@@ -18,8 +18,8 @@ var (
 	pbPyWrapperPath   = pbPyWrapperVFS.String()
 	pbDescriptorProto = pbDescriptorVFS.String()
 	// Path constants hoisted by `ay refac consts`.
-	strLibraryCppResourceRegistryH = internString("library/cpp/resource/registry.h")
-	strLibraryCppResourceResourceH = internString("library/cpp/resource/resource.h")
+	strLibraryCppResourceRegistryH = internStr("library/cpp/resource/registry.h")
+	strLibraryCppResourceResourceH = internStr("library/cpp/resource/resource.h")
 	// Path constants hoisted by `ay refac consts`.
 	anyISYt = internAny("-I=$(S)/yt")
 )
@@ -615,7 +615,7 @@ func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData,
 
 		for _, in := range seed {
 			if in.IsSource() {
-				emits = append(emits, includeDirective{kind: includeQuoted, target: internString(in.Rel())})
+				emits = append(emits, includeDirective{kind: includeQuoted, target: internStr(in.Rel())})
 			}
 		}
 

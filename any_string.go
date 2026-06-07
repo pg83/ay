@@ -44,7 +44,7 @@ func vfsAny(v VFS) ANY {
 // internAny interns a computed/raw string and boxes it as a STR-tagged ANY —
 // the entry point for cmd args assembled from non-interned strings.
 func internAny(s string) ANY {
-	return strAny(internString(s))
+	return strAny(internStr(s))
 }
 
 func (a ANY) String() string {

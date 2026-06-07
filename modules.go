@@ -11,17 +11,17 @@ import (
 var (
 	// Instruction-set CFLAGS values are platform-invariant string constants set on
 	// every x86 module; intern them once and bind via SetStringID.
-	strSSE41CFlags  = internString("-msse4.1")
-	strSSE42CFlags  = internString("-msse4.2")
-	strPopcntCFlags = internString("-mpopcnt")
-	strCX16CFlags   = internString("-mcx16")
-	strAVXCFlags    = internString("-mavx -mpclmul")
-	strAVX2CFlags   = internString("-mavx2 -mfma -mbmi -mbmi2")
-	strAVX512CFlags = internString("-mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
-	strSSECFlags    = internString("-msse2 -msse3 -mssse3")
-	strSSE4CFlags   = internString("-msse4.1 -msse4.2 -mpopcnt -mcx16")
-	strAMXCFlags    = internString("-mamx-tile -mamx-int8 -mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
-	strCPPProto     = internString("CPP_PROTO") // MODULE_TAG for the CPP PROTO_LIBRARY submodule
+	strSSE41CFlags  = internStr("-msse4.1")
+	strSSE42CFlags  = internStr("-msse4.2")
+	strPopcntCFlags = internStr("-mpopcnt")
+	strCX16CFlags   = internStr("-mcx16")
+	strAVXCFlags    = internStr("-mavx -mpclmul")
+	strAVX2CFlags   = internStr("-mavx2 -mfma -mbmi -mbmi2")
+	strAVX512CFlags = internStr("-mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
+	strSSECFlags    = internStr("-msse2 -msse3 -mssse3")
+	strSSE4CFlags   = internStr("-msse4.1 -msse4.2 -mpopcnt -mcx16")
+	strAMXCFlags    = internStr("-mamx-tile -mamx-int8 -mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
+	strCPPProto     = internStr("CPP_PROTO") // MODULE_TAG for the CPP PROTO_LIBRARY submodule
 )
 
 var allocatorPeers = map[string][]string{

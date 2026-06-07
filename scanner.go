@@ -787,7 +787,7 @@ func buildCfgResolveIndex(cfg *ScanContext) *cfgResolveIndex {
 		if p.Root() == VFSRootBuild {
 			idx.buildEntries = append(idx.buildEntries, cfgBuildAddincl{
 				prefix:   p,
-				prefixID: internString(p.Rel()),
+				prefixID: internStr(p.Rel()),
 				rank:     r,
 			})
 		}

@@ -131,7 +131,7 @@ func flatcDirectGeneratedHeaderIncludes(pm *includeParserManager, fs FS, srcRel 
 
 		out = append(out, includeDirective{
 			kind:   includeQuoted,
-			target: internString(resolved + ".h"),
+			target: internStr(resolved + ".h"),
 		})
 	}
 
@@ -254,7 +254,7 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.parsers, ctx.fs, srcVFS.Rel())
 
 	for _, dep := range flatcRes.InducedDeps {
-		headerIncludes = append(headerIncludes, includeDirective{kind: includeQuoted, target: internString(dep)})
+		headerIncludes = append(headerIncludes, includeDirective{kind: includeQuoted, target: internStr(dep)})
 	}
 
 	registerBoundGeneratedParsedOutput(ctx, instance, "FL", headerVFS, headerIncludes, flRef)
@@ -274,10 +274,10 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 	}
 
 	cppIncludes := make([]includeDirective, 0, 1+len(flatcRes.InducedDeps))
-	cppIncludes = append(cppIncludes, includeDirective{kind: includeQuoted, target: internString(headerVFS.Rel())})
+	cppIncludes = append(cppIncludes, includeDirective{kind: includeQuoted, target: internStr(headerVFS.Rel())})
 
 	for _, dep := range flatcRes.InducedDeps {
-		cppIncludes = append(cppIncludes, includeDirective{kind: includeQuoted, target: internString(dep)})
+		cppIncludes = append(cppIncludes, includeDirective{kind: includeQuoted, target: internStr(dep)})
 	}
 
 	registerBoundGeneratedParsedOutput(ctx, instance, "FL", cppVFS, cppIncludes, flRef)

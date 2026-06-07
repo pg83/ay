@@ -19,7 +19,7 @@ var (
 	blockCommentClose       = []byte("*/")
 	backtraceHeaderInclude  = []byte("BACKTRACE_HEADER")
 	opensslUnistdInclude    = []byte("OPENSSL_UNISTD")
-	opensslUnistdTarget     = internString("unistd.h")
+	opensslUnistdTarget     = internStr("unistd.h")
 )
 
 type includeDirectiveParser interface {
@@ -186,7 +186,7 @@ func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedInclude
 		}
 
 		if m := cythonIncludeRe.FindStringSubmatch(s); len(m) == 2 {
-			add(includeDirective{kind: includeQuoted, target: internString(m[1])})
+			add(includeDirective{kind: includeQuoted, target: internStr(m[1])})
 			return
 		}
 
@@ -194,7 +194,7 @@ func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedInclude
 			target, kind, ok := parseDelimitedIncludeTarget(m[1])
 
 			if ok {
-				add(includeDirective{kind: kind, target: internString(target)})
+				add(includeDirective{kind: kind, target: internStr(target)})
 			}
 
 			return
@@ -202,7 +202,7 @@ func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedInclude
 
 		if m := cythonCimportFromRe.FindStringSubmatch(s); len(m) == 2 {
 			if t := cythonPxdTarget(m[1]); t != "" {
-				add(includeDirective{kind: includeQuoted, target: internString(t)})
+				add(includeDirective{kind: includeQuoted, target: internStr(t)})
 			}
 
 			return
@@ -221,7 +221,7 @@ func (cythonIncludeDirectiveParser) Parse(rel string, data []byte) parsedInclude
 				}
 
 				if t := cythonPxdTarget(part); t != "" {
-					add(includeDirective{kind: includeQuoted, target: internString(t)})
+					add(includeDirective{kind: includeQuoted, target: internStr(t)})
 				}
 			}
 		}
@@ -261,7 +261,7 @@ func (flatbuffersIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncl
 			return
 		}
 
-		out = append(out, includeDirective{kind: includeQuoted, target: internString(string(m[1]))})
+		out = append(out, includeDirective{kind: includeQuoted, target: internStr(string(m[1]))})
 	})
 
 	if len(out) == 0 {
@@ -282,13 +282,13 @@ func (protoIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet
 			return
 		}
 
-		local = append(local, includeDirective{kind: kind, target: internString(target)})
+		local = append(local, includeDirective{kind: kind, target: internStr(target)})
 
 		switch {
 		case strings.HasSuffix(target, ".ev"):
-			hcpp = append(hcpp, includeDirective{kind: kind, target: internString(strings.TrimSuffix(target, ".ev") + ".ev.pb.h")})
+			hcpp = append(hcpp, includeDirective{kind: kind, target: internStr(strings.TrimSuffix(target, ".ev") + ".ev.pb.h")})
 		case strings.HasSuffix(target, ".proto"):
-			hcpp = append(hcpp, includeDirective{kind: kind, target: internString(strings.TrimSuffix(target, ".proto") + ".pb.h")})
+			hcpp = append(hcpp, includeDirective{kind: kind, target: internStr(strings.TrimSuffix(target, ".proto") + ".pb.h")})
 		}
 	})
 
@@ -340,7 +340,7 @@ func (ragelIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeS
 		}
 
 		seenNative[target] = struct{}{}
-		native = append(native, includeDirective{kind: includeQuoted, target: internString(target)})
+		native = append(native, includeDirective{kind: includeQuoted, target: internStr(target)})
 	})
 
 	var set parsedIncludeSet
@@ -348,7 +348,7 @@ func (ragelIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeS
 	set = appendParsedDirectives(set, parsedIncludesRagelNative, native...)
 	set = appendParsedDirectives(set, parsedIncludesHCPP, includeDirective{
 		kind:   includeQuoted,
-		target: internString(rel),
+		target: internStr(rel),
 	})
 
 	return set
@@ -370,7 +370,7 @@ func (swigIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet 
 			target, kind, ok := parseSwigIncludeLine(trimmed)
 
 			if ok {
-				direct = append(direct, includeDirective{kind: kind, target: internString(target)})
+				direct = append(direct, includeDirective{kind: kind, target: internStr(target)})
 			}
 		}
 
@@ -686,7 +686,7 @@ func parseYasmIncludes(data []byte) []includeDirective {
 		}
 
 		target := string(line[m[2]:m[3]])
-		out = append(out, includeDirective{kind: kind, target: internString(target)})
+		out = append(out, includeDirective{kind: kind, target: internStr(target)})
 	})
 
 	return out

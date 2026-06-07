@@ -344,7 +344,7 @@ func prEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, outFil
 	includes := make([]includeDirective, 0, len(stmt.INFiles)+len(stmt.OutputIncludes)+len(toolInducedDeps))
 
 	for _, f := range stmt.INFiles {
-		includes = append(includes, includeDirective{kind: includeQuoted, target: internString(runProgramInputVFS(ctx, instance, d, f).Rel())})
+		includes = append(includes, includeDirective{kind: includeQuoted, target: internStr(runProgramInputVFS(ctx, instance, d, f).Rel())})
 	}
 
 	for _, f := range stmt.OutputIncludes {
@@ -352,11 +352,11 @@ func prEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, outFil
 			f = Intern(f).Rel()
 		}
 
-		includes = append(includes, includeDirective{kind: includeQuoted, target: internString(f)})
+		includes = append(includes, includeDirective{kind: includeQuoted, target: internStr(f)})
 	}
 
 	for _, f := range toolInducedDeps {
-		includes = append(includes, includeDirective{kind: includeQuoted, target: internString(f)})
+		includes = append(includes, includeDirective{kind: includeQuoted, target: internStr(f)})
 	}
 
 	return includes

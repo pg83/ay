@@ -320,7 +320,7 @@ type hoistKind uint8
 
 const (
 	hoistVFS hoistKind = iota // Intern/Source/Build -> VFS
-	hoistStr                  // internString -> STR
+	hoistStr                  // internStr -> STR
 	hoistAny                  // internAny -> ANY
 )
 
@@ -335,7 +335,7 @@ type hoistKey struct {
 }
 
 // hoistCall reports whether call is
-// `Intern|Source|Build|internString|internAny("<literal>")` and returns its dedup key.
+// `Intern|Source|Build|internStr|internAny("<literal>")` and returns its dedup key.
 func hoistCall(call *ast.CallExpr) (hoistKey, bool) {
 	id, isID := call.Fun.(*ast.Ident)
 
@@ -366,7 +366,7 @@ func hoistCall(call *ast.CallExpr) (hoistKey, bool) {
 		return hoistKey{kind: hoistVFS, canon: "$(S)/" + lit}, true
 	case "Build":
 		return hoistKey{kind: hoistVFS, canon: "$(B)/" + lit}, true
-	case "internString":
+	case "internStr":
 		return hoistKey{kind: hoistStr, canon: lit}, true
 	case "internAny":
 		return hoistKey{kind: hoistAny, canon: lit}, true
@@ -380,7 +380,7 @@ func hoistCall(call *ast.CallExpr) (hoistKey, bool) {
 func constDef(key hoistKey) string {
 	switch key.kind {
 	case hoistStr:
-		return fmt.Sprintf("internString(%q)", key.canon)
+		return fmt.Sprintf("internStr(%q)", key.canon)
 	case hoistAny:
 		return fmt.Sprintf("internAny(%q)", key.canon)
 	}
@@ -446,7 +446,7 @@ func applyRefacEdits(pf *parsedFile, edits []constEdit, added []newVar) bool {
 
 // identForVFS turns a key into a lowerCamel identifier: the $(S)/$(B) prefix is
 // dropped ($(B) becomes a leading "bld" word so source/build siblings get distinct
-// names; an internString key becomes a leading "str" word and a internAny key a
+// names; an internStr key becomes a leading "str" word and a internAny key a
 // leading "any" word so neither collides with the same-path VFS var or each other),
 // and every non-alphanumeric run separates words.
 func identForVFS(key hoistKey) string {

@@ -54,11 +54,11 @@ func dedupIncludeDirectives(directives []includeDirective) []includeDirective {
 func bisonCppHeaderParsed(srcVFS VFS) []includeDirective {
 	parsed := make([]includeDirective, 0, 1+len(bisonCppSkeletonInputs))
 	parsed = append(parsed,
-		includeDirective{kind: includeQuoted, target: internString(bisonPreprocessPyVFS.Rel())},
+		includeDirective{kind: includeQuoted, target: internStr(bisonPreprocessPyVFS.Rel())},
 	)
 
 	for _, input := range bisonCppSkeletonInputs {
-		parsed = append(parsed, includeDirective{kind: includeQuoted, target: internString(input.Rel())})
+		parsed = append(parsed, includeDirective{kind: includeQuoted, target: internStr(input.Rel())})
 	}
 
 	return dedupIncludeDirectives(parsed)
@@ -66,8 +66,8 @@ func bisonCppHeaderParsed(srcVFS VFS) []includeDirective {
 
 func bisonGeneratedCPPParsed(ctx *genCtx, instance ModuleInstance, srcVFS, headerVFS VFS) []includeDirective {
 	parsed := []includeDirective{
-		{kind: includeQuoted, target: internString(headerVFS.Rel())},
-		{kind: includeQuoted, target: internString(srcVFS.Rel())},
+		{kind: includeQuoted, target: internStr(headerVFS.Rel())},
+		{kind: includeQuoted, target: internStr(srcVFS.Rel())},
 	}
 
 	if scanner := ctx.scannerFor(instance); scanner != nil {
@@ -88,7 +88,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	headerVFS := Build(instance.Path + "/" + headerRel)
 	generatedVFS := Build(instance.Path + "/" + generatedRel)
 	srcVFS := Source(instance.Path + "/" + srcRel)
-	headerParsed := []includeDirective{{kind: includeQuoted, target: internString(srcVFS.Rel())}}
+	headerParsed := []includeDirective{{kind: includeQuoted, target: internStr(srcVFS.Rel())}}
 
 	if preprocessHeader {
 		headerParsed = bisonCppHeaderParsed(srcVFS)
@@ -108,7 +108,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		}
 	}
 
-	generatedParsed := []includeDirective{{kind: includeQuoted, target: internString(headerVFS.Rel())}}
+	generatedParsed := []includeDirective{{kind: includeQuoted, target: internStr(headerVFS.Rel())}}
 
 	if preprocessHeader {
 		generatedParsed = bisonGeneratedCPPParsed(ctx, instance, srcVFS, headerVFS)

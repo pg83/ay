@@ -47,13 +47,13 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, modulePath string, e
 		// source node preserves that (e.g. a .cpp's `#include "foo.h"` resolves
 		// to the $(S) sibling, not the flat $(B) staging copy).
 		srcVFS := copyFileInputVFS(fs, modulePath, entry.Src)
-		out = append(out, includeDirective{kind: includeQuoted, target: internString(srcVFS.Rel())})
+		out = append(out, includeDirective{kind: includeQuoted, target: internStr(srcVFS.Rel())})
 	}
 
 	for _, include := range entry.OutputIncludes {
 		out = append(out, includeDirective{
 			kind:   includeQuoted,
-			target: internString(copyFileIncludeTarget(modulePath, include)),
+			target: internStr(copyFileIncludeTarget(modulePath, include)),
 		})
 	}
 
