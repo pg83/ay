@@ -2,20 +2,6 @@ package main
 
 import "strings"
 
-var (
-	// Path constants hoisted by `ay refac consts`.
-	anyD                = internAny("-D")
-	anyDYasm            = internAny("-D_YASM_")
-	anyElf64            = internAny("elf64")
-	anyF                = internAny("-f")
-	anyI                = internAny("-I")
-	anyReplaceBB        = internAny("--replace=$(B)=/-B")
-	anyReplaceSS        = internAny("--replace=$(S)=/-S")
-	anyReplaceToolRootT = internAny("--replace=$(TOOL_ROOT)=/-T")
-	anyS                = internAny("$(S)")
-	anyUnix             = internAny("UNIX")
-)
-
 func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, emit Emitter) (NodeRef, VFS) {
 	stem := strings.TrimSuffix(srcRel, ".asm")
 	suffix := ".o"

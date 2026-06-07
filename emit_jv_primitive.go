@@ -6,18 +6,9 @@ import (
 )
 
 var (
-	antlr4JarVFS      = Intern("$(S)/contrib/java/antlr/antlr4/antlr.jar")
-	antlr3JarVFS      = Intern("$(S)/contrib/java/antlr/antlr3/antlr.jar")
 	antlr4JarPath     = antlr4JarVFS.String()
 	antlr3JarPath     = antlr3JarVFS.String()
-	stdout2stderrVFS  = Intern("$(S)/build/scripts/stdout2stderr.py")
 	stdout2stderrPath = stdout2stderrVFS.String()
-	// Path constants hoisted by `ay refac consts`.
-	anyDlanguageCpp = internAny("-Dlanguage=Cpp")
-	anyJar          = internAny("-jar")
-	anyListener     = internAny("-listener")
-	anyNoListener   = internAny("-no-listener")
-	anyVisitor      = internAny("-visitor")
 )
 
 const jdkResourcePath = "$(JDK17-564746473)/bin/java"

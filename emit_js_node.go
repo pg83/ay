@@ -62,8 +62,3 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 
 	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), statsPlatform)), outVFS
 }
-
-// Path constants hoisted by `ay refac consts`.
-var (
-	buildScriptsGenJoinSrcsPy = Source("build/scripts/gen_join_srcs.py")
-)

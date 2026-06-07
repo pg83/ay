@@ -1,12 +1,5 @@
 package main
 
-var (
-	// Path constants hoisted by `ay refac consts`.
-	anyHeader      = internAny("--header")
-	anyIncludePath = internAny("--include-path")
-	anyOutput      = internAny("--output")
-)
-
 func EmitEN(
 	instance ModuleInstance,
 	headerInput VFS,

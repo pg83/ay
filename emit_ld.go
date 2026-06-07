@@ -1,27 +1,10 @@
 package main
 
 var (
-	ldVcsInfoVFS       = Intern("$(S)/build/scripts/vcs_info.py")
-	ldSvnInterfaceVFS  = Intern("$(S)/build/scripts/c_templates/svn_interface.c")
-	ldLinkExeVFS       = Intern("$(S)/build/scripts/link_exe.py")
-	ldFsToolsVFS       = Intern("$(S)/build/scripts/fs_tools.py")
-	ldSvnversionHVFS   = Intern("$(S)/build/scripts/c_templates/svnversion.h")
 	ldVcsInfoPath      = ldVcsInfoVFS.String()
 	ldSvnInterfacePath = ldSvnInterfaceVFS.String()
 	ldLinkExePath      = ldLinkExeVFS.String()
 	ldFsToolsPath      = ldFsToolsVFS.String()
-	// Path constants hoisted by `ay refac consts`.
-	anyAddGnuDebuglink             = internAny("--add-gnu-debuglink")
-	anyClangVer                    = internAny("--clang-ver")
-	anyLinkOrCopyToDir             = internAny("link_or_copy_to_dir")
-	anyNoCheck                     = internAny("--no-check")
-	anyOnlyKeepDebug               = internAny("--only-keep-debug")
-	anyRemoveSectionGnuDebuglink   = internAny("--remove-section=.gnu_debuglink")
-	anyStripDebug                  = internAny("--strip-debug")
-	anyVcsVcsJson                  = internAny("$(VCS)/vcs.json")
-	anyWholeArchiveLibs            = internAny("--whole-archive-libs")
-	anyWlCompressDebugSectionsZstd = internAny("-Wl,--compress-debug-sections=zstd")
-	anyWlStripAll                  = internAny("-Wl,--strip-all")
 )
 
 // ldScriptInputs seeds the link node's $(S) tooling inputs: the wrapper scripts it

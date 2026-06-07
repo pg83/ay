@@ -9,18 +9,6 @@ import (
 	"strings"
 )
 
-var (
-	// Path constants hoisted by `ay refac consts`.
-	anyCompiler    = internAny("--compiler")
-	anyCompressor  = internAny("--compressor")
-	anyInputs      = internAny("--inputs")
-	anyKeys        = internAny("--keys")
-	anyKvs         = internAny("--kvs")
-	anyObjcopy     = internAny("--objcopy")
-	anyOutputObj   = internAny("--output_obj")
-	anyRescompiler = internAny("--rescompiler")
-)
-
 type objcopyEmitResult struct {
 	Refs    []NodeRef
 	Outputs []VFS

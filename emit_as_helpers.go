@@ -5,7 +5,6 @@ import (
 )
 
 var (
-	yasmBinaryVFS  = Intern("$(B)/contrib/tools/yasm/yasm")
 	yasmBinaryPath = yasmBinaryVFS.String()
 )
 

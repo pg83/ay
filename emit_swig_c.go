@@ -8,14 +8,6 @@ import (
 
 var (
 	swigImplicitIncludes = []string{"swig.swg", "go.swg", "java.swg", "perl5.swg", "python.swg"}
-	// Path constants hoisted by `ay refac consts`.
-	bldContribToolsSwigSwig = Build("contrib/tools/swig/swig")
-	// Path constants hoisted by `ay refac consts`.
-	anyISContribToolsSwigLib       = internAny("-I$(S)/contrib/tools/swig/Lib")
-	anyISContribToolsSwigLibPython = internAny("-I$(S)/contrib/tools/swig/Lib/python")
-	anyInterface                   = internAny("-interface")
-	anyModule                      = internAny("-module")
-	anyPython                      = internAny("-python")
 )
 
 type swigSrc struct {

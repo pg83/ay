@@ -79,8 +79,3 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 
 	return emit.Emit(bindNodePlatform(node, instance.Platform)), outVFS
 }
-
-// Path constants hoisted by `ay refac consts`.
-var (
-	anyL = internAny("-L")
-)

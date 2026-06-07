@@ -5,21 +5,6 @@ import (
 	"strings"
 )
 
-var (
-	flatcWrapperVFS = Intern("$(S)/build/scripts/cpp_flatc_wrapper.py")
-	flatcRuntimeVFS = Intern("$(S)/contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h")
-	// Path constants hoisted by `ay refac consts`.
-	anyB2             = internAny("-b")
-	anyCpp            = internAny("--cpp")
-	anyFbs            = internAny(".fbs")
-	anyFilenameSuffix = internAny("--filename-suffix")
-	anyGenMutable     = internAny("--gen-mutable")
-	anyGenObjectApi   = internAny("--gen-object-api")
-	anyKeepPrefix     = internAny("--keep-prefix")
-	anyNoWarnings     = internAny("--no-warnings")
-	anySchema         = internAny("--schema")
-)
-
 const flatcModule = "contrib/libs/flatbuffers/flatc"
 
 type flatcEmission struct {

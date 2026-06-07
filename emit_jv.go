@@ -6,9 +6,7 @@ import (
 )
 
 var (
-	antlr4RuntimeHeaderVFS  = Intern("$(S)/contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h")
 	antlr4RuntimeHeaderPath = antlr4RuntimeHeaderVFS.String()
-	antlr4FsToolsVFS        = Intern("$(S)/build/scripts/fs_tools.py")
 )
 
 func emitJVDownstreamCPCC(
@@ -68,7 +66,7 @@ func emitJVDownstreamCPCC(
 
 		ccIn.IncludeInputs = ccIncludeInputs
 		ccIn.ExtraDepRefs = []NodeRef{jvRef, cpRef}
-		ccIn.PerSourceCFlags = []ARG{internArg("-Wno-unused-variable")}
+		ccIn.PerSourceCFlags = []ARG{argWnoUnusedVariable}
 		ccRef, ccOut, _ := EmitCC(instance, g4CppRel, g4CppPath, ccIn, ctx.host, ctx.emit)
 
 		ccRefs = append(ccRefs, ccRef)

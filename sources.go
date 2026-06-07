@@ -4,14 +4,6 @@ import (
 	"path/filepath"
 )
 
-var (
-	// Path constants hoisted by `ay refac consts`.
-	bld                       = Build("")
-	contribLibsLinuxHeaders   = Source("contrib/libs/linux-headers")
-	contribLibsLinuxHeadersNf = Source("contrib/libs/linux-headers/_nf")
-	v                         = Source("")
-)
-
 func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance ModuleInstance, sources []string, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerForPlatform(scanPlatform)
 

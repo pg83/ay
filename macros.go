@@ -5,13 +5,7 @@ import (
 	"strings"
 )
 
-var (
-	// strYes/strNo are the pre-interned STR forms of the bool foldings, reused by
-	// SetBool instead of re-interning "yes"/"no" on every per-module binding.
-	strYes       = internStr("yes")
-	strNo        = internStr("no")
-	DefaultIfEnv = makeDefaultIfEnv()
-)
+var DefaultIfEnv = makeDefaultIfEnv()
 
 var envTable = struct {
 	ids   map[string]ENV

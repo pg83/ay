@@ -5,13 +5,6 @@ import (
 	"strings"
 )
 
-var (
-	// Path constants hoisted by `ay refac consts`.
-	buildScriptsCheckConfigHPy = Source("build/scripts/check_config_h.py")
-	// Path constants hoisted by `ay refac consts`.
-	anySBuildScriptsCheckConfigHPy = internAny("$(S)/build/scripts/check_config_h.py")
-)
-
 func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) []*sourceEmit {
 	if len(d.checkConfigHeaders) == 0 {
 		return nil

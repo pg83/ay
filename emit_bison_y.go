@@ -5,15 +5,6 @@ import (
 	"strings"
 )
 
-var (
-	bisonPreprocessPyVFS = Intern("$(S)/build/scripts/preprocess.py")
-	// Path constants hoisted by `ay refac consts`.
-	bldContribToolsBisonBison = Build("contrib/tools/bison/bison")
-	bldContribToolsM4M4       = Build("contrib/tools/m4/m4")
-	// Path constants hoisted by `ay refac consts`.
-	anyV = internAny("-v")
-)
-
 var bisonCppSkeletonInputs = []VFS{
 	Intern("$(S)/contrib/tools/bison/data/m4sugar/foreach.m4"),
 	Intern("$(S)/contrib/tools/bison/data/m4sugar/m4sugar.m4"),
@@ -168,7 +159,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	ccIn.IncludeInputs = walkClosure(ctx, instance, generatedVFS, in)
 
 	if preprocessHeader {
-		ccIn.PerSourceCFlags = append(append([]ARG(nil), in.PerSourceCFlags...), internArg("-Wno-unused-but-set-variable"), internArg("-Wno-deprecated-copy"))
+		ccIn.PerSourceCFlags = append(append([]ARG(nil), in.PerSourceCFlags...), argWnoUnusedButSetVariable, argWnoDeprecatedCopy)
 	}
 
 	ccRef, ccOut, _ := EmitCC(instance, generatedRel, generatedVFS, ccIn, ctx.host, ctx.emit)

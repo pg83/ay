@@ -8,22 +8,6 @@ import (
 	"strings"
 )
 
-var (
-	// Instruction-set CFLAGS values are platform-invariant string constants set on
-	// every x86 module; intern them once and bind via SetStringID.
-	strSSE41CFlags  = internStr("-msse4.1")
-	strSSE42CFlags  = internStr("-msse4.2")
-	strPopcntCFlags = internStr("-mpopcnt")
-	strCX16CFlags   = internStr("-mcx16")
-	strAVXCFlags    = internStr("-mavx -mpclmul")
-	strAVX2CFlags   = internStr("-mavx2 -mfma -mbmi -mbmi2")
-	strAVX512CFlags = internStr("-mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
-	strSSECFlags    = internStr("-msse2 -msse3 -mssse3")
-	strSSE4CFlags   = internStr("-msse4.1 -msse4.2 -mpopcnt -mcx16")
-	strAMXCFlags    = internStr("-mamx-tile -mamx-int8 -mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
-	strCPPProto     = internStr("CPP_PROTO") // MODULE_TAG for the CPP PROTO_LIBRARY submodule
-)
-
 var allocatorPeers = map[string][]string{
 	"MIM":                       {"library/cpp/malloc/mimalloc"},
 	"MIM_SDC":                   {"library/cpp/malloc/mimalloc_sdc"},
@@ -216,7 +200,7 @@ func (d *moduleData) flatSrc(src string) bool {
 
 func muslCFlags(on bool) []ARG {
 	if on {
-		return []ARG{internArg("-D_musl_")}
+		return []ARG{argDMusl}
 	}
 
 	return nil
@@ -712,7 +696,7 @@ func applyPython3AddIncl(modulePath string, d *moduleData) {
 
 	d.usePython3 = true
 
-	d.moduleScopeCFlags = append(d.moduleScopeCFlags, internArg("-DUSE_PYTHON3"))
+	d.moduleScopeCFlags = append(d.moduleScopeCFlags, argDusePython3)
 
 	d.addInclGlobal = append(d.addInclGlobal, pythonIncludeDir)
 	d.addInclUserGlobal = append(d.addInclUserGlobal, pythonIncludeDir)
@@ -1266,7 +1250,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			ThrowFmt("YQL_LAST_ABI_VERSION expects exactly 0 arguments, got %d", len(v.Args))
 		}
 
-		d.cxxFlags = append(d.cxxFlags, internArg("-DUSE_CURRENT_UDF_ABI_VERSION"))
+		d.cxxFlags = append(d.cxxFlags, argDuseCurrentUdfAbiVersion)
 	case tokYqlAbiVersion:
 		if len(v.Args) != 3 {
 			ThrowFmt("YQL_ABI_VERSION expects exactly 3 arguments, got %d", len(v.Args))
@@ -1282,7 +1266,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			ThrowFmt("PROTOC_FATAL_WARNINGS expects exactly 0 arguments, got %d", len(v.Args))
 		}
 
-		d.protocFlags = append(d.protocFlags, internArg("--fatal_warnings"))
+		d.protocFlags = append(d.protocFlags, argFatalWarnings)
 	case tokUseCommonGoogleApis:
 		// upstream's _CPP_PROTO module-definition body (proto.conf:741-743)
 		// runs `PEERDIR += contrib/libs/googleapis-common-protos` so the

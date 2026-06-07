@@ -5,14 +5,6 @@ import (
 	"strings"
 )
 
-var (
-	rodataScriptVFS = Intern("$(S)/build/scripts/rodata2asm.py")
-	// Path constants hoisted by `ay refac consts`.
-	anyDwarf2 = internAny("dwarf2")
-	anyElf    = internAny("--elf")
-	anyG      = internAny("-g")
-)
-
 func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
 	base := instance.Path + "/" + srcRel
 

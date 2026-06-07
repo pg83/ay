@@ -10,18 +10,9 @@ import (
 )
 
 var (
-	pbWrapperVFS      = Intern("$(S)/build/scripts/cpp_proto_wrapper.py")
-	pbPyWrapperVFS    = Intern("$(S)/build/scripts/gen_py_protos.py")
-	pbGrpcCppVFS      = Intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp")
-	pbDescriptorVFS   = Intern("$(S)/contrib/libs/protobuf/src/google/protobuf/descriptor.proto")
 	pbWrapperPath     = pbWrapperVFS.String()
 	pbPyWrapperPath   = pbPyWrapperVFS.String()
 	pbDescriptorProto = pbDescriptorVFS.String()
-	// Path constants hoisted by `ay refac consts`.
-	strLibraryCppResourceRegistryH = internStr("library/cpp/resource/registry.h")
-	strLibraryCppResourceResourceH = internStr("library/cpp/resource/resource.h")
-	// Path constants hoisted by `ay refac consts`.
-	anyISYt = internAny("-I=$(S)/yt")
 )
 
 var protobufRuntimeHeaders = []VFS{

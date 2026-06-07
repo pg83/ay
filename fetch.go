@@ -12,15 +12,6 @@ import (
 	"strings"
 )
 
-var (
-	// Path constants hoisted by `ay refac consts`.
-	buildMappingConfJson           = Source("build/mapping.conf.json")
-	buildScriptsFetchFromMdsPy     = Source("build/scripts/fetch_from_mds.py")
-	buildScriptsFetchFromSandboxPy = Source("build/scripts/fetch_from_sandbox.py")
-	// Path constants hoisted by `ay refac consts`.
-	anyFetch = internAny("fetch")
-)
-
 type resourceFetch struct {
 	Pattern string
 	URI     string

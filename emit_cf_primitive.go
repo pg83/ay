@@ -1,7 +1,6 @@
 package main
 
 var (
-	configureFilePyVFS  = Intern("$(S)/build/scripts/configure_file.py")
 	configureFilePyPath = configureFilePyVFS.String()
 )
 

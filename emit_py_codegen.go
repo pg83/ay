@@ -5,10 +5,7 @@ import (
 )
 
 var (
-	genPy3RegScriptVFS  = Intern("$(S)/build/scripts/gen_py3_reg.py")
 	genPy3RegScriptPath = genPy3RegScriptVFS.String()
-	// Path constants hoisted by `ay refac consts`.
-	anySlowPy3cc = internAny("--slow-py3cc")
 )
 
 func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {

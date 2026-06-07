@@ -8,18 +8,6 @@ import (
 	"strings"
 )
 
-var (
-	// Path constants hoisted by `ay refac consts`.
-	bldBuildCowOnLibbuildCowOnA                                                           = Build("build/cow/on/libbuild-cow-on.a")
-	bldContribLibsJemallocLibcontribLibsJemallocA                                         = Build("contrib/libs/jemalloc/libcontrib-libs-jemalloc.a")
-	bldLibraryCppJsonCommonLibcppJsonCommonA                                              = Build("library/cpp/json/common/libcpp-json-common.a")
-	bldLibraryCppMallocApiLibcppMallocApiA                                                = Build("library/cpp/malloc/api/libcpp-malloc-api.a")
-	bldLibraryCppMallocJemallocLibcppMallocJemallocA                                      = Build("library/cpp/malloc/jemalloc/libcpp-malloc-jemalloc.a")
-	bldLibraryPythonRuntimePy3                                                            = Build("library/python/runtime_py3")
-	bldToolsEnumParserEnumSerializationRuntimeLibtoolsEnumParserEnumSerializationRuntimeA = Build("tools/enum_parser/enum_serialization_runtime/libtools-enum_parser-enum_serialization_runtime.a")
-	contribRestrictedAbseilCpp                                                            = Source("contrib/restricted/abseil-cpp")
-)
-
 var asmlibYasmModules = map[string]bool{
 	"contrib/libs/asmlib": true,
 }

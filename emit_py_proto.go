@@ -5,16 +5,6 @@ import (
 	"strings"
 )
 
-var (
-	// Path constants hoisted by `ay refac consts`.
-	anyISContribLibsProtocSrc = internAny("-I=$(S)/contrib/libs/protoc/src")
-	anyInput                  = internAny("--input")
-	anyNs                     = internAny("--ns")
-	anyPy3                    = internAny("py3")
-	anyPyVer                  = internAny("--py_ver")
-	anySuffixes               = internAny("--suffixes")
-)
-
 func protoPythonResourceKey(instance ModuleInstance, d *moduleData, src, suffix string) string {
 	base := strings.TrimSuffix(src, ".proto")
 
@@ -536,7 +526,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			PeerCXXFlagsGlobal:   peerContribs.cxxFlags,
 			PeerCOnlyFlagsGlobal: peerContribs.cOnlyFlags,
 			ModuleScopeCFlags:    d.moduleScopeCFlags,
-			PerSourceCFlags:      []ARG{internArg("-x"), internArg("c++")},
+			PerSourceCFlags:      []ARG{argX, argC},
 			SourceRoot:           ctx.sourceRoot,
 			FS:                   ctx.fs,
 			ExtraDepRefs:         []NodeRef{ref},

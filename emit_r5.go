@@ -63,8 +63,3 @@ func EmitR5(
 
 	return emit.Emit(bindNodePlatform(node, instance.Platform)), tmpVFS, cppVFS
 }
-
-// Path constants hoisted by `ay refac consts`.
-var (
-	anyG2 = internAny("-G2")
-)
