@@ -115,30 +115,3 @@ func TestCanonicalNodeBytes_VsDefaultJSONMarshal(t *testing.T) {
 		t.Errorf("canonicalNodeBytes must NOT contain %s (escaping disabled); got: %s", escapedLT, canon)
 	}
 }
-
-func TestCanonicalNodeBytes_DoesNotEscapeHTML(t *testing.T) {
-
-	n := &Node{
-		Cmds: []Cmd{{CmdArgs: appendInternStrs(nil, []string{"sh", "-c", "echo <a> & echo b"}), Env: nil}},
-		Env:  nil, Inputs: ToVFSSlice([]string{}),
-		KV: KV{}, Outputs: ToVFSSlice([]string{}),
-		Requirements: Requirements{}, Tags: []string{},
-		TargetProperties: TargetProperties{},
-	}
-	canon := canonicalNodeBytes(n)
-	s := string(canon)
-
-	if !strings.Contains(s, "<a>") {
-		t.Errorf("expected literal <a> in canonical bytes, got: %s", s)
-	}
-
-	if !strings.Contains(s, " & ") {
-		t.Errorf("expected literal & in canonical bytes, got: %s", s)
-	}
-
-	for _, banned := range []string{"\\u003c", "\\u003e", "\\u0026"} {
-		if strings.Contains(s, banned) {
-			t.Errorf("canonical bytes contain escaped HTML %q: %s", banned, s)
-		}
-	}
-}

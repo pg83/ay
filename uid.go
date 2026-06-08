@@ -58,6 +58,15 @@ func (c *canonBuf) writeBytes(s string) {
 	c.buf = append(c.buf, s...)
 }
 
+// writeSTR mixes an interned token (STR — and therefore any ARG/ENV/TOK/VFS,
+// which all resolve to a STR via str()) by the xxh3 lo recorded per STR in
+// internTable.los, not its bytes. Equal strings share a STR and thus a lo, so the
+// hash is identical without materialising the string. STR 0 (the empty token) has
+// the sentinel lo 0.
+func (c *canonBuf) writeSTR(s STR) {
+	c.writeUint64(internTable.los[s])
+}
+
 // writeRefUIDs serializes refs as their resolved dep uids (looked up by id in
 // c.uids), so Deps/ForeignDeps need not be materialized onto the node.
 func (c *canonBuf) writeRefUIDs(refs []NodeRef) {
@@ -78,14 +87,15 @@ func (c *canonBuf) writeStringSlice(ss []string) {
 	}
 }
 
-// writeStrSlice canonicalises cmd args by their materialized string, so a node's
-// UID is identical whether an arg reached the STR via ARG/STR/VFS/TOK str() — the
-// same flag string hashes the same regardless of which namespace produced it.
+// writeStrSlice canonicalises cmd args by each token's STR hash (writeSTR), so a
+// node's UID is identical whether an arg reached the STR via ARG/STR/VFS/TOK
+// str() — the same flag string hashes the same regardless of which namespace
+// produced it.
 func (c *canonBuf) writeStrSlice(as []STR) {
 	c.writeUint32(uint32(len(as)))
 
 	for _, a := range as {
-		c.writeBytes(a.String())
+		c.writeSTR(a)
 	}
 }
 
@@ -93,7 +103,7 @@ func (c *canonBuf) writeVFSSlice(vs []VFS) {
 	c.writeUint32(uint32(len(vs)))
 
 	for _, v := range vs {
-		c.writeUint64(internTable.los[v.strID()])
+		c.writeSTR(v.str())
 
 		// Mix the content hash of source inputs so editing a $(S) file changes the
 		// node uid. $(B) inputs are produced — their content is captured via the
@@ -110,7 +120,7 @@ func (c *canonBuf) writeCmdSlice(cmds []Cmd) {
 
 	for _, cm := range cmds {
 		c.writeStrSlice(cm.CmdArgs)
-		c.writeBytes(cm.Cwd.String())
+		c.writeSTR(cm.Cwd)
 		c.writeEnv(cm.Env)
 		c.writeBytes(cm.Stdout)
 	}
