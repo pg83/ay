@@ -11,7 +11,7 @@ var (
 	stdout2stderrPath = stdout2stderrVFS.String()
 )
 
-const jdkResourcePath = "$(JDK17-564746473)/bin/java"
+const jdkResourcePath = "$(JDK17)/bin/java"
 
 func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs []VFS, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag string, emit Emitter) NodeRef {
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}

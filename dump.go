@@ -15,13 +15,15 @@ import (
 )
 
 var (
-	// versionedResourceRe matches a resource reference carrying a content-hash
-	// version suffix, e.g. $(CLANG16-1380963495). The resource name is an
-	// uppercase identifier that MAY contain digits (CLANG16, CLANG20, JDK17),
-	// so the name class allows [A-Z0-9_] after the first letter. Normalization
-	// strips the -<hash> suffix on both graphs so versioned and bare references
-	// compare equal.
-	versionedResourceRe = regexp.MustCompile(`\$\(([A-Z][A-Z0-9_]*)-[0-9]+\)`)
+	// versionedResourceRe matches a resource reference carrying a sandbox/content
+	// id suffix, e.g. $(CLANG16-1380963495) or $(TEST_TOOL_HOST-sbr:12302016680).
+	// The resource name is an uppercase identifier that MAY contain digits
+	// (CLANG16, CLANG20, JDK17), so the name class allows [A-Z0-9_] after the
+	// first letter; the id is bare digits or an `sbr:<digits>` reference.
+	// Normalization strips the id suffix on both graphs so versioned and bare
+	// references compare equal — these ids churn whenever upstream rotates a
+	// sandbox resource and carry no build-graph meaning.
+	versionedResourceRe = regexp.MustCompile(`\$\(([A-Z][A-Z0-9_]*)-(?:sbr:)?[0-9]+\)`)
 	// cmdLiteralBasenames are bare-word command arguments that collide with a real
 	// input's basename but do NOT name that file: "gnu" is the llvm-ar archive-format
 	// selector (link_lib.py ... LLVM_AR gnu $(B) ...), not the magic-database source
@@ -84,7 +86,11 @@ func normPath(s string) string {
 	s = strings.ReplaceAll(s, "$(BUILD_ROOT)", "$(B)")
 	s = strings.ReplaceAll(s, "$(SOURCE_ROOT)", "$(S)")
 
-	if strings.Contains(s, "CLANG") || strings.Contains(s, "LLD_ROOT") || strings.Contains(s, "YMAKE_PYTHON3") {
+	// Strip the id suffix from any versioned resource ref ($(NAME-id) /
+	// $(NAME-sbr:id)). The regex matches only refs carrying an id, so running it
+	// on every $(-bearing string is safe and covers all resources (CLANG*,
+	// LLD_ROOT, YMAKE_PYTHON3, TEST_TOOL_HOST, JDK17, …) without an allow-list.
+	if strings.Contains(s, "-") {
 		s = versionedResourceRe.ReplaceAllStringFunc(s, func(m string) string {
 			return "$(" + versionedResourceRe.FindStringSubmatch(m)[1] + ")"
 		})
