@@ -178,10 +178,26 @@ func genResourcesLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *m
 		}
 	}
 
+	// A RESOURCES_LIBRARY has no PEERDIRs, so its GLOBAL contributions (the
+	// .GLOBAL list: RPATH/LDFLAGS/USER_C*FLAGS/OBJADDE_LIB/ADDINCL) are its own,
+	// un-merged. build/platform/local_so, for instance, SET_APPEND(RPATH_GLOBAL
+	// -Wl,-rpath,$ORIGIN); dropping that breaks every program that links a
+	// DYNAMIC_LIBRARY through it. Propagate them exactly as the general path would
+	// with an empty peer set.
 	result := &moduleEmitResult{
 		ModuleStmtName:        d.moduleStmt.Name,
 		ResourceGlobalClosure: globals,
 		Peerdirs:              d.peerdirs,
+		RPathFlagsGlobal:      dedupARG(d.rpathFlagsGlobal),
+		LDFlagsGlobal:         dedupARG(d.ldFlags),
+		CFlagsGlobal:          dedupARG(d.cFlagsGlobal),
+		CXXFlagsGlobal:        dedupARG(d.cxxFlagsGlobal),
+		COnlyFlagsGlobal:      dedupARG(d.cOnlyFlagsGlobal),
+		ObjAddLibsGlobal:      dedupARG(d.objAddLibsGlobal),
+		AddInclGlobal:         dedupVFS(d.addInclGlobal, nil),
+		OwnAddInclGlobal:      d.addInclGlobal,
+		AddInclUserGlobal:     d.addInclUserGlobal,
+		AddInclOneLevel:       d.addInclOneLevel,
 	}
 	ctx.memo[instance] = result
 
