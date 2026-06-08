@@ -233,7 +233,7 @@ func cmdMake(args []string) int {
 			for _, target := range mf.targets {
 				g := GenDumpGraphWithResources(fs, target, hostP, targetP, onWarn, resourceFetches, mf.testLevel > 0)
 				applyGraphConf(g, conf)
-				writeGraph("-", g)
+				writeGraph("-", g, !mf.sandboxing)
 			}
 		} else {
 			genStream(fs, mf.targets, hostP, targetP, resourceFetches, func(*Node, *uidVec) {}, onWarn, mf.testLevel > 0)

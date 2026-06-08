@@ -34,7 +34,10 @@ var htmlSafeNoEscape = func() [128]bool {
 // tokens). The graph is consumed by `ay dump` / `ay make`, which parse it — the
 // formatting carries no meaning, so we drop it. Nodes are flushed incrementally
 // to keep the in-memory buffer bounded for multi-GB graphs.
-func writeGraphCompact(w io.Writer, g *Graph) {
+// writeGraphCompact serialises the graph. dropSrcInputs (set for non-sandboxed
+// runs) omits every $(S)-rooted entry from each node's "inputs" as the JSON is
+// built — a streaming filter, no graph copy.
+func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 	buf := make([]byte, 0, 1<<20)
 
 	buf = append(buf, `{"conf":`...)
@@ -47,7 +50,7 @@ func writeGraphCompact(w io.Writer, g *Graph) {
 			buf = append(buf, ',')
 		}
 
-		buf = appendNode(buf, node, g.uids)
+		buf = appendNode(buf, node, g.uids, dropSrcInputs)
 
 		if len(buf) >= 256<<10 {
 			Throw2(w.Write(buf))
@@ -62,7 +65,7 @@ func writeGraphCompact(w io.Writer, g *Graph) {
 	Throw2(w.Write(buf))
 }
 
-func appendNode(buf []byte, n *Node, uids *uidVec) []byte {
+func appendNode(buf []byte, n *Node, uids *uidVec, dropSrcInputs bool) []byte {
 	buf = append(buf, '{')
 
 	if n.Cache != nil {
@@ -92,7 +95,12 @@ func appendNode(buf []byte, n *Node, uids *uidVec) []byte {
 	}
 
 	buf = append(buf, `,"inputs":`...)
-	buf = appendVFSSlice(buf, n.Inputs)
+
+	if dropSrcInputs {
+		buf = appendBuildOnlyVFSSlice(buf, n.Inputs)
+	} else {
+		buf = appendVFSSlice(buf, n.Inputs)
+	}
 
 	buf = append(buf, `,"kv":`...)
 	buf = appendKV(buf, n.KV)
@@ -234,6 +242,28 @@ func appendVFSSlice(buf []byte, vs []VFS) []byte {
 			buf = append(buf, ',')
 		}
 
+		buf = appendVFS(buf, v)
+	}
+
+	return append(buf, ']')
+}
+
+// appendBuildOnlyVFSSlice writes only the $(B)-rooted entries, skipping every
+// $(S) source input (non-sandboxed inputs filter).
+func appendBuildOnlyVFSSlice(buf []byte, vs []VFS) []byte {
+	buf = append(buf, '[')
+	first := true
+
+	for _, v := range vs {
+		if v.IsSource() {
+			continue
+		}
+
+		if !first {
+			buf = append(buf, ',')
+		}
+
+		first = false
 		buf = appendVFS(buf, v)
 	}
 
