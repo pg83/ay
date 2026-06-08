@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"sort"
 	"strings"
 )
 
@@ -34,13 +33,6 @@ type Platform struct {
 	// raw input map; everything past the platform uses ENV/STR.
 	Flags map[ENV]STR
 	Tags  []string
-
-	StatsFlags     map[string]string
-	StatsExtraTags []string
-	// StatsTags is the per-platform stats-UID tag list, computed once in
-	// NewPlatform from StatsFlags/StatsExtraTags (a platform constant). Nodes copy
-	// it in bindNodePlatform instead of recomputing statsTagsForPlatform per node.
-	StatsTags []string
 
 	Tools Toolchain
 
@@ -118,17 +110,13 @@ func toolchainFromFlags(flags map[string]string) Toolchain {
 	}
 }
 
-func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, cflagsEnv, cxxflagsEnv string, statsFlags map[string]string) *Platform {
+func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, cflagsEnv, cxxflagsEnv string) *Platform {
 	if flags == nil {
 		flags = map[string]string{}
 	}
 
 	if tags == nil {
 		tags = []string{}
-	}
-
-	if statsFlags == nil {
-		statsFlags = map[string]string{}
 	}
 
 	buildType := platformBuildType(flags)
@@ -150,8 +138,6 @@ func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, 
 		Target:            MakePlatformID(os, isa),
 		Flags:             internFlags(flags),
 		Tags:              tags,
-		StatsFlags:        statsFlags,
-		StatsExtraTags:    defaultStatsExtraTags(flags),
 		Tools:             toolchainFromFlags(flags),
 		PIC:               flags["PIC"] == "yes",
 		BuildType:         buildType,
@@ -176,83 +162,7 @@ func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, 
 	p.DebugInfoFlags = buildDebugInfoFlags(os, buildRelease, confCompressesDebug(fs))
 	p.CompileCFlags = composeCompileCFlags(isa, buildRelease, p.DebugInfoFlags)
 
-	p.StatsTags = statsTagsForPlatform(p)
-
 	return p
-}
-
-var statsFlagsMapping = map[string]string{
-	"MUSL":        "musl",
-	"RACE":        "race",
-	"USE_AFL":     "AFL",
-	"USE_LTO":     "lto",
-	"USE_THINLTO": "thinlto",
-}
-
-func defaultStatsExtraTags(flags map[string]string) []string {
-	if flags["PIC"] == "yes" {
-		return []string{"pic"}
-	}
-
-	return nil
-}
-
-func statsTagsForPlatform(p *Platform) []string {
-	if p == nil {
-		return nil
-	}
-
-	tags := []string{string(p.Target), p.BuildType}
-
-	if len(p.StatsFlags) > 0 {
-		formatted := make([]string, 0, len(p.StatsFlags))
-
-		for k, v := range p.StatsFlags {
-			if tag := formatStatsTag(k, v); tag != "" {
-				formatted = append(formatted, tag)
-			}
-		}
-
-		sort.Strings(formatted)
-		tags = append(tags, formatted...)
-	}
-
-	tags = append(tags, p.StatsExtraTags...)
-
-	return tags
-}
-
-func formatStatsTag(k, v string) string {
-	if k == "SANITIZER_TYPE" {
-		if v == "" {
-			return ""
-		}
-
-		return strings.ToLower(v[:1]) + "san"
-	}
-
-	yes, ok := parseStatsBool(v)
-
-	if tag, mapped := statsFlagsMapping[k]; mapped {
-		if ok && yes {
-			return tag
-		}
-
-		return ""
-	}
-
-	return k + "=" + v
-}
-
-func parseStatsBool(v string) (bool, bool) {
-	switch strings.ToLower(v) {
-	case "y", "yes", "t", "true", "on", "1":
-		return true, true
-	case "n", "no", "f", "false", "off", "0":
-		return false, true
-	default:
-		return false, false
-	}
 }
 
 func platformClangVersion(flags map[string]string) string {

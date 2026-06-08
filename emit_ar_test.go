@@ -29,7 +29,7 @@ func newTestPlatform(os OS, isa ISA, pic string, tags []string) *Platform {
 		flags[k] = v
 	}
 	flags["PIC"] = pic
-	return NewPlatform(newMemFS(nil), os, isa, flags, tags, "", "", nil)
+	return NewPlatform(newMemFS(nil), os, isa, flags, tags, "", "")
 }
 
 func targetInstance(path string) ModuleInstance {

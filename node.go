@@ -23,8 +23,6 @@ type Node struct {
 	TargetProperties TargetProperties `json:"target_properties"`
 	UID              UID              `json:"uid"`
 
-	StatsTags []string `json:"-"`
-
 	DepRefs        []NodeRef `json:"-"`
 	ForeignDepRefs []NodeRef `json:"-"`
 
@@ -60,7 +58,6 @@ func bindNodePlatform(n *Node, p *Platform) *Node {
 	}
 
 	n.Platform = p
-	n.StatsTags = p.StatsTags
 
 	return n
 }

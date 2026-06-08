@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	encHex "encoding/hex"
 	"encoding/json"
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -57,112 +56,11 @@ func TestComputeUID_KnownVector(t *testing.T) {
 	}
 }
 
-func TestNodeStatsUID_KnownVector(t *testing.T) {
-	n := &Node{
-		KV:       KV{P: pkLD},
-		Outputs:  []VFS{Intern("$(B)/tools/archiver/archiver")},
-		Platform: &Platform{Target: "default-linux-aarch64"},
-		StatsTags: []string{
-			"FAKEID=sandboxing",
-			"SANDBOXING=yes",
-			"debug",
-			"default-linux-aarch64",
-			"race",
-		},
-	}
-
-	const want = "b3107447d6cc0947f72c25f4ce0c059f"
-	if got := nodeStatsUID(n, &canonBuf{}); got != want {
-		t.Fatalf("nodeStatsUID mismatch:\n got: %s\nwant: %s\npreimage: %s", got, want, statsUIDPreimage(n, &canonBuf{}))
-	}
-}
-
-func TestNodeStatsUID_IgnoresUnrelatedTargetCLIFlags(t *testing.T) {
-	newNode := func(cliFlags map[string]string) *Node {
-		flags := map[string]string{
-			"GG_BUILD_TYPE": "debug",
-			"PIC":           "no",
-			"SANDBOXING":    "yes",
-		}
-		for k, v := range cliFlags {
-			flags[k] = v
-		}
-		p := NewPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "", "", nil)
-		p.StatsFlags = buildTargetStatsFlags(flags, cliFlags)
-
-		return &Node{
-			KV:        KV{P: pkLD},
-			Outputs:   []VFS{Intern("$(B)/tools/archiver/archiver")},
-			Platform:  &Platform{Target: p.Target},
-			StatsTags: statsTagsForPlatform(p),
-		}
-	}
-
-	base := newNode(map[string]string{"RACE": "yes"})
-	withUnrelated := newNode(map[string]string{
-		"RACE":      "yes",
-		"UNRELATED": "yes",
-	})
-
-	const want = "b3107447d6cc0947f72c25f4ce0c059f"
-	if got := nodeStatsUID(base, &canonBuf{}); got != want {
-		t.Fatalf("base nodeStatsUID mismatch:\n got: %s\nwant: %s\npreimage: %s", got, want, statsUIDPreimage(base, &canonBuf{}))
-	}
-
-	if got := nodeStatsUID(withUnrelated, &canonBuf{}); got != want {
-		t.Fatalf("unrelated target flag perturbed stats_uid:\n got: %s\nwant: %s\npreimage: %s", got, want, statsUIDPreimage(withUnrelated, &canonBuf{}))
-	}
-
-	for _, tag := range withUnrelated.StatsTags {
-		if tag == "UNRELATED=yes" {
-			t.Fatalf("unrelated target flag leaked into stats tags: %#v", withUnrelated.StatsTags)
-		}
-	}
-}
-
-func TestNodeStatsUID_UsesBaseTargetFlags(t *testing.T) {
-	flags := map[string]string{
-		"GG_BUILD_TYPE": "debug",
-		"PIC":           "no",
-		"USE_LTO":       "yes",
-	}
-	p := NewPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "", "", nil)
-	p.StatsFlags = buildTargetStatsFlags(flags, map[string]string{"UNRELATED": "yes"})
-
-	n := &Node{
-		KV:        KV{P: pkLD},
-		Outputs:   []VFS{Intern("$(B)/tools/archiver/archiver")},
-		Platform:  &Platform{Target: p.Target},
-		StatsTags: statsTagsForPlatform(p),
-	}
-
-	wantTags := []string{
-		"default-linux-aarch64",
-		"debug",
-		"lto",
-	}
-	if got := n.StatsTags; !reflect.DeepEqual(got, wantTags) {
-		t.Fatalf("stats tags mismatch:\n got: %#v\nwant: %#v", got, wantTags)
-	}
-
-	const want = "bdbe1d8ab9fcd589050e754ac396dd57"
-	if got := nodeStatsUID(n, &canonBuf{}); got != want {
-		t.Fatalf("base target flag stats_uid mismatch:\n got: %s\nwant: %s\npreimage: %s", got, want, statsUIDPreimage(n, &canonBuf{}))
-	}
-}
-
 func TestNodeStatsUID_UsesLongRootOutputs(t *testing.T) {
 	n := &Node{
 		KV:       KV{P: pkLD},
 		Outputs:  []VFS{Intern("$(B)/tools/archiver/archiver")},
 		Platform: &Platform{Target: "default-linux-aarch64"},
-		StatsTags: []string{
-			"FAKEID=sandboxing",
-			"SANDBOXING=yes",
-			"debug",
-			"default-linux-aarch64",
-			"race",
-		},
 	}
 
 	got := nodeStatsUID(n, &canonBuf{})

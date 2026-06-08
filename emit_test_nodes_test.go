@@ -18,7 +18,7 @@ func sandboxedX8664TargetPlatform() *Platform {
 	flags["SANDBOXING"] = "yes"
 	flags["TESTS_REQUESTED"] = "yes"
 
-	return NewPlatform(newMemFS(map[string]string{"build/ymake_conf.py": "debug_info_flags.append('-gz=zstd')\n"}), OSLinux, ISAX8664, flags, expectedSandboxingTags(), "", "", nil)
+	return NewPlatform(newMemFS(map[string]string{"build/ymake_conf.py": "debug_info_flags.append('-gz=zstd')\n"}), OSLinux, ISAX8664, flags, expectedSandboxingTags(), "", "")
 }
 
 func sandboxedTestSuite() testSuiteInfo {
