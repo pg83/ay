@@ -132,7 +132,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 
 		pyRef := ctx.emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform))
 
-		registerBoundGeneratedParsedOutput(ctx, instance, "PY", outputPath, nil, pyRef, nil)
+		registerBoundGeneratedParsedOutput(ctx, instance, "PY", outputPath, nil, pyRef, toolRefs)
 	}
 }
 
