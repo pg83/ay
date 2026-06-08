@@ -28,7 +28,6 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs []VFS, outputs []
 		Inputs:  inputs,
 		KV:      KV{P: pkJV, PC: pcLightBlue, ShowOut: "yes"},
 		Outputs: outputs,
-		Tags:    []string{},
 		TargetProperties: func() TargetProperties {
 			tp := TargetProperties{ModuleDir: instance.Path}
 

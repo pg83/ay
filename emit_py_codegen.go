@@ -87,7 +87,6 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			Inputs:  inputs,
 			Outputs: []VFS{outputPath},
 			KV:      KV{P: pkPY, PC: pcYellow},
-			Tags:    instance.Platform.Tags,
 			TargetProperties: func() TargetProperties {
 				tp := TargetProperties{ModuleDir: instance.Path}
 
@@ -186,7 +185,6 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 				Inputs:           []VFS{genPy3RegScriptVFS},
 				Outputs:          []VFS{regCppVFS},
 				KV:               KV{P: pkPY, PC: pcYellow},
-				Tags:             []string{},
 				TargetProperties: TargetProperties{ModuleDir: instance.Path},
 				Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 				DepRefs:          []NodeRef{},

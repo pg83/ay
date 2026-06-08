@@ -53,7 +53,6 @@ func EmitR5(
 		Inputs:           inputs,
 		Outputs:          []VFS{tmpVFS, cppVFS},
 		KV:               KV{P: pkR5, PC: pcYellow},
-		Tags:             []string{"tool"},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		DepRefs:          depRefs,

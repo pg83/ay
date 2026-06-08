@@ -37,7 +37,7 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 	trickyArgs := []string{"a", "b<c>&d", "tab\there", "quote\"x", "back\\slash", "newline\nhere"}
 
 	e := NewBufferedEmitter()
-	leaf := e.Emit(&Node{
+	leaf := e.Emit(&Node{Platform: &Platform{},
 		Cmds:             []Cmd{},
 		Env:              nil,
 		Inputs:           ToVFSSlice([]string{}),
@@ -47,7 +47,7 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 		Tags:             []string{},
 		TargetProperties: TargetProperties{},
 	})
-	main := e.Emit(&Node{
+	main := e.Emit(&Node{Platform: &Platform{},
 		Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, trickyArgs), Cwd: internStr("$(B)"), Env: EnvVars{{Name: "FOO", Value: "bar"}}}},
 		DepRefs:          []NodeRef{leaf},
 		ForeignDepRefs:   []NodeRef{leaf},

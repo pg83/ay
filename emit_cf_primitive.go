@@ -41,7 +41,6 @@ func EmitCF(
 		Inputs:  inputs,
 		KV:      KV{P: pkCF, PC: pcYellow},
 		Outputs: []VFS{outVFS},
-		Tags:    []string{},
 		TargetProperties: func() TargetProperties {
 			tp := TargetProperties{ModuleDir: moduleDir}
 

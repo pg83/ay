@@ -224,7 +224,7 @@ func expectedClangFormatNode() *Node {
 		},
 		Platform:         &Platform{Target: "default-linux-x86_64"},
 		Requirements:     Requirements{CPU: 1, Network: "restricted", RAM: 8, HasRAMDisk: true},
-		Tags:             nil,
+		Tags:             []string{},
 		TargetProperties: TargetProperties{ModuleLang: "unknown"},
 	}
 }
@@ -271,14 +271,14 @@ func assertNodeFields(t *testing.T, name string, got, want *Node) {
 	if !reflect.DeepEqual(got.Outputs, want.Outputs) {
 		t.Fatalf("%s outputs mismatch\n got: %#v\nwant: %#v", name, got.Outputs, want.Outputs)
 	}
-	if platformTarget(got.Platform) != platformTarget(want.Platform) {
-		t.Fatalf("%s platform = %q, want %q", name, platformTarget(got.Platform), platformTarget(want.Platform))
+	if string(got.Platform.Target) != string(want.Platform.Target) {
+		t.Fatalf("%s platform = %q, want %q", name, string(got.Platform.Target), string(want.Platform.Target))
 	}
 	if !reflect.DeepEqual(got.Requirements, want.Requirements) {
 		t.Fatalf("%s requirements mismatch\n got: %#v\nwant: %#v", name, got.Requirements, want.Requirements)
 	}
-	if !reflect.DeepEqual(got.Tags, want.Tags) {
-		t.Fatalf("%s tags mismatch\n got: %#v\nwant: %#v", name, got.Tags, want.Tags)
+	if !reflect.DeepEqual(nodeTags(got), want.Tags) {
+		t.Fatalf("%s tags mismatch\n got: %#v\nwant: %#v", name, nodeTags(got), want.Tags)
 	}
 	if !reflect.DeepEqual(got.TargetProperties, want.TargetProperties) {
 		t.Fatalf("%s target_properties mismatch\n got: %#v\nwant: %#v", name, got.TargetProperties, want.TargetProperties)
@@ -313,7 +313,7 @@ func TestEmitTestRunNodes_BuildersMatchSpec(t *testing.T) {
 	assertNodeFields(t, "unittest", buildUnittestNode(p, info), expectedUnittestNode(info))
 	assertNodeFields(t, "clang_format", buildClangFormatNode(p, info), expectedClangFormatNode())
 
-	if tags := buildClangFormatNode(p, info).Tags; tags != nil {
+	if tags := nodeTags(buildClangFormatNode(p, info)); len(tags) != 0 {
 		t.Fatalf("clang_format tags = %#v, want nil", tags)
 	}
 }
@@ -489,8 +489,8 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		if ccNode.TargetProperties.ModuleDir != "util/ut" {
 			t.Fatalf("cc module_dir for %q = %q, want util/ut", spec.output, ccNode.TargetProperties.ModuleDir)
 		}
-		if !reflect.DeepEqual(ccNode.Tags, expectedSandboxingTags()) {
-			t.Fatalf("cc tags for %q = %v, want %v", spec.output, ccNode.Tags, expectedSandboxingTags())
+		if !reflect.DeepEqual(nodeTags(ccNode), expectedSandboxingTags()) {
+			t.Fatalf("cc tags for %q = %v, want %v", spec.output, nodeTags(ccNode), expectedSandboxingTags())
 		}
 		ccInputs := make([]string, 0, len(ccNode.Inputs))
 		for _, input := range ccNode.Inputs {
@@ -512,8 +512,8 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		}
 	}
 
-	if !reflect.DeepEqual(ldNode.Tags, expectedSandboxingTags()) {
-		t.Fatalf("ld tags = %v, want %v", ldNode.Tags, expectedSandboxingTags())
+	if !reflect.DeepEqual(nodeTags(ldNode), expectedSandboxingTags()) {
+		t.Fatalf("ld tags = %v, want %v", nodeTags(ldNode), expectedSandboxingTags())
 	}
 	if !containsString(strStrs(ldNode.Cmds[1].CmdArgs), "-gz=zstd") {
 		t.Fatalf("ld vcs compile cmd missing -gz=zstd: %v", ldNode.Cmds[1].CmdArgs)

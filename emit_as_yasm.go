@@ -77,7 +77,6 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 		Inputs:           allInputs,
 		Outputs:          []VFS{outVFS},
 		KV:               KV{P: pkAS, PC: pcLightGreen},
-		Tags:             instance.Platform.Tags,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 	}

@@ -73,7 +73,6 @@ func buildTestCtxNode(p *Platform) *Node {
 		KV:               KV{P: pkCP, PC: pcLightBlue},
 		Outputs:          []VFS{bldCommonTestContext},
 		Requirements:     Requirements{Network: "restricted"},
-		Tags:             sandboxingNodeTags(p),
 		TargetProperties: TargetProperties{},
 	}, resourcePatternYMakePython3), p)
 }
@@ -159,7 +158,6 @@ func buildUnittestNode(p *Platform, info testSuiteInfo) *Node {
 			RAM:        8,
 			HasRAMDisk: true,
 		},
-		Tags:             sandboxingNodeTags(p),
 		TargetProperties: TargetProperties{ModuleLang: "cpp"},
 	}, p)
 }
@@ -257,13 +255,15 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 			HasSpecialRunner: true,
 		},
 		Outputs: testOutputs(info.ProjectPath, "clang_format"),
+		// The style/lint run node is tagless — carry the platform's TestTags (empty)
+		// so it overrides the platform Tags rather than inheriting the sandboxing set.
+		Tags: p.TestTags,
 		Requirements: Requirements{
 			CPU:        1,
 			Network:    "restricted",
 			RAM:        8,
 			HasRAMDisk: true,
 		},
-		Tags:             nil,
 		TargetProperties: TargetProperties{ModuleLang: "unknown"},
 	}, p)
 }

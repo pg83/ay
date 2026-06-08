@@ -95,7 +95,6 @@ func emitArchive(
 	}
 
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
-	tags := instance.Platform.Tags
 
 	n := &Node{
 		Cmds: []Cmd{
@@ -109,7 +108,6 @@ func emitArchive(
 		KV:               KV{P: pkAR, PC: pcLightRed},
 		Outputs:          []VFS{archiveVFS},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
-		Tags:             tags,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		DepRefs:          depRefs,
 	}

@@ -68,7 +68,6 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 			Outputs:          []VFS{cOutVFS, pyOutVFS},
 			KV:               KV{P: pkSW, PC: pcYellow},
 			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
-			Tags:             instance.Platform.Tags,
 			TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		}, instance.Platform))
 

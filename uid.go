@@ -192,9 +192,9 @@ func (c *canonBuf) writeNode(n *Node) {
 	c.writeVFSSlice(n.Inputs)
 	c.writeKV(n.KV)
 	c.writeVFSSlice(n.Outputs)
-	c.writeBytes(platformTarget(n.Platform))
+	c.writeBytes(string(n.Platform.Target))
 	c.writeRequirements(n.Requirements)
 	c.writeBool(n.Sandboxing)
-	c.writeStringSlice(n.Tags)
+	c.writeStringSlice(nodeTags(n))
 	c.writeTargetProperties(n.TargetProperties)
 }

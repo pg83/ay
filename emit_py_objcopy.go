@@ -180,7 +180,6 @@ func emitResourceObjcopy(
 			Inputs:           inputs,
 			Outputs:          []VFS{outputObj},
 			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: "yes"},
-			Tags:             objcopyTags,
 			TargetProperties: resTargetProps,
 			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		}
@@ -366,7 +365,6 @@ func emitKvOnlyObjcopyNode(
 		Inputs:           inputs,
 		Outputs:          []VFS{outputObj},
 		KV:               KV{P: pkPY, PC: pcYellow, ShowOut: "yes"},
-		Tags:             kvTags,
 		TargetProperties: targetProps,
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 	}
@@ -461,13 +459,8 @@ func emitYaConfJSONObjcopy(
 			Inputs:           []VFS{rescompilerBinVFS, rescompressorBinVFS, input, objcopyScriptVFS},
 			Outputs:          []VFS{outputObj},
 			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: "yes"},
-			Tags:             []string{},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path},
 			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
-		}
-
-		if len(instance.Platform.Tags) > 0 {
-			node.Tags = instance.Platform.Tags // read-only; Platform.Tags is immutable during emit
 		}
 
 		if rescompilerLDRef != (NodeRef(0)) {
@@ -693,7 +686,6 @@ func emitPySrcObjcopy(
 				Inputs:           inputs,
 				Outputs:          []VFS{outputObj},
 				KV:               KV{P: pkPY, PC: pcYellow, ShowOut: "yes"},
-				Tags:             pyTags,
 				TargetProperties: targetProps,
 				Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 			}

@@ -61,8 +61,6 @@ func emitARNode(
 	depRefs = append(depRefs, objRefs...)
 	depRefs = append(depRefs, peerArchiveRefs...)
 
-	tags := instance.Platform.Tags
-
 	n := &Node{
 		Cmds: []Cmd{
 			{
@@ -75,7 +73,6 @@ func emitARNode(
 		KV:               KV{P: pkAR, PC: pcLightRed, ShowOut: "yes"},
 		Outputs:          []VFS{archivePath},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
-		Tags:             tags,
 		TargetProperties: targetProperties,
 		DepRefs:          depRefs,
 	}

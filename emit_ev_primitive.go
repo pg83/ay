@@ -135,7 +135,6 @@ func EmitEV(
 		Inputs:           inputs,
 		Outputs:          []VFS{evCC, evH},
 		KV:               KV{P: pkEV, PC: pcYellow},
-		Tags:             instance.Platform.Tags,
 		TargetProperties: targetProps,
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		DepRefs:          depRefs,

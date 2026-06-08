@@ -147,7 +147,6 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		Outputs:          []VFS{headerVFS, generatedVFS},
 		KV:               KV{P: pkYC, PC: pcLightGreen},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
-		Tags:             instance.Platform.Tags,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 	}, resourcePatternYMakePython3), instance.Platform))
 	bindGeneratedOutput(ctx, instance, headerVFS, ycRef)
