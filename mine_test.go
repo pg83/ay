@@ -33,23 +33,11 @@ func TestPrebuiltToolchainFlags_UseHashedResourcePatterns(t *testing.T) {
 	}
 }
 
-func TestGraphConfForToolchainFlags_HashesResourcePatternsAndKeepsVCSStub(t *testing.T) {
-	const bundleBody = `{"by_platform":{"linux-x86_64":{"uri":"sbr:linux"},"linux-aarch64":{"uri":"sbr:aarch64"},"darwin-x86_64":{"uri":"sbr:darwin"},"darwin-arm64":{"uri":"sbr:darwin-arm64"},"win32-x86_64":{"uri":"sbr:win32"}}}`
-
-	files := map[string]string{}
-	for _, rel := range []string{
-		"build/platform/python/ymake_python3/resources.json",
-		"build/platform/clang/clang16.json",
-		"build/platform/clang/clang18.json",
-		"build/platform/lld/lld20.json",
-		"build/platform/clang/clang20.json",
-		"build/platform/java/jdk/jdk17/jdk.json",
-	} {
-		files[rel] = bundleBody
-	}
-
-	fs := newMemFS(files)
-	conf := graphConfForToolchainFlags(fs, prebuiltToolchainFlags())
+func TestGraphConfForToolchainFlags_KeepsOnlyVCSStub(t *testing.T) {
+	// Toolchain resources (CLANG*, LLD_ROOT, YMAKE_PYTHON3, …) are now declared by
+	// the build/platform/* RESOURCES_LIBRARY modules and fetched via emitResourceFetch;
+	// graphConfForToolchainFlags carries only the inline VCS stub no module declares.
+	conf := graphConfForToolchainFlags(newMemFS(nil), prebuiltToolchainFlags())
 	if conf == nil {
 		t.Fatal("graphConfForToolchainFlags returned nil")
 	}
@@ -58,18 +46,9 @@ func TestGraphConfForToolchainFlags_HashesResourcePatternsAndKeepsVCSStub(t *tes
 	for _, r := range conf.Resources {
 		gotPatterns = append(gotPatterns, r.Pattern)
 	}
-	wantPatterns := []string{
-		resourcePatternYMakePython3,
-		resourcePatternClang16,
-		resourcePatternClang18,
-		resourcePatternLLDRoot,
-		resourcePatternClangTool,
-		resourcePatternClang20,
-		resourcePatternJDK17,
-		"VCS",
-	}
-	if !reflect.DeepEqual(gotPatterns, wantPatterns) {
-		t.Fatalf("resource patterns = %#v, want %#v", gotPatterns, wantPatterns)
+
+	if !reflect.DeepEqual(gotPatterns, []string{"VCS"}) {
+		t.Fatalf("resource patterns = %#v, want [VCS]", gotPatterns)
 	}
 
 	last := conf.Resources[len(conf.Resources)-1]
