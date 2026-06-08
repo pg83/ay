@@ -1,10 +1,7 @@
 package main
 
 import (
-	"crypto/md5"
 	"encoding/binary"
-	encHex "encoding/hex"
-	"sort"
 
 	"github.com/zeebo/xxh3"
 )
@@ -18,124 +15,6 @@ func nodeUIDWithBuf(n *Node, c *canonBuf) UID {
 	return UID{Hi: sum.Hi, Lo: sum.Lo}
 }
 
-func nodeStatsUID(n *Node, c *canonBuf) string {
-	c.strBuf = appendStatsPreimage(c.strBuf[:0], c, n)
-	sum := md5.Sum(c.strBuf)
-
-	return encHex.EncodeToString(sum[:])
-}
-
-// statsUIDPreimage returns the preimage as a string for test/diagnostic callers;
-// the hot path (nodeStatsUID) md5s the bytes directly.
-
-// appendStatsPreimage builds the 4-element stats preimage into dst, with the two
-// nested list reprs built in c.strBuf2 and quoted into dst as bytes — equivalent
-// to the old nested pythonStringListRepr but with no intermediate strings.
-func appendStatsPreimage(dst []byte, c *canonBuf, n *Node) []byte {
-	kind := n.KV.P.String()
-
-	dst = append(dst, '[')
-	dst = appendPyRepr(dst, platformTarget(n.Platform))
-	dst = append(dst, ',', ' ')
-	c.strBuf2 = appendPythonListRepr(c.strBuf2[:0], sortedStatsTags(n))
-	dst = appendPyRepr(dst, c.strBuf2)
-	dst = append(dst, ',', ' ')
-	dst = appendPyRepr(dst, kind)
-	dst = append(dst, ',', ' ')
-	c.strBuf2 = appendPythonListRepr(c.strBuf2[:0], sortedLongOutputs(n.Outputs))
-	dst = appendPyRepr(dst, c.strBuf2)
-	dst = append(dst, ']')
-
-	return dst
-}
-
-func sortedStatsTags(n *Node) []string {
-	out := append([]string(nil), n.Tags...)
-	sort.Strings(out)
-
-	return out
-}
-
-func sortedLongOutputs(outputs []VFS) []string {
-	out := make([]string, len(outputs))
-
-	for i, v := range outputs {
-		out[i] = v.LongString()
-	}
-
-	sort.Strings(out)
-
-	return out
-}
-
-// pythonStringListRepr returns the python-list repr as a string (test callers).
-
-func appendPythonListRepr(dst []byte, items []string) []byte {
-	dst = append(dst, '[')
-
-	for i, item := range items {
-		if i > 0 {
-			dst = append(dst, ',', ' ')
-		}
-
-		dst = appendPyRepr(dst, item)
-	}
-
-	return append(dst, ']')
-}
-
-// appendPyRepr appends the python repr of s (a string or a []byte) to dst.
-func appendPyRepr[T ~string | ~[]byte](dst []byte, s T) []byte {
-	hasSingle, hasDouble := false, false
-
-	for i := 0; i < len(s); i++ {
-		switch s[i] {
-		case '\'':
-			hasSingle = true
-		case '"':
-			hasDouble = true
-		}
-	}
-
-	quote := byte('\'')
-
-	if hasSingle && !hasDouble {
-		quote = '"'
-	}
-
-	dst = append(dst, quote)
-
-	for i := 0; i < len(s); i++ {
-		ch := s[i]
-
-		switch ch {
-		case '\\':
-			dst = append(dst, '\\', '\\')
-		case '\n':
-			dst = append(dst, '\\', 'n')
-		case '\r':
-			dst = append(dst, '\\', 'r')
-		case '\t':
-			dst = append(dst, '\\', 't')
-		default:
-			if ch == quote {
-				dst = append(dst, '\\', ch)
-				continue
-			}
-
-			if ch < 0x20 || ch == 0x7f {
-				const hexDigits = "0123456789abcdef"
-				dst = append(dst, '\\', 'x', hexDigits[ch>>4], hexDigits[ch&0x0f])
-				continue
-			}
-
-			dst = append(dst, ch)
-		}
-	}
-
-	return append(dst, quote)
-}
-
 type canonBuf struct {
 	buf []byte
 	// fs, when set, makes writeVFSSlice mix each $(S) input's file-content hash
@@ -143,12 +22,6 @@ type canonBuf struct {
 	// changes the node uid. Left nil where only the structural hash is wanted
 	// (e.g. the dump/-G path, which is re-uid'd from canonical content anyway).
 	fs FS
-
-	// strBuf/strBuf2 are reused scratch for the stats-uid preimage: strBuf holds
-	// the outer list (md5'd directly), strBuf2 the two nested list reprs quoted
-	// into it — no intermediate strings.
-	strBuf  []byte
-	strBuf2 []byte
 
 	// uids resolves a node's DepRefs/ForeignDepRefs to dep uids for the preimage,
 	// so deps are never materialized onto the node. Set before writeNode.

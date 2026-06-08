@@ -232,7 +232,7 @@ func finalizeNodes(e *BufferedEmitter, yield func(*Node)) *uidVec {
 	return finalizeNodesInOrder(e, finalizeOrder(e), yield)
 }
 
-// resolveAndUID computes a node's uid and stamps Sandboxing/SelfUID/StatsUID. It
+// resolveAndUID computes a node's uid and stamps Sandboxing/SelfUID. It
 // does NOT materialize Deps/ForeignDeps: the uid preimage resolves the node's
 // DepRefs/ForeignDepRefs through uids (via uidScratch), and downstream consumers
 // (the JSON writer and the executor) do the same direct id->uid lookup. DepRefs
@@ -245,7 +245,6 @@ func resolveAndUID(node *Node, uids *uidVec, uidScratch *canonBuf) UID {
 	u := nodeUIDWithBuf(node, uidScratch)
 	node.UID = u
 	node.SelfUID = u
-	node.StatsUID = nodeStatsUID(node, uidScratch)
 
 	return u
 }

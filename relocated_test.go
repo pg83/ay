@@ -22,14 +22,6 @@ func canonicalNodeBytes(n *Node) []byte {
 	return c.buf
 }
 
-func statsUIDPreimage(n *Node, c *canonBuf) string {
-	return string(appendStatsPreimage(c.strBuf[:0], c, n))
-}
-
-func pythonStringListRepr(c *canonBuf, items []string) string {
-	return string(appendPythonListRepr(c.strBuf[:0], items))
-}
-
 func slicesContains(xs []string, want string) bool {
 	for _, x := range xs {
 		if x == want {

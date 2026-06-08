@@ -2,8 +2,6 @@ package main
 
 import (
 	"bytes"
-	"crypto/md5"
-	encHex "encoding/hex"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -56,30 +54,6 @@ func TestComputeUID_KnownVector(t *testing.T) {
 	}
 }
 
-func TestNodeStatsUID_UsesLongRootOutputs(t *testing.T) {
-	n := &Node{
-		KV:       KV{P: pkLD},
-		Outputs:  []VFS{Intern("$(B)/tools/archiver/archiver")},
-		Platform: &Platform{Target: "default-linux-aarch64"},
-	}
-
-	got := nodeStatsUID(n, &canonBuf{})
-
-	pc := &canonBuf{}
-	shortRootPreimage := pythonStringListRepr(pc, []string{
-		platformTarget(n.Platform),
-		pythonStringListRepr(pc, sortedStatsTags(n)),
-		"LD",
-		pythonStringListRepr(pc, []string{Intern("$(B)/tools/archiver/archiver").String()}),
-	})
-	shortRootHash := md5.Sum([]byte(shortRootPreimage))
-	shortRootUID := encHex.EncodeToString(shortRootHash[:])
-
-	if got == shortRootUID {
-		t.Fatalf("nodeStatsUID used short-root outputs: %s", shortRootPreimage)
-	}
-}
-
 func TestCanonicalNodeBytes_ZeroesIdentityFields(t *testing.T) {
 	n := &Node{
 		Cmds: []Cmd{},
@@ -93,7 +67,6 @@ func TestCanonicalNodeBytes_ZeroesIdentityFields(t *testing.T) {
 		TargetProperties: TargetProperties{},
 		UID:              tuid("AAAAA"),
 		SelfUID:          tuid("BBBBB"),
-		StatsUID:         "should-not-appear-CCCCC",
 	}
 	canon := canonicalNodeBytes(n)
 	s := string(canon)
@@ -104,7 +77,7 @@ func TestCanonicalNodeBytes_ZeroesIdentityFields(t *testing.T) {
 		}
 	}
 
-	if n.UID == (UID{}) || n.SelfUID == (UID{}) || n.StatsUID == "" {
+	if n.UID == (UID{}) || n.SelfUID == (UID{}) {
 		t.Errorf("canonicalNodeBytes mutated the original node: %+v", n)
 	}
 }

@@ -18,7 +18,6 @@ type Node struct {
 	Requirements     Requirements     `json:"requirements"`
 	Sandboxing       bool             `json:"sandboxing"`
 	SelfUID          UID              `json:"self_uid"`
-	StatsUID         string           `json:"stats_uid"`
 	Tags             []string         `json:"tags"`
 	TargetProperties TargetProperties `json:"target_properties"`
 	UID              UID              `json:"uid"`

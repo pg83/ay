@@ -4610,27 +4610,6 @@ func TestIsHeaderSource_ExtendedHeaderExtensions(t *testing.T) {
 	}
 }
 
-type statsUIDRefNode struct {
-	HostPlatform bool `json:"host_platform,omitempty"`
-	KV           struct {
-		P string `json:"p"`
-	} `json:"kv"`
-	Platform string   `json:"platform"`
-	Outputs  []string `json:"outputs"`
-	StatsUID string   `json:"stats_uid"`
-}
-
-type statsUIDNodeKey struct {
-	Outputs      string
-	Kind         string
-	HostPlatform bool
-	Platform     string
-}
-
-type indexedStatsUIDNode struct {
-	StatsUID string
-}
-
 func TestGen_ProtoLibrary_NamedArgUsedForArchive(t *testing.T) {
 	files := map[string]string{}
 

@@ -192,7 +192,6 @@ func pruneDumpGraphEmitterInPlace(e *BufferedEmitter, drop map[NodeRef]struct{},
 
 		node.UID = UID{}
 		node.SelfUID = UID{}
-		node.StatsUID = ""
 		node.DepRefs = trimDumpGraphNodeRefList(node.DepRefs, drop, newIDs)
 		node.ForeignDepRefs = trimDumpGraphNodeRefList(node.ForeignDepRefs, drop, newIDs)
 	}

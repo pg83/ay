@@ -125,16 +125,6 @@ func TestFinalize_UIDsStableAcrossRuns(t *testing.T) {
 		if n.SelfUID != n.UID {
 			t.Logf("PR-02 placeholder: SelfUID currently equals UID; future PR will compute distinct value. graph[%d].SelfUID=%q UID=%q", i, n.SelfUID, n.UID)
 		}
-
-		if len(n.StatsUID) != 32 {
-			t.Errorf("graph[%d].StatsUID len = %d, want 32 (got %q)", i, len(n.StatsUID), n.StatsUID)
-		}
-		for _, ch := range n.StatsUID {
-			if !strings.ContainsRune("0123456789abcdef", ch) {
-				t.Errorf("graph[%d].StatsUID = %q, want lowercase hex", i, n.StatsUID)
-				break
-			}
-		}
 	}
 
 	if len(g1.Result) != 1 {
