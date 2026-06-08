@@ -46,7 +46,7 @@ func expectedTargetPlatformDescriptor() string {
 }
 
 func expectedTestEnv(testName string) EnvVars {
-	return EnvVars{{Name: "ARCADIA_BUILD_ROOT", Value: "$(B)"}, {Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}, {Name: "ARCADIA_SOURCE_ROOT", Value: "$(S)"}, {Name: "ASAN_OPTIONS", Value: "exitcode=100"}, {Name: "ASAN_SYMBOLIZER_PATH", Value: "$(CLANG-1274503668)/bin/llvm-symbolizer"}, {Name: "GORACE", Value: "halt_on_error=1"}, {Name: "LSAN_OPTIONS", Value: "exitcode=100"}, {Name: "LSAN_SYMBOLIZER_PATH", Value: "$(CLANG-1274503668)/bin/llvm-symbolizer"}, {Name: "MSAN_OPTIONS", Value: "exitcode=100:report_umrs=1"}, {Name: "MSAN_SYMBOLIZER_PATH", Value: "$(CLANG-1274503668)/bin/llvm-symbolizer"}, {Name: "TESTING_SAVE_OUTPUT", Value: "yes"}, {Name: "TEST_NAME", Value: testName}, {Name: "TSAN_SYMBOLIZER_PATH", Value: "$(CLANG-1274503668)/bin/llvm-symbolizer"}, {Name: "UBSAN_OPTIONS", Value: "exitcode=100:print_stacktrace=1,halt_on_error=1"}, {Name: "UBSAN_SYMBOLIZER_PATH", Value: "$(CLANG-1274503668)/bin/llvm-symbolizer"}, {Name: "YA_CC", Value: "$(CLANG-1274503668)/bin/clang"}, {Name: "YA_CXX", Value: "$(CLANG-1274503668)/bin/clang++"}, {Name: "YA_MANDATORY_ENV_VARS", Value: "ASAN_OPTIONS:ASAN_SYMBOLIZER_PATH:LSAN_OPTIONS:LSAN_SYMBOLIZER_PATH:MSAN_OPTIONS:MSAN_SYMBOLIZER_PATH:TSAN_SYMBOLIZER_PATH:UBSAN_OPTIONS:UBSAN_SYMBOLIZER_PATH:YA_MANDATORY_ENV_VARS"}, {Name: "YA_NO_RESPAWN", Value: "yes"}, {Name: "YA_PYTHON_BIN", Value: "$(PYTHON)/python"}, {Name: "YA_TC", Value: "no"}, {Name: "YA_TEST_RUNNER", Value: "1"}}
+	return EnvVars{{Name: "ARCADIA_BUILD_ROOT", Value: "$(B)"}, {Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}, {Name: "ARCADIA_SOURCE_ROOT", Value: "$(S)"}, {Name: "ASAN_OPTIONS", Value: "exitcode=100"}, {Name: "ASAN_SYMBOLIZER_PATH", Value: "$(CLANG)/bin/llvm-symbolizer"}, {Name: "GORACE", Value: "halt_on_error=1"}, {Name: "LSAN_OPTIONS", Value: "exitcode=100"}, {Name: "LSAN_SYMBOLIZER_PATH", Value: "$(CLANG)/bin/llvm-symbolizer"}, {Name: "MSAN_OPTIONS", Value: "exitcode=100:report_umrs=1"}, {Name: "MSAN_SYMBOLIZER_PATH", Value: "$(CLANG)/bin/llvm-symbolizer"}, {Name: "TESTING_SAVE_OUTPUT", Value: "yes"}, {Name: "TEST_NAME", Value: testName}, {Name: "TSAN_SYMBOLIZER_PATH", Value: "$(CLANG)/bin/llvm-symbolizer"}, {Name: "UBSAN_OPTIONS", Value: "exitcode=100:print_stacktrace=1,halt_on_error=1"}, {Name: "UBSAN_SYMBOLIZER_PATH", Value: "$(CLANG)/bin/llvm-symbolizer"}, {Name: "YA_CC", Value: "$(CLANG)/bin/clang"}, {Name: "YA_CXX", Value: "$(CLANG)/bin/clang++"}, {Name: "YA_MANDATORY_ENV_VARS", Value: "ASAN_OPTIONS:ASAN_SYMBOLIZER_PATH:LSAN_OPTIONS:LSAN_SYMBOLIZER_PATH:MSAN_OPTIONS:MSAN_SYMBOLIZER_PATH:TSAN_SYMBOLIZER_PATH:UBSAN_OPTIONS:UBSAN_SYMBOLIZER_PATH:YA_MANDATORY_ENV_VARS"}, {Name: "YA_NO_RESPAWN", Value: "yes"}, {Name: "YA_PYTHON_BIN", Value: "$(PYTHON)/python"}, {Name: "YA_TC", Value: "no"}, {Name: "YA_TEST_RUNNER", Value: "1"}}
 }
 
 func expectedTestCtxNode() *Node {
@@ -80,7 +80,7 @@ func expectedUnittestNode(info testSuiteInfo) *Node {
 		Cmds: []Cmd{{
 			Cwd: internStr("$(B)"),
 			CmdArgs: appendInternStrs(nil, []string{
-				"$(TEST_TOOL_HOST-sbr:12080295773)/test_tool",
+				"$(TEST_TOOL_HOST)/test_tool",
 				"run_test",
 				"--ya-start-command-file",
 				"--meta", "$(B)/util/ut/test-results/unittest/meta.json",
@@ -108,17 +108,17 @@ func expectedUnittestNode(info testSuiteInfo) *Node {
 				"--smooth-shutdown-signals", "SIGUSR2",
 				"--compression-filter", "zstd",
 				"--compression-level", "1",
-				"--global-resource", "CLANG14_RESOURCE_GLOBAL::$(CLANG14-1922233694)",
-				"--global-resource", "CLANG16_RESOURCE_GLOBAL::$(CLANG16-1380963495)",
-				"--global-resource", "CLANG18_RESOURCE_GLOBAL::$(CLANG18-1866954364)",
-				"--global-resource", "CLANG20_RESOURCE_GLOBAL::$(CLANG20-178457234)",
-				"--global-resource", "CLANG_FORMAT_RESOURCE_GLOBAL::$(CLANG_FORMAT-2463648791)",
-				"--global-resource", "CLANG_RESOURCE_GLOBAL::$(CLANG-1380963495)",
-				"--global-resource", "LLD_ROOT_RESOURCE_GLOBAL::$(LLD_ROOT-3107549726)",
-				"--global-resource", "YMAKE_PYTHON3_RESOURCE_GLOBAL::$(YMAKE_PYTHON3-1002064631)",
+				"--global-resource", "CLANG14_RESOURCE_GLOBAL::$(CLANG14)",
+				"--global-resource", "CLANG16_RESOURCE_GLOBAL::$(CLANG16)",
+				"--global-resource", "CLANG18_RESOURCE_GLOBAL::$(CLANG18)",
+				"--global-resource", "CLANG20_RESOURCE_GLOBAL::$(CLANG20)",
+				"--global-resource", "CLANG_FORMAT_RESOURCE_GLOBAL::$(CLANG_FORMAT)",
+				"--global-resource", "CLANG_RESOURCE_GLOBAL::$(CLANG)",
+				"--global-resource", "LLD_ROOT_RESOURCE_GLOBAL::$(LLD_ROOT)",
+				"--global-resource", "YMAKE_PYTHON3_RESOURCE_GLOBAL::$(YMAKE_PYTHON3)",
 				"--ram-limit-gb", "8",
 				"--tar", "$(B)/util/ut/test-results/unittest/testing_out_stuff.tar.zstd",
-				"$(TEST_TOOL_HOST-sbr:12080295773)/test_tool",
+				"$(TEST_TOOL_HOST)/test_tool",
 				"run_ut",
 				"--binary", info.BinaryPath,
 				"--trace-path", "$(B)/util/ut/test-results/unittest/ytest.report.trace",
@@ -154,7 +154,7 @@ func expectedClangFormatNode() *Node {
 		Cmds: []Cmd{{
 			Cwd: internStr("$(B)"),
 			CmdArgs: appendInternStrs(nil, []string{
-				"$(TEST_TOOL_HOST-sbr:12080295773)/test_tool",
+				"$(TEST_TOOL_HOST)/test_tool",
 				"run_test",
 				"--ya-start-command-file",
 				"--meta", "$(B)/util/ut/test-results/clang_format/meta.json",
@@ -185,10 +185,10 @@ func expectedClangFormatNode() *Node {
 				"--supports-test-parameters",
 				"--compression-filter", "zstd",
 				"--compression-level", "1",
-				"--global-resource", "CLANG_FORMAT_RESOURCE_GLOBAL::$(CLANG_FORMAT-2463648791)",
+				"--global-resource", "CLANG_FORMAT_RESOURCE_GLOBAL::$(CLANG_FORMAT)",
 				"--ram-limit-gb", "8",
 				"--tar", "$(B)/util/ut/test-results/clang_format/testing_out_stuff.tar.zstd",
-				"$(TEST_TOOL_HOST-sbr:12080295773)/test_tool",
+				"$(TEST_TOOL_HOST)/test_tool",
 				"run_custom_lint",
 				"--source-root", "$(S)",
 				"--build-root", "$(B)",
@@ -199,7 +199,7 @@ func expectedClangFormatNode() *Node {
 				"--wrapper-script", "tools/cpp_style_checker/wrapper.py",
 				"--depends", "util/ut",
 				"--config", "$(S)/build/config/tests/cpp_style/.clang-format",
-				"--global-resource", "CLANG_FORMAT_RESOURCE_GLOBAL::$(CLANG_FORMAT-2463648791)",
+				"--global-resource", "CLANG_FORMAT_RESOURCE_GLOBAL::$(CLANG_FORMAT)",
 				"$(S)/build/scripts/c_templates/svn_interface.c",
 				"$(S)/util/ysafeptr_ut.cpp",
 				"$(S)/util/ysaveload_ut.cpp",
