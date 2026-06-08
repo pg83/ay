@@ -832,6 +832,7 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		"contrib/libs/cxxsupp/libcxxrt",
 		"contrib/libs/libunwind",
 		"util",
+		"build/platform/clang",
 	}
 
 	gotDefaults := defaultPeerdirsForWithState(nil, plain, &moduleData{})
@@ -870,6 +871,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 		"contrib/libs/cxxsupp/libcxxrt",
 		"contrib/libs/libunwind",
 		"util",
+		"build/platform/clang",
 	}
 
 	cases := []struct {
@@ -920,7 +922,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			},
 			flags: FlagSet{NoRuntime: true},
 
-			want: []string{"contrib/libs/linux-headers", "util"},
+			want: []string{"contrib/libs/linux-headers", "util", "build/platform/clang"},
 		},
 		{
 			name: "non_cpp",
@@ -941,6 +943,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				"contrib/libs/cxxsupp/libcxx",
 				"contrib/libs/cxxsupp/libcxxrt",
 				"contrib/libs/libunwind",
+				"build/platform/clang",
 			},
 		},
 
@@ -960,6 +963,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				"contrib/libs/cxxsupp/libcxxrt",
 				"contrib/libs/libunwind",
 				"util",
+				"build/platform/clang",
 			},
 		},
 		{
@@ -975,6 +979,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				"contrib/libs/cxxsupp/libcxxrt",
 				"contrib/libs/libunwind",
 				"util",
+				"build/platform/clang",
 			},
 		},
 		{
@@ -989,6 +994,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				"contrib/libs/cxxsupp/libcxxrt",
 				"contrib/libs/libunwind",
 				"util",
+				"build/platform/clang",
 			},
 		},
 		{
@@ -1003,6 +1009,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				"contrib/libs/cxxsupp/libcxx",
 				"contrib/libs/cxxsupp/libcxxrt",
 				"contrib/libs/libunwind",
+				"build/platform/clang",
 			},
 		},
 	}
