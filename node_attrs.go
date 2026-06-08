@@ -1,7 +1,6 @@
 package main
 
 import (
-	"math"
 	"sort"
 	"strconv"
 )
@@ -53,15 +52,6 @@ func appendEnv(buf []byte, env EnvVars) []byte {
 	}
 
 	return append(buf, '}')
-}
-
-func (c *canonBuf) writeEnv(env EnvVars) {
-	c.writeUint32(uint32(len(env)))
-
-	for _, e := range env {
-		c.writeBytes(e.Name)
-		c.writeBytes(e.Value)
-	}
 }
 
 // Requirements is a node's scheduler resource set. The zero value (no flags set)
@@ -314,42 +304,4 @@ func (r Requirements) MarshalJSON() ([]byte, error) {
 
 func (t TargetProperties) MarshalJSON() ([]byte, error) {
 	return appendTargetProperties(nil, t), nil
-}
-
-// --- canonical hash (gen-time self_uid): a fixed-field deterministic encoding.
-// The gate recomputes content hashes from the JSON, so only determinism matters
-// here, not parity with the old map encoding. ---
-
-func (c *canonBuf) writeRequirements(r Requirements) {
-	c.writeUint64(math.Float64bits(r.CPU))
-	c.writeUint64(math.Float64bits(r.RAM))
-	c.writeBytes(r.Network)
-	c.writeUint64(math.Float64bits(r.RAMDisk))
-	c.writeBool(r.HasRAMDisk)
-}
-
-func (c *canonBuf) writeTargetProperties(t TargetProperties) {
-	c.writeBytes(t.ModuleDir)
-	c.writeBytes(t.ModuleTag)
-	c.writeBytes(t.ModuleLang)
-	c.writeBytes(t.ModuleType)
-}
-
-func (c *canonBuf) writeKV(kv KV) {
-	c.writeByte(byte(kv.P))
-	c.writeByte(byte(kv.PC))
-	c.writeBytes(kv.ShowOut)
-	c.writeBool(kv.ShowOutBool)
-	c.writeBytes(kv.Name)
-	c.writeBytes(kv.Path)
-	c.writeBytes(kv.DisableCache)
-	c.writeBytes(kv.SpecialRunner)
-	c.writeBool(kv.HasSpecialRunner)
-	c.writeBool(kv.RunTestNode)
-	c.writeUint32(uint32(len(kv.ExtOut)))
-
-	for _, e := range kv.sortedExt() {
-		c.writeBytes(e.Key)
-		c.writeBytes(e.Val)
-	}
 }
