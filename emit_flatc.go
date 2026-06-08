@@ -254,7 +254,7 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 	cppIncludes := []includeDirective{{kind: includeQuoted, target: internStr(headerVFS.Rel())}}
 
 	registerBoundGeneratedParsedOutput(ctx, instance, "FL", cppVFS, cppIncludes, flRef, []NodeRef{flatcLDRef})
-	registerBoundGeneratedParsedOutput(ctx, instance, "FL", bfbsVFS, nil, flRef, nil)
+	registerBoundGeneratedParsedOutput(ctx, instance, "FL", bfbsVFS, nil, flRef, []NodeRef{flatcLDRef})
 
 	out := flatcEmission{
 		flRef:   flRef,

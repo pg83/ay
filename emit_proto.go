@@ -423,6 +423,12 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 			pbGenRefs = append(pbGenRefs, grpcCppLDRef)
 		}
 
+		for _, p := range extraPlugins {
+			if p.LDRef != NodeRef(0) {
+				pbGenRefs = append(pbGenRefs, p.LDRef)
+			}
+		}
+
 		registerBoundGeneratedParsedOutput(ctx, instance, "PB", pbH, pbHParsed, pbRef, pbGenRefs)
 
 		// The source a generated header is produced FROM is a real input of every
@@ -449,7 +455,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 			depsParsed := make([]includeDirective, 0, 1+len(directImports))
 			depsParsed = append(depsParsed, includeDirective{kind: includeQuoted, target: internStr(pbH.Rel())})
 			depsParsed = append(depsParsed, directImports...)
-			registerBoundGeneratedParsedOutput(ctx, instance, "PB", pbDepsH, depsParsed, pbRef, nil)
+			registerBoundGeneratedParsedOutput(ctx, instance, "PB", pbDepsH, depsParsed, pbRef, pbGenRefs)
 		}
 
 		pbCCParsed := make([]includeDirective, 0, 3+len(directImports))
