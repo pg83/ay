@@ -5,21 +5,21 @@ import (
 	"testing"
 )
 
-func TestPrebuiltToolchainFlags_UseHashedResourcePatterns(t *testing.T) {
+func TestPrebuiltToolchainFlags_CarryConfigNotToolPaths(t *testing.T) {
 	flags := prebuiltToolchainFlags()
 
-	if got, want := flags["BUILD_PYTHON_BIN"], "$(YMAKE_PYTHON3)/bin/python3"; got != want {
-		t.Fatalf("BUILD_PYTHON_BIN = %q, want %q", got, want)
+	// CLANG_VER (a scalar version) stays a config flag; the tool *paths* and the
+	// *_RESOURCE_GLOBAL vars do not — they come from the build/platform/* PEERDIR
+	// closure (resolveModuleToolchain / DECLARE_*), never from ambient flags.
+	if got, want := flags["CLANG_VER"], "20"; got != want {
+		t.Fatalf("CLANG_VER = %q, want %q", got, want)
 	}
-	if got, want := flags["CLANG_TOOL"], "$(CLANG)/bin/clang"; got != want {
-		t.Fatalf("CLANG_TOOL = %q, want %q", got, want)
-	}
-	if got, want := flags["LLD_TOOL"], "$(LLD_ROOT)/bin/ld.lld"; got != want {
-		t.Fatalf("LLD_TOOL = %q, want %q", got, want)
-	}
-	// <NAME>_RESOURCE_GLOBAL vars are no longer set here — they propagate via the
-	// build/platform/* DECLARE_* statements through the PEERDIR closure.
-	for _, k := range []string{"CLANG16_RESOURCE_GLOBAL", "CLANG18_RESOURCE_GLOBAL", "CLANG20_RESOURCE_GLOBAL", "LLD_ROOT_RESOURCE_GLOBAL"} {
+
+	for _, k := range []string{
+		"CLANG_TOOL", "CLANG_pl_pl_TOOL", "AR_TOOL", "OBJCOPY_TOOL", "STRIP_TOOL",
+		"LLD_TOOL", "BUILD_PYTHON_BIN", "BUILD_PYTHON3_BIN",
+		"CLANG16_RESOURCE_GLOBAL", "LLD_ROOT_RESOURCE_GLOBAL",
+	} {
 		if got, ok := flags[k]; ok {
 			t.Fatalf("%s unexpectedly present in prebuiltToolchainFlags = %q (must come from peerdir)", k, got)
 		}
@@ -30,7 +30,7 @@ func TestGraphConfForToolchainFlags_KeepsOnlyVCSStub(t *testing.T) {
 	// Toolchain resources (CLANG*, LLD_ROOT, YMAKE_PYTHON3, …) are now declared by
 	// the build/platform/* RESOURCES_LIBRARY modules and fetched via emitResourceFetch;
 	// graphConfForToolchainFlags carries only the inline VCS stub no module declares.
-	conf := graphConfForToolchainFlags(newMemFS(nil), prebuiltToolchainFlags())
+	conf := graphConfForToolchainFlags()
 	if conf == nil {
 		t.Fatal("graphConfForToolchainFlags returned nil")
 	}

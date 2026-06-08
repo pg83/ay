@@ -184,7 +184,7 @@ func TestResourceGraphEmitter_OnlyMaterializesUsedFetchNodes(t *testing.T) {
 
 	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
 	target := sandboxedX8664TargetPlatform()
-	conf := graphConfForToolchainFlags(fs, prebuiltToolchainFlags())
+	conf := graphConfForToolchainFlags()
 	plan := newResourceFetchPlan(fs.SourceRoot(), conf, host)
 
 	assertSingleUsedClangFetch(t, emitTestCompileGraph(t, host, target, plan))
@@ -195,7 +195,7 @@ func TestResourceGraphEmitter_ReusedPlanEmitsFetchPerEmitter(t *testing.T) {
 
 	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
 	target := sandboxedX8664TargetPlatform()
-	conf := graphConfForToolchainFlags(fs, prebuiltToolchainFlags())
+	conf := graphConfForToolchainFlags()
 	plan := newResourceFetchPlan(fs.SourceRoot(), conf, host)
 
 	assertSingleUsedClangFetch(t, emitTestCompileGraph(t, host, target, plan))
