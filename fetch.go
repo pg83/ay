@@ -146,34 +146,32 @@ func fetchScriptInputs(scripts scriptDeps) []VFS {
 }
 
 type resourceAwareEmitter struct {
-	inner   Emitter
-	plan    *resourceFetchPlan
-	host    *Platform
-	scripts scriptDeps
-	refs    []NodeRef
-	seen    BitSet
+	inner     Emitter
+	plan      *resourceFetchPlan
+	host      *Platform
+	scripts   scriptDeps
+	fetchRefs map[string]NodeRef
+	refs      []NodeRef
+	seen      BitSet
 }
 
-func newResourceAwareEmitter(host *Platform, inner Emitter, plan *resourceFetchPlan, scripts scriptDeps) Emitter {
-	if plan == nil || len(plan.items) == 0 {
-		return inner
-	}
-
+func newResourceAwareEmitter(host *Platform, inner Emitter, plan *resourceFetchPlan, scripts scriptDeps, fetchRefs map[string]NodeRef) Emitter {
 	return &resourceAwareEmitter{
-		inner:   inner,
-		plan:    plan,
-		host:    host,
-		scripts: scripts,
-		refs:    make([]NodeRef, len(plan.items)),
+		inner:     inner,
+		plan:      plan,
+		host:      host,
+		scripts:   scripts,
+		fetchRefs: fetchRefs,
+		refs:      make([]NodeRef, len(plan.items)),
 	}
 }
 
-func resourceGraphEmitter(host *Platform, inner Emitter, plan *resourceFetchPlan, materializeFetchNodes bool, scripts scriptDeps) Emitter {
-	if !materializeFetchNodes || plan == nil || len(plan.items) == 0 {
+func resourceGraphEmitter(host *Platform, inner Emitter, plan *resourceFetchPlan, materializeFetchNodes bool, scripts scriptDeps, fetchRefs map[string]NodeRef) Emitter {
+	if !materializeFetchNodes {
 		return inner
 	}
 
-	if plan.byPattern == nil {
+	if plan != nil && plan.byPattern == nil {
 		plan.byPattern = make(map[string]int, len(plan.items))
 
 		for i, it := range plan.items {
@@ -181,7 +179,11 @@ func resourceGraphEmitter(host *Platform, inner Emitter, plan *resourceFetchPlan
 		}
 	}
 
-	return newResourceAwareEmitter(host, inner, plan, scripts)
+	if plan == nil {
+		plan = &resourceFetchPlan{}
+	}
+
+	return newResourceAwareEmitter(host, inner, plan, scripts, fetchRefs)
 }
 
 func (e *resourceAwareEmitter) Emit(n *Node) NodeRef {
@@ -204,6 +206,16 @@ func (e *resourceAwareEmitter) OnReady(r NodeRef) <-chan struct{} {
 // scanning: usesResources is the authoritative, builder-declared set.
 func (e *resourceAwareEmitter) attachResourceDeps(n *Node) {
 	for _, pat := range n.usesResources {
+		// Resources declared by a RESOURCES_LIBRARY already have their FETCH node
+		// emitted (emitResourceFetch); take the dep from the shared registry.
+		if ref, ok := e.fetchRefs[pat]; ok {
+			n.DepRefs = append(n.DepRefs, ref)
+
+			continue
+		}
+
+		// Fallback: resources still served by the graphConf plan (e.g. the VCS
+		// stub, not declared by any module).
 		i, ok := e.plan.byPattern[pat]
 
 		if !ok {
