@@ -156,7 +156,6 @@ func EmitLD(
 		Outputs:          outputs,
 		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: "yes"},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
-		Tags:             instance.Platform.Tags,
 		TargetProperties: TargetProperties{ModuleDir: binaryDir, ModuleLang: ldModuleLang(instance), ModuleType: "bin"},
 		DepRefs:          depRefs,
 	}

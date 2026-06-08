@@ -56,16 +56,16 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		t.Errorf("kv.pc = %q, want yellow", got.KV.PC)
 	}
 
-	if platformTarget(got.Platform) != string(PlatformDefaultLinuxAArch64) {
-		t.Errorf("platform = %q, want %q", platformTarget(got.Platform), PlatformDefaultLinuxAArch64)
+	if string(got.Platform.Target) != string(PlatformDefaultLinuxAArch64) {
+		t.Errorf("platform = %q, want %q", string(got.Platform.Target), PlatformDefaultLinuxAArch64)
 	}
 
-	if nodeHasHostTag(got.Tags) {
-		t.Errorf("tags carry \"tool\" → host_platform = true, want false; tags=%v", got.Tags)
+	if nodeHasHostTag(nodeTags(got)) {
+		t.Errorf("tags carry \"tool\" → host_platform = true, want false; tags=%v", nodeTags(got))
 	}
 
-	if len(got.Tags) != 0 {
-		t.Errorf("tags = %v, want [] (aarch64 R6 is target-side)", got.Tags)
+	if len(nodeTags(got)) != 0 {
+		t.Errorf("tags = %v, want [] (aarch64 R6 is target-side)", nodeTags(got))
 	}
 
 	if len(got.DepRefs) != 1 {
@@ -90,7 +90,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 func TestEmitR6_CanonicalizesBinPath_PR35j(t *testing.T) {
 	e := NewBufferedEmitter()
 
-	ragel6LD := e.Emit(&Node{
+	ragel6LD := e.Emit(&Node{Platform: &Platform{},
 		Cmds:    []Cmd{{CmdArgs: appendInternStrs(nil, []string{"link"}), Env: nil}},
 		Env:     nil,
 		Inputs:  ToVFSSlice([]string{}),
@@ -154,7 +154,7 @@ func TestCanonicalizeRagel6BinaryPath_PassThrough(t *testing.T) {
 func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 	e := NewBufferedEmitter()
 
-	ragel6LD := e.Emit(&Node{
+	ragel6LD := e.Emit(&Node{Platform: &Platform{},
 		Cmds:    []Cmd{{CmdArgs: appendInternStrs(nil, []string{"link"}), Env: nil}},
 		Env:     nil,
 		Inputs:  ToVFSSlice([]string{}),
@@ -192,7 +192,7 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 	e := NewBufferedEmitter()
 
-	ragel6LD := e.Emit(&Node{
+	ragel6LD := e.Emit(&Node{Platform: &Platform{},
 		Cmds:    []Cmd{{CmdArgs: appendInternStrs(nil, []string{"link"}), Env: nil}},
 		Env:     nil,
 		Inputs:  ToVFSSlice([]string{}),
@@ -229,19 +229,19 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 		t.Errorf("cmd_args[1] = %q, want -CG2 (x86_64 host = release = optimized)", got.Cmds[0].CmdArgs[1].String())
 	}
 
-	if !nodeHasHostTag(got.Tags) {
-		t.Errorf("tags do not carry \"tool\"; want host_platform-equivalent. tags=%v", got.Tags)
+	if !nodeHasHostTag(nodeTags(got)) {
+		t.Errorf("tags do not carry \"tool\"; want host_platform-equivalent. tags=%v", nodeTags(got))
 	}
 
-	if len(got.Tags) != 1 || got.Tags[0] != "tool" {
-		t.Errorf("tags = %v, want [tool]", got.Tags)
+	if tg := nodeTags(got); len(tg) != 1 || tg[0] != "tool" {
+		t.Errorf("tags = %v, want [tool]", nodeTags(got))
 	}
 }
 
 func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 	e := NewBufferedEmitter()
 
-	ragel6LD := e.Emit(&Node{
+	ragel6LD := e.Emit(&Node{Platform: &Platform{},
 		Cmds:    []Cmd{{CmdArgs: appendInternStrs(nil, []string{"link"}), Env: nil}},
 		Env:     nil,
 		Inputs:  ToVFSSlice([]string{}),

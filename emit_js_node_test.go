@@ -12,11 +12,11 @@ func TestEmitJS_UsesRequestedPlatformTags(t *testing.T) {
 	ref, _ := EmitJS(hostInstance("joinmod"), "all.cpp", []string{"a.cpp"}, nil, target, nil, emit)
 	got := emit.nodes[ref]
 
-	if platformTarget(got.Platform) != string(target.Target) {
-		t.Fatalf("JS platform = %q, want %q", platformTarget(got.Platform), target.Target)
+	if string(got.Platform.Target) != string(target.Target) {
+		t.Fatalf("JS platform = %q, want %q", string(got.Platform.Target), target.Target)
 	}
-	if !reflect.DeepEqual(got.Tags, target.Tags) {
-		t.Fatalf("JS tags = %#v, want %#v", got.Tags, target.Tags)
+	if !reflect.DeepEqual(nodeTags(got), target.Tags) {
+		t.Fatalf("JS tags = %#v, want %#v", nodeTags(got), target.Tags)
 	}
 	if got.TargetProperties.ModuleDir != "joinmod" {
 		t.Fatalf("JS module_dir = %q, want joinmod", got.TargetProperties.ModuleDir)

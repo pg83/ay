@@ -43,7 +43,6 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 				Outputs:          []VFS{generatedVFS},
 				KV:               KV{P: pkCH, PC: pcYellow},
 				Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
-				Tags:             instance.Platform.Tags,
 				TargetProperties: TargetProperties{ModuleDir: instance.Path},
 			}, resourcePatternYMakePython3), instance.Platform))
 			ctx.checkConfigOutputs[generatedVFS] = chRef

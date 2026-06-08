@@ -56,8 +56,6 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	inputs = append(inputs, canonicalBinary, inVFS)
 	inputs = append(inputs, closure...)
 
-	tags := instance.Platform.Tags
-
 	node := &Node{
 		Cmds: []Cmd{
 			{
@@ -69,7 +67,6 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 		Inputs:           inputs,
 		Outputs:          []VFS{outVFS},
 		KV:               KV{P: pkR6, PC: pcYellow},
-		Tags:             tags,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		DepRefs:          []NodeRef{ragel6LD},

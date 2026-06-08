@@ -138,7 +138,7 @@ func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
 }
 
 func TestNodeJSON_DoesNotSerializeInternalRefs(t *testing.T) {
-	n := &Node{
+	n := &Node{Platform: &Platform{},
 		Cmds: []Cmd{},
 
 		Env:              nil,

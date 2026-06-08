@@ -64,7 +64,6 @@ func EmitBI(
 		Inputs:           inputs,
 		KV:               KV{P: pkBI, PC: pcYellow, ShowOut: "yes", DisableCache: "yes"},
 		Outputs:          []VFS{outVFS},
-		Tags:             []string{},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		DepRefs:          []NodeRef{},

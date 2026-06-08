@@ -226,8 +226,6 @@ func EmitPB(
 	// source closure.
 	inputs = append(inputs, producerSourceInputs...)
 
-	tags := instance.Platform.Tags
-
 	targetProps := TargetProperties{ModuleDir: moduleDir}
 
 	if moduleTag != nil {
@@ -290,7 +288,6 @@ func EmitPB(
 		Inputs:           inputs,
 		Outputs:          outputs,
 		KV:               KV{P: pkPB, PC: pcYellow},
-		Tags:             tags,
 		TargetProperties: targetProps,
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		DepRefs:          depRefs,

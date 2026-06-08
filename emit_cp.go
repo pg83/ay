@@ -47,7 +47,6 @@ func EmitJVCPG4(
 		KV:               KV{P: pkCP, PC: pcLightCyan},
 		Outputs:          []VFS{dst},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
-		Tags:             []string{},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		DepRefs:          []NodeRef{jvRef},
 	}
@@ -100,7 +99,6 @@ func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 		KV:               KV{P: pkCP, PC: pcLightCyan},
 		Outputs:          []VFS{dst},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
-		Tags:             []string{},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		DepRefs:          depRefs,
 	}

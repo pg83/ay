@@ -8,16 +8,19 @@ type Cmd struct {
 }
 
 type Node struct {
-	Cache            *bool            `json:"cache,omitempty"`
-	Cmds             []Cmd            `json:"cmds"`
-	Env              EnvVars          `json:"env"`
-	Inputs           []VFS            `json:"inputs"`
-	KV               KV               `json:"kv"`
-	Outputs          []VFS            `json:"outputs"`
-	Platform         *Platform        `json:"platform"`
-	Requirements     Requirements     `json:"requirements"`
-	Sandboxing       bool             `json:"sandboxing"`
-	SelfUID          UID              `json:"self_uid"`
+	Cache        *bool        `json:"cache,omitempty"`
+	Cmds         []Cmd        `json:"cmds"`
+	Env          EnvVars      `json:"env"`
+	Inputs       []VFS        `json:"inputs"`
+	KV           KV           `json:"kv"`
+	Outputs      []VFS        `json:"outputs"`
+	Platform     *Platform    `json:"platform"`
+	Requirements Requirements `json:"requirements"`
+	Sandboxing   bool         `json:"sandboxing"`
+	SelfUID      UID          `json:"self_uid"`
+	// Tags is nil for almost every node — its tags are the platform's (nodeTags).
+	// The exception is the tagless test/lint run nodes, which set it to the
+	// platform's TestTags so they render their own ("no") tags, not the platform's.
 	Tags             []string         `json:"tags"`
 	TargetProperties TargetProperties `json:"target_properties"`
 	UID              UID              `json:"uid"`
@@ -61,13 +64,13 @@ func bindNodePlatform(n *Node, p *Platform) *Node {
 	return n
 }
 
-// platformTarget is the node's platform target string for the graph output and
-// UID — "" for an unbound node (Platform nil), matching the former string field's
-// zero value.
-func platformTarget(p *Platform) string {
-	if p == nil {
-		return ""
+// nodeTags is a node's effective tag list for the graph output and UID: its own
+// Tags when set (the special tagless test/lint nodes carry their Platform.TestTags
+// there), otherwise the platform's Tags.
+func nodeTags(n *Node) []string {
+	if n.Tags != nil {
+		return n.Tags
 	}
 
-	return string(p.Target)
+	return n.Platform.Tags
 }

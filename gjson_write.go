@@ -87,7 +87,7 @@ func appendNode(buf []byte, n *Node, uids *uidVec) []byte {
 		buf = appendToolForeignDeps(buf, n.ForeignDepRefs, uids)
 	}
 
-	if nodeHasHostTag(n.Tags) {
+	if nodeHasHostTag(nodeTags(n)) {
 		buf = append(buf, `,"host_platform":true`...)
 	}
 
@@ -101,7 +101,7 @@ func appendNode(buf []byte, n *Node, uids *uidVec) []byte {
 	buf = appendVFSSlice(buf, n.Outputs)
 
 	buf = append(buf, `,"platform":`...)
-	buf = appendString(buf, platformTarget(n.Platform))
+	buf = appendString(buf, string(n.Platform.Target))
 
 	buf = append(buf, `,"requirements":`...)
 	buf = appendRequirements(buf, n.Requirements)
@@ -116,7 +116,7 @@ func appendNode(buf []byte, n *Node, uids *uidVec) []byte {
 	buf = appendUID(buf, n.SelfUID)
 
 	buf = append(buf, `,"tags":`...)
-	buf = appendStringSlice(buf, n.Tags)
+	buf = appendStringSlice(buf, nodeTags(n))
 
 	buf = append(buf, `,"target_properties":`...)
 	buf = appendTargetProperties(buf, n.TargetProperties)

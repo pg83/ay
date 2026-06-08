@@ -10,8 +10,6 @@ func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 	allInputs = append(allInputs, inVFS)
 	allInputs = append(allInputs, in.IncludeInputs...)
 
-	tags := instance.Platform.Tags
-
 	node := &Node{
 		Cmds: []Cmd{
 			{
@@ -24,7 +22,6 @@ func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		Inputs:           allInputs,
 		Outputs:          []VFS{outVFS},
 		KV:               KV{P: pkAS, PC: pcLightGreen},
-		Tags:             tags,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 	}

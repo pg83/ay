@@ -163,7 +163,6 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		Inputs:  allInputs,
 		Outputs: []VFS{outVFS},
 		KV:      KV{P: pkCC, PC: pcGreen},
-		Tags:    instance.Platform.Tags,
 		TargetProperties: func() TargetProperties {
 			tp := TargetProperties{ModuleDir: instance.Path}
 

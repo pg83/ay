@@ -623,9 +623,9 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 	for _, n := range g.Graph {
 		p := n.KV.P.String()
 		counts[p]++
-		platforms[platformTarget(n.Platform)]++
+		platforms[string(n.Platform.Target)]++
 
-		if nodeHasHostTag(n.Tags) {
+		if nodeHasHostTag(nodeTags(n)) {
 			hostNodes++
 		}
 	}
@@ -2771,8 +2771,8 @@ END()
 			}
 		}
 	}
-	if !nodeHasHostTag(configPlugin.Tags) {
-		t.Fatalf("config proto plugin tags = %v, want host tool tag", configPlugin.Tags)
+	if !nodeHasHostTag(nodeTags(configPlugin)) {
+		t.Fatalf("config proto plugin tags = %v, want host tool tag", nodeTags(configPlugin))
 	}
 	if !slices.Contains(graphDeps(g, configPlugin), pluginRuntime.UID) {
 		t.Fatalf("config proto plugin deps = %v, want runtime peer uid %q", graphDeps(g, configPlugin), pluginRuntime.UID)

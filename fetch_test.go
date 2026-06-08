@@ -28,7 +28,7 @@ func emitTestCompileGraph(t *testing.T, host, target *Platform, plan *resourceFe
 	execEmit := NewBufferedEmitter()
 	execResourceEmit := resourceGraphEmitter(host, execEmit, plan, true, nil)
 	clangTool := prebuiltToolchainFlags()["CLANG_TOOL"]
-	ref := execResourceEmit.Emit(bindNodePlatform(&Node{
+	ref := execResourceEmit.Emit(bindNodePlatform(&Node{Platform: &Platform{},
 		Cmds: []Cmd{{
 			CmdArgs: appendInternStrs(nil, []string{clangTool, "-c", "$(S)/pkg/app/main.cpp", "-o", "$(B)/pkg/app/main.o"}),
 			Env:     nil,
@@ -94,7 +94,7 @@ func TestGenDumpGraphWithMode_SkipsFetchNodesWithoutUIDDrift(t *testing.T) {
 
 	execEmit := NewBufferedEmitter()
 	execResourceEmit := resourceGraphEmitter(host, execEmit, resources, true, nil)
-	execRef := execResourceEmit.Emit(bindNodePlatform(&Node{
+	execRef := execResourceEmit.Emit(bindNodePlatform(&Node{Platform: &Platform{},
 		Cmds: []Cmd{{
 			CmdArgs: appendInternStrs(nil, []string{"$(YMAKE_PYTHON3)/bin/python3", "$(S)/pkg/app/main.py"}),
 			Env:     nil,
@@ -128,7 +128,7 @@ func TestGenDumpGraphWithMode_SkipsFetchNodesWithoutUIDDrift(t *testing.T) {
 
 	dumpEmit := NewBufferedEmitter()
 	dumpResourceEmit := resourceGraphEmitter(host, dumpEmit, resources, false, nil)
-	dumpRef := dumpResourceEmit.Emit(bindNodePlatform(&Node{
+	dumpRef := dumpResourceEmit.Emit(bindNodePlatform(&Node{Platform: &Platform{},
 		Cmds: []Cmd{{
 			CmdArgs: appendInternStrs(nil, []string{"$(YMAKE_PYTHON3)/bin/python3", "$(S)/pkg/app/main.py"}),
 			Env:     nil,

@@ -124,7 +124,6 @@ func fetchNode(host *Platform, item resourceFetch, scripts scriptDeps) *Node {
 		Outputs:          []VFS{item.Output},
 		Requirements:     Requirements{CPU: float64(1), Network: "full", RAM: float64(32)},
 		Sandboxing:       true,
-		Tags:             host.Tags, // read-only; Platform.Tags is immutable during emit
 		TargetProperties: TargetProperties{ModuleDir: "build/resources"},
 	}, host)
 }

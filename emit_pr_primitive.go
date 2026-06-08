@@ -145,15 +145,12 @@ func EmitPR(
 		cmd.Cwd = internStr(expandRunProgramCWD(instance, *stmt.CWD))
 	}
 
-	tags := instance.Platform.Tags
-
 	node := &Node{
 		Cmds:             []Cmd{cmd},
 		Env:              env,
 		Inputs:           inputs,
 		Outputs:          outputs,
 		KV:               KV{P: pkPR, PC: pcYellow, ShowOut: "yes"},
-		Tags:             tags,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		DepRefs:          depRefs,

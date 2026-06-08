@@ -55,7 +55,7 @@ func TestComputeUID_KnownVector(t *testing.T) {
 }
 
 func TestCanonicalNodeBytes_ZeroesIdentityFields(t *testing.T) {
-	n := &Node{
+	n := &Node{Platform: &Platform{},
 		Cmds: []Cmd{},
 
 		Env:              nil,
@@ -84,7 +84,7 @@ func TestCanonicalNodeBytes_ZeroesIdentityFields(t *testing.T) {
 
 func TestCanonicalNodeBytes_VsDefaultJSONMarshal(t *testing.T) {
 
-	n := &Node{
+	n := &Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: appendInternStrs(nil, []string{"sh", "-c", "echo <a> & echo b"}), Env: nil}},
 		Env:  nil, Inputs: ToVFSSlice([]string{}),
 		KV: KV{P: pkCC, Name: "a<b>c"}, Outputs: ToVFSSlice([]string{}),

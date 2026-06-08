@@ -511,7 +511,6 @@ func EmitPYRun(
 		Inputs:           inputs,
 		KV:               KV{P: pkPY, PC: pcYellow, ShowOut: "yes"},
 		Outputs:          outputs,
-		Tags:             instance.Platform.Tags,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		DepRefs:          extraDepRefs,

@@ -53,7 +53,6 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 		KV:               KV{P: pkJS, PC: pcMagenta},
 		Outputs:          []VFS{outVFS},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
-		Tags:             tags,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 	}
 
