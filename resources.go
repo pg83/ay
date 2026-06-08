@@ -1,0 +1,210 @@
+package main
+
+import (
+	"encoding/json"
+	"path/filepath"
+	"strings"
+
+	"github.com/zeebo/xxh3"
+)
+
+// External-resource model. A RESOURCES_LIBRARY (build/platform/clang, …, or the
+// synthetic build/system/toolchain) declares external resources via
+// DECLARE_EXTERNAL_RESOURCE / DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE[_BY_JSON].
+// Each declaration yields:
+//   - a <Name>_RESOURCE_GLOBAL variable bound to "$(<VarName>)", which propagates
+//     transitively through the PEERDIR closure (ymake global_vars_collector mines
+//     every *_RESOURCE_GLOBAL var across the closure) and is rendered into a test
+//     node's --global-resource list as "<Name>_RESOURCE_GLOBAL::$(<VarName>)";
+//   - a fetch of the host-selected URI into the bare $(<Name>) resource dir.
+//
+// VarName mirrors ymake NYa::ResourceVarName: "<Name>-<encodeUriForVar(uri)>".
+// Every field is interned: the model carries STR end to end, the raw strings
+// existing only transiently at the json/macro-argument boundary in makeResourceDecl.
+
+// resourceDecl is one declared external resource after host-platform selection.
+type resourceDecl struct {
+	Name      STR // resource base name, e.g. "CLANG16"
+	URI       STR // host-selected uri, e.g. "sbr:6495238978" or an absolute path
+	GlobalVar STR // propagated variable name, e.g. "CLANG16_RESOURCE_GLOBAL"
+	Value     STR // variable value, e.g. "$(CLANG16-sbr:6495238978)"
+	Token     STR // --global-resource arg "CLANG16_RESOURCE_GLOBAL::$(CLANG16-sbr:6495238978)"
+}
+
+const resourceGlobalSuffix = "_RESOURCE_GLOBAL"
+
+// makeResourceDecl interns one resource (the sole string boundary): it composes
+// the var name (NYa::ResourceVarName), value, global-var name and --global-resource
+// token, then carries them as STR.
+func makeResourceDecl(name, uri string) resourceDecl {
+	varName := name + "-" + encodeUriForVar(uri)
+	value := "$(" + varName + ")"
+	globalVar := name + resourceGlobalSuffix
+
+	return resourceDecl{
+		Name:      internStr(name),
+		URI:       internStr(uri),
+		GlobalVar: internStr(globalVar),
+		Value:     internStr(value),
+		Token:     internStr(globalVar + "::" + value),
+	}
+}
+
+// encodeUriForVar mirrors NYa::EncodeUriForVar: a short uri made of [alnum:_-]
+// passes through verbatim (so "sbr:6495238978" stays readable), otherwise it is
+// replaced by the xxh3 hash of the uri to keep the variable name bounded.
+func encodeUriForVar(uri string) string {
+	if len(uri) < 48 && allResourceUriChar(uri) {
+		return uri
+	}
+
+	return uintToString(xxh3.HashString(uri))
+}
+
+func allResourceUriChar(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+
+		switch {
+		case c >= '0' && c <= '9',
+			c >= 'a' && c <= 'z',
+			c >= 'A' && c <= 'Z',
+			c == ':', c == '_', c == '-':
+		default:
+			return false
+		}
+	}
+
+	return true
+}
+
+func uintToString(v uint64) string {
+	if v == 0 {
+		return "0"
+	}
+
+	var buf [20]byte
+	i := len(buf)
+
+	for v > 0 {
+		i--
+		buf[i] = byte('0' + v%10)
+		v /= 10
+	}
+
+	return string(buf[i:])
+}
+
+// hostPlatformKey is the by_platform json key for the host (os-isa), e.g.
+// "linux-x86_64". Resource bundles select the HOST entry — these are host tools.
+func hostPlatformKey(host *Platform) string {
+	return string(host.OS) + "-" + isaPlatformKey(host.ISA)
+}
+
+func isaPlatformKey(isa ISA) string {
+	if isa == ISAAArch64 {
+		return "aarch64"
+	}
+
+	return string(isa)
+}
+
+// stripSbrPrefix returns the bare sandbox id of an "sbr:<id>" uri (used by the
+// fetch mapping), or the uri unchanged when it carries no sbr scheme.
+func stripSbrPrefix(uri string) string {
+	return strings.TrimPrefix(uri, "sbr:")
+}
+
+// resolveResourceDecls turns one DECLARE_EXTERNAL_RESOURCE /
+// _HOST_RESOURCES_BUNDLE[_BY_JSON] call into host-selected resource declarations.
+func resolveResourceDecls(ctx *genCtx, instance ModuleInstance, stmt *DeclareResourceStmt) []resourceDecl {
+	switch stmt.Macro {
+	case tokDeclareExternalResource:
+		// NAME uri [NAME2 uri2 ...] — direct, host-independent.
+		out := make([]resourceDecl, 0, len(stmt.Args)/2)
+
+		for i := 0; i+1 < len(stmt.Args); i += 2 {
+			out = append(out, makeResourceDecl(stmt.Args[i], stmt.Args[i+1]))
+		}
+
+		return out
+	case tokDeclareExternalHostResourcesBundle:
+		// NAME uri FOR platform [uri2 FOR platform2 ...] — select the host entry.
+		name := stmt.Args[0]
+		bundle := map[string]string{}
+
+		for i := 1; i+2 < len(stmt.Args); i += 3 {
+			if stmt.Args[i+1] != "FOR" {
+				ThrowFmt("gen: %s: malformed DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE args %v", instance.Path, stmt.Args)
+			}
+
+			bundle[stmt.Args[i+2]] = stmt.Args[i]
+		}
+
+		return []resourceDecl{selectHostResourceDecl(ctx, instance, name, bundle)}
+	case tokDeclareExternalHostResourcesBundleByJson:
+		// NAME file.json — read by_platform.<host>.uri.
+		name, jsonRel := stmt.Args[0], stmt.Args[1]
+		bundle := readResourceBundleJSON(ctx.fs, filepath.ToSlash(filepath.Join(instance.Path, jsonRel)))
+
+		return []resourceDecl{selectHostResourceDecl(ctx, instance, name, bundle)}
+	}
+
+	return nil
+}
+
+func selectHostResourceDecl(ctx *genCtx, instance ModuleInstance, name string, bundle map[string]string) resourceDecl {
+	uri, ok := bundle[hostPlatformKey(ctx.host)]
+
+	if !ok {
+		ThrowFmt("gen: %s: resource %q has no entry for host platform %q", instance.Path, name, hostPlatformKey(ctx.host))
+	}
+
+	return makeResourceDecl(name, uri)
+}
+
+// genResourcesLibrary emits a RESOURCES_LIBRARY: it produces no archive/objects
+// (upstream RESOURCES_LIBRARY is a .pkg.fake IGNORED unit), only the external
+// resource globals it declares, which propagate up the PEERDIR closure.
+func genResourcesLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *moduleEmitResult {
+	var globals []resourceDecl
+	deduper.reset()
+
+	for _, stmt := range d.resourceDeclStmts {
+		for _, decl := range resolveResourceDecls(ctx, instance, stmt) {
+			if deduper.add(VFS(decl.GlobalVar)) {
+				globals = append(globals, decl)
+			}
+		}
+	}
+
+	result := &moduleEmitResult{
+		ModuleStmtName:        d.moduleStmt.Name,
+		ResourceGlobalClosure: globals,
+		Peerdirs:              d.peerdirs,
+	}
+	ctx.memo[instance] = result
+
+	return result
+}
+
+type resourceBundleJSON struct {
+	ByPlatform map[string]struct {
+		URI string `json:"uri"`
+	} `json:"by_platform"`
+}
+
+// readResourceBundleJSON parses a build/platform/*/*.json bundle into a
+// platform-key -> uri map (the by_platform table feeding DECLARE_*_BY_JSON).
+func readResourceBundleJSON(fs FS, rel string) map[string]string {
+	var data resourceBundleJSON
+	Throw(json.Unmarshal(fs.Read(rel), &data))
+
+	out := make(map[string]string, len(data.ByPlatform))
+
+	for k, v := range data.ByPlatform {
+		out[k] = v.URI
+	}
+
+	return out
+}

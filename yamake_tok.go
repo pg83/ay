@@ -24,6 +24,8 @@ var tokName = [...]STR{
 	tokCppProtoPlugin2:                 internStr("CPP_PROTO_PLUGIN2"),
 	tokData:                            internStr("DATA"),
 	tokDeclareExternalResource:         internStr("DECLARE_EXTERNAL_RESOURCE"),
+	tokDeclareExternalHostResourcesBundle:       internStr("DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE"),
+	tokDeclareExternalHostResourcesBundleByJson: internStr("DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON"),
 	tokDefault:                         internStr("DEFAULT"),
 	tokDefineVariable:                  internStr("DEFINE_VARIABLE"),
 	tokDisable:                         internStr("DISABLE"),
@@ -214,6 +216,8 @@ const (
 	tokCppProtoPlugin2
 	tokData
 	tokDeclareExternalResource
+	tokDeclareExternalHostResourcesBundle
+	tokDeclareExternalHostResourcesBundleByJson
 	tokDefault
 	tokDefineVariable
 	tokDisable

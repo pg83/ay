@@ -168,6 +168,11 @@ type moduleData struct {
 	ragel6Flags []ARG
 	conflictMod *ModuleStmt
 
+	// resourceDeclStmts are the RESOURCES_LIBRARY's DECLARE_EXTERNAL_RESOURCE /
+	// _HOST_RESOURCES_BUNDLE[_BY_JSON] calls in declaration order; host-uri
+	// selection and json reading happen at gen time (genResourcesLibrary).
+	resourceDeclStmts []*DeclareResourceStmt
+
 	// inducedDeps are the module's INDUCED_DEPS, bucketed by the macro's consumer
 	// type: (cpp …) -> parsedIncludesCpp, (h …) -> parsedIncludesHeader, (h+cpp …) ->
 	// both. resolveInducedDeps reads one bucket per generated output's kind.
@@ -1013,6 +1018,8 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 
 				d.resources = append(d.resources, e)
 			}
+		case *DeclareResourceStmt:
+			d.resourceDeclStmts = append(d.resourceDeclStmts, v)
 		case *IfStmt:
 			taken := v.Then
 

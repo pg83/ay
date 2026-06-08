@@ -187,6 +187,13 @@ type moduleEmitResult struct {
 	ModuleStmtName TOK
 
 	testSuiteInfo *testSuiteInfo
+
+	// ResourceGlobalClosure is the transitive union of external-resource globals
+	// (<NAME>_RESOURCE_GLOBAL) reachable through this module's PEERDIR closure,
+	// deduped by global-var name in first-seen order. A RESOURCES_LIBRARY seeds it
+	// with its own DECLARE_EXTERNAL_RESOURCE declarations; every module folds in its
+	// peers'. Consumers (test-run nodes) render it into --global-resource lists.
+	ResourceGlobalClosure []resourceDecl
 }
 
 func stringPtr(s string) *string {
@@ -607,6 +614,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	if d.moduleStmt == nil {
 		ThrowFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path)
+	}
+
+	if d.moduleStmt.Name == tokResourcesLibrary {
+		return genResourcesLibrary(ctx, instance, d)
 	}
 
 	if instance.Language == LangPy && d.moduleStmt.Name == tokProtoLibrary {
@@ -1044,6 +1055,20 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 
 		resolved = append(resolved, resolvedPeer{path: peerPath, result: peerResult, kind: kind})
+	}
+
+	// Resource globals (<NAME>_RESOURCE_GLOBAL) propagate transitively: fold every
+	// peer's closure, deduped by global-var STR through the run-wide deduper (a leaf
+	// pass — no genModule reentry — so reset-then-stream is safe).
+	var resourceGlobalsClosure []resourceDecl
+	deduper.reset()
+
+	for _, rp := range resolved {
+		for _, decl := range rp.result.ResourceGlobalClosure {
+			if deduper.add(VFS(decl.GlobalVar)) {
+				resourceGlobalsClosure = append(resourceGlobalsClosure, decl)
+			}
+		}
 	}
 
 	deduper.reset()
@@ -1999,6 +2024,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			InducedDeps:                     d.inducedDeps,
 			Peerdirs:                        d.peerdirs,
 			ModuleStmtName:                  d.moduleStmt.Name,
+			ResourceGlobalClosure:           resourceGlobalsClosure,
 			testSuiteInfo:                   suiteInfo,
 		}
 		ctx.memo[instance] = result
@@ -2099,6 +2125,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		InducedDeps:                     d.inducedDeps,
 		Peerdirs:                        d.peerdirs,
 		ModuleStmtName:                  d.moduleStmt.Name,
+		ResourceGlobalClosure:           resourceGlobalsClosure,
 	}
 
 	if len(globalRefs) > 0 {
