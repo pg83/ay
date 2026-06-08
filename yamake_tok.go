@@ -375,6 +375,12 @@ func internTok(s string) TOK {
 	return tokInvalid
 }
 
+// str returns the interned macro-name STR for this TOK — a free conversion
+// (tokName is []STR), uniform with ARG/ENV/VFS str() for cmd-arg assembly.
+func (t TOK) str() STR {
+	return tokName[t]
+}
+
 func (t TOK) String() string {
 	return tokName[t].String()
 }
