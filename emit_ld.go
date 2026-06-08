@@ -347,7 +347,7 @@ func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VF
 		trailer = append(trailer, internStr("-Wl,--version-script=$(S)/"+*exportsScript))
 	}
 
-	if p != nil && !p.PIC && p.Flags[envSANDBOXING] == strYes {
+	if p != nil && !p.PIC && p.CompressDebugSections {
 		trailer = append(trailer, argWlCompressDebugSectionsZstd.str())
 	}
 
