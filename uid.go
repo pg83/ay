@@ -167,7 +167,9 @@ func (c *canonBuf) writeKV(kv KV) {
 	c.writeBool(kv.RunTestNode)
 	c.writeUint32(uint32(len(kv.ExtOut)))
 
-	for _, e := range kv.sortedExt() {
+	// Hash ExtOut in slice order — deterministic per node, so the uid needs no
+	// sort (the sorted form is only for the JSON output's parity, see appendKV).
+	for _, e := range kv.ExtOut {
 		c.writeBytes(e.Key)
 		c.writeBytes(e.Val)
 	}
