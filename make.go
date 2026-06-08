@@ -19,25 +19,6 @@ import (
 	"github.com/jon-codes/getopt"
 )
 
-var targetStatsExtraFlagAllowlist = map[string]struct{}{
-	"ALLOCATOR": {},
-	"FAKEID":    {},
-	"MUSL":      {},
-	"RACE":      {},
-}
-
-var targetStatsBaseFlagAllowlist = map[string]struct{}{
-	"ALLOCATOR":      {},
-	"FAKEID":         {},
-	"MUSL":           {},
-	"RACE":           {},
-	"SANDBOXING":     {},
-	"SANITIZER_TYPE": {},
-	"USE_AFL":        {},
-	"USE_LTO":        {},
-	"USE_THINLTO":    {},
-}
-
 var fatalOnce sync.Once
 
 var ansiCols = map[string]string{
@@ -90,57 +71,10 @@ type cmdPrefix struct {
 	prefix []string
 }
 
-func buildTargetStatsFlags(platformFlags, cliFlags map[string]string) map[string]string {
-	flags := make(map[string]string, len(platformFlags)+len(cliFlags))
-	copyAllowedStatsFlags(flags, platformFlags, targetStatsBaseFlagAllowlist)
-	copyAllowedStatsFlags(flags, cliFlags, targetStatsExtraFlagAllowlist)
-
-	if yes, ok := parseStatsBool(flags["SANDBOXING"]); ok && yes {
-		if _, ok := flags["FAKEID"]; !ok {
-			flags["FAKEID"] = "sandboxing"
-		}
-	}
-
-	return flags
-}
-
-func copyAllowedStatsFlags(dst, src map[string]string, allowlist map[string]struct{}) {
-	for k, v := range src {
-		if v == "" {
-			continue
-		}
-
-		if _, ok := allowlist[k]; ok {
-			dst[k] = v
-		}
-	}
-}
-
 func copyStatsFlags(dst, src map[string]string) {
 	for k, v := range src {
 		dst[k] = v
 	}
-}
-
-func buildHostStatsFlags(hostPlatformFlags, cliFlags map[string]string, sandboxing bool) map[string]string {
-	flags := map[string]string{
-		"CLANG_COVERAGE":   "no",
-		"CONSISTENT_DEBUG": "yes",
-		"NO_DEBUGINFO":     "yes",
-		"TIDY":             "no",
-		"TOOL_BUILD_MODE":  "yes",
-		"TRAVERSE_RECURSE": "no",
-	}
-
-	copyStatsFlags(flags, hostPlatformFlags)
-	copyStatsFlags(flags, cliFlags)
-
-	if sandboxing {
-		flags["SANDBOXING"] = "yes"
-		flags["FAKEID"] = "sandboxing"
-	}
-
-	return flags
 }
 
 func readOptionalYaConfSection(fs FS, rel, wantSection string) map[string]string {
@@ -232,7 +166,6 @@ func cmdMake(args []string) int {
 		[]string{"tool"},
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CFLAGS", ""),
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CXXFLAGS", ""),
-		buildHostStatsFlags(hostYaFlags, mf.hflags, mf.sandboxing),
 	)
 	resourceFetches := newResourceFetchPlan(mf.srcRoot, conf, hostP)
 
@@ -278,7 +211,6 @@ func cmdMake(args []string) int {
 		nil,
 		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CFLAGS", os.Getenv("CFLAGS")),
 		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS")),
-		buildTargetStatsFlags(targetFlags, mf.tflags),
 	)
 
 	if shouldExposeSandboxingTargetTags(mf) {

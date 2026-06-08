@@ -50,13 +50,7 @@ func appendStatsPreimage(dst []byte, c *canonBuf, n *Node) []byte {
 }
 
 func sortedStatsTags(n *Node) []string {
-	tags := n.Tags
-
-	if n.StatsTags != nil {
-		tags = n.StatsTags
-	}
-
-	out := append([]string(nil), tags...)
+	out := append([]string(nil), n.Tags...)
 	sort.Strings(out)
 
 	return out
