@@ -85,6 +85,13 @@ func internBytes(b []byte) STR {
 	return id
 }
 
+// str returns the STR itself — the identity arm of the uniform X.str() STR
+// conversion shared by ARG/ENV/VFS/TOK, so generic cmd-arg assembly can box any
+// interned token the same way.
+func (id STR) str() STR {
+	return id
+}
+
 func (id STR) String() string {
 	return internTable.strs[id]
 }

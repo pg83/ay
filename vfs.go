@@ -33,6 +33,12 @@ func (v VFS) strID() uint32 {
 	return uint32(v) >> 1
 }
 
+// str returns the STR backing this VFS's full path — a free conversion (the VFS
+// is STR<<1|root), uniform with ARG/ENV/TOK str() for cmd-arg assembly.
+func (v VFS) str() STR {
+	return STR(v.strID())
+}
+
 func Source(rel string) VFS {
 	return Intern("$(S)/" + rel)
 }

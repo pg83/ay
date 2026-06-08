@@ -1,11 +1,15 @@
 package main
 
+// argTable stores no strings of its own: the string lives once in the global STR
+// intern table, and an ARG is just a second dense id layered on top. ids maps a
+// token's STR to its ARG; strs maps an ARG back to that STR — a free, O(1)
+// ARG→STR conversion (ARG.str()), the basis for dropping ANY in favour of plain
+// STR in CmdArgs. VFS/TOK already share the STR backing the same way.
 var argTable = struct {
-	ids  map[string]ARG
-	strs []string
+	ids  DenseMap[STR, uint32]
+	strs []STR
 }{
-	ids:  make(map[string]ARG, 256),
-	strs: make([]string, 1, 256), // index 0 reserved: zero-value ARG is the empty arg
+	strs: make([]STR, 1, 256), // index 0 reserved: zero-value ARG is the empty arg
 }
 
 // argDedupeSeen dedups []ARG preserving first-occurrence order, via a reused
@@ -15,26 +19,35 @@ var argTable = struct {
 var argDedupeSeen idSet
 
 // ARG is a dense interned id for a single compiler/linker argument token (e.g.
-// "-mavx2", "-DFOO=1"). Args are few and string identity is exact, so the table
-// is a plain map + vector — no hashing games. One global namespace; args never
-// share the VFS/STR path-intern space. The string form is recovered only when a
-// node's CmdArgs are built (emit/compose), analogous to VFS→string at JSON write.
+// "-mavx2", "-DFOO=1"). One global namespace, layered on the STR table: the
+// token's string is interned once as a STR and the ARG records that STR, so
+// ARG→STR (str()) and ARG→string (String()) are O(1) array loads.
 type ARG uint32
 
 func internArg(s string) ARG {
-	if id, ok := argTable.ids[s]; ok {
-		return id
+	return internArgSTR(internStr(s))
+}
+
+// internArgSTR interns an already-interned token STR into the ARG namespace.
+func internArgSTR(st STR) ARG {
+	if id, ok := argTable.ids.Get(st); ok {
+		return ARG(id)
 	}
 
 	id := ARG(len(argTable.strs))
-	argTable.strs = append(argTable.strs, s)
-	argTable.ids[s] = id
+	argTable.strs = append(argTable.strs, st)
+	argTable.ids.Put(st, uint32(id))
 
 	return id
 }
 
-func (a ARG) String() string {
+// str returns the STR backing this ARG — a free conversion (no re-interning).
+func (a ARG) str() STR {
 	return argTable.strs[a]
+}
+
+func (a ARG) String() string {
+	return argTable.strs[a].String()
 }
 
 // internArgs interns each input as one whole ARG (no whitespace split — a value
@@ -61,7 +74,7 @@ func internArgs(ss []string) []ARG {
 func appendArgStrs(dst []string, srcs ...[]ARG) []string {
 	for _, s := range srcs {
 		for _, a := range s {
-			dst = append(dst, argTable.strs[a])
+			dst = append(dst, a.String())
 		}
 	}
 
@@ -77,7 +90,7 @@ func argStrs(as []ARG) []string {
 	out := make([]string, len(as))
 
 	for i, a := range as {
-		out[i] = argTable.strs[a]
+		out[i] = a.String()
 	}
 
 	return out

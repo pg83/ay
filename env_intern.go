@@ -8,33 +8,49 @@ package main
 // goroutine), like internTable.
 type ENV uint32
 
+// envTable, like argTable, stores no strings of its own: the name is interned
+// once as a STR and the ENV records that STR. ids maps a name's STR to its ENV;
+// strs maps an ENV back to that STR — a free ENV→STR conversion (ENV.str()).
 var envTable = struct {
-	ids   map[string]ENV
-	names []string
-}{ids: make(map[string]ENV, 256), names: []string{""}} // index 0 reserved = "not interned"
+	ids  DenseMap[STR, uint32]
+	strs []STR
+}{strs: []STR{0}} // index 0 reserved = "not interned" (STR 0 is the empty string)
 
 func internEnv(name string) ENV {
-	if id, ok := envTable.ids[name]; ok {
-		return id
+	st := internStr(name)
+
+	if id, ok := envTable.ids.Get(st); ok {
+		return ENV(id)
 	}
 
-	id := ENV(len(envTable.names))
-	envTable.ids[name] = id
-	envTable.names = append(envTable.names, name)
+	id := ENV(len(envTable.strs))
+	envTable.strs = append(envTable.strs, st)
+	envTable.ids.Put(st, uint32(id))
 
 	return id
 }
 
-func (id ENV) String() string {
-	return envTable.names[id]
+// str returns the STR backing this ENV — a free conversion (no re-interning).
+func (id ENV) str() STR {
+	return envTable.strs[id]
 }
 
-// internedEnv looks up name's ENV without interning it (envTable read-only,
-// like interned() for STR). Var-expansion probes arbitrary ${VAR} tokens that
-// are usually not env vars; interning to check would grow the ENV table with
-// junk, so presence is tested via this lookup first.
-func internedEnv(name string) (ENV, bool) {
-	id, ok := envTable.ids[name]
+func (id ENV) String() string {
+	return envTable.strs[id].String()
+}
 
-	return id, ok
+// internedEnv looks up name's ENV without interning it. Var-expansion probes
+// arbitrary ${VAR} tokens that are usually not env vars; this stays read-only —
+// interned() (a read-only STR probe) returns nil for a never-seen name, so a
+// junk ${VAR} grows neither the STR nor the ENV table.
+func internedEnv(name string) (ENV, bool) {
+	st := interned(name)
+
+	if st == nil {
+		return 0, false
+	}
+
+	id, ok := envTable.ids.Get(*st)
+
+	return ENV(id), ok
 }
