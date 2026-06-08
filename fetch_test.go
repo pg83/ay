@@ -26,7 +26,16 @@ func emitTestCompileGraph(t *testing.T, host, target *Platform, plan *resourceFe
 	t.Helper()
 
 	execEmit := NewBufferedEmitter()
-	execResourceEmit := resourceGraphEmitter(host, execEmit, plan, true, nil, nil)
+	// CLANG is declared by build/platform/clang; its FETCH node is emitted up front
+	// (as genResourcesLibrary/emitResourceFetch would) into the shared fetchRefs the
+	// emitter consults for consumers' $(CLANG) deps.
+	fetchRefs := map[string]NodeRef{}
+	execResourceEmit := resourceGraphEmitter(host, execEmit, plan, true, nil, fetchRefs)
+	fetchRefs[resourcePatternClangTool] = execResourceEmit.Emit(bindNodePlatform(&Node{
+		Cmds:    []Cmd{{CmdArgs: appendInternStrs(nil, []string{"ay", "fetch", "$(B)", "$(S)", "sbr:clang", "resources/CLANG"})}},
+		KV:      KV{P: pkFETCH, PC: pcYellow, ShowOut: "yes"},
+		Outputs: []VFS{Build("resources/" + resourcePatternClangTool)},
+	}, host))
 	clangTool := prebuiltToolchainFlags()["CLANG_TOOL"]
 	ref := execResourceEmit.Emit(bindNodePlatform(&Node{Platform: &Platform{},
 		Cmds: []Cmd{{

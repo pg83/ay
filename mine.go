@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -103,52 +102,17 @@ func prebuiltToolchainFlags() map[string]string {
 	return flags
 }
 
-func graphConfForToolchainFlags(fs FS, flags map[string]string) *graphConf {
-	resources := make([]graphConfResource, 0, 5)
-
-	if flagsUsePattern(flags, resourcePatternYMakePython3) {
-		resources = append(resources, readHostResourcesBundle(fs, resourcePatternYMakePython3, "build/platform/python/ymake_python3/resources.json", true))
-	}
-
-	if flagsUsePattern(flags, resourcePatternClang16) {
-		resources = append(resources, readHostResourcesBundle(fs, resourcePatternClang16, "build/platform/clang/clang16.json", true))
-	}
-
-	if flagsUsePattern(flags, resourcePatternClang18) {
-		resources = append(resources, readHostResourcesBundle(fs, resourcePatternClang18, "build/platform/clang/clang18.json", true))
-	}
-
-	if flagsUsePattern(flags, resourcePatternLLDRoot) {
-		resources = append(resources, readHostResourcesBundle(fs, resourcePatternLLDRoot, "build/platform/lld/lld20.json", true))
-	}
-
-	if flagsUsePattern(flags, resourcePatternClangTool) {
-		resources = append(resources, readHostResourcesBundle(fs, resourcePatternClangTool, "build/platform/clang/clang20.json", false))
-	}
-
-	if flagsUsePattern(flags, resourcePatternClang20) {
-		resources = append(resources, readHostResourcesBundle(fs, resourcePatternClang20, "build/platform/clang/clang20.json", true))
-	}
-
-	resources = append(resources, readHostResourcesBundle(fs, resourcePatternJDK17, "build/platform/java/jdk/jdk17/jdk.json", true))
-	resources = append(resources, graphConfResource{
+// graphConfForToolchainFlags now yields only the VCS stub. Toolchain resources
+// (CLANG*, LLD_ROOT, YMAKE_PYTHON3, …) are declared by the build/platform/*
+// RESOURCES_LIBRARY modules and fetched via emitResourceFetch; their executor
+// mount is mechanical ($(NAME) -> <bld>/resources/NAME, see mountString). VCS is
+// an inline stub no module declares.
+func graphConfForToolchainFlags(_ FS, _ map[string]string) *graphConf {
+	return &graphConf{Resources: []graphConfResource{{
 		Name:     "vcs",
 		Pattern:  "VCS",
 		Resource: "base64:vcs.json:e30=",
-	})
-	return &graphConf{Resources: resources}
-}
-
-func flagsUsePattern(flags map[string]string, pattern string) bool {
-	ref := resourcePatternRef(pattern)
-
-	for _, v := range flags {
-		if strings.Contains(v, ref) {
-			return true
-		}
-	}
-
-	return false
+	}}}
 }
 
 func envToolOverrides() []toolOverride {
@@ -251,52 +215,6 @@ func readYaConfSection(fs FS, rel, wantSection string) map[string]string {
 	}
 
 	return out
-}
-
-type hostResourcesJSON struct {
-	ByPlatform map[string]struct {
-		URI string `json:"uri"`
-	} `json:"by_platform"`
-}
-
-func readHostResourcesBundle(fs FS, pattern, rel string, upperPlatform bool) graphConfResource {
-	var data hostResourcesJSON
-	raw := fs.Read(rel)
-	Throw(json.Unmarshal(raw, &data))
-
-	order := []string{
-		"darwin-x86_64",
-		"darwin-arm64",
-		"linux-x86_64",
-		"linux-aarch64",
-		"win32-x86_64",
-	}
-	res := graphConfResource{Pattern: pattern}
-
-	for _, key := range order {
-		item, ok := data.ByPlatform[key]
-
-		if !ok {
-			continue
-		}
-
-		res.Resources = append(res.Resources, graphConfResourceURI{
-			Platform: resourcePlatformName(key, upperPlatform),
-			Resource: item.URI,
-		})
-	}
-
-	return res
-}
-
-func resourcePlatformName(key string, upper bool) string {
-	name := strings.TrimSuffix(key, "-x86_64")
-
-	if !upper {
-		return name
-	}
-
-	return strings.ToUpper(name)
 }
 
 func hostOS() OS {

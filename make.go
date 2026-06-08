@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -758,17 +759,19 @@ func (ex *executor) installRoot(uid UID, where string) {
 	ex.restoreInto(uid, where)
 }
 
-func mountString(s, srcRoot, bldRoot string, resources map[string]string) string {
+// resourceMountRe matches a bare external-resource reference $(NAME) left after
+// the $(S)/$(B) roots are substituted. Every such resource is fetched (by its
+// FETCH node) into <bldRoot>/resources/NAME, so the mount is mechanical — no
+// per-resource map is needed.
+var resourceMountRe = regexp.MustCompile(`\$\(([A-Z_][A-Z0-9_]*)\)`)
+
+func mountString(s, srcRoot, bldRoot string, _ map[string]string) string {
 	s = strings.ReplaceAll(s, "$(S)/", srcRoot+"/")
 	s = strings.ReplaceAll(s, "$(B)/", bldRoot+"/")
 	s = strings.ReplaceAll(s, "$(S)", srcRoot)
 	s = strings.ReplaceAll(s, "$(B)", bldRoot)
 
-	for pattern, rel := range resources {
-		s = strings.ReplaceAll(s, "$("+pattern+")", filepath.Join(bldRoot, rel))
-	}
-
-	return s
+	return resourceMountRe.ReplaceAllString(s, filepath.ToSlash(bldRoot)+"/resources/$1")
 }
 
 func casPath(bldRoot, src string) string {
