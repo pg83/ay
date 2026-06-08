@@ -294,11 +294,12 @@ func (protoIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet
 	var set parsedIncludeSet
 
 	if len(local) > 0 {
-		set = parsedIncludeSet{parsedIncludesLocal: local}
+		set[parsedIncludesLocal] = local
 	}
 
-	set = appendParsedDirectives(set, parsedIncludesHeader, hcpp...)
-	set = appendParsedDirectives(set, parsedIncludesCpp, hcpp...)
+	// h+cpp applies to both consumer kinds; the two buckets share one buffer.
+	set[parsedIncludesHeader] = hcpp
+	set[parsedIncludesCpp] = hcpp
 	return set
 }
 
@@ -346,9 +347,9 @@ func (ragelIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeS
 	var set parsedIncludeSet
 	set = appendParsedDirectives(set, parsedIncludesLocal, local...)
 	set = appendParsedDirectives(set, parsedIncludesRagelNative, native...)
-	selfInclude := includeDirective{kind: includeQuoted, target: internStr(rel)}
-	set = appendParsedDirectives(set, parsedIncludesHeader, selfInclude)
-	set = appendParsedDirectives(set, parsedIncludesCpp, selfInclude)
+	selfInclude := []includeDirective{{kind: includeQuoted, target: internStr(rel)}}
+	set[parsedIncludesHeader] = selfInclude
+	set[parsedIncludesCpp] = selfInclude
 
 	return set
 }
@@ -388,8 +389,8 @@ func (swigIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet 
 
 	var set parsedIncludeSet
 	set = appendParsedDirectives(set, parsedIncludesLocal, direct...)
-	set = appendParsedDirectives(set, parsedIncludesHeader, induced...)
-	set = appendParsedDirectives(set, parsedIncludesCpp, induced...)
+	set[parsedIncludesHeader] = induced
+	set[parsedIncludesCpp] = induced
 
 	return set
 }
