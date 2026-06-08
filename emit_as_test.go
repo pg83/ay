@@ -96,7 +96,7 @@ func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 
 func testYasmLDRef(e *BufferedEmitter) NodeRef {
 	return e.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: anys("yasm"), Env: nil}},
+		Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"yasm"}), Env: nil}},
 		Env:              nil,
 		Inputs:           ToVFSSlice([]string{}),
 		Outputs:          ToVFSSlice([]string{"$(B)/tools/yasm/yasm"}),

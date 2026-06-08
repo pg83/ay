@@ -87,7 +87,7 @@ func TestNodeStatsUID_IgnoresUnrelatedTargetCLIFlags(t *testing.T) {
 		for k, v := range cliFlags {
 			flags[k] = v
 		}
-		p := NewPlatform(testFS, OSLinux, ISAAArch64, flags, nil, "", "", nil)
+		p := NewPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "", "", nil)
 		p.StatsFlags = buildTargetStatsFlags(flags, cliFlags)
 
 		return &Node{
@@ -126,7 +126,7 @@ func TestNodeStatsUID_UsesBaseTargetFlags(t *testing.T) {
 		"PIC":           "no",
 		"USE_LTO":       "yes",
 	}
-	p := NewPlatform(testFS, OSLinux, ISAAArch64, flags, nil, "", "", nil)
+	p := NewPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "", "", nil)
 	p.StatsFlags = buildTargetStatsFlags(flags, map[string]string{"UNRELATED": "yes"})
 
 	n := &Node{
@@ -214,7 +214,7 @@ func TestCanonicalNodeBytes_ZeroesIdentityFields(t *testing.T) {
 func TestCanonicalNodeBytes_VsDefaultJSONMarshal(t *testing.T) {
 
 	n := &Node{
-		Cmds: []Cmd{{CmdArgs: anys("sh", "-c", "echo <a> & echo b"), Env: nil}},
+		Cmds: []Cmd{{CmdArgs: appendInternStrs(nil, []string{"sh", "-c", "echo <a> & echo b"}), Env: nil}},
 		Env:  nil, Inputs: ToVFSSlice([]string{}),
 		KV: KV{P: pkCC, Name: "a<b>c"}, Outputs: ToVFSSlice([]string{}),
 		Requirements: Requirements{}, Tags: []string{},
@@ -248,7 +248,7 @@ func TestCanonicalNodeBytes_VsDefaultJSONMarshal(t *testing.T) {
 func TestCanonicalNodeBytes_DoesNotEscapeHTML(t *testing.T) {
 
 	n := &Node{
-		Cmds: []Cmd{{CmdArgs: anys("sh", "-c", "echo <a> & echo b"), Env: nil}},
+		Cmds: []Cmd{{CmdArgs: appendInternStrs(nil, []string{"sh", "-c", "echo <a> & echo b"}), Env: nil}},
 		Env:  nil, Inputs: ToVFSSlice([]string{}),
 		KV: KV{}, Outputs: ToVFSSlice([]string{}),
 		Requirements: Requirements{}, Tags: []string{},

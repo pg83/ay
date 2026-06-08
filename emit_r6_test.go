@@ -8,7 +8,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	ragel6LD := e.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: anys("link"), Env: nil}},
+		Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"link"}), Env: nil}},
 		Env:              nil,
 		Inputs:           ToVFSSlice([]string{}),
 		KV:               KV{P: pkLD},
@@ -91,7 +91,7 @@ func TestEmitR6_CanonicalizesBinPath_PR35j(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	ragel6LD := e.Emit(&Node{
-		Cmds:    []Cmd{{CmdArgs: anys("link"), Env: nil}},
+		Cmds:    []Cmd{{CmdArgs: appendInternStrs(nil, []string{"link"}), Env: nil}},
 		Env:     nil,
 		Inputs:  ToVFSSlice([]string{}),
 		KV:      KV{P: pkLD},
@@ -155,7 +155,7 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	ragel6LD := e.Emit(&Node{
-		Cmds:    []Cmd{{CmdArgs: anys("link"), Env: nil}},
+		Cmds:    []Cmd{{CmdArgs: appendInternStrs(nil, []string{"link"}), Env: nil}},
 		Env:     nil,
 		Inputs:  ToVFSSlice([]string{}),
 		KV:      KV{P: pkLD},
@@ -193,7 +193,7 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	ragel6LD := e.Emit(&Node{
-		Cmds:    []Cmd{{CmdArgs: anys("link"), Env: nil}},
+		Cmds:    []Cmd{{CmdArgs: appendInternStrs(nil, []string{"link"}), Env: nil}},
 		Env:     nil,
 		Inputs:  ToVFSSlice([]string{}),
 		KV:      KV{P: pkLD},
@@ -206,7 +206,7 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 	}
 	releaseHostFlags["PIC"] = "yes"
 	releaseHostFlags["GG_BUILD_TYPE"] = "release"
-	releaseHost := NewPlatform(testFS, OSLinux, ISAX8664, releaseHostFlags, []string{"tool"}, "", "", nil)
+	releaseHost := NewPlatform(newMemFS(nil), OSLinux, ISAX8664, releaseHostFlags, []string{"tool"}, "", "", nil)
 
 	r6Ref, _ := EmitR6(
 		ModuleInstance{
@@ -242,7 +242,7 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	ragel6LD := e.Emit(&Node{
-		Cmds:    []Cmd{{CmdArgs: anys("link"), Env: nil}},
+		Cmds:    []Cmd{{CmdArgs: appendInternStrs(nil, []string{"link"}), Env: nil}},
 		Env:     nil,
 		Inputs:  ToVFSSlice([]string{}),
 		KV:      KV{P: pkLD},
