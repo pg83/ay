@@ -32,8 +32,8 @@ func EmitPR(
 		}
 	}
 
-	cmdArgs := make([]ANY, 0, 1+len(stmt.Args))
-	cmdArgs = append(cmdArgs, vfsAny(toolBinPath))
+	cmdArgs := make([]STR, 0, 1+len(stmt.Args))
+	cmdArgs = append(cmdArgs, (toolBinPath).str())
 
 	for _, a := range stmt.Args {
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
@@ -56,7 +56,7 @@ func EmitPR(
 			a = vfs.String()
 		}
 
-		cmdArgs = append(cmdArgs, internAny(a))
+		cmdArgs = append(cmdArgs, internStr(a))
 	}
 
 	inputs := make([]VFS, 0, 1+len(auxTools)+len(stmt.INFiles)+len(inputClosure))

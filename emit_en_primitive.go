@@ -14,19 +14,19 @@ func EmitEN(
 ) (NodeRef, []VFS) {
 	serializedCPPVFS := Build(instance.Path + "/" + headerRel + "_serialized.cpp")
 
-	cmdArgs := []ANY{
-		vfsAny(enumParserBin),
-		vfsAny(headerInput),
-		anyIncludePath,
-		internAny(headerInput.Rel()),
-		anyOutput,
-		vfsAny(serializedCPPVFS),
+	cmdArgs := []STR{
+		(enumParserBin).str(),
+		(headerInput).str(),
+		argIncludePath.str(),
+		internStr(headerInput.Rel()),
+		argOutput.str(),
+		(serializedCPPVFS).str(),
 	}
 	outputs := []VFS{serializedCPPVFS}
 
 	if withHeader {
 		serializedHVFS := Build(instance.Path + "/" + headerRel + "_serialized.h")
-		cmdArgs = append(cmdArgs, anyHeader, vfsAny(serializedHVFS))
+		cmdArgs = append(cmdArgs, argHeader.str(), (serializedHVFS).str())
 		outputs = append(outputs, serializedHVFS)
 	}
 

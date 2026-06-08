@@ -1,9 +1,9 @@
 package main
 
-// anys builds an []ANY from string literals for CmdArgs test fixtures. Each element
-// round-trips through ANY.String() back to the original string, so a fixture built
+// anys builds an []STR from string literals for CmdArgs test fixtures. Each element
+// round-trips through STR.String() back to the original string, so a fixture built
 // with anys serializes identically to the former []string form.
-func anys(ss ...string) []ANY { return appendStringAny(nil, ss) }
+func anys(ss ...string) []STR { return appendInternStrs(nil, ss) }
 
 // testFS is the default mock source tree for platform construction in tests: it
 // carries no build/ymake_conf.py, so confCompressesDebug yields false (no -gz=zstd),

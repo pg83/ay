@@ -1,7 +1,7 @@
 package main
 
 type Cmd struct {
-	CmdArgs []ANY   `json:"cmd_args"`
+	CmdArgs []STR   `json:"cmd_args"`
 	Cwd     string  `json:"cwd,omitempty"`
 	Env     EnvVars `json:"env,omitempty"`
 	Stdout  string  `json:"stdout,omitempty"`

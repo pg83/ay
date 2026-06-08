@@ -93,7 +93,7 @@ func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
 }
 
 func newInclArgMemo() inclArgMemo {
-	return inclArgMemo{m: &DenseMap[VFS, ANY]{}}
+	return inclArgMemo{m: &DenseMap[VFS, STR]{}}
 }
 
 func EmitAR(

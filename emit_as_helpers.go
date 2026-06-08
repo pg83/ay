@@ -30,7 +30,7 @@ func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	return Build(outRel), srcVFS
 }
 
-func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInputs) []ANY {
+func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInputs) []STR {
 	bundle := compileFlagBundleFor(instance.Platform)
 	prologueArgs := 3 + len(bundle.ArchArgs)
 
@@ -46,22 +46,22 @@ func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInp
 	fixed := prologueArgs + len(debugPrefixMapFlags) + len(xclangDebugCompilationDir) +
 		len(bundle.CFlags) + len(warnBundle) + len(bundle.Defines) + len(ownCFlags) +
 		len(bundle.NoLibcBlock) + betweenBlocks + len(bundle.NoLibcBlock) + len(in.SFlags) + 4
-	cmdArgs := make([]ANY, 0, fixed+len(includes))
+	cmdArgs := make([]STR, 0, fixed+len(includes))
 
 	cmdArgs = append(cmdArgs, instance.Platform.CCArg, instance.Platform.TargetArg)
-	cmdArgs = appendArgAny(cmdArgs, bundle.ArchArgs)
+	cmdArgs = appendArgStr(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs, argDashBBin)
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warnBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags)
-	cmdArgs = appendArgAny(cmdArgs, in.SFlags)
-	cmdArgs = append(cmdArgs, anyDashC, anyDashO, vfsAny(outVFS), vfsAny(inVFS))
+	cmdArgs = appendArgStr(cmdArgs, in.SFlags)
+	cmdArgs = append(cmdArgs, argDashC.str(), argDashO.str(), (outVFS).str(), (inVFS).str())
 	cmdArgs = append(cmdArgs, includes...)
 
 	return cmdArgs
 }
 
-func composeASIncludes(in ModuleCCInputs) []ANY {
-	out := make([]ANY, 0, len(ccIncludesPrefix)+len(in.AddIncl)+len(in.PeerAddInclGlobal))
-	out = appendArgAny(out, ccIncludesPrefix)
+func composeASIncludes(in ModuleCCInputs) []STR {
+	out := make([]STR, 0, len(ccIncludesPrefix)+len(in.AddIncl)+len(in.PeerAddInclGlobal))
+	out = appendArgStr(out, ccIncludesPrefix)
 	out = appendAddIncl(out, in.AddIncl, in.InclArgs)
 	out = appendAddIncl(out, in.PeerAddInclGlobal, in.InclArgs)
 

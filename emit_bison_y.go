@@ -112,13 +112,13 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 
 	cmds := []Cmd{
 		{
-			CmdArgs: []ANY{
-				internAny(bisonBin),
-				anyV,
-				internAny("--defines=" + headerVFS.String()),
-				anyDashO,
-				vfsAny(generatedVFS),
-				vfsAny(srcVFS),
+			CmdArgs: []STR{
+				internStr(bisonBin),
+				argV.str(),
+				internStr("--defines=" + headerVFS.String()),
+				argDashO.str(),
+				(generatedVFS).str(),
+				(srcVFS).str(),
 			},
 			Env: env,
 		},
@@ -127,10 +127,10 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 
 	if preprocessHeader {
 		cmds = append(cmds, Cmd{
-			CmdArgs: []ANY{
-				internAny(instance.Platform.Tools.Python3),
-				vfsAny(bisonPreprocessPyVFS),
-				vfsAny(headerVFS),
+			CmdArgs: []STR{
+				internStr(instance.Platform.Tools.Python3),
+				(bisonPreprocessPyVFS).str(),
+				(headerVFS).str(),
 			},
 			Env: preprocessEnv,
 		})

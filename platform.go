@@ -53,11 +53,12 @@ type Platform struct {
 	Triple string
 	March  string
 
-	// Pre-boxed cmd-arg tokens, computed once per platform so the per-CC-node
-	// compile line doesn't re-intern the (constant) compiler path and --target.
-	CCArg     ANY
-	CXXArg    ANY
-	TargetArg ANY
+	// Pre-interned cmd-arg tokens (STR), computed once per platform so the
+	// per-CC-node compile line doesn't re-intern the (constant) compiler path
+	// and --target.
+	CCArg     STR
+	CXXArg    STR
+	TargetArg STR
 
 	CFlags   []ARG
 	CXXFlags []ARG
@@ -168,9 +169,9 @@ func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, 
 		BuildTypeUpperSTR: internStr(strings.ToUpper(buildType)),
 	}
 
-	p.CCArg = internAny(p.Tools.CC)
-	p.CXXArg = internAny(p.Tools.CXX)
-	p.TargetArg = internAny("--target=" + p.Triple)
+	p.CCArg = internStr(p.Tools.CC)
+	p.CXXArg = internStr(p.Tools.CXX)
+	p.TargetArg = internStr("--target=" + p.Triple)
 
 	p.DebugInfoFlags = buildDebugInfoFlags(os, buildRelease, confCompressesDebug(fs))
 	p.CompileCFlags = composeCompileCFlags(isa, buildRelease, p.DebugInfoFlags)

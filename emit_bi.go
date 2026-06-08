@@ -9,7 +9,7 @@ var (
 func EmitBI(
 	instance ModuleInstance,
 	outputHeader string,
-	cxxFlags []ANY,
+	cxxFlags []STR,
 	emit Emitter,
 ) NodeRef {
 	outPrefix := instance.Path + "/"
@@ -19,31 +19,31 @@ func EmitBI(
 
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
-	cmd0Args := []ANY{
-		internAny(instance.Platform.Tools.Python3),
-		vfsAny(yieldLinePyVFS),
-		any2,
-		internAny(argsFile),
+	cmd0Args := []STR{
+		internStr(instance.Platform.Tools.Python3),
+		(yieldLinePyVFS).str(),
+		arg2.str(),
+		internStr(argsFile),
 		instance.Platform.CXXArg,
 	}
 
-	cmd1Args := make([]ANY, 0, 4+len(cxxFlags))
+	cmd1Args := make([]STR, 0, 4+len(cxxFlags))
 	cmd1Args = append(cmd1Args,
-		internAny(instance.Platform.Tools.Python3),
-		vfsAny(yieldLinePyVFS),
-		any2,
-		internAny(argsFile),
+		internStr(instance.Platform.Tools.Python3),
+		(yieldLinePyVFS).str(),
+		arg2.str(),
+		internStr(argsFile),
 	)
 	cmd1Args = append(cmd1Args, cxxFlags...)
 
-	cmd2Args := []ANY{
-		internAny(instance.Platform.Tools.Python3),
-		vfsAny(xargsPyVFS),
-		any2,
-		internAny(argsFile),
-		internAny(instance.Platform.Tools.Python3),
-		vfsAny(buildInfoGenPyVFS),
-		vfsAny(outVFS),
+	cmd2Args := []STR{
+		internStr(instance.Platform.Tools.Python3),
+		(xargsPyVFS).str(),
+		arg2.str(),
+		internStr(argsFile),
+		internStr(instance.Platform.Tools.Python3),
+		(buildInfoGenPyVFS).str(),
+		(outVFS).str(),
 	}
 
 	inputs := []VFS{
@@ -74,15 +74,15 @@ func EmitBI(
 	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool), instance.Platform))
 }
 
-func biFlagsForInstance(targetP *Platform) []ANY {
+func biFlagsForInstance(targetP *Platform) []STR {
 	bundle := compileFlagBundleFor(targetP)
-	flags := make([]ANY, 0, 100)
+	flags := make([]STR, 0, 100)
 	cflagPrefix := append(muslCFlags(targetP.Flags[envMUSL] == strYes), sseBaseCFlags(targetP.ISA == ISAX8664)...)
 	flags = appendCompileFlagPipeline(flags, bundle, warningFlags, bundle.Defines, targetP.CFlags, cflagPrefix)
-	flags = append(flags, argAny(cxxStandardFlag))
-	flags = appendArgAny(flags, cxxStandardWarnings)
-	flags = append(flags, argAny(baseUnitCxxNostdinc))
-	flags = appendArgAny(flags, catboostOpenSourceDefine)
-	flags = append(flags, argAny(baseUnitCxxNostdinc))
+	flags = append(flags, (cxxStandardFlag).str())
+	flags = appendArgStr(flags, cxxStandardWarnings)
+	flags = append(flags, (baseUnitCxxNostdinc).str())
+	flags = appendArgStr(flags, catboostOpenSourceDefine)
+	flags = append(flags, (baseUnitCxxNostdinc).str())
 	return flags
 }

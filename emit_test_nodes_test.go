@@ -230,7 +230,7 @@ func expectedClangFormatNode() *Node {
 }
 
 // cmdsEqual compares two Cmd slices treating CmdArgs by their materialized string
-// content (an arg's ANY tag — STR vs VFS vs ARG — is irrelevant to the emitted
+// content (an arg's source namespace — STR vs VFS vs ARG — is irrelevant to the emitted
 // command; only the string matters), and the remaining Cmd fields structurally.
 func cmdsEqual(got, want []Cmd) bool {
 	if len(got) != len(want) {
@@ -238,7 +238,7 @@ func cmdsEqual(got, want []Cmd) bool {
 	}
 
 	for i := range got {
-		if !reflect.DeepEqual(anyStrs(got[i].CmdArgs), anyStrs(want[i].CmdArgs)) {
+		if !reflect.DeepEqual(strStrs(got[i].CmdArgs), strStrs(want[i].CmdArgs)) {
 			return false
 		}
 
@@ -405,7 +405,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		t.Fatalf("clang deps = %v, want [%s]", graphDeps(g, clangNode), ctxNode.UID)
 	}
 
-	unittestArgs := anyStrs(unittestNode.Cmds[0].CmdArgs)
+	unittestArgs := strStrs(unittestNode.Cmds[0].CmdArgs)
 	binaryValue := ""
 	for i := 0; i+1 < len(unittestArgs); i++ {
 		if unittestArgs[i] == "--binary" {
@@ -432,7 +432,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		}
 	}
 
-	clangArgs := anyStrs(clangNode.Cmds[0].CmdArgs)
+	clangArgs := strStrs(clangNode.Cmds[0].CmdArgs)
 	var relatedPaths []string
 	for i := 0; i+1 < len(clangArgs); i++ {
 		if clangArgs[i] == "--test-related-path" {
@@ -502,7 +502,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		if containsString(ccInputs, spec.bad) {
 			t.Fatalf("cc inputs for %q unexpectedly include %q in %v", spec.output, spec.bad, ccInputs)
 		}
-		if !containsString(anyStrs(ccNode.Cmds[0].CmdArgs), "-gz=zstd") {
+		if !containsString(strStrs(ccNode.Cmds[0].CmdArgs), "-gz=zstd") {
 			t.Fatalf("cc cmd for %q missing -gz=zstd: %v", spec.output, ccNode.Cmds[0].CmdArgs)
 		}
 	}
@@ -515,11 +515,11 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 	if !reflect.DeepEqual(ldNode.Tags, expectedSandboxingTags()) {
 		t.Fatalf("ld tags = %v, want %v", ldNode.Tags, expectedSandboxingTags())
 	}
-	if !containsString(anyStrs(ldNode.Cmds[1].CmdArgs), "-gz=zstd") {
+	if !containsString(strStrs(ldNode.Cmds[1].CmdArgs), "-gz=zstd") {
 		t.Fatalf("ld vcs compile cmd missing -gz=zstd: %v", ldNode.Cmds[1].CmdArgs)
 	}
 
-	linkArgs := anyStrs(ldNode.Cmds[2].CmdArgs)
+	linkArgs := strStrs(ldNode.Cmds[2].CmdArgs)
 	wantLinkPrefix := []string{
 		"$(S)/build/scripts/link_exe.py",
 		"--start-plugins",

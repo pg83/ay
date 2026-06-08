@@ -139,7 +139,7 @@ func appendCmdSlice(buf []byte, cmds []Cmd) []byte {
 		}
 
 		buf = append(buf, `{"cmd_args":`...)
-		buf = appendAnySlice(buf, c.CmdArgs)
+		buf = appendStrSlice(buf, c.CmdArgs)
 
 		if c.Cwd != "" {
 			buf = append(buf, `,"cwd":`...)
@@ -176,7 +176,7 @@ func appendStringSlice(buf []byte, ss []string) []byte {
 	return append(buf, ']')
 }
 
-func appendAnySlice(buf []byte, as []ANY) []byte {
+func appendStrSlice(buf []byte, as []STR) []byte {
 	buf = append(buf, '[')
 
 	for i, a := range as {

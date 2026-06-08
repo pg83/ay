@@ -122,8 +122,8 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		t.Errorf("outputs = %#v, want [%q]", got.Outputs, wantOut)
 	}
 
-	startIdx := slices.Index(anyStrs(got.Cmds[2].CmdArgs), "--start-plugins")
-	endIdx := slices.Index(anyStrs(got.Cmds[2].CmdArgs), "--end-plugins")
+	startIdx := slices.Index(strStrs(got.Cmds[2].CmdArgs), "--start-plugins")
+	endIdx := slices.Index(strStrs(got.Cmds[2].CmdArgs), "--end-plugins")
 	if startIdx < 0 || endIdx != startIdx+1 {
 		t.Fatalf("synthetic LD plugin markers = %v, want adjacent empty --start-plugins/--end-plugins", got.Cmds[2].CmdArgs)
 	}
@@ -196,13 +196,13 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 		}
 	}
 
-	if !slices.Equal(anyStrs(got.Cmds[4].CmdArgs), []string{testTargetP.Tools.Objcopy, "--only-keep-debug", "$(B)/some/prog/prog", "$(B)/some/prog/prog.debug"}) {
+	if !slices.Equal(strStrs(got.Cmds[4].CmdArgs), []string{testTargetP.Tools.Objcopy, "--only-keep-debug", "$(B)/some/prog/prog", "$(B)/some/prog/prog.debug"}) {
 		t.Fatalf("cmd[4].cmd_args = %#v", got.Cmds[4].CmdArgs)
 	}
-	if !slices.Equal(anyStrs(got.Cmds[5].CmdArgs), []string{testTargetP.Tools.Strip, "--strip-debug", "$(B)/some/prog/prog"}) {
+	if !slices.Equal(strStrs(got.Cmds[5].CmdArgs), []string{testTargetP.Tools.Strip, "--strip-debug", "$(B)/some/prog/prog"}) {
 		t.Fatalf("cmd[5].cmd_args = %#v", got.Cmds[5].CmdArgs)
 	}
-	if !slices.Equal(anyStrs(got.Cmds[6].CmdArgs), []string{testTargetP.Tools.Objcopy, "--remove-section=.gnu_debuglink", "--add-gnu-debuglink", "$(B)/some/prog/prog.debug", "$(B)/some/prog/prog"}) {
+	if !slices.Equal(strStrs(got.Cmds[6].CmdArgs), []string{testTargetP.Tools.Objcopy, "--remove-section=.gnu_debuglink", "--add-gnu-debuglink", "$(B)/some/prog/prog.debug", "$(B)/some/prog/prog"}) {
 		t.Fatalf("cmd[6].cmd_args = %#v", got.Cmds[6].CmdArgs)
 	}
 
@@ -311,7 +311,7 @@ func TestComposeProgramLinkTrailer_NonPICRPathTrailerKeepsNoPie(t *testing.T) {
 		"-Wl,-no-pie",
 	}
 
-	if !slices.Equal(anyStrs(got), want) {
+	if !slices.Equal(strStrs(got), want) {
 		t.Fatalf("composeProgramLinkTrailer mismatch:\n got: %#v\nwant: %#v", got, want)
 	}
 }
@@ -373,7 +373,7 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 		t.Fatalf("whole-archive/peer ref in DepRefs %d times, want 1: %#v", depCount, got.DepRefs)
 	}
 
-	cmdArgs := anyStrs(got.Cmds[2].CmdArgs)
+	cmdArgs := strStrs(got.Cmds[2].CmdArgs)
 	found := false
 	for i := 0; i+1 < len(cmdArgs); i++ {
 		if cmdArgs[i] == "--whole-archive-libs" && cmdArgs[i+1] == wholeArchivePath {
@@ -446,7 +446,7 @@ func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T
 		t.Fatalf("peer/whole-archive ref in DepRefs %d times, want 1: %#v", depCount, got.DepRefs)
 	}
 
-	cmdArgs := anyStrs(got.Cmds[2].CmdArgs)
+	cmdArgs := strStrs(got.Cmds[2].CmdArgs)
 	found := false
 	for i := 0; i+1 < len(cmdArgs); i++ {
 		if cmdArgs[i] == "--whole-archive-libs" && cmdArgs[i+1] == dupPath.Rel() {

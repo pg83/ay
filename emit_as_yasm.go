@@ -28,21 +28,21 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 		predefinedFlags = []string{"-g", "dwarf2"}
 	}
 
-	cmdArgs := make([]ANY, 0, 20+len(predefinedFlags))
+	cmdArgs := make([]STR, 0, 20+len(predefinedFlags))
 	cmdArgs = append(cmdArgs,
-		internAny(yasmBinaryPath),
-		anyF, anyElf64,
-		anyD, anyUnix,
-		anyReplaceBB,
-		anyReplaceSS,
-		anyReplaceToolRootT,
-		anyD, internAny("_"+string(instance.Platform.ISA)+"_"),
-		anyDYasm,
+		internStr(yasmBinaryPath),
+		argF.str(), argElf64.str(),
+		argD.str(), argUnix.str(),
+		argReplaceBB.str(),
+		argReplaceSS.str(),
+		argReplaceToolRootT.str(),
+		argD.str(), internStr("_"+string(instance.Platform.ISA)+"_"),
+		argDYasm.str(),
 	)
-	cmdArgs = appendStringAny(cmdArgs, predefinedFlags)
+	cmdArgs = appendInternStrs(cmdArgs, predefinedFlags)
 	cmdArgs = append(cmdArgs,
-		anyI, anyB,
-		anyI, anyS,
+		argI.str(), argB.str(),
+		argI.str(), argS.str(),
 	)
 
 	// Per-module `ADDINCL(FOR asm X)` entries arrive on in.AddIncl
@@ -51,12 +51,12 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	// yt/yt/core/misc/isa_crc64/include precede `-o output input` and the
 	// command shape matches REF.
 	for _, p := range in.AddIncl {
-		cmdArgs = append(cmdArgs, anyI, vfsAny(p))
+		cmdArgs = append(cmdArgs, argI.str(), (p).str())
 	}
 
 	cmdArgs = append(cmdArgs,
-		anyDashO, internAny(outputPath),
-		internAny(inputPath),
+		argDashO.str(), internStr(outputPath),
+		internStr(inputPath),
 	)
 
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}, {Name: "YASM_TEST_SUITE", Value: "1"}}

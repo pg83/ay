@@ -108,13 +108,13 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		}
 
 		mergedOut := Build(instance.Path + "/" + stmt.Name + "_merged" + stmt.Suffix + ".bc")
-		ldArgs := []ANY{internAny(llvmLink)}
+		ldArgs := []STR{internStr(llvmLink)}
 
 		for _, p := range bcPaths {
-			ldArgs = append(ldArgs, vfsAny(p))
+			ldArgs = append(ldArgs, (p).str())
 		}
 
-		ldArgs = append(ldArgs, anyDashO, vfsAny(mergedOut))
+		ldArgs = append(ldArgs, argDashO.str(), (mergedOut).str())
 		mergeInputs := append([]VFS(nil), bcPaths...)
 
 		if linksCopy {
@@ -137,18 +137,18 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 
 		optOutName := stmt.Name + "_optimized" + stmt.Suffix + ".bc"
 		optOut := Build(instance.Path + "/" + optOutName)
-		optArgs := []ANY{internAny(python), internAny(optWrapper), internAny(opt), vfsAny(mergedOut), anyDashO, vfsAny(optOut)}
+		optArgs := []STR{internStr(python), internStr(optWrapper), internStr(opt), (mergedOut).str(), argDashO.str(), (optOut).str()}
 		passes := []string{"default<O2>", "globalopt", "globaldce"}
 
 		if len(stmt.Symbols) > 0 {
 			passes = append(passes, "internalize")
-			optArgs = append(optArgs, internAny("-internalize-public-api-list="+strings.Join(stmt.Symbols, "#")))
+			optArgs = append(optArgs, internStr("-internalize-public-api-list="+strings.Join(stmt.Symbols, "#")))
 		}
 
 		// ${__COMMA__} is a ymake macro that expands to literal ','; the outer
 		// single-quotes in the Python plugin are ymake argument syntax stripped
 		// before graph JSON is written. We emit the already-expanded form directly.
-		optArgs = append(optArgs, internAny(`-passes="`+strings.Join(passes, ",")+`"`))
+		optArgs = append(optArgs, internStr(`-passes="`+strings.Join(passes, ",")+`"`))
 
 		// OP inputs: mergedBC + llvm_opt_wrapper.py + source-root BC closure inputs.
 		// Upstream OP carries the full $(S) closure from BC compilation (flat input
@@ -224,7 +224,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 //   - No macroPrefixMapFlags
 //   - No PerSrcCFlags
 //   - Ends with -Wno-unknown-warning-option -emit-llvm -c input -o output
-func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platform, in ModuleCCInputs, inVFS, outVFS VFS) []ANY {
+func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platform, in ModuleCCInputs, inVFS, outVFS VFS) []STR {
 	bundle := compileFlagBundleFor(platform)
 	warningBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
 
@@ -237,16 +237,16 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 		ownExtras = append(append([]ARG{}, ownExtras...), platform.CXXFlags...)
 	}
 
-	args := make([]ANY, 0, 200+len(in.AddIncl)+len(in.PeerAddInclGlobal)+
+	args := make([]STR, 0, 200+len(in.AddIncl)+len(in.PeerAddInclGlobal)+
 		len(bundle.Defines)+len(ownCFlags)+2*len(bundle.NoLibcBlock)+
 		len(in.ModuleScopeCFlags)+len(ownExtras)+len(ownGlobalBucket)+
 		len(bundle.ArchArgs)+len(bundle.CFlags)+len(warningBundle))
 
 	// Wrapper prefix: python3 clang_wrapper.py no clangBC++
-	args = append(args, internAny(python), internAny(clangWrapper), anyNo, internAny(clangBC))
+	args = append(args, internStr(python), internStr(clangWrapper), argNo.str(), internStr(clangBC))
 
 	// ${pre=-I:_C__INCLUDE}: include paths (same layout as CC compile)
-	args = appendArgAny(args, ccIncludesPrefix)
+	args = appendArgStr(args, ccIncludesPrefix)
 	args = appendAddIncl(args, in.AddIncl, in.InclArgs)
 	peerAddIncl := in.PeerAddInclGlobal
 
@@ -270,15 +270,15 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	// appendCompileFlagPipeline) and from the OwnGlobalBucket/PeerCXXFlagsGlobal
 	// slot. The explicit catboostOpenSourceDefine ensures the flag is present even
 	// when PeerCXXFlagsGlobal is empty (same reason composeTargetCC always adds it).
-	args = appendArgAny(args, ownGlobalBucket, catboostOpenSourceDefine, composePostCatboostBucket(ownGlobalBucket))
+	args = appendArgStr(args, ownGlobalBucket, catboostOpenSourceDefine, composePostCatboostBucket(ownGlobalBucket))
 
 	// $C_FLAGS_PLATFORM comes after $BC_CXXFLAGS (not before like in CC).
 	args = append(args, platform.TargetArg)
-	args = appendArgAny(args, bundle.ArchArgs)
+	args = appendArgStr(args, bundle.ArchArgs)
 	args = append(args, argDashBBin)
 
 	// BC-specific tail flags from upstream macro
-	args = append(args, anyWnoUnknownWarningOption, anyEmitLlvm, anyDashC, vfsAny(inVFS), anyDashO, vfsAny(outVFS))
+	args = append(args, argWnoUnknownWarningOption.str(), argEmitLlvm.str(), argDashC.str(), (inVFS).str(), argDashO.str(), (outVFS).str())
 
 	return args
 }

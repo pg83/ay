@@ -18,21 +18,21 @@ func EmitR5(
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 	cmd0 := Cmd{
-		CmdArgs: []ANY{
-			vfsAny(ragel5BinPath),
-			anyDashO,
-			vfsAny(tmpVFS),
-			vfsAny(srcVFS),
+		CmdArgs: []STR{
+			(ragel5BinPath).str(),
+			argDashO.str(),
+			(tmpVFS).str(),
+			(srcVFS).str(),
 		},
 		Env: env,
 	}
 	cmd1 := Cmd{
-		CmdArgs: []ANY{
-			vfsAny(rlgenCdBinPath),
-			anyG2,
-			anyDashO,
-			vfsAny(cppVFS),
-			vfsAny(tmpVFS),
+		CmdArgs: []STR{
+			(rlgenCdBinPath).str(),
+			argG2.str(),
+			argDashO.str(),
+			(cppVFS).str(),
+			(tmpVFS).str(),
 		},
 		Env: env,
 	}
