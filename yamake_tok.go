@@ -92,6 +92,7 @@ var tokName = [...]STR{
 	tokNoUtil:                          internStr("NO_UTIL"),
 	tokNoWshadow:                       internStr("NO_WSHADOW"),
 	tokNoYmakePython:                   internStr("NO_YMAKE_PYTHON"),
+	tokNoYmakePython3:                  internStr("NO_YMAKE_PYTHON3"),
 	tokOnlyTags:                        internStr("ONLY_TAGS"),
 	tokOpensourceExportReplacement:     internStr("OPENSOURCE_EXPORT_REPLACEMENT"),
 	tokOpensourceExportReplacementByOs: internStr("OPENSOURCE_EXPORT_REPLACEMENT_BY_OS"),
@@ -155,6 +156,7 @@ var tokName = [...]STR{
 	tokTaskletsupport:                  internStr("TASKLETSUPPORT"),
 	tokTestSrcs:                        internStr("TEST_SRCS"),
 	tokTimeout:                         internStr("TIMEOUT"),
+	tokToolchain:                       internStr("TOOLCHAIN"),
 	tokUnion:                           internStr("UNION"),
 	tokUnittestFor:                     internStr("UNITTEST_FOR"),
 	tokUseCommonGoogleApis:             internStr("USE_COMMON_GOOGLE_APIS"),
@@ -284,6 +286,7 @@ const (
 	tokNoUtil
 	tokNoWshadow
 	tokNoYmakePython
+	tokNoYmakePython3
 	tokOnlyTags
 	tokOpensourceExportReplacement
 	tokOpensourceExportReplacementByOs
@@ -347,6 +350,7 @@ const (
 	tokTaskletsupport
 	tokTestSrcs
 	tokTimeout
+	tokToolchain
 	tokUnion
 	tokUnittestFor
 	tokUseCommonGoogleApis

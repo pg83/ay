@@ -87,6 +87,8 @@ var acknowledgedMacros = map[string]struct{}{
 	"NO_PYTHON2":                      {},
 	"NO_MYPY":                         {},
 	"NO_YMAKE_PYTHON":                 {},
+	"NO_YMAKE_PYTHON3":                {},
+	"TOOLCHAIN":                       {},
 	"USE_LIGHT_PY2CC":                 {},
 	"WITHOUT_VERSION":                 {},
 	"SPLIT_FACTOR":                    {},
@@ -463,7 +465,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	ctx.emit.Result(root.LDRef)
 
 	if ctx.testMode && root.testSuiteInfo != nil {
-		for _, ref := range emitTestRunNodes(resourceEmit, resourceEmit, targetP, *root.testSuiteInfo, root.LDRef) {
+		for _, ref := range emitTestRunNodes(resourceEmit, resourceEmit, targetP, *root.testSuiteInfo, root.LDRef, root.ResourceGlobalClosure) {
 			ctx.emit.Result(ref)
 		}
 	}

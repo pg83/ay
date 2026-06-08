@@ -449,6 +449,8 @@ const (
 	tokEq
 	tokLt
 	tokNotEq
+	tokGe
+	tokGt
 )
 
 type token struct {
@@ -607,6 +609,16 @@ func (l *lexer) readToken() token {
 
 		l.advance()
 		return token{kind: tokLt, line: startLine, col: startCol}
+	case b == '>':
+
+		l.advance()
+
+		if l.pos < len(l.src) && l.src[l.pos] == '=' {
+			l.advance()
+			return token{kind: tokGe, line: startLine, col: startCol}
+		}
+
+		return token{kind: tokGt, line: startLine, col: startCol}
 	case b == '=' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '=':
 
 		l.advance()
@@ -1484,7 +1496,7 @@ func (p *parser) readCondTokens(ifTok token) []token {
 			}
 
 			out = append(out, tok)
-		case tokIdent, tokWord, tokString, tokInt, tokEq, tokLt, tokNotEq:
+		case tokIdent, tokWord, tokString, tokInt, tokEq, tokLt, tokNotEq, tokGe, tokGt:
 			out = append(out, tok)
 		}
 	}
@@ -1597,6 +1609,18 @@ func (c *condParser) parseCmp() Expr {
 		right := c.parseAtom()
 		c.rejectChainedCmp(t)
 		return &ExprNot{Of: &ExprEq{Left: left, Right: right}}
+	case tokGt:
+		// a > b  ≡  b < a
+		c.consume()
+		right := c.parseAtom()
+		c.rejectChainedCmp(t)
+		return &ExprLt{Left: right, Right: left}
+	case tokGe:
+		// a >= b  ≡  !(a < b)
+		c.consume()
+		right := c.parseAtom()
+		c.rejectChainedCmp(t)
+		return &ExprNot{Of: &ExprLt{Left: left, Right: right}}
 	}
 
 	return left
@@ -1609,7 +1633,7 @@ func (c *condParser) rejectChainedCmp(prev token) {
 		return
 	}
 
-	if t.kind == tokEq || t.kind == tokLt || t.kind == tokNotEq {
+	if t.kind == tokEq || t.kind == tokLt || t.kind == tokNotEq || t.kind == tokGe || t.kind == tokGt {
 		c.parent.lex.throwParse(t.line, t.col, "chained comparison %s after %s is not supported", describeToken(t), describeToken(prev))
 	}
 }
@@ -1749,6 +1773,10 @@ func describeToken(t token) string {
 		return "'<'"
 	case tokNotEq:
 		return "'!='"
+	case tokGe:
+		return "'>='"
+	case tokGt:
+		return "'>'"
 	default:
 		return fmt.Sprintf("token(kind=%d)", t.kind)
 	}

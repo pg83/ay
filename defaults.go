@@ -177,11 +177,20 @@ func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, d *module
 	}
 
 	// Toolchain resources: upstream _BASE_UNIT peers build/platform/clang under
-	// NEED_LLVM_TOOLS_PEERDIR && NEED_PLATFORM_PEERDIRS (ymake.core.conf:842). The
-	// module is a RESOURCES_LIBRARY (inert: no link inputs), contributing only its
-	// CLANG/CLANG16/18/20 resource globals to the closure.
-	if !noPlatform && !strings.HasPrefix(instance.Path, "build/platform/") {
-		peers = append(peers, "build/platform/clang")
+	// NEED_LLVM_TOOLS_PEERDIR && NEED_PLATFORM_PEERDIRS (ymake.core.conf:842) and
+	// build/platform/${LINKER} under the linker selection. The gate is
+	// NEED_PLATFORM_PEERDIRS — like contrib/libs/linux-headers above, NO_PLATFORM /
+	// NO_LIBC / NO_RUNTIME do NOT clear it (only _BARE_UNIT/PACKAGE/UNION fakes do,
+	// and those do not compile) — so it is NOT gated on noPlatform. The modules are
+	// RESOURCES_LIBRARYs (inert: no link inputs), contributing their resource globals
+	// and (lld) the propagated linker LDFLAGS to the closure.
+	if !strings.HasPrefix(instance.Path, "build/platform/") {
+		peers = append(peers,
+			"build/platform/clang",
+			"build/platform/clang/clang-format",
+			"build/platform/lld",
+			"build/platform/python/ymake_python3",
+		)
 	}
 
 	return peers

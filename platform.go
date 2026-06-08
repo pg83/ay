@@ -325,18 +325,10 @@ func (p *Platform) LinkerSelectionGDBIndexFlags() []string {
 }
 
 func (p *Platform) LinkerSelectionTailFlags() []string {
-	if !p.UsesResourceLLD() {
-		return nil
-	}
-
-	flags := []string{
-		"-fuse-ld=lld",
-		"--ld-path=" + p.Tools.LLD,
-		"-Wl,--no-rosegment",
-		"-Wl,--build-id=sha1",
-	}
-
-	return flags
+	// The lld linker flags (-fuse-ld=lld, --ld-path, -Wl,--no-rosegment,
+	// -Wl,--build-id=sha1) now come from build/platform/lld's propagated
+	// LDFLAGS_GLOBAL via the implicit toolchain peer, not from the Platform.
+	return nil
 }
 
 func (p *Platform) LinkerSelectionNoPieFlags() []string {
