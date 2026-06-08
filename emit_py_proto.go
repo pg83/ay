@@ -82,13 +82,11 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCo
 	}
 
 	if cppSibling != nil && cppSibling.ARPath != nil {
+		// The CPP sibling's archive is whole-archived here; it enters the regular
+		// link closure as a proper peer (walkPeersForGlobalAddIncl peers the CPP
+		// instance first), so it is not re-adopted as this module's own ARPath.
 		result.WholeArchiveRefs = append(result.WholeArchiveRefs, cppSibling.ARRef)
 		result.WholeArchivePaths = append(result.WholeArchivePaths, *cppSibling.ARPath)
-
-		if d.optimizePyProtos {
-			result.ARRef = cppSibling.ARRef
-			result.ARPath = cppSibling.ARPath
-		}
 	} else if moduleExcludesTag(d, "CPP_PROTO") {
 		result.WholeArchiveCmdPaths = append(result.WholeArchiveCmdPaths, Build(instance.Path+"/"+ArchiveName(instance.Path)))
 	}
