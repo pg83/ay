@@ -263,7 +263,7 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 		t.Errorf("tags do not carry \"tool\" baseline (host_platform-equivalent): %v", nodeTags(got))
 	}
 
-	if tg := nodeTags(got); len(tg) != 1 || tg[0] != "tool" {
+	if tg := nodeTags(got); len(tg) != 1 || tg[0] != internStr("tool") {
 		t.Errorf("tags = %v, want [\"tool\"]", nodeTags(got))
 	}
 }

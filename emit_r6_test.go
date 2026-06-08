@@ -15,7 +15,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		Outputs:          ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 		Platform:         &Platform{Target: "default-linux-x86_64"},
 		Requirements:     Requirements{},
-		Tags:             []string{"tool"},
+		Tags:             []STR{internStr("tool")},
 		TargetProperties: TargetProperties{ModuleDir: "contrib/tools/ragel6"},
 	})
 
@@ -233,7 +233,7 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 		t.Errorf("tags do not carry \"tool\"; want host_platform-equivalent. tags=%v", nodeTags(got))
 	}
 
-	if tg := nodeTags(got); len(tg) != 1 || tg[0] != "tool" {
+	if tg := nodeTags(got); len(tg) != 1 || tg[0] != internStr("tool") {
 		t.Errorf("tags = %v, want [tool]", nodeTags(got))
 	}
 }

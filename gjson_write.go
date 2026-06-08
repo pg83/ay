@@ -116,7 +116,7 @@ func appendNode(buf []byte, n *Node, uids *uidVec) []byte {
 	buf = appendUID(buf, n.SelfUID)
 
 	buf = append(buf, `,"tags":`...)
-	buf = appendStringSlice(buf, nodeTags(n))
+	buf = appendStrSlice(buf, nodeTags(n))
 
 	buf = append(buf, `,"target_properties":`...)
 	buf = appendTargetProperties(buf, n.TargetProperties)

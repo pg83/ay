@@ -21,7 +21,7 @@ type Node struct {
 	// Tags is nil for almost every node — its tags are the platform's (nodeTags).
 	// The exception is the tagless test/lint run nodes, which set it to the
 	// platform's TestTags so they render their own ("no") tags, not the platform's.
-	Tags             []string         `json:"tags"`
+	Tags             []STR            `json:"tags"`
 	TargetProperties TargetProperties `json:"target_properties"`
 	UID              UID              `json:"uid"`
 
@@ -44,9 +44,9 @@ func withResources(n *Node, patterns ...string) *Node {
 	return n
 }
 
-func nodeHasHostTag(tags []string) bool {
+func nodeHasHostTag(tags []STR) bool {
 	for _, t := range tags {
-		if t == "tool" {
+		if t == strTool {
 			return true
 		}
 	}
@@ -67,7 +67,7 @@ func bindNodePlatform(n *Node, p *Platform) *Node {
 // nodeTags is a node's effective tag list for the graph output and UID: its own
 // Tags when set (the special tagless test/lint nodes carry their Platform.TestTags
 // there), otherwise the platform's Tags.
-func nodeTags(n *Node) []string {
+func nodeTags(n *Node) []STR {
 	if n.Tags != nil {
 		return n.Tags
 	}

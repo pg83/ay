@@ -152,12 +152,6 @@ func emitResourceObjcopy(
 			inputs = append(inputs, p)
 		}
 
-		objcopyTags := []string{}
-
-		if len(instance.Platform.Tags) > 0 {
-			objcopyTags = append(objcopyTags, instance.Platform.Tags...)
-		}
-
 		resTargetProps := TargetProperties{ModuleDir: instance.Path}
 
 		if d.moduleStmt != nil {
@@ -346,12 +340,6 @@ func emitKvOnlyObjcopyNode(
 		} else {
 			targetProps.ModuleTag = "py3_bin"
 		}
-	}
-
-	kvTags := []string{}
-
-	if len(instance.Platform.Tags) > 0 {
-		kvTags = append(kvTags, instance.Platform.Tags...)
 	}
 
 	node := &Node{
@@ -672,12 +660,6 @@ func emitPySrcObjcopy(
 			// stamp them with that submodule's lowercased tag so the dump matches REF.
 			if d.moduleStmt.Name == tokPy3Program || d.programPairedLib {
 				targetProps.ModuleTag = "py3_bin_lib"
-			}
-
-			pyTags := []string{}
-
-			if len(instance.Platform.Tags) > 0 {
-				pyTags = append(pyTags, instance.Platform.Tags...)
 			}
 
 			node := &Node{

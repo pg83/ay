@@ -101,7 +101,7 @@ func testYasmLDRef(e *BufferedEmitter) NodeRef {
 		Inputs:           ToVFSSlice([]string{}),
 		Outputs:          ToVFSSlice([]string{"$(B)/tools/yasm/yasm"}),
 		KV:               KV{P: pkLD, PC: pcLightCyan},
-		Tags:             []string{"tool"},
+		Tags:             []STR{internStr("tool")},
 		Platform:         &Platform{Target: PlatformDefaultLinuxX8664},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: "tools/yasm"},

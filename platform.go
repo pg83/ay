@@ -32,13 +32,13 @@ type Platform struct {
 	// by string. Toolchain/build-config derivations inside NewPlatform read the
 	// raw input map; everything past the platform uses ENV/STR.
 	Flags map[ENV]STR
-	Tags  []string
+	Tags  []STR
 
 	// TestTags is the tag list for the special tagless test/lint run nodes (e.g.
 	// the clang_format style check), which carry it on Node.Tags instead of the
 	// platform's Tags. Empty (non-nil) so a node setting it overrides the platform
 	// Tags with "no tags" rather than falling back to them.
-	TestTags []string
+	TestTags []STR
 
 	Tools Toolchain
 
@@ -143,8 +143,8 @@ func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, 
 		ISA:               isa,
 		Target:            MakePlatformID(os, isa),
 		Flags:             internFlags(flags),
-		Tags:              tags,
-		TestTags:          []string{},
+		Tags:              internStrs(tags),
+		TestTags:          []STR{},
 		Tools:             toolchainFromFlags(flags),
 		PIC:               flags["PIC"] == "yes",
 		BuildType:         buildType,

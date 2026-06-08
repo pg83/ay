@@ -69,7 +69,7 @@ func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 		Outputs:          ToVFSSlice([]string{"$(B)/build/cow/on/lib.c.o"}),
 		Platform:         &Platform{Target: "default-linux-aarch64"},
 		Requirements:     Requirements{},
-		Tags:             []string{},
+		Tags:             []STR{},
 		TargetProperties: TargetProperties{},
 	})}
 	objPaths := []VFS{Intern("$(B)/o1.o"), Intern("$(B)/o2.o")}
@@ -183,7 +183,7 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 			Outputs:          []VFS{out},
 			Platform:         &Platform{Target: "default-linux-aarch64"},
 			Requirements:     Requirements{},
-			Tags:             []string{},
+			Tags:             []STR{},
 			TargetProperties: TargetProperties{},
 		})
 	}
@@ -233,7 +233,7 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 			Outputs:          []VFS{out},
 			Platform:         &Platform{Target: "default-linux-aarch64"},
 			Requirements:     Requirements{},
-			Tags:             []string{},
+			Tags:             []STR{},
 			TargetProperties: TargetProperties{},
 		})
 	}
@@ -270,7 +270,7 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 			Outputs:          []VFS{out},
 			Platform:         &Platform{Target: "default-linux-aarch64"},
 			Requirements:     Requirements{},
-			Tags:             []string{},
+			Tags:             []STR{},
 			TargetProperties: TargetProperties{},
 		})
 	}
@@ -310,7 +310,7 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 			Outputs:          []VFS{out},
 			Platform:         &Platform{Target: "default-linux-aarch64"},
 			Requirements:     Requirements{},
-			Tags:             []string{},
+			Tags:             []STR{},
 			TargetProperties: TargetProperties{},
 		})
 	}
