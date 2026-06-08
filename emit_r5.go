@@ -55,7 +55,6 @@ func EmitR5(
 		KV:               KV{P: pkR5, PC: pcYellow},
 		Tags:             []string{"tool"},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
-		Platform:         string(instance.Platform.Target),
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		DepRefs:          depRefs,
 		ForeignDepRefs:   depRefs,

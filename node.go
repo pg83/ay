@@ -2,7 +2,7 @@ package main
 
 type Cmd struct {
 	CmdArgs []STR   `json:"cmd_args"`
-	Cwd     string  `json:"cwd,omitempty"`
+	Cwd     STR     `json:"cwd,omitempty"`
 	Env     EnvVars `json:"env,omitempty"`
 	Stdout  string  `json:"stdout,omitempty"`
 }
@@ -14,7 +14,7 @@ type Node struct {
 	Inputs           []VFS            `json:"inputs"`
 	KV               KV               `json:"kv"`
 	Outputs          []VFS            `json:"outputs"`
-	Platform         string           `json:"platform"`
+	Platform         *Platform        `json:"platform"`
 	Requirements     Requirements     `json:"requirements"`
 	Sandboxing       bool             `json:"sandboxing"`
 	SelfUID          UID              `json:"self_uid"`
@@ -59,8 +59,19 @@ func bindNodePlatform(n *Node, p *Platform) *Node {
 		return n
 	}
 
-	n.Platform = string(p.Target)
+	n.Platform = p
 	n.StatsTags = p.StatsTags
 
 	return n
+}
+
+// platformTarget is the node's platform target string for the graph output and
+// UID — "" for an unbound node (Platform nil), matching the former string field's
+// zero value.
+func platformTarget(p *Platform) string {
+	if p == nil {
+		return ""
+	}
+
+	return string(p.Target)
 }

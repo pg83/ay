@@ -122,7 +122,6 @@ func fetchNode(host *Platform, item resourceFetch, scripts scriptDeps) *Node {
 		Inputs:           fetchScriptInputs(scripts),
 		KV:               KV{P: pkFETCH, PC: pcYellow, ShowOut: "yes"},
 		Outputs:          []VFS{item.Output},
-		Platform:         string(host.Target),
 		Requirements:     Requirements{CPU: float64(1), Network: "full", RAM: float64(32)},
 		Sandboxing:       true,
 		Tags:             host.Tags, // read-only; Platform.Tags is immutable during emit

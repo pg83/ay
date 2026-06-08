@@ -142,7 +142,7 @@ func EmitPR(
 	}
 
 	if stmt.CWD != nil {
-		cmd.Cwd = expandRunProgramCWD(instance, *stmt.CWD)
+		cmd.Cwd = internStr(expandRunProgramCWD(instance, *stmt.CWD))
 	}
 
 	tags := instance.Platform.Tags
@@ -155,7 +155,6 @@ func EmitPR(
 		KV:               KV{P: pkPR, PC: pcYellow, ShowOut: "yes"},
 		Tags:             tags,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
-		Platform:         string(instance.Platform.Target),
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		DepRefs:          depRefs,
 		ForeignDepRefs:   foreignDepRefs,

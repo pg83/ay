@@ -181,7 +181,7 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
-				Cwd:     "$(B)",
+				Cwd:     strB,
 				Env:     env,
 			},
 		},
@@ -191,7 +191,6 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 		Inputs:           inputs,
 		KV:               KV{P: pkFL, PC: pcLightGreen},
 		Outputs:          []VFS{headerVFS, cppVFS, bfbsVFS},
-		Platform:         string(instance.Platform.Target),
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		Tags:             instance.Platform.Tags,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},

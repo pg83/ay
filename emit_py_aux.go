@@ -204,7 +204,6 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 			KV:               KV{P: pkPR, PC: pcYellow, ShowOut: "yes"},
 			Tags:             instance.Platform.Tags,
 			TargetProperties: TargetProperties{ModuleDir: instance.Path},
-			Platform:         string(instance.Platform.Target),
 			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 			DepRefs:          chDeps,
 		}, instance.Platform))

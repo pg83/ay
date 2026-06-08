@@ -173,7 +173,6 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 
 			return tp
 		}(),
-		Platform:     string(instance.Platform.Target),
 		Requirements: Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 	}
 

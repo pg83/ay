@@ -41,8 +41,8 @@ func TestEmitPyRegister_TargetPlatformCacheWinsOverHostFirstVisit(t *testing.T) 
 		t.Fatalf("emitter buffered no PY node with output %q", wantOutput)
 	}
 
-	if pyNode.Platform != string(testTargetP.Target) {
-		t.Errorf("PY node platform = %q, want %q", pyNode.Platform, testTargetP.Target)
+	if platformTarget(pyNode.Platform) != string(testTargetP.Target) {
+		t.Errorf("PY node platform = %q, want %q", platformTarget(pyNode.Platform), testTargetP.Target)
 	}
 
 	if len(pyNode.Tags) != 0 {

@@ -146,7 +146,6 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		Inputs:           inputs,
 		Outputs:          []VFS{headerVFS, generatedVFS},
 		KV:               KV{P: pkYC, PC: pcLightGreen},
-		Platform:         string(instance.Platform.Target),
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		Tags:             instance.Platform.Tags,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},

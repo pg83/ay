@@ -709,8 +709,8 @@ func (ex *executor) runNode(n *Node, tmp string) commandResult {
 
 		dir := tmp
 
-		if c.Cwd != "" {
-			dir = mountString(c.Cwd, ex.srcRoot, tmp, ex.resourceMounts)
+		if c.Cwd != 0 {
+			dir = mountString(c.Cwd.String(), ex.srcRoot, tmp, ex.resourceMounts)
 		}
 
 		env := os.Environ()

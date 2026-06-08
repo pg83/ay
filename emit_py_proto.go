@@ -229,14 +229,13 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	}
 
 	pyPBNode := &Node{
-		Cmds:             []Cmd{{CmdArgs: cmdArgs, Cwd: "$(S)", Env: EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}}},
+		Cmds:             []Cmd{{CmdArgs: cmdArgs, Cwd: strS, Env: EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}}},
 		Env:              EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}},
 		Inputs:           inputs,
 		Outputs:          outputs,
 		KV:               pbKV,
 		Tags:             instance.Platform.Tags,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: "py3_proto"},
-		Platform:         string(instance.Platform.Target),
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		DepRefs:          toolRefs,
 	}
@@ -320,7 +319,6 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 			KV:               KV{P: pkPY, PC: pcYellow},
 			Tags:             instance.Platform.Tags,
 			TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: "py3_proto"},
-			Platform:         string(instance.Platform.Target),
 			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 			DepRefs:          deps,
 		}
@@ -512,7 +510,6 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			KV:               KV{P: pkPR, PC: pcYellow, ShowOut: "yes"},
 			Tags:             instance.Platform.Tags,
 			TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: "py3_proto"},
-			Platform:         string(instance.Platform.Target),
 			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 			DepRefs:          deps,
 		}, instance.Platform))

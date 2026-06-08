@@ -61,7 +61,7 @@ func TestNodeStatsUID_KnownVector(t *testing.T) {
 	n := &Node{
 		KV:       KV{P: pkLD},
 		Outputs:  []VFS{Intern("$(B)/tools/archiver/archiver")},
-		Platform: "default-linux-aarch64",
+		Platform: &Platform{Target: "default-linux-aarch64"},
 		StatsTags: []string{
 			"FAKEID=sandboxing",
 			"SANDBOXING=yes",
@@ -93,7 +93,7 @@ func TestNodeStatsUID_IgnoresUnrelatedTargetCLIFlags(t *testing.T) {
 		return &Node{
 			KV:        KV{P: pkLD},
 			Outputs:   []VFS{Intern("$(B)/tools/archiver/archiver")},
-			Platform:  string(p.Target),
+			Platform:  &Platform{Target: p.Target},
 			StatsTags: statsTagsForPlatform(p),
 		}
 	}
@@ -132,7 +132,7 @@ func TestNodeStatsUID_UsesBaseTargetFlags(t *testing.T) {
 	n := &Node{
 		KV:        KV{P: pkLD},
 		Outputs:   []VFS{Intern("$(B)/tools/archiver/archiver")},
-		Platform:  string(p.Target),
+		Platform:  &Platform{Target: p.Target},
 		StatsTags: statsTagsForPlatform(p),
 	}
 
@@ -155,7 +155,7 @@ func TestNodeStatsUID_UsesLongRootOutputs(t *testing.T) {
 	n := &Node{
 		KV:       KV{P: pkLD},
 		Outputs:  []VFS{Intern("$(B)/tools/archiver/archiver")},
-		Platform: "default-linux-aarch64",
+		Platform: &Platform{Target: "default-linux-aarch64"},
 		StatsTags: []string{
 			"FAKEID=sandboxing",
 			"SANDBOXING=yes",
@@ -169,7 +169,7 @@ func TestNodeStatsUID_UsesLongRootOutputs(t *testing.T) {
 
 	pc := &canonBuf{}
 	shortRootPreimage := pythonStringListRepr(pc, []string{
-		n.Platform,
+		platformTarget(n.Platform),
 		pythonStringListRepr(pc, sortedStatsTags(n)),
 		"LD",
 		pythonStringListRepr(pc, []string{Intern("$(B)/tools/archiver/archiver").String()}),

@@ -16,7 +16,7 @@ func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
-				Cwd:     "$(B)",
+				Cwd:     strB,
 				Env:     env,
 			},
 		},
@@ -26,7 +26,6 @@ func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		KV:               KV{P: pkAS, PC: pcLightGreen},
 		Tags:             tags,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
-		Platform:         string(instance.Platform.Target),
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 	}
 

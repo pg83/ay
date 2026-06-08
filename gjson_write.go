@@ -101,7 +101,7 @@ func appendNode(buf []byte, n *Node, uids *uidVec) []byte {
 	buf = appendVFSSlice(buf, n.Outputs)
 
 	buf = append(buf, `,"platform":`...)
-	buf = appendString(buf, n.Platform)
+	buf = appendString(buf, platformTarget(n.Platform))
 
 	buf = append(buf, `,"requirements":`...)
 	buf = appendRequirements(buf, n.Requirements)
@@ -141,9 +141,9 @@ func appendCmdSlice(buf []byte, cmds []Cmd) []byte {
 		buf = append(buf, `{"cmd_args":`...)
 		buf = appendStrSlice(buf, c.CmdArgs)
 
-		if c.Cwd != "" {
+		if c.Cwd != 0 {
 			buf = append(buf, `,"cwd":`...)
-			buf = appendString(buf, c.Cwd)
+			buf = appendString(buf, c.Cwd.String())
 		}
 
 		if len(c.Env) > 0 {

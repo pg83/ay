@@ -104,7 +104,6 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 
 				return tp
 			}(),
-			Platform:     string(instance.Platform.Target),
 			Requirements: Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		}
 
@@ -189,7 +188,6 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 				KV:               KV{P: pkPY, PC: pcYellow},
 				Tags:             []string{},
 				TargetProperties: TargetProperties{ModuleDir: instance.Path},
-				Platform:         string(pyInstance.Platform.Target),
 				Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 				DepRefs:          []NodeRef{},
 			}

@@ -62,7 +62,6 @@ func EmitEN(
 		Inputs:           inputs,
 		KV:               KV{P: pkEN, PC: pcYellow},
 		Outputs:          outputs,
-		Platform:         string(instance.Platform.Target),
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		Sandboxing:       true,
 		Tags:             instance.Platform.Tags,

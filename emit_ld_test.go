@@ -109,8 +109,8 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		t.Errorf("cmd[2] does not invoke link_exe.py: %q", got.Cmds[2].CmdArgs[1].String())
 	}
 
-	if got.Cmds[2].Cwd != "$(B)" {
-		t.Errorf("cmd[2].cwd = %q, want $(B)", got.Cmds[2].Cwd)
+	if got.Cmds[2].Cwd.String() != "$(B)" {
+		t.Errorf("cmd[2].cwd = %q, want $(B)", got.Cmds[2].Cwd.String())
 	}
 
 	if got.Cmds[3].CmdArgs[1].String() != "$(S)/build/scripts/fs_tools.py" {
@@ -213,8 +213,8 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 		if got.Cmds[idx].Env[0] != (EnvVar{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}) {
 			t.Fatalf("cmd[%d].env = %#v, want ARCADIA_ROOT_DISTBUILD=$(S)", idx, got.Cmds[idx].Env)
 		}
-		if got.Cmds[idx].Cwd != "" {
-			t.Fatalf("cmd[%d].cwd = %q, want empty", idx, got.Cmds[idx].Cwd)
+		if got.Cmds[idx].Cwd != 0 {
+			t.Fatalf("cmd[%d].cwd = %q, want empty", idx, got.Cmds[idx].Cwd.String())
 		}
 	}
 }
@@ -255,8 +255,8 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 
 	got := emit.nodes[ref]
 
-	if got.Platform != string(PlatformDefaultLinuxX8664) {
-		t.Errorf("platform = %q, want %q", got.Platform, PlatformDefaultLinuxX8664)
+	if platformTarget(got.Platform) != string(PlatformDefaultLinuxX8664) {
+		t.Errorf("platform = %q, want %q", platformTarget(got.Platform), PlatformDefaultLinuxX8664)
 	}
 
 	if !nodeHasHostTag(got.Tags) {

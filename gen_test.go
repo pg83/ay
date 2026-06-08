@@ -623,7 +623,7 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 	for _, n := range g.Graph {
 		p := n.KV.P.String()
 		counts[p]++
-		platforms[n.Platform]++
+		platforms[platformTarget(n.Platform)]++
 
 		if nodeHasHostTag(n.Tags) {
 			hostNodes++
@@ -2429,7 +2429,7 @@ END()
 	if got := antlr.Cmds[0].CmdArgs[9].String(); got != "$(B)/proto" {
 		t.Fatalf("antlr output dir arg = %q, want $(B)/proto", got)
 	}
-	if got := antlr.Cmds[0].Cwd; got != "$(B)/proto" {
+	if got := antlr.Cmds[0].Cwd.String(); got != "$(B)/proto" {
 		t.Fatalf("antlr cwd = %q, want $(B)/proto", got)
 	}
 
@@ -2459,7 +2459,7 @@ END()
 	if got := py.Cmds[0].CmdArgs[1].String(); got != "$(S)/tools/multiproto.py" {
 		t.Fatalf("python script arg = %q, want $(S)/tools/multiproto.py", got)
 	}
-	if got := py.Cmds[0].Cwd; got != "$(B)/proto" {
+	if got := py.Cmds[0].Cwd.String(); got != "$(B)/proto" {
 		t.Fatalf("python cwd = %q, want $(B)/proto", got)
 	}
 
@@ -2515,8 +2515,8 @@ END()
 		}
 		for _, cmd := range node.Cmds {
 			values = append(values, strStrs(cmd.CmdArgs)...)
-			if cmd.Cwd != "" {
-				values = append(values, cmd.Cwd)
+			if cmd.Cwd != 0 {
+				values = append(values, cmd.Cwd.String())
 			}
 			if cmd.Stdout != "" {
 				values = append(values, cmd.Stdout)
