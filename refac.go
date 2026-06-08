@@ -376,10 +376,6 @@ const (
 // hoistVFS, canon is the resolved VFS path ("$(S)/..."/"$(B)/...") so Source("x")
 // and Intern("$(S)/x") share one var. For hoistStr, canon is the raw literal — its
 // own namespace, since a STR must never share a var with a VFS.
-//
-// internAny is intentionally NOT hoisted: any_consts.go is hand-maintained as thin
-// `anyX = argX.any()` aliases, and a constant-string internAny call is forbidden
-// (see checkForbiddenInternAny).
 type hoistKey struct {
 	kind  hoistKind
 	canon string
@@ -808,66 +804,7 @@ func refacLint(args []string) int {
 		}
 	}
 
-	if checkForbiddenInternAny(files) > 0 {
-		return 1
-	}
-
 	return 0
-}
-
-// checkForbiddenInternAny reports every internAny call whose sole argument is a
-// constant string literal, and returns the violation count. A constant-string ANY
-// must not be interned ad hoc: declare it once as a typed const in the matching
-// per-kind file (internArg in arg_consts.go, internStr in str_consts.go, internEnv
-// in env_consts.go, …) and expose it to CmdArgs through a hand-written
-// `anyX = argX.any()` alias in any_consts.go. Dynamic internAny(expr) — a variable
-// or a concatenation such as internAny("-I="+path) — is allowed and not flagged.
-func checkForbiddenInternAny(files []string) int {
-	n := 0
-
-	for _, path := range files {
-		src := Throw2(os.ReadFile(path))
-		fset := gotoken.NewFileSet()
-		f, err := goparser.ParseFile(fset, path, src, 0)
-
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "refac lint: %s: parse: %v\n", path, err)
-
-			continue
-		}
-
-		ast.Inspect(f, func(node ast.Node) bool {
-			call, ok := node.(*ast.CallExpr)
-
-			if !ok {
-				return true
-			}
-
-			id, ok := call.Fun.(*ast.Ident)
-
-			if !ok || id.Name != "internAny" || len(call.Args) != 1 {
-				return true
-			}
-
-			bl, ok := call.Args[0].(*ast.BasicLit)
-
-			if !ok || bl.Kind != gotoken.STRING {
-				return true
-			}
-
-			pos := fset.Position(call.Pos())
-			fmt.Fprintf(os.Stderr,
-				"refac lint: %s:%d: forbidden internAny(%s) on a constant string — declare a typed const "+
-					"(internArg in arg_consts.go / internStr in str_consts.go / internEnv in env_consts.go, …) "+
-					"and add an `anyX = argX.any()` alias in any_consts.go\n",
-				path, pos.Line, bl.Value)
-			n++
-
-			return true
-		})
-	}
-
-	return n
 }
 
 // varItem is one package-level var spec extracted for consolidation. body holds the

@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	argDashBBin = internAny("-B" + binPath)
+	argDashBBin = internStr("-B" + binPath)
 )
 
 type ModuleCCInputs struct {
@@ -293,20 +293,20 @@ func pickWarningFlags(noCompilerWarnings bool, noWShadow bool) []ARG {
 	return warningFlags
 }
 
-func appendCxxStdAndOwn(cmdArgs []ANY, isCxx bool, noCompilerWarnings bool, injectCxxWarningBundle bool, ownExtras []ARG) []ANY {
+func appendCxxStdAndOwn(cmdArgs []STR, isCxx bool, noCompilerWarnings bool, injectCxxWarningBundle bool, ownExtras []ARG) []STR {
 	if isCxx {
-		cmdArgs = append(cmdArgs, argAny(cxxStandardFlag))
+		cmdArgs = append(cmdArgs, (cxxStandardFlag).str())
 
 		if injectCxxWarningBundle {
 			if noCompilerWarnings {
-				cmdArgs = appendArgAny(cmdArgs, noWarningsBundle)
+				cmdArgs = appendArgStr(cmdArgs, noWarningsBundle)
 			} else {
-				cmdArgs = appendArgAny(cmdArgs, cxxStandardWarnings)
+				cmdArgs = appendArgStr(cmdArgs, cxxStandardWarnings)
 			}
 		}
 	}
 
-	cmdArgs = appendArgAny(cmdArgs, ownExtras)
+	cmdArgs = appendArgStr(cmdArgs, ownExtras)
 
 	return cmdArgs
 }
@@ -361,7 +361,7 @@ func composePostCatboostBucket(preBucket []ARG) []ARG {
 	return out
 }
 
-func pickCompilerAny(p *Platform, isCxx bool) ANY {
+func pickCompilerStr(p *Platform, isCxx bool) STR {
 	if isCxx {
 		return p.CXXArg
 	}
@@ -387,11 +387,11 @@ type ccComposeArgs struct {
 	InclArgs           inclArgMemo
 }
 
-func appendCompileFlagPipeline(cmdArgs []ANY, bundle compileFlagBundle, warningBundle, defineBundle, preNoLibcExtras, moduleScopeCFlags []ARG) []ANY {
-	return appendArgAny(cmdArgs, debugPrefixMapFlags, xclangDebugCompilationDir, bundle.CFlags, warningBundle, defineBundle, preNoLibcExtras, bundle.NoLibcBlock, catboostOpenSourceDefine, moduleScopeCFlags, bundle.NoLibcBlock)
+func appendCompileFlagPipeline(cmdArgs []STR, bundle compileFlagBundle, warningBundle, defineBundle, preNoLibcExtras, moduleScopeCFlags []ARG) []STR {
+	return appendArgStr(cmdArgs, debugPrefixMapFlags, xclangDebugCompilationDir, bundle.CFlags, warningBundle, defineBundle, preNoLibcExtras, bundle.NoLibcBlock, catboostOpenSourceDefine, moduleScopeCFlags, bundle.NoLibcBlock)
 }
 
-func composeTargetCC(a ccComposeArgs) []ANY {
+func composeTargetCC(a ccComposeArgs) []STR {
 	bundle := compileFlagBundleFor(a.Platform)
 	warningBundle := pickWarningFlags(a.NoCompilerWarnings, a.NoWShadow)
 
@@ -406,11 +406,11 @@ func composeTargetCC(a ccComposeArgs) []ANY {
 		len(builtinMacroDateTime) + len(macroPrefixMapFlags) +
 		len(a.OwnAddIncl) + len(a.PeerAddIncl) + len(a.OwnCFlags) + len(a.OwnExtras) + len(a.PeerExtras) + 2*len(a.OwnGlobalBucket) + len(a.PerSrcCFlags) + len(a.ModuleScopeCFlags) +
 		len(bundle.ArchArgs) + len(bundle.CFlags) + len(bundle.Defines) + 2*len(bundle.NoLibcBlock) + len(warningBundle)
-	cmdArgs := make([]ANY, 0, argCap)
-	cmdArgs = append(cmdArgs, pickCompilerAny(a.Platform, a.IsCxx), a.Platform.TargetArg)
-	cmdArgs = appendArgAny(cmdArgs, bundle.ArchArgs)
-	cmdArgs = append(cmdArgs, argDashBBin, anyDashC, anyDashO, vfsAny(a.OutVFS))
-	cmdArgs = appendArgAny(cmdArgs, ccIncludesPrefix)
+	cmdArgs := make([]STR, 0, argCap)
+	cmdArgs = append(cmdArgs, pickCompilerStr(a.Platform, a.IsCxx), a.Platform.TargetArg)
+	cmdArgs = appendArgStr(cmdArgs, bundle.ArchArgs)
+	cmdArgs = append(cmdArgs, argDashBBin, argDashC.str(), argDashO.str(), (a.OutVFS).str())
+	cmdArgs = appendArgStr(cmdArgs, ccIncludesPrefix)
 	cmdArgs = appendAddIncl(cmdArgs, a.OwnAddIncl, a.InclArgs)
 	peerAddIncl := a.PeerAddIncl
 
@@ -431,18 +431,18 @@ func composeTargetCC(a ccComposeArgs) []ANY {
 	}
 
 	if a.IsCxx {
-		cmdArgs = appendArgAny(cmdArgs, a.OwnGlobalBucket, catboostOpenSourceDefine, composePostCatboostBucket(a.OwnGlobalBucket))
+		cmdArgs = appendArgStr(cmdArgs, a.OwnGlobalBucket, catboostOpenSourceDefine, composePostCatboostBucket(a.OwnGlobalBucket))
 	} else {
-		cmdArgs = appendArgAny(cmdArgs, a.PeerExtras)
+		cmdArgs = appendArgStr(cmdArgs, a.PeerExtras)
 	}
 
-	cmdArgs = appendArgAny(cmdArgs, builtinMacroDateTime, macroPrefixMapFlags, a.PerSrcCFlags, cOnlyExtras)
-	cmdArgs = append(cmdArgs, vfsAny(a.InVFS))
+	cmdArgs = appendArgStr(cmdArgs, builtinMacroDateTime, macroPrefixMapFlags, a.PerSrcCFlags, cOnlyExtras)
+	cmdArgs = append(cmdArgs, (a.InVFS).str())
 
 	return cmdArgs
 }
 
-func appendAddIncl(cmdArgs []ANY, addIncl []VFS, memo inclArgMemo) []ANY {
+func appendAddIncl(cmdArgs []STR, addIncl []VFS, memo inclArgMemo) []STR {
 	for _, p := range addIncl {
 		cmdArgs = append(cmdArgs, memo.arg(p))
 	}
@@ -456,19 +456,19 @@ func appendAddIncl(cmdArgs []ANY, addIncl []VFS, memo inclArgMemo) []ANY {
 // is owned by genCtx so further VFS-keyed value columns can share its idx array;
 // inclArgMemo just holds a pointer to it, so it stays copyable by value.
 type inclArgMemo struct {
-	m *DenseMap[VFS, ANY]
+	m *DenseMap[VFS, STR]
 }
 
 // newInclArgMemo builds a standalone memo with its own backing store. Production
 // code uses ctx.inclArgs (backed by ctx.inclArgValues); this is for tests that
 // emit CC/AS nodes without a genCtx.
 
-func (m inclArgMemo) arg(path VFS) ANY {
+func (m inclArgMemo) arg(path VFS) STR {
 	if a, ok := m.m.Get(path); ok {
 		return a
 	}
 
-	a := internAny("-I" + path.String())
+	a := internStr("-I" + path.String())
 	m.m.Put(path, a)
 
 	return a

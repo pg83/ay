@@ -16,25 +16,25 @@ func emitARNode(
 	cmdEnv := hostP.ToolEnv()
 	arTool, arType, arFormat := instance.Platform.ArchiverArgs()
 
-	cmdArgs := []ANY{
-		internAny(instance.Platform.Tools.Python3),
-		vfsAny(scriptVFS),
-		internAny(arTool),
-		internAny(arType),
-		internAny(arFormat),
-		anyB,
-		anyNone,
-		any2,
+	cmdArgs := []STR{
+		internStr(instance.Platform.Tools.Python3),
+		(scriptVFS).str(),
+		internStr(arTool),
+		internStr(arType),
+		internStr(arFormat),
+		argB.str(),
+		argNone.str(),
+		arg2.str(),
 	}
 
 	if arPluginPath != nil {
-		cmdArgs = append(cmdArgs, anyPlugin, vfsAny(*arPluginPath))
+		cmdArgs = append(cmdArgs, argPlugin.str(), (*arPluginPath).str())
 	}
 
-	cmdArgs = append(cmdArgs, any2, vfsAny(archivePath))
+	cmdArgs = append(cmdArgs, arg2.str(), (archivePath).str())
 
 	for _, p := range objPaths {
-		cmdArgs = append(cmdArgs, vfsAny(p))
+		cmdArgs = append(cmdArgs, (p).str())
 	}
 
 	inputs := make([]VFS, 0, len(objPaths)+2)

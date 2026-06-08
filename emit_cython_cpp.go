@@ -107,30 +107,30 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 
 		env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
-		cmdArgs := []ANY{
-			internAny(instance.Platform.Tools.Python3),
-			anySContribToolsCythonCythonPy,
-			anyX2,
-			anyLegacyImplicitNoexceptTrue,
-			anyE,
-			anyUnameSysnameLinux,
+		cmdArgs := []STR{
+			internStr(instance.Platform.Tools.Python3),
+			argSContribToolsCythonCythonPy.str(),
+			argX2.str(),
+			argLegacyImplicitNoexceptTrue.str(),
+			argE.str(),
+			argUnameSysnameLinux.str(),
 		}
-		cmdArgs = appendStringAny(cmdArgs, stmt.Options)
+		cmdArgs = appendInternStrs(cmdArgs, stmt.Options)
 
 		if !stmt.CMode {
-			cmdArgs = append(cmdArgs, anyCplus)
+			cmdArgs = append(cmdArgs, argCplus.str())
 		}
 
 		cmdArgs = append(cmdArgs,
-			anyIB,
-			anyIS,
+			argIB.str(),
+			argIS.str(),
 		)
 		cmdArgs = appendCythonAddIncl(cmdArgs, d.cythonAddIncl, ctx.inclArgs)
 		cmdArgs = append(cmdArgs,
-			anyISContribToolsCythonCythonIncludes,
-			vfsAny(srcVFS),
-			anyDashO,
-			vfsAny(generatedVFS),
+			argISContribToolsCythonCythonIncludes.str(),
+			(srcVFS).str(),
+			argDashO.str(),
+			(generatedVFS).str(),
 		)
 
 		targetProps := TargetProperties{ModuleDir: instance.Path}
@@ -227,7 +227,7 @@ func cythonImplicitFallthrough(stmt *CythonStmt, py23Variant bool) bool {
 	return !stmt.CMode && (hasSuffix(stmt.Src, ".pyx") || py23Variant)
 }
 
-func appendCythonAddIncl(cmdArgs []ANY, addIncl []VFS, memo inclArgMemo) []ANY {
+func appendCythonAddIncl(cmdArgs []STR, addIncl []VFS, memo inclArgMemo) []STR {
 	for _, path := range addIncl {
 		cmdArgs = append(cmdArgs, memo.arg(path))
 	}

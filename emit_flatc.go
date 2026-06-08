@@ -143,26 +143,26 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 	cppVFS := Build(srcRel + ".cpp")
 	bfbsVFS := Build(strings.TrimSuffix(srcRel, ".fbs") + ".bfbs")
 
-	cmdArgs := []ANY{
-		internAny(instance.Platform.Tools.Python3),
-		vfsAny(flatcWrapperVFS),
-		vfsAny(flatcBinary),
-		anyNoWarnings,
-		anyCpp,
-		anyKeepPrefix,
-		anyGenMutable,
-		anySchema,
-		anyB2,
-		anyGenObjectApi,
-		anyFilenameSuffix,
-		anyFbs,
+	cmdArgs := []STR{
+		internStr(instance.Platform.Tools.Python3),
+		(flatcWrapperVFS).str(),
+		(flatcBinary).str(),
+		argNoWarnings.str(),
+		argCpp.str(),
+		argKeepPrefix.str(),
+		argGenMutable.str(),
+		argSchema.str(),
+		argB2.str(),
+		argGenObjectApi.str(),
+		argFilenameSuffix.str(),
+		argFbs.str(),
 	}
-	cmdArgs = appendArgAny(cmdArgs, flatcFlags)
+	cmdArgs = appendArgStr(cmdArgs, flatcFlags)
 	cmdArgs = append(cmdArgs,
-		anyI, anyB,
-		anyI, anyS,
-		anyDashO, vfsAny(headerVFS),
-		vfsAny(srcVFS),
+		argI.str(), argB.str(),
+		argI.str(), argS.str(),
+		argDashO.str(), (headerVFS).str(),
+		(srcVFS).str(),
 	)
 
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}

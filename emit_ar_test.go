@@ -329,7 +329,7 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 		t.Fatalf("cmd_args len = %d, want 13", len(cmdArgs))
 	}
 
-	trailing := anyStrs(cmdArgs[10:])
+	trailing := strStrs(cmdArgs[10:])
 	wantTrailing := []string{z.String(), m.String(), a.String()}
 
 	if !reflect.DeepEqual(trailing, wantTrailing) {

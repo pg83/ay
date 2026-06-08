@@ -174,7 +174,7 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 	}
 
 	for _, c := range cc.Cmds {
-		for _, a := range anyStrs(c.CmdArgs) {
+		for _, a := range strStrs(c.CmdArgs) {
 			if a == "-I$(S)/thelib" {
 				t.Fatalf("own CC unexpectedly carries direct -I$(S)/thelib: cmds=%+v", cc.Cmds)
 			}
@@ -469,7 +469,7 @@ END()
 
 	for _, n := range g.Graph {
 		if len(n.Outputs) == 1 && n.Outputs[0].String() == "$(B)/bridge/x.cpp.o" {
-			args = anyStrs(n.Cmds[0].CmdArgs)
+			args = strStrs(n.Cmds[0].CmdArgs)
 			break
 		}
 	}
@@ -1281,7 +1281,7 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 
 		nostdinccCount := 0
 
-		for _, arg := range anyStrs(ccNode.Cmds[0].CmdArgs) {
+		for _, arg := range strStrs(ccNode.Cmds[0].CmdArgs) {
 			if arg == "GLOBAL" {
 				t.Errorf("CC cmd_args contains literal %q — GLOBAL modifier leaked into own node", arg)
 			}
@@ -1321,7 +1321,7 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 			t.Fatal("CC node has no Cmds")
 		}
 
-		for _, arg := range anyStrs(ccNode.Cmds[0].CmdArgs) {
+		for _, arg := range strStrs(ccNode.Cmds[0].CmdArgs) {
 			if arg == "GLOBAL" {
 				t.Errorf("CC cmd_args contains literal %q — GLOBAL modifier leaked into own node", arg)
 			}
@@ -1355,7 +1355,7 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 
 		found := false
 
-		for _, arg := range anyStrs(ccNode.Cmds[0].CmdArgs) {
+		for _, arg := range strStrs(ccNode.Cmds[0].CmdArgs) {
 			if arg == "-DMINE" {
 				found = true
 
@@ -1713,7 +1713,7 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 	var iFlags []string
 
 	if len(consumerCC.Cmds) > 0 {
-		for _, arg := range anyStrs(consumerCC.Cmds[0].CmdArgs) {
+		for _, arg := range strStrs(consumerCC.Cmds[0].CmdArgs) {
 			if strings.HasPrefix(arg, "-I") {
 				iFlags = append(iFlags, arg)
 			}
@@ -2437,7 +2437,7 @@ END()
 		t.Fatalf("protoc tool arg = %q, want $(B)/contrib/tools/protoc/bin/protoc", got)
 	}
 	wantPluginArg := "--plugin=protoc-gen-cpp_styleguide=$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"
-	if !containsString(anyStrs(protoc.Cmds[0].CmdArgs), wantPluginArg) {
+	if !containsString(strStrs(protoc.Cmds[0].CmdArgs), wantPluginArg) {
 		t.Fatalf("protoc cmd args missing %q: %v", wantPluginArg, protoc.Cmds[0].CmdArgs)
 	}
 	if !nodeHasInput(protoc, "$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide") {
@@ -2463,10 +2463,10 @@ END()
 		t.Fatalf("python cwd = %q, want $(B)/proto", got)
 	}
 
-	if !containsString(anyStrs(cc.Cmds[0].CmdArgs), "$(B)/proto/Generated.code0.cc") {
+	if !containsString(strStrs(cc.Cmds[0].CmdArgs), "$(B)/proto/Generated.code0.cc") {
 		t.Fatalf("cc cmd args missing built generated source: %v", cc.Cmds[0].CmdArgs)
 	}
-	if containsString(anyStrs(cc.Cmds[0].CmdArgs), "$(S)/proto/Generated.code0.cc") {
+	if containsString(strStrs(cc.Cmds[0].CmdArgs), "$(S)/proto/Generated.code0.cc") {
 		t.Fatalf("cc cmd args still contain source-root generated source: %v", cc.Cmds[0].CmdArgs)
 	}
 	if !nodeHasInput(cc, "$(B)/proto/Generated.code0.cc") {
@@ -2514,7 +2514,7 @@ END()
 			values = append(values, output.String())
 		}
 		for _, cmd := range node.Cmds {
-			values = append(values, anyStrs(cmd.CmdArgs)...)
+			values = append(values, strStrs(cmd.CmdArgs)...)
 			if cmd.Cwd != "" {
 				values = append(values, cmd.Cwd)
 			}
@@ -2720,10 +2720,10 @@ END()
 	pluginRuntime := mustNodeByOutput(t, g, "$(B)/deps/plugin_runtime/libdeps-plugin_runtime.a")
 	_ = mustNodeByOutput(t, g, "$(B)/deps/generated_runtime/libdeps-generated_runtime.a")
 
-	if !containsString(anyStrs(pb.Cmds[0].CmdArgs), "--plugin=protoc-gen-config_proto_plugin=$(B)/tools/config_plugin/config_proto_plugin") {
+	if !containsString(strStrs(pb.Cmds[0].CmdArgs), "--plugin=protoc-gen-config_proto_plugin=$(B)/tools/config_plugin/config_proto_plugin") {
 		t.Fatalf("pb cmd args missing config proto plugin: %v", pb.Cmds[0].CmdArgs)
 	}
-	if !containsString(anyStrs(pb.Cmds[0].CmdArgs), "--config_proto_plugin_out=$(B)/") {
+	if !containsString(strStrs(pb.Cmds[0].CmdArgs), "--config_proto_plugin_out=$(B)/") {
 		t.Fatalf("pb cmd args missing config proto plugin out flag: %v", pb.Cmds[0].CmdArgs)
 	}
 
@@ -2826,7 +2826,7 @@ END()
 		"$(B)/protos/test.tasklet.h",
 	}
 	gotWrapperOutputs := pb.Cmds[0].CmdArgs[outputsIdx+1 : separatorIdx]
-	if !equalStrings(anyStrs(gotWrapperOutputs), wantWrapperOutputs) {
+	if !equalStrings(strStrs(gotWrapperOutputs), wantWrapperOutputs) {
 		t.Fatalf("pb wrapper outputs = %v, want %v", gotWrapperOutputs, wantWrapperOutputs)
 	}
 }
@@ -2896,7 +2896,7 @@ int use() { return 0; }
 		"$(B)/protos/main.grpc.pb.cc",
 		"$(B)/protos/main.grpc.pb.h",
 	)
-	if !containsString(anyStrs(pb.Cmds[0].CmdArgs), "--cpp_out=proto_h=true:$(B)/") {
+	if !containsString(strStrs(pb.Cmds[0].CmdArgs), "--cpp_out=proto_h=true:$(B)/") {
 		t.Fatalf("pb cmd args missing lite-header cpp_out flag: %v", pb.Cmds[0].CmdArgs)
 	}
 
@@ -3678,7 +3678,7 @@ func TestGen_CF_SetVarsReachCfgVars(t *testing.T) {
 	if cf == nil {
 		t.Fatal("no CF node emitted for thelib/x.cpp")
 	}
-	args := strings.Join(anyStrs(cf.Cmds[0].CmdArgs), " ")
+	args := strings.Join(strStrs(cf.Cmds[0].CmdArgs), " ")
 	if !strings.Contains(args, "MYVAR=hello") {
 		t.Errorf("CF cmd_args missing SET var MYVAR=hello; got: %s", args)
 	}
@@ -3721,7 +3721,7 @@ func TestGen_HInGeneratedHeader_RealizedInConsumer(t *testing.T) {
 		t.Fatal("no AR node for genh")
 	}
 	for _, c := range ar.Cmds {
-		for _, a := range anyStrs(c.CmdArgs) {
+		for _, a := range strStrs(c.CmdArgs) {
 			if a == "$(B)/genh/config.h" {
 				t.Errorf("genh AR cmd_args archives config.h as a member: %v", c.CmdArgs)
 			}
@@ -3776,7 +3776,7 @@ END()
 
 	g := testGen(fs, "mod")
 	cc := mustNodeByOutput(t, g, "$(B)/mod/lib.cpp.o")
-	args := strings.Join(anyStrs(cc.Cmds[0].CmdArgs), " ")
+	args := strings.Join(strStrs(cc.Cmds[0].CmdArgs), " ")
 
 	for _, want := range []string{
 		"-DMKQL_RUNTIME_VERSION=42",
@@ -3962,7 +3962,7 @@ END()
 		"$(S)/build/scripts/preprocess.py",
 		"$(B)/genlib/pire/re_parser.h",
 	}
-	if got := anyStrs(yc.Cmds[1].CmdArgs[1:]); !reflect.DeepEqual(got, wantPreprocess) {
+	if got := strStrs(yc.Cmds[1].CmdArgs[1:]); !reflect.DeepEqual(got, wantPreprocess) {
 		t.Fatalf("bison preprocess cmd_args mismatch:\n  got:  %#v\n  want: %#v", got, wantPreprocess)
 	}
 	for _, want := range []string{
@@ -4339,7 +4339,7 @@ func TestGen_ManualCompanionSourceUsesCythonCompanionCCInputs(t *testing.T) {
 		}
 	}
 
-	for _, arg := range anyStrs(args) {
+	for _, arg := range strStrs(args) {
 		if strings.HasPrefix(arg, "-DPyInit_") || strings.HasPrefix(arg, "-Dinit_module_") {
 			t.Fatalf("helper.cpp.o cmd_args still carry PY_REGISTER define %q: %#v", arg, args)
 		}
@@ -4584,7 +4584,7 @@ func nodeHasInput(n *Node, input string) bool {
 	return false
 }
 
-func indexOfArg(args []ANY, want string) int {
+func indexOfArg(args []STR, want string) int {
 	for i, arg := range args {
 		if arg.String() == want {
 			return i
@@ -4718,7 +4718,7 @@ END()
 	// Find positions of pb.cc.o and h_serialized.cpp.o in AR cmd_args
 	pbPos := -1
 	hSerPos := -1
-	for i, arg := range anyStrs(ar.Cmds[0].CmdArgs) {
+	for i, arg := range strStrs(ar.Cmds[0].CmdArgs) {
 		if strings.HasSuffix(arg, ".pb.cc.o") {
 			pbPos = i
 		}
@@ -4853,7 +4853,7 @@ func TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs(t *testing.T) {
 	members := args[10:]
 
 	objcopyIdx, globalCppIdx := -1, -1
-	for i, m := range anyStrs(members) {
+	for i, m := range strStrs(members) {
 		if strings.Contains(m, "/objcopy_") && strings.HasSuffix(m, ".o") {
 			objcopyIdx = i
 		}

@@ -186,79 +186,79 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	}
 }
 
-func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath string, peerLibPaths, pluginPaths []VFS, wholeArchivePeers []string, exportsScript, fixElfPath string) []ANY {
-	cmdArgs := []ANY{
-		internAny(p.Tools.Python3),
-		internAny(ldLinkDynLibPath),
-		anyTarget, internAny(outputPath),
+func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath string, peerLibPaths, pluginPaths []VFS, wholeArchivePeers []string, exportsScript, fixElfPath string) []STR {
+	cmdArgs := []STR{
+		internStr(p.Tools.Python3),
+		internStr(ldLinkDynLibPath),
+		argTarget.str(), internStr(outputPath),
 	}
 
 	if len(pluginPaths) > 0 {
-		cmdArgs = append(cmdArgs, anyStartPlugins)
+		cmdArgs = append(cmdArgs, argStartPlugins.str())
 
 		for _, p := range pluginPaths {
-			cmdArgs = append(cmdArgs, vfsAny(p))
+			cmdArgs = append(cmdArgs, (p).str())
 		}
 
-		cmdArgs = append(cmdArgs, anyEndPlugins)
+		cmdArgs = append(cmdArgs, argEndPlugins.str())
 	}
 
 	for _, peer := range wholeArchivePeers {
-		cmdArgs = append(cmdArgs, anyWholeArchivePeers, internAny(peer))
+		cmdArgs = append(cmdArgs, argWholeArchivePeers.str(), internStr(peer))
 	}
 
 	cmdArgs = append(cmdArgs,
-		anySourceRoot, anyS,
-		anyBuildRoot, anyB,
-		anyArchLinux,
-		anyObjcopyExe, internAny(p.Tools.Objcopy),
-		anyFixElf, internAny(fixElfPath),
+		argSourceRoot.str(), argS.str(),
+		argBuildRoot.str(), argB.str(),
+		argArchLinux.str(),
+		argObjcopyExe.str(), internStr(p.Tools.Objcopy),
+		argFixElf.str(), internStr(fixElfPath),
 		p.CXXArg,
-		anyWlWholeArchive,
-		anyYaStartCommandFile,
-		anyYaEndCommandFile,
-		anyWlNoWholeArchive,
-		internAny(vcsOPath),
-		anyDashO, internAny(outputPath),
-		anyShared,
-		internAny("-Wl,-soname,"+outputName),
+		argWlWholeArchive.str(),
+		argYaStartCommandFile.str(),
+		argYaEndCommandFile.str(),
+		argWlNoWholeArchive.str(),
+		internStr(vcsOPath),
+		argDashO.str(), internStr(outputPath),
+		argShared.str(),
+		internStr("-Wl,-soname,"+outputName),
 		p.TargetArg,
 		argDashBBin,
-		anyWlStartGroup,
+		argWlStartGroup.str(),
 	)
 
 	for _, p := range peerLibPaths {
-		cmdArgs = append(cmdArgs, internAny(p.Rel()))
+		cmdArgs = append(cmdArgs, internStr(p.Rel()))
 	}
 
-	cmdArgs = append(cmdArgs, anyWlEndGroup)
+	cmdArgs = append(cmdArgs, argWlEndGroup.str())
 	cmdArgs = append(cmdArgs,
-		anyRdynamic,
-		internAny("-Wl,--version-script=$(S)/"+modulePath+"/"+exportsScript),
-		anyWlNoAsNeeded,
+		argRdynamic.str(),
+		internStr("-Wl,--version-script=$(S)/"+modulePath+"/"+exportsScript),
+		argWlNoAsNeeded.str(),
 	)
 
 	if p.PIC {
-		cmdArgs = append(cmdArgs, argAny(argFPIC))
+		cmdArgs = append(cmdArgs, (argFPIC).str())
 	}
 
 	cmdArgs = append(cmdArgs,
-		anyWlGdbIndex,
-		anyWlZNotext,
+		argWlGdbIndex.str(),
+		argWlZNotext.str(),
 	)
 
 	if p.PIC {
-		cmdArgs = append(cmdArgs, argAny(argFPIC))
+		cmdArgs = append(cmdArgs, (argFPIC).str())
 	}
 
 	cmdArgs = append(cmdArgs,
-		anyFuseLdLld,
-		internAny("--ld-path="+p.Tools.LLD),
-		anyWlNoRosegment,
-		anyWlBuildIdSha1,
-		anyNostdlib,
-		anyLm,
-		anyWlGcSections,
+		argFuseLdLld.str(),
+		internStr("--ld-path="+p.Tools.LLD),
+		argWlNoRosegment.str(),
+		argWlBuildIdSha1.str(),
+		argNostdlib.str(),
+		argLm.str(),
+		argWlGcSections.str(),
 	)
 
 	return cmdArgs

@@ -298,7 +298,7 @@ func TestEmitCC_PlatformEnvFlags_TargetOnly(t *testing.T) {
 	}
 }
 
-func contains(xs []ANY, target string) bool {
+func contains(xs []STR, target string) bool {
 	for _, x := range xs {
 		if x.String() == target {
 			return true

@@ -13,7 +13,7 @@ var (
 
 const jdkResourcePath = "$(JDK17-564746473)/bin/java"
 
-func emitJVNode(instance ModuleInstance, cmdArgs []ANY, inputs []VFS, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag string, emit Emitter) NodeRef {
+func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs []VFS, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag string, emit Emitter) NodeRef {
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 	node := &Node{
@@ -59,29 +59,29 @@ func EmitJV(
 	outDirVFS := Build(instance.Path)
 	outDir := outDirVFS.String()
 
-	cmdArgs := []ANY{
-		internAny(instance.Platform.Tools.Python3),
-		internAny(stdout2stderrPath),
-		internAny(jdkResourcePath),
-		anyJar,
-		internAny(antlr4JarPath),
-		vfsAny(grammarVFS),
-		anyDlanguageCpp,
-		anyDashO,
-		internAny(outDir),
+	cmdArgs := []STR{
+		internStr(instance.Platform.Tools.Python3),
+		internStr(stdout2stderrPath),
+		internStr(jdkResourcePath),
+		argJar.str(),
+		internStr(antlr4JarPath),
+		(grammarVFS).str(),
+		argDlanguageCpp.str(),
+		argDashO.str(),
+		internStr(outDir),
 	}
 
 	if visitor {
-		cmdArgs = append(cmdArgs, anyVisitor)
+		cmdArgs = append(cmdArgs, argVisitor.str())
 	}
 
 	if !listener {
-		cmdArgs = append(cmdArgs, anyNoListener)
+		cmdArgs = append(cmdArgs, argNoListener.str())
 	} else {
-		cmdArgs = append(cmdArgs, anyListener)
+		cmdArgs = append(cmdArgs, argListener.str())
 	}
 
-	cmdArgs = appendStringAny(cmdArgs, options)
+	cmdArgs = appendInternStrs(cmdArgs, options)
 
 	inputs := []VFS{
 		grammarVFS,
@@ -117,27 +117,27 @@ func EmitJVSplit(
 	outDirVFS := Build(instance.Path)
 	outDir := outDirVFS.String()
 
-	cmdArgs := []ANY{
-		internAny(instance.Platform.Tools.Python3),
-		internAny(stdout2stderrPath),
-		internAny(jdkResourcePath),
-		anyJar,
-		internAny(antlr4JarPath),
-		vfsAny(lexerVFS),
-		vfsAny(parserVFS),
-		anyDlanguageCpp,
-		anyDashO,
-		internAny(outDir),
+	cmdArgs := []STR{
+		internStr(instance.Platform.Tools.Python3),
+		internStr(stdout2stderrPath),
+		internStr(jdkResourcePath),
+		argJar.str(),
+		internStr(antlr4JarPath),
+		(lexerVFS).str(),
+		(parserVFS).str(),
+		argDlanguageCpp.str(),
+		argDashO.str(),
+		internStr(outDir),
 	}
 
 	if visitor {
-		cmdArgs = append(cmdArgs, anyVisitor)
+		cmdArgs = append(cmdArgs, argVisitor.str())
 	}
 
 	if !listener {
-		cmdArgs = append(cmdArgs, anyNoListener)
+		cmdArgs = append(cmdArgs, argNoListener.str())
 	} else {
-		cmdArgs = append(cmdArgs, anyListener)
+		cmdArgs = append(cmdArgs, argListener.str())
 	}
 
 	inputs := []VFS{
@@ -174,15 +174,15 @@ func EmitJVGeneral(
 	moduleTag string,
 	emit Emitter,
 ) NodeRef {
-	cmdArgs := make([]ANY, 0, 5+len(args))
+	cmdArgs := make([]STR, 0, 5+len(args))
 	cmdArgs = append(cmdArgs,
-		internAny(instance.Platform.Tools.Python3),
-		internAny(stdout2stderrPath),
-		internAny(jdkResourcePath),
-		anyJar,
-		vfsAny(jarVFS),
+		internStr(instance.Platform.Tools.Python3),
+		internStr(stdout2stderrPath),
+		internStr(jdkResourcePath),
+		argJar.str(),
+		(jarVFS).str(),
 	)
-	cmdArgs = appendStringAny(cmdArgs, args)
+	cmdArgs = appendInternStrs(cmdArgs, args)
 
 	jvInputs := make([]VFS, 0, len(inputs)+2)
 	jvInputs = append(jvInputs, inputs...)

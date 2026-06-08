@@ -18,19 +18,19 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 		statsPlatform = p
 	}
 
-	cmdArgs := make([]ANY, 0, 4+len(sources))
+	cmdArgs := make([]STR, 0, 4+len(sources))
 	cmdArgs = append(cmdArgs,
-		internAny(instance.Platform.Tools.Python3),
-		vfsAny(joinSrcs),
-		vfsAny(outVFS),
-		anyYaStartCommandFile,
+		internStr(instance.Platform.Tools.Python3),
+		(joinSrcs).str(),
+		(outVFS).str(),
+		argYaStartCommandFile.str(),
 	)
 
 	for _, s := range sources {
-		cmdArgs = append(cmdArgs, internAny(instance.Path+"/"+s))
+		cmdArgs = append(cmdArgs, internStr(instance.Path+"/"+s))
 	}
 
-	cmdArgs = append(cmdArgs, anyYaEndCommandFile)
+	cmdArgs = append(cmdArgs, argYaEndCommandFile.str())
 
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 

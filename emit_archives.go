@@ -26,11 +26,11 @@ func emitArchive(
 	archiveVFS := Build(instance.Path + "/" + a.Name)
 	archivePath := archiveVFS.String()
 
-	cmdArgs := make([]ANY, 0, 4+len(a.Files)+2)
-	cmdArgs = append(cmdArgs, vfsAny(toolBinPath), anyQ, anyX)
+	cmdArgs := make([]STR, 0, 4+len(a.Files)+2)
+	cmdArgs = append(cmdArgs, (toolBinPath).str(), argQ.str(), argX.str())
 
 	if a.DontCompress {
-		cmdArgs = append(cmdArgs, anyP)
+		cmdArgs = append(cmdArgs, argP.str())
 	}
 
 	producerRefs := []NodeRef{}
@@ -63,10 +63,10 @@ func emitArchive(
 		absStr := absVFS.String()
 
 		pathPerFile = append(pathPerFile, absVFS)
-		cmdArgs = append(cmdArgs, internAny(absStr+":"))
+		cmdArgs = append(cmdArgs, internStr(absStr+":"))
 	}
 
-	cmdArgs = append(cmdArgs, anyDashO, internAny(archivePath))
+	cmdArgs = append(cmdArgs, argDashO.str(), internStr(archivePath))
 
 	// Archive-node inputs are exactly the files the archiver reads (the archived
 	// members) plus the archiver tool. RUN_PROGRAM source INFiles and non-archived

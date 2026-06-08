@@ -107,14 +107,14 @@ func EmitPB(
 		}
 	}
 
-	cmdArgs := []ANY{
-		internAny(instance.Platform.Tools.Python3),
-		internAny(pbWrapperPath),
-		anyOutputs,
+	cmdArgs := []STR{
+		internStr(instance.Platform.Tools.Python3),
+		internStr(pbWrapperPath),
+		argOutputs.str(),
 	}
 
 	for _, output := range outputs {
-		cmdArgs = append(cmdArgs, vfsAny(output))
+		cmdArgs = append(cmdArgs, (output).str())
 	}
 
 	includeRoot := ""
@@ -130,19 +130,19 @@ func EmitPB(
 	}
 
 	cmdArgs = append(cmdArgs,
-		any2,
-		vfsAny(protocBinary),
-		internAny("-I=./"+includeRoot),
-		internAny("-I=$(S)/"+includeRoot),
-		anyIB2,
-		anyIS3,
+		arg2.str(),
+		(protocBinary).str(),
+		internStr("-I=./"+includeRoot),
+		internStr("-I=$(S)/"+includeRoot),
+		argIB2.str(),
+		argIS3.str(),
 	)
 
 	if cppOutRoot != "" {
-		cmdArgs = append(cmdArgs, internAny("-I=$(S)/"+cppOutRoot))
+		cmdArgs = append(cmdArgs, internStr("-I=$(S)/"+cppOutRoot))
 
 		if duplicateOutputRootInclude {
-			cmdArgs = append(cmdArgs, internAny("-I=$(S)/"+cppOutRoot))
+			cmdArgs = append(cmdArgs, internStr("-I=$(S)/"+cppOutRoot))
 		}
 	}
 
@@ -159,40 +159,40 @@ func EmitPB(
 	// (which need it via `ADDINCL GLOBAL FOR proto contrib/libs/protobuf/src`
 	// from their own peers).
 	for _, p := range peerProtoAddIncl {
-		cmdArgs = append(cmdArgs, internAny("-I="+p.String()))
+		cmdArgs = append(cmdArgs, internStr("-I="+p.String()))
 	}
 
 	if moduleTag == nil && strings.HasPrefix(protoRelPath, "yt/") {
-		cmdArgs = append(cmdArgs, anyISYt)
+		cmdArgs = append(cmdArgs, argISYt.str())
 	}
 
 	cmdArgs = append(cmdArgs,
-		anyIB2,
-		anyISContribLibsProtobufSrc,
-		internAny("--cpp_out="+cppOutArg),
+		argIB2.str(),
+		argISContribLibsProtobufSrc.str(),
+		internStr("--cpp_out="+cppOutArg),
 	)
-	cmdArgs = appendArgAny(cmdArgs, extraProtocFlags)
+	cmdArgs = appendArgStr(cmdArgs, extraProtocFlags)
 	cmdArgs = append(cmdArgs,
-		internAny("--cpp_styleguide_out=:$(B)/"+cppOutRoot),
-		internAny("--plugin=protoc-gen-cpp_styleguide="+cppStyleguideBinary.String()),
-		internAny(protoRelPath),
+		internStr("--cpp_styleguide_out=:$(B)/"+cppOutRoot),
+		internStr("--plugin=protoc-gen-cpp_styleguide="+cppStyleguideBinary.String()),
+		internStr(protoRelPath),
 	)
 
 	if grpc {
 		cmdArgs = append(cmdArgs,
-			internAny("--plugin=protoc-gen-grpc_cpp="+grpcCppBinary.String()),
-			internAny("--grpc_cpp_out=$(B)/"+cppOutRoot),
+			internStr("--plugin=protoc-gen-grpc_cpp="+grpcCppBinary.String()),
+			internStr("--grpc_cpp_out=$(B)/"+cppOutRoot),
 		)
 	}
 
 	for _, plugin := range extraPlugins {
 		cmdArgs = append(cmdArgs,
-			internAny("--plugin=protoc-gen-"+plugin.Spec.Name+"="+plugin.Binary.String()),
-			internAny("--"+plugin.Spec.Name+"_out=$(B)/"+cppOutRoot),
+			internStr("--plugin=protoc-gen-"+plugin.Spec.Name+"="+plugin.Binary.String()),
+			internStr("--"+plugin.Spec.Name+"_out=$(B)/"+cppOutRoot),
 		)
 
 		if plugin.Spec.ExtraOutFlag != "" {
-			cmdArgs = append(cmdArgs, internAny("--"+plugin.Spec.Name+"_opt=:"+plugin.Spec.ExtraOutFlag))
+			cmdArgs = append(cmdArgs, internStr("--"+plugin.Spec.Name+"_opt=:"+plugin.Spec.ExtraOutFlag))
 		}
 	}
 
