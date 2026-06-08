@@ -178,19 +178,25 @@ func pyInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 			out = append(out, walkClosure(ctx, instance, vfs, scanIn)...)
 		}
 	} else {
+		// Walk every output that carries includes — the same predicate under which
+		// pyEmitsIncludes registered its parsed includes (script + IN +
+		// OUTPUT_INCLUDES). For a header output with OUTPUT_INCLUDES (e.g.
+		// feature.gen.h listing feature.h) this resolves the registered feature.h
+		// and folds its transitive header closure into the producing node's inputs,
+		// matching upstream. CC-only would miss header outputs.
 		for _, f := range stmt.OUTFiles {
-			if isCCSourceExt(f) {
+			if generatedOutputCarriesIncludes(f) {
 				walkOne(f)
 			}
 		}
 
 		for _, f := range stmt.OUTNoAutoFiles {
-			if isCCSourceExt(f) {
+			if generatedOutputCarriesIncludes(f) {
 				walkOne(f)
 			}
 		}
 
-		if stmt.StdoutFile != nil && isCCSourceExt(*stmt.StdoutFile) {
+		if stmt.StdoutFile != nil && generatedOutputCarriesIncludes(*stmt.StdoutFile) {
 			walkOne(*stmt.StdoutFile)
 		}
 	}
