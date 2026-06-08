@@ -40,7 +40,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 
 		yasmLDRef, _ := ctx.tool(argContribToolsYasm)
 		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
-		ref, _, outPath := EmitRD(srcInstance, srcRel, srcVFS, yasmLDRef, ctx.emit)
+		ref, _, outPath := EmitRD(srcInstance, srcRel, srcVFS, yasmLDRef, srcIn.TC, ctx.emit)
 		return &sourceEmit{Ref: ref, OutPath: outPath}
 	case strings.HasSuffix(srcRel, ".c"),
 		strings.HasSuffix(srcRel, ".cpp"),
@@ -148,7 +148,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			srcInstance, evRelPath,
 			cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 			cppStyleguideBinary, protocBinary, event2cppBinary,
-			nil, evImports, ctx.emit)
+			nil, evImports, d.tc, ctx.emit)
 
 		evH := Build(evRelPath + ".pb.h")
 		evPbCC := Build(evRelPath + ".pb.cc")
@@ -240,6 +240,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			outVFS:        cfOut,
 			cfgVars:       cfgVars,
 			includeInputs: srcIn.IncludeInputs,
+			tc:            srcIn.TC,
 		})
 
 		return nil
@@ -249,7 +250,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, inSourceVFS, srcIn)
 		cfgVars := buildCFGVars(ctx.fs, inSourceVFS.Rel(), srcIn.SetVars, srcIn.DefaultVars)
 		cfOut := Build(srcInstance.Path + "/" + strings.TrimSuffix(srcRel, ".in"))
-		cfRef, cfOut := EmitCF(srcInstance, inSourceVFS, cfOut, cfgVars, srcIn.IncludeInputs, srcInstance.Path, cfModuleTag(d, srcInstance), ctx.emit)
+		cfRef, cfOut := EmitCF(srcInstance, inSourceVFS, cfOut, cfgVars, srcIn.IncludeInputs, srcInstance.Path, cfModuleTag(d, srcInstance), srcIn.TC, ctx.emit)
 
 		registerBoundGeneratedParsedOutput(ctx, srcInstance, "CF", cfOut, []includeDirective{
 			{kind: includeQuoted, target: internStr(inSourceVFS.Rel())},

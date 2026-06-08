@@ -10,6 +10,7 @@ func EmitBI(
 	instance ModuleInstance,
 	outputHeader string,
 	cxxFlags []STR,
+	tc moduleToolchain,
 	emit Emitter,
 ) NodeRef {
 	outPrefix := instance.Path + "/"
@@ -20,16 +21,16 @@ func EmitBI(
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 	cmd0Args := []STR{
-		internStr(instance.Platform.Tools.Python3),
+		tc.Python3,
 		(yieldLinePyVFS).str(),
 		arg2.str(),
 		internStr(argsFile),
-		instance.Platform.CXXArg,
+		tc.CXX,
 	}
 
 	cmd1Args := make([]STR, 0, 4+len(cxxFlags))
 	cmd1Args = append(cmd1Args,
-		internStr(instance.Platform.Tools.Python3),
+		tc.Python3,
 		(yieldLinePyVFS).str(),
 		arg2.str(),
 		internStr(argsFile),
@@ -37,11 +38,11 @@ func EmitBI(
 	cmd1Args = append(cmd1Args, cxxFlags...)
 
 	cmd2Args := []STR{
-		internStr(instance.Platform.Tools.Python3),
+		tc.Python3,
 		(xargsPyVFS).str(),
 		arg2.str(),
 		internStr(argsFile),
-		internStr(instance.Platform.Tools.Python3),
+		tc.Python3,
 		(buildInfoGenPyVFS).str(),
 		(outVFS).str(),
 	}

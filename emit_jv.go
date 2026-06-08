@@ -55,7 +55,7 @@ func emitJVDownstreamCPCC(
 		cpInputs = append(cpInputs, jvInputs...)
 		cpInputs = append(cpInputs, closure...)
 
-		cpRef := EmitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, closure, ctx.scripts, ctx.emit)
+		cpRef := EmitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, closure, in.TC, ctx.scripts, ctx.emit)
 
 		ccIncludeInputs := make([]VFS, 0, 3+len(jvInputs)+len(closure)+2)
 		ccIncludeInputs = append(ccIncludeInputs, jvPrimary)

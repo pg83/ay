@@ -125,10 +125,10 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	vcsCPath := Build(instance.Path + "/__vcs_version__.c").String()
 	vcsOPath := Build(instance.Path + "/__vcs_version__.c.pic.o").String()
 
-	cmd0 := composeLDCmdVcsInfo(instance.Platform.Tools, vcsCPath)
-	cmd1 := composeLDCmdVcsCompile(instance.Platform, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings)
-	cmd2 := composeDynLibCmd(instance.Platform, instance.Path, outputPath, outputName, vcsOPath, peerArchivePaths, pluginPaths, d.dynamicLibraryFrom, *d.exportsScript, fixElfPath.String())
-	cmd3 := composeLDCmdLinkOrCopy(instance.Platform.Tools, instance.Path)
+	cmd0 := composeLDCmdVcsInfo(d.tc, vcsCPath)
+	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings)
+	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path, outputPath, outputName, vcsOPath, peerArchivePaths, pluginPaths, d.dynamicLibraryFrom, *d.exportsScript, fixElfPath.String())
+	cmd3 := composeLDCmdLinkOrCopy(d.tc, instance.Path)
 	envVcsOnly := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 	envFull := ctx.host.ToolEnv()
 
@@ -195,9 +195,9 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	}
 }
 
-func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath string, peerLibPaths, pluginPaths []VFS, wholeArchivePeers []string, exportsScript, fixElfPath string) []STR {
+func composeDynLibCmd(p *Platform, tc moduleToolchain, modulePath, outputPath, outputName, vcsOPath string, peerLibPaths, pluginPaths []VFS, wholeArchivePeers []string, exportsScript, fixElfPath string) []STR {
 	cmdArgs := []STR{
-		internStr(p.Tools.Python3),
+		tc.Python3,
 		internStr(ldLinkDynLibPath),
 		argTarget.str(), internStr(outputPath),
 	}
@@ -220,9 +220,9 @@ func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath 
 		argSourceRoot.str(), argS.str(),
 		argBuildRoot.str(), argB.str(),
 		argArchLinux.str(),
-		argObjcopyExe.str(), internStr(p.Tools.Objcopy),
+		argObjcopyExe.str(), tc.Objcopy,
 		argFixElf.str(), internStr(fixElfPath),
-		p.CXXArg,
+		tc.CXX,
 		argWlWholeArchive.str(),
 		argYaStartCommandFile.str(),
 		argYaEndCommandFile.str(),
@@ -262,7 +262,7 @@ func composeDynLibCmd(p *Platform, modulePath, outputPath, outputName, vcsOPath 
 
 	cmdArgs = append(cmdArgs,
 		argFuseLdLld.str(),
-		internStr("--ld-path="+p.Tools.LLD),
+		internStr("--ld-path="+tc.LLD.String()),
 		argWlNoRosegment.str(),
 		argWlBuildIdSha1.str(),
 		argNostdlib.str(),

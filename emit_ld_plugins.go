@@ -5,7 +5,7 @@ type ldPluginsResult struct {
 	Paths []VFS
 }
 
-func emitOwnLDPlugins(ctx *genCtx, instance ModuleInstance, plugins []string) *ldPluginsResult {
+func emitOwnLDPlugins(ctx *genCtx, instance ModuleInstance, plugins []string, tc moduleToolchain) *ldPluginsResult {
 	if len(plugins) == 0 {
 		return nil
 	}
@@ -22,7 +22,7 @@ func emitOwnLDPlugins(ctx *genCtx, instance ModuleInstance, plugins []string) *l
 		ref, ok := ctx.ldPluginCPCache[dst]
 
 		if !ok {
-			ref = EmitCP(instance, src, dst, ctx.scripts, ctx.emit)
+			ref = EmitCP(instance, src, dst, tc, ctx.scripts, ctx.emit)
 			ctx.ldPluginCPCache[dst] = ref
 		}
 

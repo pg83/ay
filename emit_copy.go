@@ -137,7 +137,7 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 			closure = dedupVFS(closure)
 		}
 
-		ref := EmitCPWithDeps(instance, srcVFS, dstVFS, depRefs, closure, ctx.scripts, ctx.emit)
+		ref := EmitCPWithDeps(instance, srcVFS, dstVFS, depRefs, closure, d.tc, ctx.scripts, ctx.emit)
 
 		// Promote the registration with the producer ref; SourcePath remains.
 		if reg != nil {

@@ -3935,6 +3935,7 @@ END()
 
 func TestGen_BisonGeneratedHeaderPreprocessAndPeerBuildRootInclude(t *testing.T) {
 	files := map[string]string{}
+	addToolchainPeers(files)
 
 	writeToolProgram(files, "contrib/tools/bison", "bison")
 	writeToolProgram(files, "contrib/tools/m4", "m4")

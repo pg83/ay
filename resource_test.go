@@ -255,6 +255,7 @@ func TestChunkPySrcEntriesEmptyReturnsNil(t *testing.T) {
 
 func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 	d := &moduleData{
+		tc: testToolchain(),
 		pySrcs: []string{
 			"shellingham/__init__.py",
 			"shellingham/_core.py",
@@ -305,10 +306,10 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 	}
 
 	wantArgs := []string{
-		testTargetP.Tools.Python3,
+		testToolchain().Python3.String(),
 		objcopyScriptPath,
-		"--compiler", testTargetP.Tools.CXX,
-		"--objcopy", testTargetP.Tools.Objcopy,
+		"--compiler", testToolchain().CXX.String(),
+		"--objcopy", testToolchain().Objcopy.String(),
 		"--compressor", rescompressorBinPath,
 		"--rescompiler", rescompilerBinPath,
 		"--output_obj", "$(B)/contrib/python/shellingham/objcopy_e79ae9e993a07f847435dcf3c2.o",

@@ -20,6 +20,7 @@ func TestEmitFL_NodeShape(t *testing.T) {
 		Intern("$(B)/contrib/libs/flatbuffers/flatc/flatc"),
 		internArgs([]string{"--scoped-enums"}),
 		[]VFS{Intern("$(S)/mod/Schema.fbs")},
+		testToolchain(),
 		e,
 	)
 

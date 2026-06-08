@@ -108,7 +108,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 		cmdArgs := []STR{
-			internStr(instance.Platform.Tools.Python3),
+			d.tc.Python3,
 			argSContribToolsCythonCythonPy.str(),
 			argX2.str(),
 			argLegacyImplicitNoexceptTrue.str(),
