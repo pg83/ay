@@ -76,6 +76,12 @@ type ModuleCCInputs struct {
 	Ragel6Flags []ARG
 
 	BisonGenExt string
+
+	// CCArg / CXXArg are the C / C++ compiler invocation paths ($(CLANG)/bin/clang[++]),
+	// derived from the module's resource-global closure (d.tc). Set by every CC-emitting
+	// caller; composeTargetCC picks one by language.
+	CCArg  STR
+	CXXArg STR
 }
 
 func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS, []VFS) {
@@ -139,6 +145,8 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		NoCompilerWarnings: in.Flags.NoCompilerWarnings,
 		NoWShadow:          in.Flags.NoWShadow,
 		InclArgs:           in.InclArgs,
+		CCArg:              in.CCArg,
+		CXXArg:             in.CXXArg,
 	}
 	cmdArgs := composeTargetCC(args)
 
@@ -359,12 +367,26 @@ func composePostCatboostBucket(preBucket []ARG) []ARG {
 	return out
 }
 
-func pickCompilerStr(p *Platform, isCxx bool) STR {
-	if isCxx {
-		return p.CXXArg
+// pickCompilerArg returns the compiler from the module's resolved toolchain
+// (a.CCArg/CXXArg, derived from the PEERDIR resource-global closure). During the
+// migration off ambient platform flags it falls back to p.CCArg/CXXArg when a
+// caller has not yet threaded the closure-derived value.
+func pickCompilerArg(a ccComposeArgs) STR {
+	cc, cxx := a.CCArg, a.CXXArg
+
+	if cxx == 0 {
+		cxx = a.Platform.CXXArg
 	}
 
-	return p.CCArg
+	if cc == 0 {
+		cc = a.Platform.CCArg
+	}
+
+	if a.IsCxx {
+		return cxx
+	}
+
+	return cc
 }
 
 type ccComposeArgs struct {
@@ -383,6 +405,8 @@ type ccComposeArgs struct {
 	NoCompilerWarnings bool
 	NoWShadow          bool
 	InclArgs           inclArgMemo
+	CCArg              STR
+	CXXArg             STR
 }
 
 func appendCompileFlagPipeline(cmdArgs []STR, bundle compileFlagBundle, warningBundle, defineBundle, preNoLibcExtras, moduleScopeCFlags []ARG) []STR {
@@ -405,7 +429,7 @@ func composeTargetCC(a ccComposeArgs) []STR {
 		len(a.OwnAddIncl) + len(a.PeerAddIncl) + len(a.OwnCFlags) + len(a.OwnExtras) + len(a.PeerExtras) + 2*len(a.OwnGlobalBucket) + len(a.PerSrcCFlags) + len(a.ModuleScopeCFlags) +
 		len(bundle.ArchArgs) + len(bundle.CFlags) + len(bundle.Defines) + 2*len(bundle.NoLibcBlock) + len(warningBundle)
 	cmdArgs := make([]STR, 0, argCap)
-	cmdArgs = append(cmdArgs, pickCompilerStr(a.Platform, a.IsCxx), a.Platform.TargetArg)
+	cmdArgs = append(cmdArgs, pickCompilerArg(a), a.Platform.TargetArg)
 	cmdArgs = appendArgStr(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs, argDashBBin, argDashC.str(), argDashO.str(), (a.OutVFS).str())
 	cmdArgs = appendArgStr(cmdArgs, ccIncludesPrefix)

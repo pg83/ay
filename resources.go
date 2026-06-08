@@ -220,6 +220,54 @@ func bindResourceGlobalVars(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	return bound
 }
 
+// moduleToolchain holds a module's tool-invocation paths, derived from the
+// external-resource globals reachable through its PEERDIR closure: the compiler/
+// archiver/objcopy/strip live under $(CLANG) (build/platform/clang), the linker
+// under $(LLD_ROOT) (build/platform/lld), and python under $(YMAKE_PYTHON3)
+// (build/platform/python/ymake_python3). The bare $(NAME) form is what the
+// executor mounts (resourceMountRe) — the id-bearing resource-global value is the
+// normalize/--global-resource form, not the command form. A field stays 0 when its
+// resource is absent from the closure (the consuming emitter then has no peer to
+// take the tool from — caught at use, never silently defaulted).
+type moduleToolchain struct {
+	ClangRoot STR
+	CC        STR
+	CXX       STR
+	AR        STR
+	Objcopy   STR
+	Strip     STR
+	LLDRoot   STR
+	LLD       STR
+	Python3   STR
+}
+
+// resolveModuleToolchain derives the tool paths from the module's resource-global
+// closure. Tool paths come from peers (build/platform/*), not ambient platform flags.
+func resolveModuleToolchain(globals []resourceDecl) moduleToolchain {
+	var tc moduleToolchain
+
+	for _, decl := range globals {
+		switch decl.Name.String() {
+		case resourcePatternClangTool:
+			root := resourcePatternRef(resourcePatternClangTool)
+			tc.ClangRoot = internStr(root)
+			tc.CC = internStr(root + "/bin/clang")
+			tc.CXX = internStr(root + "/bin/clang++")
+			tc.AR = internStr(root + "/bin/llvm-ar")
+			tc.Objcopy = internStr(root + "/bin/llvm-objcopy")
+			tc.Strip = internStr(root + "/bin/llvm-strip")
+		case resourcePatternLLDRoot:
+			root := resourcePatternRef(resourcePatternLLDRoot)
+			tc.LLDRoot = internStr(root)
+			tc.LLD = internStr(root + "/bin/ld.lld")
+		case resourcePatternYMakePython3:
+			tc.Python3 = internStr(resourcePatternRef(resourcePatternYMakePython3) + "/bin/python3")
+		}
+	}
+
+	return tc
+}
+
 // genResourcesLibrary emits a RESOURCES_LIBRARY: it produces no archive/objects
 // (upstream RESOURCES_LIBRARY is a .pkg.fake IGNORED unit), only the external
 // resource globals it declares, which propagate up the PEERDIR closure.
