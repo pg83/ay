@@ -121,7 +121,7 @@ func cmdMake(args []string) int {
 
 	fs := NewFS(mf.srcRoot)
 
-	tools, conf := toolchainFlags(fs, nil)
+	tools, conf := toolchainFlags(fs)
 	rootHostYaFlags := readYaConfSection(fs, "ya.conf", "host_platform_flags")
 	rootTargetYaFlags := readYaConfSection(fs, "ya.conf", "flags")
 	hostYaFlags := map[string]string{}

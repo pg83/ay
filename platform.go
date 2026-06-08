@@ -40,8 +40,6 @@ type Platform struct {
 	// Tags with "no tags" rather than falling back to them.
 	TestTags []STR
 
-	Tools Toolchain
-
 	PIC             bool
 	BuildType       string
 	BuildRelease    bool
@@ -51,11 +49,8 @@ type Platform struct {
 	Triple string
 	March  string
 
-	// Pre-interned cmd-arg tokens (STR), computed once per platform so the
-	// per-CC-node compile line doesn't re-intern the (constant) compiler path
-	// and --target.
-	CCArg     STR
-	CXXArg    STR
+	// TargetArg is the pre-interned --target=<triple> cmd-arg token (STR), computed
+	// once per platform so the per-CC-node compile line doesn't re-intern it.
 	TargetArg STR
 
 	CFlags   []ARG
@@ -89,16 +84,6 @@ type Platform struct {
 	BuildTypeUpperSTR STR
 }
 
-type Toolchain struct {
-	Python3 string
-	CC      string
-	CXX     string
-	Objcopy string
-	AR      string
-	Strip   string
-	LLD     string
-}
-
 // internFlags interns the raw CLI/conf flag map into the ENV/STR form stored on
 // Platform.Flags. The one place env-flag strings are interned.
 func internFlags(flags map[string]string) map[ENV]STR {
@@ -109,18 +94,6 @@ func internFlags(flags map[string]string) map[ENV]STR {
 	}
 
 	return out
-}
-
-func toolchainFromFlags(flags map[string]string) Toolchain {
-	return Toolchain{
-		Python3: flags["BUILD_PYTHON_BIN"],
-		CC:      flags["CLANG_TOOL"],
-		CXX:     flags["CLANG_pl_pl_TOOL"],
-		Objcopy: flags["OBJCOPY_TOOL"],
-		AR:      flags["AR_TOOL"],
-		Strip:   flags["STRIP_TOOL"],
-		LLD:     flags["LLD_TOOL"],
-	}
 }
 
 func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, cflagsEnv, cxxflagsEnv string) *Platform {
@@ -152,7 +125,6 @@ func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, 
 		Flags:             internFlags(flags),
 		Tags:              internStrs(tags),
 		TestTags:          []STR{},
-		Tools:             toolchainFromFlags(flags),
 		PIC:               flags["PIC"] == "yes",
 		BuildType:         buildType,
 		BuildRelease:      buildRelease,
@@ -169,8 +141,6 @@ func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, 
 		BuildTypeUpperSTR: internStr(strings.ToUpper(buildType)),
 	}
 
-	p.CCArg = internStr(p.Tools.CC)
-	p.CXXArg = internStr(p.Tools.CXX)
 	p.TargetArg = internStr("--target=" + p.Triple)
 
 	compress := confCompressesDebug(fs)
@@ -289,38 +259,27 @@ func marchFor(isa ISA) string {
 	}
 }
 
+// The toolchain is always the resource clang/lld (build/platform/clang, build/
+// platform/lld), reached via PEERDIR; there is no non-resource compiler path. The
+// clang root in these executor-env / linker-selection helpers is the bare $(CLANG)
+// resource pattern (the same form the executor mounts).
 func (p *Platform) MultiarchLibPath() string {
 	path := "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/" + p.Triple
 
-	if p.UsesResourceClang() {
-		return p.resourceClangRoot() + "/lib:" + path
-	}
-
-	return path
+	return resourcePatternRef(resourcePatternClangTool) + "/lib:" + path
 }
 
 func (p *Platform) ToolEnv() EnvVars {
-	env := EnvVars{
+	return EnvVars{
 		{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"},
 		{Name: "DYLD_LIBRARY_PATH", Value: p.MultiarchLibPath()},
+		{Name: "CPATH"},
+		{Name: "LIBRARY_PATH"},
+		{Name: "SDKROOT"},
 	}
-
-	if p.UsesResourceClang() {
-		env = append(env,
-			EnvVar{Name: "CPATH"},
-			EnvVar{Name: "LIBRARY_PATH"},
-			EnvVar{Name: "SDKROOT"},
-		)
-	}
-
-	return env
 }
 
 func (p *Platform) LinkerSelectionGDBIndexFlags() []string {
-	if !p.UsesResourceLLD() {
-		return nil
-	}
-
 	return []string{"-Wl,--gdb-index"}
 }
 
@@ -332,7 +291,7 @@ func (p *Platform) LinkerSelectionTailFlags() []string {
 }
 
 func (p *Platform) LinkerSelectionNoPieFlags() []string {
-	if !p.UsesResourceLLD() || p.PIC {
+	if p.PIC {
 		return nil
 	}
 
@@ -345,39 +304,6 @@ func (p *Platform) ObjectSuffix() string {
 	}
 
 	return ".o"
-}
-
-func (p *Platform) ArchiverArgs() (string, string, string) {
-	if p.UsesResourceClang() {
-		return p.Tools.AR, "LLVM_AR", "gnu"
-	}
-
-	return "ar", "GNU_AR", "None"
-}
-
-func (p *Platform) UsesResourceClang() bool {
-	return strings.HasPrefix(p.Tools.CC, "$(") || strings.HasPrefix(p.Tools.CXX, "$(") || strings.HasPrefix(p.Tools.AR, "$(")
-}
-
-func (p *Platform) UsesResourceLLD() bool {
-	return strings.HasPrefix(p.Tools.LLD, "$(")
-}
-
-func (p *Platform) resourceClangRoot() string {
-	for _, tool := range []struct {
-		path   string
-		suffix string
-	}{
-		{path: p.Tools.CC, suffix: "/bin/clang"},
-		{path: p.Tools.CXX, suffix: "/bin/clang++"},
-		{path: p.Tools.AR, suffix: "/bin/llvm-ar"},
-	} {
-		if strings.HasSuffix(tool.path, tool.suffix) {
-			return strings.TrimSuffix(tool.path, tool.suffix)
-		}
-	}
-
-	return resourcePatternRef(resourcePatternClangTool)
 }
 
 func ParsePlatformID(s string) (OS, ISA) {
