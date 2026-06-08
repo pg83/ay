@@ -13,7 +13,7 @@ import "strings"
 //	  d.resources, picked up by emitResourceObjcopy as a normal embed → emits
 //	  the PY objcopy_<hash>.o, which then participates in the global archive
 //	  (lib<...>.global.a) via the existing LIBRARY .global.a pipeline.
-func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) {
+func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs, resourceGlobals []resourceDecl) {
 	if len(d.llvmBc) == 0 {
 		return
 	}
@@ -28,7 +28,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 	tp := TargetProperties{ModuleDir: instance.Path}
 
 	for _, stmt := range d.llvmBc {
-		clangRoot := stripResourceName(stmt.ClangBCRoot)
+		clangRoot := resolveResourceGlobalRef(stmt.ClangBCRoot, resourceGlobals)
 		clangxx := clangRoot + "/bin/clang++"
 		llvmLink := clangRoot + "/bin/llvm-link"
 		opt := clangRoot + "/bin/opt"
@@ -330,10 +330,3 @@ func llvmBcRootRelArcSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 	return src
 }
 
-func stripResourceName(s string) string {
-	if i := strings.Index(s, "::"); i >= 0 {
-		return s[i+2:]
-	}
-
-	return s
-}

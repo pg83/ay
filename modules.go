@@ -1121,13 +1121,13 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 	case tokNoWshadow:
 		d.flags.NoWShadow = true
 	case tokUseLlvmBc16:
-		env.SetString(envCLANG_BC_ROOT, env.String(envCLANG16_RESOURCE_GLOBAL))
+		env.SetString(envCLANG_BC_ROOT, "$"+envCLANG16_RESOURCE_GLOBAL.String())
 		env.SetString(envLLVM_LLC_TOOL, "contrib/libs/llvm16/tools/llc")
 	case tokUseLlvmBc18:
-		env.SetString(envCLANG_BC_ROOT, env.String(envCLANG18_RESOURCE_GLOBAL))
+		env.SetString(envCLANG_BC_ROOT, "$"+envCLANG18_RESOURCE_GLOBAL.String())
 		env.SetString(envLLVM_LLC_TOOL, "contrib/libs/llvm18/tools/llc")
 	case tokUseLlvmBc20:
-		env.SetString(envCLANG_BC_ROOT, env.String(envCLANG20_RESOURCE_GLOBAL))
+		env.SetString(envCLANG_BC_ROOT, "$"+envCLANG20_RESOURCE_GLOBAL.String())
 		env.SetString(envLLVM_LLC_TOOL, "contrib/libs/llvm20/tools/llc")
 	case tokSplitDwarf:
 		d.splitDwarf = true
@@ -1882,9 +1882,11 @@ type llvmBcStmt struct {
 	Symbols             []string
 	GenerateMachineCode bool
 	NoCompile           bool
-	// ClangBCRoot is CLANG_BC_ROOT captured at parse time (set by
-	// USE_LLVM_BC{16,18,20}). Looks like "CLANG16_RESOURCE_GLOBAL::$(CLANG16-...)".
-	// Strip everything before "::" to get the bin-root for clang++/llvm-link/opt.
+	// ClangBCRoot is CLANG_BC_ROOT captured at collection time (set by
+	// USE_LLVM_BC{16,18,20}). It holds the deferred reference "$CLANG16_RESOURCE_GLOBAL";
+	// emitLLVMBC expands it against the module's resource-global closure (the value
+	// declared by the build/platform/clang PEERDIR) to the "$(CLANG16-<id>)" bin-root
+	// for clang++/llvm-link/opt.
 	ClangBCRoot string
 }
 

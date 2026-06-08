@@ -118,7 +118,7 @@ func stripSbrPrefix(uri string) string {
 
 // resolveResourceDecls turns one DECLARE_EXTERNAL_RESOURCE /
 // _HOST_RESOURCES_BUNDLE[_BY_JSON] call into host-selected resource declarations.
-func resolveResourceDecls(ctx *genCtx, instance ModuleInstance, stmt *DeclareResourceStmt) []resourceDecl {
+func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *DeclareResourceStmt) []resourceDecl {
 	switch stmt.Macro {
 	case tokDeclareExternalResource:
 		// NAME uri [NAME2 uri2 ...] — direct, host-independent.
@@ -136,29 +136,29 @@ func resolveResourceDecls(ctx *genCtx, instance ModuleInstance, stmt *DeclareRes
 
 		for i := 1; i+2 < len(stmt.Args); i += 3 {
 			if stmt.Args[i+1] != "FOR" {
-				ThrowFmt("gen: %s: malformed DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE args %v", instance.Path, stmt.Args)
+				ThrowFmt("gen: %s: malformed DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE args %v", modulePath, stmt.Args)
 			}
 
 			bundle[stmt.Args[i+2]] = stmt.Args[i]
 		}
 
-		return []resourceDecl{selectHostResourceDecl(ctx, instance, name, bundle)}
+		return []resourceDecl{selectHostResourceDecl(host, modulePath, name, bundle)}
 	case tokDeclareExternalHostResourcesBundleByJson:
 		// NAME file.json — read by_platform.<host>.uri.
 		name, jsonRel := stmt.Args[0], stmt.Args[1]
-		bundle := readResourceBundleJSON(ctx.fs, filepath.ToSlash(filepath.Join(instance.Path, jsonRel)))
+		bundle := readResourceBundleJSON(fs, filepath.ToSlash(filepath.Join(modulePath, jsonRel)))
 
-		return []resourceDecl{selectHostResourceDecl(ctx, instance, name, bundle)}
+		return []resourceDecl{selectHostResourceDecl(host, modulePath, name, bundle)}
 	}
 
 	return nil
 }
 
-func selectHostResourceDecl(ctx *genCtx, instance ModuleInstance, name string, bundle map[string]string) resourceDecl {
-	uri, ok := bundle[hostPlatformKey(ctx.host)]
+func selectHostResourceDecl(host *Platform, modulePath, name string, bundle map[string]string) resourceDecl {
+	uri, ok := bundle[hostPlatformKey(host)]
 
 	if !ok {
-		ThrowFmt("gen: %s: resource %q has no entry for host platform %q", instance.Path, name, hostPlatformKey(ctx.host))
+		ThrowFmt("gen: %s: resource %q has no entry for host platform %q", modulePath, name, hostPlatformKey(host))
 	}
 
 	return makeResourceDecl(name, uri)
@@ -176,6 +176,50 @@ func sortedResourceGlobals(in []resourceDecl) []resourceDecl {
 	return out
 }
 
+// resolveResourceGlobalRef expands ymake's deferred CLANG_BC_ROOT=$CLANG16_RESOURCE_GLOBAL
+// reference against the consuming module's resource-global closure (the transitive union
+// of <NAME>_RESOURCE_GLOBAL declarations reached through PEERDIR — build/platform/clang
+// declares CLANG16/18/20). "$CLANG16_RESOURCE_GLOBAL" / "${CLANG16_RESOURCE_GLOBAL}"
+// resolves to the decl's value ("$(CLANG16-<id>)"); a non-reference string passes through.
+// This mirrors ymake deferring the expansion until command generation, when the global
+// is available from the closure rather than read eagerly at module-collection time.
+func resolveResourceGlobalRef(s string, globals []resourceDecl) string {
+	name, ok := strings.CutPrefix(s, "$")
+
+	if !ok {
+		return s
+	}
+
+	name = strings.TrimPrefix(strings.TrimSuffix(name, "}"), "{")
+
+	for _, d := range globals {
+		if d.GlobalVar.String() == name {
+			return d.Value.String()
+		}
+	}
+
+	ThrowFmt("resources: %q references resource global not in the PEERDIR closure", s)
+
+	return ""
+}
+
+// bindResourceGlobalVars resolves a RESOURCES_LIBRARY's DECLARE_* statements and
+// binds each <NAME>_RESOURCE_GLOBAL env var to its "$(<VarName>)" value, mirroring
+// ymake's ProcessExternalResource. Returns whether any var was bound (so the
+// caller re-collects to expand references that textually precede the DECLARE).
+func bindResourceGlobalVars(ctx *genCtx, instance ModuleInstance, d *moduleData, env Environment) bool {
+	bound := false
+
+	for _, stmt := range d.resourceDeclStmts {
+		for _, decl := range resolveResourceDecls(ctx.fs, ctx.host, instance.Path, stmt) {
+			env.SetStringID(internEnv(decl.GlobalVar.String()), decl.Value)
+			bound = true
+		}
+	}
+
+	return bound
+}
+
 // genResourcesLibrary emits a RESOURCES_LIBRARY: it produces no archive/objects
 // (upstream RESOURCES_LIBRARY is a .pkg.fake IGNORED unit), only the external
 // resource globals it declares, which propagate up the PEERDIR closure.
@@ -184,7 +228,7 @@ func genResourcesLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *m
 	deduper.reset()
 
 	for _, stmt := range d.resourceDeclStmts {
-		for _, decl := range resolveResourceDecls(ctx, instance, stmt) {
+		for _, decl := range resolveResourceDecls(ctx.fs, ctx.host, instance.Path, stmt) {
 			if deduper.add(VFS(decl.GlobalVar)) {
 				globals = append(globals, decl)
 				emitResourceFetch(ctx, decl)

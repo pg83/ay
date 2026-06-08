@@ -630,6 +630,14 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	if d.moduleStmt.Name == tokResourcesLibrary {
+		// A RESOURCES_LIBRARY's own LDFLAGS may reference ${<NAME>_RESOURCE_GLOBAL}
+		// (build/platform/lld: --ld-path=${LLD_ROOT_RESOURCE_GLOBAL}/bin/ld.lld) ahead
+		// of the DECLARE that defines it. Bind the declared globals into the env and
+		// re-collect once so those references expand (ymake defers; we re-collect).
+		if bindResourceGlobalVars(ctx, instance, d, env) {
+			d = collectModule(ctx.parsers, &deduper, instance.Path, instance.Kind, mf.Stmts, env)
+		}
+
 		return genResourcesLibrary(ctx, instance, d)
 	}
 
@@ -2073,7 +2081,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		globalOutputs = append(globalOutputs, genPyAuxRes.Outputs...)
 	}
 
-	emitLLVMBC(ctx, instance, d, moduleInputs)
+	emitLLVMBC(ctx, instance, d, moduleInputs, resourceGlobalsClosure)
 
 	objcopyRes := emitResourceObjcopy(ctx, instance, d)
 

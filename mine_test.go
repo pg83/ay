@@ -17,19 +17,12 @@ func TestPrebuiltToolchainFlags_UseHashedResourcePatterns(t *testing.T) {
 	if got, want := flags["LLD_TOOL"], "$(LLD_ROOT)/bin/ld.lld"; got != want {
 		t.Fatalf("LLD_TOOL = %q, want %q", got, want)
 	}
-	if got, want := flags["CLANG16_RESOURCE_GLOBAL"], "CLANG16_RESOURCE_GLOBAL::$(CLANG16)"; got != want {
-		t.Fatalf("CLANG16_RESOURCE_GLOBAL = %q, want %q", got, want)
-	}
-	if got, want := flags["CLANG18_RESOURCE_GLOBAL"], "CLANG18_RESOURCE_GLOBAL::$(CLANG18)"; got != want {
-		t.Fatalf("CLANG18_RESOURCE_GLOBAL = %q, want %q", got, want)
-	}
-	if got, want := flags["CLANG20_RESOURCE_GLOBAL"], "CLANG20_RESOURCE_GLOBAL::$(CLANG20)"; got != want {
-		t.Fatalf("CLANG20_RESOURCE_GLOBAL = %q, want %q", got, want)
-	}
-	// build/platform/lld's --ld-path=${LLD_ROOT_RESOURCE_GLOBAL}/bin/ld.lld needs
-	// the bare $(LLD_ROOT) dir, not the --global-resource token.
-	if got, want := flags["LLD_ROOT_RESOURCE_GLOBAL"], "$(LLD_ROOT)"; got != want {
-		t.Fatalf("LLD_ROOT_RESOURCE_GLOBAL = %q, want %q", got, want)
+	// <NAME>_RESOURCE_GLOBAL vars are no longer set here — they propagate via the
+	// build/platform/* DECLARE_* statements through the PEERDIR closure.
+	for _, k := range []string{"CLANG16_RESOURCE_GLOBAL", "CLANG18_RESOURCE_GLOBAL", "CLANG20_RESOURCE_GLOBAL", "LLD_ROOT_RESOURCE_GLOBAL"} {
+		if got, ok := flags[k]; ok {
+			t.Fatalf("%s unexpectedly present in prebuiltToolchainFlags = %q (must come from peerdir)", k, got)
+		}
 	}
 }
 

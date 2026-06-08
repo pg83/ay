@@ -64,8 +64,11 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 			data := &moduleData{}
 
 			applyUnknownStmt("mod", &UnknownStmt{Name: internTok(tt.useMacro)}, data, env)
-			if got := env.String(envCLANG_BC_ROOT); got != tt.resourceVal {
-				t.Fatalf("CLANG_BC_ROOT = %q, want %q", got, tt.resourceVal)
+			// CLANG_BC_ROOT holds the deferred "$<NAME>_RESOURCE_GLOBAL" reference;
+			// emitLLVMBC expands it against the resource-global closure (the value
+			// declared by the build/platform/clang PEERDIR), not eagerly here.
+			if got, want := env.String(envCLANG_BC_ROOT), "$"+tt.resourceKey; got != want {
+				t.Fatalf("CLANG_BC_ROOT = %q, want %q", got, want)
 			}
 			if got := env.String(envLLVM_LLC_TOOL); got != tt.wantLLCTool {
 				t.Fatalf("LLVM_LLC_TOOL = %q, want %q", got, tt.wantLLCTool)
