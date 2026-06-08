@@ -176,6 +176,14 @@ func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, d *module
 		peers = append(peers, "library/cpp/sanitizer/include")
 	}
 
+	// Toolchain resources: upstream _BASE_UNIT peers build/platform/clang under
+	// NEED_LLVM_TOOLS_PEERDIR && NEED_PLATFORM_PEERDIRS (ymake.core.conf:842). The
+	// module is a RESOURCES_LIBRARY (inert: no link inputs), contributing only its
+	// CLANG/CLANG16/18/20 resource globals to the closure.
+	if !noPlatform && !strings.HasPrefix(instance.Path, "build/platform/") {
+		peers = append(peers, "build/platform/clang")
+	}
+
 	return peers
 }
 
