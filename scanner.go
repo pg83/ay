@@ -69,10 +69,10 @@ type IncludeScanner struct {
 	scanCache DenseMap3[STR, []VFS, closureRef, bool]
 
 	// searchTierFlat caches resolveContextSearchTier results in one scanner-wide
-	// table keyed by morton(ctxNum, target STR) — the two dense ids bit-interleaved
-	// (Z-order) rather than shift-packed, so the key's low bits mix BOTH ids and an
-	// identity-hashed IntValueMap spreads (ctx, target) pairs instead of clustering
-	// them by target. ctxNum is a dense per-distinct-config id (ctxNumByHash). The
+	// table keyed by splitMix64(ctxNum, target STR) — the two dense ids hashed into a
+	// uniform 64-bit key, so an identity-hashed IntValueMap spreads (ctx, target)
+	// pairs instead of clustering them. ctxNum is a dense per-distinct-config id
+	// (ctxNumByHash). The
 	// value (a searchTierResult) lives in IntValueMap's side slice, so table entries
 	// stay small. searchTierSeen is a 1-bit-per-target-STR presence gate (set once
 	// the target has any cached entry, in any config): a hit there means the table
@@ -88,8 +88,8 @@ type IncludeScanner struct {
 	// 92% of resolveSourceUnder), since incDir (the includer's own dir) is rarely an
 	// addincl, so the addincl index can't cover it. The result is a pure function of
 	// (incDir, target) and the FS, so it's context-free and run-wide. Keyed by
-	// morton(incDir VFS, target STR) — bit-interleaved so the low bits mix both ids
-	// and an identity-hashed IntValueMap spreads them; value (the resolved source
+	// splitMix64(incDir VFS, target STR) — the two ids hashed into a uniform 64-bit
+	// key so an identity-hashed IntValueMap spreads them; value (the resolved source
 	// rel, or "" for "does not resolve here") lives in the side slice.
 	sourceUnderCache *IntValueMap[string]
 
@@ -856,7 +856,7 @@ func buildCfgResolveIndex(cfg *ScanContext) *cfgResolveIndex {
 
 func (sc *scanCtx) cacheSearchTier(targetID STR, out searchTierResult) searchTierResult {
 	s := sc.scanner
-	s.searchTierFlat.Put(morton(sc.ctxNum, uint32(targetID)), out)
+	s.searchTierFlat.Put(splitMix64(sc.ctxNum, uint32(targetID)), out)
 	s.searchTierSeen.add(uint32(targetID))
 
 	return out
@@ -868,7 +868,7 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 	// Gate the composite-key hash probe on the 1-bit per-target presence flag: a
 	// target never cached in any config skips straight to the resolve.
 	if s.searchTierSeen.has(uint32(targetID)) {
-		if cached := s.searchTierFlat.Get(morton(sc.ctxNum, uint32(targetID))); cached != nil {
+		if cached := s.searchTierFlat.Get(splitMix64(sc.ctxNum, uint32(targetID))); cached != nil {
 			s.searchTierHits++
 			return *cached
 		}
@@ -1109,9 +1109,9 @@ func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective
 	if d.kind == includeQuoted {
 		matched := false
 
-		// Memoize the includer-local resolve by morton(incDir, target) — both 32-bit
-		// ids bit-interleaved into one key. "" means "does not resolve under incDir".
-		suKey := morton(uint32(incDir), uint32(d.target))
+		// Memoize the includer-local resolve by splitMix64(incDir, target) — both 32-bit
+		// ids hashed into one uniform key. "" means "does not resolve under incDir".
+		suKey := splitMix64(uint32(incDir), uint32(d.target))
 		rel := ""
 
 		if p := s.sourceUnderCache.Get(suKey); p != nil {
