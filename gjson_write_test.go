@@ -22,7 +22,7 @@ func encodeWithStdlib(g *Graph) []byte {
 
 func encodeWithHandRolled(g *Graph) []byte {
 	var buf bytes.Buffer
-	writeGraphCompact(&buf, g)
+	writeGraphCompact(&buf, g, false)
 
 	return buf.Bytes()
 }

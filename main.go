@@ -108,7 +108,7 @@ func startProfilesFromEnv() func() {
 	}
 }
 
-func writeGraph(out string, g *Graph) {
+func writeGraph(out string, g *Graph, dropSrcInputs bool) {
 	var w io.Writer
 
 	if out == "-" {
@@ -124,6 +124,6 @@ func writeGraph(out string, g *Graph) {
 	}
 
 	bw := bufio.NewWriterSize(w, 1<<20)
-	writeGraphCompact(bw, g)
+	writeGraphCompact(bw, g, dropSrcInputs)
 	Throw(bw.Flush())
 }

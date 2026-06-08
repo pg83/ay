@@ -372,7 +372,7 @@ func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	writeGraphCompact(&buf, g)
+	writeGraphCompact(&buf, g, false)
 	if bytes.Contains(buf.Bytes(), []byte(`"foreign_deps"`)) {
 		t.Errorf("foreign_deps key leaked into JSON for empty ForeignDepRefs: %s", buf.Bytes())
 	}
