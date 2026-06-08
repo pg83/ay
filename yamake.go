@@ -59,6 +59,17 @@ type PeerdirStmt struct {
 	Line  int
 }
 
+// DeclareResourceStmt is a DECLARE_EXTERNAL_RESOURCE /
+// DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE[_BY_JSON] call inside a RESOURCES_LIBRARY.
+// Host-platform uri selection (and json reading for the BY_JSON form) is deferred
+// to gen time, where the host Platform and FS are available; Args holds the raw
+// macro arguments.
+type DeclareResourceStmt struct {
+	Macro TOK
+	Args  []string
+	Line  int
+}
+
 type SrcsStmt struct {
 	Sources []string
 	Line    int
@@ -243,6 +254,9 @@ type ResourceFilesStmt struct {
 }
 
 func (*ModuleStmt) stmtMarker() {
+}
+
+func (*DeclareResourceStmt) stmtMarker() {
 }
 
 func (*PeerdirStmt) stmtMarker() {
@@ -916,6 +930,10 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 		"PACKAGE", "UNION", "RESOURCES_LIBRARY",
 		"UNITTEST_FOR":
 		return &ModuleStmt{Name: internTok(nameTok.val), Args: args, Line: nameTok.line}
+	case "DECLARE_EXTERNAL_RESOURCE",
+		"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE",
+		"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON":
+		return &DeclareResourceStmt{Macro: internTok(nameTok.val), Args: args, Line: nameTok.line}
 	case "PEERDIR":
 		return &PeerdirStmt{Paths: args, Line: nameTok.line}
 	case "SRCS":
