@@ -262,6 +262,12 @@ type genCtx struct {
 	// closure]; emit sites add a build script via append(inputs, scripts[v]...).
 	scripts scriptDeps
 
+	// fetchRefs maps an external-resource name (CLANG, LLD_ROOT, …) to its FETCH
+	// node, emitted once when the declaring RESOURCES_LIBRARY is gen'd
+	// (emitResourceFetch). Consumers that reference $(NAME) take the dep from here.
+	// Shared with the resource-aware emitter so attachResourceDeps resolves it.
+	fetchRefs map[string]NodeRef
+
 	host   *Platform
 	target *Platform
 
@@ -405,7 +411,11 @@ func reportPerfStats(ctx *genCtx, parsers *includeParserManager, targetScanner, 
 func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, emitter Emitter, onWarn func(Warn), resources *resourceFetchPlan, testMode bool, materializeResourceFetches bool) NodeRef {
 	plainEmit := emitter
 	scriptTbl := buildScriptTable(fs)
-	resourceEmit := resourceGraphEmitter(hostP, plainEmit, resources, materializeResourceFetches, scriptTbl)
+	// Shared across the genCtx (producer: emitResourceFetch) and the resource-aware
+	// emitter (consumer: attachResourceDeps) so a $(NAME) reference resolves to the
+	// fetch node emitted when its declaring RESOURCES_LIBRARY was gen'd.
+	fetchRefs := map[string]NodeRef{}
+	resourceEmit := resourceGraphEmitter(hostP, plainEmit, resources, materializeResourceFetches, scriptTbl, fetchRefs)
 
 	// Mix $(S) input content hashes into node uids in every mode so a source edit
 	// invalidates the cache (the dump path is re-uid'd from canonical content
@@ -432,6 +442,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		walking:            make(map[ModuleInstance]bool),
 		host:               hostP,
 		target:             targetP,
+		fetchRefs:          fetchRefs,
 		flatcEmissions:     make(map[codegenOutputKey]flatcEmission),
 		pyRegisterOutputs:  make(map[VFS]NodeRef),
 		checkConfigOutputs: make(map[VFS]NodeRef),

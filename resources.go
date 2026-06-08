@@ -187,6 +187,7 @@ func genResourcesLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *m
 		for _, decl := range resolveResourceDecls(ctx, instance, stmt) {
 			if deduper.add(VFS(decl.GlobalVar)) {
 				globals = append(globals, decl)
+				emitResourceFetch(ctx, decl)
 			}
 		}
 	}
