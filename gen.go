@@ -2552,8 +2552,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		out.dynamicPaths = append(out.dynamicPaths, path)
 	}
 
-	walk := func(peerPath string) {
-		peerInstance := derivePeerInstance(ctx, instance, d, peerPath)
+	walkInstance := func(peerInstance ModuleInstance) {
 		peerResult := genModule(ctx, peerInstance)
 		addEachVFS(addInclSeen, &out.addIncl, peerResult.AddInclGlobal)
 		addEachVFS(protoAddInclSeen, &out.protoAddIncl, peerResult.ProtoAddInclGlobal)
@@ -2609,6 +2608,26 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		if peerResult.ModuleStmtName == tokDynamicLibrary && peerResult.LDPath != nil {
 			addDynamic(peerResult.LDRef, *peerResult.LDPath)
 		}
+	}
+
+	walk := func(peerPath string) {
+		walkInstance(derivePeerInstance(ctx, instance, d, peerPath))
+	}
+
+	// PY3_PROTO multimodule (proto.conf `module _PY3_PROTO`): the python proto
+	// submodule PEERDIRs its CPP_PROTO sibling, ahead of the python-runtime
+	// PEERDIRs (contrib/python/protobuf, contrib/python/grpcio added in
+	// genModule). The sibling is the same unit at the same path with CPP flags —
+	// peer that exact instance first so its archive (and closure) lands ahead of
+	// protobuf-py3 in the link order. Upstream drops this self-peer under
+	// NO_OPTIMIZE_PY_PROTOS (`when ($OPTIMIZE_PY_PROTOS_FLAG == "no") {
+	// _IGNORE_PEERDIRSELF=CPP_PROTO }`), leaving the CPP archive whole-archive-only
+	// (emitPyProtoSrcs still marks it whole-archive in both cases).
+	if instance.Language == LangPy && d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary && d.optimizePyProtos && !moduleExcludesTag(d, "CPP_PROTO") {
+		seen[instance.Path] = struct{}{}
+		cppSelf := instance
+		cppSelf.Language = LangCPP
+		walkInstance(cppSelf)
 	}
 
 	if d.useCommonGoogleAPIs && instance.Language == LangCPP {
