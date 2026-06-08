@@ -89,14 +89,8 @@ func prebuiltToolchainFlags() map[string]string {
 		"STRIP_TOOL_VENDOR":        clangRoot + "/bin/llvm-strip",
 		"LLD_TOOL":                 lldRoot + "/bin/ld.lld",
 		"LLD_TOOL_VENDOR":          lldRoot + "/bin/ld.lld",
-		"CLANG16_RESOURCE_GLOBAL":  resourceGlobalRef("CLANG16_RESOURCE_GLOBAL", resourcePatternClang16),
-		"CLANG18_RESOURCE_GLOBAL":  resourceGlobalRef("CLANG18_RESOURCE_GLOBAL", resourcePatternClang18),
-		"CLANG20_RESOURCE_GLOBAL":  resourceGlobalRef("CLANG20_RESOURCE_GLOBAL", resourcePatternClang20),
-		// build/platform/lld's LDFLAGS reference ${LLD_ROOT_RESOURCE_GLOBAL} in
-		// --ld-path=…/bin/ld.lld; it must expand to the bare $(LLD_ROOT) resource
-		// dir (the DECLARE value), not the LLD_ROOT_RESOURCE_GLOBAL::… --global-resource
-		// token. (Stopgap: the value belongs on the DECLARE; see mine.go removal.)
-		"LLD_ROOT_RESOURCE_GLOBAL": resourcePatternRef(resourcePatternLLDRoot),
+		// <NAME>_RESOURCE_GLOBAL vars are bound from the build/platform/* DECLARE_*
+		// statements (bindResourceGlobalVars) — no longer hardcoded here.
 	}
 
 	return flags

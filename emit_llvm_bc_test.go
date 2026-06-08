@@ -5,6 +5,16 @@ import (
 	"testing"
 )
 
+// addLLVMBCToolchainPeer injects a synthetic build/platform/clang RESOURCES_LIBRARY
+// (the peer every C++ module implicitly PEERDIRs) into the in-memory fixture, so
+// CLANG16_RESOURCE_GLOBAL reaches the module's resource-global closure — the peerdir
+// value emitLLVMBC resolves CLANG_BC_ROOT against. Self-contained: no real FS access;
+// the uri is a fixture token, and the clang++ path is not asserted by these tests.
+func addLLVMBCToolchainPeer(files map[string]string) {
+	files["build/platform/clang/ya.make"] = "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(CLANG16 clang16.json)\nEND()\n"
+	files["build/platform/clang/clang16.json"] = `{"by_platform":{"linux-x86_64":{"uri":"sbr:test-clang16"}}}`
+}
+
 // TestEmitLLVMBC_OptPassesNoBraceComma verifies that the OP node's -passes arg
 // uses literal commas (not ${__COMMA__}) and has no spurious outer single-quotes.
 // Upstream: ymake expands ${__COMMA__} → , and strips shell-quoting before
@@ -13,6 +23,7 @@ func TestEmitLLVMBC_OptPassesNoBraceComma(t *testing.T) {
 	const modPath = "mod/llvm"
 
 	files := map[string]string{}
+	addLLVMBCToolchainPeer(files)
 	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
 	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
 	files[modPath+"/ya.make"] = `LIBRARY()
@@ -89,6 +100,7 @@ func TestEmitLLVMBC_BCNodeIncludesCompileFlags(t *testing.T) {
 	const modPath = "mod/llvm"
 
 	files := map[string]string{}
+	addLLVMBCToolchainPeer(files)
 	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
 	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
 	files[modPath+"/ya.make"] = `LIBRARY()
@@ -176,6 +188,7 @@ func TestEmitLLVMBC_PipelineProducesFiveNodes(t *testing.T) {
 	const modPath = "mod/llvm"
 
 	files := map[string]string{}
+	addLLVMBCToolchainPeer(files)
 	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
 	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
 	for k, v := range map[string]string{
@@ -285,6 +298,7 @@ func TestEmitLLVMBC_BCNodeIncludesArchArgs(t *testing.T) {
 	const modPath = "mod/llvm"
 
 	files := map[string]string{}
+	addLLVMBCToolchainPeer(files)
 	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
 	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
 	files[modPath+"/ya.make"] = `LIBRARY()
@@ -367,6 +381,7 @@ func TestEmitLLVMBC_BCNodeCarriesIncludeClosure(t *testing.T) {
 	const modPath = "mod/llvm"
 
 	files := map[string]string{}
+	addLLVMBCToolchainPeer(files)
 	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
 	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
 	files[modPath+"/ya.make"] = `LIBRARY()
@@ -432,6 +447,7 @@ func TestEmitLLVMBC_ObjcopyNodeCarriesBCClosure(t *testing.T) {
 	const modPath = "mod/llvm"
 
 	files := map[string]string{}
+	addLLVMBCToolchainPeer(files)
 	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
 	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
 	files[modPath+"/ya.make"] = `LIBRARY()
@@ -494,6 +510,7 @@ func TestEmitLLVMBC_BCNodeGeneratedSourceClosure(t *testing.T) {
 	const modPath = "mod/llvm"
 
 	files := map[string]string{}
+	addLLVMBCToolchainPeer(files)
 	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
 	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
 	// COPY_FILE(TEXT src.in dst) creates a build-root generated source.
