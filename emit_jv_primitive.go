@@ -21,7 +21,7 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs []VFS, outputs []
 			{
 				CmdArgs: cmdArgs,
 				Env:     env,
-				Cwd:     cwd,
+				Cwd:     internStr(cwd),
 			},
 		},
 		Env:     env,
@@ -38,7 +38,6 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs []VFS, outputs []
 
 			return tp
 		}(),
-		Platform:     string(instance.Platform.Target),
 		Requirements: Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		DepRefs:      depRefs,
 	}

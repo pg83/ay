@@ -13,7 +13,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		Inputs:           ToVFSSlice([]string{}),
 		KV:               KV{P: pkLD},
 		Outputs:          ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
-		Platform:         "default-linux-x86_64",
+		Platform:         &Platform{Target: "default-linux-x86_64"},
 		Requirements:     Requirements{},
 		Tags:             []string{"tool"},
 		TargetProperties: TargetProperties{ModuleDir: "contrib/tools/ragel6"},
@@ -56,8 +56,8 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		t.Errorf("kv.pc = %q, want yellow", got.KV.PC)
 	}
 
-	if got.Platform != string(PlatformDefaultLinuxAArch64) {
-		t.Errorf("platform = %q, want %q", got.Platform, PlatformDefaultLinuxAArch64)
+	if platformTarget(got.Platform) != string(PlatformDefaultLinuxAArch64) {
+		t.Errorf("platform = %q, want %q", platformTarget(got.Platform), PlatformDefaultLinuxAArch64)
 	}
 
 	if nodeHasHostTag(got.Tags) {

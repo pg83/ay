@@ -182,7 +182,6 @@ func emitResourceObjcopy(
 			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: "yes"},
 			Tags:             objcopyTags,
 			TargetProperties: resTargetProps,
-			Platform:         string(instance.Platform.Target),
 			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		}
 
@@ -369,7 +368,6 @@ func emitKvOnlyObjcopyNode(
 		KV:               KV{P: pkPY, PC: pcYellow, ShowOut: "yes"},
 		Tags:             kvTags,
 		TargetProperties: targetProps,
-		Platform:         string(instance.Platform.Target),
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 	}
 
@@ -465,7 +463,6 @@ func emitYaConfJSONObjcopy(
 			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: "yes"},
 			Tags:             []string{},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path},
-			Platform:         string(instance.Platform.Target),
 			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		}
 
@@ -698,7 +695,6 @@ func emitPySrcObjcopy(
 				KV:               KV{P: pkPY, PC: pcYellow, ShowOut: "yes"},
 				Tags:             pyTags,
 				TargetProperties: targetProps,
-				Platform:         string(instance.Platform.Target),
 				Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 			}
 

@@ -127,7 +127,7 @@ func EmitEV(
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
-				Cwd:     "$(S)",
+				Cwd:     strS,
 				Env:     env,
 			},
 		},
@@ -137,7 +137,6 @@ func EmitEV(
 		KV:               KV{P: pkEV, PC: pcYellow},
 		Tags:             instance.Platform.Tags,
 		TargetProperties: targetProps,
-		Platform:         string(instance.Platform.Target),
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		DepRefs:          depRefs,
 		ForeignDepRefs:   foreignDepRefs,

@@ -35,7 +35,7 @@ func appendStatsPreimage(dst []byte, c *canonBuf, n *Node) []byte {
 	kind := n.KV.P.String()
 
 	dst = append(dst, '[')
-	dst = appendPyRepr(dst, n.Platform)
+	dst = appendPyRepr(dst, platformTarget(n.Platform))
 	dst = append(dst, ',', ' ')
 	c.strBuf2 = appendPythonListRepr(c.strBuf2[:0], sortedStatsTags(n))
 	dst = appendPyRepr(dst, c.strBuf2)
@@ -242,7 +242,7 @@ func (c *canonBuf) writeCmdSlice(cmds []Cmd) {
 
 	for _, cm := range cmds {
 		c.writeStrSlice(cm.CmdArgs)
-		c.writeBytes(cm.Cwd)
+		c.writeBytes(cm.Cwd.String())
 		c.writeEnv(cm.Env)
 		c.writeBytes(cm.Stdout)
 	}
@@ -265,7 +265,7 @@ func (c *canonBuf) writeNode(n *Node) {
 	c.writeVFSSlice(n.Inputs)
 	c.writeKV(n.KV)
 	c.writeVFSSlice(n.Outputs)
-	c.writeBytes(n.Platform)
+	c.writeBytes(platformTarget(n.Platform))
 	c.writeRequirements(n.Requirements)
 	c.writeBool(n.Sandboxing)
 	c.writeStringSlice(n.Tags)

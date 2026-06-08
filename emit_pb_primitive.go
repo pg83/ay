@@ -282,7 +282,7 @@ func EmitPB(
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
-				Cwd:     protocCwd,
+				Cwd:     internStr(protocCwd),
 				Env:     env,
 			},
 		},
@@ -292,7 +292,6 @@ func EmitPB(
 		KV:               KV{P: pkPB, PC: pcYellow},
 		Tags:             tags,
 		TargetProperties: targetProps,
-		Platform:         string(instance.Platform.Target),
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		DepRefs:          depRefs,
 		ForeignDepRefs:   foreignDepRefs,

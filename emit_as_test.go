@@ -102,7 +102,7 @@ func testYasmLDRef(e *BufferedEmitter) NodeRef {
 		Outputs:          ToVFSSlice([]string{"$(B)/tools/yasm/yasm"}),
 		KV:               KV{P: pkLD, PC: pcLightCyan},
 		Tags:             []string{"tool"},
-		Platform:         string(PlatformDefaultLinuxX8664),
+		Platform:         &Platform{Target: PlatformDefaultLinuxX8664},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: "tools/yasm"},
 	})
@@ -181,7 +181,7 @@ func TestEmitAS_AsmlibYasm_TargetSide_NoPicSuffix(t *testing.T) {
 
 	got := e.nodes[1]
 
-	if got.Cmds[0].Cwd != "" {
-		t.Errorf("Cmds[0].Cwd = %q, want empty (yasm path)", got.Cmds[0].Cwd)
+	if got.Cmds[0].Cwd != 0 {
+		t.Errorf("Cmds[0].Cwd = %q, want empty (yasm path)", got.Cmds[0].Cwd.String())
 	}
 }

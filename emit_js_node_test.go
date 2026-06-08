@@ -12,8 +12,8 @@ func TestEmitJS_UsesRequestedPlatformTags(t *testing.T) {
 	ref, _ := EmitJS(hostInstance("joinmod"), "all.cpp", []string{"a.cpp"}, nil, target, nil, emit)
 	got := emit.nodes[ref]
 
-	if got.Platform != string(target.Target) {
-		t.Fatalf("JS platform = %q, want %q", got.Platform, target.Target)
+	if platformTarget(got.Platform) != string(target.Target) {
+		t.Fatalf("JS platform = %q, want %q", platformTarget(got.Platform), target.Target)
 	}
 	if !reflect.DeepEqual(got.Tags, target.Tags) {
 		t.Fatalf("JS tags = %#v, want %#v", got.Tags, target.Tags)

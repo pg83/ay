@@ -110,7 +110,7 @@ func EmitLD(
 	cmds := []Cmd{
 		{CmdArgs: cmd0, Env: envVcsOnly},
 		{CmdArgs: cmd1, Env: envFull},
-		{CmdArgs: cmd2, Cwd: "$(B)", Env: envFull},
+		{CmdArgs: cmd2, Cwd: strB, Env: envFull},
 		{CmdArgs: cmd3, Env: envVcsOnly},
 	}
 
@@ -155,7 +155,6 @@ func EmitLD(
 		Inputs:           inputs,
 		Outputs:          outputs,
 		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: "yes"},
-		Platform:         string(instance.Platform.Target),
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		Tags:             instance.Platform.Tags,
 		TargetProperties: TargetProperties{ModuleDir: binaryDir, ModuleLang: ldModuleLang(instance), ModuleType: "bin"},

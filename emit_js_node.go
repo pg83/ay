@@ -4,11 +4,9 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 	joinSrcs := buildScriptsGenJoinSrcsPy
 
 	outVFS := Build(instance.Path + "/" + allName)
-	platformID := instance.Platform.Target
 	tags := []string{}
 
 	if p != nil {
-		platformID = p.Target
 		tags = append(tags, p.Tags...)
 	}
 
@@ -54,7 +52,6 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 		Inputs:           inputs,
 		KV:               KV{P: pkJS, PC: pcMagenta},
 		Outputs:          []VFS{outVFS},
-		Platform:         string(platformID),
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		Tags:             tags,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},

@@ -135,7 +135,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		Cmds: []Cmd{
 			{CmdArgs: cmd0, Env: envVcsOnly},
 			{CmdArgs: cmd1, Env: envFull},
-			{CmdArgs: cmd2, Cwd: "$(B)", Env: envFull},
+			{CmdArgs: cmd2, Cwd: strB, Env: envFull},
 			{CmdArgs: cmd3, Env: envVcsOnly},
 		},
 		Env:              envFull,
@@ -143,7 +143,6 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		Outputs:          []VFS{Build(instance.Path + "/" + outputName)},
 		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: "yes"},
 		Tags:             instance.Platform.Tags, // read-only; Platform.Tags is immutable during emit
-		Platform:         string(instance.Platform.Target),
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		Sandboxing:       true,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleLang: "cpp", ModuleTag: "dll", ModuleType: "so"},

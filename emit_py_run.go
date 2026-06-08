@@ -502,7 +502,7 @@ func EmitPYRun(
 	}
 
 	if stmt.CWD != nil {
-		cmd.Cwd = expandRunProgramCWD(instance, *stmt.CWD)
+		cmd.Cwd = internStr(expandRunProgramCWD(instance, *stmt.CWD))
 	}
 
 	node := &Node{
@@ -513,7 +513,6 @@ func EmitPYRun(
 		Outputs:          outputs,
 		Tags:             instance.Platform.Tags,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
-		Platform:         string(instance.Platform.Target),
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		DepRefs:          extraDepRefs,
 	}

@@ -72,7 +72,6 @@ func buildTestCtxNode(p *Platform) *Node {
 		Inputs:           []VFS{Source(testAppendFileScriptRel)},
 		KV:               KV{P: pkCP, PC: pcLightBlue},
 		Outputs:          []VFS{bldCommonTestContext},
-		Platform:         string(p.Target),
 		Requirements:     Requirements{Network: "restricted"},
 		Tags:             sandboxingNodeTags(p),
 		TargetProperties: TargetProperties{},
@@ -141,7 +140,7 @@ func buildUnittestNode(p *Platform, info testSuiteInfo) *Node {
 		Cache: &cacheFalse,
 		Cmds: []Cmd{{
 			CmdArgs: cmdArgs,
-			Cwd:     testBuildRoot,
+			Cwd:     internStr(testBuildRoot),
 		}},
 		Env:    testEnv(p, "unittest"),
 		Inputs: []VFS{Source(info.ProjectPath)},
@@ -153,8 +152,7 @@ func buildUnittestNode(p *Platform, info testSuiteInfo) *Node {
 			ShowOutBool:      true,
 			HasSpecialRunner: true,
 		},
-		Outputs:  testOutputs(info.ProjectPath, "unittest"),
-		Platform: string(p.Target),
+		Outputs: testOutputs(info.ProjectPath, "unittest"),
 		Requirements: Requirements{
 			CPU:        1,
 			Network:    "restricted",
@@ -246,7 +244,7 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 		Cache: &cacheTrue,
 		Cmds: []Cmd{{
 			CmdArgs: cmdArgs,
-			Cwd:     testBuildRoot,
+			Cwd:     internStr(testBuildRoot),
 		}},
 		Env:    testEnv(p, "clang_format"),
 		Inputs: inputs,
@@ -258,8 +256,7 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 			ShowOutBool:      true,
 			HasSpecialRunner: true,
 		},
-		Outputs:  testOutputs(info.ProjectPath, "clang_format"),
-		Platform: string(p.Target),
+		Outputs: testOutputs(info.ProjectPath, "clang_format"),
 		Requirements: Requirements{
 			CPU:        1,
 			Network:    "restricted",

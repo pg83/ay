@@ -68,7 +68,7 @@ func expectedTestCtxNode() *Node {
 		Inputs:           []VFS{Intern("$(S)/build/scripts/append_file.py")},
 		KV:               KV{P: pkCP, PC: pcLightBlue},
 		Outputs:          []VFS{Intern("$(B)/common_test.context")},
-		Platform:         "default-linux-x86_64",
+		Platform:         &Platform{Target: "default-linux-x86_64"},
 		Requirements:     Requirements{Network: "restricted"},
 		Tags:             expectedSandboxingTags(),
 		TargetProperties: TargetProperties{},
@@ -78,7 +78,7 @@ func expectedTestCtxNode() *Node {
 func expectedUnittestNode(info testSuiteInfo) *Node {
 	return &Node{
 		Cmds: []Cmd{{
-			Cwd: "$(B)",
+			Cwd: internStr("$(B)"),
 			CmdArgs: appendInternStrs(nil, []string{
 				"$(TEST_TOOL_HOST-sbr:12080295773)/test_tool",
 				"run_test",
@@ -142,7 +142,7 @@ func expectedUnittestNode(info testSuiteInfo) *Node {
 			Intern("$(B)/util/ut/test-results/unittest/run_test.log"),
 			Intern("$(B)/util/ut/test-results/unittest/testing_out_stuff.tar.zstd"),
 		},
-		Platform:         "default-linux-x86_64",
+		Platform:         &Platform{Target: "default-linux-x86_64"},
 		Requirements:     Requirements{CPU: 1, Network: "restricted", RAM: 8, HasRAMDisk: true},
 		Tags:             expectedSandboxingTags(),
 		TargetProperties: TargetProperties{ModuleLang: "cpp"},
@@ -152,7 +152,7 @@ func expectedUnittestNode(info testSuiteInfo) *Node {
 func expectedClangFormatNode() *Node {
 	return &Node{
 		Cmds: []Cmd{{
-			Cwd: "$(B)",
+			Cwd: internStr("$(B)"),
 			CmdArgs: appendInternStrs(nil, []string{
 				"$(TEST_TOOL_HOST-sbr:12080295773)/test_tool",
 				"run_test",
@@ -222,7 +222,7 @@ func expectedClangFormatNode() *Node {
 			Intern("$(B)/util/ut/test-results/clang_format/run_test.log"),
 			Intern("$(B)/util/ut/test-results/clang_format/testing_out_stuff.tar.zstd"),
 		},
-		Platform:         "default-linux-x86_64",
+		Platform:         &Platform{Target: "default-linux-x86_64"},
 		Requirements:     Requirements{CPU: 1, Network: "restricted", RAM: 8, HasRAMDisk: true},
 		Tags:             nil,
 		TargetProperties: TargetProperties{ModuleLang: "unknown"},
@@ -271,8 +271,8 @@ func assertNodeFields(t *testing.T, name string, got, want *Node) {
 	if !reflect.DeepEqual(got.Outputs, want.Outputs) {
 		t.Fatalf("%s outputs mismatch\n got: %#v\nwant: %#v", name, got.Outputs, want.Outputs)
 	}
-	if got.Platform != want.Platform {
-		t.Fatalf("%s platform = %q, want %q", name, got.Platform, want.Platform)
+	if platformTarget(got.Platform) != platformTarget(want.Platform) {
+		t.Fatalf("%s platform = %q, want %q", name, platformTarget(got.Platform), platformTarget(want.Platform))
 	}
 	if !reflect.DeepEqual(got.Requirements, want.Requirements) {
 		t.Fatalf("%s requirements mismatch\n got: %#v\nwant: %#v", name, got.Requirements, want.Requirements)
