@@ -375,10 +375,9 @@ func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	reg := codegenRegForInstance(ctx, instance)
 
 	if reg != nil {
-		emits := []includeDirective{
-			{kind: includeQuoted, target: strLibraryCppResourceResourceH},
-			{kind: includeQuoted, target: strLibraryCppResourceRegistryH},
-		}
+		rescompilerRef, _ := ctx.tool(argToolsRescompilerBin)
+
+		emits := make([]includeDirective, 0, len(seed))
 
 		for _, in := range seed {
 			if in.IsSource() {
@@ -386,7 +385,7 @@ func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData,
 			}
 		}
 
-		registerGeneratedParsedOutput(ctx, instance, "PR", aux, emits, nil)
+		registerGeneratedParsedOutput(ctx, instance, "PR", aux, emits, []NodeRef{rescompilerRef})
 	}
 
 	scanIn := ModuleCCInputs{

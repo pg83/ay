@@ -220,16 +220,15 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 }
 
 func rawAuxInputClosure(ctx *genCtx, instance ModuleInstance, aux VFS, seed []VFS, in ModuleCCInputs) []VFS {
-	emits := []includeDirective{
-		{kind: includeQuoted, target: strLibraryCppResourceResourceH},
-		{kind: includeQuoted, target: strLibraryCppResourceRegistryH},
-	}
+	rescompilerRef, _ := ctx.tool(argToolsRescompilerBin)
+
+	emits := make([]includeDirective, 0, len(seed))
 
 	for _, v := range seed {
 		emits = append(emits, includeDirective{kind: includeQuoted, target: internStr(v.Rel())})
 	}
 
-	registerGeneratedParsedOutput(ctx, instance, "PR", aux, emits, nil)
+	registerGeneratedParsedOutput(ctx, instance, "PR", aux, emits, []NodeRef{rescompilerRef})
 
 	closure := walkClosure(ctx, instance, aux, in)
 
