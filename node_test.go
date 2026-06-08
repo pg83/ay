@@ -80,7 +80,7 @@ func TestNodeJSONKeyOrder_AllFieldsPresent(t *testing.T) {
 		Platform:         &Platform{Target: "default-linux-aarch64"},
 		Requirements:     Requirements{CPU: 1, RAM: 32},
 		SelfUID:          tuid("selfuid"),
-		Tags:             []string{},
+		Tags:             []STR{},
 		TargetProperties: TargetProperties{ModuleLang: "cpp"},
 		UID:              tuid("uid"),
 	}
@@ -111,7 +111,7 @@ func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
 		Platform:         nil,
 		Requirements:     Requirements{},
 		SelfUID:          UID{},
-		Tags:             []string{},
+		Tags:             []STR{},
 		TargetProperties: TargetProperties{},
 		UID:              UID{},
 	}
@@ -146,7 +146,7 @@ func TestNodeJSON_DoesNotSerializeInternalRefs(t *testing.T) {
 		KV:               KV{},
 		Outputs:          ToVFSSlice([]string{}),
 		Requirements:     Requirements{},
-		Tags:             []string{},
+		Tags:             []STR{},
 		TargetProperties: TargetProperties{},
 		DepRefs:          []NodeRef{7},
 		ForeignDepRefs:   []NodeRef{9},

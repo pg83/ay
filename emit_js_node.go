@@ -4,11 +4,6 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 	joinSrcs := buildScriptsGenJoinSrcsPy
 
 	outVFS := Build(instance.Path + "/" + allName)
-	tags := []string{}
-
-	if p != nil {
-		tags = append(tags, p.Tags...)
-	}
 
 	statsPlatform := instance.Platform
 

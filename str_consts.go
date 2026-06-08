@@ -17,6 +17,7 @@ var (
 	strSSE42CFlags                = internStr("-msse4.2")
 	strSSE4CFlags                 = internStr("-msse4.1 -msse4.2 -mpopcnt -mcx16")
 	strSSECFlags                  = internStr("-msse2 -msse3 -mssse3")
+	strTool                       = internStr("tool")
 	strUtilGenericSerializedEnumH = internStr("util/generic/serialized_enum.h")
 	strYes                        = internStr("yes")
 )

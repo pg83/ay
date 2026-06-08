@@ -96,6 +96,21 @@ func (id STR) String() string {
 	return internTable.strs[id]
 }
 
+// internStrs interns a []string into a []STR (nil for empty).
+func internStrs(ss []string) []STR {
+	if len(ss) == 0 {
+		return nil
+	}
+
+	out := make([]STR, len(ss))
+
+	for i, s := range ss {
+		out[i] = internStr(s)
+	}
+
+	return out
+}
+
 func interned(s string) *STR {
 	h := xxh3.HashString128(s)
 

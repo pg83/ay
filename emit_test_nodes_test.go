@@ -70,7 +70,7 @@ func expectedTestCtxNode() *Node {
 		Outputs:          []VFS{Intern("$(B)/common_test.context")},
 		Platform:         &Platform{Target: "default-linux-x86_64"},
 		Requirements:     Requirements{Network: "restricted"},
-		Tags:             expectedSandboxingTags(),
+		Tags:             internStrs(expectedSandboxingTags()),
 		TargetProperties: TargetProperties{},
 	}
 }
@@ -144,7 +144,7 @@ func expectedUnittestNode(info testSuiteInfo) *Node {
 		},
 		Platform:         &Platform{Target: "default-linux-x86_64"},
 		Requirements:     Requirements{CPU: 1, Network: "restricted", RAM: 8, HasRAMDisk: true},
-		Tags:             expectedSandboxingTags(),
+		Tags:             internStrs(expectedSandboxingTags()),
 		TargetProperties: TargetProperties{ModuleLang: "cpp"},
 	}
 }
@@ -224,7 +224,7 @@ func expectedClangFormatNode() *Node {
 		},
 		Platform:         &Platform{Target: "default-linux-x86_64"},
 		Requirements:     Requirements{CPU: 1, Network: "restricted", RAM: 8, HasRAMDisk: true},
-		Tags:             []string{},
+		Tags:             []STR{},
 		TargetProperties: TargetProperties{ModuleLang: "unknown"},
 	}
 }
@@ -305,7 +305,7 @@ func TestEmitTestRunNodes_BuildersMatchSpec(t *testing.T) {
 		t.Fatalf("targetPlatformDescriptor = %q, want %q", got, expectedTargetPlatformDescriptor())
 	}
 
-	if got := sandboxingNodeTags(p); !reflect.DeepEqual(got, expectedSandboxingTags()) {
+	if got := sandboxingNodeTags(p); !reflect.DeepEqual(got, internStrs(expectedSandboxingTags())) {
 		t.Fatalf("sandboxingNodeTags = %#v, want %#v", got, expectedSandboxingTags())
 	}
 
@@ -489,7 +489,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		if ccNode.TargetProperties.ModuleDir != "util/ut" {
 			t.Fatalf("cc module_dir for %q = %q, want util/ut", spec.output, ccNode.TargetProperties.ModuleDir)
 		}
-		if !reflect.DeepEqual(nodeTags(ccNode), expectedSandboxingTags()) {
+		if !reflect.DeepEqual(nodeTags(ccNode), internStrs(expectedSandboxingTags())) {
 			t.Fatalf("cc tags for %q = %v, want %v", spec.output, nodeTags(ccNode), expectedSandboxingTags())
 		}
 		ccInputs := make([]string, 0, len(ccNode.Inputs))
@@ -512,7 +512,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		}
 	}
 
-	if !reflect.DeepEqual(nodeTags(ldNode), expectedSandboxingTags()) {
+	if !reflect.DeepEqual(nodeTags(ldNode), internStrs(expectedSandboxingTags())) {
 		t.Fatalf("ld tags = %v, want %v", nodeTags(ldNode), expectedSandboxingTags())
 	}
 	if !containsString(strStrs(ldNode.Cmds[1].CmdArgs), "-gz=zstd") {
