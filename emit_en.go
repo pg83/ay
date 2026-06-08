@@ -62,32 +62,26 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		}
 
 		if ctx.scannerTarget.codegen != nil {
+			// Only the macro-level output_includes are woven by hand: the enum header
+			// itself (output_include:File) and util/generic/serialized_enum.h. The
+			// runtime headers come from enum_parser's INDUCED_DEPS via the GeneratorRef
+			// (the h+cpp group), and enum_runtime.h's own transitive includes
+			// (dispatch_methods.h, ordered_pairs.h) arrive through the closure walk.
 			cppParsed := []includeDirective{
 				{kind: includeQuoted, target: internStr(headerInput.Rel())},
-				{kind: includeQuoted, target: strToolsEnumParserEnumParserStdlibDepsH},
-				{kind: includeQuoted, target: strToolsEnumParserEnumSerializationRuntimeDispatchMethodsH},
-				{kind: includeQuoted, target: strToolsEnumParserEnumSerializationRuntimeEnumRuntimeH},
-				{kind: includeQuoted, target: strToolsEnumParserEnumSerializationRuntimeOrderedPairsH},
-				{kind: includeQuoted, target: strUtilGenericMapH},
 				{kind: includeQuoted, target: strUtilGenericSerializedEnumH},
-				{kind: includeQuoted, target: strUtilGenericSingletonH},
-				{kind: includeQuoted, target: strUtilGenericStringH},
-				{kind: includeQuoted, target: strUtilGenericTypetraitsH},
-				{kind: includeQuoted, target: strUtilGenericVectorH},
-				{kind: includeQuoted, target: strUtilStreamOutputH},
-				{kind: includeQuoted, target: strUtilStringCastH},
 			}
 			sort.Slice(cppParsed, func(i, j int) bool { return cppParsed[i].target.String() < cppParsed[j].target.String() })
-			registerGeneratedParsedOutput(ctx, instance, "EN", serializedCPPPath, cppParsed, nil)
+			registerGeneratedParsedOutput(ctx, instance, "EN", serializedCPPPath, cppParsed, []NodeRef{enumParserLD})
 
 			if withHeader {
+				// serialized_enum.h reaches the header via enum_parser's INDUCED_DEPS(h …).
 				hParsed := []includeDirective{
 					{kind: includeQuoted, target: internStr(headerInput.Rel())},
 					{kind: includeQuoted, target: internStr(serializedCPPPath.Rel())},
-					{kind: includeQuoted, target: strUtilGenericSerializedEnumH},
 				}
 				sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target.String() < hParsed[j].target.String() })
-				registerGeneratedParsedOutput(ctx, instance, "EN", serializedHPath, hParsed, nil)
+				registerGeneratedParsedOutput(ctx, instance, "EN", serializedHPath, hParsed, []NodeRef{enumParserLD})
 			}
 		}
 
