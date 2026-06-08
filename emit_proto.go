@@ -417,7 +417,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		// protoc induces the protobuf runtime headers; for a grpc service the
 		// grpc_cpp plugin induces the grpcpp service headers too. Both via
 		// GeneratorRefs (type-split by output kind) instead of hand-woven lists.
-		pbGenRefs := []NodeRef{protocLDRef}
+		pbGenRefs := []NodeRef{protocLDRef, cppStyleguideLDRef}
 
 		if cfg.grpc {
 			pbGenRefs = append(pbGenRefs, grpcCppLDRef)
