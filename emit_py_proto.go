@@ -105,7 +105,10 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	protoRoot := protoPythonOutputRoot(instance, d)
 
-	if d.grpc {
+	// A grpc module without an explicit PROTO_NAMESPACE emits at the build root
+	// ("" — protoPythonOutputRoot's instance.Path default does not apply to grpc).
+	// An explicit PROTO_NAMESPACE (e.g. contrib/proto/grpc on grpc reflection) wins.
+	if d.grpc && d.protoNamespace == nil {
 		protoRoot = ""
 	}
 
@@ -156,8 +159,15 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		argIS3.str(),
 	)
 
-	if !d.grpc && protoRoot != "contrib/libs/protobuf/src" {
+	if protoRoot != "" && protoRoot != "contrib/libs/protobuf/src" {
 		cmdArgs = append(cmdArgs, internStr("-I=$(S)/"+protoRoot))
+
+		// A GLOBAL PROTO_NAMESPACE on a grpc module re-contributes its output root
+		// as an addincl, so protoc receives the -I twice (mirrors EmitPB's
+		// duplicateOutputRootInclude for the cpp side).
+		if d.grpc && d.protoNamespaceGlobal {
+			cmdArgs = append(cmdArgs, internStr("-I=$(S)/"+protoRoot))
+		}
 	}
 
 	cmdArgs = append(cmdArgs, argISContribLibsProtobufSrc.str())

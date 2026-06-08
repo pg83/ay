@@ -414,6 +414,9 @@ func makeDefaultIfEnv() Environment {
 	}
 
 	e.SetString(envCXX_RT, "libcxxrt")
+	// gnu_compiler.conf: CORE_LIBS_OPTIMIZATION=-O3 (-O0 only under DEBUG_CORE_LIBS,
+	// which the gating builds never set). python3/runtime_py3 splice it into CFLAGS.
+	e.SetString(envCORE_LIBS_OPTIMIZATION, "-O3")
 	e.SetString(envOPENSOURCE_PROJECT, "")
 	e.SetString(envSANITIZER_TYPE, "")
 	e.SetString(envundefined, "undefined")

@@ -70,6 +70,13 @@ type Platform struct {
 	DebugInfoFlags []ARG
 	CompileCFlags  []ARG
 
+	// CompressDebugSections mirrors the gnu_compiler.conf condition that adds both
+	// the compile `-gz=zstd` and the link `-Wl,--compress-debug-sections=zstd`
+	// (ymake_conf.py: `not build.is_release and target.is_linux`, gated by the
+	// repo conf carrying the rule — confCompressesDebug). The linker flag is spliced
+	// in composeLDCmdLinkExe.
+	CompressDebugSections bool
+
 	SystemLibs       []string
 	LinkPreludeExtra []string
 
@@ -166,7 +173,9 @@ func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, 
 	p.CXXArg = internStr(p.Tools.CXX)
 	p.TargetArg = internStr("--target=" + p.Triple)
 
-	p.DebugInfoFlags = buildDebugInfoFlags(os, buildRelease, confCompressesDebug(fs))
+	compress := confCompressesDebug(fs)
+	p.CompressDebugSections = compress && !buildRelease && os == OSLinux
+	p.DebugInfoFlags = buildDebugInfoFlags(os, buildRelease, compress)
 	p.CompileCFlags = composeCompileCFlags(isa, buildRelease, p.DebugInfoFlags)
 
 	return p

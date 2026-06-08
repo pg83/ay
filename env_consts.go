@@ -21,6 +21,7 @@ var (
 	envCLANG20_RESOURCE_GLOBAL      = internEnv("CLANG20_RESOURCE_GLOBAL")
 	envCLANG_BC_ROOT                = internEnv("CLANG_BC_ROOT")
 	envCOMPILER_VERSION             = internEnv("COMPILER_VERSION")
+	envCORE_LIBS_OPTIMIZATION       = internEnv("CORE_LIBS_OPTIMIZATION")
 	envCURDIR                       = internEnv("CURDIR")
 	envCX16_FLAGS                   = internEnv("CX16_FLAGS")
 	envCXX_RT                       = internEnv("CXX_RT")
