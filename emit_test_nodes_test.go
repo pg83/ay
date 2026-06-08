@@ -108,7 +108,6 @@ func expectedUnittestNode(info testSuiteInfo) *Node {
 				"--smooth-shutdown-signals", "SIGUSR2",
 				"--compression-filter", "zstd",
 				"--compression-level", "1",
-				"--global-resource", "CLANG14_RESOURCE_GLOBAL::$(CLANG14)",
 				"--global-resource", "CLANG16_RESOURCE_GLOBAL::$(CLANG16)",
 				"--global-resource", "CLANG18_RESOURCE_GLOBAL::$(CLANG18)",
 				"--global-resource", "CLANG20_RESOURCE_GLOBAL::$(CLANG20)",
@@ -297,6 +296,24 @@ type canonicalFixtureNode struct {
 	TargetProperties map[string]interface{}
 }
 
+// testUnittestResourceGlobals is the toolchain resource set a C++ unittest's
+// closure reaches, in scrambled order, to exercise buildUnittestNode's sort. The
+// tokens are id-free (the production tokens carry an sbr id the gate normalizer
+// discounts); the unit test verifies ordering/rendering only.
+func testUnittestResourceGlobals() []resourceDecl {
+	decl := func(name string) resourceDecl {
+		return resourceDecl{
+			GlobalVar: internStr(name + "_RESOURCE_GLOBAL"),
+			Token:     internStr(name + "_RESOURCE_GLOBAL::$(" + name + ")"),
+		}
+	}
+
+	return []resourceDecl{
+		decl("YMAKE_PYTHON3"), decl("CLANG"), decl("CLANG20"), decl("LLD_ROOT"),
+		decl("CLANG16"), decl("CLANG_FORMAT"), decl("CLANG18"),
+	}
+}
+
 func TestEmitTestRunNodes_BuildersMatchSpec(t *testing.T) {
 	p := sandboxedX8664TargetPlatform()
 	info := sandboxedTestSuite()
@@ -310,7 +327,7 @@ func TestEmitTestRunNodes_BuildersMatchSpec(t *testing.T) {
 	}
 
 	assertNodeFields(t, "ctx", buildTestCtxNode(p), expectedTestCtxNode())
-	assertNodeFields(t, "unittest", buildUnittestNode(p, info), expectedUnittestNode(info))
+	assertNodeFields(t, "unittest", buildUnittestNode(p, info, testUnittestResourceGlobals()), expectedUnittestNode(info))
 	assertNodeFields(t, "clang_format", buildClangFormatNode(p, info), expectedClangFormatNode())
 
 	if tags := nodeTags(buildClangFormatNode(p, info)); len(tags) != 0 {

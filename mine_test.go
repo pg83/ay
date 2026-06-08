@@ -26,7 +26,9 @@ func TestPrebuiltToolchainFlags_UseHashedResourcePatterns(t *testing.T) {
 	if got, want := flags["CLANG20_RESOURCE_GLOBAL"], "CLANG20_RESOURCE_GLOBAL::$(CLANG20)"; got != want {
 		t.Fatalf("CLANG20_RESOURCE_GLOBAL = %q, want %q", got, want)
 	}
-	if got, want := flags["LLD_ROOT_RESOURCE_GLOBAL"], "LLD_ROOT_RESOURCE_GLOBAL::$(LLD_ROOT)"; got != want {
+	// build/platform/lld's --ld-path=${LLD_ROOT_RESOURCE_GLOBAL}/bin/ld.lld needs
+	// the bare $(LLD_ROOT) dir, not the --global-resource token.
+	if got, want := flags["LLD_ROOT_RESOURCE_GLOBAL"], "$(LLD_ROOT)"; got != want {
 		t.Fatalf("LLD_ROOT_RESOURCE_GLOBAL = %q, want %q", got, want)
 	}
 }

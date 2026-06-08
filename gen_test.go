@@ -833,6 +833,9 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		"contrib/libs/libunwind",
 		"util",
 		"build/platform/clang",
+		"build/platform/clang/clang-format",
+		"build/platform/lld",
+		"build/platform/python/ymake_python3",
 	}
 
 	gotDefaults := defaultPeerdirsForWithState(nil, plain, &moduleData{})
@@ -872,6 +875,9 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 		"contrib/libs/libunwind",
 		"util",
 		"build/platform/clang",
+		"build/platform/clang/clang-format",
+		"build/platform/lld",
+		"build/platform/python/ymake_python3",
 	}
 
 	cases := []struct {
@@ -888,7 +894,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Language: LangCPP,
 			},
 			flags: FlagSet{NoLibc: true, NoRuntime: true, NoUtil: true},
-			want:  []string{"contrib/libs/linux-headers"},
+			want:  []string{"contrib/libs/linux-headers", "build/platform/clang", "build/platform/clang/clang-format", "build/platform/lld", "build/platform/python/ymake_python3"},
 		},
 		{
 			name: "explicit_no_platform",
@@ -898,7 +904,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				Language: LangCPP,
 			},
 			flags: FlagSet{NoPlatform: true},
-			want:  []string{"contrib/libs/linux-headers"},
+			want:  []string{"contrib/libs/linux-headers", "build/platform/clang", "build/platform/clang/clang-format", "build/platform/lld", "build/platform/python/ymake_python3"},
 		},
 		{
 			name: "no_libc_only",
@@ -922,7 +928,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			},
 			flags: FlagSet{NoRuntime: true},
 
-			want: []string{"contrib/libs/linux-headers", "util", "build/platform/clang"},
+			want: []string{"contrib/libs/linux-headers", "util", "build/platform/clang", "build/platform/clang/clang-format", "build/platform/lld", "build/platform/python/ymake_python3"},
 		},
 		{
 			name: "non_cpp",
@@ -944,6 +950,9 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				"contrib/libs/cxxsupp/libcxxrt",
 				"contrib/libs/libunwind",
 				"build/platform/clang",
+				"build/platform/clang/clang-format",
+				"build/platform/lld",
+				"build/platform/python/ymake_python3",
 			},
 		},
 
@@ -964,6 +973,9 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				"contrib/libs/libunwind",
 				"util",
 				"build/platform/clang",
+				"build/platform/clang/clang-format",
+				"build/platform/lld",
+				"build/platform/python/ymake_python3",
 			},
 		},
 		{
@@ -980,6 +992,9 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				"contrib/libs/libunwind",
 				"util",
 				"build/platform/clang",
+				"build/platform/clang/clang-format",
+				"build/platform/lld",
+				"build/platform/python/ymake_python3",
 			},
 		},
 		{
@@ -995,6 +1010,9 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				"contrib/libs/libunwind",
 				"util",
 				"build/platform/clang",
+				"build/platform/clang/clang-format",
+				"build/platform/lld",
+				"build/platform/python/ymake_python3",
 			},
 		},
 		{
@@ -1010,6 +1028,9 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				"contrib/libs/cxxsupp/libcxxrt",
 				"contrib/libs/libunwind",
 				"build/platform/clang",
+				"build/platform/clang/clang-format",
+				"build/platform/lld",
+				"build/platform/python/ymake_python3",
 			},
 		},
 	}

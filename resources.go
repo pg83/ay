@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/zeebo/xxh3"
@@ -163,6 +164,18 @@ func selectHostResourceDecl(ctx *genCtx, instance ModuleInstance, name string, b
 	return makeResourceDecl(name, uri)
 }
 
+// sortedResourceGlobals returns the declarations ordered by global-var name,
+// mirroring ymake's std::set<TString> ExternalResources collection — the order
+// in which a test node's --global-resource arguments are emitted.
+func sortedResourceGlobals(in []resourceDecl) []resourceDecl {
+	out := append([]resourceDecl(nil), in...)
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].GlobalVar.String() < out[j].GlobalVar.String()
+	})
+
+	return out
+}
+
 // genResourcesLibrary emits a RESOURCES_LIBRARY: it produces no archive/objects
 // (upstream RESOURCES_LIBRARY is a .pkg.fake IGNORED unit), only the external
 // resource globals it declares, which propagate up the PEERDIR closure.
@@ -180,10 +193,12 @@ func genResourcesLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *m
 
 	// A RESOURCES_LIBRARY has no PEERDIRs, so its GLOBAL contributions (the
 	// .GLOBAL list: RPATH/LDFLAGS/USER_C*FLAGS/OBJADDE_LIB/ADDINCL) are its own,
-	// un-merged. build/platform/local_so, for instance, SET_APPEND(RPATH_GLOBAL
-	// -Wl,-rpath,$ORIGIN); dropping that breaks every program that links a
-	// DYNAMIC_LIBRARY through it. Propagate them exactly as the general path would
-	// with an empty peer set.
+	// un-merged, and propagate to consumers exactly as the general path would with
+	// an empty peer set. This is the real toolchain mechanism: build/platform/lld
+	// SET_APPEND(LDFLAGS_GLOBAL -fuse-ld=lld --ld-path=…) and build/platform/local_so
+	// SET_APPEND(RPATH_GLOBAL -Wl,-rpath,$ORIGIN) reach every linking consumer here.
+	// Duplicates of these flags that currently also come from the Platform (the
+	// mine.go stopgap) are removed on the Platform side, not here.
 	result := &moduleEmitResult{
 		ModuleStmtName:        d.moduleStmt.Name,
 		ResourceGlobalClosure: globals,

@@ -37,10 +37,10 @@ type testSuiteInfo struct {
 	CppSources  []string
 }
 
-func emitTestRunNodes(ctxEmit Emitter, runEmit Emitter, p *Platform, info testSuiteInfo, ldRef NodeRef) []NodeRef {
+func emitTestRunNodes(ctxEmit Emitter, runEmit Emitter, p *Platform, info testSuiteInfo, ldRef NodeRef, resourceGlobals []resourceDecl) []NodeRef {
 	ctxRef := ctxEmit.Emit(buildTestCtxNode(p))
 
-	unittest := buildUnittestNode(p, info)
+	unittest := buildUnittestNode(p, info, resourceGlobals)
 	unittest.DepRefs = []NodeRef{ldRef, ctxRef}
 	unittestRef := runEmit.Emit(unittest)
 
@@ -77,7 +77,7 @@ func buildTestCtxNode(p *Platform) *Node {
 	}, resourcePatternYMakePython3), p)
 }
 
-func buildUnittestNode(p *Platform, info testSuiteInfo) *Node {
+func buildUnittestNode(p *Platform, info testSuiteInfo, resourceGlobals []resourceDecl) *Node {
 	cacheFalse := false
 	resultsDir := path.Join(info.ProjectPath, "test-results", "unittest")
 
@@ -110,14 +110,17 @@ func buildUnittestNode(p *Platform, info testSuiteInfo) *Node {
 		argSmoothShutdownSignals.str(), argSigusr2.str(),
 		argCompressionFilter.str(), argZstd.str(),
 		argCompressionLevel.str(), arg1.str(),
-		argGlobalResource.str(), internStr(testClang14Resource),
-		argGlobalResource.str(), internStr(testClang16Resource),
-		argGlobalResource.str(), internStr(testClang18Resource),
-		argGlobalResource.str(), internStr(testClang20Resource),
-		argGlobalResource.str(), internStr(testClangFormatResource),
-		argGlobalResource.str(), internStr(testClangResource),
-		argGlobalResource.str(), internStr(testLLDRootResource),
-		argGlobalResource.str(), internStr(testYMakePython3Resource),
+	}
+
+	// --global-resource entries are the external-resource globals reachable through
+	// the module-under-test's PEERDIR closure (the toolchain RESOURCES_LIBRARYs),
+	// sorted by global-var name (upstream collects them in a std::set), replacing
+	// the former hardcoded list.
+	for _, r := range sortedResourceGlobals(resourceGlobals) {
+		cmdArgs = append(cmdArgs, argGlobalResource.str(), r.Token)
+	}
+
+	cmdArgs = append(cmdArgs,
 		argRamLimitGb.str(), arg8.str(),
 		argTar.str(), (Build(path.Join(resultsDir, "testing_out_stuff.tar.zstd"))).str(),
 		internStr(testToolHostPath),
@@ -133,7 +136,7 @@ func buildUnittestNode(p *Platform, info testSuiteInfo) *Node {
 		argVerbose.str(),
 		argGdbPath.str(), internStr(testGDBPath),
 		argYaEndCommandFile.str(),
-	}
+	)
 
 	return bindNodePlatform(&Node{
 		Cache: &cacheFalse,

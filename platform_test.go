@@ -60,13 +60,9 @@ func TestPlatformLinkerSelectionTailFlags_UsesConfiguredLLDPath(t *testing.T) {
 		"LLD_TOOL":         "$(LLD_ROOT)/bin/ld.lld",
 	}, nil, "", "")
 
-	want := []string{
-		"-fuse-ld=lld",
-		"--ld-path=$(LLD_ROOT)/bin/ld.lld",
-		"-Wl,--no-rosegment",
-		"-Wl,--build-id=sha1",
-	}
-	if got := p.LinkerSelectionTailFlags(); !reflect.DeepEqual(got, want) {
-		t.Fatalf("LinkerSelectionTailFlags = %#v, want %#v", got, want)
+	// The lld linker flags now come from build/platform/lld's propagated
+	// LDFLAGS_GLOBAL (the implicit toolchain peer), not the Platform.
+	if got := p.LinkerSelectionTailFlags(); got != nil {
+		t.Fatalf("LinkerSelectionTailFlags = %#v, want nil", got)
 	}
 }

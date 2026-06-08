@@ -349,6 +349,12 @@ func evalEq(x *ExprEq, env Environment) bool {
 			return lv == "no"
 		}
 
+		// ya.make values are strings; a numeric literal on the other side compares
+		// by its decimal form (e.g. LLD_VERSION "20" == 20), matching upstream.
+		if rv, ok := r.(int); ok {
+			return lv == strconv.Itoa(rv)
+		}
+
 		rv, ok := r.(string)
 
 		if !ok {

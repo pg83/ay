@@ -93,7 +93,11 @@ func prebuiltToolchainFlags() map[string]string {
 		"CLANG16_RESOURCE_GLOBAL":  resourceGlobalRef("CLANG16_RESOURCE_GLOBAL", resourcePatternClang16),
 		"CLANG18_RESOURCE_GLOBAL":  resourceGlobalRef("CLANG18_RESOURCE_GLOBAL", resourcePatternClang18),
 		"CLANG20_RESOURCE_GLOBAL":  resourceGlobalRef("CLANG20_RESOURCE_GLOBAL", resourcePatternClang20),
-		"LLD_ROOT_RESOURCE_GLOBAL": resourceGlobalRef("LLD_ROOT_RESOURCE_GLOBAL", resourcePatternLLDRoot),
+		// build/platform/lld's LDFLAGS reference ${LLD_ROOT_RESOURCE_GLOBAL} in
+		// --ld-path=…/bin/ld.lld; it must expand to the bare $(LLD_ROOT) resource
+		// dir (the DECLARE value), not the LLD_ROOT_RESOURCE_GLOBAL::… --global-resource
+		// token. (Stopgap: the value belongs on the DECLARE; see mine.go removal.)
+		"LLD_ROOT_RESOURCE_GLOBAL": resourcePatternRef(resourcePatternLLDRoot),
 	}
 
 	return flags
