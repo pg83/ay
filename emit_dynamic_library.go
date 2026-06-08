@@ -54,6 +54,8 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	var peerCXXFlagsGlobal []ARG
 	var peerCOnlyFlagsGlobal []ARG
 	var peerRPathFlagsGlobal []ARG
+	var resourceGlobals []resourceDecl
+	resourceGlobalSeen := map[STR]struct{}{}
 	addEachVFS := func(seenSet map[VFS]struct{}, dst *[]VFS, src []VFS) {
 		for _, x := range src {
 			if _, dup := seenSet[x]; dup {
@@ -73,6 +75,13 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		seen[p] = struct{}{}
 		peerInstance := derivePeerInstance(ctx, instance, d, p)
 		peerResult := genModule(ctx, peerInstance)
+
+		for _, decl := range peerResult.ResourceGlobalClosure {
+			if _, dup := resourceGlobalSeen[decl.GlobalVar]; !dup {
+				resourceGlobalSeen[decl.GlobalVar] = struct{}{}
+				resourceGlobals = append(resourceGlobals, decl)
+			}
+		}
 
 		if peerResult.ARPath != nil {
 			peerArchiveRefs = append(peerArchiveRefs, peerResult.ARRef)
@@ -106,6 +115,8 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		peerResult := genModule(ctx, peerInstance)
 		addEachARG(&rpathFlagsSeen, &peerRPathFlagsGlobal, peerResult.RPathFlagsGlobal)
 	}
+
+	d.tc = resolveModuleToolchain(resourceGlobals)
 
 	fixElfRef, fixElfPath := ctx.tool(argToolsFixElf)
 

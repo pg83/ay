@@ -765,6 +765,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 
 		peerContribs := walkPeersForGlobalAddIncl(ctx, instance, d)
+		d.tc = resolveModuleToolchain(peerContribs.resourceGlobals)
 
 		ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins)
 		ldPlugins := mergeLDPlugins(ownLDPlugins, &ldPluginsResult{
@@ -1091,6 +1092,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			}
 		}
 	}
+
+	// Tool paths (compiler/archiver/objcopy/strip/linker/python) come from the
+	// build/platform/* peers via this closure, not from ambient platform flags.
+	d.tc = resolveModuleToolchain(resourceGlobalsClosure)
 
 	deduper.reset()
 
@@ -1605,6 +1610,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ModuleTag:   perModuleCCTag,
 		Ragel6Flags: d.ragel6Flags,
 		BisonGenExt: d.bisonGenExt,
+		CCArg:       d.tc.CC,
+		CXXArg:      d.tc.CXX,
 	}
 
 	ancestorRebase := d.srcDir != nil && d.moduleStmt.Name == tokProgram && isAncestorPath(*d.srcDir, instance.Path)
@@ -2508,6 +2515,11 @@ type peerGlobalContribs struct {
 	ldPluginPaths []VFS
 	dynamicRefs   []NodeRef
 	dynamicPaths  []VFS
+
+	// resourceGlobals is the transitive resource-global closure aggregated across
+	// peers (deduped by global-var name), the source for resolveModuleToolchain in
+	// the specialized/header-only path (the general path folds it inline instead).
+	resourceGlobals []resourceDecl
 }
 
 func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleData) peerGlobalContribs {
@@ -2530,6 +2542,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 	wholeArchiveCmdSeen := map[VFS]struct{}{}
 	ldPluginSeen := map[VFS]struct{}{}
 	dynamicSeen := map[VFS]struct{}{}
+	resourceGlobalSeen := map[STR]struct{}{}
 	addEachVFS := func(seenSet map[VFS]struct{}, dst *[]VFS, src []VFS) {
 		for _, x := range src {
 			if _, dup := seenSet[x]; dup {
@@ -2602,6 +2615,14 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 
 	walkInstance := func(peerInstance ModuleInstance) {
 		peerResult := genModule(ctx, peerInstance)
+
+		for _, decl := range peerResult.ResourceGlobalClosure {
+			if _, dup := resourceGlobalSeen[decl.GlobalVar]; !dup {
+				resourceGlobalSeen[decl.GlobalVar] = struct{}{}
+				out.resourceGlobals = append(out.resourceGlobals, decl)
+			}
+		}
+
 		addEachVFS(addInclSeen, &out.addIncl, peerResult.AddInclGlobal)
 		addEachVFS(protoAddInclSeen, &out.protoAddIncl, peerResult.ProtoAddInclGlobal)
 		addEachARG(&cFlagsSeen, &out.cFlags, peerResult.CFlagsGlobal)

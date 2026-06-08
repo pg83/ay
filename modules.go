@@ -179,6 +179,11 @@ type moduleData struct {
 	inducedDeps parsedIncludeSet
 
 	setVars map[string]string
+
+	// tc carries the module's tool-invocation paths (compiler/archiver/objcopy/
+	// strip/linker/python), derived in genModule from the resource-global closure
+	// (the build/platform/* peers) rather than from ambient platform flags.
+	tc moduleToolchain
 }
 
 // perSrcCFlagsFor / flatSrc gate the sparse per-source attribute maps on len, so
