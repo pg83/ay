@@ -18,7 +18,7 @@ func sandboxedX8664TargetPlatform() *Platform {
 	flags["SANDBOXING"] = "yes"
 	flags["TESTS_REQUESTED"] = "yes"
 
-	return NewPlatform(testGzFS, OSLinux, ISAX8664, flags, expectedSandboxingTags(), "", "", nil)
+	return NewPlatform(newMemFS(map[string]string{"build/ymake_conf.py": "debug_info_flags.append('-gz=zstd')\n"}), OSLinux, ISAX8664, flags, expectedSandboxingTags(), "", "", nil)
 }
 
 func sandboxedTestSuite() testSuiteInfo {
@@ -52,7 +52,7 @@ func expectedTestEnv(testName string) EnvVars {
 func expectedTestCtxNode() *Node {
 	return &Node{
 		Cmds: []Cmd{{
-			CmdArgs: anys(
+			CmdArgs: appendInternStrs(nil, []string{
 				"$(YMAKE_PYTHON3)/bin/python3",
 				"$(S)/build/scripts/append_file.py",
 				"$(B)/common_test.context",
@@ -62,7 +62,7 @@ func expectedTestCtxNode() *Node {
 				`    "TESTS_REQUESTED": "yes"`,
 				"  }",
 				"}",
-			),
+			}),
 		}},
 		Env:              nil,
 		Inputs:           []VFS{Intern("$(S)/build/scripts/append_file.py")},
@@ -79,7 +79,7 @@ func expectedUnittestNode(info testSuiteInfo) *Node {
 	return &Node{
 		Cmds: []Cmd{{
 			Cwd: "$(B)",
-			CmdArgs: anys(
+			CmdArgs: appendInternStrs(nil, []string{
 				"$(TEST_TOOL_HOST-sbr:12080295773)/test_tool",
 				"run_test",
 				"--ya-start-command-file",
@@ -131,7 +131,7 @@ func expectedUnittestNode(info testSuiteInfo) *Node {
 				"--verbose",
 				"--gdb-path", "$(GDB)/gdb/bin/gdb",
 				"--ya-end-command-file",
-			),
+			}),
 		}},
 		Env:    expectedTestEnv("unittest"),
 		Inputs: []VFS{Intern("$(S)/util/ut")},
@@ -153,7 +153,7 @@ func expectedClangFormatNode() *Node {
 	return &Node{
 		Cmds: []Cmd{{
 			Cwd: "$(B)",
-			CmdArgs: anys(
+			CmdArgs: appendInternStrs(nil, []string{
 				"$(TEST_TOOL_HOST-sbr:12080295773)/test_tool",
 				"run_test",
 				"--ya-start-command-file",
@@ -204,7 +204,7 @@ func expectedClangFormatNode() *Node {
 				"$(S)/util/ysafeptr_ut.cpp",
 				"$(S)/util/ysaveload_ut.cpp",
 				"--ya-end-command-file",
-			),
+			}),
 		}},
 		Env: expectedTestEnv("clang_format"),
 		Inputs: []VFS{

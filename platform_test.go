@@ -25,7 +25,7 @@ func TestNewPlatform_ParsesCompilerFlags(t *testing.T) {
 		"PIC": "no",
 	}
 
-	p := NewPlatform(testFS, OSLinux, ISAAArch64, flags, nil, `-O2 -DNAME="hello world"`, `-stdlib=libc++ -DCPP=1`, nil)
+	p := NewPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, `-O2 -DNAME="hello world"`, `-stdlib=libc++ -DCPP=1`, nil)
 
 	if !reflect.DeepEqual(argStrs(p.CFlags), []string{"-O2", "-DNAME=hello world"}) {
 		t.Fatalf("CFlags = %#v", argStrs(p.CFlags))
@@ -42,7 +42,7 @@ func TestStatsTagsForPlatform_TargetSandboxing(t *testing.T) {
 		"PIC":           "no",
 		"SANDBOXING":    "yes",
 	}
-	p := NewPlatform(testFS, OSLinux, ISAAArch64, flags, nil, "", "", nil)
+	p := NewPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "", "", nil)
 	p.StatsFlags = buildTargetStatsFlags(flags, map[string]string{})
 
 	want := []string{
@@ -63,7 +63,7 @@ func TestStatsTagsForPlatform_TargetBaseFlags(t *testing.T) {
 		"PIC":           "no",
 		"USE_LTO":       "yes",
 	}
-	p := NewPlatform(testFS, OSLinux, ISAAArch64, flags, nil, "", "", nil)
+	p := NewPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "", "", nil)
 	p.StatsFlags = buildTargetStatsFlags(flags, map[string]string{"UNRELATED": "yes"})
 
 	want := []string{
@@ -78,7 +78,7 @@ func TestStatsTagsForPlatform_TargetBaseFlags(t *testing.T) {
 }
 
 func TestStatsTagsForPlatform_HostTool(t *testing.T) {
-	p := NewPlatform(testFS, OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "", nil)
+	p := NewPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "", nil)
 	p.StatsFlags = buildHostStatsFlags(map[string]string{}, nil, false)
 
 	want := []string{
@@ -99,7 +99,7 @@ func TestStatsTagsForPlatform_HostTool(t *testing.T) {
 }
 
 func TestStatsTagsForPlatform_HostSandboxing(t *testing.T) {
-	p := NewPlatform(testFS, OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "", nil)
+	p := NewPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "", nil)
 	p.StatsFlags = buildHostStatsFlags(map[string]string{}, nil, true)
 
 	want := []string{
@@ -122,7 +122,7 @@ func TestStatsTagsForPlatform_HostSandboxing(t *testing.T) {
 }
 
 func TestStatsTagsForPlatform_HostPlatformFlagBundle(t *testing.T) {
-	p := NewPlatform(testFS, OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "", nil)
+	p := NewPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "", nil)
 	p.StatsFlags = buildHostStatsFlags(map[string]string{
 		"APPLE_SDK_LOCAL":    "yes",
 		"OPENSOURCE":         "yes",
@@ -156,7 +156,7 @@ func TestStatsTagsForPlatform_HostPlatformFlagBundle(t *testing.T) {
 }
 
 func TestStatsTagsForPlatform_HostCLIPlatformFlag(t *testing.T) {
-	p := NewPlatform(testFS, OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "", nil)
+	p := NewPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "", nil)
 	p.StatsFlags = buildHostStatsFlags(map[string]string{
 		"OPENSOURCE": "yes",
 	}, map[string]string{
@@ -189,7 +189,7 @@ func TestStatsTagsForPlatform_HostCLIPlatformFlag(t *testing.T) {
 }
 
 func TestStatsTagsForPlatform_HostEmptyCLIPlatformFlag(t *testing.T) {
-	p := NewPlatform(testFS, OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "", nil)
+	p := NewPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "", nil)
 	p.StatsFlags = buildHostStatsFlags(map[string]string{
 		"OPENSOURCE": "yes",
 	}, map[string]string{
@@ -218,7 +218,7 @@ func TestStatsTagsForPlatform_HostEmptyCLIPlatformFlag(t *testing.T) {
 }
 
 func TestStatsTagsForPlatform_HostCLIPlatformFlagOSSDK(t *testing.T) {
-	p := NewPlatform(testFS, OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "", nil)
+	p := NewPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{"PIC": "yes", "GG_BUILD_TYPE": "release"}, []string{"tool"}, "", "", nil)
 	p.StatsFlags = buildHostStatsFlags(map[string]string{
 		"OPENSOURCE": "yes",
 	}, map[string]string{
@@ -246,7 +246,7 @@ func TestStatsTagsForPlatform_HostCLIPlatformFlagOSSDK(t *testing.T) {
 	}
 }
 func TestPlatformMultiarchLibPath_UsesCompilerRoot(t *testing.T) {
-	p := NewPlatform(testFS, OSLinux, ISAX8664, map[string]string{
+	p := NewPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{
 		"PIC":              "yes",
 		"BUILD_PYTHON_BIN": "$(YMAKE_PYTHON3)/bin/python3",
 		"CLANG_TOOL":       "$(CLANG)/bin/clang",
@@ -261,7 +261,7 @@ func TestPlatformMultiarchLibPath_UsesCompilerRoot(t *testing.T) {
 }
 
 func TestPlatformLinkerSelectionTailFlags_UsesConfiguredLLDPath(t *testing.T) {
-	p := NewPlatform(testFS, OSLinux, ISAX8664, map[string]string{
+	p := NewPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{
 		"PIC":              "no",
 		"CLANG_TOOL":       "$(CLANG)/bin/clang",
 		"CLANG_pl_pl_TOOL": "$(CLANG)/bin/clang++",

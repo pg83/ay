@@ -48,7 +48,7 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 		TargetProperties: TargetProperties{},
 	})
 	main := e.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: anys(trickyArgs...), Cwd: "$(B)", Env: EnvVars{{Name: "FOO", Value: "bar"}}}},
+		Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, trickyArgs), Cwd: "$(B)", Env: EnvVars{{Name: "FOO", Value: "bar"}}}},
 		DepRefs:          []NodeRef{leaf},
 		ForeignDepRefs:   []NodeRef{leaf},
 		Env:              EnvVars{{Name: "PATH", Value: "/usr/bin"}},

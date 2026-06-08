@@ -29,7 +29,7 @@ func newTestPlatform(os OS, isa ISA, pic string, tags []string) *Platform {
 		flags[k] = v
 	}
 	flags["PIC"] = pic
-	return NewPlatform(testFS, os, isa, flags, tags, "", "", nil)
+	return NewPlatform(newMemFS(nil), os, isa, flags, tags, "", "", nil)
 }
 
 func targetInstance(path string) ModuleInstance {
@@ -62,7 +62,7 @@ func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	objRefs := []NodeRef{e.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: anys("cc"), Env: nil}},
+		Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"cc"}), Env: nil}},
 		Env:              nil,
 		Inputs:           ToVFSSlice([]string{}),
 		KV:               KV{},
@@ -176,7 +176,7 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: anys("cc"), Env: nil}},
+			Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"cc"}), Env: nil}},
 			Env:              nil,
 			Inputs:           ToVFSSlice([]string{}),
 			KV:               KV{},
@@ -226,7 +226,7 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: anys("cc"), Env: nil}},
+			Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"cc"}), Env: nil}},
 			Env:              nil,
 			Inputs:           ToVFSSlice([]string{}),
 			KV:               KV{},
@@ -263,7 +263,7 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: anys("cc"), Env: nil}},
+			Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"cc"}), Env: nil}},
 			Env:              nil,
 			Inputs:           ToVFSSlice([]string{}),
 			KV:               KV{},
@@ -303,7 +303,7 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: anys("cc"), Env: nil}},
+			Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"cc"}), Env: nil}},
 			Env:              nil,
 			Inputs:           ToVFSSlice([]string{}),
 			KV:               KV{},

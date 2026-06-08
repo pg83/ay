@@ -265,7 +265,7 @@ func TestEmitCC_PlatformEnvFlags_TargetOnly(t *testing.T) {
 	}
 	flags["PIC"] = "no"
 
-	target := NewPlatform(testFS, OSLinux, ISAAArch64, flags, nil, "-DENV_C=1", "-DENV_CXX=1", nil)
+	target := NewPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "-DENV_C=1", "-DENV_CXX=1", nil)
 	instance := ModuleInstance{
 		Path:     "build/cow/on",
 		Kind:     KindLib,

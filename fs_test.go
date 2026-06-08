@@ -181,7 +181,7 @@ var testParserFS = NewFS("/")
 // memFS is the test-side FS implementation. It serves Listdir/Read/Walk/
 // Exists from in-memory maps populated once at construction; no method ever
 // reads the OS. Tests should not mutate the returned *memFS (the package-
-// level testFS is shared across the whole suite).
+// level newMemFS(nil) is shared across the whole suite).
 type memFS struct {
 	sourceRoot string
 	rootSlash  string
