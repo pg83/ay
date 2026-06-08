@@ -49,6 +49,7 @@ func EmitEV(
 	event2cppBinary VFS,
 	moduleTag *string,
 	transitiveImports []VFS,
+	tc moduleToolchain,
 	emit Emitter,
 ) NodeRef {
 	moduleDir := instance.Path
@@ -58,7 +59,7 @@ func EmitEV(
 	srcVFS := Source(evRelPath)
 
 	cmdArgs := []STR{
-		internStr(instance.Platform.Tools.Python3),
+		tc.Python3,
 		internStr(pbWrapperPath),
 		argOutputs.str(),
 		(evCC).str(),

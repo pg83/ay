@@ -165,7 +165,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 		env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 		pyCmdArgs := []STR{
-			internStr(instance.Platform.Tools.Python3),
+			d.tc.Python3,
 			(genPy3RegScriptVFS).str(),
 			internStr(arg),
 			internStr(regCppAbs),

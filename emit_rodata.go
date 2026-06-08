@@ -15,7 +15,7 @@ func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
 	return Build(base + ".asm"), Build(base + instance.Platform.ObjectSuffix())
 }
 
-func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, emit Emitter) (NodeRef, VFS, VFS) {
+func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, tc moduleToolchain, emit Emitter) (NodeRef, VFS, VFS) {
 	asmVFS, outVFS := composeRodataOutputs(instance, srcRel)
 	toolName := path.Base(strings.TrimSuffix(srcRel, ".rodata"))
 
@@ -26,7 +26,7 @@ func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 		Cmds: []Cmd{
 			{
 				CmdArgs: []STR{
-					internStr(instance.Platform.Tools.Python3),
+					tc.Python3,
 					(rodataScriptVFS).str(),
 					argElf.str(),
 					internStr(toolName),

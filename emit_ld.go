@@ -50,6 +50,7 @@ func EmitLD(
 	wantsStrip bool,
 	wantsSplitDwarf bool,
 	programModuleTag string,
+	tc moduleToolchain,
 	hostP *Platform,
 	scripts scriptDeps,
 	emit Emitter,
@@ -97,12 +98,11 @@ func EmitLD(
 	vcsOPath := vcsOVFS.String()
 	outputPath := outputVFS.String()
 
-	tools := instance.Platform.Tools
-	cmd0 := composeLDCmdVcsInfo(tools, vcsCPath)
-	cmd1 := composeLDCmdVcsCompile(instance.Platform, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings)
-	cmd2 := composeLDCmdLinkExe(instance.Platform, instance.Path, outputPath, vcsOPath, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, wantsStrip)
-	cmd3 := composeLDCmdLinkOrCopy(tools, binaryDir, dynamicPaths...)
-	splitDwarfCmds := composeLDSplitDwarfCmds(tools, outputPath, wantsSplitDwarf)
+	cmd0 := composeLDCmdVcsInfo(tc, vcsCPath)
+	cmd1 := composeLDCmdVcsCompile(instance.Platform, tc, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings)
+	cmd2 := composeLDCmdLinkExe(instance.Platform, tc, instance.Path, outputPath, vcsOPath, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, wantsStrip)
+	cmd3 := composeLDCmdLinkOrCopy(tc, binaryDir, dynamicPaths...)
+	splitDwarfCmds := composeLDSplitDwarfCmds(tc, outputPath, wantsSplitDwarf)
 
 	envVcsOnly := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 	envFull := hostP.ToolEnv()
@@ -212,9 +212,9 @@ func lastPathComponent(p string) string {
 	return p
 }
 
-func composeLDCmdVcsInfo(tools Toolchain, vcsCPath string) []STR {
+func composeLDCmdVcsInfo(tc moduleToolchain, vcsCPath string) []STR {
 	return []STR{
-		internStr(tools.Python3),
+		tc.Python3,
 		(ldVcsInfoVFS).str(),
 		argVcsVcsJson.str(),
 		internStr(vcsCPath),
@@ -222,10 +222,10 @@ func composeLDCmdVcsInfo(tools Toolchain, vcsCPath string) []STR {
 	}
 }
 
-func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ARG, noCompilerWarnings bool) []STR {
+func composeLDCmdVcsCompile(p *Platform, tc moduleToolchain, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ARG, noCompilerWarnings bool) []STR {
 	bundle := compileFlagBundleFor(p)
 	cmdArgs := make([]STR, 0, 94+len(moduleCFlags)+len(peerCFlagsGlobal)+len(moduleScopeCFlags))
-	cmdArgs = append(cmdArgs, p.CCArg, p.TargetArg)
+	cmdArgs = append(cmdArgs, tc.CC, p.TargetArg)
 	cmdArgs = appendArgStr(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs,
 		argDashBBin,
@@ -253,7 +253,7 @@ func composeLDCmdVcsCompile(p *Platform, vcsCPath, vcsOPath string, moduleCFlags
 	return cmdArgs
 }
 
-func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *string, wantsStrip bool) []STR {
+func composeLDCmdLinkExe(p *Platform, tc moduleToolchain, modulePath, outputPath, vcsOPath string, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *string, wantsStrip bool) []STR {
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 16 + 1 + len(ccPaths) + len(peerLinkCmdPaths) + len(globalPaths) + len(objcopyPaths) + len(peerLDFlagsGlobal) + len(ownLDFlags) + len(ownRPathFlags) + len(peerRPathFlagsGlobal) + len(objAddLibsGlobal)
 
 	argCap += 2 + len(pluginPaths)
@@ -261,7 +261,7 @@ func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, c
 	cmdArgs := make([]STR, 0, argCap)
 
 	cmdArgs = append(cmdArgs,
-		internStr(p.Tools.Python3),
+		tc.Python3,
 		(ldLinkExeVFS).str(),
 	)
 
@@ -289,8 +289,8 @@ func composeLDCmdLinkExe(p *Platform, modulePath, outputPath, vcsOPath string, c
 
 	cmdArgs = append(cmdArgs,
 		argArchLinux.str(),
-		argObjcopyExe.str(), internStr(p.Tools.Objcopy),
-		internStr(p.Tools.CXX),
+		argObjcopyExe.str(), tc.Objcopy,
+		tc.CXX,
 		argWlWholeArchive.str(),
 		argYaStartCommandFile.str(),
 	)
@@ -380,9 +380,9 @@ func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VF
 	return trailer
 }
 
-func composeLDCmdLinkOrCopy(tools Toolchain, modulePath string, dynamicPaths ...VFS) []STR {
+func composeLDCmdLinkOrCopy(tc moduleToolchain, modulePath string, dynamicPaths ...VFS) []STR {
 	cmd := []STR{
-		internStr(tools.Python3),
+		tc.Python3,
 		(ldFsToolsVFS).str(),
 		argLinkOrCopyToDir.str(),
 		argNoCheck.str(),
@@ -397,7 +397,7 @@ func composeLDCmdLinkOrCopy(tools Toolchain, modulePath string, dynamicPaths ...
 	return cmd
 }
 
-func composeLDSplitDwarfCmds(tools Toolchain, outputPath string, enabled bool) []Cmd {
+func composeLDSplitDwarfCmds(tc moduleToolchain, outputPath string, enabled bool) []Cmd {
 	if !enabled {
 		return nil
 	}
@@ -405,9 +405,9 @@ func composeLDSplitDwarfCmds(tools Toolchain, outputPath string, enabled bool) [
 	debugPath := outputPath + ".debug"
 
 	return []Cmd{
-		{CmdArgs: []STR{internStr(tools.Objcopy), argOnlyKeepDebug.str(), internStr(outputPath), internStr(debugPath)}},
-		{CmdArgs: []STR{internStr(tools.Strip), argStripDebug.str(), internStr(outputPath)}},
-		{CmdArgs: []STR{internStr(tools.Objcopy), argRemoveSectionGnuDebuglink.str(), argAddGnuDebuglink.str(), internStr(debugPath), internStr(outputPath)}},
+		{CmdArgs: []STR{tc.Objcopy, argOnlyKeepDebug.str(), internStr(outputPath), internStr(debugPath)}},
+		{CmdArgs: []STR{tc.Strip, argStripDebug.str(), internStr(outputPath)}},
+		{CmdArgs: []STR{tc.Objcopy, argRemoveSectionGnuDebuglink.str(), argAddGnuDebuglink.str(), internStr(debugPath), internStr(outputPath)}},
 	}
 }
 

@@ -77,11 +77,10 @@ type ModuleCCInputs struct {
 
 	BisonGenExt string
 
-	// CCArg / CXXArg are the C / C++ compiler invocation paths ($(CLANG)/bin/clang[++]),
-	// derived from the module's resource-global closure (d.tc). Set by every CC-emitting
-	// caller; composeTargetCC picks one by language.
-	CCArg  STR
-	CXXArg STR
+	// TC is the module's tool-invocation paths, derived from the PEERDIR resource-global
+	// closure (d.tc). Threaded so every CC/codegen emitter takes its compiler / python /
+	// objcopy from the peer toolchain rather than ambient platform flags.
+	TC moduleToolchain
 }
 
 func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS, []VFS) {
@@ -145,8 +144,8 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		NoCompilerWarnings: in.Flags.NoCompilerWarnings,
 		NoWShadow:          in.Flags.NoWShadow,
 		InclArgs:           in.InclArgs,
-		CCArg:              in.CCArg,
-		CXXArg:             in.CXXArg,
+		CCArg:              in.TC.CC,
+		CXXArg:             in.TC.CXX,
 	}
 	cmdArgs := composeTargetCC(args)
 
@@ -279,14 +278,6 @@ func isCxxSource(srcRel string) bool {
 		strings.HasSuffix(srcRel, ".cxx")
 }
 
-func pickCompiler(tools Toolchain, isCxx bool) string {
-	if isCxx {
-		return tools.CXX
-	}
-
-	return tools.CC
-}
-
 func pickWarningFlags(noCompilerWarnings bool, noWShadow bool) []ARG {
 	if noCompilerWarnings {
 		return noWarningsBundle
@@ -368,25 +359,13 @@ func composePostCatboostBucket(preBucket []ARG) []ARG {
 }
 
 // pickCompilerArg returns the compiler from the module's resolved toolchain
-// (a.CCArg/CXXArg, derived from the PEERDIR resource-global closure). During the
-// migration off ambient platform flags it falls back to p.CCArg/CXXArg when a
-// caller has not yet threaded the closure-derived value.
+// (a.CCArg/CXXArg, derived from the PEERDIR resource-global closure — $(CLANG)/bin/clang[++]).
 func pickCompilerArg(a ccComposeArgs) STR {
-	cc, cxx := a.CCArg, a.CXXArg
-
-	if cxx == 0 {
-		cxx = a.Platform.CXXArg
-	}
-
-	if cc == 0 {
-		cc = a.Platform.CCArg
-	}
-
 	if a.IsCxx {
-		return cxx
+		return a.CXXArg
 	}
 
-	return cc
+	return a.CCArg
 }
 
 type ccComposeArgs struct {

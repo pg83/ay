@@ -57,6 +57,7 @@ type deferredCF struct {
 	outVFS        VFS
 	cfgVars       []string
 	includeInputs []VFS
+	tc            moduleToolchain
 }
 
 type CodegenRegistry struct {

@@ -74,6 +74,7 @@ func EmitPB(
 	peerProtoAddIncl []VFS,
 	extraDepRefs []NodeRef,
 	producerSourceInputs []VFS,
+	tc moduleToolchain,
 	emit Emitter,
 ) NodeRef {
 	moduleDir := instance.Path
@@ -108,7 +109,7 @@ func EmitPB(
 	}
 
 	cmdArgs := []STR{
-		internStr(instance.Platform.Tools.Python3),
+		tc.Python3,
 		internStr(pbWrapperPath),
 		argOutputs.str(),
 	}
@@ -385,6 +386,7 @@ func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	}
 
 	scanIn := ModuleCCInputs{
+		TC:                d.tc,
 		InclArgs:          ctx.inclArgs,
 		Flags:             d.flags,
 		AddIncl:           d.addIncl,

@@ -73,7 +73,7 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCo
 	pyInstance := instance
 	pyInstance.Language = LangPy
 	globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path, "libpy3", "")
-	gRef := EmitARGlobalNamedTagged(pyInstance, globalBaseName, "py3_proto_global", pyProtoRefs, pyProtoOutputs, ctx.host, ctx.emit)
+	gRef := EmitARGlobalNamedTagged(pyInstance, globalBaseName, "py3_proto_global", pyProtoRefs, pyProtoOutputs, d.tc, ctx.host, ctx.emit)
 
 	globalPath := Build(instance.Path + "/" + globalBaseName)
 	result := &protoSrcsResult{
@@ -140,7 +140,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	}
 
 	cmdArgs := []STR{
-		internStr(instance.Platform.Tools.Python3),
+		d.tc.Python3,
 		internStr(pbPyWrapperPath),
 		argPyVer.str(), argPy3.str(),
 		argSuffixes.str(),
@@ -520,6 +520,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		}, instance.Platform))
 
 		ccIn := ModuleCCInputs{
+			TC:                   d.tc,
 			InclArgs:             ctx.inclArgs,
 			Flags:                d.flags,
 			AddIncl:              d.addIncl,

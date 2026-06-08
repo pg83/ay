@@ -129,11 +129,11 @@ func TestEmitCC_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 
 func TestEmitCC_CxxSource_UsesClangPlusPlus(t *testing.T) {
 	emit := NewBufferedEmitter()
-	EmitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", Intern("$(S)/contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"), ModuleCCInputs{}, testHostP, emit)
+	EmitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", Intern("$(S)/contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"), ModuleCCInputs{TC: testToolchain()}, testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
-	wantCxx := testTargetP.Tools.CXX
+	wantCxx := testToolchain().CXX.String()
 	if args[0].String() != wantCxx {
 		t.Errorf("compiler = %q, want %q", args[0].String(), wantCxx)
 	}
@@ -155,11 +155,11 @@ func TestEmitCC_CxxSource_UsesClangPlusPlus(t *testing.T) {
 
 func TestEmitCC_CSource_UsesClang(t *testing.T) {
 	emit := NewBufferedEmitter()
-	EmitCC(targetInstance("build/cow/on"), "lib.c", Intern("$(S)/build/cow/on/lib.c"), ModuleCCInputs{}, testHostP, emit)
+	EmitCC(targetInstance("build/cow/on"), "lib.c", Intern("$(S)/build/cow/on/lib.c"), ModuleCCInputs{TC: testToolchain()}, testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs
 
-	wantCC := testTargetP.Tools.CC
+	wantCC := testToolchain().CC.String()
 	if args[0].String() != wantCC {
 		t.Errorf("compiler = %q, want %q", args[0].String(), wantCC)
 	}

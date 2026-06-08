@@ -92,10 +92,10 @@ func emitResourceObjcopy(
 		outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 
 		cmdArgs := []STR{
-			internStr(instance.Platform.Tools.Python3),
+			d.tc.Python3,
 			internStr(objcopyScriptPath),
-			argCompiler.str(), internStr(instance.Platform.Tools.CXX),
-			argObjcopy.str(), internStr(instance.Platform.Tools.Objcopy),
+			argCompiler.str(), d.tc.CXX,
+			argObjcopy.str(), d.tc.Objcopy,
 			argCompressor.str(), internStr(rescompressorBinPath),
 			argRescompiler.str(), internStr(rescompilerBinPath),
 			argOutputObj.str(), (outputObj).str(),
@@ -309,10 +309,10 @@ func emitKvOnlyObjcopyNode(
 	outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 
 	cmdArgs := []STR{
-		internStr(instance.Platform.Tools.Python3),
+		d.tc.Python3,
 		internStr(objcopyScriptPath),
-		argCompiler.str(), internStr(instance.Platform.Tools.CXX),
-		argObjcopy.str(), internStr(instance.Platform.Tools.Objcopy),
+		argCompiler.str(), d.tc.CXX,
+		argObjcopy.str(), d.tc.Objcopy,
 		argCompressor.str(), internStr(rescompressorBinPath),
 		argRescompiler.str(), internStr(rescompilerBinPath),
 		argOutputObj.str(), (outputObj).str(),
@@ -423,10 +423,10 @@ func emitYaConfJSONObjcopy(
 		input := Source(res.sourcePath)
 
 		cmdArgs := []STR{
-			internStr(instance.Platform.Tools.Python3),
+			d.tc.Python3,
 			internStr(objcopyScriptPath),
-			argCompiler.str(), internStr(instance.Platform.Tools.CXX),
-			argObjcopy.str(), internStr(instance.Platform.Tools.Objcopy),
+			argCompiler.str(), d.tc.CXX,
+			argObjcopy.str(), d.tc.Objcopy,
 			argCompressor.str(), internStr(rescompressorBinPath),
 			argRescompiler.str(), internStr(rescompilerBinPath),
 			argOutputObj.str(), (outputObj).str(),
@@ -617,10 +617,10 @@ func emitPySrcObjcopy(
 			outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
 
 			cmdArgs := []STR{
-				internStr(instance.Platform.Tools.Python3),
+				d.tc.Python3,
 				internStr(objcopyScriptPath),
-				argCompiler.str(), internStr(instance.Platform.Tools.CXX),
-				argObjcopy.str(), internStr(instance.Platform.Tools.Objcopy),
+				argCompiler.str(), d.tc.CXX,
+				argObjcopy.str(), d.tc.Objcopy,
 				argCompressor.str(), internStr(rescompressorBinPath),
 				argRescompiler.str(), internStr(rescompilerBinPath),
 				argOutputObj.str(), (outputObj).str(),

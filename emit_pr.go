@@ -180,6 +180,7 @@ func generatedOutputCarriesIncludes(p string) bool {
 
 func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *RunProgramStmt, moduleInputs ModuleCCInputs) []VFS {
 	scanIn := ModuleCCInputs{
+		TC:                d.tc,
 		InclArgs:          ctx.inclArgs,
 		Flags:             moduleInputs.Flags,
 		AddIncl:           moduleInputs.AddIncl,

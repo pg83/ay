@@ -48,7 +48,7 @@ func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInp
 		len(bundle.NoLibcBlock) + betweenBlocks + len(bundle.NoLibcBlock) + len(in.SFlags) + 4
 	cmdArgs := make([]STR, 0, fixed+len(includes))
 
-	cmdArgs = append(cmdArgs, instance.Platform.CCArg, instance.Platform.TargetArg)
+	cmdArgs = append(cmdArgs, in.TC.CC, instance.Platform.TargetArg)
 	cmdArgs = appendArgStr(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs, argDashBBin)
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warnBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags)

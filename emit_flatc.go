@@ -138,13 +138,13 @@ func flatcResolvedModuleSourceRel(ctx *genCtx, instance ModuleInstance, d *modul
 	return "", false
 }
 
-func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ARG, transitiveImports []VFS, emit Emitter) (NodeRef, VFS, VFS, VFS) {
+func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ARG, transitiveImports []VFS, tc moduleToolchain, emit Emitter) (NodeRef, VFS, VFS, VFS) {
 	headerVFS := Build(srcRel + ".h")
 	cppVFS := Build(srcRel + ".cpp")
 	bfbsVFS := Build(strings.TrimSuffix(srcRel, ".fbs") + ".bfbs")
 
 	cmdArgs := []STR{
-		internStr(instance.Platform.Tools.Python3),
+		tc.Python3,
 		(flatcWrapperVFS).str(),
 		(flatcBinary).str(),
 		argNoWarnings.str(),
@@ -224,7 +224,7 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 	flatcRes := ctx.toolResult(argContribLibsFlatbuffersFlatc)
 	flatcLDRef, flatcBinary := flatcRes.LDRef, *flatcRes.LDPath
 	transitiveImports := flatcTransitiveImports(ctx.parsers, ctx.fs, srcVFS.Rel())
-	flRef, headerVFS, cppVFS, bfbsVFS := EmitFL(instance, srcVFS.Rel(), srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, ctx.emit)
+	flRef, headerVFS, cppVFS, bfbsVFS := EmitFL(instance, srcVFS.Rel(), srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, d.tc, ctx.emit)
 
 	// flatc's INDUCED_DEPS(h+cpp …) — flatbuffers.h + flatbuffers_iter.h, declared
 	// in contrib/libs/flatbuffers/flatc/ya.make — ride into both the .h and .cpp

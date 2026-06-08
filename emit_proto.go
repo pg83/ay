@@ -368,6 +368,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		peerProtoAddIncl,
 		extraProtoDeps,
 		protoProducerSourceInputs,
+		d.tc,
 		ctx.emit,
 	)
 
@@ -584,7 +585,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 			evRef := EmitEV(
 				instance, evRelPath, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 				cppStyleguideBinary, protocBinary, event2cppBinary,
-				stringPtr("cpp_proto"), evImports, ctx.emit)
+				stringPtr("cpp_proto"), evImports, d.tc, ctx.emit)
 
 			evH := Build(evRelPath + ".pb.h")
 			evPbCC := Build(evRelPath + ".pb.cc")
@@ -625,6 +626,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
 
 	moduleInputs := ModuleCCInputs{
+		TC:                   d.tc,
 		InclArgs:             ctx.inclArgs,
 		Flags:                d.flags,
 		AddIncl:              d.addIncl,
@@ -739,6 +741,6 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 
 	arBaseName := archiveNameWithPrefixOrName(instance.Path, "lib", protoLibName)
 	archivePath := Build(instance.Path + "/" + arBaseName)
-	arRef := emitARNode(instance, archivePath, stringPtr("cpp_proto"), ccRefs, ccOutputs, nil, nil, ctx.host, ctx.emit)
+	arRef := emitARNode(instance, archivePath, stringPtr("cpp_proto"), ccRefs, ccOutputs, nil, nil, d.tc, ctx.host, ctx.emit)
 	return &protoSrcsResult{ARRef: arRef, ARPath: &archivePath}
 }

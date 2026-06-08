@@ -22,7 +22,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		clangWrapper = "$(S)/build/scripts/clang_wrapper.py"
 		optWrapper   = "$(S)/build/scripts/llvm_opt_wrapper.py"
 	)
-	python := ctx.host.Tools.Python3
+	python := d.tc.Python3.String()
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 	reqs := Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)}
 	tp := TargetProperties{ModuleDir: instance.Path}
@@ -329,4 +329,3 @@ func llvmBcRootRelArcSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 
 	return src
 }
-

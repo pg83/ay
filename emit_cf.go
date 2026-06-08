@@ -13,6 +13,7 @@ var (
 
 func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt, d *moduleData, reg *CodegenRegistry) {
 	in := ModuleCCInputs{
+		TC:              d.tc,
 		InclArgs:        ctx.inclArgs,
 		Flags:           d.flags,
 		DefaultVars:     d.defaultVars,
@@ -27,7 +28,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	in.IncludeInputs = walkClosure(ctx, instance, srcVFS, in)
 
 	cfgVars := buildCFGVars(ctx.fs, srcVFS.Rel(), d.setVars, d.defaultVars)
-	cfRef, cfOut := EmitCF(instance, srcVFS, outVFS, cfgVars, in.IncludeInputs, instance.Path, cfModuleTag(d, instance), ctx.emit)
+	cfRef, cfOut := EmitCF(instance, srcVFS, outVFS, cfgVars, in.IncludeInputs, instance.Path, cfModuleTag(d, instance), in.TC, ctx.emit)
 
 	if reg != nil {
 		parsed := []includeDirective{

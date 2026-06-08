@@ -1,5 +1,12 @@
 package main
 
+// The resource clang toolchain (build/platform/clang's llvm-ar) is always an
+// LLVM archiver in gnu format — link_lib.py's archiver type / format arguments.
+const (
+	arTypeLLVM  = "LLVM_AR"
+	arFormatGNU = "gnu"
+)
+
 func emitARNode(
 	instance ModuleInstance,
 	archivePath VFS,
@@ -8,20 +15,20 @@ func emitARNode(
 	objPaths []VFS,
 	peerArchiveRefs []NodeRef,
 	arPluginPath *VFS,
+	tc moduleToolchain,
 	hostP *Platform,
 	emit Emitter,
 ) NodeRef {
 	scriptVFS := buildScriptsLinkLibPy
 
 	cmdEnv := hostP.ToolEnv()
-	arTool, arType, arFormat := instance.Platform.ArchiverArgs()
 
 	cmdArgs := []STR{
-		internStr(instance.Platform.Tools.Python3),
+		tc.Python3,
 		(scriptVFS).str(),
-		internStr(arTool),
-		internStr(arType),
-		internStr(arFormat),
+		tc.AR,
+		internStr(arTypeLLVM),
+		internStr(arFormatGNU),
 		argB.str(),
 		argNone.str(),
 		arg2.str(),

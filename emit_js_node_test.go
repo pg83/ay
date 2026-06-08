@@ -9,7 +9,7 @@ func TestEmitJS_UsesRequestedPlatformTags(t *testing.T) {
 	emit := NewBufferedEmitter()
 	target := newTestPlatform(OSLinux, ISAX8664, "no", []string{"default-linux-x86_64", "debug", "SANDBOXING=yes"})
 
-	ref, _ := EmitJS(hostInstance("joinmod"), "all.cpp", []string{"a.cpp"}, nil, target, nil, emit)
+	ref, _ := EmitJS(hostInstance("joinmod"), "all.cpp", []string{"a.cpp"}, nil, target, testToolchain(), nil, emit)
 	got := emit.nodes[ref]
 
 	if string(got.Platform.Target) != string(target.Target) {

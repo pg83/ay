@@ -37,6 +37,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 	enumParserLD, enumParserBin := ctx.tool(argToolsEnumParserEnumParser)
 
 	scanIn := ModuleCCInputs{
+		TC:                d.tc,
 		InclArgs:          ctx.inclArgs,
 		Flags:             d.flags,
 		AddIncl:           d.addIncl,

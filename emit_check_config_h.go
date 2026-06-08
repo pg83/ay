@@ -30,7 +30,7 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 				Cmds: []Cmd{
 					{
 						CmdArgs: []STR{
-							internStr(instance.Platform.Tools.Python3),
+							d.tc.Python3,
 							argSBuildScriptsCheckConfigHPy.str(),
 							internStr(instance.Path + "/" + conf),
 							(generatedVFS).str(),

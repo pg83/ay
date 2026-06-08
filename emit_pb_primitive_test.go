@@ -28,6 +28,7 @@ func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		testToolchain(),
 		e,
 	)
 
@@ -66,6 +67,7 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		testToolchain(),
 		e,
 	)
 

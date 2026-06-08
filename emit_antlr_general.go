@@ -74,7 +74,7 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			cwd = expandRunProgramCWD(instance, *run.CWD)
 		}
 
-		jvRef := EmitJVGeneral(instance, jarVFS, args, inputs, outputs, cwd, depRefs, cfModuleTag(d, instance), ctx.emit)
+		jvRef := EmitJVGeneral(instance, jarVFS, args, inputs, outputs, cwd, depRefs, cfModuleTag(d, instance), d.tc, ctx.emit)
 
 		if reg != nil {
 			// The JV node's full $(S) input set = source-rooted IN/CF inputs plus

@@ -85,6 +85,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		false,
 		false,
 		"",
+		testToolchain(),
 		testHostP,
 		nil,
 		emit,
@@ -100,7 +101,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		t.Errorf("cmd[0] does not invoke vcs_info.py: %q", got.Cmds[0].CmdArgs[1].String())
 	}
 
-	wantCC := testTargetP.Tools.CC
+	wantCC := testToolchain().CC.String()
 	if got.Cmds[1].CmdArgs[0].String() != wantCC {
 		t.Errorf("cmd[1][0] = %q, want %q", got.Cmds[1].CmdArgs[0].String(), wantCC)
 	}
@@ -175,6 +176,7 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 		false,
 		true,
 		"",
+		testToolchain(),
 		testHostP,
 		nil,
 		emit,
@@ -196,13 +198,13 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 		}
 	}
 
-	if !slices.Equal(strStrs(got.Cmds[4].CmdArgs), []string{testTargetP.Tools.Objcopy, "--only-keep-debug", "$(B)/some/prog/prog", "$(B)/some/prog/prog.debug"}) {
+	if !slices.Equal(strStrs(got.Cmds[4].CmdArgs), []string{testToolchain().Objcopy.String(), "--only-keep-debug", "$(B)/some/prog/prog", "$(B)/some/prog/prog.debug"}) {
 		t.Fatalf("cmd[4].cmd_args = %#v", got.Cmds[4].CmdArgs)
 	}
-	if !slices.Equal(strStrs(got.Cmds[5].CmdArgs), []string{testTargetP.Tools.Strip, "--strip-debug", "$(B)/some/prog/prog"}) {
+	if !slices.Equal(strStrs(got.Cmds[5].CmdArgs), []string{testToolchain().Strip.String(), "--strip-debug", "$(B)/some/prog/prog"}) {
 		t.Fatalf("cmd[5].cmd_args = %#v", got.Cmds[5].CmdArgs)
 	}
-	if !slices.Equal(strStrs(got.Cmds[6].CmdArgs), []string{testTargetP.Tools.Objcopy, "--remove-section=.gnu_debuglink", "--add-gnu-debuglink", "$(B)/some/prog/prog.debug", "$(B)/some/prog/prog"}) {
+	if !slices.Equal(strStrs(got.Cmds[6].CmdArgs), []string{testToolchain().Objcopy.String(), "--remove-section=.gnu_debuglink", "--add-gnu-debuglink", "$(B)/some/prog/prog.debug", "$(B)/some/prog/prog"}) {
 		t.Fatalf("cmd[6].cmd_args = %#v", got.Cmds[6].CmdArgs)
 	}
 
@@ -248,6 +250,7 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 		false,
 		false,
 		"",
+		testToolchain(),
 		testHostP,
 		nil,
 		emit,
@@ -347,6 +350,7 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 		false,
 		false,
 		"",
+		testToolchain(),
 		testHostP,
 		nil,
 		emit,
@@ -416,6 +420,7 @@ func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T
 		false,
 		false,
 		"",
+		testToolchain(),
 		testHostP,
 		nil,
 		emit,
@@ -476,7 +481,7 @@ func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 			instance := targetInstance("test/prog")
 
 			exc := Try(func() {
-				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, nil, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, tc.wholeRefs, tc.wholePaths, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, false, false, false, "", testHostP, nil, e)
+				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, nil, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, tc.wholeRefs, tc.wholePaths, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, false, false, false, "", testToolchain(), testHostP, nil, e)
 			})
 
 			if exc == nil {

@@ -8,13 +8,14 @@ func EmitJVCPG4(
 	jvPrimary VFS,
 	jvInputs []VFS,
 	closure []VFS,
+	tc moduleToolchain,
 	scripts scriptDeps,
 	emit Emitter,
 ) NodeRef {
 	fsTools := copyFsToolsVFS
 
 	cmdArgs := []STR{
-		internStr(instance.Platform.Tools.Python3),
+		tc.Python3,
 		(fsTools).str(),
 		argCopy.str(),
 		(src).str(),
@@ -54,19 +55,19 @@ func EmitJVCPG4(
 	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform))
 }
 
-func EmitCP(instance ModuleInstance, src VFS, dst VFS, scripts scriptDeps, emit Emitter) NodeRef {
-	return EmitCPWithDeps(instance, src, dst, nil, nil, scripts, emit)
+func EmitCP(instance ModuleInstance, src VFS, dst VFS, tc moduleToolchain, scripts scriptDeps, emit Emitter) NodeRef {
+	return EmitCPWithDeps(instance, src, dst, nil, nil, tc, scripts, emit)
 }
 
 // EmitCPWithDeps emits a CP (copy) node. extraInputs is the additional input
 // closure to attach (e.g. the source's transitive #include closure when the
 // COPY macro was declared WITH_CONTEXT, so that any header change retriggers
 // the copy).
-func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, scripts scriptDeps, emit Emitter) NodeRef {
+func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, tc moduleToolchain, scripts scriptDeps, emit Emitter) NodeRef {
 	fsTools := copyFsToolsVFS
 
 	cmdArgs := []STR{
-		internStr(instance.Platform.Tools.Python3),
+		tc.Python3,
 		(fsTools).str(),
 		argCopy.str(),
 		(src).str(),

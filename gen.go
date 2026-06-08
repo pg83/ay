@@ -332,7 +332,7 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 			if info := reg.Lookup(v); info != nil {
 				if !info.HasProducerRef && info.DeferredCF != nil {
 					def := info.DeferredCF
-					cfRef, _ := EmitCF(def.instance, def.srcVFS, def.outVFS, def.cfgVars, def.includeInputs, consumer.Path, "", ctx.emit)
+					cfRef, _ := EmitCF(def.instance, def.srcVFS, def.outVFS, def.cfgVars, def.includeInputs, consumer.Path, "", def.tc, ctx.emit)
 					reg.SetProducerRef(v, cfRef)
 				}
 
@@ -767,7 +767,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		peerContribs := walkPeersForGlobalAddIncl(ctx, instance, d)
 		d.tc = resolveModuleToolchain(peerContribs.resourceGlobals)
 
-		ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins)
+		ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
 		ldPlugins := mergeLDPlugins(ownLDPlugins, &ldPluginsResult{
 			Refs:  peerContribs.ldPluginRefs,
 			Paths: peerContribs.ldPluginPaths,
@@ -787,6 +787,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			FS:                ctx.fs,
 			DefaultVars:       d.defaultVars,
 			DefaultVarOrder:   d.defaultVarOrder,
+			TC:                d.tc,
 		}
 		_ = emitRunProgramsForAR(ctx, instance, d, headerOnlyInputs)
 		_ = emitRunPythonForAR(ctx, instance, d, headerOnlyInputs)
@@ -826,7 +827,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 				tag = "global"
 			}
 
-			gRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRes.Refs, objcopyRes.Outputs, ctx.host, ctx.emit)
+			gRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRes.Refs, objcopyRes.Outputs, d.tc, ctx.host, ctx.emit)
 			hOnlyGlobalRef = &gRef
 			hOnlyGlobalPath = vfsPtr(Build(instance.Path + "/" + globalBaseName))
 		}
@@ -1610,8 +1611,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		ModuleTag:   perModuleCCTag,
 		Ragel6Flags: d.ragel6Flags,
 		BisonGenExt: d.bisonGenExt,
-		CCArg:       d.tc.CC,
-		CXXArg:      d.tc.CXX,
+		TC:          d.tc,
 	}
 
 	ancestorRebase := d.srcDir != nil && d.moduleStmt.Name == tokProgram && isAncestorPath(*d.srcDir, instance.Path)
@@ -1820,7 +1820,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			joinClosure = joinSrcsIncludeClosure(ctx, ctx.target, srcInstance, js.Sources, jsModuleInputs)
 		}
 
-		jsRef, joinOutVFS := EmitJS(srcInstance, js.OutputName, js.Sources, joinClosure, ctx.target, ctx.scripts, ctx.emit)
+		jsRef, joinOutVFS := EmitJS(srcInstance, js.OutputName, js.Sources, joinClosure, ctx.target, d.tc, ctx.scripts, ctx.emit)
 
 		jsRel := strings.TrimPrefix(joinOutVFS.Rel(), srcInstance.Path+"/")
 
@@ -1863,7 +1863,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 	}
 
-	ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins)
+	ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
 	mergedLDPlugins := mergeLDPlugins(ownLDPlugins, &ldPluginsResult{
 		Refs:  peerLDPluginRefs,
 		Paths: peerLDPluginPaths,
@@ -2009,6 +2009,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			wantsStrip,
 			d.splitDwarf,
 			programModuleTag,
+			d.tc,
 			ctx.host,
 			ctx.scripts,
 			ctx.emit,
@@ -2108,9 +2109,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	if len(ccRefs) > 0 {
 		if perModuleCCTag != nil {
-			arRef = EmitARNamedTagged(arInstance, arBaseName, *perModuleCCTag, ccRefs, ccOutputs, nil, arPluginVFS, ctx.host, ctx.emit)
+			arRef = EmitARNamedTagged(arInstance, arBaseName, *perModuleCCTag, ccRefs, ccOutputs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
 		} else {
-			arRef = EmitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, arPluginVFS, ctx.host, ctx.emit)
+			arRef = EmitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
 		}
 	}
 
@@ -2178,7 +2179,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 
 		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), len(globalRefs))
-		globalRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, ctx.host, ctx.emit)
+		globalRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, d.tc, ctx.host, ctx.emit)
 		result.GlobalRef = &globalRef
 		result.GlobalPath = vfsPtr(Build(instance.Path + "/" + globalBaseName))
 	}

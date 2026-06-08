@@ -14,12 +14,13 @@ func EmitCF(
 	includeInputs []VFS,
 	moduleDir string,
 	moduleTag string,
+	tc moduleToolchain,
 	emit Emitter,
 ) (NodeRef, VFS) {
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 	cmdArgs := []STR{
-		internStr(instance.Platform.Tools.Python3),
+		tc.Python3,
 		(configureFilePyVFS).str(),
 		(srcVFS).str(),
 		(outVFS).str(),

@@ -1,6 +1,6 @@
 package main
 
-func EmitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, scripts scriptDeps, emit Emitter) (NodeRef, VFS) {
+func EmitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, tc moduleToolchain, scripts scriptDeps, emit Emitter) (NodeRef, VFS) {
 	joinSrcs := buildScriptsGenJoinSrcsPy
 
 	outVFS := Build(instance.Path + "/" + allName)
@@ -13,7 +13,7 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 
 	cmdArgs := make([]STR, 0, 4+len(sources))
 	cmdArgs = append(cmdArgs,
-		internStr(instance.Platform.Tools.Python3),
+		tc.Python3,
 		(joinSrcs).str(),
 		(outVFS).str(),
 		argYaStartCommandFile.str(),

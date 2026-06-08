@@ -106,7 +106,7 @@ func emitRunPython(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	inputClosure := pyInputClosure(ctx, instance, stmt, d, moduleInputs)
 	codegenInputs := append([]VFS{scriptVFS}, inVFSs...)
 	extraDepRefs := resolveCodegenDepRefsExt(ctx, instance, inputClosure, codegenInputs)
-	result := EmitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, ctx.emit)
+	result := EmitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, moduleInputs.TC, ctx.emit)
 
 	if d.prOutputInputs == nil {
 		d.prOutputInputs = map[string][]VFS{}
@@ -145,6 +145,7 @@ func emitRunPython(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 
 func pyInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d *moduleData, moduleInputs ModuleCCInputs) []VFS {
 	scanIn := ModuleCCInputs{
+		TC:                d.tc,
 		InclArgs:          ctx.inclArgs,
 		Flags:             moduleInputs.Flags,
 		AddIncl:           moduleInputs.AddIncl,
@@ -431,6 +432,7 @@ func EmitPYRun(
 	stdoutVFS *VFS,
 	inputClosure []VFS,
 	extraDepRefs []NodeRef,
+	tc moduleToolchain,
 	emit Emitter,
 ) prEmitResult {
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
@@ -445,7 +447,7 @@ func EmitPYRun(
 		}
 	}
 
-	cmdArgs := []STR{internStr(instance.Platform.Tools.Python3), (scriptVFS).str()}
+	cmdArgs := []STR{tc.Python3, (scriptVFS).str()}
 
 	for _, a := range stmt.Args {
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")

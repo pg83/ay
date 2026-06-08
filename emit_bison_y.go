@@ -128,7 +128,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	if preprocessHeader {
 		cmds = append(cmds, Cmd{
 			CmdArgs: []STR{
-				internStr(instance.Platform.Tools.Python3),
+				in.TC.Python3,
 				(bisonPreprocessPyVFS).str(),
 				(headerVFS).str(),
 			},

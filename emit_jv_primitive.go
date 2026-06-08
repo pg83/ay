@@ -51,6 +51,7 @@ func EmitJV(
 	visitor bool,
 	listener bool,
 	moduleTag string,
+	tc moduleToolchain,
 	emit Emitter,
 ) NodeRef {
 	grammarVFS := Source(instance.Path + "/" + grammar)
@@ -58,7 +59,7 @@ func EmitJV(
 	outDir := outDirVFS.String()
 
 	cmdArgs := []STR{
-		internStr(instance.Platform.Tools.Python3),
+		tc.Python3,
 		internStr(stdout2stderrPath),
 		internStr(jdkResourcePath),
 		argJar.str(),
@@ -108,6 +109,7 @@ func EmitJVSplit(
 	visitor bool,
 	listener bool,
 	moduleTag string,
+	tc moduleToolchain,
 	emit Emitter,
 ) NodeRef {
 	lexerVFS := Source(instance.Path + "/" + lexer)
@@ -116,7 +118,7 @@ func EmitJVSplit(
 	outDir := outDirVFS.String()
 
 	cmdArgs := []STR{
-		internStr(instance.Platform.Tools.Python3),
+		tc.Python3,
 		internStr(stdout2stderrPath),
 		internStr(jdkResourcePath),
 		argJar.str(),
@@ -170,11 +172,12 @@ func EmitJVGeneral(
 	cwd string,
 	depRefs []NodeRef,
 	moduleTag string,
+	tc moduleToolchain,
 	emit Emitter,
 ) NodeRef {
 	cmdArgs := make([]STR, 0, 5+len(args))
 	cmdArgs = append(cmdArgs,
-		internStr(instance.Platform.Tools.Python3),
+		tc.Python3,
 		internStr(stdout2stderrPath),
 		internStr(jdkResourcePath),
 		argJar.str(),
