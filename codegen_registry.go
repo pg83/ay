@@ -78,15 +78,14 @@ type CodegenRegistry struct {
 	splitPrefixSeen BitSet
 
 	// bySplit maps a (prefix, suffix) STR pair to its producer info, keyed by
-	// morton(prefix, suffix) — the two ids bit-interleaved so the key's low bits
-	// mix both, letting an identity-hashed IntMap spread the pairs (a shift-packed
-	// key would cluster by suffix). Gated by splitPrefixSeen so the probe runs only
-	// for prefixes known to have an entry.
+	// splitMix64(prefix, suffix) — the two ids hashed into a uniform 64-bit key,
+	// letting an identity-hashed IntMap spread the pairs. Gated by splitPrefixSeen so
+	// the probe runs only for prefixes known to have an entry.
 	bySplit *IntMap[*GeneratedFileInfo]
 }
 
 func splitKey(prefix, suffix STR) uint64 {
-	return morton(uint32(prefix), uint32(suffix))
+	return splitMix64(uint32(prefix), uint32(suffix))
 }
 
 func NewCodegenRegistry() *CodegenRegistry {

@@ -242,7 +242,7 @@ func TestScanner_SearchTierCacheReuse_NotFound(t *testing.T) {
 		t.Fatalf("searchTierFlat entries = %d, want 1", scanner.searchTierFlat.Len())
 	}
 
-	if e := scanner.searchTierFlat.Get(morton(sc.ctxNum, uint32(internStr("missing.h")))); e != nil && e.found {
+	if e := scanner.searchTierFlat.Get(splitMix64(sc.ctxNum, uint32(internStr("missing.h")))); e != nil && e.found {
 		t.Fatalf("missing header cached as found")
 	}
 
