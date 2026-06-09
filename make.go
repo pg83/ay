@@ -798,15 +798,23 @@ func (ex *executor) storePath(src, outPath string, meta map[string]outputEntry) 
 	}
 }
 
-// storeFileToCAS moves src into the CAS at its content hash and returns that path.
-// Content-addressed, so a file already present (same content, possibly from a
-// concurrent node) is a no-op — src is left for the workspace cleanup.
+// storeFileToCAS hard-links src into the CAS at its content hash and returns that
+// path. Hard-link, not rename: an unpacked resource tree's dirs are often write-less
+// (archived perms), so renaming a file out of one is denied — linking adds a name in
+// the CAS dir without touching src's dir. Same inode, same content, so the workspace
+// copy is dropped by the tmp cleanup. Content-addressed: a file already present (same
+// content, possibly from a concurrent node) is a no-op.
 func (ex *executor) storeFileToCAS(src string) string {
 	dst := casPath(ex.bldRoot, src)
 
-	if _, err := os.Stat(dst); err != nil {
-		Throw(os.MkdirAll(filepath.Dir(dst), 0o755))
-		Throw(os.Rename(src, dst))
+	if _, err := os.Stat(dst); err == nil {
+		return dst
+	}
+
+	Throw(os.MkdirAll(filepath.Dir(dst), 0o755))
+
+	if err := os.Link(src, dst); err != nil && !os.IsExist(err) {
+		Throw(err)
 	}
 
 	return dst
