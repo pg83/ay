@@ -20,12 +20,15 @@ func cmdCasAnalyze(args []string) int {
 	}
 
 	chunkAvg := 8192
+	var minLen int64
 	casDir := ""
 
 	for _, a := range args[1:] {
 		switch {
 		case strings.HasPrefix(a, "--chunk="):
 			chunkAvg = Throw2(strconv.Atoi(strings.TrimPrefix(a, "--chunk=")))
+		case strings.HasPrefix(a, "--min-len="):
+			minLen = Throw2(strconv.ParseInt(strings.TrimPrefix(a, "--min-len="), 10, 64))
 		case strings.HasPrefix(a, "-"):
 			ThrowFmt("cas analyze: unknown flag %q", a)
 		default:
@@ -41,10 +44,12 @@ func cmdCasAnalyze(args []string) int {
 		ThrowFmt("cas analyze: --chunk must be >= 64")
 	}
 
-	return casAnalyze(casDir, chunkAvg)
+	return casAnalyze(casDir, chunkAvg, minLen)
 }
 
-func casAnalyze(casDir string, chunkAvg int) int {
+// casAnalyze chunks every CAS file of at least minLen bytes; smaller files are
+// skipped and excluded from every stat (the counts are over accounted files only).
+func casAnalyze(casDir string, chunkAvg int, minLen int64) int {
 	seen := make(map[[32]byte]int64) // chunk content hash -> chunk size (dedup set)
 
 	var files, totalBytes, totalChunks int64
@@ -55,6 +60,10 @@ func casAnalyze(casDir string, chunkAvg int) int {
 		}
 
 		if !d.Type().IsRegular() {
+			return nil
+		}
+
+		if Throw2(d.Info()).Size() < minLen {
 			return nil
 		}
 
@@ -104,8 +113,8 @@ func casAnalyze(casDir string, chunkAvg int) int {
 		return 100 * float64(part) / float64(whole)
 	}
 
-	fmt.Printf("cas analyze: %s   (content-defined chunking, avg≈%d B)\n", casDir, chunkAvg)
-	fmt.Printf("  files            %d\n", files)
+	fmt.Printf("cas analyze: %s   (content-defined chunking, avg≈%d B, min-len %s)\n", casDir, chunkAvg, humanBytes(minLen))
+	fmt.Printf("  files            %d   (>= min-len)\n", files)
 	fmt.Printf("  total size       %s   (whole-file CAS, already content-deduped)\n", humanBytes(totalBytes))
 	fmt.Printf("  chunks           %d   (avg %d B)\n", totalChunks, totalBytes/totalChunks)
 	fmt.Printf("  unique chunks    %d   (%.1f%% of chunks)\n", uniqueChunks, pct(uniqueChunks, totalChunks))
