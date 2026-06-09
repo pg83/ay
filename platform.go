@@ -266,7 +266,7 @@ func marchFor(isa ISA) string {
 func (p *Platform) MultiarchLibPath() string {
 	path := "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/" + p.Triple
 
-	return Build("resources/"+resourcePatternClangTool).String() + "/lib:" + path
+	return Build("resources/"+resourcePatternClangTool+p.ClangVer).String() + "/lib:" + path
 }
 
 func (p *Platform) ToolEnv() EnvVars {

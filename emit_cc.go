@@ -188,7 +188,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		node.DepRefs = in.ExtraDepRefs
 	}
 
-	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternClangTool), instance.Platform)), outVFS, allInputs
+	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternClangTool+instance.Platform.ClangVer), instance.Platform)), outVFS, allInputs
 }
 
 func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, suffix string) (out, input VFS) {

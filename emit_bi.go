@@ -70,7 +70,7 @@ func EmitBI(
 		DepRefs:          []NodeRef{},
 	}
 
-	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool), instance.Platform))
+	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer), instance.Platform))
 }
 
 func biFlagsForInstance(targetP *Platform) []STR {

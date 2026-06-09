@@ -767,7 +767,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		}
 
 		peerContribs := walkPeersForGlobalAddIncl(ctx, instance, d)
-		d.tc = resolveModuleToolchain(peerContribs.resourceGlobals)
+		d.tc = resolveModuleToolchain(peerContribs.resourceGlobals, instance.Platform.ClangVer)
 
 		ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
 		ldPlugins := mergeLDPlugins(ownLDPlugins, &ldPluginsResult{
@@ -1098,7 +1098,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	// Tool paths (compiler/archiver/objcopy/strip/linker/python) come from the
 	// build/platform/* peers via this closure, not from ambient platform flags.
-	d.tc = resolveModuleToolchain(resourceGlobalsClosure)
+	d.tc = resolveModuleToolchain(resourceGlobalsClosure, instance.Platform.ClangVer)
 
 	deduper.reset()
 
