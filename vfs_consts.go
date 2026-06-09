@@ -19,6 +19,7 @@ var (
 	bldLibraryCppMallocJemallocLibcppMallocJemallocA                                      = Build("library/cpp/malloc/jemalloc/libcpp-malloc-jemalloc.a")
 	bldLibraryPythonRuntimePy3                                                            = Build("library/python/runtime_py3")
 	bldToolsEnumParserEnumSerializationRuntimeLibtoolsEnumParserEnumSerializationRuntimeA = Build("tools/enum_parser/enum_serialization_runtime/libtools-enum_parser-enum_serialization_runtime.a")
+	bldVcsJson                                                                            = Build("vcs.json")
 	buildInfoGenPyVFS                                                                     = Source("build/scripts/build_info_gen.py")
 	buildMappingConfJson                                                                  = Source("build/mapping.conf.json")
 	buildScriptsCheckConfigHPy                                                            = Source("build/scripts/check_config_h.py")
