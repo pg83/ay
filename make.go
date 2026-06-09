@@ -750,22 +750,24 @@ func (ex *executor) linkSourceInputs(n *Node, srcMount string) {
 	}
 }
 
+// outputEntry is one materialized leaf of a node's output in the uid manifest:
+// either a CAS-stored regular file (Cas = its content-addressed path) or a symlink
+// (Link = the link target, verbatim). A directory output expands to one entry per
+// leaf, so the CAS holds only files — never directories.
+type outputEntry struct {
+	Cas  string `json:"cas,omitempty"`
+	Link string `json:"link,omitempty"`
+}
+
 func (ex *executor) storeOutputs(n *Node, tmp string) {
-	meta := make(map[string]string, len(n.Outputs))
+	meta := make(map[string]outputEntry, len(n.Outputs))
 
 	for _, out := range n.Outputs {
 		if !out.IsBuild() {
 			ThrowFmt("node %s: non-Build output %v", n.UID, out)
 		}
 
-		src := filepath.Join(tmp, out.Rel())
-		dst := casPath(ex.bldRoot, src)
-
-		Throw(os.MkdirAll(filepath.Dir(dst), 0o755))
-		_ = forceRemoveAll(dst)
-		Throw(os.Rename(src, dst))
-
-		meta[out.String()] = dst
+		ex.storePath(filepath.Join(tmp, out.Rel()), out.String(), meta)
 	}
 
 	uidPath := filepath.Join(ex.bldRoot, "uid", n.UID.String())
@@ -776,15 +778,49 @@ func (ex *executor) storeOutputs(n *Node, tmp string) {
 	Throw(os.Rename(tmpPath, uidPath))
 }
 
+// storePath records src (a regular file, a symlink, or a directory tree) into meta,
+// keyed by the $(B) output path. Regular files go to the CAS by content; symlinks
+// are kept as symlinks (their target verbatim, NOT followed) so the link structure
+// of a fetched tree (e.g. clang++ -> clang) survives; directories recurse, one entry
+// per leaf — the CAS never holds a directory.
+func (ex *executor) storePath(src, outPath string, meta map[string]outputEntry) {
+	info := Throw2(os.Lstat(src))
+
+	switch {
+	case info.Mode()&os.ModeSymlink != 0:
+		meta[outPath] = outputEntry{Link: Throw2(os.Readlink(src))}
+	case info.IsDir():
+		for _, e := range Throw2(os.ReadDir(src)) {
+			ex.storePath(filepath.Join(src, e.Name()), outPath+"/"+e.Name(), meta)
+		}
+	default:
+		meta[outPath] = outputEntry{Cas: ex.storeFileToCAS(src)}
+	}
+}
+
+// storeFileToCAS moves src into the CAS at its content hash and returns that path.
+// Content-addressed, so a file already present (same content, possibly from a
+// concurrent node) is a no-op — src is left for the workspace cleanup.
+func (ex *executor) storeFileToCAS(src string) string {
+	dst := casPath(ex.bldRoot, src)
+
+	if _, err := os.Stat(dst); err != nil {
+		Throw(os.MkdirAll(filepath.Dir(dst), 0o755))
+		Throw(os.Rename(src, dst))
+	}
+
+	return dst
+}
+
 func (ex *executor) restoreInto(uid UID, where string) {
 	metaPath := filepath.Join(ex.bldRoot, "uid", uid.String())
 	data := Throw2(os.ReadFile(metaPath))
 
-	var meta map[string]string
+	var meta map[string]outputEntry
 
 	Throw(json.Unmarshal(data, &meta))
 
-	for outVFS, casLoc := range meta {
+	for outVFS, e := range meta {
 		if !vfsHasPrefix(outVFS) {
 			ThrowFmt("malformed meta entry %q in %s", outVFS, metaPath)
 		}
@@ -795,7 +831,14 @@ func (ex *executor) restoreInto(uid UID, where string) {
 		target := mountString(outVFS, ex.srcRoot, where)
 		Throw(os.MkdirAll(filepath.Dir(target), 0o755))
 		_ = os.Remove(target)
-		Throw(os.Symlink(casLoc, target))
+
+		if e.Link != "" {
+			// Re-create the symlink verbatim (its target was kept, not followed); a
+			// relative link like clang++ -> clang resolves within the restored tree.
+			Throw(os.Symlink(e.Link, target))
+		} else {
+			Throw(os.Symlink(e.Cas, target))
+		}
 	}
 }
 
@@ -821,15 +864,11 @@ func mountString(s, srcRoot, bldRoot string) string {
 	return s
 }
 
+// casPath is the CAS location of a regular file, addressed by its content hash.
+// Only files reach the CAS — directory outputs are expanded to their files in
+// storePath, so there is no directory-hashing path.
 func casPath(bldRoot, src string) string {
 	h := sha256.New()
-	info := Throw2(os.Stat(src))
-
-	if info.IsDir() {
-		hashDir(h, src)
-
-		return filepath.Join(bldRoot, "cas", fmt.Sprintf("%x", h.Sum(nil)))
-	}
 
 	f := Throw2(os.Open(src))
 	defer f.Close()
@@ -837,41 +876,6 @@ func casPath(bldRoot, src string) string {
 	Throw2(io.Copy(h, f))
 
 	return filepath.Join(bldRoot, "cas", fmt.Sprintf("%x", h.Sum(nil)))
-}
-
-func hashDir(h hashWriter, root string) {
-	Throw(filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if path == root {
-			return nil
-		}
-
-		rel := Throw2(filepath.Rel(root, path))
-		h.Write([]byte(rel))
-		h.Write([]byte{0})
-
-		if d.IsDir() {
-			h.Write([]byte("dir"))
-			h.Write([]byte{0})
-			return nil
-		}
-
-		h.Write([]byte("file"))
-		h.Write([]byte{0})
-		f := Throw2(os.Open(path))
-		defer f.Close()
-
-		Throw2(io.Copy(h, f))
-
-		return nil
-	}))
-}
-
-type hashWriter interface {
-	Write([]byte) (int, error)
 }
 
 func parseMakeFlags(args []string) *makeFlags {
