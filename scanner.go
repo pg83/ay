@@ -102,7 +102,7 @@ type IncludeScanner struct {
 	// finishes, so closureOf re-enters dfs(root) only along an include cycle —
 	// which dfs hands to strongconnect. Per-scanner, not shared, so the host
 	// scanner does not see target's roots as spurious cycles. A bit set (1 bit/id)
-	// rather than an epoch idSet, since membership is permanent and binary.
+	// rather than an epoch IdSet, since membership is permanent and binary.
 	dfsActive BitSet
 
 	visitedIDPool sync.Pool
@@ -230,7 +230,7 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 	}
 
 	s.visitedIDPool.New = func() any {
-		return &idSet{}
+		return &IdSet{}
 	}
 
 	s.seenPool.New = func() any {

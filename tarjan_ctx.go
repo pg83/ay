@@ -22,7 +22,7 @@ type tarjanCtx struct {
 	scratch tarjanScratch
 	stack   []VFS
 	next    int32
-	closure idSet
+	closure IdSet
 }
 
 func (t *tarjanScratch) reset(size uint32) {

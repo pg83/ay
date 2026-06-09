@@ -33,7 +33,7 @@ func (h *intHeap) Pop() interface{} {
 
 // NodeRef is a node's index into the emitter's node buffer. uint32 (not a
 // struct) so it is a dense ~uint32 id: small (4 bytes), usable directly as a
-// slice index, and dedupable through idSet/BitSet without a side map.
+// slice index, and dedupable through IdSet/BitSet without a side map.
 type NodeRef uint32
 
 type Emitter interface {

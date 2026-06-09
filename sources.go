@@ -12,12 +12,12 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 	}
 
 	// Union each source's transitive closure (closureOf), deduping across sources
-	// with a reused idSet. The source files themselves drop out for free: seed the
-	// idSet with every source VFS up front, so the union loop's visited-skip leaves
+	// with a reused IdSet. The source files themselves drop out for free: seed the
+	// IdSet with every source VFS up front, so the union loop's visited-skip leaves
 	// them out — no post-filter, no side set. Seeding ALL sources before any
 	// closure walk also excludes a source that is a transitive dep of an earlier
 	// source (an incremental seed would miss it; the old full-set filter caught it).
-	visited := scanner.visitedIDPool.Get().(*idSet)
+	visited := scanner.visitedIDPool.Get().(*IdSet)
 	visited.reset(vfsBound())
 	defer scanner.visitedIDPool.Put(visited)
 	modDirKey := dirKey(srcInstance.Path)
