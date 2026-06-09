@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/jon-codes/getopt"
@@ -495,8 +496,24 @@ func (ex *executor) execute(f *nodeFuture) {
 	defer func() { <-ex.sema }()
 
 	tmp := filepath.Join(ex.bldRoot, "tmp", n.UID.String())
-	_ = forceRemoveAll(tmp)
-	defer forceRemoveAll(tmp)
+	Throw(os.MkdirAll(tmp, 0o755))
+
+	// Lock the workspace DIR (an exclusive flock on its fd) for the whole node, so a
+	// second ay process building the same uid can't clean or clobber it concurrently.
+	// The dir is never removed — only its CONTENTS are (rm -rf tmp/<uid>/*) — so the
+	// flock'd inode stays valid; there is no remove/recreate race, and the stale-
+	// content clean only ever runs while we hold the lock. Released on dir.Close.
+	dir := Throw2(os.Open(tmp))
+	defer dir.Close()
+	Throw(syscall.Flock(int(dir.Fd()), syscall.LOCK_EX))
+
+	// Another process may have finished this node while we waited for the lock.
+	if _, err := os.Stat(cachePath); err == nil {
+		return
+	}
+
+	removeContents(tmp)
+	defer removeContents(tmp)
 
 	// srcMount/bldMount are what $(S)/$(B) resolve to for this node. Without
 	// sandboxing $(S) is the whole source root and $(B) is the workspace itself.
@@ -879,6 +896,21 @@ func (ex *executor) installRoot(uid UID, where string) {
 	}
 
 	ex.restoreInto(uid, where)
+}
+
+// removeContents deletes everything inside dir but keeps dir itself, so an flock
+// held on the dir's inode stays valid across the clean. Best-effort, like the old
+// stale-workspace wipe it replaces.
+func removeContents(dir string) {
+	entries, err := os.ReadDir(dir)
+
+	if err != nil {
+		return
+	}
+
+	for _, e := range entries {
+		_ = forceRemoveAll(filepath.Join(dir, e.Name()))
+	}
 }
 
 // mountString substitutes the $(S)/$(B) roots. Resources are real graph nodes
