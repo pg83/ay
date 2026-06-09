@@ -16,6 +16,18 @@ func nodeUIDWithBuf(n *Node, c *canonBuf) UID {
 	return UID{Hi: sum.Hi, Lo: sum.Lo}
 }
 
+// resourceFetchUID is the stable uid of a resource FETCH node: a hash of the
+// resource URI and its output dir, NOT of the whole command. This keeps the uid
+// independent of the ay binary path (and any other command detail) so a node that
+// fetches the same sandbox resource into the same place is cache-stable across
+// machines. Output is included so two resources sharing a URI (e.g. CLANG and
+// CLANG20 both pinned to one clang20 sbr) but unpacked to different dirs stay distinct.
+func resourceFetchUID(uri, output string) UID {
+	sum := xxh3.Hash128([]byte(uri + "\x00" + output))
+
+	return UID{Hi: sum.Hi, Lo: sum.Lo}
+}
+
 type canonBuf struct {
 	buf []byte
 	// fs, when set, makes writeVFSSlice mix each $(S) input's file-content hash

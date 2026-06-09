@@ -240,7 +240,7 @@ var (
 	argUnittest                                  = internArg("unittest")
 	argUnix                                      = internArg("UNIX")
 	argV                                         = internArg("-v")
-	argVcsVcsJson                                = internArg("$(VCS)/vcs.json")
+	argVcsVcsJson                                = internArg("$(B)/vcs.json")
 	argVerbose                                   = internArg("--verbose")
 	argVerifyResults                             = internArg("--verify-results")
 	argVisitor                                   = internArg("-visitor")

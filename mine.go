@@ -44,17 +44,13 @@ func prebuiltToolchainFlags() map[string]string {
 	}
 }
 
-// graphConfForToolchainFlags yields only the VCS stub. Toolchain resources (CLANG*,
-// LLD_ROOT, YMAKE_PYTHON3, …) are declared by the build/platform/* RESOURCES_LIBRARY
-// modules and fetched via emitResourceFetch; their executor mount is mechanical
-// ($(NAME) -> <bld>/resources/NAME, see mountString). VCS is an inline stub no
-// module declares.
+// graphConfForToolchainFlags yields no graph-conf resources. Toolchain resources
+// (CLANG*, LLD_ROOT, YMAKE_PYTHON3) are declared by the build/platform/* RESOURCES_
+// LIBRARY modules and fetched via emitResourceFetch as real graph nodes; vcs.json is
+// written by its own node (emitVCSNode). Nothing is resolved out-of-band, so the
+// graph carries no conf section.
 func graphConfForToolchainFlags() *graphConf {
-	return &graphConf{Resources: []graphConfResource{{
-		Name:     "vcs",
-		Pattern:  "VCS",
-		Resource: "base64:vcs.json:e30=",
-	}}}
+	return &graphConf{}
 }
 
 func readYaConfSection(fs FS, rel, wantSection string) map[string]string {

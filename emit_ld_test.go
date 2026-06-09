@@ -137,8 +137,9 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		t.Errorf("target_properties.module_type = %q, want bin", got.TargetProperties.ModuleType)
 	}
 
-	if len(got.DepRefs) != 1 {
-		t.Errorf("DepRefs = %d, want 1", len(got.DepRefs))
+	// ccRef + the vcs.json producer node (emitVCSNode).
+	if len(got.DepRefs) != 2 {
+		t.Errorf("DepRefs = %d, want 2", len(got.DepRefs))
 	}
 }
 

@@ -289,7 +289,7 @@ func TestFinalize_GraphTopLevelKeyOrder(t *testing.T) {
 	g := Finalize(e)
 	raw := Throw2(json.Marshal(g))
 	keys := extractKeyOrder(t, raw)
-	want := []string{"conf", "graph", "inputs", "result"}
+	want := []string{"graph", "inputs", "result"}
 
 	if len(keys) != len(want) {
 		t.Fatalf("graph keys = %v, want %v", keys, want)

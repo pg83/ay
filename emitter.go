@@ -89,7 +89,6 @@ func (e *BufferedEmitter) Result(r NodeRef) {
 }
 
 type Graph struct {
-	Conf   map[string]interface{} `json:"conf"`
 	Graph  []*Node                `json:"graph"`
 	Inputs map[string]interface{} `json:"inputs"`
 	Result []UID                  `json:"result"`
@@ -239,8 +238,18 @@ func finalizeNodes(e *BufferedEmitter, yield func(*Node)) *uidVec {
 // are kept on the node for that purpose. All of a node's deps are resolved before
 // it reaches here, so uids.get(dep) is valid.
 func resolveAndUID(node *Node, uids *uidVec, uidScratch *canonBuf) UID {
-	uidScratch.uids = uids
 	node.Sandboxing = true
+
+	// A node may arrive with a pre-stamped uid: resource FETCH nodes hash their URI
+	// (+ output) at creation so the uid is stable across machines and independent of
+	// the ay binary path baked into the fetch command. Keep it; never recompute.
+	if node.UID != (UID{}) {
+		node.SelfUID = node.UID
+
+		return node.UID
+	}
+
+	uidScratch.uids = uids
 
 	u := nodeUIDWithBuf(node, uidScratch)
 	node.UID = u
@@ -362,7 +371,6 @@ func graphFromFinalizedEmitter(e *BufferedEmitter, uids *uidVec) *Graph {
 	n := len(e.nodes)
 
 	out := &Graph{
-		Conf:   map[string]interface{}{},
 		Inputs: map[string]interface{}{},
 		Graph:  make([]*Node, 0, n),
 		Result: make([]UID, 0, len(e.results)),
@@ -422,10 +430,3 @@ func Finalize(e *BufferedEmitter) *Graph {
 	return graphFromFinalizedEmitter(e, finalizeNodes(e, nil))
 }
 
-func applyGraphConf(g *Graph, conf *graphConf) {
-	if conf == nil || len(conf.Resources) == 0 {
-		return
-	}
-
-	g.Conf = map[string]interface{}{"resources": conf.Resources}
-}

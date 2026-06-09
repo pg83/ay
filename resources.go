@@ -39,7 +39,11 @@ const resourceGlobalSuffix = "_RESOURCE_GLOBAL"
 // bare resource ref, global-var name and --global-resource token, then carries them
 // as STR. The uri is kept only to drive the fetch — it never enters the ref.
 func makeResourceDecl(name, uri string) resourceDecl {
-	value := "$(" + name + ")"
+	// Resource references resolve to the FETCH node's output dir, $(B)/resources/NAME,
+	// so flags/env that splice ${NAME_RESOURCE_GLOBAL} (e.g. lld's --ld-path) point at
+	// a real graph output the consumer depends on — not an executor-mounted $(NAME).
+	// dump normalize folds $(B)/resources/NAME back to $(NAME) for the comparison.
+	value := "$(B)/resources/" + name
 	globalVar := name + resourceGlobalSuffix
 
 	return resourceDecl{
@@ -101,6 +105,16 @@ func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *Declar
 	case tokDeclareExternalHostResourcesBundleByJson:
 		// NAME file.json — read by_platform.<host>.uri.
 		name, jsonRel := stmt.Args[0], stmt.Args[1]
+
+		// The bare CLANG resource is the toolchain's default compiler; bind its
+		// content to the configured clang major version (host.ClangVer) instead of
+		// the version-independent clangNN.json the declaration names. Upstream's
+		// effective CLANG is clang${CLANG_VER} (here clang20), not the literal
+		// clang16.json the source declares.
+		if name == resourcePatternClangTool {
+			jsonRel = "clang" + host.ClangVer + ".json"
+		}
+
 		bundle := readResourceBundleJSON(fs, filepath.ToSlash(filepath.Join(modulePath, jsonRel)))
 
 		return []resourceDecl{selectHostResourceDecl(host, modulePath, name, bundle)}
@@ -204,7 +218,11 @@ func resolveModuleToolchain(globals []resourceDecl) moduleToolchain {
 	for _, decl := range globals {
 		switch decl.Name.String() {
 		case resourcePatternClangTool:
-			root := resourcePatternRef(resourcePatternClangTool)
+			// $(B)/resources/CLANG — the FETCH node's output dir, consumed as a
+			// normal build input. The CC/AR/… node depends on that fetch node (via
+			// withResources -> attachResourceDeps), so the tool is materialized in
+			// the graph rather than resolved by an executor-side $(CLANG) mount.
+			root := Build("resources/" + resourcePatternClangTool).String()
 			tc.ClangRoot = internStr(root)
 			tc.CC = internStr(root + "/bin/clang")
 			tc.CXX = internStr(root + "/bin/clang++")
@@ -212,11 +230,11 @@ func resolveModuleToolchain(globals []resourceDecl) moduleToolchain {
 			tc.Objcopy = internStr(root + "/bin/llvm-objcopy")
 			tc.Strip = internStr(root + "/bin/llvm-strip")
 		case resourcePatternLLDRoot:
-			root := resourcePatternRef(resourcePatternLLDRoot)
+			root := Build("resources/" + resourcePatternLLDRoot).String()
 			tc.LLDRoot = internStr(root)
 			tc.LLD = internStr(root + "/bin/ld.lld")
 		case resourcePatternYMakePython3:
-			tc.Python3 = internStr(resourcePatternRef(resourcePatternYMakePython3) + "/bin/python3")
+			tc.Python3 = internStr(Build("resources/" + resourcePatternYMakePython3).String() + "/bin/python3")
 		}
 	}
 

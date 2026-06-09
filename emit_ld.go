@@ -139,6 +139,7 @@ func EmitLD(
 	depRefs = append(depRefs, peerLDRefs...)
 	depRefs = append(depRefs, dynamicRefs...)
 	depRefs = append(depRefs, objcopyRefs...)
+	depRefs = append(depRefs, emitVCSNode(emit, hostP))
 	outputs := []VFS{outputVFS}
 
 	for _, p := range dynamicPaths {
@@ -210,6 +211,36 @@ func lastPathComponent(p string) string {
 	}
 
 	return p
+}
+
+// emitVCSNode emits the node that writes the inline vcs.json stub ({}) to
+// $(B)/vcs.json — the input the vcs_info step reads to generate __vcs_version__.c.
+// It is a plain build command (it writes a file, it does not fetch a resource), so
+// it carries no FETCH kind; consumers depend on it like any producer. Its uid is
+// content-stable (set in the node), so emitting it from every link node dedups to
+// one. `dump normalize` folds $(B)/vcs.json back to the upstream $(VCS)/vcs.json
+// reference and strips this producer (upstream mounts vcs.json, has no producer node).
+func emitVCSNode(emit Emitter, host *Platform) NodeRef {
+	output := Build("vcs.json")
+	node := &Node{
+		Cmds: []Cmd{{CmdArgs: []STR{
+			internStr(currentYatoolPath()),
+			argFetch.str(),
+			internStr("base64"),
+			internStr("e30="),
+			output.str(),
+		}}},
+		KV:               KV{P: pkCP, PC: pcYellow, ShowOut: "yes"},
+		Outputs:          []VFS{output},
+		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(16)},
+		Sandboxing:       true,
+		TargetProperties: TargetProperties{ModuleDir: "build/scripts"},
+	}
+
+	node.UID = resourceFetchUID("base64:vcs.json:e30=", output.String())
+	node.SelfUID = node.UID
+
+	return emit.Emit(bindNodePlatform(node, host))
 }
 
 func composeLDCmdVcsInfo(tc moduleToolchain, vcsCPath string) []STR {

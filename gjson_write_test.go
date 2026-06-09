@@ -165,7 +165,6 @@ func TestWriteGraphCompact_StringEscaping(t *testing.T) {
 
 func TestWriteGraphCompact_EmptyGraph(t *testing.T) {
 	g := &Graph{
-		Conf:   map[string]interface{}{},
 		Graph:  []*Node{},
 		Inputs: map[string]interface{}{},
 		Result: []UID{},

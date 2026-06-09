@@ -24,6 +24,12 @@ var (
 	// references compare equal — these ids churn whenever upstream rotates a
 	// sandbox resource and carry no build-graph meaning.
 	versionedResourceRe = regexp.MustCompile(`\$\(([A-Z][A-Z0-9_]*)-(?:sbr:)?[0-9]+\)`)
+	// resourceMountFoldRe folds our self-contained resource path back to upstream's
+	// bare reference form: we emit the toolchain as $(B)/resources/<NAME>/bin/… (a
+	// real FETCH-node output the consumer depends on), upstream emits $(<NAME>)/bin/…
+	// (an executor-resolved mount). Folding $(B)/resources/<NAME> -> $(<NAME>) makes
+	// the two compare equal after the FETCH node itself is stripped.
+	resourceMountFoldRe = regexp.MustCompile(`\$\(B\)/resources/([A-Z_][A-Z0-9_]*)`)
 	// cmdLiteralBasenames are bare-word command arguments that collide with a real
 	// input's basename but do NOT name that file: "gnu" is the llvm-ar archive-format
 	// selector (link_lib.py ... LLVM_AR gnu $(B) ...), not the magic-database source
@@ -85,6 +91,16 @@ func normPath(s string) string {
 
 	s = strings.ReplaceAll(s, "$(BUILD_ROOT)", "$(B)")
 	s = strings.ReplaceAll(s, "$(SOURCE_ROOT)", "$(S)")
+
+	// Fold our $(B)/resources/<NAME>/… toolchain paths back to the bare $(<NAME>)/…
+	// form upstream emits (the FETCH node that produces them is stripped separately).
+	if strings.Contains(s, "$(B)/resources/") {
+		s = resourceMountFoldRe.ReplaceAllString(s, "$($1)")
+	}
+
+	// Our inline vcs.json is a real $(B)/vcs.json producer node; upstream mounts it as
+	// $(VCS)/vcs.json with no producer. Fold the reference (the producer is stripped).
+	s = strings.ReplaceAll(s, "$(B)/vcs.json", "$(VCS)/vcs.json")
 
 	// Strip the id suffix from any versioned resource ref ($(NAME-id) /
 	// $(NAME-sbr:id)). The regex matches only refs carrying an id, so running it
