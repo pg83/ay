@@ -160,13 +160,14 @@ func EmitLD(
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: binaryDir, ModuleLang: ldModuleLang(instance), ModuleType: "bin"},
 		DepRefs:          depRefs,
+		usesResources:    []string{resourcePatternClangTool + instance.Platform.ClangVer, resourcePatternLLDRoot, resourcePatternYMakePython3},
 	}
 
 	if programModuleTag != "" {
 		n.TargetProperties.ModuleTag = programModuleTag
 	}
 
-	return emit.Emit(withResources(n, resourcePatternClangTool+instance.Platform.ClangVer, resourcePatternLLDRoot, resourcePatternYMakePython3))
+	return emit.Emit(n)
 }
 
 func LDOutputPath(instance ModuleInstance, binaryName string) VFS {

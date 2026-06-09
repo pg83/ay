@@ -111,9 +111,10 @@ func emitArchive(
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		DepRefs:          depRefs,
+		usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
 	}
 
-	arRef := emit.Emit(withResources(n, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer))
+	arRef := emit.Emit(n)
 
 	if reg != nil {
 		// Propagate each archived member's source inputs (e.g. the .py behind a

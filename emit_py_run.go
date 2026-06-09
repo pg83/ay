@@ -523,10 +523,11 @@ func EmitPYRun(
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		DepRefs:          extraDepRefs,
+		usesResources:    []string{resourcePatternYMakePython3},
 	}
 
 	return prEmitResult{
-		Ref:    emit.Emit(withResources(node, resourcePatternYMakePython3)),
+		Ref:    emit.Emit(node),
 		Inputs: append([]VFS(nil), inputs...),
 	}
 }

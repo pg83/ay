@@ -104,7 +104,8 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 
 				return tp
 			}(),
-			Requirements: Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+			Requirements:  Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+			usesResources: []string{resourcePatternYMakePython3},
 		}
 
 		var toolRefs []NodeRef
@@ -129,7 +130,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			node.ForeignDepRefs = toolRefs
 		}
 
-		pyRef := ctx.emit.Emit(withResources(node, resourcePatternYMakePython3))
+		pyRef := ctx.emit.Emit(node)
 
 		registerBoundGeneratedParsedOutput(ctx, instance, "PY", outputPath, nil, pyRef, toolRefs)
 	}
@@ -190,13 +191,14 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 				TargetProperties: TargetProperties{ModuleDir: instance.Path},
 				Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 				DepRefs:          []NodeRef{},
+				usesResources:    []string{resourcePatternYMakePython3},
 			}
 
 			if py3Suffix {
 				pyNode.TargetProperties.ModuleTag = "py3"
 			}
 
-			pyRef = ctx.emit.Emit(withResources(pyNode, resourcePatternYMakePython3))
+			pyRef = ctx.emit.Emit(pyNode)
 			ctx.pyRegisterOutputs[regCppVFS] = pyRef
 		}
 

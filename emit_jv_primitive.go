@@ -38,11 +38,12 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs []VFS, outputs []
 
 			return tp
 		}(),
-		Requirements: Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
-		DepRefs:      depRefs,
+		Requirements:  Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		DepRefs:       depRefs,
+		usesResources: []string{resourcePatternYMakePython3, resourcePatternJDK17},
 	}
 
-	return emit.Emit(withResources(node, resourcePatternYMakePython3, resourcePatternJDK17))
+	return emit.Emit(node)
 }
 
 func EmitJV(

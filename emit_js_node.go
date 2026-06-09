@@ -50,7 +50,8 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 		Outputs:          []VFS{outVFS},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		usesResources:    []string{resourcePatternYMakePython3},
 	}
 
-	return emit.Emit(withResources(node, resourcePatternYMakePython3)), outVFS
+	return emit.Emit(node), outVFS
 }
