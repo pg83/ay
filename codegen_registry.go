@@ -78,6 +78,17 @@ type CodegenRegistry struct {
 	// than a bool DenseMap column: the value is always true, only presence matters.
 	splitPrefixSeen BitSet
 
+	// leafEver marks every VFS that has EVER been registered as a ClosureLeaf
+	// (Register / AddClosureLeaf). The scanner's window-subsumption skip
+	// (scanCtx.windowSubsumed) consults it: a leaf rides in closure windows as a
+	// bare, non-expanded member, so its presence in a block does not imply its
+	// window is present too — such a VFS must never short-circuit a splice. The
+	// bit is set at registration, strictly before ClosureLeaves can hand the
+	// leaf to any window build, so it is always visible by the time a leaf-path
+	// element can appear in a dedup set. Conservative: a VFS that is both a
+	// leaf somewhere and a regular include elsewhere merely loses the skip.
+	leafEver BitSet
+
 	// bySplit maps a (prefix, suffix) STR pair to its producer info, keyed by
 	// splitMix64(prefix, suffix) — the two ids hashed into a uniform 64-bit key,
 	// letting an identity-hashed IntMap spread the pairs. Gated by splitPrefixSeen so
@@ -104,6 +115,10 @@ func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
 	rel := info.OutputPath.Rel()
 	r.byStr.Put(full, info)
 	r.byStr.Put(internStr(rel), info)
+
+	for _, leaf := range info.ClosureLeaves {
+		r.leafEver.add(uint32(leaf))
+	}
 
 	for i := 0; i < len(rel); i++ {
 		if rel[i] == '/' {
@@ -160,6 +175,13 @@ func (r *CodegenRegistry) AddClosureLeaf(node, leaf VFS) {
 	}
 
 	info.ClosureLeaves = append(info.ClosureLeaves, leaf)
+	r.leafEver.add(uint32(leaf))
+}
+
+// IsLeafEver reports whether v was ever registered as a ClosureLeaf — see the
+// leafEver field comment.
+func (r *CodegenRegistry) IsLeafEver(v VFS) bool {
+	return r.leafEver.has(uint32(v))
 }
 
 // ClosureLeaves returns the non-expanded closure-window members of node (nil
