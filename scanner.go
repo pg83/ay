@@ -145,11 +145,6 @@ type scanCtx struct {
 	resolveIndex *cfgResolveIndex
 }
 
-type idSet struct {
-	gen   []uint32
-	epoch uint32
-}
-
 // closureRef is an index into IncludeScanner.subgraphClosures.
 type closureRef uint32
 
@@ -201,56 +196,6 @@ const (
 	// 1.5x from there without bound.
 	closureArenaInitial = closureAllocHint
 )
-
-func (s *idSet) reset(size uint32) {
-	if uint32(len(s.gen)) < size {
-		grown := uint32(len(s.gen)) * 2
-
-		if grown < size {
-			grown = size
-		}
-
-		s.gen = make([]uint32, grown)
-		s.epoch = 1
-
-		return
-	}
-
-	s.epoch++
-
-	if s.epoch == 0 {
-		for i := range s.gen {
-			s.gen[i] = 0
-		}
-
-		s.epoch = 1
-	}
-}
-
-// idSet is keyed by VFS value (the dense array is indexed by uint32(v)).
-func (s *idSet) has(v VFS) bool {
-	id := uint32(v)
-
-	return id < uint32(len(s.gen)) && s.gen[id] == s.epoch
-}
-
-func (s *idSet) add(v VFS) {
-	id := uint32(v)
-
-	if id >= uint32(len(s.gen)) {
-		grown := uint32(len(s.gen)) * 2
-
-		if grown <= id {
-			grown = id + 1
-		}
-
-		g := make([]uint32, grown)
-		copy(g, s.gen)
-		s.gen = g
-	}
-
-	s.gen[id] = s.epoch
-}
 
 type searchTierResult struct {
 	paths []VFS
