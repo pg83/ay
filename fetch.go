@@ -140,6 +140,7 @@ func forceRemoveAll(path string) error {
 
 		return nil
 	})
+
 	return os.RemoveAll(path)
 }
 

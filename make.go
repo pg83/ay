@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -249,6 +250,7 @@ func cmdMake(args []string) int {
 	}
 
 	ex := newExecutor(mf.srcRoot, mf.bldRoot, mf.threads, mf.keepGoing, mf.ninja, mf.sandboxing, mf.cmdPrefixes)
+	ex.startGarbageCollector()
 
 	go ex.eventLoop()
 
@@ -325,6 +327,10 @@ type executor struct {
 	// undeclared source then fails — the input set is exactly what the graph declares.
 	sandboxing bool
 
+	// grbDir (bldRoot/grb, sibling of cas/ and tmp/) is where discard renames doomed
+	// workspaces; startGarbageCollector empties it in the background.
+	grbDir string
+
 	mu      sync.Mutex
 	byUID   map[UID]*nodeFuture
 	events  chan func()
@@ -352,6 +358,7 @@ func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, ninja boo
 		keepGoing:   keepGoing,
 		ninja:       ninja,
 		sandboxing:  sandboxing,
+		grbDir:      filepath.Join(bldRoot, "grb"),
 		cmdPrefixes: cmdPrefixes,
 		byUID:       make(map[UID]*nodeFuture, 8192),
 		events:      make(chan func(), 4096),
@@ -499,10 +506,10 @@ func (ex *executor) execute(f *nodeFuture) {
 	Throw(os.MkdirAll(tmp, 0o755))
 
 	// Lock the workspace DIR (an exclusive flock on its fd) for the whole node, so a
-	// second ay process building the same uid can't clean or clobber it concurrently.
-	// The dir is never removed — only its CONTENTS are (rm -rf tmp/<uid>/*) — so the
-	// flock'd inode stays valid; there is no remove/recreate race, and the stale-
-	// content clean only ever runs while we hold the lock. Released on dir.Close.
+	// second ay process building the same uid does not clean or clobber it while we
+	// work. Best-effort serialization, not a correctness requirement — outputs are
+	// deterministic and published atomically (CAS hard-link, uid temp+rename), so even
+	// a concurrent rebuild is safe; the lock just avoids the wasted duplicate work.
 	dir := Throw2(os.Open(tmp))
 	defer dir.Close()
 	Throw(syscall.Flock(int(dir.Fd()), syscall.LOCK_EX))
@@ -512,8 +519,8 @@ func (ex *executor) execute(f *nodeFuture) {
 		return
 	}
 
-	removeContents(tmp)
-	defer removeContents(tmp)
+	ex.removeContents(tmp) // clear any stale workspace left by a crashed prior run
+	defer ex.discard(tmp)
 
 	// srcMount/bldMount are what $(S)/$(B) resolve to for this node. Without
 	// sandboxing $(S) is the whole source root and $(B) is the workspace itself.
@@ -898,10 +905,9 @@ func (ex *executor) installRoot(uid UID, where string) {
 	ex.restoreInto(uid, where)
 }
 
-// removeContents deletes everything inside dir but keeps dir itself, so an flock
-// held on the dir's inode stays valid across the clean. Best-effort, like the old
-// stale-workspace wipe it replaces.
-func removeContents(dir string) {
+// removeContents deletes everything inside dir but keeps dir itself — the under-lock
+// clean of a possibly-stale workspace left by a crashed prior run. Best-effort.
+func (ex *executor) removeContents(dir string) {
 	entries, err := os.ReadDir(dir)
 
 	if err != nil {
@@ -909,8 +915,46 @@ func removeContents(dir string) {
 	}
 
 	for _, e := range entries {
-		_ = forceRemoveAll(filepath.Join(dir, e.Name()))
+		ex.discard(filepath.Join(dir, e.Name()))
 	}
+}
+
+// discard removes path the fast way: it renames path into grbDir under a random name
+// (one rename — O(1) regardless of tree size, and fine on write-less trees since
+// rename only touches the parent dirs) and leaves the real delete to the background
+// collector. The random suffix keeps the name unique even against a neighbouring
+// process. If the rename fails (missing path, cross-fs) it deletes in place.
+func (ex *executor) discard(path string) {
+	dst := filepath.Join(ex.grbDir, strconv.FormatUint(rand.Uint64(), 36))
+
+	if os.Rename(path, dst) == nil {
+		return
+	}
+
+	_ = forceRemoveAll(path)
+}
+
+// startGarbageCollector deletes grbDir entries once a second in the background. It is
+// best-effort and never waited on: the process exits with it still running, and any
+// leftover is cleared by the next run's collector.
+func (ex *executor) startGarbageCollector() {
+	Throw(os.MkdirAll(ex.grbDir, 0o755))
+
+	go func() {
+		for {
+			time.Sleep(time.Second)
+
+			entries, err := os.ReadDir(ex.grbDir)
+
+			if err != nil {
+				continue
+			}
+
+			for _, e := range entries {
+				_ = forceRemoveAll(filepath.Join(ex.grbDir, e.Name()))
+			}
+		}
+	}()
 }
 
 // mountString substitutes the $(S)/$(B) roots. Resources are real graph nodes
