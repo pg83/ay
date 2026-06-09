@@ -20,15 +20,15 @@ func EmitPR(
 	extraDepRefs []NodeRef,
 	emit Emitter,
 ) prEmitResult {
-	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	for _, kv := range stmt.EnvPairs {
 		parts := strings.SplitN(kv, "=", 2)
 
 		if len(parts) == 2 {
-			env = append(env, EnvVar{Name: parts[0], Value: parts[1]})
+			env = append(env, EnvVar{Name: internEnv(parts[0]), Value: internStr(parts[1])})
 		} else {
-			env = append(env, EnvVar{Name: kv})
+			env = append(env, EnvVar{Name: internEnv(kv), Value: strEmpty})
 		}
 	}
 

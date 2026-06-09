@@ -107,8 +107,8 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 
 	registerGeneratedParsedOutput(ctx, instance, "YC", generatedVFS, generatedParsed, []NodeRef{bisonRef, m4Ref})
 
-	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}, {Name: "BISON_PKGDATADIR", Value: "$(S)/contrib/tools/bison/data"}, {Name: "M4", Value: m4Bin}}
-	preprocessEnv := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envBISON_PKGDATADIR, Value: strBisonPkgData}, {Name: envM4, Value: m4Bin}}
+	preprocessEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	cmds := []Cmd{
 		{
@@ -171,7 +171,7 @@ func bisonTool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
 	return ref, bin.String()
 }
 
-func m4Tool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
+func m4Tool(ctx *genCtx, instance ModuleInstance) (NodeRef, STR) {
 	ref, bin := ctx.tool(argContribToolsM4)
-	return ref, bin.String()
+	return ref, bin.str()
 }

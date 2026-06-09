@@ -186,7 +186,7 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 			chDeps = append(chDeps, rescompilerRef)
 		}
 
-		env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
+		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 		inputs := append([]VFS(nil), ch.inputs...)
 		inputs = append(inputs, rescompilerBinVFS)
 		inputs = append(inputs, auxClosure...)

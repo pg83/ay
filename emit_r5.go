@@ -15,7 +15,7 @@ func EmitR5(
 	tmpVFS := Build(instance.Path + "/" + srcRel + ".tmp")
 	cppVFS := Build(instance.Path + "/" + strings.TrimSuffix(srcRel, ".rl") + ".rl5.cpp")
 
-	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	cmd0 := Cmd{
 		CmdArgs: []STR{

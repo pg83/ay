@@ -49,6 +49,11 @@ type Platform struct {
 	Triple string
 	March  string
 
+	// MultiarchLibPathSTR is the pre-interned DYLD_LIBRARY_PATH value (the
+	// MultiarchLibPath() string), computed once per platform so ToolEnv needn't
+	// rebuild and re-intern it on every call.
+	MultiarchLibPathSTR STR
+
 	// TargetArg is the pre-interned --target=<triple> cmd-arg token (STR), computed
 	// once per platform so the per-CC-node compile line doesn't re-intern it.
 	TargetArg STR
@@ -142,6 +147,7 @@ func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, 
 	}
 
 	p.TargetArg = internStr("--target=" + p.Triple)
+	p.MultiarchLibPathSTR = internStr(p.MultiarchLibPath())
 
 	compress := confCompressesDebug(fs)
 	p.CompressDebugSections = compress && !buildRelease && os == OSLinux
@@ -271,11 +277,11 @@ func (p *Platform) MultiarchLibPath() string {
 
 func (p *Platform) ToolEnv() EnvVars {
 	return EnvVars{
-		{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"},
-		{Name: "DYLD_LIBRARY_PATH", Value: p.MultiarchLibPath()},
-		{Name: "CPATH"},
-		{Name: "LIBRARY_PATH"},
-		{Name: "SDKROOT"},
+		{Name: envARCADIA_ROOT_DISTBUILD, Value: strS},
+		{Name: envDYLD_LIBRARY_PATH, Value: p.MultiarchLibPathSTR},
+		{Name: envCPATH, Value: strEmpty},
+		{Name: envLIBRARY_PATH, Value: strEmpty},
+		{Name: envSDKROOT, Value: strEmpty},
 	}
 }
 

@@ -644,11 +644,11 @@ func (ex *executor) runNode(n *Node, tmp string) commandResult {
 		env := os.Environ()
 
 		for _, e := range n.Env {
-			env = append(env, e.Name+"="+mountString(e.Value, ex.srcRoot, tmp))
+			env = append(env, e.Name.String()+"="+mountString(e.Value.String(), ex.srcRoot, tmp))
 		}
 
 		for _, e := range c.Env {
-			env = append(env, e.Name+"="+mountString(e.Value, ex.srcRoot, tmp))
+			env = append(env, e.Name.String()+"="+mountString(e.Value.String(), ex.srcRoot, tmp))
 		}
 
 		cmd := &exec.Cmd{

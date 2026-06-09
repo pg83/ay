@@ -23,7 +23,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		optWrapper   = "$(S)/build/scripts/llvm_opt_wrapper.py"
 	)
 	python := d.tc.Python3.String()
-	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	reqs := Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)}
 	tp := TargetProperties{ModuleDir: instance.Path}
 

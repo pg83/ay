@@ -25,7 +25,7 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 
 	cmdArgs = append(cmdArgs, argYaEndCommandFile.str())
 
-	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	inputs := make([]VFS, 0, 2+len(sources)+len(closure))
 	inputs = append(inputs, scripts[joinSrcs]...)
