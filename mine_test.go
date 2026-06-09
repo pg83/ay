@@ -26,21 +26,6 @@ func TestPrebuiltToolchainFlags_CarryConfigNotToolPaths(t *testing.T) {
 	}
 }
 
-func TestGraphConfForToolchainFlags_NoResources(t *testing.T) {
-	// Every resource is now a real graph node: toolchain bundles (CLANG*, LLD_ROOT,
-	// YMAKE_PYTHON3) via emitResourceFetch, vcs.json via emitVCSNode. Nothing is
-	// resolved out-of-band, so graphConfForToolchainFlags carries no resources and the
-	// emitted graph has no conf section.
-	conf := graphConfForToolchainFlags()
-	if conf == nil {
-		t.Fatal("graphConfForToolchainFlags returned nil")
-	}
-
-	if len(conf.Resources) != 0 {
-		t.Fatalf("resources = %#v, want none", conf.Resources)
-	}
-}
-
 func TestReadYaConfSections_MergesLaterFilesAndSkipsMissing(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"ya.conf": `[flags]

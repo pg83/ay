@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -121,7 +120,7 @@ func cmdMake(args []string) int {
 
 	fs := NewFS(mf.srcRoot)
 
-	tools, conf := toolchainFlags(fs)
+	tools := toolchainFlags(fs)
 	rootHostYaFlags := readYaConfSection(fs, "ya.conf", "host_platform_flags")
 	rootTargetYaFlags := readYaConfSection(fs, "ya.conf", "flags")
 	hostYaFlags := map[string]string{}
@@ -168,7 +167,6 @@ func cmdMake(args []string) int {
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CFLAGS", ""),
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CXXFLAGS", ""),
 	)
-	resourceFetches := newResourceFetchPlan(mf.srcRoot, conf, hostP)
 
 	targetSpec := mf.targetPlat
 
@@ -231,11 +229,11 @@ func cmdMake(args []string) int {
 	if mf.threads == 0 {
 		if mf.dumpGraph {
 			for _, target := range mf.targets {
-				g := GenDumpGraphWithResources(fs, target, hostP, targetP, onWarn, resourceFetches, mf.testLevel > 0)
+				g := GenDumpGraphWithResources(fs, target, hostP, targetP, onWarn, mf.testLevel > 0)
 				writeGraph("-", g, !mf.sandboxing)
 			}
 		} else {
-			genStream(fs, mf.targets, hostP, targetP, resourceFetches, func(*Node, *uidVec) {}, onWarn, mf.testLevel > 0)
+			genStream(fs, mf.targets, hostP, targetP, func(*Node, *uidVec) {}, onWarn, mf.testLevel > 0)
 		}
 
 		if mf.dumpIgnoredMacros {
@@ -245,7 +243,7 @@ func cmdMake(args []string) int {
 		return 0
 	}
 
-	ex := newExecutor(mf.srcRoot, mf.bldRoot, mf.threads, mf.keepGoing, resourceFetches.mountMap(), mf.cmdPrefixes)
+	ex := newExecutor(mf.srcRoot, mf.bldRoot, mf.threads, mf.keepGoing, mf.cmdPrefixes)
 
 	go ex.eventLoop()
 
@@ -266,7 +264,7 @@ func cmdMake(args []string) int {
 		}
 	}
 
-	results := genStream(fs, mf.targets, hostP, targetP, resourceFetches, ex.onNode, executorWarn, mf.testLevel > 0)
+	results := genStream(fs, mf.targets, hostP, targetP, ex.onNode, executorWarn, mf.testLevel > 0)
 
 	ex.run(results)
 
@@ -289,20 +287,20 @@ func cmdMake(args []string) int {
 	return 0
 }
 
-func genStream(fs FS, targets []string, hostP, targetP *Platform, resources *resourceFetchPlan, onNode func(*Node, *uidVec), onWarn func(Warn), testMode bool) []UID {
+func genStream(fs FS, targets []string, hostP, targetP *Platform, onNode func(*Node, *uidVec), onWarn func(Warn), testMode bool) []UID {
 	all := []UID{}
 
 	for _, t := range targets {
-		ec := genStreamOne(fs, t, hostP, targetP, resources, onNode, onWarn, testMode)
+		ec := genStreamOne(fs, t, hostP, targetP, onNode, onWarn, testMode)
 		all = append(all, ec...)
 	}
 
 	return all
 }
 
-func genStreamOne(fs FS, target string, hostP, targetP *Platform, resources *resourceFetchPlan, onNode func(*Node, *uidVec), onWarn func(Warn), testMode bool) []UID {
+func genStreamOne(fs FS, target string, hostP, targetP *Platform, onNode func(*Node, *uidVec), onWarn func(Warn), testMode bool) []UID {
 	emitter := NewStreamingEmitter(onNode)
-	runGenIntoWithResources(fs, target, hostP, targetP, emitter, onWarn, resources, testMode, true)
+	runGenIntoWithResources(fs, target, hostP, targetP, emitter, onWarn, testMode, true)
 
 	return emitter.Finish()
 }
@@ -312,7 +310,6 @@ type executor struct {
 	bldRoot        string
 	sema           chan struct{}
 	keepGoing      bool
-	resourceMounts map[string]string
 	cmdPrefixes    []cmdPrefix
 
 	mu      sync.Mutex
@@ -334,13 +331,12 @@ type nodeFuture struct {
 	err  *Exception
 }
 
-func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, resourceMounts map[string]string, cmdPrefixes []cmdPrefix) *executor {
+func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, cmdPrefixes []cmdPrefix) *executor {
 	return &executor{
 		srcRoot:        srcRoot,
 		bldRoot:        bldRoot,
 		sema:           make(chan struct{}, threads),
 		keepGoing:      keepGoing,
-		resourceMounts: resourceMounts,
 		cmdPrefixes:    cmdPrefixes,
 		byUID:          make(map[UID]*nodeFuture, 8192),
 		events:         make(chan func(), 4096),
@@ -633,7 +629,7 @@ func (ex *executor) runNode(n *Node, tmp string) commandResult {
 		args := make([]string, len(c.CmdArgs))
 
 		for i, a := range c.CmdArgs {
-			args[i] = mountString(a.String(), ex.srcRoot, tmp, ex.resourceMounts)
+			args[i] = mountString(a.String(), ex.srcRoot, tmp)
 		}
 
 		args = applyCmdPrefixes(args, ex.cmdPrefixes)
@@ -642,17 +638,17 @@ func (ex *executor) runNode(n *Node, tmp string) commandResult {
 		dir := tmp
 
 		if c.Cwd != 0 {
-			dir = mountString(c.Cwd.String(), ex.srcRoot, tmp, ex.resourceMounts)
+			dir = mountString(c.Cwd.String(), ex.srcRoot, tmp)
 		}
 
 		env := os.Environ()
 
 		for _, e := range n.Env {
-			env = append(env, e.Name+"="+mountString(e.Value, ex.srcRoot, tmp, ex.resourceMounts))
+			env = append(env, e.Name+"="+mountString(e.Value, ex.srcRoot, tmp))
 		}
 
 		for _, e := range c.Env {
-			env = append(env, e.Name+"="+mountString(e.Value, ex.srcRoot, tmp, ex.resourceMounts))
+			env = append(env, e.Name+"="+mountString(e.Value, ex.srcRoot, tmp))
 		}
 
 		cmd := &exec.Cmd{
@@ -665,7 +661,7 @@ func (ex *executor) runNode(n *Node, tmp string) commandResult {
 		var stdoutW io.Writer = os.Stdout
 
 		if c.Stdout != "" {
-			path := mountString(c.Stdout, ex.srcRoot, tmp, ex.resourceMounts)
+			path := mountString(c.Stdout, ex.srcRoot, tmp)
 			Throw(os.MkdirAll(filepath.Dir(path), 0o755))
 
 			f := Throw2(os.Create(path))
@@ -743,7 +739,7 @@ func (ex *executor) restoreInto(uid UID, where string) {
 		// Resolve the $(B)/… path directly from the string. Do NOT Intern here:
 		// execution goroutines run concurrently with the still-streaming generator,
 		// and the global intern table is not safe for concurrent writes.
-		target := mountString(outVFS, ex.srcRoot, where, nil)
+		target := mountString(outVFS, ex.srcRoot, where)
 		Throw(os.MkdirAll(filepath.Dir(target), 0o755))
 		_ = os.Remove(target)
 		Throw(os.Symlink(casLoc, target))
@@ -758,19 +754,18 @@ func (ex *executor) installRoot(uid UID, where string) {
 	ex.restoreInto(uid, where)
 }
 
-// resourceMountRe matches a bare external-resource reference $(NAME) left after
-// the $(S)/$(B) roots are substituted. Every such resource is fetched (by its
-// FETCH node) into <bldRoot>/resources/NAME, so the mount is mechanical — no
-// per-resource map is needed.
-var resourceMountRe = regexp.MustCompile(`\$\(([A-Z_][A-Z0-9_]*)\)`)
-
-func mountString(s, srcRoot, bldRoot string, _ map[string]string) string {
+// mountString substitutes the $(S)/$(B) roots. Resources are real graph nodes
+// producing $(B)/resources/NAME (and vcs.json at $(B)/vcs.json), so they resolve
+// through $(B) like any build output — no per-resource $(NAME) mount. The only
+// $(NAME) left ($(TOOL_ROOT) in debug-/macro-prefix-map flags) is deliberately
+// not expanded.
+func mountString(s, srcRoot, bldRoot string) string {
 	s = strings.ReplaceAll(s, "$(S)/", srcRoot+"/")
 	s = strings.ReplaceAll(s, "$(B)/", bldRoot+"/")
 	s = strings.ReplaceAll(s, "$(S)", srcRoot)
 	s = strings.ReplaceAll(s, "$(B)", bldRoot)
 
-	return resourceMountRe.ReplaceAllString(s, filepath.ToSlash(bldRoot)+"/resources/$1")
+	return s
 }
 
 func casPath(bldRoot, src string) string {

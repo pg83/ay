@@ -5,28 +5,12 @@ import (
 	"strings"
 )
 
-type graphConfResource struct {
-	Name      string                 `json:"name,omitempty"`
-	Pattern   string                 `json:"pattern"`
-	Resource  string                 `json:"resource,omitempty"`
-	Resources []graphConfResourceURI `json:"resources,omitempty"`
-}
-
-type graphConfResourceURI struct {
-	Platform string `json:"platform"`
-	Resource string `json:"resource"`
-}
-
-type graphConf struct {
-	Resources []graphConfResource `json:"resources,omitempty"`
-}
-
 // toolchainFlags returns the host/target config flags (build type, python mode,
 // CLANG_VER, …). Tool *paths* are no longer here — the compiler/archiver/objcopy/
 // linker/python come from the build/platform/* RESOURCES_LIBRARY peers via the
 // module toolchain (resolveModuleToolchain / d.tc), not from ambient flags.
-func toolchainFlags(fs FS) (map[string]string, *graphConf) {
-	return prebuiltToolchainFlags(), graphConfForToolchainFlags()
+func toolchainFlags(fs FS) map[string]string {
+	return prebuiltToolchainFlags()
 }
 
 func prebuiltToolchainFlags() map[string]string {
@@ -42,15 +26,6 @@ func prebuiltToolchainFlags() map[string]string {
 		// Platform.ClangVer (--clang-ver) and COMPILER_VERSION.
 		"CLANG_VER": "20",
 	}
-}
-
-// graphConfForToolchainFlags yields no graph-conf resources. Toolchain resources
-// (CLANG*, LLD_ROOT, YMAKE_PYTHON3) are declared by the build/platform/* RESOURCES_
-// LIBRARY modules and fetched via emitResourceFetch as real graph nodes; vcs.json is
-// written by its own node (emitVCSNode). Nothing is resolved out-of-band, so the
-// graph carries no conf section.
-func graphConfForToolchainFlags() *graphConf {
-	return &graphConf{}
 }
 
 func readYaConfSection(fs FS, rel, wantSection string) map[string]string {

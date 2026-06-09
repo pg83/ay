@@ -9,124 +9,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 )
-
-type resourceFetch struct {
-	Pattern string
-	URI     string
-	Output  VFS
-}
-
-type resourceFetchPlan struct {
-	items     []resourceFetch
-	byPattern map[string]int // bare pattern -> index into items
-}
 
 type resourceMappingConf struct {
 	Extensions map[string]string `json:"extensions"`
 	Resources  map[string]string `json:"resources"`
-}
-
-func newResourceFetchPlan(_ string, conf *graphConf, host *Platform) *resourceFetchPlan {
-	plan := &resourceFetchPlan{}
-
-	if conf == nil || len(conf.Resources) == 0 {
-		return plan
-	}
-
-	for _, r := range conf.Resources {
-		if r.Pattern == "" || len(r.Resources) == 0 {
-			continue
-		}
-
-		uri := selectHostResourceURI(r.Resources, host)
-
-		if uri == "" {
-			continue
-		}
-
-		plan.items = append(plan.items, resourceFetch{
-			Pattern: r.Pattern,
-			URI:     uri,
-			Output:  Intern("$(B)/resources/" + r.Pattern),
-		})
-	}
-
-	sort.Slice(plan.items, func(i, j int) bool {
-		return plan.items[i].Pattern < plan.items[j].Pattern
-	})
-
-	plan.byPattern = make(map[string]int, len(plan.items))
-
-	for i, it := range plan.items {
-		plan.byPattern[it.Pattern] = i
-	}
-
-	return plan
-}
-
-func selectHostResourceURI(resources []graphConfResourceURI, host *Platform) string {
-	candidates := hostResourcePlatformCandidates(host)
-
-	for _, cand := range candidates {
-		for _, r := range resources {
-			if r.Platform == cand {
-				return r.Resource
-			}
-		}
-	}
-
-	return ""
-}
-
-func hostResourcePlatformCandidates(host *Platform) []string {
-	if host == nil {
-		return []string{"linux", "LINUX"}
-	}
-
-	base := string(host.OS)
-	withISA := base + "-" + string(host.ISA)
-
-	if host.ISA == ISAX8664 {
-		return []string{
-			base,
-			strings.ToUpper(base),
-			withISA,
-			strings.ToUpper(withISA),
-		}
-	}
-
-	return []string{
-		withISA,
-		strings.ToUpper(withISA),
-		base,
-		strings.ToUpper(base),
-	}
-}
-
-func fetchNode(host *Platform, item resourceFetch, scripts scriptDeps) *Node {
-	return bindNodePlatform(&Node{
-		Cmds: []Cmd{{
-			CmdArgs: []STR{
-				internStr(currentYatoolPath()),
-				argFetch.str(),
-				argB.str(),
-				argS.str(),
-				internStr(item.URI),
-				(item.Output).str(),
-			},
-			Env: nil,
-		}},
-		Env:              nil,
-		Inputs:           fetchScriptInputs(scripts),
-		KV:               KV{P: pkFETCH, PC: pcYellow, ShowOut: "yes"},
-		Outputs:          []VFS{item.Output},
-		Requirements:     Requirements{CPU: float64(1), Network: "full", RAM: float64(32)},
-		Sandboxing:       true,
-		TargetProperties: TargetProperties{ModuleDir: "build/resources"},
-	}, host)
 }
 
 func currentYatoolPath() string {
@@ -148,43 +36,26 @@ func fetchScriptInputs(scripts scriptDeps) []VFS {
 
 type resourceAwareEmitter struct {
 	inner     Emitter
-	plan      *resourceFetchPlan
 	host      *Platform
 	scripts   scriptDeps
 	fetchRefs map[string]NodeRef
-	refs      []NodeRef
-	seen      BitSet
 }
 
-func newResourceAwareEmitter(host *Platform, inner Emitter, plan *resourceFetchPlan, scripts scriptDeps, fetchRefs map[string]NodeRef) Emitter {
+func newResourceAwareEmitter(host *Platform, inner Emitter, scripts scriptDeps, fetchRefs map[string]NodeRef) Emitter {
 	return &resourceAwareEmitter{
 		inner:     inner,
-		plan:      plan,
 		host:      host,
 		scripts:   scripts,
 		fetchRefs: fetchRefs,
-		refs:      make([]NodeRef, len(plan.items)),
 	}
 }
 
-func resourceGraphEmitter(host *Platform, inner Emitter, plan *resourceFetchPlan, materializeFetchNodes bool, scripts scriptDeps, fetchRefs map[string]NodeRef) Emitter {
+func resourceGraphEmitter(host *Platform, inner Emitter, materializeFetchNodes bool, scripts scriptDeps, fetchRefs map[string]NodeRef) Emitter {
 	if !materializeFetchNodes {
 		return inner
 	}
 
-	if plan != nil && plan.byPattern == nil {
-		plan.byPattern = make(map[string]int, len(plan.items))
-
-		for i, it := range plan.items {
-			plan.byPattern[it.Pattern] = i
-		}
-	}
-
-	if plan == nil {
-		plan = &resourceFetchPlan{}
-	}
-
-	return newResourceAwareEmitter(host, inner, plan, scripts, fetchRefs)
+	return newResourceAwareEmitter(host, inner, scripts, fetchRefs)
 }
 
 func (e *resourceAwareEmitter) Emit(n *Node) NodeRef {
@@ -203,47 +74,17 @@ func (e *resourceAwareEmitter) OnReady(r NodeRef) <-chan struct{} {
 
 // attachResourceDeps turns each resource pattern the node declared (at the
 // site that spliced $(PATTERN) into its command) into a dependency on that
-// resource's fetch node — emitting the fetch node once per pattern. No command
-// scanning: usesResources is the authoritative, builder-declared set.
+// resource's fetch node. No command scanning: usesResources is the
+// authoritative, builder-declared set. Resources declared by a RESOURCES_LIBRARY
+// have their FETCH node emitted (emitResourceFetch); the dep is taken from the
+// shared fetchRefs registry. A pattern absent from fetchRefs means the resource's
+// RESOURCES_LIBRARY peer was not in the closure, so it is skipped.
 func (e *resourceAwareEmitter) attachResourceDeps(n *Node) {
 	for _, pat := range n.usesResources {
-		// Resources declared by a RESOURCES_LIBRARY already have their FETCH node
-		// emitted (emitResourceFetch); take the dep from the shared registry.
 		if ref, ok := e.fetchRefs[pat]; ok {
 			n.DepRefs = append(n.DepRefs, ref)
-
-			continue
 		}
-
-		// Fallback: resources still served by the graphConf plan (e.g. the VCS
-		// stub, not declared by any module).
-		i, ok := e.plan.byPattern[pat]
-
-		if !ok {
-			continue // resource not in this run's fetch plan (e.g. unselected host)
-		}
-
-		if !e.seen.has(uint32(i)) {
-			e.refs[i] = e.inner.Emit(fetchNode(e.host, e.plan.items[i], e.scripts))
-			e.seen.add(uint32(i))
-		}
-
-		n.DepRefs = append(n.DepRefs, e.refs[i])
 	}
-}
-
-func (p *resourceFetchPlan) mountMap() map[string]string {
-	out := map[string]string{}
-
-	if p == nil {
-		return out
-	}
-
-	for _, item := range p.items {
-		out[item.Pattern] = item.Output.Rel()
-	}
-
-	return out
 }
 
 func cmdFetch(args []string) int {

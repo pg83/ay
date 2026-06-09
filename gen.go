@@ -408,14 +408,14 @@ func reportPerfStats(ctx *genCtx, parsers *includeParserManager, targetScanner, 
 	reportScanner("host", hostScanner)
 }
 
-func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, emitter Emitter, onWarn func(Warn), resources *resourceFetchPlan, testMode bool, materializeResourceFetches bool) NodeRef {
+func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, emitter Emitter, onWarn func(Warn), testMode bool, materializeResourceFetches bool) NodeRef {
 	plainEmit := emitter
 	scriptTbl := buildScriptTable(fs)
 	// Shared across the genCtx (producer: emitResourceFetch) and the resource-aware
 	// emitter (consumer: attachResourceDeps) so a $(NAME) reference resolves to the
 	// fetch node emitted when its declaring RESOURCES_LIBRARY was gen'd.
 	fetchRefs := map[string]NodeRef{}
-	resourceEmit := resourceGraphEmitter(hostP, plainEmit, resources, materializeResourceFetches, scriptTbl, fetchRefs)
+	resourceEmit := resourceGraphEmitter(hostP, plainEmit, materializeResourceFetches, scriptTbl, fetchRefs)
 
 	// Mix $(S) input content hashes into node uids in every mode so a source edit
 	// invalidates the cache (the dump path is re-uid'd from canonical content
@@ -523,19 +523,19 @@ func mergeGeneratedFirstClaims(scanners ...*IncludeScanner) map[VFS]string {
 	return out
 }
 
-func GenDumpGraphWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), resources *resourceFetchPlan, testMode bool) *Graph {
+func GenDumpGraphWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), testMode bool) *Graph {
 	emitter := NewBufferedEmitter()
 	// -G must emit the same graph that gets executed: materialize resource FETCH
 	// nodes so the toolchain (CLANG, …) is a real dependency, not an executor-side
 	// mount. dump normalize folds these back out for the byte-exact comparison.
-	runGenIntoWithResources(fs, targetDir, hostP, targetP, emitter, onWarn, resources, testMode, true)
+	runGenIntoWithResources(fs, targetDir, hostP, targetP, emitter, onWarn, testMode, true)
 
 	return finalizeDumpGraph(emitter)
 }
 
-func genWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), resources *resourceFetchPlan, testMode bool, materializeResourceFetches bool) *Graph {
+func genWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), testMode bool, materializeResourceFetches bool) *Graph {
 	emitter := NewBufferedEmitter()
-	runGenIntoWithResources(fs, targetDir, hostP, targetP, emitter, onWarn, resources, testMode, materializeResourceFetches)
+	runGenIntoWithResources(fs, targetDir, hostP, targetP, emitter, onWarn, testMode, materializeResourceFetches)
 
 	return Finalize(emitter)
 }
