@@ -85,7 +85,7 @@ func cmdDumpNormalize(args []string) int {
 				uid:     uid,
 				deps:    toStrings(node["deps"]),
 				content: sha256.Sum256(marshalCompact(canonContent(node, refGraph))),
-				isFetch: p == "FETCH",
+				isFetch: p == "FT",
 			}
 
 			outs := toStrings(node["outputs"])
