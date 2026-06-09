@@ -840,11 +840,23 @@ func (ex *executor) restoreInto(uid UID, where string) {
 		Throw(os.MkdirAll(filepath.Dir(target), 0o755))
 		_ = os.Remove(target)
 
-		if e.Link != "" {
+		switch {
+		case e.Link != "":
 			// Re-create the symlink verbatim (its target was kept, not followed); a
 			// relative link like clang++ -> clang resolves within the restored tree.
 			Throw(os.Symlink(e.Link, target))
-		} else {
+
+		case strings.HasPrefix(outVFS, "$(B)/resources/"):
+			// Toolchain trees are hard-linked, not symlinked: a tool (clang, python)
+			// finds its bundled resources (clang's builtin headers, python's stdlib)
+			// relative to its OWN binary path. A symlink resolves to the flat CAS, so
+			// those relative dirs vanish; a hard link keeps a real file at the tree
+			// path (sharing the CAS inode), so the layout the tool expects survives.
+			if err := os.Link(e.Cas, target); err != nil && !os.IsExist(err) {
+				Throw(err)
+			}
+
+		default:
 			Throw(os.Symlink(e.Cas, target))
 		}
 	}
