@@ -12,12 +12,6 @@ var argTable = struct {
 	strs: make([]STR, 1, 256), // index 0 reserved: zero-value ARG is the empty arg
 }
 
-// argDedupeSeen dedups []ARG preserving first-occurrence order, via a reused
-// epoch IdSet sized to the arg space (ARG is uint32, cast to VFS only as the
-// set's key). Single-threaded gen, leaf use (reset → scan → return); kept
-// separate from the VFS deduper so the two uint32 id-spaces never interleave.
-var argDedupeSeen IdSet
-
 // ARG is a dense interned id for a single compiler/linker argument token (e.g.
 // "-mavx2", "-DFOO=1"). One global namespace, layered on the STR table: the
 // token's string is interned once as a STR and the ARG records that STR, so
@@ -96,10 +90,6 @@ func argStrs(as []ARG) []string {
 	return out
 }
 
-func argBound() uint32 {
-	return uint32(len(argTable.strs))
-}
-
 // addEachARG appends each arg of src not already in seen to *dst, recording it
 // in seen — the order-preserving union used by the peer-flag aggregation. seen
 // is a BitSet over the ARG space (the "map флагов → битсет" replacement).
@@ -114,15 +104,18 @@ func addEachARG(seen *BitSet, dst *[]ARG, src []ARG) {
 	}
 }
 
+// dedupARG unions []ARG lists preserving first-occurrence order, routing through
+// the program-global VFS deduper with each ARG id cast to VFS as the set key. The
+// deduper is reset first, so only this call's ARG-derived keys live in the set —
+// the ARG and VFS id-spaces never interleave within a single dedup pass.
 func dedupARG(lists ...[]ARG) []ARG {
-	argDedupeSeen.reset(argBound())
+	deduper.reset()
 
 	var out []ARG
 
 	for _, l := range lists {
 		for _, a := range l {
-			if !argDedupeSeen.has(VFS(a)) {
-				argDedupeSeen.add(VFS(a))
+			if deduper.add(VFS(a)) {
 				out = append(out, a)
 			}
 		}
