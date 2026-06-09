@@ -243,7 +243,7 @@ func cmdMake(args []string) int {
 		return 0
 	}
 
-	ex := newExecutor(mf.srcRoot, mf.bldRoot, mf.threads, mf.keepGoing, mf.cmdPrefixes)
+	ex := newExecutor(mf.srcRoot, mf.bldRoot, mf.threads, mf.keepGoing, mf.ninja, mf.cmdPrefixes)
 
 	go ex.eventLoop()
 
@@ -311,6 +311,9 @@ type executor struct {
 	sema        chan struct{}
 	keepGoing   bool
 	cmdPrefixes []cmdPrefix
+	// ninja selects per-line progress output (each status on its own line).
+	// Default (false) repaints a single status line in place (\x1b[2K\r).
+	ninja bool
 
 	mu      sync.Mutex
 	byUID   map[UID]*nodeFuture
@@ -331,12 +334,13 @@ type nodeFuture struct {
 	err  *Exception
 }
 
-func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, cmdPrefixes []cmdPrefix) *executor {
+func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, ninja bool, cmdPrefixes []cmdPrefix) *executor {
 	return &executor{
 		srcRoot:     srcRoot,
 		bldRoot:     bldRoot,
 		sema:        make(chan struct{}, threads),
 		keepGoing:   keepGoing,
+		ninja:       ninja,
 		cmdPrefixes: cmdPrefixes,
 		byUID:       make(map[UID]*nodeFuture, 8192),
 		events:      make(chan func(), 4096),
@@ -511,11 +515,22 @@ func (ex *executor) execute(f *nodeFuture) {
 
 	ex.events <- func() {
 		if cmdResult.Stderr != "" {
+			if !ex.ninja {
+				// erase the in-place status line before committing real output
+				fmt.Fprint(os.Stderr, ansiESC+"[2K\r")
+			}
+
 			fmt.Fprintln(os.Stderr, cmdResult.Stderr)
 		}
 
 		ex.stats[kind.String()] = append(ex.stats[kind.String()], dur)
-		fmt.Fprintln(os.Stderr, rec)
+
+		if ex.ninja {
+			fmt.Fprintln(os.Stderr, rec)
+		} else {
+			// repaint a single status line in place: clear it, print, return to col 0
+			fmt.Fprint(os.Stderr, ansiESC+"[2K\r"+rec+"\r")
+		}
 	}
 }
 

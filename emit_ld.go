@@ -223,14 +223,14 @@ func lastPathComponent(p string) string {
 // one. `dump normalize` folds $(B)/vcs.json back to the upstream $(VCS)/vcs.json
 // reference and strips this producer (upstream mounts vcs.json, has no producer node).
 func emitVCSNode(emit Emitter, host *Platform) NodeRef {
-	output := Build("vcs.json")
+	output := bldVcsJson
 	node := &Node{
 		Platform: host,
 		Cmds: []Cmd{{CmdArgs: []STR{
 			internStr(currentYatoolPath()),
 			argFetch.str(),
-			internStr("base64"),
-			internStr("e30="),
+			strBase64,
+			strE30,
 			output.str(),
 		}}},
 		KV:               KV{P: pkCP, PC: pcYellow, ShowOut: "yes"},
