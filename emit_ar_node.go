@@ -84,5 +84,5 @@ func emitARNode(
 		DepRefs:          depRefs,
 	}
 
-	return emit.Emit(bindNodePlatform(withResources(n, resourcePatternYMakePython3, resourcePatternClangTool), instance.Platform))
+	return emit.Emit(bindNodePlatform(withResources(n, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer), instance.Platform))
 }

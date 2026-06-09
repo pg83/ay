@@ -90,14 +90,15 @@ func newInclArgMemo() inclArgMemo {
 
 // testToolchain builds the module toolchain the way genModule does — from a
 // resource-global closure declaring the build/platform/* resources — so tests that
-// drive the emitters directly get the same $(CLANG)/$(LLD_ROOT)/$(YMAKE_PYTHON3)
-// tool paths without an ambient platform.
+// drive the emitters directly get the same $(B)/resources/CLANG20 / LLD_ROOT /
+// YMAKE_PYTHON3 tool paths without an ambient platform. The compiler comes from the
+// version-specific CLANG20 resource (ClangVer "20").
 func testToolchain() moduleToolchain {
 	return resolveModuleToolchain([]resourceDecl{
-		makeResourceDecl(resourcePatternClangTool, "sbr:test-clang"),
+		makeResourceDecl(resourcePatternClang20, "sbr:test-clang"),
 		makeResourceDecl(resourcePatternLLDRoot, "sbr:test-lld"),
 		makeResourceDecl(resourcePatternYMakePython3, "sbr:test-python"),
-	})
+	}, "20")
 }
 
 // addToolchainPeers injects the synthetic build/platform/* RESOURCES_LIBRARYs every

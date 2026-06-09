@@ -165,7 +165,7 @@ func EmitLD(
 		n.TargetProperties.ModuleTag = programModuleTag
 	}
 
-	return emit.Emit(bindNodePlatform(withResources(n, resourcePatternClangTool, resourcePatternLLDRoot, resourcePatternYMakePython3), instance.Platform))
+	return emit.Emit(bindNodePlatform(withResources(n, resourcePatternClangTool+instance.Platform.ClangVer, resourcePatternLLDRoot, resourcePatternYMakePython3), instance.Platform))
 }
 
 func LDOutputPath(instance ModuleInstance, binaryName string) VFS {

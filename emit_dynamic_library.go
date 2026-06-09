@@ -116,7 +116,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		addEachARG(&rpathFlagsSeen, &peerRPathFlagsGlobal, peerResult.RPathFlagsGlobal)
 	}
 
-	d.tc = resolveModuleToolchain(resourceGlobals)
+	d.tc = resolveModuleToolchain(resourceGlobals, instance.Platform.ClangVer)
 
 	fixElfRef, fixElfPath := ctx.tool(argToolsFixElf)
 
@@ -164,7 +164,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		n.ForeignDepRefs = []NodeRef{fixElfRef}
 	}
 
-	ref := ctx.emit.Emit(bindNodePlatform(withResources(n, resourcePatternClangTool, resourcePatternLLDRoot, resourcePatternYMakePython3), instance.Platform))
+	ref := ctx.emit.Emit(bindNodePlatform(withResources(n, resourcePatternClangTool+instance.Platform.ClangVer, resourcePatternLLDRoot, resourcePatternYMakePython3), instance.Platform))
 	addInclGlobal := dedupVFS(d.addInclGlobal, peerAddInclGlobal)
 	cFlagsGlobal := dedupARG(d.cFlagsGlobal, peerCFlagsGlobal)
 	cxxFlagsGlobal := dedupARG(d.cxxFlagsGlobal, peerCXXFlagsGlobal)

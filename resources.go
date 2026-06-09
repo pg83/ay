@@ -105,16 +105,6 @@ func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *Declar
 	case tokDeclareExternalHostResourcesBundleByJson:
 		// NAME file.json — read by_platform.<host>.uri.
 		name, jsonRel := stmt.Args[0], stmt.Args[1]
-
-		// The bare CLANG resource is the toolchain's default compiler; bind its
-		// content to the configured clang major version (host.ClangVer) instead of
-		// the version-independent clangNN.json the declaration names. Upstream's
-		// effective CLANG is clang${CLANG_VER} (here clang20), not the literal
-		// clang16.json the source declares.
-		if name == resourcePatternClangTool {
-			jsonRel = "clang" + host.ClangVer + ".json"
-		}
-
 		bundle := readResourceBundleJSON(fs, filepath.ToSlash(filepath.Join(modulePath, jsonRel)))
 
 		return []resourceDecl{selectHostResourceDecl(host, modulePath, name, bundle)}
@@ -198,30 +188,37 @@ func bindResourceGlobalVars(ctx *genCtx, instance ModuleInstance, d *moduleData,
 // field stays 0 when its resource is absent from the closure (the consuming emitter
 // then has no peer to take the tool from — caught at use, never silently defaulted).
 type moduleToolchain struct {
-	ClangRoot STR
-	CC        STR
-	CXX       STR
-	AR        STR
-	Objcopy   STR
-	Strip     STR
-	LLDRoot   STR
-	LLD       STR
-	Python3   STR
+	// ClangResource is the versioned clang resource the compiler/llvm tools come
+	// from (e.g. "CLANG20"), selected by the platform's ClangVer. Consumers pass it
+	// to withResources so they depend on that specific FETCH node — version-specific
+	// so several clang versions (CLANG16 for bitcode, CLANG20 to compile) coexist.
+	ClangResource STR
+	ClangRoot     STR
+	CC            STR
+	CXX           STR
+	AR            STR
+	Objcopy       STR
+	Strip         STR
+	LLDRoot       STR
+	LLD           STR
+	Python3       STR
 }
 
 // resolveModuleToolchain derives the tool paths from the module's resource-global
 // closure. Tool paths come from peers (build/platform/*), not ambient platform flags.
-func resolveModuleToolchain(globals []resourceDecl) moduleToolchain {
+func resolveModuleToolchain(globals []resourceDecl, clangVer string) moduleToolchain {
 	var tc moduleToolchain
+
+	// The compiler/llvm tools come from the version-specific CLANG<ver> resource
+	// (e.g. CLANG20), not the version-independent bare CLANG: $(B)/resources/CLANG20
+	// is the FETCH node's output dir, taken as a dep via withResources(tc.ClangResource).
+	clangRes := resourcePatternClangTool + clangVer
 
 	for _, decl := range globals {
 		switch decl.Name.String() {
-		case resourcePatternClangTool:
-			// $(B)/resources/CLANG — the FETCH node's output dir, consumed as a
-			// normal build input. The CC/AR/… node depends on that fetch node (via
-			// withResources -> attachResourceDeps), so the tool is materialized in
-			// the graph rather than resolved by an executor-side $(CLANG) mount.
-			root := Build("resources/" + resourcePatternClangTool).String()
+		case clangRes:
+			root := Build("resources/" + clangRes).String()
+			tc.ClangResource = internStr(clangRes)
 			tc.ClangRoot = internStr(root)
 			tc.CC = internStr(root + "/bin/clang")
 			tc.CXX = internStr(root + "/bin/clang++")

@@ -95,6 +95,13 @@ func normPath(s string) string {
 	// Fold our $(B)/resources/<NAME>/… toolchain paths back to the bare $(<NAME>)/…
 	// form upstream emits (the FETCH node that produces them is stripped separately).
 	if strings.Contains(s, "$(B)/resources/") {
+		// The toolchain compiler is our version-specific CLANG20 resource, but
+		// upstream INVOKES it through the version-independent bare $(CLANG). Map the
+		// tool paths (CLANG20/bin/…, CLANG20/lib) — note the trailing slash, so the
+		// bare CLANG20_RESOURCE_GLOBAL::$(B)/resources/CLANG20 declaration value is NOT
+		// caught here and keeps its versioned $(CLANG20) via the general fold below
+		// (upstream declares the resource global versioned, invokes the tool bare).
+		s = strings.ReplaceAll(s, "$(B)/resources/CLANG20/", "$(CLANG)/")
 		s = resourceMountFoldRe.ReplaceAllString(s, "$($1)")
 	}
 
