@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 )
 
 // cmdCasAnalyze handles `ay make cas <sub> …`. The only sub is `analyze`: it
@@ -50,52 +53,92 @@ func cmdCasAnalyze(args []string) int {
 // casAnalyze chunks every CAS file of at least minLen bytes; smaller files are
 // skipped and excluded from every stat (the counts are over accounted files only).
 func casAnalyze(casDir string, chunkAvg int, minLen int64) int {
-	seen := make(map[[32]byte]int64) // chunk content hash -> chunk size (dedup set)
+	type chunkInfo struct {
+		hash [32]byte
+		size int64
+	}
 
-	var files, totalBytes, totalChunks int64
+	fileCh := make(chan string, 256)
+	hashCh := make(chan chunkInfo, 1<<14)
 
-	Throw(filepath.WalkDir(casDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
+	var files atomic.Int64
 
-		if !d.Type().IsRegular() {
-			return nil
-		}
+	// Lister: one goroutine walks the tree and feeds the accounted files (regular,
+	// >= minLen) to the workers.
+	go func() {
+		defer close(fileCh)
 
-		if Throw2(d.Info()).Size() < minLen {
-			return nil
-		}
+		Try(func() {
+			Throw(filepath.WalkDir(casDir, func(path string, d os.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
 
-		data := Throw2(os.ReadFile(path))
-		files++
-		totalBytes += int64(len(data))
+				if !d.Type().IsRegular() || Throw2(d.Info()).Size() < minLen {
+					return nil
+				}
 
-		cdcChunks(data, chunkAvg, func(chunk []byte) {
-			totalChunks++
+				files.Add(1)
+				fileCh <- path
 
-			h := sha256.Sum256(chunk)
-
-			if _, ok := seen[h]; !ok {
-				seen[h] = int64(len(chunk))
-			}
+				return nil
+			}))
+		}).Catch(func(e *Exception) {
+			fmt.Fprintf(os.Stderr, "cas analyze: walk: %s\n", e.Error())
 		})
+	}()
 
-		return nil
-	}))
+	// Workers: N chunkers read a file, split it, hash each chunk, stream the hashes.
+	var wg sync.WaitGroup
+
+	for i := 0; i < runtime.NumCPU(); i++ {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			for path := range fileCh {
+				Try(func() {
+					data := Throw2(os.ReadFile(path))
+
+					cdcChunks(data, chunkAvg, func(chunk []byte) {
+						hashCh <- chunkInfo{hash: sha256.Sum256(chunk), size: int64(len(chunk))}
+					})
+				}).Catch(func(e *Exception) {
+					fmt.Fprintf(os.Stderr, "cas analyze: skip %s: %s\n", path, e.Error())
+				})
+			}
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(hashCh)
+	}()
+
+	// Main: sole owner of the dedup set; builds every stat from the hash stream
+	// (totalBytes is the sum of chunk sizes, i.e. the accounted files' total).
+	seen := make(map[[32]byte]struct{})
+
+	var totalBytes, totalChunks, uniqueBytes int64
+
+	for ci := range hashCh {
+		totalChunks++
+		totalBytes += ci.size
+
+		if _, ok := seen[ci.hash]; !ok {
+			seen[ci.hash] = struct{}{}
+			uniqueBytes += ci.size
+		}
+	}
 
 	if totalChunks == 0 {
-		fmt.Printf("cas analyze: %s — no files\n", casDir)
+		fmt.Printf("cas analyze: %s — no files >= min-len\n", casDir)
 
 		return 0
 	}
 
-	var uniqueBytes int64
-
-	for _, sz := range seen {
-		uniqueBytes += sz
-	}
-
+	filesN := files.Load()
 	uniqueChunks := int64(len(seen))
 
 	// A chunked store keeps the unique chunk bodies plus, per chunk occurrence, a
@@ -114,7 +157,7 @@ func casAnalyze(casDir string, chunkAvg int, minLen int64) int {
 	}
 
 	fmt.Printf("cas analyze: %s   (content-defined chunking, avg≈%d B, min-len %s)\n", casDir, chunkAvg, humanBytes(minLen))
-	fmt.Printf("  files            %d   (>= min-len)\n", files)
+	fmt.Printf("  files            %d   (>= min-len)\n", filesN)
 	fmt.Printf("  total size       %s   (whole-file CAS, already content-deduped)\n", humanBytes(totalBytes))
 	fmt.Printf("  chunks           %d   (avg %d B)\n", totalChunks, totalBytes/totalChunks)
 	fmt.Printf("  unique chunks    %d   (%.1f%% of chunks)\n", uniqueChunks, pct(uniqueChunks, totalChunks))
