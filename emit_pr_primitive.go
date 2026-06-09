@@ -146,6 +146,7 @@ func EmitPR(
 	}
 
 	node := &Node{
+		Platform:         instance.Platform,
 		Cmds:             []Cmd{cmd},
 		Env:              env,
 		Inputs:           inputs,
@@ -158,7 +159,7 @@ func EmitPR(
 	}
 
 	return prEmitResult{
-		Ref:    emit.Emit(bindNodePlatform(node, instance.Platform)),
+		Ref:    emit.Emit(node),
 		Inputs: append([]VFS(nil), inputs...),
 	}
 }

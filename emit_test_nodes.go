@@ -46,8 +46,9 @@ func emitTestRunNodes(ctxEmit Emitter, runEmit Emitter, p *Platform, info testSu
 func buildTestCtxNode(p *Platform) *Node {
 	cacheTrue := true
 
-	return bindNodePlatform(withResources(&Node{
-		Cache: &cacheTrue,
+	return withResources(&Node{
+		Platform: p,
+		Cache:    &cacheTrue,
 		Cmds: []Cmd{{
 			CmdArgs: []STR{
 				internStr(testYMakePython3),
@@ -67,7 +68,7 @@ func buildTestCtxNode(p *Platform) *Node {
 		Outputs:          []VFS{bldCommonTestContext},
 		Requirements:     Requirements{Network: "restricted"},
 		TargetProperties: TargetProperties{},
-	}, resourcePatternYMakePython3), p)
+	}, resourcePatternYMakePython3)
 }
 
 func buildUnittestNode(p *Platform, info testSuiteInfo, resourceGlobals []resourceDecl) *Node {
@@ -131,8 +132,9 @@ func buildUnittestNode(p *Platform, info testSuiteInfo, resourceGlobals []resour
 		argYaEndCommandFile.str(),
 	)
 
-	return bindNodePlatform(&Node{
-		Cache: &cacheFalse,
+	return &Node{
+		Platform: p,
+		Cache:    &cacheFalse,
 		Cmds: []Cmd{{
 			CmdArgs: cmdArgs,
 			Cwd:     internStr(testBuildRoot),
@@ -155,7 +157,7 @@ func buildUnittestNode(p *Platform, info testSuiteInfo, resourceGlobals []resour
 			HasRAMDisk: true,
 		},
 		TargetProperties: TargetProperties{ModuleLang: "cpp"},
-	}, p)
+	}
 }
 
 func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
@@ -234,8 +236,9 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 		inputs = append(inputs, Source(src))
 	}
 
-	return bindNodePlatform(&Node{
-		Cache: &cacheTrue,
+	return &Node{
+		Platform: p,
+		Cache:    &cacheTrue,
 		Cmds: []Cmd{{
 			CmdArgs: cmdArgs,
 			Cwd:     internStr(testBuildRoot),
@@ -261,7 +264,7 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 			HasRAMDisk: true,
 		},
 		TargetProperties: TargetProperties{ModuleLang: "unknown"},
-	}, p)
+	}
 }
 
 func testEnv(_ *Platform, testName string) EnvVars {

@@ -514,6 +514,7 @@ func EmitPYRun(
 	}
 
 	node := &Node{
+		Platform:         instance.Platform,
 		Cmds:             []Cmd{cmd},
 		Env:              env,
 		Inputs:           inputs,
@@ -525,7 +526,7 @@ func EmitPYRun(
 	}
 
 	return prEmitResult{
-		Ref:    emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform)),
+		Ref:    emit.Emit(withResources(node, resourcePatternYMakePython3)),
 		Inputs: append([]VFS(nil), inputs...),
 	}
 }

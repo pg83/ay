@@ -54,16 +54,6 @@ func nodeHasHostTag(tags []STR) bool {
 	return false
 }
 
-func bindNodePlatform(n *Node, p *Platform) *Node {
-	if n == nil || p == nil {
-		return n
-	}
-
-	n.Platform = p
-
-	return n
-}
-
 // nodeTags is a node's effective tag list for the graph output and UID: its own
 // Tags when set (the special tagless test/lint nodes carry their Platform.TestTags
 // there), otherwise the platform's Tags.

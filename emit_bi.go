@@ -55,7 +55,8 @@ func EmitBI(
 
 	cacheFalse := false
 	node := &Node{
-		Cache: &cacheFalse,
+		Platform: instance.Platform,
+		Cache:    &cacheFalse,
 		Cmds: []Cmd{
 			{CmdArgs: cmd0Args, Env: env},
 			{CmdArgs: cmd1Args, Env: env},
@@ -70,7 +71,7 @@ func EmitBI(
 		DepRefs:          []NodeRef{},
 	}
 
-	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer), instance.Platform))
+	return emit.Emit(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer))
 }
 
 func biFlagsForInstance(targetP *Platform) []STR {

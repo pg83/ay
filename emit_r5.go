@@ -48,6 +48,7 @@ func EmitR5(
 	}
 
 	node := &Node{
+		Platform:         instance.Platform,
 		Cmds:             []Cmd{cmd0, cmd1},
 		Env:              env,
 		Inputs:           inputs,
@@ -59,5 +60,5 @@ func EmitR5(
 		ForeignDepRefs:   depRefs,
 	}
 
-	return emit.Emit(bindNodePlatform(node, instance.Platform)), tmpVFS, cppVFS
+	return emit.Emit(node), tmpVFS, cppVFS
 }

@@ -11,6 +11,7 @@ func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 	allInputs = append(allInputs, in.IncludeInputs...)
 
 	node := &Node{
+		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
@@ -26,5 +27,5 @@ func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 	}
 
-	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternClangTool+instance.Platform.ClangVer), instance.Platform)), outVFS
+	return emit.Emit(withResources(node, resourcePatternClangTool+instance.Platform.ClangVer)), outVFS
 }

@@ -52,6 +52,7 @@ func EmitEN(
 	}
 
 	node := &Node{
+		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
@@ -73,5 +74,5 @@ func EmitEN(
 		node.TargetProperties.ModuleTag = *moduleTag
 	}
 
-	return emit.Emit(bindNodePlatform(node, instance.Platform)), outputs
+	return emit.Emit(node), outputs
 }

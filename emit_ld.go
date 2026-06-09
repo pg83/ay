@@ -151,6 +151,7 @@ func EmitLD(
 	}
 
 	n := &Node{
+		Platform:         instance.Platform,
 		Cmds:             cmds,
 		Env:              envFull,
 		Inputs:           inputs,
@@ -165,7 +166,7 @@ func EmitLD(
 		n.TargetProperties.ModuleTag = programModuleTag
 	}
 
-	return emit.Emit(bindNodePlatform(withResources(n, resourcePatternClangTool+instance.Platform.ClangVer, resourcePatternLLDRoot, resourcePatternYMakePython3), instance.Platform))
+	return emit.Emit(withResources(n, resourcePatternClangTool+instance.Platform.ClangVer, resourcePatternLLDRoot, resourcePatternYMakePython3))
 }
 
 func LDOutputPath(instance ModuleInstance, binaryName string) VFS {
@@ -223,6 +224,7 @@ func lastPathComponent(p string) string {
 func emitVCSNode(emit Emitter, host *Platform) NodeRef {
 	output := Build("vcs.json")
 	node := &Node{
+		Platform: host,
 		Cmds: []Cmd{{CmdArgs: []STR{
 			internStr(currentYatoolPath()),
 			argFetch.str(),
@@ -240,7 +242,7 @@ func emitVCSNode(emit Emitter, host *Platform) NodeRef {
 	node.UID = resourceFetchUID("base64:vcs.json:e30=", output.String())
 	node.SelfUID = node.UID
 
-	return emit.Emit(bindNodePlatform(node, host))
+	return emit.Emit(node)
 }
 
 func composeLDCmdVcsInfo(tc moduleToolchain, vcsCPath string) []STR {

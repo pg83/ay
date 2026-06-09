@@ -278,6 +278,7 @@ func EmitPB(
 	}
 
 	node := &Node{
+		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
@@ -295,7 +296,7 @@ func EmitPB(
 		ForeignDepRefs:   foreignDepRefs,
 	}
 
-	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform))
+	return emit.Emit(withResources(node, resourcePatternYMakePython3))
 }
 
 func containsVFS(xs []VFS, want VFS) bool {

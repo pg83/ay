@@ -144,6 +144,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	}
 
 	n := &Node{
+		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{CmdArgs: cmd0, Env: envVcsOnly},
 			{CmdArgs: cmd1, Env: envFull},
@@ -164,7 +165,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		n.ForeignDepRefs = []NodeRef{fixElfRef}
 	}
 
-	ref := ctx.emit.Emit(bindNodePlatform(withResources(n, resourcePatternClangTool+instance.Platform.ClangVer, resourcePatternLLDRoot, resourcePatternYMakePython3), instance.Platform))
+	ref := ctx.emit.Emit(withResources(n, resourcePatternClangTool+instance.Platform.ClangVer, resourcePatternLLDRoot, resourcePatternYMakePython3))
 	addInclGlobal := dedupVFS(d.addInclGlobal, peerAddInclGlobal)
 	cFlagsGlobal := dedupARG(d.cFlagsGlobal, peerCFlagsGlobal)
 	cxxFlagsGlobal := dedupARG(d.cxxFlagsGlobal, peerCXXFlagsGlobal)

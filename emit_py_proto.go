@@ -237,6 +237,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	}
 
 	pyPBNode := &Node{
+		Platform:         instance.Platform,
 		Cmds:             []Cmd{{CmdArgs: cmdArgs, Cwd: strS, Env: EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}}},
 		Env:              EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}},
 		Inputs:           inputs,
@@ -251,7 +252,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		pyPBNode.ForeignDepRefs = toolRefs
 	}
 
-	pyPBRef := ctx.emit.Emit(bindNodePlatform(withResources(pyPBNode, resourcePatternYMakePython3), instance.Platform))
+	pyPBRef := ctx.emit.Emit(withResources(pyPBNode, resourcePatternYMakePython3))
 	pyYapyc := []VFS{pyOut}
 
 	if d.grpc {
@@ -319,6 +320,7 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 		}
 
 		node := &Node{
+			Platform:         instance.Platform,
 			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}, {Name: "PYTHONHASHSEED", Value: "0"}}}},
 			Env:              EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}, {Name: "PYTHONHASHSEED", Value: "0"}},
 			Inputs:           nodeInputs,
@@ -333,7 +335,7 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 			node.ForeignDepRefs = toolRefs
 		}
 
-		res.Refs = append(res.Refs, ctx.emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform)))
+		res.Refs = append(res.Refs, ctx.emit.Emit(withResources(node, resourcePatternYMakePython3)))
 		res.Outputs = append(res.Outputs, out)
 	}
 
@@ -508,7 +510,8 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		inputs = append(inputs, rescompilerBinVFS)
 		inputs = append(inputs, auxClosure...)
 		inputs = dedupVFS(inputs)
-		ref := ctx.emit.Emit(bindNodePlatform(&Node{
+		ref := ctx.emit.Emit(&Node{
+			Platform:         instance.Platform,
 			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: env}},
 			Env:              env,
 			Inputs:           inputs,
@@ -517,7 +520,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: "py3_proto"},
 			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 			DepRefs:          deps,
-		}, instance.Platform))
+		})
 
 		ccIn := ModuleCCInputs{
 			TC:                   d.tc,

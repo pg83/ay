@@ -196,7 +196,8 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 			chDeps = append(chDeps, extras...)
 		}
 
-		ref := ctx.emit.Emit(bindNodePlatform(&Node{
+		ref := ctx.emit.Emit(&Node{
+			Platform:         instance.Platform,
 			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: env}},
 			Env:              env,
 			Inputs:           inputs,
@@ -205,7 +206,7 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 			TargetProperties: TargetProperties{ModuleDir: instance.Path},
 			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 			DepRefs:          chDeps,
-		}, instance.Platform))
+		})
 		bindGeneratedOutput(ctx, instance, aux, ref)
 		res.Refs = append(res.Refs, ref)
 		res.Outputs = append(res.Outputs, aux)

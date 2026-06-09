@@ -69,6 +69,7 @@ func emitARNode(
 	depRefs = append(depRefs, peerArchiveRefs...)
 
 	n := &Node{
+		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
@@ -84,5 +85,5 @@ func emitARNode(
 		DepRefs:          depRefs,
 	}
 
-	return emit.Emit(bindNodePlatform(withResources(n, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer), instance.Platform))
+	return emit.Emit(withResources(n, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer))
 }

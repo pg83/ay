@@ -17,6 +17,7 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs []VFS, outputs []
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 	node := &Node{
+		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
@@ -41,7 +42,7 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs []VFS, outputs []
 		DepRefs:      depRefs,
 	}
 
-	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3, resourcePatternJDK17), instance.Platform))
+	return emit.Emit(withResources(node, resourcePatternYMakePython3, resourcePatternJDK17))
 }
 
 func EmitJV(

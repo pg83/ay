@@ -125,6 +125,7 @@ func EmitEV(
 	}
 
 	node := &Node{
+		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
@@ -142,5 +143,5 @@ func EmitEV(
 		ForeignDepRefs:   foreignDepRefs,
 	}
 
-	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform))
+	return emit.Emit(withResources(node, resourcePatternYMakePython3))
 }
