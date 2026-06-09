@@ -125,6 +125,7 @@ type IncludeScanner struct {
 	subgraphHits           uint64
 	subgraphMisses         uint64
 	subgraphTainted        uint64
+	subgraphSubsumed       uint64
 	searchTierHits         uint64
 	searchTierMisses       uint64
 	resolveSearchPathCalls uint64
@@ -207,6 +208,7 @@ type scannerPerfStats struct {
 	subgraphHits           uint64
 	subgraphMisses         uint64
 	subgraphTainted        uint64
+	subgraphSubsumed       uint64
 	searchTierHits         uint64
 	searchTierMisses       uint64
 	resolveSearchPathCalls uint64
@@ -417,6 +419,7 @@ func (s *IncludeScanner) perfStats() scannerPerfStats {
 		subgraphHits:           s.subgraphHits,
 		subgraphMisses:         s.subgraphMisses,
 		subgraphTainted:        s.subgraphTainted,
+		subgraphSubsumed:       s.subgraphSubsumed,
 		searchTierHits:         s.searchTierHits,
 		searchTierMisses:       s.searchTierMisses,
 		resolveSearchPathCalls: s.resolveSearchPathCalls,
@@ -481,6 +484,10 @@ func (sc *scanCtx) dfs(abs VFS) {
 
 	sc.forEachResolvedChildID(abs, func(ch VFS) {
 		if ch == abs {
+			return
+		}
+
+		if sc.windowSubsumed(ch) {
 			return
 		}
 
@@ -562,6 +569,31 @@ func (sc *scanCtx) closureOf(abs VFS) []VFS {
 
 func (s *IncludeScanner) closureWindow(ref closureRef) []VFS {
 	return s.subgraphClosures[ref]
+}
+
+// windowSubsumed reports whether ch's whole cached window is already inside the
+// closure block under construction, letting the splice loops (dfs pass 2,
+// strongconnect) skip it after one membership probe instead of re-checking every
+// window element. Windows are transitively closed, so ch arriving via an earlier
+// window splice means that window contained closure(ch) entirely. The leafEver
+// guard keeps this sound: a ClosureLeaf rides in windows as a bare, non-expanded
+// member — its presence does NOT imply its own window is present — so any VFS
+// ever registered as a leaf never short-circuits. A nil codegen registry has no
+// leaves at all, so membership alone suffices there.
+func (sc *scanCtx) windowSubsumed(ch VFS) bool {
+	s := sc.scanner
+
+	if !s.tjc.closure.has(ch) {
+		return false
+	}
+
+	if s.codegen != nil && s.codegen.IsLeafEver(ch) {
+		return false
+	}
+
+	s.subgraphSubsumed++
+
+	return true
 }
 
 // scanCtx implements closureSink (tarjan_ctx.go) so tarjanCtx.strongconnect can

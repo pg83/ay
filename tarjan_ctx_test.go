@@ -34,6 +34,12 @@ func (m *mockSink) cachedWindow(v VFS) ([]VFS, bool) {
 	return w, ok
 }
 
+// windowSubsumed always declines the skip: the mock exercises the SCC splice
+// mechanics themselves; the subsumption fast path is the scanner's concern.
+func (m *mockSink) windowSubsumed(VFS) bool {
+	return false
+}
+
 func (m *mockSink) emitClosure(members []VFS, fill func(block []VFS) int) {
 	block := make([]VFS, 1<<12)
 	k := fill(block)

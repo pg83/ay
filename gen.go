@@ -389,7 +389,7 @@ func reportPerfStats(ctx *genCtx, parsers *includeParserManager, targetScanner, 
 	reportScanner := func(label string, scanner *IncludeScanner) {
 		scanStats := scanner.perfStats()
 		ctxStats := ctx.perfScanCtxStats(scanner)
-		fmt.Fprintf(os.Stderr, "perf: scanner %s closureEntries=%d closureWindows=%d childrenEntries=%d walkClosure=%d closureHits=%d closureMisses=%d cyclicSCCs=%d searchTierHits=%d searchTierMisses=%d resolveCalls=%d\n",
+		fmt.Fprintf(os.Stderr, "perf: scanner %s closureEntries=%d closureWindows=%d childrenEntries=%d walkClosure=%d closureHits=%d closureMisses=%d cyclicSCCs=%d closureSubsumed=%d searchTierHits=%d searchTierMisses=%d resolveCalls=%d\n",
 			label,
 			ctxStats.subgraphEntries,
 			ctxStats.closureWindows,
@@ -398,6 +398,7 @@ func reportPerfStats(ctx *genCtx, parsers *includeParserManager, targetScanner, 
 			scanStats.subgraphHits,
 			scanStats.subgraphMisses,
 			scanStats.subgraphTainted,
+			scanStats.subgraphSubsumed,
 			scanStats.searchTierHits,
 			scanStats.searchTierMisses,
 			scanStats.resolveSearchPathCalls,

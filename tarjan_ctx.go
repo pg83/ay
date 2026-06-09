@@ -124,6 +124,10 @@ type closureSink interface {
 	// into it and returns the count), then commits + stores it and caches every
 	// member against the resulting closure ref.
 	emitClosure(members []VFS, fill func(block []VFS) int)
+	// windowSubsumed reports whether v's whole window is already inside the
+	// closure block being filled, so a splice loop can skip it wholesale — see
+	// scanCtx.windowSubsumed.
+	windowSubsumed(v VFS) bool
 }
 
 // runSCC resets the per-traversal Tarjan state (scratch epoch, stack, index
@@ -199,6 +203,10 @@ func (tc *tarjanCtx) strongconnect(g closureSink, v VFS) (hits uint64) {
 		for _, u := range members {
 			g.forEachChild(u, func(ch VFS) {
 				if tc.scratch.onStackHas(ch) {
+					return
+				}
+
+				if g.windowSubsumed(ch) {
 					return
 				}
 
