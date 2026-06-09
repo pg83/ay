@@ -777,9 +777,14 @@ func (ex *executor) storeOutputs(n *Node, tmp string) {
 	uidPath := ex.uidPath(n.UID)
 	Throw(os.MkdirAll(filepath.Dir(uidPath), 0o755))
 
-	tmpPath := uidPath + ".tmp"
-	Throw(os.WriteFile(tmpPath, Throw2(json.Marshal(meta)), 0o644))
-	Throw(os.Rename(tmpPath, uidPath))
+	// Atomic publish: write to a UNIQUE temp in the same dir, then rename over the
+	// final path (rename is atomic on one fs). CreateTemp's unique name means two
+	// writers — even another ay process building the same node — never share the
+	// temp, so the rename target is always a fully-written manifest.
+	tf := Throw2(os.CreateTemp(filepath.Dir(uidPath), "."+n.UID.String()+".*"))
+	Throw2(tf.Write(Throw2(json.Marshal(meta))))
+	Throw(tf.Close())
+	Throw(os.Rename(tf.Name(), uidPath))
 }
 
 // storePath records src (a regular file, a symlink, or a directory tree) into meta,
