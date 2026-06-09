@@ -26,27 +26,18 @@ func TestPrebuiltToolchainFlags_CarryConfigNotToolPaths(t *testing.T) {
 	}
 }
 
-func TestGraphConfForToolchainFlags_KeepsOnlyVCSStub(t *testing.T) {
-	// Toolchain resources (CLANG*, LLD_ROOT, YMAKE_PYTHON3, …) are now declared by
-	// the build/platform/* RESOURCES_LIBRARY modules and fetched via emitResourceFetch;
-	// graphConfForToolchainFlags carries only the inline VCS stub no module declares.
+func TestGraphConfForToolchainFlags_NoResources(t *testing.T) {
+	// Every resource is now a real graph node: toolchain bundles (CLANG*, LLD_ROOT,
+	// YMAKE_PYTHON3) via emitResourceFetch, vcs.json via emitVCSNode. Nothing is
+	// resolved out-of-band, so graphConfForToolchainFlags carries no resources and the
+	// emitted graph has no conf section.
 	conf := graphConfForToolchainFlags()
 	if conf == nil {
 		t.Fatal("graphConfForToolchainFlags returned nil")
 	}
 
-	var gotPatterns []string
-	for _, r := range conf.Resources {
-		gotPatterns = append(gotPatterns, r.Pattern)
-	}
-
-	if !reflect.DeepEqual(gotPatterns, []string{"VCS"}) {
-		t.Fatalf("resource patterns = %#v, want [VCS]", gotPatterns)
-	}
-
-	last := conf.Resources[len(conf.Resources)-1]
-	if last.Name != "vcs" || last.Resource != "base64:vcs.json:e30=" {
-		t.Fatalf("vcs stub = %#v, want name=vcs resource=base64:vcs.json:e30=", last)
+	if len(conf.Resources) != 0 {
+		t.Fatalf("resources = %#v, want none", conf.Resources)
 	}
 }
 

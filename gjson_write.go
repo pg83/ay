@@ -40,10 +40,9 @@ var htmlSafeNoEscape = func() [128]bool {
 func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 	buf := make([]byte, 0, 1<<20)
 
-	buf = append(buf, `{"conf":`...)
-	buf = appendGraphConf(buf, g.Conf)
-
-	buf = append(buf, `,"graph":[`...)
+	// No "conf" section: every resource (toolchain + the inline vcs.json) is a real
+	// graph node, so the graph is self-contained — nothing is resolved out-of-band.
+	buf = append(buf, `{"graph":[`...)
 
 	for i, node := range g.Graph {
 		if i > 0 {
@@ -265,98 +264,6 @@ func appendBuildOnlyVFSSlice(buf []byte, vs []VFS) []byte {
 
 		first = false
 		buf = appendVFS(buf, v)
-	}
-
-	return append(buf, ']')
-}
-
-func appendGraphConf(buf []byte, conf map[string]interface{}) []byte {
-	if len(conf) == 0 {
-		return append(buf, '{', '}')
-	}
-
-	resourcesAny, ok := conf["resources"]
-
-	if !ok || len(conf) != 1 {
-		ThrowFmt("writeGraph: unsupported conf shape")
-	}
-
-	resources, ok := resourcesAny.([]graphConfResource)
-
-	if !ok {
-		ThrowFmt("writeGraph: unsupported conf.resources type %T", resourcesAny)
-	}
-
-	buf = append(buf, `{"resources":`...)
-	buf = appendGraphConfResources(buf, resources)
-
-	return append(buf, '}')
-}
-
-func appendGraphConfResources(buf []byte, resources []graphConfResource) []byte {
-	buf = append(buf, '[')
-
-	for i, r := range resources {
-		if i > 0 {
-			buf = append(buf, ',')
-		}
-
-		buf = appendGraphConfResource(buf, r)
-	}
-
-	return append(buf, ']')
-}
-
-func appendGraphConfResource(buf []byte, r graphConfResource) []byte {
-	buf = append(buf, '{')
-
-	first := true
-	sep := func() {
-		if !first {
-			buf = append(buf, ',')
-		}
-
-		first = false
-	}
-
-	if r.Name != "" {
-		sep()
-		buf = append(buf, `"name":`...)
-		buf = appendString(buf, r.Name)
-	}
-
-	sep()
-	buf = append(buf, `"pattern":`...)
-	buf = appendString(buf, r.Pattern)
-
-	if r.Resource != "" {
-		sep()
-		buf = append(buf, `"resource":`...)
-		buf = appendString(buf, r.Resource)
-	}
-
-	if len(r.Resources) != 0 {
-		sep()
-		buf = append(buf, `"resources":`...)
-		buf = appendGraphConfResourceURIs(buf, r.Resources)
-	}
-
-	return append(buf, '}')
-}
-
-func appendGraphConfResourceURIs(buf []byte, resources []graphConfResourceURI) []byte {
-	buf = append(buf, '[')
-
-	for i, r := range resources {
-		if i > 0 {
-			buf = append(buf, ',')
-		}
-
-		buf = append(buf, `{"platform":`...)
-		buf = appendString(buf, r.Platform)
-		buf = append(buf, `,"resource":`...)
-		buf = appendString(buf, r.Resource)
-		buf = append(buf, '}')
 	}
 
 	return append(buf, ']')

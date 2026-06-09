@@ -19,8 +19,8 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 
 	g := testGen(fs, "mainprog")
 
-	if len(g.Graph) != 4 {
-		t.Fatalf("Gen produced %d nodes, want 4 (2 CC + 1 AR + 1 LD)", len(g.Graph))
+	if len(g.Graph) != 5 {
+		t.Fatalf("Gen produced %d nodes, want 5 (2 CC + 1 AR + 1 LD + 1 vcs.json)", len(g.Graph))
 	}
 
 	if len(g.Result) != 1 {
@@ -199,8 +199,8 @@ func TestGen_SyntheticPROGRAM_EmitsLD(t *testing.T) {
 
 	g := testGen(fs, "lone")
 
-	if len(g.Graph) != 2 {
-		t.Fatalf("Gen produced %d nodes, want 2 (1 CC + 1 LD)", len(g.Graph))
+	if len(g.Graph) != 3 {
+		t.Fatalf("Gen produced %d nodes, want 3 (1 CC + 1 LD + 1 vcs.json)", len(g.Graph))
 	}
 
 	if len(g.Result) != 1 {
@@ -365,8 +365,8 @@ END()
 		t.Fatalf("expected both zlib and alib AR nodes; zlibIdx=%d alibIdx=%d", zlibIdx, alibIdx)
 	}
 
-	if len(g.Graph) != 6 {
-		t.Errorf("expected 6 nodes (3 CC + 2 AR + 1 LD), got %d", len(g.Graph))
+	if len(g.Graph) != 7 {
+		t.Errorf("expected 7 nodes (3 CC + 2 AR + 1 LD + 1 vcs.json), got %d", len(g.Graph))
 	}
 }
 
@@ -646,16 +646,16 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 		t.Errorf("CC count = %d, want 2 (host ragel6/main.cpp + target generated parser.rl6.cpp)", counts["CC"])
 	}
 
-	if hostNodes != 2 {
-		t.Errorf("host nodes = %d, want 2 (host CC + host LD)", hostNodes)
+	if hostNodes != 3 {
+		t.Errorf("host nodes = %d, want 3 (host CC + host LD + vcs.json)", hostNodes)
 	}
 
 	if platforms[string(PlatformDefaultLinuxAArch64)] != 3 {
 		t.Errorf("target nodes = %d, want 3", platforms[string(PlatformDefaultLinuxAArch64)])
 	}
 
-	if platforms[string(PlatformDefaultLinuxX8664)] != 2 {
-		t.Errorf("host nodes (by platform) = %d, want 2", platforms[string(PlatformDefaultLinuxX8664)])
+	if platforms[string(PlatformDefaultLinuxX8664)] != 3 {
+		t.Errorf("host nodes (by platform) = %d, want 3 (vcs.json is host-bound)", platforms[string(PlatformDefaultLinuxX8664)])
 	}
 
 	var (

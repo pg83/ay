@@ -95,6 +95,13 @@ func cmdDumpNormalize(args []string) int {
 				out0 = normPath(outs[0])
 			}
 
+			// Our inline vcs.json producer ($(B)/vcs.json, folded to $(VCS)/vcs.json by
+			// normPath) has no upstream counterpart — upstream mounts $(VCS). Strip it
+			// like a FETCH node: drop the node and the build-order edges into it.
+			if out0 == "$(VCS)/vcs.json" {
+				r.isFetch = true
+			}
+
 			if refGraph {
 				r.outputs = make([]string, 0, len(outs))
 

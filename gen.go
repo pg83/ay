@@ -525,7 +525,10 @@ func mergeGeneratedFirstClaims(scanners ...*IncludeScanner) map[VFS]string {
 
 func GenDumpGraphWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), resources *resourceFetchPlan, testMode bool) *Graph {
 	emitter := NewBufferedEmitter()
-	runGenIntoWithResources(fs, targetDir, hostP, targetP, emitter, onWarn, resources, testMode, false)
+	// -G must emit the same graph that gets executed: materialize resource FETCH
+	// nodes so the toolchain (CLANG, …) is a real dependency, not an executor-side
+	// mount. dump normalize folds these back out for the byte-exact comparison.
+	runGenIntoWithResources(fs, targetDir, hostP, targetP, emitter, onWarn, resources, testMode, true)
 
 	return finalizeDumpGraph(emitter)
 }

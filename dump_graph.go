@@ -8,7 +8,6 @@ const nodeRefDropped = ^NodeRef(0)
 func finalizeDumpGraph(e *BufferedEmitter) *Graph {
 	if e == nil {
 		return &Graph{
-			Conf:   map[string]interface{}{},
 			Inputs: map[string]interface{}{},
 			Graph:  []*Node{},
 			Result: []UID{},
@@ -80,9 +79,9 @@ func dumpGraphDropNodeRefs(nodes []*Node, incoming []int, results map[NodeRef]st
 		}
 
 		switch {
-		case isDumpGraphResourceFetchNode(nodes[nodeID]):
-			drop[refID] = struct{}{}
-			queue = append(queue, nodeID)
+		// Resource FETCH nodes (CLANG, …) are NOT dropped here: -G must emit the
+		// same graph that gets executed. They are folded out later, only in
+		// `dump normalize`, for the byte-exact comparison against upstream.
 		case isDumpGraphStandaloneLLVMPRNode(nodes[nodeID], nodeID, incoming):
 			drop[refID] = struct{}{}
 			queue = append(queue, nodeID)

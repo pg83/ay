@@ -232,7 +232,6 @@ func cmdMake(args []string) int {
 		if mf.dumpGraph {
 			for _, target := range mf.targets {
 				g := GenDumpGraphWithResources(fs, target, hostP, targetP, onWarn, resourceFetches, mf.testLevel > 0)
-				applyGraphConf(g, conf)
 				writeGraph("-", g, !mf.sandboxing)
 			}
 		} else {

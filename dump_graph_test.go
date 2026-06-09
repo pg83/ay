@@ -61,7 +61,9 @@ func TestFinalizeDumpGraph_StripsOnlyTicketScaffolding(t *testing.T) {
 	if want := []string{
 		"bin/root",
 		"obj/consumer.o",
+		"resources/YMAKE_PYTHON3",
 		"contrib/libs/llvm16/include/llvm/IR/IntrinsicsX86.h",
+		"resources/CLANG",
 		"tool-cache/CLANG",
 		"contrib/libs/llvm16/include/generated.cpp",
 		"other/module/generated.inc",
@@ -79,11 +81,19 @@ func TestFinalizeDumpGraph_StripsOnlyTicketScaffolding(t *testing.T) {
 		t.Fatal("llvm referenced node missing after finalizeDumpGraph")
 	}
 
-	if !reflect.DeepEqual(graphDeps(got, consumerNode), []UID{llvmNode.UID}) {
-		t.Fatalf("consumer deps = %v, want [%s]", graphDeps(got, consumerNode), llvmNode.UID)
+	pythonNode := findGraphNodeByOutput(got.Graph, "resources/YMAKE_PYTHON3")
+	if pythonNode == nil {
+		t.Fatal("python fetch node missing after finalizeDumpGraph")
 	}
-	if len(consumerNode.ForeignDepRefs) != 0 {
-		t.Fatalf("consumer foreign_deps = %v, want none after fetch trim", graphForeignDeps(got, consumerNode))
+
+	// Resource FETCH nodes are no longer stripped from -G (the -G graph must equal the
+	// executed graph; they are folded out later in `dump normalize`). So the consumer
+	// keeps its dep + foreign-dep on the python fetch node alongside the llvm reference.
+	if !reflect.DeepEqual(graphDeps(got, consumerNode), []UID{pythonNode.UID, llvmNode.UID}) {
+		t.Fatalf("consumer deps = %v, want [%s %s]", graphDeps(got, consumerNode), pythonNode.UID, llvmNode.UID)
+	}
+	if !reflect.DeepEqual(graphForeignDeps(got, consumerNode), []UID{pythonNode.UID}) {
+		t.Fatalf("consumer foreign_deps = %v, want [%s]", graphForeignDeps(got, consumerNode), pythonNode.UID)
 	}
 
 	assertUIDMatchesNode(t, got, consumerNode)

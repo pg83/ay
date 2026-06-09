@@ -33,6 +33,11 @@ func emitResourceFetch(ctx *genCtx, decl resourceDecl) NodeRef {
 		TargetProperties: TargetProperties{ModuleDir: "build/resources"},
 	}
 
+	// Stable, command-independent uid (hash of URI + output), set before emit so the
+	// finalizer keeps it instead of hashing the binary-path-bearing command.
+	node.UID = resourceFetchUID(decl.URI.String(), output.String())
+	node.SelfUID = node.UID
+
 	ref := ctx.emit.Emit(bindNodePlatform(node, ctx.host))
 	ctx.fetchRefs[name] = ref
 
