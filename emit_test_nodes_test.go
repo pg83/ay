@@ -351,7 +351,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 	addToolchainPeers(files)
 	fs := newMemFS(files)
 
-	g := genWithResources(fs, "util/ut", host, p, func(Warn) {}, true, true)
+	g := genWithResources(fs, "util/ut", host, p, func(Warn) {}, true)
 	if len(g.Result) != 3 {
 		t.Fatalf("result len = %d, want 3", len(g.Result))
 	}

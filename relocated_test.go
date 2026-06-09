@@ -136,5 +136,5 @@ func EmitAR(
 }
 
 func Gen(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn)) *Graph {
-	return genWithResources(fs, targetDir, hostP, targetP, onWarn, false, true)
+	return genWithResources(fs, targetDir, hostP, targetP, onWarn, false)
 }

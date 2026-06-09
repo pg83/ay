@@ -12,7 +12,7 @@ func emitTestCompileGraph(t *testing.T, host, target *Platform) *Graph {
 	// (as genResourcesLibrary/emitResourceFetch would) into the shared fetchRefs the
 	// emitter consults for consumers' $(CLANG) deps.
 	fetchRefs := map[string]NodeRef{}
-	execResourceEmit := resourceGraphEmitter(host, execEmit, true, nil, fetchRefs)
+	execResourceEmit := newResourceAwareEmitter(host, execEmit, nil, fetchRefs)
 	fetchRefs[resourcePatternClangTool] = execResourceEmit.Emit(bindNodePlatform(&Node{
 		Cmds:    []Cmd{{CmdArgs: appendInternStrs(nil, []string{"ay", "fetch", "$(B)", "$(S)", "sbr:clang", "resources/CLANG"})}},
 		KV:      KV{P: pkFETCH, PC: pcYellow, ShowOut: "yes"},

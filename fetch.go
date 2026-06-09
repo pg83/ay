@@ -50,14 +50,6 @@ func newResourceAwareEmitter(host *Platform, inner Emitter, scripts scriptDeps, 
 	}
 }
 
-func resourceGraphEmitter(host *Platform, inner Emitter, materializeFetchNodes bool, scripts scriptDeps, fetchRefs map[string]NodeRef) Emitter {
-	if !materializeFetchNodes {
-		return inner
-	}
-
-	return newResourceAwareEmitter(host, inner, scripts, fetchRefs)
-}
-
 func (e *resourceAwareEmitter) Emit(n *Node) NodeRef {
 	e.attachResourceDeps(n)
 
