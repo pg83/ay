@@ -1,7 +1,5 @@
 package main
 
-import "strings"
-
 // nodeRefDropped marks an old node id that was pruned (no kept remapping).
 const nodeRefDropped = ^NodeRef(0)
 
@@ -99,20 +97,6 @@ func dumpGraphDropNodeRefs(nodes []*Node, incoming []int, results map[NodeRef]st
 	}
 
 	return drop
-}
-
-func isDumpGraphResourceFetchNode(node *Node) bool {
-	if dumpGraphNodeKind(node) != "FETCH" || len(node.Outputs) == 0 {
-		return false
-	}
-
-	for _, out := range node.Outputs {
-		if !out.IsBuild() || !strings.HasPrefix(out.Rel(), "resources/") {
-			return false
-		}
-	}
-
-	return true
 }
 
 func isDumpGraphStandaloneLLVMPRNode(node *Node, nodeID int, incoming []int) bool {
