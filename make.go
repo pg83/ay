@@ -243,7 +243,7 @@ func cmdMake(args []string) int {
 		return 0
 	}
 
-	ex := newExecutor(mf.srcRoot, mf.bldRoot, mf.threads, mf.keepGoing, mf.ninja, mf.cmdPrefixes)
+	ex := newExecutor(mf.srcRoot, mf.bldRoot, mf.threads, mf.keepGoing, mf.ninja, mf.sandboxing, mf.cmdPrefixes)
 
 	go ex.eventLoop()
 
@@ -314,6 +314,11 @@ type executor struct {
 	// ninja selects per-line progress output (each status on its own line).
 	// Default (false) repaints a single status line in place (\x1b[2K\r).
 	ninja bool
+	// sandboxing runs each node hermetically: its workspace X gets X/s + X/b, the
+	// declared $(S) inputs are symlinked into X/s (and $(S) mounts to X/s), while the
+	// dep outputs land in X/b as usual ($(B) mounts to X/b). A command that reads an
+	// undeclared source then fails — the input set is exactly what the graph declares.
+	sandboxing bool
 
 	mu      sync.Mutex
 	byUID   map[UID]*nodeFuture
@@ -334,13 +339,14 @@ type nodeFuture struct {
 	err  *Exception
 }
 
-func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, ninja bool, cmdPrefixes []cmdPrefix) *executor {
+func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, ninja bool, sandboxing bool, cmdPrefixes []cmdPrefix) *executor {
 	return &executor{
 		srcRoot:     srcRoot,
 		bldRoot:     bldRoot,
 		sema:        make(chan struct{}, threads),
 		keepGoing:   keepGoing,
 		ninja:       ninja,
+		sandboxing:  sandboxing,
 		cmdPrefixes: cmdPrefixes,
 		byUID:       make(map[UID]*nodeFuture, 8192),
 		events:      make(chan func(), 4096),
@@ -488,15 +494,29 @@ func (ex *executor) execute(f *nodeFuture) {
 	_ = forceRemoveAll(tmp)
 	defer forceRemoveAll(tmp)
 
+	// srcMount/bldMount are what $(S)/$(B) resolve to for this node. Without
+	// sandboxing $(S) is the whole source root and $(B) is the workspace itself.
+	// With sandboxing $(S) is X/s (only the declared source inputs, symlinked in) and
+	// $(B) is X/b (the dep outputs, restored whole as usual).
+	srcMount, bldMount := ex.srcRoot, tmp
+
+	if ex.sandboxing {
+		srcMount = filepath.Join(tmp, "s")
+		bldMount = filepath.Join(tmp, "b")
+		Throw(os.MkdirAll(srcMount, 0o755))
+		Throw(os.MkdirAll(bldMount, 0o755))
+		ex.linkSourceInputs(n, srcMount)
+	}
+
 	for _, r := range n.DepRefs {
-		ex.restoreInto(f.uids.get(r), tmp)
+		ex.restoreInto(f.uids.get(r), bldMount)
 	}
 
 	start := time.Now()
-	cmdResult := ex.runNode(n, tmp)
+	cmdResult := ex.runNode(n, srcMount, bldMount)
 	dur := time.Since(start)
 
-	ex.storeOutputs(n, tmp)
+	ex.storeOutputs(n, bldMount)
 
 	col := n.KV.PC
 	kind := n.KV.P
@@ -626,7 +646,7 @@ func consumeCommandFile(args []string, pos *int, buildRoot string, counter *int)
 	return "@" + path
 }
 
-func (ex *executor) runNode(n *Node, tmp string) commandResult {
+func (ex *executor) runNode(n *Node, srcMount, bldMount string) commandResult {
 	var result commandResult
 
 	for _, out := range n.Outputs {
@@ -634,7 +654,7 @@ func (ex *executor) runNode(n *Node, tmp string) commandResult {
 			continue
 		}
 
-		mounted := filepath.Join(tmp, out.Rel())
+		mounted := filepath.Join(bldMount, out.Rel())
 		Throw(os.MkdirAll(filepath.Dir(mounted), 0o755))
 	}
 
@@ -644,26 +664,26 @@ func (ex *executor) runNode(n *Node, tmp string) commandResult {
 		args := make([]string, len(c.CmdArgs))
 
 		for i, a := range c.CmdArgs {
-			args[i] = mountString(a.String(), ex.srcRoot, tmp)
+			args[i] = mountString(a.String(), srcMount, bldMount)
 		}
 
 		args = applyCmdPrefixes(args, ex.cmdPrefixes)
-		args = packCommandFiles(args, tmp, &cmdFileCounter)
+		args = packCommandFiles(args, bldMount, &cmdFileCounter)
 
-		dir := tmp
+		dir := bldMount
 
 		if c.Cwd != 0 {
-			dir = mountString(c.Cwd.String(), ex.srcRoot, tmp)
+			dir = mountString(c.Cwd.String(), srcMount, bldMount)
 		}
 
 		env := os.Environ()
 
 		for _, e := range n.Env {
-			env = append(env, e.Name.String()+"="+mountString(e.Value.String(), ex.srcRoot, tmp))
+			env = append(env, e.Name.String()+"="+mountString(e.Value.String(), srcMount, bldMount))
 		}
 
 		for _, e := range c.Env {
-			env = append(env, e.Name.String()+"="+mountString(e.Value.String(), ex.srcRoot, tmp))
+			env = append(env, e.Name.String()+"="+mountString(e.Value.String(), srcMount, bldMount))
 		}
 
 		cmd := &exec.Cmd{
@@ -676,7 +696,7 @@ func (ex *executor) runNode(n *Node, tmp string) commandResult {
 		var stdoutW io.Writer = os.Stdout
 
 		if c.Stdout != "" {
-			path := mountString(c.Stdout, ex.srcRoot, tmp)
+			path := mountString(c.Stdout, srcMount, bldMount)
 			Throw(os.MkdirAll(filepath.Dir(path), 0o755))
 
 			f := Throw2(os.Create(path))
@@ -710,6 +730,24 @@ func (ex *executor) runNode(n *Node, tmp string) commandResult {
 	}
 
 	return result
+}
+
+// linkSourceInputs symlinks the node's declared $(S) inputs into the sandbox source
+// dir (mirroring each input's rel path), so a sandboxed command sees exactly the
+// sources the graph declares and nothing else. $(B) inputs need no such filtering —
+// they are the dep outputs, restored whole into the sandbox build dir.
+func (ex *executor) linkSourceInputs(n *Node, srcMount string) {
+	for _, in := range n.Inputs {
+		if !in.IsSource() {
+			continue
+		}
+
+		rel := in.Rel()
+		target := filepath.Join(srcMount, rel)
+		Throw(os.MkdirAll(filepath.Dir(target), 0o755))
+		_ = os.Remove(target)
+		Throw(os.Symlink(filepath.Join(ex.srcRoot, rel), target))
+	}
 }
 
 func (ex *executor) storeOutputs(n *Node, tmp string) {
