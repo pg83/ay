@@ -165,7 +165,7 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 		(srcVFS).str(),
 	)
 
-	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	inputs := []VFS{flatcBinary, flatcWrapperVFS, srcVFS}
 	inputs = append(inputs, transitiveImports...)
 

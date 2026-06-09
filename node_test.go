@@ -73,7 +73,7 @@ func TestNodeJSONKeyOrder_AllFieldsPresent(t *testing.T) {
 	n := &Node{
 		Cmds: []Cmd{{CmdArgs: appendInternStrs(nil, []string{"echo"}), Env: nil}},
 
-		Env:              EnvVars{{Name: "FOO", Value: "bar"}},
+		Env:              EnvVars{{Name: internEnv("FOO"), Value: internStr("bar")}},
 		Inputs:           ToVFSSlice([]string{"in"}),
 		KV:               KV{P: pkLD},
 		Outputs:          ToVFSSlice([]string{"out"}),
@@ -164,7 +164,7 @@ func TestNodeJSON_DoesNotSerializeInternalRefs(t *testing.T) {
 }
 
 func TestCmdJSONKeyOrder(t *testing.T) {
-	c := Cmd{CmdArgs: appendInternStrs(nil, []string{"echo", "hi"}), Env: EnvVars{{Name: "K", Value: "V"}}}
+	c := Cmd{CmdArgs: appendInternStrs(nil, []string{"echo", "hi"}), Env: EnvVars{{Name: internEnv("K"), Value: internStr("V")}}}
 	raw, err := json.Marshal(c)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)

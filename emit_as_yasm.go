@@ -59,7 +59,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 		internStr(inputPath),
 	)
 
-	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}, {Name: "YASM_TEST_SUITE", Value: "1"}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envYASM_TEST_SUITE, Value: strOne}}
 
 	allInputs := make([]VFS, 0, 2+len(in.IncludeInputs))
 	allInputs = append(allInputs, yasmBinaryVFS)

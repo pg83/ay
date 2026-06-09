@@ -21,7 +21,7 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 		inputs := []VFS{buildScriptsCheckConfigHPy, confVFS}
 		inputs = append(inputs, walkClosure(ctx, instance, confVFS, in)...)
 
-		env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
+		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 		chRef, ok := ctx.checkConfigOutputs[generatedVFS]
 

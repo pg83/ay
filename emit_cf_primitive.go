@@ -17,7 +17,7 @@ func EmitCF(
 	tc moduleToolchain,
 	emit Emitter,
 ) (NodeRef, VFS) {
-	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	cmdArgs := []STR{
 		tc.Python3,

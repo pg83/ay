@@ -14,7 +14,7 @@ var (
 const jdkResourcePath = "$(JDK17)/bin/java"
 
 func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs []VFS, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag string, emit Emitter) NodeRef {
-	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	node := &Node{
 		Platform: instance.Platform,

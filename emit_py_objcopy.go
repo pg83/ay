@@ -121,7 +121,7 @@ func emitResourceObjcopy(
 			}
 		}
 
-		env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
+		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 		inputs := []VFS{
 			rescompilerBinVFS,
 			rescompressorBinVFS,
@@ -322,7 +322,7 @@ func emitKvOnlyObjcopyNode(
 		argKvs.str(),
 	}
 	cmdArgs = appendInternStrs(cmdArgs, kvsCmd)
-	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	inputs := []VFS{
 		rescompilerBinVFS,
 		rescompressorBinVFS,
@@ -439,7 +439,7 @@ func emitYaConfJSONObjcopy(
 			argKeys.str(), internStr(keyB64),
 			argKvs.str(), internStr(kvCmd),
 		}
-		env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
+		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 		node := &Node{
 			Platform: instance.Platform,
 			Cmds: []Cmd{
@@ -653,7 +653,7 @@ func emitPySrcObjcopy(
 			}
 
 			inputs = append(inputs, objcopyScriptVFS)
-			env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
+			env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 			targetProps := TargetProperties{ModuleDir: instance.Path}
 
 			switch d.moduleStmt.Name {

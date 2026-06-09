@@ -31,8 +31,8 @@ var pColorStr = [...]string{
 // key sort). The gate re-parses the env JSON object into a map before hashing, so
 // the emission order is free.
 type EnvVar struct {
-	Name  string
-	Value string
+	Name  ENV
+	Value STR
 }
 
 // EnvVars is the ordered binding list for Node.Env / Cmd.Env.
@@ -46,9 +46,9 @@ func appendEnv(buf []byte, env EnvVars) []byte {
 			buf = append(buf, ',')
 		}
 
-		buf = appendString(buf, e.Name)
+		buf = appendString(buf, e.Name.String())
 		buf = append(buf, ':')
-		buf = appendString(buf, e.Value)
+		buf = appendString(buf, e.Value.String())
 	}
 
 	return append(buf, '}')

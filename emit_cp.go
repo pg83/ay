@@ -22,7 +22,7 @@ func EmitJVCPG4(
 		(dst).str(),
 	}
 
-	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	inputCap := 2 + len(jvInputs) + len(closure) + 2
 	inputs := make([]VFS, 0, inputCap)
@@ -76,7 +76,7 @@ func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 		(dst).str(),
 	}
 
-	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	inputs := make([]VFS, 0, 3+len(extraInputs))
 	inputs = append(inputs, scripts[fsTools]...)

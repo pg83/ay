@@ -269,7 +269,30 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 }
 
 func testEnv(_ *Platform, testName string) EnvVars {
-	return EnvVars{{Name: "ARCADIA_BUILD_ROOT", Value: testBuildRoot}, {Name: "ARCADIA_ROOT_DISTBUILD", Value: testSourceRoot}, {Name: "ARCADIA_SOURCE_ROOT", Value: testSourceRoot}, {Name: "ASAN_OPTIONS", Value: "exitcode=100"}, {Name: "ASAN_SYMBOLIZER_PATH", Value: testClangSymbolizerPath}, {Name: "GORACE", Value: "halt_on_error=1"}, {Name: "LSAN_OPTIONS", Value: "exitcode=100"}, {Name: "LSAN_SYMBOLIZER_PATH", Value: testClangSymbolizerPath}, {Name: "MSAN_OPTIONS", Value: "exitcode=100:report_umrs=1"}, {Name: "MSAN_SYMBOLIZER_PATH", Value: testClangSymbolizerPath}, {Name: "TESTING_SAVE_OUTPUT", Value: "yes"}, {Name: "TEST_NAME", Value: testName}, {Name: "TSAN_SYMBOLIZER_PATH", Value: testClangSymbolizerPath}, {Name: "UBSAN_OPTIONS", Value: "exitcode=100:print_stacktrace=1,halt_on_error=1"}, {Name: "UBSAN_SYMBOLIZER_PATH", Value: testClangSymbolizerPath}, {Name: "YA_CC", Value: testClangCCPath}, {Name: "YA_CXX", Value: testClangCXXPath}, {Name: "YA_MANDATORY_ENV_VARS", Value: testMandatoryEnvVars}, {Name: "YA_NO_RESPAWN", Value: "yes"}, {Name: "YA_PYTHON_BIN", Value: testPythonBin}, {Name: "YA_TC", Value: "no"}, {Name: "YA_TEST_RUNNER", Value: "1"}}
+	return EnvVars{
+		{Name: envARCADIA_BUILD_ROOT, Value: strB},
+		{Name: envARCADIA_ROOT_DISTBUILD, Value: strS},
+		{Name: envARCADIA_SOURCE_ROOT, Value: strS},
+		{Name: envASAN_OPTIONS, Value: strTestAsanOpt},
+		{Name: envASAN_SYMBOLIZER_PATH, Value: strTestClangSymbolizer},
+		{Name: envGORACE, Value: strTestGorace},
+		{Name: envLSAN_OPTIONS, Value: strTestAsanOpt},
+		{Name: envLSAN_SYMBOLIZER_PATH, Value: strTestClangSymbolizer},
+		{Name: envMSAN_OPTIONS, Value: strTestMsanOpt},
+		{Name: envMSAN_SYMBOLIZER_PATH, Value: strTestClangSymbolizer},
+		{Name: envTESTING_SAVE_OUTPUT, Value: strYes},
+		{Name: envTEST_NAME, Value: internStr(testName)},
+		{Name: envTSAN_SYMBOLIZER_PATH, Value: strTestClangSymbolizer},
+		{Name: envUBSAN_OPTIONS, Value: strTestUbsanOpt},
+		{Name: envUBSAN_SYMBOLIZER_PATH, Value: strTestClangSymbolizer},
+		{Name: envYA_CC, Value: strTestClangCC},
+		{Name: envYA_CXX, Value: strTestClangCXX},
+		{Name: envYA_MANDATORY_ENV_VARS, Value: strTestMandatoryEnvVars},
+		{Name: envYA_NO_RESPAWN, Value: strYes},
+		{Name: envYA_PYTHON_BIN, Value: strTestPythonBin},
+		{Name: envYA_TC, Value: strNo},
+		{Name: envYA_TEST_RUNNER, Value: strOne},
+	}
 }
 
 func sandboxingNodeTags(p *Platform) []STR {

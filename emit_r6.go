@@ -50,7 +50,7 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 		(inVFS).str(),
 	)
 
-	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	inputs := make([]VFS, 0, 2+len(closure))
 	inputs = append(inputs, canonicalBinary, inVFS)

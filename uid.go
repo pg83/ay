@@ -142,8 +142,8 @@ func (c *canonBuf) writeEnv(env EnvVars) {
 	c.writeUint32(uint32(len(env)))
 
 	for _, e := range env {
-		c.writeBytes(e.Name)
-		c.writeBytes(e.Value)
+		c.writeSTR(e.Name.str())
+		c.writeSTR(e.Value)
 	}
 }
 

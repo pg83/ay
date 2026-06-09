@@ -60,11 +60,11 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 			Cmds: []Cmd{
 				{
 					CmdArgs: cmdArgs,
-					Env:     EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}},
+					Env:     EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
 				},
 			},
 			DepRefs:          []NodeRef{swigRef},
-			Env:              EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}},
+			Env:              EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
 			Inputs:           inputs,
 			Outputs:          []VFS{cOutVFS, pyOutVFS},
 			KV:               KV{P: pkSW, PC: pcYellow},
