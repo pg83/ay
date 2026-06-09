@@ -458,7 +458,7 @@ func (ex *executor) lookup(uid UID) *nodeFuture {
 
 func (ex *executor) execute(f *nodeFuture) {
 	n := f.node
-	cachePath := filepath.Join(ex.bldRoot, "uid", n.UID.String())
+	cachePath := ex.uidPath(n.UID)
 
 	if _, err := os.Stat(cachePath); err == nil {
 		return
@@ -770,7 +770,7 @@ func (ex *executor) storeOutputs(n *Node, tmp string) {
 		ex.storePath(filepath.Join(tmp, out.Rel()), out.String(), meta)
 	}
 
-	uidPath := filepath.Join(ex.bldRoot, "uid", n.UID.String())
+	uidPath := ex.uidPath(n.UID)
 	Throw(os.MkdirAll(filepath.Dir(uidPath), 0o755))
 
 	tmpPath := uidPath + ".tmp"
@@ -798,17 +798,19 @@ func (ex *executor) storePath(src, outPath string, meta map[string]outputEntry) 
 	}
 }
 
-// storeFileToCAS hard-links src into the CAS at its content hash and returns that
-// path. Hard-link, not rename: an unpacked resource tree's dirs are often write-less
-// (archived perms), so renaming a file out of one is denied — linking adds a name in
-// the CAS dir without touching src's dir. Same inode, same content, so the workspace
-// copy is dropped by the tmp cleanup. Content-addressed: a file already present (same
-// content, possibly from a concurrent node) is a no-op.
+// storeFileToCAS hard-links src into the CAS at its content hash and returns the
+// hash (the manifest stores the bare hash, not the path). Hard-link, not rename: an
+// unpacked resource tree's dirs are often write-less (archived perms), so renaming a
+// file out of one is denied — linking adds a name in the CAS dir without touching
+// src's dir. Same inode, same content, so the workspace copy is dropped by the tmp
+// cleanup. Content-addressed: a file already present (same content, possibly from a
+// concurrent node) is a no-op.
 func (ex *executor) storeFileToCAS(src string) string {
-	dst := casPath(ex.bldRoot, src)
+	hash := casHash(src)
+	dst := ex.casPathForHash(hash)
 
 	if _, err := os.Stat(dst); err == nil {
-		return dst
+		return hash
 	}
 
 	Throw(os.MkdirAll(filepath.Dir(dst), 0o755))
@@ -817,11 +819,11 @@ func (ex *executor) storeFileToCAS(src string) string {
 		Throw(err)
 	}
 
-	return dst
+	return hash
 }
 
 func (ex *executor) restoreInto(uid UID, where string) {
-	metaPath := filepath.Join(ex.bldRoot, "uid", uid.String())
+	metaPath := ex.uidPath(uid)
 	data := Throw2(os.ReadFile(metaPath))
 
 	var meta map[string]outputEntry
@@ -852,12 +854,12 @@ func (ex *executor) restoreInto(uid UID, where string) {
 			// relative to its OWN binary path. A symlink resolves to the flat CAS, so
 			// those relative dirs vanish; a hard link keeps a real file at the tree
 			// path (sharing the CAS inode), so the layout the tool expects survives.
-			if err := os.Link(e.Cas, target); err != nil && !os.IsExist(err) {
+			if err := os.Link(ex.casPathForHash(e.Cas), target); err != nil && !os.IsExist(err) {
 				Throw(err)
 			}
 
 		default:
-			Throw(os.Symlink(e.Cas, target))
+			Throw(os.Symlink(ex.casPathForHash(e.Cas), target))
 		}
 	}
 }
@@ -884,10 +886,9 @@ func mountString(s, srcRoot, bldRoot string) string {
 	return s
 }
 
-// casPath is the CAS location of a regular file, addressed by its content hash.
-// Only files reach the CAS — directory outputs are expanded to their files in
-// storePath, so there is no directory-hashing path.
-func casPath(bldRoot, src string) string {
+// casHash is a regular file's content hash (hex sha256) — its identity in the CAS.
+// Only files reach the CAS; directory outputs are expanded to files in storePath.
+func casHash(src string) string {
 	h := sha256.New()
 
 	f := Throw2(os.Open(src))
@@ -895,7 +896,20 @@ func casPath(bldRoot, src string) string {
 
 	Throw2(io.Copy(h, f))
 
-	return filepath.Join(bldRoot, "cas", fmt.Sprintf("%x", h.Sum(nil)))
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+// casPathForHash is where a CAS object lives, sharded by the first 2 hash chars:
+// cas/<hh>/<hash>. The uid manifest stores only the bare hash; this rebuilds the path.
+func (ex *executor) casPathForHash(hash string) string {
+	return filepath.Join(ex.bldRoot, "cas", hash[:2], hash)
+}
+
+// uidPath is a node's manifest path, sharded by the first uid char: uid/<u>/<uid>.
+func (ex *executor) uidPath(uid UID) string {
+	s := uid.String()
+
+	return filepath.Join(ex.bldRoot, "uid", s[:1], s)
 }
 
 func parseMakeFlags(args []string) *makeFlags {
