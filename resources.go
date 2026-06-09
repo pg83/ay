@@ -191,13 +191,12 @@ func bindResourceGlobalVars(ctx *genCtx, instance ModuleInstance, d *moduleData,
 
 // moduleToolchain holds a module's tool-invocation paths, derived from the
 // external-resource globals reachable through its PEERDIR closure: the compiler/
-// archiver/objcopy/strip live under $(CLANG) (build/platform/clang), the linker
-// under $(LLD_ROOT) (build/platform/lld), and python under $(YMAKE_PYTHON3)
-// (build/platform/python/ymake_python3). The bare $(NAME) form is what the
-// executor mounts (resourceMountRe) — the id-bearing resource-global value is the
-// normalize/--global-resource form, not the command form. A field stays 0 when its
-// resource is absent from the closure (the consuming emitter then has no peer to
-// take the tool from — caught at use, never silently defaulted).
+// archiver/objcopy/strip live under $(B)/resources/CLANG (build/platform/clang),
+// the linker under $(B)/resources/LLD_ROOT (build/platform/lld), and python under
+// $(B)/resources/YMAKE_PYTHON3 (build/platform/python/ymake_python3) — each the
+// output dir of that resource's FETCH node, taken as a dep via withResources. A
+// field stays 0 when its resource is absent from the closure (the consuming emitter
+// then has no peer to take the tool from — caught at use, never silently defaulted).
 type moduleToolchain struct {
 	ClangRoot STR
 	CC        STR

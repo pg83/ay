@@ -339,7 +339,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 	p := sandboxedX8664TargetPlatform()
 	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
 
-	fs := newMemFS(map[string]string{
+	files := map[string]string{
 		"util/ut/ya.make": "UNITTEST_FOR(util)\nSRCS(ysafeptr_ut.cpp ysaveload_ut.cpp)\nEND()\n",
 		"util/ya.make":    "LIBRARY()\nSRCS(lib.cpp)\nEND()\n",
 		"library/cpp/testing/unittest_main/ya.make":  "LIBRARY()\nSRCS(main.cpp)\nEND()\n",
@@ -347,17 +347,11 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		"util/ysaveload_ut.cpp":                      "int ysaveload_ut() { return 0; }\n",
 		"util/lib.cpp":                               "int util_lib() { return 0; }\n",
 		"library/cpp/testing/unittest_main/main.cpp": "int unittest_main() { return 0; }\n",
-	})
-
-	resources := &resourceFetchPlan{
-		items: []resourceFetch{{
-			Pattern: "YMAKE_PYTHON3",
-			URI:     "sbr:dummy-ymake-python3",
-			Output:  Intern("$(B)/resources/YMAKE_PYTHON3"),
-		}},
 	}
+	addToolchainPeers(files)
+	fs := newMemFS(files)
 
-	g := GenWithResources(fs, "util/ut", host, p, func(Warn) {}, resources, true)
+	g := genWithResources(fs, "util/ut", host, p, func(Warn) {}, true, true)
 	if len(g.Result) != 3 {
 		t.Fatalf("result len = %d, want 3", len(g.Result))
 	}
