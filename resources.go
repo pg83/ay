@@ -230,7 +230,7 @@ func resolveModuleToolchain(globals []resourceDecl, clangVer string) moduleToolc
 			tc.LLDRoot = internStr(root)
 			tc.LLD = internStr(root + "/bin/ld.lld")
 		case resourcePatternYMakePython3:
-			tc.Python3 = internStr(Build("resources/" + resourcePatternYMakePython3).String() + "/bin/python3")
+			tc.Python3 = internStr(Build("resources/"+resourcePatternYMakePython3).String() + "/bin/python3")
 		}
 	}
 
