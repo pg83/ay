@@ -77,6 +77,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		}
 
 		node := &Node{
+			Platform: instance.Platform,
 			Cmds: []Cmd{
 				{
 					CmdArgs: cmdArgs,
@@ -128,7 +129,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			node.ForeignDepRefs = toolRefs
 		}
 
-		pyRef := ctx.emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform))
+		pyRef := ctx.emit.Emit(withResources(node, resourcePatternYMakePython3))
 
 		registerBoundGeneratedParsedOutput(ctx, instance, "PY", outputPath, nil, pyRef, toolRefs)
 	}
@@ -178,6 +179,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 			pyInstance.Platform = ctx.target
 
 			pyNode := &Node{
+				Platform: pyInstance.Platform,
 				Cmds: []Cmd{
 					{CmdArgs: pyCmdArgs, Env: env},
 				},
@@ -194,7 +196,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 				pyNode.TargetProperties.ModuleTag = "py3"
 			}
 
-			pyRef = ctx.emit.Emit(bindNodePlatform(withResources(pyNode, resourcePatternYMakePython3), pyInstance.Platform))
+			pyRef = ctx.emit.Emit(withResources(pyNode, resourcePatternYMakePython3))
 			ctx.pyRegisterOutputs[regCppVFS] = pyRef
 		}
 

@@ -26,7 +26,8 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 		chRef, ok := ctx.checkConfigOutputs[generatedVFS]
 
 		if !ok {
-			chRef = ctx.emit.Emit(bindNodePlatform(withResources(&Node{
+			chRef = ctx.emit.Emit(withResources(&Node{
+				Platform: instance.Platform,
 				Cmds: []Cmd{
 					{
 						CmdArgs: []STR{
@@ -44,7 +45,7 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 				KV:               KV{P: pkCH, PC: pcYellow},
 				Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 				TargetProperties: TargetProperties{ModuleDir: instance.Path},
-			}, resourcePatternYMakePython3), instance.Platform))
+			}, resourcePatternYMakePython3))
 			ctx.checkConfigOutputs[generatedVFS] = chRef
 		}
 

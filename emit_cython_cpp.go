@@ -139,7 +139,8 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 			targetProps.ModuleTag = "py3"
 		}
 
-		cyRef := ctx.emit.Emit(bindNodePlatform(withResources(&Node{
+		cyRef := ctx.emit.Emit(withResources(&Node{
+			Platform: instance.Platform,
 			Cmds: []Cmd{
 				{
 					CmdArgs: cmdArgs,
@@ -152,7 +153,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 			KV:               KV{P: pkCY, PC: pcYellow},
 			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 			TargetProperties: targetProps,
-		}, resourcePatternYMakePython3), instance.Platform))
+		}, resourcePatternYMakePython3))
 		bindGeneratedOutput(ctx, instance, generatedVFS, cyRef)
 
 		ccIn := in

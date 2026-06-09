@@ -37,6 +37,7 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 	inputs = append(inputs, closure...)
 
 	node := &Node{
+		Platform: statsPlatform,
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
@@ -51,5 +52,5 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 	}
 
-	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), statsPlatform)), outVFS
+	return emit.Emit(withResources(node, resourcePatternYMakePython3)), outVFS
 }

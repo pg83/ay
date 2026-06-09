@@ -15,6 +15,7 @@ func emitResourceFetch(ctx *genCtx, decl resourceDecl) NodeRef {
 
 	output := Build("resources/" + name)
 	node := &Node{
+		Platform: ctx.host,
 		Cmds: []Cmd{{
 			CmdArgs: []STR{
 				internStr(currentYatoolPath()),
@@ -38,7 +39,7 @@ func emitResourceFetch(ctx *genCtx, decl resourceDecl) NodeRef {
 	node.UID = resourceFetchUID(decl.URI.String(), output.String())
 	node.SelfUID = node.UID
 
-	ref := ctx.emit.Emit(bindNodePlatform(node, ctx.host))
+	ref := ctx.emit.Emit(node)
 	ctx.fetchRefs[name] = ref
 
 	return ref

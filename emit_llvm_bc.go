@@ -91,6 +91,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			}
 
 			node := &Node{
+				Platform:         instance.Platform,
 				Cmds:             []Cmd{{CmdArgs: bcArgs, Env: env}},
 				Env:              env,
 				Inputs:           allInputs,
@@ -101,7 +102,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 				Sandboxing:       true,
 				DepRefs:          depRefs,
 			}
-			ref := ctx.emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3, resourcePatternClang16), instance.Platform))
+			ref := ctx.emit.Emit(withResources(node, resourcePatternYMakePython3, resourcePatternClang16))
 			bcRefs = append(bcRefs, ref)
 			bcPaths = append(bcPaths, bcOut)
 		}
@@ -121,6 +122,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		}
 
 		ldNode := &Node{
+			Platform:         instance.Platform,
 			Cmds:             []Cmd{{CmdArgs: ldArgs, Env: env}},
 			Env:              env,
 			Inputs:           mergeInputs,
@@ -131,7 +133,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			Sandboxing:       true,
 			DepRefs:          append([]NodeRef(nil), bcRefs...),
 		}
-		ldRef := ctx.emit.Emit(bindNodePlatform(withResources(ldNode, resourcePatternYMakePython3, resourcePatternClang16), instance.Platform))
+		ldRef := ctx.emit.Emit(withResources(ldNode, resourcePatternYMakePython3, resourcePatternClang16))
 
 		optOutName := stmt.Name + "_optimized" + stmt.Suffix + ".bc"
 		optOut := Build(instance.Path + "/" + optOutName)
@@ -158,6 +160,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		optInputs = dedupVFS(optInputs, bcSourceInputs)
 
 		optNode := &Node{
+			Platform:         instance.Platform,
 			Cmds:             []Cmd{{CmdArgs: optArgs, Env: env}},
 			Env:              env,
 			Inputs:           optInputs,
@@ -168,7 +171,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			Sandboxing:       true,
 			DepRefs:          []NodeRef{ldRef},
 		}
-		opRef := ctx.emit.Emit(bindNodePlatform(withResources(optNode, resourcePatternYMakePython3, resourcePatternClang16), instance.Platform))
+		opRef := ctx.emit.Emit(withResources(optNode, resourcePatternYMakePython3, resourcePatternClang16))
 
 		if stmt.GenerateMachineCode {
 			continue

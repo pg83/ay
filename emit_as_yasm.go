@@ -67,6 +67,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	allInputs = append(allInputs, in.IncludeInputs...)
 
 	node := &Node{
+		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
@@ -83,5 +84,5 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 
 	node.ForeignDepRefs = []NodeRef{yasmLD}
 	node.DepRefs = []NodeRef{yasmLD}
-	return emit.Emit(bindNodePlatform(node, instance.Platform)), outVFS
+	return emit.Emit(node), outVFS
 }

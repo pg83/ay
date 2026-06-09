@@ -178,6 +178,7 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 	}
 
 	node := &Node{
+		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
@@ -195,7 +196,7 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 	}
 
-	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform)), headerVFS, cppVFS, bfbsVFS
+	return emit.Emit(withResources(node, resourcePatternYMakePython3)), headerVFS, cppVFS, bfbsVFS
 }
 
 func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string) flatcEmission {

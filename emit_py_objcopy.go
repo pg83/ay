@@ -164,6 +164,7 @@ func emitResourceObjcopy(
 		}
 
 		node := &Node{
+			Platform: instance.Platform,
 			Cmds: []Cmd{
 				{
 					CmdArgs: cmdArgs,
@@ -201,7 +202,7 @@ func emitResourceObjcopy(
 			node.DepRefs = append(node.DepRefs, ref)
 		}
 
-		r := ctx.emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer), instance.Platform))
+		r := ctx.emit.Emit(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer))
 		out.Refs = append(out.Refs, r)
 		out.Outputs = append(out.Outputs, outputObj)
 		cur = acc{}
@@ -343,6 +344,7 @@ func emitKvOnlyObjcopyNode(
 	}
 
 	node := &Node{
+		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
@@ -365,7 +367,7 @@ func emitKvOnlyObjcopyNode(
 		node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 	}
 
-	ref := ctx.emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer), instance.Platform))
+	ref := ctx.emit.Emit(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer))
 	return &objcopyEmit{Ref: ref, Out: outputObj}
 }
 
@@ -437,6 +439,7 @@ func emitYaConfJSONObjcopy(
 		}
 		env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 		node := &Node{
+			Platform: instance.Platform,
 			Cmds: []Cmd{
 				{
 					CmdArgs: cmdArgs,
@@ -459,7 +462,7 @@ func emitYaConfJSONObjcopy(
 			node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 		}
 
-		out = append(out, &objcopyEmit{Ref: ctx.emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer), instance.Platform)), Out: outputObj})
+		out = append(out, &objcopyEmit{Ref: ctx.emit.Emit(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer)), Out: outputObj})
 	}
 
 	return out
@@ -663,6 +666,7 @@ func emitPySrcObjcopy(
 			}
 
 			node := &Node{
+				Platform:         instance.Platform,
 				Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: env}},
 				Env:              env,
 				Inputs:           inputs,
@@ -694,7 +698,7 @@ func emitPySrcObjcopy(
 				node.DepRefs = append(node.DepRefs, extras...)
 			}
 
-			r := ctx.emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer), instance.Platform))
+			r := ctx.emit.Emit(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer))
 			res.Refs = append(res.Refs, r)
 			res.Outputs = append(res.Outputs, outputObj)
 		}

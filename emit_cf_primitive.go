@@ -32,6 +32,7 @@ func EmitCF(
 	inputs = append(inputs, includeInputs...)
 
 	node := &Node{
+		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
@@ -55,5 +56,5 @@ func EmitCF(
 		DepRefs:      []NodeRef{},
 	}
 
-	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform)), outVFS
+	return emit.Emit(withResources(node, resourcePatternYMakePython3)), outVFS
 }

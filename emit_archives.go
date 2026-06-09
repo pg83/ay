@@ -97,6 +97,7 @@ func emitArchive(
 	env := EnvVars{{Name: "ARCADIA_ROOT_DISTBUILD", Value: "$(S)"}}
 
 	n := &Node{
+		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
@@ -112,7 +113,7 @@ func emitArchive(
 		DepRefs:          depRefs,
 	}
 
-	arRef := emit.Emit(bindNodePlatform(withResources(n, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer), instance.Platform))
+	arRef := emit.Emit(withResources(n, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer))
 
 	if reg != nil {
 		// Propagate each archived member's source inputs (e.g. the .py behind a

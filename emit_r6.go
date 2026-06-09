@@ -57,6 +57,7 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	inputs = append(inputs, closure...)
 
 	node := &Node{
+		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
@@ -73,5 +74,5 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 		ForeignDepRefs:   []NodeRef{ragel6LD},
 	}
 
-	return emit.Emit(bindNodePlatform(node, instance.Platform)), outVFS
+	return emit.Emit(node), outVFS
 }

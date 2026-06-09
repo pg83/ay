@@ -37,6 +37,7 @@ func EmitJVCPG4(
 	inputs = append(inputs, closure...)
 
 	node := &Node{
+		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
@@ -52,7 +53,7 @@ func EmitJVCPG4(
 		DepRefs:          []NodeRef{jvRef},
 	}
 
-	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform))
+	return emit.Emit(withResources(node, resourcePatternYMakePython3))
 }
 
 func EmitCP(instance ModuleInstance, src VFS, dst VFS, tc moduleToolchain, scripts scriptDeps, emit Emitter) NodeRef {
@@ -89,6 +90,7 @@ func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 	}
 
 	node := &Node{
+		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
 				CmdArgs: cmdArgs,
@@ -104,5 +106,5 @@ func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 		DepRefs:          depRefs,
 	}
 
-	return emit.Emit(bindNodePlatform(withResources(node, resourcePatternYMakePython3), instance.Platform))
+	return emit.Emit(withResources(node, resourcePatternYMakePython3))
 }
