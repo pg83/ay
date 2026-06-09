@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -122,6 +123,16 @@ func cmdMake(args []string) int {
 
 	if len(mf.targets) == 0 {
 		ThrowFmt("make: no targets supplied and current working directory is outside the source root")
+	}
+
+	// -j 0 is generate-only: the process emits the graph and exits, so collecting
+	// garbage along the way only costs CPU (measured on sg5: GC off cuts gen user
+	// time ~20%, peak RSS 495->680 MB — fine for a short-lived process). With
+	// executor threads the process lives for the whole build and shares RAM with
+	// the compilers it spawns, so GC stays on there (tuning it is a separate
+	// investigation). An explicit GOGC in the environment wins in both modes.
+	if mf.threads == 0 && os.Getenv("GOGC") == "" {
+		debug.SetGCPercent(-1)
 	}
 
 	fs := NewFS(mf.srcRoot)
