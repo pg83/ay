@@ -306,11 +306,11 @@ func genStreamOne(fs FS, target string, hostP, targetP *Platform, onNode func(*N
 }
 
 type executor struct {
-	srcRoot        string
-	bldRoot        string
-	sema           chan struct{}
-	keepGoing      bool
-	cmdPrefixes    []cmdPrefix
+	srcRoot     string
+	bldRoot     string
+	sema        chan struct{}
+	keepGoing   bool
+	cmdPrefixes []cmdPrefix
 
 	mu      sync.Mutex
 	byUID   map[UID]*nodeFuture
@@ -333,14 +333,14 @@ type nodeFuture struct {
 
 func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, cmdPrefixes []cmdPrefix) *executor {
 	return &executor{
-		srcRoot:        srcRoot,
-		bldRoot:        bldRoot,
-		sema:           make(chan struct{}, threads),
-		keepGoing:      keepGoing,
-		cmdPrefixes:    cmdPrefixes,
-		byUID:          make(map[UID]*nodeFuture, 8192),
-		events:         make(chan func(), 4096),
-		stats:          map[string][]time.Duration{},
+		srcRoot:     srcRoot,
+		bldRoot:     bldRoot,
+		sema:        make(chan struct{}, threads),
+		keepGoing:   keepGoing,
+		cmdPrefixes: cmdPrefixes,
+		byUID:       make(map[UID]*nodeFuture, 8192),
+		events:      make(chan func(), 4096),
+		stats:       map[string][]time.Duration{},
 	}
 }
 

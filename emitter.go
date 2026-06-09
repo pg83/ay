@@ -429,4 +429,3 @@ func finalizeGraphInOrder(e *BufferedEmitter, order []int) *Graph {
 func Finalize(e *BufferedEmitter) *Graph {
 	return graphFromFinalizedEmitter(e, finalizeNodes(e, nil))
 }
-
