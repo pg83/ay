@@ -3,10 +3,10 @@ package main
 // BitSet is a grow-on-demand set of dense ids backed by a bit vector — one bit
 // per id, indexed by the uint32 key. Callers pass any dense id (VFS, STR, a small
 // composite key) converted to uint32. At 1 bit/id it is 32x smaller than an
-// epoch-stamped idSet (which spends a uint32 per id). There is no epoch/reset:
+// epoch-stamped IdSet (which spends a uint32 per id). There is no epoch/reset:
 // the zero value is an empty set, has reports membership, add inserts. It suits
 // set-once, never-cleared usage (e.g. the dfs in-flight guard, the searchTier
-// presence gate) where the dense idSet's per-id word would only waste memory.
+// presence gate) where the dense IdSet's per-id word would only waste memory.
 type BitSet struct {
 	words []uint64
 }

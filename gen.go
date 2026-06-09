@@ -304,7 +304,7 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 	// its growth was ~25MB of churn across ~22k calls. Cleared on entry; keeps its
 	// grown buckets between calls.
 	// Dedup the producer refs through the run-wide VFS deduper (NodeRef is a
-	// ~uint32 id, cast to VFS at the idSet boundary — a different typedef over the
+	// ~uint32 id, cast to VFS at the IdSet boundary — a different typedef over the
 	// same dense space). probe touches no other deduper user (EmitCF takes no
 	// ctx), so reset-then-stream here is safe.
 	deduper.reset()

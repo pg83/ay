@@ -13,10 +13,10 @@ var argTable = struct {
 }
 
 // argDedupeSeen dedups []ARG preserving first-occurrence order, via a reused
-// epoch idSet sized to the arg space (ARG is uint32, cast to VFS only as the
+// epoch IdSet sized to the arg space (ARG is uint32, cast to VFS only as the
 // set's key). Single-threaded gen, leaf use (reset → scan → return); kept
 // separate from the VFS deduper so the two uint32 id-spaces never interleave.
-var argDedupeSeen idSet
+var argDedupeSeen IdSet
 
 // ARG is a dense interned id for a single compiler/linker argument token (e.g.
 // "-mavx2", "-DFOO=1"). One global namespace, layered on the STR table: the
