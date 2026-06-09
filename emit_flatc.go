@@ -194,9 +194,10 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 		Outputs:          []VFS{headerVFS, cppVFS, bfbsVFS},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		usesResources:    []string{resourcePatternYMakePython3},
 	}
 
-	return emit.Emit(withResources(node, resourcePatternYMakePython3)), headerVFS, cppVFS, bfbsVFS
+	return emit.Emit(node), headerVFS, cppVFS, bfbsVFS
 }
 
 func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string) flatcEmission {

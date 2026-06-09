@@ -139,7 +139,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		inputs = dedupVFS(inputs, generatedOutputClosure(ctx, instance, headerVFS, in))
 	}
 
-	ycRef := ctx.emit.Emit(withResources(&Node{
+	ycRef := ctx.emit.Emit(&Node{
 		Platform:         instance.Platform,
 		Cmds:             cmds,
 		DepRefs:          []NodeRef{bisonRef, m4Ref},
@@ -149,7 +149,8 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		KV:               KV{P: pkYC, PC: pcLightGreen},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
-	}, resourcePatternYMakePython3))
+		usesResources:    []string{resourcePatternYMakePython3},
+	})
 	bindGeneratedOutput(ctx, instance, headerVFS, ycRef)
 	bindGeneratedOutput(ctx, instance, generatedVFS, ycRef)
 

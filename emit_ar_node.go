@@ -83,7 +83,8 @@ func emitARNode(
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		TargetProperties: targetProperties,
 		DepRefs:          depRefs,
+		usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
 	}
 
-	return emit.Emit(withResources(n, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer))
+	return emit.Emit(n)
 }

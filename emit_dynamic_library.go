@@ -159,13 +159,14 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		Sandboxing:       true,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleLang: "cpp", ModuleTag: "dll", ModuleType: "so"},
 		DepRefs:          depRefs,
+		usesResources:    []string{resourcePatternClangTool + instance.Platform.ClangVer, resourcePatternLLDRoot, resourcePatternYMakePython3},
 	}
 
 	if fixElfRef != (NodeRef(0)) {
 		n.ForeignDepRefs = []NodeRef{fixElfRef}
 	}
 
-	ref := ctx.emit.Emit(withResources(n, resourcePatternClangTool+instance.Platform.ClangVer, resourcePatternLLDRoot, resourcePatternYMakePython3))
+	ref := ctx.emit.Emit(n)
 	addInclGlobal := dedupVFS(d.addInclGlobal, peerAddInclGlobal)
 	cFlagsGlobal := dedupARG(d.cFlagsGlobal, peerCFlagsGlobal)
 	cxxFlagsGlobal := dedupARG(d.cxxFlagsGlobal, peerCXXFlagsGlobal)

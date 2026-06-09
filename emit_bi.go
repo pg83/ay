@@ -69,9 +69,10 @@ func EmitBI(
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		DepRefs:          []NodeRef{},
+		usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
 	}
 
-	return emit.Emit(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer))
+	return emit.Emit(node)
 }
 
 func biFlagsForInstance(targetP *Platform) []STR {

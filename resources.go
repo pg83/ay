@@ -181,17 +181,18 @@ func bindResourceGlobalVars(ctx *genCtx, instance ModuleInstance, d *moduleData,
 
 // moduleToolchain holds a module's tool-invocation paths, derived from the
 // external-resource globals reachable through its PEERDIR closure: the compiler/
-// archiver/objcopy/strip live under $(B)/resources/CLANG (build/platform/clang),
+// archiver/objcopy/strip live under $(B)/resources/CLANG<ver> (build/platform/clang),
 // the linker under $(B)/resources/LLD_ROOT (build/platform/lld), and python under
 // $(B)/resources/YMAKE_PYTHON3 (build/platform/python/ymake_python3) — each the
-// output dir of that resource's FETCH node, taken as a dep via withResources. A
-// field stays 0 when its resource is absent from the closure (the consuming emitter
-// then has no peer to take the tool from — caught at use, never silently defaulted).
+// output dir of that resource's FETCH node, taken as a dep by listing the resource
+// name in the consuming node's usesResources. A field stays 0 when its resource is
+// absent from the closure (the consuming emitter then has no peer to take the tool
+// from — caught at use, never silently defaulted).
 type moduleToolchain struct {
 	// ClangResource is the versioned clang resource the compiler/llvm tools come
-	// from (e.g. "CLANG20"), selected by the platform's ClangVer. Consumers pass it
-	// to withResources so they depend on that specific FETCH node — version-specific
-	// so several clang versions (CLANG16 for bitcode, CLANG20 to compile) coexist.
+	// from (e.g. "CLANG20"), selected by the platform's ClangVer. Consumers list it in
+	// their node's usesResources so they depend on that specific FETCH node — version-
+	// specific so several clang versions (CLANG16 for bitcode, CLANG20 to compile) coexist.
 	ClangResource STR
 	ClangRoot     STR
 	CC            STR
@@ -211,7 +212,8 @@ func resolveModuleToolchain(globals []resourceDecl, clangVer string) moduleToolc
 
 	// The compiler/llvm tools come from the version-specific CLANG<ver> resource
 	// (e.g. CLANG20), not the version-independent bare CLANG: $(B)/resources/CLANG20
-	// is the FETCH node's output dir, taken as a dep via withResources(tc.ClangResource).
+	// is the FETCH node's output dir, depended on by listing tc.ClangResource in the
+	// consuming node's usesResources.
 	clangRes := resourcePatternClangTool + clangVer
 
 	for _, decl := range globals {

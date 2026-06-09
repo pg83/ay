@@ -180,7 +180,8 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 
 			return tp
 		}(),
-		Requirements: Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		Requirements:  Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		usesResources: []string{resourcePatternClangTool + instance.Platform.ClangVer},
 	}
 
 	if len(in.ExtraDepRefs) > 0 {
@@ -189,7 +190,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		node.DepRefs = in.ExtraDepRefs
 	}
 
-	return emit.Emit(withResources(node, resourcePatternClangTool+instance.Platform.ClangVer)), outVFS, allInputs
+	return emit.Emit(node), outVFS, allInputs
 }
 
 func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, suffix string) (out, input VFS) {

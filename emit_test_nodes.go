@@ -46,7 +46,7 @@ func emitTestRunNodes(ctxEmit Emitter, runEmit Emitter, p *Platform, info testSu
 func buildTestCtxNode(p *Platform) *Node {
 	cacheTrue := true
 
-	return withResources(&Node{
+	return &Node{
 		Platform: p,
 		Cache:    &cacheTrue,
 		Cmds: []Cmd{{
@@ -68,7 +68,8 @@ func buildTestCtxNode(p *Platform) *Node {
 		Outputs:          []VFS{bldCommonTestContext},
 		Requirements:     Requirements{Network: "restricted"},
 		TargetProperties: TargetProperties{},
-	}, resourcePatternYMakePython3)
+		usesResources:    []string{resourcePatternYMakePython3},
+	}
 }
 
 func buildUnittestNode(p *Platform, info testSuiteInfo, resourceGlobals []resourceDecl) *Node {

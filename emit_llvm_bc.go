@@ -101,8 +101,9 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 				Requirements:     reqs,
 				Sandboxing:       true,
 				DepRefs:          depRefs,
+				usesResources:    []string{resourcePatternYMakePython3, resourcePatternClang16},
 			}
-			ref := ctx.emit.Emit(withResources(node, resourcePatternYMakePython3, resourcePatternClang16))
+			ref := ctx.emit.Emit(node)
 			bcRefs = append(bcRefs, ref)
 			bcPaths = append(bcPaths, bcOut)
 		}
@@ -132,8 +133,9 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			Requirements:     reqs,
 			Sandboxing:       true,
 			DepRefs:          append([]NodeRef(nil), bcRefs...),
+			usesResources:    []string{resourcePatternYMakePython3, resourcePatternClang16},
 		}
-		ldRef := ctx.emit.Emit(withResources(ldNode, resourcePatternYMakePython3, resourcePatternClang16))
+		ldRef := ctx.emit.Emit(ldNode)
 
 		optOutName := stmt.Name + "_optimized" + stmt.Suffix + ".bc"
 		optOut := Build(instance.Path + "/" + optOutName)
@@ -170,8 +172,9 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			Requirements:     reqs,
 			Sandboxing:       true,
 			DepRefs:          []NodeRef{ldRef},
+			usesResources:    []string{resourcePatternYMakePython3, resourcePatternClang16},
 		}
-		opRef := ctx.emit.Emit(withResources(optNode, resourcePatternYMakePython3, resourcePatternClang16))
+		opRef := ctx.emit.Emit(optNode)
 
 		if stmt.GenerateMachineCode {
 			continue

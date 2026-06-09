@@ -51,9 +51,10 @@ func EmitJVCPG4(
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		DepRefs:          []NodeRef{jvRef},
+		usesResources:    []string{resourcePatternYMakePython3},
 	}
 
-	return emit.Emit(withResources(node, resourcePatternYMakePython3))
+	return emit.Emit(node)
 }
 
 func EmitCP(instance ModuleInstance, src VFS, dst VFS, tc moduleToolchain, scripts scriptDeps, emit Emitter) NodeRef {
@@ -104,7 +105,8 @@ func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		DepRefs:          depRefs,
+		usesResources:    []string{resourcePatternYMakePython3},
 	}
 
-	return emit.Emit(withResources(node, resourcePatternYMakePython3))
+	return emit.Emit(node)
 }

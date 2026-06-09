@@ -177,6 +177,7 @@ func emitResourceObjcopy(
 			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: "yes"},
 			TargetProperties: resTargetProps,
 			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+			usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
 		}
 
 		if rescompilerLDRef != (NodeRef(0)) {
@@ -202,7 +203,7 @@ func emitResourceObjcopy(
 			node.DepRefs = append(node.DepRefs, ref)
 		}
 
-		r := ctx.emit.Emit(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer))
+		r := ctx.emit.Emit(node)
 		out.Refs = append(out.Refs, r)
 		out.Outputs = append(out.Outputs, outputObj)
 		cur = acc{}
@@ -357,6 +358,7 @@ func emitKvOnlyObjcopyNode(
 		KV:               KV{P: pkPY, PC: pcYellow, ShowOut: "yes"},
 		TargetProperties: targetProps,
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
 	}
 
 	if rescompilerLDRef != (NodeRef(0)) {
@@ -367,7 +369,7 @@ func emitKvOnlyObjcopyNode(
 		node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 	}
 
-	ref := ctx.emit.Emit(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer))
+	ref := ctx.emit.Emit(node)
 	return &objcopyEmit{Ref: ref, Out: outputObj}
 }
 
@@ -452,6 +454,7 @@ func emitYaConfJSONObjcopy(
 			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: "yes"},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path},
 			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+			usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
 		}
 
 		if rescompilerLDRef != (NodeRef(0)) {
@@ -462,7 +465,7 @@ func emitYaConfJSONObjcopy(
 			node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 		}
 
-		out = append(out, &objcopyEmit{Ref: ctx.emit.Emit(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer)), Out: outputObj})
+		out = append(out, &objcopyEmit{Ref: ctx.emit.Emit(node), Out: outputObj})
 	}
 
 	return out
@@ -674,6 +677,7 @@ func emitPySrcObjcopy(
 				KV:               KV{P: pkPY, PC: pcYellow, ShowOut: "yes"},
 				TargetProperties: targetProps,
 				Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+				usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
 			}
 
 			if rescompilerLDRef != (NodeRef(0)) {
@@ -698,7 +702,7 @@ func emitPySrcObjcopy(
 				node.DepRefs = append(node.DepRefs, extras...)
 			}
 
-			r := ctx.emit.Emit(withResources(node, resourcePatternYMakePython3, resourcePatternClangTool+instance.Platform.ClangVer))
+			r := ctx.emit.Emit(node)
 			res.Refs = append(res.Refs, r)
 			res.Outputs = append(res.Outputs, outputObj)
 		}

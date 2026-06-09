@@ -141,7 +141,8 @@ func EmitEV(
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		DepRefs:          depRefs,
 		ForeignDepRefs:   foreignDepRefs,
+		usesResources:    []string{resourcePatternYMakePython3},
 	}
 
-	return emit.Emit(withResources(node, resourcePatternYMakePython3))
+	return emit.Emit(node)
 }

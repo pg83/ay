@@ -246,13 +246,14 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: "py3_proto"},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		DepRefs:          toolRefs,
+		usesResources:    []string{resourcePatternYMakePython3},
 	}
 
 	if len(toolRefs) > 0 {
 		pyPBNode.ForeignDepRefs = toolRefs
 	}
 
-	pyPBRef := ctx.emit.Emit(withResources(pyPBNode, resourcePatternYMakePython3))
+	pyPBRef := ctx.emit.Emit(pyPBNode)
 	pyYapyc := []VFS{pyOut}
 
 	if d.grpc {
@@ -329,13 +330,14 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 			TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: "py3_proto"},
 			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 			DepRefs:          deps,
+			usesResources:    []string{resourcePatternYMakePython3},
 		}
 
 		if len(toolRefs) > 0 {
 			node.ForeignDepRefs = toolRefs
 		}
 
-		res.Refs = append(res.Refs, ctx.emit.Emit(withResources(node, resourcePatternYMakePython3)))
+		res.Refs = append(res.Refs, ctx.emit.Emit(node))
 		res.Outputs = append(res.Outputs, out)
 	}
 
