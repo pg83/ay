@@ -5,41 +5,41 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"github.com/zeebo/xxh3"
 )
 
-// External-resource model. A RESOURCES_LIBRARY (build/platform/clang, …, or the
-// synthetic build/system/toolchain) declares external resources via
-// DECLARE_EXTERNAL_RESOURCE / DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE[_BY_JSON].
-// Each declaration yields:
-//   - a <Name>_RESOURCE_GLOBAL variable bound to "$(<VarName>)", which propagates
-//     transitively through the PEERDIR closure (ymake global_vars_collector mines
-//     every *_RESOURCE_GLOBAL var across the closure) and is rendered into a test
-//     node's --global-resource list as "<Name>_RESOURCE_GLOBAL::$(<VarName>)";
-//   - a fetch of the host-selected URI into the bare $(<Name>) resource dir.
+// External-resource model. A RESOURCES_LIBRARY (build/platform/clang, …) declares
+// external resources via DECLARE_EXTERNAL_RESOURCE /
+// DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE[_BY_JSON]. Each declaration yields:
+//   - a <Name>_RESOURCE_GLOBAL variable bound to the bare "$(<Name>)" resource ref,
+//     which propagates transitively through the PEERDIR closure (ymake's
+//     global_vars_collector mines every *_RESOURCE_GLOBAL var across the closure)
+//     and is rendered into a test node's --global-resource list as
+//     "<Name>_RESOURCE_GLOBAL::$(<Name>)";
+//   - a fetch of the host-selected URI into the same bare $(<Name>) resource dir.
 //
-// VarName mirrors ymake NYa::ResourceVarName: "<Name>-<encodeUriForVar(uri)>".
-// Every field is interned: the model carries STR end to end, the raw strings
-// existing only transiently at the json/macro-argument boundary in makeResourceDecl.
+// The reference is the bare $(<Name>) the executor mounts mechanically (mountString);
+// the sandbox-rotating "-<id>" suffix ymake carries on the var (NYa::ResourceVarName)
+// has no place in our graph — it would not mount, and dump-normalize only strips it
+// off the upstream reference. Every field is interned: the model carries STR end to
+// end, the raw strings existing only transiently at the json/macro-argument boundary
+// in makeResourceDecl.
 
 // resourceDecl is one declared external resource after host-platform selection.
 type resourceDecl struct {
 	Name      STR // resource base name, e.g. "CLANG16"
 	URI       STR // host-selected uri, e.g. "sbr:6495238978" or an absolute path
 	GlobalVar STR // propagated variable name, e.g. "CLANG16_RESOURCE_GLOBAL"
-	Value     STR // variable value, e.g. "$(CLANG16-sbr:6495238978)"
-	Token     STR // --global-resource arg "CLANG16_RESOURCE_GLOBAL::$(CLANG16-sbr:6495238978)"
+	Value     STR // variable value: the bare resource ref "$(CLANG16)"
+	Token     STR // --global-resource arg "CLANG16_RESOURCE_GLOBAL::$(CLANG16)"
 }
 
 const resourceGlobalSuffix = "_RESOURCE_GLOBAL"
 
-// makeResourceDecl interns one resource (the sole string boundary): it composes
-// the var name (NYa::ResourceVarName), value, global-var name and --global-resource
-// token, then carries them as STR.
+// makeResourceDecl interns one resource (the sole string boundary): it composes the
+// bare resource ref, global-var name and --global-resource token, then carries them
+// as STR. The uri is kept only to drive the fetch — it never enters the ref.
 func makeResourceDecl(name, uri string) resourceDecl {
-	varName := name + "-" + encodeUriForVar(uri)
-	value := "$(" + varName + ")"
+	value := "$(" + name + ")"
 	globalVar := name + resourceGlobalSuffix
 
 	return resourceDecl{
@@ -49,51 +49,6 @@ func makeResourceDecl(name, uri string) resourceDecl {
 		Value:     internStr(value),
 		Token:     internStr(globalVar + "::" + value),
 	}
-}
-
-// encodeUriForVar mirrors NYa::EncodeUriForVar: a short uri made of [alnum:_-]
-// passes through verbatim (so "sbr:6495238978" stays readable), otherwise it is
-// replaced by the xxh3 hash of the uri to keep the variable name bounded.
-func encodeUriForVar(uri string) string {
-	if len(uri) < 48 && allResourceUriChar(uri) {
-		return uri
-	}
-
-	return uintToString(xxh3.HashString(uri))
-}
-
-func allResourceUriChar(s string) bool {
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-
-		switch {
-		case c >= '0' && c <= '9',
-			c >= 'a' && c <= 'z',
-			c >= 'A' && c <= 'Z',
-			c == ':', c == '_', c == '-':
-		default:
-			return false
-		}
-	}
-
-	return true
-}
-
-func uintToString(v uint64) string {
-	if v == 0 {
-		return "0"
-	}
-
-	var buf [20]byte
-	i := len(buf)
-
-	for v > 0 {
-		i--
-		buf[i] = byte('0' + v%10)
-		v /= 10
-	}
-
-	return string(buf[i:])
 }
 
 // hostPlatformKey is the by_platform json key for the host (os-isa), e.g.
