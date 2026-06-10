@@ -84,10 +84,10 @@ func EmitPR(
 	}
 
 	var outputs []VFS
-	var stdoutPath string
+	var stdoutPath STR
 
 	if stdoutVFS != nil {
-		stdoutPath = stdoutVFS.String()
+		stdoutPath = stdoutVFS.str()
 		outputs = append(outputs, *stdoutVFS)
 	}
 
@@ -137,7 +137,7 @@ func EmitPR(
 		Env:     env,
 	}
 
-	if stdoutPath != "" {
+	if stdoutPath != 0 {
 		cmd.Stdout = stdoutPath
 	}
 

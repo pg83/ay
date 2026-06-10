@@ -4,7 +4,7 @@ type Cmd struct {
 	CmdArgs []STR   `json:"cmd_args"`
 	Cwd     STR     `json:"cwd,omitempty"`
 	Env     EnvVars `json:"env,omitempty"`
-	Stdout  string  `json:"stdout,omitempty"`
+	Stdout  STR     `json:"stdout,omitempty"`
 }
 
 type Node struct {

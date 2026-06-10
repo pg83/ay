@@ -2546,8 +2546,8 @@ END()
 			if cmd.Cwd != 0 {
 				values = append(values, cmd.Cwd.String())
 			}
-			if cmd.Stdout != "" {
-				values = append(values, cmd.Stdout)
+			if cmd.Stdout != 0 {
+				values = append(values, cmd.Stdout.String())
 			}
 		}
 

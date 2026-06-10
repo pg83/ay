@@ -745,8 +745,8 @@ func (ex *executor) runNode(n *Node, srcMount, bldMount string) commandResult {
 
 		var stdoutW io.Writer = os.Stdout
 
-		if c.Stdout != "" {
-			path := mountString(c.Stdout, srcMount, bldMount)
+		if c.Stdout != 0 {
+			path := mountString(c.Stdout.String(), srcMount, bldMount)
 			Throw(os.MkdirAll(filepath.Dir(path), 0o755))
 
 			f := Throw2(os.Create(path))
