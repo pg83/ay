@@ -117,8 +117,14 @@ func TestPlatformMultiarchLibPath_UsesCompilerRoot(t *testing.T) {
 		"LLD_TOOL":         "$(LLD_ROOT)/bin/ld.lld",
 	}, []string{"tool"}, "", "")
 
-	if got, want := p.MultiarchLibPath(), "$(B)/resources/CLANG20/lib:$(B)/resources/OS_SDK_ROOT/usr/lib/x86_64-linux-gnu"; got != want {
-		t.Fatalf("MultiarchLibPath = %q, want %q", got, want)
+	// Internal contour (no OPENSOURCE flag): the resource-resolved SDK form.
+	if got, want := p.multiarchLibPath(false), "$(B)/resources/CLANG20/lib:$(B)/resources/OS_SDK_ROOT/usr/lib/x86_64-linux-gnu"; got != want {
+		t.Fatalf("multiarchLibPath(internal) = %q, want %q", got, want)
+	}
+
+	// Opensource contour: the raw resource-global macro, verbatim.
+	if got, want := p.multiarchLibPath(true), "$(B)/resources/CLANG20/lib:$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu"; got != want {
+		t.Fatalf("multiarchLibPath(opensource) = %q, want %q", got, want)
 	}
 }
 

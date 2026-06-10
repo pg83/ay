@@ -4886,14 +4886,19 @@ func TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs(t *testing.T) {
 	}
 }
 
-func TestProgramBinaryName_Py3ProgramBinIgnoresArg(t *testing.T) {
+func TestProgramBinaryName_Py3ProgramBinArgWins(t *testing.T) {
 	inst := ModuleInstance{Path: Source("tools/py3cc/slow"), Kind: KindBin, Platform: testTargetP}
 
-	// PY3_PROGRAM_BIN(py3cc) INCLUDEd into tools/py3cc/slow links as .../slow
-	// (the module-dir basename), not the macro's progname argument.
+	// PY3_PROGRAM_BIN(py3cc) links as its argument (the opensource reference:
+	// tools/py3cc/slow/bin INCLUDEd into tools/py3cc/slow links as .../py3cc);
+	// without an argument it falls through to the module-dir basename.
 	got := programBinaryName(inst, &ModuleStmt{Name: tokPy3ProgramBin, Args: []string{"py3cc"}})
-	if got != "" {
-		t.Fatalf("PY3_PROGRAM_BIN binary name = %q, want \"\" (fall through to dir basename)", got)
+	if got != "py3cc" {
+		t.Fatalf("PY3_PROGRAM_BIN binary name = %q, want py3cc", got)
+	}
+
+	if got := programBinaryName(inst, &ModuleStmt{Name: tokPy3ProgramBin}); got != "" {
+		t.Fatalf("PY3_PROGRAM_BIN no-arg binary name = %q, want \"\" (dir-basename fallback)", got)
 	}
 
 	// A plain PROGRAM(foo) still honours its explicit name argument.
