@@ -6,6 +6,7 @@ var (
 	envAMX_CFLAGS                   = internEnv("AMX_CFLAGS")
 	envANDROID_API                  = internEnv("ANDROID_API")
 	envARCADIA_BUILD_ROOT           = internEnv("ARCADIA_BUILD_ROOT")
+	envARCADIA_ROOT                 = internEnv("ARCADIA_ROOT")
 	envARCADIA_ROOT_DISTBUILD       = internEnv("ARCADIA_ROOT_DISTBUILD")
 	envARCADIA_SOURCE_ROOT          = internEnv("ARCADIA_SOURCE_ROOT")
 	envARCH_AARCH64                 = internEnv("ARCH_AARCH64")
