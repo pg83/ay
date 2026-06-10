@@ -87,8 +87,6 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	}
 }
 
-
-
 func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 	e := NewBufferedEmitter()
 
