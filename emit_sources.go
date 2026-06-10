@@ -156,22 +156,14 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 			directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, "")
 			evExtras := evWitnessExtras(evRelPath, evPbCC)
-			evHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(evExtras))
+			evHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeDirectives)+len(evExtras))
 			evHParsed = append(evHParsed, directImports...)
-
-			for _, include := range protobufRuntimeHeaders {
-				evHParsed = append(evHParsed, includeDirective{kind: includeQuoted, target: internStr(include.Rel())})
-			}
-
+			evHParsed = append(evHParsed, protobufRuntimeDirectives...)
 			evHParsed = append(evHParsed, evExtras...)
 			registerBoundGeneratedParsedOutput(ctx, srcInstance, "EV", evH, evHParsed, evRef, []NodeRef{event2cppLDRef})
-			evCCParsed := make([]includeDirective, 0, 1+len(protobufRuntimeHeaders))
+			evCCParsed := make([]includeDirective, 0, 1+len(protobufRuntimeDirectives))
 			evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internStr(evH.Rel())})
-
-			for _, include := range protobufRuntimeHeaders {
-				evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internStr(include.Rel())})
-			}
-
+			evCCParsed = append(evCCParsed, protobufRuntimeDirectives...)
 			registerBoundGeneratedParsedOutput(ctx, srcInstance, "EV", evPbCC, evCCParsed, evRef, []NodeRef{event2cppLDRef})
 		}
 
