@@ -25,10 +25,16 @@ REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 GO = "go"
 AY = os.path.join(REPO_ROOT, "ay")
 
-# Host-wide, well-known lock path — shared across every worktree (all agents
-# run as the same user, so ~ resolves identically). NOT under the repo (each
-# worktree has its own .out) and NOT /tmp (read-only in some sandboxes).
-LOCK_PATH = '/var/run/dropbear/tmp/validate.lock'
+# Host-wide, well-known lock paths — shared across every worktree (all agents
+# run as the same user, so each resolves identically). NOT under the repo (each
+# worktree has its own .out). We try them in order and use the first writable
+# one: the dropbear runtime dir where it exists, else /tmp. Both are shared
+# across worktrees on a single host, so the serialization holds either way; the
+# fixed order makes all agents on a box converge on the same file.
+LOCK_PATH_CANDIDATES = (
+    '/var/run/dropbear/tmp/validate.lock',
+    '/tmp/ay-validate.lock',
+)
 
 
 # Per-case generation wall-time budgets (seconds): a gen slower than
@@ -54,22 +60,43 @@ def acquire_global_lock():
     released automatically on exit, crash, or OOM SIGKILL, so a reaped holder
     cannot deadlock the next run. Returns the fd, which the caller must keep
     open (referenced) for the lifetime of the run."""
-    os.makedirs(os.path.dirname(LOCK_PATH), exist_ok=True)
-    fd = os.open(LOCK_PATH, os.O_CREAT | os.O_RDWR, 0o644)
+    fd, path = _open_lock_fd()
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
-        print(f"[lock] another validate.py holds {LOCK_PATH}; waiting…", flush=True)
+        print(f"[lock] another validate.py holds {path}; waiting…", flush=True)
         fcntl.flock(fd, fcntl.LOCK_EX)
     return fd
 
-# name, normalize target, raw upstream reference, xfail (see docstring for values)
+
+def _open_lock_fd():
+    """Open (creating the directory as needed) the first usable lock file from
+    LOCK_PATH_CANDIDATES; return (fd, path). Falls through hosts where the
+    preferred runtime dir is absent or read-only (no /var/run/dropbear) to the
+    next candidate."""
+    last_err = None
+    for path in LOCK_PATH_CANDIDATES:
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
+
+            return fd, path
+        except OSError as e:
+            last_err = e
+
+    raise SystemExit(f"[lock] no writable lock path among {LOCK_PATH_CANDIDATES}: {last_err}")
+
+# name, normalize target, source root, raw upstream reference, xfail (see docstring for values)
+# A case is SKIPPED (never affects exit code) when its source root or reference
+# json is absent from this host — references are large and not every box has
+# every checkout, so a missing one means "no data here", not a failure.
 CASES = [
-    ("sg2", "devtools/ymake/bin", "/home/pg/monorepo/yatool/sg2.json", False),
-    ("sg2_x86_64", "devtools/ymake/bin", "/home/pg/monorepo/yatool/sg2_x86_64.json", False),
-    ("sg3", "devtools/ya/bin", "/home/pg/monorepo/yatool/sg3.json", False),
-    ("sg4", "util/ut", "/home/pg/monorepo/ydb/sg4.json", False),
-    ("sg5", "ydb/apps/ydbd", "/home/pg/monorepo/ydb/sg5.json", False),
+    ("sg2", "devtools/ymake/bin", "/home/pg/monorepo/yatool", "/home/pg/monorepo/yatool/sg2.json", False),
+    ("sg2_x86_64", "devtools/ymake/bin", "/home/pg/monorepo/yatool", "/home/pg/monorepo/yatool/sg2_x86_64.json", False),
+    ("sg3", "devtools/ya/bin", "/home/pg/monorepo/yatool", "/home/pg/monorepo/yatool/sg3.json", False),
+    ("sg4", "util/ut", "/home/pg/monorepo/ydb", "/home/pg/monorepo/ydb/sg4.json", False),
+    ("sg5", "ydb/apps/ydbd", "/home/pg/monorepo/ydb", "/home/pg/monorepo/ydb/sg5.json", False),
+    ("sg6", "devtools/ya/bin", "/home/pg/3", "/home/pg/3/sg6.json", "auto"),
 ]
 
 
@@ -232,7 +259,12 @@ def main() -> int:
     subprocess.run([GO, "build", "-o", "ay", "."], cwd=REPO_ROOT, check=True)
 
     status = 0
-    for name, target, ref, xfail in CASES:
+    for name, target, source_root, ref, xfail in CASES:
+        missing = [p for p in (source_root, ref) if not os.path.exists(p)]
+        if missing:
+            print(f"[{name}] SKIP (data not present on host: {', '.join(missing)})")
+            continue
+
         raw = os.path.join(out_dir, f"{name}.our.json")
         our_n = os.path.join(out_dir, f"{name}.our.norm.jsonl")
         ref_n = os.path.join(out_dir, f"{name}.ref.norm.jsonl")
