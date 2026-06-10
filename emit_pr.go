@@ -185,7 +185,7 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *R
 		Flags:             moduleInputs.Flags,
 		AddIncl:           moduleInputs.AddIncl,
 		PeerAddInclGlobal: moduleInputs.PeerAddInclGlobal,
-		SrcDir:            moduleInputs.SrcDir,
+		SrcDirs:           moduleInputs.SrcDirs,
 		SourceRoot:        ctx.sourceRoot,
 		FS:                ctx.fs,
 	}
@@ -406,7 +406,7 @@ func runProgramInputVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, rel
 		return Source(rel)
 	}
 
-	return resolveModuleSourceVFS(ctx, instance, d, rel, d.srcDir)
+	return resolveModuleSourceVFS(ctx, instance, d, rel, d.srcDirs)
 }
 
 func expandRunProgramCWD(instance ModuleInstance, cwd string) string {

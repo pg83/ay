@@ -165,7 +165,7 @@ func generatedModuleSourceVFS(ctx *genCtx, instance ModuleInstance, srcRel strin
 	return nil
 }
 
-func resolveModuleSourceVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, srcDir *string) VFS {
+func resolveModuleSourceVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, srcDirs []VFS) VFS {
 	if buildVFS := copyFileAutoSourceVFS(instance.Path.Rel(), d, srcRel); buildVFS != nil {
 		return *buildVFS
 	}
@@ -174,7 +174,7 @@ func resolveModuleSourceVFS(ctx *genCtx, instance ModuleInstance, d *moduleData,
 		return *buildVFS
 	}
 
-	return resolveSourceVFS(ctx, instance, srcRel, srcDir)
+	return resolveSourceVFS(ctx, instance, srcRel, srcDirs)
 }
 
 func isSourceEligibleForCopyAuto(srcRel string) bool {

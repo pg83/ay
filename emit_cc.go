@@ -26,7 +26,10 @@ type ModuleCCInputs struct {
 
 	ExtraDepRefs []NodeRef
 
-	SrcDir *string
+	// SrcDirs is the cumulative SRCDIR search path (directory VFS); index 0 is
+	// the module dir. resolveSourceVFS searches it (reverse); composeCCPaths
+	// derives output naming from the resolved source VFS, not from this.
+	SrcDirs []VFS
 
 	SourceRoot string
 
@@ -202,8 +205,8 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	// instance.Path+"/"+srcRel would still carry the unnormalised tail).
 	canon := filepath.ToSlash(filepath.Clean(instance.Path.Rel() + "/" + srcRel))
 
-	if srcVFS.IsSource() && srcVFS.Rel() != canon && in.SrcDir != nil {
-		outputRel := composeSrcDirOutputRel(instance.Path.Rel(), *in.SrcDir, srcRel)
+	if srcVFS.IsSource() && srcVFS.Rel() != canon {
+		outputRel := composeSrcDirOutputRel(instance.Path.Rel(), srcVFS.Rel())
 		out = Build(instance.Path.Rel() + "/" + outputRel + suffix)
 		return out, input
 	}
@@ -224,12 +227,14 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	return Build(outRel), input
 }
 
-func composeSrcDirOutputRel(instancePath, srcDir, srcRel string) string {
-	target := filepath.Join(srcDir, srcRel)
+// composeSrcDirOutputRel rebases the resolved source path (target, e.g. a
+// SRCDIR-found file like contrib/.../src/repmgr/x.c) under the module's build
+// dir, mapping any `..` ascent into `__` segments.
+func composeSrcDirOutputRel(instancePath, target string) string {
 	rel, err := filepath.Rel(instancePath, target)
 
 	if err != nil {
-		return "_/" + srcRel
+		return "_/" + filepath.Base(target)
 	}
 
 	parts := strings.Split(rel, string(filepath.Separator))

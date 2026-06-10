@@ -32,7 +32,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		}
 
 		generatedInputs := d.pyGeneratedSrcs[srcRel]
-		srcAbs := resolveSourceVFS(ctx, instance, srcRel, d.srcDir)
+		srcAbs := resolveSourceVFS(ctx, instance, srcRel, d.srcDirs)
 
 		if generatedInputs != nil {
 			srcAbs = Build(instance.Path.Rel() + "/" + srcRel)

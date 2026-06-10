@@ -120,7 +120,7 @@ var acknowledgedMacros = map[string]struct{}{
 	"EXCLUDE_TAGS":                    {},
 	"CHECK_DEPENDENT_DIRS":            {},
 	"WINDOWS_LONG_PATH_MANIFEST":      {},
-	"WITH_KOTLIN_GRPC":               {},
+	"WITH_KOTLIN_GRPC":                {},
 }
 
 type moduleEmitResult struct {
@@ -809,7 +809,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			Flags:             d.flags,
 			AddIncl:           d.addIncl,
 			PeerAddInclGlobal: peerContribs.addIncl,
-			SrcDir:            d.srcDir,
+			SrcDirs:           d.srcDirs,
 			SourceRoot:        ctx.sourceRoot,
 			FS:                ctx.fs,
 			DefaultVars:       d.defaultVars,
@@ -1599,10 +1599,13 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path.Rel(), peerAddInclGlobal, dedupedAddIncl)
 
-	effectiveSrcDir := d.srcDir
+	// The cumulative SRCDIR search path (always non-empty: module dir at index 0,
+	// then explicit SRCDIRs). A UNITTEST_FOR program also searches the tested
+	// module's dir, appended last (highest precedence in the reversed search).
+	effectiveSrcDirs := d.srcDirs
 
-	if effectiveSrcDir == nil {
-		effectiveSrcDir = programSourceDir(d.moduleStmt)
+	if pd := programSourceDir(d.moduleStmt); pd != nil {
+		effectiveSrcDirs = append(append([]VFS{}, d.srcDirs...), dirKey(*pd))
 	}
 
 	moduleInputs := ModuleCCInputs{
@@ -1622,7 +1625,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		PeerCOnlyFlagsGlobal:   peerCOnlyFlagsGlobal,
 		ModuleScopeCFlags:      d.moduleScopeCFlags,
 		SFlags:                 d.sFlags,
-		SrcDir:                 effectiveSrcDir,
+		SrcDirs:                effectiveSrcDirs,
 		SourceRoot:             ctx.sourceRoot,
 		FS:                     ctx.fs,
 		DefaultVars:            d.defaultVars,
@@ -1641,8 +1644,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		BisonGenExt: d.bisonGenExt,
 		TC:          d.tc,
 	}
-
-	ancestorRebase := d.srcDir != nil && d.moduleStmt.Name == tokProgram && isAncestorPath(*d.srcDir, instance.Path.Rel())
 
 	// Pass 1 (codegen-producing srcs: .proto, .ev, .fbs, .rl, .cpp.in, .c.in, .y)
 	// runs BEFORE emitCopyFiles / emitEnumSrcs / emitMiscNodes. Those later
@@ -1680,7 +1681,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			srcInputs.FlatOutput = true
 		}
 
-		codegenEmits = append(codegenEmits, codegenEmit{src, emitOneSource(ctx, instance, d, src, srcInputs, ancestorRebase)})
+		codegenEmits = append(codegenEmits, codegenEmit{src, emitOneSource(ctx, instance, d, src, srcInputs)})
 	}
 
 	emitCopyFiles(ctx, instance, d, &moduleInputs)
@@ -1733,7 +1734,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			continue
 		}
 
-		appendCC(src, emitOneSource(ctx, instance, d, src, emitSrcInputs(src), ancestorRebase))
+		appendCC(src, emitOneSource(ctx, instance, d, src, emitSrcInputs(src)))
 	}
 
 	for _, ce := range codegenEmits {
@@ -1815,7 +1816,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		variantIn.PerSourceCFlags = flags
 
-		emit := emitOneSource(ctx, instance, d, e.Src, variantIn, ancestorRebase)
+		emit := emitOneSource(ctx, instance, d, e.Src, variantIn)
 
 		if emit == nil {
 			continue
@@ -1832,10 +1833,6 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	for _, js := range d.joinSrcs {
 		srcInstance := instance
-
-		if ancestorRebase {
-			srcInstance.Path = Source(*d.srcDir)
-		}
 
 		joinClosure := joinSrcsIncludeClosure(ctx, srcInstance.Platform, srcInstance, js.Sources, moduleInputs)
 
@@ -1869,7 +1866,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	globalOutputs := make([]VFS, 0, len(d.globalSrcs))
 
 	for _, src := range d.globalSrcs {
-		emit := emitOneSource(ctx, instance, d, src, moduleInputs, ancestorRebase)
+		emit := emitOneSource(ctx, instance, d, src, moduleInputs)
 
 		if emit == nil {
 			continue

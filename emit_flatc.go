@@ -130,7 +130,7 @@ func flatcResolvedModuleSourceRel(ctx *genCtx, instance ModuleInstance, d *modul
 			continue
 		}
 
-		if resolveSourceVFS(ctx, instance, srcRel, d.srcDir).Rel() == resolvedRel {
+		if resolveSourceVFS(ctx, instance, srcRel, d.srcDirs).Rel() == resolvedRel {
 			return srcRel, true
 		}
 	}
@@ -201,7 +201,7 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 }
 
 func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string) flatcEmission {
-	srcVFS := resolveSourceVFS(ctx, instance, srcRel, d.srcDir)
+	srcVFS := resolveSourceVFS(ctx, instance, srcRel, d.srcDirs)
 	key := codegenOutputKey{
 		platform: instance.Platform,
 		path:     Build(srcVFS.Rel() + ".h"),
