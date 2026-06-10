@@ -171,7 +171,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 			{CmdArgs: cmd3, Env: envVcsOnly},
 		},
 		Env:              envFull,
-		Inputs:           inputs,
+		Inputs:           inputChunks{inputs},
 		Outputs:          []VFS{Build(instance.Path.Rel() + "/" + outputName)},
 		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

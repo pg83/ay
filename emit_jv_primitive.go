@@ -26,7 +26,7 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs []VFS, outputs []
 			},
 		},
 		Env:     env,
-		Inputs:  inputs,
+		Inputs:  inputChunks{inputs},
 		KV:      KV{P: pkJV, PC: pcLightBlue, ShowOut: true},
 		Outputs: outputs,
 		TargetProperties: func() TargetProperties {

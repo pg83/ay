@@ -10,7 +10,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	ragel6LD := e.Emit(&Node{
 		Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"link"}), Env: nil}},
 		Env:              nil,
-		Inputs:           ToVFSSlice([]string{}),
+		Inputs:           inputChunks{ToVFSSlice([]string{})},
 		KV:               KV{P: pkLD},
 		Outputs:          ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 		Platform:         &Platform{Target: "default-linux-x86_64"},
@@ -93,7 +93,7 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 	ragel6LD := e.Emit(&Node{Platform: &Platform{},
 		Cmds:    []Cmd{{CmdArgs: appendInternStrs(nil, []string{"link"}), Env: nil}},
 		Env:     nil,
-		Inputs:  ToVFSSlice([]string{}),
+		Inputs:  inputChunks{ToVFSSlice([]string{})},
 		KV:      KV{P: pkLD},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
@@ -131,7 +131,7 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 	ragel6LD := e.Emit(&Node{Platform: &Platform{},
 		Cmds:    []Cmd{{CmdArgs: appendInternStrs(nil, []string{"link"}), Env: nil}},
 		Env:     nil,
-		Inputs:  ToVFSSlice([]string{}),
+		Inputs:  inputChunks{ToVFSSlice([]string{})},
 		KV:      KV{P: pkLD},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
@@ -180,7 +180,7 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 	ragel6LD := e.Emit(&Node{Platform: &Platform{},
 		Cmds:    []Cmd{{CmdArgs: appendInternStrs(nil, []string{"link"}), Env: nil}},
 		Env:     nil,
-		Inputs:  ToVFSSlice([]string{}),
+		Inputs:  inputChunks{ToVFSSlice([]string{})},
 		KV:      KV{P: pkLD},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
@@ -201,13 +201,13 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 		"$(S)/util/generic/ymath.h",
 	}
 
-	if len(got.Inputs) != len(wantInputs) {
-		t.Fatalf("R6 inputs len = %d, want %d (got=%v)", len(got.Inputs), len(wantInputs), got.Inputs)
+	if len(got.flatInputs()) != len(wantInputs) {
+		t.Fatalf("R6 inputs len = %d, want %d (got=%v)", len(got.flatInputs()), len(wantInputs), got.flatInputs())
 	}
 
 	for i, w := range wantInputs {
-		if got.Inputs[i].String() != w {
-			t.Errorf("R6 inputs[%d] = %q, want %q", i, got.Inputs[i].String(), w)
+		if got.flatInputs()[i].String() != w {
+			t.Errorf("R6 inputs[%d] = %q, want %q", i, got.flatInputs()[i].String(), w)
 		}
 	}
 }

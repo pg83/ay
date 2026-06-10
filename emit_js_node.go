@@ -27,14 +27,14 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	inputs := make([]VFS, 0, 2+len(sources)+len(closure))
-	inputs = append(inputs, scripts[joinSrcs]...)
+	srcVFSs := make([]VFS, 0, len(sources))
 
 	for _, s := range sources {
-		inputs = append(inputs, Source(instance.Path.Rel()+"/"+s))
+		srcVFSs = append(srcVFSs, Source(instance.Path.Rel()+"/"+s))
 	}
 
-	inputs = append(inputs, closure...)
+	// Chunked: the join closure (a shared cached slice) is referenced, not copied.
+	inputs := inputChunks{scripts[joinSrcs], srcVFSs, closure}
 
 	node := &Node{
 		Platform: statsPlatform,

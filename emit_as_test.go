@@ -98,7 +98,7 @@ func testYasmLDRef(e *BufferedEmitter) NodeRef {
 	return e.Emit(&Node{
 		Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"yasm"}), Env: nil}},
 		Env:              nil,
-		Inputs:           ToVFSSlice([]string{}),
+		Inputs:           inputChunks{ToVFSSlice([]string{})},
 		Outputs:          ToVFSSlice([]string{"$(B)/tools/yasm/yasm"}),
 		KV:               KV{P: pkLD, PC: pcLightCyan},
 		Tags:             []STR{internStr("tool")},

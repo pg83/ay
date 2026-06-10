@@ -99,14 +99,14 @@ END()
 	}
 
 	hasBuildProto := false
-	for _, in := range pb.Inputs {
+	for _, in := range pb.flatInputs() {
 		if in.String() == "$(B)/"+modPath+"/JsonPathParser.proto" {
 			hasBuildProto = true
 			break
 		}
 	}
 	if !hasBuildProto {
-		t.Errorf("PB.Inputs does not include $(B)/.../JsonPathParser.proto: %v", pb.Inputs)
+		t.Errorf("PB.flatInputs() does not include $(B)/.../JsonPathParser.proto: %v", pb.flatInputs())
 	}
 }
 
@@ -169,8 +169,8 @@ END()
 		t.Fatal("no PB node for JsonPathParser.pb.h emitted")
 	}
 
-	have := make(map[string]struct{}, len(pb.Inputs))
-	for _, in := range pb.Inputs {
+	have := make(map[string]struct{}, len(pb.flatInputs()))
+	for _, in := range pb.flatInputs() {
 		have[in.String()] = struct{}{}
 	}
 	for _, want := range []string{
@@ -181,7 +181,7 @@ END()
 		"$(S)/build/scripts/stdout2stderr.py",
 	} {
 		if _, ok := have[want]; !ok {
-			t.Errorf("PB.Inputs missing producer source input %q: %v", want, vfsStringsT3(pb.Inputs))
+			t.Errorf("PB.flatInputs() missing producer source input %q: %v", want, vfsStringsT3(pb.flatInputs()))
 		}
 	}
 }
@@ -272,14 +272,14 @@ END()
 		"$(B)/" + modPath + "/JsonPathParser.pb.cc.o",
 	} {
 		found := false
-		for _, in := range ar.Inputs {
+		for _, in := range ar.flatInputs() {
 			if in.String() == want {
 				found = true
 				break
 			}
 		}
 		if !found {
-			t.Errorf("proto AR inputs missing %q: %v", want, ar.Inputs)
+			t.Errorf("proto AR inputs missing %q: %v", want, ar.flatInputs())
 		}
 	}
 
@@ -289,7 +289,7 @@ END()
 	// [JsonPathParser.cpp.o, JsonPathLexer.cpp.o, JsonPathParser.pb.cc.o].
 	idxOf := func(rel string) int {
 		want := "$(B)/" + modPath + "/" + rel
-		for i, in := range ar.Inputs {
+		for i, in := range ar.flatInputs() {
 			if in.String() == want {
 				return i
 			}
@@ -300,10 +300,10 @@ END()
 	lexerCpp := idxOf("JsonPathLexer.cpp.o")
 	pbCC := idxOf("JsonPathParser.pb.cc.o")
 	if parserCpp < 0 || lexerCpp < 0 || pbCC < 0 {
-		t.Fatalf("missing AR member (parser=%d lexer=%d pb=%d): %v", parserCpp, lexerCpp, pbCC, ar.Inputs)
+		t.Fatalf("missing AR member (parser=%d lexer=%d pb=%d): %v", parserCpp, lexerCpp, pbCC, ar.flatInputs())
 	}
 	if !(parserCpp < pbCC && lexerCpp < pbCC) {
 		t.Errorf("ANTLR .cpp.o must precede .pb.cc.o in proto AR: parser=%d lexer=%d pb.cc=%d (%v)",
-			parserCpp, lexerCpp, pbCC, ar.Inputs)
+			parserCpp, lexerCpp, pbCC, ar.flatInputs())
 	}
 }

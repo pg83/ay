@@ -65,7 +65,7 @@ func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 	objRefs := []NodeRef{e.Emit(&Node{
 		Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"cc"}), Env: nil}},
 		Env:              nil,
-		Inputs:           ToVFSSlice([]string{}),
+		Inputs:           inputChunks{ToVFSSlice([]string{})},
 		KV:               KV{},
 		Outputs:          ToVFSSlice([]string{"$(B)/build/cow/on/lib.c.o"}),
 		Platform:         &Platform{Target: "default-linux-aarch64"},
@@ -179,7 +179,7 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 		return e.Emit(&Node{
 			Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"cc"}), Env: nil}},
 			Env:              nil,
-			Inputs:           ToVFSSlice([]string{}),
+			Inputs:           inputChunks{ToVFSSlice([]string{})},
 			KV:               KV{},
 			Outputs:          []VFS{out},
 			Platform:         &Platform{Target: "default-linux-aarch64"},
@@ -229,7 +229,7 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 		return e.Emit(&Node{
 			Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"cc"}), Env: nil}},
 			Env:              nil,
-			Inputs:           ToVFSSlice([]string{}),
+			Inputs:           inputChunks{ToVFSSlice([]string{})},
 			KV:               KV{},
 			Outputs:          []VFS{out},
 			Platform:         &Platform{Target: "default-linux-aarch64"},
@@ -266,7 +266,7 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 		return e.Emit(&Node{
 			Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"cc"}), Env: nil}},
 			Env:              nil,
-			Inputs:           ToVFSSlice([]string{}),
+			Inputs:           inputChunks{ToVFSSlice([]string{})},
 			KV:               KV{},
 			Outputs:          []VFS{out},
 			Platform:         &Platform{Target: "default-linux-aarch64"},
@@ -285,7 +285,7 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, nil, testHostP, e)
 	got := e.nodes[arRef]
 
-	inputs := got.Inputs
+	inputs := got.flatInputs()
 	if len(inputs) != 4 {
 		t.Fatalf("inputs len = %d, want 4", len(inputs))
 	}
@@ -306,7 +306,7 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 		return e.Emit(&Node{
 			Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"cc"}), Env: nil}},
 			Env:              nil,
-			Inputs:           ToVFSSlice([]string{}),
+			Inputs:           inputChunks{ToVFSSlice([]string{})},
 			KV:               KV{},
 			Outputs:          []VFS{out},
 			Platform:         &Platform{Target: "default-linux-aarch64"},

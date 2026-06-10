@@ -77,7 +77,7 @@ func emitARNode(
 			},
 		},
 		Env:              topEnv,
-		Inputs:           inputs,
+		Inputs:           inputChunks{inputs},
 		KV:               KV{P: pkAR, PC: pcLightRed, ShowOut: true},
 		Outputs:          []VFS{archivePath},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

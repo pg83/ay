@@ -358,8 +358,8 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 	)
 
 	got := emit.nodes[ldRef]
-	if !slices.Contains(got.Inputs, Build(wholeArchivePath)) {
-		t.Fatalf("inputs do not contain whole-archive path %q: %#v", wholeArchivePath, got.Inputs)
+	if !slices.Contains(got.flatInputs(), Build(wholeArchivePath)) {
+		t.Fatalf("inputs do not contain whole-archive path %q: %#v", wholeArchivePath, got.flatInputs())
 	}
 
 	// The lib is a peer, so it is in DepRefs — exactly ONCE (whole-archive is a
@@ -429,13 +429,13 @@ func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T
 
 	got := emit.nodes[ldRef]
 	count := 0
-	for _, input := range got.Inputs {
+	for _, input := range got.flatInputs() {
 		if input == dupPath {
 			count++
 		}
 	}
 	if count != 1 {
-		t.Fatalf("inputs contain %d copies of %q, want 1: %#v", count, dupPath.String(), got.Inputs)
+		t.Fatalf("inputs contain %d copies of %q, want 1: %#v", count, dupPath.String(), got.flatInputs())
 	}
 
 	depCount := 0

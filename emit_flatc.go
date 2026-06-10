@@ -189,7 +189,7 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 		DepRefs:          depRefs,
 		Env:              env,
 		ForeignDepRefs:   foreignDepRefs,
-		Inputs:           inputs,
+		Inputs:           inputChunks{inputs},
 		KV:               KV{P: pkFL, PC: pcLightGreen},
 		Outputs:          []VFS{headerVFS, cppVFS, bfbsVFS},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

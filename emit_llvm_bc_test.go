@@ -259,14 +259,14 @@ END()
 		t.Errorf("graph missing PY objcopy node for embedded LLVM_BC output")
 	} else {
 		hasOptBc := false
-		for _, in := range pyNode.Inputs {
+		for _, in := range pyNode.flatInputs() {
 			if in.String() == "$(B)/"+modPath+"/Bar_optimized.16.bc" {
 				hasOptBc = true
 				break
 			}
 		}
 		if !hasOptBc {
-			t.Errorf("PY objcopy inputs do not include the optimized.bc: %v", pyNode.Inputs)
+			t.Errorf("PY objcopy inputs do not include the optimized.bc: %v", pyNode.flatInputs())
 		}
 	}
 
@@ -376,7 +376,7 @@ END()
 // carries the full transitive include closure in Inputs, not just the single
 // source file. Upstream emits all header dependencies as direct node inputs so
 // any header change retriggers the BC compile. Our prior code used
-// Inputs: []VFS{inputVFS} — only the source — which diverged from upstream.
+// Inputs: inputChunks{[]VFS{inputVFS} — only the source — which diverged from upstream.
 func TestEmitLLVMBC_BCNodeCarriesIncludeClosure(t *testing.T) {
 	const modPath = "mod/llvm"
 
@@ -422,18 +422,18 @@ END()
 
 	// BC node must carry the source file plus its include closure (foo.h).
 	// Before fix: Inputs was [foo.cpp] only — len == 1.
-	if len(bcNode.Inputs) < 2 {
-		t.Errorf("BC node Inputs has only %d entries; want source + closure: %v", len(bcNode.Inputs), vfsStringsT3(bcNode.Inputs))
+	if len(bcNode.flatInputs()) < 2 {
+		t.Errorf("BC node Inputs has only %d entries; want source + closure: %v", len(bcNode.flatInputs()), vfsStringsT3(bcNode.flatInputs()))
 	}
 
 	// First input must be the source file.
-	if !strings.HasSuffix(bcNode.Inputs[0].String(), "foo.cpp") {
-		t.Errorf("BC node first input is not foo.cpp: %v", bcNode.Inputs[0])
+	if !strings.HasSuffix(bcNode.flatInputs()[0].String(), "foo.cpp") {
+		t.Errorf("BC node first input is not foo.cpp: %v", bcNode.flatInputs()[0])
 	}
 
 	// Closure must include foo.h.
 	if !nodeHasInput(bcNode, "$(S)/"+modPath+"/foo.h") {
-		t.Errorf("BC node Inputs missing foo.h from include closure: %v", vfsStringsT3(bcNode.Inputs))
+		t.Errorf("BC node Inputs missing foo.h from include closure: %v", vfsStringsT3(bcNode.flatInputs()))
 	}
 }
 
@@ -497,7 +497,7 @@ END()
 	for _, want := range wantInputs {
 		if !nodeHasInput(pyNode, want) {
 			t.Errorf("PY objcopy node missing BC closure input %q; inputs: %v",
-				want, vfsStringsT3(pyNode.Inputs))
+				want, vfsStringsT3(pyNode.flatInputs()))
 		}
 	}
 }
@@ -552,16 +552,16 @@ END()
 	}
 
 	// Primary input must be the build-root generated copy, not the source.
-	if len(bcNode.Inputs) == 0 {
+	if len(bcNode.flatInputs()) == 0 {
 		t.Fatal("BC node has no inputs")
 	}
-	primaryInput := bcNode.Inputs[0].String()
+	primaryInput := bcNode.flatInputs()[0].String()
 	if !strings.HasPrefix(primaryInput, "$(B)/") || !strings.HasSuffix(primaryInput, "gen.cpp") {
 		t.Errorf("BC node primary input is not $(B)/.../gen.cpp: %q", primaryInput)
 	}
 
 	// BC node must also carry gen.h from the closure.
 	if !nodeHasInput(bcNode, "$(S)/"+modPath+"/gen.h") {
-		t.Errorf("BC node Inputs missing gen.h from closure: %v", vfsStringsT3(bcNode.Inputs))
+		t.Errorf("BC node Inputs missing gen.h from closure: %v", vfsStringsT3(bcNode.flatInputs()))
 	}
 }

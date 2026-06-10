@@ -56,11 +56,11 @@ func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 			},
 		},
 		Env: yasmEnv,
-		Inputs: []VFS{
+		Inputs: inputChunks{{
 			yasmBinaryVFS,
 			rodataScriptVFS,
 			srcVFS,
-		},
+		}},
 		KV:               KV{P: pkRD, PC: pcLightGreen},
 		Outputs:          []VFS{asmVFS, outVFS},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

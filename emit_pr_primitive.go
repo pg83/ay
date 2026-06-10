@@ -149,7 +149,7 @@ func EmitPR(
 		Platform:         instance.Platform,
 		Cmds:             []Cmd{cmd},
 		Env:              env,
-		Inputs:           inputs,
+		Inputs:           inputChunks{inputs},
 		Outputs:          outputs,
 		KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},

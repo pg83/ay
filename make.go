@@ -787,16 +787,18 @@ func (ex *executor) runNode(n *Node, srcMount, bldMount string) commandResult {
 // sources the graph declares and nothing else. $(B) inputs need no such filtering —
 // they are the dep outputs, restored whole into the sandbox build dir.
 func (ex *executor) linkSourceInputs(n *Node, srcMount string) {
-	for _, in := range n.Inputs {
-		if !in.IsSource() {
-			continue
-		}
+	for _, chunk := range n.Inputs {
+		for _, in := range chunk {
+			if !in.IsSource() {
+				continue
+			}
 
-		rel := in.Rel()
-		target := filepath.Join(srcMount, rel)
-		Throw(os.MkdirAll(filepath.Dir(target), 0o755))
-		_ = os.Remove(target)
-		Throw(os.Symlink(filepath.Join(ex.srcRoot, rel), target))
+			rel := in.Rel()
+			target := filepath.Join(srcMount, rel)
+			Throw(os.MkdirAll(filepath.Dir(target), 0o755))
+			_ = os.Remove(target)
+			Throw(os.Symlink(filepath.Join(ex.srcRoot, rel), target))
+		}
 	}
 }
 

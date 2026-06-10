@@ -96,9 +96,9 @@ func appendNode(buf []byte, n *Node, uids *uidVec, dropSrcInputs bool) []byte {
 	buf = append(buf, `,"inputs":`...)
 
 	if dropSrcInputs {
-		buf = appendBuildOnlyVFSSlice(buf, n.Inputs)
+		buf = appendBuildOnlyVFSChunks(buf, n.Inputs)
 	} else {
-		buf = appendVFSSlice(buf, n.Inputs)
+		buf = appendVFSChunks(buf, n.Inputs)
 	}
 
 	buf = append(buf, `,"kv":`...)
@@ -228,6 +228,49 @@ func appendRefUIDs(buf []byte, refs []NodeRef, uids *uidVec) []byte {
 		}
 
 		buf = appendUID(buf, uids.get(r))
+	}
+
+	return append(buf, ']')
+}
+
+// appendVFSChunks writes the flattened chunk list — byte-identical to
+// appendVFSSlice over the concatenation.
+func appendVFSChunks(buf []byte, chunks [][]VFS) []byte {
+	buf = append(buf, '[')
+	first := true
+
+	for _, ch := range chunks {
+		for _, v := range ch {
+			if !first {
+				buf = append(buf, ',')
+			}
+
+			first = false
+			buf = appendVFS(buf, v)
+		}
+	}
+
+	return append(buf, ']')
+}
+
+// appendBuildOnlyVFSChunks is appendBuildOnlyVFSSlice over the chunk list.
+func appendBuildOnlyVFSChunks(buf []byte, chunks [][]VFS) []byte {
+	buf = append(buf, '[')
+	first := true
+
+	for _, ch := range chunks {
+		for _, v := range ch {
+			if v.IsSource() {
+				continue
+			}
+
+			if !first {
+				buf = append(buf, ',')
+			}
+
+			first = false
+			buf = appendVFS(buf, v)
+		}
 	}
 
 	return append(buf, ']')

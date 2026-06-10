@@ -60,7 +60,7 @@ func EmitEN(
 			},
 		},
 		Env:              env,
-		Inputs:           inputs,
+		Inputs:           inputChunks{inputs},
 		KV:               KV{P: pkEN, PC: pcYellow},
 		Outputs:          outputs,
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

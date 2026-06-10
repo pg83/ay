@@ -287,7 +287,7 @@ func EmitPB(
 			},
 		},
 		Env:              env,
-		Inputs:           inputs,
+		Inputs:           inputChunks{inputs},
 		Outputs:          outputs,
 		KV:               KV{P: pkPB, PC: pcYellow},
 		TargetProperties: targetProps,

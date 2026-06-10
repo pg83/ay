@@ -86,7 +86,7 @@ type ModuleCCInputs struct {
 	TC moduleToolchain
 }
 
-func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS, []VFS) {
+func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS, inputChunks) {
 	suffix := ".o"
 
 	if instance.Platform.PIC {
@@ -154,32 +154,23 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 
 	env := hostP.ToolEnv()
 
-	// When the wrapcc.py compile wrapper is active (non-opensource build, see
-	// wrapccPrefixFor) it is an ${input:} of the CC node and runs under YMAKE_PYTHON3,
-	// so the script joins the inputs and the python3 resource joins the deps.
+	// Inputs are assembled as chunks — the include closure (a shared cached
+	// slice) is referenced, never copied. When the wrapcc.py compile wrapper is
+	// active (non-opensource build, see wrapccPrefixFor) it is an ${input:} of
+	// the CC node and runs under YMAKE_PYTHON3, so the script joins the inputs
+	// as its own chunk and the python3 resource joins the deps.
 	wrap := len(instance.Platform.WrapccHead) > 0
 
-	allInputs := in.NodeInputs
+	var allInputs inputChunks
 
-	if allInputs == nil {
-		n := 1 + len(in.IncludeInputs)
+	if in.NodeInputs == nil {
+		allInputs = append(allInputs, srcChunk(inVFS), in.IncludeInputs)
+	} else {
+		allInputs = append(allInputs, in.NodeInputs)
+	}
 
-		if wrap {
-			n++
-		}
-
-		allInputs = make([]VFS, 0, n)
-		allInputs = append(allInputs, inVFS)
-		allInputs = append(allInputs, in.IncludeInputs...)
-
-		if wrap {
-			allInputs = append(allInputs, wrapccPyVFS)
-		}
-	} else if wrap {
-		// Don't mutate the caller-owned NodeInputs slice; copy then append.
-		cp := make([]VFS, len(allInputs), len(allInputs)+1)
-		copy(cp, allInputs)
-		allInputs = append(cp, wrapccPyVFS)
+	if wrap {
+		allInputs = append(allInputs, wrapccPyChunk)
 	}
 
 	node := &Node{

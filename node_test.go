@@ -74,7 +74,7 @@ func TestNodeJSONKeyOrder_AllFieldsPresent(t *testing.T) {
 		Cmds: []Cmd{{CmdArgs: appendInternStrs(nil, []string{"echo"}), Env: nil}},
 
 		Env:              EnvVars{{Name: internEnv("FOO"), Value: internStr("bar")}},
-		Inputs:           ToVFSSlice([]string{"in"}),
+		Inputs:           inputChunks{ToVFSSlice([]string{"in"})},
 		KV:               KV{P: pkLD},
 		Outputs:          ToVFSSlice([]string{"out"}),
 		Platform:         &Platform{Target: "default-linux-aarch64"},
@@ -105,7 +105,7 @@ func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
 		Cmds: []Cmd{},
 
 		Env:              nil,
-		Inputs:           ToVFSSlice([]string{}),
+		Inputs:           inputChunks{ToVFSSlice([]string{})},
 		KV:               KV{},
 		Outputs:          ToVFSSlice([]string{}),
 		Platform:         nil,
@@ -142,7 +142,7 @@ func TestNodeJSON_DoesNotSerializeInternalRefs(t *testing.T) {
 		Cmds: []Cmd{},
 
 		Env:              nil,
-		Inputs:           ToVFSSlice([]string{}),
+		Inputs:           inputChunks{ToVFSSlice([]string{})},
 		KV:               KV{},
 		Outputs:          ToVFSSlice([]string{}),
 		Requirements:     Requirements{},

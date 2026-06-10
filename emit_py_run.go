@@ -527,7 +527,7 @@ func EmitPYRun(
 		Platform:         instance.Platform,
 		Cmds:             []Cmd{cmd},
 		Env:              env,
-		Inputs:           inputs,
+		Inputs:           inputChunks{inputs},
 		KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 		Outputs:          outputs,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
