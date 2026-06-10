@@ -112,6 +112,10 @@ func shouldExposeSandboxingTargetTags(mf *makeFlags) bool {
 	return mf != nil && mf.sandboxing && mf.testLevel > 0
 }
 
+// executorGCPercent is the GOGC value for builds (-j > 0), picked from the sg5
+// GOGC scan — see the comment at the SetGCPercent call in cmdMake.
+const executorGCPercent = 400
+
 func cmdMake(args []string) int {
 	if len(args) > 0 && args[0] == "cas" {
 		return cmdCasAnalyze(args[1:])
@@ -129,10 +133,17 @@ func cmdMake(args []string) int {
 	// garbage along the way only costs CPU (measured on sg5: GC off cuts gen user
 	// time ~20%, peak RSS 495->680 MB — fine for a short-lived process). With
 	// executor threads the process lives for the whole build and shares RAM with
-	// the compilers it spawns, so GC stays on there (tuning it is a separate
-	// investigation). An explicit GOGC in the environment wins in both modes.
-	if mf.threads == 0 && os.Getenv("GOGC") == "" {
-		debug.SetGCPercent(-1)
+	// the compilers it spawns, so GC stays on — but far rarer than the default:
+	// the sg5 GOGC scan plateaus at ~the GC-off user time from 400 up (the
+	// 400..800 spread is the phase of the last mark cycle, not a trend), so 400
+	// keeps near-full gen speed while still bounding the long-lived build
+	// process's heap. An explicit GOGC in the environment wins in both modes.
+	if os.Getenv("GOGC") == "" {
+		if mf.threads == 0 {
+			debug.SetGCPercent(-1)
+		} else {
+			debug.SetGCPercent(executorGCPercent)
+		}
 	}
 
 	fs := NewFS(mf.srcRoot)
