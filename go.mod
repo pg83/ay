@@ -7,6 +7,7 @@ require (
 	github.com/goccy/go-json v0.10.6
 	github.com/jon-codes/getopt v0.2.1
 	github.com/zeebo/xxh3 v1.0.2
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require github.com/klauspost/cpuid/v2 v2.0.9 // indirect

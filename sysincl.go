@@ -6,6 +6,8 @@ import (
 	"regexp/syntax"
 	"sort"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 var sysInclYamlSequence = []sysInclEntry{
@@ -39,12 +41,15 @@ var sysInclYamlSequence = []sysInclEntry{
 	{file: "python-2-disable-numpy.yml"},
 }
 
+const (
+	baseSysInclDir     = "build/sysincl"
+	internalSysInclDir = "build/internal/sysincl"
+)
+
 var supportedSysInclArchs = map[string]struct{}{
 	"aarch64": {},
 	"x86_64":  {},
 }
-
-var _ = sort.Strings
 
 type SysIncl struct {
 	Filter         *sourceFilter
@@ -103,8 +108,8 @@ func muslArchIs(want string) func(sysInclEnv) bool {
 	return func(e sysInclEnv) bool { return e.musl && e.arch == want }
 }
 
-func LoadSysInclSetForFS(fs FS, arch string, musl bool, onWarn func(Warn)) SysInclSet {
-	if !fs.IsDir(srcRootVFS, "build/sysincl") {
+func LoadSysInclSetForFS(fs FS, arch string, musl, opensource bool, onWarn func(Warn)) SysInclSet {
+	if !fs.IsDir(srcRootVFS, baseSysInclDir) {
 		return nil
 	}
 
@@ -114,254 +119,189 @@ func LoadSysInclSetForFS(fs FS, arch string, musl bool, onWarn func(Warn)) SysIn
 
 	env := sysInclEnv{arch: arch, musl: musl}
 	var set SysInclSet
-	sysinclDir := dirKey("build/sysincl")
+	sysinclDir := dirKey(baseSysInclDir)
 
 	for _, entry := range sysInclYamlSequence {
 		if entry.predicate != nil && !entry.predicate(env) {
 			continue
 		}
 
-		rel := "build/sysincl/" + entry.file
-
 		if !fs.IsFile(sysinclDir, entry.file) {
 			continue
 		}
 
-		records := parseSysInclYAML(entry.file, string(fs.Read(rel)), onWarn)
+		records := parseSysInclYAML(entry.file, string(fs.Read(baseSysInclDir+"/"+entry.file)), onWarn)
+		set = append(set, records...)
+	}
+
+	// The internal contour (OPENSOURCE != yes) layers build/internal/sysincl/* on top
+	// of the base set (build/internal/conf/sysincl.conf). Rather than track the curated
+	// list, load every .yml in that directory — files for absent platforms/projects
+	// (qt, smart_devices_*, …) map headers that never appear in these sources, so they
+	// are inert. Sorted for deterministic precedence; loaded after the base set so they
+	// override it (e.g. taxi.yml's <errno.h>/<pthread.h> → userver libc_workarounds).
+	if !opensource {
+		set = append(set, loadSysInclDir(fs, internalSysInclDir, onWarn)...)
+	}
+
+	return set
+}
+
+// loadSysInclDir parses every *.yml in a source-tree sysincl directory, in sorted
+// filename order. Absent directory → no records.
+func loadSysInclDir(fs FS, dir string, onWarn func(Warn)) SysInclSet {
+	if !fs.IsDir(srcRootVFS, dir) {
+		return nil
+	}
+
+	names := make([]string, 0, len(fs.Listdir(Source(dir))))
+
+	for name := range fs.Listdir(Source(dir)) {
+		if strings.HasSuffix(name, ".yml") {
+			names = append(names, name)
+		}
+	}
+
+	sort.Strings(names)
+
+	var set SysInclSet
+
+	for _, name := range names {
+		records := parseSysInclYAML(name, string(fs.Read(dir+"/"+name)), onWarn)
 		set = append(set, records...)
 	}
 
 	return set
 }
 
+// parseSysInclYAML parses a sysincl YAML file into records. The document is either a
+// sequence of records or a single record mapping (e.g. `includes: []`); each record
+// carries an optional source_filter / case_sensitive and an includes list mapping a
+// header to its target(s) (a scalar, a sequence, or null = "resolve to nothing").
 func parseSysInclYAML(name, text string, onWarn func(Warn)) []SysIncl {
-	lines := strings.Split(text, "\n")
+	var doc yaml.Node
 
-	var (
-		out     []SysIncl
-		current *SysIncl
+	if err := yaml.Unmarshal([]byte(text), &doc); err != nil {
+		onWarn(Warn{Kind: WarnSysIncl, Message: fmt.Sprintf("%s: YAML parse error: %v — file skipped", name, err)})
 
-		pendingKey   string
-		pendingPaths []VFS
-
-		inIncludes bool
-	)
-
-	flushPending := func() {
-		if pendingKey == "" {
-			return
-		}
-
-		if current == nil {
-			ThrowFmt("sysincl: %s: pending key %q with no active record", name, pendingKey)
-		}
-
-		current.setMapping(pendingKey, pendingPaths)
-
-		pendingKey = ""
-		pendingPaths = nil
+		return nil
 	}
 
-	flushRecord := func() {
-		flushPending()
-
-		if current != nil {
-			out = append(out, *current)
-			current = nil
-			inIncludes = false
-		}
+	if len(doc.Content) == 0 {
+		return nil
 	}
 
-	for i, raw := range lines {
-		lineno := i + 1
+	root := doc.Content[0]
 
-		stripped := stripComment(raw)
-		trimmed := strings.TrimRight(stripped, " \t\r")
+	var recordNodes []*yaml.Node
 
-		if strings.TrimSpace(trimmed) == "" {
-			continue
-		}
-
-		indent := leadingSpaces(trimmed)
-		body := trimmed[indent:]
-
-		if indent == 0 && strings.HasPrefix(body, "- ") {
-			flushRecord()
-			current = &SysIncl{Mappings: make(map[STR][]VFS)}
-			rest := strings.TrimSpace(body[2:])
-
-			handleRecordHeader(name, lineno, rest, current, &inIncludes, onWarn)
-
-			continue
-		}
-
-		if current == nil {
-			ThrowFmt("sysincl: %s:%d: line outside any record: %q", name, lineno, body)
-		}
-
-		if !inIncludes {
-			handleRecordHeader(name, lineno, body, current, &inIncludes, onWarn)
-
-			continue
-		}
-
-		if !strings.HasPrefix(body, "- ") && body != "-" {
-			ThrowFmt("sysincl: %s:%d: expected list entry, got %q", name, lineno, body)
-		}
-
-		var entry string
-
-		if body == "-" {
-			entry = ""
-		} else {
-			entry = strings.TrimSpace(body[2:])
-		}
-
-		if pendingKey != "" && !strings.Contains(entry, ":") {
-			if rel := unquote(entry); rel != "" {
-				pendingPaths = append(pendingPaths, Source(rel))
-			}
-
-			continue
-		}
-
-		flushPending()
-
-		key, val, hasMapping := splitKeyValue(entry)
-
-		if !hasMapping {
-			current.setMapping(key, nil)
-
-			continue
-		}
-
-		if val == "" {
-			pendingKey = key
-			pendingPaths = nil
-
-			continue
-		}
-
-		v := unquote(val)
-
-		if v == "" {
-			current.setMapping(key, nil)
-		} else {
-			current.setMapping(key, []VFS{Source(v)})
-		}
+	switch root.Kind {
+	case yaml.SequenceNode:
+		recordNodes = root.Content
+	case yaml.MappingNode:
+		recordNodes = []*yaml.Node{root}
+	default:
+		return nil
 	}
 
-	flushRecord()
+	out := make([]SysIncl, 0, len(recordNodes))
+
+	for _, rn := range recordNodes {
+		if rn.Kind != yaml.MappingNode {
+			continue
+		}
+
+		out = append(out, parseSysInclRecord(name, rn, onWarn))
+	}
 
 	return out
 }
 
-func handleRecordHeader(name string, lineno int, body string, rec *SysIncl, inIncludes *bool, onWarn func(Warn)) {
-	if body == "" || body == "includes:" {
-		*inIncludes = true
+// parseSysInclRecord builds one SysIncl from a record mapping node. source_filter /
+// case_sensitive are applied before includes so setMapping sees the final
+// case-sensitivity regardless of key order in the file.
+func parseSysInclRecord(name string, rn *yaml.Node, onWarn func(Warn)) SysIncl {
+	rec := SysIncl{Mappings: make(map[STR][]VFS)}
 
-		return
-	}
+	var includes *yaml.Node
 
-	if strings.HasPrefix(body, "source_filter:") {
-		rest := strings.TrimSpace(body[len("source_filter:"):])
-		pat := unquote(rest)
-		rec.Filter = compileSourceFilter(name, lineno, pat, onWarn)
+	for i := 0; i+1 < len(rn.Content); i += 2 {
+		key := rn.Content[i]
+		val := rn.Content[i+1]
 
-		rec.KeyBySource = strings.Contains(pat, "(?!")
-
-		return
-	}
-
-	if strings.HasPrefix(body, "includes:") {
-		*inIncludes = true
-
-		return
-	}
-
-	if strings.HasPrefix(body, "case_sensitive:") {
-		val := strings.TrimSpace(body[len("case_sensitive:"):])
-
-		if val == "false" {
-			rec.CaseInsensitive = true
+		switch key.Value {
+		case "source_filter":
+			rec.Filter = compileSourceFilter(name, key.Line, val.Value, onWarn)
+			rec.KeyBySource = strings.Contains(val.Value, "(?!")
+		case "case_sensitive":
+			rec.CaseInsensitive = val.Value == "false"
+		case "includes":
+			includes = val
+		default:
+			onWarn(Warn{
+				Kind:    WarnSysIncl,
+				Message: fmt.Sprintf("%s:%d: unrecognised record key %q — record disabled", name, key.Line, key.Value),
+			})
+			rec.Filter = &sourceFilter{unsupported: true}
 		}
-
-		return
 	}
 
-	onWarn(Warn{
-		Kind:    WarnSysIncl,
-		Message: fmt.Sprintf("%s:%d: source_filter %q unsupported (unrecognised record header) — record disabled", name, lineno, body),
-	})
-	rec.Filter = &sourceFilter{unsupported: true}
+	for _, item := range includesContent(includes) {
+		parseSysInclInclude(&rec, item)
+	}
+
+	return rec
 }
 
-func stripComment(s string) string {
-	for i := 0; i < len(s); i++ {
-		if s[i] == '#' {
-			if i == 0 || s[i-1] == ' ' || s[i-1] == '\t' {
-				return s[:i]
+func includesContent(includes *yaml.Node) []*yaml.Node {
+	if includes == nil {
+		return nil
+	}
+
+	return includes.Content
+}
+
+// parseSysInclInclude records one includes entry: a bare scalar header (→ nothing),
+// or a header→target(s) mapping where the target is a scalar, a sequence, or null.
+func parseSysInclInclude(rec *SysIncl, item *yaml.Node) {
+	if item.Kind == yaml.ScalarNode {
+		rec.setMapping(item.Value, nil)
+
+		return
+	}
+
+	if item.Kind != yaml.MappingNode {
+		return
+	}
+
+	for i := 0; i+1 < len(item.Content); i += 2 {
+		rec.setMapping(item.Content[i].Value, sysInclTargets(item.Content[i+1]))
+	}
+}
+
+// sysInclTargets reads a header's target node: a scalar (one path; empty/null = no
+// path) or a sequence (fan-out). Empty entries are dropped.
+func sysInclTargets(tval *yaml.Node) []VFS {
+	switch tval.Kind {
+	case yaml.ScalarNode:
+		if tval.Tag == "!!null" || tval.Value == "" {
+			return nil
+		}
+
+		return []VFS{Source(tval.Value)}
+	case yaml.SequenceNode:
+		var paths []VFS
+
+		for _, p := range tval.Content {
+			if p.Value != "" {
+				paths = append(paths, Source(p.Value))
 			}
 		}
+
+		return paths
 	}
 
-	return s
-}
-
-func leadingSpaces(s string) int {
-	i := 0
-
-	for i < len(s) && s[i] == ' ' {
-		i++
-	}
-
-	return i
-}
-
-func splitKeyValue(s string) (string, string, bool) {
-	depth := 0
-	colon := -1
-
-	for i := 0; i < len(s); i++ {
-		switch s[i] {
-		case '(':
-			depth++
-		case ')':
-			depth--
-		case ':':
-			if depth == 0 {
-				colon = i
-
-				break
-			}
-		}
-
-		if colon >= 0 {
-			break
-		}
-	}
-
-	if colon < 0 {
-		return s, "", false
-	}
-
-	key := strings.TrimSpace(s[:colon])
-	val := strings.TrimSpace(s[colon+1:])
-
-	return key, val, true
-}
-
-func unquote(s string) string {
-	if len(s) >= 2 {
-		first := s[0]
-		last := s[len(s)-1]
-
-		if first == last && (first == '"' || first == '\'') {
-			return s[1 : len(s)-1]
-		}
-	}
-
-	return s
+	return nil
 }
 
 type sourceFilter struct {
