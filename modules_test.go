@@ -346,3 +346,15 @@ func TestExpandConfigVFSPaths_SplitsSetList(t *testing.T) {
 		t.Fatalf("expandConfigVFSPaths = %v, want %v", got, want)
 	}
 }
+
+func TestCatboostOpenSourceDefineGating(t *testing.T) {
+	osP := NewPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{"OPENSOURCE": "yes", "PIC": "no"}, nil, "", "")
+	if len(catboostOpenSourceDefineFor(osP)) == 0 {
+		t.Error("OPENSOURCE=yes must include -DCATBOOST_OPENSOURCE")
+	}
+
+	intP := NewPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{"PIC": "no"}, nil, "", "")
+	if catboostOpenSourceDefineFor(intP) != nil {
+		t.Error("non-OPENSOURCE build must omit -DCATBOOST_OPENSOURCE")
+	}
+}

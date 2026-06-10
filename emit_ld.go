@@ -263,7 +263,7 @@ func composeLDCmdVcsCompile(p *Platform, tc moduleToolchain, vcsCPath, vcsOPath 
 	preNoLibcExtras = append(preNoLibcExtras, moduleCFlags...)
 	preNoLibcExtras = append(preNoLibcExtras, peerCFlagsGlobal...)
 
-	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(noCompilerWarnings, false), bundle.Defines, preNoLibcExtras, moduleScopeCFlags)
+	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(noCompilerWarnings, false), bundle.Defines, preNoLibcExtras, moduleScopeCFlags, catboostOpenSourceDefineFor(p))
 
 	return cmdArgs
 }
