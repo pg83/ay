@@ -413,11 +413,17 @@ func makeDefaultIfEnv() Environment {
 	for _, n := range []ENV{
 		envOS_LINUX, envLINUX,
 		envCLANG, envTRUE, envUSE_SSE4,
-		envOPENSOURCE,
 		envUSE_ARCADIA_PYTHON, envPYTHON3,
 	} {
 		e.SetBool(n, true)
 	}
+
+	// OPENSOURCE is NOT defaulted: it is a repository property set in the repo
+	// ya.conf [flags] (the opensource snapshots carry OPENSOURCE="yes";
+	// build/conf/opensource.conf gates -DCATBOOST_OPENSOURCE, proto/opensource
+	// sysincl selection, _USE_AIO/_USE_ICONV/_USE_IDN, … on it). It flows in via
+	// Platform.Flags -> buildIfEnv, so internal-contour builds (no such flag)
+	// correctly see OPENSOURCE unset.
 
 	e.SetString(envCXX_RT, "libcxxrt")
 	// gnu_compiler.conf: CORE_LIBS_OPTIMIZATION=-O3 (-O0 only under DEBUG_CORE_LIBS,
