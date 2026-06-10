@@ -29,7 +29,12 @@ var sysInclYamlSequence = []sysInclEntry{
 	{file: "libiconv.yml"},
 	{file: "libidn.yml"},
 	{file: "jdk-to-arcadia.yml"},
-	{file: "opensource.yml"},
+	// opensource.yml and proto.yml are mutually exclusive (build/conf/sysincl.conf:45
+	// `when ($OPENSOURCE == "yes") { opensource.yml } otherwise { proto.yml }`). proto.yml
+	// resolves google/protobuf/*.proto to all three vendored variants (protobuf,
+	// protobuf_std, protobuf_old) — needed for the internal contour's proto compiles.
+	{file: "opensource.yml", predicate: opensourceOn},
+	{file: "proto.yml", predicate: notOpensource},
 	{file: "libc-to-musl.yml", predicate: muslOn},
 	{file: "linux-musl-aarch64.yml", predicate: muslArchIs("aarch64")},
 	{file: "linux-musl.yml", predicate: muslArchIs("x86_64")},
@@ -83,14 +88,18 @@ func (rec *SysIncl) setMapping(k string, paths []VFS) {
 }
 
 type sysInclEnv struct {
-	arch string
-	musl bool
+	arch       string
+	musl       bool
+	opensource bool
 }
 
 type sysInclEntry struct {
 	file      string
 	predicate func(sysInclEnv) bool
 }
+
+func opensourceOn(e sysInclEnv) bool  { return e.opensource }
+func notOpensource(e sysInclEnv) bool { return !e.opensource }
 
 func archIs(want string) func(sysInclEnv) bool {
 	return func(e sysInclEnv) bool { return e.arch == want }
@@ -117,7 +126,7 @@ func LoadSysInclSetForFS(fs FS, arch string, musl, opensource bool, onWarn func(
 		ThrowFmt("LoadSysInclSetFor: unsupported arch %q (want aarch64 or x86_64)", arch)
 	}
 
-	env := sysInclEnv{arch: arch, musl: musl}
+	env := sysInclEnv{arch: arch, musl: musl, opensource: opensource}
 	var set SysInclSet
 	sysinclDir := dirKey(baseSysInclDir)
 
