@@ -133,7 +133,9 @@ type Platform struct {
 // Linux gnu contour these graphs build; non-Linux / os_sdk=local keep the bare host
 // -B/usr/bin that needs no fetched SDK.
 func sysrootArgsFor(os OS, flags map[string]string) []STR {
-	if os != OSLinux || flags["OS_SDK"] == "local" {
+	// The opensource contour (sg2-5 references) has no fetched SDK at all —
+	// ymake_conf falls back to the bare host prefix, like os_sdk=local.
+	if os != OSLinux || flags["OS_SDK"] == "local" || flags["OPENSOURCE"] == "yes" {
 		return []STR{argDashBBin}
 	}
 
@@ -226,7 +228,7 @@ func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, 
 	}
 
 	p.TargetArg = internStr("--target=" + p.Triple)
-	p.MultiarchLibPathSTR = internStr(p.MultiarchLibPath())
+	p.MultiarchLibPathSTR = internStr(p.multiarchLibPath(flags["OPENSOURCE"] == "yes"))
 	p.WrapccHead, p.WrapccTail = wrapccPrefixFor(flags)
 
 	p.CCUsesResources = []string{resourcePatternClangTool + p.ClangVer}
@@ -361,11 +363,17 @@ func marchFor(isa ISA) string {
 // platform/lld), reached via PEERDIR; there is no non-resource compiler path. The
 // clang root in these executor-env / linker-selection helpers is the bare $(CLANG)
 // resource pattern (the same form the executor mounts).
-func (p *Platform) MultiarchLibPath() string {
-	// The SDK lib dir is the OS_SDK_ROOT resource ($(B)/resources/OS_SDK_ROOT, which
-	// normalizes to $(OS_SDK_ROOT)), not the raw $OS_SDK_ROOT_RESOURCE_GLOBAL macro —
-	// upstream's TOOLCHAIN_ENV resolves the global to the fetched resource path.
-	sdkLib := "$(B)/resources/" + resourcePatternOSSDKRoot + "/usr/lib/" + p.Triple
+func (p *Platform) multiarchLibPath(opensource bool) string {
+	// The SDK lib dir form is contour-dependent: the opensource reference
+	// graphs (sg2-5) carry the raw $OS_SDK_ROOT_RESOURCE_GLOBAL macro verbatim,
+	// while the internal contour (sg6) resolves it to the OS_SDK_ROOT resource
+	// ($(B)/resources/OS_SDK_ROOT, normalizing to $(OS_SDK_ROOT)) — upstream's
+	// TOOLCHAIN_ENV resolves the global only where the resource is declared.
+	sdkLib := "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/" + p.Triple
+
+	if !opensource {
+		sdkLib = "$(B)/resources/" + resourcePatternOSSDKRoot + "/usr/lib/" + p.Triple
+	}
 
 	return "$(B)/resources/" + resourcePatternClangTool + p.ClangVer + "/lib:" + sdkLib
 }

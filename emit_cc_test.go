@@ -81,11 +81,11 @@ func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
 		"-I$(S)/contrib/libs/foolib/extra",
 	}
 
-	// Prefix (aarch64): compiler, --target, -march, --sysroot, -B<sdk>/usr/bin, -c, -o,
-	// output → the include block starts at index 8.
+	// Prefix (aarch64, opensource test contour — bare -B/usr/bin, no sysroot):
+	// compiler, --target, -march, -B, -c, -o, output → block starts at index 7.
 	for i, want := range wantSlot {
-		if args[8+i].String() != want {
-			t.Errorf("cmd_args[%d] = %q, want %q", 8+i, args[8+i].String(), want)
+		if args[7+i].String() != want {
+			t.Errorf("cmd_args[%d] = %q, want %q", 7+i, args[7+i].String(), want)
 		}
 	}
 }
@@ -113,8 +113,8 @@ func TestEmitCC_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 	// Prefix (x86_64, no -march): compiler, --target, --sysroot, -B<sdk>/usr/bin, -c, -o,
 	// output → the include block starts at index 7.
 	for i, want := range wantSlot {
-		if args[7+i].String() != want {
-			t.Fatalf("cmd_args[%d] = %q, want %q; args=%v", 7+i, args[7+i].String(), want, args)
+		if args[6+i].String() != want {
+			t.Fatalf("cmd_args[%d] = %q, want %q; args=%v", 6+i, args[6+i].String(), want, args)
 		}
 	}
 
