@@ -44,17 +44,6 @@ func emitJVDownstreamCPCC(
 		ccIn.ExtraDepRefs = nil
 		closure := walkClosure(ctx, instance, g4CppPath, ccIn)
 
-		cpInputs := make([]VFS, 0, 2+len(jvInputs)+len(closure)+2)
-		cpInputs = append(cpInputs, jvPrimary)
-
-		if srcCpp != jvPrimary {
-			cpInputs = append(cpInputs, srcCpp)
-		}
-
-		cpInputs = append(cpInputs, ctx.scripts[antlr4FsToolsVFS]...)
-		cpInputs = append(cpInputs, jvInputs...)
-		cpInputs = append(cpInputs, closure...)
-
 		cpRef := EmitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, closure, in.TC, ctx.scripts, ctx.emit)
 
 		ccIncludeInputs := make([]VFS, 0, 3+len(jvInputs)+len(closure)+2)
@@ -71,7 +60,6 @@ func emitJVDownstreamCPCC(
 
 		ccRefs = append(ccRefs, ccRef)
 		ccOutputs = append(ccOutputs, ccOut)
-		_ = cpInputs
 	}
 
 	return
