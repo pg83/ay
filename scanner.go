@@ -477,16 +477,7 @@ func (sc *scanCtx) dfs(abs VFS) {
 		}
 
 		cref, _ := s.cachedClosure(ch)
-
-		for _, id := range s.closureWindow(cref) {
-			if s.tjc.closure.has(id) {
-				continue
-			}
-
-			s.tjc.closure.add(id)
-			block[k] = id
-			k++
-		}
+		k = s.tjc.closure.spliceNew(s.closureWindow(cref), block, k)
 	})
 
 	// Splice non-expanded closure leaves (COPY_FILE(TEXT) $(B) dst → its $(S)

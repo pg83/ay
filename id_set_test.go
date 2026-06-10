@@ -109,3 +109,38 @@ func TestIdSet_EpochWraparoundZeroes(t *testing.T) {
 		t.Fatal("re-add after wraparound missing")
 	}
 }
+
+func TestIdSet_SpliceNew(t *testing.T) {
+	var s IdSet
+	s.reset(64)
+	s.add(VFS(5))
+
+	block := make([]VFS, 8)
+	block[0] = VFS(1)
+	// 5 is present (skipped), 3 appended once despite the in-window repeat.
+	k := s.spliceNew([]VFS{VFS(5), VFS(3), VFS(3), VFS(7)}, block, 1)
+
+	if k != 3 || block[1] != VFS(3) || block[2] != VFS(7) {
+		t.Fatalf("spliceNew k=%d block=%v", k, block[:k])
+	}
+
+	if !s.has(VFS(3)) || !s.has(VFS(7)) {
+		t.Fatal("spliced ids not stamped present")
+	}
+}
+
+func TestIdSet_SpliceNewGrowFallback(t *testing.T) {
+	var s IdSet
+	s.reset(4)
+
+	block := make([]VFS, 4)
+	k := s.spliceNew([]VFS{VFS(2), VFS(1000)}, block, 0) // 1000 forces the add+re-hoist path
+
+	if k != 2 || block[0] != VFS(2) || block[1] != VFS(1000) {
+		t.Fatalf("spliceNew k=%d block=%v", k, block[:k])
+	}
+
+	if !s.has(VFS(1000)) {
+		t.Fatal("grown id not present")
+	}
+}
