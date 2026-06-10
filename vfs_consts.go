@@ -60,6 +60,7 @@ var (
 	srcRootVFS                                                                            = Source("")
 	stdout2stderrVFS                                                                      = Source("build/scripts/stdout2stderr.py")
 	v                                                                                     = Source("")
+	wrapccPyVFS                                                                           = Source("build/scripts/wrapcc.py")
 	xargsPyVFS                                                                            = Source("build/scripts/xargs.py")
 	yasmBinaryVFS                                                                         = Build("contrib/tools/yasm/yasm")
 	yieldLinePyVFS                                                                        = Source("build/scripts/yield_line.py")

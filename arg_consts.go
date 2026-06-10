@@ -309,4 +309,6 @@ var (
 	argZstd                                      = internArg("zstd")
 	baseUnitCxxNostdinc                          = internArg("-nostdinc++")
 	cxxStandardFlag                              = internArg("-std=c++20")
+	wrapccArgEnd                                 = internArg("--wrapcc-end")
+	wrapccArgSrcFile                             = internArg("--source-file")
 )
