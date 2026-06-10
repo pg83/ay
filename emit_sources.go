@@ -82,7 +82,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		ref, outPath := EmitAS(srcInstance, srcRel, srcVFS, asIn, ctx.host, ctx.emit)
 		return &sourceEmit{Ref: ref, OutPath: outPath}
 	case strings.HasSuffix(srcRel, ".rl6"):
-		ragelLDRef, ragelBinaryVFS := ctx.tool(argContribToolsRagel6Bin)
+		ragelLDRef, ragelBinaryVFS := ctx.tool(argContribToolsRagel6)
 
 		rl6SourceVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDirs)
 		rl6Closure := walkClosure(ctx, srcInstance, rl6SourceVFS, srcIn)
@@ -130,7 +130,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 
 		protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
 		cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
-		event2cppLDRef, event2cppBinary := ctx.tool(argToolsEvent2cppBin)
+		event2cppLDRef, event2cppBinary := ctx.tool(argToolsEvent2cpp)
 
 		evImports := evTransitiveImports(ctx.parsers, ctx.fs, evRelPath)
 		evRef := EmitEV(

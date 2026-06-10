@@ -574,7 +574,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	if len(evSrcs) > 0 {
 		protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
 		cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
-		event2cppLDRef, event2cppBinary := ctx.tool(argToolsEvent2cppBin)
+		event2cppLDRef, event2cppBinary := ctx.tool(argToolsEvent2cpp)
 
 		for _, src := range evSrcs {
 			evRelPath := protoSourceRelPath(ctx.fs, instance, d, src)

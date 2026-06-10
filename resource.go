@@ -241,14 +241,23 @@ type pySrcEntry struct {
 	extraSrcInput *VFS
 }
 
-func buildPySrcEntriesFor(d *moduleData, modulePath string, srcs []string, topLevel bool, namespace *string) []pySrcEntry {
+// resolvePySrcRel searches the SRCDIR path (reverse, later declaration wins) for
+// srcRel and returns the resolved source rel; the module dir is the fallback —
+// the same search resolveSourceVFS does for SRCS.
+func resolvePySrcRel(fs FS, srcDirs []VFS, modulePath, srcRel string) string {
+	for i := len(srcDirs) - 1; i >= 1; i-- {
+		if fs.IsFile(srcDirs[i], srcRel) {
+			return srcDirs[i].Rel() + "/" + srcRel
+		}
+	}
+
+	return modulePath + "/" + srcRel
+}
+
+func buildPySrcEntriesFor(fs FS, d *moduleData, modulePath string, srcs []string, topLevel bool, namespace *string) []pySrcEntry {
 	if len(srcs) == 0 {
 		return nil
 	}
-
-	// SRCDIR is a source-search path, not a module relocation: the unit is the
-	// module's own dir.
-	actualUnit := modulePath
 
 	keyPrefix := ""
 
@@ -277,16 +286,20 @@ func buildPySrcEntriesFor(d *moduleData, modulePath string, srcs []string, topLe
 			suffix = "." + pySrcYapycSuffix(modulePath) + ".yapyc3"
 		}
 
+		// SRCDIR is a source-search path, not a module relocation: keys stay
+		// srcRel-based, only the source-side path resolves through srcDirs.
+		resolvedRel := resolvePySrcRel(fs, d.srcDirs, modulePath, srcRel)
+
 		if !d.pyBuildNoPY {
 			pyKey := "resfs/file/py/" + keyPrefix + srcRel
-			pyPathInput := Source(actualUnit + "/" + srcRel)
+			pyPathInput := Source(resolvedRel)
 
 			if d.pyGeneratedSrcs[srcRel] != nil {
 				pyPathInput = Build(modulePath + "/" + srcRel)
 			}
 
 			pyKvHash := "resfs/src/" + pyKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + "\"}"
-			pyKvCmd := "resfs/src/" + pyKey + "=" + actualUnit + "/" + srcRel
+			pyKvCmd := "resfs/src/" + pyKey + "=" + resolvedRel
 
 			if d.pyGeneratedSrcs[srcRel] != nil {
 				pyKvCmd = "resfs/src/" + pyKey + "=" + modulePath + "/" + srcRel
@@ -308,7 +321,7 @@ func buildPySrcEntriesFor(d *moduleData, modulePath string, srcs []string, topLe
 
 			ypKvHash := "resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + suffix + "\"}"
 			ypKvCmd := "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
-			extraSrcInput := vfsPtr(Source(actualUnit + "/" + srcRel))
+			extraSrcInput := vfsPtr(Source(resolvedRel))
 
 			if d.pyGeneratedSrcs[srcRel] != nil {
 				ypKvCmd = "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix

@@ -87,7 +87,7 @@ func EmitLD(
 		binaryName = lastPathComponent(instance.Path.Rel())
 	}
 
-	binaryDir := ldBinaryDir(instance)
+	binaryDir := instance.Path.Rel()
 
 	binPrefix := binaryDir + "/"
 	outputVFS := Build(binPrefix + binaryName)
@@ -175,26 +175,7 @@ func LDOutputPath(instance ModuleInstance, binaryName string) VFS {
 		binaryName = lastPathComponent(instance.Path.Rel())
 	}
 
-	return Build(ldBinaryDir(instance) + "/" + binaryName)
-}
-
-func ldBinaryDir(instance ModuleInstance) string {
-	switch instance.Path.Rel() {
-	case "contrib/tools/ragel6/bin":
-		return "contrib/tools/ragel6"
-	case "tools/py3cc/bin":
-		return "tools/py3cc"
-	case "tools/event2cpp/bin":
-		return "tools/event2cpp"
-	case "tools/rescompiler/bin":
-		return "tools/rescompiler"
-	case "tools/rescompressor/bin":
-		return "tools/rescompressor"
-	case "tools/py3cc/slow/bin":
-		return "tools/py3cc/slow"
-	}
-
-	return instance.Path.Rel()
+	return Build(instance.Path.Rel() + "/" + binaryName)
 }
 
 func ldModuleLang(instance ModuleInstance) ModuleLang {
