@@ -125,7 +125,18 @@ func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in Module
 		return nil
 	}
 
+	// The walk's parser for unregistered-extension files: the caller's choice
+	// when the root itself has an unregistered extension, else resolved once
+	// from the root (a .swg root parses its .i includes as swig).
+	rootParser := in.RootParser
+
+	if rootParser == nil {
+		rootParser = includeDirectiveParsers.registeredParserFor(vfsPath.Rel())
+	}
+
 	cfg := ScanContext{
+		RootParser: rootParser,
+
 		OwnAddIncl:      in.AddIncl,
 		PeerAddInclSet:  in.PeerAddInclGlobal,
 		BaseSearchPaths: includeScannerBasePaths(),
@@ -218,7 +229,7 @@ func keepOnlySourceVFS(out []VFS) []VFS {
 // dependencies without following their C headers (the scanner does not walk
 // parsedIncludesRagelNative, only parsedIncludesLocal).
 func appendRagelNativeDeps(scanner *IncludeScanner, srcInstance ModuleInstance, rl6VFS VFS, in ModuleCCInputs, existing []VFS) []VFS {
-	directives := scanner.parsers.sourceParsedBuckets(rl6VFS).bucket(parsedIncludesRagelNative)
+	directives := scanner.parsers.sourceParsedBuckets(rl6VFS, nil).bucket(parsedIncludesRagelNative)
 
 	if len(directives) == 0 {
 		return existing
@@ -266,7 +277,7 @@ func appendRagelNativeDeps(scanner *IncludeScanner, srcInstance ModuleInstance, 
 			existing = append(existing, f)
 
 			// Follow transitive ragel-native includes of f
-			sub := scanner.parsers.sourceParsedBuckets(f).bucket(parsedIncludesRagelNative)
+			sub := scanner.parsers.sourceParsedBuckets(f, nil).bucket(parsedIncludesRagelNative)
 
 			if len(sub) == 0 {
 				continue

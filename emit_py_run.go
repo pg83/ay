@@ -295,7 +295,7 @@ func splitCodegenSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt 
 			continue
 		}
 
-		for _, pd := range scanner.parsers.parsedIncludes(vfs) {
+		for _, pd := range scanner.parsers.parsedIncludes(vfs, nil) {
 			target := pd.target.String()
 
 			if vfsHasPrefix(target) {

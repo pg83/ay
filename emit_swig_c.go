@@ -2,12 +2,7 @@ package main
 
 import (
 	"path/filepath"
-	"sort"
 	"strings"
-)
-
-var (
-	swigImplicitIncludes = []string{"swig.swg", "go.swg", "java.swg", "perl5.swg", "python.swg"}
 )
 
 type swigSrc struct {
@@ -16,6 +11,10 @@ type swigSrc struct {
 }
 
 const swigLibRoot = "contrib/tools/swig/Lib"
+
+// swigAddIncls mirrors Lib/python's ADDINCL(GLOBAL FOR swig …) declarations —
+// the python contour is the one ay models (swig.conf _SWIG_PYTHON_C/_CPP).
+var swigAddIncls = []VFS{Source(swigLibRoot + "/python"), Source(swigLibRoot)}
 
 func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) []*sourceEmit {
 	if len(d.swigC) == 0 {
@@ -33,7 +32,10 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 		srcVFS := Source(instance.Path.Rel() + "/" + stmt.Src)
 		cOutVFS := Build(instance.Path.Rel() + "/" + cOutRel)
 		pyOutVFS := Build(instance.Path.Rel() + "/" + pyOutRel)
-		swigClosure := swigIncludeClosure(ctx, srcVFS)
+		// The window walk: implicit %includes are the swig parser's own
+		// directives, the Lib dirs are FOR-swig addincl data, the resolution
+		// is the scanner's standard one (sysincl swig.yml included).
+		swigClosure := windowImports(walkClosure(ctx, instance, srcVFS, ModuleCCInputs{AddIncl: swigAddIncls, RootParser: swigIncludeDirectiveParser{}}), srcVFS)
 
 		// swigClosure joins as its own chunk (referenced, not copied; read-only
 		// after this — the later consumers copy out of it).
@@ -120,77 +122,17 @@ func swigModuleName(module string) string {
 	return module
 }
 
-func swigIncludeClosure(ctx *genCtx, src VFS) []VFS {
-	if ctx == nil || ctx.fs == nil {
-		return nil
-	}
-
-	roots := swigSearchRoots(ctx.fs)
-	seen := map[string]struct{}{}
-	var queue []string
-
-	enqueue := func(target string, kind includeKind, incRel string) {
-		candidates := swigResolveCandidates(ctx.fs, target, incRel, roots)
-
-		if kind == includeQuoted {
-			if len(candidates) > 0 {
-				queue = append(queue, candidates[0])
-			}
-
-			return
-		}
-
-		queue = append(queue, candidates...)
-	}
-
-	for _, imp := range swigImplicitIncludes {
-		enqueue(imp, includeSystem, src.Rel())
-	}
-
-	for _, d := range swigSourceParsedBuckets(ctx, src.Rel()).bucket(parsedIncludesLocal) {
-		enqueue(d.target.String(), d.kind, src.Rel())
-	}
-
-	for len(queue) > 0 {
-		rel := queue[len(queue)-1]
-		queue = queue[:len(queue)-1]
-
-		if _, ok := seen[rel]; ok {
-			continue
-		}
-
-		seen[rel] = struct{}{}
-
-		for _, d := range swigSourceParsedBuckets(ctx, rel).bucket(parsedIncludesLocal) {
-			enqueue(d.target.String(), d.kind, rel)
-		}
-	}
-
-	order := make([]string, 0, len(seen))
-
-	for rel := range seen {
-		order = append(order, rel)
-	}
-
-	sort.Strings(order)
-
-	out := make([]VFS, 0, len(order))
-
-	for _, rel := range order {
-		out = append(out, Source(rel))
-	}
-
-	return out
-}
-
 func collectSwigInducedIncludes(ctx *genCtx, src VFS, closure []VFS) []includeDirective {
-	// The swig parse path between adds (fs.Read -> swigIncludeDirectiveParser.Parse)
-	// never touches the deduper, so the set may live on it across the whole walk.
+	// Every closure member was parsed during the walk, so the bucket reads
+	// below are pure cache hits — the parse path (and its dedupDirectives
+	// deduper use) cannot run, and the shared deduper may host this set.
 	deduper.reset()
+
+	swigParser := includeDirectiveParser(swigIncludeDirectiveParser{})
 	var out []includeDirective
 
-	add := func(rel string) {
-		for _, d := range swigSourceParsedBuckets(ctx, rel).bucket(parsedIncludesCpp) {
+	add := func(v VFS) {
+		for _, d := range ctx.parsers.sourceParsedBuckets(v, swigParser).bucket(parsedIncludesCpp) {
 			if !deduper.add(directiveID(d)) {
 				continue
 			}
@@ -199,42 +141,14 @@ func collectSwigInducedIncludes(ctx *genCtx, src VFS, closure []VFS) []includeDi
 		}
 	}
 
-	add(src.Rel())
+	add(src)
 
 	for _, v := range closure {
-		add(v.Rel())
+		add(v)
 	}
 
 	return out
 }
-
-func swigSearchRoots(fs FS) []string {
-	if fs == nil {
-		return nil
-	}
-
-	roots := []string{swigLibRoot}
-	entries := fs.Listdir(dirKey(swigLibRoot))
-
-	if len(entries) == 0 {
-		return roots
-	}
-
-	var subdirs []string
-
-	for name, isDir := range entries {
-		if !isDir {
-			continue
-		}
-
-		subdirs = append(subdirs, filepath.ToSlash(filepath.Clean(swigLibRoot+"/"+name)))
-	}
-
-	sort.Strings(subdirs)
-
-	return append(roots, subdirs...)
-}
-
 func swigResolveCandidates(fs FS, target, incRel string, roots []string) []string {
 	if fs == nil {
 		return nil
@@ -274,16 +188,6 @@ func swigResolveCandidates(fs FS, target, incRel string, roots []string) []strin
 	}
 
 	return out
-}
-
-func swigSourceParsedBuckets(ctx *genCtx, rel string) parsedIncludeSet {
-	data := ctx.fs.Read(rel)
-
-	if len(data) >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF {
-		data = data[3:]
-	}
-
-	return swigIncludeDirectiveParser{}.Parse(rel, data)
 }
 
 func swigFilterExistingSources(fs FS, in []VFS) []VFS {

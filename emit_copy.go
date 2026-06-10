@@ -38,7 +38,7 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, modulePath string, e
 		srcVFS := copyFileInputVFS(fs, modulePath, entry.Src)
 
 		if scanner != nil {
-			out = append(out, scanner.parsers.parsedIncludes(srcVFS)...)
+			out = append(out, scanner.parsers.parsedIncludes(srcVFS, nil)...)
 		}
 	} else if entry.WithContext {
 		// Non-TEXT COPY(WITH_CONTEXT …) (e.g. a .cpp plus its sibling .h, copied

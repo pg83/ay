@@ -27,7 +27,7 @@ func quotedDirectives(headers []VFS) []includeDirective {
 }
 
 func protoPbHIncludes(pm *includeParserManager, srcRel, outputRoot string, bucket parsedIncludeBucket) []includeDirective {
-	hcpp := pm.sourceParsedBuckets(Source(srcRel)).bucket(bucket)
+	hcpp := pm.sourceParsedBuckets(Source(srcRel), nil).bucket(bucket)
 
 	if len(hcpp) == 0 {
 		return nil
@@ -136,7 +136,7 @@ func evImportsFromWindow(window []VFS, root VFS) []VFS {
 }
 
 func protoDirectImportNames(pm *includeParserManager, srcRel string) []string {
-	direct := pm.sourceParsedBuckets(Source(srcRel)).bucket(parsedIncludesLocal)
+	direct := pm.sourceParsedBuckets(Source(srcRel), nil).bucket(parsedIncludesLocal)
 
 	if len(direct) == 0 {
 		return nil
