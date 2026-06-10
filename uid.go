@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/binary"
 	"math"
 
 	"github.com/zeebo/xxh3"
@@ -45,16 +44,19 @@ func (c *canonBuf) writeByte(b byte) {
 	c.buf = append(c.buf, b)
 }
 
+// writeUint32/writeUint64 append the little-endian bytes directly: the
+// spelled-out form compiles to inline stores, while the PutUintNN-into-a-
+// stack-array + append(b[:]...) shape paid a runtime memmove call per write —
+// and this is the inner op of the whole uid layer (every STR lo, dep uid half,
+// content hash).
 func (c *canonBuf) writeUint32(n uint32) {
-	var lenBuf [4]byte
-	binary.LittleEndian.PutUint32(lenBuf[:], n)
-	c.buf = append(c.buf, lenBuf[:]...)
+	c.buf = append(c.buf, byte(n), byte(n>>8), byte(n>>16), byte(n>>24))
 }
 
 func (c *canonBuf) writeUint64(n uint64) {
-	var b [8]byte
-	binary.LittleEndian.PutUint64(b[:], n)
-	c.buf = append(c.buf, b[:]...)
+	c.buf = append(c.buf,
+		byte(n), byte(n>>8), byte(n>>16), byte(n>>24),
+		byte(n>>32), byte(n>>40), byte(n>>48), byte(n>>56))
 }
 
 func (c *canonBuf) writeBool(b bool) {
