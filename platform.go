@@ -5,6 +5,17 @@ import (
 	"strings"
 )
 
+var (
+	// wrapccPython3STR / wrapccPyVFS / wrapccArgSrcFile / wrapccArgEnd back the wrapcc.py
+	// compile-wrapper prefix (see wrapccPrefixFor). The python path is the constant
+	// YMAKE_PYTHON3 resource binary (identical to moduleToolchain.Python3), since upstream
+	// invokes the wrapper via the global $YMAKE_PYTHON3, not a per-module peer.
+	wrapccPython3STR = internStr("$(B)/resources/" + resourcePatternYMakePython3 + "/bin/python3")
+	// wrapccPyChunk is the wrapper-script input chunk shared by every wrapped CC
+	// node (Node.Inputs is chunked; this one is appended by reference).
+	wrapccPyChunk = []VFS{wrapccPyVFS}
+)
+
 // gzZstdRule is the verbatim line in a repo's build/ymake_conf.py that appends the
 // -gz=zstd debug-section-compression flag for non-release Linux targets. ydb's conf
 // carries it; yatool's does not — the sole config-level reason the flag appears in
@@ -109,20 +120,6 @@ type Platform struct {
 	CCUsesResources []string
 }
 
-// wrapccPython3STR / wrapccPyVFS / wrapccArgSrcFile / wrapccArgEnd back the wrapcc.py
-// compile-wrapper prefix (see wrapccPrefixFor). The python path is the constant
-// YMAKE_PYTHON3 resource binary (identical to moduleToolchain.Python3), since upstream
-// invokes the wrapper via the global $YMAKE_PYTHON3, not a per-module peer.
-var (
-	wrapccPython3STR = internStr("$(B)/resources/" + resourcePatternYMakePython3 + "/bin/python3")
-	wrapccPyVFS      = Source("build/scripts/wrapcc.py")
-	// wrapccPyChunk is the wrapper-script input chunk shared by every wrapped CC
-	// node (Node.Inputs is chunked; this one is appended by reference).
-	wrapccPyChunk    = []VFS{wrapccPyVFS}
-	wrapccArgSrcFile = internArg("--source-file")
-	wrapccArgEnd     = internArg("--wrapcc-end")
-)
-
 // wrapccPrefixFor returns the wrapcc.py compile-wrapper head/tail token slices that
 // upstream's build/conf/compilers/gnu_compiler.conf prepends before the compiler in
 // _CPP_ARGS_NEW/_C_ARGS_NEW. Head = [python3, $(S)/build/scripts/wrapcc.py,
@@ -206,6 +203,7 @@ func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, 
 	p.WrapccHead, p.WrapccTail = wrapccPrefixFor(flags)
 
 	p.CCUsesResources = []string{resourcePatternClangTool + p.ClangVer}
+
 	if len(p.WrapccHead) > 0 {
 		p.CCUsesResources = append(p.CCUsesResources, resourcePatternYMakePython3)
 	}
