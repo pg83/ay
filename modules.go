@@ -1881,7 +1881,9 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			toCpp := v.Args[0] != "h"
 
 			for _, p := range v.Args[1:] {
-				p = strings.TrimPrefix(p, "${ARCADIA_ROOT}/")
+				// Args arrive expanded (${ARCADIA_ROOT} is an env binding), so
+				// the source-root spelling is its $(S)/ form.
+				p = strings.TrimPrefix(p, "$(S)/")
 				dir := includeDirective{kind: includeQuoted, target: internStr(p)}
 
 				if toHeader {
