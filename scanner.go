@@ -89,9 +89,11 @@ type IncludeScanner struct {
 	// addincl, so the addincl index can't cover it. The result is a pure function of
 	// (incDir, target) and the FS, so it's context-free and run-wide. Keyed by
 	// splitMix64(incDir VFS, target STR) — the two ids hashed into a uniform 64-bit
-	// key so an identity-hashed IntValueMap spreads them; value (the resolved source
-	// rel, or "" for "does not resolve here") lives in the side slice.
-	sourceUnderCache *IntValueMap[string]
+	// key so an identity-hashed IntValueMap spreads them. The value is the resolved
+	// $(S) VFS already interned (0 = "does not resolve here"): storing the rel
+	// string made every HIT re-intern it via Source(rel) — a full xxh3 + table
+	// probe per hit, several hundred k per run.
+	sourceUnderCache *IntValueMap[VFS]
 
 	// tjc points at the run-wide Tarjan/closure working state owned by genCtx and
 	// shared by the target and host scanners (see tarjanCtx).
@@ -227,7 +229,7 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		searchTierFlat:       NewIntValueMap[searchTierResult](4096),
 		ctxNumByHash:         make(map[uint64]uint32, 1024),
 		resolveIndexByConfig: make(map[uint64]*cfgResolveIndex, 1024),
-		sourceUnderCache:     NewIntValueMap[string](1 << 16),
+		sourceUnderCache:     NewIntValueMap[VFS](1 << 16),
 		tjc:                  tjc,
 	}
 
@@ -1077,22 +1079,22 @@ func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective
 		matched := false
 
 		// Memoize the includer-local resolve by splitMix64(incDir, target) — both 32-bit
-		// ids hashed into one uniform key. "" means "does not resolve under incDir".
+		// ids hashed into one uniform key. 0 means "does not resolve under incDir".
 		suKey := splitMix64(uint32(incDir), uint32(d.target))
-		rel := ""
+		var sv VFS
 
 		if p := s.sourceUnderCache.Get(suKey); p != nil {
-			rel = *p
+			sv = *p
 		} else {
 			if r, ok := s.resolveSourceUnder(incDir, d.target.String()); ok {
-				rel = r
+				sv = Source(r)
 			}
 
-			s.sourceUnderCache.Put(suKey, rel)
+			s.sourceUnderCache.Put(suKey, sv)
 		}
 
-		if rel != "" {
-			out = append(out, Source(rel))
+		if sv != 0 {
+			out = append(out, sv)
 			searchPathFound = true
 			matched = true
 		}
