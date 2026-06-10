@@ -83,7 +83,7 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 
 		ccIn := in
 		ccIn.ExtraDepRefs = []NodeRef{swRef}
-		cClosure := walkClosureWithSourceRel(ctx, instance, cOutVFS, srcVFS.Rel(), in)
+		cClosure := walkClosure(ctx, instance, cOutVFS, in)
 		incl := make([]VFS, 0, len(cClosure)+len(swigClosure)+1)
 		incl = append(incl, cClosure...)
 		incl = append(incl, swigClosure...)

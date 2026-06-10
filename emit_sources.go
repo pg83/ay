@@ -48,7 +48,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		strings.HasSuffix(srcRel, ".cxx"):
 		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
 
-		full := walkClosureRoot(ctx, srcInstance, srcVFS, srcVFS.Rel(), srcIn)
+		full := walkClosureRoot(ctx, srcInstance, srcVFS, srcIn)
 
 		if full != nil {
 			srcIn.IncludeInputs = full[1:]
