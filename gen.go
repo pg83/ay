@@ -457,10 +457,10 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 
 	// Both scanners share ctx.tarjan (the run-wide Tarjan scratch) so its
 	// vfsBound-sized arrays grow once, not once per scanner.
-	targetScanner := newIncludeScannerWith(parsers, LoadSysInclSetForFS(fs, string(targetP.ISA), onWarn), onWarn, &ctx.tarjan)
+	targetScanner := newIncludeScannerWith(parsers, LoadSysInclSetForFS(fs, string(targetP.ISA), targetP.Flags[envMUSL] == strYes, onWarn), onWarn, &ctx.tarjan)
 	targetScanner.codegen = targetReg
 	targetScanner.moduleByRef = &ctx.moduleByRef
-	hostScanner := newIncludeScannerWith(parsers, LoadSysInclSetForFS(fs, string(hostP.ISA), onWarn), onWarn, &ctx.tarjan)
+	hostScanner := newIncludeScannerWith(parsers, LoadSysInclSetForFS(fs, string(hostP.ISA), hostP.Flags[envMUSL] == strYes, onWarn), onWarn, &ctx.tarjan)
 	hostScanner.codegen = hostReg
 	hostScanner.moduleByRef = &ctx.moduleByRef
 	ctx.scannerTarget = targetScanner
