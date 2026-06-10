@@ -1052,7 +1052,13 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 
 			collectStmts(modulePath, kind, taken, env, d)
 		case *UnknownStmt:
-			applyUnknownStmt(modulePath, v, d, env)
+			// Expand args like the typed-macro cases (ya.make argument-expansion
+			// semantics): a ${VAR} that holds a SET-list (e.g. PY_SRCS(${SRCS}))
+			// must substitute and split into the individual tokens before the
+			// macro handler reads them.
+			expanded := *v
+			expanded.Args = expandStmtTokens(v.Args, env)
+			applyUnknownStmt(modulePath, &expanded, d, env)
 		default:
 			ThrowFmt("gen: %s: unhandled Stmt type %T (parser added a new Stmt subclass without updating gen.go)", modulePath, s)
 		}

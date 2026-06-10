@@ -312,3 +312,22 @@ func TestExpandStmtToken_UnresolvedRefDoesNotBlockLaterRefs(t *testing.T) {
 		t.Errorf("got %q, want ${UNDEFINED_VAR_42}/C", got)
 	}
 }
+
+func TestCollectModule_PySrcsExpandsSetList(t *testing.T) {
+	// PY_SRCS(${SRCS}) where SRCS is a SET-list must expand+split into the
+	// individual py sources — UnknownStmt-handled macros need arg-expansion like
+	// the typed cases. (yt/python/yt/wrapper builds SRCS via SET then PY_SRCS it.)
+	src := "LIBRARY()\nSET(SRCS\n    a.py\n    b.py\n)\nPY_SRCS(${SRCS})\nEND()\n"
+
+	mf, err := Parse(testParserFS, "ya.make", []byte(src))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+
+	d := collectModule(newIncludeParserManagerFS(newMemFS(nil), newSharedParseCache()), &deDuper{}, "mod", KindLib,
+		mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("mod"), Kind: KindLib, Platform: testTargetP}))
+
+	if !equalStrings(d.pySrcs, []string{"a.py", "b.py"}) {
+		t.Fatalf("pySrcs = %v, want [a.py b.py]", d.pySrcs)
+	}
+}
