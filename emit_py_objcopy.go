@@ -187,18 +187,19 @@ func emitResourceObjcopy(
 			node.DepRefs = append(node.DepRefs, rescompressorLDRef)
 		}
 
-		depSeen := map[NodeRef]struct{}{}
+		// The inputs set above is complete by now, so the deduper is free for the
+		// dep-ref set.
+		deduper.reset()
 
 		for _, ref := range cur.pathDeps {
 			if ref == (NodeRef(0)) {
 				continue
 			}
 
-			if _, dup := depSeen[ref]; dup {
+			if !deduper.add(VFS(ref)) {
 				continue
 			}
 
-			depSeen[ref] = struct{}{}
 			node.DepRefs = append(node.DepRefs, ref)
 		}
 
