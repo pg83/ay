@@ -40,7 +40,7 @@ func emitGeneratedPyAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleDat
 		return nil
 	}
 
-	rescompilerRef, _ := ctx.tool(argToolsRescompilerBin)
+	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 	rawRes := emitRawAuxResourceChunks(ctx, instance, entries, "PY3", nil, in, rescompilerRef)
 
 	if rawRes == nil {
@@ -222,7 +222,7 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 }
 
 func rawAuxInputClosure(ctx *genCtx, instance ModuleInstance, aux VFS, seed []VFS, in ModuleCCInputs) []VFS {
-	rescompilerRef, _ := ctx.tool(argToolsRescompilerBin)
+	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 
 	emits := make([]includeDirective, 0, len(seed))
 

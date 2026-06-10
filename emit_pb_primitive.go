@@ -351,22 +351,14 @@ type protoSrcsResult struct {
 }
 
 func protoSourceRelPath(fs FS, instance ModuleInstance, d *moduleData, src string) string {
-	moduleRel := filepath.ToSlash(filepath.Clean(instance.Path.Rel() + "/" + src))
-
-	if fs.IsFile(dirKey(instance.Path.Rel()), src) {
-		return moduleRel
-	}
-
-	baseDir := instance.Path.Rel()
-
-	return filepath.ToSlash(filepath.Clean(baseDir + "/" + src))
+	return filepath.ToSlash(filepath.Clean(resolvePySrcRel(fs, d.srcDirs, instance.Path.Rel(), src)))
 }
 
 func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, aux VFS, seed []VFS, peerAddIncl []VFS) []VFS {
 	reg := codegenRegForInstance(ctx, instance)
 
 	if reg != nil {
-		rescompilerRef, _ := ctx.tool(argToolsRescompilerBin)
+		rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 
 		emits := make([]includeDirective, 0, len(seed))
 
@@ -400,8 +392,7 @@ func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData,
 }
 
 func py3ccToolRefs(ctx *genCtx, instance ModuleInstance) (NodeRef, NodeRef, VFS, VFS) {
-	py3ccRef, py3ccRaw := ctx.tool(argToolsPy3ccBin)
-	py3ccBinary := canonicalizePy3ccBinary(py3ccRaw)
+	py3ccRef, py3ccBinary := ctx.tool(argToolsPy3cc)
 	py3ccSlowRef, py3ccSlowBin := ctx.tool(argToolsPy3ccSlow)
 	return py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin
 }

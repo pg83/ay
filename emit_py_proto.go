@@ -402,7 +402,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		return nil
 	}
 
-	rescompilerRef, _ := ctx.tool(argToolsRescompilerBin)
+	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 	type chunk struct {
 		hashInputs []string
 		cmdArgs    []string

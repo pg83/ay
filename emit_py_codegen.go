@@ -17,13 +17,12 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		return
 	}
 
-	py3ccLDRef, py3ccRaw := ctx.tool(argToolsPy3ccBin)
-	py3ccBinary := canonicalizePy3ccBinary(py3ccRaw)
+	py3ccLDRef, py3ccBinary := ctx.tool(argToolsPy3cc)
 
 	py3ccSlowLDRef, py3ccSlowBin := ctx.tool(argToolsPy3ccSlow)
 
-	ctx.tool(argToolsRescompilerBin)
-	ctx.tool(argToolsRescompressorBin)
+	ctx.tool(argToolsRescompiler)
+	ctx.tool(argToolsRescompressor)
 	ctx.tool(argToolsArchiver)
 
 	for _, srcRel := range d.pySrcs {

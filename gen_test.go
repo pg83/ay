@@ -610,7 +610,7 @@ END()
 
 func TestGen_HostToolRecursion_R6(t *testing.T) {
 	fs := newMemFS(map[string]string{
-		"contrib/tools/ragel6/bin/ya.make": "PROGRAM(ragel6)\nSRCS(main.cpp)\nEND()\n",
+		"contrib/tools/ragel6/ya.make": "PROGRAM(ragel6)\nSRCS(main.cpp)\nEND()\n",
 		"consumer/ya.make":                 "LIBRARY()\nSRCS(parser.rl6)\nEND()\n",
 	})
 
@@ -696,10 +696,10 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 		t.Fatalf("host LD node has no Outputs; got Outputs=%v", ldNode.Outputs)
 	}
 
-	wantCmd0 := canonicalizeRagel6Binary(ldNode.Outputs[0]).String()
+	wantCmd0 := ldNode.Outputs[0].String()
 
 	if r6Node.Cmds[0].CmdArgs[0].String() != wantCmd0 {
-		t.Errorf("R6 cmd_args[0] = %q, want canonicalised host ragel6 LD outputs[0] = %q (raw outputs[0] = %q)",
+		t.Errorf("R6 cmd_args[0] = %q, want host ragel6 LD outputs[0] = %q (raw outputs[0] = %q)",
 			r6Node.Cmds[0].CmdArgs[0], wantCmd0, ldNode.Outputs[0].String())
 	}
 }
@@ -1451,7 +1451,7 @@ NO_UTIL()
 SRCS(thing.rl6)
 END()
 `,
-		"contrib/tools/ragel6/bin/ya.make": `PROGRAM(ragel6)
+		"contrib/tools/ragel6/ya.make": `PROGRAM(ragel6)
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
@@ -2233,7 +2233,7 @@ func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 		"consumer/ya.make":                 "LIBRARY()\nSRCS(parser.rl6)\nEND()\n",
 		"consumer/parser.rl6":              "// fixture\n",
 		"consumer/parser.h":                "// fixture\n",
-		"contrib/tools/ragel6/bin/ya.make": "PROGRAM(ragel6)\nSRCS(main.cpp)\nEND()\n",
+		"contrib/tools/ragel6/ya.make": "PROGRAM(ragel6)\nSRCS(main.cpp)\nEND()\n",
 	})
 
 	g := testGen(fs, "consumer")
@@ -4384,8 +4384,8 @@ func TestGen_LibraryARIncludesResourceObjcopyMemberInputs(t *testing.T) {
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
-	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
-	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 
 	writeTestModuleFile(files, "db/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(main.cpp)\nRESOURCE(data.sql key)\nEND()\n")
 	writeTestModuleFile(files, "db/main.cpp", "int f(){return 0;}\n")
@@ -4412,8 +4412,8 @@ func TestGen_ResourceRelativeOutputFeedsObjcopyFromBuildRoot(t *testing.T) {
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
-	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
-	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	writeToolProgram(files, "tools/json_gen/bin", "json_gen")
 
 	writeTestModuleFile(files, "db/ya.make", `LIBRARY()
@@ -4450,8 +4450,8 @@ func TestGen_ResourceBindirOutputFeedsObjcopyFromBuildRoot(t *testing.T) {
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
-	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
-	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	writeToolProgram(files, "tools/json_gen/bin", "json_gen")
 
 	writeTestModuleFile(files, "db/ya.make", `LIBRARY()
@@ -4516,8 +4516,8 @@ func TestGen_ResourceBindirRunProgramCarriesInputClosure(t *testing.T) {
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
-	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
-	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	writeToolProgram(files, "tools/json_gen/bin", "json_gen")
 
 	writeTestModuleFile(files, "dep/ya.make", `LIBRARY()
@@ -4837,8 +4837,8 @@ END()
 // Upstream always places objcopy objects first regardless of declaration order.
 func TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs(t *testing.T) {
 	files := map[string]string{}
-	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
-	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
 	// GLOBAL_SRCS declared BEFORE RESOURCE — this is the breakpad pattern
 	writeTestModuleFile(files, "brkmod/ya.make", "LIBRARY()\nGLOBAL_SRCS(global.cpp)\nRESOURCE(data.txt somekey)\nEND()\n")

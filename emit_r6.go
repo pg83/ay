@@ -3,8 +3,6 @@ package main
 import "strings"
 
 const (
-	ragel6BinSubrel            = "contrib/tools/ragel6/bin/"
-	ragel6CanonicalRel         = "contrib/tools/ragel6/"
 	ragel6DefaultFlagOptimized = "-CG2"
 	ragel6DefaultFlagDebug     = "-CT0"
 )
@@ -13,14 +11,6 @@ var (
 	ragel6ArgOptimized = internArg(ragel6DefaultFlagOptimized)
 	ragel6ArgDebug     = internArg(ragel6DefaultFlagDebug)
 )
-
-func canonicalizeRagel6Binary(v VFS) VFS {
-	if !v.IsBuild() || !strings.HasPrefix(v.Rel(), ragel6BinSubrel) {
-		return v
-	}
-
-	return Build(ragel6CanonicalRel + v.Rel()[len(ragel6BinSubrel):])
-}
 
 func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ARG, closure []VFS, emit Emitter) (NodeRef, VFS) {
 	var outVFS VFS
@@ -32,7 +22,6 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	}
 
 	inVFS := Source(instance.Path.Rel() + "/" + srcRel)
-	canonicalBinary := canonicalizeRagel6Binary(ragel6BinaryPath)
 
 	effectiveFlags := ragel6Flags
 
@@ -45,7 +34,7 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	}
 
 	cmdArgs := make([]STR, 0, 5+len(effectiveFlags)+1)
-	cmdArgs = append(cmdArgs, (canonicalBinary).str())
+	cmdArgs = append(cmdArgs, (ragel6BinaryPath).str())
 	cmdArgs = appendArgStr(cmdArgs, effectiveFlags)
 	cmdArgs = append(cmdArgs,
 		argL.str(),
@@ -58,7 +47,7 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	inputs := make([]VFS, 0, 2+len(closure))
-	inputs = append(inputs, canonicalBinary, inVFS)
+	inputs = append(inputs, ragel6BinaryPath, inVFS)
 	inputs = append(inputs, closure...)
 
 	node := &Node{

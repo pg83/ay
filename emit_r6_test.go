@@ -87,69 +87,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	}
 }
 
-func TestEmitR6_CanonicalizesBinPath_PR35j(t *testing.T) {
-	e := NewBufferedEmitter()
 
-	ragel6LD := e.Emit(&Node{Platform: &Platform{},
-		Cmds:    []Cmd{{CmdArgs: appendInternStrs(nil, []string{"link"}), Env: nil}},
-		Env:     nil,
-		Inputs:  ToVFSSlice([]string{}),
-		KV:      KV{P: pkLD},
-		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/bin/ragel6"}),
-	})
-
-	r6Ref, _ := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, Intern("$(B)/contrib/tools/ragel6/bin/ragel6"), nil, nil, e)
-
-	got := e.nodes[r6Ref]
-
-	wantCmd0 := "$(B)/contrib/tools/ragel6/ragel6"
-
-	if len(got.Cmds) == 0 || len(got.Cmds[0].CmdArgs) == 0 {
-		t.Fatalf("R6 node has no Cmds[0].CmdArgs; got Cmds=%v", got.Cmds)
-	}
-
-	if got.Cmds[0].CmdArgs[0].String() != wantCmd0 {
-		t.Errorf("R6 cmd_args[0] = %q, want %q (PR-35j: /bin/ stripped to match reference)",
-			got.Cmds[0].CmdArgs[0].String(), wantCmd0)
-	}
-}
-
-func TestCanonicalizeRagel6BinaryPath_PassThrough(t *testing.T) {
-	cases := []struct {
-		in, want string
-	}{
-
-		{
-			in:   "$(B)/contrib/tools/ragel6/ragel6",
-			want: "$(B)/contrib/tools/ragel6/ragel6",
-		},
-
-		{
-			in:   "$(B)/contrib/tools/ragel6/bin/ragel6",
-			want: "$(B)/contrib/tools/ragel6/ragel6",
-		},
-
-		{
-			in:   "$(B)/contrib/tools/yasm/yasm",
-			want: "$(B)/contrib/tools/yasm/yasm",
-		},
-
-		{
-			in:   "$(B)/contrib/tools/ragel6/bin/other",
-			want: "$(B)/contrib/tools/ragel6/other",
-		},
-	}
-
-	for _, c := range cases {
-		if !vfsHasPrefix(c.in) {
-			t.Fatalf("Intern(%q): not a VFS token", c.in)
-		}
-		got := canonicalizeRagel6Binary(Intern(c.in)).String()
-		if got != c.want {
-			t.Errorf("canonicalizeRagel6Binary(%q) = %q, want %q", c.in, got, c.want)
-		}
-	}
-}
 
 func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 	e := NewBufferedEmitter()

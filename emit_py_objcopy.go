@@ -25,8 +25,8 @@ func emitResourceObjcopy(
 		return nil
 	}
 
-	rescompilerLDRef, _ := ctx.tool(argToolsRescompilerBin)
-	rescompressorLDRef, _ := ctx.tool(argToolsRescompressorBin)
+	rescompilerLDRef, _ := ctx.tool(argToolsRescompiler)
+	rescompressorLDRef, _ := ctx.tool(argToolsRescompressor)
 	out := &objcopyEmitResult{}
 
 	if nodeRes := emitPyMainObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); nodeRes != nil {
@@ -517,6 +517,12 @@ func emitPyNamespaceForGroup(
 
 	keyPath := instance.Path.Rel()
 
+	// A TOP_LEVEL group keys the namespace by the dir its sources resolve
+	// against — the last declared SRCDIR (srcDirs[0] is the module dir).
+	if group.TopLevel && len(d.srcDirs) > 1 {
+		keyPath = d.srcDirs[len(d.srcDirs)-1].Rel()
+	}
+
 	key := "py/namespace/" + modListMD5 + "/" + keyPath
 	kvHash := key + "=\"" + nsValue + "\""
 	kvCmd := key + "=" + nsValue
@@ -608,7 +614,7 @@ func emitPySrcObjcopy(
 			}
 		}
 
-		entries := buildPySrcEntriesFor(d, instance.Path.Rel(), group.Srcs, group.TopLevel, group.Namespace)
+		entries := buildPySrcEntriesFor(ctx.fs, d, instance.Path.Rel(), group.Srcs, group.TopLevel, group.Namespace)
 
 		if len(entries) == 0 {
 			continue

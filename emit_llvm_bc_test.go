@@ -24,8 +24,8 @@ func TestEmitLLVMBC_OptPassesNoBraceComma(t *testing.T) {
 
 	files := map[string]string{}
 	addLLVMBCToolchainPeer(files)
-	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
-	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	files[modPath+"/ya.make"] = `LIBRARY()
 USE_LLVM_BC16()
 LLVM_BC(
@@ -101,8 +101,8 @@ func TestEmitLLVMBC_BCNodeIncludesCompileFlags(t *testing.T) {
 
 	files := map[string]string{}
 	addLLVMBCToolchainPeer(files)
-	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
-	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	files[modPath+"/ya.make"] = `LIBRARY()
 USE_LLVM_BC16()
 LLVM_BC(
@@ -189,8 +189,8 @@ func TestEmitLLVMBC_PipelineProducesFiveNodes(t *testing.T) {
 
 	files := map[string]string{}
 	addLLVMBCToolchainPeer(files)
-	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
-	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	for k, v := range map[string]string{
 		modPath + "/ya.make": `LIBRARY()
 
@@ -299,8 +299,8 @@ func TestEmitLLVMBC_BCNodeIncludesArchArgs(t *testing.T) {
 
 	files := map[string]string{}
 	addLLVMBCToolchainPeer(files)
-	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
-	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	files[modPath+"/ya.make"] = `LIBRARY()
 USE_LLVM_BC16()
 LLVM_BC(
@@ -382,8 +382,8 @@ func TestEmitLLVMBC_BCNodeCarriesIncludeClosure(t *testing.T) {
 
 	files := map[string]string{}
 	addLLVMBCToolchainPeer(files)
-	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
-	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	files[modPath+"/ya.make"] = `LIBRARY()
 USE_LLVM_BC16()
 LLVM_BC(
@@ -448,8 +448,8 @@ func TestEmitLLVMBC_ObjcopyNodeCarriesBCClosure(t *testing.T) {
 
 	files := map[string]string{}
 	addLLVMBCToolchainPeer(files)
-	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
-	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	files[modPath+"/ya.make"] = `LIBRARY()
 USE_LLVM_BC16()
 LLVM_BC(
@@ -511,8 +511,8 @@ func TestEmitLLVMBC_BCNodeGeneratedSourceClosure(t *testing.T) {
 
 	files := map[string]string{}
 	addLLVMBCToolchainPeer(files)
-	writeToolProgram(files, "tools/rescompiler/bin", "rescompiler")
-	writeToolProgram(files, "tools/rescompressor/bin", "rescompressor")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	// COPY_FILE(TEXT src.in dst) creates a build-root generated source.
 	// The scanner registers src.in's parsed includes for $(B)/mod/dst,
 	// so walkClosure on $(B)/mod/dst returns the transitive header set.
