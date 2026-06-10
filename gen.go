@@ -2488,28 +2488,26 @@ func mergeLDPlugins(own, peer *ldPluginsResult) *ldPluginsResult {
 		return nil
 	}
 
-	seen := make(map[VFS]struct{}, len(ownPaths)+len(peerPaths))
+	deduper.reset()
 	out := &ldPluginsResult{
 		Refs:  make([]NodeRef, 0, len(ownPaths)+len(peerPaths)),
 		Paths: make([]VFS, 0, len(ownPaths)+len(peerPaths)),
 	}
 
 	for i, p := range ownPaths {
-		if _, dup := seen[p]; dup {
+		if !deduper.add(p) {
 			continue
 		}
 
-		seen[p] = struct{}{}
 		out.Refs = append(out.Refs, ownRefs[i])
 		out.Paths = append(out.Paths, p)
 	}
 
 	for i, p := range peerPaths {
-		if _, dup := seen[p]; dup {
+		if !deduper.add(p) {
 			continue
 		}
 
-		seen[p] = struct{}{}
 		out.Refs = append(out.Refs, peerRefs[i])
 		out.Paths = append(out.Paths, p)
 	}
@@ -2553,156 +2551,15 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 
 	defaults = suppressMallocAPIDefault(defaults, d.allocatorName)
 	seen := make(map[string]struct{}, len(defaults)+len(d.peerdirs))
-	out := peerGlobalContribs{}
-	addInclSeen := map[VFS]struct{}{}
-	protoAddInclSeen := map[VFS]struct{}{}
-	var cFlagsSeen BitSet
-	var cxxFlagsSeen BitSet
-	var cOnlyFlagsSeen BitSet
-	var objAddLibSeen BitSet
-	var ldFlagsSeen BitSet
-	var rpathFlagsSeen BitSet
-	archiveSeen := map[VFS]struct{}{}
-	globalSeen := map[VFS]struct{}{}
-	wholeArchiveSeen := map[VFS]struct{}{}
-	wholeArchiveCmdSeen := map[VFS]struct{}{}
-	ldPluginSeen := map[VFS]struct{}{}
-	dynamicSeen := map[VFS]struct{}{}
-	resourceGlobalSeen := map[STR]struct{}{}
-	addEachVFS := func(seenSet map[VFS]struct{}, dst *[]VFS, src []VFS) {
-		for _, x := range src {
-			if _, dup := seenSet[x]; dup {
-				continue
-			}
 
-			seenSet[x] = struct{}{}
-			*dst = append(*dst, x)
-		}
-	}
-
-	addArchive := func(ref NodeRef, path VFS) {
-		if _, dup := archiveSeen[path]; dup {
-			return
-		}
-
-		archiveSeen[path] = struct{}{}
-		out.archiveRefs = append(out.archiveRefs, ref)
-		out.archivePaths = append(out.archivePaths, path)
-	}
-
-	addGlobal := func(ref NodeRef, path VFS) {
-		if _, dup := globalSeen[path]; dup {
-			return
-		}
-
-		globalSeen[path] = struct{}{}
-		out.globalRefs = append(out.globalRefs, ref)
-		out.globalPaths = append(out.globalPaths, path)
-	}
-
-	addWholeArchive := func(ref NodeRef, path VFS) {
-		if _, dup := wholeArchiveSeen[path]; dup {
-			return
-		}
-
-		wholeArchiveSeen[path] = struct{}{}
-		out.wholeArchiveRefs = append(out.wholeArchiveRefs, ref)
-		out.wholeArchivePaths = append(out.wholeArchivePaths, path)
-	}
-
-	addWholeArchiveCmd := func(path VFS) {
-		if _, dup := wholeArchiveCmdSeen[path]; dup {
-			return
-		}
-
-		wholeArchiveCmdSeen[path] = struct{}{}
-		out.wholeArchiveCmdPaths = append(out.wholeArchiveCmdPaths, path)
-	}
-
-	addLDPlugin := func(ref NodeRef, path VFS) {
-		if _, dup := ldPluginSeen[path]; dup {
-			return
-		}
-
-		ldPluginSeen[path] = struct{}{}
-		out.ldPluginRefs = append(out.ldPluginRefs, ref)
-		out.ldPluginPaths = append(out.ldPluginPaths, path)
-	}
-
-	addDynamic := func(ref NodeRef, path VFS) {
-		if _, dup := dynamicSeen[path]; dup {
-			return
-		}
-
-		dynamicSeen[path] = struct{}{}
-		out.dynamicRefs = append(out.dynamicRefs, ref)
-		out.dynamicPaths = append(out.dynamicPaths, path)
-	}
+	// Resolve every peer through genModule first (memoized; the recursion may
+	// re-enter the deduper), then aggregate per output kind below in sequential
+	// leaf passes. The visited guard stays a local string-keyed map because it
+	// must stay live across the genModule calls.
+	resolved := make([]*moduleEmitResult, 0, len(defaults)+len(d.peerdirs))
 
 	walkInstance := func(peerInstance ModuleInstance) {
-		peerResult := genModule(ctx, peerInstance)
-
-		for _, decl := range peerResult.ResourceGlobalClosure {
-			if _, dup := resourceGlobalSeen[decl.GlobalVar]; !dup {
-				resourceGlobalSeen[decl.GlobalVar] = struct{}{}
-				out.resourceGlobals = append(out.resourceGlobals, decl)
-			}
-		}
-
-		addEachVFS(addInclSeen, &out.addIncl, peerResult.AddInclGlobal)
-		addEachVFS(protoAddInclSeen, &out.protoAddIncl, peerResult.ProtoAddInclGlobal)
-		addEachARG(&cFlagsSeen, &out.cFlags, peerResult.CFlagsGlobal)
-		addEachARG(&cxxFlagsSeen, &out.cxxFlags, peerResult.CXXFlagsGlobal)
-		addEachARG(&cOnlyFlagsSeen, &out.cOnlyFlags, peerResult.COnlyFlagsGlobal)
-		addEachARG(&objAddLibSeen, &out.objAddLibs, peerResult.ObjAddLibsGlobal)
-		addEachARG(&ldFlagsSeen, &out.ldFlags, peerResult.LDFlagsGlobal)
-		addEachARG(&rpathFlagsSeen, &out.rpathFlags, peerResult.RPathFlagsGlobal)
-
-		for i, p := range peerResult.PeerArchiveClosurePaths {
-			addArchive(peerResult.PeerArchiveClosureRefs[i], p)
-		}
-
-		if peerResult.ARPath != nil {
-			addArchive(peerResult.ARRef, *peerResult.ARPath)
-		}
-
-		for i, p := range peerResult.PeerGlobalClosurePaths {
-			addGlobal(peerResult.PeerGlobalClosureRefs[i], p)
-		}
-
-		if peerResult.GlobalRef != nil {
-			if peerResult.GlobalPath != nil {
-				addGlobal(*peerResult.GlobalRef, *peerResult.GlobalPath)
-			}
-		}
-
-		for i, p := range peerResult.PeerWholeArchiveClosurePaths {
-			addWholeArchive(peerResult.PeerWholeArchiveClosureRefs[i], p)
-		}
-
-		for i, p := range peerResult.WholeArchivePaths {
-			addWholeArchive(peerResult.WholeArchiveRefs[i], p)
-		}
-
-		for _, p := range peerResult.PeerWholeArchiveCmdClosurePaths {
-			addWholeArchiveCmd(p)
-		}
-
-		for _, p := range peerResult.WholeArchiveCmdPaths {
-			addWholeArchiveCmd(p)
-		}
-
-		for i, p := range peerResult.LDPluginPaths {
-			addLDPlugin(peerResult.LDPluginRefs[i], p)
-		}
-
-		for i, p := range peerResult.PeerDynamicClosurePaths {
-			addDynamic(peerResult.PeerDynamicClosureRefs[i], p)
-		}
-
-		if peerResult.ModuleStmtName == tokDynamicLibrary && peerResult.LDPath != nil {
-			addDynamic(peerResult.LDRef, *peerResult.LDPath)
-		}
+		resolved = append(resolved, genModule(ctx, peerInstance))
 	}
 
 	walk := func(peerPath string) {
@@ -2756,6 +2613,156 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 
 		seen[p] = struct{}{}
 		walk(filepath.Clean(p))
+	}
+
+	out := peerGlobalContribs{}
+
+	// Resource globals, deduped by global-var STR cast into the run-wide
+	// VFS-keyed deduper (single-namespace leaf pass, as in genModule).
+	deduper.reset()
+
+	for _, pr := range resolved {
+		for _, decl := range pr.ResourceGlobalClosure {
+			if deduper.add(VFS(decl.GlobalVar)) {
+				out.resourceGlobals = append(out.resourceGlobals, decl)
+			}
+		}
+	}
+
+	deduper.reset()
+
+	for _, pr := range resolved {
+		for _, p := range pr.AddInclGlobal {
+			if deduper.add(p) {
+				out.addIncl = append(out.addIncl, p)
+			}
+		}
+	}
+
+	deduper.reset()
+
+	for _, pr := range resolved {
+		for _, p := range pr.ProtoAddInclGlobal {
+			if deduper.add(p) {
+				out.protoAddIncl = append(out.protoAddIncl, p)
+			}
+		}
+	}
+
+	// Flag unions are several independent ARG sets, so they share one pass over
+	// local BitSets instead of the single-set deduper.
+	var cFlagsSeen BitSet
+	var cxxFlagsSeen BitSet
+	var cOnlyFlagsSeen BitSet
+	var objAddLibSeen BitSet
+	var ldFlagsSeen BitSet
+	var rpathFlagsSeen BitSet
+
+	for _, pr := range resolved {
+		addEachARG(&cFlagsSeen, &out.cFlags, pr.CFlagsGlobal)
+		addEachARG(&cxxFlagsSeen, &out.cxxFlags, pr.CXXFlagsGlobal)
+		addEachARG(&cOnlyFlagsSeen, &out.cOnlyFlags, pr.COnlyFlagsGlobal)
+		addEachARG(&objAddLibSeen, &out.objAddLibs, pr.ObjAddLibsGlobal)
+		addEachARG(&ldFlagsSeen, &out.ldFlags, pr.LDFlagsGlobal)
+		addEachARG(&rpathFlagsSeen, &out.rpathFlags, pr.RPathFlagsGlobal)
+	}
+
+	// archive: closure paths, then the peer's own AR output (per peer).
+	deduper.reset()
+
+	for _, pr := range resolved {
+		for i, p := range pr.PeerArchiveClosurePaths {
+			if deduper.add(p) {
+				out.archiveRefs = append(out.archiveRefs, pr.PeerArchiveClosureRefs[i])
+				out.archivePaths = append(out.archivePaths, p)
+			}
+		}
+
+		if pr.ARPath != nil && deduper.add(*pr.ARPath) {
+			out.archiveRefs = append(out.archiveRefs, pr.ARRef)
+			out.archivePaths = append(out.archivePaths, *pr.ARPath)
+		}
+	}
+
+	// global: closure paths, then the peer's own GLOBAL output.
+	deduper.reset()
+
+	for _, pr := range resolved {
+		for i, p := range pr.PeerGlobalClosurePaths {
+			if deduper.add(p) {
+				out.globalRefs = append(out.globalRefs, pr.PeerGlobalClosureRefs[i])
+				out.globalPaths = append(out.globalPaths, p)
+			}
+		}
+
+		if pr.GlobalRef != nil && pr.GlobalPath != nil && deduper.add(*pr.GlobalPath) {
+			out.globalRefs = append(out.globalRefs, *pr.GlobalRef)
+			out.globalPaths = append(out.globalPaths, *pr.GlobalPath)
+		}
+	}
+
+	// wholeArchive: closure paths, then the peer's own whole-archive paths.
+	deduper.reset()
+
+	for _, pr := range resolved {
+		for i, p := range pr.PeerWholeArchiveClosurePaths {
+			if deduper.add(p) {
+				out.wholeArchiveRefs = append(out.wholeArchiveRefs, pr.PeerWholeArchiveClosureRefs[i])
+				out.wholeArchivePaths = append(out.wholeArchivePaths, p)
+			}
+		}
+
+		for i, p := range pr.WholeArchivePaths {
+			if deduper.add(p) {
+				out.wholeArchiveRefs = append(out.wholeArchiveRefs, pr.WholeArchiveRefs[i])
+				out.wholeArchivePaths = append(out.wholeArchivePaths, p)
+			}
+		}
+	}
+
+	// wholeArchiveCmd: command-line whole-archive paths (no refs).
+	deduper.reset()
+
+	for _, pr := range resolved {
+		for _, p := range pr.PeerWholeArchiveCmdClosurePaths {
+			if deduper.add(p) {
+				out.wholeArchiveCmdPaths = append(out.wholeArchiveCmdPaths, p)
+			}
+		}
+
+		for _, p := range pr.WholeArchiveCmdPaths {
+			if deduper.add(p) {
+				out.wholeArchiveCmdPaths = append(out.wholeArchiveCmdPaths, p)
+			}
+		}
+	}
+
+	deduper.reset()
+
+	for _, pr := range resolved {
+		for i, p := range pr.LDPluginPaths {
+			if deduper.add(p) {
+				out.ldPluginRefs = append(out.ldPluginRefs, pr.LDPluginRefs[i])
+				out.ldPluginPaths = append(out.ldPluginPaths, p)
+			}
+		}
+	}
+
+	// dynamic: closure paths, then the peer's own DYNAMIC_LIBRARY output.
+	deduper.reset()
+
+	for _, pr := range resolved {
+		for i, p := range pr.PeerDynamicClosurePaths {
+			if deduper.add(p) {
+				out.dynamicRefs = append(out.dynamicRefs, pr.PeerDynamicClosureRefs[i])
+				out.dynamicPaths = append(out.dynamicPaths, p)
+			}
+		}
+
+		if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil && deduper.add(*pr.LDPath) {
+			out.dynamicRefs = append(out.dynamicRefs, pr.LDRef)
+			out.dynamicPaths = append(out.dynamicPaths, *pr.LDPath)
+		}
 	}
 
 	return out
