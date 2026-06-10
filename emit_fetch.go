@@ -29,7 +29,7 @@ func emitResourceFetch(ctx *genCtx, decl resourceDecl) NodeRef {
 		Inputs:           fetchScriptInputs(ctx.scripts),
 		KV:               KV{P: pkFETCH, PC: pcYellow, ShowOut: true},
 		Outputs:          []VFS{output},
-		Requirements:     Requirements{CPU: float64(1), Network: "full", RAM: float64(32)},
+		Requirements:     Requirements{CPU: float64(1), Network: nwFull, RAM: float64(32)},
 		Sandboxing:       true,
 		TargetProperties: TargetProperties{ModuleDir: "build/resources"},
 	}

@@ -157,7 +157,7 @@ func EmitLD(
 		Inputs:           inputs,
 		Outputs:          outputs,
 		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
-		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: binaryDir, ModuleLang: ldModuleLang(instance), ModuleType: "bin"},
 		DepRefs:          depRefs,
 		usesResources:    []string{resourcePatternClangTool + instance.Platform.ClangVer, resourcePatternLLDRoot, resourcePatternYMakePython3},
@@ -235,7 +235,7 @@ func emitVCSNode(emit Emitter, host *Platform) NodeRef {
 		}}},
 		KV:               KV{P: pkCP, PC: pcYellow, ShowOut: true},
 		Outputs:          []VFS{output},
-		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(16)},
+		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(16)},
 		Sandboxing:       true,
 		TargetProperties: TargetProperties{ModuleDir: "build/scripts"},
 	}

@@ -203,7 +203,7 @@ func (c *canonBuf) writeEnv(env EnvVars) {
 func (c *canonBuf) writeRequirements(r Requirements) {
 	c.writeUint64(math.Float64bits(r.CPU))
 	c.writeUint64(math.Float64bits(r.RAM))
-	c.writeBytes(r.Network)
+	c.writeByte(byte(r.Network))
 	c.writeUint64(math.Float64bits(r.RAMDisk))
 	c.writeBool(r.HasRAMDisk)
 }

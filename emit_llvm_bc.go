@@ -24,7 +24,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 	)
 	python := d.tc.Python3.String()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-	reqs := Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)}
+	reqs := Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)}
 	tp := TargetProperties{ModuleDir: instance.Path}
 
 	for _, stmt := range d.llvmBc {

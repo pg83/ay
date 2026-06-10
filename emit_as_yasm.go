@@ -79,7 +79,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 		Outputs:          []VFS{outVFS},
 		KV:               KV{P: pkAS, PC: pcLightGreen},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
-		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 	}
 
 	node.ForeignDepRefs = []NodeRef{yasmLD}

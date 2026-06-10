@@ -108,7 +108,7 @@ func emitArchive(
 		Inputs:           inputs,
 		KV:               KV{P: pkAR, PC: pcLightRed},
 		Outputs:          []VFS{archiveVFS},
-		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		DepRefs:          depRefs,
 		usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},

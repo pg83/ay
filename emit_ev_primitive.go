@@ -143,7 +143,7 @@ func EmitEV(
 		Outputs:          []VFS{evCC, evH},
 		KV:               KV{P: pkEV, PC: pcYellow},
 		TargetProperties: targetProps,
-		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          depRefs,
 		ForeignDepRefs:   foreignDepRefs,
 		usesResources:    []string{resourcePatternYMakePython3},

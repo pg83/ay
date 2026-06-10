@@ -153,7 +153,7 @@ func EmitPR(
 		Outputs:          outputs,
 		KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
-		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          depRefs,
 		ForeignDepRefs:   foreignDepRefs,
 	}
