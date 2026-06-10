@@ -1,6 +1,7 @@
 package main
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -143,23 +144,23 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 	}
 }
 
-func TestExpandConfigString_SetVar(t *testing.T) {
+func TestExpandStmtToken_SetVar(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
 	env.SetFromString(envMODDIR, "mymod")
 	env.SetFromString(envORIG_SRC_DIR, "$(S)/mylib/src")
 
-	got := expandConfigString("${ORIG_SRC_DIR}", env)
+	got := expandStmtToken("${ORIG_SRC_DIR}", env)
 	if got != "$(S)/mylib/src" {
-		t.Fatalf("expandConfigString(${ORIG_SRC_DIR}) = %q, want $(S)/mylib/src", got)
+		t.Fatalf("expandStmtToken(${ORIG_SRC_DIR}) = %q, want $(S)/mylib/src", got)
 	}
 
-	got = expandConfigString("${UNKNOWN_VAR}", env)
+	got = expandStmtToken("${UNKNOWN_VAR}", env)
 	if got != "${UNKNOWN_VAR}" {
-		t.Fatalf("expandConfigString(${UNKNOWN_VAR}) = %q, want ${UNKNOWN_VAR} (no change)", got)
+		t.Fatalf("expandStmtToken(${UNKNOWN_VAR}) = %q, want ${UNKNOWN_VAR} (no change)", got)
 	}
 
 	env.SetFromString(envSRCDIR_RAW, "${ARCADIA_ROOT}/some/path")
-	got = expandConfigString("${SRCDIR_RAW}", env)
+	got = expandStmtToken("${SRCDIR_RAW}", env)
 	if got != "$(S)/some/path" {
 		t.Fatalf("expandConfigString with raw ARCADIA_ROOT in SET = %q, want $(S)/some/path", got)
 	}
@@ -201,5 +202,113 @@ func TestCopyFileInputVFS_ResolvesSourceRootPaths(t *testing.T) {
 	}
 	if got := copyFileInputVFS(fs, "pkg/sub", "pkg/sub/codecs.h").String(); got != "$(S)/pkg/sub/codecs.h" {
 		t.Fatalf("module-qualified copy input = %q, want $(S)/pkg/sub/codecs.h", got)
+	}
+}
+
+// The ya.make argument-expansion semantics mirror upstream ymake's
+// TEvalContext::Deref (devtools/ymake/lang/eval_context.cpp): per argument,
+// an arg without '$' passes through verbatim; an arg with '$' gets one
+// substitution pass (${NAME} only, unresolved refs stay literal), and if the
+// result contains a space it is split into fields; empty results are dropped.
+// SET assigns eagerly (value expanded at assignment), so one pass reaches the
+// fixpoint by construction.
+
+func expandTestEnv(bindings map[string]string) Environment {
+	env := DefaultIfEnv.Clone()
+
+	for k, v := range bindings {
+		env.SetString(internEnv(k), v)
+	}
+
+	return env
+}
+
+func TestExpandStmtTokens_GateExample(t *testing.T) {
+	env := expandTestEnv(map[string]string{"C": "C", "D": "D"})
+
+	got := expandStmtTokens([]string{"B", "${C}/${D}", "E"}, env)
+	want := []string{"B", "C/D", "E"}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("expandStmtTokens = %q, want %q", got, want)
+	}
+}
+
+func TestExpandStmtTokens_MultiWordValueResplits(t *testing.T) {
+	env := expandTestEnv(map[string]string{"C": "x y", "D": "D"})
+
+	got := expandStmtTokens([]string{"B", "${C}/${D}", "E"}, env)
+	want := []string{"B", "x", "y/D", "E"}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("expandStmtTokens = %q, want %q", got, want)
+	}
+}
+
+func TestExpandStmtTokens_QuotedLiteralWithoutDollarKeptWhole(t *testing.T) {
+	// A quoted "a b" reaches the arg list as one element with a space and no
+	// '$' — upstream passes it through untouched.
+	env := expandTestEnv(nil)
+
+	got := expandStmtTokens([]string{"a b", "c"}, env)
+	want := []string{"a b", "c"}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("expandStmtTokens = %q, want %q", got, want)
+	}
+}
+
+func TestExpandStmtTokens_QuotedArgWithDollarResplits(t *testing.T) {
+	// Upstream strips quotes at lex time, so a quoted arg containing ${V}
+	// whose value has spaces IS re-split after substitution.
+	env := expandTestEnv(map[string]string{"V": "p q"})
+
+	got := expandStmtTokens([]string{"x ${V} y"}, env)
+	want := []string{"x", "p", "q", "y"}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("expandStmtTokens = %q, want %q", got, want)
+	}
+}
+
+func TestExpandStmtTokens_UnresolvedRefStaysLiteral(t *testing.T) {
+	env := expandTestEnv(map[string]string{"C": "C"})
+
+	got := expandStmtTokens([]string{"${UNDEFINED_VAR_42}", "${UNDEFINED_VAR_42}/${C}"}, env)
+	want := []string{"${UNDEFINED_VAR_42}", "${UNDEFINED_VAR_42}/C"}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("expandStmtTokens = %q, want %q", got, want)
+	}
+}
+
+func TestExpandStmtTokens_EmptyResultDropped(t *testing.T) {
+	env := expandTestEnv(map[string]string{"EMPTY": ""})
+
+	got := expandStmtTokens([]string{"a", "${EMPTY}", "b", "x${EMPTY}y"}, env)
+	want := []string{"a", "b", "xy"}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("expandStmtTokens = %q, want %q", got, want)
+	}
+}
+
+func TestExpandStmtToken_ArcadiaRootsViaEnv(t *testing.T) {
+	env := expandTestEnv(nil)
+
+	if got := expandStmtToken("${ARCADIA_ROOT}/x", env); got != "$(S)/x" {
+		t.Errorf("ARCADIA_ROOT: got %q, want $(S)/x", got)
+	}
+
+	if got := expandStmtToken("${ARCADIA_BUILD_ROOT}/y", env); got != "$(B)/y" {
+		t.Errorf("ARCADIA_BUILD_ROOT: got %q, want $(B)/y", got)
+	}
+}
+
+func TestExpandStmtToken_UnresolvedRefDoesNotBlockLaterRefs(t *testing.T) {
+	env := expandTestEnv(map[string]string{"C": "C"})
+
+	if got := expandStmtToken("${UNDEFINED_VAR_42}/${C}", env); got != "${UNDEFINED_VAR_42}/C" {
+		t.Errorf("got %q, want ${UNDEFINED_VAR_42}/C", got)
 	}
 }

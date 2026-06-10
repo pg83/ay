@@ -492,8 +492,8 @@ func collectModule(pm *includeParserManager, dd *deDuper, modulePath string, kin
 	fs := pm.fs
 
 	env.SetString(envMODDIR, modulePath)
-	env.SetString(envCURDIR, "${ARCADIA_ROOT}/"+modulePath)
-	env.SetString(envBINDIR, "${ARCADIA_BUILD_ROOT}/"+modulePath)
+	env.SetString(envCURDIR, "$(S)/"+modulePath)
+	env.SetString(envBINDIR, "$(B)/"+modulePath)
 
 	d := &moduleData{
 		pythonSQLite3: true,
@@ -788,6 +788,13 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			globalSrcs := make([]string, 0, len(v.Sources))
 
 			for _, src := range expandStmtTokens(v.Sources, env) {
+				// An unresolved ${VAR} stays literal through expansion (upstream
+				// Deref keeps unknown refs); ymake's source consumer then warns
+				// and ignores it — mirror that, like the PEERDIR arm below.
+				if strings.Contains(src, "${") {
+					continue
+				}
+
 				if src == "GLOBAL" {
 					globalNext = true
 
@@ -882,13 +889,11 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 		case *LDFlagsStmt:
 			d.ldFlags = append(d.ldFlags, internArgs(expandStmtTokens(v.Flags, env))...)
 		case *SrcDirStmt:
-			// SRCDIR is cumulative. Each arg is expanded (a ${VAR} may be a SET
-			// holding many whitespace-separated dirs, e.g. SRCDIR(${__dirs_})) and
-			// split into directory VFS appended to the search path.
-			for _, arg := range v.Dirs {
-				for _, dir := range strings.Fields(expandStmtToken(arg, env)) {
-					d.srcDirs = append(d.srcDirs, dirKey(dir))
-				}
+			// SRCDIR is cumulative: each expanded arg (a ${VAR} may be a SET
+			// holding many whitespace-separated dirs, e.g. SRCDIR(${__dirs_}))
+			// becomes a directory VFS appended to the search path.
+			for _, dir := range expandStmtTokens(v.Dirs, env) {
+				d.srcDirs = append(d.srcDirs, dirKey(dir))
 			}
 		case *GlobalSrcsStmt:
 			appendGlobalSrcGroup(d, expandStmtTokens(v.Sources, env))
@@ -1336,7 +1341,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		args := expandListVars(v.Args, env)
 
 		for i := range args {
-			args[i] = expandConfigString(args[i], env)
+			args[i] = expandStmtToken(args[i], env)
 		}
 
 		entry := parseCopyFileEntry(args, v.Name == tokCopyFileWithContext, v.Line)
@@ -2218,7 +2223,7 @@ func expandConfigVFSPaths(paths []string, env Environment) []VFS {
 	out := make([]VFS, 0, len(paths))
 
 	for _, path := range paths {
-		out = append(out, parseModulePathVFS(expandConfigString(path, env)))
+		out = append(out, parseModulePathVFS(expandStmtToken(path, env)))
 	}
 
 	return out
@@ -2232,42 +2237,12 @@ func parseModulePathVFS(path string) VFS {
 	return Source(path)
 }
 
-func expandConfigString(s string, env Environment) string {
-	s = strings.ReplaceAll(s, "${COMPILER_VERSION}", env.String(envCOMPILER_VERSION))
-	s = strings.ReplaceAll(s, "${ARCADIA_BUILD_ROOT}", "$(B)")
-	s = strings.ReplaceAll(s, "${ARCADIA_ROOT}", "$(S)")
-	s = strings.ReplaceAll(s, "${MODDIR}", env.String(envMODDIR))
-
-	for {
-		start := strings.Index(s, "${")
-
-		if start < 0 {
-			break
-		}
-
-		end := strings.IndexByte(s[start+2:], '}')
-
-		if end < 0 {
-			break
-		}
-
-		end += start + 2
-		name := s[start+2 : end]
-
-		val, ok := env.Lookup(name)
-
-		if !ok {
-			break
-		}
-
-		s = s[:start] + val + s[end+1:]
-	}
-
-	s = strings.ReplaceAll(s, "${ARCADIA_BUILD_ROOT}", "$(B)")
-	s = strings.ReplaceAll(s, "${ARCADIA_ROOT}", "$(S)")
-	return s
-}
-
+// expandStmtToken substitutes ${NAME} references in one ya.make statement
+// argument — upstream ymake's EvalExpr over TEvalContext vars (lang/
+// expansion.rl6): a single left-to-right pass, an unresolved reference stays
+// literal and scanning continues past it. SET assigns eagerly (the value is
+// expanded at assignment), so bound values carry no ${} and one pass reaches
+// the fixpoint by construction.
 func expandStmtToken(s string, env Environment) string {
 	if s == "$S" {
 		return "$(S)"
@@ -2280,6 +2255,10 @@ func expandStmtToken(s string, env Environment) string {
 	for i := 0; i < 8; i++ {
 		prev := s
 
+		// Bare $NAME is not part of the ya.make statement layer upstream (the
+		// expansion grammar requires braces); it belongs to the conf command
+		// language (.CMD), which ay flattens into the same pass — RUN_PROGRAM
+		// pipelines carry $PROTOC_PATH-style refs.
 		if strings.HasPrefix(s, "$") && !strings.HasPrefix(s, "${") {
 			name := strings.TrimPrefix(s, "$")
 
@@ -2291,33 +2270,7 @@ func expandStmtToken(s string, env Environment) string {
 		}
 
 		s = expandEmbeddedDollarVars(s, env)
-
-		for {
-			start := strings.Index(s, "${")
-
-			if start < 0 {
-				break
-			}
-
-			end := strings.IndexByte(s[start+2:], '}')
-
-			if end < 0 {
-				break
-			}
-
-			end += start + 2
-			name := s[start+2 : end]
-
-			val, ok := env.Lookup(name)
-
-			if !isExpandVarName(name) || !ok {
-				break
-			}
-
-			s = s[:start] + val + s[end+1:]
-		}
-
-		s = expandConfigString(s, env)
+		s = expandBracedVars(s, env)
 
 		if s == prev {
 			break
@@ -2325,6 +2278,42 @@ func expandStmtToken(s string, env Environment) string {
 	}
 
 	return s
+}
+
+// expandBracedVars resolves ${NAME} references left to right; an unresolved
+// or malformed reference is kept literal and the scan continues after it
+// (upstream keeps unknown refs verbatim — expansion.rl6's macro action).
+func expandBracedVars(s string, env Environment) string {
+	searchFrom := 0
+
+	for {
+		start := strings.Index(s[searchFrom:], "${")
+
+		if start < 0 {
+			return s
+		}
+
+		start += searchFrom
+		end := strings.IndexByte(s[start+2:], '}')
+
+		if end < 0 {
+			return s
+		}
+
+		end += start + 2
+		name := s[start+2 : end]
+
+		val, ok := env.Lookup(name)
+
+		if !isExpandVarName(name) || !ok {
+			searchFrom = end + 1
+
+			continue
+		}
+
+		s = s[:start] + val + s[end+1:]
+		searchFrom = start + len(val)
+	}
 }
 
 func expandEmbeddedDollarVars(s string, env Environment) string {
@@ -2384,46 +2373,26 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 	return b.String()
 }
 
+// expandStmtTokens expands a ya.make statement's argument list — upstream
+// ymake's TEvalContext::Deref (lang/eval_context.cpp): an argument without '$'
+// passes through verbatim (a quoted multi-word literal survives whole); an
+// argument with '$' gets one substitution pass, and the result is split on
+// whitespace in place (a multi-word value contributes several arguments);
+// empty results are dropped.
 func expandStmtTokens(items []string, env Environment) []string {
 	out := make([]string, 0, len(items))
 
 	for _, item := range items {
-		expanded := expandStmtToken(item, env)
+		if !strings.Contains(item, "$") {
+			out = append(out, item)
 
-		if fullVarRef(item) && expanded == item {
 			continue
 		}
 
-		if expanded == "" || expanded == "no" {
-			if fullVarRef(item) || (fullDollarVarRef(item) && env.HasBinding(item[1:])) {
-				continue
-			}
-		}
-
-		fields := []string{expanded}
-
-		if fullVarRef(item) || (fullDollarVarRef(item) && env.HasBinding(item[1:])) {
-			fields = strings.Fields(expanded)
-		}
-
-		for _, field := range fields {
-			if field == "" {
-				continue
-			}
-
-			out = append(out, field)
-		}
+		out = append(out, strings.Fields(expandStmtToken(item, env))...)
 	}
 
 	return out
-}
-
-func fullVarRef(s string) bool {
-	return strings.HasPrefix(s, "${") && strings.HasSuffix(s, "}") && isExpandVarName(s[2:len(s)-1])
-}
-
-func fullDollarVarRef(s string) bool {
-	return strings.HasPrefix(s, "$") && !strings.HasPrefix(s, "${") && isExpandVarName(s[1:])
 }
 
 func isExpandVarName(s string) bool {

@@ -425,6 +425,11 @@ func makeDefaultIfEnv() Environment {
 	// Platform.Flags -> buildIfEnv, so internal-contour builds (no such flag)
 	// correctly see OPENSOURCE unset.
 
+	// The roots are plain vars in the ya.make language (upstream binds them in
+	// ymake.core.conf); statement-arg expansion resolves them like any ${VAR}.
+	e.SetString(envARCADIA_ROOT, "$(S)")
+	e.SetString(envARCADIA_BUILD_ROOT, "$(B)")
+
 	e.SetString(envCXX_RT, "libcxxrt")
 	// gnu_compiler.conf: CORE_LIBS_OPTIMIZATION=-O3 (-O0 only under DEBUG_CORE_LIBS,
 	// which the gating builds never set). python3/runtime_py3 splice it into CFLAGS.
