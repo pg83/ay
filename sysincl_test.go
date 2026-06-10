@@ -39,25 +39,25 @@ func TestParseSysInclYAML_Synthetic(t *testing.T) {
 		t.Errorf("filter should not match contrib/libs/other/bar.c")
 	}
 
-	if got := r.Mappings["bar.h"]; len(got) != 1 || got[0] != "contrib/libs/foo/bar.h" {
+	if got := r.Mappings[internStr("bar.h")]; len(got) != 1 || got[0] != Source("contrib/libs/foo/bar.h") {
 		t.Errorf("bar.h: got %v, want [contrib/libs/foo/bar.h]", got)
 	}
 
-	if got := r.Mappings["baz.h"]; len(got) != 2 {
+	if got := r.Mappings[internStr("baz.h")]; len(got) != 2 {
 		t.Errorf("baz.h: got %v, want 2-element fan-out", got)
 	}
 
-	got, ok := r.Mappings["quux.h"]
+	got, ok := r.Mappings[internStr("quux.h")]
 
 	if !ok {
 		t.Errorf("quux.h: missing")
 	}
 
-	if len(got) != 1 || got[0] != "" {
-		t.Errorf("quux.h suppression: got %v, want [\"\"]", got)
+	if len(got) != 0 {
+		t.Errorf("quux.h suppression: got %v, want no paths", got)
 	}
 
-	got, ok = r.Mappings["bare.h"]
+	got, ok = r.Mappings[internStr("bare.h")]
 
 	if !ok {
 		t.Errorf("bare.h: missing")

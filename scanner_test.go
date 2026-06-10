@@ -288,8 +288,8 @@ func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
 		{
 			Filter:      nil,
 			KeyBySource: false,
-			Mappings: map[string][]string{
-				"elf.h": {"foolib/include/elf.h"},
+			Mappings: map[STR][]VFS{
+				internStr("elf.h"): {Source("foolib/include/elf.h")},
 			},
 		},
 	}
@@ -331,10 +331,10 @@ func TestScanner_QuotedMultiTargetSysincl_OwnAddIncl(t *testing.T) {
 			Filter:         nil,
 			KeyBySource:    false,
 			HasMultiTarget: true,
-			Mappings: map[string][]string{
-				"cxxabi.h": {
-					"libcxxabi/include/cxxabi.h",
-					"libcxxrt/include/cxxabi.h",
+			Mappings: map[STR][]VFS{
+				internStr("cxxabi.h"): {
+					Source("libcxxabi/include/cxxabi.h"),
+					Source("libcxxrt/include/cxxabi.h"),
 				},
 			},
 		},
@@ -380,10 +380,10 @@ func TestScanner_QuotedSameDirStillGated(t *testing.T) {
 			Filter:         nil,
 			KeyBySource:    false,
 			HasMultiTarget: true,
-			Mappings: map[string][]string{
-				"unwind.h": {
-					"libcxx/include/unwind.h",
-					"libcxxrt/unwind.h",
+			Mappings: map[STR][]VFS{
+				internStr("unwind.h"): {
+					Source("libcxx/include/unwind.h"),
+					Source("libcxxrt/unwind.h"),
 				},
 			},
 		},
@@ -426,8 +426,8 @@ func TestScanner_QuotedSysinclFiresOnLocalMiss(t *testing.T) {
 		{
 			Filter:      nil,
 			KeyBySource: false,
-			Mappings: map[string][]string{
-				"absent.h": {"foolib/include/absent.h"},
+			Mappings: map[STR][]VFS{
+				internStr("absent.h"): {Source("foolib/include/absent.h")},
 			},
 		},
 	}
@@ -461,8 +461,8 @@ func TestScanner_AngleSysinclUnaffected(t *testing.T) {
 		{
 			Filter:      nil,
 			KeyBySource: false,
-			Mappings: map[string][]string{
-				"unwind.h": {"libunwind/include/unwind.h"},
+			Mappings: map[STR][]VFS{
+				internStr("unwind.h"): {Source("libunwind/include/unwind.h")},
 			},
 		},
 	}

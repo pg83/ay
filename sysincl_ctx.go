@@ -27,26 +27,20 @@ type sysinclCtx struct {
 func newSysinclCtx(set SysInclSet) *sysinclCtx {
 	c := &sysinclCtx{}
 
-	var csKeyIDs []STR
-
 	for i := range set {
 		rec := &set[i]
 
 		for k := range rec.Mappings {
-			if rec.CaseInsensitive {
-				if c.keyCI == nil {
-					c.keyCI = make(map[string]bool, len(rec.Mappings))
-				}
-
-				c.keyCI[k] = true
-			} else {
-				csKeyIDs = append(csKeyIDs, internStr(k))
-			}
+			c.keyBits.add(uint32(k))
 		}
-	}
 
-	for _, id := range csKeyIDs {
-		c.keyBits.add(uint32(id))
+		for k := range rec.MappingsCI {
+			if c.keyCI == nil {
+				c.keyCI = make(map[string]bool, len(rec.MappingsCI))
+			}
+
+			c.keyCI[k] = true
+		}
 	}
 
 	for k := range c.keyCI {
@@ -108,9 +102,9 @@ func (c *sysinclCtx) lookup(path string, target STR) ([]VFS, bool, bool) {
 		return nil, false, false
 	}
 
-	rels, claimed, hasMultiTarget := c.merged.lookup(path, target.String())
+	paths, claimed, hasMultiTarget := c.merged.lookup(path, target.String())
 
-	return absifyRels(rels), hasMultiTarget || len(rels) >= 2, claimed
+	return paths, hasMultiTarget || len(paths) >= 2, claimed
 }
 
 // caseVariants returns b plus, for an ASCII letter, its opposite-case form — the
@@ -126,25 +120,11 @@ func caseVariants(b byte) []byte {
 	}
 }
 
-func absifyRels(rels []string) []VFS {
-	if len(rels) == 0 {
-		return nil
-	}
-
-	out := make([]VFS, 0, len(rels))
-
-	for _, rel := range rels {
-		out = append(out, Source(rel))
-	}
-
-	return out
-}
-
 // sysinclContribution is one sysincl record's mapping for a header bucket,
 // carrying the record's Filter so activeness is decided per query against the
 // includer path.
 type sysinclContribution struct {
-	paths  []string
+	paths  []VFS
 	filter *sourceFilter // nil = applies to every path
 	rawKey string        // the record's stored key (lowercase for CI records)
 	order  int           // index in the rule set
@@ -169,18 +149,26 @@ func buildSysinclIndex(set SysInclSet) *sysinclIndex {
 		rec := &set[order]
 
 		for k, paths := range rec.Mappings {
-			lc := k
-
-			if !rec.CaseInsensitive {
-				lc = strings.ToLower(k)
-			}
+			raw := k.String()
+			lc := strings.ToLower(raw)
 
 			m.byLower[lc] = append(m.byLower[lc], sysinclContribution{
 				paths:  paths,
 				filter: rec.Filter,
+				rawKey: raw,
+				order:  order,
+				ci:     false,
+				multi:  rec.HasMultiTarget,
+			})
+		}
+
+		for k, paths := range rec.MappingsCI {
+			m.byLower[k] = append(m.byLower[k], sysinclContribution{
+				paths:  paths,
+				filter: rec.Filter,
 				rawKey: k,
 				order:  order,
-				ci:     rec.CaseInsensitive,
+				ci:     true,
 				multi:  rec.HasMultiTarget,
 			})
 		}
@@ -193,7 +181,7 @@ func buildSysinclIndex(set SysInclSet) *sysinclIndex {
 	return m
 }
 
-func (m *sysinclIndex) lookup(path, header string) ([]string, bool, bool) {
+func (m *sysinclIndex) lookup(path, header string) ([]VFS, bool, bool) {
 	bucket := m.byLower[strings.ToLower(header)]
 
 	if bucket == nil {
@@ -201,7 +189,7 @@ func (m *sysinclIndex) lookup(path, header string) ([]string, bool, bool) {
 	}
 
 	var (
-		out            []string
+		out            []VFS
 		found          bool
 		hasMultiTarget bool
 	)
@@ -219,27 +207,11 @@ func (m *sysinclIndex) lookup(path, header string) ([]string, bool, bool) {
 
 		found = true
 
-		if c.multi {
-			count := 0
-
-			for _, p := range c.paths {
-				if p != "" {
-					count++
-				}
-			}
-
-			if count >= 2 {
-				hasMultiTarget = true
-			}
+		if c.multi && len(c.paths) >= 2 {
+			hasMultiTarget = true
 		}
 
-		for _, p := range c.paths {
-			if p == "" {
-				continue
-			}
-
-			out = append(out, p)
-		}
+		out = append(out, c.paths...)
 	}
 
 	return out, found, hasMultiTarget
