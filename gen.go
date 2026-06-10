@@ -44,6 +44,9 @@ var asmlibYasmModules = map[string]bool{
 //   - Tag/build-if filters we don't model: BUILD_ONLY_IF / NO_BUILD_IF /
 //     INCLUDE_TAGS / ONLY_TAGS / CHECK_DEPENDENT_DIRS / EXCLUDE_TAGS.
 //   - Windows-specific: WINDOWS_LONG_PATH_MANIFEST (ymake.core.conf:5590).
+//   - Java/Kotlin-only: WITH_KOTLIN_GRPC (proto.conf:231, tag:java-specific) —
+//     adds java protoc plugin args, java grpc/protobuf runtime peers, and a
+//     sem-export var; contributes nothing to a C++/Python module's graph.
 var acknowledgedMacros = map[string]struct{}{
 	"RECURSE":                         {},
 	"RECURSE_FOR_TESTS":               {},
@@ -116,6 +119,7 @@ var acknowledgedMacros = map[string]struct{}{
 	"EXCLUDE_TAGS":                    {},
 	"CHECK_DEPENDENT_DIRS":            {},
 	"WINDOWS_LONG_PATH_MANIFEST":      {},
+	"WITH_KOTLIN_GRPC":               {},
 }
 
 type moduleEmitResult struct {
