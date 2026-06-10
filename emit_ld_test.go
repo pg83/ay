@@ -133,8 +133,8 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		t.Errorf("kv = %+v, want {P:LD PC:light-blue ShowOut:true}", got.KV)
 	}
 
-	if got.TargetProperties.ModuleType != "bin" {
-		t.Errorf("target_properties.module_type = %q, want bin", got.TargetProperties.ModuleType)
+	if got.TargetProperties.ModuleType != mtBin {
+		t.Errorf("target_properties.module_type = %q, want bin", got.TargetProperties.ModuleType.String())
 	}
 
 	// ccRef + the vcs.json producer node (emitVCSNode).

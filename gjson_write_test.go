@@ -57,7 +57,7 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 		Outputs:          ToVFSSlice([]string{"main.o"}),
 		Requirements:     Requirements{CPU: 1, RAM: 32, Network: nwRestricted},
 		Tags:             []STR{internStr("tag1")},
-		TargetProperties: TargetProperties{ModuleLang: "cpp"},
+		TargetProperties: TargetProperties{ModuleLang: mlCPP},
 	})
 	e.Result(main)
 	g := Finalize(e)

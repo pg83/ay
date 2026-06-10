@@ -86,13 +86,52 @@ func (r Requirements) isEmpty() bool {
 	return r.CPU == 0 && r.RAM == 0 && r.Network == nwNone && !r.HasRAMDisk
 }
 
+// ModuleLang is a node's "module_lang" target property; same uint8-enum scheme
+// as ProcKind. Not the ModuleInstance Language enum: LangPy surfaces as "py3"
+// and test nodes without a module emit "unknown". Zero value mlNone = absent.
+type ModuleLang uint8
+
+const (
+	mlNone ModuleLang = iota
+	mlCPP
+	mlPy3
+	mlUnknown
+)
+
+var moduleLangStr = [...]string{
+	mlNone: "", mlCPP: "cpp", mlPy3: "py3", mlUnknown: "unknown",
+}
+
+func (l ModuleLang) String() string {
+	return moduleLangStr[l]
+}
+
+// ModuleType is a node's "module_type" target property; same uint8-enum scheme.
+// Zero value mtNone = absent.
+type ModuleType uint8
+
+const (
+	mtNone ModuleType = iota
+	mtBin
+	mtLib
+	mtSO
+)
+
+var moduleTypeStr = [...]string{
+	mtNone: "", mtBin: "bin", mtLib: "lib", mtSO: "so",
+}
+
+func (t ModuleType) String() string {
+	return moduleTypeStr[t]
+}
+
 // TargetProperties is a node's module attributes. Empty fields are omitted,
 // matching the old sparse map.
 type TargetProperties struct {
 	ModuleDir  string
 	ModuleTag  string
-	ModuleLang string
-	ModuleType string
+	ModuleLang ModuleLang
+	ModuleType ModuleType
 }
 
 // ProcKind is a node's process kind (the kv "p" value): a small fixed set of
@@ -268,9 +307,9 @@ func appendTargetProperties(buf []byte, t TargetProperties) []byte {
 	o := jsonObj{buf: append(buf, '{')}
 
 	o.str("module_dir", t.ModuleDir)
-	o.str("module_lang", t.ModuleLang)
+	o.str("module_lang", t.ModuleLang.String())
 	o.str("module_tag", t.ModuleTag)
-	o.str("module_type", t.ModuleType)
+	o.str("module_type", t.ModuleType.String())
 
 	return append(o.buf, '}')
 }

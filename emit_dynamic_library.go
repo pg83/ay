@@ -157,7 +157,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Sandboxing:       true,
-		TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleLang: "cpp", ModuleTag: "dll", ModuleType: "so"},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleLang: mlCPP, ModuleTag: "dll", ModuleType: mtSO},
 		DepRefs:          depRefs,
 		usesResources:    []string{resourcePatternClangTool + instance.Platform.ClangVer, resourcePatternLLDRoot, resourcePatternYMakePython3},
 	}
