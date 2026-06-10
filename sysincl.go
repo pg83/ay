@@ -28,13 +28,13 @@ var sysInclYamlSequence = []sysInclEntry{
 	{file: "libidn.yml"},
 	{file: "jdk-to-arcadia.yml"},
 	{file: "opensource.yml"},
-	{file: "libc-to-musl.yml"},
-	{file: "linux-musl-aarch64.yml", predicate: archIs("aarch64")},
-	{file: "linux-musl.yml", predicate: archIs("x86_64")},
+	{file: "libc-to-musl.yml", predicate: muslOn},
+	{file: "linux-musl-aarch64.yml", predicate: muslArchIs("aarch64")},
+	{file: "linux-musl.yml", predicate: muslArchIs("x86_64")},
 	{file: "emscripten-to-nothing.yml"},
 	{file: "nvidia-cccl.yml"},
 	{file: "stl-to-libcxx.yml"},
-	{file: "libc-musl-libcxx.yml"},
+	{file: "libc-musl-libcxx.yml", predicate: muslOn},
 	{file: "python-2-disable.yml"},
 	{file: "python-2-disable-numpy.yml"},
 }
@@ -67,6 +67,7 @@ func recordKey(rec *SysIncl, k string) string {
 
 type sysInclEnv struct {
 	arch string
+	musl bool
 }
 
 type sysInclEntry struct {
@@ -78,7 +79,19 @@ func archIs(want string) func(sysInclEnv) bool {
 	return func(e sysInclEnv) bool { return e.arch == want }
 }
 
-func LoadSysInclSetForFS(fs FS, arch string, onWarn func(Warn)) SysInclSet {
+// muslOn / muslArchIs gate the musl libc & stl sysincl files, which upstream
+// loads only under MUSL=yes (build/conf/sysincl.conf:52,
+// build/ymake.core.conf:349). Under glibc these must not apply, or libc headers
+// remap into contrib/libs/musl.
+func muslOn(e sysInclEnv) bool {
+	return e.musl
+}
+
+func muslArchIs(want string) func(sysInclEnv) bool {
+	return func(e sysInclEnv) bool { return e.musl && e.arch == want }
+}
+
+func LoadSysInclSetForFS(fs FS, arch string, musl bool, onWarn func(Warn)) SysInclSet {
 	if !fs.IsDir(srcRootVFS, "build/sysincl") {
 		return nil
 	}
@@ -87,7 +100,7 @@ func LoadSysInclSetForFS(fs FS, arch string, onWarn func(Warn)) SysInclSet {
 		ThrowFmt("LoadSysInclSetFor: unsupported arch %q (want aarch64 or x86_64)", arch)
 	}
 
-	env := sysInclEnv{arch: arch}
+	env := sysInclEnv{arch: arch, musl: musl}
 	var set SysInclSet
 	sysinclDir := dirKey("build/sysincl")
 

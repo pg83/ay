@@ -72,6 +72,67 @@ func TestParseSysInclYAML_Synthetic(t *testing.T) {
 	}
 }
 
+// TestSysInclMuslGating pins the upstream sysincl gating: the musl libc/stl
+// sysincl files load only under MUSL=yes (build/conf/sysincl.conf:52 and
+// build/ymake.core.conf:349). A glibc build (MUSL unset) must not pull them in
+// — otherwise a bare <stdlib.h> remaps into contrib/libs/musl and drags the
+// musl header tree (and its <alloca.h>) into a non-musl closure.
+func TestSysInclMuslGating(t *testing.T) {
+	muslFiles := []string{
+		"libc-to-musl.yml",
+		"linux-musl.yml",
+		"linux-musl-aarch64.yml",
+		"libc-musl-libcxx.yml",
+	}
+
+	selected := func(env sysInclEnv) map[string]bool {
+		out := map[string]bool{}
+
+		for _, e := range sysInclYamlSequence {
+			if e.predicate == nil || e.predicate(env) {
+				out[e.file] = true
+			}
+		}
+
+		return out
+	}
+
+	// glibc (musl off): no musl file selected, on either arch.
+	for _, arch := range []string{"x86_64", "aarch64"} {
+		got := selected(sysInclEnv{arch: arch, musl: false})
+
+		for _, f := range muslFiles {
+			if got[f] {
+				t.Errorf("musl=off arch=%s: %s selected, want gated out", arch, f)
+			}
+		}
+	}
+
+	// musl on x86_64: libc-to-musl + linux-musl + libc-musl-libcxx; not the aarch64 variant.
+	gotX := selected(sysInclEnv{arch: "x86_64", musl: true})
+
+	for _, f := range []string{"libc-to-musl.yml", "linux-musl.yml", "libc-musl-libcxx.yml"} {
+		if !gotX[f] {
+			t.Errorf("musl=on x86_64: %s not selected, want selected", f)
+		}
+	}
+
+	if gotX["linux-musl-aarch64.yml"] {
+		t.Errorf("musl=on x86_64: linux-musl-aarch64.yml selected, want x86_64 variant only")
+	}
+
+	// musl on aarch64: aarch64 variant, not the x86_64 one.
+	gotA := selected(sysInclEnv{arch: "aarch64", musl: true})
+
+	if !gotA["linux-musl-aarch64.yml"] {
+		t.Errorf("musl=on aarch64: linux-musl-aarch64.yml not selected, want selected")
+	}
+
+	if gotA["linux-musl.yml"] {
+		t.Errorf("musl=on aarch64: linux-musl.yml selected, want aarch64 variant only")
+	}
+}
+
 func TestSourceFilter_NegativeLookahead(t *testing.T) {
 	cases := []struct {
 		pat   string
