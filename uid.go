@@ -116,6 +116,12 @@ func (c *canonBuf) writeStrSlice(as []STR) {
 func (c *canonBuf) writeVFSSlice(vs []VFS) {
 	c.writeUint32(uint32(len(vs)))
 
+	if fs, ok := c.fs.(*osFS); ok {
+		c.writeVFSSliceOS(vs, fs)
+
+		return
+	}
+
 	for _, v := range vs {
 		c.writeSTR(v.str())
 
@@ -127,6 +133,47 @@ func (c *canonBuf) writeVFSSlice(vs []VFS) {
 			c.writeUint64(c.fs.ContentHash(v))
 		}
 	}
+}
+
+// writeVFSSliceOS is the *osFS arm of writeVFSSlice with the loop state hoisted
+// into locals — buf, the los array, and the content-hash array. The interface
+// ContentHash per $(S) element forced a c.buf header reload around every append
+// (per the disasm), and gcshape generics keep such a call indirect (one shape
+// instantiation serves every pointer type arg), so the devirtualization is done
+// by hand: the hot path is ContentHash's array probe inlined here, the cold
+// path (contentHashSlow, the lazy read) may grow the array and is re-hoisted
+// after. Byte output is identical to the generic loop above.
+func (c *canonBuf) writeVFSSliceOS(vs []VFS, fs *osFS) {
+	buf := c.buf
+	los := internTable.los
+	hashes := fs.contentHashes
+
+	for _, v := range vs {
+		s := v.strID()
+		lo := los[s]
+		buf = append(buf,
+			byte(lo), byte(lo>>8), byte(lo>>16), byte(lo>>24),
+			byte(lo>>32), byte(lo>>40), byte(lo>>48), byte(lo>>56))
+
+		if !v.IsSource() {
+			continue
+		}
+
+		var h uint64
+
+		if int(s) < len(hashes) && hashes[s] != 0 {
+			h = hashes[s]
+		} else {
+			h = fs.contentHashSlow(v)
+			hashes = fs.contentHashes
+		}
+
+		buf = append(buf,
+			byte(h), byte(h>>8), byte(h>>16), byte(h>>24),
+			byte(h>>32), byte(h>>40), byte(h>>48), byte(h>>56))
+	}
+
+	c.buf = buf
 }
 
 func (c *canonBuf) writeCmdSlice(cmds []Cmd) {
