@@ -23,6 +23,11 @@ var (
 
 type includeDirectiveParser interface {
 	Parse(rel string, data []byte) parsedIncludeSet
+	// id is the parser's small stable identity — the second component of the
+	// ambiguous-ext parse-cache key (a file with an unregistered extension
+	// parses under the scan context's parser, so one file may carry one parse
+	// result per parser).
+	id() uint32
 }
 
 type includeDirectiveParserRegistry struct {
@@ -46,6 +51,15 @@ type ragelIncludeDirectiveParser struct{}
 type swigIncludeDirectiveParser struct{}
 type yasmIncludeDirectiveParser struct{}
 type emptyIncludeDirectiveParser struct{}
+
+func (cIncludeDirectiveParser) id() uint32           { return 1 }
+func (cythonIncludeDirectiveParser) id() uint32      { return 2 }
+func (flatbuffersIncludeDirectiveParser) id() uint32 { return 3 }
+func (protoIncludeDirectiveParser) id() uint32       { return 4 }
+func (ragelIncludeDirectiveParser) id() uint32       { return 5 }
+func (swigIncludeDirectiveParser) id() uint32        { return 6 }
+func (yasmIncludeDirectiveParser) id() uint32        { return 7 }
+func (emptyIncludeDirectiveParser) id() uint32       { return 8 }
 
 func newIncludeDirectiveParserRegistry() includeDirectiveParserRegistry {
 	cLike := cIncludeDirectiveParser{}
@@ -82,6 +96,17 @@ func (r includeDirectiveParserRegistry) register(parser includeDirectiveParser, 
 	for _, ext := range exts {
 		r.byExt[ext] = parser
 	}
+}
+
+// registeredParserFor returns the explicitly registered parser for rel's
+// extension, or nil — an unregistered extension (swig's .i, …) parses under
+// the SCAN CONTEXT's parser, resolved once from the walk's root file.
+func (r *includeDirectiveParserRegistry) registeredParserFor(rel string) includeDirectiveParser {
+	if p, ok := r.byExt[directiveParserExt(rel)]; ok {
+		return p
+	}
+
+	return nil
 }
 
 func (r *includeDirectiveParserRegistry) parserFor(rel string) includeDirectiveParser {
@@ -354,10 +379,29 @@ func (ragelIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeS
 	return set
 }
 
-func (swigIncludeDirectiveParser) Parse(_ string, data []byte) parsedIncludeSet {
+// swigImplicitDirectives are swig's implicit %includes (swig/Source/Modules/
+// main.cxx; the SWIG_IMPLICIT_INCLUDES conf var), prepended by the parser to
+// every root .swg file outside the swig library — upstream's
+// TSwigIncludeProcessor::AddImplicitIncludes, as a parse property.
+var swigImplicitDirectives = func() []includeDirective {
+	names := []string{"swig.swg", "go.swg", "java.swg", "perl5.swg", "python.swg"}
+	out := make([]includeDirective, 0, len(names))
+
+	for _, n := range names {
+		out = append(out, includeDirective{kind: includeSystem, target: internStr(n)})
+	}
+
+	return out
+}()
+
+func (swigIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeSet {
 	direct := make([]includeDirective, 0, 8)
 	induced := make([]includeDirective, 0, 4)
 	inBlock := false
+
+	if !strings.Contains(rel, "/swig/Lib/") {
+		direct = append(direct, swigImplicitDirectives...)
+	}
 
 	eachLine(data, func(line []byte) {
 		trimmed := strings.TrimSpace(string(line))

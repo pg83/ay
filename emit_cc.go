@@ -26,6 +26,12 @@ type ModuleCCInputs struct {
 
 	ExtraDepRefs []NodeRef
 
+	// RootParser overrides the walk's parser for unregistered-extension files
+	// when the walk ROOT itself has an unregistered extension (a swig .i
+	// source) — the caller knows the language, the extension does not. nil:
+	// walkClosure derives it from the root's registered parser.
+	RootParser includeDirectiveParser
+
 	// SrcDirs is the cumulative SRCDIR search path (directory VFS); index 0 is
 	// the module dir. resolveSourceVFS searches it (reverse); composeCCPaths
 	// derives output naming from the resolved source VFS, not from this.

@@ -54,6 +54,12 @@ func (set parsedIncludeSet) bucket(bucket parsedIncludeBucket) []includeDirectiv
 // means each file is parsed exactly once per run; we get the same behaviour
 // from this map's first-write-wins semantics. Do not key by scan context.
 type sharedParseCache struct {
+	// ambiguous holds parse results for files with UNREGISTERED extensions,
+	// keyed by splitMix64(strID, parserID): such a file parses under the scan
+	// context's parser (resolved once from the walk's root), so one file may
+	// legitimately carry one result per parser (.i under swig vs under C).
+	ambiguous map[uint64]parsedIncludeSet
+
 	// parsed is keyed by the source file's STR (vfsPath.strID()): a parsed source
 	// is always Source-rooted (VFS == STR<<1), so the STR is lossless and halves
 	// DenseMap's idx array versus the 2x-wider VFS space. A present slot with an
@@ -67,7 +73,7 @@ type sharedParseCache struct {
 }
 
 func newSharedParseCache() *sharedParseCache {
-	return &sharedParseCache{}
+	return &sharedParseCache{ambiguous: make(map[uint64]parsedIncludeSet, 16)}
 }
 
 type includeParserManager struct {
@@ -93,22 +99,49 @@ func newIncludeParserManagerFS(fs FS, cache *sharedParseCache) *includeParserMan
 	}
 }
 
-func (pm *includeParserManager) sourceParsedBuckets(vfsPath VFS) parsedIncludeSet {
+// sourceParsedBuckets parses vfsPath under its extension's registered parser,
+// or — for unregistered extensions — under ctxParser, the scan context's
+// parser resolved once from the walk's root (nil falls back to the C-like
+// default). Registered-ext results cache by file; ambiguous ones by
+// (file, parser).
+func (pm *includeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser includeDirectiveParser) parsedIncludeSet {
 	key := STR(vfsPath.strID())
+	rel := vfsPath.Rel()
+	parser := includeDirectiveParsers.registeredParserFor(rel)
+	var ambKey uint64
 
-	if cached, ok := pm.cache.parsed.Get(key); ok {
+	if parser == nil {
+		parser = ctxParser
+
+		if parser == nil {
+			parser = includeDirectiveParsers.defaultParser
+		}
+
+		ambKey = splitMix64(uint32(key), parser.id())
+
+		if cached, ok := pm.cache.ambiguous[ambKey]; ok {
+			pm.cache.parsedHits++
+			return cached
+		}
+	} else if cached, ok := pm.cache.parsed.Get(key); ok {
 		pm.cache.parsedHits++
 		return cached
 	}
 
 	pm.cache.parsedMisses++
 
-	rel := vfsPath.Rel()
+	put := func(set parsedIncludeSet) parsedIncludeSet {
+		if ambKey != 0 {
+			pm.cache.ambiguous[ambKey] = set
+		} else {
+			pm.cache.parsed.Put(key, set)
+		}
+
+		return set
+	}
 
 	if !pm.fs.IsFile(srcRootVFS, rel) {
-		pm.cache.parsed.Put(key, parsedIncludeSet{})
-
-		return parsedIncludeSet{}
+		return put(parsedIncludeSet{})
 	}
 
 	data := pm.fs.Read(rel)
@@ -117,11 +150,10 @@ func (pm *includeParserManager) sourceParsedBuckets(vfsPath VFS) parsedIncludeSe
 		data = data[3:]
 	}
 
-	out := includeDirectiveParsers.parserFor(rel).Parse(rel, data)
+	out := parser.Parse(rel, data)
 	out = pm.withCythonSibling(rel, out)
-	pm.cache.parsed.Put(key, out)
 
-	return out
+	return put(out)
 }
 
 // withCythonSibling models Cython's implicit sibling .pxd: a .pyx uses its
@@ -152,7 +184,7 @@ func (pm *includeParserManager) withCythonSibling(rel string, set parsedIncludeS
 	return set
 }
 
-func (pm *includeParserManager) parsedIncludes(vfsPath VFS) []includeDirective {
+func (pm *includeParserManager) parsedIncludes(vfsPath VFS, ctxParser includeDirectiveParser) []includeDirective {
 	if vfsPath.IsBuild() {
 		if parsed, ok := pm.buildParsed[vfsPath]; ok {
 			return parsed
@@ -161,30 +193,7 @@ func (pm *includeParserManager) parsedIncludes(vfsPath VFS) []includeDirective {
 		return nil
 	}
 
-	rel := vfsPath.Rel()
-
-	if !scannerFollowsImports(rel) {
-		return nil
-	}
-
-	return pm.sourceParsedBuckets(vfsPath).bucket(parsedIncludesLocal)
-}
-
-// scannerFollowsImports reports whether the C/C++ include scanner should expand
-// a source file's parsed imports. Proto and SWIG sources have their dependency
-// closures modeled by the proto / SWIG codegen (emit_proto, swigIncludeClosure),
-// which read sourceParsedBuckets directly. The scanner must not re-walk those
-// imports: it lacks the proto/SWIG search roots and would only report spurious
-// unresolved includes for deps that already arrive via codegen (verified
-// byte-exact: e.g. sg3 google/protobuf/any.proto and swig Lib closures match
-// upstream exactly without the scanner's redundant walk).
-func scannerFollowsImports(rel string) bool {
-	switch directiveParserExt(rel) {
-	case ".swg":
-		return false
-	}
-
-	return true
+	return pm.sourceParsedBuckets(vfsPath, ctxParser).bucket(parsedIncludesLocal)
 }
 
 func (pm *includeParserManager) RegisterBuildParsedIncludes(out VFS, parsed []includeDirective) {

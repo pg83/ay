@@ -44,7 +44,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 }
 
 func cfIncludeDirectives(pm *includeParserManager, rel string) []includeDirective {
-	raw := pm.sourceParsedBuckets(Source(rel)).bucket(parsedIncludesLocal)
+	raw := pm.sourceParsedBuckets(Source(rel), nil).bucket(parsedIncludesLocal)
 	out := make([]includeDirective, 0, len(raw))
 
 	for _, d := range raw {

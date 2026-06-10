@@ -776,7 +776,7 @@ machine Sub;
 	}
 
 	// parsedIncludesRagelNative of main.rl6 must contain sub.rl6
-	ragelNative := scanner.parsers.sourceParsedBuckets(Intern("$(S)/pkg/main.rl6")).bucket(parsedIncludesRagelNative)
+	ragelNative := scanner.parsers.sourceParsedBuckets(Intern("$(S)/pkg/main.rl6"), nil).bucket(parsedIncludesRagelNative)
 	if len(ragelNative) != 1 || ragelNative[0].target.String() != "sub.rl6" {
 		t.Errorf("parsedIncludesRagelNative of main.rl6 = %v, want [{sub.rl6}]", ragelNative)
 	}
@@ -811,12 +811,20 @@ func TestParsedIncludes_SwigBuckets(t *testing.T) {
 	local := parsed.bucket(parsedIncludesLocal)
 	hcpp := parsed.bucket(parsedIncludesHeader)
 
-	if len(local) != 3 {
-		t.Fatalf("got %d local entries, want 3; %+v", len(local), local)
+	// A root .swg outside the swig library leads with the 5 implicit
+	// language-runtime system includes (the parser's own directives).
+	if len(local) != 8 {
+		t.Fatalf("got %d local entries, want 8 (5 implicit + 3 parsed); %+v", len(local), local)
 	}
 
-	wantLocalTargets := []string{"a.i", "b.i", "c.h"}
-	wantLocalKinds := []includeKind{includeQuoted, includeSystem, includeQuoted}
+	wantLocalTargets := []string{
+		"swig.swg", "go.swg", "java.swg", "perl5.swg", "python.swg",
+		"a.i", "b.i", "c.h",
+	}
+	wantLocalKinds := []includeKind{
+		includeSystem, includeSystem, includeSystem, includeSystem, includeSystem,
+		includeQuoted, includeSystem, includeQuoted,
+	}
 	for i := range wantLocalTargets {
 		if local[i].target.String() != wantLocalTargets[i] {
 			t.Fatalf("local[%d].target.String() = %q, want %q; all=%+v", i, local[i].target.String(), wantLocalTargets[i], local)
@@ -916,15 +924,15 @@ func TestScanDirectives_MacroIndirectAugmentation(t *testing.T) {
 }
 
 func (s *IncludeScanner) scanDirectives(vfsPath VFS) []includeDirective {
-	return s.parsers.parsedIncludes(vfsPath)
+	return s.parsers.parsedIncludes(vfsPath, nil)
 }
 
 func (s *IncludeScanner) parsedIncludes(vfsPath VFS) parsedIncludeSet {
-	return s.parsers.sourceParsedBuckets(vfsPath)
+	return s.parsers.sourceParsedBuckets(vfsPath, nil)
 }
 
 func (s *IncludeScanner) sourceParsedBuckets(vfsPath VFS) parsedIncludeSet {
-	return s.parsers.sourceParsedBuckets(vfsPath)
+	return s.parsers.sourceParsedBuckets(vfsPath, nil)
 }
 
 func assertHasVFS(t *testing.T, closure []VFS, want VFS) {

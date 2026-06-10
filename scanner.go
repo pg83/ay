@@ -144,6 +144,11 @@ type scanCtx struct {
 	cfg          ScanContext
 	ctxNum       uint32
 	resolveIndex *cfgResolveIndex
+
+	// parser is the scan context's parser for files with UNREGISTERED
+	// extensions (swig's .i, …), resolved ONCE from the walk's root file —
+	// registered extensions always use their own parser. nil = C-like default.
+	parser includeDirectiveParser
 }
 
 // closureRef is an index into IncludeScanner.subgraphClosures.
@@ -239,6 +244,12 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 }
 
 type ScanContext struct {
+	// RootParser is the parser for unregistered-extension files reached from
+	// this walk, resolved once from the walk's root file (nil = C default).
+	// Not part of hashScanContext: it affects parsing, not path resolution,
+	// and parse results cache by (file, parser).
+	RootParser includeDirectiveParser
+
 	OwnAddIncl      []VFS
 	PeerAddInclSet  []VFS
 	BaseSearchPaths []VFS
@@ -281,6 +292,7 @@ func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
 		cfg:          cfg,
 		ctxNum:       ctxNum,
 		resolveIndex: ri,
+		parser:       cfg.RootParser,
 	}
 }
 
@@ -314,7 +326,7 @@ func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 	s := sc.scanner
 	incDir := dirKey(pathDir(vfsPath.Rel()))
 
-	for _, entry := range s.parsers.parsedIncludes(vfsPath) {
+	for _, entry := range s.parsers.parsedIncludes(vfsPath, sc.parser) {
 		resolved := sc.resolve(vfsPath, incDir, entry)
 
 		for _, rabs := range resolved {

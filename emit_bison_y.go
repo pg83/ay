@@ -41,7 +41,7 @@ func bisonGeneratedCPPParsed(ctx *genCtx, instance ModuleInstance, srcVFS, heade
 	}
 
 	if scanner := ctx.scannerFor(instance); scanner != nil {
-		parsed = append(parsed, scanner.parsers.sourceParsedBuckets(srcVFS).bucket(parsedIncludesLocal)...)
+		parsed = append(parsed, scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
 	}
 
 	return dedupDirectives(parsed)
@@ -63,7 +63,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	if preprocessHeader {
 		headerParsed = bisonCppHeaderParsed(srcVFS)
 	} else if scanner := ctx.scannerFor(instance); scanner != nil {
-		headerParsed = append(headerParsed, scanner.parsers.sourceParsedBuckets(srcVFS).bucket(parsedIncludesLocal)...)
+		headerParsed = append(headerParsed, scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
 	}
 
 	registerGeneratedParsedOutput(ctx, instance, pkYC, headerVFS, dedupDirectives(headerParsed), []NodeRef{bisonRef, m4Ref})
