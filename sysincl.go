@@ -52,17 +52,29 @@ type SysIncl struct {
 	HasMultiTarget bool
 
 	CaseInsensitive bool
-	Mappings        map[string][]string
+	Mappings        map[STR][]VFS    // case-sensitive records, keys interned at parse
+	MappingsCI      map[string][]VFS // case-insensitive records, keys lowercased
 }
 
 type SysInclSet []SysIncl
 
-func recordKey(rec *SysIncl, k string) string {
-	if rec.CaseInsensitive {
-		return strings.ToLower(k)
+// setMapping stores one cooked header→targets mapping into the record's arm
+// (CS keys interned, CI keys lowercased). paths carries no empty entries, so
+// len>=2 is exactly the multi-target condition.
+func (rec *SysIncl) setMapping(k string, paths []VFS) {
+	if len(paths) >= 2 {
+		rec.HasMultiTarget = true
 	}
 
-	return k
+	if rec.CaseInsensitive {
+		if rec.MappingsCI == nil {
+			rec.MappingsCI = make(map[string][]VFS)
+		}
+
+		rec.MappingsCI[strings.ToLower(k)] = paths
+	} else {
+		rec.Mappings[internStr(k)] = paths
+	}
 }
 
 type sysInclEnv struct {
@@ -130,7 +142,7 @@ func parseSysInclYAML(name, text string, onWarn func(Warn)) []SysIncl {
 		current *SysIncl
 
 		pendingKey   string
-		pendingPaths []string
+		pendingPaths []VFS
 
 		inIncludes bool
 	)
@@ -144,13 +156,7 @@ func parseSysInclYAML(name, text string, onWarn func(Warn)) []SysIncl {
 			ThrowFmt("sysincl: %s: pending key %q with no active record", name, pendingKey)
 		}
 
-		key := recordKey(current, pendingKey)
-
-		if pendingPaths == nil {
-			current.Mappings[key] = nil
-		} else {
-			current.Mappings[key] = pendingPaths
-		}
+		current.setMapping(pendingKey, pendingPaths)
 
 		pendingKey = ""
 		pendingPaths = nil
@@ -160,22 +166,6 @@ func parseSysInclYAML(name, text string, onWarn func(Warn)) []SysIncl {
 		flushPending()
 
 		if current != nil {
-			for _, paths := range current.Mappings {
-				count := 0
-
-				for _, p := range paths {
-					if p != "" {
-						count++
-					}
-				}
-
-				if count >= 2 {
-					current.HasMultiTarget = true
-
-					break
-				}
-			}
-
 			out = append(out, *current)
 			current = nil
 			inIncludes = false
@@ -197,7 +187,7 @@ func parseSysInclYAML(name, text string, onWarn func(Warn)) []SysIncl {
 
 		if indent == 0 && strings.HasPrefix(body, "- ") {
 			flushRecord()
-			current = &SysIncl{Mappings: make(map[string][]string)}
+			current = &SysIncl{Mappings: make(map[STR][]VFS)}
 			rest := strings.TrimSpace(body[2:])
 
 			handleRecordHeader(name, lineno, rest, current, &inIncludes, onWarn)
@@ -228,7 +218,9 @@ func parseSysInclYAML(name, text string, onWarn func(Warn)) []SysIncl {
 		}
 
 		if pendingKey != "" && !strings.Contains(entry, ":") {
-			pendingPaths = append(pendingPaths, unquote(entry))
+			if rel := unquote(entry); rel != "" {
+				pendingPaths = append(pendingPaths, Source(rel))
+			}
 
 			continue
 		}
@@ -238,7 +230,7 @@ func parseSysInclYAML(name, text string, onWarn func(Warn)) []SysIncl {
 		key, val, hasMapping := splitKeyValue(entry)
 
 		if !hasMapping {
-			current.Mappings[recordKey(current, key)] = nil
+			current.setMapping(key, nil)
 
 			continue
 		}
@@ -253,9 +245,9 @@ func parseSysInclYAML(name, text string, onWarn func(Warn)) []SysIncl {
 		v := unquote(val)
 
 		if v == "" {
-			current.Mappings[recordKey(current, key)] = []string{""}
+			current.setMapping(key, nil)
 		} else {
-			current.Mappings[recordKey(current, key)] = []string{v}
+			current.setMapping(key, []VFS{Source(v)})
 		}
 	}
 
