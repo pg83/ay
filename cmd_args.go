@@ -19,7 +19,7 @@ func appendArgStr(dst []STR, srcs ...[]ARG) []STR {
 	return dst
 }
 
-// appendInternStrs interns a genuine []string (e.g. platform link-tail fields or
+// appendInternStrs interns a genuine []string (e.g. linker-selection flag groups or
 // per-node computed args) and appends each as a STR — the string→STR boundary for
 // cold command tails whose tokens are not pre-interned.
 func appendInternStrs(dst []STR, ss []string) []STR {
