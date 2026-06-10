@@ -91,7 +91,7 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 
 		if reg != nil && reg.Lookup(dstVFS) == nil {
 			info := &GeneratedFileInfo{
-				ProducerKvP: "CP",
+				ProducerKvP: pkCP,
 				OutputPath:  dstVFS,
 				SourcePath:  srcVFS,
 				IsText:      entry.Text,

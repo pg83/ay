@@ -131,7 +131,7 @@ func emitArchive(
 		}
 
 		reg.Register(&GeneratedFileInfo{
-			ProducerKvP:    "AR",
+			ProducerKvP:    pkAR,
 			OutputPath:     archiveVFS,
 			ProducerRef:    arRef,
 			HasProducerRef: true,

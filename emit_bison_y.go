@@ -86,7 +86,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		headerParsed = append(headerParsed, scanner.parsers.sourceParsedBuckets(srcVFS).bucket(parsedIncludesLocal)...)
 	}
 
-	registerGeneratedParsedOutput(ctx, instance, "YC", headerVFS, dedupIncludeDirectives(headerParsed), []NodeRef{bisonRef, m4Ref})
+	registerGeneratedParsedOutput(ctx, instance, pkYC, headerVFS, dedupIncludeDirectives(headerParsed), []NodeRef{bisonRef, m4Ref})
 
 	if preprocessHeader {
 		if reg := codegenRegForInstance(ctx, instance); reg != nil {
@@ -104,7 +104,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		generatedParsed = bisonGeneratedCPPParsed(ctx, instance, srcVFS, headerVFS)
 	}
 
-	registerGeneratedParsedOutput(ctx, instance, "YC", generatedVFS, generatedParsed, []NodeRef{bisonRef, m4Ref})
+	registerGeneratedParsedOutput(ctx, instance, pkYC, generatedVFS, generatedParsed, []NodeRef{bisonRef, m4Ref})
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envBISON_PKGDATADIR, Value: strBisonPkgData}, {Name: envM4, Value: m4Bin}}
 	preprocessEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}

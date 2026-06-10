@@ -235,7 +235,7 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 	// from arrow IPC CC inputs without this).
 	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.parsers, ctx.fs, srcVFS.Rel())
 
-	registerBoundGeneratedParsedOutput(ctx, instance, "FL", headerVFS, headerIncludes, flRef, []NodeRef{flatcLDRef})
+	registerBoundGeneratedParsedOutput(ctx, instance, pkFL, headerVFS, headerIncludes, flRef, []NodeRef{flatcLDRef})
 
 	// The flatc tooling, the .fbs source and its transitive imports, plus the
 	// flatbuffers runtime header are real inputs of any unit whose include-closure
@@ -253,8 +253,8 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 
 	cppIncludes := []includeDirective{{kind: includeQuoted, target: internStr(headerVFS.Rel())}}
 
-	registerBoundGeneratedParsedOutput(ctx, instance, "FL", cppVFS, cppIncludes, flRef, []NodeRef{flatcLDRef})
-	registerBoundGeneratedParsedOutput(ctx, instance, "FL", bfbsVFS, nil, flRef, []NodeRef{flatcLDRef})
+	registerBoundGeneratedParsedOutput(ctx, instance, pkFL, cppVFS, cppIncludes, flRef, []NodeRef{flatcLDRef})
+	registerBoundGeneratedParsedOutput(ctx, instance, pkFL, bfbsVFS, nil, flRef, []NodeRef{flatcLDRef})
 
 	out := flatcEmission{
 		flRef:   flRef,

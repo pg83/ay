@@ -103,7 +103,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 			parsed = append(parsed, includeDirective{kind: includeQuoted, target: internStr(include.Rel())})
 		}
 
-		registerGeneratedParsedOutput(ctx, instance, "CY", generatedVFS, parsed, nil)
+		registerGeneratedParsedOutput(ctx, instance, pkCY, generatedVFS, parsed, nil)
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 

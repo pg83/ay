@@ -110,17 +110,17 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
-			registerGeneratedParsedOutput(ctx, instance, "PR", outVFSByToken[f], prEmitsIncludes(ctx, instance, d, f, stmt), []NodeRef{toolLDRef})
+			registerGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f], prEmitsIncludes(ctx, instance, d, f, stmt), []NodeRef{toolLDRef})
 			reg.SetSourceInputs(outVFSByToken[f], prSourceInputs)
 		}
 
 		for _, f := range stmt.OUTNoAutoFiles {
-			registerGeneratedParsedOutput(ctx, instance, "PR", outVFSByToken[f], prEmitsIncludes(ctx, instance, d, f, stmt), []NodeRef{toolLDRef})
+			registerGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f], prEmitsIncludes(ctx, instance, d, f, stmt), []NodeRef{toolLDRef})
 			reg.SetSourceInputs(outVFSByToken[f], prSourceInputs)
 		}
 
 		if stmt.StdoutFile != nil {
-			registerGeneratedParsedOutput(ctx, instance, "PR", *stdoutVFS, prEmitsIncludes(ctx, instance, d, *stmt.StdoutFile, stmt), []NodeRef{toolLDRef})
+			registerGeneratedParsedOutput(ctx, instance, pkPR, *stdoutVFS, prEmitsIncludes(ctx, instance, d, *stmt.StdoutFile, stmt), []NodeRef{toolLDRef})
 			reg.SetSourceInputs(*stdoutVFS, prSourceInputs)
 		}
 	}
