@@ -1,11 +1,9 @@
 package main
 
 import (
-	"io"
 	"os"
 	"path"
 	"strings"
-	"syscall"
 
 	"github.com/zeebo/xxh3"
 )
@@ -283,55 +281,10 @@ func (fs *osFS) Read(rel string) []byte {
 	return fs.readBuf
 }
 
+// readIntoRaw reads rel through the per-platform readFileInto fast path
+// (fs_read_linux.go / fs_read_other.go).
 func (fs *osFS) readIntoRaw(rel string, buf []byte) []byte {
-	f := Throw2(os.Open(fs.rootSlash + cleanRel(rel)))
-	defer f.Close()
-
-	buf = buf[:0]
-
-	// Fstat into a stack Stat_t instead of f.Stat() — the latter heap-allocates an
-	// *os.fileStat (FileInfo) per read (~10MB churn over a run). Linux-only path.
-	var st syscall.Stat_t
-
-	if statErr := syscall.Fstat(int(f.Fd()), &st); statErr == nil {
-		sz := int(st.Size)
-
-		if sz > cap(buf) {
-			buf = make([]byte, 0, sz)
-		}
-
-		for len(buf) < sz {
-			n, err := f.Read(buf[len(buf):sz])
-			buf = buf[:len(buf)+n]
-
-			if err != nil {
-				if err == io.EOF {
-					return buf
-				}
-
-				Throw(err)
-			}
-		}
-
-		return buf
-	}
-
-	for {
-		if len(buf) == cap(buf) {
-			buf = append(buf, 0)[:len(buf)]
-		}
-
-		n, err := f.Read(buf[len(buf):cap(buf)])
-		buf = buf[:len(buf)+n]
-
-		if err != nil {
-			if err == io.EOF {
-				return buf
-			}
-
-			Throw(err)
-		}
-	}
+	return readFileInto(fs.rootSlash+cleanRel(rel), buf)
 }
 
 // ReadAbs reads a file to be parsed. The yamake lexer holds its src lazily, and a
