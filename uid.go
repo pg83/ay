@@ -183,7 +183,7 @@ func (c *canonBuf) writeCmdSlice(cmds []Cmd) {
 		c.writeStrSlice(cm.CmdArgs)
 		c.writeSTR(cm.Cwd)
 		c.writeEnv(cm.Env)
-		c.writeBytes(cm.Stdout)
+		c.writeBytes(cm.Stdout.String())
 	}
 }
 
