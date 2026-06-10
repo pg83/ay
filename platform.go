@@ -77,8 +77,8 @@ type Platform struct {
 	// in composeLDCmdLinkExe.
 	CompressDebugSections bool
 
-	SystemLibs       []string
-	LinkPreludeExtra []string
+	SystemLibs       []STR
+	LinkPreludeExtra []STR
 
 	ClangVer string
 
@@ -139,8 +139,8 @@ func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, 
 		March:             marchFor(isa),
 		CFlags:            internArgs(parseCompilerFlags(cflagsEnv)),
 		CXXFlags:          internArgs(parseCompilerFlags(cxxflagsEnv)),
-		SystemLibs:        systemLibs,
-		LinkPreludeExtra:  linkPreludeExtra,
+		SystemLibs:        internStrs(systemLibs),
+		LinkPreludeExtra:  internStrs(linkPreludeExtra),
 		ClangVer:          platformClangVersion(flags),
 		ClangVerSTR:       internStr(platformClangVersion(flags)),
 		BuildTypeUpperSTR: internStr(strings.ToUpper(buildType)),
