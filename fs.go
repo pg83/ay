@@ -82,7 +82,7 @@ func NewFS(sourceRoot string) FS {
 // recordContentHash stores xxh3(data) at the file's full-path STR (the source VFS
 // strID), growing the array as ids advance.
 func (fs *osFS) recordContentHash(rel string, data []byte) {
-	s := internStr("$(S)/" + cleanRel(rel))
+	s := internPrefixed("$(S)/", cleanRel(rel))
 
 	if int(s) >= len(fs.contentHashes) {
 		n := len(fs.contentHashes) * 2
