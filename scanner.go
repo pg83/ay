@@ -109,8 +109,6 @@ type IncludeScanner struct {
 
 	visitedIDPool sync.Pool
 
-	seenPool sync.Pool
-
 	onWarn func(Warn)
 
 	// generatedFirstClaim records the first scan-context module path that
@@ -235,11 +233,6 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 
 	s.visitedIDPool.New = func() any {
 		return &IdSet{}
-	}
-
-	s.seenPool.New = func() any {
-		m := make(map[string]struct{}, 8)
-		return &m
 	}
 
 	return s
@@ -1009,23 +1002,35 @@ func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective
 	s := sc.scanner
 	s.resolveSearchPathCalls++
 
+	// out doubles as the dedup set: every accepted candidate lands in it, each
+	// branch below adds at most one entry, so membership is a linear scan over
+	// <= 3 elements — no pooled map, no per-call "B:"+rel key allocs, no clear.
 	var out []VFS
-	seenP := s.seenPool.Get().(*map[string]struct{})
-	seen := *seenP
+
+	outHas := func(v VFS) bool {
+		for _, x := range out {
+			if x == v {
+				return true
+			}
+		}
+
+		return false
+	}
 
 	addPath := func(rel string) bool {
 		rel = normalisePath(rel)
-
-		if _, dup := seen[rel]; dup {
-			return false
-		}
 
 		if !s.parsers.fs.IsFile(srcRootVFS, rel) {
 			return false
 		}
 
-		seen[rel] = struct{}{}
-		out = append(out, Source(rel))
+		v := Source(rel)
+
+		if outHas(v) {
+			return false
+		}
+
+		out = append(out, v)
 
 		return true
 	}
@@ -1041,13 +1046,10 @@ func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective
 			return false
 		}
 
-		dedupKey := "B:" + rel
-
-		if _, dup := seen[dedupKey]; dup {
+		if outHas(info.OutputPath) {
 			return false
 		}
 
-		seen[dedupKey] = struct{}{}
 		out = append(out, info.OutputPath)
 
 		return true
@@ -1101,10 +1103,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective
 
 		if !matched {
 			if info := s.codegenUnder(incDir.Rel(), d.target.String()); info != nil {
-				dedupKey := "B:" + info.OutputPath.Rel()
-
-				if _, dup := seen[dedupKey]; !dup {
-					seen[dedupKey] = struct{}{}
+				if !outHas(info.OutputPath) {
 					out = append(out, info.OutputPath)
 					searchPathFound = true
 				}
@@ -1132,9 +1131,6 @@ func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective
 			searchPathFound = true
 		}
 	}
-
-	clear(seen)
-	s.seenPool.Put(seenP)
 
 	return out
 }
