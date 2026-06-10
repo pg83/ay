@@ -592,9 +592,9 @@ END()
 			continue
 		}
 
-		if n.TargetProperties.ModuleTag == "global" {
+		if n.TargetProperties.ModuleTag == tagGlobal {
 			globalARs++
-		} else if n.TargetProperties.ModuleTag == "" {
+		} else if n.TargetProperties.ModuleTag == 0 {
 			regularARs++
 		}
 	}
@@ -2283,7 +2283,7 @@ END()
 			continue
 		}
 
-		if n.TargetProperties.ModuleTag == "global" {
+		if n.TargetProperties.ModuleTag == tagGlobal {
 			globalAR = n
 		} else {
 			regularAR = n
@@ -2960,8 +2960,8 @@ int use() { return 0; }
 	if !slices.Contains(graphDeps(g, en), depPB.UID) {
 		t.Fatalf("enum node deps missing imported pb producer uid %q: %v", depPB.UID, graphDeps(g, en))
 	}
-	if got := en.TargetProperties.ModuleTag; got != "cpp_proto" {
-		t.Fatalf("enum node module_tag = %q, want cpp_proto", got)
+	if got := en.TargetProperties.ModuleTag; got != tagCppProto {
+		t.Fatalf("enum node module_tag = %q, want cpp_proto", got.String())
 	}
 	if !nodeHasInput(en, "$(B)/protos/dep.pb.h") {
 		t.Fatalf("enum node inputs missing imported pb.h dep.pb.h: %#v", en.Inputs)
@@ -3274,8 +3274,8 @@ END()
 	g := testGen(newMemFS(files), "udfmod")
 
 	cc := findGraphNodeByOutputs(t, g, "$(B)/udfmod/lib.cpp.udfs.o")
-	if cc.TargetProperties.ModuleTag != "yql_udf_static" {
-		t.Fatalf("cc module_tag = %q, want yql_udf_static", cc.TargetProperties.ModuleTag)
+	if cc.TargetProperties.ModuleTag != tagYqlUdfStatic {
+		t.Fatalf("cc module_tag = %q, want yql_udf_static", cc.TargetProperties.ModuleTag.String())
 	}
 
 	for _, want := range []string{
@@ -3289,8 +3289,8 @@ END()
 	}
 
 	globalAR := findGraphNodeByOutputs(t, g, "$(B)/udfmod/libmy_udf.global.a")
-	if globalAR.TargetProperties.ModuleTag != "yql_udf_static_global" {
-		t.Fatalf("global AR module_tag = %q, want yql_udf_static_global", globalAR.TargetProperties.ModuleTag)
+	if globalAR.TargetProperties.ModuleTag != tagYqlUdfStaticGlobal {
+		t.Fatalf("global AR module_tag = %q, want yql_udf_static_global", globalAR.TargetProperties.ModuleTag.String())
 	}
 
 	for _, n := range g.Graph {
@@ -4844,7 +4844,7 @@ func TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs(t *testing.T) {
 
 	var globalAR *Node
 	for _, n := range g.Graph {
-		if n.KV.P == pkAR && n.TargetProperties.ModuleTag == "global" {
+		if n.KV.P == pkAR && n.TargetProperties.ModuleTag == tagGlobal {
 			globalAR = n
 			break
 		}

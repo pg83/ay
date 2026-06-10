@@ -157,9 +157,9 @@ func emitResourceObjcopy(
 		if d.moduleStmt != nil {
 			switch d.moduleStmt.Name {
 			case tokPy23Library, tokPy23NativeLibrary:
-				resTargetProps.ModuleTag = "py3"
+				resTargetProps.ModuleTag = tagPy3
 			case tokPy3Program:
-				resTargetProps.ModuleTag = "py3_bin"
+				resTargetProps.ModuleTag = tagPy3Bin
 			}
 		}
 
@@ -333,14 +333,14 @@ func emitKvOnlyObjcopyNode(
 
 	switch d.moduleStmt.Name {
 	case tokPy23Library, tokPy23NativeLibrary:
-		targetProps.ModuleTag = "py3"
+		targetProps.ModuleTag = tagPy3
 	}
 
 	if d.moduleStmt.Name == tokPy3Program || d.programPairedLib {
 		if kind == kvOnlyLib {
-			targetProps.ModuleTag = "py3_bin_lib"
+			targetProps.ModuleTag = tagPy3BinLib
 		} else {
-			targetProps.ModuleTag = "py3_bin"
+			targetProps.ModuleTag = tagPy3Bin
 		}
 	}
 
@@ -662,14 +662,14 @@ func emitPySrcObjcopy(
 
 			switch d.moduleStmt.Name {
 			case tokPy23Library, tokPy23NativeLibrary:
-				targetProps.ModuleTag = "py3"
+				targetProps.ModuleTag = tagPy3
 			}
 
 			// pysrc/namespace emissions for both the PY3_PROGRAM PROGRAM-side and
 			// its KindLib twin live under the PY3_BIN_LIB submodule in upstream;
 			// stamp them with that submodule's lowercased tag so the dump matches REF.
 			if d.moduleStmt.Name == tokPy3Program || d.programPairedLib {
-				targetProps.ModuleTag = "py3_bin_lib"
+				targetProps.ModuleTag = tagPy3BinLib
 			}
 
 			node := &Node{

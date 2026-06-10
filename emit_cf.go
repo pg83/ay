@@ -103,16 +103,16 @@ func hasKey(m map[string]string, k string) bool {
 // in its CPP_PROTO instance lands under MODULE_TAG=CPP_PROTO (gen.go:557),
 // which surfaces in REF dumps as `cpp_proto`. CF emits from other module
 // types leave module_tag unset.
-func cfModuleTag(d *moduleData, instance ModuleInstance) string {
+func cfModuleTag(d *moduleData, instance ModuleInstance) STR {
 	if d == nil || d.moduleStmt == nil {
-		return ""
+		return 0
 	}
 
 	if d.moduleStmt.Name == tokProtoLibrary && instance.Language != LangPy {
-		return "cpp_proto"
+		return tagCppProto
 	}
 
-	return ""
+	return 0
 }
 
 // cfgVarValue strips one outer pair of escaped double-quotes plus the

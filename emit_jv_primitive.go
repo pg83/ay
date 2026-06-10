@@ -13,7 +13,7 @@ var (
 
 const jdkResourcePath = "$(JDK17)/bin/java"
 
-func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs []VFS, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag string, emit Emitter) NodeRef {
+func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs []VFS, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag STR, emit Emitter) NodeRef {
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	node := &Node{
@@ -32,7 +32,7 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs []VFS, outputs []
 		TargetProperties: func() TargetProperties {
 			tp := TargetProperties{ModuleDir: instance.Path}
 
-			if moduleTag != "" {
+			if moduleTag != 0 {
 				tp.ModuleTag = moduleTag
 			}
 
@@ -52,7 +52,7 @@ func EmitJV(
 	options []string,
 	visitor bool,
 	listener bool,
-	moduleTag string,
+	moduleTag STR,
 	tc moduleToolchain,
 	emit Emitter,
 ) NodeRef {
@@ -110,7 +110,7 @@ func EmitJVSplit(
 	parser string,
 	visitor bool,
 	listener bool,
-	moduleTag string,
+	moduleTag STR,
 	tc moduleToolchain,
 	emit Emitter,
 ) NodeRef {
@@ -173,7 +173,7 @@ func EmitJVGeneral(
 	outputs []VFS,
 	cwd string,
 	depRefs []NodeRef,
-	moduleTag string,
+	moduleTag STR,
 	tc moduleToolchain,
 	emit Emitter,
 ) NodeRef {

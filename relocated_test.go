@@ -133,7 +133,7 @@ func EmitAR(
 
 	archivePath := Build(instance.Path + "/" + ArchiveName(instance.Path))
 
-	return emitARNode(instance, archivePath, nil, objRefs, objPaths, peerArchiveRefs, nil, testToolchain(), hostP, emit)
+	return emitARNode(instance, archivePath, 0, objRefs, objPaths, peerArchiveRefs, nil, testToolchain(), hostP, emit)
 }
 
 func Gen(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn)) *Graph {

@@ -92,14 +92,14 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 				tp := TargetProperties{ModuleDir: instance.Path}
 
 				if d.moduleStmt.Name == tokPy23Library {
-					tp.ModuleTag = "py3"
+					tp.ModuleTag = tagPy3
 				}
 
 				// PY3_BIN_LIB submodule of PY3_PROGRAM bundles pysrc bytecode
 				// under its lowercased MODULE_TAG, matching the surrounding
 				// objcopy/global.a target_properties.
 				if d.programPairedLib {
-					tp.ModuleTag = "py3_bin_lib"
+					tp.ModuleTag = tagPy3BinLib
 				}
 
 				return tp
@@ -195,7 +195,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 			}
 
 			if py3Suffix {
-				pyNode.TargetProperties.ModuleTag = "py3"
+				pyNode.TargetProperties.ModuleTag = tagPy3
 			}
 
 			pyRef = ctx.emit.Emit(pyNode)

@@ -136,7 +136,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		targetProps := TargetProperties{ModuleDir: instance.Path}
 
 		if !stmt.CMode && !generatedExplicit && py23Variant {
-			targetProps.ModuleTag = "py3"
+			targetProps.ModuleTag = tagPy3
 		}
 
 		cyRef := ctx.emit.Emit(&Node{

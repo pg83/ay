@@ -327,7 +327,7 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 			if info := reg.Lookup(v); info != nil {
 				if !info.HasProducerRef && info.DeferredCF != nil {
 					def := info.DeferredCF
-					cfRef, _ := EmitCF(def.instance, def.srcVFS, def.outVFS, def.cfgVars, def.includeInputs, consumer.Path, "", def.tc, ctx.emit)
+					cfRef, _ := EmitCF(def.instance, def.srcVFS, def.outVFS, def.cfgVars, def.includeInputs, consumer.Path, 0, def.tc, ctx.emit)
 					reg.SetProducerRef(v, cfRef)
 				}
 
@@ -825,7 +825,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		if objcopyRes != nil && len(objcopyRes.Refs) > 0 {
 			arInstance := instance
-			var globalBaseName, tag string
+			var globalBaseName string
+			var tag STR
 			archiveName := ""
 
 			if len(d.moduleStmt.Args) > 0 {
@@ -835,18 +836,18 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			switch d.moduleStmt.Name {
 			case tokPy23NativeLibrary:
 				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path, "libpy3c", archiveName)
-				tag = "py3_native_global"
+				tag = tagPy3NativeGlobal
 			case tokPy23Library:
 				arInstance.Language = LangPy
 				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path, "libpy3", archiveName)
-				tag = "py3_global"
+				tag = tagPy3Global
 			case tokPy3Library, tokPy2Library, tokPy2Program, tokPy3Program:
 				arInstance.Language = LangPy
 				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path, "libpy3", archiveName)
-				tag = "global"
+				tag = tagGlobal
 			default:
 				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path, "lib", archiveName)
-				tag = "global"
+				tag = tagGlobal
 			}
 
 			gRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRes.Refs, objcopyRes.Outputs, d.tc, ctx.host, ctx.emit)
@@ -1560,15 +1561,15 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	isPy3NativeLib := d.moduleStmt.Name == tokPy23NativeLibrary ||
 		d.moduleStmt.Name == tokPy23Library
 
-	var perModuleCCTag *string
+	var perModuleCCTag STR
 
 	switch d.moduleStmt.Name {
 	case tokPy23NativeLibrary:
-		perModuleCCTag = stringPtr("py3_native")
+		perModuleCCTag = tagPy3Native
 	case tokPy23Library:
-		perModuleCCTag = stringPtr("py3")
+		perModuleCCTag = tagPy3
 	case tokYqlUdfYdb, tokYqlUdfContrib:
-		perModuleCCTag = stringPtr("yql_udf_static")
+		perModuleCCTag = tagYqlUdfStatic
 	}
 
 	var arNameFn func(string) string
@@ -2000,10 +2001,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// name (lang/confreader.cpp:847-848). REF exposes it lowercased in
 		// the LD node's target_properties. The non-multimodule PY3_PROGRAM_BIN
 		// has no implicit MODULE_TAG, so it stays unset there.
-		var programModuleTag string
+		var programModuleTag STR
 
 		if d.moduleStmt.Name == tokPy3Program {
-			programModuleTag = "py3_bin"
+			programModuleTag = tagPy3Bin
 		}
 
 		ldRef := EmitLD(
@@ -2130,8 +2131,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	if len(ccRefs) > 0 {
-		if perModuleCCTag != nil {
-			arRef = EmitARNamedTagged(arInstance, arBaseName, *perModuleCCTag, ccRefs, ccOutputs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
+		if perModuleCCTag != 0 {
+			arRef = EmitARNamedTagged(arInstance, arBaseName, perModuleCCTag, ccRefs, ccOutputs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
 		} else {
 			arRef = EmitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
 		}
@@ -2182,22 +2183,22 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	if len(globalRefs) > 0 {
 		globalBaseName := globalArNameFn(instance.Path)
 
-		globalTag := "global"
+		globalTag := tagGlobal
 
 		switch d.moduleStmt.Name {
 		case tokPy23Library:
-			globalTag = "py3_global"
+			globalTag = tagPy3Global
 		case tokPy23NativeLibrary:
-			globalTag = "py3_native_global"
+			globalTag = tagPy3NativeGlobal
 		case tokYqlUdfYdb, tokYqlUdfContrib:
-			globalTag = "yql_udf_static_global"
+			globalTag = tagYqlUdfStaticGlobal
 		}
 
 		// The PY3_BIN_LIB submodule (KindLib half of PY3_PROGRAM multimodule)
 		// composes its global.a tag from <MODULE_TAG>_global; the lang dump
 		// expects "py3_bin_lib_global".
 		if d.programPairedLib {
-			globalTag = "py3_bin_lib_global"
+			globalTag = tagPy3BinLibGlobal
 		}
 
 		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), len(globalRefs))

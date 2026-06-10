@@ -52,7 +52,7 @@ func EmitEV(
 	cppStyleguideBinary VFS,
 	protocBinary VFS,
 	event2cppBinary VFS,
-	moduleTag *string,
+	moduleTag STR,
 	transitiveImports []VFS,
 	tc moduleToolchain,
 	emit Emitter,
@@ -101,8 +101,8 @@ func EmitEV(
 
 	targetProps := TargetProperties{ModuleDir: moduleDir}
 
-	if moduleTag != nil {
-		targetProps.ModuleTag = *moduleTag
+	if moduleTag != 0 {
+		targetProps.ModuleTag = moduleTag
 	}
 
 	var depRefs []NodeRef

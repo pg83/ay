@@ -115,10 +115,10 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		enDepScan := append([]VFS{headerInput}, enClosure...)
 		augmentedDepENRefs := resolveCodegenDepRefs(ctx, instance, enDepScan)
 
-		var moduleTag *string
+		var moduleTag STR
 
 		if d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary {
-			moduleTag = stringPtr("cpp_proto")
+			moduleTag = tagCppProto
 		}
 
 		enRef, enOutPaths := EmitEN(
