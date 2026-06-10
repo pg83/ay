@@ -167,7 +167,7 @@ func expectedUnittestNode(info testSuiteInfo) *Node {
 		Platform:         &Platform{Target: "default-linux-x86_64"},
 		Requirements:     Requirements{CPU: 1, Network: nwRestricted, RAM: 8, HasRAMDisk: true},
 		Tags:             internStrs(expectedSandboxingTags()),
-		TargetProperties: TargetProperties{ModuleLang: "cpp"},
+		TargetProperties: TargetProperties{ModuleLang: mlCPP},
 	}
 }
 
@@ -247,7 +247,7 @@ func expectedClangFormatNode() *Node {
 		Platform:         &Platform{Target: "default-linux-x86_64"},
 		Requirements:     Requirements{CPU: 1, Network: nwRestricted, RAM: 8, HasRAMDisk: true},
 		Tags:             []STR{},
-		TargetProperties: TargetProperties{ModuleLang: "unknown"},
+		TargetProperties: TargetProperties{ModuleLang: mlUnknown},
 	}
 }
 

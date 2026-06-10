@@ -211,8 +211,8 @@ func (c *canonBuf) writeRequirements(r Requirements) {
 func (c *canonBuf) writeTargetProperties(t TargetProperties) {
 	c.writeBytes(t.ModuleDir)
 	c.writeBytes(t.ModuleTag)
-	c.writeBytes(t.ModuleLang)
-	c.writeBytes(t.ModuleType)
+	c.writeByte(byte(t.ModuleLang))
+	c.writeByte(byte(t.ModuleType))
 }
 
 func (c *canonBuf) writeKV(kv KV) {

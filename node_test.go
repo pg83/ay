@@ -81,7 +81,7 @@ func TestNodeJSONKeyOrder_AllFieldsPresent(t *testing.T) {
 		Requirements:     Requirements{CPU: 1, RAM: 32},
 		SelfUID:          tuid("selfuid"),
 		Tags:             []STR{},
-		TargetProperties: TargetProperties{ModuleLang: "cpp"},
+		TargetProperties: TargetProperties{ModuleLang: mlCPP},
 		UID:              tuid("uid"),
 	}
 	raw, err := json.Marshal(n)

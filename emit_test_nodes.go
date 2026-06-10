@@ -157,7 +157,7 @@ func buildUnittestNode(p *Platform, info testSuiteInfo, resourceGlobals []resour
 			RAM:        8,
 			HasRAMDisk: true,
 		},
-		TargetProperties: TargetProperties{ModuleLang: "cpp"},
+		TargetProperties: TargetProperties{ModuleLang: mlCPP},
 	}
 }
 
@@ -264,7 +264,7 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 			RAM:        8,
 			HasRAMDisk: true,
 		},
-		TargetProperties: TargetProperties{ModuleLang: "unknown"},
+		TargetProperties: TargetProperties{ModuleLang: mlUnknown},
 	}
 }
 

@@ -158,7 +158,7 @@ func EmitLD(
 		Outputs:          outputs,
 		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: binaryDir, ModuleLang: ldModuleLang(instance), ModuleType: "bin"},
+		TargetProperties: TargetProperties{ModuleDir: binaryDir, ModuleLang: ldModuleLang(instance), ModuleType: mtBin},
 		DepRefs:          depRefs,
 		usesResources:    []string{resourcePatternClangTool + instance.Platform.ClangVer, resourcePatternLLDRoot, resourcePatternYMakePython3},
 	}
@@ -197,12 +197,12 @@ func ldBinaryDir(instance ModuleInstance) string {
 	return instance.Path
 }
 
-func ldModuleLang(instance ModuleInstance) string {
+func ldModuleLang(instance ModuleInstance) ModuleLang {
 	if instance.Language == LangPy {
-		return "py3"
+		return mlPy3
 	}
 
-	return "cpp"
+	return mlCPP
 }
 
 func lastPathComponent(p string) string {

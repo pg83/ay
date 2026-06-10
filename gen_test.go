@@ -68,8 +68,8 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 		t.Errorf("root LD module_dir = %q, want %q", rootLD.TargetProperties.ModuleDir, "mainprog")
 	}
 
-	if rootLD.TargetProperties.ModuleType != "bin" {
-		t.Errorf("root LD module_type = %q, want bin", rootLD.TargetProperties.ModuleType)
+	if rootLD.TargetProperties.ModuleType != mtBin {
+		t.Errorf("root LD module_type = %q, want bin", rootLD.TargetProperties.ModuleType.String())
 	}
 
 	mainCC := nodesByOutput[mainCCOut]
@@ -129,8 +129,8 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 		t.Errorf("root node kv.p = %q, want LD", ld.KV.P)
 	}
 
-	if ld.TargetProperties.ModuleType != "bin" {
-		t.Errorf("module_type = %q, want bin", ld.TargetProperties.ModuleType)
+	if ld.TargetProperties.ModuleType != mtBin {
+		t.Errorf("module_type = %q, want bin", ld.TargetProperties.ModuleType.String())
 	}
 
 	deps := make(map[UID]struct{}, len(graphDeps(g, ld)))
