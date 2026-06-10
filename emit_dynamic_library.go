@@ -38,34 +38,12 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		peerPaths = append(peerPaths, p)
 	}
 
+	// Resolve every peer through genModule first (memoized; the recursion may
+	// re-enter the deduper), then aggregate per output kind below in sequential
+	// leaf passes. The peer-list guard stays a local string-keyed map because it
+	// must stay live across the genModule calls.
 	seen := make(map[string]struct{}, len(peerPaths)+len(dynLibRPathHelperPeers))
-	peerArchiveRefs := make([]NodeRef, 0, len(peerPaths))
-	peerArchivePaths := make([]VFS, 0, len(peerPaths))
-	pluginRefs := []NodeRef{}
-	pluginPaths := []VFS{}
-	pluginSeen := map[VFS]struct{}{}
-	addInclSeen := map[VFS]struct{}{}
-	var cFlagsSeen BitSet
-	var cxxFlagsSeen BitSet
-	var cOnlyFlagsSeen BitSet
-	var rpathFlagsSeen BitSet
-	var peerAddInclGlobal []VFS
-	var peerCFlagsGlobal []ARG
-	var peerCXXFlagsGlobal []ARG
-	var peerCOnlyFlagsGlobal []ARG
-	var peerRPathFlagsGlobal []ARG
-	var resourceGlobals []resourceDecl
-	resourceGlobalSeen := map[STR]struct{}{}
-	addEachVFS := func(seenSet map[VFS]struct{}, dst *[]VFS, src []VFS) {
-		for _, x := range src {
-			if _, dup := seenSet[x]; dup {
-				continue
-			}
-
-			seenSet[x] = struct{}{}
-			*dst = append(*dst, x)
-		}
-	}
+	resolved := make([]*moduleEmitResult, 0, len(peerPaths))
 
 	for _, p := range peerPaths {
 		if _, dup := seen[p]; dup {
@@ -74,36 +52,11 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 
 		seen[p] = struct{}{}
 		peerInstance := derivePeerInstance(ctx, instance, d, p)
-		peerResult := genModule(ctx, peerInstance)
-
-		for _, decl := range peerResult.ResourceGlobalClosure {
-			if _, dup := resourceGlobalSeen[decl.GlobalVar]; !dup {
-				resourceGlobalSeen[decl.GlobalVar] = struct{}{}
-				resourceGlobals = append(resourceGlobals, decl)
-			}
-		}
-
-		if peerResult.ARPath != nil {
-			peerArchiveRefs = append(peerArchiveRefs, peerResult.ARRef)
-			peerArchivePaths = append(peerArchivePaths, *peerResult.ARPath)
-		}
-
-		addEachVFS(addInclSeen, &peerAddInclGlobal, peerResult.AddInclGlobal)
-		addEachARG(&cFlagsSeen, &peerCFlagsGlobal, peerResult.CFlagsGlobal)
-		addEachARG(&cxxFlagsSeen, &peerCXXFlagsGlobal, peerResult.CXXFlagsGlobal)
-		addEachARG(&cOnlyFlagsSeen, &peerCOnlyFlagsGlobal, peerResult.COnlyFlagsGlobal)
-		addEachARG(&rpathFlagsSeen, &peerRPathFlagsGlobal, peerResult.RPathFlagsGlobal)
-
-		for i, pp := range peerResult.LDPluginPaths {
-			if _, dup := pluginSeen[pp]; dup {
-				continue
-			}
-
-			pluginSeen[pp] = struct{}{}
-			pluginRefs = append(pluginRefs, peerResult.LDPluginRefs[i])
-			pluginPaths = append(pluginPaths, pp)
-		}
+		resolved = append(resolved, genModule(ctx, peerInstance))
 	}
+
+	// rpath helper peers contribute only RPathFlagsGlobal.
+	rpathOnly := make([]*moduleEmitResult, 0, len(dynLibRPathHelperPeers))
 
 	for _, p := range dynLibRPathHelperPeers {
 		if _, dup := seen[p]; dup {
@@ -112,8 +65,74 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 
 		seen[p] = struct{}{}
 		peerInstance := derivePeerInstance(ctx, instance, d, p)
-		peerResult := genModule(ctx, peerInstance)
-		addEachARG(&rpathFlagsSeen, &peerRPathFlagsGlobal, peerResult.RPathFlagsGlobal)
+		rpathOnly = append(rpathOnly, genModule(ctx, peerInstance))
+	}
+
+	// Resource globals, deduped by global-var STR cast into the run-wide
+	// VFS-keyed deduper (single-namespace leaf pass, as in genModule).
+	var resourceGlobals []resourceDecl
+	deduper.reset()
+
+	for _, pr := range resolved {
+		for _, decl := range pr.ResourceGlobalClosure {
+			if deduper.add(VFS(decl.GlobalVar)) {
+				resourceGlobals = append(resourceGlobals, decl)
+			}
+		}
+	}
+
+	peerArchiveRefs := make([]NodeRef, 0, len(resolved))
+	peerArchivePaths := make([]VFS, 0, len(resolved))
+
+	for _, pr := range resolved {
+		if pr.ARPath != nil {
+			peerArchiveRefs = append(peerArchiveRefs, pr.ARRef)
+			peerArchivePaths = append(peerArchivePaths, *pr.ARPath)
+		}
+	}
+
+	var peerAddInclGlobal []VFS
+	deduper.reset()
+
+	for _, pr := range resolved {
+		for _, p := range pr.AddInclGlobal {
+			if deduper.add(p) {
+				peerAddInclGlobal = append(peerAddInclGlobal, p)
+			}
+		}
+	}
+
+	var cFlagsSeen BitSet
+	var cxxFlagsSeen BitSet
+	var cOnlyFlagsSeen BitSet
+	var rpathFlagsSeen BitSet
+	var peerCFlagsGlobal []ARG
+	var peerCXXFlagsGlobal []ARG
+	var peerCOnlyFlagsGlobal []ARG
+	var peerRPathFlagsGlobal []ARG
+
+	for _, pr := range resolved {
+		addEachARG(&cFlagsSeen, &peerCFlagsGlobal, pr.CFlagsGlobal)
+		addEachARG(&cxxFlagsSeen, &peerCXXFlagsGlobal, pr.CXXFlagsGlobal)
+		addEachARG(&cOnlyFlagsSeen, &peerCOnlyFlagsGlobal, pr.COnlyFlagsGlobal)
+		addEachARG(&rpathFlagsSeen, &peerRPathFlagsGlobal, pr.RPathFlagsGlobal)
+	}
+
+	for _, pr := range rpathOnly {
+		addEachARG(&rpathFlagsSeen, &peerRPathFlagsGlobal, pr.RPathFlagsGlobal)
+	}
+
+	pluginRefs := []NodeRef{}
+	pluginPaths := []VFS{}
+	deduper.reset()
+
+	for _, pr := range resolved {
+		for i, pp := range pr.LDPluginPaths {
+			if deduper.add(pp) {
+				pluginRefs = append(pluginRefs, pr.LDPluginRefs[i])
+				pluginPaths = append(pluginPaths, pp)
+			}
+		}
 	}
 
 	d.tc = resolveModuleToolchain(resourceGlobals, instance.Platform.ClangVer)
