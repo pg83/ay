@@ -2513,79 +2513,13 @@ func applyAllPySrcs(fs FS, modulePath string, v *UnknownStmt, d *moduleData) {
 	}
 }
 
-type moduleTypeCacheKey struct {
-	Path     string
-	Kind     ModuleKind
-	Platform *Platform
-}
-
-type moduleTypeInfo struct {
-	Name        TOK
-	ExcludeTags map[string]bool
-}
-
-func moduleInfoForInstance(ctx *genCtx, instance ModuleInstance) moduleTypeInfo {
-	if ctx.moduleTypeCache == nil {
-		ctx.moduleTypeCache = make(map[moduleTypeCacheKey]moduleTypeInfo)
-	}
-
-	key := moduleTypeCacheKey{
-		Path:     instance.Path,
-		Kind:     instance.Kind,
-		Platform: instance.Platform,
-	}
-
-	if info, ok := ctx.moduleTypeCache[key]; ok {
-		return info
-	}
-
-	yamakePath := filepath.Join(ctx.sourceRoot, instance.Path, "ya.make")
-	mf := Throw2(ParseFile(ctx.fs, yamakePath))
-
-	env := buildIfEnv(instance)
-	d := collectModule(ctx.parsers, &deduper, instance.Path, instance.Kind, mf.Stmts, env)
-
-	if d.conflictMod != nil {
-		ThrowFmt("gen: %s declares multiple modules (%s and %s); only one is allowed", instance.Path, d.moduleStmt.Name, d.conflictMod.Name)
-	}
-
-	if d.moduleStmt == nil {
-		ThrowFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path)
-	}
-
-	info := moduleTypeInfo{Name: d.moduleStmt.Name}
-
-	if len(d.excludeTags) > 0 {
-		info.ExcludeTags = make(map[string]bool, len(d.excludeTags))
-
-		for k, v := range d.excludeTags {
-			info.ExcludeTags[k] = v
-		}
-	}
-
-	ctx.moduleTypeCache[key] = info
-
-	return info
-}
-
-func peerLanguageFor(ctx *genCtx, parent ModuleInstance, parentModuleName TOK, peerPath string) Language {
-	if !peerYaMakeExists(ctx.fs, peerPath) {
-		return LangCPP
-	}
-
-	peerSeed := ModuleInstance{
-		Path:     peerPath,
-		Kind:     KindLib,
-		Language: LangCPP,
-		Platform: parent.Platform,
-	}
-
-	peerInfo := moduleInfoForInstance(ctx, peerSeed)
-
-	if peerInfo.Name != tokProtoLibrary {
-		return LangCPP
-	}
-
+// peerEntryLanguage is the variant the CONSUMER requests of a peer, derived
+// from the consumer alone — the peer is NOT pre-parsed. Only a python-ish
+// consumer (or a py-variant PROTO_LIBRARY) requests the py variant; requesting
+// py of an arbitrary peer is safe because genModule re-enters as LangCPP when
+// the peer turns out to have no python variant (it is not a PROTO_LIBRARY) and
+// aliases the py memo key to the C++ result.
+func peerEntryLanguage(parent ModuleInstance, parentModuleName TOK) Language {
 	if isPythonModuleType(parentModuleName) {
 		return LangPy
 	}
@@ -2601,7 +2535,7 @@ func derivePeerInstance(ctx *genCtx, parent ModuleInstance, d *moduleData, peerP
 	return ModuleInstance{
 		Path:     peerPath,
 		Kind:     KindLib,
-		Language: peerLanguageFor(ctx, parent, d.moduleStmt.Name, peerPath),
+		Language: peerEntryLanguage(parent, d.moduleStmt.Name),
 		Platform: parent.Platform,
 	}
 }

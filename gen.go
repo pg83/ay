@@ -229,7 +229,6 @@ type genCtx struct {
 	inclArgValues   DenseMap[VFS, STR]
 	inclArgs        inclArgMemo
 	memo            map[ModuleInstance]*moduleEmitResult
-	moduleTypeCache map[moduleTypeCacheKey]moduleTypeInfo
 	walking         map[ModuleInstance]bool
 	cyclesTolerated int
 
@@ -442,7 +441,6 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		parsers:            parsers,
 		emit:               resourceEmit,
 		memo:               make(map[ModuleInstance]*moduleEmitResult),
-		moduleTypeCache:    make(map[moduleTypeCacheKey]moduleTypeInfo),
 		walking:            make(map[ModuleInstance]bool),
 		host:               hostP,
 		target:             targetP,
@@ -610,6 +608,22 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	env := buildIfEnv(instance)
 	d := collectModule(ctx.parsers, &deduper, instance.Path, instance.Kind, mf.Stmts, env)
+
+	// The consumer requested a variant without pre-parsing this module
+	// (peerEntryLanguage). Only a PROTO_LIBRARY has a python variant: any other
+	// module re-enters as its C++ variant and the py key aliases that result.
+	// This is the generic reenter-with-corrected-parameters point — a future
+	// variant fix (e.g. a DLL consumer re-entering a static peer with PIC)
+	// belongs here too, BEFORE anything is emitted: the streaming emitter
+	// cannot retract nodes.
+	if instance.Language == LangPy && d.moduleStmt != nil && d.moduleStmt.Name != tokProtoLibrary {
+		cpp := instance
+		cpp.Language = LangCPP
+		result := genModule(ctx, cpp)
+		ctx.memo[instance] = result
+
+		return result
+	}
 
 	for _, stmt := range d.allPySrcs {
 		applyAllPySrcs(ctx.fs, instance.Path, stmt, d)
