@@ -172,7 +172,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		Outputs: []VFS{outVFS},
 		KV:      KV{P: pkCC, PC: pcGreen},
 		TargetProperties: func() TargetProperties {
-			tp := TargetProperties{ModuleDir: instance.Path}
+			tp := TargetProperties{ModuleDir: instance.Path.Rel()}
 
 			if in.ModuleTag != 0 {
 				tp.ModuleTag = in.ModuleTag
@@ -200,11 +200,11 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	// path-cleans `..` / `.` segments, so SRCS(../foo.cpp) yields a
 	// normalised srcVFS.Rel() like commands/foo.cpp — the bare
 	// instance.Path+"/"+srcRel would still carry the unnormalised tail).
-	canon := filepath.ToSlash(filepath.Clean(instance.Path + "/" + srcRel))
+	canon := filepath.ToSlash(filepath.Clean(instance.Path.Rel() + "/" + srcRel))
 
 	if srcVFS.IsSource() && srcVFS.Rel() != canon && in.SrcDir != nil {
-		outputRel := composeSrcDirOutputRel(instance.Path, *in.SrcDir, srcRel)
-		out = Build(instance.Path + "/" + outputRel + suffix)
+		outputRel := composeSrcDirOutputRel(instance.Path.Rel(), *in.SrcDir, srcRel)
+		out = Build(instance.Path.Rel() + "/" + outputRel + suffix)
 		return out, input
 	}
 
@@ -213,12 +213,12 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	switch {
 	case in.FlatOutput:
 
-		outRel = instance.Path + "/" + srcRel + suffix
+		outRel = instance.Path.Rel() + "/" + srcRel + suffix
 	case strings.Contains(srcRel, "/"):
 
-		outRel = instance.Path + "/" + normalizeDotDotSegments(srcRel) + suffix
+		outRel = instance.Path.Rel() + "/" + normalizeDotDotSegments(srcRel) + suffix
 	default:
-		outRel = instance.Path + "/" + srcRel + suffix
+		outRel = instance.Path.Rel() + "/" + srcRel + suffix
 	}
 
 	return Build(outRel), input

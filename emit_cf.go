@@ -23,12 +23,12 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 		FS:              ctx.fs,
 	}
 
-	srcVFS := copyFileInputVFS(ctx.fs, instance.Path, cf.Src)
-	outVFS := copyFileOutputVFS(instance.Path, cf.Dst)
+	srcVFS := copyFileInputVFS(ctx.fs, instance.Path.Rel(), cf.Src)
+	outVFS := copyFileOutputVFS(instance.Path.Rel(), cf.Dst)
 	in.IncludeInputs = walkClosure(ctx, instance, srcVFS, in)
 
 	cfgVars := buildCFGVars(ctx.fs, srcVFS.Rel(), d.setVars, d.defaultVars)
-	cfRef, cfOut := EmitCF(instance, srcVFS, outVFS, cfgVars, in.IncludeInputs, instance.Path, cfModuleTag(d, instance), in.TC, ctx.emit)
+	cfRef, cfOut := EmitCF(instance, srcVFS, outVFS, cfgVars, in.IncludeInputs, instance.Path.Rel(), cfModuleTag(d, instance), in.TC, ctx.emit)
 
 	if reg != nil {
 		parsed := []includeDirective{

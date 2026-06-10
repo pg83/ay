@@ -88,8 +88,8 @@ func emitResourceObjcopy(
 			return
 		}
 
-		hash := objcopyHash(cur.paths, cur.keys, cur.kvs, instance.Path, moduleTag)
-		outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
+		hash := objcopyHash(cur.paths, cur.keys, cur.kvs, instance.Path.Rel(), moduleTag)
+		outputObj := Build(instance.Path.Rel() + "/objcopy_" + hash + ".o")
 
 		cmdArgs := []STR{
 			d.tc.Python3,
@@ -117,7 +117,7 @@ func emitResourceObjcopy(
 			cmdArgs = append(cmdArgs, argKvs.str())
 
 			for _, kv := range cur.kvs {
-				cmdArgs = append(cmdArgs, internStr(expandRootrel(kv, instance.Path)))
+				cmdArgs = append(cmdArgs, internStr(expandRootrel(kv, instance.Path.Rel())))
 			}
 		}
 
@@ -152,7 +152,7 @@ func emitResourceObjcopy(
 			inputs = append(inputs, p)
 		}
 
-		resTargetProps := TargetProperties{ModuleDir: instance.Path}
+		resTargetProps := TargetProperties{ModuleDir: instance.Path.Rel()}
 
 		if d.moduleStmt != nil {
 			switch d.moduleStmt.Name {
@@ -217,10 +217,10 @@ func emitResourceObjcopy(
 					cur.cmdLen += rootCmdLen + len(e.Key)
 
 					if inner, ok := rootrelInputPath(e.Key); ok {
-						cur.kvInputs = append(cur.kvInputs, Source(instance.Path+"/"+inner))
+						cur.kvInputs = append(cur.kvInputs, Source(instance.Path.Rel()+"/"+inner))
 					}
 				} else {
-					inputVFS := copyFileInputVFS(ctx.fs, instance.Path, e.Path)
+					inputVFS := copyFileInputVFS(ctx.fs, instance.Path.Rel(), e.Path)
 					// Producer keys (RUN_PROGRAM OUTFiles, COPY outputs, etc.)
 					// are stored in expanded form ($(B)/<unit>/X), but RESOURCE
 					// pair.Path is kept raw (${BINDIR}/X) to match upstream's
@@ -231,11 +231,11 @@ func emitResourceObjcopy(
 						canonKey := inputVFS.String()
 
 						if ref, ok := d.prOutputProducer[canonKey]; ok {
-							inputVFS = copyFileOutputVFS(instance.Path, e.Path)
+							inputVFS = copyFileOutputVFS(instance.Path.Rel(), e.Path)
 							producerRef = ref
 							cur.extraInputs = dedupVFS(cur.extraInputs, prResourceExtraInputs(d, canonKey))
 						} else if ref, ok := d.prOutputProducer[e.Path]; ok {
-							inputVFS = copyFileOutputVFS(instance.Path, e.Path)
+							inputVFS = copyFileOutputVFS(instance.Path.Rel(), e.Path)
 							producerRef = ref
 							cur.extraInputs = dedupVFS(cur.extraInputs, prResourceExtraInputs(d, e.Path))
 						}
@@ -307,8 +307,8 @@ func emitKvOnlyObjcopyNode(
 		moduleTag = resourceBinTagForData(d)
 	}
 
-	hash := objcopyHash(nil, nil, kvsHash, instance.Path, moduleTag)
-	outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
+	hash := objcopyHash(nil, nil, kvsHash, instance.Path.Rel(), moduleTag)
+	outputObj := Build(instance.Path.Rel() + "/objcopy_" + hash + ".o")
 
 	cmdArgs := []STR{
 		d.tc.Python3,
@@ -329,7 +329,7 @@ func emitKvOnlyObjcopyNode(
 		objcopyScriptVFS,
 	}
 
-	targetProps := TargetProperties{ModuleDir: instance.Path}
+	targetProps := TargetProperties{ModuleDir: instance.Path.Rel()}
 
 	switch d.moduleStmt.Name {
 	case tokPy23Library, tokPy23NativeLibrary:
@@ -422,8 +422,8 @@ func emitYaConfJSONObjcopy(
 		keyB64 := encb64.StdEncoding.EncodeToString([]byte(key))
 		kvHash := "resfs/src/" + key + "=${rootrel;context=TEXT;input=TEXT:\"" + res.hashPath + "\"}"
 		kvCmd := "resfs/src/" + key + "=" + res.sourcePath
-		hash := objcopyHash([]string{res.hashPath}, []string{keyB64}, []string{kvHash}, instance.Path, moduleTag)
-		outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
+		hash := objcopyHash([]string{res.hashPath}, []string{keyB64}, []string{kvHash}, instance.Path.Rel(), moduleTag)
+		outputObj := Build(instance.Path.Rel() + "/objcopy_" + hash + ".o")
 		input := Source(res.sourcePath)
 
 		cmdArgs := []STR{
@@ -452,7 +452,7 @@ func emitYaConfJSONObjcopy(
 			Inputs:           []VFS{rescompilerBinVFS, rescompressorBinVFS, input, objcopyScriptVFS},
 			Outputs:          []VFS{outputObj},
 			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
-			TargetProperties: TargetProperties{ModuleDir: instance.Path},
+			TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
 		}
@@ -491,7 +491,7 @@ func emitPyNamespaceForGroup(
 		return nil
 	}
 
-	nsPrefix := strings.ReplaceAll(instance.Path, "/", ".") + "."
+	nsPrefix := strings.ReplaceAll(instance.Path.Rel(), "/", ".") + "."
 
 	if group.Namespace != nil {
 		nsPrefix = strings.TrimSuffix(*group.Namespace, ".") + "."
@@ -515,7 +515,7 @@ func emitPyNamespaceForGroup(
 
 	modListMD5 := enchex.EncodeToString(h.Sum(nil))
 
-	keyPath := instance.Path
+	keyPath := instance.Path.Rel()
 
 	if group.TopLevel && d.srcDir != nil {
 		keyPath = *d.srcDir
@@ -597,8 +597,8 @@ func emitPySrcObjcopy(
 	}
 
 	namespaceEnabled := !d.noExtendedPySearch &&
-		!strings.HasPrefix(instance.Path, "contrib/python") &&
-		!strings.HasPrefix(instance.Path, "contrib/tools/python3") &&
+		!strings.HasPrefix(instance.Path.Rel(), "contrib/python") &&
+		!strings.HasPrefix(instance.Path.Rel(), "contrib/tools/python3") &&
 		resourceModuleTag(d.moduleStmt.Name) != nil
 
 	moduleTag := resourceLibTagForData(d)
@@ -612,15 +612,15 @@ func emitPySrcObjcopy(
 			}
 		}
 
-		entries := buildPySrcEntriesFor(d, instance.Path, group.Srcs, group.TopLevel, group.Namespace)
+		entries := buildPySrcEntriesFor(d, instance.Path.Rel(), group.Srcs, group.TopLevel, group.Namespace)
 
 		if len(entries) == 0 {
 			continue
 		}
 
 		for _, ch := range chunkPySrcEntries(entries) {
-			hash := objcopyHash(ch.paths, ch.keys, ch.kvsHash, instance.Path, moduleTag)
-			outputObj := Build(instance.Path + "/objcopy_" + hash + ".o")
+			hash := objcopyHash(ch.paths, ch.keys, ch.kvsHash, instance.Path.Rel(), moduleTag)
+			outputObj := Build(instance.Path.Rel() + "/objcopy_" + hash + ".o")
 
 			cmdArgs := []STR{
 				d.tc.Python3,
@@ -658,7 +658,7 @@ func emitPySrcObjcopy(
 
 			inputs = append(inputs, objcopyScriptVFS)
 			env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-			targetProps := TargetProperties{ModuleDir: instance.Path}
+			targetProps := TargetProperties{ModuleDir: instance.Path.Rel()}
 
 			switch d.moduleStmt.Name {
 			case tokPy23Library, tokPy23NativeLibrary:

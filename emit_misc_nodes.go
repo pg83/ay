@@ -6,7 +6,7 @@ import (
 )
 
 func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS) {
-	outPrefix := instance.Path + "/"
+	outPrefix := instance.Path.Rel() + "/"
 	reg := codegenRegForInstance(ctx, instance)
 
 	for _, cf := range d.configureFiles {
@@ -25,8 +25,8 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
 
 			if reg != nil {
-				lexerG4 := Source(instance.Path + "/" + g.Lexer)
-				parserG4 := Source(instance.Path + "/" + g.Parser)
+				lexerG4 := Source(instance.Path.Rel() + "/" + g.Lexer)
+				parserG4 := Source(instance.Path.Rel() + "/" + g.Parser)
 				lexerCpp := Build(outPrefix + lexerBase + ".cpp")
 				parserCpp := Build(outPrefix + parserBase + ".cpp")
 				registerBoundGeneratedParsedOutput(ctx, instance, pkJV, lexerCpp, nil, jvRef, nil)
@@ -58,8 +58,8 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 
 			if consumerInputs != nil {
 				jvInputs := []VFS{
-					Source(instance.Path + "/" + g.Lexer),
-					Source(instance.Path + "/" + g.Parser),
+					Source(instance.Path.Rel() + "/" + g.Lexer),
+					Source(instance.Path.Rel() + "/" + g.Parser),
 					stdout2stderrVFS,
 					antlr4JarVFS,
 				}
@@ -78,7 +78,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
 
 			if reg != nil {
-				grammarG4 := Source(instance.Path + "/" + g.Grammar)
+				grammarG4 := Source(instance.Path.Rel() + "/" + g.Grammar)
 				lexerCpp := Build(outPrefix + base + "Lexer.cpp")
 				parserCpp := Build(outPrefix + base + "Parser.cpp")
 				registerBoundGeneratedParsedOutput(ctx, instance, pkJV, lexerCpp, nil, jvRef, nil)
@@ -109,7 +109,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 
 			if consumerInputs != nil {
 				jvInputs := []VFS{
-					Source(instance.Path + "/" + g.Grammar),
+					Source(instance.Path.Rel() + "/" + g.Grammar),
 					stdout2stderrVFS,
 					antlr4JarVFS,
 				}

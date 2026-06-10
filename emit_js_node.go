@@ -3,7 +3,7 @@ package main
 func EmitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, tc moduleToolchain, scripts scriptDeps, emit Emitter) (NodeRef, VFS) {
 	joinSrcs := buildScriptsGenJoinSrcsPy
 
-	outVFS := Build(instance.Path + "/" + allName)
+	outVFS := Build(instance.Path.Rel() + "/" + allName)
 
 	statsPlatform := instance.Platform
 
@@ -20,7 +20,7 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 	)
 
 	for _, s := range sources {
-		cmdArgs = append(cmdArgs, internStr(instance.Path+"/"+s))
+		cmdArgs = append(cmdArgs, internStr(instance.Path.Rel()+"/"+s))
 	}
 
 	cmdArgs = append(cmdArgs, argYaEndCommandFile.str())
@@ -31,7 +31,7 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 	inputs = append(inputs, scripts[joinSrcs]...)
 
 	for _, s := range sources {
-		inputs = append(inputs, Source(instance.Path+"/"+s))
+		inputs = append(inputs, Source(instance.Path.Rel()+"/"+s))
 	}
 
 	inputs = append(inputs, closure...)
@@ -49,7 +49,7 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 		KV:               KV{P: pkJS, PC: pcMagenta},
 		Outputs:          []VFS{outVFS},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
 		usesResources:    []string{resourcePatternYMakePython3},
 	}
 

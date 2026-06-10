@@ -57,7 +57,7 @@ func EmitEV(
 	tc moduleToolchain,
 	emit Emitter,
 ) NodeRef {
-	moduleDir := instance.Path
+	moduleDir := instance.Path.Rel()
 
 	evCC := Build(evRelPath + ".pb.cc")
 	evH := Build(evRelPath + ".pb.h")

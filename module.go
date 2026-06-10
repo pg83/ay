@@ -70,7 +70,7 @@ type FlagSet struct {
 }
 
 type ModuleInstance struct {
-	Path     string
+	Path     VFS
 	Kind     ModuleKind
 	Language Language
 	Platform *Platform
@@ -78,7 +78,7 @@ type ModuleInstance struct {
 
 func NewToolInstance(host *Platform, path string) ModuleInstance {
 	return ModuleInstance{
-		Path:     path,
+		Path:     Source(path),
 		Kind:     KindBin,
 		Language: LangCPP,
 		Platform: host,
@@ -87,7 +87,7 @@ func NewToolInstance(host *Platform, path string) ModuleInstance {
 
 func (mi ModuleInstance) String() string {
 	var b strings.Builder
-	b.WriteString(mi.Path)
+	b.WriteString(mi.Path.Rel())
 	b.WriteString("[")
 	b.WriteString(mi.Kind.String())
 	b.WriteString("]")

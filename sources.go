@@ -20,14 +20,14 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 	visited := scanner.visitedIDPool.Get().(*IdSet)
 	visited.reset(vfsBound())
 	defer scanner.visitedIDPool.Put(visited)
-	modDirKey := dirKey(srcInstance.Path)
+	modDirKey := dirKey(srcInstance.Path.Rel())
 
 	srcRels := make([]string, len(sources))
 
 	for i, src := range sources {
-		srcRelOnDisk := srcInstance.Path + "/" + src
+		srcRelOnDisk := srcInstance.Path.Rel() + "/" + src
 
-		if in.SrcDir != nil && *in.SrcDir != srcInstance.Path {
+		if in.SrcDir != nil && *in.SrcDir != srcInstance.Path.Rel() {
 			if !ctx.fs.IsFile(modDirKey, src) {
 				srcRelOnDisk = *in.SrcDir + "/" + src
 			}
@@ -44,7 +44,7 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 			OwnAddIncl:      in.AddIncl,
 			PeerAddInclSet:  in.PeerAddInclGlobal,
 			BaseSearchPaths: includeScannerBasePaths(),
-			OwnerModuleDir:  srcInstance.Path,
+			OwnerModuleDir:  srcInstance.Path.Rel(),
 		}
 
 		sc := scanner.NewScanCtx(cfg)
@@ -72,7 +72,7 @@ func jsCCIncludeInputs(srcInstance ModuleInstance, sources []string, closure []V
 	out = append(out, scripts[buildScriptsGenJoinSrcsPy]...)
 
 	for _, s := range sources {
-		out = append(out, Source(srcInstance.Path+"/"+s))
+		out = append(out, Source(srcInstance.Path.Rel()+"/"+s))
 	}
 
 	out = append(out, closure...)
@@ -81,12 +81,12 @@ func jsCCIncludeInputs(srcInstance ModuleInstance, sources []string, closure []V
 }
 
 func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, srcDir *string) VFS {
-	srcRelOnDisk := srcInstance.Path + "/" + srcRel
+	srcRelOnDisk := srcInstance.Path.Rel() + "/" + srcRel
 
-	if srcDir != nil && filepath.Clean(*srcDir) != "." && filepath.Clean(*srcDir) != srcInstance.Path {
+	if srcDir != nil && filepath.Clean(*srcDir) != "." && filepath.Clean(*srcDir) != srcInstance.Path.Rel() {
 		cleanSrcDir := filepath.Clean(*srcDir)
 
-		if !ctx.fs.IsFile(dirKey(srcInstance.Path), srcRel) {
+		if !ctx.fs.IsFile(dirKey(srcInstance.Path.Rel()), srcRel) {
 			srcRelOnDisk = filepath.ToSlash(filepath.Clean(cleanSrcDir + "/" + srcRel))
 		}
 	}
@@ -121,7 +121,7 @@ func walkClosureRoot(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in Mo
 		OwnAddIncl:      in.AddIncl,
 		PeerAddInclSet:  in.PeerAddInclGlobal,
 		BaseSearchPaths: includeScannerBasePaths(),
-		OwnerModuleDir:  srcInstance.Path,
+		OwnerModuleDir:  srcInstance.Path.Rel(),
 	}
 
 	sc := scanner.NewScanCtx(cfg)
@@ -209,7 +209,7 @@ func appendRagelNativeDeps(scanner *IncludeScanner, srcInstance ModuleInstance, 
 		OwnAddIncl:      in.AddIncl,
 		PeerAddInclSet:  in.PeerAddInclGlobal,
 		BaseSearchPaths: includeScannerBasePaths(),
-		OwnerModuleDir:  srcInstance.Path,
+		OwnerModuleDir:  srcInstance.Path.Rel(),
 	}
 	sc := scanner.NewScanCtx(cfg)
 

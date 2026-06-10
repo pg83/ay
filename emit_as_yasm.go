@@ -13,9 +13,9 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	var outVFS VFS
 
 	if strings.Contains(srcRel, "/") {
-		outVFS = Build(instance.Path + "/_/" + stem + suffix)
+		outVFS = Build(instance.Path.Rel() + "/_/" + stem + suffix)
 	} else {
-		outVFS = Build(instance.Path + "/" + stem + suffix)
+		outVFS = Build(instance.Path.Rel() + "/" + stem + suffix)
 	}
 
 	inVFS := srcVFS
@@ -24,7 +24,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 
 	var predefinedFlags []string
 
-	if !asmlibYasmModules[instance.Path] {
+	if !asmlibYasmModules[instance.Path.Rel()] {
 		predefinedFlags = []string{"-g", "dwarf2"}
 	}
 
@@ -78,7 +78,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 		Inputs:           allInputs,
 		Outputs:          []VFS{outVFS},
 		KV:               KV{P: pkAS, PC: pcLightGreen},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 	}
 

@@ -53,7 +53,7 @@ func emitRunPythonForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, in 
 }
 
 func emitRunPython(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d *moduleData, reg *CodegenRegistry, moduleInputs ModuleCCInputs) NodeRef {
-	scriptVFS := copyFileInputVFS(ctx.fs, instance.Path, stmt.ScriptPath)
+	scriptVFS := copyFileInputVFS(ctx.fs, instance.Path.Rel(), stmt.ScriptPath)
 	inVFSByToken := make(map[string]VFS, len(stmt.INFiles))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
 
@@ -66,17 +66,17 @@ func emitRunPython(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	outVFSByToken := make(map[string]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
 
 	for _, f := range stmt.OUTFiles {
-		outVFSByToken[f] = copyFileOutputVFS(instance.Path, f)
+		outVFSByToken[f] = copyFileOutputVFS(instance.Path.Rel(), f)
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		outVFSByToken[f] = copyFileOutputVFS(instance.Path, f)
+		outVFSByToken[f] = copyFileOutputVFS(instance.Path.Rel(), f)
 	}
 
 	var stdoutVFS *VFS
 
 	if stmt.StdoutFile != nil {
-		vfs := copyFileOutputVFS(instance.Path, *stmt.StdoutFile)
+		vfs := copyFileOutputVFS(instance.Path.Rel(), *stmt.StdoutFile)
 		stdoutVFS = &vfs
 		outVFSByToken[*stmt.StdoutFile] = vfs
 	}
@@ -157,7 +157,7 @@ func pyInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 
 	var out []VFS
 	walkOne := func(rel string) {
-		buildRootPath := copyFileOutputVFS(instance.Path, rel)
+		buildRootPath := copyFileOutputVFS(instance.Path.Rel(), rel)
 		out = append(out, walkClosure(ctx, instance, buildRootPath, scanIn)...)
 	}
 
@@ -359,7 +359,7 @@ func pyEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *
 		for _, f := range stmt.OUTNoAutoFiles {
 			if isCCSourceExt(f) {
 				firstShardFile = f
-				firstShardVFS = copyFileOutputVFS(instance.Path, f)
+				firstShardVFS = copyFileOutputVFS(instance.Path.Rel(), f)
 				break
 			}
 		}
@@ -452,11 +452,11 @@ func EmitPYRun(
 	for _, a := range stmt.Args {
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
 		a = strings.ReplaceAll(a, "${ARCADIA_BUILD_ROOT}", "$(B)")
-		a = strings.ReplaceAll(a, "${CURDIR}", Source(instance.Path).String())
-		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path).String())
-		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path)
-		a = strings.ReplaceAll(a, "$CURDIR", Source(instance.Path).String())
-		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path).String())
+		a = strings.ReplaceAll(a, "${CURDIR}", instance.Path.String())
+		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path.Rel()).String())
+		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path.Rel())
+		a = strings.ReplaceAll(a, "$CURDIR", instance.Path.String())
+		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path.Rel()).String())
 
 		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = vfs.String()
@@ -520,7 +520,7 @@ func EmitPYRun(
 		Inputs:           inputs,
 		KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 		Outputs:          outputs,
-		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          extraDepRefs,
 		usesResources:    []string{resourcePatternYMakePython3},

@@ -11,9 +11,9 @@ func EmitR5(
 	rlgenCdBinPath VFS,
 	emit Emitter,
 ) (NodeRef, VFS, VFS) {
-	srcVFS := Source(instance.Path + "/" + srcRel)
-	tmpVFS := Build(instance.Path + "/" + srcRel + ".tmp")
-	cppVFS := Build(instance.Path + "/" + strings.TrimSuffix(srcRel, ".rl") + ".rl5.cpp")
+	srcVFS := Source(instance.Path.Rel() + "/" + srcRel)
+	tmpVFS := Build(instance.Path.Rel() + "/" + srcRel + ".tmp")
+	cppVFS := Build(instance.Path.Rel() + "/" + strings.TrimSuffix(srcRel, ".rl") + ".rl5.cpp")
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -54,7 +54,7 @@ func EmitR5(
 		Inputs:           inputs,
 		Outputs:          []VFS{tmpVFS, cppVFS},
 		KV:               KV{P: pkR5, PC: pcYellow},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          depRefs,
 		ForeignDepRefs:   depRefs,

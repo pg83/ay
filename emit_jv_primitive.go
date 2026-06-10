@@ -30,7 +30,7 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs []VFS, outputs []
 		KV:      KV{P: pkJV, PC: pcLightBlue, ShowOut: true},
 		Outputs: outputs,
 		TargetProperties: func() TargetProperties {
-			tp := TargetProperties{ModuleDir: instance.Path}
+			tp := TargetProperties{ModuleDir: instance.Path.Rel()}
 
 			if moduleTag != 0 {
 				tp.ModuleTag = moduleTag
@@ -56,8 +56,8 @@ func EmitJV(
 	tc moduleToolchain,
 	emit Emitter,
 ) NodeRef {
-	grammarVFS := Source(instance.Path + "/" + grammar)
-	outDirVFS := Build(instance.Path)
+	grammarVFS := Source(instance.Path.Rel() + "/" + grammar)
+	outDirVFS := Build(instance.Path.Rel())
 	outDir := outDirVFS.String()
 
 	cmdArgs := []STR{
@@ -91,7 +91,7 @@ func EmitJV(
 	}
 
 	base := strings.TrimSuffix(filepath.Base(grammar), ".g4")
-	outPrefix := instance.Path + "/" + base
+	outPrefix := instance.Path.Rel() + "/" + base
 	outputs := []VFS{
 		Build(outPrefix + "Lexer.cpp"),
 		Build(outPrefix + "Lexer.h"),
@@ -114,9 +114,9 @@ func EmitJVSplit(
 	tc moduleToolchain,
 	emit Emitter,
 ) NodeRef {
-	lexerVFS := Source(instance.Path + "/" + lexer)
-	parserVFS := Source(instance.Path + "/" + parser)
-	outDirVFS := Build(instance.Path)
+	lexerVFS := Source(instance.Path.Rel() + "/" + lexer)
+	parserVFS := Source(instance.Path.Rel() + "/" + parser)
+	outDirVFS := Build(instance.Path.Rel())
 	outDir := outDirVFS.String()
 
 	cmdArgs := []STR{
@@ -152,7 +152,7 @@ func EmitJVSplit(
 	lexerBase := strings.TrimSuffix(filepath.Base(lexer), ".g4")
 	parserBase := strings.TrimSuffix(filepath.Base(parser), ".g4")
 	visitorBase := parserBase
-	outPrefix := instance.Path + "/"
+	outPrefix := instance.Path.Rel() + "/"
 	outputs := []VFS{
 		Build(outPrefix + lexerBase + ".cpp"),
 		Build(outPrefix + lexerBase + ".h"),

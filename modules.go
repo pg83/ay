@@ -2533,7 +2533,7 @@ func peerEntryLanguage(parent ModuleInstance, parentModuleName TOK) Language {
 
 func derivePeerInstance(ctx *genCtx, parent ModuleInstance, d *moduleData, peerPath string) ModuleInstance {
 	return ModuleInstance{
-		Path:     peerPath,
+		Path:     Source(peerPath),
 		Kind:     KindLib,
 		Language: peerEntryLanguage(parent, d.moduleStmt.Name),
 		Platform: parent.Platform,

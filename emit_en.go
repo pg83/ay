@@ -13,7 +13,7 @@ func resolveEnumHeaderInput(ctx *genCtx, instance ModuleInstance, headerRel stri
 	headerInput := resolveSourceVFS(ctx, instance, headerRel, srcDir)
 
 	if !ctx.fs.IsFile(srcRootVFS, headerInput.Rel()) {
-		if vfs := sourceInputVFS(ctx.fs, instance.Path, headerRel); vfs != nil && vfs.IsSource() {
+		if vfs := sourceInputVFS(ctx.fs, instance.Path.Rel(), headerRel); vfs != nil && vfs.IsSource() {
 			headerInput = *vfs
 		}
 	}
@@ -55,11 +55,11 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 
 		closure := walkClosure(ctx, instance, headerInput, scanIn)
 
-		serializedCPPPath := Build(instance.Path + "/" + headerRel + "_serialized.cpp")
+		serializedCPPPath := Build(instance.Path.Rel() + "/" + headerRel + "_serialized.cpp")
 		var serializedHPath VFS
 
 		if withHeader {
-			serializedHPath = Build(instance.Path + "/" + headerRel + "_serialized.h")
+			serializedHPath = Build(instance.Path.Rel() + "/" + headerRel + "_serialized.h")
 		}
 
 		if ctx.scannerTarget.codegen != nil {

@@ -285,7 +285,7 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 
 	ctx := &genCtx{emit: NewBufferedEmitter()}
 	instance := ModuleInstance{
-		Path:     "contrib/python/shellingham",
+		Path:     Source("contrib/python/shellingham"),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,

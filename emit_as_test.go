@@ -163,7 +163,7 @@ func TestEmitAS_AsmlibYasm_TargetSide_NoPicSuffix(t *testing.T) {
 	e := NewBufferedEmitter()
 	targetX86 := newTestPlatform(OSLinux, ISAX8664, "no", nil)
 	instance := ModuleInstance{
-		Path:     "contrib/libs/asmlib",
+		Path:     Source("contrib/libs/asmlib"),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: targetX86,

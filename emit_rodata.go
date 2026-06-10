@@ -6,10 +6,10 @@ import (
 )
 
 func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
-	base := instance.Path + "/" + srcRel
+	base := instance.Path.Rel() + "/" + srcRel
 
 	if strings.Contains(srcRel, "/") {
-		base = instance.Path + "/_/" + srcRel
+		base = instance.Path.Rel() + "/_/" + srcRel
 	}
 
 	return Build(base + ".asm"), Build(base + instance.Platform.ObjectSuffix())
@@ -64,7 +64,7 @@ func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 		KV:               KV{P: pkRD, PC: pcLightGreen},
 		Outputs:          []VFS{asmVFS, outVFS},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
 		DepRefs:          []NodeRef{yasmLD},
 		ForeignDepRefs:   []NodeRef{yasmLD},
 		usesResources:    []string{resourcePatternYMakePython3},

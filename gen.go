@@ -327,7 +327,7 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 			if info := reg.Lookup(v); info != nil {
 				if !info.HasProducerRef && info.DeferredCF != nil {
 					def := info.DeferredCF
-					cfRef, _ := EmitCF(def.instance, def.srcVFS, def.outVFS, def.cfgVars, def.includeInputs, consumer.Path, 0, def.tc, ctx.emit)
+					cfRef, _ := EmitCF(def.instance, def.srcVFS, def.outVFS, def.cfgVars, def.includeInputs, consumer.Path.Rel(), 0, def.tc, ctx.emit)
 					reg.SetProducerRef(v, cfRef)
 				}
 
@@ -469,7 +469,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	ctx.scannerHost = hostScanner
 
 	seed := ModuleInstance{
-		Path:     filepath.Clean(targetDir),
+		Path:     Source(filepath.Clean(targetDir)),
 		Kind:     KindBin,
 		Language: LangCPP,
 		Platform: targetP,
@@ -549,7 +549,7 @@ func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
 	}
 
 	if moduleStmt.Name == tokUnittestFor {
-		return strings.ReplaceAll(path.Clean(instance.Path), "/", "-")
+		return strings.ReplaceAll(path.Clean(instance.Path.Rel()), "/", "-")
 	}
 
 	if len(moduleStmt.Args) > 0 {
@@ -590,26 +590,26 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			caller = ctx.traceStack[len(ctx.traceStack)-1]
 		}
 
-		fmt.Fprintf(os.Stderr, "%sgenModule %s@%s  (from %s)\n", indent, instance.Path, instance.Platform.Target, caller)
-		ctx.traceStack = append(ctx.traceStack, instance.Path+"@"+string(instance.Platform.Target))
+		fmt.Fprintf(os.Stderr, "%sgenModule %s@%s  (from %s)\n", indent, instance.Path.Rel(), instance.Platform.Target, caller)
+		ctx.traceStack = append(ctx.traceStack, instance.Path.Rel()+"@"+string(instance.Platform.Target))
 
 		defer func() { ctx.traceStack = ctx.traceStack[:len(ctx.traceStack)-1] }()
 	}
 
 	if ctx.walking[instance] {
 		ctx.cyclesTolerated++
-		fmt.Fprintf(os.Stderr, "gen: PEERDIR cycle tolerated at %s\n", instance.Path)
+		fmt.Fprintf(os.Stderr, "gen: PEERDIR cycle tolerated at %s\n", instance.Path.Rel())
 		return &moduleEmitResult{}
 	}
 
 	ctx.walking[instance] = true
 	defer delete(ctx.walking, instance)
 
-	yamakePath := filepath.Join(ctx.sourceRoot, instance.Path, "ya.make")
+	yamakePath := filepath.Join(ctx.sourceRoot, instance.Path.Rel(), "ya.make")
 	mf := Throw2(ParseFile(ctx.fs, yamakePath))
 
 	env := buildIfEnv(instance)
-	d := collectModule(ctx.parsers, &deduper, instance.Path, instance.Kind, mf.Stmts, env)
+	d := collectModule(ctx.parsers, &deduper, instance.Path.Rel(), instance.Kind, mf.Stmts, env)
 
 	// The consumer requested a variant without pre-parsing this module
 	// (peerEntryLanguage). Only a PROTO_LIBRARY has a python variant: any other
@@ -628,7 +628,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	for _, stmt := range d.allPySrcs {
-		applyAllPySrcs(ctx.fs, instance.Path, stmt, d)
+		applyAllPySrcs(ctx.fs, instance.Path.Rel(), stmt, d)
 	}
 
 	if d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary && instance.Language != LangPy {
@@ -636,19 +636,19 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		cppProtoEnv.SetStringID(envMODULE_TAG, strCPPProto)
 
 		cppProtoEnv.SetBool(envGEN_PROTO, true)
-		d = collectModule(ctx.parsers, &deduper, instance.Path, instance.Kind, mf.Stmts, cppProtoEnv)
+		d = collectModule(ctx.parsers, &deduper, instance.Path.Rel(), instance.Kind, mf.Stmts, cppProtoEnv)
 	} else if d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangPy {
 		py3ProtoEnv := env.Clone()
 		py3ProtoEnv.SetBool(envPY3_PROTO, true)
-		d = collectModule(ctx.parsers, &deduper, instance.Path, instance.Kind, mf.Stmts, py3ProtoEnv)
+		d = collectModule(ctx.parsers, &deduper, instance.Path.Rel(), instance.Kind, mf.Stmts, py3ProtoEnv)
 	}
 
 	if d.conflictMod != nil {
-		ThrowFmt("gen: %s declares multiple modules (%s and %s); only one is allowed", instance.Path, d.moduleStmt.Name, d.conflictMod.Name)
+		ThrowFmt("gen: %s declares multiple modules (%s and %s); only one is allowed", instance.Path.Rel(), d.moduleStmt.Name, d.conflictMod.Name)
 	}
 
 	if d.moduleStmt == nil {
-		ThrowFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path)
+		ThrowFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path.Rel())
 	}
 
 	if d.moduleStmt.Name == tokResourcesLibrary {
@@ -657,7 +657,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// of the DECLARE that defines it. Bind the declared globals into the env and
 		// re-collect once so those references expand (ymake defers; we re-collect).
 		if bindResourceGlobalVars(ctx, instance, d, env) {
-			d = collectModule(ctx.parsers, &deduper, instance.Path, instance.Kind, mf.Stmts, env)
+			d = collectModule(ctx.parsers, &deduper, instance.Path.Rel(), instance.Kind, mf.Stmts, env)
 		}
 
 		return genResourcesLibrary(ctx, instance, d)
@@ -673,8 +673,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			}
 		}
 
-		if hasProtoSrc && !strings.HasPrefix(instance.Path, "contrib/libs/protobuf/builtin_proto") &&
-			!strings.HasPrefix(instance.Path, "contrib/python/protobuf") {
+		if hasProtoSrc && !strings.HasPrefix(instance.Path.Rel(), "contrib/libs/protobuf/builtin_proto") &&
+			!strings.HasPrefix(instance.Path.Rel(), "contrib/python/protobuf") {
 			d.peerdirs = append(d.peerdirs, "contrib/python/protobuf")
 		}
 
@@ -684,7 +684,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	if d.moduleStmt.Name != tokLibrary && !isProgramModuleType(d.moduleStmt.Name) && !isPyLibraryType(d.moduleStmt.Name) && !isYqlUdfStaticModule(d.moduleStmt.Name) && !isSpecializedLibraryType(d.moduleStmt.Name) && !isResourceContainerType(d.moduleStmt.Name) {
-		ThrowFmt("gen: %s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only)", instance.Path, d.moduleStmt.Name)
+		ThrowFmt("gen: %s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only)", instance.Path.Rel(), d.moduleStmt.Name)
 	}
 
 	if !d.hadAllocator && (d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin) {
@@ -694,9 +694,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	py3ProtoVariant := d.moduleStmt.Name == tokProtoLibrary && d.usePython3
 
-	if pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noPythonIncl && instance.Path != "contrib/libs/python" {
+	if pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noPythonIncl && instance.Path.Rel() != "contrib/libs/python" {
 		d.peerdirs = append([]string{"contrib/libs/python"}, d.peerdirs...)
-	} else if py3ProtoVariant && !d.noPythonIncl && instance.Path != "contrib/libs/python" {
+	} else if py3ProtoVariant && !d.noPythonIncl && instance.Path.Rel() != "contrib/libs/python" {
 		if moduleExcludesTag(d, "CPP_PROTO") {
 			d.peerdirs = append([]string{"contrib/libs/python"}, d.peerdirs...)
 		} else {
@@ -713,7 +713,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		earlyPeers = append(earlyPeers, "library/python/runtime_py3/main")
 
-		if !d.noImportTracing && instance.Path != "library/python/import_tracing/constructor" {
+		if !d.noImportTracing && instance.Path.Rel() != "library/python/import_tracing/constructor" {
 			earlyPeers = append(earlyPeers, "library/python/import_tracing/constructor")
 		}
 
@@ -733,7 +733,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			filteredEarly := earlyPeers[:0]
 
 			for _, peer := range earlyPeers {
-				if instance.Path != peer {
+				if instance.Path.Rel() != peer {
 					filteredEarly = append(filteredEarly, peer)
 				}
 			}
@@ -745,20 +745,20 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			d.peerdirs = spliced
 		} else {
 			for _, peer := range earlyPeers {
-				if instance.Path != peer {
+				if instance.Path.Rel() != peer {
 					d.peerdirs = append(d.peerdirs, peer)
 				}
 			}
 		}
 
 		for _, peer := range latePeers {
-			if instance.Path != peer {
+			if instance.Path.Rel() != peer {
 				d.peerdirs = append(d.peerdirs, peer)
 			}
 		}
 	}
 
-	if isProgramModuleType(d.moduleStmt.Name) && pyLibraryAutoPythonPeer(d.moduleStmt.Name) && d.moduleStmt.Name != tokPy3Program && d.moduleStmt.Name != tokPy3ProgramBin && !d.noImportTracing && instance.Path != "library/python/import_tracing/constructor" {
+	if isProgramModuleType(d.moduleStmt.Name) && pyLibraryAutoPythonPeer(d.moduleStmt.Name) && d.moduleStmt.Name != tokPy3Program && d.moduleStmt.Name != tokPy3ProgramBin && !d.noImportTracing && instance.Path.Rel() != "library/python/import_tracing/constructor" {
 		d.peerdirs = append(d.peerdirs, "library/python/import_tracing/constructor")
 	}
 
@@ -769,7 +769,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// adding it as an induced dep to every module with .fbs SRCS (e.g. apache/arrow).
 	// Append after explicit PEERDIRs so the peer archive closure puts flatbuffers
 	// after the module's last declared peer, matching upstream's link order.
-	if instance.Path != "contrib/libs/flatbuffers" {
+	if instance.Path.Rel() != "contrib/libs/flatbuffers" {
 		for _, src := range d.srcs {
 			if strings.HasSuffix(src, ".fbs") {
 				d.peerdirs = append(d.peerdirs, "contrib/libs/flatbuffers")
@@ -835,24 +835,24 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 			switch d.moduleStmt.Name {
 			case tokPy23NativeLibrary:
-				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path, "libpy3c", archiveName)
+				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.Rel(), "libpy3c", archiveName)
 				tag = tagPy3NativeGlobal
 			case tokPy23Library:
 				arInstance.Language = LangPy
-				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path, "libpy3", archiveName)
+				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.Rel(), "libpy3", archiveName)
 				tag = tagPy3Global
 			case tokPy3Library, tokPy2Library, tokPy2Program, tokPy3Program:
 				arInstance.Language = LangPy
-				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path, "libpy3", archiveName)
+				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.Rel(), "libpy3", archiveName)
 				tag = tagGlobal
 			default:
-				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path, "lib", archiveName)
+				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.Rel(), "lib", archiveName)
 				tag = tagGlobal
 			}
 
 			gRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRes.Refs, objcopyRes.Outputs, d.tc, ctx.host, ctx.emit)
 			hOnlyGlobalRef = &gRef
-			hOnlyGlobalPath = vfsPtr(Build(instance.Path + "/" + globalBaseName))
+			hOnlyGlobalPath = vfsPtr(Build(instance.Path.Rel() + "/" + globalBaseName))
 		}
 
 		// emitMiscNodes registers JV / CF outputs in the CodegenRegistry so
@@ -945,7 +945,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	languageDefaults = suppressMallocAPIDefault(languageDefaults, d.allocatorName)
 
-	isProgram := isProgramModuleType(d.moduleStmt.Name) && !isRuntimeAncestor(instance.Path)
+	isProgram := isProgramModuleType(d.moduleStmt.Name) && !isRuntimeAncestor(instance.Path.Rel())
 	unitTestPeer := unittestForPeerPath(d.moduleStmt)
 
 	var preUserProgDefaults []string
@@ -1097,7 +1097,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		peerResult := genModule(ctx, peerInstance)
 
 		if peerResult.isPROGRAM {
-			ThrowFmt("gen: %s peers PROGRAM module %s; only LIBRARY peers are linkable", instance.Path, peerPath)
+			ThrowFmt("gen: %s peers PROGRAM module %s; only LIBRARY peers are linkable", instance.Path.Rel(), peerPath)
 		}
 
 		resolved = append(resolved, resolvedPeer{path: peerPath, result: peerResult, kind: kind})
@@ -1494,7 +1494,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	effectiveProtoAddInclGlobal := dedupVFS(ownProtoAddIncl, peerProtoAddInclGlobal)
 
-	if instance.Path == "library/python/runtime_py3" {
+	if instance.Path == libraryPythonRuntimePy3 {
 		buildRootPath := bldLibraryPythonRuntimePy3
 		abseilPath := contribRestrictedAbseilCpp
 		spliced := make([]VFS, 0, len(effectiveAddInclGlobal)+1)
@@ -1525,7 +1525,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	effectiveCOnlyFlagsGlobal := dedupARG(peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
 	effectiveRPathFlagsGlobal := dedupARG(peerRPathFlagsGlobal, d.rpathFlagsGlobal)
 
-	if !effectiveNoPlatform(d.flags) && runtimeAncestorCxxConsumers[instance.Path] {
+	if !effectiveNoPlatform(d.flags) && runtimeAncestorCxxConsumers[instance.Path.Rel()] {
 		// The libc++ addincl dirs are injected above (before effectiveAddInclGlobal);
 		// only the matching -nostdinc++ flag and the runtime-stack hoist remain here.
 		if !cxxFlagsSeen.has(uint32(baseUnitCxxNostdinc)) {
@@ -1592,7 +1592,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefixOrName(dir, "lib", archiveName) }
 	}
 
-	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path, peerAddInclGlobal, dedupedAddIncl)
+	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path.Rel(), peerAddInclGlobal, dedupedAddIncl)
 
 	effectiveSrcDir := d.srcDir
 
@@ -1637,7 +1637,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		TC:          d.tc,
 	}
 
-	ancestorRebase := d.srcDir != nil && d.moduleStmt.Name == tokProgram && isAncestorPath(*d.srcDir, instance.Path)
+	ancestorRebase := d.srcDir != nil && d.moduleStmt.Name == tokProgram && isAncestorPath(*d.srcDir, instance.Path.Rel())
 
 	// Pass 1 (codegen-producing srcs: .proto, .ev, .fbs, .rl, .cpp.in, .c.in, .y)
 	// runs BEFORE emitCopyFiles / emitEnumSrcs / emitMiscNodes. Those later
@@ -1829,7 +1829,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		srcInstance := instance
 
 		if ancestorRebase {
-			srcInstance.Path = *d.srcDir
+			srcInstance.Path = Source(*d.srcDir)
 		}
 
 		joinClosure := joinSrcsIncludeClosure(ctx, srcInstance.Platform, srcInstance, js.Sources, moduleInputs)
@@ -1845,7 +1845,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		jsRef, joinOutVFS := EmitJS(srcInstance, js.OutputName, js.Sources, joinClosure, ctx.target, d.tc, ctx.scripts, ctx.emit)
 
-		jsRel := strings.TrimPrefix(joinOutVFS.Rel(), srcInstance.Path+"/")
+		jsRel := strings.TrimPrefix(joinOutVFS.Rel(), srcInstance.Path.Rel()+"/")
 
 		ccIncludeInputs := jsCCIncludeInputs(srcInstance, js.Sources, ccClosure, ctx.scripts)
 
@@ -2087,7 +2087,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	ccRefs, ccOutputs = reorderARMembers(ccRefs, ccOutputs, ccIsFlatNoLto, ccIsCFGenerated, ccIsProtoGenerated, numSrcsDerived)
 
 	var arRef NodeRef
-	arBaseName := arNameFn(instance.Path)
+	arBaseName := arNameFn(instance.Path.Rel())
 
 	arInstance := instance
 
@@ -2099,7 +2099,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	var arPluginVFS *VFS
 
 	if d.arPlugin != nil {
-		v := Source(instance.Path + "/" + *d.arPlugin)
+		v := Source(instance.Path.Rel() + "/" + *d.arPlugin)
 		arPluginVFS = &v
 	}
 
@@ -2142,7 +2142,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	var arPath *VFS
 
 	if len(ccRefs) > 0 {
-		arPath = vfsPtr(Build(instance.Path + "/" + arBaseName))
+		arPath = vfsPtr(Build(instance.Path.Rel() + "/" + arBaseName))
 	}
 
 	result := &moduleEmitResult{
@@ -2181,7 +2181,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	if len(globalRefs) > 0 {
-		globalBaseName := globalArNameFn(instance.Path)
+		globalBaseName := globalArNameFn(instance.Path.Rel())
 
 		globalTag := tagGlobal
 
@@ -2204,7 +2204,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), len(globalRefs))
 		globalRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, d.tc, ctx.host, ctx.emit)
 		result.GlobalRef = &globalRef
-		result.GlobalPath = vfsPtr(Build(instance.Path + "/" + globalBaseName))
+		result.GlobalPath = vfsPtr(Build(instance.Path.Rel() + "/" + globalBaseName))
 	}
 
 	ctx.memo[instance] = result
@@ -2717,7 +2717,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 	// _IGNORE_PEERDIRSELF=CPP_PROTO }`), leaving the CPP archive whole-archive-only
 	// (emitPyProtoSrcs still marks it whole-archive in both cases).
 	if instance.Language == LangPy && d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary && d.optimizePyProtos && !moduleExcludesTag(d, "CPP_PROTO") {
-		seen[instance.Path] = struct{}{}
+		seen[instance.Path.Rel()] = struct{}{}
 		cppSelf := instance
 		cppSelf.Language = LangCPP
 		walkInstance(cppSelf)

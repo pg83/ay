@@ -125,8 +125,8 @@ func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, d *module
 	// compile), so it is NOT gated on noPlatform. It leads the platform peerdirs
 	// (before cxxsupp/util/musl), contributes no link objects (header-only), and
 	// must not peer itself.
-	addLinuxHeaders := instance.Path != "contrib/libs/linux-headers" &&
-		!strings.HasPrefix(instance.Path, "contrib/libs/linux-headers/")
+	addLinuxHeaders := instance.Path.Rel() != "contrib/libs/linux-headers" &&
+		!strings.HasPrefix(instance.Path.Rel(), "contrib/libs/linux-headers/")
 
 	// The cxxsupp/libcxx/util language defaults below are C++-only; linux-headers
 	// is not, so it is decided ahead of the language gate.
@@ -151,28 +151,28 @@ func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, d *module
 	}
 
 	if !flags.NoRuntime && !noPlatform {
-		if instance.Path != "contrib/libs/cxxsupp/libcxx" && !strings.HasPrefix(instance.Path, "contrib/libs/cxxsupp/libcxx/") {
+		if instance.Path.Rel() != "contrib/libs/cxxsupp/libcxx" && !strings.HasPrefix(instance.Path.Rel(), "contrib/libs/cxxsupp/libcxx/") {
 			peers = append(peers, "contrib/libs/cxxsupp/libcxx")
 		}
 
-		if instance.Path != "contrib/libs/cxxsupp/libcxxrt" {
+		if instance.Path.Rel() != "contrib/libs/cxxsupp/libcxxrt" {
 			peers = append(peers, "contrib/libs/cxxsupp/libcxxrt")
 		}
 
-		if instance.Path != "contrib/libs/libunwind" {
+		if instance.Path.Rel() != "contrib/libs/libunwind" {
 			peers = append(peers, "contrib/libs/libunwind")
 		}
 	}
 
 	if !flags.NoUtil && !noPlatform {
-		if instance.Path != "util" && !strings.HasPrefix(instance.Path, "util/") {
+		if instance.Path.Rel() != "util" && !strings.HasPrefix(instance.Path.Rel(), "util/") {
 			peers = append(peers, "util")
 		}
 	}
 
 	peers = appendImplicitPeers(peers, unitImplicitPeers, rc)
 
-	if !flags.NoRuntime && !noPlatform && useArcadiaCompilerRuntime(ctx, instance) && instance.Path != "library/cpp/sanitizer/include" {
+	if !flags.NoRuntime && !noPlatform && useArcadiaCompilerRuntime(ctx, instance) && instance.Path.Rel() != "library/cpp/sanitizer/include" {
 		peers = append(peers, "library/cpp/sanitizer/include")
 	}
 
@@ -184,7 +184,7 @@ func defaultPeerdirsForWithState(ctx *genCtx, instance ModuleInstance, d *module
 	// and those do not compile) — so it is NOT gated on noPlatform. The modules are
 	// RESOURCES_LIBRARYs (inert: no link inputs), contributing their resource globals
 	// and (lld) the propagated linker LDFLAGS to the closure.
-	if !strings.HasPrefix(instance.Path, "build/platform/") {
+	if !strings.HasPrefix(instance.Path.Rel(), "build/platform/") {
 		peers = append(peers,
 			"build/platform/clang",
 			"build/platform/clang/clang-format",

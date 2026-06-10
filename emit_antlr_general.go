@@ -37,7 +37,7 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 		}
 
 		for _, inTok := range run.INFiles {
-			vfs := copyFileInputVFS(ctx.fs, instance.Path, inTok)
+			vfs := copyFileInputVFS(ctx.fs, instance.Path.Rel(), inTok)
 			inVFSByToken[inTok] = vfs
 			inputs = append(inputs, vfs)
 
@@ -55,13 +55,13 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 		outputs := make([]VFS, 0, len(run.OUTFiles)+len(run.OUTNoAutoFiles))
 
 		for _, outTok := range run.OUTFiles {
-			vfs := copyFileOutputVFS(instance.Path, outTok)
+			vfs := copyFileOutputVFS(instance.Path.Rel(), outTok)
 			outVFSByToken[outTok] = vfs
 			outputs = append(outputs, vfs)
 		}
 
 		for _, outTok := range run.OUTNoAutoFiles {
-			vfs := copyFileOutputVFS(instance.Path, outTok)
+			vfs := copyFileOutputVFS(instance.Path.Rel(), outTok)
 			outVFSByToken[outTok] = vfs
 			outputs = append(outputs, vfs)
 		}
@@ -92,7 +92,7 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			jvSourceInputs = append(jvSourceInputs, stdout2stderrVFS, jarVFS)
 
 			for outTok, outVFS := range outVFSByToken {
-				registerBoundGeneratedParsedOutput(ctx, instance, pkJV, outVFS, antlrParsedIncludes(instance.Path, run, outTok, outVFSByToken, inputs, jarVFS), jvRef, nil)
+				registerBoundGeneratedParsedOutput(ctx, instance, pkJV, outVFS, antlrParsedIncludes(instance.Path.Rel(), run, outTok, outVFSByToken, inputs, jarVFS), jvRef, nil)
 				reg.SetSourceInputs(outVFS, jvSourceInputs)
 			}
 		}
@@ -107,7 +107,7 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			}
 
 			outVFS := outVFSByToken[outTok]
-			cppRel := antlrOutputModuleRel(instance.Path, outVFS)
+			cppRel := antlrOutputModuleRel(instance.Path.Rel(), outVFS)
 			ccRef, ccOut := emitCodegenDownstreamCC(ctx, instance, cppRel, []NodeRef{jvRef}, *consumerInputs)
 			ccRefs = append(ccRefs, ccRef)
 			ccOutputs = append(ccOutputs, ccOut)
@@ -123,11 +123,11 @@ func antlrRunCmdArgs(instance ModuleInstance, run antlrRunInfo, inVFSByToken, ou
 	for _, a := range run.Args {
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
 		a = strings.ReplaceAll(a, "${ARCADIA_BUILD_ROOT}", "$(B)")
-		a = strings.ReplaceAll(a, "${CURDIR}", Source(instance.Path).String())
-		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path).String())
-		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path)
-		a = strings.ReplaceAll(a, "$CURDIR", Source(instance.Path).String())
-		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path).String())
+		a = strings.ReplaceAll(a, "${CURDIR}", instance.Path.String())
+		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path.Rel()).String())
+		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path.Rel())
+		a = strings.ReplaceAll(a, "$CURDIR", instance.Path.String())
+		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path.Rel()).String())
 
 		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = vfs.String()

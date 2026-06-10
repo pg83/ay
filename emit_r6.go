@@ -26,12 +26,12 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	var outVFS VFS
 
 	if strings.Contains(srcRel, "/") {
-		outVFS = Build(instance.Path + "/_/" + srcRel + ".cpp")
+		outVFS = Build(instance.Path.Rel() + "/_/" + srcRel + ".cpp")
 	} else {
-		outVFS = Build(instance.Path + "/" + srcRel + ".cpp")
+		outVFS = Build(instance.Path.Rel() + "/" + srcRel + ".cpp")
 	}
 
-	inVFS := Source(instance.Path + "/" + srcRel)
+	inVFS := Source(instance.Path.Rel() + "/" + srcRel)
 	canonicalBinary := canonicalizeRagel6Binary(ragel6BinaryPath)
 
 	effectiveFlags := ragel6Flags
@@ -73,7 +73,7 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 		Inputs:           inputs,
 		Outputs:          []VFS{outVFS},
 		KV:               KV{P: pkR6, PC: pcYellow},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          []NodeRef{ragel6LD},
 		ForeignDepRefs:   []NodeRef{ragel6LD},

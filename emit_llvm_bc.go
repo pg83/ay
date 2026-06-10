@@ -25,7 +25,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 	python := d.tc.Python3.String()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	reqs := Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)}
-	tp := TargetProperties{ModuleDir: instance.Path}
+	tp := TargetProperties{ModuleDir: instance.Path.Rel()}
 
 	for _, stmt := range d.llvmBc {
 		clangRoot := resolveResourceGlobalRef(stmt.ClangBCRoot, resourceGlobals)
@@ -108,7 +108,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			bcPaths = append(bcPaths, bcOut)
 		}
 
-		mergedOut := Build(instance.Path + "/" + stmt.Name + "_merged" + stmt.Suffix + ".bc")
+		mergedOut := Build(instance.Path.Rel() + "/" + stmt.Name + "_merged" + stmt.Suffix + ".bc")
 		ldArgs := []STR{internStr(llvmLink)}
 
 		for _, p := range bcPaths {
@@ -138,7 +138,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		ldRef := ctx.emit.Emit(ldNode)
 
 		optOutName := stmt.Name + "_optimized" + stmt.Suffix + ".bc"
-		optOut := Build(instance.Path + "/" + optOutName)
+		optOut := Build(instance.Path.Rel() + "/" + optOutName)
 		optArgs := []STR{internStr(python), internStr(optWrapper), internStr(opt), (mergedOut).str(), argDashO.str(), (optOut).str()}
 		passes := []string{"default<O2>", "globalopt", "globaldce"}
 
@@ -180,7 +180,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			continue
 		}
 
-		ensureResourcePeer(instance.Path, d)
+		ensureResourcePeer(instance.Path.Rel(), d)
 
 		if d.prOutputProducer == nil {
 			d.prOutputProducer = map[string]NodeRef{}
@@ -293,7 +293,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 func llvmBcSourceInfo(ctx *genCtx, instance ModuleInstance, d *moduleData, src string) (inputVFS VFS, producer NodeRef) {
 	// RUN_PROGRAM / PR generated output
 	if ref := d.prOutputProducer[src]; ref != (NodeRef(0)) {
-		return copyFileOutputVFS(instance.Path, src), ref
+		return copyFileOutputVFS(instance.Path.Rel(), src), ref
 	}
 
 	// COPY WITH_CONTEXT generated source — build-root copy is authoritative
@@ -309,7 +309,7 @@ func llvmBcSourceInfo(ctx *genCtx, instance ModuleInstance, d *moduleData, src s
 		return *buildVFS, ref
 	}
 
-	return copyFileInputVFS(ctx.fs, instance.Path, src), NodeRef(0)
+	return copyFileInputVFS(ctx.fs, instance.Path.Rel(), src), NodeRef(0)
 }
 
 // llvmBcRootRelArcSrc mirrors upstream's `rootrel_arc_src(src, unit)` quirk
@@ -329,8 +329,8 @@ func llvmBcRootRelArcSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 		return src
 	}
 
-	if sourceInputVFS(ctx.fs, instance.Path, src) != nil {
-		return instance.Path + "/" + src
+	if sourceInputVFS(ctx.fs, instance.Path.Rel(), src) != nil {
+		return instance.Path.Rel() + "/" + src
 	}
 
 	return src

@@ -26,7 +26,7 @@ func emitJVDownstreamCPCC(
 		srcH := pair.h
 
 		base := strings.TrimSuffix(filepath.Base(srcCpp.Rel()), ".cpp")
-		g4CppPath := Build(instance.Path + "/" + base + ".g4.cpp")
+		g4CppPath := Build(instance.Path.Rel() + "/" + base + ".g4.cpp")
 		g4CppRel := base + ".g4.cpp"
 
 		if reg != nil {

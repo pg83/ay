@@ -5,7 +5,7 @@ import "testing"
 func TestEmitFL_NodeShape(t *testing.T) {
 	target := newTestPlatform(OSLinux, ISAX8664, "no", nil)
 	instance := ModuleInstance{
-		Path:     "mod",
+		Path:     Source("mod"),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: target,

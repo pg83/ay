@@ -21,18 +21,18 @@ func emitGeneratedPyAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleDat
 			continue
 		}
 
-		src := Build(instance.Path + "/" + srcRel)
-		entries = append(entries, pyProtoAuxEntry{path: src, key: generatedPyResourceKey(instance.Path, d, srcRel), inputs: genInputs})
+		src := Build(instance.Path.Rel() + "/" + srcRel)
+		entries = append(entries, pyProtoAuxEntry{path: src, key: generatedPyResourceKey(instance.Path.Rel(), d, srcRel), inputs: genInputs})
 
 		if !d.pyBuildNoPYC {
 			suffix := ".yapyc3"
 
 			if strings.Contains(srcRel, "/") {
-				suffix = "." + pySrcYapycSuffix(instance.Path) + ".yapyc3"
+				suffix = "." + pySrcYapycSuffix(instance.Path.Rel()) + ".yapyc3"
 			}
 
-			yp := Build(instance.Path + "/" + srcRel + suffix)
-			entries = append(entries, pyProtoAuxEntry{path: yp, key: generatedPyResourceKey(instance.Path, d, srcRel+".yapyc3"), inputs: genInputs})
+			yp := Build(instance.Path.Rel() + "/" + srcRel + suffix)
+			entries = append(entries, pyProtoAuxEntry{path: yp, key: generatedPyResourceKey(instance.Path.Rel(), d, srcRel+".yapyc3"), inputs: genInputs})
 		}
 	}
 
@@ -173,7 +173,7 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 	res := &rawAuxResourceChunksResult{}
 
 	for _, ch := range chunks {
-		aux := Build(instance.Path + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path, moduleTag) + "_raw.auxcpp")
+		aux := Build(instance.Path.Rel() + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path.Rel(), moduleTag) + "_raw.auxcpp")
 		sourceInputs := pyProtoSourceInputs(ch.inputs)
 		auxClosure := rawAuxInputClosure(ctx, instance, aux, sourceInputs, in)
 		cmdArgs := []STR{internStr(rescompilerBinPath), (aux).str()}
@@ -203,7 +203,7 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 			Inputs:           inputs,
 			Outputs:          []VFS{aux},
 			KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
-			TargetProperties: TargetProperties{ModuleDir: instance.Path},
+			TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			DepRefs:          chDeps,
 		})

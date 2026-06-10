@@ -193,7 +193,7 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 		KV:               KV{P: pkFL, PC: pcLightGreen},
 		Outputs:          []VFS{headerVFS, cppVFS, bfbsVFS},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
 		usesResources:    []string{resourcePatternYMakePython3},
 	}
 

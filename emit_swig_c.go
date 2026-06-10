@@ -30,9 +30,9 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 		prefix := swigOutputPrefix(stmt.Src, stmt.Module)
 		cOutRel := prefix + ".swg.c"
 		pyOutRel := prefix + ".py"
-		srcVFS := Source(instance.Path + "/" + stmt.Src)
-		cOutVFS := Build(instance.Path + "/" + cOutRel)
-		pyOutVFS := Build(instance.Path + "/" + pyOutRel)
+		srcVFS := Source(instance.Path.Rel() + "/" + stmt.Src)
+		cOutVFS := Build(instance.Path.Rel() + "/" + cOutRel)
+		pyOutVFS := Build(instance.Path.Rel() + "/" + pyOutRel)
 		swigClosure := swigIncludeClosure(ctx, srcVFS)
 
 		inputs := make([]VFS, 0, 2+len(swigClosure))
@@ -69,7 +69,7 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 			Outputs:          []VFS{cOutVFS, pyOutVFS},
 			KV:               KV{P: pkSW, PC: pcYellow},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			TargetProperties: TargetProperties{ModuleDir: instance.Path},
+			TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
 		})
 
 		if d.pyGeneratedSrcs == nil {
