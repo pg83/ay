@@ -425,7 +425,7 @@ func composeTargetCC(a ccComposeArgs) []STR {
 		len(builtinMacroDateTime) + len(macroPrefixMapFlags) +
 		len(a.OwnAddIncl) + len(a.PeerAddIncl) + len(a.OwnCFlags) + len(a.OwnExtras) + len(a.PeerExtras) + 2*len(a.OwnGlobalBucket) + len(a.PerSrcCFlags) + len(a.ModuleScopeCFlags) +
 		len(bundle.ArchArgs) + len(bundle.CFlags) + len(bundle.Defines) + 2*len(bundle.NoLibcBlock) + len(warningBundle)
-	cmdArgs := make([]STR, 0, argCap+len(a.Platform.WrapccHead)+len(a.Platform.WrapccTail)+1)
+	cmdArgs := make([]STR, 0, argCap+len(a.Platform.WrapccHead)+len(a.Platform.WrapccTail)+len(a.Platform.SysrootArgs)+1)
 
 	if len(a.Platform.WrapccHead) > 0 {
 		cmdArgs = append(cmdArgs, a.Platform.WrapccHead...)
@@ -435,7 +435,8 @@ func composeTargetCC(a ccComposeArgs) []STR {
 
 	cmdArgs = append(cmdArgs, pickCompilerArg(a), a.Platform.TargetArg)
 	cmdArgs = appendArgStr(cmdArgs, bundle.ArchArgs)
-	cmdArgs = append(cmdArgs, argDashBBin, argDashC.str(), argDashO.str(), (a.OutVFS).str())
+	cmdArgs = append(cmdArgs, a.Platform.SysrootArgs...)
+	cmdArgs = append(cmdArgs, argDashC.str(), argDashO.str(), (a.OutVFS).str())
 	cmdArgs = appendArgStr(cmdArgs, ccIncludesPrefix)
 	cmdArgs = appendAddIncl(cmdArgs, a.OwnAddIncl, a.InclArgs)
 	peerAddIncl := a.PeerAddIncl
