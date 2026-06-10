@@ -9,6 +9,11 @@ const (
 	ragel6DefaultFlagDebug     = "-CT0"
 )
 
+var (
+	ragel6ArgOptimized = internArg(ragel6DefaultFlagOptimized)
+	ragel6ArgDebug     = internArg(ragel6DefaultFlagDebug)
+)
+
 func canonicalizeRagel6Binary(v VFS) VFS {
 	if !v.IsBuild() || !strings.HasPrefix(v.Rel(), ragel6BinSubrel) {
 		return v
@@ -33,9 +38,9 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 
 	if len(effectiveFlags) == 0 {
 		if instance.Platform.Ragel6Optimized {
-			effectiveFlags = []ARG{internArg(ragel6DefaultFlagOptimized)}
+			effectiveFlags = []ARG{ragel6ArgOptimized}
 		} else {
-			effectiveFlags = []ARG{internArg(ragel6DefaultFlagDebug)}
+			effectiveFlags = []ARG{ragel6ArgDebug}
 		}
 	}
 

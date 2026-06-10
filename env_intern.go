@@ -17,8 +17,11 @@ var envTable = struct {
 }{strs: []STR{0}} // index 0 reserved = "not interned" (STR 0 is the empty string)
 
 func internEnv(name string) ENV {
-	st := internStr(name)
+	return internEnvSTR(internStr(name))
+}
 
+// internEnvSTR interns an already-interned name STR into the ENV namespace.
+func internEnvSTR(st STR) ENV {
 	if id, ok := envTable.ids.Get(st); ok {
 		return ENV(id)
 	}

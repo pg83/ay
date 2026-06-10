@@ -385,7 +385,7 @@ func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VF
 		trailer = append(trailer, argWlCompressDebugSectionsZstd.str())
 	}
 
-	trailer = appendInternStrs(trailer, p.LinkPreludeExtra)
+	trailer = append(trailer, p.LinkPreludeExtra...)
 	trailer = append(trailer, argWlNoAsNeeded.str())
 	trailer = appendArgStr(trailer, ownRPathFlags)
 
@@ -402,7 +402,7 @@ func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VF
 
 	trailer = appendInternStrs(trailer, p.LinkerSelectionTailFlags())
 	trailer = appendArgStr(trailer, peerLDFlagsGlobal, ownLDFlags, objAddLibsGlobal)
-	trailer = appendInternStrs(trailer, p.SystemLibs)
+	trailer = append(trailer, p.SystemLibs...)
 
 	if wantsStrip {
 		trailer = append(trailer, argWlStripAll.str())

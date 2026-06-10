@@ -78,12 +78,12 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 
 		d.pySrcs = append(d.pySrcs, pyOutRel)
 		d.pyGeneratedSrcs[pyOutRel] = append([]VFS{cOutVFS, srcVFS}, swigClosure...)
-		registerBoundGeneratedParsedOutput(ctx, instance, "SW", cOutVFS, collectSwigInducedIncludes(ctx, srcVFS, swigClosure), swRef, []NodeRef{swigRef})
-		registerBoundGeneratedParsedOutput(ctx, instance, "SW", pyOutVFS, nil, swRef, []NodeRef{swigRef})
+		registerBoundGeneratedParsedOutput(ctx, instance, pkSW, cOutVFS, collectSwigInducedIncludes(ctx, srcVFS, swigClosure), swRef, []NodeRef{swigRef})
+		registerBoundGeneratedParsedOutput(ctx, instance, pkSW, pyOutVFS, nil, swRef, []NodeRef{swigRef})
 
 		ccIn := in
 		ccIn.ExtraDepRefs = []NodeRef{swRef}
-		cClosure := walkClosureWithSourceRel(ctx, instance, cOutVFS, srcVFS.Rel(), in)
+		cClosure := walkClosure(ctx, instance, cOutVFS, in)
 		incl := make([]VFS, 0, len(cClosure)+len(swigClosure)+1)
 		incl = append(incl, cClosure...)
 		incl = append(incl, swigClosure...)

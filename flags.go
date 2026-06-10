@@ -287,9 +287,7 @@ func compileFlagBundleFor(p *Platform) compileFlagBundle {
 			NoLibcBlock: noLibcBlock(p),
 		}
 
-		if p.March != "" {
-			bundle.ArchArgs = []ARG{internArg("-march=" + p.March)}
-		}
+		bundle.ArchArgs = p.MarchArgs
 
 		return bundle
 	}

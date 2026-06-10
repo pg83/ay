@@ -239,7 +239,6 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 }
 
 type ScanContext struct {
-	SourceRel       string
 	OwnAddIncl      []VFS
 	PeerAddInclSet  []VFS
 	BaseSearchPaths []VFS

@@ -91,15 +91,15 @@ func emitRunPython(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
-			registerGeneratedParsedOutput(ctx, instance, "PY", outVFSByToken[f], pyEmitsIncludes(ctx, instance, d, stmt, f, scriptVFS, splitSrcs, hasCCShard), nil)
+			registerGeneratedParsedOutput(ctx, instance, pkPY, outVFSByToken[f], pyEmitsIncludes(ctx, instance, d, stmt, f, scriptVFS, splitSrcs, hasCCShard), nil)
 		}
 
 		for _, f := range stmt.OUTNoAutoFiles {
-			registerGeneratedParsedOutput(ctx, instance, "PY", outVFSByToken[f], pyEmitsIncludes(ctx, instance, d, stmt, f, scriptVFS, splitSrcs, hasCCShard), nil)
+			registerGeneratedParsedOutput(ctx, instance, pkPY, outVFSByToken[f], pyEmitsIncludes(ctx, instance, d, stmt, f, scriptVFS, splitSrcs, hasCCShard), nil)
 		}
 
 		if stmt.StdoutFile != nil {
-			registerGeneratedParsedOutput(ctx, instance, "PY", *stdoutVFS, pyEmitsIncludes(ctx, instance, d, stmt, *stmt.StdoutFile, scriptVFS, splitSrcs, hasCCShard), nil)
+			registerGeneratedParsedOutput(ctx, instance, pkPY, *stdoutVFS, pyEmitsIncludes(ctx, instance, d, stmt, *stmt.StdoutFile, scriptVFS, splitSrcs, hasCCShard), nil)
 		}
 	}
 
@@ -488,10 +488,10 @@ func EmitPYRun(
 	}
 
 	var outputs []VFS
-	var stdoutPath string
+	var stdoutPath STR
 
 	if stdoutVFS != nil {
-		stdoutPath = stdoutVFS.String()
+		stdoutPath = stdoutVFS.str()
 		outputs = append(outputs, *stdoutVFS)
 	}
 
@@ -505,7 +505,7 @@ func EmitPYRun(
 
 	cmd := Cmd{CmdArgs: cmdArgs, Env: env}
 
-	if stdoutPath != "" {
+	if stdoutPath != 0 {
 		cmd.Stdout = stdoutPath
 	}
 

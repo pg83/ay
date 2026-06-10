@@ -99,6 +99,9 @@ func (fs *osFS) recordContentHash(rel string, data []byte) {
 	fs.contentHashes[s] = xxh3.Hash(data)
 }
 
+// ContentHash's hot path is small enough to inline into the uid writer's
+// monomorphic instantiation (see canonWriter); the lazy read lives in
+// contentHashSlow so it does not blow the inlining budget.
 func (fs *osFS) ContentHash(v VFS) uint64 {
 	s := v.strID()
 
@@ -106,10 +109,15 @@ func (fs *osFS) ContentHash(v VFS) uint64 {
 		return fs.contentHashes[s]
 	}
 
-	// Lazily read inputs gen never scanned — many $(S) inputs (data files,
-	// tablegen .td, python stdlib, tzdata, …) are listed on nodes but their content
-	// is never needed during graph construction. Read on first uid use (reusing one
-	// buffer) so the hash is recorded; a genuinely missing file faults here.
+	return fs.contentHashSlow(v)
+}
+
+// contentHashSlow lazily reads inputs gen never scanned — many $(S) inputs
+// (data files, tablegen .td, python stdlib, tzdata, …) are listed on nodes but
+// their content is never needed during graph construction. Read on first uid
+// use (reusing one buffer) so the hash is recorded; a genuinely missing file
+// faults here.
+func (fs *osFS) contentHashSlow(v VFS) uint64 {
 	rel := v.Rel()
 
 	if p, d := fs.existsRel(rel); p && d {
@@ -117,7 +125,7 @@ func (fs *osFS) ContentHash(v VFS) uint64 {
 	}
 
 	fs.Read(rel) // side effect: records the content hash into contentHashes[s]
-	return fs.contentHashes[s]
+	return fs.contentHashes[v.strID()]
 }
 
 func (fs *osFS) SourceRoot() string {

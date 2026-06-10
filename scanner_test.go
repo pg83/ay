@@ -6,12 +6,12 @@ import (
 	"testing"
 )
 
-// scanClosure returns the transitive include closure of cfg.SourceRel with the
+// scanClosure returns the transitive include closure of srcRel with the
 // root file stripped (element 0) — the shape tests previously got from the
 // removed IncludeScanner.WalkClosure helper, now expressed directly over
 // closureOf.
-func scanClosure(scanner *IncludeScanner, cfg ScanContext) []VFS {
-	return scanner.NewScanCtx(cfg).closureOf(Source(cfg.SourceRel))[1:]
+func scanClosure(scanner *IncludeScanner, srcRel string, cfg ScanContext) []VFS {
+	return scanner.NewScanCtx(cfg).closureOf(Source(srcRel))[1:]
 }
 
 func TestStripComments_BlockCommentInclude(t *testing.T) {
@@ -295,9 +295,7 @@ func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
 	}
 
 	scanner := newTestScanner(fs, sysincl)
-	closure := scanClosure(scanner, ScanContext{
-		SourceRel: "yasm/source.cpp",
-	})
+	closure := scanClosure(scanner, "yasm/source.cpp", ScanContext{})
 
 	hasLocal := false
 	hasFoo := false
@@ -343,8 +341,7 @@ func TestScanner_QuotedMultiTargetSysincl_OwnAddIncl(t *testing.T) {
 	}
 
 	scanner := newTestScanner(fs, sysincl)
-	closure := scanClosure(scanner, ScanContext{
-		SourceRel:  "src/source.cpp",
+	closure := scanClosure(scanner, "src/source.cpp", ScanContext{
 		OwnAddIncl: VFSesFromStrings([]string{"libcxxabi/include"}),
 	})
 
@@ -393,8 +390,7 @@ func TestScanner_QuotedSameDirStillGated(t *testing.T) {
 	}
 
 	scanner := newTestScanner(fs, sysincl)
-	closure := scanClosure(scanner, ScanContext{
-		SourceRel:  "libcxxrt/source.cc",
+	closure := scanClosure(scanner, "libcxxrt/source.cc", ScanContext{
 		OwnAddIncl: VFSesFromStrings([]string{"libcxxrt"}),
 	})
 
@@ -437,9 +433,7 @@ func TestScanner_QuotedSysinclFiresOnLocalMiss(t *testing.T) {
 	}
 
 	scanner := newTestScanner(fs, sysincl)
-	closure := scanClosure(scanner, ScanContext{
-		SourceRel: "src/source.cpp",
-	})
+	closure := scanClosure(scanner, "src/source.cpp", ScanContext{})
 
 	hasFoolib := false
 
@@ -474,8 +468,7 @@ func TestScanner_AngleSysinclUnaffected(t *testing.T) {
 	}
 
 	scanner := newTestScanner(fs, sysincl)
-	closure := scanClosure(scanner, ScanContext{
-		SourceRel:  "libcxxrt/source.cpp",
+	closure := scanClosure(scanner, "libcxxrt/source.cpp", ScanContext{
 		OwnAddIncl: VFSesFromStrings([]string{"libcxxrt"}),
 	})
 
@@ -960,8 +953,7 @@ func TestScanner_CythonNestedPxdUsesPy2StringSibling(t *testing.T) {
 		"contrib/tools/cython_py2/Cython/Includes/libcpp/string.pxd":  "from libc.string cimport memcpy\n",
 		"contrib/tools/cython_py2/Cython/Includes/libc/string.pxd":    "# py2 libc string\n",
 	}), SysInclSet{})
-	closure := scanClosure(scanner, ScanContext{
-		SourceRel: "pkg/mod.pyx",
+	closure := scanClosure(scanner, "pkg/mod.pyx", ScanContext{
 		OwnAddIncl: []VFS{
 			Intern("$(S)/"),
 			Intern("$(S)/contrib/tools/cython/Cython/Includes"),
@@ -985,8 +977,7 @@ func TestScanner_CythonPyxDirectStdlibStaysPy3WhileNestedPxdAddsPy2(t *testing.T
 		"contrib/tools/cython_py2/Cython/Includes/libcpp/pair.pxd":    "from libcpp.utility cimport move\n",
 		"contrib/tools/cython_py2/Cython/Includes/libcpp/utility.pxd": "# py2 utility\n",
 	}), SysInclSet{})
-	closure := scanClosure(scanner, ScanContext{
-		SourceRel: "pkg/mod.pyx",
+	closure := scanClosure(scanner, "pkg/mod.pyx", ScanContext{
 		OwnAddIncl: []VFS{
 			Intern("$(S)/"),
 			Intern("$(S)/contrib/tools/cython/Cython/Includes"),
@@ -1009,8 +1000,7 @@ func TestScanner_CythonStdintSplitKeepsPy3InitButAddsPy2Types(t *testing.T) {
 		"contrib/tools/cython/Cython/Includes/libc/stdint.pxd":         "# py3 stdint\n",
 		"contrib/tools/cython_py2/Cython/Includes/libc/stdint.pxd":     "# py2 stdint\n",
 	}), SysInclSet{})
-	closure := scanClosure(scanner, ScanContext{
-		SourceRel: "pkg/mod.pyx",
+	closure := scanClosure(scanner, "pkg/mod.pyx", ScanContext{
 		OwnAddIncl: []VFS{
 			Intern("$(S)/"),
 			Intern("$(S)/contrib/tools/cython/Cython/Includes"),
@@ -1040,7 +1030,7 @@ func attachCodegen(scanner *IncludeScanner, reg *CodegenRegistry) {
 func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 	reg := NewCodegenRegistry()
 	reg.Register(&GeneratedFileInfo{
-		ProducerKvP: "PR",
+		ProducerKvP: pkPR,
 		OutputPath:  Build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc"),
 	})
 
@@ -1071,7 +1061,7 @@ func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 	reg := NewCodegenRegistry()
 	reg.Register(&GeneratedFileInfo{
-		ProducerKvP: "PR",
+		ProducerKvP: pkPR,
 		OutputPath:  Build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc"),
 	})
 
@@ -1104,7 +1094,7 @@ func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 func TestScanner_AddInclBuildOnlyMatchesCodegen(t *testing.T) {
 	reg := NewCodegenRegistry()
 	reg.Register(&GeneratedFileInfo{
-		ProducerKvP: "PR",
+		ProducerKvP: pkPR,
 		OutputPath:  Build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.h.inc"),
 	})
 

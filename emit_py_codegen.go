@@ -132,7 +132,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 
 		pyRef := ctx.emit.Emit(node)
 
-		registerBoundGeneratedParsedOutput(ctx, instance, "PY", outputPath, nil, pyRef, toolRefs)
+		registerBoundGeneratedParsedOutput(ctx, instance, pkPY, outputPath, nil, pyRef, toolRefs)
 	}
 }
 
