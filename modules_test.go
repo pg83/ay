@@ -5,6 +5,30 @@ import (
 	"testing"
 )
 
+func TestApplyUnknownStmt_ExcludeTagsAcceptsTagNames(t *testing.T) {
+	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
+	d := &moduleData{}
+
+	// EXCLUDE_TAGS args are submodule tag names (data), not service-keywords
+	// that split the arg list, so the audit must not reject an unmodelled one.
+	// Build the tag at runtime: a literal here would be mined into
+	// knownServiceTokens (macro_audit embeds *.go, _test.go included) and mask
+	// the very check this test exercises.
+	tag := "PY" + "_" + "PROTO"
+
+	err := Try(func() {
+		applyUnknownStmt("mod", &UnknownStmt{Name: tokExcludeTags, Args: []string{tag}}, d, env)
+	})
+
+	if err != nil {
+		t.Fatalf("EXCLUDE_TAGS(%s) rejected: %v", tag, err)
+	}
+
+	if !d.excludeTags[tag] {
+		t.Fatalf("excludeTags = %v, want %s", d.excludeTags, tag)
+	}
+}
+
 func TestApplyUnknownStmt_AddInclSelf(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
 
