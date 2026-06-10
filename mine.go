@@ -2,7 +2,9 @@ package main
 
 import (
 	"runtime"
-	"strings"
+	"strconv"
+
+	"github.com/BurntSushi/toml"
 )
 
 // toolchainFlags returns the host/target config flags (build type, python mode,
@@ -28,44 +30,58 @@ func prebuiltToolchainFlags() map[string]string {
 	}
 }
 
+// readYaConfSection decodes ya.conf (TOML) and returns the named top-level
+// table — e.g. "flags" or "host_platform_flags" — as a flat string map. Flag
+// values are scalars; non-scalar entries (arrays, sub-tables) are not flags and
+// are skipped. Because nested tables such as [alias.flags] decode under their
+// parent key (alias), only the genuine top-level section is returned, matching
+// the previous line-parser's exact-section semantics.
 func readYaConfSection(fs FS, rel, wantSection string) map[string]string {
-	raw := fs.Read(rel)
-	out := map[string]string{}
-	section := ""
+	var root map[string]any
 
-	for _, line := range strings.Split(string(raw), "\n") {
-		line = strings.TrimSpace(line)
+	if _, err := toml.Decode(string(fs.Read(rel)), &root); err != nil {
+		ThrowFmt("ya.conf %s: %v", rel, err)
+	}
 
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
+	return yaConfStringTable(root[wantSection])
+}
 
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			section = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(line, "["), "]"))
+// yaConfStringTable flattens a decoded TOML table into a string map, stringifying
+// scalar values and dropping composite ones (arrays / sub-tables are never flags).
+func yaConfStringTable(v any) map[string]string {
+	tbl, ok := v.(map[string]any)
 
-			continue
-		}
+	if !ok {
+		return map[string]string{}
+	}
 
-		if section != wantSection {
-			continue
-		}
+	out := make(map[string]string, len(tbl))
 
-		key, val, ok := strings.Cut(line, "=")
-
-		if !ok {
-			continue
-		}
-
-		key = strings.TrimSpace(key)
-		val = strings.TrimSpace(val)
-		val = strings.Trim(val, `"`)
-
-		if key != "" {
-			out[key] = val
+	for k, val := range tbl {
+		if s, ok := yaConfScalar(val); ok {
+			out[k] = s
 		}
 	}
 
 	return out
+}
+
+// yaConfScalar renders a TOML scalar as the literal token the old line parser
+// would have produced (bool -> "true"/"false", ints/floats decimal); composite
+// values return ok=false.
+func yaConfScalar(v any) (string, bool) {
+	switch x := v.(type) {
+	case string:
+		return x, true
+	case bool:
+		return strconv.FormatBool(x), true
+	case int64:
+		return strconv.FormatInt(x, 10), true
+	case float64:
+		return strconv.FormatFloat(x, 'g', -1, 64), true
+	}
+
+	return "", false
 }
 
 func hostOS() OS {
