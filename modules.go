@@ -1232,7 +1232,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 					ThrowFmt("LLVM_BC SUFFIX expects a value")
 				}
 
-				stmt.Suffix = expandStmtToken(v.Args[i+1], env)
+				stmt.Suffix = v.Args[i+1]
 				i += 2
 			case "SYMBOLS":
 				i++
@@ -1266,15 +1266,15 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			ThrowFmt("CHECK_CONFIG_H expects exactly 1 argument, got %d", len(v.Args))
 		}
 
-		d.checkConfigHeaders = append(d.checkConfigHeaders, expandStmtToken(v.Args[0], env))
+		d.checkConfigHeaders = append(d.checkConfigHeaders, v.Args[0])
 	case tokBuildwithCythonCpp:
 		if len(v.Args) == 0 {
 			ThrowFmt("BUILDWITH_CYTHON_CPP expects at least 1 argument")
 		}
 
 		d.cythonCpp = append(d.cythonCpp, &CythonStmt{
-			Src:     expandStmtToken(v.Args[0], env),
-			Options: expandStmtTokens(v.Args[1:], env),
+			Src:     v.Args[0],
+			Options: v.Args[1:],
 		})
 		d.cythonNumpyBeforeInclude = true
 	case tokBuildwithCythonC:
@@ -1283,8 +1283,8 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		}
 
 		d.cythonCpp = append(d.cythonCpp, &CythonStmt{
-			Src:     expandStmtToken(v.Args[0], env),
-			Options: expandStmtTokens(v.Args[1:], env),
+			Src:     v.Args[0],
+			Options: v.Args[1:],
 			CMode:   true,
 		})
 		d.cythonNumpyBeforeInclude = true
@@ -1300,7 +1300,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			ThrowFmt("gen: PY_NAMESPACE expects exactly 1 argument, got %d", len(v.Args))
 		}
 
-		d.pyNamespace = stringPtr(expandStmtToken(v.Args[0], env))
+		d.pyNamespace = stringPtr(v.Args[0])
 	case tokYqlLastAbiVersion:
 		if len(v.Args) != 0 {
 			ThrowFmt("YQL_LAST_ABI_VERSION expects exactly 0 arguments, got %d", len(v.Args))
@@ -1342,15 +1342,9 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		const googleapisPeer = "contrib/libs/googleapis-common-protos"
 		d.peerdirs = append([]string{googleapisPeer}, d.peerdirs...)
 	case tokFlatcFlags:
-		d.flatcFlags = append(d.flatcFlags, internArgs(expandListVars(v.Args, env))...)
+		d.flatcFlags = append(d.flatcFlags, internArgs(v.Args)...)
 	case tokCopyFile, tokCopyFileWithContext:
-		args := expandListVars(v.Args, env)
-
-		for i := range args {
-			args[i] = expandStmtToken(args[i], env)
-		}
-
-		entry := parseCopyFileEntry(args, v.Name == tokCopyFileWithContext, v.Line)
+		entry := parseCopyFileEntry(v.Args, v.Name == tokCopyFileWithContext, v.Line)
 		d.copyFiles = append(d.copyFiles, entry)
 
 		if entry.Auto {
@@ -1372,7 +1366,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			}
 		}
 	case tokCopy:
-		for _, entry := range parseCopyEntries(expandListVars(v.Args, env), v.Line) {
+		for _, entry := range parseCopyEntries(v.Args, v.Line) {
 			d.copyFiles = append(d.copyFiles, entry)
 
 			if entry.Auto {
@@ -1399,7 +1393,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			ThrowFmt("gen: PROTO_NAMESPACE expects at least 1 argument")
 		}
 
-		d.protoNamespace = stringPtr(expandStmtToken(v.Args[len(v.Args)-1], env))
+		d.protoNamespace = stringPtr(v.Args[len(v.Args)-1])
 
 		for _, arg := range v.Args[:len(v.Args)-1] {
 			if arg == "GLOBAL" {
@@ -1439,7 +1433,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			ThrowFmt("YA_CONF_JSON expects exactly 1 argument, got %d", len(v.Args))
 		}
 
-		d.yaConfJSON = append(d.yaConfJSON, expandStmtToken(v.Args[0], env))
+		d.yaConfJSON = append(d.yaConfJSON, v.Args[0])
 	case tokAllocator:
 		applyAllocatorStmt(v, d)
 	case tokArchive:
@@ -1493,7 +1487,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			ThrowFmt("gen: SRC() requires at least 1 argument (filename); got 0 at line %d", v.Line)
 		}
 
-		filename := expandStmtToken(v.Args[0], env)
+		filename := v.Args[0]
 		d.srcs = append(d.srcs, filename)
 
 		if d.flatSrcs == nil {
@@ -1507,7 +1501,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 				d.perSrcCFlags = map[string][]ARG{}
 			}
 
-			extras := internArgs(expandStmtTokens(v.Args[1:], env))
+			extras := internArgs(v.Args[1:])
 			d.perSrcCFlags[filename] = append(d.perSrcCFlags[filename], extras...)
 		}
 	case tokSrcCNoLto:
@@ -1537,10 +1531,10 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			ThrowFmt("gen: %s() requires at least 1 argument (filename); got 0 at line %d", v.Name, v.Line)
 		}
 
-		filename := expandStmtToken(v.Args[0], env)
+		filename := v.Args[0]
 		flags := make([]string, 0, len(variant.CFlags)+len(v.Args)-1)
 		flags = append(flags, variant.CFlags...)
-		flags = append(flags, expandStmtTokens(v.Args[1:], env)...)
+		flags = append(flags, v.Args[1:]...)
 
 		d.simdSrcs = append(d.simdSrcs, simdSrc{
 			Src:     filename,
@@ -1862,11 +1856,11 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		if len(v.Args) >= 2 {
 			switch v.Args[0] {
 			case "SFLAGS":
-				d.sFlags = append(d.sFlags, internArgs(expandStmtTokens(v.Args[1:], env))...)
+				d.sFlags = append(d.sFlags, internArgs(v.Args[1:])...)
 			case "_PROTOC_FLAGS":
-				d.protocFlags = append(d.protocFlags, internArgs(expandStmtTokens(v.Args[1:], env))...)
+				d.protocFlags = append(d.protocFlags, internArgs(v.Args[1:])...)
 			case "RPATH_GLOBAL":
-				for _, arg := range expandStmtTokens(v.Args[1:], env) {
+				for _, arg := range v.Args[1:] {
 					arg = strings.ReplaceAll(arg, `${"$"}`, "$")
 					d.rpathFlagsGlobal = append(d.rpathFlagsGlobal, internArg(arg))
 				}
@@ -1913,7 +1907,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			d.unhandledMacros = map[string][]string{}
 		}
 
-		d.unhandledMacros[v.Name.String()] = append(d.unhandledMacros[v.Name.String()], expandStmtTokens(v.Args, env)...)
+		d.unhandledMacros[v.Name.String()] = append(d.unhandledMacros[v.Name.String()], v.Args...)
 		recordIgnoredMacro(v.Name.String(), v.Args)
 	}
 }
@@ -2423,34 +2417,6 @@ func isExpandVarName(s string) bool {
 
 func expandScalarVarRef(s string, env Environment) string {
 	return expandStmtToken(s, env)
-}
-
-func expandListVars(items []string, env Environment) []string {
-	out := make([]string, 0, len(items))
-
-	for _, item := range items {
-		if strings.HasPrefix(item, "${") && strings.HasSuffix(item, "}") {
-			name := strings.TrimSuffix(strings.TrimPrefix(item, "${"), "}")
-
-			value, ok := env.Lookup(name)
-
-			if !ok {
-				continue
-			}
-
-			if value == "" || value == "no" {
-				continue
-			}
-
-			out = append(out, strings.Fields(value)...)
-
-			continue
-		}
-
-		out = append(out, item)
-	}
-
-	return out
 }
 
 func applyAllPySrcs(fs FS, modulePath string, v *UnknownStmt, d *moduleData) {
