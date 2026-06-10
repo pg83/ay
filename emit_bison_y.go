@@ -22,6 +22,8 @@ var bisonCppSkeletonInputs = []VFS{
 	Intern("$(S)/contrib/tools/bison/data/skeletons/yacc.c"),
 }
 
+var bisonCppSkeletonDirectives = quotedDirectives(bisonCppSkeletonInputs)
+
 func dedupIncludeDirectives(directives []includeDirective) []includeDirective {
 	if len(directives) == 0 {
 		return nil
@@ -43,14 +45,11 @@ func dedupIncludeDirectives(directives []includeDirective) []includeDirective {
 }
 
 func bisonCppHeaderParsed(srcVFS VFS) []includeDirective {
-	parsed := make([]includeDirective, 0, 1+len(bisonCppSkeletonInputs))
+	parsed := make([]includeDirective, 0, 1+len(bisonCppSkeletonDirectives))
 	parsed = append(parsed,
 		includeDirective{kind: includeQuoted, target: internStr(bisonPreprocessPyVFS.Rel())},
 	)
-
-	for _, input := range bisonCppSkeletonInputs {
-		parsed = append(parsed, includeDirective{kind: includeQuoted, target: internStr(input.Rel())})
-	}
+	parsed = append(parsed, bisonCppSkeletonDirectives...)
 
 	return dedupIncludeDirectives(parsed)
 }

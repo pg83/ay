@@ -12,7 +12,8 @@ var (
 	// generated output (was ~260k internStr/run on sg5: the 187-entry deep list
 	// times every pb.cc/grpc.pb.cc). append copies these into the per-output slice,
 	// so sharing the read-only backing is safe.
-	protobufRuntimeDirectives = quotedDirectives(protobufRuntimeHeaders)
+	protobufRuntimeDirectives      = quotedDirectives(protobufRuntimeHeaders)
+	pbDescriptorImporterDirectives = quotedDirectives(pbDescriptorImporterHeaders)
 )
 
 func quotedDirectives(headers []VFS) []includeDirective {
@@ -55,12 +56,9 @@ func protoDirectPbHIncludes(pm *includeParserManager, srcRel, outputRoot string)
 }
 
 func pbHEmitsIncludesExtras(protoRelPath string, hasDescriptor bool) []includeDirective {
-	out := make([]includeDirective, 0, len(pbDescriptorImporterHeaders)+3)
+	out := make([]includeDirective, 0, len(pbDescriptorImporterDirectives)+3)
 	out = append(out, includeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.Rel())})
-
-	for _, v := range pbDescriptorImporterHeaders {
-		out = append(out, includeDirective{kind: includeQuoted, target: internStr(v.Rel())})
-	}
+	out = append(out, pbDescriptorImporterDirectives...)
 
 	if hasDescriptor {
 		out = append(out, includeDirective{kind: includeQuoted, target: internStr(pbDescriptorVFS.Rel())})
