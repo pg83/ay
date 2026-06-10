@@ -58,6 +58,11 @@ type Platform struct {
 	// once per platform so the per-CC-node compile line doesn't re-intern it.
 	TargetArg STR
 
+	// MarchArgs is the pre-interned -march=<March> arg vector (nil when March is
+	// empty), computed once per platform so compileFlagBundleFor doesn't re-intern
+	// it per compile node.
+	MarchArgs []ARG
+
 	CFlags   []ARG
 	CXXFlags []ARG
 
@@ -148,6 +153,10 @@ func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, 
 
 	p.TargetArg = internStr("--target=" + p.Triple)
 	p.MultiarchLibPathSTR = internStr(p.MultiarchLibPath())
+
+	if p.March != "" {
+		p.MarchArgs = []ARG{internArg("-march=" + p.March)}
+	}
 
 	compress := confCompressesDebug(fs)
 	p.CompressDebugSections = compress && !buildRelease && os == OSLinux
