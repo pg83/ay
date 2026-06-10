@@ -221,7 +221,9 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 			ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl, d.cythonNumpyBeforeInclude)
 		}
 
-		ccIn.IncludeInputs = genPy3RegScriptChunk
+		// IncludeInputs is the full input window: the compiled register cpp
+		// itself plus the generator script.
+		ccIn.IncludeInputs = []VFS{regCppVFS, genPy3RegScriptVFS}
 
 		if len(in.CFlags) > 0 {
 			filtered := make([]ARG, 0, len(in.CFlags))

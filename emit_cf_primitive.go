@@ -36,7 +36,7 @@ func EmitCF(
 			},
 		},
 		Env:     env,
-		Inputs:  inputChunks{{configureFilePyVFS, srcVFS}, includeInputs},
+		Inputs:  inputChunks{{configureFilePyVFS}, includeInputs},
 		KV:      KV{P: pkCF, PC: pcYellow},
 		Outputs: []VFS{outVFS},
 		TargetProperties: func() TargetProperties {

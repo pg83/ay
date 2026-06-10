@@ -70,7 +70,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 			},
 		},
 		Env:              env,
-		Inputs:           inputChunks{{yasmBinaryVFS, inVFS}, in.IncludeInputs},
+		Inputs:           inputChunks{{yasmBinaryVFS}, in.IncludeInputs},
 		Outputs:          []VFS{outVFS},
 		KV:               KV{P: pkAS, PC: pcLightGreen},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},

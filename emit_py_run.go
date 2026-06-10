@@ -159,7 +159,7 @@ func pyInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 	var out []VFS
 	walkOne := func(rel string) {
 		buildRootPath := copyFileOutputVFS(instance.Path.Rel(), rel)
-		out = append(out, walkClosure(ctx, instance, buildRootPath, scanIn)...)
+		out = append(out, walkClosureTail(ctx, instance, buildRootPath, scanIn)...)
 	}
 
 	hasCCShard, _ := splitCodegenDetect(stmt)
@@ -177,7 +177,7 @@ func pyInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 		// parsedIncludes) produces the correct PY-node input set.
 		for _, f := range stmt.INFiles {
 			vfs := runProgramInputVFS(ctx, instance, d, f)
-			out = append(out, walkClosure(ctx, instance, vfs, scanIn)...)
+			out = append(out, walkClosureTail(ctx, instance, vfs, scanIn)...)
 		}
 	} else {
 		// Walk every output that carries includes — the same predicate under which

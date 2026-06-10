@@ -18,7 +18,8 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 		generatedVFS := Build(instance.Path.Rel() + "/" + generated)
 
 		confVFS := Source(instance.Path.Rel() + "/" + conf)
-		inputs := []VFS{buildScriptsCheckConfigHPy, confVFS}
+		// The walk window leads with confVFS itself — no separate prepend.
+		inputs := []VFS{buildScriptsCheckConfigHPy}
 		inputs = append(inputs, walkClosure(ctx, instance, confVFS, in)...)
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -52,7 +53,8 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 
 		ccIn := in
 		ccIn.ExtraDepRefs = []NodeRef{chRef}
-		ccIn.IncludeInputs = inputs
+		// IncludeInputs is the CC input window: the generated source leads.
+		ccIn.IncludeInputs = append([]VFS{generatedVFS}, inputs...)
 
 		ccRef, ccOut, _ := EmitCC(instance, generated, generatedVFS, ccIn, ctx.host, ctx.emit)
 		out = append(out, &sourceEmit{Ref: ccRef, OutPath: ccOut})

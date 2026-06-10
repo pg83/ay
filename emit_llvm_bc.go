@@ -73,8 +73,9 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 
 			// closure is a shared cached slice (closureOf returns it uncopied) —
 			// referenced as its own chunk, never copied.
+			// closure is the input window (inputVFS included — walkClosure).
 			allInputs := inputChunks{
-				{inputVFS, clangWrapperVFS}, // ${input:"build/scripts/clang_wrapper.py"}
+				{clangWrapperVFS}, // ${input:"build/scripts/clang_wrapper.py"}
 				closure,
 			}
 

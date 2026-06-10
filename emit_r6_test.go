@@ -185,7 +185,9 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
 
+	// The closure is the rl6 source's window — the source itself leads it.
 	closure := []VFS{
+		Intern("$(S)/util/datetime/parser.rl6"),
 		Intern("$(S)/util/datetime/parser.h"),
 		Intern("$(S)/util/generic/ymath.h"),
 	}
