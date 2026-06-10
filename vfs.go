@@ -113,8 +113,10 @@ func (v VFS) LongString() string {
 	return "$(SOURCE_ROOT)/" + v.Rel()
 }
 
+// vfsHasPrefix gates on "$(": every "$( "-prefixed string we ever classify is a
+// rooted "$(S)/…" / "$(B)/…" path, so the two-byte check suffices.
 func vfsHasPrefix(s string) bool {
-	return len(s) >= vfsPrefixLen && (s[:vfsPrefixLen] == "$(S)/" || s[:vfsPrefixLen] == "$(B)/")
+	return len(s) >= vfsPrefixLen && s[0] == '$' && s[1] == '('
 }
 
 func (v VFS) MarshalJSON() ([]byte, error) {
