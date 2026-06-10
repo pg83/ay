@@ -43,59 +43,6 @@ func resolveFlatcImportPath(fs FS, includerRel, importedRel string) string {
 	return ""
 }
 
-func flatcTransitiveImports(pm *includeParserManager, fs FS, srcRel string) []VFS {
-	rootImports := flatcDirectImportNames(pm, srcRel)
-
-	if len(rootImports) == 0 {
-		return nil
-	}
-
-	seen := map[string]struct{}{}
-	scanned := map[string]struct{}{}
-	imports := make([]VFS, 0, len(rootImports))
-
-	var walk func(string)
-	walk = func(rel string) {
-		if _, done := scanned[rel]; done {
-			return
-		}
-
-		scanned[rel] = struct{}{}
-
-		for _, imp := range flatcDirectImportNames(pm, rel) {
-			resolved := resolveFlatcImportPath(fs, rel, imp)
-
-			if resolved == "" {
-				continue
-			}
-
-			if _, ok := seen[resolved]; !ok {
-				seen[resolved] = struct{}{}
-				imports = append(imports, Source(resolved))
-			}
-
-			walk(resolved)
-		}
-	}
-
-	for _, imp := range rootImports {
-		resolved := resolveFlatcImportPath(fs, srcRel, imp)
-
-		if resolved == "" {
-			continue
-		}
-
-		if _, ok := seen[resolved]; !ok {
-			seen[resolved] = struct{}{}
-			imports = append(imports, Source(resolved))
-		}
-
-		walk(resolved)
-	}
-
-	return imports
-}
-
 func flatcDirectGeneratedHeaderIncludes(pm *includeParserManager, fs FS, srcRel string) []includeDirective {
 	direct := flatcDirectImportNames(pm, srcRel)
 
@@ -223,7 +170,7 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 
 	flatcRes := ctx.toolResult(argContribLibsFlatbuffersFlatc)
 	flatcLDRef, flatcBinary := flatcRes.LDRef, *flatcRes.LDPath
-	transitiveImports := flatcTransitiveImports(ctx.parsers, ctx.fs, srcVFS.Rel())
+	transitiveImports := windowImports(walkClosure(ctx, instance, srcVFS, ModuleCCInputs{}), srcVFS)
 	flRef, headerVFS, cppVFS, bfbsVFS := EmitFL(instance, srcVFS.Rel(), srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, d.tc, ctx.emit)
 
 	// flatc's INDUCED_DEPS(h+cpp …) — flatbuffers.h + flatbuffers_iter.h, declared

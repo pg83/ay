@@ -300,3 +300,20 @@ func includeScannerBasePaths() []VFS {
 		contribLibsLinuxHeadersNf,
 	}
 }
+
+// windowImports returns the window without its root — the transitive-import
+// chunk shape the codegen emitters feed their nodes. Value-keyed (not [1:]):
+// an SCC-member source leads its shared window with the SCC head.
+func windowImports(window []VFS, root VFS) []VFS {
+	var out []VFS
+
+	for _, v := range window {
+		if v == root {
+			continue
+		}
+
+		out = append(out, v)
+	}
+
+	return out
+}
