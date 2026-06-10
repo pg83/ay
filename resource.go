@@ -337,7 +337,7 @@ type pySrcChunk struct {
 	keys     []string
 	kvsHash  []string
 	kvsCmd   []string
-	pathInps []string
+	pathInps []VFS
 
 	inps []VFS
 }
@@ -391,7 +391,7 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 		kb64 := encb64.StdEncoding.EncodeToString([]byte(e.key))
 		cur.paths = append(cur.paths, e.pathHash)
 		cur.keys = append(cur.keys, kb64)
-		cur.pathInps = append(cur.pathInps, e.pathInput.String())
+		cur.pathInps = append(cur.pathInps, e.pathInput)
 		addInps(e)
 		cmdLen += rootCmdLen + len(e.pathHash) + len(kb64)
 
