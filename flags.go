@@ -146,6 +146,18 @@ var catboostOpenSourceDefine = []ARG{
 	argDcatboostOpensourceYes,
 }
 
+// catboostOpenSourceDefineFor returns the -DCATBOOST_OPENSOURCE=yes define only
+// for opensource builds (OPENSOURCE=yes in the repo ya.conf [flags]). Upstream's
+// build/conf/opensource.conf gates it on OPENSOURCE, so internal-contour builds
+// (where OPENSOURCE is unset) must omit it.
+func catboostOpenSourceDefineFor(p *Platform) []ARG {
+	if p.Flags[envOPENSOURCE] == strYes {
+		return catboostOpenSourceDefine
+	}
+
+	return nil
+}
+
 var builtinMacroDateTime = []ARG{
 	argWnoBuiltinMacroRedefined,
 	argDDateJan102019,

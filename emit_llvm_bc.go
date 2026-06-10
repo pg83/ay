@@ -264,7 +264,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	// The upstream macro passes the same CXXFLAGS set to the BC compile as to
 	// regular CC; the only structural differences are ordering of --target/-B
 	// and the omissions listed in the function comment above.
-	args = appendCompileFlagPipeline(args, bundle, warningBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags)
+	args = appendCompileFlagPipeline(args, bundle, warningBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboostOpenSourceDefineFor(platform))
 
 	args = appendCxxStdAndOwn(args, true, in.Flags.NoCompilerWarnings, true, ownExtras)
 
@@ -273,7 +273,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	// appendCompileFlagPipeline) and from the OwnGlobalBucket/PeerCXXFlagsGlobal
 	// slot. The explicit catboostOpenSourceDefine ensures the flag is present even
 	// when PeerCXXFlagsGlobal is empty (same reason composeTargetCC always adds it).
-	args = appendArgStr(args, ownGlobalBucket, catboostOpenSourceDefine, composePostCatboostBucket(ownGlobalBucket))
+	args = appendArgStr(args, ownGlobalBucket, catboostOpenSourceDefineFor(platform), composePostCatboostBucket(ownGlobalBucket))
 
 	// $C_FLAGS_PLATFORM comes after $BC_CXXFLAGS (not before like in CC).
 	args = append(args, platform.TargetArg)

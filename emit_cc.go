@@ -395,8 +395,8 @@ type ccComposeArgs struct {
 	CXXArg             STR
 }
 
-func appendCompileFlagPipeline(cmdArgs []STR, bundle compileFlagBundle, warningBundle, defineBundle, preNoLibcExtras, moduleScopeCFlags []ARG) []STR {
-	return appendArgStr(cmdArgs, debugPrefixMapFlags, xclangDebugCompilationDir, bundle.CFlags, warningBundle, defineBundle, preNoLibcExtras, bundle.NoLibcBlock, catboostOpenSourceDefine, moduleScopeCFlags, bundle.NoLibcBlock)
+func appendCompileFlagPipeline(cmdArgs []STR, bundle compileFlagBundle, warningBundle, defineBundle, preNoLibcExtras, moduleScopeCFlags, catboost []ARG) []STR {
+	return appendArgStr(cmdArgs, debugPrefixMapFlags, xclangDebugCompilationDir, bundle.CFlags, warningBundle, defineBundle, preNoLibcExtras, bundle.NoLibcBlock, catboost, moduleScopeCFlags, bundle.NoLibcBlock)
 }
 
 func composeTargetCC(a ccComposeArgs) []STR {
@@ -428,7 +428,7 @@ func composeTargetCC(a ccComposeArgs) []STR {
 	}
 
 	cmdArgs = appendAddIncl(cmdArgs, peerAddIncl, a.InclArgs)
-	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warningBundle, bundle.Defines, a.OwnCFlags, a.ModuleScopeCFlags)
+	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warningBundle, bundle.Defines, a.OwnCFlags, a.ModuleScopeCFlags, catboostOpenSourceDefineFor(a.Platform))
 
 	var cOnlyExtras []ARG
 
@@ -439,7 +439,7 @@ func composeTargetCC(a ccComposeArgs) []STR {
 	}
 
 	if a.IsCxx {
-		cmdArgs = appendArgStr(cmdArgs, a.OwnGlobalBucket, catboostOpenSourceDefine, composePostCatboostBucket(a.OwnGlobalBucket))
+		cmdArgs = appendArgStr(cmdArgs, a.OwnGlobalBucket, catboostOpenSourceDefineFor(a.Platform), composePostCatboostBucket(a.OwnGlobalBucket))
 	} else {
 		cmdArgs = appendArgStr(cmdArgs, a.PeerExtras)
 	}

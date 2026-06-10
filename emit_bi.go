@@ -79,11 +79,11 @@ func biFlagsForInstance(targetP *Platform) []STR {
 	bundle := compileFlagBundleFor(targetP)
 	flags := make([]STR, 0, 100)
 	cflagPrefix := append(muslCFlags(targetP.Flags[envMUSL] == strYes), sseBaseCFlags(targetP.ISA == ISAX8664)...)
-	flags = appendCompileFlagPipeline(flags, bundle, warningFlags, bundle.Defines, targetP.CFlags, cflagPrefix)
+	flags = appendCompileFlagPipeline(flags, bundle, warningFlags, bundle.Defines, targetP.CFlags, cflagPrefix, catboostOpenSourceDefineFor(targetP))
 	flags = append(flags, (cxxStandardFlag).str())
 	flags = appendArgStr(flags, cxxStandardWarnings)
 	flags = append(flags, (baseUnitCxxNostdinc).str())
-	flags = appendArgStr(flags, catboostOpenSourceDefine)
+	flags = appendArgStr(flags, catboostOpenSourceDefineFor(targetP))
 	flags = append(flags, (baseUnitCxxNostdinc).str())
 	return flags
 }
