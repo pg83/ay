@@ -362,9 +362,12 @@ func marchFor(isa ISA) string {
 // clang root in these executor-env / linker-selection helpers is the bare $(CLANG)
 // resource pattern (the same form the executor mounts).
 func (p *Platform) MultiarchLibPath() string {
-	path := "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/" + p.Triple
+	// The SDK lib dir is the OS_SDK_ROOT resource ($(B)/resources/OS_SDK_ROOT, which
+	// normalizes to $(OS_SDK_ROOT)), not the raw $OS_SDK_ROOT_RESOURCE_GLOBAL macro —
+	// upstream's TOOLCHAIN_ENV resolves the global to the fetched resource path.
+	sdkLib := "$(B)/resources/" + resourcePatternOSSDKRoot + "/usr/lib/" + p.Triple
 
-	return "$(B)/resources/" + resourcePatternClangTool + p.ClangVer + "/lib:" + path
+	return "$(B)/resources/" + resourcePatternClangTool + p.ClangVer + "/lib:" + sdkLib
 }
 
 func (p *Platform) ToolEnv() EnvVars {

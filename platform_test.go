@@ -117,7 +117,7 @@ func TestPlatformMultiarchLibPath_UsesCompilerRoot(t *testing.T) {
 		"LLD_TOOL":         "$(LLD_ROOT)/bin/ld.lld",
 	}, []string{"tool"}, "", "")
 
-	if got, want := p.MultiarchLibPath(), "$(B)/resources/CLANG20/lib:$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu"; got != want {
+	if got, want := p.MultiarchLibPath(), "$(B)/resources/CLANG20/lib:$(B)/resources/OS_SDK_ROOT/usr/lib/x86_64-linux-gnu"; got != want {
 		t.Fatalf("MultiarchLibPath = %q, want %q", got, want)
 	}
 }
