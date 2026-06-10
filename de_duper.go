@@ -34,6 +34,13 @@ func (dd *deDuper) add(v VFS) bool {
 	return true
 }
 
+// has reports whether v was added since the last reset. Valid only between a
+// reset and the next reset, under the same single-set contract as add: callers
+// build one logical set via add, then query membership via has.
+func (dd *deDuper) has(v VFS) bool {
+	return dd.seen.has(v)
+}
+
 func (dd *deDuper) dedupVFS(lists ...[]VFS) []VFS {
 	total := 0
 
