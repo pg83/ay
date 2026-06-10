@@ -55,17 +55,16 @@ pprof до/после + `./dev/validate.py` (байт-в-байт).
 
 ## Tier 2 — средние (2–3% каждая)
 
-### 3. Сырой syscall-путь чтения файлов
+### 3. Сырой syscall-путь чтения файлов — СДЕЛАНО
 
-- **Где**: `fs.go:287` (`readIntoRaw`).
-- **Доказательство**: `os.Open` = 1120 ms, из них сам openat-syscall 860 ms —
-  остаток (~260 ms) это аллокация `os.File` + финализатор + `poll.FD`;
-  `f.Read` через `ignoringEINTRIO` добавляет ~200 ms обвязки над read(2) (990 ms).
-  44.6k чтений/прогон (parsedMisses).
-- **Механизм**: `syscall.Openat(dirfd(srcRoot), rel)` + `Fstat` + `Read` +
-  `Close` — без `os.File`, финализаторов и poll-обвязки; dirfd-relative open
-  заодно срезает kernel path-walk префикса source root.
-- **Ожидание**: ~3%.
+**Результат (10x sg5)**: `osFS.Read` cum 2030→1730 ms (−15% пути чтения, −3%
+профиля); тёплый wall 1.02→0.99-1.00 s. Реализация: per-platform
+`readFileInto` — `fs_read_linux.go` (сырые open/fstat/read/close с
+EINTR-ретраями, без `os.File`/финализатора/poll.FD) + `fs_read_other.go`
+(`//go:build !linux`, прежний os.File-путь с `f.Stat()` вместо
+Linux-специфичного `syscall.Fstat` — заодно убрал Stat_t из fs.go, darwin/
+windows-совместимо). Счётчики идентичны, гейт байт-в-байт. dirfd-relative
+openat (п.10) не делался — отдельная мелочь.
 
 ### 4. `hashScanContext` по интернированным id вместо байтов строк — СДЕЛАНО
 
