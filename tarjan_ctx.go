@@ -211,14 +211,7 @@ func (tc *tarjanCtx) strongconnect(g closureSink, v VFS) (hits uint64) {
 				}
 
 				win, _ := g.cachedWindow(ch)
-
-				for _, id := range win {
-					if !tc.closure.has(id) {
-						tc.closure.add(id)
-						block[k] = id
-						k++
-					}
-				}
+				k = tc.closure.spliceNew(win, block, k)
 			})
 		}
 

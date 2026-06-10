@@ -58,3 +58,36 @@ func (s *IdSet) add(v VFS) {
 
 	s.gen[id] = s.epoch
 }
+
+// spliceNew appends the window's not-yet-present ids to block[k:], stamping
+// them present, and returns the new k — the splice inner loop of dfs pass-2 /
+// strongconnect. gen and epoch are hoisted into locals: through the receiver
+// the compiler reloads s.gen (pointer and length) and s.epoch on every
+// iteration, since the gen[id] store could alias the fields — the dfs.func2
+// disasm showed 4 dependent loads per element where the hoisted form keeps
+// them in registers. reset(size) presizes gen to the id bound, so the grow
+// fallback (add + re-hoist) is never hit in practice.
+func (s *IdSet) spliceNew(win []VFS, block []VFS, k int) int {
+	gen := s.gen
+	epoch := s.epoch
+
+	for _, v := range win {
+		id := uint32(v)
+
+		if id < uint32(len(gen)) {
+			if gen[id] == epoch {
+				continue
+			}
+
+			gen[id] = epoch
+		} else {
+			s.add(v)
+			gen = s.gen
+		}
+
+		block[k] = v
+		k++
+	}
+
+	return k
+}
