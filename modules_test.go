@@ -331,3 +331,18 @@ func TestCollectModule_PySrcsExpandsSetList(t *testing.T) {
 		t.Fatalf("pySrcs = %v, want [a.py b.py]", d.pySrcs)
 	}
 }
+
+func TestExpandConfigVFSPaths_SplitsSetList(t *testing.T) {
+	// ADDINCL(${__dirs_}) where __dirs_ is a SET-list must expand+split into one
+	// VFS per dir (bdb: src + src/dbinc + …), via the same expandStmtTokens
+	// primitive the typed-macro args use — not a single path with embedded spaces.
+	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
+	env.SetFromString(internEnv("DIRS"), "contrib/deprecated/bdb/src contrib/deprecated/bdb/src/dbinc")
+
+	got := expandConfigVFSPaths([]string{"${DIRS}"}, env)
+	want := []VFS{Source("contrib/deprecated/bdb/src"), Source("contrib/deprecated/bdb/src/dbinc")}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("expandConfigVFSPaths = %v, want %v", got, want)
+	}
+}

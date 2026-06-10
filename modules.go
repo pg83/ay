@@ -2222,10 +2222,14 @@ func buildIfEnv(instance ModuleInstance) Environment {
 }
 
 func expandConfigVFSPaths(paths []string, env Environment) []VFS {
-	out := make([]VFS, 0, len(paths))
+	// Expand+split through the shared arg-expansion primitive: a ${VAR} holding a
+	// SET-list (e.g. ADDINCL(${__dirs_})) yields one VFS per dir, matching the
+	// typed-macro argument semantics rather than a single space-joined path.
+	expanded := expandStmtTokens(paths, env)
+	out := make([]VFS, 0, len(expanded))
 
-	for _, path := range paths {
-		out = append(out, parseModulePathVFS(expandStmtToken(path, env)))
+	for _, path := range expanded {
+		out = append(out, parseModulePathVFS(path))
 	}
 
 	return out
