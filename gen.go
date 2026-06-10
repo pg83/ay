@@ -557,6 +557,15 @@ func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
 		return strings.ReplaceAll(path.Clean(instance.Path.Rel()), "/", "-")
 	}
 
+	// PY3_PROGRAM_BIN's documented sole use is a bin/ya.make INCLUDEd into a parent
+	// ya.make; the program then takes the *including* module's directory name, not the
+	// macro's progname argument (upstream REALPRJNAME stays the module-dir basename —
+	// e.g. tools/py3cc/slow/bin's PY3_PROGRAM_BIN(py3cc), INCLUDEd into tools/py3cc/slow,
+	// links as .../slow). Fall through to the dir-basename default.
+	if moduleStmt.Name == tokPy3ProgramBin {
+		return ""
+	}
+
 	if len(moduleStmt.Args) > 0 {
 		return moduleStmt.Args[0]
 	}
