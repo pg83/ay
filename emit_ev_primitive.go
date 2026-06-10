@@ -4,7 +4,14 @@ import (
 	"sync"
 )
 
-var evEventlogIncludePath = evEventlogIncludeVFS.String()
+var (
+	evEventlogIncludePath = evEventlogIncludeVFS.String()
+	// Lazy (not init-time like protobufRuntimeDirectives): these lists are only
+	// reached for .ev sources, so eager interning would grow the intern table on
+	// targets that never build them.
+	evExtraProtobufDirectives = sync.OnceValue(func() []includeDirective { return quotedDirectives(evExtraProtobufHeaders) })
+	evAbseilCleanupDirectives = sync.OnceValue(func() []includeDirective { return quotedDirectives(evAbseilCleanupHeaders) })
+)
 
 var evExtraProtobufHeaders = []VFS{
 	Source(pbRuntimeBase + "google/protobuf/io/printer.h"),
@@ -18,14 +25,6 @@ var evAbseilCleanupHeaders = []VFS{
 	Intern("$(S)/contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/cleanup.h"),
 	Intern("$(S)/contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/internal/cleanup.h"),
 }
-
-// Lazy (not init-time like protobufRuntimeDirectives): these lists are only
-// reached for .ev sources, so eager interning would grow the intern table on
-// targets that never build them.
-var (
-	evExtraProtobufDirectives = sync.OnceValue(func() []includeDirective { return quotedDirectives(evExtraProtobufHeaders) })
-	evAbseilCleanupDirectives = sync.OnceValue(func() []includeDirective { return quotedDirectives(evAbseilCleanupHeaders) })
-)
 
 func evWitnessExtras(evRelPath string, evPbCC VFS) []includeDirective {
 	evExtraProtobuf := evExtraProtobufDirectives()
