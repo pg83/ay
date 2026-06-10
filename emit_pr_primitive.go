@@ -99,17 +99,18 @@ func EmitPR(
 	}
 
 	toolRefs := make([]NodeRef, 0, len(auxTools)+1)
-	seenToolRefs := make(map[NodeRef]struct{}, len(auxTools)+1)
+	// The inputs set above is complete by now, so the deduper is free for the
+	// tool-ref set.
+	deduper.reset()
 	appendToolRef := func(ref NodeRef) {
 		if ref == (NodeRef(0)) {
 			return
 		}
 
-		if _, dup := seenToolRefs[ref]; dup {
+		if !deduper.add(VFS(ref)) {
 			return
 		}
 
-		seenToolRefs[ref] = struct{}{}
 		toolRefs = append(toolRefs, ref)
 	}
 

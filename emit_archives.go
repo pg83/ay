@@ -34,7 +34,7 @@ func emitArchive(
 	}
 
 	producerRefs := []NodeRef{}
-	producerSet := map[NodeRef]struct{}{}
+	deduper.reset()
 	pathPerFile := make([]VFS, 0, len(a.Files))
 
 	for _, f := range a.Files {
@@ -44,8 +44,7 @@ func emitArchive(
 			if ref, ok := d.prOutputProducer[f]; ok {
 				isPRProduced = true
 
-				if _, dup := producerSet[ref]; !dup {
-					producerSet[ref] = struct{}{}
+				if deduper.add(VFS(ref)) {
 					producerRefs = append(producerRefs, ref)
 				}
 			}

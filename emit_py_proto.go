@@ -413,14 +413,16 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 	var chunks []chunk
 	cur := chunk{}
 	cmdLen := 0
-	inputSeen := map[VFS]struct{}{}
+	// Chunk accumulation runs no deduper user (the dedupVFS calls below follow
+	// the final flush), so the input set lives on the deduper, reset per flush.
+	// depSeen stays a local map: it is live simultaneously with the input set.
+	deduper.reset()
 	depSeen := map[NodeRef]struct{}{}
 	addInput := func(v VFS) {
-		if _, ok := inputSeen[v]; ok {
+		if !deduper.add(v) {
 			return
 		}
 
-		inputSeen[v] = struct{}{}
 		cur.inputs = append(cur.inputs, v)
 	}
 	addDep := func(ref NodeRef) {
@@ -443,7 +445,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		chunks = append(chunks, cur)
 		cur = chunk{}
 		cmdLen = 0
-		inputSeen = map[VFS]struct{}{}
+		deduper.reset()
 		depSeen = map[NodeRef]struct{}{}
 	}
 

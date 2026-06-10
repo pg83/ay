@@ -184,16 +184,17 @@ func swigIncludeClosure(ctx *genCtx, src VFS) []VFS {
 }
 
 func collectSwigInducedIncludes(ctx *genCtx, src VFS, closure []VFS) []includeDirective {
-	seen := map[includeDirective]struct{}{}
+	// The swig parse path between adds (fs.Read -> swigIncludeDirectiveParser.Parse)
+	// never touches the deduper, so the set may live on it across the whole walk.
+	deduper.reset()
 	var out []includeDirective
 
 	add := func(rel string) {
 		for _, d := range swigSourceParsedBuckets(ctx, rel).bucket(parsedIncludesCpp) {
-			if _, ok := seen[d]; ok {
+			if !deduper.add(directiveID(d)) {
 				continue
 			}
 
-			seen[d] = struct{}{}
 			out = append(out, d)
 		}
 	}
