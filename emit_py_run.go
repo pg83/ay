@@ -261,6 +261,17 @@ func splitCodegenSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt 
 
 	addInducedSources := func(deps []includeDirective) {
 		for _, d := range deps {
+			// INDUCED_DEPS targets arrive rooted ($(S)/... — the reserved
+			// ${ARCADIA_ROOT}-family spellings); the STR already backs the
+			// full path, so the binding is a shift.
+			if v := d.target.vfs(); v != 0 {
+				if v.IsSource() && ctx.fs.IsFile(srcRootVFS, v.Rel()) {
+					addSource(v)
+				}
+
+				continue
+			}
+
 			target := d.target.String()
 
 			if ctx.fs.IsFile(srcRootVFS, target) {

@@ -1115,3 +1115,22 @@ func TestScanner_AddInclBuildOnlyMatchesCodegen(t *testing.T) {
 		t.Fatalf("got=%v, want=%v (build-only target must resolve via codegen)", got, want)
 	}
 }
+
+func TestScanCtx_Resolve_RootedTargetBindsDirectly(t *testing.T) {
+	// A rooted directive target (INDUCED_DEPS via the reserved
+	// ${ARCADIA_ROOT}-family refs, expanded to $(S)/$(B)) binds to its root
+	// without include search, sysincl, or FS checks — upstream's
+	// ResolveAsKnownWithoutCheck. The memFS is empty on purpose: no search
+	// path could find these, and no FS check must run.
+	scanner := newTestScanner(newMemFS(nil), nil)
+	sc := scanner.NewScanCtx(ScanContext{})
+
+	for _, target := range []string{"$(S)/util/generic/typetraits.h", "$(B)/pkg/gen.h"} {
+		d := includeDirective{kind: includeQuoted, target: internStr(target)}
+		got := sc.resolve(Intern("$(S)/pkg/a.cpp"), dirKey("pkg"), d)
+
+		if len(got) != 1 || got[0] != Intern(target) {
+			t.Errorf("resolve(%s) = %v, want [%s]", target, got, target)
+		}
+	}
+}

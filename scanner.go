@@ -622,6 +622,15 @@ func (sc *scanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 }
 
 func (sc *scanCtx) resolve(includerAbs, incDir VFS, d includeDirective) (out []VFS) {
+	// A rooted target ($(S)/... or $(B)/...) is already bound to its root —
+	// INDUCED_DEPS spells deps via the reserved ${ARCADIA_ROOT}-family refs.
+	// Upstream classifies such paths directly (ResolveAsKnownWithoutCheck →
+	// NPath::ToYPath), with no include search, sysincl, or FS check; mirror
+	// that. The STR already backs the full path, so the binding is a shift.
+	if v := d.target.vfs(); v != 0 {
+		return []VFS{v}
+	}
+
 	s := sc.scanner
 
 	var sysinclClaimed bool

@@ -1875,9 +1875,13 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			toCpp := v.Args[0] != "h"
 
 			for _, p := range v.Args[1:] {
-				// Args arrive expanded (${ARCADIA_ROOT} is an env binding), so
-				// the source-root spelling is its $(S)/ form.
-				p = strings.TrimPrefix(p, "$(S)/")
+				// Args arrive expanded; a rooted spelling ($(S)/... or $(B)/...,
+				// from the reserved ${ARCADIA_ROOT}-family refs) stays in the
+				// target as is — sc.resolve binds it to its root directly, the
+				// way upstream's ResolveAsKnownWithoutCheck classifies rooted
+				// paths instead of include-searching them. A bare rel keeps
+				// quoted-include search semantics (upstream delays those to
+				// include resolution).
 				dir := includeDirective{kind: includeQuoted, target: internStr(p)}
 
 				if toHeader {
