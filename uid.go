@@ -218,7 +218,7 @@ func (c *canonBuf) writeTargetProperties(t TargetProperties) {
 func (c *canonBuf) writeKV(kv KV) {
 	c.writeByte(byte(kv.P))
 	c.writeByte(byte(kv.PC))
-	c.writeBytes(kv.ShowOut)
+	c.writeBool(kv.ShowOut)
 	c.writeBool(kv.ShowOutBool)
 	c.writeBytes(kv.Name)
 	c.writeBytes(kv.Path)

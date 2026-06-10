@@ -129,8 +129,8 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		t.Fatalf("synthetic LD plugin markers = %v, want adjacent empty --start-plugins/--end-plugins", got.Cmds[2].CmdArgs)
 	}
 
-	if got.KV.P != pkLD || got.KV.PC != pcLightBlue || got.KV.ShowOut != "yes" {
-		t.Errorf("kv = %+v, want {P:LD PC:light-blue ShowOut:yes}", got.KV)
+	if got.KV.P != pkLD || got.KV.PC != pcLightBlue || !got.KV.ShowOut {
+		t.Errorf("kv = %+v, want {P:LD PC:light-blue ShowOut:true}", got.KV)
 	}
 
 	if got.TargetProperties.ModuleType != "bin" {

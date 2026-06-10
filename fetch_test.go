@@ -16,7 +16,7 @@ func emitTestCompileGraph(t *testing.T, host, target *Platform) *Graph {
 	fetchRefs[resourcePatternClangTool] = execResourceEmit.Emit(&Node{
 		Platform: host,
 		Cmds:     []Cmd{{CmdArgs: appendInternStrs(nil, []string{"ay", "fetch", "$(B)", "$(S)", "sbr:clang", "resources/CLANG"})}},
-		KV:       KV{P: pkFETCH, PC: pcYellow, ShowOut: "yes"},
+		KV:       KV{P: pkFETCH, PC: pcYellow, ShowOut: true},
 		Outputs:  []VFS{Build("resources/" + resourcePatternClangTool)},
 	})
 	clangTool := prebuiltToolchainFlags()["CLANG_TOOL"]

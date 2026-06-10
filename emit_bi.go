@@ -64,7 +64,7 @@ func EmitBI(
 		},
 		Env:              env,
 		Inputs:           inputs,
-		KV:               KV{P: pkBI, PC: pcYellow, ShowOut: "yes", DisableCache: "yes"},
+		KV:               KV{P: pkBI, PC: pcYellow, ShowOut: true, DisableCache: "yes"},
 		Outputs:          []VFS{outVFS},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},

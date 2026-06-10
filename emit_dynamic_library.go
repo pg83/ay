@@ -154,7 +154,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		Env:              envFull,
 		Inputs:           inputs,
 		Outputs:          []VFS{Build(instance.Path + "/" + outputName)},
-		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: "yes"},
+		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
 		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 		Sandboxing:       true,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleLang: "cpp", ModuleTag: "dll", ModuleType: "so"},
