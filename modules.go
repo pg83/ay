@@ -507,7 +507,7 @@ func collectModule(pm *includeParserManager, dd *deDuper, modulePath string, kin
 	d.addInclUserGlobal = append(d.addInclUserGlobal, d.cfAddInclGlobal...)
 	d.cfAddIncl = nil
 	d.cfAddInclGlobal = nil
-	filterInvalidAddIncl(fs, d)
+	filterInvalidAddIncl(fs, dd, d)
 
 	if kind == KindLib {
 		d.pyMain = nil
@@ -614,7 +614,7 @@ func ensureResourcePeer(modulePath string, d *moduleData) {
 	d.peerdirs = append(d.peerdirs, resourcePeer)
 }
 
-func filterInvalidAddIncl(fs FS, d *moduleData) {
+func filterInvalidAddIncl(fs FS, dd *deDuper, d *moduleData) {
 	d.addIncl = filterExistingSourceDirs(fs, d.addIncl)
 	d.addInclGlobal = filterExistingSourceDirs(fs, d.addInclGlobal)
 	d.cythonAddIncl = filterExistingSourceDirs(fs, d.cythonAddIncl)
@@ -624,24 +624,22 @@ func filterInvalidAddIncl(fs FS, d *moduleData) {
 	// survived the addInclGlobal filter (for GLOBAL paths) or are in
 	// addInclOneLevel (ONE_LEVEL paths, which are never filtered).
 	if len(d.addInclUserGlobal) > 0 {
-		validGlobal := make(map[VFS]struct{}, len(d.addInclGlobal))
+		// One union set through the deduper: the filter below only tests
+		// membership in addInclGlobal ∪ addInclOneLevel.
+		dd.reset()
 
 		for _, p := range d.addInclGlobal {
-			validGlobal[p] = struct{}{}
+			dd.add(p)
 		}
 
-		validOneLevel := make(map[VFS]struct{}, len(d.addInclOneLevel))
-
 		for _, p := range d.addInclOneLevel {
-			validOneLevel[p] = struct{}{}
+			dd.add(p)
 		}
 
 		out := d.addInclUserGlobal[:0]
 
 		for _, p := range d.addInclUserGlobal {
-			if _, ok := validGlobal[p]; ok {
-				out = append(out, p)
-			} else if _, ok := validOneLevel[p]; ok {
+			if dd.has(p) {
 				out = append(out, p)
 			}
 		}

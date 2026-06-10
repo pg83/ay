@@ -2217,23 +2217,25 @@ func filterBuildRootSelfPaths(instancePath string, peer, own []VFS) []VFS {
 		return peer
 	}
 
-	ownSet := make(map[VFS]struct{}, len(own))
 	ownPrefix := Build(instancePath)
+	deduper.reset()
+	matched := false
 
 	for _, p := range own {
 		if p.IsBuild() && (p == ownPrefix || strings.HasPrefix(p.Rel(), ownPrefix.Rel()+"/")) {
-			ownSet[p] = struct{}{}
+			deduper.add(p)
+			matched = true
 		}
 	}
 
-	if len(ownSet) == 0 {
+	if !matched {
 		return peer
 	}
 
 	out := make([]VFS, 0, len(peer))
 
 	for _, p := range peer {
-		if _, dup := ownSet[p]; dup {
+		if deduper.has(p) {
 			continue
 		}
 
@@ -2262,10 +2264,10 @@ func moveArchivePathsAfter(refs []NodeRef, paths []VFS, anchor VFS, moved []VFS)
 		return refs, paths
 	}
 
-	moveSet := make(map[VFS]struct{}, len(moved))
+	deduper.reset()
 
 	for _, path := range moved {
-		moveSet[path] = struct{}{}
+		deduper.add(path)
 	}
 
 	outRefs := make([]NodeRef, 0, len(refs))
@@ -2274,7 +2276,7 @@ func moveArchivePathsAfter(refs []NodeRef, paths []VFS, anchor VFS, moved []VFS)
 	movedPaths := make(map[VFS]VFS, len(moved))
 
 	for i, path := range paths {
-		if _, ok := moveSet[path]; ok {
+		if deduper.has(path) {
 			movedRefs[path] = refs[i]
 			movedPaths[path] = path
 			continue
@@ -2305,17 +2307,17 @@ func movePathsAfter(paths []VFS, anchor VFS, moved []VFS) []VFS {
 		return paths
 	}
 
-	moveSet := make(map[VFS]struct{}, len(moved))
+	deduper.reset()
 
 	for _, path := range moved {
-		moveSet[path] = struct{}{}
+		deduper.add(path)
 	}
 
 	outPaths := make([]VFS, 0, len(paths))
 	movedPaths := make(map[VFS]VFS, len(moved))
 
 	for _, path := range paths {
-		if _, ok := moveSet[path]; ok {
+		if deduper.has(path) {
 			movedPaths[path] = path
 			continue
 		}
@@ -2343,17 +2345,17 @@ func moveArchivePathsBefore(refs []NodeRef, paths []VFS, anchor VFS, moved []VFS
 		return refs, paths
 	}
 
-	moveSet := make(map[VFS]struct{}, len(moved))
+	deduper.reset()
 
 	for _, path := range moved {
-		moveSet[path] = struct{}{}
+		deduper.add(path)
 	}
 
 	movedRefs := make(map[VFS]NodeRef, len(moved))
 	movedPaths := make(map[VFS]VFS, len(moved))
 
 	for i, path := range paths {
-		if _, ok := moveSet[path]; ok {
+		if deduper.has(path) {
 			movedRefs[path] = refs[i]
 			movedPaths[path] = path
 		}
@@ -2367,7 +2369,7 @@ func moveArchivePathsBefore(refs []NodeRef, paths []VFS, anchor VFS, moved []VFS
 	outPaths := make([]VFS, 0, len(paths))
 
 	for i, path := range paths {
-		if _, ok := moveSet[path]; ok {
+		if deduper.has(path) {
 			continue
 		}
 
@@ -2396,16 +2398,16 @@ func movePathsBefore(paths []VFS, anchor VFS, moved []VFS) []VFS {
 		return paths
 	}
 
-	moveSet := make(map[VFS]struct{}, len(moved))
+	deduper.reset()
 
 	for _, path := range moved {
-		moveSet[path] = struct{}{}
+		deduper.add(path)
 	}
 
 	movedPaths := make(map[VFS]VFS, len(moved))
 
 	for _, path := range paths {
-		if _, ok := moveSet[path]; ok {
+		if deduper.has(path) {
 			movedPaths[path] = path
 		}
 	}
@@ -2417,7 +2419,7 @@ func movePathsBefore(paths []VFS, anchor VFS, moved []VFS) []VFS {
 	outPaths := make([]VFS, 0, len(paths))
 
 	for _, path := range paths {
-		if _, ok := moveSet[path]; ok {
+		if deduper.has(path) {
 			continue
 		}
 
