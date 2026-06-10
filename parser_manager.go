@@ -180,7 +180,7 @@ func (pm *includeParserManager) parsedIncludes(vfsPath VFS) []includeDirective {
 // upstream exactly without the scanner's redundant walk).
 func scannerFollowsImports(rel string) bool {
 	switch directiveParserExt(rel) {
-	case ".proto", ".ev", ".gzt", ".gztproto", ".swg":
+	case ".swg":
 		return false
 	}
 
