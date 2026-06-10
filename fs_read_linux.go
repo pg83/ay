@@ -63,7 +63,9 @@ func openEINTR(path string) int {
 			continue
 		}
 
-		Throw(err)
+		if err != nil {
+			ThrowFmt("open %s: %v", path, err)
+		}
 
 		return fd
 	}
