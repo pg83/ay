@@ -22,6 +22,10 @@ var macroAudit = &macroAuditState{
 var macrosAcceptingUserFlags = map[string]struct{}{
 	"ENABLE":  {},
 	"DISABLE": {},
+	// EXCLUDE_TAGS args are submodule tag NAMES (GO_PROTO, JAVA_PROTO, PY_PROTO,
+	// …) — user data, not structural service-keywords — so they bypass the
+	// strict service-keyword audit.
+	"EXCLUDE_TAGS": {},
 }
 
 // macroAudit collects two classes of ya.make traffic during gen:
