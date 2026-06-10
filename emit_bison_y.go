@@ -75,9 +75,9 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	baseNoExt := strings.TrimSuffix(srcRel, filepath.Ext(srcRel))
 	headerRel := baseNoExt + ".h"
 	generatedRel := "_/" + srcRel + genExt
-	headerVFS := Build(instance.Path + "/" + headerRel)
-	generatedVFS := Build(instance.Path + "/" + generatedRel)
-	srcVFS := Source(instance.Path + "/" + srcRel)
+	headerVFS := Build(instance.Path.Rel() + "/" + headerRel)
+	generatedVFS := Build(instance.Path.Rel() + "/" + generatedRel)
+	srcVFS := Source(instance.Path.Rel() + "/" + srcRel)
 	headerParsed := []includeDirective{{kind: includeQuoted, target: internStr(srcVFS.Rel())}}
 
 	if preprocessHeader {
@@ -147,7 +147,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		Outputs:          []VFS{headerVFS, generatedVFS},
 		KV:               KV{P: pkYC, PC: pcLightGreen},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
 		usesResources:    []string{resourcePatternYMakePython3},
 	})
 	bindGeneratedOutput(ctx, instance, headerVFS, ycRef)

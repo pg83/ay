@@ -820,7 +820,7 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 	fs := newMemFS(files)
 
 	plain := ModuleInstance{
-		Path:     "consumer",
+		Path:     Source("consumer"),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,
@@ -889,7 +889,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 		{
 			name: "effective_no_platform",
 			mi: ModuleInstance{
-				Path:     "x",
+				Path:     Source("x"),
 				Kind:     KindLib,
 				Language: LangCPP,
 			},
@@ -899,7 +899,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 		{
 			name: "explicit_no_platform",
 			mi: ModuleInstance{
-				Path:     "x",
+				Path:     Source("x"),
 				Kind:     KindLib,
 				Language: LangCPP,
 			},
@@ -909,7 +909,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 		{
 			name: "no_libc_only",
 			mi: ModuleInstance{
-				Path:     "x",
+				Path:     Source("x"),
 				Kind:     KindLib,
 				Language: LangCPP,
 				Platform: testTargetP,
@@ -921,7 +921,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 		{
 			name: "no_runtime_only",
 			mi: ModuleInstance{
-				Path:     "x",
+				Path:     Source("x"),
 				Kind:     KindLib,
 				Language: LangCPP,
 				Platform: testTargetP,
@@ -933,7 +933,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 		{
 			name: "non_cpp",
 			mi: ModuleInstance{
-				Path:     "x",
+				Path:     Source("x"),
 				Kind:     KindLib,
 				Language: LangProto,
 			},
@@ -941,7 +941,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 		},
 		{
 			name:  "no_util_only",
-			mi:    ModuleInstance{Path: "x", Kind: KindLib, Language: LangCPP},
+			mi:    ModuleInstance{Path: Source("x"), Kind: KindLib, Language: LangCPP},
 			flags: FlagSet{NoUtil: true},
 
 			want: []string{
@@ -962,7 +962,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 		{
 			name: "self_builtins_not_in_stack",
 			mi: ModuleInstance{
-				Path:     "contrib/libs/cxxsupp/builtins",
+				Path:     Source("contrib/libs/cxxsupp/builtins"),
 				Kind:     KindLib,
 				Language: LangCPP,
 			},
@@ -981,7 +981,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 		{
 			name: "self_malloc_api_not_in_stack",
 			mi: ModuleInstance{
-				Path:     "library/cpp/malloc/api",
+				Path:     Source("library/cpp/malloc/api"),
 				Kind:     KindLib,
 				Language: LangCPP,
 			},
@@ -1000,7 +1000,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 		{
 			name: "self_libcxx_excluded",
 			mi: ModuleInstance{
-				Path:     "contrib/libs/cxxsupp/libcxx",
+				Path:     Source("contrib/libs/cxxsupp/libcxx"),
 				Kind:     KindLib,
 				Language: LangCPP,
 			},
@@ -1018,7 +1018,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 		{
 			name: "self_util_excluded",
 			mi: ModuleInstance{
-				Path:     "util",
+				Path:     Source("util"),
 				Kind:     KindLib,
 				Language: LangCPP,
 			},
@@ -3067,7 +3067,7 @@ END()
 `,
 	})
 	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/mod/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "mod", Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("mod"), Kind: KindLib, Platform: testTargetP}))
 
 	want := []string{
 		"-DUSE_CURRENT_UDF_ABI_VERSION",
@@ -3089,7 +3089,7 @@ END()
 `,
 	})
 	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/mod/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "mod", Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("mod"), Kind: KindLib, Platform: testTargetP}))
 
 	if d.moduleStmt == nil || d.moduleStmt.Name != tokYqlUdfContrib {
 		t.Fatalf("moduleStmt = %#v, want YQL_UDF_CONTRIB", d.moduleStmt)
@@ -3121,7 +3121,7 @@ END()
 `,
 	})
 	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/proto/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "proto", Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("proto"), Kind: KindLib, Platform: testTargetP}))
 
 	if !equalStrings(argStrs(d.protocFlags), []string{"--fatal_warnings"}) {
 		t.Fatalf("protocFlags = %v, want [--fatal_warnings]", d.protocFlags)
@@ -3137,7 +3137,7 @@ END()
 `,
 	})
 	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/proto/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "proto", Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("proto"), Kind: KindLib, Platform: testTargetP}))
 
 	if len(d.cppProtoPlugins) != 1 {
 		t.Fatalf("cppProtoPlugins = %d, want 1", len(d.cppProtoPlugins))
@@ -3173,7 +3173,7 @@ END()
 `,
 	})
 	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/flatcmod/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "flatcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "flatcmod", Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "flatcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("flatcmod"), Kind: KindLib, Platform: testTargetP}))
 
 	if !equalStrings(argStrs(d.flatcFlags), []string{"--scoped-enums", "--gen-all"}) {
 		t.Fatalf("flatcFlags = %v, want [--scoped-enums --gen-all]", d.flatcFlags)
@@ -3189,7 +3189,7 @@ END()
 `,
 	})
 	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/proto/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "proto", Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("proto"), Kind: KindLib, Platform: testTargetP}))
 
 	if !containsString(d.peerdirs, "contrib/libs/googleapis-common-protos") {
 		t.Fatalf("peerdirs = %v, want contrib/libs/googleapis-common-protos", d.peerdirs)
@@ -3208,7 +3208,7 @@ END()
 	})
 	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/pytool/ya.make"))
 
-	bin := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "pytool", KindBin, mf.Stmts, buildIfEnv(ModuleInstance{Path: "pytool", Kind: KindBin, Platform: testTargetP}))
+	bin := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "pytool", KindBin, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("pytool"), Kind: KindBin, Platform: testTargetP}))
 	if got := bin.pyMain; got == nil || *got != "pytool.__main__:main" {
 		t.Fatalf("bin pyMain = %#v, want pytool.__main__:main", got)
 	}
@@ -3219,7 +3219,7 @@ END()
 		t.Fatalf("bin pySrcs = %v, want [__main__.py]", bin.pySrcs)
 	}
 
-	lib := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "pytool", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "pytool", Kind: KindLib, Platform: testTargetP}))
+	lib := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "pytool", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("pytool"), Kind: KindLib, Platform: testTargetP}))
 	if lib.pyMain != nil {
 		t.Fatalf("lib pyMain = %#v, want nil", lib.pyMain)
 	}
@@ -3244,7 +3244,7 @@ END()
 `,
 	})
 	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/copymod/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "copymod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: "copymod", Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "copymod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("copymod"), Kind: KindLib, Platform: testTargetP}))
 
 	if !equalStrings(d.srcs, []string{"a.cpp", "b.h"}) {
 		t.Fatalf("srcs = %v, want [a.cpp b.h]", d.srcs)
@@ -3923,7 +3923,7 @@ END()
 
 	fs := newMemFS(files)
 	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/gen/ya.make"))
-	instance := ModuleInstance{Path: "gen", Kind: KindLib, Platform: testTargetP}
+	instance := ModuleInstance{Path: Source("gen"), Kind: KindLib, Platform: testTargetP}
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "gen", KindLib, mf.Stmts, buildIfEnv(instance))
 
 	for _, got := range [][]VFS{d.addIncl, d.addInclGlobal} {
@@ -4293,7 +4293,7 @@ func TestCollectModule_SETAPPENDRPathGlobal(t *testing.T) {
 		"mod/ya.make": content,
 	})
 	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/mod/ya.make"))
-	instance := ModuleInstance{Path: "mod", Kind: KindLib, Platform: testTargetP}
+	instance := ModuleInstance{Path: Source("mod"), Kind: KindLib, Platform: testTargetP}
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(instance))
 
 	want := []string{"-Wl,-rpath,$ORIGIN"}

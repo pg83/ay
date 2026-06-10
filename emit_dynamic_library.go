@@ -6,15 +6,15 @@ var (
 
 func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *moduleEmitResult {
 	if len(d.moduleStmt.Args) == 0 {
-		ThrowFmt("gen: %s DYNAMIC_LIBRARY requires a basename argument", instance.Path)
+		ThrowFmt("gen: %s DYNAMIC_LIBRARY requires a basename argument", instance.Path.Rel())
 	}
 
 	if len(d.dynamicLibraryFrom) == 0 {
-		ThrowFmt("gen: %s DYNAMIC_LIBRARY requires DYNAMIC_LIBRARY_FROM(...)", instance.Path)
+		ThrowFmt("gen: %s DYNAMIC_LIBRARY requires DYNAMIC_LIBRARY_FROM(...)", instance.Path.Rel())
 	}
 
 	if d.exportsScript == nil {
-		ThrowFmt("gen: %s DYNAMIC_LIBRARY requires EXPORTS_SCRIPT(...)", instance.Path)
+		ThrowFmt("gen: %s DYNAMIC_LIBRARY requires EXPORTS_SCRIPT(...)", instance.Path.Rel())
 	}
 
 	dynLibRPathHelperPeers := []string{"build/platform/local_so"}
@@ -121,18 +121,18 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	fixElfRef, fixElfPath := ctx.tool(argToolsFixElf)
 
 	outputName := "lib" + d.moduleStmt.Args[0] + ".so"
-	outputPath := Build(instance.Path + "/" + outputName).String()
-	vcsCPath := Build(instance.Path + "/__vcs_version__.c").String()
-	vcsOPath := Build(instance.Path + "/__vcs_version__.c.pic.o").String()
+	outputPath := Build(instance.Path.Rel() + "/" + outputName).String()
+	vcsCPath := Build(instance.Path.Rel() + "/__vcs_version__.c").String()
+	vcsOPath := Build(instance.Path.Rel() + "/__vcs_version__.c.pic.o").String()
 
 	cmd0 := composeLDCmdVcsInfo(d.tc, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings)
-	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path, outputPath, outputName, vcsOPath, peerArchivePaths, pluginPaths, d.dynamicLibraryFrom, *d.exportsScript, fixElfPath.String())
-	cmd3 := composeLDCmdLinkOrCopy(d.tc, instance.Path)
+	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.Rel(), outputPath, outputName, vcsOPath, peerArchivePaths, pluginPaths, d.dynamicLibraryFrom, *d.exportsScript, fixElfPath.String())
+	cmd3 := composeLDCmdLinkOrCopy(d.tc, instance.Path.Rel())
 	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	envFull := ctx.host.ToolEnv()
 
-	inputs := composeDynLibInputs(peerArchivePaths, pluginPaths, fixElfPath, instance.Path, *d.exportsScript, ctx.scripts)
+	inputs := composeDynLibInputs(peerArchivePaths, pluginPaths, fixElfPath, instance.Path.Rel(), *d.exportsScript, ctx.scripts)
 
 	depRefs := make([]NodeRef, 0, len(peerArchiveRefs)+len(pluginRefs)+2)
 	depRefs = append(depRefs, peerArchiveRefs...)
@@ -153,11 +153,11 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		},
 		Env:              envFull,
 		Inputs:           inputs,
-		Outputs:          []VFS{Build(instance.Path + "/" + outputName)},
+		Outputs:          []VFS{Build(instance.Path.Rel() + "/" + outputName)},
 		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Sandboxing:       true,
-		TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleLang: mlCPP, ModuleTag: tagDll, ModuleType: mtSO},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel(), ModuleLang: mlCPP, ModuleTag: tagDll, ModuleType: mtSO},
 		DepRefs:          depRefs,
 		usesResources:    []string{resourcePatternClangTool + instance.Platform.ClangVer, resourcePatternLLDRoot, resourcePatternYMakePython3},
 	}
@@ -176,7 +176,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		ARPath:                       nil,
 		isPROGRAM:                    false,
 		LDRef:                        ref,
-		LDPath:                       vfsPtr(Build(instance.Path + "/" + outputName)),
+		LDPath:                       vfsPtr(Build(instance.Path.Rel() + "/" + outputName)),
 		AddInclGlobal:                addInclGlobal,
 		OwnAddInclGlobal:             cloneVFSs(d.addInclGlobal),
 		CFlagsGlobal:                 cFlagsGlobal,

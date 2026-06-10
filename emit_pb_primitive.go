@@ -77,7 +77,7 @@ func EmitPB(
 	tc moduleToolchain,
 	emit Emitter,
 ) NodeRef {
-	moduleDir := instance.Path
+	moduleDir := instance.Path.Rel()
 
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 
@@ -310,7 +310,7 @@ func containsVFS(xs []VFS, want VFS) bool {
 	return false
 }
 
-func protoCPPModulePath(instance ModuleInstance, d *moduleData) string {
+func protoCPPModulePath(instance ModuleInstance, d *moduleData) VFS {
 	if d != nil && d.protoNamespace != nil {
 		if d.protoNamespaceGlobal {
 			return instance.Path
@@ -319,7 +319,7 @@ func protoCPPModulePath(instance ModuleInstance, d *moduleData) string {
 		base := filepath.ToSlash(filepath.Clean(filepath.Dir(*d.protoNamespace)))
 
 		if base != "." && base != "" {
-			return base
+			return Source(base)
 		}
 	}
 
@@ -351,13 +351,13 @@ type protoSrcsResult struct {
 }
 
 func protoSourceRelPath(fs FS, instance ModuleInstance, d *moduleData, src string) string {
-	moduleRel := filepath.ToSlash(filepath.Clean(instance.Path + "/" + src))
+	moduleRel := filepath.ToSlash(filepath.Clean(instance.Path.Rel() + "/" + src))
 
-	if fs.IsFile(dirKey(instance.Path), src) {
+	if fs.IsFile(dirKey(instance.Path.Rel()), src) {
 		return moduleRel
 	}
 
-	baseDir := instance.Path
+	baseDir := instance.Path.Rel()
 
 	if d.srcDir != nil {
 		cleaned := filepath.Clean(*d.srcDir)

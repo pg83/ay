@@ -131,7 +131,7 @@ func EmitAR(
 		ThrowFmt("EmitAR: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
 	}
 
-	archivePath := Build(instance.Path + "/" + ArchiveName(instance.Path))
+	archivePath := Build(instance.Path.Rel() + "/" + ArchiveName(instance.Path.Rel()))
 
 	return emitARNode(instance, archivePath, 0, objRefs, objPaths, peerArchiveRefs, nil, testToolchain(), hostP, emit)
 }

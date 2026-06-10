@@ -9,7 +9,7 @@ func protoPythonResourceKey(instance ModuleInstance, d *moduleData, src, suffix 
 	base := strings.TrimSuffix(src, ".proto")
 
 	if d.pyNamespace == nil {
-		return instance.Path + "/" + base + suffix
+		return instance.Path.Rel() + "/" + base + suffix
 	}
 
 	if *d.pyNamespace == "." {
@@ -34,7 +34,7 @@ func protoPythonNamespaceArg(d *moduleData) string {
 
 func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerContribs peerGlobalContribs, protoSrcs, evSrcs []string) *protoSrcsResult {
 	if len(evSrcs) > 0 {
-		ThrowFmt("gen: py-addressed PROTO_LIBRARY %s with .ev sources is not modelled", instance.Path)
+		ThrowFmt("gen: py-addressed PROTO_LIBRARY %s with .ev sources is not modelled", instance.Path.Rel())
 	}
 
 	if len(protoSrcs) == 0 {
@@ -72,10 +72,10 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCo
 
 	pyInstance := instance
 	pyInstance.Language = LangPy
-	globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path, "libpy3", "")
+	globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path.Rel(), "libpy3", "")
 	gRef := EmitARGlobalNamedTagged(pyInstance, globalBaseName, tagPy3ProtoGlobal, pyProtoRefs, pyProtoOutputs, d.tc, ctx.host, ctx.emit)
 
-	globalPath := Build(instance.Path + "/" + globalBaseName)
+	globalPath := Build(instance.Path.Rel() + "/" + globalBaseName)
 	result := &protoSrcsResult{
 		GlobalRef:  &gRef,
 		GlobalPath: &globalPath,
@@ -88,7 +88,7 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCo
 		result.WholeArchiveRefs = append(result.WholeArchiveRefs, cppSibling.ARRef)
 		result.WholeArchivePaths = append(result.WholeArchivePaths, *cppSibling.ARPath)
 	} else if moduleExcludesTag(d, "CPP_PROTO") {
-		result.WholeArchiveCmdPaths = append(result.WholeArchiveCmdPaths, Build(instance.Path+"/"+ArchiveName(instance.Path)))
+		result.WholeArchiveCmdPaths = append(result.WholeArchiveCmdPaths, Build(instance.Path.Rel()+"/"+ArchiveName(instance.Path.Rel())))
 	}
 
 	return result
@@ -243,7 +243,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		Inputs:           inputs,
 		Outputs:          outputs,
 		KV:               pbKV,
-		TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: tagPy3Proto},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel(), ModuleTag: tagPy3Proto},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          toolRefs,
 		usesResources:    []string{resourcePatternYMakePython3},
@@ -278,7 +278,7 @@ func protoPythonOutputRoot(instance ModuleInstance, d *moduleData) string {
 		}
 	}
 
-	return instance.Path
+	return instance.Path.Rel()
 }
 
 type generatedPyProtoYapycResult struct {
@@ -288,7 +288,7 @@ type generatedPyProtoYapycResult struct {
 
 func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs []VFS, pyPBRef NodeRef, sourceInputs []VFS) *generatedPyProtoYapycResult {
 	py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin := py3ccToolRefs(ctx, instance)
-	suffix := protoPySuffix(instance.Path)
+	suffix := protoPySuffix(instance.Path.Rel())
 	res := &generatedPyProtoYapycResult{}
 
 	for i, pyOut := range pyOutputs {
@@ -327,7 +327,7 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 			Inputs:           nodeInputs,
 			Outputs:          []VFS{out},
 			KV:               KV{P: pkPY, PC: pcYellow},
-			TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: tagPy3Proto},
+			TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel(), ModuleTag: tagPy3Proto},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			DepRefs:          deps,
 			usesResources:    []string{resourcePatternYMakePython3},
@@ -496,7 +496,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 	res := &pyProtoAuxChunksResult{}
 
 	for _, ch := range chunks {
-		aux := Build(instance.Path + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path, "PY3_PROTO") + "_raw.auxcpp")
+		aux := Build(instance.Path.Rel() + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path.Rel(), "PY3_PROTO") + "_raw.auxcpp")
 		auxClosure := pyProtoAuxInputClosure(ctx, instance, d, aux, ch.inputs, peerAddIncl)
 		cmdArgs := []STR{internStr(rescompilerBinPath), (aux).str()}
 		cmdArgs = appendInternStrs(cmdArgs, ch.cmdArgs)
@@ -519,7 +519,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			Inputs:           inputs,
 			Outputs:          []VFS{aux},
 			KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
-			TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: tagPy3Proto},
+			TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel(), ModuleTag: tagPy3Proto},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			DepRefs:          deps,
 		})

@@ -170,7 +170,7 @@ func bindResourceGlobalVars(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	bound := false
 
 	for _, stmt := range d.resourceDeclStmts {
-		for _, decl := range resolveResourceDecls(ctx.fs, ctx.host, instance.Path, stmt) {
+		for _, decl := range resolveResourceDecls(ctx.fs, ctx.host, instance.Path.Rel(), stmt) {
 			env.SetStringID(internEnvSTR(decl.GlobalVar), decl.Value)
 			bound = true
 		}
@@ -247,7 +247,7 @@ func genResourcesLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *m
 	deduper.reset()
 
 	for _, stmt := range d.resourceDeclStmts {
-		for _, decl := range resolveResourceDecls(ctx.fs, ctx.host, instance.Path, stmt) {
+		for _, decl := range resolveResourceDecls(ctx.fs, ctx.host, instance.Path.Rel(), stmt) {
 			if deduper.add(VFS(decl.GlobalVar)) {
 				globals = append(globals, decl)
 				emitResourceFetch(ctx, decl)

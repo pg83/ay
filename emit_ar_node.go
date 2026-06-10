@@ -54,7 +54,7 @@ func emitARNode(
 
 	topEnv := hostP.ToolEnv()
 
-	targetProperties := TargetProperties{ModuleDir: instance.Path, ModuleLang: mlCPP, ModuleType: mtLib}
+	targetProperties := TargetProperties{ModuleDir: instance.Path.Rel(), ModuleLang: mlCPP, ModuleType: mtLib}
 
 	if instance.Language == LangPy {
 		targetProperties.ModuleLang = mlPy3

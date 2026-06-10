@@ -16,8 +16,8 @@ func emitOwnLDPlugins(ctx *genCtx, instance ModuleInstance, plugins []string, tc
 	}
 
 	for _, name := range plugins {
-		src := Source(instance.Path + "/" + name)
-		dst := Build(instance.Path + "/" + name + ".pyplugin")
+		src := Source(instance.Path.Rel() + "/" + name)
+		dst := Build(instance.Path.Rel() + "/" + name + ".pyplugin")
 
 		ref, ok := ctx.ldPluginCPCache[dst]
 

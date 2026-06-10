@@ -210,7 +210,7 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 
 	r6Ref, _ := EmitR6(
 		ModuleInstance{
-			Path:     "util",
+			Path:     Source("util"),
 			Kind:     KindLib,
 			Language: LangCPP,
 			Platform: releaseHost,

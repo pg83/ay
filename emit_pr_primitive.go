@@ -38,11 +38,11 @@ func EmitPR(
 	for _, a := range stmt.Args {
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
 		a = strings.ReplaceAll(a, "${ARCADIA_BUILD_ROOT}", "$(B)")
-		a = strings.ReplaceAll(a, "${CURDIR}", Source(instance.Path).String())
-		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path).String())
-		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path)
-		a = strings.ReplaceAll(a, "$CURDIR", Source(instance.Path).String())
-		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path).String())
+		a = strings.ReplaceAll(a, "${CURDIR}", instance.Path.String())
+		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path.Rel()).String())
+		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path.Rel())
+		a = strings.ReplaceAll(a, "$CURDIR", instance.Path.String())
+		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path.Rel()).String())
 
 		for _, tool := range auxTools {
 			if strings.Contains(a, tool.token) {
@@ -152,7 +152,7 @@ func EmitPR(
 		Inputs:           inputs,
 		Outputs:          outputs,
 		KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          depRefs,
 		ForeignDepRefs:   foreignDepRefs,

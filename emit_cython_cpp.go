@@ -91,8 +91,8 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 			generated = *stmt.Generated
 		}
 
-		generatedVFS := Build(instance.Path + "/" + generated)
-		srcVFS := Source(instance.Path + "/" + stmt.Src)
+		generatedVFS := Build(instance.Path.Rel() + "/" + generated)
+		srcVFS := Source(instance.Path.Rel() + "/" + stmt.Src)
 		srcScanIn := in
 		srcScanIn.AddIncl = appendCythonScanAddIncl(srcScanIn.AddIncl, d.cythonAddIncl, py23Variant)
 		sourceClosure := walkClosure(ctx, instance, srcVFS, srcScanIn)
@@ -133,7 +133,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 			(generatedVFS).str(),
 		)
 
-		targetProps := TargetProperties{ModuleDir: instance.Path}
+		targetProps := TargetProperties{ModuleDir: instance.Path.Rel()}
 
 		if !stmt.CMode && !generatedExplicit && py23Variant {
 			targetProps.ModuleTag = tagPy3

@@ -35,7 +35,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		srcAbs := resolveSourceVFS(ctx, instance, srcRel, d.srcDir)
 
 		if generatedInputs != nil {
-			srcAbs = Build(instance.Path + "/" + srcRel)
+			srcAbs = Build(instance.Path.Rel() + "/" + srcRel)
 		}
 
 		moduleName := srcAbs.Rel() + "-"
@@ -43,9 +43,9 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		var outputPath VFS
 
 		if strings.Contains(srcRel, "/") {
-			outputPath = Build(instance.Path + "/" + srcRel + "." + pySrcYapycSuffix(instance.Path) + ".yapyc3")
+			outputPath = Build(instance.Path.Rel() + "/" + srcRel + "." + pySrcYapycSuffix(instance.Path.Rel()) + ".yapyc3")
 		} else {
-			outputPath = Build(instance.Path + "/" + srcRel + ".yapyc3")
+			outputPath = Build(instance.Path.Rel() + "/" + srcRel + ".yapyc3")
 		}
 
 		cmdArgs := []STR{
@@ -89,7 +89,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			Outputs: []VFS{outputPath},
 			KV:      KV{P: pkPY, PC: pcYellow},
 			TargetProperties: func() TargetProperties {
-				tp := TargetProperties{ModuleDir: instance.Path}
+				tp := TargetProperties{ModuleDir: instance.Path.Rel()}
 
 				if d.moduleStmt.Name == tokPy23Library {
 					tp.ModuleTag = tagPy3
@@ -161,7 +161,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 		}
 
 		regCpp := arg + ".reg3.cpp"
-		regCppVFS := Build(instance.Path + "/" + regCpp)
+		regCppVFS := Build(instance.Path.Rel() + "/" + regCpp)
 		regCppAbs := regCppVFS.String()
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -188,7 +188,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 				Inputs:           []VFS{genPy3RegScriptVFS},
 				Outputs:          []VFS{regCppVFS},
 				KV:               KV{P: pkPY, PC: pcYellow},
-				TargetProperties: TargetProperties{ModuleDir: instance.Path},
+				TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
 				Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 				DepRefs:          []NodeRef{},
 				usesResources:    []string{resourcePatternYMakePython3},

@@ -84,7 +84,7 @@ func EmitLD(
 	}
 
 	if binaryName == "" {
-		binaryName = lastPathComponent(instance.Path)
+		binaryName = lastPathComponent(instance.Path.Rel())
 	}
 
 	binaryDir := ldBinaryDir(instance)
@@ -100,7 +100,7 @@ func EmitLD(
 
 	cmd0 := composeLDCmdVcsInfo(tc, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, tc, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings)
-	cmd2 := composeLDCmdLinkExe(instance.Platform, tc, instance.Path, outputPath, vcsOPath, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, wantsStrip)
+	cmd2 := composeLDCmdLinkExe(instance.Platform, tc, instance.Path.Rel(), outputPath, vcsOPath, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, wantsStrip)
 	cmd3 := composeLDCmdLinkOrCopy(tc, binaryDir, dynamicPaths...)
 	splitDwarfCmds := composeLDSplitDwarfCmds(tc, outputPath, wantsSplitDwarf)
 
@@ -120,7 +120,7 @@ func EmitLD(
 
 	cmds = append(cmds, splitDwarfCmds...)
 
-	inputs := composeLDInputs(instance.Path, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts)
+	inputs := composeLDInputs(instance.Path.Rel(), ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts)
 
 	inputs = append(inputs, ldSvnversionHVFS)
 
@@ -172,14 +172,14 @@ func EmitLD(
 
 func LDOutputPath(instance ModuleInstance, binaryName string) VFS {
 	if binaryName == "" {
-		binaryName = lastPathComponent(instance.Path)
+		binaryName = lastPathComponent(instance.Path.Rel())
 	}
 
 	return Build(ldBinaryDir(instance) + "/" + binaryName)
 }
 
 func ldBinaryDir(instance ModuleInstance) string {
-	switch instance.Path {
+	switch instance.Path.Rel() {
 	case "contrib/tools/ragel6/bin":
 		return "contrib/tools/ragel6"
 	case "tools/py3cc/bin":
@@ -194,7 +194,7 @@ func ldBinaryDir(instance ModuleInstance) string {
 		return "tools/py3cc/slow"
 	}
 
-	return instance.Path
+	return instance.Path.Rel()
 }
 
 func ldModuleLang(instance ModuleInstance) ModuleLang {

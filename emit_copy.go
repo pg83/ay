@@ -80,9 +80,9 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 	entries := make([]entryReg, 0, len(d.copyFiles))
 
 	for _, entry := range d.copyFiles {
-		srcVFS := copyFileInputVFS(ctx.fs, instance.Path, entry.Src)
-		dstVFS := copyFileOutputVFS(instance.Path, entry.Dst)
-		parsed := copyFileParsedIncludes(scanner, ctx.fs, instance.Path, entry)
+		srcVFS := copyFileInputVFS(ctx.fs, instance.Path.Rel(), entry.Src)
+		dstVFS := copyFileOutputVFS(instance.Path.Rel(), entry.Dst)
+		parsed := copyFileParsedIncludes(scanner, ctx.fs, instance.Path.Rel(), entry)
 		entries = append(entries, entryReg{srcVFS, dstVFS, parsed})
 
 		if scanner != nil {
@@ -156,7 +156,7 @@ func generatedModuleSourceVFS(ctx *genCtx, instance ModuleInstance, srcRel strin
 		return nil
 	}
 
-	buildVFS := Build(filepath.ToSlash(filepath.Clean(instance.Path + "/" + srcRel)))
+	buildVFS := Build(filepath.ToSlash(filepath.Clean(instance.Path.Rel() + "/" + srcRel)))
 
 	if reg.Lookup(buildVFS) != nil {
 		return vfsPtr(buildVFS)
@@ -166,7 +166,7 @@ func generatedModuleSourceVFS(ctx *genCtx, instance ModuleInstance, srcRel strin
 }
 
 func resolveModuleSourceVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, srcDir *string) VFS {
-	if buildVFS := copyFileAutoSourceVFS(instance.Path, d, srcRel); buildVFS != nil {
+	if buildVFS := copyFileAutoSourceVFS(instance.Path.Rel(), d, srcRel); buildVFS != nil {
 		return *buildVFS
 	}
 

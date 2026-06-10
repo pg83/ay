@@ -23,7 +23,7 @@ func emitArchive(
 	emit Emitter,
 	reg *CodegenRegistry,
 ) {
-	archiveVFS := Build(instance.Path + "/" + a.Name)
+	archiveVFS := Build(instance.Path.Rel() + "/" + a.Name)
 	archivePath := archiveVFS.String()
 
 	cmdArgs := make([]STR, 0, 4+len(a.Files)+2)
@@ -51,7 +51,7 @@ func emitArchive(
 			}
 		}
 
-		rel := instance.Path + "/" + f
+		rel := instance.Path.Rel() + "/" + f
 		var absVFS VFS
 
 		if isPRProduced {
@@ -109,7 +109,7 @@ func emitArchive(
 		KV:               KV{P: pkAR, PC: pcLightRed},
 		Outputs:          []VFS{archiveVFS},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
 		DepRefs:          depRefs,
 		usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
 	}

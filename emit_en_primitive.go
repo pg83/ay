@@ -12,7 +12,7 @@ func EmitEN(
 	headerIncludeClosure []VFS,
 	emit Emitter,
 ) (NodeRef, []VFS) {
-	serializedCPPVFS := Build(instance.Path + "/" + headerRel + "_serialized.cpp")
+	serializedCPPVFS := Build(instance.Path.Rel() + "/" + headerRel + "_serialized.cpp")
 
 	cmdArgs := []STR{
 		(enumParserBin).str(),
@@ -25,7 +25,7 @@ func EmitEN(
 	outputs := []VFS{serializedCPPVFS}
 
 	if withHeader {
-		serializedHVFS := Build(instance.Path + "/" + headerRel + "_serialized.h")
+		serializedHVFS := Build(instance.Path.Rel() + "/" + headerRel + "_serialized.h")
 		cmdArgs = append(cmdArgs, argHeader.str(), (serializedHVFS).str())
 		outputs = append(outputs, serializedHVFS)
 	}
@@ -65,7 +65,7 @@ func EmitEN(
 		Outputs:          outputs,
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Sandboxing:       true,
-		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
 		DepRefs:          depRefs,
 		ForeignDepRefs:   foreignDepRefs,
 	}

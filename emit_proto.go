@@ -557,16 +557,16 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	for _, src := range protoSrcs {
 		pb := emitProtoPB(ctx, instance, d, src, cfg, peerContribs.protoAddIncl)
 
-		ccSrcRel := strings.TrimPrefix(pb.pbCC.Rel(), cppInstance.Path+"/")
+		ccSrcRel := strings.TrimPrefix(pb.pbCC.Rel(), cppInstance.Path.Rel()+"/")
 		appendCodegenOutput(pb.pbRef, pb.pbCC, ccSrcRel)
 
 		if d.grpc {
-			grpcSrcRel := strings.TrimPrefix(pb.grpcPbCC.Rel(), cppInstance.Path+"/")
+			grpcSrcRel := strings.TrimPrefix(pb.grpcPbCC.Rel(), cppInstance.Path.Rel()+"/")
 			appendCodegenOutput(pb.pbRef, pb.grpcPbCC, grpcSrcRel)
 		}
 
 		for _, extraSrc := range pb.extraSourceCC {
-			extraSrcRel := strings.TrimPrefix(extraSrc.Rel(), cppInstance.Path+"/")
+			extraSrcRel := strings.TrimPrefix(extraSrc.Rel(), cppInstance.Path.Rel()+"/")
 			appendCodegenOutput(pb.pbRef, extraSrc, extraSrcRel)
 		}
 	}
@@ -606,7 +606,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 
 			cppInstance := instance
 			cppInstance.Path = protoCPPModulePath(instance, d)
-			evSrcRel := strings.TrimPrefix(evRelPath+".pb.cc", cppInstance.Path+"/")
+			evSrcRel := strings.TrimPrefix(evRelPath+".pb.cc", cppInstance.Path.Rel()+"/")
 			codegenOutputs = append(codegenOutputs, protoCodegenOutput{
 				genRef: evRef,
 				pbCC:   evPbCC,
@@ -711,14 +711,14 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 					continue
 				}
 
-				outVFS := copyFileOutputVFS(instance.Path, outTok)
+				outVFS := copyFileOutputVFS(instance.Path.Rel(), outTok)
 				info := reg.Lookup(outVFS)
 
 				if info == nil || !info.HasProducerRef {
 					continue
 				}
 
-				cppRel := antlrOutputModuleRel(instance.Path, outVFS)
+				cppRel := antlrOutputModuleRel(instance.Path.Rel(), outVFS)
 				ccRef, ccOut := emitCodegenDownstreamCC(ctx, cppInstance, cppRel, []NodeRef{info.ProducerRef}, moduleInputs)
 				antlrRefs = append(antlrRefs, ccRef)
 				antlrOutputs = append(antlrOutputs, ccOut)
@@ -737,8 +737,8 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 		protoLibName = d.moduleStmt.Args[0]
 	}
 
-	arBaseName := archiveNameWithPrefixOrName(instance.Path, "lib", protoLibName)
-	archivePath := Build(instance.Path + "/" + arBaseName)
+	arBaseName := archiveNameWithPrefixOrName(instance.Path.Rel(), "lib", protoLibName)
+	archivePath := Build(instance.Path.Rel() + "/" + arBaseName)
 	arRef := emitARNode(instance, archivePath, tagCppProto, ccRefs, ccOutputs, nil, nil, d.tc, ctx.host, ctx.emit)
 	return &protoSrcsResult{ARRef: arRef, ARPath: &archivePath}
 }

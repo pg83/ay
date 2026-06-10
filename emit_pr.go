@@ -81,17 +81,17 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	outVFSByToken := make(map[string]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
 
 	for _, f := range stmt.OUTFiles {
-		outVFSByToken[f] = copyFileOutputVFS(instance.Path, f)
+		outVFSByToken[f] = copyFileOutputVFS(instance.Path.Rel(), f)
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		outVFSByToken[f] = copyFileOutputVFS(instance.Path, f)
+		outVFSByToken[f] = copyFileOutputVFS(instance.Path.Rel(), f)
 	}
 
 	var stdoutVFS *VFS
 
 	if stmt.StdoutFile != nil {
-		vfs := copyFileOutputVFS(instance.Path, *stmt.StdoutFile)
+		vfs := copyFileOutputVFS(instance.Path.Rel(), *stmt.StdoutFile)
 		stdoutVFS = &vfs
 		outVFSByToken[*stmt.StdoutFile] = vfs
 	}
@@ -192,7 +192,7 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *R
 
 	var out []VFS
 	walkOne := func(rel string) {
-		buildRootPath := copyFileOutputVFS(instance.Path, rel)
+		buildRootPath := copyFileOutputVFS(instance.Path.Rel(), rel)
 		sub := walkClosure(ctx, instance, buildRootPath, scanIn)
 		out = append(out, sub...)
 	}
@@ -391,10 +391,10 @@ func runProgramInputVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, rel
 		strings.HasPrefix(rel, "${CURDIR}/"),
 		strings.HasPrefix(rel, "${ARCADIA_BUILD_ROOT}/"),
 		strings.HasPrefix(rel, "${BINDIR}/"):
-		return copyFileInputVFS(ctx.fs, instance.Path, rel)
+		return copyFileInputVFS(ctx.fs, instance.Path.Rel(), rel)
 	}
 
-	buildVFS := Build(filepath.ToSlash(filepath.Clean(instance.Path + "/" + rel)))
+	buildVFS := Build(filepath.ToSlash(filepath.Clean(instance.Path.Rel() + "/" + rel)))
 
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
 		if reg.Lookup(buildVFS) != nil {
@@ -410,8 +410,8 @@ func runProgramInputVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, rel
 }
 
 func expandRunProgramCWD(instance ModuleInstance, cwd string) string {
-	cwd = strings.ReplaceAll(cwd, "$BINDIR", Build(instance.Path).String())
-	cwd = strings.ReplaceAll(cwd, "$CURDIR", Source(instance.Path).String())
+	cwd = strings.ReplaceAll(cwd, "$BINDIR", Build(instance.Path.Rel()).String())
+	cwd = strings.ReplaceAll(cwd, "$CURDIR", instance.Path.String())
 	cwd = strings.ReplaceAll(cwd, "${ARCADIA_BUILD_ROOT}", "$(B)")
 	cwd = strings.ReplaceAll(cwd, "${ARCADIA_ROOT}", "$(S)")
 

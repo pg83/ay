@@ -267,7 +267,7 @@ func TestEmitCC_PlatformEnvFlags_TargetOnly(t *testing.T) {
 
 	target := NewPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "-DENV_C=1", "-DENV_CXX=1")
 	instance := ModuleInstance{
-		Path:     "build/cow/on",
+		Path:     Source("build/cow/on"),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: target,
@@ -324,7 +324,7 @@ func TestEmitCC_OutputPath_YqlUdfSuffixPIC(t *testing.T) {
 	e := NewBufferedEmitter()
 	in := ModuleCCInputs{ObjectSuffixStem: stringPtr("udfs")}
 	instance := ModuleInstance{
-		Path:     "udfmod",
+		Path:     Source("udfmod"),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testHostP,
@@ -376,7 +376,7 @@ func TestComposeCCPaths_DotDotSrc(t *testing.T) {
 
 	instance := targetInstance("ydb/public/lib/ydb_cli/commands/command_base")
 	srcRel := "../ydb_command.cpp"
-	srcVFS := Source(instance.Path + "/" + srcRel)
+	srcVFS := Source(instance.Path.Rel() + "/" + srcRel)
 
 	_ = e
 	_ = srcVFS

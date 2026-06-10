@@ -34,7 +34,7 @@ func newTestPlatform(os OS, isa ISA, pic string, tags []string) *Platform {
 
 func targetInstance(path string) ModuleInstance {
 	return ModuleInstance{
-		Path:     path,
+		Path:     Source(path),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,
@@ -43,7 +43,7 @@ func targetInstance(path string) ModuleInstance {
 
 func hostInstance(path string) ModuleInstance {
 	return ModuleInstance{
-		Path:     path,
+		Path:     Source(path),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testHostP,

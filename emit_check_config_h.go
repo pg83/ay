@@ -15,9 +15,9 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 	for _, conf := range d.checkConfigHeaders {
 		confBase := strings.TrimSuffix(path.Base(conf), path.Ext(conf))
 		generated := confBase + ".config.cpp"
-		generatedVFS := Build(instance.Path + "/" + generated)
+		generatedVFS := Build(instance.Path.Rel() + "/" + generated)
 
-		confVFS := Source(instance.Path + "/" + conf)
+		confVFS := Source(instance.Path.Rel() + "/" + conf)
 		inputs := []VFS{buildScriptsCheckConfigHPy, confVFS}
 		inputs = append(inputs, walkClosure(ctx, instance, confVFS, in)...)
 
@@ -33,7 +33,7 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 						CmdArgs: []STR{
 							d.tc.Python3,
 							argSBuildScriptsCheckConfigHPy.str(),
-							internStr(instance.Path + "/" + conf),
+							internStr(instance.Path.Rel() + "/" + conf),
 							(generatedVFS).str(),
 						},
 						Env: env,
@@ -44,7 +44,7 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 				Outputs:          []VFS{generatedVFS},
 				KV:               KV{P: pkCH, PC: pcYellow},
 				Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-				TargetProperties: TargetProperties{ModuleDir: instance.Path},
+				TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
 				usesResources:    []string{resourcePatternYMakePython3},
 			})
 			ctx.checkConfigOutputs[generatedVFS] = chRef

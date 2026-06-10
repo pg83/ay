@@ -13,7 +13,7 @@ func EmitBI(
 	tc moduleToolchain,
 	emit Emitter,
 ) NodeRef {
-	outPrefix := instance.Path + "/"
+	outPrefix := instance.Path.Rel() + "/"
 	argsFileVFS := Build(outPrefix + "__args")
 	outVFS := Build(outPrefix + outputHeader)
 	argsFile := argsFileVFS.String()
@@ -66,7 +66,7 @@ func EmitBI(
 		Inputs:           inputs,
 		KV:               KV{P: pkBI, PC: pcYellow, ShowOut: true, DisableCache: "yes"},
 		Outputs:          []VFS{outVFS},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          []NodeRef{},
 		usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},

@@ -323,7 +323,7 @@ func buildTestSuiteInfo(instance ModuleInstance, d *moduleData, ldPath VFS) *tes
 		return nil
 	}
 
-	srcBase := instance.Path
+	srcBase := instance.Path.Rel()
 
 	if d.moduleStmt.Name == tokUnittestFor && len(d.moduleStmt.Args) > 0 {
 		srcBase = path.Clean(d.moduleStmt.Args[0])
@@ -341,7 +341,7 @@ func buildTestSuiteInfo(instance ModuleInstance, d *moduleData, ldPath VFS) *tes
 	}
 
 	return &testSuiteInfo{
-		ProjectPath: instance.Path,
+		ProjectPath: instance.Path.Rel(),
 		BinaryPath:  ldPath.String(),
 		CppSources:  cppSources,
 	}

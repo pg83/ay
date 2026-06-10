@@ -47,6 +47,7 @@ var (
 	ldSvnInterfaceVFS                                                                     = Source("build/scripts/c_templates/svn_interface.c")
 	ldSvnversionHVFS                                                                      = Source("build/scripts/c_templates/svnversion.h")
 	ldVcsInfoVFS                                                                          = Source("build/scripts/vcs_info.py")
+	libraryPythonRuntimePy3                                                               = Source("library/python/runtime_py3")
 	objcopyScriptVFS                                                                      = Source("build/scripts/objcopy.py")
 	pbDescriptorVFS                                                                       = Source("contrib/libs/protobuf/src/google/protobuf/descriptor.proto")
 	pbGrpcCppVFS                                                                          = Build("contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp")

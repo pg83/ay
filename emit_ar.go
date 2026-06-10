@@ -15,7 +15,7 @@ func EmitARNamed(
 		ThrowFmt("EmitARNamed: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
 	}
 
-	archivePath := Build(instance.Path + "/" + archiveBaseName)
+	archivePath := Build(instance.Path.Rel() + "/" + archiveBaseName)
 
 	return emitARNode(instance, archivePath, 0, objRefs, objPaths, peerArchiveRefs, arPluginPath, tc, hostP, emit)
 }
@@ -36,7 +36,7 @@ func EmitARNamedTagged(
 		ThrowFmt("EmitARNamedTagged: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
 	}
 
-	archivePath := Build(instance.Path + "/" + archiveBaseName)
+	archivePath := Build(instance.Path.Rel() + "/" + archiveBaseName)
 
 	return emitARNode(instance, archivePath, tag, objRefs, objPaths, peerArchiveRefs, arPluginPath, tc, hostP, emit)
 }
@@ -55,7 +55,7 @@ func EmitARGlobalNamedTagged(
 		ThrowFmt("EmitARGlobalNamedTagged: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
 	}
 
-	archivePath := Build(instance.Path + "/" + archiveBaseName)
+	archivePath := Build(instance.Path.Rel() + "/" + archiveBaseName)
 
 	return emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, nil, tc, hostP, emit)
 }
