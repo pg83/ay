@@ -611,7 +611,7 @@ END()
 func TestGen_HostToolRecursion_R6(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"contrib/tools/ragel6/ya.make": "PROGRAM(ragel6)\nSRCS(main.cpp)\nEND()\n",
-		"consumer/ya.make":                 "LIBRARY()\nSRCS(parser.rl6)\nEND()\n",
+		"consumer/ya.make":             "LIBRARY()\nSRCS(parser.rl6)\nEND()\n",
 	})
 
 	g := testGen(fs, "consumer")
@@ -2230,9 +2230,9 @@ END()
 
 func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 	fs := newMemFS(map[string]string{
-		"consumer/ya.make":                 "LIBRARY()\nSRCS(parser.rl6)\nEND()\n",
-		"consumer/parser.rl6":              "// fixture\n",
-		"consumer/parser.h":                "// fixture\n",
+		"consumer/ya.make":             "LIBRARY()\nSRCS(parser.rl6)\nEND()\n",
+		"consumer/parser.rl6":          "// fixture\n",
+		"consumer/parser.h":            "// fixture\n",
 		"contrib/tools/ragel6/ya.make": "PROGRAM(ragel6)\nSRCS(main.cpp)\nEND()\n",
 	})
 
