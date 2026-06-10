@@ -9,6 +9,14 @@ import (
 	"strings"
 )
 
+var (
+	// Fixed tool/script prefixes of the objcopy nodes' inputs, shared as chunks
+	// (referenced, never copied per node).
+	rescompilersChunk           = []VFS{rescompilerBinVFS, rescompressorBinVFS}
+	rescompilersWithScriptChunk = []VFS{rescompilerBinVFS, rescompressorBinVFS, objcopyScriptVFS}
+	objcopyScriptChunk          = []VFS{objcopyScriptVFS}
+)
+
 type objcopyEmitResult struct {
 	Refs    []NodeRef
 	Outputs []VFS
@@ -122,33 +130,35 @@ func emitResourceObjcopy(
 		}
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-		inputs := []VFS{
-			rescompilerBinVFS,
-			rescompressorBinVFS,
-		}
+
+		var inputs inputChunks
 
 		if len(cur.paths) <= 1 {
-			inputs = append(inputs, objcopyScriptVFS)
-			inputs = append(inputs, cur.pathInputs...)
-			inputs = append(inputs, cur.extraInputs...)
+			inputs = inputChunks{rescompilersWithScriptChunk, cur.pathInputs, cur.extraInputs}
 		} else {
-			inputs = append(inputs, cur.pathInputs...)
-			inputs = append(inputs, objcopyScriptVFS)
-			inputs = append(inputs, cur.extraInputs...)
+			inputs = inputChunks{rescompilersChunk, cur.pathInputs, objcopyScriptChunk, cur.extraInputs}
 		}
 
 		deduper.reset()
 
-		for _, p := range inputs {
-			deduper.add(p)
+		for _, ch := range inputs {
+			for _, p := range ch {
+				deduper.add(p)
+			}
 		}
+
+		var kvTail []VFS
 
 		for _, p := range cur.kvInputs {
 			if !deduper.add(p) {
 				continue
 			}
 
-			inputs = append(inputs, p)
+			kvTail = append(kvTail, p)
+		}
+
+		if len(kvTail) > 0 {
+			inputs = append(inputs, kvTail)
 		}
 
 		resTargetProps := TargetProperties{ModuleDir: instance.Path.Rel()}
@@ -171,7 +181,7 @@ func emitResourceObjcopy(
 				},
 			},
 			Env:              env,
-			Inputs:           inputChunks{inputs},
+			Inputs:           inputs,
 			Outputs:          []VFS{outputObj},
 			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 			TargetProperties: resTargetProps,
@@ -323,11 +333,6 @@ func emitKvOnlyObjcopyNode(
 	}
 	cmdArgs = appendInternStrs(cmdArgs, kvsCmd)
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-	inputs := []VFS{
-		rescompilerBinVFS,
-		rescompressorBinVFS,
-		objcopyScriptVFS,
-	}
 
 	targetProps := TargetProperties{ModuleDir: instance.Path.Rel()}
 
@@ -353,7 +358,7 @@ func emitKvOnlyObjcopyNode(
 			},
 		},
 		Env:              env,
-		Inputs:           inputChunks{inputs},
+		Inputs:           inputChunks{rescompilersWithScriptChunk},
 		Outputs:          []VFS{outputObj},
 		KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 		TargetProperties: targetProps,
@@ -449,7 +454,7 @@ func emitYaConfJSONObjcopy(
 				},
 			},
 			Env:              env,
-			Inputs:           inputChunks{{rescompilerBinVFS, rescompressorBinVFS, input, objcopyScriptVFS}},
+			Inputs:           inputChunks{rescompilersChunk, {input, objcopyScriptVFS}},
 			Outputs:          []VFS{outputObj},
 			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
@@ -649,16 +654,6 @@ func emitPySrcObjcopy(
 				cmdArgs = appendInternStrs(cmdArgs, ch.kvsCmd)
 			}
 
-			inputs := []VFS{
-				rescompilerBinVFS,
-				rescompressorBinVFS,
-			}
-
-			for _, p := range ch.inps {
-				inputs = append(inputs, p)
-			}
-
-			inputs = append(inputs, objcopyScriptVFS)
 			env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 			targetProps := TargetProperties{ModuleDir: instance.Path.Rel()}
 
@@ -678,7 +673,7 @@ func emitPySrcObjcopy(
 				Platform:         instance.Platform,
 				Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: env}},
 				Env:              env,
-				Inputs:           inputChunks{inputs},
+				Inputs:           inputChunks{rescompilersChunk, ch.inps, objcopyScriptChunk},
 				Outputs:          []VFS{outputObj},
 				KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 				TargetProperties: targetProps,

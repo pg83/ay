@@ -71,22 +71,26 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 				depRefs = append(depRefs, extra...)
 			}
 
-			allInputs := make([]VFS, 0, 2+len(closure))
-			allInputs = append(allInputs, inputVFS)
-			allInputs = append(allInputs, clangWrapperVFS) // ${input:"build/scripts/clang_wrapper.py"}
-			allInputs = append(allInputs, closure...)
+			// closure is a shared cached slice (closureOf returns it uncopied) —
+			// referenced as its own chunk, never copied.
+			allInputs := inputChunks{
+				{inputVFS, clangWrapperVFS}, // ${input:"build/scripts/clang_wrapper.py"}
+				closure,
+			}
 
 			// Propagate $(S) inputs from this BC node to the OP flat-input set.
 			// fs_tools.py in the inputs (via a consumed TEXT header's leaf, or via
 			// wcExtras when inputVFS is itself a copy product) means this .bc came
 			// from a COPY product, so the merge node inherits the tooling too.
-			for _, v := range allInputs {
-				if v.IsSource() {
-					bcSourceInputs = append(bcSourceInputs, v)
-				}
+			for _, ch := range allInputs {
+				for _, v := range ch {
+					if v.IsSource() {
+						bcSourceInputs = append(bcSourceInputs, v)
+					}
 
-				if v == copyFsToolsVFS {
-					linksCopy = true
+					if v == copyFsToolsVFS {
+						linksCopy = true
+					}
 				}
 			}
 
@@ -94,7 +98,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 				Platform:         instance.Platform,
 				Cmds:             []Cmd{{CmdArgs: bcArgs, Env: env}},
 				Env:              env,
-				Inputs:           inputChunks{allInputs},
+				Inputs:           allInputs,
 				Outputs:          []VFS{bcOut},
 				KV:               KV{P: pkBC, PC: pcLightGreen},
 				TargetProperties: tp,
@@ -116,17 +120,19 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		}
 
 		ldArgs = append(ldArgs, argDashO.str(), (mergedOut).str())
-		mergeInputs := append([]VFS(nil), bcPaths...)
+		// bcPaths is a fresh local (read-only after this); the script-table
+		// slice joins as its own chunk — neither is copied.
+		mergeInputs := inputChunks{bcPaths}
 
 		if linksCopy {
-			mergeInputs = append(mergeInputs, ctx.scripts[copyFsToolsVFS]...)
+			mergeInputs = append(mergeInputs, ctx.scripts[copyFsToolsVFS])
 		}
 
 		ldNode := &Node{
 			Platform:         instance.Platform,
 			Cmds:             []Cmd{{CmdArgs: ldArgs, Env: env}},
 			Env:              env,
-			Inputs:           inputChunks{mergeInputs},
+			Inputs:           mergeInputs,
 			Outputs:          []VFS{mergedOut},
 			KV:               KV{P: pkLD, PC: pcLightRed},
 			TargetProperties: tp,
@@ -159,13 +165,16 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		optInputs := make([]VFS, 0, 2+len(bcSourceInputs))
 		optInputs = append(optInputs, mergedOut)
 		optInputs = append(optInputs, optWrapperVFS) // ${input:"build/scripts/llvm_opt_wrapper.py"}
-		optInputs = dedupVFS(optInputs, bcSourceInputs)
+		// Stays a single flat chunk: the dedup interleaves the head with
+		// bcSourceInputs (a local accumulation full of per-BC duplicates), so the
+		// tail needs a freshly built slice either way — no shared slice is copied.
+		optChunks := inputChunks{dedupVFS(optInputs, bcSourceInputs)}
 
 		optNode := &Node{
 			Platform:         instance.Platform,
 			Cmds:             []Cmd{{CmdArgs: optArgs, Env: env}},
 			Env:              env,
-			Inputs:           inputChunks{optInputs},
+			Inputs:           optChunks,
 			Outputs:          []VFS{optOut},
 			KV:               KV{P: pkOP, PC: pcYellow},
 			TargetProperties: tp,
@@ -195,10 +204,10 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		// Upstream ymake propagates producer inputs transitively via its
 		// ${input:...} resolution; our code uses the prOutputInputs map for this.
 		if d.prOutputInputs == nil {
-			d.prOutputInputs = map[string][]VFS{}
+			d.prOutputInputs = map[string]inputChunks{}
 		}
 
-		d.prOutputInputs[optOutName] = optInputs // read-only consumers (node inputs + prResourceExtraInputs copies out)
+		d.prOutputInputs[optOutName] = optChunks // read-only consumers (node inputs + prResourceExtraInputs copies out)
 		d.resources = append(d.resources, resourceEntry{
 			Path:      optOutName,
 			Key:       "/llvm_bc/" + stmt.Name,

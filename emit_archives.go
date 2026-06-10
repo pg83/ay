@@ -72,7 +72,7 @@ func emitArchive(
 	// sibling PR outputs the command never names — they are build-order concerns
 	// carried by producerRefs / toolLDRef DepRefs, not action inputs — so they are
 	// not listed here.
-	inputs := make([]VFS, 0, len(pathPerFile)+1)
+	inputs := make([]VFS, 0, len(pathPerFile))
 	deduper.reset()
 
 	for _, p := range pathPerFile {
@@ -82,8 +82,6 @@ func emitArchive(
 
 		inputs = append(inputs, p)
 	}
-
-	inputs = append(inputs, toolBinPath)
 
 	depRefs := make([]NodeRef, 0, len(producerRefs)+1)
 	depRefs = append(depRefs, producerRefs...)
@@ -103,7 +101,7 @@ func emitArchive(
 			},
 		},
 		Env:              env,
-		Inputs:           inputChunks{inputs},
+		Inputs:           inputChunks{inputs, srcChunk(toolBinPath)},
 		KV:               KV{P: pkAR, PC: pcLightRed},
 		Outputs:          []VFS{archiveVFS},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

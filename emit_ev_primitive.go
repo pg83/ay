@@ -96,8 +96,6 @@ func EmitEV(
 		srcVFS,
 	}
 
-	inputs = append(inputs, transitiveImports...)
-
 	targetProps := TargetProperties{ModuleDir: moduleDir}
 
 	if moduleTag != 0 {
@@ -138,7 +136,7 @@ func EmitEV(
 			},
 		},
 		Env:              env,
-		Inputs:           inputChunks{inputs},
+		Inputs:           inputChunks{inputs, transitiveImports},
 		Outputs:          []VFS{evCC, evH},
 		KV:               KV{P: pkEV, PC: pcYellow},
 		TargetProperties: targetProps,

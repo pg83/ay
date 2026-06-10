@@ -24,17 +24,16 @@ func EmitJVCPG4(
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	inputCap := 2 + len(jvInputs) + len(closure) + 2
-	inputs := make([]VFS, 0, inputCap)
-	inputs = append(inputs, jvPrimary)
+	head := make([]VFS, 0, 2)
+	head = append(head, jvPrimary)
 
 	if src != jvPrimary {
-		inputs = append(inputs, src)
+		head = append(head, src)
 	}
 
-	inputs = append(inputs, scripts[fsTools]...)
-	inputs = append(inputs, jvInputs...)
-	inputs = append(inputs, closure...)
+	// The fs_tools closure (shared table slice), jvInputs and closure (caller's
+	// slices) are referenced as their own chunks, never copied.
+	inputs := inputChunks{head, scripts[fsTools], jvInputs, closure}
 
 	node := &Node{
 		Platform: instance.Platform,
@@ -45,7 +44,7 @@ func EmitJVCPG4(
 			},
 		},
 		Env:              env,
-		Inputs:           inputChunks{inputs},
+		Inputs:           inputs,
 		KV:               KV{P: pkCP, PC: pcLightCyan},
 		Outputs:          []VFS{dst},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -78,17 +77,21 @@ func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	inputs := make([]VFS, 0, 3+len(extraInputs))
-	inputs = append(inputs, scripts[fsTools]...)
-	inputs = append(inputs, src)
+	// The fs_tools closure (shared table slice) is referenced as its own chunk;
+	// extraInputs stays a locally built chunk — its membership depends on the
+	// per-node src/dst exclusion below.
+	ownInputs := make([]VFS, 0, 1+len(extraInputs))
+	ownInputs = append(ownInputs, src)
 
 	for _, v := range extraInputs {
 		if v == src || v == dst {
 			continue
 		}
 
-		inputs = append(inputs, v)
+		ownInputs = append(ownInputs, v)
 	}
+
+	inputs := inputChunks{scripts[fsTools], ownInputs}
 
 	node := &Node{
 		Platform: instance.Platform,
@@ -99,7 +102,7 @@ func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 			},
 		},
 		Env:              env,
-		Inputs:           inputChunks{inputs},
+		Inputs:           inputs,
 		KV:               KV{P: pkCP, PC: pcLightCyan},
 		Outputs:          []VFS{dst},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

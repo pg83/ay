@@ -41,6 +41,30 @@ func (dd *deDuper) has(v VFS) bool {
 	return dd.seen.has(v)
 }
 
+// filterSeen drops from list the elements already in the current set (adding
+// the survivors), preserving order. Copy-on-write: when nothing is dropped the
+// input slice is returned as-is (it may be a shared cached closure); a fresh
+// filtered slice is built only on the first duplicate.
+func (dd *deDuper) filterSeen(list []VFS) []VFS {
+	for i, v := range list {
+		if dd.add(v) {
+			continue
+		}
+
+		out := append(make([]VFS, 0, len(list)-1), list[:i]...)
+
+		for _, w := range list[i+1:] {
+			if dd.add(w) {
+				out = append(out, w)
+			}
+		}
+
+		return out
+	}
+
+	return list
+}
+
 func (dd *deDuper) dedupVFS(lists ...[]VFS) []VFS {
 	total := 0
 

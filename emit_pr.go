@@ -133,11 +133,12 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	prRef := prResult.Ref
 
 	if d.prOutputInputs == nil {
-		d.prOutputInputs = map[string][]VFS{}
+		d.prOutputInputs = map[string]inputChunks{}
 	}
 
-	// prResult.Inputs is a fresh, never-mutated slice; the reader
-	// (prResourceExtraInputs) copies out, so sharing it across keys is safe.
+	// prResult.Inputs shares the PR node's chunk list; nothing mutates it after
+	// Emit and the reader (prResourceExtraInputs) copies out, so sharing it
+	// across keys is safe.
 	for _, f := range stmt.OUTFiles {
 		d.prOutputInputs[f] = prResult.Inputs
 	}

@@ -166,8 +166,6 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 	)
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-	inputs := []VFS{flatcBinary, flatcWrapperVFS, srcVFS}
-	inputs = append(inputs, transitiveImports...)
 
 	var depRefs []NodeRef
 	var foreignDepRefs []NodeRef
@@ -189,7 +187,7 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 		DepRefs:          depRefs,
 		Env:              env,
 		ForeignDepRefs:   foreignDepRefs,
-		Inputs:           inputChunks{inputs},
+		Inputs:           inputChunks{{flatcBinary, flatcWrapperVFS, srcVFS}, transitiveImports},
 		KV:               KV{P: pkFL, PC: pcLightGreen},
 		Outputs:          []VFS{headerVFS, cppVFS, bfbsVFS},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

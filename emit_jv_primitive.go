@@ -13,7 +13,7 @@ var (
 
 const jdkResourcePath = "$(JDK17)/bin/java"
 
-func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs []VFS, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag STR, emit Emitter) NodeRef {
+func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs inputChunks, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag STR, emit Emitter) NodeRef {
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	node := &Node{
@@ -26,7 +26,7 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs []VFS, outputs []
 			},
 		},
 		Env:     env,
-		Inputs:  inputChunks{inputs},
+		Inputs:  inputs,
 		KV:      KV{P: pkJV, PC: pcLightBlue, ShowOut: true},
 		Outputs: outputs,
 		TargetProperties: func() TargetProperties {
@@ -84,11 +84,11 @@ func EmitJV(
 
 	cmdArgs = appendInternStrs(cmdArgs, options)
 
-	inputs := []VFS{
+	inputs := inputChunks{{
 		grammarVFS,
 		stdout2stderrVFS,
 		antlr4JarVFS,
-	}
+	}}
 
 	base := strings.TrimSuffix(filepath.Base(grammar), ".g4")
 	outPrefix := instance.Path.Rel() + "/" + base
@@ -142,12 +142,12 @@ func EmitJVSplit(
 		cmdArgs = append(cmdArgs, argListener.str())
 	}
 
-	inputs := []VFS{
+	inputs := inputChunks{{
 		lexerVFS,
 		parserVFS,
 		stdout2stderrVFS,
 		antlr4JarVFS,
-	}
+	}}
 
 	lexerBase := strings.TrimSuffix(filepath.Base(lexer), ".g4")
 	parserBase := strings.TrimSuffix(filepath.Base(parser), ".g4")
@@ -187,9 +187,8 @@ func EmitJVGeneral(
 	)
 	cmdArgs = appendInternStrs(cmdArgs, args)
 
-	jvInputs := make([]VFS, 0, len(inputs)+2)
-	jvInputs = append(jvInputs, inputs...)
-	jvInputs = append(jvInputs, stdout2stderrVFS, jarVFS)
+	// inputs is the caller's slice — referenced as its own chunk, never copied.
+	jvInputs := inputChunks{inputs, {stdout2stderrVFS, jarVFS}}
 
 	return emitJVNode(instance, cmdArgs, jvInputs, outputs, cwd, depRefs, moduleTag, emit)
 }

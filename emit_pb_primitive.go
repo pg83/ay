@@ -220,12 +220,6 @@ func EmitPB(
 	}
 
 	inputs = append(inputs, srcVFS)
-	inputs = append(inputs, transitiveProtoImports...)
-	// When srcVFS is build-generated, carry the producer's transitive $(S) leaf
-	// sources (e.g. the RUN_ANTLR grammar / template / jar / scripts behind a
-	// generated .proto) so the PB node's input set matches upstream's flat
-	// source closure.
-	inputs = append(inputs, producerSourceInputs...)
 
 	targetProps := TargetProperties{ModuleDir: moduleDir}
 
@@ -286,8 +280,12 @@ func EmitPB(
 				Env:     env,
 			},
 		},
-		Env:              env,
-		Inputs:           inputChunks{inputs},
+		Env: env,
+		// transitiveProtoImports and producerSourceInputs (the producer's
+		// transitive $(S) leaf sources behind a build-generated .proto — RUN_ANTLR
+		// grammar / template / jar / scripts — matching upstream's flat source
+		// closure) are shared caller slices: referenced as chunks, never copied.
+		Inputs:           inputChunks{inputs, transitiveProtoImports, producerSourceInputs},
 		Outputs:          outputs,
 		KV:               KV{P: pkPB, PC: pcYellow},
 		TargetProperties: targetProps,

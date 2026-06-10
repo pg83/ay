@@ -35,9 +35,9 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 		pyOutVFS := Build(instance.Path.Rel() + "/" + pyOutRel)
 		swigClosure := swigIncludeClosure(ctx, srcVFS)
 
-		inputs := make([]VFS, 0, 2+len(swigClosure))
-		inputs = append(inputs, bldContribToolsSwigSwig, srcVFS)
-		inputs = append(inputs, swigClosure...)
+		// swigClosure joins as its own chunk (referenced, not copied; read-only
+		// after this — the later consumers copy out of it).
+		inputs := inputChunks{{bldContribToolsSwigSwig, srcVFS}, swigClosure}
 
 		cmdArgs := []STR{
 			internStr(swigBin),
@@ -65,7 +65,7 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 			},
 			DepRefs:          []NodeRef{swigRef},
 			Env:              EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
-			Inputs:           inputChunks{inputs},
+			Inputs:           inputs,
 			Outputs:          []VFS{cOutVFS, pyOutVFS},
 			KV:               KV{P: pkSW, PC: pcYellow},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

@@ -314,17 +314,19 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 			toolRefs = append(toolRefs, py3ccSlowRef)
 		}
 
-		nodeInputs := append([]VFS{py3ccBinary, py3ccSlowBin, pyOut}, sourceInputs...)
+		// sourceInputs is shared across the pyOutputs loop — its own chunk,
+		// referenced, not copied per node.
+		nodeInputs := inputChunks{{py3ccBinary, py3ccSlowBin, pyOut}, sourceInputs}
 
 		if i > 0 {
-			nodeInputs = append(nodeInputs, pyOutputs[0])
+			nodeInputs = append(nodeInputs, []VFS{pyOutputs[0]})
 		}
 
 		node := &Node{
 			Platform:         instance.Platform,
 			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}}},
 			Env:              EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}},
-			Inputs:           inputChunks{nodeInputs},
+			Inputs:           nodeInputs,
 			Outputs:          []VFS{out},
 			KV:               KV{P: pkPY, PC: pcYellow},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel(), ModuleTag: tagPy3Proto},
@@ -413,9 +415,10 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 	var chunks []chunk
 	cur := chunk{}
 	cmdLen := 0
-	// Chunk accumulation runs no deduper user (the dedupVFS calls below follow
-	// the final flush), so the input set lives on the deduper, reset per flush.
-	// depSeen stays a local map: it is live simultaneously with the input set.
+	// Chunk accumulation runs no deduper user (the dedupVFS call / input tail
+	// filter below follow the final flush), so the input set lives on the
+	// deduper, reset per flush. depSeen stays a local map: it is live
+	// simultaneously with the input set.
 	deduper.reset()
 	depSeen := map[NodeRef]struct{}{}
 	addInput := func(v VFS) {
@@ -509,15 +512,33 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 		}
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-		inputs := append([]VFS(nil), ch.inputs...)
-		inputs = append(inputs, rescompilerBinVFS)
-		inputs = append(inputs, auxClosure...)
-		inputs = dedupVFS(inputs)
+
+		// ch.inputs is internally deduped already (deduper-gated accumulation),
+		// so it survives a whole-list dedup intact — reference it as a chunk and
+		// filter only the rescompiler + closure tail against it.
+		deduper.reset()
+
+		for _, p := range ch.inputs {
+			deduper.add(p)
+		}
+
+		tail := make([]VFS, 0, 1+len(auxClosure))
+
+		if deduper.add(rescompilerBinVFS) {
+			tail = append(tail, rescompilerBinVFS)
+		}
+
+		for _, p := range auxClosure {
+			if deduper.add(p) {
+				tail = append(tail, p)
+			}
+		}
+
 		ref := ctx.emit.Emit(&Node{
 			Platform:         instance.Platform,
 			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: env}},
 			Env:              env,
-			Inputs:           inputChunks{inputs},
+			Inputs:           inputChunks{ch.inputs, tail},
 			Outputs:          []VFS{aux},
 			KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel(), ModuleTag: tagPy3Proto},

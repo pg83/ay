@@ -109,11 +109,12 @@ func emitRunPython(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	result := EmitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, moduleInputs.TC, ctx.emit)
 
 	if d.prOutputInputs == nil {
-		d.prOutputInputs = map[string][]VFS{}
+		d.prOutputInputs = map[string]inputChunks{}
 	}
 
-	// result.Inputs is a fresh, never-mutated slice; the reader
-	// (prResourceExtraInputs) copies out, so sharing it across keys is safe.
+	// result.Inputs shares the PY node's chunk list; nothing mutates it after
+	// Emit and the reader (prResourceExtraInputs) copies out, so sharing it
+	// across keys is safe.
 	for _, f := range stmt.OUTFiles {
 		d.prOutputInputs[f] = result.Inputs
 	}
@@ -478,14 +479,14 @@ func EmitPYRun(
 		cmdArgs = append(cmdArgs, internStr(a))
 	}
 
-	inputs := make([]VFS, 0, 1+len(stmt.INFiles)+len(inputClosure))
+	head := make([]VFS, 0, 1+len(stmt.INFiles))
 	deduper.reset()
 	appendUnique := func(vfs VFS) {
 		if !deduper.add(vfs) {
 			return
 		}
 
-		inputs = append(inputs, vfs)
+		head = append(head, vfs)
 	}
 	appendUnique(scriptVFS)
 
@@ -493,9 +494,10 @@ func EmitPYRun(
 		appendUnique(inVFSByToken[f])
 	}
 
-	for _, vfs := range inputClosure {
-		appendUnique(vfs)
-	}
+	// The closure tail is filtered against the head set; filterSeen returns
+	// inputClosure itself when nothing collides, so the closure is referenced,
+	// not copied, into the chunk list.
+	inputs := inputChunks{head, deduper.filterSeen(inputClosure)}
 
 	var outputs []VFS
 	var stdoutPath STR
@@ -527,7 +529,7 @@ func EmitPYRun(
 		Platform:         instance.Platform,
 		Cmds:             []Cmd{cmd},
 		Env:              env,
-		Inputs:           inputChunks{inputs},
+		Inputs:           inputs,
 		KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 		Outputs:          outputs,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
@@ -536,8 +538,10 @@ func EmitPYRun(
 		usesResources:    []string{resourcePatternYMakePython3},
 	}
 
+	// The node and the result share the same chunk list: nothing mutates a
+	// node's Inputs after Emit, and prOutputInputs readers copy out.
 	return prEmitResult{
 		Ref:    emit.Emit(node),
-		Inputs: append([]VFS(nil), inputs...),
+		Inputs: inputs,
 	}
 }

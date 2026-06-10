@@ -98,10 +98,10 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 	var chunks []chunk
 	cur := chunk{}
 	cmdLen := 0
-	// Chunk accumulation runs no deduper user (pyProtoSourceInputs / dedupVFS
-	// below follow the final flush), so the input set lives on the deduper,
-	// reset per flush. depSeen stays a local map: it is live simultaneously
-	// with the input set.
+	// Chunk accumulation runs no deduper user (pyProtoSourceInputs / the input
+	// tail filter below follow the final flush), so the input set lives on the
+	// deduper, reset per flush. depSeen stays a local map: it is live
+	// simultaneously with the input set.
 	deduper.reset()
 	depSeen := map[NodeRef]struct{}{}
 	addInput := func(v VFS) {
@@ -190,10 +190,29 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 		}
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-		inputs := append([]VFS(nil), ch.inputs...)
-		inputs = append(inputs, rescompilerBinVFS)
-		inputs = append(inputs, auxClosure...)
-		inputs = dedupVFS(inputs)
+
+		// ch.inputs is internally deduped already (deduper-gated accumulation),
+		// so it survives a whole-list dedup intact — reference it as a chunk and
+		// filter only the rescompiler + closure tail against it.
+		deduper.reset()
+
+		for _, p := range ch.inputs {
+			deduper.add(p)
+		}
+
+		tail := make([]VFS, 0, 1+len(auxClosure))
+
+		if deduper.add(rescompilerBinVFS) {
+			tail = append(tail, rescompilerBinVFS)
+		}
+
+		for _, p := range auxClosure {
+			if deduper.add(p) {
+				tail = append(tail, p)
+			}
+		}
+
+		inputs := inputChunks{ch.inputs, tail}
 
 		if extras := resolveCodegenDepRefsExt(ctx, instance, nil, ch.inputs, chDeps...); len(extras) > 0 {
 			chDeps = append(chDeps, extras...)
@@ -203,7 +222,7 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 			Platform:         instance.Platform,
 			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: env}},
 			Env:              env,
-			Inputs:           inputChunks{inputs},
+			Inputs:           inputs,
 			Outputs:          []VFS{aux},
 			KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
