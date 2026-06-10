@@ -219,7 +219,7 @@ func resolveModuleToolchain(globals []resourceDecl, clangVer string) moduleToolc
 	for _, decl := range globals {
 		switch decl.Name.String() {
 		case clangRes:
-			root := Build("resources/" + clangRes).String()
+			root := "$(B)/resources/" + clangRes
 			tc.ClangResource = internStr(clangRes)
 			tc.ClangRoot = internStr(root)
 			tc.CC = internStr(root + "/bin/clang")
@@ -228,11 +228,11 @@ func resolveModuleToolchain(globals []resourceDecl, clangVer string) moduleToolc
 			tc.Objcopy = internStr(root + "/bin/llvm-objcopy")
 			tc.Strip = internStr(root + "/bin/llvm-strip")
 		case resourcePatternLLDRoot:
-			root := Build("resources/" + resourcePatternLLDRoot).String()
+			root := "$(B)/resources/" + resourcePatternLLDRoot
 			tc.LLDRoot = internStr(root)
 			tc.LLD = internStr(root + "/bin/ld.lld")
 		case resourcePatternYMakePython3:
-			tc.Python3 = internStr(Build("resources/"+resourcePatternYMakePython3).String() + "/bin/python3")
+			tc.Python3 = internStr("$(B)/resources/" + resourcePatternYMakePython3 + "/bin/python3")
 		}
 	}
 
