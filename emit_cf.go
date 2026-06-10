@@ -39,7 +39,7 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 		// Record CF source on the GeneratedFileInfo so antlr / similar
 		// consumers can extend their inputs with srcVFS + configure_file.py
 		// when an INFile is a CF output (upstream tracks both as JV inputs).
-		registerBoundGeneratedParsedOutputWithSource(ctx, instance, "CF", cfOut, srcVFS, parsed, cfRef, nil)
+		registerBoundGeneratedParsedOutputWithSource(ctx, instance, pkCF, cfOut, srcVFS, parsed, cfRef, nil)
 	}
 }
 

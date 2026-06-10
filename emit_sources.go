@@ -118,7 +118,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 
 		r6Ref, r6Out := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryVFS, srcIn.Ragel6Flags, rl6Closure, ctx.emit)
 
-		registerGeneratedParsedOutput(ctx, srcInstance, "R6", r6Out, r6Parsed, []NodeRef{ragelLDRef})
+		registerGeneratedParsedOutput(ctx, srcInstance, pkR6, r6Out, r6Parsed, []NodeRef{ragelLDRef})
 
 		ccSrcRel := strings.TrimPrefix(r6Out.Rel(), srcInstance.Path+"/")
 		ccIncludeInputs := walkClosure(ctx, srcInstance, r6Out, srcIn)
@@ -160,11 +160,11 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			evHParsed = append(evHParsed, directImports...)
 			evHParsed = append(evHParsed, protobufRuntimeDirectives...)
 			evHParsed = append(evHParsed, evExtras...)
-			registerBoundGeneratedParsedOutput(ctx, srcInstance, "EV", evH, evHParsed, evRef, []NodeRef{event2cppLDRef})
+			registerBoundGeneratedParsedOutput(ctx, srcInstance, pkEV, evH, evHParsed, evRef, []NodeRef{event2cppLDRef})
 			evCCParsed := make([]includeDirective, 0, 1+len(protobufRuntimeDirectives))
 			evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internStr(evH.Rel())})
 			evCCParsed = append(evCCParsed, protobufRuntimeDirectives...)
-			registerBoundGeneratedParsedOutput(ctx, srcInstance, "EV", evPbCC, evCCParsed, evRef, []NodeRef{event2cppLDRef})
+			registerBoundGeneratedParsedOutput(ctx, srcInstance, pkEV, evPbCC, evCCParsed, evRef, []NodeRef{event2cppLDRef})
 		}
 
 		evPbCCSuffix := srcRel + ".pb.cc"
@@ -196,14 +196,14 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		_ = r5Ref
 
 		rlSourceVFS := Source(srcInstance.Path + "/" + srcRel)
-		registerBoundGeneratedParsedOutput(ctx, srcInstance, "R5", r5TmpOut, nil, r5Ref, []NodeRef{ragel5LDRef, rlgenCdLDRef})
+		registerBoundGeneratedParsedOutput(ctx, srcInstance, pkR5, r5TmpOut, nil, r5Ref, []NodeRef{ragel5LDRef, rlgenCdLDRef})
 		var r5Parsed []includeDirective
 
 		if scanner := ctx.scannerFor(srcInstance); scanner != nil {
 			r5Parsed = scanner.parsers.sourceParsedBuckets(rlSourceVFS).bucket(parsedIncludesCpp)
 		}
 
-		registerBoundGeneratedParsedOutput(ctx, srcInstance, "R5", r5CppOut, r5Parsed, r5Ref, []NodeRef{ragel5LDRef, rlgenCdLDRef})
+		registerBoundGeneratedParsedOutput(ctx, srcInstance, pkR5, r5CppOut, r5Parsed, r5Ref, []NodeRef{ragel5LDRef, rlgenCdLDRef})
 
 		ccSrcRel := strings.TrimPrefix(r5CppOut.Rel(), srcInstance.Path+"/")
 		ccIn := srcIn
@@ -244,7 +244,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		cfOut := Build(srcInstance.Path + "/" + strings.TrimSuffix(srcRel, ".in"))
 		cfRef, cfOut := EmitCF(srcInstance, inSourceVFS, cfOut, cfgVars, srcIn.IncludeInputs, srcInstance.Path, cfModuleTag(d, srcInstance), srcIn.TC, ctx.emit)
 
-		registerBoundGeneratedParsedOutput(ctx, srcInstance, "CF", cfOut, []includeDirective{
+		registerBoundGeneratedParsedOutput(ctx, srcInstance, pkCF, cfOut, []includeDirective{
 			{kind: includeQuoted, target: internStr(inSourceVFS.Rel())},
 			{kind: includeQuoted, target: internStr(configureFilePyVFS.Rel())},
 		}, cfRef, nil)

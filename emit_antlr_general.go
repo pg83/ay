@@ -42,7 +42,7 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			inputs = append(inputs, vfs)
 
 			if reg != nil {
-				if info := reg.Lookup(vfs); info != nil && info.ProducerKvP == "CF" && info.SourcePath != 0 {
+				if info := reg.Lookup(vfs); info != nil && info.ProducerKvP == pkCF && info.SourcePath != 0 {
 					appendCFExtra(info.SourcePath)
 					appendCFExtra(configureFilePyVFS)
 				}
@@ -92,7 +92,7 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			jvSourceInputs = append(jvSourceInputs, stdout2stderrVFS, jarVFS)
 
 			for outTok, outVFS := range outVFSByToken {
-				registerBoundGeneratedParsedOutput(ctx, instance, "JV", outVFS, antlrParsedIncludes(instance.Path, run, outTok, outVFSByToken, inputs, jarVFS), jvRef, nil)
+				registerBoundGeneratedParsedOutput(ctx, instance, pkJV, outVFS, antlrParsedIncludes(instance.Path, run, outTok, outVFSByToken, inputs, jarVFS), jvRef, nil)
 				reg.SetSourceInputs(outVFS, jvSourceInputs)
 			}
 		}

@@ -1,7 +1,7 @@
 package main
 
 type GeneratedFileInfo struct {
-	ProducerKvP string
+	ProducerKvP ProcKind
 
 	OutputPath VFS
 
@@ -224,7 +224,7 @@ func (r *CodegenRegistry) SetSourceInputs(path VFS, src []VFS) {
 	info.SourceInputs = src
 }
 
-func registerGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind string, output VFS, parsed []includeDirective, generatorRefs []NodeRef) {
+func registerGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind ProcKind, output VFS, parsed []includeDirective, generatorRefs []NodeRef) {
 	reg := codegenRegForInstance(ctx, instance)
 
 	if reg != nil {
@@ -247,7 +247,7 @@ func registerDeferredCF(ctx *genCtx, instance ModuleInstance, output VFS, parsed
 
 	if reg != nil {
 		reg.Register(&GeneratedFileInfo{
-			ProducerKvP: "CF",
+			ProducerKvP: pkCF,
 			OutputPath:  output,
 			DeferredCF:  def,
 		})
@@ -270,7 +270,7 @@ func bindGeneratedOutput(ctx *genCtx, instance ModuleInstance, output VFS, ref N
 	reg.SetProducerRef(output, ref)
 }
 
-func registerBoundGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind string, output VFS, parsed []includeDirective, ref NodeRef, generatorRefs []NodeRef) {
+func registerBoundGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind ProcKind, output VFS, parsed []includeDirective, ref NodeRef, generatorRefs []NodeRef) {
 	registerBoundGeneratedParsedOutputWithSource(ctx, instance, kind, output, 0, parsed, ref, generatorRefs)
 }
 
@@ -280,7 +280,7 @@ func registerBoundGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, ki
 // to fall back to OutputPath as the canonical edge. generatorRefs are the codegen
 // tools whose INDUCED_DEPS the scanner mixes into this output's closure (nil when
 // the producer has no induced-deps tool).
-func registerBoundGeneratedParsedOutputWithSource(ctx *genCtx, instance ModuleInstance, kind string, output VFS, sourcePath VFS, parsed []includeDirective, ref NodeRef, generatorRefs []NodeRef) {
+func registerBoundGeneratedParsedOutputWithSource(ctx *genCtx, instance ModuleInstance, kind ProcKind, output VFS, sourcePath VFS, parsed []includeDirective, ref NodeRef, generatorRefs []NodeRef) {
 	reg := codegenRegForInstance(ctx, instance)
 
 	if reg != nil {

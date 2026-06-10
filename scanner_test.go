@@ -1040,7 +1040,7 @@ func attachCodegen(scanner *IncludeScanner, reg *CodegenRegistry) {
 func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 	reg := NewCodegenRegistry()
 	reg.Register(&GeneratedFileInfo{
-		ProducerKvP: "PR",
+		ProducerKvP: pkPR,
 		OutputPath:  Build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc"),
 	})
 
@@ -1071,7 +1071,7 @@ func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 	reg := NewCodegenRegistry()
 	reg.Register(&GeneratedFileInfo{
-		ProducerKvP: "PR",
+		ProducerKvP: pkPR,
 		OutputPath:  Build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc"),
 	})
 
@@ -1104,7 +1104,7 @@ func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 func TestScanner_AddInclBuildOnlyMatchesCodegen(t *testing.T) {
 	reg := NewCodegenRegistry()
 	reg.Register(&GeneratedFileInfo{
-		ProducerKvP: "PR",
+		ProducerKvP: pkPR,
 		OutputPath:  Build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.h.inc"),
 	})
 
