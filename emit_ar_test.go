@@ -7,6 +7,7 @@ import (
 )
 
 var testToolchainFlags = map[string]string{
+	"OPENSOURCE":              "yes",
 	"BUILD_PYTHON_BIN":        "/bin/python3",
 	"BUILD_PYTHON3_BIN":       "/bin/python3",
 	"CLANG_TOOL":              "/bin/clang",

@@ -92,6 +92,53 @@ type Platform struct {
 	// via SetStringID instead of re-interning the same constant on every module.
 	ClangVerSTR       STR
 	BuildTypeUpperSTR STR
+
+	// WrapccHead / WrapccTail are the wrapcc.py compile-wrapper tokens that upstream's
+	// gnu_compiler.conf (_C_CPP_WRAPPER) prepends before the compiler in the CC compile
+	// line, computed once per platform. The per-source file slots between them, so the
+	// emitted prefix is: WrapccHead ++ [<src>] ++ WrapccTail ++ [<compiler> …]. Both nil
+	// when the wrapper is disabled (OPENSOURCE=yes — i.e. the sg2–5 opensource contour);
+	// see wrapccPrefixFor.
+	WrapccHead []STR
+	WrapccTail []STR
+
+	// CCUsesResources is the fetched-resource list every CC node on this platform
+	// carries in Node.usesResources: the version-specific CLANG, plus YMAKE_PYTHON3 when
+	// the wrapcc.py wrapper is active (it runs under that python). Computed once per
+	// platform and shared read-only across CC nodes.
+	CCUsesResources []string
+}
+
+// wrapccPython3STR / wrapccPyVFS / wrapccArgSrcFile / wrapccArgEnd back the wrapcc.py
+// compile-wrapper prefix (see wrapccPrefixFor). The python path is the constant
+// YMAKE_PYTHON3 resource binary (identical to moduleToolchain.Python3), since upstream
+// invokes the wrapper via the global $YMAKE_PYTHON3, not a per-module peer.
+var (
+	wrapccPython3STR = internStr("$(B)/resources/" + resourcePatternYMakePython3 + "/bin/python3")
+	wrapccPyVFS      = Source("build/scripts/wrapcc.py")
+	wrapccArgSrcFile = internArg("--source-file")
+	wrapccArgEnd     = internArg("--wrapcc-end")
+)
+
+// wrapccPrefixFor returns the wrapcc.py compile-wrapper head/tail token slices that
+// upstream's build/conf/compilers/gnu_compiler.conf prepends before the compiler in
+// _CPP_ARGS_NEW/_C_ARGS_NEW. Head = [python3, $(S)/build/scripts/wrapcc.py,
+// --source-file]; the per-source file is spliced between head and tail; tail =
+// [--source-root, $(S), --build-root, $(B), --wrapcc-end].
+//
+// The wrapper is disabled (returns nil, nil) for opensource builds (OPENSOURCE=yes) —
+// matching the conf's `when ($CPP_ANALYSIS_ARGS || $OPENSOURCE == "yes" ||
+// $RAW_COMPILE_CPP_CMD == "yes") { _C_CPP_WRAPPER= }`. CPP_ANALYSIS_ARGS and
+// RAW_COMPILE_CPP_CMD are not modelled (unset in every build here).
+func wrapccPrefixFor(flags map[string]string) (head, tail []STR) {
+	if flags["OPENSOURCE"] == "yes" {
+		return nil, nil
+	}
+
+	head = []STR{wrapccPython3STR, wrapccPyVFS.str(), wrapccArgSrcFile.str()}
+	tail = []STR{argSourceRoot.str(), strS, argBuildRoot.str(), strB, wrapccArgEnd.str()}
+
+	return head, tail
 }
 
 // internFlags interns the raw CLI/conf flag map into the ENV/STR form stored on
@@ -153,6 +200,12 @@ func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, 
 
 	p.TargetArg = internStr("--target=" + p.Triple)
 	p.MultiarchLibPathSTR = internStr(p.MultiarchLibPath())
+	p.WrapccHead, p.WrapccTail = wrapccPrefixFor(flags)
+
+	p.CCUsesResources = []string{resourcePatternClangTool + p.ClangVer}
+	if len(p.WrapccHead) > 0 {
+		p.CCUsesResources = append(p.CCUsesResources, resourcePatternYMakePython3)
+	}
 
 	if p.March != "" {
 		p.MarchArgs = []ARG{internArg("-march=" + p.March)}

@@ -20,6 +20,58 @@ func TestParseCompilerFlags(t *testing.T) {
 	}
 }
 
+func TestWrapccPrefixFor_GateOnOpensource(t *testing.T) {
+	// Internal contour (OPENSOURCE unset) enables the wrapcc.py compile wrapper.
+	head, tail := wrapccPrefixFor(map[string]string{"PIC": "no"})
+
+	wantHead := []string{
+		"$(B)/resources/YMAKE_PYTHON3/bin/python3",
+		"$(S)/build/scripts/wrapcc.py",
+		"--source-file",
+	}
+	wantTail := []string{"--source-root", "$(S)", "--build-root", "$(B)", "--wrapcc-end"}
+
+	if !reflect.DeepEqual(strStrs(head), wantHead) {
+		t.Errorf("wrapcc head = %v, want %v", strStrs(head), wantHead)
+	}
+
+	if !reflect.DeepEqual(strStrs(tail), wantTail) {
+		t.Errorf("wrapcc tail = %v, want %v", strStrs(tail), wantTail)
+	}
+
+	// Opensource contour (OPENSOURCE=yes, the sg2–5 reference snapshots) disables it.
+	head, tail = wrapccPrefixFor(map[string]string{"OPENSOURCE": "yes"})
+
+	if head != nil || tail != nil {
+		t.Errorf("OPENSOURCE=yes must disable wrapcc; got head=%v tail=%v", head, tail)
+	}
+}
+
+func TestNewPlatform_WrapccVectorsAndResources(t *testing.T) {
+	// Non-opensource platform carries the wrapcc prefix and a YMAKE_PYTHON3 CC dep.
+	intP := NewPlatform(newMemFS(nil), OSLinux, ISAAArch64, map[string]string{"PIC": "no"}, nil, "", "")
+
+	if len(intP.WrapccHead) == 0 {
+		t.Fatal("non-opensource platform must populate WrapccHead")
+	}
+
+	wantRes := []string{resourcePatternClangTool + intP.ClangVer, resourcePatternYMakePython3}
+	if !reflect.DeepEqual(intP.CCUsesResources, wantRes) {
+		t.Errorf("CCUsesResources = %v, want %v", intP.CCUsesResources, wantRes)
+	}
+
+	// Opensource platform: no wrapper, CLANG-only CC deps.
+	osP := NewPlatform(newMemFS(nil), OSLinux, ISAAArch64, map[string]string{"PIC": "no", "OPENSOURCE": "yes"}, nil, "", "")
+
+	if len(osP.WrapccHead) != 0 {
+		t.Errorf("opensource platform must not populate WrapccHead; got %v", osP.WrapccHead)
+	}
+
+	if !reflect.DeepEqual(osP.CCUsesResources, []string{resourcePatternClangTool + osP.ClangVer}) {
+		t.Errorf("opensource CCUsesResources = %v, want CLANG-only", osP.CCUsesResources)
+	}
+}
+
 func TestNewPlatform_ParsesCompilerFlags(t *testing.T) {
 	flags := map[string]string{
 		"PIC": "no",
