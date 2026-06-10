@@ -67,88 +67,48 @@ func pbHEmitsIncludesExtras(protoRelPath string, hasDescriptor bool) []includeDi
 	return out
 }
 
-func protoTransitiveImports(pm *includeParserManager, fs FS, srcRel string, peerProtoAddIncl []VFS) ([]VFS, bool) {
-	rootImports := protoDirectImportNames(pm, srcRel)
+// srcYtVFS / pbRuntimeBaseVFS are the implicit FOR-proto addincl roots (yt's
+// PROTO_NAMESPACE and the protobuf runtime src) fed to the proto closure walk.
+var (
+	srcYtVFS         = Source("yt")
+	pbRuntimeBaseVFS = Source(strings.TrimSuffix(pbRuntimeBase, "/"))
+)
 
-	if rootImports == nil {
-		return nil, false
-	}
+// protoWalkInputs builds the scan inputs for closing over .proto imports —
+// the FOR-proto addincl data fed to the scanner's STANDARD resolution: the
+// yt PROTO_NAMESPACE root and the protobuf runtime src (the implicit
+// namespaces protoc's -I set carries), plus the module's peer proto addincls.
+func protoWalkInputs(peerProtoAddIncl []VFS) ModuleCCInputs {
+	own := make([]VFS, 0, 2+len(peerProtoAddIncl))
+	own = append(own, srcYtVFS, pbRuntimeBaseVFS)
+	own = append(own, peerProtoAddIncl...)
 
-	var imports []VFS
+	return ModuleCCInputs{AddIncl: own}
+}
+
+// protoImportsFromWindow splits a .proto closure window into the transitive
+// import list — the root and google/protobuf/descriptor.proto excluded; the
+// descriptor is reported as the flag (its consumers wire pbDescriptorVFS
+// explicitly, mirroring protoc's separate descriptor handling).
+func protoImportsFromWindow(window []VFS, root VFS) ([]VFS, bool) {
 	hasDescriptor := false
-	seen := map[string]struct{}{}
-	scanned := map[string]struct{}{}
-	var walk func(string)
-	walk = func(rel string) {
-		if _, done := scanned[rel]; done {
-			return
+	var out []VFS
+
+	for _, v := range window {
+		if v == root {
+			continue
 		}
 
-		scanned[rel] = struct{}{}
-		direct := protoDirectImportNames(pm, rel)
-
-		for _, imp := range direct {
-			if imp == "google/protobuf/descriptor.proto" {
-				hasDescriptor = true
-				continue
-			}
-
-			resolved := resolveProtoImportPath(fs, imp, peerProtoAddIncl)
-
-			if resolved == "" {
-				continue
-			}
-
-			if _, ok := seen[resolved]; ok {
-				continue
-			}
-
-			seen[resolved] = struct{}{}
-			imports = append(imports, Source(resolved))
-		}
-
-		for _, imp := range direct {
-			if imp == "google/protobuf/descriptor.proto" {
-				continue
-			}
-
-			if resolved := resolveProtoImportPath(fs, imp, peerProtoAddIncl); resolved != "" {
-				walk(resolved)
-			}
-		}
-	}
-
-	for _, imp := range rootImports {
-		if imp == "google/protobuf/descriptor.proto" {
+		if strings.HasSuffix(v.Rel(), "google/protobuf/descriptor.proto") {
 			hasDescriptor = true
+
 			continue
 		}
 
-		resolved := resolveProtoImportPath(fs, imp, peerProtoAddIncl)
-
-		if resolved == "" {
-			continue
-		}
-
-		if _, ok := seen[resolved]; ok {
-			continue
-		}
-
-		seen[resolved] = struct{}{}
-		imports = append(imports, Source(resolved))
+		out = append(out, v)
 	}
 
-	for _, imp := range rootImports {
-		if imp == "google/protobuf/descriptor.proto" {
-			continue
-		}
-
-		if resolved := resolveProtoImportPath(fs, imp, peerProtoAddIncl); resolved != "" {
-			walk(resolved)
-		}
-	}
-
-	return imports, hasDescriptor
+	return out, hasDescriptor
 }
 
 func evTransitiveImports(pm *includeParserManager, fs FS, srcRel string) []VFS {
@@ -332,7 +292,9 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		protoSearchPaths = append([]VFS{Source(cfg.cppOutRoot)}, peerProtoAddIncl...)
 	}
 
-	transitiveImports, hasDescriptor := protoTransitiveImports(ctx.parsers, ctx.fs, protoRelPath, protoSearchPaths)
+	protoVFS := Source(protoRelPath)
+	transitiveImports, hasDescriptor := protoImportsFromWindow(
+		walkClosure(ctx, instance, protoVFS, protoWalkInputs(protoSearchPaths)), protoVFS)
 
 	// SRCS(X.proto) may name a build-generated .proto (e.g. jsonpath's
 	// RUN_ANTLR -language protobuf emits JsonPathParser.proto with no source
