@@ -290,33 +290,23 @@ func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
 	}
 }
 
+// hashScanContext fingerprints the resolve-relevant context fields for the
+// in-memory config maps (ctxNumByHash, resolveIndexByConfig) — nothing
+// persistent, so in-run stability is all it needs. Each element contributes its
+// interned string's xxh3 lo (internTable.los — the same per-STR hash the uid
+// layer mixes), chained through mix64, instead of re-walking the path bytes:
+// the lo is bijective-in-practice with the string (root prefix included), so
+// the discrimination matches the old per-byte FNV at a fraction of the cost.
+// Length-prefixing each slice keeps the three-slice boundaries unambiguous.
 func hashScanContext(ctx *ScanContext) uint64 {
-	const (
-		offset uint64 = 1469598103934665603
-		prime  uint64 = 1099511628211
-	)
-
-	h := offset
-
-	mix := func(s string) {
-		for i := 0; i < len(s); i++ {
-			h ^= uint64(s[i])
-			h *= prime
-		}
-
-		h ^= 0xff
-		h *= prime
-	}
+	var h uint64
 
 	mixSlice := func(ss []VFS) {
-		for _, v := range ss {
-			h ^= uint64(v.Root())
-			h *= prime
-			mix(v.Rel())
-		}
+		h = mix64(h ^ uint64(len(ss)))
 
-		h ^= 0xfe
-		h *= prime
+		for _, v := range ss {
+			h = mix64(h ^ internTable.los[v.strID()])
+		}
 	}
 
 	mixSlice(ctx.OwnAddIncl)
