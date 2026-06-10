@@ -188,6 +188,13 @@ func scannerFollowsImports(rel string) bool {
 }
 
 func (pm *includeParserManager) RegisterBuildParsedIncludes(out VFS, parsed []includeDirective) {
+	// buildParsed is keyed by VFS and consulted only for build-rooted paths
+	// (parsedIncludes gates on IsBuild), so a source-rooted registration would
+	// be silently unreachable.
+	if !out.IsBuild() {
+		ThrowFmt("RegisterBuildParsedIncludes: source-rooted output %q", out.String())
+	}
+
 	pm.buildParsed[out] = parsed
 }
 
