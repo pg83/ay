@@ -37,8 +37,6 @@ type ModuleCCInputs struct {
 
 	IncludeInputs []VFS
 
-	NodeInputs []VFS
-
 	PeerCFlagsGlobal []ARG
 
 	PeerCXXFlagsGlobal []ARG
@@ -161,13 +159,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 	// as its own chunk and the python3 resource joins the deps.
 	wrap := len(instance.Platform.WrapccHead) > 0
 
-	var allInputs inputChunks
-
-	if in.NodeInputs == nil {
-		allInputs = append(allInputs, srcChunk(inVFS), in.IncludeInputs)
-	} else {
-		allInputs = append(allInputs, in.NodeInputs)
-	}
+	allInputs := inputChunks{srcChunk(inVFS), in.IncludeInputs}
 
 	if wrap {
 		allInputs = append(allInputs, wrapccPyChunk)

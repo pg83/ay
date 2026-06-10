@@ -112,17 +112,11 @@ func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, sr
 	return Source(srcRelOnDisk)
 }
 
+// walkClosure returns the transitive include closure of vfsPath, root excluded.
+// closureOf leads its cached window with the queried node (the scanner's
+// subsumption machinery needs self-containing windows); emitters only ever
+// want the transitive part, so the root is stripped here once.
 func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in ModuleCCInputs) []VFS {
-	full := walkClosureRoot(ctx, srcInstance, vfsPath, in)
-
-	if full == nil {
-		return nil
-	}
-
-	return full[1:]
-}
-
-func walkClosureRoot(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerFor(srcInstance)
 
 	if scanner == nil {
@@ -139,10 +133,13 @@ func walkClosureRoot(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in Mo
 	sc := scanner.NewScanCtx(cfg)
 	scanner.walkClosureCalls++
 
-	// The closure is rooted at vfsPath (closureOf leads its result with the
-	// queried node); callers that want only the transitive includes strip
-	// element 0.
-	return sc.closureOf(vfsPath)
+	full := sc.closureOf(vfsPath)
+
+	if full == nil {
+		return nil
+	}
+
+	return full[1:]
 }
 
 // rewriteClosureCPSource maps any CP (COPY_FILE) output VFS in a closure to
