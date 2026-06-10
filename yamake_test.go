@@ -890,8 +890,8 @@ func TestParseSrcDir(t *testing.T) {
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *SrcDirStmt", mf.Stmts[0])
 	}
-	if s.Dir != "./xx" {
-		t.Errorf("Dir = %q, want %q", s.Dir, "./xx")
+	if len(s.Dirs) != 1 || s.Dirs[0] != "./xx" {
+		t.Errorf("Dirs = %q, want [./xx]", s.Dirs)
 	}
 }
 

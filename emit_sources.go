@@ -9,24 +9,13 @@ type sourceEmit struct {
 	OutPath VFS
 }
 
-func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, in ModuleCCInputs, ancestorRebase bool) *sourceEmit {
+func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, in ModuleCCInputs) *sourceEmit {
 	if isHeaderSource(srcRel) {
 		return nil
 	}
 
-	rebaseAncestorSource := ancestorRebase && !strings.Contains(srcRel, "/")
-
 	srcInstance := instance
-
-	if rebaseAncestorSource {
-		srcInstance.Path = Source(*d.srcDir)
-	}
-
 	srcIn := in
-
-	if rebaseAncestorSource {
-		srcIn.SrcDir = nil
-	}
 
 	switch {
 	case strings.HasSuffix(srcRel, ".proto"):
@@ -39,14 +28,14 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		}
 
 		yasmLDRef, _ := ctx.tool(argContribToolsYasm)
-		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
+		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDirs)
 		ref, _, outPath := EmitRD(srcInstance, srcRel, srcVFS, yasmLDRef, srcIn.TC, ctx.emit)
 		return &sourceEmit{Ref: ref, OutPath: outPath}
 	case strings.HasSuffix(srcRel, ".c"),
 		strings.HasSuffix(srcRel, ".cpp"),
 		strings.HasSuffix(srcRel, ".cc"),
 		strings.HasSuffix(srcRel, ".cxx"):
-		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
+		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDirs)
 
 		full := walkClosureRoot(ctx, srcInstance, srcVFS, srcIn)
 
@@ -66,7 +55,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		strings.HasSuffix(srcRel, ".s"),
 		strings.HasSuffix(srcRel, ".asm"):
 		asIn := srcIn
-		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
+		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDirs)
 
 		scanIn := srcIn
 
@@ -95,7 +84,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 	case strings.HasSuffix(srcRel, ".rl6"):
 		ragelLDRef, ragelBinaryVFS := ctx.tool(argContribToolsRagel6Bin)
 
-		rl6SourceVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
+		rl6SourceVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDirs)
 		rl6Closure := walkClosure(ctx, srcInstance, rl6SourceVFS, srcIn)
 		rl6Closure = filterEnSerializedSiblings(rl6Closure)
 
@@ -136,7 +125,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 	case strings.HasSuffix(srcRel, ".y"):
 		return emitBisonY(ctx, srcInstance, srcRel, srcIn, srcIn.BisonGenExt)
 	case strings.HasSuffix(srcRel, ".ev"):
-		evSource := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
+		evSource := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDirs)
 		evRelPath := evSource.Rel()
 
 		protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
@@ -216,7 +205,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		return &sourceEmit{Ref: ccRef, OutPath: ccOut}
 	case strings.HasSuffix(srcRel, ".h.in"):
 
-		inSourceVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
+		inSourceVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDirs)
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, inSourceVFS, srcIn)
 		cfgVars := buildCFGVars(ctx.fs, inSourceVFS.Rel(), srcIn.SetVars, srcIn.DefaultVars)
 		cfOut := Build(srcInstance.Path.Rel() + "/" + strings.TrimSuffix(srcRel, ".in"))
@@ -238,7 +227,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		return nil
 	case strings.HasSuffix(srcRel, ".cpp.in"),
 		strings.HasSuffix(srcRel, ".c.in"):
-		inSourceVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDir)
+		inSourceVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDirs)
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, inSourceVFS, srcIn)
 		cfgVars := buildCFGVars(ctx.fs, inSourceVFS.Rel(), srcIn.SetVars, srcIn.DefaultVars)
 		cfOut := Build(srcInstance.Path.Rel() + "/" + strings.TrimSuffix(srcRel, ".in"))

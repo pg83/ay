@@ -2,6 +2,7 @@ package main
 
 import (
 	"sort"
+	"strings"
 )
 
 type enumSrcsResult struct {
@@ -9,8 +10,8 @@ type enumSrcsResult struct {
 	CCOutputs []VFS
 }
 
-func resolveEnumHeaderInput(ctx *genCtx, instance ModuleInstance, headerRel string, srcDir *string) VFS {
-	headerInput := resolveSourceVFS(ctx, instance, headerRel, srcDir)
+func resolveEnumHeaderInput(ctx *genCtx, instance ModuleInstance, headerRel string, srcDirs []VFS) VFS {
+	headerInput := resolveSourceVFS(ctx, instance, headerRel, srcDirs)
 
 	if !ctx.fs.IsFile(srcRootVFS, headerInput.Rel()) {
 		if vfs := sourceInputVFS(ctx.fs, instance.Path.Rel(), headerRel); vfs != nil && vfs.IsSource() {
@@ -44,14 +45,23 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		PeerAddInclGlobal: peerAddInclGlobal,
 		SourceRoot:        ctx.sourceRoot,
 		FS:                ctx.fs,
-		SrcDir:            d.srcDir,
+		SrcDirs:           d.srcDirs,
 	}
 	res := &enumSrcsResult{}
 
 	for _, stmt := range d.enumSrcs {
-		headerRel := stmt.Header
 		withHeader := stmt.Variant == "with_header"
-		headerInput := resolveEnumHeaderInput(ctx, instance, headerRel, d.srcDir)
+		headerInput := resolveEnumHeaderInput(ctx, instance, stmt.Header, d.srcDirs)
+
+		// For a rooted spelling (e.g. ${ARCADIA_BUILD_ROOT}/<mod>/foo.pb.h for a
+		// generated proto header), the canonical module-relative headerRel comes
+		// from the resolved VFS, so the _serialized.cpp/.h outputs and the
+		// downstream CC are named under the module's build dir.
+		headerRel := stmt.Header
+
+		if moduleRootedVFS(instance.Path.Rel(), stmt.Header) != nil {
+			headerRel = strings.TrimPrefix(headerInput.Rel(), instance.Path.Rel()+"/")
+		}
 
 		closure := walkClosure(ctx, instance, headerInput, scanIn)
 

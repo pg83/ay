@@ -27,9 +27,13 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 	for i, src := range sources {
 		srcRelOnDisk := srcInstance.Path.Rel() + "/" + src
 
-		if in.SrcDir != nil && *in.SrcDir != srcInstance.Path.Rel() {
-			if !ctx.fs.IsFile(modDirKey, src) {
-				srcRelOnDisk = *in.SrcDir + "/" + src
+		if !ctx.fs.IsFile(modDirKey, src) {
+			for _, dir := range in.SrcDirs {
+				if dir != modDirKey && ctx.fs.IsFile(dir, src) {
+					srcRelOnDisk = dir.Rel() + "/" + src
+
+					break
+				}
 			}
 		}
 
@@ -80,14 +84,22 @@ func jsCCIncludeInputs(srcInstance ModuleInstance, sources []string, closure []V
 	return out
 }
 
-func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, srcDir *string) VFS {
-	srcRelOnDisk := srcInstance.Path.Rel() + "/" + srcRel
+func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, srcDirs []VFS) VFS {
+	// A rooted spelling — $(S)/$(B) or ${ARCADIA_ROOT}/${ARCADIA_BUILD_ROOT}/
+	// ${CURDIR}/${BINDIR}/ — names an exact VFS; build it directly rather than
+	// treating the whole token as a module-relative tail (which would bury the
+	// macro inside $(S)/<mod>/…). Plain relative paths fall through.
+	if vfs := moduleRootedVFS(srcInstance.Path.Rel(), srcRel); vfs != nil {
+		return *vfs
+	}
 
-	if srcDir != nil && filepath.Clean(*srcDir) != "." && filepath.Clean(*srcDir) != srcInstance.Path.Rel() {
-		cleanSrcDir := filepath.Clean(*srcDir)
-
-		if !ctx.fs.IsFile(dirKey(srcInstance.Path.Rel()), srcRel) {
-			srcRelOnDisk = filepath.ToSlash(filepath.Clean(cleanSrcDir + "/" + srcRel))
+	// srcDirs is [moduleDir, SRCDIR1, SRCDIR2, …] (collectModule seeds index 0
+	// with the module's own dir). SRCDIR is a cumulative search path where a
+	// later declaration wins, so search in reverse and take the first entry that
+	// has the file; the module dir (index 0) is the final fallback.
+	for i := len(srcDirs) - 1; i >= 1; i-- {
+		if ctx.fs.IsFile(srcDirs[i], srcRel) {
+			return Source(filepath.ToSlash(filepath.Clean(srcDirs[i].Rel() + "/" + srcRel)))
 		}
 	}
 
@@ -95,7 +107,7 @@ func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, sr
 	// at the canonical source path (REF tracks the cleaned form, e.g.
 	// $(S)/ydb/public/lib/ydb_cli/commands/ydb_command.cpp, not the
 	// command_base/../ydb_command.cpp shape).
-	srcRelOnDisk = filepath.ToSlash(filepath.Clean(srcRelOnDisk))
+	srcRelOnDisk := filepath.ToSlash(filepath.Clean(srcInstance.Path.Rel() + "/" + srcRel))
 
 	return Source(srcRelOnDisk)
 }

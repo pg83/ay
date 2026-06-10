@@ -359,14 +359,6 @@ func protoSourceRelPath(fs FS, instance ModuleInstance, d *moduleData, src strin
 
 	baseDir := instance.Path.Rel()
 
-	if d.srcDir != nil {
-		cleaned := filepath.Clean(*d.srcDir)
-
-		if cleaned != "." {
-			baseDir = cleaned
-		}
-	}
-
 	return filepath.ToSlash(filepath.Clean(baseDir + "/" + src))
 }
 

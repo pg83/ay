@@ -353,8 +353,7 @@ func TestComposeSrcDirOutputRel_FlatSrcInModuleDir(t *testing.T) {
 
 	got := composeSrcDirOutputRel(
 		"contrib/libs/ngtcp2/crypto/quictls",
-		"contrib/libs/ngtcp2/crypto",
-		"quictls/quictls.c",
+		"contrib/libs/ngtcp2/crypto/quictls/quictls.c",
 	)
 	want := "quictls.c"
 	if got != want {
@@ -364,7 +363,7 @@ func TestComposeSrcDirOutputRel_FlatSrcInModuleDir(t *testing.T) {
 
 func TestComposeSrcDirOutputRel_SubdirInModuleDir(t *testing.T) {
 
-	got := composeSrcDirOutputRel("foo/bar", "foo/bar", "sub/file.cpp")
+	got := composeSrcDirOutputRel("foo/bar", "foo/bar/sub/file.cpp")
 	want := "_/sub/file.cpp"
 	if got != want {
 		t.Errorf("composeSrcDirOutputRel = %q, want %q", got, want)

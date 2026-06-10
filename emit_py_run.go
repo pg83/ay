@@ -150,7 +150,7 @@ func pyInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 		Flags:             moduleInputs.Flags,
 		AddIncl:           moduleInputs.AddIncl,
 		PeerAddInclGlobal: moduleInputs.PeerAddInclGlobal,
-		SrcDir:            moduleInputs.SrcDir,
+		SrcDirs:           moduleInputs.SrcDirs,
 		SourceRoot:        ctx.sourceRoot,
 		FS:                ctx.fs,
 	}

@@ -246,11 +246,9 @@ func buildPySrcEntriesFor(d *moduleData, modulePath string, srcs []string, topLe
 		return nil
 	}
 
+	// SRCDIR is a source-search path, not a module relocation: the unit is the
+	// module's own dir.
 	actualUnit := modulePath
-
-	if d.srcDir != nil {
-		actualUnit = *d.srcDir
-	}
 
 	keyPrefix := ""
 

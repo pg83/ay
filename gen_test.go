@@ -1103,7 +1103,8 @@ END()
 func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 	t.Run("with_srcdir", func(t *testing.T) {
 		fs := newMemFS(map[string]string{
-			"mymod/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCDIR(other/dir)\nSRCS(foo.cpp)\nEND()\n",
+			"mymod/ya.make":     "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCDIR(other/dir)\nSRCS(foo.cpp)\nEND()\n",
+			"other/dir/foo.cpp": "int foo() { return 0; }\n",
 		})
 
 		g := testGen(fs, "mymod")
@@ -1214,9 +1215,10 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("ancestor_program_rebases_module_dir", func(t *testing.T) {
+	t.Run("ancestor_program_keeps_module_dir", func(t *testing.T) {
 		fs := newMemFS(map[string]string{
 			"tools/r6/bin/ya.make": "PROGRAM(myprog)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nALLOCATOR(FAKE)\nSRCDIR(tools/r6)\nSRCS(main.cpp)\nEND()\n",
+			"tools/r6/main.cpp":    "int main() { return 0; }\n",
 		})
 
 		g := testGen(fs, "tools/r6/bin")
@@ -1233,8 +1235,10 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Fatal("no CC node emitted")
 		}
 
-		if ccNode.TargetProperties.ModuleDir != "tools/r6" {
-			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties.ModuleDir, "tools/r6")
+		// module_dir is the module's own path; SRCDIR is a source-search dir, not
+		// a module relocation.
+		if ccNode.TargetProperties.ModuleDir != "tools/r6/bin" {
+			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties.ModuleDir, "tools/r6/bin")
 		}
 
 		wantInput := "$(S)/tools/r6/main.cpp"
@@ -1242,7 +1246,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Errorf("CC inputs = %v, want first = %q", ccNode.Inputs, wantInput)
 		}
 
-		wantOutput := "$(B)/tools/r6/main.cpp.o"
+		wantOutput := "$(B)/tools/r6/bin/__/main.cpp.o"
 		if len(ccNode.Outputs) == 0 || ccNode.Outputs[0].String() != wantOutput {
 			t.Errorf("CC outputs = %v, want first = %q", ccNode.Outputs, wantOutput)
 		}
@@ -1635,6 +1639,7 @@ SRCDIR(other)
 SRCS(src/foo.cpp)
 END()
 `,
+		"other/src/foo.cpp": "int foo() { return 0; }\n",
 	})
 
 	g := testGen(fs, "mylib")

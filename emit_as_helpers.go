@@ -10,7 +10,7 @@ var (
 
 func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs) (out, input VFS) {
 	if srcVFS.IsSource() && srcVFS.Rel() != instance.Path.Rel()+"/"+srcRel {
-		outputRel := composeSrcDirOutputRel(instance.Path.Rel(), *in.SrcDir, srcRel)
+		outputRel := composeSrcDirOutputRel(instance.Path.Rel(), srcVFS.Rel())
 		return Build(instance.Path.Rel() + "/" + outputRel + ".o"), srcVFS
 	}
 

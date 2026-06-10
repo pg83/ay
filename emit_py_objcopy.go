@@ -516,10 +516,6 @@ func emitPyNamespaceForGroup(
 
 	keyPath := instance.Path.Rel()
 
-	if group.TopLevel && d.srcDir != nil {
-		keyPath = *d.srcDir
-	}
-
 	key := "py/namespace/" + modListMD5 + "/" + keyPath
 	kvHash := key + "=\"" + nsValue + "\""
 	kvCmd := key + "=" + nsValue

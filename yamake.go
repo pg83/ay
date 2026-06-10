@@ -149,7 +149,7 @@ type LDFlagsStmt struct {
 }
 
 type SrcDirStmt struct {
-	Dir  string
+	Dirs []string
 	Line int
 }
 
@@ -986,11 +986,11 @@ func (p *parser) buildStmt(nameTok token, args []string) Stmt {
 	case "LDFLAGS":
 		return &LDFlagsStmt{Flags: append([]string(nil), args...), Line: nameTok.line}
 	case "SRCDIR":
-		if len(args) != 1 {
-			p.lex.throwParse(nameTok.line, nameTok.col, "SRCDIR expects exactly 1 argument, got %d", len(args))
+		if len(args) == 0 {
+			p.lex.throwParse(nameTok.line, nameTok.col, "SRCDIR expects at least 1 argument, got %d", len(args))
 		}
 
-		return &SrcDirStmt{Dir: args[0], Line: nameTok.line}
+		return &SrcDirStmt{Dirs: append([]string(nil), args...), Line: nameTok.line}
 	case "GLOBAL_SRCS":
 		return &GlobalSrcsStmt{Sources: append([]string(nil), args...), Line: nameTok.line}
 	case "GENERATE_ENUM_SERIALIZATION":

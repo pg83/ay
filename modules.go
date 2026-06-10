@@ -44,44 +44,47 @@ type cppProtoPlugin struct {
 }
 
 type moduleData struct {
-	moduleStmt           *ModuleStmt
-	srcs                 []string
-	globalSrcs           []string
-	pySrcs               []string
-	pySrcGroups          []pySrcGroup
-	pyGeneratedSrcs      map[string][]VFS
-	pyPyiResources       []resourceEntry
-	pyBuildNoPYC         bool
-	pyBuildNoPY          bool
-	pyTopLevel           bool
-	noExtendedPySearch   bool
-	enumSrcs             []*GenerateEnumSerializationStmt
-	peerdirs             []string
-	joinSrcs             []*JoinSrcsStmt
-	addIncl              []VFS
-	addInclGlobal        []VFS
-	addInclOneLevel      []VFS
-	addInclUserGlobal    []VFS
-	cfAddIncl            []VFS
-	cfAddInclGlobal      []VFS
-	cythonAddIncl        []VFS
-	asmAddIncl           []VFS
-	protoAddInclGlobal   []VFS
-	unhandledMacros      map[string][]string
-	llvmBc               []*llvmBcStmt
-	cFlags               []ARG
-	cFlagsGlobal         []ARG
-	cxxFlags             []ARG
-	cxxFlagsGlobal       []ARG
-	cOnlyFlags           []ARG
-	cOnlyFlagsGlobal     []ARG
-	sFlags               []ARG
-	protocFlags          []ARG
-	flatcFlags           []ARG
-	ldFlags              []ARG
-	rpathFlagsGlobal     []ARG
-	objAddLibsGlobal     []ARG
-	srcDir               *string
+	moduleStmt         *ModuleStmt
+	srcs               []string
+	globalSrcs         []string
+	pySrcs             []string
+	pySrcGroups        []pySrcGroup
+	pyGeneratedSrcs    map[string][]VFS
+	pyPyiResources     []resourceEntry
+	pyBuildNoPYC       bool
+	pyBuildNoPY        bool
+	pyTopLevel         bool
+	noExtendedPySearch bool
+	enumSrcs           []*GenerateEnumSerializationStmt
+	peerdirs           []string
+	joinSrcs           []*JoinSrcsStmt
+	addIncl            []VFS
+	addInclGlobal      []VFS
+	addInclOneLevel    []VFS
+	addInclUserGlobal  []VFS
+	cfAddIncl          []VFS
+	cfAddInclGlobal    []VFS
+	cythonAddIncl      []VFS
+	asmAddIncl         []VFS
+	protoAddInclGlobal []VFS
+	unhandledMacros    map[string][]string
+	llvmBc             []*llvmBcStmt
+	cFlags             []ARG
+	cFlagsGlobal       []ARG
+	cxxFlags           []ARG
+	cxxFlagsGlobal     []ARG
+	cOnlyFlags         []ARG
+	cOnlyFlagsGlobal   []ARG
+	sFlags             []ARG
+	protocFlags        []ARG
+	flatcFlags         []ARG
+	ldFlags            []ARG
+	rpathFlagsGlobal   []ARG
+	objAddLibsGlobal   []ARG
+	// srcDirs is the cumulative SRCDIR search path as directory VFS (the type
+	// fs.IsFile consumes). collectModule seeds index 0 with the module's own dir,
+	// then appends explicit SRCDIRs in declaration order; searched in reverse.
+	srcDirs              []VFS
 	flags                FlagSet
 	hadAllocator         bool
 	allocatorName        string
@@ -499,6 +502,12 @@ func collectModule(pm *includeParserManager, dd *deDuper, modulePath string, kin
 
 	collectStmts(modulePath, kind, stmts, env, d)
 
+	// Seed the SRCDIR search path with the module's own dir at index 0, ahead of
+	// the explicit SRCDIRs collectStmts appended. The list is then never empty
+	// and the module dir is its base, so resolveSourceVFS and the module-base
+	// consumers need no "is there a SRCDIR?" special case.
+	d.srcDirs = append([]VFS{dirKey(modulePath)}, d.srcDirs...)
+
 	d.addIncl = append(d.addIncl, d.cfAddIncl...)
 	d.addInclGlobal = append(d.addInclGlobal, d.cfAddInclGlobal...)
 	// CF-generated include dirs join UserGlobal in the same deferred step as
@@ -873,8 +882,14 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 		case *LDFlagsStmt:
 			d.ldFlags = append(d.ldFlags, internArgs(expandStmtTokens(v.Flags, env))...)
 		case *SrcDirStmt:
-
-			d.srcDir = &v.Dir
+			// SRCDIR is cumulative. Each arg is expanded (a ${VAR} may be a SET
+			// holding many whitespace-separated dirs, e.g. SRCDIR(${__dirs_})) and
+			// split into directory VFS appended to the search path.
+			for _, arg := range v.Dirs {
+				for _, dir := range strings.Fields(expandStmtToken(arg, env)) {
+					d.srcDirs = append(d.srcDirs, dirKey(dir))
+				}
+			}
 		case *GlobalSrcsStmt:
 			appendGlobalSrcGroup(d, expandStmtTokens(v.Sources, env))
 		case *GenerateEnumSerializationStmt:
