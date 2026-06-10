@@ -32,7 +32,7 @@ func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 
 func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInputs) []STR {
 	bundle := compileFlagBundleFor(instance.Platform)
-	prologueArgs := 3 + len(bundle.ArchArgs)
+	prologueArgs := 2 + len(bundle.ArchArgs) + len(instance.Platform.SysrootArgs)
 
 	warnBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
 
@@ -50,7 +50,7 @@ func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInp
 
 	cmdArgs = append(cmdArgs, in.TC.CC, instance.Platform.TargetArg)
 	cmdArgs = appendArgStr(cmdArgs, bundle.ArchArgs)
-	cmdArgs = append(cmdArgs, argDashBBin)
+	cmdArgs = append(cmdArgs, instance.Platform.SysrootArgs...)
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warnBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboostOpenSourceDefineFor(instance.Platform))
 	cmdArgs = appendArgStr(cmdArgs, in.SFlags)
 	cmdArgs = append(cmdArgs, argDashC.str(), argDashO.str(), (outVFS).str(), (inVFS).str())

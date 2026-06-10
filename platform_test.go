@@ -72,6 +72,25 @@ func TestNewPlatform_WrapccVectorsAndResources(t *testing.T) {
 	}
 }
 
+func TestSysrootArgsFor(t *testing.T) {
+	sdk := "$(B)/resources/OS_SDK_ROOT"
+
+	// Default Linux: SDK sysroot + tool-bin dir.
+	if got := strStrs(sysrootArgsFor(OSLinux, map[string]string{})); !reflect.DeepEqual(got, []string{"--sysroot=" + sdk, "-B" + sdk + "/usr/bin"}) {
+		t.Errorf("linux default = %v", got)
+	}
+
+	// MUSL pins --sysroot=/nowhere but keeps the SDK tool-bin dir.
+	if got := strStrs(sysrootArgsFor(OSLinux, map[string]string{"MUSL": "yes"})); !reflect.DeepEqual(got, []string{"--sysroot=/nowhere", "-B" + sdk + "/usr/bin"}) {
+		t.Errorf("musl = %v", got)
+	}
+
+	// os_sdk=local uses the bare host tool-bin dir, no fetched SDK.
+	if got := strStrs(sysrootArgsFor(OSLinux, map[string]string{"OS_SDK": "local"})); !reflect.DeepEqual(got, []string{"-B/usr/bin"}) {
+		t.Errorf("local = %v", got)
+	}
+}
+
 func TestNewPlatform_ParsesCompilerFlags(t *testing.T) {
 	flags := map[string]string{
 		"PIC": "no",

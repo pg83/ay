@@ -118,6 +118,33 @@ type Platform struct {
 	// the wrapcc.py wrapper is active (it runs under that python). Computed once per
 	// platform and shared read-only across CC nodes.
 	CCUsesResources []string
+
+	// SysrootArgs is the SDK sysroot + tool-bin compile prefix that upstream's
+	// GnuToolchain.C_FLAGS_PLATFORM contributes right after --target in every CC/AS
+	// compile line: [--sysroot=<root>, -B<root>/usr/bin], where <root> is the
+	// OS_SDK_ROOT resource ($(B)/resources/OS_SDK_ROOT) declared by build/platform/
+	// linux_sdk (ymake_conf.py setup_sdk / setup_tools). MUSL pins --sysroot=/nowhere;
+	// os_sdk=local and non-Linux targets fall back to the bare host -B/usr/bin.
+	// Computed once per platform, shared read-only across CC/AS nodes.
+	SysrootArgs []STR
+}
+
+// sysrootArgsFor builds Platform.SysrootArgs (see the field doc). Modelled for the
+// Linux gnu contour these graphs build; non-Linux / os_sdk=local keep the bare host
+// -B/usr/bin that needs no fetched SDK.
+func sysrootArgsFor(os OS, flags map[string]string) []STR {
+	if os != OSLinux || flags["OS_SDK"] == "local" {
+		return []STR{argDashBBin}
+	}
+
+	sdkRoot := "$(B)/resources/" + resourcePatternOSSDKRoot
+
+	sysroot := "--sysroot=" + sdkRoot
+	if flags["MUSL"] == "yes" {
+		sysroot = "--sysroot=/nowhere"
+	}
+
+	return []STR{internStr(sysroot), internStr("-B" + sdkRoot + "/usr/bin")}
 }
 
 // wrapccPrefixFor returns the wrapcc.py compile-wrapper head/tail token slices that
@@ -207,6 +234,8 @@ func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, 
 	if len(p.WrapccHead) > 0 {
 		p.CCUsesResources = append(p.CCUsesResources, resourcePatternYMakePython3)
 	}
+
+	p.SysrootArgs = sysrootArgsFor(os, flags)
 
 	if p.March != "" {
 		p.MarchArgs = []ARG{internArg("-march=" + p.March)}

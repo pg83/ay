@@ -10,6 +10,7 @@ const (
 	resourcePatternClangTool    = "CLANG"
 	resourcePatternLLDRoot      = "LLD_ROOT"
 	resourcePatternJDK17        = "JDK17"
+	resourcePatternOSSDKRoot    = "OS_SDK_ROOT"
 )
 
 func resourcePatternRef(pattern string) string {

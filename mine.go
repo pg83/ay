@@ -15,11 +15,17 @@ func toolchainFlags(fs FS) map[string]string {
 	return prebuiltToolchainFlags()
 }
 
+// linuxSDKDefault mirrors ymake_conf.py's LINUX_SDK_DEFAULT — the OS_SDK used for a
+// Linux target when ya.conf sets no preset (GnuToolchainOptions: os_sdk = preset or
+// default). It selects the OS_SDK_ROOT sandbox resource (ubuntu-16 → sbr:243881345)
+// that build/platform/linux_sdk declares and the compile sysroot/-B point at.
+const linuxSDKDefault = "ubuntu-16"
+
 func prebuiltToolchainFlags() map[string]string {
 	return map[string]string{
 		"CONSISTENT_DEBUG":   "yes",
 		"NO_DEBUGINFO":       "yes",
-		"OS_SDK":             "local",
+		"OS_SDK":             linuxSDKDefault,
 		"TIDY":               "no",
 		"USE_ARCADIA_PYTHON": "yes",
 		"USE_PYTHON3":        "yes",
