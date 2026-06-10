@@ -4,7 +4,7 @@ func EmitEN(
 	instance ModuleInstance,
 	headerInput VFS,
 	headerRel string,
-	moduleTag *string,
+	moduleTag STR,
 	withHeader bool,
 	enumParserLD NodeRef,
 	enumParserBin VFS,
@@ -70,8 +70,8 @@ func EmitEN(
 		ForeignDepRefs:   foreignDepRefs,
 	}
 
-	if moduleTag != nil {
-		node.TargetProperties.ModuleTag = *moduleTag
+	if moduleTag != 0 {
+		node.TargetProperties.ModuleTag = moduleTag
 	}
 
 	return emit.Emit(node), outputs

@@ -49,7 +49,7 @@ func EmitLD(
 	noCompilerWarnings bool,
 	wantsStrip bool,
 	wantsSplitDwarf bool,
-	programModuleTag string,
+	programModuleTag STR,
 	tc moduleToolchain,
 	hostP *Platform,
 	scripts scriptDeps,
@@ -163,7 +163,7 @@ func EmitLD(
 		usesResources:    []string{resourcePatternClangTool + instance.Platform.ClangVer, resourcePatternLLDRoot, resourcePatternYMakePython3},
 	}
 
-	if programModuleTag != "" {
+	if programModuleTag != 0 {
 		n.TargetProperties.ModuleTag = programModuleTag
 	}
 

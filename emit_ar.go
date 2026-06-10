@@ -17,13 +17,13 @@ func EmitARNamed(
 
 	archivePath := Build(instance.Path + "/" + archiveBaseName)
 
-	return emitARNode(instance, archivePath, nil, objRefs, objPaths, peerArchiveRefs, arPluginPath, tc, hostP, emit)
+	return emitARNode(instance, archivePath, 0, objRefs, objPaths, peerArchiveRefs, arPluginPath, tc, hostP, emit)
 }
 
 func EmitARNamedTagged(
 	instance ModuleInstance,
 	archiveBaseName string,
-	tag string,
+	tag STR,
 	objRefs []NodeRef,
 	objPaths []VFS,
 	peerArchiveRefs []NodeRef,
@@ -38,13 +38,13 @@ func EmitARNamedTagged(
 
 	archivePath := Build(instance.Path + "/" + archiveBaseName)
 
-	return emitARNode(instance, archivePath, &tag, objRefs, objPaths, peerArchiveRefs, arPluginPath, tc, hostP, emit)
+	return emitARNode(instance, archivePath, tag, objRefs, objPaths, peerArchiveRefs, arPluginPath, tc, hostP, emit)
 }
 
 func EmitARGlobalNamedTagged(
 	instance ModuleInstance,
 	archiveBaseName string,
-	tag string,
+	tag STR,
 	objRefs []NodeRef,
 	objPaths []VFS,
 	tc moduleToolchain,
@@ -57,5 +57,5 @@ func EmitARGlobalNamedTagged(
 
 	archivePath := Build(instance.Path + "/" + archiveBaseName)
 
-	return emitARNode(instance, archivePath, &tag, objRefs, objPaths, nil, nil, tc, hostP, emit)
+	return emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, nil, tc, hostP, emit)
 }

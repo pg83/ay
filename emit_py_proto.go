@@ -73,7 +73,7 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCo
 	pyInstance := instance
 	pyInstance.Language = LangPy
 	globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path, "libpy3", "")
-	gRef := EmitARGlobalNamedTagged(pyInstance, globalBaseName, "py3_proto_global", pyProtoRefs, pyProtoOutputs, d.tc, ctx.host, ctx.emit)
+	gRef := EmitARGlobalNamedTagged(pyInstance, globalBaseName, tagPy3ProtoGlobal, pyProtoRefs, pyProtoOutputs, d.tc, ctx.host, ctx.emit)
 
 	globalPath := Build(instance.Path + "/" + globalBaseName)
 	result := &protoSrcsResult{
@@ -243,7 +243,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		Inputs:           inputs,
 		Outputs:          outputs,
 		KV:               pbKV,
-		TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: "py3_proto"},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: tagPy3Proto},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          toolRefs,
 		usesResources:    []string{resourcePatternYMakePython3},
@@ -327,7 +327,7 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 			Inputs:           nodeInputs,
 			Outputs:          []VFS{out},
 			KV:               KV{P: pkPY, PC: pcYellow},
-			TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: "py3_proto"},
+			TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: tagPy3Proto},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			DepRefs:          deps,
 			usesResources:    []string{resourcePatternYMakePython3},
@@ -519,7 +519,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			Inputs:           inputs,
 			Outputs:          []VFS{aux},
 			KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
-			TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: "py3_proto"},
+			TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: tagPy3Proto},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			DepRefs:          deps,
 		})
@@ -540,7 +540,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			ExtraDepRefs:         []NodeRef{ref},
 			Py3Suffix:            true,
 			ForceCxx:             true,
-			ModuleTag:            stringPtr("py3_proto"),
+			ModuleTag:            tagPy3Proto,
 			IncludeInputs:        auxClosure,
 		}
 		ccRef, ccOut, _ := EmitCC(instance, aux.Rel()[strings.LastIndex(aux.Rel(), "/")+1:], aux, ccIn, ctx.host, ctx.emit)

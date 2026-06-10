@@ -13,7 +13,7 @@ func EmitCF(
 	cfgVars []string,
 	includeInputs []VFS,
 	moduleDir string,
-	moduleTag string,
+	moduleTag STR,
 	tc moduleToolchain,
 	emit Emitter,
 ) (NodeRef, VFS) {
@@ -46,7 +46,7 @@ func EmitCF(
 		TargetProperties: func() TargetProperties {
 			tp := TargetProperties{ModuleDir: moduleDir}
 
-			if moduleTag != "" {
+			if moduleTag != 0 {
 				tp.ModuleTag = moduleTag
 			}
 

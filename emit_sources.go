@@ -148,7 +148,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 			srcInstance, evRelPath,
 			cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 			cppStyleguideBinary, protocBinary, event2cppBinary,
-			nil, evImports, d.tc, ctx.emit)
+			0, evImports, d.tc, ctx.emit)
 
 		evH := Build(evRelPath + ".pb.h")
 		evPbCC := Build(evRelPath + ".pb.cc")

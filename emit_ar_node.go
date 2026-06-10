@@ -10,7 +10,7 @@ const (
 func emitARNode(
 	instance ModuleInstance,
 	archivePath VFS,
-	tag *string,
+	tag STR,
 	objRefs []NodeRef,
 	objPaths []VFS,
 	peerArchiveRefs []NodeRef,
@@ -60,8 +60,8 @@ func emitARNode(
 		targetProperties.ModuleLang = mlPy3
 	}
 
-	if tag != nil {
-		targetProperties.ModuleTag = *tag
+	if tag != 0 {
+		targetProperties.ModuleTag = tag
 	}
 
 	depRefs := make([]NodeRef, 0, len(objRefs)+len(peerArchiveRefs))

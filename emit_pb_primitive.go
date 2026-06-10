@@ -63,7 +63,7 @@ func EmitPB(
 	protocBinary VFS,
 	grpcCppBinary VFS,
 	grpc bool,
-	moduleTag *string,
+	moduleTag STR,
 	cppOutRoot string,
 	duplicateOutputRootInclude bool,
 	liteHeaders bool,
@@ -163,7 +163,7 @@ func EmitPB(
 		cmdArgs = append(cmdArgs, internStr("-I="+p.String()))
 	}
 
-	if moduleTag == nil && strings.HasPrefix(protoRelPath, "yt/") {
+	if moduleTag == 0 && strings.HasPrefix(protoRelPath, "yt/") {
 		cmdArgs = append(cmdArgs, argISYt.str())
 	}
 
@@ -229,8 +229,8 @@ func EmitPB(
 
 	targetProps := TargetProperties{ModuleDir: moduleDir}
 
-	if moduleTag != nil {
-		targetProps.ModuleTag = *moduleTag
+	if moduleTag != 0 {
+		targetProps.ModuleTag = moduleTag
 	}
 
 	var depRefs []NodeRef

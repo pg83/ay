@@ -69,7 +69,7 @@ type ModuleCCInputs struct {
 
 	ForceCxx bool
 
-	ModuleTag *string
+	ModuleTag STR
 
 	Variant *string
 
@@ -174,8 +174,8 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		TargetProperties: func() TargetProperties {
 			tp := TargetProperties{ModuleDir: instance.Path}
 
-			if in.ModuleTag != nil {
-				tp.ModuleTag = *in.ModuleTag
+			if in.ModuleTag != 0 {
+				tp.ModuleTag = in.ModuleTag
 			}
 
 			return tp

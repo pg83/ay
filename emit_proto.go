@@ -284,7 +284,7 @@ func protoTransitiveHeadersEnabled(d *moduleData) bool {
 
 type protoPBConfig struct {
 	grpc                       bool
-	moduleTag                  *string
+	moduleTag                  STR
 	cppOutRoot                 string
 	duplicateOutputRootInclude bool
 }
@@ -543,7 +543,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	}
 	cfg := protoPBConfig{
 		grpc:       d.grpc,
-		moduleTag:  stringPtr("cpp_proto"),
+		moduleTag:  tagCppProto,
 		cppOutRoot: protoCPPOutRoot(d),
 	}
 
@@ -583,7 +583,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 			evRef := EmitEV(
 				instance, evRelPath, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 				cppStyleguideBinary, protocBinary, event2cppBinary,
-				stringPtr("cpp_proto"), evImports, d.tc, ctx.emit)
+				tagCppProto, evImports, d.tc, ctx.emit)
 
 			evH := Build(evRelPath + ".pb.h")
 			evPbCC := Build(evRelPath + ".pb.cc")
@@ -645,7 +645,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 		DefaultVars:          d.defaultVars,
 		DefaultVarOrder:      d.defaultVarOrder,
 		SetVars:              d.setVars,
-		ModuleTag:            stringPtr("cpp_proto"),
+		ModuleTag:            tagCppProto,
 	}
 
 	ccRefs := make([]NodeRef, 0, len(codegenOutputs))
@@ -739,6 +739,6 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 
 	arBaseName := archiveNameWithPrefixOrName(instance.Path, "lib", protoLibName)
 	archivePath := Build(instance.Path + "/" + arBaseName)
-	arRef := emitARNode(instance, archivePath, stringPtr("cpp_proto"), ccRefs, ccOutputs, nil, nil, d.tc, ctx.host, ctx.emit)
+	arRef := emitARNode(instance, archivePath, tagCppProto, ccRefs, ccOutputs, nil, nil, d.tc, ctx.host, ctx.emit)
 	return &protoSrcsResult{ARRef: arRef, ARPath: &archivePath}
 }
