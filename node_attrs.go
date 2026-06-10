@@ -54,18 +54,36 @@ func appendEnv(buf []byte, env EnvVars) []byte {
 	return append(buf, '}')
 }
 
+// NetworkMode is a node's "network" requirement; same uint8-enum scheme as
+// ProcKind. The zero value nwNone means absent (the key is omitted).
+type NetworkMode uint8
+
+const (
+	nwNone NetworkMode = iota
+	nwRestricted
+	nwFull
+)
+
+var networkModeStr = [...]string{
+	nwNone: "", nwRestricted: "restricted", nwFull: "full",
+}
+
+func (m NetworkMode) String() string {
+	return networkModeStr[m]
+}
+
 // Requirements is a node's scheduler resource set. The zero value (no flags set)
 // is the empty set, serialized as {}.
 type Requirements struct {
 	CPU        float64
 	RAM        float64
-	Network    string
+	Network    NetworkMode
 	RAMDisk    float64 // present-with-zero on test nodes, hence the explicit flag
 	HasRAMDisk bool
 }
 
 func (r Requirements) isEmpty() bool {
-	return r.CPU == 0 && r.RAM == 0 && r.Network == "" && !r.HasRAMDisk
+	return r.CPU == 0 && r.RAM == 0 && r.Network == nwNone && !r.HasRAMDisk
 }
 
 // TargetProperties is a node's module attributes. Empty fields are omitted,
@@ -233,7 +251,7 @@ func appendRequirements(buf []byte, r Requirements) []byte {
 		o.num("cpu", r.CPU)
 	}
 
-	o.str("network", r.Network)
+	o.str("network", r.Network.String())
 
 	if r.RAM != 0 {
 		o.num("ram", r.RAM)

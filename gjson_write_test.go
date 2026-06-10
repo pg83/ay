@@ -55,7 +55,7 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 		Inputs:           ToVFSSlice([]string{"in1"}),
 		KV:               KV{Name: "main", P: pkCC},
 		Outputs:          ToVFSSlice([]string{"main.o"}),
-		Requirements:     Requirements{CPU: 1, RAM: 32, Network: "restricted"},
+		Requirements:     Requirements{CPU: 1, RAM: 32, Network: nwRestricted},
 		Tags:             []STR{internStr("tag1")},
 		TargetProperties: TargetProperties{ModuleLang: "cpp"},
 	})

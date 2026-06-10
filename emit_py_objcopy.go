@@ -176,7 +176,7 @@ func emitResourceObjcopy(
 			Outputs:          []VFS{outputObj},
 			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 			TargetProperties: resTargetProps,
-			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
 		}
 
@@ -357,7 +357,7 @@ func emitKvOnlyObjcopyNode(
 		Outputs:          []VFS{outputObj},
 		KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 		TargetProperties: targetProps,
-		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
 	}
 
@@ -453,7 +453,7 @@ func emitYaConfJSONObjcopy(
 			Outputs:          []VFS{outputObj},
 			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path},
-			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
 		}
 
@@ -680,7 +680,7 @@ func emitPySrcObjcopy(
 				Outputs:          []VFS{outputObj},
 				KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 				TargetProperties: targetProps,
-				Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+				Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 				usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
 			}
 

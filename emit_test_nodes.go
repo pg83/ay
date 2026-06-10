@@ -66,7 +66,7 @@ func buildTestCtxNode(p *Platform) *Node {
 		Inputs:           []VFS{Source(testAppendFileScriptRel)},
 		KV:               KV{P: pkCP, PC: pcLightBlue},
 		Outputs:          []VFS{bldCommonTestContext},
-		Requirements:     Requirements{Network: "restricted"},
+		Requirements:     Requirements{Network: nwRestricted},
 		TargetProperties: TargetProperties{},
 		usesResources:    []string{resourcePatternYMakePython3},
 	}
@@ -153,7 +153,7 @@ func buildUnittestNode(p *Platform, info testSuiteInfo, resourceGlobals []resour
 		Outputs: testOutputs(info.ProjectPath, "unittest"),
 		Requirements: Requirements{
 			CPU:        1,
-			Network:    "restricted",
+			Network:    nwRestricted,
 			RAM:        8,
 			HasRAMDisk: true,
 		},
@@ -260,7 +260,7 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 		Tags: p.TestTags,
 		Requirements: Requirements{
 			CPU:        1,
-			Network:    "restricted",
+			Network:    nwRestricted,
 			RAM:        8,
 			HasRAMDisk: true,
 		},

@@ -82,8 +82,8 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		t.Errorf("ForeignDepRefs[tool] = %v, want [%v]", got.ForeignDepRefs, ragel6LD)
 	}
 
-	if got.Requirements.Network != "restricted" {
-		t.Errorf("requirements.network = %v, want restricted", got.Requirements.Network)
+	if got.Requirements.Network != nwRestricted {
+		t.Errorf("requirements.network = %v, want restricted", got.Requirements.Network.String())
 	}
 }
 

@@ -244,7 +244,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		Outputs:          outputs,
 		KV:               pbKV,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: "py3_proto"},
-		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          toolRefs,
 		usesResources:    []string{resourcePatternYMakePython3},
 	}
@@ -328,7 +328,7 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 			Outputs:          []VFS{out},
 			KV:               KV{P: pkPY, PC: pcYellow},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: "py3_proto"},
-			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			DepRefs:          deps,
 			usesResources:    []string{resourcePatternYMakePython3},
 		}
@@ -520,7 +520,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			Outputs:          []VFS{aux},
 			KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: "py3_proto"},
-			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			DepRefs:          deps,
 		})
 

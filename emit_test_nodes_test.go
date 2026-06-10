@@ -92,7 +92,7 @@ func expectedTestCtxNode() *Node {
 		KV:               KV{P: pkCP, PC: pcLightBlue},
 		Outputs:          []VFS{Intern("$(B)/common_test.context")},
 		Platform:         &Platform{Target: "default-linux-x86_64"},
-		Requirements:     Requirements{Network: "restricted"},
+		Requirements:     Requirements{Network: nwRestricted},
 		Tags:             internStrs(expectedSandboxingTags()),
 		TargetProperties: TargetProperties{},
 	}
@@ -165,7 +165,7 @@ func expectedUnittestNode(info testSuiteInfo) *Node {
 			Intern("$(B)/util/ut/test-results/unittest/testing_out_stuff.tar.zstd"),
 		},
 		Platform:         &Platform{Target: "default-linux-x86_64"},
-		Requirements:     Requirements{CPU: 1, Network: "restricted", RAM: 8, HasRAMDisk: true},
+		Requirements:     Requirements{CPU: 1, Network: nwRestricted, RAM: 8, HasRAMDisk: true},
 		Tags:             internStrs(expectedSandboxingTags()),
 		TargetProperties: TargetProperties{ModuleLang: "cpp"},
 	}
@@ -245,7 +245,7 @@ func expectedClangFormatNode() *Node {
 			Intern("$(B)/util/ut/test-results/clang_format/testing_out_stuff.tar.zstd"),
 		},
 		Platform:         &Platform{Target: "default-linux-x86_64"},
-		Requirements:     Requirements{CPU: 1, Network: "restricted", RAM: 8, HasRAMDisk: true},
+		Requirements:     Requirements{CPU: 1, Network: nwRestricted, RAM: 8, HasRAMDisk: true},
 		Tags:             []STR{},
 		TargetProperties: TargetProperties{ModuleLang: "unknown"},
 	}

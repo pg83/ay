@@ -521,7 +521,7 @@ func EmitPYRun(
 		KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 		Outputs:          outputs,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path},
-		Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
+		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          extraDepRefs,
 		usesResources:    []string{resourcePatternYMakePython3},
 	}
