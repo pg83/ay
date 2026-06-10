@@ -63,6 +63,7 @@ var acknowledgedMacros = map[string]struct{}{
 	"FILES":                           {},
 	"HEADERS":                         {},
 	"NEED_CHECK":                      {},
+	"NEED_REVIEW":                     {},
 	"ENV":                             {},
 	"OWNER":                           {},
 	"SUBSCRIBER":                      {},

@@ -65,6 +65,7 @@ var tokName = [...]STR{
 	tokMavenGroupId:                    internStr("MAVEN_GROUP_ID"),
 	tokMessage:                         internStr("MESSAGE"),
 	tokNeedCheck:                       internStr("NEED_CHECK"),
+	tokNeedReview:                      internStr("NEED_REVIEW"),
 	tokNoBuildIf:                       internStr("NO_BUILD_IF"),
 	tokNoCheckImports:                  internStr("NO_CHECK_IMPORTS"),
 	tokNoClangCoverage:                 internStr("NO_CLANG_COVERAGE"),
@@ -260,6 +261,7 @@ const (
 	tokMavenGroupId
 	tokMessage
 	tokNeedCheck
+	tokNeedReview
 	tokNoBuildIf
 	tokNoCheckImports
 	tokNoClangCoverage
