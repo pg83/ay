@@ -171,7 +171,7 @@ func bindResourceGlobalVars(ctx *genCtx, instance ModuleInstance, d *moduleData,
 
 	for _, stmt := range d.resourceDeclStmts {
 		for _, decl := range resolveResourceDecls(ctx.fs, ctx.host, instance.Path, stmt) {
-			env.SetStringID(internEnv(decl.GlobalVar.String()), decl.Value)
+			env.SetStringID(internEnvSTR(decl.GlobalVar), decl.Value)
 			bound = true
 		}
 	}
