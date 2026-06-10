@@ -1,5 +1,9 @@
 package main
 
+import (
+	"sync"
+)
+
 var evEventlogIncludePath = evEventlogIncludeVFS.String()
 
 var evExtraProtobufHeaders = []VFS{
@@ -15,25 +19,26 @@ var evAbseilCleanupHeaders = []VFS{
 	Intern("$(S)/contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/internal/cleanup.h"),
 }
 
+// Lazy (not init-time like protobufRuntimeDirectives): these lists are only
+// reached for .ev sources, so eager interning would grow the intern table on
+// targets that never build them.
+var (
+	evExtraProtobufDirectives = sync.OnceValue(func() []includeDirective { return quotedDirectives(evExtraProtobufHeaders) })
+	evAbseilCleanupDirectives = sync.OnceValue(func() []includeDirective { return quotedDirectives(evAbseilCleanupHeaders) })
+)
+
 func evWitnessExtras(evRelPath string, evPbCC VFS) []includeDirective {
+	evExtraProtobuf := evExtraProtobufDirectives()
+	evAbseilCleanup := evAbseilCleanupDirectives()
 	out := make([]includeDirective, 0,
-		3+len(pbDescriptorImporterHeaders)+len(evExtraProtobufHeaders)+len(evAbseilCleanupHeaders))
+		3+len(pbDescriptorImporterDirectives)+len(evExtraProtobuf)+len(evAbseilCleanup))
 	out = append(out, includeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.Rel())})
 	out = append(out, includeDirective{kind: includeQuoted, target: internStr(pbDescriptorVFS.Rel())})
 	out = append(out, includeDirective{kind: includeQuoted, target: internStr(evRelPath)})
 	out = append(out, includeDirective{kind: includeQuoted, target: internStr(evPbCC.Rel())})
-
-	for _, v := range pbDescriptorImporterHeaders {
-		out = append(out, includeDirective{kind: includeQuoted, target: internStr(v.Rel())})
-	}
-
-	for _, v := range evExtraProtobufHeaders {
-		out = append(out, includeDirective{kind: includeQuoted, target: internStr(v.Rel())})
-	}
-
-	for _, v := range evAbseilCleanupHeaders {
-		out = append(out, includeDirective{kind: includeQuoted, target: internStr(v.Rel())})
-	}
+	out = append(out, pbDescriptorImporterDirectives...)
+	out = append(out, evExtraProtobuf...)
+	out = append(out, evAbseilCleanup...)
 
 	return out
 }

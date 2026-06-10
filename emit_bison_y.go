@@ -22,6 +22,8 @@ var bisonCppSkeletonInputs = []VFS{
 	Intern("$(S)/contrib/tools/bison/data/skeletons/yacc.c"),
 }
 
+var bisonCppSkeletonDirectives = quotedDirectives(bisonCppSkeletonInputs)
+
 func dedupIncludeDirectives(directives []includeDirective) []includeDirective {
 	if len(directives) == 0 {
 		return nil
@@ -43,14 +45,11 @@ func dedupIncludeDirectives(directives []includeDirective) []includeDirective {
 }
 
 func bisonCppHeaderParsed(srcVFS VFS) []includeDirective {
-	parsed := make([]includeDirective, 0, 1+len(bisonCppSkeletonInputs))
+	parsed := make([]includeDirective, 0, 1+len(bisonCppSkeletonDirectives))
 	parsed = append(parsed,
 		includeDirective{kind: includeQuoted, target: internStr(bisonPreprocessPyVFS.Rel())},
 	)
-
-	for _, input := range bisonCppSkeletonInputs {
-		parsed = append(parsed, includeDirective{kind: includeQuoted, target: internStr(input.Rel())})
-	}
+	parsed = append(parsed, bisonCppSkeletonDirectives...)
 
 	return dedupIncludeDirectives(parsed)
 }
@@ -87,7 +86,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		headerParsed = append(headerParsed, scanner.parsers.sourceParsedBuckets(srcVFS).bucket(parsedIncludesLocal)...)
 	}
 
-	registerGeneratedParsedOutput(ctx, instance, "YC", headerVFS, dedupIncludeDirectives(headerParsed), []NodeRef{bisonRef, m4Ref})
+	registerGeneratedParsedOutput(ctx, instance, pkYC, headerVFS, dedupIncludeDirectives(headerParsed), []NodeRef{bisonRef, m4Ref})
 
 	if preprocessHeader {
 		if reg := codegenRegForInstance(ctx, instance); reg != nil {
@@ -105,7 +104,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		generatedParsed = bisonGeneratedCPPParsed(ctx, instance, srcVFS, headerVFS)
 	}
 
-	registerGeneratedParsedOutput(ctx, instance, "YC", generatedVFS, generatedParsed, []NodeRef{bisonRef, m4Ref})
+	registerGeneratedParsedOutput(ctx, instance, pkYC, generatedVFS, generatedParsed, []NodeRef{bisonRef, m4Ref})
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envBISON_PKGDATADIR, Value: strBisonPkgData}, {Name: envM4, Value: m4Bin}}
 	preprocessEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}

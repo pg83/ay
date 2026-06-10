@@ -41,7 +41,6 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 
 	for _, srcRelOnDisk := range srcRels {
 		cfg := ScanContext{
-			SourceRel:       srcRelOnDisk,
 			OwnAddIncl:      in.AddIncl,
 			PeerAddInclSet:  in.PeerAddInclGlobal,
 			BaseSearchPaths: includeScannerBasePaths(),
@@ -102,11 +101,7 @@ func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, sr
 }
 
 func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in ModuleCCInputs) []VFS {
-	return walkClosureWithSourceRel(ctx, srcInstance, vfsPath, vfsPath.Rel(), in)
-}
-
-func walkClosureWithSourceRel(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, sourceRel string, in ModuleCCInputs) []VFS {
-	full := walkClosureRoot(ctx, srcInstance, vfsPath, sourceRel, in)
+	full := walkClosureRoot(ctx, srcInstance, vfsPath, in)
 
 	if full == nil {
 		return nil
@@ -115,7 +110,7 @@ func walkClosureWithSourceRel(ctx *genCtx, srcInstance ModuleInstance, vfsPath V
 	return full[1:]
 }
 
-func walkClosureRoot(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, sourceRel string, in ModuleCCInputs) []VFS {
+func walkClosureRoot(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerFor(srcInstance)
 
 	if scanner == nil {
@@ -123,7 +118,6 @@ func walkClosureRoot(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, sourc
 	}
 
 	cfg := ScanContext{
-		SourceRel:       sourceRel,
 		OwnAddIncl:      in.AddIncl,
 		PeerAddInclSet:  in.PeerAddInclGlobal,
 		BaseSearchPaths: includeScannerBasePaths(),
@@ -132,10 +126,6 @@ func walkClosureRoot(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, sourc
 
 	sc := scanner.NewScanCtx(cfg)
 	scanner.walkClosureCalls++
-
-	if vfsPath.IsSource() {
-		sc.cfg.SourceRel = vfsPath.Rel()
-	}
 
 	// The closure is rooted at vfsPath (closureOf leads its result with the
 	// queried node); callers that want only the transitive includes strip
@@ -216,7 +206,6 @@ func appendRagelNativeDeps(scanner *IncludeScanner, srcInstance ModuleInstance, 
 	}
 
 	cfg := ScanContext{
-		SourceRel:       rl6VFS.Rel(),
 		OwnAddIncl:      in.AddIncl,
 		PeerAddInclSet:  in.PeerAddInclGlobal,
 		BaseSearchPaths: includeScannerBasePaths(),

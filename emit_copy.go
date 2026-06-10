@@ -86,12 +86,12 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 		entries = append(entries, entryReg{srcVFS, dstVFS, parsed})
 
 		if scanner != nil {
-			scanner.parsers.RegisterBuildParsedIncludes(dstVFS.Rel(), parsed)
+			scanner.parsers.RegisterBuildParsedIncludes(dstVFS, parsed)
 		}
 
 		if reg != nil && reg.Lookup(dstVFS) == nil {
 			info := &GeneratedFileInfo{
-				ProducerKvP: "CP",
+				ProducerKvP: pkCP,
 				OutputPath:  dstVFS,
 				SourcePath:  srcVFS,
 				IsText:      entry.Text,
@@ -131,7 +131,7 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 		// source-only (tablegen .inc outputs etc. don't appear as direct CP
 		// inputs). dedupVFS collapses repeated post-rewrite entries.
 		if moduleInputs != nil && (entry.WithContext || len(entry.OutputIncludes) > 0) {
-			closure = walkClosureRoot(ctx, instance, dstVFS, dstVFS.Rel(), *moduleInputs)
+			closure = walkClosureRoot(ctx, instance, dstVFS, *moduleInputs)
 			closure = rewriteClosureCPSource(scanner, closure)
 			closure = keepOnlySourceVFS(closure)
 			closure = dedupVFS(closure)

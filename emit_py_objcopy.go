@@ -634,7 +634,11 @@ func emitPySrcObjcopy(
 			}
 
 			cmdArgs = append(cmdArgs, argInputs.str())
-			cmdArgs = appendInternStrs(cmdArgs, ch.pathInps)
+
+			for _, p := range ch.pathInps {
+				cmdArgs = append(cmdArgs, (p).str())
+			}
+
 			cmdArgs = append(cmdArgs, argKeys.str())
 			cmdArgs = appendInternStrs(cmdArgs, ch.keys)
 

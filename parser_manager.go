@@ -76,7 +76,7 @@ type includeParserManager struct {
 
 	addinclIndex   DenseMap[STR, []VFS]
 	addinclIndexed BitSet
-	buildParsed    map[string][]includeDirective
+	buildParsed    map[VFS][]includeDirective
 }
 
 type parserPerfStats struct {
@@ -89,7 +89,7 @@ func newIncludeParserManagerFS(fs FS, cache *sharedParseCache) *includeParserMan
 	return &includeParserManager{
 		fs:          fs,
 		cache:       cache,
-		buildParsed: make(map[string][]includeDirective, 256),
+		buildParsed: make(map[VFS][]includeDirective, 256),
 	}
 }
 
@@ -154,7 +154,7 @@ func (pm *includeParserManager) withCythonSibling(rel string, set parsedIncludeS
 
 func (pm *includeParserManager) parsedIncludes(vfsPath VFS) []includeDirective {
 	if vfsPath.IsBuild() {
-		if parsed, ok := pm.buildParsed[vfsPath.Rel()]; ok {
+		if parsed, ok := pm.buildParsed[vfsPath]; ok {
 			return parsed
 		}
 
@@ -187,8 +187,15 @@ func scannerFollowsImports(rel string) bool {
 	return true
 }
 
-func (pm *includeParserManager) RegisterBuildParsedIncludes(rel string, parsed []includeDirective) {
-	pm.buildParsed[rel] = parsed
+func (pm *includeParserManager) RegisterBuildParsedIncludes(out VFS, parsed []includeDirective) {
+	// buildParsed is keyed by VFS and consulted only for build-rooted paths
+	// (parsedIncludes gates on IsBuild), so a source-rooted registration would
+	// be silently unreachable.
+	if !out.IsBuild() {
+		ThrowFmt("RegisterBuildParsedIncludes: source-rooted output %q", out.String())
+	}
+
+	pm.buildParsed[out] = parsed
 }
 
 func (pm *includeParserManager) indexAddincl(a VFS) {

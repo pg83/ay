@@ -58,6 +58,11 @@ type Platform struct {
 	// once per platform so the per-CC-node compile line doesn't re-intern it.
 	TargetArg STR
 
+	// MarchArgs is the pre-interned -march=<March> arg vector (nil when March is
+	// empty), computed once per platform so compileFlagBundleFor doesn't re-intern
+	// it per compile node.
+	MarchArgs []ARG
+
 	CFlags   []ARG
 	CXXFlags []ARG
 
@@ -77,8 +82,8 @@ type Platform struct {
 	// in composeLDCmdLinkExe.
 	CompressDebugSections bool
 
-	SystemLibs       []string
-	LinkPreludeExtra []string
+	SystemLibs       []STR
+	LinkPreludeExtra []STR
 
 	ClangVer string
 
@@ -139,8 +144,8 @@ func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, 
 		March:             marchFor(isa),
 		CFlags:            internArgs(parseCompilerFlags(cflagsEnv)),
 		CXXFlags:          internArgs(parseCompilerFlags(cxxflagsEnv)),
-		SystemLibs:        systemLibs,
-		LinkPreludeExtra:  linkPreludeExtra,
+		SystemLibs:        internStrs(systemLibs),
+		LinkPreludeExtra:  internStrs(linkPreludeExtra),
 		ClangVer:          platformClangVersion(flags),
 		ClangVerSTR:       internStr(platformClangVersion(flags)),
 		BuildTypeUpperSTR: internStr(strings.ToUpper(buildType)),
@@ -148,6 +153,10 @@ func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, 
 
 	p.TargetArg = internStr("--target=" + p.Triple)
 	p.MultiarchLibPathSTR = internStr(p.MultiarchLibPath())
+
+	if p.March != "" {
+		p.MarchArgs = []ARG{internArg("-march=" + p.March)}
+	}
 
 	compress := confCompressesDebug(fs)
 	p.CompressDebugSections = compress && !buildRelease && os == OSLinux
@@ -272,7 +281,7 @@ func marchFor(isa ISA) string {
 func (p *Platform) MultiarchLibPath() string {
 	path := "$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/" + p.Triple
 
-	return Build("resources/"+resourcePatternClangTool+p.ClangVer).String() + "/lib:" + path
+	return "$(B)/resources/" + resourcePatternClangTool + p.ClangVer + "/lib:" + path
 }
 
 func (p *Platform) ToolEnv() EnvVars {

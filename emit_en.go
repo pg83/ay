@@ -73,7 +73,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 				{kind: includeQuoted, target: strUtilGenericSerializedEnumH},
 			}
 			sort.Slice(cppParsed, func(i, j int) bool { return cppParsed[i].target.String() < cppParsed[j].target.String() })
-			registerGeneratedParsedOutput(ctx, instance, "EN", serializedCPPPath, cppParsed, []NodeRef{enumParserLD})
+			registerGeneratedParsedOutput(ctx, instance, pkEN, serializedCPPPath, cppParsed, []NodeRef{enumParserLD})
 
 			if withHeader {
 				// serialized_enum.h reaches the header via enum_parser's INDUCED_DEPS(h …).
@@ -82,7 +82,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 					{kind: includeQuoted, target: internStr(serializedCPPPath.Rel())},
 				}
 				sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target.String() < hParsed[j].target.String() })
-				registerGeneratedParsedOutput(ctx, instance, "EN", serializedHPath, hParsed, []NodeRef{enumParserLD})
+				registerGeneratedParsedOutput(ctx, instance, pkEN, serializedHPath, hParsed, []NodeRef{enumParserLD})
 			}
 		}
 
