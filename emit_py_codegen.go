@@ -6,6 +6,9 @@ import (
 
 var (
 	genPy3RegScriptPath = genPy3RegScriptVFS.String()
+	// genPy3RegScriptChunk is the reg-script input chunk shared by every
+	// py-register node, referenced instead of allocated per node.
+	genPy3RegScriptChunk = []VFS{genPy3RegScriptVFS}
 )
 
 func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
@@ -24,6 +27,9 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 	ctx.tool(argToolsRescompiler)
 	ctx.tool(argToolsRescompressor)
 	ctx.tool(argToolsArchiver)
+
+	// The py3cc tool pair is loop-invariant — one chunk shared by every pysrc node.
+	py3ccToolsChunk := []VFS{py3ccBinary, py3ccSlowBin}
 
 	for _, srcRel := range d.pySrcs {
 		if strings.HasSuffix(srcRel, ".pyi") {
@@ -57,9 +63,14 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		}
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}
-		inputs := []VFS{py3ccBinary, py3ccSlowBin, srcAbs}
+		nodeInputs := inputChunks{py3ccToolsChunk, srcChunk(srcAbs)}
+
+		var inputs []VFS
 
 		if generatedInputs != nil {
+			// The generated-src input list interleaves the shared generator
+			// inputs around the tool pair and dedups across the whole — stays
+			// flat (resolveCodegenDepRefsExt below consumes it flat too).
 			inputs = []VFS{srcAbs}
 			inputs = append(inputs, generatedInputs...)
 			inputs = append(inputs, py3ccBinary, py3ccSlowBin)
@@ -73,6 +84,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			}
 
 			inputs = dedupVFS(inputs)
+			nodeInputs = inputChunks{inputs}
 		}
 
 		node := &Node{
@@ -84,7 +96,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 				},
 			},
 			Env:     env,
-			Inputs:  inputChunks{inputs},
+			Inputs:  nodeInputs,
 			Outputs: []VFS{outputPath},
 			KV:      KV{P: pkPY, PC: pcYellow},
 			TargetProperties: func() TargetProperties {
@@ -184,7 +196,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 					{CmdArgs: pyCmdArgs, Env: env},
 				},
 				Env:              env,
-				Inputs:           inputChunks{{genPy3RegScriptVFS}},
+				Inputs:           inputChunks{genPy3RegScriptChunk},
 				Outputs:          []VFS{regCppVFS},
 				KV:               KV{P: pkPY, PC: pcYellow},
 				TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
@@ -209,7 +221,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 			ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl, d.cythonNumpyBeforeInclude)
 		}
 
-		ccIn.IncludeInputs = []VFS{genPy3RegScriptVFS}
+		ccIn.IncludeInputs = genPy3RegScriptChunk
 
 		if len(in.CFlags) > 0 {
 			filtered := make([]ARG, 0, len(in.CFlags))

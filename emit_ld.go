@@ -122,11 +122,14 @@ func EmitLD(
 
 	inputs := composeLDInputs(instance.Path.Rel(), ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts)
 
-	inputs = append(inputs, ldSvnversionHVFS)
+	inputTail := make([]VFS, 0, 2)
+	inputTail = append(inputTail, ldSvnversionHVFS)
 
 	if exportsScript != nil {
-		inputs = append(inputs, Source(*exportsScript))
+		inputTail = append(inputTail, Source(*exportsScript))
 	}
+
+	inputs = append(inputs, inputTail)
 
 	// Whole-archive is a LINK ATTRIBUTE of a subset of the peer archives (the link
 	// command wraps them in --whole-archive), not an independent dependency source:
@@ -154,7 +157,7 @@ func EmitLD(
 		Platform:         instance.Platform,
 		Cmds:             cmds,
 		Env:              envFull,
-		Inputs:           inputChunks{inputs},
+		Inputs:           inputs,
 		Outputs:          outputs,
 		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -426,9 +429,24 @@ func composeLDSplitDwarfCmds(tc moduleToolchain, outputPath string, enabled bool
 	}
 }
 
-func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts scriptDeps) []VFS {
-	buildRootBlock := make([]VFS, 0, len(peerLibPaths)+len(pluginPaths)+len(globalPaths)+len(wholeArchivePaths)+len(dynamicPaths)+len(ccPaths)+len(objcopyPaths))
+func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts scriptDeps) inputChunks {
+	chunks := make(inputChunks, 0, 3+len(ldScriptInputs))
+
+	// peerLibPaths is the caller's member slice, dup-free by construction (gen's
+	// peerArchive collection pass adds via deduper) — referenced as its own
+	// chunk, never copied; it seeds the dedup set the remaining $(B) categories
+	// are filtered through, so the flat order stays byte-identical.
 	deduper.reset()
+
+	for _, p := range peerLibPaths {
+		if !deduper.add(p) {
+			ThrowFmt("composeLDInputs: %s: duplicate peer lib path %s", modulePath, p.Rel())
+		}
+	}
+
+	chunks = append(chunks, peerLibPaths)
+
+	buildRootBlock := make([]VFS, 0, len(pluginPaths)+len(globalPaths)+len(wholeArchivePaths)+len(dynamicPaths)+len(ccPaths)+len(objcopyPaths))
 	appendBuildRoot := func(paths []VFS) {
 		for _, p := range paths {
 			if !deduper.add(p) {
@@ -439,7 +457,6 @@ func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, plugi
 		}
 	}
 
-	appendBuildRoot(peerLibPaths)
 	appendBuildRoot(pluginPaths)
 	appendBuildRoot(globalPaths)
 	appendBuildRoot(wholeArchivePaths)
@@ -448,23 +465,21 @@ func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, plugi
 
 	appendBuildRoot(objcopyPaths)
 
-	out := make([]VFS, 0, len(buildRootBlock)+len(ldScriptInputs)+4)
-	out = append(out, buildRootBlock...)
+	chunks = append(chunks, buildRootBlock)
 
 	// ldScriptInputs seeds the link's $(S) tooling; expand each wrapper to its
 	// import closure via the table (e.g. link_exe -> process_command_files,
-	// thinlto_cache, process_whole_archive_option). Non-script entries
-	// (svn_interface.c) are not in the table and pass through. Dups (link_exe and
-	// fs_tools both import process_command_files) are dropped in normalization.
+	// thinlto_cache, process_whole_archive_option) — a shared table slice,
+	// referenced as its own chunk. Non-script entries (svn_interface.c) are not
+	// in the table and pass through. Dups (link_exe and fs_tools both import
+	// process_command_files) are dropped in normalization.
 	for _, s := range ldScriptInputs {
 		if cl := scripts[s]; cl != nil {
-			out = append(out, cl...)
+			chunks = append(chunks, cl)
 		} else {
-			out = append(out, s)
+			chunks = append(chunks, srcChunk(s))
 		}
 	}
 
-	_ = modulePath
-
-	return out
+	return chunks
 }

@@ -159,12 +159,20 @@ func prResourceExtraInputs(d *moduleData, output string) []VFS {
 		return nil
 	}
 
-	inputs := d.prOutputInputs[output]
-	out := make([]VFS, 0, len(inputs))
+	chunks := d.prOutputInputs[output]
+	total := 0
 
-	for _, p := range inputs {
-		if p.IsSource() {
-			out = append(out, p)
+	for _, ch := range chunks {
+		total += len(ch)
+	}
+
+	out := make([]VFS, 0, total)
+
+	for _, ch := range chunks {
+		for _, p := range ch {
+			if p.IsSource() {
+				out = append(out, p)
+			}
 		}
 	}
 

@@ -6,10 +6,6 @@ func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 	cmdArgs := composeASCmdArgs(instance, outVFS, inVFS, in)
 	env := hostP.ToolEnv()
 
-	allInputs := make([]VFS, 0, 1+len(in.IncludeInputs))
-	allInputs = append(allInputs, inVFS)
-	allInputs = append(allInputs, in.IncludeInputs...)
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: []Cmd{
@@ -20,7 +16,7 @@ func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 			},
 		},
 		Env:              env,
-		Inputs:           inputChunks{allInputs},
+		Inputs:           inputChunks{srcChunk(inVFS), in.IncludeInputs},
 		Outputs:          []VFS{outVFS},
 		KV:               KV{P: pkAS, PC: pcLightGreen},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},

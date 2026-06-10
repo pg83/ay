@@ -4,7 +4,7 @@ import "strings"
 
 type prEmitResult struct {
 	Ref    NodeRef
-	Inputs []VFS
+	Inputs inputChunks
 }
 
 func EmitPR(
@@ -59,14 +59,14 @@ func EmitPR(
 		cmdArgs = append(cmdArgs, internStr(a))
 	}
 
-	inputs := make([]VFS, 0, 1+len(auxTools)+len(stmt.INFiles)+len(inputClosure))
+	head := make([]VFS, 0, 1+len(auxTools)+len(stmt.INFiles))
 	deduper.reset()
 	appendUnique := func(p VFS) {
 		if !deduper.add(p) {
 			return
 		}
 
-		inputs = append(inputs, p)
+		head = append(head, p)
 	}
 	appendUnique(toolBinPath)
 
@@ -78,9 +78,10 @@ func EmitPR(
 		appendUnique(inVFSByToken[f])
 	}
 
-	for _, p := range inputClosure {
-		appendUnique(p)
-	}
+	// The closure tail is filtered against the head set; filterSeen returns
+	// inputClosure itself when nothing collides, so the closure is referenced,
+	// not copied, into the chunk list.
+	inputs := inputChunks{head, deduper.filterSeen(inputClosure)}
 
 	var outputs []VFS
 	var stdoutPath STR
@@ -149,7 +150,7 @@ func EmitPR(
 		Platform:         instance.Platform,
 		Cmds:             []Cmd{cmd},
 		Env:              env,
-		Inputs:           inputChunks{inputs},
+		Inputs:           inputs,
 		Outputs:          outputs,
 		KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
@@ -158,8 +159,10 @@ func EmitPR(
 		ForeignDepRefs:   foreignDepRefs,
 	}
 
+	// The node and the result share the same chunk list: nothing mutates a
+	// node's Inputs after Emit, and prOutputInputs readers copy out.
 	return prEmitResult{
 		Ref:    emit.Emit(node),
-		Inputs: append([]VFS(nil), inputs...),
+		Inputs: inputs,
 	}
 }

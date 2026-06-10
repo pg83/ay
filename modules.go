@@ -135,7 +135,7 @@ type moduleData struct {
 
 	prOutputProducer map[string]NodeRef
 
-	prOutputInputs map[string][]VFS
+	prOutputInputs map[string]inputChunks
 
 	copyFiles []copyFileEntry
 

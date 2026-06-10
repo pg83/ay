@@ -46,10 +46,6 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	inputs := make([]VFS, 0, 2+len(closure))
-	inputs = append(inputs, ragel6BinaryPath, inVFS)
-	inputs = append(inputs, closure...)
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: []Cmd{
@@ -59,7 +55,7 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 			},
 		},
 		Env:              env,
-		Inputs:           inputChunks{inputs},
+		Inputs:           inputChunks{{ragel6BinaryPath, inVFS}, closure},
 		Outputs:          []VFS{outVFS},
 		KV:               KV{P: pkR6, PC: pcYellow},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},

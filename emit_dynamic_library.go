@@ -171,7 +171,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 			{CmdArgs: cmd3, Env: envVcsOnly},
 		},
 		Env:              envFull,
-		Inputs:           inputChunks{inputs},
+		Inputs:           inputs,
 		Outputs:          []VFS{Build(instance.Path.Rel() + "/" + outputName)},
 		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -295,30 +295,29 @@ func composeDynLibCmd(p *Platform, tc moduleToolchain, modulePath, outputPath, o
 	return cmdArgs
 }
 
-func composeDynLibInputs(peerLibPaths, pluginPaths []VFS, fixElfPath VFS, modulePath, exportsScript string, scripts scriptDeps) []VFS {
-	buildRootBlock := make([]VFS, 0, len(peerLibPaths)+len(pluginPaths)+1)
-	buildRootBlock = append(buildRootBlock, peerLibPaths...)
-	buildRootBlock = append(buildRootBlock, pluginPaths...)
-	buildRootBlock = append(buildRootBlock, fixElfPath)
+func composeDynLibInputs(peerLibPaths, pluginPaths []VFS, fixElfPath VFS, modulePath, exportsScript string, scripts scriptDeps) inputChunks {
+	chunks := make(inputChunks, 0, 7)
 
-	inputs := make([]VFS, 0, len(buildRootBlock)+12)
-	inputs = append(inputs, buildRootBlock...)
+	// peerLibPaths and pluginPaths are the caller's member slices — referenced
+	// as their own chunks, never copied.
+	chunks = append(chunks, peerLibPaths, pluginPaths, srcChunk(fixElfPath))
 
 	// The scripts the link command actually runs (vcs stamp, the link_dyn_lib
 	// wrapper, the objcopy/strip fs_tools), each expanded to its import closure via
 	// the table — link_dyn_lib pulls in link_exe, process_command_files,
 	// thinlto_cache, process_whole_archive_option; fs_tools pulls in
-	// process_command_files. Dups are dropped in normalization.
+	// process_command_files. Each closure is a shared table slice, referenced as
+	// its own chunk. Dups are dropped in normalization.
 	for _, w := range []VFS{ldVcsInfoVFS, ldLinkDynLibVFS, ldFsToolsVFS} {
-		inputs = append(inputs, scripts[w]...)
+		chunks = append(chunks, scripts[w])
 	}
 
 	// Non-script inputs: the vcs C template + header and the module's exports list.
-	inputs = append(inputs,
+	chunks = append(chunks, []VFS{
 		ldSvnInterfaceVFS,
 		ldSvnversionHVFS,
-		Source(modulePath+"/"+exportsScript),
-	)
+		Source(modulePath + "/" + exportsScript),
+	})
 
-	return inputs
+	return chunks
 }

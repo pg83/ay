@@ -27,10 +27,6 @@ func EmitCF(
 	}
 	cmdArgs = appendInternStrs(cmdArgs, cfgVars)
 
-	inputs := make([]VFS, 0, 2+len(includeInputs))
-	inputs = append(inputs, configureFilePyVFS, srcVFS)
-	inputs = append(inputs, includeInputs...)
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: []Cmd{
@@ -40,7 +36,7 @@ func EmitCF(
 			},
 		},
 		Env:     env,
-		Inputs:  inputChunks{inputs},
+		Inputs:  inputChunks{{configureFilePyVFS, srcVFS}, includeInputs},
 		KV:      KV{P: pkCF, PC: pcYellow},
 		Outputs: []VFS{outVFS},
 		TargetProperties: func() TargetProperties {

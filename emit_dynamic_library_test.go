@@ -53,7 +53,7 @@ func TestComposeDynLibInputs_IncludesVcsAndHelperScripts(t *testing.T) {
 		"$(S)/contrib/libs/libiconv/dynamic/libiconv.exports",
 	}
 
-	got2 := vfsStrings(got)
+	got2 := vfsStrings(got.flat())
 	sort.Strings(got2)
 	got2 = slices.Compact(got2)
 	if !reflect.DeepEqual(got2, want) {

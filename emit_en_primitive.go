@@ -32,11 +32,6 @@ func EmitEN(
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	inputs := make([]VFS, 0, 2+len(headerIncludeClosure))
-	inputs = append(inputs, enumParserBin)
-	inputs = append(inputs, headerInput)
-	inputs = append(inputs, headerIncludeClosure...)
-
 	depRefs := make([]NodeRef, 0, len(depENRefs)+1)
 
 	if enumParserLD != (NodeRef(0)) {
@@ -60,7 +55,7 @@ func EmitEN(
 			},
 		},
 		Env:              env,
-		Inputs:           inputChunks{inputs},
+		Inputs:           inputChunks{{enumParserBin, headerInput}, headerIncludeClosure},
 		KV:               KV{P: pkEN, PC: pcYellow},
 		Outputs:          outputs,
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

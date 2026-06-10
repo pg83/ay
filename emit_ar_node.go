@@ -44,12 +44,13 @@ func emitARNode(
 		cmdArgs = append(cmdArgs, (p).str())
 	}
 
-	inputs := make([]VFS, 0, len(objPaths)+2)
-	inputs = append(inputs, objPaths...)
-	inputs = append(inputs, scriptVFS)
+	// objPaths is the caller's member slice — referenced as its own chunk,
+	// never copied; only the script/plugin tail is built locally.
+	inputTail := make([]VFS, 0, 2)
+	inputTail = append(inputTail, scriptVFS)
 
 	if arPluginPath != nil {
-		inputs = append(inputs, *arPluginPath)
+		inputTail = append(inputTail, *arPluginPath)
 	}
 
 	topEnv := hostP.ToolEnv()
@@ -77,7 +78,7 @@ func emitARNode(
 			},
 		},
 		Env:              topEnv,
-		Inputs:           inputChunks{inputs},
+		Inputs:           inputChunks{objPaths, inputTail},
 		KV:               KV{P: pkAR, PC: pcLightRed, ShowOut: true},
 		Outputs:          []VFS{archivePath},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

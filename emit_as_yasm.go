@@ -61,11 +61,6 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envYASM_TEST_SUITE, Value: strOne}}
 
-	allInputs := make([]VFS, 0, 2+len(in.IncludeInputs))
-	allInputs = append(allInputs, yasmBinaryVFS)
-	allInputs = append(allInputs, inVFS)
-	allInputs = append(allInputs, in.IncludeInputs...)
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: []Cmd{
@@ -75,7 +70,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 			},
 		},
 		Env:              env,
-		Inputs:           inputChunks{allInputs},
+		Inputs:           inputChunks{{yasmBinaryVFS, inVFS}, in.IncludeInputs},
 		Outputs:          []VFS{outVFS},
 		KV:               KV{P: pkAS, PC: pcLightGreen},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
