@@ -4,6 +4,7 @@ package main
 // through the global intern table.
 var tokName = [...]STR{
 	tokInvalid:                            0,
+	tokAddInclSelf:                        internStr("ADDINCLSELF"),
 	tokAllocator:                          internStr("ALLOCATOR"),
 	tokAllocatorImpl:                      internStr("ALLOCATOR_IMPL"),
 	tokAllPySrcs:                          internStr("ALL_PY_SRCS"),
@@ -198,6 +199,7 @@ type TOK uint16
 
 const (
 	tokInvalid TOK = iota
+	tokAddInclSelf
 	tokAllocator
 	tokAllocatorImpl
 	tokAllPySrcs

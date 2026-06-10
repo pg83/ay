@@ -5,6 +5,36 @@ import (
 	"testing"
 )
 
+func TestApplyUnknownStmt_AddInclSelf(t *testing.T) {
+	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
+
+	// ADDINCLSELF() adds -I<own source dir> (ymake.core.conf:3177:
+	// ADDINCL += ${MODDIR}). It must resolve to Source(<modulePath>).
+	d := &moduleData{}
+	applyUnknownStmt("contrib/libs/foo", &UnknownStmt{Name: internTok("ADDINCLSELF")}, d, env)
+
+	want := Source("contrib/libs/foo")
+	found := false
+
+	for _, v := range d.addIncl {
+		if v == want {
+			found = true
+		}
+	}
+
+	if !found {
+		t.Fatalf("ADDINCLSELF(): d.addIncl = %v, want it to contain %v", d.addIncl, want)
+	}
+
+	// ADDINCLSELF(FOR cython) routes the own dir to the cython bucket.
+	dc := &moduleData{}
+	applyUnknownStmt("contrib/libs/bar", &UnknownStmt{Name: internTok("ADDINCLSELF"), Args: []string{"FOR", "cython"}}, dc, env)
+
+	if len(dc.cythonAddIncl) != 1 || dc.cythonAddIncl[0] != Source("contrib/libs/bar") {
+		t.Fatalf("ADDINCLSELF(FOR cython): cythonAddIncl = %v, want [%v]", dc.cythonAddIncl, Source("contrib/libs/bar"))
+	}
+}
+
 func TestApplyUnknownStmt_LLVMBCRequiresConfiguredVersion(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
 

@@ -1102,6 +1102,23 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 	}()
 
 	switch v.Name {
+	case tokAddInclSelf:
+		// ADDINCLSELF([FOR preset]) adds -I<own source dir> to the module's
+		// compile flags (ymake.core.conf:3177: ADDINCL += [FOR $FOR] ${MODDIR}).
+		// ${MODDIR} is the module path, so the added path is Source(modulePath) —
+		// the same VFS an explicit ADDINCL(${MODDIR}) would resolve to. A FOR
+		// preset routes it to that preset's bucket (cython/asm), matching
+		// splitAddInclPaths.
+		self := Source(modulePath)
+
+		switch {
+		case len(v.Args) >= 2 && v.Args[0] == "FOR" && v.Args[1] == "cython":
+			d.cythonAddIncl = append(d.cythonAddIncl, self)
+		case len(v.Args) >= 2 && v.Args[0] == "FOR" && v.Args[1] == "asm":
+			d.asmAddIncl = append(d.asmAddIncl, self)
+		default:
+			d.addIncl = append(d.addIncl, self)
+		}
 	case tokNoLibc:
 
 		d.flags.NoLibc = true
