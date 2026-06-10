@@ -74,14 +74,13 @@ func emitArchive(
 	// carried by producerRefs / toolLDRef DepRefs, not action inputs — so they are
 	// not listed here.
 	inputs := make([]VFS, 0, len(pathPerFile)+1)
-	buildRootSeen := map[VFS]struct{}{}
+	deduper.reset()
 
 	for _, p := range pathPerFile {
-		if _, dup := buildRootSeen[p]; dup {
+		if !deduper.add(p) {
 			continue
 		}
 
-		buildRootSeen[p] = struct{}{}
 		inputs = append(inputs, p)
 	}
 

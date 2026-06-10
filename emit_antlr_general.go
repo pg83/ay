@@ -26,13 +26,12 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 		// and the configure_file.py script as inputs alongside the dst. The
 		// CF entry's SourcePath was set at registration time (emit_cf.go).
 		var cfExtraInputs []VFS
-		cfExtraSeen := map[VFS]struct{}{}
+		deduper.reset()
 		appendCFExtra := func(v VFS) {
-			if _, dup := cfExtraSeen[v]; dup {
+			if !deduper.add(v) {
 				return
 			}
 
-			cfExtraSeen[v] = struct{}{}
 			cfExtraInputs = append(cfExtraInputs, v)
 		}
 

@@ -137,18 +137,17 @@ func emitResourceObjcopy(
 			inputs = append(inputs, cur.extraInputs...)
 		}
 
-		inputSeen := make(map[VFS]struct{}, len(inputs))
+		deduper.reset()
 
 		for _, p := range inputs {
-			inputSeen[p] = struct{}{}
+			deduper.add(p)
 		}
 
 		for _, p := range cur.kvInputs {
-			if _, dup := inputSeen[p]; dup {
+			if !deduper.add(p) {
 				continue
 			}
 
-			inputSeen[p] = struct{}{}
 			inputs = append(inputs, p)
 		}
 

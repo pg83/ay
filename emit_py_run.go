@@ -468,13 +468,12 @@ func EmitPYRun(
 	}
 
 	inputs := make([]VFS, 0, 1+len(stmt.INFiles)+len(inputClosure))
-	seen := make(map[VFS]struct{}, 1+len(stmt.INFiles)+len(inputClosure))
+	deduper.reset()
 	appendUnique := func(vfs VFS) {
-		if _, ok := seen[vfs]; ok {
+		if !deduper.add(vfs) {
 			return
 		}
 
-		seen[vfs] = struct{}{}
 		inputs = append(inputs, vfs)
 	}
 	appendUnique(scriptVFS)
