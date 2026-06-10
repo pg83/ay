@@ -60,13 +60,12 @@ func EmitPR(
 	}
 
 	inputs := make([]VFS, 0, 1+len(auxTools)+len(stmt.INFiles)+len(inputClosure))
-	seen := make(map[VFS]struct{}, 1+len(auxTools)+len(stmt.INFiles)+len(inputClosure))
+	deduper.reset()
 	appendUnique := func(p VFS) {
-		if _, dup := seen[p]; dup {
+		if !deduper.add(p) {
 			return
 		}
 
-		seen[p] = struct{}{}
 		inputs = append(inputs, p)
 	}
 	appendUnique(toolBinPath)

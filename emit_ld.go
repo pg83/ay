@@ -447,14 +447,13 @@ func composeLDSplitDwarfCmds(tc moduleToolchain, outputPath string, enabled bool
 
 func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts scriptDeps) []VFS {
 	buildRootBlock := make([]VFS, 0, len(peerLibPaths)+len(pluginPaths)+len(globalPaths)+len(wholeArchivePaths)+len(dynamicPaths)+len(ccPaths)+len(objcopyPaths))
-	buildRootSeen := make(map[VFS]struct{}, cap(buildRootBlock))
+	deduper.reset()
 	appendBuildRoot := func(paths []VFS) {
 		for _, p := range paths {
-			if _, dup := buildRootSeen[p]; dup {
+			if !deduper.add(p) {
 				continue
 			}
 
-			buildRootSeen[p] = struct{}{}
 			buildRootBlock = append(buildRootBlock, p)
 		}
 	}

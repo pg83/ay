@@ -375,18 +375,17 @@ func pyProtoAuxEntriesForSource(instance ModuleInstance, d *moduleData, src stri
 
 func pyProtoSourceInputs(inputs []VFS) []VFS {
 	out := make([]VFS, 0, len(inputs))
-	seen := map[VFS]struct{}{}
+	deduper.reset()
 
 	for _, input := range inputs {
 		if !input.IsSource() {
 			continue
 		}
 
-		if _, ok := seen[input]; ok {
+		if !deduper.add(input) {
 			continue
 		}
 
-		seen[input] = struct{}{}
 		out = append(out, input)
 	}
 

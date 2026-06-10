@@ -350,7 +350,7 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 	chunks := make([]pySrcChunk, 0)
 	cur := pySrcChunk{}
 	cmdLen := 0
-	inpsSeen := make(map[VFS]struct{})
+	deduper.reset()
 	flush := func() {
 		if cmdLen == 0 {
 			return
@@ -359,22 +359,20 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 		chunks = append(chunks, cur)
 		cur = pySrcChunk{}
 		cmdLen = 0
-		inpsSeen = make(map[VFS]struct{})
+		deduper.reset()
 	}
 
 	addInps := func(e pySrcEntry) {
-		if _, ok := inpsSeen[e.pathInput]; !ok {
+		if deduper.add(e.pathInput) {
 			cur.inps = append(cur.inps, e.pathInput)
-			inpsSeen[e.pathInput] = struct{}{}
 		}
 
 		if e.extraSrcInput == nil {
 			return
 		}
 
-		if _, ok := inpsSeen[*e.extraSrcInput]; !ok {
+		if deduper.add(*e.extraSrcInput) {
 			cur.inps = append(cur.inps, *e.extraSrcInput)
-			inpsSeen[*e.extraSrcInput] = struct{}{}
 		}
 	}
 
