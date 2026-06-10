@@ -154,12 +154,32 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 
 	env := hostP.ToolEnv()
 
+	// When the wrapcc.py compile wrapper is active (non-opensource build, see
+	// wrapccPrefixFor) it is an ${input:} of the CC node and runs under YMAKE_PYTHON3,
+	// so the script joins the inputs and the python3 resource joins the deps.
+	wrap := len(instance.Platform.WrapccHead) > 0
+
 	allInputs := in.NodeInputs
 
 	if allInputs == nil {
-		allInputs = make([]VFS, 0, 1+len(in.IncludeInputs))
+		n := 1 + len(in.IncludeInputs)
+
+		if wrap {
+			n++
+		}
+
+		allInputs = make([]VFS, 0, n)
 		allInputs = append(allInputs, inVFS)
 		allInputs = append(allInputs, in.IncludeInputs...)
+
+		if wrap {
+			allInputs = append(allInputs, wrapccPyVFS)
+		}
+	} else if wrap {
+		// Don't mutate the caller-owned NodeInputs slice; copy then append.
+		cp := make([]VFS, len(allInputs), len(allInputs)+1)
+		copy(cp, allInputs)
+		allInputs = append(cp, wrapccPyVFS)
 	}
 
 	node := &Node{
@@ -184,7 +204,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 			return tp
 		}(),
 		Requirements:  Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		usesResources: []string{resourcePatternClangTool + instance.Platform.ClangVer},
+		usesResources: instance.Platform.CCUsesResources,
 	}
 
 	if len(in.ExtraDepRefs) > 0 {
@@ -414,7 +434,14 @@ func composeTargetCC(a ccComposeArgs) []STR {
 		len(builtinMacroDateTime) + len(macroPrefixMapFlags) +
 		len(a.OwnAddIncl) + len(a.PeerAddIncl) + len(a.OwnCFlags) + len(a.OwnExtras) + len(a.PeerExtras) + 2*len(a.OwnGlobalBucket) + len(a.PerSrcCFlags) + len(a.ModuleScopeCFlags) +
 		len(bundle.ArchArgs) + len(bundle.CFlags) + len(bundle.Defines) + 2*len(bundle.NoLibcBlock) + len(warningBundle)
-	cmdArgs := make([]STR, 0, argCap)
+	cmdArgs := make([]STR, 0, argCap+len(a.Platform.WrapccHead)+len(a.Platform.WrapccTail)+1)
+
+	if len(a.Platform.WrapccHead) > 0 {
+		cmdArgs = append(cmdArgs, a.Platform.WrapccHead...)
+		cmdArgs = append(cmdArgs, (a.InVFS).str())
+		cmdArgs = append(cmdArgs, a.Platform.WrapccTail...)
+	}
+
 	cmdArgs = append(cmdArgs, pickCompilerArg(a), a.Platform.TargetArg)
 	cmdArgs = appendArgStr(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs, argDashBBin, argDashC.str(), argDashO.str(), (a.OutVFS).str())

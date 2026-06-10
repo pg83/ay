@@ -298,6 +298,90 @@ func TestEmitCC_PlatformEnvFlags_TargetOnly(t *testing.T) {
 	}
 }
 
+// nonOpensourcePlatform builds an internal-contour target platform (OPENSOURCE unset),
+// the contour under which the wrapcc.py compile wrapper is active. The shared
+// testTargetP/testHostP model the opensource (sg2–5) contour and do not wrap.
+func nonOpensourcePlatform() *Platform {
+	flags := make(map[string]string, len(testToolchainFlags)+1)
+	for k, v := range testToolchainFlags {
+		flags[k] = v
+	}
+	delete(flags, "OPENSOURCE")
+	flags["PIC"] = "no"
+
+	return NewPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "", "")
+}
+
+func TestEmitCC_WrapccPrefix_NonOpensource(t *testing.T) {
+	emit := NewBufferedEmitter()
+	inst := ModuleInstance{Path: Source("mod"), Kind: KindLib, Language: LangCPP, Platform: nonOpensourcePlatform()}
+	srcVFS := Intern("$(S)/mod/lib.cpp")
+
+	EmitCC(inst, "lib.cpp", srcVFS, ModuleCCInputs{TC: testToolchain()}, testHostP, emit)
+
+	node := emit.nodes[0]
+	args := strStrs(node.Cmds[0].CmdArgs)
+
+	wantPrefix := []string{
+		"$(B)/resources/YMAKE_PYTHON3/bin/python3",
+		"$(S)/build/scripts/wrapcc.py",
+		"--source-file",
+		"$(S)/mod/lib.cpp",
+		"--source-root",
+		"$(S)",
+		"--build-root",
+		"$(B)",
+		"--wrapcc-end",
+		testToolchain().CXX.String(),
+	}
+
+	if len(args) < len(wantPrefix) {
+		t.Fatalf("CC cmd_args shorter than wrapcc prefix: %v", args)
+	}
+
+	for i, w := range wantPrefix {
+		if args[i] != w {
+			t.Fatalf("cmd_args[%d] = %q, want %q\nfull: %v", i, args[i], w, args[:len(wantPrefix)])
+		}
+	}
+
+	// wrapcc.py is an input of the wrapped node.
+	if !slicesContains(vfsStrings(node.Inputs), "$(S)/build/scripts/wrapcc.py") {
+		t.Errorf("wrapped CC node inputs missing wrapcc.py: %v", vfsStrings(node.Inputs))
+	}
+
+	// The source stays first; wrapcc.py is appended after.
+	if node.Inputs[0].String() != "$(S)/mod/lib.cpp" {
+		t.Errorf("inputs[0] = %q, want the source $(S)/mod/lib.cpp", node.Inputs[0].String())
+	}
+
+	// YMAKE_PYTHON3 joins the CC deps (the wrapper runs under it).
+	if !slicesContains(node.usesResources, resourcePatternYMakePython3) {
+		t.Errorf("wrapped CC usesResources missing YMAKE_PYTHON3: %v", node.usesResources)
+	}
+}
+
+func TestEmitCC_NoWrapcc_Opensource(t *testing.T) {
+	emit := NewBufferedEmitter()
+	// targetInstance uses testTargetP, which is OPENSOURCE=yes → no wrapper.
+	EmitCC(targetInstance("mod"), "lib.cpp", Intern("$(S)/mod/lib.cpp"), ModuleCCInputs{TC: testToolchain()}, testHostP, emit)
+
+	node := emit.nodes[0]
+	args := strStrs(node.Cmds[0].CmdArgs)
+
+	if args[0] != testToolchain().CXX.String() {
+		t.Errorf("opensource CC cmd_args[0] = %q, want the compiler (no wrapcc prefix)", args[0])
+	}
+
+	if slicesContains(vfsStrings(node.Inputs), "$(S)/build/scripts/wrapcc.py") {
+		t.Errorf("opensource CC node must not list wrapcc.py as input: %v", vfsStrings(node.Inputs))
+	}
+
+	if slicesContains(node.usesResources, resourcePatternYMakePython3) {
+		t.Errorf("opensource CC node must not depend on YMAKE_PYTHON3: %v", node.usesResources)
+	}
+}
+
 func contains(xs []STR, target string) bool {
 	for _, x := range xs {
 		if x.String() == target {
