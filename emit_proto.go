@@ -111,57 +111,28 @@ func protoImportsFromWindow(window []VFS, root VFS) ([]VFS, bool) {
 	return out, hasDescriptor
 }
 
-func evTransitiveImports(pm *includeParserManager, fs FS, srcRel string) []VFS {
-	visited := map[string]struct{}{}
-	order := make([]VFS, 0, 8)
-	descriptorAdded := false
+// evImportsFromWindow maps an .ev window's tail to EmitEV's transitive-import
+// chunk; google/protobuf/descriptor.proto becomes the explicit pbDescriptorVFS
+// wiring (the same descriptor special-casing protoImportsFromWindow reports as
+// a flag).
+func evImportsFromWindow(window []VFS, root VFS) []VFS {
+	var out []VFS
 
-	var walk func(rel string)
-	walk = func(rel string) {
-		if _, seen := visited[rel]; seen {
-			return
+	for _, v := range window {
+		if v == root {
+			continue
 		}
 
-		visited[rel] = struct{}{}
-		direct := protoDirectImportNames(pm, rel)
+		if strings.HasSuffix(v.Rel(), "google/protobuf/descriptor.proto") {
+			out = append(out, pbDescriptorVFS)
 
-		if direct == nil {
-			return
+			continue
 		}
 
-		var imports []string
-
-		for _, importedRel := range direct {
-			if importedRel == "google/protobuf/descriptor.proto" {
-				if !descriptorAdded {
-					order = append(order, pbDescriptorVFS)
-					descriptorAdded = true
-				}
-
-				continue
-			}
-
-			imports = append(imports, importedRel)
-		}
-
-		order = append(order, Source(rel))
-
-		for _, imp := range imports {
-			walk(imp)
-		}
+		out = append(out, v)
 	}
 
-	topImports := protoDirectImportNames(pm, srcRel)
-
-	if topImports == nil {
-		return nil
-	}
-
-	for _, imp := range topImports {
-		walk(imp)
-	}
-
-	return order
+	return out
 }
 
 func protoDirectImportNames(pm *includeParserManager, srcRel string) []string {
@@ -540,7 +511,8 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 
 		for _, src := range evSrcs {
 			evRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
-			evImports := evTransitiveImports(ctx.parsers, ctx.fs, evRelPath)
+			evVFS := Source(evRelPath)
+			evImports := evImportsFromWindow(walkClosure(ctx, instance, evVFS, protoWalkInputs(nil)), evVFS)
 
 			evRef := EmitEV(
 				instance, evRelPath, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
