@@ -145,8 +145,8 @@ func (c PColor) String() string {
 type KV struct {
 	P                ProcKind
 	PC               PColor
-	ShowOut          string // "yes" string form
-	ShowOutBool      bool   // test nodes emit show_out as bool true (used iff ShowOut == "")
+	ShowOut          bool // emitted as the string "yes"
+	ShowOutBool      bool // test nodes emit show_out as bool true (used iff !ShowOut)
 	Name             string
 	Path             string
 	DisableCache     string
@@ -273,8 +273,8 @@ func appendKV(buf []byte, kv KV) []byte {
 	o.str("pc", kv.PC.String())
 	o.boolTrue("run_test_node", kv.RunTestNode)
 
-	if kv.ShowOut != "" {
-		o.forceStr("show_out", kv.ShowOut)
+	if kv.ShowOut {
+		o.forceStr("show_out", "yes")
 	} else {
 		o.boolTrue("show_out", kv.ShowOutBool)
 	}

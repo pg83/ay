@@ -202,7 +202,7 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 			Env:              env,
 			Inputs:           inputs,
 			Outputs:          []VFS{aux},
-			KV:               KV{P: pkPR, PC: pcYellow, ShowOut: "yes"},
+			KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path},
 			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 			DepRefs:          chDeps,

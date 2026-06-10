@@ -518,7 +518,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			Env:              env,
 			Inputs:           inputs,
 			Outputs:          []VFS{aux},
-			KV:               KV{P: pkPR, PC: pcYellow, ShowOut: "yes"},
+			KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path, ModuleTag: "py3_proto"},
 			Requirements:     Requirements{CPU: float64(1), Network: "restricted", RAM: float64(32)},
 			DepRefs:          deps,
