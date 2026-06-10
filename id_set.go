@@ -65,26 +65,19 @@ func (s *IdSet) add(v VFS) {
 // the compiler reloads s.gen (pointer and length) and s.epoch on every
 // iteration, since the gen[id] store could alias the fields — the dfs.func2
 // disasm showed 4 dependent loads per element where the hoisted form keeps
-// them in registers. reset(size) presizes gen to the id bound, so the grow
-// fallback (add + re-hoist) is never hit in practice.
+// them in registers. Callers reset(vfsBound()) before splicing and windows
+// hold only already-interned ids, so every id is in range by construction —
+// the runtime bounds check is the fail-fast for a violated invariant.
 func (s *IdSet) spliceNew(win []VFS, block []VFS, k int) int {
 	gen := s.gen
 	epoch := s.epoch
 
 	for _, v := range win {
-		id := uint32(v)
-
-		if id < uint32(len(gen)) {
-			if gen[id] == epoch {
-				continue
-			}
-
-			gen[id] = epoch
-		} else {
-			s.add(v)
-			gen = s.gen
+		if gen[v] == epoch {
+			continue
 		}
 
+		gen[v] = epoch
 		block[k] = v
 		k++
 	}

@@ -129,18 +129,18 @@ func TestIdSet_SpliceNew(t *testing.T) {
 	}
 }
 
-func TestIdSet_SpliceNewGrowFallback(t *testing.T) {
+func TestIdSet_SpliceNewOutOfBoundPanics(t *testing.T) {
+	// Callers presize via reset(vfsBound()); an id past the bound means the
+	// invariant broke — the runtime bounds check must fail fast, not grow.
 	var s IdSet
 	s.reset(4)
 
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic on out-of-bound splice id")
+		}
+	}()
+
 	block := make([]VFS, 4)
-	k := s.spliceNew([]VFS{VFS(2), VFS(1000)}, block, 0) // 1000 forces the add+re-hoist path
-
-	if k != 2 || block[0] != VFS(2) || block[1] != VFS(1000) {
-		t.Fatalf("spliceNew k=%d block=%v", k, block[:k])
-	}
-
-	if !s.has(VFS(1000)) {
-		t.Fatal("grown id not present")
-	}
+	s.spliceNew([]VFS{VFS(1000)}, block, 0)
 }
