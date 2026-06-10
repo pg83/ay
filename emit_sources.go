@@ -37,16 +37,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		strings.HasSuffix(srcRel, ".cxx"):
 		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDirs)
 
-		full := walkClosureRoot(ctx, srcInstance, srcVFS, srcIn)
-
-		if full != nil {
-			srcIn.IncludeInputs = full[1:]
-		}
-
-		// Fast-path: IncludeInputs == full[1:] (same backing slice), so NodeInputs =
-		// full lets EmitCC emit the full input array directly with no extra
-		// allocation.
-		srcIn.NodeInputs = full
+		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, srcVFS, srcIn)
 
 		srcIn.ExtraDepRefs = resolveCodegenDepRefsExt(ctx, srcInstance, srcIn.IncludeInputs, []VFS{srcVFS})
 		ref, outPath, _ := EmitCC(srcInstance, srcRel, srcVFS, srcIn, ctx.host, ctx.emit)

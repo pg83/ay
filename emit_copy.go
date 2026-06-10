@@ -131,7 +131,10 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 		// source-only (tablegen .inc outputs etc. don't appear as direct CP
 		// inputs). dedupVFS collapses repeated post-rewrite entries.
 		if moduleInputs != nil && (entry.WithContext || len(entry.OutputIncludes) > 0) {
-			closure = walkClosureRoot(ctx, instance, dstVFS, *moduleInputs)
+			// The closure root is irrelevant here: rewriteClosureCPSource maps
+			// the dst root to its SourcePath (== src) and EmitCPWithDeps filters
+			// both src and dst from extraInputs, so the rootless walk is exact.
+			closure = walkClosure(ctx, instance, dstVFS, *moduleInputs)
 			closure = rewriteClosureCPSource(scanner, closure)
 			closure = keepOnlySourceVFS(closure)
 			closure = dedupVFS(closure)
