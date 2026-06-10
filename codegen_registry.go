@@ -238,7 +238,7 @@ func registerGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind Pr
 	scanner := ctx.scannerFor(instance)
 
 	if scanner != nil {
-		scanner.parsers.RegisterBuildParsedIncludes(output.Rel(), parsed)
+		scanner.parsers.RegisterBuildParsedIncludes(output, parsed)
 	}
 }
 
@@ -256,7 +256,7 @@ func registerDeferredCF(ctx *genCtx, instance ModuleInstance, output VFS, parsed
 	scanner := ctx.scannerFor(instance)
 
 	if scanner != nil {
-		scanner.parsers.RegisterBuildParsedIncludes(output.Rel(), parsed)
+		scanner.parsers.RegisterBuildParsedIncludes(output, parsed)
 	}
 }
 
@@ -297,7 +297,7 @@ func registerBoundGeneratedParsedOutputWithSource(ctx *genCtx, instance ModuleIn
 	scanner := ctx.scannerFor(instance)
 
 	if scanner != nil {
-		scanner.parsers.RegisterBuildParsedIncludes(output.Rel(), parsed)
+		scanner.parsers.RegisterBuildParsedIncludes(output, parsed)
 	}
 }
 
