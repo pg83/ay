@@ -2,14 +2,14 @@ package main
 
 import "strings"
 
-const (
-	ragel6DefaultFlagOptimized = "-CG2"
-	ragel6DefaultFlagDebug     = "-CT0"
-)
-
 var (
 	ragel6ArgOptimized = internArg(ragel6DefaultFlagOptimized)
 	ragel6ArgDebug     = internArg(ragel6DefaultFlagDebug)
+)
+
+const (
+	ragel6DefaultFlagOptimized = "-CG2"
+	ragel6DefaultFlagDebug     = "-CT0"
 )
 
 func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ARG, closure []VFS, emit Emitter) (NodeRef, VFS) {

@@ -18,6 +18,18 @@ var pColorStr = [...]string{
 	pcLightGreen: "light-green", pcLightRed: "light-red", pcMagenta: "magenta", pcYellow: "yellow",
 }
 
+var networkModeStr = [...]string{
+	nwNone: "", nwRestricted: "restricted", nwFull: "full",
+}
+
+var moduleLangStr = [...]string{
+	mlNone: "", mlCPP: "cpp", mlPy3: "py3", mlUnknown: "unknown",
+}
+
+var moduleTypeStr = [...]string{
+	mtNone: "", mtBin: "bin", mtLib: "lib", mtSO: "so",
+}
+
 // Typed replacements for the former map-valued Node fields. These drop the
 // per-node map iteration, key sort and interface{} boxing the canonical-hash and
 // JSON-write paths paid when KV, Requirements, TargetProperties and Env were
@@ -64,10 +76,6 @@ const (
 	nwFull
 )
 
-var networkModeStr = [...]string{
-	nwNone: "", nwRestricted: "restricted", nwFull: "full",
-}
-
 func (m NetworkMode) String() string {
 	return networkModeStr[m]
 }
@@ -98,10 +106,6 @@ const (
 	mlUnknown
 )
 
-var moduleLangStr = [...]string{
-	mlNone: "", mlCPP: "cpp", mlPy3: "py3", mlUnknown: "unknown",
-}
-
 func (l ModuleLang) String() string {
 	return moduleLangStr[l]
 }
@@ -116,10 +120,6 @@ const (
 	mtLib
 	mtSO
 )
-
-var moduleTypeStr = [...]string{
-	mtNone: "", mtBin: "bin", mtLib: "lib", mtSO: "so",
-}
 
 func (t ModuleType) String() string {
 	return moduleTypeStr[t]
