@@ -84,7 +84,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 				},
 			},
 			Env:     env,
-			Inputs:  inputs,
+			Inputs:  inputChunks{inputs},
 			Outputs: []VFS{outputPath},
 			KV:      KV{P: pkPY, PC: pcYellow},
 			TargetProperties: func() TargetProperties {
@@ -184,7 +184,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 					{CmdArgs: pyCmdArgs, Env: env},
 				},
 				Env:              env,
-				Inputs:           []VFS{genPy3RegScriptVFS},
+				Inputs:           inputChunks{{genPy3RegScriptVFS}},
 				Outputs:          []VFS{regCppVFS},
 				KV:               KV{P: pkPY, PC: pcYellow},
 				TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},

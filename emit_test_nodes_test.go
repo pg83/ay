@@ -88,7 +88,7 @@ func expectedTestCtxNode() *Node {
 			}),
 		}},
 		Env:              nil,
-		Inputs:           []VFS{Intern("$(S)/build/scripts/append_file.py")},
+		Inputs:           inputChunks{{Intern("$(S)/build/scripts/append_file.py")}},
 		KV:               KV{P: pkCP, PC: pcLightBlue},
 		Outputs:          []VFS{Intern("$(B)/common_test.context")},
 		Platform:         &Platform{Target: "default-linux-x86_64"},
@@ -156,7 +156,7 @@ func expectedUnittestNode(info testSuiteInfo) *Node {
 			}),
 		}},
 		Env:    expectedTestEnv("unittest"),
-		Inputs: []VFS{Intern("$(S)/util/ut")},
+		Inputs: inputChunks{{Intern("$(S)/util/ut")}},
 		KV:     KV{P: pkTS, Path: "util/ut/unittest", PC: pcYellow, RunTestNode: true, ShowOutBool: true, HasSpecialRunner: true},
 		Outputs: []VFS{
 			Intern("$(B)/util/ut/test-results/unittest/meta.json"),
@@ -229,14 +229,14 @@ func expectedClangFormatNode() *Node {
 			}),
 		}},
 		Env: expectedTestEnv("clang_format"),
-		Inputs: []VFS{
+		Inputs: inputChunks{{
 			Intern("$(S)/build/config/tests/cpp_style/.clang-format"),
 			Intern("$(S)/build/scripts/c_templates/svn_interface.c"),
 			Intern("$(S)/tools/cpp_style_checker/wrapper.py"),
 			Intern("$(S)/util/ut"),
 			Intern("$(S)/util/ysafeptr_ut.cpp"),
 			Intern("$(S)/util/ysaveload_ut.cpp"),
-		},
+		}},
 		KV: KV{P: pkTS, Path: "util/ut/clang_format", PC: pcYellow, RunTestNode: true, ShowOutBool: true, HasSpecialRunner: true},
 		Outputs: []VFS{
 			Intern("$(B)/util/ut/test-results/clang_format/meta.json"),
@@ -284,8 +284,8 @@ func assertNodeFields(t *testing.T, name string, got, want *Node) {
 	if !reflect.DeepEqual(got.Env, want.Env) {
 		t.Fatalf("%s env mismatch\n got: %#v\nwant: %#v", name, got.Env, want.Env)
 	}
-	if !reflect.DeepEqual(got.Inputs, want.Inputs) {
-		t.Fatalf("%s inputs mismatch\n got: %#v\nwant: %#v", name, got.Inputs, want.Inputs)
+	if !reflect.DeepEqual(got.flatInputs(), want.flatInputs()) {
+		t.Fatalf("%s inputs mismatch\n got: %#v\nwant: %#v", name, got.flatInputs(), want.flatInputs())
 	}
 	if !reflect.DeepEqual(got.KV, want.KV) {
 		t.Fatalf("%s kv mismatch\n got: %#v\nwant: %#v", name, got.KV, want.KV)
@@ -451,8 +451,8 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		t.Fatalf("unittest --binary = %q, want $(B)/util/ut/util-ut", binaryValue)
 	}
 
-	clangInputs := make([]string, 0, len(clangNode.Inputs))
-	for _, input := range clangNode.Inputs {
+	clangInputs := make([]string, 0, len(clangNode.flatInputs()))
+	for _, input := range clangNode.flatInputs() {
 		clangInputs = append(clangInputs, input.String())
 	}
 	for _, want := range []string{"$(S)/util/ysafeptr_ut.cpp", "$(S)/util/ysaveload_ut.cpp"} {
@@ -526,8 +526,8 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		if !reflect.DeepEqual(nodeTags(ccNode), internStrs(expectedSandboxingTags())) {
 			t.Fatalf("cc tags for %q = %v, want %v", spec.output, nodeTags(ccNode), expectedSandboxingTags())
 		}
-		ccInputs := make([]string, 0, len(ccNode.Inputs))
-		for _, input := range ccNode.Inputs {
+		ccInputs := make([]string, 0, len(ccNode.flatInputs()))
+		for _, input := range ccNode.flatInputs() {
 			ccInputs = append(ccInputs, input.String())
 		}
 		if !containsString(ccInputs, spec.input) {

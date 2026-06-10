@@ -203,7 +203,7 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 			Platform:         instance.Platform,
 			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: env}},
 			Env:              env,
-			Inputs:           inputs,
+			Inputs:           inputChunks{inputs},
 			Outputs:          []VFS{aux},
 			KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},

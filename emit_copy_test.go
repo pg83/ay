@@ -51,7 +51,7 @@ func TestGen_CrossModuleTextCopySourceTracked(t *testing.T) {
 	// The .h.txt source must appear as a leaf input — upstream always tracks it.
 	if !nodeHasInput(consumerCC, "$(S)/src/tmpl.h.txt") {
 		t.Errorf("consumer.cpp.o missing cross-module TEXT copy source $(S)/src/tmpl.h.txt: %v",
-			vfsStringsT3(consumerCC.Inputs))
+			vfsStringsT3(consumerCC.flatInputs()))
 	}
 }
 
@@ -79,15 +79,15 @@ COPY_FILE(TEXT shared/dep.h.txt ${BINDIR}/dep.h)
 	bCC := mustNodeByOutput(t, g, "$(B)/b/b.cpp.o")
 
 	if nodeHasInput(aCC, "$(B)/b/dep.h") {
-		t.Errorf("a.cpp.o leaked peer copy $(B)/b/dep.h: %v", vfsStringsT3(aCC.Inputs))
+		t.Errorf("a.cpp.o leaked peer copy $(B)/b/dep.h: %v", vfsStringsT3(aCC.flatInputs()))
 	}
 	if nodeHasInput(bCC, "$(B)/a/dep.h") {
-		t.Errorf("b.cpp.o leaked peer copy $(B)/a/dep.h: %v", vfsStringsT3(bCC.Inputs))
+		t.Errorf("b.cpp.o leaked peer copy $(B)/a/dep.h: %v", vfsStringsT3(bCC.flatInputs()))
 	}
 	if !nodeHasInput(aCC, "$(B)/a/dep.h") {
-		t.Errorf("a.cpp.o missing own copy $(B)/a/dep.h: %v", vfsStringsT3(aCC.Inputs))
+		t.Errorf("a.cpp.o missing own copy $(B)/a/dep.h: %v", vfsStringsT3(aCC.flatInputs()))
 	}
 	if !nodeHasInput(bCC, "$(B)/b/dep.h") {
-		t.Errorf("b.cpp.o missing own copy $(B)/b/dep.h: %v", vfsStringsT3(bCC.Inputs))
+		t.Errorf("b.cpp.o missing own copy $(B)/b/dep.h: %v", vfsStringsT3(bCC.flatInputs()))
 	}
 }

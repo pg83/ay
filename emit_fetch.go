@@ -26,7 +26,7 @@ func emitResourceFetch(ctx *genCtx, decl resourceDecl) NodeRef {
 				output.str(),
 			},
 		}},
-		Inputs:           fetchScriptInputs(ctx.scripts),
+		Inputs:           inputChunks{fetchScriptInputs(ctx.scripts)},
 		KV:               KV{P: pkFETCH, PC: pcYellow, ShowOut: true},
 		Outputs:          []VFS{output},
 		Requirements:     Requirements{CPU: float64(1), Network: nwFull, RAM: float64(32)},

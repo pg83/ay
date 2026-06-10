@@ -63,7 +63,7 @@ func buildTestCtxNode(p *Platform) *Node {
 			},
 		}},
 		Env:              nil,
-		Inputs:           []VFS{Source(testAppendFileScriptRel)},
+		Inputs:           inputChunks{{Source(testAppendFileScriptRel)}},
 		KV:               KV{P: pkCP, PC: pcLightBlue},
 		Outputs:          []VFS{bldCommonTestContext},
 		Requirements:     Requirements{Network: nwRestricted},
@@ -141,7 +141,7 @@ func buildUnittestNode(p *Platform, info testSuiteInfo, resourceGlobals []resour
 			Cwd:     internStr(testBuildRoot),
 		}},
 		Env:    testEnv(p, "unittest"),
-		Inputs: []VFS{Source(info.ProjectPath)},
+		Inputs: inputChunks{{Source(info.ProjectPath)}},
 		KV: KV{
 			P:                pkTS,
 			Path:             path.Join(info.ProjectPath, "unittest"),
@@ -245,7 +245,7 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 			Cwd:     internStr(testBuildRoot),
 		}},
 		Env:    testEnv(p, "clang_format"),
-		Inputs: inputs,
+		Inputs: inputChunks{inputs},
 		KV: KV{
 			P:                pkTS,
 			Path:             path.Join(info.ProjectPath, "clang_format"),

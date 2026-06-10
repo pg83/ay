@@ -45,8 +45,8 @@ func TestEmitCC_GeneratedSource_BuildRootInput(t *testing.T) {
 
 	wantInput := "$(B)/util/_/datetime/parser.rl6.cpp"
 
-	if len(got.Inputs) != 1 || got.Inputs[0].String() != wantInput {
-		t.Errorf("inputs = %v, want [%q]", got.Inputs, wantInput)
+	if len(got.flatInputs()) != 1 || got.flatInputs()[0].String() != wantInput {
+		t.Errorf("inputs = %v, want [%q]", got.flatInputs(), wantInput)
 	}
 
 	args := got.Cmds[0].CmdArgs
@@ -346,13 +346,13 @@ func TestEmitCC_WrapccPrefix_NonOpensource(t *testing.T) {
 	}
 
 	// wrapcc.py is an input of the wrapped node.
-	if !slicesContains(vfsStrings(node.Inputs), "$(S)/build/scripts/wrapcc.py") {
-		t.Errorf("wrapped CC node inputs missing wrapcc.py: %v", vfsStrings(node.Inputs))
+	if !slicesContains(vfsStrings(node.flatInputs()), "$(S)/build/scripts/wrapcc.py") {
+		t.Errorf("wrapped CC node inputs missing wrapcc.py: %v", vfsStrings(node.flatInputs()))
 	}
 
 	// The source stays first; wrapcc.py is appended after.
-	if node.Inputs[0].String() != "$(S)/mod/lib.cpp" {
-		t.Errorf("inputs[0] = %q, want the source $(S)/mod/lib.cpp", node.Inputs[0].String())
+	if node.flatInputs()[0].String() != "$(S)/mod/lib.cpp" {
+		t.Errorf("inputs[0] = %q, want the source $(S)/mod/lib.cpp", node.flatInputs()[0].String())
 	}
 
 	// YMAKE_PYTHON3 joins the CC deps (the wrapper runs under it).
@@ -373,8 +373,8 @@ func TestEmitCC_NoWrapcc_Opensource(t *testing.T) {
 		t.Errorf("opensource CC cmd_args[0] = %q, want the compiler (no wrapcc prefix)", args[0])
 	}
 
-	if slicesContains(vfsStrings(node.Inputs), "$(S)/build/scripts/wrapcc.py") {
-		t.Errorf("opensource CC node must not list wrapcc.py as input: %v", vfsStrings(node.Inputs))
+	if slicesContains(vfsStrings(node.flatInputs()), "$(S)/build/scripts/wrapcc.py") {
+		t.Errorf("opensource CC node must not list wrapcc.py as input: %v", vfsStrings(node.flatInputs()))
 	}
 
 	if slicesContains(node.usesResources, resourcePatternYMakePython3) {

@@ -113,6 +113,30 @@ func (c *canonBuf) writeStrSlice(as []STR) {
 	}
 }
 
+// writeVFSChunks writes the flattened element sequence of the chunk list —
+// byte-identical to writeVFSSlice over the concatenation.
+func (c *canonBuf) writeVFSChunks(chunks inputChunks) {
+	total := 0
+
+	for _, ch := range chunks {
+		total += len(ch)
+	}
+
+	c.writeUint32(uint32(total))
+
+	if fs, ok := c.fs.(*osFS); ok {
+		for _, ch := range chunks {
+			c.writeVFSSliceOS(ch, fs)
+		}
+
+		return
+	}
+
+	for _, ch := range chunks {
+		c.writeVFSSliceBody(ch)
+	}
+}
+
 func (c *canonBuf) writeVFSSlice(vs []VFS) {
 	c.writeUint32(uint32(len(vs)))
 
@@ -122,6 +146,10 @@ func (c *canonBuf) writeVFSSlice(vs []VFS) {
 		return
 	}
 
+	c.writeVFSSliceBody(vs)
+}
+
+func (c *canonBuf) writeVFSSliceBody(vs []VFS) {
 	for _, v := range vs {
 		c.writeSTR(v.str())
 
@@ -250,7 +278,7 @@ func (c *canonBuf) writeNode(n *Node) {
 	c.writeRefUIDs(n.DepRefs)
 	c.writeEnv(n.Env)
 	c.writeRefUIDs(n.ForeignDepRefs)
-	c.writeVFSSlice(n.Inputs)
+	c.writeVFSChunks(n.Inputs)
 	c.writeKV(n.KV)
 	c.writeVFSSlice(n.Outputs)
 	c.writeBytes(string(n.Platform.Target))

@@ -65,7 +65,7 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 			},
 			DepRefs:          []NodeRef{swigRef},
 			Env:              EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
-			Inputs:           inputs,
+			Inputs:           inputChunks{inputs},
 			Outputs:          []VFS{cOutVFS, pyOutVFS},
 			KV:               KV{P: pkSW, PC: pcYellow},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

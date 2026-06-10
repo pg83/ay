@@ -116,6 +116,9 @@ type Platform struct {
 var (
 	wrapccPython3STR = internStr("$(B)/resources/" + resourcePatternYMakePython3 + "/bin/python3")
 	wrapccPyVFS      = Source("build/scripts/wrapcc.py")
+	// wrapccPyChunk is the wrapper-script input chunk shared by every wrapped CC
+	// node (Node.Inputs is chunked; this one is appended by reference).
+	wrapccPyChunk    = []VFS{wrapccPyVFS}
 	wrapccArgSrcFile = internArg("--source-file")
 	wrapccArgEnd     = internArg("--wrapcc-end")
 )

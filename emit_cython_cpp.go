@@ -148,7 +148,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 				},
 			},
 			Env:              env,
-			Inputs:           toolInputs,
+			Inputs:           inputChunks{toolInputs},
 			Outputs:          []VFS{generatedVFS},
 			KV:               KV{P: pkCY, PC: pcYellow},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

@@ -154,7 +154,7 @@ func EmitLD(
 		Platform:         instance.Platform,
 		Cmds:             cmds,
 		Env:              envFull,
-		Inputs:           inputs,
+		Inputs:           inputChunks{inputs},
 		Outputs:          outputs,
 		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

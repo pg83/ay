@@ -59,7 +59,7 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 			},
 		},
 		Env:              env,
-		Inputs:           inputs,
+		Inputs:           inputChunks{inputs},
 		Outputs:          []VFS{outVFS},
 		KV:               KV{P: pkR6, PC: pcYellow},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},

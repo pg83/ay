@@ -40,7 +40,7 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 					},
 				},
 				Env:              env,
-				Inputs:           inputs,
+				Inputs:           inputChunks{inputs},
 				Outputs:          []VFS{generatedVFS},
 				KV:               KV{P: pkCH, PC: pcYellow},
 				Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

@@ -51,7 +51,7 @@ func EmitR5(
 		Platform:         instance.Platform,
 		Cmds:             []Cmd{cmd0, cmd1},
 		Env:              env,
-		Inputs:           inputs,
+		Inputs:           inputChunks{inputs},
 		Outputs:          []VFS{tmpVFS, cppVFS},
 		KV:               KV{P: pkR5, PC: pcYellow},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},

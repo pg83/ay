@@ -103,7 +103,7 @@ func emitArchive(
 			},
 		},
 		Env:              env,
-		Inputs:           inputs,
+		Inputs:           inputChunks{inputs},
 		KV:               KV{P: pkAR, PC: pcLightRed},
 		Outputs:          []VFS{archiveVFS},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

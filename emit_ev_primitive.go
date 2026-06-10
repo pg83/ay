@@ -138,7 +138,7 @@ func EmitEV(
 			},
 		},
 		Env:              env,
-		Inputs:           inputs,
+		Inputs:           inputChunks{inputs},
 		Outputs:          []VFS{evCC, evH},
 		KV:               KV{P: pkEV, PC: pcYellow},
 		TargetProperties: targetProps,

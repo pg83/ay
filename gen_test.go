@@ -165,8 +165,8 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 		t.Fatalf("cc module_dir = %q, want mod", cc.TargetProperties.ModuleDir)
 	}
 
-	inputs := make([]string, 0, len(cc.Inputs))
-	for _, in := range cc.Inputs {
+	inputs := make([]string, 0, len(cc.flatInputs()))
+	for _, in := range cc.flatInputs() {
 		inputs = append(inputs, in.String())
 	}
 	if !slicesContains(inputs, "$(S)/thelib/a_ut.cpp") {
@@ -392,7 +392,7 @@ END()
 
 	for _, n := range g.Graph {
 		if n.KV.P == pkCC {
-			ccInputs = append(ccInputs, vfsStrings(n.Inputs)...)
+			ccInputs = append(ccInputs, vfsStrings(n.flatInputs())...)
 		}
 	}
 
@@ -526,15 +526,15 @@ END()
 			continue
 		}
 
-		if len(n.Inputs) == 0 {
+		if len(n.flatInputs()) == 0 {
 			continue
 		}
 
 		switch {
-		case strings.Contains(n.Inputs[0].String(), "all_my.cpp"):
-			joinedInput = n.Inputs[0].String()
-		case strings.Contains(n.Inputs[0].String(), "other.cpp"):
-			otherInput = n.Inputs[0].String()
+		case strings.Contains(n.flatInputs()[0].String(), "all_my.cpp"):
+			joinedInput = n.flatInputs()[0].String()
+		case strings.Contains(n.flatInputs()[0].String(), "other.cpp"):
+			otherInput = n.flatInputs()[0].String()
 		}
 	}
 
@@ -741,7 +741,7 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 	expectedInput := "$(B)/peerlib/libpeerlib.global.a"
 	foundInInputs := false
 
-	for _, in := range ldNode.Inputs {
+	for _, in := range ldNode.flatInputs() {
 		if in.String() == expectedInput {
 			foundInInputs = true
 			break
@@ -749,10 +749,10 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 	}
 
 	if !foundInInputs {
-		t.Errorf("expected single-prefixed global archive in inputs; got: %v", ldNode.Inputs)
+		t.Errorf("expected single-prefixed global archive in inputs; got: %v", ldNode.flatInputs())
 	}
 
-	for _, in := range ldNode.Inputs {
+	for _, in := range ldNode.flatInputs() {
 		if strings.Contains(in.String(), "$(B)/$(B)") {
 			t.Errorf("double-prefixed input found: %q", in.String())
 		}
@@ -1131,8 +1131,8 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 
 		wantInput := "$(S)/other/dir/foo.cpp"
 
-		if len(ccNode.Inputs) == 0 || ccNode.Inputs[0].String() != wantInput {
-			t.Errorf("CC inputs = %v, want first = %q", ccNode.Inputs, wantInput)
+		if len(ccNode.flatInputs()) == 0 || ccNode.flatInputs()[0].String() != wantInput {
+			t.Errorf("CC inputs = %v, want first = %q", ccNode.flatInputs(), wantInput)
 		}
 
 		wantOutput := "$(B)/mymod/__/other/dir/foo.cpp.o"
@@ -1171,8 +1171,8 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 
 		wantInput := "$(S)/basemod/bar.cpp"
 
-		if len(ccNode.Inputs) == 0 || ccNode.Inputs[0].String() != wantInput {
-			t.Errorf("CC inputs = %v, want first = %q", ccNode.Inputs, wantInput)
+		if len(ccNode.flatInputs()) == 0 || ccNode.flatInputs()[0].String() != wantInput {
+			t.Errorf("CC inputs = %v, want first = %q", ccNode.flatInputs(), wantInput)
 		}
 	})
 
@@ -1242,8 +1242,8 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		}
 
 		wantInput := "$(S)/tools/r6/main.cpp"
-		if len(ccNode.Inputs) == 0 || ccNode.Inputs[0].String() != wantInput {
-			t.Errorf("CC inputs = %v, want first = %q", ccNode.Inputs, wantInput)
+		if len(ccNode.flatInputs()) == 0 || ccNode.flatInputs()[0].String() != wantInput {
+			t.Errorf("CC inputs = %v, want first = %q", ccNode.flatInputs(), wantInput)
 		}
 
 		wantOutput := "$(B)/tools/r6/bin/__/main.cpp.o"
@@ -1275,7 +1275,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties.ModuleDir, "tools/r6/bin")
 		}
 
-		if got := ccNode.Inputs[0].String(); got != "$(S)/tools/r6/sub/main.cpp" {
+		if got := ccNode.flatInputs()[0].String(); got != "$(S)/tools/r6/sub/main.cpp" {
 			t.Errorf("CC input = %q, want %q", got, "$(S)/tools/r6/sub/main.cpp")
 		}
 
@@ -1472,8 +1472,8 @@ END()
 		case "CC":
 
 			ip := ""
-			if len(n.Inputs) > 0 {
-				ip = n.Inputs[0].String()
+			if len(n.flatInputs()) > 0 {
+				ip = n.flatInputs()[0].String()
 			}
 
 			if ccNode == nil && strings.HasPrefix(ip, "$(B)/") {
@@ -1664,8 +1664,8 @@ END()
 
 	wantInput := "$(S)/other/src/foo.cpp"
 
-	if len(ccNode.Inputs) == 0 || ccNode.Inputs[0].String() != wantInput {
-		t.Errorf("CC input = %v, want first = %q", ccNode.Inputs, wantInput)
+	if len(ccNode.flatInputs()) == 0 || ccNode.flatInputs()[0].String() != wantInput {
+		t.Errorf("CC input = %v, want first = %q", ccNode.flatInputs(), wantInput)
 	}
 
 	wantOutput := "$(B)/mylib/__/other/src/foo.cpp.o"
@@ -1706,8 +1706,8 @@ END()
 
 	wantInput := "$(S)/mylib/local.c"
 
-	if len(ccNode.Inputs) == 0 || ccNode.Inputs[0].String() != wantInput {
-		t.Errorf("CC input = %v, want first = %q (local-existing source must ignore SRCDIR)", ccNode.Inputs, wantInput)
+	if len(ccNode.flatInputs()) == 0 || ccNode.flatInputs()[0].String() != wantInput {
+		t.Errorf("CC input = %v, want first = %q (local-existing source must ignore SRCDIR)", ccNode.flatInputs(), wantInput)
 	}
 
 	wantOutput := "$(B)/mylib/local.c.o"
@@ -2215,15 +2215,15 @@ END()
 
 	const forbidden = "$(B)/joinmod/all_my.cpp"
 
-	for _, in := range arNode.Inputs {
+	for _, in := range arNode.flatInputs() {
 		if in.String() == forbidden {
-			t.Errorf("AR.Inputs contains %q — JS-derived BUILD_ROOT shim must be filtered (PR-35y R7)", forbidden)
+			t.Errorf("AR.flatInputs() contains %q — JS-derived BUILD_ROOT shim must be filtered (PR-35y R7)", forbidden)
 		}
 	}
 
 	for _, src := range []string{"$(S)/joinmod/src1.cpp", "$(S)/joinmod/src2.cpp"} {
 		if nodeHasInput(arNode, src) {
-			t.Errorf("AR.Inputs must not contain JS member source %q: %#v", src, arNode.Inputs)
+			t.Errorf("AR.flatInputs() must not contain JS member source %q: %#v", src, arNode.flatInputs())
 		}
 	}
 }
@@ -2254,15 +2254,15 @@ func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 
 	const forbidden = "$(B)/consumer/_/parser.rl6.cpp"
 
-	for _, in := range arNode.Inputs {
+	for _, in := range arNode.flatInputs() {
 		if in.String() == forbidden {
-			t.Errorf("AR.Inputs contains %q — R6-derived BUILD_ROOT shim must be filtered (PR-35y R7)", forbidden)
+			t.Errorf("AR.flatInputs() contains %q — R6-derived BUILD_ROOT shim must be filtered (PR-35y R7)", forbidden)
 		}
 	}
 
 	for _, src := range []string{"$(S)/consumer/parser.rl6", "$(S)/consumer/parser.h"} {
 		if nodeHasInput(arNode, src) {
-			t.Errorf("AR.Inputs must not contain member source %q: %#v", src, arNode.Inputs)
+			t.Errorf("AR.flatInputs() must not contain member source %q: %#v", src, arNode.flatInputs())
 		}
 	}
 }
@@ -2300,12 +2300,12 @@ END()
 	}
 
 	regularInputs := map[string]bool{}
-	for _, in := range regularAR.Inputs {
+	for _, in := range regularAR.flatInputs() {
 		regularInputs[in.String()] = true
 	}
 
 	globalInputs := map[string]bool{}
-	for _, in := range globalAR.Inputs {
+	for _, in := range globalAR.flatInputs() {
 		globalInputs[in.String()] = true
 	}
 
@@ -2316,15 +2316,15 @@ END()
 
 	for _, src := range []string{regularSrc, globalSrc} {
 		if regularInputs[src] {
-			t.Errorf("regular AR.Inputs must not contain member source %q: %#v", src, regularAR.Inputs)
+			t.Errorf("regular AR.flatInputs() must not contain member source %q: %#v", src, regularAR.flatInputs())
 		}
 	}
 	if globalInputs[globalSrc] {
-		t.Errorf(".global.a AR.Inputs must not contain member source %q: %#v", globalSrc, globalAR.Inputs)
+		t.Errorf(".global.a AR.flatInputs() must not contain member source %q: %#v", globalSrc, globalAR.flatInputs())
 	}
 
 	hasObject := func(n *Node) bool {
-		for _, in := range n.Inputs {
+		for _, in := range n.flatInputs() {
 			if strings.HasSuffix(in.Rel(), ".o") {
 				return true
 			}
@@ -2332,10 +2332,10 @@ END()
 		return false
 	}
 	if !hasObject(regularAR) {
-		t.Errorf("regular AR.Inputs has no object: %#v", regularAR.Inputs)
+		t.Errorf("regular AR.flatInputs() has no object: %#v", regularAR.flatInputs())
 	}
 	if !hasObject(globalAR) {
-		t.Errorf(".global.a AR.Inputs has no object: %#v", globalAR.Inputs)
+		t.Errorf(".global.a AR.flatInputs() has no object: %#v", globalAR.flatInputs())
 	}
 }
 
@@ -2373,10 +2373,10 @@ END()
 	const forbidden = "$(S)/mod/inner/sub/foo.S"
 
 	if nodeHasInput(asNode, forbidden) {
-		t.Errorf("AS.Inputs contains %q — SRCDIR rebase must redirect to %q (PR-35y R8)", forbidden, want)
+		t.Errorf("AS.flatInputs() contains %q — SRCDIR rebase must redirect to %q (PR-35y R8)", forbidden, want)
 	}
 	if !nodeHasInput(asNode, want) {
-		t.Errorf("AS.Inputs missing %q — PR-35y R8 SRCDIR rebase for `.S` source: %#v", want, asNode.Inputs)
+		t.Errorf("AS.flatInputs() missing %q — PR-35y R8 SRCDIR rebase for `.S` source: %#v", want, asNode.flatInputs())
 	}
 }
 
@@ -2446,7 +2446,7 @@ END()
 	cc := findGraphNodeByOutputs(t, g, "$(B)/proto/Generated.code0.cc.o")
 	ar := findGraphNodeByOutputs(t, g, "$(B)/proto/libproto.a")
 
-	if got := cfTemplate.Inputs[1].String(); got != "$(S)/templates/Java.stg.in" {
+	if got := cfTemplate.flatInputs()[1].String(); got != "$(S)/templates/Java.stg.in" {
 		t.Fatalf("template CF input = %q, want $(S)/templates/Java.stg.in", got)
 	}
 	if got := cfTemplate.Cmds[0].CmdArgs[3].String(); got != "$(B)/proto/templates/Java/Java.stg" {
@@ -2474,19 +2474,19 @@ END()
 		t.Fatalf("protoc cmd args missing %q: %v", wantPluginArg, protoc.Cmds[0].CmdArgs)
 	}
 	if !nodeHasInput(protoc, "$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide") {
-		t.Fatalf("protoc inputs missing built plugin binary: %v", protoc.Inputs)
+		t.Fatalf("protoc inputs missing built plugin binary: %v", protoc.flatInputs())
 	}
 	if nodeHasInput(protoc, "$(S)/contrib/tools/protoc/plugins/cpp_styleguide") {
-		t.Fatalf("protoc inputs still contain source-root plugin path: %v", protoc.Inputs)
+		t.Fatalf("protoc inputs still contain source-root plugin path: %v", protoc.flatInputs())
 	}
 
-	if got := py.Inputs[0].String(); got != "$(S)/tools/multiproto.py" {
+	if got := py.flatInputs()[0].String(); got != "$(S)/tools/multiproto.py" {
 		t.Fatalf("python script input = %q, want $(S)/tools/multiproto.py", got)
 	}
-	if got := py.Inputs[1].String(); got != "$(B)/proto/Generated.pb.h" {
+	if got := py.flatInputs()[1].String(); got != "$(B)/proto/Generated.pb.h" {
 		t.Fatalf("python generated header input = %q, want $(B)/proto/Generated.pb.h", got)
 	}
-	if got := py.Inputs[2].String(); got != "$(B)/proto/Generated.pb.cc" {
+	if got := py.flatInputs()[2].String(); got != "$(B)/proto/Generated.pb.cc" {
 		t.Fatalf("python generated source input = %q, want $(B)/proto/Generated.pb.cc", got)
 	}
 	if got := py.Cmds[0].CmdArgs[1].String(); got != "$(S)/tools/multiproto.py" {
@@ -2503,7 +2503,7 @@ END()
 		t.Fatalf("cc cmd args still contain source-root generated source: %v", cc.Cmds[0].CmdArgs)
 	}
 	if !nodeHasInput(cc, "$(B)/proto/Generated.code0.cc") {
-		t.Fatalf("cc inputs missing built generated source: %v", cc.Inputs)
+		t.Fatalf("cc inputs missing built generated source: %v", cc.flatInputs())
 	}
 	for _, want := range []string{
 		"$(S)/tools/multiproto.py",
@@ -2514,15 +2514,15 @@ END()
 		"$(S)/templates/Grammar.g.in",
 	} {
 		if !nodeHasInput(cc, want) {
-			t.Fatalf("cc inputs missing generator closure %q: %v", want, cc.Inputs)
+			t.Fatalf("cc inputs missing generator closure %q: %v", want, cc.flatInputs())
 		}
 	}
 
 	if nodeHasInput(ar, "$(S)/proto/Generated.code0.cc") {
-		t.Fatalf("ar inputs still contain source-root generated source: %v", ar.Inputs)
+		t.Fatalf("ar inputs still contain source-root generated source: %v", ar.flatInputs())
 	}
 	if nodeHasInput(ar, "$(B)/proto/Generated.code0.cc") {
-		t.Fatalf("ar inputs still contain build-root generated source: %v", ar.Inputs)
+		t.Fatalf("ar inputs still contain build-root generated source: %v", ar.flatInputs())
 	}
 
 	for _, absent := range []string{
@@ -2532,7 +2532,7 @@ END()
 		"$(S)/templates/Grammar.g.in",
 	} {
 		if nodeHasInput(ar, absent) {
-			t.Fatalf("ar inputs must not contain generator-closure source %q: %v", absent, ar.Inputs)
+			t.Fatalf("ar inputs must not contain generator-closure source %q: %v", absent, ar.flatInputs())
 		}
 	}
 
@@ -2540,7 +2540,7 @@ END()
 		t.Helper()
 
 		var values []string
-		for _, input := range node.Inputs {
+		for _, input := range node.flatInputs() {
 			values = append(values, input.String())
 		}
 		for _, output := range node.Outputs {
@@ -2770,8 +2770,8 @@ END()
 		t.Fatalf("pb plugin arg order = source:%d grpc:%d config:%d, want source < grpc < config", sourceIdx, grpcIdx, configIdx)
 	}
 
-	inputs := make([]string, 0, len(pb.Inputs))
-	for _, input := range pb.Inputs {
+	inputs := make([]string, 0, len(pb.flatInputs()))
+	for _, input := range pb.flatInputs() {
 		inputs = append(inputs, input.String())
 	}
 	wantInputsPrefix := []string{
@@ -2943,7 +2943,7 @@ int use() { return 0; }
 		"$(B)/protos/dep.pb.h",
 	} {
 		if !nodeHasInput(useCC, want) {
-			t.Fatalf("use.cpp.o inputs missing %q: %#v", want, useCC.Inputs)
+			t.Fatalf("use.cpp.o inputs missing %q: %#v", want, useCC.flatInputs())
 		}
 	}
 	for _, want := range []UID{mainPB.UID, depPB.UID} {
@@ -2954,10 +2954,10 @@ int use() { return 0; }
 
 	en := mustNodeByOutput(t, g, "$(B)/protos/main.pb.h_serialized.cpp")
 	if !nodeHasInput(en, "$(B)/protos/main.pb.h") {
-		t.Fatalf("enum node inputs missing generated pb.h: %#v", en.Inputs)
+		t.Fatalf("enum node inputs missing generated pb.h: %#v", en.flatInputs())
 	}
 	if nodeHasInput(en, "$(S)/protos/main.pb.h") {
-		t.Fatalf("enum node still consumes source-root pb.h: %#v", en.Inputs)
+		t.Fatalf("enum node still consumes source-root pb.h: %#v", en.flatInputs())
 	}
 	if !slices.Contains(graphDeps(g, en), mainPB.UID) {
 		t.Fatalf("enum node deps missing pb producer uid %q: %v", mainPB.UID, graphDeps(g, en))
@@ -2969,7 +2969,7 @@ int use() { return 0; }
 		t.Fatalf("enum node module_tag = %q, want cpp_proto", got.String())
 	}
 	if !nodeHasInput(en, "$(B)/protos/dep.pb.h") {
-		t.Fatalf("enum node inputs missing imported pb.h dep.pb.h: %#v", en.Inputs)
+		t.Fatalf("enum node inputs missing imported pb.h dep.pb.h: %#v", en.flatInputs())
 	}
 	// Protobuf runtime headers (<google/protobuf/message.h> →
 	// contrib/libs/protobuf/src/...) resolve only through the real protobuf
@@ -2977,7 +2977,7 @@ int use() { return 0; }
 	// tree, so the input is not asserted here.
 
 	if !nodeHasInput(ar, "$(B)/protos/main.pb.h_serialized.cpp.o") {
-		t.Fatalf("archive missing enum serialization object: %#v", ar.Inputs)
+		t.Fatalf("archive missing enum serialization object: %#v", ar.flatInputs())
 	}
 }
 
@@ -3041,7 +3041,7 @@ int use() { return 0; }
 		"$(B)/protos/leaf.pb.h",
 	} {
 		if !nodeHasInput(useCC, want) {
-			t.Fatalf("use.cpp.o inputs missing %q: %#v", want, useCC.Inputs)
+			t.Fatalf("use.cpp.o inputs missing %q: %#v", want, useCC.flatInputs())
 		}
 	}
 	for _, want := range []UID{mainPB.UID, publicPB.UID, leafPB.UID} {
@@ -3363,7 +3363,7 @@ root_type Bar;
 	// leaves bypass the closure dedup, so the raw input list is order- and
 	// dup-agnostic — assert membership, mirroring the gate's normalized (sorted,
 	// deduped) comparison.
-	if got := vfsStringsT3(fileCC.Inputs); !vfsInputsContainAll(got, wantFileInputs) {
+	if got := vfsStringsT3(fileCC.flatInputs()); !vfsInputsContainAll(got, wantFileInputs) {
 		t.Fatalf("File.fbs.cpp inputs = %v, want all of %v", got, wantFileInputs)
 	}
 	if len(graphDeps(g, fileCC)) != 2 {
@@ -3380,7 +3380,7 @@ root_type Bar;
 		"$(S)/mod/Schema.fbs",
 		"$(S)/contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h",
 	}
-	if got := vfsStringsT3(consumerCC.Inputs); !vfsInputsContainAll(got, wantConsumerInputs) {
+	if got := vfsStringsT3(consumerCC.flatInputs()); !vfsInputsContainAll(got, wantConsumerInputs) {
 		t.Fatalf("consumer.cpp inputs = %v, want all of %v", got, wantConsumerInputs)
 	}
 	if len(graphDeps(g, consumerCC)) != 2 {
@@ -3482,7 +3482,7 @@ int copied() { return 0; }
 	// may appear in either relative order.
 	for _, want := range []string{"$(B)/mod/copied.cpp", "$(S)/mod/original.cpp", "$(S)/mod/dep.h"} {
 		if !nodeHasInput(cc, want) {
-			t.Fatalf("copied.cpp inputs missing %q: %v", want, vfsStringsT3(cc.Inputs))
+			t.Fatalf("copied.cpp inputs missing %q: %v", want, vfsStringsT3(cc.flatInputs()))
 		}
 	}
 	if len(graphDeps(g, cc)) != 1 {
@@ -3519,7 +3519,7 @@ int copied() { return 0; }
 	// may appear in either relative order.
 	for _, want := range []string{"$(B)/mod/copied.cpp", "$(S)/mod/original.cpp", "$(S)/mod/dep.h"} {
 		if !nodeHasInput(cc, want) {
-			t.Fatalf("copied.cpp inputs missing %q: %v", want, vfsStringsT3(cc.Inputs))
+			t.Fatalf("copied.cpp inputs missing %q: %v", want, vfsStringsT3(cc.flatInputs()))
 		}
 	}
 }
@@ -3547,19 +3547,19 @@ int copied() { return 0; }
 	findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp")
 	cc := findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp.o")
 	wantInputs := []string{"$(B)/mod/copied.cpp"}
-	if got := vfsStringsT3(cc.Inputs); !reflect.DeepEqual(got[:len(wantInputs)], wantInputs) {
+	if got := vfsStringsT3(cc.flatInputs()); !reflect.DeepEqual(got[:len(wantInputs)], wantInputs) {
 		t.Fatalf("copied.cpp inputs prefix = %v, want %v", got[:len(wantInputs)], wantInputs)
 	}
 	// AUTO COPY materializes both $(S)/mod/original.cpp and $(B)/mod/copied.cpp;
 	// upstream lists both, so the source rides as a closure leaf of the dst.
-	if !slicesContains(vfsStringsT3(cc.Inputs), "$(S)/mod/original.cpp") {
-		t.Fatalf("copied.cpp inputs should contain the AUTO source $(S)/mod/original.cpp: %v", vfsStringsT3(cc.Inputs))
+	if !slicesContains(vfsStringsT3(cc.flatInputs()), "$(S)/mod/original.cpp") {
+		t.Fatalf("copied.cpp inputs should contain the AUTO source $(S)/mod/original.cpp: %v", vfsStringsT3(cc.flatInputs()))
 	}
 	// The leaf is NON-expanded: original.cpp's own #include "dep.h" must not be
 	// followed, so $(S)/mod/dep.h does not leak into the dst's inputs.
-	for _, in := range vfsStringsT3(cc.Inputs) {
+	for _, in := range vfsStringsT3(cc.flatInputs()) {
 		if in == "$(S)/mod/dep.h" {
-			t.Fatalf("copied.cpp inputs unexpectedly contain non-expanded-leaf's include $(S)/mod/dep.h: %v", vfsStringsT3(cc.Inputs))
+			t.Fatalf("copied.cpp inputs unexpectedly contain non-expanded-leaf's include $(S)/mod/dep.h: %v", vfsStringsT3(cc.flatInputs()))
 		}
 	}
 	if len(graphDeps(g, cc)) != 1 {
@@ -3589,10 +3589,10 @@ END()
 
 	cp := mustNodeByOutput(t, g, "$(B)/mod/shared/generated.h")
 	if !nodeHasInput(cp, "$(S)/shared/generated.txt") {
-		t.Fatalf("copy inputs missing source-root generated.txt: %#v", cp.Inputs)
+		t.Fatalf("copy inputs missing source-root generated.txt: %#v", cp.flatInputs())
 	}
 	if nodeHasInput(cp, "$(S)/mod/shared/generated.txt") {
-		t.Fatalf("copy inputs still carry duplicated module-prefixed generated.txt: %#v", cp.Inputs)
+		t.Fatalf("copy inputs still carry duplicated module-prefixed generated.txt: %#v", cp.flatInputs())
 	}
 }
 
@@ -3624,11 +3624,11 @@ func TestGen_EnumSerializationWithSRCDIRResolvesHeaderViaSourceDir(t *testing.T)
 
 	// The header input must resolve to shared/iface.h via SRCDIR
 	if !nodeHasInput(en, "$(S)/shared/iface.h") {
-		t.Fatalf("EN node inputs: want $(S)/shared/iface.h (via SRCDIR), got: %v", en.Inputs)
+		t.Fatalf("EN node inputs: want $(S)/shared/iface.h (via SRCDIR), got: %v", en.flatInputs())
 	}
 	// Must NOT use the consumer module path for the header
 	if nodeHasInput(en, "$(S)/consumer/iface.h") {
-		t.Fatalf("EN node inputs: got wrong path $(S)/consumer/iface.h (SRCDIR not applied): %v", en.Inputs)
+		t.Fatalf("EN node inputs: got wrong path $(S)/consumer/iface.h (SRCDIR not applied): %v", en.flatInputs())
 	}
 	// The enum_parser cmd arg[1] must be the correct source path
 	if got := en.Cmds[0].CmdArgs[1].String(); got != "$(S)/shared/iface.h" {
@@ -3657,10 +3657,10 @@ END()
 
 	en := mustNodeByOutput(t, g, "$(B)/pkg/sub/pkg/sub/codecs.h_serialized.cpp")
 	if !nodeHasInput(en, "$(S)/pkg/sub/codecs.h") {
-		t.Fatalf("enum inputs missing canonical header path: %#v", en.Inputs)
+		t.Fatalf("enum inputs missing canonical header path: %#v", en.flatInputs())
 	}
 	if nodeHasInput(en, "$(S)/pkg/sub/pkg/sub/codecs.h") {
-		t.Fatalf("enum inputs still carry duplicated header path: %#v", en.Inputs)
+		t.Fatalf("enum inputs still carry duplicated header path: %#v", en.flatInputs())
 	}
 	if got := en.Cmds[0].CmdArgs[1].String(); got != "$(S)/pkg/sub/codecs.h" {
 		t.Fatalf("enum parser input = %q, want $(S)/pkg/sub/codecs.h", got)
@@ -3760,7 +3760,7 @@ func TestGen_HInGeneratedHeader_RealizedInConsumer(t *testing.T) {
 			}
 		}
 	}
-	for _, in := range ar.Inputs {
+	for _, in := range ar.flatInputs() {
 		if in.String() == "$(B)/genh/config.h" || in.String() == "$(S)/genh/config.h.in" {
 			t.Errorf("genh AR inputs include %q (generated header must not be archived)", in.String())
 		}
@@ -3780,10 +3780,10 @@ func TestGen_HInGeneratedHeader_RealizedInConsumer(t *testing.T) {
 		t.Errorf("use.cpp.o deps %v missing config.h CF uid %q", graphDeps(g, use), cf.UID)
 	}
 	if !nodeHasInput(use, "$(S)/genh/config.h.in") {
-		t.Errorf("use.cpp.o inputs missing config.h.in: %#v", use.Inputs)
+		t.Errorf("use.cpp.o inputs missing config.h.in: %#v", use.flatInputs())
 	}
 	if !nodeHasInput(use, "$(S)/genh/dep.h") {
-		t.Errorf("use.cpp.o inputs missing dep.h from config.h.in closure: %#v", use.Inputs)
+		t.Errorf("use.cpp.o inputs missing dep.h from config.h.in closure: %#v", use.flatInputs())
 	}
 }
 
@@ -3901,7 +3901,7 @@ END()
 		"$(S)/dep/dep.h",
 	} {
 		if !nodeHasInput(use, want) {
-			t.Fatalf("use.cpp.o inputs missing %q: %#v", want, use.Inputs)
+			t.Fatalf("use.cpp.o inputs missing %q: %#v", want, use.flatInputs())
 		}
 	}
 	if !slices.Contains(graphDeps(g, use), genH.UID) {
@@ -4005,7 +4005,7 @@ END()
 		"$(S)/contrib/tools/bison/data/skeletons/skeleton-helper.h",
 	} {
 		if !nodeHasInput(yc, want) {
-			t.Fatalf("bison YC inputs missing %q: %#v", want, yc.Inputs)
+			t.Fatalf("bison YC inputs missing %q: %#v", want, yc.flatInputs())
 		}
 	}
 	for _, unwanted := range []string{
@@ -4014,7 +4014,7 @@ END()
 		"$(S)/genlib/pire/deep.h",
 	} {
 		if nodeHasInput(yc, unwanted) {
-			t.Fatalf("bison YC inputs unexpectedly include grammar-local header %q: %#v", unwanted, yc.Inputs)
+			t.Fatalf("bison YC inputs unexpectedly include grammar-local header %q: %#v", unwanted, yc.flatInputs())
 		}
 	}
 	for _, want := range vfsStrings(bisonCppSkeletonInputs) {
@@ -4037,7 +4037,7 @@ END()
 		"$(S)/contrib/tools/bison/data/skeletons/skeleton-helper.h",
 	} {
 		if !nodeHasInput(parserObj, want) {
-			t.Fatalf("generated parser object inputs missing %q: %#v", want, parserObj.Inputs)
+			t.Fatalf("generated parser object inputs missing %q: %#v", want, parserObj.flatInputs())
 		}
 	}
 }
@@ -4119,7 +4119,7 @@ int lex() { return 0; }
 	lexerObj := mustNodeByOutput(t, g, "$(B)/app/re_lexer.cpp.o")
 	want := "$(S)/genlib/pire/re_parser.y"
 	if !nodeHasInput(lexerObj, want) {
-		t.Fatalf("re_lexer.cpp.o inputs missing %q (bison source); got: %#v", want, lexerObj.Inputs)
+		t.Fatalf("re_lexer.cpp.o inputs missing %q (bison source); got: %#v", want, lexerObj.flatInputs())
 	}
 }
 
@@ -4167,13 +4167,13 @@ message Any {}
 	use := mustNodeByOutput(t, g, "$(B)/app/use.cpp.o")
 
 	if !nodeHasInput(use, "$(B)/protos/test.deps.pb.h") {
-		t.Fatalf("use.cpp.o inputs missing deps header output: %#v", use.Inputs)
+		t.Fatalf("use.cpp.o inputs missing deps header output: %#v", use.flatInputs())
 	}
 	if !nodeHasInput(use, "$(S)/contrib/libs/protobuf/src/google/protobuf/any.pb.h") {
-		t.Fatalf("use.cpp.o inputs missing protobuf runtime WKT header: %#v", use.Inputs)
+		t.Fatalf("use.cpp.o inputs missing protobuf runtime WKT header: %#v", use.flatInputs())
 	}
 	if nodeHasInput(use, "$(S)/google/protobuf/any.pb.h") {
-		t.Fatalf("use.cpp.o inputs still contain unrebased WKT header path: %#v", use.Inputs)
+		t.Fatalf("use.cpp.o inputs still contain unrebased WKT header path: %#v", use.flatInputs())
 	}
 	if !slices.Contains(graphDeps(g, use), pb.UID) {
 		t.Fatalf("use.cpp.o deps missing PB producer uid %q: %v", pb.UID, graphDeps(g, use))
@@ -4399,11 +4399,11 @@ func TestGen_LibraryARIncludesResourceObjcopyMemberInputs(t *testing.T) {
 	}
 
 	if !nodeHasInput(regularAR, "$(S)/build/scripts/link_lib.py") {
-		t.Fatalf("libdb.a inputs missing its own script link_lib.py: %#v", regularAR.Inputs)
+		t.Fatalf("libdb.a inputs missing its own script link_lib.py: %#v", regularAR.flatInputs())
 	}
 	for _, absent := range []string{"$(S)/db/data.sql", "$(S)/build/scripts/objcopy.py"} {
 		if nodeHasInput(regularAR, absent) {
-			t.Errorf("libdb.a must not list %q (not an AR input): %#v", absent, regularAR.Inputs)
+			t.Errorf("libdb.a must not list %q (not an AR input): %#v", absent, regularAR.flatInputs())
 		}
 	}
 }
@@ -4439,10 +4439,10 @@ END()
 		t.Fatal("graph is missing db objcopy output")
 	}
 	if !nodeHasInput(objcopy, "$(B)/db/data.json") {
-		t.Fatalf("objcopy inputs missing build-root data.json: %#v", objcopy.Inputs)
+		t.Fatalf("objcopy inputs missing build-root data.json: %#v", objcopy.flatInputs())
 	}
 	if nodeHasInput(objcopy, "$(S)/db/data.json") {
-		t.Fatalf("objcopy inputs still use source-root data.json: %#v", objcopy.Inputs)
+		t.Fatalf("objcopy inputs still use source-root data.json: %#v", objcopy.flatInputs())
 	}
 }
 
@@ -4477,11 +4477,11 @@ END()
 		t.Fatal("graph is missing db objcopy output")
 	}
 	if !nodeHasInput(objcopy, "$(B)/db/data.json") {
-		t.Fatalf("objcopy inputs missing build-root data.json: %#v", objcopy.Inputs)
+		t.Fatalf("objcopy inputs missing build-root data.json: %#v", objcopy.flatInputs())
 	}
-	for _, in := range objcopy.Inputs {
+	for _, in := range objcopy.flatInputs() {
 		if strings.Contains(in.String(), "${BINDIR}") {
-			t.Fatalf("objcopy inputs still leak ${BINDIR}: %#v", objcopy.Inputs)
+			t.Fatalf("objcopy inputs still leak ${BINDIR}: %#v", objcopy.flatInputs())
 		}
 	}
 
@@ -4558,10 +4558,10 @@ END()
 
 	pr := mustNodeByOutput(t, g, "$(B)/db/data.json")
 	if !nodeHasInput(pr, "$(S)/db/gen.h") {
-		t.Fatalf("pr inputs missing direct gen.h input: %#v", pr.Inputs)
+		t.Fatalf("pr inputs missing direct gen.h input: %#v", pr.flatInputs())
 	}
 	if !nodeHasInput(pr, "$(S)/dep/dep.h") {
-		t.Fatalf("pr inputs missing transitive dep/dep.h closure: %#v", pr.Inputs)
+		t.Fatalf("pr inputs missing transitive dep/dep.h closure: %#v", pr.flatInputs())
 	}
 
 	objcopy := findNodeByOutputPrefix(g, "$(B)/db/objcopy_")
@@ -4569,10 +4569,10 @@ END()
 		t.Fatal("graph is missing db objcopy output")
 	}
 	if !nodeHasInput(objcopy, "$(B)/db/data.json") {
-		t.Fatalf("objcopy inputs missing build-root data.json: %#v", objcopy.Inputs)
+		t.Fatalf("objcopy inputs missing build-root data.json: %#v", objcopy.flatInputs())
 	}
 	if !nodeHasInput(objcopy, "$(S)/dep/dep.h") {
-		t.Fatalf("objcopy inputs missing transitive dep/dep.h closure: %#v", objcopy.Inputs)
+		t.Fatalf("objcopy inputs missing transitive dep/dep.h closure: %#v", objcopy.flatInputs())
 	}
 }
 
@@ -4609,7 +4609,7 @@ func findNodeByOutputPrefix(g *Graph, prefix string) *Node {
 }
 
 func nodeHasInput(n *Node, input string) bool {
-	for _, got := range n.Inputs {
+	for _, got := range n.flatInputs() {
 		if got.String() == input {
 			return true
 		}
@@ -4820,8 +4820,8 @@ END()
 
 	useCC := mustNodeByOutput(t, g, "$(B)/"+appModPath+"/use.cpp.o")
 
-	seen := make(map[string]int, len(useCC.Inputs))
-	for _, in := range useCC.Inputs {
+	seen := make(map[string]int, len(useCC.flatInputs()))
+	for _, in := range useCC.flatInputs() {
 		seen[in.String()]++
 	}
 	for inp, count := range seen {

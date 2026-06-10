@@ -63,7 +63,7 @@ func EmitBI(
 			{CmdArgs: cmd2Args, Env: env},
 		},
 		Env:              env,
-		Inputs:           inputs,
+		Inputs:           inputChunks{inputs},
 		KV:               KV{P: pkBI, PC: pcYellow, ShowOut: true, DisableCache: "yes"},
 		Outputs:          []VFS{outVFS},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
