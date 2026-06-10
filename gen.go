@@ -1858,7 +1858,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		jsRel := strings.TrimPrefix(joinOutVFS.Rel(), srcInstance.Path.Rel()+"/")
 
-		ccIncludeInputs := jsCCIncludeInputs(srcInstance, js.Sources, ccClosure, ctx.scripts)
+		ccIncludeInputs := jsCCIncludeInputs(srcInstance, joinOutVFS, js.Sources, ccClosure, ctx.scripts)
 
 		ccIn := moduleInputs
 		ccIn.ExtraDepRefs = []NodeRef{jsRef}

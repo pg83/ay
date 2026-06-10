@@ -385,7 +385,7 @@ func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData,
 		return nil
 	}
 
-	// walkClosure already returns a deduplicated window — no further dedup needed.
+	// The window is already deduplicated — no further dedup needed.
 	return closure
 }
 

@@ -528,7 +528,13 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			tail = append(tail, rescompilerBinVFS)
 		}
 
+		// auxClosure is the aux window (root-led: aux is a build output); the
+		// PR node's own output never joins its inputs, so skip the root.
 		for _, p := range auxClosure {
+			if p == aux {
+				continue
+			}
+
 			if deduper.add(p) {
 				tail = append(tail, p)
 			}

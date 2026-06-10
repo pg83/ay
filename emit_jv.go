@@ -44,7 +44,15 @@ func emitJVDownstreamCPCC(
 		ccIn.ExtraDepRefs = nil
 		closure := walkClosure(ctx, instance, g4CppPath, ccIn)
 
-		cpRef := EmitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, closure, in.TC, ctx.scripts, ctx.emit)
+		// The CP node's inputs take the tail: g4CppPath is its own output (a
+		// build output — never an SCC member, so the window leads with it).
+		cpClosure := closure
+
+		if len(cpClosure) > 0 {
+			cpClosure = cpClosure[1:]
+		}
+
+		cpRef := EmitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, in.TC, ctx.scripts, ctx.emit)
 
 		ccIncludeInputs := make([]VFS, 0, 3+len(jvInputs)+len(closure)+2)
 		ccIncludeInputs = append(ccIncludeInputs, jvPrimary)

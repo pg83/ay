@@ -70,8 +70,10 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 	return order
 }
 
-func jsCCIncludeInputs(srcInstance ModuleInstance, sources []string, closure []VFS, scripts scriptDeps) []VFS {
-	out := make([]VFS, 0, 2+len(sources)+len(closure))
+func jsCCIncludeInputs(srcInstance ModuleInstance, joinOut VFS, sources []string, closure []VFS, scripts scriptDeps) []VFS {
+	out := make([]VFS, 0, 3+len(sources)+len(closure))
+	// The compiled join output leads (IncludeInputs is the full input window).
+	out = append(out, joinOut)
 	// gen_join_srcs.py + its import closure (process_command_files.py).
 	out = append(out, scripts[buildScriptsGenJoinSrcsPy]...)
 
@@ -112,10 +114,10 @@ func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, sr
 	return Source(srcRelOnDisk)
 }
 
-// walkClosure returns the transitive include closure of vfsPath, root excluded.
-// closureOf leads its cached window with the queried node (the scanner's
-// subsumption machinery needs self-containing windows); emitters only ever
-// want the transitive part, so the root is stripped here once.
+// walkClosure returns the transitive include closure WINDOW of vfsPath — the
+// root is a member (windows are self-containing; subsumption needs that), first
+// for plain files, anywhere within for SCC members. Consumers treat the window
+// as the node's full input list and must not re-add the root.
 func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerFor(srcInstance)
 
@@ -133,9 +135,17 @@ func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in Module
 	sc := scanner.NewScanCtx(cfg)
 	scanner.walkClosureCalls++
 
-	full := sc.closureOf(vfsPath)
+	return sc.closureOf(vfsPath)
+}
 
-	if full == nil {
+// walkClosureTail returns only the transitive part of the window — the root
+// stripped. Sound only for roots that cannot be SCC members (build outputs:
+// include cycles arise among real headers, never through registered generated
+// files), where closureOf is guaranteed to lead the window with the root.
+func walkClosureTail(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in ModuleCCInputs) []VFS {
+	full := walkClosure(ctx, srcInstance, vfsPath, in)
+
+	if len(full) == 0 {
 		return nil
 	}
 

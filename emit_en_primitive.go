@@ -55,7 +55,7 @@ func EmitEN(
 			},
 		},
 		Env:              env,
-		Inputs:           inputChunks{{enumParserBin, headerInput}, headerIncludeClosure},
+		Inputs:           inputChunks{{enumParserBin}, headerIncludeClosure},
 		KV:               KV{P: pkEN, PC: pcYellow},
 		Outputs:          outputs,
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

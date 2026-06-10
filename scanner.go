@@ -511,34 +511,6 @@ func (sc *scanCtx) closureOf(abs VFS) []VFS {
 
 	w := s.subgraphClosures[ref]
 
-	// Lead the window with the queried node. On a miss abs is the SCC root, so
-	// strongconnect already wrote it at w[0]. The branch fires only for a HIT on
-	// a non-root member of a multi-node SCC (a real include cycle): such a member
-	// shares the SCC root's window, which leads with the root, not abs. Rather
-	// than swap in place — which would corrupt the SCC-shared window every other
-	// member reads — copy it, lead the copy with abs, and re-key the cache to the
-	// straightened copy. The cache thus straightens each member on first query;
-	// subsequent queries for abs hit w[0]==abs and skip the branch. Measured at
-	// ~1.2% of queried files on sg5, so the copy is off the hot path.
-	if len(w) > 1 && w[0] != abs {
-		straight := make([]VFS, len(w))
-		copy(straight, w)
-
-		for i := 1; i < len(straight); i++ {
-			if straight[i] == abs {
-				straight[0], straight[i] = straight[i], straight[0]
-
-				break
-			}
-		}
-
-		ref = closureRef(len(s.subgraphClosures))
-		s.subgraphClosures = append(s.subgraphClosures, straight)
-		s.putClosure(abs, ref)
-
-		return straight
-	}
-
 	return w
 }
 

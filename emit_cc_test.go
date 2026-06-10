@@ -29,7 +29,8 @@ func TestEmitCC_OutputPath_FlatSrc(t *testing.T) {
 func TestEmitCC_GeneratedSource_BuildRootInput(t *testing.T) {
 	emit := NewBufferedEmitter()
 	srcVFS := Intern("$(B)/util/_/datetime/parser.rl6.cpp")
-	_, outPath, _ := EmitCC(targetInstance("util"), "_/datetime/parser.rl6.cpp", srcVFS, ModuleCCInputs{}, testHostP, emit)
+	// IncludeInputs is the full input window — the source leads it.
+	_, outPath, _ := EmitCC(targetInstance("util"), "_/datetime/parser.rl6.cpp", srcVFS, ModuleCCInputs{IncludeInputs: []VFS{srcVFS}}, testHostP, emit)
 
 	wantOut := "$(B)/util/_/_/datetime/parser.rl6.cpp.o"
 
@@ -321,7 +322,7 @@ func TestEmitCC_WrapccPrefix_NonOpensource(t *testing.T) {
 	inst := ModuleInstance{Path: Source("mod"), Kind: KindLib, Language: LangCPP, Platform: nonOpensourcePlatform()}
 	srcVFS := Intern("$(S)/mod/lib.cpp")
 
-	EmitCC(inst, "lib.cpp", srcVFS, ModuleCCInputs{TC: testToolchain()}, testHostP, emit)
+	EmitCC(inst, "lib.cpp", srcVFS, ModuleCCInputs{TC: testToolchain(), IncludeInputs: []VFS{srcVFS}}, testHostP, emit)
 
 	node := emit.nodes[0]
 	args := strStrs(node.Cmds[0].CmdArgs)

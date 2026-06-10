@@ -426,9 +426,10 @@ END()
 		t.Errorf("BC node Inputs has only %d entries; want source + closure: %v", len(bcNode.flatInputs()), vfsStringsT3(bcNode.flatInputs()))
 	}
 
-	// First input must be the source file.
-	if !strings.HasSuffix(bcNode.flatInputs()[0].String(), "foo.cpp") {
-		t.Errorf("BC node first input is not foo.cpp: %v", bcNode.flatInputs()[0])
+	// The source rides the closure window (chunked inputs carry no positional
+	// contract — the wrapper chunk leads).
+	if !nodeHasInput(bcNode, "$(S)/"+modPath+"/foo.cpp") {
+		t.Errorf("BC node Inputs missing the source foo.cpp: %v", vfsStringsT3(bcNode.flatInputs()))
 	}
 
 	// Closure must include foo.h.
@@ -555,9 +556,18 @@ END()
 	if len(bcNode.flatInputs()) == 0 {
 		t.Fatal("BC node has no inputs")
 	}
-	primaryInput := bcNode.flatInputs()[0].String()
-	if !strings.HasPrefix(primaryInput, "$(B)/") || !strings.HasSuffix(primaryInput, "gen.cpp") {
-		t.Errorf("BC node primary input is not $(B)/.../gen.cpp: %q", primaryInput)
+	hasGen := false
+
+	for _, in := range bcNode.flatInputs() {
+		s := in.String()
+
+		if strings.HasPrefix(s, "$(B)/") && strings.HasSuffix(s, "gen.cpp") {
+			hasGen = true
+		}
+	}
+
+	if !hasGen {
+		t.Errorf("BC node Inputs missing $(B)/.../gen.cpp: %v", vfsStringsT3(bcNode.flatInputs()))
 	}
 
 	// BC node must also carry gen.h from the closure.

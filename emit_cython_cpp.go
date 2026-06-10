@@ -95,7 +95,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		srcVFS := Source(instance.Path.Rel() + "/" + stmt.Src)
 		srcScanIn := in
 		srcScanIn.AddIncl = appendCythonScanAddIncl(srcScanIn.AddIncl, d.cythonAddIncl, py23Variant)
-		sourceClosure := walkClosure(ctx, instance, srcVFS, srcScanIn)
+		sourceClosure := walkClosureTail(ctx, instance, srcVFS, srcScanIn)
 		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(ctx, instance, srcVFS, sourceClosure, stmt.CMode, srcScanIn)
 		parsed := make([]includeDirective, 0, len(emitsIncludes))
 
@@ -202,7 +202,7 @@ func cythonGeneratedOutputInputs(ctx *genCtx, instance ModuleInstance, src VFS, 
 		toolInputs = append(toolInputs, v)
 		emitsIncludes = append(emitsIncludes, v)
 
-		cl := walkClosure(ctx, instance, v, scanIn)
+		cl := walkClosureTail(ctx, instance, v, scanIn)
 		toolInputs = append(toolInputs, cl...)
 		emitsIncludes = append(emitsIncludes, cl...)
 	}

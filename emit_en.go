@@ -96,34 +96,19 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			}
 		}
 
-		filteredClosure := make([]VFS, 0, len(closure))
-
-		for _, p := range closure {
-			if p == headerInput {
-				continue
-			}
-
-			filteredClosure = append(filteredClosure, p)
-		}
-
 		var ownOutputClosure []VFS
 
 		if !withHeader && ctx.scannerTarget.codegen != nil {
-			sub := walkClosure(ctx, instance, serializedCPPPath, scanIn)
-
-			for _, p := range sub {
-				if p == headerInput {
-					continue
-				}
-
-				ownOutputClosure = append(ownOutputClosure, p)
-			}
+			// Tail: serializedCPPPath is the EN node's own output, never its
+			// input (headerInput dedups out via dedupVFS below).
+			ownOutputClosure = walkClosureTail(ctx, instance, serializedCPPPath, scanIn)
 		}
 
-		enClosure := dedupVFS(filteredClosure, ownOutputClosure)
+		// closure is the headerInput window (header-led), so the EN input list
+		// is the deduped union directly — no separate header prepend.
+		enClosure := dedupVFS(closure, ownOutputClosure)
 
-		enDepScan := append([]VFS{headerInput}, enClosure...)
-		augmentedDepENRefs := resolveCodegenDepRefs(ctx, instance, enDepScan)
+		augmentedDepENRefs := resolveCodegenDepRefs(ctx, instance, enClosure)
 
 		var moduleTag STR
 

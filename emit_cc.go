@@ -159,7 +159,8 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 	// as its own chunk and the python3 resource joins the deps.
 	wrap := len(instance.Platform.WrapccHead) > 0
 
-	allInputs := inputChunks{srcChunk(inVFS), in.IncludeInputs}
+	// IncludeInputs is the full input window (root included) — see walkClosure.
+	allInputs := inputChunks{in.IncludeInputs}
 
 	if wrap {
 		allInputs = append(allInputs, wrapccPyChunk)
