@@ -315,18 +315,14 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 
 	var out []NodeRef
 
-	probe := func(v VFS) {
-		if !v.IsBuild() {
-			return
-		}
+	// All codegen producer refs (PB/EV/EN, and CP/CF) live on the codegen
+	// registry entry's ProducerRef, so one reg.Lookup resolves every kind —
+	// no per-kind side maps. Hoisted: invariant across the probes.
+	reg := codegenRegForInstance(ctx, consumer)
 
+	probe := func(v VFS) {
 		var ref NodeRef
 		var ok bool
-
-		// All codegen producer refs (PB/EV/EN, and CP/CF) live on the codegen
-		// registry entry's ProducerRef, so one reg.Lookup resolves every kind —
-		// no per-kind side maps.
-		reg := codegenRegForInstance(ctx, consumer)
 
 		if reg != nil {
 			if info := reg.Lookup(v); info != nil {
@@ -353,12 +349,19 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 		out = append(out, ref)
 	}
 
+	// The IsBuild gate stays in the loops: it inlines there, and the dominant
+	// cost was a closure call per element of a whole include closure just to
+	// bounce off this bit for the (vast) $(S) majority.
 	for _, p := range includeInputs {
-		probe(p)
+		if p.IsBuild() {
+			probe(p)
+		}
 	}
 
 	for _, p := range inputs {
-		probe(p)
+		if p.IsBuild() {
+			probe(p)
+		}
 	}
 
 	return out
