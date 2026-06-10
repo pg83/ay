@@ -62,6 +62,25 @@ func Build(rel string) VFS {
 	return VFS(uint32(internPrefixed("$(B)/", rel))<<1 | uint32(VFSRootBuild))
 }
 
+// vfs converts a STR backing a full rooted path ("$(S)/…" / "$(B)/…") into the
+// VFS bound to it — a shift plus the root bit, no re-interning (a VFS is
+// STR<<1|root over the same table slot). Returns 0 for a non-rooted string.
+func (id STR) vfs() VFS {
+	s := internTable.strs[id]
+
+	if !vfsHasPrefix(s) {
+		return 0
+	}
+
+	root := VFSRootSource
+
+	if s[2] == 'B' {
+		root = VFSRootBuild
+	}
+
+	return VFS(uint32(id)<<1 | uint32(root))
+}
+
 func (v VFS) Rel() string {
 	return internTable.strs[v.strID()][vfsPrefixLen:]
 }
