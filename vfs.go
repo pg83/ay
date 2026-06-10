@@ -39,12 +39,27 @@ func (v VFS) str() STR {
 	return STR(v.strID())
 }
 
+// vfsPrefixScratch backs internPrefixed's prefix+rel assembly, replacing a
+// heap-allocated concat per call — on the (overwhelmingly common) intern hit
+// that string was thrown away immediately, and on a miss internBytes makes the
+// one stable copy anyway. Same single-writer contract as internTable and
+// deduper: gen runs single-threaded, and executor goroutines must not intern
+// (see the restoreInto comment in make.go).
+var vfsPrefixScratch []byte
+
+func internPrefixed(prefix, rel string) STR {
+	vfsPrefixScratch = append(vfsPrefixScratch[:0], prefix...)
+	vfsPrefixScratch = append(vfsPrefixScratch, rel...)
+
+	return internBytes(vfsPrefixScratch)
+}
+
 func Source(rel string) VFS {
-	return Intern("$(S)/" + rel)
+	return VFS(uint32(internPrefixed("$(S)/", rel))<<1 | uint32(VFSRootSource))
 }
 
 func Build(rel string) VFS {
-	return Intern("$(B)/" + rel)
+	return VFS(uint32(internPrefixed("$(B)/", rel))<<1 | uint32(VFSRootBuild))
 }
 
 func (v VFS) Rel() string {
