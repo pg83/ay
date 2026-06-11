@@ -90,27 +90,16 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 	cppVFS := Build(srcRel + ".cpp")
 	bfbsVFS := Build(strings.TrimSuffix(srcRel, ".fbs") + ".bfbs")
 
-	cmdArgs := []STR{
-		tc.Python3,
-		(flatcWrapperVFS).str(),
-		(flatcBinary).str(),
-		argNoWarnings.str(),
-		argCpp.str(),
-		argKeepPrefix.str(),
-		argGenMutable.str(),
-		argSchema.str(),
-		argB2.str(),
-		argGenObjectApi.str(),
-		argFilenameSuffix.str(),
-		argFbs.str(),
+	cmdArgs := argChunks{
+		{tc.Python3, (flatcWrapperVFS).str(), (flatcBinary).str()},
+		flatcConstFlags,
 	}
-	cmdArgs = appendArgStr(cmdArgs, flatcFlags)
-	cmdArgs = append(cmdArgs,
-		argI.str(), argB.str(),
-		argI.str(), argS.str(),
-		argDashO.str(), (headerVFS).str(),
-		(srcVFS).str(),
-	)
+
+	if len(flatcFlags) > 0 {
+		cmdArgs = append(cmdArgs, appendArgStr(nil, flatcFlags))
+	}
+
+	cmdArgs = append(cmdArgs, flatcIOLeadArgs, []STR{(headerVFS).str(), (srcVFS).str()})
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -126,7 +115,7 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: argChunks{cmdArgs},
+				CmdArgs: cmdArgs,
 				Cwd:     strB,
 				Env:     env,
 			},
@@ -211,3 +200,25 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 
 	return out
 }
+
+// flatcConstFlags / flatcIOLeadArgs are the constant spans of every flatc
+// command around the module's FLATC_FLAGS; the per-node remainder is
+// [<header>, <src>].
+var (
+	flatcConstFlags = []STR{
+		argNoWarnings.str(),
+		argCpp.str(),
+		argKeepPrefix.str(),
+		argGenMutable.str(),
+		argSchema.str(),
+		argB2.str(),
+		argGenObjectApi.str(),
+		argFilenameSuffix.str(),
+		argFbs.str(),
+	}
+	flatcIOLeadArgs = []STR{
+		argI.str(), argB.str(),
+		argI.str(), argS.str(),
+		argDashO.str(),
+	}
+)

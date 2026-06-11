@@ -29,13 +29,8 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	}
 
 	cmdArgs := make([]STR, 0, 20+len(predefinedFlags))
+	cmdArgs = append(cmdArgs, yasmConstHead...)
 	cmdArgs = append(cmdArgs,
-		internStr(yasmBinaryPath),
-		argF.str(), argElf64.str(),
-		argD.str(), argUnix.str(),
-		argReplaceBB.str(),
-		argReplaceSS.str(),
-		argReplaceToolRootT.str(),
 		argD.str(), internStr("_"+string(instance.Platform.ISA)+"_"),
 		argDYasm.str(),
 	)
@@ -80,4 +75,15 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	node.ForeignDepRefs = []NodeRef{yasmLD}
 	node.DepRefs = []NodeRef{yasmLD}
 	return emit.Emit(node), outVFS
+}
+
+// yasmConstHead is the constant [yasm -f elf64 -D UNIX …replace…] lead of
+// every yasm invocation (the AS-yasm and rodata nodes share it).
+var yasmConstHead = []STR{
+	internStr(yasmBinaryPath),
+	argF.str(), argElf64.str(),
+	argD.str(), argUnix.str(),
+	argReplaceBB.str(),
+	argReplaceSS.str(),
+	argReplaceToolRootT.str(),
 }

@@ -38,16 +38,10 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 		}
 	}
 
-	cmdArgs := make([]STR, 0, 5+len(effectiveFlags)+1)
-	cmdArgs = append(cmdArgs, (ragel6BinaryPath).str())
-	cmdArgs = appendArgStr(cmdArgs, effectiveFlags)
-	cmdArgs = append(cmdArgs,
-		argL.str(),
-		argIS.str(),
-		argDashO.str(),
-		(outVFS).str(),
-		(inVFS).str(),
-	)
+	head := make([]STR, 0, 1+len(effectiveFlags))
+	head = append(head, (ragel6BinaryPath).str())
+	head = appendArgStr(head, effectiveFlags)
+	cmdArgs := argChunks{head, ragel6ConstArgs, {(outVFS).str(), (inVFS).str()}}
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -55,7 +49,7 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: argChunks{cmdArgs},
+				CmdArgs: cmdArgs,
 				Env:     env,
 			},
 		},
@@ -71,3 +65,6 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 
 	return emit.Emit(node), outVFS
 }
+
+// ragel6ConstArgs is the constant [-L -I$(S) -o] span of every R6 command.
+var ragel6ConstArgs = []STR{argL.str(), argIS.str(), argDashO.str()}

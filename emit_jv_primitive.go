@@ -60,17 +60,15 @@ func EmitJV(
 	outDirVFS := Build(instance.Path.Rel())
 	outDir := outDirVFS.String()
 
-	cmdArgs := []STR{
-		tc.Python3,
-		internStr(stdout2stderrPath),
-		internStr(jdkResourcePath),
-		argJar.str(),
-		internStr(antlr4JarPath),
+	cmdArgs := make([]STR, 0, 8+len(antlrJavaConstHead))
+	cmdArgs = append(cmdArgs, tc.Python3)
+	cmdArgs = append(cmdArgs, antlrJavaConstHead...)
+	cmdArgs = append(cmdArgs,
 		(grammarVFS).str(),
 		argDlanguageCpp.str(),
 		argDashO.str(),
 		internStr(outDir),
-	}
+	)
 
 	if visitor {
 		cmdArgs = append(cmdArgs, argVisitor.str())
@@ -191,4 +189,13 @@ func EmitJVGeneral(
 	jvInputs := inputChunks{inputs, {stdout2stderrVFS, jarVFS}}
 
 	return emitJVNode(instance, cmdArgs, jvInputs, outputs, cwd, depRefs, moduleTag, emit)
+}
+
+// antlrJavaConstHead is the constant [stdout2stderr.py, <jdk>, -jar,
+// <antlr4 jar>] lead of every antlr (JV) command, after the python3 token.
+var antlrJavaConstHead = []STR{
+	internStr(stdout2stderrPath),
+	internStr(jdkResourcePath),
+	argJar.str(),
+	internStr(antlr4JarPath),
 }

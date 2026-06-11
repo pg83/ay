@@ -107,14 +107,9 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-		cmdArgs := []STR{
-			d.tc.Python3,
-			argSContribToolsCythonCythonPy.str(),
-			argX2.str(),
-			argLegacyImplicitNoexceptTrue.str(),
-			argE.str(),
-			argUnameSysnameLinux.str(),
-		}
+		cmdArgs := make([]STR, 0, 8+len(cythonConstHead)+len(stmt.Options))
+		cmdArgs = append(cmdArgs, d.tc.Python3)
+		cmdArgs = append(cmdArgs, cythonConstHead...)
 		cmdArgs = appendInternStrs(cmdArgs, stmt.Options)
 
 		if !stmt.CMode {
@@ -323,4 +318,14 @@ func hasPrefix(s, prefix string) bool {
 
 func hasSuffix(s, suffix string) bool {
 	return len(s) >= len(suffix) && s[len(s)-len(suffix):] == suffix
+}
+
+// cythonConstHead is the constant flag lead of every cython invocation
+// (after the python3 token).
+var cythonConstHead = []STR{
+	argSContribToolsCythonCythonPy.str(),
+	argX2.str(),
+	argLegacyImplicitNoexceptTrue.str(),
+	argE.str(),
+	argUnameSysnameLinux.str(),
 }
