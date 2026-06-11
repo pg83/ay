@@ -15,6 +15,14 @@ type ModuleCCInputs struct {
 
 	InclArgs inclArgMemo
 
+	// CCBlocks points at the module-stable CC command-line spans, built ONCE
+	// when the module's ModuleCCInputs is assembled (composeCCModuleArgBlocks)
+	// and shared by every per-source copy of the inputs. Callers that mutate
+	// an arg-relevant field (the cython paths touching AddIncl/CFlags) must
+	// rebuild it for their copy. nil: EmitCC composes locally (tests, ad-hoc
+	// emitters).
+	CCBlocks *ccModuleArgBlocks
+
 	PeerAddInclGlobal []VFS
 	// PeerProtoAddInclGlobal is the _PROTO__INCLUDE chain for proto compiles
 	// only (the $(S)/<PROTO_NAMESPACE> contribution of every transitively
@@ -124,42 +132,36 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 
 	isCxx := in.ForceCxx || isCxxSource(srcRel)
 
-	var ownExtras []ARG
+	blocks := in.CCBlocks
+	inChunk := []STR{(inVFS).str()}
+	cmdArgs := make(argChunks, 0, 9)
+
+	if len(instance.Platform.WrapccHead) > 0 {
+		cmdArgs = append(cmdArgs, instance.Platform.WrapccHead, inChunk, instance.Platform.WrapccTail)
+	}
+
+	compiler, tail := blocks.cHead, blocks.cTail
 
 	if isCxx {
-		ownExtras = in.CXXFlags
-	} else {
-		ownExtras = in.COnlyFlags
+		compiler, tail = blocks.cxxHead, blocks.cxxTail
 	}
 
-	if isCxx && len(instance.Platform.CXXFlags) > 0 {
-		ownExtras = append(append([]ARG{}, ownExtras...), instance.Platform.CXXFlags...)
+	cmdArgs = append(cmdArgs,
+		compiler,
+		instance.Platform.CCHead,
+		[]STR{argDashC.str(), argDashO.str(), (outVFS).str()},
+		blocks.common,
+		tail)
+
+	if len(in.PerSourceCFlags) > 0 {
+		cmdArgs = append(cmdArgs, appendArgStr(nil, in.PerSourceCFlags))
 	}
 
-	peerExtras := composePeerExtras(in, isCxx)
-	ownGlobalBucket := composeOwnAndPeerGlobalBucket(in, isCxx)
-	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in, instance.Platform)
-
-	args := ccComposeArgs{
-		Platform:           instance.Platform,
-		OutVFS:             outVFS,
-		InVFS:              inVFS,
-		OwnAddIncl:         in.AddIncl,
-		PeerAddIncl:        in.PeerAddInclGlobal,
-		OwnCFlags:          ownCFlags,
-		OwnExtras:          ownExtras,
-		PeerExtras:         peerExtras,
-		OwnGlobalBucket:    ownGlobalBucket,
-		PerSrcCFlags:       in.PerSourceCFlags,
-		ModuleScopeCFlags:  in.ModuleScopeCFlags,
-		IsCxx:              isCxx,
-		NoCompilerWarnings: in.Flags.NoCompilerWarnings,
-		NoWShadow:          in.Flags.NoWShadow,
-		InclArgs:           in.InclArgs,
-		CCArg:              in.TC.CC,
-		CXXArg:             in.TC.CXX,
+	if !isCxx && len(blocks.cPost) > 0 {
+		cmdArgs = append(cmdArgs, blocks.cPost)
 	}
-	cmdArgs := composeTargetCC(args)
+
+	cmdArgs = append(cmdArgs, inChunk)
 
 	env := hostP.ToolEnv()
 
@@ -181,7 +183,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: argChunks{cmdArgs},
+				CmdArgs: cmdArgs,
 				Env:     env,
 			},
 		},
@@ -380,97 +382,79 @@ func composePostCatboostBucket(preBucket []ARG) []ARG {
 	return out
 }
 
-// pickCompilerArg returns the compiler from the module's resolved toolchain
-// (a.CCArg/CXXArg, derived from the PEERDIR resource-global closure — $(CLANG)/bin/clang[++]).
-func pickCompilerArg(a ccComposeArgs) STR {
-	if a.IsCxx {
-		return a.CXXArg
-	}
-
-	return a.CCArg
-}
-
-type ccComposeArgs struct {
-	Platform           *Platform
-	OutVFS             VFS
-	InVFS              VFS
-	OwnAddIncl         []VFS
-	PeerAddIncl        []VFS
-	OwnCFlags          []ARG
-	OwnExtras          []ARG
-	PeerExtras         []ARG
-	OwnGlobalBucket    []ARG
-	PerSrcCFlags       []ARG
-	ModuleScopeCFlags  []ARG
-	IsCxx              bool
-	NoCompilerWarnings bool
-	NoWShadow          bool
-	InclArgs           inclArgMemo
-	CCArg              STR
-	CXXArg             STR
-}
-
 func appendCompileFlagPipeline(cmdArgs []STR, bundle compileFlagBundle, warningBundle, defineBundle, preNoLibcExtras, moduleScopeCFlags, catboost []ARG) []STR {
 	return appendArgStr(cmdArgs, debugPrefixMapFlags, xclangDebugCompilationDir, bundle.CFlags, warningBundle, defineBundle, preNoLibcExtras, bundle.NoLibcBlock, catboost, moduleScopeCFlags, bundle.NoLibcBlock)
 }
 
-func composeTargetCC(a ccComposeArgs) []STR {
-	bundle := compileFlagBundleFor(a.Platform)
-	warningBundle := pickWarningFlags(a.NoCompilerWarnings, a.NoWShadow)
+// ccModuleArgBlocks are the module-stable spans of a CC command line, built
+// ONCE when the module's ModuleCCInputs is assembled and referenced as chunks
+// by every CC node of the module — no per-node flag copying:
+//
+//	cHead/cxxHead: [compiler] (the module toolchain's cc / c++)
+//	common:        ccIncludesPrefix + the -I block + the compile flag pipeline
+//	cTail/cxxTail: the variant span after the pipeline (peer C extras / cxx
+//	               std + own extras + flag buckets) + the builtin macro and
+//	               macro-prefix-map tail
+//	cPost:         the C-only own extras (positioned AFTER per-source flags)
+type ccModuleArgBlocks struct {
+	cHead   []STR
+	cxxHead []STR
+	common  []STR
+	cTail   []STR
+	cxxTail []STR
+	cPost   []STR
+}
 
-	// Sum the actual fixed package slices appended below (count cxx-only ones
-	// unconditionally — a slight over-estimate beats an under-estimate realloc).
-	// 12 covers the literals (compiler, --target, -B/-c/-o/output/input,
-	// googleapis, cxxStandardFlag, post-catboost sentinel) plus slack.
-	argCap := 12 +
-		len(ccIncludesPrefix) +
+func composeCCModuleArgBlocks(p *Platform, in *ModuleCCInputs) *ccModuleArgBlocks {
+	bundle := compileFlagBundleFor(p)
+	warningBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
+	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(*in, p)
+	catboost := catboostOpenSourceDefineFor(p)
+
+	// Sum the actual fixed package slices appended below — a slight
+	// over-estimate beats an under-estimate realloc.
+	commonCap := 2 +
+		len(ccIncludesPrefix) + len(in.AddIncl) + len(in.PeerAddInclGlobal) +
 		len(debugPrefixMapFlags) + len(xclangDebugCompilationDir) +
-		2*len(catboostOpenSourceDefine) + len(cxxStandardWarnings) +
-		len(builtinMacroDateTime) + len(macroPrefixMapFlags) +
-		len(a.OwnAddIncl) + len(a.PeerAddIncl) + len(a.OwnCFlags) + len(a.OwnExtras) + len(a.PeerExtras) + 2*len(a.OwnGlobalBucket) + len(a.PerSrcCFlags) + len(a.ModuleScopeCFlags) +
-		len(bundle.ArchArgs) + len(bundle.CFlags) + len(bundle.Defines) + 2*len(bundle.NoLibcBlock) + len(warningBundle)
-	cmdArgs := make([]STR, 0, argCap+len(a.Platform.WrapccHead)+len(a.Platform.WrapccTail)+len(a.Platform.SysrootArgs)+1)
-
-	if len(a.Platform.WrapccHead) > 0 {
-		cmdArgs = append(cmdArgs, a.Platform.WrapccHead...)
-		cmdArgs = append(cmdArgs, (a.InVFS).str())
-		cmdArgs = append(cmdArgs, a.Platform.WrapccTail...)
-	}
-
-	cmdArgs = append(cmdArgs, pickCompilerArg(a), a.Platform.TargetArg)
-	cmdArgs = appendArgStr(cmdArgs, bundle.ArchArgs)
-	cmdArgs = append(cmdArgs, a.Platform.SysrootArgs...)
-	cmdArgs = append(cmdArgs, argDashC.str(), argDashO.str(), (a.OutVFS).str())
-	cmdArgs = appendArgStr(cmdArgs, ccIncludesPrefix)
-	cmdArgs = appendAddIncl(cmdArgs, a.OwnAddIncl, a.InclArgs)
-	peerAddIncl := a.PeerAddIncl
+		len(bundle.CFlags) + len(warningBundle) + len(bundle.Defines) +
+		len(ownCFlags) + 2*len(bundle.NoLibcBlock) + len(catboost) + len(in.ModuleScopeCFlags)
+	common := make([]STR, 0, commonCap)
+	common = appendArgStr(common, ccIncludesPrefix)
+	common = appendAddIncl(common, in.AddIncl, in.InclArgs)
+	peerAddIncl := in.PeerAddInclGlobal
 
 	if len(peerAddIncl) > 0 && peerAddIncl[0] == googleapisCommonProtosAddIncl {
-		cmdArgs = append(cmdArgs, a.InclArgs.arg(peerAddIncl[0]))
+		common = append(common, in.InclArgs.arg(peerAddIncl[0]))
 		peerAddIncl = peerAddIncl[1:]
 	}
 
-	cmdArgs = appendAddIncl(cmdArgs, peerAddIncl, a.InclArgs)
-	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warningBundle, bundle.Defines, a.OwnCFlags, a.ModuleScopeCFlags, catboostOpenSourceDefineFor(a.Platform))
+	common = appendAddIncl(common, peerAddIncl, in.InclArgs)
+	common = appendCompileFlagPipeline(common, bundle, warningBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboost)
 
-	var cOnlyExtras []ARG
+	// C variant: the peer C extras follow the pipeline; the OWN C extras trail
+	// the per-source flags (cPost).
+	cTail := appendArgStr(nil, in.PeerCOnlyFlagsGlobal, builtinMacroDateTime, macroPrefixMapFlags)
 
-	if a.IsCxx {
-		cmdArgs = appendCxxStdAndOwn(cmdArgs, true, a.NoCompilerWarnings, true, a.OwnExtras)
-	} else {
-		cOnlyExtras = a.OwnExtras
+	// C++ variant: std + warning bundle + own extras (module + platform), the
+	// global flag buckets around the catboost define, then the shared tail.
+	cxxOwnExtras := in.CXXFlags
+
+	if len(p.CXXFlags) > 0 {
+		cxxOwnExtras = concatARG(in.CXXFlags, p.CXXFlags)
 	}
 
-	if a.IsCxx {
-		cmdArgs = appendArgStr(cmdArgs, a.OwnGlobalBucket, catboostOpenSourceDefineFor(a.Platform), composePostCatboostBucket(a.OwnGlobalBucket))
-	} else {
-		cmdArgs = appendArgStr(cmdArgs, a.PeerExtras)
+	cxxBucket := composeOwnAndPeerGlobalBucket(*in, true)
+	cxxTail := appendCxxStdAndOwn(nil, true, in.Flags.NoCompilerWarnings, true, cxxOwnExtras)
+	cxxTail = appendArgStr(cxxTail, cxxBucket, catboost, composePostCatboostBucket(cxxBucket), builtinMacroDateTime, macroPrefixMapFlags)
+
+	return &ccModuleArgBlocks{
+		cHead:   []STR{in.TC.CC},
+		cxxHead: []STR{in.TC.CXX},
+		common:  common,
+		cTail:   cTail,
+		cxxTail: cxxTail,
+		cPost:   appendArgStr(nil, in.COnlyFlags),
 	}
-
-	cmdArgs = appendArgStr(cmdArgs, builtinMacroDateTime, macroPrefixMapFlags, a.PerSrcCFlags, cOnlyExtras)
-	cmdArgs = append(cmdArgs, (a.InVFS).str())
-
-	return cmdArgs
 }
 
 func appendAddIncl(cmdArgs []STR, addIncl []VFS, memo inclArgMemo) []STR {

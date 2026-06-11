@@ -119,6 +119,11 @@ type Platform struct {
 	// platform and shared read-only across CC nodes.
 	CCUsesResources []string
 
+	// CCHead is the pre-built [--target=<triple>, -march…, sysroot args] span
+	// opening every CC compile on this platform (after the compiler token) —
+	// referenced as a chunk by the emitters, never copied.
+	CCHead []STR
+
 	// SysrootArgs is the SDK sysroot + tool-bin compile prefix that upstream's
 	// GnuToolchain.C_FLAGS_PLATFORM contributes right after --target in every CC/AS
 	// compile line: [--sysroot=<root>, -B<root>/usr/bin], where <root> is the
@@ -243,6 +248,8 @@ func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, 
 	if p.March != "" {
 		p.MarchArgs = []ARG{internArg("-march=" + p.March)}
 	}
+
+	p.CCHead = append(appendArgStr([]STR{p.TargetArg}, p.MarchArgs), p.SysrootArgs...)
 
 	compress := confCompressesDebug(fs)
 	p.CompressDebugSections = compress && !buildRelease && os == OSLinux

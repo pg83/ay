@@ -829,6 +829,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			DefaultVarOrder:   d.defaultVarOrder,
 			TC:                d.tc,
 		}
+		headerOnlyInputs.CCBlocks = composeCCModuleArgBlocks(instance.Platform, &headerOnlyInputs)
 		_ = emitRunProgramsForAR(ctx, instance, d, headerOnlyInputs)
 		_ = emitRunPythonForAR(ctx, instance, d, headerOnlyInputs)
 
@@ -1685,6 +1686,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		BisonGenExt: d.bisonGenExt,
 		TC:          d.tc,
 	}
+	moduleInputs.CCBlocks = composeCCModuleArgBlocks(instance.Platform, &moduleInputs)
 
 	// Pass 1 (codegen-producing srcs: .proto, .ev, .fbs, .rl, .cpp.in, .c.in, .y)
 	// runs BEFORE emitCopyFiles / emitEnumSrcs / emitMiscNodes. Those later
@@ -1755,7 +1757,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			si.FlatOutput = true
 		}
 
-		return adjustCythonCompanionSourceInputs(d, src, si)
+		return adjustCythonCompanionSourceInputs(instance.Platform, d, src, si)
 	}
 	appendCC := func(src string, emit *sourceEmit) {
 		if emit == nil {

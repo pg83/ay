@@ -568,6 +568,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 			ModuleTag:            tagPy3Proto,
 			IncludeInputs:        auxClosure,
 		}
+		ccIn.CCBlocks = composeCCModuleArgBlocks(instance.Platform, &ccIn)
 		ccRef, ccOut, _ := EmitCC(instance, aux.Rel()[strings.LastIndex(aux.Rel(), "/")+1:], aux, ccIn, ctx.host, ctx.emit)
 		res.Refs = append(res.Refs, ccRef)
 		res.Outputs = append(res.Outputs, ccOut)
