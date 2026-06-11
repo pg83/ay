@@ -22,6 +22,53 @@ type objcopyEmitResult struct {
 	Outputs []VFS
 }
 
+// objcopyArgBlocks are the module-stable spans of a resource-objcopy command
+// line — everything around the per-node output path. Built once per module
+// (emitResourceObjcopy) and referenced as chunks by every objcopy node the
+// module emits; the per-node remainder is the output path and the
+// --inputs/--keys/--kvs payload.
+type objcopyArgBlocks struct {
+	// pre: [python3, objcopy.py, --compiler, <cxx>, --objcopy, <objcopy>,
+	// --compressor, <path>, --rescompiler, <path>, --output-obj]
+	pre []STR
+	// post: [--target, <triple>]
+	post []STR
+}
+
+// objcopyEmitCtx carries the per-module objcopy emission state: the resource
+// tool refs and the stable arg blocks.
+type objcopyEmitCtx struct {
+	rescompilerLDRef   NodeRef
+	rescompressorLDRef NodeRef
+	blocks             objcopyArgBlocks
+}
+
+func newObjcopyEmitCtx(ctx *genCtx, d *moduleData, p *Platform) *objcopyEmitCtx {
+	oc := &objcopyEmitCtx{}
+	oc.rescompilerLDRef, _ = ctx.tool(argToolsRescompiler)
+	oc.rescompressorLDRef, _ = ctx.tool(argToolsRescompressor)
+	oc.blocks = objcopyArgBlocks{
+		pre: []STR{
+			d.tc.Python3,
+			internStr(objcopyScriptPath),
+			argCompiler.str(), d.tc.CXX,
+			argObjcopy.str(), d.tc.Objcopy,
+			argCompressor.str(), internStr(rescompressorBinPath),
+			argRescompiler.str(), internStr(rescompilerBinPath),
+			argOutputObj.str(),
+		},
+		post: []STR{argTarget.str(), internStr(p.Triple)},
+	}
+
+	return oc
+}
+
+// objcopyCmdArgs assembles an objcopy command line: the module-stable blocks
+// are referenced, only [out] and the payload tail are per-node.
+func objcopyCmdArgs(oc *objcopyEmitCtx, outputObj VFS, payload []STR) argChunks {
+	return argChunks{oc.blocks.pre, []STR{(outputObj).str()}, oc.blocks.post, payload}
+}
+
 func emitResourceObjcopy(
 	ctx *genCtx,
 	instance ModuleInstance,
@@ -33,27 +80,26 @@ func emitResourceObjcopy(
 		return nil
 	}
 
-	rescompilerLDRef, _ := ctx.tool(argToolsRescompiler)
-	rescompressorLDRef, _ := ctx.tool(argToolsRescompressor)
+	oc := newObjcopyEmitCtx(ctx, d, instance.Platform)
 	out := &objcopyEmitResult{}
 
-	if nodeRes := emitPyMainObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); nodeRes != nil {
+	if nodeRes := emitPyMainObjcopy(ctx, instance, d, oc); nodeRes != nil {
 		out.Refs = append(out.Refs, nodeRes.Ref)
 		out.Outputs = append(out.Outputs, nodeRes.Out)
 	}
 
-	if nodeRes := emitNoCheckImportsObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef); nodeRes != nil {
+	if nodeRes := emitNoCheckImportsObjcopy(ctx, instance, d, oc); nodeRes != nil {
 		out.Refs = append(out.Refs, nodeRes.Ref)
 		out.Outputs = append(out.Outputs, nodeRes.Out)
 	}
 
-	for _, nodeRes := range emitYaConfJSONObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef) {
+	for _, nodeRes := range emitYaConfJSONObjcopy(ctx, instance, d, oc) {
 		out.Refs = append(out.Refs, nodeRes.Ref)
 		out.Outputs = append(out.Outputs, nodeRes.Out)
 	}
 
 	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 {
-		srcRes := emitPySrcObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef)
+		srcRes := emitPySrcObjcopy(ctx, instance, d, oc)
 
 		if srcRes != nil {
 			out.Refs = append(out.Refs, srcRes.Refs...)
@@ -99,35 +145,28 @@ func emitResourceObjcopy(
 		hash := objcopyHash(cur.paths, cur.keys, cur.kvs, instance.Path.Rel(), moduleTag)
 		outputObj := Build(instance.Path.Rel() + "/objcopy_" + hash + ".o")
 
-		cmdArgs := []STR{
-			d.tc.Python3,
-			internStr(objcopyScriptPath),
-			argCompiler.str(), d.tc.CXX,
-			argObjcopy.str(), d.tc.Objcopy,
-			argCompressor.str(), internStr(rescompressorBinPath),
-			argRescompiler.str(), internStr(rescompilerBinPath),
-			argOutputObj.str(), (outputObj).str(),
-			argTarget.str(), internStr(instance.Platform.Triple),
-		}
+		payload := make([]STR, 0, 2+len(cur.pathInputs)+len(cur.keys)+1+len(cur.kvs))
 
 		if len(cur.paths) > 0 {
-			cmdArgs = append(cmdArgs, argInputs.str())
+			payload = append(payload, argInputs.str())
 
 			for _, p := range cur.pathInputs {
-				cmdArgs = append(cmdArgs, (p).str())
+				payload = append(payload, (p).str())
 			}
 
-			cmdArgs = append(cmdArgs, argKeys.str())
-			cmdArgs = appendInternStrs(cmdArgs, cur.keys)
+			payload = append(payload, argKeys.str())
+			payload = appendInternStrs(payload, cur.keys)
 		}
 
 		if len(cur.kvs) > 0 {
-			cmdArgs = append(cmdArgs, argKvs.str())
+			payload = append(payload, argKvs.str())
 
 			for _, kv := range cur.kvs {
-				cmdArgs = append(cmdArgs, internStr(expandRootrel(kv, instance.Path.Rel())))
+				payload = append(payload, internStr(expandRootrel(kv, instance.Path.Rel())))
 			}
 		}
+
+		cmdArgs := objcopyCmdArgs(oc, outputObj, payload)
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -176,7 +215,7 @@ func emitResourceObjcopy(
 			Platform: instance.Platform,
 			Cmds: []Cmd{
 				{
-					CmdArgs: argChunks{cmdArgs},
+					CmdArgs: cmdArgs,
 					Env:     env,
 				},
 			},
@@ -189,12 +228,12 @@ func emitResourceObjcopy(
 			usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
 		}
 
-		if rescompilerLDRef != (NodeRef(0)) {
-			node.DepRefs = append(node.DepRefs, rescompilerLDRef)
+		if oc.rescompilerLDRef != (NodeRef(0)) {
+			node.DepRefs = append(node.DepRefs, oc.rescompilerLDRef)
 		}
 
-		if rescompressorLDRef != (NodeRef(0)) {
-			node.DepRefs = append(node.DepRefs, rescompressorLDRef)
+		if oc.rescompressorLDRef != (NodeRef(0)) {
+			node.DepRefs = append(node.DepRefs, oc.rescompressorLDRef)
 		}
 
 		// The inputs set above is complete by now, so the deduper is free for the
@@ -270,7 +309,7 @@ func emitResourceObjcopy(
 
 	emitEntries(d.resources)
 
-	srcRes := emitPySrcObjcopy(ctx, instance, d, rescompilerLDRef, rescompressorLDRef)
+	srcRes := emitPySrcObjcopy(ctx, instance, d, oc)
 
 	if srcRes != nil {
 		out.Refs = append(out.Refs, srcRes.Refs...)
@@ -305,8 +344,7 @@ func emitKvOnlyObjcopyNode(
 	kvsHash []string,
 	kvsCmd []string,
 	d *moduleData,
-	rescompilerLDRef NodeRef,
-	rescompressorLDRef NodeRef,
+	oc *objcopyEmitCtx,
 ) *objcopyEmit {
 	var moduleTag *string
 
@@ -320,18 +358,8 @@ func emitKvOnlyObjcopyNode(
 	hash := objcopyHash(nil, nil, kvsHash, instance.Path.Rel(), moduleTag)
 	outputObj := Build(instance.Path.Rel() + "/objcopy_" + hash + ".o")
 
-	cmdArgs := []STR{
-		d.tc.Python3,
-		internStr(objcopyScriptPath),
-		argCompiler.str(), d.tc.CXX,
-		argObjcopy.str(), d.tc.Objcopy,
-		argCompressor.str(), internStr(rescompressorBinPath),
-		argRescompiler.str(), internStr(rescompilerBinPath),
-		argOutputObj.str(), (outputObj).str(),
-		argTarget.str(), internStr(instance.Platform.Triple),
-		argKvs.str(),
-	}
-	cmdArgs = appendInternStrs(cmdArgs, kvsCmd)
+	payload := appendInternStrs([]STR{argKvs.str()}, kvsCmd)
+	cmdArgs := objcopyCmdArgs(oc, outputObj, payload)
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	targetProps := TargetProperties{ModuleDir: instance.Path.Rel()}
@@ -353,7 +381,7 @@ func emitKvOnlyObjcopyNode(
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: argChunks{cmdArgs},
+				CmdArgs: cmdArgs,
 				Env:     env,
 			},
 		},
@@ -366,12 +394,12 @@ func emitKvOnlyObjcopyNode(
 		usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
 	}
 
-	if rescompilerLDRef != (NodeRef(0)) {
-		node.DepRefs = append(node.DepRefs, rescompilerLDRef)
+	if oc.rescompilerLDRef != (NodeRef(0)) {
+		node.DepRefs = append(node.DepRefs, oc.rescompilerLDRef)
 	}
 
-	if rescompressorLDRef != (NodeRef(0)) {
-		node.DepRefs = append(node.DepRefs, rescompressorLDRef)
+	if oc.rescompressorLDRef != (NodeRef(0)) {
+		node.DepRefs = append(node.DepRefs, oc.rescompressorLDRef)
 	}
 
 	ref := ctx.emit.Emit(node)
@@ -382,8 +410,7 @@ func emitYaConfJSONObjcopy(
 	ctx *genCtx,
 	instance ModuleInstance,
 	d *moduleData,
-	rescompilerLDRef NodeRef,
-	rescompressorLDRef NodeRef,
+	oc *objcopyEmitCtx,
 ) []*objcopyEmit {
 	if len(d.yaConfJSON) == 0 {
 		return nil
@@ -431,25 +458,17 @@ func emitYaConfJSONObjcopy(
 		outputObj := Build(instance.Path.Rel() + "/objcopy_" + hash + ".o")
 		input := Source(res.sourcePath)
 
-		cmdArgs := []STR{
-			d.tc.Python3,
-			internStr(objcopyScriptPath),
-			argCompiler.str(), d.tc.CXX,
-			argObjcopy.str(), d.tc.Objcopy,
-			argCompressor.str(), internStr(rescompressorBinPath),
-			argRescompiler.str(), internStr(rescompilerBinPath),
-			argOutputObj.str(), (outputObj).str(),
-			argTarget.str(), internStr(instance.Platform.Triple),
+		cmdArgs := objcopyCmdArgs(oc, outputObj, []STR{
 			argInputs.str(), (input).str(),
 			argKeys.str(), internStr(keyB64),
 			argKvs.str(), internStr(kvCmd),
-		}
+		})
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 		node := &Node{
 			Platform: instance.Platform,
 			Cmds: []Cmd{
 				{
-					CmdArgs: argChunks{cmdArgs},
+					CmdArgs: cmdArgs,
 					Env:     env,
 				},
 			},
@@ -462,12 +481,12 @@ func emitYaConfJSONObjcopy(
 			usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
 		}
 
-		if rescompilerLDRef != (NodeRef(0)) {
-			node.DepRefs = append(node.DepRefs, rescompilerLDRef)
+		if oc.rescompilerLDRef != (NodeRef(0)) {
+			node.DepRefs = append(node.DepRefs, oc.rescompilerLDRef)
 		}
 
-		if rescompressorLDRef != (NodeRef(0)) {
-			node.DepRefs = append(node.DepRefs, rescompressorLDRef)
+		if oc.rescompressorLDRef != (NodeRef(0)) {
+			node.DepRefs = append(node.DepRefs, oc.rescompressorLDRef)
 		}
 
 		out = append(out, &objcopyEmit{Ref: ctx.emit.Emit(node), Out: outputObj})
@@ -481,8 +500,7 @@ func emitPyNamespaceForGroup(
 	instance ModuleInstance,
 	d *moduleData,
 	group pySrcGroup,
-	rescompilerLDRef NodeRef,
-	rescompressorLDRef NodeRef,
+	oc *objcopyEmitCtx,
 ) *objcopyEmit {
 	pySources := make([]string, 0, len(group.Srcs))
 
@@ -531,30 +549,28 @@ func emitPyNamespaceForGroup(
 	key := "py/namespace/" + modListMD5 + "/" + keyPath
 	kvHash := key + "=\"" + nsValue + "\""
 	kvCmd := key + "=" + nsValue
-	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyLib, []string{kvHash}, []string{kvCmd}, d, rescompilerLDRef, rescompressorLDRef)
+	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyLib, []string{kvHash}, []string{kvCmd}, d, oc)
 }
 
 func emitPyMainObjcopy(
 	ctx *genCtx,
 	instance ModuleInstance,
 	d *moduleData,
-	rescompilerLDRef NodeRef,
-	rescompressorLDRef NodeRef,
+	oc *objcopyEmitCtx,
 ) *objcopyEmit {
 	if d.pyMain == nil || d.moduleStmt == nil {
 		return nil
 	}
 
 	kv := "PY_MAIN=" + *d.pyMain
-	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyBin, []string{kv}, []string{kv}, d, rescompilerLDRef, rescompressorLDRef)
+	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyBin, []string{kv}, []string{kv}, d, oc)
 }
 
 func emitNoCheckImportsObjcopy(
 	ctx *genCtx,
 	instance ModuleInstance,
 	d *moduleData,
-	rescompilerLDRef NodeRef,
-	rescompressorLDRef NodeRef,
+	oc *objcopyEmitCtx,
 ) *objcopyEmit {
 	if len(d.noCheckImports) == 0 || d.moduleStmt == nil {
 		return nil
@@ -567,15 +583,14 @@ func emitNoCheckImportsObjcopy(
 	key := "py/no_check_imports/" + b32
 	kvHash := key + "=\"" + value + "\""
 	kvCmd := key + "=" + value
-	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyBin, []string{kvHash}, []string{kvCmd}, d, rescompilerLDRef, rescompressorLDRef)
+	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyBin, []string{kvHash}, []string{kvCmd}, d, oc)
 }
 
 func emitPySrcObjcopy(
 	ctx *genCtx,
 	instance ModuleInstance,
 	d *moduleData,
-	rescompilerLDRef NodeRef,
-	rescompressorLDRef NodeRef,
+	oc *objcopyEmitCtx,
 ) *objcopyEmitResult {
 	if len(d.pySrcs) == 0 || d.moduleStmt == nil {
 		return nil
@@ -613,7 +628,7 @@ func emitPySrcObjcopy(
 
 	for _, group := range groups {
 		if namespaceEnabled {
-			if nsRes := emitPyNamespaceForGroup(ctx, instance, d, group, rescompilerLDRef, rescompressorLDRef); nsRes != nil {
+			if nsRes := emitPyNamespaceForGroup(ctx, instance, d, group, oc); nsRes != nil {
 				res.Refs = append(res.Refs, nsRes.Ref)
 				res.Outputs = append(res.Outputs, nsRes.Out)
 			}
@@ -629,30 +644,22 @@ func emitPySrcObjcopy(
 			hash := objcopyHash(ch.paths, ch.keys, ch.kvsHash, instance.Path.Rel(), moduleTag)
 			outputObj := Build(instance.Path.Rel() + "/objcopy_" + hash + ".o")
 
-			cmdArgs := []STR{
-				d.tc.Python3,
-				internStr(objcopyScriptPath),
-				argCompiler.str(), d.tc.CXX,
-				argObjcopy.str(), d.tc.Objcopy,
-				argCompressor.str(), internStr(rescompressorBinPath),
-				argRescompiler.str(), internStr(rescompilerBinPath),
-				argOutputObj.str(), (outputObj).str(),
-				argTarget.str(), internStr(instance.Platform.Triple),
-			}
-
-			cmdArgs = append(cmdArgs, argInputs.str())
+			payload := make([]STR, 0, 2+len(ch.pathInps)+len(ch.keys)+1+len(ch.kvsCmd))
+			payload = append(payload, argInputs.str())
 
 			for _, p := range ch.pathInps {
-				cmdArgs = append(cmdArgs, (p).str())
+				payload = append(payload, (p).str())
 			}
 
-			cmdArgs = append(cmdArgs, argKeys.str())
-			cmdArgs = appendInternStrs(cmdArgs, ch.keys)
+			payload = append(payload, argKeys.str())
+			payload = appendInternStrs(payload, ch.keys)
 
 			if len(ch.kvsCmd) > 0 {
-				cmdArgs = append(cmdArgs, argKvs.str())
-				cmdArgs = appendInternStrs(cmdArgs, ch.kvsCmd)
+				payload = append(payload, argKvs.str())
+				payload = appendInternStrs(payload, ch.kvsCmd)
 			}
+
+			cmdArgs := objcopyCmdArgs(oc, outputObj, payload)
 
 			env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 			targetProps := TargetProperties{ModuleDir: instance.Path.Rel()}
@@ -671,7 +678,7 @@ func emitPySrcObjcopy(
 
 			node := &Node{
 				Platform:         instance.Platform,
-				Cmds:             []Cmd{{CmdArgs: argChunks{cmdArgs}, Env: env}},
+				Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: env}},
 				Env:              env,
 				Inputs:           inputChunks{rescompilersChunk, ch.inps, objcopyScriptChunk},
 				Outputs:          []VFS{outputObj},
@@ -681,22 +688,22 @@ func emitPySrcObjcopy(
 				usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
 			}
 
-			if rescompilerLDRef != (NodeRef(0)) {
-				node.DepRefs = append(node.DepRefs, rescompilerLDRef)
+			if oc.rescompilerLDRef != (NodeRef(0)) {
+				node.DepRefs = append(node.DepRefs, oc.rescompilerLDRef)
 			}
 
-			if rescompressorLDRef != (NodeRef(0)) {
-				node.DepRefs = append(node.DepRefs, rescompressorLDRef)
+			if oc.rescompressorLDRef != (NodeRef(0)) {
+				node.DepRefs = append(node.DepRefs, oc.rescompressorLDRef)
 			}
 
 			exclude := []NodeRef{}
 
-			if rescompilerLDRef != (NodeRef(0)) {
-				exclude = append(exclude, rescompilerLDRef)
+			if oc.rescompilerLDRef != (NodeRef(0)) {
+				exclude = append(exclude, oc.rescompilerLDRef)
 			}
 
-			if rescompressorLDRef != (NodeRef(0)) {
-				exclude = append(exclude, rescompressorLDRef)
+			if oc.rescompressorLDRef != (NodeRef(0)) {
+				exclude = append(exclude, oc.rescompressorLDRef)
 			}
 
 			if extras := resolveCodegenDepRefsExt(ctx, instance, nil, ch.inps, exclude...); len(extras) > 0 {
