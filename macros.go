@@ -30,10 +30,10 @@ func identEnv(x *ExprIdent) ENV {
 	return internEnv(x.Name)
 }
 
-type envKind uint8
+type EnvKind uint8
 
 const (
-	envAbsent envKind = iota
+	envAbsent EnvKind = iota
 	envStr            // string binding; bools fold to "yes"/"no" (evalEq normalizes them)
 	envInt            // integer binding, stored as its decimal STR
 )
@@ -41,18 +41,18 @@ const (
 // envStore holds the ENV-indexed bindings behind a pointer so copies of an
 // Environment (a value type) share — and can grow — the same state, exactly as
 // the old shared maps did; Clone makes a fresh store.
-type envStore struct {
+type EnvStore struct {
 	val  []STR
-	kind []envKind
+	kind []EnvKind
 }
 
-type Environment struct{ s *envStore }
+type Environment struct{ s *EnvStore }
 
 func newEnvironment() Environment {
-	return Environment{s: &envStore{}}
+	return Environment{s: &EnvStore{}}
 }
 
-func (s *envStore) ensure(e ENV) {
+func (s *EnvStore) ensure(e ENV) {
 	if int(e) < len(s.kind) {
 		return
 	}
@@ -63,7 +63,7 @@ func (s *envStore) ensure(e ENV) {
 		n = int(e) + 1
 	}
 
-	nk := make([]envKind, n)
+	nk := make([]EnvKind, n)
 	copy(nk, s.kind)
 	s.kind = nk
 
@@ -72,7 +72,7 @@ func (s *envStore) ensure(e ENV) {
 	s.val = nv
 }
 
-func (s *envStore) lookup(e ENV) (envKind, STR) {
+func (s *EnvStore) lookup(e ENV) (EnvKind, STR) {
 	if int(e) < len(s.kind) {
 		return s.kind[e], s.val[e]
 	}
@@ -108,7 +108,7 @@ func isImplicitBuildVar(name string) bool {
 // (mirroring upstream ymake — $X EvalValue returns "" for unbound vars,
 // and NYMake::IsTrue treats empty / any falseWord as false). The only
 // typed error is an int binding used in boolean position.
-func (e Environment) Bool(id ENV) bool {
+func (e Environment) bool(id ENV) bool {
 	return e.boolID(id, id.String())
 }
 
@@ -159,10 +159,10 @@ func (e Environment) String(id ENV) string {
 	return ""
 }
 
-func (e Environment) Clone() Environment {
-	return Environment{s: &envStore{
+func (e Environment) clone() Environment {
+	return Environment{s: &EnvStore{
 		val:  append([]STR(nil), e.s.val...),
-		kind: append([]envKind(nil), e.s.kind...),
+		kind: append([]EnvKind(nil), e.s.kind...),
 	}}
 }
 
@@ -180,15 +180,15 @@ func (e Environment) setStrID(id ENV, v STR) {
 
 // SetStringID binds a pre-interned constant value (hoisted STR var); SetString
 // is for computed values that must intern at the call.
-func (e Environment) SetStringID(id ENV, v STR) {
+func (e Environment) setStringID(id ENV, v STR) {
 	e.setStrID(id, v)
 }
 
-func (e Environment) SetString(id ENV, v string) {
+func (e Environment) setString(id ENV, v string) {
 	e.setStrID(id, internStr(v))
 }
 
-func (e Environment) SetInt(id ENV, n int) {
+func (e Environment) setInt(id ENV, n int) {
 	e.s.ensure(id)
 	e.s.kind[id] = envInt
 
@@ -201,7 +201,7 @@ func (e Environment) SetInt(id ENV, n int) {
 	e.s.val[id] = internStr(strconv.Itoa(n))
 }
 
-func (e Environment) SetBool(id ENV, v bool) {
+func (e Environment) setBool(id ENV, v bool) {
 	if v {
 		e.setStrID(id, strYes)
 	} else {
@@ -209,21 +209,21 @@ func (e Environment) SetBool(id ENV, v bool) {
 	}
 }
 
-func (e Environment) SetFromString(id ENV, v string) {
+func (e Environment) setFromString(id ENV, v string) {
 	switch v {
 	case "yes":
-		e.SetBool(id, true)
+		e.setBool(id, true)
 	case "no":
-		e.SetBool(id, false)
+		e.setBool(id, false)
 	default:
-		e.SetString(id, v)
+		e.setString(id, v)
 	}
 }
 
 // SetFromStringID is SetFromString for an already-interned value (Platform.Flags
 // iteration): no string compare, just map the STR to the stored slot, folding the
 // yes/no STRs to themselves (they already are strYes/strNo).
-func (e Environment) SetFromStringID(id ENV, v STR) {
+func (e Environment) setFromStringID(id ENV, v STR) {
 	e.setStrID(id, v)
 }
 
@@ -236,7 +236,7 @@ func (e Environment) hasBindingID(id ENV) bool {
 // HasBinding reports whether name is bound, taking a string: it first checks
 // whether name is interned at all, so a ${VAR} token that is not a known env
 // var is reported unbound without being interned.
-func (e Environment) HasBinding(name string) bool {
+func (e Environment) hasBinding(name string) bool {
 	id, ok := internedEnv(name)
 
 	return ok && e.hasBindingID(id)
@@ -244,7 +244,7 @@ func (e Environment) HasBinding(name string) bool {
 
 // Lookup returns name's bound value and whether it is bound, without interning
 // name (same non-polluting rationale as HasBinding).
-func (e Environment) Lookup(name string) (string, bool) {
+func (e Environment) lookup(name string) (string, bool) {
 	id, ok := internedEnv(name)
 
 	if !ok {
@@ -260,12 +260,12 @@ func (e Environment) Lookup(name string) (string, bool) {
 	return internTable.strs[v], true
 }
 
-func (e Environment) SetDefaultString(id ENV, v string) {
+func (e Environment) setDefaultString(id ENV, v string) {
 	if e.hasBindingID(id) {
 		return
 	}
 
-	e.SetString(id, v)
+	e.setString(id, v)
 }
 
 func EvalCond(e Expr, env Environment) bool {
@@ -415,7 +415,7 @@ func makeDefaultIfEnv() Environment {
 		envCLANG, envTRUE, envUSE_SSE4,
 		envUSE_ARCADIA_PYTHON, envPYTHON3,
 	} {
-		e.SetBool(n, true)
+		e.setBool(n, true)
 	}
 
 	// OPENSOURCE is NOT defaulted: it is a repository property set in the repo
@@ -427,27 +427,27 @@ func makeDefaultIfEnv() Environment {
 
 	// The roots are plain vars in the ya.make language (upstream binds them in
 	// ymake.core.conf); statement-arg expansion resolves them like any ${VAR}.
-	e.SetString(envARCADIA_ROOT, "$(S)")
-	e.SetString(envARCADIA_BUILD_ROOT, "$(B)")
+	e.setString(envARCADIA_ROOT, "$(S)")
+	e.setString(envARCADIA_BUILD_ROOT, "$(B)")
 
-	e.SetString(envCXX_RT, "libcxxrt")
+	e.setString(envCXX_RT, "libcxxrt")
 	// gnu_compiler.conf: CORE_LIBS_OPTIMIZATION=-O3 (-O0 only under DEBUG_CORE_LIBS,
 	// which the gating builds never set). python3/runtime_py3 splice it into CFLAGS.
-	e.SetString(envCORE_LIBS_OPTIMIZATION, "-O3")
-	e.SetString(envOPENSOURCE_PROJECT, "")
-	e.SetString(envSANITIZER_TYPE, "")
-	e.SetString(envundefined, "undefined")
-	e.SetString(envmemory, "memory")
-	e.SetString(envaddress, "address")
-	e.SetString(envthread, "thread")
-	e.SetString(envleak, "leak")
-	e.SetString(envMODULE_TAG, "PY3")
-	e.SetString(env_USE_ICONV, "dynamic")
-	e.SetString(envALLOCATOR, "")
-	e.SetString(envPY2, "PY2")
-	e.SetString(envOS_SDK, "")
+	e.setString(envCORE_LIBS_OPTIMIZATION, "-O3")
+	e.setString(envOPENSOURCE_PROJECT, "")
+	e.setString(envSANITIZER_TYPE, "")
+	e.setString(envundefined, "undefined")
+	e.setString(envmemory, "memory")
+	e.setString(envaddress, "address")
+	e.setString(envthread, "thread")
+	e.setString(envleak, "leak")
+	e.setString(envMODULE_TAG, "PY3")
+	e.setString(env_USE_ICONV, "dynamic")
+	e.setString(envALLOCATOR, "")
+	e.setString(envPY2, "PY2")
+	e.setString(envOS_SDK, "")
 
-	e.SetInt(envANDROID_API, 0)
+	e.setInt(envANDROID_API, 0)
 
 	return e
 }

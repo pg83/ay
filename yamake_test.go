@@ -548,7 +548,7 @@ func TestParseInclude_RelativePath(t *testing.T) {
 		"sub.inc": "SRCS(x.cpp)\n",
 	})
 
-	mf, err := ParseFile(fs, fs.SourceRoot()+"/ya.make")
+	mf, err := ParseFile(fs, fs.sourceRoot()+"/ya.make")
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
 	}
@@ -912,7 +912,7 @@ func TestParseGlobalSrcs(t *testing.T) {
 func TestParseInclude_RejectsSelfCycle(t *testing.T) {
 	fs := newMemFS(map[string]string{"a.inc": "INCLUDE(a.inc)\n"})
 
-	_, err := ParseFile(fs, fs.SourceRoot()+"/a.inc")
+	_, err := ParseFile(fs, fs.sourceRoot()+"/a.inc")
 
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -929,7 +929,7 @@ func TestParseInclude_RejectsTransitiveCycle(t *testing.T) {
 		"b.inc": "INCLUDE(a.inc)\n",
 	})
 
-	_, err := ParseFile(fs, fs.SourceRoot()+"/a.inc")
+	_, err := ParseFile(fs, fs.sourceRoot()+"/a.inc")
 
 	if err == nil {
 		t.Fatal("expected error, got nil")

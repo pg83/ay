@@ -24,20 +24,20 @@ var bisonCppSkeletonInputs = []VFS{
 
 var bisonCppSkeletonDirectives = quotedDirectives(bisonCppSkeletonInputs)
 
-func bisonCppHeaderParsed(srcVFS VFS) []includeDirective {
-	parsed := make([]includeDirective, 0, 1+len(bisonCppSkeletonDirectives))
+func bisonCppHeaderParsed(srcVFS VFS) []IncludeDirective {
+	parsed := make([]IncludeDirective, 0, 1+len(bisonCppSkeletonDirectives))
 	parsed = append(parsed,
-		includeDirective{kind: includeQuoted, target: internStr(bisonPreprocessPyVFS.Rel())},
+		IncludeDirective{kind: includeQuoted, target: internStr(bisonPreprocessPyVFS.rel())},
 	)
 	parsed = append(parsed, bisonCppSkeletonDirectives...)
 
 	return dedupDirectives(parsed)
 }
 
-func bisonGeneratedCPPParsed(ctx *genCtx, instance ModuleInstance, srcVFS, headerVFS VFS) []includeDirective {
-	parsed := []includeDirective{
-		{kind: includeQuoted, target: internStr(headerVFS.Rel())},
-		{kind: includeQuoted, target: internStr(srcVFS.Rel())},
+func bisonGeneratedCPPParsed(ctx *GenCtx, instance ModuleInstance, srcVFS, headerVFS VFS) []IncludeDirective {
+	parsed := []IncludeDirective{
+		{kind: includeQuoted, target: internStr(headerVFS.rel())},
+		{kind: includeQuoted, target: internStr(srcVFS.rel())},
 	}
 
 	if scanner := ctx.scannerFor(instance); scanner != nil {
@@ -47,7 +47,7 @@ func bisonGeneratedCPPParsed(ctx *genCtx, instance ModuleInstance, srcVFS, heade
 	return dedupDirectives(parsed)
 }
 
-func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCCInputs, genExt string) *sourceEmit {
+func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCCInputs, genExt string) *SourceEmit {
 	bisonRef, bisonBin := bisonTool(ctx, instance)
 	m4Ref, m4Bin := m4Tool(ctx, instance)
 	preprocessHeader := genExt != ".c"
@@ -55,10 +55,10 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	baseNoExt := strings.TrimSuffix(srcRel, filepath.Ext(srcRel))
 	headerRel := baseNoExt + ".h"
 	generatedRel := "_/" + srcRel + genExt
-	headerVFS := Build(instance.Path.Rel() + "/" + headerRel)
-	generatedVFS := Build(instance.Path.Rel() + "/" + generatedRel)
-	srcVFS := Source(instance.Path.Rel() + "/" + srcRel)
-	headerParsed := []includeDirective{{kind: includeQuoted, target: internStr(srcVFS.Rel())}}
+	headerVFS := Build(instance.Path.rel() + "/" + headerRel)
+	generatedVFS := Build(instance.Path.rel() + "/" + generatedRel)
+	srcVFS := Source(instance.Path.rel() + "/" + srcRel)
+	headerParsed := []IncludeDirective{{kind: includeQuoted, target: internStr(srcVFS.rel())}}
 
 	if preprocessHeader {
 		headerParsed = bisonCppHeaderParsed(srcVFS)
@@ -74,11 +74,11 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 			// this preprocessed header. Ride it as a non-expanded closure leaf so every
 			// consumer picks it up transitively through the cached window, instead of
 			// the former per-CC-source pull (bisonCCSourceInputs).
-			reg.AddClosureLeaf(headerVFS, srcVFS)
+			reg.addClosureLeaf(headerVFS, srcVFS)
 		}
 	}
 
-	generatedParsed := []includeDirective{{kind: includeQuoted, target: internStr(headerVFS.Rel())}}
+	generatedParsed := []IncludeDirective{{kind: includeQuoted, target: internStr(headerVFS.rel())}}
 
 	if preprocessHeader {
 		generatedParsed = bisonGeneratedCPPParsed(ctx, instance, srcVFS, headerVFS)
@@ -91,7 +91,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 
 	cmds := []Cmd{
 		{
-			CmdArgs: argChunks{[]STR{
+			CmdArgs: ArgChunks{[]STR{
 				internStr(bisonBin),
 				argV.str(),
 				internStr("--defines=" + headerVFS.String()),
@@ -106,7 +106,7 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 
 	if preprocessHeader {
 		cmds = append(cmds, Cmd{
-			CmdArgs: argChunks{[]STR{
+			CmdArgs: ArgChunks{[]STR{
 				in.TC.Python3,
 				(bisonPreprocessPyVFS).str(),
 				(headerVFS).str(),
@@ -118,16 +118,16 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		inputs = dedupVFS(inputs, generatedOutputClosure(ctx, instance, headerVFS, in))
 	}
 
-	ycRef := ctx.emit.Emit(&Node{
+	ycRef := ctx.emit.emit(&Node{
 		Platform:         instance.Platform,
 		Cmds:             cmds,
 		DepRefs:          []NodeRef{bisonRef, m4Ref},
 		Env:              env,
-		Inputs:           inputChunks{inputs},
+		Inputs:           InputChunks{inputs},
 		Outputs:          []VFS{headerVFS, generatedVFS},
 		KV:               KV{P: pkYC, PC: pcLightGreen},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		usesResources:    []string{resourcePatternYMakePython3},
 	})
 	bindGeneratedOutput(ctx, instance, headerVFS, ycRef)
@@ -142,15 +142,15 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	}
 
 	ccRef, ccOut, _ := EmitCC(instance, generatedRel, generatedVFS, ccIn, ctx.host, ctx.emit)
-	return &sourceEmit{Ref: ccRef, OutPath: ccOut}
+	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }
 
-func bisonTool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
+func bisonTool(ctx *GenCtx, instance ModuleInstance) (NodeRef, string) {
 	ref, bin := ctx.tool(argContribToolsBison)
 	return ref, bin.String()
 }
 
-func m4Tool(ctx *genCtx, instance ModuleInstance) (NodeRef, STR) {
+func m4Tool(ctx *GenCtx, instance ModuleInstance) (NodeRef, STR) {
 	ref, bin := ctx.tool(argContribToolsM4)
 	return ref, bin.str()
 }

@@ -21,7 +21,7 @@ func TestAntlrParsedIncludes_ExcludesBuildIntermediateInputs(t *testing.T) {
 
 	parsed := antlrParsedIncludes(
 		mod,
-		antlrRunInfo{},
+		AntlrRunInfo{},
 		"SQLParser.proto",
 		map[string]VFS{"SQLParser.proto": Build(mod + "/SQLParser.proto")},
 		inputs,
@@ -33,14 +33,14 @@ func TestAntlrParsedIncludes_ExcludesBuildIntermediateInputs(t *testing.T) {
 		got[d.target.String()] = struct{}{}
 	}
 
-	if _, leaked := got[stgBuild.Rel()]; leaked {
-		t.Errorf("antlrParsedIncludes leaked $(B) generator intermediate %q: %v", stgBuild.Rel(), keysOf(got))
+	if _, leaked := got[stgBuild.rel()]; leaked {
+		t.Errorf("antlrParsedIncludes leaked $(B) generator intermediate %q: %v", stgBuild.rel(), keysOf(got))
 	}
 	for _, want := range []string{
 		"yql/essentials/sql/v0/SQL.g",
 		"yql/essentials/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in",
-		stdout2stderrVFS.Rel(),
-		antlr3JarVFS.Rel(),
+		stdout2stderrVFS.rel(),
+		antlr3JarVFS.rel(),
 	} {
 		if _, ok := got[want]; !ok {
 			t.Errorf("antlrParsedIncludes missing $(S) source %q: %v", want, keysOf(got))
@@ -67,7 +67,7 @@ func TestAntlrParsedIncludes_LexerCrossIncludesParserCpp(t *testing.T) {
 		"JsonPathParser.h":   Build(mod + "/JsonPathParser.h"),
 		"JsonPathLexer.h":    Build(mod + "/JsonPathLexer.h"),
 	}
-	run := antlrRunInfo{}
+	run := AntlrRunInfo{}
 
 	induced := func(outTok string) map[string]struct{} {
 		parsed := antlrParsedIncludes(mod, run, outTok, outByTok, nil, antlr3JarVFS)
@@ -78,10 +78,10 @@ func TestAntlrParsedIncludes_LexerCrossIncludesParserCpp(t *testing.T) {
 		return got
 	}
 
-	lexerRel := outByTok["JsonPathLexer.cpp"].Rel()
-	parserRel := outByTok["JsonPathParser.cpp"].Rel()
-	lexerHRel := outByTok["JsonPathLexer.h"].Rel()
-	parserHRel := outByTok["JsonPathParser.h"].Rel()
+	lexerRel := outByTok["JsonPathLexer.cpp"].rel()
+	parserRel := outByTok["JsonPathParser.cpp"].rel()
+	lexerHRel := outByTok["JsonPathLexer.h"].rel()
+	parserHRel := outByTok["JsonPathParser.h"].rel()
 
 	lex := induced("JsonPathLexer.cpp")
 	if _, ok := lex[parserRel]; !ok {

@@ -12,30 +12,30 @@ var (
 	perfStatsEnabled    = os.Getenv("YATOOL_PERF_STATS") != ""
 )
 
-type includeKind int
+type IncludeKind int
 
 const (
-	includeSystem includeKind = iota
+	includeSystem IncludeKind = iota
 	includeQuoted
 )
 
-type includeDirective struct {
-	kind   includeKind
+type IncludeDirective struct {
+	kind   IncludeKind
 	target STR
 }
 
 type IncludeScanner struct {
 	// sysincl owns the sysincl rule set + its lookup indexes (see sysincl_ctx.go).
-	sysincl *sysinclCtx
+	sysincl *SysinclCtx
 
-	parsers *includeParserManager
+	parsers *IncludeParserManager
 
 	// subgraphClosures holds each cached transitive closure as a slice. The
 	// slices are not owned arrays: they are address-stable sub-slices into
 	// closureArena (a bump allocator), so storing them costs no copy. closureRef
 	// is just an index into this slice.
 	subgraphClosures [][]VFS
-	closureArena     *bumpAllocator[VFS]
+	closureArena     *BumpAllocator[VFS]
 	// scanCache holds both the cached transitive closure (under DFS) and the
 	// cached immediate resolved children per includer, keyed by includer
 	// ONLY — no scan-context component. This is the same invariant upstream
@@ -66,7 +66,7 @@ type IncludeScanner struct {
 	// VFS space. The columns are filled at different times (children during dfs
 	// pass 1, closure on pop, existence on first probe), so each relies on its
 	// own per-column presence rather than the map's shared key-present bit.
-	scanCache DenseMap3[STR, []VFS, closureRef, bool]
+	scanCache DenseMap3[STR, []VFS, ClosureRef, bool]
 
 	// searchTierFlat caches resolveContextSearchTier results in one scanner-wide
 	// table keyed by splitMix64(ctxNum, target STR) — the two dense ids hashed into a
@@ -77,11 +77,11 @@ type IncludeScanner struct {
 	// stay small. searchTierSeen is a 1-bit-per-target-STR presence gate (set once
 	// the target has any cached entry, in any config): a hit there means the table
 	// is worth probing, a miss short-circuits straight to the resolve.
-	searchTierFlat *IntValueMap[searchTierResult]
+	searchTierFlat *IntValueMap[SearchTierResult]
 	searchTierSeen BitSet
 	ctxNumByHash   map[uint64]uint32
 
-	resolveIndexByConfig map[uint64]*cfgResolveIndex
+	resolveIndexByConfig map[uint64]*CfgResolveIndex
 
 	// sourceUnderCache memoizes the includer-local quoted-include resolve
 	// (resolveSourceUnder(incDir, target)) — the hottest existence probe (~505k/run,
@@ -97,7 +97,7 @@ type IncludeScanner struct {
 
 	// tjc points at the run-wide Tarjan/closure working state owned by genCtx and
 	// shared by the target and host scanners (see tarjanCtx).
-	tjc *tarjanCtx
+	tjc *TarjanCtx
 
 	// dfsActive marks the roots whose dfs is currently in flight. It is set-once
 	// (never reset): within one scanner a root is cached the moment its dfs
@@ -136,41 +136,41 @@ type IncludeScanner struct {
 	// moduleByRef points at genCtx.moduleByRef: a generated file's producing tools
 	// (GeneratedFileInfo.GeneratorRefs) are looked up here to mix their declared
 	// INDUCED_DEPS into the file's resolved children. nil in standalone scanners.
-	moduleByRef *DenseMap[NodeRef, *moduleEmitResult]
+	moduleByRef *DenseMap[NodeRef, *ModuleEmitResult]
 }
 
-type scanCtx struct {
+type ScanCtx struct {
 	scanner      *IncludeScanner
 	cfg          ScanContext
 	ctxNum       uint32
-	resolveIndex *cfgResolveIndex
+	resolveIndex *CfgResolveIndex
 
 	// parser is the scan context's parser for files with UNREGISTERED
 	// extensions (swig's .i, …), resolved ONCE from the walk's root file —
 	// registered extensions always use their own parser. nil = C-like default.
-	parser includeDirectiveParser
+	parser IncludeDirectiveParser
 }
 
 // closureRef is an index into IncludeScanner.subgraphClosures.
-type closureRef uint32
+type ClosureRef uint32
 
 // cachedChildren returns the resolved immediate children of v (column 1). A
 // resolved-but-empty child set reads back present with a nil/empty slice, since
 // presence is the column slot, not nil-ness — so no sentinel slice is needed.
 func (s *IncludeScanner) cachedChildren(v VFS) ([]VFS, bool) {
-	return s.scanCache.Get1(STR(v.strID()))
+	return s.scanCache.get1(STR(v.strID()))
 }
 
 func (s *IncludeScanner) putChildren(v VFS, children []VFS) {
-	s.scanCache.Put1(STR(v.strID()), children)
+	s.scanCache.put1(STR(v.strID()), children)
 }
 
-func (s *IncludeScanner) cachedClosure(v VFS) (closureRef, bool) {
-	return s.scanCache.Get2(STR(v.strID()))
+func (s *IncludeScanner) cachedClosure(v VFS) (ClosureRef, bool) {
+	return s.scanCache.get2(STR(v.strID()))
 }
 
-func (s *IncludeScanner) putClosure(v VFS, ref closureRef) {
-	s.scanCache.Put2(STR(v.strID()), ref)
+func (s *IncludeScanner) putClosure(v VFS, ref ClosureRef) {
+	s.scanCache.put2(STR(v.strID()), ref)
 }
 
 // sourceFileExists memoizes IsFile(srcRootVFS, abs.Rel()) by the file VFS
@@ -180,12 +180,12 @@ func (s *IncludeScanner) putClosure(v VFS, ref closureRef) {
 func (s *IncludeScanner) sourceFileExists(abs VFS) bool {
 	key := STR(abs.strID())
 
-	if exists, probed := s.scanCache.Get3(key); probed {
+	if exists, probed := s.scanCache.get3(key); probed {
 		return exists
 	}
 
-	v := s.parsers.fs.IsFile(srcRootVFS, abs.Rel())
-	s.scanCache.Put3(key, v)
+	v := s.parsers.fs.isFile(srcRootVFS, abs.rel())
+	s.scanCache.put3(key, v)
 
 	return v
 }
@@ -203,12 +203,12 @@ const (
 	closureArenaInitial = closureAllocHint
 )
 
-type searchTierResult struct {
+type SearchTierResult struct {
 	paths []VFS
 	found bool
 }
 
-type scannerPerfStats struct {
+type ScannerPerfStats struct {
 	walkClosureCalls       uint64
 	subgraphHits           uint64
 	subgraphMisses         uint64
@@ -219,7 +219,7 @@ type scannerPerfStats struct {
 	resolveSearchPathCalls uint64
 }
 
-func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, onWarn func(Warn), tjc *tarjanCtx) *IncludeScanner {
+func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, onWarn func(Warn), tjc *TarjanCtx) *IncludeScanner {
 	s := &IncludeScanner{
 		sysincl:             newSysinclCtx(sysincl),
 		parsers:             parsers,
@@ -229,9 +229,9 @@ func newIncludeScannerWith(parsers *includeParserManager, sysincl SysInclSet, on
 		// straighten path and closureWindow treat ref as a 1-based index).
 		subgraphClosures:     make([][]VFS, 1, 256),
 		closureArena:         newBumpAllocator[VFS](closureArenaInitial),
-		searchTierFlat:       NewIntValueMap[searchTierResult](4096),
+		searchTierFlat:       NewIntValueMap[SearchTierResult](4096),
 		ctxNumByHash:         make(map[uint64]uint32, 1024),
-		resolveIndexByConfig: make(map[uint64]*cfgResolveIndex, 1024),
+		resolveIndexByConfig: make(map[uint64]*CfgResolveIndex, 1024),
 		sourceUnderCache:     NewIntValueMap[VFS](1 << 16),
 		tjc:                  tjc,
 	}
@@ -248,7 +248,7 @@ type ScanContext struct {
 	// this walk, resolved once from the walk's root file (nil = C default).
 	// Not part of hashScanContext: it affects parsing, not path resolution,
 	// and parse results cache by (file, parser).
-	RootParser includeDirectiveParser
+	RootParser IncludeDirectiveParser
 
 	OwnAddIncl      []VFS
 	PeerAddInclSet  []VFS
@@ -260,7 +260,7 @@ type ScanContext struct {
 	OwnerModuleDir string
 }
 
-func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
+func (s *IncludeScanner) newScanCtx(cfg ScanContext) *ScanCtx {
 	ctxHash := hashScanContext(&cfg)
 
 	ctxNum, ok := s.ctxNumByHash[ctxHash]
@@ -287,7 +287,7 @@ func (s *IncludeScanner) NewScanCtx(cfg ScanContext) *scanCtx {
 		}
 	}
 
-	return &scanCtx{
+	return &ScanCtx{
 		scanner:      s,
 		cfg:          cfg,
 		ctxNum:       ctxNum,
@@ -322,9 +322,9 @@ func hashScanContext(ctx *ScanContext) uint64 {
 	return h
 }
 
-func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
+func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 	s := sc.scanner
-	incDir := dirKey(pathDir(vfsPath.Rel()))
+	incDir := dirKey(pathDir(vfsPath.rel()))
 
 	for _, entry := range s.parsers.parsedIncludes(vfsPath, sc.parser) {
 		resolved := sc.resolve(vfsPath, incDir, entry)
@@ -342,14 +342,14 @@ func (sc *scanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 // from the tool's declared INDUCED_DEPS rather than a hardcoded list woven into the
 // registered parsed includes. Only build outputs with a codegen registry entry and
 // recorded GeneratorRefs contribute.
-func (sc *scanCtx) resolveInducedDeps(vfsPath VFS, incDir VFS, fn func(rabs VFS)) {
+func (sc *ScanCtx) resolveInducedDeps(vfsPath VFS, incDir VFS, fn func(rabs VFS)) {
 	s := sc.scanner
 
-	if !vfsPath.IsBuild() || s.codegen == nil || s.moduleByRef == nil {
+	if !vfsPath.isBuild() || s.codegen == nil || s.moduleByRef == nil {
 		return
 	}
 
-	info := s.codegen.Lookup(vfsPath)
+	info := s.codegen.lookup(vfsPath)
 
 	if info == nil {
 		return
@@ -359,12 +359,12 @@ func (sc *scanCtx) resolveInducedDeps(vfsPath VFS, incDir VFS, fn func(rabs VFS)
 	// (h+cpp …) deps live in both buckets, so a single read per output suffices.
 	bucket := parsedIncludesCpp
 
-	if isHeaderSource(vfsPath.Rel()) {
+	if isHeaderSource(vfsPath.rel()) {
 		bucket = parsedIncludesHeader
 	}
 
 	for _, gref := range info.GeneratorRefs {
-		tool, ok := s.moduleByRef.Get(gref)
+		tool, ok := s.moduleByRef.get(gref)
 
 		if !ok {
 			continue
@@ -383,7 +383,7 @@ func (sc *scanCtx) resolveInducedDeps(vfsPath VFS, incDir VFS, fn func(rabs VFS)
 // IncludeScanner.scanCache for the upstream-mirroring
 // invariant that makes this correct: each file is parse-and-resolved exactly
 // once per run.
-func (sc *scanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
+func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
 	s := sc.scanner
 
 	if cached, ok := s.cachedChildren(abs); ok {
@@ -405,12 +405,12 @@ func (sc *scanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
 	}
 }
 
-func (s *IncludeScanner) SubgraphCacheStats() (hits, misses, tainted uint64) {
+func (s *IncludeScanner) subgraphCacheStats() (hits, misses, tainted uint64) {
 	return s.subgraphHits, s.subgraphMisses, s.subgraphTainted
 }
 
-func (s *IncludeScanner) perfStats() scannerPerfStats {
-	return scannerPerfStats{
+func (s *IncludeScanner) perfStats() ScannerPerfStats {
+	return ScannerPerfStats{
 		walkClosureCalls:       s.walkClosureCalls,
 		subgraphHits:           s.subgraphHits,
 		subgraphMisses:         s.subgraphMisses,
@@ -440,7 +440,7 @@ func (s *IncludeScanner) perfStats() scannerPerfStats {
 // child's cached window in place — no temporary [][]VFS — and allocates nothing
 // else, so holding the uncommitted block is safe. tjClosure is the dedup set,
 // shared with strongconnect; dfs's pass-2 use never overlaps a nested call.
-func (sc *scanCtx) dfs(abs VFS) {
+func (sc *ScanCtx) dfs(abs VFS) {
 	s := sc.scanner
 
 	if s.dfsActive.has(uint32(abs)) {
@@ -497,18 +497,18 @@ func (sc *scanCtx) dfs(abs VFS) {
 	// never traversed as children — re-resolving their own #includes per consuming
 	// module leaked sibling staging copies.
 	for i := 0; i < k; i++ {
-		if block[i].IsBuild() {
-			k += copy(block[k:], s.codegen.ClosureLeaves(block[i]))
+		if block[i].isBuild() {
+			k += copy(block[k:], s.codegen.closureLeaves(block[i]))
 		}
 	}
 
 	s.closureArena.commit(k)
-	ref := closureRef(len(s.subgraphClosures))
+	ref := ClosureRef(len(s.subgraphClosures))
 	s.subgraphClosures = append(s.subgraphClosures, block[:k:k])
 	s.putClosure(abs, ref)
 }
 
-func (sc *scanCtx) closureOf(abs VFS) []VFS {
+func (sc *ScanCtx) closureOf(abs VFS) []VFS {
 	s := sc.scanner
 
 	ref, ok := s.cachedClosure(abs)
@@ -526,7 +526,7 @@ func (sc *scanCtx) closureOf(abs VFS) []VFS {
 	return w
 }
 
-func (s *IncludeScanner) closureWindow(ref closureRef) []VFS {
+func (s *IncludeScanner) closureWindow(ref ClosureRef) []VFS {
 	return s.subgraphClosures[ref]
 }
 
@@ -539,14 +539,14 @@ func (s *IncludeScanner) closureWindow(ref closureRef) []VFS {
 // member — its presence does NOT imply its own window is present — so any VFS
 // ever registered as a leaf never short-circuits. A nil codegen registry has no
 // leaves at all, so membership alone suffices there.
-func (sc *scanCtx) windowSubsumed(ch VFS) bool {
+func (sc *ScanCtx) windowSubsumed(ch VFS) bool {
 	s := sc.scanner
 
 	if !s.tjc.closure.has(ch) {
 		return false
 	}
 
-	if s.codegen != nil && s.codegen.IsLeafEver(ch) {
+	if s.codegen != nil && s.codegen.isLeafEver(ch) {
 		return false
 	}
 
@@ -558,11 +558,11 @@ func (sc *scanCtx) windowSubsumed(ch VFS) bool {
 // scanCtx implements closureSink (tarjan_ctx.go) so tarjanCtx.strongconnect can
 // build SCC closures without depending on scanner internals.
 
-func (sc *scanCtx) forEachChild(v VFS, fn func(VFS)) {
+func (sc *ScanCtx) forEachChild(v VFS, fn func(VFS)) {
 	sc.forEachResolvedChildID(v, fn)
 }
 
-func (sc *scanCtx) cachedWindow(v VFS) ([]VFS, bool) {
+func (sc *ScanCtx) cachedWindow(v VFS) ([]VFS, bool) {
 	ref, ok := sc.scanner.cachedClosure(v)
 
 	if !ok {
@@ -575,7 +575,7 @@ func (sc *scanCtx) cachedWindow(v VFS) ([]VFS, bool) {
 // emitClosure reserves an arena block, lets fill write the deduped closure into
 // it (returning the count), then commits that prefix — an address-stable
 // sub-slice of the arena — into subgraphClosures and caches it for every member.
-func (sc *scanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
+func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 	s := sc.scanner
 
 	block := s.closureArena.alloc(closureAllocHint)
@@ -584,14 +584,14 @@ func (sc *scanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 	// Splice non-expanded closure leaves for every $(B) member (same as dfs
 	// pass-2; see there).
 	for i := 0; i < k; i++ {
-		if block[i].IsBuild() {
-			k += copy(block[k:], s.codegen.ClosureLeaves(block[i]))
+		if block[i].isBuild() {
+			k += copy(block[k:], s.codegen.closureLeaves(block[i]))
 		}
 	}
 
 	s.closureArena.commit(k)
 
-	ref := closureRef(len(s.subgraphClosures))
+	ref := ClosureRef(len(s.subgraphClosures))
 	s.subgraphClosures = append(s.subgraphClosures, block[:k:k])
 
 	s.subgraphMisses += uint64(len(members))
@@ -605,7 +605,7 @@ func (sc *scanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 	}
 }
 
-func (sc *scanCtx) resolve(includerAbs, incDir VFS, d includeDirective) (out []VFS) {
+func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []VFS) {
 	// A rooted target ($(S)/... or $(B)/...) is already bound to its root —
 	// INDUCED_DEPS spells deps via the reserved ${ARCADIA_ROOT}-family refs.
 	// Upstream classifies such paths directly (ResolveAsKnownWithoutCheck →
@@ -639,7 +639,7 @@ func (sc *scanCtx) resolve(includerAbs, incDir VFS, d includeDirective) (out []V
 
 	searchOut := sc.resolveSearchPath(includerAbs, incDir, d)
 
-	includerRel := includerAbs.Rel()
+	includerRel := includerAbs.rel()
 	var mappings []VFS
 	var hasMultiTarget bool
 	mappings, hasMultiTarget, sysinclClaimed = s.sysincl.lookup(includerRel, d.target)
@@ -647,7 +647,7 @@ func (sc *scanCtx) resolve(includerAbs, incDir VFS, d includeDirective) (out []V
 	if d.kind == includeQuoted && len(searchOut) > 0 {
 		bypass := !hasMultiTarget
 
-		if !bypass && searchOut[0].IsSource() {
+		if !bypass && searchOut[0].isSource() {
 			incDir := pathDir(includerRel)
 
 			var sameDirRel string
@@ -658,7 +658,7 @@ func (sc *scanCtx) resolve(includerAbs, incDir VFS, d includeDirective) (out []V
 				sameDirRel = d.target.String()
 			}
 
-			bypass = searchOut[0].Rel() == sameDirRel
+			bypass = searchOut[0].rel() == sameDirRel
 		}
 
 		if bypass {
@@ -728,16 +728,16 @@ mapLoop:
 	return out
 }
 
-type cfgResolveIndex struct {
+type CfgResolveIndex struct {
 	indexable    bool
 	rank         map[VFS]int
-	buildEntries []cfgBuildAddincl
+	buildEntries []CfgBuildAddincl
 }
 
 // cfgBuildAddincl is a Build-rooted addincl prefix paired with its rank in the
 // unified declaration order across OwnAddIncl ⨁ PeerAddInclSet. prefixID is
 // pre-interned so codegen.LookupSplit needs no per-resolve allocation.
-type cfgBuildAddincl struct {
+type CfgBuildAddincl struct {
 	prefix   VFS
 	prefixID STR
 	rank     int
@@ -751,17 +751,17 @@ const resolveNoRank = int(^uint(0) >> 1)
 // does (devtools/ymake/module_resolver.cpp:371). Source entries keep their
 // existing inverted-index lookup; Build entries are collected separately for a
 // cheap codegen.LookupSplit pass over a typically tiny set (0–2 per module).
-func buildCfgResolveIndex(cfg *ScanContext) *cfgResolveIndex {
-	idx := &cfgResolveIndex{}
+func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
+	idx := &CfgResolveIndex{}
 
 	for _, p := range cfg.OwnAddIncl {
-		if p.Root() == VFSRootSource && p.Rel() == "" {
+		if p.root() == VFSRootSource && p.rel() == "" {
 			return idx
 		}
 	}
 
 	for _, p := range cfg.PeerAddInclSet {
-		if p.Root() == VFSRootSource && p.Rel() == "" {
+		if p.root() == VFSRootSource && p.rel() == "" {
 			return idx
 		}
 	}
@@ -777,10 +777,10 @@ func buildCfgResolveIndex(cfg *ScanContext) *cfgResolveIndex {
 
 		idx.rank[p] = r
 
-		if p.Root() == VFSRootBuild {
-			idx.buildEntries = append(idx.buildEntries, cfgBuildAddincl{
+		if p.root() == VFSRootBuild {
+			idx.buildEntries = append(idx.buildEntries, CfgBuildAddincl{
 				prefix:   p,
-				prefixID: internStr(p.Rel()),
+				prefixID: internStr(p.rel()),
 				rank:     r,
 			})
 		}
@@ -799,21 +799,21 @@ func buildCfgResolveIndex(cfg *ScanContext) *cfgResolveIndex {
 	return idx
 }
 
-func (sc *scanCtx) cacheSearchTier(targetID STR, out searchTierResult) searchTierResult {
+func (sc *ScanCtx) cacheSearchTier(targetID STR, out SearchTierResult) SearchTierResult {
 	s := sc.scanner
-	s.searchTierFlat.Put(splitMix64(sc.ctxNum, uint32(targetID)), out)
+	s.searchTierFlat.put(splitMix64(sc.ctxNum, uint32(targetID)), out)
 	s.searchTierSeen.add(uint32(targetID))
 
 	return out
 }
 
-func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchTierResult {
+func (sc *ScanCtx) resolveContextSearchTier(targetID STR, target string) SearchTierResult {
 	s := sc.scanner
 
 	// Gate the composite-key hash probe on the 1-bit per-target presence flag: a
 	// target never cached in any config skips straight to the resolve.
 	if s.searchTierSeen.has(uint32(targetID)) {
-		if cached := s.searchTierFlat.Get(splitMix64(sc.ctxNum, uint32(targetID))); cached != nil {
+		if cached := s.searchTierFlat.get(splitMix64(sc.ctxNum, uint32(targetID))); cached != nil {
 			s.searchTierHits++
 			return *cached
 		}
@@ -821,7 +821,7 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 
 	s.searchTierMisses++
 
-	var out searchTierResult
+	var out SearchTierResult
 
 	normTarget := normalisePath(target)
 
@@ -852,9 +852,9 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 		var info *GeneratedFileInfo
 
 		if prefixRel == "" {
-			info = s.codegen.LookupRel(normTarget)
+			info = s.codegen.lookupRel(normTarget)
 		} else if pid := interned(prefixRel); pid != nil {
-			info = s.codegen.LookupSplit(*pid, *buildSuffix)
+			info = s.codegen.lookupSplit(*pid, *buildSuffix)
 		}
 
 		if info == nil {
@@ -874,9 +874,9 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 	}
 
 	addInclPath := func(prefix VFS) bool {
-		switch prefix.Root() {
+		switch prefix.root() {
 		case VFSRootBuild:
-			return addBuild(prefix.Rel())
+			return addBuild(prefix.rel())
 		case VFSRootSource:
 			return addSource(prefix)
 		}
@@ -895,7 +895,7 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 			bestRank := resolveNoRank
 			var bestAddincl VFS
 
-			cands, _ := s.parsers.addinclIndex.Get(targetID)
+			cands, _ := s.parsers.addinclIndex.get(targetID)
 
 			for _, a := range cands {
 				if r, ok := idx.rank[a]; ok && r < bestRank {
@@ -921,7 +921,7 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 						continue
 					}
 
-					info := s.codegen.LookupSplit(b.prefixID, *buildSuffix)
+					info := s.codegen.lookupSplit(b.prefixID, *buildSuffix)
 
 					if info == nil {
 						continue
@@ -935,7 +935,7 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 
 			if bestRank != resolveNoRank {
 				if bestIsSource {
-					out.paths = []VFS{Source(joinRel(bestAddincl.Rel(), target))}
+					out.paths = []VFS{Source(joinRel(bestAddincl.rel(), target))}
 				} else {
 					out.paths = []VFS{bestBuild.OutputPath}
 
@@ -981,7 +981,7 @@ func (sc *scanCtx) resolveContextSearchTier(targetID STR, target string) searchT
 	return sc.cacheSearchTier(targetID, out)
 }
 
-func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective) []VFS {
+func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective) []VFS {
 	s := sc.scanner
 	s.resolveSearchPathCalls++
 
@@ -1003,7 +1003,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective
 	addPath := func(rel string) bool {
 		rel = normalisePath(rel)
 
-		if !s.parsers.fs.IsFile(srcRootVFS, rel) {
+		if !s.parsers.fs.isFile(srcRootVFS, rel) {
 			return false
 		}
 
@@ -1023,7 +1023,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective
 			return false
 		}
 
-		info := s.codegen.LookupRel(rel)
+		info := s.codegen.lookupRel(rel)
 
 		if info == nil {
 			return false
@@ -1044,14 +1044,14 @@ func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective
 		searchPathFound = true
 	}
 
-	if includerAbs.IsBuild() && strings.Contains(d.target.String(), "/") {
+	if includerAbs.isBuild() && strings.Contains(d.target.String(), "/") {
 		rel := d.target.String()
 
 		if addBuildPath(rel) {
 			searchPathFound = true
 
 			if sc.cfg.OwnerModuleDir != "" && s.codegen != nil {
-				if info := s.codegen.LookupRel(rel); info != nil {
+				if info := s.codegen.lookupRel(rel); info != nil {
 					if _, ok := s.generatedFirstClaim[info.OutputPath]; !ok {
 						s.generatedFirstClaim[info.OutputPath] = sc.cfg.OwnerModuleDir
 					}
@@ -1068,14 +1068,14 @@ func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective
 		suKey := splitMix64(uint32(incDir), uint32(d.target))
 		var sv VFS
 
-		if p := s.sourceUnderCache.Get(suKey); p != nil {
+		if p := s.sourceUnderCache.get(suKey); p != nil {
 			sv = *p
 		} else {
 			if r, ok := s.resolveSourceUnder(incDir, d.target.String()); ok {
 				sv = Source(r)
 			}
 
-			s.sourceUnderCache.Put(suKey, sv)
+			s.sourceUnderCache.put(suKey, sv)
 		}
 
 		if sv != 0 {
@@ -1085,7 +1085,7 @@ func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective
 		}
 
 		if !matched {
-			if info := s.codegenUnder(incDir.Rel(), d.target.String()); info != nil {
+			if info := s.codegenUnder(incDir.rel(), d.target.String()); info != nil {
 				if !outHas(info.OutputPath) {
 					out = append(out, info.OutputPath)
 					searchPathFound = true
@@ -1118,12 +1118,12 @@ func (sc *scanCtx) resolveSearchPath(includerAbs, incDir VFS, d includeDirective
 	return out
 }
 
-func cythonPy2SiblingOverride(includerAbs VFS, d includeDirective) (string, bool) {
-	if !includerAbs.IsSource() || d.kind != includeQuoted {
+func cythonPy2SiblingOverride(includerAbs VFS, d IncludeDirective) (string, bool) {
+	if !includerAbs.isSource() || d.kind != includeQuoted {
 		return "", false
 	}
 
-	if hasPrefix(includerAbs.Rel(), "contrib/tools/cython_py2/Cython/Includes/") {
+	if hasPrefix(includerAbs.rel(), "contrib/tools/cython_py2/Cython/Includes/") {
 		if hasPrefix(d.target.String(), "libc/") || hasPrefix(d.target.String(), "libcpp/") {
 			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.String(), true
 		}
@@ -1131,7 +1131,7 @@ func cythonPy2SiblingOverride(includerAbs VFS, d includeDirective) (string, bool
 		return "", false
 	}
 
-	switch includerAbs.Rel() {
+	switch includerAbs.rel() {
 	case "util/generic/string.pxd":
 		if d.target.String() == "libcpp/string.pxd" {
 			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.String(), true
@@ -1189,11 +1189,11 @@ func (s *IncludeScanner) resolveSourceUnder(prefix VFS, target string) (string, 
 	// (firstComponent + Listdir(prefix), then the deep check) — but keyed off the
 	// already-interned prefix VFS, so it skips the Listdir(srcRoot) + re-gating the
 	// prefix's own components that IsFile(srcRootVFS, joinRel(...)) did from the root.
-	if !s.parsers.fs.IsFile(prefix, target) {
+	if !s.parsers.fs.isFile(prefix, target) {
 		return "", false
 	}
 
-	return normalisePath(joinRel(prefix.Rel(), target)), true
+	return normalisePath(joinRel(prefix.rel(), target)), true
 }
 
 func (s *IncludeScanner) codegenUnder(prefixDir, target string) *GeneratedFileInfo {
@@ -1215,10 +1215,10 @@ func (s *IncludeScanner) codegenUnder(prefixDir, target string) *GeneratedFileIn
 			return nil
 		}
 
-		return s.codegen.LookupSplit(*pid, *sid)
+		return s.codegen.lookupSplit(*pid, *sid)
 	}
 
-	return s.codegen.LookupRel(normalisePath(joinRel(prefixDir, target)))
+	return s.codegen.lookupRel(normalisePath(joinRel(prefixDir, target)))
 }
 
 func canRelFilter(first, target string) bool {

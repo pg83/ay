@@ -3,7 +3,7 @@ package main
 // tarjanScratch holds the per-node Tarjan SCC state (stamp/index/low/onStack),
 // epoch-stamped so reset() is an O(1) epoch bump rather than a clear. Every
 // dense array is indexed by uint32(v) of the VFS node.
-type tarjanScratch struct {
+type TarjanScratch struct {
 	stamp   []uint32
 	index   []int32
 	low     []int32
@@ -18,14 +18,14 @@ type tarjanScratch struct {
 // dfs pass 1 finishes before pass 2, and strongconnect only reads cached child
 // windows), so one instance avoids growing per-scanner duplicates. stack/next
 // are SCC-local.
-type tarjanCtx struct {
-	scratch tarjanScratch
+type TarjanCtx struct {
+	scratch TarjanScratch
 	stack   []VFS
 	next    int32
 	closure IdSet
 }
 
-func (t *tarjanScratch) reset(size uint32) {
+func (t *TarjanScratch) reset(size uint32) {
 	if uint32(len(t.stamp)) < size {
 		grown := uint32(len(t.stamp)) * 2
 
@@ -54,13 +54,13 @@ func (t *tarjanScratch) reset(size uint32) {
 }
 
 // tarjanScratch is keyed by VFS value; every dense array is indexed by uint32(v).
-func (t *tarjanScratch) visited(v VFS) bool {
+func (t *TarjanScratch) visited(v VFS) bool {
 	id := uint32(v)
 
 	return id < uint32(len(t.stamp)) && t.stamp[id] == t.epoch
 }
 
-func (t *tarjanScratch) discover(v VFS, idx int32) {
+func (t *TarjanScratch) discover(v VFS, idx int32) {
 	id := uint32(v)
 
 	if id >= uint32(len(t.stamp)) {
@@ -87,27 +87,27 @@ func (t *tarjanScratch) discover(v VFS, idx int32) {
 	t.onStack.add(id)
 }
 
-func (t *tarjanScratch) onStackHas(v VFS) bool {
+func (t *TarjanScratch) onStackHas(v VFS) bool {
 	return t.visited(v) && t.onStack.has(uint32(v))
 }
 
-func (t *tarjanScratch) lowOf(v VFS) int32 {
+func (t *TarjanScratch) lowOf(v VFS) int32 {
 	return t.low[uint32(v)]
 }
 
-func (t *tarjanScratch) indexOf(v VFS) int32 {
+func (t *TarjanScratch) indexOf(v VFS) int32 {
 	return t.index[uint32(v)]
 }
 
-func (t *tarjanScratch) setLow(v VFS, x int32) {
+func (t *TarjanScratch) setLow(v VFS, x int32) {
 	t.low[uint32(v)] = x
 }
 
-func (t *tarjanScratch) onStackOf(v VFS) bool {
+func (t *TarjanScratch) onStackOf(v VFS) bool {
 	return t.onStack.has(uint32(v))
 }
 
-func (t *tarjanScratch) setOnStack(v VFS, b bool) {
+func (t *TarjanScratch) setOnStack(v VFS, b bool) {
 	t.onStack.set(uint32(v), b)
 }
 
@@ -116,7 +116,7 @@ func (t *tarjanScratch) setOnStack(v VFS, b bool) {
 // one. The arena alloc/commit and the subgraphClosures/subgraphCache writes stay
 // on the scanner side (emitClosure): strongconnect only fills the block it is
 // handed. Kept narrow so the SCC algorithm does not depend on scanner internals.
-type closureSink interface {
+type ClosureSink interface {
 	forEachChild(v VFS, fn func(VFS))
 	// cachedWindow returns the cached transitive closure of v, if one exists.
 	cachedWindow(v VFS) (window []VFS, cached bool)
@@ -135,7 +135,7 @@ type closureSink interface {
 // Returns the number of already-cached child edges seen so the caller bumps
 // subgraphHits once. The reset lives here, not at the call site, so the whole
 // SCC machinery (state + lifecycle) stays inside tarjanCtx.
-func (tc *tarjanCtx) runSCC(g closureSink, root VFS) uint64 {
+func (tc *TarjanCtx) runSCC(g ClosureSink, root VFS) uint64 {
 	tc.scratch.reset(vfsBound())
 	tc.stack = tc.stack[:0]
 	tc.next = 0
@@ -150,7 +150,7 @@ func (tc *tarjanCtx) runSCC(g closureSink, root VFS) uint64 {
 // tc.closure, then their non-member children's cached windows spliced in) into a
 // block the sink hands it. Returns the number of already-cached child edges seen
 // so the caller can bump subgraphHits once instead of per edge.
-func (tc *tarjanCtx) strongconnect(g closureSink, v VFS) (hits uint64) {
+func (tc *TarjanCtx) strongconnect(g ClosureSink, v VFS) (hits uint64) {
 	tc.next++
 	tc.scratch.discover(v, tc.next)
 	tc.stack = append(tc.stack, v)

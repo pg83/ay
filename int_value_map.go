@@ -22,8 +22,8 @@ func NewIntValueMap[V any](hint int) *IntValueMap[V] {
 
 // Get returns a pointer to the value for k (into the side vals slice), or nil if
 // k is absent. The pointer is valid until the next Put grows vals.
-func (m *IntValueMap[V]) Get(k uint64) *V {
-	if i := m.idx.Get(k); i != nil {
+func (m *IntValueMap[V]) get(k uint64) *V {
+	if i := m.idx.get(k); i != nil {
 		return &m.vals[*i]
 	}
 
@@ -32,8 +32,8 @@ func (m *IntValueMap[V]) Get(k uint64) *V {
 
 // Put inserts or overwrites the value for k. A new key appends to vals and
 // records its index in the table cell; an existing key overwrites in place.
-func (m *IntValueMap[V]) Put(k uint64, v V) {
-	cell, existed := m.idx.Cell(k)
+func (m *IntValueMap[V]) put(k uint64, v V) {
+	cell, existed := m.idx.cell(k)
 
 	if existed {
 		m.vals[*cell] = v

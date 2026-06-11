@@ -4,17 +4,17 @@ var (
 	ldLinkDynLibPath = ldLinkDynLibVFS.String()
 )
 
-func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *moduleEmitResult {
+func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *ModuleEmitResult {
 	if len(d.moduleStmt.Args) == 0 {
-		ThrowFmt("gen: %s DYNAMIC_LIBRARY requires a basename argument", instance.Path.Rel())
+		ThrowFmt("gen: %s DYNAMIC_LIBRARY requires a basename argument", instance.Path.rel())
 	}
 
 	if len(d.dynamicLibraryFrom) == 0 {
-		ThrowFmt("gen: %s DYNAMIC_LIBRARY requires DYNAMIC_LIBRARY_FROM(...)", instance.Path.Rel())
+		ThrowFmt("gen: %s DYNAMIC_LIBRARY requires DYNAMIC_LIBRARY_FROM(...)", instance.Path.rel())
 	}
 
 	if d.exportsScript == nil {
-		ThrowFmt("gen: %s DYNAMIC_LIBRARY requires EXPORTS_SCRIPT(...)", instance.Path.Rel())
+		ThrowFmt("gen: %s DYNAMIC_LIBRARY requires EXPORTS_SCRIPT(...)", instance.Path.rel())
 	}
 
 	dynLibRPathHelperPeers := []string{"build/platform/local_so"}
@@ -43,7 +43,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	// leaf passes. The peer-list guard stays a local string-keyed map because it
 	// must stay live across the genModule calls.
 	seen := make(map[string]struct{}, len(peerPaths)+len(dynLibRPathHelperPeers))
-	resolved := make([]*moduleEmitResult, 0, len(peerPaths))
+	resolved := make([]*ModuleEmitResult, 0, len(peerPaths))
 
 	for _, p := range peerPaths {
 		if _, dup := seen[p]; dup {
@@ -56,7 +56,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	}
 
 	// rpath helper peers contribute only RPathFlagsGlobal.
-	rpathOnly := make([]*moduleEmitResult, 0, len(dynLibRPathHelperPeers))
+	rpathOnly := make([]*ModuleEmitResult, 0, len(dynLibRPathHelperPeers))
 
 	for _, p := range dynLibRPathHelperPeers {
 		if _, dup := seen[p]; dup {
@@ -70,7 +70,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 
 	// Resource globals, deduped by global-var STR cast into the run-wide
 	// VFS-keyed deduper (single-namespace leaf pass, as in genModule).
-	var resourceGlobals []resourceDecl
+	var resourceGlobals []ResourceDecl
 	deduper.reset()
 
 	for _, pr := range resolved {
@@ -140,18 +140,18 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	fixElfRef, fixElfPath := ctx.tool(argToolsFixElf)
 
 	outputName := "lib" + d.moduleStmt.Args[0] + ".so"
-	outputPath := Build(instance.Path.Rel() + "/" + outputName).String()
-	vcsCPath := Build(instance.Path.Rel() + "/__vcs_version__.c").String()
-	vcsOPath := Build(instance.Path.Rel() + "/__vcs_version__.c.pic.o").String()
+	outputPath := Build(instance.Path.rel() + "/" + outputName).String()
+	vcsCPath := Build(instance.Path.rel() + "/__vcs_version__.c").String()
+	vcsOPath := Build(instance.Path.rel() + "/__vcs_version__.c.pic.o").String()
 
 	cmd0 := composeLDCmdVcsInfo(d.tc, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings)
-	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.Rel(), outputPath, outputName, vcsOPath, peerArchivePaths, pluginPaths, d.dynamicLibraryFrom, *d.exportsScript, fixElfPath.String())
-	cmd3 := composeLDCmdLinkOrCopy(d.tc, instance.Path.Rel())
+	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.rel(), outputPath, outputName, vcsOPath, peerArchivePaths, pluginPaths, d.dynamicLibraryFrom, *d.exportsScript, fixElfPath.String())
+	cmd3 := composeLDCmdLinkOrCopy(d.tc, instance.Path.rel())
 	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-	envFull := ctx.host.ToolEnv()
+	envFull := ctx.host.toolEnv()
 
-	inputs := composeDynLibInputs(peerArchivePaths, pluginPaths, fixElfPath, instance.Path.Rel(), *d.exportsScript, ctx.scripts)
+	inputs := composeDynLibInputs(peerArchivePaths, pluginPaths, fixElfPath, instance.Path.rel(), *d.exportsScript, ctx.scripts)
 
 	depRefs := make([]NodeRef, 0, len(peerArchiveRefs)+len(pluginRefs)+2)
 	depRefs = append(depRefs, peerArchiveRefs...)
@@ -165,18 +165,18 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	n := &Node{
 		Platform: instance.Platform,
 		Cmds: []Cmd{
-			{CmdArgs: argChunks{cmd0}, Env: envVcsOnly},
-			{CmdArgs: argChunks{cmd1}, Env: envFull},
-			{CmdArgs: argChunks{cmd2}, Cwd: strB, Env: envFull},
-			{CmdArgs: argChunks{cmd3}, Env: envVcsOnly},
+			{CmdArgs: ArgChunks{cmd0}, Env: envVcsOnly},
+			{CmdArgs: ArgChunks{cmd1}, Env: envFull},
+			{CmdArgs: ArgChunks{cmd2}, Cwd: strB, Env: envFull},
+			{CmdArgs: ArgChunks{cmd3}, Env: envVcsOnly},
 		},
 		Env:              envFull,
 		Inputs:           inputs,
-		Outputs:          []VFS{Build(instance.Path.Rel() + "/" + outputName)},
+		Outputs:          []VFS{Build(instance.Path.rel() + "/" + outputName)},
 		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Sandboxing:       true,
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel(), ModuleLang: mlCPP, ModuleTag: tagDll, ModuleType: mtSO},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleLang: mlCPP, ModuleTag: tagDll, ModuleType: mtSO},
 		DepRefs:          depRefs,
 		usesResources:    []string{resourcePatternClangTool + instance.Platform.ClangVer, resourcePatternLLDRoot, resourcePatternYMakePython3},
 	}
@@ -185,17 +185,17 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 		n.ForeignDepRefs = []NodeRef{fixElfRef}
 	}
 
-	ref := ctx.emit.Emit(n)
+	ref := ctx.emit.emit(n)
 	addInclGlobal := dedupVFS(d.addInclGlobal, peerAddInclGlobal)
 	cFlagsGlobal := dedupARG(d.cFlagsGlobal, peerCFlagsGlobal)
 	cxxFlagsGlobal := dedupARG(d.cxxFlagsGlobal, peerCXXFlagsGlobal)
 	cOnlyFlagsGlobal := dedupARG(d.cOnlyFlagsGlobal, peerCOnlyFlagsGlobal)
 
-	return &moduleEmitResult{
+	return &ModuleEmitResult{
 		ARPath:                       nil,
 		isPROGRAM:                    false,
 		LDRef:                        ref,
-		LDPath:                       vfsPtr(Build(instance.Path.Rel() + "/" + outputName)),
+		LDPath:                       vfsPtr(Build(instance.Path.rel() + "/" + outputName)),
 		AddInclGlobal:                addInclGlobal,
 		OwnAddInclGlobal:             cloneVFSs(d.addInclGlobal),
 		CFlagsGlobal:                 cFlagsGlobal,
@@ -217,7 +217,7 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	}
 }
 
-func composeDynLibCmd(p *Platform, tc moduleToolchain, modulePath, outputPath, outputName, vcsOPath string, peerLibPaths, pluginPaths []VFS, wholeArchivePeers []string, exportsScript, fixElfPath string) []STR {
+func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, outputName, vcsOPath string, peerLibPaths, pluginPaths []VFS, wholeArchivePeers []string, exportsScript, fixElfPath string) []STR {
 	cmdArgs := []STR{
 		tc.Python3,
 		internStr(ldLinkDynLibPath),
@@ -259,7 +259,7 @@ func composeDynLibCmd(p *Platform, tc moduleToolchain, modulePath, outputPath, o
 	)
 
 	for _, p := range peerLibPaths {
-		cmdArgs = append(cmdArgs, internStr(p.Rel()))
+		cmdArgs = append(cmdArgs, internStr(p.rel()))
 	}
 
 	cmdArgs = append(cmdArgs, argWlEndGroup.str())
@@ -295,8 +295,8 @@ func composeDynLibCmd(p *Platform, tc moduleToolchain, modulePath, outputPath, o
 	return cmdArgs
 }
 
-func composeDynLibInputs(peerLibPaths, pluginPaths []VFS, fixElfPath VFS, modulePath, exportsScript string, scripts scriptDeps) inputChunks {
-	chunks := make(inputChunks, 0, 7)
+func composeDynLibInputs(peerLibPaths, pluginPaths []VFS, fixElfPath VFS, modulePath, exportsScript string, scripts ScriptDeps) InputChunks {
+	chunks := make(InputChunks, 0, 7)
 
 	// peerLibPaths and pluginPaths are the caller's member slices — referenced
 	// as their own chunks, never copied.

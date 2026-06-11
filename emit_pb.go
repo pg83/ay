@@ -46,8 +46,8 @@ const (
 	abslTstringBase = "contrib/restricted/abseil-cpp-tstring/"
 )
 
-type resolvedCPPProtoPlugin struct {
-	Spec   cppProtoPlugin
+type ResolvedCPPProtoPlugin struct {
+	Spec   CppProtoPlugin
 	LDRef  NodeRef
 	Binary VFS
 }
@@ -65,14 +65,14 @@ func EmitPB(
 	grpc bool,
 	moduleTag STR,
 	liteHeaders bool,
-	extraPlugins []resolvedCPPProtoPlugin,
+	extraPlugins []ResolvedCPPProtoPlugin,
 	transitiveProtoImports []VFS,
 	extraDepRefs []NodeRef,
 	producerSourceInputs []VFS,
-	blocks *pbArgBlocks,
+	blocks *PbArgBlocks,
 	emit Emitter,
 ) NodeRef {
-	moduleDir := instance.Path.Rel()
+	moduleDir := instance.Path.rel()
 
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 
@@ -109,7 +109,7 @@ func EmitPB(
 		outsChunk = append(outsChunk, (output).str())
 	}
 
-	cmdArgs := argChunks{blocks.head, outsChunk, blocks.mid, []STR{internStr(protoRelPath)}}
+	cmdArgs := ArgChunks{blocks.head, outsChunk, blocks.mid, []STR{internStr(protoRelPath)}}
 
 	if len(blocks.tail) > 0 {
 		cmdArgs = append(cmdArgs, blocks.tail)
@@ -198,7 +198,7 @@ func EmitPB(
 		// transitive $(S) leaf sources behind a build-generated .proto — RUN_ANTLR
 		// grammar / template / jar / scripts — matching upstream's flat source
 		// closure) are shared caller slices: referenced as chunks, never copied.
-		Inputs:           inputChunks{inputs, transitiveProtoImports, producerSourceInputs},
+		Inputs:           InputChunks{inputs, transitiveProtoImports, producerSourceInputs},
 		Outputs:          outputs,
 		KV:               KV{P: pkPB, PC: pcYellow},
 		TargetProperties: targetProps,
@@ -208,7 +208,7 @@ func EmitPB(
 		usesResources:    []string{resourcePatternYMakePython3},
 	}
 
-	return emit.Emit(node)
+	return emit.emit(node)
 }
 
 func containsVFS(xs []VFS, want VFS) bool {
@@ -221,7 +221,7 @@ func containsVFS(xs []VFS, want VFS) bool {
 	return false
 }
 
-func protoCPPModulePath(instance ModuleInstance, d *moduleData) VFS {
+func protoCPPModulePath(instance ModuleInstance, d *ModuleData) VFS {
 	if d != nil && d.protoNamespace != nil {
 		if d.protoNamespaceGlobal {
 			return instance.Path
@@ -237,7 +237,7 @@ func protoCPPModulePath(instance ModuleInstance, d *moduleData) VFS {
 	return instance.Path
 }
 
-func protoCPPOutRoot(d *moduleData) string {
+func protoCPPOutRoot(d *ModuleData) string {
 	if d == nil || d.protoNamespace == nil {
 		return ""
 	}
@@ -251,7 +251,7 @@ func protoCPPOutRoot(d *moduleData) string {
 	return root
 }
 
-type protoSrcsResult struct {
+type ProtoSrcsResult struct {
 	ARRef                NodeRef
 	ARPath               *VFS
 	GlobalRef            *NodeRef
@@ -261,21 +261,21 @@ type protoSrcsResult struct {
 	WholeArchiveCmdPaths []VFS
 }
 
-func protoSourceRelPath(fs FS, instance ModuleInstance, d *moduleData, src string) string {
-	return filepath.ToSlash(filepath.Clean(resolvePySrcRel(fs, d.srcDirs, instance.Path.Rel(), src)))
+func protoSourceRelPath(fs FS, instance ModuleInstance, d *ModuleData, src string) string {
+	return filepath.ToSlash(filepath.Clean(resolvePySrcRel(fs, d.srcDirs, instance.Path.rel(), src)))
 }
 
-func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, aux VFS, seed []VFS, peerAddIncl []VFS) []VFS {
+func pyProtoAuxInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, aux VFS, seed []VFS, peerAddIncl []VFS) []VFS {
 	reg := codegenRegForInstance(ctx, instance)
 
 	if reg != nil {
 		rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 
-		emits := make([]includeDirective, 0, len(seed))
+		emits := make([]IncludeDirective, 0, len(seed))
 
 		for _, in := range seed {
-			if in.IsSource() {
-				emits = append(emits, includeDirective{kind: includeQuoted, target: internStr(in.Rel())})
+			if in.isSource() {
+				emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(in.rel())})
 			}
 		}
 
@@ -302,7 +302,7 @@ func pyProtoAuxInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData,
 	return closure
 }
 
-func py3ccToolRefs(ctx *genCtx, instance ModuleInstance) (NodeRef, NodeRef, VFS, VFS) {
+func py3ccToolRefs(ctx *GenCtx, instance ModuleInstance) (NodeRef, NodeRef, VFS, VFS) {
 	py3ccRef, py3ccBinary := ctx.tool(argToolsPy3cc)
 	py3ccSlowRef, py3ccSlowBin := ctx.tool(argToolsPy3ccSlow)
 	return py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin
@@ -339,16 +339,16 @@ func protoResourceHash(items []string, modulePath, moduleTag string) string {
 //
 // Built once per module proto context (newPBModuleEmission) and referenced as
 // chunks by every PB node of that context.
-type pbArgBlocks struct {
+type PbArgBlocks struct {
 	head []STR
 	mid  []STR
 	tail []STR
 }
 
-func composePBArgBlocks(tc moduleToolchain, protocBinary, cppStyleguideBinary, grpcCppBinary VFS,
+func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, grpcCppBinary VFS,
 	grpc bool, moduleTag STR, cppOutRoot string, duplicateOutputRootInclude, liteHeaders bool,
-	extraProtocFlags []ARG, extraPlugins []resolvedCPPProtoPlugin,
-	peerProtoAddIncl []VFS, protoNamespaceTail []VFS) *pbArgBlocks {
+	extraProtocFlags []ARG, extraPlugins []ResolvedCPPProtoPlugin,
+	peerProtoAddIncl []VFS, protoNamespaceTail []VFS) *PbArgBlocks {
 	head := []STR{
 		tc.Python3,
 		internStr(pbWrapperPath),
@@ -442,5 +442,5 @@ func composePBArgBlocks(tc moduleToolchain, protocBinary, cppStyleguideBinary, g
 		}
 	}
 
-	return &pbArgBlocks{head: head, mid: mid, tail: tail}
+	return &PbArgBlocks{head: head, mid: mid, tail: tail}
 }

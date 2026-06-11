@@ -5,19 +5,19 @@ import (
 	"strings"
 )
 
-func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) []*sourceEmit {
+func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []*SourceEmit {
 	if len(d.checkConfigHeaders) == 0 {
 		return nil
 	}
 
-	out := make([]*sourceEmit, 0, len(d.checkConfigHeaders))
+	out := make([]*SourceEmit, 0, len(d.checkConfigHeaders))
 
 	for _, conf := range d.checkConfigHeaders {
 		confBase := strings.TrimSuffix(path.Base(conf), path.Ext(conf))
 		generated := confBase + ".config.cpp"
-		generatedVFS := Build(instance.Path.Rel() + "/" + generated)
+		generatedVFS := Build(instance.Path.rel() + "/" + generated)
 
-		confVFS := Source(instance.Path.Rel() + "/" + conf)
+		confVFS := Source(instance.Path.rel() + "/" + conf)
 		// The walk window leads with confVFS itself — no separate prepend.
 		inputs := []VFS{buildScriptsCheckConfigHPy}
 		inputs = append(inputs, walkClosure(ctx, instance, confVFS, in)...)
@@ -27,25 +27,25 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 		chRef, ok := ctx.checkConfigOutputs[generatedVFS]
 
 		if !ok {
-			chRef = ctx.emit.Emit(&Node{
+			chRef = ctx.emit.emit(&Node{
 				Platform: instance.Platform,
 				Cmds: []Cmd{
 					{
-						CmdArgs: argChunks{[]STR{
+						CmdArgs: ArgChunks{[]STR{
 							d.tc.Python3,
 							argSBuildScriptsCheckConfigHPy.str(),
-							internStr(instance.Path.Rel() + "/" + conf),
+							internStr(instance.Path.rel() + "/" + conf),
 							(generatedVFS).str(),
 						}},
 						Env: env,
 					},
 				},
 				Env:              env,
-				Inputs:           inputChunks{inputs},
+				Inputs:           InputChunks{inputs},
 				Outputs:          []VFS{generatedVFS},
 				KV:               KV{P: pkCH, PC: pcYellow},
 				Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-				TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
+				TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 				usesResources:    []string{resourcePatternYMakePython3},
 			})
 			ctx.checkConfigOutputs[generatedVFS] = chRef
@@ -57,7 +57,7 @@ func emitCheckConfigH(ctx *genCtx, instance ModuleInstance, d *moduleData, in Mo
 		ccIn.IncludeInputs = append([]VFS{generatedVFS}, inputs...)
 
 		ccRef, ccOut, _ := EmitCC(instance, generated, generatedVFS, ccIn, ctx.host, ctx.emit)
-		out = append(out, &sourceEmit{Ref: ccRef, OutPath: ccOut})
+		out = append(out, &SourceEmit{Ref: ccRef, OutPath: ccOut})
 	}
 
 	return out

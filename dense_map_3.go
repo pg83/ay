@@ -4,7 +4,7 @@ package main
 
 // denseRow3 holds one 1-based slot per value column of a DenseMap3 row;
 // a slot of 0 means that column is unset for the key.
-type denseRow3 struct {
+type DenseRow3 struct {
 	i1, i2, i3 uint32
 }
 
@@ -16,7 +16,7 @@ type denseRow3 struct {
 // the rationale versus N separate DenseMaps or a DenseMap of a struct.
 type DenseMap3[K ~uint32, V1, V2, V3 any] struct {
 	idx   []uint32
-	rows  []denseRow3
+	rows  []DenseRow3
 	vals1 []V1
 	vals2 []V2
 	vals3 []V3
@@ -40,11 +40,11 @@ func (m *DenseMap3[K, V1, V2, V3]) ensureRow(k K) uint32 {
 	}
 
 	if len(m.rows) == 0 {
-		m.rows = append(m.rows, denseRow3{}) // reserve slot 0 as the absent sentinel
+		m.rows = append(m.rows, DenseRow3{}) // reserve slot 0 as the absent sentinel
 	}
 
 	m.growIdx(int(k))
-	m.rows = append(m.rows, denseRow3{})
+	m.rows = append(m.rows, DenseRow3{})
 	slot := uint32(len(m.rows) - 1)
 	m.idx[k] = slot
 
@@ -68,7 +68,7 @@ func (m *DenseMap3[K, V1, V2, V3]) growIdx(k int) {
 }
 
 // Get1 returns column 1's value for k and whether that column is present.
-func (m *DenseMap3[K, V1, V2, V3]) Get1(k K) (V1, bool) {
+func (m *DenseMap3[K, V1, V2, V3]) get1(k K) (V1, bool) {
 	if slot := m.rowSlot(k); slot != 0 {
 		if vi := m.rows[slot].i1; vi != 0 {
 			return m.vals1[vi], true
@@ -81,7 +81,7 @@ func (m *DenseMap3[K, V1, V2, V3]) Get1(k K) (V1, bool) {
 }
 
 // Put1 sets column 1's value for k.
-func (m *DenseMap3[K, V1, V2, V3]) Put1(k K, v V1) {
+func (m *DenseMap3[K, V1, V2, V3]) put1(k K, v V1) {
 	slot := m.ensureRow(k)
 
 	if vi := m.rows[slot].i1; vi != 0 {
@@ -99,7 +99,7 @@ func (m *DenseMap3[K, V1, V2, V3]) Put1(k K, v V1) {
 }
 
 // Get2 returns column 2's value for k and whether that column is present.
-func (m *DenseMap3[K, V1, V2, V3]) Get2(k K) (V2, bool) {
+func (m *DenseMap3[K, V1, V2, V3]) get2(k K) (V2, bool) {
 	if slot := m.rowSlot(k); slot != 0 {
 		if vi := m.rows[slot].i2; vi != 0 {
 			return m.vals2[vi], true
@@ -112,7 +112,7 @@ func (m *DenseMap3[K, V1, V2, V3]) Get2(k K) (V2, bool) {
 }
 
 // Put2 sets column 2's value for k.
-func (m *DenseMap3[K, V1, V2, V3]) Put2(k K, v V2) {
+func (m *DenseMap3[K, V1, V2, V3]) put2(k K, v V2) {
 	slot := m.ensureRow(k)
 
 	if vi := m.rows[slot].i2; vi != 0 {
@@ -130,7 +130,7 @@ func (m *DenseMap3[K, V1, V2, V3]) Put2(k K, v V2) {
 }
 
 // Get3 returns column 3's value for k and whether that column is present.
-func (m *DenseMap3[K, V1, V2, V3]) Get3(k K) (V3, bool) {
+func (m *DenseMap3[K, V1, V2, V3]) get3(k K) (V3, bool) {
 	if slot := m.rowSlot(k); slot != 0 {
 		if vi := m.rows[slot].i3; vi != 0 {
 			return m.vals3[vi], true
@@ -143,7 +143,7 @@ func (m *DenseMap3[K, V1, V2, V3]) Get3(k K) (V3, bool) {
 }
 
 // Put3 sets column 3's value for k.
-func (m *DenseMap3[K, V1, V2, V3]) Put3(k K, v V3) {
+func (m *DenseMap3[K, V1, V2, V3]) put3(k K, v V3) {
 	slot := m.ensureRow(k)
 
 	if vi := m.rows[slot].i3; vi != 0 {

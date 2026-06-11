@@ -38,7 +38,7 @@ func internAppend(s string, lo uint64) STR {
 func internStr(s string) STR {
 	h := xxh3.HashString128(s)
 
-	if p := internTable.ids.Get(h.Hi); p != nil {
+	if p := internTable.ids.get(h.Hi); p != nil {
 		if internTable.los[*p] == h.Lo {
 			return *p
 		}
@@ -56,7 +56,7 @@ func internStr(s string) STR {
 	}
 
 	id := internAppend(s, h.Lo)
-	internTable.ids.Put(h.Hi, id)
+	internTable.ids.put(h.Hi, id)
 
 	return id
 }
@@ -64,7 +64,7 @@ func internStr(s string) STR {
 func internBytes(b []byte) STR {
 	h := xxh3.Hash128(b)
 
-	if p := internTable.ids.Get(h.Hi); p != nil {
+	if p := internTable.ids.get(h.Hi); p != nil {
 		if internTable.los[*p] == h.Lo {
 			return *p
 		}
@@ -80,7 +80,7 @@ func internBytes(b []byte) STR {
 	}
 
 	id := internAppend(string(b), h.Lo)
-	internTable.ids.Put(h.Hi, id)
+	internTable.ids.put(h.Hi, id)
 
 	return id
 }
@@ -114,7 +114,7 @@ func internStrs(ss []string) []STR {
 func interned(s string) *STR {
 	h := xxh3.HashString128(s)
 
-	if p := internTable.ids.Get(h.Hi); p != nil {
+	if p := internTable.ids.get(h.Hi); p != nil {
 		if internTable.los[*p] == h.Lo {
 			id := *p
 

@@ -8,7 +8,7 @@ import (
 func TestSwigParser_ImplicitIncludesOnRootSwg(t *testing.T) {
 	// A root .swg outside the swig library carries the implicit language
 	// runtimes as its own system directives (upstream AddImplicitIncludes).
-	set := swigIncludeDirectiveParser{}.Parse("mod/src.swg", []byte("%include \"local.i\"\n"))
+	set := SwigIncludeDirectiveParser{}.parse("mod/src.swg", []byte("%include \"local.i\"\n"))
 	local := set.bucket(parsedIncludesLocal)
 
 	want := []string{"swig.swg", "go.swg", "java.swg", "perl5.swg", "python.swg", "local.i"}
@@ -23,7 +23,7 @@ func TestSwigParser_ImplicitIncludesOnRootSwg(t *testing.T) {
 	}
 
 	// Library files get no implicit prefix.
-	libSet := swigIncludeDirectiveParser{}.Parse("contrib/tools/swig/Lib/python/python.swg", []byte("%include \"pyrun.swg\"\n"))
+	libSet := SwigIncludeDirectiveParser{}.parse("contrib/tools/swig/Lib/python/python.swg", []byte("%include \"pyrun.swg\"\n"))
 
 	if got := len(libSet.bucket(parsedIncludesLocal)); got != 1 {
 		t.Fatalf("Lib .swg directives = %d, want 1 (no implicit prefix)", got)
@@ -54,12 +54,12 @@ func TestCollectSwigInducedIncludes_DedupsAcrossClosure(t *testing.T) {
 		"contrib/tools/swig/Lib/python.swg": "%module python\n",
 	})
 
-	ctx := &genCtx{fs: fs, parsers: newIncludeParserManagerFS(fs, newSharedParseCache())}
+	ctx := &GenCtx{fs: fs, parsers: newIncludeParserManagerFS(fs, newSharedParseCache())}
 	// The closure files, hand-listed: collectSwigInducedIncludes runs after the
 	// walk has parsed them (here the parse-cache warms on first read).
 	closure := []VFS{Intern("$(S)/mod/local.i"), Intern("$(S)/mod/nested.i")}
 	got := collectSwigInducedIncludes(ctx, Intern("$(S)/mod/src.swg"), closure)
-	want := []includeDirective{
+	want := []IncludeDirective{
 		{kind: includeSystem, target: internStr("Python.h")},
 		{kind: includeQuoted, target: internStr("archive.h")},
 		{kind: includeSystem, target: internStr("jni.h")},

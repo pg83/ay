@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func copyFileAutoSourceVFS(modulePath string, d *moduleData, srcRel string) *VFS {
+func copyFileAutoSourceVFS(modulePath string, d *ModuleData, srcRel string) *VFS {
 	if d == nil || d.copyFileAutoOutputs == nil {
 		return nil
 	}
@@ -19,8 +19,8 @@ func copyFileAutoSourceVFS(modulePath string, d *moduleData, srcRel string) *VFS
 	return vfsPtr(copyFileOutputVFS(modulePath, entry.Dst))
 }
 
-func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, modulePath string, entry copyFileEntry) []includeDirective {
-	out := make([]includeDirective, 0, len(entry.OutputIncludes)+1)
+func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, modulePath string, entry CopyFileEntry) []IncludeDirective {
+	out := make([]IncludeDirective, 0, len(entry.OutputIncludes)+1)
 
 	if entry.Text {
 		// COPY_FILE(TEXT) substitutes the source's content into the dst and is
@@ -47,11 +47,11 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, modulePath string, e
 		// source node preserves that (e.g. a .cpp's `#include "foo.h"` resolves
 		// to the $(S) sibling, not the flat $(B) staging copy).
 		srcVFS := copyFileInputVFS(fs, modulePath, entry.Src)
-		out = append(out, includeDirective{kind: includeQuoted, target: internStr(srcVFS.Rel())})
+		out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(srcVFS.rel())})
 	}
 
 	for _, include := range entry.OutputIncludes {
-		out = append(out, includeDirective{
+		out = append(out, IncludeDirective{
 			kind:   includeQuoted,
 			target: internStr(copyFileIncludeTarget(modulePath, include)),
 		})
@@ -60,7 +60,7 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, modulePath string, e
 	return out
 }
 
-func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleInputs *ModuleCCInputs) {
+func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleInputs *ModuleCCInputs) {
 	scanner := ctx.scannerFor(instance)
 	reg := codegenRegForInstance(ctx, instance)
 
@@ -75,21 +75,21 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 	type entryReg struct {
 		srcVFS VFS
 		dstVFS VFS
-		parsed []includeDirective
+		parsed []IncludeDirective
 	}
 	entries := make([]entryReg, 0, len(d.copyFiles))
 
 	for _, entry := range d.copyFiles {
-		srcVFS := copyFileInputVFS(ctx.fs, instance.Path.Rel(), entry.Src)
-		dstVFS := copyFileOutputVFS(instance.Path.Rel(), entry.Dst)
-		parsed := copyFileParsedIncludes(scanner, ctx.fs, instance.Path.Rel(), entry)
+		srcVFS := copyFileInputVFS(ctx.fs, instance.Path.rel(), entry.Src)
+		dstVFS := copyFileOutputVFS(instance.Path.rel(), entry.Dst)
+		parsed := copyFileParsedIncludes(scanner, ctx.fs, instance.Path.rel(), entry)
 		entries = append(entries, entryReg{srcVFS, dstVFS, parsed})
 
 		if scanner != nil {
-			scanner.parsers.RegisterBuildParsedIncludes(dstVFS, parsed)
+			scanner.parsers.registerBuildParsedIncludes(dstVFS, parsed)
 		}
 
-		if reg != nil && reg.Lookup(dstVFS) == nil {
+		if reg != nil && reg.lookup(dstVFS) == nil {
 			info := &GeneratedFileInfo{
 				ProducerKvP: pkCP,
 				OutputPath:  dstVFS,
@@ -111,7 +111,7 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 				}
 			}
 
-			reg.Register(info)
+			reg.register(info)
 		}
 	}
 
@@ -144,7 +144,7 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 
 		// Promote the registration with the producer ref; SourcePath remains.
 		if reg != nil {
-			if info := reg.Lookup(dstVFS); info != nil {
+			if info := reg.lookup(dstVFS); info != nil {
 				info.ProducerRef = ref
 				info.HasProducerRef = true
 			}
@@ -152,24 +152,24 @@ func emitCopyFiles(ctx *genCtx, instance ModuleInstance, d *moduleData, moduleIn
 	}
 }
 
-func generatedModuleSourceVFS(ctx *genCtx, instance ModuleInstance, srcRel string) *VFS {
+func generatedModuleSourceVFS(ctx *GenCtx, instance ModuleInstance, srcRel string) *VFS {
 	reg := codegenRegForInstance(ctx, instance)
 
 	if reg == nil {
 		return nil
 	}
 
-	buildVFS := Build(filepath.ToSlash(filepath.Clean(instance.Path.Rel() + "/" + srcRel)))
+	buildVFS := Build(filepath.ToSlash(filepath.Clean(instance.Path.rel() + "/" + srcRel)))
 
-	if reg.Lookup(buildVFS) != nil {
+	if reg.lookup(buildVFS) != nil {
 		return vfsPtr(buildVFS)
 	}
 
 	return nil
 }
 
-func resolveModuleSourceVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, srcDirs []VFS) VFS {
-	if buildVFS := copyFileAutoSourceVFS(instance.Path.Rel(), d, srcRel); buildVFS != nil {
+func resolveModuleSourceVFS(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, srcDirs []VFS) VFS {
+	if buildVFS := copyFileAutoSourceVFS(instance.Path.rel(), d, srcRel); buildVFS != nil {
 		return *buildVFS
 	}
 

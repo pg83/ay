@@ -33,31 +33,31 @@ func TestFS_ExistsAndIsDir(t *testing.T) {
 
 	fs := NewFS(root)
 
-	if !fs.IsFile(dirKey(""), "a/b/c.txt") {
+	if !fs.isFile(dirKey(""), "a/b/c.txt") {
 		t.Errorf("c.txt should be a file")
 	}
-	if !fs.IsFile(dirKey(""), "top.txt") {
+	if !fs.isFile(dirKey(""), "top.txt") {
 		t.Errorf("top.txt should be a file")
 	}
-	if !fs.IsDir(dirKey(""), "a") {
+	if !fs.isDir(dirKey(""), "a") {
 		t.Errorf("a should be a dir")
 	}
-	if !fs.IsDir(dirKey(""), "a/b") {
+	if !fs.isDir(dirKey(""), "a/b") {
 		t.Errorf("a/b should be a dir")
 	}
-	if !fs.IsDir(dirKey(""), "") {
+	if !fs.isDir(dirKey(""), "") {
 		t.Errorf("root should be a dir")
 	}
-	if fs.IsFile(dirKey(""), "a") {
+	if fs.isFile(dirKey(""), "a") {
 		t.Errorf("a is a dir, not a file")
 	}
-	if fs.IsDir(dirKey(""), "a/b/c.txt") {
+	if fs.isDir(dirKey(""), "a/b/c.txt") {
 		t.Errorf("c.txt is a file, not a dir")
 	}
-	if fs.IsFile(dirKey(""), "a/b/missing") {
+	if fs.isFile(dirKey(""), "a/b/missing") {
 		t.Errorf("missing should not exist")
 	}
-	if fs.IsFile(dirKey(""), "totally/missing/path") {
+	if fs.isFile(dirKey(""), "totally/missing/path") {
 		t.Errorf("missing parent dir should not exist")
 	}
 }
@@ -72,13 +72,13 @@ func TestFS_ExistsRoutesThroughListdir(t *testing.T) {
 
 	fs := NewFS(root)
 
-	if !fs.IsFile(dirKey("d"), "a.txt") {
+	if !fs.isFile(dirKey("d"), "a.txt") {
 		t.Fatal("a missing")
 	}
-	if !fs.IsFile(dirKey("d"), "b.txt") {
+	if !fs.isFile(dirKey("d"), "b.txt") {
 		t.Fatal("b missing")
 	}
-	if !fs.IsFile(dirKey("d"), "c.txt") {
+	if !fs.isFile(dirKey("d"), "c.txt") {
 		t.Fatal("c missing")
 	}
 
@@ -95,10 +95,10 @@ func TestFS_ListdirCachesNegative(t *testing.T) {
 	root := t.TempDir()
 	fs := NewFS(root)
 
-	if fs.Listdir(dirKey("nope")) != nil {
+	if fs.listdir(dirKey("nope")) != nil {
 		t.Error("missing dir should return nil listdir")
 	}
-	if fs.Listdir(dirKey("nope")) != nil {
+	if fs.listdir(dirKey("nope")) != nil {
 		t.Error("missing dir should still return nil on cache hit")
 	}
 	stats := fs.perfStats()
@@ -114,12 +114,12 @@ func TestFS_Read(t *testing.T) {
 	})
 	fs := NewFS(root)
 
-	data := fs.Read("file.txt")
+	data := fs.read("file.txt")
 	if string(data) != "hello world" {
 		t.Errorf("got %q", string(data))
 	}
 
-	if exc := Try(func() { fs.Read("missing.txt") }); exc == nil {
+	if exc := Try(func() { fs.read("missing.txt") }); exc == nil {
 		t.Error("missing file should Throw")
 	}
 }
@@ -136,7 +136,7 @@ func TestFS_Walk(t *testing.T) {
 	fs := NewFS(root)
 
 	files := map[string]bool{}
-	fs.Walk("a", func(rel string, isDir bool) {
+	fs.walk("a", func(rel string, isDir bool) {
 		if !isDir {
 			files[rel] = true
 		}
@@ -182,24 +182,24 @@ var testParserFS = NewFS("/")
 // Exists from in-memory maps populated once at construction; no method ever
 // reads the OS. Tests should not mutate the returned *memFS (the package-
 // level newMemFS(nil) is shared across the whole suite).
-type memFS struct {
-	sourceRoot string
-	rootSlash  string
-	files      map[string][]byte
-	dirs       map[string]map[string]bool
+type MemFS struct {
+	srcRoot   string
+	rootSlash string
+	files     map[string][]byte
+	dirs      map[string]map[string]bool
 }
 
 // newMemFS builds a *memFS from a flat path→content map. Every intermediate
 // directory is materialised so Exists / IsDir / Listdir match what an osFS
 // rooted at a real tree with the same shape would return.
-func newMemFS(files map[string]string) *memFS {
+func newMemFS(files map[string]string) *MemFS {
 	const root = "/__fake_repo__"
 
-	fs := &memFS{
-		sourceRoot: root,
-		rootSlash:  root + "/",
-		files:      make(map[string][]byte, len(files)),
-		dirs:       map[string]map[string]bool{"": {}},
+	fs := &MemFS{
+		srcRoot:   root,
+		rootSlash: root + "/",
+		files:     make(map[string][]byte, len(files)),
+		dirs:      map[string]map[string]bool{"": {}},
 	}
 
 	addEntry := func(parent, name string, isDir bool) {
@@ -237,13 +237,13 @@ func newMemFS(files map[string]string) *memFS {
 	return fs
 }
 
-func (fs *memFS) SourceRoot() string { return fs.sourceRoot }
+func (fs *MemFS) sourceRoot() string { return fs.srcRoot }
 
-func (fs *memFS) Listdir(dir VFS) map[string]bool {
-	return fs.dirs[dir.Rel()]
+func (fs *MemFS) listdir(dir VFS) map[string]bool {
+	return fs.dirs[dir.rel()]
 }
 
-func (fs *memFS) existsRel(rel string) (present bool, isDir bool) {
+func (fs *MemFS) existsRel(rel string) (present bool, isDir bool) {
 	rel = normalisePath(cleanRel(rel))
 	if rel == "" {
 		return true, true
@@ -260,21 +260,21 @@ func (fs *memFS) existsRel(rel string) (present bool, isDir bool) {
 	return ok, isDir
 }
 
-func (fs *memFS) Exists(prefix VFS, suffix string) (present bool, isDir bool) {
-	return fs.existsRel(joinRel(prefix.Rel(), suffix))
+func (fs *MemFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
+	return fs.existsRel(joinRel(prefix.rel(), suffix))
 }
 
-func (fs *memFS) IsFile(prefix VFS, suffix string) bool {
-	p, d := fs.Exists(prefix, suffix)
+func (fs *MemFS) isFile(prefix VFS, suffix string) bool {
+	p, d := fs.exists(prefix, suffix)
 	return p && !d
 }
 
-func (fs *memFS) IsDir(prefix VFS, suffix string) bool {
-	p, d := fs.Exists(prefix, suffix)
+func (fs *MemFS) isDir(prefix VFS, suffix string) bool {
+	p, d := fs.exists(prefix, suffix)
 	return p && d
 }
 
-func (fs *memFS) Read(rel string) []byte {
+func (fs *MemFS) read(rel string) []byte {
 	data, ok := fs.files[cleanRel(rel)]
 	if !ok {
 		ThrowFmt("memFS: no such file %q", rel)
@@ -287,24 +287,24 @@ func (fs *memFS) Read(rel string) []byte {
 // in-memory tree (the shared test FS is never mutated). Fixtures are minimal, so a
 // file absent from the tree hashes to 0 rather than faulting — tests assert
 // structure, not exact uids.
-func (fs *memFS) ContentHash(v VFS) uint64 {
-	data, ok := fs.files[cleanRel(v.Rel())]
+func (fs *MemFS) contentHash(v VFS) uint64 {
+	data, ok := fs.files[cleanRel(v.rel())]
 	if !ok {
 		return 0
 	}
 	return xxh3.Hash(data)
 }
 
-func (fs *memFS) ReadAbs(absPath string) []byte {
-	return fs.Read(fs.relForAbs(absPath))
+func (fs *MemFS) readAbs(absPath string) []byte {
+	return fs.read(fs.relForAbs(absPath))
 }
 
-func (fs *memFS) ExistsAbs(absPath string) (present bool, isDir bool) {
+func (fs *MemFS) existsAbs(absPath string) (present bool, isDir bool) {
 	return fs.existsRel(fs.relForAbs(absPath))
 }
 
-func (fs *memFS) relForAbs(absPath string) string {
-	if absPath == fs.sourceRoot {
+func (fs *MemFS) relForAbs(absPath string) string {
+	if absPath == fs.srcRoot {
 		return ""
 	}
 
@@ -312,12 +312,12 @@ func (fs *memFS) relForAbs(absPath string) string {
 		return absPath[len(fs.rootSlash):]
 	}
 
-	ThrowFmt("memFS.relForAbs: %q outside source root %q", absPath, fs.sourceRoot)
+	ThrowFmt("memFS.relForAbs: %q outside source root %q", absPath, fs.srcRoot)
 
 	return ""
 }
 
-func (fs *memFS) Walk(rel string, visit func(rel string, isDir bool)) {
+func (fs *MemFS) walk(rel string, visit func(rel string, isDir bool)) {
 	rel = cleanRel(rel)
 
 	present, isDir := fs.existsRel(rel)
@@ -339,14 +339,14 @@ func (fs *memFS) Walk(rel string, visit func(rel string, isDir bool)) {
 	for name, childIsDir := range fs.dirs[rel] {
 		child := prefix + name
 		if childIsDir {
-			fs.Walk(child, visit)
+			fs.walk(child, visit)
 			continue
 		}
 		visit(child, false)
 	}
 }
 
-func (fs *memFS) perfStats() fsPerfStats { return fsPerfStats{} }
+func (fs *MemFS) perfStats() FsPerfStats { return FsPerfStats{} }
 
 // newTestScanner spins up a scanner backed by the given FS (typically a per-
 // test memFS). Each call yields a fresh scanner so per-test CodegenRegistry /
@@ -356,6 +356,6 @@ func newTestScanner(fs FS, sysincl SysInclSet) *IncludeScanner {
 		newIncludeParserManagerFS(fs, newSharedParseCache()),
 		sysincl,
 		func(Warn) {},
-		&tarjanCtx{},
+		&TarjanCtx{},
 	)
 }

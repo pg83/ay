@@ -117,7 +117,7 @@ func isDumpGraphStandaloneLLVMPRNode(node *Node, nodeID int, incoming []int) boo
 	}
 
 	for _, out := range node.Outputs {
-		if isCCSourceExt(out.Rel()) {
+		if isCCSourceExt(out.rel()) {
 			return false
 		}
 	}

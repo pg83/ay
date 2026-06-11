@@ -24,13 +24,13 @@ func internArg(s string) ARG {
 
 // internArgSTR interns an already-interned token STR into the ARG namespace.
 func internArgSTR(st STR) ARG {
-	if id, ok := argTable.ids.Get(st); ok {
+	if id, ok := argTable.ids.get(st); ok {
 		return ARG(id)
 	}
 
 	id := ARG(len(argTable.strs))
 	argTable.strs = append(argTable.strs, st)
-	argTable.ids.Put(st, uint32(id))
+	argTable.ids.put(st, uint32(id))
 
 	return id
 }

@@ -219,7 +219,7 @@ func noLibcBlock(p *Platform) []ARG {
 	return out
 }
 
-type compileFlagBundle struct {
+type CompileFlagBundle struct {
 	ArchArgs    []ARG
 	CFlags      []ARG
 	Defines     []ARG
@@ -284,16 +284,16 @@ func concatARG(parts ...[]ARG) []ARG {
 	return out
 }
 
-func compileFlagBundleFor(p *Platform) compileFlagBundle {
+func compileFlagBundleFor(p *Platform) CompileFlagBundle {
 	switch p.ISA {
 	case ISAX8664:
-		return compileFlagBundle{
+		return CompileFlagBundle{
 			CFlags:      p.CompileCFlags,
 			Defines:     hostDefines,
 			NoLibcBlock: noLibcBlock(p),
 		}
 	case ISAAArch64:
-		bundle := compileFlagBundle{
+		bundle := CompileFlagBundle{
 			CFlags:      p.CompileCFlags,
 			Defines:     commonDefines,
 			NoLibcBlock: noLibcBlock(p),
@@ -305,5 +305,5 @@ func compileFlagBundleFor(p *Platform) compileFlagBundle {
 	}
 
 	ThrowFmt("compileFlagBundleFor: unsupported platform ISA %q", p.ISA)
-	return compileFlagBundle{}
+	return CompileFlagBundle{}
 }

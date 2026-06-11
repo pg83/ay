@@ -48,16 +48,16 @@ type GeneratedFileInfo struct {
 	// output, without their own #includes being re-resolved per consuming module.
 	ClosureLeaves []VFS
 
-	DeferredCF *deferredCF
+	DeferredCF *DeferredCF
 }
 
-type deferredCF struct {
+type DeferredCF struct {
 	instance      ModuleInstance
 	srcVFS        VFS
 	outVFS        VFS
 	cfgVars       []string
 	includeInputs []VFS
-	tc            moduleToolchain
+	tc            ModuleToolchain
 }
 
 type CodegenRegistry struct {
@@ -104,17 +104,17 @@ func NewCodegenRegistry() *CodegenRegistry {
 	return &CodegenRegistry{bySplit: NewIntMap[*GeneratedFileInfo](1 << 14)}
 }
 
-func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
+func (r *CodegenRegistry) register(info *GeneratedFileInfo) {
 	full := STR(info.OutputPath.strID())
 
-	if existing, ok := r.byStr.Get(full); ok {
+	if existing, ok := r.byStr.get(full); ok {
 		ThrowFmt("CodegenRegistry: duplicate producer for %q (existing kind=%q, new kind=%q)",
 			info.OutputPath.String(), existing.ProducerKvP, info.ProducerKvP)
 	}
 
-	rel := info.OutputPath.Rel()
-	r.byStr.Put(full, info)
-	r.byStr.Put(internStr(rel), info)
+	rel := info.OutputPath.rel()
+	r.byStr.put(full, info)
+	r.byStr.put(internStr(rel), info)
 
 	for _, leaf := range info.ClosureLeaves {
 		r.leafEver.add(uint32(leaf))
@@ -128,36 +128,36 @@ func (r *CodegenRegistry) Register(info *GeneratedFileInfo) {
 }
 
 func (r *CodegenRegistry) putSplit(prefix, suffix STR, info *GeneratedFileInfo) {
-	r.bySplit.Put(splitKey(prefix, suffix), info)
+	r.bySplit.put(splitKey(prefix, suffix), info)
 	r.splitPrefixSeen.add(uint32(prefix)) // mark the prefix so LookupSplit can gate the probe
 }
 
-func (r *CodegenRegistry) Lookup(path VFS) *GeneratedFileInfo {
-	info, _ := r.byStr.Get(STR(path.strID()))
+func (r *CodegenRegistry) lookup(path VFS) *GeneratedFileInfo {
+	info, _ := r.byStr.get(STR(path.strID()))
 
 	return info
 }
 
-func (r *CodegenRegistry) LookupRel(rel string) *GeneratedFileInfo {
+func (r *CodegenRegistry) lookupRel(rel string) *GeneratedFileInfo {
 	id := interned(rel)
 
 	if id == nil {
 		return nil
 	}
 
-	info, _ := r.byStr.Get(*id)
+	info, _ := r.byStr.get(*id)
 
 	return info
 }
 
-func (r *CodegenRegistry) LookupSplit(prefix, suffix STR) *GeneratedFileInfo {
+func (r *CodegenRegistry) lookupSplit(prefix, suffix STR) *GeneratedFileInfo {
 	// Gate the uint64 hash-map probe on the dense prefix flag: most addincl
 	// prefixes hold no codegen split entry, so the array probe short-circuits.
 	if !r.splitPrefixSeen.has(uint32(prefix)) {
 		return nil
 	}
 
-	if info := r.bySplit.Get(splitKey(prefix, suffix)); info != nil {
+	if info := r.bySplit.get(splitKey(prefix, suffix)); info != nil {
 		return *info
 	}
 
@@ -167,8 +167,8 @@ func (r *CodegenRegistry) LookupSplit(prefix, suffix STR) *GeneratedFileInfo {
 // AddClosureLeaf appends leaf to node's GeneratedFileInfo.ClosureLeaves. node
 // must already be registered (the producer info exists). Cold path (codegen
 // registration); the scanner reads the result on the hot path via ClosureLeaves.
-func (r *CodegenRegistry) AddClosureLeaf(node, leaf VFS) {
-	info, ok := r.byStr.Get(STR(node.strID()))
+func (r *CodegenRegistry) addClosureLeaf(node, leaf VFS) {
+	info, ok := r.byStr.get(STR(node.strID()))
 
 	if !ok {
 		ThrowFmt("CodegenRegistry: AddClosureLeaf on unregistered path %q", node.String())
@@ -180,22 +180,22 @@ func (r *CodegenRegistry) AddClosureLeaf(node, leaf VFS) {
 
 // IsLeafEver reports whether v was ever registered as a ClosureLeaf — see the
 // leafEver field comment.
-func (r *CodegenRegistry) IsLeafEver(v VFS) bool {
+func (r *CodegenRegistry) isLeafEver(v VFS) bool {
 	return r.leafEver.has(uint32(v))
 }
 
 // ClosureLeaves returns the non-expanded closure-window members of node (nil
 // when node is not a registered output or has none).
-func (r *CodegenRegistry) ClosureLeaves(node VFS) []VFS {
-	if info, ok := r.byStr.Get(STR(node.strID())); ok {
+func (r *CodegenRegistry) closureLeaves(node VFS) []VFS {
+	if info, ok := r.byStr.get(STR(node.strID())); ok {
 		return info.ClosureLeaves
 	}
 
 	return nil
 }
 
-func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
-	info, ok := r.byStr.Get(STR(path.strID()))
+func (r *CodegenRegistry) setProducerRef(path VFS, ref NodeRef) {
+	info, ok := r.byStr.get(STR(path.strID()))
 
 	if !ok {
 		ThrowFmt("CodegenRegistry: SetProducerRef on unregistered path %q", path.String())
@@ -210,12 +210,12 @@ func (r *CodegenRegistry) SetProducerRef(path VFS, ref NodeRef) {
 	info.HasProducerRef = true
 }
 
-func (r *CodegenRegistry) SetSourceInputs(path VFS, src []VFS) {
+func (r *CodegenRegistry) setSourceInputs(path VFS, src []VFS) {
 	if len(src) == 0 {
 		return
 	}
 
-	info, ok := r.byStr.Get(STR(path.strID()))
+	info, ok := r.byStr.get(STR(path.strID()))
 
 	if !ok {
 		ThrowFmt("CodegenRegistry: SetSourceInputs on unregistered path %q", path.String())
@@ -224,11 +224,11 @@ func (r *CodegenRegistry) SetSourceInputs(path VFS, src []VFS) {
 	info.SourceInputs = src
 }
 
-func registerGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind ProcKind, output VFS, parsed []includeDirective, generatorRefs []NodeRef) {
+func registerGeneratedParsedOutput(ctx *GenCtx, instance ModuleInstance, kind ProcKind, output VFS, parsed []IncludeDirective, generatorRefs []NodeRef) {
 	reg := codegenRegForInstance(ctx, instance)
 
 	if reg != nil {
-		reg.Register(&GeneratedFileInfo{
+		reg.register(&GeneratedFileInfo{
 			ProducerKvP:   kind,
 			OutputPath:    output,
 			GeneratorRefs: generatorRefs,
@@ -238,15 +238,15 @@ func registerGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind Pr
 	scanner := ctx.scannerFor(instance)
 
 	if scanner != nil {
-		scanner.parsers.RegisterBuildParsedIncludes(output, parsed)
+		scanner.parsers.registerBuildParsedIncludes(output, parsed)
 	}
 }
 
-func registerDeferredCF(ctx *genCtx, instance ModuleInstance, output VFS, parsed []includeDirective, def *deferredCF) {
+func registerDeferredCF(ctx *GenCtx, instance ModuleInstance, output VFS, parsed []IncludeDirective, def *DeferredCF) {
 	reg := codegenRegForInstance(ctx, instance)
 
 	if reg != nil {
-		reg.Register(&GeneratedFileInfo{
+		reg.register(&GeneratedFileInfo{
 			ProducerKvP: pkCF,
 			OutputPath:  output,
 			DeferredCF:  def,
@@ -256,21 +256,21 @@ func registerDeferredCF(ctx *genCtx, instance ModuleInstance, output VFS, parsed
 	scanner := ctx.scannerFor(instance)
 
 	if scanner != nil {
-		scanner.parsers.RegisterBuildParsedIncludes(output, parsed)
+		scanner.parsers.registerBuildParsedIncludes(output, parsed)
 	}
 }
 
-func bindGeneratedOutput(ctx *genCtx, instance ModuleInstance, output VFS, ref NodeRef) {
+func bindGeneratedOutput(ctx *GenCtx, instance ModuleInstance, output VFS, ref NodeRef) {
 	reg := codegenRegForInstance(ctx, instance)
 
 	if reg == nil {
 		return
 	}
 
-	reg.SetProducerRef(output, ref)
+	reg.setProducerRef(output, ref)
 }
 
-func registerBoundGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, kind ProcKind, output VFS, parsed []includeDirective, ref NodeRef, generatorRefs []NodeRef) {
+func registerBoundGeneratedParsedOutput(ctx *GenCtx, instance ModuleInstance, kind ProcKind, output VFS, parsed []IncludeDirective, ref NodeRef, generatorRefs []NodeRef) {
 	registerBoundGeneratedParsedOutputWithSource(ctx, instance, kind, output, 0, parsed, ref, generatorRefs)
 }
 
@@ -280,11 +280,11 @@ func registerBoundGeneratedParsedOutput(ctx *genCtx, instance ModuleInstance, ki
 // to fall back to OutputPath as the canonical edge. generatorRefs are the codegen
 // tools whose INDUCED_DEPS the scanner mixes into this output's closure (nil when
 // the producer has no induced-deps tool).
-func registerBoundGeneratedParsedOutputWithSource(ctx *genCtx, instance ModuleInstance, kind ProcKind, output VFS, sourcePath VFS, parsed []includeDirective, ref NodeRef, generatorRefs []NodeRef) {
+func registerBoundGeneratedParsedOutputWithSource(ctx *GenCtx, instance ModuleInstance, kind ProcKind, output VFS, sourcePath VFS, parsed []IncludeDirective, ref NodeRef, generatorRefs []NodeRef) {
 	reg := codegenRegForInstance(ctx, instance)
 
 	if reg != nil {
-		reg.Register(&GeneratedFileInfo{
+		reg.register(&GeneratedFileInfo{
 			ProducerKvP:    kind,
 			OutputPath:     output,
 			SourcePath:     sourcePath,
@@ -297,15 +297,15 @@ func registerBoundGeneratedParsedOutputWithSource(ctx *genCtx, instance ModuleIn
 	scanner := ctx.scannerFor(instance)
 
 	if scanner != nil {
-		scanner.parsers.RegisterBuildParsedIncludes(output, parsed)
+		scanner.parsers.registerBuildParsedIncludes(output, parsed)
 	}
 }
 
-func generatedOutputClosure(ctx *genCtx, instance ModuleInstance, output VFS, in ModuleCCInputs) []VFS {
+func generatedOutputClosure(ctx *GenCtx, instance ModuleInstance, output VFS, in ModuleCCInputs) []VFS {
 	return walkClosureTail(ctx, instance, output, in)
 }
 
-func codegenRegForInstance(ctx *genCtx, instance ModuleInstance) *CodegenRegistry {
+func codegenRegForInstance(ctx *GenCtx, instance ModuleInstance) *CodegenRegistry {
 	sc := ctx.scannerFor(instance)
 
 	if sc == nil {

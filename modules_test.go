@@ -8,7 +8,7 @@ import (
 
 func TestApplyUnknownStmt_ExcludeTagsAcceptsTagNames(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
-	d := &moduleData{}
+	d := &ModuleData{}
 
 	// EXCLUDE_TAGS args are submodule tag names (data), not service-keywords
 	// that split the arg list, so the audit must not reject an unmodelled one.
@@ -35,7 +35,7 @@ func TestApplyUnknownStmt_AddInclSelf(t *testing.T) {
 
 	// ADDINCLSELF() adds -I<own source dir> (ymake.core.conf:3177:
 	// ADDINCL += ${MODDIR}). It must resolve to Source(<modulePath>).
-	d := &moduleData{}
+	d := &ModuleData{}
 	applyUnknownStmt("contrib/libs/foo", &UnknownStmt{Name: internTok("ADDINCLSELF")}, d, env)
 
 	want := Source("contrib/libs/foo")
@@ -52,7 +52,7 @@ func TestApplyUnknownStmt_AddInclSelf(t *testing.T) {
 	}
 
 	// ADDINCLSELF(FOR cython) routes the own dir to the cython bucket.
-	dc := &moduleData{}
+	dc := &ModuleData{}
 	applyUnknownStmt("contrib/libs/bar", &UnknownStmt{Name: internTok("ADDINCLSELF"), Args: []string{"FOR", "cython"}}, dc, env)
 
 	if len(dc.cythonAddIncl) != 1 || dc.cythonAddIncl[0] != Source("contrib/libs/bar") {
@@ -64,7 +64,7 @@ func TestApplyUnknownStmt_LLVMBCRequiresConfiguredVersion(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
 
 	err := Try(func() {
-		applyUnknownStmt("mod", &UnknownStmt{Name: tokLlvmBc, Args: []string{"src.cpp", "generated.cpp"}}, &moduleData{}, env)
+		applyUnknownStmt("mod", &UnknownStmt{Name: tokLlvmBc, Args: []string{"src.cpp", "generated.cpp"}}, &ModuleData{}, env)
 	})
 	if err == nil {
 		t.Fatal("applyUnknownStmt unexpectedly accepted LLVM_BC without USE_LLVM_BC*")
@@ -116,7 +116,7 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 
 			platform := NewPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "", "")
 			env := buildIfEnv(ModuleInstance{Platform: platform})
-			data := &moduleData{}
+			data := &ModuleData{}
 
 			applyUnknownStmt("mod", &UnknownStmt{Name: internTok(tt.useMacro)}, data, env)
 			// CLANG_BC_ROOT holds the deferred "$<NAME>_RESOURCE_GLOBAL" reference;
@@ -146,8 +146,8 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 
 func TestExpandStmtToken_SetVar(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
-	env.SetFromString(envMODDIR, "mymod")
-	env.SetFromString(envORIG_SRC_DIR, "$(S)/mylib/src")
+	env.setFromString(envMODDIR, "mymod")
+	env.setFromString(envORIG_SRC_DIR, "$(S)/mylib/src")
 
 	got := expandStmtToken("${ORIG_SRC_DIR}", env)
 	if got != "$(S)/mylib/src" {
@@ -159,7 +159,7 @@ func TestExpandStmtToken_SetVar(t *testing.T) {
 		t.Fatalf("expandStmtToken(${UNKNOWN_VAR}) = %q, want ${UNKNOWN_VAR} (no change)", got)
 	}
 
-	env.SetFromString(envSRCDIR_RAW, "${ARCADIA_ROOT}/some/path")
+	env.setFromString(envSRCDIR_RAW, "${ARCADIA_ROOT}/some/path")
 	got = expandStmtToken("${SRCDIR_RAW}", env)
 	if got != "$(S)/some/path" {
 		t.Fatalf("expandConfigString with raw ARCADIA_ROOT in SET = %q, want $(S)/some/path", got)
@@ -179,7 +179,7 @@ func TestPrEmitsIncludes_OutputIncludesVFSPrefixStripped(t *testing.T) {
 	for _, c := range cases {
 		got := c.input
 		if vfsHasPrefix(c.input) {
-			got = Intern(c.input).Rel()
+			got = Intern(c.input).rel()
 		}
 		if got != c.want {
 			t.Errorf("VFS prefix strip(%q) = %q, want %q", c.input, got, c.want)
@@ -214,10 +214,10 @@ func TestCopyFileInputVFS_ResolvesSourceRootPaths(t *testing.T) {
 // fixpoint by construction.
 
 func expandTestEnv(bindings map[string]string) Environment {
-	env := DefaultIfEnv.Clone()
+	env := DefaultIfEnv.clone()
 
 	for k, v := range bindings {
-		env.SetString(internEnv(k), v)
+		env.setString(internEnv(k), v)
 	}
 
 	return env
@@ -324,7 +324,7 @@ func TestCollectModule_PySrcsExpandsSetList(t *testing.T) {
 		t.Fatalf("Parse: %v", err)
 	}
 
-	d := collectModule(newIncludeParserManagerFS(newMemFS(nil), newSharedParseCache()), &deDuper{}, "mod", KindLib,
+	d := collectModule(newIncludeParserManagerFS(newMemFS(nil), newSharedParseCache()), &DeDuper{}, "mod", KindLib,
 		mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("mod"), Kind: KindLib, Platform: testTargetP}))
 
 	if !equalStrings(d.pySrcs, []string{"a.py", "b.py"}) {
@@ -337,7 +337,7 @@ func TestExpandConfigVFSPaths_SplitsSetList(t *testing.T) {
 	// VFS per dir (bdb: src + src/dbinc + …), via the same expandStmtTokens
 	// primitive the typed-macro args use — not a single path with embedded spaces.
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
-	env.SetFromString(internEnv("DIRS"), "contrib/deprecated/bdb/src contrib/deprecated/bdb/src/dbinc")
+	env.setFromString(internEnv("DIRS"), "contrib/deprecated/bdb/src contrib/deprecated/bdb/src/dbinc")
 
 	got := expandConfigVFSPaths([]string{"${DIRS}"}, env)
 	want := []VFS{Source("contrib/deprecated/bdb/src"), Source("contrib/deprecated/bdb/src/dbinc")}

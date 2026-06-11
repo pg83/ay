@@ -16,13 +16,13 @@ package main
 // table, the sole caller, absorbs a 0 hi-hash through its lo-verify + exact
 // string overflow, so it never reaches IntMap with key 0.
 type IntMap[V any] struct {
-	data     []intMapEntry[V]
+	data     []IntMapEntry[V]
 	mask     uint64
 	count    int // number of stored keys
 	resizeAt int // grow once count reaches this
 }
 
-type intMapEntry[V any] struct {
+type IntMapEntry[V any] struct {
 	k uint64
 	v V
 }
@@ -52,7 +52,7 @@ func NewIntMap[V any](hint int) *IntMap[V] {
 }
 
 func (m *IntMap[V]) alloc(capacity int) {
-	m.data = make([]intMapEntry[V], capacity)
+	m.data = make([]IntMapEntry[V], capacity)
 	m.mask = uint64(capacity - 1)
 	m.resizeAt = capacity * intMapFillNum / intMapFillDen
 }
@@ -62,7 +62,7 @@ func (m *IntMap[V]) alloc(capacity int) {
 // miss and copying V on a hit — which matters when V is large. The pointer is
 // valid only until the next mutating call (Put/Cell may grow and move the
 // backing array).
-func (m *IntMap[V]) Get(k uint64) *V {
+func (m *IntMap[V]) get(k uint64) *V {
 	for i := k & m.mask; ; i = (i + 1) & m.mask {
 		switch m.data[i].k {
 		case k:
@@ -80,7 +80,7 @@ func (m *IntMap[V]) Get(k uint64) *V {
 // the returned pointer. The pointer is valid only for the caller's immediate
 // use: Cell grows the table *before* returning (so the returned cell is never in
 // a soon-to-be-reallocated array), but the next Put/Cell may move it.
-func (m *IntMap[V]) Cell(k uint64) (*V, bool) {
+func (m *IntMap[V]) cell(k uint64) (*V, bool) {
 	for {
 		i := k & m.mask
 
@@ -110,8 +110,8 @@ func (m *IntMap[V]) Cell(k uint64) (*V, bool) {
 }
 
 // Put inserts or overwrites the value for k.
-func (m *IntMap[V]) Put(k uint64, v V) {
-	cell, _ := m.Cell(k)
+func (m *IntMap[V]) put(k uint64, v V) {
+	cell, _ := m.cell(k)
 	*cell = v
 }
 
@@ -123,7 +123,7 @@ func (m *IntMap[V]) grow() {
 
 	for _, e := range old {
 		if e.k != 0 {
-			m.Put(e.k, e.v)
+			m.put(e.k, e.v)
 		}
 	}
 }

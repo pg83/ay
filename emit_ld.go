@@ -50,9 +50,9 @@ func EmitLD(
 	wantsStrip bool,
 	wantsSplitDwarf bool,
 	programModuleTag STR,
-	tc moduleToolchain,
+	tc ModuleToolchain,
 	hostP *Platform,
-	scripts scriptDeps,
+	scripts ScriptDeps,
 	emit Emitter,
 ) NodeRef {
 	if len(ccRefs) != len(ccPaths) {
@@ -84,15 +84,15 @@ func EmitLD(
 	}
 
 	if binaryName == "" {
-		binaryName = lastPathComponent(instance.Path.Rel())
+		binaryName = lastPathComponent(instance.Path.rel())
 	}
 
-	binaryDir := instance.Path.Rel()
+	binaryDir := instance.Path.rel()
 
 	binPrefix := binaryDir + "/"
 	outputVFS := Build(binPrefix + binaryName)
 	vcsCVFS := Build(binPrefix + "__vcs_version__.c")
-	vcsOVFS := Build(binPrefix + "__vcs_version__.c" + instance.Platform.ObjectSuffix())
+	vcsOVFS := Build(binPrefix + "__vcs_version__.c" + instance.Platform.objectSuffix())
 
 	vcsCPath := vcsCVFS.String()
 	vcsOPath := vcsOVFS.String()
@@ -100,18 +100,18 @@ func EmitLD(
 
 	cmd0 := composeLDCmdVcsInfo(tc, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, tc, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings)
-	cmd2 := composeLDCmdLinkExe(instance.Platform, tc, instance.Path.Rel(), outputPath, vcsOPath, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, wantsStrip)
+	cmd2 := composeLDCmdLinkExe(instance.Platform, tc, instance.Path.rel(), outputPath, vcsOPath, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, wantsStrip)
 	cmd3 := composeLDCmdLinkOrCopy(tc, binaryDir, dynamicPaths...)
 	splitDwarfCmds := composeLDSplitDwarfCmds(tc, outputPath, wantsSplitDwarf)
 
 	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-	envFull := hostP.ToolEnv()
+	envFull := hostP.toolEnv()
 
 	cmds := []Cmd{
-		{CmdArgs: argChunks{cmd0}, Env: envVcsOnly},
-		{CmdArgs: argChunks{cmd1}, Env: envFull},
-		{CmdArgs: argChunks{cmd2}, Cwd: strB, Env: envFull},
-		{CmdArgs: argChunks{cmd3}, Env: envVcsOnly},
+		{CmdArgs: ArgChunks{cmd0}, Env: envVcsOnly},
+		{CmdArgs: ArgChunks{cmd1}, Env: envFull},
+		{CmdArgs: ArgChunks{cmd2}, Cwd: strB, Env: envFull},
+		{CmdArgs: ArgChunks{cmd3}, Env: envVcsOnly},
 	}
 
 	for i := range splitDwarfCmds {
@@ -120,7 +120,7 @@ func EmitLD(
 
 	cmds = append(cmds, splitDwarfCmds...)
 
-	inputs := composeLDInputs(instance.Path.Rel(), ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts)
+	inputs := composeLDInputs(instance.Path.rel(), ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts)
 
 	inputTail := make([]VFS, 0, 2)
 	inputTail = append(inputTail, ldSvnversionHVFS)
@@ -146,7 +146,7 @@ func EmitLD(
 	outputs := []VFS{outputVFS}
 
 	for _, p := range dynamicPaths {
-		outputs = append(outputs, Build(binaryDir+"/"+lastPathComponent(p.Rel())))
+		outputs = append(outputs, Build(binaryDir+"/"+lastPathComponent(p.rel())))
 	}
 
 	if wantsSplitDwarf {
@@ -170,15 +170,15 @@ func EmitLD(
 		n.TargetProperties.ModuleTag = programModuleTag
 	}
 
-	return emit.Emit(n)
+	return emit.emit(n)
 }
 
 func LDOutputPath(instance ModuleInstance, binaryName string) VFS {
 	if binaryName == "" {
-		binaryName = lastPathComponent(instance.Path.Rel())
+		binaryName = lastPathComponent(instance.Path.rel())
 	}
 
-	return Build(instance.Path.Rel() + "/" + binaryName)
+	return Build(instance.Path.rel() + "/" + binaryName)
 }
 
 func ldModuleLang(instance ModuleInstance) ModuleLang {
@@ -210,7 +210,7 @@ func emitVCSNode(emit Emitter, host *Platform) NodeRef {
 	output := bldVcsJson
 	node := &Node{
 		Platform: host,
-		Cmds: []Cmd{{CmdArgs: argChunks{[]STR{
+		Cmds: []Cmd{{CmdArgs: ArgChunks{[]STR{
 			internStr(currentYatoolPath()),
 			argFetch.str(),
 			strBase64,
@@ -227,10 +227,10 @@ func emitVCSNode(emit Emitter, host *Platform) NodeRef {
 	node.UID = resourceFetchUID("base64:vcs.json:e30=", output.String())
 	node.SelfUID = node.UID
 
-	return emit.Emit(node)
+	return emit.emit(node)
 }
 
-func composeLDCmdVcsInfo(tc moduleToolchain, vcsCPath string) []STR {
+func composeLDCmdVcsInfo(tc ModuleToolchain, vcsCPath string) []STR {
 	return []STR{
 		tc.Python3,
 		(ldVcsInfoVFS).str(),
@@ -240,7 +240,7 @@ func composeLDCmdVcsInfo(tc moduleToolchain, vcsCPath string) []STR {
 	}
 }
 
-func composeLDCmdVcsCompile(p *Platform, tc moduleToolchain, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ARG, noCompilerWarnings bool) []STR {
+func composeLDCmdVcsCompile(p *Platform, tc ModuleToolchain, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ARG, noCompilerWarnings bool) []STR {
 	bundle := compileFlagBundleFor(p)
 	cmdArgs := make([]STR, 0, 94+len(moduleCFlags)+len(peerCFlagsGlobal)+len(moduleScopeCFlags))
 	cmdArgs = append(cmdArgs, tc.CC, p.TargetArg)
@@ -271,7 +271,7 @@ func composeLDCmdVcsCompile(p *Platform, tc moduleToolchain, vcsCPath, vcsOPath 
 	return cmdArgs
 }
 
-func composeLDCmdLinkExe(p *Platform, tc moduleToolchain, modulePath, outputPath, vcsOPath string, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *string, wantsStrip bool) []STR {
+func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, modulePath, outputPath, vcsOPath string, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *string, wantsStrip bool) []STR {
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 16 + 1 + len(ccPaths) + len(peerLinkCmdPaths) + len(globalPaths) + len(objcopyPaths) + len(peerLDFlagsGlobal) + len(ownLDFlags) + len(ownRPathFlags) + len(peerRPathFlagsGlobal) + len(objAddLibsGlobal)
 
 	argCap += 2 + len(pluginPaths)
@@ -298,11 +298,11 @@ func composeLDCmdLinkExe(p *Platform, tc moduleToolchain, modulePath, outputPath
 	)
 
 	for _, p := range wholeArchiveCmdPaths {
-		cmdArgs = append(cmdArgs, argWholeArchiveLibs.str(), internStr(p.Rel()))
+		cmdArgs = append(cmdArgs, argWholeArchiveLibs.str(), internStr(p.rel()))
 	}
 
 	for _, p := range wholeArchivePaths {
-		cmdArgs = append(cmdArgs, argWholeArchiveLibs.str(), internStr(p.Rel()))
+		cmdArgs = append(cmdArgs, argWholeArchiveLibs.str(), internStr(p.rel()))
 	}
 
 	cmdArgs = append(cmdArgs,
@@ -314,7 +314,7 @@ func composeLDCmdLinkExe(p *Platform, tc moduleToolchain, modulePath, outputPath
 	)
 
 	for _, p := range globalPaths {
-		cmdArgs = append(cmdArgs, internStr(p.Rel()))
+		cmdArgs = append(cmdArgs, internStr(p.rel()))
 	}
 
 	cmdArgs = append(cmdArgs,
@@ -323,7 +323,7 @@ func composeLDCmdLinkExe(p *Platform, tc moduleToolchain, modulePath, outputPath
 	)
 
 	for _, op := range objcopyPaths {
-		cmdArgs = append(cmdArgs, internStr(op.Rel()))
+		cmdArgs = append(cmdArgs, internStr(op.rel()))
 	}
 
 	cmdArgs = append(cmdArgs, internStr(vcsOPath))
@@ -342,7 +342,7 @@ func composeLDCmdLinkExe(p *Platform, tc moduleToolchain, modulePath, outputPath
 	cmdArgs = append(cmdArgs, argWlStartGroup.str())
 
 	for _, p := range peerLinkCmdPaths {
-		cmdArgs = append(cmdArgs, internStr(p.Rel()))
+		cmdArgs = append(cmdArgs, internStr(p.rel()))
 	}
 
 	cmdArgs = append(cmdArgs, argWlEndGroup.str())
@@ -377,14 +377,14 @@ func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VF
 		trailer = append(trailer, (argFPIC).str())
 	}
 
-	trailer = appendInternStrs(trailer, p.LinkerSelectionGDBIndexFlags())
+	trailer = appendInternStrs(trailer, p.linkerSelectionGDBIndexFlags())
 	trailer = appendArgStr(trailer, peerRPathFlagsGlobal)
 
 	if p.PIC {
 		trailer = append(trailer, (argFPIC).str())
 	}
 
-	trailer = appendInternStrs(trailer, p.LinkerSelectionTailFlags())
+	trailer = appendInternStrs(trailer, p.linkerSelectionTailFlags())
 	trailer = appendArgStr(trailer, peerLDFlagsGlobal, ownLDFlags, objAddLibsGlobal)
 	trailer = append(trailer, p.SystemLibs...)
 
@@ -393,12 +393,12 @@ func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VF
 	}
 
 	trailer = append(trailer, argWlGcSections.str())
-	trailer = appendInternStrs(trailer, p.LinkerSelectionNoPieFlags())
+	trailer = appendInternStrs(trailer, p.linkerSelectionNoPieFlags())
 
 	return trailer
 }
 
-func composeLDCmdLinkOrCopy(tc moduleToolchain, modulePath string, dynamicPaths ...VFS) []STR {
+func composeLDCmdLinkOrCopy(tc ModuleToolchain, modulePath string, dynamicPaths ...VFS) []STR {
 	cmd := []STR{
 		tc.Python3,
 		(ldFsToolsVFS).str(),
@@ -415,7 +415,7 @@ func composeLDCmdLinkOrCopy(tc moduleToolchain, modulePath string, dynamicPaths 
 	return cmd
 }
 
-func composeLDSplitDwarfCmds(tc moduleToolchain, outputPath string, enabled bool) []Cmd {
+func composeLDSplitDwarfCmds(tc ModuleToolchain, outputPath string, enabled bool) []Cmd {
 	if !enabled {
 		return nil
 	}
@@ -423,14 +423,14 @@ func composeLDSplitDwarfCmds(tc moduleToolchain, outputPath string, enabled bool
 	debugPath := outputPath + ".debug"
 
 	return []Cmd{
-		{CmdArgs: argChunks{[]STR{tc.Objcopy, argOnlyKeepDebug.str(), internStr(outputPath), internStr(debugPath)}}},
-		{CmdArgs: argChunks{[]STR{tc.Strip, argStripDebug.str(), internStr(outputPath)}}},
-		{CmdArgs: argChunks{[]STR{tc.Objcopy, argRemoveSectionGnuDebuglink.str(), argAddGnuDebuglink.str(), internStr(debugPath), internStr(outputPath)}}},
+		{CmdArgs: ArgChunks{[]STR{tc.Objcopy, argOnlyKeepDebug.str(), internStr(outputPath), internStr(debugPath)}}},
+		{CmdArgs: ArgChunks{[]STR{tc.Strip, argStripDebug.str(), internStr(outputPath)}}},
+		{CmdArgs: ArgChunks{[]STR{tc.Objcopy, argRemoveSectionGnuDebuglink.str(), argAddGnuDebuglink.str(), internStr(debugPath), internStr(outputPath)}}},
 	}
 }
 
-func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts scriptDeps) inputChunks {
-	chunks := make(inputChunks, 0, 3+len(ldScriptInputs))
+func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts ScriptDeps) InputChunks {
+	chunks := make(InputChunks, 0, 3+len(ldScriptInputs))
 
 	// peerLibPaths is the caller's member slice, dup-free by construction (gen's
 	// peerArchive collection pass adds via deduper) — referenced as its own
@@ -440,7 +440,7 @@ func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, plugi
 
 	for _, p := range peerLibPaths {
 		if !deduper.add(p) {
-			ThrowFmt("composeLDInputs: %s: duplicate peer lib path %s", modulePath, p.Rel())
+			ThrowFmt("composeLDInputs: %s: duplicate peer lib path %s", modulePath, p.rel())
 		}
 	}
 
@@ -484,24 +484,24 @@ func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, plugi
 	return chunks
 }
 
-type ldPluginsResult struct {
+type LdPluginsResult struct {
 	Refs  []NodeRef
 	Paths []VFS
 }
 
-func emitOwnLDPlugins(ctx *genCtx, instance ModuleInstance, plugins []string, tc moduleToolchain) *ldPluginsResult {
+func emitOwnLDPlugins(ctx *GenCtx, instance ModuleInstance, plugins []string, tc ModuleToolchain) *LdPluginsResult {
 	if len(plugins) == 0 {
 		return nil
 	}
 
-	res := &ldPluginsResult{
+	res := &LdPluginsResult{
 		Refs:  make([]NodeRef, 0, len(plugins)),
 		Paths: make([]VFS, 0, len(plugins)),
 	}
 
 	for _, name := range plugins {
-		src := Source(instance.Path.Rel() + "/" + name)
-		dst := Build(instance.Path.Rel() + "/" + name + ".pyplugin")
+		src := Source(instance.Path.rel() + "/" + name)
+		dst := Build(instance.Path.rel() + "/" + name + ".pyplugin")
 
 		ref, ok := ctx.ldPluginCPCache[dst]
 

@@ -13,7 +13,7 @@ type ModuleCCInputs struct {
 	Flags   FlagSet
 	AddIncl []VFS
 
-	InclArgs inclArgMemo
+	InclArgs InclArgMemo
 
 	// CCBlocks points at the module-stable CC command-line spans, built ONCE
 	// when the module's ModuleCCInputs is assembled (composeCCModuleArgBlocks)
@@ -21,7 +21,7 @@ type ModuleCCInputs struct {
 	// an arg-relevant field (the cython paths touching AddIncl/CFlags) must
 	// rebuild it for their copy. nil: EmitCC composes locally (tests, ad-hoc
 	// emitters).
-	CCBlocks *ccModuleArgBlocks
+	CCBlocks *CcModuleArgBlocks
 
 	PeerAddInclGlobal []VFS
 	// PeerProtoAddInclGlobal is the _PROTO__INCLUDE chain for proto compiles
@@ -43,7 +43,7 @@ type ModuleCCInputs struct {
 	// when the walk ROOT itself has an unregistered extension (a swig .i
 	// source) — the caller knows the language, the extension does not. nil:
 	// walkClosure derives it from the root's registered parser.
-	RootParser includeDirectiveParser
+	RootParser IncludeDirectiveParser
 
 	// SrcDirs is the cumulative SRCDIR search path (directory VFS); index 0 is
 	// the module dir. resolveSourceVFS searches it (reverse); composeCCPaths
@@ -100,10 +100,10 @@ type ModuleCCInputs struct {
 	// TC is the module's tool-invocation paths, derived from the PEERDIR resource-global
 	// closure (d.tc). Threaded so every CC/codegen emitter takes its compiler / python /
 	// objcopy from the peer toolchain rather than ambient platform flags.
-	TC moduleToolchain
+	TC ModuleToolchain
 }
 
-func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS, inputChunks) {
+func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS, InputChunks) {
 	suffix := ".o"
 
 	if instance.Platform.PIC {
@@ -134,7 +134,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 
 	blocks := in.CCBlocks
 	inChunk := []STR{(inVFS).str()}
-	cmdArgs := make(argChunks, 0, 9)
+	cmdArgs := make(ArgChunks, 0, 9)
 
 	if len(instance.Platform.WrapccHead) > 0 {
 		cmdArgs = append(cmdArgs, instance.Platform.WrapccHead, inChunk, instance.Platform.WrapccTail)
@@ -163,7 +163,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 
 	cmdArgs = append(cmdArgs, inChunk)
 
-	env := hostP.ToolEnv()
+	env := hostP.toolEnv()
 
 	// Inputs are assembled as chunks — the include closure (a shared cached
 	// slice) is referenced, never copied. When the wrapcc.py compile wrapper is
@@ -173,7 +173,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 	wrap := len(instance.Platform.WrapccHead) > 0
 
 	// IncludeInputs is the full input window (root included) — see walkClosure.
-	allInputs := inputChunks{in.IncludeInputs}
+	allInputs := InputChunks{in.IncludeInputs}
 
 	if wrap {
 		allInputs = append(allInputs, wrapccPyChunk)
@@ -192,7 +192,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		Outputs: []VFS{outVFS},
 		KV:      KV{P: pkCC, PC: pcGreen},
 		TargetProperties: func() TargetProperties {
-			tp := TargetProperties{ModuleDir: instance.Path.Rel()}
+			tp := TargetProperties{ModuleDir: instance.Path.rel()}
 
 			if in.ModuleTag != 0 {
 				tp.ModuleTag = in.ModuleTag
@@ -210,7 +210,7 @@ func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		node.DepRefs = in.ExtraDepRefs
 	}
 
-	return emit.Emit(node), outVFS, allInputs
+	return emit.emit(node), outVFS, allInputs
 }
 
 func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, suffix string) (out, input VFS) {
@@ -220,11 +220,11 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	// path-cleans `..` / `.` segments, so SRCS(../foo.cpp) yields a
 	// normalised srcVFS.Rel() like commands/foo.cpp — the bare
 	// instance.Path+"/"+srcRel would still carry the unnormalised tail).
-	canon := filepath.ToSlash(filepath.Clean(instance.Path.Rel() + "/" + srcRel))
+	canon := filepath.ToSlash(filepath.Clean(instance.Path.rel() + "/" + srcRel))
 
-	if srcVFS.IsSource() && srcVFS.Rel() != canon {
-		outputRel := composeSrcDirOutputRel(instance.Path.Rel(), srcVFS.Rel())
-		out = Build(instance.Path.Rel() + "/" + outputRel + suffix)
+	if srcVFS.isSource() && srcVFS.rel() != canon {
+		outputRel := composeSrcDirOutputRel(instance.Path.rel(), srcVFS.rel())
+		out = Build(instance.Path.rel() + "/" + outputRel + suffix)
 		return out, input
 	}
 
@@ -233,12 +233,12 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	switch {
 	case in.FlatOutput:
 
-		outRel = instance.Path.Rel() + "/" + srcRel + suffix
+		outRel = instance.Path.rel() + "/" + srcRel + suffix
 	case strings.Contains(srcRel, "/"):
 
-		outRel = instance.Path.Rel() + "/" + normalizeDotDotSegments(srcRel) + suffix
+		outRel = instance.Path.rel() + "/" + normalizeDotDotSegments(srcRel) + suffix
 	default:
-		outRel = instance.Path.Rel() + "/" + srcRel + suffix
+		outRel = instance.Path.rel() + "/" + srcRel + suffix
 	}
 
 	return Build(outRel), input
@@ -382,7 +382,7 @@ func composePostCatboostBucket(preBucket []ARG) []ARG {
 	return out
 }
 
-func appendCompileFlagPipeline(cmdArgs []STR, bundle compileFlagBundle, warningBundle, defineBundle, preNoLibcExtras, moduleScopeCFlags, catboost []ARG) []STR {
+func appendCompileFlagPipeline(cmdArgs []STR, bundle CompileFlagBundle, warningBundle, defineBundle, preNoLibcExtras, moduleScopeCFlags, catboost []ARG) []STR {
 	return appendArgStr(cmdArgs, debugPrefixMapFlags, xclangDebugCompilationDir, bundle.CFlags, warningBundle, defineBundle, preNoLibcExtras, bundle.NoLibcBlock, catboost, moduleScopeCFlags, bundle.NoLibcBlock)
 }
 
@@ -396,7 +396,7 @@ func appendCompileFlagPipeline(cmdArgs []STR, bundle compileFlagBundle, warningB
 //	               std + own extras + flag buckets) + the builtin macro and
 //	               macro-prefix-map tail
 //	cPost:         the C-only own extras (positioned AFTER per-source flags)
-type ccModuleArgBlocks struct {
+type CcModuleArgBlocks struct {
 	cHead   []STR
 	cxxHead []STR
 	common  []STR
@@ -405,7 +405,7 @@ type ccModuleArgBlocks struct {
 	cPost   []STR
 }
 
-func composeCCModuleArgBlocks(p *Platform, in *ModuleCCInputs) *ccModuleArgBlocks {
+func composeCCModuleArgBlocks(p *Platform, in *ModuleCCInputs) *CcModuleArgBlocks {
 	bundle := compileFlagBundleFor(p)
 	warningBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
 	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(*in, p)
@@ -447,7 +447,7 @@ func composeCCModuleArgBlocks(p *Platform, in *ModuleCCInputs) *ccModuleArgBlock
 	cxxTail := appendCxxStdAndOwn(nil, true, in.Flags.NoCompilerWarnings, true, cxxOwnExtras)
 	cxxTail = appendArgStr(cxxTail, cxxBucket, catboost, composePostCatboostBucket(cxxBucket), builtinMacroDateTime, macroPrefixMapFlags)
 
-	return &ccModuleArgBlocks{
+	return &CcModuleArgBlocks{
 		cHead:   []STR{in.TC.CC},
 		cxxHead: []STR{in.TC.CXX},
 		common:  common,
@@ -457,7 +457,7 @@ func composeCCModuleArgBlocks(p *Platform, in *ModuleCCInputs) *ccModuleArgBlock
 	}
 }
 
-func appendAddIncl(cmdArgs []STR, addIncl []VFS, memo inclArgMemo) []STR {
+func appendAddIncl(cmdArgs []STR, addIncl []VFS, memo InclArgMemo) []STR {
 	for _, p := range addIncl {
 		cmdArgs = append(cmdArgs, memo.arg(p))
 	}
@@ -470,7 +470,7 @@ func appendAddIncl(cmdArgs []STR, addIncl []VFS, memo inclArgMemo) []STR {
 // backing DenseMap (a plain array probe instead of the hot map[VFS]string hash)
 // is owned by genCtx so further VFS-keyed value columns can share its idx array;
 // inclArgMemo just holds a pointer to it, so it stays copyable by value.
-type inclArgMemo struct {
+type InclArgMemo struct {
 	m *DenseMap[VFS, STR]
 }
 
@@ -478,13 +478,13 @@ type inclArgMemo struct {
 // code uses ctx.inclArgs (backed by ctx.inclArgValues); this is for tests that
 // emit CC/AS nodes without a genCtx.
 
-func (m inclArgMemo) arg(path VFS) STR {
-	if a, ok := m.m.Get(path); ok {
+func (m InclArgMemo) arg(path VFS) STR {
+	if a, ok := m.m.get(path); ok {
 		return a
 	}
 
 	a := internStr("-I" + path.String())
-	m.m.Put(path, a)
+	m.m.put(path, a)
 
 	return a
 }

@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS) {
+func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS) {
 	if len(d.antlrRuns) == 0 {
 		return nil, nil
 	}
@@ -36,12 +36,12 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 		}
 
 		for _, inTok := range run.INFiles {
-			vfs := copyFileInputVFS(ctx.fs, instance.Path.Rel(), inTok)
+			vfs := copyFileInputVFS(ctx.fs, instance.Path.rel(), inTok)
 			inVFSByToken[inTok] = vfs
 			inputs = append(inputs, vfs)
 
 			if reg != nil {
-				if info := reg.Lookup(vfs); info != nil && info.ProducerKvP == pkCF && info.SourcePath != 0 {
+				if info := reg.lookup(vfs); info != nil && info.ProducerKvP == pkCF && info.SourcePath != 0 {
 					appendCFExtra(info.SourcePath)
 					appendCFExtra(configureFilePyVFS)
 				}
@@ -54,13 +54,13 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 		outputs := make([]VFS, 0, len(run.OUTFiles)+len(run.OUTNoAutoFiles))
 
 		for _, outTok := range run.OUTFiles {
-			vfs := copyFileOutputVFS(instance.Path.Rel(), outTok)
+			vfs := copyFileOutputVFS(instance.Path.rel(), outTok)
 			outVFSByToken[outTok] = vfs
 			outputs = append(outputs, vfs)
 		}
 
 		for _, outTok := range run.OUTNoAutoFiles {
-			vfs := copyFileOutputVFS(instance.Path.Rel(), outTok)
+			vfs := copyFileOutputVFS(instance.Path.rel(), outTok)
 			outVFSByToken[outTok] = vfs
 			outputs = append(outputs, vfs)
 		}
@@ -83,7 +83,7 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			jvSourceInputs := make([]VFS, 0, len(inputs)+2)
 
 			for _, v := range inputs {
-				if v.IsSource() {
+				if v.isSource() {
 					jvSourceInputs = append(jvSourceInputs, v)
 				}
 			}
@@ -91,8 +91,8 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			jvSourceInputs = append(jvSourceInputs, stdout2stderrVFS, jarVFS)
 
 			for outTok, outVFS := range outVFSByToken {
-				registerBoundGeneratedParsedOutput(ctx, instance, pkJV, outVFS, antlrParsedIncludes(instance.Path.Rel(), run, outTok, outVFSByToken, inputs, jarVFS), jvRef, nil)
-				reg.SetSourceInputs(outVFS, jvSourceInputs)
+				registerBoundGeneratedParsedOutput(ctx, instance, pkJV, outVFS, antlrParsedIncludes(instance.Path.rel(), run, outTok, outVFSByToken, inputs, jarVFS), jvRef, nil)
+				reg.setSourceInputs(outVFS, jvSourceInputs)
 			}
 		}
 
@@ -106,7 +106,7 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			}
 
 			outVFS := outVFSByToken[outTok]
-			cppRel := antlrOutputModuleRel(instance.Path.Rel(), outVFS)
+			cppRel := antlrOutputModuleRel(instance.Path.rel(), outVFS)
 			ccRef, ccOut := emitCodegenDownstreamCC(ctx, instance, cppRel, []NodeRef{jvRef}, *consumerInputs)
 			ccRefs = append(ccRefs, ccRef)
 			ccOutputs = append(ccOutputs, ccOut)
@@ -116,17 +116,17 @@ func emitAntlrRuns(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 	return ccRefs, ccOutputs
 }
 
-func antlrRunCmdArgs(instance ModuleInstance, run antlrRunInfo, inVFSByToken, outVFSByToken map[string]VFS) []string {
+func antlrRunCmdArgs(instance ModuleInstance, run AntlrRunInfo, inVFSByToken, outVFSByToken map[string]VFS) []string {
 	args := make([]string, 0, len(run.Args))
 
 	for _, a := range run.Args {
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
 		a = strings.ReplaceAll(a, "${ARCADIA_BUILD_ROOT}", "$(B)")
 		a = strings.ReplaceAll(a, "${CURDIR}", instance.Path.String())
-		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path.Rel()).String())
-		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path.Rel())
+		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path.rel()).String())
+		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path.rel())
 		a = strings.ReplaceAll(a, "$CURDIR", instance.Path.String())
-		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path.Rel()).String())
+		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path.rel()).String())
 
 		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = vfs.String()
@@ -140,8 +140,8 @@ func antlrRunCmdArgs(instance ModuleInstance, run antlrRunInfo, inVFSByToken, ou
 	return args
 }
 
-func antlrParsedIncludes(modulePath string, run antlrRunInfo, outTok string, outVFSByToken map[string]VFS, inputs []VFS, jarVFS VFS) []includeDirective {
-	var parsed []includeDirective
+func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, outVFSByToken map[string]VFS, inputs []VFS, jarVFS VFS) []IncludeDirective {
+	var parsed []IncludeDirective
 	seen := map[string]struct{}{}
 	appendUnique := func(target string) {
 		if target == "" {
@@ -153,7 +153,7 @@ func antlrParsedIncludes(modulePath string, run antlrRunInfo, outTok string, out
 		}
 
 		seen[target] = struct{}{}
-		parsed = append(parsed, includeDirective{kind: includeQuoted, target: internStr(target)})
+		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(target)})
 	}
 
 	if isCCSourceExt(outTok) {
@@ -168,7 +168,7 @@ func antlrParsedIncludes(modulePath string, run antlrRunInfo, outTok string, out
 		if parserBase, isLexer := strings.CutSuffix(base, "Lexer"); isLexer {
 			for _, ext := range []string{".cpp", ".cc", ".cxx", ".c"} {
 				if parserVFS, ok := outVFSByToken[parserBase+"Parser"+ext]; ok {
-					appendUnique(parserVFS.Rel())
+					appendUnique(parserVFS.rel())
 					break
 				}
 			}
@@ -184,7 +184,7 @@ func antlrParsedIncludes(modulePath string, run antlrRunInfo, outTok string, out
 		if parserBase, isLexerH := strings.CutSuffix(base, "Lexer"); isLexerH {
 			for _, ext := range []string{".cpp", ".cc", ".cxx", ".c"} {
 				if parserVFS, ok := outVFSByToken[parserBase+"Parser"+ext]; ok {
-					appendUnique(parserVFS.Rel())
+					appendUnique(parserVFS.rel())
 					break
 				}
 			}
@@ -192,7 +192,7 @@ func antlrParsedIncludes(modulePath string, run antlrRunInfo, outTok string, out
 			// Non-Lexer headers: register the sibling .cpp (general case)
 			for _, ext := range []string{".cpp", ".cc", ".cxx", ".c"} {
 				if cppVFS, ok := outVFSByToken[base+ext]; ok {
-					appendUnique(cppVFS.Rel())
+					appendUnique(cppVFS.rel())
 					break
 				}
 			}
@@ -207,15 +207,15 @@ func antlrParsedIncludes(modulePath string, run antlrRunInfo, outTok string, out
 		// dep edge, not as transitive source inputs — upstream lists only the
 		// $(S) leaf (the .stg's source .stg.in, also in `inputs`). Emitting the
 		// $(B) intermediate over-includes it and diverges the consumer self_uid.
-		if !input.IsSource() {
+		if !input.isSource() {
 			continue
 		}
 
-		appendUnique(input.Rel())
+		appendUnique(input.rel())
 	}
 
-	appendUnique(stdout2stderrVFS.Rel())
-	appendUnique(jarVFS.Rel())
+	appendUnique(stdout2stderrVFS.rel())
+	appendUnique(jarVFS.rel())
 
 	for _, include := range run.OutputIncludes {
 		appendUnique(copyFileIncludeTarget(modulePath, include))
@@ -231,10 +231,10 @@ func antlrParsedIncludes(modulePath string, run antlrRunInfo, outTok string, out
 func antlrOutputModuleRel(modulePath string, outVFS VFS) string {
 	prefix := modulePath + "/"
 
-	if strings.HasPrefix(outVFS.Rel(), prefix) {
-		return strings.TrimPrefix(outVFS.Rel(), prefix)
+	if strings.HasPrefix(outVFS.rel(), prefix) {
+		return strings.TrimPrefix(outVFS.rel(), prefix)
 	}
 
-	ThrowFmt("gen: antlr output %q is outside module %q", outVFS.Rel(), modulePath)
+	ThrowFmt("gen: antlr output %q is outside module %q", outVFS.rel(), modulePath)
 	return ""
 }

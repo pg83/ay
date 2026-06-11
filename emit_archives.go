@@ -1,6 +1,6 @@
 package main
 
-func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
+func emitArchives(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	if len(d.archives) == 0 {
 		return
 	}
@@ -16,14 +16,14 @@ func emitArchives(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 
 func emitArchive(
 	instance ModuleInstance,
-	a archiveEntry,
-	d *moduleData,
+	a ArchiveEntry,
+	d *ModuleData,
 	toolBinPath VFS,
 	toolLDRef NodeRef,
 	emit Emitter,
 	reg *CodegenRegistry,
 ) {
-	archiveVFS := Build(instance.Path.Rel() + "/" + a.Name)
+	archiveVFS := Build(instance.Path.rel() + "/" + a.Name)
 	archivePath := archiveVFS.String()
 
 	cmdArgs := make([]STR, 0, 4+len(a.Files)+2)
@@ -50,7 +50,7 @@ func emitArchive(
 			}
 		}
 
-		rel := instance.Path.Rel() + "/" + f
+		rel := instance.Path.rel() + "/" + f
 		var absVFS VFS
 
 		if isPRProduced {
@@ -96,21 +96,21 @@ func emitArchive(
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: argChunks{cmdArgs},
+				CmdArgs: ArgChunks{cmdArgs},
 				Env:     env,
 			},
 		},
 		Env:              env,
-		Inputs:           inputChunks{inputs, srcChunk(toolBinPath)},
+		Inputs:           InputChunks{inputs, srcChunk(toolBinPath)},
 		KV:               KV{P: pkAR, PC: pcLightRed},
 		Outputs:          []VFS{archiveVFS},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		DepRefs:          depRefs,
 		usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
 	}
 
-	arRef := emit.Emit(n)
+	arRef := emit.emit(n)
 
 	if reg != nil {
 		// Propagate each archived member's source inputs (e.g. the .py behind a
@@ -121,12 +121,12 @@ func emitArchive(
 		var leaves []VFS
 
 		for _, p := range pathPerFile {
-			if info := reg.Lookup(p); info != nil && len(info.SourceInputs) > 0 {
+			if info := reg.lookup(p); info != nil && len(info.SourceInputs) > 0 {
 				leaves = dedupVFS(leaves, info.SourceInputs)
 			}
 		}
 
-		reg.Register(&GeneratedFileInfo{
+		reg.register(&GeneratedFileInfo{
 			ProducerKvP:    pkAR,
 			OutputPath:     archiveVFS,
 			ProducerRef:    arRef,

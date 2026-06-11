@@ -8,24 +8,24 @@ import (
 func TestIntValueMapBasic(t *testing.T) {
 	m := NewIntValueMap[string](0)
 
-	if m.Get(1) != nil {
+	if m.get(1) != nil {
 		t.Fatalf("Get on empty returned non-nil")
 	}
 
-	m.Put(1, "a")
-	m.Put(2, "b")
+	m.put(1, "a")
+	m.put(2, "b")
 
-	if p := m.Get(1); p == nil || *p != "a" {
+	if p := m.get(1); p == nil || *p != "a" {
 		t.Fatalf("Get(1) = %v want *a", p)
 	}
 
-	if p := m.Get(2); p == nil || *p != "b" {
+	if p := m.get(2); p == nil || *p != "b" {
 		t.Fatalf("Get(2) = %v want *b", p)
 	}
 
-	m.Put(1, "c") // overwrite in place, no new vals entry
+	m.put(1, "c") // overwrite in place, no new vals entry
 
-	if p := m.Get(1); p == nil || *p != "c" {
+	if p := m.get(1); p == nil || *p != "c" {
 		t.Fatalf("Get(1) after overwrite = %v want *c", p)
 	}
 
@@ -38,13 +38,13 @@ func TestIntValueMapStructValues(t *testing.T) {
 	type rec struct{ a, b int }
 
 	m := NewIntValueMap[rec](0)
-	m.Put(7, rec{1, 2})
+	m.put(7, rec{1, 2})
 
-	if p := m.Get(7); p == nil || *p != (rec{1, 2}) {
+	if p := m.get(7); p == nil || *p != (rec{1, 2}) {
 		t.Fatalf("struct value not round-tripped: %v", p)
 	}
 
-	if m.Get(8) != nil {
+	if m.get(8) != nil {
 		t.Fatalf("absent key returned non-nil")
 	}
 }
@@ -60,7 +60,7 @@ func TestIntValueMapMatchesBuiltin(t *testing.T) {
 		k := rng.Uint64()%30_000 + 1
 		v := rng.Int63()
 		ref[k] = v
-		m.Put(k, v)
+		m.put(k, v)
 
 		if m.Len() != len(ref) {
 			t.Fatalf("step %d: Len = %d want %d", i, m.Len(), len(ref))
@@ -68,7 +68,7 @@ func TestIntValueMapMatchesBuiltin(t *testing.T) {
 	}
 
 	for k, v := range ref {
-		if p := m.Get(k); p == nil || *p != v {
+		if p := m.get(k); p == nil || *p != v {
 			t.Fatalf("Get(%d) = %v want *%d", k, p, v)
 		}
 	}
@@ -76,7 +76,7 @@ func TestIntValueMapMatchesBuiltin(t *testing.T) {
 	for i := 0; i < 50_000; i++ {
 		k := rng.Uint64() | 1
 		_, refOK := ref[k]
-		gotOK := m.Get(k) != nil
+		gotOK := m.get(k) != nil
 
 		if refOK != gotOK {
 			t.Fatalf("presence mismatch for %d: builtin=%v intvaluemap=%v", k, refOK, gotOK)

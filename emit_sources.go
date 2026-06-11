@@ -4,12 +4,12 @@ import (
 	"strings"
 )
 
-type sourceEmit struct {
+type SourceEmit struct {
 	Ref     NodeRef
 	OutPath VFS
 }
 
-func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, in ModuleCCInputs) *sourceEmit {
+func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
 	if isHeaderSource(srcRel) {
 		return nil
 	}
@@ -30,7 +30,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		yasmLDRef, _ := ctx.tool(argContribToolsYasm)
 		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDirs)
 		ref, _, outPath := EmitRD(srcInstance, srcRel, srcVFS, yasmLDRef, srcIn.TC, ctx.emit)
-		return &sourceEmit{Ref: ref, OutPath: outPath}
+		return &SourceEmit{Ref: ref, OutPath: outPath}
 	case strings.HasSuffix(srcRel, ".c"),
 		strings.HasSuffix(srcRel, ".cpp"),
 		strings.HasSuffix(srcRel, ".cc"),
@@ -41,7 +41,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 
 		srcIn.ExtraDepRefs = resolveCodegenDepRefsExt(ctx, srcInstance, srcIn.IncludeInputs, []VFS{srcVFS})
 		ref, outPath, _ := EmitCC(srcInstance, srcRel, srcVFS, srcIn, ctx.host, ctx.emit)
-		return &sourceEmit{Ref: ref, OutPath: outPath}
+		return &SourceEmit{Ref: ref, OutPath: outPath}
 	case strings.HasSuffix(srcRel, ".S"),
 		strings.HasSuffix(srcRel, ".s"),
 		strings.HasSuffix(srcRel, ".asm"):
@@ -67,18 +67,18 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		if instance.Platform.ISA == ISAX8664 && strings.HasSuffix(srcRel, ".asm") {
 			yasmLD, _ := ctx.tool(argContribToolsYasm)
 			ref, outPath := emitASYasm(srcInstance, srcRel, srcVFS, asIn, yasmLD, ctx.emit)
-			return &sourceEmit{Ref: ref, OutPath: outPath}
+			return &SourceEmit{Ref: ref, OutPath: outPath}
 		}
 
 		ref, outPath := EmitAS(srcInstance, srcRel, srcVFS, asIn, ctx.host, ctx.emit)
-		return &sourceEmit{Ref: ref, OutPath: outPath}
+		return &SourceEmit{Ref: ref, OutPath: outPath}
 	case strings.HasSuffix(srcRel, ".rl6"):
 		ragelLDRef, ragelBinaryVFS := ctx.tool(argContribToolsRagel6)
 
 		rl6SourceVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDirs)
 		r6Out := ragel6OutVFS(srcInstance, srcRel)
 
-		var r6Parsed []includeDirective
+		var r6Parsed []IncludeDirective
 
 		if scanner := ctx.scannerFor(srcInstance); scanner != nil {
 			r6Parsed = scanner.parsers.sourceParsedBuckets(rl6SourceVFS, nil).bucket(parsedIncludesCpp)
@@ -103,19 +103,19 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 
 		r6Ref, _ := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryVFS, srcIn.Ragel6Flags, rl6Closure, ctx.emit)
 
-		ccSrcRel := strings.TrimPrefix(r6Out.Rel(), srcInstance.Path.Rel()+"/")
+		ccSrcRel := strings.TrimPrefix(r6Out.rel(), srcInstance.Path.rel()+"/")
 
 		ccIn := srcIn
 		ccIn.IncludeInputs = window
 		ccIn.PerSourceCFlags = append(append([]ARG(nil), srcIn.PerSourceCFlags...), argWnoImplicitFallthrough)
 		ccIn.ExtraDepRefs = append([]NodeRef{r6Ref}, resolveCodegenDepRefs(ctx, srcInstance, window, r6Ref)...)
 		ccRef, ccOut, _ := EmitCC(srcInstance, ccSrcRel, r6Out, ccIn, ctx.host, ctx.emit)
-		return &sourceEmit{Ref: ccRef, OutPath: ccOut}
+		return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 	case strings.HasSuffix(srcRel, ".y"):
 		return emitBisonY(ctx, srcInstance, srcRel, srcIn, srcIn.BisonGenExt)
 	case strings.HasSuffix(srcRel, ".ev"):
 		evSource := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDirs)
-		evRelPath := evSource.Rel()
+		evRelPath := evSource.rel()
 
 		protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
 		cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
@@ -134,13 +134,13 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
 			directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, "")
 			evExtras := evWitnessExtras(evRelPath, evPbCC)
-			evHParsed := make([]includeDirective, 0, len(directImports)+len(protobufRuntimeDirectives)+len(evExtras))
+			evHParsed := make([]IncludeDirective, 0, len(directImports)+len(protobufRuntimeDirectives)+len(evExtras))
 			evHParsed = append(evHParsed, directImports...)
 			evHParsed = append(evHParsed, protobufRuntimeDirectives...)
 			evHParsed = append(evHParsed, evExtras...)
 			registerBoundGeneratedParsedOutput(ctx, srcInstance, pkEV, evH, evHParsed, evRef, []NodeRef{event2cppLDRef})
-			evCCParsed := make([]includeDirective, 0, 1+len(protobufRuntimeDirectives))
-			evCCParsed = append(evCCParsed, includeDirective{kind: includeQuoted, target: internStr(evH.Rel())})
+			evCCParsed := make([]IncludeDirective, 0, 1+len(protobufRuntimeDirectives))
+			evCCParsed = append(evCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(evH.rel())})
 			evCCParsed = append(evCCParsed, protobufRuntimeDirectives...)
 			registerBoundGeneratedParsedOutput(ctx, srcInstance, pkEV, evPbCC, evCCParsed, evRef, []NodeRef{event2cppLDRef})
 		}
@@ -165,7 +165,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		ccIn.IncludeInputs = append(ccIn.IncludeInputs, wireFormatVFS)
 		ccIn.ExtraDepRefs = append([]NodeRef{evRef}, resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, evRef)...)
 		ref, outPath, _ := EmitCC(srcInstance, evPbCCSuffix, evPbCC, ccIn, ctx.host, ctx.emit)
-		return &sourceEmit{Ref: ref, OutPath: outPath}
+		return &SourceEmit{Ref: ref, OutPath: outPath}
 	case strings.HasSuffix(srcRel, ".rl"):
 		ragel5LDRef, ragel5BinVFS := ctx.tool(argContribToolsRagel5Ragel)
 		rlgenCdLDRef, rlgenCdBinVFS := ctx.tool(argContribToolsRagel5RlgenCd)
@@ -173,9 +173,9 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		r5Ref, r5TmpOut, r5CppOut := EmitR5(srcInstance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, ctx.emit)
 		_ = r5Ref
 
-		rlSourceVFS := Source(srcInstance.Path.Rel() + "/" + srcRel)
+		rlSourceVFS := Source(srcInstance.Path.rel() + "/" + srcRel)
 		registerBoundGeneratedParsedOutput(ctx, srcInstance, pkR5, r5TmpOut, nil, r5Ref, []NodeRef{ragel5LDRef, rlgenCdLDRef})
-		var r5Parsed []includeDirective
+		var r5Parsed []IncludeDirective
 
 		if scanner := ctx.scannerFor(srcInstance); scanner != nil {
 			r5Parsed = scanner.parsers.sourceParsedBuckets(rlSourceVFS, nil).bucket(parsedIncludesCpp)
@@ -183,7 +183,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 
 		registerBoundGeneratedParsedOutput(ctx, srcInstance, pkR5, r5CppOut, r5Parsed, r5Ref, []NodeRef{ragel5LDRef, rlgenCdLDRef})
 
-		ccSrcRel := strings.TrimPrefix(r5CppOut.Rel(), srcInstance.Path.Rel()+"/")
+		ccSrcRel := strings.TrimPrefix(r5CppOut.rel(), srcInstance.Path.rel()+"/")
 		ccIn := srcIn
 		ccClosure := walkClosure(ctx, srcInstance, r5CppOut, srcIn)
 		ccIn.IncludeInputs = append([]VFS{r5TmpOut}, ccClosure...)
@@ -191,20 +191,20 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, r5Ref)
 		ccIn.ExtraDepRefs = append([]NodeRef{r5Ref}, ccIn.ExtraDepRefs...)
 		ccRef, ccOut, _ := EmitCC(srcInstance, ccSrcRel, r5CppOut, ccIn, ctx.host, ctx.emit)
-		return &sourceEmit{Ref: ccRef, OutPath: ccOut}
+		return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 	case strings.HasSuffix(srcRel, ".h.in"):
 
 		inSourceVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDirs)
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, inSourceVFS, srcIn)
-		cfgVars := buildCFGVars(ctx.fs, inSourceVFS.Rel(), srcIn.SetVars, srcIn.DefaultVars)
-		cfOut := Build(srcInstance.Path.Rel() + "/" + strings.TrimSuffix(srcRel, ".in"))
+		cfgVars := buildCFGVars(ctx.fs, inSourceVFS.rel(), srcIn.SetVars, srcIn.DefaultVars)
+		cfOut := Build(srcInstance.Path.rel() + "/" + strings.TrimSuffix(srcRel, ".in"))
 
-		parsed := []includeDirective{
-			{kind: includeQuoted, target: internStr(inSourceVFS.Rel())},
-			{kind: includeQuoted, target: internStr(configureFilePyVFS.Rel())},
+		parsed := []IncludeDirective{
+			{kind: includeQuoted, target: internStr(inSourceVFS.rel())},
+			{kind: includeQuoted, target: internStr(configureFilePyVFS.rel())},
 		}
-		parsed = append(parsed, cfIncludeDirectives(ctx.parsers, inSourceVFS.Rel())...)
-		registerDeferredCF(ctx, srcInstance, cfOut, parsed, &deferredCF{
+		parsed = append(parsed, cfIncludeDirectives(ctx.parsers, inSourceVFS.rel())...)
+		registerDeferredCF(ctx, srcInstance, cfOut, parsed, &DeferredCF{
 			instance:      srcInstance,
 			srcVFS:        inSourceVFS,
 			outVFS:        cfOut,
@@ -218,47 +218,47 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		strings.HasSuffix(srcRel, ".c.in"):
 		inSourceVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDirs)
 		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, inSourceVFS, srcIn)
-		cfgVars := buildCFGVars(ctx.fs, inSourceVFS.Rel(), srcIn.SetVars, srcIn.DefaultVars)
-		cfOut := Build(srcInstance.Path.Rel() + "/" + strings.TrimSuffix(srcRel, ".in"))
-		cfRef, cfOut := EmitCF(srcInstance, inSourceVFS, cfOut, cfgVars, srcIn.IncludeInputs, srcInstance.Path.Rel(), cfModuleTag(d, srcInstance), srcIn.TC, ctx.emit)
+		cfgVars := buildCFGVars(ctx.fs, inSourceVFS.rel(), srcIn.SetVars, srcIn.DefaultVars)
+		cfOut := Build(srcInstance.Path.rel() + "/" + strings.TrimSuffix(srcRel, ".in"))
+		cfRef, cfOut := EmitCF(srcInstance, inSourceVFS, cfOut, cfgVars, srcIn.IncludeInputs, srcInstance.Path.rel(), cfModuleTag(d, srcInstance), srcIn.TC, ctx.emit)
 
-		registerBoundGeneratedParsedOutput(ctx, srcInstance, pkCF, cfOut, []includeDirective{
-			{kind: includeQuoted, target: internStr(inSourceVFS.Rel())},
-			{kind: includeQuoted, target: internStr(configureFilePyVFS.Rel())},
+		registerBoundGeneratedParsedOutput(ctx, srcInstance, pkCF, cfOut, []IncludeDirective{
+			{kind: includeQuoted, target: internStr(inSourceVFS.rel())},
+			{kind: includeQuoted, target: internStr(configureFilePyVFS.rel())},
 		}, cfRef, nil)
 
-		ccSrcRel := strings.TrimPrefix(cfOut.Rel(), srcInstance.Path.Rel()+"/")
+		ccSrcRel := strings.TrimPrefix(cfOut.rel(), srcInstance.Path.rel()+"/")
 		ccIn := srcIn
 		ccIn.IncludeInputs = walkClosure(ctx, srcInstance, cfOut, srcIn)
 		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, cfRef)
 		ccIn.ExtraDepRefs = append([]NodeRef{cfRef}, ccIn.ExtraDepRefs...)
 		ccRef, ccOut, _ := EmitCC(srcInstance, ccSrcRel, cfOut, ccIn, ctx.host, ctx.emit)
-		return &sourceEmit{Ref: ccRef, OutPath: ccOut}
+		return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 	}
 
-	ThrowFmt("gen: %s: unsupported source extension in %q", instance.Path.Rel(), srcRel)
+	ThrowFmt("gen: %s: unsupported source extension in %q", instance.Path.rel(), srcRel)
 	return nil
 }
 
-func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, in ModuleCCInputs) *sourceEmit {
-	pe := newPBModuleEmission(ctx, d, protoPBConfig{}, in.PeerProtoAddInclGlobal, in.ProtoNamespaceTail)
-	pb := emitProtoPB(ctx, instance, d, srcRel, protoPBConfig{}, pe, in.PeerProtoAddInclGlobal)
+func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
+	pe := newPBModuleEmission(ctx, d, ProtoPBConfig{}, in.PeerProtoAddInclGlobal, in.ProtoNamespaceTail)
+	pb := emitProtoPB(ctx, instance, d, srcRel, ProtoPBConfig{}, pe, in.PeerProtoAddInclGlobal)
 	ccIn := in
 	ccIn.IncludeInputs = walkClosure(ctx, instance, pb.pbCC, in)
 	ccIn.ExtraDepRefs = append([]NodeRef{pb.pbRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pb.pbRef)...)
-	ccSrcRel := strings.TrimPrefix(pb.pbCC.Rel(), instance.Path.Rel()+"/")
+	ccSrcRel := strings.TrimPrefix(pb.pbCC.rel(), instance.Path.rel()+"/")
 	ccRef, ccOut, _ := EmitCC(instance, ccSrcRel, pb.pbCC, ccIn, ctx.host, ctx.emit)
-	return &sourceEmit{Ref: ccRef, OutPath: ccOut}
+	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }
 
-func emitLibraryFlatcSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, in ModuleCCInputs) *sourceEmit {
+func emitLibraryFlatcSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
 	fl := ensureFlatcEmission(ctx, instance, d, srcRel)
 
 	ccIn := in
 	ccIn.IncludeInputs = walkClosure(ctx, instance, fl.cpp, in)
 
 	ccIn.ExtraDepRefs = append([]NodeRef{fl.flRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, fl.flRef)...)
-	ccSrcRel := strings.TrimPrefix(fl.cpp.Rel(), instance.Path.Rel()+"/")
+	ccSrcRel := strings.TrimPrefix(fl.cpp.rel(), instance.Path.rel()+"/")
 	ccRef, ccOut, _ := EmitCC(instance, ccSrcRel, fl.cpp, ccIn, ctx.host, ctx.emit)
-	return &sourceEmit{Ref: ccRef, OutPath: ccOut}
+	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }

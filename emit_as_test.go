@@ -95,10 +95,10 @@ func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 }
 
 func testYasmLDRef(e *BufferedEmitter) NodeRef {
-	return e.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"yasm"})}, Env: nil}},
+	return e.emit(&Node{
+		Cmds:             []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"yasm"})}, Env: nil}},
 		Env:              nil,
-		Inputs:           inputChunks{ToVFSSlice([]string{})},
+		Inputs:           InputChunks{ToVFSSlice([]string{})},
 		Outputs:          ToVFSSlice([]string{"$(B)/tools/yasm/yasm"}),
 		KV:               KV{P: pkLD, PC: pcLightCyan},
 		Tags:             []STR{internStr("tool")},

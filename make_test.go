@@ -58,7 +58,7 @@ CFLAGS = "-DINTERNAL=1"
 func TestShouldExposeSandboxingTargetTags(t *testing.T) {
 	cases := []struct {
 		name string
-		mf   *makeFlags
+		mf   *MakeFlags
 		want bool
 	}{
 		{
@@ -68,14 +68,14 @@ func TestShouldExposeSandboxingTargetTags(t *testing.T) {
 		},
 		{
 			name: "plain sandboxing build",
-			mf: &makeFlags{
+			mf: &MakeFlags{
 				sandboxing: true,
 			},
 			want: false,
 		},
 		{
 			name: "test sandboxing build",
-			mf: &makeFlags{
+			mf: &MakeFlags{
 				sandboxing: true,
 				testLevel:  3,
 			},

@@ -35,7 +35,7 @@ var allocatorPeers = map[string][]string{
 	"DEFAULT":                   nil,
 }
 
-type cppProtoPlugin struct {
+type CppProtoPlugin struct {
 	Name           string
 	ToolPath       string
 	OutputSuffixes []string
@@ -43,14 +43,14 @@ type cppProtoPlugin struct {
 	ExtraOutFlag   string
 }
 
-type moduleData struct {
+type ModuleData struct {
 	moduleStmt         *ModuleStmt
 	srcs               []string
 	globalSrcs         []string
 	pySrcs             []string
-	pySrcGroups        []pySrcGroup
+	pySrcGroups        []PySrcGroup
 	pyGeneratedSrcs    map[string][]VFS
-	pyPyiResources     []resourceEntry
+	pyPyiResources     []ResourceEntry
 	pyBuildNoPYC       bool
 	pyBuildNoPY        bool
 	pyTopLevel         bool
@@ -68,7 +68,7 @@ type moduleData struct {
 	asmAddIncl         []VFS
 	protoAddInclGlobal []VFS
 	unhandledMacros    map[string][]string
-	llvmBc             []*llvmBcStmt
+	llvmBc             []*LlvmBcStmt
 	cFlags             []ARG
 	cFlagsGlobal       []ARG
 	cxxFlags           []ARG
@@ -103,7 +103,7 @@ type moduleData struct {
 	noMypy               bool
 	optimizePyProtos     bool
 	optimizePyProtosSet  bool
-	cppProtoPlugins      []cppProtoPlugin
+	cppProtoPlugins      []CppProtoPlugin
 	excludeTags          map[string]bool
 	dynamicLibraryFrom   []string
 	exportsScript        *string
@@ -117,31 +117,31 @@ type moduleData struct {
 	defaultVarOrder    []string
 	configureFiles     []*ConfigureFileStmt
 	createBuildInfoFor *string
-	antlr4Grammars     []antlr4GrammarInfo
-	antlrRuns          []antlrRunInfo
+	antlr4Grammars     []Antlr4GrammarInfo
+	antlrRuns          []AntlrRunInfo
 	runPrograms        []*RunProgramStmt
 	runPython          []*RunPythonStmt
 	checkConfigHeaders []string
 	cythonCpp          []*CythonStmt
 
 	cythonNumpyBeforeInclude bool
-	swigC                    []swigSrc
+	swigC                    []SwigSrc
 	bisonGenExt              string
 	grpc                     bool
 	yaConfJSON               []string
 	allPySrcs                []*UnknownStmt
 
-	archives []archiveEntry
+	archives []ArchiveEntry
 
 	prOutputProducer map[string]NodeRef
 
-	prOutputInputs map[string]inputChunks
+	prOutputInputs map[string]InputChunks
 
-	copyFiles []copyFileEntry
+	copyFiles []CopyFileEntry
 
-	copyFileAutoOutputs map[string]copyFileEntry
+	copyFileAutoOutputs map[string]CopyFileEntry
 	flatSrcs            map[string]struct{}
-	resources           []resourceEntry
+	resources           []ResourceEntry
 
 	pyMain *string
 
@@ -166,7 +166,7 @@ type moduleData struct {
 
 	pyRegisterExplicit []bool
 
-	simdSrcs []simdSrc
+	simdSrcs []SimdSrc
 
 	ragel6Flags []ARG
 	conflictMod *ModuleStmt
@@ -179,20 +179,20 @@ type moduleData struct {
 	// inducedDeps are the module's INDUCED_DEPS, bucketed by the macro's consumer
 	// type: (cpp …) -> parsedIncludesCpp, (h …) -> parsedIncludesHeader, (h+cpp …) ->
 	// both. resolveInducedDeps reads one bucket per generated output's kind.
-	inducedDeps parsedIncludeSet
+	inducedDeps ParsedIncludeSet
 
 	setVars map[string]string
 
 	// tc carries the module's tool-invocation paths (compiler/archiver/objcopy/
 	// strip/linker/python), derived in genModule from the resource-global closure
 	// (the build/platform/* peers) rather than from ambient platform flags.
-	tc moduleToolchain
+	tc ModuleToolchain
 }
 
 // perSrcCFlagsFor / flatSrc gate the sparse per-source attribute maps on len, so
 // modules with no SRC-level CFLAGS and no flat-output markers (the vast majority)
 // skip the probe. Identical to a direct probe — an empty/nil map yields not-found.
-func (d *moduleData) perSrcCFlagsFor(src string) *[]ARG {
+func (d *ModuleData) perSrcCFlagsFor(src string) *[]ARG {
 	if len(d.perSrcCFlags) == 0 {
 		return nil
 	}
@@ -204,7 +204,7 @@ func (d *moduleData) perSrcCFlagsFor(src string) *[]ARG {
 	return nil
 }
 
-func (d *moduleData) flatSrc(src string) bool {
+func (d *ModuleData) flatSrc(src string) bool {
 	if len(d.flatSrcs) == 0 {
 		return false
 	}
@@ -222,7 +222,7 @@ func muslCFlags(on bool) []ARG {
 	return nil
 }
 
-type resourceEntry struct {
+type ResourceEntry struct {
 	Path string
 	Key  string
 	// EndsBatch is true on the LAST entry of one RESOURCE / RESOURCE_FILES
@@ -234,19 +234,19 @@ type resourceEntry struct {
 	EndsBatch bool
 }
 
-type pySrcGroup struct {
+type PySrcGroup struct {
 	Srcs      []string
 	TopLevel  bool
 	Namespace *string
 }
 
-type archiveEntry struct {
+type ArchiveEntry struct {
 	Name         string
 	DontCompress bool
 	Files        []string
 }
 
-type copyFileEntry struct {
+type CopyFileEntry struct {
 	Src         string
 	Dst         string
 	Auto        bool
@@ -260,7 +260,7 @@ type copyFileEntry struct {
 	OutputIncludes []string
 }
 
-type antlr4GrammarInfo struct {
+type Antlr4GrammarInfo struct {
 	IsSplit        bool
 	Lexer          string
 	Parser         string
@@ -271,7 +271,7 @@ type antlr4GrammarInfo struct {
 	OutputIncludes []string
 }
 
-type antlrRunInfo struct {
+type AntlrRunInfo struct {
 	Macro          string
 	Args           []string
 	INFiles        []string
@@ -281,7 +281,7 @@ type antlrRunInfo struct {
 	OutputIncludes []string
 }
 
-func parseCopyFileEntry(args []string, withContext bool, line int) copyFileEntry {
+func parseCopyFileEntry(args []string, withContext bool, line int) CopyFileEntry {
 	i := 0
 	auto := false
 	text := false
@@ -308,7 +308,7 @@ parsedFlags:
 	// — consumers of dst must depend on src (and src's transitive #include
 	// closure) for any change to retrigger them. The closure plumbing matches
 	// COPY(WITH_CONTEXT …), so route TEXT through the same flag.
-	entry := copyFileEntry{
+	entry := CopyFileEntry{
 		Src:         args[i],
 		Dst:         args[i+1],
 		Auto:        auto,
@@ -337,7 +337,7 @@ parsedFlags:
 	return entry
 }
 
-func parseCopyEntries(args []string, line int) []copyFileEntry {
+func parseCopyEntries(args []string, line int) []CopyFileEntry {
 	i := 0
 	auto := false
 	withContext := false
@@ -390,11 +390,11 @@ parsedFlags:
 		i++
 	}
 
-	out := make([]copyFileEntry, 0, len(files))
+	out := make([]CopyFileEntry, 0, len(files))
 
 	for _, file := range files {
 		src := filepath.ToSlash(filepath.Clean(fromDir + "/" + file))
-		out = append(out, copyFileEntry{
+		out = append(out, CopyFileEntry{
 			Src:            src,
 			Dst:            file,
 			Auto:           auto,
@@ -424,11 +424,11 @@ func sourceInputVFS(fs FS, modulePath string, path string) *VFS {
 	if fs != nil {
 		moduleRel := filepath.ToSlash(filepath.Clean(modulePath + "/" + clean))
 
-		if fs.IsFile(dirKey(modulePath), clean) {
+		if fs.isFile(dirKey(modulePath), clean) {
 			return vfsPtr(Source(moduleRel))
 		}
 
-		if fs.IsFile(srcRootVFS, clean) {
+		if fs.isFile(srcRootVFS, clean) {
 			return vfsPtr(Source(clean))
 		}
 	}
@@ -473,7 +473,7 @@ func copyFileOutputVFS(modulePath string, dst string) VFS {
 
 func copyFileIncludeTarget(modulePath string, target string) string {
 	if vfsHasPrefix(target) {
-		return Intern(target).Rel()
+		return Intern(target).rel()
 	}
 
 	switch {
@@ -488,14 +488,14 @@ func copyFileIncludeTarget(modulePath string, target string) string {
 	}
 }
 
-func collectModule(pm *includeParserManager, dd *deDuper, modulePath string, kind ModuleKind, stmts []Stmt, env Environment) *moduleData {
+func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kind ModuleKind, stmts []Stmt, env Environment) *ModuleData {
 	fs := pm.fs
 
-	env.SetString(envMODDIR, modulePath)
-	env.SetString(envCURDIR, "$(S)/"+modulePath)
-	env.SetString(envBINDIR, "$(B)/"+modulePath)
+	env.setString(envMODDIR, modulePath)
+	env.setString(envCURDIR, "$(S)/"+modulePath)
+	env.setString(envBINDIR, "$(B)/"+modulePath)
 
-	d := &moduleData{
+	d := &ModuleData{
 		pythonSQLite3: true,
 		bisonGenExt:   ".cpp",
 	}
@@ -534,25 +534,25 @@ func collectModule(pm *includeParserManager, dd *deDuper, modulePath string, kin
 	// same hash-derived path (dedup'd by Emitter on output path) so the
 	// LIBRARY's already-emitted node is reused, just with its ref/path now
 	// reaching LD.
-	d.muslEnabled = env.Bool(envMUSL)
+	d.muslEnabled = env.bool(envMUSL)
 	// ENABLE(NO_STRIP) and BUILD_TYPE-driven STRIP_FLAG suppression
 	// (ymake.core.conf:2669 — when ($STRIP == "yes" && $NO_STRIP != "yes"))
 	// both clear -Wl,--strip-all. Track the effective NO_STRIP env value
 	// here so the LD emitter can honour it without re-reading env.
-	d.noStrip = env.Bool(envNO_STRIP)
+	d.noStrip = env.bool(envNO_STRIP)
 
 	if d.muslLite {
 		d.flags.NoUtil = true
 	}
 
-	if env.Bool(envPY3_PROTO) {
+	if env.bool(envPY3_PROTO) {
 		d.usePython3 = true
 	}
 
 	applyPython3AddIncl(modulePath, d)
 	applyBuildInfoAddIncl(modulePath, d)
 
-	cflagPrefix := append(muslCFlags(d.muslEnabled && !effectiveNoPlatform(d.flags)), sseBaseCFlags(env.Bool(envARCH_X86_64))...)
+	cflagPrefix := append(muslCFlags(d.muslEnabled && !effectiveNoPlatform(d.flags)), sseBaseCFlags(env.bool(envARCH_X86_64))...)
 	d.moduleScopeCFlags = append(cflagPrefix, d.moduleScopeCFlags...)
 
 	d.addIncl = dd.dedupVFS(d.addIncl, nil)
@@ -583,7 +583,7 @@ func collectModule(pm *includeParserManager, dd *deDuper, modulePath string, kin
 	}
 
 	if hasProto && !hasEv && d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary {
-		if !env.Bool(envPY3_PROTO) {
+		if !env.bool(envPY3_PROTO) {
 			d.peerdirs = append(d.peerdirs, "contrib/libs/protobuf")
 		}
 
@@ -599,15 +599,15 @@ func collectModule(pm *includeParserManager, dd *deDuper, modulePath string, kin
 	return d
 }
 
-func appendGlobalSrcEvent(d *moduleData, src string) {
+func appendGlobalSrcEvent(d *ModuleData, src string) {
 	d.globalSrcs = append(d.globalSrcs, src)
 }
 
-func appendGlobalSrcGroup(d *moduleData, srcs []string) {
+func appendGlobalSrcGroup(d *ModuleData, srcs []string) {
 	d.globalSrcs = append(d.globalSrcs, srcs...)
 }
 
-func ensureResourcePeer(modulePath string, d *moduleData) {
+func ensureResourcePeer(modulePath string, d *ModuleData) {
 	const resourcePeer = "library/cpp/resource"
 
 	if modulePath == resourcePeer {
@@ -623,7 +623,7 @@ func ensureResourcePeer(modulePath string, d *moduleData) {
 	d.peerdirs = append(d.peerdirs, resourcePeer)
 }
 
-func filterInvalidAddIncl(fs FS, dd *deDuper, d *moduleData) {
+func filterInvalidAddIncl(fs FS, dd *DeDuper, d *ModuleData) {
 	d.addIncl = filterExistingSourceDirs(fs, d.addIncl)
 	d.addInclGlobal = filterExistingSourceDirs(fs, d.addInclGlobal)
 	d.cythonAddIncl = filterExistingSourceDirs(fs, d.cythonAddIncl)
@@ -665,7 +665,7 @@ func filterExistingSourceDirs(fs FS, paths []VFS) []VFS {
 	out := paths[:0]
 
 	for _, path := range paths {
-		if shouldCheckSourceDir(path) && !fs.IsDir(path, "") {
+		if shouldCheckSourceDir(path) && !fs.isDir(path, "") {
 			continue
 		}
 
@@ -676,15 +676,15 @@ func filterExistingSourceDirs(fs FS, paths []VFS) []VFS {
 }
 
 func shouldCheckSourceDir(path VFS) bool {
-	if !path.IsSource() {
+	if !path.isSource() {
 		return false
 	}
 
-	if path.Rel() == "" {
+	if path.rel() == "" {
 		return false
 	}
 
-	if strings.Contains(path.Rel(), "$") {
+	if strings.Contains(path.rel(), "$") {
 		return false
 	}
 
@@ -701,7 +701,7 @@ func flagsContain(flags []string, want string) bool {
 	return false
 }
 
-func applyPython3AddIncl(modulePath string, d *moduleData) {
+func applyPython3AddIncl(modulePath string, d *ModuleData) {
 	if d.moduleStmt == nil {
 		return
 	}
@@ -727,7 +727,7 @@ func applyPython3AddIncl(modulePath string, d *moduleData) {
 	}
 }
 
-func applyBuildInfoAddIncl(modulePath string, d *moduleData) {
+func applyBuildInfoAddIncl(modulePath string, d *ModuleData) {
 	if d.createBuildInfoFor == nil {
 		return
 	}
@@ -748,7 +748,7 @@ func pyModuleTypeUsesPython3(name TOK) bool {
 	return false
 }
 
-func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environment, d *moduleData) {
+func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environment, d *ModuleData) {
 	for _, s := range stmts {
 		switch v := s.(type) {
 		case *ModuleStmt:
@@ -848,7 +848,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 		case *SetStmt:
 
 			value := expandScalarVarRef(v.Value, env)
-			env.SetFromString(v.NameEnv, value)
+			env.setFromString(v.NameEnv, value)
 
 			if d.setVars == nil {
 				d.setVars = map[string]string{}
@@ -923,7 +923,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 				d.defaultVarOrder = append(d.defaultVarOrder, v.VarName)
 			}
 
-			env.SetDefaultString(v.NameEnv, expandScalarVarRef(v.Value, env))
+			env.setDefaultString(v.NameEnv, expandScalarVarRef(v.Value, env))
 		case *ConfigureFileStmt:
 			expanded := *v
 			expanded.Src = expandStmtToken(v.Src, env)
@@ -938,7 +938,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 		case *CreateBuildInfoStmt:
 			d.createBuildInfoFor = &v.OutputHeader
 		case *RunAntlr4CppStmt:
-			d.antlr4Grammars = append(d.antlr4Grammars, antlr4GrammarInfo{
+			d.antlr4Grammars = append(d.antlr4Grammars, Antlr4GrammarInfo{
 				IsSplit:        false,
 				Grammar:        expandStmtToken(v.Grammar, env),
 				Options:        expandStmtTokens(v.Options, env),
@@ -947,7 +947,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 				OutputIncludes: expandStmtTokens(v.OutputIncludes, env),
 			})
 		case *RunAntlr4CppSplitStmt:
-			d.antlr4Grammars = append(d.antlr4Grammars, antlr4GrammarInfo{
+			d.antlr4Grammars = append(d.antlr4Grammars, Antlr4GrammarInfo{
 				IsSplit:        true,
 				Lexer:          expandStmtToken(v.Lexer, env),
 				Parser:         expandStmtToken(v.Parser, env),
@@ -956,7 +956,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 				OutputIncludes: expandStmtTokens(v.OutputIncludes, env),
 			})
 		case *RunAntlrStmt:
-			expanded := antlrRunInfo{
+			expanded := AntlrRunInfo{
 				Macro:          v.Macro,
 				Args:           expandStmtTokens(v.Args, env),
 				INFiles:        expandStmtTokens(v.INFiles, env),
@@ -1023,7 +1023,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 				// is computed against ${BINDIR}/<name>. Pre-expanding here
 				// drifts the hash vs REF (e.g. yt provider yql_yt_op_settings).
 				// RESOURCE_FILES already stores raw — keep them aligned.
-				d.resources = append(d.resources, resourceEntry{
+				d.resources = append(d.resources, ResourceEntry{
 					Path:      pair.Path,
 					Key:       pair.Key,
 					EndsBatch: i == len(v.Pairs)-1,
@@ -1075,9 +1075,9 @@ func moduleStmtForKind(stmt *ModuleStmt, kind ModuleKind) *ModuleStmt {
 	return stmt
 }
 
-func addGeneratedHeaderInclude(modulePath, dst string, d *moduleData) {
+func addGeneratedHeaderInclude(modulePath, dst string, d *ModuleData) {
 	outVFS := copyFileOutputVFS(modulePath, dst)
-	dir := filepath.ToSlash(filepath.Clean(filepath.Dir(outVFS.Rel())))
+	dir := filepath.ToSlash(filepath.Clean(filepath.Dir(outVFS.rel())))
 	rel := dir
 
 	if dir != "." && dir != "" {
@@ -1092,9 +1092,9 @@ func addGeneratedHeaderInclude(modulePath, dst string, d *moduleData) {
 	d.addInclUserGlobal = append(d.addInclUserGlobal, include)
 }
 
-func addGeneratedHeaderIncludeCF(modulePath, dst string, d *moduleData) {
+func addGeneratedHeaderIncludeCF(modulePath, dst string, d *ModuleData) {
 	outVFS := copyFileOutputVFS(modulePath, dst)
-	dir := filepath.ToSlash(filepath.Clean(filepath.Dir(outVFS.Rel())))
+	dir := filepath.ToSlash(filepath.Clean(filepath.Dir(outVFS.rel())))
 	rel := dir
 
 	if dir != "." && dir != "" {
@@ -1108,11 +1108,11 @@ func addGeneratedHeaderIncludeCF(modulePath, dst string, d *moduleData) {
 	d.cfAddInclGlobal = append(d.cfAddInclGlobal, include)
 }
 
-func addGeneratedOwnHeaderInclude(modulePath, dst string, d *moduleData) {
+func addGeneratedOwnHeaderInclude(modulePath, dst string, d *ModuleData) {
 	addGeneratedHeaderInclude(modulePath, dst, d)
 }
 
-func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Environment) {
+func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Environment) {
 	// recordHandledMacro fires only when a typed case handles the macro —
 	// we deferr it and the default branch flips `handled = false` to
 	// suppress it. Logging service-keyword args of macros gen does NOT
@@ -1167,14 +1167,14 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 	case tokNoWshadow:
 		d.flags.NoWShadow = true
 	case tokUseLlvmBc16:
-		env.SetString(envCLANG_BC_ROOT, "$"+envCLANG16_RESOURCE_GLOBAL.String())
-		env.SetString(envLLVM_LLC_TOOL, "contrib/libs/llvm16/tools/llc")
+		env.setString(envCLANG_BC_ROOT, "$"+envCLANG16_RESOURCE_GLOBAL.String())
+		env.setString(envLLVM_LLC_TOOL, "contrib/libs/llvm16/tools/llc")
 	case tokUseLlvmBc18:
-		env.SetString(envCLANG_BC_ROOT, "$"+envCLANG18_RESOURCE_GLOBAL.String())
-		env.SetString(envLLVM_LLC_TOOL, "contrib/libs/llvm18/tools/llc")
+		env.setString(envCLANG_BC_ROOT, "$"+envCLANG18_RESOURCE_GLOBAL.String())
+		env.setString(envLLVM_LLC_TOOL, "contrib/libs/llvm18/tools/llc")
 	case tokUseLlvmBc20:
-		env.SetString(envCLANG_BC_ROOT, "$"+envCLANG20_RESOURCE_GLOBAL.String())
-		env.SetString(envLLVM_LLC_TOOL, "contrib/libs/llvm20/tools/llc")
+		env.setString(envCLANG_BC_ROOT, "$"+envCLANG20_RESOURCE_GLOBAL.String())
+		env.setString(envLLVM_LLC_TOOL, "contrib/libs/llvm20/tools/llc")
 	case tokSplitDwarf:
 		d.splitDwarf = true
 	case tokNoSplitDwarf:
@@ -1215,7 +1215,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			ThrowFmt("LLVM_BC requires USE_LLVM_BC16/18/20 before invocation")
 		}
 
-		stmt := &llvmBcStmt{ClangBCRoot: env.String(envCLANG_BC_ROOT)}
+		stmt := &LlvmBcStmt{ClangBCRoot: env.String(envCLANG_BC_ROOT)}
 		i := 0
 
 		for i < len(v.Args) {
@@ -1351,15 +1351,15 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
 			prefix := modulePath + "/"
 
-			if strings.HasPrefix(dstVFS.Rel(), prefix) {
-				dstRel := strings.TrimPrefix(dstVFS.Rel(), prefix)
+			if strings.HasPrefix(dstVFS.rel(), prefix) {
+				dstRel := strings.TrimPrefix(dstVFS.rel(), prefix)
 
 				if isSourceEligibleForCopyAuto(dstRel) && !flagsContain(d.srcs, dstRel) {
 					d.srcs = append(d.srcs, dstRel)
 				}
 
 				if d.copyFileAutoOutputs == nil {
-					d.copyFileAutoOutputs = make(map[string]copyFileEntry)
+					d.copyFileAutoOutputs = make(map[string]CopyFileEntry)
 				}
 
 				d.copyFileAutoOutputs[dstRel] = entry
@@ -1373,15 +1373,15 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 				dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
 				prefix := modulePath + "/"
 
-				if strings.HasPrefix(dstVFS.Rel(), prefix) {
-					dstRel := strings.TrimPrefix(dstVFS.Rel(), prefix)
+				if strings.HasPrefix(dstVFS.rel(), prefix) {
+					dstRel := strings.TrimPrefix(dstVFS.rel(), prefix)
 
 					if isSourceEligibleForCopyAuto(dstRel) && !flagsContain(d.srcs, dstRel) {
 						d.srcs = append(d.srcs, dstRel)
 					}
 
 					if d.copyFileAutoOutputs == nil {
-						d.copyFileAutoOutputs = make(map[string]copyFileEntry)
+						d.copyFileAutoOutputs = make(map[string]CopyFileEntry)
 					}
 
 					d.copyFileAutoOutputs[dstRel] = entry
@@ -1448,7 +1448,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		// macrosAcceptingUserFlags. The cases below keep the few flags
 		// whose ENABLE has a direct module-data side-effect.
 		for _, a := range v.Args {
-			env.SetBool(internEnv(a), true)
+			env.setBool(internEnv(a), true)
 
 			switch a {
 			case "MUSL_LITE":
@@ -1467,7 +1467,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		// Counterpart to ENABLE: clears the env var (and the few specific
 		// module-data flags). Generic for the same reasons as ENABLE.
 		for _, a := range v.Args {
-			env.SetBool(internEnv(a), false)
+			env.setBool(internEnv(a), false)
 
 			if a == "PYTHON_SQLITE3" {
 				d.pythonSQLite3 = false
@@ -1536,7 +1536,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		flags = append(flags, variant.CFlags...)
 		flags = append(flags, v.Args[1:]...)
 
-		d.simdSrcs = append(d.simdSrcs, simdSrc{
+		d.simdSrcs = append(d.simdSrcs, SimdSrc{
 			Src:     filename,
 			Variant: variant.Suffix,
 			CFlags:  flags,
@@ -1719,7 +1719,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 				}
 
 				if swigCMode {
-					d.swigC = append(d.swigC, swigSrc{Src: src, Module: modName})
+					d.swigC = append(d.swigC, SwigSrc{Src: src, Module: modName})
 					appendPyRegister(d, modName+"_swg", false)
 				}
 
@@ -1797,7 +1797,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 		}
 
 		if len(groupSrcs) > 0 {
-			d.pySrcGroups = append(d.pySrcGroups, pySrcGroup{
+			d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{
 				Srcs:      groupSrcs,
 				TopLevel:  topLevel,
 				Namespace: namespace,
@@ -1834,7 +1834,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 			arg += "=init"
 		}
 
-		d.resources = append(d.resources, resourceEntry{Path: "-", Key: "py/constructors/" + arg})
+		d.resources = append(d.resources, ResourceEntry{Path: "-", Key: "py/constructors/" + arg})
 	case tokNoCheckImports:
 
 		if len(v.Args) > 0 {
@@ -1882,7 +1882,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 				// paths instead of include-searching them. A bare rel keeps
 				// quoted-include search semantics (upstream delays those to
 				// include resolution).
-				dir := includeDirective{kind: includeQuoted, target: internStr(p)}
+				dir := IncludeDirective{kind: includeQuoted, target: internStr(p)}
 
 				if toHeader {
 					d.inducedDeps = appendParsedDirectives(d.inducedDeps, parsedIncludesHeader, dir)
@@ -1921,7 +1921,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *moduleData, env Envi
 // OBJ_SUF, Symbols feeds the -internalize-public-api-list opt pass, and the
 // two booleans gate llvm-llc emission (GENERATE_MACHINE_CODE) and per-input
 // llvm_compile_* dispatch (NO_COMPILE).
-type llvmBcStmt struct {
+type LlvmBcStmt struct {
 	Sources             []string
 	Name                string
 	Suffix              string
@@ -1945,7 +1945,7 @@ func isLlvmBcKeyword(s string) bool {
 	return false
 }
 
-func appendPyRegister(d *moduleData, name string, explicit bool) {
+func appendPyRegister(d *ModuleData, name string, explicit bool) {
 	d.pyRegister = append(d.pyRegister, name)
 	d.pyRegisterExplicit = append(d.pyRegisterExplicit, explicit)
 
@@ -1963,7 +1963,7 @@ func appendPyRegister(d *moduleData, name string, explicit bool) {
 	)
 }
 
-func parseCPPProtoPlugin(v *UnknownStmt) cppProtoPlugin {
+func parseCPPProtoPlugin(v *UnknownStmt) CppProtoPlugin {
 	requiredArgs := 0
 	outputSuffixes := 0
 
@@ -1984,7 +1984,7 @@ func parseCPPProtoPlugin(v *UnknownStmt) cppProtoPlugin {
 		ThrowFmt("gen: %s expects at least %d arguments, got %d", v.Name, requiredArgs, len(v.Args))
 	}
 
-	plugin := cppProtoPlugin{
+	plugin := CppProtoPlugin{
 		Name:     v.Args[0],
 		ToolPath: v.Args[1],
 	}
@@ -2060,9 +2060,9 @@ func pythonInitSuffix(name string) string {
 	return mangled.String()
 }
 
-func applyArchiveStmt(v *UnknownStmt, d *moduleData) {
+func applyArchiveStmt(v *UnknownStmt, d *ModuleData) {
 	var (
-		entry      archiveEntry
+		entry      ArchiveEntry
 		seenName   bool
 		inNameSlot bool
 	)
@@ -2097,7 +2097,7 @@ func applyArchiveStmt(v *UnknownStmt, d *moduleData) {
 	d.archives = append(d.archives, entry)
 }
 
-func applyAllocatorStmt(v *UnknownStmt, d *moduleData) {
+func applyAllocatorStmt(v *UnknownStmt, d *ModuleData) {
 	if len(v.Args) != 1 {
 		ThrowFmt("gen: ALLOCATOR expects exactly 1 argument, got %d (line %d)", len(v.Args), v.Line)
 	}
@@ -2181,45 +2181,45 @@ func isResourceContainerType(name TOK) bool {
 }
 
 func buildIfEnv(instance ModuleInstance) Environment {
-	env := DefaultIfEnv.Clone()
+	env := DefaultIfEnv.clone()
 
 	for k, v := range instance.Platform.Flags {
-		env.SetFromStringID(k, v)
+		env.setFromStringID(k, v)
 	}
 
-	if env.Bool(envOPENSOURCE) || env.String(envOPENSOURCE_PROJECT) == "ymake" || env.String(envOPENSOURCE_PROJECT) == "ya" {
-		env.SetBool(envYA_OPENSOURCE, true)
+	if env.bool(envOPENSOURCE) || env.String(envOPENSOURCE_PROJECT) == "ymake" || env.String(envOPENSOURCE_PROJECT) == "ya" {
+		env.setBool(envYA_OPENSOURCE, true)
 	}
 
-	if env.Bool(envOPENSOURCE) {
-		env.SetBool(envCATBOOST_OPENSOURCE, true)
+	if env.bool(envOPENSOURCE) {
+		env.setBool(envCATBOOST_OPENSOURCE, true)
 	}
 
 	switch instance.Platform.ISA {
 	case ISAX8664:
-		env.SetBool(envARCH_X86_64, true)
+		env.setBool(envARCH_X86_64, true)
 	case ISAAArch64:
-		env.SetBool(envARCH_AARCH64, true)
-		env.SetBool(envARCH_ARM64, true)
+		env.setBool(envARCH_AARCH64, true)
+		env.setBool(envARCH_ARM64, true)
 	}
 
 	useRuntime := instance.Platform.Flags[envUSE_ARCADIA_COMPILER_RUNTIME]
-	env.SetBool(envUSE_ARCADIA_COMPILER_RUNTIME, useRuntime != strNo)
-	env.SetStringID(envCOMPILER_VERSION, instance.Platform.ClangVerSTR)
-	env.SetStringID(envBUILD_TYPE, instance.Platform.BuildTypeUpperSTR)
+	env.setBool(envUSE_ARCADIA_COMPILER_RUNTIME, useRuntime != strNo)
+	env.setStringID(envCOMPILER_VERSION, instance.Platform.ClangVerSTR)
+	env.setStringID(envBUILD_TYPE, instance.Platform.BuildTypeUpperSTR)
 
-	if (instance.Platform.ISA == ISAX8664 || env.Bool(envARCH_I386)) &&
-		!env.Bool(envDISABLE_INSTRUCTION_SETS) {
-		env.SetStringID(envSSE41_CFLAGS, strSSE41CFlags)
-		env.SetStringID(envSSE42_CFLAGS, strSSE42CFlags)
-		env.SetStringID(envPOPCNT_CFLAGS, strPopcntCFlags)
-		env.SetStringID(envCX16_FLAGS, strCX16CFlags)
-		env.SetStringID(envAVX_CFLAGS, strAVXCFlags)
-		env.SetStringID(envAVX2_CFLAGS, strAVX2CFlags)
-		env.SetStringID(envAVX512_CFLAGS, strAVX512CFlags)
-		env.SetStringID(envSSE_CFLAGS, strSSECFlags)
-		env.SetStringID(envSSE4_CFLAGS, strSSE4CFlags)
-		env.SetStringID(envAMX_CFLAGS, strAMXCFlags)
+	if (instance.Platform.ISA == ISAX8664 || env.bool(envARCH_I386)) &&
+		!env.bool(envDISABLE_INSTRUCTION_SETS) {
+		env.setStringID(envSSE41_CFLAGS, strSSE41CFlags)
+		env.setStringID(envSSE42_CFLAGS, strSSE42CFlags)
+		env.setStringID(envPOPCNT_CFLAGS, strPopcntCFlags)
+		env.setStringID(envCX16_FLAGS, strCX16CFlags)
+		env.setStringID(envAVX_CFLAGS, strAVXCFlags)
+		env.setStringID(envAVX2_CFLAGS, strAVX2CFlags)
+		env.setStringID(envAVX512_CFLAGS, strAVX512CFlags)
+		env.setStringID(envSSE_CFLAGS, strSSECFlags)
+		env.setStringID(envSSE4_CFLAGS, strSSE4CFlags)
+		env.setStringID(envAMX_CFLAGS, strAMXCFlags)
 	}
 
 	return env
@@ -2273,7 +2273,7 @@ func expandStmtToken(s string, env Environment) string {
 			name := strings.TrimPrefix(s, "$")
 
 			if isExpandVarName(name) {
-				if val, ok := env.Lookup(name); ok {
+				if val, ok := env.lookup(name); ok {
 					s = val
 				}
 			}
@@ -2313,7 +2313,7 @@ func expandBracedVars(s string, env Environment) string {
 		end += start + 2
 		name := s[start+2 : end]
 
-		val, ok := env.Lookup(name)
+		val, ok := env.lookup(name)
 
 		if !isExpandVarName(name) || !ok {
 			searchFrom = end + 1
@@ -2363,7 +2363,7 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 
 		name := s[i+1 : j]
 
-		val, ok := env.Lookup(name)
+		val, ok := env.lookup(name)
 
 		if !ok {
 			b.WriteString(s[i:j])
@@ -2427,7 +2427,7 @@ func expandScalarVarRef(s string, env Environment) string {
 	return expandStmtToken(s, env)
 }
 
-func applyAllPySrcs(fs FS, modulePath string, v *UnknownStmt, d *moduleData) {
+func applyAllPySrcs(fs FS, modulePath string, v *UnknownStmt, d *ModuleData) {
 	dirs := []string{"."}
 	noTestFiles := false
 
@@ -2463,7 +2463,7 @@ func applyAllPySrcs(fs FS, modulePath string, v *UnknownStmt, d *moduleData) {
 	for _, dir := range dirs {
 		walkRoot := filepath.ToSlash(filepath.Join(moduleRootRel, dir))
 
-		fs.Walk(walkRoot, func(rel string, isDir bool) {
+		fs.walk(walkRoot, func(rel string, isDir bool) {
 			if isDir {
 				return
 			}
@@ -2486,7 +2486,7 @@ func applyAllPySrcs(fs FS, modulePath string, v *UnknownStmt, d *moduleData) {
 	d.pySrcs = append(d.pySrcs, files...)
 
 	if len(files) > 0 {
-		d.pySrcGroups = append(d.pySrcGroups, pySrcGroup{
+		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{
 			Srcs:      files,
 			TopLevel:  d.pyTopLevel,
 			Namespace: d.pyNamespace,
@@ -2512,7 +2512,7 @@ func peerEntryLanguage(parent ModuleInstance, parentModuleName TOK) Language {
 	return LangCPP
 }
 
-func derivePeerInstance(ctx *genCtx, parent ModuleInstance, d *moduleData, peerPath string) ModuleInstance {
+func derivePeerInstance(ctx *GenCtx, parent ModuleInstance, d *ModuleData, peerPath string) ModuleInstance {
 	return ModuleInstance{
 		Path:     Source(peerPath),
 		Kind:     KindLib,

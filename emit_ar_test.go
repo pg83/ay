@@ -62,10 +62,10 @@ func vfsStrings(vs []VFS) []string {
 func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 	e := NewBufferedEmitter()
 
-	objRefs := []NodeRef{e.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
+	objRefs := []NodeRef{e.emit(&Node{
+		Cmds:             []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
 		Env:              nil,
-		Inputs:           inputChunks{ToVFSSlice([]string{})},
+		Inputs:           InputChunks{ToVFSSlice([]string{})},
 		KV:               KV{},
 		Outputs:          ToVFSSlice([]string{"$(B)/build/cow/on/lib.c.o"}),
 		Platform:         &Platform{Target: "default-linux-aarch64"},
@@ -176,10 +176,10 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	makeLeaf := func(out VFS) NodeRef {
-		return e.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
+		return e.emit(&Node{
+			Cmds:             []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
 			Env:              nil,
-			Inputs:           inputChunks{ToVFSSlice([]string{})},
+			Inputs:           InputChunks{ToVFSSlice([]string{})},
 			KV:               KV{},
 			Outputs:          []VFS{out},
 			Platform:         &Platform{Target: "default-linux-aarch64"},
@@ -226,10 +226,10 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	makeLeaf := func(out VFS) NodeRef {
-		return e.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
+		return e.emit(&Node{
+			Cmds:             []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
 			Env:              nil,
-			Inputs:           inputChunks{ToVFSSlice([]string{})},
+			Inputs:           InputChunks{ToVFSSlice([]string{})},
 			KV:               KV{},
 			Outputs:          []VFS{out},
 			Platform:         &Platform{Target: "default-linux-aarch64"},
@@ -263,10 +263,10 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	makeLeaf := func(out VFS) NodeRef {
-		return e.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
+		return e.emit(&Node{
+			Cmds:             []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
 			Env:              nil,
-			Inputs:           inputChunks{ToVFSSlice([]string{})},
+			Inputs:           InputChunks{ToVFSSlice([]string{})},
 			KV:               KV{},
 			Outputs:          []VFS{out},
 			Platform:         &Platform{Target: "default-linux-aarch64"},
@@ -303,10 +303,10 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	makeLeaf := func(out VFS) NodeRef {
-		return e.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
+		return e.emit(&Node{
+			Cmds:             []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
 			Env:              nil,
-			Inputs:           inputChunks{ToVFSSlice([]string{})},
+			Inputs:           InputChunks{ToVFSSlice([]string{})},
 			KV:               KV{},
 			Outputs:          []VFS{out},
 			Platform:         &Platform{Target: "default-linux-aarch64"},

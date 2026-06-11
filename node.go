@@ -7,13 +7,13 @@ import "encoding/json"
 // pre-built blocks: a platform flag block, a module -I block, a per-source
 // tail), not schema; uid hashing and the json writer emit the flattened
 // element sequence.
-type argChunks [][]STR
+type ArgChunks [][]STR
 
-func (c argChunks) MarshalJSON() ([]byte, error) {
+func (c ArgChunks) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.flat())
 }
 
-func (c argChunks) flat() []STR {
+func (c ArgChunks) flat() []STR {
 	total := 0
 
 	for _, ch := range c {
@@ -30,7 +30,7 @@ func (c argChunks) flat() []STR {
 }
 
 type Cmd struct {
-	CmdArgs argChunks `json:"cmd_args"`
+	CmdArgs ArgChunks `json:"cmd_args"`
 	Cwd     STR       `json:"cwd,omitempty"`
 	Env     EnvVars   `json:"env,omitempty"`
 	Stdout  STR       `json:"stdout,omitempty"`
@@ -45,7 +45,7 @@ type Node struct {
 	// WITHOUT flattening, so a large closure slice is referenced, never copied.
 	// Consumers (uid, json writer, executor) iterate the chunks in order; the
 	// flattened element sequence is the node's input list.
-	Inputs       inputChunks  `json:"inputs"`
+	Inputs       InputChunks  `json:"inputs"`
 	KV           KV           `json:"kv"`
 	Outputs      []VFS        `json:"outputs"`
 	Platform     *Platform    `json:"platform"`
@@ -93,13 +93,13 @@ func nodeTags(n *Node) []STR {
 // inputChunks is the chunked input list. It JSON-marshals FLAT — the chunking
 // is an internal layout (zero-copy assembly from shared slices), not schema;
 // the hand-rolled writer (appendVFSChunks) emits the same flat array.
-type inputChunks [][]VFS
+type InputChunks [][]VFS
 
-func (c inputChunks) MarshalJSON() ([]byte, error) {
+func (c InputChunks) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.flat())
 }
 
-func (c inputChunks) flat() []VFS {
+func (c InputChunks) flat() []VFS {
 	total := 0
 
 	for _, ch := range c {

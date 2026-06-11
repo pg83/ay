@@ -3,7 +3,7 @@ package main
 import "testing"
 
 func TestDeDuper_AddHas(t *testing.T) {
-	var dd deDuper
+	var dd DeDuper
 	dd.reset()
 
 	if dd.has(VFS(3)) {
@@ -28,7 +28,7 @@ func TestDeDuper_AddHas(t *testing.T) {
 }
 
 func TestDeDuper_FilterSeenNoCollisionReturnsInput(t *testing.T) {
-	var dd deDuper
+	var dd DeDuper
 	dd.reset()
 	dd.add(VFS(1))
 
@@ -45,7 +45,7 @@ func TestDeDuper_FilterSeenNoCollisionReturnsInput(t *testing.T) {
 }
 
 func TestDeDuper_FilterSeenDropsDuplicates(t *testing.T) {
-	var dd deDuper
+	var dd DeDuper
 	dd.reset()
 	dd.add(VFS(2))
 
@@ -70,7 +70,7 @@ func TestDeDuper_FilterSeenDropsDuplicates(t *testing.T) {
 }
 
 func TestDeDuper_ResetClearsMembership(t *testing.T) {
-	var dd deDuper
+	var dd DeDuper
 	dd.reset()
 	dd.add(VFS(2))
 

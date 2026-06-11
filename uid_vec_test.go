@@ -37,7 +37,7 @@ func TestPageOffset_GeometricLayout(t *testing.T) {
 }
 
 func TestUidVec_SetGetRoundTrip(t *testing.T) {
-	var v uidVec
+	var v UidVec
 	const n = 1 << 14
 
 	for id := int64(0); id < n; id++ {
@@ -55,7 +55,7 @@ func TestUidVec_SetGetRoundTrip(t *testing.T) {
 }
 
 func TestUidVec_LazyPageAllocation(t *testing.T) {
-	var v uidVec
+	var v UidVec
 
 	for _, page := range v.pages {
 		if page != nil {
@@ -91,7 +91,7 @@ func TestUidVec_LazyPageAllocation(t *testing.T) {
 // fills ids in order while readers concurrently read already-written ids. Run
 // under -race to catch any torn page-table access.
 func TestUidVec_ConcurrentGetDuringSet(t *testing.T) {
-	var v uidVec
+	var v UidVec
 	const n = 1 << 13
 
 	// Pre-seed id 0 so readers always have something resolved to read.

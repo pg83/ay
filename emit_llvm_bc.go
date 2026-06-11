@@ -13,7 +13,7 @@ import "strings"
 //	  d.resources, picked up by emitResourceObjcopy as a normal embed → emits
 //	  the PY objcopy_<hash>.o, which then participates in the global archive
 //	  (lib<...>.global.a) via the existing LIBRARY .global.a pipeline.
-func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs, resourceGlobals []resourceDecl) {
+func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs, resourceGlobals []ResourceDecl) {
 	if len(d.llvmBc) == 0 {
 		return
 	}
@@ -25,7 +25,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 	python := d.tc.Python3.String()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	reqs := Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)}
-	tp := TargetProperties{ModuleDir: instance.Path.Rel()}
+	tp := TargetProperties{ModuleDir: instance.Path.rel()}
 
 	for _, stmt := range d.llvmBc {
 		clangRoot := resolveResourceGlobalRef(stmt.ClangBCRoot, resourceGlobals)
@@ -74,7 +74,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			// closure is a shared cached slice (closureOf returns it uncopied) —
 			// referenced as its own chunk, never copied.
 			// closure is the input window (inputVFS included — walkClosure).
-			allInputs := inputChunks{
+			allInputs := InputChunks{
 				{clangWrapperVFS}, // ${input:"build/scripts/clang_wrapper.py"}
 				closure,
 			}
@@ -85,7 +85,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			// from a COPY product, so the merge node inherits the tooling too.
 			for _, ch := range allInputs {
 				for _, v := range ch {
-					if v.IsSource() {
+					if v.isSource() {
 						bcSourceInputs = append(bcSourceInputs, v)
 					}
 
@@ -97,7 +97,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 
 			node := &Node{
 				Platform:         instance.Platform,
-				Cmds:             []Cmd{{CmdArgs: argChunks{bcArgs}, Env: env}},
+				Cmds:             []Cmd{{CmdArgs: ArgChunks{bcArgs}, Env: env}},
 				Env:              env,
 				Inputs:           allInputs,
 				Outputs:          []VFS{bcOut},
@@ -108,12 +108,12 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 				DepRefs:          depRefs,
 				usesResources:    []string{resourcePatternYMakePython3, resourcePatternClang16},
 			}
-			ref := ctx.emit.Emit(node)
+			ref := ctx.emit.emit(node)
 			bcRefs = append(bcRefs, ref)
 			bcPaths = append(bcPaths, bcOut)
 		}
 
-		mergedOut := Build(instance.Path.Rel() + "/" + stmt.Name + "_merged" + stmt.Suffix + ".bc")
+		mergedOut := Build(instance.Path.rel() + "/" + stmt.Name + "_merged" + stmt.Suffix + ".bc")
 		ldArgs := []STR{internStr(llvmLink)}
 
 		for _, p := range bcPaths {
@@ -123,7 +123,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		ldArgs = append(ldArgs, argDashO.str(), (mergedOut).str())
 		// bcPaths is a fresh local (read-only after this); the script-table
 		// slice joins as its own chunk — neither is copied.
-		mergeInputs := inputChunks{bcPaths}
+		mergeInputs := InputChunks{bcPaths}
 
 		if linksCopy {
 			mergeInputs = append(mergeInputs, ctx.scripts[copyFsToolsVFS])
@@ -131,7 +131,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 
 		ldNode := &Node{
 			Platform:         instance.Platform,
-			Cmds:             []Cmd{{CmdArgs: argChunks{ldArgs}, Env: env}},
+			Cmds:             []Cmd{{CmdArgs: ArgChunks{ldArgs}, Env: env}},
 			Env:              env,
 			Inputs:           mergeInputs,
 			Outputs:          []VFS{mergedOut},
@@ -142,10 +142,10 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			DepRefs:          append([]NodeRef(nil), bcRefs...),
 			usesResources:    []string{resourcePatternYMakePython3, resourcePatternClang16},
 		}
-		ldRef := ctx.emit.Emit(ldNode)
+		ldRef := ctx.emit.emit(ldNode)
 
 		optOutName := stmt.Name + "_optimized" + stmt.Suffix + ".bc"
-		optOut := Build(instance.Path.Rel() + "/" + optOutName)
+		optOut := Build(instance.Path.rel() + "/" + optOutName)
 		optArgs := []STR{internStr(python), internStr(optWrapper), internStr(opt), (mergedOut).str(), argDashO.str(), (optOut).str()}
 		passes := []string{"default<O2>", "globalopt", "globaldce"}
 
@@ -169,11 +169,11 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		// Stays a single flat chunk: the dedup interleaves the head with
 		// bcSourceInputs (a local accumulation full of per-BC duplicates), so the
 		// tail needs a freshly built slice either way — no shared slice is copied.
-		optChunks := inputChunks{dedupVFS(optInputs, bcSourceInputs)}
+		optChunks := InputChunks{dedupVFS(optInputs, bcSourceInputs)}
 
 		optNode := &Node{
 			Platform:         instance.Platform,
-			Cmds:             []Cmd{{CmdArgs: argChunks{optArgs}, Env: env}},
+			Cmds:             []Cmd{{CmdArgs: ArgChunks{optArgs}, Env: env}},
 			Env:              env,
 			Inputs:           optChunks,
 			Outputs:          []VFS{optOut},
@@ -184,13 +184,13 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 			DepRefs:          []NodeRef{ldRef},
 			usesResources:    []string{resourcePatternYMakePython3, resourcePatternClang16},
 		}
-		opRef := ctx.emit.Emit(optNode)
+		opRef := ctx.emit.emit(optNode)
 
 		if stmt.GenerateMachineCode {
 			continue
 		}
 
-		ensureResourcePeer(instance.Path.Rel(), d)
+		ensureResourcePeer(instance.Path.rel(), d)
 
 		if d.prOutputProducer == nil {
 			d.prOutputProducer = map[string]NodeRef{}
@@ -205,11 +205,11 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 		// Upstream ymake propagates producer inputs transitively via its
 		// ${input:...} resolution; our code uses the prOutputInputs map for this.
 		if d.prOutputInputs == nil {
-			d.prOutputInputs = map[string]inputChunks{}
+			d.prOutputInputs = map[string]InputChunks{}
 		}
 
 		d.prOutputInputs[optOutName] = optChunks // read-only consumers (node inputs + prResourceExtraInputs copies out)
-		d.resources = append(d.resources, resourceEntry{
+		d.resources = append(d.resources, ResourceEntry{
 			Path:      optOutName,
 			Key:       "/llvm_bc/" + stmt.Name,
 			EndsBatch: true,
@@ -300,10 +300,10 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 // for a given source in an LLVM_BC statement. Checks both the module's
 // prOutputProducer map (for RUN_PROGRAM / PR outputs) and the codegen registry
 // (for COPY WITH_CONTEXT generated sources like yt_codec_bc.cpp).
-func llvmBcSourceInfo(ctx *genCtx, instance ModuleInstance, d *moduleData, src string) (inputVFS VFS, producer NodeRef) {
+func llvmBcSourceInfo(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src string) (inputVFS VFS, producer NodeRef) {
 	// RUN_PROGRAM / PR generated output
 	if ref := d.prOutputProducer[src]; ref != (NodeRef(0)) {
-		return copyFileOutputVFS(instance.Path.Rel(), src), ref
+		return copyFileOutputVFS(instance.Path.rel(), src), ref
 	}
 
 	// COPY WITH_CONTEXT generated source — build-root copy is authoritative
@@ -311,7 +311,7 @@ func llvmBcSourceInfo(ctx *genCtx, instance ModuleInstance, d *moduleData, src s
 		ref := NodeRef(0)
 
 		if reg := codegenRegForInstance(ctx, instance); reg != nil {
-			if info := reg.Lookup(*buildVFS); info != nil && info.HasProducerRef {
+			if info := reg.lookup(*buildVFS); info != nil && info.HasProducerRef {
 				ref = info.ProducerRef
 			}
 		}
@@ -319,7 +319,7 @@ func llvmBcSourceInfo(ctx *genCtx, instance ModuleInstance, d *moduleData, src s
 		return *buildVFS, ref
 	}
 
-	return copyFileInputVFS(ctx.fs, instance.Path.Rel(), src), NodeRef(0)
+	return copyFileInputVFS(ctx.fs, instance.Path.rel(), src), NodeRef(0)
 }
 
 // llvmBcRootRelArcSrc mirrors upstream's `rootrel_arc_src(src, unit)` quirk
@@ -330,7 +330,7 @@ func llvmBcSourceInfo(ctx *genCtx, instance ModuleInstance, d *moduleData, src s
 // source-tree file, resolve_arc_path returns $S/<module>/<src> and
 // rootrel_arc_src strips $S/ → module-rel path. yt_codec_bc.cpp is the
 // canonical build-rooted case (sg5: $(B)/yt_codec_bc.cpp.16.bc).
-func llvmBcRootRelArcSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src string) string {
+func llvmBcRootRelArcSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src string) string {
 	if _, ok := d.prOutputProducer[src]; ok {
 		return src
 	}
@@ -339,8 +339,8 @@ func llvmBcRootRelArcSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 		return src
 	}
 
-	if sourceInputVFS(ctx.fs, instance.Path.Rel(), src) != nil {
-		return instance.Path.Rel() + "/" + src
+	if sourceInputVFS(ctx.fs, instance.Path.rel(), src) != nil {
+		return instance.Path.rel() + "/" + src
 	}
 
 	return src

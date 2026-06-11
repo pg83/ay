@@ -5,14 +5,35 @@ import (
 	"strings"
 )
 
-type flatcEmission struct {
+// flatcConstFlags / flatcIOLeadArgs are the constant spans of every flatc
+// command around the module's FLATC_FLAGS; the per-node remainder is
+// [<header>, <src>].
+var flatcConstFlags = []STR{
+	argNoWarnings.str(),
+	argCpp.str(),
+	argKeepPrefix.str(),
+	argGenMutable.str(),
+	argSchema.str(),
+	argB2.str(),
+	argGenObjectApi.str(),
+	argFilenameSuffix.str(),
+	argFbs.str(),
+}
+
+var flatcIOLeadArgs = []STR{
+	argI.str(), argB.str(),
+	argI.str(), argS.str(),
+	argDashO.str(),
+}
+
+type FlatcEmission struct {
 	flRef   NodeRef
 	header  VFS
 	cpp     VFS
 	relPath string
 }
 
-func flatcDirectImportNames(pm *includeParserManager, srcRel string) []string {
+func flatcDirectImportNames(pm *IncludeParserManager, srcRel string) []string {
 	direct := pm.sourceParsedBuckets(Source(srcRel), nil).bucket(parsedIncludesLocal)
 
 	if len(direct) == 0 {
@@ -35,7 +56,7 @@ func resolveFlatcImportPath(fs FS, includerRel, importedRel string) string {
 	}
 
 	for _, cand := range candidates {
-		if fs.IsFile(srcRootVFS, cand) {
+		if fs.isFile(srcRootVFS, cand) {
 			return cand
 		}
 	}
@@ -43,14 +64,14 @@ func resolveFlatcImportPath(fs FS, includerRel, importedRel string) string {
 	return ""
 }
 
-func flatcDirectGeneratedHeaderIncludes(pm *includeParserManager, fs FS, srcRel string) []includeDirective {
+func flatcDirectGeneratedHeaderIncludes(pm *IncludeParserManager, fs FS, srcRel string) []IncludeDirective {
 	direct := flatcDirectImportNames(pm, srcRel)
 
 	if len(direct) == 0 {
 		return nil
 	}
 
-	out := make([]includeDirective, 0, len(direct))
+	out := make([]IncludeDirective, 0, len(direct))
 
 	for _, imp := range direct {
 		resolved := resolveFlatcImportPath(fs, srcRel, imp)
@@ -59,7 +80,7 @@ func flatcDirectGeneratedHeaderIncludes(pm *includeParserManager, fs FS, srcRel 
 			continue
 		}
 
-		out = append(out, includeDirective{
+		out = append(out, IncludeDirective{
 			kind:   includeQuoted,
 			target: internStr(resolved + ".h"),
 		})
@@ -68,7 +89,7 @@ func flatcDirectGeneratedHeaderIncludes(pm *includeParserManager, fs FS, srcRel 
 	return out
 }
 
-func flatcResolvedModuleSourceRel(ctx *genCtx, instance ModuleInstance, d *moduleData, resolvedRel string) (string, bool) {
+func flatcResolvedModuleSourceRel(ctx *GenCtx, instance ModuleInstance, d *ModuleData, resolvedRel string) (string, bool) {
 	candidates := append([]string(nil), d.srcs...)
 	candidates = append(candidates, d.globalSrcs...)
 
@@ -77,7 +98,7 @@ func flatcResolvedModuleSourceRel(ctx *genCtx, instance ModuleInstance, d *modul
 			continue
 		}
 
-		if resolveSourceVFS(ctx, instance, srcRel, d.srcDirs).Rel() == resolvedRel {
+		if resolveSourceVFS(ctx, instance, srcRel, d.srcDirs).rel() == resolvedRel {
 			return srcRel, true
 		}
 	}
@@ -85,12 +106,12 @@ func flatcResolvedModuleSourceRel(ctx *genCtx, instance ModuleInstance, d *modul
 	return "", false
 }
 
-func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ARG, transitiveImports []VFS, tc moduleToolchain, emit Emitter) (NodeRef, VFS, VFS, VFS) {
+func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ARG, transitiveImports []VFS, tc ModuleToolchain, emit Emitter) (NodeRef, VFS, VFS, VFS) {
 	headerVFS := Build(srcRel + ".h")
 	cppVFS := Build(srcRel + ".cpp")
 	bfbsVFS := Build(strings.TrimSuffix(srcRel, ".fbs") + ".bfbs")
 
-	cmdArgs := argChunks{
+	cmdArgs := ArgChunks{
 		{tc.Python3, (flatcWrapperVFS).str(), (flatcBinary).str()},
 		flatcConstFlags,
 	}
@@ -123,30 +144,30 @@ func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 		DepRefs:          depRefs,
 		Env:              env,
 		ForeignDepRefs:   foreignDepRefs,
-		Inputs:           inputChunks{{flatcBinary, flatcWrapperVFS, srcVFS}, transitiveImports},
+		Inputs:           InputChunks{{flatcBinary, flatcWrapperVFS, srcVFS}, transitiveImports},
 		KV:               KV{P: pkFL, PC: pcLightGreen},
 		Outputs:          []VFS{headerVFS, cppVFS, bfbsVFS},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		usesResources:    []string{resourcePatternYMakePython3},
 	}
 
-	return emit.Emit(node), headerVFS, cppVFS, bfbsVFS
+	return emit.emit(node), headerVFS, cppVFS, bfbsVFS
 }
 
-func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string) flatcEmission {
+func ensureFlatcEmission(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string) FlatcEmission {
 	srcVFS := resolveSourceVFS(ctx, instance, srcRel, d.srcDirs)
-	key := codegenOutputKey{
+	key := CodegenOutputKey{
 		platform: instance.Platform,
-		path:     Build(srcVFS.Rel() + ".h"),
+		path:     Build(srcVFS.rel() + ".h"),
 	}
 
 	if got, ok := ctx.flatcEmissions[key]; ok {
 		return got
 	}
 
-	for _, imp := range flatcDirectImportNames(ctx.parsers, srcVFS.Rel()) {
-		resolved := resolveFlatcImportPath(ctx.fs, srcVFS.Rel(), imp)
+	for _, imp := range flatcDirectImportNames(ctx.parsers, srcVFS.rel()) {
+		resolved := resolveFlatcImportPath(ctx.fs, srcVFS.rel(), imp)
 
 		if resolved == "" {
 			continue
@@ -160,14 +181,14 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 	flatcRes := ctx.toolResult(argContribLibsFlatbuffersFlatc)
 	flatcLDRef, flatcBinary := flatcRes.LDRef, *flatcRes.LDPath
 	transitiveImports := walkClosureTail(ctx, instance, srcVFS, ModuleCCInputs{})
-	flRef, headerVFS, cppVFS, bfbsVFS := EmitFL(instance, srcVFS.Rel(), srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, d.tc, ctx.emit)
+	flRef, headerVFS, cppVFS, bfbsVFS := EmitFL(instance, srcVFS.rel(), srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, d.tc, ctx.emit)
 
 	// flatc's INDUCED_DEPS(h+cpp …) — flatbuffers.h + flatbuffers_iter.h, declared
 	// in contrib/libs/flatbuffers/flatc/ya.make — ride into both the .h and .cpp
 	// closures generically via the flatc GeneratorRef below, so a CC transitively
 	// reaching the generated header picks them up (flatbuffers_iter.h was missing
 	// from arrow IPC CC inputs without this).
-	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.parsers, ctx.fs, srcVFS.Rel())
+	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.parsers, ctx.fs, srcVFS.rel())
 
 	registerBoundGeneratedParsedOutput(ctx, instance, pkFL, headerVFS, headerIncludes, flRef, []NodeRef{flatcLDRef})
 
@@ -177,48 +198,26 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 	// the .h so every consumer picks them up transitively through the cached
 	// window, instead of the former per-CC-source rewalk (flatcCCExtraInputs).
 	reg := codegenRegForInstance(ctx, instance)
-	reg.AddClosureLeaf(headerVFS, flatcWrapperVFS)
-	reg.AddClosureLeaf(headerVFS, srcVFS)
-	reg.AddClosureLeaf(headerVFS, flatcRuntimeVFS)
+	reg.addClosureLeaf(headerVFS, flatcWrapperVFS)
+	reg.addClosureLeaf(headerVFS, srcVFS)
+	reg.addClosureLeaf(headerVFS, flatcRuntimeVFS)
 
 	for _, imp := range transitiveImports {
-		reg.AddClosureLeaf(headerVFS, imp)
+		reg.addClosureLeaf(headerVFS, imp)
 	}
 
-	cppIncludes := []includeDirective{{kind: includeQuoted, target: internStr(headerVFS.Rel())}}
+	cppIncludes := []IncludeDirective{{kind: includeQuoted, target: internStr(headerVFS.rel())}}
 
 	registerBoundGeneratedParsedOutput(ctx, instance, pkFL, cppVFS, cppIncludes, flRef, []NodeRef{flatcLDRef})
 	registerBoundGeneratedParsedOutput(ctx, instance, pkFL, bfbsVFS, nil, flRef, []NodeRef{flatcLDRef})
 
-	out := flatcEmission{
+	out := FlatcEmission{
 		flRef:   flRef,
 		header:  headerVFS,
 		cpp:     cppVFS,
-		relPath: srcVFS.Rel(),
+		relPath: srcVFS.rel(),
 	}
 	ctx.flatcEmissions[key] = out
 
 	return out
 }
-
-// flatcConstFlags / flatcIOLeadArgs are the constant spans of every flatc
-// command around the module's FLATC_FLAGS; the per-node remainder is
-// [<header>, <src>].
-var (
-	flatcConstFlags = []STR{
-		argNoWarnings.str(),
-		argCpp.str(),
-		argKeepPrefix.str(),
-		argGenMutable.str(),
-		argSchema.str(),
-		argB2.str(),
-		argGenObjectApi.str(),
-		argFilenameSuffix.str(),
-		argFbs.str(),
-	}
-	flatcIOLeadArgs = []STR{
-		argI.str(), argB.str(),
-		argI.str(), argS.str(),
-		argDashO.str(),
-	}
-)

@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 )
 
-func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance ModuleInstance, sources []string, in ModuleCCInputs) []VFS {
+func joinSrcsIncludeClosure(ctx *GenCtx, scanPlatform *Platform, srcInstance ModuleInstance, sources []string, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerForPlatform(scanPlatform)
 
 	if scanner == nil {
@@ -20,17 +20,17 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 	visited := scanner.visitedIDPool.Get().(*IdSet)
 	visited.reset(vfsBound())
 	defer scanner.visitedIDPool.Put(visited)
-	modDirKey := dirKey(srcInstance.Path.Rel())
+	modDirKey := dirKey(srcInstance.Path.rel())
 
 	srcRels := make([]string, len(sources))
 
 	for i, src := range sources {
-		srcRelOnDisk := srcInstance.Path.Rel() + "/" + src
+		srcRelOnDisk := srcInstance.Path.rel() + "/" + src
 
-		if !ctx.fs.IsFile(modDirKey, src) {
+		if !ctx.fs.isFile(modDirKey, src) {
 			for _, dir := range in.SrcDirs {
-				if dir != modDirKey && ctx.fs.IsFile(dir, src) {
-					srcRelOnDisk = dir.Rel() + "/" + src
+				if dir != modDirKey && ctx.fs.isFile(dir, src) {
+					srcRelOnDisk = dir.rel() + "/" + src
 
 					break
 				}
@@ -48,10 +48,10 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 			OwnAddIncl:      in.AddIncl,
 			PeerAddInclSet:  in.PeerAddInclGlobal,
 			BaseSearchPaths: includeScannerBasePaths(),
-			OwnerModuleDir:  srcInstance.Path.Rel(),
+			OwnerModuleDir:  srcInstance.Path.rel(),
 		}
 
-		sc := scanner.NewScanCtx(cfg)
+		sc := scanner.newScanCtx(cfg)
 
 		for _, v := range sc.closureOf(Source(srcRelOnDisk)) {
 			if visited.has(v) {
@@ -70,7 +70,7 @@ func joinSrcsIncludeClosure(ctx *genCtx, scanPlatform *Platform, srcInstance Mod
 	return order
 }
 
-func jsCCIncludeInputs(srcInstance ModuleInstance, joinOut VFS, sources []string, closure []VFS, scripts scriptDeps) []VFS {
+func jsCCIncludeInputs(srcInstance ModuleInstance, joinOut VFS, sources []string, closure []VFS, scripts ScriptDeps) []VFS {
 	out := make([]VFS, 0, 3+len(sources)+len(closure))
 	// The compiled join output leads (IncludeInputs is the full input window).
 	out = append(out, joinOut)
@@ -78,7 +78,7 @@ func jsCCIncludeInputs(srcInstance ModuleInstance, joinOut VFS, sources []string
 	out = append(out, scripts[buildScriptsGenJoinSrcsPy]...)
 
 	for _, s := range sources {
-		out = append(out, Source(srcInstance.Path.Rel()+"/"+s))
+		out = append(out, Source(srcInstance.Path.rel()+"/"+s))
 	}
 
 	out = append(out, closure...)
@@ -86,12 +86,12 @@ func jsCCIncludeInputs(srcInstance ModuleInstance, joinOut VFS, sources []string
 	return out
 }
 
-func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, srcDirs []VFS) VFS {
+func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, srcDirs []VFS) VFS {
 	// A rooted spelling — $(S)/$(B) or ${ARCADIA_ROOT}/${ARCADIA_BUILD_ROOT}/
 	// ${CURDIR}/${BINDIR}/ — names an exact VFS; build it directly rather than
 	// treating the whole token as a module-relative tail (which would bury the
 	// macro inside $(S)/<mod>/…). Plain relative paths fall through.
-	if vfs := moduleRootedVFS(srcInstance.Path.Rel(), srcRel); vfs != nil {
+	if vfs := moduleRootedVFS(srcInstance.Path.rel(), srcRel); vfs != nil {
 		return *vfs
 	}
 
@@ -100,8 +100,8 @@ func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, sr
 	// later declaration wins, so search in reverse and take the first entry that
 	// has the file; the module dir (index 0) is the final fallback.
 	for i := len(srcDirs) - 1; i >= 1; i-- {
-		if ctx.fs.IsFile(srcDirs[i], srcRel) {
-			return Source(filepath.ToSlash(filepath.Clean(srcDirs[i].Rel() + "/" + srcRel)))
+		if ctx.fs.isFile(srcDirs[i], srcRel) {
+			return Source(filepath.ToSlash(filepath.Clean(srcDirs[i].rel() + "/" + srcRel)))
 		}
 	}
 
@@ -109,7 +109,7 @@ func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, sr
 	// at the canonical source path (REF tracks the cleaned form, e.g.
 	// $(S)/ydb/public/lib/ydb_cli/commands/ydb_command.cpp, not the
 	// command_base/../ydb_command.cpp shape).
-	srcRelOnDisk := filepath.ToSlash(filepath.Clean(srcInstance.Path.Rel() + "/" + srcRel))
+	srcRelOnDisk := filepath.ToSlash(filepath.Clean(srcInstance.Path.rel() + "/" + srcRel))
 
 	return Source(srcRelOnDisk)
 }
@@ -118,7 +118,7 @@ func resolveSourceVFS(ctx *genCtx, srcInstance ModuleInstance, srcRel string, sr
 // root is a member (windows are self-containing; subsumption needs that), first
 // for plain files, anywhere within for SCC members. Consumers treat the window
 // as the node's full input list and must not re-add the root.
-func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in ModuleCCInputs) []VFS {
+func walkClosure(ctx *GenCtx, srcInstance ModuleInstance, vfsPath VFS, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerFor(srcInstance)
 
 	if scanner == nil {
@@ -131,7 +131,7 @@ func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in Module
 	rootParser := in.RootParser
 
 	if rootParser == nil {
-		rootParser = includeDirectiveParsers.registeredParserFor(vfsPath.Rel())
+		rootParser = includeDirectiveParsers.registeredParserFor(vfsPath.rel())
 	}
 
 	cfg := ScanContext{
@@ -140,10 +140,10 @@ func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in Module
 		OwnAddIncl:      in.AddIncl,
 		PeerAddInclSet:  in.PeerAddInclGlobal,
 		BaseSearchPaths: includeScannerBasePaths(),
-		OwnerModuleDir:  srcInstance.Path.Rel(),
+		OwnerModuleDir:  srcInstance.Path.rel(),
 	}
 
-	sc := scanner.NewScanCtx(cfg)
+	sc := scanner.newScanCtx(cfg)
 	scanner.walkClosureCalls++
 
 	return sc.closureOf(vfsPath)
@@ -153,7 +153,7 @@ func walkClosure(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in Module
 // stripped. Sound only for roots that cannot be SCC members (build outputs:
 // include cycles arise among real headers, never through registered generated
 // files), where closureOf is guaranteed to lead the window with the root.
-func walkClosureTail(ctx *genCtx, srcInstance ModuleInstance, vfsPath VFS, in ModuleCCInputs) []VFS {
+func walkClosureTail(ctx *GenCtx, srcInstance ModuleInstance, vfsPath VFS, in ModuleCCInputs) []VFS {
 	full := walkClosure(ctx, srcInstance, vfsPath, in)
 
 	if len(full) == 0 {
@@ -179,7 +179,7 @@ func rewriteClosureCPSource(scanner *IncludeScanner, out []VFS) []VFS {
 	var result []VFS
 
 	for i, v := range out {
-		info := scanner.codegen.Lookup(v)
+		info := scanner.codegen.lookup(v)
 
 		if info == nil || info.SourcePath == 0 {
 			continue
@@ -212,7 +212,7 @@ func keepOnlySourceVFS(out []VFS) []VFS {
 	var w []VFS
 
 	for _, v := range out {
-		if !v.IsSource() {
+		if !v.isSource() {
 			continue
 		}
 

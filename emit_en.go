@@ -5,24 +5,24 @@ import (
 	"strings"
 )
 
-type enumSrcsResult struct {
+type EnumSrcsResult struct {
 	CCRefs    []NodeRef
 	CCOutputs []VFS
 }
 
-func resolveEnumHeaderInput(ctx *genCtx, instance ModuleInstance, headerRel string, srcDirs []VFS) VFS {
+func resolveEnumHeaderInput(ctx *GenCtx, instance ModuleInstance, headerRel string, srcDirs []VFS) VFS {
 	headerInput := resolveSourceVFS(ctx, instance, headerRel, srcDirs)
 
-	if !ctx.fs.IsFile(srcRootVFS, headerInput.Rel()) {
-		if vfs := sourceInputVFS(ctx.fs, instance.Path.Rel(), headerRel); vfs != nil && vfs.IsSource() {
+	if !ctx.fs.isFile(srcRootVFS, headerInput.rel()) {
+		if vfs := sourceInputVFS(ctx.fs, instance.Path.rel(), headerRel); vfs != nil && vfs.isSource() {
 			headerInput = *vfs
 		}
 	}
 
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
-		buildHeader := Build(headerInput.Rel())
+		buildHeader := Build(headerInput.rel())
 
-		if reg.Lookup(buildHeader) != nil {
+		if reg.lookup(buildHeader) != nil {
 			return buildHeader
 		}
 	}
@@ -30,7 +30,7 @@ func resolveEnumHeaderInput(ctx *genCtx, instance ModuleInstance, headerRel stri
 	return headerInput
 }
 
-func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddInclGlobal []VFS, consumerInputs *ModuleCCInputs) *enumSrcsResult {
+func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddInclGlobal []VFS, consumerInputs *ModuleCCInputs) *EnumSrcsResult {
 	if len(d.enumSrcs) == 0 {
 		return nil
 	}
@@ -47,7 +47,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		FS:                ctx.fs,
 		SrcDirs:           d.srcDirs,
 	}
-	res := &enumSrcsResult{}
+	res := &EnumSrcsResult{}
 
 	for _, stmt := range d.enumSrcs {
 		withHeader := stmt.Variant == "with_header"
@@ -59,17 +59,17 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 		// downstream CC are named under the module's build dir.
 		headerRel := stmt.Header
 
-		if moduleRootedVFS(instance.Path.Rel(), stmt.Header) != nil {
-			headerRel = strings.TrimPrefix(headerInput.Rel(), instance.Path.Rel()+"/")
+		if moduleRootedVFS(instance.Path.rel(), stmt.Header) != nil {
+			headerRel = strings.TrimPrefix(headerInput.rel(), instance.Path.rel()+"/")
 		}
 
 		closure := walkClosure(ctx, instance, headerInput, scanIn)
 
-		serializedCPPPath := Build(instance.Path.Rel() + "/" + headerRel + "_serialized.cpp")
+		serializedCPPPath := Build(instance.Path.rel() + "/" + headerRel + "_serialized.cpp")
 		var serializedHPath VFS
 
 		if withHeader {
-			serializedHPath = Build(instance.Path.Rel() + "/" + headerRel + "_serialized.h")
+			serializedHPath = Build(instance.Path.rel() + "/" + headerRel + "_serialized.h")
 		}
 
 		if ctx.scannerTarget.codegen != nil {
@@ -78,8 +78,8 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 			// runtime headers come from enum_parser's INDUCED_DEPS via the GeneratorRef
 			// (the h+cpp group), and enum_runtime.h's own transitive includes
 			// (dispatch_methods.h, ordered_pairs.h) arrive through the closure walk.
-			cppParsed := []includeDirective{
-				{kind: includeQuoted, target: internStr(headerInput.Rel())},
+			cppParsed := []IncludeDirective{
+				{kind: includeQuoted, target: internStr(headerInput.rel())},
 				{kind: includeQuoted, target: strUtilGenericSerializedEnumH},
 			}
 			sort.Slice(cppParsed, func(i, j int) bool { return cppParsed[i].target.String() < cppParsed[j].target.String() })
@@ -87,9 +87,9 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 
 			if withHeader {
 				// serialized_enum.h reaches the header via enum_parser's INDUCED_DEPS(h …).
-				hParsed := []includeDirective{
-					{kind: includeQuoted, target: internStr(headerInput.Rel())},
-					{kind: includeQuoted, target: internStr(serializedCPPPath.Rel())},
+				hParsed := []IncludeDirective{
+					{kind: includeQuoted, target: internStr(headerInput.rel())},
+					{kind: includeQuoted, target: internStr(serializedCPPPath.rel())},
 				}
 				sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target.String() < hParsed[j].target.String() })
 				registerGeneratedParsedOutput(ctx, instance, pkEN, serializedHPath, hParsed, []NodeRef{enumParserLD})
@@ -131,7 +131,7 @@ func emitEnumSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerAddIn
 
 		if reg := codegenRegForInstance(ctx, instance); reg != nil {
 			for _, p := range enOutPaths {
-				reg.SetProducerRef(p, enRef)
+				reg.setProducerRef(p, enRef)
 			}
 		}
 
@@ -162,20 +162,20 @@ func EmitEN(
 	headerIncludeClosure []VFS,
 	emit Emitter,
 ) (NodeRef, []VFS) {
-	serializedCPPVFS := Build(instance.Path.Rel() + "/" + headerRel + "_serialized.cpp")
+	serializedCPPVFS := Build(instance.Path.rel() + "/" + headerRel + "_serialized.cpp")
 
 	cmdArgs := []STR{
 		(enumParserBin).str(),
 		(headerInput).str(),
 		argIncludePath.str(),
-		internStr(headerInput.Rel()),
+		internStr(headerInput.rel()),
 		argOutput.str(),
 		(serializedCPPVFS).str(),
 	}
 	outputs := []VFS{serializedCPPVFS}
 
 	if withHeader {
-		serializedHVFS := Build(instance.Path.Rel() + "/" + headerRel + "_serialized.h")
+		serializedHVFS := Build(instance.Path.rel() + "/" + headerRel + "_serialized.h")
 		cmdArgs = append(cmdArgs, argHeader.str(), (serializedHVFS).str())
 		outputs = append(outputs, serializedHVFS)
 	}
@@ -200,17 +200,17 @@ func EmitEN(
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: argChunks{cmdArgs},
+				CmdArgs: ArgChunks{cmdArgs},
 				Env:     env,
 			},
 		},
 		Env:              env,
-		Inputs:           inputChunks{{enumParserBin}, headerIncludeClosure},
+		Inputs:           InputChunks{{enumParserBin}, headerIncludeClosure},
 		KV:               KV{P: pkEN, PC: pcYellow},
 		Outputs:          outputs,
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Sandboxing:       true,
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		DepRefs:          depRefs,
 		ForeignDepRefs:   foreignDepRefs,
 	}
@@ -219,5 +219,5 @@ func EmitEN(
 		node.TargetProperties.ModuleTag = moduleTag
 	}
 
-	return emit.Emit(node), outputs
+	return emit.emit(node), outputs
 }

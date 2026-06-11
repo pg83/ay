@@ -81,11 +81,11 @@ func (id STR) vfs() VFS {
 	return VFS(uint32(id)<<1 | uint32(root))
 }
 
-func (v VFS) Rel() string {
+func (v VFS) rel() string {
 	return internTable.strs[v.strID()][vfsPrefixLen:]
 }
 
-func (v VFS) Root() VFSRoot {
+func (v VFS) root() VFSRoot {
 	if uint32(v)&1 != 0 {
 		return VFSRootBuild
 	}
@@ -93,24 +93,24 @@ func (v VFS) Root() VFSRoot {
 	return VFSRootSource
 }
 
-func (v VFS) IsSource() bool {
-	return v.Root() == VFSRootSource
+func (v VFS) isSource() bool {
+	return v.root() == VFSRootSource
 }
 
-func (v VFS) IsBuild() bool {
-	return v.Root() == VFSRootBuild
+func (v VFS) isBuild() bool {
+	return v.root() == VFSRootBuild
 }
 
 func (v VFS) String() string {
 	return internTable.strs[v.strID()]
 }
 
-func (v VFS) LongString() string {
-	if v.Root() == VFSRootBuild {
-		return "$(BUILD_ROOT)/" + v.Rel()
+func (v VFS) longString() string {
+	if v.root() == VFSRootBuild {
+		return "$(BUILD_ROOT)/" + v.rel()
 	}
 
-	return "$(SOURCE_ROOT)/" + v.Rel()
+	return "$(SOURCE_ROOT)/" + v.rel()
 }
 
 // vfsHasPrefix gates on "$(": every "$( "-prefixed string we ever classify is a

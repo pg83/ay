@@ -22,13 +22,13 @@ func internEnv(name string) ENV {
 
 // internEnvSTR interns an already-interned name STR into the ENV namespace.
 func internEnvSTR(st STR) ENV {
-	if id, ok := envTable.ids.Get(st); ok {
+	if id, ok := envTable.ids.get(st); ok {
 		return ENV(id)
 	}
 
 	id := ENV(len(envTable.strs))
 	envTable.strs = append(envTable.strs, st)
-	envTable.ids.Put(st, uint32(id))
+	envTable.ids.put(st, uint32(id))
 
 	return id
 }
@@ -53,7 +53,7 @@ func internedEnv(name string) (ENV, bool) {
 		return 0, false
 	}
 
-	id, ok := envTable.ids.Get(*st)
+	id, ok := envTable.ids.get(*st)
 
 	return ENV(id), ok
 }

@@ -64,7 +64,7 @@ func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 	Throw2(w.Write(buf))
 }
 
-func appendNode(buf []byte, n *Node, uids *uidVec, dropSrcInputs bool) []byte {
+func appendNode(buf []byte, n *Node, uids *UidVec, dropSrcInputs bool) []byte {
 	buf = append(buf, '{')
 
 	if n.Cache != nil {
@@ -182,7 +182,7 @@ func appendStringSlice(buf []byte, ss []string) []byte {
 
 // appendStrChunks emits the flattened element sequence of the chunk list —
 // the same flat JSON array appendStrSlice writes for the concatenation.
-func appendStrChunks(buf []byte, chunks argChunks) []byte {
+func appendStrChunks(buf []byte, chunks ArgChunks) []byte {
 	buf = append(buf, '[')
 	first := true
 
@@ -239,7 +239,7 @@ func appendUIDSlice(buf []byte, us []UID) []byte {
 
 // appendRefUIDs writes refs as the array of their resolved dep uids — direct
 // id->uid lookup, no materialized Deps slice on the node.
-func appendRefUIDs(buf []byte, refs []NodeRef, uids *uidVec) []byte {
+func appendRefUIDs(buf []byte, refs []NodeRef, uids *UidVec) []byte {
 	buf = append(buf, '[')
 
 	for i, r := range refs {
@@ -280,7 +280,7 @@ func appendBuildOnlyVFSChunks(buf []byte, chunks [][]VFS) []byte {
 
 	for _, ch := range chunks {
 		for _, v := range ch {
-			if v.IsSource() {
+			if v.isSource() {
 				continue
 			}
 
@@ -317,7 +317,7 @@ func appendBuildOnlyVFSSlice(buf []byte, vs []VFS) []byte {
 	first := true
 
 	for _, v := range vs {
-		if v.IsSource() {
+		if v.isSource() {
 			continue
 		}
 
@@ -356,7 +356,7 @@ func appendVFS(buf []byte, v VFS) []byte {
 
 // appendToolForeignDeps writes the foreign-dep slice as the single-key object
 // {"tool":[...]} — the only key any node ever uses.
-func appendToolForeignDeps(buf []byte, refs []NodeRef, uids *uidVec) []byte {
+func appendToolForeignDeps(buf []byte, refs []NodeRef, uids *UidVec) []byte {
 	buf = append(buf, `{"tool":`...)
 	buf = appendRefUIDs(buf, refs, uids)
 

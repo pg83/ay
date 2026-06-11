@@ -9,8 +9,8 @@ var (
 	// Lazy (not init-time like protobufRuntimeDirectives): these lists are only
 	// reached for .ev sources, so eager interning would grow the intern table on
 	// targets that never build them.
-	evExtraProtobufDirectives = sync.OnceValue(func() []includeDirective { return quotedDirectives(evExtraProtobufHeaders) })
-	evAbseilCleanupDirectives = sync.OnceValue(func() []includeDirective { return quotedDirectives(evAbseilCleanupHeaders) })
+	evExtraProtobufDirectives = sync.OnceValue(func() []IncludeDirective { return quotedDirectives(evExtraProtobufHeaders) })
+	evAbseilCleanupDirectives = sync.OnceValue(func() []IncludeDirective { return quotedDirectives(evAbseilCleanupHeaders) })
 )
 
 var evExtraProtobufHeaders = []VFS{
@@ -26,15 +26,28 @@ var evAbseilCleanupHeaders = []VFS{
 	Intern("$(S)/contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/internal/cleanup.h"),
 }
 
-func evWitnessExtras(evRelPath string, evPbCC VFS) []includeDirective {
+// evProtocConstArgs is the constant -I/--out span of every EV protoc command.
+var evProtocConstArgs = []STR{
+	argI2.str(),
+	argIS2.str(),
+	argIB2.str(),
+	argIS3.str(),
+	argISContribLibsProtobufSrc.str(),
+	argIB2.str(),
+	argISContribLibsProtobufSrc.str(),
+	argCppOutB.str(),
+	argCppStyleguideOutB.str(),
+}
+
+func evWitnessExtras(evRelPath string, evPbCC VFS) []IncludeDirective {
 	evExtraProtobuf := evExtraProtobufDirectives()
 	evAbseilCleanup := evAbseilCleanupDirectives()
-	out := make([]includeDirective, 0,
+	out := make([]IncludeDirective, 0,
 		3+len(pbDescriptorImporterDirectives)+len(evExtraProtobuf)+len(evAbseilCleanup))
-	out = append(out, includeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.Rel())})
-	out = append(out, includeDirective{kind: includeQuoted, target: internStr(pbDescriptorVFS.Rel())})
-	out = append(out, includeDirective{kind: includeQuoted, target: internStr(evRelPath)})
-	out = append(out, includeDirective{kind: includeQuoted, target: internStr(evPbCC.Rel())})
+	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())})
+	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(pbDescriptorVFS.rel())})
+	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(evRelPath)})
+	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(evPbCC.rel())})
 	out = append(out, pbDescriptorImporterDirectives...)
 	out = append(out, evExtraProtobuf...)
 	out = append(out, evAbseilCleanup...)
@@ -53,16 +66,16 @@ func EmitEV(
 	event2cppBinary VFS,
 	moduleTag STR,
 	transitiveImports []VFS,
-	tc moduleToolchain,
+	tc ModuleToolchain,
 	emit Emitter,
 ) NodeRef {
-	moduleDir := instance.Path.Rel()
+	moduleDir := instance.Path.rel()
 
 	evCC := Build(evRelPath + ".pb.cc")
 	evH := Build(evRelPath + ".pb.h")
 	srcVFS := Source(evRelPath)
 
-	cmdArgs := argChunks{
+	cmdArgs := ArgChunks{
 		{
 			tc.Python3,
 			internStr(pbWrapperPath),
@@ -132,7 +145,7 @@ func EmitEV(
 			},
 		},
 		Env:              env,
-		Inputs:           inputChunks{inputs, transitiveImports},
+		Inputs:           InputChunks{inputs, transitiveImports},
 		Outputs:          []VFS{evCC, evH},
 		KV:               KV{P: pkEV, PC: pcYellow},
 		TargetProperties: targetProps,
@@ -142,18 +155,5 @@ func EmitEV(
 		usesResources:    []string{resourcePatternYMakePython3},
 	}
 
-	return emit.Emit(node)
-}
-
-// evProtocConstArgs is the constant -I/--out span of every EV protoc command.
-var evProtocConstArgs = []STR{
-	argI2.str(),
-	argIS2.str(),
-	argIB2.str(),
-	argIS3.str(),
-	argISContribLibsProtobufSrc.str(),
-	argIB2.str(),
-	argISContribLibsProtobufSrc.str(),
-	argCppOutB.str(),
-	argCppStyleguideOutB.str(),
+	return emit.emit(node)
 }

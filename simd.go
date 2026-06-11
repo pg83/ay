@@ -1,11 +1,11 @@
 package main
 
-type simdVariant struct {
+type SimdVariant struct {
 	Suffix string
 	CFlags []string
 }
 
-var simdVariants = map[string]simdVariant{
+var simdVariants = map[string]SimdVariant{
 	"SRC_C_SSE2":  {Suffix: "sse2", CFlags: []string{"-msse2"}},
 	"SRC_C_SSE3":  {Suffix: "sse3", CFlags: []string{"-msse3"}},
 	"SRC_C_SSSE3": {Suffix: "ssse3", CFlags: []string{"-mssse3"}},
@@ -23,12 +23,12 @@ var simdVariants = map[string]simdVariant{
 	"SRC_C_SSE4": {Suffix: "sse4", CFlags: []string{"-msse4.1", "-msse4.2", "-mpopcnt", "-mcx16"}},
 }
 
-func simdVariantFor(macroName TOK) (simdVariant, bool) {
+func simdVariantFor(macroName TOK) (SimdVariant, bool) {
 	v, ok := simdVariants[macroName.String()]
 	return v, ok
 }
 
-type simdSrc struct {
+type SimdSrc struct {
 	Src     string
 	Variant string
 	CFlags  []string

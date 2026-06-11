@@ -11,7 +11,7 @@ const buildScriptsRoot = "build/scripts"
 // closure] (all VFS). Threaded from genCtx to emit sites, which add a build script
 // with `append(inputs, scripts[v]...)` so the wrapper and the helpers it imports
 // land in one append.
-type scriptDeps map[VFS][]VFS
+type ScriptDeps map[VFS][]VFS
 
 // buildScriptTable parses every build/scripts/*.py and returns, for each script's
 // VFS, a slice whose FIRST element is the script itself followed by its transitive
@@ -24,14 +24,14 @@ type scriptDeps map[VFS][]VFS
 // Multiple wrappers can share a helper (link_exe and fs_tools both import
 // process_command_files), so appending several scripts to one node can duplicate a
 // helper; canonInputs dedups, so callers need not.
-func buildScriptTable(fs FS) scriptDeps {
+func buildScriptTable(fs FS) ScriptDeps {
 	texts := map[string]string{}
-	fs.Walk(buildScriptsRoot, func(rel string, isDir bool) {
+	fs.walk(buildScriptsRoot, func(rel string, isDir bool) {
 		if isDir || !strings.HasSuffix(rel, ".py") {
 			return
 		}
 
-		texts[rel] = string(fs.Read(rel))
+		texts[rel] = string(fs.read(rel))
 	})
 
 	byStem := make(map[string]string, len(texts))
@@ -55,7 +55,7 @@ func buildScriptTable(fs FS) scriptDeps {
 		direct[rel] = deps
 	}
 
-	table := make(scriptDeps, len(texts))
+	table := make(ScriptDeps, len(texts))
 
 	for rel := range texts {
 		seen := map[string]bool{}

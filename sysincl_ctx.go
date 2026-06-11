@@ -13,7 +13,7 @@ import (
 // source/includer rule split needs no separate handling — it falls out of each
 // record's filter. Result order is irrelevant (the gate sorts node inputs), so
 // both rule kinds share one index.
-type sysinclCtx struct {
+type SysinclCtx struct {
 	// keyBits/keyCI/ciGate/ciMaxLen back mightClaim: a "could any record map this
 	// target" gate evaluated before the full lookup.
 	keyBits  BitSet          // case-sensitive keys, indexed by target STR
@@ -21,11 +21,11 @@ type sysinclCtx struct {
 	ciGate   BitSet
 	ciMaxLen int // longest CI key; longer targets cannot match (cheap reject)
 
-	merged *sysinclIndex
+	merged *SysinclIndex
 }
 
-func newSysinclCtx(set SysInclSet) *sysinclCtx {
-	c := &sysinclCtx{}
+func newSysinclCtx(set SysInclSet) *SysinclCtx {
+	c := &SysinclCtx{}
 
 	for i := range set {
 		rec := &set[i]
@@ -73,7 +73,7 @@ func newSysinclCtx(set SysInclSet) *sysinclCtx {
 
 // mightClaim is a sound, cheap prefilter: a false result guarantees no sysincl
 // record can map target, so the caller skips the full lookup.
-func (c *sysinclCtx) mightClaim(target STR) bool {
+func (c *SysinclCtx) mightClaim(target STR) bool {
 	if c.keyBits.has(uint32(target)) {
 		return true
 	}
@@ -97,7 +97,7 @@ func (c *sysinclCtx) mightClaim(target STR) bool {
 
 // lookup resolves target's sysincl override for a file at path (the scanner uses
 // the includer's own path) via the merged header-first index over all records.
-func (c *sysinclCtx) lookup(path string, target STR) ([]VFS, bool, bool) {
+func (c *SysinclCtx) lookup(path string, target STR) ([]VFS, bool, bool) {
 	if !c.mightClaim(target) {
 		return nil, false, false
 	}
@@ -123,9 +123,9 @@ func caseVariants(b byte) []byte {
 // sysinclContribution is one sysincl record's mapping for a header bucket,
 // carrying the record's Filter so activeness is decided per query against the
 // includer path.
-type sysinclContribution struct {
+type SysinclContribution struct {
 	paths  []VFS
-	filter *sourceFilter // nil = applies to every path
+	filter *SourceFilter // nil = applies to every path
 	rawKey string        // the record's stored key (lowercase for CI records)
 	order  int           // index in the rule set
 	ci     bool
@@ -138,12 +138,12 @@ type sysinclContribution struct {
 // bucket holds every record whose key folds to it, sorted by record order. A
 // matched entry must (a) match the path (filter), (b) match case (CI = whole
 // bucket, non-CI = exact rawKey).
-type sysinclIndex struct {
-	byLower map[string][]sysinclContribution
+type SysinclIndex struct {
+	byLower map[string][]SysinclContribution
 }
 
-func buildSysinclIndex(set SysInclSet) *sysinclIndex {
-	m := &sysinclIndex{byLower: make(map[string][]sysinclContribution)}
+func buildSysinclIndex(set SysInclSet) *SysinclIndex {
+	m := &SysinclIndex{byLower: make(map[string][]SysinclContribution)}
 
 	for order := range set {
 		rec := &set[order]
@@ -152,7 +152,7 @@ func buildSysinclIndex(set SysInclSet) *sysinclIndex {
 			raw := k.String()
 			lc := strings.ToLower(raw)
 
-			m.byLower[lc] = append(m.byLower[lc], sysinclContribution{
+			m.byLower[lc] = append(m.byLower[lc], SysinclContribution{
 				paths:  paths,
 				filter: rec.Filter,
 				rawKey: raw,
@@ -163,7 +163,7 @@ func buildSysinclIndex(set SysInclSet) *sysinclIndex {
 		}
 
 		for k, paths := range rec.MappingsCI {
-			m.byLower[k] = append(m.byLower[k], sysinclContribution{
+			m.byLower[k] = append(m.byLower[k], SysinclContribution{
 				paths:  paths,
 				filter: rec.Filter,
 				rawKey: k,
@@ -181,7 +181,7 @@ func buildSysinclIndex(set SysInclSet) *sysinclIndex {
 	return m
 }
 
-func (m *sysinclIndex) lookup(path, header string) ([]VFS, bool, bool) {
+func (m *SysinclIndex) lookup(path, header string) ([]VFS, bool, bool) {
 	bucket := m.byLower[strings.ToLower(header)]
 
 	if bucket == nil {

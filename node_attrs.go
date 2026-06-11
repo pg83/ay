@@ -234,12 +234,12 @@ func (kv KV) sortedExt() []KVExt {
 // so the bytes match the former sort-then-write of the maps. ---
 
 // jsonObj accumulates comma separation for a JSON object being appended.
-type jsonObj struct {
+type JsonObj struct {
 	buf []byte
 	n   int
 }
 
-func (o *jsonObj) sep() {
+func (o *JsonObj) sep() {
 	if o.n > 0 {
 		o.buf = append(o.buf, ',')
 	}
@@ -247,7 +247,7 @@ func (o *jsonObj) sep() {
 	o.n++
 }
 
-func (o *jsonObj) str(key, val string) {
+func (o *JsonObj) str(key, val string) {
 	if val == "" {
 		return
 	}
@@ -255,14 +255,14 @@ func (o *jsonObj) str(key, val string) {
 	o.forceStr(key, val)
 }
 
-func (o *jsonObj) forceStr(key, val string) {
+func (o *JsonObj) forceStr(key, val string) {
 	o.sep()
 	o.buf = appendString(o.buf, key)
 	o.buf = append(o.buf, ':')
 	o.buf = appendString(o.buf, val)
 }
 
-func (o *jsonObj) boolTrue(key string, v bool) {
+func (o *JsonObj) boolTrue(key string, v bool) {
 	if !v {
 		return
 	}
@@ -272,7 +272,7 @@ func (o *jsonObj) boolTrue(key string, v bool) {
 	o.buf = append(o.buf, ':', 't', 'r', 'u', 'e')
 }
 
-func (o *jsonObj) num(key string, v float64) {
+func (o *JsonObj) num(key string, v float64) {
 	o.sep()
 	o.buf = appendString(o.buf, key)
 	o.buf = append(o.buf, ':')
@@ -284,7 +284,7 @@ func appendRequirements(buf []byte, r Requirements) []byte {
 		return append(buf, '{', '}')
 	}
 
-	o := jsonObj{buf: append(buf, '{')}
+	o := JsonObj{buf: append(buf, '{')}
 
 	if r.CPU != 0 {
 		o.num("cpu", r.CPU)
@@ -304,7 +304,7 @@ func appendRequirements(buf []byte, r Requirements) []byte {
 }
 
 func appendTargetProperties(buf []byte, t TargetProperties) []byte {
-	o := jsonObj{buf: append(buf, '{')}
+	o := JsonObj{buf: append(buf, '{')}
 
 	o.str("module_dir", t.ModuleDir)
 	o.str("module_lang", t.ModuleLang.String())
@@ -315,7 +315,7 @@ func appendTargetProperties(buf []byte, t TargetProperties) []byte {
 }
 
 func appendKV(buf []byte, kv KV) []byte {
-	o := jsonObj{buf: append(buf, '{')}
+	o := JsonObj{buf: append(buf, '{')}
 
 	o.str("disable_cache", kv.DisableCache)
 
