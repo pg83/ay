@@ -87,8 +87,8 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 		t.Fatalf("outputs len = %d, want %d (%v)", len(got.Outputs), len(wantOutputs), got.Outputs)
 	}
 	for i, want := range wantOutputs {
-		if got.Outputs[i].String() != want {
-			t.Fatalf("outputs[%d] = %q, want %q", i, got.Outputs[i].String(), want)
+		if got.Outputs[i].string() != want {
+			t.Fatalf("outputs[%d] = %q, want %q", i, got.Outputs[i].string(), want)
 		}
 	}
 

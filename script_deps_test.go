@@ -67,7 +67,7 @@ func TestBuildScriptTable_ImportsOnly_NoFalsePositives(t *testing.T) {
 			continue
 		}
 		if got[0] != Source(script) {
-			t.Errorf("table[%s][0] = %s, want self", script, got[0].String())
+			t.Errorf("table[%s][0] = %s, want self", script, got[0].string())
 		}
 		gotRel := make([]string, len(got))
 		for i, v := range got {

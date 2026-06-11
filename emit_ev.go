@@ -5,7 +5,7 @@ import (
 )
 
 var (
-	evEventlogIncludePath = evEventlogIncludeVFS.String()
+	evEventlogIncludePath = evEventlogIncludeVFS.string()
 	// Lazy (not init-time like protobufRuntimeDirectives): these lists are only
 	// reached for .ev sources, so eager interning would grow the intern table on
 	// targets that never build them.
@@ -87,9 +87,9 @@ func EmitEV(
 		},
 		evProtocConstArgs,
 		{
-			internStr("--plugin=protoc-gen-cpp_styleguide=" + cppStyleguideBinary.String()),
+			internStr("--plugin=protoc-gen-cpp_styleguide=" + cppStyleguideBinary.string()),
 			internStr(evRelPath),
-			internStr("--plugin=protoc-gen-event2cpp=" + event2cppBinary.String()),
+			internStr("--plugin=protoc-gen-event2cpp=" + event2cppBinary.string()),
 			argEvent2cppOutB.str(),
 			internStr("-I=" + evEventlogIncludePath),
 		},

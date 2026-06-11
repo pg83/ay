@@ -11,7 +11,7 @@ func TestEmitCC_OutputPath_NestedSrc(t *testing.T) {
 	_, outPath, _ := EmitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", Intern("$(S)/contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"), withCCBlocks(targetInstance("contrib/libs/cxxsupp/libcxx").Platform, ModuleCCInputs{}), testHostP, e)
 	want := "$(B)/contrib/libs/cxxsupp/libcxx/_/src/algorithm.cpp.o"
 
-	if outPath.String() != want {
+	if outPath.string() != want {
 		t.Errorf("outPath = %q, want %q", outPath, want)
 	}
 }
@@ -21,7 +21,7 @@ func TestEmitCC_OutputPath_FlatSrc(t *testing.T) {
 	_, outPath, _ := EmitCC(targetInstance("build/cow/on"), "lib.c", Intern("$(S)/build/cow/on/lib.c"), withCCBlocks(targetInstance("build/cow/on").Platform, ModuleCCInputs{}), testHostP, e)
 	want := "$(B)/build/cow/on/lib.c.o"
 
-	if outPath.String() != want {
+	if outPath.string() != want {
 		t.Errorf("outPath = %q, want %q", outPath, want)
 	}
 }
@@ -34,7 +34,7 @@ func TestEmitCC_GeneratedSource_BuildRootInput(t *testing.T) {
 
 	wantOut := "$(B)/util/_/_/datetime/parser.rl6.cpp.o"
 
-	if outPath.String() != wantOut {
+	if outPath.string() != wantOut {
 		t.Errorf("outPath = %q, want %q", outPath, wantOut)
 	}
 
@@ -46,14 +46,14 @@ func TestEmitCC_GeneratedSource_BuildRootInput(t *testing.T) {
 
 	wantInput := "$(B)/util/_/datetime/parser.rl6.cpp"
 
-	if len(got.flatInputs()) != 1 || got.flatInputs()[0].String() != wantInput {
+	if len(got.flatInputs()) != 1 || got.flatInputs()[0].string() != wantInput {
 		t.Errorf("inputs = %v, want [%q]", got.flatInputs(), wantInput)
 	}
 
 	args := got.Cmds[0].CmdArgs.flat()
 
-	if args[len(args)-1].String() != wantInput {
-		t.Errorf("cmd_args[last] = %q, want %q", args[len(args)-1].String(), wantInput)
+	if args[len(args)-1].string() != wantInput {
+		t.Errorf("cmd_args[last] = %q, want %q", args[len(args)-1].string(), wantInput)
 	}
 }
 
@@ -84,8 +84,8 @@ func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
 	// Prefix (aarch64, opensource test contour — bare -B/usr/bin, no sysroot):
 	// compiler, --target, -march, -B, -c, -o, output → block starts at index 7.
 	for i, want := range wantSlot {
-		if args[7+i].String() != want {
-			t.Errorf("cmd_args[%d] = %q, want %q", 7+i, args[7+i].String(), want)
+		if args[7+i].string() != want {
+			t.Errorf("cmd_args[%d] = %q, want %q", 7+i, args[7+i].string(), want)
 		}
 	}
 }
@@ -113,8 +113,8 @@ func TestEmitCC_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 	// Prefix (x86_64, no -march): compiler, --target, --sysroot, -B<sdk>/usr/bin, -c, -o,
 	// output → the include block starts at index 7.
 	for i, want := range wantSlot {
-		if args[6+i].String() != want {
-			t.Fatalf("cmd_args[%d] = %q, want %q; args=%v", 6+i, args[6+i].String(), want, args)
+		if args[6+i].string() != want {
+			t.Fatalf("cmd_args[%d] = %q, want %q; args=%v", 6+i, args[6+i].string(), want, args)
 		}
 	}
 
@@ -138,15 +138,15 @@ func TestEmitCC_CxxSource_UsesClangPlusPlus(t *testing.T) {
 
 	args := emit.nodes[0].Cmds[0].CmdArgs.flat()
 
-	wantCxx := testToolchain().CXX.String()
-	if args[0].String() != wantCxx {
-		t.Errorf("compiler = %q, want %q", args[0].String(), wantCxx)
+	wantCxx := testToolchain().CXX.string()
+	if args[0].string() != wantCxx {
+		t.Errorf("compiler = %q, want %q", args[0].string(), wantCxx)
 	}
 
 	found := false
 
 	for _, a := range args {
-		if a.String() == cxxStandardFlag.String() {
+		if a.string() == cxxStandardFlag.string() {
 			found = true
 
 			break
@@ -164,13 +164,13 @@ func TestEmitCC_CSource_UsesClang(t *testing.T) {
 
 	args := emit.nodes[0].Cmds[0].CmdArgs.flat()
 
-	wantCC := testToolchain().CC.String()
-	if args[0].String() != wantCC {
-		t.Errorf("compiler = %q, want %q", args[0].String(), wantCC)
+	wantCC := testToolchain().CC.string()
+	if args[0].string() != wantCC {
+		t.Errorf("compiler = %q, want %q", args[0].string(), wantCC)
 	}
 
 	for _, a := range args {
-		if a.String() == cxxStandardFlag.String() {
+		if a.string() == cxxStandardFlag.string() {
 			t.Errorf("cmd_args contains %q for a .c source", cxxStandardFlag)
 
 			break
@@ -186,7 +186,7 @@ func TestEmitCC_NoCompilerWarnings_SelectsWarningSuppressionFlags(t *testing.T) 
 	args := emit.nodes[0].Cmds[0].CmdArgs.flat()
 
 	for _, a := range args {
-		if a.String() == "-Werror" {
+		if a.string() == "-Werror" {
 			t.Errorf("cmd_args contains -Werror despite NoCompilerWarnings=true")
 		}
 	}
@@ -194,7 +194,7 @@ func TestEmitCC_NoCompilerWarnings_SelectsWarningSuppressionFlags(t *testing.T) 
 	wnoCount := 0
 
 	for _, a := range args {
-		if a.String() == "-Wno-everything" {
+		if a.string() == "-Wno-everything" {
 			wnoCount++
 		}
 	}
@@ -220,7 +220,7 @@ func TestEmitCC_OwnCXXFlags_SlotsAfterSuppressionBlock(t *testing.T) {
 	idxBuiltinDate := -1
 
 	for i, a := range args {
-		switch a.String() {
+		switch a.string() {
 		case "-D_LIBCPP_BUILDING_LIBRARY":
 			idxOwn = i
 		case "-Wno-strict-primary-template-shadow":
@@ -337,7 +337,7 @@ func TestEmitCC_WrapccPrefix_NonOpensource(t *testing.T) {
 		"--build-root",
 		"$(B)",
 		"--wrapcc-end",
-		testToolchain().CXX.String(),
+		testToolchain().CXX.string(),
 	}
 
 	if len(args) < len(wantPrefix) {
@@ -356,8 +356,8 @@ func TestEmitCC_WrapccPrefix_NonOpensource(t *testing.T) {
 	}
 
 	// The source stays first; wrapcc.py is appended after.
-	if node.flatInputs()[0].String() != "$(S)/mod/lib.cpp" {
-		t.Errorf("inputs[0] = %q, want the source $(S)/mod/lib.cpp", node.flatInputs()[0].String())
+	if node.flatInputs()[0].string() != "$(S)/mod/lib.cpp" {
+		t.Errorf("inputs[0] = %q, want the source $(S)/mod/lib.cpp", node.flatInputs()[0].string())
 	}
 
 	// YMAKE_PYTHON3 joins the CC deps (the wrapper runs under it).
@@ -374,7 +374,7 @@ func TestEmitCC_NoWrapcc_Opensource(t *testing.T) {
 	node := emit.nodes[0]
 	args := strStrs(node.Cmds[0].CmdArgs.flat())
 
-	if args[0] != testToolchain().CXX.String() {
+	if args[0] != testToolchain().CXX.string() {
 		t.Errorf("opensource CC cmd_args[0] = %q, want the compiler (no wrapcc prefix)", args[0])
 	}
 
@@ -389,7 +389,7 @@ func TestEmitCC_NoWrapcc_Opensource(t *testing.T) {
 
 func contains(xs []STR, target string) bool {
 	for _, x := range xs {
-		if x.String() == target {
+		if x.string() == target {
 			return true
 		}
 	}
@@ -404,7 +404,7 @@ func TestEmitCC_OutputPath_YqlUdfSuffix(t *testing.T) {
 	_, outPath, _ := EmitCC(targetInstance("udfmod"), "lib.cpp", Intern("$(S)/udfmod/lib.cpp"), withCCBlocks(targetInstance("udfmod").Platform, in), testHostP, e)
 
 	want := "$(B)/udfmod/lib.cpp.udfs.o"
-	if outPath.String() != want {
+	if outPath.string() != want {
 		t.Fatalf("outPath = %q, want %q", outPath, want)
 	}
 }
@@ -422,7 +422,7 @@ func TestEmitCC_OutputPath_YqlUdfSuffixPIC(t *testing.T) {
 	_, outPath, _ := EmitCC(instance, "lib.cpp", Intern("$(S)/udfmod/lib.cpp"), withCCBlocks(instance.Platform, in), testHostP, e)
 
 	want := "$(B)/udfmod/lib.cpp.udfs.pic.o"
-	if outPath.String() != want {
+	if outPath.string() != want {
 		t.Fatalf("outPath = %q, want %q", outPath, want)
 	}
 }

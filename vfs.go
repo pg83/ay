@@ -101,8 +101,14 @@ func (v VFS) isBuild() bool {
 	return v.root() == VFSRootBuild
 }
 
-func (v VFS) String() string {
+func (v VFS) string() string {
 	return internTable.strs[v.strID()]
+}
+
+// String implements fmt.Stringer — the fmt machinery finds it by name;
+// internal code calls string().
+func (v VFS) String() string {
+	return v.string()
 }
 
 func (v VFS) longString() string {
@@ -119,6 +125,12 @@ func vfsHasPrefix(s string) bool {
 	return len(s) >= vfsPrefixLen && s[0] == '$' && s[1] == '('
 }
 
+func (v VFS) marshalJSON() ([]byte, error) {
+	return json.Marshal(v.string())
+}
+
+// MarshalJSON implements json.Marshaler — encoding/json finds it by name;
+// internal code calls marshalJSON().
 func (v VFS) MarshalJSON() ([]byte, error) {
-	return json.Marshal(v.String())
+	return v.marshalJSON()
 }

@@ -6,12 +6,22 @@ type Exception struct {
 	what func() error
 }
 
-func (e *Exception) Error() string {
+func (e *Exception) error() string {
 	return e.what().Error()
 }
 
-func (e *Exception) Unwrap() error {
+// Error implements the error interface; internal code calls error().
+func (e *Exception) Error() string {
+	return e.error()
+}
+
+func (e *Exception) unwrap() error {
 	return e.what()
+}
+
+// Unwrap implements the errors.Is/As unwrap chain.
+func (e *Exception) Unwrap() error {
+	return e.unwrap()
 }
 
 func (e *Exception) throw() {

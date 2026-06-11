@@ -46,6 +46,6 @@ func (m *IntValueMap[V]) put(k uint64, v V) {
 }
 
 // Len reports the number of distinct keys stored.
-func (m *IntValueMap[V]) Len() int {
+func (m *IntValueMap[V]) len() int {
 	return len(m.vals)
 }

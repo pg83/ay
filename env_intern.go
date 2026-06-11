@@ -38,8 +38,14 @@ func (id ENV) str() STR {
 	return envTable.strs[id]
 }
 
+func (id ENV) string() string {
+	return envTable.strs[id].string()
+}
+
+// String implements fmt.Stringer — the fmt machinery finds it by name;
+// internal code calls string().
 func (id ENV) String() string {
-	return envTable.strs[id].String()
+	return id.string()
 }
 
 // internedEnv looks up name's ENV without interning it. Var-expansion probes

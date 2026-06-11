@@ -34,7 +34,7 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 			t.Fatalf("node uid=%s has no outputs", n.UID)
 		}
 
-		nodesByOutput[n.Outputs[0].String()] = n
+		nodesByOutput[n.Outputs[0].string()] = n
 	}
 
 	const (
@@ -69,7 +69,7 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 	}
 
 	if rootLD.TargetProperties.ModuleType != mtBin {
-		t.Errorf("root LD module_type = %q, want bin", rootLD.TargetProperties.ModuleType.String())
+		t.Errorf("root LD module_type = %q, want bin", rootLD.TargetProperties.ModuleType.string())
 	}
 
 	mainCC := nodesByOutput[mainCCOut]
@@ -116,7 +116,7 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 	byOut := make(map[string]*Node, len(g.Graph))
 	for _, n := range g.Graph {
 		if len(n.Outputs) > 0 {
-			byOut[n.Outputs[0].String()] = n
+			byOut[n.Outputs[0].string()] = n
 		}
 	}
 
@@ -130,7 +130,7 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 	}
 
 	if ld.TargetProperties.ModuleType != mtBin {
-		t.Errorf("module_type = %q, want bin", ld.TargetProperties.ModuleType.String())
+		t.Errorf("module_type = %q, want bin", ld.TargetProperties.ModuleType.string())
 	}
 
 	deps := make(map[UID]struct{}, len(graphDeps(g, ld)))
@@ -167,7 +167,7 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 
 	inputs := make([]string, 0, len(cc.flatInputs()))
 	for _, in := range cc.flatInputs() {
-		inputs = append(inputs, in.String())
+		inputs = append(inputs, in.string())
 	}
 	if !slicesContains(inputs, "$(S)/thelib/a_ut.cpp") {
 		t.Fatalf("cc inputs missing $(S)/thelib/a_ut.cpp: %v", inputs)
@@ -210,7 +210,7 @@ func TestGen_SyntheticPROGRAM_EmitsLD(t *testing.T) {
 	var ld, cc *Node
 
 	for _, n := range g.Graph {
-		switch n.KV.P.String() {
+		switch n.KV.P.string() {
 		case "LD":
 			ld = n
 		case "CC":
@@ -231,7 +231,7 @@ func TestGen_SyntheticPROGRAM_EmitsLD(t *testing.T) {
 	}
 
 	wantOut := "$(B)/lone/lone"
-	if len(ld.Outputs) != 1 || ld.Outputs[0].String() != wantOut {
+	if len(ld.Outputs) != 1 || ld.Outputs[0].string() != wantOut {
 		t.Errorf("LD outputs = %#v, want [%q]", ld.Outputs, wantOut)
 	}
 
@@ -352,10 +352,10 @@ END()
 
 	for i, n := range g.Graph {
 		if len(n.Outputs) > 0 {
-			if strings.Contains(n.Outputs[0].String(), "/zlib/") && n.KV.P == pkAR {
+			if strings.Contains(n.Outputs[0].string(), "/zlib/") && n.KV.P == pkAR {
 				zlibIdx = i
 			}
-			if strings.Contains(n.Outputs[0].String(), "/alib/") && n.KV.P == pkAR {
+			if strings.Contains(n.Outputs[0].string(), "/alib/") && n.KV.P == pkAR {
 				alibIdx = i
 			}
 		}
@@ -468,7 +468,7 @@ END()
 	var args []string
 
 	for _, n := range g.Graph {
-		if len(n.Outputs) == 1 && n.Outputs[0].String() == "$(B)/bridge/x.cpp.o" {
+		if len(n.Outputs) == 1 && n.Outputs[0].string() == "$(B)/bridge/x.cpp.o" {
 			args = strStrs(n.Cmds[0].CmdArgs.flat())
 			break
 		}
@@ -496,7 +496,7 @@ END()
 
 	counts := make(map[string]int)
 	for _, n := range g.Graph {
-		p := n.KV.P.String()
+		p := n.KV.P.string()
 		counts[p]++
 	}
 
@@ -531,10 +531,10 @@ END()
 		}
 
 		switch {
-		case strings.Contains(n.flatInputs()[0].String(), "all_my.cpp"):
-			joinedInput = n.flatInputs()[0].String()
-		case strings.Contains(n.flatInputs()[0].String(), "other.cpp"):
-			otherInput = n.flatInputs()[0].String()
+		case strings.Contains(n.flatInputs()[0].string(), "all_my.cpp"):
+			joinedInput = n.flatInputs()[0].string()
+		case strings.Contains(n.flatInputs()[0].string(), "other.cpp"):
+			otherInput = n.flatInputs()[0].string()
 		}
 	}
 
@@ -550,7 +550,7 @@ END()
 
 	for _, n := range g.Graph {
 		if n.KV.P == pkJS && len(n.Outputs) > 0 {
-			jsOut = n.Outputs[0].String()
+			jsOut = n.Outputs[0].string()
 		}
 	}
 
@@ -573,7 +573,7 @@ END()
 
 	counts := make(map[string]int)
 	for _, n := range g.Graph {
-		p := n.KV.P.String()
+		p := n.KV.P.string()
 		counts[p]++
 	}
 
@@ -621,7 +621,7 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 	hostNodes := 0
 
 	for _, n := range g.Graph {
-		p := n.KV.P.String()
+		p := n.KV.P.string()
 		counts[p]++
 		platforms[string(n.Platform.Target)]++
 
@@ -664,7 +664,7 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 	)
 
 	for _, n := range g.Graph {
-		switch n.KV.P.String() {
+		switch n.KV.P.string() {
 		case "R6":
 			r6Node = n
 		case "LD":
@@ -696,11 +696,11 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 		t.Fatalf("host LD node has no Outputs; got Outputs=%v", ldNode.Outputs)
 	}
 
-	wantCmd0 := ldNode.Outputs[0].String()
+	wantCmd0 := ldNode.Outputs[0].string()
 
-	if r6Node.Cmds[0].CmdArgs.flat()[0].String() != wantCmd0 {
+	if r6Node.Cmds[0].CmdArgs.flat()[0].string() != wantCmd0 {
 		t.Errorf("R6 cmd_args[0] = %q, want host ragel6 LD outputs[0] = %q (raw outputs[0] = %q)",
-			r6Node.Cmds[0].CmdArgs.flat()[0], wantCmd0, ldNode.Outputs[0].String())
+			r6Node.Cmds[0].CmdArgs.flat()[0], wantCmd0, ldNode.Outputs[0].string())
 	}
 }
 
@@ -742,7 +742,7 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 	foundInInputs := false
 
 	for _, in := range ldNode.flatInputs() {
-		if in.String() == expectedInput {
+		if in.string() == expectedInput {
 			foundInInputs = true
 			break
 		}
@@ -753,8 +753,8 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 	}
 
 	for _, in := range ldNode.flatInputs() {
-		if strings.Contains(in.String(), "$(B)/$(B)") {
-			t.Errorf("double-prefixed input found: %q", in.String())
+		if strings.Contains(in.string(), "$(B)/$(B)") {
+			t.Errorf("double-prefixed input found: %q", in.string())
 		}
 	}
 
@@ -767,7 +767,7 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 	foundInCmdArgs := false
 
 	for _, a := range linkArgs {
-		if a.String() == expectedCmdArg {
+		if a.string() == expectedCmdArg {
 			foundInCmdArgs = true
 			break
 		}
@@ -1131,13 +1131,13 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 
 		wantInput := "$(S)/other/dir/foo.cpp"
 
-		if len(ccNode.flatInputs()) == 0 || ccNode.flatInputs()[0].String() != wantInput {
+		if len(ccNode.flatInputs()) == 0 || ccNode.flatInputs()[0].string() != wantInput {
 			t.Errorf("CC inputs = %v, want first = %q", ccNode.flatInputs(), wantInput)
 		}
 
 		wantOutput := "$(B)/mymod/__/other/dir/foo.cpp.o"
 
-		if len(ccNode.Outputs) == 0 || ccNode.Outputs[0].String() != wantOutput {
+		if len(ccNode.Outputs) == 0 || ccNode.Outputs[0].string() != wantOutput {
 			t.Errorf("CC outputs = %v, want first = %q", ccNode.Outputs, wantOutput)
 		}
 	})
@@ -1171,7 +1171,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 
 		wantInput := "$(S)/basemod/bar.cpp"
 
-		if len(ccNode.flatInputs()) == 0 || ccNode.flatInputs()[0].String() != wantInput {
+		if len(ccNode.flatInputs()) == 0 || ccNode.flatInputs()[0].string() != wantInput {
 			t.Errorf("CC inputs = %v, want first = %q", ccNode.flatInputs(), wantInput)
 		}
 	})
@@ -1190,7 +1190,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		var jsNode, ccNode *Node
 
 		for _, n := range g.Graph {
-			switch n.KV.P.String() {
+			switch n.KV.P.string() {
 			case "JS":
 				jsNode = n
 			case "CC":
@@ -1242,12 +1242,12 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		}
 
 		wantInput := "$(S)/tools/r6/main.cpp"
-		if len(ccNode.flatInputs()) == 0 || ccNode.flatInputs()[0].String() != wantInput {
+		if len(ccNode.flatInputs()) == 0 || ccNode.flatInputs()[0].string() != wantInput {
 			t.Errorf("CC inputs = %v, want first = %q", ccNode.flatInputs(), wantInput)
 		}
 
 		wantOutput := "$(B)/tools/r6/bin/__/main.cpp.o"
-		if len(ccNode.Outputs) == 0 || ccNode.Outputs[0].String() != wantOutput {
+		if len(ccNode.Outputs) == 0 || ccNode.Outputs[0].string() != wantOutput {
 			t.Errorf("CC outputs = %v, want first = %q", ccNode.Outputs, wantOutput)
 		}
 	})
@@ -1275,11 +1275,11 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties.ModuleDir, "tools/r6/bin")
 		}
 
-		if got := ccNode.flatInputs()[0].String(); got != "$(S)/tools/r6/sub/main.cpp" {
+		if got := ccNode.flatInputs()[0].string(); got != "$(S)/tools/r6/sub/main.cpp" {
 			t.Errorf("CC input = %q, want %q", got, "$(S)/tools/r6/sub/main.cpp")
 		}
 
-		if got := ccNode.Outputs[0].String(); got != "$(B)/tools/r6/bin/__/sub/main.cpp.o" {
+		if got := ccNode.Outputs[0].string(); got != "$(B)/tools/r6/bin/__/sub/main.cpp.o" {
 			t.Errorf("CC output = %q, want %q", got, "$(B)/tools/r6/bin/__/sub/main.cpp.o")
 		}
 	})
@@ -1411,7 +1411,7 @@ func TestGen_GeneratorWiredIntoDepRefs_JS(t *testing.T) {
 	var jsNode, ccNode *Node
 
 	for _, n := range g.Graph {
-		switch n.KV.P.String() {
+		switch n.KV.P.string() {
 		case "JS":
 			jsNode = n
 		case "CC":
@@ -1466,14 +1466,14 @@ END()
 	var r6Node, ccNode *Node
 
 	for _, n := range g.Graph {
-		switch n.KV.P.String() {
+		switch n.KV.P.string() {
 		case "R6":
 			r6Node = n
 		case "CC":
 
 			ip := ""
 			if len(n.flatInputs()) > 0 {
-				ip = n.flatInputs()[0].String()
+				ip = n.flatInputs()[0].string()
 			}
 
 			if ccNode == nil && strings.HasPrefix(ip, "$(B)/") {
@@ -1664,13 +1664,13 @@ END()
 
 	wantInput := "$(S)/other/src/foo.cpp"
 
-	if len(ccNode.flatInputs()) == 0 || ccNode.flatInputs()[0].String() != wantInput {
+	if len(ccNode.flatInputs()) == 0 || ccNode.flatInputs()[0].string() != wantInput {
 		t.Errorf("CC input = %v, want first = %q", ccNode.flatInputs(), wantInput)
 	}
 
 	wantOutput := "$(B)/mylib/__/other/src/foo.cpp.o"
 
-	if len(ccNode.Outputs) == 0 || ccNode.Outputs[0].String() != wantOutput {
+	if len(ccNode.Outputs) == 0 || ccNode.Outputs[0].string() != wantOutput {
 		t.Errorf("CC output = %v, want first = %q", ccNode.Outputs, wantOutput)
 	}
 }
@@ -1706,13 +1706,13 @@ END()
 
 	wantInput := "$(S)/mylib/local.c"
 
-	if len(ccNode.flatInputs()) == 0 || ccNode.flatInputs()[0].String() != wantInput {
+	if len(ccNode.flatInputs()) == 0 || ccNode.flatInputs()[0].string() != wantInput {
 		t.Errorf("CC input = %v, want first = %q (local-existing source must ignore SRCDIR)", ccNode.flatInputs(), wantInput)
 	}
 
 	wantOutput := "$(B)/mylib/local.c.o"
 
-	if len(ccNode.Outputs) == 0 || ccNode.Outputs[0].String() != wantOutput {
+	if len(ccNode.Outputs) == 0 || ccNode.Outputs[0].string() != wantOutput {
 		t.Errorf("CC output = %v, want first = %q", ccNode.Outputs, wantOutput)
 	}
 }
@@ -1731,7 +1731,7 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 	for _, n := range g.Graph {
 		if n.KV.P == pkCC {
 			for _, out := range n.Outputs {
-				if strings.Contains(out.String(), "main.cpp.o") {
+				if strings.Contains(out.string(), "main.cpp.o") {
 					consumerCC = n
 					break
 				}
@@ -1799,7 +1799,7 @@ func TestGen_OneLevelAddIncl_DeclOrderPreserved(t *testing.T) {
 	for _, n := range g.Graph {
 		if n.KV.P == pkCC {
 			for _, out := range n.Outputs {
-				if strings.Contains(out.String(), "consumer.cpp.o") {
+				if strings.Contains(out.string(), "consumer.cpp.o") {
 					consumerCC = n
 					break
 				}
@@ -1852,7 +1852,7 @@ func TestGen_ImplicitOwnGlobal_BeforeOneLevelAddIncl(t *testing.T) {
 	for _, n := range g.Graph {
 		if n.KV.P == pkCC {
 			for _, out := range n.Outputs {
-				if strings.Contains(out.String(), "consumer.cpp.o") {
+				if strings.Contains(out.string(), "consumer.cpp.o") {
 					consumerCC = n
 					break
 				}
@@ -1913,7 +1913,7 @@ func TestGen_ConfigureFileOwnGlobal_AfterExplicitAddIncl(t *testing.T) {
 	for _, n := range g.Graph {
 		if n.KV.P == pkCC {
 			for _, out := range n.Outputs {
-				if strings.Contains(out.String(), "consumer.cpp.o") {
+				if strings.Contains(out.string(), "consumer.cpp.o") {
 					consumerCC = n
 					break
 				}
@@ -1967,7 +1967,7 @@ func TestGen_OneLevelAddIncl_AppearsInPeerIncludeSlot(t *testing.T) {
 	for _, n := range g.Graph {
 		if n.KV.P == pkCC {
 			for _, out := range n.Outputs {
-				if strings.Contains(out.String(), "consumer.cpp.o") {
+				if strings.Contains(out.string(), "consumer.cpp.o") {
 					consumerCC = n
 					break
 				}
@@ -2066,11 +2066,11 @@ func TestGen_SRC_AppendsExtraCFlags_PerSource(t *testing.T) {
 
 	wantInput := "$(S)/mod/foo.cpp"
 
-	if args[len(args)-1].String() != wantInput {
+	if args[len(args)-1].string() != wantInput {
 		t.Errorf("last cmd_arg = %q, want %q", args[len(args)-1], wantInput)
 	}
 
-	if args[len(args)-2].String() != "-DSSE41_STUB" {
+	if args[len(args)-2].string() != "-DSSE41_STUB" {
 		t.Errorf("second-to-last cmd_arg = %q, want %q (per-source CFLAGS slot)", args[len(args)-2], "-DSSE41_STUB")
 	}
 }
@@ -2103,17 +2103,17 @@ func TestGen_SRC_C_NO_LTO_RegistersSource(t *testing.T) {
 
 	wantOut := "$(B)/mod/system/compiler.cpp.o"
 
-	if cc.Outputs[0].String() != wantOut {
-		t.Errorf("CC output = %q, want %q (SRC_C_NO_LTO uses flat output, not `mod/_/system/compiler.cpp.o`)", cc.Outputs[0].String(), wantOut)
+	if cc.Outputs[0].string() != wantOut {
+		t.Errorf("CC output = %q, want %q (SRC_C_NO_LTO uses flat output, not `mod/_/system/compiler.cpp.o`)", cc.Outputs[0].string(), wantOut)
 	}
 
 	args := cc.Cmds[0].CmdArgs.flat()
 
-	if args[len(args)-1].String() != "$(S)/mod/system/compiler.cpp" {
+	if args[len(args)-1].string() != "$(S)/mod/system/compiler.cpp" {
 		t.Errorf("last cmd_arg = %q, want input path", args[len(args)-1])
 	}
 
-	if args[len(args)-2].String() != "-fmacro-prefix-map=$(TOOL_ROOT)/=" {
+	if args[len(args)-2].string() != "-fmacro-prefix-map=$(TOOL_ROOT)/=" {
 		t.Errorf("second-to-last cmd_arg = %q, want %q (no per-source CFLAG)", args[len(args)-2], "-fmacro-prefix-map=$(TOOL_ROOT)/=")
 	}
 }
@@ -2142,7 +2142,7 @@ func TestGen_SRC_FlatOutputPath(t *testing.T) {
 
 	wantOut := "$(B)/mod/sub/x.cpp.o"
 
-	if len(cc.Outputs) != 1 || cc.Outputs[0].String() != wantOut {
+	if len(cc.Outputs) != 1 || cc.Outputs[0].string() != wantOut {
 		t.Errorf("CC output = %#v, want [%q] (SRC uses flat output, not `mod/_/sub/x.cpp.o`)", cc.Outputs, wantOut)
 	}
 }
@@ -2216,7 +2216,7 @@ END()
 	const forbidden = "$(B)/joinmod/all_my.cpp"
 
 	for _, in := range arNode.flatInputs() {
-		if in.String() == forbidden {
+		if in.string() == forbidden {
 			t.Errorf("AR.flatInputs() contains %q — JS-derived BUILD_ROOT shim must be filtered (PR-35y R7)", forbidden)
 		}
 	}
@@ -2255,7 +2255,7 @@ func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 	const forbidden = "$(B)/consumer/_/parser.rl6.cpp"
 
 	for _, in := range arNode.flatInputs() {
-		if in.String() == forbidden {
+		if in.string() == forbidden {
 			t.Errorf("AR.flatInputs() contains %q — R6-derived BUILD_ROOT shim must be filtered (PR-35y R7)", forbidden)
 		}
 	}
@@ -2301,12 +2301,12 @@ END()
 
 	regularInputs := map[string]bool{}
 	for _, in := range regularAR.flatInputs() {
-		regularInputs[in.String()] = true
+		regularInputs[in.string()] = true
 	}
 
 	globalInputs := map[string]bool{}
 	for _, in := range globalAR.flatInputs() {
-		globalInputs[in.String()] = true
+		globalInputs[in.string()] = true
 	}
 
 	const (
@@ -2446,27 +2446,27 @@ END()
 	cc := findGraphNodeByOutputs(t, g, "$(B)/proto/Generated.code0.cc.o")
 	ar := findGraphNodeByOutputs(t, g, "$(B)/proto/libproto.a")
 
-	if got := cfTemplate.flatInputs()[1].String(); got != "$(S)/templates/Java.stg.in" {
+	if got := cfTemplate.flatInputs()[1].string(); got != "$(S)/templates/Java.stg.in" {
 		t.Fatalf("template CF input = %q, want $(S)/templates/Java.stg.in", got)
 	}
-	if got := cfTemplate.Cmds[0].CmdArgs.flat()[3].String(); got != "$(B)/proto/templates/Java/Java.stg" {
+	if got := cfTemplate.Cmds[0].CmdArgs.flat()[3].string(); got != "$(B)/proto/templates/Java/Java.stg" {
 		t.Fatalf("template CF output arg = %q, want $(B)/proto/templates/Java/Java.stg", got)
 	}
-	if got := cfGrammar.Cmds[0].CmdArgs.flat()[3].String(); got != "$(B)/proto/Grammar.g" {
+	if got := cfGrammar.Cmds[0].CmdArgs.flat()[3].string(); got != "$(B)/proto/Grammar.g" {
 		t.Fatalf("grammar CF output arg = %q, want $(B)/proto/Grammar.g", got)
 	}
 
-	if got := antlr.Cmds[0].CmdArgs.flat()[5].String(); got != "$(B)/proto/Grammar.g" {
+	if got := antlr.Cmds[0].CmdArgs.flat()[5].string(); got != "$(B)/proto/Grammar.g" {
 		t.Fatalf("antlr grammar arg = %q, want $(B)/proto/Grammar.g", got)
 	}
-	if got := antlr.Cmds[0].CmdArgs.flat()[9].String(); got != "$(B)/proto" {
+	if got := antlr.Cmds[0].CmdArgs.flat()[9].string(); got != "$(B)/proto" {
 		t.Fatalf("antlr output dir arg = %q, want $(B)/proto", got)
 	}
-	if got := antlr.Cmds[0].Cwd.String(); got != "$(B)/proto" {
+	if got := antlr.Cmds[0].Cwd.string(); got != "$(B)/proto" {
 		t.Fatalf("antlr cwd = %q, want $(B)/proto", got)
 	}
 
-	if got := protoc.Cmds[0].CmdArgs.flat()[0].String(); got != "$(B)/contrib/tools/protoc/bin/protoc" {
+	if got := protoc.Cmds[0].CmdArgs.flat()[0].string(); got != "$(B)/contrib/tools/protoc/bin/protoc" {
 		t.Fatalf("protoc tool arg = %q, want $(B)/contrib/tools/protoc/bin/protoc", got)
 	}
 	wantPluginArg := "--plugin=protoc-gen-cpp_styleguide=$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"
@@ -2480,19 +2480,19 @@ END()
 		t.Fatalf("protoc inputs still contain source-root plugin path: %v", protoc.flatInputs())
 	}
 
-	if got := py.flatInputs()[0].String(); got != "$(S)/tools/multiproto.py" {
+	if got := py.flatInputs()[0].string(); got != "$(S)/tools/multiproto.py" {
 		t.Fatalf("python script input = %q, want $(S)/tools/multiproto.py", got)
 	}
-	if got := py.flatInputs()[1].String(); got != "$(B)/proto/Generated.pb.h" {
+	if got := py.flatInputs()[1].string(); got != "$(B)/proto/Generated.pb.h" {
 		t.Fatalf("python generated header input = %q, want $(B)/proto/Generated.pb.h", got)
 	}
-	if got := py.flatInputs()[2].String(); got != "$(B)/proto/Generated.pb.cc" {
+	if got := py.flatInputs()[2].string(); got != "$(B)/proto/Generated.pb.cc" {
 		t.Fatalf("python generated source input = %q, want $(B)/proto/Generated.pb.cc", got)
 	}
-	if got := py.Cmds[0].CmdArgs.flat()[1].String(); got != "$(S)/tools/multiproto.py" {
+	if got := py.Cmds[0].CmdArgs.flat()[1].string(); got != "$(S)/tools/multiproto.py" {
 		t.Fatalf("python script arg = %q, want $(S)/tools/multiproto.py", got)
 	}
-	if got := py.Cmds[0].Cwd.String(); got != "$(B)/proto" {
+	if got := py.Cmds[0].Cwd.string(); got != "$(B)/proto" {
 		t.Fatalf("python cwd = %q, want $(B)/proto", got)
 	}
 
@@ -2541,18 +2541,18 @@ END()
 
 		var values []string
 		for _, input := range node.flatInputs() {
-			values = append(values, input.String())
+			values = append(values, input.string())
 		}
 		for _, output := range node.Outputs {
-			values = append(values, output.String())
+			values = append(values, output.string())
 		}
 		for _, cmd := range node.Cmds {
 			values = append(values, strStrs(cmd.CmdArgs.flat())...)
 			if cmd.Cwd != 0 {
-				values = append(values, cmd.Cwd.String())
+				values = append(values, cmd.Cwd.string())
 			}
 			if cmd.Stdout != 0 {
-				values = append(values, cmd.Stdout.String())
+				values = append(values, cmd.Stdout.string())
 			}
 		}
 
@@ -2772,7 +2772,7 @@ END()
 
 	inputs := make([]string, 0, len(pb.flatInputs()))
 	for _, input := range pb.flatInputs() {
-		inputs = append(inputs, input.String())
+		inputs = append(inputs, input.string())
 	}
 	wantInputsPrefix := []string{
 		"$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide",
@@ -2966,7 +2966,7 @@ int use() { return 0; }
 		t.Fatalf("enum node deps missing imported pb producer uid %q: %v", depPB.UID, graphDeps(g, en))
 	}
 	if got := en.TargetProperties.ModuleTag; got != tagCppProto {
-		t.Fatalf("enum node module_tag = %q, want cpp_proto", got.String())
+		t.Fatalf("enum node module_tag = %q, want cpp_proto", got.string())
 	}
 	if !nodeHasInput(en, "$(B)/protos/dep.pb.h") {
 		t.Fatalf("enum node inputs missing imported pb.h dep.pb.h: %#v", en.flatInputs())
@@ -3280,7 +3280,7 @@ END()
 
 	cc := findGraphNodeByOutputs(t, g, "$(B)/udfmod/lib.cpp.udfs.o")
 	if cc.TargetProperties.ModuleTag != tagYqlUdfStatic {
-		t.Fatalf("cc module_tag = %q, want yql_udf_static", cc.TargetProperties.ModuleTag.String())
+		t.Fatalf("cc module_tag = %q, want yql_udf_static", cc.TargetProperties.ModuleTag.string())
 	}
 
 	for _, want := range []string{
@@ -3295,12 +3295,12 @@ END()
 
 	globalAR := findGraphNodeByOutputs(t, g, "$(B)/udfmod/libmy_udf.global.a")
 	if globalAR.TargetProperties.ModuleTag != tagYqlUdfStaticGlobal {
-		t.Fatalf("global AR module_tag = %q, want yql_udf_static_global", globalAR.TargetProperties.ModuleTag.String())
+		t.Fatalf("global AR module_tag = %q, want yql_udf_static_global", globalAR.TargetProperties.ModuleTag.string())
 	}
 
 	for _, n := range g.Graph {
 		for _, out := range n.Outputs {
-			if out.String() == "$(B)/udfmod/libmy_udf.a" {
+			if out.string() == "$(B)/udfmod/libmy_udf.a" {
 				t.Fatalf("unexpected regular archive output %q present in graph", out)
 			}
 		}
@@ -3631,7 +3631,7 @@ func TestGen_EnumSerializationWithSRCDIRResolvesHeaderViaSourceDir(t *testing.T)
 		t.Fatalf("EN node inputs: got wrong path $(S)/consumer/iface.h (SRCDIR not applied): %v", en.flatInputs())
 	}
 	// The enum_parser cmd arg[1] must be the correct source path
-	if got := en.Cmds[0].CmdArgs.flat()[1].String(); got != "$(S)/shared/iface.h" {
+	if got := en.Cmds[0].CmdArgs.flat()[1].string(); got != "$(S)/shared/iface.h" {
 		t.Fatalf("EN cmd_args[1] = %q, want $(S)/shared/iface.h", got)
 	}
 }
@@ -3662,10 +3662,10 @@ END()
 	if nodeHasInput(en, "$(S)/pkg/sub/pkg/sub/codecs.h") {
 		t.Fatalf("enum inputs still carry duplicated header path: %#v", en.flatInputs())
 	}
-	if got := en.Cmds[0].CmdArgs.flat()[1].String(); got != "$(S)/pkg/sub/codecs.h" {
+	if got := en.Cmds[0].CmdArgs.flat()[1].string(); got != "$(S)/pkg/sub/codecs.h" {
 		t.Fatalf("enum parser input = %q, want $(S)/pkg/sub/codecs.h", got)
 	}
-	if idx := indexOfArg(en.Cmds[0].CmdArgs.flat(), "--include-path"); idx < 0 || idx+1 >= len(en.Cmds[0].CmdArgs.flat()) || en.Cmds[0].CmdArgs.flat()[idx+1].String() != "pkg/sub/codecs.h" {
+	if idx := indexOfArg(en.Cmds[0].CmdArgs.flat(), "--include-path"); idx < 0 || idx+1 >= len(en.Cmds[0].CmdArgs.flat()) || en.Cmds[0].CmdArgs.flat()[idx+1].string() != "pkg/sub/codecs.h" {
 		t.Fatalf("enum --include-path mismatch: %#v", en.Cmds[0].CmdArgs.flat())
 	}
 }
@@ -3673,7 +3673,7 @@ END()
 func vfsStringsT3(in []VFS) []string {
 	out := make([]string, len(in))
 	for i, v := range in {
-		out[i] = v.String()
+		out[i] = v.string()
 	}
 	return out
 }
@@ -3703,7 +3703,7 @@ func TestGen_CF_SetVarsReachCfgVars(t *testing.T) {
 	g := testGen(fs, "thelib")
 	var cf *Node
 	for _, n := range g.Graph {
-		if len(n.Outputs) > 0 && n.Outputs[0].String() == "$(B)/thelib/x.cpp" {
+		if len(n.Outputs) > 0 && n.Outputs[0].string() == "$(B)/thelib/x.cpp" {
 			cf = n
 			break
 		}
@@ -3737,7 +3737,7 @@ func TestGen_HInGeneratedHeader_RealizedInConsumer(t *testing.T) {
 	byOut := map[string]*Node{}
 	for _, n := range g.Graph {
 		if len(n.Outputs) > 0 {
-			byOut[n.Outputs[0].String()] = n
+			byOut[n.Outputs[0].string()] = n
 		}
 	}
 
@@ -3761,8 +3761,8 @@ func TestGen_HInGeneratedHeader_RealizedInConsumer(t *testing.T) {
 		}
 	}
 	for _, in := range ar.flatInputs() {
-		if in.String() == "$(B)/genh/config.h" || in.String() == "$(S)/genh/config.h.in" {
-			t.Errorf("genh AR inputs include %q (generated header must not be archived)", in.String())
+		if in.string() == "$(B)/genh/config.h" || in.string() == "$(S)/genh/config.h.in" {
+			t.Errorf("genh AR inputs include %q (generated header must not be archived)", in.string())
 		}
 	}
 
@@ -3989,7 +3989,7 @@ END()
 	if got := len(yc.Cmds); got != 2 {
 		t.Fatalf("bison YC cmd count = %d, want 2", got)
 	}
-	if !strings.HasSuffix(yc.Cmds[1].CmdArgs.flat()[0].String(), "/python3") {
+	if !strings.HasSuffix(yc.Cmds[1].CmdArgs.flat()[0].string(), "/python3") {
 		t.Fatalf("bison preprocess tool = %q, want a python3 binary", yc.Cmds[1].CmdArgs.flat()[0])
 	}
 	wantPreprocess := []string{
@@ -4232,12 +4232,12 @@ func TestReorderARMembers_Reg3PICVariantsTrailObjcopy(t *testing.T) {
 			wantPaths := make([]string, len(tc.wantOrder))
 			for i, idx := range tc.wantOrder {
 				wantRefs[i] = refs[idx]
-				wantPaths[i] = Build(tc.paths[idx]).String()
+				wantPaths[i] = Build(tc.paths[idx]).string()
 			}
 
 			gotPathStrings := make([]string, len(gotPaths))
 			for i, path := range gotPaths {
-				gotPathStrings[i] = path.String()
+				gotPathStrings[i] = path.string()
 			}
 
 			if !reflect.DeepEqual(gotPathStrings, wantPaths) {
@@ -4322,7 +4322,7 @@ func findGraphNodeByOutputs(t *testing.T, g *Graph, wantOutputs ...string) *Node
 
 		match := true
 		for i, out := range node.Outputs {
-			if out.String() != wantOutputs[i] {
+			if out.string() != wantOutputs[i] {
 				match = false
 
 				break
@@ -4368,7 +4368,7 @@ func TestGen_ManualCompanionSourceUsesCythonCompanionCCInputs(t *testing.T) {
 	}
 
 	for i, want := range wantNumpy {
-		if got := args[pythonIncludeIdx+1+i].String(); got != want {
+		if got := args[pythonIncludeIdx+1+i].string(); got != want {
 			t.Fatalf("numpy include bundle mismatch at offset %d: got %q, want %q; cmd_args=%#v", i, got, want, args)
 		}
 	}
@@ -4480,7 +4480,7 @@ END()
 		t.Fatalf("objcopy inputs missing build-root data.json: %#v", objcopy.flatInputs())
 	}
 	for _, in := range objcopy.flatInputs() {
-		if strings.Contains(in.String(), "${BINDIR}") {
+		if strings.Contains(in.string(), "${BINDIR}") {
 			t.Fatalf("objcopy inputs still leak ${BINDIR}: %#v", objcopy.flatInputs())
 		}
 	}
@@ -4501,7 +4501,7 @@ END()
 	sort.Strings(wantHashInputs)
 	wantHash := md5Hex(strings.Join(wantHashInputs, ","))[:hashLen]
 	wantOutput := "$(B)/db/objcopy_" + wantHash + ".o"
-	gotOutput := objcopy.Outputs[0].String()
+	gotOutput := objcopy.Outputs[0].string()
 	if gotOutput != wantOutput {
 		t.Fatalf("objcopy output = %q, want %q (REF hashes RESOURCE Path RAW)", gotOutput, wantOutput)
 	}
@@ -4589,7 +4589,7 @@ func mustNodeByOutput(t *testing.T, g *Graph, output string) *Node {
 	t.Helper()
 
 	for _, n := range g.Graph {
-		if len(n.Outputs) > 0 && n.Outputs[0].String() == output {
+		if len(n.Outputs) > 0 && n.Outputs[0].string() == output {
 			return n
 		}
 	}
@@ -4600,7 +4600,7 @@ func mustNodeByOutput(t *testing.T, g *Graph, output string) *Node {
 
 func findNodeByOutputPrefix(g *Graph, prefix string) *Node {
 	for _, n := range g.Graph {
-		if len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].String(), prefix) {
+		if len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].string(), prefix) {
 			return n
 		}
 	}
@@ -4610,7 +4610,7 @@ func findNodeByOutputPrefix(g *Graph, prefix string) *Node {
 
 func nodeHasInput(n *Node, input string) bool {
 	for _, got := range n.flatInputs() {
-		if got.String() == input {
+		if got.string() == input {
 			return true
 		}
 	}
@@ -4620,7 +4620,7 @@ func nodeHasInput(n *Node, input string) bool {
 
 func indexOfArg(args []STR, want string) int {
 	for i, arg := range args {
-		if arg.String() == want {
+		if arg.string() == want {
 			return i
 		}
 	}
@@ -4666,7 +4666,7 @@ message Ydb {}
 
 	for _, n := range g.Graph {
 		for _, o := range n.Outputs {
-			if o.String() == "$(B)/ydb/public/api/protos/libprotos.a" {
+			if o.string() == "$(B)/ydb/public/api/protos/libprotos.a" {
 				t.Fatalf("path-derived archive libprotos.a should not exist; got it with named arg")
 			}
 		}
@@ -4822,7 +4822,7 @@ END()
 
 	seen := make(map[string]int, len(useCC.flatInputs()))
 	for _, in := range useCC.flatInputs() {
-		seen[in.String()]++
+		seen[in.string()]++
 	}
 	for inp, count := range seen {
 		if count > 1 {

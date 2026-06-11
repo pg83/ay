@@ -383,8 +383,8 @@ func (ctx *GenCtx) perfScanCtxStats(scanner *IncludeScanner) ScanCtxPerfStats {
 	return ScanCtxPerfStats{
 		// subgraph and children are columns of one DenseMap3 keyed per node, so
 		// both report its distinct-key count.
-		subgraphEntries: scanner.scanCache.Len(),
-		childrenEntries: scanner.scanCache.Len(),
+		subgraphEntries: scanner.scanCache.len(),
+		childrenEntries: scanner.scanCache.len(),
 		closureWindows:  len(scanner.subgraphClosures),
 	}
 }
@@ -2978,7 +2978,7 @@ func (ctx *GenCtx) toolResult(modulePath ARG) *ModuleEmitResult {
 		return res
 	}
 
-	res := genModule(ctx, NewToolInstance(ctx.host, modulePath.String()))
+	res := genModule(ctx, NewToolInstance(ctx.host, modulePath.string()))
 
 	// Cache (and map the tool's LD node back to its result) only once it really
 	// built: a tolerated PEERDIR cycle yields an empty stub with LDRef 0 that

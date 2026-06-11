@@ -44,12 +44,12 @@ func assertSingleUsedClangFetch(t *testing.T, graph *Graph) {
 	fetchOutputs := map[string]bool{}
 	var cc *Node
 	for _, node := range graph.Graph {
-		if len(node.Outputs) == 1 && node.Outputs[0].String() == "$(B)/pkg/app/main.o" {
+		if len(node.Outputs) == 1 && node.Outputs[0].string() == "$(B)/pkg/app/main.o" {
 			cc = node
 			continue
 		}
 		if len(node.Outputs) == 1 {
-			fetchOutputs[node.Outputs[0].String()] = true
+			fetchOutputs[node.Outputs[0].string()] = true
 		}
 	}
 

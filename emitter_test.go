@@ -118,8 +118,8 @@ func TestFinalize_UIDsStableAcrossRuns(t *testing.T) {
 	}
 
 	for i, n := range g1.Graph {
-		if len(n.UID.String()) != 22 {
-			t.Errorf("graph[%d].UID len = %d, want 22 (got %q)", i, len(n.UID.String()), n.UID)
+		if len(n.UID.string()) != 22 {
+			t.Errorf("graph[%d].UID len = %d, want 22 (got %q)", i, len(n.UID.string()), n.UID)
 		}
 
 		if n.SelfUID != n.UID {

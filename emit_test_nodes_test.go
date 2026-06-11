@@ -385,7 +385,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 	for _, node := range g.Graph {
 		byUID[node.UID] = node
 		if len(node.Outputs) == 1 {
-			byOutput[node.Outputs[0].String()] = node
+			byOutput[node.Outputs[0].string()] = node
 		}
 
 		kvPath := node.KV.Path
@@ -396,9 +396,9 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 			unittestNode = node
 		case kvPath == "util/ut/clang_format":
 			clangNode = node
-		case len(node.Outputs) == 1 && node.Outputs[0].String() == "$(B)/common_test.context":
+		case len(node.Outputs) == 1 && node.Outputs[0].string() == "$(B)/common_test.context":
 			ctxNode = node
-		case len(node.Outputs) == 1 && node.Outputs[0].String() == "$(B)/resources/YMAKE_PYTHON3":
+		case len(node.Outputs) == 1 && node.Outputs[0].string() == "$(B)/resources/YMAKE_PYTHON3":
 			fetchNode = node
 		}
 	}
@@ -411,7 +411,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		t.Fatalf("result order = %v, want [%s %s %s]", g.Result, ldNode.UID, unittestNode.UID, clangNode.UID)
 	}
 
-	if got := ldNode.Outputs[0].String(); got != "$(B)/util/ut/util-ut" {
+	if got := ldNode.Outputs[0].string(); got != "$(B)/util/ut/util-ut" {
 		t.Fatalf("ld output = %q, want $(B)/util/ut/util-ut", got)
 	}
 
@@ -453,7 +453,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 
 	clangInputs := make([]string, 0, len(clangNode.flatInputs()))
 	for _, input := range clangNode.flatInputs() {
-		clangInputs = append(clangInputs, input.String())
+		clangInputs = append(clangInputs, input.string())
 	}
 	for _, want := range []string{"$(S)/util/ysafeptr_ut.cpp", "$(S)/util/ysaveload_ut.cpp"} {
 		if !containsString(clangInputs, want) {
@@ -528,7 +528,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		}
 		ccInputs := make([]string, 0, len(ccNode.flatInputs()))
 		for _, input := range ccNode.flatInputs() {
-			ccInputs = append(ccInputs, input.String())
+			ccInputs = append(ccInputs, input.string())
 		}
 		if !containsString(ccInputs, spec.input) {
 			t.Fatalf("cc inputs for %q missing %q in %v", spec.output, spec.input, ccInputs)

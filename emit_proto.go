@@ -39,7 +39,7 @@ func protoPbHIncludes(pm *IncludeParserManager, srcRel, outputRoot string, bucke
 	out := make([]IncludeDirective, 0, len(hcpp))
 
 	for _, d := range hcpp {
-		target := d.target.String()
+		target := d.target.string()
 
 		if strings.HasPrefix(target, "google/protobuf/") && strings.HasSuffix(target, ".pb.h") {
 			target = pbRuntimeBase + target
@@ -50,7 +50,7 @@ func protoPbHIncludes(pm *IncludeParserManager, srcRel, outputRoot string, bucke
 		out = append(out, IncludeDirective{kind: d.kind, target: internStr(target)})
 	}
 
-	sort.Slice(out, func(i, j int) bool { return out[i].target.String() < out[j].target.String() })
+	sort.Slice(out, func(i, j int) bool { return out[i].target.string() < out[j].target.string() })
 	return out
 }
 
@@ -90,7 +90,7 @@ func protoDirectImportNames(pm *IncludeParserManager, srcRel string) []string {
 	out := make([]string, 0, len(direct))
 
 	for _, d := range direct {
-		out = append(out, d.target.String())
+		out = append(out, d.target.string())
 	}
 
 	return out

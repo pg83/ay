@@ -310,7 +310,7 @@ func filterPyRegisterCFlags(cflags []ARG) []ARG {
 	out := make([]ARG, 0, len(cflags))
 
 	for _, flag := range cflags {
-		s := flag.String()
+		s := flag.string()
 
 		if hasPrefix(s, "-DPyInit_") || hasPrefix(s, "-Dinit_module_") {
 			continue

@@ -6,29 +6,54 @@ import (
 
 type IntHeap []int
 
-func (h IntHeap) Len() int {
+func (h IntHeap) len() int {
 	return len(h)
 }
 
-func (h IntHeap) Less(i, j int) bool {
+// Len implements container/heap.Interface (its sort.Interface part).
+func (h IntHeap) Len() int {
+	return h.len()
+}
+
+func (h IntHeap) less(i, j int) bool {
 	return h[i] < h[j]
 }
 
-func (h IntHeap) Swap(i, j int) {
+// Less implements container/heap.Interface (its sort.Interface part).
+func (h IntHeap) Less(i, j int) bool {
+	return h.less(i, j)
+}
+
+func (h IntHeap) swap(i, j int) {
 	h[i], h[j] = h[j], h[i]
 }
 
-func (h *IntHeap) Push(x interface{}) {
+// Swap implements container/heap.Interface (its sort.Interface part).
+func (h IntHeap) Swap(i, j int) {
+	h.swap(i, j)
+}
+
+func (h *IntHeap) push(x interface{}) {
 	*h = append(*h, x.(int))
 }
 
-func (h *IntHeap) Pop() interface{} {
+// Push implements container/heap.Interface; the heap machinery finds it by name.
+func (h *IntHeap) Push(x interface{}) {
+	h.push(x)
+}
+
+func (h *IntHeap) pop() interface{} {
 	old := *h
 	n := len(old)
 	x := old[n-1]
 	*h = old[:n-1]
 
 	return x
+}
+
+// Pop implements container/heap.Interface; the heap machinery finds it by name.
+func (h *IntHeap) Pop() interface{} {
+	return h.pop()
 }
 
 // NodeRef is a node's index into the emitter's node buffer. uint32 (not a
@@ -201,7 +226,7 @@ func finalizeOrder(e *BufferedEmitter) []int {
 
 	order := make([]int, 0, n)
 
-	for queue.Len() > 0 {
+	for queue.len() > 0 {
 		i := heap.Pop(&queue).(int)
 		order = append(order, i)
 

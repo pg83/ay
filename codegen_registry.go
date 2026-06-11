@@ -109,7 +109,7 @@ func (r *CodegenRegistry) register(info *GeneratedFileInfo) {
 
 	if existing, ok := r.byStr.get(full); ok {
 		ThrowFmt("CodegenRegistry: duplicate producer for %q (existing kind=%q, new kind=%q)",
-			info.OutputPath.String(), existing.ProducerKvP, info.ProducerKvP)
+			info.OutputPath.string(), existing.ProducerKvP, info.ProducerKvP)
 	}
 
 	rel := info.OutputPath.rel()
@@ -171,7 +171,7 @@ func (r *CodegenRegistry) addClosureLeaf(node, leaf VFS) {
 	info, ok := r.byStr.get(STR(node.strID()))
 
 	if !ok {
-		ThrowFmt("CodegenRegistry: AddClosureLeaf on unregistered path %q", node.String())
+		ThrowFmt("CodegenRegistry: AddClosureLeaf on unregistered path %q", node.string())
 	}
 
 	info.ClosureLeaves = append(info.ClosureLeaves, leaf)
@@ -198,12 +198,12 @@ func (r *CodegenRegistry) setProducerRef(path VFS, ref NodeRef) {
 	info, ok := r.byStr.get(STR(path.strID()))
 
 	if !ok {
-		ThrowFmt("CodegenRegistry: SetProducerRef on unregistered path %q", path.String())
+		ThrowFmt("CodegenRegistry: SetProducerRef on unregistered path %q", path.string())
 	}
 
 	if info.HasProducerRef && info.ProducerRef != ref {
 		ThrowFmt("CodegenRegistry: conflicting ProducerRef for %q (existing=%v, new=%v)",
-			path.String(), info.ProducerRef, ref)
+			path.string(), info.ProducerRef, ref)
 	}
 
 	info.ProducerRef = ref
@@ -218,7 +218,7 @@ func (r *CodegenRegistry) setSourceInputs(path VFS, src []VFS) {
 	info, ok := r.byStr.get(STR(path.strID()))
 
 	if !ok {
-		ThrowFmt("CodegenRegistry: SetSourceInputs on unregistered path %q", path.String())
+		ThrowFmt("CodegenRegistry: SetSourceInputs on unregistered path %q", path.string())
 	}
 
 	info.SourceInputs = src

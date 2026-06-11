@@ -34,7 +34,7 @@ func appendInternStrs(dst []STR, ss []string) []STR {
 // boundary (graph write, canonicalisation, executor).
 func appendStrStrs(dst []string, as []STR) []string {
 	for _, a := range as {
-		dst = append(dst, a.String())
+		dst = append(dst, a.string())
 	}
 
 	return dst

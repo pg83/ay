@@ -185,7 +185,7 @@ var tokByName = func() map[string]TOK {
 
 	for t, s := range tokName {
 		if s != 0 {
-			m[s.String()] = TOK(t)
+			m[s.string()] = TOK(t)
 		}
 	}
 
@@ -393,6 +393,12 @@ func (t TOK) str() STR {
 	return tokName[t]
 }
 
+func (t TOK) string() string {
+	return tokName[t].string()
+}
+
+// String implements fmt.Stringer — the fmt machinery finds it by name;
+// internal code calls string().
 func (t TOK) String() string {
-	return tokName[t].String()
+	return t.string()
 }

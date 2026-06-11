@@ -30,8 +30,8 @@ func TestDenseMap_GetPut(t *testing.T) {
 		t.Fatal("unset key 7 reported present")
 	}
 
-	if m.Len() != 3 {
-		t.Fatalf("Len = %d, want 3", m.Len())
+	if m.len() != 3 {
+		t.Fatalf("Len = %d, want 3", m.len())
 	}
 }
 
@@ -44,8 +44,8 @@ func TestDenseMap_Overwrite(t *testing.T) {
 	if got, _ := m.get(42); got != 3 {
 		t.Fatalf("Get(42) = %d, want 3 (last write)", got)
 	}
-	if m.Len() != 1 {
-		t.Fatalf("Len = %d, want 1 (overwrite must not grow vals)", m.Len())
+	if m.len() != 1 {
+		t.Fatalf("Len = %d, want 1 (overwrite must not grow vals)", m.len())
 	}
 }
 

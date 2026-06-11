@@ -29,8 +29,8 @@ func TestIntValueMapBasic(t *testing.T) {
 		t.Fatalf("Get(1) after overwrite = %v want *c", p)
 	}
 
-	if m.Len() != 2 {
-		t.Fatalf("Len = %d want 2 (overwrite must not append)", m.Len())
+	if m.len() != 2 {
+		t.Fatalf("Len = %d want 2 (overwrite must not append)", m.len())
 	}
 }
 
@@ -62,8 +62,8 @@ func TestIntValueMapMatchesBuiltin(t *testing.T) {
 		ref[k] = v
 		m.put(k, v)
 
-		if m.Len() != len(ref) {
-			t.Fatalf("step %d: Len = %d want %d", i, m.Len(), len(ref))
+		if m.len() != len(ref) {
+			t.Fatalf("step %d: Len = %d want %d", i, m.len(), len(ref))
 		}
 	}
 

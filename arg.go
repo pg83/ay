@@ -40,8 +40,14 @@ func (a ARG) str() STR {
 	return argTable.strs[a]
 }
 
+func (a ARG) string() string {
+	return argTable.strs[a].string()
+}
+
+// String implements fmt.Stringer — the fmt machinery finds it by name;
+// internal code calls string().
 func (a ARG) String() string {
-	return argTable.strs[a].String()
+	return a.string()
 }
 
 // internArgs interns each input as one whole ARG (no whitespace split — a value
@@ -68,7 +74,7 @@ func internArgs(ss []string) []ARG {
 func appendArgStrs(dst []string, srcs ...[]ARG) []string {
 	for _, s := range srcs {
 		for _, a := range s {
-			dst = append(dst, a.String())
+			dst = append(dst, a.string())
 		}
 	}
 
@@ -84,7 +90,7 @@ func argStrs(as []ARG) []string {
 	out := make([]string, len(as))
 
 	for i, a := range as {
-		out[i] = a.String()
+		out[i] = a.string()
 	}
 
 	return out

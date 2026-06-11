@@ -13,7 +13,7 @@ const (
 	WarnMissingInclude
 )
 
-func (k WarnKind) String() string {
+func (k WarnKind) string() string {
 	switch k {
 	case WarnSysIncl:
 		return "sysincl"
@@ -22,4 +22,10 @@ func (k WarnKind) String() string {
 	}
 
 	return "warn"
+}
+
+// String implements fmt.Stringer — the fmt machinery finds it by name;
+// internal code calls string().
+func (k WarnKind) String() string {
+	return k.string()
 }

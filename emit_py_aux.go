@@ -157,7 +157,7 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 		}
 
 		cur.hashInputs = append(cur.hashInputs, arcBuildPath, "-"+key)
-		cur.cmdArgs = append(cur.cmdArgs, e.path.String(), "-"+key)
+		cur.cmdArgs = append(cur.cmdArgs, e.path.string(), "-"+key)
 		addInput(e.path)
 
 		for _, input := range e.inputs {

@@ -122,16 +122,16 @@ func antlrRunCmdArgs(instance ModuleInstance, run AntlrRunInfo, inVFSByToken, ou
 	for _, a := range run.Args {
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
 		a = strings.ReplaceAll(a, "${ARCADIA_BUILD_ROOT}", "$(B)")
-		a = strings.ReplaceAll(a, "${CURDIR}", instance.Path.String())
-		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path.rel()).String())
+		a = strings.ReplaceAll(a, "${CURDIR}", instance.Path.string())
+		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path.rel()).string())
 		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path.rel())
-		a = strings.ReplaceAll(a, "$CURDIR", instance.Path.String())
-		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path.rel()).String())
+		a = strings.ReplaceAll(a, "$CURDIR", instance.Path.string())
+		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path.rel()).string())
 
 		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
-			a = vfs.String()
+			a = vfs.string()
 		} else if vfs, ok := outVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
-			a = vfs.String()
+			a = vfs.string()
 		}
 
 		args = append(args, a)

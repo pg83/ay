@@ -24,7 +24,7 @@ func emitArchive(
 	reg *CodegenRegistry,
 ) {
 	archiveVFS := Build(instance.Path.rel() + "/" + a.Name)
-	archivePath := archiveVFS.String()
+	archivePath := archiveVFS.string()
 
 	cmdArgs := make([]STR, 0, 4+len(a.Files)+2)
 	cmdArgs = append(cmdArgs, (toolBinPath).str(), argQ.str(), argX.str())
@@ -59,7 +59,7 @@ func emitArchive(
 			absVFS = Source(rel)
 		}
 
-		absStr := absVFS.String()
+		absStr := absVFS.string()
 
 		pathPerFile = append(pathPerFile, absVFS)
 		cmdArgs = append(cmdArgs, internStr(absStr+":"))

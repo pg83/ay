@@ -11,7 +11,7 @@ import (
 func tuid(label string) UID { return computeUID([]byte(label)) }
 
 func TestComputeUID_LengthAndAlphabet(t *testing.T) {
-	got := computeUID([]byte("hello")).String()
+	got := computeUID([]byte("hello")).string()
 
 	if len(got) != 22 {
 		t.Errorf("computeUID length = %d, want 22 (got %q)", len(got), got)
@@ -46,7 +46,7 @@ func TestComputeUID_DifferentInputsDifferentOutputs(t *testing.T) {
 
 func TestComputeUID_KnownVector(t *testing.T) {
 
-	got := computeUID([]byte("")).String()
+	got := computeUID([]byte("")).string()
 	const want = "maoG0wFHmNhgAcMkRo1Jfw"
 
 	if got != want {
@@ -71,7 +71,7 @@ func TestCanonicalNodeBytes_ZeroesIdentityFields(t *testing.T) {
 	canon := canonicalNodeBytes(n)
 	s := string(canon)
 
-	for _, banned := range []string{tuid("AAAAA").String(), tuid("BBBBB").String(), "should-not-appear-CCCCC"} {
+	for _, banned := range []string{tuid("AAAAA").string(), tuid("BBBBB").string(), "should-not-appear-CCCCC"} {
 		if strings.Contains(s, banned) {
 			t.Errorf("canonicalNodeBytes leaked identity field value %q: %s", banned, s)
 		}

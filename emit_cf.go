@@ -9,7 +9,7 @@ import (
 var (
 	cfgVarRefRe         = regexp.MustCompile(`@([A-Z_][A-Z0-9_]*)@`)
 	cfgCmakeDefineRe    = regexp.MustCompile(`#cmakedefine(?:01)?[ \t]+([A-Z_][A-Z0-9_]*)`)
-	configureFilePyPath = configureFilePyVFS.String()
+	configureFilePyPath = configureFilePyVFS.string()
 )
 
 func emitExplicitCF(ctx *GenCtx, instance ModuleInstance, cf *ConfigureFileStmt, d *ModuleData, reg *CodegenRegistry) {
@@ -60,7 +60,7 @@ func cfIncludeDirectives(pm *IncludeParserManager, rel string) []IncludeDirectiv
 		return nil
 	}
 
-	sort.Slice(out, func(i, j int) bool { return out[i].target.String() < out[j].target.String() })
+	sort.Slice(out, func(i, j int) bool { return out[i].target.string() < out[j].target.string() })
 	return out
 }
 

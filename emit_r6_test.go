@@ -22,8 +22,8 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	r6Ref, outPath := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, Intern("$(B)/contrib/tools/ragel6/ragel6"), nil, nil, e)
 
 	wantOut := "$(B)/util/_/datetime/parser.rl6.cpp"
-	if outPath.String() != wantOut {
-		t.Errorf("outPath = %q, want %q", outPath.String(), wantOut)
+	if outPath.string() != wantOut {
+		t.Errorf("outPath = %q, want %q", outPath.string(), wantOut)
 	}
 
 	got := e.nodes[r6Ref]
@@ -43,8 +43,8 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	}
 
 	for i, w := range wantCmd {
-		if got.Cmds[0].CmdArgs.flat()[i].String() != w {
-			t.Errorf("cmd_args[%d] = %q, want %q", i, got.Cmds[0].CmdArgs.flat()[i].String(), w)
+		if got.Cmds[0].CmdArgs.flat()[i].string() != w {
+			t.Errorf("cmd_args[%d] = %q, want %q", i, got.Cmds[0].CmdArgs.flat()[i].string(), w)
 		}
 	}
 
@@ -83,7 +83,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	}
 
 	if got.Requirements.Network != nwRestricted {
-		t.Errorf("requirements.network = %v, want restricted", got.Requirements.Network.String())
+		t.Errorf("requirements.network = %v, want restricted", got.Requirements.Network.string())
 	}
 }
 
@@ -110,13 +110,13 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 
 	got := e.nodes[r6Ref]
 
-	if got.Cmds[0].CmdArgs.flat()[1].String() != "-lF1" {
-		t.Errorf("cmd_args[1] = %q, want -lF1 (per-module SET(RAGEL6_FLAGS) override)", got.Cmds[0].CmdArgs.flat()[1].String())
+	if got.Cmds[0].CmdArgs.flat()[1].string() != "-lF1" {
+		t.Errorf("cmd_args[1] = %q, want -lF1 (per-module SET(RAGEL6_FLAGS) override)", got.Cmds[0].CmdArgs.flat()[1].string())
 	}
 
 	for i, a := range got.Cmds[0].CmdArgs.flat() {
-		if a.String() == "-CT0" || a.String() == "-CG2" {
-			t.Errorf("cmd_args[%d] = %q — default flag leaked through the SET override", i, a.String())
+		if a.string() == "-CT0" || a.string() == "-CG2" {
+			t.Errorf("cmd_args[%d] = %q — default flag leaked through the SET override", i, a.string())
 		}
 	}
 
@@ -161,8 +161,8 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 
 	got := e.nodes[r6Ref]
 
-	if got.Cmds[0].CmdArgs.flat()[1].String() != "-CG2" {
-		t.Errorf("cmd_args[1] = %q, want -CG2 (x86_64 host = release = optimized)", got.Cmds[0].CmdArgs.flat()[1].String())
+	if got.Cmds[0].CmdArgs.flat()[1].string() != "-CG2" {
+		t.Errorf("cmd_args[1] = %q, want -CG2 (x86_64 host = release = optimized)", got.Cmds[0].CmdArgs.flat()[1].string())
 	}
 
 	if !nodeHasHostTag(nodeTags(got)) {
@@ -208,8 +208,8 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 	}
 
 	for i, w := range wantInputs {
-		if got.flatInputs()[i].String() != w {
-			t.Errorf("R6 inputs[%d] = %q, want %q", i, got.flatInputs()[i].String(), w)
+		if got.flatInputs()[i].string() != w {
+			t.Errorf("R6 inputs[%d] = %q, want %q", i, got.flatInputs()[i].string(), w)
 		}
 	}
 }

@@ -61,7 +61,7 @@ func (m *DenseMap[K, V]) growIdx(k int) {
 }
 
 // Len reports the number of distinct keys stored.
-func (m *DenseMap[K, V]) Len() int {
+func (m *DenseMap[K, V]) len() int {
 	if len(m.vals) == 0 {
 		return 0
 	}

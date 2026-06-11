@@ -94,7 +94,7 @@ func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCC
 			CmdArgs: ArgChunks{[]STR{
 				internStr(bisonBin),
 				argV.str(),
-				internStr("--defines=" + headerVFS.String()),
+				internStr("--defines=" + headerVFS.string()),
 				argDashO.str(),
 				(generatedVFS).str(),
 				(srcVFS).str(),
@@ -147,7 +147,7 @@ func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCC
 
 func bisonTool(ctx *GenCtx, instance ModuleInstance) (NodeRef, string) {
 	ref, bin := ctx.tool(argContribToolsBison)
-	return ref, bin.String()
+	return ref, bin.string()
 }
 
 func m4Tool(ctx *GenCtx, instance ModuleInstance) (NodeRef, STR) {

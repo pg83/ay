@@ -303,7 +303,7 @@ func cmdMake(args []string) int {
 		failedStrs := make([]string, len(failedRoots))
 
 		for i, u := range failedRoots {
-			failedStrs[i] = u.String()
+			failedStrs[i] = u.string()
 		}
 
 		ThrowFmt("build failed: %s", strings.Join(failedStrs, ", "))
@@ -524,7 +524,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 
 	defer func() { <-ex.sema }()
 
-	tmp := filepath.Join(ex.bldRoot, "tmp", n.UID.String())
+	tmp := filepath.Join(ex.bldRoot, "tmp", n.UID.string())
 	Throw(os.MkdirAll(tmp, 0o755))
 
 	// Lock the workspace DIR (an exclusive flock on its fd) for the whole node, so a
@@ -570,7 +570,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 
 	col := n.KV.PC
 	kind := n.KV.P
-	display := color(col.String(), kind.String())
+	display := color(col.string(), kind.string())
 
 	done := ex.done.Load() + 1
 	pending := ex.pending.Load()
@@ -578,7 +578,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 	outFirst := ""
 
 	if len(n.Outputs) > 0 {
-		outFirst = n.Outputs[0].String()
+		outFirst = n.Outputs[0].string()
 	}
 
 	rec := fmt.Sprintf("[%s] {%d/%d} %s", display, done, pending, outFirst)
@@ -593,7 +593,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 			fmt.Fprintln(os.Stderr, cmdResult.Stderr)
 		}
 
-		ex.stats[kind.String()] = append(ex.stats[kind.String()], dur)
+		ex.stats[kind.string()] = append(ex.stats[kind.string()], dur)
 
 		if ex.ninja {
 			fmt.Fprintln(os.Stderr, rec)
@@ -715,7 +715,7 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 		args := make([]string, len(flatArgs))
 
 		for i, a := range flatArgs {
-			args[i] = mountString(a.String(), srcMount, bldMount)
+			args[i] = mountString(a.string(), srcMount, bldMount)
 		}
 
 		args = applyCmdPrefixes(args, ex.cmdPrefixes)
@@ -724,17 +724,17 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 		dir := bldMount
 
 		if c.Cwd != 0 {
-			dir = mountString(c.Cwd.String(), srcMount, bldMount)
+			dir = mountString(c.Cwd.string(), srcMount, bldMount)
 		}
 
 		env := os.Environ()
 
 		for _, e := range n.Env {
-			env = append(env, e.Name.String()+"="+mountString(e.Value.String(), srcMount, bldMount))
+			env = append(env, e.Name.string()+"="+mountString(e.Value.string(), srcMount, bldMount))
 		}
 
 		for _, e := range c.Env {
-			env = append(env, e.Name.String()+"="+mountString(e.Value.String(), srcMount, bldMount))
+			env = append(env, e.Name.string()+"="+mountString(e.Value.string(), srcMount, bldMount))
 		}
 
 		cmd := &exec.Cmd{
@@ -747,7 +747,7 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 		var stdoutW io.Writer = os.Stdout
 
 		if c.Stdout != 0 {
-			path := mountString(c.Stdout.String(), srcMount, bldMount)
+			path := mountString(c.Stdout.string(), srcMount, bldMount)
 			Throw(os.MkdirAll(filepath.Dir(path), 0o755))
 
 			f := Throw2(os.Create(path))
@@ -820,7 +820,7 @@ func (ex *Executor) storeOutputs(n *Node, tmp string) {
 			ThrowFmt("node %s: non-Build output %v", n.UID, out)
 		}
 
-		ex.storePath(filepath.Join(tmp, out.rel()), out.String(), meta)
+		ex.storePath(filepath.Join(tmp, out.rel()), out.string(), meta)
 	}
 
 	uidPath := ex.uidPath(n.UID)
@@ -830,7 +830,7 @@ func (ex *Executor) storeOutputs(n *Node, tmp string) {
 	// final path (rename is atomic on one fs). CreateTemp's unique name means two
 	// writers — even another ay process building the same node — never share the
 	// temp, so the rename target is always a fully-written manifest.
-	tf := Throw2(os.CreateTemp(filepath.Dir(uidPath), "."+n.UID.String()+".*"))
+	tf := Throw2(os.CreateTemp(filepath.Dir(uidPath), "."+n.UID.string()+".*"))
 	Throw2(tf.Write(Throw2(json.Marshal(meta))))
 	Throw(tf.Close())
 	Throw(os.Rename(tf.Name(), uidPath))
@@ -1017,7 +1017,7 @@ func (ex *Executor) casPathForHash(hash string) string {
 
 // uidPath is a node's manifest path, sharded by the first uid char: uid/<u>/<uid>.
 func (ex *Executor) uidPath(uid UID) string {
-	s := uid.String()
+	s := uid.string()
 
 	return filepath.Join(ex.bldRoot, "uid", s[:1], s)
 }

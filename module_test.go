@@ -72,7 +72,7 @@ func TestModuleInstance_String_Diagnostic(t *testing.T) {
 		Platform: testTargetP,
 	}
 
-	got := mi.String()
+	got := mi.string()
 	want := "build/cow/on[lib]:cpp@default-linux-aarch64"
 
 	if got != want {

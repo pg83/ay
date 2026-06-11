@@ -214,14 +214,14 @@ func TestFinalizeDumpGraph_PreservesFinalizeValidation(t *testing.T) {
 
 			_, gotExc := finalizeDumpGraphExc(tt.build())
 			if gotExc == nil {
-				t.Fatalf("finalizeDumpGraph unexpectedly accepted invalid emitter; want %q", wantExc.Error())
+				t.Fatalf("finalizeDumpGraph unexpectedly accepted invalid emitter; want %q", wantExc.error())
 			}
 
-			if got, want := gotExc.Error(), wantExc.Error(); got != want {
+			if got, want := gotExc.error(), wantExc.error(); got != want {
 				t.Fatalf("finalizeDumpGraph error = %q, want Finalize error %q", got, want)
 			}
-			if !strings.Contains(gotExc.Error(), tt.needle) {
-				t.Fatalf("finalizeDumpGraph error %q does not mention %q", gotExc.Error(), tt.needle)
+			if !strings.Contains(gotExc.error(), tt.needle) {
+				t.Fatalf("finalizeDumpGraph error %q does not mention %q", gotExc.error(), tt.needle)
 			}
 		})
 	}

@@ -162,7 +162,7 @@ func (m *DenseMap3[K, V1, V2, V3]) put3(k K, v V3) {
 
 // Len reports the number of distinct keys stored (a key counts once any of
 // its columns has been set).
-func (m *DenseMap3[K, V1, V2, V3]) Len() int {
+func (m *DenseMap3[K, V1, V2, V3]) len() int {
 	if len(m.rows) == 0 {
 		return 0
 	}

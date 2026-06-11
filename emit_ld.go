@@ -1,10 +1,10 @@
 package main
 
 var (
-	ldVcsInfoPath      = ldVcsInfoVFS.String()
-	ldSvnInterfacePath = ldSvnInterfaceVFS.String()
-	ldLinkExePath      = ldLinkExeVFS.String()
-	ldFsToolsPath      = ldFsToolsVFS.String()
+	ldVcsInfoPath      = ldVcsInfoVFS.string()
+	ldSvnInterfacePath = ldSvnInterfaceVFS.string()
+	ldLinkExePath      = ldLinkExeVFS.string()
+	ldFsToolsPath      = ldFsToolsVFS.string()
 )
 
 // ldScriptInputs seeds the link node's $(S) tooling inputs: the wrapper scripts it
@@ -94,9 +94,9 @@ func EmitLD(
 	vcsCVFS := Build(binPrefix + "__vcs_version__.c")
 	vcsOVFS := Build(binPrefix + "__vcs_version__.c" + instance.Platform.objectSuffix())
 
-	vcsCPath := vcsCVFS.String()
-	vcsOPath := vcsOVFS.String()
-	outputPath := outputVFS.String()
+	vcsCPath := vcsCVFS.string()
+	vcsOPath := vcsOVFS.string()
+	outputPath := outputVFS.string()
 
 	cmd0 := composeLDCmdVcsInfo(tc, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, tc, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings)
@@ -224,7 +224,7 @@ func emitVCSNode(emit Emitter, host *Platform) NodeRef {
 		TargetProperties: TargetProperties{ModuleDir: "build/scripts"},
 	}
 
-	node.UID = resourceFetchUID("base64:vcs.json:e30=", output.String())
+	node.UID = resourceFetchUID("base64:vcs.json:e30=", output.string())
 	node.SelfUID = node.UID
 
 	return emit.emit(node)

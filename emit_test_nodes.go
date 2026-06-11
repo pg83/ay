@@ -340,7 +340,7 @@ func buildTestSuiteInfo(instance ModuleInstance, d *ModuleData, ldPath VFS) *Tes
 
 	return &TestSuiteInfo{
 		ProjectPath: instance.Path.rel(),
-		BinaryPath:  ldPath.String(),
+		BinaryPath:  ldPath.string(),
 		CppSources:  cppSources,
 	}
 }

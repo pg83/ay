@@ -407,12 +407,17 @@ type ParseError struct {
 	Message string
 }
 
-func (e *ParseError) Error() string {
+func (e *ParseError) error() string {
 	if e.File != "" {
 		return fmt.Sprintf("%s:%d:%d: %s", e.File, e.Line, e.Col, e.Message)
 	}
 
 	return fmt.Sprintf("%d:%d: %s", e.Line, e.Col, e.Message)
+}
+
+// Error implements the error interface; internal code calls error().
+func (e *ParseError) Error() string {
+	return e.error()
 }
 
 func ParseFile(fs FS, path string) (mf *MakeFile, err error) {

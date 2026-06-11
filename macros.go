@@ -109,7 +109,7 @@ func isImplicitBuildVar(name string) bool {
 // and NYMake::IsTrue treats empty / any falseWord as false). The only
 // typed error is an int binding used in boolean position.
 func (e Environment) bool(id ENV) bool {
-	return e.boolID(id, id.String())
+	return e.boolID(id, id.string())
 }
 
 // boolID is Bool keyed by a pre-interned ENV (the IF-eval hot path passes the id
@@ -141,14 +141,14 @@ func stringIsTruthy(v string) bool {
 	return true
 }
 
-func (e Environment) String(id ENV) string {
+func (e Environment) string(id ENV) string {
 	// envStr stores the string (bools as "yes"/"no"); envInt stores the decimal
 	// form — both round-trip via the value STR.
 	if k, v := e.s.lookup(id); k != envAbsent {
 		return internTable.strs[v]
 	}
 
-	name := id.String()
+	name := id.string()
 
 	if isImplicitBuildVar(name) {
 		return ""
