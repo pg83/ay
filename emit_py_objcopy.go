@@ -47,20 +47,24 @@ func newObjcopyEmitCtx(ctx *genCtx, d *moduleData, p *Platform) *objcopyEmitCtx 
 	oc := &objcopyEmitCtx{}
 	oc.rescompilerLDRef, _ = ctx.tool(argToolsRescompiler)
 	oc.rescompressorLDRef, _ = ctx.tool(argToolsRescompressor)
-	oc.blocks = objcopyArgBlocks{
+	oc.blocks = composeObjcopyArgBlocks(d.tc, p)
+
+	return oc
+}
+
+func composeObjcopyArgBlocks(tc moduleToolchain, p *Platform) objcopyArgBlocks {
+	return objcopyArgBlocks{
 		pre: []STR{
-			d.tc.Python3,
+			tc.Python3,
 			internStr(objcopyScriptPath),
-			argCompiler.str(), d.tc.CXX,
-			argObjcopy.str(), d.tc.Objcopy,
+			argCompiler.str(), tc.CXX,
+			argObjcopy.str(), tc.Objcopy,
 			argCompressor.str(), internStr(rescompressorBinPath),
 			argRescompiler.str(), internStr(rescompilerBinPath),
 			argOutputObj.str(),
 		},
 		post: []STR{argTarget.str(), internStr(p.Triple)},
 	}
-
-	return oc
 }
 
 // objcopyCmdArgs assembles an objcopy command line: the module-stable blocks
