@@ -282,11 +282,79 @@ func lintCaseConvention(path string) bool {
 				continue
 			}
 
-			if n := d.Name.Name; n[0] >= 'A' && n[0] <= 'Z' && !stdlibCaseMethods[n] {
+			n := d.Name.Name
+
+			if n[0] < 'A' || n[0] > 'Z' {
+				continue
+			}
+
+			if !stdlibCaseMethods[n] {
 				report(d.Name.Pos(), "upper-case method", n)
+
+				continue
+			}
+
+			if !isInterfaceWrapper(d) {
+				report(d.Name.Pos(), "non-wrapper upper-case stdlib method", n)
 			}
 		}
 	}
 
 	return bad
+}
+
+// isInterfaceWrapper reports whether the method body is exactly
+// `return recv.lower(args…)` — or the bare call for void methods — the only
+// form an upper-case stdlib-interface method (stdlibCaseMethods) may take:
+// the implementation lives in the lower-case twin, the upper-case name exists
+// solely so fmt/json/sort/heap/errors find it.
+func isInterfaceWrapper(d *ast.FuncDecl) bool {
+	if d.Body == nil || len(d.Body.List) != 1 || d.Recv == nil ||
+		len(d.Recv.List) != 1 || len(d.Recv.List[0].Names) != 1 {
+		return false
+	}
+
+	var call *ast.CallExpr
+
+	switch st := d.Body.List[0].(type) {
+	case *ast.ReturnStmt:
+		if len(st.Results) != 1 {
+			return false
+		}
+
+		c, ok := st.Results[0].(*ast.CallExpr)
+
+		if !ok {
+			return false
+		}
+
+		call = c
+	case *ast.ExprStmt:
+		c, ok := st.X.(*ast.CallExpr)
+
+		if !ok {
+			return false
+		}
+
+		call = c
+	default:
+		return false
+	}
+
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+
+	if !ok {
+		return false
+	}
+
+	recv, ok := sel.X.(*ast.Ident)
+
+	if !ok {
+		return false
+	}
+
+	name := d.Name.Name
+
+	return recv.Name == d.Recv.List[0].Names[0].Name &&
+		sel.Sel.Name == strings.ToLower(name[:1])+name[1:]
 }
