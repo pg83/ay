@@ -20,22 +20,22 @@ func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in 
 		}
 
 		for _, f := range rp.OUTFiles {
-			d.prOutputProducer[f] = pyRef
+			d.prOutputProducer[f.string()] = pyRef
 		}
 
 		for _, f := range rp.OUTNoAutoFiles {
-			d.prOutputProducer[f] = pyRef
+			d.prOutputProducer[f.string()] = pyRef
 		}
 
 		if rp.StdoutFile != nil {
-			d.prOutputProducer[*rp.StdoutFile] = pyRef
+			d.prOutputProducer[rp.StdoutFile.string()] = pyRef
 		}
 
 		outs := make([]string, 0, len(rp.OUTFiles)+1)
-		outs = append(outs, rp.OUTFiles...)
+		outs = append(outs, strStrings(rp.OUTFiles)...)
 
 		if rp.StdoutFile != nil {
-			outs = append(outs, *rp.StdoutFile)
+			outs = append(outs, rp.StdoutFile.string())
 		}
 
 		for _, out := range outs {
@@ -53,32 +53,32 @@ func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in 
 }
 
 func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d *ModuleData, reg *CodegenRegistry, moduleInputs ModuleCCInputs) NodeRef {
-	scriptVFS := copyFileInputVFS(ctx.fs, instance.Path.rel(), stmt.ScriptPath)
+	scriptVFS := copyFileInputVFS(ctx.fs, instance.Path.rel(), stmt.ScriptPath.string())
 	inVFSByToken := make(map[string]VFS, len(stmt.INFiles))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
 
 	for _, f := range stmt.INFiles {
-		vfs := runProgramInputVFS(ctx, instance, d, f)
-		inVFSByToken[f] = vfs
+		vfs := runProgramInputVFS(ctx, instance, d, f.string())
+		inVFSByToken[f.string()] = vfs
 		inVFSs = append(inVFSs, vfs)
 	}
 
 	outVFSByToken := make(map[string]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
 
 	for _, f := range stmt.OUTFiles {
-		outVFSByToken[f] = copyFileOutputVFS(instance.Path.rel(), f)
+		outVFSByToken[f.string()] = copyFileOutputVFS(instance.Path.rel(), f.string())
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		outVFSByToken[f] = copyFileOutputVFS(instance.Path.rel(), f)
+		outVFSByToken[f.string()] = copyFileOutputVFS(instance.Path.rel(), f.string())
 	}
 
 	var stdoutVFS *VFS
 
 	if stmt.StdoutFile != nil {
-		vfs := copyFileOutputVFS(instance.Path.rel(), *stmt.StdoutFile)
+		vfs := copyFileOutputVFS(instance.Path.rel(), stmt.StdoutFile.string())
 		stdoutVFS = &vfs
-		outVFSByToken[*stmt.StdoutFile] = vfs
+		outVFSByToken[stmt.StdoutFile.string()] = vfs
 	}
 
 	// Detect split-codegen pattern; precompute source inputs when matched.
@@ -91,15 +91,15 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
-			registerGeneratedParsedOutput(ctx, instance, pkPY, outVFSByToken[f], pyEmitsIncludes(ctx, instance, d, stmt, f, scriptVFS, splitSrcs, hasCCShard), nil)
+			registerGeneratedParsedOutput(ctx, instance, pkPY, outVFSByToken[f.string()], pyEmitsIncludes(ctx, instance, d, stmt, f.string(), scriptVFS, splitSrcs, hasCCShard), nil)
 		}
 
 		for _, f := range stmt.OUTNoAutoFiles {
-			registerGeneratedParsedOutput(ctx, instance, pkPY, outVFSByToken[f], pyEmitsIncludes(ctx, instance, d, stmt, f, scriptVFS, splitSrcs, hasCCShard), nil)
+			registerGeneratedParsedOutput(ctx, instance, pkPY, outVFSByToken[f.string()], pyEmitsIncludes(ctx, instance, d, stmt, f.string(), scriptVFS, splitSrcs, hasCCShard), nil)
 		}
 
 		if stmt.StdoutFile != nil {
-			registerGeneratedParsedOutput(ctx, instance, pkPY, *stdoutVFS, pyEmitsIncludes(ctx, instance, d, stmt, *stmt.StdoutFile, scriptVFS, splitSrcs, hasCCShard), nil)
+			registerGeneratedParsedOutput(ctx, instance, pkPY, *stdoutVFS, pyEmitsIncludes(ctx, instance, d, stmt, stmt.StdoutFile.string(), scriptVFS, splitSrcs, hasCCShard), nil)
 		}
 	}
 
@@ -116,24 +116,24 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	// Emit and the reader (prResourceExtraInputs) copies out, so sharing it
 	// across keys is safe.
 	for _, f := range stmt.OUTFiles {
-		d.prOutputInputs[f] = result.Inputs
+		d.prOutputInputs[f.string()] = result.Inputs
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		d.prOutputInputs[f] = result.Inputs
+		d.prOutputInputs[f.string()] = result.Inputs
 	}
 
 	if stmt.StdoutFile != nil {
-		d.prOutputInputs[*stmt.StdoutFile] = result.Inputs
+		d.prOutputInputs[stmt.StdoutFile.string()] = result.Inputs
 	}
 
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
-			bindGeneratedOutput(ctx, instance, outVFSByToken[f], result.Ref)
+			bindGeneratedOutput(ctx, instance, outVFSByToken[f.string()], result.Ref)
 		}
 
 		for _, f := range stmt.OUTNoAutoFiles {
-			bindGeneratedOutput(ctx, instance, outVFSByToken[f], result.Ref)
+			bindGeneratedOutput(ctx, instance, outVFSByToken[f.string()], result.Ref)
 		}
 
 		if stmt.StdoutFile != nil {
@@ -176,7 +176,7 @@ func pyInputClosure(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 		// build-generated IN files; walking them here (via their registered
 		// parsedIncludes) produces the correct PY-node input set.
 		for _, f := range stmt.INFiles {
-			vfs := runProgramInputVFS(ctx, instance, d, f)
+			vfs := runProgramInputVFS(ctx, instance, d, f.string())
 			out = append(out, walkClosureTail(ctx, instance, vfs, scanIn)...)
 		}
 	} else {
@@ -187,19 +187,19 @@ func pyInputClosure(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 		// and folds its transitive header closure into the producing node's inputs,
 		// matching upstream. CC-only would miss header outputs.
 		for _, f := range stmt.OUTFiles {
-			if generatedOutputCarriesIncludes(f) {
-				walkOne(f)
+			if generatedOutputCarriesIncludes(f.string()) {
+				walkOne(f.string())
 			}
 		}
 
 		for _, f := range stmt.OUTNoAutoFiles {
-			if generatedOutputCarriesIncludes(f) {
-				walkOne(f)
+			if generatedOutputCarriesIncludes(f.string()) {
+				walkOne(f.string())
 			}
 		}
 
-		if stmt.StdoutFile != nil && generatedOutputCarriesIncludes(*stmt.StdoutFile) {
-			walkOne(*stmt.StdoutFile)
+		if stmt.StdoutFile != nil && generatedOutputCarriesIncludes(stmt.StdoutFile.string()) {
+			walkOne(stmt.StdoutFile.string())
 		}
 	}
 
@@ -219,11 +219,11 @@ func pyInputClosure(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 // AND header outputs (*.pb.main.h, *.pb.classes.h).
 func splitCodegenDetect(stmt *RunPythonStmt) (hasCCShard bool, hasHeader bool) {
 	for _, f := range stmt.OUTNoAutoFiles {
-		if isCCSourceExt(f) {
+		if isCCSourceExt(f.string()) {
 			hasCCShard = true
 		}
 
-		if isHeaderSource(f) {
+		if isHeaderSource(f.string()) {
 			hasHeader = true
 		}
 	}
@@ -289,7 +289,7 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 	}
 
 	for _, f := range stmt.INFiles {
-		vfs := runProgramInputVFS(ctx, instance, d, f)
+		vfs := runProgramInputVFS(ctx, instance, d, f.string())
 
 		if vfs.isSource() {
 			addSource(vfs)
@@ -371,9 +371,9 @@ func pyEmitsIncludes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 		var firstShardVFS VFS
 
 		for _, f := range stmt.OUTNoAutoFiles {
-			if isCCSourceExt(f) {
-				firstShardFile = f
-				firstShardVFS = copyFileOutputVFS(instance.Path.rel(), f)
+			if isCCSourceExt(f.string()) {
+				firstShardFile = f.string()
+				firstShardVFS = copyFileOutputVFS(instance.Path.rel(), f.string())
 
 				break
 			}
@@ -424,15 +424,15 @@ func pyEmitsIncludes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 	includes := []IncludeDirective{{kind: includeQuoted, target: internStr(scriptVFS.rel())}}
 
 	for _, f := range stmt.INFiles {
-		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(runProgramInputVFS(ctx, instance, d, f).rel())})
+		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(runProgramInputVFS(ctx, instance, d, f.string()).rel())})
 	}
 
 	for _, f := range stmt.OutputIncludes {
-		if vfsHasPrefix(f) {
-			f = intern(f).rel()
+		if vfsHasPrefix(f.string()) {
+			f = internStr(intern(f.string()).rel())
 		}
 
-		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(f)})
+		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(f.string())})
 	}
 
 	return includes
@@ -453,18 +453,20 @@ func emitPYRun(
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	for _, kv := range stmt.EnvPairs {
-		parts := strings.SplitN(kv, "=", 2)
+		parts := strings.SplitN(kv.string(), "=", 2)
 
 		if len(parts) == 2 {
 			env = append(env, EnvVar{Name: internEnv(parts[0]), Value: internStr(parts[1])})
 		} else {
-			env = append(env, EnvVar{Name: internEnv(kv), Value: strEmpty})
+			env = append(env, EnvVar{Name: internEnv(kv.string()), Value: strEmpty})
 		}
 	}
 
 	cmdArgs := []STR{tc.Python3, (scriptVFS).str()}
 
-	for _, a := range stmt.Args {
+	for _, aTok := range stmt.Args {
+		a := aTok.string()
+
 		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = vfs.string()
 		} else if vfs, ok := outVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
@@ -486,7 +488,7 @@ func emitPYRun(
 	appendUnique(scriptVFS)
 
 	for _, f := range stmt.INFiles {
-		appendUnique(inVFSByToken[f])
+		appendUnique(inVFSByToken[f.string()])
 	}
 
 	// The closure tail is filtered against the head set; filterSeen returns
@@ -503,11 +505,11 @@ func emitPYRun(
 	}
 
 	for _, f := range stmt.OUTFiles {
-		outputs = append(outputs, outVFSByToken[f])
+		outputs = append(outputs, outVFSByToken[f.string()])
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		outputs = append(outputs, outVFSByToken[f])
+		outputs = append(outputs, outVFSByToken[f.string()])
 	}
 
 	cmd := Cmd{CmdArgs: ArgChunks{cmdArgs}, Env: env}
@@ -517,7 +519,7 @@ func emitPYRun(
 	}
 
 	if stmt.CWD != nil {
-		cmd.Cwd = internStr(*stmt.CWD)
+		cmd.Cwd = *stmt.CWD
 	}
 
 	node := &Node{

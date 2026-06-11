@@ -139,7 +139,7 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 
 	fixElfRef, fixElfPath := ctx.tool(argToolsFixElf)
 
-	outputName := "lib" + d.moduleStmt.Args[0] + ".so"
+	outputName := "lib" + d.moduleStmt.Args[0].string() + ".so"
 	outputPath := build(instance.Path.rel() + "/" + outputName).string()
 	vcsCPath := build(instance.Path.rel() + "/__vcs_version__.c").string()
 	vcsOPath := build(instance.Path.rel() + "/__vcs_version__.c.pic.o").string()

@@ -273,12 +273,12 @@ type Antlr4GrammarInfo struct {
 
 type AntlrRunInfo struct {
 	Macro          string
-	Args           []string
-	INFiles        []string
-	OUTFiles       []string
-	OUTNoAutoFiles []string
-	CWD            *string
-	OutputIncludes []string
+	Args           []STR
+	INFiles        []STR
+	OUTFiles       []STR
+	OUTNoAutoFiles []STR
+	CWD            *STR
+	OutputIncludes []STR
 }
 
 func parseCopyFileEntry(args []string, withContext bool, line int) CopyFileEntry {
@@ -770,7 +770,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 				d.peerdirs = append(d.peerdirs, unittestMainPeer)
 
 				if len(v.Args) > 0 {
-					d.peerdirs = append(d.peerdirs, path.Clean(v.Args[0]))
+					d.peerdirs = append(d.peerdirs, path.Clean(v.Args[0].string()))
 				}
 			}
 
@@ -789,7 +789,9 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			globalNext := false
 			globalSrcs := make([]string, 0, len(v.Sources))
 
-			for _, src := range expandStmtTokens(v.Sources, env) {
+			for _, srcTok := range expandStmtTokensSTR(v.Sources, env) {
+				src := srcTok.string()
+
 				// An unresolved ${VAR} stays literal through expansion (upstream
 				// Deref keeps unknown refs); ymake's source consumer then warns
 				// and ignores it — mirror that, like the PEERDIR arm below.
@@ -826,7 +828,9 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 
 			addInclNext := false
 
-			for _, p := range expandStmtTokens(v.Paths, env) {
+			for _, pTok := range expandStmtTokensSTR(v.Paths, env) {
+				p := pTok.string()
+
 				if strings.Contains(p, "${") {
 					continue
 				}
@@ -866,7 +870,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 
 		case *JoinSrcsStmt:
 			expanded := *v
-			expanded.Sources = expandStmtTokens(v.Sources, env)
+			expanded.Sources = expandStmtTokensSTR(v.Sources, env)
 			d.joinSrcs = append(d.joinSrcs, &expanded)
 		case *AddInclStmt:
 
@@ -879,27 +883,28 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			d.protoAddInclGlobal = append(d.protoAddInclGlobal, expandConfigVFSPaths(v.ProtoGlobalPaths, env)...)
 		case *CFlagsStmt:
 
-			d.cFlagsGlobal = append(d.cFlagsGlobal, internArgs(expandStmtTokens(v.GlobalFlags, env))...)
-			d.cFlags = append(d.cFlags, internArgs(expandStmtTokens(v.OwnFlags, env))...)
+			d.cFlagsGlobal = append(d.cFlagsGlobal, internArgsFromSTR(expandStmtTokensSTR(v.GlobalFlags, env))...)
+			d.cFlags = append(d.cFlags, internArgsFromSTR(expandStmtTokensSTR(v.OwnFlags, env))...)
 		case *CXXFlagsStmt:
 
-			d.cxxFlagsGlobal = append(d.cxxFlagsGlobal, internArgs(expandStmtTokens(v.GlobalFlags, env))...)
-			d.cxxFlags = append(d.cxxFlags, internArgs(expandStmtTokens(v.OwnFlags, env))...)
+			d.cxxFlagsGlobal = append(d.cxxFlagsGlobal, internArgsFromSTR(expandStmtTokensSTR(v.GlobalFlags, env))...)
+			d.cxxFlags = append(d.cxxFlags, internArgsFromSTR(expandStmtTokensSTR(v.OwnFlags, env))...)
 		case *CONLYFlagsStmt:
 
-			d.cOnlyFlagsGlobal = append(d.cOnlyFlagsGlobal, internArgs(expandStmtTokens(v.GlobalFlags, env))...)
-			d.cOnlyFlags = append(d.cOnlyFlags, internArgs(expandStmtTokens(v.OwnFlags, env))...)
+			d.cOnlyFlagsGlobal = append(d.cOnlyFlagsGlobal, internArgsFromSTR(expandStmtTokensSTR(v.GlobalFlags, env))...)
+			d.cOnlyFlags = append(d.cOnlyFlags, internArgsFromSTR(expandStmtTokensSTR(v.OwnFlags, env))...)
 		case *LDFlagsStmt:
-			d.ldFlags = append(d.ldFlags, internArgs(expandStmtTokens(v.Flags, env))...)
+			d.ldFlags = append(d.ldFlags, internArgsFromSTR(expandStmtTokensSTR(v.Flags, env))...)
 		case *SrcDirStmt:
 			// SRCDIR is cumulative: each expanded arg (a ${VAR} may be a SET
 			// holding many whitespace-separated dirs, e.g. SRCDIR(${__dirs_}))
 			// becomes a directory VFS appended to the search path.
-			for _, dir := range expandStmtTokens(v.Dirs, env) {
+			for _, dirTok := range expandStmtTokensSTR(v.Dirs, env) {
+				dir := dirTok.string()
 				d.srcDirs = append(d.srcDirs, dirKey(dir))
 			}
 		case *GlobalSrcsStmt:
-			appendGlobalSrcGroup(d, expandStmtTokens(v.Sources, env))
+			appendGlobalSrcGroup(d, strStrings(expandStmtTokensSTR(v.Sources, env)))
 		case *GenerateEnumSerializationStmt:
 			d.enumSrcs = append(d.enumSrcs, v)
 			// Upstream's GENERATE_ENUM_SERIALIZATION macro expands inline to
@@ -943,76 +948,76 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 		case *RunAntlr4CppStmt:
 			d.antlr4Grammars = append(d.antlr4Grammars, Antlr4GrammarInfo{
 				IsSplit:        false,
-				Grammar:        expandStmtToken(v.Grammar, env),
-				Options:        expandStmtTokens(v.Options, env),
+				Grammar:        expandStmtToken(v.Grammar.string(), env),
+				Options:        strStrings(expandStmtTokensSTR(v.Options, env)),
 				Visitor:        v.Visitor,
 				Listener:       v.Listener,
-				OutputIncludes: expandStmtTokens(v.OutputIncludes, env),
+				OutputIncludes: strStrings(expandStmtTokensSTR(v.OutputIncludes, env)),
 			})
 		case *RunAntlr4CppSplitStmt:
 			d.antlr4Grammars = append(d.antlr4Grammars, Antlr4GrammarInfo{
 				IsSplit:        true,
-				Lexer:          expandStmtToken(v.Lexer, env),
-				Parser:         expandStmtToken(v.Parser, env),
+				Lexer:          expandStmtToken(v.Lexer.string(), env),
+				Parser:         expandStmtToken(v.Parser.string(), env),
 				Visitor:        v.Visitor,
 				Listener:       v.Listener,
-				OutputIncludes: expandStmtTokens(v.OutputIncludes, env),
+				OutputIncludes: strStrings(expandStmtTokensSTR(v.OutputIncludes, env)),
 			})
 		case *RunAntlrStmt:
 			expanded := AntlrRunInfo{
 				Macro:          v.Macro,
-				Args:           expandStmtTokens(v.Args, env),
-				INFiles:        expandStmtTokens(v.INFiles, env),
-				OUTFiles:       expandStmtTokens(v.OUTFiles, env),
-				OUTNoAutoFiles: expandStmtTokens(v.OUTNoAutoFiles, env),
-				OutputIncludes: expandStmtTokens(v.OutputIncludes, env),
+				Args:           expandStmtTokensSTR(v.Args, env),
+				INFiles:        expandStmtTokensSTR(v.INFiles, env),
+				OUTFiles:       expandStmtTokensSTR(v.OUTFiles, env),
+				OUTNoAutoFiles: expandStmtTokensSTR(v.OUTNoAutoFiles, env),
+				OutputIncludes: expandStmtTokensSTR(v.OutputIncludes, env),
 			}
 
 			if v.CWD != nil {
-				cwd := expandStmtToken(*v.CWD, env)
+				cwd := expandStmtTokenSTR(*v.CWD, env)
 				expanded.CWD = &cwd
 			}
 
 			d.antlrRuns = append(d.antlrRuns, expanded)
 		case *RunProgramStmt:
 			expanded := *v
-			expanded.ToolPath = expandStmtToken(v.ToolPath, env)
-			expanded.Args = expandStmtTokens(v.Args, env)
-			expanded.INFiles = expandStmtTokens(v.INFiles, env)
-			expanded.OUTFiles = expandStmtTokens(v.OUTFiles, env)
-			expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
-			expanded.EnvPairs = expandStmtTokens(v.EnvPairs, env)
-			expanded.OutputIncludes = expandStmtTokens(v.OutputIncludes, env)
-			expanded.ToolPaths = expandStmtTokens(v.ToolPaths, env)
+			expanded.ToolPath = expandStmtTokenSTR(v.ToolPath, env)
+			expanded.Args = expandStmtTokensSTR(v.Args, env)
+			expanded.INFiles = expandStmtTokensSTR(v.INFiles, env)
+			expanded.OUTFiles = expandStmtTokensSTR(v.OUTFiles, env)
+			expanded.OUTNoAutoFiles = expandStmtTokensSTR(v.OUTNoAutoFiles, env)
+			expanded.EnvPairs = expandStmtTokensSTR(v.EnvPairs, env)
+			expanded.OutputIncludes = expandStmtTokensSTR(v.OutputIncludes, env)
+			expanded.ToolPaths = expandStmtTokensSTR(v.ToolPaths, env)
 
 			if v.StdoutFile != nil {
-				stdout := expandStmtToken(*v.StdoutFile, env)
+				stdout := expandStmtTokenSTR(*v.StdoutFile, env)
 				expanded.StdoutFile = &stdout
 			}
 
 			if v.CWD != nil {
-				cwd := expandStmtToken(*v.CWD, env)
+				cwd := expandStmtTokenSTR(*v.CWD, env)
 				expanded.CWD = &cwd
 			}
 
 			d.runPrograms = append(d.runPrograms, &expanded)
 		case *RunPythonStmt:
 			expanded := *v
-			expanded.ScriptPath = expandStmtToken(v.ScriptPath, env)
-			expanded.Args = expandStmtTokens(v.Args, env)
-			expanded.INFiles = expandStmtTokens(v.INFiles, env)
-			expanded.OUTFiles = expandStmtTokens(v.OUTFiles, env)
-			expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
-			expanded.EnvPairs = expandStmtTokens(v.EnvPairs, env)
-			expanded.OutputIncludes = expandStmtTokens(v.OutputIncludes, env)
+			expanded.ScriptPath = expandStmtTokenSTR(v.ScriptPath, env)
+			expanded.Args = expandStmtTokensSTR(v.Args, env)
+			expanded.INFiles = expandStmtTokensSTR(v.INFiles, env)
+			expanded.OUTFiles = expandStmtTokensSTR(v.OUTFiles, env)
+			expanded.OUTNoAutoFiles = expandStmtTokensSTR(v.OUTNoAutoFiles, env)
+			expanded.EnvPairs = expandStmtTokensSTR(v.EnvPairs, env)
+			expanded.OutputIncludes = expandStmtTokensSTR(v.OutputIncludes, env)
 
 			if v.StdoutFile != nil {
-				stdout := expandStmtToken(*v.StdoutFile, env)
+				stdout := expandStmtTokenSTR(*v.StdoutFile, env)
 				expanded.StdoutFile = &stdout
 			}
 
 			if v.CWD != nil {
-				cwd := expandStmtToken(*v.CWD, env)
+				cwd := expandStmtTokenSTR(*v.CWD, env)
 				expanded.CWD = &cwd
 			}
 
@@ -1035,7 +1040,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 		case *ResourceFilesStmt:
 			ensureResourcePeer(modulePath, d)
 
-			expanded := expandResourceFiles(v.Args)
+			expanded := expandResourceFiles(strStrings(v.Args))
 
 			for i, e := range expanded {
 				if i == len(expanded)-1 {
@@ -1060,7 +1065,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			// must substitute and split into the individual tokens before the
 			// macro handler reads them.
 			expanded := *v
-			expanded.Args = expandStmtTokens(v.Args, env)
+			expanded.Args = expandStmtTokensSTR(v.Args, env)
 			applyUnknownStmt(modulePath, &expanded, d, env)
 		default:
 			throwFmt("gen: %s: unhandled Stmt type %T (parser added a new Stmt subclass without updating gen.go)", modulePath, s)
@@ -1127,7 +1132,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 
 	defer func() {
 		if handled {
-			recordHandledMacro(v.Name.string(), v.Args)
+			recordHandledMacro(v.Name.string(), strStrings(v.Args))
 		}
 	}()
 
@@ -1142,9 +1147,9 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 		self := source(modulePath)
 
 		switch {
-		case len(v.Args) >= 2 && v.Args[0] == "FOR" && v.Args[1] == "cython":
+		case len(v.Args) >= 2 && v.Args[0].string() == "FOR" && v.Args[1].string() == "cython":
 			d.cythonAddIncl = append(d.cythonAddIncl, self)
-		case len(v.Args) >= 2 && v.Args[0] == "FOR" && v.Args[1] == "asm":
+		case len(v.Args) >= 2 && v.Args[0].string() == "FOR" && v.Args[1].string() == "asm":
 			d.asmAddIncl = append(d.asmAddIncl, self)
 		default:
 			d.addIncl = append(d.addIncl, self)
@@ -1199,7 +1204,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 		// no-op on the emitted graph; walk the args just to acknowledge
 		// every legal kwarg as a known service-keyword.
 		for i := 0; i < len(v.Args); i++ {
-			switch v.Args[i] {
+			switch v.Args[i].string() {
 			case "CONFIG_TYPE":
 				i++
 			case "CHECK_FORMAT":
@@ -1223,26 +1228,26 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 		i := 0
 
 		for i < len(v.Args) {
-			switch v.Args[i] {
+			switch v.Args[i].string() {
 			case "NAME":
 				if i+1 >= len(v.Args) {
 					throwFmt("LLVM_BC NAME expects a value")
 				}
 
-				stmt.Name = v.Args[i+1]
+				stmt.Name = v.Args[i+1].string()
 				i += 2
 			case "SUFFIX":
 				if i+1 >= len(v.Args) {
 					throwFmt("LLVM_BC SUFFIX expects a value")
 				}
 
-				stmt.Suffix = v.Args[i+1]
+				stmt.Suffix = v.Args[i+1].string()
 				i += 2
 			case "SYMBOLS":
 				i++
 
-				for i < len(v.Args) && !isLlvmBcKeyword(v.Args[i]) {
-					stmt.Symbols = append(stmt.Symbols, v.Args[i])
+				for i < len(v.Args) && !isLlvmBcKeyword(v.Args[i].string()) {
+					stmt.Symbols = append(stmt.Symbols, v.Args[i].string())
 					i++
 				}
 			case "GENERATE_MACHINE_CODE":
@@ -1252,7 +1257,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 				stmt.NoCompile = true
 				i++
 			default:
-				stmt.Sources = append(stmt.Sources, v.Args[i])
+				stmt.Sources = append(stmt.Sources, v.Args[i].string())
 				i++
 			}
 		}
@@ -1270,15 +1275,15 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 			throwFmt("CHECK_CONFIG_H expects exactly 1 argument, got %d", len(v.Args))
 		}
 
-		d.checkConfigHeaders = append(d.checkConfigHeaders, v.Args[0])
+		d.checkConfigHeaders = append(d.checkConfigHeaders, v.Args[0].string())
 	case tokBuildwithCythonCpp:
 		if len(v.Args) == 0 {
 			throwFmt("BUILDWITH_CYTHON_CPP expects at least 1 argument")
 		}
 
 		d.cythonCpp = append(d.cythonCpp, &CythonStmt{
-			Src:     v.Args[0],
-			Options: v.Args[1:],
+			Src:     v.Args[0].string(),
+			Options: strStrings(v.Args[1:]),
 		})
 		d.cythonNumpyBeforeInclude = true
 	case tokBuildwithCythonC:
@@ -1287,8 +1292,8 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 		}
 
 		d.cythonCpp = append(d.cythonCpp, &CythonStmt{
-			Src:     v.Args[0],
-			Options: v.Args[1:],
+			Src:     v.Args[0].string(),
+			Options: strStrings(v.Args[1:]),
 			CMode:   true,
 		})
 		d.cythonNumpyBeforeInclude = true
@@ -1304,7 +1309,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 			throwFmt("gen: PY_NAMESPACE expects exactly 1 argument, got %d", len(v.Args))
 		}
 
-		d.pyNamespace = stringPtr(v.Args[0])
+		d.pyNamespace = stringPtr(v.Args[0].string())
 	case tokYqlLastAbiVersion:
 		if len(v.Args) != 0 {
 			throwFmt("YQL_LAST_ABI_VERSION expects exactly 0 arguments, got %d", len(v.Args))
@@ -1317,9 +1322,9 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 		}
 
 		d.cxxFlags = append(d.cxxFlags,
-			internArg("-DUDF_ABI_VERSION_MAJOR="+v.Args[0]),
-			internArg("-DUDF_ABI_VERSION_MINOR="+v.Args[1]),
-			internArg("-DUDF_ABI_VERSION_PATCH="+v.Args[2]),
+			internArg("-DUDF_ABI_VERSION_MAJOR="+v.Args[0].string()),
+			internArg("-DUDF_ABI_VERSION_MINOR="+v.Args[1].string()),
+			internArg("-DUDF_ABI_VERSION_PATCH="+v.Args[2].string()),
 		)
 	case tokProtocFatalWarnings:
 		if len(v.Args) != 0 {
@@ -1346,9 +1351,9 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 		const googleapisPeer = "contrib/libs/googleapis-common-protos"
 		d.peerdirs = append([]string{googleapisPeer}, d.peerdirs...)
 	case tokFlatcFlags:
-		d.flatcFlags = append(d.flatcFlags, internArgs(v.Args)...)
+		d.flatcFlags = append(d.flatcFlags, internArgsFromSTR(v.Args)...)
 	case tokCopyFile, tokCopyFileWithContext:
-		entry := parseCopyFileEntry(v.Args, v.Name == tokCopyFileWithContext, v.Line)
+		entry := parseCopyFileEntry(strStrings(v.Args), v.Name == tokCopyFileWithContext, v.Line)
 		d.copyFiles = append(d.copyFiles, entry)
 
 		if entry.Auto {
@@ -1370,7 +1375,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 			}
 		}
 	case tokCopy:
-		for _, entry := range parseCopyEntries(v.Args, v.Line) {
+		for _, entry := range parseCopyEntries(strStrings(v.Args), v.Line) {
 			d.copyFiles = append(d.copyFiles, entry)
 
 			if entry.Auto {
@@ -1397,10 +1402,10 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 			throwFmt("gen: PROTO_NAMESPACE expects at least 1 argument")
 		}
 
-		d.protoNamespace = stringPtr(v.Args[len(v.Args)-1])
+		d.protoNamespace = stringPtr(v.Args[len(v.Args)-1].string())
 
 		for _, arg := range v.Args[:len(v.Args)-1] {
-			if arg == "GLOBAL" {
+			if arg.string() == "GLOBAL" {
 				d.protoNamespaceGlobal = true
 			}
 		}
@@ -1424,7 +1429,9 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 			d.excludeTags = make(map[string]bool)
 		}
 
-		for _, arg := range v.Args {
+		for _, argTok := range v.Args {
+			arg := argTok.string()
+
 			switch arg {
 			case "GO_PROTO", "JAVA_PROTO":
 				// known multimodule submodule tags
@@ -1437,7 +1444,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 			throwFmt("YA_CONF_JSON expects exactly 1 argument, got %d", len(v.Args))
 		}
 
-		d.yaConfJSON = append(d.yaConfJSON, v.Args[0])
+		d.yaConfJSON = append(d.yaConfJSON, v.Args[0].string())
 	case tokAllocator:
 		applyAllocatorStmt(v, d)
 	case tokArchive:
@@ -1451,7 +1458,8 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 		// strict service-keyword check in recordHandledMacro via
 		// macrosAcceptingUserFlags. The cases below keep the few flags
 		// whose ENABLE has a direct module-data side-effect.
-		for _, a := range v.Args {
+		for _, aTok := range v.Args {
+			a := aTok.string()
 			env.setBool(internEnv(a), true)
 
 			switch a {
@@ -1470,7 +1478,8 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 	case tokDisable:
 		// Counterpart to ENABLE: clears the env var (and the few specific
 		// module-data flags). Generic for the same reasons as ENABLE.
-		for _, a := range v.Args {
+		for _, aTok := range v.Args {
+			a := aTok.string()
 			env.setBool(internEnv(a), false)
 
 			if a == "PYTHON_SQLITE3" {
@@ -1492,21 +1501,21 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 		}
 
 		filename := v.Args[0]
-		d.srcs = append(d.srcs, filename)
+		d.srcs = append(d.srcs, filename.string())
 
 		if d.flatSrcs == nil {
 			d.flatSrcs = map[string]struct{}{}
 		}
 
-		d.flatSrcs[filename] = struct{}{}
+		d.flatSrcs[filename.string()] = struct{}{}
 
 		if len(v.Args) > 1 {
 			if d.perSrcCFlags == nil {
 				d.perSrcCFlags = map[string][]ARG{}
 			}
 
-			extras := internArgs(v.Args[1:])
-			d.perSrcCFlags[filename] = append(d.perSrcCFlags[filename], extras...)
+			extras := internArgsFromSTR(v.Args[1:])
+			d.perSrcCFlags[filename.string()] = append(d.perSrcCFlags[filename.string()], extras...)
 		}
 	case tokSrcCNoLto:
 
@@ -1515,13 +1524,13 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 		}
 
 		filename := v.Args[0]
-		d.srcs = append(d.srcs, filename)
+		d.srcs = append(d.srcs, filename.string())
 
 		if d.flatSrcs == nil {
 			d.flatSrcs = map[string]struct{}{}
 		}
 
-		d.flatSrcs[filename] = struct{}{}
+		d.flatSrcs[filename.string()] = struct{}{}
 	case tokSrcCAvx, tokSrcCAvx2, tokSrcCAvx512, tokSrcCAmx, tokSrcCSse2, tokSrcCSse3, tokSrcCSsse3,
 		tokSrcCSse4, tokSrcCSse41, tokSrcCXop:
 
@@ -1538,39 +1547,40 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 		filename := v.Args[0]
 		flags := make([]string, 0, len(variant.CFlags)+len(v.Args)-1)
 		flags = append(flags, variant.CFlags...)
-		flags = append(flags, v.Args[1:]...)
+		flags = append(flags, strStrings(v.Args[1:])...)
 
 		d.simdSrcs = append(d.simdSrcs, SimdSrc{
-			Src:     filename,
+			Src:     filename.string(),
 			Variant: variant.Suffix,
 			CFlags:  flags,
 			Line:    v.Line,
 		})
 	case tokLdPlugin:
 
-		d.ldPlugins = append(d.ldPlugins, v.Args...)
+		d.ldPlugins = append(d.ldPlugins, strStrings(v.Args)...)
 	case tokArPlugin:
 
 		if len(v.Args) != 1 {
 			throwFmt("gen: AR_PLUGIN expects exactly 1 argument, got %d", len(v.Args))
 		}
 
-		d.arPlugin = stringPtr(v.Args[0] + ".pyplugin")
+		d.arPlugin = stringPtr(v.Args[0].string() + ".pyplugin")
 	case tokDynamicLibraryFrom:
 		if len(v.Args) == 0 {
 			throwFmt("gen: DYNAMIC_LIBRARY_FROM expects at least 1 argument")
 		}
 
-		d.dynamicLibraryFrom = append(d.dynamicLibraryFrom, v.Args...)
-		d.peerdirs = append(d.peerdirs, v.Args...)
+		d.dynamicLibraryFrom = append(d.dynamicLibraryFrom, strStrings(v.Args)...)
+		d.peerdirs = append(d.peerdirs, strStrings(v.Args)...)
 	case tokExportsScript:
 		if len(v.Args) != 1 {
 			throwFmt("gen: EXPORTS_SCRIPT expects exactly 1 argument, got %d", len(v.Args))
 		}
 
-		d.exportsScript = stringPtr(v.Args[0])
+		d.exportsScript = stringPtr(v.Args[0].string())
 	case tokExtralibs:
-		for _, arg := range v.Args {
+		for _, argTok := range v.Args {
+			arg := argTok.string()
 			lib := arg
 
 			if !strings.HasPrefix(lib, "-") {
@@ -1603,7 +1613,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 		for i := 0; i < len(v.Args); i++ {
 			a := v.Args[i]
 
-			switch a {
+			switch a.string() {
 			case "TOP_LEVEL":
 				topLevel = true
 				d.pyTopLevel = true
@@ -1616,7 +1626,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 					throwFmt("PY_SRCS NAMESPACE expects a value")
 				}
 
-				namespace = stringPtr(v.Args[i])
+				namespace = stringPtr(v.Args[i].string())
 				d.pyNamespace = namespace
 
 				continue
@@ -1641,7 +1651,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 					throwFmt("PY_SRCS CYTHON_DIRECTIVE expects a value")
 				}
 
-				cythonDirectives = append(cythonDirectives, "-X", v.Args[i])
+				cythonDirectives = append(cythonDirectives, "-X", v.Args[i].string())
 
 				continue
 			case "SWIG_C":
@@ -1658,12 +1668,12 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 				continue
 			}
 
-			src := a
+			src := a.string()
 			modNameOverride := ""
 
-			if eq := strings.IndexByte(a, '='); eq >= 0 {
-				src = a[:eq]
-				modNameOverride = a[eq+1:]
+			if eq := strings.IndexByte(src, '='); eq >= 0 {
+				modNameOverride = src[eq+1:]
+				src = src[:eq]
 			}
 
 			if strings.HasSuffix(src, ".pyx") {
@@ -1754,7 +1764,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 				continue
 			}
 
-			if strings.Contains(a, "=") && !strings.HasSuffix(src, ".py") {
+			if strings.Contains(a.string(), "=") && !strings.HasSuffix(src, ".py") {
 				continue
 			}
 
@@ -1823,7 +1833,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 			throwFmt("gen: PY_MAIN expects exactly 1 argument, got %d", len(v.Args))
 		}
 
-		arg := strings.ReplaceAll(v.Args[0], "/", ".")
+		arg := strings.ReplaceAll(v.Args[0].string(), "/", ".")
 
 		if !strings.Contains(arg, ":") {
 			arg += ":main"
@@ -1838,7 +1848,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 			throwFmt("gen: PY_CONSTRUCTOR expects exactly 1 argument, got %d", len(v.Args))
 		}
 
-		arg := v.Args[0]
+		arg := v.Args[0].string()
 
 		if strings.Contains(arg, ":") {
 			arg = strings.Replace(arg, ":", "=", 1)
@@ -1850,7 +1860,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 	case tokNoCheckImports:
 
 		if len(v.Args) > 0 {
-			d.noCheckImports = append(d.noCheckImports, v.Args...)
+			d.noCheckImports = append(d.noCheckImports, strStrings(v.Args)...)
 		} else {
 			d.noCheckImportsDisabled = true
 		}
@@ -1860,19 +1870,21 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 		d.peerdirs = append(d.peerdirs, plugin.Deps...)
 	case tokPyRegister:
 
-		for _, name := range v.Args {
+		for _, nameTok := range v.Args {
+			name := nameTok.string()
 			appendPyRegister(d, name, true)
 		}
 	case tokSetAppend:
 
 		if len(v.Args) >= 2 {
-			switch v.Args[0] {
+			switch v.Args[0].string() {
 			case "SFLAGS":
-				d.sFlags = append(d.sFlags, internArgs(v.Args[1:])...)
+				d.sFlags = append(d.sFlags, internArgsFromSTR(v.Args[1:])...)
 			case "_PROTOC_FLAGS":
-				d.protocFlags = append(d.protocFlags, internArgs(v.Args[1:])...)
+				d.protocFlags = append(d.protocFlags, internArgsFromSTR(v.Args[1:])...)
 			case "RPATH_GLOBAL":
-				for _, arg := range v.Args[1:] {
+				for _, argTok := range v.Args[1:] {
+					arg := argTok.string()
 					arg = strings.ReplaceAll(arg, `${"$"}`, "$")
 					d.rpathFlagsGlobal = append(d.rpathFlagsGlobal, internArg(arg))
 				}
@@ -1883,10 +1895,11 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 		if len(v.Args) >= 2 {
 			// INDUCED_DEPS(h …) -> header consumers; (cpp …) -> translation units;
 			// (h+cpp …) -> both. resolveInducedDeps then reads a single bucket per output.
-			toHeader := v.Args[0] != "cpp"
-			toCpp := v.Args[0] != "h"
+			toHeader := v.Args[0].string() != "cpp"
+			toCpp := v.Args[0].string() != "h"
 
-			for _, p := range v.Args[1:] {
+			for _, pTok := range v.Args[1:] {
+				p := pTok.string()
 				// Args arrive expanded; a rooted spelling ($(S)/... or $(B)/...,
 				// from the reserved ${ARCADIA_ROOT}-family refs) stays in the
 				// target as is — sc.resolve binds it to its root directly, the
@@ -1923,8 +1936,8 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 			d.unhandledMacros = map[string][]string{}
 		}
 
-		d.unhandledMacros[v.Name.string()] = append(d.unhandledMacros[v.Name.string()], v.Args...)
-		recordIgnoredMacro(v.Name.string(), v.Args)
+		d.unhandledMacros[v.Name.string()] = append(d.unhandledMacros[v.Name.string()], strStrings(v.Args)...)
+		recordIgnoredMacro(v.Name.string(), strStrings(v.Args))
 	}
 }
 
@@ -1997,24 +2010,24 @@ func parseCPPProtoPlugin(v *UnknownStmt) CppProtoPlugin {
 	}
 
 	plugin := CppProtoPlugin{
-		Name:     v.Args[0],
-		ToolPath: v.Args[1],
+		Name:     v.Args[0].string(),
+		ToolPath: v.Args[1].string(),
 	}
 
 	tail := 2
 
 	if outputSuffixes > 0 {
-		plugin.OutputSuffixes = append(plugin.OutputSuffixes, v.Args[tail:tail+outputSuffixes]...)
+		plugin.OutputSuffixes = append(plugin.OutputSuffixes, strStrings(v.Args[tail:tail+outputSuffixes])...)
 		tail += outputSuffixes
 	}
 
 	for tail < len(v.Args) {
-		switch v.Args[tail] {
+		switch v.Args[tail].string() {
 		case "DEPS":
 			tail++
 
-			for tail < len(v.Args) && v.Args[tail] != "EXTRA_OUT_FLAG" {
-				plugin.Deps = append(plugin.Deps, v.Args[tail])
+			for tail < len(v.Args) && v.Args[tail].string() != "EXTRA_OUT_FLAG" {
+				plugin.Deps = append(plugin.Deps, v.Args[tail].string())
 				tail++
 			}
 		case "EXTRA_OUT_FLAG":
@@ -2028,7 +2041,7 @@ func parseCPPProtoPlugin(v *UnknownStmt) CppProtoPlugin {
 				throwFmt("gen: %s repeated EXTRA_OUT_FLAG", v.Name)
 			}
 
-			plugin.ExtraOutFlag = v.Args[tail]
+			plugin.ExtraOutFlag = v.Args[tail].string()
 			tail++
 		default:
 			throwFmt("gen: %s got unexpected tail token %q; supported suffixes are DEPS and EXTRA_OUT_FLAG", v.Name, v.Args[tail])
@@ -2079,7 +2092,9 @@ func applyArchiveStmt(v *UnknownStmt, d *ModuleData) {
 		inNameSlot bool
 	)
 
-	for _, a := range v.Args {
+	for _, aTok := range v.Args {
+		a := aTok.string()
+
 		switch {
 		case inNameSlot:
 			entry.Name = a
@@ -2116,12 +2131,12 @@ func applyAllocatorStmt(v *UnknownStmt, d *ModuleData) {
 
 	name := v.Args[0]
 
-	if _, ok := allocatorPeers[name]; !ok {
+	if _, ok := allocatorPeers[name.string()]; !ok {
 		throwFmt("gen: unknown allocator %q (line %d); extend allocatorPeers in gen.go", name, v.Line)
 	}
 
 	d.hadAllocator = true
-	d.allocatorName = name
+	d.allocatorName = name.string()
 }
 
 func isProgramModuleType(name TOK) bool {
@@ -2252,15 +2267,15 @@ func buildIfEnv(instance ModuleInstance) Environment {
 	return env
 }
 
-func expandConfigVFSPaths(paths []string, env Environment) []VFS {
+func expandConfigVFSPaths(paths []STR, env Environment) []VFS {
 	// Expand+split through the shared arg-expansion primitive: a ${VAR} holding a
 	// SET-list (e.g. ADDINCL(${__dirs_})) yields one VFS per dir, matching the
 	// typed-macro argument semantics rather than a single space-joined path.
-	expanded := expandStmtTokens(paths, env)
+	expanded := expandStmtTokensSTR(paths, env)
 	out := make([]VFS, 0, len(expanded))
 
 	for _, path := range expanded {
-		out = append(out, parseModulePathVFS(path))
+		out = append(out, parseModulePathVFS(path.string()))
 	}
 
 	return out
@@ -2420,6 +2435,41 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 // argument with '$' gets one substitution pass, and the result is split on
 // whitespace in place (a multi-word value contributes several arguments);
 // empty results are dropped.
+// expandStmtTokensSTR expands a parsed (interned) token list. The fast path —
+// no '$' anywhere in the token — returns the SAME id with zero string work;
+// only tokens with references go through the string expansion and re-intern.
+func expandStmtTokensSTR(items []STR, env Environment) []STR {
+	out := make([]STR, 0, len(items))
+
+	for _, item := range items {
+		s := item.string()
+
+		if !strings.Contains(s, "$") {
+			out = append(out, item)
+
+			continue
+		}
+
+		for _, f := range strings.Fields(expandStmtToken(s, env)) {
+			out = append(out, internStr(f))
+		}
+	}
+
+	return out
+}
+
+// expandStmtTokenSTR is the single-token form (no re-splitting): identity for
+// $-free tokens.
+func expandStmtTokenSTR(item STR, env Environment) STR {
+	s := item.string()
+
+	if !strings.Contains(s, "$") {
+		return item
+	}
+
+	return internStr(expandStmtToken(s, env))
+}
+
 func expandStmtTokens(items []string, env Environment) []string {
 	out := make([]string, 0, len(items))
 
@@ -2465,7 +2515,7 @@ func applyAllPySrcs(fs FS, modulePath string, v *UnknownStmt, d *ModuleData) {
 	for i := 0; i < len(v.Args); i++ {
 		a := v.Args[i]
 
-		switch a {
+		switch a.string() {
 		case "TOP_LEVEL":
 			d.pyTopLevel = true
 		case "NAMESPACE":
@@ -2475,12 +2525,12 @@ func applyAllPySrcs(fs FS, modulePath string, v *UnknownStmt, d *ModuleData) {
 				throwFmt("ALL_PY_SRCS NAMESPACE expects a value")
 			}
 
-			d.pyNamespace = stringPtr(v.Args[i])
+			d.pyNamespace = stringPtr(v.Args[i].string())
 		case "RECURSIVE":
 		case "NO_TEST_FILES":
 			noTestFiles = true
 		default:
-			dirs = append(dirs, a)
+			dirs = append(dirs, a.string())
 		}
 	}
 

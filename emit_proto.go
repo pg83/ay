@@ -616,11 +616,11 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
 		for _, run := range d.antlrRuns {
 			for _, outTok := range run.OUTFiles {
-				if !isCCSourceExt(outTok) {
+				if !isCCSourceExt(outTok.string()) {
 					continue
 				}
 
-				outVFS := copyFileOutputVFS(instance.Path.rel(), outTok)
+				outVFS := copyFileOutputVFS(instance.Path.rel(), outTok.string())
 				info := reg.lookup(outVFS)
 
 				if info == nil || !info.HasProducerRef {
@@ -643,7 +643,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	var protoLibName string
 
 	if len(d.moduleStmt.Args) > 0 {
-		protoLibName = d.moduleStmt.Args[0]
+		protoLibName = d.moduleStmt.Args[0].string()
 	}
 
 	arBaseName := archiveNameWithPrefixOrName(instance.Path.rel(), "lib", protoLibName)

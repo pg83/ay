@@ -3099,7 +3099,7 @@ END()
 	if d.moduleStmt == nil || d.moduleStmt.Name != tokYqlUdfContrib {
 		t.Fatalf("moduleStmt = %#v, want YQL_UDF_CONTRIB", d.moduleStmt)
 	}
-	if !equalStrings(d.moduleStmt.Args, []string{"my_udf"}) {
+	if !equalStrings(strStrings(d.moduleStmt.Args), []string{"my_udf"}) {
 		t.Fatalf("module args = %v, want [my_udf]", d.moduleStmt.Args)
 	}
 	if len(d.srcs) != 0 {
@@ -4892,7 +4892,7 @@ func TestProgramBinaryName_Py3ProgramBinArgWins(t *testing.T) {
 	// PY3_PROGRAM_BIN(py3cc) links as its argument (the opensource reference:
 	// tools/py3cc/slow/bin INCLUDEd into tools/py3cc/slow links as .../py3cc);
 	// without an argument it falls through to the module-dir basename.
-	got := programBinaryName(inst, &ModuleStmt{Name: tokPy3ProgramBin, Args: []string{"py3cc"}})
+	got := programBinaryName(inst, &ModuleStmt{Name: tokPy3ProgramBin, Args: STRS("py3cc")})
 	if got != "py3cc" {
 		t.Fatalf("PY3_PROGRAM_BIN binary name = %q, want py3cc", got)
 	}
@@ -4902,7 +4902,7 @@ func TestProgramBinaryName_Py3ProgramBinArgWins(t *testing.T) {
 	}
 
 	// A plain PROGRAM(foo) still honours its explicit name argument.
-	if got := programBinaryName(inst, &ModuleStmt{Name: tokProgram, Args: []string{"foo"}}); got != "foo" {
+	if got := programBinaryName(inst, &ModuleStmt{Name: tokProgram, Args: STRS("foo")}); got != "foo" {
 		t.Fatalf("PROGRAM(foo) binary name = %q, want foo", got)
 	}
 }

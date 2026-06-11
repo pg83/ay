@@ -36,8 +36,8 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 		}
 
 		for _, inTok := range run.INFiles {
-			vfs := copyFileInputVFS(ctx.fs, instance.Path.rel(), inTok)
-			inVFSByToken[inTok] = vfs
+			vfs := copyFileInputVFS(ctx.fs, instance.Path.rel(), inTok.string())
+			inVFSByToken[inTok.string()] = vfs
 			inputs = append(inputs, vfs)
 
 			if reg != nil {
@@ -54,14 +54,14 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 		outputs := make([]VFS, 0, len(run.OUTFiles)+len(run.OUTNoAutoFiles))
 
 		for _, outTok := range run.OUTFiles {
-			vfs := copyFileOutputVFS(instance.Path.rel(), outTok)
-			outVFSByToken[outTok] = vfs
+			vfs := copyFileOutputVFS(instance.Path.rel(), outTok.string())
+			outVFSByToken[outTok.string()] = vfs
 			outputs = append(outputs, vfs)
 		}
 
 		for _, outTok := range run.OUTNoAutoFiles {
-			vfs := copyFileOutputVFS(instance.Path.rel(), outTok)
-			outVFSByToken[outTok] = vfs
+			vfs := copyFileOutputVFS(instance.Path.rel(), outTok.string())
+			outVFSByToken[outTok.string()] = vfs
 			outputs = append(outputs, vfs)
 		}
 
@@ -70,7 +70,7 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 		cwd := ""
 
 		if run.CWD != nil {
-			cwd = *run.CWD
+			cwd = run.CWD.string()
 		}
 
 		jvRef := emitJVGeneral(instance, jarVFS, args, inputs, outputs, cwd, depRefs, cfModuleTag(d, instance), d.tc, ctx.emit)
@@ -101,11 +101,11 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 		}
 
 		for _, outTok := range run.OUTFiles {
-			if !isCCSourceExt(outTok) {
+			if !isCCSourceExt(outTok.string()) {
 				continue
 			}
 
-			outVFS := outVFSByToken[outTok]
+			outVFS := outVFSByToken[outTok.string()]
 			cppRel := antlrOutputModuleRel(instance.Path.rel(), outVFS)
 			ccRef, ccOut := emitCodegenDownstreamCC(ctx, instance, cppRel, []NodeRef{jvRef}, *consumerInputs)
 			ccRefs = append(ccRefs, ccRef)
@@ -119,7 +119,9 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 func antlrRunCmdArgs(instance ModuleInstance, run AntlrRunInfo, inVFSByToken, outVFSByToken map[string]VFS) []string {
 	args := make([]string, 0, len(run.Args))
 
-	for _, a := range run.Args {
+	for _, aTok := range run.Args {
+		a := aTok.string()
+
 		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = vfs.string()
 		} else if vfs, ok := outVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
@@ -213,7 +215,7 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, out
 	appendUnique(jarVFS.rel())
 
 	for _, include := range run.OutputIncludes {
-		appendUnique(copyFileIncludeTarget(modulePath, include))
+		appendUnique(copyFileIncludeTarget(modulePath, include.string()))
 	}
 
 	if len(parsed) == 0 {

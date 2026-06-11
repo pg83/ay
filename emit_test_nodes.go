@@ -327,7 +327,7 @@ func buildTestSuiteInfo(instance ModuleInstance, d *ModuleData, ldPath VFS) *Tes
 	srcBase := instance.Path.rel()
 
 	if d.moduleStmt.Name == tokUnittestFor && len(d.moduleStmt.Args) > 0 {
-		srcBase = path.Clean(d.moduleStmt.Args[0])
+		srcBase = path.Clean(d.moduleStmt.Args[0].string())
 	}
 
 	cppSources := make([]string, 0, len(d.srcs))

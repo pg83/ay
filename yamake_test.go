@@ -67,7 +67,7 @@ func TestParseArchiverYaMake(t *testing.T) {
 		t.Fatalf("Stmts[1] = %T, want *PeerdirStmt", mf.Stmts[1])
 	} else {
 		want := []string{"library/cpp/archive", "library/cpp/digest/md5", "library/cpp/getopt/small"}
-		if !equalStrings(p.Paths, want) {
+		if !equalStrings(strStrings(p.Paths), want) {
 			t.Errorf("PEERDIR.Paths = %v, want %v", p.Paths, want)
 		}
 	}
@@ -76,7 +76,7 @@ func TestParseArchiverYaMake(t *testing.T) {
 		t.Fatalf("Stmts[2] = %T, want *SrcsStmt", mf.Stmts[2])
 	} else {
 		want := []string{"main.cpp"}
-		if !equalStrings(s.Sources, want) {
+		if !equalStrings(strStrings(s.Sources), want) {
 			t.Errorf("SRCS.Sources = %v, want %v", s.Sources, want)
 		}
 	}
@@ -139,7 +139,7 @@ func TestUnknownMacro(t *testing.T) {
 		t.Errorf("UnknownStmt.Name = %q, want %q", u.Name, tokNoLint)
 	}
 	want := []string{"foo", "bar"}
-	if !equalStrings(u.Args, want) {
+	if !equalStrings(strStrings(u.Args), want) {
 		t.Errorf("UnknownStmt.Args = %v, want %v", u.Args, want)
 	}
 }
@@ -188,7 +188,7 @@ func TestMultilineMacro(t *testing.T) {
 		t.Fatalf("Stmts[0] = %T, want *PeerdirStmt", mf.Stmts[0])
 	}
 	want := []string{"a/b", "c/d"}
-	if !equalStrings(p.Paths, want) {
+	if !equalStrings(strStrings(p.Paths), want) {
 		t.Errorf("PEERDIR.Paths = %v, want %v", p.Paths, want)
 	}
 }
@@ -414,7 +414,7 @@ func TestMidWordHashIsLiteral(t *testing.T) {
 		t.Fatalf("Stmts[0] = %T, want *PeerdirStmt", mf.Stmts[0])
 	}
 	want := []string{"a/b#x"}
-	if !equalStrings(p.Paths, want) {
+	if !equalStrings(strStrings(p.Paths), want) {
 		t.Errorf("PEERDIR.Paths = %v, want %v", p.Paths, want)
 	}
 }
@@ -476,7 +476,7 @@ ENDIF()
 	if !ok {
 		t.Fatalf("Then[0] = %T, want *SrcsStmt", ifStmt.Then[0])
 	}
-	if !equalStrings(thenSrc.Sources, []string{"then.cpp"}) {
+	if !equalStrings(strStrings(thenSrc.Sources), []string{"then.cpp"}) {
 		t.Errorf("Then SRCS = %v, want [then.cpp]", thenSrc.Sources)
 	}
 
@@ -487,7 +487,7 @@ ENDIF()
 	if !ok {
 		t.Fatalf("Else[0] = %T, want *SrcsStmt", ifStmt.Else[0])
 	}
-	if !equalStrings(elseSrc.Sources, []string{"else.cpp"}) {
+	if !equalStrings(strStrings(elseSrc.Sources), []string{"else.cpp"}) {
 		t.Errorf("Else SRCS = %v, want [else.cpp]", elseSrc.Sources)
 	}
 }
@@ -537,7 +537,7 @@ ENDIF()
 	if !ok {
 		t.Fatalf("nested.Else[0] = %T, want *SrcsStmt", nested.Else[0])
 	}
-	if !equalStrings(finalSrc.Sources, []string{"c.cpp"}) {
+	if !equalStrings(strStrings(finalSrc.Sources), []string{"c.cpp"}) {
 		t.Errorf("final ELSE SRCS = %v, want [c.cpp]", finalSrc.Sources)
 	}
 }
@@ -568,7 +568,7 @@ func TestParseInclude_RelativePath(t *testing.T) {
 	if srcs == nil {
 		t.Fatalf("Stmts has no *SrcsStmt; got %#v", mf.Stmts)
 	}
-	if !equalStrings(srcs.Sources, []string{"x.cpp"}) {
+	if !equalStrings(strStrings(srcs.Sources), []string{"x.cpp"}) {
 		t.Errorf("included SRCS = %v, want [x.cpp]", srcs.Sources)
 	}
 }
@@ -588,7 +588,7 @@ func TestParseJoinSrcs(t *testing.T) {
 	if js.OutputName != "allfoo" {
 		t.Errorf("OutputName = %q, want %q", js.OutputName, "allfoo")
 	}
-	if !equalStrings(js.Sources, []string{"a.cpp", "b.cpp"}) {
+	if !equalStrings(strStrings(js.Sources), []string{"a.cpp", "b.cpp"}) {
 		t.Errorf("Sources = %v, want [a.cpp b.cpp]", js.Sources)
 	}
 }
@@ -622,7 +622,7 @@ func TestParseAddIncl_AllGlobal(t *testing.T) {
 		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
 	}
 
-	if !equalStrings(a.GlobalPaths, []string{"include1", "include2"}) {
+	if !equalStrings(strStrings(a.GlobalPaths), []string{"include1", "include2"}) {
 		t.Errorf("GlobalPaths = %v, want [include1 include2]", a.GlobalPaths)
 	}
 
@@ -646,7 +646,7 @@ func TestParseAddIncl_NoGlobal(t *testing.T) {
 		t.Errorf("GlobalPaths = %v, want empty", a.GlobalPaths)
 	}
 
-	if !equalStrings(a.OwnPaths, []string{"include1"}) {
+	if !equalStrings(strStrings(a.OwnPaths), []string{"include1"}) {
 		t.Errorf("OwnPaths = %v, want [include1]", a.OwnPaths)
 	}
 }
@@ -668,11 +668,11 @@ func TestParseAddIncl_Mixed(t *testing.T) {
 		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
 	}
 
-	if !equalStrings(a.GlobalPaths, []string{"libcxx/include"}) {
+	if !equalStrings(strStrings(a.GlobalPaths), []string{"libcxx/include"}) {
 		t.Errorf("GlobalPaths = %v, want [libcxx/include]", a.GlobalPaths)
 	}
 
-	if !equalStrings(a.OwnPaths, []string{"libcxx/src"}) {
+	if !equalStrings(strStrings(a.OwnPaths), []string{"libcxx/src"}) {
 		t.Errorf("OwnPaths = %v, want [libcxx/src]", a.OwnPaths)
 	}
 }
@@ -689,7 +689,7 @@ func TestParseAddIncl_ForKindDropped(t *testing.T) {
 	if len(a.GlobalPaths) != 0 {
 		t.Errorf("GlobalPaths = %v, want empty", a.GlobalPaths)
 	}
-	if !equalStrings(a.OwnPaths, []string{"contrib/libs/protobuf/src"}) {
+	if !equalStrings(strStrings(a.OwnPaths), []string{"contrib/libs/protobuf/src"}) {
 		t.Errorf("OwnPaths = %v, want [contrib/libs/protobuf/src]", a.OwnPaths)
 	}
 }
@@ -711,10 +711,10 @@ func TestParseAddIncl_GlobalForProtoRouted(t *testing.T) {
 		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
 	}
 
-	if !equalStrings(a.GlobalPaths, []string{"contrib/libs/protobuf/src"}) {
+	if !equalStrings(strStrings(a.GlobalPaths), []string{"contrib/libs/protobuf/src"}) {
 		t.Errorf("GlobalPaths = %v, want [contrib/libs/protobuf/src]", a.GlobalPaths)
 	}
-	if !equalStrings(a.ProtoGlobalPaths, []string{"contrib/libs/protobuf/src"}) {
+	if !equalStrings(strStrings(a.ProtoGlobalPaths), []string{"contrib/libs/protobuf/src"}) {
 		t.Errorf("ProtoGlobalPaths = %v, want [contrib/libs/protobuf/src]", a.ProtoGlobalPaths)
 	}
 	if len(a.OwnPaths) != 0 {
@@ -732,7 +732,7 @@ func TestParseAddIncl_ForAsmRouted(t *testing.T) {
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
 	}
-	if !equalStrings(a.AsmPaths, []string{"yt/yt/core/misc/isa_crc64/include"}) {
+	if !equalStrings(strStrings(a.AsmPaths), []string{"yt/yt/core/misc/isa_crc64/include"}) {
 		t.Errorf("AsmPaths = %v, want [yt/yt/core/misc/isa_crc64/include]", a.AsmPaths)
 	}
 	if len(a.OwnPaths) != 0 {
@@ -756,7 +756,7 @@ func TestParseAddIncl_GlobalForAsmRouted(t *testing.T) {
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
 	}
-	if !equalStrings(a.AsmPaths, []string{"yt/yt/core/misc/isa_crc64/include"}) {
+	if !equalStrings(strStrings(a.AsmPaths), []string{"yt/yt/core/misc/isa_crc64/include"}) {
 		t.Errorf("AsmPaths = %v, want [yt/yt/core/misc/isa_crc64/include]", a.AsmPaths)
 	}
 	if len(a.GlobalPaths) != 0 {
@@ -777,7 +777,7 @@ func TestParseCFlags_BackslashQuoteUnescaped(t *testing.T) {
 		t.Fatalf("Stmts[0] = %T, want *CFlagsStmt", mf.Stmts[0])
 	}
 	want := `-DENGINESDIR="/usr/local/lib/engines-1.1"`
-	if len(c.OwnFlags) != 1 || c.OwnFlags[0] != want {
+	if len(c.OwnFlags) != 1 || c.OwnFlags[0].string() != want {
 		t.Errorf("OwnFlags = %v, want [%s]", c.OwnFlags, want)
 	}
 }
@@ -791,10 +791,10 @@ func TestParseCFlags_Global(t *testing.T) {
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *CFlagsStmt", mf.Stmts[0])
 	}
-	if !equalStrings(c.GlobalFlags, []string{"-O2"}) {
+	if !equalStrings(strStrings(c.GlobalFlags), []string{"-O2"}) {
 		t.Errorf("GlobalFlags = %v, want [-O2]", c.GlobalFlags)
 	}
-	if !equalStrings(c.OwnFlags, []string{"-Wall"}) {
+	if !equalStrings(strStrings(c.OwnFlags), []string{"-Wall"}) {
 		t.Errorf("OwnFlags = %v, want [-Wall]", c.OwnFlags)
 	}
 }
@@ -811,7 +811,7 @@ func TestParseCFlags_NoModifier(t *testing.T) {
 	if len(c.GlobalFlags) != 0 {
 		t.Errorf("GlobalFlags = %v, want empty", c.GlobalFlags)
 	}
-	if !equalStrings(c.OwnFlags, []string{"-O2"}) {
+	if !equalStrings(strStrings(c.OwnFlags), []string{"-O2"}) {
 		t.Errorf("OwnFlags = %v, want [-O2]", c.OwnFlags)
 	}
 }
@@ -825,10 +825,10 @@ func TestParseCFlags_PerPathGlobal(t *testing.T) {
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *CFlagsStmt", mf.Stmts[0])
 	}
-	if !equalStrings(c.GlobalFlags, []string{"-DA", "-DC"}) {
+	if !equalStrings(strStrings(c.GlobalFlags), []string{"-DA", "-DC"}) {
 		t.Errorf("GlobalFlags = %v, want [-DA -DC]", c.GlobalFlags)
 	}
-	if !equalStrings(c.OwnFlags, []string{"-DB"}) {
+	if !equalStrings(strStrings(c.OwnFlags), []string{"-DB"}) {
 		t.Errorf("OwnFlags = %v, want [-DB]", c.OwnFlags)
 	}
 }
@@ -842,7 +842,7 @@ func TestParseCXXFlags_Global(t *testing.T) {
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *CXXFlagsStmt", mf.Stmts[0])
 	}
-	if !equalStrings(c.GlobalFlags, []string{"-nostdinc++"}) {
+	if !equalStrings(strStrings(c.GlobalFlags), []string{"-nostdinc++"}) {
 		t.Errorf("GlobalFlags = %v, want [-nostdinc++]", c.GlobalFlags)
 	}
 	if len(c.OwnFlags) != 0 {
@@ -862,7 +862,7 @@ func TestParseCONLYFlags_Own(t *testing.T) {
 	if len(c.GlobalFlags) != 0 {
 		t.Errorf("GlobalFlags = %v, want empty", c.GlobalFlags)
 	}
-	if !equalStrings(c.OwnFlags, []string{"-Wno-pointer-sign"}) {
+	if !equalStrings(strStrings(c.OwnFlags), []string{"-Wno-pointer-sign"}) {
 		t.Errorf("OwnFlags = %v, want [-Wno-pointer-sign]", c.OwnFlags)
 	}
 }
@@ -876,7 +876,7 @@ func TestParseLDFlags(t *testing.T) {
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *LDFlagsStmt", mf.Stmts[0])
 	}
-	if !equalStrings(l.Flags, []string{"-lpthread", "-lm"}) {
+	if !equalStrings(strStrings(l.Flags), []string{"-lpthread", "-lm"}) {
 		t.Errorf("Flags = %v, want [-lpthread -lm]", l.Flags)
 	}
 }
@@ -890,7 +890,7 @@ func TestParseSrcDir(t *testing.T) {
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *SrcDirStmt", mf.Stmts[0])
 	}
-	if len(s.Dirs) != 1 || s.Dirs[0] != "./xx" {
+	if len(s.Dirs) != 1 || s.Dirs[0].string() != "./xx" {
 		t.Errorf("Dirs = %q, want [./xx]", s.Dirs)
 	}
 }
@@ -904,7 +904,7 @@ func TestParseGlobalSrcs(t *testing.T) {
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *GlobalSrcsStmt", mf.Stmts[0])
 	}
-	if !equalStrings(g.Sources, []string{"a.cpp", "b.cpp", "c.cpp"}) {
+	if !equalStrings(strStrings(g.Sources), []string{"a.cpp", "b.cpp", "c.cpp"}) {
 		t.Errorf("Sources = %v, want [a.cpp b.cpp c.cpp]", g.Sources)
 	}
 }
@@ -1111,7 +1111,7 @@ func TestParseIf_VersionLiteralStillWord(t *testing.T) {
 		t.Fatalf("Stmts[0] = %T, want *UnknownStmt", mf.Stmts[0])
 	}
 
-	if !equalStrings(u.Args, []string{"2025-06-20"}) {
+	if !equalStrings(strStrings(u.Args), []string{"2025-06-20"}) {
 		t.Errorf("VERSION args = %v, want [2025-06-20]", u.Args)
 	}
 }
@@ -1125,7 +1125,7 @@ func TestParseIf_PureIntInMacroArg(t *testing.T) {
 
 	u := mf.Stmts[0].(*UnknownStmt)
 
-	if !equalStrings(u.Args, []string{"42"}) {
+	if !equalStrings(strStrings(u.Args), []string{"42"}) {
 		t.Errorf("IDE_FOLDER args = %v, want [42]", u.Args)
 	}
 }
@@ -1192,7 +1192,7 @@ func TestParseYqlUdfModuleStmts(t *testing.T) {
 			if m.Name.string() != tc.wantName {
 				t.Fatalf("ModuleStmt.Name = %q, want %q", m.Name.string(), tc.wantName)
 			}
-			if !equalStrings(m.Args, tc.wantArgs) {
+			if !equalStrings(strStrings(m.Args), tc.wantArgs) {
 				t.Fatalf("ModuleStmt.Args = %v, want %v", m.Args, tc.wantArgs)
 			}
 		})
@@ -1260,16 +1260,16 @@ func TestParseRunPy3ProgramAsRunProgramStmt(t *testing.T) {
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *RunProgramStmt", mf.Stmts[0])
 	}
-	if stmt.ToolPath != "tools/gen" {
+	if stmt.ToolPath.string() != "tools/gen" {
 		t.Fatalf("ToolPath = %q, want tools/gen", stmt.ToolPath)
 	}
-	if !equalStrings(stmt.Args, []string{"foo"}) {
+	if !equalStrings(strStrings(stmt.Args), []string{"foo"}) {
 		t.Fatalf("Args = %v, want [foo]", stmt.Args)
 	}
-	if !equalStrings(stmt.INFiles, []string{"input.txt"}) {
+	if !equalStrings(strStrings(stmt.INFiles), []string{"input.txt"}) {
 		t.Fatalf("INFiles = %v, want [input.txt]", stmt.INFiles)
 	}
-	if !equalStrings(stmt.OUTFiles, []string{"output.txt"}) {
+	if !equalStrings(strStrings(stmt.OUTFiles), []string{"output.txt"}) {
 		t.Fatalf("OUTFiles = %v, want [output.txt]", stmt.OUTFiles)
 	}
 }
@@ -1297,10 +1297,10 @@ func TestParseRunProgramToolSection(t *testing.T) {
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *RunProgramStmt", mf.Stmts[0])
 	}
-	if !equalStrings(stmt.ToolPaths, []string{"contrib/tools/protoc/plugins/cpp_styleguide"}) {
+	if !equalStrings(strStrings(stmt.ToolPaths), []string{"contrib/tools/protoc/plugins/cpp_styleguide"}) {
 		t.Fatalf("ToolPaths = %v, want [contrib/tools/protoc/plugins/cpp_styleguide]", stmt.ToolPaths)
 	}
-	if !equalStrings(stmt.OutputIncludes, []string{"contrib/libs/protobuf/src/google/protobuf/message.h"}) {
+	if !equalStrings(strStrings(stmt.OutputIncludes), []string{"contrib/libs/protobuf/src/google/protobuf/message.h"}) {
 		t.Fatalf("OutputIncludes = %v, want [contrib/libs/protobuf/src/google/protobuf/message.h]", stmt.OutputIncludes)
 	}
 }

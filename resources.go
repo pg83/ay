@@ -84,7 +84,7 @@ func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *Declar
 		out := make([]ResourceDecl, 0, len(stmt.Args)/2)
 
 		for i := 0; i+1 < len(stmt.Args); i += 2 {
-			out = append(out, makeResourceDecl(stmt.Args[i], stmt.Args[i+1]))
+			out = append(out, makeResourceDecl(stmt.Args[i].string(), stmt.Args[i+1].string()))
 		}
 
 		return out
@@ -94,20 +94,20 @@ func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *Declar
 		bundle := map[string]string{}
 
 		for i := 1; i+2 < len(stmt.Args); i += 3 {
-			if stmt.Args[i+1] != "FOR" {
+			if stmt.Args[i+1].string() != "FOR" {
 				throwFmt("gen: %s: malformed DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE args %v", modulePath, stmt.Args)
 			}
 
-			bundle[stmt.Args[i+2]] = stmt.Args[i]
+			bundle[stmt.Args[i+2].string()] = stmt.Args[i].string()
 		}
 
-		return []ResourceDecl{selectHostResourceDecl(host, modulePath, name, bundle)}
+		return []ResourceDecl{selectHostResourceDecl(host, modulePath, name.string(), bundle)}
 	case tokDeclareExternalHostResourcesBundleByJson:
 		// NAME file.json — read by_platform.<host>.uri.
 		name, jsonRel := stmt.Args[0], stmt.Args[1]
-		bundle := readResourceBundleJSON(fs, filepath.ToSlash(filepath.Join(modulePath, jsonRel)))
+		bundle := readResourceBundleJSON(fs, filepath.ToSlash(filepath.Join(modulePath, jsonRel.string())))
 
-		return []ResourceDecl{selectHostResourceDecl(host, modulePath, name, bundle)}
+		return []ResourceDecl{selectHostResourceDecl(host, modulePath, name.string(), bundle)}
 	}
 
 	return nil
