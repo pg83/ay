@@ -111,7 +111,7 @@ func goFilesFromArgs(args []string) []string {
 	return files
 }
 
-// refacConsts hoists every Intern/Source/Build call with a constant string literal
+// refacConsts hoists every intern/source/build call with a constant string literal
 // out of function bodies into a package-level var, deduplicating by the resolved
 // VFS path and reusing any equivalent var already declared. The call site is
 // rewritten to the var name. With no file args it processes every non-test .go
@@ -374,15 +374,15 @@ func parseRefacFile(path string, existing map[HoistKey]string, used map[string]b
 type HoistKind uint8
 
 const (
-	hoistVFS HoistKind = iota // Intern/Source/Build -> VFS
+	hoistVFS HoistKind = iota // intern/source/build -> VFS
 	hoistStr                  // internStr -> STR
 	hoistArg                  // internArg -> ARG
 	hoistEnv                  // internEnv -> ENV
 )
 
 // hoistKey identifies a hoistable literal call and is the dedup key. For
-// hoistVFS, canon is the resolved VFS path ("$(S)/..."/"$(B)/...") so Source("x")
-// and Intern("$(S)/x") share one var. For hoistStr, canon is the raw literal — its
+// hoistVFS, canon is the resolved VFS path ("$(S)/..."/"$(B)/...") so source("x")
+// and intern("$(S)/x") share one var. For hoistStr, canon is the raw literal — its
 // own namespace, since a STR must never share a var with a VFS.
 type HoistKey struct {
 	kind  HoistKind
@@ -416,11 +416,11 @@ func hoistCall(call *ast.CallExpr) (HoistKey, bool) {
 	}
 
 	switch id.Name {
-	case "Intern":
+	case "intern":
 		return HoistKey{kind: hoistVFS, canon: lit}, true
-	case "Source":
+	case "source":
 		return HoistKey{kind: hoistVFS, canon: "$(S)/" + lit}, true
-	case "Build":
+	case "build":
 		return HoistKey{kind: hoistVFS, canon: "$(B)/" + lit}, true
 	case "internStr":
 		return HoistKey{kind: hoistStr, canon: lit}, true
@@ -446,14 +446,14 @@ func constDef(key HoistKey) string {
 	}
 
 	if rel, ok := strings.CutPrefix(key.canon, "$(S)/"); ok {
-		return fmt.Sprintf("Source(%q)", rel)
+		return fmt.Sprintf("source(%q)", rel)
 	}
 
 	if rel, ok := strings.CutPrefix(key.canon, "$(B)/"); ok {
-		return fmt.Sprintf("Build(%q)", rel)
+		return fmt.Sprintf("build(%q)", rel)
 	}
 
-	return fmt.Sprintf("Intern(%q)", key.canon)
+	return fmt.Sprintf("intern(%q)", key.canon)
 }
 
 // constEdit replaces the byte range [start,end) with name; an empty name deletes

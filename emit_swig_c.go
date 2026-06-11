@@ -5,13 +5,6 @@ import (
 	"strings"
 )
 
-type SwigSrc struct {
-	Src    string
-	Module string
-}
-
-const swigLibRoot = "contrib/tools/swig/Lib"
-
 // swigAddIncls mirrors Lib/python's ADDINCL(GLOBAL FOR swig …) declarations —
 // the python contour is the one ay models (swig.conf _SWIG_PYTHON_C/_CPP).
 var swigAddIncls = []VFS{source(swigLibRoot + "/python"), source(swigLibRoot)}
@@ -26,6 +19,13 @@ var swigConstArgs = []STR{
 	argPython.str(),
 	argModule.str(),
 }
+
+type SwigSrc struct {
+	Src    string
+	Module string
+}
+
+const swigLibRoot = "contrib/tools/swig/Lib"
 
 func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []*SourceEmit {
 	if len(d.swigC) == 0 {

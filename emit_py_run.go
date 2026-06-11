@@ -465,7 +465,6 @@ func emitPYRun(
 	cmdArgs := []STR{tc.Python3, (scriptVFS).str()}
 
 	for _, a := range stmt.Args {
-
 		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = vfs.string()
 		} else if vfs, ok := outVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {

@@ -2221,13 +2221,13 @@ func buildIfEnv(instance ModuleInstance) Environment {
 	// RESOURCE() pairs are exempt by construction — their collect case stores
 	// raw strings without running the expansion (objcopy hashes the raw form).
 	// A pathless instance (IF-evaluation in tests) carries no module dir.
-	env.setString(internEnv("ARCADIA_ROOT"), "$(S)")
-	env.setString(internEnv("ARCADIA_BUILD_ROOT"), "$(B)")
+	env.setString(envARCADIA_ROOT, "$(S)")
+	env.setString(envARCADIA_BUILD_ROOT, "$(B)")
 
 	if instance.Path != 0 {
-		env.setString(internEnv("CURDIR"), instance.Path.string())
-		env.setString(internEnv("BINDIR"), build(instance.Path.rel()).string())
-		env.setString(internEnv("MODDIR"), instance.Path.rel())
+		env.setString(envCURDIR, instance.Path.string())
+		env.setString(envBINDIR, build(instance.Path.rel()).string())
+		env.setString(envMODDIR, instance.Path.rel())
 	}
 
 	useRuntime := instance.Platform.Flags[envUSE_ARCADIA_COMPILER_RUNTIME]

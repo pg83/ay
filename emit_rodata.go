@@ -5,6 +5,19 @@ import (
 	"strings"
 )
 
+// rodataConstArgs / rodataYasmConstArgs are the constant spans of the RD
+// node's two commands: the rodata.py lead (after python3) and the yasm flag
+// tail between the per-platform ISA define and the output path.
+var rodataConstArgs = []STR{(rodataScriptVFS).str(), argElf.str()}
+
+var rodataYasmConstArgs = []STR{
+	argDYasm.str(),
+	argDashG.str(), argDwarf2.str(),
+	argI.str(), argB.str(),
+	argI.str(), argS.str(),
+	argDashO.str(),
+}
+
 func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
 	base := instance.Path.rel() + "/" + srcRel
 
@@ -60,18 +73,3 @@ func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 
 	return emit.emit(node), asmVFS, outVFS
 }
-
-// rodataConstArgs / rodataYasmConstArgs are the constant spans of the RD
-// node's two commands: the rodata.py lead (after python3) and the yasm flag
-// tail between the per-platform ISA define and the output path.
-var (
-	rodataConstArgs = []STR{(rodataScriptVFS).str(), argElf.str()}
-
-	rodataYasmConstArgs = []STR{
-		argDYasm.str(),
-		argDashG.str(), argDwarf2.str(),
-		argI.str(), argB.str(),
-		argI.str(), argS.str(),
-		argDashO.str(),
-	}
-)

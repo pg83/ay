@@ -445,7 +445,6 @@ func emitPR(
 	cmdArgs = append(cmdArgs, (toolBinPath).str())
 
 	for _, a := range stmt.Args {
-
 		for _, tool := range auxTools {
 			if strings.Contains(a, tool.token) {
 				a = strings.ReplaceAll(a, tool.token, tool.bin.string())
