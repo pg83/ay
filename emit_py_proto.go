@@ -211,12 +211,8 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 
 	inputs := []VFS{protocBinary, pbPyWrapperVFS, Source(protoRelPath)}
 	protoVFS := Source(protoRelPath)
-	transitive, hasDescriptor := protoImportsFromWindow(
+	transitive := windowImports(
 		walkClosure(ctx, instance, protoVFS, protoWalkInputs(nil)), protoVFS)
-
-	if hasDescriptor {
-		inputs = append(inputs, pbDescriptorVFS)
-	}
 
 	inputs = append(inputs, transitive...)
 
