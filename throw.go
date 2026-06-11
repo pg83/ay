@@ -70,11 +70,6 @@ func throwFmt(format string, args ...any) {
 	exceptionf(format, args...).throw()
 }
 
-type HTTPError struct {
-	Status int
-	Msg    string
-}
-
 func try(cb func()) (err *Exception) {
 	defer func() {
 		if rec := recover(); rec != nil {
