@@ -14,8 +14,8 @@ var (
 	// so sharing the read-only backing is safe.
 	protobufRuntimeDirectives      = quotedDirectives(protobufRuntimeHeaders)
 	pbDescriptorImporterDirectives = quotedDirectives(pbDescriptorImporterHeaders)
-	// srcYtVFS / pbRuntimeBaseVFS are the implicit FOR-proto addincl roots (yt's
-	// PROTO_NAMESPACE and the protobuf runtime src) fed to the proto closure walk.
+	// pbRuntimeBaseVFS is the protobuf runtime src root (upstream's
+	// $PROTOBUF_INCLUDE_PATH config constant) fed to the proto closure walk.
 	pbRuntimeBaseVFS = Source(strings.TrimSuffix(pbRuntimeBase, "/"))
 )
 
@@ -67,12 +67,14 @@ func pbHEmitsIncludesExtras() []includeDirective {
 }
 
 // protoWalkInputs builds the scan inputs for closing over .proto imports —
-// the FOR-proto addincl data fed to the scanner's STANDARD resolution: the
-// yt PROTO_NAMESPACE root and the protobuf runtime src (the implicit
-// namespaces protoc's -I set carries), plus the module's peer proto addincls.
+// the FOR-proto addincl data fed to the scanner's STANDARD resolution,
+// mirroring protoc's -I set: the module's _PROTO__INCLUDE chain (own
+// PROTO_NAMESPACE included — upstream's PROTO_ADDINCL is always GLOBAL) plus
+// the protobuf runtime src ($PROTOBUF_INCLUDE_PATH, a contour config
+// constant).
 func protoWalkInputs(peerProtoAddIncl []VFS) ModuleCCInputs {
-	own := make([]VFS, 0, 2+len(peerProtoAddIncl))
-	own = append(own, srcYtVFS, pbRuntimeBaseVFS)
+	own := make([]VFS, 0, 1+len(peerProtoAddIncl))
+	own = append(own, pbRuntimeBaseVFS)
 	own = append(own, peerProtoAddIncl...)
 
 	return ModuleCCInputs{AddIncl: own}
@@ -171,7 +173,7 @@ type protoPBEmission struct {
 	relPath       string
 }
 
-func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, cfg protoPBConfig, peerProtoAddIncl []VFS) protoPBEmission {
+func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, cfg protoPBConfig, peerProtoAddIncl []VFS, protoNamespaceTail []VFS) protoPBEmission {
 	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
 	cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
 	liteHeaders := !protoTransitiveHeadersEnabled(d)
@@ -240,6 +242,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		extraPlugins,
 		transitiveImports,
 		peerProtoAddIncl,
+		protoNamespaceTail,
 		extraProtoDeps,
 		protoProducerSourceInputs,
 		d.tc,
@@ -431,7 +434,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	cppInstance.Path = protoCPPModulePath(instance, d)
 
 	for _, src := range protoSrcs {
-		pb := emitProtoPB(ctx, instance, d, src, cfg, peerContribs.protoAddIncl)
+		pb := emitProtoPB(ctx, instance, d, src, cfg, peerContribs.protoAddIncl, peerContribs.protoNamespaceTail)
 
 		ccSrcRel := strings.TrimPrefix(pb.pbCC.Rel(), cppInstance.Path.Rel()+"/")
 		appendCodegenOutput(pb.pbRef, pb.pbCC, ccSrcRel)

@@ -241,7 +241,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 }
 
 func emitLibraryProtoSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, in ModuleCCInputs) *sourceEmit {
-	pb := emitProtoPB(ctx, instance, d, srcRel, protoPBConfig{}, in.PeerProtoAddInclGlobal)
+	pb := emitProtoPB(ctx, instance, d, srcRel, protoPBConfig{}, in.PeerProtoAddInclGlobal, in.ProtoNamespaceTail)
 	ccIn := in
 	ccIn.IncludeInputs = walkClosure(ctx, instance, pb.pbCC, in)
 	ccIn.ExtraDepRefs = append([]NodeRef{pb.pbRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pb.pbRef)...)

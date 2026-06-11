@@ -124,7 +124,6 @@ var (
 	argISContribToolsCythonCythonIncludes        = internArg("-I$(S)/contrib/tools/cython/Cython/Includes")
 	argISContribToolsSwigLib                     = internArg("-I$(S)/contrib/tools/swig/Lib")
 	argISContribToolsSwigLibPython               = internArg("-I$(S)/contrib/tools/swig/Lib/python")
-	argISYt                                      = internArg("-I=$(S)/yt")
 	argIncludePath                               = internArg("--include-path")
 	argInput                                     = internArg("--input")
 	argInputs                                    = internArg("--inputs")

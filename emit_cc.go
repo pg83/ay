@@ -21,8 +21,13 @@ type ModuleCCInputs struct {
 	// peered PROTO_LIBRARY / PROTO_NAMESPACE GLOBAL). Distinct from
 	// PeerAddInclGlobal which feeds the C++ compile pipeline.
 	PeerProtoAddInclGlobal []VFS
-	CXXFlags               []ARG
-	COnlyFlags             []ARG
+
+	// ProtoNamespaceTail is the non-GLOBAL PROTO_NAMESPACE contributions (own
+	// + transitive peers') trailing the _PROTO__INCLUDE chain in protoc
+	// cmdlines of non-PROTO_LIBRARY modules. See moduleEmitResult.
+	ProtoNamespaceTail []VFS
+	CXXFlags           []ARG
+	COnlyFlags         []ARG
 
 	ExtraDepRefs []NodeRef
 
