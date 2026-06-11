@@ -345,7 +345,7 @@ func appendVFS(buf []byte, v VFS) []byte {
 		vfsEscapedJSON = nc
 	}
 
-	s := internTable.strs[id]
+	s := STR(id).string()
 	out := make([]byte, 0, len(s)+2)
 	out = append(out, '"')
 	out = appendStringEscapedBody(out, s)
