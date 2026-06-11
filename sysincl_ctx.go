@@ -30,16 +30,18 @@ func newSysinclCtx(set SysInclSet) *SysinclCtx {
 	for i := range set {
 		rec := &set[i]
 
-		for k := range rec.Mappings {
-			c.keyBits.add(uint32(k))
-		}
+		for _, p := range rec.pairs {
+			if p.key != 0 {
+				c.keyBits.add(uint32(p.key))
 
-		for k := range rec.MappingsCI {
-			if c.keyCI == nil {
-				c.keyCI = make(map[string]bool, len(rec.MappingsCI))
+				continue
 			}
 
-			c.keyCI[k] = true
+			if c.keyCI == nil {
+				c.keyCI = make(map[string]bool, len(rec.pairs))
+			}
+
+			c.keyCI[p.keyCI] = true
 		}
 	}
 
@@ -148,25 +150,52 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 	for order := range set {
 		rec := &set[order]
 
-		for k, paths := range rec.Mappings {
-			raw := k.string()
-			lc := strings.ToLower(raw)
+		// Intra-record duplicate headers carry last-wins semantics (the old
+		// per-record map staging overwrote): keep only each key's LAST pair.
+		// Membership rides the global epoch deduper (CS arm keyed by the
+		// interned key, CI arm by the lowered key's intern id), reverse scan.
+		deduper.reset()
 
-			m.byLower[lc] = append(m.byLower[lc], SysinclContribution{
-				paths:  paths,
-				filter: rec.Filter,
-				rawKey: raw,
-				order:  order,
-				ci:     false,
-				multi:  rec.HasMultiTarget,
-			})
+		for i := len(rec.pairs) - 1; i >= 0; i-- {
+			p := &rec.pairs[i]
+			id := p.key
+
+			if id == 0 {
+				id = internStr(p.keyCI)
+			}
+
+			if !deduper.add(VFS(id) << 1) {
+				// Tombstone the earlier duplicate.
+				p.paths = nil
+				p.key = 0
+				p.keyCI = ""
+			}
 		}
 
-		for k, paths := range rec.MappingsCI {
-			m.byLower[k] = append(m.byLower[k], SysinclContribution{
-				paths:  paths,
+		for _, p := range rec.pairs {
+			if p.key == 0 && p.keyCI == "" {
+				continue
+			}
+
+			if p.key != 0 {
+				raw := p.key.string()
+				lc := strings.ToLower(raw)
+				m.byLower[lc] = append(m.byLower[lc], SysinclContribution{
+					paths:  p.paths,
+					filter: rec.Filter,
+					rawKey: raw,
+					order:  order,
+					ci:     false,
+					multi:  rec.HasMultiTarget,
+				})
+
+				continue
+			}
+
+			m.byLower[p.keyCI] = append(m.byLower[p.keyCI], SysinclContribution{
+				paths:  p.paths,
 				filter: rec.Filter,
-				rawKey: k,
+				rawKey: p.keyCI,
 				order:  order,
 				ci:     true,
 				multi:  rec.HasMultiTarget,
