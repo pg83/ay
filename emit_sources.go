@@ -121,7 +121,7 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
 		event2cppLDRef, event2cppBinary := ctx.tool(argToolsEvent2cpp)
 
-		evImports := windowImports(walkClosure(ctx, srcInstance, evSource, protoWalkInputs(nil)), evSource)
+		evImports := walkClosureTail(ctx, srcInstance, evSource, protoWalkInputs(nil))
 		evRef := EmitEV(
 			srcInstance, evRelPath,
 			cppStyleguideLDRef, protocLDRef, event2cppLDRef,

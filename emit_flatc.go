@@ -170,7 +170,7 @@ func ensureFlatcEmission(ctx *genCtx, instance ModuleInstance, d *moduleData, sr
 
 	flatcRes := ctx.toolResult(argContribLibsFlatbuffersFlatc)
 	flatcLDRef, flatcBinary := flatcRes.LDRef, *flatcRes.LDPath
-	transitiveImports := windowImports(walkClosure(ctx, instance, srcVFS, ModuleCCInputs{}), srcVFS)
+	transitiveImports := walkClosureTail(ctx, instance, srcVFS, ModuleCCInputs{})
 	flRef, headerVFS, cppVFS, bfbsVFS := EmitFL(instance, srcVFS.Rel(), srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, d.tc, ctx.emit)
 
 	// flatc's INDUCED_DEPS(h+cpp …) — flatbuffers.h + flatbuffers_iter.h, declared
