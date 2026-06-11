@@ -115,7 +115,9 @@ func (c *SysinclCtx) mightClaim(target STR) bool {
 }
 
 // ciClaims is the memo-miss arm of mightClaim: the only place the CI check
-// materializes the target string.
+// materializes the target string. A claim also binds the target id to its
+// merged-index bucket (byID) in the same touch, so lookup never needs the
+// string for case-variant targets either.
 func (c *SysinclCtx) ciClaims(target STR) bool {
 	raw := target.string()
 
@@ -127,7 +129,21 @@ func (c *SysinclCtx) ciClaims(target STR) bool {
 		return false
 	}
 
-	return c.keyCI[strings.ToLower(raw)]
+	lower := strings.ToLower(raw)
+
+	if !c.keyCI[lower] {
+		return false
+	}
+
+	bi, ok := c.merged.byLower[lower]
+
+	if !ok {
+		throwFmt("sysincl: CI key %q has no merged-index bucket", lower)
+	}
+
+	c.merged.byID.put(uint64(target), bi)
+
+	return true
 }
 
 // lookup resolves target's sysincl override for a file at path (the scanner uses
@@ -137,7 +153,7 @@ func (c *SysinclCtx) lookup(path string, target STR) ([]VFS, bool, bool) {
 		return nil, false, false
 	}
 
-	paths, claimed, hasMultiTarget := c.merged.lookup(path, target.string())
+	paths, claimed, hasMultiTarget := c.merged.lookup(path, target)
 
 	return paths, hasMultiTarget || len(paths) >= 2, claimed
 }
@@ -159,26 +175,43 @@ func caseVariants(b byte) []byte {
 // carrying the record's Filter so activeness is decided per query against the
 // includer path.
 type SysinclContribution struct {
-	paths  []VFS
-	filter *SourceFilter // nil = applies to every path
-	rawKey string        // the record's stored key (lowercase for CI records)
-	order  int           // index in the rule set
-	ci     bool
-	multi  bool // record.HasMultiTarget
+	paths    []VFS
+	filter   *SourceFilter // nil = applies to every path
+	rawKeyID STR           // the record's stored key id (lowered for CI records)
+	order    int           // index in the rule set
+	ci       bool
+	multi    bool // record.HasMultiTarget
 }
 
 // sysinclIndex folds ALL sysincl records (source- and includer-keyed) into one
 // header-keyed index built once, so a lookup is a single map probe plus a tiny
-// bucket scan instead of a per-record fan-out. Keyed by ToLower(header); each
-// bucket holds every record whose key folds to it, sorted by record order. A
-// matched entry must (a) match the path (filter), (b) match case (CI = whole
-// bucket, non-CI = exact rawKey).
+// bucket scan instead of a per-record fan-out. Buckets group records whose key
+// folds to one ToLower form, sorted by record order; a matched entry must (a)
+// match the path (filter), (b) match case (CI = whole bucket, non-CI = exact
+// rawKeyID). Lookups address buckets purely by target id via byID: CS keys and
+// lowered CI keys are bound at build, case variants at ciClaims' first touch —
+// so lookup never materializes the target string. byLower exists for the build
+// and for that first-touch fill.
 type SysinclIndex struct {
-	byLower map[string][]SysinclContribution
+	byLower map[string]int32
+	buckets [][]SysinclContribution
+	byID    *IntValueMap[int32]
 }
 
 func buildSysinclIndex(set SysInclSet) *SysinclIndex {
-	m := &SysinclIndex{byLower: make(map[string][]SysinclContribution)}
+	m := &SysinclIndex{byLower: make(map[string]int32), byID: newIntValueMap[int32](4096)}
+
+	bucketFor := func(lc string) int32 {
+		if i, ok := m.byLower[lc]; ok {
+			return i
+		}
+
+		i := int32(len(m.buckets))
+		m.buckets = append(m.buckets, nil)
+		m.byLower[lc] = i
+
+		return i
+	}
 
 	for order := range set {
 		rec := &set[order]
@@ -211,44 +244,50 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 			}
 
 			if p.key != 0 {
-				raw := p.key.string()
-				lc := strings.ToLower(raw)
-				m.byLower[lc] = append(m.byLower[lc], SysinclContribution{
-					paths:  p.paths,
-					filter: rec.Filter,
-					rawKey: raw,
-					order:  order,
-					ci:     false,
-					multi:  rec.HasMultiTarget,
+				bi := bucketFor(strings.ToLower(p.key.string()))
+				m.buckets[bi] = append(m.buckets[bi], SysinclContribution{
+					paths:    p.paths,
+					filter:   rec.Filter,
+					rawKeyID: p.key,
+					order:    order,
+					ci:       false,
+					multi:    rec.HasMultiTarget,
 				})
+				m.byID.put(uint64(p.key), bi)
 
 				continue
 			}
 
-			m.byLower[p.keyCI] = append(m.byLower[p.keyCI], SysinclContribution{
-				paths:  p.paths,
-				filter: rec.Filter,
-				rawKey: p.keyCI,
-				order:  order,
-				ci:     true,
-				multi:  rec.HasMultiTarget,
+			ciID := internStr(p.keyCI)
+			bi := bucketFor(p.keyCI)
+			m.buckets[bi] = append(m.buckets[bi], SysinclContribution{
+				paths:    p.paths,
+				filter:   rec.Filter,
+				rawKeyID: ciID,
+				order:    order,
+				ci:       true,
+				multi:    rec.HasMultiTarget,
 			})
+			m.byID.put(uint64(ciID), bi)
 		}
 	}
 
-	for _, bucket := range m.byLower {
+	for i := range m.buckets {
+		bucket := m.buckets[i]
 		sort.Slice(bucket, func(i, j int) bool { return bucket[i].order < bucket[j].order })
 	}
 
 	return m
 }
 
-func (m *SysinclIndex) lookup(path, header string) ([]VFS, bool, bool) {
-	bucket := m.byLower[strings.ToLower(header)]
+func (m *SysinclIndex) lookup(path string, target STR) ([]VFS, bool, bool) {
+	bi := m.byID.get(uint64(target))
 
-	if bucket == nil {
+	if bi == nil {
 		return nil, false, false
 	}
+
+	bucket := m.buckets[*bi]
 
 	var (
 		out            []VFS
@@ -259,7 +298,7 @@ func (m *SysinclIndex) lookup(path, header string) ([]VFS, bool, bool) {
 	for i := range bucket {
 		c := &bucket[i]
 
-		if !c.ci && c.rawKey != header {
+		if !c.ci && c.rawKeyID != target {
 			continue
 		}
 
