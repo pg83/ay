@@ -70,7 +70,7 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 		cwd := ""
 
 		if run.CWD != nil {
-			cwd = expandRunProgramCWD(instance, *run.CWD)
+			cwd = *run.CWD
 		}
 
 		jvRef := emitJVGeneral(instance, jarVFS, args, inputs, outputs, cwd, depRefs, cfModuleTag(d, instance), d.tc, ctx.emit)
@@ -120,13 +120,6 @@ func antlrRunCmdArgs(instance ModuleInstance, run AntlrRunInfo, inVFSByToken, ou
 	args := make([]string, 0, len(run.Args))
 
 	for _, a := range run.Args {
-		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
-		a = strings.ReplaceAll(a, "${ARCADIA_BUILD_ROOT}", "$(B)")
-		a = strings.ReplaceAll(a, "${CURDIR}", instance.Path.string())
-		a = strings.ReplaceAll(a, "${BINDIR}", build(instance.Path.rel()).string())
-		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path.rel())
-		a = strings.ReplaceAll(a, "$CURDIR", instance.Path.string())
-		a = strings.ReplaceAll(a, "$BINDIR", build(instance.Path.rel()).string())
 
 		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = vfs.string()

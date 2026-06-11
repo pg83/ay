@@ -465,13 +465,6 @@ func emitPYRun(
 	cmdArgs := []STR{tc.Python3, (scriptVFS).str()}
 
 	for _, a := range stmt.Args {
-		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
-		a = strings.ReplaceAll(a, "${ARCADIA_BUILD_ROOT}", "$(B)")
-		a = strings.ReplaceAll(a, "${CURDIR}", instance.Path.string())
-		a = strings.ReplaceAll(a, "${BINDIR}", build(instance.Path.rel()).string())
-		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path.rel())
-		a = strings.ReplaceAll(a, "$CURDIR", instance.Path.string())
-		a = strings.ReplaceAll(a, "$BINDIR", build(instance.Path.rel()).string())
 
 		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = vfs.string()
@@ -525,7 +518,7 @@ func emitPYRun(
 	}
 
 	if stmt.CWD != nil {
-		cmd.Cwd = internStr(expandRunProgramCWD(instance, *stmt.CWD))
+		cmd.Cwd = internStr(*stmt.CWD)
 	}
 
 	node := &Node{
