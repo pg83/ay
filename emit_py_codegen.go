@@ -241,6 +241,8 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 			ccIn.CFlags = filtered
 		}
 
+		// AddIncl/CFlags feed the module-stable arg blocks — rebuild for this copy.
+		ccIn.CCBlocks = composeCCModuleArgBlocks(instance.Platform, &ccIn)
 		ccRef, ccOut, _ := EmitCC(instance, regCpp, regCppVFS, ccIn, ctx.host, ctx.emit)
 
 		res.Refs = append(res.Refs, ccRef)

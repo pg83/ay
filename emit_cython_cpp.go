@@ -162,6 +162,8 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		ccIn.Py3Suffix = !stmt.CMode && !generatedExplicit && py23Variant
 		ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl, d.cythonNumpyBeforeInclude)
 		ccIn.CFlags = filterPyRegisterCFlags(ccIn.CFlags)
+		// AddIncl/CFlags feed the module-stable arg blocks — rebuild for this copy.
+		ccIn.CCBlocks = composeCCModuleArgBlocks(instance.Platform, &ccIn)
 		ccIn.PerSourceCFlags = append([]ARG(nil), in.PerSourceCFlags...)
 
 		if cythonImplicitFallthrough(stmt, py23Variant) {
@@ -255,7 +257,7 @@ func appendCythonCCAddIncl(addIncl []VFS, numpyBeforeInclude bool) []VFS {
 	return out
 }
 
-func adjustCythonCompanionSourceInputs(d *moduleData, src string, in ModuleCCInputs) ModuleCCInputs {
+func adjustCythonCompanionSourceInputs(p *Platform, d *moduleData, src string, in ModuleCCInputs) ModuleCCInputs {
 	if len(d.cythonCpp) == 0 {
 		return in
 	}
@@ -273,6 +275,8 @@ func adjustCythonCompanionSourceInputs(d *moduleData, src string, in ModuleCCInp
 
 	in.AddIncl = appendCythonCCAddIncl(in.AddIncl, d.cythonNumpyBeforeInclude)
 	in.CFlags = filterPyRegisterCFlags(in.CFlags)
+	// AddIncl/CFlags feed the module-stable arg blocks — rebuild for this copy.
+	in.CCBlocks = composeCCModuleArgBlocks(p, &in)
 
 	return in
 }
