@@ -30,7 +30,7 @@ func simdVariantFor(macroName TOK) (SimdVariant, bool) {
 }
 
 type SimdSrc struct {
-	Src     string
+	Src     STR
 	Variant string
 	CFlags  []string
 	Line    int

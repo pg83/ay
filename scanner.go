@@ -1037,7 +1037,11 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 		searchPathFound = true
 	}
 
-	if includerAbs.isBuild() && strings.Contains(d.target.string(), "/") {
+	// No slash gate before the probe: a registered bare-rel always contains
+	// "/" (outputs live under module dirs) and rooted targets were bound in
+	// resolve() — a slashless target just misses the DenseMap, cheaper than
+	// the string view the gate cost.
+	if includerAbs.isBuild() {
 		if info := s.codegen.lookupSTR(d.target); info != nil && !outHas(info.OutputPath) {
 			out = append(out, info.OutputPath)
 			searchPathFound = true

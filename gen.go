@@ -790,14 +790,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	// adding it as an induced dep to every module with .fbs SRCS (e.g. apache/arrow).
 	// Append after explicit PEERDIRs so the peer archive closure puts flatbuffers
 	// after the module's last declared peer, matching upstream's link order.
-	if instance.Path.rel() != "contrib/libs/flatbuffers" {
-		for _, src := range d.srcs {
-			if strings.HasSuffix(src.string(), ".fbs") {
-				d.peerdirs = append(d.peerdirs, strContribLibsFlatbuffers)
-
-				break
-			}
-		}
+	if d.hasFbs && instance.Path.rel() != "contrib/libs/flatbuffers" {
+		d.peerdirs = append(d.peerdirs, strContribLibsFlatbuffers)
 	}
 
 	if isSpecializedLibraryType(d.moduleStmt.Name) {
@@ -1060,7 +1054,9 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	for _, p := range d.peerdirs {
-		if peerSeen(p.string()) {
+		// peerSeen's id-space twin: p is already interned, so membership is a
+		// direct deduper probe — no view, no re-intern.
+		if !deduper.add(VFS(p) << 1) {
 			continue
 		}
 
@@ -1705,8 +1701,9 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	// PB / EV / FL / RL / CF outputs in the codegen registry first, so the
 	// subsequent header walks resolve them correctly.
 	type codegenEmit struct {
-		src  string
-		emit *SourceEmit
+		srcID STR
+		src   string
+		emit  *SourceEmit
 	}
 
 	// Collected in SRCS order so pass 2 appends them without a side map: a source's
@@ -1715,21 +1712,23 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	codegenEmits := make([]codegenEmit, 0, 4)
 
 	for _, src := range d.srcs {
-		if !isCodegenProducingSrc(src.string()) {
+		srcRel := src.string()
+
+		if !isCodegenProducingSrc(srcRel) {
 			continue
 		}
 
 		srcInputs := moduleInputs
 
-		if extras := d.perSrcCFlagsFor(src.string()); extras != nil {
+		if extras := d.perSrcCFlagsFor(src); extras != nil {
 			srcInputs.PerSourceCFlags = *extras
 		}
 
-		if d.flatSrc(src.string()) {
+		if d.flatSrc(src) {
 			srcInputs.FlatOutput = true
 		}
 
-		codegenEmits = append(codegenEmits, codegenEmit{src.string(), emitOneSource(ctx, instance, d, src.string(), srcInputs)})
+		codegenEmits = append(codegenEmits, codegenEmit{src, srcRel, emitOneSource(ctx, instance, d, srcRel, srcInputs)})
 	}
 
 	emitCopyFiles(ctx, instance, d, &moduleInputs)
@@ -1751,25 +1750,25 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	// tdigest.pb.cc.o]. Iterating d.srcs in-order with `preEmitted[src]`
 	// preserves SRCS order, so rl6-before-cpp modules diverge. Two passes
 	// fix it without re-emitting and without changing any node content.
-	emitSrcInputs := func(src string) ModuleCCInputs {
+	emitSrcInputs := func(srcID STR, src string) ModuleCCInputs {
 		si := moduleInputs
 
-		if extras := d.perSrcCFlagsFor(src); extras != nil {
+		if extras := d.perSrcCFlagsFor(srcID); extras != nil {
 			si.PerSourceCFlags = *extras
 		}
 
-		if d.flatSrc(src) {
+		if d.flatSrc(srcID) {
 			si.FlatOutput = true
 		}
 
 		return adjustCythonCompanionSourceInputs(instance.Platform, d, src, si)
 	}
-	appendCC := func(src string, emit *SourceEmit) {
+	appendCC := func(srcID STR, src string, emit *SourceEmit) {
 		if emit == nil {
 			return
 		}
 
-		isFlatNoLto := d.flatSrc(src)
+		isFlatNoLto := d.flatSrc(srcID)
 		ccRefs = append(ccRefs, emit.Ref)
 		ccOutputs = append(ccOutputs, emit.OutPath)
 		ccIsFlatNoLto = append(ccIsFlatNoLto, isFlatNoLto)
@@ -1778,16 +1777,17 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	for _, src := range d.srcs {
-		if isCodegenProducingSrc(src.string()) {
+		srcRel := src.string()
+
+		if isCodegenProducingSrc(srcRel) {
 			continue
 		}
 
-		srcRel := src.string()
-		appendCC(srcRel, emitOneSource(ctx, instance, d, srcRel, emitSrcInputs(srcRel)))
+		appendCC(src, srcRel, emitOneSource(ctx, instance, d, srcRel, emitSrcInputs(src, srcRel)))
 	}
 
 	for _, ce := range codegenEmits {
-		appendCC(ce.src, ce.emit)
+		appendCC(ce.srcID, ce.src, ce.emit)
 	}
 
 	for _, emit := range emitCheckConfigH(ctx, instance, d, moduleInputs) {
@@ -1865,7 +1865,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		variantIn.PerSourceCFlags = flags
 
-		emit := emitOneSource(ctx, instance, d, e.Src, variantIn)
+		emit := emitOneSource(ctx, instance, d, e.Src.string(), variantIn)
 
 		if emit == nil {
 			continue

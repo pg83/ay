@@ -112,6 +112,10 @@ type ModuleData struct {
 
 	perSrcCFlags map[STR][]ARG
 
+	// hasFbs marks a .fbs in d.srcs (set in collectModule's suffix pass) —
+	// genModule's flatbuffers auto-peer gate, so it needn't rescan srcs.
+	hasFbs bool
+
 	defaultVars map[STR]STR
 
 	defaultVarOrder    []STR
@@ -192,24 +196,24 @@ type ModuleData struct {
 // perSrcCFlagsFor / flatSrc gate the sparse per-source attribute maps on len, so
 // modules with no SRC-level CFLAGS and no flat-output markers (the vast majority)
 // skip the probe. Identical to a direct probe — an empty/nil map yields not-found.
-func (d *ModuleData) perSrcCFlagsFor(src string) *[]ARG {
+func (d *ModuleData) perSrcCFlagsFor(src STR) *[]ARG {
 	if len(d.perSrcCFlags) == 0 {
 		return nil
 	}
 
-	if v, ok := d.perSrcCFlags[internStr(src)]; ok {
+	if v, ok := d.perSrcCFlags[src]; ok {
 		return &v
 	}
 
 	return nil
 }
 
-func (d *ModuleData) flatSrc(src string) bool {
+func (d *ModuleData) flatSrc(src STR) bool {
 	if len(d.flatSrcs) == 0 {
 		return false
 	}
 
-	_, ok := d.flatSrcs[internStr(src)]
+	_, ok := d.flatSrcs[src]
 
 	return ok
 }
@@ -571,12 +575,16 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 	hasEv := false
 	hasProto := false
 
+	// One view per src (the case expressions would each take their own); .fbs
+	// detection rides the same pass for genModule's flatbuffers auto-peer.
 	for _, src := range d.srcs {
-		switch {
-		case strings.HasSuffix(src.string(), ".ev"):
+		switch s := src.string(); {
+		case strings.HasSuffix(s, ".ev"):
 			hasEv = true
-		case strings.HasSuffix(src.string(), ".proto"):
+		case strings.HasSuffix(s, ".proto"):
 			hasProto = true
+		case strings.HasSuffix(s, ".fbs"):
+			d.hasFbs = true
 		}
 	}
 
@@ -601,12 +609,12 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 	return d
 }
 
-func appendGlobalSrcEvent(d *ModuleData, src string) {
-	d.globalSrcs = append(d.globalSrcs, internStr(src))
+func appendGlobalSrcEvent(d *ModuleData, src STR) {
+	d.globalSrcs = append(d.globalSrcs, src)
 }
 
-func appendGlobalSrcGroup(d *ModuleData, srcs []string) {
-	d.globalSrcs = append(d.globalSrcs, STRS(srcs...)...)
+func appendGlobalSrcGroup(d *ModuleData, srcs []STR) {
+	d.globalSrcs = append(d.globalSrcs, srcs...)
 }
 
 func ensureResourcePeer(modulePath string, d *ModuleData) {
@@ -787,9 +795,15 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 
 			routeAllToGlobal := d.moduleStmt != nil && isYqlUdfStaticModule(d.moduleStmt.Name)
 			globalNext := false
-			globalSrcs := make([]string, 0, len(v.Sources))
+			globalSrcs := make([]STR, 0, len(v.Sources))
 
 			for _, srcTok := range expandStmtTokensSTR(v.Sources, env) {
+				if srcTok == kwGLOBAL {
+					globalNext = true
+
+					continue
+				}
+
 				src := srcTok.string()
 
 				// An unresolved ${VAR} stays literal through expansion (upstream
@@ -799,19 +813,13 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 					continue
 				}
 
-				if src == "GLOBAL" {
-					globalNext = true
-
-					continue
-				}
-
 				if routeAllToGlobal {
-					globalSrcs = append(globalSrcs, src)
+					globalSrcs = append(globalSrcs, srcTok)
 				} else if globalNext {
-					appendGlobalSrcEvent(d, src)
+					appendGlobalSrcEvent(d, srcTok)
 					globalNext = false
 				} else {
-					d.srcs = append(d.srcs, internStr(src))
+					d.srcs = append(d.srcs, srcTok)
 				}
 
 				if strings.HasSuffix(src, ".h.in") {
@@ -829,19 +837,19 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			addInclNext := false
 
 			for _, pTok := range expandStmtTokensSTR(v.Paths, env) {
-				p := pTok.string()
-
-				if strings.Contains(p, "${") {
-					continue
-				}
-
-				if p == "ADDINCL" {
+				if pTok == kwADDINCL {
 					addInclNext = true
 
 					continue
 				}
 
-				if p == "GLOBAL" {
+				if pTok == kwGLOBAL {
+					continue
+				}
+
+				p := pTok.string()
+
+				if strings.Contains(p, "${") {
 					continue
 				}
 
@@ -850,7 +858,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 					addInclNext = false
 				}
 
-				d.peerdirs = append(d.peerdirs, internStr(p))
+				d.peerdirs = append(d.peerdirs, pTok)
 			}
 		case *SetStmt:
 
@@ -904,7 +912,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 				d.srcDirs = append(d.srcDirs, dirKey(dir))
 			}
 		case *GlobalSrcsStmt:
-			appendGlobalSrcGroup(d, strStrings(expandStmtTokensSTR(v.Sources, env)))
+			appendGlobalSrcGroup(d, expandStmtTokensSTR(v.Sources, env))
 		case *GenerateEnumSerializationStmt:
 			d.enumSrcs = append(d.enumSrcs, v)
 			// Upstream's GENERATE_ENUM_SERIALIZATION macro expands inline to
@@ -1550,7 +1558,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 		flags = append(flags, strStrings(v.Args[1:])...)
 
 		d.simdSrcs = append(d.simdSrcs, SimdSrc{
-			Src:     filename.string(),
+			Src:     filename,
 			Variant: variant.Suffix,
 			CFlags:  flags,
 			Line:    v.Line,
