@@ -41,7 +41,7 @@ var ansiCols = map[string]string{
 	"light-white":   ansiESC + "[97m",
 }
 
-type makeFlags struct {
+type MakeFlags struct {
 	srcRoot           string
 	bldRoot           string
 	outRoot           string
@@ -61,7 +61,7 @@ type makeFlags struct {
 	testLevel         int
 	sandboxing        bool
 	dumpIgnoredMacros bool
-	cmdPrefixes       []cmdPrefix
+	cmdPrefixes       []CmdPrefix
 }
 
 // cmdPrefix prepends prefix tokens before any command argument whose path ends
@@ -69,7 +69,7 @@ type makeFlags struct {
 // loader on systems lacking the binary's default interpreter, e.g.
 // --cmd-prefix=bin/java=/bin/ld.linux-so.2 turns `… <JDK>/bin/java …` into
 // `… /bin/ld.linux-so.2 <JDK>/bin/java …`.
-type cmdPrefix struct {
+type CmdPrefix struct {
 	suffix string
 	prefix []string
 }
@@ -81,7 +81,7 @@ func copyStatsFlags(dst, src map[string]string) {
 }
 
 func readOptionalYaConfSection(fs FS, rel, wantSection string) map[string]string {
-	if fs == nil || !fs.IsFile(srcRootVFS, rel) {
+	if fs == nil || !fs.isFile(srcRootVFS, rel) {
 		return nil
 	}
 
@@ -108,7 +108,7 @@ func compilerFlagsFromConfig(primary, internal map[string]string, key, env strin
 	return joinCompilerFlagStrings(primary[key], internal[key], env)
 }
 
-func shouldExposeSandboxingTargetTags(mf *makeFlags) bool {
+func shouldExposeSandboxingTargetTags(mf *MakeFlags) bool {
 	return mf != nil && mf.sandboxing && mf.testLevel > 0
 }
 
@@ -261,7 +261,7 @@ func cmdMake(args []string) int {
 				writeGraph("-", g, !mf.sandboxing)
 			}
 		} else {
-			genStream(fs, mf.targets, hostP, targetP, func(*Node, *uidVec) {}, onWarn, mf.testLevel > 0)
+			genStream(fs, mf.targets, hostP, targetP, func(*Node, *UidVec) {}, onWarn, mf.testLevel > 0)
 		}
 
 		if mf.dumpIgnoredMacros {
@@ -316,7 +316,7 @@ func cmdMake(args []string) int {
 	return 0
 }
 
-func genStream(fs FS, targets []string, hostP, targetP *Platform, onNode func(*Node, *uidVec), onWarn func(Warn), testMode bool) []UID {
+func genStream(fs FS, targets []string, hostP, targetP *Platform, onNode func(*Node, *UidVec), onWarn func(Warn), testMode bool) []UID {
 	all := []UID{}
 
 	for _, t := range targets {
@@ -327,19 +327,19 @@ func genStream(fs FS, targets []string, hostP, targetP *Platform, onNode func(*N
 	return all
 }
 
-func genStreamOne(fs FS, target string, hostP, targetP *Platform, onNode func(*Node, *uidVec), onWarn func(Warn), testMode bool) []UID {
+func genStreamOne(fs FS, target string, hostP, targetP *Platform, onNode func(*Node, *UidVec), onWarn func(Warn), testMode bool) []UID {
 	emitter := NewStreamingEmitter(onNode)
 	runGenIntoWithResources(fs, target, hostP, targetP, emitter, onWarn, testMode)
 
-	return emitter.Finish()
+	return emitter.finish()
 }
 
-type executor struct {
+type Executor struct {
 	srcRoot     string
 	bldRoot     string
 	sema        chan struct{}
 	keepGoing   bool
-	cmdPrefixes []cmdPrefix
+	cmdPrefixes []CmdPrefix
 	// ninja selects per-line progress output (each status on its own line).
 	// Default (false) repaints a single status line in place (\x1b[2K\r).
 	ninja bool
@@ -354,26 +354,26 @@ type executor struct {
 	grbDir string
 
 	mu      sync.Mutex
-	byUID   map[UID]*nodeFuture
+	byUID   map[UID]*NodeFuture
 	events  chan func()
 	stats   map[string][]time.Duration
 	pending atomic.Uint64
 	done    atomic.Uint64
 }
 
-type commandResult struct {
+type CommandResult struct {
 	Stderr string
 }
 
-type nodeFuture struct {
+type NodeFuture struct {
 	node *Node
-	uids *uidVec // resolves node.DepRefs -> dep uids (per emitter; deps are not materialized)
+	uids *UidVec // resolves node.DepRefs -> dep uids (per emitter; deps are not materialized)
 	once sync.Once
 	err  *Exception
 }
 
-func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, ninja bool, sandboxing bool, cmdPrefixes []cmdPrefix) *executor {
-	return &executor{
+func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, ninja bool, sandboxing bool, cmdPrefixes []CmdPrefix) *Executor {
+	return &Executor{
 		srcRoot:     srcRoot,
 		bldRoot:     bldRoot,
 		sema:        make(chan struct{}, threads),
@@ -382,13 +382,13 @@ func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, ninja boo
 		sandboxing:  sandboxing,
 		grbDir:      filepath.Join(bldRoot, "grb"),
 		cmdPrefixes: cmdPrefixes,
-		byUID:       make(map[UID]*nodeFuture, 8192),
+		byUID:       make(map[UID]*NodeFuture, 8192),
 		events:      make(chan func(), 4096),
 		stats:       map[string][]time.Duration{},
 	}
 }
 
-func (ex *executor) onNode(n *Node, uids *uidVec) {
+func (ex *Executor) onNode(n *Node, uids *UidVec) {
 	// Dedup by uid: the generator may stream the same node (identical uid) more
 	// than once. Each uid is one action and must run in exactly one goroutine —
 	// two goroutines in the same tmp/<uid> would have one's forceRemoveAll wipe the
@@ -402,17 +402,17 @@ func (ex *executor) onNode(n *Node, uids *uidVec) {
 		return
 	}
 
-	f := &nodeFuture{node: n, uids: uids}
+	f := &NodeFuture{node: n, uids: uids}
 	ex.byUID[n.UID] = f
 	ex.mu.Unlock()
 
 	go ex.fire(f)
 }
 
-func (ex *executor) fire(f *nodeFuture) {
+func (ex *Executor) fire(f *NodeFuture) {
 	Try(func() {
 		ex.visit(f.node.UID)
-	}).Catch(func(e *Exception) {
+	}).catch(func(e *Exception) {
 		if !ex.keepGoing {
 			fatalException(e)
 		}
@@ -428,17 +428,17 @@ func fatalException(e *Exception) {
 	select {}
 }
 
-func (ex *executor) eventLoop() {
+func (ex *Executor) eventLoop() {
 	for fn := range ex.events {
 		fn()
 	}
 }
 
-func (ex *executor) close() {
+func (ex *Executor) close() {
 	close(ex.events)
 }
 
-func (ex *executor) run(roots []UID) {
+func (ex *Executor) run(roots []UID) {
 	if len(roots) == 0 {
 		return
 	}
@@ -448,7 +448,7 @@ func (ex *executor) run(roots []UID) {
 	}
 }
 
-func (ex *executor) visit(uid UID) {
+func (ex *Executor) visit(uid UID) {
 	f := ex.lookup(uid)
 
 	if f == nil {
@@ -466,7 +466,7 @@ func (ex *executor) visit(uid UID) {
 	}
 }
 
-func (ex *executor) failedRoots(roots []UID) []UID {
+func (ex *Executor) failedRoots(roots []UID) []UID {
 	var failed []UID
 
 	for _, uid := range roots {
@@ -482,7 +482,7 @@ func (ex *executor) failedRoots(roots []UID) []UID {
 	return failed
 }
 
-func (ex *executor) lookup(uid UID) *nodeFuture {
+func (ex *Executor) lookup(uid UID) *NodeFuture {
 	ex.mu.Lock()
 	f := ex.byUID[uid]
 	ex.mu.Unlock()
@@ -490,7 +490,7 @@ func (ex *executor) lookup(uid UID) *nodeFuture {
 	return f
 }
 
-func (ex *executor) execute(f *nodeFuture) {
+func (ex *Executor) execute(f *NodeFuture) {
 	n := f.node
 	cachePath := ex.uidPath(n.UID)
 
@@ -606,21 +606,21 @@ func (ex *executor) execute(f *nodeFuture) {
 
 // parseCmdPrefix parses a --cmd-prefix=<suffix>=<prefix tokens> value. The prefix
 // (everything after the first '=') is split on whitespace into tokens.
-func parseCmdPrefix(spec string) cmdPrefix {
+func parseCmdPrefix(spec string) CmdPrefix {
 	suffix, prefix, ok := strings.Cut(spec, "=")
 
 	if !ok || suffix == "" {
 		ThrowFmt("make: --cmd-prefix expects <suffix>=<prefix>, got %q", spec)
 	}
 
-	return cmdPrefix{suffix: suffix, prefix: strings.Fields(prefix)}
+	return CmdPrefix{suffix: suffix, prefix: strings.Fields(prefix)}
 }
 
 // applyCmdPrefixes inserts a rule's prefix tokens before every argument whose path
 // ends with the rule's suffix. Operates on already-mounted (real-path) args, so a
 // fetched binary referenced anywhere in the command — including as an argument to a
 // wrapper that execs it — is run through the configured loader.
-func applyCmdPrefixes(args []string, rules []cmdPrefix) []string {
+func applyCmdPrefixes(args []string, rules []CmdPrefix) []string {
 	if len(rules) == 0 {
 		return args
 	}
@@ -696,15 +696,15 @@ func consumeCommandFile(args []string, pos *int, buildRoot string, counter *int)
 	return "@" + path
 }
 
-func (ex *executor) runNode(n *Node, srcMount, bldMount string) commandResult {
-	var result commandResult
+func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
+	var result CommandResult
 
 	for _, out := range n.Outputs {
-		if !out.IsBuild() {
+		if !out.isBuild() {
 			continue
 		}
 
-		mounted := filepath.Join(bldMount, out.Rel())
+		mounted := filepath.Join(bldMount, out.rel())
 		Throw(os.MkdirAll(filepath.Dir(mounted), 0o755))
 	}
 
@@ -787,14 +787,14 @@ func (ex *executor) runNode(n *Node, srcMount, bldMount string) commandResult {
 // dir (mirroring each input's rel path), so a sandboxed command sees exactly the
 // sources the graph declares and nothing else. $(B) inputs need no such filtering —
 // they are the dep outputs, restored whole into the sandbox build dir.
-func (ex *executor) linkSourceInputs(n *Node, srcMount string) {
+func (ex *Executor) linkSourceInputs(n *Node, srcMount string) {
 	for _, chunk := range n.Inputs {
 		for _, in := range chunk {
-			if !in.IsSource() {
+			if !in.isSource() {
 				continue
 			}
 
-			rel := in.Rel()
+			rel := in.rel()
 			target := filepath.Join(srcMount, rel)
 			Throw(os.MkdirAll(filepath.Dir(target), 0o755))
 			_ = os.Remove(target)
@@ -807,20 +807,20 @@ func (ex *executor) linkSourceInputs(n *Node, srcMount string) {
 // either a CAS-stored regular file (Cas = its content-addressed path) or a symlink
 // (Link = the link target, verbatim). A directory output expands to one entry per
 // leaf, so the CAS holds only files — never directories.
-type outputEntry struct {
+type OutputEntry struct {
 	Cas  string `json:"cas,omitempty"`
 	Link string `json:"link,omitempty"`
 }
 
-func (ex *executor) storeOutputs(n *Node, tmp string) {
-	meta := make(map[string]outputEntry, len(n.Outputs))
+func (ex *Executor) storeOutputs(n *Node, tmp string) {
+	meta := make(map[string]OutputEntry, len(n.Outputs))
 
 	for _, out := range n.Outputs {
-		if !out.IsBuild() {
+		if !out.isBuild() {
 			ThrowFmt("node %s: non-Build output %v", n.UID, out)
 		}
 
-		ex.storePath(filepath.Join(tmp, out.Rel()), out.String(), meta)
+		ex.storePath(filepath.Join(tmp, out.rel()), out.String(), meta)
 	}
 
 	uidPath := ex.uidPath(n.UID)
@@ -841,18 +841,18 @@ func (ex *executor) storeOutputs(n *Node, tmp string) {
 // are kept as symlinks (their target verbatim, NOT followed) so the link structure
 // of a fetched tree (e.g. clang++ -> clang) survives; directories recurse, one entry
 // per leaf — the CAS never holds a directory.
-func (ex *executor) storePath(src, outPath string, meta map[string]outputEntry) {
+func (ex *Executor) storePath(src, outPath string, meta map[string]OutputEntry) {
 	info := Throw2(os.Lstat(src))
 
 	switch {
 	case info.Mode()&os.ModeSymlink != 0:
-		meta[outPath] = outputEntry{Link: Throw2(os.Readlink(src))}
+		meta[outPath] = OutputEntry{Link: Throw2(os.Readlink(src))}
 	case info.IsDir():
 		for _, e := range Throw2(os.ReadDir(src)) {
 			ex.storePath(filepath.Join(src, e.Name()), outPath+"/"+e.Name(), meta)
 		}
 	default:
-		meta[outPath] = outputEntry{Cas: ex.storeFileToCAS(src)}
+		meta[outPath] = OutputEntry{Cas: ex.storeFileToCAS(src)}
 	}
 }
 
@@ -863,7 +863,7 @@ func (ex *executor) storePath(src, outPath string, meta map[string]outputEntry) 
 // src's dir. Same inode, same content, so the workspace copy is dropped by the tmp
 // cleanup. Content-addressed: a file already present (same content, possibly from a
 // concurrent node) is a no-op.
-func (ex *executor) storeFileToCAS(src string) string {
+func (ex *Executor) storeFileToCAS(src string) string {
 	hash := casHash(src)
 	dst := ex.casPathForHash(hash)
 
@@ -880,11 +880,11 @@ func (ex *executor) storeFileToCAS(src string) string {
 	return hash
 }
 
-func (ex *executor) restoreInto(uid UID, where string) {
+func (ex *Executor) restoreInto(uid UID, where string) {
 	metaPath := ex.uidPath(uid)
 	data := Throw2(os.ReadFile(metaPath))
 
-	var meta map[string]outputEntry
+	var meta map[string]OutputEntry
 
 	Throw(json.Unmarshal(data, &meta))
 
@@ -922,7 +922,7 @@ func (ex *executor) restoreInto(uid UID, where string) {
 	}
 }
 
-func (ex *executor) installRoot(uid UID, where string) {
+func (ex *Executor) installRoot(uid UID, where string) {
 	if where == "" {
 		return
 	}
@@ -932,7 +932,7 @@ func (ex *executor) installRoot(uid UID, where string) {
 
 // removeContents deletes everything inside dir but keeps dir itself — the under-lock
 // clean of a possibly-stale workspace left by a crashed prior run. Best-effort.
-func (ex *executor) removeContents(dir string) {
+func (ex *Executor) removeContents(dir string) {
 	entries, err := os.ReadDir(dir)
 
 	if err != nil {
@@ -949,7 +949,7 @@ func (ex *executor) removeContents(dir string) {
 // rename only touches the parent dirs) and leaves the real delete to the background
 // collector. The random suffix keeps the name unique even against a neighbouring
 // process. If the rename fails (missing path, cross-fs) it deletes in place.
-func (ex *executor) discard(path string) {
+func (ex *Executor) discard(path string) {
 	dst := filepath.Join(ex.grbDir, strconv.FormatUint(rand.Uint64(), 36))
 
 	if os.Rename(path, dst) == nil {
@@ -962,7 +962,7 @@ func (ex *executor) discard(path string) {
 // startGarbageCollector deletes grbDir entries once a second in the background. It is
 // best-effort and never waited on: the process exits with it still running, and any
 // leftover is cleared by the next run's collector.
-func (ex *executor) startGarbageCollector() {
+func (ex *Executor) startGarbageCollector() {
 	Throw(os.MkdirAll(ex.grbDir, 0o755))
 
 	go func() {
@@ -1011,18 +1011,18 @@ func casHash(src string) string {
 
 // casPathForHash is where a CAS object lives, sharded by the first 2 hash chars:
 // cas/<hh>/<hash>. The uid manifest stores only the bare hash; this rebuilds the path.
-func (ex *executor) casPathForHash(hash string) string {
+func (ex *Executor) casPathForHash(hash string) string {
 	return filepath.Join(ex.bldRoot, "cas", hash[:2], hash)
 }
 
 // uidPath is a node's manifest path, sharded by the first uid char: uid/<u>/<uid>.
-func (ex *executor) uidPath(uid UID) string {
+func (ex *Executor) uidPath(uid UID) string {
 	s := uid.String()
 
 	return filepath.Join(ex.bldRoot, "uid", s[:1], s)
 }
 
-func parseMakeFlags(args []string) *makeFlags {
+func parseMakeFlags(args []string) *MakeFlags {
 	state := getopt.NewState(append([]string{"ay-make"}, args...))
 	config := getopt.Config{
 		Opts:     getopt.OptStr("GrdktThD:j:B:o:I:"),
@@ -1031,7 +1031,7 @@ func parseMakeFlags(args []string) *makeFlags {
 		Func:     getopt.FuncGetOptLong,
 	}
 
-	mf := &makeFlags{
+	mf := &MakeFlags{
 		buildType: "debug",
 		threads:   runtime.NumCPU(),
 		tflags:    map[string]string{},

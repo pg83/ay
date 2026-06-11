@@ -17,7 +17,7 @@ import "math/bits"
 // allocated and whose slot is already written). The `go fire` at emit establishes
 // happens-before, and distinct ids touch distinct slots — so no lock is needed
 // and the page table is never reallocated out from under a reader.
-type uidVec struct {
+type UidVec struct {
 	pages [64][]UID
 }
 
@@ -29,7 +29,7 @@ func pageOffset(id NodeRef) (page int, off int64) {
 	return p, int64(n - (uint64(1) << uint(p)))
 }
 
-func (v *uidVec) set(id NodeRef, u UID) {
+func (v *UidVec) set(id NodeRef, u UID) {
 	p, off := pageOffset(id)
 
 	if v.pages[p] == nil {
@@ -39,7 +39,7 @@ func (v *uidVec) set(id NodeRef, u UID) {
 	v.pages[p][off] = u
 }
 
-func (v *uidVec) get(id NodeRef) UID {
+func (v *UidVec) get(id NodeRef) UID {
 	p, off := pageOffset(id)
 
 	return v.pages[p][off]

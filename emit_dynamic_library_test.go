@@ -11,7 +11,7 @@ func TestComposeDynLibInputs_IncludesVcsAndHelperScripts(t *testing.T) {
 	scr := func(rel string) VFS { return Intern("$(S)/build/scripts/" + rel) }
 	// link_dyn_lib's import closure (link_exe + the helpers it transitively imports)
 	// and fs_tools's, as the gen-time table would have them.
-	scripts := scriptDeps{
+	scripts := ScriptDeps{
 		scr("vcs_info.py"): {scr("vcs_info.py")},
 		scr("link_dyn_lib.py"): {
 			scr("link_dyn_lib.py"), scr("link_exe.py"), scr("process_command_files.py"),

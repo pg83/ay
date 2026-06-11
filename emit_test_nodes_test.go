@@ -21,8 +21,8 @@ func sandboxedX8664TargetPlatform() *Platform {
 	return NewPlatform(newMemFS(map[string]string{"build/ymake_conf.py": "debug_info_flags.append('-gz=zstd')\n"}), OSLinux, ISAX8664, flags, expectedSandboxingTags(), "", "")
 }
 
-func sandboxedTestSuite() testSuiteInfo {
-	return testSuiteInfo{
+func sandboxedTestSuite() TestSuiteInfo {
+	return TestSuiteInfo{
 		ProjectPath: "util/ut",
 		BinaryPath:  "$(B)/util/ut/util-ut",
 		CppSources: []string{
@@ -75,7 +75,7 @@ func expectedTestEnv(testName string) EnvVars {
 func expectedTestCtxNode() *Node {
 	return &Node{
 		Cmds: []Cmd{{
-			CmdArgs: argChunks{appendInternStrs(nil, []string{
+			CmdArgs: ArgChunks{appendInternStrs(nil, []string{
 				"$(YMAKE_PYTHON3)/bin/python3",
 				"$(S)/build/scripts/append_file.py",
 				"$(B)/common_test.context",
@@ -88,7 +88,7 @@ func expectedTestCtxNode() *Node {
 			})},
 		}},
 		Env:              nil,
-		Inputs:           inputChunks{{Intern("$(S)/build/scripts/append_file.py")}},
+		Inputs:           InputChunks{{Intern("$(S)/build/scripts/append_file.py")}},
 		KV:               KV{P: pkCP, PC: pcLightBlue},
 		Outputs:          []VFS{Intern("$(B)/common_test.context")},
 		Platform:         &Platform{Target: "default-linux-x86_64"},
@@ -98,11 +98,11 @@ func expectedTestCtxNode() *Node {
 	}
 }
 
-func expectedUnittestNode(info testSuiteInfo) *Node {
+func expectedUnittestNode(info TestSuiteInfo) *Node {
 	return &Node{
 		Cmds: []Cmd{{
 			Cwd: internStr("$(B)"),
-			CmdArgs: argChunks{appendInternStrs(nil, []string{
+			CmdArgs: ArgChunks{appendInternStrs(nil, []string{
 				"$(TEST_TOOL_HOST)/test_tool",
 				"run_test",
 				"--ya-start-command-file",
@@ -156,7 +156,7 @@ func expectedUnittestNode(info testSuiteInfo) *Node {
 			})},
 		}},
 		Env:    expectedTestEnv("unittest"),
-		Inputs: inputChunks{{Intern("$(S)/util/ut")}},
+		Inputs: InputChunks{{Intern("$(S)/util/ut")}},
 		KV:     KV{P: pkTS, Path: "util/ut/unittest", PC: pcYellow, RunTestNode: true, ShowOutBool: true, HasSpecialRunner: true},
 		Outputs: []VFS{
 			Intern("$(B)/util/ut/test-results/unittest/meta.json"),
@@ -175,7 +175,7 @@ func expectedClangFormatNode() *Node {
 	return &Node{
 		Cmds: []Cmd{{
 			Cwd: internStr("$(B)"),
-			CmdArgs: argChunks{appendInternStrs(nil, []string{
+			CmdArgs: ArgChunks{appendInternStrs(nil, []string{
 				"$(TEST_TOOL_HOST)/test_tool",
 				"run_test",
 				"--ya-start-command-file",
@@ -229,7 +229,7 @@ func expectedClangFormatNode() *Node {
 			})},
 		}},
 		Env: expectedTestEnv("clang_format"),
-		Inputs: inputChunks{{
+		Inputs: InputChunks{{
 			Intern("$(S)/build/config/tests/cpp_style/.clang-format"),
 			Intern("$(S)/build/scripts/c_templates/svn_interface.c"),
 			Intern("$(S)/tools/cpp_style_checker/wrapper.py"),
@@ -307,7 +307,7 @@ func assertNodeFields(t *testing.T, name string, got, want *Node) {
 	}
 }
 
-type canonicalFixtureNode struct {
+type CanonicalFixtureNode struct {
 	Cmds             interface{}
 	Env              map[string]interface{}
 	KV               map[string]interface{}
@@ -323,15 +323,15 @@ type canonicalFixtureNode struct {
 // closure reaches, in scrambled order, to exercise buildUnittestNode's sort. The
 // tokens are id-free (the production tokens carry an sbr id the gate normalizer
 // discounts); the unit test verifies ordering/rendering only.
-func testUnittestResourceGlobals() []resourceDecl {
-	decl := func(name string) resourceDecl {
-		return resourceDecl{
+func testUnittestResourceGlobals() []ResourceDecl {
+	decl := func(name string) ResourceDecl {
+		return ResourceDecl{
 			GlobalVar: internStr(name + "_RESOURCE_GLOBAL"),
 			Token:     internStr(name + "_RESOURCE_GLOBAL::$(" + name + ")"),
 		}
 	}
 
-	return []resourceDecl{
+	return []ResourceDecl{
 		decl("YMAKE_PYTHON3"), decl("CLANG"), decl("CLANG20"), decl("LLD_ROOT"),
 		decl("CLANG16"), decl("CLANG_FORMAT"), decl("CLANG18"),
 	}

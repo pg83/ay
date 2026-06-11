@@ -82,8 +82,8 @@ func TestEvalCond_YdbIfBindings(t *testing.T) {
 		t.Error(`EvalCond(OS_SDK == "ubuntu-12") = true, want false`)
 	}
 
-	localEnv := DefaultIfEnv.Clone()
-	localEnv.SetFromString(envOS_SDK, "local")
+	localEnv := DefaultIfEnv.clone()
+	localEnv.setFromString(envOS_SDK, "local")
 	if !EvalCond(parseCondForTest(t, `OS_SDK == "local"`), localEnv) {
 		t.Error(`EvalCond(OS_SDK == "local") with OS_SDK=local = false, want true`)
 	}
@@ -285,8 +285,8 @@ func TestEvalCond_BoolStringEqualityCoercion(t *testing.T) {
 	// Unset flags are NOT bool-typed (the IF namespace is lazy: unset names
 	// return literal name from evalAtom), so this test sets the flag
 	// explicitly via SetBool to exercise the coercion rule.
-	env := DefaultIfEnv.Clone()
-	env.SetBool(envPROFILE_MEMORY_ALLOCATIONS, false)
+	env := DefaultIfEnv.clone()
+	env.setBool(envPROFILE_MEMORY_ALLOCATIONS, false)
 	if !EvalCond(parseCondForTest(t, `PROFILE_MEMORY_ALLOCATIONS == "no"`), env) {
 		t.Fatalf(`EvalCond(PROFILE_MEMORY_ALLOCATIONS=false == "no") = false, want true`)
 	}

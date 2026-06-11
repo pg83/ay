@@ -7,11 +7,12 @@ import (
 )
 
 var (
-	cfgVarRefRe      = regexp.MustCompile(`@([A-Z_][A-Z0-9_]*)@`)
-	cfgCmakeDefineRe = regexp.MustCompile(`#cmakedefine(?:01)?[ \t]+([A-Z_][A-Z0-9_]*)`)
+	cfgVarRefRe         = regexp.MustCompile(`@([A-Z_][A-Z0-9_]*)@`)
+	cfgCmakeDefineRe    = regexp.MustCompile(`#cmakedefine(?:01)?[ \t]+([A-Z_][A-Z0-9_]*)`)
+	configureFilePyPath = configureFilePyVFS.String()
 )
 
-func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt, d *moduleData, reg *CodegenRegistry) {
+func emitExplicitCF(ctx *GenCtx, instance ModuleInstance, cf *ConfigureFileStmt, d *ModuleData, reg *CodegenRegistry) {
 	in := ModuleCCInputs{
 		TC:              d.tc,
 		InclArgs:        ctx.inclArgs,
@@ -23,19 +24,19 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 		FS:              ctx.fs,
 	}
 
-	srcVFS := copyFileInputVFS(ctx.fs, instance.Path.Rel(), cf.Src)
-	outVFS := copyFileOutputVFS(instance.Path.Rel(), cf.Dst)
+	srcVFS := copyFileInputVFS(ctx.fs, instance.Path.rel(), cf.Src)
+	outVFS := copyFileOutputVFS(instance.Path.rel(), cf.Dst)
 	in.IncludeInputs = walkClosure(ctx, instance, srcVFS, in)
 
-	cfgVars := buildCFGVars(ctx.fs, srcVFS.Rel(), d.setVars, d.defaultVars)
-	cfRef, cfOut := EmitCF(instance, srcVFS, outVFS, cfgVars, in.IncludeInputs, instance.Path.Rel(), cfModuleTag(d, instance), in.TC, ctx.emit)
+	cfgVars := buildCFGVars(ctx.fs, srcVFS.rel(), d.setVars, d.defaultVars)
+	cfRef, cfOut := EmitCF(instance, srcVFS, outVFS, cfgVars, in.IncludeInputs, instance.Path.rel(), cfModuleTag(d, instance), in.TC, ctx.emit)
 
 	if reg != nil {
-		parsed := []includeDirective{
-			{kind: includeQuoted, target: internStr(srcVFS.Rel())},
-			{kind: includeQuoted, target: internStr(configureFilePyVFS.Rel())},
+		parsed := []IncludeDirective{
+			{kind: includeQuoted, target: internStr(srcVFS.rel())},
+			{kind: includeQuoted, target: internStr(configureFilePyVFS.rel())},
 		}
-		parsed = append(parsed, cfIncludeDirectives(ctx.parsers, srcVFS.Rel())...)
+		parsed = append(parsed, cfIncludeDirectives(ctx.parsers, srcVFS.rel())...)
 		// Record CF source on the GeneratedFileInfo so antlr / similar
 		// consumers can extend their inputs with srcVFS + configure_file.py
 		// when an INFile is a CF output (upstream tracks both as JV inputs).
@@ -43,9 +44,9 @@ func emitExplicitCF(ctx *genCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	}
 }
 
-func cfIncludeDirectives(pm *includeParserManager, rel string) []includeDirective {
+func cfIncludeDirectives(pm *IncludeParserManager, rel string) []IncludeDirective {
 	raw := pm.sourceParsedBuckets(Source(rel), nil).bucket(parsedIncludesLocal)
-	out := make([]includeDirective, 0, len(raw))
+	out := make([]IncludeDirective, 0, len(raw))
 
 	for _, d := range raw {
 		if d.kind != includeQuoted {
@@ -65,7 +66,7 @@ func cfIncludeDirectives(pm *includeParserManager, rel string) []includeDirectiv
 
 func buildCFGVars(fs FS, rel string, setVars, defaultVars map[string]string) []string {
 	referenced := map[string]bool{}
-	data := fs.Read(rel)
+	data := fs.read(rel)
 
 	for _, m := range cfgVarRefRe.FindAllSubmatch(data, -1) {
 		referenced[string(m[1])] = true
@@ -103,7 +104,7 @@ func hasKey(m map[string]string, k string) bool {
 // in its CPP_PROTO instance lands under MODULE_TAG=CPP_PROTO (gen.go:557),
 // which surfaces in REF dumps as `cpp_proto`. CF emits from other module
 // types leave module_tag unset.
-func cfModuleTag(d *moduleData, instance ModuleInstance) STR {
+func cfModuleTag(d *ModuleData, instance ModuleInstance) STR {
 	if d == nil || d.moduleStmt == nil {
 		return 0
 	}
@@ -131,10 +132,6 @@ func cfgVarValue(v string) string {
 	return v
 }
 
-var (
-	configureFilePyPath = configureFilePyVFS.String()
-)
-
 const buildTypeDebug = "BUILD_TYPE=DEBUG"
 
 func EmitCF(
@@ -145,7 +142,7 @@ func EmitCF(
 	includeInputs []VFS,
 	moduleDir string,
 	moduleTag STR,
-	tc moduleToolchain,
+	tc ModuleToolchain,
 	emit Emitter,
 ) (NodeRef, VFS) {
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -162,12 +159,12 @@ func EmitCF(
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: argChunks{cmdArgs},
+				CmdArgs: ArgChunks{cmdArgs},
 				Env:     env,
 			},
 		},
 		Env:     env,
-		Inputs:  inputChunks{{configureFilePyVFS}, includeInputs},
+		Inputs:  InputChunks{{configureFilePyVFS}, includeInputs},
 		KV:      KV{P: pkCF, PC: pcYellow},
 		Outputs: []VFS{outVFS},
 		TargetProperties: func() TargetProperties {
@@ -184,5 +181,5 @@ func EmitCF(
 		usesResources: []string{resourcePatternYMakePython3},
 	}
 
-	return emit.Emit(node), outVFS
+	return emit.emit(node), outVFS
 }

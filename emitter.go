@@ -4,25 +4,25 @@ import (
 	"container/heap"
 )
 
-type intHeap []int
+type IntHeap []int
 
-func (h intHeap) Len() int {
+func (h IntHeap) Len() int {
 	return len(h)
 }
 
-func (h intHeap) Less(i, j int) bool {
+func (h IntHeap) Less(i, j int) bool {
 	return h[i] < h[j]
 }
 
-func (h intHeap) Swap(i, j int) {
+func (h IntHeap) Swap(i, j int) {
 	h[i], h[j] = h[j], h[i]
 }
 
-func (h *intHeap) Push(x interface{}) {
+func (h *IntHeap) Push(x interface{}) {
 	*h = append(*h, x.(int))
 }
 
-func (h *intHeap) Pop() interface{} {
+func (h *IntHeap) Pop() interface{} {
 	old := *h
 	n := len(old)
 	x := old[n-1]
@@ -37,9 +37,9 @@ func (h *intHeap) Pop() interface{} {
 type NodeRef uint32
 
 type Emitter interface {
-	Emit(n *Node) NodeRef
-	Result(NodeRef)
-	OnReady(NodeRef) <-chan struct{}
+	emit(n *Node) NodeRef
+	result(NodeRef)
+	onReady(NodeRef) <-chan struct{}
 }
 
 type BufferedEmitter struct {
@@ -66,11 +66,11 @@ func NewBufferedEmitter() *BufferedEmitter {
 	}
 }
 
-func (e *BufferedEmitter) OnReady(_ NodeRef) <-chan struct{} {
+func (e *BufferedEmitter) onReady(_ NodeRef) <-chan struct{} {
 	return e.readyCh
 }
 
-func (e *BufferedEmitter) Emit(n *Node) NodeRef {
+func (e *BufferedEmitter) emit(n *Node) NodeRef {
 	if e.finalized {
 		panic("BufferedEmitter.Emit called after Finalize")
 	}
@@ -80,7 +80,7 @@ func (e *BufferedEmitter) Emit(n *Node) NodeRef {
 	return id
 }
 
-func (e *BufferedEmitter) Result(r NodeRef) {
+func (e *BufferedEmitter) result(r NodeRef) {
 	if e.finalized {
 		panic("BufferedEmitter.Result called after Finalize")
 	}
@@ -95,10 +95,10 @@ type Graph struct {
 
 	// uids resolves each node's DepRefs/ForeignDepRefs (by id) to dep uids at
 	// JSON-write time; deps are never materialized onto the node.
-	uids *uidVec `json:"-"`
+	uids *UidVec `json:"-"`
 }
 
-func finalizeNodesInOrder(e *BufferedEmitter, order []int, yield func(*Node)) *uidVec {
+func finalizeNodesInOrder(e *BufferedEmitter, order []int, yield func(*Node)) *UidVec {
 	if e.finalized {
 		ThrowFmt("finalize: emitter already finalized")
 	}
@@ -109,8 +109,8 @@ func finalizeNodesInOrder(e *BufferedEmitter, order []int, yield func(*Node)) *u
 		ThrowFmt("finalize: order length %d does not match buffer size %d", len(order), n)
 	}
 
-	uids := &uidVec{}
-	uidScratch := canonBuf{fs: e.fs, uids: uids}
+	uids := &UidVec{}
+	uidScratch := CanonBuf{fs: e.fs, uids: uids}
 
 	for _, i := range order {
 		node := e.nodes[i]
@@ -189,7 +189,7 @@ func finalizeOrder(e *BufferedEmitter) []int {
 		}
 	}
 
-	queue := make(intHeap, 0, n)
+	queue := make(IntHeap, 0, n)
 
 	for i := 0; i < n; i++ {
 		if indeg[i] == 0 {
@@ -227,7 +227,7 @@ func finalizeOrder(e *BufferedEmitter) []int {
 	return order
 }
 
-func finalizeNodes(e *BufferedEmitter, yield func(*Node)) *uidVec {
+func finalizeNodes(e *BufferedEmitter, yield func(*Node)) *UidVec {
 	return finalizeNodesInOrder(e, finalizeOrder(e), yield)
 }
 
@@ -237,7 +237,7 @@ func finalizeNodes(e *BufferedEmitter, yield func(*Node)) *uidVec {
 // (the JSON writer and the executor) do the same direct id->uid lookup. DepRefs
 // are kept on the node for that purpose. All of a node's deps are resolved before
 // it reaches here, so uids.get(dep) is valid.
-func resolveAndUID(node *Node, uids *uidVec, uidScratch *canonBuf) UID {
+func resolveAndUID(node *Node, uids *UidVec, uidScratch *CanonBuf) UID {
 	node.Sandboxing = true
 
 	// A node may arrive with a pre-stamped uid: resource FETCH nodes hash their URI
@@ -260,27 +260,27 @@ func resolveAndUID(node *Node, uids *uidVec, uidScratch *canonBuf) UID {
 
 type StreamingEmitter struct {
 	nodes      []*Node
-	uids       *uidVec
+	uids       *UidVec
 	resolved   BitSet // resolved.has(id): uids has the computed uid for id (gen-goroutine only)
 	pendingIdx []NodeRef
 	pendingSet map[NodeRef]bool
 	results    []NodeRef
-	onNode     func(*Node, *uidVec)
+	onNode     func(*Node, *UidVec)
 	finalized  bool
 	readyCh    chan struct{}
-	uidScratch canonBuf
+	uidScratch CanonBuf
 }
 
-func NewStreamingEmitter(onNode func(*Node, *uidVec)) *StreamingEmitter {
+func NewStreamingEmitter(onNode func(*Node, *UidVec)) *StreamingEmitter {
 	return &StreamingEmitter{
-		uids:       &uidVec{},
+		uids:       &UidVec{},
 		pendingSet: map[NodeRef]bool{},
 		onNode:     onNode,
 		readyCh:    make(chan struct{}),
 	}
 }
 
-func (e *StreamingEmitter) Emit(n *Node) NodeRef {
+func (e *StreamingEmitter) emit(n *Node) NodeRef {
 	if e.finalized {
 		panic("StreamingEmitter.Emit called after Finish")
 	}
@@ -320,7 +320,7 @@ func (e *StreamingEmitter) hasUnresolvedDeps(n *Node) bool {
 	return false
 }
 
-func (e *StreamingEmitter) Result(r NodeRef) {
+func (e *StreamingEmitter) result(r NodeRef) {
 	if e.finalized {
 		panic("StreamingEmitter.Result called after Finish")
 	}
@@ -328,11 +328,11 @@ func (e *StreamingEmitter) Result(r NodeRef) {
 	e.results = append(e.results, r)
 }
 
-func (e *StreamingEmitter) OnReady(_ NodeRef) <-chan struct{} {
+func (e *StreamingEmitter) onReady(_ NodeRef) <-chan struct{} {
 	return e.readyCh
 }
 
-func (e *StreamingEmitter) Finish() []UID {
+func (e *StreamingEmitter) finish() []UID {
 	if e.finalized {
 		panic("StreamingEmitter.Finish called twice")
 	}
@@ -367,7 +367,7 @@ func (e *StreamingEmitter) Finish() []UID {
 	return results
 }
 
-func graphFromFinalizedEmitter(e *BufferedEmitter, uids *uidVec) *Graph {
+func graphFromFinalizedEmitter(e *BufferedEmitter, uids *UidVec) *Graph {
 	n := len(e.nodes)
 
 	out := &Graph{

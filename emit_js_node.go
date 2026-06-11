@@ -1,9 +1,9 @@
 package main
 
-func EmitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, tc moduleToolchain, scripts scriptDeps, emit Emitter) (NodeRef, VFS) {
+func EmitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, tc ModuleToolchain, scripts ScriptDeps, emit Emitter) (NodeRef, VFS) {
 	joinSrcs := buildScriptsGenJoinSrcsPy
 
-	outVFS := Build(instance.Path.Rel() + "/" + allName)
+	outVFS := Build(instance.Path.rel() + "/" + allName)
 
 	statsPlatform := instance.Platform
 
@@ -20,7 +20,7 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 	)
 
 	for _, s := range sources {
-		cmdArgs = append(cmdArgs, internStr(instance.Path.Rel()+"/"+s))
+		cmdArgs = append(cmdArgs, internStr(instance.Path.rel()+"/"+s))
 	}
 
 	cmdArgs = append(cmdArgs, argYaEndCommandFile.str())
@@ -30,17 +30,17 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 	srcVFSs := make([]VFS, 0, len(sources))
 
 	for _, s := range sources {
-		srcVFSs = append(srcVFSs, Source(instance.Path.Rel()+"/"+s))
+		srcVFSs = append(srcVFSs, Source(instance.Path.rel()+"/"+s))
 	}
 
 	// Chunked: the join closure (a shared cached slice) is referenced, not copied.
-	inputs := inputChunks{scripts[joinSrcs], srcVFSs, closure}
+	inputs := InputChunks{scripts[joinSrcs], srcVFSs, closure}
 
 	node := &Node{
 		Platform: statsPlatform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: argChunks{cmdArgs},
+				CmdArgs: ArgChunks{cmdArgs},
 				Env:     env,
 			},
 		},
@@ -49,9 +49,9 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 		KV:               KV{P: pkJS, PC: pcMagenta},
 		Outputs:          []VFS{outVFS},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		usesResources:    []string{resourcePatternYMakePython3},
 	}
 
-	return emit.Emit(node), outVFS
+	return emit.emit(node), outVFS
 }

@@ -26,11 +26,11 @@ const gzZstdRule = "debug_info_flags.append('-gz=zstd')"
 // -gz=zstd to the debug-info flags. The conf is an optional file at the source-root
 // boundary (a minimal repo or test tree may lack it), so absence means "no rule".
 func confCompressesDebug(fs FS) bool {
-	if !fs.IsFile(srcRootVFS, "build/ymake_conf.py") {
+	if !fs.isFile(srcRootVFS, "build/ymake_conf.py") {
 		return false
 	}
 
-	return bytes.Contains(fs.Read("build/ymake_conf.py"), []byte(gzZstdRule))
+	return bytes.Contains(fs.read("build/ymake_conf.py"), []byte(gzZstdRule))
 }
 
 type Platform struct {
@@ -386,7 +386,7 @@ func (p *Platform) multiarchLibPath(opensource bool) string {
 	return "$(B)/resources/" + resourcePatternClangTool + p.ClangVer + "/lib:" + sdkLib
 }
 
-func (p *Platform) ToolEnv() EnvVars {
+func (p *Platform) toolEnv() EnvVars {
 	return EnvVars{
 		{Name: envARCADIA_ROOT_DISTBUILD, Value: strS},
 		{Name: envDYLD_LIBRARY_PATH, Value: p.MultiarchLibPathSTR},
@@ -396,18 +396,18 @@ func (p *Platform) ToolEnv() EnvVars {
 	}
 }
 
-func (p *Platform) LinkerSelectionGDBIndexFlags() []string {
+func (p *Platform) linkerSelectionGDBIndexFlags() []string {
 	return []string{"-Wl,--gdb-index"}
 }
 
-func (p *Platform) LinkerSelectionTailFlags() []string {
+func (p *Platform) linkerSelectionTailFlags() []string {
 	// The lld linker flags (-fuse-ld=lld, --ld-path, -Wl,--no-rosegment,
 	// -Wl,--build-id=sha1) now come from build/platform/lld's propagated
 	// LDFLAGS_GLOBAL via the implicit toolchain peer, not from the Platform.
 	return nil
 }
 
-func (p *Platform) LinkerSelectionNoPieFlags() []string {
+func (p *Platform) linkerSelectionNoPieFlags() []string {
 	if p.PIC {
 		return nil
 	}
@@ -415,7 +415,7 @@ func (p *Platform) LinkerSelectionNoPieFlags() []string {
 	return []string{"-Wl,-no-pie"}
 }
 
-func (p *Platform) ObjectSuffix() string {
+func (p *Platform) objectSuffix() string {
 	if p.PIC {
 		return ".pic.o"
 	}

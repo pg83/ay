@@ -45,7 +45,7 @@ func prebuiltToolchainFlags() map[string]string {
 func readYaConfSection(fs FS, rel, wantSection string) map[string]string {
 	var root map[string]any
 
-	if _, err := toml.Decode(string(fs.Read(rel)), &root); err != nil {
+	if _, err := toml.Decode(string(fs.read(rel)), &root); err != nil {
 		ThrowFmt("ya.conf %s: %v", rel, err)
 	}
 

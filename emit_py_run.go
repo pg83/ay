@@ -4,13 +4,13 @@ import (
 	"strings"
 )
 
-func emitRunPythonForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) *runProgramsForARResult {
+func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) *RunProgramsForARResult {
 	if len(d.runPython) == 0 {
 		return nil
 	}
 
 	reg := codegenRegForInstance(ctx, instance)
-	res := &runProgramsForARResult{}
+	res := &RunProgramsForARResult{}
 
 	for _, rp := range d.runPython {
 		pyRef := emitRunPython(ctx, instance, rp, d, reg, in)
@@ -52,8 +52,8 @@ func emitRunPythonForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, in 
 	return res
 }
 
-func emitRunPython(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d *moduleData, reg *CodegenRegistry, moduleInputs ModuleCCInputs) NodeRef {
-	scriptVFS := copyFileInputVFS(ctx.fs, instance.Path.Rel(), stmt.ScriptPath)
+func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d *ModuleData, reg *CodegenRegistry, moduleInputs ModuleCCInputs) NodeRef {
+	scriptVFS := copyFileInputVFS(ctx.fs, instance.Path.rel(), stmt.ScriptPath)
 	inVFSByToken := make(map[string]VFS, len(stmt.INFiles))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
 
@@ -66,17 +66,17 @@ func emitRunPython(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	outVFSByToken := make(map[string]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
 
 	for _, f := range stmt.OUTFiles {
-		outVFSByToken[f] = copyFileOutputVFS(instance.Path.Rel(), f)
+		outVFSByToken[f] = copyFileOutputVFS(instance.Path.rel(), f)
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		outVFSByToken[f] = copyFileOutputVFS(instance.Path.Rel(), f)
+		outVFSByToken[f] = copyFileOutputVFS(instance.Path.rel(), f)
 	}
 
 	var stdoutVFS *VFS
 
 	if stmt.StdoutFile != nil {
-		vfs := copyFileOutputVFS(instance.Path.Rel(), *stmt.StdoutFile)
+		vfs := copyFileOutputVFS(instance.Path.rel(), *stmt.StdoutFile)
 		stdoutVFS = &vfs
 		outVFSByToken[*stmt.StdoutFile] = vfs
 	}
@@ -109,7 +109,7 @@ func emitRunPython(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	result := EmitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, moduleInputs.TC, ctx.emit)
 
 	if d.prOutputInputs == nil {
-		d.prOutputInputs = map[string]inputChunks{}
+		d.prOutputInputs = map[string]InputChunks{}
 	}
 
 	// result.Inputs shares the PY node's chunk list; nothing mutates it after
@@ -144,7 +144,7 @@ func emitRunPython(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	return result.Ref
 }
 
-func pyInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d *moduleData, moduleInputs ModuleCCInputs) []VFS {
+func pyInputClosure(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d *ModuleData, moduleInputs ModuleCCInputs) []VFS {
 	scanIn := ModuleCCInputs{
 		TC:                d.tc,
 		InclArgs:          ctx.inclArgs,
@@ -158,7 +158,7 @@ func pyInputClosure(ctx *genCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 
 	var out []VFS
 	walkOne := func(rel string) {
-		buildRootPath := copyFileOutputVFS(instance.Path.Rel(), rel)
+		buildRootPath := copyFileOutputVFS(instance.Path.rel(), rel)
 		out = append(out, walkClosureTail(ctx, instance, buildRootPath, scanIn)...)
 	}
 
@@ -242,13 +242,13 @@ func splitCodegenDetect(stmt *RunPythonStmt) (hasCCShard bool, hasHeader bool) {
 // context.  The pyInputClosure function (for the PY node) is now
 // responsible for walking pb.h directly so closureOf(arena.h) etc. are
 // cached with the full scan context BEFORE emitOneSource uses them.
-func splitCodegenSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *RunPythonStmt, scriptVFS VFS) []VFS {
+func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *RunPythonStmt, scriptVFS VFS) []VFS {
 	reg := codegenRegForInstance(ctx, instance)
 	scanner := ctx.scannerFor(instance)
 	seen := make(map[VFS]struct{}, 32)
 	var sources []VFS
 	addSource := func(v VFS) {
-		if !v.IsSource() {
+		if !v.isSource() {
 			return
 		}
 
@@ -260,13 +260,13 @@ func splitCodegenSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt 
 		sources = append(sources, v)
 	}
 
-	addInducedSources := func(deps []includeDirective) {
+	addInducedSources := func(deps []IncludeDirective) {
 		for _, d := range deps {
 			// INDUCED_DEPS targets arrive rooted ($(S)/... — the reserved
 			// ${ARCADIA_ROOT}-family spellings); the STR already backs the
 			// full path, so the binding is a shift.
 			if v := d.target.vfs(); v != 0 {
-				if v.IsSource() && ctx.fs.IsFile(srcRootVFS, v.Rel()) {
+				if v.isSource() && ctx.fs.isFile(srcRootVFS, v.rel()) {
 					addSource(v)
 				}
 
@@ -275,7 +275,7 @@ func splitCodegenSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt 
 
 			target := d.target.String()
 
-			if ctx.fs.IsFile(srcRootVFS, target) {
+			if ctx.fs.isFile(srcRootVFS, target) {
 				addSource(Source(target))
 			}
 		}
@@ -290,7 +290,7 @@ func splitCodegenSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt 
 	for _, f := range stmt.INFiles {
 		vfs := runProgramInputVFS(ctx, instance, d, f)
 
-		if vfs.IsSource() {
+		if vfs.isSource() {
 			addSource(vfs)
 			continue
 		}
@@ -301,8 +301,8 @@ func splitCodegenSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt 
 			if vfsHasPrefix(target) {
 				bvfs := Intern(target)
 
-				if bvfs.IsBuild() && reg != nil {
-					if info := reg.Lookup(bvfs); info != nil {
+				if bvfs.isBuild() && reg != nil {
+					if info := reg.lookup(bvfs); info != nil {
 						for _, si := range info.SourceInputs {
 							addSource(si)
 						}
@@ -312,10 +312,10 @@ func splitCodegenSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt 
 				continue
 			}
 
-			if ctx.fs.IsFile(srcRootVFS, target) {
+			if ctx.fs.isFile(srcRootVFS, target) {
 				addSource(Source(target))
 			} else if reg != nil {
-				if info := reg.LookupRel(target); info != nil {
+				if info := reg.lookupRel(target); info != nil {
 					for _, si := range info.SourceInputs {
 						addSource(si)
 					}
@@ -329,9 +329,9 @@ func splitCodegenSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt 
 		// resolveInducedDeps. Shards are translation units, so take the Cpp bucket
 		// (which holds both the cpp-only and the h+cpp induced groups).
 		if reg != nil {
-			if info := reg.Lookup(vfs); info != nil {
+			if info := reg.lookup(vfs); info != nil {
 				for _, gref := range info.GeneratorRefs {
-					if tool, ok := ctx.moduleByRef.Get(gref); ok {
+					if tool, ok := ctx.moduleByRef.get(gref); ok {
 						addInducedSources(tool.InducedDeps.bucket(parsedIncludesCpp))
 					}
 				}
@@ -358,7 +358,7 @@ func splitCodegenSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt 
 //     as a meta-include so consumers carry it in their input closure; then
 //     splitSrcs for the actual include chain.  Only the first shard is
 //     registered — the others are linked via the AR dep edge.
-func pyEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *RunPythonStmt, outFile string, scriptVFS VFS, splitSrcs []VFS, splitHasCCShard bool) []includeDirective {
+func pyEmitsIncludes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *RunPythonStmt, outFile string, scriptVFS VFS, splitSrcs []VFS, splitHasCCShard bool) []IncludeDirective {
 	if !generatedOutputCarriesIncludes(outFile) {
 		return nil
 	}
@@ -371,7 +371,7 @@ func pyEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *
 		for _, f := range stmt.OUTNoAutoFiles {
 			if isCCSourceExt(f) {
 				firstShardFile = f
-				firstShardVFS = copyFileOutputVFS(instance.Path.Rel(), f)
+				firstShardVFS = copyFileOutputVFS(instance.Path.rel(), f)
 				break
 			}
 		}
@@ -388,14 +388,14 @@ func pyEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *
 				capacity++
 			}
 
-			includes := make([]includeDirective, 0, capacity)
+			includes := make([]IncludeDirective, 0, capacity)
 
 			if isNonFirst && firstShardVFS != 0 {
-				includes = append(includes, includeDirective{kind: includeQuoted, target: internStr(firstShardVFS.Rel())})
+				includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(firstShardVFS.rel())})
 			}
 
 			for _, src := range splitSrcs {
-				includes = append(includes, includeDirective{kind: includeQuoted, target: internStr(src.Rel())})
+				includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(src.rel())})
 			}
 
 			return includes
@@ -404,32 +404,32 @@ func pyEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *
 		if isHeaderSource(outFile) {
 			// First shard CC as meta-include so downstream consumers of pb.main.h
 			// carry code0.cc in their include-input closure.
-			includes := make([]includeDirective, 0, 1+len(splitSrcs))
+			includes := make([]IncludeDirective, 0, 1+len(splitSrcs))
 
 			if firstShardVFS != 0 {
-				includes = append(includes, includeDirective{kind: includeQuoted, target: internStr(firstShardVFS.Rel())})
+				includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(firstShardVFS.rel())})
 			}
 
 			for _, src := range splitSrcs {
-				includes = append(includes, includeDirective{kind: includeQuoted, target: internStr(src.Rel())})
+				includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(src.rel())})
 			}
 
 			return includes
 		}
 	}
 
-	includes := []includeDirective{{kind: includeQuoted, target: internStr(scriptVFS.Rel())}}
+	includes := []IncludeDirective{{kind: includeQuoted, target: internStr(scriptVFS.rel())}}
 
 	for _, f := range stmt.INFiles {
-		includes = append(includes, includeDirective{kind: includeQuoted, target: internStr(runProgramInputVFS(ctx, instance, d, f).Rel())})
+		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(runProgramInputVFS(ctx, instance, d, f).rel())})
 	}
 
 	for _, f := range stmt.OutputIncludes {
 		if vfsHasPrefix(f) {
-			f = Intern(f).Rel()
+			f = Intern(f).rel()
 		}
 
-		includes = append(includes, includeDirective{kind: includeQuoted, target: internStr(f)})
+		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(f)})
 	}
 
 	return includes
@@ -444,9 +444,9 @@ func EmitPYRun(
 	stdoutVFS *VFS,
 	inputClosure []VFS,
 	extraDepRefs []NodeRef,
-	tc moduleToolchain,
+	tc ModuleToolchain,
 	emit Emitter,
-) prEmitResult {
+) PrEmitResult {
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	for _, kv := range stmt.EnvPairs {
@@ -465,10 +465,10 @@ func EmitPYRun(
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
 		a = strings.ReplaceAll(a, "${ARCADIA_BUILD_ROOT}", "$(B)")
 		a = strings.ReplaceAll(a, "${CURDIR}", instance.Path.String())
-		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path.Rel()).String())
-		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path.Rel())
+		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path.rel()).String())
+		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path.rel())
 		a = strings.ReplaceAll(a, "$CURDIR", instance.Path.String())
-		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path.Rel()).String())
+		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path.rel()).String())
 
 		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = vfs.String()
@@ -497,7 +497,7 @@ func EmitPYRun(
 	// The closure tail is filtered against the head set; filterSeen returns
 	// inputClosure itself when nothing collides, so the closure is referenced,
 	// not copied, into the chunk list.
-	inputs := inputChunks{head, deduper.filterSeen(inputClosure)}
+	inputs := InputChunks{head, deduper.filterSeen(inputClosure)}
 
 	var outputs []VFS
 	var stdoutPath STR
@@ -515,7 +515,7 @@ func EmitPYRun(
 		outputs = append(outputs, outVFSByToken[f])
 	}
 
-	cmd := Cmd{CmdArgs: argChunks{cmdArgs}, Env: env}
+	cmd := Cmd{CmdArgs: ArgChunks{cmdArgs}, Env: env}
 
 	if stdoutPath != 0 {
 		cmd.Stdout = stdoutPath
@@ -532,7 +532,7 @@ func EmitPYRun(
 		Inputs:           inputs,
 		KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 		Outputs:          outputs,
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          extraDepRefs,
 		usesResources:    []string{resourcePatternYMakePython3},
@@ -540,8 +540,8 @@ func EmitPYRun(
 
 	// The node and the result share the same chunk list: nothing mutates a
 	// node's Inputs after Emit, and prOutputInputs readers copy out.
-	return prEmitResult{
-		Ref:    emit.Emit(node),
+	return PrEmitResult{
+		Ref:    emit.emit(node),
 		Inputs: inputs,
 	}
 }

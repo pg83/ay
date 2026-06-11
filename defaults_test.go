@@ -23,7 +23,7 @@ func TestDefaultProgramPeerdirsForWithState_X8664GetsTcmallocDefault(t *testing.
 		Platform: newAllocatorDefaultTestPlatform(OSLinux, ISAX8664),
 	}
 
-	got := defaultProgramPeerdirsForWithState(nil, instance, &moduleData{}, false)
+	got := defaultProgramPeerdirsForWithState(nil, instance, &ModuleData{}, false)
 	want := []string{
 		"build/cow/on",
 		"library/cpp/malloc/tcmalloc",
@@ -43,7 +43,7 @@ func TestDefaultProgramPeerdirsForWithState_AArch64SkipsTcmallocDefault(t *testi
 		Platform: newAllocatorDefaultTestPlatform(OSLinux, ISAAArch64),
 	}
 
-	got := defaultProgramPeerdirsForWithState(nil, instance, &moduleData{}, false)
+	got := defaultProgramPeerdirsForWithState(nil, instance, &ModuleData{}, false)
 	want := []string{"build/cow/on"}
 
 	if !reflect.DeepEqual(got, want) {

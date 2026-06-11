@@ -130,31 +130,31 @@ func spillChunks(in io.Reader, chunkBytes int, tmpDir string) []string {
 	return chunks
 }
 
-type mergeItem struct {
+type MergeItem struct {
 	line   string
 	reader *bufio.Reader
 	closer io.Closer
 }
 
-type mergeHeap []*mergeItem
+type MergeHeap []*MergeItem
 
-func (h mergeHeap) Len() int {
+func (h MergeHeap) Len() int {
 	return len(h)
 }
 
-func (h mergeHeap) Less(i, j int) bool {
+func (h MergeHeap) Less(i, j int) bool {
 	return h[i].line < h[j].line
 }
 
-func (h mergeHeap) Swap(i, j int) {
+func (h MergeHeap) Swap(i, j int) {
 	h[i], h[j] = h[j], h[i]
 }
 
-func (h *mergeHeap) Push(x any) {
-	*h = append(*h, x.(*mergeItem))
+func (h *MergeHeap) Push(x any) {
+	*h = append(*h, x.(*MergeItem))
 }
 
-func (h *mergeHeap) Pop() any {
+func (h *MergeHeap) Pop() any {
 	old := *h
 	n := len(old)
 	it := old[n-1]
@@ -167,7 +167,7 @@ func mergeChunks(chunks []string, out io.Writer) {
 
 	defer func() { Throw(bw.Flush()) }()
 
-	h := &mergeHeap{}
+	h := &MergeHeap{}
 	heap.Init(h)
 
 	for _, path := range chunks {
@@ -184,11 +184,11 @@ func mergeChunks(chunks []string, out io.Writer) {
 			continue
 		}
 
-		heap.Push(h, &mergeItem{line: line, reader: r, closer: f})
+		heap.Push(h, &MergeItem{line: line, reader: r, closer: f})
 	}
 
 	for h.Len() > 0 {
-		it := heap.Pop(h).(*mergeItem)
+		it := heap.Pop(h).(*MergeItem)
 		Throw2(bw.WriteString(it.line))
 
 		next, err := it.reader.ReadString('\n')

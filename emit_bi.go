@@ -10,10 +10,10 @@ func EmitBI(
 	instance ModuleInstance,
 	outputHeader string,
 	cxxFlags []STR,
-	tc moduleToolchain,
+	tc ModuleToolchain,
 	emit Emitter,
 ) NodeRef {
-	outPrefix := instance.Path.Rel() + "/"
+	outPrefix := instance.Path.rel() + "/"
 	argsFileVFS := Build(outPrefix + "__args")
 	outVFS := Build(outPrefix + outputHeader)
 	argsFile := argsFileVFS.String()
@@ -58,21 +58,21 @@ func EmitBI(
 		Platform: instance.Platform,
 		Cache:    &cacheFalse,
 		Cmds: []Cmd{
-			{CmdArgs: argChunks{cmd0Args}, Env: env},
-			{CmdArgs: argChunks{cmd1Args}, Env: env},
-			{CmdArgs: argChunks{cmd2Args}, Env: env},
+			{CmdArgs: ArgChunks{cmd0Args}, Env: env},
+			{CmdArgs: ArgChunks{cmd1Args}, Env: env},
+			{CmdArgs: ArgChunks{cmd2Args}, Env: env},
 		},
 		Env:              env,
-		Inputs:           inputChunks{inputs},
+		Inputs:           InputChunks{inputs},
 		KV:               KV{P: pkBI, PC: pcYellow, ShowOut: true, DisableCache: "yes"},
 		Outputs:          []VFS{outVFS},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          []NodeRef{},
 		usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
 	}
 
-	return emit.Emit(node)
+	return emit.emit(node)
 }
 
 func biFlagsForInstance(targetP *Platform) []STR {

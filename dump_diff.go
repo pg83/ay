@@ -10,9 +10,9 @@ import (
 	"strings"
 )
 
-type diffFieldHashes [10]uint64
+type DiffFieldHashes [10]uint64
 
-type diffKindRec struct {
+type DiffKindRec struct {
 	kind string
 	h    [10]uint64
 }
@@ -191,9 +191,9 @@ func scanOutputKind(path string) map[string]string {
 }
 
 func diffByField(leftPath, rightPath string, bw *bufio.Writer) {
-	rExact := map[string]diffFieldHashes{}
-	rAxis := map[string]diffFieldHashes{}
-	ridx := map[string]diffFieldHashes{}
+	rExact := map[string]DiffFieldHashes{}
+	rAxis := map[string]DiffFieldHashes{}
+	ridx := map[string]DiffFieldHashes{}
 	streamJSONL(rightPath, func(n map[string]any) {
 		h := nodeFieldHashes(n)
 
@@ -206,7 +206,7 @@ func diffByField(leftPath, rightPath string, bw *bufio.Writer) {
 	combo := map[string]int{}
 	both := 0
 	streamJSONL(leftPath, func(n map[string]any) {
-		var rh diffFieldHashes
+		var rh DiffFieldHashes
 		found := false
 
 		if rh, found = findDumpDiffFieldMatch(rExact, rAxis, ridx, n); !found {
@@ -258,7 +258,7 @@ func diffByField(leftPath, rightPath string, bw *bufio.Writer) {
 }
 
 func nodeFieldHashes(n map[string]any) [10]uint64 {
-	var h diffFieldHashes
+	var h DiffFieldHashes
 
 	for i, f := range dumpContentFields {
 		h[i] = fnvHash(marshalCompact(n[f]))
@@ -422,11 +422,11 @@ func tokenCategory(t string) string {
 }
 
 func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
-	rExact := map[string]diffKindRec{}
-	rAxis := map[string]diffKindRec{}
-	ridx := map[string]diffKindRec{}
+	rExact := map[string]DiffKindRec{}
+	rAxis := map[string]DiffKindRec{}
+	ridx := map[string]DiffKindRec{}
 	streamJSONL(rightPath, func(n map[string]any) {
-		rr := diffKindRec{kind: nodeKVP(n), h: nodeFieldHashes(n)}
+		rr := DiffKindRec{kind: nodeKVP(n), h: nodeFieldHashes(n)}
 
 		for _, o := range toStrings(n["outputs"]) {
 			setDumpDiffKindMatch(rExact, rAxis, ridx, o, n, rr)
@@ -437,7 +437,7 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 	fieldDiff := map[string][]int{}
 	combo := map[string]map[string]int{}
 	streamJSONL(leftPath, func(n map[string]any) {
-		var rr diffKindRec
+		var rr DiffKindRec
 		found := false
 
 		if rr, found = findDumpDiffKindMatch(rExact, rAxis, ridx, n); !found {
@@ -758,7 +758,7 @@ func dumpDiffAxisOutputKey(output string, n map[string]any) string {
 	return output + "\x00" + dumpDiffNodeMatchKey(n, false)
 }
 
-func setDumpDiffFieldMatch(exact, axis, any map[string]diffFieldHashes, output string, n map[string]any, h diffFieldHashes) {
+func setDumpDiffFieldMatch(exact, axis, any map[string]DiffFieldHashes, output string, n map[string]any, h DiffFieldHashes) {
 	if _, ok := exact[dumpDiffExactOutputKey(output, n)]; !ok {
 		exact[dumpDiffExactOutputKey(output, n)] = h
 	}
@@ -772,7 +772,7 @@ func setDumpDiffFieldMatch(exact, axis, any map[string]diffFieldHashes, output s
 	}
 }
 
-func findDumpDiffFieldMatch(exact, axis, any map[string]diffFieldHashes, n map[string]any) (diffFieldHashes, bool) {
+func findDumpDiffFieldMatch(exact, axis, any map[string]DiffFieldHashes, n map[string]any) (DiffFieldHashes, bool) {
 	for _, output := range toStrings(n["outputs"]) {
 		if h, ok := exact[dumpDiffExactOutputKey(output, n)]; ok {
 			return h, true
@@ -791,7 +791,7 @@ func findDumpDiffFieldMatch(exact, axis, any map[string]diffFieldHashes, n map[s
 		}
 	}
 
-	return diffFieldHashes{}, false
+	return DiffFieldHashes{}, false
 }
 
 func setDumpDiffTokenMatch(exact, axis, any map[string]map[string][]string, output string, n map[string]any, rec map[string][]string) {
@@ -830,7 +830,7 @@ func findDumpDiffTokenMatch(exact, axis, any map[string]map[string][]string, n m
 	return nil, false
 }
 
-func setDumpDiffKindMatch(exact, axis, any map[string]diffKindRec, output string, n map[string]any, rec diffKindRec) {
+func setDumpDiffKindMatch(exact, axis, any map[string]DiffKindRec, output string, n map[string]any, rec DiffKindRec) {
 	if _, ok := exact[dumpDiffExactOutputKey(output, n)]; !ok {
 		exact[dumpDiffExactOutputKey(output, n)] = rec
 	}
@@ -844,7 +844,7 @@ func setDumpDiffKindMatch(exact, axis, any map[string]diffKindRec, output string
 	}
 }
 
-func findDumpDiffKindMatch(exact, axis, any map[string]diffKindRec, n map[string]any) (diffKindRec, bool) {
+func findDumpDiffKindMatch(exact, axis, any map[string]DiffKindRec, n map[string]any) (DiffKindRec, bool) {
 	for _, output := range toStrings(n["outputs"]) {
 		if rec, ok := exact[dumpDiffExactOutputKey(output, n)]; ok {
 			return rec, true
@@ -863,7 +863,7 @@ func findDumpDiffKindMatch(exact, axis, any map[string]diffKindRec, n map[string
 		}
 	}
 
-	return diffKindRec{}, false
+	return DiffKindRec{}, false
 }
 
 func setDumpDiffSelfMatch(exact, axis, any map[string]string, output string, n map[string]any, selfUID string) {

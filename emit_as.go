@@ -4,41 +4,50 @@ import (
 	"strings"
 )
 
+var yasmBinaryPath = yasmBinaryVFS.String()
+
+// yasmConstHead is the constant [yasm -f elf64 -D UNIX …replace…] lead of
+// every yasm invocation (the AS-yasm and rodata nodes share it).
+var yasmConstHead = []STR{
+	internStr(yasmBinaryPath),
+	argF.str(), argElf64.str(),
+	argD.str(), argUnix.str(),
+	argReplaceBB.str(),
+	argReplaceSS.str(),
+	argReplaceToolRootT.str(),
+}
+
 func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS) {
 	outVFS, inVFS := composeASPaths(instance, srcRel, srcVFS, in)
 
 	cmdArgs := composeASCmdArgs(instance, outVFS, inVFS, in)
-	env := hostP.ToolEnv()
+	env := hostP.toolEnv()
 
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: argChunks{cmdArgs},
+				CmdArgs: ArgChunks{cmdArgs},
 				Cwd:     strB,
 				Env:     env,
 			},
 		},
 		Env:              env,
-		Inputs:           inputChunks{in.IncludeInputs},
+		Inputs:           InputChunks{in.IncludeInputs},
 		Outputs:          []VFS{outVFS},
 		KV:               KV{P: pkAS, PC: pcLightGreen},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		usesResources:    []string{resourcePatternClangTool + instance.Platform.ClangVer},
 	}
 
-	return emit.Emit(node), outVFS
+	return emit.emit(node), outVFS
 }
 
-var (
-	yasmBinaryPath = yasmBinaryVFS.String()
-)
-
 func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs) (out, input VFS) {
-	if srcVFS.IsSource() && srcVFS.Rel() != instance.Path.Rel()+"/"+srcRel {
-		outputRel := composeSrcDirOutputRel(instance.Path.Rel(), srcVFS.Rel())
-		return Build(instance.Path.Rel() + "/" + outputRel + ".o"), srcVFS
+	if srcVFS.isSource() && srcVFS.rel() != instance.Path.rel()+"/"+srcRel {
+		outputRel := composeSrcDirOutputRel(instance.Path.rel(), srcVFS.rel())
+		return Build(instance.Path.rel() + "/" + outputRel + ".o"), srcVFS
 	}
 
 	var outRel string
@@ -49,9 +58,9 @@ func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	}
 
 	if strings.Contains(srcRel, "/") {
-		outRel = instance.Path.Rel() + "/_/" + outName
+		outRel = instance.Path.rel() + "/_/" + outName
 	} else {
-		outRel = instance.Path.Rel() + "/" + outName
+		outRel = instance.Path.rel() + "/" + outName
 	}
 
 	return Build(outRel), srcVFS
@@ -106,9 +115,9 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	var outVFS VFS
 
 	if strings.Contains(srcRel, "/") {
-		outVFS = Build(instance.Path.Rel() + "/_/" + stem + suffix)
+		outVFS = Build(instance.Path.rel() + "/_/" + stem + suffix)
 	} else {
-		outVFS = Build(instance.Path.Rel() + "/" + stem + suffix)
+		outVFS = Build(instance.Path.rel() + "/" + stem + suffix)
 	}
 
 	inVFS := srcVFS
@@ -117,7 +126,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 
 	var predefinedFlags []string
 
-	if !asmlibYasmModules[instance.Path.Rel()] {
+	if !asmlibYasmModules[instance.Path.rel()] {
 		predefinedFlags = []string{"-g", "dwarf2"}
 	}
 
@@ -153,30 +162,19 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: argChunks{cmdArgs},
+				CmdArgs: ArgChunks{cmdArgs},
 				Env:     env,
 			},
 		},
 		Env:              env,
-		Inputs:           inputChunks{{yasmBinaryVFS}, in.IncludeInputs},
+		Inputs:           InputChunks{{yasmBinaryVFS}, in.IncludeInputs},
 		Outputs:          []VFS{outVFS},
 		KV:               KV{P: pkAS, PC: pcLightGreen},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 	}
 
 	node.ForeignDepRefs = []NodeRef{yasmLD}
 	node.DepRefs = []NodeRef{yasmLD}
-	return emit.Emit(node), outVFS
-}
-
-// yasmConstHead is the constant [yasm -f elf64 -D UNIX …replace…] lead of
-// every yasm invocation (the AS-yasm and rodata nodes share it).
-var yasmConstHead = []STR{
-	internStr(yasmBinaryPath),
-	argF.str(), argElf64.str(),
-	argD.str(), argUnix.str(),
-	argReplaceBB.str(),
-	argReplaceSS.str(),
-	argReplaceToolRootT.str(),
+	return emit.emit(node), outVFS
 }

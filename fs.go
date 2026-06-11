@@ -12,29 +12,29 @@ import (
 // (rooted at a real directory and cached lazily); tests drive a memFS built
 // inline (testfs_test.go) so the suite does no disk I/O for fixture trees.
 type FS interface {
-	SourceRoot() string
+	sourceRoot() string
 	// Listdir lists the directory named by its Source-rooted VFS ("$(S)/<dir>").
-	Listdir(dir VFS) map[string]bool
+	listdir(dir VFS) map[string]bool
 	// Exists/IsFile/IsDir take a directory VFS prefix and a relative
 	// suffix, so callers thread an already-interned prefix instead of building and
 	// re-interning a concatenated path. See osFS.Exists for the gating algorithm.
-	Exists(prefix VFS, suffix string) (present bool, isDir bool)
-	IsFile(prefix VFS, suffix string) bool
-	IsDir(prefix VFS, suffix string) bool
+	exists(prefix VFS, suffix string) (present bool, isDir bool)
+	isFile(prefix VFS, suffix string) bool
+	isDir(prefix VFS, suffix string) bool
 	// Read returns the file content in a buffer reused across calls: the result is
 	// valid only until the next Read on this FS. Callers that retain content past
 	// another Read must copy (e.g. string(data), or ReadAbs for the parser).
-	Read(rel string) []byte
-	ReadAbs(absPath string) []byte
-	ExistsAbs(absPath string) (present bool, isDir bool)
-	Walk(rel string, visit func(rel string, isDir bool))
+	read(rel string) []byte
+	readAbs(absPath string) []byte
+	existsAbs(absPath string) (present bool, isDir bool)
+	walk(rel string, visit func(rel string, isDir bool))
 	// ContentHash returns the xxh3 of source VFS v's file content, recorded when the
 	// FS last read that file. It is keyed by v.strID() (the full "$(S)/..." path STR),
 	// so the uid serializer passes the VFS directly — no per-input re-intern of the
 	// bare rel. It faults if no content was ever read for v — the hash must exist by
 	// the time a node's uid is computed.
-	ContentHash(v VFS) uint64
-	perfStats() fsPerfStats
+	contentHash(v VFS) uint64
+	perfStats() FsPerfStats
 }
 
 // dirKey returns the directory cache key: the Source VFS of the directory
@@ -47,9 +47,9 @@ func dirKey(dir string) VFS {
 	return Source(cleanRel(dir))
 }
 
-type osFS struct {
-	sourceRoot string
-	rootSlash  string
+type OsFS struct {
+	srcRoot   string
+	rootSlash string
 	// dirs is keyed by the directory's STR (dir.strID()) rather than its VFS: a
 	// source dir is always Source-rooted (VFS == STR<<1), so the STR is lossless
 	// and halves DenseMap's idx array versus indexing the 2x-wider VFS space.
@@ -72,16 +72,16 @@ type osFS struct {
 	existsMisses  uint64
 }
 
-func NewFS(sourceRoot string) FS {
-	return &osFS{
-		sourceRoot: sourceRoot,
-		rootSlash:  sourceRoot + "/",
+func NewFS(srcRoot string) FS {
+	return &OsFS{
+		srcRoot:   srcRoot,
+		rootSlash: srcRoot + "/",
 	}
 }
 
 // recordContentHash stores xxh3(data) at the file's full-path STR (the source VFS
 // strID), growing the array as ids advance.
-func (fs *osFS) recordContentHash(rel string, data []byte) {
+func (fs *OsFS) recordContentHash(rel string, data []byte) {
 	s := internPrefixed("$(S)/", cleanRel(rel))
 
 	if int(s) >= len(fs.contentHashes) {
@@ -102,7 +102,7 @@ func (fs *osFS) recordContentHash(rel string, data []byte) {
 // ContentHash's hot path is small enough to inline into the uid writer's
 // monomorphic instantiation (see canonWriter); the lazy read lives in
 // contentHashSlow so it does not blow the inlining budget.
-func (fs *osFS) ContentHash(v VFS) uint64 {
+func (fs *OsFS) contentHash(v VFS) uint64 {
 	s := v.strID()
 
 	if int(s) < len(fs.contentHashes) && fs.contentHashes[s] != 0 {
@@ -117,45 +117,45 @@ func (fs *osFS) ContentHash(v VFS) uint64 {
 // their content is never needed during graph construction. Read on first uid
 // use (reusing one buffer) so the hash is recorded; a genuinely missing file
 // faults here.
-func (fs *osFS) contentHashSlow(v VFS) uint64 {
-	rel := v.Rel()
+func (fs *OsFS) contentHashSlow(v VFS) uint64 {
+	rel := v.rel()
 
 	if p, d := fs.existsRel(rel); p && d {
 		return 0 // directory inputs (e.g. a test data dir) have no content hash
 	}
 
-	fs.Read(rel) // side effect: records the content hash into contentHashes[s]
+	fs.read(rel) // side effect: records the content hash into contentHashes[s]
 	return fs.contentHashes[v.strID()]
 }
 
-func (fs *osFS) SourceRoot() string {
-	return fs.sourceRoot
+func (fs *OsFS) sourceRoot() string {
+	return fs.srcRoot
 }
 
 // Listdir returns the entries of the directory whose Source-rooted path is dir
 // ("$(S)/<cleandir>"). Keyed by VFS so the hot caller passes the addincl
 // VFS directly with no string hashing; expected to hit the cache.
-func (fs *osFS) Listdir(dir VFS) map[string]bool {
+func (fs *OsFS) listdir(dir VFS) map[string]bool {
 	key := STR(dir.strID())
 
-	if cached, ok := fs.dirs.Get(key); ok {
+	if cached, ok := fs.dirs.get(key); ok {
 		fs.listdirHits++
 		return cached
 	}
 
 	fs.listdirMisses++
 
-	rel := dir.Rel()
+	rel := dir.rel()
 	full := fs.rootSlash + rel
 
 	if rel == "" {
-		full = fs.sourceRoot
+		full = fs.srcRoot
 	}
 
 	entries, err := os.ReadDir(full)
 
 	if err != nil {
-		fs.dirs.Put(key, nil)
+		fs.dirs.put(key, nil)
 		return nil
 	}
 
@@ -165,12 +165,12 @@ func (fs *osFS) Listdir(dir VFS) map[string]bool {
 		out[e.Name()] = e.IsDir()
 	}
 
-	fs.dirs.Put(key, out)
+	fs.dirs.put(key, out)
 
 	return out
 }
 
-func (fs *osFS) bumpExists(ok bool) {
+func (fs *OsFS) bumpExists(ok bool) {
 	if ok {
 		fs.existsHits++
 	} else {
@@ -184,12 +184,12 @@ func (fs *osFS) bumpExists(ok bool) {
 // listing (and interning) the deeper directory — so dead candidate paths never
 // grow the intern table. A suffix carrying ../././// is normalised jointly with
 // prefix (the boundary-crossing case) and looked up directly.
-func (fs *osFS) Exists(prefix VFS, suffix string) (present bool, isDir bool) {
+func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 	if suffix == "" {
-		return fs.Listdir(prefix) != nil, true
+		return fs.listdir(prefix) != nil, true
 	}
 
-	prefixRel := prefix.Rel()
+	prefixRel := prefix.rel()
 
 	if !pathIsClean(suffix) {
 		rel := normalisePath(joinRel(prefixRel, suffix))
@@ -199,7 +199,7 @@ func (fs *osFS) Exists(prefix VFS, suffix string) (present bool, isDir bool) {
 		}
 
 		dir, name := splitDirName(rel)
-		entries := fs.Listdir(dirKey(dir))
+		entries := fs.listdir(dirKey(dir))
 
 		if entries == nil {
 			fs.existsMisses++
@@ -212,7 +212,7 @@ func (fs *osFS) Exists(prefix VFS, suffix string) (present bool, isDir bool) {
 		return ok, d
 	}
 
-	entries := fs.Listdir(prefix)
+	entries := fs.listdir(prefix)
 
 	if entries == nil {
 		fs.existsMisses++
@@ -234,7 +234,7 @@ func (fs *osFS) Exists(prefix VFS, suffix string) (present bool, isDir bool) {
 	}
 
 	dname, base := splitDirName(suffix)
-	entries = fs.Listdir(dirKey(joinRel(prefixRel, dname)))
+	entries = fs.listdir(dirKey(joinRel(prefixRel, dname)))
 
 	if entries == nil {
 		fs.existsMisses++
@@ -247,20 +247,20 @@ func (fs *osFS) Exists(prefix VFS, suffix string) (present bool, isDir bool) {
 	return ok, d
 }
 
-func (fs *osFS) IsFile(prefix VFS, suffix string) bool {
-	p, d := fs.Exists(prefix, suffix)
+func (fs *OsFS) isFile(prefix VFS, suffix string) bool {
+	p, d := fs.exists(prefix, suffix)
 	return p && !d
 }
 
-func (fs *osFS) IsDir(prefix VFS, suffix string) bool {
-	p, d := fs.Exists(prefix, suffix)
+func (fs *OsFS) isDir(prefix VFS, suffix string) bool {
+	p, d := fs.exists(prefix, suffix)
 	return p && d
 }
 
 // existsRel / listdirRel are the string-rel internal helpers for cold callers
 // that hold a whole path (Walk, ExistsAbs, ContentHash): they split and intern
 // the directory directly, no gating.
-func (fs *osFS) existsRel(rel string) (present bool, isDir bool) {
+func (fs *OsFS) existsRel(rel string) (present bool, isDir bool) {
 	rel = cleanRel(rel)
 
 	if rel == "" {
@@ -268,7 +268,7 @@ func (fs *osFS) existsRel(rel string) (present bool, isDir bool) {
 	}
 
 	dir, name := splitDirName(rel)
-	entries := fs.Listdir(dirKey(dir))
+	entries := fs.listdir(dirKey(dir))
 
 	if entries == nil {
 		return false, false
@@ -279,11 +279,11 @@ func (fs *osFS) existsRel(rel string) (present bool, isDir bool) {
 	return ok, d
 }
 
-func (fs *osFS) listdirRel(rel string) map[string]bool {
-	return fs.Listdir(dirKey(rel))
+func (fs *OsFS) listdirRel(rel string) map[string]bool {
+	return fs.listdir(dirKey(rel))
 }
 
-func (fs *osFS) Read(rel string) []byte {
+func (fs *OsFS) read(rel string) []byte {
 	fs.readBuf = fs.readIntoRaw(rel, fs.readBuf)
 	fs.recordContentHash(rel, fs.readBuf)
 	return fs.readBuf
@@ -291,7 +291,7 @@ func (fs *osFS) Read(rel string) []byte {
 
 // readIntoRaw reads rel through the per-platform readFileInto fast path
 // (fs_read_linux.go / fs_read_other.go).
-func (fs *osFS) readIntoRaw(rel string, buf []byte) []byte {
+func (fs *OsFS) readIntoRaw(rel string, buf []byte) []byte {
 	return readFileInto(fs.rootSlash+cleanRel(rel), buf)
 }
 
@@ -299,16 +299,16 @@ func (fs *osFS) readIntoRaw(rel string, buf []byte) []byte {
 // nested INCLUDE triggers another Read mid-parse — which would overwrite the reused
 // Read buffer the outer lexer still points at. So ReadAbs returns an owned copy that
 // survives those nested reads.
-func (fs *osFS) ReadAbs(absPath string) []byte {
-	return append([]byte(nil), fs.Read(fs.relForAbs(absPath))...)
+func (fs *OsFS) readAbs(absPath string) []byte {
+	return append([]byte(nil), fs.read(fs.relForAbs(absPath))...)
 }
 
-func (fs *osFS) ExistsAbs(absPath string) (present bool, isDir bool) {
+func (fs *OsFS) existsAbs(absPath string) (present bool, isDir bool) {
 	return fs.existsRel(fs.relForAbs(absPath))
 }
 
-func (fs *osFS) relForAbs(absPath string) string {
-	if absPath == fs.sourceRoot {
+func (fs *OsFS) relForAbs(absPath string) string {
+	if absPath == fs.srcRoot {
 		return ""
 	}
 
@@ -316,12 +316,12 @@ func (fs *osFS) relForAbs(absPath string) string {
 		return absPath[len(fs.rootSlash):]
 	}
 
-	ThrowFmt("relForAbs: %q is outside source root %q", absPath, fs.sourceRoot)
+	ThrowFmt("relForAbs: %q is outside source root %q", absPath, fs.srcRoot)
 
 	return ""
 }
 
-func (fs *osFS) Walk(rel string, visit func(rel string, isDir bool)) {
+func (fs *OsFS) walk(rel string, visit func(rel string, isDir bool)) {
 	rel = cleanRel(rel)
 
 	present, isDir := fs.existsRel(rel)
@@ -346,7 +346,7 @@ func (fs *osFS) Walk(rel string, visit func(rel string, isDir bool)) {
 		child := prefix + name
 
 		if childIsDir {
-			fs.Walk(child, visit)
+			fs.walk(child, visit)
 			continue
 		}
 
@@ -354,7 +354,7 @@ func (fs *osFS) Walk(rel string, visit func(rel string, isDir bool)) {
 	}
 }
 
-type fsPerfStats struct {
+type FsPerfStats struct {
 	listdirHits   uint64
 	listdirMisses uint64
 	existsHits    uint64
@@ -362,8 +362,8 @@ type fsPerfStats struct {
 	dirsCached    int
 }
 
-func (fs *osFS) perfStats() fsPerfStats {
-	return fsPerfStats{
+func (fs *OsFS) perfStats() FsPerfStats {
+	return FsPerfStats{
 		listdirHits:   fs.listdirHits,
 		listdirMisses: fs.listdirMisses,
 		existsHits:    fs.existsHits,

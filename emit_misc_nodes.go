@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS) {
-	outPrefix := instance.Path.Rel() + "/"
+func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS) {
+	outPrefix := instance.Path.rel() + "/"
 	reg := codegenRegForInstance(ctx, instance)
 
 	for _, cf := range d.configureFiles {
@@ -25,8 +25,8 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
 
 			if reg != nil {
-				lexerG4 := Source(instance.Path.Rel() + "/" + g.Lexer)
-				parserG4 := Source(instance.Path.Rel() + "/" + g.Parser)
+				lexerG4 := Source(instance.Path.rel() + "/" + g.Lexer)
+				parserG4 := Source(instance.Path.rel() + "/" + g.Parser)
 				lexerCpp := Build(outPrefix + lexerBase + ".cpp")
 				parserCpp := Build(outPrefix + parserBase + ".cpp")
 				registerBoundGeneratedParsedOutput(ctx, instance, pkJV, lexerCpp, nil, jvRef, nil)
@@ -46,10 +46,10 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 					parserBase + "Visitor.h",
 					parserBase + "BaseVisitor.h",
 				} {
-					parsed := make([]includeDirective, 0, len(witnessIncludes))
+					parsed := make([]IncludeDirective, 0, len(witnessIncludes))
 
 					for _, include := range witnessIncludes {
-						parsed = append(parsed, includeDirective{kind: includeQuoted, target: internStr(include.Rel())})
+						parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.rel())})
 					}
 
 					registerBoundGeneratedParsedOutput(ctx, instance, pkJV, Build(outPrefix+suffix), parsed, jvRef, nil)
@@ -58,8 +58,8 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 
 			if consumerInputs != nil {
 				jvInputs := []VFS{
-					Source(instance.Path.Rel() + "/" + g.Lexer),
-					Source(instance.Path.Rel() + "/" + g.Parser),
+					Source(instance.Path.rel() + "/" + g.Lexer),
+					Source(instance.Path.rel() + "/" + g.Parser),
 					stdout2stderrVFS,
 					antlr4JarVFS,
 				}
@@ -78,7 +78,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 			base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
 
 			if reg != nil {
-				grammarG4 := Source(instance.Path.Rel() + "/" + g.Grammar)
+				grammarG4 := Source(instance.Path.rel() + "/" + g.Grammar)
 				lexerCpp := Build(outPrefix + base + "Lexer.cpp")
 				parserCpp := Build(outPrefix + base + "Parser.cpp")
 				registerBoundGeneratedParsedOutput(ctx, instance, pkJV, lexerCpp, nil, jvRef, nil)
@@ -97,10 +97,10 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 					base + "Visitor.h",
 					base + "BaseVisitor.h",
 				} {
-					parsed := make([]includeDirective, 0, len(witnessIncludes))
+					parsed := make([]IncludeDirective, 0, len(witnessIncludes))
 
 					for _, include := range witnessIncludes {
-						parsed = append(parsed, includeDirective{kind: includeQuoted, target: internStr(include.Rel())})
+						parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.rel())})
 					}
 
 					registerBoundGeneratedParsedOutput(ctx, instance, pkJV, Build(outPrefix+suffix), parsed, jvRef, nil)
@@ -109,7 +109,7 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 
 			if consumerInputs != nil {
 				jvInputs := []VFS{
-					Source(instance.Path.Rel() + "/" + g.Grammar),
+					Source(instance.Path.rel() + "/" + g.Grammar),
 					stdout2stderrVFS,
 					antlr4JarVFS,
 				}
@@ -129,10 +129,10 @@ func emitMiscNodes(ctx *genCtx, instance ModuleInstance, d *moduleData, consumer
 		biRef := EmitBI(instance, *d.createBuildInfoFor, biFlagsForInstance(instance.Platform), d.tc, ctx.emit)
 
 		if reg != nil {
-			registerBoundGeneratedParsedOutput(ctx, instance, pkBI, Build(outPrefix+*d.createBuildInfoFor), []includeDirective{
-				{kind: includeQuoted, target: internStr(buildInfoGenPyVFS.Rel())},
-				{kind: includeQuoted, target: internStr(xargsPyVFS.Rel())},
-				{kind: includeQuoted, target: internStr(yieldLinePyVFS.Rel())},
+			registerBoundGeneratedParsedOutput(ctx, instance, pkBI, Build(outPrefix+*d.createBuildInfoFor), []IncludeDirective{
+				{kind: includeQuoted, target: internStr(buildInfoGenPyVFS.rel())},
+				{kind: includeQuoted, target: internStr(xargsPyVFS.rel())},
+				{kind: includeQuoted, target: internStr(yieldLinePyVFS.rel())},
 			}, biRef, nil)
 		}
 	}

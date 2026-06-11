@@ -11,14 +11,14 @@ func EmitR5(
 	rlgenCdBinPath VFS,
 	emit Emitter,
 ) (NodeRef, VFS, VFS) {
-	srcVFS := Source(instance.Path.Rel() + "/" + srcRel)
-	tmpVFS := Build(instance.Path.Rel() + "/" + srcRel + ".tmp")
-	cppVFS := Build(instance.Path.Rel() + "/" + strings.TrimSuffix(srcRel, ".rl") + ".rl5.cpp")
+	srcVFS := Source(instance.Path.rel() + "/" + srcRel)
+	tmpVFS := Build(instance.Path.rel() + "/" + srcRel + ".tmp")
+	cppVFS := Build(instance.Path.rel() + "/" + strings.TrimSuffix(srcRel, ".rl") + ".rl5.cpp")
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	cmd0 := Cmd{
-		CmdArgs: argChunks{[]STR{
+		CmdArgs: ArgChunks{[]STR{
 			(ragel5BinPath).str(),
 			argDashO.str(),
 			(tmpVFS).str(),
@@ -27,7 +27,7 @@ func EmitR5(
 		Env: env,
 	}
 	cmd1 := Cmd{
-		CmdArgs: argChunks{[]STR{
+		CmdArgs: ArgChunks{[]STR{
 			(rlgenCdBinPath).str(),
 			argG2.str(),
 			argDashO.str(),
@@ -51,14 +51,14 @@ func EmitR5(
 		Platform:         instance.Platform,
 		Cmds:             []Cmd{cmd0, cmd1},
 		Env:              env,
-		Inputs:           inputChunks{inputs},
+		Inputs:           InputChunks{inputs},
 		Outputs:          []VFS{tmpVFS, cppVFS},
 		KV:               KV{P: pkR5, PC: pcYellow},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          depRefs,
 		ForeignDepRefs:   depRefs,
 	}
 
-	return emit.Emit(node), tmpVFS, cppVFS
+	return emit.emit(node), tmpVFS, cppVFS
 }

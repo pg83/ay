@@ -417,7 +417,7 @@ func (e *ParseError) Error() string {
 
 func ParseFile(fs FS, path string) (mf *MakeFile, err error) {
 	exc := Try(func() {
-		data := fs.ReadAbs(path)
+		data := fs.readAbs(path)
 
 		abs, absErr := filepath.Abs(path)
 
@@ -429,17 +429,17 @@ func ParseFile(fs FS, path string) (mf *MakeFile, err error) {
 	})
 
 	if exc != nil {
-		err = exc.AsError()
+		err = exc.asError()
 		mf = nil
 	}
 
 	return mf, err
 }
 
-type tokKind int
+type TokKind int
 
 const (
-	tokEOF tokKind = iota
+	tokEOF TokKind = iota
 	tokIdent
 	tokString
 	tokWord
@@ -453,14 +453,14 @@ const (
 	tokGt
 )
 
-type token struct {
-	kind tokKind
+type Token struct {
+	kind TokKind
 	val  string
 	line int
 	col  int
 }
 
-type lexer struct {
+type Lexer struct {
 	name string
 	src  []byte
 	pos  int
@@ -470,8 +470,8 @@ type lexer struct {
 	prevByte byte
 }
 
-func newLexer(name string, src []byte) *lexer {
-	return &lexer{
+func newLexer(name string, src []byte) *Lexer {
+	return &Lexer{
 		name:     name,
 		src:      src,
 		pos:      0,
@@ -481,7 +481,7 @@ func newLexer(name string, src []byte) *lexer {
 	}
 }
 
-func (l *lexer) throwParse(line, col int, format string, args ...any) {
+func (l *Lexer) throwParse(line, col int, format string, args ...any) {
 	pe := &ParseError{
 		File:    l.name,
 		Line:    line,
@@ -492,7 +492,7 @@ func (l *lexer) throwParse(line, col int, format string, args ...any) {
 	New(pe).throw()
 }
 
-func (l *lexer) advance() byte {
+func (l *Lexer) advance() byte {
 	b := l.src[l.pos]
 	l.pos++
 
@@ -552,7 +552,7 @@ func isWordByte(b byte) bool {
 	return false
 }
 
-func (l *lexer) skipTrivia() {
+func (l *Lexer) skipTrivia() {
 	for l.pos < len(l.src) {
 		b := l.src[l.pos]
 
@@ -582,15 +582,15 @@ func commentBoundary(prev byte) bool {
 	return isWhitespace(prev)
 }
 
-func (l *lexer) next() token {
+func (l *Lexer) next() Token {
 	return l.readToken()
 }
 
-func (l *lexer) readToken() token {
+func (l *Lexer) readToken() Token {
 	l.skipTrivia()
 
 	if l.pos >= len(l.src) {
-		return token{kind: tokEOF, line: l.line, col: l.col}
+		return Token{kind: tokEOF, line: l.line, col: l.col}
 	}
 
 	startLine, startCol := l.line, l.col
@@ -599,36 +599,36 @@ func (l *lexer) readToken() token {
 	switch {
 	case b == '(':
 		l.advance()
-		return token{kind: tokLParen, line: startLine, col: startCol}
+		return Token{kind: tokLParen, line: startLine, col: startCol}
 	case b == ')':
 		l.advance()
-		return token{kind: tokRParen, line: startLine, col: startCol}
+		return Token{kind: tokRParen, line: startLine, col: startCol}
 	case b == '"' || b == '\'':
 		return l.readString(startLine, startCol, b)
 	case b == '<':
 
 		l.advance()
-		return token{kind: tokLt, line: startLine, col: startCol}
+		return Token{kind: tokLt, line: startLine, col: startCol}
 	case b == '>':
 
 		l.advance()
 
 		if l.pos < len(l.src) && l.src[l.pos] == '=' {
 			l.advance()
-			return token{kind: tokGe, line: startLine, col: startCol}
+			return Token{kind: tokGe, line: startLine, col: startCol}
 		}
 
-		return token{kind: tokGt, line: startLine, col: startCol}
+		return Token{kind: tokGt, line: startLine, col: startCol}
 	case b == '=' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '=':
 
 		l.advance()
 		l.advance()
-		return token{kind: tokEq, line: startLine, col: startCol}
+		return Token{kind: tokEq, line: startLine, col: startCol}
 	case b == '!' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '=':
 
 		l.advance()
 		l.advance()
-		return token{kind: tokNotEq, line: startLine, col: startCol}
+		return Token{kind: tokNotEq, line: startLine, col: startCol}
 	case b >= '0' && b <= '9':
 		return l.readNumberOrWord(startLine, startCol)
 	case isIdentStart(b):
@@ -639,11 +639,11 @@ func (l *lexer) readToken() token {
 
 		l.advance()
 		l.throwParse(startLine, startCol, "unexpected character %q", b)
-		return token{}
+		return Token{}
 	}
 }
 
-func (l *lexer) readString(startLine, startCol int, quote byte) token {
+func (l *Lexer) readString(startLine, startCol int, quote byte) Token {
 	l.advance()
 
 	var buf []byte
@@ -657,7 +657,7 @@ func (l *lexer) readString(startLine, startCol int, quote byte) token {
 
 		if b == quote {
 			l.advance()
-			return token{kind: tokString, val: string(buf), line: startLine, col: startCol}
+			return Token{kind: tokString, val: string(buf), line: startLine, col: startCol}
 		}
 
 		if b == '\n' || b == '\r' {
@@ -675,7 +675,7 @@ func (l *lexer) readString(startLine, startCol int, quote byte) token {
 	}
 }
 
-func (l *lexer) readIdentOrWord(startLine, startCol int) token {
+func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
 	var buf []byte
 	pureIdent := true
 
@@ -713,10 +713,10 @@ func (l *lexer) readIdentOrWord(startLine, startCol int) token {
 		kind = tokWord
 	}
 
-	return token{kind: kind, val: val, line: startLine, col: startCol}
+	return Token{kind: kind, val: val, line: startLine, col: startCol}
 }
 
-func (l *lexer) readWord(startLine, startCol int) token {
+func (l *Lexer) readWord(startLine, startCol int) Token {
 	var buf []byte
 
 	for l.pos < len(l.src) {
@@ -736,10 +736,10 @@ func (l *lexer) readWord(startLine, startCol int) token {
 		buf = append(buf, l.advance())
 	}
 
-	return token{kind: tokWord, val: string(buf), line: startLine, col: startCol}
+	return Token{kind: tokWord, val: string(buf), line: startLine, col: startCol}
 }
 
-func (l *lexer) readNumberOrWord(startLine, startCol int) token {
+func (l *Lexer) readNumberOrWord(startLine, startCol int) Token {
 	start := l.pos
 
 	for l.pos < len(l.src) && l.src[l.pos] >= '0' && l.src[l.pos] <= '9' {
@@ -751,10 +751,10 @@ func (l *lexer) readNumberOrWord(startLine, startCol int) token {
 			l.advance()
 		}
 
-		return token{kind: tokWord, val: string(l.src[start:l.pos]), line: startLine, col: startCol}
+		return Token{kind: tokWord, val: string(l.src[start:l.pos]), line: startLine, col: startCol}
 	}
 
-	return token{kind: tokInt, val: string(l.src[start:l.pos]), line: startLine, col: startCol}
+	return Token{kind: tokInt, val: string(l.src[start:l.pos]), line: startLine, col: startCol}
 }
 
 func Parse(fs FS, name string, src []byte) (mf *MakeFile, err error) {
@@ -763,7 +763,7 @@ func Parse(fs FS, name string, src []byte) (mf *MakeFile, err error) {
 	})
 
 	if exc != nil {
-		err = exc.AsError()
+		err = exc.asError()
 		mf = nil
 	}
 
@@ -778,31 +778,31 @@ func parseInternalWithStack(fs FS, name string, src []byte, stack []string) *Mak
 	return parseInternalWithState(fs, name, src, stack, newIncludeState())
 }
 
-func parseInternalWithState(fs FS, name string, src []byte, stack []string, includes *includeState) *MakeFile {
+func parseInternalWithState(fs FS, name string, src []byte, stack []string, includes *IncludeState) *MakeFile {
 	src = bytes.TrimPrefix(src, []byte{0xEF, 0xBB, 0xBF})
-	p := &parser{lex: newLexer(name, src), name: name, includeStack: stack, includes: includes, fs: fs}
+	p := &Parser{lex: newLexer(name, src), name: name, includeStack: stack, includes: includes, fs: fs}
 	mf := &MakeFile{Path: name}
 	mf.Stmts, _ = p.parseStmts(termTopLevel)
 
 	return mf
 }
 
-type includeState struct {
+type IncludeState struct {
 	once map[string]struct{}
 }
 
-func newIncludeState() *includeState {
-	return &includeState{once: map[string]struct{}{}}
+func newIncludeState() *IncludeState {
+	return &IncludeState{once: map[string]struct{}{}}
 }
 
-type stmtTerminator int
+type StmtTerminator int
 
 const (
-	termTopLevel stmtTerminator = iota
+	termTopLevel StmtTerminator = iota
 	termIfBody
 )
 
-func (p *parser) parseStmts(term stmtTerminator) (stmts []Stmt, endTok token) {
+func (p *Parser) parseStmts(term StmtTerminator) (stmts []Stmt, endTok Token) {
 	for {
 		tok := p.lex.next()
 
@@ -826,7 +826,7 @@ func (p *parser) parseStmts(term stmtTerminator) (stmts []Stmt, endTok token) {
 	}
 }
 
-func (p *parser) parseMacroInto(into []Stmt, nameTok token) []Stmt {
+func (p *Parser) parseMacroInto(into []Stmt, nameTok Token) []Stmt {
 	switch nameTok.val {
 	case "IF":
 		return append(into, p.parseIf(nameTok))
@@ -844,7 +844,7 @@ func (p *parser) parseMacroInto(into []Stmt, nameTok token) []Stmt {
 	return append(into, stmt)
 }
 
-func (p *parser) applyIncludeOnce(nameTok token) {
+func (p *Parser) applyIncludeOnce(nameTok Token) {
 	args := p.parseMacroArgs(nameTok)
 	enabled := true
 
@@ -869,7 +869,7 @@ func (p *parser) applyIncludeOnce(nameTok token) {
 	p.includes.once[abs] = struct{}{}
 }
 
-func (p *parser) parseMacroArgs(nameTok token) []string {
+func (p *Parser) parseMacroArgs(nameTok Token) []string {
 	lp := p.lex.next()
 
 	if lp.kind != tokLParen {
@@ -922,15 +922,15 @@ func isIdentShapedName(s string) bool {
 	return true
 }
 
-type parser struct {
-	lex          *lexer
+type Parser struct {
+	lex          *Lexer
 	name         string
 	includeStack []string
-	includes     *includeState
+	includes     *IncludeState
 	fs           FS
 }
 
-func (p *parser) buildStmt(nameTok token, args []string) Stmt {
+func (p *Parser) buildStmt(nameTok Token, args []string) Stmt {
 	switch nameTok.val {
 	case "PROGRAM", "LIBRARY",
 
@@ -1160,7 +1160,7 @@ func parseRunAntlr4CppSplit(args []string, line int) *RunAntlr4CppSplitStmt {
 	return stmt
 }
 
-func parseRunAntlr(args []string, nameTok token) *RunAntlrStmt {
+func parseRunAntlr(args []string, nameTok Token) *RunAntlrStmt {
 	stmt := &RunAntlrStmt{Macro: nameTok.val, Line: nameTok.line}
 	currentSection := "ARGS"
 
@@ -1293,7 +1293,7 @@ func parseRunPython(args []string, line int) *RunPythonStmt {
 	return stmt
 }
 
-func parseResource(args []string, nameTok token) *ResourceStmt {
+func parseResource(args []string, nameTok Token) *ResourceStmt {
 	rest := args
 
 	for i := 0; i < 2 && len(rest) > 0; i++ {
@@ -1307,7 +1307,7 @@ func parseResource(args []string, nameTok token) *ResourceStmt {
 	}
 
 	if len(rest)%2 != 0 {
-		p := &parser{lex: &lexer{}}
+		p := &Parser{lex: &Lexer{}}
 		_ = p
 		ThrowFmt("RESOURCE at line %d: argument count after DONT_PARSE/DONT_COMPRESS strip must be even (got %d)", nameTok.line, len(rest))
 	}
@@ -1425,7 +1425,7 @@ func splitAddInclPaths(args []string) (globalPaths, oneLevelPaths, ownPaths, cyt
 	return globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, userGlobalPaths, allPaths
 }
 
-func (p *parser) parseIf(ifTok token) *IfStmt {
+func (p *Parser) parseIf(ifTok Token) *IfStmt {
 	condToks := p.readCondTokens(ifTok)
 
 	if len(condToks) == 0 {
@@ -1467,7 +1467,7 @@ func (p *parser) parseIf(ifTok token) *IfStmt {
 	return nil
 }
 
-func (p *parser) readCondTokens(ifTok token) []token {
+func (p *Parser) readCondTokens(ifTok Token) []Token {
 	lp := p.lex.next()
 
 	if lp.kind != tokLParen {
@@ -1475,7 +1475,7 @@ func (p *parser) readCondTokens(ifTok token) []token {
 	}
 
 	var (
-		out   []token
+		out   []Token
 		depth = 1
 	)
 
@@ -1502,19 +1502,19 @@ func (p *parser) readCondTokens(ifTok token) []token {
 	}
 }
 
-func (p *parser) consumeEmptyMacroArgs(kwTok token) {
+func (p *Parser) consumeEmptyMacroArgs(kwTok Token) {
 	_ = p.parseMacroArgs(kwTok)
 }
 
-type condParser struct {
-	toks   []token
+type CondParser struct {
+	toks   []Token
 	pos    int
-	parent *parser
-	ifTok  token
+	parent *Parser
+	ifTok  Token
 }
 
-func parseCondExpr(parent *parser, ifTok token, toks []token) Expr {
-	cp := &condParser{toks: toks, parent: parent, ifTok: ifTok}
+func parseCondExpr(parent *Parser, ifTok Token, toks []Token) Expr {
+	cp := &CondParser{toks: toks, parent: parent, ifTok: ifTok}
 	expr := cp.parseOr()
 
 	if cp.pos != len(cp.toks) {
@@ -1525,22 +1525,22 @@ func parseCondExpr(parent *parser, ifTok token, toks []token) Expr {
 	return expr
 }
 
-func (c *condParser) peek() (token, bool) {
+func (c *CondParser) peek() (Token, bool) {
 	if c.pos >= len(c.toks) {
-		return token{}, false
+		return Token{}, false
 	}
 
 	return c.toks[c.pos], true
 }
 
-func (c *condParser) consume() token {
+func (c *CondParser) consume() Token {
 	t := c.toks[c.pos]
 	c.pos++
 
 	return t
 }
 
-func (c *condParser) parseOr() Expr {
+func (c *CondParser) parseOr() Expr {
 	left := c.parseAnd()
 
 	for {
@@ -1556,7 +1556,7 @@ func (c *condParser) parseOr() Expr {
 	}
 }
 
-func (c *condParser) parseAnd() Expr {
+func (c *CondParser) parseAnd() Expr {
 	left := c.parseNot()
 
 	for {
@@ -1572,7 +1572,7 @@ func (c *condParser) parseAnd() Expr {
 	}
 }
 
-func (c *condParser) parseNot() Expr {
+func (c *CondParser) parseNot() Expr {
 	t, ok := c.peek()
 
 	if ok && t.kind == tokIdent && t.val == "NOT" {
@@ -1583,7 +1583,7 @@ func (c *condParser) parseNot() Expr {
 	return c.parseCmp()
 }
 
-func (c *condParser) parseCmp() Expr {
+func (c *CondParser) parseCmp() Expr {
 	left := c.parseAtom()
 
 	t, ok := c.peek()
@@ -1626,7 +1626,7 @@ func (c *condParser) parseCmp() Expr {
 	return left
 }
 
-func (c *condParser) rejectChainedCmp(prev token) {
+func (c *CondParser) rejectChainedCmp(prev Token) {
 	t, ok := c.peek()
 
 	if !ok {
@@ -1638,7 +1638,7 @@ func (c *condParser) rejectChainedCmp(prev token) {
 	}
 }
 
-func (c *condParser) parseAtom() Expr {
+func (c *CondParser) parseAtom() Expr {
 	t, ok := c.peek()
 
 	if !ok {
@@ -1690,7 +1690,7 @@ func (c *condParser) parseAtom() Expr {
 	return nil
 }
 
-func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
+func (p *Parser) expandInclude(into []Stmt, nameTok Token) []Stmt {
 	args := p.parseMacroArgs(nameTok)
 
 	if len(args) != 1 {
@@ -1701,7 +1701,7 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 
 	if strings.HasPrefix(rel, "${ARCADIA_ROOT}/") {
 		suffix := strings.TrimPrefix(rel, "${ARCADIA_ROOT}/")
-		rel = filepath.Join(p.fs.SourceRoot(), suffix)
+		rel = filepath.Join(p.fs.sourceRoot(), suffix)
 	}
 
 	dir := filepath.Dir(p.name)
@@ -1740,18 +1740,18 @@ func (p *parser) expandInclude(into []Stmt, nameTok token) []Stmt {
 		}
 	}
 
-	if present, _ := p.fs.ExistsAbs(absTarget); !present {
+	if present, _ := p.fs.existsAbs(absTarget); !present {
 		return into
 	}
 
-	data := p.fs.ReadAbs(absTarget)
+	data := p.fs.readAbs(absTarget)
 
 	included := parseInternalWithState(p.fs, absTarget, data, chain, p.includes)
 
 	return append(into, included.Stmts...)
 }
 
-func describeToken(t token) string {
+func describeToken(t Token) string {
 	switch t.kind {
 	case tokEOF:
 		return "end of file"

@@ -139,7 +139,7 @@ func TestPlatformLinkerSelectionTailFlags_UsesConfiguredLLDPath(t *testing.T) {
 
 	// The lld linker flags now come from build/platform/lld's propagated
 	// LDFLAGS_GLOBAL (the implicit toolchain peer), not the Platform.
-	if got := p.LinkerSelectionTailFlags(); got != nil {
+	if got := p.linkerSelectionTailFlags(); got != nil {
 		t.Fatalf("LinkerSelectionTailFlags = %#v, want nil", got)
 	}
 }

@@ -47,8 +47,8 @@ func TestModuleInstance_Equality_Hashing(t *testing.T) {
 func TestNewToolInstance(t *testing.T) {
 	tool := NewToolInstance(testHostP, "contrib/tools/ragel6")
 
-	if tool.Path.Rel() != "contrib/tools/ragel6" {
-		t.Errorf("Path = %q, want contrib/tools/ragel6", tool.Path.Rel())
+	if tool.Path.rel() != "contrib/tools/ragel6" {
+		t.Errorf("Path = %q, want contrib/tools/ragel6", tool.Path.rel())
 	}
 
 	if tool.Language != LangCPP {

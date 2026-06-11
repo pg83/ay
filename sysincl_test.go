@@ -85,7 +85,7 @@ func TestSysInclMuslGating(t *testing.T) {
 		"libc-musl-libcxx.yml",
 	}
 
-	selected := func(env sysInclEnv) map[string]bool {
+	selected := func(env SysInclEnv) map[string]bool {
 		out := map[string]bool{}
 
 		for _, e := range sysInclYamlSequence {
@@ -99,7 +99,7 @@ func TestSysInclMuslGating(t *testing.T) {
 
 	// glibc (musl off): no musl file selected, on either arch.
 	for _, arch := range []string{"x86_64", "aarch64"} {
-		got := selected(sysInclEnv{arch: arch, musl: false})
+		got := selected(SysInclEnv{arch: arch, musl: false})
 
 		for _, f := range muslFiles {
 			if got[f] {
@@ -109,7 +109,7 @@ func TestSysInclMuslGating(t *testing.T) {
 	}
 
 	// musl on x86_64: libc-to-musl + linux-musl + libc-musl-libcxx; not the aarch64 variant.
-	gotX := selected(sysInclEnv{arch: "x86_64", musl: true})
+	gotX := selected(SysInclEnv{arch: "x86_64", musl: true})
 
 	for _, f := range []string{"libc-to-musl.yml", "linux-musl.yml", "libc-musl-libcxx.yml"} {
 		if !gotX[f] {
@@ -122,7 +122,7 @@ func TestSysInclMuslGating(t *testing.T) {
 	}
 
 	// musl on aarch64: aarch64 variant, not the x86_64 one.
-	gotA := selected(sysInclEnv{arch: "aarch64", musl: true})
+	gotA := selected(SysInclEnv{arch: "aarch64", musl: true})
 
 	if !gotA["linux-musl-aarch64.yml"] {
 		t.Errorf("musl=on aarch64: linux-musl-aarch64.yml not selected, want selected")

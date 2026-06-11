@@ -71,10 +71,10 @@ func extractKeyOrder(t *testing.T, raw []byte) []string {
 
 func TestNodeJSONKeyOrder_AllFieldsPresent(t *testing.T) {
 	n := &Node{
-		Cmds: []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"echo"})}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"echo"})}, Env: nil}},
 
 		Env:              EnvVars{{Name: internEnv("FOO"), Value: internStr("bar")}},
-		Inputs:           inputChunks{ToVFSSlice([]string{"in"})},
+		Inputs:           InputChunks{ToVFSSlice([]string{"in"})},
 		KV:               KV{P: pkLD},
 		Outputs:          ToVFSSlice([]string{"out"}),
 		Platform:         &Platform{Target: "default-linux-aarch64"},
@@ -105,7 +105,7 @@ func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
 		Cmds: []Cmd{},
 
 		Env:              nil,
-		Inputs:           inputChunks{ToVFSSlice([]string{})},
+		Inputs:           InputChunks{ToVFSSlice([]string{})},
 		KV:               KV{},
 		Outputs:          ToVFSSlice([]string{}),
 		Platform:         nil,
@@ -142,7 +142,7 @@ func TestNodeJSON_DoesNotSerializeInternalRefs(t *testing.T) {
 		Cmds: []Cmd{},
 
 		Env:              nil,
-		Inputs:           inputChunks{ToVFSSlice([]string{})},
+		Inputs:           InputChunks{ToVFSSlice([]string{})},
 		KV:               KV{},
 		Outputs:          ToVFSSlice([]string{}),
 		Requirements:     Requirements{},
@@ -164,7 +164,7 @@ func TestNodeJSON_DoesNotSerializeInternalRefs(t *testing.T) {
 }
 
 func TestCmdJSONKeyOrder(t *testing.T) {
-	c := Cmd{CmdArgs: argChunks{appendInternStrs(nil, []string{"echo", "hi"})}, Env: EnvVars{{Name: internEnv("K"), Value: internStr("V")}}}
+	c := Cmd{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"echo", "hi"})}, Env: EnvVars{{Name: internEnv("K"), Value: internStr("V")}}}
 	raw, err := json.Marshal(c)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)

@@ -10,7 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var sysInclYamlSequence = []sysInclEntry{
+var sysInclYamlSequence = []SysInclEntry{
 	{file: "macro.yml"},
 	{file: "libc-to-compat.yml"},
 	{file: "libc-to-nothing.yml"},
@@ -57,7 +57,7 @@ const (
 )
 
 type SysIncl struct {
-	Filter         *sourceFilter
+	Filter         *SourceFilter
 	KeyBySource    bool
 	HasMultiTarget bool
 
@@ -87,43 +87,43 @@ func (rec *SysIncl) setMapping(k string, paths []VFS) {
 	}
 }
 
-type sysInclEnv struct {
+type SysInclEnv struct {
 	arch       string
 	musl       bool
 	opensource bool
 }
 
-type sysInclEntry struct {
+type SysInclEntry struct {
 	file      string
-	predicate func(sysInclEnv) bool
+	predicate func(SysInclEnv) bool
 }
 
-func opensourceOn(e sysInclEnv) bool {
+func opensourceOn(e SysInclEnv) bool {
 	return e.opensource
 }
 
-func notOpensource(e sysInclEnv) bool {
+func notOpensource(e SysInclEnv) bool {
 	return !e.opensource
 }
 
-func archIs(want string) func(sysInclEnv) bool {
-	return func(e sysInclEnv) bool { return e.arch == want }
+func archIs(want string) func(SysInclEnv) bool {
+	return func(e SysInclEnv) bool { return e.arch == want }
 }
 
 // muslOn / muslArchIs gate the musl libc & stl sysincl files, which upstream
 // loads only under MUSL=yes (build/conf/sysincl.conf:52,
 // build/ymake.core.conf:349). Under glibc these must not apply, or libc headers
 // remap into contrib/libs/musl.
-func muslOn(e sysInclEnv) bool {
+func muslOn(e SysInclEnv) bool {
 	return e.musl
 }
 
-func muslArchIs(want string) func(sysInclEnv) bool {
-	return func(e sysInclEnv) bool { return e.musl && e.arch == want }
+func muslArchIs(want string) func(SysInclEnv) bool {
+	return func(e SysInclEnv) bool { return e.musl && e.arch == want }
 }
 
 func LoadSysInclSetForFS(fs FS, arch string, musl, opensource bool, onWarn func(Warn)) SysInclSet {
-	if !fs.IsDir(srcRootVFS, baseSysInclDir) {
+	if !fs.isDir(srcRootVFS, baseSysInclDir) {
 		return nil
 	}
 
@@ -131,7 +131,7 @@ func LoadSysInclSetForFS(fs FS, arch string, musl, opensource bool, onWarn func(
 		ThrowFmt("LoadSysInclSetFor: unsupported arch %q (want aarch64 or x86_64)", arch)
 	}
 
-	env := sysInclEnv{arch: arch, musl: musl, opensource: opensource}
+	env := SysInclEnv{arch: arch, musl: musl, opensource: opensource}
 	var set SysInclSet
 	sysinclDir := dirKey(baseSysInclDir)
 
@@ -140,11 +140,11 @@ func LoadSysInclSetForFS(fs FS, arch string, musl, opensource bool, onWarn func(
 			continue
 		}
 
-		if !fs.IsFile(sysinclDir, entry.file) {
+		if !fs.isFile(sysinclDir, entry.file) {
 			continue
 		}
 
-		records := parseSysInclYAML(entry.file, string(fs.Read(baseSysInclDir+"/"+entry.file)), onWarn)
+		records := parseSysInclYAML(entry.file, string(fs.read(baseSysInclDir+"/"+entry.file)), onWarn)
 		set = append(set, records...)
 	}
 
@@ -164,13 +164,13 @@ func LoadSysInclSetForFS(fs FS, arch string, musl, opensource bool, onWarn func(
 // loadSysInclDir parses every *.yml in a source-tree sysincl directory, in sorted
 // filename order. Absent directory → no records.
 func loadSysInclDir(fs FS, dir string, onWarn func(Warn)) SysInclSet {
-	if !fs.IsDir(srcRootVFS, dir) {
+	if !fs.isDir(srcRootVFS, dir) {
 		return nil
 	}
 
-	names := make([]string, 0, len(fs.Listdir(Source(dir))))
+	names := make([]string, 0, len(fs.listdir(Source(dir))))
 
-	for name := range fs.Listdir(Source(dir)) {
+	for name := range fs.listdir(Source(dir)) {
 		if strings.HasSuffix(name, ".yml") {
 			names = append(names, name)
 		}
@@ -181,7 +181,7 @@ func loadSysInclDir(fs FS, dir string, onWarn func(Warn)) SysInclSet {
 	var set SysInclSet
 
 	for _, name := range names {
-		records := parseSysInclYAML(name, string(fs.Read(dir+"/"+name)), onWarn)
+		records := parseSysInclYAML(name, string(fs.read(dir+"/"+name)), onWarn)
 		set = append(set, records...)
 	}
 
@@ -256,7 +256,7 @@ func parseSysInclRecord(name string, rn *yaml.Node, onWarn func(Warn)) SysIncl {
 				Kind:    WarnSysIncl,
 				Message: fmt.Sprintf("%s:%d: unrecognised record key %q — record disabled", name, key.Line, key.Value),
 			})
-			rec.Filter = &sourceFilter{unsupported: true}
+			rec.Filter = &SourceFilter{unsupported: true}
 		}
 	}
 
@@ -318,12 +318,12 @@ func sysInclTargets(tval *yaml.Node) []VFS {
 	return nil
 }
 
-type sourceFilter struct {
-	alts        []filterAlt
+type SourceFilter struct {
+	alts        []FilterAlt
 	unsupported bool
 }
 
-type filterAlt struct {
+type FilterAlt struct {
 	excludePrefixes []string
 	literalPrefix   string
 
@@ -333,7 +333,7 @@ type filterAlt struct {
 	re      *regexp.Regexp
 }
 
-func (f *sourceFilter) match(sourcePath string) bool {
+func (f *SourceFilter) match(sourcePath string) bool {
 	if f.unsupported {
 		return false
 	}
@@ -347,7 +347,7 @@ func (f *sourceFilter) match(sourcePath string) bool {
 	return false
 }
 
-func (a *filterAlt) matches(sourcePath string) bool {
+func (a *FilterAlt) matches(sourcePath string) bool {
 	for _, p := range a.excludePrefixes {
 		if strings.HasPrefix(sourcePath, p) {
 			return false
@@ -486,7 +486,7 @@ func crossConcat(prefixes, suffixes []string) []string {
 	return out
 }
 
-func (alt *filterAlt) setPositive(name string, lineno int, pat string) {
+func (alt *FilterAlt) setPositive(name string, lineno int, pat string) {
 	if lit, ok := literalContainsPattern(pat); ok {
 		alt.containsLit = lit
 
@@ -503,18 +503,18 @@ func (alt *filterAlt) setPositive(name string, lineno int, pat string) {
 	alt.reGuard, _ = re.LiteralPrefix()
 }
 
-func compileSourceFilter(name string, lineno int, pat string, onWarn func(Warn)) *sourceFilter {
+func compileSourceFilter(name string, lineno int, pat string, onWarn func(Warn)) *SourceFilter {
 	if pat == "" {
 		return nil
 	}
 
-	f := &sourceFilter{}
+	f := &SourceFilter{}
 	exc := Try(func() {
 		altStrs := splitTopLevelOr(pat)
 
 		for _, altStr := range altStrs {
 			excludes, residual, isExclude := extractNegativeLookahead(altStr)
-			alt := filterAlt{}
+			alt := FilterAlt{}
 
 			if isExclude {
 				alt.excludePrefixes = excludes
@@ -552,7 +552,7 @@ func compileSourceFilter(name string, lineno int, pat string, onWarn func(Warn))
 					alt.literalPrefix = lit
 				} else if prefixes, ok := literalAltsFromRegex(altStr); ok {
 					for _, p := range prefixes {
-						f.alts = append(f.alts, filterAlt{literalPrefix: p})
+						f.alts = append(f.alts, FilterAlt{literalPrefix: p})
 					}
 
 					continue
@@ -570,7 +570,7 @@ func compileSourceFilter(name string, lineno int, pat string, onWarn func(Warn))
 			Kind:    WarnSysIncl,
 			Message: fmt.Sprintf("%s:%d: source_filter %q unsupported (%s) — record disabled", name, lineno, pat, exc.Error()),
 		})
-		return &sourceFilter{unsupported: true}
+		return &SourceFilter{unsupported: true}
 	}
 
 	return f

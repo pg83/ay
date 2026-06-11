@@ -6,16 +6,16 @@ import (
 )
 
 func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
-	base := instance.Path.Rel() + "/" + srcRel
+	base := instance.Path.rel() + "/" + srcRel
 
 	if strings.Contains(srcRel, "/") {
-		base = instance.Path.Rel() + "/_/" + srcRel
+		base = instance.Path.rel() + "/_/" + srcRel
 	}
 
-	return Build(base + ".asm"), Build(base + instance.Platform.ObjectSuffix())
+	return Build(base + ".asm"), Build(base + instance.Platform.objectSuffix())
 }
 
-func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, tc moduleToolchain, emit Emitter) (NodeRef, VFS, VFS) {
+func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, tc ModuleToolchain, emit Emitter) (NodeRef, VFS, VFS) {
 	asmVFS, outVFS := composeRodataOutputs(instance, srcRel)
 	toolName := path.Base(strings.TrimSuffix(srcRel, ".rodata"))
 
@@ -26,7 +26,7 @@ func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: argChunks{[]STR{
+				CmdArgs: ArgChunks{[]STR{
 					tc.Python3,
 					(rodataScriptVFS).str(),
 					argElf.str(),
@@ -37,7 +37,7 @@ func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 				Env: pythonEnv,
 			},
 			{
-				CmdArgs: argChunks{yasmConstHead, []STR{
+				CmdArgs: ArgChunks{yasmConstHead, []STR{
 					argD.str(), internStr("_" + string(instance.Platform.ISA) + "_"),
 					argDYasm.str(),
 					argDashG.str(), argDwarf2.str(),
@@ -50,7 +50,7 @@ func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 			},
 		},
 		Env: yasmEnv,
-		Inputs: inputChunks{{
+		Inputs: InputChunks{{
 			yasmBinaryVFS,
 			rodataScriptVFS,
 			srcVFS,
@@ -58,11 +58,11 @@ func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 		KV:               KV{P: pkRD, PC: pcLightGreen},
 		Outputs:          []VFS{asmVFS, outVFS},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		DepRefs:          []NodeRef{yasmLD},
 		ForeignDepRefs:   []NodeRef{yasmLD},
 		usesResources:    []string{resourcePatternYMakePython3},
 	}
 
-	return emit.Emit(node), asmVFS, outVFS
+	return emit.emit(node), asmVFS, outVFS
 }

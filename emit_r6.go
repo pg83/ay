@@ -5,6 +5,8 @@ import "strings"
 var (
 	ragel6ArgOptimized = internArg(ragel6DefaultFlagOptimized)
 	ragel6ArgDebug     = internArg(ragel6DefaultFlagDebug)
+	// ragel6ConstArgs is the constant [-L -I$(S) -o] span of every R6 command.
+	ragel6ConstArgs = []STR{argL.str(), argIS.str(), argDashO.str()}
 )
 
 const (
@@ -17,16 +19,16 @@ const (
 // walks its closure before the R6 node exists.
 func ragel6OutVFS(instance ModuleInstance, srcRel string) VFS {
 	if strings.Contains(srcRel, "/") {
-		return Build(instance.Path.Rel() + "/_/" + srcRel + ".cpp")
+		return Build(instance.Path.rel() + "/_/" + srcRel + ".cpp")
 	}
 
-	return Build(instance.Path.Rel() + "/" + srcRel + ".cpp")
+	return Build(instance.Path.rel() + "/" + srcRel + ".cpp")
 }
 
 func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ARG, closure []VFS, emit Emitter) (NodeRef, VFS) {
 	outVFS := ragel6OutVFS(instance, srcRel)
 
-	inVFS := Source(instance.Path.Rel() + "/" + srcRel)
+	inVFS := Source(instance.Path.rel() + "/" + srcRel)
 
 	effectiveFlags := ragel6Flags
 
@@ -41,7 +43,7 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	head := make([]STR, 0, 1+len(effectiveFlags))
 	head = append(head, (ragel6BinaryPath).str())
 	head = appendArgStr(head, effectiveFlags)
-	cmdArgs := argChunks{head, ragel6ConstArgs, {(outVFS).str(), (inVFS).str()}}
+	cmdArgs := ArgChunks{head, ragel6ConstArgs, {(outVFS).str(), (inVFS).str()}}
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -54,17 +56,14 @@ func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 			},
 		},
 		Env:              env,
-		Inputs:           inputChunks{{ragel6BinaryPath}, closure},
+		Inputs:           InputChunks{{ragel6BinaryPath}, closure},
 		Outputs:          []VFS{outVFS},
 		KV:               KV{P: pkR6, PC: pcYellow},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          []NodeRef{ragel6LD},
 		ForeignDepRefs:   []NodeRef{ragel6LD},
 	}
 
-	return emit.Emit(node), outVFS
+	return emit.emit(node), outVFS
 }
-
-// ragel6ConstArgs is the constant [-L -I$(S) -o] span of every R6 command.
-var ragel6ConstArgs = []STR{argL.str(), argIS.str(), argDashO.str()}

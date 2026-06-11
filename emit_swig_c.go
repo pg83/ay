@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-type swigSrc struct {
+type SwigSrc struct {
 	Src    string
 	Module string
 }
@@ -16,30 +16,30 @@ const swigLibRoot = "contrib/tools/swig/Lib"
 // the python contour is the one ay models (swig.conf _SWIG_PYTHON_C/_CPP).
 var swigAddIncls = []VFS{Source(swigLibRoot + "/python"), Source(swigLibRoot)}
 
-func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) []*sourceEmit {
+func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []*SourceEmit {
 	if len(d.swigC) == 0 {
 		return nil
 	}
 
 	swigRef, swigBin := swigTool(ctx, instance)
 
-	out := make([]*sourceEmit, 0, len(d.swigC))
+	out := make([]*SourceEmit, 0, len(d.swigC))
 
 	for _, stmt := range d.swigC {
 		prefix := swigOutputPrefix(stmt.Src, stmt.Module)
 		cOutRel := prefix + ".swg.c"
 		pyOutRel := prefix + ".py"
-		srcVFS := Source(instance.Path.Rel() + "/" + stmt.Src)
-		cOutVFS := Build(instance.Path.Rel() + "/" + cOutRel)
-		pyOutVFS := Build(instance.Path.Rel() + "/" + pyOutRel)
+		srcVFS := Source(instance.Path.rel() + "/" + stmt.Src)
+		cOutVFS := Build(instance.Path.rel() + "/" + cOutRel)
+		pyOutVFS := Build(instance.Path.rel() + "/" + pyOutRel)
 		// The window walk: implicit %includes are the swig parser's own
 		// directives, the Lib dirs are FOR-swig addincl data, the resolution
 		// is the scanner's standard one (sysincl swig.yml included).
-		swigClosure := walkClosureTail(ctx, instance, srcVFS, ModuleCCInputs{AddIncl: swigAddIncls, RootParser: swigIncludeDirectiveParser{}})
+		swigClosure := walkClosureTail(ctx, instance, srcVFS, ModuleCCInputs{AddIncl: swigAddIncls, RootParser: SwigIncludeDirectiveParser{}})
 
 		// swigClosure joins as its own chunk (referenced, not copied; read-only
 		// after this — the later consumers copy out of it).
-		inputs := inputChunks{{bldContribToolsSwigSwig, srcVFS}, swigClosure}
+		inputs := InputChunks{{bldContribToolsSwigSwig, srcVFS}, swigClosure}
 
 		cmdArgs := []STR{
 			internStr(swigBin),
@@ -57,11 +57,11 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 			(srcVFS).str(),
 		}
 
-		swRef := ctx.emit.Emit(&Node{
+		swRef := ctx.emit.emit(&Node{
 			Platform: instance.Platform,
 			Cmds: []Cmd{
 				{
-					CmdArgs: argChunks{cmdArgs},
+					CmdArgs: ArgChunks{cmdArgs},
 					Env:     EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
 				},
 			},
@@ -71,7 +71,7 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 			Outputs:          []VFS{cOutVFS, pyOutVFS},
 			KV:               KV{P: pkSW, PC: pcYellow},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
+			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		})
 
 		if d.pyGeneratedSrcs == nil {
@@ -93,13 +93,13 @@ func emitSwigC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCI
 		ccIn.IncludeInputs = swigFilterExistingSources(ctx.fs, dedupVFS(incl))
 
 		ccRef, ccOut, _ := EmitCC(instance, cOutRel, cOutVFS, ccIn, ctx.host, ctx.emit)
-		out = append(out, &sourceEmit{Ref: ccRef, OutPath: ccOut})
+		out = append(out, &SourceEmit{Ref: ccRef, OutPath: ccOut})
 	}
 
 	return out
 }
 
-func swigTool(ctx *genCtx, instance ModuleInstance) (NodeRef, string) {
+func swigTool(ctx *GenCtx, instance ModuleInstance) (NodeRef, string) {
 	ref, bin := ctx.tool(argContribToolsSwig)
 	return ref, bin.String()
 }
@@ -122,14 +122,14 @@ func swigModuleName(module string) string {
 	return module
 }
 
-func collectSwigInducedIncludes(ctx *genCtx, src VFS, closure []VFS) []includeDirective {
+func collectSwigInducedIncludes(ctx *GenCtx, src VFS, closure []VFS) []IncludeDirective {
 	// Every closure member was parsed during the walk, so the bucket reads
 	// below are pure cache hits — the parse path (and its dedupDirectives
 	// deduper use) cannot run, and the shared deduper may host this set.
 	deduper.reset()
 
-	swigParser := includeDirectiveParser(swigIncludeDirectiveParser{})
-	var out []includeDirective
+	swigParser := IncludeDirectiveParser(SwigIncludeDirectiveParser{})
+	var out []IncludeDirective
 
 	add := func(v VFS) {
 		for _, d := range ctx.parsers.sourceParsedBuckets(v, swigParser).bucket(parsedIncludesCpp) {
@@ -160,7 +160,7 @@ func swigResolveCandidates(fs FS, target, incRel string, roots []string) []strin
 	add := func(rel string) {
 		rel = cleanRel(filepath.ToSlash(filepath.Clean(rel)))
 
-		if rel == "" || !fs.IsFile(srcRootVFS, rel) {
+		if rel == "" || !fs.isFile(srcRootVFS, rel) {
 			return
 		}
 
@@ -199,7 +199,7 @@ func swigFilterExistingSources(fs FS, in []VFS) []VFS {
 	out := make([]VFS, 0, len(in))
 
 	for _, v := range in {
-		if v.IsSource() && !fs.IsFile(srcRootVFS, v.Rel()) {
+		if v.isSource() && !fs.isFile(srcRootVFS, v.rel()) {
 			continue
 		}
 

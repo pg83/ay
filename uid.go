@@ -6,7 +6,7 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-func nodeUIDWithBuf(n *Node, c *canonBuf) UID {
+func nodeUIDWithBuf(n *Node, c *CanonBuf) UID {
 	c.buf = c.buf[:0]
 	c.writeNode(n)
 
@@ -27,7 +27,7 @@ func resourceFetchUID(uri, output string) UID {
 	return UID{Hi: sum.Hi, Lo: sum.Lo}
 }
 
-type canonBuf struct {
+type CanonBuf struct {
 	buf []byte
 	// fs, when set, makes writeVFSSlice mix each $(S) input's file-content hash
 	// (xxh3, recorded by the FS on read) into the node hash, so a source edit
@@ -37,10 +37,10 @@ type canonBuf struct {
 
 	// uids resolves a node's DepRefs/ForeignDepRefs to dep uids for the preimage,
 	// so deps are never materialized onto the node. Set before writeNode.
-	uids *uidVec
+	uids *UidVec
 }
 
-func (c *canonBuf) writeByte(b byte) {
+func (c *CanonBuf) writeByte(b byte) {
 	c.buf = append(c.buf, b)
 }
 
@@ -49,17 +49,17 @@ func (c *canonBuf) writeByte(b byte) {
 // stack-array + append(b[:]...) shape paid a runtime memmove call per write —
 // and this is the inner op of the whole uid layer (every STR lo, dep uid half,
 // content hash).
-func (c *canonBuf) writeUint32(n uint32) {
+func (c *CanonBuf) writeUint32(n uint32) {
 	c.buf = append(c.buf, byte(n), byte(n>>8), byte(n>>16), byte(n>>24))
 }
 
-func (c *canonBuf) writeUint64(n uint64) {
+func (c *CanonBuf) writeUint64(n uint64) {
 	c.buf = append(c.buf,
 		byte(n), byte(n>>8), byte(n>>16), byte(n>>24),
 		byte(n>>32), byte(n>>40), byte(n>>48), byte(n>>56))
 }
 
-func (c *canonBuf) writeBool(b bool) {
+func (c *CanonBuf) writeBool(b bool) {
 	if b {
 		c.buf = append(c.buf, 1)
 	} else {
@@ -67,7 +67,7 @@ func (c *canonBuf) writeBool(b bool) {
 	}
 }
 
-func (c *canonBuf) writeBytes(s string) {
+func (c *CanonBuf) writeBytes(s string) {
 	c.writeUint32(uint32(len(s)))
 	c.buf = append(c.buf, s...)
 }
@@ -77,13 +77,13 @@ func (c *canonBuf) writeBytes(s string) {
 // internTable.los, not its bytes. Equal strings share a STR and thus a lo, so the
 // hash is identical without materialising the string. STR 0 (the empty token) has
 // the sentinel lo 0.
-func (c *canonBuf) writeSTR(s STR) {
+func (c *CanonBuf) writeSTR(s STR) {
 	c.writeUint64(internTable.los[s])
 }
 
 // writeRefUIDs serializes refs as their resolved dep uids (looked up by id in
 // c.uids), so Deps/ForeignDeps need not be materialized onto the node.
-func (c *canonBuf) writeRefUIDs(refs []NodeRef) {
+func (c *CanonBuf) writeRefUIDs(refs []NodeRef) {
 	c.writeUint32(uint32(len(refs)))
 
 	for _, r := range refs {
@@ -93,7 +93,7 @@ func (c *canonBuf) writeRefUIDs(refs []NodeRef) {
 	}
 }
 
-func (c *canonBuf) writeStringSlice(ss []string) {
+func (c *CanonBuf) writeStringSlice(ss []string) {
 	c.writeUint32(uint32(len(ss)))
 
 	for _, s := range ss {
@@ -105,7 +105,7 @@ func (c *canonBuf) writeStringSlice(ss []string) {
 // node's UID is identical whether an arg reached the STR via ARG/STR/VFS/TOK
 // str() — the same flag string hashes the same regardless of which namespace
 // produced it.
-func (c *canonBuf) writeStrSlice(as []STR) {
+func (c *CanonBuf) writeStrSlice(as []STR) {
 	c.writeUint32(uint32(len(as)))
 
 	for _, a := range as {
@@ -115,7 +115,7 @@ func (c *canonBuf) writeStrSlice(as []STR) {
 
 // writeVFSChunks writes the flattened element sequence of the chunk list —
 // byte-identical to writeVFSSlice over the concatenation.
-func (c *canonBuf) writeVFSChunks(chunks inputChunks) {
+func (c *CanonBuf) writeVFSChunks(chunks InputChunks) {
 	total := 0
 
 	for _, ch := range chunks {
@@ -124,7 +124,7 @@ func (c *canonBuf) writeVFSChunks(chunks inputChunks) {
 
 	c.writeUint32(uint32(total))
 
-	if fs, ok := c.fs.(*osFS); ok {
+	if fs, ok := c.fs.(*OsFS); ok {
 		for _, ch := range chunks {
 			c.writeVFSSliceOS(ch, fs)
 		}
@@ -137,10 +137,10 @@ func (c *canonBuf) writeVFSChunks(chunks inputChunks) {
 	}
 }
 
-func (c *canonBuf) writeVFSSlice(vs []VFS) {
+func (c *CanonBuf) writeVFSSlice(vs []VFS) {
 	c.writeUint32(uint32(len(vs)))
 
-	if fs, ok := c.fs.(*osFS); ok {
+	if fs, ok := c.fs.(*OsFS); ok {
 		c.writeVFSSliceOS(vs, fs)
 
 		return
@@ -149,7 +149,7 @@ func (c *canonBuf) writeVFSSlice(vs []VFS) {
 	c.writeVFSSliceBody(vs)
 }
 
-func (c *canonBuf) writeVFSSliceBody(vs []VFS) {
+func (c *CanonBuf) writeVFSSliceBody(vs []VFS) {
 	for _, v := range vs {
 		c.writeSTR(v.str())
 
@@ -157,8 +157,8 @@ func (c *canonBuf) writeVFSSliceBody(vs []VFS) {
 		// node uid. $(B) inputs are produced — their content is captured via the
 		// producing node's uid in deps, not here. ContentHash faults if the file
 		// was never read by the FS (the hash must have been recorded during gen).
-		if c.fs != nil && v.IsSource() {
-			c.writeUint64(c.fs.ContentHash(v))
+		if c.fs != nil && v.isSource() {
+			c.writeUint64(c.fs.contentHash(v))
 		}
 	}
 }
@@ -171,7 +171,7 @@ func (c *canonBuf) writeVFSSliceBody(vs []VFS) {
 // by hand: the hot path is ContentHash's array probe inlined here, the cold
 // path (contentHashSlow, the lazy read) may grow the array and is re-hoisted
 // after. Byte output is identical to the generic loop above.
-func (c *canonBuf) writeVFSSliceOS(vs []VFS, fs *osFS) {
+func (c *CanonBuf) writeVFSSliceOS(vs []VFS, fs *OsFS) {
 	buf := c.buf
 	los := internTable.los
 	hashes := fs.contentHashes
@@ -183,7 +183,7 @@ func (c *canonBuf) writeVFSSliceOS(vs []VFS, fs *osFS) {
 			byte(lo), byte(lo>>8), byte(lo>>16), byte(lo>>24),
 			byte(lo>>32), byte(lo>>40), byte(lo>>48), byte(lo>>56))
 
-		if !v.IsSource() {
+		if !v.isSource() {
 			continue
 		}
 
@@ -206,7 +206,7 @@ func (c *canonBuf) writeVFSSliceOS(vs []VFS, fs *osFS) {
 
 // writeStrChunks writes the flattened element sequence of the chunk list —
 // byte-identical to writeStrSlice over the concatenation.
-func (c *canonBuf) writeStrChunks(chunks argChunks) {
+func (c *CanonBuf) writeStrChunks(chunks ArgChunks) {
 	total := 0
 
 	for _, ch := range chunks {
@@ -222,7 +222,7 @@ func (c *canonBuf) writeStrChunks(chunks argChunks) {
 	}
 }
 
-func (c *canonBuf) writeCmdSlice(cmds []Cmd) {
+func (c *CanonBuf) writeCmdSlice(cmds []Cmd) {
 	c.writeUint32(uint32(len(cmds)))
 
 	for _, cm := range cmds {
@@ -233,7 +233,7 @@ func (c *canonBuf) writeCmdSlice(cmds []Cmd) {
 	}
 }
 
-func (c *canonBuf) writeEnv(env EnvVars) {
+func (c *CanonBuf) writeEnv(env EnvVars) {
 	c.writeUint32(uint32(len(env)))
 
 	for _, e := range env {
@@ -246,7 +246,7 @@ func (c *canonBuf) writeEnv(env EnvVars) {
 // The gate recomputes content hashes from the JSON, so only determinism matters
 // here, not parity with the old map encoding. ---
 
-func (c *canonBuf) writeRequirements(r Requirements) {
+func (c *CanonBuf) writeRequirements(r Requirements) {
 	c.writeUint64(math.Float64bits(r.CPU))
 	c.writeUint64(math.Float64bits(r.RAM))
 	c.writeByte(byte(r.Network))
@@ -254,14 +254,14 @@ func (c *canonBuf) writeRequirements(r Requirements) {
 	c.writeBool(r.HasRAMDisk)
 }
 
-func (c *canonBuf) writeTargetProperties(t TargetProperties) {
+func (c *CanonBuf) writeTargetProperties(t TargetProperties) {
 	c.writeBytes(t.ModuleDir)
 	c.writeSTR(t.ModuleTag)
 	c.writeByte(byte(t.ModuleLang))
 	c.writeByte(byte(t.ModuleType))
 }
 
-func (c *canonBuf) writeKV(kv KV) {
+func (c *CanonBuf) writeKV(kv KV) {
 	c.writeByte(byte(kv.P))
 	c.writeByte(byte(kv.PC))
 	c.writeBool(kv.ShowOut)
@@ -282,7 +282,7 @@ func (c *canonBuf) writeKV(kv KV) {
 	}
 }
 
-func (c *canonBuf) writeNode(n *Node) {
+func (c *CanonBuf) writeNode(n *Node) {
 	switch {
 	case n.Cache == nil:
 		c.writeByte(0)

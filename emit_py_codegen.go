@@ -11,7 +11,7 @@ var (
 	genPy3RegScriptChunk = []VFS{genPy3RegScriptVFS}
 )
 
-func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
+func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	if len(d.pySrcs) == 0 {
 		return
 	}
@@ -42,27 +42,27 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 		srcAbs := resolveSourceVFS(ctx, instance, srcRel, d.srcDirs)
 
 		if generatedInputs != nil {
-			srcAbs = Build(instance.Path.Rel() + "/" + srcRel)
+			srcAbs = Build(instance.Path.rel() + "/" + srcRel)
 		}
 
-		moduleName := srcAbs.Rel() + "-"
+		moduleName := srcAbs.rel() + "-"
 
 		var outputPath VFS
 
 		if strings.Contains(srcRel, "/") {
-			outputPath = Build(instance.Path.Rel() + "/" + srcRel + "." + pySrcYapycSuffix(instance.Path.Rel()) + ".yapyc3")
+			outputPath = Build(instance.Path.rel() + "/" + srcRel + "." + pySrcYapycSuffix(instance.Path.rel()) + ".yapyc3")
 		} else {
-			outputPath = Build(instance.Path.Rel() + "/" + srcRel + ".yapyc3")
+			outputPath = Build(instance.Path.rel() + "/" + srcRel + ".yapyc3")
 		}
 
-		cmdArgs := argChunks{py3ccArgHead, []STR{
+		cmdArgs := ArgChunks{py3ccArgHead, []STR{
 			internStr(moduleName),
 			(srcAbs).str(),
 			(outputPath).str(),
 		}}
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}
-		nodeInputs := inputChunks{py3ccToolsChunk, srcChunk(srcAbs)}
+		nodeInputs := InputChunks{py3ccToolsChunk, srcChunk(srcAbs)}
 
 		var inputs []VFS
 
@@ -83,7 +83,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			}
 
 			inputs = dedupVFS(inputs)
-			nodeInputs = inputChunks{inputs}
+			nodeInputs = InputChunks{inputs}
 		}
 
 		node := &Node{
@@ -99,7 +99,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			Outputs: []VFS{outputPath},
 			KV:      KV{P: pkPY, PC: pcYellow},
 			TargetProperties: func() TargetProperties {
-				tp := TargetProperties{ModuleDir: instance.Path.Rel()}
+				tp := TargetProperties{ModuleDir: instance.Path.rel()}
 
 				if d.moduleStmt.Name == tokPy23Library {
 					tp.ModuleTag = tagPy3
@@ -140,23 +140,23 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			node.ForeignDepRefs = toolRefs
 		}
 
-		pyRef := ctx.emit.Emit(node)
+		pyRef := ctx.emit.emit(node)
 
 		registerBoundGeneratedParsedOutput(ctx, instance, pkPY, outputPath, nil, pyRef, toolRefs)
 	}
 }
 
-type pyRegisterResult struct {
+type PyRegisterResult struct {
 	Refs    []NodeRef
 	Outputs []VFS
 }
 
-func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs, py3Suffix bool) *pyRegisterResult {
+func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs, py3Suffix bool) *PyRegisterResult {
 	if len(d.pyRegister) == 0 {
 		return nil
 	}
 
-	res := &pyRegisterResult{}
+	res := &PyRegisterResult{}
 
 	for i, arg := range d.pyRegister {
 		priorShort := make(map[string]struct{}, i)
@@ -171,7 +171,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 		}
 
 		regCpp := arg + ".reg3.cpp"
-		regCppVFS := Build(instance.Path.Rel() + "/" + regCpp)
+		regCppVFS := Build(instance.Path.rel() + "/" + regCpp)
 		regCppAbs := regCppVFS.String()
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -192,13 +192,13 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 			pyNode := &Node{
 				Platform: pyInstance.Platform,
 				Cmds: []Cmd{
-					{CmdArgs: argChunks{pyCmdArgs}, Env: env},
+					{CmdArgs: ArgChunks{pyCmdArgs}, Env: env},
 				},
 				Env:              env,
-				Inputs:           inputChunks{genPy3RegScriptChunk},
+				Inputs:           InputChunks{genPy3RegScriptChunk},
 				Outputs:          []VFS{regCppVFS},
 				KV:               KV{P: pkPY, PC: pcYellow},
-				TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
+				TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 				Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 				DepRefs:          []NodeRef{},
 				usesResources:    []string{resourcePatternYMakePython3},
@@ -208,7 +208,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 				pyNode.TargetProperties.ModuleTag = tagPy3
 			}
 
-			pyRef = ctx.emit.Emit(pyNode)
+			pyRef = ctx.emit.emit(pyNode)
 			ctx.pyRegisterOutputs[regCppVFS] = pyRef
 		}
 

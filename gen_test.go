@@ -420,9 +420,9 @@ END()
 `,
 	})
 
-	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/nolibcmod/ya.make"))
+	mf := Throw2(ParseFile(fs, fs.sourceRoot()+"/nolibcmod/ya.make"))
 
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "nolibcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "nolibcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Kind: KindLib, Platform: testTargetP}))
 
 	if !d.flags.NoLibc {
 		t.Errorf("flags.NoLibc = false, want true (macro overlay should have flipped it)")
@@ -838,7 +838,7 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		"build/platform/python/ymake_python3",
 	}
 
-	gotDefaults := defaultPeerdirsForWithState(nil, plain, &moduleData{})
+	gotDefaults := defaultPeerdirsForWithState(nil, plain, &ModuleData{})
 
 	if !stringSlicesEqual(gotDefaults, wantDefaults) {
 		t.Errorf("defaultPeerdirsForWithState(plain CPP) = %v, want %v", gotDefaults, wantDefaults)
@@ -1037,7 +1037,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := defaultPeerdirsForWithState(nil, c.mi, &moduleData{flags: c.flags})
+			got := defaultPeerdirsForWithState(nil, c.mi, &ModuleData{flags: c.flags})
 
 			if !stringSlicesEqual(got, c.want) {
 				t.Errorf("defaultPeerdirsForWithState(%+v, %+v) = %v, want %v", c.mi, c.flags, got, c.want)
@@ -2325,7 +2325,7 @@ END()
 
 	hasObject := func(n *Node) bool {
 		for _, in := range n.flatInputs() {
-			if strings.HasSuffix(in.Rel(), ".o") {
+			if strings.HasSuffix(in.rel(), ".o") {
 				return true
 			}
 		}
@@ -3071,8 +3071,8 @@ SRCS(lib.cpp)
 END()
 `,
 	})
-	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/mod/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("mod"), Kind: KindLib, Platform: testTargetP}))
+	mf := Throw2(ParseFile(fs, fs.sourceRoot()+"/mod/ya.make"))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("mod"), Kind: KindLib, Platform: testTargetP}))
 
 	want := []string{
 		"-DUSE_CURRENT_UDF_ABI_VERSION",
@@ -3093,8 +3093,8 @@ PEERDIR(custom/peer)
 END()
 `,
 	})
-	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/mod/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("mod"), Kind: KindLib, Platform: testTargetP}))
+	mf := Throw2(ParseFile(fs, fs.sourceRoot()+"/mod/ya.make"))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("mod"), Kind: KindLib, Platform: testTargetP}))
 
 	if d.moduleStmt == nil || d.moduleStmt.Name != tokYqlUdfContrib {
 		t.Fatalf("moduleStmt = %#v, want YQL_UDF_CONTRIB", d.moduleStmt)
@@ -3125,8 +3125,8 @@ SRCS(test.proto)
 END()
 `,
 	})
-	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/proto/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("proto"), Kind: KindLib, Platform: testTargetP}))
+	mf := Throw2(ParseFile(fs, fs.sourceRoot()+"/proto/ya.make"))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("proto"), Kind: KindLib, Platform: testTargetP}))
 
 	if !equalStrings(argStrs(d.protocFlags), []string{"--fatal_warnings"}) {
 		t.Fatalf("protocFlags = %v, want [--fatal_warnings]", d.protocFlags)
@@ -3141,8 +3141,8 @@ SRCS(test.proto)
 END()
 `,
 	})
-	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/proto/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("proto"), Kind: KindLib, Platform: testTargetP}))
+	mf := Throw2(ParseFile(fs, fs.sourceRoot()+"/proto/ya.make"))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("proto"), Kind: KindLib, Platform: testTargetP}))
 
 	if len(d.cppProtoPlugins) != 1 {
 		t.Fatalf("cppProtoPlugins = %d, want 1", len(d.cppProtoPlugins))
@@ -3177,8 +3177,8 @@ SRCS(Schema.fbs)
 END()
 `,
 	})
-	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/flatcmod/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "flatcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("flatcmod"), Kind: KindLib, Platform: testTargetP}))
+	mf := Throw2(ParseFile(fs, fs.sourceRoot()+"/flatcmod/ya.make"))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "flatcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("flatcmod"), Kind: KindLib, Platform: testTargetP}))
 
 	if !equalStrings(argStrs(d.flatcFlags), []string{"--scoped-enums", "--gen-all"}) {
 		t.Fatalf("flatcFlags = %v, want [--scoped-enums --gen-all]", d.flatcFlags)
@@ -3193,8 +3193,8 @@ SRCS(test.proto)
 END()
 `,
 	})
-	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/proto/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("proto"), Kind: KindLib, Platform: testTargetP}))
+	mf := Throw2(ParseFile(fs, fs.sourceRoot()+"/proto/ya.make"))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("proto"), Kind: KindLib, Platform: testTargetP}))
 
 	if !containsString(d.peerdirs, "contrib/libs/googleapis-common-protos") {
 		t.Fatalf("peerdirs = %v, want contrib/libs/googleapis-common-protos", d.peerdirs)
@@ -3211,9 +3211,9 @@ PY_SRCS(
 END()
 `,
 	})
-	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/pytool/ya.make"))
+	mf := Throw2(ParseFile(fs, fs.sourceRoot()+"/pytool/ya.make"))
 
-	bin := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "pytool", KindBin, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("pytool"), Kind: KindBin, Platform: testTargetP}))
+	bin := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "pytool", KindBin, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("pytool"), Kind: KindBin, Platform: testTargetP}))
 	if got := bin.pyMain; got == nil || *got != "pytool.__main__:main" {
 		t.Fatalf("bin pyMain = %#v, want pytool.__main__:main", got)
 	}
@@ -3224,7 +3224,7 @@ END()
 		t.Fatalf("bin pySrcs = %v, want [__main__.py]", bin.pySrcs)
 	}
 
-	lib := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "pytool", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("pytool"), Kind: KindLib, Platform: testTargetP}))
+	lib := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "pytool", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("pytool"), Kind: KindLib, Platform: testTargetP}))
 	if lib.pyMain != nil {
 		t.Fatalf("lib pyMain = %#v, want nil", lib.pyMain)
 	}
@@ -3248,8 +3248,8 @@ COPY(
 END()
 `,
 	})
-	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/copymod/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "copymod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("copymod"), Kind: KindLib, Platform: testTargetP}))
+	mf := Throw2(ParseFile(fs, fs.sourceRoot()+"/copymod/ya.make"))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "copymod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("copymod"), Kind: KindLib, Platform: testTargetP}))
 
 	if !equalStrings(d.srcs, []string{"a.cpp", "b.h"}) {
 		t.Fatalf("srcs = %v, want [a.cpp b.h]", d.srcs)
@@ -3927,9 +3927,9 @@ END()
 	writeTestModuleFile(files, "gen/pire/re_lexer.h", "#pragma once\n")
 
 	fs := newMemFS(files)
-	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/gen/ya.make"))
+	mf := Throw2(ParseFile(fs, fs.sourceRoot()+"/gen/ya.make"))
 	instance := ModuleInstance{Path: Source("gen"), Kind: KindLib, Platform: testTargetP}
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "gen", KindLib, mf.Stmts, buildIfEnv(instance))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "gen", KindLib, mf.Stmts, buildIfEnv(instance))
 
 	for _, got := range [][]VFS{d.addIncl, d.addInclGlobal} {
 		if !slices.Contains(vfsStrings(got), "$(B)/gen/pire") {
@@ -3944,13 +3944,13 @@ func TestGen_BisonGeneratedHeaderPreprocessAndPeerBuildRootInclude(t *testing.T)
 
 	writeToolProgram(files, "contrib/tools/bison", "bison")
 	writeToolProgram(files, "contrib/tools/m4", "m4")
-	writeTestModuleFile(files, bisonPreprocessPyVFS.Rel(), "print('stub')\n")
+	writeTestModuleFile(files, bisonPreprocessPyVFS.rel(), "print('stub')\n")
 	for _, input := range bisonCppSkeletonInputs {
 		body := ""
-		if strings.HasSuffix(input.Rel(), "/stack.hh") {
+		if strings.HasSuffix(input.rel(), "/stack.hh") {
 			body = `#include "skeleton-helper.h"` + "\n"
 		}
-		writeTestModuleFile(files, input.Rel(), body)
+		writeTestModuleFile(files, input.rel(), body)
 	}
 	writeTestModuleFile(files, "contrib/tools/bison/data/skeletons/skeleton-helper.h", "")
 
@@ -4050,9 +4050,9 @@ func TestGen_BisonCppFlags(t *testing.T) {
 
 	writeToolProgram(files, "contrib/tools/bison", "bison")
 	writeToolProgram(files, "contrib/tools/m4", "m4")
-	writeTestModuleFile(files, bisonPreprocessPyVFS.Rel(), "print('stub')\n")
+	writeTestModuleFile(files, bisonPreprocessPyVFS.rel(), "print('stub')\n")
 	for _, input := range bisonCppSkeletonInputs {
-		writeTestModuleFile(files, input.Rel(), "")
+		writeTestModuleFile(files, input.rel(), "")
 	}
 
 	writeTestModuleFile(files, "genlib/ya.make", `LIBRARY()
@@ -4083,9 +4083,9 @@ func TestGen_BisonHeaderConsumerIncludesSourceY(t *testing.T) {
 
 	writeToolProgram(files, "contrib/tools/bison", "bison")
 	writeToolProgram(files, "contrib/tools/m4", "m4")
-	writeTestModuleFile(files, bisonPreprocessPyVFS.Rel(), "print('stub')\n")
+	writeTestModuleFile(files, bisonPreprocessPyVFS.rel(), "print('stub')\n")
 	for _, input := range bisonCppSkeletonInputs {
-		writeTestModuleFile(files, input.Rel(), "")
+		writeTestModuleFile(files, input.rel(), "")
 	}
 
 	// genlib produces re_parser.y.h from re_parser.y
@@ -4279,13 +4279,13 @@ func TestReorderLDMembers_LegacyDoubleUnderscorePathsTrailRegularSources(t *test
 
 var t20ResourceMacroRE = regexp.MustCompile(`\$\((CLANG|LLD_ROOT|YMAKE_PYTHON3)-[0-9]+\)`)
 
-type t20RefCmd struct {
+type T20RefCmd struct {
 	CmdArgs []string          `json:"cmd_args"`
 	Env     map[string]string `json:"env"`
 }
 
-type t20RefNode struct {
-	Cmds    []t20RefCmd `json:"cmds"`
+type T20RefNode struct {
+	Cmds    []T20RefCmd `json:"cmds"`
 	Deps    []string    `json:"deps"`
 	Inputs  []string    `json:"inputs"`
 	Outputs []string    `json:"outputs"`
@@ -4297,9 +4297,9 @@ func TestCollectModule_SETAPPENDRPathGlobal(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"mod/ya.make": content,
 	})
-	mf := Throw2(ParseFile(fs, fs.SourceRoot()+"/mod/ya.make"))
+	mf := Throw2(ParseFile(fs, fs.sourceRoot()+"/mod/ya.make"))
 	instance := ModuleInstance{Path: Source("mod"), Kind: KindLib, Platform: testTargetP}
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &deDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(instance))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(instance))
 
 	want := []string{"-Wl,-rpath,$ORIGIN"}
 	if !reflect.DeepEqual(argStrs(d.rpathFlagsGlobal), want) {
@@ -4307,9 +4307,9 @@ func TestCollectModule_SETAPPENDRPathGlobal(t *testing.T) {
 	}
 }
 
-type t20RefGraph struct {
-	nodes []*t20RefNode
-	byUID map[string]*t20RefNode
+type T20RefGraph struct {
+	nodes []*T20RefNode
+	byUID map[string]*T20RefNode
 }
 
 func findGraphNodeByOutputs(t *testing.T, g *Graph, wantOutputs ...string) *Node {

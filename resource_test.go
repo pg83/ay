@@ -61,7 +61,7 @@ func TestExpandResourceFilesRapidjson(t *testing.T) {
 
 	got := expandResourceFiles(args)
 
-	want := []resourceEntry{
+	want := []ResourceEntry{
 		{Path: "-", Key: "resfs/src/resfs/file/devtools/ymake/contrib/python-rapidjson/.dist-info/METADATA=${rootrel;context=TEXT;input=TEXT:\".dist-info/METADATA\"}"},
 		{Path: ".dist-info/METADATA", Key: "resfs/file/devtools/ymake/contrib/python-rapidjson/.dist-info/METADATA"},
 		{Path: "-", Key: "resfs/src/resfs/file/devtools/ymake/contrib/python-rapidjson/.dist-info/top_level.txt=${rootrel;context=TEXT;input=TEXT:\".dist-info/top_level.txt\"}"},
@@ -169,7 +169,7 @@ func TestPyMainObjcopyHashPy3ccSlow(t *testing.T) {
 }
 
 func TestPySrcObjcopyHashRuntimePy3RawEntryPoints(t *testing.T) {
-	d := &moduleData{
+	d := &ModuleData{
 		pySrcs:       []string{"entry_points.py"},
 		pyBuildNoPYC: true,
 		pyBuildNoPY:  false,
@@ -205,7 +205,7 @@ func TestPySrcObjcopyHashRuntimePy3RawEntryPoints(t *testing.T) {
 }
 
 func TestPySrcObjcopyHashPy3ccSlowMain(t *testing.T) {
-	d := &moduleData{
+	d := &ModuleData{
 		pySrcs:       []string{"main.py"},
 		pyBuildNoPYC: true,
 		pyBuildNoPY:  false,
@@ -225,7 +225,7 @@ func TestPySrcObjcopyHashPy3ccSlowMain(t *testing.T) {
 }
 
 func TestPySrcObjcopyHashSymbolsModuleDualEntry(t *testing.T) {
-	d := &moduleData{
+	d := &ModuleData{
 		pySrcs:       []string{"__init__.py"},
 		pyBuildNoPYC: false,
 		pyBuildNoPY:  false,
@@ -254,7 +254,7 @@ func TestChunkPySrcEntriesEmptyReturnsNil(t *testing.T) {
 }
 
 func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
-	d := &moduleData{
+	d := &ModuleData{
 		tc: testToolchain(),
 		pySrcs: []string{
 			"shellingham/__init__.py",
@@ -283,14 +283,14 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 		t.Fatalf("tail chunk paths len: got %d, want 1", got)
 	}
 
-	ctx := &genCtx{emit: NewBufferedEmitter()}
+	ctx := &GenCtx{emit: NewBufferedEmitter()}
 	instance := ModuleInstance{
 		Path:     Source("contrib/python/shellingham"),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,
 	}
-	res := emitPySrcObjcopy(ctx, instance, d, &objcopyEmitCtx{blocks: composeObjcopyArgBlocks(d.tc, testTargetP)})
+	res := emitPySrcObjcopy(ctx, instance, d, &ObjcopyEmitCtx{blocks: composeObjcopyArgBlocks(d.tc, testTargetP)})
 	if res == nil {
 		t.Fatal("emitPySrcObjcopy returned nil")
 	}

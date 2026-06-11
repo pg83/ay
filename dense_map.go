@@ -13,7 +13,7 @@ type DenseMap[K ~uint32, V any] struct {
 }
 
 // Get returns the value for k and whether it was present.
-func (m *DenseMap[K, V]) Get(k K) (V, bool) {
+func (m *DenseMap[K, V]) get(k K) (V, bool) {
 	if int(k) < len(m.idx) {
 		if slot := m.idx[k]; slot != 0 {
 			return m.vals[slot], true
@@ -26,7 +26,7 @@ func (m *DenseMap[K, V]) Get(k K) (V, bool) {
 }
 
 // Put inserts or overwrites the value for k.
-func (m *DenseMap[K, V]) Put(k K, v V) {
+func (m *DenseMap[K, V]) put(k K, v V) {
 	if int(k) < len(m.idx) {
 		if slot := m.idx[k]; slot != 0 {
 			m.vals[slot] = v

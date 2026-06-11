@@ -7,10 +7,10 @@ import (
 
 // parsedIncludeBucket enumerates the fixed, compile-time-known groups a parser
 // sorts a file's #include directives into. Used as the index of parsedIncludeSet.
-type parsedIncludeBucket uint8
+type ParsedIncludeBucket uint8
 
 const (
-	parsedIncludesLocal parsedIncludeBucket = iota
+	parsedIncludesLocal ParsedIncludeBucket = iota
 	parsedIncludesRagelNative
 	// parsedIncludesHeader is consumed by header (.h) outputs; parsedIncludesCpp by
 	// translation-unit (.cc/.cpp) outputs. INDUCED_DEPS(h …) lands in Header only,
@@ -22,14 +22,14 @@ const (
 	parsedIncludeBucketCount
 )
 
-type parsedInclude = includeDirective
+type ParsedInclude = IncludeDirective
 
 // parsedIncludeSet groups a source file's parsed directives by bucket. The bucket
 // set is fixed at compile time, so it is a flat array indexed by the bucket enum —
 // a direct index, not a map probe. The zero value is the empty set.
-type parsedIncludeSet [parsedIncludeBucketCount][]includeDirective
+type ParsedIncludeSet [parsedIncludeBucketCount][]IncludeDirective
 
-func appendParsedDirectives(set parsedIncludeSet, bucket parsedIncludeBucket, directives ...includeDirective) parsedIncludeSet {
+func appendParsedDirectives(set ParsedIncludeSet, bucket ParsedIncludeBucket, directives ...IncludeDirective) ParsedIncludeSet {
 	if len(directives) == 0 {
 		return set
 	}
@@ -39,7 +39,7 @@ func appendParsedDirectives(set parsedIncludeSet, bucket parsedIncludeBucket, di
 	return set
 }
 
-func (set parsedIncludeSet) bucket(bucket parsedIncludeBucket) []includeDirective {
+func (set ParsedIncludeSet) bucket(bucket ParsedIncludeBucket) []IncludeDirective {
 	return set[bucket]
 }
 
@@ -53,12 +53,12 @@ func (set parsedIncludeSet) bucket(bucket parsedIncludeBucket) []includeDirectiv
 // enforced upstream by TUpdEntryStats::OnceProcessedAsFile (add_iter.h:377)
 // means each file is parsed exactly once per run; we get the same behaviour
 // from this map's first-write-wins semantics. Do not key by scan context.
-type sharedParseCache struct {
+type SharedParseCache struct {
 	// ambiguous holds parse results for files with UNREGISTERED extensions,
 	// keyed by splitMix64(strID, parserID): such a file parses under the scan
 	// context's parser (resolved once from the walk's root), so one file may
 	// legitimately carry one result per parser (.i under swig vs under C).
-	ambiguous map[uint64]parsedIncludeSet
+	ambiguous map[uint64]ParsedIncludeSet
 
 	// parsed is keyed by the source file's STR (vfsPath.strID()): a parsed source
 	// is always Source-rooted (VFS == STR<<1), so the STR is lossless and halves
@@ -66,36 +66,36 @@ type sharedParseCache struct {
 	// empty set is the negative cache (file does not exist or has no directives),
 	// distinct from absent (not yet parsed); the DenseMap present/absent bool, not
 	// the value, gates the re-stat.
-	parsed DenseMap[STR, parsedIncludeSet]
+	parsed DenseMap[STR, ParsedIncludeSet]
 
 	parsedHits   uint64
 	parsedMisses uint64
 }
 
-func newSharedParseCache() *sharedParseCache {
-	return &sharedParseCache{ambiguous: make(map[uint64]parsedIncludeSet, 16)}
+func newSharedParseCache() *SharedParseCache {
+	return &SharedParseCache{ambiguous: make(map[uint64]ParsedIncludeSet, 16)}
 }
 
-type includeParserManager struct {
+type IncludeParserManager struct {
 	fs    FS
-	cache *sharedParseCache
+	cache *SharedParseCache
 
 	addinclIndex   DenseMap[STR, []VFS]
 	addinclIndexed BitSet
-	buildParsed    map[VFS][]includeDirective
+	buildParsed    map[VFS][]IncludeDirective
 }
 
-type parserPerfStats struct {
+type ParserPerfStats struct {
 	parsedHits   uint64
 	parsedMisses uint64
 	buildParsed  int
 }
 
-func newIncludeParserManagerFS(fs FS, cache *sharedParseCache) *includeParserManager {
-	return &includeParserManager{
+func newIncludeParserManagerFS(fs FS, cache *SharedParseCache) *IncludeParserManager {
+	return &IncludeParserManager{
 		fs:          fs,
 		cache:       cache,
-		buildParsed: make(map[VFS][]includeDirective, 256),
+		buildParsed: make(map[VFS][]IncludeDirective, 256),
 	}
 }
 
@@ -104,9 +104,9 @@ func newIncludeParserManagerFS(fs FS, cache *sharedParseCache) *includeParserMan
 // parser resolved once from the walk's root (nil falls back to the C-like
 // default). Registered-ext results cache by file; ambiguous ones by
 // (file, parser).
-func (pm *includeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser includeDirectiveParser) parsedIncludeSet {
+func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser IncludeDirectiveParser) ParsedIncludeSet {
 	key := STR(vfsPath.strID())
-	rel := vfsPath.Rel()
+	rel := vfsPath.rel()
 	parser := includeDirectiveParsers.registeredParserFor(rel)
 	var ambKey uint64
 
@@ -123,34 +123,34 @@ func (pm *includeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser inclu
 			pm.cache.parsedHits++
 			return cached
 		}
-	} else if cached, ok := pm.cache.parsed.Get(key); ok {
+	} else if cached, ok := pm.cache.parsed.get(key); ok {
 		pm.cache.parsedHits++
 		return cached
 	}
 
 	pm.cache.parsedMisses++
 
-	put := func(set parsedIncludeSet) parsedIncludeSet {
+	put := func(set ParsedIncludeSet) ParsedIncludeSet {
 		if ambKey != 0 {
 			pm.cache.ambiguous[ambKey] = set
 		} else {
-			pm.cache.parsed.Put(key, set)
+			pm.cache.parsed.put(key, set)
 		}
 
 		return set
 	}
 
-	if !pm.fs.IsFile(srcRootVFS, rel) {
-		return put(parsedIncludeSet{})
+	if !pm.fs.isFile(srcRootVFS, rel) {
+		return put(ParsedIncludeSet{})
 	}
 
-	data := pm.fs.Read(rel)
+	data := pm.fs.read(rel)
 
 	if len(data) >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF {
 		data = data[3:]
 	}
 
-	out := parser.Parse(rel, data)
+	out := parser.parse(rel, data)
 	out = pm.withCythonSibling(rel, out)
 
 	return put(out)
@@ -161,7 +161,7 @@ func (pm *includeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser inclu
 // pure parser must, lacking FS access) yields a spurious unresolved include
 // whenever the sibling is absent; gate it here, where the FS is available. .pyx
 // files are rare, so the extra existence probe is off the hot C/C++ parse path.
-func (pm *includeParserManager) withCythonSibling(rel string, set parsedIncludeSet) parsedIncludeSet {
+func (pm *IncludeParserManager) withCythonSibling(rel string, set ParsedIncludeSet) ParsedIncludeSet {
 	if !strings.HasSuffix(rel, ".pyx") {
 		return set
 	}
@@ -169,13 +169,13 @@ func (pm *includeParserManager) withCythonSibling(rel string, set parsedIncludeS
 	sibling := rel[:len(rel)-len(".pyx")] + ".pxd"
 	sibDir, sibBase := splitDirName(sibling)
 
-	if !pm.fs.IsFile(dirKey(sibDir), sibBase) {
+	if !pm.fs.isFile(dirKey(sibDir), sibBase) {
 		return set
 	}
 
-	d := includeDirective{kind: includeQuoted, target: internStr(path.Base(sibling))}
+	d := IncludeDirective{kind: includeQuoted, target: internStr(path.Base(sibling))}
 	local := set.bucket(parsedIncludesLocal)
-	merged := make([]includeDirective, 0, 1+len(local))
+	merged := make([]IncludeDirective, 0, 1+len(local))
 	merged = append(merged, d)
 	merged = append(merged, local...)
 
@@ -184,8 +184,8 @@ func (pm *includeParserManager) withCythonSibling(rel string, set parsedIncludeS
 	return set
 }
 
-func (pm *includeParserManager) parsedIncludes(vfsPath VFS, ctxParser includeDirectiveParser) []includeDirective {
-	if vfsPath.IsBuild() {
+func (pm *IncludeParserManager) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveParser) []IncludeDirective {
+	if vfsPath.isBuild() {
 		if parsed, ok := pm.buildParsed[vfsPath]; ok {
 			return parsed
 		}
@@ -193,22 +193,22 @@ func (pm *includeParserManager) parsedIncludes(vfsPath VFS, ctxParser includeDir
 		return nil
 	}
 
-	return pm.sourceParsedBuckets(vfsPath, ctxParser).bucket(walkableBucketFor(vfsPath.Rel()))
+	return pm.sourceParsedBuckets(vfsPath, ctxParser).bucket(walkableBucketFor(vfsPath.rel()))
 }
 
-func (pm *includeParserManager) RegisterBuildParsedIncludes(out VFS, parsed []includeDirective) {
+func (pm *IncludeParserManager) registerBuildParsedIncludes(out VFS, parsed []IncludeDirective) {
 	// buildParsed is keyed by VFS and consulted only for build-rooted paths
 	// (parsedIncludes gates on IsBuild), so a source-rooted registration would
 	// be silently unreachable.
-	if !out.IsBuild() {
+	if !out.isBuild() {
 		ThrowFmt("RegisterBuildParsedIncludes: source-rooted output %q", out.String())
 	}
 
 	pm.buildParsed[out] = parsed
 }
 
-func (pm *includeParserManager) indexAddincl(a VFS) {
-	if a.Root() != VFSRootSource || a.Rel() == "" {
+func (pm *IncludeParserManager) indexAddincl(a VFS) {
+	if a.root() != VFSRootSource || a.rel() == "" {
 		return
 	}
 
@@ -217,20 +217,20 @@ func (pm *includeParserManager) indexAddincl(a VFS) {
 	}
 
 	pm.addinclIndexed.add(uint32(a))
-	base := a.Rel()
-	pm.fs.Walk(base, func(rel string, isDir bool) {
+	base := a.rel()
+	pm.fs.walk(base, func(rel string, isDir bool) {
 		if isDir {
 			return
 		}
 
 		t := internStr(rel[len(base)+1:])
-		cur, _ := pm.addinclIndex.Get(t)
-		pm.addinclIndex.Put(t, append(cur, a))
+		cur, _ := pm.addinclIndex.get(t)
+		pm.addinclIndex.put(t, append(cur, a))
 	})
 }
 
-func (pm *includeParserManager) perfStats() parserPerfStats {
-	return parserPerfStats{
+func (pm *IncludeParserManager) perfStats() ParserPerfStats {
+	return ParserPerfStats{
 		parsedHits:   pm.cache.parsedHits,
 		parsedMisses: pm.cache.parsedMisses,
 		buildParsed:  len(pm.buildParsed),

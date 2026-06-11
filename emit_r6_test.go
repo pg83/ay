@@ -7,10 +7,10 @@ import (
 func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	e := NewBufferedEmitter()
 
-	ragel6LD := e.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
+	ragel6LD := e.emit(&Node{
+		Cmds:             []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
 		Env:              nil,
-		Inputs:           inputChunks{ToVFSSlice([]string{})},
+		Inputs:           InputChunks{ToVFSSlice([]string{})},
 		KV:               KV{P: pkLD},
 		Outputs:          ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 		Platform:         &Platform{Target: "default-linux-x86_64"},
@@ -90,10 +90,10 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 	e := NewBufferedEmitter()
 
-	ragel6LD := e.Emit(&Node{Platform: &Platform{},
-		Cmds:    []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
+	ragel6LD := e.emit(&Node{Platform: &Platform{},
+		Cmds:    []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
 		Env:     nil,
-		Inputs:  inputChunks{ToVFSSlice([]string{})},
+		Inputs:  InputChunks{ToVFSSlice([]string{})},
 		KV:      KV{P: pkLD},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
@@ -128,10 +128,10 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 	e := NewBufferedEmitter()
 
-	ragel6LD := e.Emit(&Node{Platform: &Platform{},
-		Cmds:    []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
+	ragel6LD := e.emit(&Node{Platform: &Platform{},
+		Cmds:    []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
 		Env:     nil,
-		Inputs:  inputChunks{ToVFSSlice([]string{})},
+		Inputs:  InputChunks{ToVFSSlice([]string{})},
 		KV:      KV{P: pkLD},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
@@ -177,10 +177,10 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 	e := NewBufferedEmitter()
 
-	ragel6LD := e.Emit(&Node{Platform: &Platform{},
-		Cmds:    []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
+	ragel6LD := e.emit(&Node{Platform: &Platform{},
+		Cmds:    []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
 		Env:     nil,
-		Inputs:  inputChunks{ToVFSSlice([]string{})},
+		Inputs:  InputChunks{ToVFSSlice([]string{})},
 		KV:      KV{P: pkLD},
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})

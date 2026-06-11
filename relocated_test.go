@@ -16,7 +16,7 @@ func computeUID(canonicalBytes []byte) UID {
 }
 
 func canonicalNodeBytes(n *Node) []byte {
-	var c canonBuf
+	var c CanonBuf
 	c.writeNode(n)
 
 	return c.buf
@@ -36,11 +36,11 @@ func readYaConfSections(fs FS, wantSection string, rels ...string) map[string]st
 	out := map[string]string{}
 
 	for _, rel := range rels {
-		if !fs.IsFile(srcRootVFS, rel) {
+		if !fs.isFile(srcRootVFS, rel) {
 			continue
 		}
 
-		raw := fs.Read(rel)
+		raw := fs.read(rel)
 
 		section := ""
 
@@ -80,12 +80,12 @@ func readYaConfSections(fs FS, wantSection string, rels ...string) map[string]st
 	return out
 }
 
-func buildPySrcEntries(d *moduleData, modulePath string) []pySrcEntry {
+func buildPySrcEntries(d *ModuleData, modulePath string) []PySrcEntry {
 	return buildPySrcEntriesFor(newMemFS(nil), d, modulePath, d.pySrcs, d.pyTopLevel, d.pyNamespace)
 }
 
-func newInclArgMemo() inclArgMemo {
-	return inclArgMemo{m: &DenseMap[VFS, STR]{}}
+func newInclArgMemo() InclArgMemo {
+	return InclArgMemo{m: &DenseMap[VFS, STR]{}}
 }
 
 // testToolchain builds the module toolchain the way genModule does — from a
@@ -93,8 +93,8 @@ func newInclArgMemo() inclArgMemo {
 // drive the emitters directly get the same $(B)/resources/CLANG20 / LLD_ROOT /
 // YMAKE_PYTHON3 tool paths without an ambient platform. The compiler comes from the
 // version-specific CLANG20 resource (ClangVer "20").
-func testToolchain() moduleToolchain {
-	return resolveModuleToolchain([]resourceDecl{
+func testToolchain() ModuleToolchain {
+	return resolveModuleToolchain([]ResourceDecl{
 		makeResourceDecl(resourcePatternClang20, "sbr:test-clang"),
 		makeResourceDecl(resourcePatternLLDRoot, "sbr:test-lld"),
 		makeResourceDecl(resourcePatternYMakePython3, "sbr:test-python"),
@@ -131,7 +131,7 @@ func EmitAR(
 		ThrowFmt("EmitAR: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
 	}
 
-	archivePath := Build(instance.Path.Rel() + "/" + ArchiveName(instance.Path.Rel()))
+	archivePath := Build(instance.Path.rel() + "/" + ArchiveName(instance.Path.rel()))
 
 	return emitARNode(instance, archivePath, 0, objRefs, objPaths, peerArchiveRefs, nil, testToolchain(), hostP, emit)
 }

@@ -19,24 +19,24 @@ package main
 // allocates a large chunk) while keeping the number of chunks logarithmic in
 // the total size. A chunk is always made at least as large as the alloc that
 // triggered it, so any single alloc fits in one chunk.
-type bumpAllocator[T any] struct {
+type BumpAllocator[T any] struct {
 	chunks  [][]T
 	off     int // bump boundary within the active (last) chunk
 	next    int // size of the next chunk to allocate
 	pending int // length handed out by the last alloc, not yet committed
 }
 
-func newBumpAllocator[T any](initial int) *bumpAllocator[T] {
+func newBumpAllocator[T any](initial int) *BumpAllocator[T] {
 	if initial < 1 {
 		initial = 1
 	}
 
-	return &bumpAllocator[T]{next: initial}
+	return &BumpAllocator[T]{next: initial}
 }
 
 // alloc returns a writable region of at least n elements. The region is valid
 // until the next alloc on this arena; call commit before allocating again.
-func (a *bumpAllocator[T]) alloc(n int) []T {
+func (a *BumpAllocator[T]) alloc(n int) []T {
 	if len(a.chunks) == 0 || a.off+n > len(a.chunks[len(a.chunks)-1]) {
 		a.addChunk(n)
 	}
@@ -49,7 +49,7 @@ func (a *bumpAllocator[T]) alloc(n int) []T {
 
 // commit advances the allocation boundary by k, the number of elements actually
 // written into the region returned by the preceding alloc.
-func (a *bumpAllocator[T]) commit(k int) {
+func (a *BumpAllocator[T]) commit(k int) {
 	if k < 0 || k > a.pending {
 		panic("bumpAllocator: commit out of range")
 	}
@@ -58,7 +58,7 @@ func (a *bumpAllocator[T]) commit(k int) {
 	a.pending = 0
 }
 
-func (a *bumpAllocator[T]) addChunk(min int) {
+func (a *BumpAllocator[T]) addChunk(min int) {
 	size := a.next
 
 	if size < min {

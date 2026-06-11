@@ -6,7 +6,7 @@ package main
 // node is emitted at most once per resource name across the whole run (deduped
 // through ctx.fetchRefs); every consumer that splices $(<Name>) into a command
 // takes the fetch as a dependency from there.
-func emitResourceFetch(ctx *genCtx, decl resourceDecl) NodeRef {
+func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 	name := decl.Name.String()
 
 	if ref, ok := ctx.fetchRefs[name]; ok {
@@ -17,7 +17,7 @@ func emitResourceFetch(ctx *genCtx, decl resourceDecl) NodeRef {
 	node := &Node{
 		Platform: ctx.host,
 		Cmds: []Cmd{{
-			CmdArgs: argChunks{[]STR{
+			CmdArgs: ArgChunks{[]STR{
 				internStr(currentYatoolPath()),
 				argFetch.str(),
 				argB.str(),
@@ -26,7 +26,7 @@ func emitResourceFetch(ctx *genCtx, decl resourceDecl) NodeRef {
 				output.str(),
 			}},
 		}},
-		Inputs:           inputChunks{fetchScriptInputs(ctx.scripts)},
+		Inputs:           InputChunks{fetchScriptInputs(ctx.scripts)},
 		KV:               KV{P: pkFETCH, PC: pcYellow, ShowOut: true},
 		Outputs:          []VFS{output},
 		Requirements:     Requirements{CPU: float64(1), Network: nwFull, RAM: float64(32)},
@@ -39,7 +39,7 @@ func emitResourceFetch(ctx *genCtx, decl resourceDecl) NodeRef {
 	node.UID = resourceFetchUID(decl.URI.String(), output.String())
 	node.SelfUID = node.UID
 
-	ref := ctx.emit.Emit(node)
+	ref := ctx.emit.emit(node)
 	ctx.fetchRefs[name] = ref
 
 	return ref

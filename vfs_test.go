@@ -45,7 +45,7 @@ func TestVFSLongString(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		if got := tc.vfs.LongString(); got != tc.want {
+		if got := tc.vfs.longString(); got != tc.want {
 			t.Fatalf("%s LongString = %q, want %q", tc.name, got, tc.want)
 		}
 	}
@@ -100,39 +100,39 @@ func BenchmarkMapAccess_StringKey_ConstructedAtProbe(b *testing.B) {
 	}
 }
 
-type vfsMapNonGeneric [2]map[string]struct{}
+type VfsMapNonGeneric [2]map[string]struct{}
 
-func newVFSMapNonGeneric(cap int) vfsMapNonGeneric {
-	return vfsMapNonGeneric{
+func newVFSMapNonGeneric(cap int) VfsMapNonGeneric {
+	return VfsMapNonGeneric{
 		make(map[string]struct{}, cap),
 		make(map[string]struct{}, cap),
 	}
 }
-func (m vfsMapNonGeneric) Has(v VFS) bool {
-	_, ok := m[v.Root()-1][v.Rel()]
+func (m VfsMapNonGeneric) has(v VFS) bool {
+	_, ok := m[v.root()-1][v.rel()]
 	return ok
 }
-func (m vfsMapNonGeneric) Add(v VFS) { m[v.Root()-1][v.Rel()] = struct{}{} }
+func (m VfsMapNonGeneric) add(v VFS) { m[v.root()-1][v.rel()] = struct{}{} }
 
-type vfsMap[T any] [2]map[string]T
+type VfsMap[T any] [2]map[string]T
 
-func newVFSMap[T any](cap int) vfsMap[T] {
-	return vfsMap[T]{
+func newVFSMap[T any](cap int) VfsMap[T] {
+	return VfsMap[T]{
 		make(map[string]T, cap),
 		make(map[string]T, cap),
 	}
 }
-func (m vfsMap[T]) Get(v VFS) (T, bool) {
-	val, ok := m[v.Root()-1][v.Rel()]
+func (m VfsMap[T]) get(v VFS) (T, bool) {
+	val, ok := m[v.root()-1][v.rel()]
 	return val, ok
 }
-func (m vfsMap[T]) Set(v VFS, val T) { m[v.Root()-1][v.Rel()] = val }
+func (m VfsMap[T]) set(v VFS, val T) { m[v.root()-1][v.rel()] = val }
 
 func BenchmarkMapAccess_VFS2Bucket_NonGeneric(b *testing.B) {
 	keys := bvKeys()
 	m := newVFSMapNonGeneric(bvN)
 	for _, k := range keys {
-		m.Add(Source(k))
+		m.add(Source(k))
 	}
 	probes := make([]VFS, bvN)
 	for i, k := range keys {
@@ -140,7 +140,7 @@ func BenchmarkMapAccess_VFS2Bucket_NonGeneric(b *testing.B) {
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if !m.Has(probes[i%bvN]) {
+		if !m.has(probes[i%bvN]) {
 			b.Fatalf("miss")
 		}
 	}
@@ -150,7 +150,7 @@ func BenchmarkMapAccess_VFS2Bucket_Generic(b *testing.B) {
 	keys := bvKeys()
 	m := newVFSMap[struct{}](bvN)
 	for _, k := range keys {
-		m.Set(Source(k), struct{}{})
+		m.set(Source(k), struct{}{})
 	}
 	probes := make([]VFS, bvN)
 	for i, k := range keys {
@@ -158,7 +158,7 @@ func BenchmarkMapAccess_VFS2Bucket_Generic(b *testing.B) {
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, ok := m.Get(probes[i%bvN]); !ok {
+		if _, ok := m.get(probes[i%bvN]); !ok {
 			b.Fatalf("miss")
 		}
 	}
@@ -179,7 +179,7 @@ func BenchmarkMapAccess_VFS2Bucket_Inline(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		v := probes[i%bvN]
-		if _, ok := m[v.Root()-1][v.Rel()]; !ok {
+		if _, ok := m[v.root()-1][v.rel()]; !ok {
 			b.Fatalf("miss")
 		}
 	}

@@ -167,18 +167,18 @@ func isMapExpr(info *types.Info, e ast.Expr) bool {
 // in mapKR/mapKW. These helpers are excluded from instrumentation (the counter
 // map must not recurse). Throwaway. ---
 
-type mapProbeEntry struct {
+type MapProbeEntry struct {
 	reads  uint64
 	writes uint64
 }
 
-var mapProbeCounts = map[string]*mapProbeEntry{}
+var mapProbeCounts = map[string]*MapProbeEntry{}
 
 func mapProbeAt(site string, write bool) {
 	e := mapProbeCounts[site]
 
 	if e == nil {
-		e = &mapProbeEntry{}
+		e = &MapProbeEntry{}
 		mapProbeCounts[site] = e
 	}
 

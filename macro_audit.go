@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-var macroAudit = &macroAuditState{
+var macroAudit = &MacroAuditState{
 	ignored:  map[string]int{},
 	services: map[string]map[string]int{},
 	unknown:  map[string]map[string]int{},
@@ -42,7 +42,7 @@ var macrosAcceptingUserFlags = map[string]struct{}{
 // collecting across the whole graph keeps the dump compact. Output is
 // surfaced when cmdMake's --dump-ignored-macros flag is set; otherwise
 // recording is a cheap nil-check.
-type macroAuditState struct {
+type MacroAuditState struct {
 	enabled  bool
 	mu       sync.Mutex
 	ignored  map[string]int            // macro name → invocation count

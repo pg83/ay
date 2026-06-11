@@ -7,10 +7,22 @@ import (
 
 var (
 	antlr4RuntimeHeaderPath = antlr4RuntimeHeaderVFS.String()
+	antlr4JarPath           = antlr4JarVFS.String()
+	antlr3JarPath           = antlr3JarVFS.String()
+	stdout2stderrPath       = stdout2stderrVFS.String()
 )
 
+// antlrJavaConstHead is the constant [stdout2stderr.py, <jdk>, -jar,
+// <antlr4 jar>] lead of every antlr (JV) command, after the python3 token.
+var antlrJavaConstHead = []STR{
+	internStr(stdout2stderrPath),
+	internStr(jdkResourcePath),
+	argJar.str(),
+	internStr(antlr4JarPath),
+}
+
 func emitJVDownstreamCPCC(
-	ctx *genCtx,
+	ctx *GenCtx,
 	instance ModuleInstance,
 	jvRef NodeRef,
 	jvPrimary VFS,
@@ -25,16 +37,16 @@ func emitJVDownstreamCPCC(
 		srcCpp := pair.cpp
 		srcH := pair.h
 
-		base := strings.TrimSuffix(filepath.Base(srcCpp.Rel()), ".cpp")
-		g4CppPath := Build(instance.Path.Rel() + "/" + base + ".g4.cpp")
+		base := strings.TrimSuffix(filepath.Base(srcCpp.rel()), ".cpp")
+		g4CppPath := Build(instance.Path.rel() + "/" + base + ".g4.cpp")
 		g4CppRel := base + ".g4.cpp"
 
 		if reg != nil {
-			emits := make([]includeDirective, 0, 1+len(outputIncludes))
-			emits = append(emits, includeDirective{kind: includeQuoted, target: internStr(antlr4RuntimeHeaderVFS.Rel())})
+			emits := make([]IncludeDirective, 0, 1+len(outputIncludes))
+			emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(antlr4RuntimeHeaderVFS.rel())})
 
 			for _, h := range outputIncludes {
-				emits = append(emits, includeDirective{kind: includeQuoted, target: internStr(h)})
+				emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(h)})
 			}
 
 			registerGeneratedParsedOutput(ctx, instance, pkCP, g4CppPath, emits, nil)
@@ -73,22 +85,16 @@ func emitJVDownstreamCPCC(
 	return
 }
 
-var (
-	antlr4JarPath     = antlr4JarVFS.String()
-	antlr3JarPath     = antlr3JarVFS.String()
-	stdout2stderrPath = stdout2stderrVFS.String()
-)
-
 const jdkResourcePath = "$(JDK17)/bin/java"
 
-func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs inputChunks, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag STR, emit Emitter) NodeRef {
+func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs InputChunks, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag STR, emit Emitter) NodeRef {
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: argChunks{cmdArgs},
+				CmdArgs: ArgChunks{cmdArgs},
 				Env:     env,
 				Cwd:     internStr(cwd),
 			},
@@ -98,7 +104,7 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs inputChunks, outp
 		KV:      KV{P: pkJV, PC: pcLightBlue, ShowOut: true},
 		Outputs: outputs,
 		TargetProperties: func() TargetProperties {
-			tp := TargetProperties{ModuleDir: instance.Path.Rel()}
+			tp := TargetProperties{ModuleDir: instance.Path.rel()}
 
 			if moduleTag != 0 {
 				tp.ModuleTag = moduleTag
@@ -111,7 +117,7 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs inputChunks, outp
 		usesResources: []string{resourcePatternYMakePython3, resourcePatternJDK17},
 	}
 
-	return emit.Emit(node)
+	return emit.emit(node)
 }
 
 func EmitJV(
@@ -121,11 +127,11 @@ func EmitJV(
 	visitor bool,
 	listener bool,
 	moduleTag STR,
-	tc moduleToolchain,
+	tc ModuleToolchain,
 	emit Emitter,
 ) NodeRef {
-	grammarVFS := Source(instance.Path.Rel() + "/" + grammar)
-	outDirVFS := Build(instance.Path.Rel())
+	grammarVFS := Source(instance.Path.rel() + "/" + grammar)
+	outDirVFS := Build(instance.Path.rel())
 	outDir := outDirVFS.String()
 
 	cmdArgs := make([]STR, 0, 8+len(antlrJavaConstHead))
@@ -150,14 +156,14 @@ func EmitJV(
 
 	cmdArgs = appendInternStrs(cmdArgs, options)
 
-	inputs := inputChunks{{
+	inputs := InputChunks{{
 		grammarVFS,
 		stdout2stderrVFS,
 		antlr4JarVFS,
 	}}
 
 	base := strings.TrimSuffix(filepath.Base(grammar), ".g4")
-	outPrefix := instance.Path.Rel() + "/" + base
+	outPrefix := instance.Path.rel() + "/" + base
 	outputs := []VFS{
 		Build(outPrefix + "Lexer.cpp"),
 		Build(outPrefix + "Lexer.h"),
@@ -177,12 +183,12 @@ func EmitJVSplit(
 	visitor bool,
 	listener bool,
 	moduleTag STR,
-	tc moduleToolchain,
+	tc ModuleToolchain,
 	emit Emitter,
 ) NodeRef {
-	lexerVFS := Source(instance.Path.Rel() + "/" + lexer)
-	parserVFS := Source(instance.Path.Rel() + "/" + parser)
-	outDirVFS := Build(instance.Path.Rel())
+	lexerVFS := Source(instance.Path.rel() + "/" + lexer)
+	parserVFS := Source(instance.Path.rel() + "/" + parser)
+	outDirVFS := Build(instance.Path.rel())
 	outDir := outDirVFS.String()
 
 	cmdArgs := []STR{
@@ -208,7 +214,7 @@ func EmitJVSplit(
 		cmdArgs = append(cmdArgs, argListener.str())
 	}
 
-	inputs := inputChunks{{
+	inputs := InputChunks{{
 		lexerVFS,
 		parserVFS,
 		stdout2stderrVFS,
@@ -218,7 +224,7 @@ func EmitJVSplit(
 	lexerBase := strings.TrimSuffix(filepath.Base(lexer), ".g4")
 	parserBase := strings.TrimSuffix(filepath.Base(parser), ".g4")
 	visitorBase := parserBase
-	outPrefix := instance.Path.Rel() + "/"
+	outPrefix := instance.Path.rel() + "/"
 	outputs := []VFS{
 		Build(outPrefix + lexerBase + ".cpp"),
 		Build(outPrefix + lexerBase + ".h"),
@@ -240,7 +246,7 @@ func EmitJVGeneral(
 	cwd string,
 	depRefs []NodeRef,
 	moduleTag STR,
-	tc moduleToolchain,
+	tc ModuleToolchain,
 	emit Emitter,
 ) NodeRef {
 	cmdArgs := make([]STR, 0, 5+len(args))
@@ -254,16 +260,7 @@ func EmitJVGeneral(
 	cmdArgs = appendInternStrs(cmdArgs, args)
 
 	// inputs is the caller's slice — referenced as its own chunk, never copied.
-	jvInputs := inputChunks{inputs, {stdout2stderrVFS, jarVFS}}
+	jvInputs := InputChunks{inputs, {stdout2stderrVFS, jarVFS}}
 
 	return emitJVNode(instance, cmdArgs, jvInputs, outputs, cwd, depRefs, moduleTag, emit)
-}
-
-// antlrJavaConstHead is the constant [stdout2stderr.py, <jdk>, -jar,
-// <antlr4 jar>] lead of every antlr (JV) command, after the python3 token.
-var antlrJavaConstHead = []STR{
-	internStr(stdout2stderrPath),
-	internStr(jdkResourcePath),
-	argJar.str(),
-	internStr(antlr4JarPath),
 }

@@ -60,6 +60,16 @@ var py3CythonEmbeddedFiles = []string{
 	"contrib/tools/cython/Cython/Utility/arrayarray.h",
 }
 
+// cythonConstHead is the constant flag lead of every cython invocation
+// (after the python3 token).
+var cythonConstHead = []STR{
+	argSContribToolsCythonCythonPy.str(),
+	argX2.str(),
+	argLegacyImplicitNoexceptTrue.str(),
+	argE.str(),
+	argUnameSysnameLinux.str(),
+}
+
 type CythonStmt struct {
 	Src       string
 	Generated *string
@@ -67,12 +77,12 @@ type CythonStmt struct {
 	CMode     bool
 }
 
-func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) []*sourceEmit {
+func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []*SourceEmit {
 	if len(d.cythonCpp) == 0 {
 		return nil
 	}
 
-	out := make([]*sourceEmit, 0, len(d.cythonCpp))
+	out := make([]*SourceEmit, 0, len(d.cythonCpp))
 
 	for _, stmt := range d.cythonCpp {
 		generatedExplicit := stmt.Generated != nil
@@ -91,16 +101,16 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 			generated = *stmt.Generated
 		}
 
-		generatedVFS := Build(instance.Path.Rel() + "/" + generated)
-		srcVFS := Source(instance.Path.Rel() + "/" + stmt.Src)
+		generatedVFS := Build(instance.Path.rel() + "/" + generated)
+		srcVFS := Source(instance.Path.rel() + "/" + stmt.Src)
 		srcScanIn := in
 		srcScanIn.AddIncl = appendCythonScanAddIncl(srcScanIn.AddIncl, d.cythonAddIncl, py23Variant)
 		sourceClosure := walkClosureTail(ctx, instance, srcVFS, srcScanIn)
 		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(ctx, instance, srcVFS, sourceClosure, stmt.CMode, srcScanIn)
-		parsed := make([]includeDirective, 0, len(emitsIncludes))
+		parsed := make([]IncludeDirective, 0, len(emitsIncludes))
 
 		for _, include := range emitsIncludes {
-			parsed = append(parsed, includeDirective{kind: includeQuoted, target: internStr(include.Rel())})
+			parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.rel())})
 		}
 
 		registerGeneratedParsedOutput(ctx, instance, pkCY, generatedVFS, parsed, nil)
@@ -128,22 +138,22 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 			(generatedVFS).str(),
 		)
 
-		targetProps := TargetProperties{ModuleDir: instance.Path.Rel()}
+		targetProps := TargetProperties{ModuleDir: instance.Path.rel()}
 
 		if !stmt.CMode && !generatedExplicit && py23Variant {
 			targetProps.ModuleTag = tagPy3
 		}
 
-		cyRef := ctx.emit.Emit(&Node{
+		cyRef := ctx.emit.emit(&Node{
 			Platform: instance.Platform,
 			Cmds: []Cmd{
 				{
-					CmdArgs: argChunks{cmdArgs},
+					CmdArgs: ArgChunks{cmdArgs},
 					Env:     env,
 				},
 			},
 			Env:              env,
-			Inputs:           inputChunks{toolInputs},
+			Inputs:           InputChunks{toolInputs},
 			Outputs:          []VFS{generatedVFS},
 			KV:               KV{P: pkCY, PC: pcYellow},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -170,13 +180,13 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 		ccIn.IncludeInputs = walkClosure(ctx, instance, generatedVFS, scanIn)
 
 		ccRef, ccOut, _ := EmitCC(instance, generated, generatedVFS, ccIn, ctx.host, ctx.emit)
-		out = append(out, &sourceEmit{Ref: ccRef, OutPath: ccOut})
+		out = append(out, &SourceEmit{Ref: ccRef, OutPath: ccOut})
 	}
 
 	return out
 }
 
-func cythonGeneratedOutputInputs(ctx *genCtx, instance ModuleInstance, src VFS, sourceClosure []VFS, cMode bool, scanIn ModuleCCInputs) ([]VFS, []VFS) {
+func cythonGeneratedOutputInputs(ctx *GenCtx, instance ModuleInstance, src VFS, sourceClosure []VFS, cMode bool, scanIn ModuleCCInputs) ([]VFS, []VFS) {
 	toolInputs := make([]VFS, 0, 2+len(py3CythonEmbeddedFiles)+len(py3CythonOutputIncludes)+len(sourceClosure))
 	emitsIncludes := make([]VFS, 0, 1+len(py3CythonEmbeddedFiles)+len(py3CythonOutputIncludes)+len(sourceClosure))
 
@@ -186,7 +196,7 @@ func cythonGeneratedOutputInputs(ctx *genCtx, instance ModuleInstance, src VFS, 
 	emitsIncludes = append(emitsIncludes, src)
 
 	for _, v := range py3CythonOutputIncludes {
-		if v.Rel() == "contrib/tools/cython/generated_cpp_headers.h" && cMode {
+		if v.rel() == "contrib/tools/cython/generated_cpp_headers.h" && cMode {
 			continue
 		}
 
@@ -224,7 +234,7 @@ func cythonImplicitFallthrough(stmt *CythonStmt, py23Variant bool) bool {
 	return !stmt.CMode && (hasSuffix(stmt.Src, ".pyx") || py23Variant)
 }
 
-func appendCythonAddIncl(cmdArgs []STR, addIncl []VFS, memo inclArgMemo) []STR {
+func appendCythonAddIncl(cmdArgs []STR, addIncl []VFS, memo InclArgMemo) []STR {
 	for _, path := range addIncl {
 		cmdArgs = append(cmdArgs, memo.arg(path))
 	}
@@ -252,7 +262,7 @@ func appendCythonCCAddIncl(addIncl []VFS, numpyBeforeInclude bool) []VFS {
 	return out
 }
 
-func adjustCythonCompanionSourceInputs(p *Platform, d *moduleData, src string, in ModuleCCInputs) ModuleCCInputs {
+func adjustCythonCompanionSourceInputs(p *Platform, d *ModuleData, src string, in ModuleCCInputs) ModuleCCInputs {
 	if len(d.cythonCpp) == 0 {
 		return in
 	}
@@ -318,14 +328,4 @@ func hasPrefix(s, prefix string) bool {
 
 func hasSuffix(s, suffix string) bool {
 	return len(s) >= len(suffix) && s[len(s)-len(suffix):] == suffix
-}
-
-// cythonConstHead is the constant flag lead of every cython invocation
-// (after the python3 token).
-var cythonConstHead = []STR{
-	argSContribToolsCythonCythonPy.str(),
-	argX2.str(),
-	argLegacyImplicitNoexceptTrue.str(),
-	argE.str(),
-	argUnameSysnameLinux.str(),
 }

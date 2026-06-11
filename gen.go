@@ -123,7 +123,7 @@ var acknowledgedMacros = map[string]struct{}{
 	"WITH_KOTLIN_GRPC":                {},
 }
 
-type moduleEmitResult struct {
+type ModuleEmitResult struct {
 	ARRef      NodeRef
 	ARPath     *VFS
 	isPROGRAM  bool
@@ -195,20 +195,20 @@ type moduleEmitResult struct {
 	PeerDynamicClosureRefs  []NodeRef
 	PeerDynamicClosurePaths []VFS
 
-	InducedDeps parsedIncludeSet
+	InducedDeps ParsedIncludeSet
 
 	Peerdirs []string
 
 	ModuleStmtName TOK
 
-	testSuiteInfo *testSuiteInfo
+	testSuiteInfo *TestSuiteInfo
 
 	// ResourceGlobalClosure is the transitive union of external-resource globals
 	// (<NAME>_RESOURCE_GLOBAL) reachable through this module's PEERDIR closure,
 	// deduped by global-var name in first-seen order. A RESOURCES_LIBRARY seeds it
 	// with its own DECLARE_EXTERNAL_RESOURCE declarations; every module folds in its
 	// peers'. Consumers (test-run nodes) render it into --global-resource lists.
-	ResourceGlobalClosure []resourceDecl
+	ResourceGlobalClosure []ResourceDecl
 }
 
 func stringPtr(s string) *string {
@@ -223,7 +223,7 @@ func cloneVFSs(in []VFS) []VFS {
 	return append([]VFS(nil), in...)
 }
 
-func protoResultWholeArchiveCmdPaths(res *protoSrcsResult) []VFS {
+func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
 	if res == nil {
 		return nil
 	}
@@ -231,17 +231,17 @@ func protoResultWholeArchiveCmdPaths(res *protoSrcsResult) []VFS {
 	return cloneVFSs(res.WholeArchiveCmdPaths)
 }
 
-type genCtx struct {
+type GenCtx struct {
 	sourceRoot string
 	fs         FS
-	parsers    *includeParserManager
+	parsers    *IncludeParserManager
 	emit       Emitter
 
 	// inclArgValues backs inclArgMemo (the "-I<path>" cache); owned here so future
 	// VFS-keyed value columns can share its idx array. inclArgs points at it.
 	inclArgValues   DenseMap[VFS, STR]
-	inclArgs        inclArgMemo
-	memo            map[ModuleInstance]*moduleEmitResult
+	inclArgs        InclArgMemo
+	memo            map[ModuleInstance]*ModuleEmitResult
 	walking         map[ModuleInstance]bool
 	cyclesTolerated int
 
@@ -250,7 +250,7 @@ type genCtx struct {
 	scannerTarget *IncludeScanner
 	scannerHost   *IncludeScanner
 
-	flatcEmissions map[codegenOutputKey]flatcEmission
+	flatcEmissions map[CodegenOutputKey]FlatcEmission
 
 	pyRegisterOutputs map[VFS]NodeRef
 
@@ -264,15 +264,15 @@ type genCtx struct {
 	// INDUCED_DEPS into the file's closure, via GeneratedFileInfo.GeneratorRefs —
 	// so a tool's induced runtime headers come from its declared INDUCED_DEPS, not
 	// a per-emitter hardcoded list. Scanners hold a pointer to it.
-	moduleByRef DenseMap[NodeRef, *moduleEmitResult]
+	moduleByRef DenseMap[NodeRef, *ModuleEmitResult]
 
 	// tools caches a codegen tool's emit result by its module-path ARG, so repeated
 	// ctx.tool(argX) lookups skip rebuilding the ModuleInstance + memo probe.
-	tools DenseMap[ARG, *moduleEmitResult]
+	tools DenseMap[ARG, *ModuleEmitResult]
 
 	// scripts maps each build/scripts script VFS to [self, …transitive import
 	// closure]; emit sites add a build script via append(inputs, scripts[v]...).
-	scripts scriptDeps
+	scripts ScriptDeps
 
 	// fetchRefs maps an external-resource name (CLANG, LLD_ROOT, …) to its FETCH
 	// node, emitted once when the declaring RESOURCES_LIBRARY is gen'd
@@ -289,25 +289,25 @@ type genCtx struct {
 	// pointer to it (their tjc field) so its vfsBound-sized arrays grow once, not
 	// once per scanner. reset() runs before every use, so the shared state is safe
 	// under single-threaded gen.
-	tarjan tarjanCtx
+	tarjan TarjanCtx
 }
 
-type codegenOutputKey struct {
+type CodegenOutputKey struct {
 	platform *Platform
 	path     VFS
 }
 
-type scanCtxPerfStats struct {
+type ScanCtxPerfStats struct {
 	subgraphEntries int
 	childrenEntries int
 	closureWindows  int
 }
 
-func resolveCodegenDepRefs(ctx *genCtx, consumer ModuleInstance, includeInputs []VFS, exclude ...NodeRef) []NodeRef {
+func resolveCodegenDepRefs(ctx *GenCtx, consumer ModuleInstance, includeInputs []VFS, exclude ...NodeRef) []NodeRef {
 	return resolveCodegenDepRefsExt(ctx, consumer, includeInputs, nil, exclude...)
 }
 
-func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInputs, inputs []VFS, exclude ...NodeRef) []NodeRef {
+func resolveCodegenDepRefsExt(ctx *GenCtx, consumer ModuleInstance, includeInputs, inputs []VFS, exclude ...NodeRef) []NodeRef {
 	if len(includeInputs) == 0 && len(inputs) == 0 {
 		return nil
 	}
@@ -337,11 +337,11 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 		var ok bool
 
 		if reg != nil {
-			if info := reg.Lookup(v); info != nil {
+			if info := reg.lookup(v); info != nil {
 				if !info.HasProducerRef && info.DeferredCF != nil {
 					def := info.DeferredCF
-					cfRef, _ := EmitCF(def.instance, def.srcVFS, def.outVFS, def.cfgVars, def.includeInputs, consumer.Path.Rel(), 0, def.tc, ctx.emit)
-					reg.SetProducerRef(v, cfRef)
+					cfRef, _ := EmitCF(def.instance, def.srcVFS, def.outVFS, def.cfgVars, def.includeInputs, consumer.Path.rel(), 0, def.tc, ctx.emit)
+					reg.setProducerRef(v, cfRef)
 				}
 
 				if info.HasProducerRef {
@@ -365,13 +365,13 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 	// cost was a closure call per element of a whole include closure just to
 	// bounce off this bit for the (vast) $(S) majority.
 	for _, p := range includeInputs {
-		if p.IsBuild() {
+		if p.isBuild() {
 			probe(p)
 		}
 	}
 
 	for _, p := range inputs {
-		if p.IsBuild() {
+		if p.isBuild() {
 			probe(p)
 		}
 	}
@@ -379,8 +379,8 @@ func resolveCodegenDepRefsExt(ctx *genCtx, consumer ModuleInstance, includeInput
 	return out
 }
 
-func (ctx *genCtx) perfScanCtxStats(scanner *IncludeScanner) scanCtxPerfStats {
-	return scanCtxPerfStats{
+func (ctx *GenCtx) perfScanCtxStats(scanner *IncludeScanner) ScanCtxPerfStats {
+	return ScanCtxPerfStats{
 		// subgraph and children are columns of one DenseMap3 keyed per node, so
 		// both report its distinct-key count.
 		subgraphEntries: scanner.scanCache.Len(),
@@ -389,7 +389,7 @@ func (ctx *genCtx) perfScanCtxStats(scanner *IncludeScanner) scanCtxPerfStats {
 	}
 }
 
-func reportPerfStats(ctx *genCtx, parsers *includeParserManager, targetScanner, hostScanner *IncludeScanner) {
+func reportPerfStats(ctx *GenCtx, parsers *IncludeParserManager, targetScanner, hostScanner *IncludeScanner) {
 	if !perfStatsEnabled {
 		return
 	}
@@ -450,17 +450,17 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	targetReg := NewCodegenRegistry()
 	hostReg := NewCodegenRegistry()
 
-	ctx := &genCtx{
-		sourceRoot:         fs.SourceRoot(),
+	ctx := &GenCtx{
+		sourceRoot:         fs.sourceRoot(),
 		fs:                 fs,
 		parsers:            parsers,
 		emit:               resourceEmit,
-		memo:               make(map[ModuleInstance]*moduleEmitResult),
+		memo:               make(map[ModuleInstance]*ModuleEmitResult),
 		walking:            make(map[ModuleInstance]bool),
 		host:               hostP,
 		target:             targetP,
 		fetchRefs:          fetchRefs,
-		flatcEmissions:     make(map[codegenOutputKey]flatcEmission),
+		flatcEmissions:     make(map[CodegenOutputKey]FlatcEmission),
 		pyRegisterOutputs:  make(map[VFS]NodeRef),
 		checkConfigOutputs: make(map[VFS]NodeRef),
 		ldPluginCPCache:    make(map[VFS]NodeRef),
@@ -468,7 +468,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		testMode:           testMode,
 	}
 
-	ctx.inclArgs = inclArgMemo{m: &ctx.inclArgValues}
+	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
 
 	// Both scanners share ctx.tarjan (the run-wide Tarjan scratch) so its
 	// vfsBound-sized arrays grow once, not once per scanner.
@@ -490,11 +490,11 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 
 	root := genModule(ctx, seed)
 
-	ctx.emit.Result(root.LDRef)
+	ctx.emit.result(root.LDRef)
 
 	if ctx.testMode && root.testSuiteInfo != nil {
 		for _, ref := range emitTestRunNodes(resourceEmit, resourceEmit, targetP, *root.testSuiteInfo, root.LDRef, root.ResourceGlobalClosure) {
-			ctx.emit.Result(ref)
+			ctx.emit.result(ref)
 		}
 	}
 
@@ -562,7 +562,7 @@ func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
 	}
 
 	if moduleStmt.Name == tokUnittestFor {
-		return strings.ReplaceAll(path.Clean(instance.Path.Rel()), "/", "-")
+		return strings.ReplaceAll(path.Clean(instance.Path.rel()), "/", "-")
 	}
 
 	// PY3_PROGRAM_BIN(progname) links as its argument when one is given (the
@@ -595,7 +595,7 @@ func unittestForPeerPath(moduleStmt *ModuleStmt) string {
 	return path.Clean(moduleStmt.Args[0])
 }
 
-func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
+func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if existing, ok := ctx.memo[instance]; ok {
 		return existing
 	}
@@ -608,26 +608,26 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			caller = ctx.traceStack[len(ctx.traceStack)-1]
 		}
 
-		fmt.Fprintf(os.Stderr, "%sgenModule %s@%s  (from %s)\n", indent, instance.Path.Rel(), instance.Platform.Target, caller)
-		ctx.traceStack = append(ctx.traceStack, instance.Path.Rel()+"@"+string(instance.Platform.Target))
+		fmt.Fprintf(os.Stderr, "%sgenModule %s@%s  (from %s)\n", indent, instance.Path.rel(), instance.Platform.Target, caller)
+		ctx.traceStack = append(ctx.traceStack, instance.Path.rel()+"@"+string(instance.Platform.Target))
 
 		defer func() { ctx.traceStack = ctx.traceStack[:len(ctx.traceStack)-1] }()
 	}
 
 	if ctx.walking[instance] {
 		ctx.cyclesTolerated++
-		fmt.Fprintf(os.Stderr, "gen: PEERDIR cycle tolerated at %s\n", instance.Path.Rel())
-		return &moduleEmitResult{}
+		fmt.Fprintf(os.Stderr, "gen: PEERDIR cycle tolerated at %s\n", instance.Path.rel())
+		return &ModuleEmitResult{}
 	}
 
 	ctx.walking[instance] = true
 	defer delete(ctx.walking, instance)
 
-	yamakePath := filepath.Join(ctx.sourceRoot, instance.Path.Rel(), "ya.make")
+	yamakePath := filepath.Join(ctx.sourceRoot, instance.Path.rel(), "ya.make")
 	mf := Throw2(ParseFile(ctx.fs, yamakePath))
 
 	env := buildIfEnv(instance)
-	d := collectModule(ctx.parsers, &deduper, instance.Path.Rel(), instance.Kind, mf.Stmts, env)
+	d := collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, mf.Stmts, env)
 
 	// The consumer requested a variant without pre-parsing this module
 	// (peerEntryLanguage). Only a PROTO_LIBRARY has a python variant: any other
@@ -646,27 +646,27 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	for _, stmt := range d.allPySrcs {
-		applyAllPySrcs(ctx.fs, instance.Path.Rel(), stmt, d)
+		applyAllPySrcs(ctx.fs, instance.Path.rel(), stmt, d)
 	}
 
 	if d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary && instance.Language != LangPy {
-		cppProtoEnv := env.Clone()
-		cppProtoEnv.SetStringID(envMODULE_TAG, strCPPProto)
+		cppProtoEnv := env.clone()
+		cppProtoEnv.setStringID(envMODULE_TAG, strCPPProto)
 
-		cppProtoEnv.SetBool(envGEN_PROTO, true)
-		d = collectModule(ctx.parsers, &deduper, instance.Path.Rel(), instance.Kind, mf.Stmts, cppProtoEnv)
+		cppProtoEnv.setBool(envGEN_PROTO, true)
+		d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, mf.Stmts, cppProtoEnv)
 	} else if d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangPy {
-		py3ProtoEnv := env.Clone()
-		py3ProtoEnv.SetBool(envPY3_PROTO, true)
-		d = collectModule(ctx.parsers, &deduper, instance.Path.Rel(), instance.Kind, mf.Stmts, py3ProtoEnv)
+		py3ProtoEnv := env.clone()
+		py3ProtoEnv.setBool(envPY3_PROTO, true)
+		d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, mf.Stmts, py3ProtoEnv)
 	}
 
 	if d.conflictMod != nil {
-		ThrowFmt("gen: %s declares multiple modules (%s and %s); only one is allowed", instance.Path.Rel(), d.moduleStmt.Name, d.conflictMod.Name)
+		ThrowFmt("gen: %s declares multiple modules (%s and %s); only one is allowed", instance.Path.rel(), d.moduleStmt.Name, d.conflictMod.Name)
 	}
 
 	if d.moduleStmt == nil {
-		ThrowFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path.Rel())
+		ThrowFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path.rel())
 	}
 
 	if d.moduleStmt.Name == tokResourcesLibrary {
@@ -675,7 +675,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		// of the DECLARE that defines it. Bind the declared globals into the env and
 		// re-collect once so those references expand (ymake defers; we re-collect).
 		if bindResourceGlobalVars(ctx, instance, d, env) {
-			d = collectModule(ctx.parsers, &deduper, instance.Path.Rel(), instance.Kind, mf.Stmts, env)
+			d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, mf.Stmts, env)
 		}
 
 		return genResourcesLibrary(ctx, instance, d)
@@ -691,8 +691,8 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			}
 		}
 
-		if hasProtoSrc && !strings.HasPrefix(instance.Path.Rel(), "contrib/libs/protobuf/builtin_proto") &&
-			!strings.HasPrefix(instance.Path.Rel(), "contrib/python/protobuf") {
+		if hasProtoSrc && !strings.HasPrefix(instance.Path.rel(), "contrib/libs/protobuf/builtin_proto") &&
+			!strings.HasPrefix(instance.Path.rel(), "contrib/python/protobuf") {
 			d.peerdirs = append(d.peerdirs, "contrib/python/protobuf")
 		}
 
@@ -702,7 +702,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	if d.moduleStmt.Name != tokLibrary && !isProgramModuleType(d.moduleStmt.Name) && !isPyLibraryType(d.moduleStmt.Name) && !isYqlUdfStaticModule(d.moduleStmt.Name) && !isSpecializedLibraryType(d.moduleStmt.Name) && !isResourceContainerType(d.moduleStmt.Name) {
-		ThrowFmt("gen: %s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only)", instance.Path.Rel(), d.moduleStmt.Name)
+		ThrowFmt("gen: %s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only)", instance.Path.rel(), d.moduleStmt.Name)
 	}
 
 	if !d.hadAllocator && (d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin) {
@@ -712,9 +712,9 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	py3ProtoVariant := d.moduleStmt.Name == tokProtoLibrary && d.usePython3
 
-	if pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noPythonIncl && instance.Path.Rel() != "contrib/libs/python" {
+	if pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noPythonIncl && instance.Path.rel() != "contrib/libs/python" {
 		d.peerdirs = append([]string{"contrib/libs/python"}, d.peerdirs...)
-	} else if py3ProtoVariant && !d.noPythonIncl && instance.Path.Rel() != "contrib/libs/python" {
+	} else if py3ProtoVariant && !d.noPythonIncl && instance.Path.rel() != "contrib/libs/python" {
 		if moduleExcludesTag(d, "CPP_PROTO") {
 			d.peerdirs = append([]string{"contrib/libs/python"}, d.peerdirs...)
 		} else {
@@ -731,7 +731,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		earlyPeers = append(earlyPeers, "library/python/runtime_py3/main")
 
-		if !d.noImportTracing && instance.Path.Rel() != "library/python/import_tracing/constructor" {
+		if !d.noImportTracing && instance.Path.rel() != "library/python/import_tracing/constructor" {
 			earlyPeers = append(earlyPeers, "library/python/import_tracing/constructor")
 		}
 
@@ -751,7 +751,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			filteredEarly := earlyPeers[:0]
 
 			for _, peer := range earlyPeers {
-				if instance.Path.Rel() != peer {
+				if instance.Path.rel() != peer {
 					filteredEarly = append(filteredEarly, peer)
 				}
 			}
@@ -763,20 +763,20 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			d.peerdirs = spliced
 		} else {
 			for _, peer := range earlyPeers {
-				if instance.Path.Rel() != peer {
+				if instance.Path.rel() != peer {
 					d.peerdirs = append(d.peerdirs, peer)
 				}
 			}
 		}
 
 		for _, peer := range latePeers {
-			if instance.Path.Rel() != peer {
+			if instance.Path.rel() != peer {
 				d.peerdirs = append(d.peerdirs, peer)
 			}
 		}
 	}
 
-	if isProgramModuleType(d.moduleStmt.Name) && pyLibraryAutoPythonPeer(d.moduleStmt.Name) && d.moduleStmt.Name != tokPy3Program && d.moduleStmt.Name != tokPy3ProgramBin && !d.noImportTracing && instance.Path.Rel() != "library/python/import_tracing/constructor" {
+	if isProgramModuleType(d.moduleStmt.Name) && pyLibraryAutoPythonPeer(d.moduleStmt.Name) && d.moduleStmt.Name != tokPy3Program && d.moduleStmt.Name != tokPy3ProgramBin && !d.noImportTracing && instance.Path.rel() != "library/python/import_tracing/constructor" {
 		d.peerdirs = append(d.peerdirs, "library/python/import_tracing/constructor")
 	}
 
@@ -787,7 +787,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// adding it as an induced dep to every module with .fbs SRCS (e.g. apache/arrow).
 	// Append after explicit PEERDIRs so the peer archive closure puts flatbuffers
 	// after the module's last declared peer, matching upstream's link order.
-	if instance.Path.Rel() != "contrib/libs/flatbuffers" {
+	if instance.Path.rel() != "contrib/libs/flatbuffers" {
 		for _, src := range d.srcs {
 			if strings.HasSuffix(src, ".fbs") {
 				d.peerdirs = append(d.peerdirs, "contrib/libs/flatbuffers")
@@ -808,13 +808,13 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		d.tc = resolveModuleToolchain(peerContribs.resourceGlobals, instance.Platform.ClangVer)
 
 		ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
-		ldPlugins := mergeLDPlugins(ownLDPlugins, &ldPluginsResult{
+		ldPlugins := mergeLDPlugins(ownLDPlugins, &LdPluginsResult{
 			Refs:  peerContribs.ldPluginRefs,
 			Paths: peerContribs.ldPluginPaths,
 		})
 
 		if ldPlugins == nil {
-			ldPlugins = &ldPluginsResult{}
+			ldPlugins = &LdPluginsResult{}
 		}
 
 		headerOnlyInputs := ModuleCCInputs{
@@ -854,24 +854,24 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 			switch d.moduleStmt.Name {
 			case tokPy23NativeLibrary:
-				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.Rel(), "libpy3c", archiveName)
+				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.rel(), "libpy3c", archiveName)
 				tag = tagPy3NativeGlobal
 			case tokPy23Library:
 				arInstance.Language = LangPy
-				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.Rel(), "libpy3", archiveName)
+				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.rel(), "libpy3", archiveName)
 				tag = tagPy3Global
 			case tokPy3Library, tokPy2Library, tokPy2Program, tokPy3Program:
 				arInstance.Language = LangPy
-				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.Rel(), "libpy3", archiveName)
+				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.rel(), "libpy3", archiveName)
 				tag = tagGlobal
 			default:
-				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.Rel(), "lib", archiveName)
+				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.rel(), "lib", archiveName)
 				tag = tagGlobal
 			}
 
 			gRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRes.Refs, objcopyRes.Outputs, d.tc, ctx.host, ctx.emit)
 			hOnlyGlobalRef = &gRef
-			hOnlyGlobalPath = vfsPtr(Build(instance.Path.Rel() + "/" + globalBaseName))
+			hOnlyGlobalPath = vfsPtr(Build(instance.Path.rel() + "/" + globalBaseName))
 		}
 
 		// emitMiscNodes registers JV / CF outputs in the CodegenRegistry so
@@ -928,7 +928,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		effectiveProtoAddInclH := dedupVFS(ownProtoAddInclH, peerContribs.protoAddIncl)
 		effectiveProtoTailH := dedupVFS(ownProtoTailH, peerContribs.protoNamespaceTail)
 
-		result := &moduleEmitResult{
+		result := &ModuleEmitResult{
 			isPyLibrary:        isPyLibraryType(d.moduleStmt.Name),
 			ARRef:              hOnlyARRef,
 			ARPath:             hOnlyARPath,
@@ -974,7 +974,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 	languageDefaults = suppressMallocAPIDefault(languageDefaults, d.allocatorName)
 
-	isProgram := isProgramModuleType(d.moduleStmt.Name) && !isRuntimeAncestor(instance.Path.Rel())
+	isProgram := isProgramModuleType(d.moduleStmt.Name) && !isRuntimeAncestor(instance.Path.rel())
 	unitTestPeer := unittestForPeerPath(d.moduleStmt)
 
 	var preUserProgDefaults []string
@@ -1107,7 +1107,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	peerCOnlyFlagsGlobal := make([]ARG, 0, 16)
 	type resolvedPeer struct {
 		path   string
-		result *moduleEmitResult
+		result *ModuleEmitResult
 		kind   int
 	}
 
@@ -1126,7 +1126,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		peerResult := genModule(ctx, peerInstance)
 
 		if peerResult.isPROGRAM {
-			ThrowFmt("gen: %s peers PROGRAM module %s; only LIBRARY peers are linkable", instance.Path.Rel(), peerPath)
+			ThrowFmt("gen: %s peers PROGRAM module %s; only LIBRARY peers are linkable", instance.Path.rel(), peerPath)
 		}
 
 		resolved = append(resolved, resolvedPeer{path: peerPath, result: peerResult, kind: kind})
@@ -1135,7 +1135,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// Resource globals (<NAME>_RESOURCE_GLOBAL) propagate transitively: fold every
 	// peer's closure, deduped by global-var STR through the run-wide deduper (a leaf
 	// pass — no genModule reentry — so reset-then-stream is safe).
-	var resourceGlobalsClosure []resourceDecl
+	var resourceGlobalsClosure []ResourceDecl
 	deduper.reset()
 
 	for _, rp := range resolved {
@@ -1571,7 +1571,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	effectiveCOnlyFlagsGlobal := dedupARG(peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
 	effectiveRPathFlagsGlobal := dedupARG(peerRPathFlagsGlobal, d.rpathFlagsGlobal)
 
-	if !effectiveNoPlatform(d.flags) && runtimeAncestorCxxConsumers[instance.Path.Rel()] {
+	if !effectiveNoPlatform(d.flags) && runtimeAncestorCxxConsumers[instance.Path.rel()] {
 		// The libc++ addincl dirs are injected above (before effectiveAddInclGlobal);
 		// only the matching -nostdinc++ flag and the runtime-stack hoist remain here.
 		if !cxxFlagsSeen.has(uint32(baseUnitCxxNostdinc)) {
@@ -1638,7 +1638,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefixOrName(dir, "lib", archiveName) }
 	}
 
-	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path.Rel(), peerAddInclGlobal, dedupedAddIncl)
+	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path.rel(), peerAddInclGlobal, dedupedAddIncl)
 
 	// The cumulative SRCDIR search path (always non-empty: module dir at index 0,
 	// then explicit SRCDIRs). A UNITTEST_FOR program also searches the tested
@@ -1701,7 +1701,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	// subsequent header walks resolve them correctly.
 	type codegenEmit struct {
 		src  string
-		emit *sourceEmit
+		emit *SourceEmit
 	}
 
 	// Collected in SRCS order so pass 2 appends them without a side map: a source's
@@ -1759,7 +1759,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		return adjustCythonCompanionSourceInputs(instance.Platform, d, src, si)
 	}
-	appendCC := func(src string, emit *sourceEmit) {
+	appendCC := func(src string, emit *SourceEmit) {
 		if emit == nil {
 			return
 		}
@@ -1890,7 +1890,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 
 		jsRef, joinOutVFS := EmitJS(srcInstance, js.OutputName, js.Sources, joinClosure, ctx.target, d.tc, ctx.scripts, ctx.emit)
 
-		jsRel := strings.TrimPrefix(joinOutVFS.Rel(), srcInstance.Path.Rel()+"/")
+		jsRel := strings.TrimPrefix(joinOutVFS.rel(), srcInstance.Path.rel()+"/")
 
 		ccIncludeInputs := jsCCIncludeInputs(srcInstance, joinOutVFS, js.Sources, ccClosure, ctx.scripts)
 
@@ -1932,13 +1932,13 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
-	mergedLDPlugins := mergeLDPlugins(ownLDPlugins, &ldPluginsResult{
+	mergedLDPlugins := mergeLDPlugins(ownLDPlugins, &LdPluginsResult{
 		Refs:  peerLDPluginRefs,
 		Paths: peerLDPluginPaths,
 	})
 
 	if mergedLDPlugins == nil {
-		mergedLDPlugins = &ldPluginsResult{}
+		mergedLDPlugins = &LdPluginsResult{}
 	}
 
 	if isProgramModuleType(d.moduleStmt.Name) {
@@ -1953,7 +1953,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ldPeerArchivePaths = make([]VFS, 0, len(peerArchivePaths))
 
 			for i, p := range peerArchivePaths {
-				if strings.HasPrefix(p.Rel(), "library/cpp/malloc/api/") {
+				if strings.HasPrefix(p.rel(), "library/cpp/malloc/api/") {
 					continue
 				}
 
@@ -2083,13 +2083,13 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 			ctx.emit,
 		)
 		ldPath := LDOutputPath(instance, binaryName)
-		var suiteInfo *testSuiteInfo
+		var suiteInfo *TestSuiteInfo
 
 		if ctx.testMode && d.moduleStmt.Name == tokUnittestFor {
 			suiteInfo = buildTestSuiteInfo(instance, d, ldPath)
 		}
 
-		result := &moduleEmitResult{
+		result := &ModuleEmitResult{
 			ARRef:                           ldRef,
 			ARPath:                          &ldPath,
 			isPROGRAM:                       true,
@@ -2133,7 +2133,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	ccRefs, ccOutputs = reorderARMembers(ccRefs, ccOutputs, ccIsFlatNoLto, ccIsCFGenerated, ccIsProtoGenerated, numSrcsDerived)
 
 	var arRef NodeRef
-	arBaseName := arNameFn(instance.Path.Rel())
+	arBaseName := arNameFn(instance.Path.rel())
 
 	arInstance := instance
 
@@ -2145,7 +2145,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	var arPluginVFS *VFS
 
 	if d.arPlugin != nil {
-		v := Source(instance.Path.Rel() + "/" + *d.arPlugin)
+		v := Source(instance.Path.rel() + "/" + *d.arPlugin)
 		arPluginVFS = &v
 	}
 
@@ -2188,10 +2188,10 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	var arPath *VFS
 
 	if len(ccRefs) > 0 {
-		arPath = vfsPtr(Build(instance.Path.Rel() + "/" + arBaseName))
+		arPath = vfsPtr(Build(instance.Path.rel() + "/" + arBaseName))
 	}
 
-	result := &moduleEmitResult{
+	result := &ModuleEmitResult{
 		ARRef:                           arRef,
 		ARPath:                          arPath,
 		isPROGRAM:                       false,
@@ -2228,7 +2228,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 	}
 
 	if len(globalRefs) > 0 {
-		globalBaseName := globalArNameFn(instance.Path.Rel())
+		globalBaseName := globalArNameFn(instance.Path.rel())
 
 		globalTag := tagGlobal
 
@@ -2251,7 +2251,7 @@ func genModule(ctx *genCtx, instance ModuleInstance) *moduleEmitResult {
 		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), len(globalRefs))
 		globalRef := EmitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, d.tc, ctx.host, ctx.emit)
 		result.GlobalRef = &globalRef
-		result.GlobalPath = vfsPtr(Build(instance.Path.Rel() + "/" + globalBaseName))
+		result.GlobalPath = vfsPtr(Build(instance.Path.rel() + "/" + globalBaseName))
 	}
 
 	ctx.memo[instance] = result
@@ -2269,7 +2269,7 @@ func filterBuildRootSelfPaths(instancePath string, peer, own []VFS) []VFS {
 	matched := false
 
 	for _, p := range own {
-		if p.IsBuild() && (p == ownPrefix || strings.HasPrefix(p.Rel(), ownPrefix.Rel()+"/")) {
+		if p.isBuild() && (p == ownPrefix || strings.HasPrefix(p.rel(), ownPrefix.rel()+"/")) {
 			deduper.add(p)
 			matched = true
 		}
@@ -2296,7 +2296,7 @@ func filterEnSerializedSiblings(in []VFS) []VFS {
 	out := make([]VFS, 0, len(in))
 
 	for _, p := range in {
-		if strings.HasSuffix(p.Rel(), "_serialized.cpp") || strings.HasSuffix(p.Rel(), "_serialized.h") {
+		if strings.HasSuffix(p.rel(), "_serialized.cpp") || strings.HasSuffix(p.rel(), "_serialized.h") {
 			continue
 		}
 
@@ -2514,7 +2514,7 @@ func moveTailVFSToFront(in []VFS, tailLen int) []VFS {
 	return out
 }
 
-func mergeLDPlugins(own, peer *ldPluginsResult) *ldPluginsResult {
+func mergeLDPlugins(own, peer *LdPluginsResult) *LdPluginsResult {
 	var ownRefs []NodeRef
 	var ownPaths []VFS
 
@@ -2536,7 +2536,7 @@ func mergeLDPlugins(own, peer *ldPluginsResult) *ldPluginsResult {
 	}
 
 	deduper.reset()
-	out := &ldPluginsResult{
+	out := &LdPluginsResult{
 		Refs:  make([]NodeRef, 0, len(ownPaths)+len(peerPaths)),
 		Paths: make([]VFS, 0, len(ownPaths)+len(peerPaths)),
 	}
@@ -2562,7 +2562,7 @@ func mergeLDPlugins(own, peer *ldPluginsResult) *ldPluginsResult {
 	return out
 }
 
-type peerGlobalContribs struct {
+type PeerGlobalContribs struct {
 	addIncl            []VFS
 	protoAddIncl       []VFS
 	protoNamespaceTail []VFS
@@ -2591,10 +2591,10 @@ type peerGlobalContribs struct {
 	// resourceGlobals is the transitive resource-global closure aggregated across
 	// peers (deduped by global-var name), the source for resolveModuleToolchain in
 	// the specialized/header-only path (the general path folds it inline instead).
-	resourceGlobals []resourceDecl
+	resourceGlobals []ResourceDecl
 }
 
-func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleData) peerGlobalContribs {
+func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleData) PeerGlobalContribs {
 	defaults := defaultPeerdirsForModule(ctx, instance, d)
 
 	defaults = suppressMallocAPIDefault(defaults, d.allocatorName)
@@ -2604,7 +2604,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 	// re-enter the deduper), then aggregate per output kind below in sequential
 	// leaf passes. The visited guard stays a local string-keyed map because it
 	// must stay live across the genModule calls.
-	resolved := make([]*moduleEmitResult, 0, len(defaults)+len(d.peerdirs))
+	resolved := make([]*ModuleEmitResult, 0, len(defaults)+len(d.peerdirs))
 
 	walkInstance := func(peerInstance ModuleInstance) {
 		resolved = append(resolved, genModule(ctx, peerInstance))
@@ -2624,7 +2624,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 	// _IGNORE_PEERDIRSELF=CPP_PROTO }`), leaving the CPP archive whole-archive-only
 	// (emitPyProtoSrcs still marks it whole-archive in both cases).
 	if instance.Language == LangPy && d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary && d.optimizePyProtos && !moduleExcludesTag(d, "CPP_PROTO") {
-		seen[instance.Path.Rel()] = struct{}{}
+		seen[instance.Path.rel()] = struct{}{}
 		cppSelf := instance
 		cppSelf.Language = LangCPP
 		walkInstance(cppSelf)
@@ -2663,7 +2663,7 @@ func walkPeersForGlobalAddIncl(ctx *genCtx, instance ModuleInstance, d *moduleDa
 		walk(filepath.Clean(p))
 	}
 
-	out := peerGlobalContribs{}
+	out := PeerGlobalContribs{}
 
 	// Resource globals, deduped by global-var STR cast into the run-wide
 	// VFS-keyed deduper (single-namespace leaf pass, as in genModule).
@@ -2875,7 +2875,7 @@ func reorderLDMembers(refs []NodeRef, paths []VFS) ([]NodeRef, []VFS) {
 			m.ref = refs[i]
 		}
 
-		if strings.Contains(path.Rel(), "/_/_/") {
+		if strings.Contains(path.rel(), "/_/_/") {
 			legacy = append(legacy, m)
 			continue
 		}
@@ -2909,7 +2909,7 @@ func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGener
 
 	for i := 0; i < numSrcsDerived && i < len(paths); i++ {
 		m := member{refs[i], paths[i]}
-		rel := m.path.Rel()
+		rel := m.path.rel()
 
 		switch {
 		case strings.Contains(rel, "/_/_/"):
@@ -2968,13 +2968,13 @@ func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGener
 	return outRefs, outPaths
 }
 
-func (ctx *genCtx) tool(modulePath ARG) (NodeRef, VFS) {
+func (ctx *GenCtx) tool(modulePath ARG) (NodeRef, VFS) {
 	res := ctx.toolResult(modulePath)
 	return res.LDRef, *res.LDPath
 }
 
-func (ctx *genCtx) toolResult(modulePath ARG) *moduleEmitResult {
-	if res, ok := ctx.tools.Get(modulePath); ok {
+func (ctx *GenCtx) toolResult(modulePath ARG) *ModuleEmitResult {
+	if res, ok := ctx.tools.get(modulePath); ok {
 		return res
 	}
 
@@ -2985,18 +2985,18 @@ func (ctx *genCtx) toolResult(modulePath ARG) *moduleEmitResult {
 	// genModule does NOT memoize, so caching it here would poison later lookups
 	// (the tool would keep its empty InducedDeps forever instead of rebuilding).
 	if res.LDRef != NodeRef(0) {
-		ctx.tools.Put(modulePath, res)
-		ctx.moduleByRef.Put(res.LDRef, res)
+		ctx.tools.put(modulePath, res)
+		ctx.moduleByRef.put(res.LDRef, res)
 	}
 
 	return res
 }
 
-func (ctx *genCtx) scannerFor(instance ModuleInstance) *IncludeScanner {
+func (ctx *GenCtx) scannerFor(instance ModuleInstance) *IncludeScanner {
 	return ctx.scannerForPlatform(instance.Platform)
 }
 
-func (ctx *genCtx) scannerForPlatform(p *Platform) *IncludeScanner {
+func (ctx *GenCtx) scannerForPlatform(p *Platform) *IncludeScanner {
 	if p == ctx.host {
 		return ctx.scannerHost
 	}

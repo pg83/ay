@@ -8,7 +8,7 @@ import (
 // scriptFixtureFS builds a memFS whose build/scripts/ holds Python scripts that
 // exercise real imports plus the three false-positive traps that a naive textual
 // match would wrongly treat as dependencies.
-func scriptFixtureFS() *memFS {
+func scriptFixtureFS() *MemFS {
 	return newMemFS(map[string]string{
 		"build/scripts/link_exe.py": "import os\n" +
 			"import process_command_files as pcf\n" +
@@ -71,7 +71,7 @@ func TestBuildScriptTable_ImportsOnly_NoFalsePositives(t *testing.T) {
 		}
 		gotRel := make([]string, len(got))
 		for i, v := range got {
-			gotRel[i] = v.Rel()
+			gotRel[i] = v.rel()
 		}
 		// closure (got[1:]) is sorted; self is first. Compare full slice.
 		if !reflect.DeepEqual(gotRel, want) {

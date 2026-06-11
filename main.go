@@ -15,7 +15,7 @@ func main() {
 		dispatch(os.Args)
 	})
 
-	exc.Catch(func(e *Exception) {
+	exc.catch(func(e *Exception) {
 		fatalException(e)
 	})
 }

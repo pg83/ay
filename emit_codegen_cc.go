@@ -1,11 +1,11 @@
 package main
 
-func emitPRDownstreamCC(ctx *genCtx, instance ModuleInstance, out string, prRef NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
+func emitPRDownstreamCC(ctx *GenCtx, instance ModuleInstance, out string, prRef NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
 	return emitCodegenDownstreamCC(ctx, instance, out, []NodeRef{prRef}, in)
 }
 
-func emitCodegenDownstreamCC(ctx *genCtx, instance ModuleInstance, cppRel string, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
-	cppPath := Build(instance.Path.Rel() + "/" + cppRel)
+func emitCodegenDownstreamCC(ctx *GenCtx, instance ModuleInstance, cppRel string, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
+	cppPath := Build(instance.Path.rel() + "/" + cppRel)
 
 	includeInputs := walkClosure(ctx, instance, cppPath, in)
 

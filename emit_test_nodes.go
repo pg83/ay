@@ -24,22 +24,22 @@ const (
 	testMandatoryEnvVars      = "ASAN_OPTIONS:ASAN_SYMBOLIZER_PATH:LSAN_OPTIONS:LSAN_SYMBOLIZER_PATH:MSAN_OPTIONS:MSAN_SYMBOLIZER_PATH:TSAN_SYMBOLIZER_PATH:UBSAN_OPTIONS:UBSAN_SYMBOLIZER_PATH:YA_MANDATORY_ENV_VARS"
 )
 
-type testSuiteInfo struct {
+type TestSuiteInfo struct {
 	ProjectPath string
 	BinaryPath  string
 	CppSources  []string
 }
 
-func emitTestRunNodes(ctxEmit Emitter, runEmit Emitter, p *Platform, info testSuiteInfo, ldRef NodeRef, resourceGlobals []resourceDecl) []NodeRef {
-	ctxRef := ctxEmit.Emit(buildTestCtxNode(p))
+func emitTestRunNodes(ctxEmit Emitter, runEmit Emitter, p *Platform, info TestSuiteInfo, ldRef NodeRef, resourceGlobals []ResourceDecl) []NodeRef {
+	ctxRef := ctxEmit.emit(buildTestCtxNode(p))
 
 	unittest := buildUnittestNode(p, info, resourceGlobals)
 	unittest.DepRefs = []NodeRef{ldRef, ctxRef}
-	unittestRef := runEmit.Emit(unittest)
+	unittestRef := runEmit.emit(unittest)
 
 	clangFormat := buildClangFormatNode(p, info)
 	clangFormat.DepRefs = []NodeRef{ctxRef}
-	clangFormatRef := runEmit.Emit(clangFormat)
+	clangFormatRef := runEmit.emit(clangFormat)
 	return []NodeRef{unittestRef, clangFormatRef}
 }
 
@@ -50,7 +50,7 @@ func buildTestCtxNode(p *Platform) *Node {
 		Platform: p,
 		Cache:    &cacheTrue,
 		Cmds: []Cmd{{
-			CmdArgs: argChunks{[]STR{
+			CmdArgs: ArgChunks{[]STR{
 				internStr(testYMakePython3),
 				(Source(testAppendFileScriptRel)).str(),
 				internStr(testContextPath),
@@ -63,7 +63,7 @@ func buildTestCtxNode(p *Platform) *Node {
 			}},
 		}},
 		Env:              nil,
-		Inputs:           inputChunks{{Source(testAppendFileScriptRel)}},
+		Inputs:           InputChunks{{Source(testAppendFileScriptRel)}},
 		KV:               KV{P: pkCP, PC: pcLightBlue},
 		Outputs:          []VFS{bldCommonTestContext},
 		Requirements:     Requirements{Network: nwRestricted},
@@ -72,7 +72,7 @@ func buildTestCtxNode(p *Platform) *Node {
 	}
 }
 
-func buildUnittestNode(p *Platform, info testSuiteInfo, resourceGlobals []resourceDecl) *Node {
+func buildUnittestNode(p *Platform, info TestSuiteInfo, resourceGlobals []ResourceDecl) *Node {
 	cacheFalse := false
 	resultsDir := path.Join(info.ProjectPath, "test-results", "unittest")
 
@@ -137,11 +137,11 @@ func buildUnittestNode(p *Platform, info testSuiteInfo, resourceGlobals []resour
 		Platform: p,
 		Cache:    &cacheFalse,
 		Cmds: []Cmd{{
-			CmdArgs: argChunks{cmdArgs},
+			CmdArgs: ArgChunks{cmdArgs},
 			Cwd:     internStr(testBuildRoot),
 		}},
 		Env:    testEnv(p, "unittest"),
-		Inputs: inputChunks{{Source(info.ProjectPath)}},
+		Inputs: InputChunks{{Source(info.ProjectPath)}},
 		KV: KV{
 			P:                pkTS,
 			Path:             path.Join(info.ProjectPath, "unittest"),
@@ -161,7 +161,7 @@ func buildUnittestNode(p *Platform, info testSuiteInfo, resourceGlobals []resour
 	}
 }
 
-func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
+func buildClangFormatNode(p *Platform, info TestSuiteInfo) *Node {
 	cacheTrue := true
 	resultsDir := path.Join(info.ProjectPath, "test-results", "clang_format")
 
@@ -241,11 +241,11 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 		Platform: p,
 		Cache:    &cacheTrue,
 		Cmds: []Cmd{{
-			CmdArgs: argChunks{cmdArgs},
+			CmdArgs: ArgChunks{cmdArgs},
 			Cwd:     internStr(testBuildRoot),
 		}},
 		Env:    testEnv(p, "clang_format"),
-		Inputs: inputChunks{inputs},
+		Inputs: InputChunks{inputs},
 		KV: KV{
 			P:                pkTS,
 			Path:             path.Join(info.ProjectPath, "clang_format"),
@@ -318,12 +318,12 @@ func targetPlatformDescriptor(p *Platform) string {
 	return strings.Join(parts, "-")
 }
 
-func buildTestSuiteInfo(instance ModuleInstance, d *moduleData, ldPath VFS) *testSuiteInfo {
+func buildTestSuiteInfo(instance ModuleInstance, d *ModuleData, ldPath VFS) *TestSuiteInfo {
 	if d == nil || d.moduleStmt == nil {
 		return nil
 	}
 
-	srcBase := instance.Path.Rel()
+	srcBase := instance.Path.rel()
 
 	if d.moduleStmt.Name == tokUnittestFor && len(d.moduleStmt.Args) > 0 {
 		srcBase = path.Clean(d.moduleStmt.Args[0])
@@ -338,8 +338,8 @@ func buildTestSuiteInfo(instance ModuleInstance, d *moduleData, ldPath VFS) *tes
 		}
 	}
 
-	return &testSuiteInfo{
-		ProjectPath: instance.Path.Rel(),
+	return &TestSuiteInfo{
+		ProjectPath: instance.Path.rel(),
 		BinaryPath:  ldPath.String(),
 		CppSources:  cppSources,
 	}

@@ -42,12 +42,12 @@ func objcopyHash(paths []string, keysB64 []string, kvs []string, unitPath string
 	return strings.ToLower(enchex.EncodeToString(sum[:]))[:hashLen]
 }
 
-func expandResourceFiles(args []string) []resourceEntry {
+func expandResourceFiles(args []string) []ResourceEntry {
 	prefix := ""
 	prefixToStrip := ""
 	dest := ""
 
-	out := make([]resourceEntry, 0, len(args))
+	out := make([]ResourceEntry, 0, len(args))
 	i := 0
 
 	for i < len(args) {
@@ -99,8 +99,8 @@ func expandResourceFiles(args []string) []resourceEntry {
 
 			fileKey := "resfs/file/" + computedKey
 			srcKv := "resfs/src/" + fileKey + "=${rootrel;context=TEXT;input=TEXT:\"" + path + "\"}"
-			out = append(out, resourceEntry{Path: "-", Key: srcKv})
-			out = append(out, resourceEntry{Path: path, Key: fileKey})
+			out = append(out, ResourceEntry{Path: "-", Key: srcKv})
+			out = append(out, ResourceEntry{Path: path, Key: fileKey})
 		}
 	}
 
@@ -122,7 +122,7 @@ func resourceModuleTag(modName TOK) *string {
 // lang/confreader.cpp:847-848 since _PY_PROGRAM() doesn't override it (unlike
 // _ARCADIA_PYTHON3_ADDINCL which sets PY3; the submodule-name default is set
 // AFTER body execution, so it wins).
-func resourceBinTagForData(d *moduleData) *string {
+func resourceBinTagForData(d *ModuleData) *string {
 	if d == nil || d.moduleStmt == nil {
 		return nil
 	}
@@ -142,7 +142,7 @@ func resourceBinTagForData(d *moduleData) *string {
 // objcopy), returning "PY3_BIN_LIB" lets Emitter dedup the duplicate so the
 // PROGRAM's LD reuses the LIBRARY's emission rather than producing a tagged
 // twin with a non-REF hash.
-func resourceLibTagForData(d *moduleData) *string {
+func resourceLibTagForData(d *ModuleData) *string {
 	if d == nil || d.moduleStmt == nil {
 		return nil
 	}
@@ -154,7 +154,7 @@ func resourceLibTagForData(d *moduleData) *string {
 	return resourceModuleTag(d.moduleStmt.Name)
 }
 
-func prResourceExtraInputs(d *moduleData, output string) []VFS {
+func prResourceExtraInputs(d *ModuleData, output string) []VFS {
 	if d == nil || d.prOutputInputs == nil {
 		return nil
 	}
@@ -170,7 +170,7 @@ func prResourceExtraInputs(d *moduleData, output string) []VFS {
 
 	for _, ch := range chunks {
 		for _, p := range ch {
-			if p.IsSource() {
+			if p.isSource() {
 				out = append(out, p)
 			}
 		}
@@ -219,7 +219,7 @@ func rootrelInputPath(kv string) (string, bool) {
 }
 
 func yaConfFormulaResources(fs FS, confPath string) []string {
-	raw := fs.Read(confPath)
+	raw := fs.read(confPath)
 
 	var out []string
 	seen := map[string]struct{}{}
@@ -238,7 +238,7 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 	return out
 }
 
-type pySrcEntry struct {
+type PySrcEntry struct {
 	pathHash  string
 	pathInput VFS
 	key       string
@@ -254,15 +254,15 @@ type pySrcEntry struct {
 // the same search resolveSourceVFS does for SRCS.
 func resolvePySrcRel(fs FS, srcDirs []VFS, modulePath, srcRel string) string {
 	for i := len(srcDirs) - 1; i >= 1; i-- {
-		if fs.IsFile(srcDirs[i], srcRel) {
-			return srcDirs[i].Rel() + "/" + srcRel
+		if fs.isFile(srcDirs[i], srcRel) {
+			return srcDirs[i].rel() + "/" + srcRel
 		}
 	}
 
 	return modulePath + "/" + srcRel
 }
 
-func buildPySrcEntriesFor(fs FS, d *moduleData, modulePath string, srcs []string, topLevel bool, namespace *string) []pySrcEntry {
+func buildPySrcEntriesFor(fs FS, d *ModuleData, modulePath string, srcs []string, topLevel bool, namespace *string) []PySrcEntry {
 	if len(srcs) == 0 {
 		return nil
 	}
@@ -277,7 +277,7 @@ func buildPySrcEntriesFor(fs FS, d *moduleData, modulePath string, srcs []string
 		}
 	}
 
-	out := make([]pySrcEntry, 0, len(srcs)*2)
+	out := make([]PySrcEntry, 0, len(srcs)*2)
 
 	for _, srcRel := range srcs {
 		if strings.HasSuffix(srcRel, ".pyi") {
@@ -313,7 +313,7 @@ func buildPySrcEntriesFor(fs FS, d *moduleData, modulePath string, srcs []string
 				pyKvCmd = "resfs/src/" + pyKey + "=" + modulePath + "/" + srcRel
 			}
 
-			out = append(out, pySrcEntry{
+			out = append(out, PySrcEntry{
 				pathHash:  srcRel,
 				pathInput: pyPathInput,
 				key:       pyKey,
@@ -336,7 +336,7 @@ func buildPySrcEntriesFor(fs FS, d *moduleData, modulePath string, srcs []string
 				extraSrcInput = vfsPtr(Build(modulePath + "/" + srcRel))
 			}
 
-			out = append(out, pySrcEntry{
+			out = append(out, PySrcEntry{
 				pathHash:      srcRel + suffix,
 				pathInput:     ypPathInput,
 				key:           ypKey,
@@ -351,7 +351,7 @@ func buildPySrcEntriesFor(fs FS, d *moduleData, modulePath string, srcs []string
 	return out
 }
 
-type pySrcChunk struct {
+type PySrcChunk struct {
 	paths    []string
 	keys     []string
 	kvsHash  []string
@@ -361,13 +361,13 @@ type pySrcChunk struct {
 	inps []VFS
 }
 
-func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
+func chunkPySrcEntries(entries []PySrcEntry) []PySrcChunk {
 	if len(entries) == 0 {
 		return nil
 	}
 
-	chunks := make([]pySrcChunk, 0)
-	cur := pySrcChunk{}
+	chunks := make([]PySrcChunk, 0)
+	cur := PySrcChunk{}
 	cmdLen := 0
 	deduper.reset()
 	flush := func() {
@@ -376,12 +376,12 @@ func chunkPySrcEntries(entries []pySrcEntry) []pySrcChunk {
 		}
 
 		chunks = append(chunks, cur)
-		cur = pySrcChunk{}
+		cur = PySrcChunk{}
 		cmdLen = 0
 		deduper.reset()
 	}
 
-	addInps := func(e pySrcEntry) {
+	addInps := func(e PySrcEntry) {
 		if deduper.add(e.pathInput) {
 			cur.inps = append(cur.inps, e.pathInput)
 		}

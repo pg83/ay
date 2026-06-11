@@ -87,7 +87,7 @@ func NewToolInstance(host *Platform, path string) ModuleInstance {
 
 func (mi ModuleInstance) String() string {
 	var b strings.Builder
-	b.WriteString(mi.Path.Rel())
+	b.WriteString(mi.Path.rel())
 	b.WriteString("[")
 	b.WriteString(mi.Kind.String())
 	b.WriteString("]")

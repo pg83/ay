@@ -18,13 +18,13 @@ func (e *Exception) throw() {
 	panic(e)
 }
 
-func (e *Exception) Catch(cb func(*Exception)) {
+func (e *Exception) catch(cb func(*Exception)) {
 	if e != nil {
 		cb(e)
 	}
 }
 
-func (e *Exception) AsError() error {
+func (e *Exception) asError() error {
 	if e == nil {
 		return nil
 	}

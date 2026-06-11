@@ -8,40 +8,40 @@ func TestDenseMap3_IndependentColumns(t *testing.T) {
 	var m DenseMap3[STR, int, int, int]
 
 	// Set exactly one column per key (key 0 exercises the slot-0 sentinel).
-	m.Put1(0, 100)
-	m.Put2(1, 200)
-	m.Put3(2, 300)
+	m.put1(0, 100)
+	m.put2(1, 200)
+	m.put3(2, 300)
 
 	if m.Len() != 3 {
 		t.Fatalf("Len = %d, want 3", m.Len())
 	}
 
 	// Each key has only its own column present; all others read absent.
-	if got, ok := m.Get1(0); !ok || got != 100 {
+	if got, ok := m.get1(0); !ok || got != 100 {
 		t.Fatalf("Get1(0) = (%d, %v), want (100, true)", got, ok)
 	}
-	if _, ok := m.Get2(0); ok {
+	if _, ok := m.get2(0); ok {
 		t.Fatalf("Get2(0) present, want absent")
 	}
-	if _, ok := m.Get3(0); ok {
+	if _, ok := m.get3(0); ok {
 		t.Fatalf("Get3(0) present, want absent")
 	}
-	if got, ok := m.Get2(1); !ok || got != 200 {
+	if got, ok := m.get2(1); !ok || got != 200 {
 		t.Fatalf("Get2(1) = (%d, %v), want (200, true)", got, ok)
 	}
-	if _, ok := m.Get1(1); ok {
+	if _, ok := m.get1(1); ok {
 		t.Fatalf("Get1(1) present, want absent")
 	}
-	if _, ok := m.Get3(1); ok {
+	if _, ok := m.get3(1); ok {
 		t.Fatalf("Get3(1) present, want absent")
 	}
-	if got, ok := m.Get3(2); !ok || got != 300 {
+	if got, ok := m.get3(2); !ok || got != 300 {
 		t.Fatalf("Get3(2) = (%d, %v), want (300, true)", got, ok)
 	}
-	if _, ok := m.Get1(2); ok {
+	if _, ok := m.get1(2); ok {
 		t.Fatalf("Get1(2) present, want absent")
 	}
-	if _, ok := m.Get2(2); ok {
+	if _, ok := m.get2(2); ok {
 		t.Fatalf("Get2(2) present, want absent")
 	}
 }
@@ -50,17 +50,17 @@ func TestDenseMap3_AllColumnsOneKey(t *testing.T) {
 	var m DenseMap3[STR, int, int, int]
 	const k = 1000
 
-	m.Put1(k, 1)
-	m.Put2(k, 2)
-	m.Put3(k, 3)
+	m.put1(k, 1)
+	m.put2(k, 2)
+	m.put3(k, 3)
 
-	if got, ok := m.Get1(k); !ok || got != 1 {
+	if got, ok := m.get1(k); !ok || got != 1 {
 		t.Fatalf("Get1(k) = (%d, %v), want (1, true)", got, ok)
 	}
-	if got, ok := m.Get2(k); !ok || got != 2 {
+	if got, ok := m.get2(k); !ok || got != 2 {
 		t.Fatalf("Get2(k) = (%d, %v), want (2, true)", got, ok)
 	}
-	if got, ok := m.Get3(k); !ok || got != 3 {
+	if got, ok := m.get3(k); !ok || got != 3 {
 		t.Fatalf("Get3(k) = (%d, %v), want (3, true)", got, ok)
 	}
 
@@ -72,18 +72,18 @@ func TestDenseMap3_AllColumnsOneKey(t *testing.T) {
 func TestDenseMap3_OverwriteAndAbsent(t *testing.T) {
 	var m DenseMap3[STR, int, int, int]
 
-	if _, ok := m.Get1(0); ok {
+	if _, ok := m.get1(0); ok {
 		t.Fatal("empty map reported key 0 present")
 	}
-	if _, ok := m.Get1(1 << 20); ok {
+	if _, ok := m.get1(1 << 20); ok {
 		t.Fatal("empty map reported out-of-range key present")
 	}
 
-	m.Put1(7, 1)
-	m.Put1(7, 2)
-	m.Put1(7, 3)
+	m.put1(7, 1)
+	m.put1(7, 2)
+	m.put1(7, 3)
 
-	if got, _ := m.Get1(7); got != 3 {
+	if got, _ := m.get1(7); got != 3 {
 		t.Fatalf("Get1(7) = %d, want 3 (last write)", got)
 	}
 	if m.Len() != 1 {

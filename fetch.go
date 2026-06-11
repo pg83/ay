@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-type resourceMappingConf struct {
+type ResourceMappingConf struct {
 	Extensions map[string]string `json:"extensions"`
 	Resources  map[string]string `json:"resources"`
 }
@@ -27,22 +27,22 @@ func currentYatoolPath() string {
 // plus the two fetch scripts `ay fetch` actually runs (fetch_from_sandbox /
 // fetch_from_mds), each expanded to its import closure via the table — which pulls
 // in error.py, fetch_from.py, retry.py and process_command_files.py.
-func fetchScriptInputs(scripts scriptDeps) []VFS {
+func fetchScriptInputs(scripts ScriptDeps) []VFS {
 	out := []VFS{buildMappingConfJson}
 	out = append(out, scripts[buildScriptsFetchFromSandboxPy]...)
 	out = append(out, scripts[buildScriptsFetchFromMdsPy]...)
 	return out
 }
 
-type resourceAwareEmitter struct {
+type ResourceAwareEmitter struct {
 	inner     Emitter
 	host      *Platform
-	scripts   scriptDeps
+	scripts   ScriptDeps
 	fetchRefs map[string]NodeRef
 }
 
-func newResourceAwareEmitter(host *Platform, inner Emitter, scripts scriptDeps, fetchRefs map[string]NodeRef) Emitter {
-	return &resourceAwareEmitter{
+func newResourceAwareEmitter(host *Platform, inner Emitter, scripts ScriptDeps, fetchRefs map[string]NodeRef) Emitter {
+	return &ResourceAwareEmitter{
 		inner:     inner,
 		host:      host,
 		scripts:   scripts,
@@ -50,18 +50,18 @@ func newResourceAwareEmitter(host *Platform, inner Emitter, scripts scriptDeps, 
 	}
 }
 
-func (e *resourceAwareEmitter) Emit(n *Node) NodeRef {
+func (e *ResourceAwareEmitter) emit(n *Node) NodeRef {
 	e.attachResourceDeps(n)
 
-	return e.inner.Emit(n)
+	return e.inner.emit(n)
 }
 
-func (e *resourceAwareEmitter) Result(r NodeRef) {
-	e.inner.Result(r)
+func (e *ResourceAwareEmitter) result(r NodeRef) {
+	e.inner.result(r)
 }
 
-func (e *resourceAwareEmitter) OnReady(r NodeRef) <-chan struct{} {
-	return e.inner.OnReady(r)
+func (e *ResourceAwareEmitter) onReady(r NodeRef) <-chan struct{} {
+	return e.inner.onReady(r)
 }
 
 // attachResourceDeps turns each resource pattern the node declared (at the
@@ -71,7 +71,7 @@ func (e *resourceAwareEmitter) OnReady(r NodeRef) <-chan struct{} {
 // have their FETCH node emitted (emitResourceFetch); the dep is taken from the
 // shared fetchRefs registry. A pattern absent from fetchRefs means the resource's
 // RESOURCES_LIBRARY peer was not in the closure, so it is skipped.
-func (e *resourceAwareEmitter) attachResourceDeps(n *Node) {
+func (e *ResourceAwareEmitter) attachResourceDeps(n *Node) {
 	for _, pat := range n.usesResources {
 		if ref, ok := e.fetchRefs[pat]; ok {
 			n.DepRefs = append(n.DepRefs, ref)
@@ -179,8 +179,8 @@ func fetchResource(sourceRoot, uri, out string) {
 	unpackResourceArchive(archivePath, out)
 }
 
-func readResourceMappingMaybe(path string) resourceMappingConf {
-	var out resourceMappingConf
+func readResourceMappingMaybe(path string) ResourceMappingConf {
+	var out ResourceMappingConf
 	raw, err := os.ReadFile(path)
 
 	if err != nil {
@@ -192,7 +192,7 @@ func readResourceMappingMaybe(path string) resourceMappingConf {
 	return out
 }
 
-func (m resourceMappingConf) urlForSandboxID(id string) string {
+func (m ResourceMappingConf) urlForSandboxID(id string) string {
 	tpl := m.Resources[id]
 
 	if tpl == "" {

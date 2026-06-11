@@ -25,7 +25,7 @@ import (
 // in makeResourceDecl.
 
 // resourceDecl is one declared external resource after host-platform selection.
-type resourceDecl struct {
+type ResourceDecl struct {
 	Name      STR // resource base name, e.g. "CLANG16"
 	URI       STR // host-selected uri, e.g. "sbr:6495238978" or an absolute path
 	GlobalVar STR // propagated variable name, e.g. "CLANG16_RESOURCE_GLOBAL"
@@ -38,7 +38,7 @@ const resourceGlobalSuffix = "_RESOURCE_GLOBAL"
 // makeResourceDecl interns one resource (the sole string boundary): it composes the
 // bare resource ref, global-var name and --global-resource token, then carries them
 // as STR. The uri is kept only to drive the fetch — it never enters the ref.
-func makeResourceDecl(name, uri string) resourceDecl {
+func makeResourceDecl(name, uri string) ResourceDecl {
 	// Resource references resolve to the FETCH node's output dir, $(B)/resources/NAME,
 	// so flags/env that splice ${NAME_RESOURCE_GLOBAL} (e.g. lld's --ld-path) point at
 	// a real graph output the consumer depends on — not an executor-mounted $(NAME).
@@ -46,7 +46,7 @@ func makeResourceDecl(name, uri string) resourceDecl {
 	value := "$(B)/resources/" + name
 	globalVar := name + resourceGlobalSuffix
 
-	return resourceDecl{
+	return ResourceDecl{
 		Name:      internStr(name),
 		URI:       internStr(uri),
 		GlobalVar: internStr(globalVar),
@@ -77,11 +77,11 @@ func stripSbrPrefix(uri string) string {
 
 // resolveResourceDecls turns one DECLARE_EXTERNAL_RESOURCE /
 // _HOST_RESOURCES_BUNDLE[_BY_JSON] call into host-selected resource declarations.
-func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *DeclareResourceStmt) []resourceDecl {
+func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *DeclareResourceStmt) []ResourceDecl {
 	switch stmt.Macro {
 	case tokDeclareExternalResource:
 		// NAME uri [NAME2 uri2 ...] — direct, host-independent.
-		out := make([]resourceDecl, 0, len(stmt.Args)/2)
+		out := make([]ResourceDecl, 0, len(stmt.Args)/2)
 
 		for i := 0; i+1 < len(stmt.Args); i += 2 {
 			out = append(out, makeResourceDecl(stmt.Args[i], stmt.Args[i+1]))
@@ -101,19 +101,19 @@ func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *Declar
 			bundle[stmt.Args[i+2]] = stmt.Args[i]
 		}
 
-		return []resourceDecl{selectHostResourceDecl(host, modulePath, name, bundle)}
+		return []ResourceDecl{selectHostResourceDecl(host, modulePath, name, bundle)}
 	case tokDeclareExternalHostResourcesBundleByJson:
 		// NAME file.json — read by_platform.<host>.uri.
 		name, jsonRel := stmt.Args[0], stmt.Args[1]
 		bundle := readResourceBundleJSON(fs, filepath.ToSlash(filepath.Join(modulePath, jsonRel)))
 
-		return []resourceDecl{selectHostResourceDecl(host, modulePath, name, bundle)}
+		return []ResourceDecl{selectHostResourceDecl(host, modulePath, name, bundle)}
 	}
 
 	return nil
 }
 
-func selectHostResourceDecl(host *Platform, modulePath, name string, bundle map[string]string) resourceDecl {
+func selectHostResourceDecl(host *Platform, modulePath, name string, bundle map[string]string) ResourceDecl {
 	uri, ok := bundle[hostPlatformKey(host)]
 
 	if !ok {
@@ -126,8 +126,8 @@ func selectHostResourceDecl(host *Platform, modulePath, name string, bundle map[
 // sortedResourceGlobals returns the declarations ordered by global-var name,
 // mirroring ymake's std::set<TString> ExternalResources collection — the order
 // in which a test node's --global-resource arguments are emitted.
-func sortedResourceGlobals(in []resourceDecl) []resourceDecl {
-	out := append([]resourceDecl(nil), in...)
+func sortedResourceGlobals(in []ResourceDecl) []ResourceDecl {
+	out := append([]ResourceDecl(nil), in...)
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].GlobalVar.String() < out[j].GlobalVar.String()
 	})
@@ -142,7 +142,7 @@ func sortedResourceGlobals(in []resourceDecl) []resourceDecl {
 // resolves to the decl's value ("$(CLANG16-<id>)"); a non-reference string passes through.
 // This mirrors ymake deferring the expansion until command generation, when the global
 // is available from the closure rather than read eagerly at module-collection time.
-func resolveResourceGlobalRef(s string, globals []resourceDecl) string {
+func resolveResourceGlobalRef(s string, globals []ResourceDecl) string {
 	name, ok := strings.CutPrefix(s, "$")
 
 	if !ok {
@@ -166,12 +166,12 @@ func resolveResourceGlobalRef(s string, globals []resourceDecl) string {
 // binds each <NAME>_RESOURCE_GLOBAL env var to its "$(<VarName>)" value, mirroring
 // ymake's ProcessExternalResource. Returns whether any var was bound (so the
 // caller re-collects to expand references that textually precede the DECLARE).
-func bindResourceGlobalVars(ctx *genCtx, instance ModuleInstance, d *moduleData, env Environment) bool {
+func bindResourceGlobalVars(ctx *GenCtx, instance ModuleInstance, d *ModuleData, env Environment) bool {
 	bound := false
 
 	for _, stmt := range d.resourceDeclStmts {
-		for _, decl := range resolveResourceDecls(ctx.fs, ctx.host, instance.Path.Rel(), stmt) {
-			env.SetStringID(internEnvSTR(decl.GlobalVar), decl.Value)
+		for _, decl := range resolveResourceDecls(ctx.fs, ctx.host, instance.Path.rel(), stmt) {
+			env.setStringID(internEnvSTR(decl.GlobalVar), decl.Value)
 			bound = true
 		}
 	}
@@ -188,7 +188,7 @@ func bindResourceGlobalVars(ctx *genCtx, instance ModuleInstance, d *moduleData,
 // name in the consuming node's usesResources. A field stays 0 when its resource is
 // absent from the closure (the consuming emitter then has no peer to take the tool
 // from — caught at use, never silently defaulted).
-type moduleToolchain struct {
+type ModuleToolchain struct {
 	// ClangResource is the versioned clang resource the compiler/llvm tools come
 	// from (e.g. "CLANG20"), selected by the platform's ClangVer. Consumers list it in
 	// their node's usesResources so they depend on that specific FETCH node — version-
@@ -213,8 +213,8 @@ type moduleToolchain struct {
 
 // resolveModuleToolchain derives the tool paths from the module's resource-global
 // closure. Tool paths come from peers (build/platform/*), not ambient platform flags.
-func resolveModuleToolchain(globals []resourceDecl, clangVer string) moduleToolchain {
-	var tc moduleToolchain
+func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolchain {
+	var tc ModuleToolchain
 
 	// The compiler/llvm tools come from the version-specific CLANG<ver> resource
 	// (e.g. CLANG20), not the version-independent bare CLANG: $(B)/resources/CLANG20
@@ -259,12 +259,12 @@ func resolveModuleToolchain(globals []resourceDecl, clangVer string) moduleToolc
 // genResourcesLibrary emits a RESOURCES_LIBRARY: it produces no archive/objects
 // (upstream RESOURCES_LIBRARY is a .pkg.fake IGNORED unit), only the external
 // resource globals it declares, which propagate up the PEERDIR closure.
-func genResourcesLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *moduleEmitResult {
-	var globals []resourceDecl
+func genResourcesLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *ModuleEmitResult {
+	var globals []ResourceDecl
 	deduper.reset()
 
 	for _, stmt := range d.resourceDeclStmts {
-		for _, decl := range resolveResourceDecls(ctx.fs, ctx.host, instance.Path.Rel(), stmt) {
+		for _, decl := range resolveResourceDecls(ctx.fs, ctx.host, instance.Path.rel(), stmt) {
 			if deduper.add(VFS(decl.GlobalVar)) {
 				globals = append(globals, decl)
 				emitResourceFetch(ctx, decl)
@@ -280,7 +280,7 @@ func genResourcesLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *m
 	// SET_APPEND(RPATH_GLOBAL -Wl,-rpath,$ORIGIN) reach every linking consumer here.
 	// Duplicates of these flags that currently also come from the Platform (the
 	// mine.go stopgap) are removed on the Platform side, not here.
-	result := &moduleEmitResult{
+	result := &ModuleEmitResult{
 		ModuleStmtName:        d.moduleStmt.Name,
 		ResourceGlobalClosure: globals,
 		Peerdirs:              d.peerdirs,
@@ -300,7 +300,7 @@ func genResourcesLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *m
 	return result
 }
 
-type resourceBundleJSON struct {
+type ResourceBundleJSON struct {
 	ByPlatform map[string]struct {
 		URI string `json:"uri"`
 	} `json:"by_platform"`
@@ -309,8 +309,8 @@ type resourceBundleJSON struct {
 // readResourceBundleJSON parses a build/platform/*/*.json bundle into a
 // platform-key -> uri map (the by_platform table feeding DECLARE_*_BY_JSON).
 func readResourceBundleJSON(fs FS, rel string) map[string]string {
-	var data resourceBundleJSON
-	Throw(json.Unmarshal(fs.Read(rel), &data))
+	var data ResourceBundleJSON
+	Throw(json.Unmarshal(fs.read(rel), &data))
 
 	out := make(map[string]string, len(data.ByPlatform))
 

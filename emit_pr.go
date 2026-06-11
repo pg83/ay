@@ -5,24 +5,24 @@ import (
 	"strings"
 )
 
-type runProgramsForARResult struct {
+type RunProgramsForARResult struct {
 	CCRefs    []NodeRef
 	CCOutputs []VFS
 }
 
-type runProgramAuxTool struct {
+type RunProgramAuxTool struct {
 	token string
 	ref   NodeRef
 	bin   VFS
 }
 
-func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCCInputs) *runProgramsForARResult {
+func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) *RunProgramsForARResult {
 	if len(d.runPrograms) == 0 {
 		return nil
 	}
 
 	reg := codegenRegForInstance(ctx, instance)
-	res := &runProgramsForARResult{}
+	res := &RunProgramsForARResult{}
 
 	for _, rp := range d.runPrograms {
 		prRef := emitRunProgram(ctx, instance, rp, d, reg, in)
@@ -64,7 +64,7 @@ func emitRunProgramsForAR(ctx *genCtx, instance ModuleInstance, d *moduleData, i
 	return res
 }
 
-func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, d *moduleData, reg *CodegenRegistry, moduleInputs ModuleCCInputs) NodeRef {
+func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, d *ModuleData, reg *CodegenRegistry, moduleInputs ModuleCCInputs) NodeRef {
 	res := ctx.toolResult(internArg(filepath.Clean(stmt.ToolPath)))
 	toolLDRef := res.LDRef
 	toolBinPath := *res.LDPath
@@ -81,17 +81,17 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	outVFSByToken := make(map[string]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
 
 	for _, f := range stmt.OUTFiles {
-		outVFSByToken[f] = copyFileOutputVFS(instance.Path.Rel(), f)
+		outVFSByToken[f] = copyFileOutputVFS(instance.Path.rel(), f)
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		outVFSByToken[f] = copyFileOutputVFS(instance.Path.Rel(), f)
+		outVFSByToken[f] = copyFileOutputVFS(instance.Path.rel(), f)
 	}
 
 	var stdoutVFS *VFS
 
 	if stmt.StdoutFile != nil {
-		vfs := copyFileOutputVFS(instance.Path.Rel(), *stmt.StdoutFile)
+		vfs := copyFileOutputVFS(instance.Path.rel(), *stmt.StdoutFile)
 		stdoutVFS = &vfs
 		outVFSByToken[*stmt.StdoutFile] = vfs
 	}
@@ -103,7 +103,7 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	var prSourceInputs []VFS
 
 	for _, v := range inVFSs {
-		if v.IsSource() {
+		if v.isSource() {
 			prSourceInputs = append(prSourceInputs, v)
 		}
 	}
@@ -111,17 +111,17 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
 			registerGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f], prEmitsIncludes(ctx, instance, d, f, stmt), []NodeRef{toolLDRef})
-			reg.SetSourceInputs(outVFSByToken[f], prSourceInputs)
+			reg.setSourceInputs(outVFSByToken[f], prSourceInputs)
 		}
 
 		for _, f := range stmt.OUTNoAutoFiles {
 			registerGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f], prEmitsIncludes(ctx, instance, d, f, stmt), []NodeRef{toolLDRef})
-			reg.SetSourceInputs(outVFSByToken[f], prSourceInputs)
+			reg.setSourceInputs(outVFSByToken[f], prSourceInputs)
 		}
 
 		if stmt.StdoutFile != nil {
 			registerGeneratedParsedOutput(ctx, instance, pkPR, *stdoutVFS, prEmitsIncludes(ctx, instance, d, *stmt.StdoutFile, stmt), []NodeRef{toolLDRef})
-			reg.SetSourceInputs(*stdoutVFS, prSourceInputs)
+			reg.setSourceInputs(*stdoutVFS, prSourceInputs)
 		}
 	}
 
@@ -133,7 +133,7 @@ func emitRunProgram(ctx *genCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	prRef := prResult.Ref
 
 	if d.prOutputInputs == nil {
-		d.prOutputInputs = map[string]inputChunks{}
+		d.prOutputInputs = map[string]InputChunks{}
 	}
 
 	// prResult.Inputs shares the PR node's chunk list; nothing mutates it after
@@ -179,7 +179,7 @@ func generatedOutputCarriesIncludes(p string) bool {
 	return isCCSourceExt(p) || isHeaderSource(p) || strings.HasSuffix(p, ".inc")
 }
 
-func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *RunProgramStmt, moduleInputs ModuleCCInputs) []VFS {
+func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *RunProgramStmt, moduleInputs ModuleCCInputs) []VFS {
 	scanIn := ModuleCCInputs{
 		TC:                d.tc,
 		InclArgs:          ctx.inclArgs,
@@ -193,7 +193,7 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *R
 
 	var out []VFS
 	walkOne := func(rel string) {
-		buildRootPath := copyFileOutputVFS(instance.Path.Rel(), rel)
+		buildRootPath := copyFileOutputVFS(instance.Path.rel(), rel)
 		sub := walkClosureTail(ctx, instance, buildRootPath, scanIn)
 		out = append(out, sub...)
 	}
@@ -262,11 +262,11 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *R
 			target := oi
 
 			if vfsHasPrefix(target) {
-				target = Intern(target).Rel()
+				target = Intern(target).rel()
 			}
 
 			candidate := Build(target)
-			info := reg.Lookup(candidate)
+			info := reg.lookup(candidate)
 
 			if info == nil {
 				continue
@@ -275,7 +275,7 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *R
 			sub := walkClosureTail(ctx, instance, info.OutputPath, scanIn)
 
 			for _, v := range sub {
-				if !strings.HasSuffix(v.Rel(), ".proto") {
+				if !strings.HasSuffix(v.rel(), ".proto") {
 					continue
 				}
 
@@ -288,11 +288,11 @@ func prInputClosure(ctx *genCtx, instance ModuleInstance, d *moduleData, stmt *R
 				// through one. For purely-generated .pb.h's (no source-tree
 				// .pb.h sibling) the IsFile probe returns false, so this is a
 				// no-op outside the WKT path.
-				if v.IsSource() {
-					sibling := strings.TrimSuffix(v.Rel(), ".proto") + ".pb.h"
+				if v.isSource() {
+					sibling := strings.TrimSuffix(v.rel(), ".proto") + ".pb.h"
 					sibDir, sibBase := splitDirName(sibling)
 
-					if ctx.fs.IsFile(dirKey(sibDir), sibBase) {
+					if ctx.fs.isFile(dirKey(sibDir), sibBase) {
 						out = append(out, Source(sibling))
 					}
 				}
@@ -327,7 +327,7 @@ func dropTransitiveGeneratedProto(in []VFS) []VFS {
 	out := in[:0]
 
 	for _, v := range in {
-		if v.IsBuild() && strings.HasSuffix(v.Rel(), ".proto") {
+		if v.isBuild() && strings.HasSuffix(v.rel(), ".proto") {
 			continue
 		}
 
@@ -337,34 +337,34 @@ func dropTransitiveGeneratedProto(in []VFS) []VFS {
 	return out
 }
 
-func prEmitsIncludes(ctx *genCtx, instance ModuleInstance, d *moduleData, outFile string, stmt *RunProgramStmt) []includeDirective {
+func prEmitsIncludes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, outFile string, stmt *RunProgramStmt) []IncludeDirective {
 	if !generatedOutputCarriesIncludes(outFile) {
 		return nil
 	}
 
-	includes := make([]includeDirective, 0, len(stmt.INFiles)+len(stmt.OutputIncludes))
+	includes := make([]IncludeDirective, 0, len(stmt.INFiles)+len(stmt.OutputIncludes))
 
 	for _, f := range stmt.INFiles {
-		includes = append(includes, includeDirective{kind: includeQuoted, target: internStr(runProgramInputVFS(ctx, instance, d, f).Rel())})
+		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(runProgramInputVFS(ctx, instance, d, f).rel())})
 	}
 
 	for _, f := range stmt.OutputIncludes {
 		if vfsHasPrefix(f) {
-			f = Intern(f).Rel()
+			f = Intern(f).rel()
 		}
 
-		includes = append(includes, includeDirective{kind: includeQuoted, target: internStr(f)})
+		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(f)})
 	}
 
 	return includes
 }
 
-func resolveRunProgramAuxTools(ctx *genCtx, toolPaths []string) []runProgramAuxTool {
+func resolveRunProgramAuxTools(ctx *GenCtx, toolPaths []string) []RunProgramAuxTool {
 	if len(toolPaths) == 0 {
 		return nil
 	}
 
-	out := make([]runProgramAuxTool, 0, len(toolPaths))
+	out := make([]RunProgramAuxTool, 0, len(toolPaths))
 	seen := make(map[string]struct{}, len(toolPaths))
 
 	for _, toolPath := range toolPaths {
@@ -374,7 +374,7 @@ func resolveRunProgramAuxTools(ctx *genCtx, toolPaths []string) []runProgramAuxT
 
 		seen[toolPath] = struct{}{}
 		res := ctx.toolResult(internArg(filepath.Clean(toolPath)))
-		out = append(out, runProgramAuxTool{
+		out = append(out, RunProgramAuxTool{
 			token: toolPath,
 			ref:   res.LDRef,
 			bin:   *res.LDPath,
@@ -384,7 +384,7 @@ func resolveRunProgramAuxTools(ctx *genCtx, toolPaths []string) []runProgramAuxT
 	return out
 }
 
-func runProgramInputVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, rel string) VFS {
+func runProgramInputVFS(ctx *GenCtx, instance ModuleInstance, d *ModuleData, rel string) VFS {
 	switch {
 	case strings.HasPrefix(rel, "$(S)/"),
 		strings.HasPrefix(rel, "$(B)/"),
@@ -392,18 +392,18 @@ func runProgramInputVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, rel
 		strings.HasPrefix(rel, "${CURDIR}/"),
 		strings.HasPrefix(rel, "${ARCADIA_BUILD_ROOT}/"),
 		strings.HasPrefix(rel, "${BINDIR}/"):
-		return copyFileInputVFS(ctx.fs, instance.Path.Rel(), rel)
+		return copyFileInputVFS(ctx.fs, instance.Path.rel(), rel)
 	}
 
-	buildVFS := Build(filepath.ToSlash(filepath.Clean(instance.Path.Rel() + "/" + rel)))
+	buildVFS := Build(filepath.ToSlash(filepath.Clean(instance.Path.rel() + "/" + rel)))
 
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
-		if reg.Lookup(buildVFS) != nil {
+		if reg.lookup(buildVFS) != nil {
 			return buildVFS
 		}
 	}
 
-	if ctx.fs.IsFile(srcRootVFS, rel) {
+	if ctx.fs.isFile(srcRootVFS, rel) {
 		return Source(rel)
 	}
 
@@ -411,7 +411,7 @@ func runProgramInputVFS(ctx *genCtx, instance ModuleInstance, d *moduleData, rel
 }
 
 func expandRunProgramCWD(instance ModuleInstance, cwd string) string {
-	cwd = strings.ReplaceAll(cwd, "$BINDIR", Build(instance.Path.Rel()).String())
+	cwd = strings.ReplaceAll(cwd, "$BINDIR", Build(instance.Path.rel()).String())
 	cwd = strings.ReplaceAll(cwd, "$CURDIR", instance.Path.String())
 	cwd = strings.ReplaceAll(cwd, "${ARCADIA_BUILD_ROOT}", "$(B)")
 	cwd = strings.ReplaceAll(cwd, "${ARCADIA_ROOT}", "$(S)")
@@ -419,9 +419,9 @@ func expandRunProgramCWD(instance ModuleInstance, cwd string) string {
 	return cwd
 }
 
-type prEmitResult struct {
+type PrEmitResult struct {
 	Ref    NodeRef
-	Inputs inputChunks
+	Inputs InputChunks
 }
 
 func EmitPR(
@@ -429,14 +429,14 @@ func EmitPR(
 	stmt *RunProgramStmt,
 	toolBinPath VFS,
 	toolLDRef NodeRef,
-	auxTools []runProgramAuxTool,
+	auxTools []RunProgramAuxTool,
 	inVFSByToken map[string]VFS,
 	outVFSByToken map[string]VFS,
 	stdoutVFS *VFS,
 	inputClosure []VFS,
 	extraDepRefs []NodeRef,
 	emit Emitter,
-) prEmitResult {
+) PrEmitResult {
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	for _, kv := range stmt.EnvPairs {
@@ -456,10 +456,10 @@ func EmitPR(
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
 		a = strings.ReplaceAll(a, "${ARCADIA_BUILD_ROOT}", "$(B)")
 		a = strings.ReplaceAll(a, "${CURDIR}", instance.Path.String())
-		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path.Rel()).String())
-		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path.Rel())
+		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path.rel()).String())
+		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path.rel())
 		a = strings.ReplaceAll(a, "$CURDIR", instance.Path.String())
-		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path.Rel()).String())
+		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path.rel()).String())
 
 		for _, tool := range auxTools {
 			if strings.Contains(a, tool.token) {
@@ -498,7 +498,7 @@ func EmitPR(
 	// The closure tail is filtered against the head set; filterSeen returns
 	// inputClosure itself when nothing collides, so the closure is referenced,
 	// not copied, into the chunk list.
-	inputs := inputChunks{head, deduper.filterSeen(inputClosure)}
+	inputs := InputChunks{head, deduper.filterSeen(inputClosure)}
 
 	var outputs []VFS
 	var stdoutPath STR
@@ -551,7 +551,7 @@ func EmitPR(
 	}
 
 	cmd := Cmd{
-		CmdArgs: argChunks{cmdArgs},
+		CmdArgs: ArgChunks{cmdArgs},
 		Env:     env,
 	}
 
@@ -570,7 +570,7 @@ func EmitPR(
 		Inputs:           inputs,
 		Outputs:          outputs,
 		KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.Rel()},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          depRefs,
 		ForeignDepRefs:   foreignDepRefs,
@@ -578,8 +578,8 @@ func EmitPR(
 
 	// The node and the result share the same chunk list: nothing mutates a
 	// node's Inputs after Emit, and prOutputInputs readers copy out.
-	return prEmitResult{
-		Ref:    emit.Emit(node),
+	return PrEmitResult{
+		Ref:    emit.emit(node),
 		Inputs: inputs,
 	}
 }
