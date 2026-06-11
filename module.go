@@ -9,15 +9,39 @@ var (
 	PlatformDefaultLinuxX8664   = makePlatformID(OSLinux, ISAX8664)
 )
 
-type Language string
+type Language int
 
 const (
-	LangCPP   Language = "cpp"
-	LangProto Language = "proto"
-	LangGo    Language = "go"
-	LangPy    Language = "py"
-	LangJava  Language = "java"
+	// LangNone is the zero value: an instance without an explicit language
+	// (the pre-enum "" string).
+	LangNone Language = iota
+	LangCPP
+	LangProto
+	LangGo
+	LangPy
+	LangJava
 )
+
+func (l Language) string() string {
+	switch l {
+	case LangNone:
+		return ""
+	case LangCPP:
+		return "cpp"
+	case LangProto:
+		return "proto"
+	case LangGo:
+		return "go"
+	case LangPy:
+		return "py"
+	case LangJava:
+		return "java"
+	}
+
+	throwFmt("Language.string: unknown language %d", int(l))
+
+	return ""
+}
 
 type ModuleKind int
 
@@ -98,7 +122,7 @@ func (mi ModuleInstance) string() string {
 	b.WriteString(mi.Kind.string())
 	b.WriteString("]")
 	b.WriteString(":")
-	b.WriteString(string(mi.Language))
+	b.WriteString(mi.Language.string())
 	b.WriteString("@")
 	b.WriteString(string(mi.Platform.Target))
 

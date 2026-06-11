@@ -241,7 +241,7 @@ type GenCtx struct {
 	// VFS-keyed value columns can share its idx array. inclArgs points at it.
 	inclArgValues   DenseMap[VFS, STR]
 	inclArgs        InclArgMemo
-	memo            map[ModuleInstance]*ModuleEmitResult
+	memo            *IntValueMap[*ModuleEmitResult]
 	walking         map[ModuleInstance]bool
 	cyclesTolerated int
 
@@ -455,7 +455,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		fs:                 fs,
 		parsers:            parsers,
 		emit:               resourceEmit,
-		memo:               make(map[ModuleInstance]*ModuleEmitResult),
+		memo:               newIntValueMap[*ModuleEmitResult](4096),
 		walking:            make(map[ModuleInstance]bool),
 		host:               hostP,
 		target:             targetP,
@@ -596,8 +596,8 @@ func unittestForPeerPath(moduleStmt *ModuleStmt) string {
 }
 
 func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
-	if existing, ok := ctx.memo[instance]; ok {
-		return existing
+	if existing := ctx.memo.get(ctx.instanceKey(instance)); existing != nil {
+		return *existing
 	}
 
 	if os.Getenv("YATOOL_TRACE") == "1" {
@@ -642,7 +642,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		cpp := instance
 		cpp.Language = LangCPP
 		result := genModule(ctx, cpp)
-		ctx.memo[instance] = result
+		ctx.memo.put(ctx.instanceKey(instance), result)
 
 		return result
 	}
@@ -803,7 +803,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if isSpecializedLibraryType(d.moduleStmt.Name) {
 		if d.moduleStmt.Name == tokDynamicLibrary {
 			result := emitDynamicLibrary(ctx, instance, d)
-			ctx.memo[instance] = result
+			ctx.memo.put(ctx.instanceKey(instance), result)
 
 			return result
 		}
@@ -969,7 +969,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			Peerdirs:                        d.peerdirs,
 			ModuleStmtName:                  d.moduleStmt.Name,
 		}
-		ctx.memo[instance] = result
+		ctx.memo.put(ctx.instanceKey(instance), result)
 
 		return result
 	}
@@ -997,7 +997,14 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		unitTestPeerCount = 1
 	}
 
-	seen := make(map[string]struct{}, len(languageDefaults)+unitTestPeerCount+len(preUserProgDefaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
+	// Membership rides the global epoch deduper keyed by the peer string's
+	// intern id (the peers get interned downstream anyway) — a bitset probe
+	// instead of a string-map read. Leaf contract: the list assembly below is
+	// pure appends, nothing reaches another deduper user.
+	deduper.reset()
+	peerSeen := func(p string) bool {
+		return !deduper.add(VFS(internStr(p)) << 1)
+	}
 	allPeers := make([]string, 0, len(languageDefaults)+unitTestPeerCount+len(preUserProgDefaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
 
 	const (
@@ -1010,59 +1017,53 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	peerKinds := make([]int, 0, len(languageDefaults)+unitTestPeerCount+len(preUserProgDefaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
 
 	for _, p := range languageDefaults {
-		if _, dup := seen[p]; dup {
+		if peerSeen(p) {
 			continue
 		}
 
-		seen[p] = struct{}{}
 		allPeers = append(allPeers, p)
 		peerKinds = append(peerKinds, peerKindLangDefault)
 	}
 
 	if unitTestPeer != "" {
-		if _, dup := seen[unitTestPeer]; !dup {
-			seen[unitTestPeer] = struct{}{}
+		if !peerSeen(unitTestPeer) {
 			allPeers = append(allPeers, unitTestPeer)
 			peerKinds = append(peerKinds, peerKindUnitTestPeer)
 		}
 	}
 
 	for _, p := range preUserProgDefaults {
-		if _, dup := seen[p]; dup {
+		if peerSeen(p) {
 			continue
 		}
 
-		seen[p] = struct{}{}
 		allPeers = append(allPeers, p)
 		peerKinds = append(peerKinds, peerKindProgramDefault)
 	}
 
 	for _, p := range allocatorExplicitPeers {
-		if _, dup := seen[p]; dup {
+		if peerSeen(p) {
 			continue
 		}
 
-		seen[p] = struct{}{}
 		allPeers = append(allPeers, p)
 		peerKinds = append(peerKinds, peerKindUserPeer)
 	}
 
 	for _, p := range postUserProgDefaults {
-		if _, dup := seen[p]; dup {
+		if peerSeen(p) {
 			continue
 		}
 
-		seen[p] = struct{}{}
 		allPeers = append(allPeers, p)
 		peerKinds = append(peerKinds, peerKindProgramDefault)
 	}
 
 	for _, p := range d.peerdirs {
-		if _, dup := seen[p]; dup {
+		if peerSeen(p) {
 			continue
 		}
 
-		seen[p] = struct{}{}
 		allPeers = append(allPeers, p)
 		peerKinds = append(peerKinds, peerKindUserPeer)
 	}
@@ -2129,7 +2130,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ResourceGlobalClosure:           resourceGlobalsClosure,
 			testSuiteInfo:                   suiteInfo,
 		}
-		ctx.memo[instance] = result
+		ctx.memo.put(ctx.instanceKey(instance), result)
 
 		return result
 	}
@@ -2258,7 +2259,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		result.GlobalPath = vfsPtr(build(instance.Path.rel() + "/" + globalBaseName))
 	}
 
-	ctx.memo[instance] = result
+	ctx.memo.put(ctx.instanceKey(instance), result)
 
 	return result
 }
@@ -3002,6 +3003,21 @@ func (ctx *GenCtx) toolResult(modulePath ARG) *ModuleEmitResult {
 
 func (ctx *GenCtx) scannerFor(instance ModuleInstance) *IncludeScanner {
 	return ctx.scannerForPlatform(instance.Platform)
+}
+
+// instanceKey packs a ModuleInstance into the genModule memo key: the path
+// STR id is unique per path, Kind/Language are tiny enums, and a run carries
+// exactly two platforms — anything else fails fast.
+func (ctx *GenCtx) instanceKey(in ModuleInstance) uint64 {
+	pbit := uint64(0)
+
+	if in.Platform == ctx.host {
+		pbit = 1
+	} else if in.Platform != ctx.target {
+		throwFmt("instanceKey: unknown platform for %s", in.Path.string())
+	}
+
+	return uint64(in.Path)<<16 | uint64(in.Kind)<<8 | uint64(in.Language)<<1 | pbit
 }
 
 func (ctx *GenCtx) scannerForPlatform(p *Platform) *IncludeScanner {

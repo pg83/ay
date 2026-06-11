@@ -79,9 +79,11 @@ type IncludeScanner struct {
 	// is worth probing, a miss short-circuits straight to the resolve.
 	searchTierFlat *IntValueMap[SearchTierResult]
 	searchTierSeen BitSet
-	ctxNumByHash   map[uint64]uint32
 
-	resolveIndexByConfig map[uint64]*CfgResolveIndex
+	// configByHash memoizes both per-distinct-config products — the dense
+	// ctxNum and the resolve index — under ONE probe of the shared ctxHash
+	// (they were two maps probed back-to-back with the same key).
+	configByHash map[uint64]ScanConfigEntry
 
 	// sourceUnderCache memoizes the includer-local quoted-include resolve
 	// (resolveSourceUnder(incDir, target)) — the hottest existence probe (~505k/run,
@@ -227,13 +229,12 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 		onWarn:              onWarn,
 		// Index 0 reserved so a fresh closureRef is always >= 1 (closureOf's
 		// straighten path and closureWindow treat ref as a 1-based index).
-		subgraphClosures:     make([][]VFS, 1, 256),
-		closureArena:         newBumpAllocator[VFS](closureArenaInitial),
-		searchTierFlat:       newIntValueMap[SearchTierResult](4096),
-		ctxNumByHash:         make(map[uint64]uint32, 1024),
-		resolveIndexByConfig: make(map[uint64]*CfgResolveIndex, 1024),
-		sourceUnderCache:     newIntValueMap[VFS](1 << 16),
-		tjc:                  tjc,
+		subgraphClosures: make([][]VFS, 1, 256),
+		closureArena:     newBumpAllocator[VFS](closureArenaInitial),
+		searchTierFlat:   newIntValueMap[SearchTierResult](4096),
+		configByHash:     make(map[uint64]ScanConfigEntry, 1024),
+		sourceUnderCache: newIntValueMap[VFS](1 << 16),
+		tjc:              tjc,
 	}
 
 	s.visitedIDPool.New = func() any {
@@ -260,23 +261,22 @@ type ScanContext struct {
 	OwnerModuleDir string
 }
 
+type ScanConfigEntry struct {
+	ctxNum uint32
+	ri     *CfgResolveIndex
+}
+
 func (s *IncludeScanner) newScanCtx(cfg ScanContext) *ScanCtx {
 	ctxHash := hashScanContext(&cfg)
 
-	ctxNum, ok := s.ctxNumByHash[ctxHash]
+	entry, ok := s.configByHash[ctxHash]
 
 	if !ok {
-		ctxNum = uint32(len(s.ctxNumByHash)) // dense id: next == count of distinct configs
-		s.ctxNumByHash[ctxHash] = ctxNum
-	}
+		// Dense id: next == count of distinct configs.
+		entry = ScanConfigEntry{ctxNum: uint32(len(s.configByHash)), ri: buildCfgResolveIndex(&cfg)}
+		s.configByHash[ctxHash] = entry
 
-	ri := s.resolveIndexByConfig[ctxHash]
-
-	if ri == nil {
-		ri = buildCfgResolveIndex(&cfg)
-		s.resolveIndexByConfig[ctxHash] = ri
-
-		if ri.indexable {
+		if entry.ri.indexable {
 			for _, p := range cfg.OwnAddIncl {
 				s.parsers.indexAddincl(p)
 			}
@@ -286,6 +286,8 @@ func (s *IncludeScanner) newScanCtx(cfg ScanContext) *ScanCtx {
 			}
 		}
 	}
+
+	ctxNum, ri := entry.ctxNum, entry.ri
 
 	return &ScanCtx{
 		scanner:      s,
@@ -730,7 +732,7 @@ mapLoop:
 
 type CfgResolveIndex struct {
 	indexable    bool
-	rank         map[VFS]int
+	rank         *IntValueMap[int32]
 	buildEntries []CfgBuildAddincl
 }
 
@@ -767,21 +769,25 @@ func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 	}
 
 	idx.indexable = true
-	idx.rank = make(map[VFS]int, len(cfg.OwnAddIncl)+len(cfg.PeerAddInclSet))
+	idx.rank = newIntValueMap[int32](2 * (len(cfg.OwnAddIncl) + len(cfg.PeerAddInclSet)))
 
-	r := 0
+	// Membership rides the global epoch deduper (a bitset probe, not a map
+	// read); the leaf contract holds — nothing below allocates the deduper.
+	deduper.reset()
+
+	r := int32(0)
 	add := func(p VFS) {
-		if _, ok := idx.rank[p]; ok {
+		if !deduper.add(p) {
 			return
 		}
 
-		idx.rank[p] = r
+		idx.rank.put(uint64(p), r)
 
 		if p.root() == VFSRootBuild {
 			idx.buildEntries = append(idx.buildEntries, CfgBuildAddincl{
 				prefix:   p,
 				prefixID: internStr(p.rel()),
-				rank:     r,
+				rank:     int(r),
 			})
 		}
 
@@ -899,8 +905,8 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR, target string) SearchT
 			cands, _ := s.parsers.addinclIndex.get(targetID)
 
 			for _, a := range cands {
-				if r, ok := idx.rank[a]; ok && r < bestRank {
-					bestRank = r
+				if rp := idx.rank.get(uint64(a)); rp != nil && int(*rp) < bestRank {
+					bestRank = int(*rp)
 					bestAddincl = a
 				}
 			}
