@@ -295,7 +295,7 @@ func genResourcesLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *M
 		AddInclUserGlobal:     d.addInclUserGlobal,
 		AddInclOneLevel:       d.addInclOneLevel,
 	}
-	ctx.memo[instance] = result
+	ctx.memo.put(ctx.instanceKey(instance), result)
 
 	return result
 }
