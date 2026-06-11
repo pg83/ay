@@ -43,3 +43,39 @@ func appendStrStrs(dst []string, as []STR) []string {
 func strStrs(as []STR) []string {
 	return appendStrStrs(make([]string, 0, len(as)), as)
 }
+
+// internArgsFromSTR re-interns parsed STR tokens into the ARG namespace (flag
+// tables are ARG-typed; the parser hands statements over as STR).
+func internArgsFromSTR(items []STR) []ARG {
+	out := make([]ARG, 0, len(items))
+
+	for _, s := range items {
+		out = append(out, internArg(s.string()))
+	}
+
+	return out
+}
+
+// strStrings converts an STR slice to its string views (each element is a
+// view into the intern table — no per-element allocation).
+func strStrings(items []STR) []string {
+	out := make([]string, 0, len(items))
+
+	for _, s := range items {
+		out = append(out, s.string())
+	}
+
+	return out
+}
+
+// STRS interns a literal token list — the test-side counterpart of the
+// parser's interned argument output.
+func STRS(items ...string) []STR {
+	out := make([]STR, 0, len(items))
+
+	for _, s := range items {
+		out = append(out, internStr(s))
+	}
+
+	return out
+}

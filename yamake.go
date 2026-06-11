@@ -7,36 +7,48 @@ import (
 	"strings"
 )
 
-var runAntlrKeywords = map[string]bool{
-	"IN":              true,
-	"IN_NOPARSE":      true,
-	"IN_DEPS":         true,
-	"OUT":             true,
-	"OUT_NOAUTO":      true,
-	"CWD":             true,
-	"OUTPUT_INCLUDES": true,
-	"INDUCED_DEPS":    true,
-	"TOOL":            true,
-	"ENV":             true,
-	"STDOUT":          true,
-	"STDOUT_NOAUTO":   true,
-	"GRAMMAR_FILES":   true,
-	"GRAMMAR_CWD":     true,
-}
+var runAntlrKeywords = strKeySet(
+	"IN",
+	"IN_NOPARSE",
+	"IN_DEPS",
+	"OUT",
+	"OUT_NOAUTO",
+	"CWD",
+	"OUTPUT_INCLUDES",
+	"INDUCED_DEPS",
+	"TOOL",
+	"ENV",
+	"STDOUT",
+	"STDOUT_NOAUTO",
+	"GRAMMAR_FILES",
+	"GRAMMAR_CWD",
+)
 
-var runProgramKeywords = map[string]bool{
-	"IN":              true,
-	"IN_NOPARSE":      true,
-	"OUT":             true,
-	"OUT_NOAUTO":      true,
-	"STDOUT":          true,
-	"STDOUT_NOAUTO":   true,
-	"CWD":             true,
-	"ENV":             true,
-	"OUTPUT_INCLUDES": true,
-	"INDUCED_DEPS":    true,
-	"IN_DEPS":         true,
-	"TOOL":            true,
+var runProgramKeywords = strKeySet(
+	"IN",
+	"IN_NOPARSE",
+	"OUT",
+	"OUT_NOAUTO",
+	"STDOUT",
+	"STDOUT_NOAUTO",
+	"CWD",
+	"ENV",
+	"OUTPUT_INCLUDES",
+	"INDUCED_DEPS",
+	"IN_DEPS",
+	"TOOL",
+)
+
+// strKeySet interns a keyword list into an STR-keyed membership set — the
+// parser's argument tokens are STR ids, so keyword checks stay in id space.
+func strKeySet(words ...string) map[STR]bool {
+	out := make(map[STR]bool, len(words))
+
+	for _, w := range words {
+		out[internStr(w)] = true
+	}
+
+	return out
 }
 
 type MakeFile struct {
@@ -50,12 +62,12 @@ type Stmt interface {
 
 type ModuleStmt struct {
 	Name TOK
-	Args []string
+	Args []STR
 	Line int
 }
 
 type PeerdirStmt struct {
-	Paths []string
+	Paths []STR
 	Line  int
 }
 
@@ -66,12 +78,12 @@ type PeerdirStmt struct {
 // macro arguments.
 type DeclareResourceStmt struct {
 	Macro TOK
-	Args  []string
+	Args  []STR
 	Line  int
 }
 
 type SrcsStmt struct {
-	Sources []string
+	Sources []STR
 	Line    int
 }
 
@@ -88,7 +100,7 @@ type EndStmt struct {
 
 type UnknownStmt struct {
 	Name TOK
-	Args []string
+	Args []STR
 	Line int
 }
 
@@ -106,55 +118,55 @@ type IncludeStmt struct {
 
 type JoinSrcsStmt struct {
 	OutputName string
-	Sources    []string
+	Sources    []STR
 	Line       int
 }
 
 type AddInclStmt struct {
-	GlobalPaths      []string
-	OneLevelPaths    []string
-	OwnPaths         []string
-	CythonPaths      []string
-	AsmPaths         []string
-	ProtoGlobalPaths []string
+	GlobalPaths      []STR
+	OneLevelPaths    []STR
+	OwnPaths         []STR
+	CythonPaths      []STR
+	AsmPaths         []STR
+	ProtoGlobalPaths []STR
 	// UserGlobalPaths contains GLOBAL and ONE_LEVEL paths in declaration order —
 	// the equivalent of ymake's UserGlobal. Used to preserve upstream -I ordering.
-	UserGlobalPaths []string
+	UserGlobalPaths []STR
 
-	AllPaths []string
+	AllPaths []STR
 	Line     int
 }
 
 type CFlagsStmt struct {
-	GlobalFlags []string
-	OwnFlags    []string
+	GlobalFlags []STR
+	OwnFlags    []STR
 	Line        int
 }
 
 type CXXFlagsStmt struct {
-	GlobalFlags []string
-	OwnFlags    []string
+	GlobalFlags []STR
+	OwnFlags    []STR
 	Line        int
 }
 
 type CONLYFlagsStmt struct {
-	GlobalFlags []string
-	OwnFlags    []string
+	GlobalFlags []STR
+	OwnFlags    []STR
 	Line        int
 }
 
 type LDFlagsStmt struct {
-	Flags []string
+	Flags []STR
 	Line  int
 }
 
 type SrcDirStmt struct {
-	Dirs []string
+	Dirs []STR
 	Line int
 }
 
 type GlobalSrcsStmt struct {
-	Sources []string
+	Sources []STR
 	Line    int
 }
 
@@ -172,29 +184,29 @@ type DefaultVarStmt struct {
 }
 
 type RunProgramStmt struct {
-	ToolPath       string
-	Args           []string
-	INFiles        []string
-	OUTFiles       []string
-	OUTNoAutoFiles []string
-	StdoutFile     *string
-	EnvPairs       []string
-	CWD            *string
-	OutputIncludes []string
-	ToolPaths      []string
+	ToolPath       STR
+	Args           []STR
+	INFiles        []STR
+	OUTFiles       []STR
+	OUTNoAutoFiles []STR
+	StdoutFile     *STR
+	EnvPairs       []STR
+	CWD            *STR
+	OutputIncludes []STR
+	ToolPaths      []STR
 	Line           int
 }
 
 type RunPythonStmt struct {
-	ScriptPath     string
-	Args           []string
-	INFiles        []string
-	OUTFiles       []string
-	OUTNoAutoFiles []string
-	StdoutFile     *string
-	EnvPairs       []string
-	CWD            *string
-	OutputIncludes []string
+	ScriptPath     STR
+	Args           []STR
+	INFiles        []STR
+	OUTFiles       []STR
+	OUTNoAutoFiles []STR
+	StdoutFile     *STR
+	EnvPairs       []STR
+	CWD            *STR
+	OutputIncludes []STR
 	Line           int
 }
 
@@ -210,31 +222,31 @@ type CreateBuildInfoStmt struct {
 }
 
 type RunAntlr4CppStmt struct {
-	Grammar        string
-	Options        []string
+	Grammar        STR
+	Options        []STR
 	Visitor        bool
 	Listener       bool
-	OutputIncludes []string
+	OutputIncludes []STR
 	Line           int
 }
 
 type RunAntlr4CppSplitStmt struct {
-	Lexer          string
-	Parser         string
+	Lexer          STR
+	Parser         STR
 	Visitor        bool
 	Listener       bool
-	OutputIncludes []string
+	OutputIncludes []STR
 	Line           int
 }
 
 type RunAntlrStmt struct {
 	Macro          string
-	Args           []string
-	INFiles        []string
-	OUTFiles       []string
-	OUTNoAutoFiles []string
-	CWD            *string
-	OutputIncludes []string
+	Args           []STR
+	INFiles        []STR
+	OUTFiles       []STR
+	OUTNoAutoFiles []STR
+	CWD            *STR
+	OutputIncludes []STR
 	Line           int
 }
 
@@ -249,7 +261,7 @@ type ResourceStmt struct {
 }
 
 type ResourceFilesStmt struct {
-	Args []string
+	Args []STR
 	Line int
 }
 
@@ -865,7 +877,7 @@ func (p *Parser) applyIncludeOnce(nameTok Token) {
 		p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE_ONCE expects 0 or 1 arguments, got %d", len(args))
 	}
 
-	if len(args) == 1 && args[0] == "no" {
+	if len(args) == 1 && args[0].string() == "no" {
 		enabled = false
 	}
 
@@ -882,14 +894,14 @@ func (p *Parser) applyIncludeOnce(nameTok Token) {
 	p.includes.once[abs] = struct{}{}
 }
 
-func (p *Parser) parseMacroArgs(nameTok Token) []string {
+func (p *Parser) parseMacroArgs(nameTok Token) []STR {
 	lp := p.lex.next()
 
 	if lp.kind != tokLParen {
 		p.lex.throwParse(lp.line, lp.col, "expected '(' after macro name %q, got %s", nameTok.val, describeToken(lp))
 	}
 
-	var args []string
+	var args []STR
 
 	for {
 		tok := p.lex.next()
@@ -900,7 +912,9 @@ func (p *Parser) parseMacroArgs(nameTok Token) []string {
 		case tokEOF:
 			p.lex.throwParse(nameTok.line, nameTok.col, "unterminated macro call %q (missing ')')", nameTok.val)
 		case tokIdent, tokWord, tokString, tokInt:
-			args = append(args, tok.val)
+			// The parser's argument output is interned: every downstream layer
+			// (expansion, collect, emit) works in STR id space.
+			args = append(args, internStr(tok.val))
 		case tokLParen:
 			p.lex.throwParse(tok.line, tok.col, "unexpected '(' inside macro call %q", nameTok.val)
 		default:
@@ -943,7 +957,7 @@ type Parser struct {
 	fs           FS
 }
 
-func (p *Parser) buildStmt(nameTok Token, args []string) Stmt {
+func (p *Parser) buildStmt(nameTok Token, args []STR) Stmt {
 	switch nameTok.val {
 	case "PROGRAM", "LIBRARY",
 
@@ -971,10 +985,10 @@ func (p *Parser) buildStmt(nameTok Token, args []string) Stmt {
 		value := ""
 
 		if len(args) > 1 {
-			value = strings.Join(args[1:], " ")
+			value = strings.Join(strStrings(args[1:]), " ")
 		}
 
-		return &SetStmt{Name: args[0], NameEnv: internEnv(args[0]), Value: value, Line: nameTok.line}
+		return &SetStmt{Name: args[0].string(), NameEnv: internEnv(args[0].string()), Value: value, Line: nameTok.line}
 	case "END":
 		return &EndStmt{Line: nameTok.line}
 	case "JOIN_SRCS":
@@ -982,9 +996,9 @@ func (p *Parser) buildStmt(nameTok Token, args []string) Stmt {
 			p.lex.throwParse(nameTok.line, nameTok.col, "JOIN_SRCS expects at least one argument (the output name)")
 		}
 
-		sources := append([]string(nil), args[1:]...)
+		sources := append([]STR(nil), args[1:]...)
 
-		return &JoinSrcsStmt{OutputName: args[0], Sources: sources, Line: nameTok.line}
+		return &JoinSrcsStmt{OutputName: args[0].string(), Sources: sources, Line: nameTok.line}
 	case "ADDINCL":
 		globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, userGlobalPaths, allPaths := splitAddInclPaths(args)
 
@@ -1002,44 +1016,44 @@ func (p *Parser) buildStmt(nameTok Token, args []string) Stmt {
 
 		return &CONLYFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: nameTok.line}
 	case "LDFLAGS":
-		return &LDFlagsStmt{Flags: append([]string(nil), args...), Line: nameTok.line}
+		return &LDFlagsStmt{Flags: append([]STR(nil), args...), Line: nameTok.line}
 	case "SRCDIR":
 		if len(args) == 0 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "SRCDIR expects at least 1 argument, got %d", len(args))
 		}
 
-		return &SrcDirStmt{Dirs: append([]string(nil), args...), Line: nameTok.line}
+		return &SrcDirStmt{Dirs: append([]STR(nil), args...), Line: nameTok.line}
 	case "GLOBAL_SRCS":
-		return &GlobalSrcsStmt{Sources: append([]string(nil), args...), Line: nameTok.line}
+		return &GlobalSrcsStmt{Sources: append([]STR(nil), args...), Line: nameTok.line}
 	case "GENERATE_ENUM_SERIALIZATION":
 		if len(args) != 1 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "GENERATE_ENUM_SERIALIZATION expects exactly 1 argument (header path), got %d", len(args))
 		}
 
-		return &GenerateEnumSerializationStmt{Header: args[0], Variant: "plain", Line: nameTok.line}
+		return &GenerateEnumSerializationStmt{Header: args[0].string(), Variant: "plain", Line: nameTok.line}
 	case "GENERATE_ENUM_SERIALIZATION_WITH_HEADER":
 		if len(args) != 1 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "GENERATE_ENUM_SERIALIZATION_WITH_HEADER expects exactly 1 argument (header path), got %d", len(args))
 		}
 
-		return &GenerateEnumSerializationStmt{Header: args[0], Variant: "with_header", Line: nameTok.line}
+		return &GenerateEnumSerializationStmt{Header: args[0].string(), Variant: "with_header", Line: nameTok.line}
 	case "GENERATE_ENUM_SERIALIZATION_NOUTF":
 		if len(args) != 1 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "GENERATE_ENUM_SERIALIZATION_NOUTF expects exactly 1 argument (header path), got %d", len(args))
 		}
 
-		return &GenerateEnumSerializationStmt{Header: args[0], Variant: "noutf", Line: nameTok.line}
+		return &GenerateEnumSerializationStmt{Header: args[0].string(), Variant: "noutf", Line: nameTok.line}
 	case "DEFAULT":
 
 		varName := ""
 		value := ""
 
 		if len(args) >= 1 {
-			varName = args[0]
+			varName = args[0].string()
 		}
 
 		if len(args) >= 2 {
-			value = args[1]
+			value = args[1].string()
 		}
 
 		return &DefaultVarStmt{VarName: varName, NameEnv: internEnv(varName), Value: value, Line: nameTok.line}
@@ -1049,14 +1063,14 @@ func (p *Parser) buildStmt(nameTok Token, args []string) Stmt {
 			p.lex.throwParse(nameTok.line, nameTok.col, "CONFIGURE_FILE expects exactly 2 arguments (src dst), got %d", len(args))
 		}
 
-		return &ConfigureFileStmt{Src: args[0], Dst: args[1], Line: nameTok.line}
+		return &ConfigureFileStmt{Src: args[0].string(), Dst: args[1].string(), Line: nameTok.line}
 	case "CREATE_BUILDINFO_FOR":
 
 		if len(args) != 1 {
 			p.lex.throwParse(nameTok.line, nameTok.col, "CREATE_BUILDINFO_FOR expects exactly 1 argument, got %d", len(args))
 		}
 
-		return &CreateBuildInfoStmt{OutputHeader: args[0], Line: nameTok.line}
+		return &CreateBuildInfoStmt{OutputHeader: args[0].string(), Line: nameTok.line}
 	case "RUN_ANTLR4_CPP":
 
 		if len(args) == 0 {
@@ -1094,31 +1108,31 @@ func (p *Parser) buildStmt(nameTok Token, args []string) Stmt {
 
 		return parseResource(args, nameTok)
 	case "RESOURCE_FILES":
-		return &ResourceFilesStmt{Args: append([]string(nil), args...), Line: nameTok.line}
+		return &ResourceFilesStmt{Args: append([]STR(nil), args...), Line: nameTok.line}
 	default:
 		return &UnknownStmt{Name: internTok(nameTok.val), Args: args, Line: nameTok.line}
 	}
 }
 
-func parseRunAntlr4Cpp(args []string, line int) *RunAntlr4CppStmt {
+func parseRunAntlr4Cpp(args []STR, line int) *RunAntlr4CppStmt {
 	stmt := &RunAntlr4CppStmt{Grammar: args[0], Line: line}
 	i := 1
 
 	for i < len(args) {
 		switch args[i] {
-		case "VISITOR":
+		case kwVISITOR:
 			stmt.Visitor = true
 			i++
-		case "NO_LISTENER", "LISTENER":
+		case kwNO_LISTENER, kwLISTENER:
 
-			if args[i] == "NO_LISTENER" {
+			if args[i] == kwNO_LISTENER {
 				stmt.Listener = false
 			} else {
 				stmt.Listener = true
 			}
 
 			i++
-		case "OUTPUT_INCLUDES":
+		case kwOUTPUT_INCLUDES:
 
 			i++
 
@@ -1126,7 +1140,7 @@ func parseRunAntlr4Cpp(args []string, line int) *RunAntlr4CppStmt {
 				stmt.OutputIncludes = append(stmt.OutputIncludes, args[i])
 				i++
 			}
-		case "IN", "OUT", "OUT_NOAUTO", "INDUCED_DEPS", "TOOL":
+		case kwIN, kwOUT, kwOUT_NOAUTO, kwINDUCED_DEPS, kwTOOL:
 
 			i++
 
@@ -1142,18 +1156,18 @@ func parseRunAntlr4Cpp(args []string, line int) *RunAntlr4CppStmt {
 	return stmt
 }
 
-func parseRunAntlr4CppSplit(args []string, line int) *RunAntlr4CppSplitStmt {
+func parseRunAntlr4CppSplit(args []STR, line int) *RunAntlr4CppSplitStmt {
 	stmt := &RunAntlr4CppSplitStmt{Lexer: args[0], Parser: args[1], Line: line}
 
 	for i := 2; i < len(args); i++ {
 		switch args[i] {
-		case "VISITOR":
+		case kwVISITOR:
 			stmt.Visitor = true
-		case "LISTENER":
+		case kwLISTENER:
 			stmt.Listener = true
-		case "NO_LISTENER":
+		case kwNO_LISTENER:
 
-		case "OUTPUT_INCLUDES":
+		case kwOUTPUT_INCLUDES:
 
 			i++
 
@@ -1163,7 +1177,7 @@ func parseRunAntlr4CppSplit(args []string, line int) *RunAntlr4CppSplitStmt {
 			}
 
 			i--
-		case "IN", "OUT", "OUT_NOAUTO", "INDUCED_DEPS", "TOOL":
+		case kwIN, kwOUT, kwOUT_NOAUTO, kwINDUCED_DEPS, kwTOOL:
 
 			i++
 
@@ -1178,9 +1192,9 @@ func parseRunAntlr4CppSplit(args []string, line int) *RunAntlr4CppSplitStmt {
 	return stmt
 }
 
-func parseRunAntlr(args []string, nameTok Token) *RunAntlrStmt {
+func parseRunAntlr(args []STR, nameTok Token) *RunAntlrStmt {
 	stmt := &RunAntlrStmt{Macro: nameTok.val, Line: nameTok.line}
-	currentSection := "ARGS"
+	currentSection := kwARGS
 
 	for i := 0; i < len(args); i++ {
 		tok := args[i]
@@ -1192,19 +1206,19 @@ func parseRunAntlr(args []string, nameTok Token) *RunAntlrStmt {
 		}
 
 		switch currentSection {
-		case "ARGS":
+		case kwARGS:
 			stmt.Args = append(stmt.Args, tok)
-		case "IN", "IN_NOPARSE", "IN_DEPS":
+		case kwIN, kwIN_NOPARSE, kwIN_DEPS:
 			stmt.INFiles = append(stmt.INFiles, tok)
-		case "OUT":
+		case kwOUT:
 			stmt.OUTFiles = append(stmt.OUTFiles, tok)
-		case "OUT_NOAUTO":
+		case kwOUT_NOAUTO:
 			stmt.OUTNoAutoFiles = append(stmt.OUTNoAutoFiles, tok)
-		case "CWD":
+		case kwCWD:
 			if stmt.CWD == nil {
 				stmt.CWD = &tok
 			}
-		case "OUTPUT_INCLUDES", "INDUCED_DEPS", "TOOL", "ENV", "GRAMMAR_FILES", "GRAMMAR_CWD":
+		case kwOUTPUT_INCLUDES, kwINDUCED_DEPS, kwTOOL, kwENV, kwGRAMMAR_FILES, kwGRAMMAR_CWD:
 			stmt.OutputIncludes = append(stmt.OutputIncludes, tok)
 		}
 	}
@@ -1212,22 +1226,22 @@ func parseRunAntlr(args []string, nameTok Token) *RunAntlrStmt {
 	return stmt
 }
 
-func isRunAntlrKeyword(s string) bool {
+func isRunAntlrKeyword(s STR) bool {
 	switch s {
-	case "VISITOR", "LISTENER", "NO_LISTENER", "OUTPUT_INCLUDES",
-		"IN", "IN_NOPARSE", "IN_DEPS", "OUT", "OUT_NOAUTO",
-		"INDUCED_DEPS", "TOOL", "CWD", "ENV", "STDOUT",
-		"STDOUT_NOAUTO", "GRAMMAR_FILES", "GRAMMAR_CWD":
+	case kwVISITOR, kwLISTENER, kwNO_LISTENER, kwOUTPUT_INCLUDES,
+		kwIN, kwIN_NOPARSE, kwIN_DEPS, kwOUT, kwOUT_NOAUTO,
+		kwINDUCED_DEPS, kwTOOL, kwCWD, kwENV, kwSTDOUT,
+		kwSTDOUT_NOAUTO, kwGRAMMAR_FILES, kwGRAMMAR_CWD:
 		return true
 	}
 
 	return false
 }
 
-func parseRunProgram(args []string, line int) *RunProgramStmt {
+func parseRunProgram(args []STR, line int) *RunProgramStmt {
 	stmt := &RunProgramStmt{ToolPath: args[0], Line: line}
 	i := 1
-	currentSection := "ARGS"
+	currentSection := kwARGS
 
 	for i < len(args) {
 		tok := args[i]
@@ -1240,27 +1254,27 @@ func parseRunProgram(args []string, line int) *RunProgramStmt {
 		}
 
 		switch currentSection {
-		case "ARGS":
+		case kwARGS:
 			stmt.Args = append(stmt.Args, tok)
-		case "IN", "IN_NOPARSE", "IN_DEPS":
+		case kwIN, kwIN_NOPARSE, kwIN_DEPS:
 			stmt.INFiles = append(stmt.INFiles, tok)
-		case "OUT":
+		case kwOUT:
 			stmt.OUTFiles = append(stmt.OUTFiles, tok)
-		case "OUT_NOAUTO":
+		case kwOUT_NOAUTO:
 			stmt.OUTNoAutoFiles = append(stmt.OUTNoAutoFiles, tok)
-		case "STDOUT", "STDOUT_NOAUTO":
+		case kwSTDOUT, kwSTDOUT_NOAUTO:
 			if stmt.StdoutFile == nil {
 				stmt.StdoutFile = &tok
 			}
-		case "ENV":
+		case kwENV:
 			stmt.EnvPairs = append(stmt.EnvPairs, tok)
-		case "CWD":
+		case kwCWD:
 			if stmt.CWD == nil {
 				stmt.CWD = &tok
 			}
-		case "OUTPUT_INCLUDES", "INDUCED_DEPS":
+		case kwOUTPUT_INCLUDES, kwINDUCED_DEPS:
 			stmt.OutputIncludes = append(stmt.OutputIncludes, tok)
-		case "TOOL":
+		case kwTOOL:
 			stmt.ToolPaths = append(stmt.ToolPaths, tok)
 		}
 
@@ -1270,10 +1284,10 @@ func parseRunProgram(args []string, line int) *RunProgramStmt {
 	return stmt
 }
 
-func parseRunPython(args []string, line int) *RunPythonStmt {
+func parseRunPython(args []STR, line int) *RunPythonStmt {
 	stmt := &RunPythonStmt{ScriptPath: args[0], Line: line}
 	i := 1
-	currentSection := "ARGS"
+	currentSection := kwARGS
 
 	for i < len(args) {
 		tok := args[i]
@@ -1286,25 +1300,25 @@ func parseRunPython(args []string, line int) *RunPythonStmt {
 		}
 
 		switch currentSection {
-		case "ARGS":
+		case kwARGS:
 			stmt.Args = append(stmt.Args, tok)
-		case "IN", "IN_NOPARSE", "IN_DEPS":
+		case kwIN, kwIN_NOPARSE, kwIN_DEPS:
 			stmt.INFiles = append(stmt.INFiles, tok)
-		case "OUT":
+		case kwOUT:
 			stmt.OUTFiles = append(stmt.OUTFiles, tok)
-		case "OUT_NOAUTO":
+		case kwOUT_NOAUTO:
 			stmt.OUTNoAutoFiles = append(stmt.OUTNoAutoFiles, tok)
-		case "STDOUT", "STDOUT_NOAUTO":
+		case kwSTDOUT, kwSTDOUT_NOAUTO:
 			if stmt.StdoutFile == nil {
 				stmt.StdoutFile = &tok
 			}
-		case "ENV":
+		case kwENV:
 			stmt.EnvPairs = append(stmt.EnvPairs, tok)
-		case "CWD":
+		case kwCWD:
 			if stmt.CWD == nil {
 				stmt.CWD = &tok
 			}
-		case "OUTPUT_INCLUDES", "INDUCED_DEPS", "TOOL":
+		case kwOUTPUT_INCLUDES, kwINDUCED_DEPS, kwTOOL:
 			stmt.OutputIncludes = append(stmt.OutputIncludes, tok)
 		}
 
@@ -1314,11 +1328,11 @@ func parseRunPython(args []string, line int) *RunPythonStmt {
 	return stmt
 }
 
-func parseResource(args []string, nameTok Token) *ResourceStmt {
+func parseResource(args []STR, nameTok Token) *ResourceStmt {
 	rest := args
 
 	for i := 0; i < 2 && len(rest) > 0; i++ {
-		if rest[0] == "DONT_PARSE" || rest[0] == "DONT_COMPRESS" {
+		if rest[0] == kwDONT_PARSE || rest[0] == kwDONT_COMPRESS {
 			rest = rest[1:]
 
 			continue
@@ -1336,7 +1350,7 @@ func parseResource(args []string, nameTok Token) *ResourceStmt {
 	pairs := make([]ResourcePair, 0, len(rest)/2)
 
 	for i := 0; i < len(rest); i += 2 {
-		pairs = append(pairs, ResourcePair{Path: rest[i], Key: rest[i+1]})
+		pairs = append(pairs, ResourcePair{Path: rest[i].string(), Key: rest[i+1].string()})
 	}
 
 	return &ResourceStmt{Pairs: pairs, Line: nameTok.line}
@@ -1346,25 +1360,25 @@ func unescapeFlag(s string) string {
 	return strings.ReplaceAll(s, `\"`, `"`)
 }
 
-func splitFlagsByGlobal(args []string) (globalFlags, ownFlags []string) {
+func splitFlagsByGlobal(args []STR) (globalFlags, ownFlags []STR) {
 	for i := 0; i < len(args); i++ {
-		if args[i] == "GLOBAL" {
+		if args[i] == kwGLOBAL {
 			i++
 
 			if i < len(args) {
-				globalFlags = append(globalFlags, unescapeFlag(args[i]))
+				globalFlags = append(globalFlags, internStr(unescapeFlag(args[i].string())))
 			}
 		} else {
-			ownFlags = append(ownFlags, unescapeFlag(args[i]))
+			ownFlags = append(ownFlags, internStr(unescapeFlag(args[i].string())))
 		}
 	}
 
 	return globalFlags, ownFlags
 }
 
-func splitAddInclPaths(args []string) (globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, userGlobalPaths, allPaths []string) {
+func splitAddInclPaths(args []STR) (globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, userGlobalPaths, allPaths []STR) {
 	for i := 0; i < len(args); i++ {
-		if args[i] == "ONE_LEVEL" {
+		if args[i] == kwONE_LEVEL {
 			i++
 
 			if i < len(args) {
@@ -1377,15 +1391,15 @@ func splitAddInclPaths(args []string) (globalPaths, oneLevelPaths, ownPaths, cyt
 			continue
 		}
 
-		if args[i] == "FOR" {
-			if i+2 < len(args) && args[i+1] == "cython" {
+		if args[i] == kwFOR {
+			if i+2 < len(args) && args[i+1].string() == "cython" {
 				cythonPaths = append(cythonPaths, args[i+2])
 				i += 2
 
 				continue
 			}
 
-			if i+2 < len(args) && args[i+1] == "asm" {
+			if i+2 < len(args) && args[i+1].string() == "asm" {
 				asmPaths = append(asmPaths, args[i+2])
 				i += 2
 
@@ -1397,18 +1411,18 @@ func splitAddInclPaths(args []string) (globalPaths, oneLevelPaths, ownPaths, cyt
 			continue
 		}
 
-		if args[i] == "GLOBAL" {
+		if args[i] == kwGLOBAL {
 			i++
 
-			if i < len(args) && args[i] == "FOR" {
-				if i+2 < len(args) && args[i+1] == "cython" {
+			if i < len(args) && args[i] == kwFOR {
+				if i+2 < len(args) && args[i+1].string() == "cython" {
 					cythonPaths = append(cythonPaths, args[i+2])
 					i += 2
 
 					continue
 				}
 
-				if i+2 < len(args) && args[i+1] == "asm" {
+				if i+2 < len(args) && args[i+1].string() == "asm" {
 					asmPaths = append(asmPaths, args[i+2])
 					i += 2
 
@@ -1422,7 +1436,7 @@ func splitAddInclPaths(args []string) (globalPaths, oneLevelPaths, ownPaths, cyt
 				// chain. Track these separately from the C++ GLOBAL chain
 				// (we were silently coalescing them, missing protobuf-src
 				// from tablet_flat's protoc cmd vs REF).
-				if i+2 < len(args) && args[i+1] == "proto" {
+				if i+2 < len(args) && args[i+1].string() == "proto" {
 					protoGlobalPaths = append(protoGlobalPaths, args[i+2])
 					i += 2
 
@@ -1728,7 +1742,7 @@ func (p *Parser) expandInclude(into []Stmt, nameTok Token) []Stmt {
 		p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE expects exactly 1 argument (the path), got %d", len(args))
 	}
 
-	rel := args[0]
+	rel := args[0].string()
 
 	if strings.HasPrefix(rel, "${ARCADIA_ROOT}/") {
 		suffix := strings.TrimPrefix(rel, "${ARCADIA_ROOT}/")

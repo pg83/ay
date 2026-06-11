@@ -571,7 +571,7 @@ func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
 	// it falls through to the module-dir basename default.
 
 	if len(moduleStmt.Args) > 0 {
-		return moduleStmt.Args[0]
+		return moduleStmt.Args[0].string()
 	}
 
 	return ""
@@ -592,7 +592,7 @@ func unittestForPeerPath(moduleStmt *ModuleStmt) string {
 		return ""
 	}
 
-	return path.Clean(moduleStmt.Args[0])
+	return path.Clean(moduleStmt.Args[0].string())
 }
 
 func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
@@ -853,7 +853,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			archiveName := ""
 
 			if len(d.moduleStmt.Args) > 0 {
-				archiveName = d.moduleStmt.Args[0]
+				archiveName = d.moduleStmt.Args[0].string()
 			}
 
 			switch d.moduleStmt.Name {
@@ -1628,7 +1628,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	archiveName := ""
 
 	if len(d.moduleStmt.Args) > 0 {
-		archiveName = d.moduleStmt.Args[0]
+		archiveName = d.moduleStmt.Args[0].string()
 	}
 
 	switch d.moduleStmt.Name {
@@ -1882,7 +1882,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	for _, js := range d.joinSrcs {
 		srcInstance := instance
 
-		joinClosure := joinSrcsIncludeClosure(ctx, srcInstance.Platform, srcInstance, js.Sources, moduleInputs)
+		joinClosure := joinSrcsIncludeClosure(ctx, srcInstance.Platform, srcInstance, strStrings(js.Sources), moduleInputs)
 
 		ccClosure := joinClosure
 
@@ -1890,14 +1890,14 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			jsModuleInputs := moduleInputs
 			jsModuleInputs.PeerAddInclGlobal = rebasePerArchPeerAddIncl(moduleInputs.PeerAddInclGlobal, srcInstance.Platform.ISA, ctx.target.ISA)
 
-			joinClosure = joinSrcsIncludeClosure(ctx, ctx.target, srcInstance, js.Sources, jsModuleInputs)
+			joinClosure = joinSrcsIncludeClosure(ctx, ctx.target, srcInstance, strStrings(js.Sources), jsModuleInputs)
 		}
 
-		jsRef, joinOutVFS := emitJS(srcInstance, js.OutputName, js.Sources, joinClosure, ctx.target, d.tc, ctx.scripts, ctx.emit)
+		jsRef, joinOutVFS := emitJS(srcInstance, js.OutputName, strStrings(js.Sources), joinClosure, ctx.target, d.tc, ctx.scripts, ctx.emit)
 
 		jsRel := strings.TrimPrefix(joinOutVFS.rel(), srcInstance.Path.rel()+"/")
 
-		ccIncludeInputs := jsCCIncludeInputs(srcInstance, joinOutVFS, js.Sources, ccClosure, ctx.scripts)
+		ccIncludeInputs := jsCCIncludeInputs(srcInstance, joinOutVFS, strStrings(js.Sources), ccClosure, ctx.scripts)
 
 		ccIn := moduleInputs
 		ccIn.ExtraDepRefs = []NodeRef{jsRef}

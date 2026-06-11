@@ -32,22 +32,22 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 		}
 
 		for _, f := range rp.OUTFiles {
-			d.prOutputProducer[f] = prRef
+			d.prOutputProducer[f.string()] = prRef
 		}
 
 		for _, f := range rp.OUTNoAutoFiles {
-			d.prOutputProducer[f] = prRef
+			d.prOutputProducer[f.string()] = prRef
 		}
 
 		if rp.StdoutFile != nil {
-			d.prOutputProducer[*rp.StdoutFile] = prRef
+			d.prOutputProducer[rp.StdoutFile.string()] = prRef
 		}
 
 		outs := make([]string, 0, len(rp.OUTFiles)+len(rp.OUTNoAutoFiles)+1)
-		outs = append(outs, rp.OUTFiles...)
+		outs = append(outs, strStrings(rp.OUTFiles)...)
 
 		if rp.StdoutFile != nil {
-			outs = append(outs, *rp.StdoutFile)
+			outs = append(outs, rp.StdoutFile.string())
 		}
 
 		for _, out := range outs {
@@ -65,35 +65,35 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 }
 
 func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, d *ModuleData, reg *CodegenRegistry, moduleInputs ModuleCCInputs) NodeRef {
-	res := ctx.toolResult(internArg(filepath.Clean(stmt.ToolPath)))
+	res := ctx.toolResult(internArg(filepath.Clean(stmt.ToolPath.string())))
 	toolLDRef := res.LDRef
 	toolBinPath := *res.LDPath
-	auxTools := resolveRunProgramAuxTools(ctx, stmt.ToolPaths)
+	auxTools := resolveRunProgramAuxTools(ctx, strStrings(stmt.ToolPaths))
 	inVFSByToken := make(map[string]VFS, len(stmt.INFiles))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
 
 	for _, f := range stmt.INFiles {
-		vfs := runProgramInputVFS(ctx, instance, d, f)
-		inVFSByToken[f] = vfs
+		vfs := runProgramInputVFS(ctx, instance, d, f.string())
+		inVFSByToken[f.string()] = vfs
 		inVFSs = append(inVFSs, vfs)
 	}
 
 	outVFSByToken := make(map[string]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
 
 	for _, f := range stmt.OUTFiles {
-		outVFSByToken[f] = copyFileOutputVFS(instance.Path.rel(), f)
+		outVFSByToken[f.string()] = copyFileOutputVFS(instance.Path.rel(), f.string())
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		outVFSByToken[f] = copyFileOutputVFS(instance.Path.rel(), f)
+		outVFSByToken[f.string()] = copyFileOutputVFS(instance.Path.rel(), f.string())
 	}
 
 	var stdoutVFS *VFS
 
 	if stmt.StdoutFile != nil {
-		vfs := copyFileOutputVFS(instance.Path.rel(), *stmt.StdoutFile)
+		vfs := copyFileOutputVFS(instance.Path.rel(), stmt.StdoutFile.string())
 		stdoutVFS = &vfs
-		outVFSByToken[*stmt.StdoutFile] = vfs
+		outVFSByToken[stmt.StdoutFile.string()] = vfs
 	}
 
 	// The run's $(S) source inputs are real inputs of any unit that transitively
@@ -110,17 +110,17 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
-			registerGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f], prEmitsIncludes(ctx, instance, d, f, stmt), []NodeRef{toolLDRef})
-			reg.setSourceInputs(outVFSByToken[f], prSourceInputs)
+			registerGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f.string()], prEmitsIncludes(ctx, instance, d, f.string(), stmt), []NodeRef{toolLDRef})
+			reg.setSourceInputs(outVFSByToken[f.string()], prSourceInputs)
 		}
 
 		for _, f := range stmt.OUTNoAutoFiles {
-			registerGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f], prEmitsIncludes(ctx, instance, d, f, stmt), []NodeRef{toolLDRef})
-			reg.setSourceInputs(outVFSByToken[f], prSourceInputs)
+			registerGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f.string()], prEmitsIncludes(ctx, instance, d, f.string(), stmt), []NodeRef{toolLDRef})
+			reg.setSourceInputs(outVFSByToken[f.string()], prSourceInputs)
 		}
 
 		if stmt.StdoutFile != nil {
-			registerGeneratedParsedOutput(ctx, instance, pkPR, *stdoutVFS, prEmitsIncludes(ctx, instance, d, *stmt.StdoutFile, stmt), []NodeRef{toolLDRef})
+			registerGeneratedParsedOutput(ctx, instance, pkPR, *stdoutVFS, prEmitsIncludes(ctx, instance, d, stmt.StdoutFile.string(), stmt), []NodeRef{toolLDRef})
 			reg.setSourceInputs(*stdoutVFS, prSourceInputs)
 		}
 	}
@@ -140,24 +140,24 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// Emit and the reader (prResourceExtraInputs) copies out, so sharing it
 	// across keys is safe.
 	for _, f := range stmt.OUTFiles {
-		d.prOutputInputs[f] = prResult.Inputs
+		d.prOutputInputs[f.string()] = prResult.Inputs
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		d.prOutputInputs[f] = prResult.Inputs
+		d.prOutputInputs[f.string()] = prResult.Inputs
 	}
 
 	if stmt.StdoutFile != nil {
-		d.prOutputInputs[*stmt.StdoutFile] = prResult.Inputs
+		d.prOutputInputs[stmt.StdoutFile.string()] = prResult.Inputs
 	}
 
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
-			bindGeneratedOutput(ctx, instance, outVFSByToken[f], prRef)
+			bindGeneratedOutput(ctx, instance, outVFSByToken[f.string()], prRef)
 		}
 
 		for _, f := range stmt.OUTNoAutoFiles {
-			bindGeneratedOutput(ctx, instance, outVFSByToken[f], prRef)
+			bindGeneratedOutput(ctx, instance, outVFSByToken[f.string()], prRef)
 		}
 
 		if stmt.StdoutFile != nil {
@@ -204,11 +204,11 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	}
 
 	for _, f := range stmt.OUTFiles {
-		if !isCCSourceExt(f) {
+		if !isCCSourceExt(f.string()) {
 			continue
 		}
 
-		walkOne(f)
+		walkOne(f.string())
 	}
 
 	// OUT_NOAUTO outputs use upstream's `${hide;noauto;output:OUT_NOAUTO}`
@@ -217,8 +217,8 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	// (yql/.../v1_proto_split_antlr4 uses OUT_NOAUTO for .pb.h/.pb.cc, and
 	// upstream tracks only IN + tools as PR inputs; walking the .pb.cc here
 	// over-emits 1253 libcxx/protobuf headers via the parsed pb.h chain.)
-	if stmt.StdoutFile != nil && isCCSourceExt(*stmt.StdoutFile) {
-		walkOne(*stmt.StdoutFile)
+	if stmt.StdoutFile != nil && isCCSourceExt(stmt.StdoutFile.string()) {
+		walkOne(stmt.StdoutFile.string())
 	}
 
 	// Upstream's RUN_PROGRAM macro registers every IN as an input with
@@ -233,11 +233,11 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	// yql_*_expr_nodes.gen.h PR nodes, which list only the tool + IN
 	// files).
 	for _, f := range stmt.INFiles {
-		if !includeDirectiveParsers.hasRegisteredParser(f) {
+		if !includeDirectiveParsers.hasRegisteredParser(f.string()) {
 			continue
 		}
 
-		walkInput(f)
+		walkInput(f.string())
 	}
 
 	// OUTPUT_INCLUDES contribute to the PR node's AUTO_INPUT only when the
@@ -261,11 +261,11 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		for _, oi := range stmt.OutputIncludes {
 			target := oi
 
-			if vfsHasPrefix(target) {
-				target = intern(target).rel()
+			if vfsHasPrefix(target.string()) {
+				target = internStr(intern(target.string()).rel())
 			}
 
-			candidate := build(target)
+			candidate := build(target.string())
 			info := reg.lookup(candidate)
 
 			if info == nil {
@@ -346,15 +346,15 @@ func prEmitsIncludes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, outFil
 	includes := make([]IncludeDirective, 0, len(stmt.INFiles)+len(stmt.OutputIncludes))
 
 	for _, f := range stmt.INFiles {
-		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(runProgramInputVFS(ctx, instance, d, f).rel())})
+		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(runProgramInputVFS(ctx, instance, d, f.string()).rel())})
 	}
 
 	for _, f := range stmt.OutputIncludes {
-		if vfsHasPrefix(f) {
-			f = intern(f).rel()
+		if vfsHasPrefix(f.string()) {
+			f = internStr(intern(f.string()).rel())
 		}
 
-		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(f)})
+		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(f.string())})
 	}
 
 	return includes
@@ -433,19 +433,21 @@ func emitPR(
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	for _, kv := range stmt.EnvPairs {
-		parts := strings.SplitN(kv, "=", 2)
+		parts := strings.SplitN(kv.string(), "=", 2)
 
 		if len(parts) == 2 {
 			env = append(env, EnvVar{Name: internEnv(parts[0]), Value: internStr(parts[1])})
 		} else {
-			env = append(env, EnvVar{Name: internEnv(kv), Value: strEmpty})
+			env = append(env, EnvVar{Name: internEnv(kv.string()), Value: strEmpty})
 		}
 	}
 
 	cmdArgs := make([]STR, 0, 1+len(stmt.Args))
 	cmdArgs = append(cmdArgs, (toolBinPath).str())
 
-	for _, a := range stmt.Args {
+	for _, aTok := range stmt.Args {
+		a := aTok.string()
+
 		for _, tool := range auxTools {
 			if strings.Contains(a, tool.token) {
 				a = strings.ReplaceAll(a, tool.token, tool.bin.string())
@@ -496,11 +498,11 @@ func emitPR(
 	}
 
 	for _, f := range stmt.OUTFiles {
-		outputs = append(outputs, outVFSByToken[f])
+		outputs = append(outputs, outVFSByToken[f.string()])
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		outputs = append(outputs, outVFSByToken[f])
+		outputs = append(outputs, outVFSByToken[f.string()])
 	}
 
 	toolRefs := make([]NodeRef, 0, len(auxTools)+1)
@@ -547,7 +549,7 @@ func emitPR(
 	}
 
 	if stmt.CWD != nil {
-		cmd.Cwd = internStr(*stmt.CWD)
+		cmd.Cwd = *stmt.CWD
 	}
 
 	node := &Node{
