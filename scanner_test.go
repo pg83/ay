@@ -746,12 +746,7 @@ machine Sub;
 		"stl/numeric": "// numeric\n",
 	})
 
-	scanner := newIncludeScannerWith(
-		newIncludeParserManagerFS(fs, newSharedParseCache()),
-		sysincl,
-		func(Warn) {},
-		&TarjanCtx{},
-	)
+	scanner := newTestScanner(fs, sysincl)
 
 	sc := scanner.newScanCtx(ScanContext{
 		OwnAddIncl: VFSesFromStrings([]string{"stl"}),

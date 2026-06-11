@@ -1095,7 +1095,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 		}
 
 		if !matched {
-			if info := s.codegenUnder(incDir.rel(), d.target); info != nil {
+			if info := s.codegenUnder(incDir, d.target); info != nil {
 				if !outHas(info.OutputPath) {
 					out = append(out, info.OutputPath)
 					searchPathFound = true
@@ -1206,26 +1206,14 @@ func (s *IncludeScanner) resolveSourceUnder(prefix VFS, target string) (string, 
 	return normalisePath(joinRel(prefix.rel(), target)), true
 }
 
-func (s *IncludeScanner) codegenUnder(prefixDir string, targetID STR) *GeneratedFileInfo {
-	if s.codegen == nil {
+func (s *IncludeScanner) codegenUnder(incDir VFS, targetID STR) *GeneratedFileInfo {
+	pid := interned(incDir.rel())
+
+	if pid == nil {
 		return nil
 	}
 
-	// targetID IS the interned target — no id -> string -> id round-trip.
-	target := targetID.string()
-
-	if first, _ := firstComponent(target); prefixDir != "" && canRelFilter(first, target) &&
-		!strings.Contains(target, "/./") && !strings.Contains(target, "//") {
-		pid := interned(prefixDir)
-
-		if pid == nil {
-			return nil
-		}
-
-		return s.codegen.lookupSplit(*pid, targetID)
-	}
-
-	return s.codegen.lookupRel(normalisePath(joinRel(prefixDir, target)))
+	return s.codegen.lookupSplit(*pid, targetID)
 }
 
 func canRelFilter(first, target string) bool {

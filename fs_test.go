@@ -352,10 +352,14 @@ func (fs *MemFS) perfStats() FsPerfStats { return FsPerfStats{} }
 // test memFS). Each call yields a fresh scanner so per-test CodegenRegistry /
 // cache state does not leak.
 func newTestScanner(fs FS, sysincl SysInclSet) *IncludeScanner {
-	return newIncludeScannerWith(
+	s := newIncludeScannerWith(
 		newIncludeParserManagerFS(fs, newSharedParseCache()),
 		sysincl,
 		func(Warn) {},
 		&TarjanCtx{},
 	)
+	// Prod wiring always attaches a registry (gen.go); the scanner relies on it.
+	s.codegen = newCodegenRegistry()
+
+	return s
 }
