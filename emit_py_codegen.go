@@ -91,7 +91,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			Platform: instance.Platform,
 			Cmds: []Cmd{
 				{
-					CmdArgs: cmdArgs,
+					CmdArgs: argChunks{cmdArgs},
 					Env:     env,
 				},
 			},
@@ -193,7 +193,7 @@ func emitPyRegister(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modu
 			pyNode := &Node{
 				Platform: pyInstance.Platform,
 				Cmds: []Cmd{
-					{CmdArgs: pyCmdArgs, Env: env},
+					{CmdArgs: argChunks{pyCmdArgs}, Env: env},
 				},
 				Env:              env,
 				Inputs:           inputChunks{genPy3RegScriptChunk},

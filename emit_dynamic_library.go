@@ -165,10 +165,10 @@ func emitDynamicLibrary(ctx *genCtx, instance ModuleInstance, d *moduleData) *mo
 	n := &Node{
 		Platform: instance.Platform,
 		Cmds: []Cmd{
-			{CmdArgs: cmd0, Env: envVcsOnly},
-			{CmdArgs: cmd1, Env: envFull},
-			{CmdArgs: cmd2, Cwd: strB, Env: envFull},
-			{CmdArgs: cmd3, Env: envVcsOnly},
+			{CmdArgs: argChunks{cmd0}, Env: envVcsOnly},
+			{CmdArgs: argChunks{cmd1}, Env: envFull},
+			{CmdArgs: argChunks{cmd2}, Cwd: strB, Env: envFull},
+			{CmdArgs: argChunks{cmd3}, Env: envVcsOnly},
 		},
 		Env:              envFull,
 		Inputs:           inputs,

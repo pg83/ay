@@ -26,7 +26,7 @@ func TestEmitAS_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 	}
 	EmitAS(inst, "src/math/x86_64/ceill.s", Intern("$(S)/contrib/libs/foolib/src/math/x86_64/ceill.s"), in, testHostP, e)
 
-	args := e.nodes[0].Cmds[0].CmdArgs
+	args := e.nodes[0].Cmds[0].CmdArgs.flat()
 	wantTail := []string{
 		"-I$(B)",
 		"-I$(S)",
@@ -96,7 +96,7 @@ func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 
 func testYasmLDRef(e *BufferedEmitter) NodeRef {
 	return e.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"yasm"}), Env: nil}},
+		Cmds:             []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"yasm"})}, Env: nil}},
 		Env:              nil,
 		Inputs:           inputChunks{ToVFSSlice([]string{})},
 		Outputs:          ToVFSSlice([]string{"$(B)/tools/yasm/yasm"}),

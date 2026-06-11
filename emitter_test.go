@@ -11,7 +11,7 @@ import (
 func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
 	e := NewBufferedEmitter()
 	c := e.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"build", "C"}), Env: nil}},
+		Cmds:             []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"build", "C"})}, Env: nil}},
 		Env:              nil,
 		Inputs:           inputChunks{ToVFSSlice([]string{"c.in"})},
 		KV:               KV{Name: "C"},
@@ -22,7 +22,7 @@ func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
 		TargetProperties: TargetProperties{},
 	})
 	b := e.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"build", "B"}), Env: nil}},
+		Cmds:             []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"build", "B"})}, Env: nil}},
 		Env:              nil,
 		Inputs:           inputChunks{ToVFSSlice([]string{"b.in"})},
 		KV:               KV{Name: "B"},
@@ -34,7 +34,7 @@ func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
 		DepRefs:          []NodeRef{c},
 	})
 	a := e.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"build", "A"}), Env: nil}},
+		Cmds:             []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"build", "A"})}, Env: nil}},
 		Env:              nil,
 		Inputs:           inputChunks{ToVFSSlice([]string{"a.in"})},
 		KV:               KV{Name: "A"},
@@ -141,7 +141,7 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 	e := NewBufferedEmitter()
 	mkLeaf := func(name string) NodeRef {
 		return e.Emit(&Node{Platform: &Platform{},
-			Cmds:   []Cmd{{CmdArgs: appendInternStrs(nil, []string{name}), Env: nil}},
+			Cmds:   []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{name})}, Env: nil}},
 			Env:    nil,
 			Inputs: inputChunks{ToVFSSlice([]string{})}, KV: KV{Name: name},
 			Outputs:      ToVFSSlice([]string{}),
@@ -154,7 +154,7 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 	z := mkLeaf("Z")
 
 	a := e.Emit(&Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: appendInternStrs(nil, []string{"A"}), Env: nil}},
+		Cmds: []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: inputChunks{ToVFSSlice([]string{})},
 		KV: KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     Requirements{},
@@ -196,7 +196,7 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 func TestFinalize_KeepsDuplicateDeps(t *testing.T) {
 	e := NewBufferedEmitter()
 	c := e.Emit(&Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: appendInternStrs(nil, []string{"C"}), Env: nil}},
+		Cmds: []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"C"})}, Env: nil}},
 		Env:  nil, Inputs: inputChunks{ToVFSSlice([]string{})},
 		KV: KV{Name: "C"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     Requirements{},
@@ -204,7 +204,7 @@ func TestFinalize_KeepsDuplicateDeps(t *testing.T) {
 		TargetProperties: TargetProperties{},
 	})
 	a := e.Emit(&Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: appendInternStrs(nil, []string{"A"}), Env: nil}},
+		Cmds: []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: inputChunks{ToVFSSlice([]string{})},
 		KV: KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     Requirements{},
@@ -237,7 +237,7 @@ func TestFinalize_CycleReturnsError(t *testing.T) {
 
 	e := NewBufferedEmitter()
 	aNode := &Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: appendInternStrs(nil, []string{"A"}), Env: nil}},
+		Cmds: []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: inputChunks{ToVFSSlice([]string{})},
 		KV: KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     Requirements{},
@@ -245,7 +245,7 @@ func TestFinalize_CycleReturnsError(t *testing.T) {
 		TargetProperties: TargetProperties{},
 	}
 	bNode := &Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: appendInternStrs(nil, []string{"B"}), Env: nil}},
+		Cmds: []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"B"})}, Env: nil}},
 		Env:  nil, Inputs: inputChunks{ToVFSSlice([]string{})},
 		KV: KV{Name: "B"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     Requirements{},
@@ -267,7 +267,7 @@ func TestFinalize_CycleReturnsError(t *testing.T) {
 func TestFinalize_OutOfRangeRefReturnsError(t *testing.T) {
 	e := NewBufferedEmitter()
 	a := e.Emit(&Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: appendInternStrs(nil, []string{"A"}), Env: nil}},
+		Cmds: []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: inputChunks{ToVFSSlice([]string{})},
 		KV: KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     Requirements{},
@@ -307,7 +307,7 @@ func TestFinalize_DedupesIdenticalEmits(t *testing.T) {
 	e := NewBufferedEmitter()
 	mk := func() NodeRef {
 		return e.Emit(&Node{Platform: &Platform{},
-			Cmds: []Cmd{{CmdArgs: appendInternStrs(nil, []string{"identical"}), Env: nil}},
+			Cmds: []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"identical"})}, Env: nil}},
 			Env:  nil, Inputs: inputChunks{ToVFSSlice([]string{})},
 			KV: KV{Name: "L"}, Outputs: ToVFSSlice([]string{}),
 			Requirements:     Requirements{},
@@ -345,7 +345,7 @@ func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 
 	e := NewBufferedEmitter()
 	a := e.Emit(&Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: appendInternStrs(nil, []string{"A"}), Env: nil}},
+		Cmds: []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: inputChunks{ToVFSSlice([]string{})},
 		KV: KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     Requirements{},
@@ -382,7 +382,7 @@ func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
 
 	e := NewBufferedEmitter()
 	a := e.Emit(&Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: appendInternStrs(nil, []string{"A"}), Env: nil}},
+		Cmds: []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: inputChunks{ToVFSSlice([]string{})},
 		KV: KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:     Requirements{},
@@ -401,7 +401,7 @@ func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
 func TestEmitter_OnReady_BufferedNoOp(t *testing.T) {
 	e := NewBufferedEmitter()
 	r := e.Emit(&Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: appendInternStrs(nil, []string{"X"}), Env: nil}},
+		Cmds: []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"X"})}, Env: nil}},
 		Env:  nil, Inputs: inputChunks{ToVFSSlice([]string{})},
 		KV: KV{Name: "X"}, Outputs: ToVFSSlice([]string{}),
 		Requirements: Requirements{},
@@ -480,13 +480,13 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 
 	e1 := NewBufferedEmitter()
 	c1 := e1.Emit(&Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: appendInternStrs(nil, []string{"C", "v1"}), Env: nil}},
+		Cmds: []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"C", "v1"})}, Env: nil}},
 		Env:  nil, Inputs: inputChunks{ToVFSSlice([]string{})}, KV: KV{},
 		Outputs: ToVFSSlice([]string{}), Requirements: Requirements{},
 		Tags: []STR{}, TargetProperties: TargetProperties{},
 	})
 	a1 := e1.Emit(&Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: appendInternStrs(nil, []string{"A"}), Env: nil}},
+		Cmds: []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: inputChunks{ToVFSSlice([]string{})}, KV: KV{},
 		Outputs: ToVFSSlice([]string{}), Requirements: Requirements{},
 		Tags: []STR{}, TargetProperties: TargetProperties{},
@@ -497,13 +497,13 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 
 	e2 := NewBufferedEmitter()
 	c2 := e2.Emit(&Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: appendInternStrs(nil, []string{"C", "v2"}), Env: nil}},
+		Cmds: []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"C", "v2"})}, Env: nil}},
 		Env:  nil, Inputs: inputChunks{ToVFSSlice([]string{})}, KV: KV{},
 		Outputs: ToVFSSlice([]string{}), Requirements: Requirements{},
 		Tags: []STR{}, TargetProperties: TargetProperties{},
 	})
 	a2 := e2.Emit(&Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: appendInternStrs(nil, []string{"A"}), Env: nil}},
+		Cmds: []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: inputChunks{ToVFSSlice([]string{})}, KV: KV{},
 		Outputs: ToVFSSlice([]string{}), Requirements: Requirements{},
 		Tags: []STR{}, TargetProperties: TargetProperties{},
@@ -524,7 +524,7 @@ func TestFinalize_HeapTopo_Determinism(t *testing.T) {
 	e := NewBufferedEmitter()
 	mk := func(name string, deps ...NodeRef) NodeRef {
 		return e.Emit(&Node{Platform: &Platform{},
-			Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{name}), Env: nil}},
+			Cmds:             []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{name})}, Env: nil}},
 			Env:              nil,
 			Inputs:           inputChunks{ToVFSSlice([]string{})},
 			KV:               KV{Name: name},

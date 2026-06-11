@@ -143,7 +143,7 @@ func emitCythonCpp(ctx *genCtx, instance ModuleInstance, d *moduleData, in Modul
 			Platform: instance.Platform,
 			Cmds: []Cmd{
 				{
-					CmdArgs: cmdArgs,
+					CmdArgs: argChunks{cmdArgs},
 					Env:     env,
 				},
 			},

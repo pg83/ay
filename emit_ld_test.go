@@ -97,25 +97,25 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		t.Fatalf("Cmds = %d, want 4", len(got.Cmds))
 	}
 
-	if got.Cmds[0].CmdArgs[1].String() != "$(S)/build/scripts/vcs_info.py" {
-		t.Errorf("cmd[0] does not invoke vcs_info.py: %q", got.Cmds[0].CmdArgs[1].String())
+	if got.Cmds[0].CmdArgs.flat()[1].String() != "$(S)/build/scripts/vcs_info.py" {
+		t.Errorf("cmd[0] does not invoke vcs_info.py: %q", got.Cmds[0].CmdArgs.flat()[1].String())
 	}
 
 	wantCC := testToolchain().CC.String()
-	if got.Cmds[1].CmdArgs[0].String() != wantCC {
-		t.Errorf("cmd[1][0] = %q, want %q", got.Cmds[1].CmdArgs[0].String(), wantCC)
+	if got.Cmds[1].CmdArgs.flat()[0].String() != wantCC {
+		t.Errorf("cmd[1][0] = %q, want %q", got.Cmds[1].CmdArgs.flat()[0].String(), wantCC)
 	}
 
-	if got.Cmds[2].CmdArgs[1].String() != "$(S)/build/scripts/link_exe.py" {
-		t.Errorf("cmd[2] does not invoke link_exe.py: %q", got.Cmds[2].CmdArgs[1].String())
+	if got.Cmds[2].CmdArgs.flat()[1].String() != "$(S)/build/scripts/link_exe.py" {
+		t.Errorf("cmd[2] does not invoke link_exe.py: %q", got.Cmds[2].CmdArgs.flat()[1].String())
 	}
 
 	if got.Cmds[2].Cwd.String() != "$(B)" {
 		t.Errorf("cmd[2].cwd = %q, want $(B)", got.Cmds[2].Cwd.String())
 	}
 
-	if got.Cmds[3].CmdArgs[1].String() != "$(S)/build/scripts/fs_tools.py" {
-		t.Errorf("cmd[3] does not invoke fs_tools.py: %q", got.Cmds[3].CmdArgs[1].String())
+	if got.Cmds[3].CmdArgs.flat()[1].String() != "$(S)/build/scripts/fs_tools.py" {
+		t.Errorf("cmd[3] does not invoke fs_tools.py: %q", got.Cmds[3].CmdArgs.flat()[1].String())
 	}
 
 	wantOut := "$(B)/some/prog/prog"
@@ -123,10 +123,10 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		t.Errorf("outputs = %#v, want [%q]", got.Outputs, wantOut)
 	}
 
-	startIdx := slices.Index(strStrs(got.Cmds[2].CmdArgs), "--start-plugins")
-	endIdx := slices.Index(strStrs(got.Cmds[2].CmdArgs), "--end-plugins")
+	startIdx := slices.Index(strStrs(got.Cmds[2].CmdArgs.flat()), "--start-plugins")
+	endIdx := slices.Index(strStrs(got.Cmds[2].CmdArgs.flat()), "--end-plugins")
 	if startIdx < 0 || endIdx != startIdx+1 {
-		t.Fatalf("synthetic LD plugin markers = %v, want adjacent empty --start-plugins/--end-plugins", got.Cmds[2].CmdArgs)
+		t.Fatalf("synthetic LD plugin markers = %v, want adjacent empty --start-plugins/--end-plugins", got.Cmds[2].CmdArgs.flat())
 	}
 
 	if got.KV.P != pkLD || got.KV.PC != pcLightBlue || !got.KV.ShowOut {
@@ -199,14 +199,14 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 		}
 	}
 
-	if !slices.Equal(strStrs(got.Cmds[4].CmdArgs), []string{testToolchain().Objcopy.String(), "--only-keep-debug", "$(B)/some/prog/prog", "$(B)/some/prog/prog.debug"}) {
-		t.Fatalf("cmd[4].cmd_args = %#v", got.Cmds[4].CmdArgs)
+	if !slices.Equal(strStrs(got.Cmds[4].CmdArgs.flat()), []string{testToolchain().Objcopy.String(), "--only-keep-debug", "$(B)/some/prog/prog", "$(B)/some/prog/prog.debug"}) {
+		t.Fatalf("cmd[4].cmd_args = %#v", got.Cmds[4].CmdArgs.flat())
 	}
-	if !slices.Equal(strStrs(got.Cmds[5].CmdArgs), []string{testToolchain().Strip.String(), "--strip-debug", "$(B)/some/prog/prog"}) {
-		t.Fatalf("cmd[5].cmd_args = %#v", got.Cmds[5].CmdArgs)
+	if !slices.Equal(strStrs(got.Cmds[5].CmdArgs.flat()), []string{testToolchain().Strip.String(), "--strip-debug", "$(B)/some/prog/prog"}) {
+		t.Fatalf("cmd[5].cmd_args = %#v", got.Cmds[5].CmdArgs.flat())
 	}
-	if !slices.Equal(strStrs(got.Cmds[6].CmdArgs), []string{testToolchain().Objcopy.String(), "--remove-section=.gnu_debuglink", "--add-gnu-debuglink", "$(B)/some/prog/prog.debug", "$(B)/some/prog/prog"}) {
-		t.Fatalf("cmd[6].cmd_args = %#v", got.Cmds[6].CmdArgs)
+	if !slices.Equal(strStrs(got.Cmds[6].CmdArgs.flat()), []string{testToolchain().Objcopy.String(), "--remove-section=.gnu_debuglink", "--add-gnu-debuglink", "$(B)/some/prog/prog.debug", "$(B)/some/prog/prog"}) {
+		t.Fatalf("cmd[6].cmd_args = %#v", got.Cmds[6].CmdArgs.flat())
 	}
 
 	for _, idx := range []int{4, 5, 6} {
@@ -374,7 +374,7 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 		t.Fatalf("whole-archive/peer ref in DepRefs %d times, want 1: %#v", depCount, got.DepRefs)
 	}
 
-	cmdArgs := strStrs(got.Cmds[2].CmdArgs)
+	cmdArgs := strStrs(got.Cmds[2].CmdArgs.flat())
 	found := false
 	for i := 0; i+1 < len(cmdArgs); i++ {
 		if cmdArgs[i] == "--whole-archive-libs" && cmdArgs[i+1] == wholeArchivePath {
@@ -448,7 +448,7 @@ func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T
 		t.Fatalf("peer/whole-archive ref in DepRefs %d times, want 1: %#v", depCount, got.DepRefs)
 	}
 
-	cmdArgs := strStrs(got.Cmds[2].CmdArgs)
+	cmdArgs := strStrs(got.Cmds[2].CmdArgs.flat())
 	found := false
 	for i := 0; i+1 < len(cmdArgs); i++ {
 		if cmdArgs[i] == "--whole-archive-libs" && cmdArgs[i+1] == dupPath.Rel() {

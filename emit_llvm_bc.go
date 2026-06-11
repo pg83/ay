@@ -97,7 +97,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 
 			node := &Node{
 				Platform:         instance.Platform,
-				Cmds:             []Cmd{{CmdArgs: bcArgs, Env: env}},
+				Cmds:             []Cmd{{CmdArgs: argChunks{bcArgs}, Env: env}},
 				Env:              env,
 				Inputs:           allInputs,
 				Outputs:          []VFS{bcOut},
@@ -131,7 +131,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 
 		ldNode := &Node{
 			Platform:         instance.Platform,
-			Cmds:             []Cmd{{CmdArgs: ldArgs, Env: env}},
+			Cmds:             []Cmd{{CmdArgs: argChunks{ldArgs}, Env: env}},
 			Env:              env,
 			Inputs:           mergeInputs,
 			Outputs:          []VFS{mergedOut},
@@ -173,7 +173,7 @@ func emitLLVMBC(ctx *genCtx, instance ModuleInstance, d *moduleData, in ModuleCC
 
 		optNode := &Node{
 			Platform:         instance.Platform,
-			Cmds:             []Cmd{{CmdArgs: optArgs, Env: env}},
+			Cmds:             []Cmd{{CmdArgs: argChunks{optArgs}, Env: env}},
 			Env:              env,
 			Inputs:           optChunks,
 			Outputs:          []VFS{optOut},

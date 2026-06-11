@@ -226,7 +226,7 @@ func emitRawAuxResourceChunks(ctx *genCtx, instance ModuleInstance, entries []py
 
 		ref := ctx.emit.Emit(&Node{
 			Platform:         instance.Platform,
-			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: env}},
+			Cmds:             []Cmd{{CmdArgs: argChunks{cmdArgs}, Env: env}},
 			Env:              env,
 			Inputs:           inputs,
 			Outputs:          []VFS{aux},

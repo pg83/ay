@@ -174,14 +174,14 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 	}
 
 	for _, c := range cc.Cmds {
-		for _, a := range strStrs(c.CmdArgs) {
+		for _, a := range strStrs(c.CmdArgs.flat()) {
 			if a == "-I$(S)/thelib" {
 				t.Fatalf("own CC unexpectedly carries direct -I$(S)/thelib: cmds=%+v", cc.Cmds)
 			}
 		}
 	}
 
-	linkArgs := ld.Cmds[2].CmdArgs
+	linkArgs := ld.Cmds[2].CmdArgs.flat()
 	thelibIdx := indexOfArg(linkArgs, "thelib/libthelib.a")
 	cowIdx := indexOfArg(linkArgs, "build/cow/on/libbuild-cow-on.a")
 	if thelibIdx < 0 || cowIdx < 0 {
@@ -469,7 +469,7 @@ END()
 
 	for _, n := range g.Graph {
 		if len(n.Outputs) == 1 && n.Outputs[0].String() == "$(B)/bridge/x.cpp.o" {
-			args = strStrs(n.Cmds[0].CmdArgs)
+			args = strStrs(n.Cmds[0].CmdArgs.flat())
 			break
 		}
 	}
@@ -688,8 +688,8 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 		t.Errorf("R6 ForeignDeps = %v, want {tool: [%q]}", graphForeignDeps(g, r6Node), ldNode.UID)
 	}
 
-	if len(r6Node.Cmds) == 0 || len(r6Node.Cmds[0].CmdArgs) == 0 {
-		t.Fatalf("R6 node has no Cmds[0].CmdArgs; got Cmds=%v", r6Node.Cmds)
+	if len(r6Node.Cmds) == 0 || len(r6Node.Cmds[0].CmdArgs.flat()) == 0 {
+		t.Fatalf("R6 node has no Cmds[0].CmdArgs.flat(); got Cmds=%v", r6Node.Cmds)
 	}
 
 	if len(ldNode.Outputs) == 0 {
@@ -698,9 +698,9 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 
 	wantCmd0 := ldNode.Outputs[0].String()
 
-	if r6Node.Cmds[0].CmdArgs[0].String() != wantCmd0 {
+	if r6Node.Cmds[0].CmdArgs.flat()[0].String() != wantCmd0 {
 		t.Errorf("R6 cmd_args[0] = %q, want host ragel6 LD outputs[0] = %q (raw outputs[0] = %q)",
-			r6Node.Cmds[0].CmdArgs[0], wantCmd0, ldNode.Outputs[0].String())
+			r6Node.Cmds[0].CmdArgs.flat()[0], wantCmd0, ldNode.Outputs[0].String())
 	}
 }
 
@@ -762,7 +762,7 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 		t.Fatalf("LD node has %d cmds, want >= 3", len(ldNode.Cmds))
 	}
 
-	linkArgs := ldNode.Cmds[2].CmdArgs
+	linkArgs := ldNode.Cmds[2].CmdArgs.flat()
 	expectedCmdArg := "peerlib/libpeerlib.global.a"
 	foundInCmdArgs := false
 
@@ -1313,7 +1313,7 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 
 		nostdinccCount := 0
 
-		for _, arg := range strStrs(ccNode.Cmds[0].CmdArgs) {
+		for _, arg := range strStrs(ccNode.Cmds[0].CmdArgs.flat()) {
 			if arg == "GLOBAL" {
 				t.Errorf("CC cmd_args contains literal %q — GLOBAL modifier leaked into own node", arg)
 			}
@@ -1353,7 +1353,7 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 			t.Fatal("CC node has no Cmds")
 		}
 
-		for _, arg := range strStrs(ccNode.Cmds[0].CmdArgs) {
+		for _, arg := range strStrs(ccNode.Cmds[0].CmdArgs.flat()) {
 			if arg == "GLOBAL" {
 				t.Errorf("CC cmd_args contains literal %q — GLOBAL modifier leaked into own node", arg)
 			}
@@ -1387,7 +1387,7 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 
 		found := false
 
-		for _, arg := range strStrs(ccNode.Cmds[0].CmdArgs) {
+		for _, arg := range strStrs(ccNode.Cmds[0].CmdArgs.flat()) {
 			if arg == "-DMINE" {
 				found = true
 
@@ -1746,7 +1746,7 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 	var iFlags []string
 
 	if len(consumerCC.Cmds) > 0 {
-		for _, arg := range strStrs(consumerCC.Cmds[0].CmdArgs) {
+		for _, arg := range strStrs(consumerCC.Cmds[0].CmdArgs.flat()) {
 			if strings.HasPrefix(arg, "-I") {
 				iFlags = append(iFlags, arg)
 			}
@@ -1814,7 +1814,7 @@ func TestGen_OneLevelAddIncl_DeclOrderPreserved(t *testing.T) {
 		t.Fatal("consumer CC node has no commands")
 	}
 
-	args := consumerCC.Cmds[0].CmdArgs
+	args := consumerCC.Cmds[0].CmdArgs.flat()
 	globalIdx := indexOfArg(args, "-I$(S)/peerlib/global_include")
 	oneLevelIdx := indexOfArg(args, "-I$(S)/peerlib/onelevel_include")
 
@@ -1867,7 +1867,7 @@ func TestGen_ImplicitOwnGlobal_BeforeOneLevelAddIncl(t *testing.T) {
 		t.Fatal("consumer CC node has no commands")
 	}
 
-	args := consumerCC.Cmds[0].CmdArgs
+	args := consumerCC.Cmds[0].CmdArgs.flat()
 	// addGeneratedHeaderInclude("peerlib", "gen.h", d) produces Build("peerlib") = $(B)/peerlib.
 	genHdrIdx := indexOfArg(args, "-I$(B)/peerlib")
 	oneLevelIdx := indexOfArg(args, "-I$(S)/peerlib/onelevel_dir")
@@ -1928,7 +1928,7 @@ func TestGen_ConfigureFileOwnGlobal_AfterExplicitAddIncl(t *testing.T) {
 		t.Fatal("consumer CC node has no commands")
 	}
 
-	args := consumerCC.Cmds[0].CmdArgs
+	args := consumerCC.Cmds[0].CmdArgs.flat()
 	// addGeneratedHeaderIncludeCF("peerlib", "config.cfg", d) produces Build("peerlib") = $(B)/peerlib.
 	cfBuildIdx := indexOfArg(args, "-I$(B)/peerlib")
 	globalIdx := indexOfArg(args, "-I$(S)/peerlib/global_dir")
@@ -1983,7 +1983,7 @@ func TestGen_OneLevelAddIncl_AppearsInPeerIncludeSlot(t *testing.T) {
 		t.Fatal("consumer CC node has no commands")
 	}
 
-	args := consumerCC.Cmds[0].CmdArgs
+	args := consumerCC.Cmds[0].CmdArgs.flat()
 
 	linuxHeadersIdx := indexOfArg(args, "-I$(S)/contrib/libs/linux-headers")
 	oneLevelIdx := indexOfArg(args, "-I$(S)/peerlib/include")
@@ -2058,7 +2058,7 @@ func TestGen_SRC_AppendsExtraCFlags_PerSource(t *testing.T) {
 		t.Fatal("no CC node emitted for SRC(foo.cpp ...)")
 	}
 
-	args := cc.Cmds[0].CmdArgs
+	args := cc.Cmds[0].CmdArgs.flat()
 
 	if len(args) < 2 {
 		t.Fatalf("CC cmd_args too short: %d", len(args))
@@ -2107,7 +2107,7 @@ func TestGen_SRC_C_NO_LTO_RegistersSource(t *testing.T) {
 		t.Errorf("CC output = %q, want %q (SRC_C_NO_LTO uses flat output, not `mod/_/system/compiler.cpp.o`)", cc.Outputs[0].String(), wantOut)
 	}
 
-	args := cc.Cmds[0].CmdArgs
+	args := cc.Cmds[0].CmdArgs.flat()
 
 	if args[len(args)-1].String() != "$(S)/mod/system/compiler.cpp" {
 		t.Errorf("last cmd_arg = %q, want input path", args[len(args)-1])
@@ -2449,29 +2449,29 @@ END()
 	if got := cfTemplate.flatInputs()[1].String(); got != "$(S)/templates/Java.stg.in" {
 		t.Fatalf("template CF input = %q, want $(S)/templates/Java.stg.in", got)
 	}
-	if got := cfTemplate.Cmds[0].CmdArgs[3].String(); got != "$(B)/proto/templates/Java/Java.stg" {
+	if got := cfTemplate.Cmds[0].CmdArgs.flat()[3].String(); got != "$(B)/proto/templates/Java/Java.stg" {
 		t.Fatalf("template CF output arg = %q, want $(B)/proto/templates/Java/Java.stg", got)
 	}
-	if got := cfGrammar.Cmds[0].CmdArgs[3].String(); got != "$(B)/proto/Grammar.g" {
+	if got := cfGrammar.Cmds[0].CmdArgs.flat()[3].String(); got != "$(B)/proto/Grammar.g" {
 		t.Fatalf("grammar CF output arg = %q, want $(B)/proto/Grammar.g", got)
 	}
 
-	if got := antlr.Cmds[0].CmdArgs[5].String(); got != "$(B)/proto/Grammar.g" {
+	if got := antlr.Cmds[0].CmdArgs.flat()[5].String(); got != "$(B)/proto/Grammar.g" {
 		t.Fatalf("antlr grammar arg = %q, want $(B)/proto/Grammar.g", got)
 	}
-	if got := antlr.Cmds[0].CmdArgs[9].String(); got != "$(B)/proto" {
+	if got := antlr.Cmds[0].CmdArgs.flat()[9].String(); got != "$(B)/proto" {
 		t.Fatalf("antlr output dir arg = %q, want $(B)/proto", got)
 	}
 	if got := antlr.Cmds[0].Cwd.String(); got != "$(B)/proto" {
 		t.Fatalf("antlr cwd = %q, want $(B)/proto", got)
 	}
 
-	if got := protoc.Cmds[0].CmdArgs[0].String(); got != "$(B)/contrib/tools/protoc/bin/protoc" {
+	if got := protoc.Cmds[0].CmdArgs.flat()[0].String(); got != "$(B)/contrib/tools/protoc/bin/protoc" {
 		t.Fatalf("protoc tool arg = %q, want $(B)/contrib/tools/protoc/bin/protoc", got)
 	}
 	wantPluginArg := "--plugin=protoc-gen-cpp_styleguide=$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"
-	if !containsString(strStrs(protoc.Cmds[0].CmdArgs), wantPluginArg) {
-		t.Fatalf("protoc cmd args missing %q: %v", wantPluginArg, protoc.Cmds[0].CmdArgs)
+	if !containsString(strStrs(protoc.Cmds[0].CmdArgs.flat()), wantPluginArg) {
+		t.Fatalf("protoc cmd args missing %q: %v", wantPluginArg, protoc.Cmds[0].CmdArgs.flat())
 	}
 	if !nodeHasInput(protoc, "$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide") {
 		t.Fatalf("protoc inputs missing built plugin binary: %v", protoc.flatInputs())
@@ -2489,18 +2489,18 @@ END()
 	if got := py.flatInputs()[2].String(); got != "$(B)/proto/Generated.pb.cc" {
 		t.Fatalf("python generated source input = %q, want $(B)/proto/Generated.pb.cc", got)
 	}
-	if got := py.Cmds[0].CmdArgs[1].String(); got != "$(S)/tools/multiproto.py" {
+	if got := py.Cmds[0].CmdArgs.flat()[1].String(); got != "$(S)/tools/multiproto.py" {
 		t.Fatalf("python script arg = %q, want $(S)/tools/multiproto.py", got)
 	}
 	if got := py.Cmds[0].Cwd.String(); got != "$(B)/proto" {
 		t.Fatalf("python cwd = %q, want $(B)/proto", got)
 	}
 
-	if !containsString(strStrs(cc.Cmds[0].CmdArgs), "$(B)/proto/Generated.code0.cc") {
-		t.Fatalf("cc cmd args missing built generated source: %v", cc.Cmds[0].CmdArgs)
+	if !containsString(strStrs(cc.Cmds[0].CmdArgs.flat()), "$(B)/proto/Generated.code0.cc") {
+		t.Fatalf("cc cmd args missing built generated source: %v", cc.Cmds[0].CmdArgs.flat())
 	}
-	if containsString(strStrs(cc.Cmds[0].CmdArgs), "$(S)/proto/Generated.code0.cc") {
-		t.Fatalf("cc cmd args still contain source-root generated source: %v", cc.Cmds[0].CmdArgs)
+	if containsString(strStrs(cc.Cmds[0].CmdArgs.flat()), "$(S)/proto/Generated.code0.cc") {
+		t.Fatalf("cc cmd args still contain source-root generated source: %v", cc.Cmds[0].CmdArgs.flat())
 	}
 	if !nodeHasInput(cc, "$(B)/proto/Generated.code0.cc") {
 		t.Fatalf("cc inputs missing built generated source: %v", cc.flatInputs())
@@ -2547,7 +2547,7 @@ END()
 			values = append(values, output.String())
 		}
 		for _, cmd := range node.Cmds {
-			values = append(values, strStrs(cmd.CmdArgs)...)
+			values = append(values, strStrs(cmd.CmdArgs.flat())...)
 			if cmd.Cwd != 0 {
 				values = append(values, cmd.Cwd.String())
 			}
@@ -2753,18 +2753,18 @@ END()
 	pluginRuntime := mustNodeByOutput(t, g, "$(B)/deps/plugin_runtime/libdeps-plugin_runtime.a")
 	_ = mustNodeByOutput(t, g, "$(B)/deps/generated_runtime/libdeps-generated_runtime.a")
 
-	if !containsString(strStrs(pb.Cmds[0].CmdArgs), "--plugin=protoc-gen-config_proto_plugin=$(B)/tools/config_plugin/config_proto_plugin") {
-		t.Fatalf("pb cmd args missing config proto plugin: %v", pb.Cmds[0].CmdArgs)
+	if !containsString(strStrs(pb.Cmds[0].CmdArgs.flat()), "--plugin=protoc-gen-config_proto_plugin=$(B)/tools/config_plugin/config_proto_plugin") {
+		t.Fatalf("pb cmd args missing config proto plugin: %v", pb.Cmds[0].CmdArgs.flat())
 	}
-	if !containsString(strStrs(pb.Cmds[0].CmdArgs), "--config_proto_plugin_out=$(B)/") {
-		t.Fatalf("pb cmd args missing config proto plugin out flag: %v", pb.Cmds[0].CmdArgs)
+	if !containsString(strStrs(pb.Cmds[0].CmdArgs.flat()), "--config_proto_plugin_out=$(B)/") {
+		t.Fatalf("pb cmd args missing config proto plugin out flag: %v", pb.Cmds[0].CmdArgs.flat())
 	}
 
-	sourceIdx := indexOfArg(pb.Cmds[0].CmdArgs, "protos/test.proto")
-	grpcIdx := indexOfArg(pb.Cmds[0].CmdArgs, "--plugin=protoc-gen-grpc_cpp=$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp")
-	configIdx := indexOfArg(pb.Cmds[0].CmdArgs, "--plugin=protoc-gen-config_proto_plugin=$(B)/tools/config_plugin/config_proto_plugin")
+	sourceIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "protos/test.proto")
+	grpcIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "--plugin=protoc-gen-grpc_cpp=$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp")
+	configIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "--plugin=protoc-gen-config_proto_plugin=$(B)/tools/config_plugin/config_proto_plugin")
 	if sourceIdx < 0 || grpcIdx < 0 || configIdx < 0 {
-		t.Fatalf("missing source/grpc/config args in pb cmd: %v", pb.Cmds[0].CmdArgs)
+		t.Fatalf("missing source/grpc/config args in pb cmd: %v", pb.Cmds[0].CmdArgs.flat())
 	}
 	if !(sourceIdx < grpcIdx && grpcIdx < configIdx) {
 		t.Fatalf("pb plugin arg order = source:%d grpc:%d config:%d, want source < grpc < config", sourceIdx, grpcIdx, configIdx)
@@ -2847,10 +2847,10 @@ END()
 		"$(B)/protos/test.tasklet.h",
 	)
 
-	outputsIdx := indexOfArg(pb.Cmds[0].CmdArgs, "--outputs")
-	separatorIdx := indexOfArg(pb.Cmds[0].CmdArgs, "--")
+	outputsIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "--outputs")
+	separatorIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "--")
 	if outputsIdx < 0 || separatorIdx < 0 || separatorIdx <= outputsIdx {
-		t.Fatalf("pb wrapper output section malformed: %v", pb.Cmds[0].CmdArgs)
+		t.Fatalf("pb wrapper output section malformed: %v", pb.Cmds[0].CmdArgs.flat())
 	}
 
 	wantWrapperOutputs := []string{
@@ -2858,7 +2858,7 @@ END()
 		"$(B)/protos/test.pb.cc",
 		"$(B)/protos/test.tasklet.h",
 	}
-	gotWrapperOutputs := pb.Cmds[0].CmdArgs[outputsIdx+1 : separatorIdx]
+	gotWrapperOutputs := pb.Cmds[0].CmdArgs.flat()[outputsIdx+1 : separatorIdx]
 	if !equalStrings(strStrs(gotWrapperOutputs), wantWrapperOutputs) {
 		t.Fatalf("pb wrapper outputs = %v, want %v", gotWrapperOutputs, wantWrapperOutputs)
 	}
@@ -2929,8 +2929,8 @@ int use() { return 0; }
 		"$(B)/protos/main.grpc.pb.cc",
 		"$(B)/protos/main.grpc.pb.h",
 	)
-	if !containsString(strStrs(pb.Cmds[0].CmdArgs), "--cpp_out=proto_h=true:$(B)/") {
-		t.Fatalf("pb cmd args missing lite-header cpp_out flag: %v", pb.Cmds[0].CmdArgs)
+	if !containsString(strStrs(pb.Cmds[0].CmdArgs.flat()), "--cpp_out=proto_h=true:$(B)/") {
+		t.Fatalf("pb cmd args missing lite-header cpp_out flag: %v", pb.Cmds[0].CmdArgs.flat())
 	}
 
 	useCC := mustNodeByOutput(t, g, "$(B)/app/use.cpp.o")
@@ -3288,8 +3288,8 @@ END()
 		"-DUDF_ABI_VERSION_MINOR=44",
 		"-DUDF_ABI_VERSION_PATCH=0",
 	} {
-		if !contains(cc.Cmds[0].CmdArgs, want) {
-			t.Fatalf("cc cmd_args missing %q: %v", want, cc.Cmds[0].CmdArgs)
+		if !contains(cc.Cmds[0].CmdArgs.flat(), want) {
+			t.Fatalf("cc cmd_args missing %q: %v", want, cc.Cmds[0].CmdArgs.flat())
 		}
 	}
 
@@ -3429,7 +3429,7 @@ func TestGen_FbsSrcsInduceFlatbuffersLinkDep(t *testing.T) {
 		t.Fatal("no LD node found in graph")
 	}
 
-	linkArgs := ldNode.Cmds[2].CmdArgs
+	linkArgs := ldNode.Cmds[2].CmdArgs.flat()
 	peer1Idx := indexOfArg(linkArgs, "peer1/libpeer1.a")
 	fbIdx := indexOfArg(linkArgs, "contrib/libs/flatbuffers/libcontrib-libs-flatbuffers.a")
 	arrowlikeIdx := indexOfArg(linkArgs, "arrowlike/libarrowlike.a")
@@ -3631,7 +3631,7 @@ func TestGen_EnumSerializationWithSRCDIRResolvesHeaderViaSourceDir(t *testing.T)
 		t.Fatalf("EN node inputs: got wrong path $(S)/consumer/iface.h (SRCDIR not applied): %v", en.flatInputs())
 	}
 	// The enum_parser cmd arg[1] must be the correct source path
-	if got := en.Cmds[0].CmdArgs[1].String(); got != "$(S)/shared/iface.h" {
+	if got := en.Cmds[0].CmdArgs.flat()[1].String(); got != "$(S)/shared/iface.h" {
 		t.Fatalf("EN cmd_args[1] = %q, want $(S)/shared/iface.h", got)
 	}
 }
@@ -3662,11 +3662,11 @@ END()
 	if nodeHasInput(en, "$(S)/pkg/sub/pkg/sub/codecs.h") {
 		t.Fatalf("enum inputs still carry duplicated header path: %#v", en.flatInputs())
 	}
-	if got := en.Cmds[0].CmdArgs[1].String(); got != "$(S)/pkg/sub/codecs.h" {
+	if got := en.Cmds[0].CmdArgs.flat()[1].String(); got != "$(S)/pkg/sub/codecs.h" {
 		t.Fatalf("enum parser input = %q, want $(S)/pkg/sub/codecs.h", got)
 	}
-	if idx := indexOfArg(en.Cmds[0].CmdArgs, "--include-path"); idx < 0 || idx+1 >= len(en.Cmds[0].CmdArgs) || en.Cmds[0].CmdArgs[idx+1].String() != "pkg/sub/codecs.h" {
-		t.Fatalf("enum --include-path mismatch: %#v", en.Cmds[0].CmdArgs)
+	if idx := indexOfArg(en.Cmds[0].CmdArgs.flat(), "--include-path"); idx < 0 || idx+1 >= len(en.Cmds[0].CmdArgs.flat()) || en.Cmds[0].CmdArgs.flat()[idx+1].String() != "pkg/sub/codecs.h" {
+		t.Fatalf("enum --include-path mismatch: %#v", en.Cmds[0].CmdArgs.flat())
 	}
 }
 
@@ -3711,7 +3711,7 @@ func TestGen_CF_SetVarsReachCfgVars(t *testing.T) {
 	if cf == nil {
 		t.Fatal("no CF node emitted for thelib/x.cpp")
 	}
-	args := strings.Join(strStrs(cf.Cmds[0].CmdArgs), " ")
+	args := strings.Join(strStrs(cf.Cmds[0].CmdArgs.flat()), " ")
 	if !strings.Contains(args, "MYVAR=hello") {
 		t.Errorf("CF cmd_args missing SET var MYVAR=hello; got: %s", args)
 	}
@@ -3754,9 +3754,9 @@ func TestGen_HInGeneratedHeader_RealizedInConsumer(t *testing.T) {
 		t.Fatal("no AR node for genh")
 	}
 	for _, c := range ar.Cmds {
-		for _, a := range strStrs(c.CmdArgs) {
+		for _, a := range strStrs(c.CmdArgs.flat()) {
 			if a == "$(B)/genh/config.h" {
-				t.Errorf("genh AR cmd_args archives config.h as a member: %v", c.CmdArgs)
+				t.Errorf("genh AR cmd_args archives config.h as a member: %v", c.CmdArgs.flat())
 			}
 		}
 	}
@@ -3809,7 +3809,7 @@ END()
 
 	g := testGen(fs, "mod")
 	cc := mustNodeByOutput(t, g, "$(B)/mod/lib.cpp.o")
-	args := strings.Join(strStrs(cc.Cmds[0].CmdArgs), " ")
+	args := strings.Join(strStrs(cc.Cmds[0].CmdArgs.flat()), " ")
 
 	for _, want := range []string{
 		"-DMKQL_RUNTIME_VERSION=42",
@@ -3989,14 +3989,14 @@ END()
 	if got := len(yc.Cmds); got != 2 {
 		t.Fatalf("bison YC cmd count = %d, want 2", got)
 	}
-	if !strings.HasSuffix(yc.Cmds[1].CmdArgs[0].String(), "/python3") {
-		t.Fatalf("bison preprocess tool = %q, want a python3 binary", yc.Cmds[1].CmdArgs[0])
+	if !strings.HasSuffix(yc.Cmds[1].CmdArgs.flat()[0].String(), "/python3") {
+		t.Fatalf("bison preprocess tool = %q, want a python3 binary", yc.Cmds[1].CmdArgs.flat()[0])
 	}
 	wantPreprocess := []string{
 		"$(S)/build/scripts/preprocess.py",
 		"$(B)/genlib/pire/re_parser.h",
 	}
-	if got := strStrs(yc.Cmds[1].CmdArgs[1:]); !reflect.DeepEqual(got, wantPreprocess) {
+	if got := strStrs(yc.Cmds[1].CmdArgs.flat()[1:]); !reflect.DeepEqual(got, wantPreprocess) {
 		t.Fatalf("bison preprocess cmd_args mismatch:\n  got:  %#v\n  want: %#v", got, wantPreprocess)
 	}
 	for _, want := range []string{
@@ -4024,8 +4024,8 @@ END()
 	}
 
 	use := mustNodeByOutput(t, g, "$(B)/app/use.cpp.o")
-	if indexOfArg(use.Cmds[0].CmdArgs, "-I$(B)/genlib/pire") < 0 {
-		t.Fatalf("peer CC cmd_args missing generated bison build-root addincl: %#v", use.Cmds[0].CmdArgs)
+	if indexOfArg(use.Cmds[0].CmdArgs.flat(), "-I$(B)/genlib/pire") < 0 {
+		t.Fatalf("peer CC cmd_args missing generated bison build-root addincl: %#v", use.Cmds[0].CmdArgs.flat())
 	}
 
 	parserObj := mustNodeByOutput(t, g, "$(B)/genlib/_/_/pire/re_parser.y.cpp.o")
@@ -4068,8 +4068,8 @@ END()
 
 	parserObj := mustNodeByOutput(t, g, "$(B)/genlib/_/_/pire/re_parser.y.cpp.o")
 	for _, want := range []string{"-Wno-unused-but-set-variable", "-Wno-deprecated-copy"} {
-		if indexOfArg(parserObj.Cmds[0].CmdArgs, want) < 0 {
-			t.Fatalf("bison-generated CC cmd_args missing %q: %#v", want, parserObj.Cmds[0].CmdArgs)
+		if indexOfArg(parserObj.Cmds[0].CmdArgs.flat(), want) < 0 {
+			t.Fatalf("bison-generated CC cmd_args missing %q: %#v", want, parserObj.Cmds[0].CmdArgs.flat())
 		}
 	}
 }
@@ -4348,7 +4348,7 @@ func TestGen_ManualCompanionSourceUsesCythonCompanionCCInputs(t *testing.T) {
 
 	g := testGen(newMemFS(files), "pkg")
 	helper := mustNodeByOutput(t, g, "$(B)/pkg/helper.cpp.o")
-	args := helper.Cmds[0].CmdArgs
+	args := helper.Cmds[0].CmdArgs.flat()
 
 	pythonIncludeIdx := indexOfArg(args, "-I$(S)/contrib/libs/python/Include")
 	if pythonIncludeIdx < 0 {
@@ -4731,7 +4731,7 @@ END()
 	// Find positions of pb.cc.o and h_serialized.cpp.o in AR cmd_args
 	pbPos := -1
 	hSerPos := -1
-	for i, arg := range strStrs(ar.Cmds[0].CmdArgs) {
+	for i, arg := range strStrs(ar.Cmds[0].CmdArgs.flat()) {
 		if strings.HasSuffix(arg, ".pb.cc.o") {
 			pbPos = i
 		}
@@ -4858,7 +4858,7 @@ func TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs(t *testing.T) {
 		t.Fatal("no global AR node in graph")
 	}
 
-	args := globalAR.Cmds[0].CmdArgs
+	args := globalAR.Cmds[0].CmdArgs.flat()
 	// cmd_args: [python3, script, ar_tool, ar_type, ar_format, $(B), None, --, --, archivePath, member0, ...]
 	if len(args) < 12 {
 		t.Fatalf("global AR cmd_args too short (%d): %v", len(args), args)

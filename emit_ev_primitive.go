@@ -130,7 +130,7 @@ func EmitEV(
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: cmdArgs,
+				CmdArgs: argChunks{cmdArgs},
 				Cwd:     strS,
 				Env:     env,
 			},

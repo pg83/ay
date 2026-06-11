@@ -204,11 +204,29 @@ func (c *canonBuf) writeVFSSliceOS(vs []VFS, fs *osFS) {
 	c.buf = buf
 }
 
+// writeStrChunks writes the flattened element sequence of the chunk list —
+// byte-identical to writeStrSlice over the concatenation.
+func (c *canonBuf) writeStrChunks(chunks argChunks) {
+	total := 0
+
+	for _, ch := range chunks {
+		total += len(ch)
+	}
+
+	c.writeUint32(uint32(total))
+
+	for _, ch := range chunks {
+		for _, a := range ch {
+			c.writeSTR(a)
+		}
+	}
+}
+
 func (c *canonBuf) writeCmdSlice(cmds []Cmd) {
 	c.writeUint32(uint32(len(cmds)))
 
 	for _, cm := range cmds {
-		c.writeStrSlice(cm.CmdArgs)
+		c.writeStrChunks(cm.CmdArgs)
 		c.writeSTR(cm.Cwd)
 		c.writeEnv(cm.Env)
 		c.writeBytes(cm.Stdout.String())

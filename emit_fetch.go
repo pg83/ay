@@ -17,14 +17,14 @@ func emitResourceFetch(ctx *genCtx, decl resourceDecl) NodeRef {
 	node := &Node{
 		Platform: ctx.host,
 		Cmds: []Cmd{{
-			CmdArgs: []STR{
+			CmdArgs: argChunks{[]STR{
 				internStr(currentYatoolPath()),
 				argFetch.str(),
 				argB.str(),
 				argS.str(),
 				decl.URI,
 				output.str(),
-			},
+			}},
 		}},
 		Inputs:           inputChunks{fetchScriptInputs(ctx.scripts)},
 		KV:               KV{P: pkFETCH, PC: pcYellow, ShowOut: true},

@@ -8,7 +8,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	ragel6LD := e.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"link"}), Env: nil}},
+		Cmds:             []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
 		Env:              nil,
 		Inputs:           inputChunks{ToVFSSlice([]string{})},
 		KV:               KV{P: pkLD},
@@ -28,8 +28,8 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 
 	got := e.nodes[r6Ref]
 
-	if len(got.Cmds[0].CmdArgs) != 7 {
-		t.Errorf("cmd_args length = %d, want 7", len(got.Cmds[0].CmdArgs))
+	if len(got.Cmds[0].CmdArgs.flat()) != 7 {
+		t.Errorf("cmd_args length = %d, want 7", len(got.Cmds[0].CmdArgs.flat()))
 	}
 
 	wantCmd := []string{
@@ -43,8 +43,8 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	}
 
 	for i, w := range wantCmd {
-		if got.Cmds[0].CmdArgs[i].String() != w {
-			t.Errorf("cmd_args[%d] = %q, want %q", i, got.Cmds[0].CmdArgs[i].String(), w)
+		if got.Cmds[0].CmdArgs.flat()[i].String() != w {
+			t.Errorf("cmd_args[%d] = %q, want %q", i, got.Cmds[0].CmdArgs.flat()[i].String(), w)
 		}
 	}
 
@@ -91,7 +91,7 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	ragel6LD := e.Emit(&Node{Platform: &Platform{},
-		Cmds:    []Cmd{{CmdArgs: appendInternStrs(nil, []string{"link"}), Env: nil}},
+		Cmds:    []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
 		Env:     nil,
 		Inputs:  inputChunks{ToVFSSlice([]string{})},
 		KV:      KV{P: pkLD},
@@ -110,18 +110,18 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 
 	got := e.nodes[r6Ref]
 
-	if got.Cmds[0].CmdArgs[1].String() != "-lF1" {
-		t.Errorf("cmd_args[1] = %q, want -lF1 (per-module SET(RAGEL6_FLAGS) override)", got.Cmds[0].CmdArgs[1].String())
+	if got.Cmds[0].CmdArgs.flat()[1].String() != "-lF1" {
+		t.Errorf("cmd_args[1] = %q, want -lF1 (per-module SET(RAGEL6_FLAGS) override)", got.Cmds[0].CmdArgs.flat()[1].String())
 	}
 
-	for i, a := range got.Cmds[0].CmdArgs {
+	for i, a := range got.Cmds[0].CmdArgs.flat() {
 		if a.String() == "-CT0" || a.String() == "-CG2" {
 			t.Errorf("cmd_args[%d] = %q — default flag leaked through the SET override", i, a.String())
 		}
 	}
 
-	if len(got.Cmds[0].CmdArgs) != 7 {
-		t.Errorf("cmd_args length = %d, want 7 (SET(RAGEL6_FLAGS -lF1) is a 1-arg replacement, not an append)", len(got.Cmds[0].CmdArgs))
+	if len(got.Cmds[0].CmdArgs.flat()) != 7 {
+		t.Errorf("cmd_args length = %d, want 7 (SET(RAGEL6_FLAGS -lF1) is a 1-arg replacement, not an append)", len(got.Cmds[0].CmdArgs.flat()))
 	}
 }
 
@@ -129,7 +129,7 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	ragel6LD := e.Emit(&Node{Platform: &Platform{},
-		Cmds:    []Cmd{{CmdArgs: appendInternStrs(nil, []string{"link"}), Env: nil}},
+		Cmds:    []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
 		Env:     nil,
 		Inputs:  inputChunks{ToVFSSlice([]string{})},
 		KV:      KV{P: pkLD},
@@ -161,8 +161,8 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 
 	got := e.nodes[r6Ref]
 
-	if got.Cmds[0].CmdArgs[1].String() != "-CG2" {
-		t.Errorf("cmd_args[1] = %q, want -CG2 (x86_64 host = release = optimized)", got.Cmds[0].CmdArgs[1].String())
+	if got.Cmds[0].CmdArgs.flat()[1].String() != "-CG2" {
+		t.Errorf("cmd_args[1] = %q, want -CG2 (x86_64 host = release = optimized)", got.Cmds[0].CmdArgs.flat()[1].String())
 	}
 
 	if !nodeHasHostTag(nodeTags(got)) {
@@ -178,7 +178,7 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	ragel6LD := e.Emit(&Node{Platform: &Platform{},
-		Cmds:    []Cmd{{CmdArgs: appendInternStrs(nil, []string{"link"}), Env: nil}},
+		Cmds:    []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
 		Env:     nil,
 		Inputs:  inputChunks{ToVFSSlice([]string{})},
 		KV:      KV{P: pkLD},

@@ -63,7 +63,7 @@ func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 	e := NewBufferedEmitter()
 
 	objRefs := []NodeRef{e.Emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"cc"}), Env: nil}},
+		Cmds:             []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
 		Env:              nil,
 		Inputs:           inputChunks{ToVFSSlice([]string{})},
 		KV:               KV{},
@@ -177,7 +177,7 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"cc"}), Env: nil}},
+			Cmds:             []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
 			Env:              nil,
 			Inputs:           inputChunks{ToVFSSlice([]string{})},
 			KV:               KV{},
@@ -201,7 +201,7 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, peerArchiveRefs, testHostP, e)
 	got := e.nodes[arRef]
 
-	cmdArgs := got.Cmds[0].CmdArgs
+	cmdArgs := got.Cmds[0].CmdArgs.flat()
 	wantLen := 9 + 1 + len(objPaths)
 
 	if len(cmdArgs) != wantLen {
@@ -227,7 +227,7 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"cc"}), Env: nil}},
+			Cmds:             []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
 			Env:              nil,
 			Inputs:           inputChunks{ToVFSSlice([]string{})},
 			KV:               KV{},
@@ -264,7 +264,7 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"cc"}), Env: nil}},
+			Cmds:             []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
 			Env:              nil,
 			Inputs:           inputChunks{ToVFSSlice([]string{})},
 			KV:               KV{},
@@ -304,7 +304,7 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.Emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: appendInternStrs(nil, []string{"cc"}), Env: nil}},
+			Cmds:             []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
 			Env:              nil,
 			Inputs:           inputChunks{ToVFSSlice([]string{})},
 			KV:               KV{},
@@ -325,7 +325,7 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, nil, testHostP, e)
 	got := e.nodes[arRef]
 
-	cmdArgs := got.Cmds[0].CmdArgs
+	cmdArgs := got.Cmds[0].CmdArgs.flat()
 	if len(cmdArgs) != 13 {
 		t.Fatalf("cmd_args len = %d, want 13", len(cmdArgs))
 	}

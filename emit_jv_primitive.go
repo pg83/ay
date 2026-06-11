@@ -20,7 +20,7 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs inputChunks, outp
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: cmdArgs,
+				CmdArgs: argChunks{cmdArgs},
 				Env:     env,
 				Cwd:     internStr(cwd),
 			},

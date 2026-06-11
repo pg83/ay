@@ -711,9 +711,10 @@ func (ex *executor) runNode(n *Node, srcMount, bldMount string) commandResult {
 	cmdFileCounter := 0
 
 	for _, c := range n.Cmds {
-		args := make([]string, len(c.CmdArgs))
+		flatArgs := c.CmdArgs.flat()
+		args := make([]string, len(flatArgs))
 
-		for i, a := range c.CmdArgs {
+		for i, a := range flatArgs {
 			args[i] = mountString(a.String(), srcMount, bldMount)
 		}
 

@@ -26,18 +26,18 @@ func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: []STR{
+				CmdArgs: argChunks{[]STR{
 					tc.Python3,
 					(rodataScriptVFS).str(),
 					argElf.str(),
 					internStr(toolName),
 					(srcVFS).str(),
 					(asmVFS).str(),
-				},
+				}},
 				Env: pythonEnv,
 			},
 			{
-				CmdArgs: []STR{
+				CmdArgs: argChunks{[]STR{
 					internStr(yasmBinaryPath),
 					argF.str(), argElf64.str(),
 					argD.str(), argUnix.str(),
@@ -51,7 +51,7 @@ func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 					argI.str(), argS.str(),
 					argDashO.str(), (outVFS).str(),
 					(asmVFS).str(),
-				},
+				}},
 				Env: yasmEnv,
 			},
 		},

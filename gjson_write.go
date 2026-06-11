@@ -143,7 +143,7 @@ func appendCmdSlice(buf []byte, cmds []Cmd) []byte {
 		}
 
 		buf = append(buf, `{"cmd_args":`...)
-		buf = appendStrSlice(buf, c.CmdArgs)
+		buf = appendStrChunks(buf, c.CmdArgs)
 
 		if c.Cwd != 0 {
 			buf = append(buf, `,"cwd":`...)
@@ -175,6 +175,26 @@ func appendStringSlice(buf []byte, ss []string) []byte {
 		}
 
 		buf = appendString(buf, s)
+	}
+
+	return append(buf, ']')
+}
+
+// appendStrChunks emits the flattened element sequence of the chunk list —
+// the same flat JSON array appendStrSlice writes for the concatenation.
+func appendStrChunks(buf []byte, chunks argChunks) []byte {
+	buf = append(buf, '[')
+	first := true
+
+	for _, ch := range chunks {
+		for _, a := range ch {
+			if !first {
+				buf = append(buf, ',')
+			}
+
+			first = false
+			buf = appendString(buf, a.String())
+		}
 	}
 
 	return append(buf, ']')

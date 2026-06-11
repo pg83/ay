@@ -276,7 +276,7 @@ func EmitPB(
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: cmdArgs,
+				CmdArgs: argChunks{cmdArgs},
 				Cwd:     internStr(protocCwd),
 				Env:     env,
 			},

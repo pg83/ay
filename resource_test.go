@@ -317,7 +317,7 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 		"--inputs", "$(B)/contrib/python/shellingham/shellingham/posix/ps.py.yjsy.yapyc3",
 		"--keys", "cmVzZnMvZmlsZS9weS9zaGVsbGluZ2hhbS9wb3NpeC9wcy5weS55YXB5YzM=",
 	}
-	gotArgs := tail.Cmds[0].CmdArgs
+	gotArgs := tail.Cmds[0].CmdArgs.flat()
 	if !reflect.DeepEqual(strStrs(gotArgs), wantArgs) {
 		t.Fatalf("tail cmd args mismatch:\n got: %v\nwant: %v", gotArgs, wantArgs)
 	}
