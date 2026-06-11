@@ -402,6 +402,8 @@ func reportPerfStats(ctx *genCtx, parsers *includeParserManager, targetScanner, 
 		fsStats.listdirHits, fsStats.listdirMisses, fsStats.existsHits, fsStats.existsMisses, fsStats.dirsCached)
 	fmt.Fprintf(os.Stderr, "perf: intern strs=%d args=%d envs=%d overflow=%d\n",
 		len(internTable.strs), len(argTable.strs), len(envTable.strs), len(internTable.overflow))
+	fmt.Fprintf(os.Stderr, "perf: windowImports calls=%d rootNotFirst=%d\n",
+		windowImportsCalls, windowImportsRootNotFirst)
 
 	reportScanner := func(label string, scanner *IncludeScanner) {
 		scanStats := scanner.perfStats()
