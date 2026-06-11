@@ -64,17 +64,12 @@ func EmitPB(
 	grpcCppBinary VFS,
 	grpc bool,
 	moduleTag STR,
-	cppOutRoot string,
-	duplicateOutputRootInclude bool,
 	liteHeaders bool,
-	extraProtocFlags []ARG,
 	extraPlugins []resolvedCPPProtoPlugin,
 	transitiveProtoImports []VFS,
-	peerProtoAddIncl []VFS,
-	protoNamespaceTail []VFS,
 	extraDepRefs []NodeRef,
 	producerSourceInputs []VFS,
-	tc moduleToolchain,
+	blocks *pbArgBlocks,
 	emit Emitter,
 ) NodeRef {
 	moduleDir := instance.Path.Rel()
@@ -108,99 +103,16 @@ func EmitPB(
 		}
 	}
 
-	cmdArgs := []STR{
-		tc.Python3,
-		internStr(pbWrapperPath),
-		argOutputs.str(),
-	}
+	outsChunk := make([]STR, 0, len(outputs))
 
 	for _, output := range outputs {
-		cmdArgs = append(cmdArgs, (output).str())
+		outsChunk = append(outsChunk, (output).str())
 	}
 
-	includeRoot := ""
+	cmdArgs := argChunks{blocks.head, outsChunk, blocks.mid, []STR{internStr(protoRelPath)}}
 
-	if cppOutRoot != "" {
-		includeRoot = cppOutRoot
-	}
-
-	cppOutArg := ":$(B)/" + cppOutRoot
-
-	if liteHeaders {
-		cppOutArg = "proto_h=true" + cppOutArg
-	}
-
-	cmdArgs = append(cmdArgs,
-		arg2.str(),
-		(protocBinary).str(),
-		internStr("-I=./"+includeRoot),
-		internStr("-I=$(S)/"+includeRoot),
-		argIB2.str(),
-		argIS3.str(),
-	)
-
-	if cppOutRoot != "" {
-		cmdArgs = append(cmdArgs, internStr("-I=$(S)/"+cppOutRoot))
-
-		if duplicateOutputRootInclude {
-			cmdArgs = append(cmdArgs, internStr("-I=$(S)/"+cppOutRoot))
-		}
-	}
-
-	// Upstream's _CPP_PROTO_CMDLINE_BASE (ymake.core.conf:612) emits
-	// `${pre=-I=:_PROTO__INCLUDE} -I=$ARCADIA_BUILD_ROOT
-	// -I=$PROTOBUF_INCLUDE_PATH` — peers first, then $(B), then protobuf-src.
-	// _PROTO__INCLUDE already contains protobuf-src for LIBRARY modules that
-	// transitively peer contrib/libs/protobuf (its ya.make declares
-	// `ADDINCL GLOBAL FOR proto contrib/libs/protobuf/src`), so the protobuf
-	// -I shows up via the peer loop AS WELL AS via the trailing macro
-	// expansion. PROTO_LIBRARY filters peers to CPP_PROTO-tagged modules
-	// (proto.conf:921), so contrib/libs/protobuf's FOR proto addincl does
-	// NOT enter its peer chain — only PROTO_LIBRARY-internal protos
-	// (which need it via `ADDINCL GLOBAL FOR proto contrib/libs/protobuf/src`
-	// from their own peers).
-	for _, p := range peerProtoAddIncl {
-		cmdArgs = append(cmdArgs, internStr("-I="+p.String()))
-	}
-
-	// Non-GLOBAL PROTO_NAMESPACE contributions trail the chain, and only in
-	// non-PROTO_LIBRARY protoc cmdlines — a PROTO_LIBRARY's own chain
-	// excludes them (reference graphs: yt_proto/yt/client lacks the trailing
-	// -I=$(S)/yt that yt/yt/library/quantile_digest carries).
-	if moduleTag == 0 {
-		for _, p := range protoNamespaceTail {
-			cmdArgs = append(cmdArgs, internStr("-I="+p.String()))
-		}
-	}
-
-	cmdArgs = append(cmdArgs,
-		argIB2.str(),
-		argISContribLibsProtobufSrc.str(),
-		internStr("--cpp_out="+cppOutArg),
-	)
-	cmdArgs = appendArgStr(cmdArgs, extraProtocFlags)
-	cmdArgs = append(cmdArgs,
-		internStr("--cpp_styleguide_out=:$(B)/"+cppOutRoot),
-		internStr("--plugin=protoc-gen-cpp_styleguide="+cppStyleguideBinary.String()),
-		internStr(protoRelPath),
-	)
-
-	if grpc {
-		cmdArgs = append(cmdArgs,
-			internStr("--plugin=protoc-gen-grpc_cpp="+grpcCppBinary.String()),
-			internStr("--grpc_cpp_out=$(B)/"+cppOutRoot),
-		)
-	}
-
-	for _, plugin := range extraPlugins {
-		cmdArgs = append(cmdArgs,
-			internStr("--plugin=protoc-gen-"+plugin.Spec.Name+"="+plugin.Binary.String()),
-			internStr("--"+plugin.Spec.Name+"_out=$(B)/"+cppOutRoot),
-		)
-
-		if plugin.Spec.ExtraOutFlag != "" {
-			cmdArgs = append(cmdArgs, internStr("--"+plugin.Spec.Name+"_opt=:"+plugin.Spec.ExtraOutFlag))
-		}
+	if len(blocks.tail) > 0 {
+		cmdArgs = append(cmdArgs, blocks.tail)
 	}
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -276,7 +188,7 @@ func EmitPB(
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: argChunks{cmdArgs},
+				CmdArgs: cmdArgs,
 				Cwd:     internStr(protocCwd),
 				Env:     env,
 			},
@@ -414,4 +326,121 @@ func protoResourceHash(items []string, modulePath, moduleTag string) string {
 
 	sum := md5.Sum([]byte(strings.Join(list, ",") + moduleTag))
 	return strings.ToLower(enchex.EncodeToString(sum[:]))[:26]
+}
+
+// pbArgBlocks are the module-stable spans of a protoc (PB) command line —
+// everything that does not depend on the individual .proto source:
+//
+//	head: [python3, cpp_proto_wrapper.py, --outputs]
+//	mid:  [--, protoc, the -I set (own namespace, _PROTO__INCLUDE chain,
+//	      namespace tail, runtime src), --cpp_out, extra protoc flags,
+//	      the styleguide plugin]
+//	tail: the grpc / extra plugin blocks (they follow the source token)
+//
+// Built once per module proto context (newPBModuleEmission) and referenced as
+// chunks by every PB node of that context.
+type pbArgBlocks struct {
+	head []STR
+	mid  []STR
+	tail []STR
+}
+
+func composePBArgBlocks(tc moduleToolchain, protocBinary, cppStyleguideBinary, grpcCppBinary VFS,
+	grpc bool, moduleTag STR, cppOutRoot string, duplicateOutputRootInclude, liteHeaders bool,
+	extraProtocFlags []ARG, extraPlugins []resolvedCPPProtoPlugin,
+	peerProtoAddIncl []VFS, protoNamespaceTail []VFS) *pbArgBlocks {
+	head := []STR{
+		tc.Python3,
+		internStr(pbWrapperPath),
+		argOutputs.str(),
+	}
+
+	includeRoot := ""
+
+	if cppOutRoot != "" {
+		includeRoot = cppOutRoot
+	}
+
+	cppOutArg := ":$(B)/" + cppOutRoot
+
+	if liteHeaders {
+		cppOutArg = "proto_h=true" + cppOutArg
+	}
+
+	mid := make([]STR, 0, 12+len(peerProtoAddIncl)+len(protoNamespaceTail)+len(extraProtocFlags))
+	mid = append(mid,
+		arg2.str(),
+		(protocBinary).str(),
+		internStr("-I=./"+includeRoot),
+		internStr("-I=$(S)/"+includeRoot),
+		argIB2.str(),
+		argIS3.str(),
+	)
+
+	if cppOutRoot != "" {
+		mid = append(mid, internStr("-I=$(S)/"+cppOutRoot))
+
+		if duplicateOutputRootInclude {
+			mid = append(mid, internStr("-I=$(S)/"+cppOutRoot))
+		}
+	}
+
+	// Upstream's _CPP_PROTO_CMDLINE_BASE (ymake.core.conf:612) emits
+	// `${pre=-I=:_PROTO__INCLUDE} -I=$ARCADIA_BUILD_ROOT
+	// -I=$PROTOBUF_INCLUDE_PATH` — peers first, then $(B), then protobuf-src.
+	// _PROTO__INCLUDE already contains protobuf-src for LIBRARY modules that
+	// transitively peer contrib/libs/protobuf (its ya.make declares
+	// `ADDINCL GLOBAL FOR proto contrib/libs/protobuf/src`), so the protobuf
+	// -I shows up via the peer loop AS WELL AS via the trailing macro
+	// expansion. PROTO_LIBRARY filters peers to CPP_PROTO-tagged modules
+	// (proto.conf:921), so contrib/libs/protobuf's FOR proto addincl does
+	// NOT enter its peer chain — only PROTO_LIBRARY-internal protos
+	// (which need it via `ADDINCL GLOBAL FOR proto contrib/libs/protobuf/src`
+	// from their own peers).
+	for _, p := range peerProtoAddIncl {
+		mid = append(mid, internStr("-I="+p.String()))
+	}
+
+	// Non-GLOBAL PROTO_NAMESPACE contributions trail the chain, and only in
+	// non-PROTO_LIBRARY protoc cmdlines — a PROTO_LIBRARY's own chain
+	// excludes them (reference graphs: yt_proto/yt/client lacks the trailing
+	// -I=$(S)/yt that yt/yt/library/quantile_digest carries).
+	if moduleTag == 0 {
+		for _, p := range protoNamespaceTail {
+			mid = append(mid, internStr("-I="+p.String()))
+		}
+	}
+
+	mid = append(mid,
+		argIB2.str(),
+		argISContribLibsProtobufSrc.str(),
+		internStr("--cpp_out="+cppOutArg),
+	)
+	mid = appendArgStr(mid, extraProtocFlags)
+	mid = append(mid,
+		internStr("--cpp_styleguide_out=:$(B)/"+cppOutRoot),
+		internStr("--plugin=protoc-gen-cpp_styleguide="+cppStyleguideBinary.String()),
+	)
+
+	var tail []STR
+
+	if grpc {
+		tail = append(tail,
+			internStr("--plugin=protoc-gen-grpc_cpp="+grpcCppBinary.String()),
+			internStr("--grpc_cpp_out=$(B)/"+cppOutRoot),
+		)
+	}
+
+	for _, plugin := range extraPlugins {
+		tail = append(tail,
+			internStr("--plugin=protoc-gen-"+plugin.Spec.Name+"="+plugin.Binary.String()),
+			internStr("--"+plugin.Spec.Name+"_out=$(B)/"+cppOutRoot),
+		)
+
+		if plugin.Spec.ExtraOutFlag != "" {
+			tail = append(tail, internStr("--"+plugin.Spec.Name+"_opt=:"+plugin.Spec.ExtraOutFlag))
+		}
+	}
+
+	return &pbArgBlocks{head: head, mid: mid, tail: tail}
 }

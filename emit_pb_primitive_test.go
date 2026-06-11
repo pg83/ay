@@ -6,6 +6,12 @@ func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 	e := NewBufferedEmitter()
 	inst := targetInstance("pkg/proto")
 
+	blocks := composePBArgBlocks(testToolchain(),
+		Intern("$(B)/contrib/tools/protoc/protoc"),
+		Intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
+		Intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
+		false, 0, "", false, false,
+		internArgs([]string{"--fatal_warnings"}), nil, nil, nil)
 	EmitPB(
 		inst,
 		"pkg/proto/test.proto",
@@ -18,17 +24,12 @@ func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 		Intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
 		false,
 		0,
-		"",
 		false,
-		false,
-		internArgs([]string{"--fatal_warnings"}),
 		nil,
 		nil,
 		nil,
 		nil,
-		nil,
-		nil,
-		testToolchain(),
+		blocks,
 		e,
 	)
 
@@ -45,6 +46,12 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 	e := NewBufferedEmitter()
 	inst := targetInstance("pkg/proto")
 
+	blocks := composePBArgBlocks(testToolchain(),
+		Intern("$(B)/contrib/tools/protoc/protoc"),
+		Intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
+		Intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
+		false, 0, "", false, true,
+		nil, nil, nil, nil)
 	EmitPB(
 		inst,
 		"pkg/proto/test.proto",
@@ -57,17 +64,12 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 		Intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
 		false,
 		0,
-		"",
-		false,
 		true,
 		nil,
 		nil,
 		nil,
 		nil,
-		nil,
-		nil,
-		nil,
-		testToolchain(),
+		blocks,
 		e,
 	)
 

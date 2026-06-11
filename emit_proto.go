@@ -173,29 +173,57 @@ type protoPBEmission struct {
 	relPath       string
 }
 
-func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, cfg protoPBConfig, peerProtoAddIncl []VFS, protoNamespaceTail []VFS) protoPBEmission {
-	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
-	cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
-	liteHeaders := !protoTransitiveHeadersEnabled(d)
+// pbModuleEmission is the per-module proto emission context: the resolved
+// tool refs/binaries and the stable protoc arg blocks. Built ONCE per module
+// proto context — emitCPPProtoSrcs before its source loop,
+// emitLibraryProtoSource for its single source — and shared by every PB node
+// it emits.
+type pbModuleEmission struct {
+	protocLDRef        NodeRef
+	cppStyleguideLDRef NodeRef
+	grpcCppLDRef       NodeRef
 
-	var grpcCppLDRef NodeRef
-	grpcCppBinary := pbGrpcCppVFS
+	protocBinary        VFS
+	cppStyleguideBinary VFS
+	grpcCppBinary       VFS
+
+	liteHeaders  bool
+	extraPlugins []resolvedCPPProtoPlugin
+
+	blocks *pbArgBlocks
+}
+
+func newPBModuleEmission(ctx *genCtx, d *moduleData, cfg protoPBConfig, peerProtoAddIncl []VFS, protoNamespaceTail []VFS) *pbModuleEmission {
+	pe := &pbModuleEmission{
+		liteHeaders:   !protoTransitiveHeadersEnabled(d),
+		grpcCppBinary: pbGrpcCppVFS,
+	}
+	pe.protocLDRef, pe.protocBinary = ctx.tool(argContribToolsProtoc)
+	pe.cppStyleguideLDRef, pe.cppStyleguideBinary = ctx.tool(argContribToolsProtocPluginsCppStyleguide)
 
 	if cfg.grpc {
-		grpcCppLDRef, grpcCppBinary = ctx.tool(argContribToolsProtocPluginsGrpcCpp)
+		pe.grpcCppLDRef, pe.grpcCppBinary = ctx.tool(argContribToolsProtocPluginsGrpcCpp)
 	}
 
-	extraPlugins := make([]resolvedCPPProtoPlugin, 0, len(d.cppProtoPlugins))
+	pe.extraPlugins = make([]resolvedCPPProtoPlugin, 0, len(d.cppProtoPlugins))
 
 	for _, spec := range d.cppProtoPlugins {
 		ldRef, binary := ctx.tool(internArg(spec.ToolPath))
-		extraPlugins = append(extraPlugins, resolvedCPPProtoPlugin{
+		pe.extraPlugins = append(pe.extraPlugins, resolvedCPPProtoPlugin{
 			Spec:   spec,
 			LDRef:  ldRef,
 			Binary: binary,
 		})
 	}
 
+	pe.blocks = composePBArgBlocks(d.tc, pe.protocBinary, pe.cppStyleguideBinary, pe.grpcCppBinary,
+		cfg.grpc, cfg.moduleTag, cfg.cppOutRoot, cfg.duplicateOutputRootInclude, pe.liteHeaders,
+		d.protocFlags, pe.extraPlugins, peerProtoAddIncl, protoNamespaceTail)
+
+	return pe
+}
+
+func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel string, cfg protoPBConfig, pe *pbModuleEmission, peerProtoAddIncl []VFS) protoPBEmission {
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcRel)
 	// Search transitive .proto imports through the same -I prefixes protoc
 	// receives: the own PROTO_NAMESPACE (cppOutRoot) plus every peer-contributed
@@ -233,18 +261,15 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 	}
 
 	pbRef := EmitPB(
-		instance, protoRelPath, protoSrcOverride, cppStyleguideLDRef, protocLDRef,
-		grpcCppLDRef, cppStyleguideBinary, protocBinary, grpcCppBinary,
-		cfg.grpc, cfg.moduleTag, cfg.cppOutRoot, cfg.duplicateOutputRootInclude,
-		liteHeaders,
-		d.protocFlags,
-		extraPlugins,
+		instance, protoRelPath, protoSrcOverride, pe.cppStyleguideLDRef, pe.protocLDRef,
+		pe.grpcCppLDRef, pe.cppStyleguideBinary, pe.protocBinary, pe.grpcCppBinary,
+		cfg.grpc, cfg.moduleTag,
+		pe.liteHeaders,
+		pe.extraPlugins,
 		transitiveImports,
-		peerProtoAddIncl,
-		protoNamespaceTail,
 		extraProtoDeps,
 		protoProducerSourceInputs,
-		d.tc,
+		pe.blocks,
 		ctx.emit,
 	)
 
@@ -294,13 +319,13 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		// protoc induces the protobuf runtime headers; for a grpc service the
 		// grpc_cpp plugin induces the grpcpp service headers too. Both via
 		// GeneratorRefs (type-split by output kind) instead of hand-woven lists.
-		pbGenRefs := []NodeRef{protocLDRef, cppStyleguideLDRef}
+		pbGenRefs := []NodeRef{pe.protocLDRef, pe.cppStyleguideLDRef}
 
 		if cfg.grpc {
-			pbGenRefs = append(pbGenRefs, grpcCppLDRef)
+			pbGenRefs = append(pbGenRefs, pe.grpcCppLDRef)
 		}
 
-		for _, p := range extraPlugins {
+		for _, p := range pe.extraPlugins {
 			if p.LDRef != NodeRef(0) {
 				pbGenRefs = append(pbGenRefs, p.LDRef)
 			}
@@ -328,7 +353,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 			}
 		}
 
-		if liteHeaders {
+		if pe.liteHeaders {
 			depsParsed := make([]includeDirective, 0, 1+len(directImports))
 			depsParsed = append(depsParsed, includeDirective{kind: includeQuoted, target: internStr(pbH.Rel())})
 			depsParsed = append(depsParsed, directImports...)
@@ -338,7 +363,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		pbCCParsed := make([]includeDirective, 0, 3+len(directImports))
 		pbCCParsed = append(pbCCParsed, includeDirective{kind: includeQuoted, target: internStr(pbH.Rel())})
 
-		if liteHeaders {
+		if pe.liteHeaders {
 			pbCCParsed = append(pbCCParsed, directImports...)
 		}
 
@@ -360,8 +385,8 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		}
 
 		if cfg.grpc {
-			registerBoundGeneratedParsedOutput(ctx, instance, pkPB, grpcPbCC, grpcCCParsed, pbRef, []NodeRef{protocLDRef, grpcCppLDRef})
-			registerBoundGeneratedParsedOutput(ctx, instance, pkPB, grpcPbH, grpcHParsed, pbRef, []NodeRef{grpcCppLDRef})
+			registerBoundGeneratedParsedOutput(ctx, instance, pkPB, grpcPbCC, grpcCCParsed, pbRef, []NodeRef{pe.protocLDRef, pe.grpcCppLDRef})
+			registerBoundGeneratedParsedOutput(ctx, instance, pkPB, grpcPbH, grpcHParsed, pbRef, []NodeRef{pe.grpcCppLDRef})
 		}
 	}
 
@@ -432,8 +457,10 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 	cppInstance := instance
 	cppInstance.Path = protoCPPModulePath(instance, d)
 
+	pe := newPBModuleEmission(ctx, d, cfg, peerContribs.protoAddIncl, peerContribs.protoNamespaceTail)
+
 	for _, src := range protoSrcs {
-		pb := emitProtoPB(ctx, instance, d, src, cfg, peerContribs.protoAddIncl, peerContribs.protoNamespaceTail)
+		pb := emitProtoPB(ctx, instance, d, src, cfg, pe, peerContribs.protoAddIncl)
 
 		ccSrcRel := strings.TrimPrefix(pb.pbCC.Rel(), cppInstance.Path.Rel()+"/")
 		appendCodegenOutput(pb.pbRef, pb.pbCC, ccSrcRel)
