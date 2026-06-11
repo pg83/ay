@@ -305,5 +305,6 @@ func compileFlagBundleFor(p *Platform) CompileFlagBundle {
 	}
 
 	throwFmt("compileFlagBundleFor: unsupported platform ISA %q", p.ISA)
+
 	return CompileFlagBundle{}
 }

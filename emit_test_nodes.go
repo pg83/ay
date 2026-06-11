@@ -40,6 +40,7 @@ func emitTestRunNodes(ctxEmit Emitter, runEmit Emitter, p *Platform, info TestSu
 	clangFormat := buildClangFormatNode(p, info)
 	clangFormat.DepRefs = []NodeRef{ctxRef}
 	clangFormatRef := runEmit.emit(clangFormat)
+
 	return []NodeRef{unittestRef, clangFormatRef}
 }
 

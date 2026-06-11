@@ -138,5 +138,6 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 	}
 
 	_ = d.runPrograms
+
 	return
 }

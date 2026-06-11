@@ -67,6 +67,7 @@ func emitARGlobalNamedTagged(
 func archiveNameWithPrefix(moduleDir, prefix string) string {
 	if moduleDir == "util" {
 		base := "libyutil.a"
+
 		return prefix + base[len("lib"):]
 	}
 
@@ -93,6 +94,7 @@ func archiveName(moduleDir string) string {
 
 func globalArchiveNameWithPrefixOrName(moduleDir, prefix, name string) string {
 	base := archiveNameWithPrefixOrName(moduleDir, prefix, name)
+
 	return base[:len(base)-2] + ".global.a"
 }
 

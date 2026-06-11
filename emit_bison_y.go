@@ -142,15 +142,18 @@ func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	}
 
 	ccRef, ccOut, _ := emitCC(instance, generatedRel, generatedVFS, ccIn, ctx.host, ctx.emit)
+
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }
 
 func bisonTool(ctx *GenCtx, instance ModuleInstance) (NodeRef, string) {
 	ref, bin := ctx.tool(argContribToolsBison)
+
 	return ref, bin.string()
 }
 
 func m4Tool(ctx *GenCtx, instance ModuleInstance) (NodeRef, STR) {
 	ref, bin := ctx.tool(argContribToolsM4)
+
 	return ref, bin.str()
 }

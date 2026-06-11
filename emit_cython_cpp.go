@@ -251,6 +251,7 @@ func appendCythonCCAddIncl(addIncl []VFS, numpyBeforeInclude bool) []VFS {
 				out = append(out, addIncl[:i]...)
 				out = append(out, cythonNumpyAddIncl...)
 				out = append(out, addIncl[i:]...)
+
 				return out
 			}
 		}

@@ -384,6 +384,7 @@ func internTok(s string) TOK {
 	}
 
 	throwFmt("internTok: unknown macro name %q (closed TOK set)", s)
+
 	return tokInvalid
 }
 

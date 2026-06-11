@@ -31,6 +31,7 @@ func fetchScriptInputs(scripts ScriptDeps) []VFS {
 	out := []VFS{buildMappingConfJson}
 	out = append(out, scripts[buildScriptsFetchFromSandboxPy]...)
 	out = append(out, scripts[buildScriptsFetchFromMdsPy]...)
+
 	return out
 }
 
@@ -149,6 +150,7 @@ func fetchResource(sourceRoot, uri, out string) {
 	throw(os.MkdirAll(out, 0o755))
 
 	tmp := throw2(os.MkdirTemp("", "ay-fetch-*"))
+
 	defer os.RemoveAll(tmp)
 
 	archivePath := filepath.Join(tmp, "resource")
@@ -240,6 +242,7 @@ func fetchURL(raw, out string) {
 	}
 
 	resp := throw2(http.Get(raw))
+
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -247,6 +250,7 @@ func fetchURL(raw, out string) {
 	}
 
 	f := throw2(os.Create(out))
+
 	defer f.Close()
 
 	throw2(io.Copy(f, resp.Body))
@@ -298,6 +302,7 @@ func copyFile(src, dst string) error {
 
 	if err != nil {
 		_ = out.Close()
+
 		return err
 	}
 

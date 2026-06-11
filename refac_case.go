@@ -83,6 +83,7 @@ func refacCase(args []string) int {
 			fmt.Fprintln(os.Stderr, "refac case: unfixable build errors remain:")
 			out, _ := exec.Command("go", "build", "-gcflags=-e", "./...").CombinedOutput()
 			os.Stderr.Write(out)
+
 			return 1
 		}
 	}

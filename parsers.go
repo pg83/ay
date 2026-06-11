@@ -191,6 +191,7 @@ func (r *IncludeDirectiveParserRegistry) parserFor(rel string) IncludeDirectiveP
 // .cpp.in dispatch correctly.
 func (r IncludeDirectiveParserRegistry) hasRegisteredParser(rel string) bool {
 	_, ok := r.byExt[directiveParserExt(rel)]
+
 	return ok
 }
 
@@ -263,6 +264,7 @@ func (CythonIncludeDirectiveParser) parse(rel string, data []byte) ParsedInclude
 
 		if m := cythonIncludeRe.FindStringSubmatch(s); len(m) == 2 {
 			add(IncludeDirective{kind: includeQuoted, target: internStr(m[1])})
+
 			return
 		}
 
@@ -377,6 +379,7 @@ func (ProtoIncludeDirectiveParser) parse(_ string, data []byte) ParsedIncludeSet
 	// h+cpp applies to both consumer kinds; the two buckets share one buffer.
 	set[parsedIncludesHeader] = hcpp
 	set[parsedIncludesCpp] = hcpp
+
 	return set
 }
 
@@ -397,9 +400,11 @@ func (RagelIncludeDirectiveParser) parse(rel string, data []byte) ParsedIncludeS
 		switch {
 		case strings.HasPrefix(trimmed, "%%{"):
 			inSpecification = true
+
 			return
 		case strings.HasPrefix(trimmed, "}%%"):
 			inSpecification = false
+
 			return
 		}
 
@@ -806,6 +811,7 @@ func parseProtoImportLine(line []byte) (string, IncludeKind, bool) {
 	}
 
 	target, kind, ok := parseDelimitedIncludeTarget(rest)
+
 	return target, kind, ok
 }
 
@@ -828,6 +834,7 @@ func parseRagelNativeIncludeLine(line string) (string, bool) {
 	}
 
 	target, _, ok := parseDelimitedIncludeTarget(rest[firstQuote:])
+
 	return target, ok
 }
 
@@ -970,6 +977,7 @@ func stripComments(data []byte) []byte {
 			if next, ok := scanIncludeDirectiveTarget(data, i); ok {
 				i = next
 				atLineStart = false
+
 				continue
 			}
 		}
@@ -1202,6 +1210,7 @@ target:
 	for j < n {
 		if data[j] == '\\' && close == '"' && j+1 < n && data[j+1] != '\n' {
 			j += 2
+
 			continue
 		}
 

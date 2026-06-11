@@ -348,6 +348,7 @@ func rewriteDeps(raw []string, closure, fetch map[string]bool, newUID map[string
 	}
 
 	sort.Strings(out)
+
 	return out
 }
 
@@ -374,6 +375,7 @@ func reuidClosure(
 		}
 
 		sort.Strings(ch)
+
 		return ch
 	}
 
@@ -388,6 +390,7 @@ func reuidClosure(
 			if closure[d] {
 				if nu, ok := newUID[d]; ok {
 					tokens = append(tokens, nu)
+
 					continue
 				}
 			}

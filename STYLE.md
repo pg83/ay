@@ -97,15 +97,18 @@ func nonEmpty() int {
 
 ### Logical grouping
 
-Consecutive one-liners (`Throw*`, `defer`, `:=`, `=`) that form a single logical operation stay together without blank lines. Between separate logical operations — add a blank line.
+Consecutive one-liners (`throw*`, `:=`, `=`) that form a single logical operation stay together without blank lines. Between separate logical operations — add a blank line.
 
-Example — opening a file and deferring close is one operation:
+Flow statements — `return`, `defer`, `continue`, `break` — are set off like
+control blocks: a blank line on each side, except at the start or end of
+their block (enforced by `refac lint` blank-around-blocks).
 
 ```go
-f := Throw2(os.Open(path))
+f := throw2(os.Open(path))
+
 defer f.Close()
 
-socksAddrs := parseProxyFile(f)  // next operation
+socksAddrs := parseProxyFile(f)
 ```
 
 Example — setting up a resource is one operation, using it is another:

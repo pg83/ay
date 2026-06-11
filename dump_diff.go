@@ -137,6 +137,7 @@ func scanDiffIndex(path string) (map[string]bool, map[string]map[string]bool) {
 			outToUIDs[out][su] = true
 		}
 	})
+
 	return selfUIDs, outToUIDs
 }
 
@@ -187,6 +188,7 @@ func scanOutputKind(path string) map[string]string {
 			out[o] = k
 		}
 	})
+
 	return out
 }
 
@@ -564,6 +566,7 @@ func diffRoots(leftPath, rightPath string, bw *bufio.Writer) {
 		for _, d := range uidToDeps[uid] {
 			if len(uidToDivergentOuts[d]) > 0 {
 				leaf = false
+
 				break
 			}
 		}
@@ -723,10 +726,12 @@ func findNodesByOutput(path, want string) []map[string]any {
 		for _, o := range toStrings(n["outputs"]) {
 			if normPath(o) == want {
 				found = append(found, n)
+
 				return
 			}
 		}
 	})
+
 	return found
 }
 
@@ -899,6 +904,7 @@ func findDumpDiffOutputSelfMatch(exact, axis, any map[string]string, output stri
 func fnvHash(b []byte) uint64 {
 	h := fnv.New64a()
 	throw2(h.Write(b))
+
 	return h.Sum64()
 }
 
@@ -906,6 +912,7 @@ func outputTopDir(p string) string {
 	for _, pre := range []string{"$(B)/", "$(S)/"} {
 		if strings.HasPrefix(p, pre) {
 			p = p[len(pre):]
+
 			break
 		}
 	}
@@ -985,6 +992,7 @@ func setMinus(a, b map[string]bool) []string {
 	}
 
 	sort.Strings(out)
+
 	return out
 }
 
@@ -998,6 +1006,7 @@ func keysMinus(a, b map[string]map[string]bool) []string {
 	}
 
 	sort.Strings(out)
+
 	return out
 }
 
@@ -1023,5 +1032,6 @@ func joinSet(m map[string]bool) string {
 	}
 
 	sort.Strings(keys)
+
 	return "[" + strings.Join(keys, ",") + "]"
 }

@@ -52,7 +52,9 @@ type MacroAuditState struct {
 
 func enableMacroAudit() {
 	macroAudit.mu.Lock()
+
 	defer macroAudit.mu.Unlock()
+
 	macroAudit.enabled = true
 }
 
@@ -67,7 +69,9 @@ func recordIgnoredMacro(name string, _ []string) {
 	}
 
 	macroAudit.mu.Lock()
+
 	defer macroAudit.mu.Unlock()
+
 	macroAudit.ignored[name]++
 }
 
@@ -99,7 +103,9 @@ func recordHandledMacro(name string, args []string) {
 	}
 
 	macroAudit.mu.Lock()
+
 	defer macroAudit.mu.Unlock()
+
 	recordServiceArgsLocked(name, args)
 }
 
@@ -170,6 +176,7 @@ func looksLikeServiceWord(s string) bool {
 // --dump-ignored-macros was passed.
 func dumpMacroAudit(w io.Writer) {
 	macroAudit.mu.Lock()
+
 	defer macroAudit.mu.Unlock()
 
 	if !macroAudit.enabled {
@@ -228,6 +235,7 @@ func dumpMacroAudit(w io.Writer) {
 
 	if len(macroAudit.unknown) == 0 {
 		fmt.Fprintln(w, "  (none)")
+
 		return
 	}
 

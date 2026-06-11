@@ -179,6 +179,7 @@ func (h *MergeHeap) pop() any {
 	n := len(old)
 	it := old[n-1]
 	*h = old[:n-1]
+
 	return it
 }
 
@@ -206,6 +207,7 @@ func mergeChunks(chunks []string, out io.Writer) {
 
 		if line == "" && err == io.EOF {
 			throw(f.Close())
+
 			continue
 		}
 

@@ -13,6 +13,7 @@ import (
 func cmdProbe(args []string) int {
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "usage: ay probe <mapinstr|callsite> [files...]")
+
 		return 2
 	}
 
@@ -23,6 +24,7 @@ func cmdProbe(args []string) int {
 		return probeCallSite(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "probe: unknown subcommand %q\n", args[0])
+
 		return 2
 	}
 }

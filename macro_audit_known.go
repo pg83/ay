@@ -33,6 +33,7 @@ func knownServiceTokens() map[string]struct{} {
 	knownServiceTokensOnce.Do(func() {
 		knownServiceTokensVal = mineServiceTokensFromSources()
 	})
+
 	return knownServiceTokensVal
 }
 

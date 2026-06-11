@@ -399,6 +399,7 @@ func (ex *Executor) onNode(n *Node, uids *UidVec) {
 
 	if _, ok := ex.byUID[n.UID]; ok {
 		ex.mu.Unlock()
+
 		return
 	}
 
@@ -499,6 +500,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 	}
 
 	ex.pending.Add(1)
+
 	defer ex.done.Add(1)
 
 	if ex.keepGoing {
@@ -533,7 +535,9 @@ func (ex *Executor) execute(f *NodeFuture) {
 	// deterministic and published atomically (CAS hard-link, uid temp+rename), so even
 	// a concurrent rebuild is safe; the lock just avoids the wasted duplicate work.
 	dir := throw2(os.Open(tmp))
+
 	defer dir.Close()
+
 	throw(syscall.Flock(int(dir.Fd()), syscall.LOCK_EX))
 
 	// Another process may have finished this node while we waited for the lock.
@@ -542,6 +546,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 	}
 
 	ex.removeContents(tmp) // clear any stale workspace left by a crashed prior run
+
 	defer ex.discard(tmp)
 
 	// srcMount/bldMount are what $(S)/$(B) resolve to for this node. Without
@@ -631,6 +636,7 @@ func applyCmdPrefixes(args []string, rules []CmdPrefix) []string {
 		for _, r := range rules {
 			if strings.HasSuffix(a, r.suffix) {
 				out = append(out, r.prefix...)
+
 				break
 			}
 		}
@@ -662,6 +668,7 @@ func packCommandFiles(args []string, buildRoot string, counter *int) []string {
 		if args[i] == cmdFileStartMarker {
 			i++ // skip the start marker
 			out = append(out, consumeCommandFile(args, &i, buildRoot, counter))
+
 			continue
 		}
 
@@ -684,6 +691,7 @@ func consumeCommandFile(args []string, pos *int, buildRoot string, counter *int)
 			b.WriteString(consumeCommandFile(args, pos, buildRoot, counter))
 		case cmdFileEndMarker:
 			throw(os.WriteFile(path, []byte(b.String()), 0o644))
+
 			return "@" + path
 		default:
 			b.WriteString(args[*pos])
@@ -693,6 +701,7 @@ func consumeCommandFile(args []string, pos *int, buildRoot string, counter *int)
 	}
 
 	throw(os.WriteFile(path, []byte(b.String()), 0o644))
+
 	return "@" + path
 }
 
@@ -751,6 +760,7 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 			throw(os.MkdirAll(filepath.Dir(path), 0o755))
 
 			f := throw2(os.Create(path))
+
 			defer f.Close()
 
 			stdoutW = f
@@ -1002,6 +1012,7 @@ func casHash(src string) string {
 	h := sha256.New()
 
 	f := throw2(os.Open(src))
+
 	defer f.Close()
 
 	throw2(io.Copy(h, f))
@@ -1136,6 +1147,7 @@ func parseKV(into map[string]string, kv string) {
 
 	if idx < 0 {
 		into[kv] = "yes"
+
 		return
 	}
 

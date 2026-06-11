@@ -12,6 +12,7 @@ import (
 // when available so the common case is a single exact-size read.
 func readFileInto(path string, buf []byte) []byte {
 	f := Throw2(os.Open(path))
+
 	defer f.Close()
 
 	buf = buf[:0]

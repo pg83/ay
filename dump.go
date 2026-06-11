@@ -66,6 +66,7 @@ var dumpContentFields = []string{
 func cmdDump(args []string) int {
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "usage: ay dump <normalize|sort|diff|grep> [flags]")
+
 		return 2
 	}
 
@@ -80,6 +81,7 @@ func cmdDump(args []string) int {
 		return cmdDumpGrep(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown dump subcommand: %s\n", args[0])
+
 		return 2
 	}
 }
@@ -200,6 +202,7 @@ func orVal(v, def any) any {
 func nodeProgramKind(node map[string]any) string {
 	kv, _ := node["kv"].(map[string]any)
 	p, _ := kv["p"].(string)
+
 	return p
 }
 
@@ -276,6 +279,7 @@ func arLDInputKept(s, kind string, cmdBases map[string]struct{}) bool {
 	}
 
 	_, ok := cmdBases[b]
+
 	return ok
 }
 
@@ -301,6 +305,7 @@ func filterARLDInputs(in []string, kind string, cmdBases map[string]struct{}) []
 
 func getString(node map[string]any, key string) string {
 	s, _ := node[key].(string)
+
 	return s
 }
 
@@ -434,6 +439,7 @@ func streamJSONL(path string, fn func(map[string]any)) {
 func nodeKVP(n map[string]any) string {
 	kv, _ := n["kv"].(map[string]any)
 	p, _ := kv["p"].(string)
+
 	return p
 }
 

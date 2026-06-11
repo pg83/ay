@@ -121,10 +121,12 @@ func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser Inclu
 
 		if cached, ok := pm.cache.ambiguous[ambKey]; ok {
 			pm.cache.parsedHits++
+
 			return cached
 		}
 	} else if cached, ok := pm.cache.parsed.get(key); ok {
 		pm.cache.parsedHits++
+
 		return cached
 	}
 

@@ -617,10 +617,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if ctx.walking[instance] {
 		ctx.cyclesTolerated++
 		fmt.Fprintf(os.Stderr, "gen: PEERDIR cycle tolerated at %s\n", instance.Path.rel())
+
 		return &ModuleEmitResult{}
 	}
 
 	ctx.walking[instance] = true
+
 	defer delete(ctx.walking, instance)
 
 	yamakePath := filepath.Join(ctx.sourceRoot, instance.Path.rel(), "ya.make")
@@ -687,6 +689,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		for _, src := range d.srcs {
 			if strings.HasSuffix(src, ".proto") {
 				hasProtoSrc = true
+
 				break
 			}
 		}
@@ -791,6 +794,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		for _, src := range d.srcs {
 			if strings.HasSuffix(src, ".fbs") {
 				d.peerdirs = append(d.peerdirs, "contrib/libs/flatbuffers")
+
 				break
 			}
 		}
@@ -2326,6 +2330,7 @@ func moveArchivePathsAfter(refs []NodeRef, paths []VFS, anchor VFS, moved []VFS)
 		if deduper.has(path) {
 			movedRefs[path] = refs[i]
 			movedPaths[path] = path
+
 			continue
 		}
 
@@ -2366,6 +2371,7 @@ func movePathsAfter(paths []VFS, anchor VFS, moved []VFS) []VFS {
 	for _, path := range paths {
 		if deduper.has(path) {
 			movedPaths[path] = path
+
 			continue
 		}
 
@@ -2877,6 +2883,7 @@ func reorderLDMembers(refs []NodeRef, paths []VFS) ([]NodeRef, []VFS) {
 
 		if strings.Contains(path.rel(), "/_/_/") {
 			legacy = append(legacy, m)
+
 			continue
 		}
 
@@ -2970,6 +2977,7 @@ func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGener
 
 func (ctx *GenCtx) tool(modulePath ARG) (NodeRef, VFS) {
 	res := ctx.toolResult(modulePath)
+
 	return res.LDRef, *res.LDPath
 }
 

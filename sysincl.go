@@ -570,6 +570,7 @@ func compileSourceFilter(name string, lineno int, pat string, onWarn func(Warn))
 			Kind:    WarnSysIncl,
 			Message: fmt.Sprintf("%s:%d: source_filter %q unsupported (%s) — record disabled", name, lineno, pat, exc.Error()),
 		})
+
 		return &SourceFilter{unsupported: true}
 	}
 

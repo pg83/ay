@@ -51,6 +51,7 @@ func protoPbHIncludes(pm *IncludeParserManager, srcRel, outputRoot string, bucke
 	}
 
 	sort.Slice(out, func(i, j int) bool { return out[i].target.string() < out[j].target.string() })
+
 	return out
 }
 
@@ -299,6 +300,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		for _, out := range extraOutputPaths {
 			if out.rel() == grpcPbH.rel() || out.rel() == grpcPbCC.rel() {
 				needsGRPCParsed = true
+
 				break
 			}
 		}
@@ -647,5 +649,6 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	arBaseName := archiveNameWithPrefixOrName(instance.Path.rel(), "lib", protoLibName)
 	archivePath := build(instance.Path.rel() + "/" + arBaseName)
 	arRef := emitARNode(instance, archivePath, tagCppProto, ccRefs, ccOutputs, nil, nil, d.tc, ctx.host, ctx.emit)
+
 	return &ProtoSrcsResult{ARRef: arRef, ARPath: &archivePath}
 }

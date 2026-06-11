@@ -17,6 +17,7 @@ func protoPythonResourceKey(instance ModuleInstance, d *ModuleData, src, suffix 
 	}
 
 	nsPath := strings.ReplaceAll(*d.pyNamespace, ".", "/")
+
 	return filepath.ToSlash(filepath.Clean(nsPath + "/" + filepath.Base(base) + suffix))
 }
 

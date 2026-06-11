@@ -125,6 +125,7 @@ func (fs *OsFS) contentHashSlow(v VFS) uint64 {
 	}
 
 	fs.read(rel) // side effect: records the content hash into contentHashes[s]
+
 	return fs.contentHashes[v.strID()]
 }
 
@@ -140,6 +141,7 @@ func (fs *OsFS) listdir(dir VFS) map[string]bool {
 
 	if cached, ok := fs.dirs.get(key); ok {
 		fs.listdirHits++
+
 		return cached
 	}
 
@@ -156,6 +158,7 @@ func (fs *OsFS) listdir(dir VFS) map[string]bool {
 
 	if err != nil {
 		fs.dirs.put(key, nil)
+
 		return nil
 	}
 
@@ -203,6 +206,7 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 
 		if entries == nil {
 			fs.existsMisses++
+
 			return false, false
 		}
 
@@ -216,6 +220,7 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 
 	if entries == nil {
 		fs.existsMisses++
+
 		return false, false
 	}
 
@@ -230,6 +235,7 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 
 	if d, ok := entries[first]; !ok || !d {
 		fs.existsMisses++
+
 		return false, false
 	}
 
@@ -238,6 +244,7 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 
 	if entries == nil {
 		fs.existsMisses++
+
 		return false, false
 	}
 
@@ -249,11 +256,13 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 
 func (fs *OsFS) isFile(prefix VFS, suffix string) bool {
 	p, d := fs.exists(prefix, suffix)
+
 	return p && !d
 }
 
 func (fs *OsFS) isDir(prefix VFS, suffix string) bool {
 	p, d := fs.exists(prefix, suffix)
+
 	return p && d
 }
 
@@ -286,6 +295,7 @@ func (fs *OsFS) listdirRel(rel string) map[string]bool {
 func (fs *OsFS) read(rel string) []byte {
 	fs.readBuf = fs.readIntoRaw(rel, fs.readBuf)
 	fs.recordContentHash(rel, fs.readBuf)
+
 	return fs.readBuf
 }
 
@@ -347,6 +357,7 @@ func (fs *OsFS) walk(rel string, visit func(rel string, isDir bool)) {
 
 		if childIsDir {
 			fs.walk(child, visit)
+
 			continue
 		}
 
@@ -389,6 +400,7 @@ func cleanRel(rel string) string {
 
 	rel = strings.TrimPrefix(rel, "/")
 	rel = strings.TrimSuffix(rel, "/")
+
 	return rel
 }
 

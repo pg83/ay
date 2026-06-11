@@ -19,7 +19,9 @@ func joinSrcsIncludeClosure(ctx *GenCtx, scanPlatform *Platform, srcInstance Mod
 	// source (an incremental seed would miss it; the old full-set filter caught it).
 	visited := scanner.visitedIDPool.Get().(*IdSet)
 	visited.reset(vfsBound())
+
 	defer scanner.visitedIDPool.Put(visited)
+
 	modDirKey := dirKey(srcInstance.Path.rel())
 
 	srcRels := make([]string, len(sources))
