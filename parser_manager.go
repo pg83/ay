@@ -193,7 +193,7 @@ func (pm *includeParserManager) parsedIncludes(vfsPath VFS, ctxParser includeDir
 		return nil
 	}
 
-	return pm.sourceParsedBuckets(vfsPath, ctxParser).bucket(parsedIncludesLocal)
+	return pm.sourceParsedBuckets(vfsPath, ctxParser).bucket(walkableBucketFor(vfsPath.Rel()))
 }
 
 func (pm *includeParserManager) RegisterBuildParsedIncludes(out VFS, parsed []includeDirective) {

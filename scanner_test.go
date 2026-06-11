@@ -695,25 +695,35 @@ include "machine.rl";
 		}
 	}
 
-	if len(hcpp) != 1 {
-		t.Fatalf("got %d h+cpp entries, want 1; %+v", len(hcpp), hcpp)
+	// h+cpp (the generated cpp's induced set): the self-include leads, the
+	// C/C++ directives follow (upstream AddParsedIncls("h+cpp", cppIncludes)).
+	wantHCPP := []struct {
+		target string
+		kind   includeKind
+	}{
+		{"src.rl6", includeQuoted},
+		{"outer.h", includeSystem},
+		{"tail.h", includeQuoted},
 	}
-	if hcpp[0].target.String() != "src.rl6" || hcpp[0].kind != includeQuoted {
-		t.Fatalf("h+cpp = %+v, want quoted self target \"src.rl6\"", hcpp)
+
+	if len(hcpp) != len(wantHCPP) {
+		t.Fatalf("got %d h+cpp entries, want %d; %+v", len(hcpp), len(wantHCPP), hcpp)
+	}
+
+	for i, want := range wantHCPP {
+		if hcpp[i].target.String() != want.target || hcpp[i].kind != want.kind {
+			t.Fatalf("hcpp[%d] = %+v, want {%s %v}", i, hcpp[i], want.target, want.kind)
+		}
 	}
 }
 
-// TestScanner_RagelNativeInclude_DoesNotBleedCHeaders verifies that:
-//  1. The scanner closure of a ragel source file (main.rl6) contains the file's
-//     own C includes (vector → stl/vector) but does NOT contain C includes from
-//     ragel-native-included files (sub.rl6's numeric → stl/numeric).
-//  2. sub.rl6 is NOT in the raw scanner closure — the emit layer adds it
-//     explicitly via parsedIncludesRagelNative. This mirrors upstream ymake's
-//     TRagelIncludeProcessor separation of native deps vs ParsedIncls.
-//
-// The corresponding emit_sources.go code adds sub.rl6 (from
-// parsedIncludesRagelNative) after the scanner walk, keeping the ragel file as
-// a dependency without dragging in its C headers.
+// TestScanner_RagelNativeInclude_DoesNotBleedCHeaders verifies the ragel walk
+// relation (walkableBucketFor): a ragel file's closure follows its native
+// %include edges ONLY — natively-included ragel files join the window, but no
+// C headers do (neither the root's own nor the included files'). The C side
+// rides as the induced h+cpp set on the generated cpp instead, mirroring
+// upstream ymake's TRagelIncludeProcessor separation of native deps vs
+// ParsedIncls.
 func TestScanner_RagelNativeInclude_DoesNotBleedCHeaders(t *testing.T) {
 	sysincl := parseSysInclYAML("test.yml", `
 - includes:
@@ -759,15 +769,15 @@ machine Sub;
 		t.Errorf("closure missing $(S)/pkg/main.rl6: %v", closure)
 	}
 
-	// vector (C include of main.rl6) must be in scanner closure
-	if !closureSet["$(S)/stl/vector"] {
-		t.Errorf("closure missing $(S)/stl/vector (C include of main.rl6): %v", closure)
+	// sub.rl6 is a ragel-native edge — the scanner walks it directly now.
+	if !closureSet["$(S)/pkg/sub.rl6"] {
+		t.Errorf("closure missing $(S)/pkg/sub.rl6 (ragel-native edge): %v", closure)
 	}
 
-	// sub.rl6 is a ragel-native dep; it lives in parsedIncludesRagelNative and
-	// is added by emit_sources.go, NOT by the scanner's closure walk.
-	if closureSet["$(S)/pkg/sub.rl6"] {
-		t.Errorf("scanner closure should NOT contain $(S)/pkg/sub.rl6 (ragel-native dep added by emit layer, not scanner): %v", closure)
+	// vector (C include of main.rl6) is NOT a walkable edge of the ragel file —
+	// it reaches the compile via the induced h+cpp set on the generated cpp.
+	if closureSet["$(S)/stl/vector"] {
+		t.Errorf("closure should NOT contain $(S)/stl/vector (C side rides as induced h+cpp): %v", closure)
 	}
 
 	// numeric (C include of sub.rl6) must NOT bleed into closure
@@ -775,10 +785,10 @@ machine Sub;
 		t.Errorf("closure should NOT contain $(S)/stl/numeric (C header of ragel-native-included sub.rl6 must not bleed): %v", closure)
 	}
 
-	// parsedIncludesRagelNative of main.rl6 must contain sub.rl6
-	ragelNative := scanner.parsers.sourceParsedBuckets(Intern("$(S)/pkg/main.rl6"), nil).bucket(parsedIncludesRagelNative)
-	if len(ragelNative) != 1 || ragelNative[0].target.String() != "sub.rl6" {
-		t.Errorf("parsedIncludesRagelNative of main.rl6 = %v, want [{sub.rl6}]", ragelNative)
+	// The generated cpp's induced set: self-include + main's C directives.
+	induced := scanner.parsers.sourceParsedBuckets(Intern("$(S)/pkg/main.rl6"), nil).bucket(parsedIncludesCpp)
+	if len(induced) != 2 || induced[0].target.String() != "pkg/main.rl6" || induced[1].target.String() != "vector" {
+		t.Errorf("induced h+cpp of main.rl6 = %v, want [{pkg/main.rl6} {vector}]", induced)
 	}
 }
 

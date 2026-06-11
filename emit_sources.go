@@ -76,41 +76,39 @@ func emitOneSource(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel s
 		ragelLDRef, ragelBinaryVFS := ctx.tool(argContribToolsRagel6)
 
 		rl6SourceVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDirs)
-		rl6Closure := walkClosure(ctx, srcInstance, rl6SourceVFS, srcIn)
-		rl6Closure = filterEnSerializedSiblings(rl6Closure)
+		r6Out := ragel6OutVFS(srcInstance, srcRel)
 
 		var r6Parsed []includeDirective
 
 		if scanner := ctx.scannerFor(srcInstance); scanner != nil {
 			r6Parsed = scanner.parsers.sourceParsedBuckets(rl6SourceVFS, nil).bucket(parsedIncludesCpp)
-			// Ragel-native includes (e.g. include "parser.rl6" inside %%{...}%%)
-			// are tracked in parsedIncludesRagelNative rather than parsedIncludesLocal.
-			// The C/C++ scanner does not follow them (so their C headers don't bleed
-			// into the closure), but we still need the ragel files themselves as deps.
-			rl6Closure = appendRagelNativeDeps(scanner, srcInstance, rl6SourceVFS, srcIn, rl6Closure)
 		}
+
+		// Register the generated cpp's induced includes (self-include + the
+		// .rl6's C/C++ directives) BEFORE walking, so ONE window serves both
+		// nodes: the induced directives pull the C closure, and the .rl6's own
+		// walkable edges — its ragel-native %includes — pull the natively-
+		// included ragel files WITHOUT their C headers (upstream
+		// TRagelIncludeProcessor keeps native deps and ParsedIncls apart).
+		registerGeneratedParsedOutput(ctx, srcInstance, pkR6, r6Out, r6Parsed, []NodeRef{ragelLDRef})
+
+		window := walkClosure(ctx, srcInstance, r6Out, srcIn)
 
 		// The ragel compiler only reads source files (the .rl6 source + any
 		// natively-included .rl6 files + C/C++ headers it parses). Build-generated
-		// files (proto .pb.h headers pulled in via the C++ include chain) must not
-		// appear as direct inputs — the ragel binary doesn't read them.
-		rl6Closure = keepOnlySourceVFS(rl6Closure)
+		// files (the cpp itself, proto .pb.h headers pulled in via the C++ include
+		// chain) must not appear as direct inputs — the ragel binary doesn't read
+		// them.
+		rl6Closure := keepOnlySourceVFS(filterEnSerializedSiblings(window))
 
-		r6Ref, r6Out := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryVFS, srcIn.Ragel6Flags, rl6Closure, ctx.emit)
-
-		registerGeneratedParsedOutput(ctx, srcInstance, pkR6, r6Out, r6Parsed, []NodeRef{ragelLDRef})
+		r6Ref, _ := EmitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryVFS, srcIn.Ragel6Flags, rl6Closure, ctx.emit)
 
 		ccSrcRel := strings.TrimPrefix(r6Out.Rel(), srcInstance.Path.Rel()+"/")
-		ccIncludeInputs := walkClosure(ctx, srcInstance, r6Out, srcIn)
-
-		if scanner := ctx.scannerFor(srcInstance); scanner != nil {
-			ccIncludeInputs = appendRagelNativeDeps(scanner, srcInstance, rl6SourceVFS, srcIn, ccIncludeInputs)
-		}
 
 		ccIn := srcIn
-		ccIn.IncludeInputs = ccIncludeInputs
+		ccIn.IncludeInputs = window
 		ccIn.PerSourceCFlags = append(append([]ARG(nil), srcIn.PerSourceCFlags...), argWnoImplicitFallthrough)
-		ccIn.ExtraDepRefs = append([]NodeRef{r6Ref}, resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, r6Ref)...)
+		ccIn.ExtraDepRefs = append([]NodeRef{r6Ref}, resolveCodegenDepRefs(ctx, srcInstance, window, r6Ref)...)
 		ccRef, ccOut, _ := EmitCC(srcInstance, ccSrcRel, r6Out, ccIn, ctx.host, ctx.emit)
 		return &sourceEmit{Ref: ccRef, OutPath: ccOut}
 	case strings.HasSuffix(srcRel, ".y"):
