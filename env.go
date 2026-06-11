@@ -1,0 +1,238 @@
+package main
+
+import (
+	"strconv"
+	"strings"
+)
+
+type EnvKind uint8
+
+// envStore holds the ENV-indexed bindings behind a pointer so copies of an
+// Environment (a value type) share — and can grow — the same state, exactly as
+// the old shared maps did; Clone makes a fresh store.
+type EnvStore struct {
+	val  []STR
+	kind []EnvKind
+}
+
+type Environment struct{ s *EnvStore }
+
+func newEnvironment() Environment {
+	return Environment{s: &EnvStore{}}
+}
+
+func (s *EnvStore) ensure(e ENV) {
+	if int(e) < len(s.kind) {
+		return
+	}
+
+	n := len(s.kind) * 2
+
+	if n <= int(e) {
+		n = int(e) + 1
+	}
+
+	nk := make([]EnvKind, n)
+	copy(nk, s.kind)
+	s.kind = nk
+
+	nv := make([]STR, n)
+	copy(nv, s.val)
+	s.val = nv
+}
+
+func (s *EnvStore) lookup(e ENV) (EnvKind, STR) {
+	if int(e) < len(s.kind) {
+		return s.kind[e], s.val[e]
+	}
+
+	return envAbsent, 0
+}
+
+func isImplicitBuildVar(name string) bool {
+	if name == "" {
+		return false
+	}
+
+	hasUpper := false
+
+	for i := 0; i < len(name); i++ {
+		b := name[i]
+
+		switch {
+		case b >= 'A' && b <= 'Z':
+			hasUpper = true
+		case b >= '0' && b <= '9':
+		case b == '_':
+		default:
+			return false
+		}
+	}
+
+	return hasUpper
+}
+
+// Bool reads name as a boolean IF-flag. The IF flag namespace is unified
+// and lazy: an unset name is indistinguishable from an explicit false
+// (mirroring upstream ymake — $X EvalValue returns "" for unbound vars,
+// and NYMake::IsTrue treats empty / any falseWord as false). The only
+// typed error is an int binding used in boolean position.
+func (e Environment) bool(id ENV) bool {
+	return e.boolID(id, id.string())
+}
+
+// boolID is Bool keyed by a pre-interned ENV (the IF-eval hot path passes the id
+// parsed into ExprIdent; name is only for the int-misuse error message).
+func (e Environment) boolID(id ENV, name string) bool {
+	switch k, v := e.s.lookup(id); k {
+	case envStr:
+		return stringIsTruthy(internTable.strs[v])
+	case envInt:
+		throwFmt("macros: identifier %q has int binding but is used in boolean position", name)
+	}
+
+	return false
+}
+
+// stringIsTruthy mirrors upstream's NYMake::IsTrue + util/string/type
+// IsFalse: empty or any case-insensitive false-word reads as false; every
+// other non-empty value reads as true.
+func stringIsTruthy(v string) bool {
+	if v == "" {
+		return false
+	}
+
+	switch strings.ToLower(v) {
+	case "false", "f", "no", "n", "off", "0", "net":
+		return false
+	}
+
+	return true
+}
+
+func (e Environment) string(id ENV) string {
+	// envStr stores the string (bools as "yes"/"no"); envInt stores the decimal
+	// form — both round-trip via the value STR.
+	if k, v := e.s.lookup(id); k != envAbsent {
+		return internTable.strs[v]
+	}
+
+	name := id.string()
+
+	if isImplicitBuildVar(name) {
+		return ""
+	}
+
+	throwFmt("macros: unknown IF identifier %q", name)
+
+	return ""
+}
+
+func (e Environment) clone() Environment {
+	return Environment{s: &EnvStore{
+		val:  append([]STR(nil), e.s.val...),
+		kind: append([]EnvKind(nil), e.s.kind...),
+	}}
+}
+
+// setStrID binds id to the pre-interned string value v (the unified bool/string
+// slot). The whole env API is keyed by ENV and takes pre-interned STR values so
+// no name or constant value is re-interned per binding (per-module buildIfEnv
+// ran this thousands of times). SetBool folds to strYes/strNo — observably
+// identical to the old bool binding, since Bool reads via stringIsTruthy and
+// String/evalEq map bool↔"yes"/"no".
+func (e Environment) setStrID(id ENV, v STR) {
+	e.s.ensure(id)
+	e.s.kind[id] = envStr
+	e.s.val[id] = v
+}
+
+// SetStringID binds a pre-interned constant value (hoisted STR var); SetString
+// is for computed values that must intern at the call.
+func (e Environment) setStringID(id ENV, v STR) {
+	e.setStrID(id, v)
+}
+
+func (e Environment) setString(id ENV, v string) {
+	e.setStrID(id, internStr(v))
+}
+
+func (e Environment) setInt(id ENV, n int) {
+	e.s.ensure(id)
+	e.s.kind[id] = envInt
+
+	if uint(n) < uint(len(intSTR)) {
+		e.s.val[id] = intSTR[n]
+
+		return
+	}
+
+	e.s.val[id] = internStr(strconv.Itoa(n))
+}
+
+func (e Environment) setBool(id ENV, v bool) {
+	if v {
+		e.setStrID(id, strYes)
+	} else {
+		e.setStrID(id, strNo)
+	}
+}
+
+func (e Environment) setFromString(id ENV, v string) {
+	switch v {
+	case "yes":
+		e.setBool(id, true)
+	case "no":
+		e.setBool(id, false)
+	default:
+		e.setString(id, v)
+	}
+}
+
+// SetFromStringID is SetFromString for an already-interned value (Platform.Flags
+// iteration): no string compare, just map the STR to the stored slot, folding the
+// yes/no STRs to themselves (they already are strYes/strNo).
+func (e Environment) setFromStringID(id ENV, v STR) {
+	e.setStrID(id, v)
+}
+
+func (e Environment) hasBindingID(id ENV) bool {
+	k, _ := e.s.lookup(id)
+
+	return k != envAbsent
+}
+
+// HasBinding reports whether name is bound, taking a string: it first checks
+// whether name is interned at all, so a ${VAR} token that is not a known env
+// var is reported unbound without being interned.
+func (e Environment) hasBinding(name string) bool {
+	id, ok := internedEnv(name)
+
+	return ok && e.hasBindingID(id)
+}
+
+// Lookup returns name's bound value and whether it is bound, without interning
+// name (same non-polluting rationale as HasBinding).
+func (e Environment) lookup(name string) (string, bool) {
+	id, ok := internedEnv(name)
+
+	if !ok {
+		return "", false
+	}
+
+	k, v := e.s.lookup(id)
+
+	if k == envAbsent {
+		return "", false
+	}
+
+	return internTable.strs[v], true
+}
+
+func (e Environment) setDefaultString(id ENV, v string) {
+	if e.hasBindingID(id) {
+		return
+	}
+
+	e.setString(id, v)
+}
