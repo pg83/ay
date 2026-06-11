@@ -44,7 +44,7 @@ func TestScanner_CythonExternFromQuotedAngleResolves(t *testing.T) {
 		"util/system/error.h": "// error.h\n",
 	}), SysInclSet{})
 	closure := scanClosure(scanner, "pkg/error.pxd", ScanContext{
-		OwnAddIncl: []VFS{Intern("$(S)/")},
+		OwnAddIncl: []VFS{intern("$(S)/")},
 	})
 
 	if len(closure) != 1 {
@@ -62,7 +62,7 @@ func TestScanner_CythonExternFromSingleQuotedResolves(t *testing.T) {
 		"library/cpp/logger/priority.h": "// priority.h\n",
 	}), SysInclSet{})
 	closure := scanClosure(scanner, "pkg/logger.pxd", ScanContext{
-		OwnAddIncl: []VFS{Intern("$(S)/")},
+		OwnAddIncl: []VFS{intern("$(S)/")},
 	})
 
 	if len(closure) != 1 {

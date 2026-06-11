@@ -22,7 +22,7 @@ func cmdDumpDiff(args []string) int {
 
 	setMode := func(m string) {
 		if mode != "" {
-			ThrowFmt("dump diff: modes --%s and --%s are mutually exclusive", mode, m)
+			throwFmt("dump diff: modes --%s and --%s are mutually exclusive", mode, m)
 		}
 
 		mode = m
@@ -54,27 +54,27 @@ func cmdDumpDiff(args []string) int {
 			i++
 			pairOut = arg(args, i)
 		default:
-			ThrowFmt("dump diff: unknown argument %q", args[i])
+			throwFmt("dump diff: unknown argument %q", args[i])
 		}
 	}
 
 	if leftPath == "" || rightPath == "" {
-		ThrowFmt("dump diff: --left and --right are required")
+		throwFmt("dump diff: --left and --right are required")
 	}
 
 	var w io.Writer = os.Stdout
 
 	if outPath != "" && outPath != "-" {
-		f := Throw2(os.Create(outPath))
+		f := throw2(os.Create(outPath))
 
-		defer func() { Throw(f.Close()) }()
+		defer func() { throw(f.Close()) }()
 
 		w = f
 	}
 
 	bw := bufio.NewWriterSize(w, 1<<20)
 
-	defer func() { Throw(bw.Flush()) }()
+	defer func() { throw(bw.Flush()) }()
 
 	switch mode {
 	case "summary":
@@ -115,10 +115,10 @@ func diffSections(leftPath, rightPath string, bw *bufio.Writer) {
 
 	sort.Strings(mismatched)
 
-	Throw2(fmt.Fprintf(bw, "=== outputs in both with mismatched self_uid (%d) ===\n", len(mismatched)))
+	throw2(fmt.Fprintf(bw, "=== outputs in both with mismatched self_uid (%d) ===\n", len(mismatched)))
 
 	for _, out := range mismatched {
-		Throw2(fmt.Fprintf(bw, "%s  left=%s right=%s\n", out, joinSet(leftOut[out]), joinSet(rightOut[out])))
+		throw2(fmt.Fprintf(bw, "%s  left=%s right=%s\n", out, joinSet(leftOut[out]), joinSet(rightOut[out])))
 	}
 }
 
@@ -145,7 +145,7 @@ func diffSummary(leftPath, rightPath string, bw *bufio.Writer) {
 	rightKind := scanOutputKind(rightPath)
 
 	summarize := func(title string, only map[string]string) {
-		Throw2(fmt.Fprintf(bw, "=== %s (%d) ===\n", title, len(only)))
+		throw2(fmt.Fprintf(bw, "=== %s (%d) ===\n", title, len(only)))
 		byKind, byExt, byDir := map[string]int{}, map[string]int{}, map[string]int{}
 
 		for out, kind := range only {
@@ -229,8 +229,8 @@ func diffByField(leftPath, rightPath string, bw *bufio.Writer) {
 		}
 	})
 
-	Throw2(fmt.Fprintf(bw, "=== by-field: %d outputs in both ===\n", both))
-	Throw2(fmt.Fprintf(bw, "\n[content field -> #nodes where it differs]\n"))
+	throw2(fmt.Fprintf(bw, "=== by-field: %d outputs in both ===\n", both))
+	throw2(fmt.Fprintf(bw, "\n[content field -> #nodes where it differs]\n"))
 	order := make([]int, len(dumpContentFields))
 
 	for i := range order {
@@ -250,10 +250,10 @@ func diffByField(leftPath, rightPath string, bw *bufio.Writer) {
 			pct = 100 * float64(fieldDiff[i]) / float64(both)
 		}
 
-		Throw2(fmt.Fprintf(bw, "  %6d (%5.1f%%)  %s\n", fieldDiff[i], pct, dumpContentFields[i]))
+		throw2(fmt.Fprintf(bw, "  %6d (%5.1f%%)  %s\n", fieldDiff[i], pct, dumpContentFields[i]))
 	}
 
-	Throw2(fmt.Fprintf(bw, "\n[most common differing-field combinations]\n"))
+	throw2(fmt.Fprintf(bw, "\n[most common differing-field combinations]\n"))
 	writeCountMap(bw, "", combo, 15)
 }
 
@@ -314,7 +314,7 @@ func diffByToken(leftPath, rightPath string, bw *bufio.Writer) {
 		}
 	})
 
-	Throw2(fmt.Fprintf(bw, "=== by-token: %d outputs in both ===\n", paired))
+	throw2(fmt.Fprintf(bw, "=== by-token: %d outputs in both ===\n", paired))
 
 	for _, f := range tokenFields {
 		writeTokenRanking(bw, f+" tokens only in OURS", our[f])
@@ -359,7 +359,7 @@ func accumMultisetDiff(left, right []string, onlyL, onlyR map[string]int) {
 }
 
 func writeTokenRanking(bw *bufio.Writer, title string, m map[string]int) {
-	Throw2(fmt.Fprintf(bw, "\n[%s]  (token: #nodes, by category)\n", title))
+	throw2(fmt.Fprintf(bw, "\n[%s]  (token: #nodes, by category)\n", title))
 	byCat := map[string]int{}
 
 	for t := range m {
@@ -390,7 +390,7 @@ func writeTokenRanking(bw *bufio.Writer, title string, m map[string]int) {
 			break
 		}
 
-		Throw2(fmt.Fprintf(bw, "  %6d  [%s] %s\n", e.c, tokenCategory(e.t), e.t))
+		throw2(fmt.Fprintf(bw, "  %6d  [%s] %s\n", e.c, tokenCategory(e.t), e.t))
 	}
 }
 
@@ -488,8 +488,8 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 	}
 
 	sort.Slice(kinds, func(a, b int) bool { return total[kinds[a]] > total[kinds[b]] })
-	Throw2(fmt.Fprintf(bw, "=== by-kind: content divergence per node kind ===\n"))
-	Throw2(fmt.Fprintf(bw, "%-8s %8s %8s   %s\n", "kind", "paired", "diverge", "top differing fields / combos"))
+	throw2(fmt.Fprintf(bw, "=== by-kind: content divergence per node kind ===\n"))
+	throw2(fmt.Fprintf(bw, "%-8s %8s %8s   %s\n", "kind", "paired", "diverge", "top differing fields / combos"))
 
 	for _, k := range kinds {
 		fd := fieldDiff[k]
@@ -511,7 +511,7 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 			}
 		}
 
-		Throw2(fmt.Fprintf(bw, "%-8s %8d %8d   %s   [top combo: %s ×%d]\n",
+		throw2(fmt.Fprintf(bw, "%-8s %8d %8d   %s   [top combo: %s ×%d]\n",
 			k, total[k], diverge[k], strings.Join(parts, " "), topCombo, best))
 	}
 }
@@ -583,11 +583,11 @@ func diffRoots(leftPath, rightPath string, bw *bufio.Writer) {
 
 	sort.Strings(leaves)
 
-	Throw2(fmt.Fprintf(bw, "=== roots: %d leaf-most divergent outputs (of %d divergent) ===\n", len(leaves), len(divergent)))
-	Throw2(fmt.Fprintf(bw, "(content differs but every dependency child matches the reference — fix these first)\n"))
+	throw2(fmt.Fprintf(bw, "=== roots: %d leaf-most divergent outputs (of %d divergent) ===\n", len(leaves), len(divergent)))
+	throw2(fmt.Fprintf(bw, "(content differs but every dependency child matches the reference — fix these first)\n"))
 
 	for _, o := range leaves {
-		Throw2(fmt.Fprintf(bw, "%s\n", o))
+		throw2(fmt.Fprintf(bw, "%s\n", o))
 	}
 }
 
@@ -596,21 +596,21 @@ func diffPair(leftPath, rightPath, output string, bw *bufio.Writer) {
 	left, right := findNodePairByOutput(leftPath, rightPath, want)
 
 	if left == nil {
-		ThrowFmt("dump diff --pair: output %q not found in left", output)
+		throwFmt("dump diff --pair: output %q not found in left", output)
 	}
 
 	if right == nil {
-		ThrowFmt("dump diff --pair: output %q not found in right", output)
+		throwFmt("dump diff --pair: output %q not found in right", output)
 	}
 
-	Throw2(fmt.Fprintf(bw, "=== pair diff for %s ===\n", want))
+	throw2(fmt.Fprintf(bw, "=== pair diff for %s ===\n", want))
 
 	for _, f := range dumpContentFields {
 		if fnvHash(marshalCompact(left[f])) == fnvHash(marshalCompact(right[f])) {
 			continue
 		}
 
-		Throw2(fmt.Fprintf(bw, "\n[field %s differs]\n", f))
+		throw2(fmt.Fprintf(bw, "\n[field %s differs]\n", f))
 
 		switch f {
 		case "cmds":
@@ -618,7 +618,7 @@ func diffPair(leftPath, rightPath, output string, bw *bufio.Writer) {
 		case "inputs", "tags", "outputs":
 			writePairTokens(bw, toStrings(left[f]), toStrings(right[f]))
 		default:
-			Throw2(fmt.Fprintf(bw, "  ours: %s\n  ref:  %s\n", marshalCompact(left[f]), marshalCompact(right[f])))
+			throw2(fmt.Fprintf(bw, "  ours: %s\n  ref:  %s\n", marshalCompact(left[f]), marshalCompact(right[f])))
 		}
 	}
 }
@@ -640,11 +640,11 @@ func writePairTokens(bw *bufio.Writer, left, right []string) {
 	sort.Strings(rk)
 
 	for _, t := range lk {
-		Throw2(fmt.Fprintf(bw, "  -ours +%s\n", t))
+		throw2(fmt.Fprintf(bw, "  -ours +%s\n", t))
 	}
 
 	for _, t := range rk {
-		Throw2(fmt.Fprintf(bw, "  -ref  +%s\n", t))
+		throw2(fmt.Fprintf(bw, "  -ref  +%s\n", t))
 	}
 }
 
@@ -898,7 +898,7 @@ func findDumpDiffOutputSelfMatch(exact, axis, any map[string]string, output stri
 
 func fnvHash(b []byte) uint64 {
 	h := fnv.New64a()
-	Throw2(h.Write(b))
+	throw2(h.Write(b))
 	return h.Sum64()
 }
 
@@ -955,7 +955,7 @@ func writeCountMap(bw *bufio.Writer, prefix string, m map[string]int, top int) {
 	})
 
 	if prefix != "" {
-		Throw2(fmt.Fprintf(bw, "%s:\n", prefix))
+		throw2(fmt.Fprintf(bw, "%s:\n", prefix))
 	}
 
 	for i, e := range es {
@@ -963,15 +963,15 @@ func writeCountMap(bw *bufio.Writer, prefix string, m map[string]int, top int) {
 			break
 		}
 
-		Throw2(fmt.Fprintf(bw, "  %6d  %s\n", e.c, e.k))
+		throw2(fmt.Fprintf(bw, "  %6d  %s\n", e.c, e.k))
 	}
 }
 
 func writeDiffSection(bw *bufio.Writer, title string, items []string) {
-	Throw2(fmt.Fprintf(bw, "=== %s (%d) ===\n", title, len(items)))
+	throw2(fmt.Fprintf(bw, "=== %s (%d) ===\n", title, len(items)))
 
 	for _, s := range items {
-		Throw2(fmt.Fprintf(bw, "%s\n", s))
+		throw2(fmt.Fprintf(bw, "%s\n", s))
 	}
 }
 

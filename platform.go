@@ -188,7 +188,7 @@ func internFlags(flags map[string]string) map[ENV]STR {
 	return out
 }
 
-func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, cflagsEnv, cxxflagsEnv string) *Platform {
+func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, cflagsEnv, cxxflagsEnv string) *Platform {
 	if flags == nil {
 		flags = map[string]string{}
 	}
@@ -213,7 +213,7 @@ func NewPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, 
 	p := &Platform{
 		OS:                os,
 		ISA:               isa,
-		Target:            MakePlatformID(os, isa),
+		Target:            makePlatformID(os, isa),
 		Flags:             internFlags(flags),
 		Tags:              internStrs(tags),
 		TestTags:          []STR{},
@@ -423,16 +423,16 @@ func (p *Platform) objectSuffix() string {
 	return ".o"
 }
 
-func ParsePlatformID(s string) (OS, ISA) {
+func parsePlatformID(s string) (OS, ISA) {
 	if !strings.HasPrefix(s, "default-") {
-		ThrowFmt("ParsePlatformID: %q does not start with \"default-\"", s)
+		throwFmt("ParsePlatformID: %q does not start with \"default-\"", s)
 	}
 
 	rest := s[len("default-"):]
 	dash := strings.IndexByte(rest, '-')
 
 	if dash < 0 {
-		ThrowFmt("ParsePlatformID: %q lacks the <os>-<isa> separator", s)
+		throwFmt("ParsePlatformID: %q lacks the <os>-<isa> separator", s)
 	}
 
 	return OS(rest[:dash]), ISA(rest[dash+1:])

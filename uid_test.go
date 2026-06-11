@@ -93,7 +93,7 @@ func TestCanonicalNodeBytes_VsDefaultJSONMarshal(t *testing.T) {
 	}
 	canon := canonicalNodeBytes(n)
 
-	defaultMarshalled := Throw2(json.Marshal(n))
+	defaultMarshalled := throw2(json.Marshal(n))
 
 	if bytes.Equal(canon, defaultMarshalled) {
 		t.Fatalf("canonicalNodeBytes and json.Marshal produced identical bytes; "+

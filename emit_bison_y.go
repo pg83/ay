@@ -6,20 +6,20 @@ import (
 )
 
 var bisonCppSkeletonInputs = []VFS{
-	Intern("$(S)/contrib/tools/bison/data/m4sugar/foreach.m4"),
-	Intern("$(S)/contrib/tools/bison/data/m4sugar/m4sugar.m4"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/bison.m4"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/c++-skel.m4"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/c++.m4"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/c-like.m4"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/c-skel.m4"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/c.m4"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/glr.cc"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/lalr1.cc"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/location.cc"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/stack.hh"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/variant.hh"),
-	Intern("$(S)/contrib/tools/bison/data/skeletons/yacc.c"),
+	intern("$(S)/contrib/tools/bison/data/m4sugar/foreach.m4"),
+	intern("$(S)/contrib/tools/bison/data/m4sugar/m4sugar.m4"),
+	intern("$(S)/contrib/tools/bison/data/skeletons/bison.m4"),
+	intern("$(S)/contrib/tools/bison/data/skeletons/c++-skel.m4"),
+	intern("$(S)/contrib/tools/bison/data/skeletons/c++.m4"),
+	intern("$(S)/contrib/tools/bison/data/skeletons/c-like.m4"),
+	intern("$(S)/contrib/tools/bison/data/skeletons/c-skel.m4"),
+	intern("$(S)/contrib/tools/bison/data/skeletons/c.m4"),
+	intern("$(S)/contrib/tools/bison/data/skeletons/glr.cc"),
+	intern("$(S)/contrib/tools/bison/data/skeletons/lalr1.cc"),
+	intern("$(S)/contrib/tools/bison/data/skeletons/location.cc"),
+	intern("$(S)/contrib/tools/bison/data/skeletons/stack.hh"),
+	intern("$(S)/contrib/tools/bison/data/skeletons/variant.hh"),
+	intern("$(S)/contrib/tools/bison/data/skeletons/yacc.c"),
 }
 
 var bisonCppSkeletonDirectives = quotedDirectives(bisonCppSkeletonInputs)
@@ -55,9 +55,9 @@ func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	baseNoExt := strings.TrimSuffix(srcRel, filepath.Ext(srcRel))
 	headerRel := baseNoExt + ".h"
 	generatedRel := "_/" + srcRel + genExt
-	headerVFS := Build(instance.Path.rel() + "/" + headerRel)
-	generatedVFS := Build(instance.Path.rel() + "/" + generatedRel)
-	srcVFS := Source(instance.Path.rel() + "/" + srcRel)
+	headerVFS := build(instance.Path.rel() + "/" + headerRel)
+	generatedVFS := build(instance.Path.rel() + "/" + generatedRel)
+	srcVFS := source(instance.Path.rel() + "/" + srcRel)
 	headerParsed := []IncludeDirective{{kind: includeQuoted, target: internStr(srcVFS.rel())}}
 
 	if preprocessHeader {
@@ -141,7 +141,7 @@ func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		ccIn.PerSourceCFlags = append(append([]ARG(nil), in.PerSourceCFlags...), argWnoUnusedButSetVariable, argWnoDeprecatedCopy)
 	}
 
-	ccRef, ccOut, _ := EmitCC(instance, generatedRel, generatedVFS, ccIn, ctx.host, ctx.emit)
+	ccRef, ccOut, _ := emitCC(instance, generatedRel, generatedVFS, ccIn, ctx.host, ctx.emit)
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }
 

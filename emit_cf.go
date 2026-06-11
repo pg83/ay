@@ -29,7 +29,7 @@ func emitExplicitCF(ctx *GenCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	in.IncludeInputs = walkClosure(ctx, instance, srcVFS, in)
 
 	cfgVars := buildCFGVars(ctx.fs, srcVFS.rel(), d.setVars, d.defaultVars)
-	cfRef, cfOut := EmitCF(instance, srcVFS, outVFS, cfgVars, in.IncludeInputs, instance.Path.rel(), cfModuleTag(d, instance), in.TC, ctx.emit)
+	cfRef, cfOut := emitCF(instance, srcVFS, outVFS, cfgVars, in.IncludeInputs, instance.Path.rel(), cfModuleTag(d, instance), in.TC, ctx.emit)
 
 	if reg != nil {
 		parsed := []IncludeDirective{
@@ -45,7 +45,7 @@ func emitExplicitCF(ctx *GenCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 }
 
 func cfIncludeDirectives(pm *IncludeParserManager, rel string) []IncludeDirective {
-	raw := pm.sourceParsedBuckets(Source(rel), nil).bucket(parsedIncludesLocal)
+	raw := pm.sourceParsedBuckets(source(rel), nil).bucket(parsedIncludesLocal)
 	out := make([]IncludeDirective, 0, len(raw))
 
 	for _, d := range raw {
@@ -134,7 +134,7 @@ func cfgVarValue(v string) string {
 
 const buildTypeDebug = "BUILD_TYPE=DEBUG"
 
-func EmitCF(
+func emitCF(
 	instance ModuleInstance,
 	srcVFS VFS,
 	outVFS VFS,

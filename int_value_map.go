@@ -13,9 +13,9 @@ type IntValueMap[V any] struct {
 	vals []V
 }
 
-func NewIntValueMap[V any](hint int) *IntValueMap[V] {
+func newIntValueMap[V any](hint int) *IntValueMap[V] {
 	return &IntValueMap[V]{
-		idx:  NewIntMap[uint32](hint),
+		idx:  newIntMap[uint32](hint),
 		vals: make([]V, 0, hint),
 	}
 }

@@ -38,12 +38,12 @@ func cmdDumpNormalize(args []string) int {
 			// any over-filtration on the reference side, surfaces as a diff.
 			refGraph = true
 		default:
-			ThrowFmt("dump normalize: unknown argument %q", args[i])
+			throwFmt("dump normalize: unknown argument %q", args[i])
 		}
 	}
 
 	if inPath == "" || target == "" {
-		ThrowFmt("dump normalize: --in and --target are required")
+		throwFmt("dump normalize: --in and --target are required")
 	}
 
 	const workers = 4
@@ -204,7 +204,7 @@ func cmdDumpNormalize(args []string) int {
 		case len(ldRoots) == 1:
 			roots = append(roots, ldRoots[0])
 		case len(ldRoots) > 1:
-			ThrowFmt("dump normalize: %d LD roots for target %q; expected 1", len(ldRoots), target)
+			throwFmt("dump normalize: %d LD roots for target %q; expected 1", len(ldRoots), target)
 		case len(arRoots) == 1:
 			roots = append(roots, arRoots[0].uid)
 		default:
@@ -219,7 +219,7 @@ func cmdDumpNormalize(args []string) int {
 			if len(nonHost) == 1 {
 				roots = append(roots, nonHost[0])
 			} else {
-				ThrowFmt("dump normalize: %d AR roots for target %q; expected 1", len(arRoots), target)
+				throwFmt("dump normalize: %d AR roots for target %q; expected 1", len(arRoots), target)
 			}
 		}
 	}
@@ -228,7 +228,7 @@ func cmdDumpNormalize(args []string) int {
 	roots = dedupKeepOrder(roots)
 
 	if len(roots) == 0 {
-		ThrowFmt("dump normalize: no LD/AR/TS root node found for target %q", target)
+		throwFmt("dump normalize: no LD/AR/TS root node found for target %q", target)
 	}
 
 	closure := map[string]bool{}
@@ -262,9 +262,9 @@ func cmdDumpNormalize(args []string) int {
 	if outPath == "" || outPath == "-" {
 		out = os.Stdout
 	} else {
-		f := Throw2(os.Create(outPath))
+		f := throw2(os.Create(outPath))
 
-		defer func() { Throw(f.Close()) }()
+		defer func() { throw(f.Close()) }()
 
 		out = f
 	}
@@ -290,10 +290,10 @@ func cmdDumpNormalize(args []string) int {
 		},
 		func(line []byte) {
 			if line != nil {
-				Throw2(bw.Write(line))
+				throw2(bw.Write(line))
 			}
 		})
-	Throw(bw.Flush())
+	throw(bw.Flush())
 
 	return 0
 }
@@ -461,7 +461,7 @@ func dedupKeepOrder(in []string) []string {
 
 func arg(args []string, i int) string {
 	if i >= len(args) {
-		ThrowFmt("dump: missing value for flag %q", args[i-1])
+		throwFmt("dump: missing value for flag %q", args[i-1])
 	}
 
 	return args[i]

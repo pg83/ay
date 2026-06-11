@@ -15,9 +15,9 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 	for _, conf := range d.checkConfigHeaders {
 		confBase := strings.TrimSuffix(path.Base(conf), path.Ext(conf))
 		generated := confBase + ".config.cpp"
-		generatedVFS := Build(instance.Path.rel() + "/" + generated)
+		generatedVFS := build(instance.Path.rel() + "/" + generated)
 
-		confVFS := Source(instance.Path.rel() + "/" + conf)
+		confVFS := source(instance.Path.rel() + "/" + conf)
 		// The walk window leads with confVFS itself — no separate prepend.
 		inputs := []VFS{buildScriptsCheckConfigHPy}
 		inputs = append(inputs, walkClosure(ctx, instance, confVFS, in)...)
@@ -56,7 +56,7 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 		// IncludeInputs is the CC input window: the generated source leads.
 		ccIn.IncludeInputs = append([]VFS{generatedVFS}, inputs...)
 
-		ccRef, ccOut, _ := EmitCC(instance, generated, generatedVFS, ccIn, ctx.host, ctx.emit)
+		ccRef, ccOut, _ := emitCC(instance, generated, generatedVFS, ccIn, ctx.host, ctx.emit)
 		out = append(out, &SourceEmit{Ref: ccRef, OutPath: ccOut})
 	}
 

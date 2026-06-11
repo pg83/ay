@@ -49,7 +49,7 @@ func TestWrapccPrefixFor_GateOnOpensource(t *testing.T) {
 
 func TestNewPlatform_WrapccVectorsAndResources(t *testing.T) {
 	// Non-opensource platform carries the wrapcc prefix and a YMAKE_PYTHON3 CC dep.
-	intP := NewPlatform(newMemFS(nil), OSLinux, ISAAArch64, map[string]string{"PIC": "no"}, nil, "", "")
+	intP := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, map[string]string{"PIC": "no"}, nil, "", "")
 
 	if len(intP.WrapccHead) == 0 {
 		t.Fatal("non-opensource platform must populate WrapccHead")
@@ -61,7 +61,7 @@ func TestNewPlatform_WrapccVectorsAndResources(t *testing.T) {
 	}
 
 	// Opensource platform: no wrapper, CLANG-only CC deps.
-	osP := NewPlatform(newMemFS(nil), OSLinux, ISAAArch64, map[string]string{"PIC": "no", "OPENSOURCE": "yes"}, nil, "", "")
+	osP := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, map[string]string{"PIC": "no", "OPENSOURCE": "yes"}, nil, "", "")
 
 	if len(osP.WrapccHead) != 0 {
 		t.Errorf("opensource platform must not populate WrapccHead; got %v", osP.WrapccHead)
@@ -96,7 +96,7 @@ func TestNewPlatform_ParsesCompilerFlags(t *testing.T) {
 		"PIC": "no",
 	}
 
-	p := NewPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, `-O2 -DNAME="hello world"`, `-stdlib=libc++ -DCPP=1`)
+	p := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, `-O2 -DNAME="hello world"`, `-stdlib=libc++ -DCPP=1`)
 
 	if !reflect.DeepEqual(argStrs(p.CFlags), []string{"-O2", "-DNAME=hello world"}) {
 		t.Fatalf("CFlags = %#v", argStrs(p.CFlags))
@@ -108,7 +108,7 @@ func TestNewPlatform_ParsesCompilerFlags(t *testing.T) {
 }
 
 func TestPlatformMultiarchLibPath_UsesCompilerRoot(t *testing.T) {
-	p := NewPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{
+	p := newPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{
 		"PIC":              "yes",
 		"BUILD_PYTHON_BIN": "$(YMAKE_PYTHON3)/bin/python3",
 		"CLANG_TOOL":       "$(CLANG)/bin/clang",
@@ -129,7 +129,7 @@ func TestPlatformMultiarchLibPath_UsesCompilerRoot(t *testing.T) {
 }
 
 func TestPlatformLinkerSelectionTailFlags_UsesConfiguredLLDPath(t *testing.T) {
-	p := NewPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{
+	p := newPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{
 		"PIC":              "no",
 		"CLANG_TOOL":       "$(CLANG)/bin/clang",
 		"CLANG_pl_pl_TOOL": "$(CLANG)/bin/clang++",

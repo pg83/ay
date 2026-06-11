@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	exc := Try(func() {
+	exc := try(func() {
 		dispatch(os.Args)
 	})
 
@@ -55,9 +55,9 @@ func parseGlobalFlags(argv []string) (probes []string, rest []string) {
 		case k == "probe" && (v == "map" || v == "callsite"):
 			probes = append(probes, v)
 		case k == "probe":
-			ThrowFmt("unknown --probe=%q (want map|callsite)", v)
+			throwFmt("unknown --probe=%q (want map|callsite)", v)
 		default:
-			ThrowFmt("unknown global flag %q", a)
+			throwFmt("unknown global flag %q", a)
 		}
 	}
 
@@ -89,21 +89,21 @@ func startProfilesFromEnv() func() {
 	var cpuFile *os.File
 
 	if path := os.Getenv("YATOOL_CPUPROFILE"); path != "" {
-		cpuFile = Throw2(os.Create(path))
-		Throw(pprof.StartCPUProfile(cpuFile))
+		cpuFile = throw2(os.Create(path))
+		throw(pprof.StartCPUProfile(cpuFile))
 	}
 
 	return func() {
 		if cpuFile != nil {
 			pprof.StopCPUProfile()
-			Throw(cpuFile.Close())
+			throw(cpuFile.Close())
 		}
 
 		if path := os.Getenv("YATOOL_MEMPROFILE"); path != "" {
-			f := Throw2(os.Create(path))
+			f := throw2(os.Create(path))
 			runtime.GC()
-			Throw(pprof.WriteHeapProfile(f))
-			Throw(f.Close())
+			throw(pprof.WriteHeapProfile(f))
+			throw(f.Close())
 		}
 	}
 }
@@ -114,10 +114,10 @@ func writeGraph(out string, g *Graph, dropSrcInputs bool) {
 	if out == "-" {
 		w = os.Stdout
 	} else {
-		f := Throw2(os.Create(out))
+		f := throw2(os.Create(out))
 
 		defer func() {
-			Throw(f.Close())
+			throw(f.Close())
 		}()
 
 		w = f
@@ -125,5 +125,5 @@ func writeGraph(out string, g *Graph, dropSrcInputs bool) {
 
 	bw := bufio.NewWriterSize(w, 1<<20)
 	writeGraphCompact(bw, g, dropSrcInputs)
-	Throw(bw.Flush())
+	throw(bw.Flush())
 }

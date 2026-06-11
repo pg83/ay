@@ -13,7 +13,7 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 		return ref
 	}
 
-	output := Build("resources/" + name)
+	output := build("resources/" + name)
 	node := &Node{
 		Platform: ctx.host,
 		Cmds: []Cmd{{

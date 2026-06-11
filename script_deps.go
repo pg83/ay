@@ -91,13 +91,13 @@ func buildScriptTable(fs FS) ScriptDeps {
 		sort.Strings(deps)
 
 		out := make([]VFS, 1, 1+len(deps))
-		out[0] = Source(rel)
+		out[0] = source(rel)
 
 		for _, d := range deps {
-			out = append(out, Source(d))
+			out = append(out, source(d))
 		}
 
-		table[Source(rel)] = out
+		table[source(rel)] = out
 	}
 
 	return table

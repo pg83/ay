@@ -19,7 +19,7 @@ import (
 // files. A pure read-only analysis; it never touches the store.
 func cmdCasAnalyze(args []string) int {
 	if len(args) == 0 || args[0] != "analyze" {
-		ThrowFmt("usage: ay make cas analyze [--chunk=N] <cas-dir>")
+		throwFmt("usage: ay make cas analyze [--chunk=N] <cas-dir>")
 	}
 
 	chunkAvg := 8192
@@ -29,22 +29,22 @@ func cmdCasAnalyze(args []string) int {
 	for _, a := range args[1:] {
 		switch {
 		case strings.HasPrefix(a, "--chunk="):
-			chunkAvg = Throw2(strconv.Atoi(strings.TrimPrefix(a, "--chunk=")))
+			chunkAvg = throw2(strconv.Atoi(strings.TrimPrefix(a, "--chunk=")))
 		case strings.HasPrefix(a, "--min-len="):
-			minLen = Throw2(strconv.ParseInt(strings.TrimPrefix(a, "--min-len="), 10, 64))
+			minLen = throw2(strconv.ParseInt(strings.TrimPrefix(a, "--min-len="), 10, 64))
 		case strings.HasPrefix(a, "-"):
-			ThrowFmt("cas analyze: unknown flag %q", a)
+			throwFmt("cas analyze: unknown flag %q", a)
 		default:
 			casDir = a
 		}
 	}
 
 	if casDir == "" {
-		ThrowFmt("cas analyze: missing <cas-dir>")
+		throwFmt("cas analyze: missing <cas-dir>")
 	}
 
 	if chunkAvg < 64 {
-		ThrowFmt("cas analyze: --chunk must be >= 64")
+		throwFmt("cas analyze: --chunk must be >= 64")
 	}
 
 	return casAnalyze(casDir, chunkAvg, minLen)
@@ -68,13 +68,13 @@ func casAnalyze(casDir string, chunkAvg int, minLen int64) int {
 	go func() {
 		defer close(fileCh)
 
-		Try(func() {
-			Throw(filepath.WalkDir(casDir, func(path string, d os.DirEntry, err error) error {
+		try(func() {
+			throw(filepath.WalkDir(casDir, func(path string, d os.DirEntry, err error) error {
 				if err != nil {
 					return err
 				}
 
-				if !d.Type().IsRegular() || Throw2(d.Info()).Size() < minLen {
+				if !d.Type().IsRegular() || throw2(d.Info()).Size() < minLen {
 					return nil
 				}
 
@@ -98,8 +98,8 @@ func casAnalyze(casDir string, chunkAvg int, minLen int64) int {
 			defer wg.Done()
 
 			for path := range fileCh {
-				Try(func() {
-					data := Throw2(os.ReadFile(path))
+				try(func() {
+					data := throw2(os.ReadFile(path))
 
 					cdcChunks(data, chunkAvg, func(chunk []byte) {
 						hashCh <- chunkInfo{hash: sha256.Sum256(chunk), size: int64(len(chunk))}

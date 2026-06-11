@@ -6,7 +6,7 @@ var (
 	buildInfoGenPyPath = buildInfoGenPyVFS.string()
 )
 
-func EmitBI(
+func emitBI(
 	instance ModuleInstance,
 	outputHeader string,
 	cxxFlags []STR,
@@ -14,8 +14,8 @@ func EmitBI(
 	emit Emitter,
 ) NodeRef {
 	outPrefix := instance.Path.rel() + "/"
-	argsFileVFS := Build(outPrefix + "__args")
-	outVFS := Build(outPrefix + outputHeader)
+	argsFileVFS := build(outPrefix + "__args")
+	outVFS := build(outPrefix + outputHeader)
 	argsFile := argsFileVFS.string()
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}

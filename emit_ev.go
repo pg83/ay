@@ -14,16 +14,16 @@ var (
 )
 
 var evExtraProtobufHeaders = []VFS{
-	Source(pbRuntimeBase + "google/protobuf/io/printer.h"),
-	Source(pbRuntimeBase + "google/protobuf/io/zero_copy_sink.h"),
-	Source(pbRuntimeBase + "google/protobuf/stubs/hash.h"),
-	Source(pbRuntimeBase + "google/protobuf/stubs/stringpiece.h"),
-	Source(pbRuntimeBase + "google/protobuf/stubs/strutil.h"),
+	source(pbRuntimeBase + "google/protobuf/io/printer.h"),
+	source(pbRuntimeBase + "google/protobuf/io/zero_copy_sink.h"),
+	source(pbRuntimeBase + "google/protobuf/stubs/hash.h"),
+	source(pbRuntimeBase + "google/protobuf/stubs/stringpiece.h"),
+	source(pbRuntimeBase + "google/protobuf/stubs/strutil.h"),
 }
 
 var evAbseilCleanupHeaders = []VFS{
-	Intern("$(S)/contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/cleanup.h"),
-	Intern("$(S)/contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/internal/cleanup.h"),
+	intern("$(S)/contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/cleanup.h"),
+	intern("$(S)/contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/internal/cleanup.h"),
 }
 
 // evProtocConstArgs is the constant -I/--out span of every EV protoc command.
@@ -55,7 +55,7 @@ func evWitnessExtras(evRelPath string, evPbCC VFS) []IncludeDirective {
 	return out
 }
 
-func EmitEV(
+func emitEV(
 	instance ModuleInstance,
 	evRelPath string,
 	cppStyleguideLDRef NodeRef,
@@ -71,9 +71,9 @@ func EmitEV(
 ) NodeRef {
 	moduleDir := instance.Path.rel()
 
-	evCC := Build(evRelPath + ".pb.cc")
-	evH := Build(evRelPath + ".pb.h")
-	srcVFS := Source(evRelPath)
+	evCC := build(evRelPath + ".pb.cc")
+	evH := build(evRelPath + ".pb.h")
+	srcVFS := source(evRelPath)
 
 	cmdArgs := ArgChunks{
 		{

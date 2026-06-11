@@ -11,7 +11,7 @@ import (
 // removed IncludeScanner.WalkClosure helper, now expressed directly over
 // closureOf.
 func scanClosure(scanner *IncludeScanner, srcRel string, cfg ScanContext) []VFS {
-	return scanner.newScanCtx(cfg).closureOf(Source(srcRel))[1:]
+	return scanner.newScanCtx(cfg).closureOf(source(srcRel))[1:]
 }
 
 func TestStripComments_BlockCommentInclude(t *testing.T) {
@@ -203,9 +203,9 @@ func TestScanner_SearchTierCacheReuse_OwnAddIncl(t *testing.T) {
 	})
 	d := IncludeDirective{kind: includeSystem, target: internStr("foo.h")}
 
-	got1 := sc.resolveSearchPath(Intern("$(S)/pkg/a.cpp"), dirKey("pkg"), d)
-	got2 := sc.resolveSearchPath(Intern("$(S)/pkg/b.cpp"), dirKey("pkg"), d)
-	want := []VFS{Intern("$(S)/include/foo.h")}
+	got1 := sc.resolveSearchPath(intern("$(S)/pkg/a.cpp"), dirKey("pkg"), d)
+	got2 := sc.resolveSearchPath(intern("$(S)/pkg/b.cpp"), dirKey("pkg"), d)
+	want := []VFS{intern("$(S)/include/foo.h")}
 
 	if len(got1) != len(want) || got1[0] != want[0] {
 		t.Fatalf("first resolve = %v, want %v", got1, want)
@@ -231,8 +231,8 @@ func TestScanner_SearchTierCacheReuse_NotFound(t *testing.T) {
 	})
 	d := IncludeDirective{kind: includeSystem, target: internStr("missing.h")}
 
-	got1 := sc.resolveSearchPath(Intern("$(S)/pkg/a.cpp"), dirKey("pkg"), d)
-	got2 := sc.resolveSearchPath(Intern("$(S)/pkg/b.cpp"), dirKey("pkg"), d)
+	got1 := sc.resolveSearchPath(intern("$(S)/pkg/a.cpp"), dirKey("pkg"), d)
+	got2 := sc.resolveSearchPath(intern("$(S)/pkg/b.cpp"), dirKey("pkg"), d)
 
 	if got1 != nil || got2 != nil {
 		t.Fatalf("missing header resolved unexpectedly: first=%v second=%v", got1, got2)
@@ -261,8 +261,8 @@ func TestScanner_SearchTierCacheBypassedBySameDirQuoted(t *testing.T) {
 	sc := scanner.newScanCtx(ScanContext{
 		OwnAddIncl: VFSesFromStrings([]string{"include"}),
 	})
-	got := sc.resolveSearchPath(Intern("$(S)/pkg/a.cpp"), dirKey("pkg"), IncludeDirective{kind: includeQuoted, target: internStr("foo.h")})
-	want := []VFS{Intern("$(S)/pkg/foo.h")}
+	got := sc.resolveSearchPath(intern("$(S)/pkg/a.cpp"), dirKey("pkg"), IncludeDirective{kind: includeQuoted, target: internStr("foo.h")})
+	want := []VFS{intern("$(S)/pkg/foo.h")}
 
 	if len(got) != len(want) || got[0] != want[0] {
 		t.Fatalf("quoted same-dir resolve = %v, want %v", got, want)
@@ -289,7 +289,7 @@ func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
 			Filter:      nil,
 			KeyBySource: false,
 			Mappings: map[STR][]VFS{
-				internStr("elf.h"): {Source("foolib/include/elf.h")},
+				internStr("elf.h"): {source("foolib/include/elf.h")},
 			},
 		},
 	}
@@ -333,8 +333,8 @@ func TestScanner_QuotedMultiTargetSysincl_OwnAddIncl(t *testing.T) {
 			HasMultiTarget: true,
 			Mappings: map[STR][]VFS{
 				internStr("cxxabi.h"): {
-					Source("libcxxabi/include/cxxabi.h"),
-					Source("libcxxrt/include/cxxabi.h"),
+					source("libcxxabi/include/cxxabi.h"),
+					source("libcxxrt/include/cxxabi.h"),
 				},
 			},
 		},
@@ -382,8 +382,8 @@ func TestScanner_QuotedSameDirStillGated(t *testing.T) {
 			HasMultiTarget: true,
 			Mappings: map[STR][]VFS{
 				internStr("unwind.h"): {
-					Source("libcxx/include/unwind.h"),
-					Source("libcxxrt/unwind.h"),
+					source("libcxx/include/unwind.h"),
+					source("libcxxrt/unwind.h"),
 				},
 			},
 		},
@@ -427,7 +427,7 @@ func TestScanner_QuotedSysinclFiresOnLocalMiss(t *testing.T) {
 			Filter:      nil,
 			KeyBySource: false,
 			Mappings: map[STR][]VFS{
-				internStr("absent.h"): {Source("foolib/include/absent.h")},
+				internStr("absent.h"): {source("foolib/include/absent.h")},
 			},
 		},
 	}
@@ -462,7 +462,7 @@ func TestScanner_AngleSysinclUnaffected(t *testing.T) {
 			Filter:      nil,
 			KeyBySource: false,
 			Mappings: map[STR][]VFS{
-				internStr("unwind.h"): {Source("libunwind/include/unwind.h")},
+				internStr("unwind.h"): {source("libunwind/include/unwind.h")},
 			},
 		},
 	}
@@ -602,7 +602,7 @@ import weak 'c.proto';
 // import "ghost.proto";
 `,
 	}), SysInclSet{})
-	dirs := scanner.sourceParsedBuckets(Intern("$(S)/src.proto")).bucket(parsedIncludesLocal)
+	dirs := scanner.sourceParsedBuckets(intern("$(S)/src.proto")).bucket(parsedIncludesLocal)
 
 	if len(dirs) != 3 {
 		t.Fatalf("got %d directives, want 3; %+v", len(dirs), dirs)
@@ -628,7 +628,7 @@ import weak "c.proto";
 import public "d.ev";
 `,
 	}), SysInclSet{})
-	parsed := scanner.parsedIncludes(Intern("$(S)/src.proto"))
+	parsed := scanner.parsedIncludes(intern("$(S)/src.proto"))
 	local := parsed.bucket(parsedIncludesLocal)
 	hcpp := parsed.bucket(parsedIncludesHeader)
 
@@ -661,7 +661,7 @@ include "machine.rl";
 #include "tail.h"
 `,
 	}), SysInclSet{})
-	parsed := scanner.parsedIncludes(Intern("$(S)/src.rl6"))
+	parsed := scanner.parsedIncludes(intern("$(S)/src.rl6"))
 	local := parsed.bucket(parsedIncludesLocal)
 	native := parsed.bucket(parsedIncludesRagelNative)
 	hcpp := parsed.bucket(parsedIncludesHeader)
@@ -757,7 +757,7 @@ machine Sub;
 		OwnAddIncl: VFSesFromStrings([]string{"stl"}),
 	})
 
-	closure := sc.closureOf(Intern("$(S)/pkg/main.rl6"))
+	closure := sc.closureOf(intern("$(S)/pkg/main.rl6"))
 
 	closureSet := make(map[string]bool, len(closure))
 	for _, v := range closure {
@@ -786,7 +786,7 @@ machine Sub;
 	}
 
 	// The generated cpp's induced set: self-include + main's C directives.
-	induced := scanner.parsers.sourceParsedBuckets(Intern("$(S)/pkg/main.rl6"), nil).bucket(parsedIncludesCpp)
+	induced := scanner.parsers.sourceParsedBuckets(intern("$(S)/pkg/main.rl6"), nil).bucket(parsedIncludesCpp)
 	if len(induced) != 2 || induced[0].target.string() != "pkg/main.rl6" || induced[1].target.string() != "vector" {
 		t.Errorf("induced h+cpp of main.rl6 = %v, want [{pkg/main.rl6} {vector}]", induced)
 	}
@@ -796,7 +796,7 @@ func TestParsedIncludes_LeadingUTF8BOM(t *testing.T) {
 	scanner := newTestScanner(newMemFS(map[string]string{
 		"bom.cpp": "\xef\xbb\xbf#include \"sibling.h\"\n#include <system.h>\n",
 	}), SysInclSet{})
-	local := scanner.parsedIncludes(Intern("$(S)/bom.cpp")).bucket(parsedIncludesLocal)
+	local := scanner.parsedIncludes(intern("$(S)/bom.cpp")).bucket(parsedIncludesLocal)
 
 	if len(local) != 2 {
 		t.Fatalf("got %d local entries, want 2 (BOM not stripped?); %+v", len(local), local)
@@ -817,7 +817,7 @@ func TestParsedIncludes_SwigBuckets(t *testing.T) {
 %}
 `,
 	}), SysInclSet{})
-	parsed := scanner.parsedIncludes(Intern("$(S)/src.swg"))
+	parsed := scanner.parsedIncludes(intern("$(S)/src.swg"))
 	local := parsed.bucket(parsedIncludesLocal)
 	hcpp := parsed.bucket(parsedIncludesHeader)
 
@@ -858,8 +858,8 @@ func TestScanDirectives_DispatchByExtension(t *testing.T) {
 		"src.h":   "#include \"real.h\"\n%include \"should-not-match.asm\"\n",
 	}), SysInclSet{})
 
-	asmDirs := scanner.scanDirectives(Intern("$(S)/src.asm"))
-	hDirs := scanner.scanDirectives(Intern("$(S)/src.h"))
+	asmDirs := scanner.scanDirectives(intern("$(S)/src.asm"))
+	hDirs := scanner.scanDirectives(intern("$(S)/src.h"))
 
 	if len(asmDirs) != 1 || asmDirs[0].target.string() != "defs.asm" {
 		t.Errorf("asm dispatch failed: got %+v, want one directive targeting defs.asm", asmDirs)
@@ -875,7 +875,7 @@ func TestScanDirectives_AsiDispatchesToYasm(t *testing.T) {
 		"src.asi": "%include \"nested.asi\"\n",
 	}), SysInclSet{})
 
-	dirs := scanner.scanDirectives(Intern("$(S)/src.asi"))
+	dirs := scanner.scanDirectives(intern("$(S)/src.asi"))
 
 	if len(dirs) != 1 || dirs[0].target.string() != "nested.asi" {
 		t.Errorf(".asi dispatch failed: got %+v, want one directive targeting nested.asi", dirs)
@@ -886,7 +886,7 @@ func TestScanDirectives_G4UsesEmptyParser(t *testing.T) {
 	scanner := newTestScanner(newMemFS(map[string]string{
 		"src.g4": "#include \"ghost.h\"\ngrammar X;\n",
 	}), SysInclSet{})
-	dirs := scanner.scanDirectives(Intern("$(S)/src.g4"))
+	dirs := scanner.scanDirectives(intern("$(S)/src.g4"))
 
 	if len(dirs) != 0 {
 		t.Errorf(".g4 should use empty parser, got %+v", dirs)
@@ -897,7 +897,7 @@ func TestScanDirectives_InSuffixUsesUnderlyingExtension(t *testing.T) {
 	scanner := newTestScanner(newMemFS(map[string]string{
 		"src.g4.in": "#include \"ghost.h\"\ngrammar X;\n",
 	}), SysInclSet{})
-	dirs := scanner.scanDirectives(Intern("$(S)/src.g4.in"))
+	dirs := scanner.scanDirectives(intern("$(S)/src.g4.in"))
 
 	if len(dirs) != 0 {
 		t.Errorf(".g4.in should inherit .g4 empty parser, got %+v", dirs)
@@ -910,7 +910,7 @@ func TestScanDirectives_MacroIndirectAugmentation(t *testing.T) {
 	scanner := newTestScanner(newMemFS(map[string]string{
 		rel: "#include <openssl/crypto.h>\n# include OPENSSL_UNISTD\n",
 	}), SysInclSet{})
-	dirs := scanner.scanDirectives(Source(rel))
+	dirs := scanner.scanDirectives(source(rel))
 
 	var hasCrypto, hasUnistd bool
 
@@ -973,17 +973,17 @@ func TestScanner_CythonNestedPxdUsesPy2StringSibling(t *testing.T) {
 	}), SysInclSet{})
 	closure := scanClosure(scanner, "pkg/mod.pyx", ScanContext{
 		OwnAddIncl: []VFS{
-			Intern("$(S)/"),
-			Intern("$(S)/contrib/tools/cython/Cython/Includes"),
+			intern("$(S)/"),
+			intern("$(S)/contrib/tools/cython/Cython/Includes"),
 		},
 	})
 
-	assertHasVFS(t, closure, Intern("$(S)/util/generic/string.pxd"))
-	assertHasVFS(t, closure, Intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libcpp/string.pxd"))
-	assertHasVFS(t, closure, Intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libc/string.pxd"))
-	assertLacksVFS(t, closure, Intern("$(S)/contrib/tools/cython/Cython/Includes/libcpp/string.pxd"))
-	assertLacksVFS(t, closure, Intern("$(S)/contrib/tools/cython/Cython/Includes/libc/string.pxd"))
-	assertLacksVFS(t, closure, Intern("$(S)/contrib/tools/cython/Cython/Includes/libcpp/string_view.pxd"))
+	assertHasVFS(t, closure, intern("$(S)/util/generic/string.pxd"))
+	assertHasVFS(t, closure, intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libcpp/string.pxd"))
+	assertHasVFS(t, closure, intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libc/string.pxd"))
+	assertLacksVFS(t, closure, intern("$(S)/contrib/tools/cython/Cython/Includes/libcpp/string.pxd"))
+	assertLacksVFS(t, closure, intern("$(S)/contrib/tools/cython/Cython/Includes/libc/string.pxd"))
+	assertLacksVFS(t, closure, intern("$(S)/contrib/tools/cython/Cython/Includes/libcpp/string_view.pxd"))
 }
 
 func TestScanner_CythonPyxDirectStdlibStaysPy3WhileNestedPxdAddsPy2(t *testing.T) {
@@ -997,15 +997,15 @@ func TestScanner_CythonPyxDirectStdlibStaysPy3WhileNestedPxdAddsPy2(t *testing.T
 	}), SysInclSet{})
 	closure := scanClosure(scanner, "pkg/mod.pyx", ScanContext{
 		OwnAddIncl: []VFS{
-			Intern("$(S)/"),
-			Intern("$(S)/contrib/tools/cython/Cython/Includes"),
+			intern("$(S)/"),
+			intern("$(S)/contrib/tools/cython/Cython/Includes"),
 		},
 	})
 
-	assertHasVFS(t, closure, Intern("$(S)/contrib/tools/cython/Cython/Includes/libcpp/pair.pxd"))
-	assertHasVFS(t, closure, Intern("$(S)/contrib/tools/cython/Cython/Includes/libcpp/utility.pxd"))
-	assertHasVFS(t, closure, Intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libcpp/pair.pxd"))
-	assertHasVFS(t, closure, Intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libcpp/utility.pxd"))
+	assertHasVFS(t, closure, intern("$(S)/contrib/tools/cython/Cython/Includes/libcpp/pair.pxd"))
+	assertHasVFS(t, closure, intern("$(S)/contrib/tools/cython/Cython/Includes/libcpp/utility.pxd"))
+	assertHasVFS(t, closure, intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libcpp/pair.pxd"))
+	assertHasVFS(t, closure, intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libcpp/utility.pxd"))
 }
 
 func TestScanner_CythonStdintSplitKeepsPy3InitButAddsPy2Types(t *testing.T) {
@@ -1020,15 +1020,15 @@ func TestScanner_CythonStdintSplitKeepsPy3InitButAddsPy2Types(t *testing.T) {
 	}), SysInclSet{})
 	closure := scanClosure(scanner, "pkg/mod.pyx", ScanContext{
 		OwnAddIncl: []VFS{
-			Intern("$(S)/"),
-			Intern("$(S)/contrib/tools/cython/Cython/Includes"),
+			intern("$(S)/"),
+			intern("$(S)/contrib/tools/cython/Cython/Includes"),
 		},
 	})
 
-	assertHasVFS(t, closure, Intern("$(S)/contrib/tools/cython/Cython/Includes/libcpp/__init__.pxd"))
-	assertLacksVFS(t, closure, Intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libcpp/__init__.pxd"))
-	assertHasVFS(t, closure, Intern("$(S)/contrib/tools/cython/Cython/Includes/libc/stdint.pxd"))
-	assertHasVFS(t, closure, Intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libc/stdint.pxd"))
+	assertHasVFS(t, closure, intern("$(S)/contrib/tools/cython/Cython/Includes/libcpp/__init__.pxd"))
+	assertLacksVFS(t, closure, intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libcpp/__init__.pxd"))
+	assertHasVFS(t, closure, intern("$(S)/contrib/tools/cython/Cython/Includes/libc/stdint.pxd"))
+	assertHasVFS(t, closure, intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libc/stdint.pxd"))
 }
 
 // attachCodegen wires a CodegenRegistry onto an existing scanner the way the
@@ -1046,10 +1046,10 @@ func attachCodegen(scanner *IncludeScanner, reg *CodegenRegistry) {
 // match wins (devtools/ymake/module_resolver.cpp:371 → resolver/path_resolver
 // CheckByRoot). Real-world repro of the OMP.inc case in contrib/libs/llvm16.
 func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
-	reg := NewCodegenRegistry()
+	reg := newCodegenRegistry()
 	reg.register(&GeneratedFileInfo{
 		ProducerKvP: pkPR,
-		OutputPath:  Build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc"),
+		OutputPath:  build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc"),
 	})
 
 	fs := newMemFS(map[string]string{
@@ -1059,14 +1059,14 @@ func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 	attachCodegen(scanner, reg)
 	sc := scanner.newScanCtx(ScanContext{
 		PeerAddInclSet: []VFS{
-			Build("contrib/libs/llvm16/include"),
-			Source("contrib/libs/llvm16/include"),
+			build("contrib/libs/llvm16/include"),
+			source("contrib/libs/llvm16/include"),
 		},
 	})
 
 	d := IncludeDirective{kind: includeQuoted, target: internStr("llvm/Frontend/OpenMP/OMP.inc")}
-	got := sc.resolveSearchPath(Intern("$(S)/contrib/libs/llvm16/lib/Frontend/OpenMP/OMP.cpp"), dirKey("contrib/libs/llvm16/lib/Frontend/OpenMP"), d)
-	want := []VFS{Build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc")}
+	got := sc.resolveSearchPath(intern("$(S)/contrib/libs/llvm16/lib/Frontend/OpenMP/OMP.cpp"), dirKey("contrib/libs/llvm16/lib/Frontend/OpenMP"), d)
+	want := []VFS{build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc")}
 
 	if len(got) != 1 || got[0] != want[0] {
 		t.Fatalf("got=%v, want=%v (Build addincl declared first must win over Source stub)", got, want)
@@ -1077,10 +1077,10 @@ func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 // when Source is declared before Build, even if a Build registration exists
 // for the same target, Source must win (first-match-in-declaration-order).
 func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
-	reg := NewCodegenRegistry()
+	reg := newCodegenRegistry()
 	reg.register(&GeneratedFileInfo{
 		ProducerKvP: pkPR,
-		OutputPath:  Build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc"),
+		OutputPath:  build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc"),
 	})
 
 	fs := newMemFS(map[string]string{
@@ -1090,14 +1090,14 @@ func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 	attachCodegen(scanner, reg)
 	sc := scanner.newScanCtx(ScanContext{
 		PeerAddInclSet: []VFS{
-			Source("contrib/libs/llvm16/include"),
-			Build("contrib/libs/llvm16/include"),
+			source("contrib/libs/llvm16/include"),
+			build("contrib/libs/llvm16/include"),
 		},
 	})
 
 	d := IncludeDirective{kind: includeQuoted, target: internStr("llvm/Frontend/OpenMP/OMP.inc")}
-	got := sc.resolveSearchPath(Intern("$(S)/contrib/libs/llvm16/lib/Frontend/OpenMP/OMP.cpp"), dirKey("contrib/libs/llvm16/lib/Frontend/OpenMP"), d)
-	want := []VFS{Source("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc")}
+	got := sc.resolveSearchPath(intern("$(S)/contrib/libs/llvm16/lib/Frontend/OpenMP/OMP.cpp"), dirKey("contrib/libs/llvm16/lib/Frontend/OpenMP"), d)
+	want := []VFS{source("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc")}
 
 	if len(got) != 1 || got[0] != want[0] {
 		t.Fatalf("got=%v, want=%v (Source addincl declared first must win)", got, want)
@@ -1110,24 +1110,24 @@ func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 // already worked via the Build fallback loop; the unified ranker must
 // preserve it.
 func TestScanner_AddInclBuildOnlyMatchesCodegen(t *testing.T) {
-	reg := NewCodegenRegistry()
+	reg := newCodegenRegistry()
 	reg.register(&GeneratedFileInfo{
 		ProducerKvP: pkPR,
-		OutputPath:  Build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.h.inc"),
+		OutputPath:  build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.h.inc"),
 	})
 
 	scanner := newTestScanner(newMemFS(nil), nil)
 	attachCodegen(scanner, reg)
 	sc := scanner.newScanCtx(ScanContext{
 		PeerAddInclSet: []VFS{
-			Build("contrib/libs/llvm16/include"),
-			Source("contrib/libs/llvm16/include"),
+			build("contrib/libs/llvm16/include"),
+			source("contrib/libs/llvm16/include"),
 		},
 	})
 
 	d := IncludeDirective{kind: includeQuoted, target: internStr("llvm/Frontend/OpenMP/OMP.h.inc")}
-	got := sc.resolveSearchPath(Intern("$(S)/contrib/libs/llvm16/lib/Frontend/OpenMP/OMP.cpp"), dirKey("contrib/libs/llvm16/lib/Frontend/OpenMP"), d)
-	want := []VFS{Build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.h.inc")}
+	got := sc.resolveSearchPath(intern("$(S)/contrib/libs/llvm16/lib/Frontend/OpenMP/OMP.cpp"), dirKey("contrib/libs/llvm16/lib/Frontend/OpenMP"), d)
+	want := []VFS{build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.h.inc")}
 
 	if len(got) != 1 || got[0] != want[0] {
 		t.Fatalf("got=%v, want=%v (build-only target must resolve via codegen)", got, want)
@@ -1145,9 +1145,9 @@ func TestScanCtx_Resolve_RootedTargetBindsDirectly(t *testing.T) {
 
 	for _, target := range []string{"$(S)/util/generic/typetraits.h", "$(B)/pkg/gen.h"} {
 		d := IncludeDirective{kind: includeQuoted, target: internStr(target)}
-		got := sc.resolve(Intern("$(S)/pkg/a.cpp"), dirKey("pkg"), d)
+		got := sc.resolve(intern("$(S)/pkg/a.cpp"), dirKey("pkg"), d)
 
-		if len(got) != 1 || got[0] != Intern(target) {
+		if len(got) != 1 || got[0] != intern(target) {
 			t.Errorf("resolve(%s) = %v, want [%s]", target, got, target)
 		}
 	}

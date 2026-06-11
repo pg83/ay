@@ -85,7 +85,7 @@ type BufferedEmitter struct {
 	readyCh chan struct{}
 }
 
-func NewBufferedEmitter() *BufferedEmitter {
+func newBufferedEmitter() *BufferedEmitter {
 	return &BufferedEmitter{
 		readyCh: make(chan struct{}),
 	}
@@ -125,13 +125,13 @@ type Graph struct {
 
 func finalizeNodesInOrder(e *BufferedEmitter, order []int, yield func(*Node)) *UidVec {
 	if e.finalized {
-		ThrowFmt("finalize: emitter already finalized")
+		throwFmt("finalize: emitter already finalized")
 	}
 
 	n := len(e.nodes)
 
 	if len(order) != n {
-		ThrowFmt("finalize: order length %d does not match buffer size %d", len(order), n)
+		throwFmt("finalize: order length %d does not match buffer size %d", len(order), n)
 	}
 
 	uids := &UidVec{}
@@ -157,14 +157,14 @@ func finalizeNodesInOrder(e *BufferedEmitter, order []int, yield func(*Node)) *U
 
 func finalizeOrder(e *BufferedEmitter) []int {
 	if e.finalized {
-		ThrowFmt("finalize: emitter already finalized")
+		throwFmt("finalize: emitter already finalized")
 	}
 
 	n := len(e.nodes)
 
 	checkRef := func(owner int, r NodeRef) {
 		if int(r) >= n {
-			ThrowFmt("node %d references out-of-range NodeRef id=%d (buffer size %d)", owner, r, n)
+			throwFmt("node %d references out-of-range NodeRef id=%d (buffer size %d)", owner, r, n)
 		}
 	}
 
@@ -180,7 +180,7 @@ func finalizeOrder(e *BufferedEmitter) []int {
 
 	for i, rid := range e.results {
 		if int(rid) >= n {
-			ThrowFmt("result %d references out-of-range NodeRef id=%d (buffer size %d)", i, rid, n)
+			throwFmt("result %d references out-of-range NodeRef id=%d (buffer size %d)", i, rid, n)
 		}
 	}
 
@@ -242,11 +242,11 @@ func finalizeOrder(e *BufferedEmitter) []int {
 	if len(order) != n {
 		for i, d := range indeg {
 			if d > 0 {
-				ThrowFmt("cycle detected involving node %d", i)
+				throwFmt("cycle detected involving node %d", i)
 			}
 		}
 
-		ThrowFmt("cycle detected (could not order all %d nodes; ordered %d)", n, len(order))
+		throwFmt("cycle detected (could not order all %d nodes; ordered %d)", n, len(order))
 	}
 
 	return order
@@ -296,7 +296,7 @@ type StreamingEmitter struct {
 	uidScratch CanonBuf
 }
 
-func NewStreamingEmitter(onNode func(*Node, *UidVec)) *StreamingEmitter {
+func newStreamingEmitter(onNode func(*Node, *UidVec)) *StreamingEmitter {
 	return &StreamingEmitter{
 		uids:       &UidVec{},
 		pendingSet: map[NodeRef]bool{},
@@ -451,6 +451,6 @@ func finalizeGraphInOrder(e *BufferedEmitter, order []int) *Graph {
 	return graphFromFinalizedEmitter(e, finalizeNodesInOrder(e, order, nil))
 }
 
-func Finalize(e *BufferedEmitter) *Graph {
+func finalize(e *BufferedEmitter) *Graph {
 	return graphFromFinalizedEmitter(e, finalizeNodes(e, nil))
 }

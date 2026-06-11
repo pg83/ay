@@ -42,7 +42,7 @@ func (e *Exception) asError() error {
 	return e.what()
 }
 
-func New(err error) *Exception {
+func newException(err error) *Exception {
 	return &Exception{
 		what: func() error {
 			return err
@@ -50,24 +50,24 @@ func New(err error) *Exception {
 	}
 }
 
-func Fmt(format string, args ...any) *Exception {
-	return New(fmt.Errorf(format, args...))
+func exceptionf(format string, args ...any) *Exception {
+	return newException(fmt.Errorf(format, args...))
 }
 
-func Throw(err error) {
+func throw(err error) {
 	if err != nil {
-		New(err).throw()
+		newException(err).throw()
 	}
 }
 
-func Throw2[T any](val T, err error) T {
-	Throw(err)
+func throw2[T any](val T, err error) T {
+	throw(err)
 
 	return val
 }
 
-func ThrowFmt(format string, args ...any) {
-	Fmt(format, args...).throw()
+func throwFmt(format string, args ...any) {
+	exceptionf(format, args...).throw()
 }
 
 type HTTPError struct {
@@ -75,7 +75,7 @@ type HTTPError struct {
 	Msg    string
 }
 
-func Try(cb func()) (err *Exception) {
+func try(cb func()) (err *Exception) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			if exc, ok := rec.(*Exception); ok {

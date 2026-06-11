@@ -122,8 +122,15 @@ return dev, addr
 
 ## Naming
 
-Types start upper-case, methods lower-case — uniformly; the project is one
-`package main`, so case carries no visibility here, only convention.
+Types start upper-case; methods and free functions lower-case — uniformly;
+the project is one `package main`, so case carries no visibility here, only
+convention. The resulting invariant: an upper-case identifier is a TYPE.
+
+A function whose lowered name would hit a predeclared identifier or an
+imported package name (`New` -> `new`, `Fmt` -> `fmt` — both would shadow)
+gets a descriptive rename instead (`newException`, `exceptionf`); `refac
+case` flags these, it does not invent names. Test functions stay
+`TestXxx`/`BenchmarkXxx` — the testing framework finds them by name.
 
 The exception is forced by the standard library: methods it finds by name
 (`String`, `Error`, `MarshalJSON`, `UnmarshalJSON`, `Len`/`Less`/`Swap`,

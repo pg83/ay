@@ -43,7 +43,7 @@ func perfParser(dir string) int {
 		total int64
 	)
 
-	Throw(filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+	throw(filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -52,7 +52,7 @@ func perfParser(dir string) int {
 			return nil
 		}
 
-		datas = append(datas, Throw2(os.ReadFile(p)))
+		datas = append(datas, throw2(os.ReadFile(p)))
 		total += int64(len(datas[len(datas)-1]))
 
 		return nil

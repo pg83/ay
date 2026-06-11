@@ -5,21 +5,21 @@ import "testing"
 func TestEmitFL_NodeShape(t *testing.T) {
 	target := newTestPlatform(OSLinux, ISAX8664, "no", nil)
 	instance := ModuleInstance{
-		Path:     Source("mod"),
+		Path:     source("mod"),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: target,
 	}
 
-	e := NewBufferedEmitter()
-	_, header, cpp, bfbs := EmitFL(
+	e := newBufferedEmitter()
+	_, header, cpp, bfbs := emitFL(
 		instance,
 		"mod/File.fbs",
-		Intern("$(S)/mod/File.fbs"),
+		intern("$(S)/mod/File.fbs"),
 		NodeRef(9),
-		Intern("$(B)/contrib/libs/flatbuffers/flatc/flatc"),
+		intern("$(B)/contrib/libs/flatbuffers/flatc/flatc"),
 		internArgs([]string{"--scoped-enums"}),
-		[]VFS{Intern("$(S)/mod/Schema.fbs")},
+		[]VFS{intern("$(S)/mod/Schema.fbs")},
 		testToolchain(),
 		e,
 	)

@@ -6,14 +6,14 @@ import (
 
 func TestModuleInstance_Equality_Hashing(t *testing.T) {
 	a := ModuleInstance{
-		Path:     Source("build/cow/on"),
+		Path:     source("build/cow/on"),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,
 	}
 
 	b := ModuleInstance{
-		Path:     Source("build/cow/on"),
+		Path:     source("build/cow/on"),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,
@@ -45,7 +45,7 @@ func TestModuleInstance_Equality_Hashing(t *testing.T) {
 }
 
 func TestNewToolInstance(t *testing.T) {
-	tool := NewToolInstance(testHostP, "contrib/tools/ragel6")
+	tool := newToolInstance(testHostP, "contrib/tools/ragel6")
 
 	if tool.Path.rel() != "contrib/tools/ragel6" {
 		t.Errorf("Path = %q, want contrib/tools/ragel6", tool.Path.rel())
@@ -66,7 +66,7 @@ func TestNewToolInstance(t *testing.T) {
 
 func TestModuleInstance_String_Diagnostic(t *testing.T) {
 	mi := ModuleInstance{
-		Path:     Source("build/cow/on"),
+		Path:     source("build/cow/on"),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,

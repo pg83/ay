@@ -20,7 +20,7 @@ func resolveEnumHeaderInput(ctx *GenCtx, instance ModuleInstance, headerRel stri
 	}
 
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
-		buildHeader := Build(headerInput.rel())
+		buildHeader := build(headerInput.rel())
 
 		if reg.lookup(buildHeader) != nil {
 			return buildHeader
@@ -65,11 +65,11 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 
 		closure := walkClosure(ctx, instance, headerInput, scanIn)
 
-		serializedCPPPath := Build(instance.Path.rel() + "/" + headerRel + "_serialized.cpp")
+		serializedCPPPath := build(instance.Path.rel() + "/" + headerRel + "_serialized.cpp")
 		var serializedHPath VFS
 
 		if withHeader {
-			serializedHPath = Build(instance.Path.rel() + "/" + headerRel + "_serialized.h")
+			serializedHPath = build(instance.Path.rel() + "/" + headerRel + "_serialized.h")
 		}
 
 		if ctx.scannerTarget.codegen != nil {
@@ -116,7 +116,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 			moduleTag = tagCppProto
 		}
 
-		enRef, enOutPaths := EmitEN(
+		enRef, enOutPaths := emitEN(
 			instance,
 			headerInput,
 			headerRel,
@@ -150,7 +150,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 	return res
 }
 
-func EmitEN(
+func emitEN(
 	instance ModuleInstance,
 	headerInput VFS,
 	headerRel string,
@@ -162,7 +162,7 @@ func EmitEN(
 	headerIncludeClosure []VFS,
 	emit Emitter,
 ) (NodeRef, []VFS) {
-	serializedCPPVFS := Build(instance.Path.rel() + "/" + headerRel + "_serialized.cpp")
+	serializedCPPVFS := build(instance.Path.rel() + "/" + headerRel + "_serialized.cpp")
 
 	cmdArgs := []STR{
 		(enumParserBin).str(),
@@ -175,7 +175,7 @@ func EmitEN(
 	outputs := []VFS{serializedCPPVFS}
 
 	if withHeader {
-		serializedHVFS := Build(instance.Path.rel() + "/" + headerRel + "_serialized.h")
+		serializedHVFS := build(instance.Path.rel() + "/" + headerRel + "_serialized.h")
 		cmdArgs = append(cmdArgs, argHeader.str(), (serializedHVFS).str())
 		outputs = append(outputs, serializedHVFS)
 	}

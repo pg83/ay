@@ -119,7 +119,7 @@ func (e Environment) boolID(id ENV, name string) bool {
 	case envStr:
 		return stringIsTruthy(internTable.strs[v])
 	case envInt:
-		ThrowFmt("macros: identifier %q has int binding but is used in boolean position", name)
+		throwFmt("macros: identifier %q has int binding but is used in boolean position", name)
 	}
 
 	return false
@@ -154,7 +154,7 @@ func (e Environment) string(id ENV) string {
 		return ""
 	}
 
-	ThrowFmt("macros: unknown IF identifier %q", name)
+	throwFmt("macros: unknown IF identifier %q", name)
 
 	return ""
 }
@@ -268,7 +268,7 @@ func (e Environment) setDefaultString(id ENV, v string) {
 	e.setString(id, v)
 }
 
-func EvalCond(e Expr, env Environment) bool {
+func evalCond(e Expr, env Environment) bool {
 	switch x := e.(type) {
 	case *ExprIdent:
 		if x.Name == "yes" {
@@ -281,22 +281,22 @@ func EvalCond(e Expr, env Environment) bool {
 
 		return env.boolID(identEnv(x), x.Name)
 	case *ExprNot:
-		return !EvalCond(x.Of, env)
+		return !evalCond(x.Of, env)
 	case *ExprAnd:
-		return EvalCond(x.Left, env) && EvalCond(x.Right, env)
+		return evalCond(x.Left, env) && evalCond(x.Right, env)
 	case *ExprOr:
-		return EvalCond(x.Left, env) || EvalCond(x.Right, env)
+		return evalCond(x.Left, env) || evalCond(x.Right, env)
 	case *ExprString:
-		ThrowFmt("macros: bare string %q cannot be evaluated as a boolean condition", x.Value)
+		throwFmt("macros: bare string %q cannot be evaluated as a boolean condition", x.Value)
 	case *ExprInt:
-		ThrowFmt("macros: bare integer %d cannot be evaluated as a boolean condition", x.Value)
+		throwFmt("macros: bare integer %d cannot be evaluated as a boolean condition", x.Value)
 	case *ExprEq:
 		return evalEq(x, env)
 	case *ExprLt:
 		return evalLt(x, env)
 	}
 
-	ThrowFmt("macros: unhandled Expr type %T", e)
+	throwFmt("macros: unhandled Expr type %T", e)
 
 	return false
 }
@@ -321,7 +321,7 @@ func evalAtom(e Expr, env Environment) any {
 			return x.Name
 		}
 
-		ThrowFmt("macros: unknown IF identifier %q", x.Name)
+		throwFmt("macros: unknown IF identifier %q", x.Name)
 
 		return nil
 	case *ExprString:
@@ -330,7 +330,7 @@ func evalAtom(e Expr, env Environment) any {
 		return x.Value
 	}
 
-	ThrowFmt("macros: unexpected Expr type %T in comparator operand position", e)
+	throwFmt("macros: unexpected Expr type %T in comparator operand position", e)
 
 	return nil
 }
@@ -358,7 +358,7 @@ func evalEq(x *ExprEq, env Environment) bool {
 		rv, ok := r.(string)
 
 		if !ok {
-			ThrowFmt("macros: == operand type mismatch: left is string %q, right is %T", lv, r)
+			throwFmt("macros: == operand type mismatch: left is string %q, right is %T", lv, r)
 		}
 
 		return lv == rv
@@ -366,7 +366,7 @@ func evalEq(x *ExprEq, env Environment) bool {
 		rv, ok := r.(int)
 
 		if !ok {
-			ThrowFmt("macros: == operand type mismatch: left is int %d, right is %T", lv, r)
+			throwFmt("macros: == operand type mismatch: left is int %d, right is %T", lv, r)
 		}
 
 		return lv == rv
@@ -382,13 +382,13 @@ func evalEq(x *ExprEq, env Environment) bool {
 		rv, ok := r.(bool)
 
 		if !ok {
-			ThrowFmt("macros: == operand type mismatch: left is bool %v, right is %T", lv, r)
+			throwFmt("macros: == operand type mismatch: left is bool %v, right is %T", lv, r)
 		}
 
 		return lv == rv
 	}
 
-	ThrowFmt("macros: == operand has unsupported dynamic type %T", l)
+	throwFmt("macros: == operand has unsupported dynamic type %T", l)
 
 	return false
 }
@@ -401,7 +401,7 @@ func evalLt(x *ExprLt, env Environment) bool {
 	ri, rok := r.(int)
 
 	if !lok || !rok {
-		ThrowFmt("macros: < requires int operands, got left=%T right=%T", l, r)
+		throwFmt("macros: < requires int operands, got left=%T right=%T", l, r)
 	}
 
 	return li < ri

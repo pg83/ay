@@ -19,16 +19,16 @@ const (
 // walks its closure before the R6 node exists.
 func ragel6OutVFS(instance ModuleInstance, srcRel string) VFS {
 	if strings.Contains(srcRel, "/") {
-		return Build(instance.Path.rel() + "/_/" + srcRel + ".cpp")
+		return build(instance.Path.rel() + "/_/" + srcRel + ".cpp")
 	}
 
-	return Build(instance.Path.rel() + "/" + srcRel + ".cpp")
+	return build(instance.Path.rel() + "/" + srcRel + ".cpp")
 }
 
-func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ARG, closure []VFS, emit Emitter) (NodeRef, VFS) {
+func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ARG, closure []VFS, emit Emitter) (NodeRef, VFS) {
 	outVFS := ragel6OutVFS(instance, srcRel)
 
-	inVFS := Source(instance.Path.rel() + "/" + srcRel)
+	inVFS := source(instance.Path.rel() + "/" + srcRel)
 
 	effectiveFlags := ragel6Flags
 

@@ -9,7 +9,7 @@ import (
 )
 
 func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 	c := e.emit(&Node{
 		Cmds:             []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"build", "C"})}, Env: nil}},
 		Env:              nil,
@@ -77,8 +77,8 @@ func nodeNameByKV(g *Graph, idx int) string {
 }
 
 func finalizeExc(e *BufferedEmitter) (g *Graph, exc *Exception) {
-	exc = Try(func() {
-		g = Finalize(e)
+	exc = try(func() {
+		g = finalize(e)
 	})
 
 	return g, exc
@@ -87,7 +87,7 @@ func finalizeExc(e *BufferedEmitter) (g *Graph, exc *Exception) {
 func TestFinalize_TopoOrder_LeavesFirst(t *testing.T) {
 
 	e, _, _, _ := build3NodeDAG()
-	g := Finalize(e)
+	g := finalize(e)
 
 	if len(g.Graph) != 3 {
 		t.Fatalf("expected 3 nodes, got %d", len(g.Graph))
@@ -106,12 +106,12 @@ func TestFinalize_TopoOrder_LeavesFirst(t *testing.T) {
 
 func TestFinalize_UIDsStableAcrossRuns(t *testing.T) {
 	e1, _, _, _ := build3NodeDAG()
-	g1 := Finalize(e1)
-	raw1 := Throw2(json.Marshal(g1))
+	g1 := finalize(e1)
+	raw1 := throw2(json.Marshal(g1))
 
 	e2, _, _, _ := build3NodeDAG()
-	g2 := Finalize(e2)
-	raw2 := Throw2(json.Marshal(g2))
+	g2 := finalize(e2)
+	raw2 := throw2(json.Marshal(g2))
 
 	if !bytes.Equal(raw1, raw2) {
 		t.Errorf("Finalize output not byte-stable across runs.\nrun1: %s\nrun2: %s", raw1, raw2)
@@ -138,7 +138,7 @@ func TestFinalize_UIDsStableAcrossRuns(t *testing.T) {
 
 func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 	mkLeaf := func(name string) NodeRef {
 		return e.emit(&Node{Platform: &Platform{},
 			Cmds:   []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{name})}, Env: nil}},
@@ -163,7 +163,7 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 		DepRefs:          []NodeRef{z, x, y},
 	})
 	e.result(a)
-	g := Finalize(e)
+	g := finalize(e)
 
 	var aNode *Node
 	for _, n := range g.Graph {
@@ -194,7 +194,7 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 }
 
 func TestFinalize_KeepsDuplicateDeps(t *testing.T) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 	c := e.emit(&Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"C"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
@@ -213,7 +213,7 @@ func TestFinalize_KeepsDuplicateDeps(t *testing.T) {
 		DepRefs:          []NodeRef{c, c, c},
 	})
 	e.result(a)
-	g := Finalize(e)
+	g := finalize(e)
 
 	var aNode *Node
 	for _, n := range g.Graph {
@@ -235,7 +235,7 @@ func TestFinalize_KeepsDuplicateDeps(t *testing.T) {
 
 func TestFinalize_CycleReturnsError(t *testing.T) {
 
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 	aNode := &Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
@@ -265,7 +265,7 @@ func TestFinalize_CycleReturnsError(t *testing.T) {
 }
 
 func TestFinalize_OutOfRangeRefReturnsError(t *testing.T) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 	a := e.emit(&Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
@@ -286,8 +286,8 @@ func TestFinalize_OutOfRangeRefReturnsError(t *testing.T) {
 func TestFinalize_GraphTopLevelKeyOrder(t *testing.T) {
 
 	e, _, _, _ := build3NodeDAG()
-	g := Finalize(e)
-	raw := Throw2(json.Marshal(g))
+	g := finalize(e)
+	raw := throw2(json.Marshal(g))
 	keys := extractKeyOrder(t, raw)
 	want := []string{"graph", "inputs", "result"}
 
@@ -304,7 +304,7 @@ func TestFinalize_GraphTopLevelKeyOrder(t *testing.T) {
 
 func TestFinalize_DedupesIdenticalEmits(t *testing.T) {
 
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 	mk := func() NodeRef {
 		return e.emit(&Node{Platform: &Platform{},
 			Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"identical"})}, Env: nil}},
@@ -319,7 +319,7 @@ func TestFinalize_DedupesIdenticalEmits(t *testing.T) {
 	r2 := mk()
 	e.result(r1)
 	e.result(r2)
-	g := Finalize(e)
+	g := finalize(e)
 
 	if len(g.Graph) != 1 {
 		t.Errorf("expected 1 deduped node in Graph, got %d (%+v)", len(g.Graph), g.Graph)
@@ -329,7 +329,7 @@ func TestFinalize_DedupesIdenticalEmits(t *testing.T) {
 func TestFinalize_SecondCallErrors(t *testing.T) {
 
 	e, _, _, _ := build3NodeDAG()
-	Finalize(e)
+	finalize(e)
 
 	_, exc := finalizeExc(e)
 	if exc == nil {
@@ -343,7 +343,7 @@ func TestFinalize_SecondCallErrors(t *testing.T) {
 
 func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 	a := e.emit(&Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
@@ -354,7 +354,7 @@ func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 		ForeignDepRefs:   []NodeRef{},
 	})
 	e.result(a)
-	g := Finalize(e)
+	g := finalize(e)
 
 	var aNode *Node
 	for _, n := range g.Graph {
@@ -380,7 +380,7 @@ func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 
 func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
 
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 	a := e.emit(&Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
@@ -391,7 +391,7 @@ func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
 	})
 	e.result(a)
 	e.result(a)
-	g := Finalize(e)
+	g := finalize(e)
 
 	if len(g.Result) != 1 {
 		t.Errorf("expected 1 deduped result, got %d (%v)", len(g.Result), g.Result)
@@ -399,7 +399,7 @@ func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
 }
 
 func TestEmitter_OnReady_BufferedNoOp(t *testing.T) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 	r := e.emit(&Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"X"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
@@ -418,7 +418,7 @@ func TestEmitter_OnReady_BufferedNoOp(t *testing.T) {
 
 	}
 
-	Finalize(e)
+	finalize(e)
 
 	select {
 	case <-ch:
@@ -429,9 +429,9 @@ func TestEmitter_OnReady_BufferedNoOp(t *testing.T) {
 }
 
 func TestEmitter_PostFinalizeEmitPanics(t *testing.T) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 	e.emit(&Node{Platform: &Platform{}, KV: KV{P: pkTEST}})
-	Finalize(e)
+	finalize(e)
 
 	defer func() {
 		r := recover()
@@ -453,9 +453,9 @@ func TestEmitter_PostFinalizeEmitPanics(t *testing.T) {
 }
 
 func TestEmitter_PostFinalizeResultPanics(t *testing.T) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 	ref := e.emit(&Node{Platform: &Platform{}, KV: KV{P: pkTEST}})
-	Finalize(e)
+	finalize(e)
 
 	defer func() {
 		r := recover()
@@ -478,7 +478,7 @@ func TestEmitter_PostFinalizeResultPanics(t *testing.T) {
 
 func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 
-	e1 := NewBufferedEmitter()
+	e1 := newBufferedEmitter()
 	c1 := e1.emit(&Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"C", "v1"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})}, KV: KV{},
@@ -493,9 +493,9 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 		DepRefs: []NodeRef{c1},
 	})
 	e1.result(a1)
-	g1 := Finalize(e1)
+	g1 := finalize(e1)
 
-	e2 := NewBufferedEmitter()
+	e2 := newBufferedEmitter()
 	c2 := e2.emit(&Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"C", "v2"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})}, KV: KV{},
@@ -510,7 +510,7 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 		DepRefs: []NodeRef{c2},
 	})
 	e2.result(a2)
-	g2 := Finalize(e2)
+	g2 := finalize(e2)
 
 	a1uid := g1.Graph[0].UID
 	a2uid := g2.Graph[0].UID
@@ -521,7 +521,7 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 }
 
 func TestFinalize_HeapTopo_Determinism(t *testing.T) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 	mk := func(name string, deps ...NodeRef) NodeRef {
 		return e.emit(&Node{Platform: &Platform{},
 			Cmds:             []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{name})}, Env: nil}},
@@ -542,7 +542,7 @@ func TestFinalize_HeapTopo_Determinism(t *testing.T) {
 	m4 := mk("M4", l1)
 	t6 := mk("T", l2, m3, m4)
 	e.result(t6)
-	g := Finalize(e)
+	g := finalize(e)
 
 	if len(g.Graph) != 6 {
 		t.Fatalf("graph len = %d, want 6", len(g.Graph))

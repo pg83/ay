@@ -34,7 +34,7 @@ type FlatcEmission struct {
 }
 
 func flatcDirectImportNames(pm *IncludeParserManager, srcRel string) []string {
-	direct := pm.sourceParsedBuckets(Source(srcRel), nil).bucket(parsedIncludesLocal)
+	direct := pm.sourceParsedBuckets(source(srcRel), nil).bucket(parsedIncludesLocal)
 
 	if len(direct) == 0 {
 		return nil
@@ -106,10 +106,10 @@ func flatcResolvedModuleSourceRel(ctx *GenCtx, instance ModuleInstance, d *Modul
 	return "", false
 }
 
-func EmitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ARG, transitiveImports []VFS, tc ModuleToolchain, emit Emitter) (NodeRef, VFS, VFS, VFS) {
-	headerVFS := Build(srcRel + ".h")
-	cppVFS := Build(srcRel + ".cpp")
-	bfbsVFS := Build(strings.TrimSuffix(srcRel, ".fbs") + ".bfbs")
+func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ARG, transitiveImports []VFS, tc ModuleToolchain, emit Emitter) (NodeRef, VFS, VFS, VFS) {
+	headerVFS := build(srcRel + ".h")
+	cppVFS := build(srcRel + ".cpp")
+	bfbsVFS := build(strings.TrimSuffix(srcRel, ".fbs") + ".bfbs")
 
 	cmdArgs := ArgChunks{
 		{tc.Python3, (flatcWrapperVFS).str(), (flatcBinary).str()},
@@ -159,7 +159,7 @@ func ensureFlatcEmission(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 	srcVFS := resolveSourceVFS(ctx, instance, srcRel, d.srcDirs)
 	key := CodegenOutputKey{
 		platform: instance.Platform,
-		path:     Build(srcVFS.rel() + ".h"),
+		path:     build(srcVFS.rel() + ".h"),
 	}
 
 	if got, ok := ctx.flatcEmissions[key]; ok {
@@ -181,7 +181,7 @@ func ensureFlatcEmission(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 	flatcRes := ctx.toolResult(argContribLibsFlatbuffersFlatc)
 	flatcLDRef, flatcBinary := flatcRes.LDRef, *flatcRes.LDPath
 	transitiveImports := walkClosureTail(ctx, instance, srcVFS, ModuleCCInputs{})
-	flRef, headerVFS, cppVFS, bfbsVFS := EmitFL(instance, srcVFS.rel(), srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, d.tc, ctx.emit)
+	flRef, headerVFS, cppVFS, bfbsVFS := emitFL(instance, srcVFS.rel(), srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, d.tc, ctx.emit)
 
 	// flatc's INDUCED_DEPS(h+cpp …) — flatbuffers.h + flatbuffers_iter.h, declared
 	// in contrib/libs/flatbuffers/flatc/ya.make — ride into both the .h and .cpp

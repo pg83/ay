@@ -8,7 +8,7 @@ import (
 )
 
 func TestComposeDynLibInputs_IncludesVcsAndHelperScripts(t *testing.T) {
-	scr := func(rel string) VFS { return Intern("$(S)/build/scripts/" + rel) }
+	scr := func(rel string) VFS { return intern("$(S)/build/scripts/" + rel) }
 	// link_dyn_lib's import closure (link_exe + the helpers it transitively imports)
 	// and fs_tools's, as the gen-time table would have them.
 	scripts := ScriptDeps{
@@ -22,13 +22,13 @@ func TestComposeDynLibInputs_IncludesVcsAndHelperScripts(t *testing.T) {
 
 	got := composeDynLibInputs(
 		[]VFS{
-			Intern("$(B)/contrib/libs/libiconv/static/liblibs-libiconv-static.a"),
-			Intern("$(B)/build/cow/on/libbuild-cow-on.a"),
+			intern("$(B)/contrib/libs/libiconv/static/liblibs-libiconv-static.a"),
+			intern("$(B)/build/cow/on/libbuild-cow-on.a"),
 		},
 		[]VFS{
-			Intern("$(B)/contrib/libs/foolib/include/foolib.py.pyplugin"),
+			intern("$(B)/contrib/libs/foolib/include/foolib.py.pyplugin"),
 		},
-		Intern("$(B)/tools/fix_elf/fix_elf"),
+		intern("$(B)/tools/fix_elf/fix_elf"),
 		"contrib/libs/libiconv/dynamic",
 		"libiconv.exports",
 		scripts,

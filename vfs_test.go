@@ -40,8 +40,8 @@ func TestVFSLongString(t *testing.T) {
 		vfs  VFS
 		want string
 	}{
-		{name: "source", vfs: Intern("$(S)/a/b.txt"), want: "$(SOURCE_ROOT)/a/b.txt"},
-		{name: "build", vfs: Intern("$(B)/x/y.o"), want: "$(BUILD_ROOT)/x/y.o"},
+		{name: "source", vfs: intern("$(S)/a/b.txt"), want: "$(SOURCE_ROOT)/a/b.txt"},
+		{name: "build", vfs: intern("$(B)/x/y.o"), want: "$(BUILD_ROOT)/x/y.o"},
 	}
 
 	for _, tc := range cases {
@@ -55,11 +55,11 @@ func BenchmarkMapAccess_VFSStructKey(b *testing.B) {
 	keys := bvKeys()
 	m := make(map[VFS]struct{}, bvN)
 	for _, k := range keys {
-		m[Source(k)] = struct{}{}
+		m[source(k)] = struct{}{}
 	}
 	probes := make([]VFS, bvN)
 	for i, k := range keys {
-		probes[i] = Source(k)
+		probes[i] = source(k)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -74,11 +74,11 @@ func BenchmarkMapAccess_VFSStructKey_ConstructedAtProbe(b *testing.B) {
 	keys := bvKeys()
 	m := make(map[VFS]struct{}, bvN)
 	for _, k := range keys {
-		m[Source(k)] = struct{}{}
+		m[source(k)] = struct{}{}
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, ok := m[Source(keys[i%bvN])]
+		_, ok := m[source(keys[i%bvN])]
 		if !ok {
 			b.Fatalf("miss on i=%d", i)
 		}
@@ -132,11 +132,11 @@ func BenchmarkMapAccess_VFS2Bucket_NonGeneric(b *testing.B) {
 	keys := bvKeys()
 	m := newVFSMapNonGeneric(bvN)
 	for _, k := range keys {
-		m.add(Source(k))
+		m.add(source(k))
 	}
 	probes := make([]VFS, bvN)
 	for i, k := range keys {
-		probes[i] = Source(k)
+		probes[i] = source(k)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -150,11 +150,11 @@ func BenchmarkMapAccess_VFS2Bucket_Generic(b *testing.B) {
 	keys := bvKeys()
 	m := newVFSMap[struct{}](bvN)
 	for _, k := range keys {
-		m.set(Source(k), struct{}{})
+		m.set(source(k), struct{}{})
 	}
 	probes := make([]VFS, bvN)
 	for i, k := range keys {
-		probes[i] = Source(k)
+		probes[i] = source(k)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -174,7 +174,7 @@ func BenchmarkMapAccess_VFS2Bucket_Inline(b *testing.B) {
 	}
 	probes := make([]VFS, bvN)
 	for i, k := range keys {
-		probes[i] = Source(k)
+		probes[i] = source(k)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -187,10 +187,10 @@ func BenchmarkMapAccess_VFS2Bucket_Inline(b *testing.B) {
 
 func ParseVFSOrSource(s string) VFS {
 	if vfsHasPrefix(s) {
-		return Intern(s)
+		return intern(s)
 	}
 
-	return Source(s)
+	return source(s)
 }
 
 func VFSesFromStrings(ss []string) []VFS {

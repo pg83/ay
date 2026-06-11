@@ -5,14 +5,14 @@ import "testing"
 func TestEmitRD_NodeShape(t *testing.T) {
 	target := newTestPlatform(OSLinux, ISAX8664, "no", nil)
 	instance := ModuleInstance{
-		Path:     Source("contrib/libs/icu"),
+		Path:     source("contrib/libs/icu"),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: target,
 	}
 
-	e := NewBufferedEmitter()
-	_, asmOut, objOut := EmitRD(instance, "icudt78_dat.rodata", Intern("$(S)/contrib/libs/icu/icudt78_dat.rodata"), NodeRef(7), testToolchain(), e)
+	e := newBufferedEmitter()
+	_, asmOut, objOut := emitRD(instance, "icudt78_dat.rodata", intern("$(S)/contrib/libs/icu/icudt78_dat.rodata"), NodeRef(7), testToolchain(), e)
 
 	if asmOut.string() != "$(B)/contrib/libs/icu/icudt78_dat.rodata.asm" {
 		t.Fatalf("asmOut = %q", asmOut)

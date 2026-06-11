@@ -26,9 +26,9 @@ func cmdDumpSort(args []string) int {
 			outPath = arg(args, i)
 		case "--chunk-bytes":
 			i++
-			chunkBytes = int(Throw2(strconv.Atoi(arg(args, i))))
+			chunkBytes = int(throw2(strconv.Atoi(arg(args, i))))
 		default:
-			ThrowFmt("dump sort: unknown argument %q", args[i])
+			throwFmt("dump sort: unknown argument %q", args[i])
 		}
 	}
 
@@ -37,9 +37,9 @@ func cmdDumpSort(args []string) int {
 	if inPath == "" || inPath == "-" {
 		in = os.Stdin
 	} else {
-		f := Throw2(os.Open(inPath))
+		f := throw2(os.Open(inPath))
 
-		defer func() { Throw(f.Close()) }()
+		defer func() { throw(f.Close()) }()
 
 		in = f
 	}
@@ -49,9 +49,9 @@ func cmdDumpSort(args []string) int {
 	if outPath == "" || outPath == "-" {
 		out = os.Stdout
 	} else {
-		f := Throw2(os.Create(outPath))
+		f := throw2(os.Create(outPath))
 
-		defer func() { Throw(f.Close()) }()
+		defer func() { throw(f.Close()) }()
 
 		out = f
 	}
@@ -65,10 +65,10 @@ func cmdDumpSort(args []string) int {
 	tmpDir, err := os.MkdirTemp(tmpBase, "aysort-")
 
 	if err != nil {
-		tmpDir = Throw2(os.MkdirTemp(".", "aysort-"))
+		tmpDir = throw2(os.MkdirTemp(".", "aysort-"))
 	}
 
-	defer func() { Throw(os.RemoveAll(tmpDir)) }()
+	defer func() { throw(os.RemoveAll(tmpDir)) }()
 
 	chunks := spillChunks(in, chunkBytes, tmpDir)
 	mergeChunks(chunks, out)
@@ -91,15 +91,15 @@ func spillChunks(in io.Reader, chunkBytes int, tmpDir string) []string {
 		sort.Strings(lines)
 
 		path := filepath.Join(tmpDir, "chunk-"+strconv.Itoa(len(chunks)))
-		f := Throw2(os.Create(path))
+		f := throw2(os.Create(path))
 		bw := bufio.NewWriterSize(f, 1<<20)
 
 		for _, ln := range lines {
-			Throw2(bw.WriteString(ln))
+			throw2(bw.WriteString(ln))
 		}
 
-		Throw(bw.Flush())
-		Throw(f.Close())
+		throw(bw.Flush())
+		throw(f.Close())
 
 		chunks = append(chunks, path)
 		lines = lines[:0]
@@ -122,7 +122,7 @@ func spillChunks(in io.Reader, chunkBytes int, tmpDir string) []string {
 			break
 		}
 
-		Throw(err)
+		throw(err)
 	}
 
 	spill()
@@ -190,22 +190,22 @@ func (h *MergeHeap) Pop() any {
 func mergeChunks(chunks []string, out io.Writer) {
 	bw := bufio.NewWriterSize(out, 1<<20)
 
-	defer func() { Throw(bw.Flush()) }()
+	defer func() { throw(bw.Flush()) }()
 
 	h := &MergeHeap{}
 	heap.Init(h)
 
 	for _, path := range chunks {
-		f := Throw2(os.Open(path))
+		f := throw2(os.Open(path))
 		r := bufio.NewReaderSize(f, 1<<20)
 		line, err := r.ReadString('\n')
 
 		if err != nil && err != io.EOF {
-			Throw(err)
+			throw(err)
 		}
 
 		if line == "" && err == io.EOF {
-			Throw(f.Close())
+			throw(f.Close())
 			continue
 		}
 
@@ -214,19 +214,19 @@ func mergeChunks(chunks []string, out io.Writer) {
 
 	for h.len() > 0 {
 		it := heap.Pop(h).(*MergeItem)
-		Throw2(bw.WriteString(it.line))
+		throw2(bw.WriteString(it.line))
 
 		next, err := it.reader.ReadString('\n')
 
 		if err != nil && err != io.EOF {
-			Throw(err)
+			throw(err)
 		}
 
 		if next != "" {
 			it.line = next
 			heap.Push(h, it)
 		} else {
-			Throw(it.closer.Close())
+			throw(it.closer.Close())
 		}
 	}
 }

@@ -18,7 +18,7 @@ func sandboxedX8664TargetPlatform() *Platform {
 	flags["SANDBOXING"] = "yes"
 	flags["TESTS_REQUESTED"] = "yes"
 
-	return NewPlatform(newMemFS(map[string]string{"build/ymake_conf.py": "debug_info_flags.append('-gz=zstd')\n"}), OSLinux, ISAX8664, flags, expectedSandboxingTags(), "", "")
+	return newPlatform(newMemFS(map[string]string{"build/ymake_conf.py": "debug_info_flags.append('-gz=zstd')\n"}), OSLinux, ISAX8664, flags, expectedSandboxingTags(), "", "")
 }
 
 func sandboxedTestSuite() TestSuiteInfo {
@@ -88,9 +88,9 @@ func expectedTestCtxNode() *Node {
 			})},
 		}},
 		Env:              nil,
-		Inputs:           InputChunks{{Intern("$(S)/build/scripts/append_file.py")}},
+		Inputs:           InputChunks{{intern("$(S)/build/scripts/append_file.py")}},
 		KV:               KV{P: pkCP, PC: pcLightBlue},
-		Outputs:          []VFS{Intern("$(B)/common_test.context")},
+		Outputs:          []VFS{intern("$(B)/common_test.context")},
 		Platform:         &Platform{Target: "default-linux-x86_64"},
 		Requirements:     Requirements{Network: nwRestricted},
 		Tags:             internStrs(expectedSandboxingTags()),
@@ -156,13 +156,13 @@ func expectedUnittestNode(info TestSuiteInfo) *Node {
 			})},
 		}},
 		Env:    expectedTestEnv("unittest"),
-		Inputs: InputChunks{{Intern("$(S)/util/ut")}},
+		Inputs: InputChunks{{intern("$(S)/util/ut")}},
 		KV:     KV{P: pkTS, Path: "util/ut/unittest", PC: pcYellow, RunTestNode: true, ShowOutBool: true, HasSpecialRunner: true},
 		Outputs: []VFS{
-			Intern("$(B)/util/ut/test-results/unittest/meta.json"),
-			Intern("$(B)/util/ut/test-results/unittest/ytest.report.trace"),
-			Intern("$(B)/util/ut/test-results/unittest/run_test.log"),
-			Intern("$(B)/util/ut/test-results/unittest/testing_out_stuff.tar.zstd"),
+			intern("$(B)/util/ut/test-results/unittest/meta.json"),
+			intern("$(B)/util/ut/test-results/unittest/ytest.report.trace"),
+			intern("$(B)/util/ut/test-results/unittest/run_test.log"),
+			intern("$(B)/util/ut/test-results/unittest/testing_out_stuff.tar.zstd"),
 		},
 		Platform:         &Platform{Target: "default-linux-x86_64"},
 		Requirements:     Requirements{CPU: 1, Network: nwRestricted, RAM: 8, HasRAMDisk: true},
@@ -230,19 +230,19 @@ func expectedClangFormatNode() *Node {
 		}},
 		Env: expectedTestEnv("clang_format"),
 		Inputs: InputChunks{{
-			Intern("$(S)/build/config/tests/cpp_style/.clang-format"),
-			Intern("$(S)/build/scripts/c_templates/svn_interface.c"),
-			Intern("$(S)/tools/cpp_style_checker/wrapper.py"),
-			Intern("$(S)/util/ut"),
-			Intern("$(S)/util/ysafeptr_ut.cpp"),
-			Intern("$(S)/util/ysaveload_ut.cpp"),
+			intern("$(S)/build/config/tests/cpp_style/.clang-format"),
+			intern("$(S)/build/scripts/c_templates/svn_interface.c"),
+			intern("$(S)/tools/cpp_style_checker/wrapper.py"),
+			intern("$(S)/util/ut"),
+			intern("$(S)/util/ysafeptr_ut.cpp"),
+			intern("$(S)/util/ysaveload_ut.cpp"),
 		}},
 		KV: KV{P: pkTS, Path: "util/ut/clang_format", PC: pcYellow, RunTestNode: true, ShowOutBool: true, HasSpecialRunner: true},
 		Outputs: []VFS{
-			Intern("$(B)/util/ut/test-results/clang_format/meta.json"),
-			Intern("$(B)/util/ut/test-results/clang_format/ytest.report.trace"),
-			Intern("$(B)/util/ut/test-results/clang_format/run_test.log"),
-			Intern("$(B)/util/ut/test-results/clang_format/testing_out_stuff.tar.zstd"),
+			intern("$(B)/util/ut/test-results/clang_format/meta.json"),
+			intern("$(B)/util/ut/test-results/clang_format/ytest.report.trace"),
+			intern("$(B)/util/ut/test-results/clang_format/run_test.log"),
+			intern("$(B)/util/ut/test-results/clang_format/testing_out_stuff.tar.zstd"),
 		},
 		Platform:         &Platform{Target: "default-linux-x86_64"},
 		Requirements:     Requirements{CPU: 1, Network: nwRestricted, RAM: 8, HasRAMDisk: true},

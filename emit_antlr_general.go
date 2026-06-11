@@ -73,7 +73,7 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			cwd = expandRunProgramCWD(instance, *run.CWD)
 		}
 
-		jvRef := EmitJVGeneral(instance, jarVFS, args, inputs, outputs, cwd, depRefs, cfModuleTag(d, instance), d.tc, ctx.emit)
+		jvRef := emitJVGeneral(instance, jarVFS, args, inputs, outputs, cwd, depRefs, cfModuleTag(d, instance), d.tc, ctx.emit)
 
 		if reg != nil {
 			// The JV node's full $(S) input set = source-rooted IN/CF inputs plus
@@ -123,10 +123,10 @@ func antlrRunCmdArgs(instance ModuleInstance, run AntlrRunInfo, inVFSByToken, ou
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
 		a = strings.ReplaceAll(a, "${ARCADIA_BUILD_ROOT}", "$(B)")
 		a = strings.ReplaceAll(a, "${CURDIR}", instance.Path.string())
-		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path.rel()).string())
+		a = strings.ReplaceAll(a, "${BINDIR}", build(instance.Path.rel()).string())
 		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path.rel())
 		a = strings.ReplaceAll(a, "$CURDIR", instance.Path.string())
-		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path.rel()).string())
+		a = strings.ReplaceAll(a, "$BINDIR", build(instance.Path.rel()).string())
 
 		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = vfs.string()
@@ -235,6 +235,6 @@ func antlrOutputModuleRel(modulePath string, outVFS VFS) string {
 		return strings.TrimPrefix(outVFS.rel(), prefix)
 	}
 
-	ThrowFmt("gen: antlr output %q is outside module %q", outVFS.rel(), modulePath)
+	throwFmt("gen: antlr output %q is outside module %q", outVFS.rel(), modulePath)
 	return ""
 }

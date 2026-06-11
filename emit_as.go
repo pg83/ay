@@ -17,7 +17,7 @@ var yasmConstHead = []STR{
 	argReplaceToolRootT.str(),
 }
 
-func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS) {
+func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS) {
 	outVFS, inVFS := composeASPaths(instance, srcRel, srcVFS, in)
 
 	cmdArgs := composeASCmdArgs(instance, outVFS, inVFS, in)
@@ -47,7 +47,7 @@ func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs) (out, input VFS) {
 	if srcVFS.isSource() && srcVFS.rel() != instance.Path.rel()+"/"+srcRel {
 		outputRel := composeSrcDirOutputRel(instance.Path.rel(), srcVFS.rel())
-		return Build(instance.Path.rel() + "/" + outputRel + ".o"), srcVFS
+		return build(instance.Path.rel() + "/" + outputRel + ".o"), srcVFS
 	}
 
 	var outRel string
@@ -63,7 +63,7 @@ func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 		outRel = instance.Path.rel() + "/" + outName
 	}
 
-	return Build(outRel), srcVFS
+	return build(outRel), srcVFS
 }
 
 func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInputs) []STR {
@@ -115,9 +115,9 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	var outVFS VFS
 
 	if strings.Contains(srcRel, "/") {
-		outVFS = Build(instance.Path.rel() + "/_/" + stem + suffix)
+		outVFS = build(instance.Path.rel() + "/_/" + stem + suffix)
 	} else {
-		outVFS = Build(instance.Path.rel() + "/" + stem + suffix)
+		outVFS = build(instance.Path.rel() + "/" + stem + suffix)
 	}
 
 	inVFS := srcVFS

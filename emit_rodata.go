@@ -12,10 +12,10 @@ func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
 		base = instance.Path.rel() + "/_/" + srcRel
 	}
 
-	return Build(base + ".asm"), Build(base + instance.Platform.objectSuffix())
+	return build(base + ".asm"), build(base + instance.Platform.objectSuffix())
 }
 
-func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, tc ModuleToolchain, emit Emitter) (NodeRef, VFS, VFS) {
+func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, tc ModuleToolchain, emit Emitter) (NodeRef, VFS, VFS) {
 	asmVFS, outVFS := composeRodataOutputs(instance, srcRel)
 	toolName := path.Base(strings.TrimSuffix(srcRel, ".rodata"))
 

@@ -6,7 +6,7 @@ import (
 )
 
 func TestIntValueMapBasic(t *testing.T) {
-	m := NewIntValueMap[string](0)
+	m := newIntValueMap[string](0)
 
 	if m.get(1) != nil {
 		t.Fatalf("Get on empty returned non-nil")
@@ -37,7 +37,7 @@ func TestIntValueMapBasic(t *testing.T) {
 func TestIntValueMapStructValues(t *testing.T) {
 	type rec struct{ a, b int }
 
-	m := NewIntValueMap[rec](0)
+	m := newIntValueMap[rec](0)
 	m.put(7, rec{1, 2})
 
 	if p := m.get(7); p == nil || *p != (rec{1, 2}) {
@@ -54,7 +54,7 @@ func TestIntValueMapStructValues(t *testing.T) {
 func TestIntValueMapMatchesBuiltin(t *testing.T) {
 	rng := rand.New(rand.NewSource(2))
 	ref := map[uint64]int64{}
-	m := NewIntValueMap[int64](0)
+	m := newIntValueMap[int64](0)
 
 	for i := 0; i < 200_000; i++ {
 		k := rng.Uint64()%30_000 + 1

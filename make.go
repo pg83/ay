@@ -126,7 +126,7 @@ func cmdMake(args []string) int {
 	mf := parseMakeFlags(args)
 
 	if len(mf.targets) == 0 {
-		ThrowFmt("make: no targets supplied and current working directory is outside the source root")
+		throwFmt("make: no targets supplied and current working directory is outside the source root")
 	}
 
 	// -j 0 is generate-only: the process emits the graph and exits, so collecting
@@ -146,7 +146,7 @@ func cmdMake(args []string) int {
 		}
 	}
 
-	fs := NewFS(mf.srcRoot)
+	fs := newFS(mf.srcRoot)
 
 	tools := toolchainFlags(fs)
 	rootHostYaFlags := readYaConfSection(fs, "ya.conf", "host_platform_flags")
@@ -186,7 +186,7 @@ func cmdMake(args []string) int {
 		hostFlags["GG_BUILD_TYPE"] = "release"
 	}
 
-	hostP := NewPlatform(
+	hostP := newPlatform(
 		fs,
 		hOS,
 		hISA,
@@ -199,7 +199,7 @@ func cmdMake(args []string) int {
 	targetSpec := mf.targetPlat
 
 	if targetSpec == "" {
-		targetSpec = string(MakePlatformID(hOS, hISA))
+		targetSpec = string(makePlatformID(hOS, hISA))
 	}
 
 	tOS, tISA := resolvePlatform(targetSpec)
@@ -230,7 +230,7 @@ func cmdMake(args []string) int {
 	}
 
 	targetFlags["PIC"] = "no"
-	targetP := NewPlatform(
+	targetP := newPlatform(
 		fs,
 		tOS,
 		tISA,
@@ -246,7 +246,7 @@ func cmdMake(args []string) int {
 
 	onWarn := func(w Warn) {
 		if w.Kind == WarnMissingInclude && !mf.keepGoing {
-			ThrowFmt("%s: %s", w.Kind, w.Message)
+			throwFmt("%s: %s", w.Kind, w.Message)
 		}
 
 		if mf.verbose {
@@ -257,7 +257,7 @@ func cmdMake(args []string) int {
 	if mf.threads == 0 {
 		if mf.dumpGraph {
 			for _, target := range mf.targets {
-				g := GenDumpGraphWithResources(fs, target, hostP, targetP, onWarn, mf.testLevel > 0)
+				g := genDumpGraphWithResources(fs, target, hostP, targetP, onWarn, mf.testLevel > 0)
 				writeGraph("-", g, !mf.sandboxing)
 			}
 		} else {
@@ -280,7 +280,7 @@ func cmdMake(args []string) int {
 
 	executorWarn := func(w Warn) {
 		if w.Kind == WarnMissingInclude && !mf.keepGoing {
-			ThrowFmt("%s: %s", w.Kind, w.Message)
+			throwFmt("%s: %s", w.Kind, w.Message)
 		}
 
 		if mf.verbose {
@@ -306,7 +306,7 @@ func cmdMake(args []string) int {
 			failedStrs[i] = u.string()
 		}
 
-		ThrowFmt("build failed: %s", strings.Join(failedStrs, ", "))
+		throwFmt("build failed: %s", strings.Join(failedStrs, ", "))
 	}
 
 	for _, uid := range results {
@@ -328,7 +328,7 @@ func genStream(fs FS, targets []string, hostP, targetP *Platform, onNode func(*N
 }
 
 func genStreamOne(fs FS, target string, hostP, targetP *Platform, onNode func(*Node, *UidVec), onWarn func(Warn), testMode bool) []UID {
-	emitter := NewStreamingEmitter(onNode)
+	emitter := newStreamingEmitter(onNode)
 	runGenIntoWithResources(fs, target, hostP, targetP, emitter, onWarn, testMode)
 
 	return emitter.finish()
@@ -410,7 +410,7 @@ func (ex *Executor) onNode(n *Node, uids *UidVec) {
 }
 
 func (ex *Executor) fire(f *NodeFuture) {
-	Try(func() {
+	try(func() {
 		ex.visit(f.node.UID)
 	}).catch(func(e *Exception) {
 		if !ex.keepGoing {
@@ -452,11 +452,11 @@ func (ex *Executor) visit(uid UID) {
 	f := ex.lookup(uid)
 
 	if f == nil {
-		ThrowFmt("executor: unknown UID %s", uid)
+		throwFmt("executor: unknown UID %s", uid)
 	}
 
 	f.once.Do(func() {
-		f.err = Try(func() {
+		f.err = try(func() {
 			ex.execute(f)
 		})
 	})
@@ -504,7 +504,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 	if ex.keepGoing {
 		for _, r := range n.DepRefs {
 			dep := f.uids.get(r)
-			exc := Try(func() {
+			exc := try(func() {
 				ex.visit(dep)
 			})
 
@@ -512,7 +512,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 				continue
 			}
 
-			ThrowFmt("deps failed: %s", dep)
+			throwFmt("deps failed: %s", dep)
 		}
 	} else {
 		for _, r := range n.DepRefs {
@@ -525,16 +525,16 @@ func (ex *Executor) execute(f *NodeFuture) {
 	defer func() { <-ex.sema }()
 
 	tmp := filepath.Join(ex.bldRoot, "tmp", n.UID.string())
-	Throw(os.MkdirAll(tmp, 0o755))
+	throw(os.MkdirAll(tmp, 0o755))
 
 	// Lock the workspace DIR (an exclusive flock on its fd) for the whole node, so a
 	// second ay process building the same uid does not clean or clobber it while we
 	// work. Best-effort serialization, not a correctness requirement — outputs are
 	// deterministic and published atomically (CAS hard-link, uid temp+rename), so even
 	// a concurrent rebuild is safe; the lock just avoids the wasted duplicate work.
-	dir := Throw2(os.Open(tmp))
+	dir := throw2(os.Open(tmp))
 	defer dir.Close()
-	Throw(syscall.Flock(int(dir.Fd()), syscall.LOCK_EX))
+	throw(syscall.Flock(int(dir.Fd()), syscall.LOCK_EX))
 
 	// Another process may have finished this node while we waited for the lock.
 	if _, err := os.Stat(cachePath); err == nil {
@@ -553,8 +553,8 @@ func (ex *Executor) execute(f *NodeFuture) {
 	if ex.sandboxing {
 		srcMount = filepath.Join(tmp, "s")
 		bldMount = filepath.Join(tmp, "b")
-		Throw(os.MkdirAll(srcMount, 0o755))
-		Throw(os.MkdirAll(bldMount, 0o755))
+		throw(os.MkdirAll(srcMount, 0o755))
+		throw(os.MkdirAll(bldMount, 0o755))
 		ex.linkSourceInputs(n, srcMount)
 	}
 
@@ -610,7 +610,7 @@ func parseCmdPrefix(spec string) CmdPrefix {
 	suffix, prefix, ok := strings.Cut(spec, "=")
 
 	if !ok || suffix == "" {
-		ThrowFmt("make: --cmd-prefix expects <suffix>=<prefix>, got %q", spec)
+		throwFmt("make: --cmd-prefix expects <suffix>=<prefix>, got %q", spec)
 	}
 
 	return CmdPrefix{suffix: suffix, prefix: strings.Fields(prefix)}
@@ -683,7 +683,7 @@ func consumeCommandFile(args []string, pos *int, buildRoot string, counter *int)
 			*pos++ // skip the nested start marker
 			b.WriteString(consumeCommandFile(args, pos, buildRoot, counter))
 		case cmdFileEndMarker:
-			Throw(os.WriteFile(path, []byte(b.String()), 0o644))
+			throw(os.WriteFile(path, []byte(b.String()), 0o644))
 			return "@" + path
 		default:
 			b.WriteString(args[*pos])
@@ -692,7 +692,7 @@ func consumeCommandFile(args []string, pos *int, buildRoot string, counter *int)
 		b.WriteByte('\n')
 	}
 
-	Throw(os.WriteFile(path, []byte(b.String()), 0o644))
+	throw(os.WriteFile(path, []byte(b.String()), 0o644))
 	return "@" + path
 }
 
@@ -705,7 +705,7 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 		}
 
 		mounted := filepath.Join(bldMount, out.rel())
-		Throw(os.MkdirAll(filepath.Dir(mounted), 0o755))
+		throw(os.MkdirAll(filepath.Dir(mounted), 0o755))
 	}
 
 	cmdFileCounter := 0
@@ -748,9 +748,9 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 
 		if c.Stdout != 0 {
 			path := mountString(c.Stdout.string(), srcMount, bldMount)
-			Throw(os.MkdirAll(filepath.Dir(path), 0o755))
+			throw(os.MkdirAll(filepath.Dir(path), 0o755))
 
-			f := Throw2(os.Create(path))
+			f := throw2(os.Create(path))
 			defer f.Close()
 
 			stdoutW = f
@@ -768,7 +768,7 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 				msg += "\n" + strings.TrimRight(stderr.String(), "\n")
 			}
 
-			ThrowFmt("%s", msg)
+			throwFmt("%s", msg)
 		}
 
 		if stderr.Len() > 0 {
@@ -796,9 +796,9 @@ func (ex *Executor) linkSourceInputs(n *Node, srcMount string) {
 
 			rel := in.rel()
 			target := filepath.Join(srcMount, rel)
-			Throw(os.MkdirAll(filepath.Dir(target), 0o755))
+			throw(os.MkdirAll(filepath.Dir(target), 0o755))
 			_ = os.Remove(target)
-			Throw(os.Symlink(filepath.Join(ex.srcRoot, rel), target))
+			throw(os.Symlink(filepath.Join(ex.srcRoot, rel), target))
 		}
 	}
 }
@@ -817,23 +817,23 @@ func (ex *Executor) storeOutputs(n *Node, tmp string) {
 
 	for _, out := range n.Outputs {
 		if !out.isBuild() {
-			ThrowFmt("node %s: non-Build output %v", n.UID, out)
+			throwFmt("node %s: non-Build output %v", n.UID, out)
 		}
 
 		ex.storePath(filepath.Join(tmp, out.rel()), out.string(), meta)
 	}
 
 	uidPath := ex.uidPath(n.UID)
-	Throw(os.MkdirAll(filepath.Dir(uidPath), 0o755))
+	throw(os.MkdirAll(filepath.Dir(uidPath), 0o755))
 
 	// Atomic publish: write to a UNIQUE temp in the same dir, then rename over the
 	// final path (rename is atomic on one fs). CreateTemp's unique name means two
 	// writers — even another ay process building the same node — never share the
 	// temp, so the rename target is always a fully-written manifest.
-	tf := Throw2(os.CreateTemp(filepath.Dir(uidPath), "."+n.UID.string()+".*"))
-	Throw2(tf.Write(Throw2(json.Marshal(meta))))
-	Throw(tf.Close())
-	Throw(os.Rename(tf.Name(), uidPath))
+	tf := throw2(os.CreateTemp(filepath.Dir(uidPath), "."+n.UID.string()+".*"))
+	throw2(tf.Write(throw2(json.Marshal(meta))))
+	throw(tf.Close())
+	throw(os.Rename(tf.Name(), uidPath))
 }
 
 // storePath records src (a regular file, a symlink, or a directory tree) into meta,
@@ -842,13 +842,13 @@ func (ex *Executor) storeOutputs(n *Node, tmp string) {
 // of a fetched tree (e.g. clang++ -> clang) survives; directories recurse, one entry
 // per leaf — the CAS never holds a directory.
 func (ex *Executor) storePath(src, outPath string, meta map[string]OutputEntry) {
-	info := Throw2(os.Lstat(src))
+	info := throw2(os.Lstat(src))
 
 	switch {
 	case info.Mode()&os.ModeSymlink != 0:
-		meta[outPath] = OutputEntry{Link: Throw2(os.Readlink(src))}
+		meta[outPath] = OutputEntry{Link: throw2(os.Readlink(src))}
 	case info.IsDir():
-		for _, e := range Throw2(os.ReadDir(src)) {
+		for _, e := range throw2(os.ReadDir(src)) {
 			ex.storePath(filepath.Join(src, e.Name()), outPath+"/"+e.Name(), meta)
 		}
 	default:
@@ -871,10 +871,10 @@ func (ex *Executor) storeFileToCAS(src string) string {
 		return hash
 	}
 
-	Throw(os.MkdirAll(filepath.Dir(dst), 0o755))
+	throw(os.MkdirAll(filepath.Dir(dst), 0o755))
 
 	if err := os.Link(src, dst); err != nil && !os.IsExist(err) {
-		Throw(err)
+		throw(err)
 	}
 
 	return hash
@@ -882,29 +882,29 @@ func (ex *Executor) storeFileToCAS(src string) string {
 
 func (ex *Executor) restoreInto(uid UID, where string) {
 	metaPath := ex.uidPath(uid)
-	data := Throw2(os.ReadFile(metaPath))
+	data := throw2(os.ReadFile(metaPath))
 
 	var meta map[string]OutputEntry
 
-	Throw(json.Unmarshal(data, &meta))
+	throw(json.Unmarshal(data, &meta))
 
 	for outVFS, e := range meta {
 		if !vfsHasPrefix(outVFS) {
-			ThrowFmt("malformed meta entry %q in %s", outVFS, metaPath)
+			throwFmt("malformed meta entry %q in %s", outVFS, metaPath)
 		}
 
 		// Resolve the $(B)/… path directly from the string. Do NOT Intern here:
 		// execution goroutines run concurrently with the still-streaming generator,
 		// and the global intern table is not safe for concurrent writes.
 		target := mountString(outVFS, ex.srcRoot, where)
-		Throw(os.MkdirAll(filepath.Dir(target), 0o755))
+		throw(os.MkdirAll(filepath.Dir(target), 0o755))
 		_ = os.Remove(target)
 
 		switch {
 		case e.Link != "":
 			// Re-create the symlink verbatim (its target was kept, not followed); a
 			// relative link like clang++ -> clang resolves within the restored tree.
-			Throw(os.Symlink(e.Link, target))
+			throw(os.Symlink(e.Link, target))
 
 		case strings.HasPrefix(outVFS, "$(B)/resources/"):
 			// Toolchain trees are hard-linked, not symlinked: a tool (clang, python)
@@ -913,11 +913,11 @@ func (ex *Executor) restoreInto(uid UID, where string) {
 			// those relative dirs vanish; a hard link keeps a real file at the tree
 			// path (sharing the CAS inode), so the layout the tool expects survives.
 			if err := os.Link(ex.casPathForHash(e.Cas), target); err != nil && !os.IsExist(err) {
-				Throw(err)
+				throw(err)
 			}
 
 		default:
-			Throw(os.Symlink(ex.casPathForHash(e.Cas), target))
+			throw(os.Symlink(ex.casPathForHash(e.Cas), target))
 		}
 	}
 }
@@ -963,7 +963,7 @@ func (ex *Executor) discard(path string) {
 // best-effort and never waited on: the process exits with it still running, and any
 // leftover is cleared by the next run's collector.
 func (ex *Executor) startGarbageCollector() {
-	Throw(os.MkdirAll(ex.grbDir, 0o755))
+	throw(os.MkdirAll(ex.grbDir, 0o755))
 
 	go func() {
 		for {
@@ -1001,10 +1001,10 @@ func mountString(s, srcRoot, bldRoot string) string {
 func casHash(src string) string {
 	h := sha256.New()
 
-	f := Throw2(os.Open(src))
+	f := throw2(os.Open(src))
 	defer f.Close()
 
-	Throw2(io.Copy(h, f))
+	throw2(io.Copy(h, f))
 
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
@@ -1043,7 +1043,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 			break
 		}
 
-		Throw(err)
+		throw(err)
 
 		switch {
 		case opt.Char == 'h' || opt.Name == "help":
@@ -1075,7 +1075,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 			parseKV(mf.tflags, opt.OptArg)
 		case opt.Char == 'j':
 			n, perr := strconv.Atoi(opt.OptArg)
-			Throw(perr)
+			throw(perr)
 			mf.threads = n
 		case opt.Char == 'r' || opt.Name == "release":
 			mf.buildType = "release"
@@ -1100,16 +1100,16 @@ func parseMakeFlags(args []string) *MakeFlags {
 
 			mf.targets = append(mf.targets, opt.OptArg)
 		default:
-			ThrowFmt("make: unhandled flag %v", opt)
+			throwFmt("make: unhandled flag %v", opt)
 		}
 	}
 
 	if mf.srcRoot == "" {
-		mf.srcRoot = Throw2(os.Getwd())
+		mf.srcRoot = throw2(os.Getwd())
 	}
 
 	if mf.bldRoot == "" {
-		mf.bldRoot = filepath.Join(Throw2(os.UserHomeDir()), ".ya", "ay")
+		mf.bldRoot = filepath.Join(throw2(os.UserHomeDir()), ".ya", "ay")
 	}
 
 	if mf.outRoot == "" {

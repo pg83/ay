@@ -140,7 +140,7 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 			closure = dedupVFS(closure)
 		}
 
-		ref := EmitCPWithDeps(instance, srcVFS, dstVFS, depRefs, closure, d.tc, ctx.scripts, ctx.emit)
+		ref := emitCPWithDeps(instance, srcVFS, dstVFS, depRefs, closure, d.tc, ctx.scripts, ctx.emit)
 
 		// Promote the registration with the producer ref; SourcePath remains.
 		if reg != nil {
@@ -159,7 +159,7 @@ func generatedModuleSourceVFS(ctx *GenCtx, instance ModuleInstance, srcRel strin
 		return nil
 	}
 
-	buildVFS := Build(filepath.ToSlash(filepath.Clean(instance.Path.rel() + "/" + srcRel)))
+	buildVFS := build(filepath.ToSlash(filepath.Clean(instance.Path.rel() + "/" + srcRel)))
 
 	if reg.lookup(buildVFS) != nil {
 		return vfsPtr(buildVFS)

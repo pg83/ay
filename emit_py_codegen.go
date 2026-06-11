@@ -42,7 +42,7 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		srcAbs := resolveSourceVFS(ctx, instance, srcRel, d.srcDirs)
 
 		if generatedInputs != nil {
-			srcAbs = Build(instance.Path.rel() + "/" + srcRel)
+			srcAbs = build(instance.Path.rel() + "/" + srcRel)
 		}
 
 		moduleName := srcAbs.rel() + "-"
@@ -50,9 +50,9 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		var outputPath VFS
 
 		if strings.Contains(srcRel, "/") {
-			outputPath = Build(instance.Path.rel() + "/" + srcRel + "." + pySrcYapycSuffix(instance.Path.rel()) + ".yapyc3")
+			outputPath = build(instance.Path.rel() + "/" + srcRel + "." + pySrcYapycSuffix(instance.Path.rel()) + ".yapyc3")
 		} else {
-			outputPath = Build(instance.Path.rel() + "/" + srcRel + ".yapyc3")
+			outputPath = build(instance.Path.rel() + "/" + srcRel + ".yapyc3")
 		}
 
 		cmdArgs := ArgChunks{py3ccArgHead, []STR{
@@ -171,7 +171,7 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 		}
 
 		regCpp := arg + ".reg3.cpp"
-		regCppVFS := Build(instance.Path.rel() + "/" + regCpp)
+		regCppVFS := build(instance.Path.rel() + "/" + regCpp)
 		regCppAbs := regCppVFS.string()
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -242,7 +242,7 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 
 		// AddIncl/CFlags feed the module-stable arg blocks — rebuild for this copy.
 		ccIn.CCBlocks = composeCCModuleArgBlocks(instance.Platform, &ccIn)
-		ccRef, ccOut, _ := EmitCC(instance, regCpp, regCppVFS, ccIn, ctx.host, ctx.emit)
+		ccRef, ccOut, _ := emitCC(instance, regCpp, regCppVFS, ccIn, ctx.host, ctx.emit)
 
 		res.Refs = append(res.Refs, ccRef)
 		res.Outputs = append(res.Outputs, ccOut)

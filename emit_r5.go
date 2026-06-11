@@ -2,7 +2,7 @@ package main
 
 import "strings"
 
-func EmitR5(
+func emitR5(
 	instance ModuleInstance,
 	srcRel string,
 	ragel5LD NodeRef,
@@ -11,9 +11,9 @@ func EmitR5(
 	rlgenCdBinPath VFS,
 	emit Emitter,
 ) (NodeRef, VFS, VFS) {
-	srcVFS := Source(instance.Path.rel() + "/" + srcRel)
-	tmpVFS := Build(instance.Path.rel() + "/" + srcRel + ".tmp")
-	cppVFS := Build(instance.Path.rel() + "/" + strings.TrimSuffix(srcRel, ".rl") + ".rl5.cpp")
+	srcVFS := source(instance.Path.rel() + "/" + srcRel)
+	tmpVFS := build(instance.Path.rel() + "/" + srcRel + ".tmp")
+	cppVFS := build(instance.Path.rel() + "/" + strings.TrimSuffix(srcRel, ".rl") + ".rl5.cpp")
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 

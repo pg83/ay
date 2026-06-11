@@ -1,9 +1,9 @@
 package main
 
-func EmitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, tc ModuleToolchain, scripts ScriptDeps, emit Emitter) (NodeRef, VFS) {
+func emitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, tc ModuleToolchain, scripts ScriptDeps, emit Emitter) (NodeRef, VFS) {
 	joinSrcs := buildScriptsGenJoinSrcsPy
 
-	outVFS := Build(instance.Path.rel() + "/" + allName)
+	outVFS := build(instance.Path.rel() + "/" + allName)
 
 	statsPlatform := instance.Platform
 
@@ -30,7 +30,7 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 	srcVFSs := make([]VFS, 0, len(sources))
 
 	for _, s := range sources {
-		srcVFSs = append(srcVFSs, Source(instance.Path.rel()+"/"+s))
+		srcVFSs = append(srcVFSs, source(instance.Path.rel()+"/"+s))
 	}
 
 	// Chunked: the join closure (a shared cached slice) is referenced, not copied.

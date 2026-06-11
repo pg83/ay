@@ -96,7 +96,7 @@ func goFilesFromArgs(args []string) []string {
 
 	var files []string
 
-	for _, e := range Throw2(os.ReadDir(".")) {
+	for _, e := range throw2(os.ReadDir(".")) {
 		n := e.Name()
 
 		if !e.IsDir() && strings.HasSuffix(n, ".go") && !strings.HasSuffix(n, "_test.go") {
@@ -311,7 +311,7 @@ type HoistedVar struct {
 // parseRefacFile parses path and folds its top-level declarations into the shared
 // existing/used maps. Returns nil (with a warning) if the file fails to parse.
 func parseRefacFile(path string, existing map[HoistKey]string, used map[string]bool) *ParsedFile {
-	src := Throw2(os.ReadFile(path))
+	src := throw2(os.ReadFile(path))
 	fset := gotoken.NewFileSet()
 	f, err := goparser.ParseFile(fset, path, src, goparser.ParseComments)
 
@@ -661,7 +661,7 @@ func applyConstEdits(pf *ParsedFile, edits []ConstEdit) bool {
 		return false
 	}
 
-	Throw(os.WriteFile(pf.path, formatted, 0o644))
+	throw(os.WriteFile(pf.path, formatted, 0o644))
 	return true
 }
 
@@ -682,7 +682,7 @@ func generateConstFile(path string, kind HoistKind, vars []HoistedVar) {
 
 	if len(items) == 0 {
 		if _, err := os.Stat(path); err == nil {
-			Throw(os.Remove(path))
+			throw(os.Remove(path))
 			fmt.Fprintf(os.Stderr, "refac consts: removed empty %s\n", path)
 		}
 
@@ -701,8 +701,8 @@ func generateConstFile(path string, kind HoistKind, vars []HoistedVar) {
 	}
 
 	b.WriteString(")\n")
-	formatted := Throw2(format.Source([]byte(b.String())))
-	Throw(os.WriteFile(path, formatted, 0o644))
+	formatted := throw2(format.Source([]byte(b.String())))
+	throw(os.WriteFile(path, formatted, 0o644))
 	fmt.Fprintf(os.Stderr, "refac consts: generated %s (%d consts)\n", path, len(items))
 }
 
@@ -855,7 +855,7 @@ func (it VarItem) render(inGroup bool) string {
 // exist; otherwise every var is emitted standalone. Acts only when the file has at
 // least two package-level var specs.
 func lintConsolidateVars(path string) bool {
-	src := Throw2(os.ReadFile(path))
+	src := throw2(os.ReadFile(path))
 	fset := gotoken.NewFileSet()
 	f, err := goparser.ParseFile(fset, path, src, goparser.ParseComments)
 
@@ -1006,7 +1006,7 @@ func lintConsolidateVars(path string) bool {
 		return false
 	}
 
-	Throw(os.WriteFile(path, formatted, 0o644))
+	throw(os.WriteFile(path, formatted, 0o644))
 	return true
 }
 
@@ -1042,7 +1042,7 @@ func isControlBlockStmt(stmt ast.Stmt) bool {
 // brace), and one that is last has no successor pair (none before the closing brace).
 // The linter only inserts missing blanks; gofmt already collapses extra ones.
 func lintControlBlankLines(path string) bool {
-	src := Throw2(os.ReadFile(path))
+	src := throw2(os.ReadFile(path))
 	fset := gotoken.NewFileSet()
 	f, err := goparser.ParseFile(fset, path, src, goparser.ParseComments)
 
@@ -1130,7 +1130,7 @@ func lintControlBlankLines(path string) bool {
 		return false
 	}
 
-	Throw(os.WriteFile(path, formatted, 0o644))
+	throw(os.WriteFile(path, formatted, 0o644))
 	return true
 }
 
@@ -1140,7 +1140,7 @@ func lintControlBlankLines(path string) bool {
 // come from the parsed AST, so braces inside strings or comments are never matched.
 // gofmt does not strip these blanks, hence this pass.
 func lintTightBraces(path string) bool {
-	src := Throw2(os.ReadFile(path))
+	src := throw2(os.ReadFile(path))
 	fset := gotoken.NewFileSet()
 	f, err := goparser.ParseFile(fset, path, src, goparser.ParseComments)
 
@@ -1219,7 +1219,7 @@ func lintTightBraces(path string) bool {
 		return false
 	}
 
-	Throw(os.WriteFile(path, formatted, 0o644))
+	throw(os.WriteFile(path, formatted, 0o644))
 	return true
 }
 
@@ -1229,7 +1229,7 @@ func lintTightBraces(path string) bool {
 // after the opening brace and before the closing one and lets gofmt reindent and
 // split any `;`-separated statements. Empty bodies (`{}`) are left alone.
 func lintExpandFuncBodies(path string) bool {
-	src := Throw2(os.ReadFile(path))
+	src := throw2(os.ReadFile(path))
 	fset := gotoken.NewFileSet()
 	f, err := goparser.ParseFile(fset, path, src, goparser.ParseComments)
 
@@ -1288,7 +1288,7 @@ func lintExpandFuncBodies(path string) bool {
 		return false
 	}
 
-	Throw(os.WriteFile(path, formatted, 0o644))
+	throw(os.WriteFile(path, formatted, 0o644))
 	return true
 }
 
@@ -1297,7 +1297,7 @@ func lintExpandFuncBodies(path string) bool {
 // brace. gofmt does not separate top-level decls itself; it does collapse any
 // duplicate blanks these inserts create.
 func lintFuncBlankLines(path string) bool {
-	src := Throw2(os.ReadFile(path))
+	src := throw2(os.ReadFile(path))
 	fset := gotoken.NewFileSet()
 	f, err := goparser.ParseFile(fset, path, src, goparser.ParseComments)
 
@@ -1367,6 +1367,6 @@ func lintFuncBlankLines(path string) bool {
 		return false
 	}
 
-	Throw(os.WriteFile(path, formatted, 0o644))
+	throw(os.WriteFile(path, formatted, 0o644))
 	return true
 }

@@ -6,7 +6,7 @@ import (
 )
 
 func TestIntMapBasicPutGet(t *testing.T) {
-	m := NewIntMap[int](0)
+	m := newIntMap[int](0)
 
 	if m.get(42) != nil {
 		t.Fatalf("Get on empty map returned non-nil")
@@ -24,7 +24,7 @@ func TestIntMapBasicPutGet(t *testing.T) {
 }
 
 func TestIntMapOverwrite(t *testing.T) {
-	m := NewIntMap[string](0)
+	m := newIntMap[string](0)
 	m.put(7, "a")
 	m.put(7, "b")
 
@@ -39,7 +39,7 @@ func TestIntMapOverwrite(t *testing.T) {
 
 func TestIntMapCapacityIsPowerOfTwo(t *testing.T) {
 	for _, hint := range []int{0, 1, 7, 8, 100, 1000, 1 << 20} {
-		m := NewIntMap[int](hint)
+		m := newIntMap[int](hint)
 		c := len(m.data)
 
 		if c&(c-1) != 0 || c < intMapMinCap {
@@ -55,7 +55,7 @@ func TestIntMapCapacityIsPowerOfTwo(t *testing.T) {
 // Keys that share a home slot (k, k+cap, k+2*cap) must all be found via probing,
 // and probing must wrap around the end of the table.
 func TestIntMapCollisionAndWraparound(t *testing.T) {
-	m := NewIntMap[int](0) // cap 8, mask 7
+	m := newIntMap[int](0) // cap 8, mask 7
 	cap0 := uint64(len(m.data))
 
 	keys := []uint64{1, 1 + cap0, 1 + 2*cap0, 7, 7 + cap0, 7 + 2*cap0} // slot 1 and slot 7 (wraps)
@@ -71,7 +71,7 @@ func TestIntMapCollisionAndWraparound(t *testing.T) {
 }
 
 func TestIntMapGrowKeepsAll(t *testing.T) {
-	m := NewIntMap[uint64](0)
+	m := newIntMap[uint64](0)
 	const n = 100_000
 
 	for i := uint64(1); i <= n; i++ {
@@ -99,7 +99,7 @@ func TestIntMapGrowKeepsAll(t *testing.T) {
 func TestIntMapMatchesBuiltin(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	ref := map[uint64]int64{}
-	m := NewIntMap[int64](0)
+	m := newIntMap[int64](0)
 
 	for i := 0; i < 300_000; i++ {
 		k := rng.Uint64()%40_000 + 1 // small space → many collisions + overwrites; non-zero
@@ -133,7 +133,7 @@ func TestIntMapMatchesBuiltin(t *testing.T) {
 // Cell is the find-or-insert primitive: it returns a writable pointer to the
 // value cell and whether the key existed.
 func TestIntMapCell(t *testing.T) {
-	m := NewIntMap[int](0)
+	m := newIntMap[int](0)
 
 	p, existed := m.cell(5)
 	if existed {
@@ -168,7 +168,7 @@ func TestIntMapCell(t *testing.T) {
 
 // Cell must keep inserting correctly across the grows it triggers.
 func TestIntMapCellGrows(t *testing.T) {
-	m := NewIntMap[int](0)
+	m := newIntMap[int](0)
 	const n = 50_000
 
 	for i := 1; i <= n; i++ {
@@ -195,7 +195,7 @@ func TestIntMapCellGrows(t *testing.T) {
 func TestIntMapPointerValues(t *testing.T) {
 	type box struct{ n int }
 
-	m := NewIntMap[*box](0)
+	m := newIntMap[*box](0)
 	b := &box{n: 9}
 	m.put(123, b)
 

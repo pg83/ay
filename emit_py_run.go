@@ -106,7 +106,7 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	inputClosure := pyInputClosure(ctx, instance, stmt, d, moduleInputs)
 	codegenInputs := append([]VFS{scriptVFS}, inVFSs...)
 	extraDepRefs := resolveCodegenDepRefsExt(ctx, instance, inputClosure, codegenInputs)
-	result := EmitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, moduleInputs.TC, ctx.emit)
+	result := emitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, moduleInputs.TC, ctx.emit)
 
 	if d.prOutputInputs == nil {
 		d.prOutputInputs = map[string]InputChunks{}
@@ -276,7 +276,7 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 			target := d.target.string()
 
 			if ctx.fs.isFile(srcRootVFS, target) {
-				addSource(Source(target))
+				addSource(source(target))
 			}
 		}
 	}
@@ -299,7 +299,7 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 			target := pd.target.string()
 
 			if vfsHasPrefix(target) {
-				bvfs := Intern(target)
+				bvfs := intern(target)
 
 				if bvfs.isBuild() && reg != nil {
 					if info := reg.lookup(bvfs); info != nil {
@@ -313,7 +313,7 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 			}
 
 			if ctx.fs.isFile(srcRootVFS, target) {
-				addSource(Source(target))
+				addSource(source(target))
 			} else if reg != nil {
 				if info := reg.lookupRel(target); info != nil {
 					for _, si := range info.SourceInputs {
@@ -426,7 +426,7 @@ func pyEmitsIncludes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 
 	for _, f := range stmt.OutputIncludes {
 		if vfsHasPrefix(f) {
-			f = Intern(f).rel()
+			f = intern(f).rel()
 		}
 
 		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(f)})
@@ -435,7 +435,7 @@ func pyEmitsIncludes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 	return includes
 }
 
-func EmitPYRun(
+func emitPYRun(
 	instance ModuleInstance,
 	stmt *RunPythonStmt,
 	scriptVFS VFS,
@@ -465,10 +465,10 @@ func EmitPYRun(
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
 		a = strings.ReplaceAll(a, "${ARCADIA_BUILD_ROOT}", "$(B)")
 		a = strings.ReplaceAll(a, "${CURDIR}", instance.Path.string())
-		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path.rel()).string())
+		a = strings.ReplaceAll(a, "${BINDIR}", build(instance.Path.rel()).string())
 		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path.rel())
 		a = strings.ReplaceAll(a, "$CURDIR", instance.Path.string())
-		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path.rel()).string())
+		a = strings.ReplaceAll(a, "$BINDIR", build(instance.Path.rel()).string())
 
 		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = vfs.string()

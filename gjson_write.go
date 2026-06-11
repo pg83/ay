@@ -52,7 +52,7 @@ func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 		buf = appendNode(buf, node, g.uids, dropSrcInputs)
 
 		if len(buf) >= 256<<10 {
-			Throw2(w.Write(buf))
+			throw2(w.Write(buf))
 			buf = buf[:0]
 		}
 	}
@@ -61,7 +61,7 @@ func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 	buf = appendUIDSlice(buf, g.Result)
 	buf = append(buf, '}')
 
-	Throw2(w.Write(buf))
+	throw2(w.Write(buf))
 }
 
 func appendNode(buf []byte, n *Node, uids *UidVec, dropSrcInputs bool) []byte {

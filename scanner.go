@@ -229,10 +229,10 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 		// straighten path and closureWindow treat ref as a 1-based index).
 		subgraphClosures:     make([][]VFS, 1, 256),
 		closureArena:         newBumpAllocator[VFS](closureArenaInitial),
-		searchTierFlat:       NewIntValueMap[SearchTierResult](4096),
+		searchTierFlat:       newIntValueMap[SearchTierResult](4096),
 		ctxNumByHash:         make(map[uint64]uint32, 1024),
 		resolveIndexByConfig: make(map[uint64]*CfgResolveIndex, 1024),
-		sourceUnderCache:     NewIntValueMap[VFS](1 << 16),
+		sourceUnderCache:     newIntValueMap[VFS](1 << 16),
 		tjc:                  tjc,
 	}
 
@@ -832,7 +832,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR, target string) SearchT
 			return false
 		}
 
-		out.paths = []VFS{Source(rel)}
+		out.paths = []VFS{source(rel)}
 		out.found = true
 
 		return true
@@ -935,7 +935,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR, target string) SearchT
 
 			if bestRank != resolveNoRank {
 				if bestIsSource {
-					out.paths = []VFS{Source(joinRel(bestAddincl.rel(), target))}
+					out.paths = []VFS{source(joinRel(bestAddincl.rel(), target))}
 				} else {
 					out.paths = []VFS{bestBuild.OutputPath}
 
@@ -1007,7 +1007,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 			return false
 		}
 
-		v := Source(rel)
+		v := source(rel)
 
 		if outHas(v) {
 			return false
@@ -1072,7 +1072,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 			sv = *p
 		} else {
 			if r, ok := s.resolveSourceUnder(incDir, d.target.string()); ok {
-				sv = Source(r)
+				sv = source(r)
 			}
 
 			s.sourceUnderCache.put(suKey, sv)

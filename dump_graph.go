@@ -13,7 +13,7 @@ func finalizeDumpGraph(e *BufferedEmitter) *Graph {
 	}
 
 	if len(e.nodes) == 0 {
-		return Finalize(e)
+		return finalize(e)
 	}
 
 	overrideGeneratedModuleDir(e)
@@ -134,7 +134,7 @@ func dumpGraphDropNodeDeps(refs []NodeRef, drop map[NodeRef]struct{}, incoming [
 		refID := int(ref)
 
 		if incoming[refID] == 0 {
-			ThrowFmt("finalizeDumpGraph: incoming ref count underflow at id=%d", ref)
+			throwFmt("finalizeDumpGraph: incoming ref count underflow at id=%d", ref)
 		}
 
 		incoming[refID]--
@@ -200,7 +200,7 @@ func trimDumpGraphNodeRefList(in []NodeRef, drop map[NodeRef]struct{}, newIDs []
 		newID := newIDs[int(ref)]
 
 		if newID == nodeRefDropped {
-			ThrowFmt("finalizeDumpGraph: kept ref id=%d missing after prune", ref)
+			throwFmt("finalizeDumpGraph: kept ref id=%d missing after prune", ref)
 		}
 
 		out = append(out, newID)
@@ -224,7 +224,7 @@ func trimDumpGraphResultRefs(in []NodeRef, newIDs []NodeRef) []NodeRef {
 		newID := newIDs[int(refID)]
 
 		if newID == nodeRefDropped {
-			ThrowFmt("finalizeDumpGraph: result ref id=%d missing after prune", refID)
+			throwFmt("finalizeDumpGraph: result ref id=%d missing after prune", refID)
 		}
 
 		out = append(out, newID)
@@ -244,7 +244,7 @@ func remapDumpGraphOrder(order []int, drop map[NodeRef]struct{}, newIDs []NodeRe
 		newID := newIDs[oldID]
 
 		if newID == nodeRefDropped {
-			ThrowFmt("finalizeDumpGraph: kept order id=%d missing after prune", oldID)
+			throwFmt("finalizeDumpGraph: kept order id=%d missing after prune", oldID)
 		}
 
 		out = append(out, int(newID))
