@@ -411,15 +411,6 @@ func runProgramInputVFS(ctx *GenCtx, instance ModuleInstance, d *ModuleData, rel
 	return resolveModuleSourceVFS(ctx, instance, d, rel, d.srcDirs)
 }
 
-func expandRunProgramCWD(instance ModuleInstance, cwd string) string {
-	cwd = strings.ReplaceAll(cwd, "$BINDIR", build(instance.Path.rel()).string())
-	cwd = strings.ReplaceAll(cwd, "$CURDIR", instance.Path.string())
-	cwd = strings.ReplaceAll(cwd, "${ARCADIA_BUILD_ROOT}", "$(B)")
-	cwd = strings.ReplaceAll(cwd, "${ARCADIA_ROOT}", "$(S)")
-
-	return cwd
-}
-
 type PrEmitResult struct {
 	Ref    NodeRef
 	Inputs InputChunks
@@ -454,13 +445,6 @@ func emitPR(
 	cmdArgs = append(cmdArgs, (toolBinPath).str())
 
 	for _, a := range stmt.Args {
-		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
-		a = strings.ReplaceAll(a, "${ARCADIA_BUILD_ROOT}", "$(B)")
-		a = strings.ReplaceAll(a, "${CURDIR}", instance.Path.string())
-		a = strings.ReplaceAll(a, "${BINDIR}", build(instance.Path.rel()).string())
-		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path.rel())
-		a = strings.ReplaceAll(a, "$CURDIR", instance.Path.string())
-		a = strings.ReplaceAll(a, "$BINDIR", build(instance.Path.rel()).string())
 
 		for _, tool := range auxTools {
 			if strings.Contains(a, tool.token) {
@@ -561,7 +545,7 @@ func emitPR(
 	}
 
 	if stmt.CWD != nil {
-		cmd.Cwd = internStr(expandRunProgramCWD(instance, *stmt.CWD))
+		cmd.Cwd = internStr(*stmt.CWD)
 	}
 
 	node := &Node{
