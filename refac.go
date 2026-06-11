@@ -46,6 +46,7 @@ var linters = []fileLinter{
 	{name: "func-blank-lines", run: lintFuncBlankLines},
 	{name: "blank-around-blocks", run: lintControlBlankLines},
 	{name: "tight-braces", run: lintTightBraces},
+	{name: "case-convention", run: lintCaseConvention},
 }
 
 // constFileForKind names the dedicated file that owns every hoisted const of a
@@ -69,7 +70,7 @@ var constFileHeader = map[hoistKind]string{
 // place; run them in a throwaway worktree and review the diff.
 func cmdRefac(args []string) int {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: ay refac consts|lint [files...]")
+		fmt.Fprintln(os.Stderr, "usage: ay refac consts|lint|case [files...]")
 		return 2
 	}
 
@@ -78,6 +79,8 @@ func cmdRefac(args []string) int {
 		return refacConsts(args[1:])
 	case "lint":
 		return refacLint(args[1:])
+	case "case":
+		return refacCase(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown refac subcommand: %s\n", args[0])
 		return 2
