@@ -6,8 +6,6 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-type STR uint32
-
 // internTable maps strings to dense STR ids without a string-keyed map on the
 // hot path. The lookup map is keyed by the high 64 bits of the xxh3-128 of the
 // string; los holds the low 64 bits per STR, so a hit is verified by a uint64
@@ -26,6 +24,15 @@ var internTable = struct {
 	los:      make([]uint64, 1, 1<<16),
 	strs:     make([]string, 1, 1<<16),
 }
+
+// strDollar is a first-touch memo over "does the interned string contain '$'",
+// indexed by STR id — the macro-expansion fast-path predicate (expandStmtTokensSTR
+// and friends). Tokens repeat heavily across ya.makes; an interned string is
+// immutable, so the answer is constant per id. Same single-writer contract as
+// internTable.
+var strDollar TwoBitSet
+
+type STR uint32
 
 // internAppend allocates the next STR slot for s, recording its lo half (the
 // collision-verify key, reused as the per-path hash in node UIDs).
@@ -96,13 +103,6 @@ const (
 	dollarAbsent
 	dollarPresent
 )
-
-// strDollar is a first-touch memo over "does the interned string contain '$'",
-// indexed by STR id — the macro-expansion fast-path predicate (expandStmtTokensSTR
-// and friends). Tokens repeat heavily across ya.makes; an interned string is
-// immutable, so the answer is constant per id. Same single-writer contract as
-// internTable.
-var strDollar TwoBitSet
 
 func strHasDollar(id STR) bool {
 	if cell := DollarMemoState(strDollar.get(uint32(id))); cell != dollarUnseen {

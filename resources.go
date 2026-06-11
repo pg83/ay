@@ -7,6 +7,13 @@ import (
 	"strings"
 )
 
+var (
+	// resolveModuleToolchain derives the tool paths from the module's resource-global
+	// closure. Tool paths come from peers (build/platform/*), not ambient platform flags.
+	strLLDRootName      = internStr(resourcePatternLLDRoot)
+	strYMakePython3Name = internStr(resourcePatternYMakePython3)
+)
+
 // External-resource model. A RESOURCES_LIBRARY (build/platform/clang, …) declares
 // external resources via DECLARE_EXTERNAL_RESOURCE /
 // DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE[_BY_JSON]. Each declaration yields:
@@ -210,13 +217,6 @@ type ModuleToolchain struct {
 	LLD       STR
 	Python3   STR
 }
-
-// resolveModuleToolchain derives the tool paths from the module's resource-global
-// closure. Tool paths come from peers (build/platform/*), not ambient platform flags.
-var (
-	strLLDRootName      = internStr(resourcePatternLLDRoot)
-	strYMakePython3Name = internStr(resourcePatternYMakePython3)
-)
 
 func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolchain {
 	var tc ModuleToolchain
