@@ -575,15 +575,15 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 	hasEv := false
 	hasProto := false
 
-	// One view per src (the case expressions would each take their own); .fbs
-	// detection rides the same pass for genModule's flatbuffers auto-peer.
+	// Pure id-space triage (memoized class); .fbs detection rides the same
+	// pass for genModule's flatbuffers auto-peer.
 	for _, src := range d.srcs {
-		switch s := src.string(); {
-		case strings.HasSuffix(s, ".ev"):
+		switch srcExtClassOf(src) {
+		case srcExtEv:
 			hasEv = true
-		case strings.HasSuffix(s, ".proto"):
+		case srcExtProto:
 			hasProto = true
-		case strings.HasSuffix(s, ".fbs"):
+		case srcExtFbs:
 			d.hasFbs = true
 		}
 	}
@@ -804,12 +804,11 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 					continue
 				}
 
-				src := srcTok.string()
-
 				// An unresolved ${VAR} stays literal through expansion (upstream
 				// Deref keeps unknown refs); ymake's source consumer then warns
-				// and ignores it — mirror that, like the PEERDIR arm below.
-				if strings.Contains(src, "${") {
+				// and ignores it — mirror that, like the PEERDIR arm below. Only
+				// a $-bearing token (the memoized bit) can carry one.
+				if strHasDollar(srcTok) && strings.Contains(srcTok.string(), "${") {
 					continue
 				}
 
@@ -822,9 +821,11 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 					d.srcs = append(d.srcs, srcTok)
 				}
 
-				if strings.HasSuffix(src, ".h.in") {
-					addGeneratedHeaderInclude(modulePath, strings.TrimSuffix(src, ".in"), d)
-				} else if strings.HasSuffix(src, ".y") {
+				switch srcExtClassOf(srcTok) {
+				case srcExtHIn:
+					addGeneratedHeaderInclude(modulePath, strings.TrimSuffix(srcTok.string(), ".in"), d)
+				case srcExtY:
+					src := srcTok.string()
 					addGeneratedOwnHeaderInclude(modulePath, strings.TrimSuffix(src, filepath.Ext(src))+".h", d)
 				}
 			}
@@ -847,14 +848,14 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 					continue
 				}
 
-				p := pTok.string()
-
-				if strings.Contains(p, "${") {
+				// Only a $-bearing token can carry an unresolved ${VAR};
+				// plain paths append by id without a view.
+				if strHasDollar(pTok) && strings.Contains(pTok.string(), "${") {
 					continue
 				}
 
 				if addInclNext {
-					d.addIncl = append(d.addIncl, parseModulePathVFS(p))
+					d.addIncl = append(d.addIncl, parseModulePathVFS(pTok.string()))
 					addInclNext = false
 				}
 
@@ -1140,7 +1141,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 
 	defer func() {
 		if handled {
-			recordHandledMacro(v.Name.string(), strStrings(v.Args))
+			recordHandledMacro(v.Name, v.Args)
 		}
 	}()
 
@@ -1621,13 +1622,13 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 		for i := 0; i < len(v.Args); i++ {
 			a := v.Args[i]
 
-			switch a.string() {
-			case "TOP_LEVEL":
+			switch a {
+			case kwTOP_LEVEL:
 				topLevel = true
 				d.pyTopLevel = true
 
 				continue
-			case "NAMESPACE":
+			case kwNAMESPACE:
 				i++
 
 				if i >= len(v.Args) {
@@ -1638,21 +1639,21 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 				d.pyNamespace = namespace
 
 				continue
-			case "CYTHONIZE_PY":
+			case kwCYTHONIZE_PY:
 				cythonizePy = true
 
 				continue
-			case "CYTHON_CPP":
+			case kwCYTHON_CPP:
 				cythonPlainCpp = true
 				cythonCMode = false
 
 				continue
-			case "CYTHON_C":
+			case kwCYTHON_C:
 				cythonCMode = true
 				cythonPlainCpp = false
 
 				continue
-			case "CYTHON_DIRECTIVE":
+			case kwCYTHON_DIRECTIVE:
 				i++
 
 				if i >= len(v.Args) {
@@ -1662,15 +1663,15 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 				cythonDirectives = append(cythonDirectives, "-X", v.Args[i].string())
 
 				continue
-			case "SWIG_C":
+			case kwSWIG_C:
 				swigCMode = true
 
 				continue
-			case "SWIG_CPP":
+			case kwSWIG_CPP:
 				swigCMode = false
 
 				continue
-			case "MAIN":
+			case kwMAIN:
 				mainNext = true
 
 				continue
@@ -1936,7 +1937,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 		// handler.
 		handled = false
 
-		if _, ok := acknowledgedMacros[v.Name.string()]; !ok {
+		if !acknowledgedTokSet.has(uint32(v.Name)) {
 			throwFmt("gen: macro %q not modelled — implement its upstream semantics (see yatool/build/conf, yatool/build/ymake.core.conf)", v.Name.string())
 		}
 
@@ -1944,9 +1945,9 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 			d.unhandledMacros = map[STR][]STR{}
 		}
 
-		name := internStr(v.Name.string())
+		name := v.Name.str()
 		d.unhandledMacros[name] = append(d.unhandledMacros[name], v.Args...)
-		recordIgnoredMacro(v.Name.string(), strStrings(v.Args))
+		recordIgnoredMacro(v.Name)
 	}
 }
 

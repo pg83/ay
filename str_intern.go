@@ -6,6 +6,19 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
+var (
+	// strDollar is a first-touch memo over "does the interned string contain '$'",
+	// indexed by STR id — the macro-expansion fast-path predicate (expandStmtTokensSTR
+	// and friends). Tokens repeat heavily across ya.makes; an interned string is
+	// immutable, so the answer is constant per id. Same single-writer contract as
+	// internTable.
+	strDollar TwoBitSet
+	// srcExtClasses memoizes SrcExtClass per STR id, first-touch (an interned
+	// string is immutable, so the class is constant per id). Same single-writer
+	// contract as internTable.
+	srcExtClasses []uint8
+)
+
 // internTable maps strings to dense STR ids without a string-keyed map on the
 // hot path. The lookup map is keyed by the high 64 bits of the xxh3-128 of the
 // string; los holds the low 64 bits per STR, so a hit is verified by a uint64
@@ -24,13 +37,6 @@ var internTable = struct {
 	los:      make([]uint64, 1, 1<<16),
 	strs:     make([]string, 1, 1<<16),
 }
-
-// strDollar is a first-touch memo over "does the interned string contain '$'",
-// indexed by STR id — the macro-expansion fast-path predicate (expandStmtTokensSTR
-// and friends). Tokens repeat heavily across ya.makes; an interned string is
-// immutable, so the answer is constant per id. Same single-writer contract as
-// internTable.
-var strDollar TwoBitSet
 
 type STR uint32
 
@@ -118,6 +124,87 @@ func strHasDollar(id STR) bool {
 	}
 
 	return yes
+}
+
+// SrcExtClass is a srcExtClasses cell: the suffix triage of a src token,
+// shared by the SRCS collect arm, collectModule's .ev/.proto/.fbs pass and
+// genModule's codegen-producing gates. srcExtUnseen doubles as the zero value.
+type SrcExtClass uint8
+
+const (
+	srcExtUnseen SrcExtClass = iota
+	srcExtRegular
+	srcExtProto
+	srcExtFbs
+	srcExtEv
+	srcExtRl6
+	srcExtRl
+	srcExtY
+	srcExtCppIn
+	srcExtCIn
+	srcExtHIn
+)
+
+func srcExtClassOf(id STR) SrcExtClass {
+	if int(id) < len(srcExtClasses) {
+		if c := SrcExtClass(srcExtClasses[id]); c != srcExtUnseen {
+			return c
+		}
+	}
+
+	c := classifySrcExt(id.string())
+
+	for int(id) >= len(srcExtClasses) {
+		grown := len(srcExtClasses) * 2
+
+		if grown <= int(id) {
+			grown = int(id) + 1
+		}
+
+		next := make([]uint8, grown)
+		copy(next, srcExtClasses)
+		srcExtClasses = next
+	}
+
+	srcExtClasses[id] = uint8(c)
+
+	return c
+}
+
+func classifySrcExt(s string) SrcExtClass {
+	switch {
+	case strings.HasSuffix(s, ".proto"):
+		return srcExtProto
+	case strings.HasSuffix(s, ".fbs"):
+		return srcExtFbs
+	case strings.HasSuffix(s, ".ev"):
+		return srcExtEv
+	case strings.HasSuffix(s, ".rl6"):
+		return srcExtRl6
+	case strings.HasSuffix(s, ".rl"):
+		return srcExtRl
+	case strings.HasSuffix(s, ".y"):
+		return srcExtY
+	case strings.HasSuffix(s, ".cpp.in"):
+		return srcExtCppIn
+	case strings.HasSuffix(s, ".c.in"):
+		return srcExtCIn
+	case strings.HasSuffix(s, ".h.in"):
+		return srcExtHIn
+	default:
+		return srcExtRegular
+	}
+}
+
+// isCodegenProducingSrcID is isCodegenProducingSrc in id space (the memoized
+// class) — the same eight-extension set.
+func isCodegenProducingSrcID(id STR) bool {
+	switch srcExtClassOf(id) {
+	case srcExtProto, srcExtFbs, srcExtEv, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn:
+		return true
+	}
+
+	return false
 }
 
 // internedBytes is the lookup-only twin of internBytes: it probes for b without

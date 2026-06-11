@@ -85,7 +85,7 @@ func isRuntimeAncestor(path string) bool {
 }
 
 func suppressMallocAPIDefault(defaults []string, allocatorName STR) []string {
-	if allocatorName.string() != "FAKE" {
+	if allocatorName != strFAKE {
 		return defaults
 	}
 
