@@ -37,13 +37,7 @@ func EmitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 				Env: pythonEnv,
 			},
 			{
-				CmdArgs: argChunks{[]STR{
-					internStr(yasmBinaryPath),
-					argF.str(), argElf64.str(),
-					argD.str(), argUnix.str(),
-					argReplaceBB.str(),
-					argReplaceSS.str(),
-					argReplaceToolRootT.str(),
+				CmdArgs: argChunks{yasmConstHead, []STR{
 					argD.str(), internStr("_" + string(instance.Platform.ISA) + "_"),
 					argDYasm.str(),
 					argDashG.str(), argDwarf2.str(),

@@ -62,28 +62,24 @@ func EmitEV(
 	evH := Build(evRelPath + ".pb.h")
 	srcVFS := Source(evRelPath)
 
-	cmdArgs := []STR{
-		tc.Python3,
-		internStr(pbWrapperPath),
-		argOutputs.str(),
-		(evCC).str(),
-		(evH).str(),
-		arg2.str(),
-		(protocBinary).str(),
-		argI2.str(),
-		argIS2.str(),
-		argIB2.str(),
-		argIS3.str(),
-		argISContribLibsProtobufSrc.str(),
-		argIB2.str(),
-		argISContribLibsProtobufSrc.str(),
-		argCppOutB.str(),
-		argCppStyleguideOutB.str(),
-		internStr("--plugin=protoc-gen-cpp_styleguide=" + cppStyleguideBinary.String()),
-		internStr(evRelPath),
-		internStr("--plugin=protoc-gen-event2cpp=" + event2cppBinary.String()),
-		argEvent2cppOutB.str(),
-		internStr("-I=" + evEventlogIncludePath),
+	cmdArgs := argChunks{
+		{
+			tc.Python3,
+			internStr(pbWrapperPath),
+			argOutputs.str(),
+			(evCC).str(),
+			(evH).str(),
+			arg2.str(),
+			(protocBinary).str(),
+		},
+		evProtocConstArgs,
+		{
+			internStr("--plugin=protoc-gen-cpp_styleguide=" + cppStyleguideBinary.String()),
+			internStr(evRelPath),
+			internStr("--plugin=protoc-gen-event2cpp=" + event2cppBinary.String()),
+			argEvent2cppOutB.str(),
+			internStr("-I=" + evEventlogIncludePath),
+		},
 	}
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -130,7 +126,7 @@ func EmitEV(
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: argChunks{cmdArgs},
+				CmdArgs: cmdArgs,
 				Cwd:     strS,
 				Env:     env,
 			},
@@ -147,4 +143,17 @@ func EmitEV(
 	}
 
 	return emit.Emit(node)
+}
+
+// evProtocConstArgs is the constant -I/--out span of every EV protoc command.
+var evProtocConstArgs = []STR{
+	argI2.str(),
+	argIS2.str(),
+	argIB2.str(),
+	argIS3.str(),
+	argISContribLibsProtobufSrc.str(),
+	argIB2.str(),
+	argISContribLibsProtobufSrc.str(),
+	argCppOutB.str(),
+	argCppStyleguideOutB.str(),
 }
