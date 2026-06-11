@@ -149,6 +149,7 @@ func collectSwigInducedIncludes(ctx *genCtx, src VFS, closure []VFS) []includeDi
 
 	return out
 }
+
 func swigResolveCandidates(fs FS, target, incRel string, roots []string) []string {
 	if fs == nil {
 		return nil

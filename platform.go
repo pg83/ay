@@ -142,6 +142,7 @@ func sysrootArgsFor(os OS, flags map[string]string) []STR {
 	sdkRoot := "$(B)/resources/" + resourcePatternOSSDKRoot
 
 	sysroot := "--sysroot=" + sdkRoot
+
 	if flags["MUSL"] == "yes" {
 		sysroot = "--sysroot=/nowhere"
 	}

@@ -46,15 +46,15 @@ var sysInclYamlSequence = []sysInclEntry{
 	{file: "python-2-disable-numpy.yml"},
 }
 
-const (
-	baseSysInclDir     = "build/sysincl"
-	internalSysInclDir = "build/internal/sysincl"
-)
-
 var supportedSysInclArchs = map[string]struct{}{
 	"aarch64": {},
 	"x86_64":  {},
 }
+
+const (
+	baseSysInclDir     = "build/sysincl"
+	internalSysInclDir = "build/internal/sysincl"
+)
 
 type SysIncl struct {
 	Filter         *sourceFilter
@@ -98,8 +98,13 @@ type sysInclEntry struct {
 	predicate func(sysInclEnv) bool
 }
 
-func opensourceOn(e sysInclEnv) bool  { return e.opensource }
-func notOpensource(e sysInclEnv) bool { return !e.opensource }
+func opensourceOn(e sysInclEnv) bool {
+	return e.opensource
+}
+
+func notOpensource(e sysInclEnv) bool {
+	return !e.opensource
+}
 
 func archIs(want string) func(sysInclEnv) bool {
 	return func(e sysInclEnv) bool { return e.arch == want }
