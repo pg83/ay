@@ -71,6 +71,7 @@ var constFileHeader = map[HoistKind]string{
 func cmdRefac(args []string) int {
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "usage: ay refac consts|lint|case [files...]")
+
 		return 2
 	}
 
@@ -83,6 +84,7 @@ func cmdRefac(args []string) int {
 		return refacCase(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown refac subcommand: %s\n", args[0])
+
 		return 2
 	}
 }
@@ -105,6 +107,7 @@ func goFilesFromArgs(args []string) []string {
 	}
 
 	sort.Strings(files)
+
 	return files
 }
 
@@ -253,6 +256,7 @@ func collectOccurrences(pf *ParsedFile, fileIdx int, occs *[]Occurrence) {
 			key:     key,
 			free:    free,
 		})
+
 		return false // the only child is the string literal — nothing nested to hoist
 	}
 
@@ -317,6 +321,7 @@ func parseRefacFile(path string, existing map[HoistKey]string, used map[string]b
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refac consts: %s: parse: %v\n", path, err)
+
 		return nil
 	}
 
@@ -546,6 +551,7 @@ func specRemovable(pf *ParsedFile, spec ast.Spec) bool {
 	}
 
 	call, ok := vs.Values[0].(*ast.CallExpr)
+
 	return ok && pf.declared[call]
 }
 
@@ -654,6 +660,7 @@ func applyConstEdits(pf *ParsedFile, edits []ConstEdit) bool {
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refac consts: %s: format failed (left unchanged): %v\n", pf.path, err)
+
 		return false
 	}
 
@@ -662,6 +669,7 @@ func applyConstEdits(pf *ParsedFile, edits []ConstEdit) bool {
 	}
 
 	throw(os.WriteFile(pf.path, formatted, 0o644))
+
 	return true
 }
 
@@ -841,6 +849,7 @@ func (it VarItem) render(inGroup bool) string {
 	}
 
 	b.WriteString(it.body)
+
 	return b.String()
 }
 
@@ -861,6 +870,7 @@ func lintConsolidateVars(path string) bool {
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refac lint: %s: parse: %v\n", path, err)
+
 		return false
 	}
 
@@ -979,6 +989,7 @@ func lintConsolidateVars(path string) bool {
 	for _, decl := range f.Decls {
 		if gd, ok := decl.(*ast.GenDecl); ok && gd.Tok == gotoken.IMPORT {
 			insOff = off(gd.End())
+
 			break
 		}
 	}
@@ -999,6 +1010,7 @@ func lintConsolidateVars(path string) bool {
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refac lint: %s: consolidate-vars format failed (left unchanged): %v\n", path, err)
+
 		return false
 	}
 
@@ -1007,6 +1019,7 @@ func lintConsolidateVars(path string) bool {
 	}
 
 	throw(os.WriteFile(path, formatted, 0o644))
+
 	return true
 }
 
@@ -1018,11 +1031,17 @@ func isControlBlockStmt(stmt ast.Stmt) bool {
 	switch s := stmt.(type) {
 	case *ast.IfStmt, *ast.ForStmt, *ast.RangeStmt, *ast.SwitchStmt, *ast.TypeSwitchStmt, *ast.SelectStmt:
 		return true
+	// return/defer/continue/break are set off like control blocks: a blank
+	// line on each side, except at their statement list's edges (which have
+	// no adjacent pair). goto/fallthrough stay free — fallthrough belongs to
+	// its case body tail, goto reads as part of its loop shape.
+	case *ast.ReturnStmt, *ast.DeferStmt:
+		return true
+	case *ast.BranchStmt:
+		return s.Tok == gotoken.BREAK || s.Tok == gotoken.CONTINUE
 	case *ast.GoStmt:
 		_, ok := s.Call.Fun.(*ast.FuncLit)
-		return ok
-	case *ast.DeferStmt:
-		_, ok := s.Call.Fun.(*ast.FuncLit)
+
 		return ok
 	case *ast.LabeledStmt:
 		return isControlBlockStmt(s.Stmt)
@@ -1032,8 +1051,9 @@ func isControlBlockStmt(stmt ast.Stmt) bool {
 }
 
 // lintControlBlankLines enforces STYLE.md's "blank lines around control blocks":
-// before and after every control block (if/for/switch/select/go-func/defer-func),
-// except where the block is the first or last statement of its enclosing block.
+// before and after every control block (if/for/switch/select/go-func) and every
+// flow statement (return/defer/continue/break), except where the statement is
+// the first or last of its enclosing block.
 //
 // That before/after pair of rules, with their first/last exceptions, is exactly the
 // pairwise invariant: between any two adjacent statements in one statement list, if
@@ -1048,6 +1068,7 @@ func lintControlBlankLines(path string) bool {
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refac lint: %s: parse: %v\n", path, err)
+
 		return false
 	}
 
@@ -1123,6 +1144,7 @@ func lintControlBlankLines(path string) bool {
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refac lint: %s: blank-around-blocks format failed (left unchanged): %v\n", path, err)
+
 		return false
 	}
 
@@ -1131,6 +1153,7 @@ func lintControlBlankLines(path string) bool {
 	}
 
 	throw(os.WriteFile(path, formatted, 0o644))
+
 	return true
 }
 
@@ -1146,6 +1169,7 @@ func lintTightBraces(path string) bool {
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refac lint: %s: parse: %v\n", path, err)
+
 		return false
 	}
 
@@ -1212,6 +1236,7 @@ func lintTightBraces(path string) bool {
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refac lint: %s: tight-braces format failed (left unchanged): %v\n", path, err)
+
 		return false
 	}
 
@@ -1220,6 +1245,7 @@ func lintTightBraces(path string) bool {
 	}
 
 	throw(os.WriteFile(path, formatted, 0o644))
+
 	return true
 }
 
@@ -1235,6 +1261,7 @@ func lintExpandFuncBodies(path string) bool {
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refac lint: %s: parse: %v\n", path, err)
+
 		return false
 	}
 
@@ -1281,6 +1308,7 @@ func lintExpandFuncBodies(path string) bool {
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refac lint: %s: expand-func-bodies format failed (left unchanged): %v\n", path, err)
+
 		return false
 	}
 
@@ -1289,6 +1317,7 @@ func lintExpandFuncBodies(path string) bool {
 	}
 
 	throw(os.WriteFile(path, formatted, 0o644))
+
 	return true
 }
 
@@ -1303,6 +1332,7 @@ func lintFuncBlankLines(path string) bool {
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refac lint: %s: parse: %v\n", path, err)
+
 		return false
 	}
 
@@ -1360,6 +1390,7 @@ func lintFuncBlankLines(path string) bool {
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "refac lint: %s: func-blank-lines format failed (left unchanged): %v\n", path, err)
+
 		return false
 	}
 
@@ -1368,5 +1399,6 @@ func lintFuncBlankLines(path string) bool {
 	}
 
 	throw(os.WriteFile(path, formatted, 0o644))
+
 	return true
 }

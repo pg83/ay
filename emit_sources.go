@@ -30,6 +30,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		yasmLDRef, _ := ctx.tool(argContribToolsYasm)
 		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDirs)
 		ref, _, outPath := emitRD(srcInstance, srcRel, srcVFS, yasmLDRef, srcIn.TC, ctx.emit)
+
 		return &SourceEmit{Ref: ref, OutPath: outPath}
 	case strings.HasSuffix(srcRel, ".c"),
 		strings.HasSuffix(srcRel, ".cpp"),
@@ -41,6 +42,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 
 		srcIn.ExtraDepRefs = resolveCodegenDepRefsExt(ctx, srcInstance, srcIn.IncludeInputs, []VFS{srcVFS})
 		ref, outPath, _ := emitCC(srcInstance, srcRel, srcVFS, srcIn, ctx.host, ctx.emit)
+
 		return &SourceEmit{Ref: ref, OutPath: outPath}
 	case strings.HasSuffix(srcRel, ".S"),
 		strings.HasSuffix(srcRel, ".s"),
@@ -67,10 +69,12 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		if instance.Platform.ISA == ISAX8664 && strings.HasSuffix(srcRel, ".asm") {
 			yasmLD, _ := ctx.tool(argContribToolsYasm)
 			ref, outPath := emitASYasm(srcInstance, srcRel, srcVFS, asIn, yasmLD, ctx.emit)
+
 			return &SourceEmit{Ref: ref, OutPath: outPath}
 		}
 
 		ref, outPath := emitAS(srcInstance, srcRel, srcVFS, asIn, ctx.host, ctx.emit)
+
 		return &SourceEmit{Ref: ref, OutPath: outPath}
 	case strings.HasSuffix(srcRel, ".rl6"):
 		ragelLDRef, ragelBinaryVFS := ctx.tool(argContribToolsRagel6)
@@ -110,6 +114,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		ccIn.PerSourceCFlags = append(append([]ARG(nil), srcIn.PerSourceCFlags...), argWnoImplicitFallthrough)
 		ccIn.ExtraDepRefs = append([]NodeRef{r6Ref}, resolveCodegenDepRefs(ctx, srcInstance, window, r6Ref)...)
 		ccRef, ccOut, _ := emitCC(srcInstance, ccSrcRel, r6Out, ccIn, ctx.host, ctx.emit)
+
 		return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 	case strings.HasSuffix(srcRel, ".y"):
 		return emitBisonY(ctx, srcInstance, srcRel, srcIn, srcIn.BisonGenExt)
@@ -165,6 +170,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		ccIn.IncludeInputs = append(ccIn.IncludeInputs, wireFormatVFS)
 		ccIn.ExtraDepRefs = append([]NodeRef{evRef}, resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, evRef)...)
 		ref, outPath, _ := emitCC(srcInstance, evPbCCSuffix, evPbCC, ccIn, ctx.host, ctx.emit)
+
 		return &SourceEmit{Ref: ref, OutPath: outPath}
 	case strings.HasSuffix(srcRel, ".rl"):
 		ragel5LDRef, ragel5BinVFS := ctx.tool(argContribToolsRagel5Ragel)
@@ -191,6 +197,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, r5Ref)
 		ccIn.ExtraDepRefs = append([]NodeRef{r5Ref}, ccIn.ExtraDepRefs...)
 		ccRef, ccOut, _ := emitCC(srcInstance, ccSrcRel, r5CppOut, ccIn, ctx.host, ctx.emit)
+
 		return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 	case strings.HasSuffix(srcRel, ".h.in"):
 
@@ -233,10 +240,12 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, cfRef)
 		ccIn.ExtraDepRefs = append([]NodeRef{cfRef}, ccIn.ExtraDepRefs...)
 		ccRef, ccOut, _ := emitCC(srcInstance, ccSrcRel, cfOut, ccIn, ctx.host, ctx.emit)
+
 		return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 	}
 
 	throwFmt("gen: %s: unsupported source extension in %q", instance.Path.rel(), srcRel)
+
 	return nil
 }
 
@@ -248,6 +257,7 @@ func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	ccIn.ExtraDepRefs = append([]NodeRef{pb.pbRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pb.pbRef)...)
 	ccSrcRel := strings.TrimPrefix(pb.pbCC.rel(), instance.Path.rel()+"/")
 	ccRef, ccOut, _ := emitCC(instance, ccSrcRel, pb.pbCC, ccIn, ctx.host, ctx.emit)
+
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }
 
@@ -260,5 +270,6 @@ func emitLibraryFlatcSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	ccIn.ExtraDepRefs = append([]NodeRef{fl.flRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, fl.flRef)...)
 	ccSrcRel := strings.TrimPrefix(fl.cpp.rel(), instance.Path.rel()+"/")
 	ccRef, ccOut, _ := emitCC(instance, ccSrcRel, fl.cpp, ccIn, ctx.host, ctx.emit)
+
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }

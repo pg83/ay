@@ -407,6 +407,7 @@ func emitKvOnlyObjcopyNode(
 	}
 
 	ref := ctx.emit.emit(node)
+
 	return &ObjcopyEmit{Ref: ref, Out: outputObj}
 }
 
@@ -553,6 +554,7 @@ func emitPyNamespaceForGroup(
 	key := "py/namespace/" + modListMD5 + "/" + keyPath
 	kvHash := key + "=\"" + nsValue + "\""
 	kvCmd := key + "=" + nsValue
+
 	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyLib, []string{kvHash}, []string{kvCmd}, d, oc)
 }
 
@@ -567,6 +569,7 @@ func emitPyMainObjcopy(
 	}
 
 	kv := "PY_MAIN=" + *d.pyMain
+
 	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyBin, []string{kv}, []string{kv}, d, oc)
 }
 
@@ -587,6 +590,7 @@ func emitNoCheckImportsObjcopy(
 	key := "py/no_check_imports/" + b32
 	kvHash := key + "=\"" + value + "\""
 	kvCmd := key + "=" + value
+
 	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyBin, []string{kvHash}, []string{kvCmd}, d, oc)
 }
 

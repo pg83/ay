@@ -169,6 +169,7 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, out
 			for _, ext := range []string{".cpp", ".cc", ".cxx", ".c"} {
 				if parserVFS, ok := outVFSByToken[parserBase+"Parser"+ext]; ok {
 					appendUnique(parserVFS.rel())
+
 					break
 				}
 			}
@@ -185,6 +186,7 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, out
 			for _, ext := range []string{".cpp", ".cc", ".cxx", ".c"} {
 				if parserVFS, ok := outVFSByToken[parserBase+"Parser"+ext]; ok {
 					appendUnique(parserVFS.rel())
+
 					break
 				}
 			}
@@ -193,6 +195,7 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, out
 			for _, ext := range []string{".cpp", ".cc", ".cxx", ".c"} {
 				if cppVFS, ok := outVFSByToken[base+ext]; ok {
 					appendUnique(cppVFS.rel())
+
 					break
 				}
 			}
@@ -236,5 +239,6 @@ func antlrOutputModuleRel(modulePath string, outVFS VFS) string {
 	}
 
 	throwFmt("gen: antlr output %q is outside module %q", outVFS.rel(), modulePath)
+
 	return ""
 }

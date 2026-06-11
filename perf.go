@@ -17,6 +17,7 @@ func cmdPerf(args []string) int {
 	}
 
 	stop := startProfilesFromEnv()
+
 	defer stop()
 
 	return perfParser(args[1])

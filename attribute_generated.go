@@ -47,11 +47,13 @@ func overrideGeneratedModuleDir(e *BufferedEmitter) {
 
 			if claim == "" {
 				claim = c
+
 				continue
 			}
 
 			if c != claim {
 				claim = ""
+
 				break
 			}
 		}

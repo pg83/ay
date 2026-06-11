@@ -10,6 +10,7 @@ import "syscall"
 // preemption on some filesystems).
 func readFileInto(path string, buf []byte) []byte {
 	fd := openEINTR(path)
+
 	defer syscall.Close(fd)
 
 	buf = buf[:0]

@@ -61,6 +61,7 @@ func cfIncludeDirectives(pm *IncludeParserManager, rel string) []IncludeDirectiv
 	}
 
 	sort.Slice(out, func(i, j int) bool { return out[i].target.string() < out[j].target.string() })
+
 	return out
 }
 
@@ -96,6 +97,7 @@ func buildCFGVars(fs FS, rel string, setVars, defaultVars map[string]string) []s
 
 func hasKey(m map[string]string, k string) bool {
 	_, ok := m[k]
+
 	return ok
 }
 

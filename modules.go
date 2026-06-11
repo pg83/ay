@@ -324,6 +324,7 @@ parsedFlags:
 		case "OUTPUT_INCLUDES", "INDUCED_DEPS":
 			section = args[i]
 			i++
+
 			continue
 		}
 
@@ -378,6 +379,7 @@ parsedFlags:
 		case "OUTPUT_INCLUDES", "INDUCED_DEPS":
 			section = args[i]
 			i++
+
 			continue
 		}
 
@@ -831,6 +833,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 
 				if p == "ADDINCL" {
 					addInclNext = true
+
 					continue
 				}
 
@@ -1069,6 +1072,7 @@ func moduleStmtForKind(stmt *ModuleStmt, kind ModuleKind) *ModuleStmt {
 	if stmt.Name == tokPy3Program && kind == KindLib {
 		out := *stmt
 		out.Name = tokPy3Library
+
 		return &out
 	}
 
@@ -1603,6 +1607,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 			case "TOP_LEVEL":
 				topLevel = true
 				d.pyTopLevel = true
+
 				continue
 			case "NAMESPACE":
 				i++
@@ -1617,14 +1622,17 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 				continue
 			case "CYTHONIZE_PY":
 				cythonizePy = true
+
 				continue
 			case "CYTHON_CPP":
 				cythonPlainCpp = true
 				cythonCMode = false
+
 				continue
 			case "CYTHON_C":
 				cythonCMode = true
 				cythonPlainCpp = false
+
 				continue
 			case "CYTHON_DIRECTIVE":
 				i++
@@ -1634,15 +1642,19 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 				}
 
 				cythonDirectives = append(cythonDirectives, "-X", v.Args[i])
+
 				continue
 			case "SWIG_C":
 				swigCMode = true
+
 				continue
 			case "SWIG_CPP":
 				swigCMode = false
+
 				continue
 			case "MAIN":
 				mainNext = true
+
 				continue
 			}
 
@@ -2339,6 +2351,7 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 		if s[i] != '$' || i+1 >= len(s) || s[i+1] == '{' || s[i+1] == '(' {
 			b.WriteByte(s[i])
 			i++
+
 			continue
 		}
 
@@ -2349,6 +2362,7 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 
 			if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' {
 				j++
+
 				continue
 			}
 
@@ -2358,6 +2372,7 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 		if j == i+1 {
 			b.WriteByte(s[i])
 			i++
+
 			continue
 		}
 
@@ -2368,6 +2383,7 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 		if !ok {
 			b.WriteString(s[i:j])
 			i = j
+
 			continue
 		}
 

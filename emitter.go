@@ -102,6 +102,7 @@ func (e *BufferedEmitter) emit(n *Node) NodeRef {
 
 	id := NodeRef(len(e.nodes))
 	e.nodes = append(e.nodes, n)
+
 	return id
 }
 
@@ -316,6 +317,7 @@ func (e *StreamingEmitter) emit(n *Node) NodeRef {
 	if e.hasUnresolvedDeps(n) {
 		e.pendingSet[id] = true
 		e.pendingIdx = append(e.pendingIdx, id)
+
 		return id
 	}
 

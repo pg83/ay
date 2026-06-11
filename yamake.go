@@ -604,15 +604,18 @@ func (l *Lexer) readToken() Token {
 	switch {
 	case b == '(':
 		l.advance()
+
 		return Token{kind: tokLParen, line: startLine, col: startCol}
 	case b == ')':
 		l.advance()
+
 		return Token{kind: tokRParen, line: startLine, col: startCol}
 	case b == '"' || b == '\'':
 		return l.readString(startLine, startCol, b)
 	case b == '<':
 
 		l.advance()
+
 		return Token{kind: tokLt, line: startLine, col: startCol}
 	case b == '>':
 
@@ -620,6 +623,7 @@ func (l *Lexer) readToken() Token {
 
 		if l.pos < len(l.src) && l.src[l.pos] == '=' {
 			l.advance()
+
 			return Token{kind: tokGe, line: startLine, col: startCol}
 		}
 
@@ -628,11 +632,13 @@ func (l *Lexer) readToken() Token {
 
 		l.advance()
 		l.advance()
+
 		return Token{kind: tokEq, line: startLine, col: startCol}
 	case b == '!' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '=':
 
 		l.advance()
 		l.advance()
+
 		return Token{kind: tokNotEq, line: startLine, col: startCol}
 	case b >= '0' && b <= '9':
 		return l.readNumberOrWord(startLine, startCol)
@@ -644,6 +650,7 @@ func (l *Lexer) readToken() Token {
 
 		l.advance()
 		l.throwParse(startLine, startCol, "unexpected character %q", b)
+
 		return Token{}
 	}
 }
@@ -662,6 +669,7 @@ func (l *Lexer) readString(startLine, startCol int, quote byte) Token {
 
 		if b == quote {
 			l.advance()
+
 			return Token{kind: tokString, val: string(buf), line: startLine, col: startCol}
 		}
 
@@ -975,18 +983,23 @@ func (p *Parser) buildStmt(nameTok Token, args []string) Stmt {
 		}
 
 		sources := append([]string(nil), args[1:]...)
+
 		return &JoinSrcsStmt{OutputName: args[0], Sources: sources, Line: nameTok.line}
 	case "ADDINCL":
 		globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, userGlobalPaths, allPaths := splitAddInclPaths(args)
+
 		return &AddInclStmt{GlobalPaths: globalPaths, OneLevelPaths: oneLevelPaths, OwnPaths: ownPaths, CythonPaths: cythonPaths, AsmPaths: asmPaths, ProtoGlobalPaths: protoGlobalPaths, UserGlobalPaths: userGlobalPaths, AllPaths: allPaths, Line: nameTok.line}
 	case "CFLAGS":
 		globalFlags, ownFlags := splitFlagsByGlobal(args)
+
 		return &CFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: nameTok.line}
 	case "CXXFLAGS":
 		globalFlags, ownFlags := splitFlagsByGlobal(args)
+
 		return &CXXFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: nameTok.line}
 	case "CONLYFLAGS":
 		globalFlags, ownFlags := splitFlagsByGlobal(args)
+
 		return &CONLYFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: nameTok.line}
 	case "LDFLAGS":
 		return &LDFlagsStmt{Flags: append([]string(nil), args...), Line: nameTok.line}
@@ -1174,6 +1187,7 @@ func parseRunAntlr(args []string, nameTok Token) *RunAntlrStmt {
 
 		if runAntlrKeywords[tok] {
 			currentSection = tok
+
 			continue
 		}
 
@@ -1221,6 +1235,7 @@ func parseRunProgram(args []string, line int) *RunProgramStmt {
 		if runProgramKeywords[tok] {
 			currentSection = tok
 			i++
+
 			continue
 		}
 
@@ -1266,6 +1281,7 @@ func parseRunPython(args []string, line int) *RunPythonStmt {
 		if runProgramKeywords[tok] {
 			currentSection = tok
 			i++
+
 			continue
 		}
 
@@ -1377,6 +1393,7 @@ func splitAddInclPaths(args []string) (globalPaths, oneLevelPaths, ownPaths, cyt
 			}
 
 			i++
+
 			continue
 		}
 
@@ -1464,6 +1481,7 @@ func (p *Parser) parseIf(ifTok Token) *IfStmt {
 
 		nested := p.parseIf(endTok)
 		node.Else = []Stmt{nested}
+
 		return node
 	}
 
@@ -1582,6 +1600,7 @@ func (c *CondParser) parseNot() Expr {
 
 	if ok && t.kind == tokIdent && t.val == "NOT" {
 		c.consume()
+
 		return &ExprNot{Of: c.parseNot()}
 	}
 
@@ -1602,29 +1621,34 @@ func (c *CondParser) parseCmp() Expr {
 		c.consume()
 		right := c.parseAtom()
 		c.rejectChainedCmp(t)
+
 		return &ExprEq{Left: left, Right: right}
 	case tokLt:
 		c.consume()
 		right := c.parseAtom()
 		c.rejectChainedCmp(t)
+
 		return &ExprLt{Left: left, Right: right}
 	case tokNotEq:
 
 		c.consume()
 		right := c.parseAtom()
 		c.rejectChainedCmp(t)
+
 		return &ExprNot{Of: &ExprEq{Left: left, Right: right}}
 	case tokGt:
 		// a > b  ≡  b < a
 		c.consume()
 		right := c.parseAtom()
 		c.rejectChainedCmp(t)
+
 		return &ExprLt{Left: right, Right: left}
 	case tokGe:
 		// a >= b  ≡  !(a < b)
 		c.consume()
 		right := c.parseAtom()
 		c.rejectChainedCmp(t)
+
 		return &ExprNot{Of: &ExprLt{Left: left, Right: right}}
 	}
 
@@ -1666,6 +1690,7 @@ func (c *CondParser) parseAtom() Expr {
 
 	if t.kind == tokString {
 		c.consume()
+
 		return &ExprString{Value: t.val}
 	}
 
@@ -1687,6 +1712,7 @@ func (c *CondParser) parseAtom() Expr {
 		}
 
 		c.consume()
+
 		return &ExprIdent{Name: t.val, Env: internEnv(t.val)}
 	}
 

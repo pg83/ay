@@ -34,6 +34,7 @@ func probeMapInstr(args []string) int {
 
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "mapinstr: read %s: %v\n", p, err)
+
 			return 1
 		}
 
@@ -41,6 +42,7 @@ func probeMapInstr(args []string) int {
 
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "mapinstr: parse %s: %v\n", p, err)
+
 			return 1
 		}
 
@@ -142,6 +144,7 @@ func probeMapInstr(args []string) int {
 
 		if err := os.WriteFile(p, b, 0o644); err != nil {
 			fmt.Fprintf(os.Stderr, "mapinstr: write %s: %v\n", p, err)
+
 			return 1
 		}
 	}

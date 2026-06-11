@@ -85,5 +85,6 @@ func biFlagsForInstance(targetP *Platform) []STR {
 	flags = append(flags, (baseUnitCxxNostdinc).str())
 	flags = appendArgStr(flags, catboostOpenSourceDefineFor(targetP))
 	flags = append(flags, (baseUnitCxxNostdinc).str())
+
 	return flags
 }

@@ -305,6 +305,7 @@ func pyProtoAuxInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 func py3ccToolRefs(ctx *GenCtx, instance ModuleInstance) (NodeRef, NodeRef, VFS, VFS) {
 	py3ccRef, py3ccBinary := ctx.tool(argToolsPy3cc)
 	py3ccSlowRef, py3ccSlowBin := ctx.tool(argToolsPy3ccSlow)
+
 	return py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin
 }
 
@@ -316,6 +317,7 @@ func protoPathID(path string) string {
 	sum := md5.Sum([]byte(path))
 	encoded := base32.StdEncoding.EncodeToString(sum[:])
 	encoded = strings.ToLower(encoded)
+
 	return strings.TrimRight(encoded, "=")
 }
 
@@ -325,6 +327,7 @@ func protoResourceHash(items []string, modulePath, moduleTag string) string {
 	sort.Strings(list)
 
 	sum := md5.Sum([]byte(strings.Join(list, ",") + moduleTag))
+
 	return strings.ToLower(enchex.EncodeToString(sum[:]))[:26]
 }
 

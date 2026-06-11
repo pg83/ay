@@ -225,6 +225,7 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	if srcVFS.isSource() && srcVFS.rel() != canon {
 		outputRel := composeSrcDirOutputRel(instance.Path.rel(), srcVFS.rel())
 		out = build(instance.Path.rel() + "/" + outputRel + suffix)
+
 		return out, input
 	}
 

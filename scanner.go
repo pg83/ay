@@ -815,6 +815,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR, target string) SearchT
 	if s.searchTierSeen.has(uint32(targetID)) {
 		if cached := s.searchTierFlat.get(splitMix64(sc.ctxNum, uint32(targetID))); cached != nil {
 			s.searchTierHits++
+
 			return *cached
 		}
 	}
@@ -947,6 +948,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR, target string) SearchT
 				}
 
 				out.found = true
+
 				return sc.cacheSearchTier(targetID, out)
 			}
 

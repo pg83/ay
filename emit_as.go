@@ -47,6 +47,7 @@ func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs) (out, input VFS) {
 	if srcVFS.isSource() && srcVFS.rel() != instance.Path.rel()+"/"+srcRel {
 		outputRel := composeSrcDirOutputRel(instance.Path.rel(), srcVFS.rel())
+
 		return build(instance.Path.rel() + "/" + outputRel + ".o"), srcVFS
 	}
 
@@ -176,5 +177,6 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 
 	node.ForeignDepRefs = []NodeRef{yasmLD}
 	node.DepRefs = []NodeRef{yasmLD}
+
 	return emit.emit(node), outVFS
 }

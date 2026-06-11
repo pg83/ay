@@ -351,6 +351,7 @@ func appendVFS(buf []byte, v VFS) []byte {
 	out = appendStringEscapedBody(out, s)
 	out = append(out, '"')
 	vfsEscapedJSON[id] = out
+
 	return append(buf, out...)
 }
 
@@ -369,6 +370,7 @@ func appendString(buf []byte, s string) []byte {
 	buf = append(buf, '"')
 	buf = appendStringEscapedBody(buf, s)
 	buf = append(buf, '"')
+
 	return buf
 }
 

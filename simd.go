@@ -25,6 +25,7 @@ var simdVariants = map[string]SimdVariant{
 
 func simdVariantFor(macroName TOK) (SimdVariant, bool) {
 	v, ok := simdVariants[macroName.string()]
+
 	return v, ok
 }
 

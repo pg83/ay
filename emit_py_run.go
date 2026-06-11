@@ -210,6 +210,7 @@ func pyInputClosure(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 	}
 
 	out = dedupVFS(out, nil)
+
 	return out
 }
 
@@ -292,6 +293,7 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 
 		if vfs.isSource() {
 			addSource(vfs)
+
 			continue
 		}
 
@@ -372,6 +374,7 @@ func pyEmitsIncludes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 			if isCCSourceExt(f) {
 				firstShardFile = f
 				firstShardVFS = copyFileOutputVFS(instance.Path.rel(), f)
+
 				break
 			}
 		}

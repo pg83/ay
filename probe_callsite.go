@@ -22,6 +22,7 @@ import (
 func probeCallSite(args []string) int {
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "usage: ay probe callsite <all-sites-out> [files...]")
+
 		return 2
 	}
 
@@ -42,6 +43,7 @@ func probeCallSite(args []string) int {
 
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "callsite: read %s: %v\n", p, err)
+
 			return 1
 		}
 
@@ -49,6 +51,7 @@ func probeCallSite(args []string) int {
 
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "callsite: parse %s: %v\n", p, err)
+
 			return 1
 		}
 
@@ -86,6 +89,7 @@ func probeCallSite(args []string) int {
 
 		if err := os.WriteFile(p, b, 0o644); err != nil {
 			fmt.Fprintf(os.Stderr, "callsite: write %s: %v\n", p, err)
+
 			return 1
 		}
 	}
@@ -95,12 +99,14 @@ func probeCallSite(args []string) int {
 	if dir := filepath.Dir(outPath); dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			fmt.Fprintf(os.Stderr, "callsite: mkdir %s: %v\n", dir, err)
+
 			return 1
 		}
 	}
 
 	if err := os.WriteFile(outPath, []byte(strings.Join(allSites, "\n")+"\n"), 0o644); err != nil {
 		fmt.Fprintf(os.Stderr, "callsite: write all-sites: %v\n", err)
+
 		return 1
 	}
 
