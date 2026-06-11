@@ -16,6 +16,17 @@ const swigLibRoot = "contrib/tools/swig/Lib"
 // the python contour is the one ay models (swig.conf _SWIG_PYTHON_C/_CPP).
 var swigAddIncls = []VFS{source(swigLibRoot + "/python"), source(swigLibRoot)}
 
+// swigConstArgs is the constant span of every SW command between the swig
+// binary and the per-statement module/interface/output tail.
+var swigConstArgs = []STR{
+	argIB.str(),
+	argIS.str(),
+	argISContribToolsSwigLibPython.str(),
+	argISContribToolsSwigLib.str(),
+	argPython.str(),
+	argModule.str(),
+}
+
 func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []*SourceEmit {
 	if len(d.swigC) == 0 {
 		return nil
@@ -41,27 +52,24 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 		// after this — the later consumers copy out of it).
 		inputs := InputChunks{{bldContribToolsSwigSwig, srcVFS}, swigClosure}
 
-		cmdArgs := []STR{
-			internStr(swigBin),
-			argIB.str(),
-			argIS.str(),
-			argISContribToolsSwigLibPython.str(),
-			argISContribToolsSwigLib.str(),
-			argPython.str(),
-			argModule.str(),
-			internStr(swigModuleName(stmt.Module)),
-			argInterface.str(),
-			internStr(swigModuleName(stmt.Module) + "_swg"),
-			argDashO.str(),
-			(cOutVFS).str(),
-			(srcVFS).str(),
+		cmdArgs := ArgChunks{
+			{internStr(swigBin)},
+			swigConstArgs,
+			{
+				internStr(swigModuleName(stmt.Module)),
+				argInterface.str(),
+				internStr(swigModuleName(stmt.Module) + "_swg"),
+				argDashO.str(),
+				(cOutVFS).str(),
+				(srcVFS).str(),
+			},
 		}
 
 		swRef := ctx.emit.emit(&Node{
 			Platform: instance.Platform,
 			Cmds: []Cmd{
 				{
-					CmdArgs: ArgChunks{cmdArgs},
+					CmdArgs: cmdArgs,
 					Env:     EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
 				},
 			},

@@ -26,26 +26,20 @@ func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: ArgChunks{[]STR{
-					tc.Python3,
-					(rodataScriptVFS).str(),
-					argElf.str(),
-					internStr(toolName),
-					(srcVFS).str(),
-					(asmVFS).str(),
-				}},
+				CmdArgs: ArgChunks{
+					{tc.Python3},
+					rodataConstArgs,
+					{internStr(toolName), (srcVFS).str(), (asmVFS).str()},
+				},
 				Env: pythonEnv,
 			},
 			{
-				CmdArgs: ArgChunks{yasmConstHead, []STR{
-					argD.str(), internStr("_" + string(instance.Platform.ISA) + "_"),
-					argDYasm.str(),
-					argDashG.str(), argDwarf2.str(),
-					argI.str(), argB.str(),
-					argI.str(), argS.str(),
-					argDashO.str(), (outVFS).str(),
-					(asmVFS).str(),
-				}},
+				CmdArgs: ArgChunks{
+					yasmConstHead,
+					{argD.str(), internStr("_" + string(instance.Platform.ISA) + "_")},
+					rodataYasmConstArgs,
+					{(outVFS).str(), (asmVFS).str()},
+				},
 				Env: yasmEnv,
 			},
 		},
@@ -66,3 +60,18 @@ func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 
 	return emit.emit(node), asmVFS, outVFS
 }
+
+// rodataConstArgs / rodataYasmConstArgs are the constant spans of the RD
+// node's two commands: the rodata.py lead (after python3) and the yasm flag
+// tail between the per-platform ISA define and the output path.
+var (
+	rodataConstArgs = []STR{(rodataScriptVFS).str(), argElf.str()}
+
+	rodataYasmConstArgs = []STR{
+		argDYasm.str(),
+		argDashG.str(), argDwarf2.str(),
+		argI.str(), argB.str(),
+		argI.str(), argS.str(),
+		argDashO.str(),
+	}
+)
