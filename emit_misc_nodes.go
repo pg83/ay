@@ -126,10 +126,10 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 	}
 
 	if d.createBuildInfoFor != nil {
-		biRef := emitBI(instance, *d.createBuildInfoFor, biFlagsForInstance(instance.Platform), d.tc, ctx.emit)
+		biRef := emitBI(instance, d.createBuildInfoFor.string(), biFlagsForInstance(instance.Platform), d.tc, ctx.emit)
 
 		if reg != nil {
-			registerBoundGeneratedParsedOutput(ctx, instance, pkBI, build(outPrefix+*d.createBuildInfoFor), []IncludeDirective{
+			registerBoundGeneratedParsedOutput(ctx, instance, pkBI, build(outPrefix+d.createBuildInfoFor.string()), []IncludeDirective{
 				{kind: includeQuoted, target: internStr(buildInfoGenPyVFS.rel())},
 				{kind: includeQuoted, target: internStr(xargsPyVFS.rel())},
 				{kind: includeQuoted, target: internStr(yieldLinePyVFS.rel())},

@@ -12,17 +12,17 @@ func protoPythonResourceKey(instance ModuleInstance, d *ModuleData, src, suffix 
 		return instance.Path.rel() + "/" + base + suffix
 	}
 
-	if *d.pyNamespace == "." {
+	if d.pyNamespace.string() == "." {
 		return base + suffix
 	}
 
-	nsPath := strings.ReplaceAll(*d.pyNamespace, ".", "/")
+	nsPath := strings.ReplaceAll(d.pyNamespace.string(), ".", "/")
 
 	return filepath.ToSlash(filepath.Clean(nsPath + "/" + filepath.Base(base) + suffix))
 }
 
 func moduleExcludesTag(d *ModuleData, tag string) bool {
-	return d != nil && d.excludeTags != nil && d.excludeTags[tag]
+	return d != nil && d.excludeTags != nil && d.excludeTags[internStr(tag)]
 }
 
 func protoPythonNamespaceArg(d *ModuleData) string {
@@ -30,7 +30,7 @@ func protoPythonNamespaceArg(d *ModuleData) string {
 		return "/"
 	}
 
-	return "/" + filepath.ToSlash(filepath.Clean(*d.protoNamespace))
+	return "/" + filepath.ToSlash(filepath.Clean(d.protoNamespace.string()))
 }
 
 func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerContribs PeerGlobalContribs, protoSrcs, evSrcs []string) *ProtoSrcsResult {
@@ -310,7 +310,7 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 
 func protoPythonOutputRoot(instance ModuleInstance, d *ModuleData) string {
 	if d != nil && d.protoNamespace != nil {
-		root := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(*d.protoNamespace)), "/")
+		root := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(d.protoNamespace.string())), "/")
 
 		if root != "." && root != "" {
 			return root

@@ -170,7 +170,7 @@ func TestPyMainObjcopyHashPy3ccSlow(t *testing.T) {
 
 func TestPySrcObjcopyHashRuntimePy3RawEntryPoints(t *testing.T) {
 	d := &ModuleData{
-		pySrcs:       []string{"entry_points.py"},
+		pySrcs:       STRS("entry_points.py"),
 		pyBuildNoPYC: true,
 		pyBuildNoPY:  false,
 		pyTopLevel:   false,
@@ -206,7 +206,7 @@ func TestPySrcObjcopyHashRuntimePy3RawEntryPoints(t *testing.T) {
 
 func TestPySrcObjcopyHashPy3ccSlowMain(t *testing.T) {
 	d := &ModuleData{
-		pySrcs:       []string{"main.py"},
+		pySrcs:       STRS("main.py"),
 		pyBuildNoPYC: true,
 		pyBuildNoPY:  false,
 		pyTopLevel:   false,
@@ -226,7 +226,7 @@ func TestPySrcObjcopyHashPy3ccSlowMain(t *testing.T) {
 
 func TestPySrcObjcopyHashSymbolsModuleDualEntry(t *testing.T) {
 	d := &ModuleData{
-		pySrcs:       []string{"__init__.py"},
+		pySrcs:       STRS("__init__.py"),
 		pyBuildNoPYC: false,
 		pyBuildNoPY:  false,
 		pyTopLevel:   false,
@@ -256,7 +256,7 @@ func TestChunkPySrcEntriesEmptyReturnsNil(t *testing.T) {
 func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 	d := &ModuleData{
 		tc: testToolchain(),
-		pySrcs: []string{
+		pySrcs: STRS(
 			"shellingham/__init__.py",
 			"shellingham/_core.py",
 			"shellingham/nt.py",
@@ -264,7 +264,7 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 			"shellingham/posix/_core.py",
 			"shellingham/posix/proc.py",
 			"shellingham/posix/ps.py",
-		},
+		),
 		pyBuildNoPY:  false,
 		pyBuildNoPYC: false,
 		pyTopLevel:   true,

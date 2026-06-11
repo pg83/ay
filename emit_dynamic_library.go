@@ -31,11 +31,11 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 	}
 
 	for _, p := range d.dynamicLibraryFrom {
-		if _, helper := rpathHelperSet[p]; helper {
+		if _, helper := rpathHelperSet[p.string()]; helper {
 			continue
 		}
 
-		peerPaths = append(peerPaths, p)
+		peerPaths = append(peerPaths, p.string())
 	}
 
 	// Resolve every peer through genModule first (memoized; the recursion may
@@ -146,12 +146,12 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 
 	cmd0 := composeLDCmdVcsInfo(d.tc, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings)
-	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.rel(), outputPath, outputName, vcsOPath, peerArchivePaths, pluginPaths, d.dynamicLibraryFrom, *d.exportsScript, fixElfPath.string())
+	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.rel(), outputPath, outputName, vcsOPath, peerArchivePaths, pluginPaths, strStrings(d.dynamicLibraryFrom), d.exportsScript.string(), fixElfPath.string())
 	cmd3 := composeLDCmdLinkOrCopy(d.tc, instance.Path.rel())
 	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	envFull := ctx.host.toolEnv()
 
-	inputs := composeDynLibInputs(peerArchivePaths, pluginPaths, fixElfPath, instance.Path.rel(), *d.exportsScript, ctx.scripts)
+	inputs := composeDynLibInputs(peerArchivePaths, pluginPaths, fixElfPath, instance.Path.rel(), d.exportsScript.string(), ctx.scripts)
 
 	depRefs := make([]NodeRef, 0, len(peerArchiveRefs)+len(pluginRefs)+2)
 	depRefs = append(depRefs, peerArchiveRefs...)
@@ -212,7 +212,7 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		LDPluginRefs:                 pluginRefs,
 		LDPluginPaths:                pluginPaths,
 		InducedDeps:                  d.inducedDeps,
-		Peerdirs:                     append([]string(nil), d.peerdirs...),
+		Peerdirs:                     d.peerdirs,
 		ModuleStmtName:               d.moduleStmt.Name,
 	}
 }

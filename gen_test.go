@@ -3105,10 +3105,10 @@ END()
 	if len(d.srcs) != 0 {
 		t.Fatalf("srcs = %v, want empty (SRCS must alias to GLOBAL_SRCS)", d.srcs)
 	}
-	if !equalStrings(d.globalSrcs, []string{"lib.cpp", "nested/extra.cpp"}) {
+	if !equalStrings(strStrings(d.globalSrcs), []string{"lib.cpp", "nested/extra.cpp"}) {
 		t.Fatalf("globalSrcs = %v, want [lib.cpp nested/extra.cpp]", d.globalSrcs)
 	}
-	if !equalStrings(d.peerdirs, []string{
+	if !equalStrings(strStrings(d.peerdirs), []string{
 		"yql/essentials/public/udf",
 		"yql/essentials/public/udf/support",
 		"custom/peer",
@@ -3164,7 +3164,7 @@ END()
 	if plugin.ExtraOutFlag != "lite=true" {
 		t.Fatalf("plugin.ExtraOutFlag = %q, want lite=true", plugin.ExtraOutFlag)
 	}
-	if !containsString(d.peerdirs, "ydb/public/api/protos/annotations") {
+	if !containsString(strStrings(d.peerdirs), "ydb/public/api/protos/annotations") {
 		t.Fatalf("peerdirs = %v, want ydb/public/api/protos/annotations", d.peerdirs)
 	}
 }
@@ -3196,7 +3196,7 @@ END()
 	mf := throw2(parseFile(fs, fs.sourceRoot()+"/proto/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("proto"), Kind: KindLib, Platform: testTargetP}))
 
-	if !containsString(d.peerdirs, "contrib/libs/googleapis-common-protos") {
+	if !containsString(strStrings(d.peerdirs), "contrib/libs/googleapis-common-protos") {
 		t.Fatalf("peerdirs = %v, want contrib/libs/googleapis-common-protos", d.peerdirs)
 	}
 }
@@ -3214,13 +3214,13 @@ END()
 	mf := throw2(parseFile(fs, fs.sourceRoot()+"/pytool/ya.make"))
 
 	bin := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "pytool", KindBin, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("pytool"), Kind: KindBin, Platform: testTargetP}))
-	if got := bin.pyMain; got == nil || *got != "pytool.__main__:main" {
+	if got := bin.pyMain; got == nil || got.string() != "pytool.__main__:main" {
 		t.Fatalf("bin pyMain = %#v, want pytool.__main__:main", got)
 	}
 	// PY_SRCS stays populated on KindBin since 50cd9e9: the PROGRAM-side
 	// emitResourceObjcopy needs len(d.pySrcs)>0 to enter its hasKvOnly
 	// branch and surface the PY_MAIN objcopy_<hash>.o into LD inputs.
-	if !equalStrings(bin.pySrcs, []string{"__main__.py"}) {
+	if !equalStrings(strStrings(bin.pySrcs), []string{"__main__.py"}) {
 		t.Fatalf("bin pySrcs = %v, want [__main__.py]", bin.pySrcs)
 	}
 
@@ -3228,7 +3228,7 @@ END()
 	if lib.pyMain != nil {
 		t.Fatalf("lib pyMain = %#v, want nil", lib.pyMain)
 	}
-	if !equalStrings(lib.pySrcs, []string{"__main__.py"}) {
+	if !equalStrings(strStrings(lib.pySrcs), []string{"__main__.py"}) {
 		t.Fatalf("lib pySrcs = %v, want [__main__.py]", lib.pySrcs)
 	}
 }
@@ -3251,7 +3251,7 @@ END()
 	mf := throw2(parseFile(fs, fs.sourceRoot()+"/copymod/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "copymod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("copymod"), Kind: KindLib, Platform: testTargetP}))
 
-	if !equalStrings(d.srcs, []string{"a.cpp", "b.h"}) {
+	if !equalStrings(strStrings(d.srcs), []string{"a.cpp", "b.h"}) {
 		t.Fatalf("srcs = %v, want [a.cpp b.h]", d.srcs)
 	}
 	if len(d.copyFiles) != 2 {

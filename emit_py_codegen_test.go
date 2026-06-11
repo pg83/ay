@@ -10,7 +10,7 @@ func TestEmitPyRegister_TargetPlatformCacheWinsOverHostFirstVisit(t *testing.T) 
 		target:            testTargetP,
 		pyRegisterOutputs: make(map[VFS]NodeRef),
 	}
-	d := &ModuleData{pyRegister: []string{"_sqlite3"}}
+	d := &ModuleData{pyRegister: STRS("_sqlite3")}
 	hostInst := ModuleInstance{
 		Path:     source("contrib/tools/python3/Modules/_sqlite"),
 		Kind:     KindLib,

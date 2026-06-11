@@ -193,10 +193,10 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 		ensureResourcePeer(instance.Path.rel(), d)
 
 		if d.prOutputProducer == nil {
-			d.prOutputProducer = map[string]NodeRef{}
+			d.prOutputProducer = map[STR]NodeRef{}
 		}
 
-		d.prOutputProducer[optOutName] = opRef
+		d.prOutputProducer[internStr(optOutName)] = opRef
 
 		// Propagate the OP node's inputs into prOutputInputs so that
 		// emitResourceObjcopy's prResourceExtraInputs picks up the full BC
@@ -205,10 +205,10 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 		// Upstream ymake propagates producer inputs transitively via its
 		// ${input:...} resolution; our code uses the prOutputInputs map for this.
 		if d.prOutputInputs == nil {
-			d.prOutputInputs = map[string]InputChunks{}
+			d.prOutputInputs = map[STR]InputChunks{}
 		}
 
-		d.prOutputInputs[optOutName] = optChunks // read-only consumers (node inputs + prResourceExtraInputs copies out)
+		d.prOutputInputs[internStr(optOutName)] = optChunks // read-only consumers (node inputs + prResourceExtraInputs copies out)
 		d.resources = append(d.resources, ResourceEntry{
 			Path:      optOutName,
 			Key:       "/llvm_bc/" + stmt.Name,
@@ -302,7 +302,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 // (for COPY WITH_CONTEXT generated sources like yt_codec_bc.cpp).
 func llvmBcSourceInfo(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src string) (inputVFS VFS, producer NodeRef) {
 	// RUN_PROGRAM / PR generated output
-	if ref := d.prOutputProducer[src]; ref != (NodeRef(0)) {
+	if ref := d.prOutputProducer[internStr(src)]; ref != (NodeRef(0)) {
 		return copyFileOutputVFS(instance.Path.rel(), src), ref
 	}
 
@@ -331,7 +331,7 @@ func llvmBcSourceInfo(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src s
 // rootrel_arc_src strips $S/ → module-rel path. yt_codec_bc.cpp is the
 // canonical build-rooted case (sg5: $(B)/yt_codec_bc.cpp.16.bc).
 func llvmBcRootRelArcSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src string) string {
-	if _, ok := d.prOutputProducer[src]; ok {
+	if _, ok := d.prOutputProducer[internStr(src)]; ok {
 		return src
 	}
 

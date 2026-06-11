@@ -41,7 +41,7 @@ func emitArchive(
 		isPRProduced := false
 
 		if d.prOutputProducer != nil {
-			if ref, ok := d.prOutputProducer[f]; ok {
+			if ref, ok := d.prOutputProducer[internStr(f)]; ok {
 				isPRProduced = true
 
 				if deduper.add(VFS(ref)) {

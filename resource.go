@@ -159,7 +159,7 @@ func prResourceExtraInputs(d *ModuleData, output string) []VFS {
 		return nil
 	}
 
-	chunks := d.prOutputInputs[output]
+	chunks := d.prOutputInputs[internStr(output)]
 	total := 0
 
 	for _, ch := range chunks {
@@ -262,7 +262,7 @@ func resolvePySrcRel(fs FS, srcDirs []VFS, modulePath, srcRel string) string {
 	return modulePath + "/" + srcRel
 }
 
-func buildPySrcEntriesFor(fs FS, d *ModuleData, modulePath string, srcs []string, topLevel bool, namespace *string) []PySrcEntry {
+func buildPySrcEntriesFor(fs FS, d *ModuleData, modulePath string, srcs []string, topLevel bool, namespace *STR) []PySrcEntry {
 	if len(srcs) == 0 {
 		return nil
 	}
@@ -271,7 +271,7 @@ func buildPySrcEntriesFor(fs FS, d *ModuleData, modulePath string, srcs []string
 
 	if !topLevel {
 		if namespace != nil {
-			keyPrefix = strings.ReplaceAll(strings.TrimSuffix(*namespace, "."), ".", "/") + "/"
+			keyPrefix = strings.ReplaceAll(strings.TrimSuffix(namespace.string(), "."), ".", "/") + "/"
 		} else {
 			keyPrefix = modulePath + "/"
 		}
@@ -284,7 +284,7 @@ func buildPySrcEntriesFor(fs FS, d *ModuleData, modulePath string, srcs []string
 			continue
 		}
 
-		if d.pyGeneratedSrcs[srcRel] != nil {
+		if d.pyGeneratedSrcs[internStr(srcRel)] != nil {
 			continue
 		}
 
@@ -302,14 +302,14 @@ func buildPySrcEntriesFor(fs FS, d *ModuleData, modulePath string, srcs []string
 			pyKey := "resfs/file/py/" + keyPrefix + srcRel
 			pyPathInput := source(resolvedRel)
 
-			if d.pyGeneratedSrcs[srcRel] != nil {
+			if d.pyGeneratedSrcs[internStr(srcRel)] != nil {
 				pyPathInput = build(modulePath + "/" + srcRel)
 			}
 
 			pyKvHash := "resfs/src/" + pyKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + "\"}"
 			pyKvCmd := "resfs/src/" + pyKey + "=" + resolvedRel
 
-			if d.pyGeneratedSrcs[srcRel] != nil {
+			if d.pyGeneratedSrcs[internStr(srcRel)] != nil {
 				pyKvCmd = "resfs/src/" + pyKey + "=" + modulePath + "/" + srcRel
 			}
 
@@ -331,7 +331,7 @@ func buildPySrcEntriesFor(fs FS, d *ModuleData, modulePath string, srcs []string
 			ypKvCmd := "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
 			extraSrcInput := vfsPtr(source(resolvedRel))
 
-			if d.pyGeneratedSrcs[srcRel] != nil {
+			if d.pyGeneratedSrcs[internStr(srcRel)] != nil {
 				ypKvCmd = "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
 				extraSrcInput = vfsPtr(build(modulePath + "/" + srcRel))
 			}
