@@ -129,7 +129,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	prExtraDepRefs := resolveCodegenDepRefsExt(ctx, instance, inputClosure, inVFSs, toolLDRef)
 
-	prResult := emitPR(instance, stmt, toolBinPath, toolLDRef, auxTools, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, prExtraDepRefs, ctx.emit)
+	prResult := emitPR(instance, stmt, toolBinPath, toolLDRef, auxTools, inVFSByToken, inVFSs, outVFSByToken, stdoutVFS, inputClosure, prExtraDepRefs, ctx.emit)
 	prRef := prResult.Ref
 
 	if d.prOutputInputs == nil {
@@ -423,6 +423,7 @@ func emitPR(
 	toolLDRef NodeRef,
 	auxTools []RunProgramAuxTool,
 	inVFSByToken map[string]VFS,
+	inVFSs []VFS,
 	outVFSByToken map[string]VFS,
 	stdoutVFS *VFS,
 	inputClosure []VFS,
@@ -475,8 +476,10 @@ func emitPR(
 		appendUnique(tool.bin)
 	}
 
-	for _, f := range stmt.INFiles {
-		appendUnique(inVFSByToken[f])
+	// inVFSs mirrors stmt.INFiles in order — same values the token map holds,
+	// without re-probing it.
+	for _, v := range inVFSs {
+		appendUnique(v)
 	}
 
 	// The closure tail is filtered against the head set; filterSeen returns
