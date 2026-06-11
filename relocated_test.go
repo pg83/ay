@@ -128,10 +128,10 @@ func EmitAR(
 	emit Emitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
-		ThrowFmt("EmitAR: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
+		throwFmt("EmitAR: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
 	}
 
-	archivePath := Build(instance.Path.rel() + "/" + ArchiveName(instance.Path.rel()))
+	archivePath := build(instance.Path.rel() + "/" + archiveName(instance.Path.rel()))
 
 	return emitARNode(instance, archivePath, 0, objRefs, objPaths, peerArchiveRefs, nil, testToolchain(), hostP, emit)
 }

@@ -12,18 +12,18 @@ import "testing"
 // transitive source input; listing it diverges the PR self_uid.
 func TestAntlrParsedIncludes_ExcludesBuildIntermediateInputs(t *testing.T) {
 	const mod = "yql/essentials/parser/proto_ast/gen/v0_proto_split"
-	stgBuild := Build(mod + "/org/antlr/codegen/templates/protobuf/protobuf.stg")
+	stgBuild := build(mod + "/org/antlr/codegen/templates/protobuf/protobuf.stg")
 	inputs := []VFS{
-		Source("yql/essentials/sql/v0/SQL.g"),
+		source("yql/essentials/sql/v0/SQL.g"),
 		stgBuild, // $(B) CONFIGURE_FILE output — generator intermediate
-		Source("yql/essentials/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in"),
+		source("yql/essentials/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in"),
 	}
 
 	parsed := antlrParsedIncludes(
 		mod,
 		AntlrRunInfo{},
 		"SQLParser.proto",
-		map[string]VFS{"SQLParser.proto": Build(mod + "/SQLParser.proto")},
+		map[string]VFS{"SQLParser.proto": build(mod + "/SQLParser.proto")},
 		inputs,
 		antlr3JarVFS,
 	)
@@ -62,10 +62,10 @@ func TestAntlrParsedIncludes_ExcludesBuildIntermediateInputs(t *testing.T) {
 func TestAntlrParsedIncludes_LexerCrossIncludesParserCpp(t *testing.T) {
 	const mod = "yql/essentials/parser/proto_ast/gen/jsonpath"
 	outByTok := map[string]VFS{
-		"JsonPathParser.cpp": Build(mod + "/JsonPathParser.cpp"),
-		"JsonPathLexer.cpp":  Build(mod + "/JsonPathLexer.cpp"),
-		"JsonPathParser.h":   Build(mod + "/JsonPathParser.h"),
-		"JsonPathLexer.h":    Build(mod + "/JsonPathLexer.h"),
+		"JsonPathParser.cpp": build(mod + "/JsonPathParser.cpp"),
+		"JsonPathLexer.cpp":  build(mod + "/JsonPathLexer.cpp"),
+		"JsonPathParser.h":   build(mod + "/JsonPathParser.h"),
+		"JsonPathLexer.h":    build(mod + "/JsonPathLexer.h"),
 	}
 	run := AntlrRunInfo{}
 

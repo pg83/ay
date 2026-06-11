@@ -19,16 +19,16 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 
 	for _, g := range d.antlr4Grammars {
 		if g.IsSplit {
-			jvRef := EmitJVSplit(instance, g.Lexer, g.Parser, g.Visitor, g.Listener, cfModuleTag(d, instance), d.tc, ctx.emit)
+			jvRef := emitJVSplit(instance, g.Lexer, g.Parser, g.Visitor, g.Listener, cfModuleTag(d, instance), d.tc, ctx.emit)
 
 			lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
 			parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
 
 			if reg != nil {
-				lexerG4 := Source(instance.Path.rel() + "/" + g.Lexer)
-				parserG4 := Source(instance.Path.rel() + "/" + g.Parser)
-				lexerCpp := Build(outPrefix + lexerBase + ".cpp")
-				parserCpp := Build(outPrefix + parserBase + ".cpp")
+				lexerG4 := source(instance.Path.rel() + "/" + g.Lexer)
+				parserG4 := source(instance.Path.rel() + "/" + g.Parser)
+				lexerCpp := build(outPrefix + lexerBase + ".cpp")
+				parserCpp := build(outPrefix + parserBase + ".cpp")
 				registerBoundGeneratedParsedOutput(ctx, instance, pkJV, lexerCpp, nil, jvRef, nil)
 				registerBoundGeneratedParsedOutput(ctx, instance, pkJV, parserCpp, nil, jvRef, nil)
 				witnessIncludes := []VFS{
@@ -52,35 +52,35 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 						parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.rel())})
 					}
 
-					registerBoundGeneratedParsedOutput(ctx, instance, pkJV, Build(outPrefix+suffix), parsed, jvRef, nil)
+					registerBoundGeneratedParsedOutput(ctx, instance, pkJV, build(outPrefix+suffix), parsed, jvRef, nil)
 				}
 			}
 
 			if consumerInputs != nil {
 				jvInputs := []VFS{
-					Source(instance.Path.rel() + "/" + g.Lexer),
-					Source(instance.Path.rel() + "/" + g.Parser),
+					source(instance.Path.rel() + "/" + g.Lexer),
+					source(instance.Path.rel() + "/" + g.Parser),
 					stdout2stderrVFS,
 					antlr4JarVFS,
 				}
-				jvPrimary := Build(outPrefix + lexerBase + ".cpp")
+				jvPrimary := build(outPrefix + lexerBase + ".cpp")
 				cpccPairs := []struct{ cpp, h VFS }{
-					{Build(outPrefix + lexerBase + ".cpp"), Build(outPrefix + lexerBase + ".h")},
-					{Build(outPrefix + parserBase + ".cpp"), Build(outPrefix + parserBase + ".h")},
+					{build(outPrefix + lexerBase + ".cpp"), build(outPrefix + lexerBase + ".h")},
+					{build(outPrefix + parserBase + ".cpp"), build(outPrefix + parserBase + ".h")},
 				}
 				refs, outs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
 				ccRefs = append(ccRefs, refs...)
 				ccOutputs = append(ccOutputs, outs...)
 			}
 		} else {
-			jvRef := EmitJV(instance, g.Grammar, g.Options, g.Visitor, g.Listener, cfModuleTag(d, instance), d.tc, ctx.emit)
+			jvRef := emitJV(instance, g.Grammar, g.Options, g.Visitor, g.Listener, cfModuleTag(d, instance), d.tc, ctx.emit)
 
 			base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
 
 			if reg != nil {
-				grammarG4 := Source(instance.Path.rel() + "/" + g.Grammar)
-				lexerCpp := Build(outPrefix + base + "Lexer.cpp")
-				parserCpp := Build(outPrefix + base + "Parser.cpp")
+				grammarG4 := source(instance.Path.rel() + "/" + g.Grammar)
+				lexerCpp := build(outPrefix + base + "Lexer.cpp")
+				parserCpp := build(outPrefix + base + "Parser.cpp")
 				registerBoundGeneratedParsedOutput(ctx, instance, pkJV, lexerCpp, nil, jvRef, nil)
 				registerBoundGeneratedParsedOutput(ctx, instance, pkJV, parserCpp, nil, jvRef, nil)
 				witnessIncludes := []VFS{
@@ -103,20 +103,20 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 						parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.rel())})
 					}
 
-					registerBoundGeneratedParsedOutput(ctx, instance, pkJV, Build(outPrefix+suffix), parsed, jvRef, nil)
+					registerBoundGeneratedParsedOutput(ctx, instance, pkJV, build(outPrefix+suffix), parsed, jvRef, nil)
 				}
 			}
 
 			if consumerInputs != nil {
 				jvInputs := []VFS{
-					Source(instance.Path.rel() + "/" + g.Grammar),
+					source(instance.Path.rel() + "/" + g.Grammar),
 					stdout2stderrVFS,
 					antlr4JarVFS,
 				}
-				jvPrimary := Build(outPrefix + base + "Lexer.cpp")
+				jvPrimary := build(outPrefix + base + "Lexer.cpp")
 				cpccPairs := []struct{ cpp, h VFS }{
-					{Build(outPrefix + base + "Lexer.cpp"), Build(outPrefix + base + "Lexer.h")},
-					{Build(outPrefix + base + "Parser.cpp"), Build(outPrefix + base + "Parser.h")},
+					{build(outPrefix + base + "Lexer.cpp"), build(outPrefix + base + "Lexer.h")},
+					{build(outPrefix + base + "Parser.cpp"), build(outPrefix + base + "Parser.h")},
 				}
 				refs, outs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
 				ccRefs = append(ccRefs, refs...)
@@ -126,10 +126,10 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 	}
 
 	if d.createBuildInfoFor != nil {
-		biRef := EmitBI(instance, *d.createBuildInfoFor, biFlagsForInstance(instance.Platform), d.tc, ctx.emit)
+		biRef := emitBI(instance, *d.createBuildInfoFor, biFlagsForInstance(instance.Platform), d.tc, ctx.emit)
 
 		if reg != nil {
-			registerBoundGeneratedParsedOutput(ctx, instance, pkBI, Build(outPrefix+*d.createBuildInfoFor), []IncludeDirective{
+			registerBoundGeneratedParsedOutput(ctx, instance, pkBI, build(outPrefix+*d.createBuildInfoFor), []IncludeDirective{
 				{kind: includeQuoted, target: internStr(buildInfoGenPyVFS.rel())},
 				{kind: includeQuoted, target: internStr(xargsPyVFS.rel())},
 				{kind: includeQuoted, target: internStr(yieldLinePyVFS.rel())},

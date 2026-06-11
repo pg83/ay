@@ -31,7 +31,7 @@ func TestFS_ExistsAndIsDir(t *testing.T) {
 		"top.txt":       "top",
 	})
 
-	fs := NewFS(root)
+	fs := newFS(root)
 
 	if !fs.isFile(dirKey(""), "a/b/c.txt") {
 		t.Errorf("c.txt should be a file")
@@ -70,7 +70,7 @@ func TestFS_ExistsRoutesThroughListdir(t *testing.T) {
 		"d/c.txt": "3",
 	})
 
-	fs := NewFS(root)
+	fs := newFS(root)
 
 	if !fs.isFile(dirKey("d"), "a.txt") {
 		t.Fatal("a missing")
@@ -93,7 +93,7 @@ func TestFS_ExistsRoutesThroughListdir(t *testing.T) {
 
 func TestFS_ListdirCachesNegative(t *testing.T) {
 	root := t.TempDir()
-	fs := NewFS(root)
+	fs := newFS(root)
 
 	if fs.listdir(dirKey("nope")) != nil {
 		t.Error("missing dir should return nil listdir")
@@ -112,14 +112,14 @@ func TestFS_Read(t *testing.T) {
 	writeTree(t, root, map[string]string{
 		"file.txt": "hello world",
 	})
-	fs := NewFS(root)
+	fs := newFS(root)
 
 	data := fs.read("file.txt")
 	if string(data) != "hello world" {
 		t.Errorf("got %q", string(data))
 	}
 
-	if exc := Try(func() { fs.read("missing.txt") }); exc == nil {
+	if exc := try(func() { fs.read("missing.txt") }); exc == nil {
 		t.Error("missing file should Throw")
 	}
 }
@@ -133,7 +133,7 @@ func TestFS_Walk(t *testing.T) {
 		"top.txt":   "4",
 	})
 
-	fs := NewFS(root)
+	fs := newFS(root)
 
 	files := map[string]bool{}
 	fs.walk("a", func(rel string, isDir bool) {
@@ -176,7 +176,7 @@ func TestFS_CleanRel(t *testing.T) {
 	}
 }
 
-var testParserFS = NewFS("/")
+var testParserFS = newFS("/")
 
 // memFS is the test-side FS implementation. It serves Listdir/Read/Walk/
 // Exists from in-memory maps populated once at construction; no method ever
@@ -277,7 +277,7 @@ func (fs *MemFS) isDir(prefix VFS, suffix string) bool {
 func (fs *MemFS) read(rel string) []byte {
 	data, ok := fs.files[cleanRel(rel)]
 	if !ok {
-		ThrowFmt("memFS: no such file %q", rel)
+		throwFmt("memFS: no such file %q", rel)
 	}
 
 	return append([]byte(nil), data...)
@@ -312,7 +312,7 @@ func (fs *MemFS) relForAbs(absPath string) string {
 		return absPath[len(fs.rootSlash):]
 	}
 
-	ThrowFmt("memFS.relForAbs: %q outside source root %q", absPath, fs.srcRoot)
+	throwFmt("memFS.relForAbs: %q outside source root %q", absPath, fs.srcRoot)
 
 	return ""
 }

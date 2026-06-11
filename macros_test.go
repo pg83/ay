@@ -9,7 +9,7 @@ func parseCondForTest(t *testing.T, condSrc string) Expr {
 	t.Helper()
 
 	src := []byte("IF (" + condSrc + ")\nENDIF()\n")
-	mf, err := Parse(testParserFS, "test.input", src)
+	mf, err := parse(testParserFS, "test.input", src)
 
 	if err != nil {
 		t.Fatalf("Parse(%q) failed: %v", condSrc, err)
@@ -42,7 +42,7 @@ func TestEvalCond_AndOrNot(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			expr := parseCondForTest(t, tc.expr)
-			got := EvalCond(expr, DefaultIfEnv)
+			got := evalCond(expr, DefaultIfEnv)
 
 			if got != tc.want {
 				t.Errorf("EvalCond(%q) = %v, want %v", tc.expr, got, tc.want)
@@ -53,7 +53,7 @@ func TestEvalCond_AndOrNot(t *testing.T) {
 
 func TestEvalCond_UnknownVarDefaultsFalse(t *testing.T) {
 	expr := parseCondForTest(t, "UNKNOWN_VAR")
-	if EvalCond(expr, DefaultIfEnv) {
+	if evalCond(expr, DefaultIfEnv) {
 		t.Fatal("EvalCond(UNKNOWN_VAR) = true, want false")
 	}
 }
@@ -63,7 +63,7 @@ func TestEvalCond_DefaultEnvCoversArchiverClosureCanaries(t *testing.T) {
 
 	for _, name := range canaries {
 		expr := &ExprIdent{Name: name}
-		got := EvalCond(expr, DefaultIfEnv)
+		got := evalCond(expr, DefaultIfEnv)
 
 		if !got {
 			t.Errorf("EvalCond(%s) = false, want true (DefaultIfEnv canary)", name)
@@ -73,18 +73,18 @@ func TestEvalCond_DefaultEnvCoversArchiverClosureCanaries(t *testing.T) {
 
 func TestEvalCond_YdbIfBindings(t *testing.T) {
 	for _, name := range []string{"OS_FREERTOS", "STATIC_STL"} {
-		if EvalCond(&ExprIdent{Name: name}, DefaultIfEnv) {
+		if evalCond(&ExprIdent{Name: name}, DefaultIfEnv) {
 			t.Errorf("EvalCond(%s) = true, want false", name)
 		}
 	}
 
-	if EvalCond(parseCondForTest(t, `OS_SDK == "ubuntu-12"`), DefaultIfEnv) {
+	if evalCond(parseCondForTest(t, `OS_SDK == "ubuntu-12"`), DefaultIfEnv) {
 		t.Error(`EvalCond(OS_SDK == "ubuntu-12") = true, want false`)
 	}
 
 	localEnv := DefaultIfEnv.clone()
 	localEnv.setFromString(envOS_SDK, "local")
-	if !EvalCond(parseCondForTest(t, `OS_SDK == "local"`), localEnv) {
+	if !evalCond(parseCondForTest(t, `OS_SDK == "local"`), localEnv) {
 		t.Error(`EvalCond(OS_SDK == "local") with OS_SDK=local = false, want true`)
 	}
 }
@@ -105,7 +105,7 @@ func TestEvalCond_StringEquality(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			expr := parseCondForTest(t, tc.expr)
-			got := EvalCond(expr, DefaultIfEnv)
+			got := evalCond(expr, DefaultIfEnv)
 
 			if got != tc.want {
 				t.Errorf("EvalCond(%q) = %v, want %v", tc.expr, got, tc.want)
@@ -129,7 +129,7 @@ func TestEvalCond_NumericLessThan(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			expr := parseCondForTest(t, tc.expr)
-			got := EvalCond(expr, DefaultIfEnv)
+			got := evalCond(expr, DefaultIfEnv)
 
 			if got != tc.want {
 				t.Errorf("EvalCond(%q) = %v, want %v", tc.expr, got, tc.want)
@@ -164,8 +164,8 @@ func TestEvalCond_TypeMismatch(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			expr := parseCondForTest(t, tc.expr)
-			exc := Try(func() {
-				EvalCond(expr, DefaultIfEnv)
+			exc := try(func() {
+				evalCond(expr, DefaultIfEnv)
 			})
 
 			if exc == nil {
@@ -185,8 +185,8 @@ func TestEvalCond_BareLiteralInPredicateThrows(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c, func(t *testing.T) {
 			expr := parseCondForTest(t, c)
-			exc := Try(func() {
-				EvalCond(expr, DefaultIfEnv)
+			exc := try(func() {
+				evalCond(expr, DefaultIfEnv)
 			})
 
 			if exc == nil {
@@ -205,8 +205,8 @@ func TestEnvironment_BoolMethodRejectsTypedBindings(t *testing.T) {
 	t.Run("string_in_bool_position_coerces_not_throws", func(t *testing.T) {
 
 		expr := &ExprIdent{Name: "CXX_RT"}
-		exc := Try(func() {
-			got := EvalCond(expr, DefaultIfEnv)
+		exc := try(func() {
+			got := evalCond(expr, DefaultIfEnv)
 			if !got {
 				t.Errorf("EvalCond(CXX_RT) = false; want true (non-empty string coerces to true)")
 			}
@@ -219,8 +219,8 @@ func TestEnvironment_BoolMethodRejectsTypedBindings(t *testing.T) {
 	t.Run("empty_string_in_bool_position_coerces_false", func(t *testing.T) {
 
 		expr := &ExprIdent{Name: "SANITIZER_TYPE"}
-		exc := Try(func() {
-			got := EvalCond(expr, DefaultIfEnv)
+		exc := try(func() {
+			got := evalCond(expr, DefaultIfEnv)
 			if got {
 				t.Errorf("EvalCond(SANITIZER_TYPE) = true; want false (empty string coerces to false)")
 			}
@@ -232,8 +232,8 @@ func TestEnvironment_BoolMethodRejectsTypedBindings(t *testing.T) {
 
 	t.Run("int_in_bool_position", func(t *testing.T) {
 		expr := &ExprIdent{Name: "ANDROID_API"}
-		exc := Try(func() {
-			EvalCond(expr, DefaultIfEnv)
+		exc := try(func() {
+			evalCond(expr, DefaultIfEnv)
 		})
 
 		if exc == nil {
@@ -247,25 +247,25 @@ func TestEnvironment_BoolMethodRejectsTypedBindings(t *testing.T) {
 }
 
 func TestDefaultIfEnv_DLL_FORDefaultsFalse(t *testing.T) {
-	if EvalCond(&ExprIdent{Name: "DLL_FOR"}, DefaultIfEnv) {
+	if evalCond(&ExprIdent{Name: "DLL_FOR"}, DefaultIfEnv) {
 		t.Fatalf("EvalCond(DLL_FOR) = true, want false")
 	}
 }
 
 func TestDefaultIfEnv_DYNAMIC_BOOSTDefaultsFalse(t *testing.T) {
-	if EvalCond(&ExprIdent{Name: "DYNAMIC_BOOST"}, DefaultIfEnv) {
+	if evalCond(&ExprIdent{Name: "DYNAMIC_BOOST"}, DefaultIfEnv) {
 		t.Fatalf("EvalCond(DYNAMIC_BOOST) = true, want false")
 	}
 }
 
 func TestDefaultIfEnv_USE_SSE4DefaultsTrue(t *testing.T) {
-	if !EvalCond(&ExprIdent{Name: "USE_SSE4"}, DefaultIfEnv) {
+	if !evalCond(&ExprIdent{Name: "USE_SSE4"}, DefaultIfEnv) {
 		t.Fatalf("EvalCond(USE_SSE4) = false, want true")
 	}
 }
 
 func TestDefaultIfEnv_PROFILE_MEMORY_ALLOCATIONSDefaultsFalse(t *testing.T) {
-	if EvalCond(&ExprIdent{Name: "PROFILE_MEMORY_ALLOCATIONS"}, DefaultIfEnv) {
+	if evalCond(&ExprIdent{Name: "PROFILE_MEMORY_ALLOCATIONS"}, DefaultIfEnv) {
 		t.Fatalf("EvalCond(PROFILE_MEMORY_ALLOCATIONS) = true, want false")
 	}
 }
@@ -277,7 +277,7 @@ func TestDefaultIfEnv_ALLOCATORDefaultsEmpty(t *testing.T) {
 }
 
 func TestEvalCond_BoolStringEqualityCoercion(t *testing.T) {
-	if !EvalCond(parseCondForTest(t, `USE_SSE4 == "yes"`), DefaultIfEnv) {
+	if !evalCond(parseCondForTest(t, `USE_SSE4 == "yes"`), DefaultIfEnv) {
 		t.Fatalf(`EvalCond(USE_SSE4 == "yes") = false, want true`)
 	}
 
@@ -287,7 +287,7 @@ func TestEvalCond_BoolStringEqualityCoercion(t *testing.T) {
 	// explicitly via SetBool to exercise the coercion rule.
 	env := DefaultIfEnv.clone()
 	env.setBool(envPROFILE_MEMORY_ALLOCATIONS, false)
-	if !EvalCond(parseCondForTest(t, `PROFILE_MEMORY_ALLOCATIONS == "no"`), env) {
+	if !evalCond(parseCondForTest(t, `PROFILE_MEMORY_ALLOCATIONS == "no"`), env) {
 		t.Fatalf(`EvalCond(PROFILE_MEMORY_ALLOCATIONS=false == "no") = false, want true`)
 	}
 }

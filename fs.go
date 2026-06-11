@@ -44,7 +44,7 @@ type FS interface {
 // canonical so the two routes agree.
 
 func dirKey(dir string) VFS {
-	return Source(cleanRel(dir))
+	return source(cleanRel(dir))
 }
 
 type OsFS struct {
@@ -72,7 +72,7 @@ type OsFS struct {
 	existsMisses  uint64
 }
 
-func NewFS(srcRoot string) FS {
+func newFS(srcRoot string) FS {
 	return &OsFS{
 		srcRoot:   srcRoot,
 		rootSlash: srcRoot + "/",
@@ -316,7 +316,7 @@ func (fs *OsFS) relForAbs(absPath string) string {
 		return absPath[len(fs.rootSlash):]
 	}
 
-	ThrowFmt("relForAbs: %q is outside source root %q", absPath, fs.srcRoot)
+	throwFmt("relForAbs: %q is outside source root %q", absPath, fs.srcRoot)
 
 	return ""
 }

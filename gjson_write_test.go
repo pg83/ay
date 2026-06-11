@@ -10,7 +10,7 @@ func encodeWithStdlib(g *Graph) []byte {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
-	Throw(enc.Encode(g))
+	throw(enc.Encode(g))
 
 	b := buf.Bytes()
 	if len(b) > 0 && b[len(b)-1] == '\n' {
@@ -36,7 +36,7 @@ func encodeWithHandRolled(g *Graph) []byte {
 func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 	trickyArgs := []string{"a", "b<c>&d", "tab\there", "quote\"x", "back\\slash", "newline\nhere"}
 
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 	leaf := e.emit(&Node{Platform: &Platform{},
 		Cmds:             []Cmd{},
 		Env:              nil,
@@ -60,7 +60,7 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 		TargetProperties: TargetProperties{ModuleLang: mlCPP},
 	})
 	e.result(main)
-	g := Finalize(e)
+	g := finalize(e)
 
 	out := encodeWithHandRolled(g)
 
@@ -154,7 +154,7 @@ func TestWriteGraphCompact_StringEscaping(t *testing.T) {
 		var nb bytes.Buffer
 		enc := json.NewEncoder(&nb)
 		enc.SetEscapeHTML(false)
-		Throw(enc.Encode(s))
+		throw(enc.Encode(s))
 		wantNoHTML := bytes.TrimRight(nb.Bytes(), "\n")
 
 		if got != string(wantNoHTML) {

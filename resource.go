@@ -58,7 +58,7 @@ func expandResourceFiles(args []string) []ResourceEntry {
 			i++
 		case "PREFIX":
 			if i+1 >= len(args) {
-				ThrowFmt("RESOURCE_FILES: PREFIX is the last token; expected a prefix value")
+				throwFmt("RESOURCE_FILES: PREFIX is the last token; expected a prefix value")
 			}
 
 			prefix = args[i+1]
@@ -66,7 +66,7 @@ func expandResourceFiles(args []string) []ResourceEntry {
 			i += 2
 		case "DEST":
 			if i+1 >= len(args) {
-				ThrowFmt("RESOURCE_FILES: DEST is the last token; expected a dest value")
+				throwFmt("RESOURCE_FILES: DEST is the last token; expected a dest value")
 			}
 
 			dest = args[i+1]
@@ -74,7 +74,7 @@ func expandResourceFiles(args []string) []ResourceEntry {
 			i += 2
 		case "STRIP":
 			if i+1 >= len(args) {
-				ThrowFmt("RESOURCE_FILES: STRIP is the last token; expected a prefix-to-strip value")
+				throwFmt("RESOURCE_FILES: STRIP is the last token; expected a prefix-to-strip value")
 			}
 
 			prefixToStrip = args[i+1]
@@ -300,10 +300,10 @@ func buildPySrcEntriesFor(fs FS, d *ModuleData, modulePath string, srcs []string
 
 		if !d.pyBuildNoPY {
 			pyKey := "resfs/file/py/" + keyPrefix + srcRel
-			pyPathInput := Source(resolvedRel)
+			pyPathInput := source(resolvedRel)
 
 			if d.pyGeneratedSrcs[srcRel] != nil {
-				pyPathInput = Build(modulePath + "/" + srcRel)
+				pyPathInput = build(modulePath + "/" + srcRel)
 			}
 
 			pyKvHash := "resfs/src/" + pyKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + "\"}"
@@ -325,15 +325,15 @@ func buildPySrcEntriesFor(fs FS, d *ModuleData, modulePath string, srcs []string
 
 		if !d.pyBuildNoPYC {
 			ypKey := "resfs/file/py/" + keyPrefix + srcRel + ".yapyc3"
-			ypPathInput := Build(modulePath + "/" + srcRel + suffix)
+			ypPathInput := build(modulePath + "/" + srcRel + suffix)
 
 			ypKvHash := "resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + suffix + "\"}"
 			ypKvCmd := "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
-			extraSrcInput := vfsPtr(Source(resolvedRel))
+			extraSrcInput := vfsPtr(source(resolvedRel))
 
 			if d.pyGeneratedSrcs[srcRel] != nil {
 				ypKvCmd = "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
-				extraSrcInput = vfsPtr(Build(modulePath + "/" + srcRel))
+				extraSrcInput = vfsPtr(build(modulePath + "/" + srcRel))
 			}
 
 			out = append(out, PySrcEntry{

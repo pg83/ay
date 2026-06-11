@@ -16,28 +16,28 @@ var (
 )
 
 var protobufRuntimeHeaders = []VFS{
-	Source(pbRuntimeBase + "google/protobuf/arena.h"),
-	Source(pbRuntimeBase + "google/protobuf/arenastring.h"),
-	Source(pbRuntimeBase + "google/protobuf/extension_set.h"),
-	Source(pbRuntimeBase + "google/protobuf/generated_message_reflection.h"),
-	Source(pbRuntimeBase + "google/protobuf/generated_message_util.h"),
-	Source(pbRuntimeBase + "google/protobuf/io/coded_stream.h"),
-	Source(pbRuntimeBase + "google/protobuf/message.h"),
-	Source(pbRuntimeBase + "google/protobuf/metadata_lite.h"),
-	Source(pbRuntimeBase + "google/protobuf/port_def.inc"),
-	Source(pbRuntimeBase + "google/protobuf/port_undef.inc"),
-	Source(pbRuntimeBase + "google/protobuf/repeated_field.h"),
-	Source(pbRuntimeBase + "google/protobuf/unknown_field_set.h"),
+	source(pbRuntimeBase + "google/protobuf/arena.h"),
+	source(pbRuntimeBase + "google/protobuf/arenastring.h"),
+	source(pbRuntimeBase + "google/protobuf/extension_set.h"),
+	source(pbRuntimeBase + "google/protobuf/generated_message_reflection.h"),
+	source(pbRuntimeBase + "google/protobuf/generated_message_util.h"),
+	source(pbRuntimeBase + "google/protobuf/io/coded_stream.h"),
+	source(pbRuntimeBase + "google/protobuf/message.h"),
+	source(pbRuntimeBase + "google/protobuf/metadata_lite.h"),
+	source(pbRuntimeBase + "google/protobuf/port_def.inc"),
+	source(pbRuntimeBase + "google/protobuf/port_undef.inc"),
+	source(pbRuntimeBase + "google/protobuf/repeated_field.h"),
+	source(pbRuntimeBase + "google/protobuf/unknown_field_set.h"),
 }
 
 var pbDescriptorImporterHeaders = []VFS{
-	Source(pbRuntimeBase + "google/protobuf/generated_message_bases.h"),
-	Source(pbRuntimeBase + "google/protobuf/map_entry.h"),
-	Source(pbRuntimeBase + "google/protobuf/map_entry_lite.h"),
-	Source(pbRuntimeBase + "google/protobuf/map_field.h"),
-	Source(pbRuntimeBase + "google/protobuf/map_field_inl.h"),
-	Source(pbRuntimeBase + "google/protobuf/map_field_lite.h"),
-	Source(pbRuntimeBase + "google/protobuf/reflection_ops.h"),
+	source(pbRuntimeBase + "google/protobuf/generated_message_bases.h"),
+	source(pbRuntimeBase + "google/protobuf/map_entry.h"),
+	source(pbRuntimeBase + "google/protobuf/map_entry_lite.h"),
+	source(pbRuntimeBase + "google/protobuf/map_field.h"),
+	source(pbRuntimeBase + "google/protobuf/map_field_inl.h"),
+	source(pbRuntimeBase + "google/protobuf/map_field_lite.h"),
+	source(pbRuntimeBase + "google/protobuf/reflection_ops.h"),
 }
 
 const (
@@ -52,7 +52,7 @@ type ResolvedCPPProtoPlugin struct {
 	Binary VFS
 }
 
-func EmitPB(
+func emitPB(
 	instance ModuleInstance,
 	protoRelPath string,
 	protoSrcOverride VFS,
@@ -76,12 +76,12 @@ func EmitPB(
 
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 
-	pbH := Build(protoBase + ".pb.h")
-	pbCC := Build(protoBase + ".pb.cc")
-	pbDepsH := Build(protoBase + ".deps.pb.h")
-	grpcPbCC := Build(protoBase + ".grpc.pb.cc")
-	grpcPbH := Build(protoBase + ".grpc.pb.h")
-	srcVFS := Source(protoRelPath)
+	pbH := build(protoBase + ".pb.h")
+	pbCC := build(protoBase + ".pb.cc")
+	pbDepsH := build(protoBase + ".deps.pb.h")
+	grpcPbCC := build(protoBase + ".grpc.pb.cc")
+	grpcPbH := build(protoBase + ".grpc.pb.h")
+	srcVFS := source(protoRelPath)
 
 	if protoSrcOverride != 0 {
 		srcVFS = protoSrcOverride
@@ -99,7 +99,7 @@ func EmitPB(
 
 	for _, plugin := range extraPlugins {
 		for _, suffix := range plugin.Spec.OutputSuffixes {
-			outputs = append(outputs, Build(protoBase+suffix))
+			outputs = append(outputs, build(protoBase+suffix))
 		}
 	}
 
@@ -230,7 +230,7 @@ func protoCPPModulePath(instance ModuleInstance, d *ModuleData) VFS {
 		base := filepath.ToSlash(filepath.Clean(filepath.Dir(*d.protoNamespace)))
 
 		if base != "." && base != "" {
-			return Source(base)
+			return source(base)
 		}
 	}
 

@@ -27,18 +27,18 @@ func cmdDumpGrep(args []string) int {
 		case args[i] == "--regex":
 			useRegex = true
 		case strings.HasPrefix(args[i], "--"):
-			ThrowFmt("dump grep: unknown argument %q", args[i])
+			throwFmt("dump grep: unknown argument %q", args[i])
 		default:
 			keys = append(keys, args[i])
 		}
 	}
 
 	if substr && useRegex {
-		ThrowFmt("dump grep: --substr and --regex are mutually exclusive")
+		throwFmt("dump grep: --substr and --regex are mutually exclusive")
 	}
 
 	if inPath == "" {
-		ThrowFmt("dump grep: --in is required")
+		throwFmt("dump grep: --in is required")
 	}
 
 	if len(keys) == 0 {
@@ -51,11 +51,11 @@ func cmdDumpGrep(args []string) int {
 			}
 		}
 
-		Throw(sc.Err())
+		throw(sc.Err())
 	}
 
 	if len(keys) == 0 {
-		ThrowFmt("dump grep: no keys given (positional args or stdin)")
+		throwFmt("dump grep: no keys given (positional args or stdin)")
 	}
 
 	var matchStr func(string) bool
@@ -65,7 +65,7 @@ func cmdDumpGrep(args []string) int {
 		res := make([]*regexp.Regexp, len(keys))
 
 		for i, k := range keys {
-			res[i] = Throw2(regexp.Compile(k))
+			res[i] = throw2(regexp.Compile(k))
 		}
 
 		matchStr = func(s string) bool {
@@ -105,7 +105,7 @@ func cmdDumpGrep(args []string) int {
 
 	bw := bufio.NewWriterSize(os.Stdout, 1<<20)
 
-	defer func() { Throw(bw.Flush()) }()
+	defer func() { throw(bw.Flush()) }()
 
 	exact := !substr && !useRegex
 	emit := func(node map[string]any) {
@@ -133,14 +133,14 @@ func cmdDumpGrep(args []string) int {
 			return
 		}
 
-		Throw2(bw.Write(Throw2(json.MarshalIndent(node, "", "  "))))
-		Throw(bw.WriteByte('\n'))
+		throw2(bw.Write(throw2(json.MarshalIndent(node, "", "  "))))
+		throw(bw.WriteByte('\n'))
 	}
 
 	if raw {
-		f := Throw2(os.Open(inPath))
+		f := throw2(os.Open(inPath))
 
-		defer func() { Throw(f.Close()) }()
+		defer func() { throw(f.Close()) }()
 
 		dec := json.NewDecoder(bufio.NewReaderSize(f, 1<<20))
 		dec.UseNumber()
@@ -148,16 +148,16 @@ func cmdDumpGrep(args []string) int {
 
 		for dec.More() {
 			node := map[string]any{}
-			Throw(dec.Decode(&node))
+			throw(dec.Decode(&node))
 			emit(node)
 		}
 
 		return 0
 	}
 
-	f := Throw2(os.Open(inPath))
+	f := throw2(os.Open(inPath))
 
-	defer func() { Throw(f.Close()) }()
+	defer func() { throw(f.Close()) }()
 
 	r := bufio.NewReaderSize(f, 1<<20)
 
@@ -166,7 +166,7 @@ func cmdDumpGrep(args []string) int {
 
 		if len(line) > 0 {
 			node := map[string]any{}
-			Throw(json.Unmarshal([]byte(line), &node))
+			throw(json.Unmarshal([]byte(line), &node))
 			emit(node)
 		}
 
@@ -174,7 +174,7 @@ func cmdDumpGrep(args []string) int {
 			break
 		}
 
-		Throw(err)
+		throw(err)
 	}
 
 	return 0

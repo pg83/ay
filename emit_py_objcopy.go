@@ -147,7 +147,7 @@ func emitResourceObjcopy(
 		}
 
 		hash := objcopyHash(cur.paths, cur.keys, cur.kvs, instance.Path.rel(), moduleTag)
-		outputObj := Build(instance.Path.rel() + "/objcopy_" + hash + ".o")
+		outputObj := build(instance.Path.rel() + "/objcopy_" + hash + ".o")
 
 		payload := make([]STR, 0, 2+len(cur.pathInputs)+len(cur.keys)+1+len(cur.kvs))
 
@@ -270,7 +270,7 @@ func emitResourceObjcopy(
 					cur.cmdLen += rootCmdLen + len(e.Key)
 
 					if inner, ok := rootrelInputPath(e.Key); ok {
-						cur.kvInputs = append(cur.kvInputs, Source(instance.Path.rel()+"/"+inner))
+						cur.kvInputs = append(cur.kvInputs, source(instance.Path.rel()+"/"+inner))
 					}
 				} else {
 					inputVFS := copyFileInputVFS(ctx.fs, instance.Path.rel(), e.Path)
@@ -360,7 +360,7 @@ func emitKvOnlyObjcopyNode(
 	}
 
 	hash := objcopyHash(nil, nil, kvsHash, instance.Path.rel(), moduleTag)
-	outputObj := Build(instance.Path.rel() + "/objcopy_" + hash + ".o")
+	outputObj := build(instance.Path.rel() + "/objcopy_" + hash + ".o")
 
 	payload := appendInternStrs([]STR{argKvs.str()}, kvsCmd)
 	cmdArgs := objcopyCmdArgs(oc, outputObj, payload)
@@ -459,8 +459,8 @@ func emitYaConfJSONObjcopy(
 		kvHash := "resfs/src/" + key + "=${rootrel;context=TEXT;input=TEXT:\"" + res.hashPath + "\"}"
 		kvCmd := "resfs/src/" + key + "=" + res.sourcePath
 		hash := objcopyHash([]string{res.hashPath}, []string{keyB64}, []string{kvHash}, instance.Path.rel(), moduleTag)
-		outputObj := Build(instance.Path.rel() + "/objcopy_" + hash + ".o")
-		input := Source(res.sourcePath)
+		outputObj := build(instance.Path.rel() + "/objcopy_" + hash + ".o")
+		input := source(res.sourcePath)
 
 		cmdArgs := objcopyCmdArgs(oc, outputObj, []STR{
 			argInputs.str(), (input).str(),
@@ -646,7 +646,7 @@ func emitPySrcObjcopy(
 
 		for _, ch := range chunkPySrcEntries(entries) {
 			hash := objcopyHash(ch.paths, ch.keys, ch.kvsHash, instance.Path.rel(), moduleTag)
-			outputObj := Build(instance.Path.rel() + "/objcopy_" + hash + ".o")
+			outputObj := build(instance.Path.rel() + "/objcopy_" + hash + ".o")
 
 			payload := make([]STR, 0, 2+len(ch.pathInps)+len(ch.keys)+1+len(ch.kvsCmd))
 			payload = append(payload, argInputs.str())

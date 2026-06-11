@@ -52,7 +52,7 @@ var archiverGlobalPaths = []string{
 }
 
 func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
-	emit := NewBufferedEmitter()
+	emit := newBufferedEmitter()
 	mainRef := emit.emit(&Node{Platform: &Platform{},
 		KV: KV{P: pkSTUB},
 	})
@@ -60,7 +60,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 
 	instance := targetInstance("some/prog")
 
-	ldRef := EmitLD(
+	ldRef := emitLD(
 		instance,
 		"",
 		[]NodeRef{mainRef}, []VFS{ParseVFSOrSource(mainPath)},
@@ -144,7 +144,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 }
 
 func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
-	emit := NewBufferedEmitter()
+	emit := newBufferedEmitter()
 	mainRef := emit.emit(&Node{Platform: &Platform{},
 		KV: KV{P: pkSTUB},
 	})
@@ -152,7 +152,7 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 
 	instance := targetInstance("some/prog")
 
-	ldRef := EmitLD(
+	ldRef := emitLD(
 		instance,
 		"",
 		[]NodeRef{mainRef}, []VFS{ParseVFSOrSource(mainPath)},
@@ -223,13 +223,13 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 }
 
 func TestEmitLD_AcceptsHostPIC(t *testing.T) {
-	emit := NewBufferedEmitter()
+	emit := newBufferedEmitter()
 	stub := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
 
-	ref := EmitLD(
+	ref := emitLD(
 		hostInstance("some/prog"),
 		"",
-		[]NodeRef{stub}, []VFS{Intern("$(B)/some/prog/main.cpp.o")},
+		[]NodeRef{stub}, []VFS{intern("$(B)/some/prog/main.cpp.o")},
 		nil, nil,
 		nil,
 		nil, nil,
@@ -280,7 +280,7 @@ func TestComposeProgramLinkTrailer_NonPICRPathTrailerKeepsNoPie(t *testing.T) {
 	flags["LLD_TOOL"] = "$(LLD_ROOT)/bin/ld.lld"
 	flags["PIC"] = "no"
 
-	p := NewPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "", "")
+	p := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "", "")
 
 	got := composeProgramLinkTrailer(
 		p,
@@ -317,7 +317,7 @@ func TestComposeProgramLinkTrailer_NonPICRPathTrailerKeepsNoPie(t *testing.T) {
 }
 
 func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
-	emit := NewBufferedEmitter()
+	emit := newBufferedEmitter()
 	mainRef := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
 	// A whole-archive lib is one of the peer archives (linked with --whole-archive),
 	// so its ref is in BOTH peerLDRefs and wholeArchiveRefs — the same node.
@@ -326,15 +326,15 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 	instance := targetInstance("some/prog")
 	wholeArchivePath := "some/prog/libproto_cpp.a"
 
-	ldRef := EmitLD(
+	ldRef := emitLD(
 		instance,
 		"",
-		[]NodeRef{mainRef}, []VFS{Intern("$(B)/some/prog/main.cpp.o")},
-		[]NodeRef{wholeRef}, []VFS{Build(wholeArchivePath)},
+		[]NodeRef{mainRef}, []VFS{intern("$(B)/some/prog/main.cpp.o")},
+		[]NodeRef{wholeRef}, []VFS{build(wholeArchivePath)},
 		nil,
 		nil, nil,
 		nil, nil,
-		[]NodeRef{wholeRef}, []VFS{Build(wholeArchivePath)},
+		[]NodeRef{wholeRef}, []VFS{build(wholeArchivePath)},
 		nil,
 		nil, nil,
 		nil, nil,
@@ -358,7 +358,7 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 	)
 
 	got := emit.nodes[ldRef]
-	if !slices.Contains(got.flatInputs(), Build(wholeArchivePath)) {
+	if !slices.Contains(got.flatInputs(), build(wholeArchivePath)) {
 		t.Fatalf("inputs do not contain whole-archive path %q: %#v", wholeArchivePath, got.flatInputs())
 	}
 
@@ -388,18 +388,18 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 }
 
 func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T) {
-	emit := NewBufferedEmitter()
+	emit := newBufferedEmitter()
 	mainRef := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
 	// Same node reached as both a peer archive and a whole-archive lib.
 	peerRef := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
 
 	instance := targetInstance("some/prog")
-	dupPath := Intern("$(B)/some/prog/libproto_cpp.a")
+	dupPath := intern("$(B)/some/prog/libproto_cpp.a")
 
-	ldRef := EmitLD(
+	ldRef := emitLD(
 		instance,
 		"",
-		[]NodeRef{mainRef}, []VFS{Intern("$(B)/some/prog/main.cpp.o")},
+		[]NodeRef{mainRef}, []VFS{intern("$(B)/some/prog/main.cpp.o")},
 		[]NodeRef{peerRef}, []VFS{dupPath},
 		nil,
 		nil, nil,
@@ -478,11 +478,11 @@ func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			e := NewBufferedEmitter()
+			e := newBufferedEmitter()
 			instance := targetInstance("test/prog")
 
-			exc := Try(func() {
-				EmitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, nil, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, tc.wholeRefs, tc.wholePaths, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, false, false, false, 0, testToolchain(), testHostP, nil, e)
+			exc := try(func() {
+				emitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, nil, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, tc.wholeRefs, tc.wholePaths, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, false, false, false, 0, testToolchain(), testHostP, nil, e)
 			})
 
 			if exc == nil {

@@ -36,8 +36,8 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 		// clangWrapperVFS / optWrapperVFS correspond to ${input:"..."} in the
 		// upstream LLVM_COMPILE_CXX / LLVM_OPT macros: ymake adds the script as
 		// a direct node input alongside the compile/opt command.
-		clangWrapperVFS := Intern(clangWrapper)
-		optWrapperVFS := Intern(optWrapper)
+		clangWrapperVFS := intern(clangWrapper)
+		optWrapperVFS := intern(optWrapper)
 
 		// bcSourceInputs accumulates the $(S)-rooted inputs from every BC node for
 		// flat-input propagation to the OP node. Upstream OP carries all source
@@ -55,7 +55,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 
 		for _, src := range stmt.Sources {
 			inputVFS, producer := llvmBcSourceInfo(ctx, instance, d, src)
-			bcOut := Build(llvmBcRootRelArcSrc(ctx, instance, d, src) + stmt.Suffix + ".bc")
+			bcOut := build(llvmBcRootRelArcSrc(ctx, instance, d, src) + stmt.Suffix + ".bc")
 			bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
 
 			// Walk include closure (same as emitCodegenDownstreamCC for generated CC).
@@ -113,7 +113,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 			bcPaths = append(bcPaths, bcOut)
 		}
 
-		mergedOut := Build(instance.Path.rel() + "/" + stmt.Name + "_merged" + stmt.Suffix + ".bc")
+		mergedOut := build(instance.Path.rel() + "/" + stmt.Name + "_merged" + stmt.Suffix + ".bc")
 		ldArgs := []STR{internStr(llvmLink)}
 
 		for _, p := range bcPaths {
@@ -145,7 +145,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 		ldRef := ctx.emit.emit(ldNode)
 
 		optOutName := stmt.Name + "_optimized" + stmt.Suffix + ".bc"
-		optOut := Build(instance.Path.rel() + "/" + optOutName)
+		optOut := build(instance.Path.rel() + "/" + optOutName)
 		optArgs := []STR{internStr(python), internStr(optWrapper), internStr(opt), (mergedOut).str(), argDashO.str(), (optOut).str()}
 		passes := []string{"default<O2>", "globalopt", "globaldce"}
 

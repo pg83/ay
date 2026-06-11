@@ -19,7 +19,7 @@ func vfsBound() uint32 {
 	return uint32(len(internTable.strs)) << 1
 }
 
-func Intern(full string) VFS {
+func intern(full string) VFS {
 	root := VFSRootSource
 
 	if full[2] == 'B' {
@@ -54,11 +54,11 @@ func internPrefixed(prefix, rel string) STR {
 	return internBytes(vfsPrefixScratch)
 }
 
-func Source(rel string) VFS {
+func source(rel string) VFS {
 	return VFS(uint32(internPrefixed("$(S)/", rel))<<1 | uint32(VFSRootSource))
 }
 
-func Build(rel string) VFS {
+func build(rel string) VFS {
 	return VFS(uint32(internPrefixed("$(B)/", rel))<<1 | uint32(VFSRootBuild))
 }
 

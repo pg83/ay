@@ -34,7 +34,7 @@ func protoPythonNamespaceArg(d *ModuleData) string {
 
 func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerContribs PeerGlobalContribs, protoSrcs, evSrcs []string) *ProtoSrcsResult {
 	if len(evSrcs) > 0 {
-		ThrowFmt("gen: py-addressed PROTO_LIBRARY %s with .ev sources is not modelled", instance.Path.rel())
+		throwFmt("gen: py-addressed PROTO_LIBRARY %s with .ev sources is not modelled", instance.Path.rel())
 	}
 
 	if len(protoSrcs) == 0 {
@@ -74,9 +74,9 @@ func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCo
 	pyInstance := instance
 	pyInstance.Language = LangPy
 	globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path.rel(), "libpy3", "")
-	gRef := EmitARGlobalNamedTagged(pyInstance, globalBaseName, tagPy3ProtoGlobal, pyProtoRefs, pyProtoOutputs, d.tc, ctx.host, ctx.emit)
+	gRef := emitARGlobalNamedTagged(pyInstance, globalBaseName, tagPy3ProtoGlobal, pyProtoRefs, pyProtoOutputs, d.tc, ctx.host, ctx.emit)
 
-	globalPath := Build(instance.Path.rel() + "/" + globalBaseName)
+	globalPath := build(instance.Path.rel() + "/" + globalBaseName)
 	result := &ProtoSrcsResult{
 		GlobalRef:  &gRef,
 		GlobalPath: &globalPath,
@@ -89,7 +89,7 @@ func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCo
 		result.WholeArchiveRefs = append(result.WholeArchiveRefs, cppSibling.ARRef)
 		result.WholeArchivePaths = append(result.WholeArchivePaths, *cppSibling.ARPath)
 	} else if moduleExcludesTag(d, "CPP_PROTO") {
-		result.WholeArchiveCmdPaths = append(result.WholeArchiveCmdPaths, Build(instance.Path.rel()+"/"+ArchiveName(instance.Path.rel())))
+		result.WholeArchiveCmdPaths = append(result.WholeArchiveCmdPaths, build(instance.Path.rel()+"/"+archiveName(instance.Path.rel())))
 	}
 
 	return result
@@ -212,14 +212,14 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 
 	pyBase := protoBase + "__intpy3___pb2.py"
-	pyOut := Build(pyBase)
-	pyiOut := Build(protoBase + "__intpy3___pb2.pyi")
+	pyOut := build(pyBase)
+	pyiOut := build(protoBase + "__intpy3___pb2.pyi")
 	var grpcPyOut VFS
 	outputs := []VFS{pyOut}
 	suffixes := []string{"_pb2.py"}
 
 	if d.grpc {
-		grpcPyOut = Build(protoBase + "__intpy3___pb2_grpc.py")
+		grpcPyOut = build(protoBase + "__intpy3___pb2_grpc.py")
 		outputs = append(outputs, grpcPyOut)
 		suffixes = append(suffixes, "_pb2_grpc.py")
 	}
@@ -250,8 +250,8 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 		toolRefs = append(toolRefs, pe.mypyRef)
 	}
 
-	inputs := []VFS{protocBinary, pbPyWrapperVFS, Source(protoRelPath)}
-	protoVFS := Source(protoRelPath)
+	inputs := []VFS{protocBinary, pbPyWrapperVFS, source(protoRelPath)}
+	protoVFS := source(protoRelPath)
 	transitive := walkClosureTail(ctx, instance, protoVFS, protoWalkInputs(nil))
 
 	inputs = append(inputs, transitive...)
@@ -330,7 +330,7 @@ func emitGeneratedPyProtoYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs [
 	res := &GeneratedPyProtoYapycResult{}
 
 	for i, pyOut := range pyOutputs {
-		out := Build(pyOut.rel() + "." + suffix + ".yapyc3")
+		out := build(pyOut.rel() + "." + suffix + ".yapyc3")
 		cmdArgs := []STR{
 			(py3ccBinary).str(),
 			argSlowPy3cc.str(),
@@ -538,7 +538,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 	res := &PyProtoAuxChunksResult{}
 
 	for _, ch := range chunks {
-		aux := Build(instance.Path.rel() + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path.rel(), "PY3_PROTO") + "_raw.auxcpp")
+		aux := build(instance.Path.rel() + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path.rel(), "PY3_PROTO") + "_raw.auxcpp")
 		auxClosure := pyProtoAuxInputClosure(ctx, instance, d, aux, ch.inputs, peerAddIncl)
 		cmdArgs := []STR{internStr(rescompilerBinPath), (aux).str()}
 		cmdArgs = appendInternStrs(cmdArgs, ch.cmdArgs)
@@ -610,7 +610,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 			IncludeInputs:        auxClosure,
 		}
 		ccIn.CCBlocks = composeCCModuleArgBlocks(instance.Platform, &ccIn)
-		ccRef, ccOut, _ := EmitCC(instance, aux.rel()[strings.LastIndex(aux.rel(), "/")+1:], aux, ccIn, ctx.host, ctx.emit)
+		ccRef, ccOut, _ := emitCC(instance, aux.rel()[strings.LastIndex(aux.rel(), "/")+1:], aux, ccIn, ctx.host, ctx.emit)
 		res.Refs = append(res.Refs, ccRef)
 		res.Outputs = append(res.Outputs, ccOut)
 	}

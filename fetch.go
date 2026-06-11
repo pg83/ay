@@ -18,7 +18,7 @@ type ResourceMappingConf struct {
 }
 
 func currentYatoolPath() string {
-	path := Throw2(os.Executable())
+	path := throw2(os.Executable())
 
 	return path
 }
@@ -85,19 +85,19 @@ func cmdFetch(args []string) int {
 	// fetch a sandbox resource, so it is a plain build command, not a FETCH node.
 	if len(args) >= 1 && args[0] == "base64" {
 		if len(args) != 3 {
-			ThrowFmt("fetch: usage: ay fetch base64 <data> <out>")
+			throwFmt("fetch: usage: ay fetch base64 <data> <out>")
 		}
 
-		data := Throw2(base64.StdEncoding.DecodeString(args[1]))
+		data := throw2(base64.StdEncoding.DecodeString(args[1]))
 		out := args[2]
-		Throw(os.MkdirAll(filepath.Dir(out), 0o755))
-		Throw(os.WriteFile(out, data, 0o644))
+		throw(os.MkdirAll(filepath.Dir(out), 0o755))
+		throw(os.WriteFile(out, data, 0o644))
 
 		return 0
 	}
 
 	if len(args) != 3 && len(args) != 4 {
-		ThrowFmt("fetch: usage: ay fetch <build-root> <source-root> <uri> [output-dir]")
+		throwFmt("fetch: usage: ay fetch <build-root> <source-root> <uri> [output-dir]")
 	}
 
 	buildRoot := args[0]
@@ -145,10 +145,10 @@ func forceRemoveAll(path string) error {
 }
 
 func fetchResource(sourceRoot, uri, out string) {
-	Throw(forceRemoveAll(out))
-	Throw(os.MkdirAll(out, 0o755))
+	throw(forceRemoveAll(out))
+	throw(os.MkdirAll(out, 0o755))
 
-	tmp := Throw2(os.MkdirTemp("", "ay-fetch-*"))
+	tmp := throw2(os.MkdirTemp("", "ay-fetch-*"))
 	defer os.RemoveAll(tmp)
 
 	archivePath := filepath.Join(tmp, "resource")
@@ -187,7 +187,7 @@ func readResourceMappingMaybe(path string) ResourceMappingConf {
 		return out
 	}
 
-	Throw(json.Unmarshal(raw, &out))
+	throw(json.Unmarshal(raw, &out))
 
 	return out
 }
@@ -231,29 +231,29 @@ func runPythonScript(cwd, script string, args ...string) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	Throw(cmd.Run())
+	throw(cmd.Run())
 }
 
 func fetchURL(raw, out string) {
 	if raw == "" {
-		ThrowFmt("fetch: empty URL")
+		throwFmt("fetch: empty URL")
 	}
 
-	resp := Throw2(http.Get(raw))
+	resp := throw2(http.Get(raw))
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		ThrowFmt("fetch: %s returned %s", raw, resp.Status)
+		throwFmt("fetch: %s returned %s", raw, resp.Status)
 	}
 
-	f := Throw2(os.Create(out))
+	f := throw2(os.Create(out))
 	defer f.Close()
 
-	Throw2(io.Copy(f, resp.Body))
+	throw2(io.Copy(f, resp.Body))
 }
 
 func unpackResourceArchive(archivePath, out string) {
-	Throw(os.MkdirAll(out, 0o755))
+	throw(os.MkdirAll(out, 0o755))
 
 	cmd := exec.Command("tar", "-xf", archivePath, "-C", out)
 	cmd.Stdout = os.Stdout
@@ -263,7 +263,7 @@ func unpackResourceArchive(archivePath, out string) {
 		return
 	}
 
-	Throw(os.MkdirAll(out, 0o755))
+	throw(os.MkdirAll(out, 0o755))
 
 	zipCmd := exec.Command("unzip", "-q", archivePath, "-d", out)
 	zipCmd.Stdout = os.Stdout
@@ -273,10 +273,10 @@ func unpackResourceArchive(archivePath, out string) {
 		return
 	}
 
-	Throw(os.MkdirAll(out, 0o755))
+	throw(os.MkdirAll(out, 0o755))
 
 	dst := filepath.Join(out, "resource")
-	Throw(copyFile(archivePath, dst))
+	throw(copyFile(archivePath, dst))
 }
 
 func copyFile(src, dst string) error {

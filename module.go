@@ -5,8 +5,8 @@ import (
 )
 
 var (
-	PlatformDefaultLinuxAArch64 = MakePlatformID(OSLinux, ISAAArch64)
-	PlatformDefaultLinuxX8664   = MakePlatformID(OSLinux, ISAX8664)
+	PlatformDefaultLinuxAArch64 = makePlatformID(OSLinux, ISAAArch64)
+	PlatformDefaultLinuxX8664   = makePlatformID(OSLinux, ISAX8664)
 )
 
 type Language string
@@ -61,7 +61,7 @@ const (
 
 type PlatformID string
 
-func MakePlatformID(os OS, isa ISA) PlatformID {
+func makePlatformID(os OS, isa ISA) PlatformID {
 	return PlatformID("default-" + string(os) + "-" + string(isa))
 }
 
@@ -82,9 +82,9 @@ type ModuleInstance struct {
 	Platform *Platform
 }
 
-func NewToolInstance(host *Platform, path string) ModuleInstance {
+func newToolInstance(host *Platform, path string) ModuleInstance {
 	return ModuleInstance{
-		Path:     Source(path),
+		Path:     source(path),
 		Kind:     KindBin,
 		Language: LangCPP,
 		Platform: host,

@@ -283,9 +283,9 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 		t.Fatalf("tail chunk paths len: got %d, want 1", got)
 	}
 
-	ctx := &GenCtx{emit: NewBufferedEmitter()}
+	ctx := &GenCtx{emit: newBufferedEmitter()}
 	instance := ModuleInstance{
-		Path:     Source("contrib/python/shellingham"),
+		Path:     source("contrib/python/shellingham"),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,

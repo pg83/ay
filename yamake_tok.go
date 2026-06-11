@@ -383,7 +383,7 @@ func internTok(s string) TOK {
 		return t
 	}
 
-	ThrowFmt("internTok: unknown macro name %q (closed TOK set)", s)
+	throwFmt("internTok: unknown macro name %q (closed TOK set)", s)
 	return tokInvalid
 }
 

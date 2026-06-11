@@ -14,7 +14,7 @@ const swigLibRoot = "contrib/tools/swig/Lib"
 
 // swigAddIncls mirrors Lib/python's ADDINCL(GLOBAL FOR swig …) declarations —
 // the python contour is the one ay models (swig.conf _SWIG_PYTHON_C/_CPP).
-var swigAddIncls = []VFS{Source(swigLibRoot + "/python"), Source(swigLibRoot)}
+var swigAddIncls = []VFS{source(swigLibRoot + "/python"), source(swigLibRoot)}
 
 func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []*SourceEmit {
 	if len(d.swigC) == 0 {
@@ -29,9 +29,9 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 		prefix := swigOutputPrefix(stmt.Src, stmt.Module)
 		cOutRel := prefix + ".swg.c"
 		pyOutRel := prefix + ".py"
-		srcVFS := Source(instance.Path.rel() + "/" + stmt.Src)
-		cOutVFS := Build(instance.Path.rel() + "/" + cOutRel)
-		pyOutVFS := Build(instance.Path.rel() + "/" + pyOutRel)
+		srcVFS := source(instance.Path.rel() + "/" + stmt.Src)
+		cOutVFS := build(instance.Path.rel() + "/" + cOutRel)
+		pyOutVFS := build(instance.Path.rel() + "/" + pyOutRel)
 		// The window walk: implicit %includes are the swig parser's own
 		// directives, the Lib dirs are FOR-swig addincl data, the resolution
 		// is the scanner's standard one (sysincl swig.yml included).
@@ -92,7 +92,7 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 		incl = append(incl, srcVFS)
 		ccIn.IncludeInputs = swigFilterExistingSources(ctx.fs, dedupVFS(incl))
 
-		ccRef, ccOut, _ := EmitCC(instance, cOutRel, cOutVFS, ccIn, ctx.host, ctx.emit)
+		ccRef, ccOut, _ := emitCC(instance, cOutRel, cOutVFS, ccIn, ctx.host, ctx.emit)
 		out = append(out, &SourceEmit{Ref: ccRef, OutPath: ccOut})
 	}
 

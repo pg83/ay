@@ -1,6 +1,6 @@
 package main
 
-func EmitJVCPG4(
+func emitJVCPG4(
 	instance ModuleInstance,
 	src VFS,
 	dst VFS,
@@ -56,15 +56,15 @@ func EmitJVCPG4(
 	return emit.emit(node)
 }
 
-func EmitCP(instance ModuleInstance, src VFS, dst VFS, tc ModuleToolchain, scripts ScriptDeps, emit Emitter) NodeRef {
-	return EmitCPWithDeps(instance, src, dst, nil, nil, tc, scripts, emit)
+func emitCP(instance ModuleInstance, src VFS, dst VFS, tc ModuleToolchain, scripts ScriptDeps, emit Emitter) NodeRef {
+	return emitCPWithDeps(instance, src, dst, nil, nil, tc, scripts, emit)
 }
 
 // EmitCPWithDeps emits a CP (copy) node. extraInputs is the additional input
 // closure to attach (e.g. the source's transitive #include closure when the
 // COPY macro was declared WITH_CONTEXT, so that any header change retriggers
 // the copy).
-func EmitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, tc ModuleToolchain, scripts ScriptDeps, emit Emitter) NodeRef {
+func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, tc ModuleToolchain, scripts ScriptDeps, emit Emitter) NodeRef {
 	fsTools := copyFsToolsVFS
 
 	cmdArgs := []STR{

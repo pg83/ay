@@ -100,15 +100,15 @@ func splitKey(prefix, suffix STR) uint64 {
 	return splitMix64(uint32(prefix), uint32(suffix))
 }
 
-func NewCodegenRegistry() *CodegenRegistry {
-	return &CodegenRegistry{bySplit: NewIntMap[*GeneratedFileInfo](1 << 14)}
+func newCodegenRegistry() *CodegenRegistry {
+	return &CodegenRegistry{bySplit: newIntMap[*GeneratedFileInfo](1 << 14)}
 }
 
 func (r *CodegenRegistry) register(info *GeneratedFileInfo) {
 	full := STR(info.OutputPath.strID())
 
 	if existing, ok := r.byStr.get(full); ok {
-		ThrowFmt("CodegenRegistry: duplicate producer for %q (existing kind=%q, new kind=%q)",
+		throwFmt("CodegenRegistry: duplicate producer for %q (existing kind=%q, new kind=%q)",
 			info.OutputPath.string(), existing.ProducerKvP, info.ProducerKvP)
 	}
 
@@ -171,7 +171,7 @@ func (r *CodegenRegistry) addClosureLeaf(node, leaf VFS) {
 	info, ok := r.byStr.get(STR(node.strID()))
 
 	if !ok {
-		ThrowFmt("CodegenRegistry: AddClosureLeaf on unregistered path %q", node.string())
+		throwFmt("CodegenRegistry: AddClosureLeaf on unregistered path %q", node.string())
 	}
 
 	info.ClosureLeaves = append(info.ClosureLeaves, leaf)
@@ -198,11 +198,11 @@ func (r *CodegenRegistry) setProducerRef(path VFS, ref NodeRef) {
 	info, ok := r.byStr.get(STR(path.strID()))
 
 	if !ok {
-		ThrowFmt("CodegenRegistry: SetProducerRef on unregistered path %q", path.string())
+		throwFmt("CodegenRegistry: SetProducerRef on unregistered path %q", path.string())
 	}
 
 	if info.HasProducerRef && info.ProducerRef != ref {
-		ThrowFmt("CodegenRegistry: conflicting ProducerRef for %q (existing=%v, new=%v)",
+		throwFmt("CodegenRegistry: conflicting ProducerRef for %q (existing=%v, new=%v)",
 			path.string(), info.ProducerRef, ref)
 	}
 
@@ -218,7 +218,7 @@ func (r *CodegenRegistry) setSourceInputs(path VFS, src []VFS) {
 	info, ok := r.byStr.get(STR(path.strID()))
 
 	if !ok {
-		ThrowFmt("CodegenRegistry: SetSourceInputs on unregistered path %q", path.string())
+		throwFmt("CodegenRegistry: SetSourceInputs on unregistered path %q", path.string())
 	}
 
 	info.SourceInputs = src

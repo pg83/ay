@@ -16,7 +16,7 @@ var (
 	pbDescriptorImporterDirectives = quotedDirectives(pbDescriptorImporterHeaders)
 	// pbRuntimeBaseVFS is the protobuf runtime src root (upstream's
 	// $PROTOBUF_INCLUDE_PATH config constant) fed to the proto closure walk.
-	pbRuntimeBaseVFS = Source(strings.TrimSuffix(pbRuntimeBase, "/"))
+	pbRuntimeBaseVFS = source(strings.TrimSuffix(pbRuntimeBase, "/"))
 )
 
 func quotedDirectives(headers []VFS) []IncludeDirective {
@@ -30,7 +30,7 @@ func quotedDirectives(headers []VFS) []IncludeDirective {
 }
 
 func protoPbHIncludes(pm *IncludeParserManager, srcRel, outputRoot string, bucket ParsedIncludeBucket) []IncludeDirective {
-	hcpp := pm.sourceParsedBuckets(Source(srcRel), nil).bucket(bucket)
+	hcpp := pm.sourceParsedBuckets(source(srcRel), nil).bucket(bucket)
 
 	if len(hcpp) == 0 {
 		return nil
@@ -81,7 +81,7 @@ func protoWalkInputs(peerProtoAddIncl []VFS) ModuleCCInputs {
 }
 
 func protoDirectImportNames(pm *IncludeParserManager, srcRel string) []string {
-	direct := pm.sourceParsedBuckets(Source(srcRel), nil).bucket(parsedIncludesLocal)
+	direct := pm.sourceParsedBuckets(source(srcRel), nil).bucket(parsedIncludesLocal)
 
 	if len(direct) == 0 {
 		return nil
@@ -233,10 +233,10 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 	protoSearchPaths := peerProtoAddIncl
 
 	if cfg.cppOutRoot != "" {
-		protoSearchPaths = append([]VFS{Source(cfg.cppOutRoot)}, peerProtoAddIncl...)
+		protoSearchPaths = append([]VFS{source(cfg.cppOutRoot)}, peerProtoAddIncl...)
 	}
 
-	protoVFS := Source(protoRelPath)
+	protoVFS := source(protoRelPath)
 	transitiveImports := walkClosureTail(ctx, instance, protoVFS, protoWalkInputs(protoSearchPaths))
 
 	// SRCS(X.proto) may name a build-generated .proto (e.g. jsonpath's
@@ -251,7 +251,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 	var protoProducerSourceInputs []VFS
 
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
-		buildProto := Build(protoRelPath)
+		buildProto := build(protoRelPath)
 
 		if info := reg.lookup(buildProto); info != nil && info.HasProducerRef {
 			protoSrcOverride = buildProto
@@ -260,7 +260,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		}
 	}
 
-	pbRef := EmitPB(
+	pbRef := emitPB(
 		instance, protoRelPath, protoSrcOverride, pe.cppStyleguideLDRef, pe.protocLDRef,
 		pe.grpcCppLDRef, pe.cppStyleguideBinary, pe.protocBinary, pe.grpcCppBinary,
 		cfg.grpc, cfg.moduleTag,
@@ -274,17 +274,17 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 	)
 
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
-	pbH := Build(protoBase + ".pb.h")
-	pbCC := Build(protoBase + ".pb.cc")
-	pbDepsH := Build(protoBase + ".deps.pb.h")
-	grpcPbH := Build(protoBase + ".grpc.pb.h")
-	grpcPbCC := Build(protoBase + ".grpc.pb.cc")
+	pbH := build(protoBase + ".pb.h")
+	pbCC := build(protoBase + ".pb.cc")
+	pbDepsH := build(protoBase + ".deps.pb.h")
+	grpcPbH := build(protoBase + ".grpc.pb.h")
+	grpcPbCC := build(protoBase + ".grpc.pb.cc")
 	extraOutputPaths := make([]VFS, 0, 4)
 	extraSourceOutputs := make([]VFS, 0, 2)
 
 	for _, plugin := range d.cppProtoPlugins {
 		for _, suffix := range plugin.OutputSuffixes {
-			out := Build(protoBase + suffix)
+			out := build(protoBase + suffix)
 			extraOutputPaths = append(extraOutputPaths, out)
 
 			if isCCSourceExt(out.rel()) {
@@ -345,7 +345,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		// produced it (protoProducerSourceInputs = the $(B) .proto's SourceInputs).
 		if reg := codegenRegForInstance(ctx, instance); reg != nil {
 			if protoSrcOverride == 0 {
-				reg.addClosureLeaf(pbH, Source(protoRelPath))
+				reg.addClosureLeaf(pbH, source(protoRelPath))
 			} else {
 				for _, s := range protoProducerSourceInputs {
 					reg.addClosureLeaf(pbH, s)
@@ -451,7 +451,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	}
 
 	if cfg.cppOutRoot != "" {
-		cfg.duplicateOutputRootInclude = containsVFS(peerContribs.addIncl, Build(cfg.cppOutRoot))
+		cfg.duplicateOutputRootInclude = containsVFS(peerContribs.addIncl, build(cfg.cppOutRoot))
 	}
 
 	cppInstance := instance
@@ -483,16 +483,16 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 
 		for _, src := range evSrcs {
 			evRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
-			evVFS := Source(evRelPath)
+			evVFS := source(evRelPath)
 			evImports := walkClosureTail(ctx, instance, evVFS, protoWalkInputs(nil))
 
-			evRef := EmitEV(
+			evRef := emitEV(
 				instance, evRelPath, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 				cppStyleguideBinary, protocBinary, event2cppBinary,
 				tagCppProto, evImports, d.tc, ctx.emit)
 
-			evH := Build(evRelPath + ".pb.h")
-			evPbCC := Build(evRelPath + ".pb.cc")
+			evH := build(evRelPath + ".pb.h")
+			evPbCC := build(evRelPath + ".pb.cc")
 
 			if reg := codegenRegForInstance(ctx, instance); reg != nil {
 				directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, protoCPPOutRoot(d))
@@ -558,14 +558,14 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	ccRefs := make([]NodeRef, 0, len(codegenOutputs))
 	ccOutputs := make([]VFS, 0, len(codegenOutputs))
 
-	wireFormatVFS := Source(pbRuntimeBase + "google/protobuf/wire_format.h")
+	wireFormatVFS := source(pbRuntimeBase + "google/protobuf/wire_format.h")
 
 	for _, co := range codegenOutputs {
 		ccIn := moduleInputs
 		ccIn.IncludeInputs = walkClosure(ctx, instance, co.pbCC, moduleInputs)
 
 		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {
-			selfH := Build(strings.TrimSuffix(co.pbCC.rel(), ".cc") + ".h")
+			selfH := build(strings.TrimSuffix(co.pbCC.rel(), ".cc") + ".h")
 			filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
 
 			for _, in := range ccIn.IncludeInputs {
@@ -584,7 +584,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		}
 
 		ccIn.ExtraDepRefs = append([]NodeRef{co.genRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, co.genRef)...)
-		ccRef, ccOut, _ := EmitCC(cppInstance, co.srcRel, co.pbCC, ccIn, ctx.host, ctx.emit)
+		ccRef, ccOut, _ := emitCC(cppInstance, co.srcRel, co.pbCC, ccIn, ctx.host, ctx.emit)
 		ccRefs = append(ccRefs, ccRef)
 		ccOutputs = append(ccOutputs, ccOut)
 	}
@@ -645,7 +645,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	}
 
 	arBaseName := archiveNameWithPrefixOrName(instance.Path.rel(), "lib", protoLibName)
-	archivePath := Build(instance.Path.rel() + "/" + arBaseName)
+	archivePath := build(instance.Path.rel() + "/" + arBaseName)
 	arRef := emitARNode(instance, archivePath, tagCppProto, ccRefs, ccOutputs, nil, nil, d.tc, ctx.host, ctx.emit)
 	return &ProtoSrcsResult{ARRef: arRef, ARPath: &archivePath}
 }

@@ -103,7 +103,7 @@ type ModuleCCInputs struct {
 	TC ModuleToolchain
 }
 
-func EmitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS, InputChunks) {
+func emitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS, InputChunks) {
 	suffix := ".o"
 
 	if instance.Platform.PIC {
@@ -224,7 +224,7 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 
 	if srcVFS.isSource() && srcVFS.rel() != canon {
 		outputRel := composeSrcDirOutputRel(instance.Path.rel(), srcVFS.rel())
-		out = Build(instance.Path.rel() + "/" + outputRel + suffix)
+		out = build(instance.Path.rel() + "/" + outputRel + suffix)
 		return out, input
 	}
 
@@ -241,7 +241,7 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 		outRel = instance.Path.rel() + "/" + srcRel + suffix
 	}
 
-	return Build(outRel), input
+	return build(outRel), input
 }
 
 // composeSrcDirOutputRel rebases the resolved source path (target, e.g. a

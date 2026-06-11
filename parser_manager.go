@@ -201,7 +201,7 @@ func (pm *IncludeParserManager) registerBuildParsedIncludes(out VFS, parsed []In
 	// (parsedIncludes gates on IsBuild), so a source-rooted registration would
 	// be silently unreachable.
 	if !out.isBuild() {
-		ThrowFmt("RegisterBuildParsedIncludes: source-rooted output %q", out.string())
+		throwFmt("RegisterBuildParsedIncludes: source-rooted output %q", out.string())
 	}
 
 	pm.buildParsed[out] = parsed

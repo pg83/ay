@@ -18,7 +18,7 @@ var ldScriptInputs = []VFS{
 	copyFsToolsVFS,
 }
 
-func EmitLD(
+func emitLD(
 	instance ModuleInstance,
 	binaryName string,
 	ccRefs []NodeRef,
@@ -56,31 +56,31 @@ func EmitLD(
 	emit Emitter,
 ) NodeRef {
 	if len(ccRefs) != len(ccPaths) {
-		ThrowFmt("EmitLD: ccRefs/ccPaths length mismatch (%d vs %d)", len(ccRefs), len(ccPaths))
+		throwFmt("EmitLD: ccRefs/ccPaths length mismatch (%d vs %d)", len(ccRefs), len(ccPaths))
 	}
 
 	if len(peerLDRefs) != len(peerLibPaths) {
-		ThrowFmt("EmitLD: peerLDRefs/peerLibPaths length mismatch (%d vs %d)", len(peerLDRefs), len(peerLibPaths))
+		throwFmt("EmitLD: peerLDRefs/peerLibPaths length mismatch (%d vs %d)", len(peerLDRefs), len(peerLibPaths))
 	}
 
 	if len(pluginRefs) != len(pluginPaths) {
-		ThrowFmt("EmitLD: pluginRefs/pluginPaths length mismatch (%d vs %d)", len(pluginRefs), len(pluginPaths))
+		throwFmt("EmitLD: pluginRefs/pluginPaths length mismatch (%d vs %d)", len(pluginRefs), len(pluginPaths))
 	}
 
 	if len(globalRefs) != len(globalPaths) {
-		ThrowFmt("EmitLD: globalRefs/globalPaths length mismatch (%d vs %d)", len(globalRefs), len(globalPaths))
+		throwFmt("EmitLD: globalRefs/globalPaths length mismatch (%d vs %d)", len(globalRefs), len(globalPaths))
 	}
 
 	if len(wholeArchiveRefs) != len(wholeArchivePaths) {
-		ThrowFmt("EmitLD: wholeArchiveRefs/wholeArchivePaths length mismatch (%d vs %d)", len(wholeArchiveRefs), len(wholeArchivePaths))
+		throwFmt("EmitLD: wholeArchiveRefs/wholeArchivePaths length mismatch (%d vs %d)", len(wholeArchiveRefs), len(wholeArchivePaths))
 	}
 
 	if len(objcopyRefs) != len(objcopyPaths) {
-		ThrowFmt("EmitLD: objcopyRefs/objcopyPaths length mismatch (%d vs %d)", len(objcopyRefs), len(objcopyPaths))
+		throwFmt("EmitLD: objcopyRefs/objcopyPaths length mismatch (%d vs %d)", len(objcopyRefs), len(objcopyPaths))
 	}
 
 	if len(dynamicRefs) != len(dynamicPaths) {
-		ThrowFmt("EmitLD: dynamicRefs/dynamicPaths length mismatch (%d vs %d)", len(dynamicRefs), len(dynamicPaths))
+		throwFmt("EmitLD: dynamicRefs/dynamicPaths length mismatch (%d vs %d)", len(dynamicRefs), len(dynamicPaths))
 	}
 
 	if binaryName == "" {
@@ -90,9 +90,9 @@ func EmitLD(
 	binaryDir := instance.Path.rel()
 
 	binPrefix := binaryDir + "/"
-	outputVFS := Build(binPrefix + binaryName)
-	vcsCVFS := Build(binPrefix + "__vcs_version__.c")
-	vcsOVFS := Build(binPrefix + "__vcs_version__.c" + instance.Platform.objectSuffix())
+	outputVFS := build(binPrefix + binaryName)
+	vcsCVFS := build(binPrefix + "__vcs_version__.c")
+	vcsOVFS := build(binPrefix + "__vcs_version__.c" + instance.Platform.objectSuffix())
 
 	vcsCPath := vcsCVFS.string()
 	vcsOPath := vcsOVFS.string()
@@ -126,7 +126,7 @@ func EmitLD(
 	inputTail = append(inputTail, ldSvnversionHVFS)
 
 	if exportsScript != nil {
-		inputTail = append(inputTail, Source(*exportsScript))
+		inputTail = append(inputTail, source(*exportsScript))
 	}
 
 	inputs = append(inputs, inputTail)
@@ -146,11 +146,11 @@ func EmitLD(
 	outputs := []VFS{outputVFS}
 
 	for _, p := range dynamicPaths {
-		outputs = append(outputs, Build(binaryDir+"/"+lastPathComponent(p.rel())))
+		outputs = append(outputs, build(binaryDir+"/"+lastPathComponent(p.rel())))
 	}
 
 	if wantsSplitDwarf {
-		outputs = append(outputs, Build(binPrefix+binaryName+".debug"))
+		outputs = append(outputs, build(binPrefix+binaryName+".debug"))
 	}
 
 	n := &Node{
@@ -173,12 +173,12 @@ func EmitLD(
 	return emit.emit(n)
 }
 
-func LDOutputPath(instance ModuleInstance, binaryName string) VFS {
+func lDOutputPath(instance ModuleInstance, binaryName string) VFS {
 	if binaryName == "" {
 		binaryName = lastPathComponent(instance.Path.rel())
 	}
 
-	return Build(instance.Path.rel() + "/" + binaryName)
+	return build(instance.Path.rel() + "/" + binaryName)
 }
 
 func ldModuleLang(instance ModuleInstance) ModuleLang {
@@ -410,7 +410,7 @@ func composeLDCmdLinkOrCopy(tc ModuleToolchain, modulePath string, dynamicPaths 
 		cmd = append(cmd, (p).str())
 	}
 
-	cmd = append(cmd, (Build(modulePath)).str())
+	cmd = append(cmd, (build(modulePath)).str())
 
 	return cmd
 }
@@ -440,7 +440,7 @@ func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, plugi
 
 	for _, p := range peerLibPaths {
 		if !deduper.add(p) {
-			ThrowFmt("composeLDInputs: %s: duplicate peer lib path %s", modulePath, p.rel())
+			throwFmt("composeLDInputs: %s: duplicate peer lib path %s", modulePath, p.rel())
 		}
 	}
 
@@ -500,13 +500,13 @@ func emitOwnLDPlugins(ctx *GenCtx, instance ModuleInstance, plugins []string, tc
 	}
 
 	for _, name := range plugins {
-		src := Source(instance.Path.rel() + "/" + name)
-		dst := Build(instance.Path.rel() + "/" + name + ".pyplugin")
+		src := source(instance.Path.rel() + "/" + name)
+		dst := build(instance.Path.rel() + "/" + name + ".pyplugin")
 
 		ref, ok := ctx.ldPluginCPCache[dst]
 
 		if !ok {
-			ref = EmitCP(instance, src, dst, tc, ctx.scripts, ctx.emit)
+			ref = emitCP(instance, src, dst, tc, ctx.scripts, ctx.emit)
 			ctx.ldPluginCPCache[dst] = ref
 		}
 

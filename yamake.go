@@ -420,8 +420,8 @@ func (e *ParseError) Error() string {
 	return e.error()
 }
 
-func ParseFile(fs FS, path string) (mf *MakeFile, err error) {
-	exc := Try(func() {
+func parseFile(fs FS, path string) (mf *MakeFile, err error) {
+	exc := try(func() {
 		data := fs.readAbs(path)
 
 		abs, absErr := filepath.Abs(path)
@@ -430,7 +430,7 @@ func ParseFile(fs FS, path string) (mf *MakeFile, err error) {
 			abs = path
 		}
 
-		mf = Throw2(Parse(fs, abs, data))
+		mf = throw2(parse(fs, abs, data))
 	})
 
 	if exc != nil {
@@ -494,7 +494,7 @@ func (l *Lexer) throwParse(line, col int, format string, args ...any) {
 		Message: fmt.Sprintf(format, args...),
 	}
 
-	New(pe).throw()
+	newException(pe).throw()
 }
 
 func (l *Lexer) advance() byte {
@@ -762,8 +762,8 @@ func (l *Lexer) readNumberOrWord(startLine, startCol int) Token {
 	return Token{kind: tokInt, val: string(l.src[start:l.pos]), line: startLine, col: startCol}
 }
 
-func Parse(fs FS, name string, src []byte) (mf *MakeFile, err error) {
-	exc := Try(func() {
+func parse(fs FS, name string, src []byte) (mf *MakeFile, err error) {
+	exc := try(func() {
 		mf = parseInternal(fs, name, src)
 	})
 
@@ -1314,7 +1314,7 @@ func parseResource(args []string, nameTok Token) *ResourceStmt {
 	if len(rest)%2 != 0 {
 		p := &Parser{lex: &Lexer{}}
 		_ = p
-		ThrowFmt("RESOURCE at line %d: argument count after DONT_PARSE/DONT_COMPRESS strip must be even (got %d)", nameTok.line, len(rest))
+		throwFmt("RESOURCE at line %d: argument count after DONT_PARSE/DONT_COMPRESS strip must be even (got %d)", nameTok.line, len(rest))
 	}
 
 	pairs := make([]ResourcePair, 0, len(rest)/2)

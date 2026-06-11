@@ -348,7 +348,7 @@ func marshalCompact(v any) []byte {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
-	Throw(enc.Encode(v))
+	throw(enc.Encode(v))
 
 	b := buf.Bytes()
 
@@ -360,9 +360,9 @@ func marshalCompact(v any) []byte {
 }
 
 func streamGraphFanout[R any](path string, workers int, process func(map[string]any) R, collect func(R)) {
-	f := Throw2(os.Open(path))
+	f := throw2(os.Open(path))
 
-	defer func() { Throw(f.Close()) }()
+	defer func() { throw(f.Close()) }()
 
 	dec := json.NewDecoder(bufio.NewReaderSize(f, 1<<20))
 	dec.UseNumber()
@@ -397,7 +397,7 @@ func streamGraphFanout[R any](path string, workers int, process func(map[string]
 
 	for dec.More() {
 		node := map[string]any{}
-		Throw(dec.Decode(&node))
+		throw(dec.Decode(&node))
 		nodes <- node
 	}
 
@@ -408,9 +408,9 @@ func streamGraphFanout[R any](path string, workers int, process func(map[string]
 }
 
 func streamJSONL(path string, fn func(map[string]any)) {
-	f := Throw2(os.Open(path))
+	f := throw2(os.Open(path))
 
-	defer func() { Throw(f.Close()) }()
+	defer func() { throw(f.Close()) }()
 
 	r := bufio.NewReaderSize(f, 1<<20)
 
@@ -419,7 +419,7 @@ func streamJSONL(path string, fn func(map[string]any)) {
 
 		if len(line) > 0 {
 			n := map[string]any{}
-			Throw(json.Unmarshal([]byte(line), &n))
+			throw(json.Unmarshal([]byte(line), &n))
 			fn(n)
 		}
 
@@ -427,7 +427,7 @@ func streamJSONL(path string, fn func(map[string]any)) {
 			break
 		}
 
-		Throw(err)
+		throw(err)
 	}
 }
 
@@ -438,32 +438,32 @@ func nodeKVP(n map[string]any) string {
 }
 
 func seekToGraph(dec *json.Decoder, path string) {
-	tok := Throw2(dec.Token())
+	tok := throw2(dec.Token())
 
 	if d, ok := tok.(json.Delim); !ok || d != '{' {
-		ThrowFmt("dump: %s: expected top-level JSON object", path)
+		throwFmt("dump: %s: expected top-level JSON object", path)
 	}
 
 	for dec.More() {
-		key, ok := Throw2(dec.Token()).(string)
+		key, ok := throw2(dec.Token()).(string)
 
 		if !ok {
-			ThrowFmt("dump: %s: expected object key", path)
+			throwFmt("dump: %s: expected object key", path)
 		}
 
 		if key == "graph" {
-			open := Throw2(dec.Token())
+			open := throw2(dec.Token())
 
 			if d, ok := open.(json.Delim); !ok || d != '[' {
-				ThrowFmt("dump: %s: graph is not an array", path)
+				throwFmt("dump: %s: graph is not an array", path)
 			}
 
 			return
 		}
 
 		var skip json.RawMessage
-		Throw(dec.Decode(&skip))
+		throw(dec.Decode(&skip))
 	}
 
-	ThrowFmt("dump: %s: no \"graph\" key found", path)
+	throwFmt("dump: %s: no \"graph\" key found", path)
 }

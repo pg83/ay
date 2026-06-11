@@ -39,7 +39,7 @@ func TestParseSysInclYAML_Synthetic(t *testing.T) {
 		t.Errorf("filter should not match contrib/libs/other/bar.c")
 	}
 
-	if got := r.Mappings[internStr("bar.h")]; len(got) != 1 || got[0] != Source("contrib/libs/foo/bar.h") {
+	if got := r.Mappings[internStr("bar.h")]; len(got) != 1 || got[0] != source("contrib/libs/foo/bar.h") {
 		t.Errorf("bar.h: got %v, want [contrib/libs/foo/bar.h]", got)
 	}
 

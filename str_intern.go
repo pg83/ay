@@ -19,7 +19,7 @@ var internTable = struct {
 	los      []uint64       // low 64 bits of xxh3-128(s), indexed by STR; also the per-path hash mixed into node UIDs
 	strs     []string
 }{
-	ids:      NewIntMap[STR](1 << 16),
+	ids:      newIntMap[STR](1 << 16),
 	overflow: make(map[string]STR),
 	los:      make([]uint64, 1, 1<<16),
 	strs:     make([]string, 1, 1<<16),

@@ -64,7 +64,7 @@ func openEINTR(path string) int {
 		}
 
 		if err != nil {
-			ThrowFmt("open %s: %v", path, err)
+			throwFmt("open %s: %v", path, err)
 		}
 
 		return fd
@@ -79,7 +79,7 @@ func readEINTR(fd int, p []byte) int {
 			continue
 		}
 
-		Throw(err)
+		throw(err)
 
 		return n
 	}

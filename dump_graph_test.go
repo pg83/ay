@@ -7,38 +7,38 @@ import (
 )
 
 func TestFinalizeDumpGraph_StripsOnlyTicketScaffolding(t *testing.T) {
-	emit := NewBufferedEmitter()
+	emit := newBufferedEmitter()
 
 	fetchUsed := emit.emit(&Node{Platform: testTargetP,
 		KV:      KV{P: pkFETCH},
-		Outputs: []VFS{Intern("$(B)/resources/YMAKE_PYTHON3")},
+		Outputs: []VFS{intern("$(B)/resources/YMAKE_PYTHON3")},
 	})
 	emit.emit(&Node{Platform: testTargetP,
 		KV:      KV{P: pkFETCH},
-		Outputs: []VFS{Intern("$(B)/resources/CLANG")},
+		Outputs: []VFS{intern("$(B)/resources/CLANG")},
 	})
 	emit.emit(&Node{Platform: testTargetP,
 		KV:      KV{P: pkFETCH},
-		Outputs: []VFS{Intern("$(B)/tool-cache/CLANG")},
+		Outputs: []VFS{intern("$(B)/tool-cache/CLANG")},
 	})
 	emit.emit(&Node{Platform: testTargetP,
 		KV:               KV{P: pkPR},
-		Outputs:          []VFS{Intern("$(B)/contrib/libs/llvm16/include/llvm/IR/Attributes.inc")},
+		Outputs:          []VFS{intern("$(B)/contrib/libs/llvm16/include/llvm/IR/Attributes.inc")},
 		TargetProperties: TargetProperties{ModuleDir: "contrib/libs/llvm16/include"},
 	})
 	llvmReferenced := emit.emit(&Node{Platform: testTargetP,
 		KV:               KV{P: pkPR},
-		Outputs:          []VFS{Intern("$(B)/contrib/libs/llvm16/include/llvm/IR/IntrinsicsX86.h")},
+		Outputs:          []VFS{intern("$(B)/contrib/libs/llvm16/include/llvm/IR/IntrinsicsX86.h")},
 		TargetProperties: TargetProperties{ModuleDir: "contrib/libs/llvm16/include"},
 	})
 	emit.emit(&Node{Platform: testTargetP,
 		KV:               KV{P: pkPR},
-		Outputs:          []VFS{Intern("$(B)/contrib/libs/llvm16/include/generated.cpp")},
+		Outputs:          []VFS{intern("$(B)/contrib/libs/llvm16/include/generated.cpp")},
 		TargetProperties: TargetProperties{ModuleDir: "contrib/libs/llvm16/include"},
 	})
 	emit.emit(&Node{Platform: testTargetP,
 		KV:               KV{P: pkPR},
-		Outputs:          []VFS{Intern("$(B)/other/module/generated.inc")},
+		Outputs:          []VFS{intern("$(B)/other/module/generated.inc")},
 		TargetProperties: TargetProperties{ModuleDir: "other/module"},
 	})
 	consumer := emit.emit(&Node{Platform: testTargetP,
@@ -46,13 +46,13 @@ func TestFinalizeDumpGraph_StripsOnlyTicketScaffolding(t *testing.T) {
 		DepRefs:        []NodeRef{fetchUsed, llvmReferenced},
 		ForeignDepRefs: []NodeRef{fetchUsed},
 		KV:             KV{P: pkCC},
-		Outputs:        []VFS{Intern("$(B)/obj/consumer.o")},
+		Outputs:        []VFS{intern("$(B)/obj/consumer.o")},
 	})
 	root := emit.emit(&Node{Platform: testTargetP,
 		Cmds:    []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"ld"})}}},
 		DepRefs: []NodeRef{consumer},
 		KV:      KV{P: pkLD},
-		Outputs: []VFS{Intern("$(B)/bin/root")},
+		Outputs: []VFS{intern("$(B)/bin/root")},
 	})
 	emit.result(root)
 
@@ -101,12 +101,12 @@ func TestFinalizeDumpGraph_StripsOnlyTicketScaffolding(t *testing.T) {
 }
 
 func TestFinalizeDumpGraph_KeepsMatchingResultNode(t *testing.T) {
-	emit := NewBufferedEmitter()
+	emit := newBufferedEmitter()
 	expected := "contrib/libs/llvm16/include/llvm/IR/Attributes.inc"
 
 	root := emit.emit(&Node{Platform: testTargetP,
 		KV:               KV{P: pkPR},
-		Outputs:          []VFS{Build(expected)},
+		Outputs:          []VFS{build(expected)},
 		TargetProperties: TargetProperties{ModuleDir: "contrib/libs/llvm16/include"},
 	})
 	emit.result(root)
@@ -120,25 +120,25 @@ func TestFinalizeDumpGraph_KeepsMatchingResultNode(t *testing.T) {
 }
 
 func TestFinalizeDumpGraph_PrunesTransitiveStandaloneLLVM(t *testing.T) {
-	emit := NewBufferedEmitter()
+	emit := newBufferedEmitter()
 
 	leaf := "contrib/libs/llvm16/include/llvm/IR/Leaf.inc"
 	parent := "contrib/libs/llvm16/include/llvm/IR/Parent.inc"
 
 	leafRef := emit.emit(&Node{Platform: testTargetP,
 		KV:               KV{P: pkPR},
-		Outputs:          []VFS{Build(leaf)},
+		Outputs:          []VFS{build(leaf)},
 		TargetProperties: TargetProperties{ModuleDir: "contrib/libs/llvm16/include"},
 	})
 	emit.emit(&Node{Platform: testTargetP,
 		DepRefs:          []NodeRef{leafRef},
 		KV:               KV{P: pkPR},
-		Outputs:          []VFS{Build(parent)},
+		Outputs:          []VFS{build(parent)},
 		TargetProperties: TargetProperties{ModuleDir: "contrib/libs/llvm16/include"},
 	})
 	root := emit.emit(&Node{Platform: testTargetP,
 		KV:      KV{P: pkLD},
-		Outputs: []VFS{Intern("$(B)/bin/root")},
+		Outputs: []VFS{intern("$(B)/bin/root")},
 	})
 	emit.result(root)
 
@@ -165,19 +165,19 @@ func TestFinalizeDumpGraph_PreservesFinalizeValidation(t *testing.T) {
 			name:   "BogusDepRef",
 			needle: "out-of-range NodeRef",
 			build: func() *BufferedEmitter {
-				emit := NewBufferedEmitter()
+				emit := newBufferedEmitter()
 				emit.emit(&Node{Platform: testTargetP,
 					KV:      KV{P: pkFETCH},
-					Outputs: []VFS{Intern("$(B)/resources/CLANG")},
+					Outputs: []VFS{intern("$(B)/resources/CLANG")},
 				})
 				leaf := emit.emit(&Node{Platform: testTargetP,
 					KV:      KV{P: pkPR},
-					Outputs: []VFS{Intern("$(B)/obj/leaf.o")},
+					Outputs: []VFS{intern("$(B)/obj/leaf.o")},
 				})
 				root := emit.emit(&Node{Platform: testTargetP,
 					DepRefs: []NodeRef{leaf, NodeRef(99)},
 					KV:      KV{P: pkLD},
-					Outputs: []VFS{Intern("$(B)/bin/root")},
+					Outputs: []VFS{intern("$(B)/bin/root")},
 				})
 				emit.result(root)
 
@@ -188,14 +188,14 @@ func TestFinalizeDumpGraph_PreservesFinalizeValidation(t *testing.T) {
 			name:   "BogusResultRef",
 			needle: "out-of-range NodeRef",
 			build: func() *BufferedEmitter {
-				emit := NewBufferedEmitter()
+				emit := newBufferedEmitter()
 				emit.emit(&Node{Platform: testTargetP,
 					KV:      KV{P: pkFETCH},
-					Outputs: []VFS{Intern("$(B)/resources/CLANG")},
+					Outputs: []VFS{intern("$(B)/resources/CLANG")},
 				})
 				root := emit.emit(&Node{Platform: testTargetP,
 					KV:      KV{P: pkLD},
-					Outputs: []VFS{Intern("$(B)/bin/root")},
+					Outputs: []VFS{intern("$(B)/bin/root")},
 				})
 				emit.result(root)
 				emit.result(NodeRef(99))
@@ -228,7 +228,7 @@ func TestFinalizeDumpGraph_PreservesFinalizeValidation(t *testing.T) {
 }
 
 func finalizeDumpGraphExc(e *BufferedEmitter) (g *Graph, exc *Exception) {
-	exc = Try(func() {
+	exc = try(func() {
 		g = finalizeDumpGraph(e)
 	})
 

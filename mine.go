@@ -46,7 +46,7 @@ func readYaConfSection(fs FS, rel, wantSection string) map[string]string {
 	var root map[string]any
 
 	if _, err := toml.Decode(string(fs.read(rel)), &root); err != nil {
-		ThrowFmt("ya.conf %s: %v", rel, err)
+		throwFmt("ya.conf %s: %v", rel, err)
 	}
 
 	return yaConfStringTable(root[wantSection])
@@ -114,5 +114,5 @@ func resolvePlatform(s string) (OS, ISA) {
 		return hostOS(), hostISA()
 	}
 
-	return ParsePlatformID(s)
+	return parsePlatformID(s)
 }

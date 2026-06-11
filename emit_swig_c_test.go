@@ -57,8 +57,8 @@ func TestCollectSwigInducedIncludes_DedupsAcrossClosure(t *testing.T) {
 	ctx := &GenCtx{fs: fs, parsers: newIncludeParserManagerFS(fs, newSharedParseCache())}
 	// The closure files, hand-listed: collectSwigInducedIncludes runs after the
 	// walk has parsed them (here the parse-cache warms on first read).
-	closure := []VFS{Intern("$(S)/mod/local.i"), Intern("$(S)/mod/nested.i")}
-	got := collectSwigInducedIncludes(ctx, Intern("$(S)/mod/src.swg"), closure)
+	closure := []VFS{intern("$(S)/mod/local.i"), intern("$(S)/mod/nested.i")}
+	got := collectSwigInducedIncludes(ctx, intern("$(S)/mod/src.swg"), closure)
 	want := []IncludeDirective{
 		{kind: includeSystem, target: internStr("Python.h")},
 		{kind: includeQuoted, target: internStr("archive.h")},

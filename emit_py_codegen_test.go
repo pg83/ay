@@ -3,7 +3,7 @@ package main
 import "testing"
 
 func TestEmitPyRegister_TargetPlatformCacheWinsOverHostFirstVisit(t *testing.T) {
-	emit := NewBufferedEmitter()
+	emit := newBufferedEmitter()
 	ctx := &GenCtx{
 		emit:              emit,
 		host:              testHostP,
@@ -12,7 +12,7 @@ func TestEmitPyRegister_TargetPlatformCacheWinsOverHostFirstVisit(t *testing.T) 
 	}
 	d := &ModuleData{pyRegister: []string{"_sqlite3"}}
 	hostInst := ModuleInstance{
-		Path:     Source("contrib/tools/python3/Modules/_sqlite"),
+		Path:     source("contrib/tools/python3/Modules/_sqlite"),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testHostP,

@@ -41,7 +41,7 @@ RECURSE_FOR_TESTS(
 `
 
 func TestParseArchiverYaMake(t *testing.T) {
-	mf, err := Parse(testParserFS, "tools/archiver/ya.make", []byte(archiverYaMake))
+	mf, err := parse(testParserFS, "tools/archiver/ya.make", []byte(archiverYaMake))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestParseArchiverYaMake(t *testing.T) {
 }
 
 func TestParseLibraryArchiveYaMake(t *testing.T) {
-	mf, err := Parse(testParserFS, "library/cpp/archive/ya.make", []byte(libraryArchiveYaMake))
+	mf, err := parse(testParserFS, "library/cpp/archive/ya.make", []byte(libraryArchiveYaMake))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestUnknownMacro(t *testing.T) {
 	// with its args. (A name outside the closed TOK set now fails fast at parse —
 	// see TestUnknownMacroNameFailsFast.)
 	src := []byte("NO_LINT(foo bar)\n")
-	mf, err := Parse(testParserFS, "test.input", src)
+	mf, err := parse(testParserFS, "test.input", src)
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -147,14 +147,14 @@ func TestUnknownMacro(t *testing.T) {
 func TestUnknownMacroNameFailsFast(t *testing.T) {
 	// A macro name outside the closed TOK set is a parser/corpus gap and must
 	// fail fast (internTok), rather than silently parsing to an UnknownStmt.
-	if _, err := Parse(testParserFS, "test.input", []byte("FROBNICATE(foo bar)\n")); err == nil {
+	if _, err := parse(testParserFS, "test.input", []byte("FROBNICATE(foo bar)\n")); err == nil {
 		t.Fatal("Parse accepted an unknown macro name; want fail-fast error")
 	}
 }
 
 func TestCommentHandling(t *testing.T) {
 	src := []byte("# this is a comment\nPROGRAM()\n")
-	mf, err := Parse(testParserFS, "test.input", src)
+	mf, err := parse(testParserFS, "test.input", src)
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestCommentHandling(t *testing.T) {
 
 func TestMultilineMacro(t *testing.T) {
 	src := []byte("PEERDIR(\n  a/b\n  c/d\n)\n")
-	mf, err := Parse(testParserFS, "test.input", src)
+	mf, err := parse(testParserFS, "test.input", src)
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestSetQuotedAndUnquoted(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			mf, err := Parse(testParserFS, "test.input", []byte(tc.src))
+			mf, err := parse(testParserFS, "test.input", []byte(tc.src))
 			if err != nil {
 				t.Fatalf("Parse(%q) failed: %v", tc.src, err)
 			}
@@ -240,7 +240,7 @@ func TestErrorCases(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := Parse(testParserFS, "test.input", []byte(tc.src))
+			_, err := parse(testParserFS, "test.input", []byte(tc.src))
 			if err == nil {
 				t.Fatalf("Parse(%q) returned nil error, want *ParseError", tc.src)
 			}
@@ -259,7 +259,7 @@ func TestErrorCases(t *testing.T) {
 }
 
 func TestSetAllowsEmptyValue(t *testing.T) {
-	mf, err := Parse(testParserFS, "test.input", []byte(`SET(only_one_arg)`))
+	mf, err := parse(testParserFS, "test.input", []byte(`SET(only_one_arg)`))
 	if err != nil {
 		t.Fatalf("Parse returned %v, want success", err)
 	}
@@ -291,7 +291,7 @@ func TestLineEndings(t *testing.T) {
 	var got [3][]int
 	for i, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			mf, err := Parse(testParserFS, "test.input", []byte(tc.src))
+			mf, err := parse(testParserFS, "test.input", []byte(tc.src))
 			if err != nil {
 				t.Fatalf("Parse failed: %v", err)
 			}
@@ -335,7 +335,7 @@ func TestStringRejectsNewline(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := Parse(testParserFS, "test.input", []byte(tc.src))
+			_, err := parse(testParserFS, "test.input", []byte(tc.src))
 			if err == nil {
 				t.Fatalf("Parse returned nil error, want *ParseError")
 			}
@@ -358,17 +358,17 @@ func TestLowercaseAndMixedCaseMacro(t *testing.T) {
 	// The lexer reads lowercase/mixed-case macro identifiers, but such names are
 	// outside the closed TOK set, so the parser fails fast at internTok.
 	t.Run("lowercase", func(t *testing.T) {
-		if _, err := Parse(testParserFS, "test.input", []byte("lowercase_macro()\n")); err == nil {
+		if _, err := parse(testParserFS, "test.input", []byte("lowercase_macro()\n")); err == nil {
 			t.Fatal("Parse accepted lowercase non-TOK macro; want fail-fast error")
 		}
 	})
 	t.Run("mixed_case_with_args", func(t *testing.T) {
-		if _, err := Parse(testParserFS, "test.input", []byte(`Mixed_Case(arg1 "arg2")`)); err == nil {
+		if _, err := parse(testParserFS, "test.input", []byte(`Mixed_Case(arg1 "arg2")`)); err == nil {
 			t.Fatal("Parse accepted mixed-case non-TOK macro; want fail-fast error")
 		}
 	})
 	t.Run("garbage_still_errors", func(t *testing.T) {
-		_, err := Parse(testParserFS, "test.input", []byte("@@@()"))
+		_, err := parse(testParserFS, "test.input", []byte("@@@()"))
 		if err == nil {
 			t.Fatalf("Parse(@@@()): want error, got nil")
 		}
@@ -402,7 +402,7 @@ func TestIsWordByteBoundary(t *testing.T) {
 
 func TestMidWordHashIsLiteral(t *testing.T) {
 	src := []byte("PEERDIR(a/b#x  # this IS a comment\n)\n")
-	mf, err := Parse(testParserFS, "test.input", src)
+	mf, err := parse(testParserFS, "test.input", src)
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -421,7 +421,7 @@ func TestMidWordHashIsLiteral(t *testing.T) {
 
 func TestStringHasNoEscapeProcessing(t *testing.T) {
 	src := []byte(`SET(N "ab\X")`)
-	mf, err := Parse(testParserFS, "test.input", src)
+	mf, err := parse(testParserFS, "test.input", src)
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -449,7 +449,7 @@ ELSE()
 ENDIF()
 `)
 
-	mf, err := Parse(testParserFS, "test.input", src)
+	mf, err := parse(testParserFS, "test.input", src)
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -502,7 +502,7 @@ ELSE()
 ENDIF()
 `)
 
-	mf, err := Parse(testParserFS, "test.input", src)
+	mf, err := parse(testParserFS, "test.input", src)
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -548,7 +548,7 @@ func TestParseInclude_RelativePath(t *testing.T) {
 		"sub.inc": "SRCS(x.cpp)\n",
 	})
 
-	mf, err := ParseFile(fs, fs.sourceRoot()+"/ya.make")
+	mf, err := parseFile(fs, fs.sourceRoot()+"/ya.make")
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
 	}
@@ -574,7 +574,7 @@ func TestParseInclude_RelativePath(t *testing.T) {
 }
 
 func TestParseJoinSrcs(t *testing.T) {
-	mf, err := Parse(testParserFS, "test.input", []byte("JOIN_SRCS(allfoo a.cpp b.cpp)\n"))
+	mf, err := parse(testParserFS, "test.input", []byte("JOIN_SRCS(allfoo a.cpp b.cpp)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -594,7 +594,7 @@ func TestParseJoinSrcs(t *testing.T) {
 }
 
 func TestParseJoinSrcs_RejectsEmpty(t *testing.T) {
-	_, err := Parse(testParserFS, "test.input", []byte("JOIN_SRCS()\n"))
+	_, err := parse(testParserFS, "test.input", []byte("JOIN_SRCS()\n"))
 	if err == nil {
 		t.Fatal("Parse returned nil error, want *ParseError")
 	}
@@ -608,7 +608,7 @@ func TestParseJoinSrcs_RejectsEmpty(t *testing.T) {
 }
 
 func TestParseAddIncl_AllGlobal(t *testing.T) {
-	mf, err := Parse(testParserFS, "test.input", []byte("ADDINCL(GLOBAL include1 GLOBAL include2)\n"))
+	mf, err := parse(testParserFS, "test.input", []byte("ADDINCL(GLOBAL include1 GLOBAL include2)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -632,7 +632,7 @@ func TestParseAddIncl_AllGlobal(t *testing.T) {
 }
 
 func TestParseAddIncl_NoGlobal(t *testing.T) {
-	mf, err := Parse(testParserFS, "test.input", []byte("ADDINCL(include1)\n"))
+	mf, err := parse(testParserFS, "test.input", []byte("ADDINCL(include1)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -653,7 +653,7 @@ func TestParseAddIncl_NoGlobal(t *testing.T) {
 
 func TestParseAddIncl_Mixed(t *testing.T) {
 	src := "ADDINCL(\n    GLOBAL libcxx/include\n    libcxx/src\n)\n"
-	mf, err := Parse(testParserFS, "test.input", []byte(src))
+	mf, err := parse(testParserFS, "test.input", []byte(src))
 
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
@@ -678,7 +678,7 @@ func TestParseAddIncl_Mixed(t *testing.T) {
 }
 
 func TestParseAddIncl_ForKindDropped(t *testing.T) {
-	mf, err := Parse(testParserFS, "test.input", []byte("ADDINCL(FOR proto contrib/libs/protobuf/src)\n"))
+	mf, err := parse(testParserFS, "test.input", []byte("ADDINCL(FOR proto contrib/libs/protobuf/src)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -702,7 +702,7 @@ func TestParseAddIncl_GlobalForProtoRouted(t *testing.T) {
 	// both). The parser must split the FOR proto path into its own bucket
 	// so it does not double-show up in GlobalPaths (C++ ADDINCL).
 	src := "ADDINCL(\n    GLOBAL contrib/libs/protobuf/src\n    GLOBAL FOR\n    proto\n    contrib/libs/protobuf/src\n)\n"
-	mf, err := Parse(testParserFS, "test.input", []byte(src))
+	mf, err := parse(testParserFS, "test.input", []byte(src))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -723,7 +723,7 @@ func TestParseAddIncl_GlobalForProtoRouted(t *testing.T) {
 }
 
 func TestParseAddIncl_ForAsmRouted(t *testing.T) {
-	mf, err := Parse(testParserFS, "test.input",
+	mf, err := parse(testParserFS, "test.input",
 		[]byte("ADDINCL(FOR asm yt/yt/core/misc/isa_crc64/include)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
@@ -748,7 +748,7 @@ func TestParseAddIncl_ForAsmRouted(t *testing.T) {
 
 func TestParseAddIncl_GlobalForAsmRouted(t *testing.T) {
 	src := "ADDINCL(\n    GLOBAL FOR\n    asm\n    yt/yt/core/misc/isa_crc64/include\n)\n"
-	mf, err := Parse(testParserFS, "test.input", []byte(src))
+	mf, err := parse(testParserFS, "test.input", []byte(src))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -768,7 +768,7 @@ func TestParseAddIncl_GlobalForAsmRouted(t *testing.T) {
 }
 
 func TestParseCFlags_BackslashQuoteUnescaped(t *testing.T) {
-	mf, err := Parse(testParserFS, "test.input", []byte("CFLAGS(-DENGINESDIR=\\\"/usr/local/lib/engines-1.1\\\")\n"))
+	mf, err := parse(testParserFS, "test.input", []byte("CFLAGS(-DENGINESDIR=\\\"/usr/local/lib/engines-1.1\\\")\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -783,7 +783,7 @@ func TestParseCFlags_BackslashQuoteUnescaped(t *testing.T) {
 }
 
 func TestParseCFlags_Global(t *testing.T) {
-	mf, err := Parse(testParserFS, "test.input", []byte("CFLAGS(GLOBAL -O2 -Wall)\n"))
+	mf, err := parse(testParserFS, "test.input", []byte("CFLAGS(GLOBAL -O2 -Wall)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -800,7 +800,7 @@ func TestParseCFlags_Global(t *testing.T) {
 }
 
 func TestParseCFlags_NoModifier(t *testing.T) {
-	mf, err := Parse(testParserFS, "test.input", []byte("CFLAGS(-O2)\n"))
+	mf, err := parse(testParserFS, "test.input", []byte("CFLAGS(-O2)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -817,7 +817,7 @@ func TestParseCFlags_NoModifier(t *testing.T) {
 }
 
 func TestParseCFlags_PerPathGlobal(t *testing.T) {
-	mf, err := Parse(testParserFS, "test.input", []byte("CFLAGS(GLOBAL -DA -DB GLOBAL -DC)\n"))
+	mf, err := parse(testParserFS, "test.input", []byte("CFLAGS(GLOBAL -DA -DB GLOBAL -DC)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -834,7 +834,7 @@ func TestParseCFlags_PerPathGlobal(t *testing.T) {
 }
 
 func TestParseCXXFlags_Global(t *testing.T) {
-	mf, err := Parse(testParserFS, "test.input", []byte("CXXFLAGS(GLOBAL -nostdinc++)\n"))
+	mf, err := parse(testParserFS, "test.input", []byte("CXXFLAGS(GLOBAL -nostdinc++)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -851,7 +851,7 @@ func TestParseCXXFlags_Global(t *testing.T) {
 }
 
 func TestParseCONLYFlags_Own(t *testing.T) {
-	mf, err := Parse(testParserFS, "test.input", []byte("CONLYFLAGS(-Wno-pointer-sign)\n"))
+	mf, err := parse(testParserFS, "test.input", []byte("CONLYFLAGS(-Wno-pointer-sign)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -868,7 +868,7 @@ func TestParseCONLYFlags_Own(t *testing.T) {
 }
 
 func TestParseLDFlags(t *testing.T) {
-	mf, err := Parse(testParserFS, "test.input", []byte("LDFLAGS(-lpthread -lm)\n"))
+	mf, err := parse(testParserFS, "test.input", []byte("LDFLAGS(-lpthread -lm)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -882,7 +882,7 @@ func TestParseLDFlags(t *testing.T) {
 }
 
 func TestParseSrcDir(t *testing.T) {
-	mf, err := Parse(testParserFS, "test.input", []byte("SRCDIR(./xx)\n"))
+	mf, err := parse(testParserFS, "test.input", []byte("SRCDIR(./xx)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -896,7 +896,7 @@ func TestParseSrcDir(t *testing.T) {
 }
 
 func TestParseGlobalSrcs(t *testing.T) {
-	mf, err := Parse(testParserFS, "test.input", []byte("GLOBAL_SRCS(a.cpp b.cpp c.cpp)\n"))
+	mf, err := parse(testParserFS, "test.input", []byte("GLOBAL_SRCS(a.cpp b.cpp c.cpp)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -912,7 +912,7 @@ func TestParseGlobalSrcs(t *testing.T) {
 func TestParseInclude_RejectsSelfCycle(t *testing.T) {
 	fs := newMemFS(map[string]string{"a.inc": "INCLUDE(a.inc)\n"})
 
-	_, err := ParseFile(fs, fs.sourceRoot()+"/a.inc")
+	_, err := parseFile(fs, fs.sourceRoot()+"/a.inc")
 
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -929,7 +929,7 @@ func TestParseInclude_RejectsTransitiveCycle(t *testing.T) {
 		"b.inc": "INCLUDE(a.inc)\n",
 	})
 
-	_, err := ParseFile(fs, fs.sourceRoot()+"/a.inc")
+	_, err := parseFile(fs, fs.sourceRoot()+"/a.inc")
 
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -946,7 +946,7 @@ func TestParseIf_StringEquality(t *testing.T) {
 ENDIF()
 `)
 
-	mf, err := Parse(testParserFS, "test.input", src)
+	mf, err := parse(testParserFS, "test.input", src)
 
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
@@ -983,7 +983,7 @@ func TestParseIf_NumericLessThan(t *testing.T) {
 ENDIF()
 `)
 
-	mf, err := Parse(testParserFS, "test.input", src)
+	mf, err := parse(testParserFS, "test.input", src)
 
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
@@ -1020,7 +1020,7 @@ func TestParseIf_NotEqualDesugars(t *testing.T) {
 ENDIF()
 `)
 
-	mf, err := Parse(testParserFS, "test.input", src)
+	mf, err := parse(testParserFS, "test.input", src)
 
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
@@ -1054,7 +1054,7 @@ ENDIF()
 }
 
 func TestParseIf_ChainedComparisonRejected(t *testing.T) {
-	_, err := Parse(testParserFS, "test.input", []byte("IF (A == B == C)\nENDIF()\n"))
+	_, err := parse(testParserFS, "test.input", []byte("IF (A == B == C)\nENDIF()\n"))
 
 	if err == nil {
 		t.Fatal("expected error for chained comparison, got nil")
@@ -1071,7 +1071,7 @@ func TestParseIf_ComparisonInAndOr(t *testing.T) {
 ENDIF()
 `)
 
-	mf, err := Parse(testParserFS, "test.input", src)
+	mf, err := parse(testParserFS, "test.input", src)
 
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
@@ -1095,7 +1095,7 @@ ENDIF()
 }
 
 func TestParseIf_VersionLiteralStillWord(t *testing.T) {
-	mf, err := Parse(testParserFS, "test.input", []byte("VERSION(2025-06-20)\n"))
+	mf, err := parse(testParserFS, "test.input", []byte("VERSION(2025-06-20)\n"))
 
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
@@ -1117,7 +1117,7 @@ func TestParseIf_VersionLiteralStillWord(t *testing.T) {
 }
 
 func TestParseIf_PureIntInMacroArg(t *testing.T) {
-	mf, err := Parse(testParserFS, "test.input", []byte("IDE_FOLDER(42)\n"))
+	mf, err := parse(testParserFS, "test.input", []byte("IDE_FOLDER(42)\n"))
 
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
@@ -1177,7 +1177,7 @@ func TestParseYqlUdfModuleStmts(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			mf, err := Parse(testParserFS, "test.input", []byte(tc.src))
+			mf, err := parse(testParserFS, "test.input", []byte(tc.src))
 			if err != nil {
 				t.Fatalf("Parse failed: %v", err)
 			}
@@ -1200,7 +1200,7 @@ func TestParseYqlUdfModuleStmts(t *testing.T) {
 }
 
 func TestParseSetAllowsEmptyValue(t *testing.T) {
-	mf, err := Parse(testParserFS, "test.input", []byte("SET(DISABLE_HYPERSCAN_BUILD)\n"))
+	mf, err := parse(testParserFS, "test.input", []byte("SET(DISABLE_HYPERSCAN_BUILD)\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -1227,7 +1227,7 @@ ELSE(OS_LINUX)
 SRCS(b.cpp)
 ENDIF(OS_LINUX)
 `)
-	mf, err := Parse(testParserFS, "test.input", src)
+	mf, err := parse(testParserFS, "test.input", src)
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -1248,7 +1248,7 @@ func TestParseRunPy3ProgramAsRunProgramStmt(t *testing.T) {
     OUT output.txt
 )
 `)
-	mf, err := Parse(testParserFS, "test.input", src)
+	mf, err := parse(testParserFS, "test.input", src)
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -1285,7 +1285,7 @@ func TestParseRunProgramToolSection(t *testing.T) {
     OUT_NOAUTO foo.pb.h foo.pb.cc
 )
 `)
-	mf, err := Parse(testParserFS, "test.input", src)
+	mf, err := parse(testParserFS, "test.input", src)
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}

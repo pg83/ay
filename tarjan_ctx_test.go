@@ -55,14 +55,14 @@ func (m *MockSink) emitClosure(members []VFS, fill func(block []VFS) int) {
 func vfsList(rels ...string) []VFS {
 	out := make([]VFS, len(rels))
 	for i, r := range rels {
-		out[i] = Source(r)
+		out[i] = source(r)
 	}
 
 	return out
 }
 
 func TestTarjan_TwoNodeCycle(t *testing.T) {
-	a, b := Source("tj/a.h"), Source("tj/b.h")
+	a, b := source("tj/a.h"), source("tj/b.h")
 	m := newMockSink(map[VFS][]VFS{
 		a: {b},
 		b: {a},
@@ -89,7 +89,7 @@ func TestTarjan_TwoNodeCycle(t *testing.T) {
 }
 
 func TestTarjan_CycleSplicesCachedExternalDep(t *testing.T) {
-	a, b, x, y := Source("tj/a.h"), Source("tj/b.h"), Source("tj/x.h"), Source("tj/y.h")
+	a, b, x, y := source("tj/a.h"), source("tj/b.h"), source("tj/x.h"), source("tj/y.h")
 	m := newMockSink(map[VFS][]VFS{
 		a: {b, x},
 		b: {a},
@@ -114,7 +114,7 @@ func TestTarjan_CycleSplicesCachedExternalDep(t *testing.T) {
 func TestTarjan_SingletonRootWithCachedChild(t *testing.T) {
 	// dfs hands a non-cyclic root to runSCC too when it re-enters along a chain;
 	// it must still build the root's own closure.
-	a, x := Source("tj/a.h"), Source("tj/x.h")
+	a, x := source("tj/a.h"), source("tj/x.h")
 	m := newMockSink(map[VFS][]VFS{
 		a: {x},
 	}, map[VFS][]VFS{
@@ -137,7 +137,7 @@ func TestTarjan_SingletonRootWithCachedChild(t *testing.T) {
 func TestTarjan_NestedSCCBuiltChildSpliced(t *testing.T) {
 	// a<->b is an SCC; a also reaches an uncached acyclic c. c finalizes as its
 	// own singleton SCC first, gets cached, then the {a,b} SCC splices c's window.
-	a, b, c := Source("tj/a.h"), Source("tj/b.h"), Source("tj/c.h")
+	a, b, c := source("tj/a.h"), source("tj/b.h"), source("tj/c.h")
 	m := newMockSink(map[VFS][]VFS{
 		a: {b, c},
 		b: {a},
@@ -166,7 +166,7 @@ func TestTarjan_NestedSCCBuiltChildSpliced(t *testing.T) {
 func TestTarjan_DedupesRepeatedWindowEntries(t *testing.T) {
 	// Two members each splice a cached child whose windows overlap; the closure
 	// must contain each node once.
-	a, b, x, y, z := Source("tj/a.h"), Source("tj/b.h"), Source("tj/x.h"), Source("tj/y.h"), Source("tj/z.h")
+	a, b, x, y, z := source("tj/a.h"), source("tj/b.h"), source("tj/x.h"), source("tj/y.h"), source("tj/z.h")
 	m := newMockSink(map[VFS][]VFS{
 		a: {b, x},
 		b: {a, y},

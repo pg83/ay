@@ -95,7 +95,7 @@ func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *Declar
 
 		for i := 1; i+2 < len(stmt.Args); i += 3 {
 			if stmt.Args[i+1] != "FOR" {
-				ThrowFmt("gen: %s: malformed DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE args %v", modulePath, stmt.Args)
+				throwFmt("gen: %s: malformed DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE args %v", modulePath, stmt.Args)
 			}
 
 			bundle[stmt.Args[i+2]] = stmt.Args[i]
@@ -117,7 +117,7 @@ func selectHostResourceDecl(host *Platform, modulePath, name string, bundle map[
 	uri, ok := bundle[hostPlatformKey(host)]
 
 	if !ok {
-		ThrowFmt("gen: %s: resource %q has no entry for host platform %q", modulePath, name, hostPlatformKey(host))
+		throwFmt("gen: %s: resource %q has no entry for host platform %q", modulePath, name, hostPlatformKey(host))
 	}
 
 	return makeResourceDecl(name, uri)
@@ -157,7 +157,7 @@ func resolveResourceGlobalRef(s string, globals []ResourceDecl) string {
 		}
 	}
 
-	ThrowFmt("resources: %q references resource global not in the PEERDIR closure", s)
+	throwFmt("resources: %q references resource global not in the PEERDIR closure", s)
 
 	return ""
 }
@@ -310,7 +310,7 @@ type ResourceBundleJSON struct {
 // platform-key -> uri map (the by_platform table feeding DECLARE_*_BY_JSON).
 func readResourceBundleJSON(fs FS, rel string) map[string]string {
 	var data ResourceBundleJSON
-	Throw(json.Unmarshal(fs.read(rel), &data))
+	throw(json.Unmarshal(fs.read(rel), &data))
 
 	out := make(map[string]string, len(data.ByPlatform))
 

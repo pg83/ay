@@ -38,7 +38,7 @@ func emitJVDownstreamCPCC(
 		srcH := pair.h
 
 		base := strings.TrimSuffix(filepath.Base(srcCpp.rel()), ".cpp")
-		g4CppPath := Build(instance.Path.rel() + "/" + base + ".g4.cpp")
+		g4CppPath := build(instance.Path.rel() + "/" + base + ".g4.cpp")
 		g4CppRel := base + ".g4.cpp"
 
 		if reg != nil {
@@ -64,7 +64,7 @@ func emitJVDownstreamCPCC(
 			cpClosure = cpClosure[1:]
 		}
 
-		cpRef := EmitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, in.TC, ctx.scripts, ctx.emit)
+		cpRef := emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, in.TC, ctx.scripts, ctx.emit)
 
 		ccIncludeInputs := make([]VFS, 0, 3+len(jvInputs)+len(closure)+2)
 		ccIncludeInputs = append(ccIncludeInputs, jvPrimary)
@@ -76,7 +76,7 @@ func emitJVDownstreamCPCC(
 		ccIn.IncludeInputs = ccIncludeInputs
 		ccIn.ExtraDepRefs = []NodeRef{jvRef, cpRef}
 		ccIn.PerSourceCFlags = []ARG{argWnoUnusedVariable}
-		ccRef, ccOut, _ := EmitCC(instance, g4CppRel, g4CppPath, ccIn, ctx.host, ctx.emit)
+		ccRef, ccOut, _ := emitCC(instance, g4CppRel, g4CppPath, ccIn, ctx.host, ctx.emit)
 
 		ccRefs = append(ccRefs, ccRef)
 		ccOutputs = append(ccOutputs, ccOut)
@@ -120,7 +120,7 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs InputChunks, outp
 	return emit.emit(node)
 }
 
-func EmitJV(
+func emitJV(
 	instance ModuleInstance,
 	grammar string,
 	options []string,
@@ -130,8 +130,8 @@ func EmitJV(
 	tc ModuleToolchain,
 	emit Emitter,
 ) NodeRef {
-	grammarVFS := Source(instance.Path.rel() + "/" + grammar)
-	outDirVFS := Build(instance.Path.rel())
+	grammarVFS := source(instance.Path.rel() + "/" + grammar)
+	outDirVFS := build(instance.Path.rel())
 	outDir := outDirVFS.string()
 
 	cmdArgs := make([]STR, 0, 8+len(antlrJavaConstHead))
@@ -165,18 +165,18 @@ func EmitJV(
 	base := strings.TrimSuffix(filepath.Base(grammar), ".g4")
 	outPrefix := instance.Path.rel() + "/" + base
 	outputs := []VFS{
-		Build(outPrefix + "Lexer.cpp"),
-		Build(outPrefix + "Lexer.h"),
-		Build(outPrefix + "Parser.cpp"),
-		Build(outPrefix + "Parser.h"),
-		Build(outPrefix + "Visitor.h"),
-		Build(outPrefix + "BaseVisitor.h"),
+		build(outPrefix + "Lexer.cpp"),
+		build(outPrefix + "Lexer.h"),
+		build(outPrefix + "Parser.cpp"),
+		build(outPrefix + "Parser.h"),
+		build(outPrefix + "Visitor.h"),
+		build(outPrefix + "BaseVisitor.h"),
 	}
 
 	return emitJVNode(instance, cmdArgs, inputs, outputs, outDir, nil, moduleTag, emit)
 }
 
-func EmitJVSplit(
+func emitJVSplit(
 	instance ModuleInstance,
 	lexer string,
 	parser string,
@@ -186,9 +186,9 @@ func EmitJVSplit(
 	tc ModuleToolchain,
 	emit Emitter,
 ) NodeRef {
-	lexerVFS := Source(instance.Path.rel() + "/" + lexer)
-	parserVFS := Source(instance.Path.rel() + "/" + parser)
-	outDirVFS := Build(instance.Path.rel())
+	lexerVFS := source(instance.Path.rel() + "/" + lexer)
+	parserVFS := source(instance.Path.rel() + "/" + parser)
+	outDirVFS := build(instance.Path.rel())
 	outDir := outDirVFS.string()
 
 	cmdArgs := []STR{
@@ -226,18 +226,18 @@ func EmitJVSplit(
 	visitorBase := parserBase
 	outPrefix := instance.Path.rel() + "/"
 	outputs := []VFS{
-		Build(outPrefix + lexerBase + ".cpp"),
-		Build(outPrefix + lexerBase + ".h"),
-		Build(outPrefix + parserBase + ".cpp"),
-		Build(outPrefix + parserBase + ".h"),
-		Build(outPrefix + visitorBase + "Visitor.h"),
-		Build(outPrefix + visitorBase + "BaseVisitor.h"),
+		build(outPrefix + lexerBase + ".cpp"),
+		build(outPrefix + lexerBase + ".h"),
+		build(outPrefix + parserBase + ".cpp"),
+		build(outPrefix + parserBase + ".h"),
+		build(outPrefix + visitorBase + "Visitor.h"),
+		build(outPrefix + visitorBase + "BaseVisitor.h"),
 	}
 
 	return emitJVNode(instance, cmdArgs, inputs, outputs, outDir, nil, moduleTag, emit)
 }
 
-func EmitJVGeneral(
+func emitJVGeneral(
 	instance ModuleInstance,
 	jarVFS VFS,
 	args []string,

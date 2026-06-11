@@ -37,7 +37,7 @@ const (
 )
 
 // NewIntMap returns a map sized to hold at least hint keys without growing.
-func NewIntMap[V any](hint int) *IntMap[V] {
+func newIntMap[V any](hint int) *IntMap[V] {
 	c := intMapMinCap
 
 	// Grow c (power of two) until its load-factor threshold covers hint.

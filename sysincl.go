@@ -122,13 +122,13 @@ func muslArchIs(want string) func(SysInclEnv) bool {
 	return func(e SysInclEnv) bool { return e.musl && e.arch == want }
 }
 
-func LoadSysInclSetForFS(fs FS, arch string, musl, opensource bool, onWarn func(Warn)) SysInclSet {
+func loadSysInclSetForFS(fs FS, arch string, musl, opensource bool, onWarn func(Warn)) SysInclSet {
 	if !fs.isDir(srcRootVFS, baseSysInclDir) {
 		return nil
 	}
 
 	if _, ok := supportedSysInclArchs[arch]; !ok {
-		ThrowFmt("LoadSysInclSetFor: unsupported arch %q (want aarch64 or x86_64)", arch)
+		throwFmt("LoadSysInclSetFor: unsupported arch %q (want aarch64 or x86_64)", arch)
 	}
 
 	env := SysInclEnv{arch: arch, musl: musl, opensource: opensource}
@@ -168,9 +168,9 @@ func loadSysInclDir(fs FS, dir string, onWarn func(Warn)) SysInclSet {
 		return nil
 	}
 
-	names := make([]string, 0, len(fs.listdir(Source(dir))))
+	names := make([]string, 0, len(fs.listdir(source(dir))))
 
-	for name := range fs.listdir(Source(dir)) {
+	for name := range fs.listdir(source(dir)) {
 		if strings.HasSuffix(name, ".yml") {
 			names = append(names, name)
 		}
@@ -302,13 +302,13 @@ func sysInclTargets(tval *yaml.Node) []VFS {
 			return nil
 		}
 
-		return []VFS{Source(tval.Value)}
+		return []VFS{source(tval.Value)}
 	case yaml.SequenceNode:
 		var paths []VFS
 
 		for _, p := range tval.Content {
 			if p.Value != "" {
-				paths = append(paths, Source(p.Value))
+				paths = append(paths, source(p.Value))
 			}
 		}
 
@@ -496,7 +496,7 @@ func (alt *FilterAlt) setPositive(name string, lineno int, pat string) {
 	re, err := regexp.Compile(pat)
 
 	if err != nil {
-		ThrowFmt("sysincl: %s:%d: cannot compile %q: %v", name, lineno, pat, err)
+		throwFmt("sysincl: %s:%d: cannot compile %q: %v", name, lineno, pat, err)
 	}
 
 	alt.re = re
@@ -509,7 +509,7 @@ func compileSourceFilter(name string, lineno int, pat string, onWarn func(Warn))
 	}
 
 	f := &SourceFilter{}
-	exc := Try(func() {
+	exc := try(func() {
 		altStrs := splitTopLevelOr(pat)
 
 		for _, altStr := range altStrs {
@@ -521,7 +521,7 @@ func compileSourceFilter(name string, lineno int, pat string, onWarn func(Warn))
 
 				if residual != "" {
 					if strings.Contains(residual, "(?!") {
-						ThrowFmt("sysincl: %s:%d: unsupported negative lookahead position in %q (residual after ^(?!): %q)", name, lineno, altStr, residual)
+						throwFmt("sysincl: %s:%d: unsupported negative lookahead position in %q (residual after ^(?!): %q)", name, lineno, altStr, residual)
 					}
 
 					if residual == ".*" {
@@ -541,11 +541,11 @@ func compileSourceFilter(name string, lineno int, pat string, onWarn func(Warn))
 				}
 
 				if res != "" && res != ".*" {
-					ThrowFmt("sysincl: %s:%d: unsupported residual %q after prefixed negative lookahead in %q", name, lineno, res, altStr)
+					throwFmt("sysincl: %s:%d: unsupported residual %q after prefixed negative lookahead in %q", name, lineno, res, altStr)
 				}
 			} else {
 				if strings.Contains(altStr, "(?!") {
-					ThrowFmt("sysincl: %s:%d: unsupported negative lookahead position in %q", name, lineno, altStr)
+					throwFmt("sysincl: %s:%d: unsupported negative lookahead position in %q", name, lineno, altStr)
 				}
 
 				if lit := extractLiteralAnchoredPrefix(altStr); lit != "" {
@@ -674,7 +674,7 @@ func extractNegativeLookahead(pat string) ([]string, string, bool) {
 	}
 
 	if end < 0 {
-		ThrowFmt("sysincl: malformed negative lookahead in %q", pat)
+		throwFmt("sysincl: malformed negative lookahead in %q", pat)
 	}
 
 	inner := rest[:end]
@@ -704,7 +704,7 @@ func parseLookaheadAlts(body string) []string {
 		}
 
 		if containsRegexMeta(p) {
-			ThrowFmt("sysincl: negative-lookahead alt %q has regex metacharacters; only literal prefixes are supported", p)
+			throwFmt("sysincl: negative-lookahead alt %q has regex metacharacters; only literal prefixes are supported", p)
 		}
 
 		out = append(out, p)

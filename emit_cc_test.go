@@ -7,8 +7,8 @@ import (
 const referenceCCOutput = "$(B)/build/cow/on/lib.c.o"
 
 func TestEmitCC_OutputPath_NestedSrc(t *testing.T) {
-	e := NewBufferedEmitter()
-	_, outPath, _ := EmitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", Intern("$(S)/contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"), withCCBlocks(targetInstance("contrib/libs/cxxsupp/libcxx").Platform, ModuleCCInputs{}), testHostP, e)
+	e := newBufferedEmitter()
+	_, outPath, _ := emitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", intern("$(S)/contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"), withCCBlocks(targetInstance("contrib/libs/cxxsupp/libcxx").Platform, ModuleCCInputs{}), testHostP, e)
 	want := "$(B)/contrib/libs/cxxsupp/libcxx/_/src/algorithm.cpp.o"
 
 	if outPath.string() != want {
@@ -17,8 +17,8 @@ func TestEmitCC_OutputPath_NestedSrc(t *testing.T) {
 }
 
 func TestEmitCC_OutputPath_FlatSrc(t *testing.T) {
-	e := NewBufferedEmitter()
-	_, outPath, _ := EmitCC(targetInstance("build/cow/on"), "lib.c", Intern("$(S)/build/cow/on/lib.c"), withCCBlocks(targetInstance("build/cow/on").Platform, ModuleCCInputs{}), testHostP, e)
+	e := newBufferedEmitter()
+	_, outPath, _ := emitCC(targetInstance("build/cow/on"), "lib.c", intern("$(S)/build/cow/on/lib.c"), withCCBlocks(targetInstance("build/cow/on").Platform, ModuleCCInputs{}), testHostP, e)
 	want := "$(B)/build/cow/on/lib.c.o"
 
 	if outPath.string() != want {
@@ -27,10 +27,10 @@ func TestEmitCC_OutputPath_FlatSrc(t *testing.T) {
 }
 
 func TestEmitCC_GeneratedSource_BuildRootInput(t *testing.T) {
-	emit := NewBufferedEmitter()
-	srcVFS := Intern("$(B)/util/_/datetime/parser.rl6.cpp")
+	emit := newBufferedEmitter()
+	srcVFS := intern("$(B)/util/_/datetime/parser.rl6.cpp")
 	// IncludeInputs is the full input window — the source leads it.
-	_, outPath, _ := EmitCC(targetInstance("util"), "_/datetime/parser.rl6.cpp", srcVFS, withCCBlocks(targetInstance("util").Platform, ModuleCCInputs{IncludeInputs: []VFS{srcVFS}}), testHostP, emit)
+	_, outPath, _ := emitCC(targetInstance("util"), "_/datetime/parser.rl6.cpp", srcVFS, withCCBlocks(targetInstance("util").Platform, ModuleCCInputs{IncludeInputs: []VFS{srcVFS}}), testHostP, emit)
 
 	wantOut := "$(B)/util/_/_/datetime/parser.rl6.cpp.o"
 
@@ -58,17 +58,17 @@ func TestEmitCC_GeneratedSource_BuildRootInput(t *testing.T) {
 }
 
 func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
-	emit := NewBufferedEmitter()
+	emit := newBufferedEmitter()
 	in := ModuleCCInputs{
 		InclArgs: newInclArgMemo(),
 		AddIncl: []VFS{
-			Intern("$(S)/contrib/libs/foolib/arch/aarch64"),
-			Intern("$(S)/contrib/libs/foolib/arch/generic"),
-			Intern("$(S)/contrib/libs/foolib/include"),
-			Intern("$(S)/contrib/libs/foolib/extra"),
+			intern("$(S)/contrib/libs/foolib/arch/aarch64"),
+			intern("$(S)/contrib/libs/foolib/arch/generic"),
+			intern("$(S)/contrib/libs/foolib/include"),
+			intern("$(S)/contrib/libs/foolib/extra"),
 		},
 	}
-	EmitCC(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/fp_mode.c", Intern("$(S)/contrib/libs/cxxsupp/builtins/aarch64/fp_mode.c"), withCCBlocks(targetInstance("contrib/libs/cxxsupp/builtins").Platform, in), testHostP, emit)
+	emitCC(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/fp_mode.c", intern("$(S)/contrib/libs/cxxsupp/builtins/aarch64/fp_mode.c"), withCCBlocks(targetInstance("contrib/libs/cxxsupp/builtins").Platform, in), testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs.flat()
 
@@ -91,16 +91,16 @@ func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
 }
 
 func TestEmitCC_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
-	emit := NewBufferedEmitter()
+	emit := newBufferedEmitter()
 	inst := hostInstance("contrib/libs/foolib")
 	in := ModuleCCInputs{
 		InclArgs: newInclArgMemo(),
 		AddIncl: []VFS{
-			Intern("$(S)/custom/foolib/arch/x86_64"),
-			Intern("$(S)/custom/foolib/include"),
+			intern("$(S)/custom/foolib/arch/x86_64"),
+			intern("$(S)/custom/foolib/include"),
 		},
 	}
-	EmitCC(inst, "src/string/strlen.c", Intern("$(S)/contrib/libs/foolib/src/string/strlen.c"), withCCBlocks(inst.Platform, in), testHostP, emit)
+	emitCC(inst, "src/string/strlen.c", intern("$(S)/contrib/libs/foolib/src/string/strlen.c"), withCCBlocks(inst.Platform, in), testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs.flat()
 	wantSlot := []string{
@@ -133,8 +133,8 @@ func TestEmitCC_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 }
 
 func TestEmitCC_CxxSource_UsesClangPlusPlus(t *testing.T) {
-	emit := NewBufferedEmitter()
-	EmitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", Intern("$(S)/contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"), withCCBlocks(targetInstance("contrib/libs/cxxsupp/libcxx").Platform, ModuleCCInputs{TC: testToolchain()}), testHostP, emit)
+	emit := newBufferedEmitter()
+	emitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.cpp", intern("$(S)/contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"), withCCBlocks(targetInstance("contrib/libs/cxxsupp/libcxx").Platform, ModuleCCInputs{TC: testToolchain()}), testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs.flat()
 
@@ -159,8 +159,8 @@ func TestEmitCC_CxxSource_UsesClangPlusPlus(t *testing.T) {
 }
 
 func TestEmitCC_CSource_UsesClang(t *testing.T) {
-	emit := NewBufferedEmitter()
-	EmitCC(targetInstance("build/cow/on"), "lib.c", Intern("$(S)/build/cow/on/lib.c"), withCCBlocks(targetInstance("build/cow/on").Platform, ModuleCCInputs{TC: testToolchain()}), testHostP, emit)
+	emit := newBufferedEmitter()
+	emitCC(targetInstance("build/cow/on"), "lib.c", intern("$(S)/build/cow/on/lib.c"), withCCBlocks(targetInstance("build/cow/on").Platform, ModuleCCInputs{TC: testToolchain()}), testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs.flat()
 
@@ -179,9 +179,9 @@ func TestEmitCC_CSource_UsesClang(t *testing.T) {
 }
 
 func TestEmitCC_NoCompilerWarnings_SelectsWarningSuppressionFlags(t *testing.T) {
-	emit := NewBufferedEmitter()
+	emit := newBufferedEmitter()
 	inst := targetInstance("contrib/libs/cxxsupp/libcxxrt")
-	EmitCC(inst, "exception.cc", Intern("$(S)/contrib/libs/cxxsupp/libcxxrt/exception.cc"), withCCBlocks(inst.Platform, ModuleCCInputs{Flags: FlagSet{NoCompilerWarnings: true}}), testHostP, emit)
+	emitCC(inst, "exception.cc", intern("$(S)/contrib/libs/cxxsupp/libcxxrt/exception.cc"), withCCBlocks(inst.Platform, ModuleCCInputs{Flags: FlagSet{NoCompilerWarnings: true}}), testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs.flat()
 
@@ -205,13 +205,13 @@ func TestEmitCC_NoCompilerWarnings_SelectsWarningSuppressionFlags(t *testing.T) 
 }
 
 func TestEmitCC_OwnCXXFlags_SlotsAfterSuppressionBlock(t *testing.T) {
-	emit := NewBufferedEmitter()
+	emit := newBufferedEmitter()
 	in := ModuleCCInputs{
 		Flags:    FlagSet{NoCompilerWarnings: true},
 		CXXFlags: internArgs([]string{"-D_LIBCPP_BUILDING_LIBRARY"}),
 	}
 	inst := targetInstance("contrib/libs/cxxsupp/libcxx")
-	EmitCC(inst, "src/algorithm.cpp", Intern("$(S)/contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"), withCCBlocks(inst.Platform, in), testHostP, emit)
+	emitCC(inst, "src/algorithm.cpp", intern("$(S)/contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"), withCCBlocks(inst.Platform, in), testHostP, emit)
 
 	args := emit.nodes[0].Cmds[0].CmdArgs.flat()
 
@@ -248,15 +248,15 @@ func TestEmitCC_OwnCXXFlags_SlotsAfterSuppressionBlock(t *testing.T) {
 func TestEmitCC_COnlyFlags_AppliesOnlyToCSources(t *testing.T) {
 	in := ModuleCCInputs{COnlyFlags: internArgs([]string{"-Wno-narrowing"})}
 
-	emitC := NewBufferedEmitter()
-	EmitCC(targetInstance("build/cow/on"), "lib.c", Intern("$(S)/build/cow/on/lib.c"), withCCBlocks(targetInstance("build/cow/on").Platform, in), testHostP, emitC)
+	emitC := newBufferedEmitter()
+	emitCC(targetInstance("build/cow/on"), "lib.c", intern("$(S)/build/cow/on/lib.c"), withCCBlocks(targetInstance("build/cow/on").Platform, in), testHostP, emitC)
 
 	if !contains(emitC.nodes[0].Cmds[0].CmdArgs.flat(), "-Wno-narrowing") {
 		t.Errorf(".c source missing CONLYFLAG -Wno-narrowing; got %v", emitC.nodes[0].Cmds[0].CmdArgs.flat())
 	}
 
-	emitCpp := NewBufferedEmitter()
-	EmitCC(targetInstance("build/cow/on"), "lib.cpp", Intern("$(S)/build/cow/on/lib.cpp"), withCCBlocks(targetInstance("build/cow/on").Platform, in), testHostP, emitCpp)
+	emitCpp := newBufferedEmitter()
+	emitCC(targetInstance("build/cow/on"), "lib.cpp", intern("$(S)/build/cow/on/lib.cpp"), withCCBlocks(targetInstance("build/cow/on").Platform, in), testHostP, emitCpp)
 
 	if contains(emitCpp.nodes[0].Cmds[0].CmdArgs.flat(), "-Wno-narrowing") {
 		t.Errorf(".cpp source got CONLYFLAG -Wno-narrowing (should be CXXFlags-only); got %v", emitCpp.nodes[0].Cmds[0].CmdArgs.flat())
@@ -270,16 +270,16 @@ func TestEmitCC_PlatformEnvFlags_TargetOnly(t *testing.T) {
 	}
 	flags["PIC"] = "no"
 
-	target := NewPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "-DENV_C=1", "-DENV_CXX=1")
+	target := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "-DENV_C=1", "-DENV_CXX=1")
 	instance := ModuleInstance{
-		Path:     Source("build/cow/on"),
+		Path:     source("build/cow/on"),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: target,
 	}
 
-	e := NewBufferedEmitter()
-	EmitCC(instance, "lib.c", Intern("$(S)/build/cow/on/lib.c"), withCCBlocks(instance.Platform, ModuleCCInputs{Flags: FlagSet{NoLibc: true, NoUtil: true, NoRuntime: true}}), testHostP, e)
+	e := newBufferedEmitter()
+	emitCC(instance, "lib.c", intern("$(S)/build/cow/on/lib.c"), withCCBlocks(instance.Platform, ModuleCCInputs{Flags: FlagSet{NoLibc: true, NoUtil: true, NoRuntime: true}}), testHostP, e)
 	cArgs := e.nodes[0].Cmds[0].CmdArgs.flat()
 
 	if !contains(cArgs, "-DENV_C=1") {
@@ -290,8 +290,8 @@ func TestEmitCC_PlatformEnvFlags_TargetOnly(t *testing.T) {
 		t.Fatalf("C cmd_args unexpectedly contain env CXXFLAGS: %v", cArgs)
 	}
 
-	e = NewBufferedEmitter()
-	EmitCC(instance, "lib.cpp", Intern("$(S)/build/cow/on/lib.cpp"), withCCBlocks(instance.Platform, ModuleCCInputs{}), testHostP, e)
+	e = newBufferedEmitter()
+	emitCC(instance, "lib.cpp", intern("$(S)/build/cow/on/lib.cpp"), withCCBlocks(instance.Platform, ModuleCCInputs{}), testHostP, e)
 	cxxArgs := e.nodes[0].Cmds[0].CmdArgs.flat()
 
 	if !contains(cxxArgs, "-DENV_C=1") {
@@ -314,15 +314,15 @@ func nonOpensourcePlatform() *Platform {
 	delete(flags, "OPENSOURCE")
 	flags["PIC"] = "no"
 
-	return NewPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "", "")
+	return newPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "", "")
 }
 
 func TestEmitCC_WrapccPrefix_NonOpensource(t *testing.T) {
-	emit := NewBufferedEmitter()
-	inst := ModuleInstance{Path: Source("mod"), Kind: KindLib, Language: LangCPP, Platform: nonOpensourcePlatform()}
-	srcVFS := Intern("$(S)/mod/lib.cpp")
+	emit := newBufferedEmitter()
+	inst := ModuleInstance{Path: source("mod"), Kind: KindLib, Language: LangCPP, Platform: nonOpensourcePlatform()}
+	srcVFS := intern("$(S)/mod/lib.cpp")
 
-	EmitCC(inst, "lib.cpp", srcVFS, withCCBlocks(inst.Platform, ModuleCCInputs{TC: testToolchain(), IncludeInputs: []VFS{srcVFS}}), testHostP, emit)
+	emitCC(inst, "lib.cpp", srcVFS, withCCBlocks(inst.Platform, ModuleCCInputs{TC: testToolchain(), IncludeInputs: []VFS{srcVFS}}), testHostP, emit)
 
 	node := emit.nodes[0]
 	args := strStrs(node.Cmds[0].CmdArgs.flat())
@@ -367,9 +367,9 @@ func TestEmitCC_WrapccPrefix_NonOpensource(t *testing.T) {
 }
 
 func TestEmitCC_NoWrapcc_Opensource(t *testing.T) {
-	emit := NewBufferedEmitter()
+	emit := newBufferedEmitter()
 	// targetInstance uses testTargetP, which is OPENSOURCE=yes → no wrapper.
-	EmitCC(targetInstance("mod"), "lib.cpp", Intern("$(S)/mod/lib.cpp"), withCCBlocks(targetInstance("mod").Platform, ModuleCCInputs{TC: testToolchain()}), testHostP, emit)
+	emitCC(targetInstance("mod"), "lib.cpp", intern("$(S)/mod/lib.cpp"), withCCBlocks(targetInstance("mod").Platform, ModuleCCInputs{TC: testToolchain()}), testHostP, emit)
 
 	node := emit.nodes[0]
 	args := strStrs(node.Cmds[0].CmdArgs.flat())
@@ -398,10 +398,10 @@ func contains(xs []STR, target string) bool {
 }
 
 func TestEmitCC_OutputPath_YqlUdfSuffix(t *testing.T) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 	in := ModuleCCInputs{ObjectSuffixStem: stringPtr("udfs")}
 
-	_, outPath, _ := EmitCC(targetInstance("udfmod"), "lib.cpp", Intern("$(S)/udfmod/lib.cpp"), withCCBlocks(targetInstance("udfmod").Platform, in), testHostP, e)
+	_, outPath, _ := emitCC(targetInstance("udfmod"), "lib.cpp", intern("$(S)/udfmod/lib.cpp"), withCCBlocks(targetInstance("udfmod").Platform, in), testHostP, e)
 
 	want := "$(B)/udfmod/lib.cpp.udfs.o"
 	if outPath.string() != want {
@@ -410,16 +410,16 @@ func TestEmitCC_OutputPath_YqlUdfSuffix(t *testing.T) {
 }
 
 func TestEmitCC_OutputPath_YqlUdfSuffixPIC(t *testing.T) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 	in := ModuleCCInputs{ObjectSuffixStem: stringPtr("udfs")}
 	instance := ModuleInstance{
-		Path:     Source("udfmod"),
+		Path:     source("udfmod"),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testHostP,
 	}
 
-	_, outPath, _ := EmitCC(instance, "lib.cpp", Intern("$(S)/udfmod/lib.cpp"), withCCBlocks(instance.Platform, in), testHostP, e)
+	_, outPath, _ := emitCC(instance, "lib.cpp", intern("$(S)/udfmod/lib.cpp"), withCCBlocks(instance.Platform, in), testHostP, e)
 
 	want := "$(B)/udfmod/lib.cpp.udfs.pic.o"
 	if outPath.string() != want {
@@ -428,10 +428,10 @@ func TestEmitCC_OutputPath_YqlUdfSuffixPIC(t *testing.T) {
 }
 
 func TestEmitCC_NoWShadowAddsWarningFlag(t *testing.T) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 	in := ModuleCCInputs{Flags: FlagSet{NoWShadow: true}}
 
-	EmitCC(targetInstance("build/cow/on"), "lib.cpp", Intern("$(S)/build/cow/on/lib.cpp"), withCCBlocks(targetInstance("build/cow/on").Platform, in), testHostP, e)
+	emitCC(targetInstance("build/cow/on"), "lib.cpp", intern("$(S)/build/cow/on/lib.cpp"), withCCBlocks(targetInstance("build/cow/on").Platform, in), testHostP, e)
 
 	if !contains(e.nodes[0].Cmds[0].CmdArgs.flat(), "-Wno-shadow") {
 		t.Fatalf("cmd_args missing -Wno-shadow: %v", e.nodes[0].Cmds[0].CmdArgs.flat())
@@ -460,11 +460,11 @@ func TestComposeSrcDirOutputRel_SubdirInModuleDir(t *testing.T) {
 }
 
 func TestComposeCCPaths_DotDotSrc(t *testing.T) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 
 	instance := targetInstance("ydb/public/lib/ydb_cli/commands/command_base")
 	srcRel := "../ydb_command.cpp"
-	srcVFS := Source(instance.Path.rel() + "/" + srcRel)
+	srcVFS := source(instance.Path.rel() + "/" + srcRel)
 
 	_ = e
 	_ = srcVFS

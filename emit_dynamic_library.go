@@ -6,15 +6,15 @@ var (
 
 func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *ModuleEmitResult {
 	if len(d.moduleStmt.Args) == 0 {
-		ThrowFmt("gen: %s DYNAMIC_LIBRARY requires a basename argument", instance.Path.rel())
+		throwFmt("gen: %s DYNAMIC_LIBRARY requires a basename argument", instance.Path.rel())
 	}
 
 	if len(d.dynamicLibraryFrom) == 0 {
-		ThrowFmt("gen: %s DYNAMIC_LIBRARY requires DYNAMIC_LIBRARY_FROM(...)", instance.Path.rel())
+		throwFmt("gen: %s DYNAMIC_LIBRARY requires DYNAMIC_LIBRARY_FROM(...)", instance.Path.rel())
 	}
 
 	if d.exportsScript == nil {
-		ThrowFmt("gen: %s DYNAMIC_LIBRARY requires EXPORTS_SCRIPT(...)", instance.Path.rel())
+		throwFmt("gen: %s DYNAMIC_LIBRARY requires EXPORTS_SCRIPT(...)", instance.Path.rel())
 	}
 
 	dynLibRPathHelperPeers := []string{"build/platform/local_so"}
@@ -140,9 +140,9 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 	fixElfRef, fixElfPath := ctx.tool(argToolsFixElf)
 
 	outputName := "lib" + d.moduleStmt.Args[0] + ".so"
-	outputPath := Build(instance.Path.rel() + "/" + outputName).string()
-	vcsCPath := Build(instance.Path.rel() + "/__vcs_version__.c").string()
-	vcsOPath := Build(instance.Path.rel() + "/__vcs_version__.c.pic.o").string()
+	outputPath := build(instance.Path.rel() + "/" + outputName).string()
+	vcsCPath := build(instance.Path.rel() + "/__vcs_version__.c").string()
+	vcsOPath := build(instance.Path.rel() + "/__vcs_version__.c.pic.o").string()
 
 	cmd0 := composeLDCmdVcsInfo(d.tc, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings)
@@ -172,7 +172,7 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		},
 		Env:              envFull,
 		Inputs:           inputs,
-		Outputs:          []VFS{Build(instance.Path.rel() + "/" + outputName)},
+		Outputs:          []VFS{build(instance.Path.rel() + "/" + outputName)},
 		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Sandboxing:       true,
@@ -195,7 +195,7 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		ARPath:                       nil,
 		isPROGRAM:                    false,
 		LDRef:                        ref,
-		LDPath:                       vfsPtr(Build(instance.Path.rel() + "/" + outputName)),
+		LDPath:                       vfsPtr(build(instance.Path.rel() + "/" + outputName)),
 		AddInclGlobal:                addInclGlobal,
 		OwnAddInclGlobal:             cloneVFSs(d.addInclGlobal),
 		CFlagsGlobal:                 cFlagsGlobal,
@@ -316,7 +316,7 @@ func composeDynLibInputs(peerLibPaths, pluginPaths []VFS, fixElfPath VFS, module
 	chunks = append(chunks, []VFS{
 		ldSvnInterfaceVFS,
 		ldSvnversionHVFS,
-		Source(modulePath + "/" + exportsScript),
+		source(modulePath + "/" + exportsScript),
 	})
 
 	return chunks

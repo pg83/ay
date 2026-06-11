@@ -3,25 +3,25 @@ package main
 import "testing"
 
 func TestEmitPB_ExtraProtocFlags(t *testing.T) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 	inst := targetInstance("pkg/proto")
 
 	blocks := composePBArgBlocks(testToolchain(),
-		Intern("$(B)/contrib/tools/protoc/protoc"),
-		Intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
-		Intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
+		intern("$(B)/contrib/tools/protoc/protoc"),
+		intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
+		intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
 		false, 0, "", false, false,
 		internArgs([]string{"--fatal_warnings"}), nil, nil, nil)
-	EmitPB(
+	emitPB(
 		inst,
 		"pkg/proto/test.proto",
 		VFS(0),
 		NodeRef(1),
 		NodeRef(2),
 		NodeRef(0),
-		Intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
-		Intern("$(B)/contrib/tools/protoc/protoc"),
-		Intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
+		intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
+		intern("$(B)/contrib/tools/protoc/protoc"),
+		intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
 		false,
 		0,
 		false,
@@ -43,25 +43,25 @@ func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 }
 
 func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 	inst := targetInstance("pkg/proto")
 
 	blocks := composePBArgBlocks(testToolchain(),
-		Intern("$(B)/contrib/tools/protoc/protoc"),
-		Intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
-		Intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
+		intern("$(B)/contrib/tools/protoc/protoc"),
+		intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
+		intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
 		false, 0, "", false, true,
 		nil, nil, nil, nil)
-	EmitPB(
+	emitPB(
 		inst,
 		"pkg/proto/test.proto",
 		VFS(0),
 		NodeRef(1),
 		NodeRef(2),
 		NodeRef(0),
-		Intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
-		Intern("$(B)/contrib/tools/protoc/protoc"),
-		Intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
+		intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
+		intern("$(B)/contrib/tools/protoc/protoc"),
+		intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
 		false,
 		0,
 		true,

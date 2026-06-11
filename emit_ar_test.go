@@ -30,12 +30,12 @@ func newTestPlatform(os OS, isa ISA, pic string, tags []string) *Platform {
 		flags[k] = v
 	}
 	flags["PIC"] = pic
-	return NewPlatform(newMemFS(nil), os, isa, flags, tags, "", "")
+	return newPlatform(newMemFS(nil), os, isa, flags, tags, "", "")
 }
 
 func targetInstance(path string) ModuleInstance {
 	return ModuleInstance{
-		Path:     Source(path),
+		Path:     source(path),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,
@@ -44,7 +44,7 @@ func targetInstance(path string) ModuleInstance {
 
 func hostInstance(path string) ModuleInstance {
 	return ModuleInstance{
-		Path:     Source(path),
+		Path:     source(path),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testHostP,
@@ -60,7 +60,7 @@ func vfsStrings(vs []VFS) []string {
 }
 
 func TestEmitAR_LengthMismatchPanics(t *testing.T) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 
 	objRefs := []NodeRef{e.emit(&Node{
 		Cmds:             []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
@@ -73,9 +73,9 @@ func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 		Tags:             []STR{},
 		TargetProperties: TargetProperties{},
 	})}
-	objPaths := []VFS{Intern("$(B)/o1.o"), Intern("$(B)/o2.o")}
+	objPaths := []VFS{intern("$(B)/o1.o"), intern("$(B)/o2.o")}
 
-	exc := Try(func() {
+	exc := try(func() {
 		EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, nil, testHostP, e)
 	})
 
@@ -110,7 +110,7 @@ func TestArchiveName(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		got := ArchiveName(tc.moduleDir)
+		got := archiveName(tc.moduleDir)
 
 		if got != tc.want {
 			t.Errorf("ArchiveName(%q) = %q, want %q", tc.moduleDir, got, tc.want)
@@ -164,7 +164,7 @@ func TestArchiveName_AllReferenceAR(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		got := ArchiveName(tc.moduleDir)
+		got := archiveName(tc.moduleDir)
 
 		if got != tc.want {
 			t.Errorf("ArchiveName(%q) = %q, want %q", tc.moduleDir, got, tc.want)
@@ -173,7 +173,7 @@ func TestArchiveName_AllReferenceAR(t *testing.T) {
 }
 
 func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.emit(&Node{
@@ -189,13 +189,13 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 		})
 	}
 
-	o1 := Intern("$(B)/build/cow/on/a.c.o")
-	o2 := Intern("$(B)/build/cow/on/b.c.o")
+	o1 := intern("$(B)/build/cow/on/a.c.o")
+	o2 := intern("$(B)/build/cow/on/b.c.o")
 	objRefs := []NodeRef{makeLeaf(o1), makeLeaf(o2)}
 	objPaths := []VFS{o1, o2}
 
-	peer1 := makeLeaf(Intern("$(B)/some/peer/libsome-peer.a"))
-	peer2 := makeLeaf(Intern("$(B)/other/peer/libother-peer.a"))
+	peer1 := makeLeaf(intern("$(B)/some/peer/libsome-peer.a"))
+	peer2 := makeLeaf(intern("$(B)/other/peer/libother-peer.a"))
 	peerArchiveRefs := []NodeRef{peer1, peer2}
 
 	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, peerArchiveRefs, testHostP, e)
@@ -223,7 +223,7 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 }
 
 func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.emit(&Node{
@@ -239,13 +239,13 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 		})
 	}
 
-	o1 := Intern("$(B)/build/cow/on/a.c.o")
-	o2 := Intern("$(B)/build/cow/on/b.c.o")
+	o1 := intern("$(B)/build/cow/on/a.c.o")
+	o2 := intern("$(B)/build/cow/on/b.c.o")
 	objRefs := []NodeRef{makeLeaf(o1), makeLeaf(o2)}
 	objPaths := []VFS{o1, o2}
 
-	peer1 := makeLeaf(Intern("$(B)/some/peer/libsome-peer.a"))
-	peer2 := makeLeaf(Intern("$(B)/other/peer/libother-peer.a"))
+	peer1 := makeLeaf(intern("$(B)/some/peer/libsome-peer.a"))
+	peer2 := makeLeaf(intern("$(B)/other/peer/libother-peer.a"))
 	peerArchiveRefs := []NodeRef{peer1, peer2}
 
 	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, peerArchiveRefs, testHostP, e)
@@ -260,7 +260,7 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 }
 
 func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.emit(&Node{
@@ -276,9 +276,9 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 		})
 	}
 
-	z := Intern("$(B)/build/cow/on/z.c.o")
-	m := Intern("$(B)/build/cow/on/m.c.o")
-	a := Intern("$(B)/build/cow/on/a.c.o")
+	z := intern("$(B)/build/cow/on/z.c.o")
+	m := intern("$(B)/build/cow/on/m.c.o")
+	a := intern("$(B)/build/cow/on/a.c.o")
 	objPaths := []VFS{z, m, a}
 	objRefs := []NodeRef{makeLeaf(z), makeLeaf(m), makeLeaf(a)}
 
@@ -300,7 +300,7 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 }
 
 func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.emit(&Node{
@@ -316,9 +316,9 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 		})
 	}
 
-	z := Intern("$(B)/build/cow/on/z.c.o")
-	m := Intern("$(B)/build/cow/on/m.c.o")
-	a := Intern("$(B)/build/cow/on/a.c.o")
+	z := intern("$(B)/build/cow/on/z.c.o")
+	m := intern("$(B)/build/cow/on/m.c.o")
+	a := intern("$(B)/build/cow/on/a.c.o")
 	objPaths := []VFS{z, m, a}
 	objRefs := []NodeRef{makeLeaf(z), makeLeaf(m), makeLeaf(a)}
 

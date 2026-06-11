@@ -4,7 +4,7 @@ import (
 	"strings"
 )
 
-func EmitARNamed(
+func emitARNamed(
 	instance ModuleInstance,
 	archiveBaseName string,
 	objRefs []NodeRef,
@@ -16,15 +16,15 @@ func EmitARNamed(
 	emit Emitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
-		ThrowFmt("EmitARNamed: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
+		throwFmt("EmitARNamed: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
 	}
 
-	archivePath := Build(instance.Path.rel() + "/" + archiveBaseName)
+	archivePath := build(instance.Path.rel() + "/" + archiveBaseName)
 
 	return emitARNode(instance, archivePath, 0, objRefs, objPaths, peerArchiveRefs, arPluginPath, tc, hostP, emit)
 }
 
-func EmitARNamedTagged(
+func emitARNamedTagged(
 	instance ModuleInstance,
 	archiveBaseName string,
 	tag STR,
@@ -37,15 +37,15 @@ func EmitARNamedTagged(
 	emit Emitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
-		ThrowFmt("EmitARNamedTagged: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
+		throwFmt("EmitARNamedTagged: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
 	}
 
-	archivePath := Build(instance.Path.rel() + "/" + archiveBaseName)
+	archivePath := build(instance.Path.rel() + "/" + archiveBaseName)
 
 	return emitARNode(instance, archivePath, tag, objRefs, objPaths, peerArchiveRefs, arPluginPath, tc, hostP, emit)
 }
 
-func EmitARGlobalNamedTagged(
+func emitARGlobalNamedTagged(
 	instance ModuleInstance,
 	archiveBaseName string,
 	tag STR,
@@ -56,10 +56,10 @@ func EmitARGlobalNamedTagged(
 	emit Emitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
-		ThrowFmt("EmitARGlobalNamedTagged: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
+		throwFmt("EmitARGlobalNamedTagged: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
 	}
 
-	archivePath := Build(instance.Path.rel() + "/" + archiveBaseName)
+	archivePath := build(instance.Path.rel() + "/" + archiveBaseName)
 
 	return emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, nil, tc, hostP, emit)
 }
@@ -87,7 +87,7 @@ func archiveNameWithPrefixOrName(moduleDir, prefix, name string) string {
 	return archiveNameWithPrefix(moduleDir, prefix)
 }
 
-func ArchiveName(moduleDir string) string {
+func archiveName(moduleDir string) string {
 	return archiveNameWithPrefix(moduleDir, "lib")
 }
 

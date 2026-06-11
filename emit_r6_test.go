@@ -5,7 +5,7 @@ import (
 )
 
 func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 
 	ragel6LD := e.emit(&Node{
 		Cmds:             []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
@@ -19,7 +19,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		TargetProperties: TargetProperties{ModuleDir: "contrib/tools/ragel6"},
 	})
 
-	r6Ref, outPath := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, Intern("$(B)/contrib/tools/ragel6/ragel6"), nil, nil, e)
+	r6Ref, outPath := emitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, intern("$(B)/contrib/tools/ragel6/ragel6"), nil, nil, e)
 
 	wantOut := "$(B)/util/_/datetime/parser.rl6.cpp"
 	if outPath.string() != wantOut {
@@ -88,7 +88,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 }
 
 func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 
 	ragel6LD := e.emit(&Node{Platform: &Platform{},
 		Cmds:    []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
@@ -98,11 +98,11 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
 
-	r6Ref, _ := EmitR6(
+	r6Ref, _ := emitR6(
 		targetInstance("devtools/ymake/lang/makelists"),
 		"makefile_lang.rl6",
 		ragel6LD,
-		Intern("$(B)/contrib/tools/ragel6/ragel6"),
+		intern("$(B)/contrib/tools/ragel6/ragel6"),
 		internArgs([]string{"-lF1"}),
 		nil,
 		e,
@@ -126,7 +126,7 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 }
 
 func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 
 	ragel6LD := e.emit(&Node{Platform: &Platform{},
 		Cmds:    []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
@@ -142,18 +142,18 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 	}
 	releaseHostFlags["PIC"] = "yes"
 	releaseHostFlags["GG_BUILD_TYPE"] = "release"
-	releaseHost := NewPlatform(newMemFS(nil), OSLinux, ISAX8664, releaseHostFlags, []string{"tool"}, "", "")
+	releaseHost := newPlatform(newMemFS(nil), OSLinux, ISAX8664, releaseHostFlags, []string{"tool"}, "", "")
 
-	r6Ref, _ := EmitR6(
+	r6Ref, _ := emitR6(
 		ModuleInstance{
-			Path:     Source("util"),
+			Path:     source("util"),
 			Kind:     KindLib,
 			Language: LangCPP,
 			Platform: releaseHost,
 		},
 		"datetime/parser.rl6",
 		ragel6LD,
-		Intern("$(B)/contrib/tools/ragel6/ragel6"),
+		intern("$(B)/contrib/tools/ragel6/ragel6"),
 		nil,
 		nil,
 		e,
@@ -175,7 +175,7 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 }
 
 func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
-	e := NewBufferedEmitter()
+	e := newBufferedEmitter()
 
 	ragel6LD := e.emit(&Node{Platform: &Platform{},
 		Cmds:    []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
@@ -187,12 +187,12 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 
 	// The closure is the rl6 source's window — the source itself leads it.
 	closure := []VFS{
-		Intern("$(S)/util/datetime/parser.rl6"),
-		Intern("$(S)/util/datetime/parser.h"),
-		Intern("$(S)/util/generic/ymath.h"),
+		intern("$(S)/util/datetime/parser.rl6"),
+		intern("$(S)/util/datetime/parser.h"),
+		intern("$(S)/util/generic/ymath.h"),
 	}
 
-	r6Ref, _ := EmitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, Intern("$(B)/contrib/tools/ragel6/ragel6"), nil, closure, e)
+	r6Ref, _ := emitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, intern("$(B)/contrib/tools/ragel6/ragel6"), nil, closure, e)
 
 	got := e.nodes[r6Ref]
 

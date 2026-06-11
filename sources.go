@@ -38,7 +38,7 @@ func joinSrcsIncludeClosure(ctx *GenCtx, scanPlatform *Platform, srcInstance Mod
 		}
 
 		srcRels[i] = srcRelOnDisk
-		visited.add(Source(srcRelOnDisk))
+		visited.add(source(srcRelOnDisk))
 	}
 
 	order := make([]VFS, 0, 1024)
@@ -53,7 +53,7 @@ func joinSrcsIncludeClosure(ctx *GenCtx, scanPlatform *Platform, srcInstance Mod
 
 		sc := scanner.newScanCtx(cfg)
 
-		for _, v := range sc.closureOf(Source(srcRelOnDisk)) {
+		for _, v := range sc.closureOf(source(srcRelOnDisk)) {
 			if visited.has(v) {
 				continue
 			}
@@ -78,7 +78,7 @@ func jsCCIncludeInputs(srcInstance ModuleInstance, joinOut VFS, sources []string
 	out = append(out, scripts[buildScriptsGenJoinSrcsPy]...)
 
 	for _, s := range sources {
-		out = append(out, Source(srcInstance.Path.rel()+"/"+s))
+		out = append(out, source(srcInstance.Path.rel()+"/"+s))
 	}
 
 	out = append(out, closure...)
@@ -101,7 +101,7 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 	// has the file; the module dir (index 0) is the final fallback.
 	for i := len(srcDirs) - 1; i >= 1; i-- {
 		if ctx.fs.isFile(srcDirs[i], srcRel) {
-			return Source(filepath.ToSlash(filepath.Clean(srcDirs[i].rel() + "/" + srcRel)))
+			return source(filepath.ToSlash(filepath.Clean(srcDirs[i].rel() + "/" + srcRel)))
 		}
 	}
 
@@ -111,7 +111,7 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 	// command_base/../ydb_command.cpp shape).
 	srcRelOnDisk := filepath.ToSlash(filepath.Clean(srcInstance.Path.rel() + "/" + srcRel))
 
-	return Source(srcRelOnDisk)
+	return source(srcRelOnDisk)
 }
 
 // walkClosure returns the transitive include closure WINDOW of vfsPath — the

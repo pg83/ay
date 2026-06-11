@@ -1,25 +1,25 @@
 package main
 
 var cythonNumpyAddIncl = []VFS{
-	Intern("$(S)/contrib/python/numpy/include/numpy/core/include"),
-	Intern("$(S)/contrib/python/numpy/include/numpy/core/include/numpy"),
-	Intern("$(S)/contrib/python/numpy/include/numpy/core/src/common"),
-	Intern("$(S)/contrib/python/numpy/include/numpy/core/src/npymath"),
-	Intern("$(S)/contrib/python/numpy/include/numpy/distutils/include"),
+	intern("$(S)/contrib/python/numpy/include/numpy/core/include"),
+	intern("$(S)/contrib/python/numpy/include/numpy/core/include/numpy"),
+	intern("$(S)/contrib/python/numpy/include/numpy/core/src/common"),
+	intern("$(S)/contrib/python/numpy/include/numpy/core/src/npymath"),
+	intern("$(S)/contrib/python/numpy/include/numpy/distutils/include"),
 }
 
 var py3CythonOutputIncludes = []VFS{
-	Intern("$(S)/contrib/tools/cython/generated_c_headers.h"),
-	Intern("$(S)/contrib/tools/cython/generated_cpp_headers.h"),
-	Intern("$(S)/contrib/libs/python/Include/compile.h"),
-	Intern("$(S)/contrib/libs/python/Include/frameobject.h"),
-	Intern("$(S)/contrib/libs/python/Include/longintrepr.h"),
-	Intern("$(S)/contrib/libs/python/Include/pyconfig.h"),
-	Intern("$(S)/contrib/libs/python/Include/Python.h"),
-	Intern("$(S)/contrib/libs/python/Include/pythread.h"),
-	Intern("$(S)/contrib/libs/python/Include/structmember.h"),
-	Intern("$(S)/contrib/libs/python/Include/traceback.h"),
-	Intern("$(S)/contrib/libs/cxxsupp/openmp/omp.h"),
+	intern("$(S)/contrib/tools/cython/generated_c_headers.h"),
+	intern("$(S)/contrib/tools/cython/generated_cpp_headers.h"),
+	intern("$(S)/contrib/libs/python/Include/compile.h"),
+	intern("$(S)/contrib/libs/python/Include/frameobject.h"),
+	intern("$(S)/contrib/libs/python/Include/longintrepr.h"),
+	intern("$(S)/contrib/libs/python/Include/pyconfig.h"),
+	intern("$(S)/contrib/libs/python/Include/Python.h"),
+	intern("$(S)/contrib/libs/python/Include/pythread.h"),
+	intern("$(S)/contrib/libs/python/Include/structmember.h"),
+	intern("$(S)/contrib/libs/python/Include/traceback.h"),
+	intern("$(S)/contrib/libs/cxxsupp/openmp/omp.h"),
 }
 
 var py3CythonEmbeddedFiles = []string{
@@ -101,8 +101,8 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 			generated = *stmt.Generated
 		}
 
-		generatedVFS := Build(instance.Path.rel() + "/" + generated)
-		srcVFS := Source(instance.Path.rel() + "/" + stmt.Src)
+		generatedVFS := build(instance.Path.rel() + "/" + generated)
+		srcVFS := source(instance.Path.rel() + "/" + stmt.Src)
 		srcScanIn := in
 		srcScanIn.AddIncl = appendCythonScanAddIncl(srcScanIn.AddIncl, d.cythonAddIncl, py23Variant)
 		sourceClosure := walkClosureTail(ctx, instance, srcVFS, srcScanIn)
@@ -179,7 +179,7 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 		scanIn.AddIncl = appendCythonScanAddIncl(in.AddIncl, d.cythonAddIncl, py23Variant)
 		ccIn.IncludeInputs = walkClosure(ctx, instance, generatedVFS, scanIn)
 
-		ccRef, ccOut, _ := EmitCC(instance, generated, generatedVFS, ccIn, ctx.host, ctx.emit)
+		ccRef, ccOut, _ := emitCC(instance, generated, generatedVFS, ccIn, ctx.host, ctx.emit)
 		out = append(out, &SourceEmit{Ref: ccRef, OutPath: ccOut})
 	}
 
@@ -205,7 +205,7 @@ func cythonGeneratedOutputInputs(ctx *GenCtx, instance ModuleInstance, src VFS, 
 	}
 
 	for _, rel := range py3CythonEmbeddedFiles {
-		v := Source(rel)
+		v := source(rel)
 		toolInputs = append(toolInputs, v)
 		emitsIncludes = append(emitsIncludes, v)
 

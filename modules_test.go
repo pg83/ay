@@ -17,7 +17,7 @@ func TestApplyUnknownStmt_ExcludeTagsAcceptsTagNames(t *testing.T) {
 	// the very check this test exercises.
 	tag := "PY" + "_" + "PROTO"
 
-	err := Try(func() {
+	err := try(func() {
 		applyUnknownStmt("mod", &UnknownStmt{Name: tokExcludeTags, Args: []string{tag}}, d, env)
 	})
 
@@ -38,7 +38,7 @@ func TestApplyUnknownStmt_AddInclSelf(t *testing.T) {
 	d := &ModuleData{}
 	applyUnknownStmt("contrib/libs/foo", &UnknownStmt{Name: internTok("ADDINCLSELF")}, d, env)
 
-	want := Source("contrib/libs/foo")
+	want := source("contrib/libs/foo")
 	found := false
 
 	for _, v := range d.addIncl {
@@ -55,15 +55,15 @@ func TestApplyUnknownStmt_AddInclSelf(t *testing.T) {
 	dc := &ModuleData{}
 	applyUnknownStmt("contrib/libs/bar", &UnknownStmt{Name: internTok("ADDINCLSELF"), Args: []string{"FOR", "cython"}}, dc, env)
 
-	if len(dc.cythonAddIncl) != 1 || dc.cythonAddIncl[0] != Source("contrib/libs/bar") {
-		t.Fatalf("ADDINCLSELF(FOR cython): cythonAddIncl = %v, want [%v]", dc.cythonAddIncl, Source("contrib/libs/bar"))
+	if len(dc.cythonAddIncl) != 1 || dc.cythonAddIncl[0] != source("contrib/libs/bar") {
+		t.Fatalf("ADDINCLSELF(FOR cython): cythonAddIncl = %v, want [%v]", dc.cythonAddIncl, source("contrib/libs/bar"))
 	}
 }
 
 func TestApplyUnknownStmt_LLVMBCRequiresConfiguredVersion(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
 
-	err := Try(func() {
+	err := try(func() {
 		applyUnknownStmt("mod", &UnknownStmt{Name: tokLlvmBc, Args: []string{"src.cpp", "generated.cpp"}}, &ModuleData{}, env)
 	})
 	if err == nil {
@@ -114,7 +114,7 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 			flags["PIC"] = "no"
 			flags[tt.resourceKey] = tt.resourceVal
 
-			platform := NewPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "", "")
+			platform := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "", "")
 			env := buildIfEnv(ModuleInstance{Platform: platform})
 			data := &ModuleData{}
 
@@ -128,7 +128,7 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 			if got := env.string(envLLVM_LLC_TOOL); got != tt.wantLLCTool {
 				t.Fatalf("LLVM_LLC_TOOL = %q, want %q", got, tt.wantLLCTool)
 			}
-			if err := Try(func() {
+			if err := try(func() {
 				// LLVM_BC requires NAME per upstream (build/plugins/llvm_bc.py:8).
 				applyUnknownStmt("mod", &UnknownStmt{Name: tokLlvmBc, Args: []string{"src.cpp", "generated.cpp", "NAME", "Bytecode"}}, data, env)
 			}); err != nil {
@@ -179,7 +179,7 @@ func TestPrEmitsIncludes_OutputIncludesVFSPrefixStripped(t *testing.T) {
 	for _, c := range cases {
 		got := c.input
 		if vfsHasPrefix(c.input) {
-			got = Intern(c.input).rel()
+			got = intern(c.input).rel()
 		}
 		if got != c.want {
 			t.Errorf("VFS prefix strip(%q) = %q, want %q", c.input, got, c.want)
@@ -319,13 +319,13 @@ func TestCollectModule_PySrcsExpandsSetList(t *testing.T) {
 	// the typed cases. (yt/python/yt/wrapper builds SRCS via SET then PY_SRCS it.)
 	src := "LIBRARY()\nSET(SRCS\n    a.py\n    b.py\n)\nPY_SRCS(${SRCS})\nEND()\n"
 
-	mf, err := Parse(testParserFS, "ya.make", []byte(src))
+	mf, err := parse(testParserFS, "ya.make", []byte(src))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
 
 	d := collectModule(newIncludeParserManagerFS(newMemFS(nil), newSharedParseCache()), &DeDuper{}, "mod", KindLib,
-		mf.Stmts, buildIfEnv(ModuleInstance{Path: Source("mod"), Kind: KindLib, Platform: testTargetP}))
+		mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}))
 
 	if !equalStrings(d.pySrcs, []string{"a.py", "b.py"}) {
 		t.Fatalf("pySrcs = %v, want [a.py b.py]", d.pySrcs)
@@ -340,7 +340,7 @@ func TestExpandConfigVFSPaths_SplitsSetList(t *testing.T) {
 	env.setFromString(internEnv("DIRS"), "contrib/deprecated/bdb/src contrib/deprecated/bdb/src/dbinc")
 
 	got := expandConfigVFSPaths([]string{"${DIRS}"}, env)
-	want := []VFS{Source("contrib/deprecated/bdb/src"), Source("contrib/deprecated/bdb/src/dbinc")}
+	want := []VFS{source("contrib/deprecated/bdb/src"), source("contrib/deprecated/bdb/src/dbinc")}
 
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("expandConfigVFSPaths = %v, want %v", got, want)
@@ -348,12 +348,12 @@ func TestExpandConfigVFSPaths_SplitsSetList(t *testing.T) {
 }
 
 func TestCatboostOpenSourceDefineGating(t *testing.T) {
-	osP := NewPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{"OPENSOURCE": "yes", "PIC": "no"}, nil, "", "")
+	osP := newPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{"OPENSOURCE": "yes", "PIC": "no"}, nil, "", "")
 	if len(catboostOpenSourceDefineFor(osP)) == 0 {
 		t.Error("OPENSOURCE=yes must include -DCATBOOST_OPENSOURCE")
 	}
 
-	intP := NewPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{"PIC": "no"}, nil, "", "")
+	intP := newPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{"PIC": "no"}, nil, "", "")
 	if catboostOpenSourceDefineFor(intP) != nil {
 		t.Error("non-OPENSOURCE build must omit -DCATBOOST_OPENSOURCE")
 	}

@@ -12,12 +12,12 @@ func newAllocatorDefaultTestPlatform(os OS, isa ISA) *Platform {
 	}
 	flags["PIC"] = "no"
 
-	return NewPlatform(newMemFS(nil), os, isa, flags, nil, "", "")
+	return newPlatform(newMemFS(nil), os, isa, flags, nil, "", "")
 }
 
 func TestDefaultProgramPeerdirsForWithState_X8664GetsTcmallocDefault(t *testing.T) {
 	instance := ModuleInstance{
-		Path:     Source("prog"),
+		Path:     source("prog"),
 		Kind:     KindBin,
 		Language: LangCPP,
 		Platform: newAllocatorDefaultTestPlatform(OSLinux, ISAX8664),
@@ -37,7 +37,7 @@ func TestDefaultProgramPeerdirsForWithState_X8664GetsTcmallocDefault(t *testing.
 
 func TestDefaultProgramPeerdirsForWithState_AArch64SkipsTcmallocDefault(t *testing.T) {
 	instance := ModuleInstance{
-		Path:     Source("prog"),
+		Path:     source("prog"),
 		Kind:     KindBin,
 		Language: LangCPP,
 		Platform: newAllocatorDefaultTestPlatform(OSLinux, ISAAArch64),

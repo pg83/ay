@@ -129,7 +129,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	prExtraDepRefs := resolveCodegenDepRefsExt(ctx, instance, inputClosure, inVFSs, toolLDRef)
 
-	prResult := EmitPR(instance, stmt, toolBinPath, toolLDRef, auxTools, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, prExtraDepRefs, ctx.emit)
+	prResult := emitPR(instance, stmt, toolBinPath, toolLDRef, auxTools, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, prExtraDepRefs, ctx.emit)
 	prRef := prResult.Ref
 
 	if d.prOutputInputs == nil {
@@ -262,10 +262,10 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 			target := oi
 
 			if vfsHasPrefix(target) {
-				target = Intern(target).rel()
+				target = intern(target).rel()
 			}
 
-			candidate := Build(target)
+			candidate := build(target)
 			info := reg.lookup(candidate)
 
 			if info == nil {
@@ -293,7 +293,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 					sibDir, sibBase := splitDirName(sibling)
 
 					if ctx.fs.isFile(dirKey(sibDir), sibBase) {
-						out = append(out, Source(sibling))
+						out = append(out, source(sibling))
 					}
 				}
 			}
@@ -350,7 +350,7 @@ func prEmitsIncludes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, outFil
 
 	for _, f := range stmt.OutputIncludes {
 		if vfsHasPrefix(f) {
-			f = Intern(f).rel()
+			f = intern(f).rel()
 		}
 
 		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(f)})
@@ -395,7 +395,7 @@ func runProgramInputVFS(ctx *GenCtx, instance ModuleInstance, d *ModuleData, rel
 		return copyFileInputVFS(ctx.fs, instance.Path.rel(), rel)
 	}
 
-	buildVFS := Build(filepath.ToSlash(filepath.Clean(instance.Path.rel() + "/" + rel)))
+	buildVFS := build(filepath.ToSlash(filepath.Clean(instance.Path.rel() + "/" + rel)))
 
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
 		if reg.lookup(buildVFS) != nil {
@@ -404,14 +404,14 @@ func runProgramInputVFS(ctx *GenCtx, instance ModuleInstance, d *ModuleData, rel
 	}
 
 	if ctx.fs.isFile(srcRootVFS, rel) {
-		return Source(rel)
+		return source(rel)
 	}
 
 	return resolveModuleSourceVFS(ctx, instance, d, rel, d.srcDirs)
 }
 
 func expandRunProgramCWD(instance ModuleInstance, cwd string) string {
-	cwd = strings.ReplaceAll(cwd, "$BINDIR", Build(instance.Path.rel()).string())
+	cwd = strings.ReplaceAll(cwd, "$BINDIR", build(instance.Path.rel()).string())
 	cwd = strings.ReplaceAll(cwd, "$CURDIR", instance.Path.string())
 	cwd = strings.ReplaceAll(cwd, "${ARCADIA_BUILD_ROOT}", "$(B)")
 	cwd = strings.ReplaceAll(cwd, "${ARCADIA_ROOT}", "$(S)")
@@ -424,7 +424,7 @@ type PrEmitResult struct {
 	Inputs InputChunks
 }
 
-func EmitPR(
+func emitPR(
 	instance ModuleInstance,
 	stmt *RunProgramStmt,
 	toolBinPath VFS,
@@ -456,10 +456,10 @@ func EmitPR(
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
 		a = strings.ReplaceAll(a, "${ARCADIA_BUILD_ROOT}", "$(B)")
 		a = strings.ReplaceAll(a, "${CURDIR}", instance.Path.string())
-		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path.rel()).string())
+		a = strings.ReplaceAll(a, "${BINDIR}", build(instance.Path.rel()).string())
 		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path.rel())
 		a = strings.ReplaceAll(a, "$CURDIR", instance.Path.string())
-		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path.rel()).string())
+		a = strings.ReplaceAll(a, "$BINDIR", build(instance.Path.rel()).string())
 
 		for _, tool := range auxTools {
 			if strings.Contains(a, tool.token) {

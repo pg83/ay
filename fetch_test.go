@@ -7,7 +7,7 @@ import (
 func emitTestCompileGraph(t *testing.T, host, target *Platform) *Graph {
 	t.Helper()
 
-	execEmit := NewBufferedEmitter()
+	execEmit := newBufferedEmitter()
 	// CLANG is declared by build/platform/clang; its FETCH node is emitted up front
 	// (as genResourcesLibrary/emitResourceFetch would) into the shared fetchRefs the
 	// emitter consults for consumers' $(CLANG) deps.
@@ -17,7 +17,7 @@ func emitTestCompileGraph(t *testing.T, host, target *Platform) *Graph {
 		Platform: host,
 		Cmds:     []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"ay", "fetch", "$(B)", "$(S)", "sbr:clang", "resources/CLANG"})}}},
 		KV:       KV{P: pkFETCH, PC: pcYellow, ShowOut: true},
-		Outputs:  []VFS{Build("resources/" + resourcePatternClangTool)},
+		Outputs:  []VFS{build("resources/" + resourcePatternClangTool)},
 	})
 	clangTool := prebuiltToolchainFlags()["CLANG_TOOL"]
 	ref := execResourceEmit.emit(&Node{Platform: target,
@@ -26,16 +26,16 @@ func emitTestCompileGraph(t *testing.T, host, target *Platform) *Graph {
 			Env:     nil,
 		}},
 		Env:              nil,
-		Inputs:           InputChunks{{Intern("$(S)/pkg/app/main.cpp")}},
+		Inputs:           InputChunks{{intern("$(S)/pkg/app/main.cpp")}},
 		KV:               KV{P: pkCC},
-		Outputs:          []VFS{Intern("$(B)/pkg/app/main.o")},
+		Outputs:          []VFS{intern("$(B)/pkg/app/main.o")},
 		Requirements:     Requirements{},
 		TargetProperties: TargetProperties{},
 		usesResources:    []string{resourcePatternClangTool},
 	})
 	execResourceEmit.result(ref)
 
-	return Finalize(execEmit)
+	return finalize(execEmit)
 }
 
 func assertSingleUsedClangFetch(t *testing.T, graph *Graph) {

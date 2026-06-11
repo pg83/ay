@@ -30,6 +30,21 @@ var stdlibCaseMethods = map[string]bool{
 	"Unwrap":        true,
 }
 
+// predeclaredIdents are Go's predeclared names: a package-level function
+// lowered onto one of these shadows the builtin for the whole package.
+var predeclaredIdents = map[string]bool{
+	"new": true, "make": true, "len": true, "cap": true, "copy": true,
+	"append": true, "delete": true, "clear": true, "close": true,
+	"panic": true, "recover": true, "print": true, "println": true,
+	"min": true, "max": true, "complex": true, "real": true, "imag": true,
+	"true": true, "false": true, "nil": true, "iota": true,
+	"bool": true, "byte": true, "rune": true, "error": true, "string": true,
+	"int": true, "int8": true, "int16": true, "int32": true, "int64": true,
+	"uint": true, "uint8": true, "uint16": true, "uint32": true, "uint64": true,
+	"uintptr": true, "float32": true, "float64": true, "complex64": true,
+	"complex128": true, "any": true, "comparable": true,
+}
+
 var caseErrRe = regexp.MustCompile(`^([^:\s]+\.go):(\d+):(\d+): (?:undefined: (\w+)|\S+ undefined \(.*has no field or method (\w+))`)
 
 // refacCase enforces the package naming convention — type names upper-case,
@@ -45,16 +60,17 @@ func refacCase(args []string) int {
 
 	typeRen := map[string]string{}
 	methodRen := map[string]string{}
+	forbidden := forbiddenLowerNames(files)
 
 	for _, path := range files {
-		renameCaseDecls(path, typeRen, methodRen)
+		renameCaseDecls(path, typeRen, methodRen, forbidden)
 	}
 
 	fmt.Fprintf(os.Stderr, "refac case: renamed decls: %d types, %d method names\n", len(typeRen), len(methodRen))
 
 	for round := 0; ; round++ {
 		if round > 500 {
-			ThrowFmt("refac case: no fixpoint after %d rounds", round)
+			throwFmt("refac case: no fixpoint after %d rounds", round)
 		}
 
 		fixed, clean := fixCaseRefsOnce(typeRen, methodRen)
@@ -77,10 +93,41 @@ func refacCase(args []string) int {
 // renameCaseDecls rewrites the violating declarations of one file in place:
 // lower-case package-level type names, upper-case method names (on both the
 // func decls and any interface type's method list), recording old->new.
-func renameCaseDecls(path string, typeRen, methodRen map[string]string) {
+// forbiddenLowerNames returns the identifiers a lowered function name must
+// not collide with: Go's predeclared names plus the base name of every
+// package imported anywhere in the file set (a package-level `fmt` would
+// shadow the import in its file).
+func forbiddenLowerNames(files []string) map[string]bool {
+	out := make(map[string]bool, len(predeclaredIdents)+32)
+
+	for n := range predeclaredIdents {
+		out[n] = true
+	}
+
+	for _, path := range files {
+		fset := gotoken.NewFileSet()
+		f := throw2(goparser.ParseFile(fset, path, throw2(os.ReadFile(path)), goparser.ImportsOnly))
+
+		for _, imp := range f.Imports {
+			p := strings.Trim(imp.Path.Value, `"`)
+
+			if imp.Name != nil {
+				out[imp.Name.Name] = true
+			} else if i := strings.LastIndexByte(p, '/'); i >= 0 {
+				out[p[i+1:]] = true
+			} else {
+				out[p] = true
+			}
+		}
+	}
+
+	return out
+}
+
+func renameCaseDecls(path string, typeRen, methodRen map[string]string, forbidden map[string]bool) {
 	fset := gotoken.NewFileSet()
-	src := Throw2(os.ReadFile(path))
-	f := Throw2(goparser.ParseFile(fset, path, src, goparser.SkipObjectResolution))
+	src := throw2(os.ReadFile(path))
+	f := throw2(goparser.ParseFile(fset, path, src, goparser.SkipObjectResolution))
 
 	type edit struct {
 		off  int
@@ -124,11 +171,31 @@ func renameCaseDecls(path string, typeRen, methodRen map[string]string) {
 				}
 			}
 		case *ast.FuncDecl:
-			if d.Recv == nil {
+			name := d.Name.Name
+
+			if name[0] < 'A' || name[0] > 'Z' {
 				continue
 			}
 
-			if name := d.Name.Name; name[0] >= 'A' && name[0] <= 'Z' && !stdlibCaseMethods[name] {
+			if d.Recv == nil {
+				// Free functions are lower-case too; "undefined:" references
+				// resolve through the same map as types. A lowered name that
+				// hits a predeclared identifier (New -> new) would shadow the
+				// builtin package-wide — those need a manual, descriptive
+				// rename; flag instead of mangling.
+				if forbidden[lower(name)] {
+					fmt.Fprintf(os.Stderr, "refac case: %s: function %s lowers to reserved %q — rename manually\n", path, name, lower(name))
+
+					continue
+				}
+
+				typeRen[name] = lower(name)
+				add(d.Name, typeRen[name])
+
+				continue
+			}
+
+			if !stdlibCaseMethods[name] {
 				methodRen[name] = lower(name)
 				add(d.Name, methodRen[name])
 			}
@@ -145,13 +212,13 @@ func renameCaseDecls(path string, typeRen, methodRen map[string]string) {
 
 	for _, e := range edits {
 		if out[e.off:e.off+len(e.old)] != e.old {
-			ThrowFmt("refac case: %s: offset %d holds %q, want %q", path, e.off, out[e.off:e.off+min(len(e.old), 20)], e.old)
+			throwFmt("refac case: %s: offset %d holds %q, want %q", path, e.off, out[e.off:e.off+min(len(e.old), 20)], e.old)
 		}
 
 		out = out[:e.off] + e.new_ + out[e.off+len(e.old):]
 	}
 
-	Throw(os.WriteFile(path, []byte(out), 0o644))
+	throw(os.WriteFile(path, []byte(out), 0o644))
 }
 
 // fixCaseRefsOnce compiles the package (and its tests) and flips the case of
@@ -211,7 +278,7 @@ func fixCaseRefsOnce(typeRen, methodRen map[string]string) (int, bool) {
 	}
 
 	for path, fixes := range byFile {
-		src := strings.Split(string(Throw2(os.ReadFile(path))), "\n")
+		src := strings.Split(string(throw2(os.ReadFile(path))), "\n")
 		sort.Slice(fixes, func(i, j int) bool {
 			if fixes[i].line != fixes[j].line {
 				return fixes[i].line > fixes[j].line
@@ -232,7 +299,7 @@ func fixCaseRefsOnce(typeRen, methodRen map[string]string) (int, bool) {
 			total++
 		}
 
-		Throw(os.WriteFile(path, []byte(strings.Join(src, "\n")), 0o644))
+		throw(os.WriteFile(path, []byte(strings.Join(src, "\n")), 0o644))
 	}
 
 	return total, len(build) == 0 && len(vet) == 0
@@ -242,8 +309,8 @@ func fixCaseRefsOnce(typeRen, methodRen map[string]string) (int, bool) {
 // naming convention `refac case` enforces.
 func lintCaseConvention(path string) bool {
 	fset := gotoken.NewFileSet()
-	src := Throw2(os.ReadFile(path))
-	f := Throw2(goparser.ParseFile(fset, path, src, goparser.SkipObjectResolution))
+	src := throw2(os.ReadFile(path))
+	f := throw2(goparser.ParseFile(fset, path, src, goparser.SkipObjectResolution))
 
 	bad := false
 	report := func(pos gotoken.Pos, kind, name string) {
@@ -278,13 +345,15 @@ func lintCaseConvention(path string) bool {
 				}
 			}
 		case *ast.FuncDecl:
-			if d.Recv == nil {
-				continue
-			}
-
 			n := d.Name.Name
 
 			if n[0] < 'A' || n[0] > 'Z' {
+				continue
+			}
+
+			if d.Recv == nil {
+				report(d.Name.Pos(), "upper-case function", n)
+
 				continue
 			}
 
