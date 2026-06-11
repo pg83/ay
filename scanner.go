@@ -813,7 +813,7 @@ func (sc *ScanCtx) cacheSearchTier(targetID STR, out SearchTierResult) SearchTie
 	return out
 }
 
-func (sc *ScanCtx) resolveContextSearchTier(targetID STR, target string) SearchTierResult {
+func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 	s := sc.scanner
 
 	// Gate the composite-key hash probe on the 1-bit per-target presence flag: a
@@ -827,6 +827,10 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR, target string) SearchT
 	}
 
 	s.searchTierMisses++
+
+	// The string view is only needed on the miss path — cache hits never
+	// leave id space.
+	target := targetID.string()
 
 	var out SearchTierResult
 
@@ -1052,10 +1056,8 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 		searchPathFound = true
 	}
 
-	if includerAbs.isBuild() && strings.Contains(d.target.string(), "/") {
-		rel := d.target.string()
-
-		if addBuildPath(rel) {
+	if includerAbs.isBuild() {
+		if rel := d.target.string(); strings.Contains(rel, "/") && addBuildPath(rel) {
 			searchPathFound = true
 
 			if sc.cfg.OwnerModuleDir != "" && s.codegen != nil {
@@ -1093,7 +1095,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 		}
 
 		if !matched {
-			if info := s.codegenUnder(incDir.rel(), d.target.string()); info != nil {
+			if info := s.codegenUnder(incDir.rel(), d.target); info != nil {
 				if !outHas(info.OutputPath) {
 					out = append(out, info.OutputPath)
 					searchPathFound = true
@@ -1115,7 +1117,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 	}
 
 	if !searchPathFound {
-		tier := sc.resolveContextSearchTier(d.target, d.target.string())
+		tier := sc.resolveContextSearchTier(d.target)
 
 		if tier.found {
 			out = append(out, tier.paths...)
@@ -1204,10 +1206,13 @@ func (s *IncludeScanner) resolveSourceUnder(prefix VFS, target string) (string, 
 	return normalisePath(joinRel(prefix.rel(), target)), true
 }
 
-func (s *IncludeScanner) codegenUnder(prefixDir, target string) *GeneratedFileInfo {
+func (s *IncludeScanner) codegenUnder(prefixDir string, targetID STR) *GeneratedFileInfo {
 	if s.codegen == nil {
 		return nil
 	}
+
+	// targetID IS the interned target — no id -> string -> id round-trip.
+	target := targetID.string()
 
 	if first, _ := firstComponent(target); prefixDir != "" && canRelFilter(first, target) &&
 		!strings.Contains(target, "/./") && !strings.Contains(target, "//") {
@@ -1217,13 +1222,7 @@ func (s *IncludeScanner) codegenUnder(prefixDir, target string) *GeneratedFileIn
 			return nil
 		}
 
-		sid := interned(target)
-
-		if sid == nil {
-			return nil
-		}
-
-		return s.codegen.lookupSplit(*pid, *sid)
+		return s.codegen.lookupSplit(*pid, targetID)
 	}
 
 	return s.codegen.lookupRel(normalisePath(joinRel(prefixDir, target)))

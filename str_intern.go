@@ -93,6 +93,10 @@ func (id STR) str() STR {
 }
 
 func (id STR) string() string {
+	if strProbeEnabled {
+		strProbeAt()
+	}
+
 	return internTable.strs[id]
 }
 

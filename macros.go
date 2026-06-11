@@ -77,9 +77,9 @@ func evalAtom(e Expr, env Environment) any {
 
 		switch k, v := env.s.lookup(identEnv(x)); k {
 		case envStr:
-			return internTable.strs[v]
+			return v.string()
 		case envInt:
-			n, _ := strconv.Atoi(internTable.strs[v])
+			n, _ := strconv.Atoi(v.string())
 
 			return n
 		}

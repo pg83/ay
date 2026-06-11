@@ -86,7 +86,7 @@ func (e Environment) bool(id ENV) bool {
 func (e Environment) boolID(id ENV, name string) bool {
 	switch k, v := e.s.lookup(id); k {
 	case envStr:
-		return stringIsTruthy(internTable.strs[v])
+		return stringIsTruthy(v.string())
 	case envInt:
 		throwFmt("macros: identifier %q has int binding but is used in boolean position", name)
 	}
@@ -114,7 +114,7 @@ func (e Environment) string(id ENV) string {
 	// envStr stores the string (bools as "yes"/"no"); envInt stores the decimal
 	// form — both round-trip via the value STR.
 	if k, v := e.s.lookup(id); k != envAbsent {
-		return internTable.strs[v]
+		return v.string()
 	}
 
 	name := id.string()
@@ -226,7 +226,7 @@ func (e Environment) lookup(name string) (string, bool) {
 		return "", false
 	}
 
-	return internTable.strs[v], true
+	return v.string(), true
 }
 
 func (e Environment) setDefaultString(id ENV, v string) {

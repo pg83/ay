@@ -1782,7 +1782,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			continue
 		}
 
-		appendCC(src.string(), emitOneSource(ctx, instance, d, src.string(), emitSrcInputs(src.string())))
+		srcRel := src.string()
+		appendCC(srcRel, emitOneSource(ctx, instance, d, srcRel, emitSrcInputs(srcRel)))
 	}
 
 	for _, ce := range codegenEmits {

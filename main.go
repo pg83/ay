@@ -23,6 +23,12 @@ func main() {
 func dispatch(argv []string) {
 	probes, rest := parseGlobalFlags(argv[1:])
 
+	for _, p := range probes {
+		if p == "str" {
+			strProbeEnabled = true
+		}
+	}
+
 	if len(rest) == 0 {
 		fmt.Fprintln(os.Stderr, "usage: ay <subcommand> [flags]")
 		os.Exit(2)
@@ -52,10 +58,10 @@ func parseGlobalFlags(argv []string) (probes []string, rest []string) {
 		k, v, _ := strings.Cut(strings.TrimLeft(a, "-"), "=")
 
 		switch {
-		case k == "probe" && (v == "map" || v == "callsite"):
+		case k == "probe" && (v == "map" || v == "callsite" || v == "str"):
 			probes = append(probes, v)
 		case k == "probe":
-			throwFmt("unknown --probe=%q (want map|callsite)", v)
+			throwFmt("unknown --probe=%q (want map|callsite|str)", v)
 		default:
 			throwFmt("unknown global flag %q", a)
 		}
