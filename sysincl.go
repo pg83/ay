@@ -62,8 +62,19 @@ type SysIncl struct {
 	HasMultiTarget bool
 
 	CaseInsensitive bool
-	Mappings        map[STR][]VFS    // case-sensitive records, keys interned at parse
-	MappingsCI      map[string][]VFS // case-insensitive records, keys lowercased
+
+	// pairs accumulates the record's cooked header->targets mappings in parse
+	// order: CS keys interned (key), CI keys lowercased (keyCI). The YAMLs
+	// carry intra-record duplicate headers (darwin, libc-to-musl, misc, …)
+	// with last-wins semantics — the index build dedups keeping the LAST
+	// occurrence, matching the old per-record map staging.
+	pairs []SysinclPair
+}
+
+type SysinclPair struct {
+	key   STR    // case-sensitive arm; 0 for CI records
+	keyCI string // case-insensitive arm, lowercased; "" for CS records
+	paths []VFS
 }
 
 type SysInclSet []SysIncl
@@ -77,13 +88,9 @@ func (rec *SysIncl) setMapping(k string, paths []VFS) {
 	}
 
 	if rec.CaseInsensitive {
-		if rec.MappingsCI == nil {
-			rec.MappingsCI = make(map[string][]VFS)
-		}
-
-		rec.MappingsCI[strings.ToLower(k)] = paths
+		rec.pairs = append(rec.pairs, SysinclPair{keyCI: strings.ToLower(k), paths: paths})
 	} else {
-		rec.Mappings[internStr(k)] = paths
+		rec.pairs = append(rec.pairs, SysinclPair{key: internStr(k), paths: paths})
 	}
 }
 
@@ -235,7 +242,7 @@ func parseSysInclYAML(name, text string, onWarn func(Warn)) []SysIncl {
 // case_sensitive are applied before includes so setMapping sees the final
 // case-sensitivity regardless of key order in the file.
 func parseSysInclRecord(name string, rn *yaml.Node, onWarn func(Warn)) SysIncl {
-	rec := SysIncl{Mappings: make(map[STR][]VFS)}
+	rec := SysIncl{}
 
 	var includes *yaml.Node
 

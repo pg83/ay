@@ -39,15 +39,15 @@ func TestParseSysInclYAML_Synthetic(t *testing.T) {
 		t.Errorf("filter should not match contrib/libs/other/bar.c")
 	}
 
-	if got := r.Mappings[internStr("bar.h")]; len(got) != 1 || got[0] != source("contrib/libs/foo/bar.h") {
+	if got, _ := recMapping(r, "bar.h"); len(got) != 1 || got[0] != source("contrib/libs/foo/bar.h") {
 		t.Errorf("bar.h: got %v, want [contrib/libs/foo/bar.h]", got)
 	}
 
-	if got := r.Mappings[internStr("baz.h")]; len(got) != 2 {
+	if got, _ := recMapping(r, "baz.h"); len(got) != 2 {
 		t.Errorf("baz.h: got %v, want 2-element fan-out", got)
 	}
 
-	got, ok := r.Mappings[internStr("quux.h")]
+	got, ok := recMapping(r, "quux.h")
 
 	if !ok {
 		t.Errorf("quux.h: missing")
@@ -57,7 +57,7 @@ func TestParseSysInclYAML_Synthetic(t *testing.T) {
 		t.Errorf("quux.h suppression: got %v, want no paths", got)
 	}
 
-	got, ok = r.Mappings[internStr("bare.h")]
+	got, ok = recMapping(r, "bare.h")
 
 	if !ok {
 		t.Errorf("bare.h: missing")
@@ -242,4 +242,18 @@ func TestLiteralAltsFromRegex_BailsOnNonLiteral(t *testing.T) {
 			t.Errorf("literalAltsFromRegex(%q) = expandable, want kept as regex", pat)
 		}
 	}
+}
+
+// recMapping reads a record's last-wins mapping for k (the pre-pairs tests
+// asserted via the staging map).
+func recMapping(r SysIncl, k string) ([]VFS, bool) {
+	id := internStr(k)
+
+	for i := len(r.pairs) - 1; i >= 0; i-- {
+		if r.pairs[i].key == id {
+			return r.pairs[i].paths, true
+		}
+	}
+
+	return nil, false
 }
