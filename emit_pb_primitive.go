@@ -71,6 +71,7 @@ func EmitPB(
 	extraPlugins []resolvedCPPProtoPlugin,
 	transitiveProtoImports []VFS,
 	peerProtoAddIncl []VFS,
+	protoNamespaceTail []VFS,
 	extraDepRefs []NodeRef,
 	producerSourceInputs []VFS,
 	tc moduleToolchain,
@@ -162,8 +163,14 @@ func EmitPB(
 		cmdArgs = append(cmdArgs, internStr("-I="+p.String()))
 	}
 
-	if moduleTag == 0 && strings.HasPrefix(protoRelPath, "yt/") {
-		cmdArgs = append(cmdArgs, argISYt.str())
+	// Non-GLOBAL PROTO_NAMESPACE contributions trail the chain, and only in
+	// non-PROTO_LIBRARY protoc cmdlines — a PROTO_LIBRARY's own chain
+	// excludes them (reference graphs: yt_proto/yt/client lacks the trailing
+	// -I=$(S)/yt that yt/yt/library/quantile_digest carries).
+	if moduleTag == 0 {
+		for _, p := range protoNamespaceTail {
+			cmdArgs = append(cmdArgs, internStr("-I="+p.String()))
+		}
 	}
 
 	cmdArgs = append(cmdArgs,
