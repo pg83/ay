@@ -19,14 +19,20 @@ var macroAudit = &MacroAuditState{
 // and DISABLE(MY_X) translate into env.SetBool(MY_X, …) and accept anything
 // the ya.make author chose. The strict service-keyword check is suppressed
 // for these so a new project-specific flag does not need to be hard-coded.
-var macrosAcceptingUserFlags = map[string]struct{}{
-	"ENABLE":  {},
-	"DISABLE": {},
+var macrosAcceptingUserFlags = map[TOK]struct{}{
+	tokEnable:  {},
+	tokDisable: {},
 	// EXCLUDE_TAGS args are submodule tag NAMES (GO_PROTO, JAVA_PROTO, PY_PROTO,
 	// …) — user data, not structural service-keywords — so they bypass the
 	// strict service-keyword audit.
-	"EXCLUDE_TAGS": {},
+	tokExcludeTags: {},
 }
+
+// serviceArgOK marks arg STRs the service-keyword check has already passed
+// (either not service-shaped, or a modelled keyword) — args repeat heavily
+// across ya.makes, so the per-invocation check is a bit probe. Single-writer
+// (gen goroutine), like the deduper.
+var serviceArgOK BitSet
 
 // macroAudit collects two classes of ya.make traffic during gen:
 //   - macro invocations whose name lands in whitelistedMetadataMacros (i.e.,
@@ -63,7 +69,7 @@ func enableMacroAudit() {
 // nothing from it. Service-word args of these macros are intentionally NOT
 // inspected: their argument grammar belongs to upstream's macro parser, not
 // ours, so listing tokens like `MIT` for LICENSE only generates noise.
-func recordIgnoredMacro(name string, _ []string) {
+func recordIgnoredMacro(name TOK) {
 	if !macroAudit.enabled {
 		return
 	}
@@ -72,7 +78,7 @@ func recordIgnoredMacro(name string, _ []string) {
 
 	defer macroAudit.mu.Unlock()
 
-	macroAudit.ignored[name]++
+	macroAudit.ignored[name.string()]++
 }
 
 // recordHandledMacro is called for every macro whose typed branch in
@@ -83,18 +89,22 @@ func recordIgnoredMacro(name string, _ []string) {
 // is forced to model it before any graph is emitted. Macros listed in
 // macrosAcceptingUserFlags bypass the check. The audit buckets fill only
 // when --dump-ignored-macros is on.
-func recordHandledMacro(name string, args []string) {
+func recordHandledMacro(name TOK, args []STR) {
 	if _, free := macrosAcceptingUserFlags[name]; !free {
-		known := knownServiceTokens()
-
-		for _, a := range args {
-			if !looksLikeServiceWord(a) {
+		for _, aTok := range args {
+			if serviceArgOK.has(uint32(aTok)) {
 				continue
 			}
 
-			if _, ok := known[a]; !ok {
-				throwFmt("gen: macro %s received service-keyword %q that no handler models — open the upstream macro definition (yatool/build/conf, yatool/build/ymake.core.conf, yatool/build/plugins) and implement its semantics; only then drop the keyword as a \"…\" literal in the macro's handler", name, a)
+			a := aTok.string()
+
+			if looksLikeServiceWord(a) {
+				if _, ok := knownServiceTokens()[a]; !ok {
+					throwFmt("gen: macro %s received service-keyword %q that no handler models — open the upstream macro definition (yatool/build/conf, yatool/build/ymake.core.conf, yatool/build/plugins) and implement its semantics; only then drop the keyword as a \"…\" literal in the macro's handler", name.string(), a)
+				}
 			}
+
+			serviceArgOK.add(uint32(aTok))
 		}
 	}
 
@@ -106,7 +116,7 @@ func recordHandledMacro(name string, args []string) {
 
 	defer macroAudit.mu.Unlock()
 
-	recordServiceArgsLocked(name, args)
+	recordServiceArgsLocked(name.string(), strStrings(args))
 }
 
 func recordServiceArgsLocked(macroName string, args []string) {

@@ -123,6 +123,25 @@ var acknowledgedMacros = map[string]struct{}{
 	"WITH_KOTLIN_GRPC":                {},
 }
 
+// acknowledgedTokSet is acknowledgedMacros in TOK space, so the per-invocation
+// gate is a bit probe instead of a name view + string-map read. Built once;
+// every acknowledged name must exist in the closed TOK enum.
+var acknowledgedTokSet = func() BitSet {
+	var b BitSet
+
+	for name := range acknowledgedMacros {
+		t, ok := tokByName[name]
+
+		if !ok {
+			panic("acknowledgedMacros name missing from the TOK enum: " + name)
+		}
+
+		b.add(uint32(t))
+	}
+
+	return b
+}()
+
 type ModuleEmitResult struct {
 	ARRef      NodeRef
 	ARPath     *VFS
@@ -1702,7 +1721,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	// subsequent header walks resolve them correctly.
 	type codegenEmit struct {
 		srcID STR
-		src   string
 		emit  *SourceEmit
 	}
 
@@ -1712,12 +1730,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	codegenEmits := make([]codegenEmit, 0, 4)
 
 	for _, src := range d.srcs {
-		srcRel := src.string()
-
-		if !isCodegenProducingSrc(srcRel) {
+		if !isCodegenProducingSrcID(src) {
 			continue
 		}
 
+		srcRel := src.string()
 		srcInputs := moduleInputs
 
 		if extras := d.perSrcCFlagsFor(src); extras != nil {
@@ -1728,7 +1745,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			srcInputs.FlatOutput = true
 		}
 
-		codegenEmits = append(codegenEmits, codegenEmit{src, srcRel, emitOneSource(ctx, instance, d, srcRel, srcInputs)})
+		codegenEmits = append(codegenEmits, codegenEmit{src, emitOneSource(ctx, instance, d, srcRel, srcInputs)})
 	}
 
 	emitCopyFiles(ctx, instance, d, &moduleInputs)
@@ -1763,31 +1780,30 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		return adjustCythonCompanionSourceInputs(instance.Platform, d, src, si)
 	}
-	appendCC := func(srcID STR, src string, emit *SourceEmit) {
+	appendCC := func(srcID STR, emit *SourceEmit) {
 		if emit == nil {
 			return
 		}
 
-		isFlatNoLto := d.flatSrc(srcID)
+		cls := srcExtClassOf(srcID)
 		ccRefs = append(ccRefs, emit.Ref)
 		ccOutputs = append(ccOutputs, emit.OutPath)
-		ccIsFlatNoLto = append(ccIsFlatNoLto, isFlatNoLto)
-		ccIsCFGenerated = append(ccIsCFGenerated, strings.HasSuffix(src, ".cpp.in") || strings.HasSuffix(src, ".c.in"))
-		ccIsProtoGenerated = append(ccIsProtoGenerated, strings.HasSuffix(src, ".proto"))
+		ccIsFlatNoLto = append(ccIsFlatNoLto, d.flatSrc(srcID))
+		ccIsCFGenerated = append(ccIsCFGenerated, cls == srcExtCppIn || cls == srcExtCIn)
+		ccIsProtoGenerated = append(ccIsProtoGenerated, cls == srcExtProto)
 	}
 
 	for _, src := range d.srcs {
-		srcRel := src.string()
-
-		if isCodegenProducingSrc(srcRel) {
+		if isCodegenProducingSrcID(src) {
 			continue
 		}
 
-		appendCC(src, srcRel, emitOneSource(ctx, instance, d, srcRel, emitSrcInputs(src, srcRel)))
+		srcRel := src.string()
+		appendCC(src, emitOneSource(ctx, instance, d, srcRel, emitSrcInputs(src, srcRel)))
 	}
 
 	for _, ce := range codegenEmits {
-		appendCC(ce.srcID, ce.src, ce.emit)
+		appendCC(ce.srcID, ce.emit)
 	}
 
 	for _, emit := range emitCheckConfigH(ctx, instance, d, moduleInputs) {
@@ -1883,7 +1899,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	for _, js := range d.joinSrcs {
 		srcInstance := instance
 
-		joinClosure := joinSrcsIncludeClosure(ctx, srcInstance.Platform, srcInstance, strStrings(js.Sources), moduleInputs)
+		jsSources := strStrings(js.Sources)
+		joinClosure := joinSrcsIncludeClosure(ctx, srcInstance.Platform, srcInstance, jsSources, moduleInputs)
 
 		ccClosure := joinClosure
 
@@ -1891,14 +1908,14 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			jsModuleInputs := moduleInputs
 			jsModuleInputs.PeerAddInclGlobal = rebasePerArchPeerAddIncl(moduleInputs.PeerAddInclGlobal, srcInstance.Platform.ISA, ctx.target.ISA)
 
-			joinClosure = joinSrcsIncludeClosure(ctx, ctx.target, srcInstance, strStrings(js.Sources), jsModuleInputs)
+			joinClosure = joinSrcsIncludeClosure(ctx, ctx.target, srcInstance, jsSources, jsModuleInputs)
 		}
 
-		jsRef, joinOutVFS := emitJS(srcInstance, js.OutputName, strStrings(js.Sources), joinClosure, ctx.target, d.tc, ctx.scripts, ctx.emit)
+		jsRef, joinOutVFS := emitJS(srcInstance, js.OutputName, jsSources, joinClosure, ctx.target, d.tc, ctx.scripts, ctx.emit)
 
 		jsRel := strings.TrimPrefix(joinOutVFS.rel(), srcInstance.Path.rel()+"/")
 
-		ccIncludeInputs := jsCCIncludeInputs(srcInstance, joinOutVFS, strStrings(js.Sources), ccClosure, ctx.scripts)
+		ccIncludeInputs := jsCCIncludeInputs(srcInstance, joinOutVFS, jsSources, ccClosure, ctx.scripts)
 
 		ccIn := moduleInputs
 		ccIn.ExtraDepRefs = []NodeRef{jsRef}
@@ -1954,7 +1971,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ldPeerArchivePaths := peerArchivePaths
 		ldPeerLinkCmdPaths := peerLinkCmdPaths
 
-		if d.allocatorName.string() == "FAKE" {
+		if d.allocatorName == strFAKE {
 			ldPeerArchiveRefs = make([]NodeRef, 0, len(peerArchiveRefs))
 			ldPeerArchivePaths = make([]VFS, 0, len(peerArchivePaths))
 
@@ -1968,7 +1985,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			}
 		}
 
-		if d.moduleStmt.Name == tokPy3Program && d.allocatorName.string() == "J" {
+		if d.moduleStmt.Name == tokPy3Program && d.allocatorName == strJ {
 			ldPeerArchiveRefs, ldPeerArchivePaths = moveArchivePathsAfter(
 				ldPeerArchiveRefs,
 				ldPeerArchivePaths,

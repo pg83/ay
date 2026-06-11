@@ -90,20 +90,29 @@ func flatcDirectGeneratedHeaderIncludes(pm *IncludeParserManager, fs FS, srcRel 
 }
 
 func flatcResolvedModuleSourceRel(ctx *GenCtx, instance ModuleInstance, d *ModuleData, resolvedRel string) (string, bool) {
-	candidates := strStrings(d.srcs)
-	candidates = append(candidates, strStrings(d.globalSrcs)...)
+	// Filter by the memoized ext class before materializing anything: only
+	// .fbs entries ever match, so non-fbs srcs cost a bit probe, not a view.
+	match := func(srcs []STR) (string, bool) {
+		for _, src := range srcs {
+			if srcExtClassOf(src) != srcExtFbs {
+				continue
+			}
 
-	for _, srcRel := range candidates {
-		if !strings.HasSuffix(srcRel, ".fbs") {
-			continue
+			srcRel := src.string()
+
+			if resolveSourceVFS(ctx, instance, srcRel, d.srcDirs).rel() == resolvedRel {
+				return srcRel, true
+			}
 		}
 
-		if resolveSourceVFS(ctx, instance, srcRel, d.srcDirs).rel() == resolvedRel {
-			return srcRel, true
-		}
+		return "", false
 	}
 
-	return "", false
+	if srcRel, ok := match(d.srcs); ok {
+		return srcRel, true
+	}
+
+	return match(d.globalSrcs)
 }
 
 func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ARG, transitiveImports []VFS, tc ModuleToolchain, emit Emitter) (NodeRef, VFS, VFS, VFS) {
