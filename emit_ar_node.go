@@ -19,35 +19,26 @@ func emitARNode(
 	hostP *Platform,
 	emit Emitter,
 ) NodeRef {
-	scriptVFS := buildScriptsLinkLibPy
-
 	cmdEnv := hostP.ToolEnv()
 
-	cmdArgs := []STR{
-		tc.Python3,
-		(scriptVFS).str(),
-		tc.AR,
-		internStr(arTypeLLVM),
-		internStr(arFormatGNU),
-		argB.str(),
-		argNone.str(),
-		arg2.str(),
-	}
+	tail := make([]STR, 0, 4+len(objPaths))
 
 	if arPluginPath != nil {
-		cmdArgs = append(cmdArgs, argPlugin.str(), (*arPluginPath).str())
+		tail = append(tail, argPlugin.str(), (*arPluginPath).str())
 	}
 
-	cmdArgs = append(cmdArgs, arg2.str(), (archivePath).str())
+	tail = append(tail, arg2.str(), (archivePath).str())
 
 	for _, p := range objPaths {
-		cmdArgs = append(cmdArgs, (p).str())
+		tail = append(tail, (p).str())
 	}
+
+	cmdArgs := argChunks{tc.ARCmdHead, tail}
 
 	// objPaths is the caller's member slice — referenced as its own chunk,
 	// never copied; only the script/plugin tail is built locally.
 	inputTail := make([]VFS, 0, 2)
-	inputTail = append(inputTail, scriptVFS)
+	inputTail = append(inputTail, buildScriptsLinkLibPy)
 
 	if arPluginPath != nil {
 		inputTail = append(inputTail, *arPluginPath)
@@ -73,7 +64,7 @@ func emitARNode(
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: argChunks{cmdArgs},
+				CmdArgs: cmdArgs,
 				Env:     cmdEnv,
 			},
 		},

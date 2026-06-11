@@ -42,6 +42,7 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCo
 	}
 
 	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
+	pe := newPyPBModuleEmission(ctx, d, instance, protocBinary)
 
 	var cppSibling *moduleEmitResult
 
@@ -56,7 +57,7 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCo
 	var auxEntries []pyProtoAuxEntry
 
 	for _, src := range protoSrcs {
-		auxEntries = append(auxEntries, emitPyProtoSrc(ctx, instance, d, src, protocLDRef, protocBinary)...)
+		auxEntries = append(auxEntries, emitPyProtoSrc(ctx, instance, d, src, protocLDRef, protocBinary, pe)...)
 	}
 
 	auxRes := emitPyProtoAuxChunks(ctx, instance, d, peerContribs, auxEntries, cppSibling)
@@ -94,21 +95,121 @@ func emitPyProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerCo
 	return result
 }
 
-func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src string, protocLDRef NodeRef, protocBinary VFS) []pyProtoAuxEntry {
+// pyPBModuleEmission is the per-module py-proto emission context: the
+// resolved plugin tools and the stable spans of the protoc py command line.
+// Built once per module (emitPyProtoSrcs, before its source loop):
+//
+//	head: [python3, protoc_wrapper.py, --py-ver py3, --suffixes <…>, --input]
+//	mid:  [--ns <ns>, --, protoc, the -I set, --python_out] (follows the
+//	      per-source input path)
+//	tail: the grpc / mypy plugin blocks (they follow the source token)
+type pyPBModuleEmission struct {
+	grpcPyRef    NodeRef
+	mypyRef      NodeRef
+	grpcPyBinary VFS
+	mypyBinary   VFS
+
+	head []STR
+	mid  []STR
+	tail []STR
+}
+
+func newPyPBModuleEmission(ctx *genCtx, d *moduleData, instance ModuleInstance, protocBinary VFS) *pyPBModuleEmission {
+	pe := &pyPBModuleEmission{}
+
+	if d.grpc {
+		pe.grpcPyRef, pe.grpcPyBinary = ctx.tool(argContribToolsProtocPluginsGrpcPython)
+	}
+
+	if !d.noMypy {
+		pe.mypyRef, pe.mypyBinary = ctx.tool(argContribPythonMypyProtobufBinProtocGenMypy)
+	}
+
+	suffixes := []string{"_pb2.py"}
+
+	if d.grpc {
+		suffixes = append(suffixes, "_pb2_grpc.py")
+	}
+
+	if !d.noMypy {
+		suffixes = append(suffixes, "_pb2.pyi")
+	}
+
+	protoRoot := protoPythonOutputRoot(instance, d)
+
+	// grpc python protos emit at the build root unless an explicit
+	// PROTO_NAMESPACE overrides (mirrors emitPyProtoSrc's local rule).
+	if d.grpc && d.protoNamespace == nil {
+		protoRoot = ""
+	}
+
+	head := []STR{
+		d.tc.Python3,
+		internStr(pbPyWrapperPath),
+		argPyVer.str(), argPy3.str(),
+		argSuffixes.str(),
+	}
+	head = appendInternStrs(head, suffixes)
+	pe.head = append(head, argInput.str())
+
+	mid := make([]STR, 0, 16)
+	mid = append(mid,
+		argNs.str(), internStr(protoPythonNamespaceArg(d)),
+		arg2.str(),
+		(protocBinary).str(),
+		internStr("-I=./"+protoRoot),
+		internStr("-I=$(S)/"+protoRoot),
+		argIB2.str(),
+		argIS3.str(),
+	)
+
+	if protoRoot != "" && protoRoot != "contrib/libs/protobuf/src" {
+		mid = append(mid, internStr("-I=$(S)/"+protoRoot))
+
+		// A GLOBAL PROTO_NAMESPACE on a grpc module re-contributes its output root
+		// as an addincl, so protoc receives the -I twice (mirrors EmitPB's
+		// duplicateOutputRootInclude for the cpp side).
+		if d.grpc && d.protoNamespaceGlobal {
+			mid = append(mid, internStr("-I=$(S)/"+protoRoot))
+		}
+	}
+
+	mid = append(mid, argISContribLibsProtobufSrc.str())
+
+	if d.grpc {
+		mid = append(mid, argISContribLibsProtocSrc.str())
+	}
+
+	pe.mid = append(mid,
+		argIB2.str(),
+		argISContribLibsProtobufSrc.str(),
+		internStr("--python_out=$(B)/"+protoRoot),
+	)
+
+	if d.grpc {
+		pe.tail = append(pe.tail,
+			internStr("--plugin=protoc-gen-grpc_py="+pe.grpcPyBinary.String()),
+			internStr("--grpc_py_out=$(B)/"+protoRoot),
+		)
+	}
+
+	if !d.noMypy {
+		pe.tail = append(pe.tail,
+			internStr("--plugin=protoc-gen-mypy="+pe.mypyBinary.String()),
+			internStr("--mypy_out=$(B)/"+protoRoot),
+		)
+	}
+
+	return pe
+}
+
+func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src string, protocLDRef NodeRef, protocBinary VFS, pe *pyPBModuleEmission) []pyProtoAuxEntry {
 	if d.moduleStmt == nil || d.moduleStmt.Name != tokProtoLibrary {
 		return nil
 	}
 
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
-	protoRoot := protoPythonOutputRoot(instance, d)
-
-	// A grpc module without an explicit PROTO_NAMESPACE emits at the build root
-	// ("" — protoPythonOutputRoot's instance.Path default does not apply to grpc).
-	// An explicit PROTO_NAMESPACE (e.g. contrib/proto/grpc on grpc reflection) wins.
-	if d.grpc && d.protoNamespace == nil {
-		protoRoot = ""
-	}
 
 	pyBase := protoBase + "__intpy3___pb2.py"
 	pyOut := Build(pyBase)
@@ -128,71 +229,11 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		suffixes = append(suffixes, "_pb2.pyi")
 	}
 
-	var grpcPyBinary, mypyBinary VFS
-	var grpcPyRef, mypyRef NodeRef
+	relChunk := []STR{internStr(protoRelPath)}
+	cmdArgs := argChunks{pe.head, relChunk, pe.mid, relChunk}
 
-	if d.grpc {
-		grpcPyRef, grpcPyBinary = ctx.tool(argContribToolsProtocPluginsGrpcPython)
-	}
-
-	if !d.noMypy {
-		mypyRef, mypyBinary = ctx.tool(argContribPythonMypyProtobufBinProtocGenMypy)
-	}
-
-	cmdArgs := []STR{
-		d.tc.Python3,
-		internStr(pbPyWrapperPath),
-		argPyVer.str(), argPy3.str(),
-		argSuffixes.str(),
-	}
-	cmdArgs = appendInternStrs(cmdArgs, suffixes)
-	cmdArgs = append(cmdArgs,
-		argInput.str(), internStr(protoRelPath),
-		argNs.str(), internStr(protoPythonNamespaceArg(d)),
-		arg2.str(),
-		(protocBinary).str(),
-		internStr("-I=./"+protoRoot),
-		internStr("-I=$(S)/"+protoRoot),
-		argIB2.str(),
-		argIS3.str(),
-	)
-
-	if protoRoot != "" && protoRoot != "contrib/libs/protobuf/src" {
-		cmdArgs = append(cmdArgs, internStr("-I=$(S)/"+protoRoot))
-
-		// A GLOBAL PROTO_NAMESPACE on a grpc module re-contributes its output root
-		// as an addincl, so protoc receives the -I twice (mirrors EmitPB's
-		// duplicateOutputRootInclude for the cpp side).
-		if d.grpc && d.protoNamespaceGlobal {
-			cmdArgs = append(cmdArgs, internStr("-I=$(S)/"+protoRoot))
-		}
-	}
-
-	cmdArgs = append(cmdArgs, argISContribLibsProtobufSrc.str())
-
-	if d.grpc {
-		cmdArgs = append(cmdArgs, argISContribLibsProtocSrc.str())
-	}
-
-	cmdArgs = append(cmdArgs,
-		argIB2.str(),
-		argISContribLibsProtobufSrc.str(),
-		internStr("--python_out=$(B)/"+protoRoot),
-		internStr(protoRelPath),
-	)
-
-	if d.grpc {
-		cmdArgs = append(cmdArgs,
-			internStr("--plugin=protoc-gen-grpc_py="+grpcPyBinary.String()),
-			internStr("--grpc_py_out=$(B)/"+protoRoot),
-		)
-	}
-
-	if !d.noMypy {
-		cmdArgs = append(cmdArgs,
-			internStr("--plugin=protoc-gen-mypy="+mypyBinary.String()),
-			internStr("--mypy_out=$(B)/"+protoRoot),
-		)
+	if len(pe.tail) > 0 {
+		cmdArgs = append(cmdArgs, pe.tail)
 	}
 
 	toolRefs := make([]NodeRef, 0, 3)
@@ -201,12 +242,12 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 		toolRefs = append(toolRefs, protocLDRef)
 	}
 
-	if grpcPyRef != (NodeRef(0)) {
-		toolRefs = append(toolRefs, grpcPyRef)
+	if pe.grpcPyRef != (NodeRef(0)) {
+		toolRefs = append(toolRefs, pe.grpcPyRef)
 	}
 
-	if !d.noMypy && mypyRef != (NodeRef(0)) {
-		toolRefs = append(toolRefs, mypyRef)
+	if !d.noMypy && pe.mypyRef != (NodeRef(0)) {
+		toolRefs = append(toolRefs, pe.mypyRef)
 	}
 
 	inputs := []VFS{protocBinary, pbPyWrapperVFS, Source(protoRelPath)}
@@ -216,11 +257,11 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 	inputs = append(inputs, transitive...)
 
 	if d.grpc {
-		inputs = append(inputs, grpcPyBinary)
+		inputs = append(inputs, pe.grpcPyBinary)
 	}
 
 	if !d.noMypy {
-		inputs = append(inputs, mypyBinary)
+		inputs = append(inputs, pe.mypyBinary)
 	}
 
 	pbKV := KV{P: pkPB, PC: pcYellow}
@@ -235,7 +276,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 
 	pyPBNode := &Node{
 		Platform:         instance.Platform,
-		Cmds:             []Cmd{{CmdArgs: argChunks{cmdArgs}, Cwd: strS, Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}}},
+		Cmds:             []Cmd{{CmdArgs: cmdArgs, Cwd: strS, Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}}},
 		Env:              EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
 		Inputs:           inputChunks{inputs},
 		Outputs:          outputs,

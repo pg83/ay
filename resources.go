@@ -201,8 +201,14 @@ type moduleToolchain struct {
 	Objcopy       STR
 	Strip         STR
 	LLDRoot       STR
-	LLD           STR
-	Python3       STR
+
+	// ARCmdHead is the pre-built head of every AR command this toolchain
+	// drives — [python3, link_lib.py, llvm-ar, llvm, gnu, $(B), None, --] —
+	// referenced as a chunk by emitARNode, never copied. Built here because
+	// it is a pure function of the toolchain.
+	ARCmdHead []STR
+	LLD       STR
+	Python3   STR
 }
 
 // resolveModuleToolchain derives the tool paths from the module's resource-global
@@ -234,6 +240,17 @@ func resolveModuleToolchain(globals []resourceDecl, clangVer string) moduleToolc
 		case resourcePatternYMakePython3:
 			tc.Python3 = internStr("$(B)/resources/" + resourcePatternYMakePython3 + "/bin/python3")
 		}
+	}
+
+	tc.ARCmdHead = []STR{
+		tc.Python3,
+		(buildScriptsLinkLibPy).str(),
+		tc.AR,
+		internStr(arTypeLLVM),
+		internStr(arFormatGNU),
+		argB.str(),
+		argNone.str(),
+		arg2.str(),
 	}
 
 	return tc
