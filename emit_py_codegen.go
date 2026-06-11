@@ -34,25 +34,25 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	py3ccArgHead := []STR{(py3ccBinary).str(), argSlowPy3cc.str(), (py3ccSlowBin).str()}
 
 	for _, srcRel := range d.pySrcs {
-		if strings.HasSuffix(srcRel, ".pyi") {
+		if strings.HasSuffix(srcRel.string(), ".pyi") {
 			continue
 		}
 
 		generatedInputs := d.pyGeneratedSrcs[srcRel]
-		srcAbs := resolveSourceVFS(ctx, instance, srcRel, d.srcDirs)
+		srcAbs := resolveSourceVFS(ctx, instance, srcRel.string(), d.srcDirs)
 
 		if generatedInputs != nil {
-			srcAbs = build(instance.Path.rel() + "/" + srcRel)
+			srcAbs = build(instance.Path.rel() + "/" + srcRel.string())
 		}
 
 		moduleName := srcAbs.rel() + "-"
 
 		var outputPath VFS
 
-		if strings.Contains(srcRel, "/") {
-			outputPath = build(instance.Path.rel() + "/" + srcRel + "." + pySrcYapycSuffix(instance.Path.rel()) + ".yapyc3")
+		if strings.Contains(srcRel.string(), "/") {
+			outputPath = build(instance.Path.rel() + "/" + srcRel.string() + "." + pySrcYapycSuffix(instance.Path.rel()) + ".yapyc3")
 		} else {
-			outputPath = build(instance.Path.rel() + "/" + srcRel + ".yapyc3")
+			outputPath = build(instance.Path.rel() + "/" + srcRel.string() + ".yapyc3")
 		}
 
 		cmdArgs := ArgChunks{py3ccArgHead, []STR{
@@ -167,10 +167,11 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 			}
 
 			prior := d.pyRegister[j]
-			priorShort[prior[strings.LastIndexByte(prior, '.')+1:]] = struct{}{}
+			priorStr := prior.string()
+			priorShort[priorStr[strings.LastIndexByte(priorStr, '.')+1:]] = struct{}{}
 		}
 
-		regCpp := arg + ".reg3.cpp"
+		regCpp := arg.string() + ".reg3.cpp"
 		regCppVFS := build(instance.Path.rel() + "/" + regCpp)
 		regCppAbs := regCppVFS.string()
 
@@ -179,7 +180,7 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 		pyCmdArgs := []STR{
 			d.tc.Python3,
 			(genPy3RegScriptVFS).str(),
-			internStr(arg),
+			internStr(arg.string()),
 			internStr(regCppAbs),
 		}
 

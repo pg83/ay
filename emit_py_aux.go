@@ -21,18 +21,18 @@ func emitGeneratedPyAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleDat
 			continue
 		}
 
-		src := build(instance.Path.rel() + "/" + srcRel)
-		entries = append(entries, PyProtoAuxEntry{path: src, key: generatedPyResourceKey(instance.Path.rel(), d, srcRel), inputs: genInputs})
+		src := build(instance.Path.rel() + "/" + srcRel.string())
+		entries = append(entries, PyProtoAuxEntry{path: src, key: generatedPyResourceKey(instance.Path.rel(), d, srcRel.string()), inputs: genInputs})
 
 		if !d.pyBuildNoPYC {
 			suffix := ".yapyc3"
 
-			if strings.Contains(srcRel, "/") {
+			if strings.Contains(srcRel.string(), "/") {
 				suffix = "." + pySrcYapycSuffix(instance.Path.rel()) + ".yapyc3"
 			}
 
-			yp := build(instance.Path.rel() + "/" + srcRel + suffix)
-			entries = append(entries, PyProtoAuxEntry{path: yp, key: generatedPyResourceKey(instance.Path.rel(), d, srcRel+".yapyc3"), inputs: genInputs})
+			yp := build(instance.Path.rel() + "/" + srcRel.string() + suffix)
+			entries = append(entries, PyProtoAuxEntry{path: yp, key: generatedPyResourceKey(instance.Path.rel(), d, srcRel.string()+".yapyc3"), inputs: genInputs})
 		}
 	}
 

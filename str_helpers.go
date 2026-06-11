@@ -79,3 +79,27 @@ func STRS(items ...string) []STR {
 
 	return out
 }
+
+// strPtr returns a pointer to an interned id — the *STR optional-field
+// counterpart of stringPtr.
+func strPtr(s STR) *STR {
+	return &s
+}
+
+// strsContain reports membership of the string's intern id in an STR list —
+// an unknown string cannot be a member (probe without polluting the table).
+func strsContain(items []STR, s string) bool {
+	id := interned(s)
+
+	if id == nil {
+		return false
+	}
+
+	for _, it := range items {
+		if it == *id {
+			return true
+		}
+	}
+
+	return false
+}

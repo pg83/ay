@@ -65,7 +65,7 @@ func cfIncludeDirectives(pm *IncludeParserManager, rel string) []IncludeDirectiv
 	return out
 }
 
-func buildCFGVars(fs FS, rel string, setVars, defaultVars map[string]string) []string {
+func buildCFGVars(fs FS, rel string, setVars, defaultVars map[STR]STR) []string {
 	referenced := map[string]bool{}
 	data := fs.read(rel)
 
@@ -81,10 +81,10 @@ func buildCFGVars(fs FS, rel string, setVars, defaultVars map[string]string) []s
 
 	for name := range referenced {
 		switch {
-		case hasKey(setVars, name):
-			vars = append(vars, name+"="+cfgVarValue(setVars[name]))
-		case hasKey(defaultVars, name):
-			vars = append(vars, name+"="+cfgVarValue(defaultVars[name]))
+		case hasKey(setVars, internStr(name)):
+			vars = append(vars, name+"="+cfgVarValue(setVars[internStr(name)].string()))
+		case hasKey(defaultVars, internStr(name)):
+			vars = append(vars, name+"="+cfgVarValue(defaultVars[internStr(name)].string()))
 		case name == "BUILD_TYPE":
 			vars = append(vars, buildTypeDebug)
 		}
@@ -95,7 +95,7 @@ func buildCFGVars(fs FS, rel string, setVars, defaultVars map[string]string) []s
 	return vars
 }
 
-func hasKey(m map[string]string, k string) bool {
+func hasKey(m map[STR]STR, k STR) bool {
 	_, ok := m[k]
 
 	return ok

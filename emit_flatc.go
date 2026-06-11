@@ -90,8 +90,8 @@ func flatcDirectGeneratedHeaderIncludes(pm *IncludeParserManager, fs FS, srcRel 
 }
 
 func flatcResolvedModuleSourceRel(ctx *GenCtx, instance ModuleInstance, d *ModuleData, resolvedRel string) (string, bool) {
-	candidates := append([]string(nil), d.srcs...)
-	candidates = append(candidates, d.globalSrcs...)
+	candidates := strStrings(d.srcs)
+	candidates = append(candidates, strStrings(d.globalSrcs)...)
 
 	for _, srcRel := range candidates {
 		if !strings.HasSuffix(srcRel, ".fbs") {

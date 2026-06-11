@@ -84,8 +84,8 @@ func isRuntimeAncestor(path string) bool {
 	return runtimeAncestorPaths[path]
 }
 
-func suppressMallocAPIDefault(defaults []string, allocatorName string) []string {
-	if allocatorName != "FAKE" {
+func suppressMallocAPIDefault(defaults []string, allocatorName STR) []string {
+	if allocatorName.string() != "FAKE" {
 		return defaults
 	}
 
@@ -280,7 +280,7 @@ func defaultProgramPeerdirsForWithState(ctx *GenCtx, instance ModuleInstance, d 
 		osLinux:       env.bool(envOS_LINUX),
 		archX8664:     env.bool(envARCH_X86_64),
 		hadAllocator:  d.hadAllocator,
-		allocatorName: allocatorName,
+		allocatorName: allocatorName.string(),
 	}
 
 	var peers []string
@@ -292,7 +292,7 @@ func defaultProgramPeerdirsForWithState(ctx *GenCtx, instance ModuleInstance, d 
 	} else {
 		peers = appendImplicitPeers(peers, programImplicitPeers, rc)
 
-		if env.bool(envARCH_X86_64) && !flags.NoUtil && allocatorName != "FAKE" {
+		if env.bool(envARCH_X86_64) && !flags.NoUtil && allocatorName.string() != "FAKE" {
 			peers = append(peers, "library/cpp/cpuid_check")
 		}
 	}

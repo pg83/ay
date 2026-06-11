@@ -25,7 +25,7 @@ func TestApplyUnknownStmt_ExcludeTagsAcceptsTagNames(t *testing.T) {
 		t.Fatalf("EXCLUDE_TAGS(%s) rejected: %v", tag, err)
 	}
 
-	if !d.excludeTags[tag] {
+	if !d.excludeTags[internStr(tag)] {
 		t.Fatalf("excludeTags = %v, want %s", d.excludeTags, tag)
 	}
 }
@@ -327,7 +327,7 @@ func TestCollectModule_PySrcsExpandsSetList(t *testing.T) {
 	d := collectModule(newIncludeParserManagerFS(newMemFS(nil), newSharedParseCache()), &DeDuper{}, "mod", KindLib,
 		mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}))
 
-	if !equalStrings(d.pySrcs, []string{"a.py", "b.py"}) {
+	if !equalStrings(strStrings(d.pySrcs), []string{"a.py", "b.py"}) {
 		t.Fatalf("pySrcs = %v, want [a.py b.py]", d.pySrcs)
 	}
 }

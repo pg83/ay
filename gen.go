@@ -197,7 +197,7 @@ type ModuleEmitResult struct {
 
 	InducedDeps ParsedIncludeSet
 
-	Peerdirs []string
+	Peerdirs []STR
 
 	ModuleStmtName TOK
 
@@ -687,7 +687,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		hasProtoSrc := false
 
 		for _, src := range d.srcs {
-			if strings.HasSuffix(src, ".proto") {
+			if strings.HasSuffix(src.string(), ".proto") {
 				hasProtoSrc = true
 
 				break
@@ -696,11 +696,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		if hasProtoSrc && !strings.HasPrefix(instance.Path.rel(), "contrib/libs/protobuf/builtin_proto") &&
 			!strings.HasPrefix(instance.Path.rel(), "contrib/python/protobuf") {
-			d.peerdirs = append(d.peerdirs, "contrib/python/protobuf")
+			d.peerdirs = append(d.peerdirs, strContribPythonProtobuf)
 		}
 
 		if hasProtoSrc && d.grpc {
-			d.peerdirs = append(d.peerdirs, "contrib/python/grpcio")
+			d.peerdirs = append(d.peerdirs, strContribPythonGrpcio)
 		}
 	}
 
@@ -710,18 +710,18 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if !d.hadAllocator && (d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin) {
 		d.hadAllocator = true
-		d.allocatorName = "J"
+		d.allocatorName = strJ
 	}
 
 	py3ProtoVariant := d.moduleStmt.Name == tokProtoLibrary && d.usePython3
 
 	if pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noPythonIncl && instance.Path.rel() != "contrib/libs/python" {
-		d.peerdirs = append([]string{"contrib/libs/python"}, d.peerdirs...)
+		d.peerdirs = append([]STR{strContribLibsPython}, d.peerdirs...)
 	} else if py3ProtoVariant && !d.noPythonIncl && instance.Path.rel() != "contrib/libs/python" {
 		if moduleExcludesTag(d, "CPP_PROTO") {
-			d.peerdirs = append([]string{"contrib/libs/python"}, d.peerdirs...)
+			d.peerdirs = append([]STR{strContribLibsPython}, d.peerdirs...)
 		} else {
-			d.peerdirs = append(d.peerdirs, "contrib/libs/python")
+			d.peerdirs = append(d.peerdirs, strContribLibsPython)
 		}
 	}
 
@@ -747,7 +747,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		if d.moduleStmt.Name == tokPy3ProgramBin {
 			insertAt := 0
 
-			if len(d.peerdirs) > 0 && d.peerdirs[0] == "contrib/libs/python" {
+			if len(d.peerdirs) > 0 && d.peerdirs[0].string() == "contrib/libs/python" {
 				insertAt = 1
 			}
 
@@ -759,28 +759,28 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 				}
 			}
 
-			spliced := make([]string, 0, len(d.peerdirs)+len(filteredEarly))
+			spliced := make([]STR, 0, len(d.peerdirs)+len(filteredEarly))
 			spliced = append(spliced, d.peerdirs[:insertAt]...)
-			spliced = append(spliced, filteredEarly...)
+			spliced = append(spliced, STRS(filteredEarly...)...)
 			spliced = append(spliced, d.peerdirs[insertAt:]...)
 			d.peerdirs = spliced
 		} else {
 			for _, peer := range earlyPeers {
 				if instance.Path.rel() != peer {
-					d.peerdirs = append(d.peerdirs, peer)
+					d.peerdirs = append(d.peerdirs, internStr(peer))
 				}
 			}
 		}
 
 		for _, peer := range latePeers {
 			if instance.Path.rel() != peer {
-				d.peerdirs = append(d.peerdirs, peer)
+				d.peerdirs = append(d.peerdirs, internStr(peer))
 			}
 		}
 	}
 
 	if isProgramModuleType(d.moduleStmt.Name) && pyLibraryAutoPythonPeer(d.moduleStmt.Name) && d.moduleStmt.Name != tokPy3Program && d.moduleStmt.Name != tokPy3ProgramBin && !d.noImportTracing && instance.Path.rel() != "library/python/import_tracing/constructor" {
-		d.peerdirs = append(d.peerdirs, "library/python/import_tracing/constructor")
+		d.peerdirs = append(d.peerdirs, strLibraryPythonImportTracingConstructor)
 	}
 
 	// (enum_serialization_runtime PEERDIR is added at GenerateEnumSerializationStmt
@@ -792,8 +792,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	// after the module's last declared peer, matching upstream's link order.
 	if instance.Path.rel() != "contrib/libs/flatbuffers" {
 		for _, src := range d.srcs {
-			if strings.HasSuffix(src, ".fbs") {
-				d.peerdirs = append(d.peerdirs, "contrib/libs/flatbuffers")
+			if strings.HasSuffix(src.string(), ".fbs") {
+				d.peerdirs = append(d.peerdirs, strContribLibsFlatbuffers)
 
 				break
 			}
@@ -920,7 +920,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		var ownProtoTailH []VFS
 
 		if d.protoNamespace != nil {
-			ns := source(filepath.ToSlash(filepath.Clean(*d.protoNamespace)))
+			ns := source(filepath.ToSlash(filepath.Clean(d.protoNamespace.string())))
 
 			if d.protoNamespaceGlobal {
 				ownProtoAddInclH = []VFS{ns}
@@ -989,7 +989,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		postUserProgDefaults = defaultProgramPeerdirsForModule(ctx, instance, d, true)
 	}
 
-	allocatorExplicitPeers := allocatorPeers[d.allocatorName]
+	allocatorExplicitPeers := allocatorPeers[d.allocatorName.string()]
 
 	unitTestPeerCount := 0
 
@@ -1060,11 +1060,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	for _, p := range d.peerdirs {
-		if peerSeen(p) {
+		if peerSeen(p.string()) {
 			continue
 		}
 
-		allPeers = append(allPeers, p)
+		allPeers = append(allPeers, p.string())
 		peerKinds = append(peerKinds, peerKindUserPeer)
 	}
 
@@ -1503,7 +1503,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	var ownProtoTail []VFS
 
 	if d.protoNamespace != nil {
-		ns := source(filepath.ToSlash(filepath.Clean(*d.protoNamespace)))
+		ns := source(filepath.ToSlash(filepath.Clean(d.protoNamespace.string())))
 
 		if d.protoNamespaceGlobal {
 			ownProtoAddIncl = []VFS{ns}
@@ -1688,7 +1688,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}(),
 		ModuleTag:   perModuleCCTag,
 		Ragel6Flags: d.ragel6Flags,
-		BisonGenExt: d.bisonGenExt,
+		BisonGenExt: d.bisonGenExt.string(),
 		TC:          d.tc,
 	}
 	moduleInputs.CCBlocks = composeCCModuleArgBlocks(instance.Platform, &moduleInputs)
@@ -1715,21 +1715,21 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	codegenEmits := make([]codegenEmit, 0, 4)
 
 	for _, src := range d.srcs {
-		if !isCodegenProducingSrc(src) {
+		if !isCodegenProducingSrc(src.string()) {
 			continue
 		}
 
 		srcInputs := moduleInputs
 
-		if extras := d.perSrcCFlagsFor(src); extras != nil {
+		if extras := d.perSrcCFlagsFor(src.string()); extras != nil {
 			srcInputs.PerSourceCFlags = *extras
 		}
 
-		if d.flatSrc(src) {
+		if d.flatSrc(src.string()) {
 			srcInputs.FlatOutput = true
 		}
 
-		codegenEmits = append(codegenEmits, codegenEmit{src, emitOneSource(ctx, instance, d, src, srcInputs)})
+		codegenEmits = append(codegenEmits, codegenEmit{src.string(), emitOneSource(ctx, instance, d, src.string(), srcInputs)})
 	}
 
 	emitCopyFiles(ctx, instance, d, &moduleInputs)
@@ -1778,11 +1778,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	for _, src := range d.srcs {
-		if isCodegenProducingSrc(src) {
+		if isCodegenProducingSrc(src.string()) {
 			continue
 		}
 
-		appendCC(src, emitOneSource(ctx, instance, d, src, emitSrcInputs(src)))
+		appendCC(src.string(), emitOneSource(ctx, instance, d, src.string(), emitSrcInputs(src.string())))
 	}
 
 	for _, ce := range codegenEmits {
@@ -1914,7 +1914,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	globalOutputs := make([]VFS, 0, len(d.globalSrcs))
 
 	for _, src := range d.globalSrcs {
-		emit := emitOneSource(ctx, instance, d, src, moduleInputs)
+		emit := emitOneSource(ctx, instance, d, src.string(), moduleInputs)
 
 		if emit == nil {
 			continue
@@ -1953,7 +1953,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ldPeerArchivePaths := peerArchivePaths
 		ldPeerLinkCmdPaths := peerLinkCmdPaths
 
-		if d.allocatorName == "FAKE" {
+		if d.allocatorName.string() == "FAKE" {
 			ldPeerArchiveRefs = make([]NodeRef, 0, len(peerArchiveRefs))
 			ldPeerArchivePaths = make([]VFS, 0, len(peerArchivePaths))
 
@@ -1967,7 +1967,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			}
 		}
 
-		if d.moduleStmt.Name == tokPy3Program && d.allocatorName == "J" {
+		if d.moduleStmt.Name == tokPy3Program && d.allocatorName.string() == "J" {
 			ldPeerArchiveRefs, ldPeerArchivePaths = moveArchivePathsAfter(
 				ldPeerArchiveRefs,
 				ldPeerArchivePaths,
@@ -2150,7 +2150,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	var arPluginVFS *VFS
 
 	if d.arPlugin != nil {
-		v := source(instance.Path.rel() + "/" + *d.arPlugin)
+		v := source(instance.Path.rel() + "/" + d.arPlugin.string())
 		arPluginVFS = &v
 	}
 
@@ -2662,12 +2662,12 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	}
 
 	for _, p := range d.peerdirs {
-		if _, dup := seen[p]; dup {
+		if _, dup := seen[p.string()]; dup {
 			continue
 		}
 
-		seen[p] = struct{}{}
-		walk(filepath.Clean(p))
+		seen[p.string()] = struct{}{}
+		walk(filepath.Clean(p.string()))
 	}
 
 	out := PeerGlobalContribs{}

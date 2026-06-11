@@ -16,19 +16,19 @@ func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in 
 		pyRef := emitRunPython(ctx, instance, rp, d, reg, in)
 
 		if d.prOutputProducer == nil {
-			d.prOutputProducer = map[string]NodeRef{}
+			d.prOutputProducer = map[STR]NodeRef{}
 		}
 
 		for _, f := range rp.OUTFiles {
-			d.prOutputProducer[f.string()] = pyRef
+			d.prOutputProducer[f] = pyRef
 		}
 
 		for _, f := range rp.OUTNoAutoFiles {
-			d.prOutputProducer[f.string()] = pyRef
+			d.prOutputProducer[f] = pyRef
 		}
 
 		if rp.StdoutFile != nil {
-			d.prOutputProducer[rp.StdoutFile.string()] = pyRef
+			d.prOutputProducer[*rp.StdoutFile] = pyRef
 		}
 
 		outs := make([]string, 0, len(rp.OUTFiles)+1)
@@ -109,22 +109,22 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	result := emitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, moduleInputs.TC, ctx.emit)
 
 	if d.prOutputInputs == nil {
-		d.prOutputInputs = map[string]InputChunks{}
+		d.prOutputInputs = map[STR]InputChunks{}
 	}
 
 	// result.Inputs shares the PY node's chunk list; nothing mutates it after
 	// Emit and the reader (prResourceExtraInputs) copies out, so sharing it
 	// across keys is safe.
 	for _, f := range stmt.OUTFiles {
-		d.prOutputInputs[f.string()] = result.Inputs
+		d.prOutputInputs[f] = result.Inputs
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		d.prOutputInputs[f.string()] = result.Inputs
+		d.prOutputInputs[f] = result.Inputs
 	}
 
 	if stmt.StdoutFile != nil {
-		d.prOutputInputs[stmt.StdoutFile.string()] = result.Inputs
+		d.prOutputInputs[*stmt.StdoutFile] = result.Inputs
 	}
 
 	if reg != nil {

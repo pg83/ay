@@ -78,10 +78,10 @@ type ModuleCCInputs struct {
 
 	FlatOutput bool
 
-	DefaultVars     map[string]string
-	DefaultVarOrder []string
+	DefaultVars     map[STR]STR
+	DefaultVarOrder []STR
 
-	SetVars map[string]string
+	SetVars map[STR]STR
 
 	Py3Suffix bool
 

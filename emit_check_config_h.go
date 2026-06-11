@@ -13,11 +13,11 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 	out := make([]*SourceEmit, 0, len(d.checkConfigHeaders))
 
 	for _, conf := range d.checkConfigHeaders {
-		confBase := strings.TrimSuffix(path.Base(conf), path.Ext(conf))
+		confBase := strings.TrimSuffix(path.Base(conf.string()), path.Ext(conf.string()))
 		generated := confBase + ".config.cpp"
 		generatedVFS := build(instance.Path.rel() + "/" + generated)
 
-		confVFS := source(instance.Path.rel() + "/" + conf)
+		confVFS := source(instance.Path.rel() + "/" + conf.string())
 		// The walk window leads with confVFS itself — no separate prepend.
 		inputs := []VFS{buildScriptsCheckConfigHPy}
 		inputs = append(inputs, walkClosure(ctx, instance, confVFS, in)...)
@@ -34,7 +34,7 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 						CmdArgs: ArgChunks{[]STR{
 							d.tc.Python3,
 							argSBuildScriptsCheckConfigHPy.str(),
-							internStr(instance.Path.rel() + "/" + conf),
+							internStr(instance.Path.rel() + "/" + conf.string()),
 							(generatedVFS).str(),
 						}},
 						Env: env,

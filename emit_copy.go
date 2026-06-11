@@ -10,7 +10,7 @@ func copyFileAutoSourceVFS(modulePath string, d *ModuleData, srcRel string) *VFS
 		return nil
 	}
 
-	entry, ok := d.copyFileAutoOutputs[srcRel]
+	entry, ok := d.copyFileAutoOutputs[internStr(srcRel)]
 
 	if !ok {
 		return nil

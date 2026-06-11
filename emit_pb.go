@@ -227,7 +227,7 @@ func protoCPPModulePath(instance ModuleInstance, d *ModuleData) VFS {
 			return instance.Path
 		}
 
-		base := filepath.ToSlash(filepath.Clean(filepath.Dir(*d.protoNamespace)))
+		base := filepath.ToSlash(filepath.Clean(filepath.Dir(d.protoNamespace.string())))
 
 		if base != "." && base != "" {
 			return source(base)
@@ -242,7 +242,7 @@ func protoCPPOutRoot(d *ModuleData) string {
 		return ""
 	}
 
-	root := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(*d.protoNamespace)), "/")
+	root := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(d.protoNamespace.string())), "/")
 
 	if root == "." {
 		return ""

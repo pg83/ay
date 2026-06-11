@@ -45,7 +45,7 @@ func emitLD(
 	ownRPathFlags []ARG,
 	peerRPathFlagsGlobal []ARG,
 	objAddLibsGlobal []ARG,
-	exportsScript *string,
+	exportsScript *STR,
 	noCompilerWarnings bool,
 	wantsStrip bool,
 	wantsSplitDwarf bool,
@@ -126,7 +126,7 @@ func emitLD(
 	inputTail = append(inputTail, ldSvnversionHVFS)
 
 	if exportsScript != nil {
-		inputTail = append(inputTail, source(*exportsScript))
+		inputTail = append(inputTail, source(exportsScript.string()))
 	}
 
 	inputs = append(inputs, inputTail)
@@ -271,7 +271,7 @@ func composeLDCmdVcsCompile(p *Platform, tc ModuleToolchain, vcsCPath, vcsOPath 
 	return cmdArgs
 }
 
-func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, modulePath, outputPath, vcsOPath string, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *string, wantsStrip bool) []STR {
+func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, modulePath, outputPath, vcsOPath string, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *STR, wantsStrip bool) []STR {
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 16 + 1 + len(ccPaths) + len(peerLinkCmdPaths) + len(globalPaths) + len(objcopyPaths) + len(peerLDFlagsGlobal) + len(ownLDFlags) + len(ownRPathFlags) + len(peerRPathFlagsGlobal) + len(objAddLibsGlobal)
 
 	argCap += 2 + len(pluginPaths)
@@ -352,7 +352,7 @@ func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, modulePath, outputPath
 	return cmdArgs
 }
 
-func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *string, wantsStrip bool) []STR {
+func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *STR, wantsStrip bool) []STR {
 	// EXPORTS_SCRIPT appends the version-script flag right after -rdynamic
 	// per upstream's EXPORTS_VALUE in build/conf/linkers/ld.conf:138. The macro
 	// arg is already a source-root-relative path, not module-relative.
@@ -362,7 +362,7 @@ func composeProgramLinkTrailer(p *Platform, modulePath string, dynamicPaths []VF
 	trailer := []STR{argRdynamic.str()}
 
 	if exportsScript != nil {
-		trailer = append(trailer, internStr("-Wl,--version-script=$(S)/"+*exportsScript))
+		trailer = append(trailer, internStr("-Wl,--version-script=$(S)/"+exportsScript.string()))
 	}
 
 	if p != nil && !p.PIC && p.CompressDebugSections {
@@ -489,7 +489,7 @@ type LdPluginsResult struct {
 	Paths []VFS
 }
 
-func emitOwnLDPlugins(ctx *GenCtx, instance ModuleInstance, plugins []string, tc ModuleToolchain) *LdPluginsResult {
+func emitOwnLDPlugins(ctx *GenCtx, instance ModuleInstance, plugins []STR, tc ModuleToolchain) *LdPluginsResult {
 	if len(plugins) == 0 {
 		return nil
 	}
@@ -500,8 +500,8 @@ func emitOwnLDPlugins(ctx *GenCtx, instance ModuleInstance, plugins []string, tc
 	}
 
 	for _, name := range plugins {
-		src := source(instance.Path.rel() + "/" + name)
-		dst := build(instance.Path.rel() + "/" + name + ".pyplugin")
+		src := source(instance.Path.rel() + "/" + name.string())
+		dst := build(instance.Path.rel() + "/" + name.string() + ".pyplugin")
 
 		ref, ok := ctx.ldPluginCPCache[dst]
 

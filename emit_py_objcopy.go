@@ -283,11 +283,11 @@ func emitResourceObjcopy(
 					if d.prOutputProducer != nil {
 						canonKey := inputVFS.string()
 
-						if ref, ok := d.prOutputProducer[canonKey]; ok {
+						if ref, ok := d.prOutputProducer[internStr(canonKey)]; ok {
 							inputVFS = copyFileOutputVFS(instance.Path.rel(), e.Path)
 							producerRef = ref
 							cur.extraInputs = dedupVFS(cur.extraInputs, prResourceExtraInputs(d, canonKey))
-						} else if ref, ok := d.prOutputProducer[e.Path]; ok {
+						} else if ref, ok := d.prOutputProducer[internStr(e.Path)]; ok {
 							inputVFS = copyFileOutputVFS(instance.Path.rel(), e.Path)
 							producerRef = ref
 							cur.extraInputs = dedupVFS(cur.extraInputs, prResourceExtraInputs(d, e.Path))
@@ -431,11 +431,11 @@ func emitYaConfJSONObjcopy(
 
 	for _, file := range d.yaConfJSON {
 		resources = append(resources, yaConfResource{
-			sourcePath: file,
+			sourcePath: file.string(),
 			keyPath:    "ya.conf.json",
 			hashPath:   "ya.conf.json",
 		})
-		formulas := yaConfFormulaResources(ctx.fs, file)
+		formulas := yaConfFormulaResources(ctx.fs, file.string())
 		sort.Strings(formulas)
 
 		for _, formula := range formulas {
@@ -510,8 +510,8 @@ func emitPyNamespaceForGroup(
 	pySources := make([]string, 0, len(group.Srcs))
 
 	for _, srcRel := range group.Srcs {
-		if strings.HasSuffix(srcRel, ".py") {
-			pySources = append(pySources, srcRel)
+		if strings.HasSuffix(srcRel.string(), ".py") {
+			pySources = append(pySources, srcRel.string())
 		}
 	}
 
@@ -522,7 +522,7 @@ func emitPyNamespaceForGroup(
 	nsPrefix := strings.ReplaceAll(instance.Path.rel(), "/", ".") + "."
 
 	if group.Namespace != nil {
-		nsPrefix = strings.TrimSuffix(*group.Namespace, ".") + "."
+		nsPrefix = strings.TrimSuffix(group.Namespace.string(), ".") + "."
 	}
 
 	nsValue := nsPrefix
@@ -568,7 +568,7 @@ func emitPyMainObjcopy(
 		return nil
 	}
 
-	kv := "PY_MAIN=" + *d.pyMain
+	kv := "PY_MAIN=" + d.pyMain.string()
 
 	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyBin, []string{kv}, []string{kv}, d, oc)
 }
@@ -583,7 +583,7 @@ func emitNoCheckImportsObjcopy(
 		return nil
 	}
 
-	value := strings.Join(d.noCheckImports, " ")
+	value := strings.Join(strStrings(d.noCheckImports), " ")
 	sum := md5.Sum([]byte(value))
 	b32 := strings.ToLower(enc32.StdEncoding.EncodeToString(sum[:]))
 	b32 = strings.TrimRight(b32, "=")
@@ -642,7 +642,7 @@ func emitPySrcObjcopy(
 			}
 		}
 
-		entries := buildPySrcEntriesFor(ctx.fs, d, instance.Path.rel(), group.Srcs, group.TopLevel, group.Namespace)
+		entries := buildPySrcEntriesFor(ctx.fs, d, instance.Path.rel(), strStrings(group.Srcs), group.TopLevel, group.Namespace)
 
 		if len(entries) == 0 {
 			continue

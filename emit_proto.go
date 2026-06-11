@@ -144,14 +144,14 @@ func protoOutputRel(outputRoot, rel string) string {
 func protoTransitiveHeadersEnabled(d *ModuleData) bool {
 	if d != nil {
 		if d.setVars != nil {
-			if v, ok := d.setVars["PROTOC_TRANSITIVE_HEADERS"]; ok {
-				return v != "no"
+			if v, ok := d.setVars[strProtocTransitiveHeaders]; ok {
+				return v.string() != "no"
 			}
 		}
 
 		if d.defaultVars != nil {
-			if v, ok := d.defaultVars["PROTOC_TRANSITIVE_HEADERS"]; ok {
-				return v != "no"
+			if v, ok := d.defaultVars[strProtocTransitiveHeaders]; ok {
+				return v.string() != "no"
 			}
 		}
 	}
@@ -406,10 +406,10 @@ func emitProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCont
 
 	for _, src := range d.srcs {
 		switch {
-		case strings.HasSuffix(src, ".proto"):
-			protoSrcs = append(protoSrcs, src)
-		case strings.HasSuffix(src, ".ev"):
-			evSrcs = append(evSrcs, src)
+		case strings.HasSuffix(src.string(), ".proto"):
+			protoSrcs = append(protoSrcs, src.string())
+		case strings.HasSuffix(src.string(), ".ev"):
+			evSrcs = append(evSrcs, src.string())
 		}
 	}
 
@@ -433,13 +433,13 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	}
 
 	var codegenOutputs []protoCodegenOutput
-	codegenOutputSeen := make(map[string]struct{})
+	codegenOutputSeen := make(map[STR]struct{})
 	appendCodegenOutput := func(genRef NodeRef, pbCC VFS, srcRel string) {
-		if _, dup := codegenOutputSeen[pbCC.rel()]; dup {
+		if _, dup := codegenOutputSeen[internStr(pbCC.rel())]; dup {
 			return
 		}
 
-		codegenOutputSeen[pbCC.rel()] = struct{}{}
+		codegenOutputSeen[internStr(pbCC.rel())] = struct{}{}
 		codegenOutputs = append(codegenOutputs, protoCodegenOutput{
 			genRef: genRef,
 			pbCC:   pbCC,

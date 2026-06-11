@@ -28,19 +28,19 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 		prRef := emitRunProgram(ctx, instance, rp, d, reg, in)
 
 		if d.prOutputProducer == nil {
-			d.prOutputProducer = map[string]NodeRef{}
+			d.prOutputProducer = map[STR]NodeRef{}
 		}
 
 		for _, f := range rp.OUTFiles {
-			d.prOutputProducer[f.string()] = prRef
+			d.prOutputProducer[f] = prRef
 		}
 
 		for _, f := range rp.OUTNoAutoFiles {
-			d.prOutputProducer[f.string()] = prRef
+			d.prOutputProducer[f] = prRef
 		}
 
 		if rp.StdoutFile != nil {
-			d.prOutputProducer[rp.StdoutFile.string()] = prRef
+			d.prOutputProducer[*rp.StdoutFile] = prRef
 		}
 
 		outs := make([]string, 0, len(rp.OUTFiles)+len(rp.OUTNoAutoFiles)+1)
@@ -133,22 +133,22 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	prRef := prResult.Ref
 
 	if d.prOutputInputs == nil {
-		d.prOutputInputs = map[string]InputChunks{}
+		d.prOutputInputs = map[STR]InputChunks{}
 	}
 
 	// prResult.Inputs shares the PR node's chunk list; nothing mutates it after
 	// Emit and the reader (prResourceExtraInputs) copies out, so sharing it
 	// across keys is safe.
 	for _, f := range stmt.OUTFiles {
-		d.prOutputInputs[f.string()] = prResult.Inputs
+		d.prOutputInputs[f] = prResult.Inputs
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		d.prOutputInputs[f.string()] = prResult.Inputs
+		d.prOutputInputs[f] = prResult.Inputs
 	}
 
 	if stmt.StdoutFile != nil {
-		d.prOutputInputs[stmt.StdoutFile.string()] = prResult.Inputs
+		d.prOutputInputs[*stmt.StdoutFile] = prResult.Inputs
 	}
 
 	if reg != nil {
