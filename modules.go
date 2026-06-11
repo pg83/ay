@@ -2445,21 +2445,20 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 // whitespace in place (a multi-word value contributes several arguments);
 // empty results are dropped.
 // expandStmtTokensSTR expands a parsed (interned) token list. The fast path —
-// no '$' anywhere in the token — returns the SAME id with zero string work;
-// only tokens with references go through the string expansion and re-intern.
+// no '$' anywhere in the token (the memoized strHasDollar bit) — returns the
+// SAME id with zero string work; only tokens with references go through the
+// string expansion and re-intern.
 func expandStmtTokensSTR(items []STR, env Environment) []STR {
 	out := make([]STR, 0, len(items))
 
 	for _, item := range items {
-		s := item.string()
-
-		if !strings.Contains(s, "$") {
+		if !strHasDollar(item) {
 			out = append(out, item)
 
 			continue
 		}
 
-		for _, f := range strings.Fields(expandStmtToken(s, env)) {
+		for _, f := range strings.Fields(expandStmtToken(item.string(), env)) {
 			out = append(out, internStr(f))
 		}
 	}
@@ -2470,13 +2469,11 @@ func expandStmtTokensSTR(items []STR, env Environment) []STR {
 // expandStmtTokenSTR is the single-token form (no re-splitting): identity for
 // $-free tokens.
 func expandStmtTokenSTR(item STR, env Environment) STR {
-	s := item.string()
-
-	if !strings.Contains(s, "$") {
+	if !strHasDollar(item) {
 		return item
 	}
 
-	return internStr(expandStmtToken(s, env))
+	return internStr(expandStmtToken(item.string(), env))
 }
 
 func expandStmtTokens(items []string, env Environment) []string {
