@@ -21,6 +21,12 @@ type SysinclCtx struct {
 	ciGate   BitSet
 	ciMaxLen int // longest CI key; longer targets cannot match (cheap reject)
 
+	// First-touch memo over the CI arm, indexed by target STR: the rule set is
+	// immutable per scanner, so mightClaim(target) is constant per id. Targets
+	// repeat ~9x per run; repeats answer from one 2-bit probe without a string
+	// view. Cell values: ciUnseen / ciNo / ciClaimed.
+	ciMemo TwoBitSet
+
 	merged *SysinclIndex
 }
 
@@ -73,6 +79,15 @@ func newSysinclCtx(set SysInclSet) *SysinclCtx {
 	return c
 }
 
+// CIMemoState is a ciMemo cell value; ciUnseen doubles as TwoBitSet's zero.
+type CIMemoState uint8
+
+const (
+	ciUnseen CIMemoState = iota
+	ciNo
+	ciClaimed
+)
+
 // mightClaim is a sound, cheap prefilter: a false result guarantees no sysincl
 // record can map target, so the caller skips the full lookup.
 func (c *SysinclCtx) mightClaim(target STR) bool {
@@ -81,20 +96,38 @@ func (c *SysinclCtx) mightClaim(target STR) bool {
 	}
 
 	if len(c.keyCI) != 0 {
-		raw := target.string()
-
-		if len(raw) > c.ciMaxLen {
-			return false
+		if cell := CIMemoState(c.ciMemo.get(uint32(target))); cell != ciUnseen {
+			return cell == ciClaimed
 		}
 
-		if len(raw) >= 2 && !c.ciGate.has(uint32(uint16(raw[0])*uint16(len(raw))+uint16(raw[1]))) {
-			return false
+		yes := c.ciClaims(target)
+
+		if yes {
+			c.ciMemo.set(uint32(target), uint8(ciClaimed))
+		} else {
+			c.ciMemo.set(uint32(target), uint8(ciNo))
 		}
 
-		return c.keyCI[strings.ToLower(raw)]
+		return yes
 	}
 
 	return false
+}
+
+// ciClaims is the memo-miss arm of mightClaim: the only place the CI check
+// materializes the target string.
+func (c *SysinclCtx) ciClaims(target STR) bool {
+	raw := target.string()
+
+	if len(raw) > c.ciMaxLen {
+		return false
+	}
+
+	if len(raw) >= 2 && !c.ciGate.has(uint32(uint16(raw[0])*uint16(len(raw))+uint16(raw[1]))) {
+		return false
+	}
+
+	return c.keyCI[strings.ToLower(raw)]
 }
 
 // lookup resolves target's sysincl override for a file at path (the scanner uses
