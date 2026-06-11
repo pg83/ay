@@ -120,6 +120,21 @@ Throw(netlink.AddrAdd(dev, addr))
 return dev, addr
 ```
 
+## Naming
+
+Types start upper-case, methods lower-case — uniformly; the project is one
+`package main`, so case carries no visibility here, only convention.
+
+The exception is forced by the standard library: methods it finds by name
+(`String`, `Error`, `MarshalJSON`, `UnmarshalJSON`, `Len`/`Less`/`Swap`,
+`Push`/`Pop`, `Unwrap`) stay upper-case — but only as one-line wrappers
+delegating to the lower-case implementation (`func (v VFS) String() string {
+return v.string() }`). Internal code calls the lower-case twin; the wrapper
+exists solely so fmt/json/sort/heap/errors dispatch works.
+
+Enforced by `ay refac lint` (the `case-convention` check, wrapper shape
+included); `ay refac case` applies the convention mechanically.
+
 ## Project layout
 
 All `.go` files live in the repo root. No `internal/`, no `cmd/`, no `pkg/`. The project is small; directory hierarchy would be overhead, not structure.
@@ -127,3 +142,9 @@ All `.go` files live in the repo root. No `internal/`, no `cmd/`, no `pkg/`. The
 ## Config
 
 JSON only. No YAML, ever.
+
+## Lint
+
+`./lint.sh` is the style gate: it rebuilds `ay`, runs `ay refac consts`
+(const hoisting) and `ay refac lint` (style checks, the naming convention
+included), then `gofmt -w`. Run it before committing style-sensitive changes.
