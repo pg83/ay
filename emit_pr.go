@@ -69,23 +69,23 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	toolLDRef := res.LDRef
 	toolBinPath := *res.LDPath
 	auxTools := resolveRunProgramAuxTools(ctx, strStrings(stmt.ToolPaths))
-	inVFSByToken := make(map[string]VFS, len(stmt.INFiles))
+	inVFSByToken := make(map[STR]VFS, len(stmt.INFiles))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
 
 	for _, f := range stmt.INFiles {
 		vfs := runProgramInputVFS(ctx, instance, d, f.string())
-		inVFSByToken[f.string()] = vfs
+		inVFSByToken[f] = vfs
 		inVFSs = append(inVFSs, vfs)
 	}
 
-	outVFSByToken := make(map[string]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
+	outVFSByToken := make(map[STR]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
 
 	for _, f := range stmt.OUTFiles {
-		outVFSByToken[f.string()] = copyFileOutputVFS(instance.Path.rel(), f.string())
+		outVFSByToken[f] = copyFileOutputVFS(instance.Path.rel(), f.string())
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		outVFSByToken[f.string()] = copyFileOutputVFS(instance.Path.rel(), f.string())
+		outVFSByToken[f] = copyFileOutputVFS(instance.Path.rel(), f.string())
 	}
 
 	var stdoutVFS *VFS
@@ -93,7 +93,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	if stmt.StdoutFile != nil {
 		vfs := copyFileOutputVFS(instance.Path.rel(), stmt.StdoutFile.string())
 		stdoutVFS = &vfs
-		outVFSByToken[stmt.StdoutFile.string()] = vfs
+		outVFSByToken[*stmt.StdoutFile] = vfs
 	}
 
 	// The run's $(S) source inputs are real inputs of any unit that transitively
@@ -110,17 +110,17 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
-			registerGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f.string()], prEmitsIncludes(ctx, instance, d, f.string(), stmt), []NodeRef{toolLDRef})
-			reg.setSourceInputs(outVFSByToken[f.string()], prSourceInputs)
+			registerGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f], prEmitsIncludes(f, stmt, inVFSs), []NodeRef{toolLDRef})
+			reg.setSourceInputs(outVFSByToken[f], prSourceInputs)
 		}
 
 		for _, f := range stmt.OUTNoAutoFiles {
-			registerGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f.string()], prEmitsIncludes(ctx, instance, d, f.string(), stmt), []NodeRef{toolLDRef})
-			reg.setSourceInputs(outVFSByToken[f.string()], prSourceInputs)
+			registerGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f], prEmitsIncludes(f, stmt, inVFSs), []NodeRef{toolLDRef})
+			reg.setSourceInputs(outVFSByToken[f], prSourceInputs)
 		}
 
 		if stmt.StdoutFile != nil {
-			registerGeneratedParsedOutput(ctx, instance, pkPR, *stdoutVFS, prEmitsIncludes(ctx, instance, d, stmt.StdoutFile.string(), stmt), []NodeRef{toolLDRef})
+			registerGeneratedParsedOutput(ctx, instance, pkPR, *stdoutVFS, prEmitsIncludes(*stmt.StdoutFile, stmt, inVFSs), []NodeRef{toolLDRef})
 			reg.setSourceInputs(*stdoutVFS, prSourceInputs)
 		}
 	}
@@ -153,11 +153,11 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	if reg != nil {
 		for _, f := range stmt.OUTFiles {
-			bindGeneratedOutput(ctx, instance, outVFSByToken[f.string()], prRef)
+			bindGeneratedOutput(ctx, instance, outVFSByToken[f], prRef)
 		}
 
 		for _, f := range stmt.OUTNoAutoFiles {
-			bindGeneratedOutput(ctx, instance, outVFSByToken[f.string()], prRef)
+			bindGeneratedOutput(ctx, instance, outVFSByToken[f], prRef)
 		}
 
 		if stmt.StdoutFile != nil {
@@ -233,11 +233,9 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	// yql_*_expr_nodes.gen.h PR nodes, which list only the tool + IN
 	// files).
 	for _, f := range stmt.INFiles {
-		if !includeDirectiveParsers.hasRegisteredParser(f.string()) {
-			continue
+		if rel := f.string(); includeDirectiveParsers.hasRegisteredParser(rel) {
+			walkInput(rel)
 		}
-
-		walkInput(f.string())
 	}
 
 	// OUTPUT_INCLUDES contribute to the PR node's AUTO_INPUT only when the
@@ -338,23 +336,26 @@ func dropTransitiveGeneratedProto(in []VFS) []VFS {
 	return out
 }
 
-func prEmitsIncludes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, outFile string, stmt *RunProgramStmt) []IncludeDirective {
-	if !generatedOutputCarriesIncludes(outFile) {
+// prEmitsIncludes builds the parsed-include set registered on one PR output.
+// inVFSs mirrors stmt.INFiles in order (computed once by emitRunProgram), so the
+// per-output call needn't re-resolve every IN file.
+func prEmitsIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS) []IncludeDirective {
+	if !generatedOutputCarriesIncludes(outFile.string()) {
 		return nil
 	}
 
-	includes := make([]IncludeDirective, 0, len(stmt.INFiles)+len(stmt.OutputIncludes))
+	includes := make([]IncludeDirective, 0, len(inVFSs)+len(stmt.OutputIncludes))
 
-	for _, f := range stmt.INFiles {
-		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(runProgramInputVFS(ctx, instance, d, f.string()).rel())})
+	for _, v := range inVFSs {
+		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(v.rel())})
 	}
 
 	for _, f := range stmt.OutputIncludes {
-		if vfsHasPrefix(f.string()) {
-			f = internStr(intern(f.string()).rel())
+		if v := f.vfs(); v != 0 {
+			f = internStr(v.rel())
 		}
 
-		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(f.string())})
+		includes = append(includes, IncludeDirective{kind: includeQuoted, target: f})
 	}
 
 	return includes
@@ -422,9 +423,9 @@ func emitPR(
 	toolBinPath VFS,
 	toolLDRef NodeRef,
 	auxTools []RunProgramAuxTool,
-	inVFSByToken map[string]VFS,
+	inVFSByToken map[STR]VFS,
 	inVFSs []VFS,
-	outVFSByToken map[string]VFS,
+	outVFSByToken map[STR]VFS,
 	stdoutVFS *VFS,
 	inputClosure []VFS,
 	extraDepRefs []NodeRef,
@@ -447,20 +448,30 @@ func emitPR(
 
 	for _, aTok := range stmt.Args {
 		a := aTok.string()
+		key := aTok
 
 		for _, tool := range auxTools {
 			if strings.Contains(a, tool.token) {
 				a = strings.ReplaceAll(a, tool.token, tool.bin.string())
+				key = internStr(a)
 			}
 		}
 
-		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
-			a = vfs.string()
-		} else if vfs, ok := outVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
-			a = vfs.string()
+		if !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
+			if vfs, ok := inVFSByToken[key]; ok {
+				cmdArgs = append(cmdArgs, vfs.str())
+
+				continue
+			}
+
+			if vfs, ok := outVFSByToken[key]; ok {
+				cmdArgs = append(cmdArgs, vfs.str())
+
+				continue
+			}
 		}
 
-		cmdArgs = append(cmdArgs, internStr(a))
+		cmdArgs = append(cmdArgs, key)
 	}
 
 	head := make([]VFS, 0, 1+len(auxTools)+len(stmt.INFiles))
@@ -498,11 +509,11 @@ func emitPR(
 	}
 
 	for _, f := range stmt.OUTFiles {
-		outputs = append(outputs, outVFSByToken[f.string()])
+		outputs = append(outputs, outVFSByToken[f])
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		outputs = append(outputs, outVFSByToken[f.string()])
+		outputs = append(outputs, outVFSByToken[f])
 	}
 
 	toolRefs := make([]NodeRef, 0, len(auxTools)+1)

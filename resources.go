@@ -213,6 +213,11 @@ type ModuleToolchain struct {
 
 // resolveModuleToolchain derives the tool paths from the module's resource-global
 // closure. Tool paths come from peers (build/platform/*), not ambient platform flags.
+var (
+	strLLDRootName      = internStr(resourcePatternLLDRoot)
+	strYMakePython3Name = internStr(resourcePatternYMakePython3)
+)
+
 func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolchain {
 	var tc ModuleToolchain
 
@@ -221,23 +226,26 @@ func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolc
 	// is the FETCH node's output dir, depended on by listing tc.ClangResource in the
 	// consuming node's usesResources.
 	clangRes := resourcePatternClangTool + clangVer
+	// Decl names are compared in id space: one intern probe per call instead of
+	// a string view per decl (the LLD/python ids are package-level constants).
+	clangResID := internStr(clangRes)
 
 	for _, decl := range globals {
-		switch decl.Name.string() {
-		case clangRes:
+		switch decl.Name {
+		case clangResID:
 			root := "$(B)/resources/" + clangRes
-			tc.ClangResource = internStr(clangRes)
+			tc.ClangResource = clangResID
 			tc.ClangRoot = internStr(root)
 			tc.CC = internStr(root + "/bin/clang")
 			tc.CXX = internStr(root + "/bin/clang++")
 			tc.AR = internStr(root + "/bin/llvm-ar")
 			tc.Objcopy = internStr(root + "/bin/llvm-objcopy")
 			tc.Strip = internStr(root + "/bin/llvm-strip")
-		case resourcePatternLLDRoot:
+		case strLLDRootName:
 			root := "$(B)/resources/" + resourcePatternLLDRoot
 			tc.LLDRoot = internStr(root)
 			tc.LLD = internStr(root + "/bin/ld.lld")
-		case resourcePatternYMakePython3:
+		case strYMakePython3Name:
 			tc.Python3 = internStr("$(B)/resources/" + resourcePatternYMakePython3 + "/bin/python3")
 		}
 	}

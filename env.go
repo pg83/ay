@@ -78,20 +78,38 @@ func isImplicitBuildVar(name string) bool {
 // and NYMake::IsTrue treats empty / any falseWord as false). The only
 // typed error is an int binding used in boolean position.
 func (e Environment) bool(id ENV) bool {
-	return e.boolID(id, id.string())
+	return e.boolID(id, "")
 }
 
 // boolID is Bool keyed by a pre-interned ENV (the IF-eval hot path passes the id
-// parsed into ExprIdent; name is only for the int-misuse error message).
+// parsed into ExprIdent; name is only for the int-misuse error message and is
+// derived lazily from the id when the caller passes "").
 func (e Environment) boolID(id ENV, name string) bool {
 	switch k, v := e.s.lookup(id); k {
 	case envStr:
-		return stringIsTruthy(v.string())
+		return strIsTruthy(v)
 	case envInt:
+		if name == "" {
+			name = id.string()
+		}
+
 		throwFmt("macros: identifier %q has int binding but is used in boolean position", name)
 	}
 
 	return false
+}
+
+// strIsTruthy is stringIsTruthy in id space: bool bindings are written as the
+// strYes/strNo constants (setBool), so the common case never takes a view.
+func strIsTruthy(v STR) bool {
+	switch v {
+	case strYes:
+		return true
+	case strNo, 0:
+		return false
+	}
+
+	return stringIsTruthy(v.string())
 }
 
 // stringIsTruthy mirrors upstream's NYMake::IsTrue + util/string/type
