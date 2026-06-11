@@ -40,7 +40,7 @@ func EmitJS(instance ModuleInstance, allName string, sources []string, closure [
 		Platform: statsPlatform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: cmdArgs,
+				CmdArgs: argChunks{cmdArgs},
 				Env:     env,
 			},
 		},

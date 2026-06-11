@@ -75,7 +75,7 @@ func expectedTestEnv(testName string) EnvVars {
 func expectedTestCtxNode() *Node {
 	return &Node{
 		Cmds: []Cmd{{
-			CmdArgs: appendInternStrs(nil, []string{
+			CmdArgs: argChunks{appendInternStrs(nil, []string{
 				"$(YMAKE_PYTHON3)/bin/python3",
 				"$(S)/build/scripts/append_file.py",
 				"$(B)/common_test.context",
@@ -85,7 +85,7 @@ func expectedTestCtxNode() *Node {
 				`    "TESTS_REQUESTED": "yes"`,
 				"  }",
 				"}",
-			}),
+			})},
 		}},
 		Env:              nil,
 		Inputs:           inputChunks{{Intern("$(S)/build/scripts/append_file.py")}},
@@ -102,7 +102,7 @@ func expectedUnittestNode(info testSuiteInfo) *Node {
 	return &Node{
 		Cmds: []Cmd{{
 			Cwd: internStr("$(B)"),
-			CmdArgs: appendInternStrs(nil, []string{
+			CmdArgs: argChunks{appendInternStrs(nil, []string{
 				"$(TEST_TOOL_HOST)/test_tool",
 				"run_test",
 				"--ya-start-command-file",
@@ -153,7 +153,7 @@ func expectedUnittestNode(info testSuiteInfo) *Node {
 				"--verbose",
 				"--gdb-path", "$(GDB)/gdb/bin/gdb",
 				"--ya-end-command-file",
-			}),
+			})},
 		}},
 		Env:    expectedTestEnv("unittest"),
 		Inputs: inputChunks{{Intern("$(S)/util/ut")}},
@@ -175,7 +175,7 @@ func expectedClangFormatNode() *Node {
 	return &Node{
 		Cmds: []Cmd{{
 			Cwd: internStr("$(B)"),
-			CmdArgs: appendInternStrs(nil, []string{
+			CmdArgs: argChunks{appendInternStrs(nil, []string{
 				"$(TEST_TOOL_HOST)/test_tool",
 				"run_test",
 				"--ya-start-command-file",
@@ -226,7 +226,7 @@ func expectedClangFormatNode() *Node {
 				"$(S)/util/ysafeptr_ut.cpp",
 				"$(S)/util/ysaveload_ut.cpp",
 				"--ya-end-command-file",
-			}),
+			})},
 		}},
 		Env: expectedTestEnv("clang_format"),
 		Inputs: inputChunks{{
@@ -260,7 +260,7 @@ func cmdsEqual(got, want []Cmd) bool {
 	}
 
 	for i := range got {
-		if !reflect.DeepEqual(strStrs(got[i].CmdArgs), strStrs(want[i].CmdArgs)) {
+		if !reflect.DeepEqual(strStrs(got[i].CmdArgs.flat()), strStrs(want[i].CmdArgs.flat())) {
 			return false
 		}
 
@@ -439,7 +439,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		t.Fatalf("clang deps = %v, want [%s]", graphDeps(g, clangNode), ctxNode.UID)
 	}
 
-	unittestArgs := strStrs(unittestNode.Cmds[0].CmdArgs)
+	unittestArgs := strStrs(unittestNode.Cmds[0].CmdArgs.flat())
 	binaryValue := ""
 	for i := 0; i+1 < len(unittestArgs); i++ {
 		if unittestArgs[i] == "--binary" {
@@ -466,7 +466,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		}
 	}
 
-	clangArgs := strStrs(clangNode.Cmds[0].CmdArgs)
+	clangArgs := strStrs(clangNode.Cmds[0].CmdArgs.flat())
 	var relatedPaths []string
 	for i := 0; i+1 < len(clangArgs); i++ {
 		if clangArgs[i] == "--test-related-path" {
@@ -536,8 +536,8 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		if containsString(ccInputs, spec.bad) {
 			t.Fatalf("cc inputs for %q unexpectedly include %q in %v", spec.output, spec.bad, ccInputs)
 		}
-		if !containsString(strStrs(ccNode.Cmds[0].CmdArgs), "-gz=zstd") {
-			t.Fatalf("cc cmd for %q missing -gz=zstd: %v", spec.output, ccNode.Cmds[0].CmdArgs)
+		if !containsString(strStrs(ccNode.Cmds[0].CmdArgs.flat()), "-gz=zstd") {
+			t.Fatalf("cc cmd for %q missing -gz=zstd: %v", spec.output, ccNode.Cmds[0].CmdArgs.flat())
 		}
 	}
 	for _, badOutput := range []string{"$(B)/util/ut/ysafeptr_ut.cpp.o", "$(B)/util/ut/ysaveload_ut.cpp.o"} {
@@ -549,11 +549,11 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 	if !reflect.DeepEqual(nodeTags(ldNode), internStrs(expectedSandboxingTags())) {
 		t.Fatalf("ld tags = %v, want %v", nodeTags(ldNode), expectedSandboxingTags())
 	}
-	if !containsString(strStrs(ldNode.Cmds[1].CmdArgs), "-gz=zstd") {
-		t.Fatalf("ld vcs compile cmd missing -gz=zstd: %v", ldNode.Cmds[1].CmdArgs)
+	if !containsString(strStrs(ldNode.Cmds[1].CmdArgs.flat()), "-gz=zstd") {
+		t.Fatalf("ld vcs compile cmd missing -gz=zstd: %v", ldNode.Cmds[1].CmdArgs.flat())
 	}
 
-	linkArgs := strStrs(ldNode.Cmds[2].CmdArgs)
+	linkArgs := strStrs(ldNode.Cmds[2].CmdArgs.flat())
 	wantLinkPrefix := []string{
 		"$(S)/build/scripts/link_exe.py",
 		"--start-plugins",

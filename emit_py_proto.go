@@ -235,7 +235,7 @@ func emitPyProtoSrc(ctx *genCtx, instance ModuleInstance, d *moduleData, src str
 
 	pyPBNode := &Node{
 		Platform:         instance.Platform,
-		Cmds:             []Cmd{{CmdArgs: cmdArgs, Cwd: strS, Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}}},
+		Cmds:             []Cmd{{CmdArgs: argChunks{cmdArgs}, Cwd: strS, Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}}},
 		Env:              EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
 		Inputs:           inputChunks{inputs},
 		Outputs:          outputs,
@@ -321,7 +321,7 @@ func emitGeneratedPyProtoYapyc(ctx *genCtx, instance ModuleInstance, pyOutputs [
 
 		node := &Node{
 			Platform:         instance.Platform,
-			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}}},
+			Cmds:             []Cmd{{CmdArgs: argChunks{cmdArgs}, Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}}},
 			Env:              EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}},
 			Inputs:           nodeInputs,
 			Outputs:          []VFS{out},
@@ -539,7 +539,7 @@ func emitPyProtoAuxChunks(ctx *genCtx, instance ModuleInstance, d *moduleData, p
 
 		ref := ctx.emit.Emit(&Node{
 			Platform:         instance.Platform,
-			Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: env}},
+			Cmds:             []Cmd{{CmdArgs: argChunks{cmdArgs}, Env: env}},
 			Env:              env,
 			Inputs:           inputChunks{ch.inputs, tail},
 			Outputs:          []VFS{aux},

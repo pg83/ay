@@ -65,7 +65,7 @@ END()
 	if len(opNode.Cmds) == 0 {
 		t.Fatal("OP node has no cmds")
 	}
-	args := strStrs(opNode.Cmds[0].CmdArgs)
+	args := strStrs(opNode.Cmds[0].CmdArgs.flat())
 	var passesArg string
 	for _, a := range args {
 		if strings.HasPrefix(a, "-passes=") {
@@ -140,7 +140,7 @@ END()
 	if len(bcNode.Cmds) == 0 {
 		t.Fatal("BC node has no cmds")
 	}
-	args := strStrs(bcNode.Cmds[0].CmdArgs)
+	args := strStrs(bcNode.Cmds[0].CmdArgs.flat())
 
 	// Must include standard include paths from ccIncludesPrefix.
 	hasIB := false
@@ -338,7 +338,7 @@ END()
 	if len(bcNode.Cmds) == 0 {
 		t.Fatal("BC node has no cmds")
 	}
-	args := strStrs(bcNode.Cmds[0].CmdArgs)
+	args := strStrs(bcNode.Cmds[0].CmdArgs.flat())
 
 	// Must carry -march=armv8-a (AArch64 platform; testGen targets AArch64).
 	hasMarch := false

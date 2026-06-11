@@ -2,11 +2,38 @@ package main
 
 import "encoding/json"
 
+// argChunks is a command's chunked arg list. Like inputChunks it JSON-marshals
+// FLAT — the chunking is an internal layout (zero-copy assembly from shared,
+// pre-built blocks: a platform flag block, a module -I block, a per-source
+// tail), not schema; uid hashing and the json writer emit the flattened
+// element sequence.
+type argChunks [][]STR
+
+func (c argChunks) MarshalJSON() ([]byte, error) {
+	return json.Marshal(c.flat())
+}
+
+func (c argChunks) flat() []STR {
+	total := 0
+
+	for _, ch := range c {
+		total += len(ch)
+	}
+
+	out := make([]STR, 0, total)
+
+	for _, ch := range c {
+		out = append(out, ch...)
+	}
+
+	return out
+}
+
 type Cmd struct {
-	CmdArgs []STR   `json:"cmd_args"`
-	Cwd     STR     `json:"cwd,omitempty"`
-	Env     EnvVars `json:"env,omitempty"`
-	Stdout  STR     `json:"stdout,omitempty"`
+	CmdArgs argChunks `json:"cmd_args"`
+	Cwd     STR       `json:"cwd,omitempty"`
+	Env     EnvVars   `json:"env,omitempty"`
+	Stdout  STR       `json:"stdout,omitempty"`
 }
 
 type Node struct {

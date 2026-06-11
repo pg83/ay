@@ -515,7 +515,7 @@ func EmitPYRun(
 		outputs = append(outputs, outVFSByToken[f])
 	}
 
-	cmd := Cmd{CmdArgs: cmdArgs, Env: env}
+	cmd := Cmd{CmdArgs: argChunks{cmdArgs}, Env: env}
 
 	if stdoutPath != 0 {
 		cmd.Stdout = stdoutPath

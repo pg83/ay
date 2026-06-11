@@ -31,7 +31,7 @@ func EmitCF(
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: cmdArgs,
+				CmdArgs: argChunks{cmdArgs},
 				Env:     env,
 			},
 		},

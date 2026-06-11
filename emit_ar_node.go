@@ -73,7 +73,7 @@ func emitARNode(
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: cmdArgs,
+				CmdArgs: argChunks{cmdArgs},
 				Env:     cmdEnv,
 			},
 		},

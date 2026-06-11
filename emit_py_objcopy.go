@@ -176,7 +176,7 @@ func emitResourceObjcopy(
 			Platform: instance.Platform,
 			Cmds: []Cmd{
 				{
-					CmdArgs: cmdArgs,
+					CmdArgs: argChunks{cmdArgs},
 					Env:     env,
 				},
 			},
@@ -353,7 +353,7 @@ func emitKvOnlyObjcopyNode(
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: cmdArgs,
+				CmdArgs: argChunks{cmdArgs},
 				Env:     env,
 			},
 		},
@@ -449,7 +449,7 @@ func emitYaConfJSONObjcopy(
 			Platform: instance.Platform,
 			Cmds: []Cmd{
 				{
-					CmdArgs: cmdArgs,
+					CmdArgs: argChunks{cmdArgs},
 					Env:     env,
 				},
 			},
@@ -671,7 +671,7 @@ func emitPySrcObjcopy(
 
 			node := &Node{
 				Platform:         instance.Platform,
-				Cmds:             []Cmd{{CmdArgs: cmdArgs, Env: env}},
+				Cmds:             []Cmd{{CmdArgs: argChunks{cmdArgs}, Env: env}},
 				Env:              env,
 				Inputs:           inputChunks{rescompilersChunk, ch.inps, objcopyScriptChunk},
 				Outputs:          []VFS{outputObj},

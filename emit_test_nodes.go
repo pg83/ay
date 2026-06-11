@@ -50,7 +50,7 @@ func buildTestCtxNode(p *Platform) *Node {
 		Platform: p,
 		Cache:    &cacheTrue,
 		Cmds: []Cmd{{
-			CmdArgs: []STR{
+			CmdArgs: argChunks{[]STR{
 				internStr(testYMakePython3),
 				(Source(testAppendFileScriptRel)).str(),
 				internStr(testContextPath),
@@ -60,7 +60,7 @@ func buildTestCtxNode(p *Platform) *Node {
 				argTestsRequestedYes.str(),
 				arg4.str(),
 				arg5.str(),
-			},
+			}},
 		}},
 		Env:              nil,
 		Inputs:           inputChunks{{Source(testAppendFileScriptRel)}},
@@ -137,7 +137,7 @@ func buildUnittestNode(p *Platform, info testSuiteInfo, resourceGlobals []resour
 		Platform: p,
 		Cache:    &cacheFalse,
 		Cmds: []Cmd{{
-			CmdArgs: cmdArgs,
+			CmdArgs: argChunks{cmdArgs},
 			Cwd:     internStr(testBuildRoot),
 		}},
 		Env:    testEnv(p, "unittest"),
@@ -241,7 +241,7 @@ func buildClangFormatNode(p *Platform, info testSuiteInfo) *Node {
 		Platform: p,
 		Cache:    &cacheTrue,
 		Cmds: []Cmd{{
-			CmdArgs: cmdArgs,
+			CmdArgs: argChunks{cmdArgs},
 			Cwd:     internStr(testBuildRoot),
 		}},
 		Env:    testEnv(p, "clang_format"),

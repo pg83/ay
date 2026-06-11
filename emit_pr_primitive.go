@@ -134,7 +134,7 @@ func EmitPR(
 	}
 
 	cmd := Cmd{
-		CmdArgs: cmdArgs,
+		CmdArgs: argChunks{cmdArgs},
 		Env:     env,
 	}
 

@@ -58,9 +58,9 @@ func EmitBI(
 		Platform: instance.Platform,
 		Cache:    &cacheFalse,
 		Cmds: []Cmd{
-			{CmdArgs: cmd0Args, Env: env},
-			{CmdArgs: cmd1Args, Env: env},
-			{CmdArgs: cmd2Args, Env: env},
+			{CmdArgs: argChunks{cmd0Args}, Env: env},
+			{CmdArgs: argChunks{cmd1Args}, Env: env},
+			{CmdArgs: argChunks{cmd2Args}, Env: env},
 		},
 		Env:              env,
 		Inputs:           inputChunks{inputs},

@@ -108,10 +108,10 @@ func EmitLD(
 	envFull := hostP.ToolEnv()
 
 	cmds := []Cmd{
-		{CmdArgs: cmd0, Env: envVcsOnly},
-		{CmdArgs: cmd1, Env: envFull},
-		{CmdArgs: cmd2, Cwd: strB, Env: envFull},
-		{CmdArgs: cmd3, Env: envVcsOnly},
+		{CmdArgs: argChunks{cmd0}, Env: envVcsOnly},
+		{CmdArgs: argChunks{cmd1}, Env: envFull},
+		{CmdArgs: argChunks{cmd2}, Cwd: strB, Env: envFull},
+		{CmdArgs: argChunks{cmd3}, Env: envVcsOnly},
 	}
 
 	for i := range splitDwarfCmds {
@@ -210,13 +210,13 @@ func emitVCSNode(emit Emitter, host *Platform) NodeRef {
 	output := bldVcsJson
 	node := &Node{
 		Platform: host,
-		Cmds: []Cmd{{CmdArgs: []STR{
+		Cmds: []Cmd{{CmdArgs: argChunks{[]STR{
 			internStr(currentYatoolPath()),
 			argFetch.str(),
 			strBase64,
 			strE30,
 			output.str(),
-		}}},
+		}}}},
 		KV:               KV{P: pkCP, PC: pcYellow, ShowOut: true},
 		Outputs:          []VFS{output},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(16)},
@@ -423,9 +423,9 @@ func composeLDSplitDwarfCmds(tc moduleToolchain, outputPath string, enabled bool
 	debugPath := outputPath + ".debug"
 
 	return []Cmd{
-		{CmdArgs: []STR{tc.Objcopy, argOnlyKeepDebug.str(), internStr(outputPath), internStr(debugPath)}},
-		{CmdArgs: []STR{tc.Strip, argStripDebug.str(), internStr(outputPath)}},
-		{CmdArgs: []STR{tc.Objcopy, argRemoveSectionGnuDebuglink.str(), argAddGnuDebuglink.str(), internStr(debugPath), internStr(outputPath)}},
+		{CmdArgs: argChunks{[]STR{tc.Objcopy, argOnlyKeepDebug.str(), internStr(outputPath), internStr(debugPath)}}},
+		{CmdArgs: argChunks{[]STR{tc.Strip, argStripDebug.str(), internStr(outputPath)}}},
+		{CmdArgs: argChunks{[]STR{tc.Objcopy, argRemoveSectionGnuDebuglink.str(), argAddGnuDebuglink.str(), internStr(debugPath), internStr(outputPath)}}},
 	}
 }
 

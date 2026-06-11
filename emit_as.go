@@ -10,7 +10,7 @@ func EmitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		Platform: instance.Platform,
 		Cmds: []Cmd{
 			{
-				CmdArgs: cmdArgs,
+				CmdArgs: argChunks{cmdArgs},
 				Cwd:     strB,
 				Env:     env,
 			},

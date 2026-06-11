@@ -15,14 +15,14 @@ func emitTestCompileGraph(t *testing.T, host, target *Platform) *Graph {
 	execResourceEmit := newResourceAwareEmitter(host, execEmit, nil, fetchRefs)
 	fetchRefs[resourcePatternClangTool] = execResourceEmit.Emit(&Node{
 		Platform: host,
-		Cmds:     []Cmd{{CmdArgs: appendInternStrs(nil, []string{"ay", "fetch", "$(B)", "$(S)", "sbr:clang", "resources/CLANG"})}},
+		Cmds:     []Cmd{{CmdArgs: argChunks{appendInternStrs(nil, []string{"ay", "fetch", "$(B)", "$(S)", "sbr:clang", "resources/CLANG"})}}},
 		KV:       KV{P: pkFETCH, PC: pcYellow, ShowOut: true},
 		Outputs:  []VFS{Build("resources/" + resourcePatternClangTool)},
 	})
 	clangTool := prebuiltToolchainFlags()["CLANG_TOOL"]
 	ref := execResourceEmit.Emit(&Node{Platform: target,
 		Cmds: []Cmd{{
-			CmdArgs: appendInternStrs(nil, []string{clangTool, "-c", "$(S)/pkg/app/main.cpp", "-o", "$(B)/pkg/app/main.o"}),
+			CmdArgs: argChunks{appendInternStrs(nil, []string{clangTool, "-c", "$(S)/pkg/app/main.cpp", "-o", "$(B)/pkg/app/main.o"})},
 			Env:     nil,
 		}},
 		Env:              nil,

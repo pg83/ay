@@ -91,14 +91,14 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 
 	cmds := []Cmd{
 		{
-			CmdArgs: []STR{
+			CmdArgs: argChunks{[]STR{
 				internStr(bisonBin),
 				argV.str(),
 				internStr("--defines=" + headerVFS.String()),
 				argDashO.str(),
 				(generatedVFS).str(),
 				(srcVFS).str(),
-			},
+			}},
 			Env: env,
 		},
 	}
@@ -106,11 +106,11 @@ func emitBisonY(ctx *genCtx, instance ModuleInstance, srcRel string, in ModuleCC
 
 	if preprocessHeader {
 		cmds = append(cmds, Cmd{
-			CmdArgs: []STR{
+			CmdArgs: argChunks{[]STR{
 				in.TC.Python3,
 				(bisonPreprocessPyVFS).str(),
 				(headerVFS).str(),
-			},
+			}},
 			Env: preprocessEnv,
 		})
 		inputs = append(inputs, bisonPreprocessPyVFS)

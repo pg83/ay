@@ -36,8 +36,8 @@ func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 		t.Fatalf("emitted %d nodes, want 1", len(e.nodes))
 	}
 
-	if !contains(e.nodes[0].Cmds[0].CmdArgs, "--fatal_warnings") {
-		t.Fatalf("cmd_args missing --fatal_warnings: %v", e.nodes[0].Cmds[0].CmdArgs)
+	if !contains(e.nodes[0].Cmds[0].CmdArgs.flat(), "--fatal_warnings") {
+		t.Fatalf("cmd_args missing --fatal_warnings: %v", e.nodes[0].Cmds[0].CmdArgs.flat())
 	}
 }
 
@@ -90,10 +90,10 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 		}
 	}
 
-	if !contains(got.Cmds[0].CmdArgs, "--cpp_out=proto_h=true:$(B)/") {
-		t.Fatalf("cmd_args missing lite-header cpp_out option: %v", got.Cmds[0].CmdArgs)
+	if !contains(got.Cmds[0].CmdArgs.flat(), "--cpp_out=proto_h=true:$(B)/") {
+		t.Fatalf("cmd_args missing lite-header cpp_out option: %v", got.Cmds[0].CmdArgs.flat())
 	}
-	if !contains(got.Cmds[0].CmdArgs, "$(B)/pkg/proto/test.deps.pb.h") {
-		t.Fatalf("cmd_args missing deps header output: %v", got.Cmds[0].CmdArgs)
+	if !contains(got.Cmds[0].CmdArgs.flat(), "$(B)/pkg/proto/test.deps.pb.h") {
+		t.Fatalf("cmd_args missing deps header output: %v", got.Cmds[0].CmdArgs.flat())
 	}
 }
