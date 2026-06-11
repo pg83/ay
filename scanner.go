@@ -737,12 +737,13 @@ type CfgResolveIndex struct {
 }
 
 // cfgBuildAddincl is a Build-rooted addincl prefix paired with its rank in the
-// unified declaration order across OwnAddIncl ⨁ PeerAddInclSet. prefixID is
-// pre-interned so codegen.LookupSplit needs no per-resolve allocation.
+// unified declaration order across OwnAddIncl ⨁ PeerAddInclSet. prefixSrc is the
+// pre-interned Source-rooted twin (the bySplit prefix key space), so
+// codegen.LookupSplit needs no per-resolve string work.
 type CfgBuildAddincl struct {
-	prefix   VFS
-	prefixID STR
-	rank     int
+	prefix    VFS
+	prefixSrc VFS
+	rank      int
 }
 
 const resolveNoRank = int(^uint(0) >> 1)
@@ -785,9 +786,9 @@ func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 
 		if p.root() == VFSRootBuild {
 			idx.buildEntries = append(idx.buildEntries, CfgBuildAddincl{
-				prefix:   p,
-				prefixID: internStr(p.rel()),
-				rank:     int(r),
+				prefix:    p,
+				prefixSrc: source(p.rel()),
+				rank:      int(r),
 			})
 		}
 
@@ -863,9 +864,9 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 		var info *GeneratedFileInfo
 
 		if prefixRel == "" {
-			info = s.codegen.lookupRel(normTarget)
-		} else if pid := interned(prefixRel); pid != nil {
-			info = s.codegen.lookupSplit(*pid, *buildSuffix)
+			info = s.codegen.lookupSTR(*buildSuffix)
+		} else if pid := internedPrefixed("$(S)/", prefixRel); pid != nil {
+			info = s.codegen.lookupSplit(pid.vfs(), *buildSuffix)
 		}
 
 		if info == nil {
@@ -932,7 +933,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 						continue
 					}
 
-					info := s.codegen.lookupSplit(b.prefixID, *buildSuffix)
+					info := s.codegen.lookupSplit(b.prefixSrc, *buildSuffix)
 
 					if info == nil {
 						continue
@@ -1030,41 +1031,20 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 		return true
 	}
 
-	addBuildPath := func(rel string) bool {
-		if s.codegen == nil {
-			return false
-		}
-
-		info := s.codegen.lookupRel(rel)
-
-		if info == nil {
-			return false
-		}
-
-		if outHas(info.OutputPath) {
-			return false
-		}
-
-		out = append(out, info.OutputPath)
-
-		return true
-	}
-
 	searchPathFound := false
 
 	if candidate, ok := cythonPy2SiblingOverride(includerAbs, d); ok && addPath(candidate) {
 		searchPathFound = true
 	}
 
-	if includerAbs.isBuild() {
-		if rel := d.target.string(); strings.Contains(rel, "/") && addBuildPath(rel) {
+	if includerAbs.isBuild() && strings.Contains(d.target.string(), "/") {
+		if info := s.codegen.lookupSTR(d.target); info != nil && !outHas(info.OutputPath) {
+			out = append(out, info.OutputPath)
 			searchPathFound = true
 
-			if sc.cfg.OwnerModuleDir != "" && s.codegen != nil {
-				if info := s.codegen.lookupRel(rel); info != nil {
-					if _, ok := s.generatedFirstClaim[info.OutputPath]; !ok {
-						s.generatedFirstClaim[info.OutputPath] = sc.cfg.OwnerModuleDir
-					}
+			if sc.cfg.OwnerModuleDir != "" {
+				if _, ok := s.generatedFirstClaim[info.OutputPath]; !ok {
+					s.generatedFirstClaim[info.OutputPath] = sc.cfg.OwnerModuleDir
 				}
 			}
 		}
@@ -1095,7 +1075,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 		}
 
 		if !matched {
-			if info := s.codegenUnder(incDir, d.target); info != nil {
+			if info := s.codegen.lookupSplit(incDir, d.target); info != nil {
 				if !outHas(info.OutputPath) {
 					out = append(out, info.OutputPath)
 					searchPathFound = true
@@ -1103,7 +1083,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 
 				// Mirror resolveContextSearchTier's addBuild: when a
 				// quoted include resolves to a generated path via the
-				// includer-dir codegenUnder branch (e.g. X86CallingConv.cpp
+				// includer-dir split lookup (e.g. X86CallingConv.cpp
 				// → X86GenCallingConv.inc), record the first consumer
 				// module so the attribute_generated.go finalize pass can
 				// re-attribute the .inc node's target_properties.module_dir.
@@ -1204,16 +1184,6 @@ func (s *IncludeScanner) resolveSourceUnder(prefix VFS, target string) (string, 
 	}
 
 	return normalisePath(joinRel(prefix.rel(), target)), true
-}
-
-func (s *IncludeScanner) codegenUnder(incDir VFS, targetID STR) *GeneratedFileInfo {
-	pid := interned(incDir.rel())
-
-	if pid == nil {
-		return nil
-	}
-
-	return s.codegen.lookupSplit(*pid, targetID)
 }
 
 func canRelFilter(first, target string) bool {

@@ -54,6 +54,15 @@ func internPrefixed(prefix, rel string) STR {
 	return internBytes(vfsPrefixScratch)
 }
 
+// internedPrefixed is the lookup-only twin of internPrefixed: it probes for
+// prefix+rel without inserting, assembling the key in the same scratch buffer.
+func internedPrefixed(prefix, rel string) *STR {
+	vfsPrefixScratch = append(vfsPrefixScratch[:0], prefix...)
+	vfsPrefixScratch = append(vfsPrefixScratch, rel...)
+
+	return internedBytes(vfsPrefixScratch)
+}
+
 func source(rel string) VFS {
 	return VFS(uint32(internPrefixed("$(S)/", rel))<<1 | uint32(VFSRootSource))
 }

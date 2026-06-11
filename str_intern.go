@@ -85,6 +85,27 @@ func internBytes(b []byte) STR {
 	return id
 }
 
+// internedBytes is the lookup-only twin of internBytes: it probes for b without
+// inserting. The overflow probe's string(b) conversion allocates only on a
+// hi-collision (essentially never).
+func internedBytes(b []byte) *STR {
+	h := xxh3.Hash128(b)
+
+	if p := internTable.ids.get(h.Hi); p != nil {
+		if internTable.los[*p] == h.Lo {
+			id := *p
+
+			return &id
+		}
+
+		if oid, ok := internTable.overflow[string(b)]; ok {
+			return &oid
+		}
+	}
+
+	return nil
+}
+
 // str returns the STR itself — the identity arm of the uniform X.str() STR
 // conversion shared by ARG/ENV/VFS/TOK, so generic cmd-arg assembly can box any
 // interned token the same way.
