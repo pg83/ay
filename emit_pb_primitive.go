@@ -70,7 +70,6 @@ func EmitPB(
 	extraProtocFlags []ARG,
 	extraPlugins []resolvedCPPProtoPlugin,
 	transitiveProtoImports []VFS,
-	hasDescriptor bool,
 	peerProtoAddIncl []VFS,
 	extraDepRefs []NodeRef,
 	producerSourceInputs []VFS,
@@ -214,11 +213,6 @@ func EmitPB(
 	}
 
 	inputs = append(inputs, pbWrapperVFS)
-
-	if hasDescriptor {
-		inputs = append(inputs, pbDescriptorVFS)
-	}
-
 	inputs = append(inputs, srcVFS)
 
 	targetProps := TargetProperties{ModuleDir: moduleDir}

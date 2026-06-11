@@ -58,14 +58,10 @@ func protoDirectPbHIncludes(pm *includeParserManager, srcRel, outputRoot string)
 	return protoPbHIncludes(pm, srcRel, outputRoot, parsedIncludesHeader)
 }
 
-func pbHEmitsIncludesExtras(protoRelPath string, hasDescriptor bool) []includeDirective {
-	out := make([]includeDirective, 0, len(pbDescriptorImporterDirectives)+3)
+func pbHEmitsIncludesExtras() []includeDirective {
+	out := make([]includeDirective, 0, len(pbDescriptorImporterDirectives)+1)
 	out = append(out, includeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.Rel())})
 	out = append(out, pbDescriptorImporterDirectives...)
-
-	if hasDescriptor {
-		out = append(out, includeDirective{kind: includeQuoted, target: internStr(pbDescriptorVFS.Rel())})
-	}
 
 	return out
 }
@@ -80,55 +76,6 @@ func protoWalkInputs(peerProtoAddIncl []VFS) ModuleCCInputs {
 	own = append(own, peerProtoAddIncl...)
 
 	return ModuleCCInputs{AddIncl: own}
-}
-
-// protoImportsFromWindow splits a .proto closure window into the transitive
-// import list — the root and google/protobuf/descriptor.proto excluded; the
-// descriptor is reported as the flag (its consumers wire pbDescriptorVFS
-// explicitly, mirroring protoc's separate descriptor handling).
-func protoImportsFromWindow(window []VFS, root VFS) ([]VFS, bool) {
-	hasDescriptor := false
-	var out []VFS
-
-	for _, v := range window {
-		if v == root {
-			continue
-		}
-
-		if strings.HasSuffix(v.Rel(), "google/protobuf/descriptor.proto") {
-			hasDescriptor = true
-
-			continue
-		}
-
-		out = append(out, v)
-	}
-
-	return out, hasDescriptor
-}
-
-// evImportsFromWindow maps an .ev window's tail to EmitEV's transitive-import
-// chunk; google/protobuf/descriptor.proto becomes the explicit pbDescriptorVFS
-// wiring (the same descriptor special-casing protoImportsFromWindow reports as
-// a flag).
-func evImportsFromWindow(window []VFS, root VFS) []VFS {
-	var out []VFS
-
-	for _, v := range window {
-		if v == root {
-			continue
-		}
-
-		if strings.HasSuffix(v.Rel(), "google/protobuf/descriptor.proto") {
-			out = append(out, pbDescriptorVFS)
-
-			continue
-		}
-
-		out = append(out, v)
-	}
-
-	return out
 }
 
 func protoDirectImportNames(pm *includeParserManager, srcRel string) []string {
@@ -260,7 +207,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 	}
 
 	protoVFS := Source(protoRelPath)
-	transitiveImports, hasDescriptor := protoImportsFromWindow(
+	transitiveImports := windowImports(
 		walkClosure(ctx, instance, protoVFS, protoWalkInputs(protoSearchPaths)), protoVFS)
 
 	// SRCS(X.proto) may name a build-generated .proto (e.g. jsonpath's
@@ -291,7 +238,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 		liteHeaders,
 		d.protocFlags,
 		extraPlugins,
-		transitiveImports, hasDescriptor,
+		transitiveImports,
 		peerProtoAddIncl,
 		extraProtoDeps,
 		protoProducerSourceInputs,
@@ -333,7 +280,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 	if reg := codegenRegForInstance(ctx, instance); reg != nil {
 		directImports := protoDirectPbHIncludes(ctx.parsers, protoRelPath, cfg.cppOutRoot)
 		pbHImports := directImports
-		extras := pbHEmitsIncludesExtras(protoRelPath, hasDescriptor)
+		extras := pbHEmitsIncludesExtras()
 		pbHParsed := make([]includeDirective, 0, len(pbHImports)+len(extras)+len(transitiveImports))
 		pbHParsed = append(pbHParsed, pbHImports...)
 		pbHParsed = append(pbHParsed, extras...)
@@ -508,7 +455,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 		for _, src := range evSrcs {
 			evRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
 			evVFS := Source(evRelPath)
-			evImports := evImportsFromWindow(walkClosure(ctx, instance, evVFS, protoWalkInputs(nil)), evVFS)
+			evImports := windowImports(walkClosure(ctx, instance, evVFS, protoWalkInputs(nil)), evVFS)
 
 			evRef := EmitEV(
 				instance, evRelPath, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
