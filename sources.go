@@ -239,35 +239,3 @@ func includeScannerBasePaths() []VFS {
 		contribLibsLinuxHeadersNf,
 	}
 }
-
-// windowImports returns the window without its root — the transitive-import
-// chunk shape the codegen emitters feed their nodes. Value-keyed (not [1:]):
-// an SCC-member source leads its shared window with the SCC head.
-// windowImports perf counters (reported under YATOOL_PERF_STATS): how often
-// the window does not LEAD with its root — closureOf leads with the root for
-// plain files, so a displaced root marks an SCC window (the root sits
-// anywhere within its cycle's member list).
-var (
-	windowImportsCalls        uint64
-	windowImportsRootNotFirst uint64
-)
-
-func windowImports(window []VFS, root VFS) []VFS {
-	windowImportsCalls++
-
-	if len(window) > 0 && window[0] != root {
-		windowImportsRootNotFirst++
-	}
-
-	var out []VFS
-
-	for _, v := range window {
-		if v == root {
-			continue
-		}
-
-		out = append(out, v)
-	}
-
-	return out
-}

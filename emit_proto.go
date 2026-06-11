@@ -209,8 +209,7 @@ func emitProtoPB(ctx *genCtx, instance ModuleInstance, d *moduleData, srcRel str
 	}
 
 	protoVFS := Source(protoRelPath)
-	transitiveImports := windowImports(
-		walkClosure(ctx, instance, protoVFS, protoWalkInputs(protoSearchPaths)), protoVFS)
+	transitiveImports := walkClosureTail(ctx, instance, protoVFS, protoWalkInputs(protoSearchPaths))
 
 	// SRCS(X.proto) may name a build-generated .proto (e.g. jsonpath's
 	// RUN_ANTLR -language protobuf emits JsonPathParser.proto with no source
@@ -458,7 +457,7 @@ func emitCPPProtoSrcs(ctx *genCtx, instance ModuleInstance, d *moduleData, peerC
 		for _, src := range evSrcs {
 			evRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
 			evVFS := Source(evRelPath)
-			evImports := windowImports(walkClosure(ctx, instance, evVFS, protoWalkInputs(nil)), evVFS)
+			evImports := walkClosureTail(ctx, instance, evVFS, protoWalkInputs(nil))
 
 			evRef := EmitEV(
 				instance, evRelPath, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
