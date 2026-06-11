@@ -9,8 +9,14 @@ import "encoding/json"
 // element sequence.
 type ArgChunks [][]STR
 
-func (c ArgChunks) MarshalJSON() ([]byte, error) {
+func (c ArgChunks) marshalJSON() ([]byte, error) {
 	return json.Marshal(c.flat())
+}
+
+// MarshalJSON implements json.Marshaler — encoding/json finds it by name;
+// internal code calls marshalJSON().
+func (c ArgChunks) MarshalJSON() ([]byte, error) {
+	return c.marshalJSON()
 }
 
 func (c ArgChunks) flat() []STR {
@@ -95,8 +101,14 @@ func nodeTags(n *Node) []STR {
 // the hand-rolled writer (appendVFSChunks) emits the same flat array.
 type InputChunks [][]VFS
 
-func (c InputChunks) MarshalJSON() ([]byte, error) {
+func (c InputChunks) marshalJSON() ([]byte, error) {
 	return json.Marshal(c.flat())
+}
+
+// MarshalJSON implements json.Marshaler — encoding/json finds it by name;
+// internal code calls marshalJSON().
+func (c InputChunks) MarshalJSON() ([]byte, error) {
+	return c.marshalJSON()
 }
 
 func (c InputChunks) flat() []VFS {

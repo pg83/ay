@@ -79,7 +79,7 @@ func (c *SysinclCtx) mightClaim(target STR) bool {
 	}
 
 	if len(c.keyCI) != 0 {
-		raw := target.String()
+		raw := target.string()
 
 		if len(raw) > c.ciMaxLen {
 			return false
@@ -102,7 +102,7 @@ func (c *SysinclCtx) lookup(path string, target STR) ([]VFS, bool, bool) {
 		return nil, false, false
 	}
 
-	paths, claimed, hasMultiTarget := c.merged.lookup(path, target.String())
+	paths, claimed, hasMultiTarget := c.merged.lookup(path, target.string())
 
 	return paths, hasMultiTarget || len(paths) >= 2, claimed
 }
@@ -149,7 +149,7 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 		rec := &set[order]
 
 		for k, paths := range rec.Mappings {
-			raw := k.String()
+			raw := k.string()
 			lc := strings.ToLower(raw)
 
 			m.byLower[lc] = append(m.byLower[lc], SysinclContribution{

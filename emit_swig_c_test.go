@@ -15,7 +15,7 @@ func TestSwigParser_ImplicitIncludesOnRootSwg(t *testing.T) {
 	got := make([]string, 0, len(local))
 
 	for _, d := range local {
-		got = append(got, d.target.String())
+		got = append(got, d.target.string())
 	}
 
 	if !reflect.DeepEqual(got, want) {

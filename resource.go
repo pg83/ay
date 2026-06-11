@@ -10,9 +10,9 @@ import (
 )
 
 var (
-	objcopyScriptPath    = objcopyScriptVFS.String()
-	rescompressorBinPath = rescompressorBinVFS.String()
-	rescompilerBinPath   = rescompilerBinVFS.String()
+	objcopyScriptPath    = objcopyScriptVFS.string()
+	rescompressorBinPath = rescompressorBinVFS.string()
+	rescompilerBinPath   = rescompilerBinVFS.string()
 	yaConfFormulaRE      = regexp.MustCompile(`"formula"\s*:\s*"([^"]+\.json)"`)
 )
 

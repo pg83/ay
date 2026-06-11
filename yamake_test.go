@@ -1189,8 +1189,8 @@ func TestParseYqlUdfModuleStmts(t *testing.T) {
 			if !ok {
 				t.Fatalf("Stmts[0] = %T, want *ModuleStmt", mf.Stmts[0])
 			}
-			if m.Name.String() != tc.wantName {
-				t.Fatalf("ModuleStmt.Name = %q, want %q", m.Name.String(), tc.wantName)
+			if m.Name.string() != tc.wantName {
+				t.Fatalf("ModuleStmt.Name = %q, want %q", m.Name.string(), tc.wantName)
 			}
 			if !equalStrings(m.Args, tc.wantArgs) {
 				t.Fatalf("ModuleStmt.Args = %v, want %v", m.Args, tc.wantArgs)

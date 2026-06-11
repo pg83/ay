@@ -97,29 +97,29 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		t.Fatalf("Cmds = %d, want 4", len(got.Cmds))
 	}
 
-	if got.Cmds[0].CmdArgs.flat()[1].String() != "$(S)/build/scripts/vcs_info.py" {
-		t.Errorf("cmd[0] does not invoke vcs_info.py: %q", got.Cmds[0].CmdArgs.flat()[1].String())
+	if got.Cmds[0].CmdArgs.flat()[1].string() != "$(S)/build/scripts/vcs_info.py" {
+		t.Errorf("cmd[0] does not invoke vcs_info.py: %q", got.Cmds[0].CmdArgs.flat()[1].string())
 	}
 
-	wantCC := testToolchain().CC.String()
-	if got.Cmds[1].CmdArgs.flat()[0].String() != wantCC {
-		t.Errorf("cmd[1][0] = %q, want %q", got.Cmds[1].CmdArgs.flat()[0].String(), wantCC)
+	wantCC := testToolchain().CC.string()
+	if got.Cmds[1].CmdArgs.flat()[0].string() != wantCC {
+		t.Errorf("cmd[1][0] = %q, want %q", got.Cmds[1].CmdArgs.flat()[0].string(), wantCC)
 	}
 
-	if got.Cmds[2].CmdArgs.flat()[1].String() != "$(S)/build/scripts/link_exe.py" {
-		t.Errorf("cmd[2] does not invoke link_exe.py: %q", got.Cmds[2].CmdArgs.flat()[1].String())
+	if got.Cmds[2].CmdArgs.flat()[1].string() != "$(S)/build/scripts/link_exe.py" {
+		t.Errorf("cmd[2] does not invoke link_exe.py: %q", got.Cmds[2].CmdArgs.flat()[1].string())
 	}
 
-	if got.Cmds[2].Cwd.String() != "$(B)" {
-		t.Errorf("cmd[2].cwd = %q, want $(B)", got.Cmds[2].Cwd.String())
+	if got.Cmds[2].Cwd.string() != "$(B)" {
+		t.Errorf("cmd[2].cwd = %q, want $(B)", got.Cmds[2].Cwd.string())
 	}
 
-	if got.Cmds[3].CmdArgs.flat()[1].String() != "$(S)/build/scripts/fs_tools.py" {
-		t.Errorf("cmd[3] does not invoke fs_tools.py: %q", got.Cmds[3].CmdArgs.flat()[1].String())
+	if got.Cmds[3].CmdArgs.flat()[1].string() != "$(S)/build/scripts/fs_tools.py" {
+		t.Errorf("cmd[3] does not invoke fs_tools.py: %q", got.Cmds[3].CmdArgs.flat()[1].string())
 	}
 
 	wantOut := "$(B)/some/prog/prog"
-	if len(got.Outputs) != 1 || got.Outputs[0].String() != wantOut {
+	if len(got.Outputs) != 1 || got.Outputs[0].string() != wantOut {
 		t.Errorf("outputs = %#v, want [%q]", got.Outputs, wantOut)
 	}
 
@@ -134,7 +134,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 	}
 
 	if got.TargetProperties.ModuleType != mtBin {
-		t.Errorf("target_properties.module_type = %q, want bin", got.TargetProperties.ModuleType.String())
+		t.Errorf("target_properties.module_type = %q, want bin", got.TargetProperties.ModuleType.string())
 	}
 
 	// ccRef + the vcs.json producer node (emitVCSNode).
@@ -199,13 +199,13 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 		}
 	}
 
-	if !slices.Equal(strStrs(got.Cmds[4].CmdArgs.flat()), []string{testToolchain().Objcopy.String(), "--only-keep-debug", "$(B)/some/prog/prog", "$(B)/some/prog/prog.debug"}) {
+	if !slices.Equal(strStrs(got.Cmds[4].CmdArgs.flat()), []string{testToolchain().Objcopy.string(), "--only-keep-debug", "$(B)/some/prog/prog", "$(B)/some/prog/prog.debug"}) {
 		t.Fatalf("cmd[4].cmd_args = %#v", got.Cmds[4].CmdArgs.flat())
 	}
-	if !slices.Equal(strStrs(got.Cmds[5].CmdArgs.flat()), []string{testToolchain().Strip.String(), "--strip-debug", "$(B)/some/prog/prog"}) {
+	if !slices.Equal(strStrs(got.Cmds[5].CmdArgs.flat()), []string{testToolchain().Strip.string(), "--strip-debug", "$(B)/some/prog/prog"}) {
 		t.Fatalf("cmd[5].cmd_args = %#v", got.Cmds[5].CmdArgs.flat())
 	}
-	if !slices.Equal(strStrs(got.Cmds[6].CmdArgs.flat()), []string{testToolchain().Objcopy.String(), "--remove-section=.gnu_debuglink", "--add-gnu-debuglink", "$(B)/some/prog/prog.debug", "$(B)/some/prog/prog"}) {
+	if !slices.Equal(strStrs(got.Cmds[6].CmdArgs.flat()), []string{testToolchain().Objcopy.string(), "--remove-section=.gnu_debuglink", "--add-gnu-debuglink", "$(B)/some/prog/prog.debug", "$(B)/some/prog/prog"}) {
 		t.Fatalf("cmd[6].cmd_args = %#v", got.Cmds[6].CmdArgs.flat())
 	}
 
@@ -217,7 +217,7 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 			t.Fatalf("cmd[%d].env = %#v, want ARCADIA_ROOT_DISTBUILD=$(S)", idx, got.Cmds[idx].Env)
 		}
 		if got.Cmds[idx].Cwd != 0 {
-			t.Fatalf("cmd[%d].cwd = %q, want empty", idx, got.Cmds[idx].Cwd.String())
+			t.Fatalf("cmd[%d].cwd = %q, want empty", idx, got.Cmds[idx].Cwd.string())
 		}
 	}
 }
@@ -435,7 +435,7 @@ func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T
 		}
 	}
 	if count != 1 {
-		t.Fatalf("inputs contain %d copies of %q, want 1: %#v", count, dupPath.String(), got.flatInputs())
+		t.Fatalf("inputs contain %d copies of %q, want 1: %#v", count, dupPath.string(), got.flatInputs())
 	}
 
 	depCount := 0

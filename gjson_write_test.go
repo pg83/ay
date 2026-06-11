@@ -87,8 +87,8 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 		t.Fatalf("compact output does not parse: %v\n%s", err, out)
 	}
 
-	leafUID := g.uids.get(leaf).String()
-	mainUID := g.uids.get(main).String()
+	leafUID := g.uids.get(leaf).string()
+	mainUID := g.uids.get(main).string()
 
 	var mainNode *struct {
 		Cmds []struct {

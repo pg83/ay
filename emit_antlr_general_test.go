@@ -30,7 +30,7 @@ func TestAntlrParsedIncludes_ExcludesBuildIntermediateInputs(t *testing.T) {
 
 	got := make(map[string]struct{}, len(parsed))
 	for _, d := range parsed {
-		got[d.target.String()] = struct{}{}
+		got[d.target.string()] = struct{}{}
 	}
 
 	if _, leaked := got[stgBuild.rel()]; leaked {
@@ -73,7 +73,7 @@ func TestAntlrParsedIncludes_LexerCrossIncludesParserCpp(t *testing.T) {
 		parsed := antlrParsedIncludes(mod, run, outTok, outByTok, nil, antlr3JarVFS)
 		got := make(map[string]struct{}, len(parsed))
 		for _, d := range parsed {
-			got[d.target.String()] = struct{}{}
+			got[d.target.string()] = struct{}{}
 		}
 		return got
 	}

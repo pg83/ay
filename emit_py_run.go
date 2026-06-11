@@ -273,7 +273,7 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 				continue
 			}
 
-			target := d.target.String()
+			target := d.target.string()
 
 			if ctx.fs.isFile(srcRootVFS, target) {
 				addSource(Source(target))
@@ -296,7 +296,7 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 		}
 
 		for _, pd := range scanner.parsers.parsedIncludes(vfs, nil) {
-			target := pd.target.String()
+			target := pd.target.string()
 
 			if vfsHasPrefix(target) {
 				bvfs := Intern(target)
@@ -464,16 +464,16 @@ func EmitPYRun(
 	for _, a := range stmt.Args {
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
 		a = strings.ReplaceAll(a, "${ARCADIA_BUILD_ROOT}", "$(B)")
-		a = strings.ReplaceAll(a, "${CURDIR}", instance.Path.String())
-		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path.rel()).String())
+		a = strings.ReplaceAll(a, "${CURDIR}", instance.Path.string())
+		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path.rel()).string())
 		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path.rel())
-		a = strings.ReplaceAll(a, "$CURDIR", instance.Path.String())
-		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path.rel()).String())
+		a = strings.ReplaceAll(a, "$CURDIR", instance.Path.string())
+		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path.rel()).string())
 
 		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
-			a = vfs.String()
+			a = vfs.string()
 		} else if vfs, ok := outVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
-			a = vfs.String()
+			a = vfs.string()
 		}
 
 		cmdArgs = append(cmdArgs, internStr(a))

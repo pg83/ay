@@ -1123,7 +1123,7 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 
 	defer func() {
 		if handled {
-			recordHandledMacro(v.Name.String(), v.Args)
+			recordHandledMacro(v.Name.string(), v.Args)
 		}
 	}()
 
@@ -1167,13 +1167,13 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 	case tokNoWshadow:
 		d.flags.NoWShadow = true
 	case tokUseLlvmBc16:
-		env.setString(envCLANG_BC_ROOT, "$"+envCLANG16_RESOURCE_GLOBAL.String())
+		env.setString(envCLANG_BC_ROOT, "$"+envCLANG16_RESOURCE_GLOBAL.string())
 		env.setString(envLLVM_LLC_TOOL, "contrib/libs/llvm16/tools/llc")
 	case tokUseLlvmBc18:
-		env.setString(envCLANG_BC_ROOT, "$"+envCLANG18_RESOURCE_GLOBAL.String())
+		env.setString(envCLANG_BC_ROOT, "$"+envCLANG18_RESOURCE_GLOBAL.string())
 		env.setString(envLLVM_LLC_TOOL, "contrib/libs/llvm18/tools/llc")
 	case tokUseLlvmBc20:
-		env.setString(envCLANG_BC_ROOT, "$"+envCLANG20_RESOURCE_GLOBAL.String())
+		env.setString(envCLANG_BC_ROOT, "$"+envCLANG20_RESOURCE_GLOBAL.string())
 		env.setString(envLLVM_LLC_TOOL, "contrib/libs/llvm20/tools/llc")
 	case tokSplitDwarf:
 		d.splitDwarf = true
@@ -1211,11 +1211,11 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 		// finally either llvm_llc (GENERATE_MACHINE_CODE) or resource embed.
 		// We parse the keywords identically and stash the result on the
 		// moduleData; actual node emission is left to a follow-up.
-		if env.String(envCLANG_BC_ROOT) == "" || env.String(envLLVM_LLC_TOOL) == "" {
+		if env.string(envCLANG_BC_ROOT) == "" || env.string(envLLVM_LLC_TOOL) == "" {
 			ThrowFmt("LLVM_BC requires USE_LLVM_BC16/18/20 before invocation")
 		}
 
-		stmt := &LlvmBcStmt{ClangBCRoot: env.String(envCLANG_BC_ROOT)}
+		stmt := &LlvmBcStmt{ClangBCRoot: env.string(envCLANG_BC_ROOT)}
 		i := 0
 
 		for i < len(v.Args) {
@@ -1903,16 +1903,16 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 		// handler.
 		handled = false
 
-		if _, ok := acknowledgedMacros[v.Name.String()]; !ok {
-			ThrowFmt("gen: macro %q not modelled — implement its upstream semantics (see yatool/build/conf, yatool/build/ymake.core.conf)", v.Name.String())
+		if _, ok := acknowledgedMacros[v.Name.string()]; !ok {
+			ThrowFmt("gen: macro %q not modelled — implement its upstream semantics (see yatool/build/conf, yatool/build/ymake.core.conf)", v.Name.string())
 		}
 
 		if d.unhandledMacros == nil {
 			d.unhandledMacros = map[string][]string{}
 		}
 
-		d.unhandledMacros[v.Name.String()] = append(d.unhandledMacros[v.Name.String()], v.Args...)
-		recordIgnoredMacro(v.Name.String(), v.Args)
+		d.unhandledMacros[v.Name.string()] = append(d.unhandledMacros[v.Name.string()], v.Args...)
+		recordIgnoredMacro(v.Name.string(), v.Args)
 	}
 }
 
@@ -2187,7 +2187,7 @@ func buildIfEnv(instance ModuleInstance) Environment {
 		env.setFromStringID(k, v)
 	}
 
-	if env.bool(envOPENSOURCE) || env.String(envOPENSOURCE_PROJECT) == "ymake" || env.String(envOPENSOURCE_PROJECT) == "ya" {
+	if env.bool(envOPENSOURCE) || env.string(envOPENSOURCE_PROJECT) == "ymake" || env.string(envOPENSOURCE_PROJECT) == "ya" {
 		env.setBool(envYA_OPENSOURCE, true)
 	}
 

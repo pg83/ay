@@ -122,10 +122,10 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 			// CLANG_BC_ROOT holds the deferred "$<NAME>_RESOURCE_GLOBAL" reference;
 			// emitLLVMBC expands it against the resource-global closure (the value
 			// declared by the build/platform/clang PEERDIR), not eagerly here.
-			if got, want := env.String(envCLANG_BC_ROOT), "$"+tt.resourceKey; got != want {
+			if got, want := env.string(envCLANG_BC_ROOT), "$"+tt.resourceKey; got != want {
 				t.Fatalf("CLANG_BC_ROOT = %q, want %q", got, want)
 			}
-			if got := env.String(envLLVM_LLC_TOOL); got != tt.wantLLCTool {
+			if got := env.string(envLLVM_LLC_TOOL); got != tt.wantLLCTool {
 				t.Fatalf("LLVM_LLC_TOOL = %q, want %q", got, tt.wantLLCTool)
 			}
 			if err := Try(func() {
@@ -194,13 +194,13 @@ func TestCopyFileInputVFS_ResolvesSourceRootPaths(t *testing.T) {
 		"pkg/sub/codecs.h":     "stub\n",
 	})
 
-	if got := copyFileInputVFS(fs, "mod", "local.txt").String(); got != "$(S)/mod/local.txt" {
+	if got := copyFileInputVFS(fs, "mod", "local.txt").string(); got != "$(S)/mod/local.txt" {
 		t.Fatalf("local copy input = %q, want $(S)/mod/local.txt", got)
 	}
-	if got := copyFileInputVFS(fs, "mod", "shared/generated.txt").String(); got != "$(S)/shared/generated.txt" {
+	if got := copyFileInputVFS(fs, "mod", "shared/generated.txt").string(); got != "$(S)/shared/generated.txt" {
 		t.Fatalf("root copy input = %q, want $(S)/shared/generated.txt", got)
 	}
-	if got := copyFileInputVFS(fs, "pkg/sub", "pkg/sub/codecs.h").String(); got != "$(S)/pkg/sub/codecs.h" {
+	if got := copyFileInputVFS(fs, "pkg/sub", "pkg/sub/codecs.h").string(); got != "$(S)/pkg/sub/codecs.h" {
 		t.Fatalf("module-qualified copy input = %q, want $(S)/pkg/sub/codecs.h", got)
 	}
 }

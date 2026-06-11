@@ -31,7 +31,7 @@ func TestEmitPyRegister_TargetPlatformCacheWinsOverHostFirstVisit(t *testing.T) 
 	var pyNode *Node
 
 	for _, n := range emit.nodes {
-		if len(n.Outputs) == 1 && n.Outputs[0].String() == wantOutput {
+		if len(n.Outputs) == 1 && n.Outputs[0].string() == wantOutput {
 			pyNode = n
 			break
 		}

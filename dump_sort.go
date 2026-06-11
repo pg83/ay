@@ -138,28 +138,53 @@ type MergeItem struct {
 
 type MergeHeap []*MergeItem
 
-func (h MergeHeap) Len() int {
+func (h MergeHeap) len() int {
 	return len(h)
 }
 
-func (h MergeHeap) Less(i, j int) bool {
+// Len implements container/heap.Interface (its sort.Interface part).
+func (h MergeHeap) Len() int {
+	return h.len()
+}
+
+func (h MergeHeap) less(i, j int) bool {
 	return h[i].line < h[j].line
 }
 
-func (h MergeHeap) Swap(i, j int) {
+// Less implements container/heap.Interface (its sort.Interface part).
+func (h MergeHeap) Less(i, j int) bool {
+	return h.less(i, j)
+}
+
+func (h MergeHeap) swap(i, j int) {
 	h[i], h[j] = h[j], h[i]
 }
 
-func (h *MergeHeap) Push(x any) {
+// Swap implements container/heap.Interface (its sort.Interface part).
+func (h MergeHeap) Swap(i, j int) {
+	h.swap(i, j)
+}
+
+func (h *MergeHeap) push(x any) {
 	*h = append(*h, x.(*MergeItem))
 }
 
-func (h *MergeHeap) Pop() any {
+// Push implements container/heap.Interface; the heap machinery finds it by name.
+func (h *MergeHeap) Push(x any) {
+	h.push(x)
+}
+
+func (h *MergeHeap) pop() any {
 	old := *h
 	n := len(old)
 	it := old[n-1]
 	*h = old[:n-1]
 	return it
+}
+
+// Pop implements container/heap.Interface; the heap machinery finds it by name.
+func (h *MergeHeap) Pop() any {
+	return h.pop()
 }
 
 func mergeChunks(chunks []string, out io.Writer) {
@@ -187,7 +212,7 @@ func mergeChunks(chunks []string, out io.Writer) {
 		heap.Push(h, &MergeItem{line: line, reader: r, closer: f})
 	}
 
-	for h.Len() > 0 {
+	for h.len() > 0 {
 		it := heap.Pop(h).(*MergeItem)
 		Throw2(bw.WriteString(it.line))
 

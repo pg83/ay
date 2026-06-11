@@ -215,8 +215,8 @@ func TestScanner_SearchTierCacheReuse_OwnAddIncl(t *testing.T) {
 		t.Fatalf("second resolve = %v, want %v", got2, want)
 	}
 
-	if scanner.searchTierFlat.Len() != 1 {
-		t.Fatalf("searchTierFlat entries = %d, want 1 (shared by target)", scanner.searchTierFlat.Len())
+	if scanner.searchTierFlat.len() != 1 {
+		t.Fatalf("searchTierFlat entries = %d, want 1 (shared by target)", scanner.searchTierFlat.len())
 	}
 
 	if scanner.searchTierMisses != 1 || scanner.searchTierHits != 1 {
@@ -238,8 +238,8 @@ func TestScanner_SearchTierCacheReuse_NotFound(t *testing.T) {
 		t.Fatalf("missing header resolved unexpectedly: first=%v second=%v", got1, got2)
 	}
 
-	if scanner.searchTierFlat.Len() != 1 {
-		t.Fatalf("searchTierFlat entries = %d, want 1", scanner.searchTierFlat.Len())
+	if scanner.searchTierFlat.len() != 1 {
+		t.Fatalf("searchTierFlat entries = %d, want 1", scanner.searchTierFlat.len())
 	}
 
 	if e := scanner.searchTierFlat.get(splitMix64(sc.ctxNum, uint32(internStr("missing.h")))); e != nil && e.found {
@@ -268,8 +268,8 @@ func TestScanner_SearchTierCacheBypassedBySameDirQuoted(t *testing.T) {
 		t.Fatalf("quoted same-dir resolve = %v, want %v", got, want)
 	}
 
-	if scanner.searchTierFlat.Len() != 0 {
-		t.Fatalf("searchTierFlat entries = %d, want 0 when same-dir quoted wins", scanner.searchTierFlat.Len())
+	if scanner.searchTierFlat.len() != 0 {
+		t.Fatalf("searchTierFlat entries = %d, want 0 when same-dir quoted wins", scanner.searchTierFlat.len())
 	}
 
 	if scanner.searchTierHits != 0 || scanner.searchTierMisses != 0 {
@@ -302,9 +302,9 @@ func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
 
 	for _, p := range closure {
 		switch {
-		case strings.HasSuffix(p.String(), "/yasm/elf.h"):
+		case strings.HasSuffix(p.string(), "/yasm/elf.h"):
 			hasLocal = true
-		case strings.HasSuffix(p.String(), "/foolib/include/elf.h"):
+		case strings.HasSuffix(p.string(), "/foolib/include/elf.h"):
 			hasFoo = true
 		}
 	}
@@ -350,9 +350,9 @@ func TestScanner_QuotedMultiTargetSysincl_OwnAddIncl(t *testing.T) {
 
 	for _, p := range closure {
 		switch {
-		case strings.HasSuffix(p.String(), "/libcxxabi/include/cxxabi.h"):
+		case strings.HasSuffix(p.string(), "/libcxxabi/include/cxxabi.h"):
 			hasLibcxxabi = true
-		case strings.HasSuffix(p.String(), "/libcxxrt/include/cxxabi.h"):
+		case strings.HasSuffix(p.string(), "/libcxxrt/include/cxxabi.h"):
 			hasLibcxxrt = true
 		}
 	}
@@ -399,9 +399,9 @@ func TestScanner_QuotedSameDirStillGated(t *testing.T) {
 
 	for _, p := range closure {
 		switch {
-		case strings.HasSuffix(p.String(), "/libcxxrt/unwind.h"):
+		case strings.HasSuffix(p.string(), "/libcxxrt/unwind.h"):
 			hasLibcxxrt = true
-		case strings.HasSuffix(p.String(), "/libcxx/include/unwind.h"):
+		case strings.HasSuffix(p.string(), "/libcxx/include/unwind.h"):
 			hasLibcxxSpurious = true
 		}
 	}
@@ -438,7 +438,7 @@ func TestScanner_QuotedSysinclFiresOnLocalMiss(t *testing.T) {
 	hasFoolib := false
 
 	for _, p := range closure {
-		if strings.HasSuffix(p.String(), "/foolib/include/absent.h") {
+		if strings.HasSuffix(p.string(), "/foolib/include/absent.h") {
 			hasFoolib = true
 
 			break
@@ -477,9 +477,9 @@ func TestScanner_AngleSysinclUnaffected(t *testing.T) {
 
 	for _, p := range closure {
 		switch {
-		case strings.HasSuffix(p.String(), "/libcxxrt/unwind.h"):
+		case strings.HasSuffix(p.string(), "/libcxxrt/unwind.h"):
 			hasLocal = true
-		case strings.HasSuffix(p.String(), "/libunwind/include/unwind.h"):
+		case strings.HasSuffix(p.string(), "/libunwind/include/unwind.h"):
 			hasLibunwind = true
 		}
 	}
@@ -505,8 +505,8 @@ some_label:
 		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
 	}
 
-	if dirs[0].target.String() != "defs.asm" {
-		t.Errorf("target = %q, want %q", dirs[0].target.String(), "defs.asm")
+	if dirs[0].target.string() != "defs.asm" {
+		t.Errorf("target = %q, want %q", dirs[0].target.string(), "defs.asm")
 	}
 
 	if dirs[0].kind != includeQuoted {
@@ -524,8 +524,8 @@ func TestParseYasmIncludes_UppercaseDirective(t *testing.T) {
 		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
 	}
 
-	if dirs[0].target.String() != "randomah.asi" {
-		t.Errorf("target = %q, want %q", dirs[0].target.String(), "randomah.asi")
+	if dirs[0].target.string() != "randomah.asi" {
+		t.Errorf("target = %q, want %q", dirs[0].target.string(), "randomah.asi")
 	}
 
 	if dirs[0].kind != includeQuoted {
@@ -544,8 +544,8 @@ func TestParseYasmIncludes_LineCommentIgnored(t *testing.T) {
 		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
 	}
 
-	if dirs[0].target.String() != "real.asm" {
-		t.Errorf("target = %q, want %q", dirs[0].target.String(), "real.asm")
+	if dirs[0].target.string() != "real.asm" {
+		t.Errorf("target = %q, want %q", dirs[0].target.string(), "real.asm")
 	}
 }
 
@@ -559,8 +559,8 @@ func TestParseYasmIncludes_TrailingSemicolonComment(t *testing.T) {
 		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
 	}
 
-	if dirs[0].target.String() != "instrset64.asm" {
-		t.Errorf("target = %q, want %q", dirs[0].target.String(), "instrset64.asm")
+	if dirs[0].target.string() != "instrset64.asm" {
+		t.Errorf("target = %q, want %q", dirs[0].target.string(), "instrset64.asm")
 	}
 }
 
@@ -585,8 +585,8 @@ func TestParseYasmIncludes_AngleBracketForm(t *testing.T) {
 		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
 	}
 
-	if dirs[0].target.String() != "sysmacros.asi" {
-		t.Errorf("target = %q, want %q", dirs[0].target.String(), "sysmacros.asi")
+	if dirs[0].target.string() != "sysmacros.asi" {
+		t.Errorf("target = %q, want %q", dirs[0].target.string(), "sysmacros.asi")
 	}
 
 	if dirs[0].kind != includeSystem {
@@ -608,7 +608,7 @@ import weak 'c.proto';
 		t.Fatalf("got %d directives, want 3; %+v", len(dirs), dirs)
 	}
 
-	got := []string{dirs[0].target.String(), dirs[1].target.String(), dirs[2].target.String()}
+	got := []string{dirs[0].target.string(), dirs[1].target.string(), dirs[2].target.string()}
 	want := []string{"a.proto", "b.proto", "c.proto"}
 	for i := range want {
 		if got[i] != want[i] {
@@ -641,8 +641,8 @@ import public "d.ev";
 
 	wantHCPP := []string{"a.pb.h", "b.pb.h", "c.pb.h", "d.ev.pb.h"}
 	for i, want := range wantHCPP {
-		if hcpp[i].target.String() != want {
-			t.Fatalf("hcpp[%d].target.String() = %q, want %q; all=%+v", i, hcpp[i].target.String(), want, hcpp)
+		if hcpp[i].target.string() != want {
+			t.Fatalf("hcpp[%d].target.String() = %q, want %q; all=%+v", i, hcpp[i].target.string(), want, hcpp)
 		}
 		if hcpp[i].kind != includeQuoted {
 			t.Fatalf("hcpp[%d].kind = %v, want includeQuoted", i, hcpp[i].kind)
@@ -673,8 +673,8 @@ include "machine.rl";
 	wantLocalTargets := []string{"outer.h", "tail.h"}
 	wantLocalKinds := []IncludeKind{includeSystem, includeQuoted}
 	for i := range wantLocalTargets {
-		if local[i].target.String() != wantLocalTargets[i] {
-			t.Fatalf("local[%d].target.String() = %q, want %q; all=%+v", i, local[i].target.String(), wantLocalTargets[i], local)
+		if local[i].target.string() != wantLocalTargets[i] {
+			t.Fatalf("local[%d].target.String() = %q, want %q; all=%+v", i, local[i].target.string(), wantLocalTargets[i], local)
 		}
 		if local[i].kind != wantLocalKinds[i] {
 			t.Fatalf("local[%d].kind = %v, want %v", i, local[i].kind, wantLocalKinds[i])
@@ -687,8 +687,8 @@ include "machine.rl";
 	}
 	wantNativeTargets := []string{"machine.rl", "machine2.rl"}
 	for i := range wantNativeTargets {
-		if native[i].target.String() != wantNativeTargets[i] {
-			t.Fatalf("native[%d].target.String() = %q, want %q; all=%+v", i, native[i].target.String(), wantNativeTargets[i], native)
+		if native[i].target.string() != wantNativeTargets[i] {
+			t.Fatalf("native[%d].target.String() = %q, want %q; all=%+v", i, native[i].target.string(), wantNativeTargets[i], native)
 		}
 		if native[i].kind != includeQuoted {
 			t.Fatalf("native[%d].kind = %v, want includeQuoted", i, native[i].kind)
@@ -711,7 +711,7 @@ include "machine.rl";
 	}
 
 	for i, want := range wantHCPP {
-		if hcpp[i].target.String() != want.target || hcpp[i].kind != want.kind {
+		if hcpp[i].target.string() != want.target || hcpp[i].kind != want.kind {
 			t.Fatalf("hcpp[%d] = %+v, want {%s %v}", i, hcpp[i], want.target, want.kind)
 		}
 	}
@@ -761,7 +761,7 @@ machine Sub;
 
 	closureSet := make(map[string]bool, len(closure))
 	for _, v := range closure {
-		closureSet[v.String()] = true
+		closureSet[v.string()] = true
 	}
 
 	// main.rl6 itself must be in closure
@@ -787,7 +787,7 @@ machine Sub;
 
 	// The generated cpp's induced set: self-include + main's C directives.
 	induced := scanner.parsers.sourceParsedBuckets(Intern("$(S)/pkg/main.rl6"), nil).bucket(parsedIncludesCpp)
-	if len(induced) != 2 || induced[0].target.String() != "pkg/main.rl6" || induced[1].target.String() != "vector" {
+	if len(induced) != 2 || induced[0].target.string() != "pkg/main.rl6" || induced[1].target.string() != "vector" {
 		t.Errorf("induced h+cpp of main.rl6 = %v, want [{pkg/main.rl6} {vector}]", induced)
 	}
 }
@@ -801,7 +801,7 @@ func TestParsedIncludes_LeadingUTF8BOM(t *testing.T) {
 	if len(local) != 2 {
 		t.Fatalf("got %d local entries, want 2 (BOM not stripped?); %+v", len(local), local)
 	}
-	if local[0].target.String() != "sibling.h" || local[0].kind != includeQuoted {
+	if local[0].target.string() != "sibling.h" || local[0].kind != includeQuoted {
 		t.Fatalf("local[0] = %+v, want quoted \"sibling.h\"", local[0])
 	}
 }
@@ -836,8 +836,8 @@ func TestParsedIncludes_SwigBuckets(t *testing.T) {
 		includeQuoted, includeSystem, includeQuoted,
 	}
 	for i := range wantLocalTargets {
-		if local[i].target.String() != wantLocalTargets[i] {
-			t.Fatalf("local[%d].target.String() = %q, want %q; all=%+v", i, local[i].target.String(), wantLocalTargets[i], local)
+		if local[i].target.string() != wantLocalTargets[i] {
+			t.Fatalf("local[%d].target.String() = %q, want %q; all=%+v", i, local[i].target.string(), wantLocalTargets[i], local)
 		}
 		if local[i].kind != wantLocalKinds[i] {
 			t.Fatalf("local[%d].kind = %v, want %v", i, local[i].kind, wantLocalKinds[i])
@@ -847,7 +847,7 @@ func TestParsedIncludes_SwigBuckets(t *testing.T) {
 	if len(hcpp) != 1 {
 		t.Fatalf("got %d h+cpp entries, want 1; %+v", len(hcpp), hcpp)
 	}
-	if hcpp[0].target.String() != "block.h" || hcpp[0].kind != includeQuoted {
+	if hcpp[0].target.string() != "block.h" || hcpp[0].kind != includeQuoted {
 		t.Fatalf("h+cpp = %+v, want block.h quoted", hcpp)
 	}
 }
@@ -861,11 +861,11 @@ func TestScanDirectives_DispatchByExtension(t *testing.T) {
 	asmDirs := scanner.scanDirectives(Intern("$(S)/src.asm"))
 	hDirs := scanner.scanDirectives(Intern("$(S)/src.h"))
 
-	if len(asmDirs) != 1 || asmDirs[0].target.String() != "defs.asm" {
+	if len(asmDirs) != 1 || asmDirs[0].target.string() != "defs.asm" {
 		t.Errorf("asm dispatch failed: got %+v, want one directive targeting defs.asm", asmDirs)
 	}
 
-	if len(hDirs) != 1 || hDirs[0].target.String() != "real.h" {
+	if len(hDirs) != 1 || hDirs[0].target.string() != "real.h" {
 		t.Errorf("h dispatch failed: got %+v, want one directive targeting real.h", hDirs)
 	}
 }
@@ -877,7 +877,7 @@ func TestScanDirectives_AsiDispatchesToYasm(t *testing.T) {
 
 	dirs := scanner.scanDirectives(Intern("$(S)/src.asi"))
 
-	if len(dirs) != 1 || dirs[0].target.String() != "nested.asi" {
+	if len(dirs) != 1 || dirs[0].target.string() != "nested.asi" {
 		t.Errorf(".asi dispatch failed: got %+v, want one directive targeting nested.asi", dirs)
 	}
 }
@@ -915,11 +915,11 @@ func TestScanDirectives_MacroIndirectAugmentation(t *testing.T) {
 	var hasCrypto, hasUnistd bool
 
 	for _, d := range dirs {
-		if d.target.String() == "openssl/crypto.h" && d.kind == includeSystem {
+		if d.target.string() == "openssl/crypto.h" && d.kind == includeSystem {
 			hasCrypto = true
 		}
 
-		if d.target.String() == "unistd.h" && d.kind == includeSystem {
+		if d.target.string() == "unistd.h" && d.kind == includeSystem {
 			hasUnistd = true
 		}
 	}

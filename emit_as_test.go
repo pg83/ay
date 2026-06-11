@@ -36,8 +36,8 @@ func TestEmitAS_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 	start := len(args) - len(wantTail)
 
 	for i, want := range wantTail {
-		if args[start+i].String() != want {
-			t.Fatalf("cmd_args[%d] = %q, want %q; args=%v", start+i, args[start+i].String(), want, args)
+		if args[start+i].string() != want {
+			t.Fatalf("cmd_args[%d] = %q, want %q; args=%v", start+i, args[start+i].string(), want, args)
 		}
 	}
 
@@ -60,7 +60,7 @@ func TestEmitAS_OutputPath_FlatSrcRel(t *testing.T) {
 	_, outPath := EmitAS(targetInstance("some/module"), "flat.S", Intern("$(S)/some/module/flat.S"), ModuleCCInputs{}, testHostP, e)
 	want := "$(B)/some/module/flat.S.o"
 
-	if outPath.String() != want {
+	if outPath.string() != want {
 		t.Errorf("outPath = %q, want %q", outPath, want)
 	}
 }
@@ -70,7 +70,7 @@ func TestEmitAS_OutputPath_NestedSrc(t *testing.T) {
 	_, outPath := EmitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", Intern("$(S)/contrib/libs/cxxsupp/builtins/aarch64/chkstk.S"), ModuleCCInputs{}, testHostP, e)
 	want := "$(B)/contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S.o"
 
-	if outPath.String() != want {
+	if outPath.string() != want {
 		t.Errorf("outPath = %q, want %q", outPath, want)
 	}
 }
@@ -89,7 +89,7 @@ func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 	)
 	want := "$(B)/contrib/libs/tcmalloc/no_percpu_cache/__/tcmalloc/internal/percpu_rseq_asm.S.o"
 
-	if outPath.String() != want {
+	if outPath.string() != want {
 		t.Errorf("outPath = %q, want %q", outPath, want)
 	}
 }
@@ -154,7 +154,7 @@ func TestEmitAS_AsmlibYasm_OutputPath_NoUnderscoreInfix(t *testing.T) {
 	_, outPath := emitASYasm(hostInstance("contrib/libs/asmlib"), "memset64.asm", Intern("$(S)/contrib/libs/asmlib/memset64.asm"), ModuleCCInputs{}, testYasmLDRef(e), e)
 	want := "$(B)/contrib/libs/asmlib/memset64.pic.o"
 
-	if outPath.String() != want {
+	if outPath.string() != want {
 		t.Errorf("outPath = %q, want %q", outPath, want)
 	}
 }
@@ -171,7 +171,7 @@ func TestEmitAS_AsmlibYasm_TargetSide_NoPicSuffix(t *testing.T) {
 	_, outPath := emitASYasm(instance, "memset64.asm", Intern("$(S)/contrib/libs/asmlib/memset64.asm"), ModuleCCInputs{}, testYasmLDRef(e), e)
 	wantYasmPath := "$(B)/contrib/libs/asmlib/memset64.o"
 
-	if outPath.String() != wantYasmPath {
+	if outPath.string() != wantYasmPath {
 		t.Errorf("outPath = %q, want %q", outPath, wantYasmPath)
 	}
 
@@ -182,6 +182,6 @@ func TestEmitAS_AsmlibYasm_TargetSide_NoPicSuffix(t *testing.T) {
 	got := e.nodes[1]
 
 	if got.Cmds[0].Cwd != 0 {
-		t.Errorf("Cmds[0].Cwd = %q, want empty (yasm path)", got.Cmds[0].Cwd.String())
+		t.Errorf("Cmds[0].Cwd = %q, want empty (yasm path)", got.Cmds[0].Cwd.string())
 	}
 }

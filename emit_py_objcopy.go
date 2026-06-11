@@ -281,7 +281,7 @@ func emitResourceObjcopy(
 					var producerRef NodeRef
 
 					if d.prOutputProducer != nil {
-						canonKey := inputVFS.String()
+						canonKey := inputVFS.string()
 
 						if ref, ok := d.prOutputProducer[canonKey]; ok {
 							inputVFS = copyFileOutputVFS(instance.Path.rel(), e.Path)

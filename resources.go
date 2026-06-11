@@ -129,7 +129,7 @@ func selectHostResourceDecl(host *Platform, modulePath, name string, bundle map[
 func sortedResourceGlobals(in []ResourceDecl) []ResourceDecl {
 	out := append([]ResourceDecl(nil), in...)
 	sort.Slice(out, func(i, j int) bool {
-		return out[i].GlobalVar.String() < out[j].GlobalVar.String()
+		return out[i].GlobalVar.string() < out[j].GlobalVar.string()
 	})
 
 	return out
@@ -152,8 +152,8 @@ func resolveResourceGlobalRef(s string, globals []ResourceDecl) string {
 	name = strings.TrimPrefix(strings.TrimSuffix(name, "}"), "{")
 
 	for _, d := range globals {
-		if d.GlobalVar.String() == name {
-			return d.Value.String()
+		if d.GlobalVar.string() == name {
+			return d.Value.string()
 		}
 	}
 
@@ -223,7 +223,7 @@ func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolc
 	clangRes := resourcePatternClangTool + clangVer
 
 	for _, decl := range globals {
-		switch decl.Name.String() {
+		switch decl.Name.string() {
 		case clangRes:
 			root := "$(B)/resources/" + clangRes
 			tc.ClangResource = internStr(clangRes)

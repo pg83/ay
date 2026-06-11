@@ -1,7 +1,7 @@
 package main
 
 var (
-	ldLinkDynLibPath = ldLinkDynLibVFS.String()
+	ldLinkDynLibPath = ldLinkDynLibVFS.string()
 )
 
 func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *ModuleEmitResult {
@@ -140,13 +140,13 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 	fixElfRef, fixElfPath := ctx.tool(argToolsFixElf)
 
 	outputName := "lib" + d.moduleStmt.Args[0] + ".so"
-	outputPath := Build(instance.Path.rel() + "/" + outputName).String()
-	vcsCPath := Build(instance.Path.rel() + "/__vcs_version__.c").String()
-	vcsOPath := Build(instance.Path.rel() + "/__vcs_version__.c.pic.o").String()
+	outputPath := Build(instance.Path.rel() + "/" + outputName).string()
+	vcsCPath := Build(instance.Path.rel() + "/__vcs_version__.c").string()
+	vcsOPath := Build(instance.Path.rel() + "/__vcs_version__.c.pic.o").string()
 
 	cmd0 := composeLDCmdVcsInfo(d.tc, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings)
-	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.rel(), outputPath, outputName, vcsOPath, peerArchivePaths, pluginPaths, d.dynamicLibraryFrom, *d.exportsScript, fixElfPath.String())
+	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.rel(), outputPath, outputName, vcsOPath, peerArchivePaths, pluginPaths, d.dynamicLibraryFrom, *d.exportsScript, fixElfPath.string())
 	cmd3 := composeLDCmdLinkOrCopy(d.tc, instance.Path.rel())
 	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	envFull := ctx.host.toolEnv()
@@ -284,7 +284,7 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 
 	cmdArgs = append(cmdArgs,
 		argFuseLdLld.str(),
-		internStr("--ld-path="+tc.LLD.String()),
+		internStr("--ld-path="+tc.LLD.string()),
 		argWlNoRosegment.str(),
 		argWlBuildIdSha1.str(),
 		argNostdlib.str(),

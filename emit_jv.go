@@ -6,10 +6,10 @@ import (
 )
 
 var (
-	antlr4RuntimeHeaderPath = antlr4RuntimeHeaderVFS.String()
-	antlr4JarPath           = antlr4JarVFS.String()
-	antlr3JarPath           = antlr3JarVFS.String()
-	stdout2stderrPath       = stdout2stderrVFS.String()
+	antlr4RuntimeHeaderPath = antlr4RuntimeHeaderVFS.string()
+	antlr4JarPath           = antlr4JarVFS.string()
+	antlr3JarPath           = antlr3JarVFS.string()
+	stdout2stderrPath       = stdout2stderrVFS.string()
 )
 
 // antlrJavaConstHead is the constant [stdout2stderr.py, <jdk>, -jar,
@@ -132,7 +132,7 @@ func EmitJV(
 ) NodeRef {
 	grammarVFS := Source(instance.Path.rel() + "/" + grammar)
 	outDirVFS := Build(instance.Path.rel())
-	outDir := outDirVFS.String()
+	outDir := outDirVFS.string()
 
 	cmdArgs := make([]STR, 0, 8+len(antlrJavaConstHead))
 	cmdArgs = append(cmdArgs, tc.Python3)
@@ -189,7 +189,7 @@ func EmitJVSplit(
 	lexerVFS := Source(instance.Path.rel() + "/" + lexer)
 	parserVFS := Source(instance.Path.rel() + "/" + parser)
 	outDirVFS := Build(instance.Path.rel())
-	outDir := outDirVFS.String()
+	outDir := outDirVFS.string()
 
 	cmdArgs := []STR{
 		tc.Python3,

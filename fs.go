@@ -368,7 +368,7 @@ func (fs *OsFS) perfStats() FsPerfStats {
 		listdirMisses: fs.listdirMisses,
 		existsHits:    fs.existsHits,
 		existsMisses:  fs.existsMisses,
-		dirsCached:    fs.dirs.Len(),
+		dirsCached:    fs.dirs.len(),
 	}
 }
 

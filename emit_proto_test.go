@@ -55,7 +55,7 @@ END()
 	byOut := make(map[string]*Node, len(g.Graph))
 	for _, n := range g.Graph {
 		if len(n.Outputs) > 0 {
-			byOut[n.Outputs[0].String()] = n
+			byOut[n.Outputs[0].string()] = n
 		}
 	}
 
@@ -70,7 +70,7 @@ END()
 
 	var pb *Node
 	for _, n := range g.Graph {
-		if n.KV.P == pkPB && strings.HasSuffix(n.Outputs[0].String(), "JsonPathParser.pb.h") {
+		if n.KV.P == pkPB && strings.HasSuffix(n.Outputs[0].string(), "JsonPathParser.pb.h") {
 			pb = n
 			break
 		}
@@ -100,7 +100,7 @@ END()
 
 	hasBuildProto := false
 	for _, in := range pb.flatInputs() {
-		if in.String() == "$(B)/"+modPath+"/JsonPathParser.proto" {
+		if in.string() == "$(B)/"+modPath+"/JsonPathParser.proto" {
 			hasBuildProto = true
 			break
 		}
@@ -160,7 +160,7 @@ END()
 
 	var pb *Node
 	for _, n := range g.Graph {
-		if n.KV.P == pkPB && strings.HasSuffix(n.Outputs[0].String(), "JsonPathParser.pb.h") {
+		if n.KV.P == pkPB && strings.HasSuffix(n.Outputs[0].string(), "JsonPathParser.pb.h") {
 			pb = n
 			break
 		}
@@ -171,7 +171,7 @@ END()
 
 	have := make(map[string]struct{}, len(pb.flatInputs()))
 	for _, in := range pb.flatInputs() {
-		have[in.String()] = struct{}{}
+		have[in.string()] = struct{}{}
 	}
 	for _, want := range []string{
 		"$(S)/yql/essentials/minikql/jsonpath/JsonPath.g",
@@ -249,7 +249,7 @@ END()
 	byOut := make(map[string]*Node, len(g.Graph))
 	for _, n := range g.Graph {
 		if len(n.Outputs) > 0 {
-			byOut[n.Outputs[0].String()] = n
+			byOut[n.Outputs[0].string()] = n
 		}
 	}
 
@@ -273,7 +273,7 @@ END()
 	} {
 		found := false
 		for _, in := range ar.flatInputs() {
-			if in.String() == want {
+			if in.string() == want {
 				found = true
 				break
 			}
@@ -290,7 +290,7 @@ END()
 	idxOf := func(rel string) int {
 		want := "$(B)/" + modPath + "/" + rel
 		for i, in := range ar.flatInputs() {
-			if in.String() == want {
+			if in.string() == want {
 				return i
 			}
 		}

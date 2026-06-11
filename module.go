@@ -26,7 +26,7 @@ const (
 	KindLib
 )
 
-func (k ModuleKind) String() string {
+func (k ModuleKind) string() string {
 	switch k {
 	case KindBin:
 		return "bin"
@@ -35,6 +35,12 @@ func (k ModuleKind) String() string {
 	default:
 		return "unknown"
 	}
+}
+
+// String implements fmt.Stringer — the fmt machinery finds it by name;
+// internal code calls string().
+func (k ModuleKind) String() string {
+	return k.string()
 }
 
 type OS string
@@ -85,11 +91,11 @@ func NewToolInstance(host *Platform, path string) ModuleInstance {
 	}
 }
 
-func (mi ModuleInstance) String() string {
+func (mi ModuleInstance) string() string {
 	var b strings.Builder
 	b.WriteString(mi.Path.rel())
 	b.WriteString("[")
-	b.WriteString(mi.Kind.String())
+	b.WriteString(mi.Kind.string())
 	b.WriteString("]")
 	b.WriteString(":")
 	b.WriteString(string(mi.Language))
@@ -97,4 +103,10 @@ func (mi ModuleInstance) String() string {
 	b.WriteString(string(mi.Platform.Target))
 
 	return b.String()
+}
+
+// String implements fmt.Stringer — the fmt machinery finds it by name;
+// internal code calls string().
+func (mi ModuleInstance) String() string {
+	return mi.string()
 }

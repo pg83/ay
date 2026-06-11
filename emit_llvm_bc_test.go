@@ -45,11 +45,11 @@ END()
 
 	var opNode *Node
 	for _, n := range g.Graph {
-		if p := n.KV.P.String(); p != "OP" {
+		if p := n.KV.P.string(); p != "OP" {
 			continue
 		}
 		for _, o := range n.Outputs {
-			if strings.Contains(o.String(), "Bar_optimized") {
+			if strings.Contains(o.string(), "Bar_optimized") {
 				opNode = n
 				break
 			}
@@ -120,11 +120,11 @@ END()
 
 	var bcNode *Node
 	for _, n := range g.Graph {
-		if p := n.KV.P.String(); p != "BC" {
+		if p := n.KV.P.string(); p != "BC" {
 			continue
 		}
 		for _, o := range n.Outputs {
-			if strings.HasSuffix(o.String(), "foo.cpp.16.bc") {
+			if strings.HasSuffix(o.string(), "foo.cpp.16.bc") {
 				bcNode = n
 				break
 			}
@@ -219,7 +219,7 @@ END()
 	byOut := make(map[string]*Node, len(g.Graph))
 	for _, n := range g.Graph {
 		for _, o := range n.Outputs {
-			byOut[o.String()] = n
+			byOut[o.string()] = n
 		}
 	}
 
@@ -234,19 +234,19 @@ END()
 			t.Errorf("graph missing %s node with output %q", kvp, path)
 			continue
 		}
-		if got := n.KV.P.String(); got != kvp {
+		if got := n.KV.P.string(); got != kvp {
 			t.Errorf("output %q kv.p = %q, want %q", path, got, kvp)
 		}
 	}
 
 	var pyNode *Node
 	for _, n := range g.Graph {
-		if got := n.KV.P.String(); got != "PY" {
+		if got := n.KV.P.string(); got != "PY" {
 			continue
 		}
 		for _, o := range n.Outputs {
-			if strings.HasPrefix(o.String(), "$(B)/"+modPath+"/objcopy_") &&
-				strings.HasSuffix(o.String(), ".o") {
+			if strings.HasPrefix(o.string(), "$(B)/"+modPath+"/objcopy_") &&
+				strings.HasSuffix(o.string(), ".o") {
 				pyNode = n
 				break
 			}
@@ -260,7 +260,7 @@ END()
 	} else {
 		hasOptBc := false
 		for _, in := range pyNode.flatInputs() {
-			if in.String() == "$(B)/"+modPath+"/Bar_optimized.16.bc" {
+			if in.string() == "$(B)/"+modPath+"/Bar_optimized.16.bc" {
 				hasOptBc = true
 				break
 			}
@@ -272,11 +272,11 @@ END()
 
 	var arNode *Node
 	for _, n := range g.Graph {
-		if got := n.KV.P.String(); got != "AR" {
+		if got := n.KV.P.string(); got != "AR" {
 			continue
 		}
 		for _, o := range n.Outputs {
-			if strings.HasSuffix(o.String(), ".global.a") {
+			if strings.HasSuffix(o.string(), ".global.a") {
 				arNode = n
 				break
 			}
@@ -318,11 +318,11 @@ END()
 
 	var bcNode *Node
 	for _, n := range g.Graph {
-		if p := n.KV.P.String(); p != "BC" {
+		if p := n.KV.P.string(); p != "BC" {
 			continue
 		}
 		for _, o := range n.Outputs {
-			if strings.HasSuffix(o.String(), "foo.cpp.16.bc") {
+			if strings.HasSuffix(o.string(), "foo.cpp.16.bc") {
 				bcNode = n
 				break
 			}
@@ -403,11 +403,11 @@ END()
 
 	var bcNode *Node
 	for _, n := range g.Graph {
-		if p := n.KV.P.String(); p != "BC" {
+		if p := n.KV.P.string(); p != "BC" {
 			continue
 		}
 		for _, o := range n.Outputs {
-			if strings.HasSuffix(o.String(), "foo.cpp.16.bc") {
+			if strings.HasSuffix(o.string(), "foo.cpp.16.bc") {
 				bcNode = n
 				break
 			}
@@ -469,12 +469,12 @@ END()
 	// Find the PY objcopy node that embeds the LLVM BC output.
 	var pyNode *Node
 	for _, n := range g.Graph {
-		if p := n.KV.P.String(); p != "PY" {
+		if p := n.KV.P.string(); p != "PY" {
 			continue
 		}
 		for _, o := range n.Outputs {
-			if strings.HasPrefix(o.String(), "$(B)/"+modPath+"/objcopy_") &&
-				strings.HasSuffix(o.String(), ".o") {
+			if strings.HasPrefix(o.string(), "$(B)/"+modPath+"/objcopy_") &&
+				strings.HasSuffix(o.string(), ".o") {
 				pyNode = n
 				break
 			}
@@ -535,11 +535,11 @@ END()
 
 	var bcNode *Node
 	for _, n := range g.Graph {
-		if p := n.KV.P.String(); p != "BC" {
+		if p := n.KV.P.string(); p != "BC" {
 			continue
 		}
 		for _, o := range n.Outputs {
-			if strings.HasSuffix(o.String(), "gen.cpp.16.bc") {
+			if strings.HasSuffix(o.string(), "gen.cpp.16.bc") {
 				bcNode = n
 				break
 			}
@@ -559,7 +559,7 @@ END()
 	hasGen := false
 
 	for _, in := range bcNode.flatInputs() {
-		s := in.String()
+		s := in.string()
 
 		if strings.HasPrefix(s, "$(B)/") && strings.HasSuffix(s, "gen.cpp") {
 			hasGen = true

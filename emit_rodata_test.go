@@ -14,10 +14,10 @@ func TestEmitRD_NodeShape(t *testing.T) {
 	e := NewBufferedEmitter()
 	_, asmOut, objOut := EmitRD(instance, "icudt78_dat.rodata", Intern("$(S)/contrib/libs/icu/icudt78_dat.rodata"), NodeRef(7), testToolchain(), e)
 
-	if asmOut.String() != "$(B)/contrib/libs/icu/icudt78_dat.rodata.asm" {
+	if asmOut.string() != "$(B)/contrib/libs/icu/icudt78_dat.rodata.asm" {
 		t.Fatalf("asmOut = %q", asmOut)
 	}
-	if objOut.String() != "$(B)/contrib/libs/icu/icudt78_dat.rodata.o" {
+	if objOut.string() != "$(B)/contrib/libs/icu/icudt78_dat.rodata.o" {
 		t.Fatalf("objOut = %q", objOut)
 	}
 	if len(e.nodes) != 1 {

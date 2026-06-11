@@ -633,7 +633,7 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 		s.onWarn(Warn{
 			Kind: WarnMissingInclude,
 			Message: fmt.Sprintf("%s: unresolved include %s%s%s — not found in source, build, search path, or sysincl",
-				includerAbs.String(), open, d.target.String(), close),
+				includerAbs.string(), open, d.target.string(), close),
 		})
 	}()
 
@@ -653,9 +653,9 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 			var sameDirRel string
 
 			if incDir != "" {
-				sameDirRel = incDir + "/" + d.target.String()
+				sameDirRel = incDir + "/" + d.target.string()
 			} else {
-				sameDirRel = d.target.String()
+				sameDirRel = d.target.string()
 			}
 
 			bypass = searchOut[0].rel() == sameDirRel
@@ -1044,8 +1044,8 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 		searchPathFound = true
 	}
 
-	if includerAbs.isBuild() && strings.Contains(d.target.String(), "/") {
-		rel := d.target.String()
+	if includerAbs.isBuild() && strings.Contains(d.target.string(), "/") {
+		rel := d.target.string()
 
 		if addBuildPath(rel) {
 			searchPathFound = true
@@ -1071,7 +1071,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 		if p := s.sourceUnderCache.get(suKey); p != nil {
 			sv = *p
 		} else {
-			if r, ok := s.resolveSourceUnder(incDir, d.target.String()); ok {
+			if r, ok := s.resolveSourceUnder(incDir, d.target.string()); ok {
 				sv = Source(r)
 			}
 
@@ -1085,7 +1085,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 		}
 
 		if !matched {
-			if info := s.codegenUnder(incDir.rel(), d.target.String()); info != nil {
+			if info := s.codegenUnder(incDir.rel(), d.target.string()); info != nil {
 				if !outHas(info.OutputPath) {
 					out = append(out, info.OutputPath)
 					searchPathFound = true
@@ -1107,7 +1107,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 	}
 
 	if !searchPathFound {
-		tier := sc.resolveContextSearchTier(d.target, d.target.String())
+		tier := sc.resolveContextSearchTier(d.target, d.target.string())
 
 		if tier.found {
 			out = append(out, tier.paths...)
@@ -1124,8 +1124,8 @@ func cythonPy2SiblingOverride(includerAbs VFS, d IncludeDirective) (string, bool
 	}
 
 	if hasPrefix(includerAbs.rel(), "contrib/tools/cython_py2/Cython/Includes/") {
-		if hasPrefix(d.target.String(), "libc/") || hasPrefix(d.target.String(), "libcpp/") {
-			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.String(), true
+		if hasPrefix(d.target.string(), "libc/") || hasPrefix(d.target.string(), "libcpp/") {
+			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.string(), true
 		}
 
 		return "", false
@@ -1133,16 +1133,16 @@ func cythonPy2SiblingOverride(includerAbs VFS, d IncludeDirective) (string, bool
 
 	switch includerAbs.rel() {
 	case "util/generic/string.pxd":
-		if d.target.String() == "libcpp/string.pxd" {
-			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.String(), true
+		if d.target.string() == "libcpp/string.pxd" {
+			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.string(), true
 		}
 	case "util/generic/hash.pxd", "util/generic/hash_set.pxd":
-		if d.target.String() == "libcpp/pair.pxd" {
-			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.String(), true
+		if d.target.string() == "libcpp/pair.pxd" {
+			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.string(), true
 		}
 	case "util/system/types.pxd":
-		if d.target.String() == "libc/stdint.pxd" {
-			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.String(), true
+		if d.target.string() == "libc/stdint.pxd" {
+			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.string(), true
 		}
 	}
 

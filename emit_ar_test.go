@@ -54,7 +54,7 @@ func hostInstance(path string) ModuleInstance {
 func vfsStrings(vs []VFS) []string {
 	out := make([]string, len(vs))
 	for i, v := range vs {
-		out[i] = v.String()
+		out[i] = v.string()
 	}
 	return out
 }
@@ -215,7 +215,7 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 
 	for _, pp := range peerPaths {
 		for _, arg := range cmdArgs {
-			if arg.String() == pp {
+			if arg.string() == pp {
 				t.Errorf("peer archive path %q unexpectedly present in cmd_args", pp)
 			}
 		}
@@ -292,7 +292,7 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 
 	inputObjs := vfsStrings(inputs[:3])
 
-	wantInputObjs := []string{z.String(), m.String(), a.String()}
+	wantInputObjs := []string{z.string(), m.string(), a.string()}
 
 	if !reflect.DeepEqual(inputObjs, wantInputObjs) {
 		t.Errorf("inputs .o mismatch:\n  want %v\n  got  %v", wantInputObjs, inputObjs)
@@ -331,7 +331,7 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 	}
 
 	trailing := strStrs(cmdArgs[10:])
-	wantTrailing := []string{z.String(), m.String(), a.String()}
+	wantTrailing := []string{z.string(), m.string(), a.string()}
 
 	if !reflect.DeepEqual(trailing, wantTrailing) {
 		t.Errorf("cmd_args .o order mismatch:\n  want %v\n  got  %v", wantTrailing, trailing)

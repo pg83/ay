@@ -483,7 +483,7 @@ func (m InclArgMemo) arg(path VFS) STR {
 		return a
 	}
 
-	a := internStr("-I" + path.String())
+	a := internStr("-I" + path.string())
 	m.m.put(path, a)
 
 	return a

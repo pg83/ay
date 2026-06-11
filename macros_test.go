@@ -172,8 +172,8 @@ func TestEvalCond_TypeMismatch(t *testing.T) {
 				t.Fatalf("EvalCond(%q) returned nil exception, want throw", tc.expr)
 			}
 
-			if !strings.Contains(exc.Error(), tc.wantSub) {
-				t.Errorf("exception %q does not contain %q", exc.Error(), tc.wantSub)
+			if !strings.Contains(exc.error(), tc.wantSub) {
+				t.Errorf("exception %q does not contain %q", exc.error(), tc.wantSub)
 			}
 		})
 	}
@@ -193,8 +193,8 @@ func TestEvalCond_BareLiteralInPredicateThrows(t *testing.T) {
 				t.Fatalf("EvalCond(%q) did not throw", c)
 			}
 
-			if !strings.Contains(exc.Error(), "cannot be evaluated as a boolean condition") {
-				t.Errorf("exception %q does not mention boolean-condition rejection", exc.Error())
+			if !strings.Contains(exc.error(), "cannot be evaluated as a boolean condition") {
+				t.Errorf("exception %q does not mention boolean-condition rejection", exc.error())
 			}
 		})
 	}
@@ -240,8 +240,8 @@ func TestEnvironment_BoolMethodRejectsTypedBindings(t *testing.T) {
 			t.Fatalf("EvalCond(ANDROID_API) did not throw")
 		}
 
-		if !strings.Contains(exc.Error(), "int binding") {
-			t.Errorf("exception %q does not contain %q", exc.Error(), "int binding")
+		if !strings.Contains(exc.error(), "int binding") {
+			t.Errorf("exception %q does not contain %q", exc.error(), "int binding")
 		}
 	})
 }
@@ -271,7 +271,7 @@ func TestDefaultIfEnv_PROFILE_MEMORY_ALLOCATIONSDefaultsFalse(t *testing.T) {
 }
 
 func TestDefaultIfEnv_ALLOCATORDefaultsEmpty(t *testing.T) {
-	if got := DefaultIfEnv.String(envALLOCATOR); got != "" {
+	if got := DefaultIfEnv.string(envALLOCATOR); got != "" {
 		t.Fatalf("DefaultIfEnv.String(ALLOCATOR) = %q, want empty", got)
 	}
 }

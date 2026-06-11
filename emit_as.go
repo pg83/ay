@@ -4,7 +4,7 @@ import (
 	"strings"
 )
 
-var yasmBinaryPath = yasmBinaryVFS.String()
+var yasmBinaryPath = yasmBinaryVFS.string()
 
 // yasmConstHead is the constant [yasm -f elf64 -D UNIX …replace…] lead of
 // every yasm invocation (the AS-yasm and rodata nodes share it).
@@ -121,8 +121,8 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	}
 
 	inVFS := srcVFS
-	outputPath := outVFS.String()
-	inputPath := inVFS.String()
+	outputPath := outVFS.string()
+	inputPath := inVFS.string()
 
 	var predefinedFlags []string
 

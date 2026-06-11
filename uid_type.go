@@ -35,20 +35,32 @@ func (u UID) appendB64(buf []byte) []byte {
 	return append(buf, enc[:]...)
 }
 
-func (u UID) String() string {
+func (u UID) string() string {
 	raw := u.raw()
 
 	return base64.RawURLEncoding.EncodeToString(raw[:])
 }
 
+// String implements fmt.Stringer — the fmt machinery finds it by name;
+// internal code calls string().
+func (u UID) String() string {
+	return u.string()
+}
+
 // MarshalJSON emits the quoted base64 text. Used only by the stdlib encoder (tests
 // and the byte-exact oracle); the production graph writer uses appendUID, which
 // produces identical bytes without the intermediate allocation.
-func (u UID) MarshalJSON() ([]byte, error) {
+func (u UID) marshalJSON() ([]byte, error) {
 	out := make([]byte, 0, uidB64Len+2)
 	out = append(out, '"')
 	out = u.appendB64(out)
 	out = append(out, '"')
 
 	return out, nil
+}
+
+// MarshalJSON implements json.Marshaler — encoding/json finds it by name;
+// internal code calls marshalJSON().
+func (u UID) MarshalJSON() ([]byte, error) {
+	return u.marshalJSON()
 }

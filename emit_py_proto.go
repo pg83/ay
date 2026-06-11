@@ -188,14 +188,14 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 
 	if d.grpc {
 		pe.tail = append(pe.tail,
-			internStr("--plugin=protoc-gen-grpc_py="+pe.grpcPyBinary.String()),
+			internStr("--plugin=protoc-gen-grpc_py="+pe.grpcPyBinary.string()),
 			internStr("--grpc_py_out=$(B)/"+protoRoot),
 		)
 	}
 
 	if !d.noMypy {
 		pe.tail = append(pe.tail,
-			internStr("--plugin=protoc-gen-mypy="+pe.mypyBinary.String()),
+			internStr("--plugin=protoc-gen-mypy="+pe.mypyBinary.string()),
 			internStr("--mypy_out=$(B)/"+protoRoot),
 		)
 	}
@@ -512,7 +512,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 		}
 
 		cur.hashInputs = append(cur.hashInputs, arcBuildPath, "-"+key)
-		cur.cmdArgs = append(cur.cmdArgs, e.path.String(), "-"+key)
+		cur.cmdArgs = append(cur.cmdArgs, e.path.string(), "-"+key)
 		addInput(e.path)
 
 		for _, input := range e.inputs {

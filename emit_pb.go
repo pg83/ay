@@ -10,9 +10,9 @@ import (
 )
 
 var (
-	pbWrapperPath     = pbWrapperVFS.String()
-	pbPyWrapperPath   = pbPyWrapperVFS.String()
-	pbDescriptorProto = pbDescriptorVFS.String()
+	pbWrapperPath     = pbWrapperVFS.string()
+	pbPyWrapperPath   = pbPyWrapperVFS.string()
+	pbDescriptorProto = pbDescriptorVFS.string()
 )
 
 var protobufRuntimeHeaders = []VFS{
@@ -398,7 +398,7 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 	// (which need it via `ADDINCL GLOBAL FOR proto contrib/libs/protobuf/src`
 	// from their own peers).
 	for _, p := range peerProtoAddIncl {
-		mid = append(mid, internStr("-I="+p.String()))
+		mid = append(mid, internStr("-I="+p.string()))
 	}
 
 	// Non-GLOBAL PROTO_NAMESPACE contributions trail the chain, and only in
@@ -407,7 +407,7 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 	// -I=$(S)/yt that yt/yt/library/quantile_digest carries).
 	if moduleTag == 0 {
 		for _, p := range protoNamespaceTail {
-			mid = append(mid, internStr("-I="+p.String()))
+			mid = append(mid, internStr("-I="+p.string()))
 		}
 	}
 
@@ -419,21 +419,21 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 	mid = appendArgStr(mid, extraProtocFlags)
 	mid = append(mid,
 		internStr("--cpp_styleguide_out=:$(B)/"+cppOutRoot),
-		internStr("--plugin=protoc-gen-cpp_styleguide="+cppStyleguideBinary.String()),
+		internStr("--plugin=protoc-gen-cpp_styleguide="+cppStyleguideBinary.string()),
 	)
 
 	var tail []STR
 
 	if grpc {
 		tail = append(tail,
-			internStr("--plugin=protoc-gen-grpc_cpp="+grpcCppBinary.String()),
+			internStr("--plugin=protoc-gen-grpc_cpp="+grpcCppBinary.string()),
 			internStr("--grpc_cpp_out=$(B)/"+cppOutRoot),
 		)
 	}
 
 	for _, plugin := range extraPlugins {
 		tail = append(tail,
-			internStr("--plugin=protoc-gen-"+plugin.Spec.Name+"="+plugin.Binary.String()),
+			internStr("--plugin=protoc-gen-"+plugin.Spec.Name+"="+plugin.Binary.string()),
 			internStr("--"+plugin.Spec.Name+"_out=$(B)/"+cppOutRoot),
 		)
 

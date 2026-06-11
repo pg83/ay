@@ -82,7 +82,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 				{kind: includeQuoted, target: internStr(headerInput.rel())},
 				{kind: includeQuoted, target: strUtilGenericSerializedEnumH},
 			}
-			sort.Slice(cppParsed, func(i, j int) bool { return cppParsed[i].target.String() < cppParsed[j].target.String() })
+			sort.Slice(cppParsed, func(i, j int) bool { return cppParsed[i].target.string() < cppParsed[j].target.string() })
 			registerGeneratedParsedOutput(ctx, instance, pkEN, serializedCPPPath, cppParsed, []NodeRef{enumParserLD})
 
 			if withHeader {
@@ -91,7 +91,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 					{kind: includeQuoted, target: internStr(headerInput.rel())},
 					{kind: includeQuoted, target: internStr(serializedCPPPath.rel())},
 				}
-				sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target.String() < hParsed[j].target.String() })
+				sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target.string() < hParsed[j].target.string() })
 				registerGeneratedParsedOutput(ctx, instance, pkEN, serializedHPath, hParsed, []NodeRef{enumParserLD})
 			}
 		}

@@ -101,7 +101,7 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 
 func swigTool(ctx *GenCtx, instance ModuleInstance) (NodeRef, string) {
 	ref, bin := ctx.tool(argContribToolsSwig)
-	return ref, bin.String()
+	return ref, bin.string()
 }
 
 func swigOutputPrefix(src, module string) string {

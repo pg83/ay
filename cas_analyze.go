@@ -84,7 +84,7 @@ func casAnalyze(casDir string, chunkAvg int, minLen int64) int {
 				return nil
 			}))
 		}).catch(func(e *Exception) {
-			fmt.Fprintf(os.Stderr, "cas analyze: walk: %s\n", e.Error())
+			fmt.Fprintf(os.Stderr, "cas analyze: walk: %s\n", e.error())
 		})
 	}()
 
@@ -105,7 +105,7 @@ func casAnalyze(casDir string, chunkAvg int, minLen int64) int {
 						hashCh <- chunkInfo{hash: sha256.Sum256(chunk), size: int64(len(chunk))}
 					})
 				}).catch(func(e *Exception) {
-					fmt.Fprintf(os.Stderr, "cas analyze: skip %s: %s\n", path, e.Error())
+					fmt.Fprintf(os.Stderr, "cas analyze: skip %s: %s\n", path, e.error())
 				})
 			}
 		}()

@@ -5,7 +5,7 @@ import (
 )
 
 var (
-	genPy3RegScriptPath = genPy3RegScriptVFS.String()
+	genPy3RegScriptPath = genPy3RegScriptVFS.string()
 	// genPy3RegScriptChunk is the reg-script input chunk shared by every
 	// py-register node, referenced instead of allocated per node.
 	genPy3RegScriptChunk = []VFS{genPy3RegScriptVFS}
@@ -172,7 +172,7 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 
 		regCpp := arg + ".reg3.cpp"
 		regCppVFS := Build(instance.Path.rel() + "/" + regCpp)
-		regCppAbs := regCppVFS.String()
+		regCppAbs := regCppVFS.string()
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -228,7 +228,7 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 			filtered := make([]ARG, 0, len(in.CFlags))
 
 			for _, f := range in.CFlags {
-				if short, ok := pyInitDefineShortname(f.String()); ok {
+				if short, ok := pyInitDefineShortname(f.string()); ok {
 					if _, keep := priorShort[short]; !keep {
 						continue
 					}

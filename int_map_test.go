@@ -18,8 +18,8 @@ func TestIntMapBasicPutGet(t *testing.T) {
 		t.Fatalf("Get(42) = %v want *100", p)
 	}
 
-	if m.Len() != 1 {
-		t.Fatalf("Len = %d want 1", m.Len())
+	if m.len() != 1 {
+		t.Fatalf("Len = %d want 1", m.len())
 	}
 }
 
@@ -32,8 +32,8 @@ func TestIntMapOverwrite(t *testing.T) {
 		t.Fatalf("Get(7) = %v want *\"b\"", p)
 	}
 
-	if m.Len() != 1 {
-		t.Fatalf("Len = %d want 1 after overwrite", m.Len())
+	if m.len() != 1 {
+		t.Fatalf("Len = %d want 1 after overwrite", m.len())
 	}
 }
 
@@ -78,8 +78,8 @@ func TestIntMapGrowKeepsAll(t *testing.T) {
 		m.put(i*0x9E3779B97F4A7C15, i) // spread keys
 	}
 
-	if m.Len() != n {
-		t.Fatalf("Len = %d want %d", m.Len(), n)
+	if m.len() != n {
+		t.Fatalf("Len = %d want %d", m.len(), n)
 	}
 
 	for i := uint64(1); i <= n; i++ {
@@ -107,8 +107,8 @@ func TestIntMapMatchesBuiltin(t *testing.T) {
 		ref[k] = v
 		m.put(k, v)
 
-		if m.Len() != len(ref) {
-			t.Fatalf("step %d: Len = %d want %d", i, m.Len(), len(ref))
+		if m.len() != len(ref) {
+			t.Fatalf("step %d: Len = %d want %d", i, m.len(), len(ref))
 		}
 	}
 
@@ -161,8 +161,8 @@ func TestIntMapCell(t *testing.T) {
 		t.Fatalf("update via Cell = %v want *100", g)
 	}
 
-	if m.Len() != 1 {
-		t.Fatalf("Len = %d want 1", m.Len())
+	if m.len() != 1 {
+		t.Fatalf("Len = %d want 1", m.len())
 	}
 }
 
@@ -180,8 +180,8 @@ func TestIntMapCellGrows(t *testing.T) {
 		*p = i
 	}
 
-	if m.Len() != n {
-		t.Fatalf("Len = %d want %d", m.Len(), n)
+	if m.len() != n {
+		t.Fatalf("Len = %d want %d", m.len(), n)
 	}
 
 	for i := 1; i <= n; i++ {

@@ -58,9 +58,9 @@ func appendEnv(buf []byte, env EnvVars) []byte {
 			buf = append(buf, ',')
 		}
 
-		buf = appendString(buf, e.Name.String())
+		buf = appendString(buf, e.Name.string())
 		buf = append(buf, ':')
-		buf = appendString(buf, e.Value.String())
+		buf = appendString(buf, e.Value.string())
 	}
 
 	return append(buf, '}')
@@ -76,8 +76,14 @@ const (
 	nwFull
 )
 
-func (m NetworkMode) String() string {
+func (m NetworkMode) string() string {
 	return networkModeStr[m]
+}
+
+// String implements fmt.Stringer — the fmt machinery finds it by name;
+// internal code calls string().
+func (m NetworkMode) String() string {
+	return m.string()
 }
 
 // Requirements is a node's scheduler resource set. The zero value (no flags set)
@@ -106,8 +112,14 @@ const (
 	mlUnknown
 )
 
-func (l ModuleLang) String() string {
+func (l ModuleLang) string() string {
 	return moduleLangStr[l]
+}
+
+// String implements fmt.Stringer — the fmt machinery finds it by name;
+// internal code calls string().
+func (l ModuleLang) String() string {
+	return l.string()
 }
 
 // ModuleType is a node's "module_type" target property; same uint8-enum scheme.
@@ -121,8 +133,14 @@ const (
 	mtSO
 )
 
-func (t ModuleType) String() string {
+func (t ModuleType) string() string {
 	return moduleTypeStr[t]
+}
+
+// String implements fmt.Stringer — the fmt machinery finds it by name;
+// internal code calls string().
+func (t ModuleType) String() string {
+	return t.string()
 }
 
 // TargetProperties is a node's module attributes. Empty fields are omitted,
@@ -173,8 +191,14 @@ const (
 	pkYC
 )
 
-func (k ProcKind) String() string {
+func (k ProcKind) string() string {
 	return procKindStr[k]
+}
+
+// String implements fmt.Stringer — the fmt machinery finds it by name;
+// internal code calls string().
+func (k ProcKind) String() string {
+	return k.string()
 }
 
 // PColor is a node's display colour (the kv "pc" value); same uint8-enum scheme.
@@ -191,8 +215,14 @@ const (
 	pcYellow
 )
 
-func (c PColor) String() string {
+func (c PColor) string() string {
 	return pColorStr[c]
+}
+
+// String implements fmt.Stringer — the fmt machinery finds it by name;
+// internal code calls string().
+func (c PColor) String() string {
+	return c.string()
 }
 
 // KV is a node's kv block. P (process kind) is on every node; PC/ShowOut/Name/
@@ -290,7 +320,7 @@ func appendRequirements(buf []byte, r Requirements) []byte {
 		o.num("cpu", r.CPU)
 	}
 
-	o.str("network", r.Network.String())
+	o.str("network", r.Network.string())
 
 	if r.RAM != 0 {
 		o.num("ram", r.RAM)
@@ -307,9 +337,9 @@ func appendTargetProperties(buf []byte, t TargetProperties) []byte {
 	o := JsonObj{buf: append(buf, '{')}
 
 	o.str("module_dir", t.ModuleDir)
-	o.str("module_lang", t.ModuleLang.String())
-	o.str("module_tag", t.ModuleTag.String())
-	o.str("module_type", t.ModuleType.String())
+	o.str("module_lang", t.ModuleLang.string())
+	o.str("module_tag", t.ModuleTag.string())
+	o.str("module_type", t.ModuleType.string())
 
 	return append(o.buf, '}')
 }
@@ -325,9 +355,9 @@ func appendKV(buf []byte, kv KV) []byte {
 	}
 
 	o.str("name", kv.Name)
-	o.str("p", kv.P.String())
+	o.str("p", kv.P.string())
 	o.str("path", kv.Path)
-	o.str("pc", kv.PC.String())
+	o.str("pc", kv.PC.string())
 	o.boolTrue("run_test_node", kv.RunTestNode)
 
 	if kv.ShowOut {
@@ -347,18 +377,42 @@ func appendKV(buf []byte, kv KV) []byte {
 // writer (appendKV/appendRequirements/appendTargetProperties) — so json.Marshal
 // of a Node emits {} for the empty case and the sorted keys otherwise, instead
 // of the struct's Go field names.
-func (e EnvVars) MarshalJSON() ([]byte, error) {
+func (e EnvVars) marshalJSON() ([]byte, error) {
 	return appendEnv(nil, e), nil
 }
 
-func (kv KV) MarshalJSON() ([]byte, error) {
+// MarshalJSON implements json.Marshaler — encoding/json finds it by name;
+// internal code calls marshalJSON().
+func (e EnvVars) MarshalJSON() ([]byte, error) {
+	return e.marshalJSON()
+}
+
+func (kv KV) marshalJSON() ([]byte, error) {
 	return appendKV(nil, kv), nil
 }
 
-func (r Requirements) MarshalJSON() ([]byte, error) {
+// MarshalJSON implements json.Marshaler — encoding/json finds it by name;
+// internal code calls marshalJSON().
+func (kv KV) MarshalJSON() ([]byte, error) {
+	return kv.marshalJSON()
+}
+
+func (r Requirements) marshalJSON() ([]byte, error) {
 	return appendRequirements(nil, r), nil
 }
 
-func (t TargetProperties) MarshalJSON() ([]byte, error) {
+// MarshalJSON implements json.Marshaler — encoding/json finds it by name;
+// internal code calls marshalJSON().
+func (r Requirements) MarshalJSON() ([]byte, error) {
+	return r.marshalJSON()
+}
+
+func (t TargetProperties) marshalJSON() ([]byte, error) {
 	return appendTargetProperties(nil, t), nil
+}
+
+// MarshalJSON implements json.Marshaler — encoding/json finds it by name;
+// internal code calls marshalJSON().
+func (t TargetProperties) MarshalJSON() ([]byte, error) {
+	return t.marshalJSON()
 }

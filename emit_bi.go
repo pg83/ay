@@ -1,9 +1,9 @@
 package main
 
 var (
-	yieldLinePyPath    = yieldLinePyVFS.String()
-	xargsPyPath        = xargsPyVFS.String()
-	buildInfoGenPyPath = buildInfoGenPyVFS.String()
+	yieldLinePyPath    = yieldLinePyVFS.string()
+	xargsPyPath        = xargsPyVFS.string()
+	buildInfoGenPyPath = buildInfoGenPyVFS.string()
 )
 
 func EmitBI(
@@ -16,7 +16,7 @@ func EmitBI(
 	outPrefix := instance.Path.rel() + "/"
 	argsFileVFS := Build(outPrefix + "__args")
 	outVFS := Build(outPrefix + outputHeader)
-	argsFile := argsFileVFS.String()
+	argsFile := argsFileVFS.string()
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 

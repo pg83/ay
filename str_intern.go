@@ -92,8 +92,14 @@ func (id STR) str() STR {
 	return id
 }
 
-func (id STR) String() string {
+func (id STR) string() string {
 	return internTable.strs[id]
+}
+
+// String implements fmt.Stringer — the fmt machinery finds it by name;
+// internal code calls string().
+func (id STR) String() string {
+	return id.string()
 }
 
 // internStrs interns a []string into a []STR (nil for empty).

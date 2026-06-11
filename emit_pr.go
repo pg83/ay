@@ -411,8 +411,8 @@ func runProgramInputVFS(ctx *GenCtx, instance ModuleInstance, d *ModuleData, rel
 }
 
 func expandRunProgramCWD(instance ModuleInstance, cwd string) string {
-	cwd = strings.ReplaceAll(cwd, "$BINDIR", Build(instance.Path.rel()).String())
-	cwd = strings.ReplaceAll(cwd, "$CURDIR", instance.Path.String())
+	cwd = strings.ReplaceAll(cwd, "$BINDIR", Build(instance.Path.rel()).string())
+	cwd = strings.ReplaceAll(cwd, "$CURDIR", instance.Path.string())
 	cwd = strings.ReplaceAll(cwd, "${ARCADIA_BUILD_ROOT}", "$(B)")
 	cwd = strings.ReplaceAll(cwd, "${ARCADIA_ROOT}", "$(S)")
 
@@ -455,22 +455,22 @@ func EmitPR(
 	for _, a := range stmt.Args {
 		a = strings.ReplaceAll(a, "${ARCADIA_ROOT}", "$(S)")
 		a = strings.ReplaceAll(a, "${ARCADIA_BUILD_ROOT}", "$(B)")
-		a = strings.ReplaceAll(a, "${CURDIR}", instance.Path.String())
-		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path.rel()).String())
+		a = strings.ReplaceAll(a, "${CURDIR}", instance.Path.string())
+		a = strings.ReplaceAll(a, "${BINDIR}", Build(instance.Path.rel()).string())
 		a = strings.ReplaceAll(a, "${MODDIR}", instance.Path.rel())
-		a = strings.ReplaceAll(a, "$CURDIR", instance.Path.String())
-		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path.rel()).String())
+		a = strings.ReplaceAll(a, "$CURDIR", instance.Path.string())
+		a = strings.ReplaceAll(a, "$BINDIR", Build(instance.Path.rel()).string())
 
 		for _, tool := range auxTools {
 			if strings.Contains(a, tool.token) {
-				a = strings.ReplaceAll(a, tool.token, tool.bin.String())
+				a = strings.ReplaceAll(a, tool.token, tool.bin.string())
 			}
 		}
 
 		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
-			a = vfs.String()
+			a = vfs.string()
 		} else if vfs, ok := outVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
-			a = vfs.String()
+			a = vfs.string()
 		}
 
 		cmdArgs = append(cmdArgs, internStr(a))

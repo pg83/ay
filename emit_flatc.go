@@ -43,7 +43,7 @@ func flatcDirectImportNames(pm *IncludeParserManager, srcRel string) []string {
 	out := make([]string, 0, len(direct))
 
 	for _, d := range direct {
-		out = append(out, d.target.String())
+		out = append(out, d.target.string())
 	}
 
 	return out

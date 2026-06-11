@@ -301,15 +301,15 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 	}
 
 	tail := emit.nodes[1]
-	if got := tail.Outputs[0].String(); got != "$(B)/contrib/python/shellingham/objcopy_e79ae9e993a07f847435dcf3c2.o" {
+	if got := tail.Outputs[0].string(); got != "$(B)/contrib/python/shellingham/objcopy_e79ae9e993a07f847435dcf3c2.o" {
 		t.Fatalf("tail output = %q, want %q", got, "$(B)/contrib/python/shellingham/objcopy_e79ae9e993a07f847435dcf3c2.o")
 	}
 
 	wantArgs := []string{
-		testToolchain().Python3.String(),
+		testToolchain().Python3.string(),
 		objcopyScriptPath,
-		"--compiler", testToolchain().CXX.String(),
-		"--objcopy", testToolchain().Objcopy.String(),
+		"--compiler", testToolchain().CXX.string(),
+		"--objcopy", testToolchain().Objcopy.string(),
 		"--compressor", rescompressorBinPath,
 		"--rescompiler", rescompilerBinPath,
 		"--output_obj", "$(B)/contrib/python/shellingham/objcopy_e79ae9e993a07f847435dcf3c2.o",

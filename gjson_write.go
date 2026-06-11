@@ -147,7 +147,7 @@ func appendCmdSlice(buf []byte, cmds []Cmd) []byte {
 
 		if c.Cwd != 0 {
 			buf = append(buf, `,"cwd":`...)
-			buf = appendString(buf, c.Cwd.String())
+			buf = appendString(buf, c.Cwd.string())
 		}
 
 		if len(c.Env) > 0 {
@@ -157,7 +157,7 @@ func appendCmdSlice(buf []byte, cmds []Cmd) []byte {
 
 		if c.Stdout != 0 {
 			buf = append(buf, `,"stdout":`...)
-			buf = appendString(buf, c.Stdout.String())
+			buf = appendString(buf, c.Stdout.string())
 		}
 
 		buf = append(buf, '}')
@@ -193,7 +193,7 @@ func appendStrChunks(buf []byte, chunks ArgChunks) []byte {
 			}
 
 			first = false
-			buf = appendString(buf, a.String())
+			buf = appendString(buf, a.string())
 		}
 	}
 
@@ -208,7 +208,7 @@ func appendStrSlice(buf []byte, as []STR) []byte {
 			buf = append(buf, ',')
 		}
 
-		buf = appendString(buf, a.String())
+		buf = appendString(buf, a.string())
 	}
 
 	return append(buf, ']')

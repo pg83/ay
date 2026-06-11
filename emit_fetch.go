@@ -7,7 +7,7 @@ package main
 // through ctx.fetchRefs); every consumer that splices $(<Name>) into a command
 // takes the fetch as a dependency from there.
 func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
-	name := decl.Name.String()
+	name := decl.Name.string()
 
 	if ref, ok := ctx.fetchRefs[name]; ok {
 		return ref
@@ -36,7 +36,7 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 
 	// Stable, command-independent uid (hash of URI + output), set before emit so the
 	// finalizer keeps it instead of hashing the binary-path-bearing command.
-	node.UID = resourceFetchUID(decl.URI.String(), output.String())
+	node.UID = resourceFetchUID(decl.URI.string(), output.string())
 	node.SelfUID = node.UID
 
 	ref := ctx.emit.emit(node)

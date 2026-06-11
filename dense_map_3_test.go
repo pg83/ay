@@ -12,8 +12,8 @@ func TestDenseMap3_IndependentColumns(t *testing.T) {
 	m.put2(1, 200)
 	m.put3(2, 300)
 
-	if m.Len() != 3 {
-		t.Fatalf("Len = %d, want 3", m.Len())
+	if m.len() != 3 {
+		t.Fatalf("Len = %d, want 3", m.len())
 	}
 
 	// Each key has only its own column present; all others read absent.
@@ -64,8 +64,8 @@ func TestDenseMap3_AllColumnsOneKey(t *testing.T) {
 		t.Fatalf("Get3(k) = (%d, %v), want (3, true)", got, ok)
 	}
 
-	if m.Len() != 1 {
-		t.Fatalf("Len = %d, want 1", m.Len())
+	if m.len() != 1 {
+		t.Fatalf("Len = %d, want 1", m.len())
 	}
 }
 
@@ -86,7 +86,7 @@ func TestDenseMap3_OverwriteAndAbsent(t *testing.T) {
 	if got, _ := m.get1(7); got != 3 {
 		t.Fatalf("Get1(7) = %d, want 3 (last write)", got)
 	}
-	if m.Len() != 1 {
-		t.Fatalf("Len = %d, want 1 (overwrite must not add a key)", m.Len())
+	if m.len() != 1 {
+		t.Fatalf("Len = %d, want 1 (overwrite must not add a key)", m.len())
 	}
 }
