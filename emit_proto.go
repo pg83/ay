@@ -14,6 +14,9 @@ var (
 	// so sharing the read-only backing is safe.
 	protobufRuntimeDirectives      = quotedDirectives(protobufRuntimeHeaders)
 	pbDescriptorImporterDirectives = quotedDirectives(pbDescriptorImporterHeaders)
+	// srcYtVFS / pbRuntimeBaseVFS are the implicit FOR-proto addincl roots (yt's
+	// PROTO_NAMESPACE and the protobuf runtime src) fed to the proto closure walk.
+	pbRuntimeBaseVFS = Source(strings.TrimSuffix(pbRuntimeBase, "/"))
 )
 
 func quotedDirectives(headers []VFS) []includeDirective {
@@ -66,13 +69,6 @@ func pbHEmitsIncludesExtras(protoRelPath string, hasDescriptor bool) []includeDi
 
 	return out
 }
-
-// srcYtVFS / pbRuntimeBaseVFS are the implicit FOR-proto addincl roots (yt's
-// PROTO_NAMESPACE and the protobuf runtime src) fed to the proto closure walk.
-var (
-	srcYtVFS         = Source("yt")
-	pbRuntimeBaseVFS = Source(strings.TrimSuffix(pbRuntimeBase, "/"))
-)
 
 // protoWalkInputs builds the scan inputs for closing over .proto imports —
 // the FOR-proto addincl data fed to the scanner's STANDARD resolution: the

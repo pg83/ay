@@ -21,6 +21,21 @@ var (
 	opensslUnistdInclude    = []byte("OPENSSL_UNISTD")
 )
 
+// swigImplicitDirectives are swig's implicit %includes (swig/Source/Modules/
+// main.cxx; the SWIG_IMPLICIT_INCLUDES conf var), prepended by the parser to
+// every root .swg file outside the swig library — upstream's
+// TSwigIncludeProcessor::AddImplicitIncludes, as a parse property.
+var swigImplicitDirectives = func() []includeDirective {
+	names := []string{"swig.swg", "go.swg", "java.swg", "perl5.swg", "python.swg"}
+	out := make([]includeDirective, 0, len(names))
+
+	for _, n := range names {
+		out = append(out, includeDirective{kind: includeSystem, target: internStr(n)})
+	}
+
+	return out
+}()
+
 type includeDirectiveParser interface {
 	Parse(rel string, data []byte) parsedIncludeSet
 	// id is the parser's small stable identity — the second component of the
@@ -52,14 +67,37 @@ type swigIncludeDirectiveParser struct{}
 type yasmIncludeDirectiveParser struct{}
 type emptyIncludeDirectiveParser struct{}
 
-func (cIncludeDirectiveParser) id() uint32           { return 1 }
-func (cythonIncludeDirectiveParser) id() uint32      { return 2 }
-func (flatbuffersIncludeDirectiveParser) id() uint32 { return 3 }
-func (protoIncludeDirectiveParser) id() uint32       { return 4 }
-func (ragelIncludeDirectiveParser) id() uint32       { return 5 }
-func (swigIncludeDirectiveParser) id() uint32        { return 6 }
-func (yasmIncludeDirectiveParser) id() uint32        { return 7 }
-func (emptyIncludeDirectiveParser) id() uint32       { return 8 }
+func (cIncludeDirectiveParser) id() uint32 {
+	return 1
+}
+
+func (cythonIncludeDirectiveParser) id() uint32 {
+	return 2
+}
+
+func (flatbuffersIncludeDirectiveParser) id() uint32 {
+	return 3
+}
+
+func (protoIncludeDirectiveParser) id() uint32 {
+	return 4
+}
+
+func (ragelIncludeDirectiveParser) id() uint32 {
+	return 5
+}
+
+func (swigIncludeDirectiveParser) id() uint32 {
+	return 6
+}
+
+func (yasmIncludeDirectiveParser) id() uint32 {
+	return 7
+}
+
+func (emptyIncludeDirectiveParser) id() uint32 {
+	return 8
+}
 
 // walkableBucketFor selects the directive bucket the scanner closes over for
 // a file — a pure function of the file's TYPE, so the context-free scanCache
@@ -399,21 +437,6 @@ func (ragelIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeS
 
 	return set
 }
-
-// swigImplicitDirectives are swig's implicit %includes (swig/Source/Modules/
-// main.cxx; the SWIG_IMPLICIT_INCLUDES conf var), prepended by the parser to
-// every root .swg file outside the swig library — upstream's
-// TSwigIncludeProcessor::AddImplicitIncludes, as a parse property.
-var swigImplicitDirectives = func() []includeDirective {
-	names := []string{"swig.swg", "go.swg", "java.swg", "perl5.swg", "python.swg"}
-	out := make([]includeDirective, 0, len(names))
-
-	for _, n := range names {
-		out = append(out, includeDirective{kind: includeSystem, target: internStr(n)})
-	}
-
-	return out
-}()
 
 func (swigIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeSet {
 	direct := make([]includeDirective, 0, 8)
