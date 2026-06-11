@@ -61,6 +61,20 @@ func (swigIncludeDirectiveParser) id() uint32        { return 6 }
 func (yasmIncludeDirectiveParser) id() uint32        { return 7 }
 func (emptyIncludeDirectiveParser) id() uint32       { return 8 }
 
+// walkableBucketFor selects the directive bucket the scanner closes over for
+// a file — a pure function of the file's TYPE, so the context-free scanCache
+// stays valid. Ragel files walk their native %include edges (upstream
+// TRagelIncludeProcessor: native → direct node dep), every other type walks
+// the local bucket; a ragel file's C/C++ directives ride as induced h+cpp on
+// its generated output instead.
+func walkableBucketFor(rel string) parsedIncludeBucket {
+	if _, ok := includeDirectiveParsers.registeredParserFor(rel).(ragelIncludeDirectiveParser); ok {
+		return parsedIncludesRagelNative
+	}
+
+	return parsedIncludesLocal
+}
+
 func newIncludeDirectiveParserRegistry() includeDirectiveParserRegistry {
 	cLike := cIncludeDirectiveParser{}
 	protoLike := protoIncludeDirectiveParser{}
@@ -372,9 +386,16 @@ func (ragelIncludeDirectiveParser) Parse(rel string, data []byte) parsedIncludeS
 	var set parsedIncludeSet
 	set = appendParsedDirectives(set, parsedIncludesLocal, local...)
 	set = appendParsedDirectives(set, parsedIncludesRagelNative, native...)
-	selfInclude := []includeDirective{{kind: includeQuoted, target: internStr(rel)}}
-	set[parsedIncludesHeader] = selfInclude
-	set[parsedIncludesCpp] = selfInclude
+	// Mirror upstream TRagelIncludeProcessor: a ragel file's WALKABLE edges are
+	// the native %include directives; the C/C++ directives ride as the induced
+	// h+cpp set applied to the generated output (AddParsedIncls("h+cpp")). The
+	// self-include leads so the .rl6 itself stays an input of the consuming
+	// compile.
+	induced := make([]includeDirective, 0, 1+len(local))
+	induced = append(induced, includeDirective{kind: includeQuoted, target: internStr(rel)})
+	induced = append(induced, local...)
+	set[parsedIncludesHeader] = induced
+	set[parsedIncludesCpp] = induced
 
 	return set
 }

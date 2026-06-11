@@ -12,14 +12,19 @@ const (
 	ragel6DefaultFlagDebug     = "-CT0"
 )
 
-func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ARG, closure []VFS, emit Emitter) (NodeRef, VFS) {
-	var outVFS VFS
-
+// ragel6OutVFS is the generated-cpp path of a ragel source — shared with the
+// emit_sources.go caller, which registers the output's induced includes and
+// walks its closure before the R6 node exists.
+func ragel6OutVFS(instance ModuleInstance, srcRel string) VFS {
 	if strings.Contains(srcRel, "/") {
-		outVFS = Build(instance.Path.Rel() + "/_/" + srcRel + ".cpp")
-	} else {
-		outVFS = Build(instance.Path.Rel() + "/" + srcRel + ".cpp")
+		return Build(instance.Path.Rel() + "/_/" + srcRel + ".cpp")
 	}
+
+	return Build(instance.Path.Rel() + "/" + srcRel + ".cpp")
+}
+
+func EmitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ARG, closure []VFS, emit Emitter) (NodeRef, VFS) {
+	outVFS := ragel6OutVFS(instance, srcRel)
 
 	inVFS := Source(instance.Path.Rel() + "/" + srcRel)
 
