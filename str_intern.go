@@ -1,6 +1,8 @@
 package main
 
 import (
+	"strings"
+
 	"github.com/zeebo/xxh3"
 )
 
@@ -83,6 +85,39 @@ func internBytes(b []byte) STR {
 	internTable.ids.put(h.Hi, id)
 
 	return id
+}
+
+// DollarMemoState is a strDollar cell value; dollarUnseen doubles as
+// TwoBitSet's zero.
+type DollarMemoState uint8
+
+const (
+	dollarUnseen DollarMemoState = iota
+	dollarAbsent
+	dollarPresent
+)
+
+// strDollar is a first-touch memo over "does the interned string contain '$'",
+// indexed by STR id — the macro-expansion fast-path predicate (expandStmtTokensSTR
+// and friends). Tokens repeat heavily across ya.makes; an interned string is
+// immutable, so the answer is constant per id. Same single-writer contract as
+// internTable.
+var strDollar TwoBitSet
+
+func strHasDollar(id STR) bool {
+	if cell := DollarMemoState(strDollar.get(uint32(id))); cell != dollarUnseen {
+		return cell == dollarPresent
+	}
+
+	yes := strings.Contains(id.string(), "$")
+
+	if yes {
+		strDollar.set(uint32(id), uint8(dollarPresent))
+	} else {
+		strDollar.set(uint32(id), uint8(dollarAbsent))
+	}
+
+	return yes
 }
 
 // internedBytes is the lookup-only twin of internBytes: it probes for b without
