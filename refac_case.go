@@ -15,7 +15,8 @@ import (
 // stdlibCaseMethods are method names that MUST stay upper-case: the standard
 // library's machinery finds them by name through well-known interfaces
 // (fmt.Stringer, error, json.Marshaler/Unmarshaler, sort.Interface,
-// errors.Unwrap). Renaming them silently detaches the implementation.
+// container/heap.Interface, errors.Unwrap). Renaming them silently detaches
+// the implementation.
 var stdlibCaseMethods = map[string]bool{
 	"String":        true,
 	"Error":         true,
@@ -24,8 +25,12 @@ var stdlibCaseMethods = map[string]bool{
 	"Len":           true,
 	"Less":          true,
 	"Swap":          true,
+	"Push":          true,
+	"Pop":           true,
 	"Unwrap":        true,
 }
+
+var caseErrRe = regexp.MustCompile(`^([^:\s]+\.go):(\d+):(\d+): (?:undefined: (\w+)|\S+ undefined \(.*has no field or method (\w+))`)
 
 // refacCase enforces the package naming convention — type names upper-case,
 // method names lower-case (stdlibCaseMethods excepted). It renames the
@@ -148,8 +153,6 @@ func renameCaseDecls(path string, typeRen, methodRen map[string]string) {
 
 	Throw(os.WriteFile(path, []byte(out), 0o644))
 }
-
-var caseErrRe = regexp.MustCompile(`^([^:\s]+\.go):(\d+):(\d+): (?:undefined: (\w+)|\S+ undefined \(.*has no field or method (\w+))`)
 
 // fixCaseRefsOnce compiles the package (and its tests) and flips the case of
 // every reference the compiler reports as undefined under the recorded
