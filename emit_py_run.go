@@ -298,11 +298,7 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 		}
 
 		for _, pd := range scanner.parsers.parsedIncludes(vfs, nil) {
-			target := pd.target.string()
-
-			if vfsHasPrefix(target) {
-				bvfs := intern(target)
-
+			if bvfs := pd.target.vfs(); bvfs != 0 {
 				if bvfs.isBuild() && reg != nil {
 					if info := reg.lookup(bvfs); info != nil {
 						for _, si := range info.SourceInputs {
@@ -314,10 +310,12 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 				continue
 			}
 
+			target := pd.target.string()
+
 			if ctx.fs.isFile(srcRootVFS, target) {
 				addSource(source(target))
 			} else if reg != nil {
-				if info := reg.lookupRel(target); info != nil {
+				if info := reg.lookupSTR(pd.target); info != nil {
 					for _, si := range info.SourceInputs {
 						addSource(si)
 					}

@@ -70,9 +70,10 @@ type CodegenRegistry struct {
 	// (per-output data), read via reg.Lookup.
 	byStr DenseMap[STR, *GeneratedFileInfo]
 
-	// splitPrefixSeen marks split-key PREFIX STRs (the first component rel[:i], not
-	// an output path) that occur as a bySplit key prefix. LookupSplit checks it
-	// first: a 1-bit-per-STR probe short-circuits the uint64 bySplit hash-map lookup
+	// splitPrefixSeen marks split-key PREFIX dirs (the Source-rooted VFS of
+	// rel[:i] — the canonical dir identity dirKey produces, not an output path)
+	// that occur as a bySplit key prefix. LookupSplit checks it first: a
+	// 1-bit-per-VFS probe short-circuits the uint64 bySplit hash-map lookup
 	// whenever the prefix has no split entry — the common case on the hot resolve
 	// path, where most addincl prefixes hold no codegen outputs. A bitset rather
 	// than a bool DenseMap column: the value is always true, only presence matters.
@@ -89,14 +90,14 @@ type CodegenRegistry struct {
 	// leaf somewhere and a regular include elsewhere merely loses the skip.
 	leafEver BitSet
 
-	// bySplit maps a (prefix, suffix) STR pair to its producer info, keyed by
-	// splitMix64(prefix, suffix) — the two ids hashed into a uniform 64-bit key,
+	// bySplit maps a (Source-dir-VFS prefix, suffix STR) pair to its producer
+	// info, keyed by splitMix64(prefix, suffix) — two ids hashed into a uniform key,
 	// letting an identity-hashed IntMap spread the pairs. Gated by splitPrefixSeen so
 	// the probe runs only for prefixes known to have an entry.
 	bySplit *IntMap[*GeneratedFileInfo]
 }
 
-func splitKey(prefix, suffix STR) uint64 {
+func splitKey(prefix VFS, suffix STR) uint64 {
 	return splitMix64(uint32(prefix), uint32(suffix))
 }
 
@@ -122,12 +123,12 @@ func (r *CodegenRegistry) register(info *GeneratedFileInfo) {
 
 	for i := 0; i < len(rel); i++ {
 		if rel[i] == '/' {
-			r.putSplit(internStr(rel[:i]), internStr(rel[i+1:]), info)
+			r.putSplit(source(rel[:i]), internStr(rel[i+1:]), info)
 		}
 	}
 }
 
-func (r *CodegenRegistry) putSplit(prefix, suffix STR, info *GeneratedFileInfo) {
+func (r *CodegenRegistry) putSplit(prefix VFS, suffix STR, info *GeneratedFileInfo) {
 	r.bySplit.put(splitKey(prefix, suffix), info)
 	r.splitPrefixSeen.add(uint32(prefix)) // mark the prefix so LookupSplit can gate the probe
 }
@@ -138,19 +139,16 @@ func (r *CodegenRegistry) lookup(path VFS) *GeneratedFileInfo {
 	return info
 }
 
-func (r *CodegenRegistry) lookupRel(rel string) *GeneratedFileInfo {
-	id := interned(rel)
-
-	if id == nil {
-		return nil
-	}
-
-	info, _ := r.byStr.get(*id)
+// lookupSTR probes byStr by an already-interned id — either a full rooted path
+// (== VFS strID) or the bare-rel form register also keys. Callers always hold
+// the id (an include-target token), so no string round-trip exists here.
+func (r *CodegenRegistry) lookupSTR(id STR) *GeneratedFileInfo {
+	info, _ := r.byStr.get(id)
 
 	return info
 }
 
-func (r *CodegenRegistry) lookupSplit(prefix, suffix STR) *GeneratedFileInfo {
+func (r *CodegenRegistry) lookupSplit(prefix VFS, suffix STR) *GeneratedFileInfo {
 	// Gate the uint64 hash-map probe on the dense prefix flag: most addincl
 	// prefixes hold no codegen split entry, so the array probe short-circuits.
 	if !r.splitPrefixSeen.has(uint32(prefix)) {
