@@ -30,6 +30,8 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 
 	// The py3cc tool pair is loop-invariant — one chunk shared by every pysrc node.
 	py3ccToolsChunk := []VFS{py3ccBinary, py3ccSlowBin}
+	// So is the command head.
+	py3ccArgHead := []STR{(py3ccBinary).str(), argSlowPy3cc.str(), (py3ccSlowBin).str()}
 
 	for _, srcRel := range d.pySrcs {
 		if strings.HasSuffix(srcRel, ".pyi") {
@@ -53,14 +55,11 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			outputPath = Build(instance.Path.Rel() + "/" + srcRel + ".yapyc3")
 		}
 
-		cmdArgs := []STR{
-			(py3ccBinary).str(),
-			argSlowPy3cc.str(),
-			(py3ccSlowBin).str(),
+		cmdArgs := argChunks{py3ccArgHead, []STR{
 			internStr(moduleName),
 			(srcAbs).str(),
 			(outputPath).str(),
-		}
+		}}
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}
 		nodeInputs := inputChunks{py3ccToolsChunk, srcChunk(srcAbs)}
@@ -91,7 +90,7 @@ func emitPySrcs(ctx *genCtx, instance ModuleInstance, d *moduleData) {
 			Platform: instance.Platform,
 			Cmds: []Cmd{
 				{
-					CmdArgs: argChunks{cmdArgs},
+					CmdArgs: cmdArgs,
 					Env:     env,
 				},
 			},
