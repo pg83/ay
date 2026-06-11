@@ -47,17 +47,8 @@ type IncludeDirectiveParser interface {
 
 type IncludeDirectiveParserRegistry struct {
 	defaultParser IncludeDirectiveParser
-	byExt         map[string]IncludeDirectiveParser
-
-	// lastExt/lastParser memoize the previous parserFor resolution. Parsed files
-	// arrive in scan order, where one extension tends to run consecutively (a
-	// .cpp's includes are mostly .h), so this one-entry cache skips most byExt
-	// probes. lastValid distinguishes "not cached" from a cached empty extension.
-	// Single-goroutine gen, so no locking.
-	lastExt    string
-	lastParser IncludeDirectiveParser
-	lastValid  bool
 }
+
 type CIncludeDirectiveParser struct{}
 type CythonIncludeDirectiveParser struct{}
 type FlatbuffersIncludeDirectiveParser struct{}
@@ -114,71 +105,22 @@ func walkableBucketFor(rel string) ParsedIncludeBucket {
 }
 
 func newIncludeDirectiveParserRegistry() IncludeDirectiveParserRegistry {
-	cLike := CIncludeDirectiveParser{}
-	protoLike := ProtoIncludeDirectiveParser{}
-	ragelLike := RagelIncludeDirectiveParser{}
-	swigLike := SwigIncludeDirectiveParser{}
-	yasm := YasmIncludeDirectiveParser{}
-	empty := EmptyIncludeDirectiveParser{}
-	r := IncludeDirectiveParserRegistry{
-		defaultParser: cLike,
-		byExt:         make(map[string]IncludeDirectiveParser, 48),
-	}
-
-	r.register(cLike,
-		".cpp", ".cc", ".cxx", ".c", ".C", ".auxcpp",
-		".h", ".hh", ".hpp", ".cuh", ".H", ".hxx", ".xh", ".ipp", ".ixx", ".inl",
-		".vert", ".frag", ".tesc", ".tese", ".geom", ".comp",
-		".cu", ".S", ".s", ".sfdl", ".m", ".mm",
-		".l", ".lex", ".lpp", ".y", ".ypp", ".gperf", ".asp",
-		".go",
-	)
-	r.register(ragelLike, ".rl", ".rh", ".rli", ".rl6", ".rl5")
-	r.register(CythonIncludeDirectiveParser{}, ".pyx", ".pxd", ".pxi", ".pyx.pxi", ".pxd.pxi")
-	r.register(FlatbuffersIncludeDirectiveParser{}, ".fbs")
-	r.register(protoLike, ".proto", ".ev", ".gzt", ".gztproto")
-	r.register(swigLike, ".swg")
-	r.register(yasm, ".asm", ".asi")
-	r.register(empty, ".g4", ".stg", ".m4")
-
-	return r
-}
-
-func (r IncludeDirectiveParserRegistry) register(parser IncludeDirectiveParser, exts ...string) {
-	for _, ext := range exts {
-		r.byExt[ext] = parser
-	}
+	return IncludeDirectiveParserRegistry{defaultParser: CIncludeDirectiveParser{}}
 }
 
 // registeredParserFor returns the explicitly registered parser for rel's
 // extension, or nil — an unregistered extension (swig's .i, …) parses under
 // the SCAN CONTEXT's parser, resolved once from the walk's root file.
 func (r *IncludeDirectiveParserRegistry) registeredParserFor(rel string) IncludeDirectiveParser {
-	if p, ok := r.byExt[directiveParserExt(rel)]; ok {
-		return p
-	}
-
-	return nil
+	return lookupParserByExt(directiveParserExt(rel))
 }
 
 func (r *IncludeDirectiveParserRegistry) parserFor(rel string) IncludeDirectiveParser {
-	ext := directiveParserExt(rel)
-
-	if r.lastValid && ext == r.lastExt {
-		return r.lastParser
+	if p := lookupParserByExt(directiveParserExt(rel)); p != nil {
+		return p
 	}
 
-	parser := r.defaultParser
-
-	if p, ok := r.byExt[ext]; ok {
-		parser = p
-	}
-
-	r.lastExt = ext
-	r.lastParser = parser
-	r.lastValid = true
-
-	return parser
+	return r.defaultParser
 }
 
 // hasRegisteredParser reports whether the parser dispatcher would return an
@@ -189,10 +131,8 @@ func (r *IncludeDirectiveParserRegistry) parserFor(rel string) IncludeDirectiveP
 // Jinja .jnj templates, JSON, etc.) must not be parsed for C-style
 // directives. The .in trail-strip in directiveParserExt makes .h.in and
 // .cpp.in dispatch correctly.
-func (r IncludeDirectiveParserRegistry) hasRegisteredParser(rel string) bool {
-	_, ok := r.byExt[directiveParserExt(rel)]
-
-	return ok
+func (r *IncludeDirectiveParserRegistry) hasRegisteredParser(rel string) bool {
+	return lookupParserByExt(directiveParserExt(rel)) != nil
 }
 
 func directiveParserExt(rel string) string {
