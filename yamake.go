@@ -485,6 +485,11 @@ type Lexer struct {
 	col  int
 
 	prevByte byte
+
+	// tokBuf is the reused per-token assembly buffer: token text is interned
+	// straight from it (internBytes copies on a table miss), so no per-token
+	// []byte survives the call and the buffer never escapes.
+	tokBuf []byte
 }
 
 func newLexer(name string, src []byte) *Lexer {
@@ -670,7 +675,7 @@ func (l *Lexer) readToken() Token {
 func (l *Lexer) readString(startLine, startCol int, quote byte) Token {
 	l.advance()
 
-	var buf []byte
+	buf := l.tokBuf[:0]
 
 	for {
 		if l.pos >= len(l.src) {
@@ -682,7 +687,9 @@ func (l *Lexer) readString(startLine, startCol int, quote byte) Token {
 		if b == quote {
 			l.advance()
 
-			return Token{kind: tokString, val: string(buf), line: startLine, col: startCol}
+			l.tokBuf = buf
+
+			return Token{kind: tokString, val: internBytes(buf).string(), line: startLine, col: startCol}
 		}
 
 		if b == '\n' || b == '\r' {
@@ -701,7 +708,7 @@ func (l *Lexer) readString(startLine, startCol int, quote byte) Token {
 }
 
 func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
-	var buf []byte
+	buf := l.tokBuf[:0]
 	pureIdent := true
 
 	for l.pos < len(l.src) {
@@ -731,7 +738,11 @@ func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
 		break
 	}
 
-	val := string(buf)
+	l.tokBuf = buf
+	// Token text is interned straight from the buffer: on a table hit (the
+	// overwhelming case — tokens repeat across ya.makes) the value is a view,
+	// not a fresh string; downstream internStr(tok.val) then hits the same slot.
+	val := internBytes(buf).string()
 	kind := tokIdent
 
 	if !pureIdent {
@@ -742,7 +753,7 @@ func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
 }
 
 func (l *Lexer) readWord(startLine, startCol int) Token {
-	var buf []byte
+	buf := l.tokBuf[:0]
 
 	for l.pos < len(l.src) {
 		b := l.src[l.pos]
@@ -761,7 +772,9 @@ func (l *Lexer) readWord(startLine, startCol int) Token {
 		buf = append(buf, l.advance())
 	}
 
-	return Token{kind: tokWord, val: string(buf), line: startLine, col: startCol}
+	l.tokBuf = buf
+
+	return Token{kind: tokWord, val: internBytes(buf).string(), line: startLine, col: startCol}
 }
 
 func (l *Lexer) readNumberOrWord(startLine, startCol int) Token {
@@ -776,10 +789,10 @@ func (l *Lexer) readNumberOrWord(startLine, startCol int) Token {
 			l.advance()
 		}
 
-		return Token{kind: tokWord, val: string(l.src[start:l.pos]), line: startLine, col: startCol}
+		return Token{kind: tokWord, val: internBytes(l.src[start:l.pos]).string(), line: startLine, col: startCol}
 	}
 
-	return Token{kind: tokInt, val: string(l.src[start:l.pos]), line: startLine, col: startCol}
+	return Token{kind: tokInt, val: internBytes(l.src[start:l.pos]).string(), line: startLine, col: startCol}
 }
 
 func parse(fs FS, name string, src []byte) (mf *MakeFile, err error) {
