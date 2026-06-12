@@ -219,7 +219,6 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 
 		if len(d.cythonCpp) > 0 {
 			ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl, d.cythonNumpyBeforeInclude)
-			ccIn.ScanMemo = nil
 		}
 
 		// IncludeInputs is the full input window: the compiled register cpp

@@ -82,10 +82,8 @@ type IncludeScanner struct {
 
 	// configByHash memoizes both per-distinct-config products — the dense
 	// ctxNum and the resolve index — under ONE probe of the shared ctxHash
-	// (an identity-hashed IntMap: the key is already a uniform mix64 chain).
-	// configCount feeds the dense ctxNum allocation.
-	configByHash *IntMap[ScanConfigEntry]
-	configCount  uint32
+	// (they were two maps probed back-to-back with the same key).
+	configByHash map[uint64]ScanConfigEntry
 
 	// sourceUnderCache memoizes the includer-local quoted-include resolve
 	// (resolveSourceUnder(incDir, target)) — the hottest existence probe (~505k/run,
@@ -248,7 +246,7 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 		closureArena:     newBumpAllocator[VFS](closureArenaInitial),
 		childArena:       newBumpAllocator[VFS](1 << 12),
 		searchTierFlat:   newIntValueMap[SearchTierResult](4096),
-		configByHash:     newIntMap[ScanConfigEntry](1 << 10),
+		configByHash:     make(map[uint64]ScanConfigEntry, 1024),
 		sourceUnderCache: newIntValueMap[VFS](1 << 16),
 		tjc:              tjc,
 	}
@@ -285,19 +283,12 @@ type ScanConfigEntry struct {
 func (s *IncludeScanner) newScanCtx(cfg ScanContext) *ScanCtx {
 	ctxHash := hashScanContext(&cfg)
 
-	if ctxHash == 0 {
-		throwFmt("newScanCtx: config hashed to the reserved 0 key")
-	}
+	entry, ok := s.configByHash[ctxHash]
 
-	var entry ScanConfigEntry
-
-	if p := s.configByHash.get(ctxHash); p != nil {
-		entry = *p
-	} else {
+	if !ok {
 		// Dense id: next == count of distinct configs.
-		entry = ScanConfigEntry{ctxNum: s.configCount, ri: buildCfgResolveIndex(&cfg)}
-		s.configCount++
-		s.configByHash.put(ctxHash, entry)
+		entry = ScanConfigEntry{ctxNum: uint32(len(s.configByHash)), ri: buildCfgResolveIndex(&cfg)}
+		s.configByHash[ctxHash] = entry
 
 		if entry.ri.indexable {
 			for _, p := range cfg.OwnAddIncl {
@@ -330,9 +321,7 @@ func (s *IncludeScanner) newScanCtx(cfg ScanContext) *ScanCtx {
 // the discrimination matches the old per-byte FNV at a fraction of the cost.
 // Length-prefixing each slice keeps the three-slice boundaries unambiguous.
 func hashScanContext(ctx *ScanContext) uint64 {
-	// Non-zero seed: the all-empty context would otherwise hash to 0 —
-	// IntMap's reserved key (mix64(0) == 0).
-	h := uint64(0x9e3779b97f4a7c15)
+	var h uint64
 
 	mixSlice := func(ss []VFS) {
 		h = mix64(h ^ uint64(len(ss)))

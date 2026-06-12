@@ -61,7 +61,6 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 			// diverging from REF (e.g. yt/yt/core/misc/isa_crc64 needs
 			// -I=$(S)/yt/yt/core/misc/isa_crc64/include for reg_sizes.asm).
 			scanIn.AddIncl = dedupVFS(srcIn.AddIncl, d.asmAddIncl)
-			scanIn.ScanMemo = nil
 			asIn.AddIncl = scanIn.AddIncl
 		}
 
