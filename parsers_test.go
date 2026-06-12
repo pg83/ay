@@ -45,7 +45,7 @@ func TestScanner_CythonExternFromQuotedAngleResolves(t *testing.T) {
 		"pkg/error.pxd":       "cdef extern from \"<util/system/error.h>\"\n",
 		"util/system/error.h": "// error.h\n",
 	}), SysInclSet{})
-	closure := scanClosure(scanner, "pkg/error.pxd", newScanContext([]VFS{intern("$(S)/")}, nil, nil, ""))
+	closure := scanClosure(scanner, "pkg/error.pxd", newScanContext(scanner.parsers, []VFS{intern("$(S)/")}, nil, nil, ""))
 
 	if len(closure) != 1 {
 		t.Fatalf("closure len = %d, want 1; got %v", len(closure), closure)
@@ -61,7 +61,7 @@ func TestScanner_CythonExternFromSingleQuotedResolves(t *testing.T) {
 		"pkg/logger.pxd":                "cdef extern from 'library/cpp/logger/priority.h':\n",
 		"library/cpp/logger/priority.h": "// priority.h\n",
 	}), SysInclSet{})
-	closure := scanClosure(scanner, "pkg/logger.pxd", newScanContext([]VFS{intern("$(S)/")}, nil, nil, ""))
+	closure := scanClosure(scanner, "pkg/logger.pxd", newScanContext(scanner.parsers, []VFS{intern("$(S)/")}, nil, nil, ""))
 
 	if len(closure) != 1 {
 		t.Fatalf("closure len = %d, want 1; got %v", len(closure), closure)

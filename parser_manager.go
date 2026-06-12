@@ -88,6 +88,11 @@ type IncludeParserManager struct {
 	fs    FS
 	cache *SharedParseCache
 
+	// scanConfigs dedupes resolved scan configs by content hash; shared by
+	// both scanners (the addincl inverted index it feeds is shared too).
+	scanConfigs     map[uint64]*ScanConfig
+	scanConfigCount uint32
+
 	addinclIndex   DenseMap[STR, []VFS]
 	addinclIndexed BitSet
 	buildParsed    map[VFS][]IncludeDirective
@@ -237,6 +242,37 @@ func (pm *IncludeParserManager) indexAddincl(a VFS) {
 		cur, _ := pm.addinclIndex.get(t)
 		pm.addinclIndex.put(t, append(cur, a))
 	})
+}
+
+// resolveScanConfig returns the deduped ScanConfig for cfg's resolve-relevant
+// content, building the resolve index (and feeding the addincl inverted index)
+// on first sight.
+func (pm *IncludeParserManager) resolveScanConfig(cfg *ScanContext) *ScanConfig {
+	h := hashScanContext(cfg)
+
+	if sc, ok := pm.scanConfigs[h]; ok {
+		return sc
+	}
+
+	if pm.scanConfigs == nil {
+		pm.scanConfigs = make(map[uint64]*ScanConfig, 256)
+	}
+
+	sc := &ScanConfig{num: pm.scanConfigCount, ri: buildCfgResolveIndex(cfg)}
+	pm.scanConfigCount++
+	pm.scanConfigs[h] = sc
+
+	if sc.ri.indexable {
+		for _, p := range cfg.OwnAddIncl {
+			pm.indexAddincl(p)
+		}
+
+		for _, p := range cfg.PeerAddInclSet {
+			pm.indexAddincl(p)
+		}
+	}
+
+	return sc
 }
 
 func (pm *IncludeParserManager) perfStats() ParserPerfStats {

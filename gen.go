@@ -845,7 +845,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			DefaultVarOrder:   d.defaultVarOrder,
 			TC:                d.tc,
 		}
-		headerOnlyInputs.ScanCfg = newScanContext(d.addIncl, peerContribs.addIncl, includeScannerBasePaths(), instance.Path.rel())
+		headerOnlyInputs.ScanCfg = newScanContext(ctx.parsers, d.addIncl, peerContribs.addIncl, includeScannerBasePaths(), instance.Path.rel())
 		headerOnlyInputs.CCBlocks = composeCCModuleArgBlocks(instance.Platform, &headerOnlyInputs)
 		_ = emitRunProgramsForAR(ctx, instance, d, headerOnlyInputs)
 		_ = emitRunPythonForAR(ctx, instance, d, headerOnlyInputs)
@@ -1706,7 +1706,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		BisonGenExt: d.bisonGenExt.string(),
 		TC:          d.tc,
 	}
-	moduleInputs.ScanCfg = newScanContext(dedupedAddIncl, selfPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+	moduleInputs.ScanCfg = newScanContext(ctx.parsers, dedupedAddIncl, selfPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 	moduleInputs.CCBlocks = composeCCModuleArgBlocks(instance.Platform, &moduleInputs)
 
 	// Pass 1 (codegen-producing srcs: .proto, .ev, .fbs, .rl, .cpp.in, .c.in, .y)
@@ -1908,7 +1908,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		if srcInstance.Platform.ISA == ISAX8664 {
 			jsModuleInputs := moduleInputs
 			jsModuleInputs.PeerAddInclGlobal = rebasePerArchPeerAddIncl(moduleInputs.PeerAddInclGlobal, srcInstance.Platform.ISA, ctx.target.ISA)
-			jsModuleInputs.ScanCfg = newScanContext(jsModuleInputs.AddIncl, jsModuleInputs.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+			jsModuleInputs.ScanCfg = newScanContext(ctx.parsers, jsModuleInputs.AddIncl, jsModuleInputs.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 
 			joinClosure = joinSrcsIncludeClosure(ctx, ctx.target, srcInstance, jsSources, jsModuleInputs)
 		}

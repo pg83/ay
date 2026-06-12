@@ -198,7 +198,7 @@ func TestScanner_SearchTierCacheReuse_OwnAddIncl(t *testing.T) {
 	})
 
 	scanner := newTestScanner(fs, nil)
-	sc := scanner.newScanCtx(newScanContext(VFSesFromStrings([]string{"include"}), nil, nil, ""), nil)
+	sc := scanner.newScanCtx(newScanContext(scanner.parsers, VFSesFromStrings([]string{"include"}), nil, nil, ""), nil)
 	d := IncludeDirective{kind: includeSystem, target: internStr("foo.h")}
 
 	got1 := sc.resolveSearchPath(intern("$(S)/pkg/a.cpp"), dirKey("pkg"), d)
@@ -224,7 +224,7 @@ func TestScanner_SearchTierCacheReuse_OwnAddIncl(t *testing.T) {
 
 func TestScanner_SearchTierCacheReuse_NotFound(t *testing.T) {
 	scanner := newTestScanner(newMemFS(nil), nil)
-	sc := scanner.newScanCtx(newScanContext(VFSesFromStrings([]string{"include"}), nil, nil, ""), nil)
+	sc := scanner.newScanCtx(newScanContext(scanner.parsers, VFSesFromStrings([]string{"include"}), nil, nil, ""), nil)
 	d := IncludeDirective{kind: includeSystem, target: internStr("missing.h")}
 
 	got1 := sc.resolveSearchPath(intern("$(S)/pkg/a.cpp"), dirKey("pkg"), d)
@@ -254,7 +254,7 @@ func TestScanner_SearchTierCacheBypassedBySameDirQuoted(t *testing.T) {
 	})
 
 	scanner := newTestScanner(fs, nil)
-	sc := scanner.newScanCtx(newScanContext(VFSesFromStrings([]string{"include"}), nil, nil, ""), nil)
+	sc := scanner.newScanCtx(newScanContext(scanner.parsers, VFSesFromStrings([]string{"include"}), nil, nil, ""), nil)
 	got := sc.resolveSearchPath(intern("$(S)/pkg/a.cpp"), dirKey("pkg"), IncludeDirective{kind: includeQuoted, target: internStr("foo.h")})
 	want := []VFS{intern("$(S)/pkg/foo.h")}
 
@@ -289,7 +289,7 @@ func TestScanner_QuotedSysinclGated_LocalResolved(t *testing.T) {
 	}
 
 	scanner := newTestScanner(fs, sysincl)
-	closure := scanClosure(scanner, "yasm/source.cpp", newScanContext(nil, nil, nil, ""))
+	closure := scanClosure(scanner, "yasm/source.cpp", newScanContext(scanner.parsers, nil, nil, nil, ""))
 
 	hasLocal := false
 	hasFoo := false
@@ -335,7 +335,7 @@ func TestScanner_QuotedMultiTargetSysincl_OwnAddIncl(t *testing.T) {
 	}
 
 	scanner := newTestScanner(fs, sysincl)
-	closure := scanClosure(scanner, "src/source.cpp", newScanContext(VFSesFromStrings([]string{"libcxxabi/include"}), nil, nil, ""))
+	closure := scanClosure(scanner, "src/source.cpp", newScanContext(scanner.parsers, VFSesFromStrings([]string{"libcxxabi/include"}), nil, nil, ""))
 
 	hasLibcxxabi := false
 	hasLibcxxrt := false
@@ -382,7 +382,7 @@ func TestScanner_QuotedSameDirStillGated(t *testing.T) {
 	}
 
 	scanner := newTestScanner(fs, sysincl)
-	closure := scanClosure(scanner, "libcxxrt/source.cc", newScanContext(VFSesFromStrings([]string{"libcxxrt"}), nil, nil, ""))
+	closure := scanClosure(scanner, "libcxxrt/source.cc", newScanContext(scanner.parsers, VFSesFromStrings([]string{"libcxxrt"}), nil, nil, ""))
 
 	hasLibcxxrt := false
 	hasLibcxxSpurious := false
@@ -423,7 +423,7 @@ func TestScanner_QuotedSysinclFiresOnLocalMiss(t *testing.T) {
 	}
 
 	scanner := newTestScanner(fs, sysincl)
-	closure := scanClosure(scanner, "src/source.cpp", newScanContext(nil, nil, nil, ""))
+	closure := scanClosure(scanner, "src/source.cpp", newScanContext(scanner.parsers, nil, nil, nil, ""))
 
 	hasFoolib := false
 
@@ -458,7 +458,7 @@ func TestScanner_AngleSysinclUnaffected(t *testing.T) {
 	}
 
 	scanner := newTestScanner(fs, sysincl)
-	closure := scanClosure(scanner, "libcxxrt/source.cpp", newScanContext(VFSesFromStrings([]string{"libcxxrt"}), nil, nil, ""))
+	closure := scanClosure(scanner, "libcxxrt/source.cpp", newScanContext(scanner.parsers, VFSesFromStrings([]string{"libcxxrt"}), nil, nil, ""))
 
 	hasLocal := false
 	hasLibunwind := false
@@ -742,7 +742,7 @@ machine Sub;
 
 	scanner := newTestScanner(fs, sysincl)
 
-	sc := scanner.newScanCtx(newScanContext(VFSesFromStrings([]string{"stl"}), nil, nil, ""), nil)
+	sc := scanner.newScanCtx(newScanContext(scanner.parsers, VFSesFromStrings([]string{"stl"}), nil, nil, ""), nil)
 
 	closure := sc.closureOf(intern("$(S)/pkg/main.rl6"))
 
@@ -958,7 +958,7 @@ func TestScanner_CythonNestedPxdUsesPy2StringSibling(t *testing.T) {
 		"contrib/tools/cython_py2/Cython/Includes/libcpp/string.pxd":  "from libc.string cimport memcpy\n",
 		"contrib/tools/cython_py2/Cython/Includes/libc/string.pxd":    "# py2 libc string\n",
 	}), SysInclSet{})
-	closure := scanClosure(scanner, "pkg/mod.pyx", newScanContext([]VFS{
+	closure := scanClosure(scanner, "pkg/mod.pyx", newScanContext(scanner.parsers, []VFS{
 		intern("$(S)/"),
 		intern("$(S)/contrib/tools/cython/Cython/Includes"),
 	}, nil, nil, ""))
@@ -980,7 +980,7 @@ func TestScanner_CythonPyxDirectStdlibStaysPy3WhileNestedPxdAddsPy2(t *testing.T
 		"contrib/tools/cython_py2/Cython/Includes/libcpp/pair.pxd":    "from libcpp.utility cimport move\n",
 		"contrib/tools/cython_py2/Cython/Includes/libcpp/utility.pxd": "# py2 utility\n",
 	}), SysInclSet{})
-	closure := scanClosure(scanner, "pkg/mod.pyx", newScanContext([]VFS{
+	closure := scanClosure(scanner, "pkg/mod.pyx", newScanContext(scanner.parsers, []VFS{
 		intern("$(S)/"),
 		intern("$(S)/contrib/tools/cython/Cython/Includes"),
 	}, nil, nil, ""))
@@ -1001,7 +1001,7 @@ func TestScanner_CythonStdintSplitKeepsPy3InitButAddsPy2Types(t *testing.T) {
 		"contrib/tools/cython/Cython/Includes/libc/stdint.pxd":         "# py3 stdint\n",
 		"contrib/tools/cython_py2/Cython/Includes/libc/stdint.pxd":     "# py2 stdint\n",
 	}), SysInclSet{})
-	closure := scanClosure(scanner, "pkg/mod.pyx", newScanContext([]VFS{
+	closure := scanClosure(scanner, "pkg/mod.pyx", newScanContext(scanner.parsers, []VFS{
 		intern("$(S)/"),
 		intern("$(S)/contrib/tools/cython/Cython/Includes"),
 	}, nil, nil, ""))
@@ -1038,7 +1038,7 @@ func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 	})
 	scanner := newTestScanner(fs, nil)
 	attachCodegen(scanner, reg)
-	sc := scanner.newScanCtx(newScanContext(nil, []VFS{
+	sc := scanner.newScanCtx(newScanContext(scanner.parsers, nil, []VFS{
 		build("contrib/libs/llvm16/include"),
 		source("contrib/libs/llvm16/include"),
 	}, nil, ""), nil)
@@ -1067,7 +1067,7 @@ func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 	})
 	scanner := newTestScanner(fs, nil)
 	attachCodegen(scanner, reg)
-	sc := scanner.newScanCtx(newScanContext(nil, []VFS{
+	sc := scanner.newScanCtx(newScanContext(scanner.parsers, nil, []VFS{
 		source("contrib/libs/llvm16/include"),
 		build("contrib/libs/llvm16/include"),
 	}, nil, ""), nil)
@@ -1095,7 +1095,7 @@ func TestScanner_AddInclBuildOnlyMatchesCodegen(t *testing.T) {
 
 	scanner := newTestScanner(newMemFS(nil), nil)
 	attachCodegen(scanner, reg)
-	sc := scanner.newScanCtx(newScanContext(nil, []VFS{
+	sc := scanner.newScanCtx(newScanContext(scanner.parsers, nil, []VFS{
 		build("contrib/libs/llvm16/include"),
 		source("contrib/libs/llvm16/include"),
 	}, nil, ""), nil)
@@ -1116,7 +1116,7 @@ func TestScanCtx_Resolve_RootedTargetBindsDirectly(t *testing.T) {
 	// ResolveAsKnownWithoutCheck. The memFS is empty on purpose: no search
 	// path could find these, and no FS check must run.
 	scanner := newTestScanner(newMemFS(nil), nil)
-	sc := scanner.newScanCtx(newScanContext(nil, nil, nil, ""), nil)
+	sc := scanner.newScanCtx(newScanContext(scanner.parsers, nil, nil, nil, ""), nil)
 
 	for _, target := range []string{"$(S)/util/generic/typetraits.h", "$(B)/pkg/gen.h"} {
 		d := IncludeDirective{kind: includeQuoted, target: internStr(target)}

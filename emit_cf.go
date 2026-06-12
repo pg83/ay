@@ -22,7 +22,7 @@ func emitExplicitCF(ctx *GenCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 		SetVars:         d.setVars,
 		SourceRoot:      ctx.sourceRoot,
 		FS:              ctx.fs,
-		ScanCfg:         newScanContext(nil, nil, includeScannerBasePaths(), instance.Path.rel()),
+		ScanCfg:         newScanContext(ctx.parsers, nil, nil, includeScannerBasePaths(), instance.Path.rel()),
 	}
 
 	srcVFS := copyFileInputVFS(ctx.fs, instance.Path.rel(), cf.Src)

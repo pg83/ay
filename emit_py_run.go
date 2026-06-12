@@ -154,7 +154,7 @@ func pyInputClosure(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 		SrcDirs:           moduleInputs.SrcDirs,
 		SourceRoot:        ctx.sourceRoot,
 		FS:                ctx.fs,
-		ScanCfg:           newScanContext(moduleInputs.AddIncl, moduleInputs.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel()),
+		ScanCfg:           newScanContext(ctx.parsers, moduleInputs.AddIncl, moduleInputs.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel()),
 	}
 
 	var out []VFS
