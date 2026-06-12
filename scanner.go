@@ -97,6 +97,21 @@ type IncludeScanner struct {
 	// probe per hit, several hundred k per run.
 	sourceUnderCache *IntValueMap[VFS]
 
+	// childScratch collects a file's resolved children before they are copied
+	// into childArena as one exactly-sized, address-stable block (the cached
+	// children are retained for the whole run; growing them in place churned a
+	// grow-chain per file). Collection never nests: forEachResolvedChildID
+	// finishes collecting before it runs the caller's callback.
+	childScratch []VFS
+	childArena   *BumpAllocator[VFS]
+
+	// spOut / resolveOut back resolveSearchPath's and resolve's per-call result
+	// slices. Both are fully consumed by the caller (values copied into the
+	// children block) before the next resolve, so one scratch per scanner
+	// replaces a fresh allocation per include directive.
+	spOut      []VFS
+	resolveOut []VFS
+
 	// tjc points at the run-wide Tarjan/closure working state owned by genCtx and
 	// shared by the target and host scanners (see tarjanCtx).
 	tjc *TarjanCtx
@@ -231,6 +246,7 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 		// straighten path and closureWindow treat ref as a 1-based index).
 		subgraphClosures: make([][]VFS, 1, 256),
 		closureArena:     newBumpAllocator[VFS](closureArenaInitial),
+		childArena:       newBumpAllocator[VFS](1 << 12),
 		searchTierFlat:   newIntValueMap[SearchTierResult](4096),
 		configByHash:     make(map[uint64]ScanConfigEntry, 1024),
 		sourceUnderCache: newIntValueMap[VFS](1 << 16),
@@ -396,10 +412,21 @@ func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
 		return
 	}
 
-	var children []VFS
+	scratch := s.childScratch[:0]
 	sc.forEachResolvedChild(abs, func(rabs VFS) {
-		children = append(children, rabs)
+		scratch = append(scratch, rabs)
 	})
+	s.childScratch = scratch
+
+	var children []VFS
+
+	if len(scratch) > 0 {
+		block := s.childArena.alloc(len(scratch))[:len(scratch):len(scratch)]
+		copy(block, scratch)
+		s.childArena.commit(len(scratch))
+		children = block
+	}
+
 	s.putChildren(abs, children)
 
 	for _, id := range children {
@@ -608,16 +635,19 @@ func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 }
 
 func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []VFS) {
+	s := sc.scanner
+
 	// A rooted target ($(S)/... or $(B)/...) is already bound to its root —
 	// INDUCED_DEPS spells deps via the reserved ${ARCADIA_ROOT}-family refs.
 	// Upstream classifies such paths directly (ResolveAsKnownWithoutCheck →
 	// NPath::ToYPath), with no include search, sysincl, or FS check; mirror
 	// that. The STR already backs the full path, so the binding is a shift.
 	if v := d.target.vfs(); v != 0 {
-		return []VFS{v}
-	}
+		out = append(s.resolveOut[:0], v)
+		s.resolveOut = out
 
-	s := sc.scanner
+		return out
+	}
 
 	var sysinclClaimed bool
 
@@ -673,9 +703,11 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 	}
 
 	if len(searchOut) == 0 {
+		res := s.resolveOut[:0]
+
 	fastLoop:
 		for _, abs := range mappings {
-			for _, q := range out {
+			for _, q := range res {
 				if q == abs {
 					continue fastLoop
 				}
@@ -685,29 +717,34 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 				continue
 			}
 
-			if out == nil {
-				out = make([]VFS, 0, len(mappings))
-			}
-
-			out = append(out, abs)
+			res = append(res, abs)
 		}
+
+		s.resolveOut = res
+
+		if len(res) == 0 {
+			return nil
+		}
+
+		out = res
 
 		return out
 	}
 
+	merged := s.resolveOut[:0]
+	added := false
+
 mapLoop:
 	for _, abs := range mappings {
-		if out != nil {
-			for _, q := range out {
-				if q == abs {
-					continue mapLoop
-				}
-			}
-		} else {
-			for _, q := range searchOut {
-				if q == abs {
-					continue mapLoop
-				}
+		base := searchOut
+
+		if added {
+			base = merged
+		}
+
+		for _, q := range base {
+			if q == abs {
+				continue mapLoop
 			}
 		}
 
@@ -715,17 +752,21 @@ mapLoop:
 			continue
 		}
 
-		if out == nil {
-			out = make([]VFS, len(searchOut), len(searchOut)+len(mappings))
-			copy(out, searchOut)
+		if !added {
+			merged = append(merged, searchOut...)
+			added = true
 		}
 
-		out = append(out, abs)
+		merged = append(merged, abs)
 	}
 
-	if out == nil {
+	s.resolveOut = merged
+
+	if !added {
 		return searchOut
 	}
+
+	out = merged
 
 	return out
 }
@@ -850,23 +891,19 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 		return true
 	}
 
-	var buildSuffix *STR
-
-	if s.codegen != nil {
-		buildSuffix = interned(normTarget)
-	}
+	buildSuffix, haveBuildSuffix := interned(normTarget)
 
 	addBuild := func(prefixRel string) bool {
-		if buildSuffix == nil {
+		if !haveBuildSuffix {
 			return false
 		}
 
 		var info *GeneratedFileInfo
 
 		if prefixRel == "" {
-			info = s.codegen.lookupSTR(*buildSuffix)
-		} else if pid := internedPrefixed("$(S)/", prefixRel); pid != nil {
-			info = s.codegen.lookupSplit(pid.vfs(), *buildSuffix)
+			info = s.codegen.lookupSTR(buildSuffix)
+		} else if pid, ok := internedPrefixed("$(S)/", prefixRel); ok {
+			info = s.codegen.lookupSplit(pid.vfs(), buildSuffix)
 		}
 
 		if info == nil {
@@ -925,7 +962,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 			// semantics over IncDirs (module_resolver.cpp:371).
 			var bestBuild *GeneratedFileInfo
 
-			if buildSuffix != nil {
+			if haveBuildSuffix {
 				for i := range idx.buildEntries {
 					b := &idx.buildEntries[i]
 
@@ -933,7 +970,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 						continue
 					}
 
-					info := s.codegen.lookupSplit(b.prefixSrc, *buildSuffix)
+					info := s.codegen.lookupSplit(b.prefixSrc, buildSuffix)
 
 					if info == nil {
 						continue
@@ -1001,7 +1038,13 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 	// out doubles as the dedup set: every accepted candidate lands in it, each
 	// branch below adds at most one entry, so membership is a linear scan over
 	// <= 3 elements — no pooled map, no per-call "B:"+rel key allocs, no clear.
-	var out []VFS
+	// Backed by the per-scanner scratch: the caller consumes the result before
+	// the next resolve.
+	out := s.spOut[:0]
+
+	defer func() {
+		s.spOut = out[:0]
+	}()
 
 	outHas := func(v VFS) bool {
 		for _, x := range out {

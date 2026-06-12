@@ -162,15 +162,18 @@ func generatedModuleSourceVFS(ctx *GenCtx, instance ModuleInstance, srcRel strin
 	// Lookup-only probe: the canonical "$(B)/<mod>/<src>" is assembled in the
 	// scratch buffer and probed without inserting — a plain src (the common
 	// case) used to intern a never-registered $(B) path per call.
-	var id *STR
+	var (
+		id STR
+		ok bool
+	)
 
 	if srcRel != "" && pathIsClean(srcRel) {
-		id = internedPrefixedJoined("$(B)/", instance.Path.rel(), srcRel)
+		id, ok = internedPrefixedJoined("$(B)/", instance.Path.rel(), srcRel)
 	} else {
-		id = internedPrefixed("$(B)/", filepath.ToSlash(filepath.Clean(instance.Path.rel()+"/"+srcRel)))
+		id, ok = internedPrefixed("$(B)/", filepath.ToSlash(filepath.Clean(instance.Path.rel()+"/"+srcRel)))
 	}
 
-	if id == nil {
+	if !ok {
 		return nil
 	}
 

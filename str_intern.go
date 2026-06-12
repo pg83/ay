@@ -210,22 +210,20 @@ func isCodegenProducingSrcID(id STR) bool {
 // internedBytes is the lookup-only twin of internBytes: it probes for b without
 // inserting. The overflow probe's string(b) conversion allocates only on a
 // hi-collision (essentially never).
-func internedBytes(b []byte) *STR {
+func internedBytes(b []byte) (STR, bool) {
 	h := xxh3.Hash128(b)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
 		if internTable.los[*p] == h.Lo {
-			id := *p
-
-			return &id
+			return *p, true
 		}
 
 		if oid, ok := internTable.overflow[string(b)]; ok {
-			return &oid
+			return oid, true
 		}
 	}
 
-	return nil
+	return 0, false
 }
 
 // str returns the STR itself — the identity arm of the uniform X.str() STR
@@ -264,22 +262,20 @@ func internStrs(ss []string) []STR {
 	return out
 }
 
-func interned(s string) *STR {
+func interned(s string) (STR, bool) {
 	h := xxh3.HashString128(s)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
 		if internTable.los[*p] == h.Lo {
-			id := *p
-
-			return &id
+			return *p, true
 		}
 
 		if oid, ok := internTable.overflow[s]; ok {
-			return &oid
+			return oid, true
 		}
 	}
 
-	return nil
+	return 0, false
 }
 
 func internBound() uint32 {
