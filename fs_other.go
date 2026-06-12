@@ -82,6 +82,10 @@ func (fs *OsFS) readDirMapRel(rel string) (map[string]bool, bool) {
 		return nil, false
 	}
 
+	if len(entries) == 0 {
+		return emptyDirEntries, true
+	}
+
 	out := make(map[string]bool, len(entries))
 
 	for _, e := range entries {

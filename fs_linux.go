@@ -210,6 +210,10 @@ func (fs *OsFS) readDirMapRel(rel string) (map[string]bool, bool) {
 		count++
 	})
 
+	if count == 0 {
+		return emptyDirEntries, true
+	}
+
 	out := make(map[string]bool, count)
 	forEachDirent(ents, func(name []byte, typ byte) {
 		isDir := typ == syscall.DT_DIR
