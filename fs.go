@@ -64,7 +64,13 @@ type OsFS struct {
 	readBuf       []byte
 
 	// direntBuf is the reused getdents64 block for listdir misses.
-	direntBuf []byte // reused buffer returned by Read (gen goroutine only)
+	direntBuf []byte
+
+	// rootFD pins the source root directory (linux): every read/listdir opens
+	// via openat(rootFD, rel) — no rootSlash+rel concat, no per-open path
+	// bytes. pathBuf is the reused NUL-terminated rel scratch for those calls.
+	rootFD  int
+	pathBuf []byte // reused buffer returned by Read (gen goroutine only)
 
 	listdirHits   uint64
 	listdirMisses uint64
@@ -73,10 +79,13 @@ type OsFS struct {
 }
 
 func newFS(srcRoot string) FS {
-	return &OsFS{
+	fs := &OsFS{
 		srcRoot:   srcRoot,
 		rootSlash: srcRoot + "/",
 	}
+	fs.platformInit()
+
+	return fs
 }
 
 // recordContentHash stores xxh3(data) at the file's full-path STR (the source VFS
@@ -147,14 +156,7 @@ func (fs *OsFS) listdir(dir VFS) map[string]bool {
 
 	fs.listdirMisses++
 
-	rel := dir.rel()
-	full := fs.rootSlash + rel
-
-	if rel == "" {
-		full = fs.srcRoot
-	}
-
-	out, ok := readDirMap(full, &fs.direntBuf)
+	out, ok := fs.readDirMapRel(dir.rel())
 
 	if !ok {
 		fs.dirs.put(key, nil)
@@ -293,10 +295,11 @@ func (fs *OsFS) read(rel string) []byte {
 	return fs.readBuf
 }
 
-// readIntoRaw reads rel through the per-platform readFileInto fast path
-// (fs_read_linux.go / fs_read_other.go).
+// readIntoRaw reads rel through the per-platform fast path (fs_linux.go /
+// fs_other.go) — on linux an openat from the pinned source-root fd, with no
+// rootSlash+rel concat and no per-open path conversion.
 func (fs *OsFS) readIntoRaw(rel string, buf []byte) []byte {
-	return readFileInto(fs.rootSlash+cleanRel(rel), buf)
+	return fs.readFileRel(cleanRel(rel), buf)
 }
 
 func (fs *OsFS) walk(rel string, visit func(rel string, isDir bool)) {
