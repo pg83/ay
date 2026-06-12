@@ -133,21 +133,14 @@ func swigModuleName(module string) string {
 
 func collectSwigInducedIncludes(ctx *GenCtx, src VFS, closure []VFS) []IncludeDirective {
 	// Every closure member was parsed during the walk, so the bucket reads
-	// below are pure cache hits — the parse path (and its
-	// deduper use) cannot run, and the shared deduper may host this set.
-	deduper.reset()
-
+	// below are pure cache hits. Cross-file repeats stay in the registered
+	// set — the consumer-side resolve caches and the closure dedup absorb
+	// them.
 	swigParser := IncludeDirectiveParser(SwigIncludeDirectiveParser{})
 	var out []IncludeDirective
 
 	add := func(v VFS) {
-		for _, d := range ctx.parsers.sourceParsedBuckets(v, swigParser).bucket(parsedIncludesCpp) {
-			if !deduper.add(directiveID(d)) {
-				continue
-			}
-
-			out = append(out, d)
-		}
+		out = append(out, ctx.parsers.sourceParsedBuckets(v, swigParser).bucket(parsedIncludesCpp)...)
 	}
 
 	add(src)
