@@ -104,6 +104,15 @@ func buildJoined(dir, rel string) VFS {
 	return VFS(uint32(internPrefixedJoined("$(B)/", dir, rel))<<1 | uint32(VFSRootBuild))
 }
 
+// sourceBytes interns "$(S)/<rel>" straight from raw bytes via the scratch
+// buffer — the parser-side twin of source().
+func sourceBytes(rel []byte) VFS {
+	vfsPrefixScratch = append(vfsPrefixScratch[:0], "$(S)/"...)
+	vfsPrefixScratch = append(vfsPrefixScratch, rel...)
+
+	return VFS(uint32(internBytes(vfsPrefixScratch))<<1 | uint32(VFSRootSource))
+}
+
 func source(rel string) VFS {
 	return VFS(uint32(internPrefixed("$(S)/", rel))<<1 | uint32(VFSRootSource))
 }

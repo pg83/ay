@@ -19,7 +19,7 @@ func TestParseSysInclYAML_Synthetic(t *testing.T) {
 - includes:
   - any.h: contrib/libs/any/any.h
 `
-	recs := parseSysInclYAML("test.yml", yaml, func(Warn) {})
+	recs := parseSysInclYAML("test.yml", []byte(yaml), func(Warn) {})
 
 	if len(recs) != 2 {
 		t.Fatalf("expected 2 records, got %d", len(recs))

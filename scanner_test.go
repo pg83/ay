@@ -725,11 +725,11 @@ include "machine.rl";
 // upstream ymake's TRagelIncludeProcessor separation of native deps vs
 // ParsedIncls.
 func TestScanner_RagelNativeInclude_DoesNotBleedCHeaders(t *testing.T) {
-	sysincl := parseSysInclYAML("test.yml", `
+	sysincl := parseSysInclYAML("test.yml", []byte(`
 - includes:
   - vector: stl/vector
   - numeric: stl/numeric
-`, func(Warn) {})
+`), func(Warn) {})
 
 	fs := newMemFS(map[string]string{
 		"pkg/main.rl6": `#include <vector>
