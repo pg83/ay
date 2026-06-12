@@ -56,7 +56,7 @@ func TestNewPlatform_WrapccVectorsAndResources(t *testing.T) {
 	}
 
 	wantRes := []string{resourcePatternClangTool + intP.ClangVer, resourcePatternYMakePython3}
-	if !reflect.DeepEqual(intP.CCUsesResources, wantRes) {
+	if !reflect.DeepEqual(intP.CCUsesResources, STRS(wantRes...)) {
 		t.Errorf("CCUsesResources = %v, want %v", intP.CCUsesResources, wantRes)
 	}
 
@@ -67,7 +67,7 @@ func TestNewPlatform_WrapccVectorsAndResources(t *testing.T) {
 		t.Errorf("opensource platform must not populate WrapccHead; got %v", osP.WrapccHead)
 	}
 
-	if !reflect.DeepEqual(osP.CCUsesResources, []string{resourcePatternClangTool + osP.ClangVer}) {
+	if !reflect.DeepEqual(osP.CCUsesResources, []STR{internStr(resourcePatternClangTool + osP.ClangVer)}) {
 		t.Errorf("opensource CCUsesResources = %v, want CLANG-only", osP.CCUsesResources)
 	}
 }
