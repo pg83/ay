@@ -94,12 +94,10 @@ func readEINTR(fd int, p []byte) int {
 // directories list in one syscall.
 const direntBlock = 1 << 16
 
-// readDirEntries streams (name, isDir) for every entry of the directory at
-// full via raw getdents64 into the caller's reused buffer — one block read,
-// names carved out as byte slices: no per-entry os.DirEntry object, no
-// []DirEntry, no sort. name is valid only during the visit call. Returns
-// false when full cannot be listed (mirrors os.ReadDir's error → nil).
-func readDirEntries(full string, buf []byte, visit func(name []byte, isDir bool)) bool {
+// readDirAll reads the whole getdents64 stream of the directory at full into
+// *buf (grown as needed, reused across calls) and returns the filled length.
+// false mirrors os.ReadDir's error → nil ("not listable").
+func readDirAll(full string, buf *[]byte) (int, bool) {
 	fd, err := syscall.Open(full, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_DIRECTORY, 0)
 
 	for err == syscall.EINTR {
@@ -107,53 +105,61 @@ func readDirEntries(full string, buf []byte, visit func(name []byte, isDir bool)
 	}
 
 	if err != nil {
-		return false
+		return 0, false
 	}
 
 	defer syscall.Close(fd)
 
+	total := 0
+
 	for {
-		n, err := syscall.Getdents(fd, buf)
+		if total+direntBlock > len(*buf) {
+			grown := 2 * len(*buf)
+
+			if grown < total+direntBlock {
+				grown = total + direntBlock
+			}
+
+			next := make([]byte, grown)
+			copy(next, (*buf)[:total])
+			*buf = next
+		}
+
+		n, err := syscall.Getdents(fd, (*buf)[total:])
 
 		for err == syscall.EINTR {
-			n, err = syscall.Getdents(fd, buf)
+			n, err = syscall.Getdents(fd, (*buf)[total:])
 		}
 
 		if err != nil {
-			return false
+			return 0, false
 		}
 
 		if n == 0 {
-			return true
+			return total, true
 		}
 
-		// linux_dirent64: ino u64, off u64, reclen u16, type u8, NUL-terminated name.
-		for off := 0; off < n; {
-			reclen := int(binary.LittleEndian.Uint16(buf[off+16:]))
-			typ := buf[off+18]
-			name := buf[off+19 : off+reclen]
+		total += n
+	}
+}
 
-			if i := bytes.IndexByte(name, 0); i >= 0 {
-				name = name[:i]
-			}
+// forEachDirent walks the raw linux_dirent64 records in b — ino u64, off u64,
+// reclen u16, type u8, NUL-terminated name — skipping "." and "..". The name
+// slice is a view into b.
+func forEachDirent(b []byte, visit func(name []byte, typ byte)) {
+	for off := 0; off < len(b); {
+		reclen := int(binary.LittleEndian.Uint16(b[off+16:]))
+		typ := b[off+18]
+		name := b[off+19 : off+reclen]
 
-			if !(len(name) == 1 && name[0] == '.') && !(len(name) == 2 && name[0] == '.' && name[1] == '.') {
-				isDir := typ == syscall.DT_DIR
-
-				if typ == syscall.DT_UNKNOWN {
-					// Filesystems without d_type (rare): fall back to lstat,
-					// like os's dirent layer.
-					var st syscall.Stat_t
-
-					if syscall.Lstat(full+"/"+string(name), &st) == nil {
-						isDir = st.Mode&syscall.S_IFMT == syscall.S_IFDIR
-					}
-				}
-
-				visit(name, isDir)
-			}
-
-			off += reclen
+		if i := bytes.IndexByte(name, 0); i >= 0 {
+			name = name[:i]
 		}
+
+		if !(len(name) == 1 && name[0] == '.') && !(len(name) == 2 && name[0] == '.' && name[1] == '.') {
+			visit(name, typ)
+		}
+
+		off += reclen
 	}
 }
