@@ -158,14 +158,14 @@ func directiveParserExt(rel string) string {
 
 func (CIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	block := a.alloc(directiveBlockHint)
-	out := dedupDirectives(block[:parseCIncludes(data, block, 0)])
-	a.commit(len(out))
+	k := parseCIncludes(data, block, 0)
+	a.commit(k)
 
-	if len(out) == 0 {
+	if k == 0 {
 		return ParsedIncludeSet{}
 	}
 
-	return ParsedIncludeSet{parsedIncludesLocal: out[:len(out):len(out)]}
+	return ParsedIncludeSet{parsedIncludesLocal: block[:k:k]}
 }
 
 // directiveBlockHint is the block reservation a parser takes from the
@@ -173,6 +173,13 @@ func (CIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator[I
 // count of any file in the tree (boost's PP iteration files repeat one
 // #include up to 1024x). Overflow throws (addDirective).
 const directiveBlockHint = 1 << 14
+
+// directiveID packs one directive's (kind, target) into a VFS — the same
+// STR<<1|bit shape — so identical directives dedup through the global VFS deduper
+// by a plain cast, no separate set.
+func directiveID(d IncludeDirective) VFS {
+	return VFS(uint32(d.target)<<1 | uint32(d.kind))
+}
 
 // addDirective writes d at block[k] with the overflow guard; returns k+1.
 func addDirective(block []IncludeDirective, k int, d IncludeDirective) int {
@@ -183,34 +190,6 @@ func addDirective(block []IncludeDirective, k int, d IncludeDirective) int {
 	block[k] = d
 
 	return k + 1
-}
-
-// directiveID packs one directive's (kind, target) into a VFS — the same
-// STR<<1|bit shape — so identical directives dedup through the global VFS deduper
-// by a plain cast, no separate set.
-func directiveID(d IncludeDirective) VFS {
-	return VFS(uint32(d.target)<<1 | uint32(d.kind))
-}
-
-// dedupDirectives drops repeated (kind, target) directives in place over the
-// global VFS deduper — boost's PP iteration files (forwardN_1024.hpp) repeat one
-// #include up to 1024x, and each survivor otherwise drives a redundant resolve.
-// In-place compaction, no array copy, no per-file map. Single-threaded gen only.
-func dedupDirectives(out []IncludeDirective) []IncludeDirective {
-	if len(out) < 2 {
-		return out
-	}
-
-	deduper.reset()
-	kept := out[:0]
-
-	for _, d := range out {
-		if deduper.add(directiveID(d)) {
-			kept = append(kept, d)
-		}
-	}
-
-	return kept
 }
 
 func (CythonIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
@@ -270,14 +249,13 @@ func (CythonIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAlloca
 		}
 	})
 
-	out := dedupDirectives(block[:k])
-	a.commit(len(out))
+	a.commit(k)
 
-	if len(out) == 0 {
+	if k == 0 {
 		return ParsedIncludeSet{}
 	}
 
-	return ParsedIncludeSet{parsedIncludesLocal: out[:len(out):len(out)]}
+	return ParsedIncludeSet{parsedIncludesLocal: block[:k:k]}
 }
 
 func cythonPxdTarget(module string) string {

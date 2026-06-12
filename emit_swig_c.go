@@ -133,7 +133,7 @@ func swigModuleName(module string) string {
 
 func collectSwigInducedIncludes(ctx *GenCtx, src VFS, closure []VFS) []IncludeDirective {
 	// Every closure member was parsed during the walk, so the bucket reads
-	// below are pure cache hits — the parse path (and its dedupDirectives
+	// below are pure cache hits — the parse path (and its
 	// deduper use) cannot run, and the shared deduper may host this set.
 	deduper.reset()
 
