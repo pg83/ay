@@ -52,14 +52,14 @@ func (id ENV) String() string {
 // arbitrary ${VAR} tokens that are usually not env vars; this stays read-only —
 // interned() (a read-only STR probe) returns nil for a never-seen name, so a
 // junk ${VAR} grows neither the STR nor the ENV table.
-func internedEnv(name string) (ENV, bool) {
+func internedEnv(name string) ENV {
 	st := interned(name)
 
 	if st == 0 {
-		return 0, false
+		return 0
 	}
 
-	id, ok := envTable.ids.get(st)
+	id, _ := envTable.ids.get(st)
 
-	return ENV(id), ok
+	return ENV(id) // slot 0 is reserved, so 0 doubles as "unknown"
 }
