@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"path"
 	"strings"
 
@@ -64,7 +63,10 @@ type OsFS struct {
 	// happen on the single gen goroutine — the executor goroutine is spawned only
 	// after a node's uid is computed — so no lock.
 	contentHashes []uint64
-	readBuf       []byte // reused buffer returned by Read (gen goroutine only)
+	readBuf       []byte
+
+	// direntBuf is the reused getdents64 block for listdir misses.
+	direntBuf []byte // reused buffer returned by Read (gen goroutine only)
 
 	listdirHits   uint64
 	listdirMisses uint64
@@ -154,18 +156,18 @@ func (fs *OsFS) listdir(dir VFS) map[string]bool {
 		full = fs.srcRoot
 	}
 
-	entries, err := os.ReadDir(full)
+	if fs.direntBuf == nil {
+		fs.direntBuf = make([]byte, direntBlock)
+	}
 
-	if err != nil {
+	out := make(map[string]bool, 16)
+
+	if !readDirEntries(full, fs.direntBuf, func(name []byte, isDir bool) {
+		out[string(name)] = isDir
+	}) {
 		fs.dirs.put(key, nil)
 
 		return nil
-	}
-
-	out := make(map[string]bool, len(entries))
-
-	for _, e := range entries {
-		out[e.Name()] = e.IsDir()
 	}
 
 	fs.dirs.put(key, out)
