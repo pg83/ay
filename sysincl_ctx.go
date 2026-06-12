@@ -1,7 +1,6 @@
 package main
 
 import (
-	"sort"
 	"strings"
 )
 
@@ -178,7 +177,6 @@ type SysinclContribution struct {
 	paths    []VFS
 	filter   *SourceFilter // nil = applies to every path
 	rawKeyID STR           // the record's stored key id (lowered for CI records)
-	order    int           // index in the rule set
 	ci       bool
 	multi    bool // record.HasMultiTarget
 }
@@ -186,7 +184,7 @@ type SysinclContribution struct {
 // sysinclIndex folds ALL sysincl records (source- and includer-keyed) into one
 // header-keyed index built once, so a lookup is a single map probe plus a tiny
 // bucket scan instead of a per-record fan-out. Buckets group records whose key
-// folds to one ToLower form, sorted by record order; a matched entry must (a)
+// folds to one ToLower form, in declaration order by construction; a matched entry must (a)
 // match the path (filter), (b) match case (CI = whole bucket, non-CI = exact
 // rawKeyID). Lookups address buckets purely by target id via byID: CS keys and
 // lowered CI keys are bound at build, case variants at ciClaims' first touch —
@@ -254,7 +252,6 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 					paths:    p.paths,
 					filter:   rec.Filter,
 					rawKeyID: p.key,
-					order:    order,
 					ci:       false,
 					multi:    rec.HasMultiTarget,
 				})
@@ -269,7 +266,6 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 				paths:    p.paths,
 				filter:   rec.Filter,
 				rawKeyID: ciID,
-				order:    order,
 				ci:       true,
 				multi:    rec.HasMultiTarget,
 			})
@@ -277,10 +273,8 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 		}
 	}
 
-	for i := range m.buckets {
-		bucket := m.buckets[i]
-		sort.Slice(bucket, func(i, j int) bool { return bucket[i].order < bucket[j].order })
-	}
+	// Buckets are already in record order: the build loop walks the rule set
+	// in declaration order and only appends.
 
 	return m
 }
