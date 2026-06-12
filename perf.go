@@ -59,8 +59,10 @@ func perfParser(dir string) int {
 		return nil
 	}))
 
+	block := make([]IncludeDirective, directiveBlockHint)
+
 	for _, b := range datas {
-		parseCIncludes(b)
+		parseCIncludes(b, block, 0)
 	}
 
 	const minDur = 3 * time.Second
@@ -69,7 +71,7 @@ func perfParser(dir string) int {
 
 	for time.Since(start) < minDur {
 		for _, b := range datas {
-			sink += len(parseCIncludes(b))
+			sink += parseCIncludes(b, block, 0)
 		}
 
 		iters++
