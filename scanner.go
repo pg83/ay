@@ -97,13 +97,11 @@ type IncludeScanner struct {
 	// probe per hit, several hundred k per run.
 	sourceUnderCache *IntValueMap[VFS]
 
-	// childScratch collects a file's resolved children before they are copied
-	// into childArena as one exactly-sized, address-stable block (the cached
-	// children are retained for the whole run; growing them in place churned a
-	// grow-chain per file). Collection never nests: forEachResolvedChildID
-	// finishes collecting before it runs the caller's callback.
-	childScratch []VFS
-	childArena   *BumpAllocator[VFS]
+	// childArena holds the cached resolved-children blocks (retained for the
+	// whole run; growing them in place churned a grow-chain per file). Filled
+	// like the closure arena: reserve closureAllocHint, collect, commit the
+	// used prefix. Collection never nests, so one pending block suffices.
+	childArena *BumpAllocator[VFS]
 
 	// spOut / resolveOut back resolveSearchPath's and resolve's per-call result
 	// slices. Both are fully consumed by the caller (values copied into the
@@ -412,19 +410,21 @@ func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
 		return
 	}
 
-	scratch := s.childScratch[:0]
+	// Collect straight into an arena block (the dfs pattern: reserve the hint,
+	// commit the used prefix). Nothing else touches childArena while the block
+	// is open — resolve never re-enters children collection.
+	block := s.childArena.alloc(closureAllocHint)
+	k := 0
 	sc.forEachResolvedChild(abs, func(rabs VFS) {
-		scratch = append(scratch, rabs)
+		block[k] = rabs
+		k++
 	})
-	s.childScratch = scratch
+	s.childArena.commit(k)
 
 	var children []VFS
 
-	if len(scratch) > 0 {
-		block := s.childArena.alloc(len(scratch))[:len(scratch):len(scratch)]
-		copy(block, scratch)
-		s.childArena.commit(len(scratch))
-		children = block
+	if k > 0 {
+		children = block[:k:k]
 	}
 
 	s.putChildren(abs, children)
@@ -891,10 +891,10 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 		return true
 	}
 
-	buildSuffix, haveBuildSuffix := interned(normTarget)
+	buildSuffix := interned(normTarget)
 
 	addBuild := func(prefixRel string) bool {
-		if !haveBuildSuffix {
+		if buildSuffix == 0 {
 			return false
 		}
 
@@ -902,7 +902,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 
 		if prefixRel == "" {
 			info = s.codegen.lookupSTR(buildSuffix)
-		} else if pid, ok := internedPrefixed("$(S)/", prefixRel); ok {
+		} else if pid := internedPrefixed("$(S)/", prefixRel); pid != 0 {
 			info = s.codegen.lookupSplit(pid.vfs(), buildSuffix)
 		}
 
@@ -962,7 +962,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 			// semantics over IncDirs (module_resolver.cpp:371).
 			var bestBuild *GeneratedFileInfo
 
-			if haveBuildSuffix {
+			if buildSuffix != 0 {
 				for i := range idx.buildEntries {
 					b := &idx.buildEntries[i]
 
