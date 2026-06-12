@@ -4,16 +4,64 @@ import (
 	"bytes"
 	"encoding/binary"
 	"syscall"
+	"unsafe"
 )
 
-// readFileInto reads path into buf's storage (growing it as needed) and returns
-// the filled slice. Raw open/fstat/read/close instead of os.Open + (*os.File).Read:
-// no per-read *os.File heap object and finalizer, no poll.FD indirection — that
-// wrapper overhead was ~3% of gen CPU over sg5's ~45k reads. EINTR is retried
-// here (the os layer used to do it for us; raw reads can see it under Go's async
-// preemption on some filesystems).
-func readFileInto(path string, buf []byte) []byte {
-	fd := openEINTR(path)
+// platformInit pins the source root as rootFD; every subsequent read/listdir
+// resolves relative to it via openat.
+func (fs *OsFS) platformInit() {
+	for {
+		fd, err := syscall.Open(fs.srcRoot, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_DIRECTORY, 0)
+
+		if err == syscall.EINTR {
+			continue
+		}
+
+		if err != nil {
+			throwFmt("open source root %s: %v", fs.srcRoot, err)
+		}
+
+		fs.rootFD = fd
+
+		return
+	}
+}
+
+// openatRel opens rel under rootFD — the NUL-terminated rel is assembled in
+// the reused scratch, so the open allocates nothing (syscall.Open would build
+// a fresh ByteSliceFromString per call, on top of the rootSlash+rel concat).
+func (fs *OsFS) openatRel(rel string, flags int) (int, syscall.Errno) {
+	if rel == "" {
+		rel = "."
+	}
+
+	p := append(fs.pathBuf[:0], rel...)
+	p = append(p, 0)
+	fs.pathBuf = p
+
+	for {
+		r1, _, errno := syscall.Syscall6(syscall.SYS_OPENAT, uintptr(fs.rootFD), uintptr(unsafe.Pointer(&p[0])), uintptr(flags), 0, 0, 0)
+
+		if errno == syscall.EINTR {
+			continue
+		}
+
+		return int(r1), errno
+	}
+}
+
+// readFileRel reads rel into buf's storage (growing it as needed) and returns
+// the filled slice. Raw openat/fstat/read/close instead of os.Open +
+// (*os.File).Read: no per-read *os.File heap object and finalizer, no poll.FD
+// indirection — that wrapper overhead was ~3% of gen CPU over sg5's ~45k
+// reads. EINTR is retried here (the os layer used to do it for us; raw reads
+// can see it under Go's async preemption on some filesystems).
+func (fs *OsFS) readFileRel(rel string, buf []byte) []byte {
+	fd, errno := fs.openatRel(rel, syscall.O_RDONLY|syscall.O_CLOEXEC)
+
+	if errno != 0 {
+		throwFmt("open %s: %v", rel, errno)
+	}
 
 	defer syscall.Close(fd)
 
@@ -60,22 +108,6 @@ func readFileInto(path string, buf []byte) []byte {
 	}
 }
 
-func openEINTR(path string) int {
-	for {
-		fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_CLOEXEC, 0)
-
-		if err == syscall.EINTR {
-			continue
-		}
-
-		if err != nil {
-			throwFmt("open %s: %v", path, err)
-		}
-
-		return fd
-	}
-}
-
 func readEINTR(fd int, p []byte) int {
 	for {
 		n, err := syscall.Read(fd, p)
@@ -94,17 +126,34 @@ func readEINTR(fd int, p []byte) int {
 // directories list in one syscall.
 const direntBlock = 1 << 16
 
-// readDirAll reads the whole getdents64 stream of the directory at full into
+// atSymlinkNofollow is AT_SYMLINK_NOFOLLOW (not exported by syscall).
+const atSymlinkNofollow = 0x100
+
+// fstatatRel is lstat relative to rootFD (SYS_NEWFSTATAT; the syscall package
+// exports no Fstatat on linux/amd64).
+func (fs *OsFS) fstatatRel(rel string, st *syscall.Stat_t) bool {
+	p := append(fs.pathBuf[:0], rel...)
+	p = append(p, 0)
+	fs.pathBuf = p
+
+	for {
+		_, _, errno := syscall.Syscall6(syscall.SYS_NEWFSTATAT, uintptr(fs.rootFD), uintptr(unsafe.Pointer(&p[0])), uintptr(unsafe.Pointer(st)), uintptr(atSymlinkNofollow), 0, 0)
+
+		if errno == syscall.EINTR {
+			continue
+		}
+
+		return errno == 0
+	}
+}
+
+// readDirAll reads the whole getdents64 stream of the directory at rel into
 // *buf (grown as needed, reused across calls) and returns the filled length.
 // false mirrors os.ReadDir's error → nil ("not listable").
-func readDirAll(full string, buf *[]byte) (int, bool) {
-	fd, err := syscall.Open(full, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_DIRECTORY, 0)
+func (fs *OsFS) readDirAll(rel string, buf *[]byte) (int, bool) {
+	fd, errno := fs.openatRel(rel, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_DIRECTORY)
 
-	for err == syscall.EINTR {
-		fd, err = syscall.Open(full, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_DIRECTORY, 0)
-	}
-
-	if err != nil {
+	if errno != 0 {
 		return 0, false
 	}
 
@@ -143,19 +192,19 @@ func readDirAll(full string, buf *[]byte) (int, bool) {
 	}
 }
 
-// readDirMap lists the directory at full into a fresh, exactly-sized
+// readDirMapRel lists the directory at rel into a fresh, exactly-sized
 // map[string]bool (name → isDir): one raw getdents64 stream into the reused
 // block, parsed twice — count (one right-sized map allocation), then fill.
 // Per entry only the map-key string is allocated. false mirrors os.ReadDir's
 // error → nil ("not listable").
-func readDirMap(full string, buf *[]byte) (map[string]bool, bool) {
-	n, ok := readDirAll(full, buf)
+func (fs *OsFS) readDirMapRel(rel string) (map[string]bool, bool) {
+	n, ok := fs.readDirAll(rel, &fs.direntBuf)
 
 	if !ok {
 		return nil, false
 	}
 
-	ents := (*buf)[:n]
+	ents := fs.direntBuf[:n]
 	count := 0
 	forEachDirent(ents, func([]byte, byte) {
 		count++
@@ -169,7 +218,7 @@ func readDirMap(full string, buf *[]byte) (map[string]bool, bool) {
 			// Filesystems without d_type (rare): lstat, like os's dirent layer.
 			var st syscall.Stat_t
 
-			if syscall.Lstat(full+"/"+string(name), &st) == nil {
+			if fs.fstatatRel(joinRel(rel, string(name)), &st) {
 				isDir = st.Mode&syscall.S_IFMT == syscall.S_IFDIR
 			}
 		}

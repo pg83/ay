@@ -58,10 +58,24 @@ func readFileInto(path string, buf []byte) []byte {
 	}
 }
 
-// readDirMap is the portable fallback: os.ReadDir already returns the full,
-// right-sized entry list. buf is unused here (the linux arm's reused dirent
-// block).
-func readDirMap(full string, _ *[]byte) (map[string]bool, bool) {
+// platformInit is a no-op on the portable arm (no pinned root fd).
+func (fs *OsFS) platformInit() {
+}
+
+// readFileRel is the portable twin of the linux openat fast path.
+func (fs *OsFS) readFileRel(rel string, buf []byte) []byte {
+	return readFileInto(fs.rootSlash+rel, buf)
+}
+
+// readDirMapRel is the portable fallback: os.ReadDir already returns the full,
+// right-sized entry list.
+func (fs *OsFS) readDirMapRel(rel string) (map[string]bool, bool) {
+	full := fs.rootSlash + rel
+
+	if rel == "" {
+		full = fs.srcRoot
+	}
+
 	entries, err := os.ReadDir(full)
 
 	if err != nil {
