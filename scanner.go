@@ -259,12 +259,6 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 }
 
 type ScanContext struct {
-	// RootParser is the parser for unregistered-extension files reached from
-	// this walk, resolved once from the walk's root file (nil = C default).
-	// Not part of hashScanContext: it affects parsing, not path resolution,
-	// and parse results cache by (file, parser).
-	RootParser IncludeDirectiveParser
-
 	OwnAddIncl      []VFS
 	PeerAddInclSet  []VFS
 	BaseSearchPaths []VFS
@@ -273,6 +267,25 @@ type ScanContext struct {
 	// IncludeScanner.generatedFirstClaim on the first resolve of any
 	// CodegenRegistry output — see that field's comment for the rationale.
 	OwnerModuleDir string
+
+	// hash fingerprints the resolve-relevant fields, computed exactly once by
+	// newScanContext — the only constructor.
+	hash uint64
+}
+
+// newScanContext builds a scan config and seals its hash. The walk's parser
+// for unregistered-extension files is NOT part of the config — it is a ScanCtx
+// property handed to newScanCtx (derived from the walk root).
+func newScanContext(ownAddIncl, peerAddIncl, base []VFS, ownerModuleDir string) ScanContext {
+	cfg := ScanContext{
+		OwnAddIncl:      ownAddIncl,
+		PeerAddInclSet:  peerAddIncl,
+		BaseSearchPaths: base,
+		OwnerModuleDir:  ownerModuleDir,
+	}
+	cfg.hash = hashScanContext(&cfg)
+
+	return cfg
 }
 
 type ScanConfigEntry struct {
@@ -280,15 +293,20 @@ type ScanConfigEntry struct {
 	ri     *CfgResolveIndex
 }
 
-func (s *IncludeScanner) newScanCtx(cfg ScanContext) *ScanCtx {
-	ctxHash := hashScanContext(&cfg)
+// newScanCtx resolves cfg (sealed by newScanContext) into a scan context;
+// parser handles unregistered-extension files reached from this walk (nil = C
+// default), resolved by the caller from the walk's root.
+func (s *IncludeScanner) newScanCtx(cfg ScanContext, parser IncludeDirectiveParser) *ScanCtx {
+	if cfg.hash == 0 {
+		throwFmt("newScanCtx: ScanContext built without newScanContext")
+	}
 
-	entry, ok := s.configByHash[ctxHash]
+	entry, ok := s.configByHash[cfg.hash]
 
 	if !ok {
 		// Dense id: next == count of distinct configs.
 		entry = ScanConfigEntry{ctxNum: uint32(len(s.configByHash)), ri: buildCfgResolveIndex(&cfg)}
-		s.configByHash[ctxHash] = entry
+		s.configByHash[cfg.hash] = entry
 
 		if entry.ri.indexable {
 			for _, p := range cfg.OwnAddIncl {
@@ -308,7 +326,7 @@ func (s *IncludeScanner) newScanCtx(cfg ScanContext) *ScanCtx {
 		cfg:          cfg,
 		ctxNum:       ctxNum,
 		resolveIndex: ri,
-		parser:       cfg.RootParser,
+		parser:       parser,
 	}
 }
 
@@ -321,7 +339,9 @@ func (s *IncludeScanner) newScanCtx(cfg ScanContext) *ScanCtx {
 // the discrimination matches the old per-byte FNV at a fraction of the cost.
 // Length-prefixing each slice keeps the three-slice boundaries unambiguous.
 func hashScanContext(ctx *ScanContext) uint64 {
-	var h uint64
+	// Non-zero seed so the all-empty context cannot hash to 0 (the "unsealed"
+	// sentinel newScanCtx guards on).
+	h := uint64(0x9e3779b97f4a7c15)
 
 	mixSlice := func(ss []VFS) {
 		h = mix64(h ^ uint64(len(ss)))

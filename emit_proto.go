@@ -73,12 +73,12 @@ func pbHEmitsIncludesExtras() []IncludeDirective {
 // PROTO_NAMESPACE included — upstream's PROTO_ADDINCL is always GLOBAL) plus
 // the protobuf runtime src ($PROTOBUF_INCLUDE_PATH, a contour config
 // constant).
-func protoWalkInputs(peerProtoAddIncl []VFS) ModuleCCInputs {
+func protoWalkInputs(peerProtoAddIncl []VFS, ownerModuleDir string) ModuleCCInputs {
 	own := make([]VFS, 0, 1+len(peerProtoAddIncl))
 	own = append(own, pbRuntimeBaseVFS)
 	own = append(own, peerProtoAddIncl...)
 
-	return ModuleCCInputs{AddIncl: own}
+	return ModuleCCInputs{AddIncl: own, ScanCfg: newScanContext(own, nil, includeScannerBasePaths(), ownerModuleDir)}
 }
 
 func protoDirectImportNames(pm *IncludeParserManager, srcRel string) []string {
@@ -238,7 +238,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 	}
 
 	protoVFS := source(protoRelPath)
-	transitiveImports := walkClosureTail(ctx, instance, protoVFS, protoWalkInputs(protoSearchPaths))
+	transitiveImports := walkClosureTail(ctx.scannerFor(instance), protoVFS, protoWalkInputs(protoSearchPaths, instance.Path.rel()).ScanCfg)
 
 	// SRCS(X.proto) may name a build-generated .proto (e.g. jsonpath's
 	// RUN_ANTLR -language protobuf emits JsonPathParser.proto with no source
@@ -486,7 +486,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		for _, src := range evSrcs {
 			evRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
 			evVFS := source(evRelPath)
-			evImports := walkClosureTail(ctx, instance, evVFS, protoWalkInputs(nil))
+			evImports := walkClosureTail(ctx.scannerFor(instance), evVFS, protoWalkInputs(nil, instance.Path.rel()).ScanCfg)
 
 			evRef := emitEV(
 				instance, evRelPath, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
@@ -537,6 +537,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		Flags:                d.flags,
 		AddIncl:              d.addIncl,
 		PeerAddInclGlobal:    peerContribs.addIncl,
+		ScanCfg:              newScanContext(d.addIncl, peerContribs.addIncl, includeScannerBasePaths(), instance.Path.rel()),
 		CFlags:               d.cFlags,
 		CXXFlags:             d.cxxFlags,
 		COnlyFlags:           d.cOnlyFlags,
@@ -564,7 +565,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 
 	for _, co := range codegenOutputs {
 		ccIn := moduleInputs
-		ccIn.IncludeInputs = walkClosure(ctx, instance, co.pbCC, moduleInputs)
+		ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), co.pbCC, moduleInputs.ScanCfg)
 
 		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {
 			selfH := build(strings.TrimSuffix(co.pbCC.rel(), ".cc") + ".h")

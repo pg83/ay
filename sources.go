@@ -45,15 +45,10 @@ func joinSrcsIncludeClosure(ctx *GenCtx, scanPlatform *Platform, srcInstance Mod
 
 	order := make([]VFS, 0, 1024)
 
-	for _, srcRelOnDisk := range srcRels {
-		cfg := ScanContext{
-			OwnAddIncl:      in.AddIncl,
-			PeerAddInclSet:  in.PeerAddInclGlobal,
-			BaseSearchPaths: includeScannerBasePaths(),
-			OwnerModuleDir:  srcInstance.Path.rel(),
-		}
+	cfg := in.ScanCfg
 
-		sc := scanner.newScanCtx(cfg)
+	for _, srcRelOnDisk := range srcRels {
+		sc := scanner.newScanCtx(cfg, includeDirectiveParsers.registeredParserFor(srcRelOnDisk))
 
 		for _, v := range sc.closureOf(source(srcRelOnDisk)) {
 			if visited.has(v) {
@@ -127,33 +122,15 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 // walkClosure returns the transitive include closure WINDOW of vfsPath — the
 // root is a member (windows are self-containing; subsumption needs that), first
 // for plain files, anywhere within for SCC members. Consumers treat the window
-// as the node's full input list and must not re-add the root.
-func walkClosure(ctx *GenCtx, srcInstance ModuleInstance, vfsPath VFS, in ModuleCCInputs) []VFS {
-	scanner := ctx.scannerFor(srcInstance)
-
+// as the node's full input list and must not re-add the root. It depends on
+// exactly (scanner, vfsPath, cfg): the unregistered-extension parser derives
+// from the root (a .swg root parses its .i includes as swig).
+func walkClosure(scanner *IncludeScanner, vfsPath VFS, cfg ScanContext) []VFS {
 	if scanner == nil {
 		return nil
 	}
 
-	// The walk's parser for unregistered-extension files: the caller's choice
-	// when the root itself has an unregistered extension, else resolved once
-	// from the root (a .swg root parses its .i includes as swig).
-	rootParser := in.RootParser
-
-	if rootParser == nil {
-		rootParser = includeDirectiveParsers.registeredParserFor(vfsPath.rel())
-	}
-
-	cfg := ScanContext{
-		RootParser: rootParser,
-
-		OwnAddIncl:      in.AddIncl,
-		PeerAddInclSet:  in.PeerAddInclGlobal,
-		BaseSearchPaths: includeScannerBasePaths(),
-		OwnerModuleDir:  srcInstance.Path.rel(),
-	}
-
-	sc := scanner.newScanCtx(cfg)
+	sc := scanner.newScanCtx(cfg, includeDirectiveParsers.registeredParserFor(vfsPath.rel()))
 	scanner.walkClosureCalls++
 
 	return sc.closureOf(vfsPath)
@@ -163,8 +140,8 @@ func walkClosure(ctx *GenCtx, srcInstance ModuleInstance, vfsPath VFS, in Module
 // stripped. Sound only for roots that cannot be SCC members (build outputs:
 // include cycles arise among real headers, never through registered generated
 // files), where closureOf is guaranteed to lead the window with the root.
-func walkClosureTail(ctx *GenCtx, srcInstance ModuleInstance, vfsPath VFS, in ModuleCCInputs) []VFS {
-	full := walkClosure(ctx, srcInstance, vfsPath, in)
+func walkClosureTail(scanner *IncludeScanner, vfsPath VFS, cfg ScanContext) []VFS {
+	full := walkClosure(scanner, vfsPath, cfg)
 
 	if len(full) == 0 {
 		return nil

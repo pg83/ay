@@ -46,6 +46,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		SourceRoot:        ctx.sourceRoot,
 		FS:                ctx.fs,
 		SrcDirs:           d.srcDirs,
+		ScanCfg:           newScanContext(d.addIncl, peerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel()),
 	}
 	res := &EnumSrcsResult{}
 
@@ -63,7 +64,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 			headerRel = strings.TrimPrefix(headerInput.rel(), instance.Path.rel()+"/")
 		}
 
-		closure := walkClosure(ctx, instance, headerInput, scanIn)
+		closure := walkClosure(ctx.scannerFor(instance), headerInput, scanIn.ScanCfg)
 
 		serializedCPPPath := build(instance.Path.rel() + "/" + headerRel + "_serialized.cpp")
 		var serializedHPath VFS
@@ -101,7 +102,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		if !withHeader && ctx.scannerTarget.codegen != nil {
 			// Tail: serializedCPPPath is the EN node's own output, never its
 			// input (headerInput dedups out via dedupVFS below).
-			ownOutputClosure = walkClosureTail(ctx, instance, serializedCPPPath, scanIn)
+			ownOutputClosure = walkClosureTail(ctx.scannerFor(instance), serializedCPPPath, scanIn.ScanCfg)
 		}
 
 		// closure is the headerInput window (header-led), so the EN input list

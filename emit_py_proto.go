@@ -253,7 +253,7 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 
 	inputs := []VFS{protocBinary, pbPyWrapperVFS, source(protoRelPath)}
 	protoVFS := source(protoRelPath)
-	transitive := walkClosureTail(ctx, instance, protoVFS, protoWalkInputs(nil))
+	transitive := walkClosureTail(ctx.scannerFor(instance), protoVFS, protoWalkInputs(nil, instance.Path.rel()).ScanCfg)
 
 	inputs = append(inputs, transitive...)
 
@@ -597,6 +597,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 			Flags:                d.flags,
 			AddIncl:              d.addIncl,
 			PeerAddInclGlobal:    peerAddIncl,
+			ScanCfg:              newScanContext(d.addIncl, peerAddIncl, includeScannerBasePaths(), instance.Path.rel()),
 			PeerCFlagsGlobal:     peerContribs.cFlags,
 			PeerCXXFlagsGlobal:   peerContribs.cxxFlags,
 			PeerCOnlyFlagsGlobal: peerContribs.cOnlyFlags,

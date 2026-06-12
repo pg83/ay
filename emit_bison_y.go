@@ -135,7 +135,7 @@ func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCC
 
 	ccIn := in
 	ccIn.ExtraDepRefs = []NodeRef{ycRef}
-	ccIn.IncludeInputs = walkClosure(ctx, instance, generatedVFS, in)
+	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), generatedVFS, in.ScanCfg)
 
 	if preprocessHeader {
 		ccIn.PerSourceCFlags = append(append([]ARG(nil), in.PerSourceCFlags...), argWnoUnusedButSetVariable, argWnoDeprecatedCopy)

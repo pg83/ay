@@ -300,7 +300,7 @@ func registerBoundGeneratedParsedOutputWithSource(ctx *GenCtx, instance ModuleIn
 }
 
 func generatedOutputClosure(ctx *GenCtx, instance ModuleInstance, output VFS, in ModuleCCInputs) []VFS {
-	return walkClosureTail(ctx, instance, output, in)
+	return walkClosureTail(ctx.scannerFor(instance), output, in.ScanCfg)
 }
 
 func codegenRegForInstance(ctx *GenCtx, instance ModuleInstance) *CodegenRegistry {

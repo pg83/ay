@@ -59,7 +59,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 			bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
 
 			// Walk include closure (same as emitCodegenDownstreamCC for generated CC).
-			closure := walkClosure(ctx, instance, inputVFS, in)
+			closure := walkClosure(ctx.scannerFor(instance), inputVFS, in.ScanCfg)
 
 			var depRefs []NodeRef
 

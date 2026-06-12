@@ -54,7 +54,7 @@ func emitJVDownstreamCPCC(
 
 		ccIn := in
 		ccIn.ExtraDepRefs = nil
-		closure := walkClosure(ctx, instance, g4CppPath, ccIn)
+		closure := walkClosure(ctx.scannerFor(instance), g4CppPath, ccIn.ScanCfg)
 
 		// The CP node's inputs take the tail: g4CppPath is its own output (a
 		// build output — never an SCC member, so the window leads with it).

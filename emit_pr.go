@@ -189,17 +189,18 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		SrcDirs:           moduleInputs.SrcDirs,
 		SourceRoot:        ctx.sourceRoot,
 		FS:                ctx.fs,
+		ScanCfg:           newScanContext(moduleInputs.AddIncl, moduleInputs.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel()),
 	}
 
 	var out []VFS
 	walkOne := func(rel string) {
 		buildRootPath := copyFileOutputVFS(instance.Path.rel(), rel)
-		sub := walkClosureTail(ctx, instance, buildRootPath, scanIn)
+		sub := walkClosureTail(ctx.scannerFor(instance), buildRootPath, scanIn.ScanCfg)
 		out = append(out, sub...)
 	}
 	walkInput := func(rel string) {
 		inputVFS := runProgramInputVFS(ctx, instance, d, rel)
-		sub := walkClosureTail(ctx, instance, inputVFS, scanIn)
+		sub := walkClosureTail(ctx.scannerFor(instance), inputVFS, scanIn.ScanCfg)
 		out = append(out, sub...)
 	}
 
@@ -270,7 +271,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 				continue
 			}
 
-			sub := walkClosureTail(ctx, instance, info.OutputPath, scanIn)
+			sub := walkClosureTail(ctx.scannerFor(instance), info.OutputPath, scanIn.ScanCfg)
 
 			for _, v := range sub {
 				if !strings.HasSuffix(v.rel(), ".proto") {
