@@ -105,7 +105,6 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 		srcVFS := source(instance.Path.rel() + "/" + stmt.Src)
 		srcScanIn := in
 		srcScanIn.AddIncl = appendCythonScanAddIncl(srcScanIn.AddIncl, d.cythonAddIncl, py23Variant)
-		srcScanIn.ScanMemo = nil
 		sourceClosure := walkClosureTail(ctx, instance, srcVFS, srcScanIn)
 		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(ctx, instance, srcVFS, sourceClosure, stmt.CMode, srcScanIn)
 		parsed := make([]IncludeDirective, 0, len(emitsIncludes))
@@ -167,7 +166,6 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 		ccIn.ExtraDepRefs = []NodeRef{cyRef}
 		ccIn.Py3Suffix = !stmt.CMode && !generatedExplicit && py23Variant
 		ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl, d.cythonNumpyBeforeInclude)
-		ccIn.ScanMemo = nil
 		ccIn.CFlags = filterPyRegisterCFlags(ccIn.CFlags)
 		// AddIncl/CFlags feed the module-stable arg blocks — rebuild for this copy.
 		ccIn.CCBlocks = composeCCModuleArgBlocks(instance.Platform, &ccIn)
@@ -179,7 +177,6 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 
 		scanIn := ccIn
 		scanIn.AddIncl = appendCythonScanAddIncl(in.AddIncl, d.cythonAddIncl, py23Variant)
-		scanIn.ScanMemo = nil
 		ccIn.IncludeInputs = walkClosure(ctx, instance, generatedVFS, scanIn)
 
 		ccRef, ccOut, _ := emitCC(instance, generated, generatedVFS, ccIn, ctx.host, ctx.emit)
@@ -283,7 +280,6 @@ func adjustCythonCompanionSourceInputs(p *Platform, d *ModuleData, src string, i
 	}
 
 	in.AddIncl = appendCythonCCAddIncl(in.AddIncl, d.cythonNumpyBeforeInclude)
-	in.ScanMemo = nil
 	in.CFlags = filterPyRegisterCFlags(in.CFlags)
 	// AddIncl/CFlags feed the module-stable arg blocks — rebuild for this copy.
 	in.CCBlocks = composeCCModuleArgBlocks(p, &in)

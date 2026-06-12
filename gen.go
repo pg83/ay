@@ -846,7 +846,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			TC:                d.tc,
 		}
 		headerOnlyInputs.CCBlocks = composeCCModuleArgBlocks(instance.Platform, &headerOnlyInputs)
-		headerOnlyInputs.ScanMemo = &ScanCtxMemo{}
 		_ = emitRunProgramsForAR(ctx, instance, d, headerOnlyInputs)
 		_ = emitRunPythonForAR(ctx, instance, d, headerOnlyInputs)
 
@@ -1707,7 +1706,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		TC:          d.tc,
 	}
 	moduleInputs.CCBlocks = composeCCModuleArgBlocks(instance.Platform, &moduleInputs)
-	moduleInputs.ScanMemo = &ScanCtxMemo{}
 
 	// Pass 1 (codegen-producing srcs: .proto, .ev, .fbs, .rl, .cpp.in, .c.in, .y)
 	// runs BEFORE emitCopyFiles / emitEnumSrcs / emitMiscNodes. Those later
@@ -1908,7 +1906,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		if srcInstance.Platform.ISA == ISAX8664 {
 			jsModuleInputs := moduleInputs
 			jsModuleInputs.PeerAddInclGlobal = rebasePerArchPeerAddIncl(moduleInputs.PeerAddInclGlobal, srcInstance.Platform.ISA, ctx.target.ISA)
-			jsModuleInputs.ScanMemo = nil
 
 			joinClosure = joinSrcsIncludeClosure(ctx, ctx.target, srcInstance, jsSources, jsModuleInputs)
 		}
