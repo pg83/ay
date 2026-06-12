@@ -39,7 +39,12 @@ var swigImplicitDirectives = func() []IncludeDirective {
 }()
 
 type IncludeDirectiveParser interface {
-	parse(rel string, data []byte) ParsedIncludeSet
+	// parse extracts the file's directive buckets. The parser takes its own
+	// block(s) from the arena and commits them itself (alloc hint, fill,
+	// commit the used prefix); a parser embedding another language collects
+	// that language's line chunks, commits its own bucket first, then runs
+	// the other parser over the collected chunks.
+	parse(rel string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet
 	// id is the parser's small stable identity — the second component of the
 	// ambiguous-ext parse-cache key (a file with an unregistered extension
 	// parses under the scan context's parser, so one file may carry one parse
@@ -151,16 +156,33 @@ func directiveParserExt(rel string) string {
 	return rel[idx:]
 }
 
-func (CIncludeDirectiveParser) parse(rel string, data []byte) ParsedIncludeSet {
-	out := parseCIncludes(data)
-
-	out = dedupDirectives(out)
+func (CIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+	block := a.alloc(directiveBlockHint)
+	out := dedupDirectives(block[:parseCIncludes(data, block, 0)])
+	a.commit(len(out))
 
 	if len(out) == 0 {
 		return ParsedIncludeSet{}
 	}
 
-	return ParsedIncludeSet{parsedIncludesLocal: out}
+	return ParsedIncludeSet{parsedIncludesLocal: out[:len(out):len(out)]}
+}
+
+// directiveBlockHint is the block reservation a parser takes from the
+// directive arena: comfortably above the largest RAW (pre-dedup) directive
+// count of any file in the tree (boost's PP iteration files repeat one
+// #include up to 1024x). Overflow throws (addDirective).
+const directiveBlockHint = 1 << 14
+
+// addDirective writes d at block[k] with the overflow guard; returns k+1.
+func addDirective(block []IncludeDirective, k int, d IncludeDirective) int {
+	if k == len(block) {
+		throwFmt("directive block overflowed %d entries — raise directiveBlockHint", len(block))
+	}
+
+	block[k] = d
+
+	return k + 1
 }
 
 // directiveID packs one directive's (kind, target) into a VFS — the same
@@ -191,10 +213,11 @@ func dedupDirectives(out []IncludeDirective) []IncludeDirective {
 	return kept
 }
 
-func (CythonIncludeDirectiveParser) parse(rel string, data []byte) ParsedIncludeSet {
-	out := make([]IncludeDirective, 0, 8)
+func (CythonIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+	block := a.alloc(directiveBlockHint)
+	k := 0
 	add := func(d IncludeDirective) {
-		out = append(out, d)
+		k = addDirective(block, k, d)
 	}
 
 	eachLine(data, func(line []byte) {
@@ -247,13 +270,14 @@ func (CythonIncludeDirectiveParser) parse(rel string, data []byte) ParsedInclude
 		}
 	})
 
-	out = dedupDirectives(out)
+	out := dedupDirectives(block[:k])
+	a.commit(len(out))
 
 	if len(out) == 0 {
 		return ParsedIncludeSet{}
 	}
 
-	return ParsedIncludeSet{parsedIncludesLocal: out}
+	return ParsedIncludeSet{parsedIncludesLocal: out[:len(out):len(out)]}
 }
 
 func cythonPxdTarget(module string) string {
@@ -269,10 +293,11 @@ func cythonPxdTarget(module string) string {
 	}
 }
 
-func (FlatbuffersIncludeDirectiveParser) parse(_ string, data []byte) ParsedIncludeSet {
+func (FlatbuffersIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	data = stripComments(data)
 
-	out := make([]IncludeDirective, 0, 4)
+	block := a.alloc(directiveBlockHint)
+	k := 0
 
 	eachLine(data, func(line []byte) {
 		m := flatbuffersIncludeRe.FindSubmatch(line)
@@ -281,19 +306,21 @@ func (FlatbuffersIncludeDirectiveParser) parse(_ string, data []byte) ParsedIncl
 			return
 		}
 
-		out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(string(m[1]))})
+		k = addDirective(block, k, IncludeDirective{kind: includeQuoted, target: internStr(string(m[1]))})
 	})
 
-	if len(out) == 0 {
+	a.commit(k)
+
+	if k == 0 {
 		return ParsedIncludeSet{}
 	}
 
-	return ParsedIncludeSet{parsedIncludesLocal: out}
+	return ParsedIncludeSet{parsedIncludesLocal: block[:k:k]}
 }
 
-func (ProtoIncludeDirectiveParser) parse(_ string, data []byte) ParsedIncludeSet {
-	local := make([]IncludeDirective, 0, 8)
-	hcpp := make([]IncludeDirective, 0, 8)
+func (ProtoIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+	block := a.alloc(directiveBlockHint)
+	k := 0
 
 	eachLine(data, func(line []byte) {
 		target, kind, ok := parseProtoImportLine(line)
@@ -302,15 +329,29 @@ func (ProtoIncludeDirectiveParser) parse(_ string, data []byte) ParsedIncludeSet
 			return
 		}
 
-		local = append(local, IncludeDirective{kind: kind, target: internStr(target)})
+		k = addDirective(block, k, IncludeDirective{kind: kind, target: internStr(target)})
+	})
+
+	local := block[:k:k]
+	a.commit(k)
+
+	// The induced .pb.h set derives from the committed imports — second block.
+	hblock := a.alloc(directiveBlockHint)
+	j := 0
+
+	for _, d := range local {
+		target := d.target.string()
 
 		switch {
 		case strings.HasSuffix(target, ".ev"):
-			hcpp = append(hcpp, IncludeDirective{kind: kind, target: internStr(strings.TrimSuffix(target, ".ev") + ".ev.pb.h")})
+			j = addDirective(hblock, j, IncludeDirective{kind: d.kind, target: internStr(strings.TrimSuffix(target, ".ev") + ".ev.pb.h")})
 		case strings.HasSuffix(target, ".proto"):
-			hcpp = append(hcpp, IncludeDirective{kind: kind, target: internStr(strings.TrimSuffix(target, ".proto") + ".pb.h")})
+			j = addDirective(hblock, j, IncludeDirective{kind: d.kind, target: internStr(strings.TrimSuffix(target, ".proto") + ".pb.h")})
 		}
-	})
+	}
+
+	hcpp := hblock[:j:j]
+	a.commit(j)
 
 	var set ParsedIncludeSet
 
@@ -325,10 +366,14 @@ func (ProtoIncludeDirectiveParser) parse(_ string, data []byte) ParsedIncludeSet
 	return set
 }
 
-func (RagelIncludeDirectiveParser) parse(rel string, data []byte) ParsedIncludeSet {
-	local := parseCIncludes(data)
+func (RagelIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+	block := a.alloc(directiveBlockHint)
+	local := block[:parseCIncludes(data, block, 0)]
+	local = local[:len(local):len(local)]
+	a.commit(len(local))
 
-	var native []IncludeDirective
+	nblock := a.alloc(directiveBlockHint)
+	nk := 0
 	seenNative := make(map[string]struct{}, 4)
 	inSpecification := false
 
@@ -365,33 +410,57 @@ func (RagelIncludeDirectiveParser) parse(rel string, data []byte) ParsedIncludeS
 		}
 
 		seenNative[target] = struct{}{}
-		native = append(native, IncludeDirective{kind: includeQuoted, target: internStr(target)})
+		nk = addDirective(nblock, nk, IncludeDirective{kind: includeQuoted, target: internStr(target)})
 	})
 
-	var set ParsedIncludeSet
-	set = appendParsedDirectives(set, parsedIncludesLocal, local...)
-	set = appendParsedDirectives(set, parsedIncludesRagelNative, native...)
+	native := nblock[:nk:nk]
+	a.commit(nk)
+
 	// Mirror upstream TRagelIncludeProcessor: a ragel file's WALKABLE edges are
 	// the native %include directives; the C/C++ directives ride as the induced
 	// h+cpp set applied to the generated output (AddParsedIncls("h+cpp")). The
 	// self-include leads so the .rl6 itself stays an input of the consuming
 	// compile.
-	induced := make([]IncludeDirective, 0, 1+len(local))
-	induced = append(induced, IncludeDirective{kind: includeQuoted, target: internStr(rel)})
-	induced = append(induced, local...)
+	iblock := a.alloc(directiveBlockHint)
+	j := addDirective(iblock, 0, IncludeDirective{kind: includeQuoted, target: internStr(rel)})
+
+	for _, d := range local {
+		j = addDirective(iblock, j, d)
+	}
+
+	induced := iblock[:j:j]
+	a.commit(j)
+
+	var set ParsedIncludeSet
+
+	if len(local) > 0 {
+		set[parsedIncludesLocal] = local
+	}
+
+	if len(native) > 0 {
+		set[parsedIncludesRagelNative] = native
+	}
+
 	set[parsedIncludesHeader] = induced
 	set[parsedIncludesCpp] = induced
 
 	return set
 }
 
-func (SwigIncludeDirectiveParser) parse(rel string, data []byte) ParsedIncludeSet {
-	direct := make([]IncludeDirective, 0, 8)
-	induced := make([]IncludeDirective, 0, 4)
+func (SwigIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+	block := a.alloc(directiveBlockHint)
+	k := 0
 	inBlock := false
 
+	// Embedded C lines (#… inside %{ %}) are collected as raw chunks and run
+	// through the C parser AFTER this parser commits its own bucket.
+	var cChunkArr [32][]byte
+	cChunks := cChunkArr[:0]
+
 	if !strings.Contains(rel, "/swig/Lib/") {
-		direct = append(direct, swigImplicitDirectives...)
+		for _, d := range swigImplicitDirectives {
+			k = addDirective(block, k, d)
+		}
 	}
 
 	eachLine(data, func(line []byte) {
@@ -405,7 +474,7 @@ func (SwigIncludeDirectiveParser) parse(rel string, data []byte) ParsedIncludeSe
 			target, kind, ok := parseSwigIncludeLine(trimmed)
 
 			if ok {
-				direct = append(direct, IncludeDirective{kind: kind, target: internStr(target)})
+				k = addDirective(block, k, IncludeDirective{kind: kind, target: internStr(target)})
 			}
 		}
 
@@ -414,7 +483,7 @@ func (SwigIncludeDirectiveParser) parse(rel string, data []byte) ParsedIncludeSe
 		}
 
 		if inBlock && strings.HasPrefix(trimmed, "#") {
-			induced = append(induced, parseCIncludes([]byte(trimmed+"\n"))...)
+			cChunks = append(cChunks, []byte(trimmed))
 		}
 
 		if strings.HasSuffix(trimmed, "%}") {
@@ -422,30 +491,50 @@ func (SwigIncludeDirectiveParser) parse(rel string, data []byte) ParsedIncludeSe
 		}
 	})
 
+	direct := block[:k:k]
+	a.commit(k)
+
+	iblock := a.alloc(directiveBlockHint)
+	j := 0
+
+	for _, chunk := range cChunks {
+		j = parseCIncludes(chunk, iblock, j)
+	}
+
+	induced := iblock[:j:j]
+	a.commit(j)
+
 	var set ParsedIncludeSet
-	set = appendParsedDirectives(set, parsedIncludesLocal, direct...)
+
+	if len(direct) > 0 {
+		set[parsedIncludesLocal] = direct
+	}
+
 	set[parsedIncludesHeader] = induced
 	set[parsedIncludesCpp] = induced
 
 	return set
 }
 
-func (YasmIncludeDirectiveParser) parse(_ string, data []byte) ParsedIncludeSet {
-	out := parseYasmIncludes(data)
+func (YasmIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+	block := a.alloc(directiveBlockHint)
+	k := parseYasmIncludes(data, block, 0)
+	a.commit(k)
 
-	if len(out) == 0 {
+	if k == 0 {
 		return ParsedIncludeSet{}
 	}
 
-	return ParsedIncludeSet{parsedIncludesLocal: out}
+	return ParsedIncludeSet{parsedIncludesLocal: block[:k:k]}
 }
 
-func (EmptyIncludeDirectiveParser) parse(_ string, _ []byte) ParsedIncludeSet {
+func (EmptyIncludeDirectiveParser) parse(_ string, _ []byte, _ *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	return ParsedIncludeSet{}
 }
 
-func parseCIncludes(data []byte) []IncludeDirective {
-	out := make([]IncludeDirective, 0, 8)
+// parseCIncludes fills block from k with data's C include directives and
+// returns the new k — the caller owns the block (and its commit).
+func parseCIncludes(data []byte, block []IncludeDirective, k int) int {
 	n := len(data)
 	p := 0
 	clean := 0
@@ -480,13 +569,13 @@ func parseCIncludes(data []byte) []IncludeDirective {
 		d, ok, next := parseDirectiveInline(data, hi)
 
 		if ok {
-			out = append(out, d)
+			k = addDirective(block, k, d)
 		}
 
 		p, clean = next, next
 	}
 
-	return out
+	return k
 }
 
 func parseDirectiveInline(data []byte, hashPos int) (IncludeDirective, bool, int) {
@@ -699,9 +788,7 @@ func hasYIgnoreComment(data []byte, i int) bool {
 	return bytesHasPrefixAt(data, i, "Y_IGNORE")
 }
 
-func parseYasmIncludes(data []byte) []IncludeDirective {
-	out := make([]IncludeDirective, 0, 4)
-
+func parseYasmIncludes(data []byte, block []IncludeDirective, k int) int {
 	eachLine(data, func(line []byte) {
 		if bytes.IndexByte(line, '%') < 0 {
 			return
@@ -721,11 +808,10 @@ func parseYasmIncludes(data []byte) []IncludeDirective {
 			kind = includeQuoted
 		}
 
-		target := string(line[m[2]:m[3]])
-		out = append(out, IncludeDirective{kind: kind, target: internStr(target)})
+		k = addDirective(block, k, IncludeDirective{kind: kind, target: internStr(string(line[m[2]:m[3]]))})
 	})
 
-	return out
+	return k
 }
 
 func parseProtoImportLine(line []byte) (string, IncludeKind, bool) {

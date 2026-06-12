@@ -31,7 +31,7 @@ func bisonCppHeaderParsed(srcVFS VFS) []IncludeDirective {
 	)
 	parsed = append(parsed, bisonCppSkeletonDirectives...)
 
-	return dedupDirectives(parsed)
+	return parsed
 }
 
 func bisonGeneratedCPPParsed(ctx *GenCtx, instance ModuleInstance, srcVFS, headerVFS VFS) []IncludeDirective {
@@ -44,7 +44,7 @@ func bisonGeneratedCPPParsed(ctx *GenCtx, instance ModuleInstance, srcVFS, heade
 		parsed = append(parsed, scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
 	}
 
-	return dedupDirectives(parsed)
+	return parsed
 }
 
 func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCCInputs, genExt string) *SourceEmit {
@@ -66,7 +66,7 @@ func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		headerParsed = append(headerParsed, scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
 	}
 
-	registerGeneratedParsedOutput(ctx, instance, pkYC, headerVFS, dedupDirectives(headerParsed), []NodeRef{bisonRef, m4Ref})
+	registerGeneratedParsedOutput(ctx, instance, pkYC, headerVFS, headerParsed, []NodeRef{bisonRef, m4Ref})
 
 	if preprocessHeader {
 		if reg := codegenRegForInstance(ctx, instance); reg != nil {

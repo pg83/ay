@@ -60,6 +60,11 @@ type SharedParseCache struct {
 	// legitimately carry one result per parser (.i under swig vs under C).
 	ambiguous map[uint64]ParsedIncludeSet
 
+	// directives is the arena behind every retained parse result: a parser
+	// reserves a block (directiveBlockHint), fills it in place and commits the
+	// used prefix; the cached sets below hold its address-stable sub-slices.
+	directives *BumpAllocator[IncludeDirective]
+
 	// parsed is keyed by the source file's STR (vfsPath.strID()): a parsed source
 	// is always Source-rooted (VFS == STR<<1), so the STR is lossless and halves
 	// DenseMap's idx array versus the 2x-wider VFS space. A present slot with an
@@ -73,7 +78,10 @@ type SharedParseCache struct {
 }
 
 func newSharedParseCache() *SharedParseCache {
-	return &SharedParseCache{ambiguous: make(map[uint64]ParsedIncludeSet, 16)}
+	return &SharedParseCache{
+		ambiguous:  make(map[uint64]ParsedIncludeSet, 16),
+		directives: newBumpAllocator[IncludeDirective](directiveBlockHint),
+	}
 }
 
 type IncludeParserManager struct {
@@ -152,7 +160,7 @@ func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser Inclu
 		data = data[3:]
 	}
 
-	out := parser.parse(rel, data)
+	out := parser.parse(rel, data, pm.cache.directives)
 	out = pm.withCythonSibling(rel, out)
 
 	return put(out)

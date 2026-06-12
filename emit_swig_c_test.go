@@ -8,7 +8,7 @@ import (
 func TestSwigParser_ImplicitIncludesOnRootSwg(t *testing.T) {
 	// A root .swg outside the swig library carries the implicit language
 	// runtimes as its own system directives (upstream AddImplicitIncludes).
-	set := SwigIncludeDirectiveParser{}.parse("mod/src.swg", []byte("%include \"local.i\"\n"))
+	set := SwigIncludeDirectiveParser{}.parse("mod/src.swg", []byte("%include \"local.i\"\n"), newBumpAllocator[IncludeDirective](directiveBlockHint))
 	local := set.bucket(parsedIncludesLocal)
 
 	want := []string{"swig.swg", "go.swg", "java.swg", "perl5.swg", "python.swg", "local.i"}
@@ -23,7 +23,7 @@ func TestSwigParser_ImplicitIncludesOnRootSwg(t *testing.T) {
 	}
 
 	// Library files get no implicit prefix.
-	libSet := SwigIncludeDirectiveParser{}.parse("contrib/tools/swig/Lib/python/python.swg", []byte("%include \"pyrun.swg\"\n"))
+	libSet := SwigIncludeDirectiveParser{}.parse("contrib/tools/swig/Lib/python/python.swg", []byte("%include \"pyrun.swg\"\n"), newBumpAllocator[IncludeDirective](directiveBlockHint))
 
 	if got := len(libSet.bucket(parsedIncludesLocal)); got != 1 {
 		t.Fatalf("Lib .swg directives = %d, want 1 (no implicit prefix)", got)

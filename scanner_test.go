@@ -499,7 +499,8 @@ some_label:
     mov rax, 0
 `)
 
-	dirs := parseYasmIncludes(in)
+	dblock := make([]IncludeDirective, 64)
+	dirs := dblock[:parseYasmIncludes(in, dblock, 0)]
 
 	if len(dirs) != 1 {
 		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
@@ -518,7 +519,8 @@ func TestParseYasmIncludes_UppercaseDirective(t *testing.T) {
 	in := []byte(`%INCLUDE "randomah.asi"
 `)
 
-	dirs := parseYasmIncludes(in)
+	dblock := make([]IncludeDirective, 64)
+	dirs := dblock[:parseYasmIncludes(in, dblock, 0)]
 
 	if len(dirs) != 1 {
 		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
@@ -538,7 +540,8 @@ func TestParseYasmIncludes_LineCommentIgnored(t *testing.T) {
 %include "real.asm"
 `)
 
-	dirs := parseYasmIncludes(in)
+	dblock := make([]IncludeDirective, 64)
+	dirs := dblock[:parseYasmIncludes(in, dblock, 0)]
 
 	if len(dirs) != 1 {
 		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
@@ -553,7 +556,8 @@ func TestParseYasmIncludes_TrailingSemicolonComment(t *testing.T) {
 	in := []byte(`%include "instrset64.asm"              ; include code for InstructionSet function
 `)
 
-	dirs := parseYasmIncludes(in)
+	dblock := make([]IncludeDirective, 64)
+	dirs := dblock[:parseYasmIncludes(in, dblock, 0)]
 
 	if len(dirs) != 1 {
 		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
@@ -568,7 +572,8 @@ func TestParseYasmIncludes_NoMatchOnCInclude(t *testing.T) {
 	in := []byte(`#include "foo.h"
 `)
 
-	dirs := parseYasmIncludes(in)
+	dblock := make([]IncludeDirective, 64)
+	dirs := dblock[:parseYasmIncludes(in, dblock, 0)]
 
 	if len(dirs) != 0 {
 		t.Errorf("got %d directives, want 0; %+v", len(dirs), dirs)
@@ -579,7 +584,8 @@ func TestParseYasmIncludes_AngleBracketForm(t *testing.T) {
 	in := []byte(`%include <sysmacros.asi>
 `)
 
-	dirs := parseYasmIncludes(in)
+	dblock := make([]IncludeDirective, 64)
+	dirs := dblock[:parseYasmIncludes(in, dblock, 0)]
 
 	if len(dirs) != 1 {
 		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
