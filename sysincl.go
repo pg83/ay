@@ -173,10 +173,11 @@ func loadSysInclDir(fs FS, dir string, onWarn func(Warn)) SysInclSet {
 		return nil
 	}
 
-	names := make([]string, 0, len(fs.listdir(source(dir))))
+	view := fs.listdir(source(dir))
+	names := make([]string, 0, len(view.names))
 
-	for name := range fs.listdir(source(dir)) {
-		if strings.HasSuffix(name, ".yml") {
+	for _, packed := range view.names {
+		if name := STR(packed >> 1).string(); strings.HasSuffix(name, ".yml") {
 			names = append(names, name)
 		}
 	}

@@ -67,9 +67,10 @@ func (fs *OsFS) readFileRel(rel string, buf []byte) []byte {
 	return readFileInto(fs.rootSlash+rel, buf)
 }
 
-// readDirMapRel is the portable fallback: os.ReadDir already returns the full,
-// right-sized entry list.
-func (fs *OsFS) readDirMapRel(rel string) (map[string]bool, bool) {
+// readDirViewRel is the portable fallback: os.ReadDir already returns the
+// full entry list; names intern and pack into the shared store like the linux
+// arm.
+func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 	full := fs.rootSlash + rel
 
 	if rel == "" {
@@ -79,18 +80,28 @@ func (fs *OsFS) readDirMapRel(rel string) (map[string]bool, bool) {
 	entries, err := os.ReadDir(full)
 
 	if err != nil {
-		return nil, false
+		return DirView{}
 	}
 
 	if len(entries) == 0 {
-		return emptyDirEntries, true
+		return DirView{dir: dir, names: emptyDirNames}
 	}
 
-	out := make(map[string]bool, len(entries))
+	block := fs.dirNames.alloc(len(entries))
 
-	for _, e := range entries {
-		out[e.Name()] = e.IsDir()
+	for i, e := range entries {
+		id := internStr(e.Name())
+		packed := uint32(id) << 1
+
+		if e.IsDir() {
+			packed |= 1
+		}
+
+		block[i] = packed
+		fs.dirEntries.put(splitMix64(uint32(dir), uint32(id)), e.IsDir())
 	}
 
-	return out, true
+	fs.dirNames.commit(len(entries))
+
+	return DirView{dir: dir, names: block[:len(entries):len(entries)]}
 }
