@@ -879,9 +879,9 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 	normTarget := normalisePath(target)
 
 	addSource := func(prefix VFS) bool {
-		v, ok := s.resolveSourceUnder(prefix, target)
+		v := s.resolveSourceUnder(prefix, target)
 
-		if !ok {
+		if v == 0 {
 			return false
 		}
 
@@ -1108,10 +1108,9 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 		if p := s.sourceUnderCache.get(suKey); p != nil {
 			sv = *p
 		} else {
-			if v, ok := s.resolveSourceUnder(incDir, d.target.string()); ok {
-				sv = v
-			}
-
+			// 0 is the shared "does not resolve" sentinel — the probe's miss
+			// value caches directly.
+			sv = s.resolveSourceUnder(incDir, d.target.string())
 			s.sourceUnderCache.put(suKey, sv)
 		}
 
@@ -1221,21 +1220,22 @@ func normalisePath(p string) string {
 	return strings.Join(out, "/")
 }
 
-func (s *IncludeScanner) resolveSourceUnder(prefix VFS, target string) (VFS, bool) {
+// resolveSourceUnder resolves target relative to prefix; 0 means "no such file".
+func (s *IncludeScanner) resolveSourceUnder(prefix VFS, target string) VFS {
 	// IsFile(prefix, target) is exactly the gating this used to hand-roll
 	// (firstComponent + Listdir(prefix), then the deep check) — but keyed off the
 	// already-interned prefix VFS, so it skips the Listdir(srcRoot) + re-gating the
 	// prefix's own components that IsFile(srcRootVFS, joinRel(...)) did from the root.
 	if !s.parsers.fs.isFile(prefix, target) {
-		return 0, false
+		return 0
 	}
 
 	// A clean target joins in the scratch buffer — no concat, no normalise.
 	if target != "" && pathIsClean(target) {
-		return sourceJoined(prefix.rel(), target), true
+		return sourceJoined(prefix.rel(), target)
 	}
 
-	return source(normalisePath(joinRel(prefix.rel(), target))), true
+	return source(normalisePath(joinRel(prefix.rel(), target)))
 }
 
 func canRelFilter(first, target string) bool {

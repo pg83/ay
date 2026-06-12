@@ -224,17 +224,17 @@ func (e Environment) hasBindingID(id ENV) bool {
 // whether name is interned at all, so a ${VAR} token that is not a known env
 // var is reported unbound without being interned.
 func (e Environment) hasBinding(name string) bool {
-	id, ok := internedEnv(name)
+	id := internedEnv(name)
 
-	return ok && e.hasBindingID(id)
+	return id != 0 && e.hasBindingID(id)
 }
 
 // Lookup returns name's bound value and whether it is bound, without interning
 // name (same non-polluting rationale as HasBinding).
 func (e Environment) lookup(name string) (string, bool) {
-	id, ok := internedEnv(name)
+	id := internedEnv(name)
 
-	if !ok {
+	if id == 0 {
 		return "", false
 	}
 
