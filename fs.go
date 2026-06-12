@@ -1,9 +1,6 @@
 package main
 
 import (
-	"path"
-	"strings"
-
 	"github.com/zeebo/xxh3"
 )
 
