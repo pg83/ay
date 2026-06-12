@@ -174,13 +174,6 @@ func (CIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator[I
 // #include up to 1024x). Overflow throws (addDirective).
 const directiveBlockHint = 1 << 14
 
-// directiveID packs one directive's (kind, target) into a VFS — the same
-// STR<<1|bit shape — so identical directives dedup through the global VFS deduper
-// by a plain cast, no separate set.
-func directiveID(d IncludeDirective) VFS {
-	return VFS(uint32(d.target)<<1 | uint32(d.kind))
-}
-
 // addDirective writes d at block[k] with the overflow guard; returns k+1.
 func addDirective(block []IncludeDirective, k int, d IncludeDirective) int {
 	if k == len(block) {

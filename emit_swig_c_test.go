@@ -29,7 +29,7 @@ func TestSwigParser_ImplicitIncludesOnRootSwg(t *testing.T) {
 		t.Fatalf("Lib .swg directives = %d, want 1 (no implicit prefix)", got)
 	}
 }
-func TestCollectSwigInducedIncludes_DedupsAcrossClosure(t *testing.T) {
+func TestCollectSwigInducedIncludes_UnionAcrossClosure(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"mod/src.swg": `%include "local.i"
 %{
@@ -59,10 +59,13 @@ func TestCollectSwigInducedIncludes_DedupsAcrossClosure(t *testing.T) {
 	// walk has parsed them (here the parse-cache warms on first read).
 	closure := []VFS{intern("$(S)/mod/local.i"), intern("$(S)/mod/nested.i")}
 	got := collectSwigInducedIncludes(ctx, intern("$(S)/mod/src.swg"), closure)
+	// Raw union, root first then closure order; cross-file repeats stay (the
+	// consumer-side resolve caches and closure dedup absorb them).
 	want := []IncludeDirective{
 		{kind: includeSystem, target: internStr("Python.h")},
 		{kind: includeQuoted, target: internStr("archive.h")},
 		{kind: includeSystem, target: internStr("jni.h")},
+		{kind: includeSystem, target: internStr("Python.h")},
 		{kind: includeQuoted, target: internStr("archive_entry.h")},
 	}
 
