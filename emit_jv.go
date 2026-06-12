@@ -114,7 +114,7 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs InputChunks, outp
 		}(),
 		Requirements:  Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:       depRefs,
-		usesResources: []string{resourcePatternYMakePython3, resourcePatternJDK17},
+		usesResources: usesPython3JDK17,
 	}
 
 	return emit.emit(node)

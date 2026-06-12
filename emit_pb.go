@@ -205,7 +205,7 @@ func emitPB(
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          depRefs,
 		ForeignDepRefs:   foreignDepRefs,
-		usesResources:    []string{resourcePatternYMakePython3},
+		usesResources:    usesPython3,
 	}
 
 	return emit.emit(node)

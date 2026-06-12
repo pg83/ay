@@ -72,7 +72,7 @@ type Node struct {
 	// LLD_ROOT, …) whose tool the node's command invokes via $(B)/resources/<NAME>.
 	// Builders set it in the &Node{} literal alongside that tool path; the resource
 	// emitter turns each into a dependency on that resource's FETCH node.
-	usesResources []string `json:"-"`
+	usesResources []STR `json:"-"`
 }
 
 func nodeHasHostTag(tags []STR) bool {

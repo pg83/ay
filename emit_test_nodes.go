@@ -69,7 +69,7 @@ func buildTestCtxNode(p *Platform) *Node {
 		Outputs:          []VFS{bldCommonTestContext},
 		Requirements:     Requirements{Network: nwRestricted},
 		TargetProperties: TargetProperties{},
-		usesResources:    []string{resourcePatternYMakePython3},
+		usesResources:    usesPython3,
 	}
 }
 

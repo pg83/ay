@@ -7,13 +7,11 @@ package main
 // through ctx.fetchRefs); every consumer that splices $(<Name>) into a command
 // takes the fetch as a dependency from there.
 func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
-	name := decl.Name.string()
-
-	if ref, ok := ctx.fetchRefs[name]; ok {
+	if ref, ok := ctx.fetchRefs.get(decl.Name); ok {
 		return ref
 	}
 
-	output := build("resources/" + name)
+	output := build("resources/" + decl.Name.string())
 	node := &Node{
 		Platform: ctx.host,
 		Cmds: []Cmd{{
@@ -40,7 +38,7 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 	node.SelfUID = node.UID
 
 	ref := ctx.emit.emit(node)
-	ctx.fetchRefs[name] = ref
+	ctx.fetchRefs.put(decl.Name, ref)
 
 	return ref
 }

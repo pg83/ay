@@ -39,10 +39,10 @@ type ResourceAwareEmitter struct {
 	inner     Emitter
 	host      *Platform
 	scripts   ScriptDeps
-	fetchRefs map[string]NodeRef
+	fetchRefs *DenseMap[STR, NodeRef]
 }
 
-func newResourceAwareEmitter(host *Platform, inner Emitter, scripts ScriptDeps, fetchRefs map[string]NodeRef) Emitter {
+func newResourceAwareEmitter(host *Platform, inner Emitter, scripts ScriptDeps, fetchRefs *DenseMap[STR, NodeRef]) Emitter {
 	return &ResourceAwareEmitter{
 		inner:     inner,
 		host:      host,
@@ -74,7 +74,7 @@ func (e *ResourceAwareEmitter) onReady(r NodeRef) <-chan struct{} {
 // RESOURCES_LIBRARY peer was not in the closure, so it is skipped.
 func (e *ResourceAwareEmitter) attachResourceDeps(n *Node) {
 	for _, pat := range n.usesResources {
-		if ref, ok := e.fetchRefs[pat]; ok {
+		if ref, ok := e.fetchRefs.get(pat); ok {
 			n.DepRefs = append(n.DepRefs, ref)
 		}
 	}

@@ -116,8 +116,13 @@ type Platform struct {
 	// CCUsesResources is the fetched-resource list every CC node on this platform
 	// carries in Node.usesResources: the version-specific CLANG, plus YMAKE_PYTHON3 when
 	// the wrapcc.py wrapper is active (it runs under that python). Computed once per
-	// platform and shared read-only across CC nodes.
-	CCUsesResources []string
+	// platform and shared read-only across CC nodes. The sibling vectors cover the
+	// other per-platform resource sets the emitters attach (python3+clang for
+	// script-driven tool nodes, the link set, bare clang for AS).
+	CCUsesResources   []STR
+	UsesPython3Clang  []STR
+	UsesLinkResources []STR
+	UsesClangOnly     []STR
 
 	// ToolEnvVars is the shared tool environment every CC/codegen node on this
 	// platform carries (read-only; toolEnv() hands it out by reference).
@@ -241,11 +246,16 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, 
 	p.MultiarchLibPathSTR = internStr(p.multiarchLibPath(flags["OPENSOURCE"] == "yes"))
 	p.WrapccHead, p.WrapccTail = wrapccPrefixFor(flags)
 
-	p.CCUsesResources = []string{resourcePatternClangTool + p.ClangVer}
+	clangRes := internStr(resourcePatternClangTool + p.ClangVer)
+	p.CCUsesResources = []STR{clangRes}
 
 	if len(p.WrapccHead) > 0 {
-		p.CCUsesResources = append(p.CCUsesResources, resourcePatternYMakePython3)
+		p.CCUsesResources = append(p.CCUsesResources, strYMakePython3Name)
 	}
+
+	p.UsesPython3Clang = []STR{strYMakePython3Name, clangRes}
+	p.UsesLinkResources = []STR{clangRes, strLLDRootName, strYMakePython3Name}
+	p.UsesClangOnly = []STR{clangRes}
 
 	p.SysrootArgs = sysrootArgsFor(os, flags)
 

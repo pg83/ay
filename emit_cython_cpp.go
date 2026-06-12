@@ -158,7 +158,7 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 			KV:               KV{P: pkCY, PC: pcYellow},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			TargetProperties: targetProps,
-			usesResources:    []string{resourcePatternYMakePython3},
+			usesResources:    usesPython3,
 		})
 		bindGeneratedOutput(ctx, instance, generatedVFS, cyRef)
 
