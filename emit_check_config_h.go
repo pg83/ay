@@ -46,7 +46,7 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 				KV:               KV{P: pkCH, PC: pcYellow},
 				Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 				TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-				usesResources:    []string{resourcePatternYMakePython3},
+				usesResources:    usesPython3,
 			})
 			ctx.checkConfigOutputs[generatedVFS] = chRef
 		}

@@ -229,7 +229,7 @@ func emitResourceObjcopy(
 			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 			TargetProperties: resTargetProps,
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
+			usesResources:    instance.Platform.UsesPython3Clang,
 		}
 
 		if oc.rescompilerLDRef != (NodeRef(0)) {
@@ -395,7 +395,7 @@ func emitKvOnlyObjcopyNode(
 		KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 		TargetProperties: targetProps,
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
+		usesResources:    instance.Platform.UsesPython3Clang,
 	}
 
 	if oc.rescompilerLDRef != (NodeRef(0)) {
@@ -483,7 +483,7 @@ func emitYaConfJSONObjcopy(
 			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
+			usesResources:    instance.Platform.UsesPython3Clang,
 		}
 
 		if oc.rescompilerLDRef != (NodeRef(0)) {
@@ -693,7 +693,7 @@ func emitPySrcObjcopy(
 				KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 				TargetProperties: targetProps,
 				Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-				usesResources:    []string{resourcePatternYMakePython3, resourcePatternClangTool + instance.Platform.ClangVer},
+				usesResources:    instance.Platform.UsesPython3Clang,
 			}
 
 			if oc.rescompilerLDRef != (NodeRef(0)) {

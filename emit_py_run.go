@@ -530,7 +530,7 @@ func emitPYRun(
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          extraDepRefs,
-		usesResources:    []string{resourcePatternYMakePython3},
+		usesResources:    usesPython3,
 	}
 
 	// The node and the result share the same chunk list: nothing mutates a

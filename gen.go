@@ -297,7 +297,7 @@ type GenCtx struct {
 	// node, emitted once when the declaring RESOURCES_LIBRARY is gen'd
 	// (emitResourceFetch). Consumers that reference $(NAME) take the dep from here.
 	// Shared with the resource-aware emitter so attachResourceDeps resolves it.
-	fetchRefs map[string]NodeRef
+	fetchRefs *DenseMap[STR, NodeRef]
 
 	host   *Platform
 	target *Platform
@@ -451,7 +451,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	// Shared across the genCtx (producer: emitResourceFetch) and the resource-aware
 	// emitter (consumer: attachResourceDeps) so a $(<NAME>) reference resolves to the
 	// fetch node emitted when its declaring RESOURCES_LIBRARY was gen'd.
-	fetchRefs := map[string]NodeRef{}
+	fetchRefs := &DenseMap[STR, NodeRef]{}
 	resourceEmit := newResourceAwareEmitter(hostP, plainEmit, scriptTbl, fetchRefs)
 
 	// Mix $(S) input content hashes into node uids in every mode so a source edit

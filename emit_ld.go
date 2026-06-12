@@ -163,7 +163,7 @@ func emitLD(
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: binaryDir, ModuleLang: ldModuleLang(instance), ModuleType: mtBin},
 		DepRefs:          depRefs,
-		usesResources:    []string{resourcePatternClangTool + instance.Platform.ClangVer, resourcePatternLLDRoot, resourcePatternYMakePython3},
+		usesResources:    instance.Platform.UsesLinkResources,
 	}
 
 	if programModuleTag != 0 {
