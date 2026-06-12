@@ -39,13 +39,14 @@ var runProgramKeywords = strKeySet(
 	"TOOL",
 )
 
-// strKeySet interns a keyword list into an STR-keyed membership set — the
-// parser's argument tokens are STR ids, so keyword checks stay in id space.
-func strKeySet(words ...string) map[STR]bool {
-	out := make(map[STR]bool, len(words))
+// strKeySet interns a keyword list into a BitSet over the STR ids — the
+// parser's argument tokens are STR ids and the kw constants intern first at
+// init (tiny ids), so a membership check is one bit probe, no map.
+func strKeySet(words ...string) BitSet {
+	var out BitSet
 
 	for _, w := range words {
-		out[internStr(w)] = true
+		out.add(uint32(internStr(w)))
 	}
 
 	return out
@@ -1208,7 +1209,7 @@ func parseRunAntlr(args []STR, nameTok Token) *RunAntlrStmt {
 	for i := 0; i < len(args); i++ {
 		tok := args[i]
 
-		if runAntlrKeywords[tok] {
+		if runAntlrKeywords.has(uint32(tok)) {
 			currentSection = tok
 
 			continue
@@ -1255,7 +1256,7 @@ func parseRunProgram(args []STR, line int) *RunProgramStmt {
 	for i < len(args) {
 		tok := args[i]
 
-		if runProgramKeywords[tok] {
+		if runProgramKeywords.has(uint32(tok)) {
 			currentSection = tok
 			i++
 
@@ -1301,7 +1302,7 @@ func parseRunPython(args []STR, line int) *RunPythonStmt {
 	for i < len(args) {
 		tok := args[i]
 
-		if runProgramKeywords[tok] {
+		if runProgramKeywords.has(uint32(tok)) {
 			currentSection = tok
 			i++
 
