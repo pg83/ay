@@ -53,7 +53,7 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 		inputs := InputChunks{{bldContribToolsSwigSwig, srcVFS}, swigClosure}
 
 		cmdArgs := ArgChunks{
-			{internStr(swigBin)},
+			{swigBin.str()},
 			swigConstArgs,
 			{
 				internStr(swigModuleName(stmt.Module)),
@@ -98,7 +98,7 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 		incl = append(incl, cClosure...)
 		incl = append(incl, swigClosure...)
 		incl = append(incl, srcVFS)
-		ccIn.IncludeInputs = swigFilterExistingSources(ctx.fs, dedupVFS(incl))
+		ccIn.IncludeInputs = dedupVFS(incl)
 
 		ccRef, ccOut, _ := emitCC(instance, cOutRel, cOutVFS, ccIn, ctx.host, ctx.emit)
 		out = append(out, &SourceEmit{Ref: ccRef, OutPath: ccOut})
@@ -107,10 +107,8 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 	return out
 }
 
-func swigTool(ctx *GenCtx, instance ModuleInstance) (NodeRef, string) {
-	ref, bin := ctx.tool(argContribToolsSwig)
-
-	return ref, bin.string()
+func swigTool(ctx *GenCtx, instance ModuleInstance) (NodeRef, VFS) {
+	return ctx.tool(argContribToolsSwig)
 }
 
 func swigOutputPrefix(src, module string) string {
@@ -147,65 +145,6 @@ func collectSwigInducedIncludes(ctx *GenCtx, src VFS, closure []VFS) []IncludeDi
 
 	for _, v := range closure {
 		add(v)
-	}
-
-	return out
-}
-
-func swigResolveCandidates(fs FS, target, incRel string, roots []string) []string {
-	if fs == nil {
-		return nil
-	}
-
-	seen := map[string]struct{}{}
-	out := make([]string, 0, 1+len(roots))
-	add := func(rel string) {
-		rel = cleanRel(filepath.ToSlash(filepath.Clean(rel)))
-
-		if rel == "" || !fs.isFile(srcRootVFS, rel) {
-			return
-		}
-
-		if _, ok := seen[rel]; ok {
-			return
-		}
-
-		seen[rel] = struct{}{}
-		out = append(out, rel)
-	}
-
-	dir := filepath.ToSlash(filepath.Dir(incRel))
-
-	if dir == "." {
-		dir = ""
-	}
-
-	if dir != "" {
-		add(dir + "/" + target)
-	} else {
-		add(target)
-	}
-
-	for _, root := range roots {
-		add(root + "/" + target)
-	}
-
-	return out
-}
-
-func swigFilterExistingSources(fs FS, in []VFS) []VFS {
-	if fs == nil {
-		return in
-	}
-
-	out := make([]VFS, 0, len(in))
-
-	for _, v := range in {
-		if v.isSource() && !fs.isFile(srcRootVFS, v.rel()) {
-			continue
-		}
-
-		out = append(out, v)
 	}
 
 	return out
