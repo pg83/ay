@@ -144,16 +144,27 @@ func walkClosure(ctx *GenCtx, srcInstance ModuleInstance, vfsPath VFS, in Module
 		rootParser = includeDirectiveParsers.registeredParserFor(vfsPath.rel())
 	}
 
-	cfg := ScanContext{
-		RootParser: rootParser,
+	var sc *ScanCtx
 
-		OwnAddIncl:      in.AddIncl,
-		PeerAddInclSet:  in.PeerAddInclGlobal,
-		BaseSearchPaths: includeScannerBasePaths(),
-		OwnerModuleDir:  srcInstance.Path.rel(),
+	if m := in.ScanMemo; m != nil && m.sc != nil && m.scanner == scanner && m.parser == rootParser {
+		sc = m.sc
+	} else {
+		cfg := ScanContext{
+			RootParser: rootParser,
+
+			OwnAddIncl:      in.AddIncl,
+			PeerAddInclSet:  in.PeerAddInclGlobal,
+			BaseSearchPaths: includeScannerBasePaths(),
+			OwnerModuleDir:  srcInstance.Path.rel(),
+		}
+
+		sc = scanner.newScanCtx(cfg)
+
+		if m != nil {
+			m.scanner, m.parser, m.sc = scanner, rootParser, sc
+		}
 	}
 
-	sc := scanner.newScanCtx(cfg)
 	scanner.walkClosureCalls++
 
 	return sc.closureOf(vfsPath)

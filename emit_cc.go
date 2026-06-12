@@ -9,6 +9,17 @@ var (
 	argDashBBin = internStr("-B" + binPath)
 )
 
+// ScanCtxMemo caches the module-wide ScanCtx across walkClosure calls: every
+// value copy of the module's ModuleCCInputs shares the holder, so the first
+// walk resolves the scan config (hash + map probe + index build) and the rest
+// reuse it. Keyed by (scanner, root parser) — a copy that mutates the
+// resolve-relevant fields (AddIncl / PeerAddInclGlobal) must drop the memo.
+type ScanCtxMemo struct {
+	scanner *IncludeScanner
+	parser  IncludeDirectiveParser
+	sc      *ScanCtx
+}
+
 type ModuleCCInputs struct {
 	Flags   FlagSet
 	AddIncl []VFS
@@ -101,6 +112,9 @@ type ModuleCCInputs struct {
 	// closure (d.tc). Threaded so every CC/codegen emitter takes its compiler / python /
 	// objcopy from the peer toolchain rather than ambient platform flags.
 	TC ModuleToolchain
+
+	// ScanMemo — see ScanCtxMemo. nil disables the reuse (ad-hoc walk inputs).
+	ScanMemo *ScanCtxMemo
 }
 
 func emitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS, InputChunks) {
