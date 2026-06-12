@@ -11,7 +11,7 @@ import (
 // fs_read_linux.go): os.Open + (*os.File).Read, sizing the buffer from f.Stat()
 // when available so the common case is a single exact-size read.
 func readFileInto(path string, buf []byte) []byte {
-	f := Throw2(os.Open(path))
+	f := throw2(os.Open(path))
 
 	defer f.Close()
 
@@ -33,7 +33,7 @@ func readFileInto(path string, buf []byte) []byte {
 					return buf
 				}
 
-				Throw(err)
+				throw(err)
 			}
 		}
 
@@ -53,7 +53,26 @@ func readFileInto(path string, buf []byte) []byte {
 				return buf
 			}
 
-			Throw(err)
+			throw(err)
 		}
 	}
+}
+
+// readDirMap is the portable fallback: os.ReadDir already returns the full,
+// right-sized entry list. buf is unused here (the linux arm's reused dirent
+// block).
+func readDirMap(full string, _ *[]byte) (map[string]bool, bool) {
+	entries, err := os.ReadDir(full)
+
+	if err != nil {
+		return nil, false
+	}
+
+	out := make(map[string]bool, len(entries))
+
+	for _, e := range entries {
+		out[e.Name()] = e.IsDir()
+	}
+
+	return out, true
 }
