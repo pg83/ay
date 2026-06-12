@@ -3,7 +3,6 @@ package main
 import (
 	"path"
 	"strings"
-	"syscall"
 
 	"github.com/zeebo/xxh3"
 )
@@ -157,38 +156,13 @@ func (fs *OsFS) listdir(dir VFS) map[string]bool {
 		full = fs.srcRoot
 	}
 
-	// One raw getdents64 stream into the reused block, parsed twice: count
-	// (to right-size the map in one allocation), then fill. Per entry only
-	// the map-key string is allocated.
-	n, ok := readDirAll(full, &fs.direntBuf)
+	out, ok := readDirMap(full, &fs.direntBuf)
 
 	if !ok {
 		fs.dirs.put(key, nil)
 
 		return nil
 	}
-
-	ents := fs.direntBuf[:n]
-	count := 0
-	forEachDirent(ents, func([]byte, byte) {
-		count++
-	})
-
-	out := make(map[string]bool, count)
-	forEachDirent(ents, func(name []byte, typ byte) {
-		isDir := typ == syscall.DT_DIR
-
-		if typ == syscall.DT_UNKNOWN {
-			// Filesystems without d_type (rare): lstat, like os's dirent layer.
-			var st syscall.Stat_t
-
-			if syscall.Lstat(full+"/"+string(name), &st) == nil {
-				isDir = st.Mode&syscall.S_IFMT == syscall.S_IFDIR
-			}
-		}
-
-		out[string(name)] = isDir
-	})
 
 	fs.dirs.put(key, out)
 

@@ -143,6 +143,43 @@ func readDirAll(full string, buf *[]byte) (int, bool) {
 	}
 }
 
+// readDirMap lists the directory at full into a fresh, exactly-sized
+// map[string]bool (name → isDir): one raw getdents64 stream into the reused
+// block, parsed twice — count (one right-sized map allocation), then fill.
+// Per entry only the map-key string is allocated. false mirrors os.ReadDir's
+// error → nil ("not listable").
+func readDirMap(full string, buf *[]byte) (map[string]bool, bool) {
+	n, ok := readDirAll(full, buf)
+
+	if !ok {
+		return nil, false
+	}
+
+	ents := (*buf)[:n]
+	count := 0
+	forEachDirent(ents, func([]byte, byte) {
+		count++
+	})
+
+	out := make(map[string]bool, count)
+	forEachDirent(ents, func(name []byte, typ byte) {
+		isDir := typ == syscall.DT_DIR
+
+		if typ == syscall.DT_UNKNOWN {
+			// Filesystems without d_type (rare): lstat, like os's dirent layer.
+			var st syscall.Stat_t
+
+			if syscall.Lstat(full+"/"+string(name), &st) == nil {
+				isDir = st.Mode&syscall.S_IFMT == syscall.S_IFDIR
+			}
+		}
+
+		out[string(name)] = isDir
+	})
+
+	return out, true
+}
+
 // forEachDirent walks the raw linux_dirent64 records in b — ino u64, off u64,
 // reclen u16, type u8, NUL-terminated name — skipping "." and "..". The name
 // slice is a view into b.
