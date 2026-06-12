@@ -133,7 +133,15 @@ func emitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 	isCxx := in.ForceCxx || isCxxSource(srcRel)
 
 	blocks := in.CCBlocks
-	inChunk := []STR{(inVFS).str()}
+
+	// All per-node STR tokens ride ONE block (sliced sub-chunks), instead of a
+	// fresh tiny slice per field.
+	tok := make([]STR, 4)
+	tok[0] = (inVFS).str()
+	tok[1] = argDashC.str()
+	tok[2] = argDashO.str()
+	tok[3] = (outVFS).str()
+	inChunk := tok[0:1:1]
 	cmdArgs := make(ArgChunks, 0, 9)
 
 	if len(instance.Platform.WrapccHead) > 0 {
@@ -149,7 +157,7 @@ func emitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 	cmdArgs = append(cmdArgs,
 		compiler,
 		instance.Platform.CCHead,
-		[]STR{argDashC.str(), argDashO.str(), (outVFS).str()},
+		tok[1:4:4],
 		blocks.common,
 		tail)
 

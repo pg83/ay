@@ -119,6 +119,10 @@ type Platform struct {
 	// platform and shared read-only across CC nodes.
 	CCUsesResources []string
 
+	// ToolEnvVars is the shared tool environment every CC/codegen node on this
+	// platform carries (read-only; toolEnv() hands it out by reference).
+	ToolEnvVars EnvVars
+
 	// CCHead is the pre-built [--target=<triple>, -march…, sysroot args] span
 	// opening every CC compile on this platform (after the compiler token) —
 	// referenced as a chunk by the emitters, never copied.
@@ -250,6 +254,14 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, 
 	}
 
 	p.CCHead = append(appendArgStr([]STR{p.TargetArg}, p.MarchArgs), p.SysrootArgs...)
+
+	p.ToolEnvVars = EnvVars{
+		{Name: envARCADIA_ROOT_DISTBUILD, Value: strS},
+		{Name: envDYLD_LIBRARY_PATH, Value: p.MultiarchLibPathSTR},
+		{Name: envCPATH, Value: strEmpty},
+		{Name: envLIBRARY_PATH, Value: strEmpty},
+		{Name: envSDKROOT, Value: strEmpty},
+	}
 
 	compress := confCompressesDebug(fs)
 	p.CompressDebugSections = compress && !buildRelease && os == OSLinux
@@ -386,14 +398,11 @@ func (p *Platform) multiarchLibPath(opensource bool) string {
 	return "$(B)/resources/" + resourcePatternClangTool + p.ClangVer + "/lib:" + sdkLib
 }
 
+// toolEnv returns the per-platform tool environment — precomputed once
+// (ToolEnvVars): emitters attach it to every CC/codegen node, and the content
+// never varies within a platform. Nodes never mutate their Env.
 func (p *Platform) toolEnv() EnvVars {
-	return EnvVars{
-		{Name: envARCADIA_ROOT_DISTBUILD, Value: strS},
-		{Name: envDYLD_LIBRARY_PATH, Value: p.MultiarchLibPathSTR},
-		{Name: envCPATH, Value: strEmpty},
-		{Name: envLIBRARY_PATH, Value: strEmpty},
-		{Name: envSDKROOT, Value: strEmpty},
-	}
+	return p.ToolEnvVars
 }
 
 func (p *Platform) linkerSelectionGDBIndexFlags() []string {
