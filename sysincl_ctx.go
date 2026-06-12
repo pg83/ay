@@ -196,6 +196,11 @@ type SysinclIndex struct {
 	byLower map[string]int32
 	buckets [][]SysinclContribution
 	byID    *IntValueMap[int32]
+
+	// outScratch backs multi-contribution lookup results; the caller (resolve)
+	// consumes the slice before the next lookup. A single matching
+	// contribution returns its paths slice directly, allocation-free.
+	outScratch []VFS
 }
 
 func buildSysinclIndex(set SysInclSet) *SysinclIndex {
@@ -293,6 +298,8 @@ func (m *SysinclIndex) lookup(path string, target STR) ([]VFS, bool, bool) {
 		out            []VFS
 		found          bool
 		hasMultiTarget bool
+		single         []VFS
+		singleMulti    bool
 	)
 
 	for i := range bucket {
@@ -306,14 +313,34 @@ func (m *SysinclIndex) lookup(path string, target STR) ([]VFS, bool, bool) {
 			continue
 		}
 
-		found = true
+		cMulti := c.multi && len(c.paths) >= 2
 
-		if c.multi && len(c.paths) >= 2 {
+		if !found {
+			// First (and usually only) match: hand back its paths directly.
+			found = true
+			single = c.paths
+			singleMulti = cMulti
+
+			continue
+		}
+
+		if out == nil {
+			out = append(m.outScratch[:0], single...)
+			hasMultiTarget = singleMulti
+		}
+
+		if cMulti {
 			hasMultiTarget = true
 		}
 
 		out = append(out, c.paths...)
 	}
+
+	if out == nil {
+		return single, found, singleMulti
+	}
+
+	m.outScratch = out
 
 	return out, found, hasMultiTarget
 }

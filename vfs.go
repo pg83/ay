@@ -56,7 +56,7 @@ func internPrefixed(prefix, rel string) STR {
 
 // internedPrefixed is the lookup-only twin of internPrefixed: it probes for
 // prefix+rel without inserting, assembling the key in the same scratch buffer.
-func internedPrefixed(prefix, rel string) *STR {
+func internedPrefixed(prefix, rel string) (STR, bool) {
 	vfsPrefixScratch = append(vfsPrefixScratch[:0], prefix...)
 	vfsPrefixScratch = append(vfsPrefixScratch, rel...)
 
@@ -81,7 +81,7 @@ func internPrefixedJoined(prefix, dir, rel string) STR {
 }
 
 // internedPrefixedJoined is the lookup-only twin of internPrefixedJoined.
-func internedPrefixedJoined(prefix, dir, rel string) *STR {
+func internedPrefixedJoined(prefix, dir, rel string) (STR, bool) {
 	vfsPrefixScratch = append(vfsPrefixScratch[:0], prefix...)
 
 	if dir != "" {
