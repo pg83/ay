@@ -6,8 +6,6 @@ import (
 	"regexp/syntax"
 	"sort"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 var sysInclYamlSequence = []SysInclEntry{
@@ -80,17 +78,17 @@ type SysinclPair struct {
 type SysInclSet []SysIncl
 
 // setMapping stores one cooked header→targets mapping into the record's arm
-// (CS keys interned, CI keys lowercased). paths carries no empty entries, so
-// len>=2 is exactly the multi-target condition.
-func (rec *SysIncl) setMapping(k string, paths []VFS) {
+// (CS keys interned straight from the bytes, CI keys lowercased). paths carries
+// no empty entries, so len>=2 is exactly the multi-target condition.
+func (rec *SysIncl) setMapping(k []byte, paths []VFS) {
 	if len(paths) >= 2 {
 		rec.HasMultiTarget = true
 	}
 
 	if rec.CaseInsensitive {
-		rec.pairs = append(rec.pairs, SysinclPair{keyCI: strings.ToLower(k), paths: paths})
+		rec.pairs = append(rec.pairs, SysinclPair{keyCI: strings.ToLower(string(k)), paths: paths})
 	} else {
-		rec.pairs = append(rec.pairs, SysinclPair{key: internStr(k), paths: paths})
+		rec.pairs = append(rec.pairs, SysinclPair{key: internBytes(k), paths: paths})
 	}
 }
 
@@ -151,7 +149,7 @@ func loadSysInclSetForFS(fs FS, arch string, musl, opensource bool, onWarn func(
 			continue
 		}
 
-		records := parseSysInclYAML(entry.file, string(fs.read(baseSysInclDir+"/"+entry.file)), onWarn)
+		records := parseSysInclYAML(entry.file, fs.read(baseSysInclDir+"/"+entry.file), onWarn)
 		set = append(set, records...)
 	}
 
@@ -188,141 +186,11 @@ func loadSysInclDir(fs FS, dir string, onWarn func(Warn)) SysInclSet {
 	var set SysInclSet
 
 	for _, name := range names {
-		records := parseSysInclYAML(name, string(fs.read(dir+"/"+name)), onWarn)
+		records := parseSysInclYAML(name, fs.read(dir+"/"+name), onWarn)
 		set = append(set, records...)
 	}
 
 	return set
-}
-
-// parseSysInclYAML parses a sysincl YAML file into records. The document is either a
-// sequence of records or a single record mapping (e.g. `includes: []`); each record
-// carries an optional source_filter / case_sensitive and an includes list mapping a
-// header to its target(s) (a scalar, a sequence, or null = "resolve to nothing").
-func parseSysInclYAML(name, text string, onWarn func(Warn)) []SysIncl {
-	var doc yaml.Node
-
-	if err := yaml.Unmarshal([]byte(text), &doc); err != nil {
-		onWarn(Warn{Kind: WarnSysIncl, Message: fmt.Sprintf("%s: YAML parse error: %v — file skipped", name, err)})
-
-		return nil
-	}
-
-	if len(doc.Content) == 0 {
-		return nil
-	}
-
-	root := doc.Content[0]
-
-	var recordNodes []*yaml.Node
-
-	switch root.Kind {
-	case yaml.SequenceNode:
-		recordNodes = root.Content
-	case yaml.MappingNode:
-		recordNodes = []*yaml.Node{root}
-	default:
-		return nil
-	}
-
-	out := make([]SysIncl, 0, len(recordNodes))
-
-	for _, rn := range recordNodes {
-		if rn.Kind != yaml.MappingNode {
-			continue
-		}
-
-		out = append(out, parseSysInclRecord(name, rn, onWarn))
-	}
-
-	return out
-}
-
-// parseSysInclRecord builds one SysIncl from a record mapping node. source_filter /
-// case_sensitive are applied before includes so setMapping sees the final
-// case-sensitivity regardless of key order in the file.
-func parseSysInclRecord(name string, rn *yaml.Node, onWarn func(Warn)) SysIncl {
-	rec := SysIncl{}
-
-	var includes *yaml.Node
-
-	for i := 0; i+1 < len(rn.Content); i += 2 {
-		key := rn.Content[i]
-		val := rn.Content[i+1]
-
-		switch key.Value {
-		case "source_filter":
-			rec.Filter = compileSourceFilter(name, key.Line, val.Value, onWarn)
-			rec.KeyBySource = strings.Contains(val.Value, "(?!")
-		case "case_sensitive":
-			rec.CaseInsensitive = val.Value == "false"
-		case "includes":
-			includes = val
-		default:
-			onWarn(Warn{
-				Kind:    WarnSysIncl,
-				Message: fmt.Sprintf("%s:%d: unrecognised record key %q — record disabled", name, key.Line, key.Value),
-			})
-			rec.Filter = &SourceFilter{unsupported: true}
-		}
-	}
-
-	for _, item := range includesContent(includes) {
-		parseSysInclInclude(&rec, item)
-	}
-
-	return rec
-}
-
-func includesContent(includes *yaml.Node) []*yaml.Node {
-	if includes == nil {
-		return nil
-	}
-
-	return includes.Content
-}
-
-// parseSysInclInclude records one includes entry: a bare scalar header (→ nothing),
-// or a header→target(s) mapping where the target is a scalar, a sequence, or null.
-func parseSysInclInclude(rec *SysIncl, item *yaml.Node) {
-	if item.Kind == yaml.ScalarNode {
-		rec.setMapping(item.Value, nil)
-
-		return
-	}
-
-	if item.Kind != yaml.MappingNode {
-		return
-	}
-
-	for i := 0; i+1 < len(item.Content); i += 2 {
-		rec.setMapping(item.Content[i].Value, sysInclTargets(item.Content[i+1]))
-	}
-}
-
-// sysInclTargets reads a header's target node: a scalar (one path; empty/null = no
-// path) or a sequence (fan-out). Empty entries are dropped.
-func sysInclTargets(tval *yaml.Node) []VFS {
-	switch tval.Kind {
-	case yaml.ScalarNode:
-		if tval.Tag == "!!null" || tval.Value == "" {
-			return nil
-		}
-
-		return []VFS{source(tval.Value)}
-	case yaml.SequenceNode:
-		var paths []VFS
-
-		for _, p := range tval.Content {
-			if p.Value != "" {
-				paths = append(paths, source(p.Value))
-			}
-		}
-
-		return paths
-	}
-
-	return nil
 }
 
 type SourceFilter struct {
