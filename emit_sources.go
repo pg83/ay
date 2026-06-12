@@ -38,7 +38,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		strings.HasSuffix(srcRel, ".cxx"):
 		srcVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDirs)
 
-		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, srcVFS, srcIn)
+		srcIn.IncludeInputs = walkClosure(ctx.scannerFor(srcInstance), srcVFS, srcIn.ScanCfg)
 
 		srcIn.ExtraDepRefs = resolveCodegenDepRefsExt(ctx, srcInstance, srcIn.IncludeInputs, []VFS{srcVFS})
 		ref, outPath, _ := emitCC(srcInstance, srcRel, srcVFS, srcIn, ctx.host, ctx.emit)
@@ -61,10 +61,11 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 			// diverging from REF (e.g. yt/yt/core/misc/isa_crc64 needs
 			// -I=$(S)/yt/yt/core/misc/isa_crc64/include for reg_sizes.asm).
 			scanIn.AddIncl = dedupVFS(srcIn.AddIncl, d.asmAddIncl)
+			scanIn.ScanCfg = newScanContext(scanIn.AddIncl, scanIn.PeerAddInclGlobal, includeScannerBasePaths(), srcInstance.Path.rel())
 			asIn.AddIncl = scanIn.AddIncl
 		}
 
-		asIn.IncludeInputs = walkClosure(ctx, srcInstance, srcVFS, scanIn)
+		asIn.IncludeInputs = walkClosure(ctx.scannerFor(srcInstance), srcVFS, scanIn.ScanCfg)
 
 		if instance.Platform.ISA == ISAX8664 && strings.HasSuffix(srcRel, ".asm") {
 			yasmLD, _ := ctx.tool(argContribToolsYasm)
@@ -96,7 +97,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		// TRagelIncludeProcessor keeps native deps and ParsedIncls apart).
 		registerGeneratedParsedOutput(ctx, srcInstance, pkR6, r6Out, r6Parsed, []NodeRef{ragelLDRef})
 
-		window := walkClosure(ctx, srcInstance, r6Out, srcIn)
+		window := walkClosure(ctx.scannerFor(srcInstance), r6Out, srcIn.ScanCfg)
 
 		// The ragel compiler only reads source files (the .rl6 source + any
 		// natively-included .rl6 files + C/C++ headers it parses). Build-generated
@@ -126,7 +127,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
 		event2cppLDRef, event2cppBinary := ctx.tool(argToolsEvent2cpp)
 
-		evImports := walkClosureTail(ctx, srcInstance, evSource, protoWalkInputs(nil))
+		evImports := walkClosureTail(ctx.scannerFor(srcInstance), evSource, protoWalkInputs(nil, srcInstance.Path.rel()).ScanCfg)
 		evRef := emitEV(
 			srcInstance, evRelPath,
 			cppStyleguideLDRef, protocLDRef, event2cppLDRef,
@@ -152,7 +153,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 
 		evPbCCSuffix := srcRel + ".pb.cc"
 		ccIn := srcIn
-		ccIn.IncludeInputs = walkClosure(ctx, srcInstance, evPbCC, srcIn)
+		ccIn.IncludeInputs = walkClosure(ctx.scannerFor(srcInstance), evPbCC, srcIn.ScanCfg)
 		{
 			filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
 
@@ -191,7 +192,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 
 		ccSrcRel := strings.TrimPrefix(r5CppOut.rel(), srcInstance.Path.rel()+"/")
 		ccIn := srcIn
-		ccClosure := walkClosure(ctx, srcInstance, r5CppOut, srcIn)
+		ccClosure := walkClosure(ctx.scannerFor(srcInstance), r5CppOut, srcIn.ScanCfg)
 		ccIn.IncludeInputs = append([]VFS{r5TmpOut}, ccClosure...)
 		ccIn.PerSourceCFlags = append(append([]ARG(nil), srcIn.PerSourceCFlags...), argWnoImplicitFallthrough)
 		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, r5Ref)
@@ -202,7 +203,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 	case strings.HasSuffix(srcRel, ".h.in"):
 
 		inSourceVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDirs)
-		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, inSourceVFS, srcIn)
+		srcIn.IncludeInputs = walkClosure(ctx.scannerFor(srcInstance), inSourceVFS, srcIn.ScanCfg)
 		cfgVars := buildCFGVars(ctx.fs, inSourceVFS.rel(), srcIn.SetVars, srcIn.DefaultVars)
 		cfOut := build(srcInstance.Path.rel() + "/" + strings.TrimSuffix(srcRel, ".in"))
 
@@ -224,7 +225,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 	case strings.HasSuffix(srcRel, ".cpp.in"),
 		strings.HasSuffix(srcRel, ".c.in"):
 		inSourceVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDirs)
-		srcIn.IncludeInputs = walkClosure(ctx, srcInstance, inSourceVFS, srcIn)
+		srcIn.IncludeInputs = walkClosure(ctx.scannerFor(srcInstance), inSourceVFS, srcIn.ScanCfg)
 		cfgVars := buildCFGVars(ctx.fs, inSourceVFS.rel(), srcIn.SetVars, srcIn.DefaultVars)
 		cfOut := build(srcInstance.Path.rel() + "/" + strings.TrimSuffix(srcRel, ".in"))
 		cfRef, cfOut := emitCF(srcInstance, inSourceVFS, cfOut, cfgVars, srcIn.IncludeInputs, srcInstance.Path.rel(), cfModuleTag(d, srcInstance), srcIn.TC, ctx.emit)
@@ -236,7 +237,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 
 		ccSrcRel := strings.TrimPrefix(cfOut.rel(), srcInstance.Path.rel()+"/")
 		ccIn := srcIn
-		ccIn.IncludeInputs = walkClosure(ctx, srcInstance, cfOut, srcIn)
+		ccIn.IncludeInputs = walkClosure(ctx.scannerFor(srcInstance), cfOut, srcIn.ScanCfg)
 		ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, srcInstance, ccIn.IncludeInputs, cfRef)
 		ccIn.ExtraDepRefs = append([]NodeRef{cfRef}, ccIn.ExtraDepRefs...)
 		ccRef, ccOut, _ := emitCC(srcInstance, ccSrcRel, cfOut, ccIn, ctx.host, ctx.emit)
@@ -253,7 +254,7 @@ func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	pe := newPBModuleEmission(ctx, d, ProtoPBConfig{}, in.PeerProtoAddInclGlobal, in.ProtoNamespaceTail)
 	pb := emitProtoPB(ctx, instance, d, srcRel, ProtoPBConfig{}, pe, in.PeerProtoAddInclGlobal)
 	ccIn := in
-	ccIn.IncludeInputs = walkClosure(ctx, instance, pb.pbCC, in)
+	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), pb.pbCC, in.ScanCfg)
 	ccIn.ExtraDepRefs = append([]NodeRef{pb.pbRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pb.pbRef)...)
 	ccSrcRel := strings.TrimPrefix(pb.pbCC.rel(), instance.Path.rel()+"/")
 	ccRef, ccOut, _ := emitCC(instance, ccSrcRel, pb.pbCC, ccIn, ctx.host, ctx.emit)
@@ -265,7 +266,7 @@ func emitLibraryFlatcSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	fl := ensureFlatcEmission(ctx, instance, d, srcRel)
 
 	ccIn := in
-	ccIn.IncludeInputs = walkClosure(ctx, instance, fl.cpp, in)
+	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), fl.cpp, in.ScanCfg)
 
 	ccIn.ExtraDepRefs = append([]NodeRef{fl.flRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, fl.flRef)...)
 	ccSrcRel := strings.TrimPrefix(fl.cpp.rel(), instance.Path.rel()+"/")

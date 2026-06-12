@@ -134,7 +134,7 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 			// The closure root is irrelevant here: rewriteClosureCPSource maps
 			// the dst root to its SourcePath (== src) and EmitCPWithDeps filters
 			// both src and dst from extraInputs, so the rootless walk is exact.
-			closure = walkClosure(ctx, instance, dstVFS, *moduleInputs)
+			closure = walkClosure(ctx.scannerFor(instance), dstVFS, moduleInputs.ScanCfg)
 			closure = rewriteClosureCPSource(scanner, closure)
 			closure = keepOnlySourceVFS(closure)
 			closure = dedupVFS(closure)

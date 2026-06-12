@@ -290,9 +290,10 @@ func pyProtoAuxInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 		PeerAddInclGlobal: peerAddIncl,
 		SourceRoot:        ctx.sourceRoot,
 		FS:                ctx.fs,
+		ScanCfg:           newScanContext(d.addIncl, peerAddIncl, includeScannerBasePaths(), instance.Path.rel()),
 	}
 
-	closure := walkClosure(ctx, instance, aux, scanIn)
+	closure := walkClosure(ctx.scannerFor(instance), aux, scanIn.ScanCfg)
 
 	if len(closure) == 0 {
 		return nil

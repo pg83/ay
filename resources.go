@@ -12,7 +12,6 @@ var (
 	// closure. Tool paths come from peers (build/platform/*), not ambient platform flags.
 	strLLDRootName      = internStr(resourcePatternLLDRoot)
 	strYMakePython3Name = internStr(resourcePatternYMakePython3)
-
 	// Shared usesResources vectors — every emitter that needs one of these
 	// fixed sets references the same slice instead of building it per node.
 	usesPython3        = []STR{strYMakePython3Name}

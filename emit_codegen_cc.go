@@ -7,7 +7,7 @@ func emitPRDownstreamCC(ctx *GenCtx, instance ModuleInstance, out string, prRef 
 func emitCodegenDownstreamCC(ctx *GenCtx, instance ModuleInstance, cppRel string, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
 	cppPath := build(instance.Path.rel() + "/" + cppRel)
 
-	includeInputs := walkClosure(ctx, instance, cppPath, in)
+	includeInputs := walkClosure(ctx.scannerFor(instance), cppPath, in.ScanCfg)
 
 	ccIn := in
 	ccIn.IncludeInputs = includeInputs

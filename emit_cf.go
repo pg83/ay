@@ -22,11 +22,12 @@ func emitExplicitCF(ctx *GenCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 		SetVars:         d.setVars,
 		SourceRoot:      ctx.sourceRoot,
 		FS:              ctx.fs,
+		ScanCfg:         newScanContext(nil, nil, includeScannerBasePaths(), instance.Path.rel()),
 	}
 
 	srcVFS := copyFileInputVFS(ctx.fs, instance.Path.rel(), cf.Src)
 	outVFS := copyFileOutputVFS(instance.Path.rel(), cf.Dst)
-	in.IncludeInputs = walkClosure(ctx, instance, srcVFS, in)
+	in.IncludeInputs = walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)
 
 	cfgVars := buildCFGVars(ctx.fs, srcVFS.rel(), d.setVars, d.defaultVars)
 	cfRef, cfOut := emitCF(instance, srcVFS, outVFS, cfgVars, in.IncludeInputs, instance.Path.rel(), cfModuleTag(d, instance), in.TC, ctx.emit)

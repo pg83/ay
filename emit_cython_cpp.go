@@ -105,7 +105,8 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 		srcVFS := source(instance.Path.rel() + "/" + stmt.Src)
 		srcScanIn := in
 		srcScanIn.AddIncl = appendCythonScanAddIncl(srcScanIn.AddIncl, d.cythonAddIncl, py23Variant)
-		sourceClosure := walkClosureTail(ctx, instance, srcVFS, srcScanIn)
+		srcScanIn.ScanCfg = newScanContext(srcScanIn.AddIncl, srcScanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+		sourceClosure := walkClosureTail(ctx.scannerFor(instance), srcVFS, srcScanIn.ScanCfg)
 		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(ctx, instance, srcVFS, sourceClosure, stmt.CMode, srcScanIn)
 		parsed := make([]IncludeDirective, 0, len(emitsIncludes))
 
@@ -177,7 +178,8 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 
 		scanIn := ccIn
 		scanIn.AddIncl = appendCythonScanAddIncl(in.AddIncl, d.cythonAddIncl, py23Variant)
-		ccIn.IncludeInputs = walkClosure(ctx, instance, generatedVFS, scanIn)
+		scanIn.ScanCfg = newScanContext(scanIn.AddIncl, scanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+		ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), generatedVFS, scanIn.ScanCfg)
 
 		ccRef, ccOut, _ := emitCC(instance, generated, generatedVFS, ccIn, ctx.host, ctx.emit)
 		out = append(out, &SourceEmit{Ref: ccRef, OutPath: ccOut})
@@ -209,7 +211,7 @@ func cythonGeneratedOutputInputs(ctx *GenCtx, instance ModuleInstance, src VFS, 
 		toolInputs = append(toolInputs, v)
 		emitsIncludes = append(emitsIncludes, v)
 
-		cl := walkClosureTail(ctx, instance, v, scanIn)
+		cl := walkClosureTail(ctx.scannerFor(instance), v, scanIn.ScanCfg)
 		toolInputs = append(toolInputs, cl...)
 		emitsIncludes = append(emitsIncludes, cl...)
 	}

@@ -39,11 +39,10 @@ type ModuleCCInputs struct {
 
 	ExtraDepRefs []NodeRef
 
-	// RootParser overrides the walk's parser for unregistered-extension files
-	// when the walk ROOT itself has an unregistered extension (a swig .i
-	// source) — the caller knows the language, the extension does not. nil:
-	// walkClosure derives it from the root's registered parser.
-	RootParser IncludeDirectiveParser
+	// ScanCfg is the sealed scan config (newScanContext) every walkClosure of
+	// these inputs uses; builders that change the resolve-relevant addincl set
+	// reseal it.
+	ScanCfg ScanContext
 
 	// SrcDirs is the cumulative SRCDIR search path (directory VFS); index 0 is
 	// the module dir. resolveSourceVFS searches it (reverse); composeCCPaths

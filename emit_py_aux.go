@@ -257,7 +257,7 @@ func rawAuxInputClosure(ctx *GenCtx, instance ModuleInstance, aux VFS, seed []VF
 
 	registerGeneratedParsedOutput(ctx, instance, pkPR, aux, emits, []NodeRef{rescompilerRef})
 
-	closure := walkClosure(ctx, instance, aux, in)
+	closure := walkClosure(ctx.scannerFor(instance), aux, in.ScanCfg)
 
 	if len(closure) == 0 {
 		return nil

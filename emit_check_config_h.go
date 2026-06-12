@@ -20,7 +20,7 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 		confVFS := source(instance.Path.rel() + "/" + conf.string())
 		// The walk window leads with confVFS itself — no separate prepend.
 		inputs := []VFS{buildScriptsCheckConfigHPy}
-		inputs = append(inputs, walkClosure(ctx, instance, confVFS, in)...)
+		inputs = append(inputs, walkClosure(ctx.scannerFor(instance), confVFS, in.ScanCfg)...)
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 

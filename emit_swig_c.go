@@ -46,7 +46,7 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 		// The window walk: implicit %includes are the swig parser's own
 		// directives, the Lib dirs are FOR-swig addincl data, the resolution
 		// is the scanner's standard one (sysincl swig.yml included).
-		swigClosure := walkClosureTail(ctx, instance, srcVFS, ModuleCCInputs{AddIncl: swigAddIncls, RootParser: SwigIncludeDirectiveParser{}})
+		swigClosure := walkClosureTail(ctx.scannerFor(instance), srcVFS, newScanContext(swigAddIncls, nil, includeScannerBasePaths(), instance.Path.rel()))
 
 		// swigClosure joins as its own chunk (referenced, not copied; read-only
 		// after this — the later consumers copy out of it).
@@ -93,7 +93,7 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 
 		ccIn := in
 		ccIn.ExtraDepRefs = []NodeRef{swRef}
-		cClosure := walkClosure(ctx, instance, cOutVFS, in)
+		cClosure := walkClosure(ctx.scannerFor(instance), cOutVFS, in.ScanCfg)
 		incl := make([]VFS, 0, len(cClosure)+len(swigClosure)+1)
 		incl = append(incl, cClosure...)
 		incl = append(incl, swigClosure...)
