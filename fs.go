@@ -13,7 +13,8 @@ import (
 type FS interface {
 	sourceRoot() string
 	// Listdir lists the directory named by its Source-rooted VFS ("$(S)/<dir>").
-	listdir(dir VFS) map[string]bool
+	listdir(dir VFS) DirView
+	dirHas(v DirView, name string) (present bool, isDir bool)
 	// Exists/IsFile/IsDir take a directory VFS prefix and a relative
 	// suffix, so callers thread an already-interned prefix instead of building and
 	// re-interning a concatenated path. See osFS.Exists for the gating algorithm.
@@ -50,7 +51,16 @@ type OsFS struct {
 	// dirs is keyed by the directory's STR (dir.strID()) rather than its VFS: a
 	// source dir is always Source-rooted (VFS == STR<<1), so the STR is lossless
 	// and halves DenseMap's idx array versus indexing the 2x-wider VFS space.
-	dirs DenseMap[STR, map[string]bool]
+	dirs DenseMap[STR, DirView]
+
+	// dirNames is the packed name store every DirView windows (bump arena —
+	// address-stable blocks, filled exactly once per listed directory).
+	// dirEntries is the membership/isDir index over ALL directories, keyed by
+	// splitMix64(dirSTR, nameSTR) — a bijection over the packed id pair, so a
+	// probe is exact. Names intern once globally (repeated basenames share one
+	// table entry instead of one map-key string per directory).
+	dirNames   *BumpAllocator[uint32]
+	dirEntries *IntMap[bool]
 
 	// contentHashes is the xxh3 of each read file's content, indexed directly by the
 	// STR of its full "$(S)/..." path — i.e. the source VFS's own strID, so the uid
@@ -78,15 +88,29 @@ type OsFS struct {
 	existsMisses  uint64
 }
 
-// emptyDirEntries is the shared result for every listable-but-empty directory:
-// callers only read listdir maps, and fs.go's "listable" probe needs non-nil
-// (nil is the negative cache), so one canonical empty map serves them all.
-var emptyDirEntries = map[string]bool{}
+// DirView is a directory's window into the FS name store: dir is the half of
+// the splitMix64 membership key (the directory's own STR), names the packed
+// entries (name STR<<1 | isDir bit), a sub-slice of the FS's bump-arena store.
+// A zero view (nil names) is "not listable"; emptyDirNames backs an existing
+// empty directory — the same nil/empty distinction the map cache had.
+type DirView struct {
+	dir   STR
+	names []uint32
+}
+
+func (v DirView) listable() bool {
+	return v.names != nil
+}
+
+// emptyDirNames is the shared store of every listable-but-empty directory.
+var emptyDirNames = []uint32{}
 
 func newFS(srcRoot string) FS {
 	fs := &OsFS{
-		srcRoot:   srcRoot,
-		rootSlash: srcRoot + "/",
+		srcRoot:    srcRoot,
+		rootSlash:  srcRoot + "/",
+		dirNames:   newBumpAllocator[uint32](1 << 12),
+		dirEntries: newIntMap[bool](1 << 12),
 	}
 	fs.platformInit()
 
@@ -150,7 +174,7 @@ func (fs *OsFS) sourceRoot() string {
 // Listdir returns the entries of the directory whose Source-rooted path is dir
 // ("$(S)/<cleandir>"). Keyed by VFS so the hot caller passes the addincl
 // VFS directly with no string hashing; expected to hit the cache.
-func (fs *OsFS) listdir(dir VFS) map[string]bool {
+func (fs *OsFS) listdir(dir VFS) DirView {
 	key := STR(dir.strID())
 
 	if cached, ok := fs.dirs.get(key); ok {
@@ -161,17 +185,29 @@ func (fs *OsFS) listdir(dir VFS) map[string]bool {
 
 	fs.listdirMisses++
 
-	out, ok := fs.readDirMapRel(dir.rel())
+	v := fs.readDirViewRel(key, dir.rel())
+	fs.dirs.put(key, v)
 
-	if !ok {
-		fs.dirs.put(key, nil)
+	return v
+}
 
-		return nil
+// dirHas probes one (dir, name) membership: an un-interned name cannot be a
+// directory entry (every listed name interns at fill), and the splitMix64 key
+// is a bijection over the id pair.
+func (fs *OsFS) dirHas(v DirView, name string) (present bool, isDir bool) {
+	id := interned(name)
+
+	if id == 0 {
+		return false, false
 	}
 
-	fs.dirs.put(key, out)
+	d := fs.dirEntries.get(splitMix64(uint32(v.dir), uint32(id)))
 
-	return out
+	if d == nil {
+		return false, false
+	}
+
+	return true, *d
 }
 
 func (fs *OsFS) bumpExists(ok bool) {
@@ -190,7 +226,7 @@ func (fs *OsFS) bumpExists(ok bool) {
 // prefix (the boundary-crossing case) and looked up directly.
 func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 	if suffix == "" {
-		return fs.listdir(prefix) != nil, true
+		return fs.listdir(prefix).listable(), true
 	}
 
 	prefixRel := prefix.rel()
@@ -203,23 +239,23 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 		}
 
 		dir, name := splitDirName(rel)
-		entries := fs.listdir(dirKey(dir))
+		v := fs.listdir(dirKey(dir))
 
-		if entries == nil {
+		if !v.listable() {
 			fs.existsMisses++
 
 			return false, false
 		}
 
-		d, ok := entries[name]
+		ok, d := fs.dirHas(v, name)
 		fs.bumpExists(ok)
 
 		return ok, d
 	}
 
-	entries := fs.listdir(prefix)
+	v := fs.listdir(prefix)
 
-	if entries == nil {
+	if !v.listable() {
 		fs.existsMisses++
 
 		return false, false
@@ -228,28 +264,28 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 	first, more := firstComponent(suffix)
 
 	if !more {
-		d, ok := entries[first]
+		ok, d := fs.dirHas(v, first)
 		fs.bumpExists(ok)
 
 		return ok, d
 	}
 
-	if d, ok := entries[first]; !ok || !d {
+	if ok, d := fs.dirHas(v, first); !ok || !d {
 		fs.existsMisses++
 
 		return false, false
 	}
 
 	dname, base := splitDirName(suffix)
-	entries = fs.listdir(dirKey(joinRel(prefixRel, dname)))
+	v = fs.listdir(dirKey(joinRel(prefixRel, dname)))
 
-	if entries == nil {
+	if !v.listable() {
 		fs.existsMisses++
 
 		return false, false
 	}
 
-	d, ok := entries[base]
+	ok, d := fs.dirHas(v, base)
 	fs.bumpExists(ok)
 
 	return ok, d
@@ -278,18 +314,18 @@ func (fs *OsFS) existsRel(rel string) (present bool, isDir bool) {
 	}
 
 	dir, name := splitDirName(rel)
-	entries := fs.listdir(dirKey(dir))
+	v := fs.listdir(dirKey(dir))
 
-	if entries == nil {
+	if !v.listable() {
 		return false, false
 	}
 
-	d, ok := entries[name]
+	ok, d := fs.dirHas(v, name)
 
 	return ok, d
 }
 
-func (fs *OsFS) listdirRel(rel string) map[string]bool {
+func (fs *OsFS) listdirRel(rel string) DirView {
 	return fs.listdir(dirKey(rel))
 }
 
@@ -328,10 +364,10 @@ func (fs *OsFS) walk(rel string, visit func(rel string, isDir bool)) {
 		prefix += "/"
 	}
 
-	for name, childIsDir := range fs.listdirRel(rel) {
-		child := prefix + name
+	for _, packed := range fs.listdirRel(rel).names {
+		child := prefix + STR(packed>>1).string()
 
-		if childIsDir {
+		if packed&1 != 0 {
 			fs.walk(child, visit)
 
 			continue

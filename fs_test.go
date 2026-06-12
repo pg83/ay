@@ -94,10 +94,10 @@ func TestFS_ListdirCachesNegative(t *testing.T) {
 	root := t.TempDir()
 	fs := newFS(root)
 
-	if fs.listdir(dirKey("nope")) != nil {
+	if fs.listdir(dirKey("nope")).listable() {
 		t.Error("missing dir should return nil listdir")
 	}
-	if fs.listdir(dirKey("nope")) != nil {
+	if fs.listdir(dirKey("nope")).listable() {
 		t.Error("missing dir should still return nil on cache hit")
 	}
 	stats := fs.perfStats()
@@ -186,6 +186,11 @@ type MemFS struct {
 	rootSlash string
 	files     map[string][]byte
 	dirs      map[string]map[string]bool
+
+	// views/entries mirror OsFS's DirView model over the in-memory tree,
+	// built lazily per directory.
+	views   map[string]DirView
+	entries *IntMap[bool]
 }
 
 // newMemFS builds a *memFS from a flat path→content map. Every intermediate
@@ -199,6 +204,8 @@ func newMemFS(files map[string]string) *MemFS {
 		rootSlash: root + "/",
 		files:     make(map[string][]byte, len(files)),
 		dirs:      map[string]map[string]bool{"": {}},
+		views:     map[string]DirView{},
+		entries:   newIntMap[bool](64),
 	}
 
 	addEntry := func(parent, name string, isDir bool) {
@@ -238,8 +245,56 @@ func newMemFS(files map[string]string) *MemFS {
 
 func (fs *MemFS) sourceRoot() string { return fs.srcRoot }
 
-func (fs *MemFS) listdir(dir VFS) map[string]bool {
-	return fs.dirs[dir.rel()]
+func (fs *MemFS) listdir(dir VFS) DirView {
+	rel := dir.rel()
+
+	if v, ok := fs.views[rel]; ok {
+		return v
+	}
+
+	entries, ok := fs.dirs[rel]
+
+	if !ok {
+		fs.views[rel] = DirView{}
+
+		return DirView{}
+	}
+
+	key := STR(dir.strID())
+	packed := make([]uint32, 0, len(entries))
+
+	for name, isDir := range entries {
+		id := internStr(name)
+		p := uint32(id) << 1
+
+		if isDir {
+			p |= 1
+		}
+
+		packed = append(packed, p)
+		fs.entries.put(splitMix64(uint32(key), uint32(id)), isDir)
+	}
+
+	v := DirView{dir: key, names: packed}
+	fs.views[rel] = v
+
+	return v
+}
+
+func (fs *MemFS) dirHas(v DirView, name string) (present bool, isDir bool) {
+	id := interned(name)
+
+	if id == 0 {
+		return false, false
+	}
+
+	d := fs.entries.get(splitMix64(uint32(v.dir), uint32(id)))
+
+	if d == nil {
+		return false, false
+	}
+
+	return true, *d
 }
 
 func (fs *MemFS) existsRel(rel string) (present bool, isDir bool) {

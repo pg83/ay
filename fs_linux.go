@@ -192,16 +192,18 @@ func (fs *OsFS) readDirAll(rel string, buf *[]byte) (int, bool) {
 	}
 }
 
-// readDirMapRel lists the directory at rel into a fresh, exactly-sized
-// map[string]bool (name → isDir): one raw getdents64 stream into the reused
-// block, parsed twice — count (one right-sized map allocation), then fill.
-// Per entry only the map-key string is allocated. false mirrors os.ReadDir's
-// error → nil ("not listable").
-func (fs *OsFS) readDirMapRel(rel string) (map[string]bool, bool) {
+// readDirViewRel lists the directory at rel into the shared name store: one
+// raw getdents64 stream into the reused block, parsed twice — count (one
+// exactly-sized arena reservation), then fill. Each name interns straight from
+// the dirent bytes (repeated basenames share one table entry) and lands packed
+// (STR<<1|isDir) in the view's block; membership goes into the global
+// dirEntries index under the bijective splitMix64(dir, name) key. A zero view
+// mirrors os.ReadDir's error ("not listable").
+func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 	n, ok := fs.readDirAll(rel, &fs.direntBuf)
 
 	if !ok {
-		return nil, false
+		return DirView{}
 	}
 
 	ents := fs.direntBuf[:n]
@@ -211,10 +213,11 @@ func (fs *OsFS) readDirMapRel(rel string) (map[string]bool, bool) {
 	})
 
 	if count == 0 {
-		return emptyDirEntries, true
+		return DirView{dir: dir, names: emptyDirNames}
 	}
 
-	out := make(map[string]bool, count)
+	block := fs.dirNames.alloc(count)
+	k := 0
 	forEachDirent(ents, func(name []byte, typ byte) {
 		isDir := typ == syscall.DT_DIR
 
@@ -227,10 +230,20 @@ func (fs *OsFS) readDirMapRel(rel string) (map[string]bool, bool) {
 			}
 		}
 
-		out[string(name)] = isDir
-	})
+		id := internBytes(name)
+		packed := uint32(id) << 1
 
-	return out, true
+		if isDir {
+			packed |= 1
+		}
+
+		block[k] = packed
+		k++
+		fs.dirEntries.put(splitMix64(uint32(dir), uint32(id)), isDir)
+	})
+	fs.dirNames.commit(k)
+
+	return DirView{dir: dir, names: block[:k:k]}
 }
 
 // forEachDirent walks the raw linux_dirent64 records in b — ino u64, off u64,
