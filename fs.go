@@ -78,6 +78,11 @@ type OsFS struct {
 	existsMisses  uint64
 }
 
+// emptyDirEntries is the shared result for every listable-but-empty directory:
+// callers only read listdir maps, and fs.go's "listable" probe needs non-nil
+// (nil is the negative cache), so one canonical empty map serves them all.
+var emptyDirEntries = map[string]bool{}
+
 func newFS(srcRoot string) FS {
 	fs := &OsFS{
 		srcRoot:   srcRoot,
