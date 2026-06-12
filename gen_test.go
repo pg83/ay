@@ -420,7 +420,7 @@ END()
 `,
 	})
 
-	mf := throw2(parseFile(fs, fs.sourceRoot()+"/nolibcmod/ya.make"))
+	mf := throw2(parseFile(fs, "nolibcmod/ya.make"))
 
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "nolibcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Kind: KindLib, Platform: testTargetP}))
 
@@ -3071,7 +3071,7 @@ SRCS(lib.cpp)
 END()
 `,
 	})
-	mf := throw2(parseFile(fs, fs.sourceRoot()+"/mod/ya.make"))
+	mf := throw2(parseFile(fs, "mod/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}))
 
 	want := []string{
@@ -3093,7 +3093,7 @@ PEERDIR(custom/peer)
 END()
 `,
 	})
-	mf := throw2(parseFile(fs, fs.sourceRoot()+"/mod/ya.make"))
+	mf := throw2(parseFile(fs, "mod/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}))
 
 	if d.moduleStmt == nil || d.moduleStmt.Name != tokYqlUdfContrib {
@@ -3125,7 +3125,7 @@ SRCS(test.proto)
 END()
 `,
 	})
-	mf := throw2(parseFile(fs, fs.sourceRoot()+"/proto/ya.make"))
+	mf := throw2(parseFile(fs, "proto/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("proto"), Kind: KindLib, Platform: testTargetP}))
 
 	if !equalStrings(argStrs(d.protocFlags), []string{"--fatal_warnings"}) {
@@ -3141,7 +3141,7 @@ SRCS(test.proto)
 END()
 `,
 	})
-	mf := throw2(parseFile(fs, fs.sourceRoot()+"/proto/ya.make"))
+	mf := throw2(parseFile(fs, "proto/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("proto"), Kind: KindLib, Platform: testTargetP}))
 
 	if len(d.cppProtoPlugins) != 1 {
@@ -3177,7 +3177,7 @@ SRCS(Schema.fbs)
 END()
 `,
 	})
-	mf := throw2(parseFile(fs, fs.sourceRoot()+"/flatcmod/ya.make"))
+	mf := throw2(parseFile(fs, "flatcmod/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "flatcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("flatcmod"), Kind: KindLib, Platform: testTargetP}))
 
 	if !equalStrings(argStrs(d.flatcFlags), []string{"--scoped-enums", "--gen-all"}) {
@@ -3193,7 +3193,7 @@ SRCS(test.proto)
 END()
 `,
 	})
-	mf := throw2(parseFile(fs, fs.sourceRoot()+"/proto/ya.make"))
+	mf := throw2(parseFile(fs, "proto/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("proto"), Kind: KindLib, Platform: testTargetP}))
 
 	if !containsString(strStrings(d.peerdirs), "contrib/libs/googleapis-common-protos") {
@@ -3211,7 +3211,7 @@ PY_SRCS(
 END()
 `,
 	})
-	mf := throw2(parseFile(fs, fs.sourceRoot()+"/pytool/ya.make"))
+	mf := throw2(parseFile(fs, "pytool/ya.make"))
 
 	bin := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "pytool", KindBin, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("pytool"), Kind: KindBin, Platform: testTargetP}))
 	if got := bin.pyMain; got == nil || got.string() != "pytool.__main__:main" {
@@ -3248,7 +3248,7 @@ COPY(
 END()
 `,
 	})
-	mf := throw2(parseFile(fs, fs.sourceRoot()+"/copymod/ya.make"))
+	mf := throw2(parseFile(fs, "copymod/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "copymod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("copymod"), Kind: KindLib, Platform: testTargetP}))
 
 	if !equalStrings(strStrings(d.srcs), []string{"a.cpp", "b.h"}) {
@@ -3927,7 +3927,7 @@ END()
 	writeTestModuleFile(files, "gen/pire/re_lexer.h", "#pragma once\n")
 
 	fs := newMemFS(files)
-	mf := throw2(parseFile(fs, fs.sourceRoot()+"/gen/ya.make"))
+	mf := throw2(parseFile(fs, "gen/ya.make"))
 	instance := ModuleInstance{Path: source("gen"), Kind: KindLib, Platform: testTargetP}
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "gen", KindLib, mf.Stmts, buildIfEnv(instance))
 
@@ -4297,7 +4297,7 @@ func TestCollectModule_SETAPPENDRPathGlobal(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"mod/ya.make": content,
 	})
-	mf := throw2(parseFile(fs, fs.sourceRoot()+"/mod/ya.make"))
+	mf := throw2(parseFile(fs, "mod/ya.make"))
 	instance := ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(instance))
 

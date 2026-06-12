@@ -644,8 +644,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	defer delete(ctx.walking, instance)
 
-	yamakePath := filepath.Join(ctx.sourceRoot, instance.Path.rel(), "ya.make")
-	mf := throw2(parseFile(ctx.fs, yamakePath))
+	mf := throw2(parseFile(ctx.fs, joinRel(instance.Path.rel(), "ya.make")))
 
 	env := buildIfEnv(instance)
 	d := collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, mf.Stmts, env)

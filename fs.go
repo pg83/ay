@@ -24,8 +24,6 @@ type FS interface {
 	// valid only until the next Read on this FS. Callers that retain content past
 	// another Read must copy (e.g. string(data), or ReadAbs for the parser).
 	read(rel string) []byte
-	readAbs(absPath string) []byte
-	existsAbs(absPath string) (present bool, isDir bool)
 	walk(rel string, visit func(rel string, isDir bool))
 	// ContentHash returns the xxh3 of source VFS v's file content, recorded when the
 	// FS last read that file. It is keyed by v.strID() (the full "$(S)/..." path STR),
@@ -299,32 +297,6 @@ func (fs *OsFS) read(rel string) []byte {
 // (fs_read_linux.go / fs_read_other.go).
 func (fs *OsFS) readIntoRaw(rel string, buf []byte) []byte {
 	return readFileInto(fs.rootSlash+cleanRel(rel), buf)
-}
-
-// ReadAbs reads a file to be parsed. The yamake lexer holds its src lazily, and a
-// nested INCLUDE triggers another Read mid-parse — which would overwrite the reused
-// Read buffer the outer lexer still points at. So ReadAbs returns an owned copy that
-// survives those nested reads.
-func (fs *OsFS) readAbs(absPath string) []byte {
-	return append([]byte(nil), fs.read(fs.relForAbs(absPath))...)
-}
-
-func (fs *OsFS) existsAbs(absPath string) (present bool, isDir bool) {
-	return fs.existsRel(fs.relForAbs(absPath))
-}
-
-func (fs *OsFS) relForAbs(absPath string) string {
-	if absPath == fs.srcRoot {
-		return ""
-	}
-
-	if strings.HasPrefix(absPath, fs.rootSlash) {
-		return absPath[len(fs.rootSlash):]
-	}
-
-	throwFmt("relForAbs: %q is outside source root %q", absPath, fs.srcRoot)
-
-	return ""
 }
 
 func (fs *OsFS) walk(rel string, visit func(rel string, isDir bool)) {
