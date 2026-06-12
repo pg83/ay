@@ -2,6 +2,7 @@ package main
 
 import (
 	"strings"
+	"unsafe"
 
 	"github.com/zeebo/xxh3"
 )
@@ -31,11 +32,34 @@ var internTable = struct {
 	overflow map[string]STR // exact fallback for the rare hi-collision
 	los      []uint64       // low 64 bits of xxh3-128(s), indexed by STR; also the per-path hash mixed into node UIDs
 	strs     []string
+	// bytes backs the strings interned from transient byte views (internBytes):
+	// the table must own stable bytes, so a copy is mandatory, but batching the
+	// copies into arena chunks replaces one malloc per unique string with one
+	// per chunk. Committed arena bytes are never rewritten, which is exactly
+	// the immutability unsafe.String requires.
+	bytes *BumpAllocator[byte]
 }{
 	ids:      newIntMap[STR](1 << 16),
 	overflow: make(map[string]STR),
 	los:      make([]uint64, 1, 1<<16),
 	strs:     make([]string, 1, 1<<16),
+	bytes:    newBumpAllocator[byte](1 << 20),
+}
+
+// internOwnedCopy copies b into the table's byte arena and returns a string
+// view over the committed, address-stable region.
+func internOwnedCopy(b []byte) string {
+	n := len(b)
+
+	if n == 0 {
+		return ""
+	}
+
+	block := internTable.bytes.alloc(n)
+	copy(block, b)
+	internTable.bytes.commit(n)
+
+	return unsafe.String(&block[0], n)
 }
 
 type STR uint32
@@ -88,13 +112,14 @@ func internBytes(b []byte) STR {
 			return oid
 		}
 
-		id := internAppend(string(b), h.Lo)
-		internTable.overflow[string(b)] = id
+		s := internOwnedCopy(b)
+		id := internAppend(s, h.Lo)
+		internTable.overflow[s] = id
 
 		return id
 	}
 
-	id := internAppend(string(b), h.Lo)
+	id := internAppend(internOwnedCopy(b), h.Lo)
 	internTable.ids.put(h.Hi, id)
 
 	return id
