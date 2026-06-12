@@ -220,9 +220,19 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	// path-cleans `..` / `.` segments, so SRCS(../foo.cpp) yields a
 	// normalised srcVFS.Rel() like commands/foo.cpp — the bare
 	// instance.Path+"/"+srcRel would still carry the unnormalised tail).
-	canon := filepath.ToSlash(filepath.Clean(instance.Path.rel() + "/" + srcRel))
+	// A clean srcRel needs no Clean and the comparison needs no concat.
+	canonMatches := func() bool {
+		if srcRel != "" && pathIsClean(srcRel) {
+			rel, dir := srcVFS.rel(), instance.Path.rel()
 
-	if srcVFS.isSource() && srcVFS.rel() != canon {
+			return len(rel) == len(dir)+1+len(srcRel) &&
+				rel[:len(dir)] == dir && rel[len(dir)] == '/' && rel[len(dir)+1:] == srcRel
+		}
+
+		return srcVFS.rel() == filepath.ToSlash(filepath.Clean(instance.Path.rel()+"/"+srcRel))
+	}
+
+	if srcVFS.isSource() && !canonMatches() {
 		outputRel := composeSrcDirOutputRel(instance.Path.rel(), srcVFS.rel())
 		out = build(instance.Path.rel() + "/" + outputRel + suffix)
 
@@ -280,6 +290,12 @@ func composeSrcDirOutputRel(instancePath, target string) string {
 }
 
 func normalizeDotDotSegments(rel string) string {
+	// No ".." anywhere (the common case): the split/join would be the
+	// identity, so only the "_/" prefix concat remains.
+	if !strings.Contains(rel, "..") {
+		return "_/" + rel
+	}
+
 	parts := strings.Split(rel, "/")
 	hasParent := false
 

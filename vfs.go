@@ -63,6 +63,47 @@ func internedPrefixed(prefix, rel string) *STR {
 	return internedBytes(vfsPrefixScratch)
 }
 
+// internPrefixedJoined interns prefix+dir+"/"+rel (or prefix+rel when dir is
+// empty) assembled in the scratch buffer — the joined-path twin of
+// internPrefixed, so canonical "dir/rel" interning allocates nothing beyond
+// the one stable table copy on a miss.
+func internPrefixedJoined(prefix, dir, rel string) STR {
+	vfsPrefixScratch = append(vfsPrefixScratch[:0], prefix...)
+
+	if dir != "" {
+		vfsPrefixScratch = append(vfsPrefixScratch, dir...)
+		vfsPrefixScratch = append(vfsPrefixScratch, '/')
+	}
+
+	vfsPrefixScratch = append(vfsPrefixScratch, rel...)
+
+	return internBytes(vfsPrefixScratch)
+}
+
+// internedPrefixedJoined is the lookup-only twin of internPrefixedJoined.
+func internedPrefixedJoined(prefix, dir, rel string) *STR {
+	vfsPrefixScratch = append(vfsPrefixScratch[:0], prefix...)
+
+	if dir != "" {
+		vfsPrefixScratch = append(vfsPrefixScratch, dir...)
+		vfsPrefixScratch = append(vfsPrefixScratch, '/')
+	}
+
+	vfsPrefixScratch = append(vfsPrefixScratch, rel...)
+
+	return internedBytes(vfsPrefixScratch)
+}
+
+// sourceJoined / buildJoined intern "$(S)/dir/rel" / "$(B)/dir/rel" without the
+// dir+"/"+rel concat garbage. rel must already be clean (pathIsClean).
+func sourceJoined(dir, rel string) VFS {
+	return VFS(uint32(internPrefixedJoined("$(S)/", dir, rel))<<1 | uint32(VFSRootSource))
+}
+
+func buildJoined(dir, rel string) VFS {
+	return VFS(uint32(internPrefixedJoined("$(B)/", dir, rel))<<1 | uint32(VFSRootBuild))
+}
+
 func source(rel string) VFS {
 	return VFS(uint32(internPrefixed("$(S)/", rel))<<1 | uint32(VFSRootSource))
 }

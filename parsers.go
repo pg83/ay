@@ -19,6 +19,8 @@ var (
 	blockCommentClose       = []byte("*/")
 	backtraceHeaderInclude  = []byte("BACKTRACE_HEADER")
 	opensslUnistdInclude    = []byte("OPENSSL_UNISTD")
+	protoLineComment        = []byte("//")
+	protoImportKw           = []byte("import")
 )
 
 // swigImplicitDirectives are swig's implicit %includes (swig/Source/Modules/
@@ -727,18 +729,25 @@ func parseYasmIncludes(data []byte) []IncludeDirective {
 }
 
 func parseProtoImportLine(line []byte) (string, IncludeKind, bool) {
-	trimmed := strings.TrimSpace(string(line))
+	// Reject non-import lines (the vast majority) in byte space — the string
+	// materializes only for actual import lines.
+	b := bytes.TrimSpace(line)
 
-	if trimmed == "" {
+	if len(b) == 0 {
 		return "", includeSystem, false
 	}
 
-	if idx := strings.Index(trimmed, "//"); idx >= 0 {
-		trimmed = trimmed[:idx]
-		trimmed = strings.TrimSpace(trimmed)
+	if idx := bytes.Index(b, protoLineComment); idx >= 0 {
+		b = bytes.TrimSpace(b[:idx])
 	}
 
-	if !strings.HasPrefix(trimmed, "import") || isParserIdentContinuation(trimmed, len("import")) {
+	if !bytes.HasPrefix(b, protoImportKw) {
+		return "", includeSystem, false
+	}
+
+	trimmed := string(b)
+
+	if isParserIdentContinuation(trimmed, len("import")) {
 		return "", includeSystem, false
 	}
 

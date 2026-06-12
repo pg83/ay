@@ -103,6 +103,10 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 	// has the file; the module dir (index 0) is the final fallback.
 	for i := len(srcDirs) - 1; i >= 1; i-- {
 		if ctx.fs.isFile(srcDirs[i], srcRel) {
+			if srcRel != "" && pathIsClean(srcRel) {
+				return sourceJoined(srcDirs[i].rel(), srcRel)
+			}
+
 			return source(filepath.ToSlash(filepath.Clean(srcDirs[i].rel() + "/" + srcRel)))
 		}
 	}
@@ -111,6 +115,10 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 	// at the canonical source path (REF tracks the cleaned form, e.g.
 	// $(S)/ydb/public/lib/ydb_cli/commands/ydb_command.cpp, not the
 	// command_base/../ydb_command.cpp shape).
+	if srcRel != "" && pathIsClean(srcRel) {
+		return sourceJoined(srcInstance.Path.rel(), srcRel)
+	}
+
 	srcRelOnDisk := filepath.ToSlash(filepath.Clean(srcInstance.Path.rel() + "/" + srcRel))
 
 	return source(srcRelOnDisk)
