@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/zeebo/xxh3"
@@ -293,28 +292,6 @@ func (fs *MemFS) contentHash(v VFS) uint64 {
 		return 0
 	}
 	return xxh3.Hash(data)
-}
-
-func (fs *MemFS) readAbs(absPath string) []byte {
-	return fs.read(fs.relForAbs(absPath))
-}
-
-func (fs *MemFS) existsAbs(absPath string) (present bool, isDir bool) {
-	return fs.existsRel(fs.relForAbs(absPath))
-}
-
-func (fs *MemFS) relForAbs(absPath string) string {
-	if absPath == fs.srcRoot {
-		return ""
-	}
-
-	if strings.HasPrefix(absPath, fs.rootSlash) {
-		return absPath[len(fs.rootSlash):]
-	}
-
-	throwFmt("memFS.relForAbs: %q outside source root %q", absPath, fs.srcRoot)
-
-	return ""
 }
 
 func (fs *MemFS) walk(rel string, visit func(rel string, isDir bool)) {

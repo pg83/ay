@@ -432,17 +432,12 @@ func (e *ParseError) Error() string {
 	return e.error()
 }
 
-func parseFile(fs FS, path string) (mf *MakeFile, err error) {
+// parseFile parses the ya.make at the source-root-relative rel. The parser's
+// whole path space (file names, INCLUDE targets, the once/cycle sets) is
+// root-relative: build files cannot reference anything outside the FS.
+func parseFile(fs FS, rel string) (mf *MakeFile, err error) {
 	exc := try(func() {
-		data := fs.readAbs(path)
-
-		abs, absErr := filepath.Abs(path)
-
-		if absErr != nil {
-			abs = path
-		}
-
-		mf = throw2(parse(fs, abs, data))
+		mf = throw2(parse(fs, cleanRel(rel), readOwnedForParse(fs, cleanRel(rel))))
 	})
 
 	if exc != nil {
@@ -451,6 +446,13 @@ func parseFile(fs FS, path string) (mf *MakeFile, err error) {
 	}
 
 	return mf, err
+}
+
+// readOwnedForParse returns an owned copy of rel's content: the lexer holds
+// its src lazily, and a nested INCLUDE triggers another read mid-parse — which
+// would overwrite the reused FS read buffer the outer lexer still points at.
+func readOwnedForParse(fs FS, rel string) []byte {
+	return append([]byte(nil), fs.read(rel)...)
 }
 
 type TokKind int
@@ -898,13 +900,7 @@ func (p *Parser) applyIncludeOnce(nameTok Token) {
 		return
 	}
 
-	abs, err := filepath.Abs(p.name)
-
-	if err != nil {
-		abs = p.name
-	}
-
-	p.includes.once[abs] = struct{}{}
+	p.includes.once[p.name] = struct{}{}
 }
 
 func (p *Parser) parseMacroArgs(nameTok Token) []STR {
@@ -1757,32 +1753,27 @@ func (p *Parser) expandInclude(into []Stmt, nameTok Token) []Stmt {
 
 	rel := args[0].string()
 
-	if strings.HasPrefix(rel, "${ARCADIA_ROOT}/") {
-		suffix := strings.TrimPrefix(rel, "${ARCADIA_ROOT}/")
-		rel = filepath.Join(p.fs.sourceRoot(), suffix)
+	// The target is source-root-relative: either spelled from the root via
+	// ${ARCADIA_ROOT}/, or relative to the including file's directory. An
+	// absolute path would escape the FS — that is a build-file defect.
+	var target string
+
+	if suffix, ok := strings.CutPrefix(rel, "${ARCADIA_ROOT}/"); ok {
+		target = cleanRel(suffix)
+	} else if filepath.IsAbs(rel) {
+		p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE(%s): absolute paths escape the source root", rel)
+	} else {
+		target = cleanRel(joinRel(pathDir(p.name), rel))
 	}
 
-	dir := filepath.Dir(p.name)
-	full := rel
-
-	if !filepath.IsAbs(rel) {
-		full = filepath.Join(dir, rel)
-	}
-
-	absTarget, absErr := filepath.Abs(full)
-
-	if absErr != nil {
-		absTarget = full
-	}
-
-	if _, skip := p.includes.once[absTarget]; skip {
+	if _, skip := p.includes.once[target]; skip {
 		return into
 	}
 
 	chain := append(p.includeStack, p.name)
 
 	for _, visited := range chain {
-		if visited == absTarget {
+		if visited == target {
 			chainStr := ""
 
 			for i, v := range chain {
@@ -1793,18 +1784,18 @@ func (p *Parser) expandInclude(into []Stmt, nameTok Token) []Stmt {
 				chainStr += v
 			}
 
-			chainStr += " -> " + absTarget
+			chainStr += " -> " + target
 			p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE cycle: %s", chainStr)
 		}
 	}
 
-	if present, _ := p.fs.existsAbs(absTarget); !present {
+	if present, _ := p.fs.exists(srcRootVFS, target); !present {
 		return into
 	}
 
-	data := p.fs.readAbs(absTarget)
+	data := readOwnedForParse(p.fs, target)
 
-	included := parseInternalWithState(p.fs, absTarget, data, chain, p.includes)
+	included := parseInternalWithState(p.fs, target, data, chain, p.includes)
 
 	return append(into, included.Stmts...)
 }
