@@ -53,9 +53,9 @@ func (id ENV) String() string {
 // interned() (a read-only STR probe) returns nil for a never-seen name, so a
 // junk ${VAR} grows neither the STR nor the ENV table.
 func internedEnv(name string) (ENV, bool) {
-	st, ok := interned(name)
+	st := interned(name)
 
-	if !ok {
+	if st == 0 {
 		return 0, false
 	}
 

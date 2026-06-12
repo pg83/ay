@@ -89,9 +89,9 @@ func strPtr(s STR) *STR {
 // strsContain reports membership of the string's intern id in an STR list —
 // an unknown string cannot be a member (probe without polluting the table).
 func strsContain(items []STR, s string) bool {
-	id, ok := interned(s)
+	id := interned(s)
 
-	if !ok {
+	if id == 0 {
 		return false
 	}
 
