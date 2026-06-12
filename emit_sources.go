@@ -61,7 +61,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 			// diverging from REF (e.g. yt/yt/core/misc/isa_crc64 needs
 			// -I=$(S)/yt/yt/core/misc/isa_crc64/include for reg_sizes.asm).
 			scanIn.AddIncl = dedupVFS(srcIn.AddIncl, d.asmAddIncl)
-			scanIn.ScanCfg = newScanContext(scanIn.AddIncl, scanIn.PeerAddInclGlobal, includeScannerBasePaths(), srcInstance.Path.rel())
+			scanIn.ScanCfg = newScanContext(ctx.parsers, scanIn.AddIncl, scanIn.PeerAddInclGlobal, includeScannerBasePaths(), srcInstance.Path.rel())
 			asIn.AddIncl = scanIn.AddIncl
 		}
 
@@ -127,7 +127,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
 		event2cppLDRef, event2cppBinary := ctx.tool(argToolsEvent2cpp)
 
-		evImports := walkClosureTail(ctx.scannerFor(srcInstance), evSource, protoWalkInputs(nil, srcInstance.Path.rel()).ScanCfg)
+		evImports := walkClosureTail(ctx.scannerFor(srcInstance), evSource, protoWalkInputs(ctx.parsers, nil, srcInstance.Path.rel()).ScanCfg)
 		evRef := emitEV(
 			srcInstance, evRelPath,
 			cppStyleguideLDRef, protocLDRef, event2cppLDRef,

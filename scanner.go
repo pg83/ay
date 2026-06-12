@@ -80,10 +80,8 @@ type IncludeScanner struct {
 	searchTierFlat *IntValueMap[SearchTierResult]
 	searchTierSeen BitSet
 
-	// configByHash memoizes both per-distinct-config products — the dense
-	// ctxNum and the resolve index — under ONE probe of the shared ctxHash
-	// (they were two maps probed back-to-back with the same key).
-	configByHash map[uint64]ScanConfigEntry
+	// (scan configs resolve at newScanContext time — see
+	// IncludeParserManager.resolveScanConfig; the scanner holds no config table.)
 
 	// sourceUnderCache memoizes the includer-local quoted-include resolve
 	// (resolveSourceUnder(incDir, target)) — the hottest existence probe (~505k/run,
@@ -246,7 +244,6 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 		closureArena:     newBumpAllocator[VFS](closureArenaInitial),
 		childArena:       newBumpAllocator[VFS](1 << 12),
 		searchTierFlat:   newIntValueMap[SearchTierResult](4096),
-		configByHash:     make(map[uint64]ScanConfigEntry, 1024),
 		sourceUnderCache: newIntValueMap[VFS](1 << 16),
 		tjc:              tjc,
 	}
@@ -268,64 +265,48 @@ type ScanContext struct {
 	// CodegenRegistry output — see that field's comment for the rationale.
 	OwnerModuleDir string
 
-	// hash fingerprints the resolve-relevant fields, computed exactly once by
-	// newScanContext — the only constructor.
-	hash uint64
+	// cfg is the resolved scan config — bound exactly once by newScanContext
+	// (the only constructor); walks do no table lookups at all.
+	cfg *ScanConfig
 }
 
-// newScanContext builds a scan config and seals its hash. The walk's parser
-// for unregistered-extension files is NOT part of the config — it is a ScanCtx
-// property handed to newScanCtx (derived from the walk root).
-func newScanContext(ownAddIncl, peerAddIncl, base []VFS, ownerModuleDir string) ScanContext {
+// ScanConfig is one distinct resolve configuration: its dense id (half of the
+// searchTier cache key) and the prebuilt resolve index. Deduped per config
+// content by IncludeParserManager.resolveScanConfig.
+type ScanConfig struct {
+	num uint32
+	ri  *CfgResolveIndex
+}
+
+// newScanContext builds a scan config and binds its resolved ScanConfig. The
+// walk's parser for unregistered-extension files is NOT part of the config —
+// it is a ScanCtx property handed to newScanCtx (derived from the walk root).
+func newScanContext(pm *IncludeParserManager, ownAddIncl, peerAddIncl, base []VFS, ownerModuleDir string) ScanContext {
 	cfg := ScanContext{
 		OwnAddIncl:      ownAddIncl,
 		PeerAddInclSet:  peerAddIncl,
 		BaseSearchPaths: base,
 		OwnerModuleDir:  ownerModuleDir,
 	}
-	cfg.hash = hashScanContext(&cfg)
+	cfg.cfg = pm.resolveScanConfig(&cfg)
 
 	return cfg
 }
 
-type ScanConfigEntry struct {
-	ctxNum uint32
-	ri     *CfgResolveIndex
-}
-
-// newScanCtx resolves cfg (sealed by newScanContext) into a scan context;
-// parser handles unregistered-extension files reached from this walk (nil = C
-// default), resolved by the caller from the walk's root.
+// newScanCtx wraps cfg (bound by newScanContext) for this scanner; parser
+// handles unregistered-extension files reached from this walk (nil = C
+// default), resolved by the caller from the walk's root. No lookups: the
+// resolved config rides inside cfg.
 func (s *IncludeScanner) newScanCtx(cfg ScanContext, parser IncludeDirectiveParser) *ScanCtx {
-	if cfg.hash == 0 {
+	if cfg.cfg == nil {
 		throwFmt("newScanCtx: ScanContext built without newScanContext")
 	}
-
-	entry, ok := s.configByHash[cfg.hash]
-
-	if !ok {
-		// Dense id: next == count of distinct configs.
-		entry = ScanConfigEntry{ctxNum: uint32(len(s.configByHash)), ri: buildCfgResolveIndex(&cfg)}
-		s.configByHash[cfg.hash] = entry
-
-		if entry.ri.indexable {
-			for _, p := range cfg.OwnAddIncl {
-				s.parsers.indexAddincl(p)
-			}
-
-			for _, p := range cfg.PeerAddInclSet {
-				s.parsers.indexAddincl(p)
-			}
-		}
-	}
-
-	ctxNum, ri := entry.ctxNum, entry.ri
 
 	return &ScanCtx{
 		scanner:      s,
 		cfg:          cfg,
-		ctxNum:       ctxNum,
-		resolveIndex: ri,
+		ctxNum:       cfg.cfg.num,
+		resolveIndex: cfg.cfg.ri,
 		parser:       parser,
 	}
 }

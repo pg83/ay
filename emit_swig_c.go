@@ -46,7 +46,7 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 		// The window walk: implicit %includes are the swig parser's own
 		// directives, the Lib dirs are FOR-swig addincl data, the resolution
 		// is the scanner's standard one (sysincl swig.yml included).
-		swigClosure := walkClosureTail(ctx.scannerFor(instance), srcVFS, newScanContext(swigAddIncls, nil, includeScannerBasePaths(), instance.Path.rel()))
+		swigClosure := walkClosureTail(ctx.scannerFor(instance), srcVFS, newScanContext(ctx.parsers, swigAddIncls, nil, includeScannerBasePaths(), instance.Path.rel()))
 
 		// swigClosure joins as its own chunk (referenced, not copied; read-only
 		// after this — the later consumers copy out of it).
