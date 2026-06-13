@@ -163,6 +163,8 @@ func emitEN(
 	headerIncludeClosure []VFS,
 	emit Emitter,
 ) (NodeRef, []VFS) {
+	na := emit.nodeArenas()
+
 	serializedCPPVFS := build(instance.Path.rel() + "/" + headerRel + "_serialized.cpp")
 
 	cmdArgs := []STR{
@@ -199,10 +201,10 @@ func emitEN(
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:              env,
-		Inputs:           inputList(vfsList(enumParserBin), headerIncludeClosure),
+		Inputs:           na.inputList(na.vfsList(enumParserBin), headerIncludeClosure),
 		KV:               KV{P: pkEN, PC: pcYellow},
 		Outputs:          outputs,
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

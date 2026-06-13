@@ -1,6 +1,8 @@
 package main
 
 func emitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, tc ModuleToolchain, scripts ScriptDeps, emit Emitter) (NodeRef, VFS) {
+	na := emit.nodeArenas()
+
 	joinSrcs := buildScriptsGenJoinSrcsPy
 
 	outVFS := build(instance.Path.rel() + "/" + allName)
@@ -34,16 +36,16 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 	}
 
 	// Chunked: the join closure (a shared cached slice) is referenced, not copied.
-	inputs := inputList(scripts[joinSrcs], srcVFSs, closure)
+	inputs := na.inputList(scripts[joinSrcs], srcVFSs, closure)
 
 	node := &Node{
 		Platform: statsPlatform,
-		Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:              env,
 		Inputs:           inputs,
 		KV:               KV{P: pkJS, PC: pcMagenta},
-		Outputs:          vfsList(outVFS),
+		Outputs:          na.vfsList(outVFS),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		usesResources:    usesPython3,

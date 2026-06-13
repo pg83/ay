@@ -487,7 +487,7 @@ func TestNormalizeDotDotSegments_Subdir(t *testing.T) {
 // withCCBlocks builds the module-stable arg blocks for an ad-hoc test input —
 // production code builds them where the module's ModuleCCInputs is assembled.
 func withCCBlocks(p *Platform, in ModuleCCInputs) ModuleCCInputs {
-	in.CCBlocks = composeCCModuleArgBlocks(p, &in)
+	in.CCBlocks = composeCCModuleArgBlocks(newNodeArenas(), p, &in)
 
 	return in
 }

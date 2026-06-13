@@ -556,7 +556,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		SetVars:              d.setVars,
 		ModuleTag:            tagCppProto,
 	}
-	moduleInputs.CCBlocks = composeCCModuleArgBlocks(cppInstance.Platform, &moduleInputs)
+	moduleInputs.CCBlocks = composeCCModuleArgBlocks(ctx.na, cppInstance.Platform, &moduleInputs)
 
 	ccRefs := make([]NodeRef, 0, len(codegenOutputs))
 	ccOutputs := make([]VFS, 0, len(codegenOutputs))

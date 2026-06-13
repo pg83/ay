@@ -148,6 +148,8 @@ func emitCF(
 	tc ModuleToolchain,
 	emit Emitter,
 ) (NodeRef, VFS) {
+	na := emit.nodeArenas()
+
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	cmdArgs := []STR{
@@ -160,12 +162,12 @@ func emitCF(
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:     env,
-		Inputs:  inputList(vfsList(configureFilePyVFS), includeInputs),
+		Inputs:  na.inputList(na.vfsList(configureFilePyVFS), includeInputs),
 		KV:      KV{P: pkCF, PC: pcYellow},
-		Outputs: vfsList(outVFS),
+		Outputs: na.vfsList(outVFS),
 		TargetProperties: func() TargetProperties {
 			tp := TargetProperties{ModuleDir: moduleDir}
 

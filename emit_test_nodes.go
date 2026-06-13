@@ -31,26 +31,26 @@ type TestSuiteInfo struct {
 }
 
 func emitTestRunNodes(ctxEmit Emitter, runEmit Emitter, p *Platform, info TestSuiteInfo, ldRef NodeRef, resourceGlobals []ResourceDecl) []NodeRef {
-	ctxRef := ctxEmit.emit(buildTestCtxNode(p))
+	ctxRef := ctxEmit.emit(buildTestCtxNode(ctxEmit.nodeArenas(), p))
 
-	unittest := buildUnittestNode(p, info, resourceGlobals)
+	unittest := buildUnittestNode(runEmit.nodeArenas(), p, info, resourceGlobals)
 	unittest.DepRefs = []NodeRef{ldRef, ctxRef}
 	unittestRef := runEmit.emit(unittest)
 
-	clangFormat := buildClangFormatNode(p, info)
+	clangFormat := buildClangFormatNode(runEmit.nodeArenas(), p, info)
 	clangFormat.DepRefs = []NodeRef{ctxRef}
 	clangFormatRef := runEmit.emit(clangFormat)
 
 	return []NodeRef{unittestRef, clangFormatRef}
 }
 
-func buildTestCtxNode(p *Platform) *Node {
+func buildTestCtxNode(na *NodeArenas, p *Platform) *Node {
 	cacheTrue := true
 
 	return &Node{
 		Platform: p,
 		Cache:    &cacheTrue,
-		Cmds: cmdList(Cmd{CmdArgs: chunkList(strList(internStr(testYMakePython3),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(internStr(testYMakePython3),
 			(source(testAppendFileScriptRel)).str(),
 			internStr(testContextPath),
 			arg3.str(),
@@ -60,16 +60,16 @@ func buildTestCtxNode(p *Platform) *Node {
 			arg4.str(),
 			arg5.str()))}),
 		Env:              nil,
-		Inputs:           inputList(vfsList(source(testAppendFileScriptRel))),
+		Inputs:           na.inputList(na.vfsList(source(testAppendFileScriptRel))),
 		KV:               KV{P: pkCP, PC: pcLightBlue},
-		Outputs:          vfsList(bldCommonTestContext),
+		Outputs:          na.vfsList(bldCommonTestContext),
 		Requirements:     Requirements{Network: nwRestricted},
 		TargetProperties: TargetProperties{},
 		usesResources:    usesPython3,
 	}
 }
 
-func buildUnittestNode(p *Platform, info TestSuiteInfo, resourceGlobals []ResourceDecl) *Node {
+func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resourceGlobals []ResourceDecl) *Node {
 	cacheFalse := false
 	resultsDir := path.Join(info.ProjectPath, "test-results", "unittest")
 
@@ -133,10 +133,10 @@ func buildUnittestNode(p *Platform, info TestSuiteInfo, resourceGlobals []Resour
 	return &Node{
 		Platform: p,
 		Cache:    &cacheFalse,
-		Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Cwd: internStr(testBuildRoot)}),
 		Env:    testEnv(p, "unittest"),
-		Inputs: inputList(vfsList(source(info.ProjectPath))),
+		Inputs: na.inputList(na.vfsList(source(info.ProjectPath))),
 		KV: KV{
 			P:                pkTS,
 			Path:             path.Join(info.ProjectPath, "unittest"),
@@ -156,7 +156,7 @@ func buildUnittestNode(p *Platform, info TestSuiteInfo, resourceGlobals []Resour
 	}
 }
 
-func buildClangFormatNode(p *Platform, info TestSuiteInfo) *Node {
+func buildClangFormatNode(na *NodeArenas, p *Platform, info TestSuiteInfo) *Node {
 	cacheTrue := true
 	resultsDir := path.Join(info.ProjectPath, "test-results", "clang_format")
 
@@ -235,10 +235,10 @@ func buildClangFormatNode(p *Platform, info TestSuiteInfo) *Node {
 	return &Node{
 		Platform: p,
 		Cache:    &cacheTrue,
-		Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Cwd: internStr(testBuildRoot)}),
 		Env:    testEnv(p, "clang_format"),
-		Inputs: inputList(inputs),
+		Inputs: na.inputList(inputs),
 		KV: KV{
 			P:                pkTS,
 			Path:             path.Join(info.ProjectPath, "clang_format"),

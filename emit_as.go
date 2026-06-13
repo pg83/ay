@@ -18,6 +18,8 @@ var yasmConstHead = []STR{
 }
 
 func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS) {
+	na := emit.nodeArenas()
+
 	outVFS, inVFS := composeASPaths(instance, srcRel, srcVFS, in)
 
 	cmdArgs := composeASCmdArgs(instance, outVFS, inVFS, in)
@@ -25,12 +27,12 @@ func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Cwd: strB,
 			Env: env}),
 		Env:              env,
-		Inputs:           inputList(in.IncludeInputs),
-		Outputs:          vfsList(outVFS),
+		Inputs:           na.inputList(in.IncludeInputs),
+		Outputs:          na.vfsList(outVFS),
 		KV:               KV{P: pkAS, PC: pcLightGreen},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -102,6 +104,8 @@ func composeASIncludes(in ModuleCCInputs) []STR {
 }
 
 func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, emit Emitter) (NodeRef, VFS) {
+	na := emit.nodeArenas()
+
 	stem := strings.TrimSuffix(srcRel, ".asm")
 	suffix := ".o"
 
@@ -157,11 +161,11 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:              env,
-		Inputs:           inputList(vfsList(yasmBinaryVFS), in.IncludeInputs),
-		Outputs:          vfsList(outVFS),
+		Inputs:           na.inputList(na.vfsList(yasmBinaryVFS), in.IncludeInputs),
+		Outputs:          na.vfsList(outVFS),
 		KV:               KV{P: pkAS, PC: pcLightGreen},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

@@ -11,6 +11,8 @@ func emitR5(
 	rlgenCdBinPath VFS,
 	emit Emitter,
 ) (NodeRef, VFS, VFS) {
+	na := emit.nodeArenas()
+
 	srcVFS := source(instance.Path.rel() + "/" + srcRel)
 	tmpVFS := build(instance.Path.rel() + "/" + srcRel + ".tmp")
 	cppVFS := build(instance.Path.rel() + "/" + strings.TrimSuffix(srcRel, ".rl") + ".rl5.cpp")
@@ -18,14 +20,14 @@ func emitR5(
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	cmd0 := Cmd{
-		CmdArgs: chunkList(strList((ragel5BinPath).str(),
+		CmdArgs: na.chunkList(na.strList((ragel5BinPath).str(),
 			argDashO.str(),
 			(tmpVFS).str(),
 			(srcVFS).str())),
 		Env: env,
 	}
 	cmd1 := Cmd{
-		CmdArgs: chunkList(strList((rlgenCdBinPath).str(),
+		CmdArgs: na.chunkList(na.strList((rlgenCdBinPath).str(),
 			argG2.str(),
 			argDashO.str(),
 			(cppVFS).str(),
@@ -45,10 +47,10 @@ func emitR5(
 
 	node := &Node{
 		Platform:         instance.Platform,
-		Cmds:             cmdList(cmd0, cmd1),
+		Cmds:             na.cmdList(cmd0, cmd1),
 		Env:              env,
-		Inputs:           inputList(inputs),
-		Outputs:          vfsList(tmpVFS, cppVFS),
+		Inputs:           na.inputList(inputs),
+		Outputs:          na.vfsList(tmpVFS, cppVFS),
 		KV:               KV{P: pkR5, PC: pcYellow},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

@@ -72,6 +72,8 @@ func emitPB(
 	blocks *PbArgBlocks,
 	emit Emitter,
 ) NodeRef {
+	na := emit.nodeArenas()
+
 	moduleDir := instance.Path.rel()
 
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
@@ -109,7 +111,7 @@ func emitPB(
 		outsChunk = append(outsChunk, (output).str())
 	}
 
-	cmdArgs := chunkList(blocks.head, outsChunk, blocks.mid, strList(internStr(protoRelPath)))
+	cmdArgs := na.chunkList(blocks.head, outsChunk, blocks.mid, na.strList(internStr(protoRelPath)))
 
 	if len(blocks.tail) > 0 {
 		cmdArgs = append(cmdArgs, blocks.tail)
@@ -186,7 +188,7 @@ func emitPB(
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: cmdList(Cmd{CmdArgs: cmdArgs,
+		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Cwd: internStr(protocCwd),
 			Env: env}),
 		Env: env,
@@ -194,7 +196,7 @@ func emitPB(
 		// transitive $(S) leaf sources behind a build-generated .proto — RUN_ANTLR
 		// grammar / template / jar / scripts — matching upstream's flat source
 		// closure) are shared caller slices: referenced as chunks, never copied.
-		Inputs:           inputList(inputs, transitiveProtoImports, producerSourceInputs),
+		Inputs:           na.inputList(inputs, transitiveProtoImports, producerSourceInputs),
 		Outputs:          outputs,
 		KV:               KV{P: pkPB, PC: pcYellow},
 		TargetProperties: targetProps,

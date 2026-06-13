@@ -14,6 +14,8 @@ import "strings"
 //	  the PY objcopy_<hash>.o, which then participates in the global archive
 //	  (lib<...>.global.a) via the existing LIBRARY .global.a pipeline.
 func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs, resourceGlobals []ResourceDecl) {
+	na := ctx.na
+
 	if len(d.llvmBc) == 0 {
 		return
 	}
@@ -74,7 +76,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 			// closure is a shared cached slice (closureOf returns it uncopied) —
 			// referenced as its own chunk, never copied.
 			// closure is the input window (inputVFS included — walkClosure).
-			allInputs := inputList(vfsList(clangWrapperVFS), // ${input:"build/scripts/clang_wrapper.py"}
+			allInputs := na.inputList(na.vfsList(clangWrapperVFS), // ${input:"build/scripts/clang_wrapper.py"}
 				closure)
 
 			// Propagate $(S) inputs from this BC node to the OP flat-input set.
@@ -95,10 +97,10 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 
 			node := &Node{
 				Platform:         instance.Platform,
-				Cmds:             cmdList(Cmd{CmdArgs: chunkList(bcArgs), Env: env}),
+				Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(bcArgs), Env: env}),
 				Env:              env,
 				Inputs:           allInputs,
-				Outputs:          vfsList(bcOut),
+				Outputs:          na.vfsList(bcOut),
 				KV:               KV{P: pkBC, PC: pcLightGreen},
 				TargetProperties: tp,
 				Requirements:     reqs,
@@ -121,7 +123,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 		ldArgs = append(ldArgs, argDashO.str(), (mergedOut).str())
 		// bcPaths is a fresh local (read-only after this); the script-table
 		// slice joins as its own chunk — neither is copied.
-		mergeInputs := inputList(bcPaths)
+		mergeInputs := na.inputList(bcPaths)
 
 		if linksCopy {
 			mergeInputs = append(mergeInputs, ctx.scripts[copyFsToolsVFS])
@@ -129,10 +131,10 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 
 		ldNode := &Node{
 			Platform:         instance.Platform,
-			Cmds:             cmdList(Cmd{CmdArgs: chunkList(ldArgs), Env: env}),
+			Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(ldArgs), Env: env}),
 			Env:              env,
 			Inputs:           mergeInputs,
-			Outputs:          vfsList(mergedOut),
+			Outputs:          na.vfsList(mergedOut),
 			KV:               KV{P: pkLD, PC: pcLightRed},
 			TargetProperties: tp,
 			Requirements:     reqs,
@@ -167,14 +169,14 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 		// Stays a single flat chunk: the dedup interleaves the head with
 		// bcSourceInputs (a local accumulation full of per-BC duplicates), so the
 		// tail needs a freshly built slice either way — no shared slice is copied.
-		optChunks := inputList(dedupVFS(optInputs, bcSourceInputs))
+		optChunks := na.inputList(dedupVFS(optInputs, bcSourceInputs))
 
 		optNode := &Node{
 			Platform:         instance.Platform,
-			Cmds:             cmdList(Cmd{CmdArgs: chunkList(optArgs), Env: env}),
+			Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(optArgs), Env: env}),
 			Env:              env,
 			Inputs:           optChunks,
-			Outputs:          vfsList(optOut),
+			Outputs:          na.vfsList(optOut),
 			KV:               KV{P: pkOP, PC: pcYellow},
 			TargetProperties: tp,
 			Requirements:     reqs,

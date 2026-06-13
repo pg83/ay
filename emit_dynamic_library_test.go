@@ -21,6 +21,7 @@ func TestComposeDynLibInputs_IncludesVcsAndHelperScripts(t *testing.T) {
 	}
 
 	got := composeDynLibInputs(
+		newNodeArenas(),
 		[]VFS{
 			intern("$(B)/contrib/libs/libiconv/static/liblibs-libiconv-static.a"),
 			intern("$(B)/build/cow/on/libbuild-cow-on.a"),

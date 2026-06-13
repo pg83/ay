@@ -51,6 +51,10 @@ func newResourceAwareEmitter(host *Platform, inner Emitter, scripts ScriptDeps, 
 	}
 }
 
+func (e *ResourceAwareEmitter) nodeArenas() *NodeArenas {
+	return e.inner.nodeArenas()
+}
+
 func (e *ResourceAwareEmitter) emit(n *Node) NodeRef {
 	e.attachResourceDeps(n)
 

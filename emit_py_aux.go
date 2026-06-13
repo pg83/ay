@@ -84,6 +84,8 @@ type RawAuxResourceChunksResult struct {
 }
 
 func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []PyProtoAuxEntry, moduleTag string, deps []NodeRef, in ModuleCCInputs, rescompilerRef NodeRef) *RawAuxResourceChunksResult {
+	na := ctx.na
+
 	if len(entries) == 0 {
 		return nil
 	}
@@ -218,7 +220,7 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 			}
 		}
 
-		inputs := inputList(ch.inputs, tail)
+		inputs := na.inputList(ch.inputs, tail)
 
 		if extras := resolveCodegenDepRefsExt(ctx, instance, nil, ch.inputs, chDeps...); len(extras) > 0 {
 			chDeps = append(chDeps, extras...)
@@ -226,10 +228,10 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 
 		ref := ctx.emit.emit(&Node{
 			Platform:         instance.Platform,
-			Cmds:             cmdList(Cmd{CmdArgs: chunkList(cmdArgs), Env: env}),
+			Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
 			Env:              env,
 			Inputs:           inputs,
-			Outputs:          vfsList(aux),
+			Outputs:          na.vfsList(aux),
 			KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

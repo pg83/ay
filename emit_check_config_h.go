@@ -6,6 +6,8 @@ import (
 )
 
 func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []*SourceEmit {
+	na := ctx.na
+
 	if len(d.checkConfigHeaders) == 0 {
 		return nil
 	}
@@ -29,14 +31,14 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 		if !ok {
 			chRef = ctx.emit.emit(&Node{
 				Platform: instance.Platform,
-				Cmds: cmdList(Cmd{CmdArgs: chunkList(strList(d.tc.Python3,
+				Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(d.tc.Python3,
 					argSBuildScriptsCheckConfigHPy.str(),
 					internStr(instance.Path.rel()+"/"+conf.string()),
 					(generatedVFS).str())),
 					Env: env}),
 				Env:              env,
-				Inputs:           inputList(inputs),
-				Outputs:          vfsList(generatedVFS),
+				Inputs:           na.inputList(inputs),
+				Outputs:          na.vfsList(generatedVFS),
 				KV:               KV{P: pkCH, PC: pcYellow},
 				Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 				TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},

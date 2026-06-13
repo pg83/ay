@@ -132,9 +132,3 @@ func (c InputChunks) flat() []VFS {
 func (n *Node) flatInputs() []VFS {
 	return n.Inputs.flat()
 }
-
-// srcChunk wraps a single VFS as an input chunk — the [1]{src} head of a CC
-// node's chunked inputs.
-func srcChunk(v VFS) []VFS {
-	return vfsList(v)
-}

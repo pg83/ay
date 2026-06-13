@@ -78,6 +78,8 @@ type CythonStmt struct {
 }
 
 func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []*SourceEmit {
+	na := ctx.na
+
 	if len(d.cythonCpp) == 0 {
 		return nil
 	}
@@ -147,11 +149,11 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 
 		cyRef := ctx.emit.emit(&Node{
 			Platform: instance.Platform,
-			Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 				Env: env}),
 			Env:              env,
-			Inputs:           inputList(toolInputs),
-			Outputs:          vfsList(generatedVFS),
+			Inputs:           na.inputList(toolInputs),
+			Outputs:          na.vfsList(generatedVFS),
 			KV:               KV{P: pkCY, PC: pcYellow},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			TargetProperties: targetProps,
@@ -165,7 +167,7 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 		ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl, d.cythonNumpyBeforeInclude)
 		ccIn.CFlags = filterPyRegisterCFlags(ccIn.CFlags)
 		// AddIncl/CFlags feed the module-stable arg blocks — rebuild for this copy.
-		ccIn.CCBlocks = composeCCModuleArgBlocks(instance.Platform, &ccIn)
+		ccIn.CCBlocks = composeCCModuleArgBlocks(na, instance.Platform, &ccIn)
 		ccIn.PerSourceCFlags = append([]ARG(nil), in.PerSourceCFlags...)
 
 		if cythonImplicitFallthrough(stmt, py23Variant) {
@@ -261,7 +263,7 @@ func appendCythonCCAddIncl(addIncl []VFS, numpyBeforeInclude bool) []VFS {
 	return out
 }
 
-func adjustCythonCompanionSourceInputs(p *Platform, d *ModuleData, src string, in ModuleCCInputs) ModuleCCInputs {
+func adjustCythonCompanionSourceInputs(na *NodeArenas, p *Platform, d *ModuleData, src string, in ModuleCCInputs) ModuleCCInputs {
 	if len(d.cythonCpp) == 0 {
 		return in
 	}
@@ -280,7 +282,7 @@ func adjustCythonCompanionSourceInputs(p *Platform, d *ModuleData, src string, i
 	in.AddIncl = appendCythonCCAddIncl(in.AddIncl, d.cythonNumpyBeforeInclude)
 	in.CFlags = filterPyRegisterCFlags(in.CFlags)
 	// AddIncl/CFlags feed the module-stable arg blocks — rebuild for this copy.
-	in.CCBlocks = composeCCModuleArgBlocks(p, &in)
+	in.CCBlocks = composeCCModuleArgBlocks(na, p, &in)
 
 	return in
 }

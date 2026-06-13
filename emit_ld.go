@@ -55,6 +55,8 @@ func emitLD(
 	scripts ScriptDeps,
 	emit Emitter,
 ) NodeRef {
+	na := emit.nodeArenas()
+
 	if len(ccRefs) != len(ccPaths) {
 		throwFmt("EmitLD: ccRefs/ccPaths length mismatch (%d vs %d)", len(ccRefs), len(ccPaths))
 	}
@@ -102,12 +104,12 @@ func emitLD(
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, tc, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings)
 	cmd2 := composeLDCmdLinkExe(instance.Platform, tc, instance.Path.rel(), outputPath, vcsOPath, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, dynamicPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, wantsStrip)
 	cmd3 := composeLDCmdLinkOrCopy(tc, binaryDir, dynamicPaths...)
-	splitDwarfCmds := composeLDSplitDwarfCmds(tc, outputPath, wantsSplitDwarf)
+	splitDwarfCmds := composeLDSplitDwarfCmds(na, tc, outputPath, wantsSplitDwarf)
 
 	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	envFull := hostP.toolEnv()
 
-	cmds := cmdList(Cmd{CmdArgs: chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: chunkList(cmd1), Env: envFull}, Cmd{CmdArgs: chunkList(cmd2), Cwd: strB, Env: envFull}, Cmd{CmdArgs: chunkList(cmd3), Env: envVcsOnly})
+	cmds := na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: strB, Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd3), Env: envVcsOnly})
 
 	for i := range splitDwarfCmds {
 		splitDwarfCmds[i].Env = envVcsOnly
@@ -115,7 +117,7 @@ func emitLD(
 
 	cmds = append(cmds, splitDwarfCmds...)
 
-	inputs := composeLDInputs(instance.Path.rel(), ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts)
+	inputs := composeLDInputs(na, instance.Path.rel(), ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts)
 
 	inputTail := make([]VFS, 0, 2)
 	inputTail = append(inputTail, ldSvnversionHVFS)
@@ -202,16 +204,18 @@ func lastPathComponent(p string) string {
 // one. `dump normalize` folds $(B)/vcs.json back to the upstream $(VCS)/vcs.json
 // reference and strips this producer (upstream mounts vcs.json, has no producer node).
 func emitVCSNode(emit Emitter, host *Platform) NodeRef {
+	na := emit.nodeArenas()
+
 	output := bldVcsJson
 	node := &Node{
 		Platform: host,
-		Cmds: cmdList(Cmd{CmdArgs: chunkList(strList(internStr(currentYatoolPath()),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(internStr(currentYatoolPath()),
 			argFetch.str(),
 			strBase64,
 			strE30,
 			output.str()))}),
 		KV:               KV{P: pkCP, PC: pcYellow, ShowOut: true},
-		Outputs:          vfsList(output),
+		Outputs:          na.vfsList(output),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(16)},
 		Sandboxing:       true,
 		TargetProperties: TargetProperties{ModuleDir: "build/scripts"},
@@ -408,17 +412,17 @@ func composeLDCmdLinkOrCopy(tc ModuleToolchain, modulePath string, dynamicPaths 
 	return cmd
 }
 
-func composeLDSplitDwarfCmds(tc ModuleToolchain, outputPath string, enabled bool) []Cmd {
+func composeLDSplitDwarfCmds(na *NodeArenas, tc ModuleToolchain, outputPath string, enabled bool) []Cmd {
 	if !enabled {
 		return nil
 	}
 
 	debugPath := outputPath + ".debug"
 
-	return cmdList(Cmd{CmdArgs: chunkList(strList(tc.Objcopy, argOnlyKeepDebug.str(), internStr(outputPath), internStr(debugPath)))}, Cmd{CmdArgs: chunkList(strList(tc.Strip, argStripDebug.str(), internStr(outputPath)))}, Cmd{CmdArgs: chunkList(strList(tc.Objcopy, argRemoveSectionGnuDebuglink.str(), argAddGnuDebuglink.str(), internStr(debugPath), internStr(outputPath)))})
+	return na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(tc.Objcopy, argOnlyKeepDebug.str(), internStr(outputPath), internStr(debugPath)))}, Cmd{CmdArgs: na.chunkList(na.strList(tc.Strip, argStripDebug.str(), internStr(outputPath)))}, Cmd{CmdArgs: na.chunkList(na.strList(tc.Objcopy, argRemoveSectionGnuDebuglink.str(), argAddGnuDebuglink.str(), internStr(debugPath), internStr(outputPath)))})
 }
 
-func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts ScriptDeps) InputChunks {
+func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts ScriptDeps) InputChunks {
 	chunks := make(InputChunks, 0, 3+len(ldScriptInputs))
 
 	// peerLibPaths is the caller's member slice, dup-free by construction (gen's
@@ -466,7 +470,7 @@ func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, plugi
 		if cl := scripts[s]; cl != nil {
 			chunks = append(chunks, cl)
 		} else {
-			chunks = append(chunks, srcChunk(s))
+			chunks = append(chunks, na.srcChunk(s))
 		}
 	}
 

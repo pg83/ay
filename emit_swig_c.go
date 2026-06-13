@@ -28,6 +28,8 @@ type SwigSrc struct {
 const swigLibRoot = "contrib/tools/swig/Lib"
 
 func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []*SourceEmit {
+	na := ctx.na
+
 	if len(d.swigC) == 0 {
 		return nil
 	}
@@ -50,9 +52,9 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 
 		// swigClosure joins as its own chunk (referenced, not copied; read-only
 		// after this — the later consumers copy out of it).
-		inputs := inputList(vfsList(bldContribToolsSwigSwig, srcVFS), swigClosure)
+		inputs := na.inputList(na.vfsList(bldContribToolsSwigSwig, srcVFS), swigClosure)
 
-		cmdArgs := chunkList(strList(swigBin.str()), swigConstArgs, strList(internStr(swigModuleName(stmt.Module)),
+		cmdArgs := na.chunkList(na.strList(swigBin.str()), swigConstArgs, na.strList(internStr(swigModuleName(stmt.Module)),
 			argInterface.str(),
 			internStr(swigModuleName(stmt.Module)+"_swg"),
 			argDashO.str(),
@@ -61,12 +63,12 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 
 		swRef := ctx.emit.emit(&Node{
 			Platform: instance.Platform,
-			Cmds: cmdList(Cmd{CmdArgs: cmdArgs,
+			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 				Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}}),
 			DepRefs:          []NodeRef{swigRef},
 			Env:              EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
 			Inputs:           inputs,
-			Outputs:          vfsList(cOutVFS, pyOutVFS),
+			Outputs:          na.vfsList(cOutVFS, pyOutVFS),
 			KV:               KV{P: pkSW, PC: pcYellow},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},

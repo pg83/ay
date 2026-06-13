@@ -432,6 +432,8 @@ func emitPR(
 	extraDepRefs []NodeRef,
 	emit Emitter,
 ) PrEmitResult {
+	na := emit.nodeArenas()
+
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	for _, kv := range stmt.EnvPairs {
@@ -499,7 +501,7 @@ func emitPR(
 	// The closure tail is filtered against the head set; filterSeen returns
 	// inputClosure itself when nothing collides, so the closure is referenced,
 	// not copied, into the chunk list.
-	inputs := inputList(head, deduper.filterSeen(inputClosure))
+	inputs := na.inputList(head, deduper.filterSeen(inputClosure))
 
 	var outputs []VFS
 	var stdoutPath STR
@@ -552,7 +554,7 @@ func emitPR(
 	}
 
 	cmd := Cmd{
-		CmdArgs: chunkList(cmdArgs),
+		CmdArgs: na.chunkList(cmdArgs),
 		Env:     env,
 	}
 
@@ -566,7 +568,7 @@ func emitPR(
 
 	node := &Node{
 		Platform:         instance.Platform,
-		Cmds:             cmdList(cmd),
+		Cmds:             na.cmdList(cmd),
 		Env:              env,
 		Inputs:           inputs,
 		Outputs:          outputs,

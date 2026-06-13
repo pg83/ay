@@ -116,11 +116,13 @@ func flatcResolvedModuleSourceRel(ctx *GenCtx, instance ModuleInstance, d *Modul
 }
 
 func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ARG, transitiveImports []VFS, tc ModuleToolchain, emit Emitter) (NodeRef, VFS, VFS, VFS) {
+	na := emit.nodeArenas()
+
 	headerVFS := build(srcRel + ".h")
 	cppVFS := build(srcRel + ".cpp")
 	bfbsVFS := build(strings.TrimSuffix(srcRel, ".fbs") + ".bfbs")
 
-	cmdArgs := chunkList(strList(tc.Python3, (flatcWrapperVFS).str(), (flatcBinary).str()), flatcConstFlags)
+	cmdArgs := na.chunkList(na.strList(tc.Python3, (flatcWrapperVFS).str(), (flatcBinary).str()), flatcConstFlags)
 
 	if len(flatcFlags) > 0 {
 		cmdArgs = append(cmdArgs, appendArgStr(nil, flatcFlags))
@@ -140,15 +142,15 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: cmdList(Cmd{CmdArgs: cmdArgs,
+		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Cwd: strB,
 			Env: env}),
 		DepRefs:          depRefs,
 		Env:              env,
 		ForeignDepRefs:   foreignDepRefs,
-		Inputs:           inputList(vfsList(flatcBinary, flatcWrapperVFS, srcVFS), transitiveImports),
+		Inputs:           na.inputList(na.vfsList(flatcBinary, flatcWrapperVFS, srcVFS), transitiveImports),
 		KV:               KV{P: pkFL, PC: pcLightGreen},
-		Outputs:          vfsList(headerVFS, cppVFS, bfbsVFS),
+		Outputs:          na.vfsList(headerVFS, cppVFS, bfbsVFS),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		usesResources:    usesPython3,

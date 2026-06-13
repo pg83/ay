@@ -5,6 +5,8 @@ var (
 )
 
 func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *ModuleEmitResult {
+	na := ctx.na
+
 	if len(d.moduleStmt.Args) == 0 {
 		throwFmt("gen: %s DYNAMIC_LIBRARY requires a basename argument", instance.Path.rel())
 	}
@@ -151,7 +153,7 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	envFull := ctx.host.toolEnv()
 
-	inputs := composeDynLibInputs(peerArchivePaths, pluginPaths, fixElfPath, instance.Path.rel(), d.exportsScript.string(), ctx.scripts)
+	inputs := composeDynLibInputs(na, peerArchivePaths, pluginPaths, fixElfPath, instance.Path.rel(), d.exportsScript.string(), ctx.scripts)
 
 	depRefs := make([]NodeRef, 0, len(peerArchiveRefs)+len(pluginRefs)+2)
 	depRefs = append(depRefs, peerArchiveRefs...)
@@ -164,10 +166,10 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 
 	n := &Node{
 		Platform:         instance.Platform,
-		Cmds:             cmdList(Cmd{CmdArgs: chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: chunkList(cmd1), Env: envFull}, Cmd{CmdArgs: chunkList(cmd2), Cwd: strB, Env: envFull}, Cmd{CmdArgs: chunkList(cmd3), Env: envVcsOnly}),
+		Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: strB, Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd3), Env: envVcsOnly}),
 		Env:              envFull,
 		Inputs:           inputs,
-		Outputs:          vfsList(build(instance.Path.rel() + "/" + outputName)),
+		Outputs:          na.vfsList(build(instance.Path.rel() + "/" + outputName)),
 		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Sandboxing:       true,
@@ -290,12 +292,12 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 	return cmdArgs
 }
 
-func composeDynLibInputs(peerLibPaths, pluginPaths []VFS, fixElfPath VFS, modulePath, exportsScript string, scripts ScriptDeps) InputChunks {
+func composeDynLibInputs(na *NodeArenas, peerLibPaths, pluginPaths []VFS, fixElfPath VFS, modulePath, exportsScript string, scripts ScriptDeps) InputChunks {
 	chunks := make(InputChunks, 0, 7)
 
 	// peerLibPaths and pluginPaths are the caller's member slices — referenced
 	// as their own chunks, never copied.
-	chunks = append(chunks, peerLibPaths, pluginPaths, srcChunk(fixElfPath))
+	chunks = append(chunks, peerLibPaths, pluginPaths, na.srcChunk(fixElfPath))
 
 	// The scripts the link command actually runs (vcs stamp, the link_dyn_lib
 	// wrapper, the objcopy/strip fs_tools), each expanded to its import closure via

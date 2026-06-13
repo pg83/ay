@@ -58,6 +58,19 @@ func (a *BumpAllocator[T]) commit(k int) {
 	a.pending = 0
 }
 
+// list copies vs into the arena and returns the committed block — the
+// arena-backed replacement for a small slice literal. The variadic slice at
+// the call site stays on the stack (it is only copied from), so a call
+// replaces the heap literal it wraps.
+func (a *BumpAllocator[T]) list(vs ...T) []T {
+	n := len(vs)
+	block := a.alloc(n)
+	copy(block, vs)
+	a.commit(n)
+
+	return block[:n:n]
+}
+
 func (a *BumpAllocator[T]) addChunk(min int) {
 	size := a.next
 

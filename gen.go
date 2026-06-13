@@ -255,6 +255,9 @@ type GenCtx struct {
 	fs         FS
 	parsers    *IncludeParserManager
 	emit       Emitter
+	// na is the emitter's node-construction arenas (see NodeArenas), shared
+	// here so ctx-threaded builders reach them without the Emitter detour.
+	na *NodeArenas
 
 	// inclArgValues backs inclArgMemo (the "-I<path>" cache); owned here so future
 	// VFS-keyed value columns can share its idx array. inclArgs points at it.
@@ -474,6 +477,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		fs:                 fs,
 		parsers:            parsers,
 		emit:               resourceEmit,
+		na:                 resourceEmit.nodeArenas(),
 		memo:               newIntValueMap[*ModuleEmitResult](4096),
 		walking:            make(map[ModuleInstance]bool),
 		host:               hostP,
@@ -846,7 +850,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			TC:                d.tc,
 		}
 		headerOnlyInputs.ScanCfg = newScanContext(ctx.parsers, d.addIncl, peerContribs.addIncl, includeScannerBasePaths(), instance.Path.rel())
-		headerOnlyInputs.CCBlocks = composeCCModuleArgBlocks(instance.Platform, &headerOnlyInputs)
+		headerOnlyInputs.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &headerOnlyInputs)
 		_ = emitRunProgramsForAR(ctx, instance, d, headerOnlyInputs)
 		_ = emitRunPythonForAR(ctx, instance, d, headerOnlyInputs)
 
@@ -1707,7 +1711,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		TC:          d.tc,
 	}
 	moduleInputs.ScanCfg = newScanContext(ctx.parsers, dedupedAddIncl, selfPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
-	moduleInputs.CCBlocks = composeCCModuleArgBlocks(instance.Platform, &moduleInputs)
+	moduleInputs.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &moduleInputs)
 
 	// Pass 1 (codegen-producing srcs: .proto, .ev, .fbs, .rl, .cpp.in, .c.in, .y)
 	// runs BEFORE emitCopyFiles / emitEnumSrcs / emitMiscNodes. Those later
@@ -1779,7 +1783,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			si.FlatOutput = true
 		}
 
-		return adjustCythonCompanionSourceInputs(instance.Platform, d, src, si)
+		return adjustCythonCompanionSourceInputs(ctx.na, instance.Platform, d, src, si)
 	}
 	appendCC := func(srcID STR, emit *SourceEmit) {
 		if emit == nil {

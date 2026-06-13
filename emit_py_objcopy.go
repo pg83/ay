@@ -41,10 +41,11 @@ type ObjcopyEmitCtx struct {
 	rescompilerLDRef   NodeRef
 	rescompressorLDRef NodeRef
 	blocks             ObjcopyArgBlocks
+	na                 *NodeArenas
 }
 
 func newObjcopyEmitCtx(ctx *GenCtx, d *ModuleData, p *Platform) *ObjcopyEmitCtx {
-	oc := &ObjcopyEmitCtx{}
+	oc := &ObjcopyEmitCtx{na: ctx.na}
 	oc.rescompilerLDRef, _ = ctx.tool(argToolsRescompiler)
 	oc.rescompressorLDRef, _ = ctx.tool(argToolsRescompressor)
 	oc.blocks = composeObjcopyArgBlocks(d.tc, p)
@@ -70,7 +71,7 @@ func composeObjcopyArgBlocks(tc ModuleToolchain, p *Platform) ObjcopyArgBlocks {
 // objcopyCmdArgs assembles an objcopy command line: the module-stable blocks
 // are referenced, only [out] and the payload tail are per-node.
 func objcopyCmdArgs(oc *ObjcopyEmitCtx, outputObj VFS, payload []STR) ArgChunks {
-	return chunkList(oc.blocks.pre, strList((outputObj).str()), oc.blocks.post, payload)
+	return oc.na.chunkList(oc.blocks.pre, oc.na.strList((outputObj).str()), oc.blocks.post, payload)
 }
 
 func emitResourceObjcopy(
@@ -78,6 +79,8 @@ func emitResourceObjcopy(
 	instance ModuleInstance,
 	d *ModuleData,
 ) *ObjcopyEmitResult {
+	na := ctx.na
+
 	hasKvOnly := d.pyMain != nil || len(d.noCheckImports) > 0 || len(d.pySrcs) > 0 || len(d.yaConfJSON) > 0
 
 	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 && !hasKvOnly {
@@ -177,9 +180,9 @@ func emitResourceObjcopy(
 		var inputs InputChunks
 
 		if len(cur.paths) <= 1 {
-			inputs = inputList(rescompilersWithScriptChunk, cur.pathInputs, cur.extraInputs)
+			inputs = na.inputList(rescompilersWithScriptChunk, cur.pathInputs, cur.extraInputs)
 		} else {
-			inputs = inputList(rescompilersChunk, cur.pathInputs, objcopyScriptChunk, cur.extraInputs)
+			inputs = na.inputList(rescompilersChunk, cur.pathInputs, objcopyScriptChunk, cur.extraInputs)
 		}
 
 		deduper.reset()
@@ -217,11 +220,11 @@ func emitResourceObjcopy(
 
 		node := &Node{
 			Platform: instance.Platform,
-			Cmds: cmdList(Cmd{CmdArgs: cmdArgs,
+			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 				Env: env}),
 			Env:              env,
 			Inputs:           inputs,
-			Outputs:          vfsList(outputObj),
+			Outputs:          na.vfsList(outputObj),
 			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 			TargetProperties: resTargetProps,
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -346,6 +349,8 @@ func emitKvOnlyObjcopyNode(
 	d *ModuleData,
 	oc *ObjcopyEmitCtx,
 ) *ObjcopyEmit {
+	na := ctx.na
+
 	var moduleTag *string
 
 	switch kind {
@@ -379,11 +384,11 @@ func emitKvOnlyObjcopyNode(
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: cmdList(Cmd{CmdArgs: cmdArgs,
+		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Env: env}),
 		Env:              env,
-		Inputs:           inputList(rescompilersWithScriptChunk),
-		Outputs:          vfsList(outputObj),
+		Inputs:           na.inputList(rescompilersWithScriptChunk),
+		Outputs:          na.vfsList(outputObj),
 		KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 		TargetProperties: targetProps,
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -409,6 +414,8 @@ func emitYaConfJSONObjcopy(
 	d *ModuleData,
 	oc *ObjcopyEmitCtx,
 ) []*ObjcopyEmit {
+	na := ctx.na
+
 	if len(d.yaConfJSON) == 0 {
 		return nil
 	}
@@ -463,11 +470,11 @@ func emitYaConfJSONObjcopy(
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 		node := &Node{
 			Platform: instance.Platform,
-			Cmds: cmdList(Cmd{CmdArgs: cmdArgs,
+			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 				Env: env}),
 			Env:              env,
-			Inputs:           inputList(rescompilersChunk, vfsList(input, objcopyScriptVFS)),
-			Outputs:          vfsList(outputObj),
+			Inputs:           na.inputList(rescompilersChunk, na.vfsList(input, objcopyScriptVFS)),
+			Outputs:          na.vfsList(outputObj),
 			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -588,6 +595,8 @@ func emitPySrcObjcopy(
 	d *ModuleData,
 	oc *ObjcopyEmitCtx,
 ) *ObjcopyEmitResult {
+	na := ctx.na
+
 	if len(d.pySrcs) == 0 || d.moduleStmt == nil {
 		return nil
 	}
@@ -674,10 +683,10 @@ func emitPySrcObjcopy(
 
 			node := &Node{
 				Platform:         instance.Platform,
-				Cmds:             cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
+				Cmds:             na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
 				Env:              env,
-				Inputs:           inputList(rescompilersChunk, ch.inps, objcopyScriptChunk),
-				Outputs:          vfsList(outputObj),
+				Inputs:           na.inputList(rescompilersChunk, ch.inps, objcopyScriptChunk),
+				Outputs:          na.vfsList(outputObj),
 				KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 				TargetProperties: targetProps,
 				Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
