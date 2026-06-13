@@ -6,7 +6,7 @@ import (
 )
 
 func copyFileAutoSourceVFS(modulePath string, d *ModuleData, srcRel string) *VFS {
-	if d == nil || d.copyFileAutoOutputs == nil {
+	if d.copyFileAutoOutputs == nil {
 		return nil
 	}
 

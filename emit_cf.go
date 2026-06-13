@@ -106,10 +106,6 @@ func hasKey(m map[STR]STR, k STR) bool {
 // which surfaces in REF dumps as `cpp_proto`. CF emits from other module
 // types leave module_tag unset.
 func cfModuleTag(d *ModuleData, instance ModuleInstance) STR {
-	if d == nil || d.moduleStmt == nil {
-		return 0
-	}
-
 	if d.moduleStmt.Name == tokProtoLibrary && instance.Language != LangPy {
 		return tagCppProto
 	}

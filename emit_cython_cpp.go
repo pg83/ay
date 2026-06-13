@@ -88,7 +88,7 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 
 	for _, stmt := range d.cythonCpp {
 		generatedExplicit := stmt.Generated != nil
-		py23Variant := d.moduleStmt != nil && cythonUsesPy23Variant(d.moduleStmt.Name)
+		py23Variant := cythonUsesPy23Variant(d.moduleStmt.Name)
 		generated := stmt.Src + ".cpp"
 
 		if py23Variant {

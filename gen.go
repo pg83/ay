@@ -1179,7 +1179,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	archiveOrder := resolved
 
-	if d.moduleStmt != nil {
+	{
 		switch d.moduleStmt.Name {
 		case tokPy2Program:
 			head := make([]resolvedPeer, 0, len(resolved))
@@ -1471,7 +1471,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	cflagsAggOrder := resolved
 
-	if d.moduleStmt != nil && d.moduleStmt.Name == tokPy3Program {
+	if d.moduleStmt.Name == tokPy3Program {
 		cflagsAggOrder = archiveOrder
 	}
 
@@ -2645,7 +2645,7 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	// NO_OPTIMIZE_PY_PROTOS (`when ($OPTIMIZE_PY_PROTOS_FLAG == "no") {
 	// _IGNORE_PEERDIRSELF=CPP_PROTO }`), leaving the CPP archive whole-archive-only
 	// (emitPyProtoSrcs still marks it whole-archive in both cases).
-	if instance.Language == LangPy && d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary && d.optimizePyProtos && !moduleExcludesTag(d, "CPP_PROTO") {
+	if instance.Language == LangPy && d.moduleStmt.Name == tokProtoLibrary && d.optimizePyProtos && !moduleExcludesTag(d, "CPP_PROTO") {
 		seen[instance.Path.rel()] = struct{}{}
 		cppSelf := instance
 		cppSelf.Language = LangCPP
