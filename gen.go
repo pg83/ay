@@ -443,11 +443,10 @@ func reportPerfStats(ctx *GenCtx, parsers *IncludeParserManager, targetScanner, 
 func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, emitter Emitter, onWarn func(Warn), testMode bool) NodeRef {
 	plainEmit := emitter
 	scriptTbl := buildScriptTable(fs)
-	// Shared across the genCtx (producer: emitResourceFetch) and the resource-aware
-	// emitter (consumer: attachResourceDeps) so a $(<NAME>) reference resolves to the
-	// fetch node emitted when its declaring RESOURCES_LIBRARY was gen'd.
-	fetchRefs := &DenseMap[STR, NodeRef]{}
-	resourceEmit := newResourceAwareEmitter(hostP, plainEmit, scriptTbl, fetchRefs)
+	// fetchRefs (the resource pattern → FETCH node registry) is owned by the
+	// emitter; the genCtx shares its pointer so emitResourceFetch populates the
+	// same map Node.buildDeps later resolves usesResources through, on the fly.
+	var fetchRefs *DenseMap[STR, NodeRef]
 
 	// Mix $(S) input content hashes into node uids in every mode so a source edit
 	// invalidates the cache (the dump path is re-uid'd from canonical content
@@ -455,8 +454,11 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	switch e := plainEmit.(type) {
 	case *BufferedEmitter:
 		e.fs = fs
+		fetchRefs = e.fetchRefs
 	case *StreamingEmitter:
 		e.uidScratch.fs = fs
+		e.uidScratch.fetchRefs = e.fetchRefs
+		fetchRefs = e.fetchRefs
 	}
 
 	parsers := newIncludeParserManagerFS(fs, newSharedParseCache())
@@ -468,8 +470,8 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		sourceRoot:         fs.sourceRoot(),
 		fs:                 fs,
 		parsers:            parsers,
-		emit:               resourceEmit,
-		na:                 resourceEmit.nodeArenas(),
+		emit:               plainEmit,
+		na:                 plainEmit.nodeArenas(),
 		memo:               newIntValueMap[*ModuleEmitResult](4096),
 		walking:            make(map[ModuleInstance]bool),
 		host:               hostP,
@@ -508,7 +510,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	ctx.emit.result(root.LDRef)
 
 	if ctx.testMode && root.testSuiteInfo != nil {
-		for _, ref := range emitTestRunNodes(resourceEmit, resourceEmit, targetP, *root.testSuiteInfo, root.LDRef, root.ResourceGlobalClosure) {
+		for _, ref := range emitTestRunNodes(plainEmit, plainEmit, targetP, *root.testSuiteInfo, root.LDRef, root.ResourceGlobalClosure) {
 			ctx.emit.result(ref)
 		}
 	}

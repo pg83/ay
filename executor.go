@@ -64,10 +64,11 @@ type CommandResult struct {
 }
 
 type NodeFuture struct {
-	node *Node
-	uids *UidVec // resolves node.DepRefs -> dep uids (per emitter; deps are not materialized)
-	once sync.Once
-	err  *Exception
+	node      *Node
+	uids      *UidVec                 // resolves a ref -> dep uid (per emitter; deps are not materialized)
+	fetchRefs *DenseMap[STR, NodeRef] // resolves usesResources -> FETCH ref (per emitter)
+	once      sync.Once
+	err       *Exception
 }
 
 func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, ninja bool, sandboxing bool, cmdPrefixes []CmdPrefix) *Executor {
@@ -86,7 +87,7 @@ func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, ninja boo
 	}
 }
 
-func (ex *Executor) onNode(n *Node, uids *UidVec) {
+func (ex *Executor) onNode(n *Node, uids *UidVec, fetchRefs *DenseMap[STR, NodeRef]) {
 	// Dedup by uid: the generator may stream the same node (identical uid) more
 	// than once. Each uid is one action and must run in exactly one goroutine —
 	// two goroutines in the same tmp/<uid> would have one's forceRemoveAll wipe the
@@ -101,7 +102,7 @@ func (ex *Executor) onNode(n *Node, uids *UidVec) {
 		return
 	}
 
-	f := &NodeFuture{node: n, uids: uids}
+	f := &NodeFuture{node: n, uids: uids, fetchRefs: fetchRefs}
 	ex.byUID[n.UID] = f
 	ex.mu.Unlock()
 
@@ -202,7 +203,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 	defer ex.done.Add(1)
 
 	if ex.keepGoing {
-		for r := range n.buildDeps {
+		for r := range n.buildDeps(f.fetchRefs) {
 			dep := f.uids.get(r)
 			exc := try(func() {
 				ex.visit(dep)
@@ -215,7 +216,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 			throwFmt("deps failed: %s", dep)
 		}
 	} else {
-		for r := range n.buildDeps {
+		for r := range n.buildDeps(f.fetchRefs) {
 			ex.visit(f.uids.get(r))
 		}
 	}
@@ -261,7 +262,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 		ex.linkSourceInputs(n, srcMount)
 	}
 
-	for r := range n.buildDeps {
+	for r := range n.buildDeps(f.fetchRefs) {
 		ex.restoreInto(f.uids.get(r), bldMount)
 	}
 

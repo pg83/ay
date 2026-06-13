@@ -33,15 +33,22 @@ type BufferedEmitter struct {
 
 	// fs, set by runGen, lets finalizeNodesInOrder mix $(S) input content hashes
 	// into node uids (see canonBuf.fs).
-	fs      FS
-	readyCh chan struct{}
-	na      *NodeArenas
+	fs FS
+	// fetchRefs maps a resource pattern (CLANG20, YMAKE_PYTHON3, …) to its FETCH
+	// node; the emitter owns it, GenCtx shares the pointer to populate it
+	// (emitResourceFetch). Node.buildDeps resolves usesResources through it, so
+	// the resource fetch deps are materialized into the graph/uid on the fly
+	// rather than stored on every consuming node.
+	fetchRefs *DenseMap[STR, NodeRef]
+	readyCh   chan struct{}
+	na        *NodeArenas
 }
 
 func newBufferedEmitter() *BufferedEmitter {
 	return &BufferedEmitter{
-		readyCh: make(chan struct{}),
-		na:      newNodeArenas(),
+		readyCh:   make(chan struct{}),
+		na:        newNodeArenas(),
+		fetchRefs: &DenseMap[STR, NodeRef]{},
 	}
 }
 
@@ -80,6 +87,10 @@ type Graph struct {
 	// uids resolves each node's DepRefs/ForeignDepRefs (by id) to dep uids at
 	// JSON-write time; deps are never materialized onto the node.
 	uids *UidVec `json:"-"`
+	// fetchRefs resolves a node's usesResources patterns to their FETCH node refs
+	// at JSON-write time (Node.buildDeps), so resource fetch deps are part of the
+	// "deps" array without being stored on the node.
+	fetchRefs *DenseMap[STR, NodeRef] `json:"-"`
 }
 
 func finalizeNodesInOrder(e *BufferedEmitter, order []int, yield func(*Node)) *UidVec {
@@ -94,7 +105,7 @@ func finalizeNodesInOrder(e *BufferedEmitter, order []int, yield func(*Node)) *U
 	}
 
 	uids := &UidVec{}
-	uidScratch := CanonBuf{fs: e.fs, uids: uids}
+	uidScratch := CanonBuf{fs: e.fs, uids: uids, fetchRefs: e.fetchRefs}
 
 	for _, i := range order {
 		node := e.nodes[i]
@@ -128,11 +139,7 @@ func finalizeOrder(e *BufferedEmitter) []int {
 	}
 
 	for i, node := range e.nodes {
-		for _, r := range node.DepRefs {
-			checkRef(i, r)
-		}
-
-		for _, r := range node.ForeignDepRefs {
+		for r := range node.buildDeps(e.fetchRefs) {
 			checkRef(i, r)
 		}
 	}
@@ -154,16 +161,7 @@ func finalizeOrder(e *BufferedEmitter) []int {
 	for i, node := range e.nodes {
 		seen := make(map[NodeRef]struct{})
 
-		for _, r := range node.DepRefs {
-			if _, ok := seen[r]; ok {
-				continue
-			}
-
-			seen[r] = struct{}{}
-			addEdge(int(r), i)
-		}
-
-		for _, r := range node.ForeignDepRefs {
+		for r := range node.buildDeps(e.fetchRefs) {
 			if _, ok := seen[r]; ok {
 				continue
 			}
@@ -249,20 +247,23 @@ type StreamingEmitter struct {
 	pendingIdx []NodeRef
 	pendingSet map[NodeRef]bool
 	results    []NodeRef
-	onNode     func(*Node, *UidVec)
+	onNode     func(*Node, *UidVec, *DenseMap[STR, NodeRef])
 	finalized  bool
 	readyCh    chan struct{}
 	uidScratch CanonBuf
 	na         *NodeArenas
+	// fetchRefs — resource pattern → FETCH node; see BufferedEmitter.fetchRefs.
+	fetchRefs *DenseMap[STR, NodeRef]
 }
 
-func newStreamingEmitter(onNode func(*Node, *UidVec)) *StreamingEmitter {
+func newStreamingEmitter(onNode func(*Node, *UidVec, *DenseMap[STR, NodeRef])) *StreamingEmitter {
 	return &StreamingEmitter{
 		uids:       &UidVec{},
 		pendingSet: map[NodeRef]bool{},
 		onNode:     onNode,
 		readyCh:    make(chan struct{}),
 		na:         newNodeArenas(),
+		fetchRefs:  &DenseMap[STR, NodeRef]{},
 	}
 }
 
@@ -289,20 +290,14 @@ func (e *StreamingEmitter) emit(n *Node) NodeRef {
 	e.resolved.add(uint32(id))
 
 	if e.onNode != nil {
-		e.onNode(n, e.uids)
+		e.onNode(n, e.uids, e.fetchRefs)
 	}
 
 	return id
 }
 
 func (e *StreamingEmitter) hasUnresolvedDeps(n *Node) bool {
-	for _, r := range n.DepRefs {
-		if !e.resolved.has(uint32(r)) {
-			return true
-		}
-	}
-
-	for _, r := range n.ForeignDepRefs {
+	for r := range n.buildDeps(e.fetchRefs) {
 		if !e.resolved.has(uint32(r)) {
 			return true
 		}
@@ -334,7 +329,7 @@ func (e *StreamingEmitter) finish() []UID {
 		e.resolved.add(uint32(id))
 
 		if e.onNode != nil {
-			e.onNode(n, e.uids)
+			e.onNode(n, e.uids, e.fetchRefs)
 		}
 	}
 
@@ -362,10 +357,11 @@ func graphFromFinalizedEmitter(e *BufferedEmitter, uids *UidVec) *Graph {
 	n := len(e.nodes)
 
 	out := &Graph{
-		Inputs: map[string]interface{}{},
-		Graph:  make([]*Node, 0, n),
-		Result: make([]UID, 0, len(e.results)),
-		uids:   uids,
+		Inputs:    map[string]interface{}{},
+		Graph:     make([]*Node, 0, n),
+		Result:    make([]UID, 0, len(e.results)),
+		uids:      uids,
+		fetchRefs: e.fetchRefs,
 	}
 
 	seenResult := map[UID]struct{}{}

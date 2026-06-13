@@ -9,18 +9,16 @@ func emitTestCompileGraph(t *testing.T, host, target *Platform) *Graph {
 
 	execEmit := newBufferedEmitter()
 	// CLANG is declared by build/platform/clang; its FETCH node is emitted up front
-	// (as genResourcesLibrary/emitResourceFetch would) into the shared fetchRefs the
-	// emitter consults for consumers' $(CLANG) deps.
-	fetchRefs := &DenseMap[STR, NodeRef]{}
-	execResourceEmit := newResourceAwareEmitter(host, execEmit, nil, fetchRefs)
-	fetchRefs.put(internStr(resourcePatternClangTool), execResourceEmit.emit(&Node{
+	// (as genResourcesLibrary/emitResourceFetch would) into the emitter's fetchRefs,
+	// which Node.buildDeps consults on the fly for consumers' $(CLANG) deps.
+	execEmit.fetchRefs.put(internStr(resourcePatternClangTool), execEmit.emit(&Node{
 		Platform: host,
 		Cmds:     []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"ay", "fetch", "$(B)", "$(S)", "sbr:clang", "resources/CLANG"})}}},
 		KV:       KV{P: pkFETCH, PC: pcYellow, ShowOut: true},
 		Outputs:  []VFS{build("resources/" + resourcePatternClangTool)},
 	}))
 	clangTool := prebuiltToolchainFlags()["CLANG_TOOL"]
-	ref := execResourceEmit.emit(&Node{Platform: target,
+	ref := execEmit.emit(&Node{Platform: target,
 		Cmds: []Cmd{{
 			CmdArgs: ArgChunks{appendInternStrs(nil, []string{clangTool, "-c", "$(S)/pkg/app/main.cpp", "-o", "$(B)/pkg/app/main.o"})},
 			Env:     nil,
@@ -33,7 +31,7 @@ func emitTestCompileGraph(t *testing.T, host, target *Platform) *Graph {
 		TargetProperties: TargetProperties{},
 		usesResources:    []STR{internStr(resourcePatternClangTool)},
 	})
-	execResourceEmit.result(ref)
+	execEmit.result(ref)
 
 	return finalize(execEmit)
 }
