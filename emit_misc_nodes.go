@@ -134,7 +134,5 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 		}, biRef, nil)
 	}
 
-	_ = d.runPrograms
-
 	return
 }

@@ -174,7 +174,6 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		rlgenCdLDRef, rlgenCdBinVFS := ctx.tool(argContribToolsRagel5RlgenCd)
 
 		r5Ref, r5TmpOut, r5CppOut := emitR5(srcInstance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, ctx.emit)
-		_ = r5Ref
 
 		rlSourceVFS := source(srcInstance.Path.rel() + "/" + srcRel)
 		registerBoundGeneratedParsedOutput(ctx, srcInstance, pkR5, r5TmpOut, nil, r5Ref, []NodeRef{ragel5LDRef, rlgenCdLDRef})

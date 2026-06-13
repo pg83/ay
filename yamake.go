@@ -1352,8 +1352,6 @@ func parseResource(args []STR, nameTok Token) *ResourceStmt {
 	}
 
 	if len(rest)%2 != 0 {
-		p := &Parser{lex: &Lexer{}}
-		_ = p
 		throwFmt("RESOURCE at line %d: argument count after DONT_PARSE/DONT_COMPRESS strip must be even (got %d)", nameTok.line, len(rest))
 	}
 
@@ -1550,7 +1548,7 @@ func (p *Parser) readCondTokens(ifTok Token) []Token {
 }
 
 func (p *Parser) consumeEmptyMacroArgs(kwTok Token) {
-	_ = p.parseMacroArgs(kwTok)
+	p.parseMacroArgs(kwTok)
 }
 
 type CondParser struct {
