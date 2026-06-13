@@ -286,7 +286,6 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 		KV:               pbKV,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleTag: tagPy3Proto},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:          toolRefs,
 		usesResources:    usesPython3,
 	}
 
@@ -348,12 +347,10 @@ func emitGeneratedPyProtoYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs [
 		var toolRefs []NodeRef
 
 		if py3ccRef != (NodeRef(0)) {
-			deps = append(deps, py3ccRef)
 			toolRefs = append(toolRefs, py3ccRef)
 		}
 
 		if py3ccSlowRef != (NodeRef(0)) {
-			deps = append(deps, py3ccSlowRef)
 			toolRefs = append(toolRefs, py3ccSlowRef)
 		}
 

@@ -59,7 +59,6 @@ func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 		KV:               KV{P: pkR6, PC: pcYellow},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:          []NodeRef{ragel6LD},
 		ForeignDepRefs:   []NodeRef{ragel6LD},
 	}
 

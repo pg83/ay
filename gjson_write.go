@@ -78,8 +78,10 @@ func appendNode(buf []byte, n *Node, uids *UidVec, dropSrcInputs bool) []byte {
 	buf = append(buf, `"cmds":`...)
 	buf = appendCmdSlice(buf, n.Cmds)
 
+	// "deps" lists DepRefs followed by ForeignDepRefs (tool deps): the tool refs
+	// are stored only in ForeignDepRefs, so the build-deps array is their union.
 	buf = append(buf, `,"deps":`...)
-	buf = appendRefUIDs(buf, n.DepRefs, uids)
+	buf = appendRefUIDsSeq(buf, n.buildDeps, uids)
 
 	buf = append(buf, `,"env":`...)
 	buf = appendEnv(buf, n.Env)
@@ -249,6 +251,26 @@ func appendRefUIDs(buf []byte, refs []NodeRef, uids *UidVec) []byte {
 
 		buf = appendUID(buf, uids.get(r))
 	}
+
+	return append(buf, ']')
+}
+
+// appendRefUIDsSeq writes the uids of a NodeRef sequence (e.g. Node.buildDeps)
+// as a JSON array, without materializing the sequence into a slice.
+func appendRefUIDsSeq(buf []byte, seq func(func(NodeRef) bool), uids *UidVec) []byte {
+	buf = append(buf, '[')
+	first := true
+
+	seq(func(r NodeRef) bool {
+		if !first {
+			buf = append(buf, ',')
+		}
+
+		first = false
+		buf = appendUID(buf, uids.get(r))
+
+		return true
+	})
 
 	return append(buf, ']')
 }

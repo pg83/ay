@@ -155,14 +155,10 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 
 	inputs := composeDynLibInputs(na, peerArchivePaths, pluginPaths, fixElfPath, instance.Path.rel(), d.exportsScript.string(), ctx.scripts)
 
-	depRefs := make([]NodeRef, 0, len(peerArchiveRefs)+len(pluginRefs)+2)
+	depRefs := make([]NodeRef, 0, len(peerArchiveRefs)+len(pluginRefs)+1)
 	depRefs = append(depRefs, peerArchiveRefs...)
 	depRefs = append(depRefs, pluginRefs...)
 	depRefs = append(depRefs, emitVCSNode(ctx.emit, ctx.host))
-
-	if fixElfRef != (NodeRef(0)) {
-		depRefs = append(depRefs, fixElfRef)
-	}
 
 	n := &Node{
 		Platform:         instance.Platform,

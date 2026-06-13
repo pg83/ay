@@ -172,7 +172,6 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	}
 
 	node.ForeignDepRefs = []NodeRef{yasmLD}
-	node.DepRefs = []NodeRef{yasmLD}
 
 	return emit.emit(node), outVFS
 }

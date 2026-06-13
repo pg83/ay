@@ -117,17 +117,15 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		var toolRefs []NodeRef
 
 		if py3ccLDRef != (NodeRef(0)) {
-			node.DepRefs = append(node.DepRefs, py3ccLDRef)
 			toolRefs = append(toolRefs, py3ccLDRef)
 		}
 
 		if py3ccSlowLDRef != (NodeRef(0)) {
-			node.DepRefs = append(node.DepRefs, py3ccSlowLDRef)
 			toolRefs = append(toolRefs, py3ccSlowLDRef)
 		}
 
 		if generatedInputs != nil {
-			if extras := resolveCodegenDepRefsExt(ctx, instance, nil, inputs, node.DepRefs...); len(extras) > 0 {
+			if extras := resolveCodegenDepRefsExt(ctx, instance, nil, inputs, toolRefs...); len(extras) > 0 {
 				node.DepRefs = append(node.DepRefs, extras...)
 			}
 		}

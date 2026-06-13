@@ -202,7 +202,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 	defer ex.done.Add(1)
 
 	if ex.keepGoing {
-		for _, r := range n.DepRefs {
+		for r := range n.buildDeps {
 			dep := f.uids.get(r)
 			exc := try(func() {
 				ex.visit(dep)
@@ -215,7 +215,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 			throwFmt("deps failed: %s", dep)
 		}
 	} else {
-		for _, r := range n.DepRefs {
+		for r := range n.buildDeps {
 			ex.visit(f.uids.get(r))
 		}
 	}
@@ -261,7 +261,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 		ex.linkSourceInputs(n, srcMount)
 	}
 
-	for _, r := range n.DepRefs {
+	for r := range n.buildDeps {
 		ex.restoreInto(f.uids.get(r), bldMount)
 	}
 

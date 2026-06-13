@@ -43,7 +43,7 @@ func TestFinalizeDumpGraph_StripsOnlyTicketScaffolding(t *testing.T) {
 	})
 	consumer := emit.emit(&Node{Platform: testTargetP,
 		Cmds:           []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"clang"})}}},
-		DepRefs:        []NodeRef{fetchUsed, llvmReferenced},
+		DepRefs:        []NodeRef{llvmReferenced},
 		ForeignDepRefs: []NodeRef{fetchUsed},
 		KV:             KV{P: pkCC},
 		Outputs:        []VFS{intern("$(B)/obj/consumer.o")},
@@ -61,8 +61,8 @@ func TestFinalizeDumpGraph_StripsOnlyTicketScaffolding(t *testing.T) {
 	if want := []string{
 		"bin/root",
 		"obj/consumer.o",
-		"resources/YMAKE_PYTHON3",
 		"contrib/libs/llvm16/include/llvm/IR/IntrinsicsX86.h",
+		"resources/YMAKE_PYTHON3",
 		"resources/CLANG",
 		"tool-cache/CLANG",
 		"contrib/libs/llvm16/include/generated.cpp",
@@ -88,9 +88,10 @@ func TestFinalizeDumpGraph_StripsOnlyTicketScaffolding(t *testing.T) {
 
 	// Resource FETCH nodes are no longer stripped from -G (the -G graph must equal the
 	// executed graph; they are folded out later in `dump normalize`). So the consumer
-	// keeps its dep + foreign-dep on the python fetch node alongside the llvm reference.
-	if !reflect.DeepEqual(graphDeps(got, consumerNode), []UID{pythonNode.UID, llvmNode.UID}) {
-		t.Fatalf("consumer deps = %v, want [%s %s]", graphDeps(got, consumerNode), pythonNode.UID, llvmNode.UID)
+	// keeps its dep on the python fetch node — via the foreign (tool) deps, which the
+	// "deps" array unions in after DepRefs — alongside the llvm reference.
+	if !reflect.DeepEqual(graphDeps(got, consumerNode), []UID{llvmNode.UID, pythonNode.UID}) {
+		t.Fatalf("consumer deps = %v, want [%s %s]", graphDeps(got, consumerNode), llvmNode.UID, pythonNode.UID)
 	}
 	if !reflect.DeepEqual(graphForeignDeps(got, consumerNode), []UID{pythonNode.UID}) {
 		t.Fatalf("consumer foreign_deps = %v, want [%s]", graphForeignDeps(got, consumerNode), pythonNode.UID)

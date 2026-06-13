@@ -34,10 +34,7 @@ func TestEmitRD_NodeShape(t *testing.T) {
 	if len(node.Outputs) != 2 {
 		t.Fatalf("len(Outputs) = %d, want 2", len(node.Outputs))
 	}
-	if len(node.DepRefs) != 1 || node.DepRefs[0] != 7 {
-		t.Fatalf("DepRefs = %#v, want yasm dep", node.DepRefs)
-	}
-	if got := len(node.ForeignDepRefs); got != 1 {
-		t.Fatalf("foreign tool deps = %d, want 1", got)
+	if len(node.ForeignDepRefs) != 1 || node.ForeignDepRefs[0] != 7 {
+		t.Fatalf("ForeignDepRefs = %#v, want yasm dep", node.ForeignDepRefs)
 	}
 }

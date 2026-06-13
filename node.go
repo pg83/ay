@@ -75,6 +75,25 @@ type Node struct {
 	usesResources []STR `json:"-"`
 }
 
+// buildDeps yields every ref that must be built/restored before this node runs:
+// its DepRefs (real build inputs) followed by its ForeignDepRefs (tool deps).
+// The two lists are disjoint — a tool ref lives only in ForeignDepRefs — so the
+// graph's "deps" array, the UID, and the executor reach the tools through this
+// single sequence without storing them twice.
+func (n *Node) buildDeps(yield func(NodeRef) bool) {
+	for _, r := range n.DepRefs {
+		if !yield(r) {
+			return
+		}
+	}
+
+	for _, r := range n.ForeignDepRefs {
+		if !yield(r) {
+			return
+		}
+	}
+}
+
 func nodeHasHostTag(tags []STR) bool {
 	for _, t := range tags {
 		if t == strTool {

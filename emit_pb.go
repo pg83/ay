@@ -168,7 +168,6 @@ func emitPB(
 			toolRefs = append(toolRefs, plugin.LDRef)
 		}
 
-		depRefs = append([]NodeRef(nil), toolRefs...)
 		foreignDepRefs = toolRefs
 	}
 
