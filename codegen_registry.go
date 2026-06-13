@@ -47,17 +47,6 @@ type GeneratedFileInfo struct {
 	// emitClosure) so they ride transitively to every consumer that includes the
 	// output, without their own #includes being re-resolved per consuming module.
 	ClosureLeaves []VFS
-
-	DeferredCF *DeferredCF
-}
-
-type DeferredCF struct {
-	instance      ModuleInstance
-	srcVFS        VFS
-	outVFS        VFS
-	cfgVars       []string
-	includeInputs []VFS
-	tc            ModuleToolchain
 }
 
 type CodegenRegistry struct {
@@ -230,24 +219,6 @@ func registerGeneratedParsedOutput(ctx *GenCtx, instance ModuleInstance, kind Pr
 			ProducerKvP:   kind,
 			OutputPath:    output,
 			GeneratorRefs: generatorRefs,
-		})
-	}
-
-	scanner := ctx.scannerFor(instance)
-
-	if scanner != nil {
-		scanner.parsers.registerBuildParsedIncludes(output, parsed)
-	}
-}
-
-func registerDeferredCF(ctx *GenCtx, instance ModuleInstance, output VFS, parsed []IncludeDirective, def *DeferredCF) {
-	reg := codegenRegForInstance(ctx, instance)
-
-	if reg != nil {
-		reg.register(&GeneratedFileInfo{
-			ProducerKvP: pkCF,
-			OutputPath:  output,
-			DeferredCF:  def,
 		})
 	}
 
