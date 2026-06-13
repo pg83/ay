@@ -54,7 +54,6 @@ func emitR5(
 		KV:               KV{P: pkR5, PC: pcYellow},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:          depRefs,
 		ForeignDepRefs:   depRefs,
 	}
 

@@ -124,7 +124,6 @@ func emitEV(
 		}
 
 		if len(toolRefs) > 0 {
-			depRefs = append([]NodeRef(nil), toolRefs...)
 			foreignDepRefs = toolRefs
 		}
 	}

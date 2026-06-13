@@ -537,15 +537,14 @@ func emitPR(
 
 	appendToolRef(toolLDRef)
 
-	depRefs := make([]NodeRef, 0, len(toolRefs)+len(extraDepRefs))
-	depRefs = append(depRefs, toolRefs...)
-	depRefs = append(depRefs, extraDepRefs...)
+	depRefs := append([]NodeRef(nil), extraDepRefs...)
 
 	var foreignDepRefs []NodeRef
 
 	if len(toolRefs) > 0 {
-		// toolRefs is a fresh local, not mutated after this; depRefs above already
-		// copied out of it, so the node may share it read-only.
+		// toolRefs is a fresh local, not mutated after this; the node owns it as
+		// its foreign (tool) deps. The graph's "deps" array is DepRefs ∪
+		// ForeignDepRefs (Node.buildDeps), so the tools are not duplicated here.
 		foreignDepRefs = toolRefs
 	}
 

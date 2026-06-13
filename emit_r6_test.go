@@ -68,12 +68,8 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		t.Errorf("tags = %v, want [] (aarch64 R6 is target-side)", nodeTags(got))
 	}
 
-	if len(got.DepRefs) != 1 {
-		t.Fatalf("DepRefs len = %d, want 1", len(got.DepRefs))
-	}
-
-	if got.DepRefs[0] != ragel6LD {
-		t.Errorf("DepRefs[0] = %v, want %v", got.DepRefs[0], ragel6LD)
+	if got.ForeignDepRefs[0] != ragel6LD {
+		t.Errorf("ForeignDepRefs[0] = %v, want %v", got.ForeignDepRefs[0], ragel6LD)
 	}
 
 	if len(got.ForeignDepRefs) != 1 {

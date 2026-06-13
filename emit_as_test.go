@@ -122,8 +122,8 @@ func TestEmitASYasm_YasmLD_PopulatesDepRefs(t *testing.T) {
 	_ = ref
 	got := e.nodes[1]
 
-	if len(got.DepRefs) != 1 || got.DepRefs[0] != yasmLDRef {
-		t.Errorf("DepRefs = %v, want [%v]", got.DepRefs, yasmLDRef)
+	if len(got.ForeignDepRefs) != 1 || got.ForeignDepRefs[0] != yasmLDRef {
+		t.Errorf("ForeignDepRefs = %v, want [%v]", got.ForeignDepRefs, yasmLDRef)
 	}
 
 	toolRefs := got.ForeignDepRefs

@@ -185,13 +185,7 @@ func emitEN(
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	depRefs := make([]NodeRef, 0, len(depENRefs)+1)
-
-	if enumParserLD != (NodeRef(0)) {
-		depRefs = append(depRefs, enumParserLD)
-	}
-
-	depRefs = append(depRefs, depENRefs...)
+	depRefs := append([]NodeRef(nil), depENRefs...)
 
 	var foreignDepRefs []NodeRef
 

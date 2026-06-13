@@ -53,10 +53,15 @@ func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
 // graphDeps / graphForeignDeps resolve a node's refs to dep uids via the graph's
 // uid vector — deps are no longer materialized on the node.
 func graphDeps(g *Graph, n *Node) []UID {
-	out := make([]UID, len(n.DepRefs))
-	for i, r := range n.DepRefs {
-		out[i] = g.uids.get(r)
-	}
+	// The graph's "deps" array is DepRefs ∪ ForeignDepRefs (Node.buildDeps);
+	// tool refs live only in ForeignDepRefs.
+	var out []UID
+
+	n.buildDeps(func(r NodeRef) bool {
+		out = append(out, g.uids.get(r))
+
+		return true
+	})
 
 	return out
 }
