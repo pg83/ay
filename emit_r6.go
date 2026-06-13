@@ -26,6 +26,8 @@ func ragel6OutVFS(instance ModuleInstance, srcRel string) VFS {
 }
 
 func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ARG, closure []VFS, emit Emitter) (NodeRef, VFS) {
+	na := emit.nodeArenas()
+
 	outVFS := ragel6OutVFS(instance, srcRel)
 
 	inVFS := source(instance.Path.rel() + "/" + srcRel)
@@ -43,17 +45,17 @@ func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	head := make([]STR, 0, 1+len(effectiveFlags))
 	head = append(head, (ragel6BinaryPath).str())
 	head = appendArgStr(head, effectiveFlags)
-	cmdArgs := chunkList(head, ragel6ConstArgs, strList((outVFS).str(), (inVFS).str()))
+	cmdArgs := na.chunkList(head, ragel6ConstArgs, na.strList((outVFS).str(), (inVFS).str()))
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: cmdList(Cmd{CmdArgs: cmdArgs,
+		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Env: env}),
 		Env:              env,
-		Inputs:           inputList(vfsList(ragel6BinaryPath), closure),
-		Outputs:          vfsList(outVFS),
+		Inputs:           na.inputList(na.vfsList(ragel6BinaryPath), closure),
+		Outputs:          na.vfsList(outVFS),
 		KV:               KV{P: pkR6, PC: pcYellow},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

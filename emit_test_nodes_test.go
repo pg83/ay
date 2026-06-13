@@ -349,11 +349,11 @@ func TestEmitTestRunNodes_BuildersMatchSpec(t *testing.T) {
 		t.Fatalf("sandboxingNodeTags = %#v, want %#v", got, expectedSandboxingTags())
 	}
 
-	assertNodeFields(t, "ctx", buildTestCtxNode(p), expectedTestCtxNode())
-	assertNodeFields(t, "unittest", buildUnittestNode(p, info, testUnittestResourceGlobals()), expectedUnittestNode(info))
-	assertNodeFields(t, "clang_format", buildClangFormatNode(p, info), expectedClangFormatNode())
+	assertNodeFields(t, "ctx", buildTestCtxNode(newNodeArenas(), p), expectedTestCtxNode())
+	assertNodeFields(t, "unittest", buildUnittestNode(newNodeArenas(), p, info, testUnittestResourceGlobals()), expectedUnittestNode(info))
+	assertNodeFields(t, "clang_format", buildClangFormatNode(newNodeArenas(), p, info), expectedClangFormatNode())
 
-	if tags := nodeTags(buildClangFormatNode(p, info)); len(tags) != 0 {
+	if tags := nodeTags(buildClangFormatNode(newNodeArenas(), p, info)); len(tags) != 0 {
 		t.Fatalf("clang_format tags = %#v, want nil", tags)
 	}
 }

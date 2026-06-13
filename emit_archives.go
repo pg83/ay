@@ -23,6 +23,8 @@ func emitArchive(
 	emit Emitter,
 	reg *CodegenRegistry,
 ) {
+	na := emit.nodeArenas()
+
 	archiveVFS := build(instance.Path.rel() + "/" + a.Name)
 	archivePath := archiveVFS.string()
 
@@ -94,12 +96,12 @@ func emitArchive(
 
 	n := &Node{
 		Platform: instance.Platform,
-		Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:              env,
-		Inputs:           inputList(inputs, srcChunk(toolBinPath)),
+		Inputs:           na.inputList(inputs, na.srcChunk(toolBinPath)),
 		KV:               KV{P: pkAR, PC: pcLightRed},
-		Outputs:          vfsList(archiveVFS),
+		Outputs:          na.vfsList(archiveVFS),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		DepRefs:          depRefs,

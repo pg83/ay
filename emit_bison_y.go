@@ -48,6 +48,8 @@ func bisonGeneratedCPPParsed(ctx *GenCtx, instance ModuleInstance, srcVFS, heade
 }
 
 func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCCInputs, genExt string) *SourceEmit {
+	na := ctx.na
+
 	bisonRef, bisonBin := bisonTool(ctx, instance)
 	m4Ref, m4Bin := m4Tool(ctx, instance)
 	preprocessHeader := genExt != ".c"
@@ -89,7 +91,7 @@ func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envBISON_PKGDATADIR, Value: strBisonPkgData}, {Name: envM4, Value: m4Bin}}
 	preprocessEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	cmds := cmdList(Cmd{CmdArgs: chunkList(strList(internStr(bisonBin),
+	cmds := na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(internStr(bisonBin),
 		argV.str(),
 		internStr("--defines="+headerVFS.string()),
 		argDashO.str(),
@@ -100,7 +102,7 @@ func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCC
 
 	if preprocessHeader {
 		cmds = append(cmds, Cmd{
-			CmdArgs: chunkList(strList(in.TC.Python3,
+			CmdArgs: na.chunkList(na.strList(in.TC.Python3,
 				(bisonPreprocessPyVFS).str(),
 				(headerVFS).str())),
 			Env: preprocessEnv,
@@ -115,8 +117,8 @@ func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		Cmds:             cmds,
 		DepRefs:          []NodeRef{bisonRef, m4Ref},
 		Env:              env,
-		Inputs:           inputList(inputs),
-		Outputs:          vfsList(headerVFS, generatedVFS),
+		Inputs:           na.inputList(inputs),
+		Outputs:          na.vfsList(headerVFS, generatedVFS),
 		KV:               KV{P: pkYC, PC: pcLightGreen},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},

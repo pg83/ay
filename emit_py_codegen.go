@@ -12,6 +12,8 @@ var (
 )
 
 func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
+	na := ctx.na
+
 	if len(d.pySrcs) == 0 {
 		return
 	}
@@ -55,12 +57,12 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 			outputPath = build(instance.Path.rel() + "/" + srcRel.string() + ".yapyc3")
 		}
 
-		cmdArgs := chunkList(py3ccArgHead, strList(internStr(moduleName),
+		cmdArgs := na.chunkList(py3ccArgHead, na.strList(internStr(moduleName),
 			(srcAbs).str(),
 			(outputPath).str()))
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}
-		nodeInputs := inputList(py3ccToolsChunk, srcChunk(srcAbs))
+		nodeInputs := na.inputList(py3ccToolsChunk, na.srcChunk(srcAbs))
 
 		var inputs []VFS
 
@@ -81,16 +83,16 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 			}
 
 			inputs = dedupVFS(inputs)
-			nodeInputs = inputList(inputs)
+			nodeInputs = na.inputList(inputs)
 		}
 
 		node := &Node{
 			Platform: instance.Platform,
-			Cmds: cmdList(Cmd{CmdArgs: cmdArgs,
+			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 				Env: env}),
 			Env:     env,
 			Inputs:  nodeInputs,
-			Outputs: vfsList(outputPath),
+			Outputs: na.vfsList(outputPath),
 			KV:      KV{P: pkPY, PC: pcYellow},
 			TargetProperties: func() TargetProperties {
 				tp := TargetProperties{ModuleDir: instance.Path.rel()}
@@ -146,6 +148,8 @@ type PyRegisterResult struct {
 }
 
 func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs, py3Suffix bool) *PyRegisterResult {
+	na := ctx.na
+
 	if len(d.pyRegister) == 0 {
 		return nil
 	}
@@ -186,10 +190,10 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 
 			pyNode := &Node{
 				Platform:         pyInstance.Platform,
-				Cmds:             cmdList(Cmd{CmdArgs: chunkList(pyCmdArgs), Env: env}),
+				Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(pyCmdArgs), Env: env}),
 				Env:              env,
-				Inputs:           inputList(genPy3RegScriptChunk),
-				Outputs:          vfsList(regCppVFS),
+				Inputs:           na.inputList(genPy3RegScriptChunk),
+				Outputs:          na.vfsList(regCppVFS),
 				KV:               KV{P: pkPY, PC: pcYellow},
 				TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 				Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -234,7 +238,7 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 		}
 
 		// AddIncl/CFlags feed the module-stable arg blocks — rebuild for this copy.
-		ccIn.CCBlocks = composeCCModuleArgBlocks(instance.Platform, &ccIn)
+		ccIn.CCBlocks = composeCCModuleArgBlocks(na, instance.Platform, &ccIn)
 		ccRef, ccOut, _ := emitCC(instance, regCpp, regCppVFS, ccIn, ctx.host, ctx.emit)
 
 		res.Refs = append(res.Refs, ccRef)

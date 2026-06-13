@@ -449,6 +449,8 @@ func emitPYRun(
 	tc ModuleToolchain,
 	emit Emitter,
 ) PrEmitResult {
+	na := emit.nodeArenas()
+
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	for _, kv := range stmt.EnvPairs {
@@ -493,7 +495,7 @@ func emitPYRun(
 	// The closure tail is filtered against the head set; filterSeen returns
 	// inputClosure itself when nothing collides, so the closure is referenced,
 	// not copied, into the chunk list.
-	inputs := inputList(head, deduper.filterSeen(inputClosure))
+	inputs := na.inputList(head, deduper.filterSeen(inputClosure))
 
 	var outputs []VFS
 	var stdoutPath STR
@@ -511,7 +513,7 @@ func emitPYRun(
 		outputs = append(outputs, outVFSByToken[f.string()])
 	}
 
-	cmd := Cmd{CmdArgs: chunkList(cmdArgs), Env: env}
+	cmd := Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}
 
 	if stdoutPath != 0 {
 		cmd.Stdout = stdoutPath
@@ -523,7 +525,7 @@ func emitPYRun(
 
 	node := &Node{
 		Platform:         instance.Platform,
-		Cmds:             cmdList(cmd),
+		Cmds:             na.cmdList(cmd),
 		Env:              env,
 		Inputs:           inputs,
 		KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},

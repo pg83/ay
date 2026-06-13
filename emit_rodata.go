@@ -29,6 +29,8 @@ func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
 }
 
 func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, tc ModuleToolchain, emit Emitter) (NodeRef, VFS, VFS) {
+	na := emit.nodeArenas()
+
 	asmVFS, outVFS := composeRodataOutputs(instance, srcRel)
 	toolName := path.Base(strings.TrimSuffix(srcRel, ".rodata"))
 
@@ -37,15 +39,15 @@ func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: cmdList(Cmd{CmdArgs: chunkList(strList(tc.Python3), rodataConstArgs, strList(internStr(toolName), (srcVFS).str(), (asmVFS).str())),
-			Env: pythonEnv}, Cmd{CmdArgs: chunkList(yasmConstHead, strList(argD.str(), internStr("_"+string(instance.Platform.ISA)+"_")), rodataYasmConstArgs, strList((outVFS).str(), (asmVFS).str())),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(tc.Python3), rodataConstArgs, na.strList(internStr(toolName), (srcVFS).str(), (asmVFS).str())),
+			Env: pythonEnv}, Cmd{CmdArgs: na.chunkList(yasmConstHead, na.strList(argD.str(), internStr("_"+string(instance.Platform.ISA)+"_")), rodataYasmConstArgs, na.strList((outVFS).str(), (asmVFS).str())),
 			Env: yasmEnv}),
 		Env: yasmEnv,
-		Inputs: inputList(vfsList(yasmBinaryVFS,
+		Inputs: na.inputList(na.vfsList(yasmBinaryVFS,
 			rodataScriptVFS,
 			srcVFS)),
 		KV:               KV{P: pkRD, PC: pcLightGreen},
-		Outputs:          vfsList(asmVFS, outVFS),
+		Outputs:          na.vfsList(asmVFS, outVFS),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		DepRefs:          []NodeRef{yasmLD},

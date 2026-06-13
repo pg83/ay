@@ -12,6 +12,8 @@ func emitJVCPG4(
 	scripts ScriptDeps,
 	emit Emitter,
 ) NodeRef {
+	na := emit.nodeArenas()
+
 	fsTools := copyFsToolsVFS
 
 	cmdArgs := []STR{
@@ -33,16 +35,16 @@ func emitJVCPG4(
 
 	// The fs_tools closure (shared table slice), jvInputs and closure (caller's
 	// slices) are referenced as their own chunks, never copied.
-	inputs := inputList(head, scripts[fsTools], jvInputs, closure)
+	inputs := na.inputList(head, scripts[fsTools], jvInputs, closure)
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:              env,
 		Inputs:           inputs,
 		KV:               KV{P: pkCP, PC: pcLightCyan},
-		Outputs:          vfsList(dst),
+		Outputs:          na.vfsList(dst),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		DepRefs:          []NodeRef{jvRef},
@@ -61,6 +63,8 @@ func emitCP(instance ModuleInstance, src VFS, dst VFS, tc ModuleToolchain, scrip
 // COPY macro was declared WITH_CONTEXT, so that any header change retriggers
 // the copy).
 func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, tc ModuleToolchain, scripts ScriptDeps, emit Emitter) NodeRef {
+	na := emit.nodeArenas()
+
 	fsTools := copyFsToolsVFS
 
 	cmdArgs := []STR{
@@ -87,16 +91,16 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 		ownInputs = append(ownInputs, v)
 	}
 
-	inputs := inputList(scripts[fsTools], ownInputs)
+	inputs := na.inputList(scripts[fsTools], ownInputs)
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:              env,
 		Inputs:           inputs,
 		KV:               KV{P: pkCP, PC: pcLightCyan},
-		Outputs:          vfsList(dst),
+		Outputs:          na.vfsList(dst),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		DepRefs:          depRefs,

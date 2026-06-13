@@ -6,6 +6,7 @@ func TestEmitPyRegister_TargetPlatformCacheWinsOverHostFirstVisit(t *testing.T) 
 	emit := newBufferedEmitter()
 	ctx := &GenCtx{
 		emit:              emit,
+		na:                emit.nodeArenas(),
 		host:              testHostP,
 		target:            testTargetP,
 		pyRegisterOutputs: make(map[VFS]NodeRef),

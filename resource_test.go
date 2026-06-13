@@ -283,14 +283,15 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 		t.Fatalf("tail chunk paths len: got %d, want 1", got)
 	}
 
-	ctx := &GenCtx{emit: newBufferedEmitter()}
+	em := newBufferedEmitter()
+	ctx := &GenCtx{emit: em, na: em.nodeArenas()}
 	instance := ModuleInstance{
 		Path:     source("contrib/python/shellingham"),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: testTargetP,
 	}
-	res := emitPySrcObjcopy(ctx, instance, d, &ObjcopyEmitCtx{blocks: composeObjcopyArgBlocks(d.tc, testTargetP)})
+	res := emitPySrcObjcopy(ctx, instance, d, &ObjcopyEmitCtx{blocks: composeObjcopyArgBlocks(d.tc, testTargetP), na: ctx.na})
 	if res == nil {
 		t.Fatal("emitPySrcObjcopy returned nil")
 	}

@@ -13,6 +13,10 @@ type Emitter interface {
 	emit(n *Node) NodeRef
 	result(NodeRef)
 	onReady(NodeRef) <-chan struct{}
+	// nodeArenas exposes the run's node-construction arenas (NodeArenas); the
+	// emitter owns them so every node builder reaches them through the Emitter
+	// it already holds.
+	nodeArenas() *NodeArenas
 }
 
 type BufferedEmitter struct {
@@ -31,12 +35,18 @@ type BufferedEmitter struct {
 	// into node uids (see canonBuf.fs).
 	fs      FS
 	readyCh chan struct{}
+	na      *NodeArenas
 }
 
 func newBufferedEmitter() *BufferedEmitter {
 	return &BufferedEmitter{
 		readyCh: make(chan struct{}),
+		na:      newNodeArenas(),
 	}
+}
+
+func (e *BufferedEmitter) nodeArenas() *NodeArenas {
+	return e.na
 }
 
 func (e *BufferedEmitter) onReady(_ NodeRef) <-chan struct{} {
@@ -243,6 +253,7 @@ type StreamingEmitter struct {
 	finalized  bool
 	readyCh    chan struct{}
 	uidScratch CanonBuf
+	na         *NodeArenas
 }
 
 func newStreamingEmitter(onNode func(*Node, *UidVec)) *StreamingEmitter {
@@ -251,7 +262,12 @@ func newStreamingEmitter(onNode func(*Node, *UidVec)) *StreamingEmitter {
 		pendingSet: map[NodeRef]bool{},
 		onNode:     onNode,
 		readyCh:    make(chan struct{}),
+		na:         newNodeArenas(),
 	}
+}
+
+func (e *StreamingEmitter) nodeArenas() *NodeArenas {
+	return e.na
 }
 
 func (e *StreamingEmitter) emit(n *Node) NodeRef {

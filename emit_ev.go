@@ -69,19 +69,21 @@ func emitEV(
 	tc ModuleToolchain,
 	emit Emitter,
 ) NodeRef {
+	na := emit.nodeArenas()
+
 	moduleDir := instance.Path.rel()
 
 	evCC := build(evRelPath + ".pb.cc")
 	evH := build(evRelPath + ".pb.h")
 	srcVFS := source(evRelPath)
 
-	cmdArgs := chunkList(strList(tc.Python3,
+	cmdArgs := na.chunkList(na.strList(tc.Python3,
 		internStr(pbWrapperPath),
 		argOutputs.str(),
 		(evCC).str(),
 		(evH).str(),
 		arg2.str(),
-		(protocBinary).str()), evProtocConstArgs, strList(internStr("--plugin=protoc-gen-cpp_styleguide="+cppStyleguideBinary.string()),
+		(protocBinary).str()), evProtocConstArgs, na.strList(internStr("--plugin=protoc-gen-cpp_styleguide="+cppStyleguideBinary.string()),
 		internStr(evRelPath),
 		internStr("--plugin=protoc-gen-event2cpp="+event2cppBinary.string()),
 		argEvent2cppOutB.str(),
@@ -129,12 +131,12 @@ func emitEV(
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: cmdList(Cmd{CmdArgs: cmdArgs,
+		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Cwd: strS,
 			Env: env}),
 		Env:              env,
-		Inputs:           inputList(inputs, transitiveImports),
-		Outputs:          vfsList(evCC, evH),
+		Inputs:           na.inputList(inputs, transitiveImports),
+		Outputs:          na.vfsList(evCC, evH),
 		KV:               KV{P: pkEV, PC: pcYellow},
 		TargetProperties: targetProps,
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

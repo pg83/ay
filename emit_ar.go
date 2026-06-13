@@ -117,6 +117,8 @@ func emitARNode(
 	hostP *Platform,
 	emit Emitter,
 ) NodeRef {
+	na := emit.nodeArenas()
+
 	cmdEnv := hostP.toolEnv()
 
 	tail := make([]STR, 0, 4+len(objPaths))
@@ -131,7 +133,7 @@ func emitARNode(
 		tail = append(tail, (p).str())
 	}
 
-	cmdArgs := chunkList(tc.ARCmdHead, tail)
+	cmdArgs := na.chunkList(tc.ARCmdHead, tail)
 
 	// objPaths is the caller's member slice — referenced as its own chunk,
 	// never copied; only the script/plugin tail is built locally.
@@ -160,12 +162,12 @@ func emitARNode(
 
 	n := &Node{
 		Platform: instance.Platform,
-		Cmds: cmdList(Cmd{CmdArgs: cmdArgs,
+		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Env: cmdEnv}),
 		Env:              topEnv,
-		Inputs:           inputList(objPaths, inputTail),
+		Inputs:           na.inputList(objPaths, inputTail),
 		KV:               KV{P: pkAR, PC: pcLightRed, ShowOut: true},
-		Outputs:          vfsList(archivePath),
+		Outputs:          na.vfsList(archivePath),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: targetProperties,
 		DepRefs:          depRefs,

@@ -13,6 +13,8 @@ func emitBI(
 	tc ModuleToolchain,
 	emit Emitter,
 ) NodeRef {
+	na := emit.nodeArenas()
+
 	outPrefix := instance.Path.rel() + "/"
 	argsFileVFS := build(outPrefix + "__args")
 	outVFS := build(outPrefix + outputHeader)
@@ -57,11 +59,11 @@ func emitBI(
 	node := &Node{
 		Platform:         instance.Platform,
 		Cache:            &cacheFalse,
-		Cmds:             cmdList(Cmd{CmdArgs: chunkList(cmd0Args), Env: env}, Cmd{CmdArgs: chunkList(cmd1Args), Env: env}, Cmd{CmdArgs: chunkList(cmd2Args), Env: env}),
+		Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd1Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd2Args), Env: env}),
 		Env:              env,
-		Inputs:           inputList(inputs),
+		Inputs:           na.inputList(inputs),
 		KV:               KV{P: pkBI, PC: pcYellow, ShowOut: true, DisableCache: "yes"},
-		Outputs:          vfsList(outVFS),
+		Outputs:          na.vfsList(outVFS),
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          []NodeRef{},

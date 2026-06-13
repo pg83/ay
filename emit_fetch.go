@@ -7,6 +7,8 @@ package main
 // through ctx.fetchRefs); every consumer that splices $(<Name>) into a command
 // takes the fetch as a dependency from there.
 func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
+	na := ctx.na
+
 	if ref, ok := ctx.fetchRefs.get(decl.Name); ok {
 		return ref
 	}
@@ -14,15 +16,15 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 	output := build("resources/" + decl.Name.string())
 	node := &Node{
 		Platform: ctx.host,
-		Cmds: cmdList(Cmd{CmdArgs: chunkList(strList(internStr(currentYatoolPath()),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(internStr(currentYatoolPath()),
 			argFetch.str(),
 			argB.str(),
 			argS.str(),
 			decl.URI,
 			output.str()))}),
-		Inputs:           inputList(fetchScriptInputs(ctx.scripts)),
+		Inputs:           na.inputList(fetchScriptInputs(ctx.scripts)),
 		KV:               KV{P: pkFETCH, PC: pcYellow, ShowOut: true},
-		Outputs:          vfsList(output),
+		Outputs:          na.vfsList(output),
 		Requirements:     Requirements{CPU: float64(1), Network: nwFull, RAM: float64(32)},
 		Sandboxing:       true,
 		TargetProperties: TargetProperties{ModuleDir: "build/resources"},

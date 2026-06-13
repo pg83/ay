@@ -205,6 +205,8 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 }
 
 func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src string, protocLDRef NodeRef, protocBinary VFS, pe *PyPBModuleEmission) []PyProtoAuxEntry {
+	na := ctx.na
+
 	if d.moduleStmt == nil || d.moduleStmt.Name != tokProtoLibrary {
 		return nil
 	}
@@ -231,7 +233,7 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 	}
 
 	relChunk := []STR{internStr(protoRelPath)}
-	cmdArgs := chunkList(pe.head, relChunk, pe.mid, relChunk)
+	cmdArgs := na.chunkList(pe.head, relChunk, pe.mid, relChunk)
 
 	if len(pe.tail) > 0 {
 		cmdArgs = append(cmdArgs, pe.tail)
@@ -277,9 +279,9 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 
 	pyPBNode := &Node{
 		Platform:         instance.Platform,
-		Cmds:             cmdList(Cmd{CmdArgs: cmdArgs, Cwd: strS, Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}}),
+		Cmds:             na.cmdList(Cmd{CmdArgs: cmdArgs, Cwd: strS, Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}}),
 		Env:              EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
-		Inputs:           inputList(inputs),
+		Inputs:           na.inputList(inputs),
 		Outputs:          outputs,
 		KV:               pbKV,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleTag: tagPy3Proto},
@@ -326,6 +328,8 @@ type GeneratedPyProtoYapycResult struct {
 }
 
 func emitGeneratedPyProtoYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs []VFS, pyPBRef NodeRef, sourceInputs []VFS) *GeneratedPyProtoYapycResult {
+	na := ctx.na
+
 	py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin := py3ccToolRefs(ctx, instance)
 	suffix := protoPySuffix(instance.Path.rel())
 	res := &GeneratedPyProtoYapycResult{}
@@ -355,7 +359,7 @@ func emitGeneratedPyProtoYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs [
 
 		// sourceInputs is shared across the pyOutputs loop — its own chunk,
 		// referenced, not copied per node.
-		nodeInputs := inputList(vfsList(py3ccBinary, py3ccSlowBin, pyOut), sourceInputs)
+		nodeInputs := na.inputList(na.vfsList(py3ccBinary, py3ccSlowBin, pyOut), sourceInputs)
 
 		if i > 0 {
 			nodeInputs = append(nodeInputs, []VFS{pyOutputs[0]})
@@ -363,10 +367,10 @@ func emitGeneratedPyProtoYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs [
 
 		node := &Node{
 			Platform:         instance.Platform,
-			Cmds:             cmdList(Cmd{CmdArgs: chunkList(cmdArgs), Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}}),
+			Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}}),
 			Env:              EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}},
 			Inputs:           nodeInputs,
-			Outputs:          vfsList(out),
+			Outputs:          na.vfsList(out),
 			KV:               KV{P: pkPY, PC: pcYellow},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleTag: tagPy3Proto},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -439,6 +443,8 @@ type PyProtoAuxChunksResult struct {
 }
 
 func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerContribs PeerGlobalContribs, entries []PyProtoAuxEntry, cppSibling *ModuleEmitResult) *PyProtoAuxChunksResult {
+	na := ctx.na
+
 	if len(entries) == 0 {
 		return nil
 	}
@@ -581,10 +587,10 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 
 		ref := ctx.emit.emit(&Node{
 			Platform:         instance.Platform,
-			Cmds:             cmdList(Cmd{CmdArgs: chunkList(cmdArgs), Env: env}),
+			Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
 			Env:              env,
-			Inputs:           inputList(ch.inputs, tail),
-			Outputs:          vfsList(aux),
+			Inputs:           na.inputList(ch.inputs, tail),
+			Outputs:          na.vfsList(aux),
 			KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleTag: tagPy3Proto},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -611,7 +617,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 			ModuleTag:            tagPy3Proto,
 			IncludeInputs:        auxClosure,
 		}
-		ccIn.CCBlocks = composeCCModuleArgBlocks(instance.Platform, &ccIn)
+		ccIn.CCBlocks = composeCCModuleArgBlocks(na, instance.Platform, &ccIn)
 		ccRef, ccOut, _ := emitCC(instance, aux.rel()[strings.LastIndex(aux.rel(), "/")+1:], aux, ccIn, ctx.host, ctx.emit)
 		res.Refs = append(res.Refs, ccRef)
 		res.Outputs = append(res.Outputs, ccOut)

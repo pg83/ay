@@ -88,11 +88,13 @@ func emitJVDownstreamCPCC(
 const jdkResourcePath = "$(JDK17)/bin/java"
 
 func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs InputChunks, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag STR, emit Emitter) NodeRef {
+	na := emit.nodeArenas()
+
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env,
 			Cwd: internStr(cwd)}),
 		Env:     env,
@@ -126,6 +128,8 @@ func emitJV(
 	tc ModuleToolchain,
 	emit Emitter,
 ) NodeRef {
+	na := emit.nodeArenas()
+
 	grammarVFS := source(instance.Path.rel() + "/" + grammar)
 	outDirVFS := build(instance.Path.rel())
 	outDir := outDirVFS.string()
@@ -152,7 +156,7 @@ func emitJV(
 
 	cmdArgs = appendInternStrs(cmdArgs, options)
 
-	inputs := inputList(vfsList(grammarVFS,
+	inputs := na.inputList(na.vfsList(grammarVFS,
 		stdout2stderrVFS,
 		antlr4JarVFS))
 
@@ -180,6 +184,8 @@ func emitJVSplit(
 	tc ModuleToolchain,
 	emit Emitter,
 ) NodeRef {
+	na := emit.nodeArenas()
+
 	lexerVFS := source(instance.Path.rel() + "/" + lexer)
 	parserVFS := source(instance.Path.rel() + "/" + parser)
 	outDirVFS := build(instance.Path.rel())
@@ -208,7 +214,7 @@ func emitJVSplit(
 		cmdArgs = append(cmdArgs, argListener.str())
 	}
 
-	inputs := inputList(vfsList(lexerVFS,
+	inputs := na.inputList(na.vfsList(lexerVFS,
 		parserVFS,
 		stdout2stderrVFS,
 		antlr4JarVFS))
@@ -241,6 +247,8 @@ func emitJVGeneral(
 	tc ModuleToolchain,
 	emit Emitter,
 ) NodeRef {
+	na := emit.nodeArenas()
+
 	cmdArgs := make([]STR, 0, 5+len(args))
 	cmdArgs = append(cmdArgs,
 		tc.Python3,
@@ -252,7 +260,7 @@ func emitJVGeneral(
 	cmdArgs = appendInternStrs(cmdArgs, args)
 
 	// inputs is the caller's slice — referenced as its own chunk, never copied.
-	jvInputs := inputList(inputs, vfsList(stdout2stderrVFS, jarVFS))
+	jvInputs := na.inputList(inputs, na.vfsList(stdout2stderrVFS, jarVFS))
 
 	return emitJVNode(instance, cmdArgs, jvInputs, outputs, cwd, depRefs, moduleTag, emit)
 }
