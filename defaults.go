@@ -105,7 +105,7 @@ func suppressMallocAPIDefault(defaults []string, allocatorName STR) []string {
 func defaultPeerdirsForModule(ctx *GenCtx, instance ModuleInstance, d *ModuleData) []string {
 	inst := instance
 
-	if instance.Language == LangPy && d.usePython3 && d.moduleStmt != nil &&
+	if instance.Language == LangPy && d.usePython3 &&
 		d.moduleStmt.Name == tokProtoLibrary && moduleExcludesTag(d, "CPP_PROTO") {
 		inst.Language = LangCPP
 	}

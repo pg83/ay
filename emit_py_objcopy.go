@@ -138,11 +138,7 @@ func emitResourceObjcopy(
 		cmdLen      int
 	}
 	cur := acc{}
-	var moduleTag *string
-
-	if d.moduleStmt != nil {
-		moduleTag = resourceLibTagForData(d)
-	}
+	moduleTag := resourceLibTagForData(d)
 
 	flush := func() {
 		if cur.cmdLen == 0 {
@@ -209,13 +205,11 @@ func emitResourceObjcopy(
 
 		resTargetProps := TargetProperties{ModuleDir: instance.Path.rel()}
 
-		if d.moduleStmt != nil {
-			switch d.moduleStmt.Name {
-			case tokPy23Library, tokPy23NativeLibrary:
-				resTargetProps.ModuleTag = tagPy3
-			case tokPy3Program:
-				resTargetProps.ModuleTag = tagPy3Bin
-			}
+		switch d.moduleStmt.Name {
+		case tokPy23Library, tokPy23NativeLibrary:
+			resTargetProps.ModuleTag = tagPy3
+		case tokPy3Program:
+			resTargetProps.ModuleTag = tagPy3Bin
 		}
 
 		node := &Node{
@@ -447,11 +441,7 @@ func emitYaConfJSONObjcopy(
 	}
 
 	out := make([]*ObjcopyEmit, 0, len(resources))
-	var moduleTag *string
-
-	if d.moduleStmt != nil {
-		moduleTag = resourceLibTagForData(d)
-	}
+	moduleTag := resourceLibTagForData(d)
 
 	for _, res := range resources {
 		key := "resfs/file/" + res.keyPath
@@ -559,7 +549,7 @@ func emitPyMainObjcopy(
 	d *ModuleData,
 	oc *ObjcopyEmitCtx,
 ) *ObjcopyEmit {
-	if d.pyMain == nil || d.moduleStmt == nil {
+	if d.pyMain == nil {
 		return nil
 	}
 
@@ -574,7 +564,7 @@ func emitNoCheckImportsObjcopy(
 	d *ModuleData,
 	oc *ObjcopyEmitCtx,
 ) *ObjcopyEmit {
-	if len(d.noCheckImports) == 0 || d.moduleStmt == nil {
+	if len(d.noCheckImports) == 0 {
 		return nil
 	}
 
@@ -597,7 +587,7 @@ func emitPySrcObjcopy(
 ) *ObjcopyEmitResult {
 	na := ctx.na
 
-	if len(d.pySrcs) == 0 || d.moduleStmt == nil {
+	if len(d.pySrcs) == 0 {
 		return nil
 	}
 

@@ -236,7 +236,7 @@ func protoCPPModulePath(instance ModuleInstance, d *ModuleData) VFS {
 }
 
 func protoCPPOutRoot(d *ModuleData) string {
-	if d == nil || d.protoNamespace == nil {
+	if d.protoNamespace == nil {
 		return ""
 	}
 

@@ -26,7 +26,7 @@ func moduleExcludesTag(d *ModuleData, tag string) bool {
 }
 
 func protoPythonNamespaceArg(d *ModuleData) string {
-	if d == nil || d.protoNamespace == nil {
+	if d.protoNamespace == nil {
 		return "/"
 	}
 
@@ -207,7 +207,7 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src string, protocLDRef NodeRef, protocBinary VFS, pe *PyPBModuleEmission) []PyProtoAuxEntry {
 	na := ctx.na
 
-	if d.moduleStmt == nil || d.moduleStmt.Name != tokProtoLibrary {
+	if d.moduleStmt.Name != tokProtoLibrary {
 		return nil
 	}
 

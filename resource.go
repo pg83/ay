@@ -123,10 +123,6 @@ func resourceModuleTag(modName TOK) *string {
 // _ARCADIA_PYTHON3_ADDINCL which sets PY3; the submodule-name default is set
 // AFTER body execution, so it wins).
 func resourceBinTagForData(d *ModuleData) *string {
-	if d == nil || d.moduleStmt == nil {
-		return nil
-	}
-
 	if d.moduleStmt.Name == tokPy3Program {
 		return stringPtr("PY3_BIN")
 	}
@@ -143,10 +139,6 @@ func resourceBinTagForData(d *ModuleData) *string {
 // PROGRAM's LD reuses the LIBRARY's emission rather than producing a tagged
 // twin with a non-REF hash.
 func resourceLibTagForData(d *ModuleData) *string {
-	if d == nil || d.moduleStmt == nil {
-		return nil
-	}
-
 	if d.moduleStmt.Name == tokPy3Program || d.programPairedLib {
 		return stringPtr("PY3_BIN_LIB")
 	}
@@ -155,7 +147,7 @@ func resourceLibTagForData(d *ModuleData) *string {
 }
 
 func prResourceExtraInputs(d *ModuleData, output string) []VFS {
-	if d == nil || d.prOutputInputs == nil {
+	if d.prOutputInputs == nil {
 		return nil
 	}
 
