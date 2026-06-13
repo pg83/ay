@@ -355,22 +355,17 @@ func resolveCodegenDepRefsExt(ctx *GenCtx, consumer ModuleInstance, includeInput
 	reg := codegenRegForInstance(ctx, consumer)
 
 	probe := func(v VFS) {
-		var ref NodeRef
-		var ok bool
+		info := reg.lookup(v)
 
-		if info := reg.lookup(v); info != nil {
-			ref, ok = info.ProducerRef, true
-		}
-
-		if !ok {
+		if info == nil {
 			return
 		}
 
-		if !deduper.add(VFS(ref)) {
+		if !deduper.add(VFS(info.ProducerRef)) {
 			return
 		}
 
-		out = append(out, ref)
+		out = append(out, info.ProducerRef)
 	}
 
 	// The IsBuild gate stays in the loops: it inlines there, and the dominant
