@@ -251,14 +251,12 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 	var extraProtoDeps []NodeRef
 	var protoProducerSourceInputs []VFS
 
-	if reg := codegenRegForInstance(ctx, instance); reg != nil {
-		buildProto := build(protoRelPath)
+	buildProto := build(protoRelPath)
 
-		if info := reg.lookup(buildProto); info != nil && info.HasProducerRef {
-			protoSrcOverride = buildProto
-			extraProtoDeps = []NodeRef{info.ProducerRef}
-			protoProducerSourceInputs = info.SourceInputs
-		}
+	if info := codegenRegForInstance(ctx, instance).lookup(buildProto); info != nil && info.HasProducerRef {
+		protoSrcOverride = buildProto
+		extraProtoDeps = []NodeRef{info.ProducerRef}
+		protoProducerSourceInputs = info.SourceInputs
 	}
 
 	pbRef := emitPB(
@@ -306,7 +304,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		}
 	}
 
-	if reg := codegenRegForInstance(ctx, instance); reg != nil {
+	{
 		directImports := protoDirectPbHIncludes(ctx.parsers, protoRelPath, cfg.cppOutRoot)
 		pbHImports := directImports
 		extras := pbHEmitsIncludesExtras()
@@ -345,7 +343,9 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		// intermediate (reached via the producer dep edge), so ride the generator's
 		// own $(S) sources instead — the grammar/template/tool/scripts that
 		// produced it (protoProducerSourceInputs = the $(B) .proto's SourceInputs).
-		if reg := codegenRegForInstance(ctx, instance); reg != nil {
+		{
+			reg := codegenRegForInstance(ctx, instance)
+
 			if protoSrcOverride == 0 {
 				reg.addClosureLeaf(pbH, source(protoRelPath))
 			} else {
@@ -496,7 +496,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 			evH := build(evRelPath + ".pb.h")
 			evPbCC := build(evRelPath + ".pb.cc")
 
-			if reg := codegenRegForInstance(ctx, instance); reg != nil {
+			{
 				directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, protoCPPOutRoot(d))
 				evExtras := evWitnessExtras(evRelPath, evPbCC)
 				evHParsed := make([]IncludeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(evExtras))
@@ -614,7 +614,9 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	var antlrRefs []NodeRef
 	var antlrOutputs []VFS
 
-	if reg := codegenRegForInstance(ctx, instance); reg != nil {
+	{
+		reg := codegenRegForInstance(ctx, instance)
+
 		for _, run := range d.antlrRuns {
 			for _, outTok := range run.OUTFiles {
 				if !isCCSourceExt(outTok.string()) {

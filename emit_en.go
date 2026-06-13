@@ -19,12 +19,10 @@ func resolveEnumHeaderInput(ctx *GenCtx, instance ModuleInstance, headerRel stri
 		}
 	}
 
-	if reg := codegenRegForInstance(ctx, instance); reg != nil {
-		buildHeader := build(headerInput.rel())
+	buildHeader := build(headerInput.rel())
 
-		if reg.lookup(buildHeader) != nil {
-			return buildHeader
-		}
+	if codegenRegForInstance(ctx, instance).lookup(buildHeader) != nil {
+		return buildHeader
 	}
 
 	return headerInput
@@ -73,7 +71,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 			serializedHPath = build(instance.Path.rel() + "/" + headerRel + "_serialized.h")
 		}
 
-		if ctx.scannerTarget.codegen != nil {
+		{
 			// Only the macro-level output_includes are woven by hand: the enum header
 			// itself (output_include:File) and util/generic/serialized_enum.h. The
 			// runtime headers come from enum_parser's INDUCED_DEPS via the GeneratorRef
@@ -99,7 +97,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 
 		var ownOutputClosure []VFS
 
-		if !withHeader && ctx.scannerTarget.codegen != nil {
+		if !withHeader {
 			// Tail: serializedCPPPath is the EN node's own output, never its
 			// input (headerInput dedups out via dedupVFS below).
 			ownOutputClosure = walkClosureTail(ctx.scannerFor(instance), serializedCPPPath, scanIn.ScanCfg)
@@ -130,7 +128,9 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 			ctx.emit,
 		)
 
-		if reg := codegenRegForInstance(ctx, instance); reg != nil {
+		{
+			reg := codegenRegForInstance(ctx, instance)
+
 			for _, p := range enOutPaths {
 				reg.setProducerRef(p, enRef)
 			}

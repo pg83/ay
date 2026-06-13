@@ -108,21 +108,19 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		}
 	}
 
-	if reg != nil {
-		for _, f := range stmt.OUTFiles {
-			registerGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f], prEmitsIncludes(f, stmt, inVFSs), []NodeRef{toolLDRef})
-			reg.setSourceInputs(outVFSByToken[f], prSourceInputs)
-		}
+	for _, f := range stmt.OUTFiles {
+		registerGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f], prEmitsIncludes(f, stmt, inVFSs), []NodeRef{toolLDRef})
+		reg.setSourceInputs(outVFSByToken[f], prSourceInputs)
+	}
 
-		for _, f := range stmt.OUTNoAutoFiles {
-			registerGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f], prEmitsIncludes(f, stmt, inVFSs), []NodeRef{toolLDRef})
-			reg.setSourceInputs(outVFSByToken[f], prSourceInputs)
-		}
+	for _, f := range stmt.OUTNoAutoFiles {
+		registerGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f], prEmitsIncludes(f, stmt, inVFSs), []NodeRef{toolLDRef})
+		reg.setSourceInputs(outVFSByToken[f], prSourceInputs)
+	}
 
-		if stmt.StdoutFile != nil {
-			registerGeneratedParsedOutput(ctx, instance, pkPR, *stdoutVFS, prEmitsIncludes(*stmt.StdoutFile, stmt, inVFSs), []NodeRef{toolLDRef})
-			reg.setSourceInputs(*stdoutVFS, prSourceInputs)
-		}
+	if stmt.StdoutFile != nil {
+		registerGeneratedParsedOutput(ctx, instance, pkPR, *stdoutVFS, prEmitsIncludes(*stmt.StdoutFile, stmt, inVFSs), []NodeRef{toolLDRef})
+		reg.setSourceInputs(*stdoutVFS, prSourceInputs)
 	}
 
 	inputClosure := prInputClosure(ctx, instance, d, stmt, moduleInputs)
@@ -151,18 +149,16 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		d.prOutputInputs[*stmt.StdoutFile] = prResult.Inputs
 	}
 
-	if reg != nil {
-		for _, f := range stmt.OUTFiles {
-			bindGeneratedOutput(ctx, instance, outVFSByToken[f], prRef)
-		}
+	for _, f := range stmt.OUTFiles {
+		bindGeneratedOutput(ctx, instance, outVFSByToken[f], prRef)
+	}
 
-		for _, f := range stmt.OUTNoAutoFiles {
-			bindGeneratedOutput(ctx, instance, outVFSByToken[f], prRef)
-		}
+	for _, f := range stmt.OUTNoAutoFiles {
+		bindGeneratedOutput(ctx, instance, outVFSByToken[f], prRef)
+	}
 
-		if stmt.StdoutFile != nil {
-			bindGeneratedOutput(ctx, instance, *stdoutVFS, prRef)
-		}
+	if stmt.StdoutFile != nil {
+		bindGeneratedOutput(ctx, instance, *stdoutVFS, prRef)
 	}
 
 	return prRef
@@ -256,7 +252,9 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	// without the 148 deep .pb.h headers our closure walk otherwise gathers).
 	// Filter the walk: keep the OUTPUT_INCLUDES VFS itself and every .proto
 	// reached through it; drop transitive .pb.h.
-	if reg := codegenRegForInstance(ctx, instance); reg != nil {
+	{
+		reg := codegenRegForInstance(ctx, instance)
+
 		for _, oi := range stmt.OutputIncludes {
 			target := oi
 
@@ -400,10 +398,8 @@ func runProgramInputVFS(ctx *GenCtx, instance ModuleInstance, d *ModuleData, rel
 
 	buildVFS := build(filepath.ToSlash(filepath.Clean(instance.Path.rel() + "/" + rel)))
 
-	if reg := codegenRegForInstance(ctx, instance); reg != nil {
-		if reg.lookup(buildVFS) != nil {
-			return buildVFS
-		}
+	if codegenRegForInstance(ctx, instance).lookup(buildVFS) != nil {
+		return buildVFS
 	}
 
 	if ctx.fs.isFile(srcRootVFS, rel) {

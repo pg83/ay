@@ -12,7 +12,7 @@ var (
 	configureFilePyPath = configureFilePyVFS.string()
 )
 
-func emitExplicitCF(ctx *GenCtx, instance ModuleInstance, cf *ConfigureFileStmt, d *ModuleData, reg *CodegenRegistry) {
+func emitExplicitCF(ctx *GenCtx, instance ModuleInstance, cf *ConfigureFileStmt, d *ModuleData) {
 	in := ModuleCCInputs{
 		TC:              d.tc,
 		InclArgs:        ctx.inclArgs,
@@ -32,17 +32,15 @@ func emitExplicitCF(ctx *GenCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	cfgVars := buildCFGVars(ctx.fs, srcVFS.rel(), d.setVars, d.defaultVars)
 	cfRef, cfOut := emitCF(instance, srcVFS, outVFS, cfgVars, in.IncludeInputs, instance.Path.rel(), cfModuleTag(d, instance), in.TC, ctx.emit)
 
-	if reg != nil {
-		parsed := []IncludeDirective{
-			{kind: includeQuoted, target: internStr(srcVFS.rel())},
-			{kind: includeQuoted, target: internStr(configureFilePyVFS.rel())},
-		}
-		parsed = append(parsed, cfIncludeDirectives(ctx.parsers, srcVFS.rel())...)
-		// Record CF source on the GeneratedFileInfo so antlr / similar
-		// consumers can extend their inputs with srcVFS + configure_file.py
-		// when an INFile is a CF output (upstream tracks both as JV inputs).
-		registerBoundGeneratedParsedOutputWithSource(ctx, instance, pkCF, cfOut, srcVFS, parsed, cfRef, nil)
+	parsed := []IncludeDirective{
+		{kind: includeQuoted, target: internStr(srcVFS.rel())},
+		{kind: includeQuoted, target: internStr(configureFilePyVFS.rel())},
 	}
+	parsed = append(parsed, cfIncludeDirectives(ctx.parsers, srcVFS.rel())...)
+	// Record CF source on the GeneratedFileInfo so antlr / similar
+	// consumers can extend their inputs with srcVFS + configure_file.py
+	// when an INFile is a CF output (upstream tracks both as JV inputs).
+	registerBoundGeneratedParsedOutputWithSource(ctx, instance, pkCF, cfOut, srcVFS, parsed, cfRef, nil)
 }
 
 func cfIncludeDirectives(pm *IncludeParserManager, rel string) []IncludeDirective {

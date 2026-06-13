@@ -212,31 +212,17 @@ func (r *CodegenRegistry) setSourceInputs(path VFS, src []VFS) {
 }
 
 func registerGeneratedParsedOutput(ctx *GenCtx, instance ModuleInstance, kind ProcKind, output VFS, parsed []IncludeDirective, generatorRefs []NodeRef) {
-	reg := codegenRegForInstance(ctx, instance)
+	codegenRegForInstance(ctx, instance).register(&GeneratedFileInfo{
+		ProducerKvP:   kind,
+		OutputPath:    output,
+		GeneratorRefs: generatorRefs,
+	})
 
-	if reg != nil {
-		reg.register(&GeneratedFileInfo{
-			ProducerKvP:   kind,
-			OutputPath:    output,
-			GeneratorRefs: generatorRefs,
-		})
-	}
-
-	scanner := ctx.scannerFor(instance)
-
-	if scanner != nil {
-		scanner.parsers.registerBuildParsedIncludes(output, parsed)
-	}
+	ctx.scannerFor(instance).parsers.registerBuildParsedIncludes(output, parsed)
 }
 
 func bindGeneratedOutput(ctx *GenCtx, instance ModuleInstance, output VFS, ref NodeRef) {
-	reg := codegenRegForInstance(ctx, instance)
-
-	if reg == nil {
-		return
-	}
-
-	reg.setProducerRef(output, ref)
+	codegenRegForInstance(ctx, instance).setProducerRef(output, ref)
 }
 
 func registerBoundGeneratedParsedOutput(ctx *GenCtx, instance ModuleInstance, kind ProcKind, output VFS, parsed []IncludeDirective, ref NodeRef, generatorRefs []NodeRef) {
@@ -250,24 +236,16 @@ func registerBoundGeneratedParsedOutput(ctx *GenCtx, instance ModuleInstance, ki
 // tools whose INDUCED_DEPS the scanner mixes into this output's closure (nil when
 // the producer has no induced-deps tool).
 func registerBoundGeneratedParsedOutputWithSource(ctx *GenCtx, instance ModuleInstance, kind ProcKind, output VFS, sourcePath VFS, parsed []IncludeDirective, ref NodeRef, generatorRefs []NodeRef) {
-	reg := codegenRegForInstance(ctx, instance)
+	codegenRegForInstance(ctx, instance).register(&GeneratedFileInfo{
+		ProducerKvP:    kind,
+		OutputPath:     output,
+		SourcePath:     sourcePath,
+		ProducerRef:    ref,
+		HasProducerRef: true,
+		GeneratorRefs:  generatorRefs,
+	})
 
-	if reg != nil {
-		reg.register(&GeneratedFileInfo{
-			ProducerKvP:    kind,
-			OutputPath:     output,
-			SourcePath:     sourcePath,
-			ProducerRef:    ref,
-			HasProducerRef: true,
-			GeneratorRefs:  generatorRefs,
-		})
-	}
-
-	scanner := ctx.scannerFor(instance)
-
-	if scanner != nil {
-		scanner.parsers.registerBuildParsedIncludes(output, parsed)
-	}
+	ctx.scannerFor(instance).parsers.registerBuildParsedIncludes(output, parsed)
 }
 
 func generatedOutputClosure(ctx *GenCtx, instance ModuleInstance, output VFS, in ModuleCCInputs) []VFS {
@@ -275,11 +253,5 @@ func generatedOutputClosure(ctx *GenCtx, instance ModuleInstance, output VFS, in
 }
 
 func codegenRegForInstance(ctx *GenCtx, instance ModuleInstance) *CodegenRegistry {
-	sc := ctx.scannerFor(instance)
-
-	if sc == nil {
-		return nil
-	}
-
-	return sc.codegen
+	return ctx.scannerFor(instance).codegen
 }

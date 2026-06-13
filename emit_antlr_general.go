@@ -40,7 +40,7 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			inVFSByToken[inTok.string()] = vfs
 			inputs = append(inputs, vfs)
 
-			if reg != nil {
+			{
 				if info := reg.lookup(vfs); info != nil && info.ProducerKvP == pkCF && info.SourcePath != 0 {
 					appendCFExtra(info.SourcePath)
 					appendCFExtra(configureFilePyVFS)
@@ -75,7 +75,7 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 
 		jvRef := emitJVGeneral(instance, jarVFS, args, inputs, outputs, cwd, depRefs, cfModuleTag(d, instance), d.tc, ctx.emit)
 
-		if reg != nil {
+		{
 			// The JV node's full $(S) input set = source-rooted IN/CF inputs plus
 			// the two implicit sources EmitJVGeneral appends (stdout2stderr.py and
 			// the antlr jar). Consumers compiling a JV output (e.g. a PB protoc

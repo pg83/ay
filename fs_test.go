@@ -390,8 +390,35 @@ func newTestScanner(fs FS, sysincl SysInclSet) *IncludeScanner {
 		func(Warn) {},
 		&TarjanCtx{},
 	)
-	// Prod wiring always attaches a registry (gen.go); the scanner relies on it.
+	// Prod wiring always attaches a registry and a moduleByRef map (gen.go); the
+	// scanner relies on both being non-nil.
 	s.codegen = newCodegenRegistry()
+	s.moduleByRef = &DenseMap[NodeRef, *ModuleEmitResult]{}
 
 	return s
+}
+
+// wireTestScanners attaches host + target scanners (each with a registry) to a
+// hand-built test GenCtx, mirroring the real gen pipeline (gen.go). Emitter
+// unit tests that build a GenCtx literal call this so codegen/scanner accessors
+// resolve to real objects instead of nil — production never sees nil there.
+func wireTestScanners(ctx *GenCtx) {
+	fs := ctx.fs
+
+	if fs == nil {
+		fs = newMemFS(nil)
+	}
+
+	mk := func() *IncludeScanner {
+		s := newTestScanner(fs, SysInclSet{})
+
+		if ctx.parsers != nil {
+			s.parsers = ctx.parsers
+		}
+
+		return s
+	}
+
+	ctx.scannerTarget = mk()
+	ctx.scannerHost = mk()
 }

@@ -264,9 +264,7 @@ func protoSourceRelPath(fs FS, instance ModuleInstance, d *ModuleData, src strin
 }
 
 func pyProtoAuxInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, aux VFS, seed []VFS, peerAddIncl []VFS) []VFS {
-	reg := codegenRegForInstance(ctx, instance)
-
-	if reg != nil {
+	{
 		rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 
 		emits := make([]IncludeDirective, 0, len(seed))
