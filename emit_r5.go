@@ -18,22 +18,18 @@ func emitR5(
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	cmd0 := Cmd{
-		CmdArgs: ArgChunks{[]STR{
-			(ragel5BinPath).str(),
+		CmdArgs: chunkList(strList((ragel5BinPath).str(),
 			argDashO.str(),
 			(tmpVFS).str(),
-			(srcVFS).str(),
-		}},
+			(srcVFS).str())),
 		Env: env,
 	}
 	cmd1 := Cmd{
-		CmdArgs: ArgChunks{[]STR{
-			(rlgenCdBinPath).str(),
+		CmdArgs: chunkList(strList((rlgenCdBinPath).str(),
 			argG2.str(),
 			argDashO.str(),
 			(cppVFS).str(),
-			(tmpVFS).str(),
-		}},
+			(tmpVFS).str())),
 		Env: env,
 	}
 	inputs := []VFS{ragel5BinPath, rlgenCdBinPath, srcVFS}
@@ -49,10 +45,10 @@ func emitR5(
 
 	node := &Node{
 		Platform:         instance.Platform,
-		Cmds:             []Cmd{cmd0, cmd1},
+		Cmds:             cmdList(cmd0, cmd1),
 		Env:              env,
-		Inputs:           InputChunks{inputs},
-		Outputs:          []VFS{tmpVFS, cppVFS},
+		Inputs:           inputList(inputs),
+		Outputs:          vfsList(tmpVFS, cppVFS),
 		KV:               KV{P: pkR5, PC: pcYellow},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

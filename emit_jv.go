@@ -92,13 +92,9 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs InputChunks, outp
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: []Cmd{
-			{
-				CmdArgs: ArgChunks{cmdArgs},
-				Env:     env,
-				Cwd:     internStr(cwd),
-			},
-		},
+		Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+			Env: env,
+			Cwd: internStr(cwd)}),
 		Env:     env,
 		Inputs:  inputs,
 		KV:      KV{P: pkJV, PC: pcLightBlue, ShowOut: true},
@@ -156,11 +152,9 @@ func emitJV(
 
 	cmdArgs = appendInternStrs(cmdArgs, options)
 
-	inputs := InputChunks{{
-		grammarVFS,
+	inputs := inputList(vfsList(grammarVFS,
 		stdout2stderrVFS,
-		antlr4JarVFS,
-	}}
+		antlr4JarVFS))
 
 	base := strings.TrimSuffix(filepath.Base(grammar), ".g4")
 	outPrefix := instance.Path.rel() + "/" + base
@@ -214,12 +208,10 @@ func emitJVSplit(
 		cmdArgs = append(cmdArgs, argListener.str())
 	}
 
-	inputs := InputChunks{{
-		lexerVFS,
+	inputs := inputList(vfsList(lexerVFS,
 		parserVFS,
 		stdout2stderrVFS,
-		antlr4JarVFS,
-	}}
+		antlr4JarVFS))
 
 	lexerBase := strings.TrimSuffix(filepath.Base(lexer), ".g4")
 	parserBase := strings.TrimSuffix(filepath.Base(parser), ".g4")
@@ -260,7 +252,7 @@ func emitJVGeneral(
 	cmdArgs = appendInternStrs(cmdArgs, args)
 
 	// inputs is the caller's slice — referenced as its own chunk, never copied.
-	jvInputs := InputChunks{inputs, {stdout2stderrVFS, jarVFS}}
+	jvInputs := inputList(inputs, vfsList(stdout2stderrVFS, jarVFS))
 
 	return emitJVNode(instance, cmdArgs, jvInputs, outputs, cwd, depRefs, moduleTag, emit)
 }

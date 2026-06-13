@@ -163,16 +163,11 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 	}
 
 	n := &Node{
-		Platform: instance.Platform,
-		Cmds: []Cmd{
-			{CmdArgs: ArgChunks{cmd0}, Env: envVcsOnly},
-			{CmdArgs: ArgChunks{cmd1}, Env: envFull},
-			{CmdArgs: ArgChunks{cmd2}, Cwd: strB, Env: envFull},
-			{CmdArgs: ArgChunks{cmd3}, Env: envVcsOnly},
-		},
+		Platform:         instance.Platform,
+		Cmds:             cmdList(Cmd{CmdArgs: chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: chunkList(cmd1), Env: envFull}, Cmd{CmdArgs: chunkList(cmd2), Cwd: strB, Env: envFull}, Cmd{CmdArgs: chunkList(cmd3), Env: envVcsOnly}),
 		Env:              envFull,
 		Inputs:           inputs,
-		Outputs:          []VFS{build(instance.Path.rel() + "/" + outputName)},
+		Outputs:          vfsList(build(instance.Path.rel() + "/" + outputName)),
 		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Sandboxing:       true,

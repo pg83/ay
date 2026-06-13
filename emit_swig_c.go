@@ -50,33 +50,23 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 
 		// swigClosure joins as its own chunk (referenced, not copied; read-only
 		// after this — the later consumers copy out of it).
-		inputs := InputChunks{{bldContribToolsSwigSwig, srcVFS}, swigClosure}
+		inputs := inputList(vfsList(bldContribToolsSwigSwig, srcVFS), swigClosure)
 
-		cmdArgs := ArgChunks{
-			{swigBin.str()},
-			swigConstArgs,
-			{
-				internStr(swigModuleName(stmt.Module)),
-				argInterface.str(),
-				internStr(swigModuleName(stmt.Module) + "_swg"),
-				argDashO.str(),
-				(cOutVFS).str(),
-				(srcVFS).str(),
-			},
-		}
+		cmdArgs := chunkList(strList(swigBin.str()), swigConstArgs, strList(internStr(swigModuleName(stmt.Module)),
+			argInterface.str(),
+			internStr(swigModuleName(stmt.Module)+"_swg"),
+			argDashO.str(),
+			(cOutVFS).str(),
+			(srcVFS).str()))
 
 		swRef := ctx.emit.emit(&Node{
 			Platform: instance.Platform,
-			Cmds: []Cmd{
-				{
-					CmdArgs: cmdArgs,
-					Env:     EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
-				},
-			},
+			Cmds: cmdList(Cmd{CmdArgs: cmdArgs,
+				Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}}),
 			DepRefs:          []NodeRef{swigRef},
 			Env:              EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
 			Inputs:           inputs,
-			Outputs:          []VFS{cOutVFS, pyOutVFS},
+			Outputs:          vfsList(cOutVFS, pyOutVFS),
 			KV:               KV{P: pkSW, PC: pcYellow},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},

@@ -55,14 +55,12 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 			outputPath = build(instance.Path.rel() + "/" + srcRel.string() + ".yapyc3")
 		}
 
-		cmdArgs := ArgChunks{py3ccArgHead, []STR{
-			internStr(moduleName),
+		cmdArgs := chunkList(py3ccArgHead, strList(internStr(moduleName),
 			(srcAbs).str(),
-			(outputPath).str(),
-		}}
+			(outputPath).str()))
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}
-		nodeInputs := InputChunks{py3ccToolsChunk, srcChunk(srcAbs)}
+		nodeInputs := inputList(py3ccToolsChunk, srcChunk(srcAbs))
 
 		var inputs []VFS
 
@@ -83,20 +81,16 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 			}
 
 			inputs = dedupVFS(inputs)
-			nodeInputs = InputChunks{inputs}
+			nodeInputs = inputList(inputs)
 		}
 
 		node := &Node{
 			Platform: instance.Platform,
-			Cmds: []Cmd{
-				{
-					CmdArgs: cmdArgs,
-					Env:     env,
-				},
-			},
+			Cmds: cmdList(Cmd{CmdArgs: cmdArgs,
+				Env: env}),
 			Env:     env,
 			Inputs:  nodeInputs,
-			Outputs: []VFS{outputPath},
+			Outputs: vfsList(outputPath),
 			KV:      KV{P: pkPY, PC: pcYellow},
 			TargetProperties: func() TargetProperties {
 				tp := TargetProperties{ModuleDir: instance.Path.rel()}
@@ -191,13 +185,11 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 			pyInstance.Platform = ctx.target
 
 			pyNode := &Node{
-				Platform: pyInstance.Platform,
-				Cmds: []Cmd{
-					{CmdArgs: ArgChunks{pyCmdArgs}, Env: env},
-				},
+				Platform:         pyInstance.Platform,
+				Cmds:             cmdList(Cmd{CmdArgs: chunkList(pyCmdArgs), Env: env}),
 				Env:              env,
-				Inputs:           InputChunks{genPy3RegScriptChunk},
-				Outputs:          []VFS{regCppVFS},
+				Inputs:           inputList(genPy3RegScriptChunk),
+				Outputs:          vfsList(regCppVFS),
 				KV:               KV{P: pkPY, PC: pcYellow},
 				TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 				Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

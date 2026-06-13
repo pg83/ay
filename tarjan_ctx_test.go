@@ -52,7 +52,7 @@ func (m *MockSink) emitClosure(members []VFS, fill func(block []VFS) int) {
 	}
 }
 
-func vfsList(rels ...string) []VFS {
+func sourceVFSList(rels ...string) []VFS {
 	out := make([]VFS, len(rels))
 	for i, r := range rels {
 		out[i] = source(r)
@@ -76,7 +76,7 @@ func TestTarjan_TwoNodeCycle(t *testing.T) {
 	}
 
 	// Both members share one SCC closure {a,b}, led by the root a.
-	want := vfsList("tj/a.h", "tj/b.h")
+	want := sourceVFSList("tj/a.h", "tj/b.h")
 	for _, n := range []VFS{a, b} {
 		if got := m.cache[n]; !reflect.DeepEqual(got, want) {
 			t.Errorf("closure(%s) = %v, want %v", n.rel(), relsOf(got), relsOf(want))
@@ -105,7 +105,7 @@ func TestTarjan_CycleSplicesCachedExternalDep(t *testing.T) {
 	}
 
 	// SCC {a,b} leads, then x's window spliced in.
-	want := vfsList("tj/a.h", "tj/b.h", "tj/x.h", "tj/y.h")
+	want := sourceVFSList("tj/a.h", "tj/b.h", "tj/x.h", "tj/y.h")
 	if got := m.cache[a]; !reflect.DeepEqual(got, want) {
 		t.Errorf("closure(a) = %v, want %v", relsOf(got), relsOf(want))
 	}
@@ -128,7 +128,7 @@ func TestTarjan_SingletonRootWithCachedChild(t *testing.T) {
 		t.Errorf("hits = %d, want 1", hits)
 	}
 
-	want := vfsList("tj/a.h", "tj/x.h")
+	want := sourceVFSList("tj/a.h", "tj/x.h")
 	if got := m.cache[a]; !reflect.DeepEqual(got, want) {
 		t.Errorf("closure(a) = %v, want %v", relsOf(got), relsOf(want))
 	}
@@ -153,11 +153,11 @@ func TestTarjan_NestedSCCBuiltChildSpliced(t *testing.T) {
 		t.Fatalf("emitted %d closures, want 2 (singleton c, then {a,b})", len(m.emits))
 	}
 
-	if got, want := m.emits[0], vfsList("tj/c.h"); !reflect.DeepEqual(got, want) {
+	if got, want := m.emits[0], sourceVFSList("tj/c.h"); !reflect.DeepEqual(got, want) {
 		t.Errorf("first SCC = %v, want %v (c finalizes before a)", relsOf(got), relsOf(want))
 	}
 
-	wantAB := vfsList("tj/a.h", "tj/b.h", "tj/c.h")
+	wantAB := sourceVFSList("tj/a.h", "tj/b.h", "tj/c.h")
 	if got := m.cache[a]; !reflect.DeepEqual(got, wantAB) {
 		t.Errorf("closure(a) = %v, want %v", relsOf(got), relsOf(wantAB))
 	}
@@ -178,7 +178,7 @@ func TestTarjan_DedupesRepeatedWindowEntries(t *testing.T) {
 	tc := &TarjanCtx{}
 	tc.runSCC(m, a)
 
-	want := vfsList("tj/a.h", "tj/b.h", "tj/x.h", "tj/z.h", "tj/y.h")
+	want := sourceVFSList("tj/a.h", "tj/b.h", "tj/x.h", "tj/z.h", "tj/y.h")
 	if got := m.cache[a]; !reflect.DeepEqual(got, want) {
 		t.Errorf("closure(a) = %v, want %v (z deduped)", relsOf(got), relsOf(want))
 	}

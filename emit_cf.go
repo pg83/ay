@@ -160,16 +160,12 @@ func emitCF(
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: []Cmd{
-			{
-				CmdArgs: ArgChunks{cmdArgs},
-				Env:     env,
-			},
-		},
+		Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+			Env: env}),
 		Env:     env,
-		Inputs:  InputChunks{{configureFilePyVFS}, includeInputs},
+		Inputs:  inputList(vfsList(configureFilePyVFS), includeInputs),
 		KV:      KV{P: pkCF, PC: pcYellow},
-		Outputs: []VFS{outVFS},
+		Outputs: vfsList(outVFS),
 		TargetProperties: func() TargetProperties {
 			tp := TargetProperties{ModuleDir: moduleDir}
 

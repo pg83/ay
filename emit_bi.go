@@ -55,17 +55,13 @@ func emitBI(
 
 	cacheFalse := false
 	node := &Node{
-		Platform: instance.Platform,
-		Cache:    &cacheFalse,
-		Cmds: []Cmd{
-			{CmdArgs: ArgChunks{cmd0Args}, Env: env},
-			{CmdArgs: ArgChunks{cmd1Args}, Env: env},
-			{CmdArgs: ArgChunks{cmd2Args}, Env: env},
-		},
+		Platform:         instance.Platform,
+		Cache:            &cacheFalse,
+		Cmds:             cmdList(Cmd{CmdArgs: chunkList(cmd0Args), Env: env}, Cmd{CmdArgs: chunkList(cmd1Args), Env: env}, Cmd{CmdArgs: chunkList(cmd2Args), Env: env}),
 		Env:              env,
-		Inputs:           InputChunks{inputs},
+		Inputs:           inputList(inputs),
 		KV:               KV{P: pkBI, PC: pcYellow, ShowOut: true, DisableCache: "yes"},
-		Outputs:          []VFS{outVFS},
+		Outputs:          vfsList(outVFS),
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          []NodeRef{},

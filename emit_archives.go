@@ -94,16 +94,12 @@ func emitArchive(
 
 	n := &Node{
 		Platform: instance.Platform,
-		Cmds: []Cmd{
-			{
-				CmdArgs: ArgChunks{cmdArgs},
-				Env:     env,
-			},
-		},
+		Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+			Env: env}),
 		Env:              env,
-		Inputs:           InputChunks{inputs, srcChunk(toolBinPath)},
+		Inputs:           inputList(inputs, srcChunk(toolBinPath)),
 		KV:               KV{P: pkAR, PC: pcLightRed},
-		Outputs:          []VFS{archiveVFS},
+		Outputs:          vfsList(archiveVFS),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		DepRefs:          depRefs,

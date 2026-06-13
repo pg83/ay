@@ -14,19 +14,15 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 	output := build("resources/" + decl.Name.string())
 	node := &Node{
 		Platform: ctx.host,
-		Cmds: []Cmd{{
-			CmdArgs: ArgChunks{[]STR{
-				internStr(currentYatoolPath()),
-				argFetch.str(),
-				argB.str(),
-				argS.str(),
-				decl.URI,
-				output.str(),
-			}},
-		}},
-		Inputs:           InputChunks{fetchScriptInputs(ctx.scripts)},
+		Cmds: cmdList(Cmd{CmdArgs: chunkList(strList(internStr(currentYatoolPath()),
+			argFetch.str(),
+			argB.str(),
+			argS.str(),
+			decl.URI,
+			output.str()))}),
+		Inputs:           inputList(fetchScriptInputs(ctx.scripts)),
 		KV:               KV{P: pkFETCH, PC: pcYellow, ShowOut: true},
-		Outputs:          []VFS{output},
+		Outputs:          vfsList(output),
 		Requirements:     Requirements{CPU: float64(1), Network: nwFull, RAM: float64(32)},
 		Sandboxing:       true,
 		TargetProperties: TargetProperties{ModuleDir: "build/resources"},
