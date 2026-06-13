@@ -843,8 +843,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 		headerOnlyInputs.ScanCfg = newScanContext(ctx.parsers, d.addIncl, peerContribs.addIncl, includeScannerBasePaths(), instance.Path.rel())
 		headerOnlyInputs.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &headerOnlyInputs)
-		_ = emitRunProgramsForAR(ctx, instance, d, headerOnlyInputs)
-		_ = emitRunPythonForAR(ctx, instance, d, headerOnlyInputs)
+		emitRunProgramsForAR(ctx, instance, d, headerOnlyInputs)
+		emitRunPythonForAR(ctx, instance, d, headerOnlyInputs)
 
 		emitPySrcs(ctx, instance, d)
 
@@ -2205,7 +2205,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	_ = peerArchiveRefs
 	var arPath *VFS
 
 	if len(ccRefs) > 0 {

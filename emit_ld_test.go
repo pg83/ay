@@ -284,8 +284,6 @@ func TestComposeProgramLinkTrailer_NonPICRPathTrailerKeepsNoPie(t *testing.T) {
 
 	got := composeProgramLinkTrailer(
 		p,
-		"",
-		nil,
 		nil,
 		nil,
 		internArgs([]string{"-Wl,-rpath,$ORIGIN"}),

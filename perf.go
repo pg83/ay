@@ -67,18 +67,17 @@ func perfParser(dir string) int {
 
 	const minDur = 3 * time.Second
 	start := time.Now()
-	iters, sink := 0, 0
+	iters := 0
 
 	for time.Since(start) < minDur {
 		for _, b := range datas {
-			sink += parseCIncludes(b, block, 0)
+			parseCIncludes(b, block, 0)
 		}
 
 		iters++
 	}
 
 	dur := time.Since(start)
-	_ = sink
 
 	perPass := dur / time.Duration(iters)
 	fmt.Printf("files=%d bytes=%d iters=%d per-pass=%v (%.0f MB/s)\n",
