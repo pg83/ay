@@ -76,20 +76,31 @@ type Node struct {
 }
 
 // buildDeps yields every ref that must be built/restored before this node runs:
-// its DepRefs (real build inputs) followed by its ForeignDepRefs (tool deps).
-// The two lists are disjoint — a tool ref lives only in ForeignDepRefs — so the
-// graph's "deps" array, the UID, and the executor reach the tools through this
-// single sequence without storing them twice.
-func (n *Node) buildDeps(yield func(NodeRef) bool) {
-	for _, r := range n.DepRefs {
-		if !yield(r) {
-			return
+// its DepRefs (real build inputs), its ForeignDepRefs (tool deps), then the
+// resolved resource FETCH deps (each usesResources pattern looked up in the
+// run's fetchRefs registry). The three are disjoint, and none are stored on the
+// node twice — the graph's "deps" array, the UID, and the executor all reach
+// the tools and resources through this single on-the-fly sequence.
+func (n *Node) buildDeps(fetchRefs *DenseMap[STR, NodeRef]) func(func(NodeRef) bool) {
+	return func(yield func(NodeRef) bool) {
+		for _, r := range n.DepRefs {
+			if !yield(r) {
+				return
+			}
 		}
-	}
 
-	for _, r := range n.ForeignDepRefs {
-		if !yield(r) {
-			return
+		for _, r := range n.ForeignDepRefs {
+			if !yield(r) {
+				return
+			}
+		}
+
+		for _, pat := range n.usesResources {
+			if ref, ok := fetchRefs.get(pat); ok {
+				if !yield(ref) {
+					return
+				}
+			}
 		}
 	}
 }

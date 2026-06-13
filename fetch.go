@@ -35,55 +35,6 @@ func fetchScriptInputs(scripts ScriptDeps) []VFS {
 	return out
 }
 
-type ResourceAwareEmitter struct {
-	inner     Emitter
-	host      *Platform
-	scripts   ScriptDeps
-	fetchRefs *DenseMap[STR, NodeRef]
-}
-
-func newResourceAwareEmitter(host *Platform, inner Emitter, scripts ScriptDeps, fetchRefs *DenseMap[STR, NodeRef]) Emitter {
-	return &ResourceAwareEmitter{
-		inner:     inner,
-		host:      host,
-		scripts:   scripts,
-		fetchRefs: fetchRefs,
-	}
-}
-
-func (e *ResourceAwareEmitter) nodeArenas() *NodeArenas {
-	return e.inner.nodeArenas()
-}
-
-func (e *ResourceAwareEmitter) emit(n *Node) NodeRef {
-	e.attachResourceDeps(n)
-
-	return e.inner.emit(n)
-}
-
-func (e *ResourceAwareEmitter) result(r NodeRef) {
-	e.inner.result(r)
-}
-
-func (e *ResourceAwareEmitter) onReady(r NodeRef) <-chan struct{} {
-	return e.inner.onReady(r)
-}
-
-// attachResourceDeps turns each resource pattern the node declared (at the
-// site that spliced $(PATTERN) into its command) into a dependency on that
-// resource's fetch node. No command scanning: usesResources is the
-// authoritative, builder-declared set. Resources declared by a RESOURCES_LIBRARY
-// have their FETCH node emitted (emitResourceFetch); the dep is taken from the
-// shared fetchRefs registry. A pattern absent from fetchRefs means the resource's
-// RESOURCES_LIBRARY peer was not in the closure, so it is skipped.
-func (e *ResourceAwareEmitter) attachResourceDeps(n *Node) {
-	for _, pat := range n.usesResources {
-		if ref, ok := e.fetchRefs.get(pat); ok {
-			n.DepRefs = append(n.DepRefs, ref)
-		}
-	}
-}
-
 func cmdFetch(args []string) int {
 	// `ay fetch base64 <data> <out>` writes the base64-decoded data straight to
 	// <out>. Used by the inline vcs.json node — it produces a file, it does not

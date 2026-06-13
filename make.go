@@ -222,7 +222,7 @@ func cmdMake(args []string) int {
 				writeGraph("-", g, !mf.sandboxing)
 			}
 		} else {
-			genStream(fs, mf.targets, hostP, targetP, func(*Node, *UidVec) {}, onWarn, mf.testLevel > 0)
+			genStream(fs, mf.targets, hostP, targetP, func(*Node, *UidVec, *DenseMap[STR, NodeRef]) {}, onWarn, mf.testLevel > 0)
 		}
 
 		if mf.dumpIgnoredMacros {
@@ -277,7 +277,7 @@ func cmdMake(args []string) int {
 	return 0
 }
 
-func genStream(fs FS, targets []string, hostP, targetP *Platform, onNode func(*Node, *UidVec), onWarn func(Warn), testMode bool) []UID {
+func genStream(fs FS, targets []string, hostP, targetP *Platform, onNode func(*Node, *UidVec, *DenseMap[STR, NodeRef]), onWarn func(Warn), testMode bool) []UID {
 	all := []UID{}
 
 	for _, t := range targets {
@@ -288,7 +288,7 @@ func genStream(fs FS, targets []string, hostP, targetP *Platform, onNode func(*N
 	return all
 }
 
-func genStreamOne(fs FS, target string, hostP, targetP *Platform, onNode func(*Node, *UidVec), onWarn func(Warn), testMode bool) []UID {
+func genStreamOne(fs FS, target string, hostP, targetP *Platform, onNode func(*Node, *UidVec, *DenseMap[STR, NodeRef]), onWarn func(Warn), testMode bool) []UID {
 	emitter := newStreamingEmitter(onNode)
 	runGenIntoWithResources(fs, target, hostP, targetP, emitter, onWarn, testMode)
 

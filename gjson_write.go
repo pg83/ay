@@ -49,7 +49,7 @@ func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 			buf = append(buf, ',')
 		}
 
-		buf = appendNode(buf, node, g.uids, dropSrcInputs)
+		buf = appendNode(buf, node, g.uids, g.fetchRefs, dropSrcInputs)
 
 		if len(buf) >= 256<<10 {
 			throw2(w.Write(buf))
@@ -64,7 +64,7 @@ func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 	throw2(w.Write(buf))
 }
 
-func appendNode(buf []byte, n *Node, uids *UidVec, dropSrcInputs bool) []byte {
+func appendNode(buf []byte, n *Node, uids *UidVec, fetchRefs *DenseMap[STR, NodeRef], dropSrcInputs bool) []byte {
 	buf = append(buf, '{')
 
 	if n.Cache != nil {
@@ -78,10 +78,11 @@ func appendNode(buf []byte, n *Node, uids *UidVec, dropSrcInputs bool) []byte {
 	buf = append(buf, `"cmds":`...)
 	buf = appendCmdSlice(buf, n.Cmds)
 
-	// "deps" lists DepRefs followed by ForeignDepRefs (tool deps): the tool refs
-	// are stored only in ForeignDepRefs, so the build-deps array is their union.
+	// "deps" lists DepRefs, then ForeignDepRefs (tool deps), then the resolved
+	// resource FETCH deps (usesResources): tools and resources are not stored on
+	// the node, so the build-deps array materializes them on the fly.
 	buf = append(buf, `,"deps":`...)
-	buf = appendRefUIDsSeq(buf, n.buildDeps, uids)
+	buf = appendRefUIDsSeq(buf, n.buildDeps(fetchRefs), uids)
 
 	buf = append(buf, `,"env":`...)
 	buf = appendEnv(buf, n.Env)
