@@ -91,7 +91,8 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		// walkable edges — its ragel-native %includes — pull the natively-
 		// included ragel files WITHOUT their C headers (upstream
 		// TRagelIncludeProcessor keeps native deps and ParsedIncls apart).
-		registerGeneratedParsedOutput(ctx, srcInstance, pkR6, r6Out, r6Parsed, []NodeRef{ragelLDRef})
+		r6Ref := ctx.emit.reserve()
+		registerBoundGeneratedParsedOutput(ctx, srcInstance, pkR6, r6Out, r6Parsed, r6Ref, []NodeRef{ragelLDRef})
 
 		window := walkClosure(ctx.scannerFor(srcInstance), r6Out, srcIn.ScanCfg)
 
@@ -102,7 +103,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		// them.
 		rl6Closure := keepOnlySourceVFS(filterEnSerializedSiblings(window))
 
-		r6Ref, _ := emitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryVFS, srcIn.Ragel6Flags, rl6Closure, ctx.emit)
+		emitR6(srcInstance, srcRel, ragelLDRef, ragelBinaryVFS, srcIn.Ragel6Flags, rl6Closure, r6Ref, ctx.emit)
 
 		ccSrcRel := strings.TrimPrefix(r6Out.rel(), srcInstance.Path.rel()+"/")
 

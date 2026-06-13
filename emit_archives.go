@@ -125,11 +125,10 @@ func emitArchive(
 		}
 
 		reg.register(&GeneratedFileInfo{
-			ProducerKvP:    pkAR,
-			OutputPath:     archiveVFS,
-			ProducerRef:    arRef,
-			HasProducerRef: true,
-			ClosureLeaves:  leaves,
+			ProducerKvP:   pkAR,
+			OutputPath:    archiveVFS,
+			ProducerRef:   arRef,
+			ClosureLeaves: leaves,
 		})
 	}
 }

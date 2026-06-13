@@ -116,7 +116,8 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 			parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.rel())})
 		}
 
-		registerGeneratedParsedOutput(ctx, instance, pkCY, generatedVFS, parsed, nil)
+		cyRef := ctx.emit.reserve()
+		registerBoundGeneratedParsedOutput(ctx, instance, pkCY, generatedVFS, parsed, cyRef, nil)
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -147,7 +148,7 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 			targetProps.ModuleTag = tagPy3
 		}
 
-		cyRef := ctx.emit.emit(&Node{
+		ctx.emit.emitReserved(&Node{
 			Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 				Env: env}),
@@ -158,8 +159,7 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			TargetProperties: targetProps,
 			usesResources:    usesPython3,
-		})
-		bindGeneratedOutput(ctx, instance, generatedVFS, cyRef)
+		}, cyRef)
 
 		ccIn := in
 		ccIn.ExtraDepRefs = []NodeRef{cyRef}

@@ -20,8 +20,11 @@ type GeneratedFileInfo struct {
 	// boundaries with the dst's window.
 	IsText bool
 
-	ProducerRef    NodeRef
-	HasProducerRef bool
+	// ProducerRef is the NodeRef of the node that produces OutputPath. Every
+	// registration carries it: the producer reserves its ref (emitter.reserve)
+	// before registering, so a consumer that resolves this output to a dep edge
+	// (resolveCodegenDepRefs) always reads a valid ref.
+	ProducerRef NodeRef
 
 	// GeneratorRefs are the NodeRefs of the codegen TOOLS that produce this file
 	// (e.g. event2cpp/protoc/cpp_styleguide for a .ev.pb.h), as returned by
@@ -181,22 +184,6 @@ func (r *CodegenRegistry) closureLeaves(node VFS) []VFS {
 	return nil
 }
 
-func (r *CodegenRegistry) setProducerRef(path VFS, ref NodeRef) {
-	info, ok := r.byStr.get(STR(path.strID()))
-
-	if !ok {
-		throwFmt("CodegenRegistry: SetProducerRef on unregistered path %q", path.string())
-	}
-
-	if info.HasProducerRef && info.ProducerRef != ref {
-		throwFmt("CodegenRegistry: conflicting ProducerRef for %q (existing=%v, new=%v)",
-			path.string(), info.ProducerRef, ref)
-	}
-
-	info.ProducerRef = ref
-	info.HasProducerRef = true
-}
-
 func (r *CodegenRegistry) setSourceInputs(path VFS, src []VFS) {
 	if len(src) == 0 {
 		return
@@ -211,20 +198,11 @@ func (r *CodegenRegistry) setSourceInputs(path VFS, src []VFS) {
 	info.SourceInputs = src
 }
 
-func registerGeneratedParsedOutput(ctx *GenCtx, instance ModuleInstance, kind ProcKind, output VFS, parsed []IncludeDirective, generatorRefs []NodeRef) {
-	codegenRegForInstance(ctx, instance).register(&GeneratedFileInfo{
-		ProducerKvP:   kind,
-		OutputPath:    output,
-		GeneratorRefs: generatorRefs,
-	})
-
-	ctx.scannerFor(instance).parsers.registerBuildParsedIncludes(output, parsed)
-}
-
-func bindGeneratedOutput(ctx *GenCtx, instance ModuleInstance, output VFS, ref NodeRef) {
-	codegenRegForInstance(ctx, instance).setProducerRef(output, ref)
-}
-
+// registerBoundGeneratedParsedOutput registers a generated output against its
+// producer ref (reserved via emitter.reserve before the producing node is built)
+// and records the output's parsed includes for the scanner. generatorRefs are the
+// codegen tools whose INDUCED_DEPS the scanner mixes into this output's closure
+// (nil when the producer has no induced-deps tool).
 func registerBoundGeneratedParsedOutput(ctx *GenCtx, instance ModuleInstance, kind ProcKind, output VFS, parsed []IncludeDirective, ref NodeRef, generatorRefs []NodeRef) {
 	registerBoundGeneratedParsedOutputWithSource(ctx, instance, kind, output, 0, parsed, ref, generatorRefs)
 }
@@ -232,17 +210,14 @@ func registerBoundGeneratedParsedOutput(ctx *GenCtx, instance ModuleInstance, ki
 // registerBoundGeneratedParsedOutputWithSource is the CP variant that records
 // the COPY source alongside the dst so the closure walker can rewrite the
 // emitted input edge to the source. Pass sourcePath = 0 for non-CP producers
-// to fall back to OutputPath as the canonical edge. generatorRefs are the codegen
-// tools whose INDUCED_DEPS the scanner mixes into this output's closure (nil when
-// the producer has no induced-deps tool).
+// to fall back to OutputPath as the canonical edge.
 func registerBoundGeneratedParsedOutputWithSource(ctx *GenCtx, instance ModuleInstance, kind ProcKind, output VFS, sourcePath VFS, parsed []IncludeDirective, ref NodeRef, generatorRefs []NodeRef) {
 	codegenRegForInstance(ctx, instance).register(&GeneratedFileInfo{
-		ProducerKvP:    kind,
-		OutputPath:     output,
-		SourcePath:     sourcePath,
-		ProducerRef:    ref,
-		HasProducerRef: true,
-		GeneratorRefs:  generatorRefs,
+		ProducerKvP:   kind,
+		OutputPath:    output,
+		SourcePath:    sourcePath,
+		ProducerRef:   ref,
+		GeneratorRefs: generatorRefs,
 	})
 
 	ctx.scannerFor(instance).parsers.registerBuildParsedIncludes(output, parsed)

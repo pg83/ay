@@ -359,9 +359,7 @@ func resolveCodegenDepRefsExt(ctx *GenCtx, consumer ModuleInstance, includeInput
 		var ok bool
 
 		if info := reg.lookup(v); info != nil {
-			if info.HasProducerRef {
-				ref, ok = info.ProducerRef, true
-			}
+			ref, ok = info.ProducerRef, true
 		}
 
 		if !ok {

@@ -39,6 +39,8 @@ func emitJVDownstreamCPCC(
 		g4CppPath := build(instance.Path.rel() + "/" + base + ".g4.cpp")
 		g4CppRel := base + ".g4.cpp"
 
+		cpRef := ctx.emit.reserve()
+
 		{
 			emits := make([]IncludeDirective, 0, 1+len(outputIncludes))
 			emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(antlr4RuntimeHeaderVFS.rel())})
@@ -47,7 +49,7 @@ func emitJVDownstreamCPCC(
 				emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(h)})
 			}
 
-			registerGeneratedParsedOutput(ctx, instance, pkCP, g4CppPath, emits, nil)
+			registerBoundGeneratedParsedOutput(ctx, instance, pkCP, g4CppPath, emits, cpRef, nil)
 		}
 
 		ccIn := in
@@ -62,7 +64,7 @@ func emitJVDownstreamCPCC(
 			cpClosure = cpClosure[1:]
 		}
 
-		cpRef := emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, in.TC, ctx.scripts, ctx.emit)
+		emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, in.TC, ctx.scripts, ctx.emit)
 
 		ccIncludeInputs := make([]VFS, 0, 3+len(jvInputs)+len(closure)+2)
 		ccIncludeInputs = append(ccIncludeInputs, jvPrimary)

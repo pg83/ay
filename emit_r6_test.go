@@ -19,7 +19,10 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		TargetProperties: TargetProperties{ModuleDir: "contrib/tools/ragel6"},
 	})
 
-	r6Ref, outPath := emitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, intern("$(B)/contrib/tools/ragel6/ragel6"), nil, nil, e)
+	inst := targetInstance("util")
+	r6Ref := e.reserve()
+	emitR6(inst, "datetime/parser.rl6", ragel6LD, intern("$(B)/contrib/tools/ragel6/ragel6"), nil, nil, r6Ref, e)
+	outPath := ragel6OutVFS(inst, "datetime/parser.rl6")
 
 	wantOut := "$(B)/util/_/datetime/parser.rl6.cpp"
 	if outPath.string() != wantOut {
@@ -94,13 +97,15 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
 
-	r6Ref, _ := emitR6(
+	r6Ref := e.reserve()
+	emitR6(
 		targetInstance("devtools/ymake/lang/makelists"),
 		"makefile_lang.rl6",
 		ragel6LD,
 		intern("$(B)/contrib/tools/ragel6/ragel6"),
 		internArgs([]string{"-lF1"}),
 		nil,
+		r6Ref,
 		e,
 	)
 
@@ -140,7 +145,8 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 	releaseHostFlags["GG_BUILD_TYPE"] = "release"
 	releaseHost := newPlatform(newMemFS(nil), OSLinux, ISAX8664, releaseHostFlags, []string{"tool"}, "", "")
 
-	r6Ref, _ := emitR6(
+	r6Ref := e.reserve()
+	emitR6(
 		ModuleInstance{
 			Path:     source("util"),
 			Kind:     KindLib,
@@ -152,6 +158,7 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 		intern("$(B)/contrib/tools/ragel6/ragel6"),
 		nil,
 		nil,
+		r6Ref,
 		e,
 	)
 
@@ -188,7 +195,8 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 		intern("$(S)/util/generic/ymath.h"),
 	}
 
-	r6Ref, _ := emitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, intern("$(B)/contrib/tools/ragel6/ragel6"), nil, closure, e)
+	r6Ref := e.reserve()
+	emitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, intern("$(B)/contrib/tools/ragel6/ragel6"), nil, closure, r6Ref, e)
 
 	got := e.nodes[r6Ref]
 

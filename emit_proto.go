@@ -251,7 +251,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 
 	buildProto := build(protoRelPath)
 
-	if info := codegenRegForInstance(ctx, instance).lookup(buildProto); info != nil && info.HasProducerRef {
+	if info := codegenRegForInstance(ctx, instance).lookup(buildProto); info != nil {
 		protoSrcOverride = buildProto
 		extraProtoDeps = []NodeRef{info.ProducerRef}
 		protoProducerSourceInputs = info.SourceInputs
@@ -624,7 +624,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 				outVFS := copyFileOutputVFS(instance.Path.rel(), outTok.string())
 				info := reg.lookup(outVFS)
 
-				if info == nil || !info.HasProducerRef {
+				if info == nil {
 					continue
 				}
 

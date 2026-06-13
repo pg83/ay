@@ -11,6 +11,20 @@ type NodeRef uint32
 
 type Emitter interface {
 	emit(n *Node) NodeRef
+	// reserve claims the next node slot (a nil placeholder) and returns the
+	// NodeRef that emitReserved will assign to it. A codegen producer reserves
+	// its ref, registers its generated outputs in the codegen registry against
+	// that ref — needed because the producer's own input-closure walk (and any
+	// sibling resolve) runs BEFORE the producing node exists and must see a valid
+	// producer ref — then fills the slot via emitReserved. Calling reserve k times
+	// reserves k consecutive slots, so a batch of producers can register before
+	// any node is built. A reserved slot left unfilled is a fail-fast error at
+	// finalize/finish.
+	reserve() NodeRef
+	// emitReserved fills the reserved slot id with n. Resolution (the StreamingEmitter
+	// computes the uid eagerly when all deps are resolved) happens here, exactly
+	// where an append emit would have resolved.
+	emitReserved(n *Node, id NodeRef)
 	result(NodeRef)
 	onReady(NodeRef) <-chan struct{}
 	// nodeArenas exposes the run's node-construction arenas (NodeArenas); the
@@ -42,6 +56,9 @@ type BufferedEmitter struct {
 	fetchRefs *DenseMap[STR, NodeRef]
 	readyCh   chan struct{}
 	na        *NodeArenas
+	// reserved counts slots claimed by reserve() and not yet filled by
+	// emitReserved(); finalize fails fast if any remain.
+	reserved int
 }
 
 func newBufferedEmitter() *BufferedEmitter {
@@ -54,6 +71,31 @@ func newBufferedEmitter() *BufferedEmitter {
 
 func (e *BufferedEmitter) nodeArenas() *NodeArenas {
 	return e.na
+}
+
+func (e *BufferedEmitter) reserve() NodeRef {
+	if e.finalized {
+		panic("BufferedEmitter.reserve called after Finalize")
+	}
+
+	id := NodeRef(len(e.nodes))
+	e.nodes = append(e.nodes, nil)
+	e.reserved++
+
+	return id
+}
+
+func (e *BufferedEmitter) emitReserved(n *Node, id NodeRef) {
+	if e.finalized {
+		panic("BufferedEmitter.emitReserved called after Finalize")
+	}
+
+	if e.nodes[id] != nil {
+		throwFmt("emitReserved: slot %d already filled", id)
+	}
+
+	e.nodes[id] = n
+	e.reserved--
 }
 
 func (e *BufferedEmitter) onReady(_ NodeRef) <-chan struct{} {
@@ -128,6 +170,10 @@ func finalizeNodesInOrder(e *BufferedEmitter, order []int, yield func(*Node)) *U
 func finalizeOrder(e *BufferedEmitter) []int {
 	if e.finalized {
 		throwFmt("finalize: emitter already finalized")
+	}
+
+	if e.reserved != 0 {
+		throwFmt("finalize: %d reserved node slot(s) left unfilled", e.reserved)
 	}
 
 	n := len(e.nodes)
@@ -254,6 +300,9 @@ type StreamingEmitter struct {
 	na         *NodeArenas
 	// fetchRefs — resource pattern → FETCH node; see BufferedEmitter.fetchRefs.
 	fetchRefs *DenseMap[STR, NodeRef]
+	// reserved counts slots claimed by reserve() and not yet filled by
+	// emitReserved(); finish fails fast if any remain.
+	reserved int
 }
 
 func newStreamingEmitter(onNode func(*Node, *UidVec, *DenseMap[STR, NodeRef])) *StreamingEmitter {
@@ -271,6 +320,32 @@ func (e *StreamingEmitter) nodeArenas() *NodeArenas {
 	return e.na
 }
 
+func (e *StreamingEmitter) reserve() NodeRef {
+	if e.finalized {
+		panic("StreamingEmitter.reserve called after Finish")
+	}
+
+	id := NodeRef(len(e.nodes))
+	e.nodes = append(e.nodes, nil)
+	e.reserved++
+
+	return id
+}
+
+func (e *StreamingEmitter) emitReserved(n *Node, id NodeRef) {
+	if e.finalized {
+		panic("StreamingEmitter.emitReserved called after Finish")
+	}
+
+	if e.nodes[id] != nil {
+		throwFmt("emitReserved: slot %d already filled", id)
+	}
+
+	e.nodes[id] = n
+	e.reserved--
+	e.resolveOrPend(n, id)
+}
+
 func (e *StreamingEmitter) emit(n *Node) NodeRef {
 	if e.finalized {
 		panic("StreamingEmitter.Emit called after Finish")
@@ -278,12 +353,19 @@ func (e *StreamingEmitter) emit(n *Node) NodeRef {
 
 	id := NodeRef(len(e.nodes))
 	e.nodes = append(e.nodes, n)
+	e.resolveOrPend(n, id)
 
+	return id
+}
+
+// resolveOrPend resolves n's uid immediately when all its deps are already
+// resolved (delivering it to onNode), else queues it for finish().
+func (e *StreamingEmitter) resolveOrPend(n *Node, id NodeRef) {
 	if e.hasUnresolvedDeps(n) {
 		e.pendingSet[id] = true
 		e.pendingIdx = append(e.pendingIdx, id)
 
-		return id
+		return
 	}
 
 	e.uids.set(id, resolveAndUID(n, e.uids, &e.uidScratch))
@@ -292,8 +374,6 @@ func (e *StreamingEmitter) emit(n *Node) NodeRef {
 	if e.onNode != nil {
 		e.onNode(n, e.uids, e.fetchRefs)
 	}
-
-	return id
 }
 
 func (e *StreamingEmitter) hasUnresolvedDeps(n *Node) bool {
@@ -321,6 +401,10 @@ func (e *StreamingEmitter) onReady(_ NodeRef) <-chan struct{} {
 func (e *StreamingEmitter) finish() []UID {
 	if e.finalized {
 		panic("StreamingEmitter.Finish called twice")
+	}
+
+	if e.reserved != 0 {
+		throwFmt("finish: %d reserved node slot(s) left unfilled", e.reserved)
 	}
 
 	for _, id := range e.pendingIdx {

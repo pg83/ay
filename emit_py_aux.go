@@ -179,8 +179,11 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 
 	for _, ch := range chunks {
 		aux := build(instance.Path.rel() + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path.rel(), moduleTag) + "_raw.auxcpp")
+		// Reserve the aux producer's ref before rawAuxInputClosure registers the
+		// output and walks its closure.
+		auxRef := ctx.emit.reserve()
 		sourceInputs := pyProtoSourceInputs(ch.inputs)
-		auxClosure := rawAuxInputClosure(ctx, instance, aux, sourceInputs, in)
+		auxClosure := rawAuxInputClosure(ctx, instance, aux, sourceInputs, auxRef, in)
 		cmdArgs := []STR{internStr(rescompilerBinPath), (aux).str()}
 		cmdArgs = appendInternStrs(cmdArgs, ch.cmdArgs)
 
@@ -226,7 +229,7 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 			chDeps = append(chDeps, extras...)
 		}
 
-		ref := ctx.emit.emit(&Node{
+		ctx.emit.emitReserved(&Node{
 			Platform:         instance.Platform,
 			Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
 			Env:              env,
@@ -236,11 +239,10 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			DepRefs:          chDeps,
-		})
-		bindGeneratedOutput(ctx, instance, aux, ref)
-		res.Refs = append(res.Refs, ref)
+		}, auxRef)
+		res.Refs = append(res.Refs, auxRef)
 		res.Outputs = append(res.Outputs, aux)
-		res.PRRefs = append(res.PRRefs, ref)
+		res.PRRefs = append(res.PRRefs, auxRef)
 		res.PROutputs = append(res.PROutputs, aux)
 		res.AuxClosures = append(res.AuxClosures, auxClosure)
 	}
@@ -248,7 +250,7 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 	return res
 }
 
-func rawAuxInputClosure(ctx *GenCtx, instance ModuleInstance, aux VFS, seed []VFS, in ModuleCCInputs) []VFS {
+func rawAuxInputClosure(ctx *GenCtx, instance ModuleInstance, aux VFS, seed []VFS, ref NodeRef, in ModuleCCInputs) []VFS {
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 
 	emits := make([]IncludeDirective, 0, len(seed))
@@ -257,7 +259,7 @@ func rawAuxInputClosure(ctx *GenCtx, instance ModuleInstance, aux VFS, seed []VF
 		emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(v.rel())})
 	}
 
-	registerGeneratedParsedOutput(ctx, instance, pkPR, aux, emits, []NodeRef{rescompilerRef})
+	registerBoundGeneratedParsedOutput(ctx, instance, pkPR, aux, emits, ref, []NodeRef{rescompilerRef})
 
 	closure := walkClosure(ctx.scannerFor(instance), aux, in.ScanCfg)
 

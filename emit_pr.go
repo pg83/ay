@@ -108,27 +108,34 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		}
 	}
 
+	// Reserve the PR producer's ref before registering its outputs: the input
+	// closure walk below resolves sibling codegen deps that may include these
+	// outputs, and registration records the producer ref.
+	prRef := ctx.emit.reserve()
+
 	for _, f := range stmt.OUTFiles {
-		registerGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f], prEmitsIncludes(f, stmt, inVFSs), []NodeRef{toolLDRef})
+		registerBoundGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f], prEmitsIncludes(f, stmt, inVFSs), prRef, []NodeRef{toolLDRef})
 		reg.setSourceInputs(outVFSByToken[f], prSourceInputs)
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		registerGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f], prEmitsIncludes(f, stmt, inVFSs), []NodeRef{toolLDRef})
+		registerBoundGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f], prEmitsIncludes(f, stmt, inVFSs), prRef, []NodeRef{toolLDRef})
 		reg.setSourceInputs(outVFSByToken[f], prSourceInputs)
 	}
 
 	if stmt.StdoutFile != nil {
-		registerGeneratedParsedOutput(ctx, instance, pkPR, *stdoutVFS, prEmitsIncludes(*stmt.StdoutFile, stmt, inVFSs), []NodeRef{toolLDRef})
+		registerBoundGeneratedParsedOutput(ctx, instance, pkPR, *stdoutVFS, prEmitsIncludes(*stmt.StdoutFile, stmt, inVFSs), prRef, []NodeRef{toolLDRef})
 		reg.setSourceInputs(*stdoutVFS, prSourceInputs)
 	}
 
 	inputClosure := prInputClosure(ctx, instance, d, stmt, moduleInputs)
 
-	prExtraDepRefs := resolveCodegenDepRefsExt(ctx, instance, inputClosure, inVFSs, toolLDRef)
+	// Exclude prRef as well as the tool: the outputs are now registered against
+	// prRef, so a PR output appearing in another output's closure must not become a
+	// self-dependency (the old two-phase code bound the ref only after this resolve).
+	prExtraDepRefs := resolveCodegenDepRefsExt(ctx, instance, inputClosure, inVFSs, toolLDRef, prRef)
 
-	prResult := emitPR(instance, stmt, toolBinPath, toolLDRef, auxTools, inVFSByToken, inVFSs, outVFSByToken, stdoutVFS, inputClosure, prExtraDepRefs, ctx.emit)
-	prRef := prResult.Ref
+	prResult := emitPR(instance, stmt, toolBinPath, toolLDRef, auxTools, inVFSByToken, inVFSs, outVFSByToken, stdoutVFS, inputClosure, prExtraDepRefs, prRef, ctx.emit)
 
 	if d.prOutputInputs == nil {
 		d.prOutputInputs = map[STR]InputChunks{}
@@ -147,18 +154,6 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	if stmt.StdoutFile != nil {
 		d.prOutputInputs[*stmt.StdoutFile] = prResult.Inputs
-	}
-
-	for _, f := range stmt.OUTFiles {
-		bindGeneratedOutput(ctx, instance, outVFSByToken[f], prRef)
-	}
-
-	for _, f := range stmt.OUTNoAutoFiles {
-		bindGeneratedOutput(ctx, instance, outVFSByToken[f], prRef)
-	}
-
-	if stmt.StdoutFile != nil {
-		bindGeneratedOutput(ctx, instance, *stdoutVFS, prRef)
 	}
 
 	return prRef
@@ -426,6 +421,7 @@ func emitPR(
 	stdoutVFS *VFS,
 	inputClosure []VFS,
 	extraDepRefs []NodeRef,
+	id NodeRef,
 	emit Emitter,
 ) PrEmitResult {
 	na := emit.nodeArenas()
@@ -576,8 +572,10 @@ func emitPR(
 
 	// The node and the result share the same chunk list: nothing mutates a
 	// node's Inputs after Emit, and prOutputInputs readers copy out.
+	emit.emitReserved(node, id)
+
 	return PrEmitResult{
-		Ref:    emit.emit(node),
+		Ref:    id,
 		Inputs: inputs,
 	}
 }

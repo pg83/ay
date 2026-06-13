@@ -88,22 +88,26 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 		splitSrcs = splitCodegenSrcs(ctx, instance, d, stmt, scriptVFS)
 	}
 
+	// Reserve the PY producer's ref before registering its outputs; see emit_pr.go.
+	pyRef := ctx.emit.reserve()
+
 	for _, f := range stmt.OUTFiles {
-		registerGeneratedParsedOutput(ctx, instance, pkPY, outVFSByToken[f.string()], pyEmitsIncludes(ctx, instance, d, stmt, f.string(), scriptVFS, splitSrcs, hasCCShard), nil)
+		registerBoundGeneratedParsedOutput(ctx, instance, pkPY, outVFSByToken[f.string()], pyEmitsIncludes(ctx, instance, d, stmt, f.string(), scriptVFS, splitSrcs, hasCCShard), pyRef, nil)
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		registerGeneratedParsedOutput(ctx, instance, pkPY, outVFSByToken[f.string()], pyEmitsIncludes(ctx, instance, d, stmt, f.string(), scriptVFS, splitSrcs, hasCCShard), nil)
+		registerBoundGeneratedParsedOutput(ctx, instance, pkPY, outVFSByToken[f.string()], pyEmitsIncludes(ctx, instance, d, stmt, f.string(), scriptVFS, splitSrcs, hasCCShard), pyRef, nil)
 	}
 
 	if stmt.StdoutFile != nil {
-		registerGeneratedParsedOutput(ctx, instance, pkPY, *stdoutVFS, pyEmitsIncludes(ctx, instance, d, stmt, stmt.StdoutFile.string(), scriptVFS, splitSrcs, hasCCShard), nil)
+		registerBoundGeneratedParsedOutput(ctx, instance, pkPY, *stdoutVFS, pyEmitsIncludes(ctx, instance, d, stmt, stmt.StdoutFile.string(), scriptVFS, splitSrcs, hasCCShard), pyRef, nil)
 	}
 
 	inputClosure := pyInputClosure(ctx, instance, stmt, d, moduleInputs)
 	codegenInputs := append([]VFS{scriptVFS}, inVFSs...)
-	extraDepRefs := resolveCodegenDepRefsExt(ctx, instance, inputClosure, codegenInputs)
-	result := emitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, moduleInputs.TC, ctx.emit)
+	// Exclude pyRef: outputs are now registered against it; see emit_pr.go.
+	extraDepRefs := resolveCodegenDepRefsExt(ctx, instance, inputClosure, codegenInputs, pyRef)
+	result := emitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, pyRef, moduleInputs.TC, ctx.emit)
 
 	if d.prOutputInputs == nil {
 		d.prOutputInputs = map[STR]InputChunks{}
@@ -122,18 +126,6 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 
 	if stmt.StdoutFile != nil {
 		d.prOutputInputs[*stmt.StdoutFile] = result.Inputs
-	}
-
-	for _, f := range stmt.OUTFiles {
-		bindGeneratedOutput(ctx, instance, outVFSByToken[f.string()], result.Ref)
-	}
-
-	for _, f := range stmt.OUTNoAutoFiles {
-		bindGeneratedOutput(ctx, instance, outVFSByToken[f.string()], result.Ref)
-	}
-
-	if stmt.StdoutFile != nil {
-		bindGeneratedOutput(ctx, instance, *stdoutVFS, result.Ref)
 	}
 
 	return result.Ref
@@ -433,6 +425,7 @@ func emitPYRun(
 	stdoutVFS *VFS,
 	inputClosure []VFS,
 	extraDepRefs []NodeRef,
+	id NodeRef,
 	tc ModuleToolchain,
 	emit Emitter,
 ) PrEmitResult {
@@ -525,8 +518,10 @@ func emitPYRun(
 
 	// The node and the result share the same chunk list: nothing mutates a
 	// node's Inputs after Emit, and prOutputInputs readers copy out.
+	emit.emitReserved(node, id)
+
 	return PrEmitResult{
-		Ref:    emit.emit(node),
+		Ref:    id,
 		Inputs: inputs,
 	}
 }

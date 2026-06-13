@@ -310,7 +310,7 @@ func llvmBcSourceInfo(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src s
 	if buildVFS := generatedModuleSourceVFS(ctx, instance, src); buildVFS != nil {
 		ref := NodeRef(0)
 
-		if info := codegenRegForInstance(ctx, instance).lookup(*buildVFS); info != nil && info.HasProducerRef {
+		if info := codegenRegForInstance(ctx, instance).lookup(*buildVFS); info != nil {
 			ref = info.ProducerRef
 		}
 

@@ -25,7 +25,7 @@ func ragel6OutVFS(instance ModuleInstance, srcRel string) VFS {
 	return build(instance.Path.rel() + "/" + srcRel + ".cpp")
 }
 
-func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ARG, closure []VFS, emit Emitter) (NodeRef, VFS) {
+func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ARG, closure []VFS, id NodeRef, emit Emitter) {
 	na := emit.nodeArenas()
 
 	outVFS := ragel6OutVFS(instance, srcRel)
@@ -62,5 +62,5 @@ func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 		ForeignDepRefs:   []NodeRef{ragel6LD},
 	}
 
-	return emit.emit(node), outVFS
+	emit.emitReserved(node, id)
 }
