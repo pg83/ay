@@ -7,10 +7,9 @@ import (
 
 func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS) {
 	outPrefix := instance.Path.rel() + "/"
-	reg := codegenRegForInstance(ctx, instance)
 
 	for _, cf := range d.configureFiles {
-		emitExplicitCF(ctx, instance, cf, d, reg)
+		emitExplicitCF(ctx, instance, cf, d)
 	}
 
 	antlrCCRefs, antlrCCOutputs := emitAntlrRuns(ctx, instance, d, consumerInputs)
@@ -24,7 +23,7 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
 			parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
 
-			if reg != nil {
+			{
 				lexerG4 := source(instance.Path.rel() + "/" + g.Lexer)
 				parserG4 := source(instance.Path.rel() + "/" + g.Parser)
 				lexerCpp := build(outPrefix + lexerBase + ".cpp")
@@ -77,7 +76,7 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 
 			base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
 
-			if reg != nil {
+			{
 				grammarG4 := source(instance.Path.rel() + "/" + g.Grammar)
 				lexerCpp := build(outPrefix + base + "Lexer.cpp")
 				parserCpp := build(outPrefix + base + "Parser.cpp")
@@ -128,13 +127,11 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 	if d.createBuildInfoFor != nil {
 		biRef := emitBI(instance, d.createBuildInfoFor.string(), biFlagsForInstance(instance.Platform), d.tc, ctx.emit)
 
-		if reg != nil {
-			registerBoundGeneratedParsedOutput(ctx, instance, pkBI, build(outPrefix+d.createBuildInfoFor.string()), []IncludeDirective{
-				{kind: includeQuoted, target: internStr(buildInfoGenPyVFS.rel())},
-				{kind: includeQuoted, target: internStr(xargsPyVFS.rel())},
-				{kind: includeQuoted, target: internStr(yieldLinePyVFS.rel())},
-			}, biRef, nil)
-		}
+		registerBoundGeneratedParsedOutput(ctx, instance, pkBI, build(outPrefix+d.createBuildInfoFor.string()), []IncludeDirective{
+			{kind: includeQuoted, target: internStr(buildInfoGenPyVFS.rel())},
+			{kind: includeQuoted, target: internStr(xargsPyVFS.rel())},
+			{kind: includeQuoted, target: internStr(yieldLinePyVFS.rel())},
+		}, biRef, nil)
 	}
 
 	_ = d.runPrograms

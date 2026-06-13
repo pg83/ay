@@ -362,7 +362,7 @@ func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 func (sc *ScanCtx) resolveInducedDeps(vfsPath VFS, incDir VFS, fn func(rabs VFS)) {
 	s := sc.scanner
 
-	if !vfsPath.isBuild() || s.codegen == nil || s.moduleByRef == nil {
+	if !vfsPath.isBuild() {
 		return
 	}
 
@@ -567,8 +567,7 @@ func (s *IncludeScanner) closureWindow(ref ClosureRef) []VFS {
 // window splice means that window contained closure(ch) entirely. The leafEver
 // guard keeps this sound: a ClosureLeaf rides in windows as a bare, non-expanded
 // member — its presence does NOT imply its own window is present — so any VFS
-// ever registered as a leaf never short-circuits. A nil codegen registry has no
-// leaves at all, so membership alone suffices there.
+// ever registered as a leaf never short-circuits.
 func (sc *ScanCtx) windowSubsumed(ch VFS) bool {
 	s := sc.scanner
 
@@ -576,7 +575,7 @@ func (sc *ScanCtx) windowSubsumed(ch VFS) bool {
 		return false
 	}
 
-	if s.codegen != nil && s.codegen.isLeafEver(ch) {
+	if s.codegen.isLeafEver(ch) {
 		return false
 	}
 

@@ -7,10 +7,6 @@ import (
 func joinSrcsIncludeClosure(ctx *GenCtx, scanPlatform *Platform, srcInstance ModuleInstance, sources []string, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerForPlatform(scanPlatform)
 
-	if scanner == nil {
-		return nil
-	}
-
 	// Union each source's transitive closure (closureOf), deduping across sources
 	// with a reused IdSet. The source files themselves drop out for free: seed the
 	// IdSet with every source VFS up front, so the union loop's visited-skip leaves
@@ -126,10 +122,6 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 // exactly (scanner, vfsPath, cfg): the unregistered-extension parser derives
 // from the root (a .swg root parses its .i includes as swig).
 func walkClosure(scanner *IncludeScanner, vfsPath VFS, cfg ScanContext) []VFS {
-	if scanner == nil {
-		return nil
-	}
-
 	sc := scanner.newScanCtx(cfg, includeDirectiveParsers.registeredParserFor(vfsPath.rel()))
 	scanner.walkClosureCalls++
 
@@ -156,10 +148,6 @@ func walkClosureTail(scanner *IncludeScanner, vfsPath VFS, cfg ScanContext) []VF
 // compile closures must NOT use this — upstream tracks the $(B) COPY output
 // as the CC input directly (it is the file the compiler actually opens).
 func rewriteClosureCPSource(scanner *IncludeScanner, out []VFS) []VFS {
-	if scanner == nil || scanner.codegen == nil {
-		return out
-	}
-
 	// out may be a shared cached closure (closureOf returns its slice without
 	// copying), so clone on the first rewrite instead of mutating in place. The
 	// common case rewrites nothing and returns out untouched.

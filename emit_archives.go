@@ -110,7 +110,7 @@ func emitArchive(
 
 	arRef := emit.emit(n)
 
-	if reg != nil {
+	{
 		// Propagate each archived member's source inputs (e.g. the .py behind a
 		// .pyc compiled by a RUN_PROGRAM) as non-expanded closure leaves of the
 		// archive output, so a CC unit that #includes the archived .inc picks them

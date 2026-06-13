@@ -36,10 +36,7 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, modulePath string, e
 		// source file rides as a non-expanded closure leaf of the dst instead
 		// (registered in emitCopyFiles; see CodegenRegistry.closureLeaves).
 		srcVFS := copyFileInputVFS(fs, modulePath, entry.Src)
-
-		if scanner != nil {
-			out = append(out, scanner.parsers.parsedIncludes(srcVFS, nil)...)
-		}
+		out = append(out, scanner.parsers.parsedIncludes(srcVFS, nil)...)
 	} else if entry.WithContext {
 		// Non-TEXT COPY(WITH_CONTEXT …) (e.g. a .cpp plus its sibling .h, copied
 		// by a single module) cannot leak across modules, and its quoted
@@ -85,11 +82,9 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 		parsed := copyFileParsedIncludes(scanner, ctx.fs, instance.Path.rel(), entry)
 		entries = append(entries, entryReg{srcVFS, dstVFS, parsed})
 
-		if scanner != nil {
-			scanner.parsers.registerBuildParsedIncludes(dstVFS, parsed)
-		}
+		scanner.parsers.registerBuildParsedIncludes(dstVFS, parsed)
 
-		if reg != nil && reg.lookup(dstVFS) == nil {
+		if reg.lookup(dstVFS) == nil {
 			info := &GeneratedFileInfo{
 				ProducerKvP: pkCP,
 				OutputPath:  dstVFS,
@@ -143,21 +138,15 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 		ref := emitCPWithDeps(instance, srcVFS, dstVFS, depRefs, closure, d.tc, ctx.scripts, ctx.emit)
 
 		// Promote the registration with the producer ref; SourcePath remains.
-		if reg != nil {
-			if info := reg.lookup(dstVFS); info != nil {
-				info.ProducerRef = ref
-				info.HasProducerRef = true
-			}
+		if info := reg.lookup(dstVFS); info != nil {
+			info.ProducerRef = ref
+			info.HasProducerRef = true
 		}
 	}
 }
 
 func generatedModuleSourceVFS(ctx *GenCtx, instance ModuleInstance, srcRel string) *VFS {
 	reg := codegenRegForInstance(ctx, instance)
-
-	if reg == nil {
-		return nil
-	}
 
 	// Lookup-only probe: the canonical "$(B)/<mod>/<src>" is assembled in the
 	// scratch buffer and probed without inserting — a plain src (the common

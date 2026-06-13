@@ -31,8 +31,6 @@ func emitJVDownstreamCPCC(
 	outputIncludes []string,
 	in ModuleCCInputs,
 ) (ccRefs []NodeRef, ccOutputs []VFS) {
-	reg := codegenRegForInstance(ctx, instance)
-
 	for _, pair := range cpccPairs {
 		srcCpp := pair.cpp
 		srcH := pair.h
@@ -41,7 +39,7 @@ func emitJVDownstreamCPCC(
 		g4CppPath := build(instance.Path.rel() + "/" + base + ".g4.cpp")
 		g4CppRel := base + ".g4.cpp"
 
-		if reg != nil {
+		{
 			emits := make([]IncludeDirective, 0, 1+len(outputIncludes))
 			emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(antlr4RuntimeHeaderVFS.rel())})
 

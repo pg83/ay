@@ -9,11 +9,10 @@ func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in 
 		return nil
 	}
 
-	reg := codegenRegForInstance(ctx, instance)
 	res := &RunProgramsForARResult{}
 
 	for _, rp := range d.runPython {
-		pyRef := emitRunPython(ctx, instance, rp, d, reg, in)
+		pyRef := emitRunPython(ctx, instance, rp, d, in)
 
 		if d.prOutputProducer == nil {
 			d.prOutputProducer = map[STR]NodeRef{}
@@ -52,7 +51,7 @@ func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in 
 	return res
 }
 
-func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d *ModuleData, reg *CodegenRegistry, moduleInputs ModuleCCInputs) NodeRef {
+func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d *ModuleData, moduleInputs ModuleCCInputs) NodeRef {
 	scriptVFS := copyFileInputVFS(ctx.fs, instance.Path.rel(), stmt.ScriptPath.string())
 	inVFSByToken := make(map[string]VFS, len(stmt.INFiles))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
@@ -89,18 +88,16 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 		splitSrcs = splitCodegenSrcs(ctx, instance, d, stmt, scriptVFS)
 	}
 
-	if reg != nil {
-		for _, f := range stmt.OUTFiles {
-			registerGeneratedParsedOutput(ctx, instance, pkPY, outVFSByToken[f.string()], pyEmitsIncludes(ctx, instance, d, stmt, f.string(), scriptVFS, splitSrcs, hasCCShard), nil)
-		}
+	for _, f := range stmt.OUTFiles {
+		registerGeneratedParsedOutput(ctx, instance, pkPY, outVFSByToken[f.string()], pyEmitsIncludes(ctx, instance, d, stmt, f.string(), scriptVFS, splitSrcs, hasCCShard), nil)
+	}
 
-		for _, f := range stmt.OUTNoAutoFiles {
-			registerGeneratedParsedOutput(ctx, instance, pkPY, outVFSByToken[f.string()], pyEmitsIncludes(ctx, instance, d, stmt, f.string(), scriptVFS, splitSrcs, hasCCShard), nil)
-		}
+	for _, f := range stmt.OUTNoAutoFiles {
+		registerGeneratedParsedOutput(ctx, instance, pkPY, outVFSByToken[f.string()], pyEmitsIncludes(ctx, instance, d, stmt, f.string(), scriptVFS, splitSrcs, hasCCShard), nil)
+	}
 
-		if stmt.StdoutFile != nil {
-			registerGeneratedParsedOutput(ctx, instance, pkPY, *stdoutVFS, pyEmitsIncludes(ctx, instance, d, stmt, stmt.StdoutFile.string(), scriptVFS, splitSrcs, hasCCShard), nil)
-		}
+	if stmt.StdoutFile != nil {
+		registerGeneratedParsedOutput(ctx, instance, pkPY, *stdoutVFS, pyEmitsIncludes(ctx, instance, d, stmt, stmt.StdoutFile.string(), scriptVFS, splitSrcs, hasCCShard), nil)
 	}
 
 	inputClosure := pyInputClosure(ctx, instance, stmt, d, moduleInputs)
@@ -127,18 +124,16 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 		d.prOutputInputs[*stmt.StdoutFile] = result.Inputs
 	}
 
-	if reg != nil {
-		for _, f := range stmt.OUTFiles {
-			bindGeneratedOutput(ctx, instance, outVFSByToken[f.string()], result.Ref)
-		}
+	for _, f := range stmt.OUTFiles {
+		bindGeneratedOutput(ctx, instance, outVFSByToken[f.string()], result.Ref)
+	}
 
-		for _, f := range stmt.OUTNoAutoFiles {
-			bindGeneratedOutput(ctx, instance, outVFSByToken[f.string()], result.Ref)
-		}
+	for _, f := range stmt.OUTNoAutoFiles {
+		bindGeneratedOutput(ctx, instance, outVFSByToken[f.string()], result.Ref)
+	}
 
-		if stmt.StdoutFile != nil {
-			bindGeneratedOutput(ctx, instance, *stdoutVFS, result.Ref)
-		}
+	if stmt.StdoutFile != nil {
+		bindGeneratedOutput(ctx, instance, *stdoutVFS, result.Ref)
 	}
 
 	return result.Ref
@@ -285,10 +280,6 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 
 	addSource(scriptVFS)
 
-	if scanner == nil {
-		return sources
-	}
-
 	for _, f := range stmt.INFiles {
 		vfs := runProgramInputVFS(ctx, instance, d, f.string())
 
@@ -300,7 +291,7 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 
 		for _, pd := range scanner.parsers.parsedIncludes(vfs, nil) {
 			if bvfs := pd.target.vfs(); bvfs != 0 {
-				if bvfs.isBuild() && reg != nil {
+				if bvfs.isBuild() {
 					if info := reg.lookup(bvfs); info != nil {
 						for _, si := range info.SourceInputs {
 							addSource(si)
@@ -315,11 +306,9 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 
 			if ctx.fs.isFile(srcRootVFS, target) {
 				addSource(source(target))
-			} else if reg != nil {
-				if info := reg.lookupSTR(pd.target); info != nil {
-					for _, si := range info.SourceInputs {
-						addSource(si)
-					}
+			} else if info := reg.lookupSTR(pd.target); info != nil {
+				for _, si := range info.SourceInputs {
+					addSource(si)
 				}
 			}
 		}
@@ -329,12 +318,10 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 		// source-rooted ones in directly here, mirroring the scanner's
 		// resolveInducedDeps. Shards are translation units, so take the Cpp bucket
 		// (which holds both the cpp-only and the h+cpp induced groups).
-		if reg != nil {
-			if info := reg.lookup(vfs); info != nil {
-				for _, gref := range info.GeneratorRefs {
-					if tool, ok := ctx.moduleByRef.get(gref); ok {
-						addInducedSources(tool.InducedDeps.bucket(parsedIncludesCpp))
-					}
+		if info := reg.lookup(vfs); info != nil {
+			for _, gref := range info.GeneratorRefs {
+				if tool, ok := ctx.moduleByRef.get(gref); ok {
+					addInducedSources(tool.InducedDeps.bucket(parsedIncludesCpp))
 				}
 			}
 		}

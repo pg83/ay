@@ -40,9 +40,7 @@ func bisonGeneratedCPPParsed(ctx *GenCtx, instance ModuleInstance, srcVFS, heade
 		{kind: includeQuoted, target: internStr(srcVFS.rel())},
 	}
 
-	if scanner := ctx.scannerFor(instance); scanner != nil {
-		parsed = append(parsed, scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
-	}
+	parsed = append(parsed, ctx.scannerFor(instance).parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
 
 	return parsed
 }
@@ -64,20 +62,18 @@ func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCC
 
 	if preprocessHeader {
 		headerParsed = bisonCppHeaderParsed(srcVFS)
-	} else if scanner := ctx.scannerFor(instance); scanner != nil {
-		headerParsed = append(headerParsed, scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
+	} else {
+		headerParsed = append(headerParsed, ctx.scannerFor(instance).parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
 	}
 
 	registerGeneratedParsedOutput(ctx, instance, pkYC, headerVFS, headerParsed, []NodeRef{bisonRef, m4Ref})
 
 	if preprocessHeader {
-		if reg := codegenRegForInstance(ctx, instance); reg != nil {
-			// The .y source is a real input of any unit whose include-closure reaches
-			// this preprocessed header. Ride it as a non-expanded closure leaf so every
-			// consumer picks it up transitively through the cached window, instead of
-			// the former per-CC-source pull (bisonCCSourceInputs).
-			reg.addClosureLeaf(headerVFS, srcVFS)
-		}
+		// The .y source is a real input of any unit whose include-closure reaches
+		// this preprocessed header. Ride it as a non-expanded closure leaf so every
+		// consumer picks it up transitively through the cached window, instead of
+		// the former per-CC-source pull (bisonCCSourceInputs).
+		codegenRegForInstance(ctx, instance).addClosureLeaf(headerVFS, srcVFS)
 	}
 
 	generatedParsed := []IncludeDirective{{kind: includeQuoted, target: internStr(headerVFS.rel())}}

@@ -83,11 +83,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		rl6SourceVFS := resolveModuleSourceVFS(ctx, srcInstance, d, srcRel, srcIn.SrcDirs)
 		r6Out := ragel6OutVFS(srcInstance, srcRel)
 
-		var r6Parsed []IncludeDirective
-
-		if scanner := ctx.scannerFor(srcInstance); scanner != nil {
-			r6Parsed = scanner.parsers.sourceParsedBuckets(rl6SourceVFS, nil).bucket(parsedIncludesCpp)
-		}
+		r6Parsed := ctx.scannerFor(srcInstance).parsers.sourceParsedBuckets(rl6SourceVFS, nil).bucket(parsedIncludesCpp)
 
 		// Register the generated cpp's induced includes (self-include + the
 		// .rl6's C/C++ directives) BEFORE walking, so ONE window serves both
@@ -137,7 +133,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		evH := build(evRelPath + ".pb.h")
 		evPbCC := build(evRelPath + ".pb.cc")
 
-		if reg := codegenRegForInstance(ctx, srcInstance); reg != nil {
+		{
 			directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, "")
 			evExtras := evWitnessExtras(evRelPath, evPbCC)
 			evHParsed := make([]IncludeDirective, 0, len(directImports)+len(protobufRuntimeDirectives)+len(evExtras))
@@ -182,11 +178,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 
 		rlSourceVFS := source(srcInstance.Path.rel() + "/" + srcRel)
 		registerBoundGeneratedParsedOutput(ctx, srcInstance, pkR5, r5TmpOut, nil, r5Ref, []NodeRef{ragel5LDRef, rlgenCdLDRef})
-		var r5Parsed []IncludeDirective
-
-		if scanner := ctx.scannerFor(srcInstance); scanner != nil {
-			r5Parsed = scanner.parsers.sourceParsedBuckets(rlSourceVFS, nil).bucket(parsedIncludesCpp)
-		}
+		r5Parsed := ctx.scannerFor(srcInstance).parsers.sourceParsedBuckets(rlSourceVFS, nil).bucket(parsedIncludesCpp)
 
 		registerBoundGeneratedParsedOutput(ctx, srcInstance, pkR5, r5CppOut, r5Parsed, r5Ref, []NodeRef{ragel5LDRef, rlgenCdLDRef})
 
