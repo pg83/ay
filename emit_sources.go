@@ -206,20 +206,14 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		srcIn.IncludeInputs = walkClosure(ctx.scannerFor(srcInstance), inSourceVFS, srcIn.ScanCfg)
 		cfgVars := buildCFGVars(ctx.fs, inSourceVFS.rel(), srcIn.SetVars, srcIn.DefaultVars)
 		cfOut := build(srcInstance.Path.rel() + "/" + strings.TrimSuffix(srcRel, ".in"))
+		cfRef, cfOut := emitCF(srcInstance, inSourceVFS, cfOut, cfgVars, srcIn.IncludeInputs, srcInstance.Path.rel(), cfModuleTag(d, srcInstance), srcIn.TC, ctx.emit)
 
 		parsed := []IncludeDirective{
 			{kind: includeQuoted, target: internStr(inSourceVFS.rel())},
 			{kind: includeQuoted, target: internStr(configureFilePyVFS.rel())},
 		}
 		parsed = append(parsed, cfIncludeDirectives(ctx.parsers, inSourceVFS.rel())...)
-		registerDeferredCF(ctx, srcInstance, cfOut, parsed, &DeferredCF{
-			instance:      srcInstance,
-			srcVFS:        inSourceVFS,
-			outVFS:        cfOut,
-			cfgVars:       cfgVars,
-			includeInputs: srcIn.IncludeInputs,
-			tc:            srcIn.TC,
-		})
+		registerBoundGeneratedParsedOutput(ctx, srcInstance, pkCF, cfOut, parsed, cfRef, nil)
 
 		return nil
 	case strings.HasSuffix(srcRel, ".cpp.in"),

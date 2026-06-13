@@ -360,12 +360,6 @@ func resolveCodegenDepRefsExt(ctx *GenCtx, consumer ModuleInstance, includeInput
 
 		if reg != nil {
 			if info := reg.lookup(v); info != nil {
-				if !info.HasProducerRef && info.DeferredCF != nil {
-					def := info.DeferredCF
-					cfRef, _ := emitCF(def.instance, def.srcVFS, def.outVFS, def.cfgVars, def.includeInputs, consumer.Path.rel(), 0, def.tc, ctx.emit)
-					reg.setProducerRef(v, cfRef)
-				}
-
 				if info.HasProducerRef {
 					ref, ok = info.ProducerRef, true
 				}
