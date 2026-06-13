@@ -73,6 +73,7 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 		srcVFS VFS
 		dstVFS VFS
 		parsed []IncludeDirective
+		ref    NodeRef
 	}
 	entries := make([]entryReg, 0, len(d.copyFiles))
 
@@ -80,7 +81,12 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 		srcVFS := copyFileInputVFS(ctx.fs, instance.Path.rel(), entry.Src)
 		dstVFS := copyFileOutputVFS(instance.Path.rel(), entry.Dst)
 		parsed := copyFileParsedIncludes(scanner, ctx.fs, instance.Path.rel(), entry)
-		entries = append(entries, entryReg{srcVFS, dstVFS, parsed})
+		// Reserve the CP node's ref up front, per entry, so the second loop fills
+		// the matching slot (emitCPWithDeps), every dst carries a valid ProducerRef
+		// before any CP is built, and a CP whose source resolves to a sibling CP's
+		// output sees that producer.
+		ref := ctx.emit.reserve()
+		entries = append(entries, entryReg{srcVFS, dstVFS, parsed, ref})
 
 		scanner.parsers.registerBuildParsedIncludes(dstVFS, parsed)
 
@@ -90,6 +96,7 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 				OutputPath:  dstVFS,
 				SourcePath:  srcVFS,
 				IsText:      entry.Text,
+				ProducerRef: ref,
 			}
 
 			// The fs_tools.py copy tooling is a real input of every copy product, so
@@ -113,7 +120,11 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 	for i, entry := range d.copyFiles {
 		srcVFS := entries[i].srcVFS
 		dstVFS := entries[i].dstVFS
-		depRefs := resolveCodegenDepRefsExt(ctx, instance, nil, []VFS{srcVFS})
+		// Exclude this CP's own reserved ref: an AUTO copy may have src == dst, and
+		// without the exclude probe(srcVFS) would now resolve to this very node — a
+		// self-dependency (and finalize cycle). The old two-phase code never saw it
+		// because dst was not yet bound at this point.
+		depRefs := resolveCodegenDepRefsExt(ctx, instance, nil, []VFS{srcVFS}, entries[i].ref)
 		var closure []VFS
 
 		// COPY_FILE with WITH_CONTEXT pulls the source file's #include closure;
@@ -135,13 +146,7 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 			closure = dedupVFS(closure)
 		}
 
-		ref := emitCPWithDeps(instance, srcVFS, dstVFS, depRefs, closure, d.tc, ctx.scripts, ctx.emit)
-
-		// Promote the registration with the producer ref; SourcePath remains.
-		if info := reg.lookup(dstVFS); info != nil {
-			info.ProducerRef = ref
-			info.HasProducerRef = true
-		}
+		emitCPWithDeps(instance, srcVFS, dstVFS, depRefs, closure, entries[i].ref, d.tc, ctx.scripts, ctx.emit)
 	}
 }
 

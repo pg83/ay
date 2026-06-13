@@ -66,7 +66,11 @@ func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		headerParsed = append(headerParsed, ctx.scannerFor(instance).parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
 	}
 
-	registerGeneratedParsedOutput(ctx, instance, pkYC, headerVFS, headerParsed, []NodeRef{bisonRef, m4Ref})
+	// Reserve the YC producer's ref before registering its outputs: the
+	// generatedOutputClosure walk of headerVFS below needs the registration first.
+	ycRef := ctx.emit.reserve()
+
+	registerBoundGeneratedParsedOutput(ctx, instance, pkYC, headerVFS, headerParsed, ycRef, []NodeRef{bisonRef, m4Ref})
 
 	if preprocessHeader {
 		// The .y source is a real input of any unit whose include-closure reaches
@@ -82,7 +86,7 @@ func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		generatedParsed = bisonGeneratedCPPParsed(ctx, instance, srcVFS, headerVFS)
 	}
 
-	registerGeneratedParsedOutput(ctx, instance, pkYC, generatedVFS, generatedParsed, []NodeRef{bisonRef, m4Ref})
+	registerBoundGeneratedParsedOutput(ctx, instance, pkYC, generatedVFS, generatedParsed, ycRef, []NodeRef{bisonRef, m4Ref})
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envBISON_PKGDATADIR, Value: strBisonPkgData}, {Name: envM4, Value: m4Bin}}
 	preprocessEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -108,7 +112,7 @@ func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		inputs = dedupVFS(inputs, generatedOutputClosure(ctx, instance, headerVFS, in))
 	}
 
-	ycRef := ctx.emit.emit(&Node{
+	ctx.emit.emitReserved(&Node{
 		Platform:         instance.Platform,
 		Cmds:             cmds,
 		DepRefs:          []NodeRef{bisonRef, m4Ref},
@@ -119,9 +123,7 @@ func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		usesResources:    usesPython3,
-	})
-	bindGeneratedOutput(ctx, instance, headerVFS, ycRef)
-	bindGeneratedOutput(ctx, instance, generatedVFS, ycRef)
+	}, ycRef)
 
 	ccIn := in
 	ccIn.ExtraDepRefs = []NodeRef{ycRef}

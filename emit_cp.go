@@ -8,10 +8,11 @@ func emitJVCPG4(
 	jvPrimary VFS,
 	jvInputs []VFS,
 	closure []VFS,
+	id NodeRef,
 	tc ModuleToolchain,
 	scripts ScriptDeps,
 	emit Emitter,
-) NodeRef {
+) {
 	na := emit.nodeArenas()
 
 	fsTools := copyFsToolsVFS
@@ -51,18 +52,21 @@ func emitJVCPG4(
 		usesResources:    usesPython3,
 	}
 
-	return emit.emit(node)
+	emit.emitReserved(node, id)
 }
 
 func emitCP(instance ModuleInstance, src VFS, dst VFS, tc ModuleToolchain, scripts ScriptDeps, emit Emitter) NodeRef {
-	return emitCPWithDeps(instance, src, dst, nil, nil, tc, scripts, emit)
+	id := emit.reserve()
+	emitCPWithDeps(instance, src, dst, nil, nil, id, tc, scripts, emit)
+
+	return id
 }
 
 // EmitCPWithDeps emits a CP (copy) node. extraInputs is the additional input
 // closure to attach (e.g. the source's transitive #include closure when the
 // COPY macro was declared WITH_CONTEXT, so that any header change retriggers
 // the copy).
-func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, tc ModuleToolchain, scripts ScriptDeps, emit Emitter) NodeRef {
+func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, id NodeRef, tc ModuleToolchain, scripts ScriptDeps, emit Emitter) {
 	na := emit.nodeArenas()
 
 	fsTools := copyFsToolsVFS
@@ -107,5 +111,5 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 		usesResources:    usesPython3,
 	}
 
-	return emit.emit(node)
+	emit.emitReserved(node, id)
 }

@@ -71,6 +71,11 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 			serializedHPath = build(instance.Path.rel() + "/" + headerRel + "_serialized.h")
 		}
 
+		// Reserve the EN producer's ref before registering its outputs: the own-output
+		// closure walk below (walkClosureTail of serializedCPPPath) needs the parsed
+		// includes registered first, and registration records the producer ref.
+		enRef := ctx.emit.reserve()
+
 		{
 			// Only the macro-level output_includes are woven by hand: the enum header
 			// itself (output_include:File) and util/generic/serialized_enum.h. The
@@ -82,7 +87,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 				{kind: includeQuoted, target: strUtilGenericSerializedEnumH},
 			}
 			sort.Slice(cppParsed, func(i, j int) bool { return cppParsed[i].target.string() < cppParsed[j].target.string() })
-			registerGeneratedParsedOutput(ctx, instance, pkEN, serializedCPPPath, cppParsed, []NodeRef{enumParserLD})
+			registerBoundGeneratedParsedOutput(ctx, instance, pkEN, serializedCPPPath, cppParsed, enRef, []NodeRef{enumParserLD})
 
 			if withHeader {
 				// serialized_enum.h reaches the header via enum_parser's INDUCED_DEPS(h …).
@@ -91,7 +96,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 					{kind: includeQuoted, target: internStr(serializedCPPPath.rel())},
 				}
 				sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target.string() < hParsed[j].target.string() })
-				registerGeneratedParsedOutput(ctx, instance, pkEN, serializedHPath, hParsed, []NodeRef{enumParserLD})
+				registerBoundGeneratedParsedOutput(ctx, instance, pkEN, serializedHPath, hParsed, enRef, []NodeRef{enumParserLD})
 			}
 		}
 
@@ -115,7 +120,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 			moduleTag = tagCppProto
 		}
 
-		enRef, enOutPaths := emitEN(
+		emitEN(
 			instance,
 			headerInput,
 			headerRel,
@@ -125,16 +130,9 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 			enumParserBin,
 			augmentedDepENRefs,
 			enClosure,
+			enRef,
 			ctx.emit,
 		)
-
-		{
-			reg := codegenRegForInstance(ctx, instance)
-
-			for _, p := range enOutPaths {
-				reg.setProducerRef(p, enRef)
-			}
-		}
 
 		if consumerInputs != nil {
 			cppRel := headerRel + "_serialized.cpp"
@@ -161,8 +159,9 @@ func emitEN(
 	enumParserBin VFS,
 	depENRefs []NodeRef,
 	headerIncludeClosure []VFS,
+	id NodeRef,
 	emit Emitter,
-) (NodeRef, []VFS) {
+) {
 	na := emit.nodeArenas()
 
 	serializedCPPVFS := build(instance.Path.rel() + "/" + headerRel + "_serialized.cpp")
@@ -212,5 +211,5 @@ func emitEN(
 		node.TargetProperties.ModuleTag = moduleTag
 	}
 
-	return emit.emit(node), outputs
+	emit.emitReserved(node, id)
 }

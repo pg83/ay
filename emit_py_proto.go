@@ -543,7 +543,8 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 
 	for _, ch := range chunks {
 		aux := build(instance.Path.rel() + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path.rel(), "PY3_PROTO") + "_raw.auxcpp")
-		auxClosure := pyProtoAuxInputClosure(ctx, instance, d, aux, ch.inputs, peerAddIncl)
+		auxRef := ctx.emit.reserve()
+		auxClosure := pyProtoAuxInputClosure(ctx, instance, d, aux, ch.inputs, auxRef, peerAddIncl)
 		cmdArgs := []STR{internStr(rescompilerBinPath), (aux).str()}
 		cmdArgs = appendInternStrs(cmdArgs, ch.cmdArgs)
 
@@ -582,7 +583,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 			}
 		}
 
-		ref := ctx.emit.emit(&Node{
+		ctx.emit.emitReserved(&Node{
 			Platform:         instance.Platform,
 			Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
 			Env:              env,
@@ -592,7 +593,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleTag: tagPy3Proto},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			DepRefs:          deps,
-		})
+		}, auxRef)
 
 		ccIn := ModuleCCInputs{
 			TC:                   d.tc,
@@ -608,7 +609,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 			PerSourceCFlags:      []ARG{argX, argC},
 			SourceRoot:           ctx.sourceRoot,
 			FS:                   ctx.fs,
-			ExtraDepRefs:         []NodeRef{ref},
+			ExtraDepRefs:         []NodeRef{auxRef},
 			Py3Suffix:            true,
 			ForceCxx:             true,
 			ModuleTag:            tagPy3Proto,

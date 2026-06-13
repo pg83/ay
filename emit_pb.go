@@ -262,7 +262,7 @@ func protoSourceRelPath(fs FS, instance ModuleInstance, d *ModuleData, src strin
 	return filepath.ToSlash(filepath.Clean(resolvePySrcRel(fs, d.srcDirs, instance.Path.rel(), src)))
 }
 
-func pyProtoAuxInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, aux VFS, seed []VFS, peerAddIncl []VFS) []VFS {
+func pyProtoAuxInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, aux VFS, seed []VFS, ref NodeRef, peerAddIncl []VFS) []VFS {
 	{
 		rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 
@@ -274,7 +274,7 @@ func pyProtoAuxInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 			}
 		}
 
-		registerGeneratedParsedOutput(ctx, instance, pkPR, aux, emits, []NodeRef{rescompilerRef})
+		registerBoundGeneratedParsedOutput(ctx, instance, pkPR, aux, emits, ref, []NodeRef{rescompilerRef})
 	}
 
 	scanIn := ModuleCCInputs{
