@@ -131,7 +131,7 @@ func emitARNode(
 		tail = append(tail, (p).str())
 	}
 
-	cmdArgs := ArgChunks{tc.ARCmdHead, tail}
+	cmdArgs := chunkList(tc.ARCmdHead, tail)
 
 	// objPaths is the caller's member slice — referenced as its own chunk,
 	// never copied; only the script/plugin tail is built locally.
@@ -160,16 +160,12 @@ func emitARNode(
 
 	n := &Node{
 		Platform: instance.Platform,
-		Cmds: []Cmd{
-			{
-				CmdArgs: cmdArgs,
-				Env:     cmdEnv,
-			},
-		},
+		Cmds: cmdList(Cmd{CmdArgs: cmdArgs,
+			Env: cmdEnv}),
 		Env:              topEnv,
-		Inputs:           InputChunks{objPaths, inputTail},
+		Inputs:           inputList(objPaths, inputTail),
 		KV:               KV{P: pkAR, PC: pcLightRed, ShowOut: true},
-		Outputs:          []VFS{archivePath},
+		Outputs:          vfsList(archivePath),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: targetProperties,
 		DepRefs:          depRefs,

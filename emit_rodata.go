@@ -37,33 +37,15 @@ func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: []Cmd{
-			{
-				CmdArgs: ArgChunks{
-					{tc.Python3},
-					rodataConstArgs,
-					{internStr(toolName), (srcVFS).str(), (asmVFS).str()},
-				},
-				Env: pythonEnv,
-			},
-			{
-				CmdArgs: ArgChunks{
-					yasmConstHead,
-					{argD.str(), internStr("_" + string(instance.Platform.ISA) + "_")},
-					rodataYasmConstArgs,
-					{(outVFS).str(), (asmVFS).str()},
-				},
-				Env: yasmEnv,
-			},
-		},
+		Cmds: cmdList(Cmd{CmdArgs: chunkList(strList(tc.Python3), rodataConstArgs, strList(internStr(toolName), (srcVFS).str(), (asmVFS).str())),
+			Env: pythonEnv}, Cmd{CmdArgs: chunkList(yasmConstHead, strList(argD.str(), internStr("_"+string(instance.Platform.ISA)+"_")), rodataYasmConstArgs, strList((outVFS).str(), (asmVFS).str())),
+			Env: yasmEnv}),
 		Env: yasmEnv,
-		Inputs: InputChunks{{
-			yasmBinaryVFS,
+		Inputs: inputList(vfsList(yasmBinaryVFS,
 			rodataScriptVFS,
-			srcVFS,
-		}},
+			srcVFS)),
 		KV:               KV{P: pkRD, PC: pcLightGreen},
-		Outputs:          []VFS{asmVFS, outVFS},
+		Outputs:          vfsList(asmVFS, outVFS),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		DepRefs:          []NodeRef{yasmLD},

@@ -89,28 +89,20 @@ func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envBISON_PKGDATADIR, Value: strBisonPkgData}, {Name: envM4, Value: m4Bin}}
 	preprocessEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	cmds := []Cmd{
-		{
-			CmdArgs: ArgChunks{[]STR{
-				internStr(bisonBin),
-				argV.str(),
-				internStr("--defines=" + headerVFS.string()),
-				argDashO.str(),
-				(generatedVFS).str(),
-				(srcVFS).str(),
-			}},
-			Env: env,
-		},
-	}
+	cmds := cmdList(Cmd{CmdArgs: chunkList(strList(internStr(bisonBin),
+		argV.str(),
+		internStr("--defines="+headerVFS.string()),
+		argDashO.str(),
+		(generatedVFS).str(),
+		(srcVFS).str())),
+		Env: env})
 	inputs := []VFS{bldContribToolsBisonBison, bldContribToolsM4M4, srcVFS}
 
 	if preprocessHeader {
 		cmds = append(cmds, Cmd{
-			CmdArgs: ArgChunks{[]STR{
-				in.TC.Python3,
+			CmdArgs: chunkList(strList(in.TC.Python3,
 				(bisonPreprocessPyVFS).str(),
-				(headerVFS).str(),
-			}},
+				(headerVFS).str())),
 			Env: preprocessEnv,
 		})
 		inputs = append(inputs, bisonPreprocessPyVFS)
@@ -123,8 +115,8 @@ func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		Cmds:             cmds,
 		DepRefs:          []NodeRef{bisonRef, m4Ref},
 		Env:              env,
-		Inputs:           InputChunks{inputs},
-		Outputs:          []VFS{headerVFS, generatedVFS},
+		Inputs:           inputList(inputs),
+		Outputs:          vfsList(headerVFS, generatedVFS),
 		KV:               KV{P: pkYC, PC: pcLightGreen},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},

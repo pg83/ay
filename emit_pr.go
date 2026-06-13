@@ -499,7 +499,7 @@ func emitPR(
 	// The closure tail is filtered against the head set; filterSeen returns
 	// inputClosure itself when nothing collides, so the closure is referenced,
 	// not copied, into the chunk list.
-	inputs := InputChunks{head, deduper.filterSeen(inputClosure)}
+	inputs := inputList(head, deduper.filterSeen(inputClosure))
 
 	var outputs []VFS
 	var stdoutPath STR
@@ -552,7 +552,7 @@ func emitPR(
 	}
 
 	cmd := Cmd{
-		CmdArgs: ArgChunks{cmdArgs},
+		CmdArgs: chunkList(cmdArgs),
 		Env:     env,
 	}
 
@@ -566,7 +566,7 @@ func emitPR(
 
 	node := &Node{
 		Platform:         instance.Platform,
-		Cmds:             []Cmd{cmd},
+		Cmds:             cmdList(cmd),
 		Env:              env,
 		Inputs:           inputs,
 		Outputs:          outputs,

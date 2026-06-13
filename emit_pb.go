@@ -109,7 +109,7 @@ func emitPB(
 		outsChunk = append(outsChunk, (output).str())
 	}
 
-	cmdArgs := ArgChunks{blocks.head, outsChunk, blocks.mid, []STR{internStr(protoRelPath)}}
+	cmdArgs := chunkList(blocks.head, outsChunk, blocks.mid, strList(internStr(protoRelPath)))
 
 	if len(blocks.tail) > 0 {
 		cmdArgs = append(cmdArgs, blocks.tail)
@@ -186,19 +186,15 @@ func emitPB(
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: []Cmd{
-			{
-				CmdArgs: cmdArgs,
-				Cwd:     internStr(protocCwd),
-				Env:     env,
-			},
-		},
+		Cmds: cmdList(Cmd{CmdArgs: cmdArgs,
+			Cwd: internStr(protocCwd),
+			Env: env}),
 		Env: env,
 		// transitiveProtoImports and producerSourceInputs (the producer's
 		// transitive $(S) leaf sources behind a build-generated .proto — RUN_ANTLR
 		// grammar / template / jar / scripts — matching upstream's flat source
 		// closure) are shared caller slices: referenced as chunks, never copied.
-		Inputs:           InputChunks{inputs, transitiveProtoImports, producerSourceInputs},
+		Inputs:           inputList(inputs, transitiveProtoImports, producerSourceInputs),
 		Outputs:          outputs,
 		KV:               KV{P: pkPB, PC: pcYellow},
 		TargetProperties: targetProps,

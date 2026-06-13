@@ -107,12 +107,7 @@ func emitLD(
 	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	envFull := hostP.toolEnv()
 
-	cmds := []Cmd{
-		{CmdArgs: ArgChunks{cmd0}, Env: envVcsOnly},
-		{CmdArgs: ArgChunks{cmd1}, Env: envFull},
-		{CmdArgs: ArgChunks{cmd2}, Cwd: strB, Env: envFull},
-		{CmdArgs: ArgChunks{cmd3}, Env: envVcsOnly},
-	}
+	cmds := cmdList(Cmd{CmdArgs: chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: chunkList(cmd1), Env: envFull}, Cmd{CmdArgs: chunkList(cmd2), Cwd: strB, Env: envFull}, Cmd{CmdArgs: chunkList(cmd3), Env: envVcsOnly})
 
 	for i := range splitDwarfCmds {
 		splitDwarfCmds[i].Env = envVcsOnly
@@ -210,15 +205,13 @@ func emitVCSNode(emit Emitter, host *Platform) NodeRef {
 	output := bldVcsJson
 	node := &Node{
 		Platform: host,
-		Cmds: []Cmd{{CmdArgs: ArgChunks{[]STR{
-			internStr(currentYatoolPath()),
+		Cmds: cmdList(Cmd{CmdArgs: chunkList(strList(internStr(currentYatoolPath()),
 			argFetch.str(),
 			strBase64,
 			strE30,
-			output.str(),
-		}}}},
+			output.str()))}),
 		KV:               KV{P: pkCP, PC: pcYellow, ShowOut: true},
-		Outputs:          []VFS{output},
+		Outputs:          vfsList(output),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(16)},
 		Sandboxing:       true,
 		TargetProperties: TargetProperties{ModuleDir: "build/scripts"},
@@ -422,11 +415,7 @@ func composeLDSplitDwarfCmds(tc ModuleToolchain, outputPath string, enabled bool
 
 	debugPath := outputPath + ".debug"
 
-	return []Cmd{
-		{CmdArgs: ArgChunks{[]STR{tc.Objcopy, argOnlyKeepDebug.str(), internStr(outputPath), internStr(debugPath)}}},
-		{CmdArgs: ArgChunks{[]STR{tc.Strip, argStripDebug.str(), internStr(outputPath)}}},
-		{CmdArgs: ArgChunks{[]STR{tc.Objcopy, argRemoveSectionGnuDebuglink.str(), argAddGnuDebuglink.str(), internStr(debugPath), internStr(outputPath)}}},
-	}
+	return cmdList(Cmd{CmdArgs: chunkList(strList(tc.Objcopy, argOnlyKeepDebug.str(), internStr(outputPath), internStr(debugPath)))}, Cmd{CmdArgs: chunkList(strList(tc.Strip, argStripDebug.str(), internStr(outputPath)))}, Cmd{CmdArgs: chunkList(strList(tc.Objcopy, argRemoveSectionGnuDebuglink.str(), argAddGnuDebuglink.str(), internStr(debugPath), internStr(outputPath)))})
 }
 
 func composeLDInputs(modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts ScriptDeps) InputChunks {

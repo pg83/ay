@@ -43,21 +43,17 @@ func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	head := make([]STR, 0, 1+len(effectiveFlags))
 	head = append(head, (ragel6BinaryPath).str())
 	head = appendArgStr(head, effectiveFlags)
-	cmdArgs := ArgChunks{head, ragel6ConstArgs, {(outVFS).str(), (inVFS).str()}}
+	cmdArgs := chunkList(head, ragel6ConstArgs, strList((outVFS).str(), (inVFS).str()))
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: []Cmd{
-			{
-				CmdArgs: cmdArgs,
-				Env:     env,
-			},
-		},
+		Cmds: cmdList(Cmd{CmdArgs: cmdArgs,
+			Env: env}),
 		Env:              env,
-		Inputs:           InputChunks{{ragel6BinaryPath}, closure},
-		Outputs:          []VFS{outVFS},
+		Inputs:           inputList(vfsList(ragel6BinaryPath), closure),
+		Outputs:          vfsList(outVFS),
 		KV:               KV{P: pkR6, PC: pcYellow},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

@@ -231,7 +231,7 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 	}
 
 	relChunk := []STR{internStr(protoRelPath)}
-	cmdArgs := ArgChunks{pe.head, relChunk, pe.mid, relChunk}
+	cmdArgs := chunkList(pe.head, relChunk, pe.mid, relChunk)
 
 	if len(pe.tail) > 0 {
 		cmdArgs = append(cmdArgs, pe.tail)
@@ -277,9 +277,9 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 
 	pyPBNode := &Node{
 		Platform:         instance.Platform,
-		Cmds:             []Cmd{{CmdArgs: cmdArgs, Cwd: strS, Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}}},
+		Cmds:             cmdList(Cmd{CmdArgs: cmdArgs, Cwd: strS, Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}}),
 		Env:              EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
-		Inputs:           InputChunks{inputs},
+		Inputs:           inputList(inputs),
 		Outputs:          outputs,
 		KV:               pbKV,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleTag: tagPy3Proto},
@@ -355,7 +355,7 @@ func emitGeneratedPyProtoYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs [
 
 		// sourceInputs is shared across the pyOutputs loop — its own chunk,
 		// referenced, not copied per node.
-		nodeInputs := InputChunks{{py3ccBinary, py3ccSlowBin, pyOut}, sourceInputs}
+		nodeInputs := inputList(vfsList(py3ccBinary, py3ccSlowBin, pyOut), sourceInputs)
 
 		if i > 0 {
 			nodeInputs = append(nodeInputs, []VFS{pyOutputs[0]})
@@ -363,10 +363,10 @@ func emitGeneratedPyProtoYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs [
 
 		node := &Node{
 			Platform:         instance.Platform,
-			Cmds:             []Cmd{{CmdArgs: ArgChunks{cmdArgs}, Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}}},
+			Cmds:             cmdList(Cmd{CmdArgs: chunkList(cmdArgs), Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}}),
 			Env:              EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}},
 			Inputs:           nodeInputs,
-			Outputs:          []VFS{out},
+			Outputs:          vfsList(out),
 			KV:               KV{P: pkPY, PC: pcYellow},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleTag: tagPy3Proto},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -581,10 +581,10 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 
 		ref := ctx.emit.emit(&Node{
 			Platform:         instance.Platform,
-			Cmds:             []Cmd{{CmdArgs: ArgChunks{cmdArgs}, Env: env}},
+			Cmds:             cmdList(Cmd{CmdArgs: chunkList(cmdArgs), Env: env}),
 			Env:              env,
-			Inputs:           InputChunks{ch.inputs, tail},
-			Outputs:          []VFS{aux},
+			Inputs:           inputList(ch.inputs, tail),
+			Outputs:          vfsList(aux),
 			KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleTag: tagPy3Proto},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

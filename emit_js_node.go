@@ -34,20 +34,16 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 	}
 
 	// Chunked: the join closure (a shared cached slice) is referenced, not copied.
-	inputs := InputChunks{scripts[joinSrcs], srcVFSs, closure}
+	inputs := inputList(scripts[joinSrcs], srcVFSs, closure)
 
 	node := &Node{
 		Platform: statsPlatform,
-		Cmds: []Cmd{
-			{
-				CmdArgs: ArgChunks{cmdArgs},
-				Env:     env,
-			},
-		},
+		Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+			Env: env}),
 		Env:              env,
 		Inputs:           inputs,
 		KV:               KV{P: pkJS, PC: pcMagenta},
-		Outputs:          []VFS{outVFS},
+		Outputs:          vfsList(outVFS),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		usesResources:    usesPython3,

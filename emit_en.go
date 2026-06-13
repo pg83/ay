@@ -199,14 +199,10 @@ func emitEN(
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: []Cmd{
-			{
-				CmdArgs: ArgChunks{cmdArgs},
-				Env:     env,
-			},
-		},
+		Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+			Env: env}),
 		Env:              env,
-		Inputs:           InputChunks{{enumParserBin}, headerIncludeClosure},
+		Inputs:           inputList(vfsList(enumParserBin), headerIncludeClosure),
 		KV:               KV{P: pkEN, PC: pcYellow},
 		Outputs:          outputs,
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

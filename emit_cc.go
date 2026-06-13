@@ -133,18 +133,22 @@ func emitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 
 	blocks := in.CCBlocks
 
-	// All per-node STR tokens ride ONE block (sliced sub-chunks), instead of a
-	// fresh tiny slice per field.
-	tok := make([]STR, 4)
-	tok[0] = (inVFS).str()
-	tok[1] = argDashC.str()
-	tok[2] = argDashO.str()
-	tok[3] = (outVFS).str()
+	// All per-node STR tokens ride ONE arena block (sliced sub-chunks), instead
+	// of a fresh tiny slice per field.
+	tok := strList((inVFS).str(), argDashC.str(), argDashO.str(), (outVFS).str())
 	inChunk := tok[0:1:1]
-	cmdArgs := make(ArgChunks, 0, 9)
+
+	// Chunk-count ceiling: wrapcc(3) + fixed(5) + per-source(1) + cPost(1) + in(1).
+	const ccCmdArgsMax = 11
+
+	chunks := nodeChunkArena.alloc(ccCmdArgsMax)
+	k := 0
 
 	if len(instance.Platform.WrapccHead) > 0 {
-		cmdArgs = append(cmdArgs, instance.Platform.WrapccHead, inChunk, instance.Platform.WrapccTail)
+		chunks[k] = instance.Platform.WrapccHead
+		chunks[k+1] = inChunk
+		chunks[k+2] = instance.Platform.WrapccTail
+		k += 3
 	}
 
 	compiler, tail := blocks.cHead, blocks.cTail
@@ -153,22 +157,27 @@ func emitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		compiler, tail = blocks.cxxHead, blocks.cxxTail
 	}
 
-	cmdArgs = append(cmdArgs,
-		compiler,
-		instance.Platform.CCHead,
-		tok[1:4:4],
-		blocks.common,
-		tail)
+	chunks[k] = compiler
+	chunks[k+1] = instance.Platform.CCHead
+	chunks[k+2] = tok[1:4:4]
+	chunks[k+3] = blocks.common
+	chunks[k+4] = tail
+	k += 5
 
 	if len(in.PerSourceCFlags) > 0 {
-		cmdArgs = append(cmdArgs, appendArgStr(nil, in.PerSourceCFlags))
+		chunks[k] = argStrList(in.PerSourceCFlags)
+		k++
 	}
 
 	if !isCxx && len(blocks.cPost) > 0 {
-		cmdArgs = append(cmdArgs, blocks.cPost)
+		chunks[k] = blocks.cPost
+		k++
 	}
 
-	cmdArgs = append(cmdArgs, inChunk)
+	chunks[k] = inChunk
+	k++
+	nodeChunkArena.commit(k)
+	cmdArgs := ArgChunks(chunks[:k:k])
 
 	env := hostP.toolEnv()
 
@@ -180,23 +189,23 @@ func emitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 	wrap := len(instance.Platform.WrapccHead) > 0
 
 	// IncludeInputs is the full input window (root included) — see walkClosure.
-	allInputs := InputChunks{in.IncludeInputs}
+	var allInputs InputChunks
 
 	if wrap {
-		allInputs = append(allInputs, wrapccPyChunk)
+		allInputs = inputList(in.IncludeInputs, wrapccPyChunk)
+	} else {
+		allInputs = inputList(in.IncludeInputs)
 	}
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: []Cmd{
-			{
-				CmdArgs: cmdArgs,
-				Env:     env,
-			},
-		},
+		Cmds: cmdList(Cmd{
+			CmdArgs: cmdArgs,
+			Env:     env,
+		}),
 		Env:     env,
 		Inputs:  allInputs,
-		Outputs: []VFS{outVFS},
+		Outputs: vfsList(outVFS),
 		KV:      KV{P: pkCC, PC: pcGreen},
 		TargetProperties: func() TargetProperties {
 			tp := TargetProperties{ModuleDir: instance.Path.rel()}
@@ -457,7 +466,7 @@ func composeCCModuleArgBlocks(p *Platform, in *ModuleCCInputs) *CcModuleArgBlock
 
 	// C variant: the peer C extras follow the pipeline; the OWN C extras trail
 	// the per-source flags (cPost).
-	cTail := appendArgStr(nil, in.PeerCOnlyFlagsGlobal, builtinMacroDateTime, macroPrefixMapFlags)
+	cTail := argStrList(in.PeerCOnlyFlagsGlobal, builtinMacroDateTime, macroPrefixMapFlags)
 
 	// C++ variant: std + warning bundle + own extras (module + platform), the
 	// global flag buckets around the catboost define, then the shared tail.
@@ -472,12 +481,12 @@ func composeCCModuleArgBlocks(p *Platform, in *ModuleCCInputs) *CcModuleArgBlock
 	cxxTail = appendArgStr(cxxTail, cxxBucket, catboost, composePostCatboostBucket(cxxBucket), builtinMacroDateTime, macroPrefixMapFlags)
 
 	return &CcModuleArgBlocks{
-		cHead:   []STR{in.TC.CC},
-		cxxHead: []STR{in.TC.CXX},
+		cHead:   strList(in.TC.CC),
+		cxxHead: strList(in.TC.CXX),
 		common:  common,
 		cTail:   cTail,
 		cxxTail: cxxTail,
-		cPost:   appendArgStr(nil, in.COnlyFlags),
+		cPost:   argStrList(in.COnlyFlags),
 	}
 }
 

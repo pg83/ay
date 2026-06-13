@@ -147,15 +147,11 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 
 		cyRef := ctx.emit.emit(&Node{
 			Platform: instance.Platform,
-			Cmds: []Cmd{
-				{
-					CmdArgs: ArgChunks{cmdArgs},
-					Env:     env,
-				},
-			},
+			Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+				Env: env}),
 			Env:              env,
-			Inputs:           InputChunks{toolInputs},
-			Outputs:          []VFS{generatedVFS},
+			Inputs:           inputList(toolInputs),
+			Outputs:          vfsList(generatedVFS),
 			KV:               KV{P: pkCY, PC: pcYellow},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			TargetProperties: targetProps,

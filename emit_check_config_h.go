@@ -29,20 +29,14 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 		if !ok {
 			chRef = ctx.emit.emit(&Node{
 				Platform: instance.Platform,
-				Cmds: []Cmd{
-					{
-						CmdArgs: ArgChunks{[]STR{
-							d.tc.Python3,
-							argSBuildScriptsCheckConfigHPy.str(),
-							internStr(instance.Path.rel() + "/" + conf.string()),
-							(generatedVFS).str(),
-						}},
-						Env: env,
-					},
-				},
+				Cmds: cmdList(Cmd{CmdArgs: chunkList(strList(d.tc.Python3,
+					argSBuildScriptsCheckConfigHPy.str(),
+					internStr(instance.Path.rel()+"/"+conf.string()),
+					(generatedVFS).str())),
+					Env: env}),
 				Env:              env,
-				Inputs:           InputChunks{inputs},
-				Outputs:          []VFS{generatedVFS},
+				Inputs:           inputList(inputs),
+				Outputs:          vfsList(generatedVFS),
 				KV:               KV{P: pkCH, PC: pcYellow},
 				Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 				TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},

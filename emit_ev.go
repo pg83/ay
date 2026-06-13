@@ -75,25 +75,17 @@ func emitEV(
 	evH := build(evRelPath + ".pb.h")
 	srcVFS := source(evRelPath)
 
-	cmdArgs := ArgChunks{
-		{
-			tc.Python3,
-			internStr(pbWrapperPath),
-			argOutputs.str(),
-			(evCC).str(),
-			(evH).str(),
-			arg2.str(),
-			(protocBinary).str(),
-		},
-		evProtocConstArgs,
-		{
-			internStr("--plugin=protoc-gen-cpp_styleguide=" + cppStyleguideBinary.string()),
-			internStr(evRelPath),
-			internStr("--plugin=protoc-gen-event2cpp=" + event2cppBinary.string()),
-			argEvent2cppOutB.str(),
-			internStr("-I=" + evEventlogIncludePath),
-		},
-	}
+	cmdArgs := chunkList(strList(tc.Python3,
+		internStr(pbWrapperPath),
+		argOutputs.str(),
+		(evCC).str(),
+		(evH).str(),
+		arg2.str(),
+		(protocBinary).str()), evProtocConstArgs, strList(internStr("--plugin=protoc-gen-cpp_styleguide="+cppStyleguideBinary.string()),
+		internStr(evRelPath),
+		internStr("--plugin=protoc-gen-event2cpp="+event2cppBinary.string()),
+		argEvent2cppOutB.str(),
+		internStr("-I="+evEventlogIncludePath)))
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -137,16 +129,12 @@ func emitEV(
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: []Cmd{
-			{
-				CmdArgs: cmdArgs,
-				Cwd:     strS,
-				Env:     env,
-			},
-		},
+		Cmds: cmdList(Cmd{CmdArgs: cmdArgs,
+			Cwd: strS,
+			Env: env}),
 		Env:              env,
-		Inputs:           InputChunks{inputs, transitiveImports},
-		Outputs:          []VFS{evCC, evH},
+		Inputs:           inputList(inputs, transitiveImports),
+		Outputs:          vfsList(evCC, evH),
 		KV:               KV{P: pkEV, PC: pcYellow},
 		TargetProperties: targetProps,
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

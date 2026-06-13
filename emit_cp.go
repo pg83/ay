@@ -33,20 +33,16 @@ func emitJVCPG4(
 
 	// The fs_tools closure (shared table slice), jvInputs and closure (caller's
 	// slices) are referenced as their own chunks, never copied.
-	inputs := InputChunks{head, scripts[fsTools], jvInputs, closure}
+	inputs := inputList(head, scripts[fsTools], jvInputs, closure)
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: []Cmd{
-			{
-				CmdArgs: ArgChunks{cmdArgs},
-				Env:     env,
-			},
-		},
+		Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+			Env: env}),
 		Env:              env,
 		Inputs:           inputs,
 		KV:               KV{P: pkCP, PC: pcLightCyan},
-		Outputs:          []VFS{dst},
+		Outputs:          vfsList(dst),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		DepRefs:          []NodeRef{jvRef},
@@ -91,20 +87,16 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 		ownInputs = append(ownInputs, v)
 	}
 
-	inputs := InputChunks{scripts[fsTools], ownInputs}
+	inputs := inputList(scripts[fsTools], ownInputs)
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: []Cmd{
-			{
-				CmdArgs: ArgChunks{cmdArgs},
-				Env:     env,
-			},
-		},
+		Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+			Env: env}),
 		Env:              env,
 		Inputs:           inputs,
 		KV:               KV{P: pkCP, PC: pcLightCyan},
-		Outputs:          []VFS{dst},
+		Outputs:          vfsList(dst),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		DepRefs:          depRefs,

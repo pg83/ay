@@ -25,16 +25,12 @@ func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: []Cmd{
-			{
-				CmdArgs: ArgChunks{cmdArgs},
-				Cwd:     strB,
-				Env:     env,
-			},
-		},
+		Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+			Cwd: strB,
+			Env: env}),
 		Env:              env,
-		Inputs:           InputChunks{in.IncludeInputs},
-		Outputs:          []VFS{outVFS},
+		Inputs:           inputList(in.IncludeInputs),
+		Outputs:          vfsList(outVFS),
 		KV:               KV{P: pkAS, PC: pcLightGreen},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -161,15 +157,11 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 
 	node := &Node{
 		Platform: instance.Platform,
-		Cmds: []Cmd{
-			{
-				CmdArgs: ArgChunks{cmdArgs},
-				Env:     env,
-			},
-		},
+		Cmds: cmdList(Cmd{CmdArgs: chunkList(cmdArgs),
+			Env: env}),
 		Env:              env,
-		Inputs:           InputChunks{{yasmBinaryVFS}, in.IncludeInputs},
-		Outputs:          []VFS{outVFS},
+		Inputs:           inputList(vfsList(yasmBinaryVFS), in.IncludeInputs),
+		Outputs:          vfsList(outVFS),
 		KV:               KV{P: pkAS, PC: pcLightGreen},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
