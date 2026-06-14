@@ -110,8 +110,8 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 
 				return tp
 			}(),
-			Requirements:  Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			usesResources: usesPython3,
+			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			Resources:    usesPython3,
 		}
 
 		var toolRefs []NodeRef
@@ -196,7 +196,7 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 				TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 				Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 				DepRefs:          []NodeRef{},
-				usesResources:    usesPython3,
+				Resources:        usesPython3,
 			}
 
 			if py3Suffix {

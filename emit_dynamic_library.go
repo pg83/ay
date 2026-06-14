@@ -171,7 +171,7 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		Sandboxing:       true,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleLang: mlCPP, ModuleTag: tagDll, ModuleType: mtSO},
 		DepRefs:          depRefs,
-		usesResources:    instance.Platform.UsesLinkResources,
+		Resources:        instance.Platform.UsesLinkResources,
 	}
 
 	if fixElfRef != (NodeRef(0)) {

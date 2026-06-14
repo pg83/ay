@@ -106,7 +106,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 				Requirements:     reqs,
 				Sandboxing:       true,
 				DepRefs:          depRefs,
-				usesResources:    usesPython3Clang16,
+				Resources:        usesPython3Clang16,
 			}
 			ref := ctx.emit.emit(node)
 			bcRefs = append(bcRefs, ref)
@@ -140,7 +140,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 			Requirements:     reqs,
 			Sandboxing:       true,
 			DepRefs:          append([]NodeRef(nil), bcRefs...),
-			usesResources:    usesPython3Clang16,
+			Resources:        usesPython3Clang16,
 		}
 		ldRef := ctx.emit.emit(ldNode)
 
@@ -182,7 +182,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 			Requirements:     reqs,
 			Sandboxing:       true,
 			DepRefs:          []NodeRef{ldRef},
-			usesResources:    usesPython3Clang16,
+			Resources:        usesPython3Clang16,
 		}
 		opRef := ctx.emit.emit(optNode)
 

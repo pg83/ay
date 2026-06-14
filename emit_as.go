@@ -36,7 +36,7 @@ func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		KV:               KV{P: pkAS, PC: pcLightGreen},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		usesResources:    instance.Platform.UsesClangOnly,
+		Resources:        instance.Platform.UsesClangOnly,
 	}
 
 	return emit.emit(node), outVFS

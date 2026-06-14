@@ -39,7 +39,7 @@ type CanonBuf struct {
 	// so deps are never materialized onto the node. Set before writeNode.
 	uids *UidVec
 
-	// fetchRefs resolves a node's usesResources patterns to their FETCH node refs,
+	// fetchRefs resolves a node's Resources patterns to their FETCH node refs,
 	// so the resource fetch deps are folded into the uid preimage on the fly
 	// rather than stored on the node.
 	fetchRefs *DenseMap[STR, NodeRef]
@@ -99,14 +99,14 @@ func (c *CanonBuf) writeRefUIDs(refs []NodeRef) {
 }
 
 // writeDepRefUIDs serializes the node's build deps for the uid preimage: its
-// DepRefs followed by the resolved resource FETCH deps (usesResources), which
+// DepRefs followed by the resolved resource FETCH deps (Resources), which
 // is exactly what the "deps" array lists minus the separately-hashed
 // ForeignDepRefs. Resources are resolved on the fly through fetchRefs, never
 // stored on the node.
 func (c *CanonBuf) writeDepRefUIDs(n *Node) {
 	count := len(n.DepRefs)
 
-	for _, pat := range n.usesResources {
+	for _, pat := range n.Resources {
 		if _, ok := c.fetchRefs.get(pat); ok {
 			count++
 		}
@@ -120,7 +120,7 @@ func (c *CanonBuf) writeDepRefUIDs(n *Node) {
 		c.writeUint64(u.Lo)
 	}
 
-	for _, pat := range n.usesResources {
+	for _, pat := range n.Resources {
 		if ref, ok := c.fetchRefs.get(pat); ok {
 			u := c.uids.get(ref)
 			c.writeUint64(u.Hi)

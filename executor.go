@@ -66,7 +66,7 @@ type CommandResult struct {
 type NodeFuture struct {
 	node      *Node
 	uids      *UidVec                 // resolves a ref -> dep uid (per emitter; deps are not materialized)
-	fetchRefs *DenseMap[STR, NodeRef] // resolves usesResources -> FETCH ref (per emitter)
+	fetchRefs *DenseMap[STR, NodeRef] // resolves Resources -> FETCH ref (per emitter)
 	once      sync.Once
 	err       *Exception
 }

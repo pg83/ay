@@ -171,9 +171,9 @@ func emitCF(
 
 			return tp
 		}(),
-		Requirements:  Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:       []NodeRef{},
-		usesResources: usesPython3,
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		DepRefs:      []NodeRef{},
+		Resources:    usesPython3,
 	}
 
 	return emit.emit(node), outVFS

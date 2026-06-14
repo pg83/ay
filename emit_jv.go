@@ -110,9 +110,9 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs InputChunks, outp
 
 			return tp
 		}(),
-		Requirements:  Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:       depRefs,
-		usesResources: usesPython3JDK17,
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		DepRefs:      depRefs,
+		Resources:    usesPython3JDK17,
 	}
 
 	return emit.emit(node)

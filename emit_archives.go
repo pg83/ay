@@ -105,7 +105,7 @@ func emitArchive(
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		DepRefs:          depRefs,
-		usesResources:    instance.Platform.UsesPython3Clang,
+		Resources:        instance.Platform.UsesPython3Clang,
 	}
 
 	arRef := emit.emit(n)

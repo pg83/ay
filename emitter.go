@@ -50,7 +50,7 @@ type BufferedEmitter struct {
 	fs FS
 	// fetchRefs maps a resource pattern (CLANG20, YMAKE_PYTHON3, …) to its FETCH
 	// node; the emitter owns it, GenCtx shares the pointer to populate it
-	// (emitResourceFetch). Node.buildDeps resolves usesResources through it, so
+	// (emitResourceFetch). Node.buildDeps resolves Resources through it, so
 	// the resource fetch deps are materialized into the graph/uid on the fly
 	// rather than stored on every consuming node.
 	fetchRefs *DenseMap[STR, NodeRef]
@@ -129,7 +129,7 @@ type Graph struct {
 	// uids resolves each node's DepRefs/ForeignDepRefs (by id) to dep uids at
 	// JSON-write time; deps are never materialized onto the node.
 	uids *UidVec `json:"-"`
-	// fetchRefs resolves a node's usesResources patterns to their FETCH node refs
+	// fetchRefs resolves a node's Resources patterns to their FETCH node refs
 	// at JSON-write time (Node.buildDeps), so resource fetch deps are part of the
 	// "deps" array without being stored on the node.
 	fetchRefs *DenseMap[STR, NodeRef] `json:"-"`

@@ -218,8 +218,8 @@ func emitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 
 			return tp
 		}(),
-		Requirements:  Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		usesResources: instance.Platform.CCUsesResources,
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		Resources:    instance.Platform.CCUsesResources,
 	}
 
 	if len(in.ExtraDepRefs) > 0 {
