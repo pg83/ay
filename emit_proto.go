@@ -324,9 +324,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		}
 
 		for _, p := range pe.extraPlugins {
-			if p.LDRef != NodeRef(0) {
-				pbGenRefs = append(pbGenRefs, p.LDRef)
-			}
+			pbGenRefs = append(pbGenRefs, depRefs(p.LDRef)...)
 		}
 
 		registerBoundGeneratedParsedOutput(ctx, instance, pkPB, pbH, pbHParsed, pbRef, pbGenRefs)

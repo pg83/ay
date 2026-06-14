@@ -225,13 +225,7 @@ func emitResourceObjcopy(
 			Resources:        instance.Platform.UsesPython3Clang,
 		}
 
-		if oc.rescompilerLDRef != (NodeRef(0)) {
-			node.DepRefs = append(node.DepRefs, oc.rescompilerLDRef)
-		}
-
-		if oc.rescompressorLDRef != (NodeRef(0)) {
-			node.DepRefs = append(node.DepRefs, oc.rescompressorLDRef)
-		}
+		node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
 
 		// The inputs set above is complete by now, so the deduper is free for the
 		// dep-ref set.
@@ -389,13 +383,7 @@ func emitKvOnlyObjcopyNode(
 		Resources:        instance.Platform.UsesPython3Clang,
 	}
 
-	if oc.rescompilerLDRef != (NodeRef(0)) {
-		node.DepRefs = append(node.DepRefs, oc.rescompilerLDRef)
-	}
-
-	if oc.rescompressorLDRef != (NodeRef(0)) {
-		node.DepRefs = append(node.DepRefs, oc.rescompressorLDRef)
-	}
+	node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
 
 	ref := ctx.emit.emit(node)
 
@@ -471,13 +459,7 @@ func emitYaConfJSONObjcopy(
 			Resources:        instance.Platform.UsesPython3Clang,
 		}
 
-		if oc.rescompilerLDRef != (NodeRef(0)) {
-			node.DepRefs = append(node.DepRefs, oc.rescompilerLDRef)
-		}
-
-		if oc.rescompressorLDRef != (NodeRef(0)) {
-			node.DepRefs = append(node.DepRefs, oc.rescompressorLDRef)
-		}
+		node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
 
 		out = append(out, &ObjcopyEmit{Ref: ctx.emit.emit(node), Out: outputObj})
 	}
@@ -683,23 +665,9 @@ func emitPySrcObjcopy(
 				Resources:        instance.Platform.UsesPython3Clang,
 			}
 
-			if oc.rescompilerLDRef != (NodeRef(0)) {
-				node.DepRefs = append(node.DepRefs, oc.rescompilerLDRef)
-			}
+			node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
 
-			if oc.rescompressorLDRef != (NodeRef(0)) {
-				node.DepRefs = append(node.DepRefs, oc.rescompressorLDRef)
-			}
-
-			exclude := []NodeRef{}
-
-			if oc.rescompilerLDRef != (NodeRef(0)) {
-				exclude = append(exclude, oc.rescompilerLDRef)
-			}
-
-			if oc.rescompressorLDRef != (NodeRef(0)) {
-				exclude = append(exclude, oc.rescompressorLDRef)
-			}
+			exclude := depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)
 
 			if extras := resolveCodegenDepRefsExt(ctx, instance, nil, ch.inps, exclude...); len(extras) > 0 {
 				node.DepRefs = append(node.DepRefs, extras...)

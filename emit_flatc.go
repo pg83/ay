@@ -132,21 +132,13 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	var depRefs []NodeRef
-	var foreignDepRefs []NodeRef
-
-	if flatcLDRef != (NodeRef(0)) {
-		foreignDepRefs = []NodeRef{flatcLDRef}
-	}
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Cwd: strB,
 			Env: env}),
-		DepRefs:          depRefs,
 		Env:              env,
-		ForeignDepRefs:   foreignDepRefs,
+		ForeignDepRefs:   depRefs(flatcLDRef),
 		Inputs:           na.inputList(na.vfsList(flatcBinary, flatcWrapperVFS, srcVFS), transitiveImports),
 		KV:               KV{P: pkFL, PC: pcLightGreen},
 		Outputs:          na.vfsList(headerVFS, cppVFS, bfbsVFS),

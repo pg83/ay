@@ -63,14 +63,10 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 			// Walk include closure (same as emitCodegenDownstreamCC for generated CC).
 			closure := walkClosure(ctx.scannerFor(instance), inputVFS, in.ScanCfg)
 
-			var depRefs []NodeRef
+			deps := depRefs(producer)
 
-			if producer != (NodeRef(0)) {
-				depRefs = []NodeRef{producer}
-			}
-
-			if extra := resolveCodegenDepRefs(ctx, instance, closure, depRefs...); len(extra) > 0 {
-				depRefs = append(depRefs, extra...)
+			if extra := resolveCodegenDepRefs(ctx, instance, closure, deps...); len(extra) > 0 {
+				deps = append(deps, extra...)
 			}
 
 			// closure is a shared cached slice (closureOf returns it uncopied) —
@@ -105,7 +101,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 				TargetProperties: tp,
 				Requirements:     reqs,
 				Sandboxing:       true,
-				DepRefs:          depRefs,
+				DepRefs:          deps,
 				Resources:        usesPython3Clang16,
 			}
 			ref := ctx.emit.emit(node)

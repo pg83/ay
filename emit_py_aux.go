@@ -189,10 +189,7 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 
 		chDeps := append([]NodeRef(nil), deps...)
 		chDeps = append(chDeps, ch.deps...)
-
-		if rescompilerRef != (NodeRef(0)) {
-			chDeps = append(chDeps, rescompilerRef)
-		}
+		chDeps = append(chDeps, depRefs(rescompilerRef)...)
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 

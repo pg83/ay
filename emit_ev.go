@@ -105,29 +105,6 @@ func emitEV(
 		targetProps.ModuleTag = moduleTag
 	}
 
-	var depRefs []NodeRef
-	var foreignDepRefs []NodeRef
-
-	{
-		var toolRefs []NodeRef
-
-		if cppStyleguideLDRef != (NodeRef(0)) {
-			toolRefs = append(toolRefs, cppStyleguideLDRef)
-		}
-
-		if protocLDRef != (NodeRef(0)) {
-			toolRefs = append(toolRefs, protocLDRef)
-		}
-
-		if event2cppLDRef != (NodeRef(0)) {
-			toolRefs = append(toolRefs, event2cppLDRef)
-		}
-
-		if len(toolRefs) > 0 {
-			foreignDepRefs = toolRefs
-		}
-	}
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
@@ -139,8 +116,7 @@ func emitEV(
 		KV:               KV{P: pkEV, PC: pcYellow},
 		TargetProperties: targetProps,
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:          depRefs,
-		ForeignDepRefs:   foreignDepRefs,
+		ForeignDepRefs:   depRefs(cppStyleguideLDRef, protocLDRef, event2cppLDRef),
 		Resources:        usesPython3,
 	}
 
