@@ -175,3 +175,36 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 
 	return emit.emit(node), outVFS
 }
+
+func emitLibraryAsmSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
+	asIn := in
+	srcVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
+
+	scanIn := in
+
+	if len(d.asmAddIncl) > 0 {
+		// `ADDINCL(FOR asm X)` (yatool/build/conf/proto.conf:104-106
+		// _ORDER_ADDINCL routes the FOR asm bucket via ADDINCL) feeds
+		// the assembler's -I list AND the include scanner's search
+		// path. Without it the .asm's `%include "X/..."` resolves
+		// against nothing — and yasm's command misses `-I X` entirely,
+		// diverging from REF (e.g. yt/yt/core/misc/isa_crc64 needs
+		// -I=$(S)/yt/yt/core/misc/isa_crc64/include for reg_sizes.asm).
+		scanIn.AddIncl = dedupVFS(in.AddIncl, d.asmAddIncl)
+		scanIn.ScanCfg = newScanContext(ctx.parsers, scanIn.AddIncl, scanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+		asIn.AddIncl = scanIn.AddIncl
+	}
+
+	asIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), srcVFS, scanIn.ScanCfg)
+
+	if instance.Platform.ISA == ISAX8664 && strings.HasSuffix(srcRel, ".asm") {
+		yasmLD, _ := ctx.tool(argContribToolsYasm)
+		ref, outPath := emitASYasm(instance, srcRel, srcVFS, asIn, yasmLD, ctx.emit)
+
+		return &SourceEmit{Ref: ref, OutPath: outPath}
+	}
+
+	ref, outPath := emitAS(instance, srcRel, srcVFS, asIn, ctx.host, ctx.emit)
+
+	return &SourceEmit{Ref: ref, OutPath: outPath}
+}

@@ -64,3 +64,42 @@ func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 
 	emit.emitReserved(node, id)
 }
+
+func emitLibraryRagel6Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
+	ragelLDRef, ragelBinaryVFS := ctx.tool(argContribToolsRagel6)
+
+	rl6SourceVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
+	r6Out := ragel6OutVFS(instance, srcRel)
+
+	r6Parsed := ctx.scannerFor(instance).parsers.sourceParsedBuckets(rl6SourceVFS, nil).bucket(parsedIncludesCpp)
+
+	// Register the generated cpp's induced includes (self-include + the
+	// .rl6's C/C++ directives) BEFORE walking, so ONE window serves both
+	// nodes: the induced directives pull the C closure, and the .rl6's own
+	// walkable edges — its ragel-native %includes — pull the natively-
+	// included ragel files WITHOUT their C headers (upstream
+	// TRagelIncludeProcessor keeps native deps and ParsedIncls apart).
+	r6Ref := ctx.emit.reserve()
+	registerBoundGeneratedParsedOutput(ctx, instance, pkR6, r6Out, r6Parsed, r6Ref, []NodeRef{ragelLDRef})
+
+	window := walkClosure(ctx.scannerFor(instance), r6Out, in.ScanCfg)
+
+	// The ragel compiler only reads source files (the .rl6 source + any
+	// natively-included .rl6 files + C/C++ headers it parses). Build-generated
+	// files (the cpp itself, proto .pb.h headers pulled in via the C++ include
+	// chain) must not appear as direct inputs — the ragel binary doesn't read
+	// them.
+	rl6Closure := keepOnlySourceVFS(filterEnSerializedSiblings(window))
+
+	emitR6(instance, srcRel, ragelLDRef, ragelBinaryVFS, in.Ragel6Flags, rl6Closure, r6Ref, ctx.emit)
+
+	ccSrcRel := strings.TrimPrefix(r6Out.rel(), instance.Path.rel()+"/")
+
+	ccIn := in
+	ccIn.IncludeInputs = window
+	ccIn.PerSourceCFlags = append(append([]ARG(nil), in.PerSourceCFlags...), argWnoImplicitFallthrough)
+	ccIn.ExtraDepRefs = append([]NodeRef{r6Ref}, resolveCodegenDepRefs(ctx, instance, window, r6Ref)...)
+	ccRef, ccOut, _ := emitCC(instance, ccSrcRel, r6Out, ccIn, ctx.host, ctx.emit)
+
+	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
+}

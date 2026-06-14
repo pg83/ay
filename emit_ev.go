@@ -122,3 +122,59 @@ func emitEV(
 
 	return emit.emit(node)
 }
+
+func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
+	evSource := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
+	evRelPath := evSource.rel()
+
+	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
+	cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
+	event2cppLDRef, event2cppBinary := ctx.tool(argToolsEvent2cpp)
+
+	evImports := walkClosureTail(ctx.scannerFor(instance), evSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()).ScanCfg)
+	evRef := emitEV(
+		instance, evRelPath,
+		cppStyleguideLDRef, protocLDRef, event2cppLDRef,
+		cppStyleguideBinary, protocBinary, event2cppBinary,
+		0, evImports, d.tc, ctx.emit)
+
+	evH := build(evRelPath + ".pb.h")
+	evPbCC := build(evRelPath + ".pb.cc")
+
+	{
+		directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, "")
+		evExtras := evWitnessExtras(evRelPath, evPbCC)
+		evHParsed := make([]IncludeDirective, 0, len(directImports)+len(protobufRuntimeDirectives)+len(evExtras))
+		evHParsed = append(evHParsed, directImports...)
+		evHParsed = append(evHParsed, protobufRuntimeDirectives...)
+		evHParsed = append(evHParsed, evExtras...)
+		registerBoundGeneratedParsedOutput(ctx, instance, pkEV, evH, evHParsed, evRef, []NodeRef{event2cppLDRef})
+		evCCParsed := make([]IncludeDirective, 0, 1+len(protobufRuntimeDirectives))
+		evCCParsed = append(evCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(evH.rel())})
+		evCCParsed = append(evCCParsed, protobufRuntimeDirectives...)
+		registerBoundGeneratedParsedOutput(ctx, instance, pkEV, evPbCC, evCCParsed, evRef, []NodeRef{event2cppLDRef})
+	}
+
+	evPbCCSuffix := srcRel + ".pb.cc"
+	ccIn := in
+	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), evPbCC, in.ScanCfg)
+	{
+		filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
+
+		for _, v := range ccIn.IncludeInputs {
+			if v == evH {
+				continue
+			}
+
+			filtered = append(filtered, v)
+		}
+
+		ccIn.IncludeInputs = filtered
+	}
+	wireFormatVFS := source(pbRuntimeBase + "google/protobuf/wire_format.h")
+	ccIn.IncludeInputs = append(ccIn.IncludeInputs, wireFormatVFS)
+	ccIn.ExtraDepRefs = append([]NodeRef{evRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, evRef)...)
+	ref, outPath, _ := emitCC(instance, evPbCCSuffix, evPbCC, ccIn, ctx.host, ctx.emit)
+
+	return &SourceEmit{Ref: ref, OutPath: outPath}
+}
