@@ -511,38 +511,20 @@ func emitPR(
 		outputs = append(outputs, outVFSByToken[f])
 	}
 
-	toolRefs := make([]NodeRef, 0, len(auxTools)+1)
-	// The inputs set above is complete by now, so the deduper is free for the
-	// tool-ref set.
-	deduper.reset()
-	appendToolRef := func(ref NodeRef) {
-		if ref == (NodeRef(0)) {
-			return
-		}
-
-		if !deduper.add(VFS(ref)) {
-			return
-		}
-
-		toolRefs = append(toolRefs, ref)
-	}
+	var toolRefs []NodeRef
 
 	for _, tool := range auxTools {
-		appendToolRef(tool.ref)
+		toolRefs = append(toolRefs, depRefs(tool.ref)...)
 	}
 
-	appendToolRef(toolLDRef)
+	toolRefs = append(toolRefs, depRefs(toolLDRef)...)
 
-	depRefs := append([]NodeRef(nil), extraDepRefs...)
+	deps := append([]NodeRef(nil), extraDepRefs...)
 
-	var foreignDepRefs []NodeRef
-
-	if len(toolRefs) > 0 {
-		// toolRefs is a fresh local, not mutated after this; the node owns it as
-		// its foreign (tool) deps. The graph's "deps" array is DepRefs ∪
-		// ForeignDepRefs (Node.buildDeps), so the tools are not duplicated here.
-		foreignDepRefs = toolRefs
-	}
+	// toolRefs is a fresh local, not mutated after this; the node owns it as its
+	// foreign (tool) deps. The graph's "deps" array is DepRefs ∪ ForeignDepRefs
+	// (Node.buildDeps), so the tools are not duplicated here.
+	foreignDepRefs := toolRefs
 
 	cmd := Cmd{
 		CmdArgs: na.chunkList(cmdArgs),
@@ -566,7 +548,7 @@ func emitPR(
 		KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:          depRefs,
+		DepRefs:          deps,
 		ForeignDepRefs:   foreignDepRefs,
 	}
 

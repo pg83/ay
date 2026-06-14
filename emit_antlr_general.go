@@ -65,7 +65,7 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			outputs = append(outputs, vfs)
 		}
 
-		depRefs := resolveCodegenDepRefsExt(ctx, instance, nil, inputs)
+		deps := resolveCodegenDepRefsExt(ctx, instance, nil, inputs)
 		args := antlrRunCmdArgs(instance, run, inVFSByToken, outVFSByToken)
 		cwd := ""
 
@@ -73,7 +73,7 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			cwd = run.CWD.string()
 		}
 
-		jvRef := emitJVGeneral(instance, jarVFS, args, inputs, outputs, cwd, depRefs, cfModuleTag(d, instance), d.tc, ctx.emit)
+		jvRef := emitJVGeneral(instance, jarVFS, args, inputs, outputs, cwd, deps, cfModuleTag(d, instance), d.tc, ctx.emit)
 
 		{
 			// The JV node's full $(S) input set = source-rooted IN/CF inputs plus

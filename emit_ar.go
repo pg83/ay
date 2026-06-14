@@ -156,9 +156,9 @@ func emitARNode(
 		targetProperties.ModuleTag = tag
 	}
 
-	depRefs := make([]NodeRef, 0, len(objRefs)+len(peerArchiveRefs))
-	depRefs = append(depRefs, objRefs...)
-	depRefs = append(depRefs, peerArchiveRefs...)
+	deps := make([]NodeRef, 0, len(objRefs)+len(peerArchiveRefs))
+	deps = append(deps, objRefs...)
+	deps = append(deps, peerArchiveRefs...)
 
 	n := &Node{
 		Platform: instance.Platform,
@@ -170,7 +170,7 @@ func emitARNode(
 		Outputs:          na.vfsList(archivePath),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: targetProperties,
-		DepRefs:          depRefs,
+		DepRefs:          deps,
 		Resources:        instance.Platform.UsesPython3Clang,
 	}
 
