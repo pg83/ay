@@ -105,6 +105,22 @@ func (n *Node) buildDeps(fetchRefs *DenseMap[STR, NodeRef]) func(func(NodeRef) b
 	}
 }
 
+// depRefs collects refs into a dep slice, dropping NodeRef(0) — the "absent"
+// sentinel emit sites use for an optional tool or producer that was not resolved
+// (node 0 is real, but it is never one of these optional refs). Returns nil when
+// every ref is zero, matching a left-nil DepRefs/ForeignDepRefs.
+func depRefs(refs ...NodeRef) []NodeRef {
+	var out []NodeRef
+
+	for _, r := range refs {
+		if r != 0 {
+			out = append(out, r)
+		}
+	}
+
+	return out
+}
+
 func nodeHasHostTag(tags []STR) bool {
 	for _, t := range tags {
 		if t == strTool {

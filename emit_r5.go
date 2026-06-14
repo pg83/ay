@@ -35,15 +35,6 @@ func emitR5(
 		Env: env,
 	}
 	inputs := []VFS{ragel5BinPath, rlgenCdBinPath, srcVFS}
-	depRefs := make([]NodeRef, 0, 2)
-
-	if ragel5LD != (NodeRef(0)) {
-		depRefs = append(depRefs, ragel5LD)
-	}
-
-	if rlgenCdLD != (NodeRef(0)) {
-		depRefs = append(depRefs, rlgenCdLD)
-	}
 
 	node := &Node{
 		Platform:         instance.Platform,
@@ -54,7 +45,7 @@ func emitR5(
 		KV:               KV{P: pkR5, PC: pcYellow},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs:   depRefs,
+		ForeignDepRefs:   depRefs(ragel5LD, rlgenCdLD),
 	}
 
 	return emit.emit(node), tmpVFS, cppVFS

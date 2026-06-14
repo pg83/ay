@@ -142,39 +142,16 @@ func emitPB(
 		targetProps.ModuleTag = moduleTag
 	}
 
-	var depRefs []NodeRef
-	var foreignDepRefs []NodeRef
+	foreignDepRefs := depRefs(cppStyleguideLDRef, grpcCppLDRef, protocLDRef)
 
-	if cppStyleguideLDRef != (NodeRef(0)) || protocLDRef != (NodeRef(0)) || grpcCppLDRef != (NodeRef(0)) || len(extraPlugins) > 0 {
-		var toolRefs []NodeRef
-
-		if cppStyleguideLDRef != (NodeRef(0)) {
-			toolRefs = append(toolRefs, cppStyleguideLDRef)
-		}
-
-		if grpcCppLDRef != (NodeRef(0)) {
-			toolRefs = append(toolRefs, grpcCppLDRef)
-		}
-
-		if protocLDRef != (NodeRef(0)) {
-			toolRefs = append(toolRefs, protocLDRef)
-		}
-
-		for _, plugin := range extraPlugins {
-			if plugin.LDRef == (NodeRef(0)) {
-				continue
-			}
-
-			toolRefs = append(toolRefs, plugin.LDRef)
-		}
-
-		foreignDepRefs = toolRefs
+	for _, plugin := range extraPlugins {
+		foreignDepRefs = append(foreignDepRefs, depRefs(plugin.LDRef)...)
 	}
 
 	// Producer refs for build-generated proto sources (e.g. RUN_ANTLR -lang
 	// protobuf): without these the producer JV is unreachable from the LD
 	// root closure and gets DFS-pruned at finalize.
-	depRefs = append(depRefs, extraDepRefs...)
+	deps := append([]NodeRef(nil), extraDepRefs...)
 
 	// A build-generated .proto (protoSrcOverride set) lives under $(B); protoc
 	// runs from $(B) so its relative `-I=./` and the proto path resolve to the
@@ -200,7 +177,7 @@ func emitPB(
 		KV:               KV{P: pkPB, PC: pcYellow},
 		TargetProperties: targetProps,
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:          depRefs,
+		DepRefs:          deps,
 		ForeignDepRefs:   foreignDepRefs,
 		Resources:        usesPython3,
 	}

@@ -114,15 +114,7 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 			Resources:    usesPython3,
 		}
 
-		var toolRefs []NodeRef
-
-		if py3ccLDRef != (NodeRef(0)) {
-			toolRefs = append(toolRefs, py3ccLDRef)
-		}
-
-		if py3ccSlowLDRef != (NodeRef(0)) {
-			toolRefs = append(toolRefs, py3ccSlowLDRef)
-		}
+		toolRefs := depRefs(py3ccLDRef, py3ccSlowLDRef)
 
 		if generatedInputs != nil {
 			if extras := resolveCodegenDepRefsExt(ctx, instance, nil, inputs, toolRefs...); len(extras) > 0 {
@@ -130,9 +122,7 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 			}
 		}
 
-		if len(toolRefs) > 0 {
-			node.ForeignDepRefs = toolRefs
-		}
+		node.ForeignDepRefs = toolRefs
 
 		pyRef := ctx.emit.emit(node)
 

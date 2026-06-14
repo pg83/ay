@@ -155,10 +155,10 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 
 	inputs := composeDynLibInputs(na, peerArchivePaths, pluginPaths, fixElfPath, instance.Path.rel(), d.exportsScript.string(), ctx.scripts)
 
-	depRefs := make([]NodeRef, 0, len(peerArchiveRefs)+len(pluginRefs)+1)
-	depRefs = append(depRefs, peerArchiveRefs...)
-	depRefs = append(depRefs, pluginRefs...)
-	depRefs = append(depRefs, emitVCSNode(ctx.emit, ctx.host))
+	deps := make([]NodeRef, 0, len(peerArchiveRefs)+len(pluginRefs)+1)
+	deps = append(deps, peerArchiveRefs...)
+	deps = append(deps, pluginRefs...)
+	deps = append(deps, emitVCSNode(ctx.emit, ctx.host))
 
 	n := &Node{
 		Platform:         instance.Platform,
@@ -170,13 +170,11 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Sandboxing:       true,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleLang: mlCPP, ModuleTag: tagDll, ModuleType: mtSO},
-		DepRefs:          depRefs,
+		DepRefs:          deps,
 		Resources:        instance.Platform.UsesLinkResources,
 	}
 
-	if fixElfRef != (NodeRef(0)) {
-		n.ForeignDepRefs = []NodeRef{fixElfRef}
-	}
+	n.ForeignDepRefs = depRefs(fixElfRef)
 
 	ref := ctx.emit.emit(n)
 	addInclGlobal := dedupVFS(d.addInclGlobal, peerAddInclGlobal)

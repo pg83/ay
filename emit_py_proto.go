@@ -239,18 +239,10 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 		cmdArgs = append(cmdArgs, pe.tail)
 	}
 
-	toolRefs := make([]NodeRef, 0, 3)
+	toolRefs := depRefs(protocLDRef, pe.grpcPyRef)
 
-	if protocLDRef != (NodeRef(0)) {
-		toolRefs = append(toolRefs, protocLDRef)
-	}
-
-	if pe.grpcPyRef != (NodeRef(0)) {
-		toolRefs = append(toolRefs, pe.grpcPyRef)
-	}
-
-	if !d.noMypy && pe.mypyRef != (NodeRef(0)) {
-		toolRefs = append(toolRefs, pe.mypyRef)
+	if !d.noMypy {
+		toolRefs = append(toolRefs, depRefs(pe.mypyRef)...)
 	}
 
 	inputs := []VFS{protocBinary, pbPyWrapperVFS, source(protoRelPath)}
@@ -344,15 +336,7 @@ func emitGeneratedPyProtoYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs [
 			(out).str(),
 		}
 		deps := []NodeRef{pyPBRef}
-		var toolRefs []NodeRef
-
-		if py3ccRef != (NodeRef(0)) {
-			toolRefs = append(toolRefs, py3ccRef)
-		}
-
-		if py3ccSlowRef != (NodeRef(0)) {
-			toolRefs = append(toolRefs, py3ccSlowRef)
-		}
+		toolRefs := depRefs(py3ccRef, py3ccSlowRef)
 
 		// sourceInputs is shared across the pyOutputs loop — its own chunk,
 		// referenced, not copied per node.
@@ -548,11 +532,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 		cmdArgs := []STR{internStr(rescompilerBinPath), (aux).str()}
 		cmdArgs = appendInternStrs(cmdArgs, ch.cmdArgs)
 
-		deps := append([]NodeRef(nil), ch.deps...)
-
-		if rescompilerRef != (NodeRef(0)) {
-			deps = append(deps, rescompilerRef)
-		}
+		deps := append(append([]NodeRef(nil), ch.deps...), depRefs(rescompilerRef)...)
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 

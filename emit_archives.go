@@ -85,12 +85,7 @@ func emitArchive(
 		inputs = append(inputs, p)
 	}
 
-	depRefs := make([]NodeRef, 0, len(producerRefs)+1)
-	depRefs = append(depRefs, producerRefs...)
-
-	if toolLDRef != (NodeRef(0)) {
-		depRefs = append(depRefs, toolLDRef)
-	}
+	deps := append(append([]NodeRef(nil), producerRefs...), depRefs(toolLDRef)...)
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -104,7 +99,7 @@ func emitArchive(
 		Outputs:          na.vfsList(archiveVFS),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-		DepRefs:          depRefs,
+		DepRefs:          deps,
 		Resources:        instance.Platform.UsesPython3Clang,
 	}
 

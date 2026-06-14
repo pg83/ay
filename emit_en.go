@@ -184,13 +184,8 @@ func emitEN(
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	depRefs := append([]NodeRef(nil), depENRefs...)
-
-	var foreignDepRefs []NodeRef
-
-	if enumParserLD != (NodeRef(0)) {
-		foreignDepRefs = []NodeRef{enumParserLD}
-	}
+	deps := append([]NodeRef(nil), depENRefs...)
+	foreignDepRefs := depRefs(enumParserLD)
 
 	node := &Node{
 		Platform: instance.Platform,
@@ -203,7 +198,7 @@ func emitEN(
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Sandboxing:       true,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-		DepRefs:          depRefs,
+		DepRefs:          deps,
 		ForeignDepRefs:   foreignDepRefs,
 	}
 
