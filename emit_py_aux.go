@@ -222,7 +222,7 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 
 		inputs := na.inputList(ch.inputs, tail)
 
-		if extras := resolveCodegenDepRefsExt(ctx, instance, nil, ch.inputs, chDeps...); len(extras) > 0 {
+		if extras := resolveCodegenDepRefs(ctx, instance, ch.inputs, chDeps...); len(extras) > 0 {
 			chDeps = append(chDeps, extras...)
 		}
 

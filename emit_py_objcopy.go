@@ -669,7 +669,7 @@ func emitPySrcObjcopy(
 
 			exclude := depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)
 
-			if extras := resolveCodegenDepRefsExt(ctx, instance, nil, ch.inps, exclude...); len(extras) > 0 {
+			if extras := resolveCodegenDepRefs(ctx, instance, ch.inps, exclude...); len(extras) > 0 {
 				node.DepRefs = append(node.DepRefs, extras...)
 			}
 
