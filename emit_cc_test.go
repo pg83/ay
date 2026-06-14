@@ -361,8 +361,8 @@ func TestEmitCC_WrapccPrefix_NonOpensource(t *testing.T) {
 	}
 
 	// YMAKE_PYTHON3 joins the CC deps (the wrapper runs under it).
-	if !strsContain(node.usesResources, resourcePatternYMakePython3) {
-		t.Errorf("wrapped CC usesResources missing YMAKE_PYTHON3: %v", node.usesResources)
+	if !strsContain(node.Resources, resourcePatternYMakePython3) {
+		t.Errorf("wrapped CC Resources missing YMAKE_PYTHON3: %v", node.Resources)
 	}
 }
 
@@ -382,8 +382,8 @@ func TestEmitCC_NoWrapcc_Opensource(t *testing.T) {
 		t.Errorf("opensource CC node must not list wrapcc.py as input: %v", vfsStrings(node.flatInputs()))
 	}
 
-	if strsContain(node.usesResources, resourcePatternYMakePython3) {
-		t.Errorf("opensource CC node must not depend on YMAKE_PYTHON3: %v", node.usesResources)
+	if strsContain(node.Resources, resourcePatternYMakePython3) {
+		t.Errorf("opensource CC node must not depend on YMAKE_PYTHON3: %v", node.Resources)
 	}
 }
 

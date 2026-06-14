@@ -67,7 +67,7 @@ func emitBI(
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          []NodeRef{},
-		usesResources:    instance.Platform.UsesPython3Clang,
+		Resources:        instance.Platform.UsesPython3Clang,
 	}
 
 	return emit.emit(node)

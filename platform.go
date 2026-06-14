@@ -114,7 +114,7 @@ type Platform struct {
 	WrapccTail []STR
 
 	// CCUsesResources is the fetched-resource list every CC node on this platform
-	// carries in Node.usesResources: the version-specific CLANG, plus YMAKE_PYTHON3 when
+	// carries in Node.Resources: the version-specific CLANG, plus YMAKE_PYTHON3 when
 	// the wrapcc.py wrapper is active (it runs under that python). Computed once per
 	// platform and shared read-only across CC nodes. The sibling vectors cover the
 	// other per-platform resource sets the emitters attach (python3+clang for

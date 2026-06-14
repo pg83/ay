@@ -438,7 +438,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	scriptTbl := buildScriptTable(fs)
 	// fetchRefs (the resource pattern → FETCH node registry) is owned by the
 	// emitter; the genCtx shares its pointer so emitResourceFetch populates the
-	// same map Node.buildDeps later resolves usesResources through, on the fly.
+	// same map Node.buildDeps later resolves Resources through, on the fly.
 	var fetchRefs *DenseMap[STR, NodeRef]
 
 	// Mix $(S) input content hashes into node uids in every mode so a source edit

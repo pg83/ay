@@ -29,7 +29,7 @@ func emitTestCompileGraph(t *testing.T, host, target *Platform) *Graph {
 		Outputs:          []VFS{intern("$(B)/pkg/app/main.o")},
 		Requirements:     Requirements{},
 		TargetProperties: TargetProperties{},
-		usesResources:    []STR{internStr(resourcePatternClangTool)},
+		Resources:        []STR{internStr(resourcePatternClangTool)},
 	})
 	execEmit.result(ref)
 

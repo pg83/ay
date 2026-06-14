@@ -65,7 +65,7 @@ func buildTestCtxNode(na *NodeArenas, p *Platform) *Node {
 		Outputs:          na.vfsList(bldCommonTestContext),
 		Requirements:     Requirements{Network: nwRestricted},
 		TargetProperties: TargetProperties{},
-		usesResources:    usesPython3,
+		Resources:        usesPython3,
 	}
 }
 

@@ -158,7 +158,7 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 			KV:               KV{P: pkCY, PC: pcYellow},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			TargetProperties: targetProps,
-			usesResources:    usesPython3,
+			Resources:        usesPython3,
 		}, cyRef)
 
 		ccIn := in

@@ -79,7 +79,7 @@ func appendNode(buf []byte, n *Node, uids *UidVec, fetchRefs *DenseMap[STR, Node
 	buf = appendCmdSlice(buf, n.Cmds)
 
 	// "deps" lists DepRefs, then ForeignDepRefs (tool deps), then the resolved
-	// resource FETCH deps (usesResources): tools and resources are not stored on
+	// resource FETCH deps (Resources): tools and resources are not stored on
 	// the node, so the build-deps array materializes them on the fly.
 	buf = append(buf, `,"deps":`...)
 	buf = appendRefUIDsSeq(buf, n.buildDeps(fetchRefs), uids)

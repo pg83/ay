@@ -141,7 +141,7 @@ func emitEV(
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          depRefs,
 		ForeignDepRefs:   foreignDepRefs,
-		usesResources:    usesPython3,
+		Resources:        usesPython3,
 	}
 
 	return emit.emit(node)

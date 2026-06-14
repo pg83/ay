@@ -12,7 +12,7 @@ var (
 	// closure. Tool paths come from peers (build/platform/*), not ambient platform flags.
 	strLLDRootName      = internStr(resourcePatternLLDRoot)
 	strYMakePython3Name = internStr(resourcePatternYMakePython3)
-	// Shared usesResources vectors — every emitter that needs one of these
+	// Shared Resources vectors — every emitter that needs one of these
 	// fixed sets references the same slice instead of building it per node.
 	usesPython3        = []STR{strYMakePython3Name}
 	usesPython3JDK17   = []STR{strYMakePython3Name, internStr(resourcePatternJDK17)}
@@ -197,13 +197,13 @@ func bindResourceGlobalVars(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 // the linker under $(B)/resources/LLD_ROOT (build/platform/lld), and python under
 // $(B)/resources/YMAKE_PYTHON3 (build/platform/python/ymake_python3) — each the
 // output dir of that resource's FETCH node, taken as a dep by listing the resource
-// name in the consuming node's usesResources. A field stays 0 when its resource is
+// name in the consuming node's Resources. A field stays 0 when its resource is
 // absent from the closure (the consuming emitter then has no peer to take the tool
 // from — caught at use, never silently defaulted).
 type ModuleToolchain struct {
 	// ClangResource is the versioned clang resource the compiler/llvm tools come
 	// from (e.g. "CLANG20"), selected by the platform's ClangVer. Consumers list it in
-	// their node's usesResources so they depend on that specific FETCH node — version-
+	// their node's Resources so they depend on that specific FETCH node — version-
 	// specific so several clang versions (CLANG16 for bitcode, CLANG20 to compile) coexist.
 	ClangResource STR
 	ClangRoot     STR
@@ -229,7 +229,7 @@ func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolc
 	// The compiler/llvm tools come from the version-specific CLANG<ver> resource
 	// (e.g. CLANG20), not the version-independent bare CLANG: $(B)/resources/CLANG20
 	// is the FETCH node's output dir, depended on by listing tc.ClangResource in the
-	// consuming node's usesResources.
+	// consuming node's Resources.
 	clangRes := resourcePatternClangTool + clangVer
 	// Decl names are compared in id space: one intern probe per call instead of
 	// a string view per decl (the LLD/python ids are package-level constants).

@@ -68,16 +68,16 @@ type Node struct {
 	DepRefs        []NodeRef `json:"-"`
 	ForeignDepRefs []NodeRef `json:"-"`
 
-	// usesResources lists the fetched-resource names (CLANG20, YMAKE_PYTHON3,
+	// Resources lists the fetched-resource names (CLANG20, YMAKE_PYTHON3,
 	// LLD_ROOT, …) whose tool the node's command invokes via $(B)/resources/<NAME>.
 	// Builders set it in the &Node{} literal alongside that tool path; the resource
 	// emitter turns each into a dependency on that resource's FETCH node.
-	usesResources []STR `json:"-"`
+	Resources []STR `json:"-"`
 }
 
 // buildDeps yields every ref that must be built/restored before this node runs:
 // its DepRefs (real build inputs), its ForeignDepRefs (tool deps), then the
-// resolved resource FETCH deps (each usesResources pattern looked up in the
+// resolved resource FETCH deps (each Resources entry looked up in the
 // run's fetchRefs registry). The three are disjoint, and none are stored on the
 // node twice — the graph's "deps" array, the UID, and the executor all reach
 // the tools and resources through this single on-the-fly sequence.
@@ -95,7 +95,7 @@ func (n *Node) buildDeps(fetchRefs *DenseMap[STR, NodeRef]) func(func(NodeRef) b
 			}
 		}
 
-		for _, pat := range n.usesResources {
+		for _, pat := range n.Resources {
 			if ref, ok := fetchRefs.get(pat); ok {
 				if !yield(ref) {
 					return
