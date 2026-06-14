@@ -50,3 +50,27 @@ func emitR5(
 
 	return emit.emit(node), tmpVFS, cppVFS
 }
+
+func emitLibraryRagel5Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
+	ragel5LDRef, ragel5BinVFS := ctx.tool(argContribToolsRagel5Ragel)
+	rlgenCdLDRef, rlgenCdBinVFS := ctx.tool(argContribToolsRagel5RlgenCd)
+
+	r5Ref, r5TmpOut, r5CppOut := emitR5(instance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, ctx.emit)
+
+	rlSourceVFS := source(instance.Path.rel() + "/" + srcRel)
+	registerBoundGeneratedParsedOutput(ctx, instance, pkR5, r5TmpOut, nil, r5Ref, []NodeRef{ragel5LDRef, rlgenCdLDRef})
+	r5Parsed := ctx.scannerFor(instance).parsers.sourceParsedBuckets(rlSourceVFS, nil).bucket(parsedIncludesCpp)
+
+	registerBoundGeneratedParsedOutput(ctx, instance, pkR5, r5CppOut, r5Parsed, r5Ref, []NodeRef{ragel5LDRef, rlgenCdLDRef})
+
+	ccSrcRel := strings.TrimPrefix(r5CppOut.rel(), instance.Path.rel()+"/")
+	ccIn := in
+	ccClosure := walkClosure(ctx.scannerFor(instance), r5CppOut, in.ScanCfg)
+	ccIn.IncludeInputs = append([]VFS{r5TmpOut}, ccClosure...)
+	ccIn.PerSourceCFlags = append(append([]ARG(nil), in.PerSourceCFlags...), argWnoImplicitFallthrough)
+	ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, r5Ref)
+	ccIn.ExtraDepRefs = append([]NodeRef{r5Ref}, ccIn.ExtraDepRefs...)
+	ccRef, ccOut, _ := emitCC(instance, ccSrcRel, r5CppOut, ccIn, ctx.host, ctx.emit)
+
+	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
+}

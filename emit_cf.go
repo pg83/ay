@@ -178,3 +178,42 @@ func emitCF(
 
 	return emit.emit(node), outVFS
 }
+
+func emitLibraryHInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
+	inSourceVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
+	in.IncludeInputs = walkClosure(ctx.scannerFor(instance), inSourceVFS, in.ScanCfg)
+	cfgVars := buildCFGVars(ctx.fs, inSourceVFS.rel(), in.SetVars, in.DefaultVars)
+	cfOut := build(instance.Path.rel() + "/" + strings.TrimSuffix(srcRel, ".in"))
+	cfRef, cfOut := emitCF(instance, inSourceVFS, cfOut, cfgVars, in.IncludeInputs, instance.Path.rel(), cfModuleTag(d, instance), in.TC, ctx.emit)
+
+	parsed := []IncludeDirective{
+		{kind: includeQuoted, target: internStr(inSourceVFS.rel())},
+		{kind: includeQuoted, target: internStr(configureFilePyVFS.rel())},
+	}
+	parsed = append(parsed, cfIncludeDirectives(ctx.parsers, inSourceVFS.rel())...)
+	registerBoundGeneratedParsedOutput(ctx, instance, pkCF, cfOut, parsed, cfRef, nil)
+
+	return nil
+}
+
+func emitLibraryCInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
+	inSourceVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
+	in.IncludeInputs = walkClosure(ctx.scannerFor(instance), inSourceVFS, in.ScanCfg)
+	cfgVars := buildCFGVars(ctx.fs, inSourceVFS.rel(), in.SetVars, in.DefaultVars)
+	cfOut := build(instance.Path.rel() + "/" + strings.TrimSuffix(srcRel, ".in"))
+	cfRef, cfOut := emitCF(instance, inSourceVFS, cfOut, cfgVars, in.IncludeInputs, instance.Path.rel(), cfModuleTag(d, instance), in.TC, ctx.emit)
+
+	registerBoundGeneratedParsedOutput(ctx, instance, pkCF, cfOut, []IncludeDirective{
+		{kind: includeQuoted, target: internStr(inSourceVFS.rel())},
+		{kind: includeQuoted, target: internStr(configureFilePyVFS.rel())},
+	}, cfRef, nil)
+
+	ccSrcRel := strings.TrimPrefix(cfOut.rel(), instance.Path.rel()+"/")
+	ccIn := in
+	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), cfOut, in.ScanCfg)
+	ccIn.ExtraDepRefs = resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, cfRef)
+	ccIn.ExtraDepRefs = append([]NodeRef{cfRef}, ccIn.ExtraDepRefs...)
+	ccRef, ccOut, _ := emitCC(instance, ccSrcRel, cfOut, ccIn, ctx.host, ctx.emit)
+
+	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
+}

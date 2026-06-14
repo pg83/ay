@@ -651,3 +651,15 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 
 	return &ProtoSrcsResult{ARRef: arRef, ARPath: &archivePath}
 }
+
+func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
+	pe := newPBModuleEmission(ctx, d, ProtoPBConfig{}, in.PeerProtoAddInclGlobal, in.ProtoNamespaceTail)
+	pb := emitProtoPB(ctx, instance, d, srcRel, ProtoPBConfig{}, pe, in.PeerProtoAddInclGlobal)
+	ccIn := in
+	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), pb.pbCC, in.ScanCfg)
+	ccIn.ExtraDepRefs = append([]NodeRef{pb.pbRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pb.pbRef)...)
+	ccSrcRel := strings.TrimPrefix(pb.pbCC.rel(), instance.Path.rel()+"/")
+	ccRef, ccOut, _ := emitCC(instance, ccSrcRel, pb.pbCC, ccIn, ctx.host, ctx.emit)
+
+	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
+}

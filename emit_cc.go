@@ -523,3 +523,14 @@ func (m InclArgMemo) arg(path VFS) STR {
 
 	return a
 }
+
+func emitLibraryCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
+	srcVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
+
+	in.IncludeInputs = walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)
+
+	in.ExtraDepRefs = resolveCodegenDepRefsExt(ctx, instance, in.IncludeInputs, []VFS{srcVFS})
+	ref, outPath, _ := emitCC(instance, srcRel, srcVFS, in, ctx.host, ctx.emit)
+
+	return &SourceEmit{Ref: ref, OutPath: outPath}
+}

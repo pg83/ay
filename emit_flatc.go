@@ -216,3 +216,16 @@ func ensureFlatcEmission(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 
 	return out
 }
+
+func emitLibraryFlatcSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
+	fl := ensureFlatcEmission(ctx, instance, d, srcRel)
+
+	ccIn := in
+	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), fl.cpp, in.ScanCfg)
+
+	ccIn.ExtraDepRefs = append([]NodeRef{fl.flRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, fl.flRef)...)
+	ccSrcRel := strings.TrimPrefix(fl.cpp.rel(), instance.Path.rel()+"/")
+	ccRef, ccOut, _ := emitCC(instance, ccSrcRel, fl.cpp, ccIn, ctx.host, ctx.emit)
+
+	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
+}
