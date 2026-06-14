@@ -527,7 +527,7 @@ func emitLibraryCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src
 
 	in.IncludeInputs = walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)
 
-	in.ExtraDepRefs = resolveCodegenDepRefsExt(ctx, instance, in.IncludeInputs, []VFS{srcVFS})
+	in.ExtraDepRefs = resolveCodegenDepRefs(ctx, instance, in.IncludeInputs)
 	ref, outPath, _ := emitCC(instance, srcRel, srcVFS, in, ctx.host, ctx.emit)
 
 	return &SourceEmit{Ref: ref, OutPath: outPath}
