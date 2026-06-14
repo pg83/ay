@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 )
 
@@ -96,6 +97,11 @@ func startProfilesFromEnv() func() {
 
 	if path := os.Getenv("YATOOL_CPUPROFILE"); path != "" {
 		cpuFile = throw2(os.Create(path))
+
+		if hz := os.Getenv("YATOOL_CPUHZ"); hz != "" {
+			runtime.SetCPUProfileRate(throw2(strconv.Atoi(hz)))
+		}
+
 		throw(pprof.StartCPUProfile(cpuFile))
 	}
 
