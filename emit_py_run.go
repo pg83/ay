@@ -189,7 +189,6 @@ func pyInputClosure(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 		}
 	}
 
-
 	if len(out) == 0 {
 		return nil
 	}
@@ -308,6 +307,14 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 		// resolveInducedDeps. Shards are translation units, so take the Cpp bucket
 		// (which holds both the cpp-only and the h+cpp induced groups).
 		if info := reg.lookup(vfs); info != nil {
+			// The IN file's own transitive source inputs — e.g. the antlr
+			// grammar/template/jar/scripts behind a generated .pb.h/.pb.cc, folded
+			// in by its producer (emitRunProgram). Read them directly instead of
+			// chasing a fake .proto self-include through parsedIncludes.
+			for _, si := range info.SourceInputs {
+				addSource(si)
+			}
+
 			for _, gref := range info.GeneratorRefs {
 				if tool, ok := ctx.moduleByRef.get(gref); ok {
 					addInducedSources(tool.InducedDeps.bucket(parsedIncludesCpp))

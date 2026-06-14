@@ -69,7 +69,7 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		if generatedInputs != nil {
 			// The generated-src input list interleaves the shared generator
 			// inputs around the tool pair and dedups across the whole — stays
-			// flat (resolveCodegenDepRefsExt below consumes it flat too).
+			// flat (resolveCodegenDepRefs below consumes it flat too).
 			inputs = []VFS{srcAbs}
 			inputs = append(inputs, generatedInputs...)
 			inputs = append(inputs, py3ccBinary, py3ccSlowBin)

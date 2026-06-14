@@ -312,11 +312,7 @@ type ScanCtxPerfStats struct {
 }
 
 func resolveCodegenDepRefs(ctx *GenCtx, consumer ModuleInstance, includeInputs []VFS, exclude ...NodeRef) []NodeRef {
-	return resolveCodegenDepRefsExt(ctx, consumer, includeInputs, nil, exclude...)
-}
-
-func resolveCodegenDepRefsExt(ctx *GenCtx, consumer ModuleInstance, includeInputs, inputs []VFS, exclude ...NodeRef) []NodeRef {
-	if len(includeInputs) == 0 && len(inputs) == 0 {
+	if len(includeInputs) == 0 {
 		return nil
 	}
 
@@ -325,8 +321,8 @@ func resolveCodegenDepRefsExt(ctx *GenCtx, consumer ModuleInstance, includeInput
 	// grown buckets between calls.
 	// Dedup the producer refs through the run-wide VFS deduper (NodeRef is a
 	// ~uint32 id, cast to VFS at the IdSet boundary — a different typedef over the
-	// same dense space). probe touches no other deduper user (EmitCF takes no
-	// ctx), so reset-then-stream here is safe.
+	// same dense space). It touches no other deduper user (EmitCF takes no ctx), so
+	// reset-then-stream here is safe.
 	deduper.reset()
 
 	for _, r := range exclude {
@@ -337,36 +333,28 @@ func resolveCodegenDepRefsExt(ctx *GenCtx, consumer ModuleInstance, includeInput
 
 	// All codegen producer refs (PB/EV/EN, and CP/CF) live on the codegen
 	// registry entry's ProducerRef, so one reg.Lookup resolves every kind —
-	// no per-kind side maps. Hoisted: invariant across the probes.
+	// no per-kind side maps.
 	reg := codegenRegForInstance(ctx, consumer)
 
-	probe := func(v VFS) {
-		info := reg.lookup(v)
+	// The IsBuild gate guards the lookup inline: the dominant cost was touching
+	// every element of a whole include closure just to bounce off this bit for
+	// the (vast) $(S) majority.
+	for _, p := range includeInputs {
+		if !p.isBuild() {
+			continue
+		}
+
+		info := reg.lookup(p)
 
 		if info == nil {
-			return
+			continue
 		}
 
 		if !deduper.add(VFS(info.ProducerRef)) {
-			return
+			continue
 		}
 
 		out = append(out, info.ProducerRef)
-	}
-
-	// The IsBuild gate stays in the loops: it inlines there, and the dominant
-	// cost was a closure call per element of a whole include closure just to
-	// bounce off this bit for the (vast) $(S) majority.
-	for _, p := range includeInputs {
-		if p.isBuild() {
-			probe(p)
-		}
-	}
-
-	for _, p := range inputs {
-		if p.isBuild() {
-			probe(p)
-		}
 	}
 
 	return out
