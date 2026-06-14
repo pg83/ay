@@ -49,8 +49,6 @@ type ModuleCCInputs struct {
 	// derives output naming from the resolved source VFS, not from this.
 	SrcDirs []VFS
 
-	SourceRoot string
-
 	FS FS
 
 	IncludeInputs []VFS

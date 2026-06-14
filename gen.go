@@ -251,10 +251,9 @@ func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
 }
 
 type GenCtx struct {
-	sourceRoot string
-	fs         FS
-	parsers    *IncludeParserManager
-	emit       Emitter
+	fs      FS
+	parsers *IncludeParserManager
+	emit    Emitter
 	// na is the emitter's node-construction arenas (see NodeArenas), shared
 	// here so ctx-threaded builders reach them without the Emitter detour.
 	na *NodeArenas
@@ -447,18 +446,17 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	hostReg := newCodegenRegistry()
 
 	ctx := &GenCtx{
-		sourceRoot: fs.sourceRoot(),
-		fs:         fs,
-		parsers:    parsers,
-		emit:       plainEmit,
-		na:         plainEmit.nodeArenas(),
-		memo:       newIntValueMap[*ModuleEmitResult](4096),
-		walking:    make(map[ModuleInstance]bool),
-		host:       hostP,
-		target:     targetP,
-		fetchRefs:  fetchRefs,
-		scripts:    scriptTbl,
-		testMode:   testMode,
+		fs:        fs,
+		parsers:   parsers,
+		emit:      plainEmit,
+		na:        plainEmit.nodeArenas(),
+		memo:      newIntValueMap[*ModuleEmitResult](4096),
+		walking:   make(map[ModuleInstance]bool),
+		host:      hostP,
+		target:    targetP,
+		fetchRefs: fetchRefs,
+		scripts:   scriptTbl,
+		testMode:  testMode,
 	}
 
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
@@ -813,7 +811,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			AddIncl:           d.addIncl,
 			PeerAddInclGlobal: peerContribs.addIncl,
 			SrcDirs:           d.srcDirs,
-			SourceRoot:        ctx.sourceRoot,
 			FS:                ctx.fs,
 			DefaultVars:       d.defaultVars,
 			DefaultVarOrder:   d.defaultVarOrder,
@@ -1662,7 +1659,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ModuleScopeCFlags:      d.moduleScopeCFlags,
 		SFlags:                 d.sFlags,
 		SrcDirs:                effectiveSrcDirs,
-		SourceRoot:             ctx.sourceRoot,
 		FS:                     ctx.fs,
 		DefaultVars:            d.defaultVars,
 		DefaultVarOrder:        d.defaultVarOrder,

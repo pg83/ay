@@ -178,7 +178,6 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		AddIncl:           moduleInputs.AddIncl,
 		PeerAddInclGlobal: moduleInputs.PeerAddInclGlobal,
 		SrcDirs:           moduleInputs.SrcDirs,
-		SourceRoot:        ctx.sourceRoot,
 		FS:                ctx.fs,
 		ScanCfg:           newScanContext(ctx.parsers, moduleInputs.AddIncl, moduleInputs.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel()),
 	}

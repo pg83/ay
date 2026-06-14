@@ -4,7 +4,6 @@ package main
 // (rooted at a real directory and cached lazily); tests drive a memFS built
 // inline (testfs_test.go) so the suite does no disk I/O for fixture trees.
 type FS interface {
-	sourceRoot() string
 	// Listdir lists the directory named by its Source-rooted VFS ("$(S)/<dir>").
 	listdir(dir VFS) DirView
 	dirHas(v DirView, name string) (present bool, isDir bool)

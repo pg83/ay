@@ -243,8 +243,6 @@ func newMemFS(files map[string]string) *MemFS {
 	return fs
 }
 
-func (fs *MemFS) sourceRoot() string { return fs.srcRoot }
-
 func (fs *MemFS) listdir(dir VFS) DirView {
 	rel := dir.rel()
 
