@@ -272,8 +272,6 @@ type GenCtx struct {
 	scannerTarget *IncludeScanner
 	scannerHost   *IncludeScanner
 
-	flatcEmissions map[CodegenOutputKey]FlatcEmission
-
 	pyRegisterOutputs map[VFS]NodeRef
 
 	ldPluginCPCache map[VFS]NodeRef
@@ -310,11 +308,6 @@ type GenCtx struct {
 	// once per scanner. reset() runs before every use, so the shared state is safe
 	// under single-threaded gen.
 	tarjan TarjanCtx
-}
-
-type CodegenOutputKey struct {
-	platform *Platform
-	path     VFS
 }
 
 type ScanCtxPerfStats struct {
@@ -468,7 +461,6 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		host:              hostP,
 		target:            targetP,
 		fetchRefs:         fetchRefs,
-		flatcEmissions:    make(map[CodegenOutputKey]FlatcEmission),
 		pyRegisterOutputs: make(map[VFS]NodeRef),
 		ldPluginCPCache:   make(map[VFS]NodeRef),
 		scripts:           scriptTbl,
@@ -1717,6 +1709,18 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	// codegen-ness is exactly isCodegenProducingSrc(src), so pass 2 needs no
 	// membership set, only this ordered list of the pre-emitted nodes.
 	codegenEmits := make([]codegenEmit, 0, 4)
+
+	// A .fbs's generated .h references its imported .fbs's .h, so every .fbs
+	// producer must be registered before any .fbs CC closure is walked — exactly
+	// what proto does via its two-phase emitCPPProtoSrcs (register all pb.h, then
+	// compile). Emit the module's .fbs producers here; emitLibraryFlatcSource then
+	// takes each producer's ref from the codegen registry and walks against a
+	// complete registry.
+	for _, src := range d.srcs {
+		if srcExtClassOf(src) == srcExtFbs {
+			emitFlatcProducer(ctx, instance, d, src.string())
+		}
+	}
 
 	for _, src := range d.srcs {
 		if !isCodegenProducingSrcID(src) {

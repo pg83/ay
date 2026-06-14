@@ -26,13 +26,6 @@ var flatcIOLeadArgs = []STR{
 	argDashO.str(),
 }
 
-type FlatcEmission struct {
-	flRef   NodeRef
-	header  VFS
-	cpp     VFS
-	relPath string
-}
-
 func flatcDirectImportNames(pm *IncludeParserManager, srcRel string) []string {
 	direct := pm.sourceParsedBuckets(source(srcRel), nil).bucket(parsedIncludesLocal)
 
@@ -89,32 +82,6 @@ func flatcDirectGeneratedHeaderIncludes(pm *IncludeParserManager, fs FS, srcRel 
 	return out
 }
 
-func flatcResolvedModuleSourceRel(ctx *GenCtx, instance ModuleInstance, d *ModuleData, resolvedRel string) (string, bool) {
-	// Filter by the memoized ext class before materializing anything: only
-	// .fbs entries ever match, so non-fbs srcs cost a bit probe, not a view.
-	match := func(srcs []STR) (string, bool) {
-		for _, src := range srcs {
-			if srcExtClassOf(src) != srcExtFbs {
-				continue
-			}
-
-			srcRel := src.string()
-
-			if resolveSourceVFS(ctx, instance, srcRel, d.srcDirs).rel() == resolvedRel {
-				return srcRel, true
-			}
-		}
-
-		return "", false
-	}
-
-	if srcRel, ok := match(d.srcs); ok {
-		return srcRel, true
-	}
-
-	return match(d.globalSrcs)
-}
-
 func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ARG, transitiveImports []VFS, tc ModuleToolchain, emit Emitter) (NodeRef, VFS, VFS, VFS) {
 	na := emit.nodeArenas()
 
@@ -150,28 +117,13 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 	return emit.emit(node), headerVFS, cppVFS, bfbsVFS
 }
 
-func ensureFlatcEmission(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string) FlatcEmission {
+// emitFlatcProducer emits the flatc node for one .fbs and registers its outputs
+// (.h/.cpp/.bfbs) in the codegen registry. Run in a pre-pass over all of a
+// module's .fbs before any flatc CC closure is walked, so a .fbs importing a
+// sibling resolves the sibling's generated .h — the same two-phase shape proto
+// uses in emitCPPProtoSrcs (register every pb.h, then compile).
+func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string) {
 	srcVFS := resolveSourceVFS(ctx, instance, srcRel, d.srcDirs)
-	key := CodegenOutputKey{
-		platform: instance.Platform,
-		path:     build(srcVFS.rel() + ".h"),
-	}
-
-	if got, ok := ctx.flatcEmissions[key]; ok {
-		return got
-	}
-
-	for _, imp := range flatcDirectImportNames(ctx.parsers, srcVFS.rel()) {
-		resolved := resolveFlatcImportPath(ctx.fs, srcVFS.rel(), imp)
-
-		if resolved == "" {
-			continue
-		}
-
-		if moduleSrcRel, ok := flatcResolvedModuleSourceRel(ctx, instance, d, resolved); ok {
-			ensureFlatcEmission(ctx, instance, d, moduleSrcRel)
-		}
-	}
 
 	flatcRes := ctx.toolResult(argContribLibsFlatbuffersFlatc)
 	flatcLDRef, flatcBinary := flatcRes.LDRef, *flatcRes.LDPath
@@ -205,27 +157,20 @@ func ensureFlatcEmission(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 
 	registerBoundGeneratedParsedOutput(ctx, instance, pkFL, cppVFS, cppIncludes, flRef, []NodeRef{flatcLDRef})
 	registerBoundGeneratedParsedOutput(ctx, instance, pkFL, bfbsVFS, nil, flRef, []NodeRef{flatcLDRef})
-
-	out := FlatcEmission{
-		flRef:   flRef,
-		header:  headerVFS,
-		cpp:     cppVFS,
-		relPath: srcVFS.rel(),
-	}
-	ctx.flatcEmissions[key] = out
-
-	return out
 }
 
 func emitLibraryFlatcSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
-	fl := ensureFlatcEmission(ctx, instance, d, srcRel)
+	// The producer was emitted+registered in the pre-pass (emitFlatcProducer);
+	// take its ref from the codegen registry and compile the generated .cpp.
+	cppVFS := build(resolveSourceVFS(ctx, instance, srcRel, d.srcDirs).rel() + ".cpp")
+	flRef := codegenRegForInstance(ctx, instance).lookup(cppVFS).ProducerRef
 
 	ccIn := in
-	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), fl.cpp, in.ScanCfg)
+	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), cppVFS, in.ScanCfg)
 
-	ccIn.ExtraDepRefs = append([]NodeRef{fl.flRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, fl.flRef)...)
-	ccSrcRel := strings.TrimPrefix(fl.cpp.rel(), instance.Path.rel()+"/")
-	ccRef, ccOut, _ := emitCC(instance, ccSrcRel, fl.cpp, ccIn, ctx.host, ctx.emit)
+	ccIn.ExtraDepRefs = append([]NodeRef{flRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, flRef)...)
+	ccSrcRel := strings.TrimPrefix(cppVFS.rel(), instance.Path.rel()+"/")
+	ccRef, ccOut, _ := emitCC(instance, ccSrcRel, cppVFS, ccIn, ctx.host, ctx.emit)
 
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }
