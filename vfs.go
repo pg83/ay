@@ -144,20 +144,14 @@ func (v VFS) rel() string {
 	return internTable.strs[v.strID()][vfsPrefixLen:]
 }
 
-func (v VFS) root() VFSRoot {
-	if uint32(v)&1 != 0 {
-		return VFSRootBuild
-	}
-
-	return VFSRootSource
-}
-
+// isSource / isBuild read the root bit directly (VFS == STR<<1 | root, root:
+// 0=source, 1=build). No VFSRoot round-trip — these are the only root probes.
 func (v VFS) isSource() bool {
-	return v.root() == VFSRootSource
+	return uint32(v)&1 == 0
 }
 
 func (v VFS) isBuild() bool {
-	return v.root() == VFSRootBuild
+	return uint32(v)&1 != 0
 }
 
 func (v VFS) string() string {
@@ -171,7 +165,7 @@ func (v VFS) String() string {
 }
 
 func (v VFS) longString() string {
-	if v.root() == VFSRootBuild {
+	if v.isBuild() {
 		return "$(BUILD_ROOT)/" + v.rel()
 	}
 

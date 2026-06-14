@@ -799,13 +799,13 @@ func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 	idx := &CfgResolveIndex{}
 
 	for _, p := range cfg.OwnAddIncl {
-		if p.root() == VFSRootSource && p.rel() == "" {
+		if p.isSource() && p.rel() == "" {
 			return idx
 		}
 	}
 
 	for _, p := range cfg.PeerAddInclSet {
-		if p.root() == VFSRootSource && p.rel() == "" {
+		if p.isSource() && p.rel() == "" {
 			return idx
 		}
 	}
@@ -825,7 +825,7 @@ func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 
 		idx.rank.put(uint64(p), r)
 
-		if p.root() == VFSRootBuild {
+		if p.isBuild() {
 			idx.buildEntries = append(idx.buildEntries, CfgBuildAddincl{
 				prefix:    p,
 				prefixSrc: source(p.rel()),
@@ -923,14 +923,11 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 	}
 
 	addInclPath := func(prefix VFS) bool {
-		switch prefix.root() {
-		case VFSRootBuild:
+		if prefix.isBuild() {
 			return addBuild(prefix.rel())
-		case VFSRootSource:
-			return addSource(prefix)
 		}
 
-		panic("resolveContextSearchTier: zero-valued search path")
+		return addSource(prefix)
 	}
 
 	first, _ := firstComponent(target)

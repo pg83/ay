@@ -223,7 +223,7 @@ func (pm *IncludeParserManager) registerBuildParsedIncludes(out VFS, parsed []In
 }
 
 func (pm *IncludeParserManager) indexAddincl(a VFS) {
-	if a.root() != VFSRootSource || a.rel() == "" {
+	if a.isBuild() || a.rel() == "" {
 		return
 	}
 

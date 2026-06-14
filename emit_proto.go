@@ -121,7 +121,7 @@ func resolveProtoImportPath(fs FS, importedRel string, peerProtoAddIncl []VFS) s
 	// via the `contrib/libs/opentelemetry-proto` -I). p is already a VFS, so it
 	// keys Listdir directly — no per-candidate concat or re-intern.
 	for _, p := range peerProtoAddIncl {
-		if p.root() != VFSRootSource {
+		if p.isBuild() {
 			continue
 		}
 
