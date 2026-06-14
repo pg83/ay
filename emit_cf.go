@@ -30,7 +30,7 @@ func emitExplicitCF(ctx *GenCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	srcVFS := copyFileInputVFS(ctx.fs, instance.Path.rel(), cf.Src)
 	outVFS := copyFileOutputVFS(instance.Path.rel(), cf.Dst)
 
-	emitConfigureFile(ctx, instance, d, srcVFS, outVFS, in, cfIncludeDirectives(ctx.parsers, srcVFS.rel()))
+	emitConfigureFile(ctx, instance, d, srcVFS, outVFS, in)
 }
 
 // emitLibraryHInSource handles a .h.in source: the configured header is consumed
@@ -39,7 +39,7 @@ func emitLibraryHInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, s
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
 	outVFS := build(instance.Path.rel() + "/" + strings.TrimSuffix(srcRel, ".in"))
 
-	emitConfigureFile(ctx, instance, d, srcVFS, outVFS, in, cfIncludeDirectives(ctx.parsers, srcVFS.rel()))
+	emitConfigureFile(ctx, instance, d, srcVFS, outVFS, in)
 
 	return nil
 }
@@ -51,7 +51,7 @@ func emitLibraryCInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, s
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
 	outVFS := build(instance.Path.rel() + "/" + strings.TrimSuffix(srcRel, ".in"))
 
-	cfRef := emitConfigureFile(ctx, instance, d, srcVFS, outVFS, in, nil)
+	cfRef := emitConfigureFile(ctx, instance, d, srcVFS, outVFS, in)
 
 	in.IncludeInputs = walkClosure(ctx.scannerFor(instance), outVFS, in.ScanCfg)
 	in.ExtraDepRefs = append([]NodeRef{cfRef}, resolveCodegenDepRefs(ctx, instance, in.IncludeInputs, cfRef)...)
@@ -63,12 +63,12 @@ func emitLibraryCInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, s
 
 // emitConfigureFile walks the template's include closure, emits the
 // configure_file.py node producing outVFS from srcVFS, and registers outVFS as a
-// pkCF codegen output. The registered include set is the witness pair (srcVFS,
-// configure_file.py) plus parsedExtra — a header template's own quoted includes,
-// or nil for a translation unit. The template is recorded as the output's source
-// (GeneratedFileInfo.SourcePath) so consumers taking the output as an input pull
-// the template + script too. Returns the producer ref.
-func emitConfigureFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS, outVFS VFS, in ModuleCCInputs, parsedExtra []IncludeDirective) NodeRef {
+// pkCF codegen output. The output's registered includes are the template's own
+// parsed #includes (the substituted output carries the same #include lines). The
+// template and configure_file.py are the generated-from inputs, recorded as the
+// output's SourcePath and ridden to consumers as closure leaves. Returns the
+// producer ref.
+func emitConfigureFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS, outVFS VFS, in ModuleCCInputs) NodeRef {
 	na := ctx.emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -92,11 +92,18 @@ func emitConfigureFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 		Resources:        usesPython3,
 	})
 
-	parsed := append([]IncludeDirective{
-		{kind: includeQuoted, target: internStr(srcVFS.rel())},
-		{kind: includeQuoted, target: internStr(configureFilePyVFS.rel())},
-	}, parsedExtra...)
-	registerBoundGeneratedParsedOutputWithSource(ctx, instance, pkCF, outVFS, srcVFS, parsed, cfRef, nil)
+	// The generated output's content is the template with @VAR@ / #cmakedefine
+	// substituted — its #include lines are exactly the template's. The output is
+	// $(B) (not on disk at gen time), so register the template's own parsed
+	// includes as the output's includes directly. The template source and the
+	// configure_file.py script are generated-from inputs, not #includes: they ride
+	// to consumers as non-expanded closure leaves (the vehicle emit_proto.go /
+	// emit_pr.go use), instead of being fake-#included into the output.
+	registerBoundGeneratedParsedOutputWithSource(ctx, instance, pkCF, outVFS, srcVFS, cfTemplateParsedIncludes(ctx.parsers, srcVFS.rel()), cfRef, nil)
+
+	reg := codegenRegForInstance(ctx, instance)
+	reg.addClosureLeaf(outVFS, srcVFS)
+	reg.addClosureLeaf(outVFS, configureFilePyVFS)
 
 	return cfRef
 }
@@ -155,24 +162,13 @@ func cfgVarValue(v string) string {
 	return v
 }
 
-// cfIncludeDirectives is the template's own quoted #includes (sorted), registered
-// on a configured header so a consumer's closure walk resolves them.
-func cfIncludeDirectives(pm *IncludeParserManager, rel string) []IncludeDirective {
-	out := make([]IncludeDirective, 0)
-
-	for _, d := range pm.sourceParsedBuckets(source(rel), nil).bucket(parsedIncludesLocal) {
-		if d.kind == includeQuoted {
-			out = append(out, d)
-		}
-	}
-
-	if len(out) == 0 {
-		return nil
-	}
-
-	sort.Slice(out, func(i, j int) bool { return out[i].target.string() < out[j].target.string() })
-
-	return out
+// cfTemplateParsedIncludes is the template's own parsed #includes (local bucket,
+// both quoted and angle), registered as the configured output's includes: the
+// substituted output carries the same #include lines, and being $(B) it is not
+// on disk to re-parse. The caller's closure walk resolves them in its own scan
+// context. The returned slice aliases the parse cache (read-only on both sides).
+func cfTemplateParsedIncludes(pm *IncludeParserManager, rel string) []IncludeDirective {
+	return pm.sourceParsedBuckets(source(rel), nil).bucket(parsedIncludesLocal)
 }
 
 // cfModuleTag returns the lowercased submodule tag for the CF node's
