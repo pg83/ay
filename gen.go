@@ -272,10 +272,6 @@ type GenCtx struct {
 	scannerTarget *IncludeScanner
 	scannerHost   *IncludeScanner
 
-	pyRegisterOutputs map[VFS]NodeRef
-
-	ldPluginCPCache map[VFS]NodeRef
-
 	// moduleByRef maps a module's LD NodeRef back to its emit result, populated in
 	// toolResult (so every codegen tool resolved via ctx.tool is reachable by ref).
 	// The include scanner uses it to pull a generated file's producing tools'
@@ -451,20 +447,18 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	hostReg := newCodegenRegistry()
 
 	ctx := &GenCtx{
-		sourceRoot:        fs.sourceRoot(),
-		fs:                fs,
-		parsers:           parsers,
-		emit:              plainEmit,
-		na:                plainEmit.nodeArenas(),
-		memo:              newIntValueMap[*ModuleEmitResult](4096),
-		walking:           make(map[ModuleInstance]bool),
-		host:              hostP,
-		target:            targetP,
-		fetchRefs:         fetchRefs,
-		pyRegisterOutputs: make(map[VFS]NodeRef),
-		ldPluginCPCache:   make(map[VFS]NodeRef),
-		scripts:           scriptTbl,
-		testMode:          testMode,
+		sourceRoot: fs.sourceRoot(),
+		fs:         fs,
+		parsers:    parsers,
+		emit:       plainEmit,
+		na:         plainEmit.nodeArenas(),
+		memo:       newIntValueMap[*ModuleEmitResult](4096),
+		walking:    make(map[ModuleInstance]bool),
+		host:       hostP,
+		target:     targetP,
+		fetchRefs:  fetchRefs,
+		scripts:    scriptTbl,
+		testMode:   testMode,
 	}
 
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}

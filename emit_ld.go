@@ -489,16 +489,19 @@ func emitOwnLDPlugins(ctx *GenCtx, instance ModuleInstance, plugins []STR, tc Mo
 		Paths: make([]VFS, 0, len(plugins)),
 	}
 
+	// The .py→.pyplugin copy is platform-independent codegen; upstream attributes
+	// it to the target platform (same rule as reg3.cpp in emit_py_codegen). Emit
+	// under ctx.target so a plugin pulled by both the target and a host tool
+	// produces byte-identical CP nodes that collapse by uid — no cross-platform
+	// cache needed.
+	cpInstance := instance
+	cpInstance.Platform = ctx.target
+
 	for _, name := range plugins {
 		src := source(instance.Path.rel() + "/" + name.string())
 		dst := build(instance.Path.rel() + "/" + name.string() + ".pyplugin")
 
-		ref, ok := ctx.ldPluginCPCache[dst]
-
-		if !ok {
-			ref = emitCP(instance, src, dst, tc, ctx.scripts, ctx.emit)
-			ctx.ldPluginCPCache[dst] = ref
-		}
+		ref := emitCP(cpInstance, src, dst, tc, ctx.scripts, ctx.emit)
 
 		res.Refs = append(res.Refs, ref)
 		res.Paths = append(res.Paths, dst)

@@ -170,32 +170,30 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 			internStr(regCppAbs),
 		}
 
-		pyRef, ok := ctx.pyRegisterOutputs[regCppVFS]
-
-		if !ok {
-			pyInstance := instance
-			pyInstance.Platform = ctx.target
-
-			pyNode := &Node{
-				Platform:         pyInstance.Platform,
-				Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(pyCmdArgs), Env: env}),
-				Env:              env,
-				Inputs:           na.inputList(genPy3RegScriptChunk),
-				Outputs:          na.vfsList(regCppVFS),
-				KV:               KV{P: pkPY, PC: pcYellow},
-				TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-				Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-				DepRefs:          []NodeRef{},
-				Resources:        usesPython3,
-			}
-
-			if py3Suffix {
-				pyNode.TargetProperties.ModuleTag = tagPy3
-			}
-
-			pyRef = ctx.emit.emit(pyNode)
-			ctx.pyRegisterOutputs[regCppVFS] = pyRef
+		// gen_py3_reg.py is platform-independent codegen; upstream attributes such a
+		// command to the TARGET platform (a cross build shows every .reg3.cpp as the
+		// target ISA, never the host/tool ISA, even for a python module also built
+		// for the host). Emit under ctx.target so the target and host instances that
+		// reach this output produce byte-identical nodes that collapse by uid — no
+		// cross-platform dedup map needed. The per-instance compile of the generated
+		// source is emitted below with its own platform.
+		pyNode := &Node{
+			Platform:         ctx.target,
+			Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(pyCmdArgs), Env: env}),
+			Env:              env,
+			Inputs:           na.inputList(genPy3RegScriptChunk),
+			Outputs:          na.vfsList(regCppVFS),
+			KV:               KV{P: pkPY, PC: pcYellow},
+			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
+			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			Resources:        usesPython3,
 		}
+
+		if py3Suffix {
+			pyNode.TargetProperties.ModuleTag = tagPy3
+		}
+
+		pyRef := ctx.emit.emit(pyNode)
 
 		ccIn := in
 		ccIn.ExtraDepRefs = []NodeRef{pyRef}
