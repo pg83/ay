@@ -339,6 +339,15 @@ func prEmitsIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS) []IncludeD
 	includes := make([]IncludeDirective, 0, len(inVFSs)+len(stmt.OutputIncludes))
 
 	for _, v := range inVFSs {
+		// A generated output does not #include its source $(B) .proto — upstream
+		// parses a .pb.h as a plain C header (no proto reference); the .proto→protoc
+		// link is the protoc node's own direct IN. Fake-including it here made every
+		// consumer that walks this output (e.g. multiproto reading the .pb.h)
+		// wrongly pull the $(B) .proto as an input.
+		if v.isBuild() && strings.HasSuffix(v.rel(), ".proto") {
+			continue
+		}
+
 		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(v.rel())})
 	}
 
