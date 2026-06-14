@@ -2,14 +2,13 @@ package main
 
 import "testing"
 
-func TestEmitPyRegister_TargetPlatformCacheWinsOverHostFirstVisit(t *testing.T) {
+func TestEmitPyRegister_ProducerEmittedAtTargetPlatform(t *testing.T) {
 	emit := newBufferedEmitter()
 	ctx := &GenCtx{
-		emit:              emit,
-		na:                emit.nodeArenas(),
-		host:              testHostP,
-		target:            testTargetP,
-		pyRegisterOutputs: make(map[VFS]NodeRef),
+		emit:   emit,
+		na:     emit.nodeArenas(),
+		host:   testHostP,
+		target: testTargetP,
 	}
 	d := &ModuleData{pyRegister: STRS("_sqlite3")}
 	hostInst := ModuleInstance{
@@ -24,29 +23,30 @@ func TestEmitPyRegister_TargetPlatformCacheWinsOverHostFirstVisit(t *testing.T) 
 	emitPyRegister(ctx, hostInst, d, ModuleCCInputs{}, false)
 	emitPyRegister(ctx, targetInst, d, ModuleCCInputs{}, false)
 
-	if len(emit.nodes) != 3 {
-		t.Fatalf("emitter buffered %d nodes, want 3", len(emit.nodes))
-	}
-
+	// No cross-platform cache: each instance emits its own .reg3.cpp producer.
+	// gen_py3_reg.py is platform-independent codegen, attributed to the target
+	// platform, so both producers carry testTargetP and no tool tag — byte-
+	// identical, hence they collapse by uid in the finalized graph.
 	wantOutput := "$(B)/contrib/tools/python3/Modules/_sqlite/_sqlite3.reg3.cpp"
-	var pyNode *Node
+	var pyNodes []*Node
 
 	for _, n := range emit.nodes {
 		if len(n.Outputs) == 1 && n.Outputs[0].string() == wantOutput {
-			pyNode = n
-			break
+			pyNodes = append(pyNodes, n)
 		}
 	}
 
-	if pyNode == nil {
-		t.Fatalf("emitter buffered no PY node with output %q", wantOutput)
+	if len(pyNodes) != 2 {
+		t.Fatalf("emitted %d PY producers, want 2 (one per instance)", len(pyNodes))
 	}
 
-	if string(pyNode.Platform.Target) != string(testTargetP.Target) {
-		t.Errorf("PY node platform = %q, want %q", string(pyNode.Platform.Target), testTargetP.Target)
-	}
+	for _, n := range pyNodes {
+		if string(n.Platform.Target) != string(testTargetP.Target) {
+			t.Errorf("PY node platform = %q, want %q (target)", n.Platform.Target, testTargetP.Target)
+		}
 
-	if len(nodeTags(pyNode)) != 0 {
-		t.Errorf("PY node tags = %v, want none", nodeTags(pyNode))
+		if len(nodeTags(n)) != 0 {
+			t.Errorf("PY node tags = %v, want none", nodeTags(n))
+		}
 	}
 }
