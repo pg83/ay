@@ -545,7 +545,6 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		PeerCOnlyFlagsGlobal: peerContribs.cOnlyFlags,
 		ModuleScopeCFlags:    d.moduleScopeCFlags,
 		SrcDirs:              d.srcDirs,
-		SourceRoot:           ctx.sourceRoot,
 		FS:                   ctx.fs,
 		DefaultVars:          d.defaultVars,
 		DefaultVarOrder:      d.defaultVarOrder,

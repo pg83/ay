@@ -114,10 +114,6 @@ func (fs *OsFS) contentHashSlow(v VFS) uint64 {
 	return fs.contentHashes[v.strID()]
 }
 
-func (fs *OsFS) sourceRoot() string {
-	return fs.srcRoot
-}
-
 // Listdir returns the entries of the directory whose Source-rooted path is dir
 // ("$(S)/<cleandir>"). Keyed by VFS so the hot caller passes the addincl
 // VFS directly with no string hashing; expected to hit the cache.

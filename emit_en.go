@@ -41,7 +41,6 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		Flags:             d.flags,
 		AddIncl:           d.addIncl,
 		PeerAddInclGlobal: peerAddInclGlobal,
-		SourceRoot:        ctx.sourceRoot,
 		FS:                ctx.fs,
 		SrcDirs:           d.srcDirs,
 		ScanCfg:           newScanContext(ctx.parsers, d.addIncl, peerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel()),
