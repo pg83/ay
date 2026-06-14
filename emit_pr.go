@@ -100,32 +100,55 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// consumes a generated output (directly, or after the output is archived into
 	// an .inc that a CC unit #includes). Record them on each output so the archive
 	// emit can propagate them as closure leaves (see emitArchive).
+	//
+	// A $(B) input is itself a codegen intermediate (e.g. a RUN_ANTLR-generated
+	// .proto). Its own $(S) generator sources (grammar/template/jar/scripts) are
+	// real inputs of every consumer of this run's outputs too, so fold them in:
+	// SourceInputs is transitive through the producer chain. prGeneratedFromSources
+	// (the $(B)-derived subset) additionally rides as a non-expanded ClosureLeaf of
+	// each output, so walkClosure carries it to consumers — the vehicle
+	// emit_proto.go uses, replacing the old fake `#include "X.proto"` bridge.
 	var prSourceInputs []VFS
+	var prGeneratedFromSources []VFS
 
 	for _, v := range inVFSs {
 		if v.isSource() {
 			prSourceInputs = append(prSourceInputs, v)
+
+			continue
+		}
+
+		if info := reg.lookup(v); info != nil {
+			prGeneratedFromSources = append(prGeneratedFromSources, info.SourceInputs...)
 		}
 	}
+
+	prSourceInputs = append(prSourceInputs, prGeneratedFromSources...)
 
 	// Reserve the PR producer's ref before registering its outputs: the input
 	// closure walk below resolves sibling codegen deps that may include these
 	// outputs, and registration records the producer ref.
 	prRef := ctx.emit.reserve()
 
+	registerPROutput := func(out VFS, parsed []IncludeDirective) {
+		registerBoundGeneratedParsedOutput(ctx, instance, pkPR, out, parsed, prRef, []NodeRef{toolLDRef})
+		reg.setSourceInputs(out, prSourceInputs)
+
+		for _, s := range prGeneratedFromSources {
+			reg.addClosureLeaf(out, s)
+		}
+	}
+
 	for _, f := range stmt.OUTFiles {
-		registerBoundGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f], prEmitsIncludes(f, stmt, inVFSs), prRef, []NodeRef{toolLDRef})
-		reg.setSourceInputs(outVFSByToken[f], prSourceInputs)
+		registerPROutput(outVFSByToken[f], prEmitsIncludes(f, stmt, inVFSs))
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		registerBoundGeneratedParsedOutput(ctx, instance, pkPR, outVFSByToken[f], prEmitsIncludes(f, stmt, inVFSs), prRef, []NodeRef{toolLDRef})
-		reg.setSourceInputs(outVFSByToken[f], prSourceInputs)
+		registerPROutput(outVFSByToken[f], prEmitsIncludes(f, stmt, inVFSs))
 	}
 
 	if stmt.StdoutFile != nil {
-		registerBoundGeneratedParsedOutput(ctx, instance, pkPR, *stdoutVFS, prEmitsIncludes(*stmt.StdoutFile, stmt, inVFSs), prRef, []NodeRef{toolLDRef})
-		reg.setSourceInputs(*stdoutVFS, prSourceInputs)
+		registerPROutput(*stdoutVFS, prEmitsIncludes(*stmt.StdoutFile, stmt, inVFSs))
 	}
 
 	inputClosure := prInputClosure(ctx, instance, d, stmt, moduleInputs)
@@ -291,39 +314,11 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		}
 	}
 
-
 	if len(out) == 0 {
 		return nil
 	}
 
 	out = dedupVFS(out, nil)
-
-	return out
-}
-
-// dropTransitiveGeneratedProto removes a build-generated .proto a RUN_PROGRAM /
-// RUN_PYTHON3 codegen node surfaces by walking its own generated .proto INFile
-// (the protoc-split step takes the $(B) .proto as input, and walkClosure of that
-// .proto returns the .proto itself — the scanner does not expand .proto imports).
-// Such a $(B) .proto is a codegen intermediate, not a graph input of the walking
-// node: upstream reaches it via the producer dep edge. Keeping it would also make
-// resolveCodegenDepRefs attach a spurious dep on its RUN_ANTLR (JV) producer,
-// diverging the node's deps (hence self_uid). $(S) proto imports stay.
-//
-// CC consumers no longer need this: a generated header used to fake-include its
-// .proto, dragging the $(B) intermediate into every CC closure; that include is
-// gone (the .proto rides as a closure leaf instead), so the only live callers are
-// the two codegen-node sites above.
-func dropTransitiveGeneratedProto(in []VFS) []VFS {
-	out := in[:0]
-
-	for _, v := range in {
-		if v.isBuild() && strings.HasSuffix(v.rel(), ".proto") {
-			continue
-		}
-
-		out = append(out, v)
-	}
 
 	return out
 }
@@ -339,12 +334,13 @@ func prEmitsIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS) []IncludeD
 	includes := make([]IncludeDirective, 0, len(inVFSs)+len(stmt.OutputIncludes))
 
 	for _, v := range inVFSs {
-		// A generated output does not #include its source $(B) .proto — upstream
-		// parses a .pb.h as a plain C header (no proto reference); the .proto→protoc
-		// link is the protoc node's own direct IN. Fake-including it here made every
-		// consumer that walks this output (e.g. multiproto reading the .pb.h)
-		// wrongly pull the $(B) .proto as an input.
-		if v.isBuild() && strings.HasSuffix(v.rel(), ".proto") {
+		// A generated output never #includes its $(B) inputs — those are codegen
+		// intermediates (e.g. a RUN_ANTLR-generated .proto) reached via the
+		// producer dep edge, not C++ includes. Their $(S) generator sources ride
+		// to consumers as this output's ClosureLeaves (see emitRunProgram),
+		// matching emit_proto.go; fake-including the intermediate here dragged the
+		// $(B) file into every consumer's closure.
+		if v.isBuild() {
 			continue
 		}
 
