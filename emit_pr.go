@@ -133,7 +133,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// Exclude prRef as well as the tool: the outputs are now registered against
 	// prRef, so a PR output appearing in another output's closure must not become a
 	// self-dependency (the old two-phase code bound the ref only after this resolve).
-	prExtraDepRefs := resolveCodegenDepRefsExt(ctx, instance, inputClosure, inVFSs, toolLDRef, prRef)
+	prExtraDepRefs := resolveCodegenDepRefs(ctx, instance, inputClosure, toolLDRef, prRef)
 
 	prResult := emitPR(instance, stmt, toolBinPath, toolLDRef, auxTools, inVFSByToken, inVFSs, outVFSByToken, stdoutVFS, inputClosure, prExtraDepRefs, prRef, ctx.emit)
 
@@ -190,7 +190,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	}
 	walkInput := func(rel string) {
 		inputVFS := runProgramInputVFS(ctx, instance, d, rel)
-		sub := walkClosureTail(ctx.scannerFor(instance), inputVFS, scanIn.ScanCfg)
+		sub := walkClosure(ctx.scannerFor(instance), inputVFS, scanIn.ScanCfg)
 		out = append(out, sub...)
 	}
 
@@ -291,7 +291,6 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		}
 	}
 
-	out = dropTransitiveGeneratedProto(out)
 
 	if len(out) == 0 {
 		return nil

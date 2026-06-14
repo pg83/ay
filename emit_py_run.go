@@ -104,9 +104,8 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	}
 
 	inputClosure := pyInputClosure(ctx, instance, stmt, d, moduleInputs)
-	codegenInputs := append([]VFS{scriptVFS}, inVFSs...)
 	// Exclude pyRef: outputs are now registered against it; see emit_pr.go.
-	extraDepRefs := resolveCodegenDepRefsExt(ctx, instance, inputClosure, codegenInputs, pyRef)
+	extraDepRefs := resolveCodegenDepRefs(ctx, instance, inputClosure, pyRef)
 	result := emitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, pyRef, moduleInputs.TC, ctx.emit)
 
 	if d.prOutputInputs == nil {
@@ -164,7 +163,7 @@ func pyInputClosure(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 		// parsedIncludes) produces the correct PY-node input set.
 		for _, f := range stmt.INFiles {
 			vfs := runProgramInputVFS(ctx, instance, d, f.string())
-			out = append(out, walkClosureTail(ctx.scannerFor(instance), vfs, scanIn.ScanCfg)...)
+			out = append(out, walkClosure(ctx.scannerFor(instance), vfs, scanIn.ScanCfg)...)
 		}
 	} else {
 		// Walk every output that carries includes — the same predicate under which
@@ -190,7 +189,6 @@ func pyInputClosure(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 		}
 	}
 
-	out = dropTransitiveGeneratedProto(out)
 
 	if len(out) == 0 {
 		return nil
