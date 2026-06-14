@@ -124,7 +124,7 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 		// without the exclude probe(srcVFS) would now resolve to this very node — a
 		// self-dependency (and finalize cycle). The old two-phase code never saw it
 		// because dst was not yet bound at this point.
-		depRefs := resolveCodegenDepRefsExt(ctx, instance, nil, []VFS{srcVFS}, entries[i].ref)
+		deps := resolveCodegenDepRefsExt(ctx, instance, nil, []VFS{srcVFS}, entries[i].ref)
 		var closure []VFS
 
 		// COPY_FILE with WITH_CONTEXT pulls the source file's #include closure;
@@ -146,7 +146,7 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 			closure = dedupVFS(closure)
 		}
 
-		emitCPWithDeps(instance, srcVFS, dstVFS, depRefs, closure, entries[i].ref, d.tc, ctx.scripts, ctx.emit)
+		emitCPWithDeps(instance, srcVFS, dstVFS, deps, closure, entries[i].ref, d.tc, ctx.scripts, ctx.emit)
 	}
 }
 

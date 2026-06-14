@@ -132,14 +132,14 @@ func emitLD(
 	// command wraps them in --whole-archive), not an independent dependency source:
 	// every wholeArchiveRef is already in peerLDRefs. So it is NOT appended here —
 	// peerLDRefs already covers it, and appending would duplicate the dep.
-	depRefs := make([]NodeRef, 0, len(ccRefs)+len(pluginRefs)+len(globalRefs)+len(peerLDRefs)+len(dynamicRefs)+len(objcopyRefs))
-	depRefs = append(depRefs, ccRefs...)
-	depRefs = append(depRefs, pluginRefs...)
-	depRefs = append(depRefs, globalRefs...)
-	depRefs = append(depRefs, peerLDRefs...)
-	depRefs = append(depRefs, dynamicRefs...)
-	depRefs = append(depRefs, objcopyRefs...)
-	depRefs = append(depRefs, emitVCSNode(emit, hostP))
+	deps := make([]NodeRef, 0, len(ccRefs)+len(pluginRefs)+len(globalRefs)+len(peerLDRefs)+len(dynamicRefs)+len(objcopyRefs))
+	deps = append(deps, ccRefs...)
+	deps = append(deps, pluginRefs...)
+	deps = append(deps, globalRefs...)
+	deps = append(deps, peerLDRefs...)
+	deps = append(deps, dynamicRefs...)
+	deps = append(deps, objcopyRefs...)
+	deps = append(deps, emitVCSNode(emit, hostP))
 	outputs := []VFS{outputVFS}
 
 	for _, p := range dynamicPaths {
@@ -159,7 +159,7 @@ func emitLD(
 		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: binaryDir, ModuleLang: ldModuleLang(instance), ModuleType: mtBin},
-		DepRefs:          depRefs,
+		DepRefs:          deps,
 		Resources:        instance.Platform.UsesLinkResources,
 	}
 
