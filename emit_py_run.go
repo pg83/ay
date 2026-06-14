@@ -229,7 +229,6 @@ func splitCodegenDetect(stmt *RunPythonStmt) (hasCCShard bool, hasHeader bool) {
 // cached with the full scan context BEFORE emitOneSource uses them.
 func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *RunPythonStmt, scriptVFS VFS) []VFS {
 	reg := codegenRegForInstance(ctx, instance)
-	scanner := ctx.scannerFor(instance)
 	seen := make(map[VFS]struct{}, 32)
 	var sources []VFS
 	addSource := func(v VFS) {
@@ -277,44 +276,19 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 			continue
 		}
 
-		for _, pd := range scanner.parsers.parsedIncludes(vfs, nil) {
-			if bvfs := pd.target.vfs(); bvfs != 0 {
-				if bvfs.isBuild() {
-					if info := reg.lookup(bvfs); info != nil {
-						for _, si := range info.SourceInputs {
-							addSource(si)
-						}
-					}
-				}
-
-				continue
-			}
-
-			target := pd.target.string()
-
-			if ctx.fs.isFile(srcRootVFS, target) {
-				addSource(source(target))
-			} else if info := reg.lookupSTR(pd.target); info != nil {
-				for _, si := range info.SourceInputs {
-					addSource(si)
-				}
-			}
-		}
-
-		// The IN file's producing tools' INDUCED_DEPS (e.g. protoc's runtime set for
-		// a generated .pb.cc) are no longer woven into its parsedIncludes; pull the
-		// source-rooted ones in directly here, mirroring the scanner's
-		// resolveInducedDeps. Shards are translation units, so take the Cpp bucket
-		// (which holds both the cpp-only and the h+cpp induced groups).
 		if info := reg.lookup(vfs); info != nil {
 			// The IN file's own transitive source inputs — e.g. the antlr
 			// grammar/template/jar/scripts behind a generated .pb.h/.pb.cc, folded
-			// in by its producer (emitRunProgram). Read them directly instead of
-			// chasing a fake .proto self-include through parsedIncludes.
+			// in by its producer (emitRunProgram). Read them directly from the
+			// registry rather than chasing parsedIncludes.
 			for _, si := range info.SourceInputs {
 				addSource(si)
 			}
 
+			// The IN file's producing tools' INDUCED_DEPS (e.g. protoc's runtime
+			// set for a generated .pb.cc): pull the source-rooted ones in,
+			// mirroring the scanner's resolveInducedDeps. Shards are translation
+			// units, so take the Cpp bucket (cpp-only + h+cpp induced groups).
 			for _, gref := range info.GeneratorRefs {
 				if tool, ok := ctx.moduleByRef.get(gref); ok {
 					addInducedSources(tool.InducedDeps.bucket(parsedIncludesCpp))
