@@ -248,9 +248,6 @@ func buildClangFormatNode(na *NodeArenas, p *Platform, info TestSuiteInfo) *Node
 			HasSpecialRunner: true,
 		},
 		Outputs: testOutputs(info.ProjectPath, "clang_format"),
-		// The style/lint run node is tagless — carry the platform's TestTags (empty)
-		// so it overrides the platform Tags rather than inheriting the sandboxing set.
-		Tags: p.TestTags,
 		Requirements: Requirements{
 			CPU:        1,
 			Network:    nwRestricted,
@@ -286,19 +283,6 @@ func testEnv(_ *Platform, testName string) EnvVars {
 		{Name: envYA_TC, Value: strNo},
 		{Name: envYA_TEST_RUNNER, Value: strOne},
 	}
-}
-
-func sandboxingNodeTags(p *Platform) []STR {
-	if p == nil || p.Flags[envSANDBOXING] != strYes {
-		return nil
-	}
-
-	return internStrs([]string{
-		string(p.Target),
-		p.BuildType,
-		"FAKEID=sandboxing",
-		"SANDBOXING=yes",
-	})
 }
 
 func targetPlatformDescriptor(p *Platform) string {

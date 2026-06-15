@@ -43,13 +43,6 @@ type Platform struct {
 	// by string. Toolchain/build-config derivations inside NewPlatform read the
 	// raw input map; everything past the platform uses ENV/STR.
 	Flags map[ENV]STR
-	Tags  []STR
-
-	// TestTags is the tag list for the special tagless test/lint run nodes (e.g.
-	// the clang_format style check), which carry it on Node.Tags instead of the
-	// platform's Tags. Empty (non-nil) so a node setting it overrides the platform
-	// Tags with "no tags" rather than falling back to them.
-	TestTags []STR
 
 	PIC             bool
 	BuildType       string
@@ -197,13 +190,9 @@ func internFlags(flags map[string]string) map[ENV]STR {
 	return out
 }
 
-func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, cflagsEnv, cxxflagsEnv string) *Platform {
+func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxflagsEnv string) *Platform {
 	if flags == nil {
 		flags = map[string]string{}
-	}
-
-	if tags == nil {
-		tags = []string{}
 	}
 
 	buildType := platformBuildType(flags)
@@ -224,8 +213,6 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, tags []string, 
 		ISA:               isa,
 		Target:            makePlatformID(os, isa),
 		Flags:             internFlags(flags),
-		Tags:              internStrs(tags),
-		TestTags:          []STR{},
 		PIC:               flags["PIC"] == "yes",
 		BuildType:         buildType,
 		BuildRelease:      buildRelease,

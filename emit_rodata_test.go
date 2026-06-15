@@ -3,7 +3,7 @@ package main
 import "testing"
 
 func TestEmitRD_NodeShape(t *testing.T) {
-	target := newTestPlatform(OSLinux, ISAX8664, "no", nil)
+	target := newTestPlatform(OSLinux, ISAX8664, "no")
 	instance := ModuleInstance{
 		Path:     source("contrib/libs/icu"),
 		Kind:     KindLib,

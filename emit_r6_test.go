@@ -16,7 +16,6 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		Outputs:          ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 		Platform:         &Platform{Target: "default-linux-x86_64"},
 		Requirements:     Requirements{},
-		Tags:             []STR{internStr("tool")},
 		TargetProperties: TargetProperties{ModuleDir: "contrib/tools/ragel6"},
 	})
 
@@ -62,14 +61,6 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 
 	if string(got.Platform.Target) != string(PlatformDefaultLinuxAArch64) {
 		t.Errorf("platform = %q, want %q", string(got.Platform.Target), PlatformDefaultLinuxAArch64)
-	}
-
-	if nodeHasHostTag(nodeTags(got)) {
-		t.Errorf("tags carry \"tool\" → host_platform = true, want false; tags=%v", nodeTags(got))
-	}
-
-	if len(nodeTags(got)) != 0 {
-		t.Errorf("tags = %v, want [] (aarch64 R6 is target-side)", nodeTags(got))
 	}
 
 	if got.ForeignDepRefs[0] != ragel6LD {
@@ -144,7 +135,7 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 	}
 	releaseHostFlags["PIC"] = "yes"
 	releaseHostFlags["GG_BUILD_TYPE"] = "release"
-	releaseHost := newPlatform(newMemFS(nil), OSLinux, ISAX8664, releaseHostFlags, []string{"tool"}, "", "")
+	releaseHost := newPlatform(newMemFS(nil), OSLinux, ISAX8664, releaseHostFlags, "", "")
 
 	r6Ref := e.reserve()
 	emitR6(
@@ -167,14 +158,6 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 
 	if got.Cmds[0].CmdArgs.flat()[1].string() != "-CG2" {
 		t.Errorf("cmd_args[1] = %q, want -CG2 (x86_64 host = release = optimized)", got.Cmds[0].CmdArgs.flat()[1].string())
-	}
-
-	if !nodeHasHostTag(nodeTags(got)) {
-		t.Errorf("tags do not carry \"tool\"; want host_platform-equivalent. tags=%v", nodeTags(got))
-	}
-
-	if tg := nodeTags(got); len(tg) != 1 || tg[0] != internStr("tool") {
-		t.Errorf("tags = %v, want [tool]", nodeTags(got))
 	}
 }
 
@@ -229,16 +212,11 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 
 	counts := make(map[string]int)
 	platforms := make(map[string]int)
-	hostNodes := 0
 
 	for _, n := range g.Graph {
 		p := n.KV.P.string()
 		counts[p]++
 		platforms[string(n.Platform.Target)]++
-
-		if nodeHasHostTag(nodeTags(n)) {
-			hostNodes++
-		}
 	}
 
 	if counts["R6"] != 1 {
@@ -255,10 +233,6 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 
 	if counts["CC"] != 2 {
 		t.Errorf("CC count = %d, want 2 (host ragel6/main.cpp + target generated parser.rl6.cpp)", counts["CC"])
-	}
-
-	if hostNodes != 3 {
-		t.Errorf("host nodes = %d, want 3 (host CC + host LD + vcs.json)", hostNodes)
 	}
 
 	if platforms[string(PlatformDefaultLinuxAArch64)] != 3 {

@@ -44,9 +44,5 @@ func TestEmitPyRegister_ProducerEmittedAtTargetPlatform(t *testing.T) {
 		if string(n.Platform.Target) != string(testTargetP.Target) {
 			t.Errorf("PY node platform = %q, want %q (target)", n.Platform.Target, testTargetP.Target)
 		}
-
-		if len(nodeTags(n)) != 0 {
-			t.Errorf("PY node tags = %v, want none", nodeTags(n))
-		}
 	}
 }

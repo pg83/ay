@@ -49,7 +49,7 @@ func TestWrapccPrefixFor_GateOnOpensource(t *testing.T) {
 
 func TestNewPlatform_WrapccVectorsAndResources(t *testing.T) {
 	// Non-opensource platform carries the wrapcc prefix and a YMAKE_PYTHON3 CC dep.
-	intP := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, map[string]string{"PIC": "no"}, nil, "", "")
+	intP := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, map[string]string{"PIC": "no"}, "", "")
 
 	if len(intP.WrapccHead) == 0 {
 		t.Fatal("non-opensource platform must populate WrapccHead")
@@ -61,7 +61,7 @@ func TestNewPlatform_WrapccVectorsAndResources(t *testing.T) {
 	}
 
 	// Opensource platform: no wrapper, CLANG-only CC deps.
-	osP := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, map[string]string{"PIC": "no", "OPENSOURCE": "yes"}, nil, "", "")
+	osP := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, map[string]string{"PIC": "no", "OPENSOURCE": "yes"}, "", "")
 
 	if len(osP.WrapccHead) != 0 {
 		t.Errorf("opensource platform must not populate WrapccHead; got %v", osP.WrapccHead)
@@ -96,7 +96,7 @@ func TestNewPlatform_ParsesCompilerFlags(t *testing.T) {
 		"PIC": "no",
 	}
 
-	p := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, `-O2 -DNAME="hello world"`, `-stdlib=libc++ -DCPP=1`)
+	p := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, `-O2 -DNAME="hello world"`, `-stdlib=libc++ -DCPP=1`)
 
 	if !reflect.DeepEqual(argStrs(p.CFlags), []string{"-O2", "-DNAME=hello world"}) {
 		t.Fatalf("CFlags = %#v", argStrs(p.CFlags))
@@ -115,7 +115,7 @@ func TestPlatformMultiarchLibPath_UsesCompilerRoot(t *testing.T) {
 		"CLANG_pl_pl_TOOL": "$(CLANG)/bin/clang++",
 		"AR_TOOL":          "$(CLANG)/bin/llvm-ar",
 		"LLD_TOOL":         "$(LLD_ROOT)/bin/ld.lld",
-	}, []string{"tool"}, "", "")
+	}, "", "")
 
 	// Internal contour (no OPENSOURCE flag): the resource-resolved SDK form.
 	if got, want := p.multiarchLibPath(false), "$(B)/resources/CLANG20/lib:$(B)/resources/OS_SDK_ROOT/usr/lib/x86_64-linux-gnu"; got != want {
@@ -135,7 +135,7 @@ func TestPlatformLinkerSelectionTailFlags_UsesConfiguredLLDPath(t *testing.T) {
 		"CLANG_pl_pl_TOOL": "$(CLANG)/bin/clang++",
 		"AR_TOOL":          "$(CLANG)/bin/llvm-ar",
 		"LLD_TOOL":         "$(LLD_ROOT)/bin/ld.lld",
-	}, nil, "", "")
+	}, "", "")
 
 	// The lld linker flags now come from build/platform/lld's propagated
 	// LDFLAGS_GLOBAL (the implicit toolchain peer), not the Platform.

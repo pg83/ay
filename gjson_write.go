@@ -92,10 +92,6 @@ func appendNode(buf []byte, n *Node, uids *UidVec, fetchRefs *DenseMap[STR, Node
 		buf = appendToolForeignDeps(buf, n.ForeignDepRefs, uids)
 	}
 
-	if nodeHasHostTag(nodeTags(n)) {
-		buf = append(buf, `,"host_platform":true`...)
-	}
-
 	buf = append(buf, `,"inputs":`...)
 
 	if dropSrcInputs {
@@ -124,9 +120,6 @@ func appendNode(buf []byte, n *Node, uids *UidVec, fetchRefs *DenseMap[STR, Node
 
 	buf = append(buf, `,"self_uid":`...)
 	buf = appendUID(buf, n.SelfUID)
-
-	buf = append(buf, `,"tags":`...)
-	buf = appendStrSlice(buf, nodeTags(n))
 
 	buf = append(buf, `,"target_properties":`...)
 	buf = appendTargetProperties(buf, n.TargetProperties)

@@ -209,9 +209,6 @@ END()
 			}
 		}
 	}
-	if !nodeHasHostTag(nodeTags(configPlugin)) {
-		t.Fatalf("config proto plugin tags = %v, want host tool tag", nodeTags(configPlugin))
-	}
 	if !slices.Contains(graphDeps(g, configPlugin), pluginRuntime.UID) {
 		t.Fatalf("config proto plugin deps = %v, want runtime peer uid %q", graphDeps(g, configPlugin), pluginRuntime.UID)
 	}

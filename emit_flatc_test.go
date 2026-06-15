@@ -3,7 +3,7 @@ package main
 import "testing"
 
 func TestEmitFL_NodeShape(t *testing.T) {
-	target := newTestPlatform(OSLinux, ISAX8664, "no", nil)
+	target := newTestPlatform(OSLinux, ISAX8664, "no")
 	instance := ModuleInstance{
 		Path:     source("mod"),
 		Kind:     KindLib,

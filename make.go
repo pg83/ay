@@ -74,10 +74,6 @@ func compilerFlagsFromConfig(primary, internal map[string]string, key, env strin
 	return joinCompilerFlagStrings(primary[key], internal[key], env)
 }
 
-func shouldExposeSandboxingTargetTags(mf *MakeFlags) bool {
-	return mf != nil && mf.sandboxing && mf.testLevel > 0
-}
-
 func cmdMake(args []string) int {
 	if len(args) > 0 && args[0] == "cas" {
 		return cmdCasAnalyze(args[1:])
@@ -154,7 +150,6 @@ func cmdMake(args []string) int {
 		hOS,
 		hISA,
 		hostFlags,
-		[]string{"tool"},
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CFLAGS", ""),
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CXXFLAGS", ""),
 	)
@@ -198,14 +193,9 @@ func cmdMake(args []string) int {
 		tOS,
 		tISA,
 		targetFlags,
-		nil,
 		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CFLAGS", os.Getenv("CFLAGS")),
 		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS")),
 	)
-
-	if shouldExposeSandboxingTargetTags(mf) {
-		targetP.Tags = sandboxingNodeTags(targetP)
-	}
 
 	onWarn := func(w Warn) {
 		if w.Kind == WarnMissingInclude && !mf.keepGoing {

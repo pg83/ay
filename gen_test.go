@@ -927,8 +927,8 @@ END()
 `,
 	})
 
-	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
-	target := newTestPlatform(OSLinux, ISAX8664, "no", nil)
+	host := newTestPlatform(OSLinux, ISAX8664, "yes")
+	target := newTestPlatform(OSLinux, ISAX8664, "no")
 	g := Gen(fs, "myprog", host, target, func(Warn) {})
 
 	hasTcmalloc := false
@@ -1744,13 +1744,13 @@ int use() { return 0; }
 }
 
 func testGen(fs FS, targetDir string) *Graph {
-	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
+	host := newTestPlatform(OSLinux, ISAX8664, "yes")
 	targetFlags := make(map[string]string, len(testToolchainFlags)+1)
 	for k, v := range testToolchainFlags {
 		targetFlags[k] = v
 	}
 	targetFlags["PIC"] = "no"
-	target := newPlatform(fs, OSLinux, ISAAArch64, targetFlags, nil, "", "")
+	target := newPlatform(fs, OSLinux, ISAAArch64, targetFlags, "", "")
 	return Gen(fs, targetDir, host, target, func(Warn) {})
 }
 

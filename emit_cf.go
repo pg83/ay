@@ -6,16 +6,16 @@ import (
 	"strings"
 )
 
+var (
+	cfgVarRefRe      = regexp.MustCompile(`@([A-Z_][A-Z0-9_]*)@`)
+	cfgCmakeDefineRe = regexp.MustCompile(`#cmakedefine(?:01)?[ \t]+([A-Z_][A-Z0-9_]*)`)
+)
+
 // A CONFIGURE_FILE / *.in source is a template: configure_file.py substitutes its
 // @VAR@ and #cmakedefine[01] references (resolved from SET/DEFAULT vars) to
 // produce the output. The three entry points below all walk the template's
 // include closure, emit the configure node, and register the output; they differ
 // only in how src/dst are named and what happens to the output afterwards.
-
-var (
-	cfgVarRefRe      = regexp.MustCompile(`@([A-Z_][A-Z0-9_]*)@`)
-	cfgCmakeDefineRe = regexp.MustCompile(`#cmakedefine(?:01)?[ \t]+([A-Z_][A-Z0-9_]*)`)
-)
 
 const buildTypeDebug = "BUILD_TYPE=DEBUG"
 
@@ -76,6 +76,7 @@ func emitConfigureFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 	cmdArgs = appendInternStrs(cmdArgs, buildCFGVars(ctx.fs, srcVFS.rel(), in.SetVars, in.DefaultVars))
 
 	tp := TargetProperties{ModuleDir: instance.Path.rel()}
+
 	if tag := cfModuleTag(d, instance); tag != 0 {
 		tp.ModuleTag = tag
 	}
