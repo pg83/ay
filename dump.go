@@ -303,6 +303,72 @@ func filterARLDInputs(in []string, kind string, cmdBases map[string]struct{}) []
 	return out
 }
 
+// objcopyOverEmitExts are the C/C++ source/header extensions that constitute the
+// embedded resource producer's leaked compile closure on a resource-objcopy node.
+var objcopyOverEmitExts = map[string]struct{}{
+	".h": {}, ".hpp": {}, ".hxx": {}, ".ipp": {}, ".inc": {}, ".def": {},
+	".proto": {}, ".cpp": {}, ".cc": {}, ".cxx": {}, ".c": {}, ".i": {}, ".td": {},
+	".txt": {}, // COPY_FILE(TEXT) header sources, e.g. mkql_computation_node_codegen.h.txt
+}
+
+// filterObjcopyInputs drops the embedded resource producer's transitive $(S)
+// compile/source closure that upstream over-emits onto a resource-objcopy node as
+// cache-key-only inputs (the objcopy.py action reads only the resource it embeds;
+// none of these appear in cmd_args). Classified per file from the our-vs-ref input
+// delta (see bugs/20260615-upstream-resource-objcopy-overemit.md): the closure is
+// everything under $(S)/contrib/libs/ (libcxx/libmagic/clang-rt/protobuf headers &
+// data), every C/C++ source/header by extension (module-local generated .pb.h /
+// .proto included), and the $(S)/build/ generator wrappers (cpp_proto_wrapper.py).
+// Command-named files (the resource, objcopy.py, the tools), $(B) artifacts, the
+// python3 interpreter stdlib and contrib/python package sources are kept.
+func filterObjcopyInputs(in []string, cmdBases map[string]struct{}) []string {
+	out := in[:0]
+
+	for _, s := range in {
+		if objcopyInputKept(s, cmdBases) {
+			out = append(out, s)
+		}
+	}
+
+	return out
+}
+
+func objcopyInputKept(s string, cmdBases map[string]struct{}) bool {
+	b := baseName(s)
+
+	if _, named := cmdBases[b]; named && !cmdLiteralBasenames[b] {
+		return true
+	}
+
+	rel, isSrc := strings.CutPrefix(s, "$(S)/")
+
+	if !isSrc {
+		return true
+	}
+
+	if strings.HasPrefix(rel, "contrib/libs/") {
+		return false
+	}
+
+	if _, over := objcopyOverEmitExts[fileExt(b)]; over {
+		return false
+	}
+
+	if strings.HasPrefix(rel, "build/") && strings.HasSuffix(b, ".py") {
+		return false
+	}
+
+	return true
+}
+
+func fileExt(base string) string {
+	if i := strings.LastIndexByte(base, '.'); i >= 0 {
+		return base[i:]
+	}
+
+	return ""
+}
+
 func getString(node map[string]any, key string) string {
 	s, _ := node[key].(string)
 
@@ -317,10 +383,28 @@ func getString(node map[string]any, key string) string {
 // can be tightened to drop only what is really superfluous.
 func canonInputs(node map[string]any, refGraph bool) []string {
 	inputs := normSortedStrings(node["inputs"])
+
+	if !refGraph {
+		return inputs
+	}
+
 	kind := nodeProgramKind(node)
 
-	if refGraph && (kind == "AR" || kind == "LD") {
+	switch {
+	case kind == "AR" || kind == "LD":
 		inputs = filterARLDInputs(inputs, kind, nodeCmdBasenames(node))
+	case kind == "PY":
+		// Resource-embedding objcopy (build/scripts/objcopy.py): upstream lists
+		// the embedded resource's producer's full transitive $(S) compile closure
+		// (libcxx/sanitizer headers, cpp_proto_wrapper.py, …) as inputs, though
+		// objcopy.py reads only the resource it embeds — those paths never appear
+		// in cmd_args. Same over-emit class as AR/LD; keep only command-named
+		// inputs. See bugs/20260615-upstream-resource-objcopy-overemit.md.
+		cmdBases := nodeCmdBasenames(node)
+
+		if _, ok := cmdBases["objcopy.py"]; ok {
+			inputs = filterObjcopyInputs(inputs, cmdBases)
+		}
 	}
 
 	return inputs

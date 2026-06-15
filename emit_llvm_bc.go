@@ -193,17 +193,6 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 		// side map. The .bc carries no #includes, so no parsed includes / generators.
 		registerBoundGeneratedParsedOutput(ctx, instance, pkOP, optOut, nil, opRef, nil)
 
-		// Propagate the OP node's inputs into prOutputInputs so that
-		// emitResourceObjcopy's prResourceExtraInputs picks up the full BC
-		// compilation closure (clang_wrapper.py, llvm_opt_wrapper.py, and all
-		// header dependencies) and adds them as inputs to the PY objcopy node.
-		// Upstream ymake propagates producer inputs transitively via its
-		// ${input:...} resolution; our code uses the prOutputInputs map for this.
-		if d.prOutputInputs == nil {
-			d.prOutputInputs = map[STR]InputChunks{}
-		}
-
-		d.prOutputInputs[internStr(optOutName)] = optChunks // read-only consumers (node inputs + prResourceExtraInputs copies out)
 		d.resources = append(d.resources, ResourceEntry{
 			Path:      optOutName,
 			Key:       "/llvm_bc/" + stmt.Name,

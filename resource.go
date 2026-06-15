@@ -146,31 +146,6 @@ func resourceLibTagForData(d *ModuleData) *string {
 	return resourceModuleTag(d.moduleStmt.Name)
 }
 
-func prResourceExtraInputs(d *ModuleData, output string) []VFS {
-	if d.prOutputInputs == nil {
-		return nil
-	}
-
-	chunks := d.prOutputInputs[internStr(output)]
-	total := 0
-
-	for _, ch := range chunks {
-		total += len(ch)
-	}
-
-	out := make([]VFS, 0, total)
-
-	for _, ch := range chunks {
-		for _, p := range ch {
-			if p.isSource() {
-				out = append(out, p)
-			}
-		}
-	}
-
-	return out
-}
-
 func expandRootrel(kv string, unitPath string) string {
 	const marker = "${rootrel;context=TEXT;input=TEXT:\""
 	idx := strings.Index(kv, marker)
