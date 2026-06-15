@@ -56,8 +56,8 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 		linksCopy := false
 
 		for _, src := range stmt.Sources {
-			inputVFS, producer := llvmBcSourceInfo(ctx, instance, d, src)
-			bcOut := build(llvmBcRootRelArcSrc(ctx, instance, d, src) + stmt.Suffix + ".bc")
+			inputVFS, producer := llvmBcSourceInfo(ctx, instance, src)
+			bcOut := build(llvmBcRootRelArcSrc(ctx, instance, src) + stmt.Suffix + ".bc")
 			bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
 
 			// Walk include closure (same as emitCodegenDownstreamCC for generated CC).
@@ -188,11 +188,10 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 
 		ensureResourcePeer(instance.Path.rel(), d)
 
-		if d.prOutputProducer == nil {
-			d.prOutputProducer = map[STR]NodeRef{}
-		}
-
-		d.prOutputProducer[internStr(optOutName)] = opRef
+		// Register the optimized .bc as a codegen output so consumers resolve its
+		// producer through the registry (like every other generated file), not a
+		// side map. The .bc carries no #includes, so no parsed includes / generators.
+		registerBoundGeneratedParsedOutput(ctx, instance, pkOP, optOut, nil, opRef, nil)
 
 		// Propagate the OP node's inputs into prOutputInputs so that
 		// emitResourceObjcopy's prResourceExtraInputs picks up the full BC
@@ -293,20 +292,25 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 }
 
 // llvmBcSourceInfo returns the compile input VFS and optional producer NodeRef
-// for a given source in an LLVM_BC statement. Checks both the module's
-// prOutputProducer map (for RUN_PROGRAM / PR outputs) and the codegen registry
-// (for COPY WITH_CONTEXT generated sources like yt_codec_bc.cpp).
-func llvmBcSourceInfo(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src string) (inputVFS VFS, producer NodeRef) {
-	// RUN_PROGRAM / PR generated output
-	if ref := d.prOutputProducer[internStr(src)]; ref != (NodeRef(0)) {
-		return copyFileOutputVFS(instance.Path.rel(), src), ref
+// for a given source in an LLVM_BC statement. Resolves the producer through the
+// codegen registry — both for RUN_PROGRAM / PR / OP outputs (keyed by the output
+// VFS) and for COPY WITH_CONTEXT generated sources like yt_codec_bc.cpp.
+func llvmBcSourceInfo(ctx *GenCtx, instance ModuleInstance, src string) (inputVFS VFS, producer NodeRef) {
+	reg := codegenRegForInstance(ctx, instance)
+
+	// RUN_PROGRAM / PR / OP generated output (the producer ref lives in the
+	// codegen registry, keyed by the output VFS).
+	outVFS := copyFileOutputVFS(instance.Path.rel(), src)
+
+	if info := reg.lookup(outVFS); info != nil {
+		return outVFS, info.ProducerRef
 	}
 
 	// COPY WITH_CONTEXT generated source — build-root copy is authoritative
 	if buildVFS := generatedModuleSourceVFS(ctx, instance, src); buildVFS != nil {
 		ref := NodeRef(0)
 
-		if info := codegenRegForInstance(ctx, instance).lookup(*buildVFS); info != nil {
+		if info := reg.lookup(*buildVFS); info != nil {
 			ref = info.ProducerRef
 		}
 
@@ -324,8 +328,8 @@ func llvmBcSourceInfo(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src s
 // source-tree file, resolve_arc_path returns $S/<module>/<src> and
 // rootrel_arc_src strips $S/ → module-rel path. yt_codec_bc.cpp is the
 // canonical build-rooted case (sg5: $(B)/yt_codec_bc.cpp.16.bc).
-func llvmBcRootRelArcSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src string) string {
-	if _, ok := d.prOutputProducer[internStr(src)]; ok {
+func llvmBcRootRelArcSrc(ctx *GenCtx, instance ModuleInstance, src string) string {
+	if reg := codegenRegForInstance(ctx, instance); reg.lookup(copyFileOutputVFS(instance.Path.rel(), src)) != nil {
 		return src
 	}
 

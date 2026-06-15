@@ -261,24 +261,27 @@ func emitResourceObjcopy(
 					}
 				} else {
 					inputVFS := copyFileInputVFS(ctx.fs, instance.Path.rel(), e.Path)
-					// Producer keys (RUN_PROGRAM OUTFiles, COPY outputs, etc.)
-					// are stored in expanded form ($(B)/<unit>/X), but RESOURCE
-					// pair.Path is kept raw (${BINDIR}/X) to match upstream's
-					// objcopy_<hash>. Lookup canonicalizes by VFS string.
+					// The producer ref of a generated resource (RUN_PROGRAM OUTFile,
+					// COPY output, etc.) lives in the codegen registry, keyed by the
+					// output VFS. copyFileOutputVFS canonicalizes the raw RESOURCE
+					// path (${BINDIR}/X, $(B)/<unit>/X, or a plain name) to that VFS.
 					var producerRef NodeRef
 
-					if d.prOutputProducer != nil {
+					if info := codegenRegForInstance(ctx, instance).lookup(copyFileOutputVFS(instance.Path.rel(), e.Path)); info != nil {
 						canonKey := inputVFS.string()
+						inputVFS = copyFileOutputVFS(instance.Path.rel(), e.Path)
+						producerRef = info.ProducerRef
 
-						if ref, ok := d.prOutputProducer[internStr(canonKey)]; ok {
-							inputVFS = copyFileOutputVFS(instance.Path.rel(), e.Path)
-							producerRef = ref
-							cur.extraInputs = dedupVFS(cur.extraInputs, prResourceExtraInputs(d, canonKey))
-						} else if ref, ok := d.prOutputProducer[internStr(e.Path)]; ok {
-							inputVFS = copyFileOutputVFS(instance.Path.rel(), e.Path)
-							producerRef = ref
-							cur.extraInputs = dedupVFS(cur.extraInputs, prResourceExtraInputs(d, e.Path))
+						// prOutputInputs is still keyed by the producer's raw OUT
+						// token, which is either the canonical $(B) string or the raw
+						// RESOURCE path; try both.
+						extra := prResourceExtraInputs(d, canonKey)
+
+						if len(extra) == 0 {
+							extra = prResourceExtraInputs(d, e.Path)
 						}
+
+						cur.extraInputs = dedupVFS(cur.extraInputs, extra)
 					}
 
 					cur.paths = append(cur.paths, e.Path)

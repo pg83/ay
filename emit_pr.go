@@ -27,22 +27,6 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 	for _, rp := range d.runPrograms {
 		prRef := emitRunProgram(ctx, instance, rp, d, reg, in)
 
-		if d.prOutputProducer == nil {
-			d.prOutputProducer = map[STR]NodeRef{}
-		}
-
-		for _, f := range rp.OUTFiles {
-			d.prOutputProducer[f] = prRef
-		}
-
-		for _, f := range rp.OUTNoAutoFiles {
-			d.prOutputProducer[f] = prRef
-		}
-
-		if rp.StdoutFile != nil {
-			d.prOutputProducer[*rp.StdoutFile] = prRef
-		}
-
 		outs := make([]string, 0, len(rp.OUTFiles)+len(rp.OUTNoAutoFiles)+1)
 		outs = append(outs, strStrings(rp.OUTFiles)...)
 

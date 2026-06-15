@@ -14,22 +14,6 @@ func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in 
 	for _, rp := range d.runPython {
 		pyRef := emitRunPython(ctx, instance, rp, d, in)
 
-		if d.prOutputProducer == nil {
-			d.prOutputProducer = map[STR]NodeRef{}
-		}
-
-		for _, f := range rp.OUTFiles {
-			d.prOutputProducer[f] = pyRef
-		}
-
-		for _, f := range rp.OUTNoAutoFiles {
-			d.prOutputProducer[f] = pyRef
-		}
-
-		if rp.StdoutFile != nil {
-			d.prOutputProducer[*rp.StdoutFile] = pyRef
-		}
-
 		outs := make([]string, 0, len(rp.OUTFiles)+1)
 		outs = append(outs, strStrings(rp.OUTFiles)...)
 

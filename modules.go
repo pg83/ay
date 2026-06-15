@@ -137,8 +137,6 @@ type ModuleData struct {
 
 	archives []ArchiveEntry
 
-	prOutputProducer map[STR]NodeRef
-
 	prOutputInputs map[STR]InputChunks
 
 	copyFiles []CopyFileEntry

@@ -42,13 +42,11 @@ func emitArchive(
 	for _, f := range a.Files {
 		isPRProduced := false
 
-		if d.prOutputProducer != nil {
-			if ref, ok := d.prOutputProducer[internStr(f)]; ok {
-				isPRProduced = true
+		if info := reg.lookup(copyFileOutputVFS(instance.Path.rel(), f)); info != nil {
+			isPRProduced = true
 
-				if deduper.add(VFS(ref)) {
-					producerRefs = append(producerRefs, ref)
-				}
+			if deduper.add(VFS(info.ProducerRef)) {
+				producerRefs = append(producerRefs, info.ProducerRef)
 			}
 		}
 
