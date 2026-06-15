@@ -24,6 +24,7 @@ type MakeFlags struct {
 	threads           int
 	keepGoing         bool
 	dumpGraph         bool
+	copySources       string
 	stats             bool
 	ninja             bool
 	buildType         string
@@ -215,6 +216,24 @@ func cmdMake(args []string) int {
 		}
 	}
 
+	if mf.copySources != "" {
+		// Build the graph as for -G (the FS records every read), then slice the repo
+		// by what was actually opened. The graph itself is discarded.
+		for _, target := range mf.targets {
+			genDumpGraphWithResources(fs, target, hostP, targetP, onWarn, mf.testLevel > 0)
+		}
+
+		osfs, ok := fs.(*OsFS)
+
+		if !ok {
+			throwFmt("--copy-sources requires the on-disk source FS")
+		}
+
+		throw(copySourceSlice(osfs, mf.srcRoot, mf.copySources, onWarn))
+
+		return 0
+	}
+
 	if mf.threads == 0 {
 		if mf.dumpGraph {
 			for _, target := range mf.targets {
@@ -304,7 +323,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 	state := getopt.NewState(append([]string{"ay-make"}, args...))
 	config := getopt.Config{
 		Opts:     getopt.OptStr("GrdktThD:j:B:o:I:"),
-		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stats,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose,sandboxing,dump-ignored-macros,cmd-prefix:"),
+		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stats,build-dir:,source-root:,keep-going,dump-graph,copy-sources:,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose,sandboxing,dump-ignored-macros,cmd-prefix:"),
 		Mode:     getopt.ModeInOrder,
 		Func:     getopt.FuncGetOptLong,
 	}
@@ -331,6 +350,8 @@ func parseMakeFlags(args []string) *MakeFlags {
 			mf.keepGoing = true
 		case opt.Char == 'G' || opt.Name == "dump-graph":
 			mf.dumpGraph = true
+		case opt.Name == "copy-sources":
+			mf.copySources = opt.OptArg
 		case opt.Name == "stats":
 			mf.stats = true
 		case opt.Name == "musl":

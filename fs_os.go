@@ -1,6 +1,8 @@
 package main
 
 import (
+	"strings"
+
 	"github.com/zeebo/xxh3"
 )
 
@@ -62,6 +64,28 @@ func newFS(srcRoot string) FS {
 	fs.platformInit()
 
 	return fs
+}
+
+// readSourceRels returns the $(S)-relative path of every source file the FS read
+// (every non-empty contentHashes slot — the slot index is the file's full-path STR).
+// Used by --copy-sources to slice the repo by what the graph build actually opened,
+// which is strictly more than the graph's recorded inputs (scanned headers, ya.make
+// files, and other reads never land in a node's inputs). No extra bookkeeping: the
+// content-hash table already records every read.
+func (fs *OsFS) readSourceRels() []string {
+	out := make([]string, 0, len(fs.contentHashes))
+
+	for s := 1; s < len(fs.contentHashes); s++ {
+		if fs.contentHashes[s] == 0 {
+			continue
+		}
+
+		if rel, ok := strings.CutPrefix(STR(s).String(), "$(S)/"); ok && rel != "" {
+			out = append(out, rel)
+		}
+	}
+
+	return out
 }
 
 // recordContentHash stores xxh3(data) at the file's full-path STR (the source VFS
