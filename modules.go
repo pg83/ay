@@ -49,7 +49,6 @@ type ModuleData struct {
 	globalSrcs         []STR
 	pySrcs             []STR
 	pySrcGroups        []PySrcGroup
-	pyGeneratedSrcs    map[STR][]VFS
 	pyPyiResources     []ResourceEntry
 	pyBuildNoPYC       bool
 	pyBuildNoPY        bool

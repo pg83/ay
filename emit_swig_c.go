@@ -74,14 +74,13 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		})
 
-		if d.pyGeneratedSrcs == nil {
-			d.pyGeneratedSrcs = make(map[STR][]VFS)
-		}
-
 		d.pySrcs = append(d.pySrcs, internStr(pyOutRel))
-		d.pyGeneratedSrcs[internStr(pyOutRel)] = append([]VFS{cOutVFS, srcVFS}, swigClosure...)
 		registerBoundGeneratedParsedOutput(ctx, instance, pkSW, cOutVFS, collectSwigInducedIncludes(ctx, srcVFS, swigClosure), swRef, []NodeRef{swigRef})
 		registerBoundGeneratedParsedOutput(ctx, instance, pkSW, pyOutVFS, nil, swRef, []NodeRef{swigRef})
+		// The generated .py's build-from closure (its paired .swg.c, the .swg
+		// source, and the swig include closure) reaches its py-bytecode consumers
+		// through the registry's SourceInputs, not a per-module side map.
+		codegenRegForInstance(ctx, instance).setSourceInputs(pyOutVFS, append([]VFS{cOutVFS, srcVFS}, swigClosure...))
 
 		ccIn := in
 		ccIn.ExtraDepRefs = []NodeRef{swRef}

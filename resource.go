@@ -229,7 +229,7 @@ func resolvePySrcRel(fs FS, srcDirs []VFS, modulePath, srcRel string) string {
 	return modulePath + "/" + srcRel
 }
 
-func buildPySrcEntriesFor(fs FS, d *ModuleData, modulePath string, srcs []string, topLevel bool, namespace *STR) []PySrcEntry {
+func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath string, srcs []string, topLevel bool, namespace *STR) []PySrcEntry {
 	if len(srcs) == 0 {
 		return nil
 	}
@@ -251,7 +251,9 @@ func buildPySrcEntriesFor(fs FS, d *ModuleData, modulePath string, srcs []string
 			continue
 		}
 
-		if d.pyGeneratedSrcs[internStr(srcRel)] != nil {
+		// A build-generated .py (e.g. SWIG output) is resourced by
+		// emitGeneratedPyAuxChunks, not here.
+		if reg.lookupSplit(dirKey(modulePath), internStr(srcRel)) != nil {
 			continue
 		}
 
@@ -268,17 +270,8 @@ func buildPySrcEntriesFor(fs FS, d *ModuleData, modulePath string, srcs []string
 		if !d.pyBuildNoPY {
 			pyKey := "resfs/file/py/" + keyPrefix + srcRel
 			pyPathInput := source(resolvedRel)
-
-			if d.pyGeneratedSrcs[internStr(srcRel)] != nil {
-				pyPathInput = build(modulePath + "/" + srcRel)
-			}
-
 			pyKvHash := "resfs/src/" + pyKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + "\"}"
 			pyKvCmd := "resfs/src/" + pyKey + "=" + resolvedRel
-
-			if d.pyGeneratedSrcs[internStr(srcRel)] != nil {
-				pyKvCmd = "resfs/src/" + pyKey + "=" + modulePath + "/" + srcRel
-			}
 
 			out = append(out, PySrcEntry{
 				pathHash:  srcRel,
@@ -297,11 +290,6 @@ func buildPySrcEntriesFor(fs FS, d *ModuleData, modulePath string, srcs []string
 			ypKvHash := "resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + suffix + "\"}"
 			ypKvCmd := "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
 			extraSrcInput := vfsPtr(source(resolvedRel))
-
-			if d.pyGeneratedSrcs[internStr(srcRel)] != nil {
-				ypKvCmd = "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
-				extraSrcInput = vfsPtr(build(modulePath + "/" + srcRel))
-			}
 
 			out = append(out, PySrcEntry{
 				pathHash:      srcRel + suffix,
