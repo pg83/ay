@@ -76,7 +76,9 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 		case "case_sensitive":
 			rec.CaseInsensitive = string(val) == "false"
 		case "includes":
-			if len(val) != 0 {
+			// `includes:` opens a block sequence; `includes: []` is the empty flow
+			// form (smart_devices_telink.yml) — both contribute no mappings inline.
+			if len(val) != 0 && string(val) != "[]" {
 				throwFmt("%s:%d: inline includes value is not part of the sysincl subset", name, lineNo)
 			}
 		default:
@@ -197,7 +199,17 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 
 		flushPending()
 
-		if indent == 0 || !open {
+		if indent == 0 {
+			// Single-record document form (smart_devices_telink.yml: a bare
+			// `includes: []` with no leading `-`): an indent-0 key opens, then
+			// continues, one implicit record instead of the block-sequence form.
+			open = true
+			recordKey(rest)
+
+			continue
+		}
+
+		if !open {
 			throwFmt("%s:%d: unsupported top-level line %q (expected a record sequence)", name, lineNo, rest)
 		}
 
