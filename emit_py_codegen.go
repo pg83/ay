@@ -96,11 +96,7 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		}
 
 		node := &Node{
-			// .py->.yapyc3 bytecode is platform-independent codegen; attribute it to
-			// the target platform (like emitPyRegister below and the objcopy nodes) so
-			// a python lib pulled by both the target and a host tool produces a single
-			// node that collapses by uid instead of a spurious host duplicate.
-			Platform: ctx.target,
+			Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 				Env: env}),
 			Env:     env,
