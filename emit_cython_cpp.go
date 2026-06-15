@@ -202,6 +202,17 @@ func cythonGeneratedOutputInputs(ctx *GenCtx, instance ModuleInstance, src VFS, 
 
 		toolInputs = append(toolInputs, v)
 		emitsIncludes = append(emitsIncludes, v)
+
+		// Upstream declares these via OUTPUT_INCLUDES (CYTHON_OUTPUT_INCLUDES,
+		// ymake.core.conf) and scans each transitively, so the header's full
+		// include closure rides on the CY node — not the bare header alone. The
+		// contrib/libs/python/Include/longintrepr.h shim, for one, resolves its
+		// #else `#include <contrib/tools/python/src/Include/longintrepr.h>` (ymake
+		// ignores #ifdef) to the py2 longintrepr target reachable only through it.
+		// See bugs/20260615-upstream-cython-cy-node-full-include-closure.md.
+		cl := walkClosureTail(ctx.scannerFor(instance), v, scanIn.ScanCfg)
+		toolInputs = append(toolInputs, cl...)
+		emitsIncludes = append(emitsIncludes, cl...)
 	}
 
 	for _, rel := range py3CythonEmbeddedFiles {
