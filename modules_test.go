@@ -18,7 +18,7 @@ func TestApplyUnknownStmt_ExcludeTagsAcceptsTagNames(t *testing.T) {
 	tag := "PY" + "_" + "PROTO"
 
 	err := try(func() {
-		applyUnknownStmt("mod", &UnknownStmt{Name: tokExcludeTags, Args: STRS(tag)}, d, env)
+		applyUnknownStmt(nil, "mod", &UnknownStmt{Name: tokExcludeTags, Args: STRS(tag)}, d, env)
 	})
 
 	if err != nil {
@@ -36,7 +36,7 @@ func TestApplyUnknownStmt_AddInclSelf(t *testing.T) {
 	// ADDINCLSELF() adds -I<own source dir> (ymake.core.conf:3177:
 	// ADDINCL += ${MODDIR}). It must resolve to Source(<modulePath>).
 	d := &ModuleData{}
-	applyUnknownStmt("contrib/libs/foo", &UnknownStmt{Name: internTok("ADDINCLSELF")}, d, env)
+	applyUnknownStmt(nil, "contrib/libs/foo", &UnknownStmt{Name: internTok("ADDINCLSELF")}, d, env)
 
 	want := source("contrib/libs/foo")
 	found := false
@@ -53,7 +53,7 @@ func TestApplyUnknownStmt_AddInclSelf(t *testing.T) {
 
 	// ADDINCLSELF(FOR cython) routes the own dir to the cython bucket.
 	dc := &ModuleData{}
-	applyUnknownStmt("contrib/libs/bar", &UnknownStmt{Name: internTok("ADDINCLSELF"), Args: STRS("FOR", "cython")}, dc, env)
+	applyUnknownStmt(nil, "contrib/libs/bar", &UnknownStmt{Name: internTok("ADDINCLSELF"), Args: STRS("FOR", "cython")}, dc, env)
 
 	if len(dc.cythonAddIncl) != 1 || dc.cythonAddIncl[0] != source("contrib/libs/bar") {
 		t.Fatalf("ADDINCLSELF(FOR cython): cythonAddIncl = %v, want [%v]", dc.cythonAddIncl, source("contrib/libs/bar"))
@@ -64,7 +64,7 @@ func TestApplyUnknownStmt_LLVMBCRequiresConfiguredVersion(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
 
 	err := try(func() {
-		applyUnknownStmt("mod", &UnknownStmt{Name: tokLlvmBc, Args: STRS("src.cpp", "generated.cpp")}, &ModuleData{}, env)
+		applyUnknownStmt(nil, "mod", &UnknownStmt{Name: tokLlvmBc, Args: STRS("src.cpp", "generated.cpp")}, &ModuleData{}, env)
 	})
 	if err == nil {
 		t.Fatal("applyUnknownStmt unexpectedly accepted LLVM_BC without USE_LLVM_BC*")
@@ -118,7 +118,7 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 			env := buildIfEnv(ModuleInstance{Platform: platform})
 			data := &ModuleData{}
 
-			applyUnknownStmt("mod", &UnknownStmt{Name: internTok(tt.useMacro)}, data, env)
+			applyUnknownStmt(nil, "mod", &UnknownStmt{Name: internTok(tt.useMacro)}, data, env)
 			// CLANG_BC_ROOT holds the deferred "$<NAME>_RESOURCE_GLOBAL" reference;
 			// emitLLVMBC expands it against the resource-global closure (the value
 			// declared by the build/platform/clang PEERDIR), not eagerly here.
@@ -130,7 +130,7 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 			}
 			if err := try(func() {
 				// LLVM_BC requires NAME per upstream (build/plugins/llvm_bc.py:8).
-				applyUnknownStmt("mod", &UnknownStmt{Name: tokLlvmBc, Args: STRS("src.cpp", "generated.cpp", "NAME", "Bytecode")}, data, env)
+				applyUnknownStmt(nil, "mod", &UnknownStmt{Name: tokLlvmBc, Args: STRS("src.cpp", "generated.cpp", "NAME", "Bytecode")}, data, env)
 			}); err != nil {
 				t.Fatalf("applyUnknownStmt rejected configured LLVM_BC: %v", err)
 			}

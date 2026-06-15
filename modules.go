@@ -175,6 +175,10 @@ type ModuleData struct {
 	// selection and json reading happen at gen time (genResourcesLibrary).
 	resourceDeclStmts []*DeclareResourceStmt
 
+	// primaryOutput is PREBUILT_PROGRAM's PRIMARY_OUTPUT: the fetched binary path
+	// (${<NAME>_RESOURCE_GLOBAL}/<name>) copied to the module's program output.
+	primaryOutput string
+
 	// inducedDeps are the module's INDUCED_DEPS, bucketed by the macro's consumer
 	// type: (cpp …) -> parsedIncludesCpp, (h …) -> parsedIncludesHeader, (h+cpp …) ->
 	// both. resolveInducedDeps reads one bucket per generated output's kind.
@@ -501,7 +505,7 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 		bisonGenExt:   strCpp,
 	}
 
-	collectStmts(modulePath, kind, stmts, env, d)
+	collectStmts(fs, modulePath, kind, stmts, env, d)
 
 	// Seed the SRCDIR search path with the module's own dir at index 0, ahead of
 	// the explicit SRCDIRs collectStmts appended. The list is then never empty
@@ -753,7 +757,7 @@ func pyModuleTypeUsesPython3(name TOK) bool {
 	return false
 }
 
-func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environment, d *ModuleData) {
+func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env Environment, d *ModuleData) {
 	for _, s := range stmts {
 		switch v := s.(type) {
 		case *ModuleStmt:
@@ -1054,7 +1058,13 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 				d.resources = append(d.resources, e)
 			}
 		case *DeclareResourceStmt:
-			d.resourceDeclStmts = append(d.resourceDeclStmts, v)
+			// Expand args (ya.make argument semantics): PREBUILT_PROGRAM's
+			// DECLARE_EXTERNAL_RESOURCE(NAME ${SANDBOX_RESOURCE_URI}) carries the var
+			// SET_RESOURCE_URI_FROM_JSON bound; build/platform's literal sbr:/FOR/json
+			// args contain no ${VAR}, so expansion is a no-op for them.
+			expanded := *v
+			expanded.Args = expandStmtTokensSTR(v.Args, env)
+			d.resourceDeclStmts = append(d.resourceDeclStmts, &expanded)
 		case *IfStmt:
 			taken := v.Then
 
@@ -1062,7 +1072,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 				taken = v.Else
 			}
 
-			collectStmts(modulePath, kind, taken, env, d)
+			collectStmts(fs, modulePath, kind, taken, env, d)
 		case *UnknownStmt:
 			// Expand args like the typed-macro cases (ya.make argument-expansion
 			// semantics): a ${VAR} that holds a SET-list (e.g. PY_SRCS(${SRCS}))
@@ -1070,7 +1080,7 @@ func collectStmts(modulePath string, kind ModuleKind, stmts []Stmt, env Environm
 			// macro handler reads them.
 			expanded := *v
 			expanded.Args = expandStmtTokensSTR(v.Args, env)
-			applyUnknownStmt(modulePath, &expanded, d, env)
+			applyUnknownStmt(fs, modulePath, &expanded, d, env)
 		default:
 			throwFmt("gen: %s: unhandled Stmt type %T (parser added a new Stmt subclass without updating gen.go)", modulePath, s)
 		}
@@ -1125,7 +1135,7 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *ModuleData) {
 	addGeneratedHeaderInclude(modulePath, dst, d)
 }
 
-func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Environment) {
+func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, env Environment) {
 	// recordHandledMacro fires only when a typed case handles the macro —
 	// we deferr it and the default branch flips `handled = false` to
 	// suppress it. Logging service-keyword args of macros gen does NOT
@@ -1157,6 +1167,38 @@ func applyUnknownStmt(modulePath string, v *UnknownStmt, d *ModuleData, env Envi
 			d.asmAddIncl = append(d.asmAddIncl, self)
 		default:
 			d.addIncl = append(d.addIncl, self)
+		}
+	case tokSetResourceUriFromJson:
+		// SET_RESOURCE_URI_FROM_JSON(VarName file.json) (ymake builtin): bind VarName
+		// to the by_platform[<current platform>].uri entry of file.json. The current
+		// platform here is the instance's (a tool is collected on the host), so the
+		// json key is the host-canonized name (linux / linux-aarch64 / darwin / …).
+		// Drives the prebuilt-tool contour: IF(VarName != "") gates PREBUILT_PROGRAM.
+		// Absent host entry -> VarName left unset (== "") -> from-source path taken.
+		if len(v.Args) != 2 {
+			throwFmt("gen: %s: SET_RESOURCE_URI_FROM_JSON expects 2 args (var json), got %d", modulePath, len(v.Args))
+		}
+
+		jsonRel := v.Args[1].string()
+
+		if suffix, ok := strings.CutPrefix(jsonRel, "$(S)/"); ok {
+			jsonRel = cleanRel(suffix)
+		} else {
+			jsonRel = cleanRel(joinRel(modulePath, jsonRel))
+		}
+
+		bundle := readResourceBundleJSON(fs, jsonRel)
+
+		if uri, ok := bundle[resourceJSONPlatformKey(env)]; ok {
+			env.setString(internEnv(v.Args[0].string()), uri)
+		}
+	case tokPrimaryOutput:
+		// PRIMARY_OUTPUT(path): the module's main output (PREBUILT_PROGRAM copies a
+		// fetched binary to ${TARGET}). The arg holds ${<NAME>_RESOURCE_GLOBAL}/...,
+		// which binds only after DECLARE_EXTERNAL_RESOURCE — genPrebuiltProgram
+		// re-collects with the global bound so the stored value is fully expanded.
+		if len(v.Args) >= 1 {
+			d.primaryOutput = v.Args[0].string()
 		}
 	case tokNoLibc:
 
@@ -2225,6 +2267,17 @@ func buildIfEnv(instance ModuleInstance) Environment {
 
 	if env.bool(envOPENSOURCE) {
 		env.setBool(envCATBOOST_OPENSOURCE, true)
+	}
+
+	// USE_PREBUILT_TOOLS (build/conf/settings.conf:3) routes tools that ship a
+	// ya.make.prebuilt (protoc, …) to a fetched binary instead of a from-source
+	// compile. The opensource snapshots omit the ya.make.prebuilt/resources.json
+	// files (INCLUDE silently skips them — yamake.go expandInclude), so gating on
+	// !OPENSOURCE keeps sg2-5 building tools from source while the internal contour
+	// (sg6) takes the prebuilt path; per-tool the contour still defers to the
+	// resources.json host-uri presence (SET_RESOURCE_URI_FROM_JSON -> IF != "").
+	if !env.bool(envOPENSOURCE) {
+		env.setBool(envUSE_PREBUILT_TOOLS, true)
 	}
 
 	switch instance.Platform.ISA {

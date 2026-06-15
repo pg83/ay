@@ -666,6 +666,20 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		return genResourcesLibrary(ctx, instance, d)
 	}
 
+	if d.moduleStmt.Name == tokPrebuiltProgram {
+		// PRIMARY_OUTPUT references ${<NAME>_RESOURCE_GLOBAL} (bound by the module's
+		// own DECLARE_EXTERNAL_RESOURCE) and ${MODULE_SUFFIX}. Bind both and re-collect
+		// once so the stored primaryOutput is fully expanded — the same deferred-
+		// expansion re-collect RESOURCES_LIBRARY does for its LDFLAGS globals.
+		env.setString(envMODULE_SUFFIX, prebuiltModuleSuffix(instance.Platform))
+
+		if bindResourceGlobalVars(ctx, instance, d, env) {
+			d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, mf.Stmts, env)
+		}
+
+		return genPrebuiltProgram(ctx, instance, d)
+	}
+
 	if instance.Language == LangPy && d.moduleStmt.Name == tokProtoLibrary {
 		hasProtoSrc := false
 

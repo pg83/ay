@@ -977,6 +977,7 @@ func (p *Parser) buildStmt(nameTok Token, args []STR) Stmt {
 		"PROTO_LIBRARY",
 		"DLL", "SO_PROGRAM", "DYNAMIC_LIBRARY",
 		"PACKAGE", "UNION", "RESOURCES_LIBRARY",
+		"PREBUILT_PROGRAM",
 		"UNITTEST_FOR":
 		return &ModuleStmt{Name: internTok(nameTok.val), Args: args, Line: nameTok.line}
 	case "DECLARE_EXTERNAL_RESOURCE",

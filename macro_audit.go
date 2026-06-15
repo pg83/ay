@@ -26,6 +26,10 @@ var macrosAcceptingUserFlags = map[TOK]struct{}{
 	// …) — user data, not structural service-keywords — so they bypass the
 	// strict service-keyword audit.
 	tokExcludeTags: {},
+	// SET_RESOURCE_URI_FROM_JSON(VarName file.json): the first arg is the
+	// user-chosen destination variable name (SANDBOX_RESOURCE_URI, WITH_JDK_URI,
+	// …), not a structural keyword — like ENABLE's flag name.
+	tokSetResourceUriFromJson: {},
 }
 
 // serviceArgOK marks arg STRs the service-keyword check has already passed
