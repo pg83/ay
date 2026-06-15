@@ -58,6 +58,7 @@ type ModuleData struct {
 	peerdirs           []STR
 	joinSrcs           []*JoinSrcsStmt
 	addIncl            []VFS
+	addInclP           []prioVFS
 	addInclGlobal      []VFS
 	addInclOneLevel    []VFS
 	addInclUserGlobal  []VFS
@@ -493,6 +494,48 @@ func copyFileIncludeTarget(modulePath string, target string) string {
 	}
 }
 
+// prioVFS is a local ADDINCL dir tagged with the insertion priority of the
+// statement that contributed it. The module's -I list is the addInclP entries
+// stable-sorted by prio: ymake processes statements in TMakeFileMap priority
+// order (module_loader.cpp:StatementPriority), and within one priority merges
+// non-multi statements in declaration order. We use dense priorities (not
+// ymake's (base<<24)+size() packing) since only relative order matters; the
+// stable sort supplies the declaration-order tiebreak.
+type prioVFS struct {
+	prio int
+	vfs  VFS
+}
+
+const (
+	// prioAddIncl: explicit ADDINCL(...), PEERDIR ADDINCL, and generated-header
+	// dirs — non-multi statements, kept in declaration order by the stable sort.
+	prioAddIncl = 0
+	// prioAddInclSelf: ADDINCLSELF is a user macro (multi in ymake), so its
+	// ${MODDIR} dir always sorts after the module's non-multi ADDINCL(...) dirs.
+	// See docs/drafts/20260615-1922-addincl-ordering-addinclself-last.md.
+	prioAddInclSelf = 1
+)
+
+// addLocalIncl records one local (-I) dir at the given statement priority.
+func (d *ModuleData) addLocalIncl(prio int, v VFS) {
+	d.addInclP = append(d.addInclP, prioVFS{prio: prio, vfs: v})
+}
+
+// materializeAddIncl flattens the priority-tagged local ADDINCL contributions
+// into d.addIncl in (prio, declaration) order. Called once after collectStmts,
+// before the post-collect ADDINCL appends (CF, python3, build-info).
+func (d *ModuleData) materializeAddIncl() {
+	sort.SliceStable(d.addInclP, func(i, j int) bool {
+		return d.addInclP[i].prio < d.addInclP[j].prio
+	})
+
+	for _, p := range d.addInclP {
+		d.addIncl = append(d.addIncl, p.vfs)
+	}
+
+	d.addInclP = nil
+}
+
 func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kind ModuleKind, stmts []Stmt, env Environment) *ModuleData {
 	fs := pm.fs
 
@@ -506,6 +549,11 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 	}
 
 	collectStmts(fs, modulePath, kind, stmts, env, d)
+
+	// Flatten the priority-tagged local ADDINCL contributions into d.addIncl
+	// (ADDINCLSELF's own dir floats after explicit ADDINCL(...)) before the
+	// post-collect ADDINCL appends below feed the materialized list.
+	d.materializeAddIncl()
 
 	// Seed the SRCDIR search path with the module's own dir at index 0, ahead of
 	// the explicit SRCDIRs collectStmts appended. The list is then never empty
@@ -854,7 +902,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 				}
 
 				if addInclNext {
-					d.addIncl = append(d.addIncl, parseModulePathVFS(pTok.string()))
+					d.addLocalIncl(prioAddIncl, parseModulePathVFS(pTok.string()))
 					addInclNext = false
 				}
 
@@ -885,7 +933,11 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 			d.addInclGlobal = append(d.addInclGlobal, expandConfigVFSPaths(v.GlobalPaths, env)...)
 			d.addInclOneLevel = append(d.addInclOneLevel, expandConfigVFSPaths(v.OneLevelPaths, env)...)
 			d.addInclUserGlobal = append(d.addInclUserGlobal, expandConfigVFSPaths(v.UserGlobalPaths, env)...)
-			d.addIncl = append(d.addIncl, expandConfigVFSPaths(v.AllPaths, env)...)
+
+			for _, p := range expandConfigVFSPaths(v.AllPaths, env) {
+				d.addLocalIncl(prioAddIncl, p)
+			}
+
 			d.cythonAddIncl = append(d.cythonAddIncl, expandConfigVFSPaths(v.CythonPaths, env)...)
 			d.asmAddIncl = append(d.asmAddIncl, expandConfigVFSPaths(v.AsmPaths, env)...)
 			d.protoAddInclGlobal = append(d.protoAddInclGlobal, expandConfigVFSPaths(v.ProtoGlobalPaths, env)...)
@@ -1110,7 +1162,7 @@ func addGeneratedHeaderInclude(modulePath, dst string, d *ModuleData) {
 	}
 
 	include := build(rel)
-	d.addIncl = append(d.addIncl, include)
+	d.addLocalIncl(prioAddIncl, include)
 	d.addInclGlobal = append(d.addInclGlobal, include)
 	d.addInclUserGlobal = append(d.addInclUserGlobal, include)
 }
@@ -1166,7 +1218,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		case len(v.Args) >= 2 && v.Args[0].string() == "FOR" && v.Args[1].string() == "asm":
 			d.asmAddIncl = append(d.asmAddIncl, self)
 		default:
-			d.addIncl = append(d.addIncl, self)
+			d.addLocalIncl(prioAddInclSelf, self)
 		}
 	case tokSetResourceUriFromJson:
 		// SET_RESOURCE_URI_FROM_JSON(VarName file.json) (ymake builtin): bind VarName
