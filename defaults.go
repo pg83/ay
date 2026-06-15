@@ -35,6 +35,28 @@ var unitImplicitPeers = []ImplicitPeerRule{
 }
 
 var programImplicitPeers = []ImplicitPeerRule{
+	// The fast asm libc routines (memcpy/memchr/…). _BASE_PROGRAM (ymake.core.conf:
+	// 1229) peers one when the program is non-PIC and platform-backed: glibcasm for
+	// glibc x86_64+SSE4, asmlib otherwise. NOPLATFORM/PIC/MUSL/sanitizer disable the
+	// glibc variant. Modelled flags: the rarely-set MSVC/PIE/MIC/VALGRIND/USE_ASMLIB=no
+	// gates are not (all false / unset in these contours).
+	{
+		name: "glibcasm",
+		peer: "contrib/libs/glibcasm",
+		predicate: func(rc ImplicitPeerCtx) bool {
+			return !rc.pic && !rc.noPlatform &&
+				rc.osLinux && rc.archX8664 && !rc.muslOn && !rc.sanitizer && rc.useSSE4
+		},
+	},
+	{
+		name: "asmlib",
+		peer: "contrib/libs/asmlib",
+		predicate: func(rc ImplicitPeerCtx) bool {
+			glibcasm := rc.osLinux && rc.archX8664 && !rc.muslOn && !rc.sanitizer && rc.useSSE4
+
+			return !rc.pic && !rc.noPlatform && !glibcasm
+		},
+	},
 	{
 		name: "musl/full",
 		peer: "contrib/libs/musl/full",
@@ -221,6 +243,9 @@ type ImplicitPeerCtx struct {
 	muslLite      bool
 	osLinux       bool
 	archX8664     bool
+	pic           bool
+	sanitizer     bool
+	useSSE4       bool
 	hadAllocator  bool
 	allocatorName string
 }
@@ -275,10 +300,14 @@ func defaultProgramPeerdirsForWithState(ctx *GenCtx, instance ModuleInstance, d 
 
 	rc := ImplicitPeerCtx{
 		flags:         flags,
+		noPlatform:    effectiveNoPlatform(flags),
 		muslOn:        d.muslEnabled && !effectiveNoPlatform(flags),
 		muslLite:      muslLite,
 		osLinux:       env.bool(envOS_LINUX),
 		archX8664:     env.bool(envARCH_X86_64),
+		pic:           instance.Platform.PIC,
+		sanitizer:     instance.Platform.BuildSanitized,
+		useSSE4:       env.bool(envUSE_SSE4),
 		hadAllocator:  d.hadAllocator,
 		allocatorName: allocatorName.string(),
 	}
