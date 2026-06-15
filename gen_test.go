@@ -2210,18 +2210,19 @@ func TestIsHeaderSource_ExtendedHeaderExtensions(t *testing.T) {
 	}
 }
 
-func TestProgramBinaryName_Py3ProgramBinUsesDirBasename(t *testing.T) {
+func TestProgramBinaryName_Py3ProgramBinArgWins(t *testing.T) {
 	inst := ModuleInstance{Path: source("tools/py3cc/slow"), Kind: KindBin, Platform: testTargetP}
 
-	// PY3_PROGRAM_BIN's arg does NOT name the binary: it is INCLUDEd into a parent
-	// ya.make (NOT PREBUILT path) and links as that module's dir basename. sg6's
-	// tools/py3cc/slow/bin PY3_PROGRAM_BIN(py3cc) INCLUDEd into tools/py3cc/slow links
-	// as .../slow (reference graph, 4142 PY references). The opensource `py3cc` name is
-	// the prebuilt path's PRIMARY_OUTPUT, not this arg.
-	if got := programBinaryName(inst, &ModuleStmt{Name: tokPy3ProgramBin, Args: STRS("py3cc")}); got != "" {
-		t.Fatalf("PY3_PROGRAM_BIN binary name = %q, want \"\" (dir-basename fallback)", got)
+	// PY3_PROGRAM_BIN(py3cc) links as its argument (the opensource reference:
+	// tools/py3cc/slow/bin INCLUDEd into tools/py3cc/slow links as .../py3cc). In the
+	// internal contour the dir is a PREBUILT_PROGRAM instead, named .../slow by the
+	// module-dir basename via genPrebuiltProgram — a distinct module type.
+	got := programBinaryName(inst, &ModuleStmt{Name: tokPy3ProgramBin, Args: STRS("py3cc")})
+	if got != "py3cc" {
+		t.Fatalf("PY3_PROGRAM_BIN binary name = %q, want py3cc", got)
 	}
 
+	// Without an argument it falls through to the module-dir basename.
 	if got := programBinaryName(inst, &ModuleStmt{Name: tokPy3ProgramBin}); got != "" {
 		t.Fatalf("PY3_PROGRAM_BIN no-arg binary name = %q, want \"\" (dir-basename fallback)", got)
 	}
