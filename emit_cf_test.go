@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // TestEmitCF_GeneratedFromRidesAsClosureLeaf pins the CONFIGURE_FILE emitter's
 // generated-from propagation: a cross-module consumer that #includes a configured
@@ -35,5 +38,32 @@ func TestEmitCF_GeneratedFromRidesAsClosureLeaf(t *testing.T) {
 		if !inputs[want] {
 			t.Errorf("use.cpp.o input closure missing %q", want)
 		}
+	}
+}
+
+func TestGen_CF_SetVarsReachCfgVars(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"thelib/ya.make":  "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSET(MYVAR hello)\nDEFAULT(MYDEF world)\nSRCS(lib.cpp x.cpp.in)\nEND()\n",
+		"thelib/lib.cpp":  "int f(){return 0;}\n",
+		"thelib/x.cpp.in": "int a = @MYVAR@;\nint b = @MYDEF@;\n",
+	})
+
+	g := testGen(fs, "thelib")
+	var cf *Node
+	for _, n := range g.Graph {
+		if len(n.Outputs) > 0 && n.Outputs[0].string() == "$(B)/thelib/x.cpp" {
+			cf = n
+			break
+		}
+	}
+	if cf == nil {
+		t.Fatal("no CF node emitted for thelib/x.cpp")
+	}
+	args := strings.Join(strStrs(cf.Cmds[0].CmdArgs.flat()), " ")
+	if !strings.Contains(args, "MYVAR=hello") {
+		t.Errorf("CF cmd_args missing SET var MYVAR=hello; got: %s", args)
+	}
+	if !strings.Contains(args, "MYDEF=world") {
+		t.Errorf("CF cmd_args missing DEFAULT var MYDEF=world; got: %s", args)
 	}
 }

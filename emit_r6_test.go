@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -215,5 +216,164 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 		if got.flatInputs()[i].string() != w {
 			t.Errorf("R6 inputs[%d] = %q, want %q", i, got.flatInputs()[i].string(), w)
 		}
+	}
+}
+
+func TestGen_HostToolRecursion_R6(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"contrib/tools/ragel6/ya.make": "PROGRAM(ragel6)\nSRCS(main.cpp)\nEND()\n",
+		"consumer/ya.make":             "LIBRARY()\nSRCS(parser.rl6)\nEND()\n",
+	})
+
+	g := testGen(fs, "consumer")
+
+	counts := make(map[string]int)
+	platforms := make(map[string]int)
+	hostNodes := 0
+
+	for _, n := range g.Graph {
+		p := n.KV.P.string()
+		counts[p]++
+		platforms[string(n.Platform.Target)]++
+
+		if nodeHasHostTag(nodeTags(n)) {
+			hostNodes++
+		}
+	}
+
+	if counts["R6"] != 1 {
+		t.Errorf("R6 count = %d, want 1", counts["R6"])
+	}
+
+	if counts["LD"] != 1 {
+		t.Errorf("LD count = %d, want 1 (host ragel6 LD)", counts["LD"])
+	}
+
+	if counts["AR"] != 1 {
+		t.Errorf("AR count = %d, want 1 (target consumer AR)", counts["AR"])
+	}
+
+	if counts["CC"] != 2 {
+		t.Errorf("CC count = %d, want 2 (host ragel6/main.cpp + target generated parser.rl6.cpp)", counts["CC"])
+	}
+
+	if hostNodes != 3 {
+		t.Errorf("host nodes = %d, want 3 (host CC + host LD + vcs.json)", hostNodes)
+	}
+
+	if platforms[string(PlatformDefaultLinuxAArch64)] != 3 {
+		t.Errorf("target nodes = %d, want 3", platforms[string(PlatformDefaultLinuxAArch64)])
+	}
+
+	if platforms[string(PlatformDefaultLinuxX8664)] != 3 {
+		t.Errorf("host nodes (by platform) = %d, want 3 (vcs.json is host-bound)", platforms[string(PlatformDefaultLinuxX8664)])
+	}
+
+	var (
+		r6Node *Node
+		ldNode *Node
+	)
+
+	for _, n := range g.Graph {
+		switch n.KV.P.string() {
+		case "R6":
+			r6Node = n
+		case "LD":
+			ldNode = n
+		}
+	}
+
+	if r6Node == nil {
+		t.Fatal("no R6 node found")
+	}
+
+	if ldNode == nil {
+		t.Fatal("no host ragel6 LD node found")
+	}
+
+	if len(graphDeps(g, r6Node)) != 1 || graphDeps(g, r6Node)[0] != ldNode.UID {
+		t.Errorf("R6 Deps = %v, want [%q]", graphDeps(g, r6Node), ldNode.UID)
+	}
+
+	if len(graphForeignDeps(g, r6Node)) != 1 || len(graphForeignDeps(g, r6Node)) != 1 || graphForeignDeps(g, r6Node)[0] != ldNode.UID {
+		t.Errorf("R6 ForeignDeps = %v, want {tool: [%q]}", graphForeignDeps(g, r6Node), ldNode.UID)
+	}
+
+	if len(r6Node.Cmds) == 0 || len(r6Node.Cmds[0].CmdArgs.flat()) == 0 {
+		t.Fatalf("R6 node has no Cmds[0].CmdArgs.flat(); got Cmds=%v", r6Node.Cmds)
+	}
+
+	if len(ldNode.Outputs) == 0 {
+		t.Fatalf("host LD node has no Outputs; got Outputs=%v", ldNode.Outputs)
+	}
+
+	wantCmd0 := ldNode.Outputs[0].string()
+
+	if r6Node.Cmds[0].CmdArgs.flat()[0].string() != wantCmd0 {
+		t.Errorf("R6 cmd_args[0] = %q, want host ragel6 LD outputs[0] = %q (raw outputs[0] = %q)",
+			r6Node.Cmds[0].CmdArgs.flat()[0], wantCmd0, ldNode.Outputs[0].string())
+	}
+}
+
+func TestGen_GeneratorWiredIntoDepRefs_R6(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"r6mod/ya.make": `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(thing.rl6)
+END()
+`,
+		"contrib/tools/ragel6/ya.make": `PROGRAM(ragel6)
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+ALLOCATOR(FAKE)
+SRCS(main.cpp)
+END()
+`,
+	})
+
+	g := testGen(fs, "r6mod")
+
+	var r6Node, ccNode *Node
+
+	for _, n := range g.Graph {
+		switch n.KV.P.string() {
+		case "R6":
+			r6Node = n
+		case "CC":
+
+			ip := ""
+			if len(n.flatInputs()) > 0 {
+				ip = n.flatInputs()[0].string()
+			}
+
+			if ccNode == nil && strings.HasPrefix(ip, "$(B)/") {
+				ccNode = n
+			}
+		}
+	}
+
+	if r6Node == nil {
+		t.Fatal("no R6 node emitted")
+	}
+
+	if ccNode == nil {
+		t.Fatal("no R6-derived CC node emitted")
+	}
+
+	found := false
+
+	for _, dep := range graphDeps(g, ccNode) {
+		if dep == r6Node.UID {
+			found = true
+
+			break
+		}
+	}
+
+	if !found {
+		t.Errorf("R6-derived graphDeps(g, CC) = %v, want to contain R6 UID %q (PR-30 D04 Generator wiring)", graphDeps(g, ccNode), r6Node.UID)
 	}
 }

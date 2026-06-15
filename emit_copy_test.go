@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 // TestGen_TextCopyResolvesIncludesInConsumerContext reproduces the cross-module
 // COPY_FILE(TEXT) contamination: two sibling libraries each TEXT-copy the same
@@ -89,5 +92,119 @@ COPY_FILE(TEXT shared/dep.h.txt ${BINDIR}/dep.h)
 	}
 	if !nodeHasInput(bCC, "$(B)/b/dep.h") {
 		t.Errorf("b.cpp.o missing own copy $(B)/b/dep.h: %v", vfsStringsT3(bCC.flatInputs()))
+	}
+}
+
+func TestGen_CopyFileWithContextAutoCompilesBuildOutput(t *testing.T) {
+	files := map[string]string{}
+
+	mkdirWrite := func(rel, body string) { files[rel] = body }
+
+	mkdirWrite("mod/ya.make", `LIBRARY()
+COPY_FILE_WITH_CONTEXT(
+    AUTO
+    original.cpp
+    copied.cpp
+)
+END()
+`)
+	mkdirWrite("mod/original.cpp", `#include "dep.h"
+int copied() { return 0; }
+`)
+	mkdirWrite("mod/dep.h", "#pragma once\n")
+
+	g := testGen(newMemFS(files), "mod")
+
+	findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp")
+	cc := findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp.o")
+	// Input order is irrelevant to self_uid (normalization sorts inputs); assert
+	// membership. The WITH_CONTEXT source's #includes now resolve in the dst's
+	// own context (its raw directives are spliced onto the per-module dst), and
+	// the $(S) source is re-attached as a leaf input, so dep.h and original.cpp
+	// may appear in either relative order.
+	for _, want := range []string{"$(B)/mod/copied.cpp", "$(S)/mod/original.cpp", "$(S)/mod/dep.h"} {
+		if !nodeHasInput(cc, want) {
+			t.Fatalf("copied.cpp inputs missing %q: %v", want, vfsStringsT3(cc.flatInputs()))
+		}
+	}
+	if len(graphDeps(g, cc)) != 1 {
+		t.Fatalf("len(copied.cpp deps) = %d, want 1 (copy producer)", len(graphDeps(g, cc)))
+	}
+}
+
+func TestGen_CopyFileWithContextExpandsBuildRootModdirDestination(t *testing.T) {
+	files := map[string]string{}
+
+	mkdirWrite := func(rel, body string) { files[rel] = body }
+
+	mkdirWrite("mod/ya.make", `LIBRARY()
+COPY_FILE_WITH_CONTEXT(
+    AUTO
+    original.cpp
+    ${ARCADIA_BUILD_ROOT}/${MODDIR}/copied.cpp
+)
+END()
+`)
+	mkdirWrite("mod/original.cpp", `#include "dep.h"
+int copied() { return 0; }
+`)
+	mkdirWrite("mod/dep.h", "#pragma once\n")
+
+	g := testGen(newMemFS(files), "mod")
+
+	findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp")
+	cc := findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp.o")
+	// Input order is irrelevant to self_uid (normalization sorts inputs); assert
+	// membership. The WITH_CONTEXT source's #includes now resolve in the dst's
+	// own context (its raw directives are spliced onto the per-module dst), and
+	// the $(S) source is re-attached as a leaf input, so dep.h and original.cpp
+	// may appear in either relative order.
+	for _, want := range []string{"$(B)/mod/copied.cpp", "$(S)/mod/original.cpp", "$(S)/mod/dep.h"} {
+		if !nodeHasInput(cc, want) {
+			t.Fatalf("copied.cpp inputs missing %q: %v", want, vfsStringsT3(cc.flatInputs()))
+		}
+	}
+}
+
+func TestGen_CopyFileAutoRidesSourceAsNonExpandedLeaf(t *testing.T) {
+	files := map[string]string{}
+
+	mkdirWrite := func(rel, body string) { files[rel] = body }
+
+	mkdirWrite("mod/ya.make", `LIBRARY()
+COPY_FILE(
+    AUTO
+    original.cpp
+    copied.cpp
+)
+END()
+`)
+	mkdirWrite("mod/original.cpp", `#include "dep.h"
+int copied() { return 0; }
+`)
+	mkdirWrite("mod/dep.h", "#pragma once\n")
+
+	g := testGen(newMemFS(files), "mod")
+
+	findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp")
+	cc := findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp.o")
+	wantInputs := []string{"$(B)/mod/copied.cpp"}
+	if got := vfsStringsT3(cc.flatInputs()); !reflect.DeepEqual(got[:len(wantInputs)], wantInputs) {
+		t.Fatalf("copied.cpp inputs prefix = %v, want %v", got[:len(wantInputs)], wantInputs)
+	}
+	// AUTO COPY materializes both $(S)/mod/original.cpp and $(B)/mod/copied.cpp;
+	// upstream lists both, so the source rides as a closure leaf of the dst.
+	if !slicesContains(vfsStringsT3(cc.flatInputs()), "$(S)/mod/original.cpp") {
+		t.Fatalf("copied.cpp inputs should contain the AUTO source $(S)/mod/original.cpp: %v", vfsStringsT3(cc.flatInputs()))
+	}
+	// The leaf is NON-expanded: original.cpp's own #include "dep.h" must not be
+	// followed, so $(S)/mod/dep.h does not leak into the dst's inputs.
+	for _, in := range vfsStringsT3(cc.flatInputs()) {
+		if in == "$(S)/mod/dep.h" {
+			t.Fatalf("copied.cpp inputs unexpectedly contain non-expanded-leaf's include $(S)/mod/dep.h: %v", vfsStringsT3(cc.flatInputs()))
+		}
+	}
+	if len(graphDeps(g, cc)) != 1 {
+		t.Fatalf("len(copied.cpp deps) = %d, want 1 (copy producer)", len(graphDeps(g, cc)))
 	}
 }

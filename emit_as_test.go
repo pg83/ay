@@ -185,3 +185,44 @@ func TestEmitAS_AsmlibYasm_TargetSide_NoPicSuffix(t *testing.T) {
 		t.Errorf("Cmds[0].Cwd = %q, want empty (yasm path)", got.Cmds[0].Cwd.string())
 	}
 }
+
+func TestGen_PR35y_R8_AsmSrcdirRebase(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"mod/inner/ya.make": `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PLATFORM()
+SRCDIR(mod)
+SRCS(sub/foo.S)
+END()
+`,
+		"mod/sub/foo.S": "// asm\n",
+	})
+
+	g := testGen(fs, "mod/inner")
+
+	var asNode *Node
+
+	for _, n := range g.Graph {
+		if n.KV.P == pkAS {
+			asNode = n
+
+			break
+		}
+	}
+
+	if asNode == nil {
+		t.Fatal("no AS node emitted for mod/inner")
+	}
+
+	const want = "$(S)/mod/sub/foo.S"
+	const forbidden = "$(S)/mod/inner/sub/foo.S"
+
+	if nodeHasInput(asNode, forbidden) {
+		t.Errorf("AS.flatInputs() contains %q — SRCDIR rebase must redirect to %q (PR-35y R8)", forbidden, want)
+	}
+	if !nodeHasInput(asNode, want) {
+		t.Errorf("AS.flatInputs() missing %q — PR-35y R8 SRCDIR rebase for `.S` source: %#v", want, asNode.flatInputs())
+	}
+}
