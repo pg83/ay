@@ -2269,16 +2269,11 @@ func buildIfEnv(instance ModuleInstance) Environment {
 		env.setBool(envCATBOOST_OPENSOURCE, true)
 	}
 
-	// USE_PREBUILT_TOOLS (build/conf/settings.conf:3) routes tools that ship a
-	// ya.make.prebuilt (protoc, …) to a fetched binary instead of a from-source
-	// compile. The opensource snapshots omit the ya.make.prebuilt/resources.json
-	// files (INCLUDE silently skips them — yamake.go expandInclude), so gating on
-	// !OPENSOURCE keeps sg2-5 building tools from source while the internal contour
-	// (sg6) takes the prebuilt path; per-tool the contour still defers to the
-	// resources.json host-uri presence (SET_RESOURCE_URI_FROM_JSON -> IF != "").
-	if !env.bool(envOPENSOURCE) {
-		env.setBool(envUSE_PREBUILT_TOOLS, true)
-	}
+	// USE_PREBUILT_TOOLS is defaulted to yes in DefaultIfEnv (build/conf/settings.conf:3)
+	// and overridden to "no" by the opensource snapshots' ya.conf (flowing in via the
+	// Platform.Flags copy above). It gates each tool's `IF (USE_PREBUILT_TOOLS)
+	// INCLUDE(ya.make.prebuilt)` (protoc, rescompiler, rescompressor, py3cc, …):
+	// yes -> a fetched prebuilt binary, no -> a from-source host build.
 
 	switch instance.Platform.ISA {
 	case ISAX8664:
