@@ -338,6 +338,5 @@ func (c *CanonBuf) writeNode(n *Node) {
 	c.writeBytes(string(n.Platform.Target))
 	c.writeRequirements(n.Requirements)
 	c.writeBool(n.Sandboxing)
-	c.writeStrSlice(nodeTags(n))
 	c.writeTargetProperties(n.TargetProperties)
 }

@@ -20,17 +20,17 @@ var testToolchainFlags = map[string]string{
 }
 
 var (
-	testHostP   = newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
-	testTargetP = newTestPlatform(OSLinux, ISAAArch64, "no", nil)
+	testHostP   = newTestPlatform(OSLinux, ISAX8664, "yes")
+	testTargetP = newTestPlatform(OSLinux, ISAAArch64, "no")
 )
 
-func newTestPlatform(os OS, isa ISA, pic string, tags []string) *Platform {
+func newTestPlatform(os OS, isa ISA, pic string) *Platform {
 	flags := make(map[string]string, len(testToolchainFlags)+2)
 	for k, v := range testToolchainFlags {
 		flags[k] = v
 	}
 	flags["PIC"] = pic
-	return newPlatform(newMemFS(nil), os, isa, flags, tags, "", "")
+	return newPlatform(newMemFS(nil), os, isa, flags, "", "")
 }
 
 func targetInstance(path string) ModuleInstance {
@@ -70,7 +70,6 @@ func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 		Outputs:          ToVFSSlice([]string{"$(B)/build/cow/on/lib.c.o"}),
 		Platform:         &Platform{Target: "default-linux-aarch64"},
 		Requirements:     Requirements{},
-		Tags:             []STR{},
 		TargetProperties: TargetProperties{},
 	})}
 	objPaths := []VFS{intern("$(B)/o1.o"), intern("$(B)/o2.o")}
@@ -184,7 +183,6 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 			Outputs:          []VFS{out},
 			Platform:         &Platform{Target: "default-linux-aarch64"},
 			Requirements:     Requirements{},
-			Tags:             []STR{},
 			TargetProperties: TargetProperties{},
 		})
 	}
@@ -234,7 +232,6 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 			Outputs:          []VFS{out},
 			Platform:         &Platform{Target: "default-linux-aarch64"},
 			Requirements:     Requirements{},
-			Tags:             []STR{},
 			TargetProperties: TargetProperties{},
 		})
 	}
@@ -271,7 +268,6 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 			Outputs:          []VFS{out},
 			Platform:         &Platform{Target: "default-linux-aarch64"},
 			Requirements:     Requirements{},
-			Tags:             []STR{},
 			TargetProperties: TargetProperties{},
 		})
 	}
@@ -311,7 +307,6 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 			Outputs:          []VFS{out},
 			Platform:         &Platform{Target: "default-linux-aarch64"},
 			Requirements:     Requirements{},
-			Tags:             []STR{},
 			TargetProperties: TargetProperties{},
 		})
 	}

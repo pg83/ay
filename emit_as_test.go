@@ -101,7 +101,6 @@ func testYasmLDRef(e *BufferedEmitter) NodeRef {
 		Inputs:           InputChunks{ToVFSSlice([]string{})},
 		Outputs:          ToVFSSlice([]string{"$(B)/tools/yasm/yasm"}),
 		KV:               KV{P: pkLD, PC: pcLightCyan},
-		Tags:             []STR{internStr("tool")},
 		Platform:         &Platform{Target: PlatformDefaultLinuxX8664},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: "tools/yasm"},
@@ -161,7 +160,7 @@ func TestEmitAS_AsmlibYasm_OutputPath_NoUnderscoreInfix(t *testing.T) {
 
 func TestEmitAS_AsmlibYasm_TargetSide_NoPicSuffix(t *testing.T) {
 	e := newBufferedEmitter()
-	targetX86 := newTestPlatform(OSLinux, ISAX8664, "no", nil)
+	targetX86 := newTestPlatform(OSLinux, ISAX8664, "no")
 	instance := ModuleInstance{
 		Path:     source("contrib/libs/asmlib"),
 		Kind:     KindLib,

@@ -72,14 +72,14 @@ func assertSingleUsedClangFetch(t *testing.T, graph *Graph) {
 }
 
 func TestResourceGraphEmitter_OnlyMaterializesUsedFetchNodes(t *testing.T) {
-	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
+	host := newTestPlatform(OSLinux, ISAX8664, "yes")
 	target := sandboxedX8664TargetPlatform()
 
 	assertSingleUsedClangFetch(t, emitTestCompileGraph(t, host, target))
 }
 
 func TestResourceGraphEmitter_ReusedEmitterEmitsFetchPerEmitter(t *testing.T) {
-	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
+	host := newTestPlatform(OSLinux, ISAX8664, "yes")
 	target := sandboxedX8664TargetPlatform()
 
 	assertSingleUsedClangFetch(t, emitTestCompileGraph(t, host, target))

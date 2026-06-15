@@ -18,7 +18,7 @@ func sandboxedX8664TargetPlatform() *Platform {
 	flags["SANDBOXING"] = "yes"
 	flags["TESTS_REQUESTED"] = "yes"
 
-	return newPlatform(newMemFS(map[string]string{"build/ymake_conf.py": "debug_info_flags.append('-gz=zstd')\n"}), OSLinux, ISAX8664, flags, expectedSandboxingTags(), "", "")
+	return newPlatform(newMemFS(map[string]string{"build/ymake_conf.py": "debug_info_flags.append('-gz=zstd')\n"}), OSLinux, ISAX8664, flags, "", "")
 }
 
 func sandboxedTestSuite() TestSuiteInfo {
@@ -29,15 +29,6 @@ func sandboxedTestSuite() TestSuiteInfo {
 			"util/ysafeptr_ut.cpp",
 			"util/ysaveload_ut.cpp",
 		},
-	}
-}
-
-func expectedSandboxingTags() []string {
-	return []string{
-		"default-linux-x86_64",
-		"debug",
-		"FAKEID=sandboxing",
-		"SANDBOXING=yes",
 	}
 }
 
@@ -93,7 +84,6 @@ func expectedTestCtxNode() *Node {
 		Outputs:          []VFS{intern("$(B)/common_test.context")},
 		Platform:         &Platform{Target: "default-linux-x86_64"},
 		Requirements:     Requirements{Network: nwRestricted},
-		Tags:             internStrs(expectedSandboxingTags()),
 		TargetProperties: TargetProperties{},
 	}
 }
@@ -166,7 +156,6 @@ func expectedUnittestNode(info TestSuiteInfo) *Node {
 		},
 		Platform:         &Platform{Target: "default-linux-x86_64"},
 		Requirements:     Requirements{CPU: 1, Network: nwRestricted, RAM: 8, HasRAMDisk: true},
-		Tags:             internStrs(expectedSandboxingTags()),
 		TargetProperties: TargetProperties{ModuleLang: mlCPP},
 	}
 }
@@ -246,7 +235,6 @@ func expectedClangFormatNode() *Node {
 		},
 		Platform:         &Platform{Target: "default-linux-x86_64"},
 		Requirements:     Requirements{CPU: 1, Network: nwRestricted, RAM: 8, HasRAMDisk: true},
-		Tags:             []STR{},
 		TargetProperties: TargetProperties{ModuleLang: mlUnknown},
 	}
 }
@@ -299,9 +287,6 @@ func assertNodeFields(t *testing.T, name string, got, want *Node) {
 	if !reflect.DeepEqual(got.Requirements, want.Requirements) {
 		t.Fatalf("%s requirements mismatch\n got: %#v\nwant: %#v", name, got.Requirements, want.Requirements)
 	}
-	if !reflect.DeepEqual(nodeTags(got), want.Tags) {
-		t.Fatalf("%s tags mismatch\n got: %#v\nwant: %#v", name, nodeTags(got), want.Tags)
-	}
 	if !reflect.DeepEqual(got.TargetProperties, want.TargetProperties) {
 		t.Fatalf("%s target_properties mismatch\n got: %#v\nwant: %#v", name, got.TargetProperties, want.TargetProperties)
 	}
@@ -345,22 +330,14 @@ func TestEmitTestRunNodes_BuildersMatchSpec(t *testing.T) {
 		t.Fatalf("targetPlatformDescriptor = %q, want %q", got, expectedTargetPlatformDescriptor())
 	}
 
-	if got := sandboxingNodeTags(p); !reflect.DeepEqual(got, internStrs(expectedSandboxingTags())) {
-		t.Fatalf("sandboxingNodeTags = %#v, want %#v", got, expectedSandboxingTags())
-	}
-
 	assertNodeFields(t, "ctx", buildTestCtxNode(newNodeArenas(), p), expectedTestCtxNode())
 	assertNodeFields(t, "unittest", buildUnittestNode(newNodeArenas(), p, info, testUnittestResourceGlobals()), expectedUnittestNode(info))
 	assertNodeFields(t, "clang_format", buildClangFormatNode(newNodeArenas(), p, info), expectedClangFormatNode())
-
-	if tags := nodeTags(buildClangFormatNode(newNodeArenas(), p, info)); len(tags) != 0 {
-		t.Fatalf("clang_format tags = %#v, want nil", tags)
-	}
 }
 
 func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 	p := sandboxedX8664TargetPlatform()
-	host := newTestPlatform(OSLinux, ISAX8664, "yes", []string{"tool"})
+	host := newTestPlatform(OSLinux, ISAX8664, "yes")
 
 	files := map[string]string{
 		"util/ut/ya.make": "UNITTEST_FOR(util)\nSRCS(ysafeptr_ut.cpp ysaveload_ut.cpp)\nEND()\n",
@@ -523,9 +500,6 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		if ccNode.TargetProperties.ModuleDir != "util/ut" {
 			t.Fatalf("cc module_dir for %q = %q, want util/ut", spec.output, ccNode.TargetProperties.ModuleDir)
 		}
-		if !reflect.DeepEqual(nodeTags(ccNode), internStrs(expectedSandboxingTags())) {
-			t.Fatalf("cc tags for %q = %v, want %v", spec.output, nodeTags(ccNode), expectedSandboxingTags())
-		}
 		ccInputs := make([]string, 0, len(ccNode.flatInputs()))
 		for _, input := range ccNode.flatInputs() {
 			ccInputs = append(ccInputs, input.string())
@@ -546,9 +520,6 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		}
 	}
 
-	if !reflect.DeepEqual(nodeTags(ldNode), internStrs(expectedSandboxingTags())) {
-		t.Fatalf("ld tags = %v, want %v", nodeTags(ldNode), expectedSandboxingTags())
-	}
 	if !containsString(strStrs(ldNode.Cmds[1].CmdArgs.flat()), "-gz=zstd") {
 		t.Fatalf("ld vcs compile cmd missing -gz=zstd: %v", ldNode.Cmds[1].CmdArgs.flat())
 	}

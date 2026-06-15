@@ -271,7 +271,7 @@ func TestEmitCC_PlatformEnvFlags_TargetOnly(t *testing.T) {
 	}
 	flags["PIC"] = "no"
 
-	target := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "-DENV_C=1", "-DENV_CXX=1")
+	target := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, "-DENV_C=1", "-DENV_CXX=1")
 	instance := ModuleInstance{
 		Path:     source("build/cow/on"),
 		Kind:     KindLib,
@@ -315,7 +315,7 @@ func nonOpensourcePlatform() *Platform {
 	delete(flags, "OPENSOURCE")
 	flags["PIC"] = "no"
 
-	return newPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "", "")
+	return newPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, "", "")
 }
 
 func TestEmitCC_WrapccPrefix_NonOpensource(t *testing.T) {

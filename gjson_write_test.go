@@ -44,7 +44,6 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 		KV:               KV{Name: "leaf"},
 		Outputs:          ToVFSSlice([]string{"leaf.o"}),
 		Requirements:     Requirements{},
-		Tags:             []STR{},
 		TargetProperties: TargetProperties{},
 	})
 	main := e.emit(&Node{Platform: &Platform{},
@@ -55,7 +54,6 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 		KV:               KV{Name: "main", P: pkCC},
 		Outputs:          ToVFSSlice([]string{"main.o"}),
 		Requirements:     Requirements{CPU: 1, RAM: 32, Network: nwRestricted},
-		Tags:             []STR{internStr("tag1")},
 		TargetProperties: TargetProperties{ModuleLang: mlCPP},
 	})
 	e.result(main)

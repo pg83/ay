@@ -263,14 +263,6 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 	if string(got.Platform.Target) != string(PlatformDefaultLinuxX8664) {
 		t.Errorf("platform = %q, want %q", string(got.Platform.Target), PlatformDefaultLinuxX8664)
 	}
-
-	if !nodeHasHostTag(nodeTags(got)) {
-		t.Errorf("tags do not carry \"tool\" baseline (host_platform-equivalent): %v", nodeTags(got))
-	}
-
-	if tg := nodeTags(got); len(tg) != 1 || tg[0] != internStr("tool") {
-		t.Errorf("tags = %v, want [\"tool\"]", nodeTags(got))
-	}
 }
 
 func TestComposeProgramLinkTrailer_NonPICRPathTrailerKeepsNoPie(t *testing.T) {
@@ -281,7 +273,7 @@ func TestComposeProgramLinkTrailer_NonPICRPathTrailerKeepsNoPie(t *testing.T) {
 	flags["LLD_TOOL"] = "$(LLD_ROOT)/bin/ld.lld"
 	flags["PIC"] = "no"
 
-	p := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "", "")
+	p := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, "", "")
 
 	got := composeProgramLinkTrailer(
 		p,

@@ -114,7 +114,7 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 			flags["PIC"] = "no"
 			flags[tt.resourceKey] = tt.resourceVal
 
-			platform := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, nil, "", "")
+			platform := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, "", "")
 			env := buildIfEnv(ModuleInstance{Platform: platform})
 			data := &ModuleData{}
 
@@ -348,12 +348,12 @@ func TestExpandConfigVFSPaths_SplitsSetList(t *testing.T) {
 }
 
 func TestCatboostOpenSourceDefineGating(t *testing.T) {
-	osP := newPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{"OPENSOURCE": "yes", "PIC": "no"}, nil, "", "")
+	osP := newPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{"OPENSOURCE": "yes", "PIC": "no"}, "", "")
 	if len(catboostOpenSourceDefineFor(osP)) == 0 {
 		t.Error("OPENSOURCE=yes must include -DCATBOOST_OPENSOURCE")
 	}
 
-	intP := newPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{"PIC": "no"}, nil, "", "")
+	intP := newPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{"PIC": "no"}, "", "")
 	if catboostOpenSourceDefineFor(intP) != nil {
 		t.Error("non-OPENSOURCE build must omit -DCATBOOST_OPENSOURCE")
 	}

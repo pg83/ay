@@ -54,38 +54,3 @@ CFLAGS = "-DINTERNAL=1"
 		t.Fatalf("target compiler flags = %q, want %q", got, want)
 	}
 }
-
-func TestShouldExposeSandboxingTargetTags(t *testing.T) {
-	cases := []struct {
-		name string
-		mf   *MakeFlags
-		want bool
-	}{
-		{
-			name: "nil",
-			mf:   nil,
-			want: false,
-		},
-		{
-			name: "plain sandboxing build",
-			mf: &MakeFlags{
-				sandboxing: true,
-			},
-			want: false,
-		},
-		{
-			name: "test sandboxing build",
-			mf: &MakeFlags{
-				sandboxing: true,
-				testLevel:  3,
-			},
-			want: true,
-		},
-	}
-
-	for _, tc := range cases {
-		if got := shouldExposeSandboxingTargetTags(tc.mf); got != tc.want {
-			t.Fatalf("%s: shouldExposeSandboxingTargetTags = %v, want %v", tc.name, got, tc.want)
-		}
-	}
-}

@@ -51,17 +51,13 @@ type Node struct {
 	// WITHOUT flattening, so a large closure slice is referenced, never copied.
 	// Consumers (uid, json writer, executor) iterate the chunks in order; the
 	// flattened element sequence is the node's input list.
-	Inputs       InputChunks  `json:"inputs"`
-	KV           KV           `json:"kv"`
-	Outputs      []VFS        `json:"outputs"`
-	Platform     *Platform    `json:"platform"`
-	Requirements Requirements `json:"requirements"`
-	Sandboxing   bool         `json:"sandboxing"`
-	SelfUID      UID          `json:"self_uid"`
-	// Tags is nil for almost every node — its tags are the platform's (nodeTags).
-	// The exception is the tagless test/lint run nodes, which set it to the
-	// platform's TestTags so they render their own ("no") tags, not the platform's.
-	Tags             []STR            `json:"tags"`
+	Inputs           InputChunks      `json:"inputs"`
+	KV               KV               `json:"kv"`
+	Outputs          []VFS            `json:"outputs"`
+	Platform         *Platform        `json:"platform"`
+	Requirements     Requirements     `json:"requirements"`
+	Sandboxing       bool             `json:"sandboxing"`
+	SelfUID          UID              `json:"self_uid"`
 	TargetProperties TargetProperties `json:"target_properties"`
 	UID              UID              `json:"uid"`
 
@@ -119,27 +115,6 @@ func depRefs(refs ...NodeRef) []NodeRef {
 	}
 
 	return out
-}
-
-func nodeHasHostTag(tags []STR) bool {
-	for _, t := range tags {
-		if t == strTool {
-			return true
-		}
-	}
-
-	return false
-}
-
-// nodeTags is a node's effective tag list for the graph output and UID: its own
-// Tags when set (the special tagless test/lint nodes carry their Platform.TestTags
-// there), otherwise the platform's Tags.
-func nodeTags(n *Node) []STR {
-	if n.Tags != nil {
-		return n.Tags
-	}
-
-	return n.Platform.Tags
 }
 
 // inputChunks is the chunked input list. It JSON-marshals FLAT — the chunking

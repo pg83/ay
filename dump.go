@@ -60,7 +60,15 @@ var ldOwnScriptRels = map[string]bool{
 
 var dumpContentFields = []string{
 	"cmds", "env", "inputs", "kv", "outputs",
-	"platform", "requirements", "tags", "target_properties", "host_platform",
+	"platform", "requirements", "target_properties",
+}
+
+// objcopyOverEmitExts are the C/C++ source/header extensions that constitute the
+// embedded resource producer's leaked compile closure on a resource-objcopy node.
+var objcopyOverEmitExts = map[string]struct{}{
+	".h": {}, ".hpp": {}, ".hxx": {}, ".ipp": {}, ".inc": {}, ".def": {},
+	".proto": {}, ".cpp": {}, ".cc": {}, ".cxx": {}, ".c": {}, ".i": {}, ".td": {},
+	".txt": {}, // COPY_FILE(TEXT) header sources, e.g. mkql_computation_node_codegen.h.txt
 }
 
 func cmdDump(args []string) int {
@@ -303,14 +311,6 @@ func filterARLDInputs(in []string, kind string, cmdBases map[string]struct{}) []
 	return out
 }
 
-// objcopyOverEmitExts are the C/C++ source/header extensions that constitute the
-// embedded resource producer's leaked compile closure on a resource-objcopy node.
-var objcopyOverEmitExts = map[string]struct{}{
-	".h": {}, ".hpp": {}, ".hxx": {}, ".ipp": {}, ".inc": {}, ".def": {},
-	".proto": {}, ".cpp": {}, ".cc": {}, ".cxx": {}, ".c": {}, ".i": {}, ".td": {},
-	".txt": {}, // COPY_FILE(TEXT) header sources, e.g. mkql_computation_node_codegen.h.txt
-}
-
 // filterObjcopyInputs drops the embedded resource producer's transitive $(S)
 // compile/source closure that upstream over-emits onto a resource-objcopy node as
 // cache-key-only inputs (the objcopy.py action reads only the resource it embeds;
@@ -423,13 +423,12 @@ func canonContent(node map[string]any, refGraph bool) map[string]any {
 		"requirements":      normRec(orVal(node["requirements"], map[string]any{})),
 		"sandboxing":        true,
 		"target_properties": normRec(orVal(node["target_properties"], map[string]any{})),
-		"tags":              normSortedStrings(node["tags"]),
 	}
 
-	if b, ok := node["host_platform"].(bool); ok && b {
-		canon["host_platform"] = true
-	}
-
+	// tags and host_platform are a graph-merge artifact (devtools/ya assigns the
+	// "tool" tag / host_platform to host-contour nodes at merge time); they are not
+	// intrinsic to a node's build action. Strip them from both sides so a host
+	// (tool) instance and its target twin compare on their real content.
 	return canon
 }
 

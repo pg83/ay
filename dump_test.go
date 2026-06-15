@@ -211,8 +211,8 @@ func TestDumpDiffModes(t *testing.T) {
 		return string(throw2(os.ReadFile(out)))
 	}
 
-	if bf := run("--by-field"); !strings.Contains(bf, "cmds") || !strings.Contains(bf, "tags") {
-		t.Fatalf("by-field missing cmds/tags:\n%s", bf)
+	if bf := run("--by-field"); !strings.Contains(bf, "cmds") {
+		t.Fatalf("by-field missing cmds:\n%s", bf)
 	}
 	if bt := run("--by-token"); !strings.Contains(bt, "${SSE}") || !strings.Contains(bt, "-fno-omit-frame-pointer") {
 		t.Fatalf("by-token missing tokens:\n%s", bt)

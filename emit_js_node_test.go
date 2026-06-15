@@ -1,23 +1,19 @@
 package main
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 )
 
 func TestEmitJS_UsesRequestedPlatformTags(t *testing.T) {
 	emit := newBufferedEmitter()
-	target := newTestPlatform(OSLinux, ISAX8664, "no", []string{"default-linux-x86_64", "debug", "SANDBOXING=yes"})
+	target := newTestPlatform(OSLinux, ISAX8664, "no")
 
 	ref, _ := emitJS(hostInstance("joinmod"), "all.cpp", []string{"a.cpp"}, nil, target, testToolchain(), nil, emit)
 	got := emit.nodes[ref]
 
 	if string(got.Platform.Target) != string(target.Target) {
 		t.Fatalf("JS platform = %q, want %q", string(got.Platform.Target), target.Target)
-	}
-	if !reflect.DeepEqual(nodeTags(got), target.Tags) {
-		t.Fatalf("JS tags = %#v, want %#v", nodeTags(got), target.Tags)
 	}
 	if got.TargetProperties.ModuleDir != "joinmod" {
 		t.Fatalf("JS module_dir = %q, want joinmod", got.TargetProperties.ModuleDir)

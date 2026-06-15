@@ -16,7 +16,6 @@ var expectedKeyOrder = []string{
 	"requirements",
 	"sandboxing",
 	"self_uid",
-	"tags",
 	"target_properties",
 	"uid",
 }
@@ -31,7 +30,6 @@ var expectedKeyOrderMinimal = []string{
 	"requirements",
 	"sandboxing",
 	"self_uid",
-	"tags",
 	"target_properties",
 	"uid",
 }
@@ -80,7 +78,6 @@ func TestNodeJSONKeyOrder_AllFieldsPresent(t *testing.T) {
 		Platform:         &Platform{Target: "default-linux-aarch64"},
 		Requirements:     Requirements{CPU: 1, RAM: 32},
 		SelfUID:          tuid("selfuid"),
-		Tags:             []STR{},
 		TargetProperties: TargetProperties{ModuleLang: mlCPP},
 		UID:              tuid("uid"),
 	}
@@ -111,7 +108,6 @@ func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
 		Platform:         nil,
 		Requirements:     Requirements{},
 		SelfUID:          UID{},
-		Tags:             []STR{},
 		TargetProperties: TargetProperties{},
 		UID:              UID{},
 	}
@@ -130,7 +126,7 @@ func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
 	}
 
 	s := string(raw)
-	for _, frag := range []string{`"cmds":[]`, `"env":{}`, `"inputs":[]`, `"kv":{}`, `"outputs":[]`, `"requirements":{}`, `"tags":[]`, `"target_properties":{}`} {
+	for _, frag := range []string{`"cmds":[]`, `"env":{}`, `"inputs":[]`, `"kv":{}`, `"outputs":[]`, `"requirements":{}`, `"target_properties":{}`} {
 		if !strings.Contains(s, frag) {
 			t.Errorf("expected output to contain %q, got: %s", frag, s)
 		}
@@ -146,7 +142,6 @@ func TestNodeJSON_DoesNotSerializeInternalRefs(t *testing.T) {
 		KV:               KV{},
 		Outputs:          ToVFSSlice([]string{}),
 		Requirements:     Requirements{},
-		Tags:             []STR{},
 		TargetProperties: TargetProperties{},
 		DepRefs:          []NodeRef{7},
 		ForeignDepRefs:   []NodeRef{9},

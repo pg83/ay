@@ -54,12 +54,7 @@ func cmdDumpNormalize(args []string) int {
 	// node to its output paths so the strip pass can resolve, for an edge u->d,
 	// what d produces and check it against u's inputs. Compact (1-3 strings/node).
 	outputsByUID := map[string][]string{}
-	var ldRoots, tsRoots []string
-	type arCand struct {
-		uid  string
-		host bool
-	}
-	var arRoots []arCand
+	var ldRoots, tsRoots, arRoots []string
 
 	ldPrefix := "$(B)/" + target + "/"
 	arInfix := "/" + target + "/"
@@ -71,7 +66,6 @@ func cmdDumpNormalize(args []string) int {
 		content  [32]byte
 		isFetch  bool
 		rootKind byte
-		arHost   bool
 		outputs  []string
 	}
 
@@ -118,7 +112,6 @@ func cmdDumpNormalize(args []string) int {
 			case "AR":
 				if strings.Contains(out0, arInfix) {
 					r.rootKind = 'A'
-					r.arHost, _ = node["host_platform"].(bool)
 				}
 			case "TS":
 				path, _ := kv["path"].(string)
@@ -146,7 +139,7 @@ func cmdDumpNormalize(args []string) int {
 			case 'L':
 				ldRoots = append(ldRoots, r.uid)
 			case 'A':
-				arRoots = append(arRoots, arCand{uid: r.uid, host: r.arHost})
+				arRoots = append(arRoots, r.uid)
 			case 'T':
 				tsRoots = append(tsRoots, r.uid)
 			}
@@ -206,21 +199,9 @@ func cmdDumpNormalize(args []string) int {
 		case len(ldRoots) > 1:
 			throwFmt("dump normalize: %d LD roots for target %q; expected 1", len(ldRoots), target)
 		case len(arRoots) == 1:
-			roots = append(roots, arRoots[0].uid)
+			roots = append(roots, arRoots[0])
 		default:
-			var nonHost []string
-
-			for _, c := range arRoots {
-				if !c.host {
-					nonHost = append(nonHost, c.uid)
-				}
-			}
-
-			if len(nonHost) == 1 {
-				roots = append(roots, nonHost[0])
-			} else {
-				throwFmt("dump normalize: %d AR roots for target %q; expected 1", len(arRoots), target)
-			}
+			throwFmt("dump normalize: %d AR roots for target %q; expected 1", len(arRoots), target)
 		}
 	}
 
@@ -271,26 +252,38 @@ func cmdDumpNormalize(args []string) int {
 
 	bw := bufio.NewWriterSize(out, 1<<20)
 
+	// Dedup by the recomputed (Merkle) uid: after stripping tags/host_platform a
+	// host (tool) instance and its target twin can collapse to one uid when their
+	// whole subtree matches; the raw graph still lists both, so emit each uid once.
+	// Instances whose deps genuinely differ keep distinct uids and both survive.
+	type emitLine struct {
+		uid  string
+		line []byte
+	}
+	seen := map[string]bool{}
+
 	streamGraphFanout(inPath, workers,
-		func(node map[string]any) []byte {
+		func(node map[string]any) emitLine {
 			uid := getString(node, "uid")
 
 			if !closure[uid] {
-				return nil
+				return emitLine{}
 			}
 
 			canon := canonContent(node, refGraph)
 			canon["deps"] = rewriteDeps(deps[uid], closure, fetch, newUID)
 
-			canon["uid"] = newUID[uid]
+			nu := newUID[uid]
+			canon["uid"] = nu
 			ch := contentHash[uid]
 			canon["self_uid"] = base64.RawURLEncoding.EncodeToString(ch[:])[:dumpUIDLen]
 
-			return append(marshalCompact(canon), '\n')
+			return emitLine{uid: nu, line: append(marshalCompact(canon), '\n')}
 		},
-		func(line []byte) {
-			if line != nil {
-				throw2(bw.Write(line))
+		func(e emitLine) {
+			if e.line != nil && !seen[e.uid] {
+				seen[e.uid] = true
+				throw2(bw.Write(e.line))
 			}
 		})
 	throw(bw.Flush())
