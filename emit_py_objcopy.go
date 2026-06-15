@@ -128,14 +128,13 @@ func emitResourceObjcopy(
 	}
 
 	type acc struct {
-		paths       []string
-		pathInputs  []VFS
-		extraInputs []VFS
-		kvInputs    []VFS
-		pathDeps    []NodeRef
-		keys        []string
-		kvs         []string
-		cmdLen      int
+		paths      []string
+		pathInputs []VFS
+		kvInputs   []VFS
+		pathDeps   []NodeRef
+		keys       []string
+		kvs        []string
+		cmdLen     int
 	}
 	cur := acc{}
 	moduleTag := resourceLibTagForData(d)
@@ -176,9 +175,9 @@ func emitResourceObjcopy(
 		var inputs InputChunks
 
 		if len(cur.paths) <= 1 {
-			inputs = na.inputList(rescompilersWithScriptChunk, cur.pathInputs, cur.extraInputs)
+			inputs = na.inputList(rescompilersWithScriptChunk, cur.pathInputs)
 		} else {
-			inputs = na.inputList(rescompilersChunk, cur.pathInputs, objcopyScriptChunk, cur.extraInputs)
+			inputs = na.inputList(rescompilersChunk, cur.pathInputs, objcopyScriptChunk)
 		}
 
 		deduper.reset()
@@ -268,20 +267,8 @@ func emitResourceObjcopy(
 					var producerRef NodeRef
 
 					if info := codegenRegForInstance(ctx, instance).lookup(copyFileOutputVFS(instance.Path.rel(), e.Path)); info != nil {
-						canonKey := inputVFS.string()
 						inputVFS = copyFileOutputVFS(instance.Path.rel(), e.Path)
 						producerRef = info.ProducerRef
-
-						// prOutputInputs is still keyed by the producer's raw OUT
-						// token, which is either the canonical $(B) string or the raw
-						// RESOURCE path; try both.
-						extra := prResourceExtraInputs(d, canonKey)
-
-						if len(extra) == 0 {
-							extra = prResourceExtraInputs(d, e.Path)
-						}
-
-						cur.extraInputs = dedupVFS(cur.extraInputs, extra)
 					}
 
 					cur.paths = append(cur.paths, e.Path)

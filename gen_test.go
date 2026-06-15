@@ -4504,8 +4504,12 @@ END()
 	if !nodeHasInput(objcopy, "$(B)/db/data.json") {
 		t.Fatalf("objcopy inputs missing build-root data.json: %#v", objcopy.flatInputs())
 	}
-	if !nodeHasInput(objcopy, "$(S)/dep/dep.h") {
-		t.Fatalf("objcopy inputs missing transitive dep/dep.h closure: %#v", objcopy.flatInputs())
+	// The objcopy embeds data.json and reads only it; the producer's transitive
+	// $(S) compile closure (dep/dep.h) is NOT an objcopy input. Upstream over-emits
+	// it as a cache-key-only input; we do not, and normalization strips it from the
+	// reference side (see bugs/20260615-upstream-resource-objcopy-overemit.md).
+	if nodeHasInput(objcopy, "$(S)/dep/dep.h") {
+		t.Fatalf("objcopy should not carry producer-closure dep/dep.h: %#v", objcopy.flatInputs())
 	}
 }
 

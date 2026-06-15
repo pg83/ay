@@ -90,28 +90,7 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	inputClosure := pyInputClosure(ctx, instance, stmt, d, moduleInputs)
 	// Exclude pyRef: outputs are now registered against it; see emit_pr.go.
 	extraDepRefs := resolveCodegenDepRefs(ctx, instance, inputClosure, pyRef)
-	result := emitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, pyRef, moduleInputs.TC, ctx.emit)
-
-	if d.prOutputInputs == nil {
-		d.prOutputInputs = map[STR]InputChunks{}
-	}
-
-	// result.Inputs shares the PY node's chunk list; nothing mutates it after
-	// Emit and the reader (prResourceExtraInputs) copies out, so sharing it
-	// across keys is safe.
-	for _, f := range stmt.OUTFiles {
-		d.prOutputInputs[f] = result.Inputs
-	}
-
-	for _, f := range stmt.OUTNoAutoFiles {
-		d.prOutputInputs[f] = result.Inputs
-	}
-
-	if stmt.StdoutFile != nil {
-		d.prOutputInputs[*stmt.StdoutFile] = result.Inputs
-	}
-
-	return result.Ref
+	return emitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, pyRef, moduleInputs.TC, ctx.emit)
 }
 
 func pyInputClosure(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d *ModuleData, moduleInputs ModuleCCInputs) []VFS {
@@ -390,7 +369,7 @@ func emitPYRun(
 	id NodeRef,
 	tc ModuleToolchain,
 	emit Emitter,
-) PrEmitResult {
+) NodeRef {
 	na := emit.nodeArenas()
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -478,12 +457,7 @@ func emitPYRun(
 		Resources:        usesPython3,
 	}
 
-	// The node and the result share the same chunk list: nothing mutates a
-	// node's Inputs after Emit, and prOutputInputs readers copy out.
 	emit.emitReserved(node, id)
 
-	return PrEmitResult{
-		Ref:    id,
-		Inputs: inputs,
-	}
+	return id
 }

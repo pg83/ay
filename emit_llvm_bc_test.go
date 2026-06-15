@@ -487,18 +487,19 @@ END()
 		t.Fatal("graph missing PY objcopy node for LLVM_BC resource")
 	}
 
-	// The PY node must carry clang_wrapper.py (from BC inputs) and
-	// llvm_opt_wrapper.py (from OP inputs) as part of the propagated closure.
-	// Before fix: d.prOutputInputs[optOutName] is never set, so prResourceExtraInputs
-	// returns nil and neither script appears in the PY node's inputs.
-	wantInputs := []string{
+	// The objcopy.py action reads only the embedded .bc; the BC compilation's
+	// source closure (clang_wrapper.py, llvm_opt_wrapper.py, headers) is NOT an
+	// input of the objcopy node. Upstream over-emits that closure here as
+	// cache-key-only inputs; we do not, and dump normalization strips it from the
+	// reference side (see bugs/20260615-upstream-resource-objcopy-overemit.md and
+	// filterObjcopyInputs).
+	for _, unwanted := range []string{
 		"$(S)/build/scripts/clang_wrapper.py",
 		"$(S)/build/scripts/llvm_opt_wrapper.py",
-	}
-	for _, want := range wantInputs {
-		if !nodeHasInput(pyNode, want) {
-			t.Errorf("PY objcopy node missing BC closure input %q; inputs: %v",
-				want, vfsStringsT3(pyNode.flatInputs()))
+	} {
+		if nodeHasInput(pyNode, unwanted) {
+			t.Errorf("PY objcopy node should not carry BC producer-closure input %q; inputs: %v",
+				unwanted, vfsStringsT3(pyNode.flatInputs()))
 		}
 	}
 }

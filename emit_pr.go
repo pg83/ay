@@ -142,26 +142,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// self-dependency (the old two-phase code bound the ref only after this resolve).
 	prExtraDepRefs := resolveCodegenDepRefs(ctx, instance, inputClosure, toolLDRef, prRef)
 
-	prResult := emitPR(instance, stmt, toolBinPath, toolLDRef, auxTools, inVFSByToken, inVFSs, outVFSByToken, stdoutVFS, inputClosure, prExtraDepRefs, prRef, ctx.emit)
-
-	if d.prOutputInputs == nil {
-		d.prOutputInputs = map[STR]InputChunks{}
-	}
-
-	// prResult.Inputs shares the PR node's chunk list; nothing mutates it after
-	// Emit and the reader (prResourceExtraInputs) copies out, so sharing it
-	// across keys is safe.
-	for _, f := range stmt.OUTFiles {
-		d.prOutputInputs[f] = prResult.Inputs
-	}
-
-	for _, f := range stmt.OUTNoAutoFiles {
-		d.prOutputInputs[f] = prResult.Inputs
-	}
-
-	if stmt.StdoutFile != nil {
-		d.prOutputInputs[*stmt.StdoutFile] = prResult.Inputs
-	}
+	emitPR(instance, stmt, toolBinPath, toolLDRef, auxTools, inVFSByToken, inVFSs, outVFSByToken, stdoutVFS, inputClosure, prExtraDepRefs, prRef, ctx.emit)
 
 	return prRef
 }
@@ -391,11 +372,6 @@ func runProgramInputVFS(ctx *GenCtx, instance ModuleInstance, d *ModuleData, rel
 	return resolveModuleSourceVFS(ctx, instance, d, rel, d.srcDirs)
 }
 
-type PrEmitResult struct {
-	Ref    NodeRef
-	Inputs InputChunks
-}
-
 func emitPR(
 	instance ModuleInstance,
 	stmt *RunProgramStmt,
@@ -410,7 +386,7 @@ func emitPR(
 	extraDepRefs []NodeRef,
 	id NodeRef,
 	emit Emitter,
-) PrEmitResult {
+) {
 	na := emit.nodeArenas()
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -539,12 +515,5 @@ func emitPR(
 		ForeignDepRefs:   foreignDepRefs,
 	}
 
-	// The node and the result share the same chunk list: nothing mutates a
-	// node's Inputs after Emit, and prOutputInputs readers copy out.
 	emit.emitReserved(node, id)
-
-	return PrEmitResult{
-		Ref:    id,
-		Inputs: inputs,
-	}
 }
