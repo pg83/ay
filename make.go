@@ -117,15 +117,16 @@ func cmdMake(args []string) int {
 	targetYaFlags := map[string]string{}
 	copyStatsFlags(hostYaFlags, rootHostYaFlags)
 	copyStatsFlags(targetYaFlags, rootTargetYaFlags)
-	var hostInternalYaFlags map[string]string
-	var targetInternalYaFlags map[string]string
-
-	if mf.testLevel == 0 {
-		hostInternalYaFlags = readOptionalYaConfSection(fs, "build/internal/ya.conf", "host_platform_flags")
-		targetInternalYaFlags = readOptionalYaConfSection(fs, "build/internal/ya.conf", "flags")
-		copyStatsFlags(hostYaFlags, hostInternalYaFlags)
-		copyStatsFlags(targetYaFlags, targetInternalYaFlags)
-	}
+	// build/internal/ya.conf carries the internal contour's common flags
+	// (OPENSOURCE, USE_PREBUILT_TOOLS=no, the -fno-omit-frame-pointer /
+	// -Wno-unknown-argument CFLAGS, …). Upstream applies it to every build,
+	// test or not; both sg4 (-ttt) and sg5 references now carry these CFLAGS,
+	// so it is read unconditionally (absent in the opensource snapshots, where
+	// readOptionalYaConfSection returns nil).
+	hostInternalYaFlags := readOptionalYaConfSection(fs, "build/internal/ya.conf", "host_platform_flags")
+	targetInternalYaFlags := readOptionalYaConfSection(fs, "build/internal/ya.conf", "flags")
+	copyStatsFlags(hostYaFlags, hostInternalYaFlags)
+	copyStatsFlags(targetYaFlags, targetInternalYaFlags)
 
 	hOS, hISA := resolvePlatform(mf.hostPlat)
 	hostFlags := make(map[string]string, len(tools)+len(hostYaFlags)+len(mf.hflags)+1)
