@@ -96,7 +96,9 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		}
 
 		node := &Node{
-			Platform: instance.Platform,
+			// Internal builds reuse the target .yapyc3 for host tools; opensource keeps
+			// the reaching instance's own copy. See pyCodegenPlatform (emit_py_objcopy).
+			Platform: pyCodegenPlatform(ctx, instance),
 			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 				Env: env}),
 			Env:     env,

@@ -22,6 +22,25 @@ type ObjcopyEmitResult struct {
 	Outputs []VFS
 }
 
+// pyCodegenPlatform picks the platform a python codegen node (resource objcopy,
+// .py->.yapyc3 bytecode) is attributed to. These outputs are arch-independent for
+// our purposes (the objcopy hash and the .pyc bytecode do not vary with the build
+// platform), so in the INTERNAL contour (USE_PREBUILT_TOOLS) a host tool reuses the
+// target-built node instead of producing its own: the reference's internal graph
+// (sg6) carries zero host-platform python nodes — host tools link the target objcopy.
+// Emitting under ctx.target makes the host-tool and target instances byte-identical
+// so they collapse by uid. The opensource contour instead keeps each reaching
+// instance's own copy (sg2_x86_64/sg5 references carry both a host and a target node
+// at the same path), so there we keep instance.Platform. Gating on the contour keeps
+// every (opensource) gating case on its current, byte-exact behaviour.
+func pyCodegenPlatform(ctx *GenCtx, instance ModuleInstance) *Platform {
+	if ctx.target.Flags[envOPENSOURCE] != strYes {
+		return ctx.target
+	}
+
+	return instance.Platform
+}
+
 // objcopyArgBlocks are the module-stable spans of a resource-objcopy command
 // line — everything around the per-node output path. Built once per module
 // (emitResourceObjcopy) and referenced as chunks by every objcopy node the
@@ -87,7 +106,7 @@ func emitResourceObjcopy(
 		return nil
 	}
 
-	oc := newObjcopyEmitCtx(ctx, d, instance.Platform)
+	oc := newObjcopyEmitCtx(ctx, d, pyCodegenPlatform(ctx, instance))
 	out := &ObjcopyEmitResult{}
 
 	if nodeRes := emitPyMainObjcopy(ctx, instance, d, oc); nodeRes != nil {
@@ -212,7 +231,7 @@ func emitResourceObjcopy(
 		}
 
 		node := &Node{
-			Platform: instance.Platform,
+			Platform: pyCodegenPlatform(ctx, instance),
 			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 				Env: env}),
 			Env:              env,
@@ -221,7 +240,7 @@ func emitResourceObjcopy(
 			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 			TargetProperties: resTargetProps,
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			Resources:        instance.Platform.UsesPython3Clang,
+			Resources:        pyCodegenPlatform(ctx, instance).UsesPython3Clang,
 		}
 
 		node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
@@ -361,7 +380,7 @@ func emitKvOnlyObjcopyNode(
 	}
 
 	node := &Node{
-		Platform: instance.Platform,
+		Platform: pyCodegenPlatform(ctx, instance),
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Env: env}),
 		Env:              env,
@@ -370,7 +389,7 @@ func emitKvOnlyObjcopyNode(
 		KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 		TargetProperties: targetProps,
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		Resources:        instance.Platform.UsesPython3Clang,
+		Resources:        pyCodegenPlatform(ctx, instance).UsesPython3Clang,
 	}
 
 	node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
@@ -437,7 +456,7 @@ func emitYaConfJSONObjcopy(
 		})
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 		node := &Node{
-			Platform: instance.Platform,
+			Platform: pyCodegenPlatform(ctx, instance),
 			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 				Env: env}),
 			Env:              env,
@@ -446,7 +465,7 @@ func emitYaConfJSONObjcopy(
 			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			Resources:        instance.Platform.UsesPython3Clang,
+			Resources:        pyCodegenPlatform(ctx, instance).UsesPython3Clang,
 		}
 
 		node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
@@ -644,7 +663,7 @@ func emitPySrcObjcopy(
 			}
 
 			node := &Node{
-				Platform:         instance.Platform,
+				Platform:         pyCodegenPlatform(ctx, instance),
 				Cmds:             na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
 				Env:              env,
 				Inputs:           na.inputList(rescompilersChunk, ch.inps, objcopyScriptChunk),
@@ -652,7 +671,7 @@ func emitPySrcObjcopy(
 				KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 				TargetProperties: targetProps,
 				Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-				Resources:        instance.Platform.UsesPython3Clang,
+				Resources:        pyCodegenPlatform(ctx, instance).UsesPython3Clang,
 			}
 
 			node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
