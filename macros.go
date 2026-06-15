@@ -181,6 +181,11 @@ func makeDefaultIfEnv() Environment {
 		envOS_LINUX, envLINUX,
 		envCLANG, envTRUE, envUSE_SSE4,
 		envUSE_ARCADIA_PYTHON, envPYTHON3,
+		// build/conf/settings.conf:3 sets USE_PREBUILT_TOOLS=yes unconditionally.
+		// The opensource snapshots override it back to "no" in their ya.conf
+		// [flags]/[host_platform_flags] (yatool, ydb), which flows in via
+		// Platform.Flags -> buildIfEnv and wins over this default.
+		envUSE_PREBUILT_TOOLS,
 	} {
 		e.setBool(n, true)
 	}
