@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
 // alwaysCopyDirs mirrors devtools/ya/tests/copy_inputs.py's ALWAYS_INCLUDE: dirs
@@ -65,6 +64,12 @@ func copySourceSlice(fs *OsFS, srcRoot, dst string, onWarn func(Warn)) error {
 	}
 
 	dirs := dropDescendantDirs(dirSet)
+
+	// The repo root is never a copy unit: a recursive copy of it would clone the whole
+	// tree (and would never have been the intended slice). Drop any entry that resolves
+	// to it — "", ".", "/", or a path that joins back to the source root.
+	dirs = dropRepoRoot(absSrc, dirs)
+
 	yamakes := ancestorYamakes(dirs)
 
 	fmt.Fprintf(os.Stderr, "copy-sources: %d directories (from %d read dirs) + %d ancestor ya.make files -> %s\n",
@@ -81,6 +86,28 @@ func copySourceSlice(fs *OsFS, srcRoot, dst string, onWarn func(Warn)) error {
 	fmt.Fprintf(os.Stderr, "copy-sources: done — %d/%d dirs + %d ya.make files copied\n", copied, len(dirs), yamakeCount)
 
 	return nil
+}
+
+// dropRepoRoot removes any directory that resolves to the source root itself —
+// copying the whole repository is forbidden under all conditions.
+func dropRepoRoot(srcRoot string, dirs []string) []string {
+	out := dirs[:0]
+
+	for _, d := range dirs {
+		c := strings.Trim(filepath.ToSlash(filepath.Clean(d)), "/")
+
+		if c == "" || c == "." {
+			continue
+		}
+
+		if abs, err := filepath.Abs(filepath.Join(srcRoot, d)); err == nil && abs == srcRoot {
+			continue
+		}
+
+		out = append(out, d)
+	}
+
+	return out
 }
 
 // dropDescendantDirs keeps only the topmost directory of every ancestor chain: a
@@ -168,25 +195,10 @@ func copySliceConcurrent(srcRoot, dst string, dirs []string, onWarn func(Warn)) 
 		errOnce.Do(func() { firstErr = e })
 	}
 
-	// Live progress: a ticker prints the running dir count (carriage-returned) until
-	// the copy finishes — the slice is thousands of dirs and several GB, so the bare
-	// summary at the end is not enough feedback.
+	// Print every directory as a worker starts it, as `{started}/{all} path`, so a
+	// slow/huge tree is visible (its line is the last printed) instead of looking hung.
 	total := len(dirs)
-	done := make(chan struct{})
-
-	go func() {
-		tick := time.NewTicker(250 * time.Millisecond)
-		defer tick.Stop()
-
-		for {
-			select {
-			case <-done:
-				return
-			case <-tick.C:
-				fmt.Fprintf(os.Stderr, "\rcopy-sources: %d/%d dirs", copied.Load(), total)
-			}
-		}
-	}()
+	var started atomic.Int64
 
 	workers := runtime.GOMAXPROCS(0)
 
@@ -198,6 +210,11 @@ func copySliceConcurrent(srcRoot, dst string, dirs []string, onWarn func(Warn)) 
 
 			for d := range jobs {
 				src := filepath.Join(srcRoot, d)
+
+				if abs, err := filepath.Abs(src); err == nil && abs == srcRoot {
+					continue // belt-and-suspenders: never copy the repo root
+				}
+
 				fi, err := os.Lstat(src)
 
 				if err != nil || !fi.IsDir() {
@@ -205,6 +222,8 @@ func copySliceConcurrent(srcRoot, dst string, dirs []string, onWarn func(Warn)) 
 
 					continue
 				}
+
+				fmt.Fprintf(os.Stderr, "%d/%d %s\n", started.Add(1), total, d)
 
 				if err := copyTree(src, filepath.Join(dst, d)); err != nil {
 					setErr(err)
@@ -221,9 +240,6 @@ func copySliceConcurrent(srcRoot, dst string, dirs []string, onWarn func(Warn)) 
 
 	close(jobs)
 	wg.Wait()
-	close(done)
-
-	fmt.Fprintf(os.Stderr, "\rcopy-sources: %d/%d dirs\n", copied.Load(), total)
 
 	return int(copied.Load()), firstErr
 }
