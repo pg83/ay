@@ -8,19 +8,22 @@ type GeneratedPyAuxChunksResult struct {
 }
 
 func emitGeneratedPyAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) *GeneratedPyAuxChunksResult {
-	if len(d.pyGeneratedSrcs) == 0 {
+	if len(d.pySrcs) == 0 {
 		return nil
 	}
+
+	reg := codegenRegForInstance(ctx, instance)
 
 	var entries []PyProtoAuxEntry
 
 	for _, srcRel := range d.pySrcs {
-		genInputs := d.pyGeneratedSrcs[srcRel]
+		info := reg.lookupSplit(dirKey(instance.Path.rel()), srcRel)
 
-		if genInputs == nil {
+		if info == nil {
 			continue
 		}
 
+		genInputs := info.SourceInputs
 		src := build(instance.Path.rel() + "/" + srcRel.string())
 		entries = append(entries, PyProtoAuxEntry{path: src, key: generatedPyResourceKey(instance.Path.rel(), d, srcRel.string()), inputs: genInputs})
 

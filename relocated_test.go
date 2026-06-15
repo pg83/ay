@@ -81,7 +81,7 @@ func readYaConfSections(fs FS, wantSection string, rels ...string) map[string]st
 }
 
 func buildPySrcEntries(d *ModuleData, modulePath string) []PySrcEntry {
-	return buildPySrcEntriesFor(newMemFS(nil), d, modulePath, strStrings(d.pySrcs), d.pyTopLevel, d.pyNamespace)
+	return buildPySrcEntriesFor(newCodegenRegistry(), newMemFS(nil), d, modulePath, strStrings(d.pySrcs), d.pyTopLevel, d.pyNamespace)
 }
 
 func newInclArgMemo() InclArgMemo {

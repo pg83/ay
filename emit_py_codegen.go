@@ -35,15 +35,24 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	// So is the command head.
 	py3ccArgHead := []STR{(py3ccBinary).str(), argSlowPy3cc.str(), (py3ccSlowBin).str()}
 
+	reg := codegenRegForInstance(ctx, instance)
+
 	for _, srcRel := range d.pySrcs {
 		if strings.HasSuffix(srcRel.string(), ".pyi") {
 			continue
 		}
 
-		generatedInputs := d.pyGeneratedSrcs[srcRel]
+		genInfo := reg.lookupSplit(dirKey(instance.Path.rel()), srcRel)
+
+		var generatedInputs []VFS
+
+		if genInfo != nil {
+			generatedInputs = genInfo.SourceInputs
+		}
+
 		srcAbs := resolveSourceVFS(ctx, instance, srcRel.string(), d.srcDirs)
 
-		if generatedInputs != nil {
+		if genInfo != nil {
 			srcAbs = build(instance.Path.rel() + "/" + srcRel.string())
 		}
 
@@ -66,7 +75,7 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 
 		var inputs []VFS
 
-		if generatedInputs != nil {
+		if genInfo != nil {
 			// The generated-src input list interleaves the shared generator
 			// inputs around the tool pair and dedups across the whole — stays
 			// flat (resolveCodegenDepRefs below consumes it flat too).
@@ -116,7 +125,7 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 
 		toolRefs := depRefs(py3ccLDRef, py3ccSlowLDRef)
 
-		if generatedInputs != nil {
+		if genInfo != nil {
 			if extras := resolveCodegenDepRefs(ctx, instance, inputs, toolRefs...); len(extras) > 0 {
 				node.DepRefs = append(node.DepRefs, extras...)
 			}

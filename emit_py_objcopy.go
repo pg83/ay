@@ -601,7 +601,7 @@ func emitPySrcObjcopy(
 			}
 		}
 
-		entries := buildPySrcEntriesFor(ctx.fs, d, instance.Path.rel(), strStrings(group.Srcs), group.TopLevel, group.Namespace)
+		entries := buildPySrcEntriesFor(codegenRegForInstance(ctx, instance), ctx.fs, d, instance.Path.rel(), strStrings(group.Srcs), group.TopLevel, group.Namespace)
 
 		if len(entries) == 0 {
 			continue
