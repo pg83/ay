@@ -1,6 +1,7 @@
 package main
 
 import (
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -491,5 +492,217 @@ func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 				t.Errorf("unexpected error: %v", exc)
 			}
 		})
+	}
+}
+
+func TestGen_SyntheticPROGRAM_EmitsLD(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"lone/ya.make": "PROGRAM()\nSRCS(main.cpp)\nEND()\n",
+	})
+
+	g := testGen(fs, "lone")
+
+	if len(g.Graph) != 3 {
+		t.Fatalf("Gen produced %d nodes, want 3 (1 CC + 1 LD + 1 vcs.json)", len(g.Graph))
+	}
+
+	if len(g.Result) != 1 {
+		t.Fatalf("Gen produced %d results, want 1", len(g.Result))
+	}
+
+	var ld, cc *Node
+
+	for _, n := range g.Graph {
+		switch n.KV.P.string() {
+		case "LD":
+			ld = n
+		case "CC":
+			cc = n
+		}
+	}
+
+	if ld == nil {
+		t.Fatal("Gen produced no LD node for PROGRAM module")
+	}
+
+	if cc == nil {
+		t.Fatal("Gen produced no CC node for PROGRAM module")
+	}
+
+	if len(ld.Cmds) != 4 {
+		t.Errorf("LD Cmds = %d, want 4", len(ld.Cmds))
+	}
+
+	wantOut := "$(B)/lone/lone"
+	if len(ld.Outputs) != 1 || ld.Outputs[0].string() != wantOut {
+		t.Errorf("LD outputs = %#v, want [%q]", ld.Outputs, wantOut)
+	}
+
+	if g.Result[0] != ld.UID {
+		t.Errorf("result UID = %q, want LD uid %q", g.Result[0], ld.UID)
+	}
+}
+
+func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"peerlib/ya.make":  "LIBRARY()\nSRCS(regular.cpp)\nGLOBAL_SRCS(global.cpp)\nEND()\n",
+		"consumer/ya.make": "PROGRAM()\nSRCS(main.cpp)\nPEERDIR(peerlib)\nEND()\n",
+	})
+
+	g := testGen(fs, "consumer")
+
+	var ldNode *Node
+	for _, n := range g.Graph {
+		if n.KV.P == pkLD {
+			ldNode = n
+		}
+	}
+
+	if ldNode == nil {
+		t.Fatal("no LD node found in graph")
+	}
+
+	arCount := 0
+	for _, n := range g.Graph {
+		if n.KV.P == pkAR {
+			arCount++
+		}
+	}
+
+	if arCount != 2 {
+		t.Errorf("AR count = %d, want 2 (regular + global from peerlib)", arCount)
+	}
+
+	if len(graphDeps(g, ldNode)) < 3 {
+		t.Errorf("LD Deps = %d, want >= 3 (own CC + peer AR + peer global AR)", len(graphDeps(g, ldNode)))
+	}
+
+	expectedInput := "$(B)/peerlib/libpeerlib.global.a"
+	foundInInputs := false
+
+	for _, in := range ldNode.flatInputs() {
+		if in.string() == expectedInput {
+			foundInInputs = true
+			break
+		}
+	}
+
+	if !foundInInputs {
+		t.Errorf("expected single-prefixed global archive in inputs; got: %v", ldNode.flatInputs())
+	}
+
+	for _, in := range ldNode.flatInputs() {
+		if strings.Contains(in.string(), "$(B)/$(B)") {
+			t.Errorf("double-prefixed input found: %q", in.string())
+		}
+	}
+
+	if len(ldNode.Cmds) < 3 {
+		t.Fatalf("LD node has %d cmds, want >= 3", len(ldNode.Cmds))
+	}
+
+	linkArgs := ldNode.Cmds[2].CmdArgs.flat()
+	expectedCmdArg := "peerlib/libpeerlib.global.a"
+	foundInCmdArgs := false
+
+	for _, a := range linkArgs {
+		if a.string() == expectedCmdArg {
+			foundInCmdArgs = true
+			break
+		}
+	}
+
+	if !foundInCmdArgs {
+		t.Errorf("expected unprefixed global archive in cmd_args[2]; got: %v", linkArgs)
+	}
+}
+
+// TestGen_FbsSrcsInduceFlatbuffersLinkDep verifies that a module with .fbs SRCS
+// gets contrib/libs/flatbuffers added as an induced PEERDIR (upstream's
+// _CPP_FLATC_CMD has .PEERDIR=contrib/libs/flatbuffers). The induced dep must
+// appear AFTER all explicit PEERDIRs so that in the LD link command flatbuffers
+// lands between the last explicit peer's transitive closure and the library
+// itself — matching the upstream link order that sg5 ref exhibits for arrow.
+func TestGen_FbsSrcsInduceFlatbuffersLinkDep(t *testing.T) {
+	files := map[string]string{
+		// A program that peers a library with .fbs SRCS.
+		"prog/ya.make":  "PROGRAM()\nPEERDIR(arrowlike)\nSRCS(main.cpp)\nEND()\n",
+		"prog/main.cpp": "int main() { return 0; }\n",
+		// arrowlike has an explicit peer (peer1) AND a .fbs source.
+		// The fix must insert flatbuffers AFTER peer1 in the link order.
+		"arrowlike/ya.make":    "LIBRARY()\nPEERDIR(peer1)\nSRCS(lib.cpp Schema.fbs)\nEND()\n",
+		"arrowlike/lib.cpp":    "int f() { return 0; }\n",
+		"arrowlike/Schema.fbs": "namespace test; table Foo { value:int; }\n",
+		"peer1/ya.make":        "LIBRARY()\nSRCS(p1.cpp)\nEND()\n",
+		"peer1/p1.cpp":         "int p1() { return 0; }\n",
+		// flatbuffers runtime — must have a ya.make so the peerdir resolves.
+		"contrib/libs/flatbuffers/ya.make":                           "LIBRARY()\nSRCS(flatbuffers.cpp)\nEND()\n",
+		"contrib/libs/flatbuffers/flatbuffers.cpp":                   "int fb() { return 0; }\n",
+		"contrib/libs/flatbuffers/flatc/ya.make":                     "PROGRAM(flatc)\nSRCS(main.cpp)\nEND()\n",
+		"contrib/libs/flatbuffers/flatc/main.cpp":                    "int main() { return 0; }\n",
+		"contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h": "#pragma once\n",
+		"build/scripts/cpp_flatc_wrapper.py":                         "print('stub')\n",
+	}
+
+	g := testGen(newMemFS(files), "prog")
+
+	// Find the LD node.
+	var ldNode *Node
+	for _, n := range g.Graph {
+		if n.KV.P == pkLD {
+			ldNode = n
+			break
+		}
+	}
+	if ldNode == nil {
+		t.Fatal("no LD node found in graph")
+	}
+
+	linkArgs := ldNode.Cmds[2].CmdArgs.flat()
+	peer1Idx := indexOfArg(linkArgs, "peer1/libpeer1.a")
+	fbIdx := indexOfArg(linkArgs, "contrib/libs/flatbuffers/libcontrib-libs-flatbuffers.a")
+	arrowlikeIdx := indexOfArg(linkArgs, "arrowlike/libarrowlike.a")
+
+	if peer1Idx < 0 {
+		t.Fatalf("link args missing peer1/libpeer1.a: %v", linkArgs)
+	}
+	if fbIdx < 0 {
+		t.Fatalf("link args missing contrib/libs/flatbuffers/libcontrib-libs-flatbuffers.a: "+
+			"induced peerdir from .fbs SRCS not added; args=%v", linkArgs)
+	}
+	if arrowlikeIdx < 0 {
+		t.Fatalf("link args missing arrowlike/libarrowlike.a: %v", linkArgs)
+	}
+	// Upstream order: peer1 (explicit), then flatbuffers (induced from .fbs), then arrowlike itself.
+	if peer1Idx > fbIdx {
+		t.Errorf("peer1 [%d] appears after flatbuffers [%d] in link args; want peer1 before flatbuffers", peer1Idx, fbIdx)
+	}
+	if fbIdx > arrowlikeIdx {
+		t.Errorf("flatbuffers [%d] appears after arrowlike [%d] in link args; want flatbuffers before the owning library", fbIdx, arrowlikeIdx)
+	}
+}
+
+func TestReorderLDMembers_LegacyDoubleUnderscorePathsTrailRegularSources(t *testing.T) {
+	refs := []NodeRef{1, 2, 3}
+	paths := []VFS{
+		intern("$(B)/contrib/tools/swig/_/Source/CParse/cscanner.c.pic.o"),
+		intern("$(B)/contrib/tools/swig/_/_/Source/CParse/parser.y.c.pic.o"),
+		intern("$(B)/contrib/tools/swig/_/Source/CParse/templ.c.pic.o"),
+	}
+
+	gotRefs, gotPaths := reorderLDMembers(refs, paths)
+
+	wantRefs := []NodeRef{1, 3, 2}
+	if !reflect.DeepEqual(gotRefs, wantRefs) {
+		t.Fatalf("ld refs mismatch:\n  got:  %#v\n  want: %#v", gotRefs, wantRefs)
+	}
+
+	wantPaths := []string{
+		"$(B)/contrib/tools/swig/_/Source/CParse/cscanner.c.pic.o",
+		"$(B)/contrib/tools/swig/_/Source/CParse/templ.c.pic.o",
+		"$(B)/contrib/tools/swig/_/_/Source/CParse/parser.y.c.pic.o",
+	}
+	if got := vfsStrings(gotPaths); !reflect.DeepEqual(got, wantPaths) {
+		t.Fatalf("ld paths mismatch:\n  got:  %#v\n  want: %#v", got, wantPaths)
 	}
 }
