@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 )
 
 // alwaysCopyDirs mirrors devtools/ya/tests/copy_inputs.py's ALWAYS_INCLUDE: dirs
@@ -83,7 +82,7 @@ func copySourceSlice(fs *OsFS, srcRoot, dst string, onWarn func(Warn)) error {
 
 	yamakeCount := copyAncestorYamakes(absSrc, absDst, yamakes)
 
-	fmt.Fprintf(os.Stderr, "copy-sources: done — %d/%d dirs + %d ya.make files copied\n", copied, len(dirs), yamakeCount)
+	fmt.Fprintf(os.Stderr, "copy-sources: done — %d files + %d ancestor ya.make files copied\n", copied, yamakeCount)
 
 	return nil
 }
@@ -175,73 +174,142 @@ func ancestorYamakes(dirs []string) []string {
 	return out
 }
 
-// copySliceConcurrent copies each dir's tree from srcRoot into dst, preserving the
-// relative path, across GOMAXPROCS workers. Returns the count of dirs copied.
+// copyJob is one regular file or symlink to copy, relative to the source root.
+type copyJob struct {
+	rel     string
+	mode    os.FileMode
+	symlink bool
+}
+
+// copyStat is one worker's report of a finished file, drained by the single printer.
+type copyStat struct {
+	rel string
+	err error
+}
+
+// copySliceConcurrent runs the copy pipeline: one producer walks the dirs (stat-only —
+// never opening a file, so a FIFO/socket can't block it) and streams the regular files
+// / symlinks into jobCh as it finds them, GOMAXPROCS workers copy and report into
+// statCh, and one printer drains statCh — so progress is `{n} rel`, numbered
+// monotonically by that single goroutine with no up-front counting pass. Returns the
+// count copied.
 func copySliceConcurrent(srcRoot, dst string, dirs []string, onWarn func(Warn)) (int, error) {
 	if err := os.MkdirAll(dst, 0o755); err != nil {
 		return 0, err
 	}
 
-	jobs := make(chan string)
+	jobCh := make(chan copyJob, 256)
+	statCh := make(chan copyStat, 256)
 
-	var (
-		wg       sync.WaitGroup
-		copied   atomic.Int64
-		errOnce  sync.Once
-		firstErr error
-	)
+	// Producer: walk and stream jobs, creating dst dirs as it goes.
+	go func() {
+		defer close(jobCh)
 
-	setErr := func(e error) {
-		errOnce.Do(func() { firstErr = e })
-	}
+		for _, d := range dirs {
+			src := filepath.Join(srcRoot, d)
 
-	// Print every directory as a worker starts it, as `{started}/{all} path`, so a
-	// slow/huge tree is visible (its line is the last printed) instead of looking hung.
-	total := len(dirs)
-	var started atomic.Int64
+			if abs, err := filepath.Abs(src); err == nil && abs == srcRoot {
+				continue // never copy the repo root
+			}
 
-	workers := runtime.GOMAXPROCS(0)
+			fi, err := os.Lstat(src)
 
-	for i := 0; i < workers; i++ {
+			if err != nil || !fi.IsDir() {
+				onWarn(Warn{Kind: WarnMissingInclude, Message: "copy-sources: skip (not a directory in repo): " + d})
+
+				continue
+			}
+
+			_ = filepath.WalkDir(src, func(p string, de os.DirEntry, err error) error {
+				if err != nil {
+					return nil // skip unreadable entries; don't abort the whole slice
+				}
+
+				rel, err := filepath.Rel(srcRoot, p)
+
+				if err != nil {
+					return nil
+				}
+
+				info, err := de.Info()
+
+				if err != nil {
+					return nil
+				}
+
+				switch {
+				case info.Mode()&os.ModeSymlink != 0:
+					jobCh <- copyJob{rel: rel, mode: info.Mode(), symlink: true}
+				case de.IsDir():
+					_ = os.MkdirAll(filepath.Join(dst, rel), 0o755)
+				case info.Mode().IsRegular():
+					jobCh <- copyJob{rel: rel, mode: info.Mode()}
+				}
+
+				return nil
+			})
+		}
+	}()
+
+	// Workers: copy each file, then report it.
+	var wg sync.WaitGroup
+
+	for i := 0; i < runtime.GOMAXPROCS(0); i++ {
 		wg.Add(1)
 
 		go func() {
 			defer wg.Done()
 
-			for d := range jobs {
-				src := filepath.Join(srcRoot, d)
-
-				if abs, err := filepath.Abs(src); err == nil && abs == srcRoot {
-					continue // belt-and-suspenders: never copy the repo root
-				}
-
-				fi, err := os.Lstat(src)
-
-				if err != nil || !fi.IsDir() {
-					onWarn(Warn{Kind: WarnMissingInclude, Message: "copy-sources: skip (not a directory in repo): " + d})
-
-					continue
-				}
-
-				fmt.Fprintf(os.Stderr, "%d/%d %s\n", started.Add(1), total, d)
-
-				if err := copyTree(src, filepath.Join(dst, d)); err != nil {
-					setErr(err)
-				} else {
-					copied.Add(1)
-				}
+			for j := range jobCh {
+				err := copyOne(filepath.Join(srcRoot, j.rel), filepath.Join(dst, j.rel), j)
+				statCh <- copyStat{rel: j.rel, err: err}
 			}
 		}()
 	}
 
-	for _, d := range dirs {
-		jobs <- d
+	go func() {
+		wg.Wait()
+		close(statCh)
+	}()
+
+	// Printer: the single drainer — owns the counter, so numbering is monotonic.
+	copied, n := 0, 0
+	var firstErr error
+
+	for s := range statCh {
+		n++
+
+		fmt.Fprintf(os.Stderr, "%d %s\n", n, s.rel)
+
+		if s.err != nil {
+			if firstErr == nil {
+				firstErr = s.err
+			}
+		} else {
+			copied++
+		}
 	}
 
-	close(jobs)
-	wg.Wait()
+	return copied, firstErr
+}
 
-	return int(copied.Load()), firstErr
+// copyOne copies a single enumerated job: a symlink is recreated (not followed), a
+// regular file is content-copied with its mode. Parent dirs are created as needed.
+func copyOne(src, dst string, j copyJob) error {
+	if j.symlink {
+		link, err := os.Readlink(src)
+
+		if err != nil {
+			return err
+		}
+
+		_ = os.MkdirAll(filepath.Dir(dst), 0o755)
+		_ = os.Remove(dst)
+
+		return os.Symlink(link, dst)
+	}
+
+	return copyFileMode(src, dst, j.mode)
 }
 
 // copyAncestorYamakes copies the ancestor ya.make files that a recursive dir copy did
@@ -269,47 +337,6 @@ func copyAncestorYamakes(srcRoot, dst string, yamakes []string) int {
 	}
 
 	return n
-}
-
-// copyTree copies the directory tree at src into dst, preserving symlinks (recreated,
-// not followed) and file modes. Directories are created as needed.
-func copyTree(src, dst string) error {
-	return filepath.WalkDir(src, func(p string, de os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		rel, err := filepath.Rel(src, p)
-
-		if err != nil {
-			return err
-		}
-
-		target := filepath.Join(dst, rel)
-		info, err := de.Info()
-
-		if err != nil {
-			return err
-		}
-
-		switch {
-		case info.Mode()&os.ModeSymlink != 0:
-			link, err := os.Readlink(p)
-
-			if err != nil {
-				return err
-			}
-
-			_ = os.MkdirAll(filepath.Dir(target), 0o755)
-			_ = os.Remove(target)
-
-			return os.Symlink(link, target)
-		case de.IsDir():
-			return os.MkdirAll(target, info.Mode().Perm()|0o700)
-		default:
-			return copyFileMode(p, target, info.Mode())
-		}
-	})
 }
 
 // copyFile copies one file's contents into dst (creating parents), preserving mode.
