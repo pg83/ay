@@ -187,21 +187,25 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 }
 
 func cythonGeneratedOutputInputs(ctx *GenCtx, instance ModuleInstance, src VFS, sourceClosure []VFS, cMode bool, scanIn ModuleCCInputs) ([]VFS, []VFS) {
-	toolInputs := make([]VFS, 0, 2+len(py3CythonEmbeddedFiles)+len(py3CythonOutputIncludes)+len(sourceClosure))
-	emitsIncludes := make([]VFS, 0, 1+len(py3CythonEmbeddedFiles)+len(py3CythonOutputIncludes)+len(sourceClosure))
+	scanner := ctx.scannerFor(instance)
 
-	cythonPy := contribToolsCythonCythonPy
-	toolInputs = append(toolInputs, cythonPy)
-	emitsIncludes = append(emitsIncludes, cythonPy)
-	emitsIncludes = append(emitsIncludes, src)
+	// The bare tool/source/header files collect into one `singles` slice; each
+	// include-closure rides as its own chunk. dedupVFS reads every chunk in a
+	// single pass, so no kilometre-long intermediate concat is built. The dedup
+	// is load-bearing, not defensive: the closures overlap massively (every
+	// embedded .c and every OUTPUT_INCLUDES header pulls libcxx/python), so the
+	// union really collapses — ~7.5k raw → ~1.3k on library/python/codecs.
+	toolSingles := []VFS{contribToolsCythonCythonPy}
+	emitsSingles := []VFS{contribToolsCythonCythonPy, src}
+	var toolCl, emitsCl [][]VFS
 
 	for _, v := range py3CythonOutputIncludes {
 		if v.rel() == "contrib/tools/cython/generated_cpp_headers.h" && cMode {
 			continue
 		}
 
-		toolInputs = append(toolInputs, v)
-		emitsIncludes = append(emitsIncludes, v)
+		toolSingles = append(toolSingles, v)
+		emitsSingles = append(emitsSingles, v)
 
 		// Upstream declares these via OUTPUT_INCLUDES (CYTHON_OUTPUT_INCLUDES,
 		// ymake.core.conf) and scans each transitively, so the header's full
@@ -210,26 +214,27 @@ func cythonGeneratedOutputInputs(ctx *GenCtx, instance ModuleInstance, src VFS, 
 		// #else `#include <contrib/tools/python/src/Include/longintrepr.h>` (ymake
 		// ignores #ifdef) to the py2 longintrepr target reachable only through it.
 		// See bugs/20260615-upstream-cython-cy-node-full-include-closure.md.
-		cl := walkClosureTail(ctx.scannerFor(instance), v, scanIn.ScanCfg)
-		toolInputs = append(toolInputs, cl...)
-		emitsIncludes = append(emitsIncludes, cl...)
+		cl := walkClosureTail(scanner, v, scanIn.ScanCfg)
+		toolCl = append(toolCl, cl)
+		emitsCl = append(emitsCl, cl)
 	}
 
 	for _, rel := range py3CythonEmbeddedFiles {
 		v := source(rel)
-		toolInputs = append(toolInputs, v)
-		emitsIncludes = append(emitsIncludes, v)
+		toolSingles = append(toolSingles, v)
+		emitsSingles = append(emitsSingles, v)
 
-		cl := walkClosureTail(ctx.scannerFor(instance), v, scanIn.ScanCfg)
-		toolInputs = append(toolInputs, cl...)
-		emitsIncludes = append(emitsIncludes, cl...)
+		cl := walkClosureTail(scanner, v, scanIn.ScanCfg)
+		toolCl = append(toolCl, cl)
+		emitsCl = append(emitsCl, cl)
 	}
 
-	toolInputs = append(toolInputs, src)
-	toolInputs = append(toolInputs, sourceClosure...)
-	emitsIncludes = append(emitsIncludes, sourceClosure...)
+	toolSingles = append(toolSingles, src)
 
-	return dedupVFS(toolInputs), dedupVFS(emitsIncludes)
+	// singles first (dedup keeps first occurrence), then the closure chunks and
+	// the .pyx source closure — fed straight to the one-pass dedup as chunks.
+	return dedupVFS(append([][]VFS{toolSingles}, append(toolCl, sourceClosure)...)...),
+		dedupVFS(append([][]VFS{emitsSingles}, append(emitsCl, sourceClosure)...)...)
 }
 
 func cythonUsesPy23Variant(modName TOK) bool {
