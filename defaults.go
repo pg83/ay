@@ -37,9 +37,11 @@ var unitImplicitPeers = []ImplicitPeerRule{
 var programImplicitPeers = []ImplicitPeerRule{
 	// The fast asm libc routines (memcpy/memchr/…). _BASE_PROGRAM (ymake.core.conf:
 	// 1229) peers one when the program is non-PIC and platform-backed: glibcasm for
-	// glibc x86_64+SSE4, asmlib otherwise. NOPLATFORM/PIC/MUSL/sanitizer disable the
-	// glibc variant. Modelled flags: the rarely-set MSVC/PIE/MIC/VALGRIND/USE_ASMLIB=no
-	// gates are not (all false / unset in these contours).
+	// glibc x86_64+SSE4, asmlib otherwise. Both are x86 assembly (Agner Fog's asmlib /
+	// the glibc x86 asm), so neither is peered on non-x86_64 — the reference's aarch64
+	// programs (sg2/sg3, aarch64-musl targets) carry neither, only the x86_64 host tools
+	// get asmlib. NOPLATFORM/PIC/MUSL/sanitizer disable the glibc variant. Modelled
+	// flags: the rarely-set MSVC/PIE/MIC/VALGRIND/USE_ASMLIB=no gates are not.
 	{
 		name: "glibcasm",
 		peer: "contrib/libs/glibcasm",
@@ -54,7 +56,7 @@ var programImplicitPeers = []ImplicitPeerRule{
 		predicate: func(rc ImplicitPeerCtx) bool {
 			glibcasm := rc.osLinux && rc.archX8664 && !rc.muslOn && !rc.sanitizer && rc.useSSE4
 
-			return !rc.pic && !rc.noPlatform && !glibcasm
+			return !rc.pic && !rc.noPlatform && rc.archX8664 && !glibcasm
 		},
 	},
 	{
