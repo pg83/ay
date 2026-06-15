@@ -245,9 +245,9 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 		argShared.str(),
 		internStr("-Wl,-soname,"+outputName),
 		p.TargetArg,
-		argDashBBin,
-		argWlStartGroup.str(),
 	)
+	cmdArgs = append(cmdArgs, p.SysrootArgs...)
+	cmdArgs = append(cmdArgs, argWlStartGroup.str())
 
 	for _, p := range peerLibPaths {
 		cmdArgs = append(cmdArgs, internStr(p.rel()))
