@@ -50,11 +50,15 @@ func copySourceSlice(fs *OsFS, srcRoot, dst string, onWarn func(Warn)) error {
 
 	dirSet := make(map[string]struct{})
 
+	var rootFiles []string
+
 	for _, rel := range fs.readSourceRels() {
-		// Every read is a file; its directory is the build-relevant unit. A read at
-		// the repo root (dir ".") is the root ya.make — covered by ancestorYamakes.
+		// A read at the repo root (e.g. ya.conf) has dir "." — the repo root is never a
+		// copy unit, so copy the file itself. Everything else copies via its directory.
 		if d := filepath.ToSlash(filepath.Dir(rel)); d != "." && d != "" {
 			dirSet[d] = struct{}{}
+		} else {
+			rootFiles = append(rootFiles, rel)
 		}
 	}
 
@@ -69,10 +73,12 @@ func copySourceSlice(fs *OsFS, srcRoot, dst string, onWarn func(Warn)) error {
 	// to it — "", ".", "/", or a path that joins back to the source root.
 	dirs = dropRepoRoot(absSrc, dirs)
 
-	yamakes := ancestorYamakes(dirs)
+	// Individually-copied files: the ancestor ya.make of every kept dir (configure walks
+	// them top-down) plus the root-level files the build read (ya.conf, …).
+	loose := append(ancestorYamakes(dirs), rootFiles...)
 
-	fmt.Fprintf(os.Stderr, "copy-sources: %d directories (from %d read dirs) + %d ancestor ya.make files -> %s\n",
-		len(dirs), len(dirSet), len(yamakes), absDst)
+	fmt.Fprintf(os.Stderr, "copy-sources: %d directories (from %d read dirs) + %d loose files -> %s\n",
+		len(dirs), len(dirSet), len(loose), absDst)
 
 	copied, err := copySliceConcurrent(absSrc, absDst, dirs, onWarn)
 
@@ -80,9 +86,9 @@ func copySourceSlice(fs *OsFS, srcRoot, dst string, onWarn func(Warn)) error {
 		return err
 	}
 
-	yamakeCount := copyAncestorYamakes(absSrc, absDst, yamakes)
+	looseCount := copyLooseFiles(absSrc, absDst, loose)
 
-	fmt.Fprintf(os.Stderr, "copy-sources: done — %d files + %d ancestor ya.make files copied\n", copied, yamakeCount)
+	fmt.Fprintf(os.Stderr, "copy-sources: done — %d files + %d loose files copied\n", copied, looseCount)
 
 	return nil
 }
@@ -312,20 +318,20 @@ func copyOne(src, dst string, j copyJob) error {
 	return copyFileMode(src, dst, j.mode)
 }
 
-// copyAncestorYamakes copies the ancestor ya.make files that a recursive dir copy did
-// not already place. Sequential — there are few, and each is one small file.
-func copyAncestorYamakes(srcRoot, dst string, yamakes []string) int {
+// copyLooseFiles copies individual files (ancestor ya.makes, root-level configs) that a
+// recursive dir copy did not already place. Sequential — there are few, each small.
+func copyLooseFiles(srcRoot, dst string, rels []string) int {
 	n := 0
 
-	for _, y := range yamakes {
-		src := filepath.Join(srcRoot, y)
+	for _, rel := range rels {
+		src := filepath.Join(srcRoot, rel)
 		fi, err := os.Lstat(src)
 
 		if err != nil || fi.IsDir() {
 			continue
 		}
 
-		target := filepath.Join(dst, y)
+		target := filepath.Join(dst, rel)
 
 		if _, err := os.Lstat(target); err == nil {
 			continue // already brought in by a recursive dir copy
