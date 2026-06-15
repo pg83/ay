@@ -544,10 +544,15 @@ func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
 		return strings.ReplaceAll(path.Clean(instance.Path.rel()), "/", "-")
 	}
 
-	// PY3_PROGRAM_BIN(progname) links as its argument when one is given (the
-	// opensource reference: tools/py3cc/slow/bin's PY3_PROGRAM_BIN(py3cc),
-	// INCLUDEd into tools/py3cc/slow, links as .../py3cc); without an argument
-	// it falls through to the module-dir basename default.
+	// PY3_PROGRAM_BIN's documented sole use is a bin/ya.make INCLUDEd into a parent
+	// ya.make (NOT PREBUILT path); the linked program then takes the *including*
+	// module's directory name, not the progname argument. In sg6, tools/py3cc/slow/bin's
+	// PY3_PROGRAM_BIN(py3cc) INCLUDEd into tools/py3cc/slow links as $(B)/tools/py3cc/slow/slow
+	// (the reference graph names it `slow`, referenced by 4142 PY compile nodes). The
+	// opensource `py3cc` name comes from the prebuilt path's PRIMARY_OUTPUT, not this arg.
+	if moduleStmt.Name == tokPy3ProgramBin {
+		return ""
+	}
 
 	if len(moduleStmt.Args) > 0 {
 		return moduleStmt.Args[0].string()
