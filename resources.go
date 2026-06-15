@@ -73,6 +73,30 @@ func hostPlatformKey(host *Platform) string {
 	return string(host.OS) + "-" + isaPlatformKey(host.ISA)
 }
 
+// resourceJSONPlatformKey is the SET_RESOURCE_URI_FROM_JSON by_platform key for the
+// instance's platform — ymake's canonized platform name where x86_64 is the implicit
+// default (no suffix) and win is "win32": "linux"/"linux-aarch64"/"darwin"/
+// "darwin-arm64"/"win32". Distinct from hostPlatformKey ("linux-x86_64"), which the
+// DECLARE_*_BUNDLE bundles use.
+func resourceJSONPlatformKey(env Environment) string {
+	switch {
+	case env.bool(envOS_DARWIN):
+		if env.bool(envARCH_ARM64) {
+			return "darwin-arm64"
+		}
+
+		return "darwin"
+	case env.bool(envOS_WINDOWS):
+		return "win32"
+	default:
+		if env.bool(envARCH_AARCH64) {
+			return "linux-aarch64"
+		}
+
+		return "linux"
+	}
+}
+
 func isaPlatformKey(isa ISA) string {
 	if isa == ISAAArch64 {
 		return "aarch64"
@@ -307,6 +331,91 @@ func genResourcesLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *M
 		OwnAddInclGlobal:      d.addInclGlobal,
 		AddInclUserGlobal:     d.addInclUserGlobal,
 		AddInclOneLevel:       d.addInclOneLevel,
+	}
+	ctx.memo.put(ctx.instanceKey(instance), result)
+
+	return result
+}
+
+// prebuiltModuleSuffix is the PROGRAM MODULE_SUFFIX for the platform (ymake.core.conf:
+// the _LINK_UNIT/PROGRAM default is empty, .exe under WIN32). PREBUILT_PROGRAM's
+// PRIMARY_OUTPUT splices it after the binary name.
+func prebuiltModuleSuffix(p *Platform) string {
+	if p.OS == OSWindows {
+		return ".exe"
+	}
+
+	return ""
+}
+
+// genPrebuiltProgram emits a PREBUILT_PROGRAM: rather than compiling sources, it
+// fetches a sandbox-built binary (DECLARE_EXTERNAL_RESOURCE) and copies it to the
+// module's program output with fs_tools.py, mirroring upstream _PREBUILT_PROGRAM_CMD
+// ($COPY_CMD $_PRIMARY_OUTPUT_VALUE ${TARGET}, kv p=ld pc=light-blue show_out). The
+// USE_PREBUILT_TOOLS contour (internal only) routes protoc/… here, so the tool's
+// from-source object closure (the host-PIC protobuf/abseil/grpc compiles) never enters
+// the graph. The result is a PROGRAM (LDRef/LDPath) so tool consumers take its binary.
+func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *ModuleEmitResult {
+	na := ctx.na
+
+	var fetchRef NodeRef
+	var globals []ResourceDecl
+	deduper.reset()
+
+	for _, stmt := range d.resourceDeclStmts {
+		for _, decl := range resolveResourceDecls(ctx.fs, ctx.host, instance.Path.rel(), stmt) {
+			if deduper.add(VFS(decl.Name)) {
+				globals = append(globals, decl)
+				fetchRef = emitResourceFetch(ctx, decl)
+			}
+		}
+	}
+
+	if d.primaryOutput == "" || len(globals) == 0 {
+		throwFmt("gen: %s: PREBUILT_PROGRAM has no PRIMARY_OUTPUT/resource", instance.Path.rel())
+	}
+
+	if strings.Contains(d.primaryOutput, "${") {
+		throwFmt("gen: %s: PREBUILT_PROGRAM PRIMARY_OUTPUT %q has an unresolved reference", instance.Path.rel(), d.primaryOutput)
+	}
+
+	// primaryOutput is "$(B)/resources/<NAME>/<bin>" (the fetch node's output dir); the
+	// copy reads it as an input and depends on the fetch. dst is the module's program
+	// output, $(B)/<dir>/<name> — what ${TARGET} expands to and tool consumers reference.
+	srcVFS := build(strings.TrimPrefix(d.primaryOutput, "$(B)/"))
+	dst := lDOutputPath(instance, programBinaryName(instance, d.moduleStmt))
+
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+
+	node := &Node{
+		Platform: instance.Platform,
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList([]STR{
+			wrapccPython3STR,
+			copyFsToolsVFS.str(),
+			argCopy.str(),
+			srcVFS.str(),
+			dst.str(),
+		}), Env: env}),
+		Env:              env,
+		Inputs:           na.inputList(ctx.scripts[copyFsToolsVFS], []VFS{srcVFS}),
+		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
+		Outputs:          na.vfsList(dst),
+		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
+		DepRefs:          []NodeRef{fetchRef},
+		Resources:        usesPython3,
+	}
+
+	ref := ctx.emit.emit(node)
+
+	result := &ModuleEmitResult{
+		ModuleStmtName: d.moduleStmt.Name,
+		ARRef:          ref,
+		ARPath:         &dst,
+		isPROGRAM:      true,
+		LDRef:          ref,
+		LDPath:         &dst,
+		Peerdirs:       d.peerdirs,
 	}
 	ctx.memo.put(ctx.instanceKey(instance), result)
 
