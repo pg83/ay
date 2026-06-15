@@ -87,7 +87,12 @@ func emitResourceObjcopy(
 		return nil
 	}
 
-	oc := newObjcopyEmitCtx(ctx, d, instance.Platform)
+	// Resource objcopy (.py/data -> .o) is platform-independent codegen; upstream
+	// attributes it to the target platform (same rule as reg3.cpp in emit_py_codegen
+	// and the .pyplugin copies in emit_ld). Emit under ctx.target so a python lib
+	// pulled by both the target and a host tool (e.g. contrib/python/cffi/py3/gen)
+	// produces byte-identical objcopy nodes that collapse by uid — no host duplicate.
+	oc := newObjcopyEmitCtx(ctx, d, ctx.target)
 	out := &ObjcopyEmitResult{}
 
 	if nodeRes := emitPyMainObjcopy(ctx, instance, d, oc); nodeRes != nil {
@@ -212,7 +217,7 @@ func emitResourceObjcopy(
 		}
 
 		node := &Node{
-			Platform: instance.Platform,
+			Platform: ctx.target,
 			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 				Env: env}),
 			Env:              env,
@@ -221,7 +226,7 @@ func emitResourceObjcopy(
 			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 			TargetProperties: resTargetProps,
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			Resources:        instance.Platform.UsesPython3Clang,
+			Resources:        ctx.target.UsesPython3Clang,
 		}
 
 		node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
@@ -361,7 +366,7 @@ func emitKvOnlyObjcopyNode(
 	}
 
 	node := &Node{
-		Platform: instance.Platform,
+		Platform: ctx.target,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Env: env}),
 		Env:              env,
@@ -370,7 +375,7 @@ func emitKvOnlyObjcopyNode(
 		KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 		TargetProperties: targetProps,
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		Resources:        instance.Platform.UsesPython3Clang,
+		Resources:        ctx.target.UsesPython3Clang,
 	}
 
 	node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
@@ -437,7 +442,7 @@ func emitYaConfJSONObjcopy(
 		})
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 		node := &Node{
-			Platform: instance.Platform,
+			Platform: ctx.target,
 			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 				Env: env}),
 			Env:              env,
@@ -446,7 +451,7 @@ func emitYaConfJSONObjcopy(
 			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			Resources:        instance.Platform.UsesPython3Clang,
+			Resources:        ctx.target.UsesPython3Clang,
 		}
 
 		node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
@@ -644,7 +649,7 @@ func emitPySrcObjcopy(
 			}
 
 			node := &Node{
-				Platform:         instance.Platform,
+				Platform:         ctx.target,
 				Cmds:             na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
 				Env:              env,
 				Inputs:           na.inputList(rescompilersChunk, ch.inps, objcopyScriptChunk),
@@ -652,7 +657,7 @@ func emitPySrcObjcopy(
 				KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
 				TargetProperties: targetProps,
 				Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-				Resources:        instance.Platform.UsesPython3Clang,
+				Resources:        ctx.target.UsesPython3Clang,
 			}
 
 			node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
