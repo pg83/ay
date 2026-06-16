@@ -427,6 +427,25 @@ func emitPR(
 
 				continue
 			}
+
+			// A path with a trailing modifier (e.g. CFFI's `build.py:ffi`): the head
+			// before ':' is the relative path declared in IN/OUT, which "becomes
+			// absolute" per RUN_PROGRAM semantics; the modifier rides along.
+			if i := strings.IndexByte(a, ':'); i > 0 {
+				head := internStr(a[:i])
+
+				if vfs, ok := inVFSByToken[head]; ok {
+					cmdArgs = append(cmdArgs, internStr(vfs.string()+a[i:]))
+
+					continue
+				}
+
+				if vfs, ok := outVFSByToken[head]; ok {
+					cmdArgs = append(cmdArgs, internStr(vfs.string()+a[i:]))
+
+					continue
+				}
+			}
 		}
 
 		cmdArgs = append(cmdArgs, key)
