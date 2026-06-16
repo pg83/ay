@@ -184,6 +184,16 @@ func usageCommands(prefix []string, verbose bool) string {
 		b.WriteString(color("green", "usage:") + " ay [global-flags] " + strings.Join(prefix, " ") + " <subcommand> [args]")
 	}
 
+	// Global flags (parsed before the subcommand) live in the usage block. Only
+	// --verbose shows by default; it also reveals the remaining flags.
+	if len(prefix) == 0 {
+		b.WriteString("\n  " + color("cyan", "-v, --verbose") + "             expand collapsed groups (dev), hidden commands, and the flags below")
+
+		if verbose {
+			b.WriteString("\n  " + color("cyan", "--probe=map|callsite|str") + "  dump the named runtime probe (map/callsite/str) on exit")
+		}
+	}
+
 	b.WriteString("\n\n" + color("green", "subcommands:"))
 
 	devCollapsed := false
@@ -212,12 +222,6 @@ func usageCommands(prefix []string, verbose bool) string {
 			b.WriteString("\n    ")
 			b.WriteString(line)
 		}
-	}
-
-	if len(prefix) == 0 {
-		b.WriteString("\n\n" + color("green", "global flags (before the subcommand):"))
-		b.WriteString("\n  " + color("cyan", "-v, --verbose") + "             expand collapsed groups (dev) in this listing")
-		b.WriteString("\n  " + color("cyan", "--probe=map|callsite|str") + "  dump the named runtime probe (map/callsite/str) on exit")
 	}
 
 	return b.String()
