@@ -10,17 +10,20 @@ import (
 )
 
 func cmdPerf(args []string) int {
-	if len(args) < 2 || args[0] != "parser" {
-		fmt.Fprintln(os.Stderr, "usage: ay perf parser <dir>")
-
-		return 2
-	}
-
 	stop := startProfilesFromEnv()
 
 	defer stop()
 
-	return perfParser(args[1])
+	switch {
+	case len(args) >= 1 && args[0] == "darts":
+		return perfDarts()
+	case len(args) >= 2 && args[0] == "parser":
+		return perfParser(args[1])
+	default:
+		fmt.Fprintln(os.Stderr, "usage: ay perf parser <dir> | ay perf darts")
+
+		return 2
+	}
 }
 
 func cParserSource(path string) bool {
