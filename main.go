@@ -67,11 +67,13 @@ func parseGlobalFlags(argv []string) (probes []string, rest []string) {
 }
 
 // command binds a subcommand token path to its handler. The handler receives the
-// args that follow the matched path. hide keeps internal commands (invoked by
-// build-graph nodes, not users) out of the usage listing.
+// args that follow the matched path. help is a short (1–3 line) description shown
+// in the subcommand listing. hide keeps internal commands (invoked by build-graph
+// nodes, not users) out of that listing.
 type command struct {
 	path []string
 	run  func(args []string) int
+	help string
 	hide bool
 }
 
@@ -79,21 +81,75 @@ type command struct {
 // path is the longest prefix of the argv (so {"make"} and {"make","cas"} coexist;
 // `make cas …` takes the latter, `make …` the former).
 var commands = []command{
-	{path: []string{"fetch"}, run: cmdFetch, hide: true},
-	{path: []string{"fetch", "base64"}, run: cmdFetchBase64, hide: true},
-	{path: []string{"make"}, run: cmdMake},
-	{path: []string{"make", "cas"}, run: cmdCasAnalyze},
-	{path: []string{"dump", "normalize"}, run: cmdDumpNormalize},
-	{path: []string{"dump", "sort"}, run: cmdDumpSort},
-	{path: []string{"dump", "diff"}, run: cmdDumpDiff},
-	{path: []string{"dump", "grep"}, run: cmdDumpGrep},
-	{path: []string{"perf", "parser"}, run: cmdPerfParser},
-	{path: []string{"perf", "darts"}, run: cmdPerfDarts},
-	{path: []string{"refac", "consts"}, run: refacConsts},
-	{path: []string{"refac", "lint"}, run: refacLint},
-	{path: []string{"refac", "case"}, run: refacCase},
-	{path: []string{"probe", "mapinstr"}, run: probeMapInstr},
-	{path: []string{"probe", "callsite"}, run: probeCallSite},
+	{
+		path: []string{"fetch"}, run: cmdFetch, hide: true,
+		help: "Fetch a Sandbox/MDS resource into the build root (FETCH node).",
+	},
+	{
+		path: []string{"fetch", "base64"}, run: cmdFetchBase64, hide: true,
+		help: "Write base64-decoded data to a file (inline vcs.json node).",
+	},
+	{
+		path: []string{"make"}, run: cmdMake,
+		help: "Generate the build graph for the given targets and write it as JSON.\n" +
+			"Mirrors ymake: --source-root, --sandboxing, -G, -j.",
+	},
+	{
+		path: []string{"make", "cas"}, run: cmdCasAnalyze,
+		help: "Read-only analysis: estimate extra CAS savings from content-defined\n" +
+			"chunking (rolling-hash chunk dedup) on top of whole-file dedup.",
+	},
+	{
+		path: []string{"dump", "normalize"}, run: cmdDumpNormalize,
+		help: "Normalize a raw graph dump (fold producers, canonicalize paths, prune\n" +
+			"ref-only artifacts) to one JSON node per line for byte-exact comparison.",
+	},
+	{
+		path: []string{"dump", "sort"}, run: cmdDumpSort,
+		help: "Stable-sort normalized graph lines so two graphs can be merge-compared.",
+	},
+	{
+		path: []string{"dump", "diff"}, run: cmdDumpDiff,
+		help: "Diff two normalized graphs — by kind/field/token, paired nodes, or roots.",
+	},
+	{
+		path: []string{"dump", "grep"}, run: cmdDumpGrep,
+		help: "Search a graph dump for nodes by output/cmd/input substring.",
+	},
+	{
+		path: []string{"perf", "parser"}, run: cmdPerfParser,
+		help: "Benchmark the C/ya.make parser over every source file under <dir>.",
+	},
+	{
+		path: []string{"perf", "darts"}, run: cmdPerfDarts,
+		help: "Benchmark the autoinclude longest-prefix matcher: double-array trie vs\n" +
+			"the former ancestor-walk. Prints ns/op for each.",
+	},
+	{
+		path: []string{"refac", "consts"}, run: refacConsts,
+		help: "Regenerate the interned-constant files (str/arg/vfs/env) from the\n" +
+			"literals used across the package. Mutates source in place.",
+	},
+	{
+		path: []string{"refac", "lint"}, run: refacLint,
+		help: "Apply the in-tree linters to the given .go files (default: all non-test\n" +
+			".go here). Mutates source in place.",
+	},
+	{
+		path: []string{"refac", "case"}, run: refacCase,
+		help: "Flip identifier case via the compiler's error positions to a fixpoint.\n" +
+			"Mutates source in place; run in a worktree.",
+	},
+	{
+		path: []string{"probe", "mapinstr"}, run: probeMapInstr,
+		help: "Throwaway: instrument real map ops with per-site counters; build under\n" +
+			"--probe=map to dump the tally. Run in a worktree, revert after.",
+	},
+	{
+		path: []string{"probe", "callsite"}, run: probeCallSite,
+		help: "Throwaway: instrument per-function call sites for reachability; build\n" +
+			"under --probe=callsite with CALLSITE_OUT to find never-run code.",
+	},
 }
 
 // isTokenPrefix reports whether p is a token-wise prefix of of.
@@ -131,6 +187,11 @@ func usageCommands(prefix []string) string {
 
 		b.WriteString("\n  ")
 		b.WriteString(strings.Join(c.path, " "))
+
+		for _, line := range strings.Split(c.help, "\n") {
+			b.WriteString("\n      ")
+			b.WriteString(line)
+		}
 	}
 
 	return b.String()
