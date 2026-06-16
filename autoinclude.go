@@ -1,9 +1,6 @@
 package main
 
-import (
-	"encoding/json"
-	"strings"
-)
+import "encoding/json"
 
 // AUTOINCLUDE_PATHS (build/conf/settings.conf:126; internal settings.conf:26
 // appends the internal list) names the JSON arrays of directory prefixes under
@@ -17,13 +14,19 @@ var autoincludePathsFiles = []string{
 // lintersMakeIncName mirrors devtools/ymake/autoincludes_conf.cpp's LINTERS_MAKE_INC.
 const lintersMakeIncName = "linters.make.inc"
 
-// loadAutoincludeIndex builds the autoinclude root index: source-VFS of each root
-// directory -> source-VFS of that root's linters.make.inc. This mirrors ymake's
-// AutoincludePathsTrie (autoincludes_conf.cpp:30), which maps "<root>/" to
-// "<root>/linters.make.inc" for every json entry unconditionally — existence is
-// checked at lookup time, not load.
-func loadAutoincludeIndex(fs FS) *IntValueMap[VFS] {
-	idx := newIntValueMap[VFS](512)
+// AutoincludeIndex resolves the linters.make.inc that ymake auto-includes for a
+// module — the nearest enclosing AUTOINCLUDE_PATHS root (longest-prefix match,
+// component boundary). The roots are held in a byte double-array trie keyed by
+// "<root>/", mirroring ymake's TCompactTrie<char> + FindLongestPrefix(Dir+"/")
+// (autoincludes_conf.cpp:30, makefile_loader.cpp:226).
+type AutoincludeIndex struct {
+	darts   *Darts
+	linters []VFS // parallel to the trie keys: each root's linters.make.inc
+}
+
+func loadAutoincludeIndex(fs FS) *AutoincludeIndex {
+	var keys []string
+	var linters []VFS
 
 	for _, f := range autoincludePathsFiles {
 		if !fs.isFile(srcRootVFS, f) {
@@ -37,33 +40,24 @@ func loadAutoincludeIndex(fs FS) *IntValueMap[VFS] {
 		}
 
 		for _, r := range roots {
-			idx.put(uint64(source(r)), source(r+"/"+lintersMakeIncName))
+			keys = append(keys, r+"/")
+			linters = append(linters, source(r+"/"+lintersMakeIncName))
 		}
 	}
 
-	return idx
+	return &AutoincludeIndex{darts: NewDarts(keys), linters: linters}
 }
 
-// lintersMakeIncFor returns the linters.make.inc that ymake auto-includes for a
-// module at moduleDir, mirroring AutoincludePathsTrie.FindLongestPrefix
-// (makefile_loader.cpp:226): the nearest (longest-prefix) autoinclude root
-// enclosing moduleDir. The ancestor walk is allocation-free — internedPrefixed is
-// a lookup-only intern probe (returns 0 for a non-root prefix) and the substrings
-// share moduleDir's backing array. Returns (0,false) when no root encloses it.
-func lintersMakeIncFor(idx *IntValueMap[VFS], moduleDir string) (VFS, bool) {
-	for d := moduleDir; ; {
-		if st := internedPrefixed("$(S)/", d); st != 0 {
-			if v := idx.get(uint64(st.vfs())); v != nil {
-				return *v, true
-			}
-		}
+// lintersMakeIncFor returns the linters.make.inc of the nearest enclosing
+// autoinclude root for moduleDir (ymake's FindLongestPrefix), or (0,false) when
+// no root encloses it. The trailing "/" — passed as a separate part so no string
+// is concatenated — gives the component-boundary match ("arc/" ∌ "arcfoo/…").
+func (a *AutoincludeIndex) lintersMakeIncFor(moduleDir string) (VFS, bool) {
+	i, ok := a.darts.longestMatch(moduleDir, "/")
 
-		i := strings.LastIndexByte(d, '/')
-
-		if i < 0 {
-			return 0, false
-		}
-
-		d = d[:i]
+	if !ok {
+		return 0, false
 	}
+
+	return a.linters[i], true
 }
