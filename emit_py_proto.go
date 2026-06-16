@@ -590,6 +590,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 			PeerCXXFlagsGlobal:   peerContribs.cxxFlags,
 			PeerCOnlyFlagsGlobal: peerContribs.cOnlyFlags,
 			ModuleScopeCFlags:    d.moduleScopeCFlags,
+			ClangWarnings:        d.clangWarnings,
 			PerSourceCFlags:      []ARG{argX, argC},
 			FS:                   ctx.fs,
 			ExtraDepRefs:         []NodeRef{auxRef},
