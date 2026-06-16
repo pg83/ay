@@ -638,7 +638,13 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	// (CLANG_WARNINGS — STYLE_* are lint-only) run in the module's context after its
 	// own body. The file must exist when a root names it; absent => misconfiguration.
 	if inc, ok := lintersMakeIncFor(ctx.autoincludeIdx, instance.Path.rel()); ok && ctx.fs.isFile(srcRootVFS, inc.rel()) {
-		mf.Stmts = append(mf.Stmts, throw2(parseFile(ctx.fs, inc.rel())).Stmts...)
+		ls := throw2(parseFile(ctx.fs, inc.rel())).Stmts
+		if os.Getenv("AY_DBG_LINT") != "" {
+			fmt.Fprintf(os.Stderr, "LINT %s -> %s (%d stmts)\n", instance.Path.rel(), inc.rel(), len(ls))
+		}
+		mf.Stmts = append(mf.Stmts, ls...)
+	} else if os.Getenv("AY_DBG_LINT") != "" && strings.HasPrefix(instance.Path.rel(), "arc/") {
+		fmt.Fprintf(os.Stderr, "LINT %s -> NONE (ok=%v)\n", instance.Path.rel(), ok)
 	}
 
 	env := buildIfEnv(instance)
