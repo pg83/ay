@@ -502,9 +502,10 @@ func emitPyNamespaceForGroup(
 
 	keyPath := instance.Path.rel()
 
-	// A TOP_LEVEL group keys the namespace by the dir its sources resolve
-	// against — the last declared SRCDIR (srcDirs[0] is the module dir).
-	if group.TopLevel && len(d.srcDirs) > 1 {
+	// The namespace is keyed by the dir its sources resolve against — the last
+	// declared SRCDIR (srcDirs[0] is the module dir), not the module dir, whenever
+	// SRCDIR redirects PY_SRCS (e.g. SRCDIR(.../src) PY_SRCS(NAMESPACE … urllib3/…)).
+	if len(d.srcDirs) > 1 {
 		keyPath = d.srcDirs[len(d.srcDirs)-1].rel()
 	}
 
