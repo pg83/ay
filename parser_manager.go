@@ -233,14 +233,16 @@ func (pm *IncludeParserManager) indexAddincl(a VFS) {
 
 	pm.addinclIndexed.add(uint32(a))
 	base := a.rel()
-	pm.fs.walk(base, func(rel string, isDir bool) {
+	pm.fs.walk(base, func(rel string, isDir bool) bool {
 		if isDir {
-			return
+			return true
 		}
 
 		t := internStr(rel[len(base)+1:])
 		cur, _ := pm.addinclIndex.get(t)
 		pm.addinclIndex.put(t, append(cur, a))
+
+		return false
 	})
 }
 

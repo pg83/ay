@@ -119,6 +119,13 @@ func addToolchainPeers(files map[string]string) {
 	files["build/platform/python/ymake_python3/python.json"] = json
 }
 
+// writeBisonTool writes the bison tool program plus build/induced/by_bison (the
+// empty licensed module _SRC("y") induces via PEERDIR) into a test fixture.
+func writeBisonTool(files map[string]string) {
+	writeToolProgram(files, "contrib/tools/bison", "bison")
+	files["build/induced/by_bison/ya.make"] = "LIBRARY()\nNO_UTIL()\nNO_RUNTIME()\nEND()\n"
+}
+
 func EmitAR(
 	instance ModuleInstance,
 	objRefs []NodeRef,

@@ -2667,22 +2667,26 @@ func applyAllPySrcs(fs FS, modulePath string, v *UnknownStmt, d *ModuleData) {
 	for _, dir := range dirs {
 		walkRoot := filepath.ToSlash(filepath.Join(moduleRootRel, dir))
 
-		fs.walk(walkRoot, func(rel string, isDir bool) {
+		fs.walk(walkRoot, func(rel string, isDir bool) bool {
 			if isDir {
-				return
+				// A subdir with its own ya.make is a separate module; ALL_PY_SRCS
+				// (a GLOB) does not descend into it.
+				return rel == walkRoot || !fs.isFile(dirKey(rel), "ya.make")
 			}
 
 			if filepath.Ext(rel) != ".py" {
-				return
+				return false
 			}
 
 			base := filepath.Base(rel)
 
 			if noTestFiles && (strings.HasPrefix(base, "test_") || strings.HasSuffix(base, "_test.py")) {
-				return
+				return false
 			}
 
 			files = append(files, strings.TrimPrefix(rel, moduleRootRel+"/"))
+
+			return false
 		})
 	}
 

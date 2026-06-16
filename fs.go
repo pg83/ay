@@ -17,7 +17,9 @@ type FS interface {
 	// valid only until the next Read on this FS. Callers that retain content past
 	// another Read must copy (e.g. string(data), or ReadAbs for the parser).
 	read(rel string) []byte
-	walk(rel string, visit func(rel string, isDir bool))
+	// walk visits each entry; for a directory, visit returns whether to descend
+	// into it (the return is ignored for files).
+	walk(rel string, visit func(rel string, isDir bool) bool)
 	// ContentHash returns the xxh3 of source VFS v's file content, recorded when the
 	// FS last read that file. It is keyed by v.strID() (the full "$(S)/..." path STR),
 	// so the uid serializer passes the VFS directly — no per-input re-intern of the

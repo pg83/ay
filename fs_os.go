@@ -310,7 +310,7 @@ func (fs *OsFS) readIntoRaw(rel string, buf []byte) []byte {
 	return fs.readFileRel(cleanRel(rel), buf)
 }
 
-func (fs *OsFS) walk(rel string, visit func(rel string, isDir bool)) {
+func (fs *OsFS) walk(rel string, visit func(rel string, isDir bool) bool) {
 	rel = cleanRel(rel)
 
 	present, isDir := fs.existsRel(rel)
@@ -319,9 +319,7 @@ func (fs *OsFS) walk(rel string, visit func(rel string, isDir bool)) {
 		return
 	}
 
-	visit(rel, isDir)
-
-	if !isDir {
+	if !visit(rel, isDir) || !isDir {
 		return
 	}
 

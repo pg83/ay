@@ -135,10 +135,12 @@ func TestFS_Walk(t *testing.T) {
 	fs := newFS(root)
 
 	files := map[string]bool{}
-	fs.walk("a", func(rel string, isDir bool) {
+	fs.walk("a", func(rel string, isDir bool) bool {
 		if !isDir {
 			files[rel] = true
 		}
+
+		return true
 	})
 
 	want := map[string]bool{
@@ -347,7 +349,7 @@ func (fs *MemFS) contentHash(v VFS) uint64 {
 	return xxh3.Hash(data)
 }
 
-func (fs *MemFS) walk(rel string, visit func(rel string, isDir bool)) {
+func (fs *MemFS) walk(rel string, visit func(rel string, isDir bool) bool) {
 	rel = cleanRel(rel)
 
 	present, isDir := fs.existsRel(rel)
@@ -355,9 +357,7 @@ func (fs *MemFS) walk(rel string, visit func(rel string, isDir bool)) {
 		return
 	}
 
-	visit(rel, isDir)
-
-	if !isDir {
+	if !visit(rel, isDir) || !isDir {
 		return
 	}
 
