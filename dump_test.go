@@ -29,7 +29,7 @@ func TestDumpSortMergesChunks(t *testing.T) {
 
 	throw(os.WriteFile(in, []byte("cherry\napple\nbanana\napple\ndate\n"), 0o644))
 
-	if exc := try(func() { cmdDumpSort([]string{"--in", in, "--out", out, "--chunk-bytes", "8"}) }); exc != nil {
+	if exc := try(func() { cmdDumpSort(GlobalFlags{}, []string{"--in", in, "--out", out, "--chunk-bytes", "8"}) }); exc != nil {
 		t.Fatalf("dump sort: %v", exc)
 	}
 
@@ -64,10 +64,10 @@ func runNormalizeSort(t *testing.T, dir, name, graphJSON, target string) string 
 	sorted := filepath.Join(dir, name+".sorted.jsonl")
 	throw(os.WriteFile(raw, []byte(graphJSON), 0o644))
 
-	if exc := try(func() { cmdDumpNormalize([]string{"--in", raw, "--target", target, "--out", norm}) }); exc != nil {
+	if exc := try(func() { cmdDumpNormalize(GlobalFlags{}, []string{"--in", raw, "--target", target, "--out", norm}) }); exc != nil {
 		t.Fatalf("normalize %s: %v", name, exc)
 	}
-	if exc := try(func() { cmdDumpSort([]string{"--in", norm, "--out", sorted}) }); exc != nil {
+	if exc := try(func() { cmdDumpSort(GlobalFlags{}, []string{"--in", norm, "--out", sorted}) }); exc != nil {
 		t.Fatalf("sort %s: %v", name, exc)
 	}
 	return string(throw2(os.ReadFile(sorted)))
@@ -122,7 +122,7 @@ func TestDumpDiff(t *testing.T) {
 			`{"self_uid":"D","outputs":["/z"]}`+"\n"+
 			`{"self_uid":"E","outputs":["/shared"]}`+"\n"), 0o644))
 
-	if exc := try(func() { cmdDumpDiff([]string{"--left", left, "--right", right, "--out", out}) }); exc != nil {
+	if exc := try(func() { cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out}) }); exc != nil {
 		t.Fatalf("dump diff: %v", exc)
 	}
 
@@ -161,12 +161,12 @@ func TestDumpGrep(t *testing.T) {
 		`{"self_uid":"AA","outputs":["$(B)/p/a.o"],"kv":{"p":"CC"}}`+"\n"+
 			`{"self_uid":"BB","outputs":["$(B)/p/b.o"],"kv":{"p":"CC"}}`+"\n"), 0o644))
 
-	byOut := captureStdout(t, func() { cmdDumpGrep([]string{"--in", in, "$(BUILD_ROOT)/p/a.o"}) })
+	byOut := captureStdout(t, func() { cmdDumpGrep(GlobalFlags{}, []string{"--in", in, "$(BUILD_ROOT)/p/a.o"}) })
 	if !strings.Contains(byOut, `"AA"`) || strings.Contains(byOut, `"BB"`) {
 		t.Fatalf("grep by output: want AA only, got:\n%s", byOut)
 	}
 
-	bySU := captureStdout(t, func() { cmdDumpGrep([]string{"--in", in, "BB"}) })
+	bySU := captureStdout(t, func() { cmdDumpGrep(GlobalFlags{}, []string{"--in", in, "BB"}) })
 	if !strings.Contains(bySU, `"BB"`) || strings.Contains(bySU, `"AA"`) {
 		t.Fatalf("grep by self_uid: want BB only, got:\n%s", bySU)
 	}
@@ -179,11 +179,11 @@ func TestDumpGrepSubstrRegex(t *testing.T) {
 		`{"self_uid":"AA","outputs":["/a.o"],"cmds":[{"cmd_args":["clang","${SSE41_CFLAGS}"]}]}`+"\n"+
 			`{"self_uid":"BB","outputs":["/b.o"],"cmds":[{"cmd_args":["clang","-O2"]}]}`+"\n"), 0o644))
 
-	sub := captureStdout(t, func() { cmdDumpGrep([]string{"--in", in, "--substr", "${SSE41_CFLAGS}"}) })
+	sub := captureStdout(t, func() { cmdDumpGrep(GlobalFlags{}, []string{"--in", in, "--substr", "${SSE41_CFLAGS}"}) })
 	if !strings.Contains(sub, `"AA"`) || strings.Contains(sub, `"BB"`) {
 		t.Fatalf("grep --substr: want AA only, got:\n%s", sub)
 	}
-	rx := captureStdout(t, func() { cmdDumpGrep([]string{"--in", in, "--regex", "SSE[0-9]+_CFLAGS"}) })
+	rx := captureStdout(t, func() { cmdDumpGrep(GlobalFlags{}, []string{"--in", in, "--regex", "SSE[0-9]+_CFLAGS"}) })
 	if !strings.Contains(rx, `"AA"`) || strings.Contains(rx, `"BB"`) {
 		t.Fatalf("grep --regex: want AA only, got:\n%s", rx)
 	}
@@ -205,7 +205,7 @@ func TestDumpDiffModes(t *testing.T) {
 	run := func(mode ...string) string {
 		out := filepath.Join(dir, "o.txt")
 		args := append([]string{"--left", left, "--right", right, "--out", out}, mode...)
-		if exc := try(func() { cmdDumpDiff(args) }); exc != nil {
+		if exc := try(func() { cmdDumpDiff(GlobalFlags{}, args) }); exc != nil {
 			t.Fatalf("diff %v: %v", mode, exc)
 		}
 		return string(throw2(os.ReadFile(out)))
@@ -244,7 +244,7 @@ func TestDumpDiffModes_PairDuplicateOutputsByVariant(t *testing.T) {
 	run := func(mode ...string) string {
 		out := filepath.Join(dir, "o.txt")
 		args := append([]string{"--left", left, "--right", right, "--out", out}, mode...)
-		if exc := try(func() { cmdDumpDiff(args) }); exc != nil {
+		if exc := try(func() { cmdDumpDiff(GlobalFlags{}, args) }); exc != nil {
 			t.Fatalf("diff %v: %v", mode, exc)
 		}
 		return string(throw2(os.ReadFile(out)))
@@ -281,7 +281,7 @@ func TestDumpDiffPair_PrefersDivergentDuplicateVariant(t *testing.T) {
 	throw(os.WriteFile(left, []byte(line("same-host", "L-host", "host-clean", true)+"\n"+line("left-target", "L-target", "target-ours", false)+"\n"), 0o644))
 	throw(os.WriteFile(right, []byte(line("same-host", "R-host", "host-clean", true)+"\n"+line("right-target", "R-target", "target-ref", false)+"\n"), 0o644))
 
-	if exc := try(func() { cmdDumpDiff([]string{"--left", left, "--right", right, "--out", out, "--pair", "/dup"}) }); exc != nil {
+	if exc := try(func() { cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out, "--pair", "/dup"}) }); exc != nil {
 		t.Fatalf("pair duplicate outputs: %v", exc)
 	}
 	got := string(throw2(os.ReadFile(out)))
@@ -304,7 +304,7 @@ func TestDumpDiffRoots(t *testing.T) {
 	throw(os.WriteFile(left, []byte(node("Ps", "Pu", "/p", `["Cu"]`, `["a"]`)+"\n"+node("Cs", "Cu", "/c", `[]`, `["a"]`)+"\n"), 0o644))
 	throw(os.WriteFile(right, []byte(node("Ps2", "Pu2", "/p", `["Cu2"]`, `[]`)+"\n"+node("Cs2", "Cu2", "/c", `[]`, `[]`)+"\n"), 0o644))
 
-	if exc := try(func() { cmdDumpDiff([]string{"--left", left, "--right", right, "--out", out, "--roots"}) }); exc != nil {
+	if exc := try(func() { cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out, "--roots"}) }); exc != nil {
 		t.Fatalf("roots: %v", exc)
 	}
 	got := string(throw2(os.ReadFile(out)))
@@ -338,7 +338,7 @@ func TestDumpDiffRoots_DedupDuplicateOutputsByVariant(t *testing.T) {
 	throw(os.WriteFile(left, []byte(line("same-host", "L-host", true)+"\n"+line("left-target", "L-target", false)+"\n"), 0o644))
 	throw(os.WriteFile(right, []byte(line("same-host", "R-host", true)+"\n"+line("right-target", "R-target", false)+"\n"), 0o644))
 
-	if exc := try(func() { cmdDumpDiff([]string{"--left", left, "--right", right, "--out", out, "--roots"}) }); exc != nil {
+	if exc := try(func() { cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out, "--roots"}) }); exc != nil {
 		t.Fatalf("roots duplicate outputs: %v", exc)
 	}
 	got := string(throw2(os.ReadFile(out)))
@@ -368,7 +368,7 @@ func TestDumpDiffRoots_PartialOverlapMultiOutputNode(t *testing.T) {
 	throw(os.WriteFile(left, []byte(leftNode+"\n"), 0o644))
 	throw(os.WriteFile(right, []byte(rightNode+"\n"), 0o644))
 
-	if exc := try(func() { cmdDumpDiff([]string{"--left", left, "--right", right, "--out", out, "--roots"}) }); exc != nil {
+	if exc := try(func() { cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out, "--roots"}) }); exc != nil {
 		t.Fatalf("roots partial-overlap multi-output: %v", exc)
 	}
 	got := string(throw2(os.ReadFile(out)))
