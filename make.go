@@ -434,7 +434,7 @@ func parseKV(into map[string]string, kv string) {
 }
 
 func printMakeUsage(w io.Writer) {
-	fmt.Fprint(w, `Usage: ay make [flags] [targets...]
+	const usage = `Usage: ay make [flags] [targets...]
 Build the targets in dependency order, executing per-node cmds.
 
 Layout flags:
@@ -465,5 +465,45 @@ Configuration flags:
     --host-platform <id>          Host platform id (default: <host>).
     -D, --define KEY=VALUE        Target-axis -D flag (repeatable).
     --host-platform-flag KEY=V    Host-axis -D flag (repeatable).
-`)
+`
+
+	fmt.Fprint(w, colorizeMakeUsage(usage))
+}
+
+// colorizeMakeUsage tints the make help by the same scheme as the top-level
+// listing: section headers ("… flags:" and the Usage: label) light-green, flag
+// columns light-yellow. Descriptions and continuation lines stay plain.
+func colorizeMakeUsage(s string) string {
+	lines := strings.Split(s, "\n")
+
+	for i, line := range lines {
+		switch {
+		case strings.HasSuffix(line, "flags:"):
+			lines[i] = clHeader(line)
+		case strings.HasPrefix(line, "Usage:"):
+			lines[i] = clHeader("Usage:") + line[len("Usage:"):]
+		default:
+			lines[i] = colorizeFlagLine(line)
+		}
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// colorizeFlagLine tints the flag column (the leading "-…" token up to the 2-space
+// gap before its description) light-yellow; non-flag lines pass through.
+func colorizeFlagLine(line string) string {
+	trimmed := strings.TrimLeft(line, " ")
+
+	if !strings.HasPrefix(trimmed, "-") {
+		return line
+	}
+
+	indent := line[:len(line)-len(trimmed)]
+
+	if gap := strings.Index(trimmed, "  "); gap >= 0 {
+		return indent + clFlag(trimmed[:gap]) + trimmed[gap:]
+	}
+
+	return indent + clFlag(trimmed)
 }
