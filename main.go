@@ -30,12 +30,7 @@ func dispatch(argv []string) {
 		}
 	}
 
-	if len(rest) == 0 {
-		fmt.Fprintln(os.Stderr, usageCommands())
-		os.Exit(2)
-	}
-
-	code := runCommand(rest)
+	code := runCommand(rest) // empty rest falls through to the choice-point help
 
 	dumpProbes(probes) // flush enabled probe stats before exit (cmds os.Exit-free)
 	dumpCalls()        // flush callsite reachability when CALLSITE_OUT is set (env-driven)
@@ -101,14 +96,36 @@ var commands = []command{
 	{path: []string{"probe", "callsite"}, run: probeCallSite},
 }
 
-// usageCommands lists the visible (non-hidden) subcommand paths, one per line.
-func usageCommands() string {
+// isTokenPrefix reports whether p is a token-wise prefix of of.
+func isTokenPrefix(p, of []string) bool {
+	if len(p) > len(of) {
+		return false
+	}
+
+	for i, tok := range p {
+		if of[i] != tok {
+			return false
+		}
+	}
+
+	return true
+}
+
+// usageCommands lists the visible subcommand paths under prefix (all, for the
+// empty prefix), one per line — the help shown at a choice point.
+func usageCommands(prefix []string) string {
 	var b strings.Builder
 
-	b.WriteString("usage: ay <subcommand> [flags]\nsubcommands:")
+	if len(prefix) == 0 {
+		b.WriteString("usage: ay <subcommand> [flags]")
+	} else {
+		b.WriteString("usage: ay " + strings.Join(prefix, " ") + " <subcommand> [flags]")
+	}
+
+	b.WriteString("\nsubcommands:")
 
 	for _, c := range commands {
-		if c.hide {
+		if c.hide || !isTokenPrefix(prefix, c.path) {
 			continue
 		}
 
@@ -119,39 +136,36 @@ func usageCommands() string {
 	return b.String()
 }
 
-// runCommand dispatches argv against commands by longest matching token path.
+// runCommand dispatches argv against commands by longest matching token path. A
+// full leaf match runs its handler; otherwise, if argv is a choice-point prefix
+// of some visible command(s) (the empty argv included), the prefix help is shown;
+// anything else is an unknown subcommand.
 func runCommand(argv []string) int {
 	best := -1
 	bestLen := 0
 
 	for i, c := range commands {
-		if len(c.path) > len(argv) || len(c.path) < bestLen {
-			continue
-		}
-
-		match := true
-
-		for j, tok := range c.path {
-			if argv[j] != tok {
-				match = false
-
-				break
-			}
-		}
-
-		if match && (best < 0 || len(c.path) > bestLen) {
+		if isTokenPrefix(c.path, argv) && (best < 0 || len(c.path) > bestLen) {
 			best = i
 			bestLen = len(c.path)
 		}
 	}
 
-	if best < 0 {
-		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n%s\n", strings.Join(argv, " "), usageCommands())
-
-		return 2
+	if best >= 0 {
+		return commands[best].run(argv[bestLen:])
 	}
 
-	return commands[best].run(argv[bestLen:])
+	for _, c := range commands {
+		if !c.hide && isTokenPrefix(argv, c.path) {
+			fmt.Fprintln(os.Stderr, usageCommands(argv))
+
+			return 2
+		}
+	}
+
+	fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n%s\n", strings.Join(argv, " "), usageCommands(nil))
+
+	return 2
 }
 
 func startProfilesFromEnv() func() {
