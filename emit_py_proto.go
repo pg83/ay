@@ -396,7 +396,15 @@ func pyProtoAuxEntriesForSource(instance ModuleInstance, d *ModuleData, src stri
 	}
 
 	if d.grpc && len(pyOutputs) > 2 && pyOutputs[1].rel() != "" {
-		addResource(pyOutputs[1], protoPythonResourceKey(instance, d, src, "_pb2_grpc.py"), pyPBRef)
+		// The _pb2_grpc.py and _pb2.py share one protoc producer (pyPBRef). Bundling
+		// _pb2_grpc.py pulls that producer's sibling output _pb2.py into the chunk's
+		// inputs (deduped against the _pb2.py resource when co-located).
+		entries = append(entries, PyProtoAuxEntry{
+			path:     pyOutputs[1],
+			key:      protoPythonResourceKey(instance, d, src, "_pb2_grpc.py"),
+			producer: pyPBRef,
+			inputs:   append(append([]VFS(nil), producerInputs...), pyOutputs[0]),
+		})
 
 		if len(yapyOuts) > 1 {
 			addResource(yapyOuts[1], protoPythonResourceKey(instance, d, src, "_pb2_grpc.py.yapyc3"), yapyRefs[1])
