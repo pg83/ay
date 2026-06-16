@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -44,12 +45,17 @@ type CppProtoPlugin struct {
 }
 
 type ModuleData struct {
-	moduleStmt         *ModuleStmt
-	modver             string // VERSION() args joined by "." (MODVER); "" means default "unknown"
-	hasLicense         bool   // LICENSE() present — gates the _GEN_SBOM_COMPONENT DX node
-	hasBisonY          bool   // a .y bison source present — induces PEERDIR build/induced/by_bison
-	toolchainName      string // TOOLCHAIN(Name) arg — gates the toolchain SBOM DX node
-	srcs               []STR
+	moduleStmt    *ModuleStmt
+	modver        string // VERSION() args joined by "." (MODVER); "" means default "unknown"
+	hasLicense    bool   // LICENSE() present — gates the _GEN_SBOM_COMPONENT DX node
+	hasBisonY     bool   // a .y bison source present — induces PEERDIR build/induced/by_bison
+	toolchainName string // TOOLCHAIN(Name) arg — gates the toolchain SBOM DX node
+	srcs          []STR
+	// srcExtraFlat holds SRC(file flags…) where `file` is also in SRCS: SRCS
+	// yields the regular non-flat object (default flags), SRC adds a separate FLAT
+	// object with its own flags (e.g. glibcasm's strstr.c + SRC(strstr.c
+	// -fgnu89-inline) → both _/…/strstr.c.o and …/strstr.c.o).
+	srcExtraFlat       []SrcFlatEntry
 	globalSrcs         []STR
 	pySrcs             []STR
 	pySrcGroups        []PySrcGroup
@@ -246,6 +252,13 @@ type PySrcGroup struct {
 	Srcs      []STR
 	TopLevel  bool
 	Namespace *STR
+}
+
+// SrcFlatEntry is a SRC(file flags…) whose file is also in SRCS — an extra FLAT
+// compile object carrying its own per-source flags.
+type SrcFlatEntry struct {
+	Src   STR
+	Flags []ARG
 }
 
 type ArchiveEntry struct {
@@ -1623,6 +1636,22 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		}
 
 		filename := v.Args[0]
+
+		var extras []ARG
+
+		if len(v.Args) > 1 {
+			extras = internArgsFromSTR(v.Args[1:])
+		}
+
+		// A file already in SRCS: SRCS yields its non-flat object (default flags);
+		// this SRC adds a separate FLAT object with its own flags. Routing it to
+		// srcExtraFlat keeps the SRCS occurrence non-flat and unflagged.
+		if slices.Contains(d.srcs, filename) {
+			d.srcExtraFlat = append(d.srcExtraFlat, SrcFlatEntry{Src: filename, Flags: extras})
+
+			break
+		}
+
 		d.srcs = append(d.srcs, filename)
 
 		if d.flatSrcs == nil {
@@ -1631,12 +1660,11 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 
 		d.flatSrcs[filename] = struct{}{}
 
-		if len(v.Args) > 1 {
+		if extras != nil {
 			if d.perSrcCFlags == nil {
 				d.perSrcCFlags = map[STR][]ARG{}
 			}
 
-			extras := internArgsFromSTR(v.Args[1:])
 			d.perSrcCFlags[filename] = append(d.perSrcCFlags[filename], extras...)
 		}
 	case tokSrcCNoLto:

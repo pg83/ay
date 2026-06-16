@@ -1862,6 +1862,25 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		appendCC(ce.srcID, ce.emit)
 	}
 
+	// Extra FLAT objects for SRC(file …) whose file is also in SRCS (the SRCS
+	// occurrence already emitted its non-flat object above).
+	for _, fe := range d.srcExtraFlat {
+		si := moduleInputs
+		si.FlatOutput = true
+
+		if len(fe.Flags) > 0 {
+			si.PerSourceCFlags = fe.Flags
+		}
+
+		if emit := emitOneSource(ctx, instance, d, fe.Src.string(), si); emit != nil {
+			ccRefs = append(ccRefs, emit.Ref)
+			ccOutputs = append(ccOutputs, emit.OutPath)
+			ccIsFlatNoLto = append(ccIsFlatNoLto, true)
+			ccIsCFGenerated = append(ccIsCFGenerated, false)
+			ccIsProtoGenerated = append(ccIsProtoGenerated, false)
+		}
+	}
+
 	for _, emit := range emitCheckConfigH(ctx, instance, d, moduleInputs) {
 		ccRefs = append(ccRefs, emit.Ref)
 		ccOutputs = append(ccOutputs, emit.OutPath)
