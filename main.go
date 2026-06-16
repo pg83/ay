@@ -161,10 +161,11 @@ var commands = []command{
 	},
 }
 
-// Help palette (One Dark): section headers green, command names blue, flags amber.
-func clHeader(s string) string { return trueColor(152, 195, 121, s) }
-func clName(s string) string   { return trueColor(97, 175, 239, s) }
-func clFlag(s string) string   { return trueColor(229, 192, 123, s) }
+// Help palette: section headers light-green, subcommands light-red, flags
+// light-yellow.
+func clHeader(s string) string { return color("light-green", s) }
+func clName(s string) string   { return color("light-red", s) }
+func clFlag(s string) string   { return color("light-yellow", s) }
 
 // isTokenPrefix reports whether p is a token-wise prefix of of.
 func isTokenPrefix(p, of []string) bool {
