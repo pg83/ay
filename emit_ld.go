@@ -128,8 +128,11 @@ func emitLD(
 
 	// LINK_OR_COPY_SO_CMD is gated on SO_OUTPUTS (build/ymake.core.conf:1065), set
 	// only for OPENSOURCE (opensource.conf:22) or modules with dynamic-lib outputs.
-	// Internal builds (sbom contour) omit it for plain programs.
-	if instance.Platform.Flags[envOPENSOURCE] == strYes || len(dynamicPaths) > 0 {
+	// Internal builds (sbom contour) omit it for plain programs — and then fs_tools.py
+	// is not one of the node's $(S) tooling inputs either (composeLDInputs).
+	emitCopy := instance.Platform.Flags[envOPENSOURCE] == strYes || len(dynamicPaths) > 0
+
+	if emitCopy {
 		cmd3 := composeLDCmdLinkOrCopy(tc, binaryDir, dynamicPaths...)
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd3), Env: envVcsOnly})
 	}
@@ -145,7 +148,7 @@ func emitLD(
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(objcopy), Env: envVcsOnly})
 	}
 
-	inputs := composeLDInputs(na, instance.Path.rel(), ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts)
+	inputs := composeLDInputs(na, instance.Path.rel(), ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts, emitCopy)
 
 	inputTail := make([]VFS, 0, 2)
 	inputTail = append(inputTail, ldSvnversionHVFS)
@@ -498,7 +501,7 @@ func composeLDSplitDwarfCmds(na *NodeArenas, tc ModuleToolchain, outputPath stri
 	return na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(tc.Objcopy, argOnlyKeepDebug.str(), internStr(outputPath), internStr(debugPath)))}, Cmd{CmdArgs: na.chunkList(na.strList(tc.Strip, argStripDebug.str(), internStr(outputPath)))}, Cmd{CmdArgs: na.chunkList(na.strList(tc.Objcopy, argRemoveSectionGnuDebuglink.str(), argAddGnuDebuglink.str(), internStr(debugPath), internStr(outputPath)))})
 }
 
-func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts ScriptDeps) InputChunks {
+func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts ScriptDeps, emitCopy bool) InputChunks {
 	chunks := make(InputChunks, 0, 3+len(ldScriptInputs))
 
 	// peerLibPaths is the caller's member slice, dup-free by construction (gen's
@@ -543,6 +546,13 @@ func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPa
 	// in the table and pass through. Dups (link_exe and fs_tools both import
 	// process_command_files) are dropped in normalization.
 	for _, s := range ldScriptInputs {
+		// fs_tools.py is the LINK_OR_COPY_SO_CMD script; when that step is not
+		// emitted (no SO_OUTPUTS) it is not an input either (its sole import,
+		// process_command_files, still arrives via link_exe.py).
+		if s == copyFsToolsVFS && !emitCopy {
+			continue
+		}
+
 		if cl := scripts[s]; cl != nil {
 			chunks = append(chunks, cl)
 		} else {
