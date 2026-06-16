@@ -179,7 +179,10 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 
 	mid = append(mid, argISContribLibsProtobufSrc.str())
 
-	if d.grpc {
+	// NEED_GOOGLE_PROTO_PEERDIRS (default yes) peers the PY-only protos_from_protoc,
+	// whose GLOBAL PROTO_NAMESPACE(contrib/libs/protoc/src) adds protoc/src to the
+	// py-proto include path. The protobuf builtins DISABLE it (proto.conf:717,857).
+	if d.needGoogleProtoPeerdirs {
 		mid = append(mid, argISContribLibsProtocSrc.str())
 	}
 
