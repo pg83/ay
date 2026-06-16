@@ -2054,7 +2054,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	// toolchain SBOM component into the closure (the only thing it contributes —
 	// it has no archive). Threads into both the program link and the library result.
 	if ctx.sbomEnabled && env.bool(envCLANG) && len(ccRefs) > 0 {
-		if r, p := clangToolchainSbomComponent(ctx, instance.Platform); r != nil {
+		if r, p := clangToolchainSbomComponent(ctx, instance.Platform); r != nil && !containsVFS(peerSbomPaths, *p) {
 			peerSbomRefs = append(peerSbomRefs, *r)
 			peerSbomPaths = append(peerSbomPaths, *p)
 		}
