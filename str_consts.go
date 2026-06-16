@@ -116,6 +116,7 @@ var (
 	strE30                                           = internStr("e30=")
 	strEmpty                                         = internStr("")
 	strFAKE                                          = internStr("FAKE")
+	strISContribLibsGoogleapisCommonProtos           = internStr("-I=$(S)/contrib/libs/googleapis-common-protos")
 	strJ                                             = internStr("J")
 	strLang                                          = internStr("--lang")
 	strLibrary                                       = internStr("library")

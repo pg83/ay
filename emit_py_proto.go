@@ -158,6 +158,14 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 		argIS3.str(),
 	)
 
+	// USE_COMMON_GOOGLE_APIS PEERDIRs contrib/libs/googleapis-common-protos, whose
+	// PROTO_ADDINCL(GLOBAL) injects -I=$(S)/contrib/libs/googleapis-common-protos
+	// into the proto cmdline ahead of the protobuf runtime include. The cpp variant
+	// picks this up through the proto-addincl closure; the py cmdline adds it here.
+	if d.useCommonGoogleAPIs {
+		mid = append(mid, strISContribLibsGoogleapisCommonProtos)
+	}
+
 	if protoRoot != "" && protoRoot != "contrib/libs/protobuf/src" {
 		mid = append(mid, internStr("-I=$(S)/"+protoRoot))
 
