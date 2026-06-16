@@ -86,71 +86,71 @@ type command struct {
 var commands = []command{
 	{
 		path: []string{"fetch"}, run: cmdFetch, hide: true,
-		help: "Fetch a Sandbox/MDS resource into the build root (FETCH node).",
+		help: "📥 Fetch a Sandbox/MDS resource into the build root (FETCH node).",
 	},
 	{
 		path: []string{"fetch", "base64"}, run: cmdFetchBase64, hide: true,
-		help: "Write base64-decoded data to a file (inline vcs.json node).",
+		help: "🔣 Write base64-decoded data to a file (inline vcs.json node).",
 	},
 	{
 		path: []string{"make"}, run: cmdMake,
-		help: "Generate the build graph for the given targets and write it as JSON.\n" +
+		help: "🔨 Generate the build graph for the given targets and write it as JSON.\n" +
 			"Mirrors ymake: --source-root, --sandboxing, -G, -j.",
 	},
 	{
 		path: []string{"dev", "cas"}, run: cmdCasAnalyze,
-		help: "Read-only analysis: estimate extra CAS savings from content-defined\n" +
+		help: "🗜️ Read-only analysis: estimate extra CAS savings from content-defined\n" +
 			"chunking (rolling-hash chunk dedup) on top of whole-file dedup.",
 	},
 	{
-		path: []string{"dev", "dump","normalize"}, run: cmdDumpNormalize,
-		help: "Normalize a raw graph dump (fold producers, canonicalize paths, prune\n" +
+		path: []string{"dev", "dump", "normalize"}, run: cmdDumpNormalize,
+		help: "🧼 Normalize a raw graph dump (fold producers, canonicalize paths, prune\n" +
 			"ref-only artifacts) to one JSON node per line for byte-exact comparison.",
 	},
 	{
-		path: []string{"dev", "dump","sort"}, run: cmdDumpSort,
-		help: "Stable-sort normalized graph lines so two graphs can be merge-compared.",
+		path: []string{"dev", "dump", "sort"}, run: cmdDumpSort,
+		help: "🔢 Stable-sort normalized graph lines so two graphs can be merge-compared.",
 	},
 	{
-		path: []string{"dev", "dump","diff"}, run: cmdDumpDiff,
-		help: "Diff two normalized graphs — by kind/field/token, paired nodes, or roots.",
+		path: []string{"dev", "dump", "diff"}, run: cmdDumpDiff,
+		help: "🆚 Diff two normalized graphs — by kind/field/token, paired nodes, or roots.",
 	},
 	{
-		path: []string{"dev", "dump","grep"}, run: cmdDumpGrep,
-		help: "Search a graph dump for nodes by output/cmd/input substring.",
+		path: []string{"dev", "dump", "grep"}, run: cmdDumpGrep,
+		help: "🔎 Search a graph dump for nodes by output/cmd/input substring.",
 	},
 	{
-		path: []string{"dev", "perf","parser"}, run: cmdPerfParser,
-		help: "Benchmark the C/ya.make parser over every source file under <dir>.",
+		path: []string{"dev", "perf", "parser"}, run: cmdPerfParser,
+		help: "⏱️ Benchmark the C/ya.make parser over every source file under <dir>.",
 	},
 	{
-		path: []string{"dev", "perf","darts"}, run: cmdPerfDarts,
-		help: "Benchmark the autoinclude longest-prefix matcher: double-array trie vs\n" +
+		path: []string{"dev", "perf", "darts"}, run: cmdPerfDarts,
+		help: "🎯 Benchmark the autoinclude longest-prefix matcher: double-array trie vs\n" +
 			"the former ancestor-walk. Prints ns/op for each.",
 	},
 	{
-		path: []string{"dev", "refac","consts"}, run: refacConsts,
-		help: "Regenerate the interned-constant files (str/arg/vfs/env) from the\n" +
+		path: []string{"dev", "refac", "consts"}, run: refacConsts,
+		help: "♻️ Regenerate the interned-constant files (str/arg/vfs/env) from the\n" +
 			"literals used across the package. Mutates source in place.",
 	},
 	{
-		path: []string{"dev", "refac","lint"}, run: refacLint,
-		help: "Apply the in-tree linters to the given .go files (default: all non-test\n" +
+		path: []string{"dev", "refac", "lint"}, run: refacLint,
+		help: "🧹 Apply the in-tree linters to the given .go files (default: all non-test\n" +
 			".go here). Mutates source in place.",
 	},
 	{
-		path: []string{"dev", "refac","case"}, run: refacCase,
-		help: "Flip identifier case via the compiler's error positions to a fixpoint.\n" +
+		path: []string{"dev", "refac", "case"}, run: refacCase,
+		help: "🔠 Flip identifier case via the compiler's error positions to a fixpoint.\n" +
 			"Mutates source in place; run in a worktree.",
 	},
 	{
-		path: []string{"dev", "probe","mapinstr"}, run: probeMapInstr,
-		help: "Throwaway: instrument real map ops with per-site counters; build under\n" +
+		path: []string{"dev", "probe", "mapinstr"}, run: probeMapInstr,
+		help: "🗺️ Throwaway: instrument real map ops with per-site counters; build under\n" +
 			"--probe=map to dump the tally. Run in a worktree, revert after.",
 	},
 	{
-		path: []string{"dev", "probe","callsite"}, run: probeCallSite,
-		help: "Throwaway: instrument per-function call sites for reachability; build\n" +
+		path: []string{"dev", "probe", "callsite"}, run: probeCallSite,
+		help: "📞 Throwaway: instrument per-function call sites for reachability; build\n" +
 			"under --probe=callsite with CALLSITE_OUT to find never-run code.",
 	},
 }
@@ -198,7 +198,7 @@ func usageCommands(prefix []string, verbose bool) string {
 		if len(prefix) == 0 && !verbose && c.path[0] == "dev" {
 			if !devCollapsed {
 				b.WriteString("\n  dev")
-				b.WriteString("\n      Developer tooling (dump, perf, refac, probe). Pass --verbose to list.")
+				b.WriteString("\n      🛠️ Developer tooling (dump, perf, refac, probe). Pass --verbose to list.")
 				devCollapsed = true
 			}
 
