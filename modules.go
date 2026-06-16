@@ -2340,6 +2340,12 @@ func buildIfEnv(instance ModuleInstance) Environment {
 
 	if env.bool(envOPENSOURCE) {
 		env.setBool(envCATBOOST_OPENSOURCE, true)
+		// opensource.conf:28-30 — the open-source contour ships these libs shared
+		// (.so via DYNAMIC_LIBRARY); the internal contour leaves them unset, so the
+		// <lib>/ya.make selectors fall through to the static PEERDIR.
+		env.setString(env_USE_AIO, "dynamic")
+		env.setString(env_USE_ICONV, "dynamic")
+		env.setString(env_USE_IDN, "dynamic")
 	}
 
 	// USE_PREBUILT_TOOLS is defaulted to yes in DefaultIfEnv (build/conf/settings.conf:3)
