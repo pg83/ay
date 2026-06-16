@@ -317,6 +317,13 @@ func genResourcesLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *M
 	// SET_APPEND(RPATH_GLOBAL -Wl,-rpath,$ORIGIN) reach every linking consumer here.
 	// Duplicates of these flags that currently also come from the Platform (the
 	// mine.go stopgap) are removed on the Platform side, not here.
+	var sbomRef *NodeRef
+	var sbomPath *VFS
+
+	if sbomActive(ctx, instance) && d.toolchainName != "" {
+		sbomRef, sbomPath = emitSbomToolchainComponent(ctx, instance, d.toolchainName, d.modver)
+	}
+
 	result := &ModuleEmitResult{
 		ModuleStmtName:        d.moduleStmt.Name,
 		ResourceGlobalClosure: globals,
@@ -331,6 +338,8 @@ func genResourcesLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *M
 		OwnAddInclGlobal:      d.addInclGlobal,
 		AddInclUserGlobal:     d.addInclUserGlobal,
 		AddInclOneLevel:       d.addInclOneLevel,
+		SbomComponentRef:      sbomRef,
+		SbomComponentPath:     sbomPath,
 	}
 	ctx.memo.put(ctx.instanceKey(instance), result)
 
@@ -387,6 +396,24 @@ func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
+	// The prebuilt copy is an agnostic "bin"; like any licensed module it gets a
+	// _GEN_SBOM_COMPONENT, and (when EMBED is on for this RELEASE host build) the
+	// copy node itself collects its own .component.sbom — ref lists it as an input.
+	var ownSbomRef *NodeRef
+	var ownSbomPath *VFS
+
+	if sbomActive(ctx, instance) && sbomQualifies(d) {
+		ownSbomRef, ownSbomPath = emitSbomComponent(ctx, instance, d, programBinaryName(instance, d.moduleStmt))
+	}
+
+	inputs := InputChunks{ctx.scripts[copyFsToolsVFS], {srcVFS}}
+	depRefs := []NodeRef{fetchRef}
+
+	if ownSbomRef != nil && instance.Platform.BuildRelease {
+		inputs = append(inputs, []VFS{*ownSbomPath})
+		depRefs = append(depRefs, *ownSbomRef)
+	}
+
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList([]STR{
@@ -397,12 +424,12 @@ func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 			dst.str(),
 		}), Env: env}),
 		Env:              env,
-		Inputs:           na.inputList(ctx.scripts[copyFsToolsVFS], []VFS{srcVFS}),
-		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
+		Inputs:           inputs,
+		KV:               KV{P: pkld, PC: pcLightBlue, ShowOut: true},
 		Outputs:          na.vfsList(dst),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-		DepRefs:          []NodeRef{fetchRef},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleLang: mlAgnostic, ModuleType: mtBin},
+		DepRefs:          depRefs,
 		Resources:        usesPython3,
 	}
 

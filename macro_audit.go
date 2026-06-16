@@ -30,6 +30,10 @@ var macrosAcceptingUserFlags = map[TOK]struct{}{
 	// user-chosen destination variable name (SANDBOX_RESOURCE_URI, WITH_JDK_URI,
 	// …), not a structural keyword — like ENABLE's flag name.
 	tokSetResourceUriFromJson: {},
+	// LICENSE(...) args are SPDX license expressions (BSD-3-Clause, WITH, AND,
+	// OR, …) — license data, not structural service-keywords. We read only
+	// LICENSE's presence (it gates the SBOM DX node), never the args.
+	tokLicense: {},
 }
 
 // serviceArgOK marks arg STRs the service-keyword check has already passed

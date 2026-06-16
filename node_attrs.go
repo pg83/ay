@@ -11,6 +11,7 @@ var procKindStr = [...]string{
 	pkFETCH: "FT", pkFL: "FL", pkJS: "JS", pkJV: "JV", pkLD: "LD", pkOP: "OP",
 	pkPB: "PB", pkPR: "PR", pkPY: "PY", pkR5: "R5", pkR6: "R6", pkRD: "RD",
 	pkSTUB: "STUB", pkSW: "SW", pkTEST: "TEST", pkTEST2: "TEST2", pkTS: "TS", pkYC: "YC",
+	pkld: "ld", pkDX: "DX",
 }
 
 var pColorStr = [...]string{
@@ -23,7 +24,7 @@ var networkModeStr = [...]string{
 }
 
 var moduleLangStr = [...]string{
-	mlNone: "", mlCPP: "cpp", mlPy3: "py3", mlUnknown: "unknown",
+	mlNone: "", mlCPP: "cpp", mlPy3: "py3", mlUnknown: "unknown", mlAgnostic: "agnostic",
 }
 
 var moduleTypeStr = [...]string{
@@ -110,6 +111,7 @@ const (
 	mlCPP
 	mlPy3
 	mlUnknown
+	mlAgnostic
 )
 
 func (l ModuleLang) string() string {
@@ -189,6 +191,8 @@ const (
 	pkTEST2
 	pkTS
 	pkYC
+	pkld // lowercase "ld": PREBUILT_PROGRAM copy node (agnostic bin), distinct from pkLD link
+	pkDX // _GEN_SBOM_COMPONENT / toolchain SBOM node (gen_sbom.py)
 )
 
 func (k ProcKind) string() string {
