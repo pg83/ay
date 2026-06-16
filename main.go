@@ -22,7 +22,7 @@ func main() {
 }
 
 func dispatch(argv []string) {
-	probes, rest := parseGlobalFlags(argv[1:])
+	probes, verbose, rest := parseGlobalFlags(argv[1:])
 
 	for _, p := range probes {
 		if p == "str" {
@@ -30,7 +30,7 @@ func dispatch(argv []string) {
 		}
 	}
 
-	code := runCommand(rest) // empty rest falls through to the choice-point help
+	code := runCommand(rest, verbose) // empty rest falls through to the choice-point help
 
 	dumpProbes(probes) // flush enabled probe stats before exit (cmds os.Exit-free)
 	dumpCalls()        // flush callsite reachability when CALLSITE_OUT is set (env-driven)
@@ -38,10 +38,11 @@ func dispatch(argv []string) {
 }
 
 // parseGlobalFlags consumes the leading -flags before the subcommand (program-
-// wide options) and returns the requested --probe values plus the remaining
-// argv (subcommand + its args). The first non-flag arg ends the global section;
-// -h/--help/help fall through to runCommand as the help subcommand.
-func parseGlobalFlags(argv []string) (probes []string, rest []string) {
+// wide options) and returns the requested --probe values, the --verbose toggle,
+// and the remaining argv (subcommand + its args). The first non-flag arg ends the
+// global section; -h/--help fall through to runCommand as the choice-point help.
+// These flags are documented in usageCommands ("global flags").
+func parseGlobalFlags(argv []string) (probes []string, verbose bool, rest []string) {
 	i := 0
 
 	for ; i < len(argv); i++ {
@@ -58,12 +59,14 @@ func parseGlobalFlags(argv []string) (probes []string, rest []string) {
 			probes = append(probes, v)
 		case k == "probe":
 			throwFmt("unknown --probe=%q (want map|callsite|str)", v)
+		case k == "verbose" || k == "v":
+			verbose = true
 		default:
 			throwFmt("unknown global flag %q", a)
 		}
 	}
 
-	return probes, argv[i:]
+	return probes, verbose, argv[i:]
 }
 
 // command binds a subcommand token path to its handler. The handler receives the
@@ -95,7 +98,7 @@ var commands = []command{
 			"Mirrors ymake: --source-root, --sandboxing, -G, -j.",
 	},
 	{
-		path: []string{"make", "cas"}, run: cmdCasAnalyze,
+		path: []string{"dev", "cas"}, run: cmdCasAnalyze,
 		help: "Read-only analysis: estimate extra CAS savings from content-defined\n" +
 			"chunking (rolling-hash chunk dedup) on top of whole-file dedup.",
 	},
@@ -167,21 +170,37 @@ func isTokenPrefix(p, of []string) bool {
 	return true
 }
 
-// usageCommands lists the visible subcommand paths under prefix (all, for the
-// empty prefix), one per line — the help shown at a choice point.
-func usageCommands(prefix []string) string {
+// usageCommands lists the visible subcommands under prefix (all, for the empty
+// prefix) with their help — the listing shown at a choice point. At the top level
+// the `dev` group is collapsed to a single line unless verbose; the empty-prefix
+// listing also documents the global flags parsed before the subcommand.
+func usageCommands(prefix []string, verbose bool) string {
 	var b strings.Builder
 
 	if len(prefix) == 0 {
-		b.WriteString("usage: ay <subcommand> [flags]")
+		b.WriteString("usage: ay [global-flags] <subcommand> [args]")
 	} else {
-		b.WriteString("usage: ay " + strings.Join(prefix, " ") + " <subcommand> [flags]")
+		b.WriteString("usage: ay [global-flags] " + strings.Join(prefix, " ") + " <subcommand> [args]")
 	}
 
 	b.WriteString("\nsubcommands:")
 
+	devCollapsed := false
+
 	for _, c := range commands {
 		if c.hide || !isTokenPrefix(prefix, c.path) {
+			continue
+		}
+
+		// Collapse the dev group to one pointer line at the top listing unless
+		// --verbose; drilling in (ay dev …) lists it regardless.
+		if len(prefix) == 0 && !verbose && c.path[0] == "dev" {
+			if !devCollapsed {
+				b.WriteString("\n  dev")
+				b.WriteString("\n      Developer tooling (dump, perf, refac, probe). Pass --verbose to list.")
+				devCollapsed = true
+			}
+
 			continue
 		}
 
@@ -194,6 +213,12 @@ func usageCommands(prefix []string) string {
 		}
 	}
 
+	if len(prefix) == 0 {
+		b.WriteString("\nglobal flags (before the subcommand):")
+		b.WriteString("\n  -v, --verbose             expand collapsed groups (dev) in this listing")
+		b.WriteString("\n  --probe=map|callsite|str  dump the named runtime probe (map/callsite/str) on exit")
+	}
+
 	return b.String()
 }
 
@@ -201,7 +226,7 @@ func usageCommands(prefix []string) string {
 // full leaf match runs its handler; otherwise, if argv is a choice-point prefix
 // of some visible command(s) (the empty argv included), the prefix help is shown;
 // anything else is an unknown subcommand.
-func runCommand(argv []string) int {
+func runCommand(argv []string, verbose bool) int {
 	best := -1
 	bestLen := 0
 
@@ -218,13 +243,13 @@ func runCommand(argv []string) int {
 
 	for _, c := range commands {
 		if !c.hide && isTokenPrefix(argv, c.path) {
-			fmt.Fprintln(os.Stderr, usageCommands(argv))
+			fmt.Fprintln(os.Stderr, usageCommands(argv, verbose))
 
 			return 2
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n%s\n", strings.Join(argv, " "), usageCommands(nil))
+	fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n%s\n", strings.Join(argv, " "), usageCommands(nil, verbose))
 
 	return 2
 }

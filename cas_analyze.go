@@ -12,14 +12,14 @@ import (
 	"sync/atomic"
 )
 
-// cmdCasAnalyze handles `ay make cas <sub> …`. The only sub is `analyze`: it
+// cmdCasAnalyze handles `ay dev cas <sub> …`. The only sub is `analyze`: it
 // estimates how much the (already whole-file-deduplicated) CAS would shrink if its
 // files were split into variable-size, content-defined chunks — the rsync rolling-
 // hash idea, a.k.a. content-defined chunking — and identical chunks shared across
 // files. A pure read-only analysis; it never touches the store.
 func cmdCasAnalyze(args []string) int {
 	if len(args) == 0 || args[0] != "analyze" {
-		throwFmt("usage: ay make cas analyze [--chunk=N] <cas-dir>")
+		throwFmt("usage: ay dev cas analyze [--chunk=N] <cas-dir>")
 	}
 
 	chunkAvg := 8192
