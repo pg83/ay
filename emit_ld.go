@@ -105,19 +105,45 @@ func emitLD(
 	cmd0 := composeLDCmdVcsInfo(tc, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, tc, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings)
 	cmd2 := composeLDCmdLinkExe(instance.Platform, tc, outputPath, vcsOPath, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, wantsStrip)
-	cmd3 := composeLDCmdLinkOrCopy(tc, binaryDir, dynamicPaths...)
 	splitDwarfCmds := composeLDSplitDwarfCmds(na, tc, outputPath, wantsSplitDwarf)
 
 	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	envFull := hostP.toolEnv()
 
-	cmds := na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: strB, Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd3), Env: envVcsOnly})
+	// _LINK_EXE (build/conf/linkers/ld.conf:321): GENERATE_VCS && _GENERATE_EXTRA_OBJS
+	// && REAL_LINK_EXE(link && LINK_OR_COPY_SO_CMD) && DWARF && LINK_ADDITIONAL_SECTIONS_COMMAND.
+	// _GENERATE_EXTRA_OBJS is the link_sbom.py step (sbom.conf:26, EMBED_SBOM &&
+	// RELEASE); LINK_ADDITIONAL_SECTIONS_COMMAND embeds .rosbomdata via llvm-objcopy.
+	sbomEmbed := len(sbomPaths) > 0
+	sbomJSON := build(binPrefix + "__sbomdata.json").string()
+
+	cmds := na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull})
+
+	if sbomEmbed {
+		linkSbom := composeLDCmdLinkSbom(tc, ldSbomLang(instance), binaryDir, sbomJSON, sbomPaths)
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(linkSbom), Cwd: strB, Env: envVcsOnly})
+	}
+
+	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: strB, Env: envFull})
+
+	// LINK_OR_COPY_SO_CMD is gated on SO_OUTPUTS (build/ymake.core.conf:1065), set
+	// only for OPENSOURCE (opensource.conf:22) or modules with dynamic-lib outputs.
+	// Internal builds (sbom contour) omit it for plain programs.
+	if instance.Platform.Flags[envOPENSOURCE] == strYes || len(dynamicPaths) > 0 {
+		cmd3 := composeLDCmdLinkOrCopy(tc, binaryDir, dynamicPaths...)
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd3), Env: envVcsOnly})
+	}
 
 	for i := range splitDwarfCmds {
 		splitDwarfCmds[i].Env = envVcsOnly
 	}
 
 	cmds = append(cmds, splitDwarfCmds...)
+
+	if sbomEmbed {
+		objcopy := composeLDCmdSbomObjcopy(tc, sbomJSON, outputPath)
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(objcopy), Env: envVcsOnly})
+	}
 
 	inputs := composeLDInputs(na, instance.Path.rel(), ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts)
 
@@ -135,6 +161,7 @@ func emitLD(
 	// irrelevant — normalize sorts and dedups inputs.
 	if len(sbomPaths) > 0 {
 		inputs = append(inputs, sbomPaths)
+		inputs = append(inputs, []VFS{linkSbomScriptVFS})
 	}
 
 	// Whole-archive is a LINK ATTRIBUTE of a subset of the peer archives (the link
@@ -400,6 +427,48 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 	trailer = appendInternStrs(trailer, p.linkerSelectionNoPieFlags())
 
 	return trailer
+}
+
+// ldSbomLang maps the program's module language to the uppercase --lang token
+// link_sbom.py expects (CPP for C-family programs, PY3 for python programs).
+func ldSbomLang(instance ModuleInstance) string {
+	if ldModuleLang(instance) == mlPy3 {
+		return "PY3"
+	}
+
+	return "CPP"
+}
+
+// composeLDCmdLinkSbom is _GENERATE_EXTRA_OBJS (sbom.conf:26): link_sbom.py reads
+// the ${ext=.component.sbom:SRCS_GLOBAL} of the link closure and the program's own
+// component into $BINDIR/__sbomdata.json, stamped with --vcs-info. cwd=$(B).
+func composeLDCmdLinkSbom(tc ModuleToolchain, lang, moddir, sbomJSON string, sbomPaths []VFS) []STR {
+	cmd := make([]STR, 0, 10+len(sbomPaths))
+	cmd = append(cmd,
+		tc.Python3,
+		linkSbomScriptVFS.str(),
+		strLang, internStr(lang),
+		strModPath, internStr(moddir),
+		strOutput, internStr(sbomJSON),
+		strVcsInfo, argVcsVcsJson.str(),
+	)
+
+	for _, p := range sbomPaths {
+		cmd = append(cmd, p.str())
+	}
+
+	return cmd
+}
+
+// composeLDCmdSbomObjcopy is LINK_ADDITIONAL_SECTIONS_COMMAND with _SBOM_SECTION
+// (sbom.conf:27): llvm-objcopy embeds __sbomdata.json into the binary's .rosbomdata.
+func composeLDCmdSbomObjcopy(tc ModuleToolchain, sbomJSON, targetPath string) []STR {
+	return []STR{
+		tc.Objcopy,
+		strAddSection,
+		internStr(".rosbomdata=" + sbomJSON),
+		internStr(targetPath),
+	}
 }
 
 func composeLDCmdLinkOrCopy(tc ModuleToolchain, modulePath string, dynamicPaths ...VFS) []STR {
