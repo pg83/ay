@@ -36,6 +36,10 @@ type ModuleCCInputs struct {
 	ProtoNamespaceTail []VFS
 	CXXFlags           []ARG
 	COnlyFlags         []ARG
+	// ClangWarnings is _CLANG_USER_WARNINGS_VALUE — the autoincluded
+	// linters.make.inc CLANG_WARNINGS, emitted just after the -I block and before
+	// the compile-flag pipeline (between GCC_COMPILE_FLAGS and CXXFLAGS upstream).
+	ClangWarnings []ARG
 
 	ExtraDepRefs []NodeRef
 
@@ -450,7 +454,8 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *
 		len(ccIncludesPrefix) + len(in.AddIncl) + len(in.PeerAddInclGlobal) +
 		len(debugPrefixMapFlags) + len(xclangDebugCompilationDir) +
 		len(bundle.CFlags) + len(warningBundle) + len(bundle.Defines) +
-		len(ownCFlags) + 2*len(bundle.NoLibcBlock) + len(catboost) + len(in.ModuleScopeCFlags)
+		len(ownCFlags) + 2*len(bundle.NoLibcBlock) + len(catboost) + len(in.ModuleScopeCFlags) +
+		len(in.ClangWarnings)
 	common := make([]STR, 0, commonCap)
 	common = appendArgStr(common, ccIncludesPrefix)
 	common = appendAddIncl(common, in.AddIncl, in.InclArgs)
@@ -462,6 +467,7 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *
 	}
 
 	common = appendAddIncl(common, peerAddIncl, in.InclArgs)
+	common = appendArgStr(common, in.ClangWarnings)
 	common = appendCompileFlagPipeline(common, bundle, warningBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboost)
 
 	// C variant: the peer C extras follow the pipeline; the OWN C extras trail

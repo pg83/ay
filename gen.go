@@ -85,6 +85,7 @@ var acknowledgedMacros = map[string]struct{}{
 	"NO_SANITIZE":                     {},
 	"NO_SANITIZE_COVERAGE":            {},
 	"NO_JOIN_SRC":                     {},
+	"STYLE_CPP":                       {},
 	"STYLE_PYTHON":                    {},
 	"NO_OPTIMIZE":                     {},
 	"NO_OPTIMIZE_PY_PROTOS":           {},
@@ -312,6 +313,11 @@ type GenCtx struct {
 	// _GEN_SBOM_COMPONENT DX nodes; absent in the open-source contour (sg2–5).
 	sbomEnabled bool
 
+	// autoincludeIdx maps each AUTOINCLUDE_PATHS root directory (source VFS) to its
+	// linters.make.inc (source VFS); a module auto-includes the nearest enclosing
+	// root's file (lintersMakeIncFor / ymake's FindLongestPrefix).
+	autoincludeIdx *IntValueMap[VFS]
+
 	// tarjan is the run-wide Tarjan/closure working state; both scanners hold a
 	// pointer to it (their tjc field) so its vfsBound-sized arrays grow once, not
 	// once per scanner. reset() runs before every use, so the shared state is safe
@@ -462,6 +468,8 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		// SBOM_GENERATION_ALLOWED is defined only by build/internal/conf/sbom.conf;
 		// its presence is the feature gate (open-source roots lack it).
 		sbomEnabled: fs.isFile(srcRootVFS, sbomConfRel),
+
+		autoincludeIdx: loadAutoincludeIndex(fs),
 	}
 
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
@@ -624,6 +632,14 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	defer delete(ctx.walking, instance)
 
 	mf := throw2(parseFile(ctx.fs, joinRel(instance.Path.rel(), "ya.make")))
+
+	// Auto-include the nearest enclosing linters.make.inc (AUTOINCLUDE_PATHS): ymake
+	// INCLUDEs it at module finalization (makefile_loader.cpp:226), so its statements
+	// (CLANG_WARNINGS — STYLE_* are lint-only) run in the module's context after its
+	// own body. The file must exist when a root names it; absent => misconfiguration.
+	if inc, ok := lintersMakeIncFor(ctx.autoincludeIdx, instance.Path.rel()); ok && ctx.fs.isFile(srcRootVFS, inc.rel()) {
+		mf.Stmts = append(mf.Stmts, throw2(parseFile(ctx.fs, inc.rel())).Stmts...)
+	}
 
 	env := buildIfEnv(instance)
 	d := collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, mf.Stmts, env)
@@ -1734,6 +1750,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		CFlags:                 ownCFlags,
 		CXXFlags:               d.cxxFlags,
 		COnlyFlags:             d.cOnlyFlags,
+		ClangWarnings:          d.clangWarnings,
 		OwnCFlagsGlobal:        ownCFlagsGlobalSelf,
 		OwnCXXFlagsGlobal:      ownCXXFlagsGlobalSelf,
 		OwnCOnlyFlagsGlobal:    ownCOnlyFlagsGlobalSelf,

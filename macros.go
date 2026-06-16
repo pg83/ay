@@ -2,7 +2,27 @@ package main
 
 import (
 	"strconv"
+	"strings"
 )
+
+// evalAtomString evaluates an IF-condition atom to its string form (the natural
+// representation of ya.make values; ints render decimal, bools as yes/no).
+func evalAtomString(e Expr, env Environment) string {
+	switch v := evalAtom(e, env).(type) {
+	case string:
+		return v
+	case int:
+		return strconv.Itoa(v)
+	case bool:
+		if v {
+			return "yes"
+		}
+
+		return "no"
+	}
+
+	return ""
+}
 
 var DefaultIfEnv = makeDefaultIfEnv()
 
@@ -61,6 +81,8 @@ func evalCond(e Expr, env Environment) bool {
 		return evalEq(x, env)
 	case *ExprLt:
 		return evalLt(x, env)
+	case *ExprStartsWith:
+		return strings.HasPrefix(evalAtomString(x.Left, env), evalAtomString(x.Right, env))
 	}
 
 	throwFmt("macros: unhandled Expr type %T", e)

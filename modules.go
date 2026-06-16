@@ -88,6 +88,10 @@ type ModuleData struct {
 	sFlags             []ARG
 	protocFlags        []ARG
 	flatcFlags         []ARG
+	// clangWarnings is CLANG_WARNINGS(...) — the _CLANG_USER_WARNINGS_VALUE the
+	// autoincluded linters.make.inc contributes; emitted on C/C++ compiles between
+	// GCC_COMPILE_FLAGS and CXXFLAGS (gnu_compiler.conf:284).
+	clangWarnings []ARG
 	ldFlags            []ARG
 	rpathFlagsGlobal   []ARG
 	objAddLibsGlobal   []ARG
@@ -1485,6 +1489,8 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		d.useCommonGoogleAPIs = true
 		const googleapisPeer = "contrib/libs/googleapis-common-protos"
 		d.peerdirs = append([]STR{internStr(googleapisPeer)}, d.peerdirs...)
+	case tokClangWarnings:
+		d.clangWarnings = append(d.clangWarnings, internArgsFromSTR(expandStmtTokensSTR(v.Args, env))...)
 	case tokFlatcFlags:
 		d.flatcFlags = append(d.flatcFlags, internArgsFromSTR(v.Args)...)
 	case tokCopyFile, tokCopyFileWithContext:
