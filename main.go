@@ -198,7 +198,7 @@ func usageCommands(prefix []string, verbose bool) string {
 		if len(prefix) == 0 && !verbose && c.path[0] == "dev" {
 			if !devCollapsed {
 				b.WriteString("\n  dev")
-				b.WriteString("\n      🛠️ Developer tooling (dump, perf, refac, probe). Pass --verbose to list.")
+				b.WriteString("\n    🛠️ Developer tooling (dump, perf, refac, probe). Pass --verbose to list.")
 				devCollapsed = true
 			}
 
@@ -209,7 +209,7 @@ func usageCommands(prefix []string, verbose bool) string {
 		b.WriteString(strings.Join(c.path, " "))
 
 		for _, line := range strings.Split(c.help, "\n") {
-			b.WriteString("\n      ")
+			b.WriteString("\n    ")
 			b.WriteString(line)
 		}
 	}
