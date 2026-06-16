@@ -184,7 +184,7 @@ func usageCommands(prefix []string, verbose bool) string {
 		b.WriteString("usage: ay [global-flags] " + strings.Join(prefix, " ") + " <subcommand> [args]")
 	}
 
-	b.WriteString("\nsubcommands:")
+	b.WriteString("\n\nsubcommands:")
 
 	devCollapsed := false
 
@@ -215,7 +215,7 @@ func usageCommands(prefix []string, verbose bool) string {
 	}
 
 	if len(prefix) == 0 {
-		b.WriteString("\nglobal flags (before the subcommand):")
+		b.WriteString("\n\nglobal flags (before the subcommand):")
 		b.WriteString("\n  -v, --verbose             expand collapsed groups (dev) in this listing")
 		b.WriteString("\n  --probe=map|callsite|str  dump the named runtime probe (map/callsite/str) on exit")
 	}
