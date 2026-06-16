@@ -75,10 +75,6 @@ func compilerFlagsFromConfig(primary, internal map[string]string, key, env strin
 }
 
 func cmdMake(args []string) int {
-	if len(args) > 0 && args[0] == "cas" {
-		return cmdCasAnalyze(args[1:])
-	}
-
 	defer startProfilesFromEnv()()
 
 	mf := parseMakeFlags(args)

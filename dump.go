@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"io"
 	"os"
 	"regexp"
@@ -69,29 +68,6 @@ var objcopyOverEmitExts = map[string]struct{}{
 	".h": {}, ".hpp": {}, ".hxx": {}, ".ipp": {}, ".inc": {}, ".def": {},
 	".proto": {}, ".cpp": {}, ".cc": {}, ".cxx": {}, ".c": {}, ".i": {}, ".td": {},
 	".txt": {}, // COPY_FILE(TEXT) header sources, e.g. mkql_computation_node_codegen.h.txt
-}
-
-func cmdDump(args []string) int {
-	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: ay dump <normalize|sort|diff|grep> [flags]")
-
-		return 2
-	}
-
-	switch args[0] {
-	case "normalize":
-		return cmdDumpNormalize(args[1:])
-	case "sort":
-		return cmdDumpSort(args[1:])
-	case "diff":
-		return cmdDumpDiff(args[1:])
-	case "grep":
-		return cmdDumpGrep(args[1:])
-	default:
-		fmt.Fprintf(os.Stderr, "unknown dump subcommand: %s\n", args[0])
-
-		return 2
-	}
 }
 
 func normPath(s string) string {
