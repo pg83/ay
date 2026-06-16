@@ -389,6 +389,12 @@ type ExprLt struct {
 	Left, Right Expr
 }
 
+// ExprStartsWith models `<a> STARTS_WITH <b>` — a string-prefix condition used in
+// autoinclude linters.make.inc dispatch (e.g. `MODDIR STARTS_WITH arc/api`).
+type ExprStartsWith struct {
+	Left, Right Expr
+}
+
 func (*ExprIdent) exprMarker() {
 }
 
@@ -411,6 +417,9 @@ func (*ExprEq) exprMarker() {
 }
 
 func (*ExprLt) exprMarker() {
+}
+
+func (*ExprStartsWith) exprMarker() {
 }
 
 type ParseError struct {
@@ -1639,6 +1648,15 @@ func (c *CondParser) parseCmp() Expr {
 		return left
 	}
 
+	// STARTS_WITH is spelled as a bare identifier operator (not a punctuation token).
+	if t.kind == tokIdent && t.val == "STARTS_WITH" {
+		c.consume()
+		right := c.parseAtom()
+		c.rejectChainedCmp(t)
+
+		return &ExprStartsWith{Left: left, Right: right}
+	}
+
 	switch t.kind {
 	case tokEq:
 		c.consume()
@@ -1737,6 +1755,14 @@ func (c *CondParser) parseAtom() Expr {
 		c.consume()
 
 		return &ExprIdent{Name: t.val, Env: internEnv(t.val)}
+	}
+
+	// A non-ident-shaped bare word is an unquoted string literal (e.g. the path
+	// operand of `MODDIR STARTS_WITH arc/robots`).
+	if t.kind == tokWord {
+		c.consume()
+
+		return &ExprString{Value: t.val}
 	}
 
 	c.parent.lex.throwParse(t.line, t.col, "unexpected %s in IF condition", describeToken(t))

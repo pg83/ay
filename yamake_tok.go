@@ -17,6 +17,7 @@ var tokName = [...]STR{
 	tokBuildOnlyIf:                        internStr("BUILD_ONLY_IF"),
 	tokCheckConfigH:                       internStr("CHECK_CONFIG_H"),
 	tokCheckDependentDirs:                 internStr("CHECK_DEPENDENT_DIRS"),
+	tokClangWarnings:                      internStr("CLANG_WARNINGS"),
 	tokCopy:                               internStr("COPY"),
 	tokCopyFile:                           internStr("COPY_FILE"),
 	tokCopyFileWithContext:                internStr("COPY_FILE_WITH_CONTEXT"),
@@ -149,6 +150,7 @@ var tokName = [...]STR{
 	tokSrcCSsse3:                       internStr("SRC_C_SSSE3"),
 	tokSrcCXop:                         internStr("SRC_C_XOP"),
 	tokStrip:                           internStr("STRIP"),
+	tokStyleCpp:                        internStr("STYLE_CPP"),
 	tokStylePython:                     internStr("STYLE_PYTHON"),
 	tokStyleRuff:                       internStr("STYLE_RUFF"),
 	tokSubscriber:                      internStr("SUBSCRIBER"),
@@ -213,6 +215,7 @@ const (
 	tokBuildOnlyIf
 	tokCheckConfigH
 	tokCheckDependentDirs
+	tokClangWarnings
 	tokCopy
 	tokCopyFile
 	tokCopyFileWithContext
@@ -345,6 +348,7 @@ const (
 	tokSrcCSsse3
 	tokSrcCXop
 	tokStrip
+	tokStyleCpp
 	tokStylePython
 	tokStyleRuff
 	tokSubscriber
