@@ -575,7 +575,10 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 	d.cfAddInclGlobal = nil
 	filterInvalidAddIncl(fs, dd, d)
 
-	if kind == KindLib {
+	// The PY3_PROGRAM multimodule's BIN half emits PY_MAIN; clear it on the paired
+	// LIB half to avoid a duplicate. A standalone PY3_LIBRARY with an explicit
+	// PY_SRCS(MAIN …) (e.g. contrib/python/cffi/py3/gen/lib) keeps its PY_MAIN.
+	if kind == KindLib && d.programPairedLib {
 		d.pyMain = nil
 	}
 
