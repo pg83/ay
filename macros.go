@@ -214,7 +214,6 @@ func makeDefaultIfEnv() Environment {
 	e.setString(envthread, "thread")
 	e.setString(envleak, "leak")
 	e.setString(envMODULE_TAG, "PY3")
-	e.setString(env_USE_ICONV, "dynamic")
 	e.setString(envALLOCATOR, "")
 	e.setString(envPY2, "PY2")
 	e.setString(envOS_SDK, "")
