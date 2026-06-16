@@ -13,6 +13,12 @@ package main
 
 const sbomGenScriptRel = "build/internal/scripts/gen_sbom.py"
 
+// lldToolchainSbomVFS is the linker (build/platform/lld) TOOLCHAIN component. It is
+// a link-time peer, so this component is collected at the final link (build/platform/lld
+// as a direct program peer) rather than propagated through library PeerSbomClosures —
+// which would float it to the front of SRCS_GLOBAL instead of its link-position slot.
+var lldToolchainSbomVFS = build("build/platform/lld/toolchain.component.sbom")
+
 // sbomConfRel is the config file that turns the SBOM feature on
 // (SBOM_GENERATION_ALLOWED=yes); present only in the internal contour.
 const sbomConfRel = "build/internal/conf/sbom.conf"
