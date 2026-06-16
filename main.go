@@ -179,12 +179,12 @@ func usageCommands(prefix []string, verbose bool) string {
 	var b strings.Builder
 
 	if len(prefix) == 0 {
-		b.WriteString("usage: ay [global-flags] <subcommand> [args]")
+		b.WriteString(color("green", "usage:") + " ay [global-flags] <subcommand> [args]")
 	} else {
-		b.WriteString("usage: ay [global-flags] " + strings.Join(prefix, " ") + " <subcommand> [args]")
+		b.WriteString(color("green", "usage:") + " ay [global-flags] " + strings.Join(prefix, " ") + " <subcommand> [args]")
 	}
 
-	b.WriteString("\n\nsubcommands:")
+	b.WriteString("\n\n" + color("green", "subcommands:"))
 
 	devCollapsed := false
 
@@ -197,7 +197,7 @@ func usageCommands(prefix []string, verbose bool) string {
 		// --verbose; drilling in (ay dev …) lists it regardless.
 		if len(prefix) == 0 && !verbose && c.path[0] == "dev" {
 			if !devCollapsed {
-				b.WriteString("\n  dev:")
+				b.WriteString("\n  " + color("cyan", "dev:"))
 				b.WriteString("\n    🛠️ Developer tooling (dump, perf, refac, probe). Pass --verbose to list.")
 				devCollapsed = true
 			}
@@ -206,8 +206,7 @@ func usageCommands(prefix []string, verbose bool) string {
 		}
 
 		b.WriteString("\n  ")
-		b.WriteString(strings.Join(c.path, " "))
-		b.WriteString(":")
+		b.WriteString(color("cyan", strings.Join(c.path, " ")+":"))
 
 		for _, line := range strings.Split(c.help, "\n") {
 			b.WriteString("\n    ")
@@ -216,9 +215,9 @@ func usageCommands(prefix []string, verbose bool) string {
 	}
 
 	if len(prefix) == 0 {
-		b.WriteString("\n\nglobal flags (before the subcommand):")
-		b.WriteString("\n  -v, --verbose             expand collapsed groups (dev) in this listing")
-		b.WriteString("\n  --probe=map|callsite|str  dump the named runtime probe (map/callsite/str) on exit")
+		b.WriteString("\n\n" + color("green", "global flags (before the subcommand):"))
+		b.WriteString("\n  " + color("cyan", "-v, --verbose") + "             expand collapsed groups (dev) in this listing")
+		b.WriteString("\n  " + color("cyan", "--probe=map|callsite|str") + "  dump the named runtime probe (map/callsite/str) on exit")
 	}
 
 	return b.String()
