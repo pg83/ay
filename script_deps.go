@@ -26,12 +26,16 @@ type ScriptDeps map[VFS][]VFS
 // helper; canonInputs dedups, so callers need not.
 func buildScriptTable(fs FS) ScriptDeps {
 	texts := map[string]string{}
-	fs.walk(buildScriptsRoot, func(rel string, isDir bool) {
-		if isDir || !strings.HasSuffix(rel, ".py") {
-			return
+	fs.walk(buildScriptsRoot, func(rel string, isDir bool) bool {
+		if isDir {
+			return true
 		}
 
-		texts[rel] = string(fs.read(rel))
+		if strings.HasSuffix(rel, ".py") {
+			texts[rel] = string(fs.read(rel))
+		}
+
+		return false
 	})
 
 	byStem := make(map[string]string, len(texts))

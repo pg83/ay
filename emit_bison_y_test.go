@@ -10,7 +10,7 @@ func TestGen_BisonGeneratedHeaderPreprocessAndPeerBuildRootInclude(t *testing.T)
 	files := map[string]string{}
 	addToolchainPeers(files)
 
-	writeToolProgram(files, "contrib/tools/bison", "bison")
+	writeBisonTool(files)
 	writeToolProgram(files, "contrib/tools/m4", "m4")
 	writeTestModuleFile(files, bisonPreprocessPyVFS.rel(), "print('stub')\n")
 	for _, input := range bisonCppSkeletonInputs {
@@ -116,7 +116,7 @@ END()
 func TestGen_BisonCppFlags(t *testing.T) {
 	files := map[string]string{}
 
-	writeToolProgram(files, "contrib/tools/bison", "bison")
+	writeBisonTool(files)
 	writeToolProgram(files, "contrib/tools/m4", "m4")
 	writeTestModuleFile(files, bisonPreprocessPyVFS.rel(), "print('stub')\n")
 	for _, input := range bisonCppSkeletonInputs {
@@ -149,7 +149,7 @@ END()
 func TestGen_BisonHeaderConsumerIncludesSourceY(t *testing.T) {
 	files := map[string]string{}
 
-	writeToolProgram(files, "contrib/tools/bison", "bison")
+	writeBisonTool(files)
 	writeToolProgram(files, "contrib/tools/m4", "m4")
 	writeTestModuleFile(files, bisonPreprocessPyVFS.rel(), "print('stub')\n")
 	for _, input := range bisonCppSkeletonInputs {
