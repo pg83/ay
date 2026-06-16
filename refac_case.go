@@ -55,7 +55,7 @@ var caseErrRe = regexp.MustCompile(`^([^:\s]+\.go):(\d+):(\d+): (?:undefined: (\
 // rename would clobber same-named methods on foreign types (sync.Pool.Get,
 // strings.Builder.WriteString); the compiler resolves receivers for us and
 // flags exactly the references that need the flip.
-func refacCase(args []string) int {
+func refacCase(_ GlobalFlags, args []string) int {
 	files := goFilesFromArgs(args)
 
 	typeRen := map[string]string{}

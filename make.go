@@ -74,10 +74,14 @@ func compilerFlagsFromConfig(primary, internal map[string]string, key, env strin
 	return joinCompilerFlagStrings(primary[key], internal[key], env)
 }
 
-func cmdMake(args []string) int {
+func cmdMake(g GlobalFlags, args []string) int {
 	defer startProfilesFromEnv()()
 
 	mf := parseMakeFlags(args)
+
+	// The global --verbose seeds make's local verbose; make's own --verbose can
+	// still turn it on independently.
+	mf.verbose = mf.verbose || g.Verbose
 
 	if len(mf.targets) == 0 {
 		throwFmt("make: no targets supplied and current working directory is outside the source root")

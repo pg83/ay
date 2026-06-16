@@ -12,7 +12,7 @@ import (
 
 const defaultSortChunkBytes = 256 << 20
 
-func cmdDumpSort(args []string) int {
+func cmdDumpSort(_ GlobalFlags, args []string) int {
 	var inPath, outPath string
 	chunkBytes := defaultSortChunkBytes
 

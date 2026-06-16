@@ -10,7 +10,7 @@ import (
 	json "github.com/goccy/go-json"
 )
 
-func cmdDumpGrep(args []string) int {
+func cmdDumpGrep(_ GlobalFlags, args []string) int {
 	var inPath string
 	raw, substr, useRegex := false, false, false
 	var keys []string

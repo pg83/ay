@@ -19,7 +19,7 @@ func TestDartsLongestMatch(t *testing.T) {
 		{[]string{"arcfoo/x/"}, 0, false},         // component boundary: arc/ not a prefix
 		{[]string{"util/x/"}, 2, true},
 		{[]string{"april/arf/x/"}, 3, true},
-		{[]string{"april/"}, 0, false},   // april/ is not a key (only april/arf/)
+		{[]string{"april/"}, 0, false}, // april/ is not a key (only april/arf/)
 		{[]string{"contrib/x/"}, 0, false},
 		{[]string{""}, 0, false},
 		{nil, 0, false},
@@ -41,9 +41,9 @@ func TestDartsEmptyAndExact(t *testing.T) {
 	d := NewDarts([]string{"a", "ab", "abc"})
 
 	for _, tc := range []struct {
-		q    string
-		idx  int
-		ok   bool
+		q   string
+		idx int
+		ok  bool
 	}{
 		{"abcd", 2, true},
 		{"abc", 2, true},

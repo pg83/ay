@@ -17,7 +17,7 @@ type DiffKindRec struct {
 	h    [10]uint64
 }
 
-func cmdDumpDiff(args []string) int {
+func cmdDumpDiff(_ GlobalFlags, args []string) int {
 	var leftPath, rightPath, outPath, mode, pairOut string
 
 	setMode := func(m string) {

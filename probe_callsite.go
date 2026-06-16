@@ -19,7 +19,7 @@ import (
 // recorded sites across runs. Any site in the all-sites file (first arg) NOT in
 // the union is reachable code the gate never exercises — refactor garbage.
 // Throwaway: apply, measure, revert.
-func probeCallSite(args []string) int {
+func probeCallSite(_ GlobalFlags, args []string) int {
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "usage: ay probe callsite <all-sites-out> [files...]")
 
