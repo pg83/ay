@@ -2340,7 +2340,9 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	var ownSbomRef *NodeRef
 	var ownSbomPath *VFS
 
-	if sbomActive(ctx, instance) && sbomQualifies(d) {
+	// The PY3_PROGRAM multimodule's BIN half (program branch) emits the component
+	// (tagged py3_bin_lib); the paired LIB half must not duplicate it.
+	if sbomActive(ctx, instance) && sbomQualifies(d) && !d.programPairedLib {
 		realPrjName := strings.TrimSuffix(archiveNameWithPrefixOrName(instance.Path.rel(), "", archiveName), ".a")
 		ownSbomRef, ownSbomPath = emitSbomComponent(ctx, instance, d, realPrjName)
 	}

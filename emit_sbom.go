@@ -81,6 +81,21 @@ func emitSbomComponent(ctx *GenCtx, instance ModuleInstance, d *ModuleData, real
 	scriptVFS := source(sbomGenScriptRel)
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
+	// MODULE_TAG of the component — only the multimodule variants carry one (the
+	// same value as their CC objects' module_tag): PY23_LIBRARY -> py3,
+	// PY23_NATIVE_LIBRARY -> py3_native, PY3_PROGRAM -> py3_bin_lib (its
+	// SRCS_GLOBAL-owning lib half). A plain PY3_LIBRARY / CPP carries none.
+	var moduleTag STR
+
+	switch d.moduleStmt.Name {
+	case tokPy23Library:
+		moduleTag = tagPy3
+	case tokPy23NativeLibrary:
+		moduleTag = tagPy3Native
+	case tokPy3Program, tokPy3ProgramBin:
+		moduleTag = tagPy3BinLib
+	}
+
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList([]STR{
@@ -97,7 +112,7 @@ func emitSbomComponent(ctx *GenCtx, instance ModuleInstance, d *ModuleData, real
 		KV:               KV{P: pkDX, PC: pcYellow},
 		Outputs:          na.vfsList(out),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: moddir},
+		TargetProperties: TargetProperties{ModuleDir: moddir, ModuleTag: moduleTag},
 	}
 
 	ref := ctx.emit.emit(node)
