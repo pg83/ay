@@ -57,7 +57,11 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, modulePath string, e
 	return out
 }
 
-func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleInputs *ModuleCCInputs) {
+// emitCopyFiles emits the module's COPY_FILE nodes and returns the (ref, output)
+// of any copy whose destination is a linkable object (.a/.o) — upstream archives
+// such a copied object into the module's library (e.g. a prebuilt Rust staticlib
+// COPY_FILE'd into a PY3_LIBRARY: contrib/python/pydantic-core).
+func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleInputs *ModuleCCInputs) (memberRefs []NodeRef, memberOuts []VFS) {
 	scanner := ctx.scannerFor(instance)
 	reg := codegenRegForInstance(ctx, instance)
 
@@ -147,7 +151,14 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 		}
 
 		emitCPWithDeps(instance, srcVFS, dstVFS, deps, closure, entries[i].ref, d.tc, ctx.scripts, ctx.emit)
+
+		if dst := entry.Dst; strings.HasSuffix(dst, ".a") || strings.HasSuffix(dst, ".o") {
+			memberRefs = append(memberRefs, entries[i].ref)
+			memberOuts = append(memberOuts, dstVFS)
+		}
 	}
+
+	return memberRefs, memberOuts
 }
 
 func generatedModuleSourceVFS(ctx *GenCtx, instance ModuleInstance, srcRel string) *VFS {

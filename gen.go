@@ -1804,7 +1804,15 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		codegenEmits = append(codegenEmits, codegenEmit{src, emitOneSource(ctx, instance, d, srcRel, srcInputs)})
 	}
 
-	emitCopyFiles(ctx, instance, d, &moduleInputs)
+	cpMemberRefs, cpMemberOuts := emitCopyFiles(ctx, instance, d, &moduleInputs)
+
+	for i, ref := range cpMemberRefs {
+		ccRefs = append(ccRefs, ref)
+		ccOutputs = append(ccOutputs, cpMemberOuts[i])
+		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
+		ccIsCFGenerated = append(ccIsCFGenerated, false)
+		ccIsProtoGenerated = append(ccIsProtoGenerated, false)
+	}
 
 	enCCRes := emitEnumSrcs(ctx, instance, d, selfPeerAddInclGlobal, &moduleInputs)
 
