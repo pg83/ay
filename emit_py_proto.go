@@ -136,13 +136,7 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 		suffixes = append(suffixes, "_pb2.pyi")
 	}
 
-	protoRoot := protoPythonOutputRoot(instance, d)
-
-	// grpc python protos emit at the build root unless an explicit
-	// PROTO_NAMESPACE overrides (mirrors emitPyProtoSrc's local rule).
-	if d.grpc && d.protoNamespace == nil {
-		protoRoot = ""
-	}
+	protoRoot := protoPythonOutputRoot(d)
 
 	head := []STR{
 		d.tc.Python3,
@@ -301,7 +295,7 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 	return pyProtoAuxEntriesForSource(instance, d, src, pyPBRef, pyProtoSourceInputs(inputs), outputs, yapyRes.Refs, yapyRes.Outputs)
 }
 
-func protoPythonOutputRoot(instance ModuleInstance, d *ModuleData) string {
+func protoPythonOutputRoot(d *ModuleData) string {
 	if d != nil && d.protoNamespace != nil {
 		root := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(d.protoNamespace.string())), "/")
 
@@ -310,7 +304,9 @@ func protoPythonOutputRoot(instance ModuleInstance, d *ModuleData) string {
 		}
 	}
 
-	return instance.Path.rel()
+	// Without a PROTO_NAMESPACE the python protos compile against the arcadia
+	// root: --python_out=$(B)/ and -I=$(S)/ (not the module dir).
+	return ""
 }
 
 type GeneratedPyProtoYapycResult struct {
