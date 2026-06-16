@@ -13,12 +13,6 @@ package main
 
 const sbomGenScriptRel = "build/internal/scripts/gen_sbom.py"
 
-// lldToolchainSbomVFS is the linker (build/platform/lld) TOOLCHAIN component. It is
-// a link-time peer, so this component is collected at the final link (build/platform/lld
-// as a direct program peer) rather than propagated through library PeerSbomClosures —
-// which would float it to the front of SRCS_GLOBAL instead of its link-position slot.
-var lldToolchainSbomVFS = build("build/platform/lld/toolchain.component.sbom")
-
 // sbomConfRel is the config file that turns the SBOM feature on
 // (SBOM_GENERATION_ALLOWED=yes); present only in the internal contour.
 const sbomConfRel = "build/internal/conf/sbom.conf"
@@ -35,6 +29,26 @@ const clangToolchainInfoRel = "build/internal/platform/clang_toolchain_info"
 func clangToolchainSbomComponent(ctx *GenCtx, platform *Platform) (*NodeRef, *VFS) {
 	res := genModule(ctx, ModuleInstance{
 		Path:     source(clangToolchainInfoRel),
+		Kind:     KindLib,
+		Language: LangCPP,
+		Platform: platform,
+	})
+
+	return res.SbomComponentRef, res.SbomComponentPath
+}
+
+// pythonToolchainInfoRel is the YMAKE_PYTHON3 platform RESOURCES_LIBRARY (TOOLCHAIN).
+// _BARE_UNIT — the base of every module — carries PEERDIR+=$YMAKE_PYTHON3_PEERDIR
+// (ymake.core.conf:574, python.conf:268), so this toolchain SBOM component is a
+// universal peer contribution; a module that resolves no other SBOM peers (e.g. a
+// bare-link PREBUILT_PROGRAM) still carries it.
+const pythonToolchainInfoRel = "build/platform/python/ymake_python3"
+
+// pythonToolchainSbomComponent resolves ymake_python3 on `platform` and returns its
+// toolchain SBOM component (nil if the feature/platform is off).
+func pythonToolchainSbomComponent(ctx *GenCtx, platform *Platform) (*NodeRef, *VFS) {
+	res := genModule(ctx, ModuleInstance{
+		Path:     source(pythonToolchainInfoRel),
 		Kind:     KindLib,
 		Language: LangCPP,
 		Platform: platform,

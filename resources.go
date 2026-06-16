@@ -406,11 +406,30 @@ func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		ownSbomRef, ownSbomPath = emitSbomComponent(ctx, instance, d, programBinaryName(instance, d.moduleStmt))
 	}
 
-	inputs := InputChunks{ctx.scripts[copyFsToolsVFS], {srcVFS}}
+	// _PREBUILT_PROGRAM_CMD (ymake.core.conf:5443) is `GENERATE_MF && COPY_CMD
+	// $_PRIMARY_OUTPUT_VALUE ${TARGET}` — unlike _DLL_PROXY_LIBRARY_CMD it does NOT
+	// wrap the primary output in ${input}, so the fetched binary is a resource
+	// (tracked via fetchRef), not a content input.
+	inputs := InputChunks{ctx.scripts[copyFsToolsVFS]}
 	depRefs := []NodeRef{fetchRef}
 
+	// Every module descends from _BARE_UNIT, which PEERDIR+=$YMAKE_PYTHON3_PEERDIR
+	// (ymake.core.conf:574). A bare-link PREBUILT_PROGRAM resolves no other SBOM
+	// peers (NO_PLATFORM/NO_RUNTIME), so that universal python toolchain component is
+	// the whole peer SBOM closure it collects at the link.
+	if sbomActive(ctx, instance) && instance.Platform.BuildRelease {
+		if pyRef, pyPath := pythonToolchainSbomComponent(ctx, instance.Platform); pyRef != nil {
+			inputs = append(inputs, []VFS{*pyPath})
+			depRefs = append(depRefs, *pyRef)
+		}
+	}
+
 	if ownSbomRef != nil && instance.Platform.BuildRelease {
-		inputs = append(inputs, []VFS{*ownSbomPath})
+		// _GEN_SBOM_COMPONENT (sbom.conf:42, run via _CONTRIB_MODULE_HOOKS on LICENSE)
+		// declares ${input:gen_sbom.py}; that module input lands on the module's
+		// primary node — for a bare PREBUILT_PROGRAM the single copy node — alongside
+		// its own .component.sbom global (a separate DX node also produces the latter).
+		inputs = append(inputs, []VFS{*ownSbomPath, source(sbomGenScriptRel)})
 		depRefs = append(depRefs, *ownSbomRef)
 	}
 
