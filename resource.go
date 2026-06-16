@@ -14,6 +14,9 @@ var (
 	rescompressorBinPath = rescompressorBinVFS.string()
 	rescompilerBinPath   = rescompilerBinVFS.string()
 	yaConfFormulaRE      = regexp.MustCompile(`"formula"\s*:\s*"([^"]+\.json)"`)
+	// A simple_tools `"resource": "<name>"` entry (no formula, e.g. yq) maps to
+	// build/external_resources/<name>/resources.json — embedded like a formula.
+	yaConfResourceRE = regexp.MustCompile(`"resource"\s*:\s*"([^"]+)"`)
 )
 
 const hashLen = 26
@@ -200,6 +203,23 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 
 		seen[formula] = struct{}{}
 		out = append(out, formula)
+	}
+
+	// A "resource": "<name>" entry without its own formula (e.g. yq) embeds
+	// build/external_resources/<name>/resources.json when that file exists.
+	for _, m := range yaConfResourceRE.FindAllSubmatch(raw, -1) {
+		path := "build/external_resources/" + string(m[1]) + "/resources.json"
+
+		if _, dup := seen[path]; dup {
+			continue
+		}
+
+		if !fs.isFile(srcRootVFS, path) {
+			continue
+		}
+
+		seen[path] = struct{}{}
+		out = append(out, path)
 	}
 
 	return out
