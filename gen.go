@@ -1323,17 +1323,28 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	// reached ones survive normalize's target closure.
 	deduper.reset()
 
+	// The linker (build/platform/lld) is a link-time peer: its toolchain component
+	// attaches at the final link, not transitively through libraries. So never carry
+	// it as a propagated closure entry, and collect its own component only on a link
+	// target (program/DLL) — where build/platform/lld is a direct peer, landing the
+	// component at its archiveOrder slot rather than the front of SRCS_GLOBAL.
+	linkTarget := isProgramModuleType(d.moduleStmt.Name)
+
 	for _, rp := range archiveOrder {
 		pr := rp.result
 
 		for i, p := range pr.PeerSbomClosurePaths {
+			if p == lldToolchainSbomVFS {
+				continue
+			}
+
 			if deduper.add(p) {
 				peerSbomRefs = append(peerSbomRefs, pr.PeerSbomClosureRefs[i])
 				peerSbomPaths = append(peerSbomPaths, p)
 			}
 		}
 
-		if pr.SbomComponentRef != nil && deduper.add(*pr.SbomComponentPath) {
+		if pr.SbomComponentRef != nil && (*pr.SbomComponentPath != lldToolchainSbomVFS || linkTarget) && deduper.add(*pr.SbomComponentPath) {
 			peerSbomRefs = append(peerSbomRefs, *pr.SbomComponentRef)
 			peerSbomPaths = append(peerSbomPaths, *pr.SbomComponentPath)
 		}
@@ -2908,17 +2919,26 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	}
 
 	// sbom: the SBOM component of every peer in the link closure (mirrors archive).
+	// The linker toolchain component (build/platform/lld) is excluded from the
+	// propagated closure: lld is a link-time peer, so its toolchain.component.sbom
+	// attaches at the final link (where build/platform/lld is a direct program peer),
+	// not transitively through every library. Propagating it would float it to the
+	// front of SRCS_GLOBAL instead of its link-position slot.
 	deduper.reset()
 
 	for _, pr := range resolved {
 		for i, p := range pr.PeerSbomClosurePaths {
+			if p == lldToolchainSbomVFS {
+				continue
+			}
+
 			if deduper.add(p) {
 				out.sbomRefs = append(out.sbomRefs, pr.PeerSbomClosureRefs[i])
 				out.sbomPaths = append(out.sbomPaths, p)
 			}
 		}
 
-		if pr.SbomComponentRef != nil && deduper.add(*pr.SbomComponentPath) {
+		if pr.SbomComponentRef != nil && *pr.SbomComponentPath != lldToolchainSbomVFS && deduper.add(*pr.SbomComponentPath) {
 			out.sbomRefs = append(out.sbomRefs, *pr.SbomComponentRef)
 			out.sbomPaths = append(out.sbomPaths, *pr.SbomComponentPath)
 		}
