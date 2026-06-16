@@ -170,10 +170,11 @@ func isTokenPrefix(p, of []string) bool {
 	return true
 }
 
-// usageCommands lists the visible subcommands under prefix (all, for the empty
-// prefix) with their help — the listing shown at a choice point. At the top level
-// the `dev` group is collapsed to a single line unless verbose; the empty-prefix
-// listing also documents the global flags parsed before the subcommand.
+// usageCommands lists the subcommands under prefix (all, for the empty prefix)
+// with their help — the listing shown at a choice point. Hidden commands appear
+// only under verbose; at the top level the `dev` group is collapsed to a single
+// line unless verbose; the empty-prefix listing also documents the global flags
+// parsed before the subcommand.
 func usageCommands(prefix []string, verbose bool) string {
 	var b strings.Builder
 
@@ -188,7 +189,7 @@ func usageCommands(prefix []string, verbose bool) string {
 	devCollapsed := false
 
 	for _, c := range commands {
-		if c.hide || !isTokenPrefix(prefix, c.path) {
+		if (c.hide && !verbose) || !isTokenPrefix(prefix, c.path) {
 			continue
 		}
 
