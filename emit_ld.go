@@ -37,6 +37,8 @@ func emitLD(
 	dynamicPaths []VFS,
 	objcopyRefs []NodeRef,
 	objcopyPaths []VFS,
+	sbomRefs []NodeRef,
+	sbomPaths []VFS,
 	moduleCFlags []ARG,
 	peerCFlagsGlobal []ARG,
 	moduleScopeCFlags []ARG,
@@ -128,6 +130,13 @@ func emitLD(
 
 	inputs = append(inputs, inputTail)
 
+	// SBOM components of the link closure: collected as link inputs (gen_sbom.py
+	// outputs the embedding program reads via link_sbom.py). Order/dups are
+	// irrelevant — normalize sorts and dedups inputs.
+	if len(sbomPaths) > 0 {
+		inputs = append(inputs, sbomPaths)
+	}
+
 	// Whole-archive is a LINK ATTRIBUTE of a subset of the peer archives (the link
 	// command wraps them in --whole-archive), not an independent dependency source:
 	// every wholeArchiveRef is already in peerLDRefs. So it is NOT appended here —
@@ -139,6 +148,7 @@ func emitLD(
 	deps = append(deps, peerLDRefs...)
 	deps = append(deps, dynamicRefs...)
 	deps = append(deps, objcopyRefs...)
+	deps = append(deps, sbomRefs...)
 	deps = append(deps, emitVCSNode(emit, hostP))
 	outputs := []VFS{outputVFS}
 

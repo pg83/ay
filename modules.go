@@ -45,6 +45,10 @@ type CppProtoPlugin struct {
 
 type ModuleData struct {
 	moduleStmt         *ModuleStmt
+	modver             string // VERSION() args joined by "." (MODVER); "" means default "unknown"
+	hasLicense         bool   // LICENSE() present — gates the _GEN_SBOM_COMPONENT DX node
+	hasBisonY          bool   // a .y bison source present — induces PEERDIR build/induced/by_bison
+	toolchainName      string // TOOLCHAIN(Name) arg — gates the toolchain SBOM DX node
 	srcs               []STR
 	globalSrcs         []STR
 	pySrcs             []STR
@@ -632,6 +636,8 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 			hasProto = true
 		case srcExtFbs:
 			d.hasFbs = true
+		case srcExtY:
+			d.hasBisonY = true
 		}
 	}
 
@@ -1368,6 +1374,21 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 
 	case tokMavenGroupId:
 
+	case tokLicense:
+		// LICENSE() invokes _CONTRIB_MODULE_HOOKS (build/conf/license.conf), which
+		// (under _NEED_SBOM_INFO, non-JAVA) attaches _GEN_SBOM_COMPONENT. So the
+		// presence of LICENSE — not a contrib/ path — is what gates the DX node.
+		d.hasLicense = true
+	case tokVersion:
+		// SET(MODVER ${Flags}); _GEN_SBOM_COMPONENT renders it as join(".", MODVER).
+		// Expand ${COMPILER_VERSION}/${LLD_VERSION} (toolchain VERSION refs).
+		d.modver = strings.Join(strStrings(expandStmtTokensSTR(v.Args, env)), ".")
+	case tokToolchain:
+		// TOOLCHAIN(Name) (contrib_hooks.py) attaches _GEN_SBOM_TOOLCHAIN_COMPONENT:
+		// a DX node producing <dir>/toolchain.component.sbom for the named toolchain.
+		if len(v.Args) == 1 {
+			d.toolchainName = v.Args[0].string()
+		}
 	case tokCheckConfigH:
 		if len(v.Args) != 1 {
 			throwFmt("CHECK_CONFIG_H expects exactly 1 argument, got %d", len(v.Args))

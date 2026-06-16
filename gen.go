@@ -214,6 +214,15 @@ type ModuleEmitResult struct {
 	PeerDynamicClosureRefs  []NodeRef
 	PeerDynamicClosurePaths []VFS
 
+	// SbomComponentRef/Path is this module's own _GEN_SBOM_COMPONENT DX node
+	// (.component.sbom), set only for qualifying (contrib/vendor) modules.
+	// PeerSbomClosure is the transitive union of qualifying peers' components
+	// over the link closure; embedding programs collect it into the link node.
+	SbomComponentRef     *NodeRef
+	SbomComponentPath    *VFS
+	PeerSbomClosureRefs  []NodeRef
+	PeerSbomClosurePaths []VFS
+
 	InducedDeps ParsedIncludeSet
 
 	Peerdirs []STR
@@ -297,6 +306,11 @@ type GenCtx struct {
 	target *Platform
 
 	testMode bool
+
+	// sbomEnabled is true when the build config defines the SBOM feature
+	// (build/internal/conf/sbom.conf sets SBOM_GENERATION_ALLOWED=yes). Gates the
+	// _GEN_SBOM_COMPONENT DX nodes; absent in the open-source contour (sg2–5).
+	sbomEnabled bool
 
 	// tarjan is the run-wide Tarjan/closure working state; both scanners hold a
 	// pointer to it (their tjc field) so its vfsBound-sized arrays grow once, not
@@ -445,6 +459,9 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		fetchRefs: fetchRefs,
 		scripts:   scriptTbl,
 		testMode:  testMode,
+		// SBOM_GENERATION_ALLOWED is defined only by build/internal/conf/sbom.conf;
+		// its presence is the feature gate (open-source roots lack it).
+		sbomEnabled: fs.isFile(srcRootVFS, sbomConfRel),
 	}
 
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
@@ -788,6 +805,22 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		d.peerdirs = append(d.peerdirs, strContribLibsFlatbuffers)
 	}
 
+	// _SRC("y") induces .PEERDIR=build/induced/by_bison (bison_lex.conf) — an empty
+	// licensed library that hangs the bison-grammar license (and its SBOM
+	// component) onto every module with a .y source.
+	if d.hasBisonY && instance.Path.rel() != strBuildInducedByBison.string() {
+		d.peerdirs = append(d.peerdirs, strBuildInducedByBison)
+	}
+
+	// Upstream's C++ language default is the contrib/libs/cxxsupp parent (it
+	// PEERDIRs libcxx); we shortcut straight to libcxx, so the licensed parent —
+	// and its SBOM component — is never processed. Under SBOM, add it back: it has
+	// no archive (its libcxx closure dedups against the existing default, leaving
+	// link order intact), contributing only its component.
+	if ctx.sbomEnabled && !d.flags.NoRuntime && !effectiveNoPlatform(d.flags) && !strings.HasPrefix(instance.Path.rel(), "contrib/libs/cxxsupp") {
+		d.peerdirs = append(d.peerdirs, strContribLibsCxxsupp)
+	}
+
 	if isSpecializedLibraryType(d.moduleStmt.Name) {
 		if d.moduleStmt.Name == tokDynamicLibrary {
 			result := emitDynamicLibrary(ctx, instance, d)
@@ -920,6 +953,14 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		effectiveProtoAddInclH := dedupVFS(ownProtoAddInclH, peerContribs.protoAddIncl)
 		effectiveProtoTailH := dedupVFS(ownProtoTailH, peerContribs.protoNamespaceTail)
 
+		var ownSbomRefH *NodeRef
+		var ownSbomPathH *VFS
+
+		if sbomActive(ctx, instance) && sbomQualifies(d) {
+			realPrjName := strings.TrimSuffix(archiveNameWithPrefixOrName(instance.Path.rel(), "", ""), ".a")
+			ownSbomRefH, ownSbomPathH = emitSbomComponent(ctx, instance, d, realPrjName)
+		}
+
 		result := &ModuleEmitResult{
 			isPyLibrary:        isPyLibraryType(d.moduleStmt.Name),
 			ARRef:              hOnlyARRef,
@@ -953,6 +994,10 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			LDPluginPaths:                   ldPlugins.Paths,
 			PeerDynamicClosureRefs:          peerContribs.dynamicRefs,
 			PeerDynamicClosurePaths:         peerContribs.dynamicPaths,
+			SbomComponentRef:                ownSbomRefH,
+			SbomComponentPath:               ownSbomPathH,
+			PeerSbomClosureRefs:             peerContribs.sbomRefs,
+			PeerSbomClosurePaths:            peerContribs.sbomPaths,
 			InducedDeps:                     d.inducedDeps,
 			Peerdirs:                        d.peerdirs,
 			ModuleStmtName:                  d.moduleStmt.Name,
@@ -1068,6 +1113,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	peerDynamicRefs := make([]NodeRef, 0, len(allPeers))
 	peerDynamicPaths := make([]VFS, 0, len(allPeers))
 	peerLinkCmdPaths := make([]VFS, 0, len(allPeers))
+	peerSbomRefs := make([]NodeRef, 0, len(allPeers))
+	peerSbomPaths := make([]VFS, 0, len(allPeers))
 	// The peer-collection dedup sets are built below, after the recursive peer
 	// genModule loop — each in its own inlined pass that resets the run-wide
 	// deduper and streams exactly one set through deduper.add. Running after
@@ -1267,6 +1314,28 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		if pr.GlobalRef != nil && pr.GlobalPath != nil && deduper.add(*pr.GlobalPath) {
 			peerGlobalRefs = append(peerGlobalRefs, *pr.GlobalRef)
 			peerGlobalPaths = append(peerGlobalPaths, *pr.GlobalPath)
+		}
+	}
+
+	// peerSbom: the .component.sbom global outputs of every qualifying module in
+	// the link (archive) closure — mirrors peerArchive but carries the SBOM node
+	// per peer. Embedding programs collect these into the link's inputs; only the
+	// reached ones survive normalize's target closure.
+	deduper.reset()
+
+	for _, rp := range archiveOrder {
+		pr := rp.result
+
+		for i, p := range pr.PeerSbomClosurePaths {
+			if deduper.add(p) {
+				peerSbomRefs = append(peerSbomRefs, pr.PeerSbomClosureRefs[i])
+				peerSbomPaths = append(peerSbomPaths, p)
+			}
+		}
+
+		if pr.SbomComponentRef != nil && deduper.add(*pr.SbomComponentPath) {
+			peerSbomRefs = append(peerSbomRefs, *pr.SbomComponentRef)
+			peerSbomPaths = append(peerSbomPaths, *pr.SbomComponentPath)
 		}
 	}
 
@@ -1952,6 +2021,18 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		mergedLDPlugins = &LdPluginsResult{}
 	}
 
+	// A module that compiled any C-family TU (ccRefs) invoked _SRC(cpp|cxx|cc|C|
+	// c|m), each carrying .PEERDIR=$_SRC_CPP_TOOLCHAIN_INFO_PEER = clang_toolchain_info
+	// under SBOM+CLANG (sbom.conf:9). Mirror that induced peer by folding its
+	// toolchain SBOM component into the closure (the only thing it contributes —
+	// it has no archive). Threads into both the program link and the library result.
+	if ctx.sbomEnabled && env.bool(envCLANG) && len(ccRefs) > 0 {
+		if r, p := clangToolchainSbomComponent(ctx, instance.Platform); r != nil {
+			peerSbomRefs = append(peerSbomRefs, *r)
+			peerSbomPaths = append(peerSbomPaths, *p)
+		}
+	}
+
 	if isProgramModuleType(d.moduleStmt.Name) {
 		binaryName := programBinaryName(instance, d.moduleStmt)
 
@@ -2063,6 +2144,29 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			programModuleTag = tagPy3Bin
 		}
 
+		var ownSbomRef *NodeRef
+		var ownSbomPath *VFS
+
+		if sbomActive(ctx, instance) && sbomQualifies(d) {
+			ownSbomRef, ownSbomPath = emitSbomComponent(ctx, instance, d, binaryName)
+		}
+
+		// _GENERATE_EXTRA_OBJS collects ${ext=.component.sbom:SRCS_GLOBAL} into the
+		// link only under EMBED_SBOM && BUILD_TYPE∈RELEASE (sbom.conf:26): a debug
+		// program (ya-bin) links licensed libs without pulling their components.
+		var ldSbomRefs []NodeRef
+		var ldSbomPaths []VFS
+
+		if instance.Platform.BuildRelease {
+			ldSbomRefs = peerSbomRefs
+			ldSbomPaths = peerSbomPaths
+
+			if ownSbomRef != nil {
+				ldSbomRefs = append(append([]NodeRef(nil), peerSbomRefs...), *ownSbomRef)
+				ldSbomPaths = append(append([]VFS(nil), peerSbomPaths...), *ownSbomPath)
+			}
+		}
+
 		ldRef := emitLD(
 			ldInstance,
 			binaryName,
@@ -2075,6 +2179,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			peerWholeArchiveCmdPaths,
 			peerDynamicRefs, peerDynamicPaths,
 			ldObjcopyRefs, ldObjcopyPaths,
+			ldSbomRefs, ldSbomPaths,
 			ownCFlags,
 			peerCFlagsGlobal,
 			d.moduleScopeCFlags,
@@ -2130,6 +2235,10 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			LDPluginPaths:                   mergedLDPlugins.Paths,
 			PeerDynamicClosureRefs:          peerDynamicRefs,
 			PeerDynamicClosurePaths:         peerDynamicPaths,
+			SbomComponentRef:                ownSbomRef,
+			SbomComponentPath:               ownSbomPath,
+			PeerSbomClosureRefs:             peerSbomRefs,
+			PeerSbomClosurePaths:            peerSbomPaths,
 			InducedDeps:                     d.inducedDeps,
 			Peerdirs:                        d.peerdirs,
 			ModuleStmtName:                  d.moduleStmt.Name,
@@ -2201,6 +2310,14 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		arPath = vfsPtr(build(instance.Path.rel() + "/" + arBaseName))
 	}
 
+	var ownSbomRef *NodeRef
+	var ownSbomPath *VFS
+
+	if sbomActive(ctx, instance) && sbomQualifies(d) {
+		realPrjName := strings.TrimSuffix(archiveNameWithPrefixOrName(instance.Path.rel(), "", archiveName), ".a")
+		ownSbomRef, ownSbomPath = emitSbomComponent(ctx, instance, d, realPrjName)
+	}
+
 	result := &ModuleEmitResult{
 		ARRef:                           arRef,
 		ARPath:                          arPath,
@@ -2231,6 +2348,10 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		LDPluginPaths:                   mergedLDPlugins.Paths,
 		PeerDynamicClosureRefs:          peerDynamicRefs,
 		PeerDynamicClosurePaths:         peerDynamicPaths,
+		SbomComponentRef:                ownSbomRef,
+		SbomComponentPath:               ownSbomPath,
+		PeerSbomClosureRefs:             peerSbomRefs,
+		PeerSbomClosurePaths:            peerSbomPaths,
 		InducedDeps:                     d.inducedDeps,
 		Peerdirs:                        d.peerdirs,
 		ModuleStmtName:                  d.moduleStmt.Name,
@@ -2600,6 +2721,9 @@ type PeerGlobalContribs struct {
 	dynamicRefs   []NodeRef
 	dynamicPaths  []VFS
 
+	sbomRefs  []NodeRef
+	sbomPaths []VFS
+
 	// resourceGlobals is the transitive resource-global closure aggregated across
 	// peers (deduped by global-var name), the source for resolveModuleToolchain in
 	// the specialized/header-only path (the general path folds it inline instead).
@@ -2751,6 +2875,23 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		if pr.ARPath != nil && deduper.add(*pr.ARPath) {
 			out.archiveRefs = append(out.archiveRefs, pr.ARRef)
 			out.archivePaths = append(out.archivePaths, *pr.ARPath)
+		}
+	}
+
+	// sbom: the SBOM component of every peer in the link closure (mirrors archive).
+	deduper.reset()
+
+	for _, pr := range resolved {
+		for i, p := range pr.PeerSbomClosurePaths {
+			if deduper.add(p) {
+				out.sbomRefs = append(out.sbomRefs, pr.PeerSbomClosureRefs[i])
+				out.sbomPaths = append(out.sbomPaths, p)
+			}
+		}
+
+		if pr.SbomComponentRef != nil && deduper.add(*pr.SbomComponentPath) {
+			out.sbomRefs = append(out.sbomRefs, *pr.SbomComponentRef)
+			out.sbomPaths = append(out.sbomPaths, *pr.SbomComponentPath)
 		}
 	}
 
