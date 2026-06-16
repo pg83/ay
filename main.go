@@ -31,7 +31,7 @@ func dispatch(argv []string) {
 	}
 
 	if len(rest) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: ay <subcommand> [flags]")
+		fmt.Fprintln(os.Stderr, usageCommands())
 		os.Exit(2)
 	}
 
@@ -72,31 +72,51 @@ func parseGlobalFlags(argv []string) (probes []string, rest []string) {
 }
 
 // command binds a subcommand token path to its handler. The handler receives the
-// args that follow the matched path.
+// args that follow the matched path. hide keeps internal commands (invoked by
+// build-graph nodes, not users) out of the usage listing.
 type command struct {
 	path []string
 	run  func(args []string) int
+	hide bool
 }
 
 // commands is the flat subcommand table. Dispatch picks the entry whose token
 // path is the longest prefix of the argv (so {"make"} and {"make","cas"} coexist;
 // `make cas …` takes the latter, `make …` the former).
 var commands = []command{
-	{[]string{"fetch"}, cmdFetch},
-	{[]string{"fetch", "base64"}, cmdFetchBase64},
-	{[]string{"make"}, cmdMake},
-	{[]string{"make", "cas"}, cmdCasAnalyze},
-	{[]string{"dump", "normalize"}, cmdDumpNormalize},
-	{[]string{"dump", "sort"}, cmdDumpSort},
-	{[]string{"dump", "diff"}, cmdDumpDiff},
-	{[]string{"dump", "grep"}, cmdDumpGrep},
-	{[]string{"perf", "parser"}, cmdPerfParser},
-	{[]string{"perf", "darts"}, cmdPerfDarts},
-	{[]string{"refac", "consts"}, refacConsts},
-	{[]string{"refac", "lint"}, refacLint},
-	{[]string{"refac", "case"}, refacCase},
-	{[]string{"probe", "mapinstr"}, probeMapInstr},
-	{[]string{"probe", "callsite"}, probeCallSite},
+	{path: []string{"fetch"}, run: cmdFetch, hide: true},
+	{path: []string{"fetch", "base64"}, run: cmdFetchBase64, hide: true},
+	{path: []string{"make"}, run: cmdMake},
+	{path: []string{"make", "cas"}, run: cmdCasAnalyze},
+	{path: []string{"dump", "normalize"}, run: cmdDumpNormalize},
+	{path: []string{"dump", "sort"}, run: cmdDumpSort},
+	{path: []string{"dump", "diff"}, run: cmdDumpDiff},
+	{path: []string{"dump", "grep"}, run: cmdDumpGrep},
+	{path: []string{"perf", "parser"}, run: cmdPerfParser},
+	{path: []string{"perf", "darts"}, run: cmdPerfDarts},
+	{path: []string{"refac", "consts"}, run: refacConsts},
+	{path: []string{"refac", "lint"}, run: refacLint},
+	{path: []string{"refac", "case"}, run: refacCase},
+	{path: []string{"probe", "mapinstr"}, run: probeMapInstr},
+	{path: []string{"probe", "callsite"}, run: probeCallSite},
+}
+
+// usageCommands lists the visible (non-hidden) subcommand paths, one per line.
+func usageCommands() string {
+	var b strings.Builder
+
+	b.WriteString("usage: ay <subcommand> [flags]\nsubcommands:")
+
+	for _, c := range commands {
+		if c.hide {
+			continue
+		}
+
+		b.WriteString("\n  ")
+		b.WriteString(strings.Join(c.path, " "))
+	}
+
+	return b.String()
 }
 
 // runCommand dispatches argv against commands by longest matching token path.
@@ -126,7 +146,7 @@ func runCommand(argv []string) int {
 	}
 
 	if best < 0 {
-		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n", strings.Join(argv, " "))
+		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n%s\n", strings.Join(argv, " "), usageCommands())
 
 		return 2
 	}
