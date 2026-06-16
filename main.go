@@ -185,8 +185,8 @@ func isTokenPrefix(p, of []string) bool {
 // usageCommands lists the subcommands under prefix (all, for the empty prefix)
 // with their help — the listing shown at a choice point. Hidden commands appear
 // only under verbose; at the top level the `dev` group is collapsed to a single
-// line unless verbose; the empty-prefix listing also documents the global flags
-// parsed before the subcommand.
+// line unless verbose; every listing documents the global flags parsed before the
+// subcommand.
 func usageCommands(prefix []string, verbose bool) string {
 	var b strings.Builder
 
@@ -196,14 +196,12 @@ func usageCommands(prefix []string, verbose bool) string {
 		b.WriteString(clHeader("usage:") + " ay [global-flags] " + strings.Join(prefix, " ") + " <subcommand> [args]")
 	}
 
-	// Global flags (parsed before the subcommand) live in the usage block. Only
-	// --verbose shows by default; it also reveals the remaining flags.
-	if len(prefix) == 0 {
-		b.WriteString("\n  " + clFlag("-v, --verbose") + "             expand collapsed groups (dev), hidden commands, and the flags below")
+	// Global flags (parsed before the subcommand) live in the usage block at every
+	// level. Only --verbose shows by default; it also reveals the remaining flags.
+	b.WriteString("\n  " + clFlag("-v, --verbose") + "             expand collapsed groups (dev), hidden commands, and the flags below")
 
-		if verbose {
-			b.WriteString("\n  " + clFlag("--probe=map|callsite|str") + "  dump the named runtime probe (map/callsite/str) on exit")
-		}
+	if verbose {
+		b.WriteString("\n  " + clFlag("--probe=map|callsite|str") + "  dump the named runtime probe (map/callsite/str) on exit")
 	}
 
 	b.WriteString("\n\n" + clHeader("subcommands:"))
