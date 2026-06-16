@@ -197,6 +197,19 @@ func usageCommands(prefix []string, verbose bool) string {
 	b.WriteString("\n\n" + color("green", "subcommands:"))
 
 	devCollapsed := false
+	first := true
+
+	// entry opens a subcommand block, blank-line-separated from the previous one.
+	entry := func(name string) {
+		if first {
+			b.WriteString("\n  ")
+		} else {
+			b.WriteString("\n\n  ")
+		}
+
+		first = false
+		b.WriteString(color("cyan", name))
+	}
 
 	for _, c := range commands {
 		if (c.hide && !verbose) || !isTokenPrefix(prefix, c.path) {
@@ -207,7 +220,7 @@ func usageCommands(prefix []string, verbose bool) string {
 		// --verbose; drilling in (ay dev …) lists it regardless.
 		if len(prefix) == 0 && !verbose && c.path[0] == "dev" {
 			if !devCollapsed {
-				b.WriteString("\n  " + color("cyan", "dev:"))
+				entry("dev:")
 				b.WriteString("\n    🛠️ Developer tooling (dump, perf, refac, probe). Pass --verbose to list.")
 				devCollapsed = true
 			}
@@ -215,8 +228,7 @@ func usageCommands(prefix []string, verbose bool) string {
 			continue
 		}
 
-		b.WriteString("\n  ")
-		b.WriteString(color("cyan", strings.Join(c.path, " ")+":"))
+		entry(strings.Join(c.path, " ") + ":")
 
 		for _, line := range strings.Split(c.help, "\n") {
 			b.WriteString("\n    ")
