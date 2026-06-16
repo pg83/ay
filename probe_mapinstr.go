@@ -21,7 +21,7 @@ import (
 // real maps, not slices/arrays. Throwaway: run in a worktree, build, measure,
 // revert. mapKR/mapKW always tally; the --probe=map global flag dumps the tally
 // (reportMapProbe) on exit, e.g. ay --probe=map make …
-func probeMapInstr(args []string) int {
+func probeMapInstr(_ GlobalFlags, args []string) int {
 	files := goFilesFromArgs(args)
 
 	fset := gotoken.NewFileSet()

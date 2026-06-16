@@ -22,7 +22,7 @@ func main() {
 }
 
 func dispatch(argv []string) {
-	probes, verbose, rest := parseGlobalFlags(argv[1:])
+	probes, g, rest := parseGlobalFlags(argv[1:])
 
 	for _, p := range probes {
 		if p == "str" {
@@ -30,19 +30,25 @@ func dispatch(argv []string) {
 		}
 	}
 
-	code := runCommand(rest, verbose) // empty rest falls through to the choice-point help
+	code := runCommand(rest, g) // empty rest falls through to the choice-point help
 
 	dumpProbes(probes) // flush enabled probe stats before exit (cmds os.Exit-free)
 	dumpCalls()        // flush callsite reachability when CALLSITE_OUT is set (env-driven)
 	os.Exit(code)
 }
 
-// parseGlobalFlags consumes the leading -flags before the subcommand (program-
-// wide options) and returns the requested --probe values, the --verbose toggle,
-// and the remaining argv (subcommand + its args). The first non-flag arg ends the
-// global section; -h/--help fall through to runCommand as the choice-point help.
-// These flags are documented in usageCommands ("global flags").
-func parseGlobalFlags(argv []string) (probes []string, verbose bool, rest []string) {
+// GlobalFlags are the options parsed before the subcommand and threaded to every
+// handler. For now it carries only --verbose; new global flags go here.
+type GlobalFlags struct {
+	Verbose bool
+}
+
+// parseGlobalFlags consumes the leading -flags before the subcommand and returns
+// the requested --probe values, the parsed GlobalFlags, and the remaining argv
+// (subcommand + its args). The first non-flag arg ends the global section;
+// -h/--help fall through to runCommand as the choice-point help. The flags are
+// documented in the usage block (usageCommands).
+func parseGlobalFlags(argv []string) (probes []string, g GlobalFlags, rest []string) {
 	i := 0
 
 	for ; i < len(argv); i++ {
@@ -60,13 +66,13 @@ func parseGlobalFlags(argv []string) (probes []string, verbose bool, rest []stri
 		case k == "probe":
 			throwFmt("unknown --probe=%q (want map|callsite|str)", v)
 		case k == "verbose" || k == "v":
-			verbose = true
+			g.Verbose = true
 		default:
 			throwFmt("unknown global flag %q", a)
 		}
 	}
 
-	return probes, verbose, argv[i:]
+	return probes, g, argv[i:]
 }
 
 // command binds a subcommand token path to its handler. The handler receives the
@@ -75,7 +81,7 @@ func parseGlobalFlags(argv []string) (probes []string, verbose bool, rest []stri
 // nodes, not users) out of that listing.
 type command struct {
 	path []string
-	run  func(args []string) int
+	run  func(g GlobalFlags, args []string) int
 	help string
 	hide bool
 }
@@ -243,7 +249,7 @@ func usageCommands(prefix []string, verbose bool) string {
 // full leaf match runs its handler; otherwise, if argv is a choice-point prefix
 // of some visible command(s) (the empty argv included), the prefix help is shown;
 // anything else is an unknown subcommand.
-func runCommand(argv []string, verbose bool) int {
+func runCommand(argv []string, g GlobalFlags) int {
 	best := -1
 	bestLen := 0
 
@@ -255,18 +261,18 @@ func runCommand(argv []string, verbose bool) int {
 	}
 
 	if best >= 0 {
-		return commands[best].run(argv[bestLen:])
+		return commands[best].run(g, argv[bestLen:])
 	}
 
 	for _, c := range commands {
 		if !c.hide && isTokenPrefix(argv, c.path) {
-			fmt.Fprintln(os.Stderr, usageCommands(argv, verbose))
+			fmt.Fprintln(os.Stderr, usageCommands(argv, g.Verbose))
 
 			return 2
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n%s\n", strings.Join(argv, " "), usageCommands(nil, verbose))
+	fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n%s\n", strings.Join(argv, " "), usageCommands(nil, g.Verbose))
 
 	return 2
 }

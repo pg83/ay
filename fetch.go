@@ -39,7 +39,7 @@ func fetchScriptInputs(scripts ScriptDeps) []VFS {
 // straight to <out>. Used by the inline vcs.json node — it produces a file, it
 // does not fetch a sandbox resource, so it is a plain build command, not a FETCH
 // node.
-func cmdFetchBase64(args []string) int {
+func cmdFetchBase64(_ GlobalFlags, args []string) int {
 	if len(args) != 2 {
 		throwFmt("fetch: usage: ay fetch base64 <data> <out>")
 	}
@@ -52,7 +52,7 @@ func cmdFetchBase64(args []string) int {
 	return 0
 }
 
-func cmdFetch(args []string) int {
+func cmdFetch(_ GlobalFlags, args []string) int {
 	if len(args) != 3 && len(args) != 4 {
 		throwFmt("fetch: usage: ay fetch <build-root> <source-root> <uri> [output-dir]")
 	}

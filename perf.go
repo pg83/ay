@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func cmdPerfParser(args []string) int {
+func cmdPerfParser(_ GlobalFlags, args []string) int {
 	defer startProfilesFromEnv()()
 
 	if len(args) < 1 {
@@ -21,7 +21,7 @@ func cmdPerfParser(args []string) int {
 	return perfParser(args[0])
 }
 
-func cmdPerfDarts(args []string) int {
+func cmdPerfDarts(_ GlobalFlags, args []string) int {
 	defer startProfilesFromEnv()()
 
 	return perfDarts()

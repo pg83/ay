@@ -102,7 +102,7 @@ func goFilesFromArgs(args []string) []string {
 // (not re-declared) when it recurs in file B, and generated names are unique across
 // the whole package. Files are processed in sorted order, so a new var lands in the
 // first file (alphabetically) that uses it.
-func refacConsts(args []string) int {
+func refacConsts(_ GlobalFlags, args []string) int {
 	files := goFilesFromArgs(args)
 
 	dest := map[string]bool{}
@@ -784,7 +784,7 @@ type FileLinter struct {
 
 // refacLint applies every linter, in order, to each file. With no file args it
 // processes every non-test .go file in the current directory.
-func refacLint(args []string) int {
+func refacLint(_ GlobalFlags, args []string) int {
 	files := goFilesFromArgs(args)
 
 	for _, path := range files {

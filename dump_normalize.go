@@ -12,7 +12,7 @@ import (
 
 const dumpUIDLen = 22
 
-func cmdDumpNormalize(args []string) int {
+func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 	defer startProfilesFromEnv()()
 
 	var inPath, target, outPath string

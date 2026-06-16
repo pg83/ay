@@ -17,7 +17,7 @@ import (
 // files were split into variable-size, content-defined chunks — the rsync rolling-
 // hash idea, a.k.a. content-defined chunking — and identical chunks shared across
 // files. A pure read-only analysis; it never touches the store.
-func cmdCasAnalyze(args []string) int {
+func cmdCasAnalyze(_ GlobalFlags, args []string) int {
 	if len(args) == 0 || args[0] != "analyze" {
 		throwFmt("usage: ay dev cas analyze [--chunk=N] <cas-dir>")
 	}

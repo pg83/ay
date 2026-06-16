@@ -91,10 +91,10 @@ type ModuleData struct {
 	// clangWarnings is CLANG_WARNINGS(...) — the _CLANG_USER_WARNINGS_VALUE the
 	// autoincluded linters.make.inc contributes; emitted on C/C++ compiles between
 	// GCC_COMPILE_FLAGS and CXXFLAGS (gnu_compiler.conf:284).
-	clangWarnings []ARG
-	ldFlags            []ARG
-	rpathFlagsGlobal   []ARG
-	objAddLibsGlobal   []ARG
+	clangWarnings    []ARG
+	ldFlags          []ARG
+	rpathFlagsGlobal []ARG
+	objAddLibsGlobal []ARG
 	// srcDirs is the cumulative SRCDIR search path as directory VFS (the type
 	// fs.IsFile consumes). collectModule seeds index 0 with the module's own dir,
 	// then appends explicit SRCDIRs in declaration order; searched in reverse.
