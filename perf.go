@@ -9,21 +9,22 @@ import (
 	"time"
 )
 
-func cmdPerf(args []string) int {
-	stop := startProfilesFromEnv()
+func cmdPerfParser(args []string) int {
+	defer startProfilesFromEnv()()
 
-	defer stop()
-
-	switch {
-	case len(args) >= 1 && args[0] == "darts":
-		return perfDarts()
-	case len(args) >= 2 && args[0] == "parser":
-		return perfParser(args[1])
-	default:
-		fmt.Fprintln(os.Stderr, "usage: ay perf parser <dir> | ay perf darts")
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "usage: ay perf parser <dir>")
 
 		return 2
 	}
+
+	return perfParser(args[0])
+}
+
+func cmdPerfDarts(args []string) int {
+	defer startProfilesFromEnv()()
+
+	return perfDarts()
 }
 
 func cParserSource(path string) bool {

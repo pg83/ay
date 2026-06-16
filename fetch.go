@@ -35,23 +35,24 @@ func fetchScriptInputs(scripts ScriptDeps) []VFS {
 	return out
 }
 
-func cmdFetch(args []string) int {
-	// `ay fetch base64 <data> <out>` writes the base64-decoded data straight to
-	// <out>. Used by the inline vcs.json node — it produces a file, it does not
-	// fetch a sandbox resource, so it is a plain build command, not a FETCH node.
-	if len(args) >= 1 && args[0] == "base64" {
-		if len(args) != 3 {
-			throwFmt("fetch: usage: ay fetch base64 <data> <out>")
-		}
-
-		data := throw2(base64.StdEncoding.DecodeString(args[1]))
-		out := args[2]
-		throw(os.MkdirAll(filepath.Dir(out), 0o755))
-		throw(os.WriteFile(out, data, 0o644))
-
-		return 0
+// cmdFetchBase64 (`ay fetch base64 <data> <out>`) writes the base64-decoded data
+// straight to <out>. Used by the inline vcs.json node — it produces a file, it
+// does not fetch a sandbox resource, so it is a plain build command, not a FETCH
+// node.
+func cmdFetchBase64(args []string) int {
+	if len(args) != 2 {
+		throwFmt("fetch: usage: ay fetch base64 <data> <out>")
 	}
 
+	data := throw2(base64.StdEncoding.DecodeString(args[0]))
+	out := args[1]
+	throw(os.MkdirAll(filepath.Dir(out), 0o755))
+	throw(os.WriteFile(out, data, 0o644))
+
+	return 0
+}
+
+func cmdFetch(args []string) int {
 	if len(args) != 3 && len(args) != 4 {
 		throwFmt("fetch: usage: ay fetch <build-root> <source-root> <uri> [output-dir]")
 	}

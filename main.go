@@ -35,7 +35,7 @@ func dispatch(argv []string) {
 		os.Exit(2)
 	}
 
-	code := runCommand(rest[0], rest[1:])
+	code := runCommand(rest)
 
 	dumpProbes(probes) // flush enabled probe stats before exit (cmds os.Exit-free)
 	dumpCalls()        // flush callsite reachability when CALLSITE_OUT is set (env-driven)
@@ -71,25 +71,67 @@ func parseGlobalFlags(argv []string) (probes []string, rest []string) {
 	return probes, argv[i:]
 }
 
-func runCommand(name string, args []string) int {
-	switch name {
-	case "fetch":
-		return cmdFetch(args)
-	case "make":
-		return cmdMake(args)
-	case "dump":
-		return cmdDump(args)
-	case "perf":
-		return cmdPerf(args)
-	case "refac":
-		return cmdRefac(args)
-	case "probe":
-		return cmdProbe(args)
-	default:
-		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n", name)
+// command binds a subcommand token path to its handler. The handler receives the
+// args that follow the matched path.
+type command struct {
+	path []string
+	run  func(args []string) int
+}
+
+// commands is the flat subcommand table. Dispatch picks the entry whose token
+// path is the longest prefix of the argv (so {"make"} and {"make","cas"} coexist;
+// `make cas …` takes the latter, `make …` the former).
+var commands = []command{
+	{[]string{"fetch"}, cmdFetch},
+	{[]string{"fetch", "base64"}, cmdFetchBase64},
+	{[]string{"make"}, cmdMake},
+	{[]string{"make", "cas"}, cmdCasAnalyze},
+	{[]string{"dump", "normalize"}, cmdDumpNormalize},
+	{[]string{"dump", "sort"}, cmdDumpSort},
+	{[]string{"dump", "diff"}, cmdDumpDiff},
+	{[]string{"dump", "grep"}, cmdDumpGrep},
+	{[]string{"perf", "parser"}, cmdPerfParser},
+	{[]string{"perf", "darts"}, cmdPerfDarts},
+	{[]string{"refac", "consts"}, refacConsts},
+	{[]string{"refac", "lint"}, refacLint},
+	{[]string{"refac", "case"}, refacCase},
+	{[]string{"probe", "mapinstr"}, probeMapInstr},
+	{[]string{"probe", "callsite"}, probeCallSite},
+}
+
+// runCommand dispatches argv against commands by longest matching token path.
+func runCommand(argv []string) int {
+	best := -1
+	bestLen := 0
+
+	for i, c := range commands {
+		if len(c.path) > len(argv) || len(c.path) < bestLen {
+			continue
+		}
+
+		match := true
+
+		for j, tok := range c.path {
+			if argv[j] != tok {
+				match = false
+
+				break
+			}
+		}
+
+		if match && (best < 0 || len(c.path) > bestLen) {
+			best = i
+			bestLen = len(c.path)
+		}
+	}
+
+	if best < 0 {
+		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n", strings.Join(argv, " "))
 
 		return 2
 	}
+
+	return commands[best].run(argv[bestLen:])
 }
 
 func startProfilesFromEnv() func() {
