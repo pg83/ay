@@ -117,6 +117,11 @@ type ModuleData struct {
 	noMypy               bool
 	optimizePyProtos     bool
 	optimizePyProtosSet  bool
+	// needGoogleProtoPeerdirs (NEED_GOOGLE_PROTO_PEERDIRS, default yes) drives the
+	// PEERDIR to protobuf/builtin_proto/protos_from_protoc — a PY-only proto whose
+	// GLOBAL PROTO_NAMESPACE(contrib/libs/protoc/src) injects -I=$(S)/.../protoc/src
+	// into the py-proto cmdline. The protobuf builtins DISABLE it (no self-peer).
+	needGoogleProtoPeerdirs bool
 	cppProtoPlugins      []CppProtoPlugin
 	excludeTags          map[STR]bool
 	dynamicLibraryFrom   []STR
@@ -565,8 +570,9 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 	env.setString(envBINDIR, "$(B)/"+modulePath)
 
 	d := &ModuleData{
-		pythonSQLite3: true,
-		bisonGenExt:   strCpp,
+		pythonSQLite3:           true,
+		bisonGenExt:             strCpp,
+		needGoogleProtoPeerdirs: true,
 	}
 
 	collectStmts(fs, modulePath, kind, stmts, env, d)
@@ -1625,6 +1631,10 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 
 			if a == "PYTHON_SQLITE3" {
 				d.pythonSQLite3 = false
+			}
+
+			if a == "NEED_GOOGLE_PROTO_PEERDIRS" {
+				d.needGoogleProtoPeerdirs = false
 			}
 		}
 	case tokNoMypy:
