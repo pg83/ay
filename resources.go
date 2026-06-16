@@ -443,6 +443,10 @@ func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		LDRef:          ref,
 		LDPath:         &dst,
 		Peerdirs:       d.peerdirs,
+		// A prebuilt codegen tool keeps its INDUCED_DEPS (ya.make.induced_deps,
+		// e.g. grpc_cpp's grpcpp service headers) so a generated file's consumer
+		// pulls them via GeneratorRefs — exactly as the from-source build does.
+		InducedDeps: d.inducedDeps,
 	}
 	ctx.memo.put(ctx.instanceKey(instance), result)
 
