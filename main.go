@@ -197,7 +197,7 @@ func usageCommands(prefix []string, verbose bool) string {
 		// --verbose; drilling in (ay dev …) lists it regardless.
 		if len(prefix) == 0 && !verbose && c.path[0] == "dev" {
 			if !devCollapsed {
-				b.WriteString("\n  dev")
+				b.WriteString("\n  dev:")
 				b.WriteString("\n    🛠️ Developer tooling (dump, perf, refac, probe). Pass --verbose to list.")
 				devCollapsed = true
 			}
@@ -207,6 +207,7 @@ func usageCommands(prefix []string, verbose bool) string {
 
 		b.WriteString("\n  ")
 		b.WriteString(strings.Join(c.path, " "))
+		b.WriteString(":")
 
 		for _, line := range strings.Split(c.help, "\n") {
 			b.WriteString("\n    ")
