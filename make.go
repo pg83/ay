@@ -435,36 +435,36 @@ func parseKV(into map[string]string, kv string) {
 
 func printMakeUsage(w io.Writer) {
 	const usage = `usage: ay make [flags] [targets...]
-Build the targets in dependency order, executing per-node cmds.
+  Build the targets in dependency order, executing per-node cmds.
 
 layout flags:
-    --source-root <path>          Source tree root.
-    -B, --build-dir <path>        Build directory (default: ~/.ya/ay).
-    -o, --output <path>           Output staging dir (default: <build-dir>/res).
-    -I, --install <path>          Install outputs into this directory (default: source-root).
+  --source-root <path>          Source tree root.
+  -B, --build-dir <path>        Build directory (default: ~/.ya/ay).
+  -o, --output <path>           Output staging dir (default: <build-dir>/res).
+  -I, --install <path>          Install outputs into this directory (default: source-root).
 
 execution flags:
-    -j, --jobs <N>                Parallel exec slots (default: NumCPU); 0 = build-only.
-    -k, --keep-going              Continue past per-node failures.
-    --cmd-prefix <suffix>=<pfx>   Prepend <pfx> tokens before any command arg whose path
-                                  ends with <suffix> (repeatable). E.g. run fetched glibc
-                                  binaries through a loader: bin/java=/bin/ld.linux-so.2
-    -T, --ninja                   Ninja-style per-line output (default: in-place repaint).
-    -t, -tt, -ttt                 Generate test nodes (small / +medium / +large).
-    --stats                       Print per-kind execution stats after the build.
-    -G, --dump-graph              Log a graph summary to stderr after Gen.
-    --verbose                     Emit Gen-time diagnostics (unsupported sysincl records, …) to stderr.
-    --sandboxing                  Run test nodes under the filesystem sandbox.
+  -j, --jobs <N>                Parallel exec slots (default: NumCPU); 0 = build-only.
+  -k, --keep-going              Continue past per-node failures.
+  --cmd-prefix <suffix>=<pfx>   Prepend <pfx> tokens before any command arg whose path
+                                ends with <suffix> (repeatable). E.g. run fetched glibc
+                                binaries through a loader: bin/java=/bin/ld.linux-so.2
+  -T, --ninja                   Ninja-style per-line output (default: in-place repaint).
+  -t, -tt, -ttt                 Generate test nodes (small / +medium / +large).
+  --stats                       Print per-kind execution stats after the build.
+  -G, --dump-graph              Log a graph summary to stderr after Gen.
+  --verbose                     Emit Gen-time diagnostics (unsupported sysincl records, …) to stderr.
+  --sandboxing                  Run test nodes under the filesystem sandbox.
 
 configuration flags:
-    -r, --release                 GG_BUILD_TYPE=release.
-    -d, --debug                   GG_BUILD_TYPE=debug (default).
-    --xbuild <value>              GG_BUILD_TYPE=<value> (overrides -r/-d).
-    --musl                        MUSL=yes.
-    --target-platform <id>        Target platform id (default: <host>).
-    --host-platform <id>          Host platform id (default: <host>).
-    -D, --define KEY=VALUE        Target-axis -D flag (repeatable).
-    --host-platform-flag KEY=V    Host-axis -D flag (repeatable).
+  -r, --release                 GG_BUILD_TYPE=release.
+  -d, --debug                   GG_BUILD_TYPE=debug (default).
+  --xbuild <value>              GG_BUILD_TYPE=<value> (overrides -r/-d).
+  --musl                        MUSL=yes.
+  --target-platform <id>        Target platform id (default: <host>).
+  --host-platform <id>          Host platform id (default: <host>).
+  -D, --define KEY=VALUE        Target-axis -D flag (repeatable).
+  --host-platform-flag KEY=V    Host-axis -D flag (repeatable).
 `
 
 	fmt.Fprint(w, colorizeMakeUsage(usage))
