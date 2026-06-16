@@ -434,16 +434,16 @@ func parseKV(into map[string]string, kv string) {
 }
 
 func printMakeUsage(w io.Writer) {
-	const usage = `Usage: ay make [flags] [targets...]
+	const usage = `usage: ay make [flags] [targets...]
 Build the targets in dependency order, executing per-node cmds.
 
-Layout flags:
+layout flags:
     --source-root <path>          Source tree root.
     -B, --build-dir <path>        Build directory (default: ~/.ya/ay).
     -o, --output <path>           Output staging dir (default: <build-dir>/res).
     -I, --install <path>          Install outputs into this directory (default: source-root).
 
-Execution flags:
+execution flags:
     -j, --jobs <N>                Parallel exec slots (default: NumCPU); 0 = build-only.
     -k, --keep-going              Continue past per-node failures.
     --cmd-prefix <suffix>=<pfx>   Prepend <pfx> tokens before any command arg whose path
@@ -456,7 +456,7 @@ Execution flags:
     --verbose                     Emit Gen-time diagnostics (unsupported sysincl records, …) to stderr.
     --sandboxing                  Run test nodes under the filesystem sandbox.
 
-Configuration flags:
+configuration flags:
     -r, --release                 GG_BUILD_TYPE=release.
     -d, --debug                   GG_BUILD_TYPE=debug (default).
     --xbuild <value>              GG_BUILD_TYPE=<value> (overrides -r/-d).
@@ -480,8 +480,8 @@ func colorizeMakeUsage(s string) string {
 		switch {
 		case strings.HasSuffix(line, "flags:"):
 			lines[i] = clHeader(line)
-		case strings.HasPrefix(line, "Usage:"):
-			lines[i] = clHeader("Usage:") + line[len("Usage:"):]
+		case strings.HasPrefix(line, "usage:"):
+			lines[i] = clHeader("usage:") + line[len("usage:"):]
 		default:
 			lines[i] = colorizeFlagLine(line)
 		}
