@@ -2,8 +2,8 @@
 """validate.py — L4 byte-exact acceptance orchestrator.
 
 For each case: run its gen_<graph>.sh generator, normalize both our output
-and the raw upstream reference into canonical JSONL (streaming `ay dump
-normalize | ay dump sort`), then either byte-compare (gating cases) or run
+and the raw upstream reference into canonical JSONL (streaming `ay dev dump
+normalize | ay dev dump sort`), then either byte-compare (gating cases) or run
 diff.py metrics plus exact normalized-node parity counts (xfail cases).
 xfail cases never affect the exit code; the suite fails only when a gating
 case diverges.
@@ -121,7 +121,7 @@ def _remove_if_exists(path):
 
 
 def _normalize_sort_go(raw, target, out, ref_graph=False):
-    """ay dump normalize <raw> | ay dump sort > out (streaming, bounded mem).
+    """ay dev dump normalize <raw> | ay dev dump sort > out (streaming, bounded mem).
 
     ref_graph marks the input as the upstream reference (ymake) graph, enabling
     reference-side normalizations (filterARLDInputs input pruning + build-order-only
@@ -129,7 +129,7 @@ def _normalize_sort_go(raw, target, out, ref_graph=False):
     normalized WITHOUT it (faithful), so any superfluous input/dep WE emit — or any
     over-filtration on the reference side — surfaces in the diff.
     """
-    norm_cmd = [AY, "dump", "normalize", "--in", raw, "--target", target, "--out", "-"]
+    norm_cmd = [AY, "dev", "dump", "normalize", "--in", raw, "--target", target, "--out", "-"]
     if ref_graph:
         norm_cmd.append("--ref-graph")
     tmp = out + ".tmp"
@@ -139,7 +139,7 @@ def _normalize_sort_go(raw, target, out, ref_graph=False):
         cwd=REPO_ROOT, stdout=subprocess.PIPE,
     )
     p2 = subprocess.Popen(
-        [AY, "dump", "sort", "--out", tmp],
+        [AY, "dev", "dump", "sort", "--out", tmp],
         cwd=REPO_ROOT, stdin=p1.stdout,
     )
     p1.stdout.close()
@@ -310,7 +310,7 @@ def main() -> int:
                 f"our_total={parity.left_total} ref_total={parity.right_total}"
             )
             diff_file = os.path.join(out_dir, f"{name}.diff.txt")
-            run([AY, "dump", "diff", "--left", our_n, "--right", ref_n, "--out", diff_file])
+            run([AY, "dev", "dump", "diff", "--left", our_n, "--right", ref_n, "--out", diff_file])
             print(f"[{name}] XFAIL (not gating) — full diff: {diff_file}")
             continue
 

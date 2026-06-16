@@ -100,53 +100,53 @@ var commands = []command{
 			"chunking (rolling-hash chunk dedup) on top of whole-file dedup.",
 	},
 	{
-		path: []string{"dump", "normalize"}, run: cmdDumpNormalize,
+		path: []string{"dev", "dump","normalize"}, run: cmdDumpNormalize,
 		help: "Normalize a raw graph dump (fold producers, canonicalize paths, prune\n" +
 			"ref-only artifacts) to one JSON node per line for byte-exact comparison.",
 	},
 	{
-		path: []string{"dump", "sort"}, run: cmdDumpSort,
+		path: []string{"dev", "dump","sort"}, run: cmdDumpSort,
 		help: "Stable-sort normalized graph lines so two graphs can be merge-compared.",
 	},
 	{
-		path: []string{"dump", "diff"}, run: cmdDumpDiff,
+		path: []string{"dev", "dump","diff"}, run: cmdDumpDiff,
 		help: "Diff two normalized graphs — by kind/field/token, paired nodes, or roots.",
 	},
 	{
-		path: []string{"dump", "grep"}, run: cmdDumpGrep,
+		path: []string{"dev", "dump","grep"}, run: cmdDumpGrep,
 		help: "Search a graph dump for nodes by output/cmd/input substring.",
 	},
 	{
-		path: []string{"perf", "parser"}, run: cmdPerfParser,
+		path: []string{"dev", "perf","parser"}, run: cmdPerfParser,
 		help: "Benchmark the C/ya.make parser over every source file under <dir>.",
 	},
 	{
-		path: []string{"perf", "darts"}, run: cmdPerfDarts,
+		path: []string{"dev", "perf","darts"}, run: cmdPerfDarts,
 		help: "Benchmark the autoinclude longest-prefix matcher: double-array trie vs\n" +
 			"the former ancestor-walk. Prints ns/op for each.",
 	},
 	{
-		path: []string{"refac", "consts"}, run: refacConsts,
+		path: []string{"dev", "refac","consts"}, run: refacConsts,
 		help: "Regenerate the interned-constant files (str/arg/vfs/env) from the\n" +
 			"literals used across the package. Mutates source in place.",
 	},
 	{
-		path: []string{"refac", "lint"}, run: refacLint,
+		path: []string{"dev", "refac","lint"}, run: refacLint,
 		help: "Apply the in-tree linters to the given .go files (default: all non-test\n" +
 			".go here). Mutates source in place.",
 	},
 	{
-		path: []string{"refac", "case"}, run: refacCase,
+		path: []string{"dev", "refac","case"}, run: refacCase,
 		help: "Flip identifier case via the compiler's error positions to a fixpoint.\n" +
 			"Mutates source in place; run in a worktree.",
 	},
 	{
-		path: []string{"probe", "mapinstr"}, run: probeMapInstr,
+		path: []string{"dev", "probe","mapinstr"}, run: probeMapInstr,
 		help: "Throwaway: instrument real map ops with per-site counters; build under\n" +
 			"--probe=map to dump the tally. Run in a worktree, revert after.",
 	},
 	{
-		path: []string{"probe", "callsite"}, run: probeCallSite,
+		path: []string{"dev", "probe","callsite"}, run: probeCallSite,
 		help: "Throwaway: instrument per-function call sites for reachability; build\n" +
 			"under --probe=callsite with CALLSITE_OUT to find never-run code.",
 	},
