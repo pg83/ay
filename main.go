@@ -161,6 +161,11 @@ var commands = []command{
 	},
 }
 
+// Help palette (One Dark): section headers green, command names blue, flags amber.
+func clHeader(s string) string { return trueColor(152, 195, 121, s) }
+func clName(s string) string   { return trueColor(97, 175, 239, s) }
+func clFlag(s string) string   { return trueColor(229, 192, 123, s) }
+
 // isTokenPrefix reports whether p is a token-wise prefix of of.
 func isTokenPrefix(p, of []string) bool {
 	if len(p) > len(of) {
@@ -185,22 +190,22 @@ func usageCommands(prefix []string, verbose bool) string {
 	var b strings.Builder
 
 	if len(prefix) == 0 {
-		b.WriteString(color("green", "usage:") + " ay [global-flags] <subcommand> [args]")
+		b.WriteString(clHeader("usage:") + " ay [global-flags] <subcommand> [args]")
 	} else {
-		b.WriteString(color("green", "usage:") + " ay [global-flags] " + strings.Join(prefix, " ") + " <subcommand> [args]")
+		b.WriteString(clHeader("usage:") + " ay [global-flags] " + strings.Join(prefix, " ") + " <subcommand> [args]")
 	}
 
 	// Global flags (parsed before the subcommand) live in the usage block. Only
 	// --verbose shows by default; it also reveals the remaining flags.
 	if len(prefix) == 0 {
-		b.WriteString("\n  " + color("cyan", "-v, --verbose") + "             expand collapsed groups (dev), hidden commands, and the flags below")
+		b.WriteString("\n  " + clFlag("-v, --verbose") + "             expand collapsed groups (dev), hidden commands, and the flags below")
 
 		if verbose {
-			b.WriteString("\n  " + color("cyan", "--probe=map|callsite|str") + "  dump the named runtime probe (map/callsite/str) on exit")
+			b.WriteString("\n  " + clFlag("--probe=map|callsite|str") + "  dump the named runtime probe (map/callsite/str) on exit")
 		}
 	}
 
-	b.WriteString("\n\n" + color("green", "subcommands:"))
+	b.WriteString("\n\n" + clHeader("subcommands:"))
 
 	devCollapsed := false
 	first := true
@@ -214,7 +219,7 @@ func usageCommands(prefix []string, verbose bool) string {
 		}
 
 		first = false
-		b.WriteString(color("cyan", name))
+		b.WriteString(clName(name))
 	}
 
 	for _, c := range commands {
