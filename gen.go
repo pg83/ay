@@ -313,10 +313,10 @@ type GenCtx struct {
 	// _GEN_SBOM_COMPONENT DX nodes; absent in the open-source contour (sg2–5).
 	sbomEnabled bool
 
-	// autoincludeIdx maps each AUTOINCLUDE_PATHS root directory (source VFS) to its
-	// linters.make.inc (source VFS); a module auto-includes the nearest enclosing
-	// root's file (lintersMakeIncFor / ymake's FindLongestPrefix).
-	autoincludeIdx *IntValueMap[VFS]
+	// autoincludeIdx resolves the nearest enclosing AUTOINCLUDE_PATHS root's
+	// linters.make.inc for a module (ymake's FindLongestPrefix over a double-array
+	// trie of "<root>/" keys).
+	autoincludeIdx *AutoincludeIndex
 
 	// tarjan is the run-wide Tarjan/closure working state; both scanners hold a
 	// pointer to it (their tjc field) so its vfsBound-sized arrays grow once, not
@@ -637,14 +637,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	// INCLUDEs it at module finalization (makefile_loader.cpp:226), so its statements
 	// (CLANG_WARNINGS — STYLE_* are lint-only) run in the module's context after its
 	// own body. The file must exist when a root names it; absent => misconfiguration.
-	if inc, ok := lintersMakeIncFor(ctx.autoincludeIdx, instance.Path.rel()); ok && ctx.fs.isFile(srcRootVFS, inc.rel()) {
-		ls := throw2(parseFile(ctx.fs, inc.rel())).Stmts
-		if os.Getenv("AY_DBG_LINT") != "" {
-			fmt.Fprintf(os.Stderr, "LINT %s -> %s (%d stmts)\n", instance.Path.rel(), inc.rel(), len(ls))
-		}
-		mf.Stmts = append(mf.Stmts, ls...)
-	} else if os.Getenv("AY_DBG_LINT") != "" && strings.HasPrefix(instance.Path.rel(), "arc/") {
-		fmt.Fprintf(os.Stderr, "LINT %s -> NONE (ok=%v)\n", instance.Path.rel(), ok)
+	if inc, ok := ctx.autoincludeIdx.lintersMakeIncFor(instance.Path.rel()); ok && ctx.fs.isFile(srcRootVFS, inc.rel()) {
+		mf.Stmts = append(mf.Stmts, throw2(parseFile(ctx.fs, inc.rel())).Stmts...)
 	}
 
 	env := buildIfEnv(instance)
