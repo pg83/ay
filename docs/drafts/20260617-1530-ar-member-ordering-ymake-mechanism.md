@@ -31,11 +31,47 @@ So the codegen special-case buckets in `reorderARMembers`
 deferred to the tail*. They should collapse into one general "deferred" bucket
 driven by the readiness/deferral model, not by `.suffix.o` string matching.
 
-## The unresolved piece (left for later, per owner)
+## RESOLVED: the flagged-hoist is StatementPriority
 
-For `contrib/libs/glibcasm` (no codegen at all) the raw command still places the
+The earlier "open question" — why `SRC(file flags)` archives before an
+earlier-declared `SRCS` — is answered by **`TModuleDef::StatementPriority`**
+(`devtools/ymake/module_loader.cpp:38`). ymake processes a module's statements in
+**(priority, name)** order, and the archive lists `$AUTO_INPUT` in that order:
+
+- `SRCS` / `PY_SRCS` → priority **4**
+- everything else (`SRC`, `SRC_C_NO_LTO`, `SRC_C_AVX*`, `JOIN_SRCS`, `RUN_PROGRAM`,
+  the codegen macros) → priority **2** (the default)
+- `PEERDIR`/`SRCDIR` = 1, java/docs = 3, `_ADD_PY_LINTER_CHECK` = 5
+
+So prio-2 `SRC()`/`JOIN`/codegen run (and archive) ahead of prio-4 plain `SRCS`.
+Combined with the FIFO deferral (a generated-source compile waits a round), the
+full AR order is **(generated?, priority, declaration-seq)**:
+
+1. direct compiles, by (priority, seq) — so `SRC()` (2) before `SRCS` (4);
+2. then generated-source compiles (deferred a round), by (priority, seq) — so a
+   `JOIN_SRCS` codegen (gen prio 2) before a `.rl6`/`.proto`-in-`SRCS` codegen
+   (gen prio 4).
+
+`reorderARMembers` (gen.go) implements exactly this: every object carries a
+`SrcMeta{Prio, Seq, Generated}` and sorts by a packed `uint64` key. **Seq is a
+module-global counter (`ModuleData.declSeq`) bumped per source as collection
+walks the ya.make and its `INCLUDE`s** — a per-file line does NOT compose across
+includes (openssl pulls its `SRCS` from `crypto/ya.make.inc`, whose line numbers
+are unrelated to the main file's). This replaced the former per-codegen-kind
+bucket list (`cfSrcs`/`g4Srcs`/`hSerSrcs`/`evPbSrcs`/`pbCCSrcs`/`rl6Srcs`/
+`reg3Srcs`/`legacyR6`) — those were a proxy for the deferral; the priority+seq
+model is the real mechanism. Status: all gating cases byte-exact, sg6 matched
+15485 (remaining sg6 divergences are LD-only: ya-bin `-lrt`, swig/cffigen SBOM).
+
+Caveat retained: in the `.global` archive, `genPyAux` `_raw.auxcpp` objects are
+NOT generated-deferred (they precede the direct objcopy members), whereas
+`PY_REGISTER`'s `.reg.cpp` is.
+
+## Historical: the flagged-hoist as first observed
+
+For `contrib/libs/glibcasm` (no codegen at all) the raw command places the
 flagged `SRC(file flags)` objects (ya.make lines 236–243) **before** the plain
-`SRCS` objects declared earlier (lines 216–234):
+`SRCS` objects declared earlier (lines 216–234) — now explained by priority above:
 
 ```
 0   glibc/sysdeps/x86_64/multiarch/strstr.c.o          SRC(…strstr.c -fgnu89-inline)        line 236
