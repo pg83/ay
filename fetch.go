@@ -116,10 +116,17 @@ func fetchResource(sourceRoot, uri, out string) {
 	case strings.HasPrefix(uri, "sbr:"):
 		id := strings.TrimPrefix(uri, "sbr:")
 		mapped := mapping.urlForSandboxID(id)
+		token := resolveSandboxToken()
 
-		if mapped != "" {
+		switch {
+		case mapped != "":
 			fetchURL(mapped, archivePath)
-		} else {
+		case token != "":
+			// Authenticated fetch, like ya: the Sandbox API and proxy both require
+			// the OAuth token. fetch_from_sandbox.py is unauthenticated (401s), so we
+			// only fall back to it when no token is configured.
+			fetchFromSandbox(id, token, archivePath)
+		default:
 			runPythonScript(tmp, filepath.Join(sourceRoot, "build/scripts/fetch_from_sandbox.py"),
 				"--resource-id", id,
 				"--copy-to", archivePath,
@@ -193,11 +200,23 @@ func runPythonScript(cwd, script string, args ...string) {
 }
 
 func fetchURL(raw, out string) {
+	httpGetToFile(raw, "", out)
+}
+
+// httpGetToFile downloads raw to out, sending an `Authorization: OAuth <token>` header
+// when token is non-empty (Sandbox proxy/MDS downloads require it; public mirrors do not).
+func httpGetToFile(raw, token, out string) {
 	if raw == "" {
 		throwFmt("fetch: empty URL")
 	}
 
-	resp := throw2(http.Get(raw))
+	req := throw2(http.NewRequest(http.MethodGet, raw, nil))
+
+	if token != "" {
+		req.Header.Set("Authorization", "OAuth "+token)
+	}
+
+	resp := throw2(http.DefaultClient.Do(req))
 
 	defer resp.Body.Close()
 
@@ -210,6 +229,85 @@ func fetchURL(raw, out string) {
 	defer f.Close()
 
 	throw2(io.Copy(f, resp.Body))
+}
+
+const (
+	sandboxAPIBase      = "https://sandbox.yandex-team.ru/api/v1.0"
+	sandboxOriginSuffix = "?origin=fetch-from-sandbox"
+	mdsGetSandboxPrefix = "http://storage-int.mds.yandex.net/get-sandbox/"
+)
+
+// resolveSandboxToken returns the Sandbox OAuth token the way ya does: $YA_TOKEN, then
+// the ~/.ya_token file. Empty means no token is configured (callers fall back to the
+// unauthenticated fetch script).
+func resolveSandboxToken() string {
+	if t := strings.TrimSpace(os.Getenv("YA_TOKEN")); t != "" {
+		return t
+	}
+
+	if home, err := os.UserHomeDir(); err == nil {
+		if b, err := os.ReadFile(filepath.Join(home, ".ya_token")); err == nil {
+			return strings.TrimSpace(string(b))
+		}
+	}
+
+	return ""
+}
+
+// sandboxResource is the subset of the Sandbox resource API response we consume.
+type sandboxResource struct {
+	State     string `json:"state"`
+	Multifile bool   `json:"multifile"`
+	HTTP      struct {
+		Proxy string `json:"proxy"`
+	} `json:"http"`
+	Attributes struct {
+		MDS string `json:"mds"`
+	} `json:"attributes"`
+}
+
+// fetchFromSandbox downloads Sandbox resource id to archivePath using the OAuth token,
+// mirroring ya's authenticated fetch (build/scripts/fetch_from_sandbox.py is
+// unauthenticated): query the resource API, then download the tokenless MDS mirror when
+// present, else the proxy link (which also requires the token).
+func fetchFromSandbox(id, token, archivePath string) {
+	info := querySandboxResource(id, token)
+
+	if info.State != "READY" {
+		throwFmt("fetch: sandbox resource %s is not READY (state=%s)", id, info.State)
+	}
+
+	if mds := info.Attributes.MDS; mds != "" {
+		httpGetToFile(mdsGetSandboxPrefix+mds, "", archivePath)
+
+		return
+	}
+
+	link := info.HTTP.Proxy + sandboxOriginSuffix
+	if info.Multifile {
+		link += "&stream=tgz"
+	}
+
+	httpGetToFile(link, token, archivePath)
+}
+
+func querySandboxResource(id, token string) sandboxResource {
+	req := throw2(http.NewRequest(http.MethodGet, sandboxAPIBase+"/resource/"+id, nil))
+	req.Header.Set("Authorization", "OAuth "+token)
+
+	resp := throw2(http.DefaultClient.Do(req))
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		throwFmt("fetch: sandbox resource %s API returned %s", id, resp.Status)
+	}
+
+	var info sandboxResource
+
+	throw(json.NewDecoder(resp.Body).Decode(&info))
+
+	return info
 }
 
 func unpackResourceArchive(archivePath, out string) {
