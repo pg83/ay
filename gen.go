@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -1676,6 +1677,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	ccIsFlatNoLto := make([]bool, 0, len(d.srcs)+len(d.joinSrcs))
 
+	// arDeclLine maps a flagged source's compiled object to its ya.make declaration
+	// line. reorderARMembers sorts the hoisted (flagged) AR bucket by it, restoring
+	// ymake's declaration order — emission interleaves d.srcs SRC()s, srcExtraFlat
+	// duplicates, and SIMD variants out of that order.
+	arDeclLine := map[VFS]int{}
+
 	ccIsCFGenerated := make([]bool, 0, len(d.srcs)+len(d.joinSrcs))
 
 	ccIsProtoGenerated := make([]bool, 0, len(d.srcs)+len(d.joinSrcs))
@@ -1883,6 +1890,10 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ccIsFlatNoLto = append(ccIsFlatNoLto, d.flatSrc(srcID))
 		ccIsCFGenerated = append(ccIsCFGenerated, cls == srcExtCppIn || cls == srcExtCIn)
 		ccIsProtoGenerated = append(ccIsProtoGenerated, cls == srcExtProto)
+
+		if ln, ok := d.srcLine[srcID]; ok {
+			arDeclLine[emit.OutPath] = ln
+		}
 	}
 
 	for _, src := range d.srcs {
@@ -1914,6 +1925,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ccIsFlatNoLto = append(ccIsFlatNoLto, true)
 			ccIsCFGenerated = append(ccIsCFGenerated, false)
 			ccIsProtoGenerated = append(ccIsProtoGenerated, false)
+			arDeclLine[emit.OutPath] = fe.Line
 		}
 	}
 
@@ -2003,6 +2015,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ccIsFlatNoLto = append(ccIsFlatNoLto, true)
 		ccIsCFGenerated = append(ccIsCFGenerated, false)
 		ccIsProtoGenerated = append(ccIsProtoGenerated, false)
+		arDeclLine[emit.OutPath] = e.Line
 	}
 
 	numSrcsDerived := len(ccOutputs)
@@ -2305,7 +2318,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		return result
 	}
 
-	ccRefs, ccOutputs = reorderARMembers(ccRefs, ccOutputs, ccIsFlatNoLto, ccIsCFGenerated, ccIsProtoGenerated, numSrcsDerived)
+	ccRefs, ccOutputs = reorderARMembers(ccRefs, ccOutputs, ccIsFlatNoLto, ccIsCFGenerated, ccIsProtoGenerated, arDeclLine, numSrcsDerived)
 
 	var arRef NodeRef
 	arBaseName := arNameFn(instance.Path.rel())
@@ -2436,7 +2449,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			globalTag = tagPy3BinLibGlobal
 		}
 
-		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), len(globalRefs))
+		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), nil, len(globalRefs))
 		globalRef := emitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, d.tc, ctx.host, ctx.emit)
 		result.GlobalRef = &globalRef
 		result.GlobalPath = vfsPtr(build(instance.Path.rel() + "/" + globalBaseName))
@@ -3115,7 +3128,7 @@ func reorderLDMembers(refs []NodeRef, paths []VFS) ([]NodeRef, []VFS) {
 	return outRefs, outPaths
 }
 
-func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGenerated []bool, isProtoGenerated []bool, numSrcsDerived int) ([]NodeRef, []VFS) {
+func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGenerated []bool, isProtoGenerated []bool, declLine map[VFS]int, numSrcsDerived int) ([]NodeRef, []VFS) {
 	if len(paths) == 0 {
 		return refs, paths
 	}
@@ -3163,6 +3176,13 @@ func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGener
 	for i := numSrcsDerived; i < len(paths); i++ {
 		joinSrcs = append(joinSrcs, member{refs[i], paths[i]})
 	}
+
+	// The hoisted (flagged) bucket follows ymake's declaration order, but emission
+	// interleaves d.srcs SRC()s, srcExtraFlat duplicates, and SIMD variants out of
+	// it — restore it by stable-sorting on the recorded ya.make line.
+	slices.SortStableFunc(noLtoSrcs, func(a, b member) int {
+		return declLine[a.path] - declLine[b.path]
+	})
 
 	out := make([]member, 0, len(paths))
 	out = append(out, noLtoSrcs...)
