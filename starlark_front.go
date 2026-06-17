@@ -232,6 +232,7 @@ func evalStar(fs FS, rel string, env Environment) ([]Stmt, error) {
 
 	predeclared := starlark.StringDict{
 		"flags":                                  fl,
+		"on":                                     starlark.NewBuiltin("on", onBuiltin),
 		"atom":                                   atomBuiltin(fl),
 		"enable":                                 flagSetBuiltin("ENABLE", fl),
 		"disable":                                flagSetBuiltin("DISABLE", fl),
@@ -994,6 +995,19 @@ func macroFragBuiltin(macro string) func(*starlark.Thread, *starlark.Builtin, st
 
 		return fragList(buildStmtFor(macro, out, 0, throwFmt)), nil
 	}
+}
+
+// onBuiltin implements `on(v)` — ymake's truthiness test (NYMake::IsTrue): a value is
+// true unless empty or a false-word. Predeclared in the runtime so a transpiled ya.star
+// uses `if on(flags.X):` without re-declaring the helper in every file.
+func onBuiltin(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var v string
+
+	if err := starlark.UnpackArgs("on", args, kwargs, "v", &v); err != nil {
+		return nil, err
+	}
+
+	return starlark.Bool(stringIsTruthy(v)), nil
 }
 
 // atomBuiltin implements `atom(name)` — the value of an IF-condition identifier in
