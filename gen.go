@@ -656,6 +656,18 @@ func unittestForPeerPath(moduleStmt *ModuleStmt) string {
 	return path.Clean(moduleStmt.Args[0].string())
 }
 
+// moduleStmts parses the module's ya.make and appends the nearest enclosing
+// linters.make.inc (AUTOINCLUDE_PATHS), which ymake INCLUDEs at module finalization.
+func moduleStmts(ctx *GenCtx, dir string) []Stmt {
+	stmts := throw2(parseFile(ctx.fs, joinRel(dir, "ya.make"))).Stmts
+
+	if inc, ok := ctx.autoincludeIdx.lintersMakeIncFor(dir); ok && ctx.fs.isFile(srcRootVFS, inc.rel()) {
+		stmts = append(stmts, throw2(parseFile(ctx.fs, inc.rel())).Stmts...)
+	}
+
+	return stmts
+}
+
 func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if existing := ctx.memo.get(ctx.instanceKey(instance)); existing != nil {
 		return *existing
@@ -686,15 +698,14 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	defer delete(ctx.walking, instance)
 
-	// The module's statement source: a ya.star (evaluated per build-variant with that
-	// variant's flags) or the parsed ya.make. loadModuleSource also pre-parses and
-	// appends the nearest enclosing linters.make.inc (AUTOINCLUDE_PATHS): ymake INCLUDEs
-	// it at module finalization (makefile_loader.cpp:226), so its statements (CLANG_WARNINGS
-	// — STYLE_* are lint-only) run in the module's context after its own body.
-	ms := loadModuleSource(ctx, instance.Path.rel())
+	// The module's parsed ya.make, with the nearest enclosing linters.make.inc
+	// (AUTOINCLUDE_PATHS) appended: ymake INCLUDEs it at module finalization
+	// (makefile_loader.cpp:226), so its statements (CLANG_WARNINGS — STYLE_* are
+	// lint-only) run in the module's context after its own body.
+	stmts := moduleStmts(ctx, instance.Path.rel())
 
 	env := buildIfEnv(instance)
-	d := collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, ms.stmtsFor(env), env)
+	d := collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, env)
 
 	// The consumer requested a variant without pre-parsing this module
 	// (peerEntryLanguage). Only a PROTO_LIBRARY has a python variant: any other
@@ -721,11 +732,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		cppProtoEnv.setStringID(envMODULE_TAG, strCPPProto)
 
 		cppProtoEnv.setBool(envGEN_PROTO, true)
-		d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, ms.stmtsFor(cppProtoEnv), cppProtoEnv)
+		d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, cppProtoEnv)
 	} else if d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangPy {
 		py3ProtoEnv := env.clone()
 		py3ProtoEnv.setBool(envPY3_PROTO, true)
-		d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, ms.stmtsFor(py3ProtoEnv), py3ProtoEnv)
+		d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, py3ProtoEnv)
 	}
 
 	if d.conflictMod != nil {
@@ -742,7 +753,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		// of the DECLARE that defines it. Bind the declared globals into the env and
 		// re-collect once so those references expand (ymake defers; we re-collect).
 		if bindResourceGlobalVars(ctx, instance, d, env) {
-			d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, ms.stmtsFor(env), env)
+			d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, env)
 		}
 
 		return genResourcesLibrary(ctx, instance, d)
@@ -756,7 +767,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		env.setString(envMODULE_SUFFIX, prebuiltModuleSuffix(instance.Platform))
 
 		if bindResourceGlobalVars(ctx, instance, d, env) {
-			d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, ms.stmtsFor(env), env)
+			d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, env)
 		}
 
 		return genPrebuiltProgram(ctx, instance, d)

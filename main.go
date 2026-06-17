@@ -126,11 +126,6 @@ var commands = []command{
 		help: "🔎 Search a graph dump for nodes by output/cmd/input substring.",
 	},
 	{
-		path: []string{"dev", "make", "starlark"}, run: cmdMakeStarlark,
-		help: "🌟 Transpile ya.make → ya.star (Model A) next to each source. Args are\n" +
-			"source-root-relative dirs or ya.make paths; --source-root sets the root.",
-	},
-	{
 		path: []string{"dev", "perf", "parser"}, run: cmdPerfParser,
 		help: "⏱️ Benchmark the C/ya.make parser over every source file under <dir>.",
 	},
@@ -138,11 +133,6 @@ var commands = []command{
 		path: []string{"dev", "perf", "darts"}, run: cmdPerfDarts,
 		help: "🎯 Benchmark the autoinclude longest-prefix matcher: double-array trie vs\n" +
 			"the former ancestor-walk. Prints ns/op for each.",
-	},
-	{
-		path: []string{"dev", "perf", "starlark"}, run: cmdPerfStarlark,
-		help: "🌟 Benchmark module construction from an embedded util ya.make vs ya.star\n" +
-			"(over an in-memory FS): native parse vs Starlark eval, and full build.",
 	},
 	{
 		path: []string{"dev", "refac", "consts"}, run: refacConsts,

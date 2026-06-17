@@ -477,28 +477,6 @@ func parseFile(fs FS, rel string) (mf *MakeFile, err error) {
 	return mf, err
 }
 
-// parseFileWithRaw parses rel and also returns the flat RawCall stream (macro name +
-// raw args, in parse order, INCLUDEs spliced) used by the ya.star transpiler.
-func parseFileWithRaw(fs FS, rel string) (mf *MakeFile, raw []RawCall, err error) {
-	rel = cleanRel(rel)
-	src := readOwnedForParse(fs, rel)
-
-	var calls []RawCall
-
-	st := newIncludeState()
-	st.rawCalls = &calls
-
-	exc := try(func() {
-		mf = parseInternalWithState(fs, rel, src, nil, st)
-	})
-
-	if exc != nil {
-		return nil, nil, exc.asError()
-	}
-
-	return mf, calls, nil
-}
-
 // readOwnedForParse returns an owned copy of rel's content: the lexer holds
 // its src lazily, and a nested INCLUDE triggers another read mid-parse — which
 // would overwrite the reused FS read buffer the outer lexer still points at.
@@ -880,20 +858,6 @@ func parseInternalWithState(fs FS, name string, src []byte, stack []string, incl
 
 type IncludeState struct {
 	once map[string]struct{}
-	// rawCalls, when non-nil, records every macro invocation (name + raw args) in
-	// parse order — including those spliced in by INCLUDE, since the state is shared
-	// across nested parsers. `ay dev make starlark` zips this against the typed Stmt
-	// tree (which carries the IF structure) to transpile ya.make → ya.star without
-	// reconstructing flat args from the typed Stmts.
-	rawCalls *[]RawCall
-}
-
-// RawCall is one macro invocation as the parser saw it: the macro name and its
-// already-interned, pre-typing argument tokens.
-type RawCall struct {
-	Name string
-	Args []STR
-	Line int
 }
 
 func newIncludeState() *IncludeState {
@@ -1032,20 +996,14 @@ type Parser struct {
 }
 
 func (p *Parser) buildStmt(nameTok Token, args []STR) Stmt {
-	if p.includes.rawCalls != nil {
-		*p.includes.rawCalls = append(*p.includes.rawCalls, RawCall{Name: nameTok.val, Args: args, Line: nameTok.line})
-	}
-
 	return buildStmtFor(nameTok.val, args, nameTok.line, func(format string, a ...any) {
 		p.lex.throwParse(nameTok.line, nameTok.col, format, a...)
 	})
 }
 
 // buildStmtFor constructs the Stmt for a macro invocation (name + already-tokenized
-// args). It is the single source of truth for macro → Stmt mapping, shared by the
-// ya.make parser (via buildStmt) and the Starlark front-end (which assembles args from
-// typed kwargs), so both produce byte-identical statements. fail reports a malformed
-// invocation; the parser routes it to throwParse (file:line:col), Starlark to throwFmt.
+// args) — the single source of truth for macro → Stmt mapping. fail reports a malformed
+// invocation (the parser routes it to throwParse with file:line:col).
 func buildStmtFor(name string, args []STR, line int, fail func(format string, a ...any)) Stmt {
 	switch name {
 	case "PROGRAM", "LIBRARY",

@@ -103,19 +103,6 @@ func evalCond(e Expr, env Environment) bool {
 	return false
 }
 
-// atomValue is evalAtom restricted to a bare identifier name: a bound variable yields its
-// value (ints round-trip through their decimal STR), an unbound one yields its own name —
-// matching how ymake compares `MODULE_KIND == PROTO_LIBRARY` (the unbound RHS is the
-// literal "PROTO_LIBRARY"). It backs the ya.star `atom()` builtin the transpiler emits in
-// comparison position.
-func atomValue(env Environment, name string) string {
-	if k, v := env.s.lookup(internEnv(name)); k != envAbsent {
-		return v.string()
-	}
-
-	return name
-}
-
 func evalAtom(e Expr, env Environment) any {
 	switch x := e.(type) {
 	case *ExprIdent:
