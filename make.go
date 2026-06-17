@@ -411,10 +411,14 @@ func parseMakeFlags(args []string) *MakeFlags {
 	}
 
 	if len(mf.targets) == 0 {
-		cwd, err := os.Getwd()
+		cwd := throw2(os.Getwd())
 
-		if err == nil && strings.HasPrefix(cwd, mf.srcRoot+"/") {
-			mf.targets = []string{cwd[len(mf.srcRoot)+1:]}
+		// Default the target to the current directory relative to the source root —
+		// "." at the root itself, "util" in a subdirectory. filepath.Rel yields a
+		// "../"-prefixed path when cwd escapes the root; those are rejected (cwd is
+		// genuinely outside the source root).
+		if rel, err := filepath.Rel(mf.srcRoot, cwd); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			mf.targets = []string{rel}
 		}
 	}
 
