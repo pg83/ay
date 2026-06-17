@@ -160,7 +160,11 @@ type ModuleData struct {
 
 	copyFileAutoOutputs map[STR]CopyFileEntry
 	flatSrcs            map[STR]struct{}
-	resources           []ResourceEntry
+	// srcLine records the ya.make line of each flagged source (SRC/SRC_C_NO_LTO),
+	// so the AR member reorder can sort the hoisted (flagged) bucket in declaration
+	// order — emission interleaves srcExtraFlat/simd out of that order.
+	srcLine   map[STR]int
+	resources []ResourceEntry
 
 	pyMain *STR
 
@@ -237,6 +241,14 @@ func (d *ModuleData) flatSrc(src STR) bool {
 	return ok
 }
 
+func (d *ModuleData) setSrcLine(src STR, line int) {
+	if d.srcLine == nil {
+		d.srcLine = map[STR]int{}
+	}
+
+	d.srcLine[src] = line
+}
+
 func muslCFlags(on bool) []ARG {
 	if on {
 		return []ARG{argDMusl}
@@ -268,6 +280,7 @@ type PySrcGroup struct {
 type SrcFlatEntry struct {
 	Src   STR
 	Flags []ARG
+	Line  int
 }
 
 type ArchiveEntry struct {
@@ -1663,7 +1676,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		// this SRC adds a separate FLAT object with its own flags. Routing it to
 		// srcExtraFlat keeps the SRCS occurrence non-flat and unflagged.
 		if slices.Contains(d.srcs, filename) {
-			d.srcExtraFlat = append(d.srcExtraFlat, SrcFlatEntry{Src: filename, Flags: extras})
+			d.srcExtraFlat = append(d.srcExtraFlat, SrcFlatEntry{Src: filename, Flags: extras, Line: v.Line})
 
 			break
 		}
@@ -1675,6 +1688,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		}
 
 		d.flatSrcs[filename] = struct{}{}
+		d.setSrcLine(filename, v.Line)
 
 		if extras != nil {
 			if d.perSrcCFlags == nil {
@@ -1697,6 +1711,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		}
 
 		d.flatSrcs[filename] = struct{}{}
+		d.setSrcLine(filename, v.Line)
 	case tokSrcCAvx, tokSrcCAvx2, tokSrcCAvx512, tokSrcCAmx, tokSrcCSse2, tokSrcCSse3, tokSrcCSsse3,
 		tokSrcCSse4, tokSrcCSse41, tokSrcCXop:
 
