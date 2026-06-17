@@ -122,12 +122,12 @@ type ModuleData struct {
 	// GLOBAL PROTO_NAMESPACE(contrib/libs/protoc/src) injects -I=$(S)/.../protoc/src
 	// into the py-proto cmdline. The protobuf builtins DISABLE it (no self-peer).
 	needGoogleProtoPeerdirs bool
-	cppProtoPlugins      []CppProtoPlugin
-	excludeTags          map[STR]bool
-	dynamicLibraryFrom   []STR
-	exportsScript        *STR
-	ldPlugins            []STR
-	arPlugin             *STR
+	cppProtoPlugins         []CppProtoPlugin
+	excludeTags             map[STR]bool
+	dynamicLibraryFrom      []STR
+	exportsScript           *STR
+	ldPlugins               []STR
+	arPlugin                *STR
 
 	perSrcCFlags map[STR][]ARG
 
@@ -1344,7 +1344,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 
 		bundle := readResourceBundleJSON(fs, jsonRel)
 
-		if uri, ok := bundle[resourceJSONPlatformKey(env)]; ok {
+		if uri, ok := resolveResourceURIFromBundle(bundle, env); ok {
 			env.setString(internEnv(v.Args[0].string()), uri)
 		}
 	case tokPrimaryOutput:
