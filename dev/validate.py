@@ -34,6 +34,7 @@ AY = os.path.join(REPO_ROOT, "ay")
 LOCK_PATH_CANDIDATES = (
     '/var/run/dropbear/tmp/validate.lock',
     '/tmp/ay-validate.lock',
+    '/var/tmp/ay-validate.lock',
 )
 
 
