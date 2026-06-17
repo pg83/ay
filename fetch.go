@@ -4,12 +4,18 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
+
+	"golang.org/x/crypto/ssh/agent"
 )
 
 type ResourceMappingConf struct {
@@ -237,9 +243,16 @@ const (
 	mdsGetSandboxPrefix = "http://storage-int.mds.yandex.net/get-sandbox/"
 )
 
+// OAuth client used to exchange an SSH key for a token (devtools/ya/yalibrary/oauth).
+const (
+	oauthClientID     = "f4d36b7671004ed9850148fa645acac6"
+	oauthClientSecret = "da475ea72e58427ab5c8a31e17ef2347"
+	oauthTokenURL     = "https://oauth.yandex-team.ru/token"
+)
+
 // resolveSandboxToken returns the Sandbox OAuth token the way ya does: $YA_TOKEN, then
-// the ~/.ya_token file. Empty means no token is configured (callers fall back to the
-// unauthenticated fetch script).
+// the ~/.ya_token file, then an SSH-agent key exchanged for a token. Empty means no
+// token could be obtained (callers fall back to the unauthenticated fetch script).
 func resolveSandboxToken() string {
 	if t := strings.TrimSpace(os.Getenv("YA_TOKEN")); t != "" {
 		return t
@@ -247,11 +260,109 @@ func resolveSandboxToken() string {
 
 	if home, err := os.UserHomeDir(); err == nil {
 		if b, err := os.ReadFile(filepath.Join(home, ".ya_token")); err == nil {
-			return strings.TrimSpace(string(b))
+			if t := strings.TrimSpace(string(b)); t != "" {
+				return t
+			}
+		}
+	}
+
+	return tokenFromSSHAgent(oauthLogin())
+}
+
+// oauthLogin is the Staff login used for the SSH-key exchange: $YA_USER, else the current
+// OS user (matching ya's getpass.getuser()).
+func oauthLogin() string {
+	if u := strings.TrimSpace(os.Getenv("YA_USER")); u != "" {
+		return u
+	}
+
+	if u, err := user.Current(); err == nil && u.Username != "" {
+		return u.Username
+	}
+
+	return os.Getenv("USER")
+}
+
+// tokenFromSSHAgent reimplements ya's library.python.oauth.get_token SSH path: sign
+// "<ts><client_id><login>" with each SSH-agent key and POST grant_type=ssh_key to the
+// OAuth service; the first key the server accepts yields the token. Returns "" if no
+// agent is reachable or no key is accepted.
+func tokenFromSSHAgent(login string) string {
+	sock := os.Getenv("SSH_AUTH_SOCK")
+	if sock == "" || login == "" {
+		return ""
+	}
+
+	conn, err := net.Dial("unix", sock)
+	if err != nil {
+		return ""
+	}
+
+	defer conn.Close()
+
+	ag := agent.NewClient(conn)
+
+	keys, err := ag.List()
+	if err != nil {
+		return ""
+	}
+
+	ts := time.Now().Unix()
+	data := []byte(strconv.FormatInt(ts, 10) + oauthClientID + login)
+
+	for _, key := range keys {
+		sig, err := ag.Sign(key, data)
+		if err != nil {
+			continue
+		}
+
+		form := url.Values{
+			"grant_type":    {"ssh_key"},
+			"client_id":     {oauthClientID},
+			"client_secret": {oauthClientSecret},
+			"login":         {login},
+			"ts":            {strconv.FormatInt(ts, 10)},
+			// The signature is the second SSH-string of the agent's reply; x/crypto
+			// hands it back already split out as sig.Blob. base64url, no padding.
+			"ssh_sign": {base64.RawURLEncoding.EncodeToString(sig.Blob)},
+		}
+
+		// A certificate key isn't pre-registered on Staff, so the server needs the
+		// cert itself to verify (ya sends public_cert only for cert keys).
+		if strings.Contains(key.Format, "cert") {
+			form.Set("public_cert", base64.RawURLEncoding.EncodeToString(key.Blob))
+		}
+
+		if tok := postOAuthToken(form); tok != "" {
+			return tok
 		}
 	}
 
 	return ""
+}
+
+// postOAuthToken posts the token request and returns access_token, or "" on any failure.
+func postOAuthToken(form url.Values) string {
+	resp, err := http.PostForm(oauthTokenURL, form)
+	if err != nil {
+		return ""
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+
+	var out struct {
+		AccessToken string `json:"access_token"`
+	}
+
+	if json.NewDecoder(resp.Body).Decode(&out) != nil {
+		return ""
+	}
+
+	return out.AccessToken
 }
 
 // sandboxResource is the subset of the Sandbox resource API response we consume.
