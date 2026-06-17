@@ -102,21 +102,6 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 		}
 	}
 
-	// A SRCS entry may be spelled as a full arcadia-root path rather than a
-	// module-relative tail — e.g. a PROTO_LIBRARY that pulls a sibling dir's
-	// proto: module market/idx/datacamp/proto/external lists
-	// SRCS(market/idx/datacamp/proto/api/ExportMessage.proto). If the
-	// module-relative join is absent on disk but the token resolves
-	// root-relative, take the root-relative form (matching upstream's source
-	// resolution, which would otherwise double the prefix).
-	if srcRel != "" {
-		moduleRel := filepath.ToSlash(filepath.Clean(srcInstance.Path.rel() + "/" + srcRel))
-
-		if !ctx.fs.isFile(srcRootVFS, moduleRel) && ctx.fs.isFile(srcRootVFS, srcRel) {
-			return source(filepath.ToSlash(filepath.Clean(srcRel)))
-		}
-	}
-
 	// Normalise any literal `..` / `.` segments so SRCS(../foo.cpp) lands
 	// at the canonical source path (REF tracks the cleaned form, e.g.
 	// $(S)/ydb/public/lib/ydb_cli/commands/ydb_command.cpp, not the

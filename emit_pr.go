@@ -382,18 +382,7 @@ func runProgramInputVFS(ctx *GenCtx, instance ModuleInstance, d *ModuleData, rel
 		return source(rel)
 	}
 
-	resolved := resolveModuleSourceVFS(ctx, instance, d, rel, d.srcDirs)
-
-	// A resolved $(S) source that does not exist on disk is not a real source:
-	// it is the output of an unmodelled codegen (e.g. a FROM_SANDBOX OUT_NOAUTO
-	// like `trie`), which lives in $(B). Treat it as the generated build
-	// artifact so it is not content-hashed as a missing source. The producing
-	// node is a node-count gap to close once that codegen is modelled.
-	if resolved.isSource() && !ctx.fs.isFile(srcRootVFS, resolved.rel()) {
-		return buildVFS
-	}
-
-	return resolved
+	return resolveModuleSourceVFS(ctx, instance, d, rel, d.srcDirs)
 }
 
 func emitPR(
