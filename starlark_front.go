@@ -49,19 +49,17 @@ var starAttrs = map[string]struct {
 	kind  attrKind
 }{
 	// structured list attributes (typed Stmts built by buildStmtFor)
-	"peerdir":        {"PEERDIR", attrArgs},
-	"srcdir":         {"SRCDIR", attrArgs},
-	"global_srcs":    {"GLOBAL_SRCS", attrArgs},
-	"join_srcs":      {"JOIN_SRCS", attrArgs},
-	"cflags":         {"CFLAGS", attrArgs},
-	"cxxflags":       {"CXXFLAGS", attrArgs},
-	"conlyflags":     {"CONLYFLAGS", attrArgs},
-	"ldflags":        {"LDFLAGS", attrArgs},
-	"addincl":        {"ADDINCL", attrArgs},
-	"resource_files": {"RESOURCE_FILES", attrArgs},
-	"resource":       {"RESOURCE", attrArgs},
-	"default":        {"DEFAULT", attrArgs},
-	"headers":        {"HEADERS", attrArgs},
+	"peerdir":     {"PEERDIR", attrArgs},
+	"srcdir":      {"SRCDIR", attrArgs},
+	"global_srcs": {"GLOBAL_SRCS", attrArgs},
+	"join_srcs":   {"JOIN_SRCS", attrArgs},
+	"cflags":      {"CFLAGS", attrArgs},
+	"cxxflags":    {"CXXFLAGS", attrArgs},
+	"conlyflags":  {"CONLYFLAGS", attrArgs},
+	"ldflags":     {"LDFLAGS", attrArgs},
+	"addincl":     {"ADDINCL", attrArgs},
+	"default":     {"DEFAULT", attrArgs},
+	"headers":     {"HEADERS", attrArgs},
 
 	// value macros (UnknownStmt; the collect handler reads Args and validates arity)
 	"version":         {"VERSION", attrArgs},
@@ -83,6 +81,48 @@ var starAttrs = map[string]struct {
 	"extralibs":       {"EXTRALIBS", attrArgs},
 	"yql_abi_version": {"YQL_ABI_VERSION", attrArgs},
 	"split_factor":    {"SPLIT_FACTOR", attrArgs},
+
+	// pure-metadata value macros (acknowledgedMacros; UnknownStmt, no graph effect) —
+	// mapped so a transpiled ya.star expresses them as kwargs instead of stmt().
+	"license_texts":                       {"LICENSE_TEXTS", attrArgs},
+	"without_license_texts":               {"WITHOUT_LICENSE_TEXTS", attrArgs},
+	"license_restriction":                 {"LICENSE_RESTRICTION", attrArgs},
+	"license_restriction_exceptions":      {"LICENSE_RESTRICTION_EXCEPTIONS", attrArgs},
+	"original_source":                     {"ORIGINAL_SOURCE", attrArgs},
+	"provides":                            {"PROVIDES", attrArgs},
+	"suppressions":                        {"SUPPRESSIONS", attrArgs},
+	"message":                             {"MESSAGE", attrArgs},
+	"owner":                               {"OWNER", attrArgs},
+	"opensource_project":                  {"OPENSOURCE_PROJECT", attrArgs},
+	"opensource_export_replacement":       {"OPENSOURCE_EXPORT_REPLACEMENT", attrArgs},
+	"ide_folder":                          {"IDE_FOLDER", attrArgs},
+	"tag":                                 {"TAG", attrArgs},
+	"size":                                {"SIZE", attrArgs},
+	"timeout":                             {"TIMEOUT", attrArgs},
+	"need_review":                         {"NEED_REVIEW", attrArgs},
+	"allocator_impl":                      {"ALLOCATOR_IMPL", attrArgs},
+	"requirements":                        {"REQUIREMENTS", attrArgs},
+	"test_srcs":                           {"TEST_SRCS", attrArgs},
+	"restrict_path":                       {"RESTRICT_PATH", attrArgs},
+	"include_tags":                        {"INCLUDE_TAGS", attrArgs},
+	"only_tags":                           {"ONLY_TAGS", attrArgs},
+	"build_only_if":                       {"BUILD_ONLY_IF", attrArgs},
+	"no_build_if":                         {"NO_BUILD_IF", attrArgs},
+	"check_dependent_dirs":                {"CHECK_DEPENDENT_DIRS", attrArgs},
+	"all_py_srcs":                         {"ALL_PY_SRCS", attrArgs},
+	"addinclself":                         {"ADDINCLSELF", attrToggle},
+	"python3_addincl":                     {"PYTHON3_ADDINCL", attrArgs},
+	"ya_conf_json":                        {"YA_CONF_JSON", attrArgs},
+	"opensource_export_replacement_by_os": {"OPENSOURCE_EXPORT_REPLACEMENT_BY_OS", attrArgs},
+	"global_cflags":                       {"GLOBAL_CFLAGS", attrArgs},
+	"files":                               {"FILES", attrArgs},
+	"check_config_h":                      {"CHECK_CONFIG_H", attrArgs},
+
+	// toggle macros that must emit even with no arguments
+	"grpc":                       {"GRPC", attrToggle},
+	"with_kotlin_grpc":           {"WITH_KOTLIN_GRPC", attrToggle},
+	"no_ymake_python3":           {"NO_YMAKE_PYTHON3", attrToggle},
+	"windows_long_path_manifest": {"WINDOWS_LONG_PATH_MANIFEST", attrToggle},
 
 	// zero-argument toggle macros (bool kwargs)
 	"need_check":                {"NEED_CHECK", attrToggle},
@@ -215,6 +255,20 @@ func evalStar(fs FS, rel string, env Environment) ([]Stmt, error) {
 		"enum_serialization_noutf":       starlark.NewBuiltin("enum_serialization_noutf", enumSerBuiltin("noutf")),
 		"join_srcs":                      starlark.NewBuiltin("join_srcs", joinSrcsBuiltin),
 		"src_c_no_lto":                   starlark.NewBuiltin("src_c_no_lto", macroFragBuiltin("SRC_C_NO_LTO")),
+	}
+
+	// Source-generating per-file macros (SRC, the SIMD SRC_C_* set, COPY_FILE, ARCHIVE)
+	// are positional-arg frag builtins composed into srcs, preserving their declaration
+	// order among the plain sources.
+	for _, m := range srcGenMacros {
+		predeclared[strings.ToLower(m)] = starlark.NewBuiltin(strings.ToLower(m), macroFragBuiltin(m))
+	}
+
+	// Boundary-sensitive macros (RESOURCE_FILES/RESOURCE batch per statement; INDUCED_DEPS
+	// groups files under a leading extension key) must stay one-frag-per-statement, so
+	// they are positional frag builtins emitted into `body`, never merged into a kwarg.
+	for _, m := range boundaryMacros {
+		predeclared[strings.ToLower(m)] = macroListFragBuiltin(m)
 	}
 
 	// Every module type ya.make recognizes is a rule builtin (lower-cased): library(),
@@ -959,8 +1013,9 @@ func atomBuiltin(fl *starFlags) *starlark.Builtin {
 }
 
 // flagSetBuiltin implements `enable([names])` / `disable([names])` — it records each name
-// as yes/no in the eval-time overlay (so a later IF sees it) and emits the ENABLE/DISABLE
-// stmt so collectStmts still applies its module-data side-effects (MUSL_LITE, …).
+// as yes/no in the eval-time overlay (so a later IF sees it) and returns the ENABLE/DISABLE
+// stmt as a frag (composed into `body`) so collectStmts still applies its module-data side
+// effects (MUSL_LITE, …).
 func flagSetBuiltin(macro string, fl *starFlags) *starlark.Builtin {
 	on := macro == "ENABLE"
 	val := strNo.string()
@@ -989,8 +1044,8 @@ func flagSetBuiltin(macro string, fl *starFlags) *starlark.Builtin {
 	})
 }
 
-// setVarBuiltin implements `set_var(name, [vals])` — SET in the overlay (space-joined
-// value) plus the SetStmt for collectStmts.
+// setVarBuiltin implements `set_var(name, [vals])` — SET in the overlay (space-joined,
+// expanded value) plus the SetStmt frag.
 func setVarBuiltin(fl *starFlags) *starlark.Builtin {
 	return starlark.NewBuiltin("set_var", func(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 		var name string
@@ -1056,6 +1111,26 @@ func stmtBuiltin(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, k
 	}
 
 	return fragList(buildStmtFor(name, out, 0, throwFmt)), nil
+}
+
+// macroListFragBuiltin builds a per-statement frag builtin taking a single list argument
+// (not varargs) — used for boundary macros whose argument list can exceed Starlark's
+// 255-positional-call limit (e.g. RESOURCE_FILES with hundreds of files).
+func macroListFragBuiltin(macro string) *starlark.Builtin {
+	return starlark.NewBuiltin(strings.ToLower(macro), func(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		var list *starlark.List
+
+		if err := starlark.UnpackArgs(strings.ToLower(macro), args, kwargs, "args?", &list); err != nil {
+			return nil, err
+		}
+
+		out, err := unpackStrList(list)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", macro, err)
+		}
+
+		return fragList(buildStmtFor(macro, out, 0, throwFmt)), nil
+	})
 }
 
 // fragList wraps a generator's statements in a single-element Starlark list, so

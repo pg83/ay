@@ -28,52 +28,20 @@ func assertTranspileRoundTrip(t *testing.T, yamake string, env Environment) {
 		t.Fatalf("no module found in:\n%s", yamake)
 	}
 
-	want := moduleSpan(flattenIfStmts(mf.Stmts, env))
+	want := flattenIfStmts(mf.Stmts, env)
 
 	got, err := evalStar(newMemFS(map[string]string{"m/ya.star": star}), "m/ya.star", env)
 	if err != nil {
 		t.Fatalf("evalStar:\n--- src ---\n%s\nerr: %v", star, err)
 	}
 
-	gs, ws := dumpStmts(got), dumpStmts(want)
+	// The declarative form merges repeated statements and groups attributes by kind, so
+	// it is compared order-/grouping-insensitively (summarizeModule). Exact byte parity
+	// of the resulting graph is verified end-to-end by the sg6 gate.
+	gs, ws := summarizeModule(got), summarizeModule(want)
 	if gs != ws {
 		t.Fatalf("round-trip mismatch:\n--- ya.star ---\n%s\n--- got ---\n%s--- want ---\n%s", star, gs, ws)
 	}
-}
-
-// moduleSpan returns the statements a ya.star reproduces, in ya.star emission order:
-// ModuleStmt first, then any pre-module statements (the transpiler relocates them to the
-// head of `body`), then the module body, then EndStmt. Post-END statements (RECURSE) are
-// dropped.
-func moduleSpan(stmts []Stmt) []Stmt {
-	start, end := -1, -1
-
-	for i, s := range stmts {
-		if _, ok := s.(*ModuleStmt); ok && start < 0 {
-			start = i
-		}
-
-		if _, ok := s.(*EndStmt); ok && start >= 0 {
-			end = i
-
-			break
-		}
-	}
-
-	if start < 0 {
-		return nil
-	}
-
-	if end < 0 {
-		end = len(stmts) - 1
-	}
-
-	out := []Stmt{stmts[start]}         // ModuleStmt
-	out = append(out, stmts[:start]...) // pre-module → head of body
-	out = append(out, stmts[start+1:end]...)
-	out = append(out, stmts[end]) // EndStmt
-
-	return out
 }
 
 // TestTranspile_Sg6Corpus round-trips every sg6 module ya.make under one representative
@@ -103,13 +71,13 @@ func TestTranspile_Sg6Corpus(t *testing.T) {
 			continue
 		}
 
-		star, hasModule, terr := transpileToStar(mf.Stmts, raw)
+		star, hasModule, terr := transpileToStarMode(mf.Stmts, raw, stmtFallbackDirs[dir])
 		if terr != nil || !hasModule {
 			continue
 		}
 
 		env := buildIfEnv(ModuleInstance{Platform: newTestPlatform(OSLinux, ISAX8664, "no"), Kind: KindLib, Path: source(dir)})
-		want := moduleSpan(flattenIfStmts(mf.Stmts, env))
+		want := summarizeModule(flattenIfStmts(mf.Stmts, env))
 
 		got, eerr := evalStar(newMemFS(map[string]string{"x/ya.star": star}), "x/ya.star", env)
 		if eerr != nil {
@@ -123,11 +91,11 @@ func TestTranspile_Sg6Corpus(t *testing.T) {
 			continue
 		}
 
-		if dumpStmts(got) != dumpStmts(want) {
+		if gs := summarizeModule(got); gs != want {
 			mismatch++
 
 			if shown < 8 {
-				t.Logf("MISMATCH %s:\n%s", dir, firstDiffLine(dumpStmts(want), dumpStmts(got)))
+				t.Logf("MISMATCH %s:\n%s", dir, firstDiffLine(want, gs))
 				shown++
 			}
 
@@ -244,15 +212,15 @@ func TestTranspile_UtilModule(t *testing.T) {
 	for _, isa := range []ISA{ISAX8664, ISAAArch64} {
 		env := buildIfEnv(ModuleInstance{Platform: newTestPlatform(OSLinux, isa, "no"), Kind: KindLib, Path: source("util")})
 
-		want := moduleSpan(flattenIfStmts(mf.Stmts, env))
+		want := summarizeModule(flattenIfStmts(mf.Stmts, env))
 
 		got, err := evalStar(starFS, "util/ya.star", env)
 		if err != nil {
 			t.Fatalf("evalStar:\n%s\nerr: %v", star, err)
 		}
 
-		if gs, ws := dumpStmts(got), dumpStmts(want); gs != ws {
-			t.Fatalf("util round-trip mismatch (isa=%v):\n--- got ---\n%s--- want ---\n%s", isa, gs, ws)
+		if gs := summarizeModule(got); gs != want {
+			t.Fatalf("util round-trip mismatch (isa=%v):\n--- got ---\n%s--- want ---\n%s", isa, gs, want)
 		}
 	}
 }
