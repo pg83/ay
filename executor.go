@@ -57,6 +57,21 @@ type Executor struct {
 	stats   map[string][]time.Duration
 	pending atomic.Uint64
 	done    atomic.Uint64
+
+	// sandboxToken is resolved on demand the first time a FETCH node needs a Sandbox
+	// (sbr:) resource — so a graph with no such fetch never touches the SSH agent.
+	tokenOnce sync.Once
+	token     string
+}
+
+// sandboxToken resolves the Sandbox OAuth token once (across all concurrent fetch
+// nodes), the way ya does (env / ~/.ya_token / SSH-agent exchange). "" if none.
+func (ex *Executor) sandboxToken() string {
+	ex.tokenOnce.Do(func() {
+		ex.token = resolveSandboxToken()
+	})
+
+	return ex.token
 }
 
 type CommandResult struct {
@@ -438,6 +453,15 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 
 		for _, e := range c.Env {
 			env = append(env, e.Name.string()+"="+mountString(e.Value.string(), srcMount, bldMount))
+		}
+
+		// A FETCH node pulling a Sandbox (sbr:) resource needs an OAuth token; resolve
+		// it lazily (once) and pass it via YA_TOKEN so the `ay fetch` child authenticates
+		// without re-resolving. Only sbr: fetches trigger this — http/mapped ones don't.
+		if n.KV.P == pkFETCH && os.Getenv("YA_TOKEN") == "" && argsNeedSandboxToken(args) {
+			if tok := ex.sandboxToken(); tok != "" {
+				env = append(env, "YA_TOKEN="+tok)
+			}
 		}
 
 		cmd := &exec.Cmd{
