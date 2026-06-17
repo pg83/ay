@@ -6,6 +6,16 @@ import (
 	"testing"
 )
 
+// TestStarlark_CreateBuildInfoFor pins the create_buildinfo_for() builtin →
+// CreateBuildInfoStmt.
+func TestStarlark_CreateBuildInfoFor(t *testing.T) {
+	env := DefaultIfEnv.clone()
+
+	assertSameStmts(t,
+		evalStarStr(t, `library(srcs = ["a.cpp"] + create_buildinfo_for("buildinfo.h"))`, env),
+		parseMakeStr(t, "LIBRARY()\nSRCS(a.cpp)\nCREATE_BUILDINFO_FOR(buildinfo.h)\nEND()\n"))
+}
+
 func TestApplyUnknownStmt_ExcludeTagsAcceptsTagNames(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
 	d := &ModuleData{}
