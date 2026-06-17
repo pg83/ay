@@ -160,10 +160,15 @@ type ModuleData struct {
 
 	copyFileAutoOutputs map[STR]CopyFileEntry
 	flatSrcs            map[STR]struct{}
-	// srcLine records the ya.make line of each flagged source (SRC/SRC_C_NO_LTO),
-	// so the AR member reorder can sort the hoisted (flagged) bucket in declaration
-	// order — emission interleaves srcExtraFlat/simd out of that order.
-	srcLine   map[STR]int
+	// srcMeta records, per source, its declaring macro's StatementPriority (ymake
+	// module_loader.cpp:38 — SRCS/PY_SRCS=4, everything else including
+	// SRC/JOIN_SRCS/codegen=2 by default) and a module-global declaration sequence
+	// (declSeq, monotonic across the module's statements AND its INCLUDEs — a plain
+	// per-file line does not compose across includes). ymake processes statements
+	// in (priority, name) order, so the AR member order is (prio, seq): SRC/JOIN/
+	// codegen (prio 2) ahead of plain SRCS (prio 4); within a priority, by seq.
+	srcMeta   map[STR]SrcMeta
+	declSeq   int
 	resources []ResourceEntry
 
 	pyMain *STR
@@ -241,12 +246,63 @@ func (d *ModuleData) flatSrc(src STR) bool {
 	return ok
 }
 
-func (d *ModuleData) setSrcLine(src STR, line int) {
-	if d.srcLine == nil {
-		d.srcLine = map[STR]int{}
+// StatementPriority values mirror ymake's TModuleDef::StatementPriority
+// (devtools/ymake/module_loader.cpp:38): statements run in (priority, name)
+// order, so a lower number is processed (and its objects archived) first.
+const (
+	stmtPrioDefault = 2 // SRC, SRC_C_*, JOIN_SRCS, RUN_PROGRAM, codegen macros…
+	stmtPrioSrcs    = 4 // SRCS, PY_SRCS
+)
+
+// SrcMeta carries a source's AR-ordering key: its declaring macro's
+// StatementPriority, a module-global declaration sequence, and whether the
+// compiled object's input is an in-module generated file (codegen/JOIN). ymake's
+// FIFO defers a generated compile to a later round, so generated objects archive
+// after the direct ones; within each group the order is (Prio, Seq).
+type SrcMeta struct {
+	Prio      int
+	Seq       int
+	Generated bool
+}
+
+// sortKey packs the AR-ordering key into one comparable uint64 (high→low:
+// generated-flag, StatementPriority, declaration sequence) — direct compiles
+// before generated-source compiles (deferred a FIFO round in ymake), then by
+// (priority, seq).
+func (m SrcMeta) sortKey() uint64 {
+	var gen uint64
+	if m.Generated {
+		gen = 1
 	}
 
-	d.srcLine[src] = line
+	return gen<<60 | uint64(m.Prio)<<32 | uint64(uint32(m.Seq))
+}
+
+// nextDeclSeq returns the next module-global declaration sequence number. It is
+// bumped once per source/statement as collection walks the ya.make and its
+// INCLUDEs in order, so it composes across includes where a per-file line cannot.
+func (d *ModuleData) nextDeclSeq() int {
+	d.declSeq++
+
+	return d.declSeq
+}
+
+func (d *ModuleData) setSrcMeta(src STR, prio, seq int) {
+	if d.srcMeta == nil {
+		d.srcMeta = map[STR]SrcMeta{}
+	}
+
+	d.srcMeta[src] = SrcMeta{Prio: prio, Seq: seq}
+}
+
+// srcMetaOf returns a source's recorded (prio, seq); sources without an entry
+// (e.g. COPY_FILE auto-srcs) default to the macro priority (2), seq 0.
+func (d *ModuleData) srcMetaOf(src STR) SrcMeta {
+	if m, ok := d.srcMeta[src]; ok {
+		return m
+	}
+
+	return SrcMeta{Prio: stmtPrioDefault}
 }
 
 func muslCFlags(on bool) []ARG {
@@ -280,7 +336,7 @@ type PySrcGroup struct {
 type SrcFlatEntry struct {
 	Src   STR
 	Flags []ARG
-	Line  int
+	Seq   int
 }
 
 type ArchiveEntry struct {
@@ -911,6 +967,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 					globalNext = false
 				} else {
 					d.srcs = append(d.srcs, srcTok)
+					d.setSrcMeta(srcTok, stmtPrioSrcs, d.nextDeclSeq())
 				}
 
 				switch srcExtClassOf(srcTok) {
@@ -972,6 +1029,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 		case *JoinSrcsStmt:
 			expanded := *v
 			expanded.Sources = expandStmtTokensSTR(v.Sources, env)
+			expanded.Seq = d.nextDeclSeq()
 			d.joinSrcs = append(d.joinSrcs, &expanded)
 		case *AddInclStmt:
 
@@ -1676,7 +1734,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		// this SRC adds a separate FLAT object with its own flags. Routing it to
 		// srcExtraFlat keeps the SRCS occurrence non-flat and unflagged.
 		if slices.Contains(d.srcs, filename) {
-			d.srcExtraFlat = append(d.srcExtraFlat, SrcFlatEntry{Src: filename, Flags: extras, Line: v.Line})
+			d.srcExtraFlat = append(d.srcExtraFlat, SrcFlatEntry{Src: filename, Flags: extras, Seq: d.nextDeclSeq()})
 
 			break
 		}
@@ -1688,7 +1746,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		}
 
 		d.flatSrcs[filename] = struct{}{}
-		d.setSrcLine(filename, v.Line)
+		d.setSrcMeta(filename, stmtPrioDefault, d.nextDeclSeq())
 
 		if extras != nil {
 			if d.perSrcCFlags == nil {
@@ -1711,7 +1769,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		}
 
 		d.flatSrcs[filename] = struct{}{}
-		d.setSrcLine(filename, v.Line)
+		d.setSrcMeta(filename, stmtPrioDefault, d.nextDeclSeq())
 	case tokSrcCAvx, tokSrcCAvx2, tokSrcCAvx512, tokSrcCAmx, tokSrcCSse2, tokSrcCSse3, tokSrcCSsse3,
 		tokSrcCSse4, tokSrcCSse41, tokSrcCXop:
 
@@ -1734,7 +1792,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 			Src:     filename,
 			Variant: variant.Suffix,
 			CFlags:  flags,
-			Line:    v.Line,
+			Seq:     d.nextDeclSeq(),
 		})
 	case tokLdPlugin:
 
