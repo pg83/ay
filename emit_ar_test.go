@@ -654,19 +654,19 @@ func TestReorderARMembers_Reg3PICVariantsTrailObjcopy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			refs := make([]NodeRef, len(tc.paths))
 			paths := make([]VFS, len(tc.paths))
+			declMeta := map[VFS]SrcMeta{}
 			for i, rel := range tc.paths {
 				refs[i] = NodeRef(int64(i + 1))
 				paths[i] = build(rel)
+				// The .reg3.cpp compiles are generated sources (production sets
+				// Generated on their AR member meta), so they sort after the direct
+				// objcopy members, which carry the default meta.
+				if strings.Contains(rel, ".reg3.cpp") {
+					declMeta[paths[i]] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
+				}
 			}
 
-			gotRefs, gotPaths := reorderARMembers(
-				refs,
-				paths,
-				make([]bool, len(tc.paths)),
-				make([]bool, len(tc.paths)),
-				make([]bool, len(tc.paths)),
-				len(tc.paths),
-			)
+			gotRefs, gotPaths := reorderARMembers(refs, paths, declMeta)
 
 			wantRefs := make([]NodeRef, len(tc.wantOrder))
 			wantPaths := make([]string, len(tc.wantOrder))
