@@ -104,6 +104,16 @@ func cmdMake(g GlobalFlags, args []string) int {
 		}
 	}
 
+	// Resolve the Sandbox OAuth token once and export it, so the many `ay fetch`
+	// child processes inherit it (a single SSH-agent exchange — and a single
+	// Secure-Enclave touch — instead of one per fetch). Only when actually executing
+	// (threads > 0); -j0 gen-only never fetches.
+	if mf.threads > 0 && os.Getenv("YA_TOKEN") == "" {
+		if tok := resolveSandboxToken(); tok != "" {
+			throw(os.Setenv("YA_TOKEN", tok))
+		}
+	}
+
 	fs := newFS(mf.srcRoot)
 
 	tools := toolchainFlags(fs)
