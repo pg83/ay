@@ -1037,7 +1037,15 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		postUserProgDefaults = defaultProgramPeerdirsForModule(ctx, instance, d, true)
 	}
 
-	allocatorExplicitPeers := allocatorPeers[d.allocatorName.string()]
+	// The allocator is injected at the final link (the program), not into the
+	// paired PY3_LIBRARY or any library: otherwise the allocator's .a leaks into
+	// the lib's archive closure and surfaces early in the program link instead of
+	// at its module-epilogue slot (before glibcasm). Gate on isProgram.
+	var allocatorExplicitPeers []string
+
+	if isProgram {
+		allocatorExplicitPeers = allocatorPeers[d.allocatorName.string()]
+	}
 
 	unitTestPeerCount := 0
 
