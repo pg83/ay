@@ -395,7 +395,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 	}
 
 	if mf.srcRoot == "" {
-		mf.srcRoot = throw2(os.Getwd())
+		mf.srcRoot = findSourceRoot(throw2(os.Getwd()))
 	}
 
 	if mf.bldRoot == "" {
@@ -419,6 +419,25 @@ func parseMakeFlags(args []string) *MakeFlags {
 	}
 
 	return mf
+}
+
+// findSourceRoot resolves the source root when --source-root is not given: it walks up
+// from start to the nearest ancestor containing a ya.conf (the source-root marker), so
+// `ay make` works from any subdirectory the way the upstream `ya` does. With no ya.conf
+// in any ancestor it falls back to start (the previous behavior).
+func findSourceRoot(start string) string {
+	for dir := start; ; {
+		if info, err := os.Stat(filepath.Join(dir, "ya.conf")); err == nil && !info.IsDir() {
+			return dir
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return start
+		}
+
+		dir = parent
+	}
 }
 
 func parseKV(into map[string]string, kv string) {

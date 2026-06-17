@@ -1,8 +1,38 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
+
+func TestFindSourceRoot(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "ya.conf"), []byte("[flags]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sub := filepath.Join(root, "util", "system")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// From a subdirectory, the root is the nearest ancestor holding ya.conf.
+	if got := findSourceRoot(sub); got != root {
+		t.Fatalf("findSourceRoot(%q) = %q, want %q", sub, got, root)
+	}
+
+	// At the root itself, the root is returned.
+	if got := findSourceRoot(root); got != root {
+		t.Fatalf("findSourceRoot(root) = %q, want %q", got, root)
+	}
+
+	// With no ya.conf in any ancestor, fall back to the start directory.
+	bare := t.TempDir()
+	if got := findSourceRoot(bare); got != bare {
+		t.Fatalf("findSourceRoot(no-marker) = %q, want %q", got, bare)
+	}
+}
 
 func TestCompilerFlagsFromConfig_NonTestMergesInternalYaConf(t *testing.T) {
 	fs := newMemFS(map[string]string{
