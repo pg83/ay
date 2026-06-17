@@ -233,7 +233,15 @@ func cythonGeneratedOutputInputs(ctx *GenCtx, instance ModuleInstance, src VFS, 
 
 	// singles first (dedup keeps first occurrence), then the closure chunks and
 	// the .pyx source closure — fed straight to the one-pass dedup as chunks.
-	return dedupVFS(append([][]VFS{toolSingles}, append(toolCl, sourceClosure)...)...),
+	//
+	// The cython transpile's own inputs are source-only: it reads the .pyx/.pxd
+	// and source headers, not generated C++ ($(B)) headers — a generated header
+	// reached in the closure rides its $(S) source (the proto/codegen leaf)
+	// instead. keepOnlySourceVFS drops the $(B) entries (e.g. tvmauth's
+	// ticket2.pb.h/tvm_keys.pb.h, reached via a C++ header that #includes them),
+	// matching upstream (every CY node lists zero $(B) inputs). The generated
+	// .cpp's own CC closure (emitsIncludes) keeps them.
+	return keepOnlySourceVFS(dedupVFS(append([][]VFS{toolSingles}, append(toolCl, sourceClosure)...)...)),
 		dedupVFS(append([][]VFS{emitsSingles}, append(emitsCl, sourceClosure)...)...)
 }
 
