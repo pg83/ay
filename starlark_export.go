@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -34,6 +35,27 @@ func cmdMakeStarlark(_ GlobalFlags, args []string) int {
 		default:
 			targets = append(targets, args[i])
 		}
+	}
+
+	if os.Getenv("AY_PRETTY_WHY") != "" {
+		prettyReasons = map[string]int{}
+		defer func() {
+			type kv struct {
+				k string
+				n int
+			}
+
+			var rs []kv
+			for k, n := range prettyReasons {
+				rs = append(rs, kv{k, n})
+			}
+
+			sort.Slice(rs, func(i, j int) bool { return rs[i].n > rs[j].n })
+
+			for _, r := range rs {
+				fmt.Printf("WHY %-28s %d\n", r.k, r.n)
+			}
+		}()
 	}
 
 	fs := newFS(srcRoot)
@@ -170,139 +192,240 @@ func transpileYaMakeFile(fs FS, rel string) (src string, hasModule bool, err err
 	return transpileToStarMode(mf.Stmts, raw, stmtFallbackDirs[dir])
 }
 
-// prettyKw is one attribute of a pretty module() call.
-type prettyKw struct {
-	name   string
-	toggle bool     // emit `name = True`
-	items  []STR    // list attribute contents (attrArgs)
-	srcs   []string // srcs expression segments joined by " + " (the srcs kwarg only)
+// segBuilder accumulates one attribute's value expression as a sequence of segments,
+// merging contiguous plain-list items into a single literal and keeping generator and
+// conditional segments separate — preserving source order.
+type segBuilder struct {
+	segs []string
+	pend []STR
 }
 
-// tryPretty renders the idiomatic single-call form for a conditional-free module:
+func (s *segBuilder) addItems(items []STR) { s.pend = append(s.pend, items...) }
+
+func (s *segBuilder) flush() {
+	if len(s.pend) > 0 {
+		s.segs = append(s.segs, renderStrList(s.pend))
+		s.pend = nil
+	}
+}
+
+func (s *segBuilder) addExpr(expr string) {
+	s.flush()
+	s.segs = append(s.segs, expr)
+}
+
+func (s *segBuilder) expr() string {
+	s.flush()
+
+	if len(s.segs) == 0 {
+		return "[]"
+	}
+
+	return strings.Join(s.segs, " + ")
+}
+
+// prettyState collects a module (or one IF branch): list/srcs attributes as segment
+// builders, toggles as booleans, both in first-use order.
+type prettyState struct {
+	seg    map[string]*segBuilder
+	toggle map[string]bool
+	order  []string
+}
+
+func newPrettyState() *prettyState {
+	return &prettyState{seg: map[string]*segBuilder{}, toggle: map[string]bool{}}
+}
+
+func (p *prettyState) segOf(name string) *segBuilder {
+	s := p.seg[name]
+	if s == nil {
+		s = &segBuilder{}
+		p.seg[name] = s
+		p.order = append(p.order, name)
+	}
+
+	return s
+}
+
+func (p *prettyState) setToggle(name string) {
+	if !p.toggle[name] {
+		p.toggle[name] = true
+		p.order = append(p.order, name)
+	}
+}
+
+func (p *prettyState) exprOf(name string) string {
+	if s := p.seg[name]; s != nil {
+		return s.expr()
+	}
+
+	return "[]"
+}
+
+func recordPrettyReason(reason string) bool {
+	if prettyReasons != nil {
+		prettyReasons[reason]++
+	}
+
+	return false
+}
+
+// collectOne appends one statement to p. An IF becomes a per-attribute Starlark
+// conditional expression (`(then if cond else else)`, nested for ELSEIF) — each branch is
+// collected into its own state and merged segment-wise, so order is preserved. Returns
+// false (caller falls back) for a construct the single-call form cannot express: a flag
+// mutator, a boundary macro, an unmapped macro, or a toggle inside an IF.
+func collectOne(p *prettyState, s Stmt, cur *rawCursor, topLevel bool) bool {
+	if iff, ok := s.(*IfStmt); ok {
+		cond, err := renderCond(iff.Cond)
+		if err != nil {
+			return recordPrettyReason("cond")
+		}
+
+		thenP := newPrettyState()
+		if !collectBlock(thenP, iff.Then, cur, false) {
+			return false
+		}
+
+		elseP := newPrettyState()
+		if !collectBlock(elseP, iff.Else, cur, false) {
+			return false
+		}
+
+		names := append([]string(nil), thenP.order...)
+
+		for _, n := range elseP.order {
+			if _, seen := thenP.seg[n]; !seen {
+				names = append(names, n)
+			}
+		}
+
+		for _, name := range names {
+			p.segOf(name).addExpr("(" + thenP.exprOf(name) + " if " + cond + " else " + elseP.exprOf(name) + ")")
+		}
+
+		return true
+	}
+
+	rc := cur.next()
+	n, a := rc.Name, rc.Args
+
+	switch {
+	case n == "SRCS":
+		p.segOf("srcs").addItems(a)
+	case n == "ENABLE" || n == "DISABLE" || n == "SET" || n == "DEFAULT":
+		return recordPrettyReason("mutator:" + n)
+	default:
+		if _, ok := boundaryMacroSet[n]; ok {
+			return recordPrettyReason("boundary:" + n)
+		}
+
+		if gen, ok := generatorCall(n, a); ok {
+			p.segOf("srcs").addExpr(gen)
+
+			return true
+		}
+
+		spec, ok := declMacroAttr[n]
+		if !ok {
+			return recordPrettyReason("unmapped:" + n)
+		}
+
+		if spec.kind == attrToggle {
+			if !topLevel {
+				return recordPrettyReason("toggle-in-if:" + n)
+			}
+
+			p.setToggle(spec.kw)
+		} else {
+			p.segOf(spec.kw).addItems(a)
+		}
+	}
+
+	return true
+}
+
+// collectBlock appends every statement of a block to p (topLevel allows toggles).
+func collectBlock(p *prettyState, stmts []Stmt, cur *rawCursor, topLevel bool) bool {
+	for _, s := range stmts {
+		if !collectOne(p, s, cur, topLevel) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// tryPretty renders the idiomatic single-call form for a module:
 //
 //	library(
 //	    "name",
-//	    srcs = ["a.cpp", "b.cpp"] + enum_serialization("c.h"),
+//	    srcs = ["a.cpp"] + (["lin.cpp"] if on(flags.OS_LINUX) else []),
 //	    peerdir = ["contrib/libs/zstd"],
 //	    no_util = True,
 //	)
 //
-// It returns ok=false (caller falls back) when the module has an IF, a flag mutator
-// (ENABLE/SET/DEFAULT), a boundary macro (RESOURCE_FILES/INDUCED_DEPS), or any unmapped
-// macro — i.e. anything that needs the imperative body form. The emitted statement stream
-// is identical to the declarative form (same kwargs, same order, same srcs boundaries), so
-// the build graph is unchanged.
-func tryPretty(stmts []Stmt, raw []RawCall) (string, bool) {
-	for _, s := range stmts {
-		if _, ok := s.(*IfStmt); ok {
-			return "", false
-		}
-	}
+// Conditionals lower to inline expressions; it returns ok=false (caller falls back to the
+// accumulator/body form) only for constructs the single call cannot express — a flag
+// mutator, a boundary macro, an unmapped macro, or a toggle inside an IF. The emitted
+// statement stream is identical to the declarative form (same kwargs, same order, same
+// srcs boundaries), so the build graph is unchanged.
+//
+// prettyReasons, when non-nil, tallies why modules fall out of the pretty form (set via
+// AY_PRETTY_WHY for one-off analysis).
+var prettyReasons map[string]int
 
+func bailPretty(reason string) (string, bool) {
+	recordPrettyReason(reason)
+
+	return "", false
+}
+
+func tryPretty(stmts []Stmt, raw []RawCall) (string, bool) {
 	cur := &rawCursor{calls: raw}
+	p := newPrettyState()
 
 	var (
 		moduleType string
 		moduleArgs []STR
 		found      bool
-		order      []*prettyKw
-		byName     = map[string]*prettyKw{}
-		srcsKw     *prettyKw
-		pendingSrc []STR
+		ended      bool
 	)
 
-	use := func(name string) *prettyKw {
-		if kw := byName[name]; kw != nil {
-			return kw
-		}
-
-		kw := &prettyKw{name: name}
-		byName[name] = kw
-		order = append(order, kw)
-
-		return kw
-	}
-
-	flushSrc := func() {
-		if len(pendingSrc) > 0 {
-			srcsKw.srcs = append(srcsKw.srcs, renderStrList(pendingSrc))
-			pendingSrc = nil
-		}
-	}
-
 	for _, s := range stmts {
+		if ended {
+			break
+		}
+
 		switch s.(type) {
 		case *ModuleStmt:
 			rc := cur.next()
 			moduleType = rc.Name
 			moduleArgs = rc.Args
 			found = true
-
-			continue
 		case *EndStmt:
 			cur.next()
+			ended = true
 		default:
-			rc := cur.next()
-			n, a := rc.Name, rc.Args
-
-			if n == "SRCS" {
-				if srcsKw == nil {
-					srcsKw = use("srcs")
-				}
-
-				pendingSrc = append(pendingSrc, a...)
-
-				continue
+			if !found {
+				return bailPretty("pre-module")
 			}
 
-			if gen, ok := generatorCall(n, a); ok {
-				if srcsKw == nil {
-					srcsKw = use("srcs")
-				}
-
-				flushSrc()
-				srcsKw.srcs = append(srcsKw.srcs, gen)
-
-				continue
-			}
-
-			// Flag mutators are per-statement (overlay side effect + one var each); DEFAULT
-			// is in starAttrs but must not be merged into a kwarg, so bail explicitly here
-			// rather than fall into declMacroAttr.
-			switch n {
-			case "ENABLE", "DISABLE", "SET", "DEFAULT":
+			if !collectOne(p, s, cur, true) {
 				return "", false
 			}
-
-			spec, ok := declMacroAttr[n]
-			if !ok {
-				return "", false // boundary / unmapped → needs body form
-			}
-
-			kw := use(spec.kw)
-			if spec.kind == attrToggle {
-				kw.toggle = true
-			} else {
-				kw.items = append(kw.items, a...)
-			}
-
-			continue
 		}
-
-		break
 	}
 
 	if !found {
-		return "", false
+		return bailPretty("no-module")
 	}
 
-	flushSrc()
-
-	return renderPretty(moduleType, moduleArgs, order), true
+	return renderPretty(moduleType, moduleArgs, p), true
 }
 
 // renderPretty assembles the single-call pretty form, omitting empty list attributes.
-func renderPretty(moduleType string, moduleArgs []STR, order []*prettyKw) string {
+func renderPretty(moduleType string, moduleArgs []STR, p *prettyState) string {
 	var b strings.Builder
 
 	b.WriteString("# Generated by `ay dev make starlark` from ya.make — do not edit.\n\n")
@@ -313,19 +436,19 @@ func renderPretty(moduleType string, moduleArgs []STR, order []*prettyKw) string
 		b.WriteString("    " + strconv.Quote(a.string()) + ",\n")
 	}
 
-	for _, kw := range order {
-		switch {
-		case kw.name == "srcs":
-			if len(kw.srcs) == 0 {
-				continue
-			}
+	for _, name := range p.order {
+		if p.toggle[name] {
+			b.WriteString("    " + name + " = True,\n")
 
-			b.WriteString("    srcs = " + strings.Join(kw.srcs, " + ") + ",\n")
-		case kw.toggle:
-			b.WriteString("    " + kw.name + " = True,\n")
-		case len(kw.items) > 0:
-			b.WriteString("    " + kw.name + " = " + renderStrList(kw.items) + ",\n")
+			continue
 		}
+
+		expr := p.seg[name].expr()
+		if expr == "[]" {
+			continue // empty attrArgs → omitted, matching emitAttr
+		}
+
+		b.WriteString("    " + name + " = " + expr + ",\n")
 	}
 
 	b.WriteString(")\n")

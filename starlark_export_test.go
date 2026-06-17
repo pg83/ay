@@ -44,15 +44,21 @@ END()
 	}
 }
 
-// TestTranspile_PrettyFallback: constructs the pretty form cannot express fall back to the
-// accumulator/body form. An IF, or repeated DEFAULT mutators (which must stay one var per
-// statement, not merge into a single kwarg), force the fallback.
-func TestTranspile_PrettyFallback(t *testing.T) {
-	withIf := transpile(t, "LIBRARY()\nSRCS(a.cpp)\nIF (OS_LINUX)\nSRCS(b.cpp)\nENDIF()\nEND()\n")
-	if !strings.Contains(withIf, "srcs = []") || !strings.Contains(withIf, "if on(flags.OS_LINUX):") {
-		t.Fatalf("IF module should use accumulator form:\n%s", withIf)
-	}
+// TestTranspile_PrettyIf: a simple IF lowers to an inline Starlark conditional expression
+// inside the single module() call (no accumulator variables).
+func TestTranspile_PrettyIf(t *testing.T) {
+	star := transpile(t, "LIBRARY()\nSRCS(a.cpp)\nIF (OS_LINUX)\nSRCS(b.cpp)\nELSE()\nSRCS(c.cpp)\nENDIF()\nEND()\n")
 
+	want := `    srcs = ["a.cpp"] + (["b.cpp"] if on(flags.OS_LINUX) else ["c.cpp"]),`
+	if !strings.Contains(star, want) || strings.Contains(star, "srcs = []") {
+		t.Fatalf("IF should inline as a conditional expression:\n%s", star)
+	}
+}
+
+// TestTranspile_PrettyFallback: constructs the pretty form cannot express fall back to the
+// accumulator/body form — e.g. repeated DEFAULT mutators (which must stay one var per
+// statement, not merge into a single kwarg).
+func TestTranspile_PrettyFallback(t *testing.T) {
 	twoDefault := transpile(t, "LIBRARY()\nDEFAULT(A 0)\nDEFAULT(B \"\")\nSRCS(a.cpp)\nEND()\n")
 	if !strings.Contains(twoDefault, `default_var("A", "0")`) || !strings.Contains(twoDefault, `default_var("B", "")`) {
 		t.Fatalf("repeated DEFAULT must stay per-statement (not merged):\n%s", twoDefault)
