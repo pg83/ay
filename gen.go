@@ -1345,7 +1345,42 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	// component at its archiveOrder slot rather than the front of SRCS_GLOBAL.
 	linkTarget := isProgramModuleType(d.moduleStmt.Name)
 
-	for _, rp := range archiveOrder {
+	// SBOM component order follows ymake's GlobalSrcs post-order DFS, where the
+	// contrib/libs/cxxsupp language-default parent (which PEERDIRs the libcxx group)
+	// finishes — and so contributes its component — immediately after its libcxx
+	// subtree, ahead of the build/platform/lld toolchain peer. We model cxxsupp by
+	// appending it to d.peerdirs (it lands last in archiveOrder), which is correct
+	// for archive/link order (no AR; libcxx closure dedups) but emits its component
+	// late. Reorder it for the SBOM pass only: move the bare cxxsupp peer to right
+	// after contrib/libs/cxxsupp/libcxx so its component precedes lld's.
+	sbomOrder := archiveOrder
+	{
+		cxxIdx, libcxxIdx := -1, -1
+		for i, rp := range archiveOrder {
+			switch rp.path {
+			case "contrib/libs/cxxsupp":
+				cxxIdx = i
+			case "contrib/libs/cxxsupp/libcxx":
+				libcxxIdx = i
+			}
+		}
+		if cxxIdx > libcxxIdx && libcxxIdx >= 0 {
+			reordered := make([]resolvedPeer, 0, len(archiveOrder))
+			cxx := archiveOrder[cxxIdx]
+			for i, rp := range archiveOrder {
+				if i == cxxIdx {
+					continue
+				}
+				reordered = append(reordered, rp)
+				if i == libcxxIdx {
+					reordered = append(reordered, cxx)
+				}
+			}
+			sbomOrder = reordered
+		}
+	}
+
+	for _, rp := range sbomOrder {
 		pr := rp.result
 
 		for i, p := range pr.PeerSbomClosurePaths {
