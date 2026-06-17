@@ -37,6 +37,7 @@ func TestApplyUnknownStmt_AddInclSelf(t *testing.T) {
 	// ADDINCL += ${MODDIR}). It must resolve to Source(<modulePath>).
 	d := &ModuleData{}
 	applyUnknownStmt(nil, "contrib/libs/foo", &UnknownStmt{Name: internTok("ADDINCLSELF")}, d, env)
+	d.materializeAddIncl() // local ADDINCL is priority-tagged (addInclP) then flattened into addIncl
 
 	want := source("contrib/libs/foo")
 	found := false
