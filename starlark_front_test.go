@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 	"testing"
@@ -234,19 +233,9 @@ func TestStarlark_ModuleTypes(t *testing.T) {
 // IF/ELSEIF/ELSE are flattened with the same evalCond collectStmts uses; the ya.star's
 // `if/elif/else` resolve eagerly during evaluation. Skipped when the files are absent.
 func TestStarlark_UtilModule(t *testing.T) {
-	const dir = "/home/pg/monorepo/3/util"
-
-	makeSrc, err := os.ReadFile(dir + "/ya.make")
-	if err != nil {
-		t.Skipf("util/ya.make unavailable: %v", err)
-	}
-
-	starSrc, err := os.ReadFile(dir + "/ya.star")
-	if err != nil {
-		t.Skipf("util/ya.star unavailable: %v", err)
-	}
-
-	fs := newMemFS(map[string]string{"util/ya.make": string(makeSrc), "util/ya.star": string(starSrc)})
+	// Hermetic: the util ya.make / hand-written ya.star are embedded constants
+	// (perf_starlark.go), not read from a local checkout.
+	fs := newMemFS(map[string]string{"util/ya.make": utilYaMake, "util/ya.star": utilYaStar})
 
 	platforms := []struct {
 		name string

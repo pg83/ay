@@ -175,7 +175,10 @@ func TestFS_CleanRel(t *testing.T) {
 	}
 }
 
-var testParserFS = newFS("/")
+// testParserFS is a hermetic empty in-memory FS for parser tests that pass their source
+// inline; an INCLUDE of an absent file is silently skipped (same as over a real root that
+// lacks it), so no test reaches the local filesystem.
+var testParserFS = newMemFS(nil)
 
 // newTestScanner spins up a scanner backed by the given FS (typically a per-
 // test memFS). Each call yields a fresh scanner so per-test CodegenRegistry /
