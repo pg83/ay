@@ -8,6 +8,15 @@ import (
 	"go.starlark.net/syntax"
 )
 
+// starFileOptions enables the imperative constructs a ya.star uses to build attribute
+// lists: top-level if/for (TopLevelControl) and accumulation into globals like
+// `srcs += …` (GlobalReassign).
+var starFileOptions = &syntax.FileOptions{
+	TopLevelControl: true,
+	GlobalReassign:  true,
+	Set:             true,
+}
+
 // moduleTypeNames are the ya.make module declarations exposed as rule builtins. They
 // must match the ModuleStmt cases in buildStmtFor.
 var moduleTypeNames = []string{
@@ -52,6 +61,7 @@ var starAttrs = map[string]struct {
 	"resource_files": {"RESOURCE_FILES", attrArgs},
 	"resource":       {"RESOURCE", attrArgs},
 	"default":        {"DEFAULT", attrArgs},
+	"headers":        {"HEADERS", attrArgs},
 
 	// value macros (UnknownStmt; the collect handler reads Args and validates arity)
 	"version":         {"VERSION", attrArgs},
@@ -75,6 +85,7 @@ var starAttrs = map[string]struct {
 	"split_factor":    {"SPLIT_FACTOR", attrArgs},
 
 	// zero-argument toggle macros (bool kwargs)
+	"need_check":                {"NEED_CHECK", attrToggle},
 	"no_optimize":               {"NO_OPTIMIZE", attrToggle},
 	"no_runtime":                {"NO_RUNTIME", attrToggle},
 	"no_libc":                   {"NO_LIBC", attrToggle},
@@ -184,6 +195,8 @@ func evalStar(fs FS, rel string, env Environment) ([]Stmt, error) {
 		"enum_serialization":             starlark.NewBuiltin("enum_serialization", enumSerBuiltin("plain")),
 		"enum_serialization_with_header": starlark.NewBuiltin("enum_serialization_with_header", enumSerBuiltin("with_header")),
 		"enum_serialization_noutf":       starlark.NewBuiltin("enum_serialization_noutf", enumSerBuiltin("noutf")),
+		"join_srcs":                      starlark.NewBuiltin("join_srcs", joinSrcsBuiltin),
+		"src_c_no_lto":                   starlark.NewBuiltin("src_c_no_lto", macroFragBuiltin("SRC_C_NO_LTO")),
 	}
 
 	// Every module type ya.make recognizes is a rule builtin (lower-cased): library(),
@@ -195,7 +208,7 @@ func evalStar(fs FS, rel string, env Environment) ([]Stmt, error) {
 
 	thread := &starlark.Thread{Name: rel}
 
-	if _, err := starlark.ExecFileOptions(syntax.LegacyFileOptions(), thread, rel, src, predeclared); err != nil {
+	if _, err := starlark.ExecFileOptions(starFileOptions, thread, rel, src, predeclared); err != nil {
 		return nil, fmt.Errorf("%s: %w", rel, err)
 	}
 
@@ -596,6 +609,52 @@ func enumSerBuiltin(variant string) func(*starlark.Thread, *starlark.Builtin, st
 		}
 
 		return fragList(&GenerateEnumSerializationStmt{Header: header, Variant: variant}), nil
+	}
+}
+
+// joinSrcsBuiltin implements `join_srcs(output, sources)` → a JoinSrcsStmt genFrag.
+// JOIN_SRCS(out a b c) concatenates the sources into a single generated out, which is
+// then compiled; composed into `srcs`, it preserves declaration order among the others.
+func joinSrcsBuiltin(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var output string
+
+	var sources *starlark.List
+
+	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "output", &output, "sources", &sources); err != nil {
+		return nil, err
+	}
+
+	srcs, err := unpackStrList(sources)
+	if err != nil {
+		return nil, err
+	}
+
+	all := append([]STR{internStr(output)}, srcs...)
+
+	return fragList(buildStmtFor("JOIN_SRCS", all, 0, throwFmt)), nil
+}
+
+// macroFragBuiltin builds a generator for a per-source macro taking positional string
+// arguments — e.g. src_c_no_lto("system/compiler.cpp") → SRC_C_NO_LTO(system/compiler.cpp),
+// composed into `srcs`.
+func macroFragBuiltin(macro string) func(*starlark.Thread, *starlark.Builtin, starlark.Tuple, []starlark.Tuple) (starlark.Value, error) {
+	return func(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		if len(kwargs) > 0 {
+			return nil, fmt.Errorf("%s: unexpected keyword argument", b.Name())
+		}
+
+		out := make([]STR, 0, len(args))
+
+		for _, a := range args {
+			str, ok := starlark.AsString(a)
+			if !ok {
+				return nil, fmt.Errorf("%s: arguments must be strings, got %s", b.Name(), a.Type())
+			}
+
+			out = append(out, internStr(str))
+		}
+
+		return fragList(buildStmtFor(macro, out, 0, throwFmt)), nil
 	}
 }
 

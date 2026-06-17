@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -226,6 +228,125 @@ func TestStarlark_ModuleTypes(t *testing.T) {
 		parseMakeStr(t, "UNITTEST_FOR(contrib/libs/foo)\nSRCS(t.cpp)\nEND()\n"))
 }
 
+// TestStarlark_UtilModule verifies the hand-written util/ya.star is equivalent to the
+// real util/ya.make: under one build variant, both resolve to the same module summary
+// (name, source set, JOIN_SRCS groups, peerdirs, cflags, other macros). The ya.make's
+// IF/ELSEIF/ELSE are flattened with the same evalCond collectStmts uses; the ya.star's
+// `if/elif/else` resolve eagerly during evaluation. Skipped when the files are absent.
+func TestStarlark_UtilModule(t *testing.T) {
+	const dir = "/home/pg/monorepo/3/util"
+
+	makeSrc, err := os.ReadFile(dir + "/ya.make")
+	if err != nil {
+		t.Skipf("util/ya.make unavailable: %v", err)
+	}
+
+	starSrc, err := os.ReadFile(dir + "/ya.star")
+	if err != nil {
+		t.Skipf("util/ya.star unavailable: %v", err)
+	}
+
+	fs := newMemFS(map[string]string{"util/ya.make": string(makeSrc), "util/ya.star": string(starSrc)})
+
+	platforms := []struct {
+		name string
+		isa  ISA
+	}{
+		{"linux-x86_64", ISAX8664},
+		{"linux-aarch64", ISAAArch64},
+	}
+
+	summaries := make(map[string]string)
+
+	for _, p := range platforms {
+		env := buildIfEnv(ModuleInstance{Platform: newTestPlatform(OSLinux, p.isa, "no"), Kind: KindLib, Path: source("util")})
+
+		want := summarizeModule(flattenIfStmts(throw2(parseFile(fs, "util/ya.make")).Stmts, env))
+		got := summarizeModule(throw2(evalStar(fs, "util/ya.star", env)))
+
+		if got != want {
+			t.Fatalf("[%s] util ya.star summary != ya.make summary:\n--- ya.star ---\n%s\n--- ya.make ---\n%s", p.name, got, want)
+		}
+
+		summaries[p.name] = got
+	}
+
+	// Sanity: the arch-specific context source differs, so the test is not vacuous.
+	if summaries["linux-x86_64"] == summaries["linux-aarch64"] {
+		t.Fatal("expected x86_64 and aarch64 summaries to differ (context_x86.asm vs context_aarch64.S)")
+	}
+}
+
+// flattenIfStmts resolves IfStmt branches under env (mirroring collectStmts) into a flat
+// statement list, so a deferred-conditional ya.make can be compared with an eagerly
+// evaluated ya.star.
+func flattenIfStmts(stmts []Stmt, env Environment) []Stmt {
+	var out []Stmt
+
+	for _, s := range stmts {
+		if iff, ok := s.(*IfStmt); ok {
+			taken := iff.Then
+			if !evalCond(iff.Cond, env) {
+				taken = iff.Else
+			}
+
+			out = append(out, flattenIfStmts(taken, env)...)
+
+			continue
+		}
+
+		out = append(out, s)
+	}
+
+	return out
+}
+
+// summarizeModule renders an order-insensitive, grouping-insensitive summary of a module
+// body (up to and including END): module name, the union of plain sources, each
+// JOIN_SRCS group (output → ordered sources), peerdirs, cflags, and every other macro.
+func summarizeModule(stmts []Stmt) string {
+	var (
+		name     string
+		srcs     []string
+		joins    []string
+		peerdirs []string
+		cflags   []string
+		macros   []string
+	)
+
+	for _, s := range stmts {
+		switch x := s.(type) {
+		case *ModuleStmt:
+			name = x.Name.string() + strDump(x.Args)
+		case *SrcsStmt:
+			for _, src := range x.Sources {
+				srcs = append(srcs, src.string())
+			}
+		case *JoinSrcsStmt:
+			joins = append(joins, x.OutputName+" "+strDump(x.Sources))
+		case *PeerdirStmt:
+			for _, p := range x.Paths {
+				peerdirs = append(peerdirs, p.string())
+			}
+		case *CFlagsStmt:
+			cflags = append(cflags, "global="+strDump(x.GlobalFlags), "own="+strDump(x.OwnFlags))
+		case *UnknownStmt:
+			macros = append(macros, x.Name.string()+strDump(x.Args))
+		case *EndStmt:
+			sort.Strings(srcs)
+			sort.Strings(joins)
+			sort.Strings(peerdirs)
+			sort.Strings(cflags)
+			sort.Strings(macros)
+
+			return fmt.Sprintf("MODULE %s\nSRCS %v\nJOINS %v\nPEERDIRS %v\nCFLAGS %v\nMACROS %v\n",
+				name, srcs, joins, peerdirs, cflags, macros)
+		}
+	}
+
+	return "MODULE " + name + " (no END)\n"
+}
+
 // dumpStmts renders a statement stream into a Line/empty-insensitive form (nil and
 // empty slices both render as "[]"), so two streams that differ only in source
 // positions or nil-vs-empty compare equal.
@@ -256,6 +377,8 @@ func dumpStmts(stmts []Stmt) string {
 			fmt.Fprintf(&b, "RUN_PROGRAM tool=%s args=%s in=%s out=%s outnoauto=%s incl=%s\n",
 				x.ToolPath.string(), strDump(x.Args), strDump(x.INFiles), strDump(x.OUTFiles),
 				strDump(x.OUTNoAutoFiles), strDump(x.OutputIncludes))
+		case *JoinSrcsStmt:
+			fmt.Fprintf(&b, "JOIN_SRCS %s %s\n", x.OutputName, strDump(x.Sources))
 		case *GenerateEnumSerializationStmt:
 			fmt.Fprintf(&b, "ENUMSER %s %s\n", x.Header, x.Variant)
 		case *LDFlagsStmt:
