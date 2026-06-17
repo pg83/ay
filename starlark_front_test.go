@@ -361,6 +361,10 @@ func summarizeModule(stmts []Stmt) string {
 
 			return fmt.Sprintf("MODULE %s\nSRCS %v\nJOINS %v\nPEERDIRS %v\nCFLAGS %v\nMACROS %v\n",
 				name, srcs, joins, peerdirs, cflags, macros)
+		default:
+			// Generators (RunProgram/ConfigureFile/EnumSer/…) and other typed stmts:
+			// capture a Line-insensitive dump so content compares order-insensitively.
+			macros = append(macros, strings.TrimRight(dumpStmts([]Stmt{s}), "\n"))
 		}
 	}
 
