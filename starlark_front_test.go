@@ -284,15 +284,35 @@ func flattenIfStmts(stmts []Stmt, env Environment) []Stmt {
 	var out []Stmt
 
 	for _, s := range stmts {
-		if iff, ok := s.(*IfStmt); ok {
-			taken := iff.Then
-			if !evalCond(iff.Cond, env) {
-				taken = iff.Else
+		switch x := s.(type) {
+		case *IfStmt:
+			taken := x.Then
+			if !evalCond(x.Cond, env) {
+				taken = x.Else
 			}
 
 			out = append(out, flattenIfStmts(taken, env)...)
 
 			continue
+		case *SetStmt:
+			// Mirror collectStmts: SET/DEFAULT/ENABLE/DISABLE mutate the env in
+			// statement order so a later IF sees them (e.g. ENABLE(PROVIDE_X) gating
+			// IF (PROVIDE_X), or DEFAULT(LLD_VERSION ${COMPILER_VERSION}) gating
+			// IF (LLD_VERSION == 18)). Values are expanded as collectStmts expands them.
+			env.setFromString(x.NameEnv, expandScalarVarRef(x.Value, env))
+		case *DefaultVarStmt:
+			env.setDefaultString(x.NameEnv, expandScalarVarRef(x.Value, env))
+		case *UnknownStmt:
+			switch x.Name {
+			case tokEnable:
+				for _, a := range x.Args {
+					env.setBool(internEnv(a.string()), true)
+				}
+			case tokDisable:
+				for _, a := range x.Args {
+					env.setBool(internEnv(a.string()), false)
+				}
+			}
 		}
 
 		out = append(out, s)
@@ -399,6 +419,16 @@ func dumpStmts(stmts []Stmt) string {
 			fmt.Fprintf(&b, "CREATE_BUILDINFO_FOR %s\n", x.OutputHeader)
 		case *DeclareResourceStmt:
 			fmt.Fprintf(&b, "DECLARE %s %s\n", x.Macro.string(), strDump(x.Args))
+		case *ResourceFilesStmt:
+			fmt.Fprintf(&b, "RESOURCE_FILES %s\n", strDump(x.Args))
+		case *ResourceStmt:
+			b.WriteString("RESOURCE")
+
+			for _, p := range x.Pairs {
+				fmt.Fprintf(&b, " %s=%s", p.Path, p.Key)
+			}
+
+			b.WriteByte('\n')
 		case *JoinSrcsStmt:
 			fmt.Fprintf(&b, "JOIN_SRCS %s %s\n", x.OutputName, strDump(x.Sources))
 		case *GenerateEnumSerializationStmt:
