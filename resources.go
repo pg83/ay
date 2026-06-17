@@ -47,6 +47,10 @@ type ResourceDecl struct {
 
 const resourceGlobalSuffix = "_RESOURCE_GLOBAL"
 
+// platformDefaultArch is the architecture ya treats as implicit in a by_platform key
+// (NYa::TCanonizedPlatform::DEFAULT_ARCH): "linux-x86_64" canonizes to "linux".
+const platformDefaultArch = "x86_64"
+
 // makeResourceDecl interns one resource (the sole string boundary): it composes the
 // bare resource ref, global-var name and --global-resource token, then carries them
 // as STR. The uri is kept only to drive the fetch — it never enters the ref.
@@ -95,6 +99,44 @@ func resourceJSONPlatformKey(env Environment) string {
 
 		return "linux"
 	}
+}
+
+// canonizePlatformKey mirrors NYa::TCanonizedPlatform::AsString (yaplatform): a
+// by_platform key is lower-cased <os>[-<arch>] with the default arch (x86_64) dropped, so
+// "linux" and "linux-x86_64" both collapse to "linux". SET_RESOURCE_URI_FROM_JSON bundles
+// use either spelling (protoc: "linux"; py3cc/slow: "linux-x86_64"); canonizing both sides
+// makes the lookup hit regardless.
+func canonizePlatformKey(key string) string {
+	key = strings.ToLower(key)
+
+	os, arch, found := strings.Cut(key, "-")
+	if !found || arch == "" || arch == platformDefaultArch {
+		return os
+	}
+
+	return os + "-" + arch
+}
+
+// resolveResourceURIFromBundle returns the bundle URI for env's platform, matching keys
+// by their canonical form (see canonizePlatformKey). Keys are scanned in sorted order for
+// deterministic selection.
+func resolveResourceURIFromBundle(bundle map[string]string, env Environment) (string, bool) {
+	want := resourceJSONPlatformKey(env)
+
+	keys := make([]string, 0, len(bundle))
+	for k := range bundle {
+		keys = append(keys, k)
+	}
+
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		if canonizePlatformKey(k) == want {
+			return bundle[k], true
+		}
+	}
+
+	return "", false
 }
 
 func isaPlatformKey(isa ISA) string {
