@@ -135,6 +135,11 @@ var commands = []command{
 			"the former ancestor-walk. Prints ns/op for each.",
 	},
 	{
+		path: []string{"dev", "perf", "starlark"}, run: cmdPerfStarlark,
+		help: "🌟 Benchmark module construction from an embedded util ya.make vs ya.star\n" +
+			"(over an in-memory FS): native parse vs Starlark eval, and full build.",
+	},
+	{
 		path: []string{"dev", "refac", "consts"}, run: refacConsts,
 		help: "♻️ Regenerate the interned-constant files (str/arg/vfs/env) from the\n" +
 			"literals used across the package. Mutates source in place.",
