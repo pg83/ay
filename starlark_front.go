@@ -190,13 +190,24 @@ func evalStar(fs FS, rel string, env Environment) ([]Stmt, error) {
 	sink := &stmtSink{}
 
 	predeclared := starlark.StringDict{
-		"flags":                          &starFlags{env: env},
-		"run_program":                    starlark.NewBuiltin("run_program", runProgramBuiltin),
-		"enum_serialization":             starlark.NewBuiltin("enum_serialization", enumSerBuiltin("plain")),
-		"enum_serialization_with_header": starlark.NewBuiltin("enum_serialization_with_header", enumSerBuiltin("with_header")),
-		"enum_serialization_noutf":       starlark.NewBuiltin("enum_serialization_noutf", enumSerBuiltin("noutf")),
-		"join_srcs":                      starlark.NewBuiltin("join_srcs", joinSrcsBuiltin),
-		"src_c_no_lto":                   starlark.NewBuiltin("src_c_no_lto", macroFragBuiltin("SRC_C_NO_LTO")),
+		"flags":                                  &starFlags{env: env},
+		"run_program":                            runCmdBuiltin("RUN_PROGRAM", "tool"),
+		"run_py3_program":                        runCmdBuiltin("RUN_PY3_PROGRAM", "tool"),
+		"run_python3":                            runCmdBuiltin("RUN_PYTHON3", "script"),
+		"run_antlr":                              runAntlrBuiltin("RUN_ANTLR"),
+		"run_antlr4":                             runAntlrBuiltin("RUN_ANTLR4"),
+		"run_antlr4_cpp":                         starlark.NewBuiltin("run_antlr4_cpp", runAntlr4CppBuiltin),
+		"run_antlr4_cpp_split":                   starlark.NewBuiltin("run_antlr4_cpp_split", runAntlr4CppSplitBuiltin),
+		"configure_file":                         starlark.NewBuiltin("configure_file", configureFileBuiltin),
+		"create_buildinfo_for":                   starlark.NewBuiltin("create_buildinfo_for", createBuildInfoBuiltin),
+		"declare_external_resource":              declareResourceBuiltin("DECLARE_EXTERNAL_RESOURCE"),
+		"declare_external_host_resources_bundle": declareResourceBuiltin("DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE"),
+		"declare_external_host_resources_bundle_by_json": declareResourceBuiltin("DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON"),
+		"enum_serialization":                             starlark.NewBuiltin("enum_serialization", enumSerBuiltin("plain")),
+		"enum_serialization_with_header":                 starlark.NewBuiltin("enum_serialization_with_header", enumSerBuiltin("with_header")),
+		"enum_serialization_noutf":                       starlark.NewBuiltin("enum_serialization_noutf", enumSerBuiltin("noutf")),
+		"join_srcs":                                      starlark.NewBuiltin("join_srcs", joinSrcsBuiltin),
+		"src_c_no_lto":                                   starlark.NewBuiltin("src_c_no_lto", macroFragBuiltin("SRC_C_NO_LTO")),
 	}
 
 	// Every module type ya.make recognizes is a rule builtin (lower-cased): library(),
@@ -551,51 +562,281 @@ func iterValues(l *starlark.List, fn func(starlark.Value) error) error {
 	return nil
 }
 
-// runProgramBuiltin implements `run_program(tool, args=, ins=, outs=, out_noauto=,
-// output_includes=, cwd=)` → a RunProgramStmt genFrag (mirrors parseRunProgram).
-func runProgramBuiltin(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	var tool, cwd string
-
-	var progArgs, ins, outs, outNoauto, outputIncludes *starlark.List
-
-	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
-		"tool", &tool,
-		"args?", &progArgs,
-		"ins?", &ins,
-		"outs?", &outs,
-		"out_noauto?", &outNoauto,
-		"output_includes?", &outputIncludes,
-		"cwd?", &cwd,
-	); err != nil {
-		return nil, err
+// appendSection appends a RUN_* macro section — its keyword followed by its values —
+// when the value list is non-empty, reconstructing the flat ya.make argument vector the
+// parse* functions (via buildStmtFor) consume.
+func appendSection(args []STR, kw STR, vals []STR) []STR {
+	if len(vals) == 0 {
+		return args
 	}
 
-	st := &RunProgramStmt{ToolPath: internStr(tool)}
+	args = append(args, kw)
 
-	for _, field := range []struct {
-		l   *starlark.List
-		dst *[]STR
-	}{
-		{progArgs, &st.Args},
-		{ins, &st.INFiles},
-		{outs, &st.OUTFiles},
-		{outNoauto, &st.OUTNoAutoFiles},
-		{outputIncludes, &st.OutputIncludes},
-	} {
-		v, err := unpackStrList(field.l)
+	return append(args, vals...)
+}
+
+// runCmdBuiltin builds a generator for a RUN_PROGRAM-shaped macro (RUN_PROGRAM,
+// RUN_PY3_PROGRAM, RUN_PYTHON3): a head positional (tool path / script path) plus the
+// keyword sections ya.make accepts. It reconstructs the flat argument vector and
+// delegates to buildStmtFor, so the emitted Stmt is identical to the parsed ya.make.
+// headName labels the head argument in error messages and the kwarg name.
+func runCmdBuiltin(macro, headName string) *starlark.Builtin {
+	return starlark.NewBuiltin(strings.ToLower(macro), func(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		var head, cwd string
+
+		var progArgs, ins, inNoparse, inDeps, outs, outNoauto, stdout, env, outputIncludes, inducedDeps, tools *starlark.List
+
+		if err := starlark.UnpackArgs(macro, args, kwargs,
+			headName, &head,
+			"args?", &progArgs,
+			"ins?", &ins,
+			"in_noparse?", &inNoparse,
+			"in_deps?", &inDeps,
+			"outs?", &outs,
+			"out_noauto?", &outNoauto,
+			"stdout?", &stdout,
+			"env?", &env,
+			"output_includes?", &outputIncludes,
+			"induced_deps?", &inducedDeps,
+			"tools?", &tools,
+			"cwd?", &cwd,
+		); err != nil {
+			return nil, err
+		}
+
+		// ARGS is the default (keyword-less) section, so its values come first; every
+		// other section is keyword-prefixed.
+		flat := STRS(head)
+
+		progVals, err := unpackStrList(progArgs)
 		if err != nil {
 			return nil, err
 		}
 
-		*field.dst = v
+		flat = append(flat, progVals...)
+
+		for _, sec := range []struct {
+			kw STR
+			l  *starlark.List
+		}{
+			{kwIN, ins},
+			{kwIN_NOPARSE, inNoparse},
+			{kwIN_DEPS, inDeps},
+			{kwOUT, outs},
+			{kwOUT_NOAUTO, outNoauto},
+			{kwSTDOUT, stdout},
+			{kwENV, env},
+			{kwOUTPUT_INCLUDES, outputIncludes},
+			{kwINDUCED_DEPS, inducedDeps},
+			{kwTOOL, tools},
+		} {
+			vals, err := unpackStrList(sec.l)
+			if err != nil {
+				return nil, err
+			}
+
+			flat = appendSection(flat, sec.kw, vals)
+		}
+
+		if cwd != "" {
+			flat = appendSection(flat, kwCWD, STRS(cwd))
+		}
+
+		return fragList(buildStmtFor(macro, flat, 0, throwFmt)), nil
+	})
+}
+
+// runAntlrBuiltin builds a generator for RUN_ANTLR / RUN_ANTLR4 (RunAntlrStmt): the same
+// section grammar as runCmdBuiltin minus STDOUT, delegating to buildStmtFor.
+func runAntlrBuiltin(macro string) *starlark.Builtin {
+	return starlark.NewBuiltin(strings.ToLower(macro), func(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		var cwd string
+
+		var progArgs, ins, inNoparse, inDeps, outs, outNoauto, outputIncludes, inducedDeps, tools, env *starlark.List
+
+		if err := starlark.UnpackArgs(macro, args, kwargs,
+			"args?", &progArgs,
+			"ins?", &ins,
+			"in_noparse?", &inNoparse,
+			"in_deps?", &inDeps,
+			"outs?", &outs,
+			"out_noauto?", &outNoauto,
+			"output_includes?", &outputIncludes,
+			"induced_deps?", &inducedDeps,
+			"tools?", &tools,
+			"env?", &env,
+			"cwd?", &cwd,
+		); err != nil {
+			return nil, err
+		}
+
+		progVals, err := unpackStrList(progArgs)
+		if err != nil {
+			return nil, err
+		}
+
+		flat := append([]STR(nil), progVals...)
+
+		for _, sec := range []struct {
+			kw STR
+			l  *starlark.List
+		}{
+			{kwIN, ins},
+			{kwIN_NOPARSE, inNoparse},
+			{kwIN_DEPS, inDeps},
+			{kwOUT, outs},
+			{kwOUT_NOAUTO, outNoauto},
+			{kwOUTPUT_INCLUDES, outputIncludes},
+			{kwINDUCED_DEPS, inducedDeps},
+			{kwTOOL, tools},
+			{kwENV, env},
+		} {
+			vals, err := unpackStrList(sec.l)
+			if err != nil {
+				return nil, err
+			}
+
+			flat = appendSection(flat, sec.kw, vals)
+		}
+
+		if cwd != "" {
+			flat = appendSection(flat, kwCWD, STRS(cwd))
+		}
+
+		return fragList(buildStmtFor(macro, flat, 0, throwFmt)), nil
+	})
+}
+
+// antlrFlags appends the VISITOR / LISTENER toggle tokens that RUN_ANTLR4_CPP[_SPLIT]
+// recognize. Listener is emitted as LISTENER/NO_LISTENER so the round-trip is explicit
+// (the Stmt stores only the resolved bool).
+func antlrFlags(flat []STR, visitor, listener bool) []STR {
+	if visitor {
+		flat = append(flat, kwVISITOR)
 	}
 
-	if cwd != "" {
-		c := internStr(cwd)
-		st.CWD = &c
+	if listener {
+		flat = append(flat, kwLISTENER)
+	} else {
+		flat = append(flat, kwNO_LISTENER)
 	}
 
-	return fragList(st), nil
+	return flat
+}
+
+// runAntlr4CppBuiltin implements `run_antlr4_cpp(grammar, options=, visitor=, listener=,
+// output_includes=)` → a RunAntlr4CppStmt genFrag (mirrors parseRunAntlr4Cpp).
+func runAntlr4CppBuiltin(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var grammar string
+
+	var visitor, listener bool
+
+	var options, outputIncludes *starlark.List
+
+	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
+		"grammar", &grammar,
+		"options?", &options,
+		"visitor?", &visitor,
+		"listener?", &listener,
+		"output_includes?", &outputIncludes,
+	); err != nil {
+		return nil, err
+	}
+
+	opts, err := unpackStrList(options)
+	if err != nil {
+		return nil, err
+	}
+
+	flat := append(STRS(grammar), opts...)
+	flat = antlrFlags(flat, visitor, listener)
+
+	incl, err := unpackStrList(outputIncludes)
+	if err != nil {
+		return nil, err
+	}
+
+	flat = appendSection(flat, kwOUTPUT_INCLUDES, incl)
+
+	return fragList(buildStmtFor("RUN_ANTLR4_CPP", flat, 0, throwFmt)), nil
+}
+
+// runAntlr4CppSplitBuiltin implements `run_antlr4_cpp_split(lexer, parser, visitor=,
+// listener=, output_includes=)` → a RunAntlr4CppSplitStmt genFrag.
+func runAntlr4CppSplitBuiltin(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var lexer, parser string
+
+	var visitor, listener bool
+
+	var outputIncludes *starlark.List
+
+	if err := starlark.UnpackArgs(b.Name(), args, kwargs,
+		"lexer", &lexer,
+		"parser", &parser,
+		"visitor?", &visitor,
+		"listener?", &listener,
+		"output_includes?", &outputIncludes,
+	); err != nil {
+		return nil, err
+	}
+
+	flat := antlrFlags(STRS(lexer, parser), visitor, listener)
+
+	incl, err := unpackStrList(outputIncludes)
+	if err != nil {
+		return nil, err
+	}
+
+	flat = appendSection(flat, kwOUTPUT_INCLUDES, incl)
+
+	return fragList(buildStmtFor("RUN_ANTLR4_CPP_SPLIT", flat, 0, throwFmt)), nil
+}
+
+// configureFileBuiltin implements `configure_file(src, dst)` → a ConfigureFileStmt
+// genFrag (mirrors the CONFIGURE_FILE handler).
+func configureFileBuiltin(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var src, dst string
+
+	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "src", &src, "dst", &dst); err != nil {
+		return nil, err
+	}
+
+	return fragList(buildStmtFor("CONFIGURE_FILE", STRS(src, dst), 0, throwFmt)), nil
+}
+
+// createBuildInfoBuiltin implements `create_buildinfo_for(header)` → a CreateBuildInfoStmt
+// genFrag.
+func createBuildInfoBuiltin(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var header string
+
+	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "header", &header); err != nil {
+		return nil, err
+	}
+
+	return fragList(buildStmtFor("CREATE_BUILDINFO_FOR", STRS(header), 0, throwFmt)), nil
+}
+
+// declareResourceBuiltin builds a generator for a DECLARE_EXTERNAL_RESOURCE-family macro:
+// it passes its positional string arguments through to buildStmtFor (→ DeclareResourceStmt).
+func declareResourceBuiltin(macro string) *starlark.Builtin {
+	return starlark.NewBuiltin(strings.ToLower(macro), func(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		if len(kwargs) > 0 {
+			return nil, fmt.Errorf("%s: unexpected keyword argument", b.Name())
+		}
+
+		out := make([]STR, 0, len(args))
+
+		for _, a := range args {
+			str, ok := starlark.AsString(a)
+			if !ok {
+				return nil, fmt.Errorf("%s: arguments must be strings, got %s", b.Name(), a.Type())
+			}
+
+			out = append(out, internStr(str))
+		}
+
+		return fragList(buildStmtFor(macro, out, 0, throwFmt)), nil
+	})
 }
 
 // enumSerBuiltin implements `enum_serialization[_with_header|_noutf](header)` → a

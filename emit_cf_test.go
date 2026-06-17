@@ -5,6 +5,15 @@ import (
 	"testing"
 )
 
+// TestStarlark_ConfigureFile pins the configure_file() builtin → ConfigureFileStmt.
+func TestStarlark_ConfigureFile(t *testing.T) {
+	env := DefaultIfEnv.clone()
+
+	assertSameStmts(t,
+		evalStarStr(t, `library(srcs = ["a.cpp"] + configure_file("tmpl.h.in", "out.h"))`, env),
+		parseMakeStr(t, "LIBRARY()\nSRCS(a.cpp)\nCONFIGURE_FILE(tmpl.h.in out.h)\nEND()\n"))
+}
+
 // TestEmitCF_GeneratedFromRidesAsClosureLeaf pins the CONFIGURE_FILE emitter's
 // generated-from propagation: a cross-module consumer that #includes a configured
 // header must carry, in its CC input closure, the generated header, the template

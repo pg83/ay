@@ -5,6 +5,40 @@ import (
 	"testing"
 )
 
+// TestStarlark_RunProgram pins the run_program() builtin: every keyword section maps to
+// the matching ya.make RUN_PROGRAM section, producing an identical RunProgramStmt.
+func TestStarlark_RunProgram(t *testing.T) {
+	env := DefaultIfEnv.clone()
+
+	assertSameStmts(t,
+		evalStarStr(t, `library(srcs = ["a.cpp"] + run_program(
+    "//tool/gen",
+    args = ["--flag", "v"],
+    ins = ["in.txt"],
+    outs = ["out.cpp"],
+    out_noauto = ["log"],
+    stdout = ["s.out"],
+    env = ["K=V"],
+    output_includes = ["h.h"],
+    induced_deps = ["d.h"],
+    tools = ["//t"],
+    cwd = "sub",
+))`, env),
+		parseMakeStr(t, "LIBRARY()\nSRCS(a.cpp)\n"+
+			"RUN_PROGRAM(//tool/gen --flag v IN in.txt OUT out.cpp OUT_NOAUTO log "+
+			"STDOUT s.out ENV K=V OUTPUT_INCLUDES h.h INDUCED_DEPS d.h TOOL //t CWD sub)\nEND()\n"))
+}
+
+// TestStarlark_RunPy3Program pins run_py3_program() — the same RunProgramStmt shape under
+// the RUN_PY3_PROGRAM name.
+func TestStarlark_RunPy3Program(t *testing.T) {
+	env := DefaultIfEnv.clone()
+
+	assertSameStmts(t,
+		evalStarStr(t, `library(srcs = ["a.cpp"] + run_py3_program("//tool", args = ["x"], outs = ["o.cpp"]))`, env),
+		parseMakeStr(t, "LIBRARY()\nSRCS(a.cpp)\nRUN_PY3_PROGRAM(//tool x OUT o.cpp)\nEND()\n"))
+}
+
 func TestGen_RunProgramHeaderOutputClosurePropagatesInputs(t *testing.T) {
 	files := map[string]string{}
 

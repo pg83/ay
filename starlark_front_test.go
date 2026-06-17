@@ -374,9 +374,31 @@ func dumpStmts(stmts []Stmt) string {
 		case *SetStmt:
 			fmt.Fprintf(&b, "SET %s=%s\n", x.Name, x.Value)
 		case *RunProgramStmt:
-			fmt.Fprintf(&b, "RUN_PROGRAM tool=%s args=%s in=%s out=%s outnoauto=%s incl=%s\n",
+			fmt.Fprintf(&b, "RUN_PROGRAM tool=%s args=%s in=%s out=%s outnoauto=%s stdout=%s env=%s cwd=%s incl=%s tools=%s\n",
 				x.ToolPath.string(), strDump(x.Args), strDump(x.INFiles), strDump(x.OUTFiles),
-				strDump(x.OUTNoAutoFiles), strDump(x.OutputIncludes))
+				strDump(x.OUTNoAutoFiles), ptrStr(x.StdoutFile), strDump(x.EnvPairs), ptrStr(x.CWD),
+				strDump(x.OutputIncludes), strDump(x.ToolPaths))
+		case *RunPythonStmt:
+			fmt.Fprintf(&b, "RUN_PYTHON3 script=%s args=%s in=%s out=%s outnoauto=%s stdout=%s env=%s cwd=%s incl=%s\n",
+				x.ScriptPath.string(), strDump(x.Args), strDump(x.INFiles), strDump(x.OUTFiles),
+				strDump(x.OUTNoAutoFiles), ptrStr(x.StdoutFile), strDump(x.EnvPairs), ptrStr(x.CWD),
+				strDump(x.OutputIncludes))
+		case *RunAntlrStmt:
+			fmt.Fprintf(&b, "RUN_ANTLR %s args=%s in=%s out=%s outnoauto=%s cwd=%s incl=%s\n",
+				x.Macro, strDump(x.Args), strDump(x.INFiles), strDump(x.OUTFiles),
+				strDump(x.OUTNoAutoFiles), ptrStr(x.CWD), strDump(x.OutputIncludes))
+		case *RunAntlr4CppStmt:
+			fmt.Fprintf(&b, "RUN_ANTLR4_CPP grammar=%s options=%s visitor=%t listener=%t incl=%s\n",
+				x.Grammar.string(), strDump(x.Options), x.Visitor, x.Listener, strDump(x.OutputIncludes))
+		case *RunAntlr4CppSplitStmt:
+			fmt.Fprintf(&b, "RUN_ANTLR4_CPP_SPLIT lexer=%s parser=%s visitor=%t listener=%t incl=%s\n",
+				x.Lexer.string(), x.Parser.string(), x.Visitor, x.Listener, strDump(x.OutputIncludes))
+		case *ConfigureFileStmt:
+			fmt.Fprintf(&b, "CONFIGURE_FILE %s %s\n", x.Src, x.Dst)
+		case *CreateBuildInfoStmt:
+			fmt.Fprintf(&b, "CREATE_BUILDINFO_FOR %s\n", x.OutputHeader)
+		case *DeclareResourceStmt:
+			fmt.Fprintf(&b, "DECLARE %s %s\n", x.Macro.string(), strDump(x.Args))
 		case *JoinSrcsStmt:
 			fmt.Fprintf(&b, "JOIN_SRCS %s %s\n", x.OutputName, strDump(x.Sources))
 		case *GenerateEnumSerializationStmt:
@@ -399,6 +421,16 @@ func dumpStmts(stmts []Stmt) string {
 	}
 
 	return b.String()
+}
+
+// ptrStr renders an optional STR field (nil → "<nil>"), so a CWD/STDOUT absent on one
+// side compares distinct from one present.
+func ptrStr(s *STR) string {
+	if s == nil {
+		return "<nil>"
+	}
+
+	return s.string()
 }
 
 func strDump(ss []STR) string {
