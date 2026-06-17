@@ -192,11 +192,85 @@ func transpileYaMakeFile(fs FS, rel string) (src string, hasModule bool, err err
 	return transpileToStarMode(mf.Stmts, raw, stmtFallbackDirs[dir])
 }
 
-// segBuilder accumulates one attribute's value expression as a sequence of segments,
-// merging contiguous plain-list items into a single literal and keeping generator and
-// conditional segments separate — preserving source order.
+// seg is one segment of an attribute's value expression (segments are joined with " + ").
+// render takes the base indent (the column the closing bracket aligns to).
+type seg interface {
+	render(base int) string
+}
+
+// listSeg is a plain list literal, rendered vertically (one element per line) when it has
+// more than one element.
+type listSeg struct{ items []STR }
+
+func (l listSeg) render(base int) string { return renderList(l.items, base) }
+
+// rawSeg is an already-formatted inline expression (a non-join generator call).
+type rawSeg struct{ s string }
+
+func (r rawSeg) render(int) string { return r.s }
+
+// joinSeg is a JOIN_SRCS generator with its sources list rendered vertically.
+type joinSeg struct {
+	out     STR
+	sources []STR
+}
+
+func (j joinSeg) render(base int) string {
+	return "join_srcs(" + strconv.Quote(j.out.string()) + ", " + renderList(j.sources, base) + ")"
+}
+
+// condSeg is an inline conditional (from an IF): `(then if cond else else)`.
+type condSeg struct {
+	cond string
+	then []seg
+	els  []seg
+}
+
+func (c condSeg) render(base int) string {
+	return "(" + renderSegs(c.then, base) + " if " + c.cond + " else " + renderSegs(c.els, base) + ")"
+}
+
+// renderSegs joins an attribute's segments into its value expression at the given indent.
+func renderSegs(segs []seg, base int) string {
+	if len(segs) == 0 {
+		return "[]"
+	}
+
+	parts := make([]string, len(segs))
+	for i, g := range segs {
+		parts[i] = g.render(base)
+	}
+
+	return strings.Join(parts, " + ")
+}
+
+// renderList renders a list literal: vertical (one element per line, trailing comma) for
+// two or more elements, inline otherwise.
+func renderList(items []STR, base int) string {
+	switch len(items) {
+	case 0:
+		return "[]"
+	case 1:
+		return "[" + strconv.Quote(items[0].string()) + "]"
+	}
+
+	var b strings.Builder
+
+	b.WriteString("[\n")
+
+	for _, it := range items {
+		b.WriteString(strings.Repeat(" ", base+4) + strconv.Quote(it.string()) + ",\n")
+	}
+
+	b.WriteString(strings.Repeat(" ", base) + "]")
+
+	return b.String()
+}
+
+// segBuilder accumulates one attribute's segments, merging contiguous plain-list items
+// into one literal and keeping generator/conditional segments separate, in source order.
 type segBuilder struct {
-	segs []string
+	segs []seg
 	pend []STR
 }
 
@@ -204,24 +278,20 @@ func (s *segBuilder) addItems(items []STR) { s.pend = append(s.pend, items...) }
 
 func (s *segBuilder) flush() {
 	if len(s.pend) > 0 {
-		s.segs = append(s.segs, renderStrList(s.pend))
+		s.segs = append(s.segs, listSeg{s.pend})
 		s.pend = nil
 	}
 }
 
-func (s *segBuilder) addExpr(expr string) {
+func (s *segBuilder) addSeg(g seg) {
 	s.flush()
-	s.segs = append(s.segs, expr)
+	s.segs = append(s.segs, g)
 }
 
-func (s *segBuilder) expr() string {
+func (s *segBuilder) finalize() []seg {
 	s.flush()
 
-	if len(s.segs) == 0 {
-		return "[]"
-	}
-
-	return strings.Join(s.segs, " + ")
+	return s.segs
 }
 
 // prettyState collects a module (or one IF branch): list/srcs attributes as segment
@@ -254,12 +324,12 @@ func (p *prettyState) setToggle(name string) {
 	}
 }
 
-func (p *prettyState) exprOf(name string) string {
+func (p *prettyState) segsOf(name string) []seg {
 	if s := p.seg[name]; s != nil {
-		return s.expr()
+		return s.finalize()
 	}
 
-	return "[]"
+	return nil
 }
 
 func recordPrettyReason(reason string) bool {
@@ -301,7 +371,7 @@ func collectOne(p *prettyState, s Stmt, cur *rawCursor, topLevel bool) bool {
 		}
 
 		for _, name := range names {
-			p.segOf(name).addExpr("(" + thenP.exprOf(name) + " if " + cond + " else " + elseP.exprOf(name) + ")")
+			p.segOf(name).addSeg(condSeg{cond: cond, then: thenP.segsOf(name), els: elseP.segsOf(name)})
 		}
 
 		return true
@@ -315,13 +385,15 @@ func collectOne(p *prettyState, s Stmt, cur *rawCursor, topLevel bool) bool {
 		p.segOf("srcs").addItems(a)
 	case n == "ENABLE" || n == "DISABLE" || n == "SET" || n == "DEFAULT":
 		return recordPrettyReason("mutator:" + n)
+	case n == "JOIN_SRCS" && len(a) > 0:
+		p.segOf("srcs").addSeg(joinSeg{out: a[0], sources: a[1:]})
 	default:
 		if _, ok := boundaryMacroSet[n]; ok {
 			return recordPrettyReason("boundary:" + n)
 		}
 
 		if gen, ok := generatorCall(n, a); ok {
-			p.segOf("srcs").addExpr(gen)
+			p.segOf("srcs").addSeg(rawSeg{gen})
 
 			return true
 		}
@@ -443,7 +515,7 @@ func renderPretty(moduleType string, moduleArgs []STR, p *prettyState) string {
 			continue
 		}
 
-		expr := p.seg[name].expr()
+		expr := renderSegs(p.segsOf(name), 4)
 		if expr == "[]" {
 			continue // empty attrArgs → omitted, matching emitAttr
 		}
@@ -623,7 +695,7 @@ func (t *transBuilder) leaf(rc RawCall, indent int) error {
 	switch n {
 	case "SRCS":
 		t.use("srcs", attrArgs)
-		t.emit(indent, "srcs += "+renderStrList(a))
+		t.emit(indent, "srcs += "+renderList(a, indent*4))
 
 		return nil
 	case "ENABLE", "DISABLE", "SET", "DEFAULT":
@@ -656,7 +728,7 @@ func (t *transBuilder) leaf(rc RawCall, indent int) error {
 			t.emit(indent, spec.kw+" = True")
 		case attrArgs:
 			t.use(spec.kw, attrArgs)
-			t.emit(indent, spec.kw+" += "+renderStrList(a))
+			t.emit(indent, spec.kw+" += "+renderList(a, indent*4))
 		}
 
 		return nil
