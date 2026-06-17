@@ -2311,10 +2311,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if genPyAuxRes != nil {
 		globalRefs = append(globalRefs, genPyAuxRes.Refs...)
 		globalOutputs = append(globalOutputs, genPyAuxRes.Outputs...)
-
-		for _, p := range genPyAuxRes.Outputs {
-			arDeclMeta[p] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
-		}
 	}
 
 	emitLLVMBC(ctx, instance, d, moduleInputs, resourceGlobalsClosure)
