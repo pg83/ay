@@ -1380,6 +1380,53 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
+	// build/platform/${LINKER} (lld) is PEERDIR'd after _BASE_UNIT and the module's
+	// own user peers but before the allocator (ymake.core.conf:867; the allocator
+	// peer is injected later still). In the GlobalSrcs post-order DFS this places
+	// lld's toolchain component immediately ahead of the first allocator-subtree
+	// component. archiveOrder keeps lld at its language-default slot (early), correct
+	// for link/AR (lld has no archive) but wrong for the SBOM list. Relocate the lld
+	// peer to just before the first allocator-explicit peer in the SBOM pass only.
+	if linkTarget && len(allocatorExplicitPeers) > 0 {
+		allocSet := make(map[string]struct{}, len(allocatorExplicitPeers))
+		for _, p := range allocatorExplicitPeers {
+			allocSet[filepath.Clean(p)] = struct{}{}
+		}
+
+		lldIdx, allocIdx := -1, -1
+		for i, rp := range sbomOrder {
+			if rp.path == "build/platform/lld" {
+				lldIdx = i
+			}
+			if _, ok := allocSet[rp.path]; ok && allocIdx < 0 {
+				allocIdx = i
+			}
+		}
+
+		if lldIdx >= 0 && allocIdx >= 0 && lldIdx < allocIdx {
+			relocated := make([]resolvedPeer, 0, len(sbomOrder))
+			lld := sbomOrder[lldIdx]
+			for i, rp := range sbomOrder {
+				if i == lldIdx {
+					continue
+				}
+				if i == allocIdx {
+					relocated = append(relocated, lld)
+				}
+				relocated = append(relocated, rp)
+			}
+			sbomOrder = relocated
+		}
+	}
+
+	// For Py3 programs the linker/allocator/python peers are moved to the SBOM tail
+	// (after the module's own user peers), so the module's own .component.sbom — which
+	// upstream's collector appends when the module Finishes, before those late peers
+	// merge — lands ahead of lld and the allocator group, not at the very end. Capture
+	// the peerSbomPaths offset at the lld emission point so the own component can be
+	// inserted there (PROGRAM modules keep own last; offset stays -1).
+	ownSbomInsertIdx := -1
+
 	for _, rp := range sbomOrder {
 		pr := rp.result
 
@@ -1392,6 +1439,10 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 				peerSbomRefs = append(peerSbomRefs, pr.PeerSbomClosureRefs[i])
 				peerSbomPaths = append(peerSbomPaths, p)
 			}
+		}
+
+		if rp.path == "build/platform/lld" && d.moduleStmt.Name == tokPy3Program {
+			ownSbomInsertIdx = len(peerSbomPaths)
 		}
 
 		if pr.SbomComponentRef != nil && (*pr.SbomComponentPath != lldToolchainSbomVFS || linkTarget) && deduper.add(*pr.SbomComponentPath) {
@@ -2229,8 +2280,22 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ldSbomPaths = peerSbomPaths
 
 			if ownSbomRef != nil {
-				ldSbomRefs = append(append([]NodeRef(nil), peerSbomRefs...), *ownSbomRef)
-				ldSbomPaths = append(append([]VFS(nil), peerSbomPaths...), *ownSbomPath)
+				if ownSbomInsertIdx >= 0 && ownSbomInsertIdx <= len(peerSbomPaths) {
+					// Py3 program: own component lands ahead of the relocated
+					// lld/allocator/python tail (collector Finish order).
+					ldSbomRefs = make([]NodeRef, 0, len(peerSbomRefs)+1)
+					ldSbomRefs = append(ldSbomRefs, peerSbomRefs[:ownSbomInsertIdx]...)
+					ldSbomRefs = append(ldSbomRefs, *ownSbomRef)
+					ldSbomRefs = append(ldSbomRefs, peerSbomRefs[ownSbomInsertIdx:]...)
+
+					ldSbomPaths = make([]VFS, 0, len(peerSbomPaths)+1)
+					ldSbomPaths = append(ldSbomPaths, peerSbomPaths[:ownSbomInsertIdx]...)
+					ldSbomPaths = append(ldSbomPaths, *ownSbomPath)
+					ldSbomPaths = append(ldSbomPaths, peerSbomPaths[ownSbomInsertIdx:]...)
+				} else {
+					ldSbomRefs = append(append([]NodeRef(nil), peerSbomRefs...), *ownSbomRef)
+					ldSbomPaths = append(append([]VFS(nil), peerSbomPaths...), *ownSbomPath)
+				}
 			}
 		}
 
