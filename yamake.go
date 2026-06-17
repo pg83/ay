@@ -121,6 +121,7 @@ type JoinSrcsStmt struct {
 	OutputName string
 	Sources    []STR
 	Line       int
+	Seq        int
 }
 
 type AddInclStmt struct {

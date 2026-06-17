@@ -33,5 +33,5 @@ type SimdSrc struct {
 	Src     STR
 	Variant string
 	CFlags  []string
-	Line    int
+	Seq     int
 }

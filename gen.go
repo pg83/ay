@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path"
@@ -1675,17 +1676,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	ccRefs := make([]NodeRef, 0, len(d.srcs)+len(d.joinSrcs))
 	ccOutputs := make([]VFS, 0, len(d.srcs)+len(d.joinSrcs))
 
-	ccIsFlatNoLto := make([]bool, 0, len(d.srcs)+len(d.joinSrcs))
-
-	// arDeclLine maps a flagged source's compiled object to its ya.make declaration
-	// line. reorderARMembers sorts the hoisted (flagged) AR bucket by it, restoring
-	// ymake's declaration order — emission interleaves d.srcs SRC()s, srcExtraFlat
-	// duplicates, and SIMD variants out of that order.
-	arDeclLine := map[VFS]int{}
-
-	ccIsCFGenerated := make([]bool, 0, len(d.srcs)+len(d.joinSrcs))
-
-	ccIsProtoGenerated := make([]bool, 0, len(d.srcs)+len(d.joinSrcs))
+	// arDeclMeta maps each compiled object to its source's (StatementPriority,
+	// ya.make line) and whether it is a generated-source compile. reorderARMembers
+	// sorts the AR members by that key, reproducing ymake's statement processing
+	// order ((prio, name) then declaration), with generated compiles deferred after
+	// the direct ones — emission interleaves SRC()/JOIN/codegen vs plain SRCS.
+	arDeclMeta := map[VFS]SrcMeta{}
 
 	ownCFlags := d.cFlags
 	ownCFlagsGlobalSelf := d.cFlagsGlobal
@@ -1844,9 +1840,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	for i, ref := range cpMemberRefs {
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, cpMemberOuts[i])
-		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
-		ccIsCFGenerated = append(ccIsCFGenerated, false)
-		ccIsProtoGenerated = append(ccIsProtoGenerated, false)
 	}
 
 	enCCRes := emitEnumSrcs(ctx, instance, d, selfPeerAddInclGlobal, &moduleInputs)
@@ -1879,21 +1872,17 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		return adjustCythonCompanionSourceInputs(ctx.na, instance.Platform, d, src, si)
 	}
-	appendCC := func(srcID STR, emit *SourceEmit) {
+	appendCC := func(srcID STR, emit *SourceEmit, generated bool) {
 		if emit == nil {
 			return
 		}
 
-		cls := srcExtClassOf(srcID)
 		ccRefs = append(ccRefs, emit.Ref)
 		ccOutputs = append(ccOutputs, emit.OutPath)
-		ccIsFlatNoLto = append(ccIsFlatNoLto, d.flatSrc(srcID))
-		ccIsCFGenerated = append(ccIsCFGenerated, cls == srcExtCppIn || cls == srcExtCIn)
-		ccIsProtoGenerated = append(ccIsProtoGenerated, cls == srcExtProto)
 
-		if ln, ok := d.srcLine[srcID]; ok {
-			arDeclLine[emit.OutPath] = ln
-		}
+		m := d.srcMetaOf(srcID)
+		m.Generated = generated
+		arDeclMeta[emit.OutPath] = m
 	}
 
 	for _, src := range d.srcs {
@@ -1902,11 +1891,14 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		srcRel := src.string()
-		appendCC(src, emitOneSource(ctx, instance, d, srcRel, emitSrcInputs(src, srcRel)))
+		appendCC(src, emitOneSource(ctx, instance, d, srcRel, emitSrcInputs(src, srcRel)), false)
 	}
 
+	// codegen compiles (rl6/proto/ev/.in → .cpp/.pb.cc) consume an in-module
+	// generated source — deferred past the direct compiles. Their (prio, line) is
+	// the generating statement's (the .rl6/.proto SRCS entry, or a SRC()).
 	for _, ce := range codegenEmits {
-		appendCC(ce.srcID, ce.emit)
+		appendCC(ce.srcID, ce.emit, true)
 	}
 
 	// Extra FLAT objects for SRC(file …) whose file is also in SRCS (the SRCS
@@ -1922,72 +1914,50 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		if emit := emitOneSource(ctx, instance, d, fe.Src.string(), si); emit != nil {
 			ccRefs = append(ccRefs, emit.Ref)
 			ccOutputs = append(ccOutputs, emit.OutPath)
-			ccIsFlatNoLto = append(ccIsFlatNoLto, true)
-			ccIsCFGenerated = append(ccIsCFGenerated, false)
-			ccIsProtoGenerated = append(ccIsProtoGenerated, false)
-			arDeclLine[emit.OutPath] = fe.Line
+			arDeclMeta[emit.OutPath] = SrcMeta{Prio: stmtPrioDefault, Seq: fe.Seq}
 		}
 	}
 
-	for _, emit := range emitCheckConfigH(ctx, instance, d, moduleInputs) {
+	// Generated-source compiles (config-h, cython, swig, java, enum-serialize,
+	// RUN_PROGRAM/RUN_PYTHON outputs): each consumes an in-module generated source,
+	// so it archives after the direct compiles. Their generating macro is prio 2.
+	genCC := func(emit *SourceEmit) {
 		ccRefs = append(ccRefs, emit.Ref)
 		ccOutputs = append(ccOutputs, emit.OutPath)
-		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
-		ccIsCFGenerated = append(ccIsCFGenerated, true)
-		ccIsProtoGenerated = append(ccIsProtoGenerated, false)
+		arDeclMeta[emit.OutPath] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
+	}
+
+	for _, emit := range emitCheckConfigH(ctx, instance, d, moduleInputs) {
+		genCC(emit)
 	}
 
 	for _, emit := range emitCythonCpp(ctx, instance, d, moduleInputs) {
-		ccRefs = append(ccRefs, emit.Ref)
-		ccOutputs = append(ccOutputs, emit.OutPath)
-		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
-		ccIsCFGenerated = append(ccIsCFGenerated, true)
-		ccIsProtoGenerated = append(ccIsProtoGenerated, false)
+		genCC(emit)
 	}
 
 	for _, emit := range emitSwigC(ctx, instance, d, moduleInputs) {
-		ccRefs = append(ccRefs, emit.Ref)
-		ccOutputs = append(ccOutputs, emit.OutPath)
-		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
-		ccIsCFGenerated = append(ccIsCFGenerated, true)
-		ccIsProtoGenerated = append(ccIsProtoGenerated, false)
+		genCC(emit)
 	}
 
 	for i, ref := range jvCCRefs {
-		ccRefs = append(ccRefs, ref)
-		ccOutputs = append(ccOutputs, jvCCOutputs[i])
-		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
-		ccIsCFGenerated = append(ccIsCFGenerated, false)
-		ccIsProtoGenerated = append(ccIsProtoGenerated, false)
+		genCC(&SourceEmit{Ref: ref, OutPath: jvCCOutputs[i]})
 	}
 
 	if enCCRes != nil {
 		for i, ref := range enCCRes.CCRefs {
-			ccRefs = append(ccRefs, ref)
-			ccOutputs = append(ccOutputs, enCCRes.CCOutputs[i])
-			ccIsFlatNoLto = append(ccIsFlatNoLto, false)
-			ccIsCFGenerated = append(ccIsCFGenerated, false)
-			ccIsProtoGenerated = append(ccIsProtoGenerated, false)
+			genCC(&SourceEmit{Ref: ref, OutPath: enCCRes.CCOutputs[i]})
 		}
 	}
 
 	if prCCRes != nil {
 		for i, ref := range prCCRes.CCRefs {
-			ccRefs = append(ccRefs, ref)
-			ccOutputs = append(ccOutputs, prCCRes.CCOutputs[i])
-			ccIsFlatNoLto = append(ccIsFlatNoLto, false)
-			ccIsCFGenerated = append(ccIsCFGenerated, false)
-			ccIsProtoGenerated = append(ccIsProtoGenerated, false)
+			genCC(&SourceEmit{Ref: ref, OutPath: prCCRes.CCOutputs[i]})
 		}
 	}
 
 	if pyCCRes != nil {
 		for i, ref := range pyCCRes.CCRefs {
-			ccRefs = append(ccRefs, ref)
-			ccOutputs = append(ccOutputs, pyCCRes.CCOutputs[i])
-			ccIsFlatNoLto = append(ccIsFlatNoLto, false)
-			ccIsCFGenerated = append(ccIsCFGenerated, false)
-			ccIsProtoGenerated = append(ccIsProtoGenerated, false)
+			genCC(&SourceEmit{Ref: ref, OutPath: pyCCRes.CCOutputs[i]})
 		}
 	}
 
@@ -2012,13 +1982,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		ccRefs = append(ccRefs, emit.Ref)
 		ccOutputs = append(ccOutputs, emit.OutPath)
-		ccIsFlatNoLto = append(ccIsFlatNoLto, true)
-		ccIsCFGenerated = append(ccIsCFGenerated, false)
-		ccIsProtoGenerated = append(ccIsProtoGenerated, false)
-		arDeclLine[emit.OutPath] = e.Line
+		arDeclMeta[emit.OutPath] = SrcMeta{Prio: stmtPrioDefault, Seq: e.Seq}
 	}
-
-	numSrcsDerived := len(ccOutputs)
 
 	for _, js := range d.joinSrcs {
 		srcInstance := instance
@@ -2049,8 +2014,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ref, outPath, _ := emitCC(srcInstance, jsRel, joinOutVFS, ccIn, ctx.host, ctx.emit)
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, outPath)
-		ccIsFlatNoLto = append(ccIsFlatNoLto, false)
-		ccIsCFGenerated = append(ccIsCFGenerated, false)
+		arDeclMeta[outPath] = SrcMeta{Prio: stmtPrioDefault, Seq: js.Seq, Generated: true}
 	}
 
 	globalRefs := make([]NodeRef, 0, len(d.globalSrcs))
@@ -2076,6 +2040,9 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		for i, ref := range regRes.Refs {
 			globalRefs = append(globalRefs, ref)
 			globalOutputs = append(globalOutputs, regRes.Outputs[i])
+			// PY_REGISTER's .reg.cpp is generated, so it archives after the direct
+			// global members (objcopy resources).
+			arDeclMeta[regRes.Outputs[i]] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
 		}
 	}
 
@@ -2318,7 +2285,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		return result
 	}
 
-	ccRefs, ccOutputs = reorderARMembers(ccRefs, ccOutputs, ccIsFlatNoLto, ccIsCFGenerated, ccIsProtoGenerated, arDeclLine, numSrcsDerived)
+	ccRefs, ccOutputs = reorderARMembers(ccRefs, ccOutputs, arDeclMeta)
 
 	var arRef NodeRef
 	arBaseName := arNameFn(instance.Path.rel())
@@ -2344,6 +2311,10 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if genPyAuxRes != nil {
 		globalRefs = append(globalRefs, genPyAuxRes.Refs...)
 		globalOutputs = append(globalOutputs, genPyAuxRes.Outputs...)
+
+		for _, p := range genPyAuxRes.Outputs {
+			arDeclMeta[p] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
+		}
 	}
 
 	emitLLVMBC(ctx, instance, d, moduleInputs, resourceGlobalsClosure)
@@ -2449,7 +2420,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			globalTag = tagPy3BinLibGlobal
 		}
 
-		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), make([]bool, len(globalRefs)), nil, len(globalRefs))
+		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, arDeclMeta)
 		globalRef := emitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, d.tc, ctx.host, ctx.emit)
 		result.GlobalRef = &globalRef
 		result.GlobalPath = vfsPtr(build(instance.Path.rel() + "/" + globalBaseName))
@@ -3128,7 +3099,15 @@ func reorderLDMembers(refs []NodeRef, paths []VFS) ([]NodeRef, []VFS) {
 	return outRefs, outPaths
 }
 
-func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGenerated []bool, isProtoGenerated []bool, declLine map[VFS]int, numSrcsDerived int) ([]NodeRef, []VFS) {
+// reorderARMembers reproduces ymake's AR member order. ymake processes a
+// module's statements in (StatementPriority, name) order (module_loader.cpp:38),
+// and the archive lists $AUTO_INPUT in that processing order. So the members
+// sort by (prio, ya.make line): SRC()/SRC_C_*/JOIN_SRCS/codegen (prio 2) ahead
+// of plain SRCS/PY_SRCS (prio 4); within a priority, by declaration line. The
+// sort is stable, so objects sharing a key (e.g. one SRCS block, or a plain
+// source and its in-block codegen) keep emission order — which is itself
+// declaration order, with a generated source's compile emitted after the source.
+func reorderARMembers(refs []NodeRef, paths []VFS, declMeta map[VFS]SrcMeta) ([]NodeRef, []VFS) {
 	if len(paths) == 0 {
 		return refs, paths
 	}
@@ -3138,69 +3117,28 @@ func reorderARMembers(refs []NodeRef, paths []VFS, isFlatNoLto []bool, isCFGener
 		path VFS
 	}
 
-	var noLtoSrcs, regularSrcs, cfSrcs, g4Srcs, hSerSrcs, evPbSrcs, pbCCSrcs, rl6Srcs, reg3Srcs, legacyR6 []member
+	members := make([]member, len(paths))
 
-	for i := 0; i < numSrcsDerived && i < len(paths); i++ {
-		m := member{refs[i], paths[i]}
-		rel := m.path.rel()
+	for i := range paths {
+		members[i] = member{refs[i], paths[i]}
+	}
 
-		switch {
-		case strings.Contains(rel, "/_/_/"):
-			legacyR6 = append(legacyR6, m)
-		case i < len(isFlatNoLto) && isFlatNoLto[i]:
-			noLtoSrcs = append(noLtoSrcs, m)
-		case strings.Contains(rel, ".reg3.cpp") && strings.HasSuffix(rel, ".o"):
-			reg3Srcs = append(reg3Srcs, m)
-		case strings.HasSuffix(rel, ".rl6.cpp.o"):
-			rl6Srcs = append(rl6Srcs, m)
-		case strings.HasSuffix(rel, ".ev.pb.cc.o"):
-			evPbSrcs = append(evPbSrcs, m)
-		// pb.cc.o generated from a .proto SRCS entry (not a direct .pb.cc source
-		// file) goes after h_serialized — this matches upstream's ordering where
-		// the proto codegen output follows the enum serialization outputs.
-		case i < len(isProtoGenerated) && isProtoGenerated[i] && strings.HasSuffix(rel, ".pb.cc.o"):
-			pbCCSrcs = append(pbCCSrcs, m)
-		case strings.HasSuffix(rel, ".h_serialized.cpp.o"):
-			hSerSrcs = append(hSerSrcs, m)
-		case strings.HasSuffix(rel, ".g4.cpp.o"):
-			g4Srcs = append(g4Srcs, m)
-		case i < len(isCFGenerated) && isCFGenerated[i]:
-			cfSrcs = append(cfSrcs, m)
-		default:
-			regularSrcs = append(regularSrcs, m)
+	key := func(p VFS) uint64 {
+		if m, ok := declMeta[p]; ok {
+			return m.sortKey()
 		}
+
+		return SrcMeta{Prio: stmtPrioDefault}.sortKey()
 	}
 
-	joinSrcs := make([]member, 0, len(paths)-numSrcsDerived)
-
-	for i := numSrcsDerived; i < len(paths); i++ {
-		joinSrcs = append(joinSrcs, member{refs[i], paths[i]})
-	}
-
-	// The hoisted (flagged) bucket follows ymake's declaration order, but emission
-	// interleaves d.srcs SRC()s, srcExtraFlat duplicates, and SIMD variants out of
-	// it — restore it by stable-sorting on the recorded ya.make line.
-	slices.SortStableFunc(noLtoSrcs, func(a, b member) int {
-		return declLine[a.path] - declLine[b.path]
+	slices.SortStableFunc(members, func(a, b member) int {
+		return cmp.Compare(key(a.path), key(b.path))
 	})
 
-	out := make([]member, 0, len(paths))
-	out = append(out, noLtoSrcs...)
-	out = append(out, regularSrcs...)
-	out = append(out, cfSrcs...)
-	out = append(out, joinSrcs...)
-	out = append(out, g4Srcs...)
-	out = append(out, hSerSrcs...)
-	out = append(out, evPbSrcs...)
-	out = append(out, pbCCSrcs...)
-	out = append(out, rl6Srcs...)
-	out = append(out, reg3Srcs...)
-	out = append(out, legacyR6...)
+	outRefs := make([]NodeRef, len(members))
+	outPaths := make([]VFS, len(members))
 
-	outRefs := make([]NodeRef, len(out))
-	outPaths := make([]VFS, len(out))
-
-	for i, m := range out {
+	for i, m := range members {
 		outRefs[i] = m.ref
 		outPaths[i] = m.path
 	}
