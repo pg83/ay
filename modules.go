@@ -1818,15 +1818,26 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 
 		d.exportsScript = strPtr(v.Args[0])
 	case tokExtralibs:
+		// ymake stores one EXTRALIBS(...) call as a single space-joined OBJADDE_LIB
+		// value (TVarStr.Name), and cross-peer collection dedups by that whole-value
+		// string, not per token. So two libraries each contributing "-lrt" as part of
+		// a DIFFERENT EXTRALIBS value both survive (util's "-lrt -ldl" vs bdb's
+		// "-lrt"). Model each call as one group ARG; the cmd_args boundary splits it
+		// back into tokens.
+		libs := make([]string, 0, len(v.Args))
+
 		for _, argTok := range v.Args {
-			arg := argTok.string()
-			lib := arg
+			lib := argTok.string()
 
 			if !strings.HasPrefix(lib, "-") {
 				lib = "-l" + lib
 			}
 
-			d.objAddLibsGlobal = append(d.objAddLibsGlobal, internArg(lib))
+			libs = append(libs, lib)
+		}
+
+		if len(libs) > 0 {
+			d.objAddLibsGlobal = append(d.objAddLibsGlobal, internArg(strings.Join(libs, " ")))
 		}
 	case tokUsePython3:
 
