@@ -569,10 +569,9 @@ func tryPretty(stmts []Stmt, raw []RawCall) (string, bool) {
 			cur.next()
 			ended = true
 		default:
-			if !found {
-				return bailPretty("pre-module")
-			}
-
+			// Pre-module and body statements are collected the same way: attributes hoist
+			// into the single call (a pre-module SUBSCRIBER, etc., is position-independent,
+			// exactly as the accumulator form already relocates it).
 			if !collectOne(p, s, cur, true) {
 				return "", false
 			}
