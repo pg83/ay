@@ -214,8 +214,9 @@ func (s *stmtSink) moduleBuiltin(typeName string) *starlark.Builtin {
 	})
 }
 
-// emitSrcs walks a srcs list: contiguous strings become a SrcsStmt; a genFrag flushes
-// the pending strings and emits its statements, preserving declaration order.
+// emitSrcs walks a srcs list (flattening nested lists, so `+`-composed generators
+// work): contiguous strings become a SrcsStmt; a genFrag flushes the pending strings
+// and emits its statements, preserving declaration order.
 func (s *stmtSink) emitSrcs(l *starlark.List) error {
 	if l == nil {
 		return nil
@@ -230,12 +231,9 @@ func (s *stmtSink) emitSrcs(l *starlark.List) error {
 		}
 	}
 
-	iter := l.Iterate()
-	defer iter.Done()
+	var walk func(v starlark.Value) error
 
-	var v starlark.Value
-
-	for iter.Next(&v) {
+	walk = func(v starlark.Value) error {
 		switch x := v.(type) {
 		case starlark.String:
 			pending = append(pending, internStr(string(x)))
@@ -245,9 +243,17 @@ func (s *stmtSink) emitSrcs(l *starlark.List) error {
 			for _, st := range x.stmts {
 				s.add(st)
 			}
+		case *starlark.List:
+			return iterValues(x, walk)
 		default:
 			return fmt.Errorf("srcs: expected string or generator, got %s", v.Type())
 		}
+
+		return nil
+	}
+
+	if err := iterValues(l, walk); err != nil {
+		return err
 	}
 
 	flush()
@@ -296,26 +302,43 @@ func (s *stmtSink) emitSet(d *starlark.Dict) error {
 	return nil
 }
 
-// emitFrags emits the statements of a list of genFrags (e.g. extra_outputs runs whose
-// outputs are not compiled into the module).
+// emitFrags emits the statements of a (possibly nested) list of genFrags — e.g.
+// extra_outputs = run_program(…) + run_program(…), runs whose outputs are not compiled.
 func (s *stmtSink) emitFrags(l *starlark.List) error {
 	if l == nil {
 		return nil
 	}
 
+	var walk func(v starlark.Value) error
+
+	walk = func(v starlark.Value) error {
+		switch x := v.(type) {
+		case *genFrag:
+			for _, st := range x.stmts {
+				s.add(st)
+			}
+		case *starlark.List:
+			return iterValues(x, walk)
+		default:
+			return fmt.Errorf("extra_outputs: expected generator, got %s", v.Type())
+		}
+
+		return nil
+	}
+
+	return iterValues(l, walk)
+}
+
+// iterValues calls fn on each element of l (stopping on the first error).
+func iterValues(l *starlark.List, fn func(starlark.Value) error) error {
 	iter := l.Iterate()
 	defer iter.Done()
 
 	var v starlark.Value
 
 	for iter.Next(&v) {
-		g, ok := v.(*genFrag)
-		if !ok {
-			return fmt.Errorf("expected generator, got %s", v.Type())
-		}
-
-		for _, st := range g.stmts {
-			s.add(st)
+		if err := fn(v); err != nil {
+			return err
 		}
 	}
 
@@ -366,7 +389,7 @@ func runProgramBuiltin(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tu
 		st.CWD = &c
 	}
 
-	return &genFrag{stmts: []Stmt{st}}, nil
+	return fragList(st), nil
 }
 
 // enumSerBuiltin implements `enum_serialization[_with_header|_noutf](header)` → a
@@ -379,8 +402,15 @@ func enumSerBuiltin(variant string) func(*starlark.Thread, *starlark.Builtin, st
 			return nil, err
 		}
 
-		return &genFrag{stmts: []Stmt{&GenerateEnumSerializationStmt{Header: header, Variant: variant}}}, nil
+		return fragList(&GenerateEnumSerializationStmt{Header: header, Variant: variant}), nil
 	}
+}
+
+// fragList wraps a generator's statements in a single-element Starlark list, so
+// generators compose into `srcs` with `+`: srcs = ["a.cpp"] + enum_serialization(…)
+// + run_program(…). The srcs walker flattens the concatenated list.
+func fragList(stmts ...Stmt) *starlark.List {
+	return starlark.NewList([]starlark.Value{&genFrag{stmts: stmts}})
 }
 
 // nonEmptyList reports whether l is a non-nil list with at least one element. An
