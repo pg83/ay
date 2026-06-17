@@ -188,9 +188,15 @@ func loadModuleSource(ctx *GenCtx, dir string) *moduleSource {
 func evalStar(fs FS, rel string, env Environment) ([]Stmt, error) {
 	src := readOwnedForParse(fs, rel)
 	sink := &stmtSink{}
+	fl := &starFlags{env: env, local: map[string]string{}}
 
 	predeclared := starlark.StringDict{
-		"flags":                                  &starFlags{env: env},
+		"flags":                                  fl,
+		"atom":                                   atomBuiltin(fl),
+		"enable":                                 flagSetBuiltin("ENABLE", fl),
+		"disable":                                flagSetBuiltin("DISABLE", fl),
+		"set_var":                                setVarBuiltin(fl),
+		"default_var":                            defaultVarBuiltin(fl),
 		"run_program":                            runCmdBuiltin("RUN_PROGRAM", "tool"),
 		"run_py3_program":                        runCmdBuiltin("RUN_PY3_PROGRAM", "tool"),
 		"run_python3":                            runCmdBuiltin("RUN_PYTHON3", "script"),
@@ -203,11 +209,12 @@ func evalStar(fs FS, rel string, env Environment) ([]Stmt, error) {
 		"declare_external_resource":              declareResourceBuiltin("DECLARE_EXTERNAL_RESOURCE"),
 		"declare_external_host_resources_bundle": declareResourceBuiltin("DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE"),
 		"declare_external_host_resources_bundle_by_json": declareResourceBuiltin("DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON"),
-		"enum_serialization":                             starlark.NewBuiltin("enum_serialization", enumSerBuiltin("plain")),
-		"enum_serialization_with_header":                 starlark.NewBuiltin("enum_serialization_with_header", enumSerBuiltin("with_header")),
-		"enum_serialization_noutf":                       starlark.NewBuiltin("enum_serialization_noutf", enumSerBuiltin("noutf")),
-		"join_srcs":                                      starlark.NewBuiltin("join_srcs", joinSrcsBuiltin),
-		"src_c_no_lto":                                   starlark.NewBuiltin("src_c_no_lto", macroFragBuiltin("SRC_C_NO_LTO")),
+		"stmt":                           starlark.NewBuiltin("stmt", stmtBuiltin),
+		"enum_serialization":             starlark.NewBuiltin("enum_serialization", enumSerBuiltin("plain")),
+		"enum_serialization_with_header": starlark.NewBuiltin("enum_serialization_with_header", enumSerBuiltin("with_header")),
+		"enum_serialization_noutf":       starlark.NewBuiltin("enum_serialization_noutf", enumSerBuiltin("noutf")),
+		"join_srcs":                      starlark.NewBuiltin("join_srcs", joinSrcsBuiltin),
+		"src_c_no_lto":                   starlark.NewBuiltin("src_c_no_lto", macroFragBuiltin("SRC_C_NO_LTO")),
 	}
 
 	// Every module type ya.make recognizes is a rule builtin (lower-cased): library(),
@@ -236,9 +243,14 @@ func (s *stmtSink) add(st Stmt) {
 }
 
 // starFlags exposes the build-variant's env to Starlark as `flags`: `flags.MUSL`
-// returns the raw string value, faithful to ya.make's `when ($MUSL == "yes")`.
+// returns the raw string value, faithful to ya.make's `when ($MUSL == "yes")`. The
+// `local` overlay records SET/ENABLE/DISABLE/DEFAULT performed during evaluation so a
+// later condition sees them — collectStmts mutates the env in statement order, and the
+// eager ya.star must reproduce that (e.g. ENABLE(PROVIDE_REALLOCARRAY) gating a later
+// IF (PROVIDE_REALLOCARRAY)).
 type starFlags struct {
-	env Environment
+	env   Environment
+	local map[string]string
 }
 
 func (f *starFlags) String() string        { return "<flags>" }
@@ -248,10 +260,36 @@ func (f *starFlags) Truth() starlark.Bool  { return starlark.True }
 func (f *starFlags) Hash() (uint32, error) { return 0, fmt.Errorf("flags is unhashable") }
 
 func (f *starFlags) Attr(name string) (starlark.Value, error) {
+	if v, ok := f.local[name]; ok {
+		return starlark.String(v), nil
+	}
+
 	return starlark.String(f.env.string(internEnv(name))), nil
 }
 
 func (f *starFlags) AttrNames() []string { return nil }
+
+// atom resolves an identifier in comparison position (evalAtom semantics) honouring the
+// overlay: an overlaid or env-bound value, else the literal name.
+func (f *starFlags) atom(name string) string {
+	if v, ok := f.local[name]; ok {
+		return v
+	}
+
+	return atomValue(f.env, name)
+}
+
+// bound reports whether name has a value (overlay or env binding) — DEFAULT only sets an
+// unbound name.
+func (f *starFlags) bound(name string) bool {
+	if _, ok := f.local[name]; ok {
+		return true
+	}
+
+	k, _ := f.env.s.lookup(internEnv(name))
+
+	return k != envAbsent
+}
 
 // genFrag is a Model A generator value: it wraps the Stmt(s) the generator emits.
 // A genFrag placed in `srcs` contributes those statements to the module in order.
@@ -343,6 +381,11 @@ func (s *stmtSink) emitAttr(rule, key string, v starlark.Value) error {
 	case "disable":
 		return s.emitFlagFlips("DISABLE", v)
 	case "extra_outputs":
+		return s.emitFrags(asList(v))
+	case "body":
+		// body is the machine-generated form (`ay dev make starlark`): an ordered list
+		// of stmt()/generator frags emitted verbatim, preserving exact ya.make
+		// statement order.
 		return s.emitFrags(asList(v))
 	}
 
@@ -897,6 +940,122 @@ func macroFragBuiltin(macro string) func(*starlark.Thread, *starlark.Builtin, st
 
 		return fragList(buildStmtFor(macro, out, 0, throwFmt)), nil
 	}
+}
+
+// atomBuiltin implements `atom(name)` — the value of an IF-condition identifier in
+// comparison position (evalAtom semantics): a bound variable's value, else the literal
+// name. Distinct from `flags.X` (truthiness position), where an unbound name reads as
+// false, not as its own name.
+func atomBuiltin(fl *starFlags) *starlark.Builtin {
+	return starlark.NewBuiltin("atom", func(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		var name string
+
+		if err := starlark.UnpackArgs("atom", args, kwargs, "name", &name); err != nil {
+			return nil, err
+		}
+
+		return starlark.String(fl.atom(name)), nil
+	})
+}
+
+// flagSetBuiltin implements `enable([names])` / `disable([names])` — it records each name
+// as yes/no in the eval-time overlay (so a later IF sees it) and emits the ENABLE/DISABLE
+// stmt so collectStmts still applies its module-data side-effects (MUSL_LITE, …).
+func flagSetBuiltin(macro string, fl *starFlags) *starlark.Builtin {
+	on := macro == "ENABLE"
+	val := strNo.string()
+
+	if on {
+		val = strYes.string()
+	}
+
+	return starlark.NewBuiltin(strings.ToLower(macro), func(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		var names *starlark.List
+
+		if err := starlark.UnpackArgs(strings.ToLower(macro), args, kwargs, "names", &names); err != nil {
+			return nil, err
+		}
+
+		out, err := unpackStrList(names)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, n := range out {
+			fl.local[n.string()] = val
+		}
+
+		return fragList(buildStmtFor(macro, out, 0, throwFmt)), nil
+	})
+}
+
+// setVarBuiltin implements `set_var(name, [vals])` — SET in the overlay (space-joined
+// value) plus the SetStmt for collectStmts.
+func setVarBuiltin(fl *starFlags) *starlark.Builtin {
+	return starlark.NewBuiltin("set_var", func(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		var name string
+
+		var vals *starlark.List
+
+		if err := starlark.UnpackArgs("set_var", args, kwargs, "name", &name, "vals?", &vals); err != nil {
+			return nil, err
+		}
+
+		out, err := unpackStrList(vals)
+		if err != nil {
+			return nil, err
+		}
+
+		// The overlay value drives later eager conditions, so it must be expanded like
+		// collectStmts does (e.g. DEFAULT(LLD_VERSION ${COMPILER_VERSION}) gating
+		// IF (LLD_VERSION == 18)); the emitted stmt keeps the raw value (collectStmts
+		// re-expands it).
+		fl.local[name] = expandScalarVarRef(strings.Join(strStrings(out), " "), fl.env)
+
+		return fragList(buildStmtFor("SET", append(STRS(name), out...), 0, throwFmt)), nil
+	})
+}
+
+// defaultVarBuiltin implements `default_var(name, val)` — DEFAULT sets the overlay only
+// when name is unbound (overlay or env), matching env.setDefaultString.
+func defaultVarBuiltin(fl *starFlags) *starlark.Builtin {
+	return starlark.NewBuiltin("default_var", func(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		var name, val string
+
+		if err := starlark.UnpackArgs("default_var", args, kwargs, "name", &name, "val?", &val); err != nil {
+			return nil, err
+		}
+
+		if !fl.bound(name) {
+			fl.local[name] = expandScalarVarRef(val, fl.env)
+		}
+
+		return fragList(buildStmtFor("DEFAULT", STRS(name, val), 0, throwFmt)), nil
+	})
+}
+
+// stmtBuiltin implements `stmt(name, *args)` — a generic generator emitting the macro
+// `name(args…)` exactly as buildStmtFor produces it. It is the building block of the
+// machine-generated ya.star (`ay dev make starlark`): one stmt() per ya.make statement,
+// composed into `body` in order, so any ya.make statement round-trips through the same
+// parse path with identical args.
+func stmtBuiltin(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var name string
+
+	var argList *starlark.List
+
+	// args arrives as a single list, not varargs: a SRCS with hundreds of files would
+	// otherwise blow Starlark's 255-positional-argument call limit.
+	if err := starlark.UnpackArgs("stmt", args, kwargs, "name", &name, "args?", &argList); err != nil {
+		return nil, err
+	}
+
+	out, err := unpackStrList(argList)
+	if err != nil {
+		return nil, fmt.Errorf("stmt %s: %w", name, err)
+	}
+
+	return fragList(buildStmtFor(name, out, 0, throwFmt)), nil
 }
 
 // fragList wraps a generator's statements in a single-element Starlark list, so

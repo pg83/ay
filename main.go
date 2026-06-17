@@ -126,6 +126,11 @@ var commands = []command{
 		help: "🔎 Search a graph dump for nodes by output/cmd/input substring.",
 	},
 	{
+		path: []string{"dev", "make", "starlark"}, run: cmdMakeStarlark,
+		help: "🌟 Transpile ya.make → ya.star (Model A) next to each source. Args are\n" +
+			"source-root-relative dirs or ya.make paths; --source-root sets the root.",
+	},
+	{
 		path: []string{"dev", "perf", "parser"}, run: cmdPerfParser,
 		help: "⏱️ Benchmark the C/ya.make parser over every source file under <dir>.",
 	},
