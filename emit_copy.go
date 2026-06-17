@@ -61,7 +61,7 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, modulePath string, e
 // of any copy whose destination is a linkable object (.a/.o) — upstream archives
 // such a copied object into the module's library (e.g. a prebuilt Rust staticlib
 // COPY_FILE'd into a PY3_LIBRARY: contrib/python/pydantic-core).
-func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleInputs *ModuleCCInputs) (memberRefs []NodeRef, memberOuts []VFS) {
+func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleInputs *ModuleCCInputs) (memberRefs []NodeRef, memberOuts []VFS, memberSrcs []VFS) {
 	scanner := ctx.scannerFor(instance)
 	reg := codegenRegForInstance(ctx, instance)
 
@@ -155,10 +155,14 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 		if dst := entry.Dst; strings.HasSuffix(dst, ".a") || strings.HasSuffix(dst, ".o") {
 			memberRefs = append(memberRefs, entries[i].ref)
 			memberOuts = append(memberOuts, dstVFS)
+			// Upstream archives a copied .a/.o alongside its copy source: the
+			// prebuilt source rides as a direct input of the module's AR (e.g.
+			// pydantic-core's Rust lib_pydantic_core.a).
+			memberSrcs = append(memberSrcs, srcVFS)
 		}
 	}
 
-	return memberRefs, memberOuts
+	return memberRefs, memberOuts, memberSrcs
 }
 
 func generatedModuleSourceVFS(ctx *GenCtx, instance ModuleInstance, srcRel string) *VFS {
