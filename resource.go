@@ -246,7 +246,20 @@ func resolvePySrcRel(fs FS, srcDirs []VFS, modulePath, srcRel string) string {
 		}
 	}
 
-	return modulePath + "/" + srcRel
+	// A SRCS/proto entry may be spelled as a full arcadia-root path rather than
+	// a module-relative tail — e.g. a PROTO_LIBRARY whose module dir is
+	// market/idx/datacamp/proto/external listing
+	// SRCS(market/idx/datacamp/proto/api/ExportMessage.proto). When the
+	// module-relative join is absent on disk but the token resolves
+	// root-relative, take the root-relative form (otherwise the module prefix
+	// is doubled and the file open fails).
+	moduleRel := modulePath + "/" + srcRel
+
+	if !fs.isFile(srcRootVFS, moduleRel) && fs.isFile(srcRootVFS, srcRel) {
+		return srcRel
+	}
+
+	return moduleRel
 }
 
 func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath string, srcs []string, topLevel bool, namespace *STR) []PySrcEntry {

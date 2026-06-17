@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -48,7 +49,14 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		return emitLibraryCInSource(ctx, instance, d, srcRel, in)
 	}
 
-	throwFmt("gen: %s: unsupported source extension in %q", instance.Path.rel(), srcRel)
+	// An unmodelled codegen source extension (e.g. .gperf, .pyx not yet wired
+	// here). Under --keep-going this warns and the source is skipped so gen can
+	// complete (its compiled object and any headers it would yield are absent —
+	// a node-count gap to close later); in strict mode onWarn makes it fatal.
+	ctx.onWarn(Warn{
+		Kind:    WarnUnsupportedSource,
+		Message: fmt.Sprintf("%s: unsupported source extension in %q", instance.Path.rel(), srcRel),
+	})
 
 	return nil
 }

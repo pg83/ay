@@ -88,6 +88,7 @@ var acknowledgedMacros = map[string]struct{}{
 	"NO_SANITIZE_COVERAGE":            {},
 	"NO_JOIN_SRC":                     {},
 	"STYLE_CPP":                       {},
+	"STYLE_CPP_YT":                    {},
 	"STYLE_PYTHON":                    {},
 	"NO_OPTIMIZE":                     {},
 	"NO_OPTIMIZE_PY_PROTOS":           {},
@@ -124,6 +125,45 @@ var acknowledgedMacros = map[string]struct{}{
 	"CHECK_DEPENDENT_DIRS":            {},
 	"WINDOWS_LONG_PATH_MANIFEST":      {},
 	"WITH_KOTLIN_GRPC":                {},
+	"DISABLE_DATA_VALIDATION":         {},
+
+	// sg7 stage-1 stubs: these DO contribute graph nodes upstream but are
+	// acknowledged as no-ops only to get sg7 generation past the closed-TOK
+	// gate; modelling their nodes is the node-count convergence step.
+	// TODO: implement typed handlers.
+	//   - FROM_SANDBOX: fetch+unpack a Sandbox resource → OUT files.
+	//   - ARCHIVE_ASM: embed files as a rodata .o.
+	//   - YAFF / YAFF_SCHEMA: yabs flat-format codegen (build/internal).
+	//   - CPP_EVLOG: event-log C++ codegen.
+	//   - LIST_PROTO: writes a .proto file listing.
+	//   - BASE_CODEGEN: generic tool-driven codegen.
+	// JAVA_PROTO_PLUGIN / GO_PROTO_PLUGIN register java/go protoc plugins —
+	// genuinely inert for a C++/Python target (cf. WITH_KOTLIN_GRPC above).
+	"FROM_SANDBOX":      {},
+	"ARCHIVE_ASM":       {},
+	"YAFF":              {},
+	"YAFF_SCHEMA":       {},
+	"CPP_EVLOG":         {},
+	"LIST_PROTO":        {},
+	"BASE_CODEGEN":      {},
+	"JAVA_PROTO_PLUGIN": {},
+	"GO_PROTO_PLUGIN":   {},
+
+	// More sg7 codegen/resource/archive macros — graph-affecting, stubbed for
+	// the node-count step; STYLE_DETEKT (kotlin) / DEFAULT_JDK_VERSION (java) inert.
+	"DECIMAL_MD5_LOWER_32_BITS": {},
+	"SPLIT_CODEGEN":             {},
+	"STRUCT_CODEGEN":            {},
+	"CPP_ENUMS_SERIALIZATION":   {},
+	"ALL_RESOURCE_FILES":        {},
+	"EXPORT_YMAPS_PROTO":        {},
+	"YMAPS_SPROTO":              {},
+	"BUNDLE":                    {},
+	"STYLE_DETEKT":              {},
+	"DEFAULT_JDK_VERSION":       {},
+	"LJ_21_ARCHIVE":             {},
+	"BISON_FLAGS":               {},
+	"ARCHIVE_BY_KEYS":           {},
 }
 
 // acknowledgedTokSet is acknowledgedMacros in TOK space, so the per-invocation
@@ -266,6 +306,10 @@ type GenCtx struct {
 	fs      FS
 	parsers *IncludeParserManager
 	emit    Emitter
+	// onWarn surfaces non-fatal gen diagnostics (missing includes, unmodelled
+	// source extensions) to the caller's handler, which decides fatality by
+	// --keep-going. Threaded so emit paths off the scanner can report too.
+	onWarn func(Warn)
 	// na is the emitter's node-construction arenas (see NodeArenas), shared
 	// here so ctx-threaded builders reach them without the Emitter detour.
 	na *NodeArenas
@@ -464,6 +508,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		fs:        fs,
 		parsers:   parsers,
 		emit:      plainEmit,
+		onWarn:    onWarn,
 		na:        plainEmit.nodeArenas(),
 		memo:      newIntValueMap[*ModuleEmitResult](4096),
 		walking:   make(map[ModuleInstance]bool),
@@ -738,7 +783,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	if d.moduleStmt.Name != tokLibrary && !isProgramModuleType(d.moduleStmt.Name) && !isPyLibraryType(d.moduleStmt.Name) && !isYqlUdfStaticModule(d.moduleStmt.Name) && !isSpecializedLibraryType(d.moduleStmt.Name) && !isResourceContainerType(d.moduleStmt.Name) {
+	if d.moduleStmt.Name != tokLibrary && d.moduleStmt.Name != tokFbsLibrary && !isProgramModuleType(d.moduleStmt.Name) && !isPyLibraryType(d.moduleStmt.Name) && !isYqlUdfStaticModule(d.moduleStmt.Name) && !isSpecializedLibraryType(d.moduleStmt.Name) && !isResourceContainerType(d.moduleStmt.Name) {
 		throwFmt("gen: %s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only)", instance.Path.rel(), d.moduleStmt.Name)
 	}
 

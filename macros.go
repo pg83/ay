@@ -1,6 +1,7 @@
 package main
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -83,6 +84,18 @@ func evalCond(e Expr, env Environment) bool {
 		return evalLt(x, env)
 	case *ExprStartsWith:
 		return strings.HasPrefix(evalAtomString(x.Left, env), evalAtomString(x.Right, env))
+	case *ExprMatches:
+		return throw2(regexp.MatchString(evalAtomString(x.Right, env), evalAtomString(x.Left, env)))
+	case *ExprDefined:
+		id, ok := x.Of.(*ExprIdent)
+
+		if !ok {
+			throwFmt("macros: DEFINED expects a variable name, got %T", x.Of)
+		}
+
+		k, _ := env.s.lookup(identEnv(id))
+
+		return k != envAbsent
 	}
 
 	throwFmt("macros: unhandled Expr type %T", e)

@@ -96,7 +96,8 @@ CASES = [
     ("sg3", "devtools/ya/bin", "/home/pg/monorepo/yatool", "/home/pg/monorepo/yatool/sg3.json", False),
     ("sg4", "util/ut", "/home/pg/monorepo/ydb", "/home/pg/monorepo/ydb/sg4.json", False),
     ("sg5", "ydb/apps/ydbd", "/home/pg/monorepo/ydb", "/home/pg/monorepo/ydb/sg5.json", False),
-    ("sg6", "devtools/ya/bin", "/home/pg/monorepo/3", "/home/pg/monorepo/3/sg6.json", "auto"),
+    ("sg6", "devtools/ya/bin", "/home/pg/monorepo/3", "/home/pg/monorepo/3/sg6.json", False),
+    ("sg7", "yabs/server/daemons/bs_static", "/home/pg/monorepo/4", "/home/pg/monorepo/4/sg7.json", True),
 ]
 
 
@@ -256,7 +257,12 @@ def main() -> int:
     out_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(REPO_ROOT, ".out", "validate")
     os.makedirs(out_dir, exist_ok=True)
 
-    subprocess.run([GO, "build", "-o", "ay", "."], cwd=REPO_ROOT, check=True)
+    # The project has no cgo imports; force CGO_ENABLED=0 so the build never
+    # drags in runtime/cgo (which needs a C toolchain with stddef.h that may be
+    # absent from the host clang resource dir). Pure-Go net/user resolvers are
+    # equivalent for our purposes and more hermetic.
+    build_env = dict(os.environ, CGO_ENABLED="0")
+    subprocess.run([GO, "build", "-o", "ay", "."], cwd=REPO_ROOT, check=True, env=build_env)
 
     status = 0
     for name, target, source_root, ref, xfail in CASES:

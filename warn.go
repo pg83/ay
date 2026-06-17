@@ -11,6 +11,8 @@ const (
 	WarnSysIncl WarnKind = iota
 
 	WarnMissingInclude
+
+	WarnUnsupportedSource
 )
 
 func (k WarnKind) string() string {
@@ -19,6 +21,8 @@ func (k WarnKind) string() string {
 		return "sysincl"
 	case WarnMissingInclude:
 		return "missing-include"
+	case WarnUnsupportedSource:
+		return "unsupported-source"
 	}
 
 	return "warn"

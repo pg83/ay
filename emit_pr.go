@@ -114,7 +114,20 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// outputs, and registration records the producer ref.
 	prRef := ctx.emit.reserve()
 
+	// A RUN_PROGRAM may name the same file in more than one output role —
+	// e.g. STDOUT and OUT_NOAUTO pointing at the same generated artifact (the
+	// program's stdout *is* that declared output). They denote one physical
+	// output, so register each distinct output VFS exactly once; a second
+	// registration would trip the codegen registry's duplicate-producer guard.
+	registeredPROut := map[VFS]bool{}
+
 	registerPROutput := func(out VFS, parsed []IncludeDirective) {
+		if registeredPROut[out] {
+			return
+		}
+
+		registeredPROut[out] = true
+
 		registerBoundGeneratedParsedOutput(ctx, instance, pkPR, out, parsed, prRef, []NodeRef{toolLDRef})
 		reg.setSourceInputs(out, prSourceInputs)
 
@@ -369,7 +382,18 @@ func runProgramInputVFS(ctx *GenCtx, instance ModuleInstance, d *ModuleData, rel
 		return source(rel)
 	}
 
-	return resolveModuleSourceVFS(ctx, instance, d, rel, d.srcDirs)
+	resolved := resolveModuleSourceVFS(ctx, instance, d, rel, d.srcDirs)
+
+	// A resolved $(S) source that does not exist on disk is not a real source:
+	// it is the output of an unmodelled codegen (e.g. a FROM_SANDBOX OUT_NOAUTO
+	// like `trie`), which lives in $(B). Treat it as the generated build
+	// artifact so it is not content-hashed as a missing source. The producing
+	// node is a node-count gap to close once that codegen is modelled.
+	if resolved.isSource() && !ctx.fs.isFile(srcRootVFS, resolved.rel()) {
+		return buildVFS
+	}
+
+	return resolved
 }
 
 func emitPR(

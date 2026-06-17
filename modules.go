@@ -1899,6 +1899,14 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 				cythonPlainCpp = false
 
 				continue
+			case internStr("CYTHON_C_H"), internStr("CYTHON_C_API_H"):
+				// Cython C mode that additionally emits a (public api) header.
+				// We model the C compilation; the extra generated .h/_api.h is a
+				// node-count gap to close later (stage-1 stub).
+				cythonCMode = true
+				cythonPlainCpp = false
+
+				continue
 			case kwCYTHON_DIRECTIVE:
 				i++
 
