@@ -396,6 +396,18 @@ type ExprStartsWith struct {
 	Left, Right Expr
 }
 
+// ExprDefined models the unary `DEFINED <var>` predicate — true iff the variable
+// has an explicit binding in the environment (e.g. `IF(DEFINED RESERVE_ADDRESS_SPACE)`).
+type ExprDefined struct {
+	Of Expr
+}
+
+// ExprMatches models `<a> MATCHES <re>` — a regular-expression match condition
+// (e.g. `MODDIR MATCHES yabs/.../configs`), the regex analogue of STARTS_WITH.
+type ExprMatches struct {
+	Left, Right Expr
+}
+
 func (*ExprIdent) exprMarker() {
 }
 
@@ -421,6 +433,12 @@ func (*ExprLt) exprMarker() {
 }
 
 func (*ExprStartsWith) exprMarker() {
+}
+
+func (*ExprDefined) exprMarker() {
+}
+
+func (*ExprMatches) exprMarker() {
 }
 
 type ParseError struct {
@@ -1039,6 +1057,7 @@ func buildStmtFor(name string, args []STR, line int, fail func(format string, a 
 		"DLL", "SO_PROGRAM", "DYNAMIC_LIBRARY",
 		"PACKAGE", "UNION", "RESOURCES_LIBRARY",
 		"PREBUILT_PROGRAM",
+		"FBS_LIBRARY",
 		"UNITTEST_FOR":
 		return &ModuleStmt{Name: internTok(name), Args: args, Line: line}
 	case "DECLARE_EXTERNAL_RESOURCE",
@@ -1688,6 +1707,12 @@ func (c *CondParser) parseNot() Expr {
 		return &ExprNot{Of: c.parseNot()}
 	}
 
+	if ok && t.kind == tokIdent && t.val == "DEFINED" {
+		c.consume()
+
+		return &ExprDefined{Of: c.parseAtom()}
+	}
+
 	return c.parseCmp()
 }
 
@@ -1707,6 +1732,15 @@ func (c *CondParser) parseCmp() Expr {
 		c.rejectChainedCmp(t)
 
 		return &ExprStartsWith{Left: left, Right: right}
+	}
+
+	// MATCHES is the regex-match analogue, likewise spelled as a bare identifier.
+	if t.kind == tokIdent && t.val == "MATCHES" {
+		c.consume()
+		right := c.parseAtom()
+		c.rejectChainedCmp(t)
+
+		return &ExprMatches{Left: left, Right: right}
 	}
 
 	switch t.kind {
@@ -1825,12 +1859,20 @@ func (c *CondParser) parseAtom() Expr {
 func (p *Parser) expandInclude(into []Stmt, nameTok Token) []Stmt {
 	args := p.parseMacroArgs(nameTok)
 
-	if len(args) != 1 {
-		p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE expects exactly 1 argument (the path), got %d", len(args))
+	if len(args) == 0 {
+		p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE expects at least 1 argument (the path)")
 	}
 
-	rel := args[0].string()
+	// INCLUDE accepts several paths in one call (e.g. a list of cxxflags .inc
+	// files); upstream processes each. Expand them left-to-right.
+	for _, a := range args {
+		into = p.expandOneInclude(into, nameTok, a.string())
+	}
 
+	return into
+}
+
+func (p *Parser) expandOneInclude(into []Stmt, nameTok Token, rel string) []Stmt {
 	// The target is source-root-relative: either spelled from the root via
 	// ${ARCADIA_ROOT}/, or relative to the including file's directory. An
 	// absolute path would escape the FS — that is a build-file defect.

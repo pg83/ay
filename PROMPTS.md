@@ -9,12 +9,6 @@ case-insensitively; a section's body runs to the next `### ` header.
 
 DEBUG.md — how to debug divergences between the upstream graph and ours.
 
-If a process dies unexpectedly, suspect an OOM kill first: run `klog` and grep for `Out of memory` / `Killed process`. This box is shared by parallel agents, so the OOM killer reaps memory-heavy runs — don't misread an OOM (SIGKILL) as a code crash or a library bug.
-
-NEVER load a whole graph into memory — graphs reach multiple GB and OOM. Any graph analysis/normalization MUST be a streaming, bounded-memory algorithm (line-at-a-time / fan-out workers), never "decode the entire graph into a map and process it".
-
-### OVERSEER
-
 ### LEAD
 
 Write a thorough `descr` for every ticket: 8–10 sentences that make the work unambiguous — what to change, why, where in the code, what the upstream reference behavior is, and what "done" looks like. A one-liner is not enough; the digger and tasker must be able to act on the `descr` alone without guessing your intent.
@@ -66,9 +60,9 @@ The acceptance gate is `./dev/validate.py` (it builds `ay` itself) — use it as
 
 The pre→post numbers that must improve or stay flat:
 
-- gating `[<case>] OK` count (the byte-exact cases sg2 / sg2_x86_64 / sg3 / sg4) — must not drop;
+- gating `[<case>] OK` count — must not drop;
 - `XFAIL` count — must not grow;
-- the `[sg5] exact normalized-node parity: matched=…` line — `matched` must not decrease.
+- the `XFAIL exact normalized-node parity: matched=…` line — `matched` must not decrease.
 
 ### ARBITER
 

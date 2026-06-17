@@ -3,4 +3,4 @@
 /home/pg/monorepo/yatool/devtools/ymake - код графопостроителя ymake
 /home/pg/monorepo/yatool/devtools/ya/bin - код оркестратора ya
 
-./dev/validate.py должен перестать XFAIL по существу. sg5 должен сойтись с нашим вариантом.
+./dev/validate.py должен перестать XFAIL по существу.

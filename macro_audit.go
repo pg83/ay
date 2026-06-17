@@ -34,6 +34,11 @@ var macrosAcceptingUserFlags = map[TOK]struct{}{
 	// OR, …) — license data, not structural service-keywords. We read only
 	// LICENSE's presence (it gates the SBOM DX node), never the args.
 	tokLicense: {},
+	// SET_APPEND(VarName value…): the first arg is the destination variable
+	// name (PROTO_FILES, RPATH_GLOBAL, SFLAGS, …) — user/build data, not a
+	// structural keyword. The handler dispatches on the few names it models;
+	// appending to any other variable is inert, so bypass the strict audit.
+	tokSetAppend: {},
 }
 
 // serviceArgOK marks arg STRs the service-keyword check has already passed

@@ -9,7 +9,9 @@ var tokName = [...]STR{
 	tokAllocatorImpl:                      internStr("ALLOCATOR_IMPL"),
 	tokAllPySrcs:                          internStr("ALL_PY_SRCS"),
 	tokArchive:                            internStr("ARCHIVE"),
+	tokArchiveAsm:                         internStr("ARCHIVE_ASM"),
 	tokArPlugin:                           internStr("AR_PLUGIN"),
+	tokBaseCodegen:                        internStr("BASE_CODEGEN"),
 	tokBisonGenC:                          internStr("BISON_GEN_C"),
 	tokBisonGenCpp:                        internStr("BISON_GEN_CPP"),
 	tokBuildwithCythonC:                   internStr("BUILDWITH_CYTHON_C"),
@@ -21,6 +23,7 @@ var tokName = [...]STR{
 	tokCopy:                               internStr("COPY"),
 	tokCopyFile:                           internStr("COPY_FILE"),
 	tokCopyFileWithContext:                internStr("COPY_FILE_WITH_CONTEXT"),
+	tokCppEvlog:                           internStr("CPP_EVLOG"),
 	tokCppProtoPlugin:                     internStr("CPP_PROTO_PLUGIN"),
 	tokCppProtoPlugin0:                    internStr("CPP_PROTO_PLUGIN0"),
 	tokCppProtoPlugin2:                    internStr("CPP_PROTO_PLUGIN2"),
@@ -31,6 +34,7 @@ var tokName = [...]STR{
 	tokDefault:                         kwDEFAULT,
 	tokDefineVariable:                  internStr("DEFINE_VARIABLE"),
 	tokDisable:                         internStr("DISABLE"),
+	tokDisableDataValidation:           internStr("DISABLE_DATA_VALIDATION"),
 	tokDll:                             kwDLL,
 	tokDynamicLibrary:                  kwDYNAMIC_LIBRARY,
 	tokDynamicLibraryFrom:              internStr("DYNAMIC_LIBRARY_FROM"),
@@ -41,17 +45,21 @@ var tokName = [...]STR{
 	tokExtralibs:                       internStr("EXTRALIBS"),
 	tokExtralibsStatic:                 internStr("EXTRALIBS_STATIC"),
 	tokFatal:                           internStr("FATAL"),
+	tokFbsLibrary:                      internStr("FBS_LIBRARY"),
 	tokFiles:                           internStr("FILES"),
 	tokFlatcFlags:                      internStr("FLATC_FLAGS"),
 	tokForkSubtests:                    internStr("FORK_SUBTESTS"),
 	tokForkTests:                       internStr("FORK_TESTS"),
+	tokFromSandbox:                     internStr("FROM_SANDBOX"),
 	tokGlobalCflags:                    internStr("GLOBAL_CFLAGS"),
+	tokGoProtoPlugin:                   internStr("GO_PROTO_PLUGIN"),
 	tokGrpc:                            internStr("GRPC"),
 	tokHeaders:                         internStr("HEADERS"),
 	tokIdeFolder:                       internStr("IDE_FOLDER"),
 	tokIncludeTags:                     internStr("INCLUDE_TAGS"),
 	tokInducedDeps:                     kwINDUCED_DEPS,
 	tokJavaClasspathIgnoreConflictz:    internStr("JAVA_CLASSPATH_IGNORE_CONFLICTZ"),
+	tokJavaProtoPlugin:                 internStr("JAVA_PROTO_PLUGIN"),
 	tokJavaSrcs:                        internStr("JAVA_SRCS"),
 	tokLdPlugin:                        internStr("LD_PLUGIN"),
 	tokLibrary:                         kwLIBRARY,
@@ -60,6 +68,7 @@ var tokName = [...]STR{
 	tokLicenseRestrictionExceptions:    internStr("LICENSE_RESTRICTION_EXCEPTIONS"),
 	tokLicenseTexts:                    internStr("LICENSE_TEXTS"),
 	tokLint:                            internStr("LINT"),
+	tokListProto:                       internStr("LIST_PROTO"),
 	tokLlvmBc:                          internStr("LLVM_BC"),
 	tokManualGeneration:                internStr("MANUAL_GENERATION"),
 	tokMasmflags:                       internStr("MASMFLAGS"),
@@ -152,6 +161,7 @@ var tokName = [...]STR{
 	tokSrcCXop:                         internStr("SRC_C_XOP"),
 	tokStrip:                           internStr("STRIP"),
 	tokStyleCpp:                        internStr("STYLE_CPP"),
+	tokStyleCppYt:                      internStr("STYLE_CPP_YT"),
 	tokStylePython:                     internStr("STYLE_PYTHON"),
 	tokStyleRuff:                       internStr("STYLE_RUFF"),
 	tokSubscriber:                      internStr("SUBSCRIBER"),
@@ -176,11 +186,31 @@ var tokName = [...]STR{
 	tokWithoutLicenseTexts:             internStr("WITHOUT_LICENSE_TEXTS"),
 	tokWithoutVersion:                  internStr("WITHOUT_VERSION"),
 	tokWithKotlinGrpc:                  internStr("WITH_KOTLIN_GRPC"),
+	tokYaff:                            internStr("YAFF"),
+	tokYaffSchema:                      internStr("YAFF_SCHEMA"),
 	tokYaConfJson:                      internStr("YA_CONF_JSON"),
 	tokYqlAbiVersion:                   internStr("YQL_ABI_VERSION"),
 	tokYqlLastAbiVersion:               internStr("YQL_LAST_ABI_VERSION"),
 	tokYqlUdfContrib:                   kwYQL_UDF_CONTRIB,
 	tokYqlUdfYdb:                       kwYQL_UDF_YDB,
+
+	// sg7 stage-1 stub macros: registered so the closed TOK set tokenizes them;
+	// acknowledged as no-ops in acknowledgedMacros (graph-node modelling is the
+	// node-count convergence step). STYLE_DETEKT (kotlin lint) / DEFAULT_JDK_VERSION
+	// (java) are genuinely inert for a C++/Python target.
+	tokAllResourceFiles:                internStr("ALL_RESOURCE_FILES"),
+	tokArchiveByKeys:                   internStr("ARCHIVE_BY_KEYS"),
+	tokBisonFlags:                      internStr("BISON_FLAGS"),
+	tokBundle:                          internStr("BUNDLE"),
+	tokCppEnumsSerialization:           internStr("CPP_ENUMS_SERIALIZATION"),
+	tokDecimalMd5Lower32Bits:           internStr("DECIMAL_MD5_LOWER_32_BITS"),
+	tokDefaultJdkVersion:               internStr("DEFAULT_JDK_VERSION"),
+	tokExportYmapsProto:                internStr("EXPORT_YMAPS_PROTO"),
+	tokLj21Archive:                     internStr("LJ_21_ARCHIVE"),
+	tokSplitCodegen:                    internStr("SPLIT_CODEGEN"),
+	tokStructCodegen:                   internStr("STRUCT_CODEGEN"),
+	tokStyleDetekt:                     internStr("STYLE_DETEKT"),
+	tokYmapsSproto:                     internStr("YMAPS_SPROTO"),
 }
 
 var tokByName = func() map[string]TOK {
@@ -208,7 +238,9 @@ const (
 	tokAllocatorImpl
 	tokAllPySrcs
 	tokArchive
+	tokArchiveAsm
 	tokArPlugin
+	tokBaseCodegen
 	tokBisonGenC
 	tokBisonGenCpp
 	tokBuildwithCythonC
@@ -220,6 +252,7 @@ const (
 	tokCopy
 	tokCopyFile
 	tokCopyFileWithContext
+	tokCppEvlog
 	tokCppProtoPlugin
 	tokCppProtoPlugin0
 	tokCppProtoPlugin2
@@ -230,6 +263,7 @@ const (
 	tokDefault
 	tokDefineVariable
 	tokDisable
+	tokDisableDataValidation
 	tokDll
 	tokDynamicLibrary
 	tokDynamicLibraryFrom
@@ -240,17 +274,21 @@ const (
 	tokExtralibs
 	tokExtralibsStatic
 	tokFatal
+	tokFbsLibrary
 	tokFiles
 	tokFlatcFlags
 	tokForkSubtests
 	tokForkTests
+	tokFromSandbox
 	tokGlobalCflags
+	tokGoProtoPlugin
 	tokGrpc
 	tokHeaders
 	tokIdeFolder
 	tokIncludeTags
 	tokInducedDeps
 	tokJavaClasspathIgnoreConflictz
+	tokJavaProtoPlugin
 	tokJavaSrcs
 	tokLdPlugin
 	tokLibrary
@@ -259,6 +297,7 @@ const (
 	tokLicenseRestrictionExceptions
 	tokLicenseTexts
 	tokLint
+	tokListProto
 	tokLlvmBc
 	tokManualGeneration
 	tokMasmflags
@@ -351,6 +390,7 @@ const (
 	tokSrcCXop
 	tokStrip
 	tokStyleCpp
+	tokStyleCppYt
 	tokStylePython
 	tokStyleRuff
 	tokSubscriber
@@ -375,11 +415,28 @@ const (
 	tokWithoutLicenseTexts
 	tokWithoutVersion
 	tokWithKotlinGrpc
+	tokYaff
+	tokYaffSchema
 	tokYaConfJson
 	tokYqlAbiVersion
 	tokYqlLastAbiVersion
 	tokYqlUdfContrib
 	tokYqlUdfYdb
+
+	// sg7 stage-1 stub macros (see tokName block and acknowledgedMacros).
+	tokAllResourceFiles
+	tokArchiveByKeys
+	tokBisonFlags
+	tokBundle
+	tokCppEnumsSerialization
+	tokDecimalMd5Lower32Bits
+	tokDefaultJdkVersion
+	tokExportYmapsProto
+	tokLj21Archive
+	tokSplitCodegen
+	tokStructCodegen
+	tokStyleDetekt
+	tokYmapsSproto
 )
 
 // internTok maps a macro name to its TOK; the set is closed, so an unknown name
