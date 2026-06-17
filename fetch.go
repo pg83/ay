@@ -400,18 +400,42 @@ func fetchFromSandbox(id, token, archivePath string) {
 		throwFmt("fetch: sandbox resource %s is not READY (state=%s)", id, info.State)
 	}
 
+	// Download sources tried in order, like ya (skynet/proxy/storage with fallback):
+	// the tokenless MDS mirror first when present, then the authenticated proxy. An old
+	// resource's MDS object can be 410 Gone while the proxy still serves it, so a single
+	// source is not enough.
+	type source struct {
+		url  string
+		auth bool
+	}
+
+	var sources []source
+
 	if mds := info.Attributes.MDS; mds != "" {
-		httpGetToFile(mdsGetSandboxPrefix+mds, "", archivePath)
-
-		return
+		sources = append(sources, source{url: mdsGetSandboxPrefix + mds})
 	}
 
-	link := info.HTTP.Proxy + sandboxOriginSuffix
+	proxy := info.HTTP.Proxy + sandboxOriginSuffix
 	if info.Multifile {
-		link += "&stream=tgz"
+		proxy += "&stream=tgz"
 	}
 
-	httpGetToFile(link, token, archivePath)
+	sources = append(sources, source{url: proxy, auth: true})
+
+	var last *Exception
+
+	for _, s := range sources {
+		tok := ""
+		if s.auth {
+			tok = token
+		}
+
+		if last = try(func() { httpGetToFile(s.url, tok, archivePath) }); last == nil {
+			return
+		}
+	}
+
+	last.throw()
 }
 
 func querySandboxResource(id, token string) sandboxResource {
