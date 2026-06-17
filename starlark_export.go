@@ -294,16 +294,81 @@ func (s *segBuilder) finalize() []seg {
 	return s.segs
 }
 
+// collectCondRefs gathers every identifier that appears in any IF condition of the module
+// (recursively). A SET/ENABLE/DISABLE whose variable is in this set gates a condition, so
+// it cannot be hoisted into a kwarg (the eager `on(flags.X)`/`atom()` would not see the
+// mutation) — such modules keep the overlay-ordered accumulator form.
+func collectCondRefs(stmts []Stmt) map[string]bool {
+	refs := map[string]bool{}
+
+	var expr func(e Expr)
+
+	expr = func(e Expr) {
+		switch x := e.(type) {
+		case *ExprIdent:
+			refs[x.Name] = true
+		case *ExprNot:
+			expr(x.Of)
+		case *ExprAnd:
+			expr(x.Left)
+			expr(x.Right)
+		case *ExprOr:
+			expr(x.Left)
+			expr(x.Right)
+		case *ExprEq:
+			expr(x.Left)
+			expr(x.Right)
+		case *ExprLt:
+			expr(x.Left)
+			expr(x.Right)
+		case *ExprStartsWith:
+			expr(x.Left)
+			expr(x.Right)
+		}
+	}
+
+	var walk func(ss []Stmt)
+
+	walk = func(ss []Stmt) {
+		for _, s := range ss {
+			if iff, ok := s.(*IfStmt); ok {
+				expr(iff.Cond)
+				walk(iff.Then)
+				walk(iff.Else)
+			}
+		}
+	}
+
+	walk(stmts)
+
+	return refs
+}
+
 // prettyState collects a module (or one IF branch): list/srcs attributes as segment
-// builders, toggles as booleans, both in first-use order.
+// builders, toggles as booleans, SET vars as a dict, all in first-use order.
 type prettyState struct {
-	seg    map[string]*segBuilder
-	toggle map[string]bool
-	order  []string
+	seg      map[string]*segBuilder
+	toggle   map[string]bool
+	setVars  map[string]string // SET name → value (rendered as one `set = {…}` kwarg)
+	setOrder []string          // SET var names in source order
+	order    []string
+	condRefs map[string]bool // identifiers read by an IF condition (shared with sub-branches)
 }
 
 func newPrettyState() *prettyState {
-	return &prettyState{seg: map[string]*segBuilder{}, toggle: map[string]bool{}}
+	return &prettyState{seg: map[string]*segBuilder{}, toggle: map[string]bool{}, setVars: map[string]string{}}
+}
+
+func (p *prettyState) setVar(name, val string) {
+	if _, ok := p.setVars[name]; !ok {
+		if len(p.setOrder) == 0 {
+			p.order = append(p.order, "set")
+		}
+
+		p.setOrder = append(p.setOrder, name)
+	}
+
+	p.setVars[name] = val
 }
 
 func (p *prettyState) segOf(name string) *segBuilder {
@@ -353,11 +418,15 @@ func collectOne(p *prettyState, s Stmt, cur *rawCursor, topLevel bool) bool {
 		}
 
 		thenP := newPrettyState()
+		thenP.condRefs = p.condRefs
+
 		if !collectBlock(thenP, iff.Then, cur, false) {
 			return false
 		}
 
 		elseP := newPrettyState()
+		elseP.condRefs = p.condRefs
+
 		if !collectBlock(elseP, iff.Else, cur, false) {
 			return false
 		}
@@ -383,8 +452,28 @@ func collectOne(p *prettyState, s Stmt, cur *rawCursor, topLevel bool) bool {
 	switch {
 	case n == "SRCS":
 		p.segOf("srcs").addItems(a)
-	case n == "ENABLE" || n == "DISABLE" || n == "SET" || n == "DEFAULT":
-		return recordPrettyReason("mutator:" + n)
+	case n == "SET":
+		// SET hoists to a `set = {…}` kwarg only at top level and only when no condition
+		// reads the variable (otherwise the eager IF would miss the mutation).
+		if !topLevel || len(a) == 0 || p.condRefs[a[0].string()] {
+			return recordPrettyReason("mutator:SET")
+		}
+
+		p.setVar(a[0].string(), strings.Join(strStrings(a[1:]), " "))
+	case n == "ENABLE" || n == "DISABLE":
+		if !topLevel {
+			return recordPrettyReason("mutator:" + n)
+		}
+
+		for _, nm := range a {
+			if p.condRefs[nm.string()] {
+				return recordPrettyReason("mutator:" + n)
+			}
+		}
+
+		p.segOf(strings.ToLower(n)).addItems(a)
+	case n == "DEFAULT":
+		return recordPrettyReason("mutator:DEFAULT")
 	case n == "JOIN_SRCS" && len(a) > 0:
 		p.segOf("srcs").addSeg(joinSeg{out: a[0], sources: a[1:]})
 	default:
@@ -456,6 +545,7 @@ func bailPretty(reason string) (string, bool) {
 func tryPretty(stmts []Stmt, raw []RawCall) (string, bool) {
 	cur := &rawCursor{calls: raw}
 	p := newPrettyState()
+	p.condRefs = collectCondRefs(stmts)
 
 	var (
 		moduleType string
@@ -509,18 +599,25 @@ func renderPretty(moduleType string, moduleArgs []STR, p *prettyState) string {
 	}
 
 	for _, name := range p.order {
-		if p.toggle[name] {
+		switch {
+		case name == "set":
+			b.WriteString("    set = {\n")
+
+			for _, k := range p.setOrder {
+				b.WriteString("        " + strconv.Quote(k) + ": " + strconv.Quote(p.setVars[k]) + ",\n")
+			}
+
+			b.WriteString("    },\n")
+		case p.toggle[name]:
 			b.WriteString("    " + name + " = True,\n")
+		default:
+			expr := renderSegs(p.segsOf(name), 4)
+			if expr == "[]" {
+				continue // empty attrArgs → omitted, matching emitAttr
+			}
 
-			continue
+			b.WriteString("    " + name + " = " + expr + ",\n")
 		}
-
-		expr := renderSegs(p.segsOf(name), 4)
-		if expr == "[]" {
-			continue // empty attrArgs → omitted, matching emitAttr
-		}
-
-		b.WriteString("    " + name + " = " + expr + ",\n")
 	}
 
 	b.WriteString(")\n")
