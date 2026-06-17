@@ -133,6 +133,7 @@ func emitSbomComponent(ctx *GenCtx, instance ModuleInstance, d *ModuleData, real
 		Outputs:          na.vfsList(out),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: moddir, ModuleTag: moduleTag},
+		Resources:        usesPython3,
 	}
 
 	ref := ctx.emit.emit(node)
@@ -171,6 +172,7 @@ func emitSbomToolchainComponent(ctx *GenCtx, instance ModuleInstance, toolchainN
 		Outputs:          na.vfsList(out),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: moddir},
+		Resources:        usesPython3,
 	}
 
 	ref := ctx.emit.emit(node)
