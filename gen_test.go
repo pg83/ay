@@ -335,8 +335,8 @@ END()
 
 	g := testGen(fs, "ifmod")
 
-	if len(g.Graph) != 2 {
-		t.Fatalf("expected 2 nodes (1 CC + 1 AR), got %d", len(g.Graph))
+	if len(g.Graph) != 3 {
+		t.Fatalf("expected 3 nodes (1 CC + 1 AR + 1 vcs.json), got %d", len(g.Graph))
 	}
 
 	var ccInputs []string
@@ -389,8 +389,8 @@ END()
 
 	g := testGen(fs, "nolibcmod")
 
-	if len(g.Graph) != 2 {
-		t.Errorf("Gen produced %d nodes, want 2 (1 CC + 1 AR)", len(g.Graph))
+	if len(g.Graph) != 3 {
+		t.Errorf("Gen produced %d nodes, want 3 (1 CC + 1 AR + 1 vcs.json)", len(g.Graph))
 	}
 }
 
@@ -730,8 +730,8 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 
 		g := testGen(fs, "mymod")
 
-		if len(g.Graph) != 2 {
-			t.Fatalf("expected 2 nodes (1 CC + 1 AR), got %d", len(g.Graph))
+		if len(g.Graph) != 3 {
+			t.Fatalf("expected 3 nodes (1 CC + 1 AR + 1 vcs.json), got %d", len(g.Graph))
 		}
 
 		var ccNode *Node
@@ -770,8 +770,8 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 
 		g := testGen(fs, "basemod")
 
-		if len(g.Graph) != 2 {
-			t.Fatalf("expected 2 nodes (1 CC + 1 AR), got %d", len(g.Graph))
+		if len(g.Graph) != 3 {
+			t.Fatalf("expected 3 nodes (1 CC + 1 AR + 1 vcs.json), got %d", len(g.Graph))
 		}
 
 		var ccNode *Node
@@ -804,8 +804,8 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 
 		g := testGen(fs, "jsmod")
 
-		if len(g.Graph) != 3 {
-			t.Fatalf("expected 3 nodes (1 JS + 1 CC + 1 AR), got %d", len(g.Graph))
+		if len(g.Graph) != 4 {
+			t.Fatalf("expected 4 nodes (1 JS + 1 CC + 1 AR + 1 vcs.json), got %d", len(g.Graph))
 		}
 
 		var jsNode, ccNode *Node

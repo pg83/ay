@@ -158,7 +158,7 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 	deps := make([]NodeRef, 0, len(peerArchiveRefs)+len(pluginRefs)+1)
 	deps = append(deps, peerArchiveRefs...)
 	deps = append(deps, pluginRefs...)
-	deps = append(deps, emitVCSNode(ctx.emit, ctx.host))
+	deps = append(deps, ctx.vcsRef)
 
 	n := &Node{
 		Platform:         instance.Platform,

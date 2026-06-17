@@ -113,7 +113,6 @@ var (
 	strContribPythonGrpcio                           = internStr("contrib/python/grpcio")
 	strContribPythonProtobuf                         = internStr("contrib/python/protobuf")
 	strCpp                                           = internStr(".cpp")
-	strE30                                           = internStr("e30=")
 	strEmpty                                         = internStr("")
 	strFAKE                                          = internStr("FAKE")
 	strISContribLibsGoogleapisCommonProtos           = internStr("-I=$(S)/contrib/libs/googleapis-common-protos")

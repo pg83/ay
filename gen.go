@@ -308,6 +308,11 @@ type GenCtx struct {
 	host   *Platform
 	target *Platform
 
+	// vcsRef is the single $(B)/vcs.json producer node (emitVCSNode), emitted once at
+	// gen start; every program/dll link node depends on it (vcs_info / link_sbom read
+	// it). One ref shared here rather than re-emitted per consumer.
+	vcsRef NodeRef
+
 	testMode bool
 
 	// sbomEnabled is true when the build config defines the SBOM feature
@@ -486,6 +491,9 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	hostScanner.moduleByRef = &ctx.moduleByRef
 	ctx.scannerTarget = targetScanner
 	ctx.scannerHost = hostScanner
+
+	// The vcs.json producer is emitted once up front; link nodes depend on ctx.vcsRef.
+	ctx.vcsRef = emitVCSNode(ctx.emit, ctx.host)
 
 	seed := ModuleInstance{
 		Path:     source(filepath.Clean(targetDir)),
@@ -2337,6 +2345,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ctx.host,
 			ctx.scripts,
 			ctx.emit,
+			ctx.vcsRef,
 		)
 		ldPath := lDOutputPath(instance, binaryName)
 		var suiteInfo *TestSuiteInfo
