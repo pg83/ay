@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 // CmdArgs (a node's command line) is a []STR: every heterogeneous token — a flag
 // (ARG), a path (VFS), a macro name (TOK), an env var (ENV) or a literal — is
 // converted to the STR backing it via the free x.str() conversion, so the slice
@@ -13,6 +15,22 @@ func appendArgStr(dst []STR, srcs ...[]ARG) []STR {
 	for _, s := range srcs {
 		for _, a := range s {
 			dst = append(dst, a.str())
+		}
+	}
+
+	return dst
+}
+
+// appendArgGroupStr is appendArgStr for group-ARGs whose value is a space-joined
+// token list (e.g. one EXTRALIBS(...) call → OBJADDE_LIB value). It splits each
+// group back into individual command tokens at the cmd_args boundary, after the
+// whole-group string has served as the dedup key upstream.
+func appendArgGroupStr(dst []STR, srcs ...[]ARG) []STR {
+	for _, s := range srcs {
+		for _, a := range s {
+			for _, tok := range strings.Fields(a.string()) {
+				dst = append(dst, internStr(tok))
+			}
 		}
 	}
 

@@ -419,7 +419,10 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 	}
 
 	trailer = appendInternStrs(trailer, p.linkerSelectionTailFlags())
-	trailer = appendArgStr(trailer, peerLDFlagsGlobal, ownLDFlags, objAddLibsGlobal)
+	trailer = appendArgStr(trailer, peerLDFlagsGlobal, ownLDFlags)
+	// objAddLibsGlobal entries are group-ARGs (one per EXTRALIBS call); split each
+	// into its individual -l tokens here at the command boundary.
+	trailer = appendArgGroupStr(trailer, objAddLibsGlobal)
 	trailer = append(trailer, p.SystemLibs...)
 
 	if wantsStrip {
