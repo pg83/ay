@@ -3,8 +3,7 @@ package main
 import "github.com/zeebo/xxh3"
 
 // MemFS is an in-memory FS implementation serving Listdir/Read/Walk/Exists from
-// maps populated once at construction; no method reads the OS. Used by the test
-// suite and by `dev perf starlark` (built over an in-memory tree).
+// maps populated once at construction; no method reads the OS. Used by the test suite.
 type MemFS struct {
 	srcRoot   string
 	rootSlash string

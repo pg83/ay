@@ -2,57 +2,6 @@ package main
 
 import "testing"
 
-// TestStarlark_RunAntlr pins run_antlr() → RunAntlrStmt (the RUN_ANTLR macro name and
-// every section).
-func TestStarlark_RunAntlr(t *testing.T) {
-	env := DefaultIfEnv.clone()
-
-	assertSameStmts(t,
-		evalStarStr(t, `library(srcs = ["a.cpp"] + run_antlr(
-    args = ["-x"],
-    ins = ["g.g4"],
-    outs = ["P.cpp"],
-    output_includes = ["P.h"],
-    cwd = "sub",
-))`, env),
-		parseMakeStr(t, "LIBRARY()\nSRCS(a.cpp)\n"+
-			"RUN_ANTLR(-x IN g.g4 OUT P.cpp OUTPUT_INCLUDES P.h CWD sub)\nEND()\n"))
-}
-
-// TestStarlark_RunAntlr4Cpp pins run_antlr4_cpp() → RunAntlr4CppStmt (options, the
-// VISITOR/LISTENER toggles, OUTPUT_INCLUDES).
-func TestStarlark_RunAntlr4Cpp(t *testing.T) {
-	env := DefaultIfEnv.clone()
-
-	assertSameStmts(t,
-		evalStarStr(t, `library(srcs = ["a.cpp"] + run_antlr4_cpp(
-    "Grammar.g4",
-    options = ["-opt"],
-    visitor = True,
-    listener = True,
-    output_includes = ["G.h"],
-))`, env),
-		parseMakeStr(t, "LIBRARY()\nSRCS(a.cpp)\n"+
-			"RUN_ANTLR4_CPP(Grammar.g4 -opt VISITOR LISTENER OUTPUT_INCLUDES G.h)\nEND()\n"))
-}
-
-// TestStarlark_RunAntlr4CppSplit pins run_antlr4_cpp_split() → RunAntlr4CppSplitStmt; a
-// False listener round-trips through the NO_LISTENER token.
-func TestStarlark_RunAntlr4CppSplit(t *testing.T) {
-	env := DefaultIfEnv.clone()
-
-	assertSameStmts(t,
-		evalStarStr(t, `library(srcs = ["a.cpp"] + run_antlr4_cpp_split(
-    "Lex.g4",
-    "Par.g4",
-    visitor = True,
-    listener = False,
-    output_includes = ["X.h"],
-))`, env),
-		parseMakeStr(t, "LIBRARY()\nSRCS(a.cpp)\n"+
-			"RUN_ANTLR4_CPP_SPLIT(Lex.g4 Par.g4 VISITOR NO_LISTENER OUTPUT_INCLUDES X.h)\nEND()\n"))
-}
-
 // TestAntlrParsedIncludes_ExcludesBuildIntermediateInputs locks the induced
 // include set of a RUN_ANTLR output: a consumer that walks the generated
 // output's closure (e.g. the proto-split RUN_PROGRAM protoc node walking
