@@ -1347,6 +1347,11 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		if uri, ok := resolveResourceURIFromBundle(bundle, env); ok {
 			env.setString(internEnv(v.Args[0].string()), uri)
 		}
+	case tokNoPlatformResources:
+		// NO_PLATFORM_RESOURCES() (ymake.core.conf:4360) is exactly
+		// ENABLE(NOPLATFORM_RESOURCES) — a RESOURCES_LIBRARY (e.g. build/platform/
+		// linux_sdk) marks itself so it carries no platform resources of its own.
+		env.setBool(internEnv("NOPLATFORM_RESOURCES"), true)
 	case tokPrimaryOutput:
 		// PRIMARY_OUTPUT(path): the module's main output (PREBUILT_PROGRAM copies a
 		// fetched binary to ${TARGET}). The arg holds ${<NAME>_RESOURCE_GLOBAL}/...,

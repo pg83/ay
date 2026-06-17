@@ -653,10 +653,15 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := defaultPeerdirsForWithState(nil, c.mi, &ModuleData{flags: c.flags})
+			mi := c.mi
+			if mi.Platform == nil {
+				mi.Platform = testTargetP
+			}
+
+			got := defaultPeerdirsForWithState(nil, mi, &ModuleData{flags: c.flags})
 
 			if !stringSlicesEqual(got, c.want) {
-				t.Errorf("defaultPeerdirsForWithState(%+v, %+v) = %v, want %v", c.mi, c.flags, got, c.want)
+				t.Errorf("defaultPeerdirsForWithState(%+v, %+v) = %v, want %v", mi, c.flags, got, c.want)
 			}
 		})
 	}
