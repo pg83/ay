@@ -250,6 +250,18 @@ const (
 	oauthTokenURL     = "https://oauth.yandex-team.ru/token"
 )
 
+// argsNeedSandboxToken reports whether a fetch command targets a Sandbox resource (an
+// sbr: URI), the only fetch kind that requires an OAuth token.
+func argsNeedSandboxToken(args []string) bool {
+	for _, a := range args {
+		if strings.HasPrefix(a, "sbr:") {
+			return true
+		}
+	}
+
+	return false
+}
+
 // resolveSandboxToken returns the Sandbox OAuth token the way ya does: $YA_TOKEN, then
 // the ~/.ya_token file, then an SSH-agent key exchanged for a token. Empty means no
 // token could be obtained (callers fall back to the unauthenticated fetch script).
