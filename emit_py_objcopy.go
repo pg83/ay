@@ -204,10 +204,12 @@ func emitResourceObjcopy(
 
 		resTargetProps := TargetProperties{ModuleDir: instance.Path.rel()}
 
-		switch d.moduleStmt.Name {
-		case tokPy23Library, tokPy23NativeLibrary:
+		switch {
+		case d.moduleStmt.Name == tokPy23Library || d.moduleStmt.Name == tokPy23NativeLibrary:
 			resTargetProps.ModuleTag = tagPy3
-		case tokPy3Program:
+		case d.programPairedLib:
+			resTargetProps.ModuleTag = tagPy3BinLib
+		case d.moduleStmt.Name == tokPy3Program:
 			resTargetProps.ModuleTag = tagPy3Bin
 		}
 

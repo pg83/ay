@@ -178,6 +178,10 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 		scanIn.AddIncl = appendCythonScanAddIncl(in.AddIncl, d.cythonAddIncl, py23Variant)
 		scanIn.ScanCfg = newScanContext(ctx.parsers, scanIn.AddIncl, scanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 		ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), generatedVFS, scanIn.ScanCfg)
+		// The generated .cpp #includes codegen headers (e.g. proto .pb.h); like a
+		// regular CC source (emit_cc.go), resolve their producers into deps — the CY
+		// node alone does not cover them.
+		ccIn.ExtraDepRefs = append([]NodeRef{cyRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, cyRef)...)
 
 		ccRef, ccOut, _ := emitCC(instance, generated, generatedVFS, ccIn, ctx.host, ctx.emit)
 		out = append(out, &SourceEmit{Ref: ccRef, OutPath: ccOut})

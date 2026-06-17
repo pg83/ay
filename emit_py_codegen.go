@@ -199,7 +199,13 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 		}
 
 		if py3Suffix {
-			pyNode.TargetProperties.ModuleTag = tagPy3
+			// A PY23_NATIVE_LIBRARY's reg node carries the py3_native tag, like its
+			// other objects; plain py3 libraries use py3.
+			if d.moduleStmt.Name == tokPy23NativeLibrary {
+				pyNode.TargetProperties.ModuleTag = tagPy3Native
+			} else {
+				pyNode.TargetProperties.ModuleTag = tagPy3
+			}
 		}
 
 		pyRef := ctx.emit.emit(pyNode)
