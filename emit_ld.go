@@ -1,5 +1,7 @@
 package main
 
+import "encoding/base64"
+
 var (
 	ldVcsInfoPath      = ldVcsInfoVFS.string()
 	ldSvnInterfacePath = ldSvnInterfaceVFS.string()
@@ -56,6 +58,7 @@ func emitLD(
 	hostP *Platform,
 	scripts ScriptDeps,
 	emit Emitter,
+	vcsRef NodeRef,
 ) NodeRef {
 	na := emit.nodeArenas()
 
@@ -179,7 +182,7 @@ func emitLD(
 	deps = append(deps, dynamicRefs...)
 	deps = append(deps, objcopyRefs...)
 	deps = append(deps, sbomRefs...)
-	deps = append(deps, emitVCSNode(emit, hostP))
+	deps = append(deps, vcsRef)
 	outputs := []VFS{outputVFS}
 
 	for _, p := range dynamicPaths {
@@ -243,6 +246,40 @@ func lastPathComponent(p string) string {
 // content-stable (set in the node), so emitting it from every link node dedups to
 // one. `dump normalize` folds $(B)/vcs.json back to the upstream $(VCS)/vcs.json
 // reference and strips this producer (upstream mounts vcs.json, has no producer node).
+// vcsJSONContent is the "No VCS" vcs.json the producer node writes — the default
+// get_default_json() from build/scripts/vcs_info.py. The vcs_info / link_sbom steps read
+// these fields (ARCADIA_SOURCE_HG_HASH, PROGRAM_VERSION, …); the empty "{}" stub made
+// link_sbom.py KeyError. The `\n` escapes are JSON-level (literal in this raw string).
+const vcsJSONContent = `{
+    "ARCADIA_SOURCE_HG_HASH": "0000000000000000000000000000000000000000",
+    "ARCADIA_SOURCE_LAST_AUTHOR": "<UNKNOWN>",
+    "ARCADIA_SOURCE_LAST_CHANGE": -1,
+    "ARCADIA_SOURCE_PATH": "/",
+    "ARCADIA_SOURCE_REVISION": -1,
+    "ARCADIA_SOURCE_URL": "",
+    "BRANCH": "unknown-vcs-branch",
+    "BUILD_DATE": "",
+    "BUILD_TIMESTAMP": 0,
+    "BUILD_HOST": "localhost",
+    "BUILD_USER": "nobody",
+    "CUSTOM_VERSION": "",
+    "RELEASE_VERSION": "",
+    "PROGRAM_VERSION": "Arc info:\n    Branch: unknown-vcs-branch\n    Commit: 0000000000000000000000000000000000000000\n    Author: <UNKNOWN>\n    Summary: No VCS\n\n",
+    "SCM_DATA": "Arc info:\n    Branch: unknown-vcs-branch\n    Commit: 0000000000000000000000000000000000000000\n    Author: <UNKNOWN>\n    Summary: No VCS\n",
+    "VCS": "arc",
+    "ARCADIA_PATCH_NUMBER": 0,
+    "ARCADIA_TAG": ""
+}`
+
+// vcsJSONBase64 is vcsJSONContent for the inline `ay fetch base64 <data> $(B)/vcs.json`
+// producer (cmdFetchBase64 decodes it to the file).
+var vcsJSONBase64 = base64.StdEncoding.EncodeToString([]byte(vcsJSONContent))
+
+// emitVCSNode emits the single node that writes vcs.json to $(B)/vcs.json — the input
+// the vcs_info step reads to generate __vcs_version__.c and link_sbom stamps the SBOM
+// with. It is emitted once (ctx.vcsRef); link nodes depend on that ref. `dump normalize`
+// folds $(B)/vcs.json to the upstream $(VCS)/vcs.json and strips this producer (upstream
+// mounts vcs.json, has no producer node), so its content does not affect graph parity.
 func emitVCSNode(emit Emitter, host *Platform) NodeRef {
 	na := emit.nodeArenas()
 
@@ -252,7 +289,7 @@ func emitVCSNode(emit Emitter, host *Platform) NodeRef {
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(internStr(currentYatoolPath()),
 			argFetch.str(),
 			strBase64,
-			strE30,
+			internStr(vcsJSONBase64),
 			output.str()))}),
 		KV:               KV{P: pkCP, PC: pcYellow, ShowOut: true},
 		Outputs:          na.vfsList(output),
@@ -261,7 +298,7 @@ func emitVCSNode(emit Emitter, host *Platform) NodeRef {
 		TargetProperties: TargetProperties{ModuleDir: "build/scripts"},
 	}
 
-	node.UID = resourceFetchUID("base64:vcs.json:e30=", output.string())
+	node.UID = resourceFetchUID("base64:vcs.json:"+vcsJSONBase64, output.string())
 	node.SelfUID = node.UID
 
 	return emit.emit(node)

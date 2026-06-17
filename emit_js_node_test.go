@@ -49,8 +49,8 @@ END()
 		t.Errorf("AR count = %d, want 1", counts["AR"])
 	}
 
-	if len(g.Graph) != 4 {
-		t.Fatalf("total graph nodes = %d, want 4", len(g.Graph))
+	if len(g.Graph) != 5 {
+		t.Fatalf("total graph nodes = %d, want 5 (incl. vcs.json)", len(g.Graph))
 	}
 
 	var (

@@ -91,6 +91,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		testHostP,
 		nil,
 		emit,
+		emitVCSNode(emit, testHostP),
 	)
 
 	got := emit.nodes[ldRef]
@@ -184,6 +185,7 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 		testHostP,
 		nil,
 		emit,
+		emitVCSNode(emit, testHostP),
 	)
 
 	got := emit.nodes[ldRef]
@@ -259,6 +261,7 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 		testHostP,
 		nil,
 		emit,
+		emitVCSNode(emit, testHostP),
 	)
 
 	got := emit.nodes[ref]
@@ -350,6 +353,7 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 		testHostP,
 		nil,
 		emit,
+		emitVCSNode(emit, testHostP),
 	)
 
 	got := emit.nodes[ldRef]
@@ -421,6 +425,7 @@ func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T
 		testHostP,
 		nil,
 		emit,
+		emitVCSNode(emit, testHostP),
 	)
 
 	got := emit.nodes[ldRef]
@@ -478,7 +483,7 @@ func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 			instance := targetInstance("test/prog")
 
 			exc := try(func() {
-				emitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, nil, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, tc.wholeRefs, tc.wholePaths, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, false, false, false, 0, testToolchain(), testHostP, nil, e)
+				emitLD(instance, "prog", tc.ccRefs, tc.ccPaths, tc.peerRefs, tc.peerPaths, nil, tc.pluginRefs, tc.pluginPaths, tc.globalRefs, tc.globalPaths, tc.wholeRefs, tc.wholePaths, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, false, false, false, 0, testToolchain(), testHostP, nil, e, emitVCSNode(e, testHostP))
 			})
 
 			if exc == nil {
