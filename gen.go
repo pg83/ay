@@ -1832,7 +1832,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		codegenEmits = append(codegenEmits, codegenEmit{src, emitOneSource(ctx, instance, d, srcRel, srcInputs)})
 	}
 
-	cpMemberRefs, cpMemberOuts := emitCopyFiles(ctx, instance, d, &moduleInputs)
+	cpMemberRefs, cpMemberOuts, cpMemberSrcs := emitCopyFiles(ctx, instance, d, &moduleInputs)
 
 	for i, ref := range cpMemberRefs {
 		ccRefs = append(ccRefs, ref)
@@ -2353,9 +2353,9 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if len(ccRefs) > 0 {
 		if perModuleCCTag != 0 {
-			arRef = emitARNamedTagged(arInstance, arBaseName, perModuleCCTag, ccRefs, ccOutputs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
+			arRef = emitARNamedTagged(arInstance, arBaseName, perModuleCCTag, ccRefs, ccOutputs, nil, arPluginVFS, cpMemberSrcs, d.tc, ctx.host, ctx.emit)
 		} else {
-			arRef = emitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
+			arRef = emitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, arPluginVFS, cpMemberSrcs, d.tc, ctx.host, ctx.emit)
 		}
 	}
 

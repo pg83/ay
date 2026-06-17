@@ -647,7 +647,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 
 	arBaseName := archiveNameWithPrefixOrName(instance.Path.rel(), "lib", protoLibName)
 	archivePath := build(instance.Path.rel() + "/" + arBaseName)
-	arRef := emitARNode(instance, archivePath, tagCppProto, ccRefs, ccOutputs, nil, nil, d.tc, ctx.host, ctx.emit)
+	arRef := emitARNode(instance, archivePath, tagCppProto, ccRefs, ccOutputs, nil, nil, nil, d.tc, ctx.host, ctx.emit)
 
 	return &ProtoSrcsResult{ARRef: arRef, ARPath: &archivePath}
 }
