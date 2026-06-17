@@ -322,6 +322,25 @@ func (s *stmtSink) emitAttr(rule, key string, v starlark.Value) error {
 		return s.emitFrags(asList(v))
 	}
 
+	// An UPPER_CASE keyword is a generic flag flip: FLAG=True → ENABLE(FLAG),
+	// FLAG=False → DISABLE(FLAG). Casing disambiguates it from the lower-case typed
+	// attributes, so an arbitrary flag needs no table entry.
+	if isFlagName(key) {
+		on, ok := v.(starlark.Bool)
+		if !ok {
+			return fmt.Errorf("%s: flag %s expects a bool, got %s", rule, key, v.Type())
+		}
+
+		macro := "DISABLE"
+		if on {
+			macro = "ENABLE"
+		}
+
+		s.add(buildStmtFor(macro, STRS(key), 0, throwFmt))
+
+		return nil
+	}
+
 	spec, ok := starAttrs[key]
 	if !ok {
 		return fmt.Errorf("%s: unknown attribute %q", rule, key)
@@ -364,6 +383,24 @@ func (s *stmtSink) emitFlagFlips(macro string, v starlark.Value) error {
 	}
 
 	return nil
+}
+
+// isFlagName reports whether key is an UPPER_CASE flag name ([A-Z_][A-Z0-9_]* with at
+// least one letter) — the form used for generic ENABLE/DISABLE flips.
+func isFlagName(key string) bool {
+	hasLetter := false
+
+	for _, r := range key {
+		switch {
+		case r >= 'A' && r <= 'Z':
+			hasLetter = true
+		case (r >= '0' && r <= '9') || r == '_':
+		default:
+			return false
+		}
+	}
+
+	return hasLetter
 }
 
 // toArgs coerces an attribute value into macro arguments: a string becomes a single

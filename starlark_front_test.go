@@ -192,6 +192,27 @@ END()
 	assertSameStmts(t, star, make)
 }
 
+func TestStarlark_UpperCaseFlagFlip(t *testing.T) {
+	env := DefaultIfEnv.clone()
+
+	// An UPPER_CASE kwarg is a generic flag flip: True → ENABLE, False → DISABLE.
+	star := evalStarStr(t, `library(
+    srcs = ["a.cpp"],
+    FOO = True,
+    BAR_BAZ = False,
+)
+`, env)
+
+	make := parseMakeStr(t, `LIBRARY()
+SRCS(a.cpp)
+ENABLE(FOO)
+DISABLE(BAR_BAZ)
+END()
+`)
+
+	assertSameStmts(t, star, make)
+}
+
 func TestStarlark_ModuleTypes(t *testing.T) {
 	env := DefaultIfEnv.clone()
 
