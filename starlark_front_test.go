@@ -119,6 +119,92 @@ END()
 	assertSameStmts(t, star, make)
 }
 
+func TestStarlark_Toggles(t *testing.T) {
+	env := DefaultIfEnv.clone()
+
+	// Boolean kwargs map to zero-argument macros; a False toggle emits nothing.
+	star := evalStarStr(t, `library(
+    srcs = ["a.cpp"],
+    no_optimize = True,
+    no_runtime = True,
+    use_python3 = True,
+    no_libc = False,
+)
+`, env)
+
+	make := parseMakeStr(t, `LIBRARY()
+SRCS(a.cpp)
+NO_OPTIMIZE()
+NO_RUNTIME()
+USE_PYTHON3()
+END()
+`)
+
+	assertSameStmts(t, star, make)
+}
+
+func TestStarlark_ValueMacros(t *testing.T) {
+	env := DefaultIfEnv.clone()
+
+	// Scalar/list value macros: a string is one argument, a list is many.
+	star := evalStarStr(t, `library(
+    srcs = ["a.cpp"],
+    version = "1.0.0",
+    license = ["MIT", "AND", "BSD-3-Clause"],
+    py_namespace = "foo.bar",
+    ldflags = ["-lm"],
+    srcdir = ["contrib/libs/foo"],
+)
+`, env)
+
+	make := parseMakeStr(t, `LIBRARY()
+SRCS(a.cpp)
+VERSION(1.0.0)
+LICENSE(MIT AND BSD-3-Clause)
+PY_NAMESPACE(foo.bar)
+LDFLAGS(-lm)
+SRCDIR(contrib/libs/foo)
+END()
+`)
+
+	assertSameStmts(t, star, make)
+}
+
+func TestStarlark_EnableDisable(t *testing.T) {
+	env := DefaultIfEnv.clone()
+
+	// enable=/disable= emit one ENABLE/DISABLE per flag name, in order.
+	star := evalStarStr(t, `library(
+    srcs = ["a.cpp"],
+    enable = ["FOO", "BAR"],
+    disable = ["BAZ"],
+)
+`, env)
+
+	make := parseMakeStr(t, `LIBRARY()
+SRCS(a.cpp)
+ENABLE(FOO)
+ENABLE(BAR)
+DISABLE(BAZ)
+END()
+`)
+
+	assertSameStmts(t, star, make)
+}
+
+func TestStarlark_ModuleTypes(t *testing.T) {
+	env := DefaultIfEnv.clone()
+
+	// A non-trivial module type with GLOBAL cflags and a unittest_for target name.
+	assertSameStmts(t,
+		evalStarStr(t, `py3_library(srcs = ["m.py"], cxxflags = ["GLOBAL", "-DX"])`, env),
+		parseMakeStr(t, "PY3_LIBRARY()\nSRCS(m.py)\nCXXFLAGS(GLOBAL -DX)\nEND()\n"))
+
+	assertSameStmts(t,
+		evalStarStr(t, `unittest_for("contrib/libs/foo", srcs = ["t.cpp"])`, env),
+		parseMakeStr(t, "UNITTEST_FOR(contrib/libs/foo)\nSRCS(t.cpp)\nEND()\n"))
+}
+
 // dumpStmts renders a statement stream into a Line/empty-insensitive form (nil and
 // empty slices both render as "[]"), so two streams that differ only in source
 // positions or nil-vs-empty compare equal.
@@ -151,10 +237,20 @@ func dumpStmts(stmts []Stmt) string {
 				strDump(x.OUTNoAutoFiles), strDump(x.OutputIncludes))
 		case *GenerateEnumSerializationStmt:
 			fmt.Fprintf(&b, "ENUMSER %s %s\n", x.Header, x.Variant)
+		case *LDFlagsStmt:
+			fmt.Fprintf(&b, "LDFLAGS %s\n", strDump(x.Flags))
+		case *SrcDirStmt:
+			fmt.Fprintf(&b, "SRCDIR %s\n", strDump(x.Dirs))
+		case *GlobalSrcsStmt:
+			fmt.Fprintf(&b, "GLOBAL_SRCS %s\n", strDump(x.Sources))
+		case *DefaultVarStmt:
+			fmt.Fprintf(&b, "DEFAULT %s=%s\n", x.VarName, x.Value)
+		case *UnknownStmt:
+			fmt.Fprintf(&b, "MACRO %s %s\n", x.Name.string(), strDump(x.Args))
 		case *EndStmt:
 			b.WriteString("END\n")
 		default:
-			fmt.Fprintf(&b, "UNHANDLED %T\n", s)
+			fmt.Fprintf(&b, "UNHANDLED %T %+v\n", s, s)
 		}
 	}
 

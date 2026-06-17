@@ -2,10 +2,115 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
 )
+
+// moduleTypeNames are the ya.make module declarations exposed as rule builtins. They
+// must match the ModuleStmt cases in buildStmtFor.
+var moduleTypeNames = []string{
+	"LIBRARY", "PROGRAM",
+	"PY23_NATIVE_LIBRARY", "PY3_LIBRARY", "PY23_LIBRARY", "PY2_LIBRARY",
+	"PY3_PROGRAM_BIN", "PY2_PROGRAM", "PY3_PROGRAM",
+	"YQL_UDF_YDB", "YQL_UDF_CONTRIB",
+	"PROTO_LIBRARY",
+	"DLL", "SO_PROGRAM", "DYNAMIC_LIBRARY",
+	"PACKAGE", "UNION", "RESOURCES_LIBRARY",
+	"PREBUILT_PROGRAM",
+	"UNITTEST_FOR",
+}
+
+// attrKind classifies how a rule attribute's value becomes macro arguments.
+type attrKind int
+
+const (
+	attrArgs   attrKind = iota // string | [string] -> MACRO(args…); empty list omits it
+	attrToggle                 // bool -> MACRO() when True
+)
+
+// starAttrs maps a rule keyword argument to the ya.make macro it emits. Args-attrs pass
+// their value through as the macro's arguments (buildStmtFor handles GLOBAL splitting,
+// section keywords, etc.); toggle-attrs emit the zero-argument macro when True. The few
+// structural attributes (srcs, set, enable, disable, extra_outputs) are handled directly
+// in emitAttr. This table is the entire declarative vocabulary — one row per macro.
+var starAttrs = map[string]struct {
+	macro string
+	kind  attrKind
+}{
+	// structured list attributes (typed Stmts built by buildStmtFor)
+	"peerdir":        {"PEERDIR", attrArgs},
+	"srcdir":         {"SRCDIR", attrArgs},
+	"global_srcs":    {"GLOBAL_SRCS", attrArgs},
+	"join_srcs":      {"JOIN_SRCS", attrArgs},
+	"cflags":         {"CFLAGS", attrArgs},
+	"cxxflags":       {"CXXFLAGS", attrArgs},
+	"conlyflags":     {"CONLYFLAGS", attrArgs},
+	"ldflags":        {"LDFLAGS", attrArgs},
+	"addincl":        {"ADDINCL", attrArgs},
+	"resource_files": {"RESOURCE_FILES", attrArgs},
+	"resource":       {"RESOURCE", attrArgs},
+	"default":        {"DEFAULT", attrArgs},
+
+	// value macros (UnknownStmt; the collect handler reads Args and validates arity)
+	"version":         {"VERSION", attrArgs},
+	"license":         {"LICENSE", attrArgs},
+	"allocator":       {"ALLOCATOR", attrArgs},
+	"maven_group_id":  {"MAVEN_GROUP_ID", attrArgs},
+	"py_namespace":    {"PY_NAMESPACE", attrArgs},
+	"proto_namespace": {"PROTO_NAMESPACE", attrArgs},
+	"subscriber":      {"SUBSCRIBER", attrArgs},
+	"data":            {"DATA", attrArgs},
+	"primary_output":  {"PRIMARY_OUTPUT", attrArgs},
+	"exports_script":  {"EXPORTS_SCRIPT", attrArgs},
+	"toolchain":       {"TOOLCHAIN", attrArgs},
+	"py_srcs":         {"PY_SRCS", attrArgs},
+	"py_main":         {"PY_MAIN", attrArgs},
+	"py_register":     {"PY_REGISTER", attrArgs},
+	"py_constructor":  {"PY_CONSTRUCTOR", attrArgs},
+	"exclude_tags":    {"EXCLUDE_TAGS", attrArgs},
+	"extralibs":       {"EXTRALIBS", attrArgs},
+	"yql_abi_version": {"YQL_ABI_VERSION", attrArgs},
+	"split_factor":    {"SPLIT_FACTOR", attrArgs},
+
+	// zero-argument toggle macros (bool kwargs)
+	"no_optimize":               {"NO_OPTIMIZE", attrToggle},
+	"no_runtime":                {"NO_RUNTIME", attrToggle},
+	"no_libc":                   {"NO_LIBC", attrToggle},
+	"no_platform":               {"NO_PLATFORM", attrToggle},
+	"no_util":                   {"NO_UTIL", attrToggle},
+	"no_compiler_warnings":      {"NO_COMPILER_WARNINGS", attrToggle},
+	"no_wshadow":                {"NO_WSHADOW", attrToggle},
+	"no_lto":                    {"NO_LTO", attrToggle},
+	"no_mypy":                   {"NO_MYPY", attrToggle},
+	"no_lint":                   {"NO_LINT", attrToggle},
+	"no_check_imports":          {"NO_CHECK_IMPORTS", attrToggle},
+	"no_import_tracing":         {"NO_IMPORT_TRACING", attrToggle},
+	"no_python_includes":        {"NO_PYTHON_INCLUDES", attrToggle},
+	"no_extended_source_search": {"NO_EXTENDED_SOURCE_SEARCH", attrToggle},
+	"no_split_dwarf":            {"NO_SPLIT_DWARF", attrToggle},
+	"no_join_src":               {"NO_JOIN_SRC", attrToggle},
+	"no_clang_tidy":             {"NO_CLANG_TIDY", attrToggle},
+	"no_clang_coverage":         {"NO_CLANG_COVERAGE", attrToggle},
+	"no_sanitize":               {"NO_SANITIZE", attrToggle},
+	"no_sanitize_coverage":      {"NO_SANITIZE_COVERAGE", attrToggle},
+	"no_profile_runtime":        {"NO_PROFILE_RUNTIME", attrToggle},
+	"no_export_dynamic_symbols": {"NO_EXPORT_DYNAMIC_SYMBOLS", attrToggle},
+	"no_optimize_py_protos":     {"NO_OPTIMIZE_PY_PROTOS", attrToggle},
+	"optimize_py_protos":        {"OPTIMIZE_PY_PROTOS", attrToggle},
+	"protoc_fatal_warnings":     {"PROTOC_FATAL_WARNINGS", attrToggle},
+	"split_dwarf":               {"SPLIT_DWARF", attrToggle},
+	"style_ruff":                {"STYLE_RUFF", attrToggle},
+	"style_cpp":                 {"STYLE_CPP", attrToggle},
+	"style_python":              {"STYLE_PYTHON", attrToggle},
+	"use_python3":               {"USE_PYTHON3", attrToggle},
+	"use_cxx":                   {"USE_CXX", attrToggle},
+	"use_common_google_apis":    {"USE_COMMON_GOOGLE_APIS", attrToggle},
+	"use_llvm_bc16":             {"USE_LLVM_BC16", attrToggle},
+	"use_llvm_bc18":             {"USE_LLVM_BC18", attrToggle},
+	"use_llvm_bc20":             {"USE_LLVM_BC20", attrToggle},
+}
 
 // Starlark front-end (Model A) for ya.make. A `ya.star` evaluates — per module
 // build-variant, with that variant's flags — to the same []Stmt the ya.make parser
@@ -75,12 +180,17 @@ func evalStar(fs FS, rel string, env Environment) ([]Stmt, error) {
 
 	predeclared := starlark.StringDict{
 		"flags":                          &starFlags{env: env},
-		"library":                        sink.moduleBuiltin("LIBRARY"),
-		"program":                        sink.moduleBuiltin("PROGRAM"),
 		"run_program":                    starlark.NewBuiltin("run_program", runProgramBuiltin),
 		"enum_serialization":             starlark.NewBuiltin("enum_serialization", enumSerBuiltin("plain")),
 		"enum_serialization_with_header": starlark.NewBuiltin("enum_serialization_with_header", enumSerBuiltin("with_header")),
 		"enum_serialization_noutf":       starlark.NewBuiltin("enum_serialization_noutf", enumSerBuiltin("noutf")),
+	}
+
+	// Every module type ya.make recognizes is a rule builtin (lower-cased): library(),
+	// program(), py3_library(), proto_library(), dll(), … The multimodule split for
+	// py3_program etc. happens downstream in collectModule, exactly as for ya.make.
+	for _, typeName := range moduleTypeNames {
+		predeclared[strings.ToLower(typeName)] = sink.moduleBuiltin(typeName)
 	}
 
 	thread := &starlark.Thread{Name: rel}
@@ -131,30 +241,45 @@ func (g *genFrag) Freeze()               {}
 func (g *genFrag) Truth() starlark.Bool  { return starlark.True }
 func (g *genFrag) Hash() (uint32, error) { return 0, fmt.Errorf("genfrag is unhashable") }
 
-// moduleBuiltin builds the `library`/`program` rule: it emits ModuleStmt, one stmt per
-// declared attribute (mirroring buildStmt), then EndStmt.
+// moduleBuiltin builds a module rule (library, program, py3_library, …): it emits the
+// ModuleStmt, one statement per declared attribute (in source order, via buildStmtFor so
+// the result is byte-identical to the equivalent ya.make), then EndStmt. The module name
+// is an optional first positional or a `name=` keyword.
 func (s *stmtSink) moduleBuiltin(typeName string) *starlark.Builtin {
-	name := typeName
+	return starlark.NewBuiltin(strings.ToLower(typeName), func(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		if len(args) > 1 {
+			return nil, fmt.Errorf("%s: at most one positional argument (name), got %d", b.Name(), len(args))
+		}
 
-	return starlark.NewBuiltin(name, func(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-		var modName string
+		modName := ""
 
-		var srcs, peerdir, cflags, cxxflags, conlyflags, addincl, extraOutputs *starlark.List
+		if len(args) == 1 {
+			n, ok := starlark.AsString(args[0])
+			if !ok {
+				return nil, fmt.Errorf("%s: name must be a string, got %s", b.Name(), args[0].Type())
+			}
 
-		var setDict *starlark.Dict
+			modName = n
+		}
 
-		if err := starlark.UnpackArgs(b.Name(), args, kwargs,
-			"name?", &modName,
-			"srcs?", &srcs,
-			"peerdir?", &peerdir,
-			"cflags?", &cflags,
-			"cxxflags?", &cxxflags,
-			"conlyflags?", &conlyflags,
-			"addincl?", &addincl,
-			"set?", &setDict,
-			"extra_outputs?", &extraOutputs,
-		); err != nil {
-			return nil, err
+		// `name` may also arrive as a keyword; pull it out, keep the rest in source order.
+		body := make([]starlark.Tuple, 0, len(kwargs))
+
+		for _, kv := range kwargs {
+			key, _ := starlark.AsString(kv[0])
+
+			if key == "name" {
+				n, ok := starlark.AsString(kv[1])
+				if !ok {
+					return nil, fmt.Errorf("%s: name must be a string, got %s", b.Name(), kv[1].Type())
+				}
+
+				modName = n
+
+				continue
+			}
+
+			body = append(body, kv)
 		}
 
 		var modArgs []STR
@@ -163,55 +288,104 @@ func (s *stmtSink) moduleBuiltin(typeName string) *starlark.Builtin {
 			modArgs = STRS(modName)
 		}
 
-		s.add(&ModuleStmt{Name: internTok(typeName), Args: modArgs})
+		s.add(buildStmtFor(typeName, modArgs, 0, throwFmt))
 
-		if err := s.emitSrcs(srcs); err != nil {
-			return nil, err
-		}
+		for _, kv := range body {
+			key, _ := starlark.AsString(kv[0])
 
-		if nonEmptyList(peerdir) {
-			ps, err := unpackStrList(peerdir)
-			if err != nil {
+			if err := s.emitAttr(b.Name(), key, kv[1]); err != nil {
 				return nil, err
 			}
-
-			s.add(&PeerdirStmt{Paths: ps})
 		}
 
-		if err := s.emitFlags(cflags, func(g, o []STR) Stmt { return &CFlagsStmt{GlobalFlags: g, OwnFlags: o} }); err != nil {
-			return nil, err
-		}
-
-		if err := s.emitFlags(cxxflags, func(g, o []STR) Stmt { return &CXXFlagsStmt{GlobalFlags: g, OwnFlags: o} }); err != nil {
-			return nil, err
-		}
-
-		if err := s.emitFlags(conlyflags, func(g, o []STR) Stmt { return &CONLYFlagsStmt{GlobalFlags: g, OwnFlags: o} }); err != nil {
-			return nil, err
-		}
-
-		if nonEmptyList(addincl) {
-			as, err := unpackStrList(addincl)
-			if err != nil {
-				return nil, err
-			}
-
-			gp, ol, op, cp, ap, pgp, ugp, all := splitAddInclPaths(as)
-			s.add(&AddInclStmt{GlobalPaths: gp, OneLevelPaths: ol, OwnPaths: op, CythonPaths: cp, AsmPaths: ap, ProtoGlobalPaths: pgp, UserGlobalPaths: ugp, AllPaths: all})
-		}
-
-		if err := s.emitSet(setDict); err != nil {
-			return nil, err
-		}
-
-		if err := s.emitFrags(extraOutputs); err != nil {
-			return nil, err
-		}
-
-		s.add(&EndStmt{})
+		s.add(buildStmtFor("END", nil, 0, throwFmt))
 
 		return starlark.None, nil
 	})
+}
+
+// emitAttr emits the statement(s) for one rule attribute. Structural attributes (srcs,
+// set, enable, disable, extra_outputs) have bespoke handling; everything else is a row
+// in starAttrs (args-attr or toggle-attr).
+func (s *stmtSink) emitAttr(rule, key string, v starlark.Value) error {
+	switch key {
+	case "srcs":
+		return s.emitSrcs(asList(v))
+	case "set":
+		d, _ := v.(*starlark.Dict)
+		return s.emitSet(d)
+	case "enable":
+		return s.emitFlagFlips("ENABLE", v)
+	case "disable":
+		return s.emitFlagFlips("DISABLE", v)
+	case "extra_outputs":
+		return s.emitFrags(asList(v))
+	}
+
+	spec, ok := starAttrs[key]
+	if !ok {
+		return fmt.Errorf("%s: unknown attribute %q", rule, key)
+	}
+
+	switch spec.kind {
+	case attrToggle:
+		on, ok := v.(starlark.Bool)
+		if !ok {
+			return fmt.Errorf("%s: %s expects a bool, got %s", rule, key, v.Type())
+		}
+
+		if on {
+			s.add(buildStmtFor(spec.macro, nil, 0, throwFmt))
+		}
+	case attrArgs:
+		args, err := toArgs(v)
+		if err != nil {
+			return fmt.Errorf("%s: %s: %w", rule, key, err)
+		}
+
+		if len(args) > 0 {
+			s.add(buildStmtFor(spec.macro, args, 0, throwFmt))
+		}
+	}
+
+	return nil
+}
+
+// emitFlagFlips emits one ENABLE/DISABLE per flag name: enable=["FOO","BAR"] →
+// ENABLE(FOO) ENABLE(BAR) (each sets the flag yes/no, like ya.make's ENABLE/DISABLE).
+func (s *stmtSink) emitFlagFlips(macro string, v starlark.Value) error {
+	args, err := toArgs(v)
+	if err != nil {
+		return fmt.Errorf("%s: %w", strings.ToLower(macro), err)
+	}
+
+	for _, flag := range args {
+		s.add(buildStmtFor(macro, STRS(flag.string()), 0, throwFmt))
+	}
+
+	return nil
+}
+
+// toArgs coerces an attribute value into macro arguments: a string becomes a single
+// argument; a list becomes its (string) elements. Other types are rejected.
+func toArgs(v starlark.Value) ([]STR, error) {
+	switch x := v.(type) {
+	case starlark.String:
+		return STRS(string(x)), nil
+	case *starlark.List:
+		return unpackStrList(x)
+	case starlark.NoneType:
+		return nil, nil
+	default:
+		return nil, fmt.Errorf("expected string or list, got %s", v.Type())
+	}
+}
+
+// asList returns v as a *starlark.List, or nil if it is not one (None / absent).
+func asList(v starlark.Value) *starlark.List {
+	l, _ := v.(*starlark.List)
+
+	return l
 }
 
 // emitSrcs walks a srcs list (flattening nested lists, so `+`-composed generators
@@ -257,24 +431,6 @@ func (s *stmtSink) emitSrcs(l *starlark.List) error {
 	}
 
 	flush()
-
-	return nil
-}
-
-// emitFlags splits a flags list into GLOBAL/own (splitFlagsByGlobal) and emits the
-// kind-specific statement built by mk.
-func (s *stmtSink) emitFlags(l *starlark.List, mk func(global, own []STR) Stmt) error {
-	if !nonEmptyList(l) {
-		return nil
-	}
-
-	fl, err := unpackStrList(l)
-	if err != nil {
-		return err
-	}
-
-	g, o := splitFlagsByGlobal(fl)
-	s.add(mk(g, o))
 
 	return nil
 }
@@ -411,13 +567,6 @@ func enumSerBuiltin(variant string) func(*starlark.Thread, *starlark.Builtin, st
 // + run_program(…). The srcs walker flattens the concatenated list.
 func fragList(stmts ...Stmt) *starlark.List {
 	return starlark.NewList([]starlark.Value{&genFrag{stmts: stmts}})
-}
-
-// nonEmptyList reports whether l is a non-nil list with at least one element. An
-// empty list attribute (e.g. `peerdir = [] if … else …`) contributes no statement,
-// matching a ya.make that simply omits the macro.
-func nonEmptyList(l *starlark.List) bool {
-	return l != nil && l.Len() > 0
 }
 
 // unpackStrList interns a Starlark list of strings into []STR.

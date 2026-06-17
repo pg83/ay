@@ -978,7 +978,18 @@ type Parser struct {
 }
 
 func (p *Parser) buildStmt(nameTok Token, args []STR) Stmt {
-	switch nameTok.val {
+	return buildStmtFor(nameTok.val, args, nameTok.line, func(format string, a ...any) {
+		p.lex.throwParse(nameTok.line, nameTok.col, format, a...)
+	})
+}
+
+// buildStmtFor constructs the Stmt for a macro invocation (name + already-tokenized
+// args). It is the single source of truth for macro → Stmt mapping, shared by the
+// ya.make parser (via buildStmt) and the Starlark front-end (which assembles args from
+// typed kwargs), so both produce byte-identical statements. fail reports a malformed
+// invocation; the parser routes it to throwParse (file:line:col), Starlark to throwFmt.
+func buildStmtFor(name string, args []STR, line int, fail func(format string, a ...any)) Stmt {
+	switch name {
 	case "PROGRAM", "LIBRARY",
 
 		"PY23_NATIVE_LIBRARY", "PY3_LIBRARY", "PY23_LIBRARY", "PY2_LIBRARY",
@@ -989,18 +1000,18 @@ func (p *Parser) buildStmt(nameTok Token, args []STR) Stmt {
 		"PACKAGE", "UNION", "RESOURCES_LIBRARY",
 		"PREBUILT_PROGRAM",
 		"UNITTEST_FOR":
-		return &ModuleStmt{Name: internTok(nameTok.val), Args: args, Line: nameTok.line}
+		return &ModuleStmt{Name: internTok(name), Args: args, Line: line}
 	case "DECLARE_EXTERNAL_RESOURCE",
 		"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE",
 		"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON":
-		return &DeclareResourceStmt{Macro: internTok(nameTok.val), Args: args, Line: nameTok.line}
+		return &DeclareResourceStmt{Macro: internTok(name), Args: args, Line: line}
 	case "PEERDIR":
-		return &PeerdirStmt{Paths: args, Line: nameTok.line}
+		return &PeerdirStmt{Paths: args, Line: line}
 	case "SRCS":
-		return &SrcsStmt{Sources: args, Line: nameTok.line}
+		return &SrcsStmt{Sources: args, Line: line}
 	case "SET":
 		if len(args) == 0 {
-			p.lex.throwParse(nameTok.line, nameTok.col, "SET expects at least 1 argument (name), got %d", len(args))
+			fail("SET expects at least 1 argument (name), got %d", len(args))
 		}
 
 		value := ""
@@ -1009,61 +1020,61 @@ func (p *Parser) buildStmt(nameTok Token, args []STR) Stmt {
 			value = strings.Join(strStrings(args[1:]), " ")
 		}
 
-		return &SetStmt{Name: args[0].string(), NameEnv: internEnv(args[0].string()), Value: value, Line: nameTok.line}
+		return &SetStmt{Name: args[0].string(), NameEnv: internEnv(args[0].string()), Value: value, Line: line}
 	case "END":
-		return &EndStmt{Line: nameTok.line}
+		return &EndStmt{Line: line}
 	case "JOIN_SRCS":
 		if len(args) == 0 {
-			p.lex.throwParse(nameTok.line, nameTok.col, "JOIN_SRCS expects at least one argument (the output name)")
+			fail("JOIN_SRCS expects at least one argument (the output name)")
 		}
 
 		sources := append([]STR(nil), args[1:]...)
 
-		return &JoinSrcsStmt{OutputName: args[0].string(), Sources: sources, Line: nameTok.line}
+		return &JoinSrcsStmt{OutputName: args[0].string(), Sources: sources, Line: line}
 	case "ADDINCL":
 		globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, userGlobalPaths, allPaths := splitAddInclPaths(args)
 
-		return &AddInclStmt{GlobalPaths: globalPaths, OneLevelPaths: oneLevelPaths, OwnPaths: ownPaths, CythonPaths: cythonPaths, AsmPaths: asmPaths, ProtoGlobalPaths: protoGlobalPaths, UserGlobalPaths: userGlobalPaths, AllPaths: allPaths, Line: nameTok.line}
+		return &AddInclStmt{GlobalPaths: globalPaths, OneLevelPaths: oneLevelPaths, OwnPaths: ownPaths, CythonPaths: cythonPaths, AsmPaths: asmPaths, ProtoGlobalPaths: protoGlobalPaths, UserGlobalPaths: userGlobalPaths, AllPaths: allPaths, Line: line}
 	case "CFLAGS":
 		globalFlags, ownFlags := splitFlagsByGlobal(args)
 
-		return &CFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: nameTok.line}
+		return &CFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: line}
 	case "CXXFLAGS":
 		globalFlags, ownFlags := splitFlagsByGlobal(args)
 
-		return &CXXFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: nameTok.line}
+		return &CXXFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: line}
 	case "CONLYFLAGS":
 		globalFlags, ownFlags := splitFlagsByGlobal(args)
 
-		return &CONLYFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: nameTok.line}
+		return &CONLYFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: line}
 	case "LDFLAGS":
-		return &LDFlagsStmt{Flags: append([]STR(nil), args...), Line: nameTok.line}
+		return &LDFlagsStmt{Flags: append([]STR(nil), args...), Line: line}
 	case "SRCDIR":
 		if len(args) == 0 {
-			p.lex.throwParse(nameTok.line, nameTok.col, "SRCDIR expects at least 1 argument, got %d", len(args))
+			fail("SRCDIR expects at least 1 argument, got %d", len(args))
 		}
 
-		return &SrcDirStmt{Dirs: append([]STR(nil), args...), Line: nameTok.line}
+		return &SrcDirStmt{Dirs: append([]STR(nil), args...), Line: line}
 	case "GLOBAL_SRCS":
-		return &GlobalSrcsStmt{Sources: append([]STR(nil), args...), Line: nameTok.line}
+		return &GlobalSrcsStmt{Sources: append([]STR(nil), args...), Line: line}
 	case "GENERATE_ENUM_SERIALIZATION":
 		if len(args) != 1 {
-			p.lex.throwParse(nameTok.line, nameTok.col, "GENERATE_ENUM_SERIALIZATION expects exactly 1 argument (header path), got %d", len(args))
+			fail("GENERATE_ENUM_SERIALIZATION expects exactly 1 argument (header path), got %d", len(args))
 		}
 
-		return &GenerateEnumSerializationStmt{Header: args[0].string(), Variant: "plain", Line: nameTok.line}
+		return &GenerateEnumSerializationStmt{Header: args[0].string(), Variant: "plain", Line: line}
 	case "GENERATE_ENUM_SERIALIZATION_WITH_HEADER":
 		if len(args) != 1 {
-			p.lex.throwParse(nameTok.line, nameTok.col, "GENERATE_ENUM_SERIALIZATION_WITH_HEADER expects exactly 1 argument (header path), got %d", len(args))
+			fail("GENERATE_ENUM_SERIALIZATION_WITH_HEADER expects exactly 1 argument (header path), got %d", len(args))
 		}
 
-		return &GenerateEnumSerializationStmt{Header: args[0].string(), Variant: "with_header", Line: nameTok.line}
+		return &GenerateEnumSerializationStmt{Header: args[0].string(), Variant: "with_header", Line: line}
 	case "GENERATE_ENUM_SERIALIZATION_NOUTF":
 		if len(args) != 1 {
-			p.lex.throwParse(nameTok.line, nameTok.col, "GENERATE_ENUM_SERIALIZATION_NOUTF expects exactly 1 argument (header path), got %d", len(args))
+			fail("GENERATE_ENUM_SERIALIZATION_NOUTF expects exactly 1 argument (header path), got %d", len(args))
 		}
 
-		return &GenerateEnumSerializationStmt{Header: args[0].string(), Variant: "noutf", Line: nameTok.line}
+		return &GenerateEnumSerializationStmt{Header: args[0].string(), Variant: "noutf", Line: line}
 	case "DEFAULT":
 
 		varName := ""
@@ -1077,61 +1088,61 @@ func (p *Parser) buildStmt(nameTok Token, args []STR) Stmt {
 			value = args[1].string()
 		}
 
-		return &DefaultVarStmt{VarName: varName, NameEnv: internEnv(varName), Value: value, Line: nameTok.line}
+		return &DefaultVarStmt{VarName: varName, NameEnv: internEnv(varName), Value: value, Line: line}
 	case "CONFIGURE_FILE":
 
 		if len(args) != 2 {
-			p.lex.throwParse(nameTok.line, nameTok.col, "CONFIGURE_FILE expects exactly 2 arguments (src dst), got %d", len(args))
+			fail("CONFIGURE_FILE expects exactly 2 arguments (src dst), got %d", len(args))
 		}
 
-		return &ConfigureFileStmt{Src: args[0].string(), Dst: args[1].string(), Line: nameTok.line}
+		return &ConfigureFileStmt{Src: args[0].string(), Dst: args[1].string(), Line: line}
 	case "CREATE_BUILDINFO_FOR":
 
 		if len(args) != 1 {
-			p.lex.throwParse(nameTok.line, nameTok.col, "CREATE_BUILDINFO_FOR expects exactly 1 argument, got %d", len(args))
+			fail("CREATE_BUILDINFO_FOR expects exactly 1 argument, got %d", len(args))
 		}
 
-		return &CreateBuildInfoStmt{OutputHeader: args[0].string(), Line: nameTok.line}
+		return &CreateBuildInfoStmt{OutputHeader: args[0].string(), Line: line}
 	case "RUN_ANTLR4_CPP":
 
 		if len(args) == 0 {
-			p.lex.throwParse(nameTok.line, nameTok.col, "RUN_ANTLR4_CPP expects at least 1 argument (grammar)")
+			fail("RUN_ANTLR4_CPP expects at least 1 argument (grammar)")
 		}
 
-		return parseRunAntlr4Cpp(args, nameTok.line)
+		return parseRunAntlr4Cpp(args, line)
 	case "RUN_ANTLR4_CPP_SPLIT":
 
 		if len(args) < 2 {
-			p.lex.throwParse(nameTok.line, nameTok.col, "RUN_ANTLR4_CPP_SPLIT expects at least 2 arguments (lexer parser)")
+			fail("RUN_ANTLR4_CPP_SPLIT expects at least 2 arguments (lexer parser)")
 		}
 
-		return parseRunAntlr4CppSplit(args, nameTok.line)
+		return parseRunAntlr4CppSplit(args, line)
 	case "RUN_ANTLR", "RUN_ANTLR4":
 		if len(args) == 0 {
-			p.lex.throwParse(nameTok.line, nameTok.col, "%s expects at least 1 argument", nameTok.val)
+			fail("%s expects at least 1 argument", name)
 		}
 
-		return parseRunAntlr(args, nameTok)
+		return parseRunAntlr(args, Token{val: name, line: line})
 	case "RUN_PROGRAM", "RUN_PY3_PROGRAM":
 
 		if len(args) == 0 {
-			p.lex.throwParse(nameTok.line, nameTok.col, "%s expects at least 1 argument (tool path)", nameTok.val)
+			fail("%s expects at least 1 argument (tool path)", name)
 		}
 
-		return parseRunProgram(args, nameTok.line)
+		return parseRunProgram(args, line)
 	case "RUN_PYTHON3":
 		if len(args) == 0 {
-			p.lex.throwParse(nameTok.line, nameTok.col, "RUN_PYTHON3 expects at least 1 argument (script path)")
+			fail("RUN_PYTHON3 expects at least 1 argument (script path)")
 		}
 
-		return parseRunPython(args, nameTok.line)
+		return parseRunPython(args, line)
 	case "RESOURCE":
 
-		return parseResource(args, nameTok)
+		return parseResource(args, Token{val: name, line: line})
 	case "RESOURCE_FILES":
-		return &ResourceFilesStmt{Args: append([]STR(nil), args...), Line: nameTok.line}
+		return &ResourceFilesStmt{Args: append([]STR(nil), args...), Line: line}
 	default:
-		return &UnknownStmt{Name: internTok(nameTok.val), Args: args, Line: nameTok.line}
+		return &UnknownStmt{Name: internTok(name), Args: args, Line: line}
 	}
 }
 
