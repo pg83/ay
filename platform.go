@@ -134,15 +134,25 @@ type Platform struct {
 	// os_sdk=local and non-Linux targets fall back to the bare host -B/usr/bin.
 	// Computed once per platform, shared read-only across CC/AS nodes.
 	SysrootArgs []STR
+
+	// UsesSDKRoot is true when SysrootArgs reference the fetched OS_SDK_ROOT resource
+	// (Linux, non-opensource, os_sdk != local) — the gate for peering build/platform/
+	// linux_sdk and declaring OS_SDK_ROOT on the nodes that embed the sysroot.
+	UsesSDKRoot bool
 }
 
 // sysrootArgsFor builds Platform.SysrootArgs (see the field doc). Modelled for the
 // Linux gnu contour these graphs build; non-Linux / os_sdk=local keep the bare host
 // -B/usr/bin that needs no fetched SDK.
+// platformUsesSDKRoot reports whether this platform compiles against the fetched
+// OS_SDK_ROOT sysroot. The opensource contour (sg2-5 references) and os_sdk=local fall
+// back to the bare host prefix, and only Linux has an SDK — those carry no OS_SDK_ROOT.
+func platformUsesSDKRoot(os OS, flags map[string]string) bool {
+	return os == OSLinux && flags["OS_SDK"] != "local" && flags["OPENSOURCE"] != "yes"
+}
+
 func sysrootArgsFor(os OS, flags map[string]string) []STR {
-	// The opensource contour (sg2-5 references) has no fetched SDK at all —
-	// ymake_conf falls back to the bare host prefix, like os_sdk=local.
-	if os != OSLinux || flags["OS_SDK"] == "local" || flags["OPENSOURCE"] == "yes" {
+	if !platformUsesSDKRoot(os, flags) {
 		return []STR{argDashBBin}
 	}
 
@@ -245,6 +255,20 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 	p.UsesClangOnly = []STR{clangRes}
 
 	p.SysrootArgs = sysrootArgsFor(os, flags)
+	p.UsesSDKRoot = platformUsesSDKRoot(os, flags)
+
+	// A node that puts the SDK sysroot (--sysroot/-B …/resources/OS_SDK_ROOT) on its
+	// command line must also depend on that FETCH, so the resource is materialized
+	// before it runs. The sysroot rides on CCHead (CC) and SysrootArgs (AS/LD/DLL);
+	// those node kinds draw their Resources from exactly these three lists, so adding
+	// OS_SDK_ROOT here — under the same gate as the sysroot resource — wires the
+	// dependency precisely where the command needs it (and nowhere else).
+	if p.UsesSDKRoot {
+		osSDKRoot := internStr(resourcePatternOSSDKRoot)
+		p.CCUsesResources = append(p.CCUsesResources, osSDKRoot)
+		p.UsesClangOnly = append(p.UsesClangOnly, osSDKRoot)
+		p.UsesLinkResources = append(p.UsesLinkResources, osSDKRoot)
+	}
 
 	if p.March != "" {
 		p.MarchArgs = []ARG{internArg("-march=" + p.March)}

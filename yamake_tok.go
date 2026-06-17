@@ -84,6 +84,7 @@ var tokName = [...]STR{
 	tokNoOptimize:                      internStr("NO_OPTIMIZE"),
 	tokNoOptimizePyProtos:              internStr("NO_OPTIMIZE_PY_PROTOS"),
 	tokNoPlatform:                      internStr("NO_PLATFORM"),
+	tokNoPlatformResources:             internStr("NO_PLATFORM_RESOURCES"),
 	tokNoProfileRuntime:                internStr("NO_PROFILE_RUNTIME"),
 	tokNoPython2:                       internStr("NO_PYTHON2"),
 	tokNoPythonCoverage:                internStr("NO_PYTHON_COVERAGE"),
@@ -282,6 +283,7 @@ const (
 	tokNoOptimize
 	tokNoOptimizePyProtos
 	tokNoPlatform
+	tokNoPlatformResources
 	tokNoProfileRuntime
 	tokNoPython2
 	tokNoPythonCoverage

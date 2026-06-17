@@ -48,14 +48,15 @@ func TestWrapccPrefixFor_GateOnOpensource(t *testing.T) {
 }
 
 func TestNewPlatform_WrapccVectorsAndResources(t *testing.T) {
-	// Non-opensource platform carries the wrapcc prefix and a YMAKE_PYTHON3 CC dep.
+	// Non-opensource platform carries the wrapcc prefix, a YMAKE_PYTHON3 CC dep, and the
+	// OS_SDK_ROOT sysroot dep.
 	intP := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, map[string]string{"PIC": "no"}, "", "")
 
 	if len(intP.WrapccHead) == 0 {
 		t.Fatal("non-opensource platform must populate WrapccHead")
 	}
 
-	wantRes := []string{resourcePatternClangTool + intP.ClangVer, resourcePatternYMakePython3}
+	wantRes := []string{resourcePatternClangTool + intP.ClangVer, resourcePatternYMakePython3, resourcePatternOSSDKRoot}
 	if !reflect.DeepEqual(intP.CCUsesResources, STRS(wantRes...)) {
 		t.Errorf("CCUsesResources = %v, want %v", intP.CCUsesResources, wantRes)
 	}

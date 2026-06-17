@@ -215,6 +215,15 @@ func defaultPeerdirsForWithState(ctx *GenCtx, instance ModuleInstance, d *Module
 			"build/platform/lld",
 			"build/platform/python/ymake_python3",
 		)
+
+		// build/platform/linux_sdk DECLARE_EXTERNAL_RESOURCEs OS_SDK_ROOT (the compile
+		// sysroot). Peer it only when this platform actually uses that resource (Linux,
+		// non-opensource, os_sdk != local) — the same gate the CC/AS/LD/DLL nodes apply —
+		// so the FETCH is registered for them, and opensource/local/non-linux are
+		// unaffected.
+		if instance.Platform.UsesSDKRoot {
+			peers = append(peers, "build/platform/linux_sdk")
+		}
 	}
 
 	return peers
