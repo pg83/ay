@@ -100,21 +100,19 @@ END()
 func TestStarlark_GeneratorsInSrcs(t *testing.T) {
 	env := DefaultIfEnv.clone()
 
-	// Model A: run_program / enum_serialization are values composed into srcs; they
-	// emit RUN_PROGRAM / GENERATE_ENUM_SERIALIZATION in declaration order.
+	// Model A: run_program / enum_serialization return lists, composed into srcs with
+	// `+`; they emit GENERATE_ENUM_SERIALIZATION / RUN_PROGRAM in declaration order.
 	star := evalStarStr(t, `library(
-    srcs = [
-        "a.cpp",
-        run_program("//tools/foogen", outs = ["gen.cpp"]),
-        enum_serialization("color.h"),
-    ],
+    srcs = ["a.cpp"]
+         + enum_serialization("color.h")
+         + run_program("//tools/foogen", outs = ["gen.cpp"]),
 )
 `, env)
 
 	make := parseMakeStr(t, `LIBRARY()
 SRCS(a.cpp)
-RUN_PROGRAM(//tools/foogen OUT gen.cpp)
 GENERATE_ENUM_SERIALIZATION(color.h)
+RUN_PROGRAM(//tools/foogen OUT gen.cpp)
 END()
 `)
 
