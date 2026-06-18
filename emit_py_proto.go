@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -43,7 +44,7 @@ func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCo
 	}
 
 	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
-	pe := newPyPBModuleEmission(ctx, d, instance, protocBinary)
+	pe := newPyPBModuleEmission(ctx, d, instance, protocBinary, peerContribs.protoNamespaceTail)
 
 	var cppSibling *ModuleEmitResult
 
@@ -115,7 +116,7 @@ type PyPBModuleEmission struct {
 	tail []STR
 }
 
-func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, protocBinary VFS) *PyPBModuleEmission {
+func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, protocBinary VFS, protoNamespaceTail []VFS) *PyPBModuleEmission {
 	pe := &PyPBModuleEmission{}
 
 	if d.grpc {
@@ -178,6 +179,24 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 	}
 
 	mid = append(mid, argISContribLibsProtobufSrc.str())
+
+	// Non-GLOBAL PROTO_NAMESPACE contributions trail the protobuf-src include and
+	// precede the NEED_GOOGLE_PROTO_PEERDIRS protoc-src include. Upstream's
+	// PROTO_NAMESPACE always expands to a `GLOBAL FOR proto $(S)/<ns>` addincl
+	// (proto.conf PROTO_ADDINCL), so it rides the proto peer closure into every
+	// transitive consumer's _PROTO__INCLUDE — py3_proto consumers included (sg7:
+	// brandformance__intpy3___pb2.py carries -I=$(S)/yt). protos_from_protoc is a
+	// PY-only implicit peer added after the real proto peers, so its protoc-src
+	// include trails the namespace tail. _PROTO__INCLUDE is a set: a namespace
+	// already rendered (e.g. the module's own protoRoot) is not re-emitted.
+	for _, p := range protoNamespaceTail {
+		token := internStr("-I=" + p.string())
+		if slices.Contains(mid, token) {
+			continue
+		}
+
+		mid = append(mid, token)
+	}
 
 	// NEED_GOOGLE_PROTO_PEERDIRS (default yes) peers the PY-only protos_from_protoc,
 	// whose GLOBAL PROTO_NAMESPACE(contrib/libs/protoc/src) adds protoc/src to the
