@@ -199,6 +199,21 @@ type RunProgramStmt struct {
 	Line           int
 }
 
+// FromSandboxStmt is a FROM_SANDBOX(Id [FILE] [PREFIX dir] [EXECUTABLE]
+// OUT/OUT_NOAUTO files [OUTPUT_INCLUDES ...]) macro: it fetches a Sandbox
+// resource and unpacks (or, with FILE, copies) its files into the module build
+// dir as the declared OUT/OUT_NOAUTO outputs.
+type FromSandboxStmt struct {
+	ResourceId     STR
+	OUTFiles       []STR
+	OUTNoAutoFiles []STR
+	OutputIncludes []STR
+	File           bool
+	Executable     bool
+	Prefix         string
+	Line           int
+}
+
 type RunPythonStmt struct {
 	ScriptPath     STR
 	Args           []STR
@@ -328,6 +343,9 @@ func (*RunProgramStmt) stmtMarker() {
 }
 
 func (*RunPythonStmt) stmtMarker() {
+}
+
+func (*FromSandboxStmt) stmtMarker() {
 }
 
 func (*ConfigureFileStmt) stmtMarker() {
@@ -1153,6 +1171,13 @@ func buildStmtFor(name string, args []STR, line int, fail func(format string, a 
 		}
 
 		return parseRunPython(args, line)
+	case "FROM_SANDBOX":
+
+		if len(args) == 0 {
+			fail("FROM_SANDBOX expects at least 1 argument (resource id)")
+		}
+
+		return parseFromSandbox(args, line)
 	case "RESOURCE":
 
 		return parseResource(args, Token{val: name, line: line})
@@ -1285,6 +1310,58 @@ func isRunAntlrKeyword(s STR) bool {
 	}
 
 	return false
+}
+
+// parseFromSandbox parses FROM_SANDBOX(Id ...): the first non-keyword token is
+// the resource id, then keyword sections collect OUT/OUT_NOAUTO/OUTPUT_INCLUDES,
+// flag keywords (FILE/EXECUTABLE) toggle, and value keywords (PREFIX/AUTOUPDATED/
+// SBR) consume their single argument. RENAME/INDUCED_DEPS sections are parsed and
+// skipped (not needed by the C++/Python contour).
+func parseFromSandbox(args []STR, line int) *FromSandboxStmt {
+	stmt := &FromSandboxStmt{Line: line, Prefix: "."}
+	section := ""
+
+	for i := 0; i < len(args); i++ {
+		switch args[i].string() {
+		case "FILE":
+			stmt.File = true
+			section = ""
+		case "EXECUTABLE":
+			stmt.Executable = true
+			section = ""
+		case "AUTOUPDATED", "PREFIX", "SBR":
+			section = args[i].string()
+		case "OUT":
+			section = "OUT"
+		case "OUT_NOAUTO":
+			section = "OUT_NOAUTO"
+		case "OUTPUT_INCLUDES":
+			section = "OUTPUT_INCLUDES"
+		case "INDUCED_DEPS", "RENAME":
+			section = "SKIP"
+		default:
+			switch section {
+			case "":
+				if stmt.ResourceId == 0 {
+					stmt.ResourceId = args[i]
+				}
+			case "PREFIX":
+				stmt.Prefix = args[i].string()
+				section = ""
+			case "AUTOUPDATED", "SBR":
+				section = ""
+			case "OUT":
+				stmt.OUTFiles = append(stmt.OUTFiles, args[i])
+			case "OUT_NOAUTO":
+				stmt.OUTNoAutoFiles = append(stmt.OUTNoAutoFiles, args[i])
+			case "OUTPUT_INCLUDES":
+				stmt.OutputIncludes = append(stmt.OutputIncludes, args[i])
+			case "SKIP":
+			}
+		}
+	}
+
+	return stmt
 }
 
 func parseRunProgram(args []STR, line int) *RunProgramStmt {

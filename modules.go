@@ -144,6 +144,7 @@ type ModuleData struct {
 	antlrRuns          []AntlrRunInfo
 	runPrograms        []*RunProgramStmt
 	runPython          []*RunPythonStmt
+	fromSandboxes      []*FromSandboxStmt
 	checkConfigHeaders []STR
 	cythonCpp          []*CythonStmt
 
@@ -1185,6 +1186,13 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 			}
 
 			d.runPython = append(d.runPython, &expanded)
+		case *FromSandboxStmt:
+			expanded := *v
+			expanded.ResourceId = expandStmtTokenSTR(v.ResourceId, env)
+			expanded.OUTFiles = expandStmtTokensSTR(v.OUTFiles, env)
+			expanded.OUTNoAutoFiles = expandStmtTokensSTR(v.OUTNoAutoFiles, env)
+			expanded.OutputIncludes = expandStmtTokensSTR(v.OutputIncludes, env)
+			d.fromSandboxes = append(d.fromSandboxes, &expanded)
 		case *ResourceStmt:
 			ensureResourcePeer(modulePath, d)
 
