@@ -14,6 +14,14 @@ type RunProgramAuxTool struct {
 	token string
 	ref   NodeRef
 	bin   VFS
+	// rooted marks a TOOL whose path already carries a build/source root prefix
+	// ($(B)/… from ${ARCADIA_BUILD_ROOT}/…). Upstream's `${tool:TOOL}` is hidden
+	// and only registers the dependency; the command spells the binary path
+	// literally (e.g. ${ARCADIA_BUILD_ROOT}/dir/binary), so no arg substitution
+	// applies. A relative TOOL (contrib/tools/protoc/plugins/cpp_styleguide) is
+	// the substituting case — ymake rewrites the matching relative arg token to
+	// the resolved binary.
+	rooted bool
 }
 
 func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) *RunProgramsForARResult {
@@ -361,11 +369,23 @@ func resolveRunProgramAuxTools(ctx *GenCtx, toolPaths []string) []RunProgramAuxT
 		}
 
 		seen[toolPath] = struct{}{}
-		res := ctx.toolResult(internArg(filepath.Clean(toolPath)))
+
+		// A TOOL spelled ${ARCADIA_BUILD_ROOT}/dir (expanded to $(B)/dir) names the
+		// built module `dir`; the root prefix only marks it as an output reference.
+		// toolResult expects the source-root module path, so strip the prefix.
+		rooted := vfsHasPrefix(toolPath)
+		modulePath := toolPath
+
+		if rooted {
+			modulePath = intern(toolPath).rel()
+		}
+
+		res := ctx.toolResult(internArg(filepath.Clean(modulePath)))
 		out = append(out, RunProgramAuxTool{
-			token: toolPath,
-			ref:   res.LDRef,
-			bin:   *res.LDPath,
+			token:  toolPath,
+			ref:    res.LDRef,
+			bin:    *res.LDPath,
+			rooted: rooted,
 		})
 	}
 
@@ -433,6 +453,13 @@ func emitPR(
 		key := aTok
 
 		for _, tool := range auxTools {
+			// A rooted TOOL ($(B)/dir) contributes only the dependency; its binary
+			// path is already spelled literally in the args, so substituting would
+			// corrupt it (token $(B)/dir is a prefix of the literal $(B)/dir/binary).
+			if tool.rooted {
+				continue
+			}
+
 			if strings.Contains(a, tool.token) {
 				a = strings.ReplaceAll(a, tool.token, tool.bin.string())
 				key = internStr(a)

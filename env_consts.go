@@ -12,6 +12,8 @@ var (
 	envARCH_AARCH64                 = internEnv("ARCH_AARCH64")
 	envARCH_ARM64                   = internEnv("ARCH_ARM64")
 	envARCH_I386                    = internEnv("ARCH_I386")
+	envARCH_TYPE_32                  = internEnv("ARCH_TYPE_32")
+	envARCH_TYPE_64                  = internEnv("ARCH_TYPE_64")
 	envARCH_X86_64                  = internEnv("ARCH_X86_64")
 	envASAN_OPTIONS                 = internEnv("ASAN_OPTIONS")
 	envASAN_SYMBOLIZER_PATH         = internEnv("ASAN_SYMBOLIZER_PATH")
