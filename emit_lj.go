@@ -72,7 +72,7 @@ func emitLuaJit21(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	}
 
 	d.archives = append(d.archives,
-		ArchiveEntry{Name: "LuaScripts.inc", DontCompress: true, Files: raws, Keys: luas},
-		ArchiveEntry{Name: "LuaSources.inc", DontCompress: true, Files: append([]string(nil), luas...), Keys: luas},
+		ArchiveEntry{Name: "LuaScripts.inc", DontCompress: true, Files: raws, Keys: luas, PropagateSourceMembers: true},
+		ArchiveEntry{Name: "LuaSources.inc", DontCompress: true, Files: append([]string(nil), luas...), Keys: luas, PropagateSourceMembers: true},
 	)
 }

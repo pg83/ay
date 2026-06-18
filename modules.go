@@ -368,6 +368,12 @@ type ArchiveEntry struct {
 	// `${input:Files} -k <:joined keys>` command shape (ymake.core.conf
 	// ARCHIVE_BY_KEYS); nil keeps the plain ARCHIVE `${suf=\:;input:Files}` form.
 	Keys []string
+	// PropagateSourceMembers registers each direct source member (a member with no
+	// producer in the codegen registry) as a closure leaf of the archive output, so
+	// a C++ unit that #includes the generated header receives the archived sources
+	// in its input closure. Generated members propagate via their SourceInputs
+	// regardless; this adds the direct-source case used by LJ's LuaSources.inc.
+	PropagateSourceMembers bool
 }
 
 // Lj21Archive holds the ordered module-relative .lua names declared by a
@@ -949,6 +955,17 @@ func applyPython3AddIncl(modulePath string, d *ModuleData) {
 func applyArchiveAddIncl(modulePath string, d *ModuleData) {
 	for _, a := range d.archives {
 		include := build(generatedIncludeDir(modulePath, a.Name))
+		d.addIncl = append(d.addIncl, include)
+		d.addInclGlobal = append(d.addInclGlobal, include)
+		d.addInclUserGlobal = append(d.addInclUserGlobal, include)
+	}
+
+	// LJ_21_ARCHIVE expands to two ARCHIVE_BY_KEYS calls (LuaScripts.inc,
+	// LuaSources.inc), whose ${addincl;noauto;output:NAME} outputs land flat in the
+	// module build dir. Their archive entries are synthesized later (emitLuaJit21),
+	// so drive the same Global-scope addincl side effect from d.lj21 here.
+	if d.lj21 != nil {
+		include := build(modulePath)
 		d.addIncl = append(d.addIncl, include)
 		d.addInclGlobal = append(d.addInclGlobal, include)
 		d.addInclUserGlobal = append(d.addInclUserGlobal, include)
