@@ -573,6 +573,28 @@ func copyFileOutputVFS(modulePath string, dst string) VFS {
 	return build(filepath.ToSlash(filepath.Clean(modulePath + "/" + dst)))
 }
 
+// resourceOutputVFS canonicalizes a RESOURCE/RESOURCE_FILES file argument to the
+// build-output VFS the codegen registry keys producers by. Unlike
+// copyFileOutputVFS (which always prepends the module dir, matching producer-side
+// OUT tokens), a RESOURCE path may be arcadia-root-relative yet rooted at the
+// module dir (e.g. a FROM_SANDBOX OUT embedded as
+// yt/yt/library/ytprof/bundle/llvm-symbolizer): such a path is used verbatim
+// instead of doubled, mirroring the module-rooted branch of sourceInputVFS on the
+// $(B) side. A genuinely module-relative path still resolves under the module dir.
+func resourceOutputVFS(modulePath string, path string) VFS {
+	if vfs := moduleRootedVFS(modulePath, path); vfs != nil {
+		return *vfs
+	}
+
+	clean := filepath.ToSlash(filepath.Clean(path))
+
+	if clean == modulePath || strings.HasPrefix(clean, modulePath+"/") {
+		return build(clean)
+	}
+
+	return build(filepath.ToSlash(filepath.Clean(modulePath + "/" + clean)))
+}
+
 func copyFileIncludeTarget(modulePath string, target string) string {
 	if vfsHasPrefix(target) {
 		return intern(target).rel()
