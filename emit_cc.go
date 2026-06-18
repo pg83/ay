@@ -259,6 +259,21 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 		return out, input
 	}
 
+	// A build-rooted SRCS spelling (${BINDIR}/x.cpp expands to $(B)/<mod>/x.cpp)
+	// re-feeds a generated in-module source: the object is $(B)/<rel>.o, keyed off
+	// the resolved build path, not the prefixed srcRel token (which would bury the
+	// $(B)/ root inside the module dir as $(B)/<mod>/_/$(B)/<mod>/x.cpp.o). Only a
+	// rooted srcRel takes this path; a module-relative srcRel naming a $(B) leaf
+	// (e.g. a rl6/bison intermediate "_/datetime/parser.rl6.cpp") keeps the
+	// existing _/-rebase below.
+	if srcVFS.isBuild() && vfsHasPrefix(srcRel) {
+		rel := srcVFS.rel()
+
+		if dir := instance.Path.rel(); rel == dir || strings.HasPrefix(rel, dir+"/") {
+			return build(rel + suffix), input
+		}
+	}
+
 	var outRel string
 
 	switch {
