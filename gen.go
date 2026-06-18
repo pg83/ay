@@ -2000,12 +2000,21 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ccOutputs = append(ccOutputs, cpMemberOuts[i])
 	}
 
-	enCCRes := emitEnumSrcs(ctx, instance, d, selfPeerAddInclGlobal, &moduleInputs)
-
+	// Producers (JV/CF, RUN_PROGRAM, RUN_PYTHON) emit BEFORE emitEnumSrcs so
+	// their build-tree outputs are registered in the codegen registry when
+	// GENERATE_ENUM_SERIALIZATION resolves its header input: a header named by
+	// GENERATE_ENUM_SERIALIZATION may itself be a RUN_PROGRAM OUT with no $(S)
+	// counterpart (e.g. ads/bsyeti/libs/features/formula.h), and EN must resolve
+	// it to the $(B) producer output plus its producer dep, not fall back to a
+	// nonexistent source. This mirrors the header-only path's producers-then-EN
+	// order above.
 	jvCCRefs, jvCCOutputs := emitMiscNodes(ctx, instance, d, &moduleInputs)
 
 	prCCRes := emitRunProgramsForAR(ctx, instance, d, moduleInputs)
 	pyCCRes := emitRunPythonForAR(ctx, instance, d, moduleInputs)
+
+	enCCRes := emitEnumSrcs(ctx, instance, d, selfPeerAddInclGlobal, &moduleInputs)
+
 	emitArchives(ctx, instance, d)
 
 	// Pass 2 splits d.srcs in two: non-codegen first (regular .cpp/.c/.h),

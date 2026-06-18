@@ -1,6 +1,64 @@
 package main
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
+
+func TestGen_EnumSerializationConsumesRunProgramGeneratedHeader(t *testing.T) {
+	// Reproduces the ads/bsyeti/libs/features divergence: a RUN_PROGRAM OUT
+	// emits a header (formula.h) into the build tree with no $(S) counterpart,
+	// and GENERATE_ENUM_SERIALIZATION in the same module consumes that generated
+	// header. The EN input must resolve to the $(B) producer output and take a
+	// dependency on the producing RUN_PROGRAM node — never fall back to a
+	// nonexistent $(S) source.
+	files := map[string]string{}
+
+	writeToolProgram(files, "tools/genhdr", "genhdr")
+
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    tools/genhdr --header gen.h
+    IN gen.in
+    OUT gen.cpp gen.h
+)
+SRCS(real.cpp)
+GENERATE_ENUM_SERIALIZATION(gen.h)
+END()
+`)
+	writeTestModuleFile(files, "mod/gen.in", "enum class E { A = 0 };\n")
+	writeTestModuleFile(files, "mod/real.cpp", "int real(){return 0;}\n")
+
+	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "mod")
+
+	en := mustNodeByOutput(t, g, "$(B)/mod/gen.h_serialized.cpp")
+
+	// The header input must resolve to the $(B) producer output, not a
+	// nonexistent $(S) source.
+	if !nodeHasInput(en, "$(B)/mod/gen.h") {
+		t.Fatalf("EN node inputs: want $(B)/mod/gen.h (generated), got: %v", en.flatInputs())
+	}
+	if nodeHasInput(en, "$(S)/mod/gen.h") {
+		t.Fatalf("EN node inputs: got nonexistent source $(S)/mod/gen.h: %v", en.flatInputs())
+	}
+	if got := en.Cmds[0].CmdArgs.flat()[1].string(); got != "$(B)/mod/gen.h" {
+		t.Fatalf("EN cmd_args[1] = %q, want $(B)/mod/gen.h", got)
+	}
+
+	// The EN node must depend on the RUN_PROGRAM producer of gen.h (its node
+	// lists gen.cpp as Outputs[0], so match on any output).
+	genH := mustNodeByAnyOutput(t, g, "$(B)/mod/gen.h")
+	if !slices.Contains(graphDeps(g, en), genH.UID) {
+		t.Fatalf("EN node deps missing generated-header producer uid %q: %v", genH.UID, graphDeps(g, en))
+	}
+}
 
 func TestGen_EnumSerializationWithSRCDIRResolvesHeaderViaSourceDir(t *testing.T) {
 	// Reproduces the purecalc_no_pg_wrapper divergence: a module uses INCLUDE()
