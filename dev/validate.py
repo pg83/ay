@@ -13,7 +13,6 @@ xfail values: False = gating (byte-compare); True = xfail (parity metrics only);
 
 Usage: validate.py [out-dir]   (default: <repo>/.out/validate)
 """
-import fcntl
 import os
 import subprocess
 import sys
@@ -24,19 +23,6 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 GO = "go"
 AY = os.path.join(REPO_ROOT, "ay")
-
-# Host-wide, well-known lock paths — shared across every worktree (all agents
-# run as the same user, so each resolves identically). NOT under the repo (each
-# worktree has its own .out). We try them in order and use the first writable
-# one: the dropbear runtime dir where it exists, else /tmp. Both are shared
-# across worktrees on a single host, so the serialization holds either way; the
-# fixed order makes all agents on a box converge on the same file.
-LOCK_PATH_CANDIDATES = (
-    '/var/run/dropbear/tmp/validate.lock',
-    '/tmp/ay-validate.lock',
-    '/var/tmp/ay-validate.lock',
-)
-
 
 # Per-case generation wall-time budgets (seconds): a gen slower than
 # GEN_TIME_SLACK * budget FAILs the case as a perf regression — optimize the
@@ -53,39 +39,6 @@ GEN_TIME_BUDGET = {
 }
 GEN_TIME_SLACK = 1.2
 
-
-def acquire_global_lock():
-    """Serialize validate.py runs across worktrees so concurrent agents don't
-    collectively OOM — each run drives memory-heavy `ay make` + normalize over
-    multi-GB graphs, and several at once exhaust host RAM (global_oom). flock is
-    released automatically on exit, crash, or OOM SIGKILL, so a reaped holder
-    cannot deadlock the next run. Returns the fd, which the caller must keep
-    open (referenced) for the lifetime of the run."""
-    fd, path = _open_lock_fd()
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        print(f"[lock] another validate.py holds {path}; waiting…", flush=True)
-        fcntl.flock(fd, fcntl.LOCK_EX)
-    return fd
-
-
-def _open_lock_fd():
-    """Open (creating the directory as needed) the first usable lock file from
-    LOCK_PATH_CANDIDATES; return (fd, path). Falls through hosts where the
-    preferred runtime dir is absent or read-only (no /var/run/dropbear) to the
-    next candidate."""
-    last_err = None
-    for path in LOCK_PATH_CANDIDATES:
-        try:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
-
-            return fd, path
-        except OSError as e:
-            last_err = e
-
-    raise SystemExit(f"[lock] no writable lock path among {LOCK_PATH_CANDIDATES}: {last_err}")
 
 # name, normalize target, source root, raw upstream reference, xfail (see docstring for values)
 # A case is SKIPPED (never affects exit code) when its source root or reference
@@ -251,10 +204,6 @@ def measured_generate(name, gen, raw, budget):
 
 
 def main() -> int:
-    # Held for the whole run (released on exit/crash/OOM); keep the fd
-    # referenced so the OS does not drop the lock early.
-    lock_fd = acquire_global_lock()  # noqa: F841
-
     out_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(REPO_ROOT, ".out", "validate")
     os.makedirs(out_dir, exist_ok=True)
 
