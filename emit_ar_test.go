@@ -928,3 +928,47 @@ func TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs(t *testing.T) {
 			objcopyIdx, globalCppIdx, members)
 	}
 }
+
+// ARCHIVE(NAME data.inc file.txt) writes its output through the upstream
+// ${addincl;noauto;output:NAME} modifier (ymake.core.conf). Beyond emitting the
+// archive output, the `addincl` side effect adds the output's build directory as
+// a global include reaching the declaring module and its PEERDIR consumers. A
+// consumer that PEERDIRs the archive module must compile with -I$(B)/<peer-dir>,
+// while the archive output itself is still emitted.
+func TestGen_Archive_NameOutputDirPropagatesAsBuildInclude(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "peer/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(owner.cpp)
+ARCHIVE(
+    NAME data.inc
+    file.txt
+)
+END()
+`)
+	writeTestModuleFile(files, "peer/owner.cpp", "int owner(){return 0;}\n")
+	writeTestModuleFile(files, "peer/file.txt", "payload\n")
+	writeTestModuleFile(files, "consumer/ya.make", `LIBRARY()
+NO_RUNTIME()
+PEERDIR(peer)
+SRCS(use.cpp)
+END()
+`)
+	writeTestModuleFile(files, "consumer/use.cpp", "int use(){return 0;}\n")
+	writeToolProgram(files, "tools/archiver", "archiver")
+
+	g := testGen(newMemFS(files), "consumer")
+
+	// The archive output must still be emitted.
+	mustNodeByOutput(t, g, "$(B)/peer/data.inc")
+
+	cc := mustNodeByOutput(t, g, "$(B)/consumer/use.cpp.o")
+	args := strStrs(cc.Cmds[0].CmdArgs.flat())
+
+	if !flagsContain(args, "-I$(B)/peer") {
+		t.Errorf("consumer use.cpp.o missing ARCHIVE-generated build include -I$(B)/peer: %v", args)
+	}
+}
