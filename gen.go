@@ -132,7 +132,6 @@ var acknowledgedMacros = map[string]struct{}{
 	// gate; modelling their nodes is the node-count convergence step.
 	// TODO: implement typed handlers.
 	//   - ARCHIVE_ASM: embed files as a rodata .o.
-	//   - YAFF / YAFF_SCHEMA: yabs flat-format codegen (build/internal).
 	//   - CPP_EVLOG: event-log C++ codegen.
 	//   - LIST_PROTO: writes a .proto file listing.
 	//   - BASE_CODEGEN: generic tool-driven codegen.
@@ -140,8 +139,6 @@ var acknowledgedMacros = map[string]struct{}{
 	// genuinely inert for a C++/Python target (cf. WITH_KOTLIN_GRPC above).
 	"FROM_SANDBOX":      {},
 	"ARCHIVE_ASM":       {},
-	"YAFF":              {},
-	"YAFF_SCHEMA":       {},
 	"CPP_EVLOG":         {},
 	"LIST_PROTO":        {},
 	"BASE_CODEGEN":      {},

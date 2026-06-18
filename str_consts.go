@@ -28,6 +28,8 @@ var (
 	kwEND                                            = internStr("END")
 	kwENDIF                                          = internStr("ENDIF")
 	kwENV                                            = internStr("ENV")
+	kwEXPERIMENTAL                                   = internStr("EXPERIMENTAL")
+	kwFILES                                          = internStr("FILES")
 	kwFOR                                            = internStr("FOR")
 	kwGENERATE_ENUM_SERIALIZATION                    = internStr("GENERATE_ENUM_SERIALIZATION")
 	kwGENERATE_ENUM_SERIALIZATION_NOUTF              = internStr("GENERATE_ENUM_SERIALIZATION_NOUTF")
