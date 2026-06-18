@@ -1,6 +1,8 @@
 package main
 
 import (
+	encb64 "encoding/base64"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -41,6 +43,72 @@ END()
 	}
 	if nodeHasInput(objcopy, "$(S)/db/data.json") {
 		t.Fatalf("objcopy inputs still use source-root data.json: %#v", objcopy.flatInputs())
+	}
+}
+
+// A FROM_SANDBOX OUT/OUT_NOAUTO file is a Sandbox-fetched build output. When a
+// RESOURCE in the same module embeds it via an arcadia-root-relative path rooted
+// at the module dir (yt/yt/library/ytprof/bundle/llvm-symbolizer), the objcopy
+// packer must read the artifact from $(B) and depend on the SB fetch node — never
+// resolve it to a $(S) source path (which faults the UID finalizer's content hash
+// under --sandboxing) nor to the module-dir-doubled $(B) path. The resfs key
+// (base64 of the literal RESOURCE key) is unchanged from a source resource.
+func TestGen_ResourceRootRelativeFromSandboxOutputFeedsObjcopyFromBuildRoot(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+
+	writeTestModuleFile(files, "yt/bundle/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+FROM_SANDBOX(
+    FILE 2531143113
+    OUT_NOAUTO llvm-symbolizer
+)
+RESOURCE(
+    yt/bundle/llvm-symbolizer /ytprof/llvm-symbolizer
+)
+END()
+`)
+
+	g := testGen(newMemFS(files), "yt/bundle")
+
+	// FROM_SANDBOX emits an SB fetch node producing the OUT_NOAUTO file in $(B).
+	sb := mustNodeByOutput(t, g, "$(B)/yt/bundle/llvm-symbolizer")
+	if sb.KV.P != pkSB {
+		t.Fatalf("llvm-symbolizer producer kind = %q, want SB", sb.KV.P.string())
+	}
+
+	objcopy := findNodeByOutputPrefix(g, "$(B)/yt/bundle/objcopy_")
+	if objcopy == nil {
+		t.Fatal("graph is missing yt/bundle objcopy output")
+	}
+
+	// The objcopy embeds the fetched artifact from $(B), not a source path and not
+	// the module-dir-doubled build path.
+	if !nodeHasInput(objcopy, "$(B)/yt/bundle/llvm-symbolizer") {
+		t.Fatalf("objcopy inputs missing build-root fetched artifact: %#v", objcopy.flatInputs())
+	}
+	if nodeHasInput(objcopy, "$(S)/yt/bundle/llvm-symbolizer") {
+		t.Fatalf("objcopy inputs use the source path for a fetched artifact: %#v", objcopy.flatInputs())
+	}
+	if nodeHasInput(objcopy, "$(B)/yt/bundle/yt/bundle/llvm-symbolizer") {
+		t.Fatalf("objcopy inputs double the module dir: %#v", objcopy.flatInputs())
+	}
+
+	// The objcopy depends on the SB fetch node that produces the artifact.
+	if !slices.Contains(graphDeps(g, objcopy), sb.UID) {
+		t.Fatalf("objcopy deps missing SB fetch uid %q: %v", sb.UID, graphDeps(g, objcopy))
+	}
+
+	// The resfs key (the literal RESOURCE key, base64) is unaffected by the
+	// build-root resolution — only the input VFS and the producer dep change.
+	wantKey := encb64.StdEncoding.EncodeToString([]byte("/ytprof/llvm-symbolizer"))
+	if !slices.Contains(prCmdArgStrings(objcopy), wantKey) {
+		t.Fatalf("objcopy --keys missing base64 RESOURCE key %q: %v", wantKey, prCmdArgStrings(objcopy))
 	}
 }
 
