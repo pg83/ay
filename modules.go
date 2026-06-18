@@ -172,6 +172,12 @@ type ModuleData struct {
 	declSeq   int
 	resources []ResourceEntry
 
+	// bundles are the module's BUNDLE(<Dir> [SUFFIX s] [NAME n]) groups in
+	// declaration order. Each emits a BN node that renames the bundled module's
+	// primary output into $(B)/<mod>/<name>; a RESOURCE/embed of <name> then
+	// resolves to that build output (see emit_bundle.go).
+	bundles []BundleEntry
+
 	pyMain *STR
 
 	// noStrip mirrors ENABLE(NO_STRIP); see ymake.core.conf:2669 for the
@@ -312,6 +318,15 @@ func muslCFlags(on bool) []ARG {
 	}
 
 	return nil
+}
+
+// BundleEntry is one BUNDLE group: the bundled module Dir (arcadia-root
+// relative), the collected output Name (basename(Dir)+Suffix by default), and
+// the optional Suffix selecting a secondary module output.
+type BundleEntry struct {
+	Target string
+	Name   string
+	Suffix string
 }
 
 type ResourceEntry struct {
@@ -1481,6 +1496,35 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		}
 
 		d.llvmBc = append(d.llvmBc, stmt)
+
+	case tokBundle:
+		// BUNDLE(<Dir> [SUFFIX s] [NAME n]>…) — build/plugins/bundle.py splits each
+		// group and calls on_bundle_target([target, name, suffix]) with
+		// name = basename(target)+suffix when NAME is absent. Each group becomes a
+		// BN node bringing the bundled module's primary output under <name>
+		// (emit_bundle.go). We only collect here; node emission needs the emitter.
+		i := 0
+
+		for i < len(v.Args) {
+			target := v.Args[i].string()
+			i++
+
+			suffix := ""
+
+			if i+1 < len(v.Args) && v.Args[i].string() == "SUFFIX" {
+				suffix = v.Args[i+1].string()
+				i += 2
+			}
+
+			name := path.Base(target) + suffix
+
+			if i+1 < len(v.Args) && v.Args[i].string() == "NAME" {
+				name = v.Args[i+1].string()
+				i += 2
+			}
+
+			d.bundles = append(d.bundles, BundleEntry{Target: target, Name: name, Suffix: suffix})
+		}
 
 	case tokMavenGroupId:
 

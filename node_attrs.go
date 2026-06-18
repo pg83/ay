@@ -12,7 +12,7 @@ var procKindStr = [...]string{
 	pkPB: "PB", pkPR: "PR", pkPY: "PY", pkR5: "R5", pkR6: "R6", pkRD: "RD",
 	pkSB:   "SB",
 	pkSTUB: "STUB", pkSW: "SW", pkTEST: "TEST", pkTEST2: "TEST2", pkTS: "TS", pkYC: "YC",
-	pkld: "ld", pkDX: "DX",
+	pkld: "ld", pkDX: "DX", pkBN: "BN",
 }
 
 var pColorStr = [...]string{
@@ -195,6 +195,7 @@ const (
 	pkYC
 	pkld // lowercase "ld": PREBUILT_PROGRAM copy node (agnostic bin), distinct from pkLD link
 	pkDX // _GEN_SBOM_COMPONENT / toolchain SBOM node (gen_sbom.py)
+	pkBN // BUNDLE rename node (_BUNDLE_TARGET: $MOVE_FILE ${result:Target} → $(B)/<mod>/<name>)
 )
 
 func (k ProcKind) string() string {
