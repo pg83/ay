@@ -9,6 +9,8 @@ case-insensitively; a section's body runs to the next `### ` header.
 
 DEBUG.md — how to debug divergences between the upstream graph and ours.
 
+Не уходите в background, -p вас выкидывает из агентского цикла!!! validate.py больше не лочится и работает параллельно!!!
+
 ### LEAD
 
 Write a thorough `descr` for every ticket: 8–10 sentences that make the work unambiguous — what to change, why, where in the code, what the upstream reference behavior is, and what "done" looks like. A one-liner is not enough; the digger and tasker must be able to act on the `descr` alone without guessing your intent.
