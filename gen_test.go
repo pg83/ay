@@ -1749,10 +1749,25 @@ int use() { return 0; }
 }
 
 func testGen(fs FS, targetDir string) *Graph {
+	return testGenContour(fs, targetDir, true)
+}
+
+// testGenInternal builds under the internal (non-opensource) contour, where
+// LINK_OR_COPY_SO_CMD is not emitted for plain programs — so fs_tools.py is not
+// a link input via emitCopy and only the BUNDLE MOVE_FILE mechanism can put it
+// on the link node.
+func testGenInternal(fs FS, targetDir string) *Graph {
+	return testGenContour(fs, targetDir, false)
+}
+
+func testGenContour(fs FS, targetDir string, opensource bool) *Graph {
 	host := newTestPlatform(OSLinux, ISAX8664, "yes")
 	targetFlags := make(map[string]string, len(testToolchainFlags)+1)
 	for k, v := range testToolchainFlags {
 		targetFlags[k] = v
+	}
+	if !opensource {
+		delete(targetFlags, "OPENSOURCE")
 	}
 	targetFlags["PIC"] = "no"
 	target := newPlatform(fs, OSLinux, ISAAArch64, targetFlags, "", "")
