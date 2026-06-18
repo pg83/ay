@@ -152,11 +152,8 @@ var acknowledgedMacros = map[string]struct{}{
 	"ALL_RESOURCE_FILES":        {},
 	"EXPORT_YMAPS_PROTO":        {},
 	"YMAPS_SPROTO":              {},
-	// PROTO_DESCRIPTIONS opens a module that merges peer .protodesc files; its
-	// node is not modeled yet. Acknowledged so a BUNDLE(<dir>) of such a target
-	// parses (emit_bundle.go peeks the bundled ya.make to classify it as
-	// unmodeled) instead of faulting the closed-TOK lexer.
-	"PROTO_DESCRIPTIONS": {},
+	// PROTO_DESCRIPTIONS is now a modeled module opener (emit_proto_desc.go);
+	// it no longer rides this no-op set.
 	"STYLE_DETEKT":       {},
 	"DEFAULT_JDK_VERSION":       {},
 	"BISON_FLAGS":               {},
@@ -270,6 +267,14 @@ type ModuleEmitResult struct {
 	ModuleStmtName TOK
 
 	testSuiteInfo *TestSuiteInfo
+
+	// DescClosure is the ordered, deduped transitive closure of DESC_PROTO
+	// submodules reachable through a DESC_PROTO peer chain (own module last,
+	// post-order). Each entry exposes the merge node that produces that
+	// submodule's <realprjname>.self.protodesc, which a PROTO_DESCRIPTIONS
+	// module merges into its .protodesc / .tar. Populated only for
+	// LangDescProto instances and PROTO_DESCRIPTIONS modules.
+	DescClosure []DescProtoPeer
 
 	// ResourceGlobalClosure is the transitive union of external-resource globals
 	// (<NAME>_RESOURCE_GLOBAL) reachable through this module's PEERDIR closure,
@@ -750,6 +755,24 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if d.moduleStmt == nil {
 		throwFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path.rel())
+	}
+
+	// DESC_PROTO submodule of a PROTO_LIBRARY (proto.conf `module _DESC_PROTO`):
+	// the proto-description producer side, requested via the DESC_PROTO peer tag.
+	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangDescProto {
+		result := emitDescProtoSubmodule(ctx, instance, d)
+		ctx.memo.put(ctx.instanceKey(instance), result)
+
+		return result
+	}
+
+	// PROTO_DESCRIPTIONS module (proto.conf `module PROTO_DESCRIPTIONS`):
+	// merges its DESC_PROTO peer closure's .self.protodesc into .protodesc / .tar.
+	if d.moduleStmt.Name == tokProtoDescriptions {
+		result := emitProtoDescriptions(ctx, instance, d)
+		ctx.memo.put(ctx.instanceKey(instance), result)
+
+		return result
 	}
 
 	if d.moduleStmt.Name == tokResourcesLibrary {

@@ -12,7 +12,7 @@ var procKindStr = [...]string{
 	pkPB: "PB", pkPR: "PR", pkPY: "PY", pkR5: "R5", pkR6: "R6", pkRD: "RD",
 	pkSB:   "SB",
 	pkSTUB: "STUB", pkSW: "SW", pkTEST: "TEST", pkTEST2: "TEST2", pkTS: "TS", pkYC: "YC",
-	pkld: "ld", pkDX: "DX", pkBN: "BN", pkSV: "SV", pkSC: "SC",
+	pkld: "ld", pkDX: "DX", pkBN: "BN", pkSV: "SV", pkSC: "SC", pkPD: "PD",
 }
 
 var pColorStr = [...]string{
@@ -26,6 +26,7 @@ var networkModeStr = [...]string{
 
 var moduleLangStr = [...]string{
 	mlNone: "", mlCPP: "cpp", mlPy3: "py3", mlUnknown: "unknown", mlAgnostic: "agnostic",
+	mlDescProto: "desc_proto", mlProtoDescriptions: "proto_descriptions",
 }
 
 var moduleTypeStr = [...]string{
@@ -113,6 +114,8 @@ const (
 	mlPy3
 	mlUnknown
 	mlAgnostic
+	mlDescProto         // DESC_PROTO submodule merge node (_DESC_PROTO)
+	mlProtoDescriptions // PROTO_DESCRIPTIONS merge node
 )
 
 func (l ModuleLang) string() string {
@@ -199,6 +202,7 @@ const (
 	pkBN // BUNDLE rename node (_BUNDLE_TARGET: $MOVE_FILE ${result:Target} → $(B)/<mod>/<name>)
 	pkSV // DECIMAL_MD5_LOWER_32_BITS hash producer (decimal_md5.py, stdout → $(B)/<mod>/<file>)
 	pkSC // SPLIT_CODEGEN producer (_SPLIT_CODEGEN_BASE): prefix.in → prefix.{0..N}.cpp + prefix.cpp + prefix.h
+	pkPD // proto-description producer (_DESC_PROTO / PROTO_DESCRIPTIONS: desc_rawproto_wrapper / merge_files / collect_rawproto / merge_protosrc)
 )
 
 func (k ProcKind) string() string {
