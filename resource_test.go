@@ -284,7 +284,7 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 	}
 
 	em := newBufferedEmitter()
-	ctx := &GenCtx{emit: em, na: em.nodeArenas(), target: testTargetP}
+	ctx := &GenCtx{emit: em, na: em.nodeArenas(), target: testTargetP, fs: newMemFS(nil)}
 	wireTestScanners(ctx)
 	instance := ModuleInstance{
 		Path:     source("contrib/python/shellingham"),
