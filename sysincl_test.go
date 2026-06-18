@@ -133,6 +133,61 @@ func TestSysInclMuslGating(t *testing.T) {
 	}
 }
 
+// TestSysInclInternalGating pins the upstream internal-sysincl gating: the files
+// under build/internal/sysincl are a curated, config-gated list (build/internal/
+// conf/sysincl.conf + project_specific/{smart_devices,maps/mapkit}.conf), not the
+// whole directory. actions_zephyr.yml loads only under OS_ZEPHYR && ARCH_ARM_ATS3089P
+// (smart_devices.conf:22), so a native linux build must NOT pull it in — otherwise
+// its broad ^(alice|util|contrib|…) source_filter remaps stdint.h/time.h/pthread.h/
+// syscall.h to Zephyr headers, polluting ordinary C++ closures (e.g. adfox/amacs).
+// smart_devices_linux.yml DOES load on OS_LINUX, and its source_filter still scopes
+// per includer path.
+func TestSysInclInternalGating(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		// base dir must exist (loadSysInclSetForFS guards on it) — one trivial file.
+		"build/sysincl/macro.yml": "# empty\n",
+		// gated OUT on linux (OS_ZEPHYR-only).
+		"build/internal/sysincl/actions_zephyr.yml": "" +
+			"- source_filter: \"^util\"\n" +
+			"  includes:\n" +
+			"  - zephyr_only.h: smart_devices/platforms/monocle_common/firmware/zephyr/zephyr_only.h\n",
+		// gated IN on linux (OS_LINUX).
+		"build/internal/sysincl/smart_devices_linux.yml": "" +
+			"- source_filter: \"^util\"\n" +
+			"  includes:\n" +
+			"  - sd_linux.h: smart_devices/linux/sd_linux.h\n",
+	})
+
+	set := loadSysInclSetForFS(fs, "x86_64", false, false, OSLinux, func(Warn) {})
+	ctx := newSysinclCtx(set)
+
+	claims := func(includer, header string) ([]VFS, bool) {
+		paths, _, claimed := ctx.lookup(includer, internStr(header))
+
+		return paths, claimed
+	}
+
+	// actions_zephyr.yml is gated out: its header is unknown to the rule set.
+	if paths, claimed := claims("util/foo.cpp", "zephyr_only.h"); claimed {
+		t.Errorf("actions_zephyr.yml gated out: util/foo.cpp acquired zephyr_only.h -> %v", paths)
+	}
+
+	// smart_devices_linux.yml is gated in: a matching includer acquires its header.
+	paths, claimed := claims("util/foo.cpp", "sd_linux.h")
+	if !claimed {
+		t.Fatalf("smart_devices_linux.yml gated in: util/foo.cpp did not acquire sd_linux.h")
+	}
+
+	if len(paths) != 1 || paths[0] != source("smart_devices/linux/sd_linux.h") {
+		t.Errorf("sd_linux.h for util/foo.cpp: got %v, want [smart_devices/linux/sd_linux.h]", paths)
+	}
+
+	// source_filter scope still holds: a non-matching includer does not acquire it.
+	if paths, claimed := claims("adfox/bar.cpp", "sd_linux.h"); claimed {
+		t.Errorf("source_filter ^util: adfox/bar.cpp acquired sd_linux.h -> %v", paths)
+	}
+}
+
 func TestSourceFilter_NegativeLookahead(t *testing.T) {
 	cases := []struct {
 		pat   string
