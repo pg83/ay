@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -199,6 +200,21 @@ type RunProgramStmt struct {
 	Line           int
 }
 
+// SplitCodegenStmt is a SPLIT_CODEGEN(tool prefix opts... [OUT_NUM n]
+// [OUTPUT_INCLUDES ...]) macro (build/internal/plugins/split_codegen.py →
+// _SPLIT_CODEGEN_BASE). The tool consumes <prefix>.in and produces OutNum
+// numbered <prefix>.<i>.cpp parts (auto-compiled), plus <prefix>.cpp (noauto:
+// re-fed via SRCS(${BINDIR}/<prefix>.cpp)) and <prefix>.h. Opts are the trailing
+// positional generator options; cpp-parts = OutNum - 5.
+type SplitCodegenStmt struct {
+	ToolPath       STR
+	Prefix         STR
+	Opts           []STR
+	OutNum         int
+	OutputIncludes []STR
+	Line           int
+}
+
 // FromSandboxStmt is a FROM_SANDBOX(Id [FILE] [PREFIX dir] [EXECUTABLE]
 // OUT/OUT_NOAUTO files [OUTPUT_INCLUDES ...]) macro: it fetches a Sandbox
 // resource and unpacks (or, with FILE, copies) its files into the module build
@@ -346,6 +362,9 @@ func (*RunPythonStmt) stmtMarker() {
 }
 
 func (*FromSandboxStmt) stmtMarker() {
+}
+
+func (*SplitCodegenStmt) stmtMarker() {
 }
 
 func (*ConfigureFileStmt) stmtMarker() {
@@ -1171,6 +1190,12 @@ func buildStmtFor(name string, args []STR, line int, fail func(format string, a 
 		}
 
 		return parseRunPython(args, line)
+	case "SPLIT_CODEGEN":
+		if len(args) < 2 {
+			fail("SPLIT_CODEGEN expects at least 2 arguments (tool prefix), got %d", len(args))
+		}
+
+		return parseSplitCodegen(args, line)
 	case "FROM_SANDBOX":
 
 		if len(args) == 0 {
@@ -1449,6 +1474,71 @@ func parseRunPython(args []STR, line int) *RunPythonStmt {
 		}
 
 		i++
+	}
+
+	return stmt
+}
+
+// splitCodegenDefaultOutNum mirrors split_codegen.py: _DEFAULT_CPP_PARTS (20) +
+// _ADDITIONAL_STREAM_COUNT (5). The producer emits OutNum numbered .cpp parts and
+// passes --cpp-parts (OutNum - splitCodegenStreamCount) to the tool.
+const (
+	splitCodegenDefaultOutNum = 25
+	splitCodegenStreamCount   = 5
+)
+
+var (
+	kwSplitOutNum         = internStr("OUT_NUM")
+	kwSplitOutputIncludes = internStr("OUTPUT_INCLUDES")
+)
+
+// parseSplitCodegen lowers SPLIT_CODEGEN(tool prefix opts... [OUT_NUM n]
+// [OUTPUT_INCLUDES ...]). OUT_NUM (one value) and OUTPUT_INCLUDES (variadic) are
+// keyword sections that may appear anywhere — mirroring the Python macro's
+// keyword args — so tool and prefix are the first two POSITIONAL (non-keyword)
+// tokens, not necessarily args[0]/args[1].
+func parseSplitCodegen(args []STR, line int) *SplitCodegenStmt {
+	stmt := &SplitCodegenStmt{OutNum: splitCodegenDefaultOutNum, Line: line}
+
+	var positional []STR
+	section := STR(0) // 0 = positional
+
+	for _, tok := range args {
+		switch tok {
+		case kwSplitOutNum:
+			section = kwSplitOutNum
+
+			continue
+		case kwSplitOutputIncludes:
+			section = kwSplitOutputIncludes
+
+			continue
+		}
+
+		switch section {
+		case kwSplitOutNum:
+			if n, err := strconv.Atoi(tok.string()); err == nil {
+				stmt.OutNum = n
+			}
+
+			section = 0 // OUT_NUM consumes exactly one value; revert to positional
+		case kwSplitOutputIncludes:
+			stmt.OutputIncludes = append(stmt.OutputIncludes, tok)
+		default:
+			positional = append(positional, tok)
+		}
+	}
+
+	if len(positional) > 0 {
+		stmt.ToolPath = positional[0]
+	}
+
+	if len(positional) > 1 {
+		stmt.Prefix = positional[1]
+	}
+
+	if len(positional) > 2 {
+		stmt.Opts = positional[2:]
 	}
 
 	return stmt
