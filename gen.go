@@ -2469,6 +2469,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			wantsStrip,
 			d.splitDwarf,
 			programModuleTag,
+			len(d.bundles) > 0,
 			d.tc,
 			ctx.host,
 			ctx.scripts,
