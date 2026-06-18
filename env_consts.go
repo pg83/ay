@@ -37,6 +37,7 @@ var (
 	envDYLD_LIBRARY_PATH            = internEnv("DYLD_LIBRARY_PATH")
 	envGEN_PROTO                    = internEnv("GEN_PROTO")
 	envGORACE                       = internEnv("GORACE")
+	envHAVE_MKL                     = internEnv("HAVE_MKL")
 	envLIBRARY_PATH                 = internEnv("LIBRARY_PATH")
 	envLINUX                        = internEnv("LINUX")
 	envLLVM_LLC_TOOL                = internEnv("LLVM_LLC_TOOL")
