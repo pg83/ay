@@ -2169,6 +2169,21 @@ func mustNodeByOutput(t *testing.T, g *Graph, output string) *Node {
 	return nil
 }
 
+func mustNodeByAnyOutput(t *testing.T, g *Graph, output string) *Node {
+	t.Helper()
+
+	for _, n := range g.Graph {
+		for _, o := range n.Outputs {
+			if o.string() == output {
+				return n
+			}
+		}
+	}
+
+	t.Fatalf("graph is missing a node with output %q", output)
+	return nil
+}
+
 func findNodeByOutputPrefix(g *Graph, prefix string) *Node {
 	for _, n := range g.Graph {
 		if len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].string(), prefix) {
