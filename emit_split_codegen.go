@@ -77,14 +77,28 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 	// so a consumer resolving a generated output to a dep edge reads a valid ref.
 	scRef := ctx.emit.reserve()
 
-	// prefix.h carries OUTPUT_INCLUDES; the generated .cpp parts and prefix.cpp
-	// #include the generated header.
+	// Upstream's flat-input model carries the first numbered part (prefix.0.cpp)
+	// and the prefix.in source through the generated closure — never the
+	// generated header prefix.h on a generated cpp compilation.
+	part0 := build(moduleDir + "/" + partRels[0])
+	part0Inc := IncludeDirective{kind: includeQuoted, target: internStr(part0.rel())}
+
+	// prefix.h carries only OUTPUT_INCLUDES as real (traversed) includes. The
+	// generated-from edges (prefix.0.cpp + prefix.in) ride as NON-EXPANDED
+	// closure leaves, not parsed includes: prefix.0.cpp is a generated cpp, so
+	// traversing it would pull the codegen tool's cpp INDUCED_DEPS bucket (a cpp
+	// output reads both the h+cpp and cpp buckets) into header consumers, which
+	// reference lists only on the compiled cpp parts, not on header includers.
 	headerParsed := make([]IncludeDirective, 0, len(sc.OutputIncludes))
 	for _, oi := range sc.OutputIncludes {
 		headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: oi})
 	}
 
-	cppParsed := []IncludeDirective{{kind: includeQuoted, target: internStr(prefixH.rel())}}
+	// The generated .cpp parts and the noauto prefix.cpp #include prefix.0.cpp
+	// (not prefix.h). They are themselves cpp outputs that already carry the cpp
+	// bucket via their own GeneratorRefs, so traversing prefix.0.cpp only re-adds
+	// that bucket (deduped) plus the prefix.0.cpp edge and prefix.in source.
+	cppParsed := []IncludeDirective{part0Inc}
 
 	registerBoundGeneratedParsedOutput(ctx, instance, pkSC, prefixH, headerParsed, scRef, []NodeRef{toolLDRef})
 	registerBoundGeneratedParsedOutput(ctx, instance, pkSC, prefixCpp, cppParsed, scRef, []NodeRef{toolLDRef})
@@ -92,6 +106,15 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 	for _, partRel := range partRels {
 		registerBoundGeneratedParsedOutput(ctx, instance, pkSC, build(moduleDir+"/"+partRel), cppParsed, scRef, []NodeRef{toolLDRef})
 	}
+
+	// prefix.0.cpp carries prefix.in as a closure leaf (the scanner ignores its
+	// self-include); prefix.h carries the prefix.0.cpp edge and prefix.in so a
+	// header consumer inherits the generated-from closure without expanding
+	// prefix.0.cpp's window. Reference order: prefix.0.cpp, then prefix.in.
+	reg := codegenRegForInstance(ctx, instance)
+	reg.addClosureLeaf(part0, inputIn)
+	reg.addClosureLeaf(prefixH, part0)
+	reg.addClosureLeaf(prefixH, inputIn)
 
 	node := &Node{
 		Platform:         instance.Platform,
