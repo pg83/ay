@@ -443,3 +443,64 @@ END()
 		}
 	}
 }
+
+// TestEmitProtoSrcs_SetAppendProtoFilesNotDoubled reproduces the grut auxiliary
+// duplicate-PB-producer abort (T-14). A PROTO_LIBRARY that builds its proto list
+// with SET_APPEND(PROTO_FILES …) and feeds it to SRCS(${PROTO_FILES}) is
+// collected twice by genModule: a probe pass to learn the module type, then a
+// cpp-proto re-collect. When the re-collect env is cloned from the probe-mutated
+// env, SET_APPEND re-appends PROTO_FILES (VAR = "$VAR x"), doubling the list, so
+// the same proto is scheduled for PB generation twice and CodegenRegistry aborts
+// on the duplicate producer. The re-collect must start from a clean module base
+// env, so each proto yields exactly one PB producer.
+func TestEmitProtoSrcs_SetAppendProtoFilesNotDoubled(t *testing.T) {
+	const modPath = "grut/libs/proto/public/auxiliary"
+
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	for path, body := range map[string]string{
+		modPath + "/ya.make": `PROTO_LIBRARY()
+
+SET_APPEND(PROTO_FILES
+    foo.proto
+)
+
+SRCS(${PROTO_FILES})
+
+LIST_PROTO(${PROTO_FILES})
+
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+
+END()
+`,
+		modPath + "/foo.proto":           "syntax = \"proto3\";\npackage grut.auxiliary;\n",
+		"contrib/libs/protobuf/ya.make":  "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n",
+	} {
+		files[path] = body
+	}
+
+	g := testGen(newMemFS(files), modPath)
+
+	var pbH, pbCC int
+	for _, n := range g.Graph {
+		if n.KV.P != pkPB {
+			continue
+		}
+		for _, out := range n.Outputs {
+			switch out.string() {
+			case "$(B)/" + modPath + "/foo.pb.h":
+				pbH++
+			case "$(B)/" + modPath + "/foo.pb.cc":
+				pbCC++
+			}
+		}
+	}
+
+	if pbH != 1 {
+		t.Errorf("expected exactly one PB producer for foo.pb.h, got %d", pbH)
+	}
+	if pbCC != 1 {
+		t.Errorf("expected exactly one PB producer for foo.pb.cc, got %d", pbCC)
+	}
+}
