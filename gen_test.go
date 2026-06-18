@@ -2252,3 +2252,50 @@ func TestProgramBinaryName_Py3ProgramBinArgWins(t *testing.T) {
 		t.Fatalf("PROGRAM(foo) binary name = %q, want foo", got)
 	}
 }
+
+// TestGen_CppEvlog_PropagatesEventlogGlobalAddIncl reproduces T-8: a
+// PROTO_LIBRARY with CPP_EVLOG() must gain library/cpp/eventlog as a C++ peer
+// (upstream: CPP_EVLOG -> CPP_PROTO_PLUGIN0(... DEPS library/cpp/eventlog) ->
+// PEERDIR). eventlog transitively PEERDIRs a leaf declaring
+// ADDINCL(GLOBAL leaf/include); a consumer PEERDIRing the proto must therefore
+// compile with -I$(S)/leaf/include. Before modelling CPP_EVLOG (it was a
+// no-op stub) the eventlog peer edge was absent, so the GLOBAL include never
+// reached the consumer's CC command. Mirrors the cookie_cleaner.cpp.o sg7 case.
+func TestGen_CppEvlog_PropagatesEventlogGlobalAddIncl(t *testing.T) {
+	files := map[string]string{}
+	writeTestModuleFile(files, "leaf/ya.make", "LIBRARY()\nADDINCL(GLOBAL leaf/include)\nSRCS(leaf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "leaf/leaf.cpp", "int leaf(){return 0;}\n")
+	writeTestModuleFile(files, "leaf/include/.keep", "")
+	writeTestModuleFile(files, "library/cpp/eventlog/ya.make", "LIBRARY()\nPEERDIR(leaf)\nSRCS(eventlog.cpp)\nEND()\n")
+	writeTestModuleFile(files, "library/cpp/eventlog/eventlog.cpp", "int eventlog(){return 0;}\n")
+
+	writeTestModuleFile(files, "protos/ya.make", "PROTO_LIBRARY()\nSET(PROTOC_TRANSITIVE_HEADERS \"no\")\nCPP_EVLOG()\nSRCS(main.proto)\nEND()\n")
+	writeTestModuleFile(files, "protos/main.proto", "syntax = \"proto3\";\npackage test;\nmessage Main { string value = 1; }\n")
+
+	writeTestModuleFile(files, "consumer/ya.make", "LIBRARY()\nPEERDIR(protos)\nSRCS(consumer.cpp)\nEND()\n")
+	writeTestModuleFile(files, "consumer/consumer.cpp", "int consumer(){return 0;}\n")
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "consumer")
+
+	consumerCC := mustNodeByOutput(t, g, "$(B)/consumer/consumer.cpp.o")
+	if len(consumerCC.Cmds) == 0 {
+		t.Fatal("consumer CC node has no commands")
+	}
+	args := consumerCC.Cmds[0].CmdArgs.flat()
+	want := "-I$(S)/leaf/include"
+	if indexOfArg(args, want) == -1 {
+		var iFlags []string
+		for _, a := range strStrs(args) {
+			if strings.HasPrefix(a, "-I") {
+				iFlags = append(iFlags, a)
+			}
+		}
+		t.Fatalf("consumer CC -I flags = %v; want %q (CPP_EVLOG must peer library/cpp/eventlog so its transitive GLOBAL ADDINCL reaches the consumer)", iFlags, want)
+	}
+}
