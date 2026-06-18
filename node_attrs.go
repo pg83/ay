@@ -10,6 +10,7 @@ var procKindStr = [...]string{
 	pkCF: "CF", pkCH: "CH", pkCP: "CP", pkCY: "CY", pkEN: "EN", pkEV: "EV",
 	pkFETCH: "FT", pkFL: "FL", pkJS: "JS", pkJV: "JV", pkLD: "LD", pkOP: "OP",
 	pkPB: "PB", pkPR: "PR", pkPY: "PY", pkR5: "R5", pkR6: "R6", pkRD: "RD",
+	pkSB:   "SB",
 	pkSTUB: "STUB", pkSW: "SW", pkTEST: "TEST", pkTEST2: "TEST2", pkTS: "TS", pkYC: "YC",
 	pkld: "ld", pkDX: "DX",
 }
@@ -185,6 +186,7 @@ const (
 	pkR5
 	pkR6
 	pkRD
+	pkSB
 	pkSTUB
 	pkSW
 	pkTEST
