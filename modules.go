@@ -2252,6 +2252,16 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		plugin := parseCPPProtoPlugin(v)
 		d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
 		d.peerdirs = append(d.peerdirs, STRS(plugin.Deps...)...)
+	case tokCppEvlog:
+		// CPP_EVLOG() expands to CPP_PROTO_PLUGIN0(event2cpp tools/event2cpp
+		// DEPS library/cpp/eventlog) + ENABLE(_BUILD_PROTO_AS_EVLOG)
+		// (build/conf/proto.conf). The DEPS land in CPP_PROTOBUF_PEERS, which
+		// ymake.core.conf folds into the CPP_PROTO submodule's PEERDIR — the
+		// same path as tokCppProtoPlugin0 above. Model only that C++ peer edge
+		// so library/cpp/eventlog's transitive GLOBAL ADDINCL propagates into
+		// the proto compile (and its consumers); the event2cpp codegen /
+		// _BUILD_PROTO_AS_EVLOG output modeling remains out of scope.
+		d.peerdirs = append(d.peerdirs, strLibraryCppEventlog)
 	case tokYaff:
 		d.cppProtoPlugins = append(d.cppProtoPlugins, parseYAFF(v))
 	case tokYaffSchema:
