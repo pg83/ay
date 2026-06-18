@@ -1248,7 +1248,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 		case *ResourceFilesStmt:
 			ensureResourcePeer(modulePath, d)
 
-			expanded := expandResourceFiles(strStrings(v.Args))
+			expanded := expandResourceFiles(strStrings(expandStmtTokensSTR(v.Args, env)))
 
 			for i, e := range expanded {
 				if i == len(expanded)-1 {
@@ -2213,7 +2213,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		}
 	case tokSetAppend:
 
-		if len(v.Args) >= 2 {
+		if len(v.Args) >= 1 {
 			switch v.Args[0].string() {
 			case "SFLAGS":
 				d.sFlags = append(d.sFlags, internArgsFromSTR(v.Args[1:])...)
@@ -2226,6 +2226,26 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 					d.rpathFlagsGlobal = append(d.rpathFlagsGlobal, internArg(arg))
 				}
 			}
+
+			// Bind the variable like SET does (case *SetStmt), with upstream's
+			// append semantics — SET_APPEND(VAR x) sets VAR to "$VAR x"
+			// (macro_processor.cpp). The accumulated value then expands wherever a
+			// later macro references ${VAR} (FROM_SANDBOX OUT, RESOURCE_FILES, …).
+			// Args arrive already expanded, matching upstream's eval-then-join.
+			name := v.Args[0].string()
+			value := strings.Join(strStrings(v.Args[1:]), " ")
+
+			if prev, ok := env.lookup(name); ok && prev != "" {
+				value = prev + " " + value
+			}
+
+			env.setFromString(internEnv(name), value)
+
+			if d.setVars == nil {
+				d.setVars = map[STR]STR{}
+			}
+
+			d.setVars[internStr(name)] = internStr(value)
 		}
 	case tokInducedDeps:
 

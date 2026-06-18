@@ -333,6 +333,49 @@ func TestCollectModule_PySrcsExpandsSetList(t *testing.T) {
 	}
 }
 
+func TestCollectModule_SetAppendExpandsResourceAndSandboxInputs(t *testing.T) {
+	// yabs/plutonium/libs/dictionaries_resource builds its file list with
+	// SET_APPEND(PLUTONIUM_IN_YABS_DICTIONARIES …) then references it as
+	// ${PLUTONIUM_IN_YABS_DICTIONARIES} in FROM_SANDBOX(OUT_NOAUTO …) and
+	// RESOURCE_FILES(…). Upstream SET_APPEND(VAR x) binds VAR to "$VAR x", so the
+	// reference expands before resource/sandbox input resolution. Without the
+	// binding the literal ${VAR} survives as a nonexistent path segment
+	// (open …/${PLUTONIUM_IN_YABS_DICTIONARIES}: no such file).
+	src := "LIBRARY()\n" +
+		"SET_APPEND(VAR\n    d/2.dict\n    d/3.dict\n)\n" +
+		"FROM_SANDBOX(123 OUT_NOAUTO\n    ${VAR}\n)\n" +
+		"RESOURCE_FILES(${VAR})\n" +
+		"END()\n"
+
+	mf, err := parse(testParserFS, "ya.make", []byte(src))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+
+	d := collectModule(newIncludeParserManagerFS(newMemFS(nil), newSharedParseCache()), &DeDuper{}, "mod", KindLib,
+		mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}))
+
+	if len(d.fromSandboxes) != 1 {
+		t.Fatalf("fromSandboxes = %d, want 1", len(d.fromSandboxes))
+	}
+
+	if !equalStrings(strStrings(d.fromSandboxes[0].OUTNoAutoFiles), []string{"d/2.dict", "d/3.dict"}) {
+		t.Fatalf("OUT_NOAUTO = %v, want [d/2.dict d/3.dict]", d.fromSandboxes[0].OUTNoAutoFiles)
+	}
+
+	var paths []string
+
+	for _, e := range d.resources {
+		if e.Path != "-" {
+			paths = append(paths, e.Path)
+		}
+	}
+
+	if !equalStrings(paths, []string{"d/2.dict", "d/3.dict"}) {
+		t.Fatalf("RESOURCE_FILES paths = %v, want [d/2.dict d/3.dict]", paths)
+	}
+}
+
 func TestExpandConfigVFSPaths_SplitsSetList(t *testing.T) {
 	// ADDINCL(${__dirs_}) where __dirs_ is a SET-list must expand+split into one
 	// VFS per dir (bdb: src + src/dbinc + …), via the same expandStmtTokens
