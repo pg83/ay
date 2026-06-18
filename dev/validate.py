@@ -209,7 +209,12 @@ def measured_generate(name, gen, raw, budget):
 
 
 def main() -> int:
-    out_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(REPO_ROOT, ".out", "validate")
+    # Absolutize: AY / WORK_CWD / the per-case paths below are all derived from
+    # out_dir and then used from processes whose cwd is WORK_CWD=out_dir. A relative
+    # out_dir (e.g. `.out/reviewer-validate`) would re-resolve against that cwd and
+    # double-nest (the normalize .tmp then lands under out_dir/out_dir and os.replace
+    # fails). Resolve once, up front, so every derived path is cwd-independent.
+    out_dir = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(REPO_ROOT, ".out", "validate"))
     os.makedirs(out_dir, exist_ok=True)
 
     # Build the binary into the writable out-dir (never into REPO_ROOT, which may
