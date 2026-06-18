@@ -50,8 +50,14 @@ PARITY_LINE = re.compile(
 )
 
 
+_LOG_LOCK = threading.Lock()
+
+
 def log(msg=""):
-    print(msg, flush=True)
+    # Line-atomic: OLD and NEW stream concurrently, so guard the print so their
+    # prefixed lines never interleave mid-line.
+    with _LOG_LOCK:
+        print(msg, flush=True)
 
 
 def run_validate(label, repo, out_dir):
@@ -211,24 +217,38 @@ def main():
     log(f"[acceptance] work = {work}")
 
     try:
-        # Each repo validates into its own fresh subdir (no cross-run staleness);
-        # the multi-GB graph dumps are freed as soon as the run's text output is
-        # captured, so peak disk stays at one repo's footprint, not both.
-        old_out = os.path.join(work, "old")
-        done_old, out_old = run_validate("OLD", old_repo, old_out)
-        shutil.rmtree(old_out, ignore_errors=True)
+        # Run OLD and NEW concurrently in two threads — the sg7 generation
+        # dominates wall time, so parallelizing roughly halves it. Each run
+        # streams its own [OLD]/[NEW]-prefixed output (log() is line-atomic) into
+        # its own fresh subdir (no cross-run staleness) and frees that subdir's
+        # multi-GB graph dumps as soon as its text output is captured. Peak disk
+        # is both repos at once — accepted for the wall-time win; the watchdog
+        # timeout fires per run independently.
+        results = {}
 
-        if not done_old:
-            log("[acceptance] VERDICT: REJECT (OLD validate.py did not complete in budget)")
+        def worker(label, repo, out):
+            done, output = run_validate(label, repo, out)
+            shutil.rmtree(out, ignore_errors=True)
+            results[label] = (done, output)
 
-            return 1
+        threads = [
+            threading.Thread(target=worker, args=("OLD", old_repo, os.path.join(work, "old"))),
+            threading.Thread(target=worker, args=("NEW", new_repo, os.path.join(work, "new"))),
+        ]
 
-        new_out = os.path.join(work, "new")
-        done_new, out_new = run_validate("NEW", new_repo, new_out)
-        shutil.rmtree(new_out, ignore_errors=True)
+        for t in threads:
+            t.start()
 
-        if not done_new:
-            log("[acceptance] VERDICT: REJECT (NEW validate.py did not complete in budget)")
+        for t in threads:
+            t.join()
+
+        done_old, out_old = results["OLD"]
+        done_new, out_new = results["NEW"]
+
+        not_done = [lbl for lbl in ("OLD", "NEW") if not results[lbl][0]]
+
+        if not_done:
+            log(f"[acceptance] VERDICT: REJECT ({' & '.join(not_done)} validate.py did not complete in budget)")
 
             return 1
 
