@@ -1,7 +1,6 @@
 package main
 
 import (
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -681,30 +680,5 @@ func TestGen_FbsSrcsInduceFlatbuffersLinkDep(t *testing.T) {
 	}
 	if fbIdx > arrowlikeIdx {
 		t.Errorf("flatbuffers [%d] appears after arrowlike [%d] in link args; want flatbuffers before the owning library", fbIdx, arrowlikeIdx)
-	}
-}
-
-func TestReorderLDMembers_LegacyDoubleUnderscorePathsTrailRegularSources(t *testing.T) {
-	refs := []NodeRef{1, 2, 3}
-	paths := []VFS{
-		intern("$(B)/contrib/tools/swig/_/Source/CParse/cscanner.c.pic.o"),
-		intern("$(B)/contrib/tools/swig/_/_/Source/CParse/parser.y.c.pic.o"),
-		intern("$(B)/contrib/tools/swig/_/Source/CParse/templ.c.pic.o"),
-	}
-
-	gotRefs, gotPaths := reorderLDMembers(refs, paths)
-
-	wantRefs := []NodeRef{1, 3, 2}
-	if !reflect.DeepEqual(gotRefs, wantRefs) {
-		t.Fatalf("ld refs mismatch:\n  got:  %#v\n  want: %#v", gotRefs, wantRefs)
-	}
-
-	wantPaths := []string{
-		"$(B)/contrib/tools/swig/_/Source/CParse/cscanner.c.pic.o",
-		"$(B)/contrib/tools/swig/_/Source/CParse/templ.c.pic.o",
-		"$(B)/contrib/tools/swig/_/_/Source/CParse/parser.y.c.pic.o",
-	}
-	if got := vfsStrings(gotPaths); !reflect.DeepEqual(got, wantPaths) {
-		t.Fatalf("ld paths mismatch:\n  got:  %#v\n  want: %#v", got, wantPaths)
 	}
 }

@@ -2289,7 +2289,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		ldCCRefs := ccRefs
 		ldCCOutputs := ccOutputs
-		ldCCRefs, ldCCOutputs = reorderLDMembers(ldCCRefs, ldCCOutputs)
+		// A program links its own objects in the same order it would archive them:
+		// ymake lists $AUTO_INPUT in statement-processing ((prio, name) then decl)
+		// order, with generated-source compiles deferred a FIFO round. Same key,
+		// same map — see reorderARMembers.
+		ldCCRefs, ldCCOutputs = reorderARMembers(ldCCRefs, ldCCOutputs, arDeclMeta)
 
 		var ldObjcopyRefs []NodeRef
 		var ldObjcopyPaths []VFS
@@ -3222,47 +3226,6 @@ func isCodegenProducingSrc(srcRel string) bool {
 		strings.HasSuffix(srcRel, ".y") ||
 		strings.HasSuffix(srcRel, ".cpp.in") ||
 		strings.HasSuffix(srcRel, ".c.in")
-}
-
-func reorderLDMembers(refs []NodeRef, paths []VFS) ([]NodeRef, []VFS) {
-	if len(paths) == 0 {
-		return refs, paths
-	}
-
-	type member struct {
-		ref  NodeRef
-		path VFS
-	}
-
-	regular := make([]member, 0, len(paths))
-	legacy := make([]member, 0, len(paths))
-
-	for i, path := range paths {
-		m := member{path: path}
-
-		if i < len(refs) {
-			m.ref = refs[i]
-		}
-
-		if strings.Contains(path.rel(), "/_/_/") {
-			legacy = append(legacy, m)
-
-			continue
-		}
-
-		regular = append(regular, m)
-	}
-
-	out := append(regular, legacy...)
-	outRefs := make([]NodeRef, len(out))
-	outPaths := make([]VFS, len(out))
-
-	for i, m := range out {
-		outRefs[i] = m.ref
-		outPaths[i] = m.path
-	}
-
-	return outRefs, outPaths
 }
 
 // reorderARMembers reproduces ymake's AR member order. ymake processes a
