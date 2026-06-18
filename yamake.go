@@ -215,6 +215,18 @@ type SplitCodegenStmt struct {
 	Line           int
 }
 
+// BaseCodegenStmt is a BASE_CODEGEN(Tool, Prefix, Opts...) macro
+// (build/internal/conf/codegen.conf). The tool consumes <prefix>.in and produces
+// <prefix>.cpp (noauto: re-fed via SRCS(${BINDIR}/<prefix>.cpp) only when the
+// module declares it) and <prefix>.h. Opts are trailing positional generator
+// options. Unlike SPLIT_CODEGEN there are no numbered parts and no --cpp-parts.
+type BaseCodegenStmt struct {
+	ToolPath STR
+	Prefix   STR
+	Opts     []STR
+	Line     int
+}
+
 // FromSandboxStmt is a FROM_SANDBOX(Id [FILE] [PREFIX dir] [EXECUTABLE]
 // OUT/OUT_NOAUTO files [OUTPUT_INCLUDES ...]) macro: it fetches a Sandbox
 // resource and unpacks (or, with FILE, copies) its files into the module build
@@ -365,6 +377,9 @@ func (*FromSandboxStmt) stmtMarker() {
 }
 
 func (*SplitCodegenStmt) stmtMarker() {
+}
+
+func (*BaseCodegenStmt) stmtMarker() {
 }
 
 func (*ConfigureFileStmt) stmtMarker() {
@@ -1197,6 +1212,12 @@ func buildStmtFor(name string, args []STR, line int, fail func(format string, a 
 		}
 
 		return parseSplitCodegen(args, line)
+	case "BASE_CODEGEN":
+		if len(args) < 2 {
+			fail("BASE_CODEGEN expects at least 2 arguments (tool prefix), got %d", len(args))
+		}
+
+		return parseBaseCodegen(args, line)
 	case "FROM_SANDBOX":
 
 		if len(args) == 0 {
@@ -1540,6 +1561,19 @@ func parseSplitCodegen(args []STR, line int) *SplitCodegenStmt {
 
 	if len(positional) > 2 {
 		stmt.Opts = positional[2:]
+	}
+
+	return stmt
+}
+
+// parseBaseCodegen lowers BASE_CODEGEN(Tool, Prefix, Opts...): the first two
+// tokens are the tool path and prefix; the remainder are positional generator
+// opts. The macro takes no keyword sections.
+func parseBaseCodegen(args []STR, line int) *BaseCodegenStmt {
+	stmt := &BaseCodegenStmt{ToolPath: args[0], Prefix: args[1], Line: line}
+
+	if len(args) > 2 {
+		stmt.Opts = args[2:]
 	}
 
 	return stmt
