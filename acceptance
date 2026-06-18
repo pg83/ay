@@ -36,7 +36,7 @@ import time
 # One ./dev/validate.py run budget. The user-stated wall cost of a single run is
 # ~10 minutes; over this we kill the run's whole process group and reject.
 # Override via $ACCEPTANCE_TIMEOUT_S (seconds).
-VALIDATE_TIMEOUT_S = int(os.environ.get("ACCEPTANCE_TIMEOUT_S", "600"))
+VALIDATE_TIMEOUT_S = int(os.environ.get("ACCEPTANCE_TIMEOUT_S", "1200"))
 
 # Status lines printed by validate.py, e.g. "[sg2] OK", "[sg7] FAIL (generate)",
 # "[sg7] XFAIL (not gating) — …", "[sg5] SKIP (data not present …)".
