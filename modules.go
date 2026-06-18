@@ -2798,6 +2798,24 @@ func buildIfEnv(instance ModuleInstance) Environment {
 		env.setBool(envARCH_ARM64, true)
 	}
 
+	// HAVE_MKL — the BLAS/LAPACK contrib selectors (contrib/libs/clapack,
+	// contrib/libs/cblas) branch IF(HAVE_MKL) between
+	// PEERDIR(contrib/libs/intel/mkl) and the source-build fallback
+	// (clapack/cblas/libf2c). Upstream binds it in two ordered steps:
+	//   1. ymake.core.conf:373 `when ($HAVE_MKL == "")` — default yes iff a
+	//      non-sanitized linux/x86_64 contour; a ya.conf flag binding wins.
+	//   2. opensource.conf:19 — forced no *unconditionally* under OPENSOURCE,
+	//      applied after the default guard, so it overrides even an explicit
+	//      HAVE_MKL=yes flag.
+	if !env.hasBindingID(envHAVE_MKL) {
+		haveMkl := env.bool(envOS_LINUX) && env.bool(envARCH_X86_64) &&
+			env.string(envSANITIZER_TYPE) == ""
+		env.setBool(envHAVE_MKL, haveMkl)
+	}
+	if env.bool(envOPENSOURCE) {
+		env.setBool(envHAVE_MKL, false)
+	}
+
 	// The module-relative path vars upstream's macro expansion provides in
 	// every macro: braced (${CURDIR}) and bare ($CURDIR mid-token, via
 	// expandEmbeddedDollarVars) forms both resolve through this binding.
