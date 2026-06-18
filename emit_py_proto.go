@@ -250,11 +250,33 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 		toolRefs = append(toolRefs, depRefs(pe.mypyRef)...)
 	}
 
-	inputs := []VFS{protocBinary, pbPyWrapperVFS, source(protoRelPath)}
-	protoVFS := source(protoRelPath)
-	transitive := walkClosureTail(ctx.scannerFor(instance), protoVFS, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()).ScanCfg)
+	// SRCS(X.proto) may name a build-generated .proto (e.g. an IF(GEN_PROTO)
+	// RUN_PROGRAM/RUN_ANTLR STDOUT — irt/bannerland/proto/banner_flags/
+	// banner_flags.proto). Mirror the C++ PB override (emit_proto.go / emitPB):
+	// swap the proto input to the $(B) build path, pin the producer as a dep,
+	// fold in the producer's $(S) source inputs, and run protoc from $(B).
+	// Without this the py PB node lists a nonexistent $(S) .proto and finalize
+	// content-hashing faults on it. The codegen registry is shared per platform,
+	// and emitPyProtoSrcs generates the C++ sibling first, so the JV producer is
+	// already registered by the time this lookup runs.
+	protoSrcVFS := source(protoRelPath)
+	protoCwd := strS
+
+	var producerDeps []NodeRef
+	var producerSourceInputs []VFS
+
+	if info := codegenRegForInstance(ctx, instance).lookup(build(protoRelPath)); info != nil {
+		protoSrcVFS = build(protoRelPath)
+		protoCwd = strB
+		producerDeps = []NodeRef{info.ProducerRef}
+		producerSourceInputs = info.SourceInputs
+	}
+
+	inputs := []VFS{protocBinary, pbPyWrapperVFS, protoSrcVFS}
+	transitive := walkClosureTail(ctx.scannerFor(instance), source(protoRelPath), protoWalkInputs(ctx.parsers, nil, instance.Path.rel()).ScanCfg)
 
 	inputs = append(inputs, transitive...)
+	inputs = append(inputs, producerSourceInputs...)
 
 	if d.grpc {
 		inputs = append(inputs, pe.grpcPyBinary)
@@ -276,13 +298,14 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 
 	pyPBNode := &Node{
 		Platform:         instance.Platform,
-		Cmds:             na.cmdList(Cmd{CmdArgs: cmdArgs, Cwd: strS, Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}}),
+		Cmds:             na.cmdList(Cmd{CmdArgs: cmdArgs, Cwd: protoCwd, Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}}),
 		Env:              EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
 		Inputs:           na.inputList(inputs),
 		Outputs:          outputs,
 		KV:               pbKV,
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleTag: tagPy3Proto},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		DepRefs:          producerDeps,
 		Resources:        usesPython3,
 	}
 
