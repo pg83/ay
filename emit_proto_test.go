@@ -307,3 +307,139 @@ END()
 			parserCpp, lexerCpp, pbCC, ar.flatInputs())
 	}
 }
+
+// TestEmitPyProtoSrc_GeneratedProtoWiresProducerDep is the Python protobuf
+// analogue of TestEmitProtoSrcs_GeneratedProtoWiresProducerDep: a PROTO_LIBRARY
+// whose SRCS(X.proto) is the OUT of a RUN_ANTLR (no on-disk X.proto), consumed
+// by a PY3_LIBRARY. Upstream wires the python protoc (PB) node to the build-tree
+// proto, takes the producer dependency, and carries the producer's $(S) leaf
+// sources. Before the fix the py PB node listed $(S)/.../JsonPathParser.proto —
+// a nonexistent source path that faults sandboxing content-hashing — with no
+// producer dep and no producer source inputs.
+func TestEmitPyProtoSrc_GeneratedProtoWiresProducerDep(t *testing.T) {
+	const modPath = "yql/essentials/parser/proto_ast/gen/jsonpath"
+	const consumer = "app/pytool"
+
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "py3cc_slow")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	for path, body := range map[string]string{
+		consumer + "/ya.make": `PY3_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+PEERDIR(` + modPath + `)
+END()
+`,
+		modPath + "/ya.make": `PROTO_LIBRARY()
+NO_MYPY()
+
+IF (GEN_PROTO)
+    SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
+    SET(antlr_templates ${antlr_output}/org/antlr/codegen/templates)
+    SET(jsonpath_grammar ${ARCADIA_ROOT}/yql/essentials/minikql/jsonpath/JsonPath.g)
+
+    CONFIGURE_FILE(${ARCADIA_ROOT}/templates/protobuf.stg.in ${antlr_templates}/protobuf/protobuf.stg)
+
+    RUN_ANTLR(
+        ${jsonpath_grammar}
+        -lib .
+        -fo ${antlr_output}
+        -language protobuf
+        IN ${jsonpath_grammar} ${antlr_templates}/protobuf/protobuf.stg
+        OUT_NOAUTO JsonPathParser.proto
+        CWD ${antlr_output}
+    )
+ENDIF()
+
+SRCS(JsonPathParser.proto)
+
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+
+END()
+`,
+		"templates/protobuf.stg.in":                  "stub stg\n",
+		"yql/essentials/minikql/jsonpath/JsonPath.g": "stub grammar\n",
+		"contrib/libs/protobuf/ya.make":              "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n",
+		"contrib/python/protobuf/ya.make":            "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nEND()\n",
+		"contrib/libs/python/ya.make":                "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
+	} {
+		files[path] = body
+	}
+
+	g := testGen(newMemFS(files), consumer)
+
+	var pyPB *Node
+	for _, n := range g.Graph {
+		if n.KV.P == pkPB && n.TargetProperties.ModuleTag == tagPy3Proto &&
+			strings.HasSuffix(n.Outputs[0].string(), "JsonPathParser__intpy3___pb2.py") {
+			pyPB = n
+			break
+		}
+	}
+	if pyPB == nil {
+		t.Fatal("no python PB node for JsonPathParser__intpy3___pb2.py emitted")
+	}
+
+	byOut := make(map[string]*Node, len(g.Graph))
+	for _, n := range g.Graph {
+		if len(n.Outputs) > 0 {
+			byOut[n.Outputs[0].string()] = n
+		}
+	}
+	jv := byOut["$(B)/"+modPath+"/JsonPathParser.proto"]
+	if jv == nil {
+		t.Fatal("no JV node producing JsonPathParser.proto")
+	}
+
+	// (1) build-tree proto input, not the nonexistent $(S) source.
+	hasBuildProto := false
+	hasSourceProto := false
+	for _, in := range pyPB.flatInputs() {
+		switch in.string() {
+		case "$(B)/" + modPath + "/JsonPathParser.proto":
+			hasBuildProto = true
+		case "$(S)/" + modPath + "/JsonPathParser.proto":
+			hasSourceProto = true
+		}
+	}
+	if !hasBuildProto {
+		t.Errorf("py PB.flatInputs() does not include $(B)/.../JsonPathParser.proto: %v", vfsStringsT3(pyPB.flatInputs()))
+	}
+	if hasSourceProto {
+		t.Errorf("py PB.flatInputs() still lists the nonexistent $(S)/.../JsonPathParser.proto: %v", vfsStringsT3(pyPB.flatInputs()))
+	}
+
+	// (2) producer dependency.
+	found := false
+	for _, d := range graphDeps(g, pyPB) {
+		if d == jv.UID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("graphDeps(g, pyPB) %v does not include JV(.proto) uid %q", graphDeps(g, pyPB), jv.UID)
+	}
+
+	// (3) producer source inputs ride on the py PB node's flat inputs.
+	have := make(map[string]struct{}, len(pyPB.flatInputs()))
+	for _, in := range pyPB.flatInputs() {
+		have[in.string()] = struct{}{}
+	}
+	for _, want := range []string{
+		"$(S)/yql/essentials/minikql/jsonpath/JsonPath.g",
+		"$(S)/templates/protobuf.stg.in",
+		"$(S)/contrib/java/antlr/antlr3/antlr.jar",
+		"$(S)/build/scripts/configure_file.py",
+		"$(S)/build/scripts/stdout2stderr.py",
+	} {
+		if _, ok := have[want]; !ok {
+			t.Errorf("py PB.flatInputs() missing producer source input %q: %v", want, vfsStringsT3(pyPB.flatInputs()))
+		}
+	}
+}
