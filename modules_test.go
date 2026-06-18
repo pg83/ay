@@ -61,6 +61,100 @@ func TestApplyUnknownStmt_AddInclSelf(t *testing.T) {
 	}
 }
 
+// internalContourPlatform builds a platform whose Flags omit OPENSOURCE, so
+// buildIfEnv reaches the ymake.core.conf HAVE_MKL default rather than the
+// opensource.conf HAVE_MKL=no override (testTargetP/testHostP both carry
+// OPENSOURCE=yes).
+func internalContourPlatform(os OS, isa ISA, sanitizer string) *Platform {
+	flags := make(map[string]string, len(testToolchainFlags)+1)
+	for k, v := range testToolchainFlags {
+		if k == "OPENSOURCE" {
+			continue
+		}
+		flags[k] = v
+	}
+	if sanitizer != "" {
+		flags["SANITIZER_TYPE"] = sanitizer
+	}
+	return newPlatform(newMemFS(nil), os, isa, flags, "", "")
+}
+
+// opensourceHaveMklYesPlatform builds an OPENSOURCE=yes platform that *also*
+// carries an explicit HAVE_MKL=yes flag (as a ya.conf binding would). It pins
+// the opensource.conf:19 ordering: that override is unconditional and applied
+// after the ymake.core.conf default guard, so it must beat an existing
+// HAVE_MKL=yes binding rather than being skipped because HAVE_MKL is already set.
+func opensourceHaveMklYesPlatform(os OS, isa ISA) *Platform {
+	flags := make(map[string]string, len(testToolchainFlags)+1)
+	for k, v := range testToolchainFlags {
+		flags[k] = v
+	}
+	flags["HAVE_MKL"] = "yes"
+	return newPlatform(newMemFS(nil), os, isa, flags, "", "")
+}
+
+// TestBuildIfEnv_HaveMklFollowsUpstreamEnv pins the upstream HAVE_MKL default
+// (ymake.core.conf:373 — yes iff OS_LINUX && ARCH_X86_64 && !SANITIZER_TYPE,
+// forced no under OPENSOURCE) and proves an IF(HAVE_MKL) module selects the
+// MKL PEERDIR exactly when the configured environment selects MKL — the sg7
+// clapack/cblas/libf2c branch-mismatch regression.
+func TestBuildIfEnv_HaveMklFollowsUpstreamEnv(t *testing.T) {
+	const mklPeer = "contrib/libs/intel/mkl"
+	const fallbackPeer = "contrib/libs/clapack/part1"
+
+	mklYaMake := `LIBRARY()
+NO_UTIL()
+NO_RUNTIME()
+IF (HAVE_MKL)
+PEERDIR(` + mklPeer + `)
+ELSE()
+PEERDIR(` + fallbackPeer + `)
+ENDIF()
+END()
+`
+
+	tests := []struct {
+		name     string
+		platform *Platform
+		wantMkl  bool
+	}{
+		{"linux_x86_64_internal", internalContourPlatform(OSLinux, ISAX8664, ""), true},
+		{"linux_aarch64_internal", internalContourPlatform(OSLinux, ISAAArch64, ""), false},
+		{"linux_x86_64_sanitizer", internalContourPlatform(OSLinux, ISAX8664, "address"), false},
+		{"linux_x86_64_opensource", newTestPlatform(OSLinux, ISAX8664, "no"), false},
+		{"linux_x86_64_opensource_have_mkl_flag", opensourceHaveMklYesPlatform(OSLinux, ISAX8664), false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			env := buildIfEnv(ModuleInstance{Kind: KindLib, Platform: tc.platform})
+
+			if got := env.bool(envHAVE_MKL); got != tc.wantMkl {
+				t.Fatalf("HAVE_MKL = %v, want %v", got, tc.wantMkl)
+			}
+
+			fs := newMemFS(map[string]string{"contrib/libs/cblas/ya.make": mklYaMake})
+			mf := throw2(parseFile(fs, "contrib/libs/cblas/ya.make"))
+			d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "contrib/libs/cblas", KindLib, mf.Stmts, env)
+
+			hasMkl, hasFallback := false, false
+			for _, p := range d.peerdirs {
+				switch p.string() {
+				case mklPeer:
+					hasMkl = true
+				case fallbackPeer:
+					hasFallback = true
+				}
+			}
+
+			if hasMkl != tc.wantMkl || hasFallback == tc.wantMkl {
+				t.Fatalf("peerdirs=%v: MKL=%v fallback=%v, want MKL=%v fallback=%v",
+					d.peerdirs, hasMkl, hasFallback, tc.wantMkl, !tc.wantMkl)
+			}
+		})
+	}
+}
+
 func TestApplyUnknownStmt_LLVMBCRequiresConfiguredVersion(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
 
