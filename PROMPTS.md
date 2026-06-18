@@ -13,6 +13,8 @@ DEBUG.md — how to debug divergences between the upstream graph and ours.
 
 Write a thorough `descr` for every ticket: 8–10 sentences that make the work unambiguous — what to change, why, where in the code, what the upstream reference behavior is, and what "done" looks like. A one-liner is not enough; the digger and tasker must be able to act on the `descr` alone without guessing your intent.
 
+Слушай сюда, дебил. Не давай задачи вида "сведи разницу в 0", она может быть сильно больше, чем ты думаешь. Давай конкретные задачи - свести какую-то конкретную одну причину.
+
 Tip — don't put concrete numbers in tickets. "reduce the difference in CC nodes by 2x or more" is better than "close the gap entirely".
 Tip — read all the plans from closed `plan` tasks.
 
@@ -21,8 +23,6 @@ One of your jobs is to study the new workspaces and messages, understand where t
 * replan tickets
 * if you see the team is missing tooling — plan tasks to build it
 * if you see the quality-acceptance tooling is flaky or not good enough — plan tickets to improve it
-
-### TASKER
 
 ### DIGGER
 
