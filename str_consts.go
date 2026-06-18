@@ -31,6 +31,7 @@ var (
 	kwEXPERIMENTAL                                   = internStr("EXPERIMENTAL")
 	kwFILES                                          = internStr("FILES")
 	kwFOR                                            = internStr("FOR")
+	kwFUNCNAME                                       = internStr("FUNCNAME")
 	kwGENERATE_ENUM_SERIALIZATION                    = internStr("GENERATE_ENUM_SERIALIZATION")
 	kwGENERATE_ENUM_SERIALIZATION_NOUTF              = internStr("GENERATE_ENUM_SERIALIZATION_NOUTF")
 	kwGENERATE_ENUM_SERIALIZATION_WITH_HEADER        = internStr("GENERATE_ENUM_SERIALIZATION_WITH_HEADER")
