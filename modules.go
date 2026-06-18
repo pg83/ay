@@ -145,6 +145,7 @@ type ModuleData struct {
 	runPrograms        []*RunProgramStmt
 	decimalMD5         []*DecimalMD5Lower32BitsStmt
 	splitCodegens      []*SplitCodegenStmt
+	baseCodegens       []*BaseCodegenStmt
 	runPython          []*RunPythonStmt
 	fromSandboxes      []*FromSandboxStmt
 	checkConfigHeaders []STR
@@ -1241,6 +1242,13 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 			expanded.OutputIncludes = expandStmtTokensSTR(v.OutputIncludes, env)
 
 			d.splitCodegens = append(d.splitCodegens, &expanded)
+		case *BaseCodegenStmt:
+			expanded := *v
+			expanded.ToolPath = expandStmtTokenSTR(v.ToolPath, env)
+			expanded.Prefix = expandStmtTokenSTR(v.Prefix, env)
+			expanded.Opts = expandStmtTokensSTR(v.Opts, env)
+
+			d.baseCodegens = append(d.baseCodegens, &expanded)
 		case *RunPythonStmt:
 			expanded := *v
 			expanded.ScriptPath = expandStmtTokenSTR(v.ScriptPath, env)
