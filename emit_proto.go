@@ -216,7 +216,7 @@ func newPBModuleEmission(ctx *GenCtx, d *ModuleData, cfg ProtoPBConfig, peerProt
 	}
 
 	pe.blocks = composePBArgBlocks(d.tc, pe.protocBinary, pe.cppStyleguideBinary, pe.grpcCppBinary,
-		cfg.grpc, cfg.moduleTag, cfg.cppOutRoot, cfg.duplicateOutputRootInclude, pe.liteHeaders,
+		cfg.grpc, cfg.cppOutRoot, cfg.duplicateOutputRootInclude, pe.liteHeaders,
 		d.protocFlags, pe.extraPlugins, peerProtoAddIncl, protoNamespaceTail)
 
 	return pe

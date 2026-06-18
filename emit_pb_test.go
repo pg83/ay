@@ -14,7 +14,7 @@ func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 		intern("$(B)/contrib/tools/protoc/protoc"),
 		intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
 		intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
-		false, 0, "", false, false,
+		false, "", false, false,
 		internArgs([]string{"--fatal_warnings"}), nil, nil, nil)
 	emitPB(
 		inst,
@@ -54,7 +54,7 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 		intern("$(B)/contrib/tools/protoc/protoc"),
 		intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
 		intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
-		false, 0, "", false, true,
+		false, "", false, true,
 		nil, nil, nil, nil)
 	emitPB(
 		inst,
@@ -379,6 +379,79 @@ END()
 
 	if !nodeHasInput(pb, "$(B)/library/cpp/yaff/tools/protoc_plugin/protoc_plugin") {
 		t.Fatalf("pb inputs missing yaff plugin binary: %#v", pb.flatInputs())
+	}
+}
+
+func TestGen_ProtoLibrary_TransitivePROTONamespaceReachesCppProtoCmd(t *testing.T) {
+	files := map[string]string{}
+
+	// Leaf PROTO_LIBRARY declares a bare (non-GLOBAL) PROTO_NAMESPACE(yt).
+	// Upstream expands it to `GLOBAL FOR proto $(S)/yt`, which propagates through
+	// the CPP_PROTO peer closure into every transitive consumer's protoc command
+	// as -I=$(S)/yt — including PROTO_LIBRARY (cpp_proto) consumers.
+	writeTestModuleFile(files, "leaf/ya.make", `PROTO_LIBRARY()
+PROTO_NAMESPACE(yt)
+SRCS(leaf.proto)
+END()
+`)
+	writeTestModuleFile(files, "leaf/leaf.proto", "syntax = \"proto3\";\npackage test;\nmessage Leaf {}\n")
+
+	// Intermediate declares a GLOBAL PROTO_NAMESPACE: it rides the
+	// _PROTO__INCLUDE chain (peerProtoAddIncl), ahead of the bare-namespace tail.
+	writeTestModuleFile(files, "mid/ya.make", `PROTO_LIBRARY()
+PROTO_NAMESPACE(GLOBAL midns)
+PEERDIR(leaf)
+SRCS(mid.proto)
+END()
+`)
+	writeTestModuleFile(files, "mid/mid.proto", "syntax = \"proto3\";\npackage test;\nmessage Mid {}\n")
+
+	writeTestModuleFile(files, "consumer/ya.make", `PROTO_LIBRARY()
+PEERDIR(mid)
+SRCS(brand.proto)
+END()
+`)
+	writeTestModuleFile(files, "consumer/brand.proto", "syntax = \"proto3\";\npackage test;\nmessage Brand {}\n")
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "consumer")
+
+	pb := findGraphNodeByOutputs(t, g,
+		"$(B)/consumer/brand.pb.h",
+		"$(B)/consumer/brand.pb.cc",
+	)
+
+	args := strStrs(pb.Cmds[0].CmdArgs.flat())
+
+	ytCount := 0
+	for _, a := range args {
+		if a == "-I=$(S)/yt" {
+			ytCount++
+		}
+	}
+	if ytCount == 0 {
+		t.Fatalf("consumer pb cmd missing transitive PROTO_NAMESPACE token -I=$(S)/yt: %v", args)
+	}
+	if ytCount > 1 {
+		t.Fatalf("consumer pb cmd duplicates -I=$(S)/yt (%d times): %v", ytCount, args)
+	}
+
+	// The bare-namespace tail (yt) trails the GLOBAL-namespace chain entry
+	// (midns) in the _PROTO__INCLUDE order, and both sit inside the include
+	// block (before --cpp_out).
+	chainIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "-I=$(S)/midns")
+	ytIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "-I=$(S)/yt")
+	cppOutIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "--cpp_out=:$(B)/")
+	if chainIdx < 0 {
+		t.Fatalf("consumer pb cmd missing GLOBAL chain token -I=$(S)/midns: %v", args)
+	}
+	if !(chainIdx < ytIdx && ytIdx < cppOutIdx) {
+		t.Fatalf("expected chain < tail < cpp_out: midns=%d yt=%d cpp_out=%d args=%v", chainIdx, ytIdx, cppOutIdx, args)
 	}
 }
 
