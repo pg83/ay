@@ -45,6 +45,7 @@ var (
 	envLSAN_SYMBOLIZER_PATH         = internEnv("LSAN_SYMBOLIZER_PATH")
 	envM4                           = internEnv("M4")
 	envMODDIR                       = internEnv("MODDIR")
+	envMODULE_LANG                  = internEnv("MODULE_LANG")
 	envMODULE_SUFFIX                = internEnv("MODULE_SUFFIX")
 	envMODULE_TAG                   = internEnv("MODULE_TAG")
 	envMSAN_OPTIONS                 = internEnv("MSAN_OPTIONS")

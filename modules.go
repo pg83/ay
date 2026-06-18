@@ -1006,6 +1006,13 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 
 			d.moduleStmt = moduleStmtForKind(v, kind)
 
+			// Bind MODULE_LANG for IF evaluation of the autoincluded
+			// linters.make.inc (appended after the module body in moduleStmts):
+			// upstream's `IF (MODULE_LANG == CPP)` gate around CLANG_WARNINGS only
+			// fires once the module language is known. sbomComponentLang already
+			// maps the module TOK to the uppercase MODULE_LANG token (PY3/CPP/...).
+			env.setString(envMODULE_LANG, sbomComponentLang(d.moduleStmt.Name))
+
 			if v.Name == tokPy3Program && kind == KindLib {
 				d.programPairedLib = true
 			}
