@@ -718,6 +718,54 @@ func TestGen_LibraryARIncludesResourceObjcopyMemberInputs(t *testing.T) {
 	}
 }
 
+// TestGen_Archive_SrcdirMemberResolvesThroughSourcePathPlan reproduces the
+// kernel/hosts/owner divergence: a module that declares SRCDIR(data) and then
+// ARCHIVE(NAME out.inc member.txt) must resolve the ARCHIVE member through the
+// module's SRCDIR source path plan (upstream feeds members via ${input:Files}),
+// reading $(S)/data/member.txt — not the phantom module-dir path
+// $(S)/mod/member.txt, which does not exist.
+func TestGen_Archive_SrcdirMemberResolvesThroughSourcePathPlan(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(owner.cpp)
+SRCDIR(data)
+ARCHIVE(
+    NAME out.inc
+    member.txt
+)
+END()
+`)
+	writeTestModuleFile(files, "mod/owner.cpp", "int owner(){return 0;}\n")
+	writeTestModuleFile(files, "data/member.txt", "payload\n")
+	writeToolProgram(files, "tools/archiver", "archiver")
+
+	g := testGen(newMemFS(files), "mod")
+
+	ar := mustNodeByOutput(t, g, "$(B)/mod/out.inc")
+
+	const wantMember = "$(S)/data/member.txt"
+	const phantomMember = "$(S)/mod/member.txt"
+
+	args := strStrs(ar.Cmds[0].CmdArgs.flat())
+	if !containsString(args, wantMember+":") {
+		t.Errorf("ARCHIVE cmd_args missing SRCDIR-resolved member %q: %v", wantMember+":", args)
+	}
+	if containsString(args, phantomMember+":") {
+		t.Errorf("ARCHIVE cmd_args must not list phantom module-dir member %q: %v", phantomMember+":", args)
+	}
+
+	if !nodeHasInput(ar, wantMember) {
+		t.Errorf("ARCHIVE inputs missing SRCDIR-resolved member %q: %#v", wantMember, ar.flatInputs())
+	}
+	if nodeHasInput(ar, phantomMember) {
+		t.Errorf("ARCHIVE inputs must not list phantom module-dir member %q: %#v", phantomMember, ar.flatInputs())
+	}
+}
+
 func TestGen_ProtoLibrary_NamedArgUsedForArchive(t *testing.T) {
 	files := map[string]string{}
 
