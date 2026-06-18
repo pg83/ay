@@ -47,6 +47,8 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 	case strings.HasSuffix(srcRel, ".cpp.in"),
 		strings.HasSuffix(srcRel, ".c.in"):
 		return emitLibraryCInSource(ctx, instance, d, srcRel, in)
+	case strings.HasSuffix(srcRel, ".sc"):
+		return emitLibrarySCSource(ctx, instance, d, srcRel, in)
 	}
 
 	// An unmodelled codegen source extension (e.g. .gperf, .pyx not yet wired

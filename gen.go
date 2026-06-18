@@ -3293,7 +3293,8 @@ func isCodegenProducingSrc(srcRel string) bool {
 		strings.HasSuffix(srcRel, ".rl") ||
 		strings.HasSuffix(srcRel, ".y") ||
 		strings.HasSuffix(srcRel, ".cpp.in") ||
-		strings.HasSuffix(srcRel, ".c.in")
+		strings.HasSuffix(srcRel, ".c.in") ||
+		strings.HasSuffix(srcRel, ".sc")
 }
 
 // reorderARMembers reproduces ymake's AR member order. ymake processes a

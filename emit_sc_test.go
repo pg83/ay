@@ -1,0 +1,129 @@
+package main
+
+import "testing"
+
+// TestGen_ScSourceEmitsDomschemecProducer reproduces the sg7 divergence where a
+// SRCS(*.sc) entry yields no producer for its generated .sc.h: upstream's
+// _SRC("sc") runs tools/domschemec --in SRC --out SRC.h, carries the
+// library/cpp/domscheme/runtime.h output_include, tags kv p=SC/pc yellow, and
+// adds an implicit PEERDIR(library/cpp/domscheme). Before the .sc arm exists the
+// source hits WarnUnsupportedSource and is dropped, so options.sc.h is missing.
+func TestGen_ScSourceEmitsDomschemecProducer(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+SRCS(
+    options.sc
+)
+END()
+`)
+	files["mod/options.sc"] = "struct TOptions { ui32 X; };\n"
+
+	writeToolProgram(files, "tools/domschemec", "domschemec")
+
+	writeTestModuleFile(files, "library/cpp/domscheme/ya.make", "LIBRARY()\nSRCS(domscheme.cpp)\nEND()\n")
+	files["library/cpp/domscheme/domscheme.cpp"] = "int domscheme() { return 0; }\n"
+	files["library/cpp/domscheme/runtime.h"] = "#pragma once\n"
+
+	g := testGen(newMemFS(files), "mod")
+
+	sc := findGraphNodeByOutputs(t, g, "$(B)/mod/options.sc.h")
+
+	if sc.KV.P != pkSC {
+		t.Fatalf("kv.p = %q, want SC", sc.KV.P)
+	}
+	if sc.KV.PC != pcYellow {
+		t.Fatalf("kv.pc = %q, want yellow", sc.KV.PC)
+	}
+
+	cmd := sc.Cmds[0].CmdArgs.flat()
+	wantCmd := []string{
+		"$(B)/tools/domschemec/domschemec",
+		"--in",
+		"$(S)/mod/options.sc",
+		"--out",
+		"$(B)/mod/options.sc.h",
+	}
+	if len(cmd) != len(wantCmd) {
+		t.Fatalf("cmd = %v, want %v", strStrings(cmd), wantCmd)
+	}
+	for i, w := range wantCmd {
+		if cmd[i].string() != w {
+			t.Fatalf("cmd[%d] = %q, want %q (full %v)", i, cmd[i].string(), w, strStrings(cmd))
+		}
+	}
+
+	if len(sc.ForeignDepRefs) != 1 {
+		t.Fatalf("ForeignDepRefs = %#v, want exactly the domschemec tool dep", sc.ForeignDepRefs)
+	}
+
+	wantInputs := []string{
+		"$(B)/tools/domschemec/domschemec",
+		"$(S)/mod/options.sc",
+		"$(S)/library/cpp/domscheme/runtime.h",
+	}
+	if got := vfsStringsT3(sc.flatInputs()); !vfsInputsContainAll(got, wantInputs) {
+		t.Fatalf("SC inputs = %v, want all of %v", got, wantInputs)
+	}
+
+	// The implicit PEERDIR(library/cpp/domscheme) from _SRC("sc") must enter the
+	// module's collected peerdirs.
+	d := collectTestModule(newMemFS(files), "mod")
+	if !peerdirsContain(d, "library/cpp/domscheme") {
+		t.Fatalf("module peerdirs = %v, want library/cpp/domscheme", strStrings(d.peerdirs))
+	}
+}
+
+// TestGen_ScSourceAddsNoAddIncl pins the sg7 divergence where a SRCS(*.sc)
+// module leaked -I$(B)/<mod> into every compile (own and, via the global
+// ADDINCL channel, every PEERDIR consumer). Upstream's _SRC("sc") rule
+// (build/ymake.core.conf) is .CMD=...${norel;output;suf=.h:SRC}... with NO
+// `addincl` modifier on the generated header — unlike CONFIGURE_FILE's
+// ${addincl;output:Dst}. So the .sc.h producer must contribute no ADDINCL dir
+// at any scope; the header resolves via the global $(B) build root like any
+// other generated output.
+func TestGen_ScSourceAddsNoAddIncl(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "mod/ya.make", "LIBRARY()\nSRCS(options.sc)\nEND()\n")
+	files["mod/options.sc"] = "struct TOptions { ui32 X; };\n"
+
+	writeToolProgram(files, "tools/domschemec", "domschemec")
+	writeTestModuleFile(files, "library/cpp/domscheme/ya.make", "LIBRARY()\nSRCS(domscheme.cpp)\nEND()\n")
+	files["library/cpp/domscheme/domscheme.cpp"] = "int domscheme() { return 0; }\n"
+	files["library/cpp/domscheme/runtime.h"] = "#pragma once\n"
+
+	d := collectTestModule(newMemFS(files), "mod")
+
+	genDir := build("mod")
+	for _, scope := range []struct {
+		name string
+		dirs []VFS
+	}{
+		{"addIncl", d.addIncl},
+		{"addInclGlobal", d.addInclGlobal},
+		{"addInclUserGlobal", d.addInclUserGlobal},
+	} {
+		for _, v := range scope.dirs {
+			if v == genDir {
+				t.Fatalf("%s contains the .sc generated build dir %q; _SRC(\"sc\") adds no addincl (got %v)",
+					scope.name, genDir.str().string(), vfsStrings(scope.dirs))
+			}
+		}
+	}
+}
+
+func collectTestModule(fs FS, modulePath string) *ModuleData {
+	mf := throw2(parseFile(fs, modulePath+"/ya.make"))
+	return collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, modulePath, KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source(modulePath), Kind: KindLib, Platform: testTargetP}))
+}
+
+func peerdirsContain(d *ModuleData, want string) bool {
+	for _, p := range d.peerdirs {
+		if p.string() == want {
+			return true
+		}
+	}
+
+	return false
+}
