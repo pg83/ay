@@ -2205,6 +2205,10 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		plugin := parseCPPProtoPlugin(v)
 		d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
 		d.peerdirs = append(d.peerdirs, STRS(plugin.Deps...)...)
+	case tokYaff:
+		d.cppProtoPlugins = append(d.cppProtoPlugins, parseYAFF(v))
+	case tokYaffSchema:
+		d.cppProtoPlugins = append(d.cppProtoPlugins, parseYAFFSchema(v))
 	case tokPyRegister:
 
 		for _, nameTok := range v.Args {
@@ -2407,6 +2411,131 @@ func parseCPPProtoPlugin(v *UnknownStmt) CppProtoPlugin {
 	}
 
 	return plugin
+}
+
+// yaffPluginPath mirrors upstream's YAFF_PLUGIN_PATH (yabs.conf): the YaFF
+// protoc plugin lives at this PROGRAM, whose binary is `protoc_plugin`.
+const yaffPluginPath = "library/cpp/yaff/tools/protoc_plugin"
+
+// yaffSections collects the NAMESPACE scalar and the FILES / EXPERIMENTAL lists
+// shared by YAFF and YAFF_SCHEMA. `positional` receives any leading non-keyword
+// arguments (YAFF_SCHEMA's SCHEMA_NAME and NAMESPACE).
+type yaffSections struct {
+	positional   []string
+	namespace    string
+	files        []string
+	experimental []string
+}
+
+func parseYAFFSections(v *UnknownStmt) yaffSections {
+	var s yaffSections
+
+	section := STR(0) // 0 = positional/leading
+
+	for i := 0; i < len(v.Args); i++ {
+		a := v.Args[i]
+
+		switch a {
+		case kwNAMESPACE:
+			i++
+
+			if i >= len(v.Args) {
+				throwFmt("gen: %s NAMESPACE expects a value", v.Name)
+			}
+
+			s.namespace = v.Args[i].string()
+			section = STR(0)
+		case kwFILES:
+			section = kwFILES
+		case kwEXPERIMENTAL:
+			section = kwEXPERIMENTAL
+		default:
+			switch section {
+			case kwFILES:
+				s.files = append(s.files, a.string())
+			case kwEXPERIMENTAL:
+				s.experimental = append(s.experimental, a.string())
+			default:
+				s.positional = append(s.positional, a.string())
+			}
+		}
+	}
+
+	return s
+}
+
+// yaffExtraOutFlag composes the comma-joined EXTRA_OUT_FLAG exactly as the
+// upstream macro does: a leading group (`namespace=…` for YAFF, `tag=…,
+// namespace=…` for YAFF_SCHEMA), then `file=` per FILES entry, then
+// `experimental=` per EXPERIMENTAL entry. Empty groups stay as empty
+// comma-separated pieces; the protoc command builder drops them when splitting.
+func yaffExtraOutFlag(lead string, s yaffSections) string {
+	groups := []string{
+		lead,
+		strings.Join(prefixEach("file=", s.files), ","),
+		strings.Join(prefixEach("experimental=", s.experimental), ","),
+	}
+
+	return strings.Join(groups, ",")
+}
+
+func prefixEach(prefix string, items []string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+
+	out := make([]string, len(items))
+	for i, it := range items {
+		out[i] = prefix + it
+	}
+
+	return out
+}
+
+func parseYAFF(v *UnknownStmt) CppProtoPlugin {
+	s := parseYAFFSections(v)
+
+	if len(s.positional) != 0 {
+		throwFmt("gen: YAFF got unexpected positional argument %q", s.positional[0])
+	}
+
+	return CppProtoPlugin{
+		Name:           "yaff",
+		ToolPath:       yaffPluginPath,
+		OutputSuffixes: []string{".yaff.h", ".yaff.cpp"},
+		ExtraOutFlag:   yaffExtraOutFlag("namespace="+s.namespace, s),
+	}
+}
+
+func parseYAFFSchema(v *UnknownStmt) CppProtoPlugin {
+	s := parseYAFFSections(v)
+
+	if len(s.positional) < 1 {
+		throwFmt("gen: YAFF_SCHEMA expects SCHEMA_NAME, got %d positional args", len(s.positional))
+	}
+
+	schemaName := s.positional[0]
+
+	// NAMESPACE may arrive positionally (YAFF_SCHEMA(schema ns)) or as the
+	// NAMESPACE keyword; the keyword form already populated s.namespace.
+	namespace := s.namespace
+
+	if len(s.positional) >= 2 {
+		namespace = s.positional[1]
+	}
+
+	if len(s.positional) > 2 {
+		throwFmt("gen: YAFF_SCHEMA got unexpected positional argument %q", s.positional[2])
+	}
+
+	lead := "tag=" + schemaName + ",namespace=" + namespace
+
+	return CppProtoPlugin{
+		Name:           "yaff_" + schemaName,
+		ToolPath:       yaffPluginPath,
+		OutputSuffixes: []string{"_" + schemaName + ".yaff.h", "_" + schemaName + ".yaff.cpp"},
+		ExtraOutFlag:   yaffExtraOutFlag(lead, s),
+	}
 }
 
 func pythonModuleName(modulePath, src string, topLevel bool, namespace *STR) string {
