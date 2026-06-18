@@ -160,7 +160,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"PROTO_DESCRIPTIONS": {},
 	"STYLE_DETEKT":       {},
 	"DEFAULT_JDK_VERSION":       {},
-	"LJ_21_ARCHIVE":             {},
 	"BISON_FLAGS":               {},
 	"ARCHIVE_BY_KEYS":           {},
 }
@@ -2025,6 +2024,10 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	pyCCRes := emitRunPythonForAR(ctx, instance, d, moduleInputs)
 
 	enCCRes := emitEnumSrcs(ctx, instance, d, selfPeerAddInclGlobal, &moduleInputs)
+
+	// LJ_21_ARCHIVE emits its .raw producers and appends its archive_by_keys
+	// entries; emitArchives then materializes those (and any ARCHIVE) entries.
+	emitLuaJit21(ctx, instance, d)
 
 	emitArchives(ctx, instance, d)
 
