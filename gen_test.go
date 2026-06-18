@@ -2299,3 +2299,70 @@ func TestGen_CppEvlog_PropagatesEventlogGlobalAddIncl(t *testing.T) {
 		t.Fatalf("consumer CC -I flags = %v; want %q (CPP_EVLOG must peer library/cpp/eventlog so its transitive GLOBAL ADDINCL reaches the consumer)", iFlags, want)
 	}
 }
+
+func TestGen_AutoincludeClangWarningsRequiresModuleLangCPP(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"build/conf/autoincludes.json": `["ads"]`,
+		"ads/linters.make.inc": `IF (MODULE_LANG == CPP)
+    IF (MODDIR STARTS_WITH ads/bsyeti)
+        CLANG_WARNINGS(-Wimplicit-fallthrough)
+    ENDIF()
+ENDIF()
+`,
+		"ads/bsyeti/lib/ya.make": `LIBRARY()
+CXXFLAGS(-Wimplicit-fallthrough -Wdeprecated-this-capture)
+SRCS(x.cpp)
+END()
+`,
+		"ads/bsyeti/lib/x.cpp": "int x() { return 0; }\n",
+	})
+
+	g := testGen(fs, "ads/bsyeti/lib")
+
+	var cc *Node
+	for _, n := range g.Graph {
+		if n.KV.P != pkCC {
+			continue
+		}
+		for _, out := range n.Outputs {
+			if strings.Contains(out.string(), "x.cpp.o") {
+				cc = n
+			}
+		}
+	}
+	if cc == nil {
+		t.Fatal("CC node for ads/bsyeti/lib/x.cpp.o not found")
+	}
+
+	var args []string
+	for _, c := range cc.Cmds {
+		args = append(args, strStrs(c.CmdArgs.flat())...)
+	}
+
+	fallthroughCount := 0
+	firstFallthrough := -1
+	deprecatedIdx := -1
+	deprecatedCount := 0
+	for i, a := range args {
+		switch a {
+		case "-Wimplicit-fallthrough":
+			fallthroughCount++
+			if firstFallthrough < 0 {
+				firstFallthrough = i
+			}
+		case "-Wdeprecated-this-capture":
+			deprecatedCount++
+			deprecatedIdx = i
+		}
+	}
+
+	if fallthroughCount != 2 {
+		t.Fatalf("-Wimplicit-fallthrough count = %d, want 2 (early CLANG_WARNINGS slot + CXXFLAGS tail); args=%v", fallthroughCount, args)
+	}
+	if deprecatedCount != 1 {
+		t.Fatalf("-Wdeprecated-this-capture count = %d, want 1; args=%v", deprecatedCount, args)
+	}
+	if firstFallthrough >= deprecatedIdx {
+		t.Fatalf("first -Wimplicit-fallthrough (idx %d) must precede -Wdeprecated-this-capture (idx %d); args=%v", firstFallthrough, deprecatedIdx, args)
+	}
+}
