@@ -131,7 +131,6 @@ var acknowledgedMacros = map[string]struct{}{
 	// acknowledged as no-ops only to get sg7 generation past the closed-TOK
 	// gate; modelling their nodes is the node-count convergence step.
 	// TODO: implement typed handlers.
-	//   - FROM_SANDBOX: fetch+unpack a Sandbox resource → OUT files.
 	//   - ARCHIVE_ASM: embed files as a rodata .o.
 	//   - YAFF / YAFF_SCHEMA: yabs flat-format codegen (build/internal).
 	//   - CPP_EVLOG: event-log C++ codegen.
@@ -911,6 +910,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		peerContribs := walkPeersForGlobalAddIncl(ctx, instance, d)
 		d.tc = resolveModuleToolchain(peerContribs.resourceGlobals, instance.Platform.ClangVer)
 
+		emitFromSandboxes(ctx, instance, d)
+
 		ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
 		ldPlugins := mergeLDPlugins(ownLDPlugins, &LdPluginsResult{
 			Refs:  peerContribs.ldPluginRefs,
@@ -1278,6 +1279,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	// Tool paths (compiler/archiver/objcopy/strip/linker/python) come from the
 	// build/platform/* peers via this closure, not from ambient platform flags.
 	d.tc = resolveModuleToolchain(resourceGlobalsClosure, instance.Platform.ClangVer)
+
+	emitFromSandboxes(ctx, instance, d)
 
 	deduper.reset()
 
