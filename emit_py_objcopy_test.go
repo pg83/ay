@@ -112,6 +112,71 @@ END()
 	}
 }
 
+// A RESOURCE_FILES path may name an ordinary source file that lives at the
+// arcadia root OUTSIDE the consuming module (e.g. yabs/server/libs/banner_flags
+// embedding modadvert/dyn_disclaimers/disclaimers_config.pb.txt). res.py expands
+// it into a payload member AND a resfs/src kv member
+// (${rootrel;input=TEXT:"<path>"}); ymake resolves that input the same way as
+// the payload — to $(S)/<path>, the source-root file — because the file exists
+// there. Before the fix the resfs/src kv fallback naively joined module dir +
+// path, fabricating a phantom $(S)/<module>/<path> input that sg7 then aborted
+// while content-hashing. Both members must bind to the same root source path,
+// with no producer dep for an ordinary source.
+func TestGen_ResourceFilesRootRelativeSourceFromOtherModule(t *testing.T) {
+	files := map[string]string{
+		"contrib/libs/python/ya.make":     "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
+		"library/python/resource/ya.make": "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n",
+	}
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+
+	// The embedded source lives at the arcadia root, NOT under the module dir.
+	files["modadvert/dyn_disclaimers/disclaimers_config.pb.txt"] = "config\n"
+
+	writeTestModuleFile(files, "yabs/server/libs/banner_flags/ya.make", `PY3_LIBRARY()
+PEERDIR(library/python/resource)
+RESOURCE_FILES(
+    modadvert/dyn_disclaimers/disclaimers_config.pb.txt
+)
+END()
+`)
+
+	g := testGen(newMemFS(files), "yabs/server/libs/banner_flags")
+
+	objcopy := findNodeByOutputPrefix(g, "$(B)/yabs/server/libs/banner_flags/objcopy_")
+	if objcopy == nil {
+		t.Fatal("graph is missing banner_flags objcopy output")
+	}
+
+	const rootSrc = "$(S)/modadvert/dyn_disclaimers/disclaimers_config.pb.txt"
+	const phantom = "$(S)/yabs/server/libs/banner_flags/modadvert/dyn_disclaimers/disclaimers_config.pb.txt"
+
+	if !nodeHasInput(objcopy, rootSrc) {
+		t.Fatalf("objcopy inputs missing root source %q: %#v", rootSrc, objcopy.flatInputs())
+	}
+	if nodeHasInput(objcopy, phantom) {
+		t.Fatalf("objcopy inputs carry the module-prefixed phantom %q: %#v", phantom, objcopy.flatInputs())
+	}
+
+	// resfs/file key (literal RESOURCE_FILES key, base64) is unchanged.
+	wantKey := encb64.StdEncoding.EncodeToString([]byte("resfs/file/modadvert/dyn_disclaimers/disclaimers_config.pb.txt"))
+	if !slices.Contains(prCmdArgStrings(objcopy), wantKey) {
+		t.Fatalf("objcopy --keys missing base64 resfs/file key %q: %v", wantKey, prCmdArgStrings(objcopy))
+	}
+
+	// resfs/src kv command value carries the root source path, not the phantom.
+	wantKv := "resfs/src/resfs/file/modadvert/dyn_disclaimers/disclaimers_config.pb.txt=modadvert/dyn_disclaimers/disclaimers_config.pb.txt"
+	phantomKv := "resfs/src/resfs/file/modadvert/dyn_disclaimers/disclaimers_config.pb.txt=yabs/server/libs/banner_flags/modadvert/dyn_disclaimers/disclaimers_config.pb.txt"
+	args := prCmdArgStrings(objcopy)
+	if !slices.Contains(args, wantKv) {
+		t.Fatalf("objcopy --kvs missing root-relative resfs/src %q: %v", wantKv, args)
+	}
+	if slices.Contains(args, phantomKv) {
+		t.Fatalf("objcopy --kvs carries module-prefixed phantom resfs/src %q: %v", phantomKv, args)
+	}
+}
+
 func TestGen_ResourceBindirOutputFeedsObjcopyFromBuildRoot(t *testing.T) {
 	files := map[string]string{}
 

@@ -153,6 +153,7 @@ func emitResourceObjcopy(
 		pathDeps   []NodeRef
 		keys       []string
 		kvs        []string
+		kvsCmd     []string
 		cmdLen     int
 	}
 	cur := acc{}
@@ -182,8 +183,8 @@ func emitResourceObjcopy(
 		if len(cur.kvs) > 0 {
 			payload = append(payload, argKvs.str())
 
-			for _, kv := range cur.kvs {
-				payload = append(payload, internStr(expandRootrel(kv, instance.Path.rel())))
+			for _, kv := range cur.kvsCmd {
+				payload = append(payload, internStr(kv))
 			}
 		}
 
@@ -277,14 +278,20 @@ func emitResourceObjcopy(
 					cur.cmdLen += rootCmdLen + len(e.Key)
 
 					// The resfs/src kv names the same file as the payload entry via
-					// ${rootrel;input=TEXT:"<inner>"}. A RUN_PROGRAM STDOUT/OUT output
-					// is a build artifact: resolve it through the codegen registry like
-					// the payload entry below, so the kv input points at $(B) with the
-					// producer dep instead of a phantom $(S) source.
+					// ${rootrel;input=TEXT:"<inner>"}. Resolve it exactly like the
+					// payload entry below — codegen registry first (a RUN_PROGRAM
+					// STDOUT/OUT, FROM_SANDBOX, or BUNDLE output binds to $(B) with the
+					// producer dep), then copyFileInputVFS, which binds a root-relative
+					// ordinary source (existing at the arcadia root outside the module)
+					// to its $(S) source path. The emitted resfs/src value is that
+					// resolved input's rootrel, not a naive module-dir join.
 					if inner, ok := rootrelInputPath(e.Key); ok {
-						kvInput, producerRef := resolveResourceInput(ctx, instance, inner, source(instance.Path.rel()+"/"+inner))
+						kvInput, producerRef := resolveResourceInput(ctx, instance, inner, copyFileInputVFS(ctx.fs, instance.Path.rel(), inner))
 						cur.kvInputs = append(cur.kvInputs, kvInput)
 						cur.pathDeps = append(cur.pathDeps, producerRef)
+						cur.kvsCmd = append(cur.kvsCmd, rootrelExpand(e.Key, kvInput.rel()))
+					} else {
+						cur.kvsCmd = append(cur.kvsCmd, e.Key)
 					}
 				} else {
 					inputVFS, producerRef := resolveResourceInput(ctx, instance, e.Path, copyFileInputVFS(ctx.fs, instance.Path.rel(), e.Path))
