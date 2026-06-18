@@ -5,6 +5,7 @@ import (
 	"encoding/base32"
 	enchex "encoding/hex"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -321,7 +322,7 @@ type PbArgBlocks struct {
 }
 
 func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, grpcCppBinary VFS,
-	grpc bool, moduleTag STR, cppOutRoot string, duplicateOutputRootInclude, liteHeaders bool,
+	grpc bool, cppOutRoot string, duplicateOutputRootInclude, liteHeaders bool,
 	extraProtocFlags []ARG, extraPlugins []ResolvedCPPProtoPlugin,
 	peerProtoAddIncl []VFS, protoNamespaceTail []VFS) *PbArgBlocks {
 	head := []STR{
@@ -376,14 +377,21 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 		mid = append(mid, internStr("-I="+p.string()))
 	}
 
-	// Non-GLOBAL PROTO_NAMESPACE contributions trail the chain, and only in
-	// non-PROTO_LIBRARY protoc cmdlines — a PROTO_LIBRARY's own chain
-	// excludes them (reference graphs: yt_proto/yt/client lacks the trailing
-	// -I=$(S)/yt that yt/yt/library/quantile_digest carries).
-	if moduleTag == 0 {
-		for _, p := range protoNamespaceTail {
-			mid = append(mid, internStr("-I="+p.string()))
+	// Non-GLOBAL PROTO_NAMESPACE contributions trail the chain. Upstream's
+	// PROTO_NAMESPACE always expands to a `GLOBAL FOR proto $(S)/<ns>` addincl
+	// (proto.conf PROTO_ADDINCL), so it propagates through the CPP_PROTO peer
+	// closure into EVERY transitive consumer's _PROTO__INCLUDE — PROTO_LIBRARY
+	// (cpp_proto) consumers included (sg7: brandformance.pb.h carries
+	// -I=$(S)/yt). _PROTO__INCLUDE is a set: a tail namespace already rendered
+	// (e.g. the module's own cppOutRoot, for a PROTO_NAMESPACE(yt) module under
+	// yt itself) is not re-emitted.
+	for _, p := range protoNamespaceTail {
+		token := internStr("-I=" + p.string())
+		if slices.Contains(mid, token) {
+			continue
 		}
+
+		mid = append(mid, token)
 	}
 
 	mid = append(mid,
