@@ -2358,7 +2358,15 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		var ldObjcopyRefs []NodeRef
 		var ldObjcopyPaths []VFS
 
-		if resourceLibTagForData(d) != nil {
+		if resourceLibTagForData(d) != nil || len(d.resources) > 0 {
+			// A plain C++ PROGRAM() that declares RESOURCE/RESOURCE_FILES packs
+			// those payloads into objcopy_<hash>.o and links them as members,
+			// exactly like upstream's TObjCopyResourcePacker on the link side of
+			// every module (not only Python ones). resourceLibTagForData is nil
+			// for plain PROGRAM, so the hash uses no module tag — matching the
+			// reference object name. emitResourceObjcopy returns nil when there
+			// are no resources, so non-resource PROGRAMs are unaffected.
+			//
 			// PY3_PROGRAM's paired PY3_LIBRARY genModule (kind=KindLib,
 			// reached via the prepended self-PEERDIR at gen.go:610) already
 			// ran emitPySrcs and registered the .yapyc3 codegen outputs in
