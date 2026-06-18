@@ -74,6 +74,25 @@ func objcopyCmdArgs(oc *ObjcopyEmitCtx, outputObj VFS, payload []STR) ArgChunks 
 	return oc.na.chunkList(oc.blocks.pre, oc.na.strList((outputObj).str()), oc.blocks.post, payload)
 }
 
+// resolveResourceInput resolves one embedded resource path to its node input. A
+// generated resource (RUN_PROGRAM OUT/OUT_NOAUTO/STDOUT, COPY output, ...) lives
+// in the codegen registry keyed by its output VFS; resourceOutputVFS
+// canonicalizes the raw RESOURCE path (${BINDIR}/X, $(B)/<unit>/X, a plain
+// module-relative name, or an arcadia-root-relative path rooted at the module
+// dir) to that key. When found, the input is the $(B) build artifact and the
+// producer ref is returned so the objcopy node depends on it. Otherwise the path
+// is an ordinary source file: the fallback VFS (its $(S) location) is used with
+// no extra dep.
+func resolveResourceInput(ctx *GenCtx, instance ModuleInstance, rawPath string, fallback VFS) (VFS, NodeRef) {
+	output := resourceOutputVFS(instance.Path.rel(), rawPath)
+
+	if info := codegenRegForInstance(ctx, instance).lookup(output); info != nil {
+		return output, info.ProducerRef
+	}
+
+	return fallback, 0
+}
+
 func emitResourceObjcopy(
 	ctx *GenCtx,
 	instance ModuleInstance,
@@ -257,26 +276,18 @@ func emitResourceObjcopy(
 					cur.kvs = append(cur.kvs, e.Key)
 					cur.cmdLen += rootCmdLen + len(e.Key)
 
+					// The resfs/src kv names the same file as the payload entry via
+					// ${rootrel;input=TEXT:"<inner>"}. A RUN_PROGRAM STDOUT/OUT output
+					// is a build artifact: resolve it through the codegen registry like
+					// the payload entry below, so the kv input points at $(B) with the
+					// producer dep instead of a phantom $(S) source.
 					if inner, ok := rootrelInputPath(e.Key); ok {
-						cur.kvInputs = append(cur.kvInputs, source(instance.Path.rel()+"/"+inner))
+						kvInput, producerRef := resolveResourceInput(ctx, instance, inner, source(instance.Path.rel()+"/"+inner))
+						cur.kvInputs = append(cur.kvInputs, kvInput)
+						cur.pathDeps = append(cur.pathDeps, producerRef)
 					}
 				} else {
-					inputVFS := copyFileInputVFS(ctx.fs, instance.Path.rel(), e.Path)
-					// The producer ref of a generated resource (RUN_PROGRAM OUTFile,
-					// COPY output, FROM_SANDBOX fetch, etc.) lives in the codegen
-					// registry, keyed by the output VFS. resourceOutputVFS
-					// canonicalizes the raw RESOURCE path (${BINDIR}/X, $(B)/<unit>/X,
-					// a plain module-relative name, or an arcadia-root-relative path
-					// rooted at the module dir) to that VFS.
-					var producerRef NodeRef
-
-					outVFS := resourceOutputVFS(instance.Path.rel(), e.Path)
-
-					if info := codegenRegForInstance(ctx, instance).lookup(outVFS); info != nil {
-						inputVFS = outVFS
-						producerRef = info.ProducerRef
-					}
-
+					inputVFS, producerRef := resolveResourceInput(ctx, instance, e.Path, copyFileInputVFS(ctx.fs, instance.Path.rel(), e.Path))
 					cur.paths = append(cur.paths, e.Path)
 					cur.pathInputs = append(cur.pathInputs, inputVFS)
 					cur.pathDeps = append(cur.pathDeps, producerRef)
