@@ -2,6 +2,7 @@ package main
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -263,6 +264,121 @@ END()
 	gotWrapperOutputs := pb.Cmds[0].CmdArgs.flat()[outputsIdx+1 : separatorIdx]
 	if !equalStrings(strStrs(gotWrapperOutputs), wantWrapperOutputs) {
 		t.Fatalf("pb wrapper outputs = %v, want %v", gotWrapperOutputs, wantWrapperOutputs)
+	}
+}
+
+func TestGen_ProtoLibrary_YAFFContributesCppProtoPlugin(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "protos/ya.make", `PROTO_LIBRARY()
+YAFF(NAMESPACE NMyNs FILES
+    a.proto
+    EXPERIMENTAL
+    b.proto
+)
+SRCS(
+    a.proto
+    b.proto
+)
+END()
+`)
+	writeTestModuleFile(files, "protos/a.proto", "syntax = \"proto3\";\npackage test;\nmessage A {}\n")
+	writeTestModuleFile(files, "protos/b.proto", "syntax = \"proto3\";\npackage test;\nmessage B {}\n")
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "library/cpp/yaff/tools/protoc_plugin", "protoc_plugin")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "protos")
+
+	pb := findGraphNodeByOutputs(t, g,
+		"$(B)/protos/a.pb.h",
+		"$(B)/protos/a.pb.cc",
+		"$(B)/protos/a.yaff.h",
+		"$(B)/protos/a.yaff.cpp",
+	)
+
+	args := strStrs(pb.Cmds[0].CmdArgs.flat())
+	wantArgs := []string{
+		"--plugin=protoc-gen-yaff=$(B)/library/cpp/yaff/tools/protoc_plugin/protoc_plugin",
+		"--yaff_out=$(B)/",
+		"--yaff_opt=namespace=NMyNs",
+		"--yaff_opt=file=a.proto",
+		"--yaff_opt=experimental=b.proto",
+	}
+	for _, want := range wantArgs {
+		if !containsString(args, want) {
+			t.Fatalf("pb cmd args missing %q: %v", want, args)
+		}
+	}
+
+	// The plugin opt block must NOT carry the unsplit/colon form.
+	for _, bad := range args {
+		if strings.HasPrefix(bad, "--yaff_opt=:") || bad == "--yaff_opt=namespace=NMyNs,file=a.proto,experimental=b.proto" {
+			t.Fatalf("pb cmd args carry unsplit/colon yaff_opt %q: %v", bad, args)
+		}
+	}
+
+	if !nodeHasInput(pb, "$(B)/library/cpp/yaff/tools/protoc_plugin/protoc_plugin") {
+		t.Fatalf("pb inputs missing yaff plugin binary: %#v", pb.flatInputs())
+	}
+
+	// Every proto in the module gets per-proto yaff outputs, not just the listed ones.
+	_ = mustNodeByAnyOutput(t, g, "$(B)/protos/b.yaff.h")
+	_ = mustNodeByAnyOutput(t, g, "$(B)/protos/b.yaff.cpp")
+}
+
+func TestGen_ProtoLibrary_YAFFSchemaContributesCppProtoPlugin(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "protos/ya.make", `PROTO_LIBRARY()
+YAFF_SCHEMA(tsar_vectors NUserProfileTsarVectors)
+SRCS(
+    a.proto
+)
+END()
+`)
+	writeTestModuleFile(files, "protos/a.proto", "syntax = \"proto3\";\npackage test;\nmessage A {}\n")
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "library/cpp/yaff/tools/protoc_plugin", "protoc_plugin")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "protos")
+
+	pb := findGraphNodeByOutputs(t, g,
+		"$(B)/protos/a.pb.h",
+		"$(B)/protos/a.pb.cc",
+		"$(B)/protos/a_tsar_vectors.yaff.h",
+		"$(B)/protos/a_tsar_vectors.yaff.cpp",
+	)
+
+	args := strStrs(pb.Cmds[0].CmdArgs.flat())
+	wantArgs := []string{
+		"--plugin=protoc-gen-yaff_tsar_vectors=$(B)/library/cpp/yaff/tools/protoc_plugin/protoc_plugin",
+		"--yaff_tsar_vectors_out=$(B)/",
+		"--yaff_tsar_vectors_opt=tag=tsar_vectors",
+		"--yaff_tsar_vectors_opt=namespace=NUserProfileTsarVectors",
+	}
+	for _, want := range wantArgs {
+		if !containsString(args, want) {
+			t.Fatalf("pb cmd args missing %q: %v", want, args)
+		}
+	}
+
+	// tag precedes namespace, mirroring the upstream EXTRA_OUT_FLAG order.
+	tagIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "--yaff_tsar_vectors_opt=tag=tsar_vectors")
+	nsIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "--yaff_tsar_vectors_opt=namespace=NUserProfileTsarVectors")
+	if !(tagIdx >= 0 && nsIdx >= 0 && tagIdx < nsIdx) {
+		t.Fatalf("yaff_tsar_vectors opt order = tag:%d namespace:%d, want tag < namespace", tagIdx, nsIdx)
+	}
+
+	if !nodeHasInput(pb, "$(B)/library/cpp/yaff/tools/protoc_plugin/protoc_plugin") {
+		t.Fatalf("pb inputs missing yaff plugin binary: %#v", pb.flatInputs())
 	}
 }
 

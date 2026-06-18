@@ -412,8 +412,16 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 			internStr("--"+plugin.Spec.Name+"_out=$(B)/"+cppOutRoot),
 		)
 
-		if plugin.Spec.ExtraOutFlag != "" {
-			tail = append(tail, internStr("--"+plugin.Spec.Name+"_opt=:"+plugin.Spec.ExtraOutFlag))
+		// Upstream's _PROTO_PLUGIN_ARGS_BASE expands `${pre=--${Name}_opt=:OutParm}`
+		// over OutParm, whose commas are macro-argument separators: the
+		// EXTRA_OUT_FLAG scalar splits on `,`, empty pieces drop, and each
+		// surviving piece becomes its own `--${Name}_opt=<piece>`.
+		for _, piece := range strings.Split(plugin.Spec.ExtraOutFlag, ",") {
+			if piece == "" {
+				continue
+			}
+
+			tail = append(tail, internStr("--"+plugin.Spec.Name+"_opt="+piece))
 		}
 	}
 
