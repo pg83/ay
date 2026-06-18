@@ -20,6 +20,11 @@ const (
 	LangGo
 	LangPy
 	LangJava
+	// LangDescProto is the DESC_PROTO submodule variant of a PROTO_LIBRARY
+	// (proto.conf `module _DESC_PROTO`): the proto-description producer side
+	// (.proto.desc / .rawproto / .self.protodesc) requested via the DESC_PROTO
+	// PEERDIR tag, distinct from the CPP_PROTO (.pb.cc) variant.
+	LangDescProto
 )
 
 func (l Language) string() string {
@@ -36,6 +41,8 @@ func (l Language) string() string {
 		return "py"
 	case LangJava:
 		return "java"
+	case LangDescProto:
+		return "desc_proto"
 	}
 
 	throwFmt("Language.string: unknown language %d", int(l))

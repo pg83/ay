@@ -1049,6 +1049,7 @@ func buildStmtFor(name string, args []STR, line int, fail func(format string, a 
 		"PY3_PROGRAM_BIN", "PY2_PROGRAM", "PY3_PROGRAM",
 		"YQL_UDF_YDB", "YQL_UDF_CONTRIB",
 		"PROTO_LIBRARY",
+		"PROTO_DESCRIPTIONS",
 		"DLL", "SO_PROGRAM", "DYNAMIC_LIBRARY",
 		"PACKAGE", "UNION", "RESOURCES_LIBRARY",
 		"PREBUILT_PROGRAM",
