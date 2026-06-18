@@ -147,7 +147,6 @@ var acknowledgedMacros = map[string]struct{}{
 
 	// More sg7 codegen/resource/archive macros — graph-affecting, stubbed for
 	// the node-count step; STYLE_DETEKT (kotlin) / DEFAULT_JDK_VERSION (java) inert.
-	"DECIMAL_MD5_LOWER_32_BITS": {},
 	"SPLIT_CODEGEN":             {},
 	"STRUCT_CODEGEN":            {},
 	"CPP_ENUMS_SERIALIZATION":   {},
@@ -2022,6 +2021,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	jvCCRefs, jvCCOutputs := emitMiscNodes(ctx, instance, d, &moduleInputs)
 
 	prCCRes := emitRunProgramsForAR(ctx, instance, d, moduleInputs)
+	dmCCRes := emitDecimalMD5ForAR(ctx, instance, d, moduleInputs)
 	pyCCRes := emitRunPythonForAR(ctx, instance, d, moduleInputs)
 
 	enCCRes := emitEnumSrcs(ctx, instance, d, selfPeerAddInclGlobal, &moduleInputs)
@@ -2136,6 +2136,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if pyCCRes != nil {
 		for i, ref := range pyCCRes.CCRefs {
 			genCC(&SourceEmit{Ref: ref, OutPath: pyCCRes.CCOutputs[i]})
+		}
+	}
+
+	if dmCCRes != nil {
+		for i, ref := range dmCCRes.CCRefs {
+			genCC(&SourceEmit{Ref: ref, OutPath: dmCCRes.CCOutputs[i]})
 		}
 	}
 
