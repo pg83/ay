@@ -504,3 +504,101 @@ END()
 		t.Errorf("expected exactly one PB producer for foo.pb.cc, got %d", pbCC)
 	}
 }
+
+// TestGen_PyProtoLibrary_TransitivePROTONamespaceReachesPyProtoCmd reproduces the
+// sg7 brandformance py3_proto gap: a PY-addressed PROTO_LIBRARY reaching a
+// transitive PROTO_LIBRARY that declares a bare (non-GLOBAL) PROTO_NAMESPACE(yt)
+// must carry -I=$(S)/yt in its gen_py_protos protoc command, exactly as the C++
+// pb.h side does. The contributor chain mirrors the reference:
+// ads/autobudget/protos -> grut/libs/proto/public/metadata -> yt/yt_proto/yt/core
+// (PROTO_NAMESPACE(yt)). The reference orders the namespace token after the
+// protobuf-src include and before the NEED_GOOGLE_PROTO_PEERDIRS protoc-src
+// include, inside the -I block (before --python_out).
+func TestGen_PyProtoLibrary_TransitivePROTONamespaceReachesPyProtoCmd(t *testing.T) {
+	const consumer = "app/pytool"
+
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "py3cc_slow")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "contrib/python/mypy-protobuf/bin/protoc-gen-mypy", "protoc-gen-mypy")
+
+	writeTestModuleFile(files, "yt/yt_proto/yt/core/ya.make", `PROTO_LIBRARY()
+PROTO_NAMESPACE(yt)
+SRCS(core.proto)
+END()
+`)
+	writeTestModuleFile(files, "yt/yt_proto/yt/core/core.proto", "syntax = \"proto3\";\npackage yt;\nmessage Core {}\n")
+
+	writeTestModuleFile(files, "grut/libs/proto/public/metadata/ya.make", `PROTO_LIBRARY()
+PEERDIR(yt/yt_proto/yt/core)
+SRCS(meta.proto)
+END()
+`)
+	writeTestModuleFile(files, "grut/libs/proto/public/metadata/meta.proto", "syntax = \"proto3\";\npackage test;\nmessage Meta {}\n")
+
+	writeTestModuleFile(files, "ads/autobudget/protos/ya.make", `PROTO_LIBRARY()
+PEERDIR(grut/libs/proto/public/metadata)
+SRCS(brand.proto)
+END()
+`)
+	writeTestModuleFile(files, "ads/autobudget/protos/brand.proto", "syntax = \"proto3\";\npackage test;\nmessage Brand {}\n")
+
+	writeTestModuleFile(files, consumer+"/ya.make", `PY3_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+PEERDIR(ads/autobudget/protos)
+END()
+`)
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/python/protobuf/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/python/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n")
+
+	g := testGen(newMemFS(files), consumer)
+
+	var pyPB *Node
+	for _, n := range g.Graph {
+		if n.KV.P == pkPB && n.TargetProperties.ModuleTag == tagPy3Proto &&
+			strings.HasSuffix(n.Outputs[0].string(), "brand__intpy3___pb2.py") {
+			pyPB = n
+			break
+		}
+	}
+	if pyPB == nil {
+		t.Fatal("no python PB node for brand__intpy3___pb2.py emitted")
+	}
+
+	args := pyPB.Cmds[0].CmdArgs.flat()
+
+	ytCount := 0
+	for _, a := range args {
+		if a.string() == "-I=$(S)/yt" {
+			ytCount++
+		}
+	}
+	if ytCount == 0 {
+		t.Fatalf("py PB cmd missing transitive PROTO_NAMESPACE token -I=$(S)/yt: %v", strStrs(args))
+	}
+	if ytCount > 1 {
+		t.Fatalf("py PB cmd duplicates -I=$(S)/yt (%d times): %v", ytCount, strStrs(args))
+	}
+
+	protobufSrcIdx := indexOfArg(args, "-I=$(S)/contrib/libs/protobuf/src")
+	ytIdx := indexOfArg(args, "-I=$(S)/yt")
+	protocSrcIdx := indexOfArg(args, "-I=$(S)/contrib/libs/protoc/src")
+	pyOutIdx := indexOfArg(args, "--python_out=$(B)/")
+	if protobufSrcIdx < 0 || pyOutIdx < 0 {
+		t.Fatalf("py PB cmd missing protobuf-src / python_out anchors: %v", strStrs(args))
+	}
+	if !(protobufSrcIdx < ytIdx && ytIdx < pyOutIdx) {
+		t.Fatalf("expected protobuf-src < yt < python_out: protobuf-src=%d yt=%d python_out=%d args=%v",
+			protobufSrcIdx, ytIdx, pyOutIdx, strStrs(args))
+	}
+	if protocSrcIdx >= 0 && !(ytIdx < protocSrcIdx) {
+		t.Fatalf("expected yt before protoc-src: yt=%d protoc-src=%d args=%v", ytIdx, protocSrcIdx, strStrs(args))
+	}
+}
