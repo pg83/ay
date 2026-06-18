@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 func emitArchives(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	if len(d.archives) == 0 {
 		return
@@ -67,7 +69,18 @@ func emitArchive(
 		absStr := absVFS.string()
 
 		pathPerFile = append(pathPerFile, absVFS)
-		cmdArgs = append(cmdArgs, internStr(absStr+":"))
+
+		// ARCHIVE_BY_KEYS lists members plain and passes keys via `-k`; plain
+		// ARCHIVE suffixes each member with an empty-key `:`.
+		if a.Keys != nil {
+			cmdArgs = append(cmdArgs, internStr(absStr))
+		} else {
+			cmdArgs = append(cmdArgs, internStr(absStr+":"))
+		}
+	}
+
+	if a.Keys != nil {
+		cmdArgs = append(cmdArgs, argDashK.str(), internStr(strings.Join(a.Keys, ":")))
 	}
 
 	cmdArgs = append(cmdArgs, argDashO.str(), internStr(archivePath))
