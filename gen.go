@@ -731,13 +731,21 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	if d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary && instance.Language != LangPy {
-		cppProtoEnv := env.clone()
+		// Re-collect from a pristine module base env, NOT env.clone(): the probe
+		// collectModule above mutated `env` in place (SET_APPEND(PROTO_FILES …)
+		// already set PROTO_FILES = "<files>"). Cloning the mutated env and
+		// re-running the statements would re-apply SET_APPEND's "$VAR x" append,
+		// doubling PROTO_FILES and scheduling every proto for PB generation twice
+		// (CodegenRegistry duplicate-producer abort). buildIfEnv(instance) is
+		// deterministic and reproduces the probe's starting state, and the
+		// re-collect re-runs every statement, so nothing is lost.
+		cppProtoEnv := buildIfEnv(instance)
 		cppProtoEnv.setStringID(envMODULE_TAG, strCPPProto)
 
 		cppProtoEnv.setBool(envGEN_PROTO, true)
 		d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, cppProtoEnv)
 	} else if d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangPy {
-		py3ProtoEnv := env.clone()
+		py3ProtoEnv := buildIfEnv(instance)
 		py3ProtoEnv.setBool(envPY3_PROTO, true)
 		d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, py3ProtoEnv)
 	}
