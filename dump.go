@@ -215,14 +215,26 @@ func nodeCmdText(node map[string]any) string {
 // '/'); a trailing ':' (the resource archiver's "path:" syntax) is stripped.
 // The match is on whole basenames, not substrings, so a source input (foo.c) is
 // not spuriously matched against the object token that embeds its name (foo.c.o).
+//
+// The archiver's `-k $KEYS` value (ARCHIVE_BY_KEYS, ymake.core.conf) is a
+// colon-joined list of archive *keys*, not input file paths; the archiver
+// addresses entries by name and reads no file for it. Its trailing key would
+// otherwise leak a phantom file basename (e.g. tests/ft/yabs_md5.lua), spuriously
+// keeping a source member that ymake over-emits as a cache-key input but the
+// command never actually names — so skip the token following -k.
 func nodeCmdBasenames(node map[string]any) map[string]struct{} {
 	cmds, _ := node["cmds"].([]any)
 	set := map[string]struct{}{}
 
 	for _, c := range cmds {
 		m, _ := c.(map[string]any)
+		args := toStrings(m["cmd_args"])
 
-		for _, a := range toStrings(m["cmd_args"]) {
+		for i, a := range args {
+			if i > 0 && args[i-1] == "-k" {
+				continue
+			}
+
 			b := strings.TrimRight(baseName(normPath(a)), ":")
 			set[b] = struct{}{}
 		}

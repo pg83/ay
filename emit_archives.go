@@ -132,6 +132,10 @@ func emitArchive(
 		for _, p := range pathPerFile {
 			if info := reg.lookup(p); info != nil && len(info.SourceInputs) > 0 {
 				leaves = dedupVFS(leaves, info.SourceInputs)
+			} else if a.PropagateSourceMembers && info == nil {
+				// A direct source member (LJ's LuaSources.inc archives the .lua
+				// sources themselves): ride the source into the consumer's closure.
+				leaves = dedupVFS(leaves, []VFS{p})
 			}
 		}
 

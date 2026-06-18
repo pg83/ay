@@ -382,3 +382,50 @@ func TestDumpDiffRoots_PartialOverlapMultiOutputNode(t *testing.T) {
 		t.Fatalf("roots should not list unmatched /b as divergent:\n%s", got)
 	}
 }
+
+// TestCanonInputs_ArchiveByKeysIgnoresKeyListBasename pins the upstream archiver
+// convention: ARCHIVE_BY_KEYS' `-k $KEYS` value is a colon-joined archive key
+// list, not input file paths. A source member that ymake over-emits onto the AR
+// node — but that the archiver command names only via the key list — must be
+// pruned by the reference-side AR input filter, exactly like the other 355 source
+// luas. Regression for the residual $(S)/.../tests/ft/yabs_md5.lua input that
+// leaked through because baseName of the whole -k token collided with the input.
+func TestCanonInputs_ArchiveByKeysIgnoresKeyListBasename(t *testing.T) {
+	node := map[string]any{
+		"kv": map[string]any{"p": "AR"},
+		"inputs": []any{
+			"$(B)/mod/a.raw",
+			"$(B)/mod/sub/b.raw",
+			"$(S)/mod/a.lua",
+			"$(S)/mod/sub/b.lua",
+			"$(B)/tools/archiver/archiver",
+		},
+		"cmds": []any{map[string]any{"cmd_args": []any{
+			"$(B)/tools/archiver/archiver", "-q", "-x", "-p",
+			"$(B)/mod/a.raw", "$(B)/mod/sub/b.raw",
+			"-k", "a.lua:sub/b.lua",
+			"-o", "$(B)/mod/LuaScripts.inc",
+		}}},
+	}
+
+	got := canonInputs(node, true)
+	has := func(s string) bool {
+		for _, g := range got {
+			if g == s {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, want := range []string{"$(B)/mod/a.raw", "$(B)/mod/sub/b.raw", "$(B)/tools/archiver/archiver"} {
+		if !has(want) {
+			t.Errorf("canonInputs dropped command-named member %q; got %v", want, got)
+		}
+	}
+	for _, drop := range []string{"$(S)/mod/a.lua", "$(S)/mod/sub/b.lua"} {
+		if has(drop) {
+			t.Errorf("canonInputs kept source lua %q named only via the -k key list; got %v", drop, got)
+		}
+	}
+}
