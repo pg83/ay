@@ -26,6 +26,8 @@ One of your jobs is to study the new workspaces and messages, understand where t
 
 ### DIGGER
 
+REBASE on main repo on start!
+
 Check the upstream (ya/ymake) first, always. We are reproducing real upstream behavior, not inventing our own. Do not substitute correlation for knowledge of the upstream mechanism. Never introduce a concept, ordering that has no counterpart in upstream. Upstream has no random array permutations applied just to make a metric line up — if our output diverges, there is a real, generic mechanism upstream that explains the correct order/value, and your job is to find it and reproduce it. A change that hardcodes a reordering, special-cases a single test input, or otherwise fakes a match to move a number is wrong even if the metric goes green. Always look for the generic mechanism behind the difference and implement that.
 
 Study the ay project's code beneath you, broadly and deeply; familiarize yourself with all of its subsystems. It is especially important to study the include-resolution subsystem and the way information is passed between the various emitters — the codegen registry and GeneratedFileInfo. The include-resolution system rests on the fact that the sources being built are structured so that include resolution for each file does not depend on context, even though it may be invoked in different contexts. The rule that this mechanism MUST NOT be made context-dependent — degrading the caching of resolution — is NOT UP FOR DEBATE. We are building a high-speed race car, not a Lada; every millisecond matters — do not invent new ways of passing information between modules, or new ways of passing information about generated files, unless it has been proven that they exist in upstream. Do not fit the result to the data — if you find yourself reordering two elements of an array just to make a command line up, it is most likely a mistake, and you should study the upstream mechanism instead. The emitters' configuration parameters are most often vectors or flags in Platform/Module, set at creation time depending on the flags.
@@ -57,6 +59,8 @@ Do NOT REWORK for housekeeping: dead code or orphaned helpers / fields / constan
 If a task is mostly done, ship it when the remaining refinements would require a new large cycle; post the rationale for the lead and merger in a `message`.
 
 ### MERGER
+
+REBASE on main repo on start!
 
 The acceptance gate is `./dev/validate.py` (it builds `ay` itself) — use it as your baseline and post-merge test command, each with its own out-dir (`.out/validate-pre`, `.out/validate-post`).
 
