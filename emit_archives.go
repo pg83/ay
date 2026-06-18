@@ -10,11 +10,12 @@ func emitArchives(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	reg := codegenRegForInstance(ctx, instance)
 
 	for _, a := range d.archives {
-		emitArchive(instance, a, d, toolBinPath, toolLDRef, ctx.emit, reg)
+		emitArchive(ctx, instance, a, d, toolBinPath, toolLDRef, ctx.emit, reg)
 	}
 }
 
 func emitArchive(
+	ctx *GenCtx,
 	instance ModuleInstance,
 	a ArchiveEntry,
 	d *ModuleData,
@@ -50,13 +51,17 @@ func emitArchive(
 			}
 		}
 
-		rel := instance.Path.rel() + "/" + f
 		var absVFS VFS
 
 		if isPRProduced {
-			absVFS = build(rel)
+			absVFS = build(instance.Path.rel() + "/" + f)
 		} else {
-			absVFS = source(rel)
+			// Upstream feeds ARCHIVE members through ${input:Files}, which
+			// resolves each name via the module's source path plan (the
+			// cumulative SRCDIR search), not a blind module-dir prefix. Reuse
+			// the shared SRCDIR-aware source resolver so a SRCDIR-backed member
+			// reads $(S)/<srcdir>/<file> rather than the phantom $(S)/<mod>/<file>.
+			absVFS = resolveSourceVFS(ctx, instance, f, d.srcDirs)
 		}
 
 		absStr := absVFS.string()
