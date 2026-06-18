@@ -150,10 +150,21 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	inputClosure := prInputClosure(ctx, instance, d, stmt, moduleInputs)
 
+	// A build-rooted IN that is a registered codegen output but carries no include
+	// parser (e.g. a FROM_SANDBOX OUT_NOAUTO fetch artifact) never enters
+	// inputClosure, yet the PR still depends on its producer. Resolve producer deps
+	// over the IN set as well as the walked closure; resolveCodegenDepRefs' build
+	// gate + registry probe + dedup make the IN files a no-op for the common case (a
+	// parsed IN is already in inputClosure, a source IN is skipped).
+	depInputs := inputClosure
+	if len(inVFSs) > 0 {
+		depInputs = append(append(make([]VFS, 0, len(inVFSs)+len(inputClosure)), inVFSs...), inputClosure...)
+	}
+
 	// Exclude prRef as well as the tool: the outputs are now registered against
 	// prRef, so a PR output appearing in another output's closure must not become a
 	// self-dependency (the old two-phase code bound the ref only after this resolve).
-	prExtraDepRefs := resolveCodegenDepRefs(ctx, instance, inputClosure, toolLDRef, prRef)
+	prExtraDepRefs := resolveCodegenDepRefs(ctx, instance, depInputs, toolLDRef, prRef)
 
 	emitPR(instance, stmt, toolBinPath, toolLDRef, auxTools, inVFSByToken, inVFSs, outVFSByToken, stdoutVFS, inputClosure, prExtraDepRefs, prRef, ctx.emit)
 
