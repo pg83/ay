@@ -157,8 +157,12 @@ var acknowledgedMacros = map[string]struct{}{
 	"ALL_RESOURCE_FILES":        {},
 	"EXPORT_YMAPS_PROTO":        {},
 	"YMAPS_SPROTO":              {},
-	"BUNDLE":                    {},
-	"STYLE_DETEKT":              {},
+	// PROTO_DESCRIPTIONS opens a module that merges peer .protodesc files; its
+	// node is not modeled yet. Acknowledged so a BUNDLE(<dir>) of such a target
+	// parses (emit_bundle.go peeks the bundled ya.make to classify it as
+	// unmodeled) instead of faulting the closed-TOK lexer.
+	"PROTO_DESCRIPTIONS": {},
+	"STYLE_DETEKT":       {},
 	"DEFAULT_JDK_VERSION":       {},
 	"LJ_21_ARCHIVE":             {},
 	"BISON_FLAGS":               {},
@@ -911,6 +915,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		d.tc = resolveModuleToolchain(peerContribs.resourceGlobals, instance.Platform.ClangVer)
 
 		emitFromSandboxes(ctx, instance, d)
+		emitBundles(ctx, instance, d)
 
 		ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
 		ldPlugins := mergeLDPlugins(ownLDPlugins, &LdPluginsResult{
@@ -1281,6 +1286,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	d.tc = resolveModuleToolchain(resourceGlobalsClosure, instance.Platform.ClangVer)
 
 	emitFromSandboxes(ctx, instance, d)
+	emitBundles(ctx, instance, d)
 
 	deduper.reset()
 
