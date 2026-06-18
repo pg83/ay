@@ -56,6 +56,14 @@ func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt, 
 	registerBoundGeneratedParsedOutput(ctx, instance, pkBC, prefixH, nil, bcRef, []NodeRef{toolLDRef})
 	registerBoundGeneratedParsedOutput(ctx, instance, pkBC, prefixCpp, cppParsed, bcRef, []NodeRef{toolLDRef})
 
+	// The generated header carries its generated-from sibling .cpp and the .in
+	// source as non-expanded closure leaves, so every CC node that includes
+	// prefix.h inherits them (upstream's flat-input model; matches the sg7
+	// kernel/factor_slices evidence). Reference order: prefix.cpp, then prefix.in.
+	reg := codegenRegForInstance(ctx, instance)
+	reg.addClosureLeaf(prefixH, prefixCpp)
+	reg.addClosureLeaf(prefixH, inputIn)
+
 	node := &Node{
 		Platform:         instance.Platform,
 		Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),

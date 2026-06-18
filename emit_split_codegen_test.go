@@ -43,6 +43,79 @@ func TestParseSplitCodegen_DefaultOutNum(t *testing.T) {
 	}
 }
 
+// TestGen_SplitCodegenGeneratedClosure pins the generated-output include closure
+// for SPLIT_CODEGEN consumers (T-29). Upstream's flat-input model carries the
+// first numbered part (prefix.0.cpp) and the prefix.in source through the
+// generated header / generated cpp closure, and NEVER the generated header
+// prefix.h on a generated cpp part compilation.
+//
+// Pre-T-29 the generated cpp parts and the noauto prefix.cpp are modeled as
+// #including prefix.h, so they carry $(B)/lib/factors_gen.h (ours-only) and miss
+// prefix.0.cpp + prefix.in (ref-only) — the exact sg7 factors_gen pair deltas.
+func TestGen_SplitCodegenGeneratedClosure(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "tools/codegen", "codegen")
+
+	writeTestModuleFile(files, "lib/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(
+    GLOBAL ${BINDIR}/factors_gen.cpp
+    GLOBAL factor_names.cpp
+)
+SPLIT_CODEGEN(
+    tools/codegen
+    factors_gen
+    NToponymClassifier
+)
+END()
+`)
+	writeTestModuleFile(files, "lib/factors_gen.in", "// codegen input\n")
+	writeTestModuleFile(files, "lib/factor_names.cpp", "#include \"factor_names.h\"\nint fn() { return 0; }\n")
+	writeTestModuleFile(files, "lib/factor_names.h", "#include <lib/factors_gen.h>\n")
+
+	g := testGen(newMemFS(files), "lib")
+
+	part0 := "$(B)/lib/factors_gen.0.cpp"
+	inputIn := "$(S)/lib/factors_gen.in"
+	genHeader := "$(B)/lib/factors_gen.h"
+
+	// Generated cpp part (non-first) and the noauto prefix.cpp re-fed source:
+	// closure carries prefix.0.cpp + prefix.in, never the generated header.
+	for _, ccOut := range []string{
+		"$(B)/lib/factors_gen.1.cpp.o",
+		"$(B)/lib/factors_gen.cpp.o",
+	} {
+		cc := mustNodeByOutput(t, g, ccOut)
+
+		if !nodeHasInput(cc, part0) {
+			t.Errorf("%s inputs missing %q: %v", ccOut, part0, cc.flatInputs())
+		}
+
+		if !nodeHasInput(cc, inputIn) {
+			t.Errorf("%s inputs missing %q: %v", ccOut, inputIn, cc.flatInputs())
+		}
+
+		if nodeHasInput(cc, genHeader) {
+			t.Errorf("%s inputs must not include the generated header %q: %v", ccOut, genHeader, cc.flatInputs())
+		}
+	}
+
+	// Ordinary source that reaches the generated header through its own includes
+	// inherits prefix.0.cpp + prefix.in through that header's closure.
+	fn := mustNodeByOutput(t, g, "$(B)/lib/factor_names.cpp.o")
+
+	if !nodeHasInput(fn, part0) {
+		t.Errorf("factor_names.cpp.o inputs missing %q: %v", part0, fn.flatInputs())
+	}
+
+	if !nodeHasInput(fn, inputIn) {
+		t.Errorf("factor_names.cpp.o inputs missing %q: %v", inputIn, fn.flatInputs())
+	}
+}
+
 // TestGen_SplitCodegenProducer pins SPLIT_CODEGEN as a generated-output producer
 // (kv p=SC): the macro must emit one SC node whose outputs are the OUT_NUM
 // numbered .cpp parts plus prefix.cpp + prefix.h, depend on the codegen tool, and
