@@ -1,0 +1,258 @@
+#!/usr/bin/env python3
+"""acceptance — semi-automatic merge gate for the overseer.
+
+    ./acceptance <OLD_REPO> <NEW_REPO>
+
+Runs <repo>/dev/validate.py in BOTH repos — each in its own writable out-dir
+under $TMPDIR, so the repos themselves may be READ-ONLY — parses the per-case
+metrics from each run, and decides whether NEW may be merged over OLD per the
+PROMPTS.md gating rules:
+
+  * gating `[<case>] OK` count must NOT drop (it may rise);
+  * `XFAIL` count must NOT grow;
+  * no NEW `FAIL` may appear (a case FAILing in NEW that did not FAIL in OLD);
+  * each XFAIL case's normalized-node parity `matched=` must NOT decrease.
+
+Only cases evaluated (non-SKIP) in BOTH repos are compared.
+
+Each `./dev/validate.py` run is bounded to VALIDATE_TIMEOUT_S; if a run exceeds
+it (e.g. an sg7 generation that wedges on the arc FUSE), the whole process tree
+is killed and acceptance exits non-zero — a candidate that cannot even validate
+in the budget is not mergeable.
+
+exit 0 -> ACCEPT (mergeable);  exit 1 -> REJECT (or a validate.py run failed /
+timed out);  exit 2 -> bad usage.
+"""
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+
+# One ./dev/validate.py run budget. The user-stated wall cost of a single run is
+# ~10 minutes; over this we kill the run's whole process group and reject.
+# Override via $ACCEPTANCE_TIMEOUT_S (seconds).
+VALIDATE_TIMEOUT_S = int(os.environ.get("ACCEPTANCE_TIMEOUT_S", "600"))
+
+# Status lines printed by validate.py, e.g. "[sg2] OK", "[sg7] FAIL (generate)",
+# "[sg7] XFAIL (not gating) — …", "[sg5] SKIP (data not present …)".
+CASE_LINE = re.compile(r"^\[(\w+)\]\s+(OK|FAIL|XFAIL|SKIP)\b")
+
+# The xfail parity line:
+# "[sg7] exact normalized-node parity: matched=N our_only=N ref_only=N our_total=N ref_total=N"
+PARITY_LINE = re.compile(
+    r"^\[(\w+)\]\s+exact normalized-node parity:\s+"
+    r"matched=(\d+)\s+our_only=(\d+)\s+ref_only=(\d+)\s+our_total=(\d+)\s+ref_total=(\d+)"
+)
+
+
+def log(msg=""):
+    print(msg, flush=True)
+
+
+def run_validate(label, repo, out_dir):
+    """Run <repo>/dev/validate.py out_dir, streaming its output live (prefixed)
+    and capturing it. Returns (completed, output_text). completed=False means the
+    run timed out or could not be launched — its output is still returned."""
+    validate = os.path.join(repo, "dev", "validate.py")
+
+    if not os.path.isfile(validate):
+        log(f"[acceptance] {label}: missing {validate}")
+
+        return False, ""
+
+    os.makedirs(out_dir, exist_ok=True)
+    log(f"[acceptance] === {label}: {validate} {out_dir}  (timeout {VALIDATE_TIMEOUT_S}s) ===")
+
+    t0 = time.monotonic()
+    # start_new_session so the whole tree (validate.py + ay) shares a process
+    # group we can kill on timeout; ay does not orphan if we only kill validate.
+    proc = subprocess.Popen(
+        [sys.executable, validate, out_dir],
+        cwd=repo,
+        text=True,
+        bufsize=1,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
+
+    timed_out = {"v": False}
+
+    def killer():
+        timed_out["v"] = True
+
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+    watchdog = threading.Timer(VALIDATE_TIMEOUT_S, killer)
+    watchdog.start()
+
+    lines = []
+
+    try:
+        for ln in proc.stdout:
+            lines.append(ln)
+            log(f"  [{label}] {ln.rstrip()}")
+    finally:
+        proc.wait()
+        watchdog.cancel()
+
+    dt = time.monotonic() - t0
+    output = "".join(lines)
+
+    if timed_out["v"]:
+        log(f"[acceptance] {label}: TIMEOUT after {VALIDATE_TIMEOUT_S}s — killed; not mergeable")
+
+        return False, output
+
+    log(f"[acceptance] {label}: validate.py exit={proc.returncode} in {dt:.1f}s")
+
+    return True, output
+
+
+def parse(output):
+    """Parse validate.py output. Returns (status, matched, onlies):
+    status[case] -> 'OK'|'FAIL'|'XFAIL'|'SKIP' (last status line per case wins),
+    matched[case] -> int parity matched, onlies[case] -> (our_only, ref_only)."""
+    status, matched, onlies = {}, {}, {}
+
+    for ln in output.splitlines():
+        m = CASE_LINE.match(ln)
+
+        if m:
+            status[m.group(1)] = m.group(2)
+
+            continue
+
+        m = PARITY_LINE.match(ln)
+
+        if m:
+            case = m.group(1)
+            matched[case] = int(m.group(2))
+            onlies[case] = (int(m.group(3)), int(m.group(4)))
+
+    return status, matched, onlies
+
+
+def decide(so, mo, oo, sn, mn, on):
+    """Compare OLD (so/mo/oo) vs NEW (sn/mn/on). Returns (accept, reasons[])."""
+    # Compare only cases evaluated (present, non-SKIP) in BOTH repos.
+    common = sorted(c for c in so if c in sn and so[c] != "SKIP" and sn[c] != "SKIP")
+
+    log("")
+    log("[acceptance] ===== per-case  OLD -> NEW =====")
+
+    for case in sorted(set(so) | set(sn)):
+        old, new = so.get(case, "—"), sn.get(case, "—")
+        parity = ""
+
+        if case in mo or case in mn:
+            po = f"{mo.get(case, '—')}/{oo.get(case, ('—', '—'))}"
+            pn = f"{mn.get(case, '—')}/{on.get(case, ('—', '—'))}"
+            parity = f"   parity matched/(our_only,ref_only) {po} -> {pn}"
+
+        excluded = "" if case in common else "   (SKIP — excluded)"
+        log(f"  {case:14} {old:6} -> {new:6}{parity}{excluded}")
+
+    ok_old = sum(1 for c in common if so[c] == "OK")
+    ok_new = sum(1 for c in common if sn[c] == "OK")
+    xf_old = sum(1 for c in common if so[c] == "XFAIL")
+    xf_new = sum(1 for c in common if sn[c] == "XFAIL")
+    fail_old = sum(1 for c in common if so[c] == "FAIL")
+    fail_new = sum(1 for c in common if sn[c] == "FAIL")
+
+    log("")
+    log(f"[acceptance] OK     {ok_old} -> {ok_new}    (must not drop)")
+    log(f"[acceptance] XFAIL  {xf_old} -> {xf_new}    (must not grow)")
+    log(f"[acceptance] FAIL   {fail_old} -> {fail_new}    (no new FAIL)")
+
+    reasons = []
+
+    if ok_new < ok_old:
+        reasons.append(f"gating OK count dropped {ok_old} -> {ok_new}")
+
+    if xf_new > xf_old:
+        reasons.append(f"XFAIL count grew {xf_old} -> {xf_new}")
+
+    new_fails = [c for c in common if sn[c] == "FAIL" and so[c] != "FAIL"]
+
+    if new_fails:
+        reasons.append(f"new FAIL appeared: {', '.join(new_fails)}")
+
+    # Each case that is XFAIL in both must not lose matched nodes (PROMPTS.md:
+    # the parity `matched` must not decrease).
+    for case in common:
+        if so[case] == "XFAIL" and sn[case] == "XFAIL" and case in mo and case in mn:
+            if mn[case] < mo[case]:
+                reasons.append(f"{case} parity matched dropped {mo[case]} -> {mn[case]}")
+
+    return (not reasons), reasons
+
+
+def main():
+    if len(sys.argv) != 3:
+        log("usage: acceptance <OLD_REPO> <NEW_REPO>")
+
+        return 2
+
+    old_repo = os.path.abspath(sys.argv[1])
+    new_repo = os.path.abspath(sys.argv[2])
+    work = tempfile.mkdtemp(prefix="acceptance-", dir=os.environ.get("TMPDIR") or None)
+
+    log(f"[acceptance] OLD  = {old_repo}")
+    log(f"[acceptance] NEW  = {new_repo}")
+    log(f"[acceptance] work = {work}")
+
+    try:
+        # Each repo validates into its own fresh subdir (no cross-run staleness);
+        # the multi-GB graph dumps are freed as soon as the run's text output is
+        # captured, so peak disk stays at one repo's footprint, not both.
+        old_out = os.path.join(work, "old")
+        done_old, out_old = run_validate("OLD", old_repo, old_out)
+        shutil.rmtree(old_out, ignore_errors=True)
+
+        if not done_old:
+            log("[acceptance] VERDICT: REJECT (OLD validate.py did not complete in budget)")
+
+            return 1
+
+        new_out = os.path.join(work, "new")
+        done_new, out_new = run_validate("NEW", new_repo, new_out)
+        shutil.rmtree(new_out, ignore_errors=True)
+
+        if not done_new:
+            log("[acceptance] VERDICT: REJECT (NEW validate.py did not complete in budget)")
+
+            return 1
+
+        so, mo, oo = parse(out_old)
+        sn, mn, on = parse(out_new)
+
+        accept, reasons = decide(so, mo, oo, sn, mn, on)
+
+        log("")
+
+        if accept:
+            log("[acceptance] VERDICT: ACCEPT — NEW is mergeable over OLD")
+
+            return 0
+
+        log("[acceptance] VERDICT: REJECT")
+
+        for r in reasons:
+            log(f"  - {r}")
+
+        return 1
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
