@@ -22,7 +22,12 @@ from dataclasses import dataclass
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 GO = "go"
+# AY (the built binary) and WORK_CWD (where gen_*.sh runs, resolving its `./ay`)
+# are repointed at the writable out-dir in main(), so REPO_ROOT may be read-only
+# (the ./acceptance merge gate runs both repos from $TMPDIR). Defaults keep a
+# direct `validate.py` invocation working when nothing overrides them.
 AY = os.path.join(REPO_ROOT, "ay")
+WORK_CWD = REPO_ROOT
 
 # Per-case generation wall-time budgets (seconds): a gen slower than
 # GEN_TIME_SLACK * budget FAILs the case as a perf regression — optimize the
@@ -65,7 +70,7 @@ class ParityCounts:
 
 
 def run(cmd):
-    return subprocess.run(cmd, cwd=REPO_ROOT)
+    return subprocess.run(cmd, cwd=WORK_CWD)
 
 
 def _remove_if_exists(path):
@@ -91,11 +96,11 @@ def _normalize_sort_go(raw, target, out, ref_graph=False):
     _remove_if_exists(tmp)
     p1 = subprocess.Popen(
         norm_cmd,
-        cwd=REPO_ROOT, stdout=subprocess.PIPE,
+        cwd=WORK_CWD, stdout=subprocess.PIPE,
     )
     p2 = subprocess.Popen(
         [AY, "dev", "dump", "sort", "--out", tmp],
-        cwd=REPO_ROOT, stdin=p1.stdout,
+        cwd=WORK_CWD, stdin=p1.stdout,
     )
     p1.stdout.close()
     p2.communicate()
@@ -207,12 +212,20 @@ def main() -> int:
     out_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(REPO_ROOT, ".out", "validate")
     os.makedirs(out_dir, exist_ok=True)
 
+    # Build the binary into the writable out-dir (never into REPO_ROOT, which may
+    # be read-only) and run everything from there: the gen_*.sh scripts invoke
+    # `./ay`, resolved under WORK_CWD=out_dir, and AY (normalize/sort/diff) points
+    # at the same binary. REPO_ROOT stays the build cwd so `go build` finds the module.
+    global AY, WORK_CWD
+    AY = os.path.join(out_dir, "ay")
+    WORK_CWD = out_dir
+
     # The project has no cgo imports; force CGO_ENABLED=0 so the build never
     # drags in runtime/cgo (which needs a C toolchain with stddef.h that may be
     # absent from the host clang resource dir). Pure-Go net/user resolvers are
     # equivalent for our purposes and more hermetic.
     build_env = dict(os.environ, CGO_ENABLED="0")
-    subprocess.run([GO, "build", "-o", "ay", "."], cwd=REPO_ROOT, check=True, env=build_env)
+    subprocess.run([GO, "build", "-o", AY, "."], cwd=REPO_ROOT, check=True, env=build_env)
 
     status = 0
     for name, target, source_root, ref, xfail in CASES:
