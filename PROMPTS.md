@@ -46,6 +46,8 @@ Performance is not negotiable: we are building a racing car, not a Zhiguli. Slow
 
 Before emitting READY, run the full acceptance gate `./dev/validate.py .out/digger-validate` (it builds `ay` itself) and confirm it PASSES — a green `go test` and a clean `ay dump diff` are NOT enough. The gate must keep the gating `[<case>] OK` counts (sg2 / sg2_x86_64 / sg3 / sg4) from dropping, `XFAIL` from growing, and `[sg5] … matched=…` from decreasing — AND it must not introduce any NEW `validate.py` failure, including the per-case generation-time budget. A correct-but-too-slow change fails the gate: if generation time regresses, optimize the hot path before READY.
 
+Never end a turn while work is unfinished: run the gate and every long build/test in the FOREGROUND (block on it inline) — do NOT background it and then stop, narrating that you are "waiting for the gate". Your harness is a one-shot `claude -p`; a turn that ends without a `verdict` event terminates the process and forces a cold respawn that loses your in-progress context. The only way to end a turn is to emit your verdict.
+
 If a task is mostly done, it can already be sent to review when the remaining refinements would require a new large cycle. In a message, post the rationale for the lead and reviewer.
 
 ### REVIEWER
