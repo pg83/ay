@@ -2821,9 +2821,11 @@ func buildIfEnv(instance ModuleInstance) Environment {
 	switch instance.Platform.ISA {
 	case ISAX8664:
 		env.setBool(envARCH_X86_64, true)
+		env.setBool(envARCH_TYPE_64, true)
 	case ISAAArch64:
 		env.setBool(envARCH_AARCH64, true)
 		env.setBool(envARCH_ARM64, true)
+		env.setBool(envARCH_TYPE_64, true)
 	}
 
 	// HAVE_MKL — the BLAS/LAPACK contrib selectors (contrib/libs/clapack,
