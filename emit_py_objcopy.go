@@ -263,13 +263,17 @@ func emitResourceObjcopy(
 				} else {
 					inputVFS := copyFileInputVFS(ctx.fs, instance.Path.rel(), e.Path)
 					// The producer ref of a generated resource (RUN_PROGRAM OUTFile,
-					// COPY output, etc.) lives in the codegen registry, keyed by the
-					// output VFS. copyFileOutputVFS canonicalizes the raw RESOURCE
-					// path (${BINDIR}/X, $(B)/<unit>/X, or a plain name) to that VFS.
+					// COPY output, FROM_SANDBOX fetch, etc.) lives in the codegen
+					// registry, keyed by the output VFS. resourceOutputVFS
+					// canonicalizes the raw RESOURCE path (${BINDIR}/X, $(B)/<unit>/X,
+					// a plain module-relative name, or an arcadia-root-relative path
+					// rooted at the module dir) to that VFS.
 					var producerRef NodeRef
 
-					if info := codegenRegForInstance(ctx, instance).lookup(copyFileOutputVFS(instance.Path.rel(), e.Path)); info != nil {
-						inputVFS = copyFileOutputVFS(instance.Path.rel(), e.Path)
+					outVFS := resourceOutputVFS(instance.Path.rel(), e.Path)
+
+					if info := codegenRegForInstance(ctx, instance).lookup(outVFS); info != nil {
+						inputVFS = outVFS
 						producerRef = info.ProducerRef
 					}
 
