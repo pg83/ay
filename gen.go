@@ -132,14 +132,12 @@ var acknowledgedMacros = map[string]struct{}{
 	// gate; modelling their nodes is the node-count convergence step.
 	// TODO: implement typed handlers.
 	//   - ARCHIVE_ASM: embed files as a rodata .o.
-	//   - CPP_EVLOG: event-log C++ codegen.
 	//   - LIST_PROTO: writes a .proto file listing.
 	//   - BASE_CODEGEN: generic tool-driven codegen.
 	// JAVA_PROTO_PLUGIN / GO_PROTO_PLUGIN register java/go protoc plugins —
 	// genuinely inert for a C++/Python target (cf. WITH_KOTLIN_GRPC above).
 	"FROM_SANDBOX":      {},
 	"ARCHIVE_ASM":       {},
-	"CPP_EVLOG":         {},
 	"LIST_PROTO":        {},
 	"BASE_CODEGEN":      {},
 	"JAVA_PROTO_PLUGIN": {},
