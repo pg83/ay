@@ -143,6 +143,7 @@ type ModuleData struct {
 	antlr4Grammars     []Antlr4GrammarInfo
 	antlrRuns          []AntlrRunInfo
 	runPrograms        []*RunProgramStmt
+	decimalMD5         []*DecimalMD5Lower32BitsStmt
 	runPython          []*RunPythonStmt
 	fromSandboxes      []*FromSandboxStmt
 	checkConfigHeaders []STR
@@ -1571,6 +1572,28 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		}
 
 		d.checkConfigHeaders = append(d.checkConfigHeaders, v.Args[0])
+	case tokDecimalMd5Lower32Bits:
+		// DECIMAL_MD5_LOWER_32_BITS(File, FUNCNAME="", Opts...): decimal_md5.py
+		// hashes Opts and emits File as a build-root .cpp (ymake.core.conf:4239).
+		// Args arrive already expanded (the ${ATLAS_SOURCES} list is split).
+		if len(v.Args) == 0 {
+			throwFmt("gen: %s: DECIMAL_MD5_LOWER_32_BITS expects at least 1 argument (File)", modulePath)
+		}
+
+		stmt := &DecimalMD5Lower32BitsStmt{File: v.Args[0].string()}
+
+		rest := v.Args[1:]
+		if len(rest) >= 1 && rest[0] == kwFUNCNAME {
+			if len(rest) < 2 {
+				throwFmt("gen: %s: DECIMAL_MD5_LOWER_32_BITS FUNCNAME requires a value", modulePath)
+			}
+
+			stmt.FuncName = rest[1].string()
+			rest = rest[2:]
+		}
+
+		stmt.Opts = append([]STR(nil), rest...)
+		d.decimalMD5 = append(d.decimalMD5, stmt)
 	case tokBuildwithCythonCpp:
 		if len(v.Args) == 0 {
 			throwFmt("BUILDWITH_CYTHON_CPP expects at least 1 argument")
