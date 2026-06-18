@@ -246,6 +246,16 @@ func resolvePySrcRel(fs FS, srcDirs []VFS, modulePath, srcRel string) string {
 		}
 	}
 
+	// Root-relative SRCS (proto/py listed with an arcadia-root path, e.g.
+	// market/idx/datacamp/proto/external's
+	// `market/idx/datacamp/proto/api/ExportMessage.proto`): when the entry
+	// resolves under neither a SRCDIR nor the module dir but exists at the
+	// arcadia root, bind it there instead of doubling it under the module dir.
+	if srcRel != "" && pathIsClean(srcRel) &&
+		!fs.isFile(dirKey(modulePath), srcRel) && fs.isFile(srcRootVFS, srcRel) {
+		return srcRel
+	}
+
 	return modulePath + "/" + srcRel
 }
 

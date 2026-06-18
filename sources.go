@@ -102,6 +102,19 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 		}
 	}
 
+	// Root-relative SRCS: a clean path that resolves under neither the module
+	// dir nor any SRCDIR but exists at the arcadia root binds there. Upstream
+	// ymake's source resolution plan ends at the arcadia root, so e.g.
+	// geobase/library/abi's `geobase/library/asset.cpp` (the file lives at
+	// $(S)/geobase/library/asset.cpp, not under the module dir) resolves to
+	// $(S)/<path>, not the doubled $(S)/<moduledir>/<path>. The module dir is
+	// consulted first (curdir wins) so a co-located source still binds locally.
+	if srcRel != "" && pathIsClean(srcRel) &&
+		!ctx.fs.isFile(dirKey(srcInstance.Path.rel()), srcRel) &&
+		ctx.fs.isFile(srcRootVFS, srcRel) {
+		return source(srcRel)
+	}
+
 	// Normalise any literal `..` / `.` segments so SRCS(../foo.cpp) lands
 	// at the canonical source path (REF tracks the cleaned form, e.g.
 	// $(S)/ydb/public/lib/ydb_cli/commands/ydb_command.cpp, not the
