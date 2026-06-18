@@ -149,7 +149,13 @@ func resourceLibTagForData(d *ModuleData) *string {
 	return resourceModuleTag(d.moduleStmt.Name)
 }
 
-func expandRootrel(kv string, unitPath string) string {
+// rootrelExpand substitutes the resolved root-relative path of the input into a
+// resfs/src kv's ${rootrel;…input=TEXT:"<inner>"} marker. `resolved` is the
+// .rel() of the same VFS the payload member binds to: a generated $(B) output
+// yields module/inner, an ordinary source the source-root path. Mirrors
+// upstream rootrel, which reports the resolved input's root-relative path rather
+// than a naive module-dir join.
+func rootrelExpand(kv string, resolved string) string {
 	const marker = "${rootrel;context=TEXT;input=TEXT:\""
 	idx := strings.Index(kv, marker)
 
@@ -164,10 +170,7 @@ func expandRootrel(kv string, unitPath string) string {
 		return kv
 	}
 
-	innerPath := tail[:end]
-	expanded := unitPath + "/" + innerPath
-
-	return kv[:idx] + expanded + tail[end+len("\"}"):]
+	return kv[:idx] + resolved + tail[end+len("\"}"):]
 }
 
 func rootrelInputPath(kv string) (string, bool) {
