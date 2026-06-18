@@ -96,6 +96,7 @@ type SysInclEnv struct {
 	arch       string
 	musl       bool
 	opensource bool
+	os         OS
 }
 
 type SysInclEntry struct {
@@ -127,7 +128,7 @@ func muslArchIs(want string) func(SysInclEnv) bool {
 	return func(e SysInclEnv) bool { return e.musl && e.arch == want }
 }
 
-func loadSysInclSetForFS(fs FS, arch string, musl, opensource bool, onWarn func(Warn)) SysInclSet {
+func loadSysInclSetForFS(fs FS, arch string, musl, opensource bool, os OS, onWarn func(Warn)) SysInclSet {
 	if !fs.isDir(srcRootVFS, baseSysInclDir) {
 		return nil
 	}
@@ -136,7 +137,7 @@ func loadSysInclSetForFS(fs FS, arch string, musl, opensource bool, onWarn func(
 		throwFmt("LoadSysInclSetFor: unsupported arch %q (want aarch64 or x86_64)", arch)
 	}
 
-	env := SysInclEnv{arch: arch, musl: musl, opensource: opensource}
+	env := SysInclEnv{arch: arch, musl: musl, opensource: opensource, os: os}
 	var set SysInclSet
 	sysinclDir := dirKey(baseSysInclDir)
 
@@ -154,21 +155,56 @@ func loadSysInclSetForFS(fs FS, arch string, musl, opensource bool, onWarn func(
 	}
 
 	// The internal contour (OPENSOURCE != yes) layers build/internal/sysincl/* on top
-	// of the base set (build/internal/conf/sysincl.conf). Rather than track the curated
-	// list, load every .yml in that directory — files for absent platforms/projects
-	// (qt, smart_devices_*, …) map headers that never appear in these sources, so they
-	// are inert. Sorted for deterministic precedence; loaded after the base set so they
-	// override it (e.g. taxi.yml's <errno.h>/<pthread.h> → userver libc_workarounds).
+	// of the base set. Upstream loads a curated, config-gated subset (build/internal/
+	// conf/sysincl.conf + project_specific/{smart_devices,maps/mapkit}.conf), NOT the
+	// whole directory: each SYSINCL+= sits under a `when` clause on OPENSOURCE/OS_*/
+	// ARCH_*/project flags. internalSysInclApplies reproduces that gating. Loading
+	// every file is wrong — actions_zephyr.yml (OS_ZEPHYR only) carries a broad
+	// ^(alice|util|contrib|…) source_filter that remaps stdint.h/time.h/pthread.h/
+	// syscall.h to Zephyr headers, polluting ordinary C++ closures. Sorted for
+	// deterministic precedence; loaded after the base set so it overrides it (e.g.
+	// taxi.yml's <errno.h>/<pthread.h> → userver libc_workarounds).
 	if !opensource {
-		set = append(set, loadSysInclDir(fs, internalSysInclDir, onWarn)...)
+		set = append(set, loadSysInclDir(fs, internalSysInclDir, env, onWarn)...)
 	}
 
 	return set
 }
 
-// loadSysInclDir parses every *.yml in a source-tree sysincl directory, in sorted
-// filename order. Absent directory → no records.
-func loadSysInclDir(fs FS, dir string, onWarn func(Warn)) SysInclSet {
+// internalSysInclApplies gates a build/internal/sysincl/*.yml file the way the
+// upstream conf does. The internal contour (opensource==false) is already ensured
+// by the caller. The OSes this model builds are linux/darwin/windows only — files
+// gated on OS_ZEPHYR/OS_NONE/OS_FREERTOS/OS_ANDROID or MAPSMOBI_BUILD_TARGET can
+// never apply here, so they are never loaded (matching upstream for these graphs).
+func internalSysInclApplies(name string, env SysInclEnv) bool {
+	switch name {
+	case "macro.yml", "misc.yml", "sdc.yml", "smart_devices.yml", "speechkit.yml", "weird.yml":
+		// build/internal/conf/sysincl.conf: when ($OPENSOURCE != "yes").
+		return true
+	case "taxi.yml":
+		// when ($USE_STL_SYSTEM != "yes" && $NORUNTIME != "yes" && $OPENSOURCE != "yes");
+		// USE_STL_SYSTEM / NORUNTIME are unset in every build here.
+		return true
+	case "misc-win.yml":
+		// when ($OS_WINDOWS == "yes").
+		return env.os == OSWindows
+	case "smart_devices_linux.yml":
+		// project_specific/smart_devices.conf: when ($OS_LINUX == "yes").
+		return env.os == OSLinux
+	case "smart_devices_darwin.yml":
+		// elsewhen ($OS_DARWIN == "yes").
+		return env.os == OSDarwin
+	}
+
+	// actions_zephyr, amlogic_rtos, sanitizers-to-nothing, smart_devices_{android,
+	// beken,esp32,telink}, mobile-metrica, qt, yx-account-manager: gated on an OS/
+	// ARCH/project this model never builds.
+	return false
+}
+
+// loadSysInclDir parses the config-applicable *.yml in the internal sysincl
+// directory, in sorted filename order. Absent directory → no records.
+func loadSysInclDir(fs FS, dir string, env SysInclEnv, onWarn func(Warn)) SysInclSet {
 	if !fs.isDir(srcRootVFS, dir) {
 		return nil
 	}
@@ -187,6 +223,10 @@ func loadSysInclDir(fs FS, dir string, onWarn func(Warn)) SysInclSet {
 	var set SysInclSet
 
 	for _, name := range names {
+		if !internalSysInclApplies(name, env) {
+			continue
+		}
+
 		records := parseSysInclYAML(name, fs.read(dir+"/"+name), onWarn)
 		set = append(set, records...)
 	}
