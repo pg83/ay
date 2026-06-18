@@ -207,6 +207,7 @@ var tokName = [...]STR{
 	tokDefaultJdkVersion:               internStr("DEFAULT_JDK_VERSION"),
 	tokExportYmapsProto:                internStr("EXPORT_YMAPS_PROTO"),
 	tokLj21Archive:                     internStr("LJ_21_ARCHIVE"),
+	tokProtoDescriptions:               internStr("PROTO_DESCRIPTIONS"),
 	tokSplitCodegen:                    internStr("SPLIT_CODEGEN"),
 	tokStructCodegen:                   internStr("STRUCT_CODEGEN"),
 	tokStyleDetekt:                     internStr("STYLE_DETEKT"),
@@ -433,6 +434,7 @@ const (
 	tokDefaultJdkVersion
 	tokExportYmapsProto
 	tokLj21Archive
+	tokProtoDescriptions
 	tokSplitCodegen
 	tokStructCodegen
 	tokStyleDetekt
