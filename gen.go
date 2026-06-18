@@ -133,13 +133,11 @@ var acknowledgedMacros = map[string]struct{}{
 	// TODO: implement typed handlers.
 	//   - ARCHIVE_ASM: embed files as a rodata .o.
 	//   - LIST_PROTO: writes a .proto file listing.
-	//   - BASE_CODEGEN: generic tool-driven codegen.
 	// JAVA_PROTO_PLUGIN / GO_PROTO_PLUGIN register java/go protoc plugins —
 	// genuinely inert for a C++/Python target (cf. WITH_KOTLIN_GRPC above).
 	"FROM_SANDBOX":      {},
 	"ARCHIVE_ASM":       {},
 	"LIST_PROTO":        {},
-	"BASE_CODEGEN":      {},
 	"JAVA_PROTO_PLUGIN": {},
 	"GO_PROTO_PLUGIN":   {},
 
@@ -2044,6 +2042,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	prCCRes := emitRunProgramsForAR(ctx, instance, d, moduleInputs)
 	dmCCRes := emitDecimalMD5ForAR(ctx, instance, d, moduleInputs)
 	scCCRes := emitSplitCodegensForAR(ctx, instance, d, moduleInputs)
+	emitBaseCodegensForAR(ctx, instance, d, moduleInputs)
 	pyCCRes := emitRunPythonForAR(ctx, instance, d, moduleInputs)
 
 	enCCRes := emitEnumSrcs(ctx, instance, d, selfPeerAddInclGlobal, &moduleInputs)
