@@ -90,3 +90,62 @@ func TestEmitLj21Archive_RawCompilationAndArchive(t *testing.T) {
 		t.Errorf("LuaSources.inc cmd %q missing the lua sources / keys", srcCmd)
 	}
 }
+
+// TestEmitLj21Archive_ArchiveOutputAddInclAndClosure covers the ARCHIVE_BY_KEYS
+// generated-header consumer surface of LJ_21_ARCHIVE: the `${addincl;noauto;
+// output:NAME}` outputs put the module build dir on the C++ compile command
+// (-I$(B)/mod), and a C++ unit that #includes a generated archive header receives
+// the archive's source-member closure as inputs (the raws' lua sources through
+// LuaScripts.inc, the direct lua sources through LuaSources.inc).
+func TestEmitLj21Archive_ArchiveOutputAddInclAndClosure(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "contrib/libs/luajit_21/compiler", "compiler")
+	writeToolProgram(files, "tools/archiver", "archiver")
+
+	writeTestModuleFile(files, "mod/ya.make",
+		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"+
+			"SRCS(\n    templates.cpp\n    templates_sources.cpp\n)\n"+
+			"LJ_21_ARCHIVE(\n    NAME LuaScripts.inc\n    a.lua\n    sub/b.lua\n)\nEND()\n")
+	writeTestModuleFile(files, "mod/a.lua", "return 1\n")
+	writeTestModuleFile(files, "mod/sub/b.lua", "return 2\n")
+	writeTestModuleFile(files, "mod/templates.cpp", "#include \"LuaScripts.inc\"\n")
+	writeTestModuleFile(files, "mod/templates_sources.cpp", "#include \"LuaSources.inc\"\n")
+
+	g := testGen(newMemFS(files), "mod")
+
+	ccBySuffix := func(suffix string) *Node {
+		t.Helper()
+		for _, n := range g.Graph {
+			if n.KV.P == pkCC && len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), suffix) {
+				return n
+			}
+		}
+		t.Fatalf("no CC node with output suffix %q", suffix)
+		return nil
+	}
+
+	const buildInc = "-I$(B)/mod"
+
+	// (1) both C++ objects get the archive output's addincl on their command line.
+	scripts := ccBySuffix("/templates.cpp.o")
+	if !contains(scripts.Cmds[0].CmdArgs.flat(), buildInc) {
+		t.Errorf("templates.cpp.o cmd missing %q; got %v", buildInc, strStrs(scripts.Cmds[0].CmdArgs.flat()))
+	}
+
+	sources := ccBySuffix("/templates_sources.cpp.o")
+	if !contains(sources.Cmds[0].CmdArgs.flat(), buildInc) {
+		t.Errorf("templates_sources.cpp.o cmd missing %q; got %v", buildInc, strStrs(sources.Cmds[0].CmdArgs.flat()))
+	}
+
+	// (2) the LuaScripts.inc consumer pulls the raw members' lua sources, and the
+	// LuaSources.inc consumer pulls the direct lua sources, as closure-leaf inputs.
+	for _, lua := range []string{"$(S)/mod/a.lua", "$(S)/mod/sub/b.lua"} {
+		if !nodeHasInput(scripts, lua) {
+			t.Errorf("templates.cpp.o inputs %v missing LuaScripts.inc closure leaf %q", vfsStringsT3(scripts.flatInputs()), lua)
+		}
+		if !nodeHasInput(sources, lua) {
+			t.Errorf("templates_sources.cpp.o inputs %v missing LuaSources.inc closure leaf %q", vfsStringsT3(sources.flatInputs()), lua)
+		}
+	}
+}
