@@ -54,6 +54,7 @@ func emitLD(
 	wantsStrip bool,
 	wantsSplitDwarf bool,
 	programModuleTag STR,
+	hasBundles bool,
 	tc ModuleToolchain,
 	hostP *Platform,
 	scripts ScriptDeps,
@@ -151,7 +152,7 @@ func emitLD(
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(objcopy), Env: envVcsOnly})
 	}
 
-	inputs := composeLDInputs(na, instance.Path.rel(), ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts, emitCopy)
+	inputs := composeLDInputs(na, instance.Path.rel(), ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts, emitCopy, hasBundles)
 
 	inputTail := make([]VFS, 0, 2)
 	inputTail = append(inputTail, ldSvnversionHVFS)
@@ -541,7 +542,7 @@ func composeLDSplitDwarfCmds(na *NodeArenas, tc ModuleToolchain, outputPath stri
 	return na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(tc.Objcopy, argOnlyKeepDebug.str(), internStr(outputPath), internStr(debugPath)))}, Cmd{CmdArgs: na.chunkList(na.strList(tc.Strip, argStripDebug.str(), internStr(outputPath)))}, Cmd{CmdArgs: na.chunkList(na.strList(tc.Objcopy, argRemoveSectionGnuDebuglink.str(), argAddGnuDebuglink.str(), internStr(debugPath), internStr(outputPath)))})
 }
 
-func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts ScriptDeps, emitCopy bool) InputChunks {
+func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts ScriptDeps, emitCopy bool, hasBundles bool) InputChunks {
 	chunks := make(InputChunks, 0, 3+len(ldScriptInputs))
 
 	// peerLibPaths is the caller's member slice, dup-free by construction (gen's
@@ -588,8 +589,10 @@ func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPa
 	for _, s := range ldScriptInputs {
 		// fs_tools.py is the LINK_OR_COPY_SO_CMD script; when that step is not
 		// emitted (no SO_OUTPUTS) it is not an input either (its sole import,
-		// process_command_files, still arrives via link_exe.py).
-		if s == copyFsToolsVFS && !emitCopy {
+		// process_command_files, still arrives via link_exe.py) — unless the
+		// module declares BUNDLE, whose _BUNDLE_TARGET MOVE_FILE ($FS_TOOLS rename)
+		// attributes the same ${input:"build/scripts/fs_tools.py"} to this link node.
+		if s == copyFsToolsVFS && !emitCopy && !hasBundles {
 			continue
 		}
 
