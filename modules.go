@@ -755,6 +755,7 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 
 	applyPython3AddIncl(modulePath, d)
 	applyBuildInfoAddIncl(modulePath, d)
+	applyArchiveAddIncl(modulePath, d)
 
 	cflagPrefix := append(muslCFlags(d.muslEnabled && !effectiveNoPlatform(d.flags)), sseBaseCFlags(env.bool(envARCH_X86_64))...)
 	d.moduleScopeCFlags = append(cflagPrefix, d.moduleScopeCFlags...)
@@ -931,9 +932,24 @@ func applyPython3AddIncl(modulePath string, d *ModuleData) {
 	d.addInclGlobal = append(d.addInclGlobal, pythonIncludeDir)
 	d.addInclUserGlobal = append(d.addInclUserGlobal, pythonIncludeDir)
 	d.addIncl = append(d.addIncl, pythonIncludeDir)
+}
 
-	if modulePath == "library/python/runtime_py3" {
-		d.addIncl = append(d.addIncl, bldLibraryPythonRuntimePy3)
+// applyArchiveAddIncl reproduces ARCHIVE's ${addincl;noauto;output:NAME} side
+// effect (ymake.core.conf). Upstream's `addincl` modifier resolves to
+// Module.IncDirs.Add(Parent(output), EIncDirScope::Global) — the output's build
+// directory enters the module's local, user-global, and global include buckets,
+// reaching the declaring module's own compiles and propagating to its PEERDIR
+// consumers (the same Global-scope effect CONFIGURE_FILE's ${addincl;output:Dst}
+// produces). Applied after applyPython3AddIncl so the build-root dir follows the
+// python include in declaration order, matching upstream where ARCHIVE is
+// processed after the USE_PYTHON3 include setup. This subsumes the former
+// runtime_py3-specific local include.
+func applyArchiveAddIncl(modulePath string, d *ModuleData) {
+	for _, a := range d.archives {
+		include := build(generatedIncludeDir(modulePath, a.Name))
+		d.addIncl = append(d.addIncl, include)
+		d.addInclGlobal = append(d.addInclGlobal, include)
+		d.addInclUserGlobal = append(d.addInclUserGlobal, include)
 	}
 }
 
@@ -1312,35 +1328,29 @@ func moduleStmtForKind(stmt *ModuleStmt, kind ModuleKind) *ModuleStmt {
 	return stmt
 }
 
-func addGeneratedHeaderInclude(modulePath, dst string, d *ModuleData) {
+// generatedIncludeDir resolves the build-root include directory for a generated
+// output `dst` written into `modulePath` (the parent dir of $(B)/<mod>/<dst>,
+// falling back to the module dir when dst is flat).
+func generatedIncludeDir(modulePath, dst string) string {
 	outVFS := copyFileOutputVFS(modulePath, dst)
 	dir := filepath.ToSlash(filepath.Clean(filepath.Dir(outVFS.rel())))
-	rel := dir
 
 	if dir != "." && dir != "" {
-		rel = filepath.ToSlash(filepath.Clean(dir))
-	} else {
-		rel = modulePath
+		return filepath.ToSlash(filepath.Clean(dir))
 	}
 
-	include := build(rel)
+	return modulePath
+}
+
+func addGeneratedHeaderInclude(modulePath, dst string, d *ModuleData) {
+	include := build(generatedIncludeDir(modulePath, dst))
 	d.addLocalIncl(prioAddIncl, include)
 	d.addInclGlobal = append(d.addInclGlobal, include)
 	d.addInclUserGlobal = append(d.addInclUserGlobal, include)
 }
 
 func addGeneratedHeaderIncludeCF(modulePath, dst string, d *ModuleData) {
-	outVFS := copyFileOutputVFS(modulePath, dst)
-	dir := filepath.ToSlash(filepath.Clean(filepath.Dir(outVFS.rel())))
-	rel := dir
-
-	if dir != "." && dir != "" {
-		rel = filepath.ToSlash(filepath.Clean(dir))
-	} else {
-		rel = modulePath
-	}
-
-	include := build(rel)
+	include := build(generatedIncludeDir(modulePath, dst))
 	d.cfAddIncl = append(d.cfAddIncl, include)
 	d.cfAddInclGlobal = append(d.cfAddInclGlobal, include)
 }
