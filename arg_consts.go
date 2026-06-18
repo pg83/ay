@@ -41,6 +41,7 @@ var (
 	argContribToolsSwig                          = internArg("contrib/tools/swig")
 	argContribToolsYasm                          = internArg("contrib/tools/yasm")
 	argCopy                                      = internArg("copy")
+	argRename                                    = internArg("rename")
 	argCplus                                     = internArg("--cplus")
 	argCpp                                       = internArg("--cpp")
 	argCppOutB                                   = internArg("--cpp_out=:$(B)/")
