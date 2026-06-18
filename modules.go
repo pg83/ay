@@ -157,6 +157,8 @@ type ModuleData struct {
 
 	archives []ArchiveEntry
 
+	lj21 *Lj21Archive
+
 	copyFiles []CopyFileEntry
 
 	copyFileAutoOutputs map[STR]CopyFileEntry
@@ -359,6 +361,17 @@ type ArchiveEntry struct {
 	Name         string
 	DontCompress bool
 	Files        []string
+	// Keys is the ordered ARCHIVE_BY_KEYS key list. Non-nil selects the
+	// `${input:Files} -k <:joined keys>` command shape (ymake.core.conf
+	// ARCHIVE_BY_KEYS); nil keeps the plain ARCHIVE `${suf=\:;input:Files}` form.
+	Keys []string
+}
+
+// Lj21Archive holds the ordered module-relative .lua names declared by a
+// LJ_21_ARCHIVE call. The emit phase (emitLuaJit21) compiles each to a .raw and
+// wires the LuaScripts.inc/LuaSources.inc archives.
+type Lj21Archive struct {
+	Luas []string
 }
 
 type CopyFileEntry struct {
@@ -1747,6 +1760,8 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 	case tokArchive:
 
 		applyArchiveStmt(v, d)
+	case tokLj21Archive:
+		applyLj21ArchiveStmt(v, d)
 	case tokEnable:
 		// upstream pybuild plugins translate ENABLE(X) into
 		// `unit.set([X, 'yes'])` — a plain boolean env var, picked up by
@@ -2609,6 +2624,28 @@ func applyArchiveStmt(v *UnknownStmt, d *ModuleData) {
 	}
 
 	d.archives = append(d.archives, entry)
+}
+
+// applyLj21ArchiveStmt parses LJ_21_ARCHIVE(NAME Name LuaFiles...). Mirroring
+// build/plugins/lj_archive.py, the lua list is every arg ending in `.lua` (the
+// NAME keyword and its value slot do not end in `.lua`, so they fall out). The
+// emit phase compiles each to a .raw and archives the raws/sources.
+func applyLj21ArchiveStmt(v *UnknownStmt, d *ModuleData) {
+	var luas []string
+
+	for _, aTok := range v.Args {
+		a := aTok.string()
+
+		if strings.HasSuffix(a, ".lua") {
+			luas = append(luas, a)
+		}
+	}
+
+	if len(luas) == 0 {
+		throwFmt("gen: LJ_21_ARCHIVE has no .lua files (line %d)", v.Line)
+	}
+
+	d.lj21 = &Lj21Archive{Luas: luas}
 }
 
 func applyAllocatorStmt(v *UnknownStmt, d *ModuleData) {
