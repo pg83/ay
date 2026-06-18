@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"sync"
 )
 
@@ -26,17 +27,57 @@ var evAbseilCleanupHeaders = []VFS{
 	intern("$(S)/contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/internal/cleanup.h"),
 }
 
-// evProtocConstArgs is the constant -I/--out span of every EV protoc command.
-var evProtocConstArgs = []STR{
+// CPP_EV_CMDLINE reuses _CPP_PROTO_CMDLINE_BASE (ymake.core.conf:614,618), so
+// the EV protoc include span is split around the `${pre=-I=:_PROTO__INCLUDE}`
+// peer block exactly as the PB command is: evProtocConstHead is everything up to
+// and including the leading PROTOBUF_INCLUDE_PATH, evProtocConstTail is the
+// trailing $ARCADIA_BUILD_ROOT / PROTOBUF_INCLUDE_PATH pair plus the --out args.
+var evProtocConstHead = []STR{
 	argI2.str(),
 	argIS2.str(),
 	argIB2.str(),
 	argIS3.str(),
 	argISContribLibsProtobufSrc.str(),
+}
+
+var evProtocConstTail = []STR{
 	argIB2.str(),
 	argISContribLibsProtobufSrc.str(),
 	argCppOutB.str(),
 	argCppStyleguideOutB.str(),
+}
+
+// evPeerProtoIncludes renders the transitive _PROTO__INCLUDE peer block for an
+// EV protoc command: peer PROTO_ADDINCL contributions first, then the bare
+// PROTO_NAMESPACE tail. _PROTO__INCLUDE is an ordered set, and evProtocConstHead
+// already renders its base members ($(B), $(S), contrib/libs/protobuf/src), so a
+// token already present in the const head (or earlier in this block) is skipped
+// — only the extra peer namespace tokens (e.g. -I=$(S)/yt) survive.
+func evPeerProtoIncludes(peerProtoAddIncl, protoNamespaceTail []VFS) []STR {
+	if len(peerProtoAddIncl) == 0 && len(protoNamespaceTail) == 0 {
+		return nil
+	}
+
+	out := make([]STR, 0, len(peerProtoAddIncl)+len(protoNamespaceTail))
+
+	appendUnique := func(p VFS) {
+		token := internStr("-I=" + p.string())
+		if slices.Contains(evProtocConstHead, token) || slices.Contains(out, token) {
+			return
+		}
+
+		out = append(out, token)
+	}
+
+	for _, p := range peerProtoAddIncl {
+		appendUnique(p)
+	}
+
+	for _, p := range protoNamespaceTail {
+		appendUnique(p)
+	}
+
+	return out
 }
 
 func evWitnessExtras(evRelPath string, evPbCC VFS) []IncludeDirective {
@@ -66,6 +107,8 @@ func emitEV(
 	event2cppBinary VFS,
 	moduleTag STR,
 	transitiveImports []VFS,
+	peerProtoAddIncl []VFS,
+	protoNamespaceTail []VFS,
 	tc ModuleToolchain,
 	emit Emitter,
 ) NodeRef {
@@ -77,13 +120,15 @@ func emitEV(
 	evH := build(evRelPath + ".pb.h")
 	srcVFS := source(evRelPath)
 
+	peerIncludes := evPeerProtoIncludes(peerProtoAddIncl, protoNamespaceTail)
+
 	cmdArgs := na.chunkList(na.strList(tc.Python3,
 		internStr(pbWrapperPath),
 		argOutputs.str(),
 		(evCC).str(),
 		(evH).str(),
 		arg2.str(),
-		(protocBinary).str()), evProtocConstArgs, na.strList(internStr("--plugin=protoc-gen-cpp_styleguide="+cppStyleguideBinary.string()),
+		(protocBinary).str()), evProtocConstHead, peerIncludes, evProtocConstTail, na.strList(internStr("--plugin=protoc-gen-cpp_styleguide="+cppStyleguideBinary.string()),
 		internStr(evRelPath),
 		internStr("--plugin=protoc-gen-event2cpp="+event2cppBinary.string()),
 		argEvent2cppOutB.str(),
@@ -136,7 +181,8 @@ func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 		instance, evRelPath,
 		cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 		cppStyleguideBinary, protocBinary, event2cppBinary,
-		0, evImports, d.tc, ctx.emit)
+		0, evImports, in.PeerProtoAddInclGlobal, in.ProtoNamespaceTail,
+		d.tc, ctx.emit)
 
 	evH := build(evRelPath + ".pb.h")
 	evPbCC := build(evRelPath + ".pb.cc")
