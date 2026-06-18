@@ -23,6 +23,45 @@ func TestParseBaseCodegen(t *testing.T) {
 	}
 }
 
+// TestGen_BaseCodegenGeneratedClosure pins the generated-header include closure
+// for BASE_CODEGEN consumers (T-29). Upstream carries the generated-from sibling
+// prefix.cpp and the prefix.in source as closure leaves of prefix.h, so every CC
+// node that includes the generated header inherits them. This is the BC half of
+// the sg7 kernel/factor_slices evidence (factor_slices_gen.h → factor_slices_gen.cpp
+// + factor_slices_gen.in on kernel/fill_factors_codegen/main.cpp.pic.o).
+//
+// Pre-T-29 prefix.h has no closure leaves, so a consumer of base_gen.h sees the
+// header but neither base_gen.cpp nor base_gen.in.
+func TestGen_BaseCodegenGeneratedClosure(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "tool", "base_gen")
+
+	writeTestModuleFile(files, "lib/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+BASE_CODEGEN(tool base_gen)
+SRCS(
+    GLOBAL ${BINDIR}/base_gen.cpp
+    GLOBAL use.cpp
+)
+END()
+`)
+	writeTestModuleFile(files, "lib/base_gen.in", "// base codegen input\n")
+	writeTestModuleFile(files, "lib/use.cpp", "#include <lib/base_gen.h>\nint use() { return 0; }\n")
+
+	g := testGen(newMemFS(files), "lib")
+
+	cc := mustNodeByOutput(t, g, "$(B)/lib/use.cpp.o")
+
+	for _, want := range []string{"$(B)/lib/base_gen.cpp", "$(S)/lib/base_gen.in"} {
+		if !nodeHasInput(cc, want) {
+			t.Errorf("use.cpp.o inputs missing generated-from leaf %q: %v", want, cc.flatInputs())
+		}
+	}
+}
+
 // TestGen_BaseCodegenReachability is the T-22 regression. It guards the
 // reachability rule verified by T-21: BASE_CODEGEN must emit a BC producer that
 // takes a tool dependency on the tool PROGRAM's LD, and that tool dependency must
