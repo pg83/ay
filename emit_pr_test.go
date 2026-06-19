@@ -163,3 +163,242 @@ END()
 		t.Fatalf("use.cpp.o deps missing producer uid %q: %v", producer.UID, graphDeps(g, use))
 	}
 }
+
+// A RUN_PROGRAM auto STDOUT output with an assembler extension (.asm) is, per
+// ymake auto-output semantics, a module source: it must be compiled by the
+// assembler and archived into the module library, exactly like a declared .asm
+// SRC. This is the connectivity the sg7 icookie blacklist .pic.o depends on —
+// yabs/server/cs/libs/mkdb_info/builtin RUN_PROGRAMs dump_mkdb_info (a host
+// tool whose PIC closure links the icookie libraries) STDOUT mkdb_info.asm, and
+// only the resulting mkdb_info.o member edge pulls that tool closure into the
+// program's target closure. Before the fix the .asm output was registered for
+// include resolution but never compiled or archived, leaving the tool closure
+// disconnected.
+func TestGen_RunProgramAutoStdoutAsmCompiledAndArchived(t *testing.T) {
+	files := map[string]string{}
+
+	// The host tool that produces the .asm, with its own library peer (stands
+	// in for the icookie-style LIBRARY reached only through the tool closure).
+	writeTestModuleFile(files, "cookie/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(cookie.cpp)
+END()
+`)
+	writeTestModuleFile(files, "cookie/cookie.cpp", "int cookie(){return 0;}\n")
+
+	writeTestModuleFile(files, "tools/dumper/ya.make", `PROGRAM(dumper)
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(cookie)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "tools/dumper/main.cpp", "int main(){return 0;}\n")
+
+	// The LIBRARY whose RUN_PROGRAM auto STDOUT is a .asm.
+	writeTestModuleFile(files, "builtin/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    tools/dumper archive_asm
+    STDOUT gen.asm
+)
+SRCS(builtin.cpp)
+END()
+`)
+	writeTestModuleFile(files, "builtin/builtin.cpp", "int builtin(){return 0;}\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(builtin)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+
+	// The RUN_PROGRAM auto STDOUT .asm producer.
+	asmProducer := mustNodeByAnyOutput(t, g, "$(B)/builtin/gen.asm")
+
+	// (1) The .asm is compiled to an object by the assembler.
+	asmObj := mustNodeByOutput(t, g, "$(B)/builtin/gen.o")
+
+	// The assembler compile depends on the RUN_PROGRAM producer (so the .asm
+	// exists before it runs).
+	if !slices.Contains(graphDeps(g, asmObj), asmProducer.UID) {
+		t.Fatalf("gen.o deps missing RUN_PROGRAM producer uid %q: %v", asmProducer.UID, graphDeps(g, asmObj))
+	}
+
+	// (2) The object is a member of the module library.
+	lib := mustNodeByOutput(t, g, "$(B)/builtin/libbuiltin.a")
+	if !nodeHasInput(lib, "$(B)/builtin/gen.o") {
+		t.Fatalf("libbuiltin.a missing member $(B)/builtin/gen.o: %#v", lib.flatInputs())
+	}
+
+	// (3) The RUN_PROGRAM tool program — and through it its library peer —
+	// becomes reachable from the program target closure (the disconnected-tool
+	// failure mode the icookie residual exhibits).
+	mustNodeByAnyOutput(t, g, "$(B)/tools/dumper/dumper")
+	mustNodeByOutput(t, g, "$(B)/cookie/libcookie.a")
+}
+
+// STDOUT_NOAUTO is upstream's ${stdout;noauto;output:STDOUT_NOAUTO} — the noauto
+// modifier marks the redirect as NOT a module source (ymake.core.conf:4780,4832),
+// exactly like OUT_NOAUTO vs OUT. A RUN_PROGRAM(... STDOUT_NOAUTO gen.asm) must
+// therefore NOT be assembled or archived: the .asm is still a declared output of
+// the producer (so it exists for any consumer that #includes it), but it never
+// becomes a downstream module source. Before the fix the parser collapsed STDOUT
+// and STDOUT_NOAUTO into one field, so the auto-output compile loop assembled the
+// noauto output too.
+func TestGen_RunProgramStdoutNoautoAsmNotCompiled(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "tools/dumper/ya.make", `PROGRAM(dumper)
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "tools/dumper/main.cpp", "int main(){return 0;}\n")
+
+	writeTestModuleFile(files, "builtin/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    tools/dumper archive_asm
+    STDOUT_NOAUTO gen.asm
+)
+SRCS(builtin.cpp)
+END()
+`)
+	writeTestModuleFile(files, "builtin/builtin.cpp", "int builtin(){return 0;}\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(builtin)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+
+	// The STDOUT_NOAUTO .asm is a declared producer output (so a consumer that
+	// includes it can resolve it), but it is NOT compiled to an object…
+	mustNodeByAnyOutput(t, g, "$(B)/builtin/gen.asm")
+	if n := nodeByOutput(g, "$(B)/builtin/gen.o"); n != nil {
+		t.Fatalf("STDOUT_NOAUTO gen.asm must not be assembled, but $(B)/builtin/gen.o exists")
+	}
+
+	// …and not archived into the module library.
+	lib := mustNodeByOutput(t, g, "$(B)/builtin/libbuiltin.a")
+	if nodeHasInput(lib, "$(B)/builtin/gen.o") {
+		t.Fatalf("libbuiltin.a must not contain noauto member $(B)/builtin/gen.o: %#v", lib.flatInputs())
+	}
+}
+
+// RUN_PYTHON3 STDOUT_NOAUTO mirrors RUN_PROGRAM's: the noauto stdout assembler
+// output is not a module source and must not be assembled or archived.
+func TestGen_RunPython3StdoutNoautoAsmNotCompiled(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "builtin/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PYTHON3(
+    gen.py archive_asm
+    STDOUT_NOAUTO gen.asm
+)
+SRCS(builtin.cpp)
+END()
+`)
+	writeTestModuleFile(files, "builtin/gen.py", "print('.text')\n")
+	writeTestModuleFile(files, "builtin/builtin.cpp", "int builtin(){return 0;}\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(builtin)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+
+	mustNodeByAnyOutput(t, g, "$(B)/builtin/gen.asm")
+	if n := nodeByOutput(g, "$(B)/builtin/gen.o"); n != nil {
+		t.Fatalf("STDOUT_NOAUTO gen.asm must not be assembled, but $(B)/builtin/gen.o exists")
+	}
+
+	lib := mustNodeByOutput(t, g, "$(B)/builtin/libbuiltin.a")
+	if nodeHasInput(lib, "$(B)/builtin/gen.o") {
+		t.Fatalf("libbuiltin.a must not contain noauto member $(B)/builtin/gen.o: %#v", lib.flatInputs())
+	}
+}
+
+// RUN_PYTHON3 shares RUN_PROGRAM's auto-output mechanism: ymake.core.conf:4832
+// spells STDOUT as ${stdout;output:STDOUT} and OUT as ${hide;output:OUT}, the
+// same modifiers RUN_PROGRAM uses, so an auto .asm/.s/.S STDOUT or OUT of a
+// RUN_PYTHON3 is equally a module source — it must be assembled and archived.
+// Before the fix emitRunPythonForAR filtered with !isCCSourceExt and dropped
+// assembler outputs, leaving them registered for include resolution but never
+// compiled or archived.
+func TestGen_RunPython3AutoStdoutAsmCompiledAndArchived(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "builtin/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PYTHON3(
+    gen.py archive_asm
+    STDOUT gen.asm
+)
+SRCS(builtin.cpp)
+END()
+`)
+	writeTestModuleFile(files, "builtin/gen.py", "print('.text')\n")
+	writeTestModuleFile(files, "builtin/builtin.cpp", "int builtin(){return 0;}\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(builtin)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+
+	// The RUN_PYTHON3 auto STDOUT .asm producer.
+	asmProducer := mustNodeByAnyOutput(t, g, "$(B)/builtin/gen.asm")
+
+	// (1) The .asm is compiled to an object by the assembler, depending on the
+	// RUN_PYTHON3 producer (so the .asm exists before it runs).
+	asmObj := mustNodeByOutput(t, g, "$(B)/builtin/gen.o")
+	if !slices.Contains(graphDeps(g, asmObj), asmProducer.UID) {
+		t.Fatalf("gen.o deps missing RUN_PYTHON3 producer uid %q: %v", asmProducer.UID, graphDeps(g, asmObj))
+	}
+
+	// (2) The object is a member of the module library.
+	lib := mustNodeByOutput(t, g, "$(B)/builtin/libbuiltin.a")
+	if !nodeHasInput(lib, "$(B)/builtin/gen.o") {
+		t.Fatalf("libbuiltin.a missing member $(B)/builtin/gen.o: %#v", lib.flatInputs())
+	}
+}
