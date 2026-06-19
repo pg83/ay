@@ -898,7 +898,19 @@ func parseInternal(fs FS, name string, src []byte) *MakeFile {
 }
 
 func parseInternalWithStack(fs FS, name string, src []byte, stack []string) *MakeFile {
-	return parseInternalWithState(fs, name, src, stack, newIncludeState())
+	st := newIncludeState()
+
+	// Seed MODDIR into the parse-time include env, mirroring upstream's
+	// Context->Vars() which always carries the directory of the ya.make that
+	// opens the module. INCLUDE paths spelled as ${ARCADIA_ROOT}/${MODDIR}/...
+	// (e.g. feature_store run_codegen.inc → modules.lst) resolve only when MODDIR
+	// is bound. ARCADIA_ROOT is intentionally left unbound: expandOneInclude
+	// strips a literal ${ARCADIA_ROOT}/ prefix to route the path to the source
+	// root, so keeping it verbatim is what makes resolution work. MODDIR is the
+	// parsed file's own directory, so this stays a pure function of (file, dir).
+	st.env.setString(envMODDIR, pathDir(name))
+
+	return parseInternalWithState(fs, name, src, stack, st)
 }
 
 func parseInternalWithState(fs FS, name string, src []byte, stack []string, includes *IncludeState) *MakeFile {
@@ -977,6 +989,15 @@ func (p *Parser) parseMacroInto(into []Stmt, nameTok Token) []Stmt {
 	// collection still rebuilds d.setVars from the same statement sequence.
 	if set, ok := stmt.(*SetStmt); ok {
 		p.includes.env.setFromString(set.NameEnv, expandScalarVarRef(set.Value, p.includes.env))
+	}
+
+	// DEFAULT(NAME value) binds NAME only if not already set (upstream's
+	// SetDefaultVar). Fold it into the parse-time env the same way SET is, so a
+	// later INCLUDE path argument can reference a DEFAULT-defined variable (e.g.
+	// run_codegen.inc DEFAULTs FS_CODEGEN_CONFIG_PATH from ${ARCADIA_ROOT}/${MODDIR},
+	// then INCLUDEs ${FS_CODEGEN_CONFIG_PATH}/modules.lst).
+	if def, ok := stmt.(*DefaultVarStmt); ok && !p.includes.env.hasBindingID(def.NameEnv) {
+		p.includes.env.setFromString(def.NameEnv, expandScalarVarRef(def.Value, p.includes.env))
 	}
 
 	return append(into, stmt)

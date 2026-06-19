@@ -1476,3 +1476,45 @@ func TestParseInclude_SetInsideIfFeedsLaterInclude(t *testing.T) {
 		t.Fatalf("SET inside IF body did not feed later INCLUDE; got %#v", mf.Stmts)
 	}
 }
+
+// T-5: an included file SETs a list later consumed by a RUN_PROGRAM argument,
+// reached through a ${MODDIR}/DEFAULT-derived include path (the feature_store
+// modules.lst pattern). The parse-time include env must carry MODDIR and fold
+// DEFAULT so ${CONFIG_PATH} resolves and modules.lst is spliced; otherwise the
+// later ${MODULES_INCLUDED} survives verbatim into the command.
+func TestParseInclude_ModdirDefaultIncludeSetListFeedsRunProgram(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"pkg/cfg/ya.make": "LIBRARY()\n" +
+			"INCLUDE(${ARCADIA_ROOT}/pkg/codegen/run.inc)\n" +
+			"END()\n",
+		"pkg/codegen/run.inc": "IF (MODDIR MATCHES pkg/cfg)\n" +
+			"    DEFAULT(CONFIG_PATH ${ARCADIA_ROOT}/${MODDIR})\n" +
+			"ENDIF()\n" +
+			"INCLUDE(${CONFIG_PATH}/modules.lst)\n" +
+			"SET(GEN_ARGS ${MODULES_INCLUDED} --bindir ${BINDIR})\n" +
+			"RUN_PROGRAM(pkg/cfg/tool ${GEN_ARGS} OUT out.cpp)\n",
+		"pkg/cfg/modules.lst": "SET(MODULES_INCLUDED first.mod second.mod third.mod)\n",
+	})
+
+	mf, err := parseFile(fs, "pkg/cfg/ya.make")
+	if err != nil {
+		t.Fatalf("parseFile failed: %v", err)
+	}
+
+	if setStmtByName(mf.Stmts, "MODULES_INCLUDED") == nil {
+		t.Fatalf("modules.lst was not included: no SET(MODULES_INCLUDED); got %#v", mf.Stmts)
+	}
+
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "pkg/cfg", KindLib, mf.Stmts,
+		buildIfEnv(ModuleInstance{Path: source("pkg/cfg"), Kind: KindLib, Platform: testTargetP}))
+
+	if len(d.runPrograms) != 1 {
+		t.Fatalf("runPrograms = %d, want 1", len(d.runPrograms))
+	}
+
+	got := strStrings(d.runPrograms[0].Args)
+	want := []string{"first.mod", "second.mod", "third.mod", "--bindir", "$(B)/pkg/cfg"}
+	if !equalStrings(got, want) {
+		t.Fatalf("RUN_PROGRAM args = %v, want %v (the SET-list must expand, not survive as ${MODULES_INCLUDED})", got, want)
+	}
+}
