@@ -196,22 +196,6 @@ func containsVFS(xs []VFS, want VFS) bool {
 	return false
 }
 
-func protoCPPModulePath(instance ModuleInstance, d *ModuleData) VFS {
-	if d != nil && d.protoNamespace != nil {
-		if d.protoNamespaceGlobal {
-			return instance.Path
-		}
-
-		base := filepath.ToSlash(filepath.Clean(filepath.Dir(d.protoNamespace.string())))
-
-		if base != "." && base != "" {
-			return source(base)
-		}
-	}
-
-	return instance.Path
-}
-
 func protoCPPOutRoot(d *ModuleData) string {
 	if d.protoNamespace == nil {
 		return ""

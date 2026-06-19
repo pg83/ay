@@ -587,6 +587,113 @@ END()
 	}
 }
 
+func TestGen_ProtoLibrary_ExportYmapsProtoSetsProtoNamespaceOutputRoot(t *testing.T) {
+	files := map[string]string{}
+
+	// EXPORT_YMAPS_PROTO() == PROTO_NAMESPACE(maps/doc/proto). Besides the
+	// transitive include effects (T-30/T-32), its SET(PROTO_NAMESPACE maps/doc/proto)
+	// roots the maps module's OWN protoc command and output paths under
+	// maps/doc/proto, and roots the proto import search path at $(S)/maps/doc/proto.
+	const moduleDir = "maps/doc/proto/yandex/maps/proto/common2"
+	writeTestModuleFile(files, moduleDir+"/ya.make", `PROTO_LIBRARY()
+EXPORT_YMAPS_PROTO()
+SRCS(response.proto attribution.proto)
+END()
+`)
+	writeTestModuleFile(files, moduleDir+"/response.proto", `syntax = "proto3";
+package yandex.maps.proto.common2;
+import "yandex/maps/proto/common2/attribution.proto";
+message Response {
+  Attribution attribution = 1;
+}
+`)
+	writeTestModuleFile(files, moduleDir+"/attribution.proto", `syntax = "proto3";
+package yandex.maps.proto.common2;
+message Attribution {}
+`)
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	g := testGen(newMemFS(files), moduleDir)
+
+	pb := findGraphNodeByOutputs(t, g,
+		"$(B)/"+moduleDir+"/response.pb.h",
+		"$(B)/"+moduleDir+"/response.pb.cc",
+	)
+
+	args := strStrs(pb.Cmds[0].CmdArgs.flat())
+	count := func(want string) int {
+		n := 0
+		for _, a := range args {
+			if a == want {
+				n++
+			}
+		}
+		return n
+	}
+
+	// Output roots and the local-dir import root must carry the namespace, once.
+	for _, tok := range []string{
+		"-I=./maps/doc/proto",
+		"--cpp_out=:$(B)/maps/doc/proto",
+		"--cpp_styleguide_out=:$(B)/maps/doc/proto",
+	} {
+		if c := count(tok); c != 1 {
+			t.Fatalf("response.pb cmd: want exactly one %q, got %d: %v", tok, c, args)
+		}
+	}
+
+	// The source-root namespace include must be present (the generic command
+	// construction emits it both as the include-root and the cppOutRoot arm).
+	if count("-I=$(S)/maps/doc/proto") == 0 {
+		t.Fatalf("response.pb cmd missing -I=$(S)/maps/doc/proto: %v", args)
+	}
+
+	// None of the unrooted forms may survive.
+	for _, tok := range []string{
+		"-I=./",
+		"-I=$(S)/",
+		"--cpp_out=:$(B)/",
+		"--cpp_styleguide_out=:$(B)/",
+	} {
+		if c := count(tok); c != 0 {
+			t.Fatalf("response.pb cmd: unrooted %q must be gone, got %d: %v", tok, c, args)
+		}
+	}
+
+	// The imported proto resolves through the namespace root, proving the import
+	// search path roots at $(S)/maps/doc/proto.
+	wantImport := "$(S)/" + moduleDir + "/attribution.proto"
+	inputs := vfsStrings(pb.Inputs.flat())
+	if !slices.Contains(inputs, wantImport) {
+		t.Fatalf("response.pb inputs missing imported proto %q: %v", wantImport, inputs)
+	}
+
+	// The generated C++ compile gains the build-root namespace include exactly
+	// once, and never a source-root C++ include.
+	ccObj := findGraphNodeByOutputs(t, g, "$(B)/"+moduleDir+"/response.pb.cc.o")
+	ccArgs := strStrs(ccObj.Cmds[0].CmdArgs.flat())
+	buildCount, sourceCount := 0, 0
+	for _, a := range ccArgs {
+		switch a {
+		case "-I$(B)/maps/doc/proto":
+			buildCount++
+		case "-I$(S)/maps/doc/proto":
+			sourceCount++
+		}
+	}
+	if buildCount != 1 {
+		t.Fatalf("response.pb.cc.o: want exactly one -I$(B)/maps/doc/proto, got %d: %v", buildCount, ccArgs)
+	}
+	if sourceCount != 0 {
+		t.Fatalf("response.pb.cc.o: source-root C++ include leakage, got %d: %v", sourceCount, ccArgs)
+	}
+}
+
 func TestGen_ProtoLibrary_TransitiveHeadersNoKeepsPublicImportsOnLitePBHeader(t *testing.T) {
 	files := map[string]string{}
 
