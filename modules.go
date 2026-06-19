@@ -186,6 +186,8 @@ type ModuleData struct {
 
 	archives []ArchiveEntry
 
+	archiveAsm []ArchiveAsmEntry
+
 	lj21 *Lj21Archive
 
 	copyFiles []CopyFileEntry
@@ -400,6 +402,16 @@ type ArchiveEntry struct {
 	// in its input closure. Generated members propagate via their SourceInputs
 	// regardless; this adds the direct-source case used by LJ's LuaSources.inc.
 	PropagateSourceMembers bool
+}
+
+// ArchiveAsmEntry holds an ARCHIVE_ASM(NAME <n> [DONTCOMPRESS] Files...) call
+// (ymake.core.conf). Unlike ARCHIVE it emits a `<NAME>.rodata` resource via the
+// archiver (`-q [-p]`) which ymake re-feeds as a generated module source, then
+// compiled by the .rodata yasm pipeline into `<NAME>.rodata$OBJECT_SUF`.
+type ArchiveAsmEntry struct {
+	Name         string
+	DontCompress bool
+	Files        []string
 }
 
 // Lj21Archive holds the ordered module-relative .lua names declared by a
@@ -1902,6 +1914,8 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		applyArchiveStmt(v, d)
 	case tokArchiveByKeys:
 		applyArchiveByKeysStmt(v, d)
+	case tokArchiveAsm:
+		applyArchiveAsmStmt(v, d)
 	case tokLj21Archive:
 		applyLj21ArchiveStmt(v, d)
 	case tokEnable:
@@ -2898,6 +2912,49 @@ func applyArchiveByKeysStmt(v *UnknownStmt, d *ModuleData) {
 	}
 
 	d.archives = append(d.archives, entry)
+}
+
+// applyArchiveAsmStmt parses ARCHIVE_ASM(NAME <name> [DONTCOMPRESS] files...)
+// (ymake.core.conf). It lands in its own d.archiveAsm slot — the emit phase
+// produces a `<NAME>.rodata` archiver resource plus the .rodata→asm→object
+// compile, distinct from ARCHIVE's addincl `.inc` output.
+func applyArchiveAsmStmt(v *UnknownStmt, d *ModuleData) {
+	var (
+		entry      ArchiveAsmEntry
+		seenName   bool
+		inNameSlot bool
+	)
+
+	for _, aTok := range v.Args {
+		a := aTok.string()
+
+		switch {
+		case inNameSlot:
+			entry.Name = a
+			inNameSlot = false
+			seenName = true
+		case a == "NAME":
+			inNameSlot = true
+		case a == "DONTCOMPRESS":
+			entry.DontCompress = true
+		default:
+			entry.Files = append(entry.Files, a)
+		}
+	}
+
+	if inNameSlot {
+		throwFmt("gen: ARCHIVE_ASM(NAME ...) missing value after NAME (line %d)", v.Line)
+	}
+
+	if !seenName || entry.Name == "" {
+		throwFmt("gen: ARCHIVE_ASM expects `NAME <output>` (line %d)", v.Line)
+	}
+
+	if len(entry.Files) == 0 {
+		throwFmt("gen: ARCHIVE_ASM(NAME %s) has no input files (line %d)", entry.Name, v.Line)
+	}
+
+	d.archiveAsm = append(d.archiveAsm, entry)
 }
 
 // applyLj21ArchiveStmt parses LJ_21_ARCHIVE(NAME Name LuaFiles...). Mirroring
