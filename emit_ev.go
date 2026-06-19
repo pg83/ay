@@ -48,33 +48,25 @@ var evProtocConstTail = []STR{
 }
 
 // evPeerProtoIncludes renders the transitive _PROTO__INCLUDE peer block for an
-// EV protoc command: peer PROTO_ADDINCL contributions first, then the bare
-// PROTO_NAMESPACE tail. _PROTO__INCLUDE is an ordered set, and evProtocConstHead
-// already renders its base members ($(B), $(S), contrib/libs/protobuf/src), so a
-// token already present in the const head (or earlier in this block) is skipped
-// — only the extra peer namespace tokens (e.g. -I=$(S)/yt) survive.
-func evPeerProtoIncludes(peerProtoAddIncl, protoNamespaceTail []VFS) []STR {
-	if len(peerProtoAddIncl) == 0 && len(protoNamespaceTail) == 0 {
+// EV protoc command: the single ordered proto-include set in encounter order.
+// _PROTO__INCLUDE is a set, and evProtocConstHead already renders its base
+// members ($(B), $(S), contrib/libs/protobuf/src), so a token already present in
+// the const head (or earlier in this block) is skipped — only the extra peer
+// namespace tokens (e.g. -I=$(S)/yt) survive.
+func evPeerProtoIncludes(protoInclude []VFS) []STR {
+	if len(protoInclude) == 0 {
 		return nil
 	}
 
-	out := make([]STR, 0, len(peerProtoAddIncl)+len(protoNamespaceTail))
+	out := make([]STR, 0, len(protoInclude))
 
-	appendUnique := func(p VFS) {
+	for _, p := range protoInclude {
 		token := internStr("-I=" + p.string())
 		if slices.Contains(evProtocConstHead, token) || slices.Contains(out, token) {
-			return
+			continue
 		}
 
 		out = append(out, token)
-	}
-
-	for _, p := range peerProtoAddIncl {
-		appendUnique(p)
-	}
-
-	for _, p := range protoNamespaceTail {
-		appendUnique(p)
 	}
 
 	return out
@@ -107,8 +99,7 @@ func emitEV(
 	event2cppBinary VFS,
 	moduleTag STR,
 	transitiveImports []VFS,
-	peerProtoAddIncl []VFS,
-	protoNamespaceTail []VFS,
+	protoInclude []VFS,
 	tc ModuleToolchain,
 	emit Emitter,
 ) NodeRef {
@@ -120,7 +111,7 @@ func emitEV(
 	evH := build(evRelPath + ".pb.h")
 	srcVFS := source(evRelPath)
 
-	peerIncludes := evPeerProtoIncludes(peerProtoAddIncl, protoNamespaceTail)
+	peerIncludes := evPeerProtoIncludes(protoInclude)
 
 	cmdArgs := na.chunkList(na.strList(tc.Python3,
 		internStr(pbWrapperPath),
@@ -181,7 +172,7 @@ func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 		instance, evRelPath,
 		cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 		cppStyleguideBinary, protocBinary, event2cppBinary,
-		0, evImports, in.PeerProtoAddInclGlobal, in.ProtoNamespaceTail,
+		0, evImports, in.ProtoInclude,
 		d.tc, ctx.emit)
 
 	evH := build(evRelPath + ".pb.h")

@@ -192,7 +192,7 @@ type PbModuleEmission struct {
 	blocks *PbArgBlocks
 }
 
-func newPBModuleEmission(ctx *GenCtx, d *ModuleData, cfg ProtoPBConfig, peerProtoAddIncl []VFS, protoNamespaceTail []VFS) *PbModuleEmission {
+func newPBModuleEmission(ctx *GenCtx, d *ModuleData, cfg ProtoPBConfig, protoInclude []VFS) *PbModuleEmission {
 	pe := &PbModuleEmission{
 		liteHeaders:   !protoTransitiveHeadersEnabled(d),
 		grpcCppBinary: pbGrpcCppVFS,
@@ -217,7 +217,7 @@ func newPBModuleEmission(ctx *GenCtx, d *ModuleData, cfg ProtoPBConfig, peerProt
 
 	pe.blocks = composePBArgBlocks(d.tc, pe.protocBinary, pe.cppStyleguideBinary, pe.grpcCppBinary,
 		cfg.grpc, cfg.cppOutRoot, cfg.duplicateOutputRootInclude, pe.liteHeaders,
-		d.protocFlags, pe.extraPlugins, peerProtoAddIncl, protoNamespaceTail)
+		d.protocFlags, pe.extraPlugins, protoInclude)
 
 	return pe
 }
@@ -472,10 +472,10 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	// reaches imported .pb.h, which must be registered first).
 	sprotoProduced := ymapsSprotoProducedBases(ctx, instance, d)
 
-	pe := newPBModuleEmission(ctx, d, cfg, peerContribs.protoAddIncl, peerContribs.protoNamespaceTail)
+	pe := newPBModuleEmission(ctx, d, cfg, peerContribs.protoInclude)
 
 	for _, src := range protoSrcs {
-		pb := emitProtoPB(ctx, instance, d, src, cfg, pe, peerContribs.protoAddIncl, sprotoProduced)
+		pb := emitProtoPB(ctx, instance, d, src, cfg, pe, peerContribs.protoInclude, sprotoProduced)
 
 		ccSrcRel := strings.TrimPrefix(pb.pbCC.rel(), cppInstance.Path.rel()+"/")
 		appendCodegenOutput(pb.pbRef, pb.pbCC, ccSrcRel)
@@ -509,7 +509,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 			evRef := emitEV(
 				instance, evRelPath, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 				cppStyleguideBinary, protocBinary, event2cppBinary,
-				tagCppProto, evImports, peerContribs.protoAddIncl, peerContribs.protoNamespaceTail,
+				tagCppProto, evImports, peerContribs.protoInclude,
 				d.tc, ctx.emit)
 
 			evH := build(evRelPath + ".pb.h")
@@ -675,8 +675,8 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 }
 
 func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
-	pe := newPBModuleEmission(ctx, d, ProtoPBConfig{}, in.PeerProtoAddInclGlobal, in.ProtoNamespaceTail)
-	pb := emitProtoPB(ctx, instance, d, srcRel, ProtoPBConfig{}, pe, in.PeerProtoAddInclGlobal, nil)
+	pe := newPBModuleEmission(ctx, d, ProtoPBConfig{}, in.ProtoInclude)
+	pb := emitProtoPB(ctx, instance, d, srcRel, ProtoPBConfig{}, pe, in.ProtoInclude, nil)
 	ccIn := in
 	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), pb.pbCC, in.ScanCfg)
 	ccIn.ExtraDepRefs = append([]NodeRef{pb.pbRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pb.pbRef)...)

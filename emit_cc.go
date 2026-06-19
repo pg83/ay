@@ -24,18 +24,13 @@ type ModuleCCInputs struct {
 	CCBlocks *CcModuleArgBlocks
 
 	PeerAddInclGlobal []VFS
-	// PeerProtoAddInclGlobal is the _PROTO__INCLUDE chain for proto compiles
-	// only (the $(S)/<PROTO_NAMESPACE> contribution of every transitively
-	// peered PROTO_LIBRARY / PROTO_NAMESPACE GLOBAL). Distinct from
-	// PeerAddInclGlobal which feeds the C++ compile pipeline.
-	PeerProtoAddInclGlobal []VFS
-
-	// ProtoNamespaceTail is the non-GLOBAL PROTO_NAMESPACE contributions (own
-	// + transitive peers') trailing the _PROTO__INCLUDE chain in protoc
-	// cmdlines of non-PROTO_LIBRARY modules. See moduleEmitResult.
-	ProtoNamespaceTail []VFS
-	CXXFlags           []ARG
-	COnlyFlags         []ARG
+	// ProtoInclude is the single ordered _PROTO__INCLUDE set for proto compiles
+	// only (the $(S)/<PROTO_NAMESPACE> + PROTO_ADDINCL contribution of every
+	// transitively peered PROTO_LIBRARY, in encounter order). Distinct from
+	// PeerAddInclGlobal which feeds the C++ compile pipeline. See ModuleEmitResult.
+	ProtoInclude []VFS
+	CXXFlags     []ARG
+	COnlyFlags   []ARG
 	// ClangWarnings is _CLANG_USER_WARNINGS_VALUE — the autoincluded
 	// linters.make.inc CLANG_WARNINGS, emitted just after the -I block and before
 	// the compile-flag pipeline (between GCC_COMPILE_FLAGS and CXXFLAGS upstream).
