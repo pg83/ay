@@ -754,8 +754,15 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 }
 
 func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
-	pe := newPBModuleEmission(ctx, d, ProtoPBConfig{}, in.ProtoInclude)
-	pb := emitProtoPB(ctx, instance, d, srcRel, ProtoPBConfig{}, pe, in.ProtoInclude, nil)
+	// A LIBRARY-hosted .proto compiles identically to one in a PROTO_LIBRARY:
+	// PROTO_NAMESPACE roots the protoc output/import roots (cppOutRoot), and a peer
+	// that re-declares the namespace duplicates its _PROTO__INCLUDE copy.
+	cfg := ProtoPBConfig{
+		cppOutRoot:                 protoCPPOutRoot(d),
+		duplicateOutputRootInclude: in.ProtoOwnNamespaceInPeers,
+	}
+	pe := newPBModuleEmission(ctx, d, cfg, in.ProtoInclude)
+	pb := emitProtoPB(ctx, instance, d, srcRel, cfg, pe, in.ProtoInclude, nil)
 	ccIn := in
 	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), pb.pbCC, in.ScanCfg)
 	ccIn.ExtraDepRefs = append([]NodeRef{pb.pbRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pb.pbRef)...)
