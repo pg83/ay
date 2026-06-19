@@ -204,6 +204,60 @@ END()
 	mustNodeByOutput(t, g, "$(B)/req/req_pars.y.cpp.o")
 }
 
+// TestGen_BisonFlagsReachProducerCommand verifies that a module-level
+// BISON_FLAGS(<flags>) reaches the YC producer's bison invocation, positioned
+// after the default -v (the BISON_FLAGS variable default) and before --defines
+// (upstream bison_lex.conf: `${tool} $BISON_FLAGS … $_BISON_HEADER`, with the
+// macro doing SET_APPEND(BISON_FLAGS $Flags)).
+func TestGen_BisonFlagsReachProducerCommand(t *testing.T) {
+	files := map[string]string{}
+
+	writeBisonTool(files)
+	writeToolProgram(files, "contrib/tools/m4", "m4")
+	writeTestModuleFile(files, bisonPreprocessPyVFS.rel(), "print('stub')\n")
+	for _, input := range bisonCppSkeletonInputs {
+		writeTestModuleFile(files, input.rel(), "")
+	}
+
+	writeTestModuleFile(files, "qbase/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+BISON_FLAGS(-Wcounterexamples)
+SRCS(parser.ypp)
+END()
+`)
+	writeTestModuleFile(files, "qbase/parser.ypp", "%%\n")
+
+	g := testGen(newMemFS(files), "qbase")
+
+	yc := mustNodeByOutput(t, g, "$(B)/qbase/parser.h")
+	args := strStrs(yc.Cmds[0].CmdArgs.flat())
+
+	flagIdx := -1
+	for i, a := range args {
+		if a == "-Wcounterexamples" {
+			flagIdx = i
+			break
+		}
+	}
+	if flagIdx < 0 {
+		t.Fatalf("bison producer cmd_args missing BISON_FLAGS -Wcounterexamples: %#v", args)
+	}
+
+	vIdx := indexOfArg(yc.Cmds[0].CmdArgs.flat(), "-v")
+	definesIdx := -1
+	for i, a := range args {
+		if strings.HasPrefix(a, "--defines=") {
+			definesIdx = i
+			break
+		}
+	}
+	if !(vIdx >= 0 && vIdx < flagIdx && flagIdx < definesIdx) {
+		t.Fatalf("BISON_FLAGS not positioned after -v and before --defines (v=%d flag=%d defines=%d): %#v", vIdx, flagIdx, definesIdx, args)
+	}
+}
+
 // TestGen_BisonCppFlags verifies that the CC node compiling a bison-generated
 // C++ file carries the -Wno-unused-but-set-variable and -Wno-deprecated-copy
 // flags (upstream _LANG_CFLAGS_BISON).

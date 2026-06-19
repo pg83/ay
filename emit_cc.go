@@ -91,6 +91,8 @@ type ModuleCCInputs struct {
 
 	Ragel6Flags []ARG
 
+	BisonFlags []ARG
+
 	BisonGenExt string
 
 	// TC is the module's tool-invocation paths, derived from the PEERDIR resource-global

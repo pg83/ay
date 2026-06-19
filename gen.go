@@ -150,7 +150,6 @@ var acknowledgedMacros = map[string]struct{}{
 	// it no longer rides this no-op set.
 	"STYLE_DETEKT":       {},
 	"DEFAULT_JDK_VERSION":       {},
-	"BISON_FLAGS":               {},
 }
 
 // acknowledgedTokSet is acknowledgedMacros in TOK space, so the per-invocation
@@ -1935,6 +1934,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}(),
 		ModuleTag:   perModuleCCTag,
 		Ragel6Flags: d.ragel6Flags,
+		BisonFlags:  d.bisonFlags,
 		BisonGenExt: d.bisonGenExt.string(),
 		TC:          d.tc,
 	}
