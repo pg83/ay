@@ -608,11 +608,7 @@ func genWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn 
 }
 
 func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
-	if moduleStmt == nil {
-		return ""
-	}
-
-	if moduleStmt.Name == tokUnittestFor {
+	if moduleStmt != nil && moduleStmt.Name == tokUnittestFor {
 		return strings.ReplaceAll(path.Clean(instance.Path.rel()), "/", "-")
 	}
 
@@ -621,13 +617,15 @@ func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
 	// links as $(B)/tools/py3cc/slow/py3cc). In the internal contour the same dir is
 	// instead a PREBUILT_PROGRAM (USE_PREBUILT_TOOLS + ya.make.prebuilt present) whose
 	// output takes the module-dir basename (.../slow) via genPrebuiltProgram — a
-	// distinct module type, so this from-source path must honour its arg. Without an
-	// argument it falls through to the module-dir basename default below.
-	if len(moduleStmt.Args) > 0 {
+	// distinct module type, so this from-source path must honour its arg.
+	if moduleStmt != nil && len(moduleStmt.Args) > 0 {
 		return moduleStmt.Args[0].string()
 	}
 
-	return ""
+	// No explicit name: REALPRJNAME defaults to the module-dir basename — the one
+	// resolved name the binary output, .ldcref/.map, and
+	// <REALPRJNAME>.<LANG>.component.sbom all derive from.
+	return lastPathComponent(instance.Path.rel())
 }
 
 func programSourceDir(moduleStmt *ModuleStmt) *string {

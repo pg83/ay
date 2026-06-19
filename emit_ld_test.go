@@ -62,7 +62,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 
 	ldRef := emitLD(
 		instance,
-		"",
+		"prog",
 		[]NodeRef{mainRef}, []VFS{ParseVFSOrSource(mainPath)},
 		nil, nil,
 		nil,
@@ -157,7 +157,7 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 
 	ldRef := emitLD(
 		instance,
-		"",
+		"prog",
 		[]NodeRef{mainRef}, []VFS{ParseVFSOrSource(mainPath)},
 		nil, nil,
 		nil,
@@ -234,7 +234,7 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 
 	ref := emitLD(
 		hostInstance("some/prog"),
-		"",
+		"prog",
 		[]NodeRef{stub}, []VFS{intern("$(B)/some/prog/main.cpp.o")},
 		nil, nil,
 		nil,
@@ -327,7 +327,7 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 
 	ldRef := emitLD(
 		instance,
-		"",
+		"prog",
 		[]NodeRef{mainRef}, []VFS{intern("$(B)/some/prog/main.cpp.o")},
 		[]NodeRef{wholeRef}, []VFS{build(wholeArchivePath)},
 		nil,
@@ -400,7 +400,7 @@ func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T
 
 	ldRef := emitLD(
 		instance,
-		"",
+		"prog",
 		[]NodeRef{mainRef}, []VFS{intern("$(B)/some/prog/main.cpp.o")},
 		[]NodeRef{peerRef}, []VFS{dupPath},
 		nil,
