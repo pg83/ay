@@ -131,6 +131,95 @@ func TestEmitProtoSrcs_YaffFilesWhitelistSkipsNonWhitelistedHeaderClosure(t *tes
 	}
 }
 
+// TestEmitProtoSrcs_YaffOutputOrderFollowsLiteHeaderDeclarationOrder pins the
+// upstream CPP_PROTO_OUTS accumulation order. The wrapper's --outputs list (and
+// the PB node's outputs) is CPP_PROTO_OUTS in statement order, main .pb.h
+// floated to the front. The YAFF() plugin appends .yaff.h/.yaff.cpp; the lite
+// header .deps.pb.h is appended by the `when ($PROTOC_TRANSITIVE_HEADERS=="no")`
+// block triggered by SET(PROTOC_TRANSITIVE_HEADERS "no"). So the yaff group
+// precedes the cpp_out group (.pb.cc + .deps.pb.h) iff YAFF() is declared before
+// lite headers are turned on (sg7 representative ads/peafowl), and follows it
+// otherwise (sg7 majority, e.g. yabs/server/proto/log). Before the fix both
+// orderings emit the cpp_out group first, so the YAFF-before-SET case mismatches.
+func TestEmitProtoSrcs_YaffOutputOrderFollowsLiteHeaderDeclarationOrder(t *testing.T) {
+	mkFiles := func() map[string]string {
+		files := map[string]string{}
+		writeToolProgram(files, "contrib/tools/protoc", "protoc")
+		writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+		writeToolProgram(files, "library/cpp/yaff/tools/protoc_plugin", "protoc_plugin")
+		writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+		writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+		writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+		return files
+	}
+
+	// YAFF() before SET(PROTOC_TRANSITIVE_HEADERS "no") — yaff group precedes the
+	// cpp_out group.
+	beforeFiles := mkFiles()
+	writeTestModuleFile(beforeFiles, "before/ya.make",
+		"PROTO_LIBRARY()\nYAFF()\nSRCS(foo.proto)\nSET(PROTOC_TRANSITIVE_HEADERS \"no\")\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
+	writeTestModuleFile(beforeFiles, "before/foo.proto", "syntax = \"proto3\";\npackage test;\nmessage Foo { string v = 1; }\n")
+
+	gBefore := testGen(newMemFS(beforeFiles), "before")
+	pbBefore := mustNodeByOutput(t, gBefore, "$(B)/before/foo.pb.h")
+	wantBefore := []string{
+		"$(B)/before/foo.pb.h",
+		"$(B)/before/foo.yaff.h",
+		"$(B)/before/foo.yaff.cpp",
+		"$(B)/before/foo.pb.cc",
+		"$(B)/before/foo.deps.pb.h",
+	}
+	assertOutputOrder(t, "YAFF-before-SET", pbBefore, wantBefore)
+
+	// SET(PROTOC_TRANSITIVE_HEADERS "no") before YAFF() — cpp_out group first.
+	afterFiles := mkFiles()
+	writeTestModuleFile(afterFiles, "after/ya.make",
+		"PROTO_LIBRARY()\nSET(PROTOC_TRANSITIVE_HEADERS \"no\")\nYAFF()\nSRCS(foo.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
+	writeTestModuleFile(afterFiles, "after/foo.proto", "syntax = \"proto3\";\npackage test;\nmessage Foo { string v = 1; }\n")
+
+	gAfter := testGen(newMemFS(afterFiles), "after")
+	pbAfter := mustNodeByOutput(t, gAfter, "$(B)/after/foo.pb.h")
+	wantAfter := []string{
+		"$(B)/after/foo.pb.h",
+		"$(B)/after/foo.pb.cc",
+		"$(B)/after/foo.deps.pb.h",
+		"$(B)/after/foo.yaff.h",
+		"$(B)/after/foo.yaff.cpp",
+	}
+	assertOutputOrder(t, "SET-before-YAFF", pbAfter, wantAfter)
+}
+
+func assertOutputOrder(t *testing.T, label string, n *Node, want []string) {
+	t.Helper()
+
+	got := make([]string, len(n.Outputs))
+	for i, o := range n.Outputs {
+		got[i] = o.string()
+	}
+
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("%s: PB outputs order =\n  %v\nwant\n  %v", label, got, want)
+	}
+
+	// The --outputs command list must mirror the node outputs exactly.
+	args := strStrs(n.Cmds[0].CmdArgs.flat())
+	start := -1
+	for i, a := range args {
+		if a == "--outputs" {
+			start = i + 1
+			break
+		}
+	}
+	if start < 0 {
+		t.Fatalf("%s: --outputs not found in cmd args: %v", label, args)
+	}
+	for i, w := range want {
+		if start+i >= len(args) || args[start+i] != w {
+			t.Fatalf("%s: --outputs[%d] = %q, want %q (args=%v)", label, i, args[min(start+i, len(args)-1)], w, args)
+		}
+	}
+}
+
 // TestEmitProtoSrcs_GeneratedProtoWiresProducerDep reproduces the
 // jsonpath G2 gap: a PROTO_LIBRARY whose SRCS(X.proto) is itself the OUT
 // of a RUN_ANTLR (no X.proto in source tree). The PB protoc node must wire

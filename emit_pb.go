@@ -90,7 +90,23 @@ func emitPB(
 		srcVFS = protoSrcOverride
 	}
 
-	outputs := []VFS{pbH, pbCC}
+	// CPP_PROTO_OUTS accumulates in ya.make statement order, with the main .pb.h
+	// floated to the front. A plugin declared before lite headers were turned on
+	// appends its outputs ahead of the cpp_out group (.pb.cc + .deps.pb.h); the
+	// rest append behind it (and behind grpc). See CppProtoPlugin.DeclaredBeforeLiteHeaders.
+	outputs := []VFS{pbH}
+
+	for _, plugin := range extraPlugins {
+		if !pluginOutputsPrecedeCppGroup(plugin, liteHeaders) {
+			continue
+		}
+
+		for _, suffix := range plugin.Spec.OutputSuffixes {
+			outputs = append(outputs, build(protoBase+suffix))
+		}
+	}
+
+	outputs = append(outputs, pbCC)
 
 	if liteHeaders {
 		outputs = append(outputs, pbDepsH)
@@ -101,6 +117,10 @@ func emitPB(
 	}
 
 	for _, plugin := range extraPlugins {
+		if pluginOutputsPrecedeCppGroup(plugin, liteHeaders) {
+			continue
+		}
+
 		for _, suffix := range plugin.Spec.OutputSuffixes {
 			outputs = append(outputs, build(protoBase+suffix))
 		}
@@ -184,6 +204,17 @@ func emitPB(
 	}
 
 	return emit.emit(node)
+}
+
+// pluginOutputsPrecedeCppGroup reports whether a proto plugin's generated
+// outputs are accumulated into CPP_PROTO_OUTS ahead of the cpp_out group
+// (.pb.cc + the lite-header .deps.pb.h). That happens only when the plugin was
+// declared before lite headers were turned on: the .deps.pb.h append is driven
+// by the later SET(PROTOC_TRANSITIVE_HEADERS "no"), so a plugin declared first
+// lands ahead of it. With transitive headers (no .deps.pb.h) plugins always
+// follow the cpp_out group.
+func pluginOutputsPrecedeCppGroup(plugin ResolvedCPPProtoPlugin, liteHeaders bool) bool {
+	return liteHeaders && plugin.Spec.DeclaredBeforeLiteHeaders
 }
 
 func containsVFS(xs []VFS, want VFS) bool {

@@ -52,6 +52,13 @@ type CppProtoPlugin struct {
 	// generators — and thus writes any .yaff.h content — only for these protos;
 	// every other <proto>.yaff.h is opened but left empty.
 	Files []string
+	// DeclaredBeforeLiteHeaders records whether PROTOC_TRANSITIVE_HEADERS was
+	// still enabled (lite headers / .deps.pb.h not yet turned on) at the point
+	// this plugin statement was parsed. CPP_PROTO_OUTS accumulates in statement
+	// order, so a plugin declared before SET(PROTOC_TRANSITIVE_HEADERS "no")
+	// appends its outputs ahead of the cpp_out group (.pb.cc + .deps.pb.h); one
+	// declared after appends behind it. See emitPB.
+	DeclaredBeforeLiteHeaders bool
 }
 
 // isYaff reports whether this plugin is the YaFF protoc plugin (YAFF /
@@ -2528,9 +2535,13 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 			Deps:     []string{strLibraryCppEventlog.string()},
 		})
 	case tokYaff:
-		d.cppProtoPlugins = append(d.cppProtoPlugins, parseYAFF(v))
+		plugin := parseYAFF(v)
+		plugin.DeclaredBeforeLiteHeaders = protoTransitiveHeadersEnabled(d)
+		d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
 	case tokYaffSchema:
-		d.cppProtoPlugins = append(d.cppProtoPlugins, parseYAFFSchema(v))
+		plugin := parseYAFFSchema(v)
+		plugin.DeclaredBeforeLiteHeaders = protoTransitiveHeadersEnabled(d)
+		d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
 	case tokPyRegister:
 
 		for _, nameTok := range v.Args {
