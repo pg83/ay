@@ -104,6 +104,69 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 	}
 }
 
+// TestGen_ProtoLibrary_PluginDepAddInclLeadsDeclaredPeer reproduces the sg7
+// socdem_type.h_serialized.cpp.o cmds-only divergence: a CPP_PROTO compile must
+// emit the proto plugin DEPS' GLOBAL ADDINCL (upstream CPP_EVLOG → eventlog →
+// library/cpp/blockcodecs's brotli/snappy) BEFORE the declared PEERDIR closure's
+// include dirs. Upstream's per-source `_CPP_PROTO_EVLOG_CMD .PEERDIR=` induces the
+// plugin-runtime peer ahead of the declared PEERDIR for include-dir propagation.
+// Before the fix the declared peer's -I leads (plugin runtime emitted after),
+// which this test rejects.
+func TestGen_ProtoLibrary_PluginDepAddInclLeadsDeclaredPeer(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "protos/ya.make", `PROTO_LIBRARY()
+PEERDIR(declared/peer)
+CPP_PROTO_PLUGIN0(myplug tools/myplug DEPS plugin/runtime)
+SRCS(test.proto)
+END()
+`)
+	writeTestModuleFile(files, "protos/test.proto", `syntax = "proto3";
+package test;
+message Row {}
+`)
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+
+	writeTestModuleFile(files, "tools/myplug/ya.make", `PROGRAM(myplug)
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "tools/myplug/main.cpp", "int main(){return 0;}\n")
+
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	// The declared PEERDIR exposes a GLOBAL ADDINCL; the proto-plugin DEPS runtime
+	// exposes another. The plugin-runtime include must precede the declared one.
+	writeTestModuleFile(files, "declared/peer/ya.make", "LIBRARY()\nADDINCL(GLOBAL declared/peer/inc)\nSRCS(p.cpp)\nEND()\n")
+	writeTestModuleFile(files, "declared/peer/p.cpp", "int p(){return 0;}\n")
+	writeTestModuleFile(files, "declared/peer/inc/h.h", "#pragma once\n")
+	writeTestModuleFile(files, "plugin/runtime/ya.make", "LIBRARY()\nADDINCL(GLOBAL plugin/runtime/inc)\nSRCS(r.cpp)\nEND()\n")
+	writeTestModuleFile(files, "plugin/runtime/r.cpp", "int r(){return 0;}\n")
+	writeTestModuleFile(files, "plugin/runtime/inc/h.h", "#pragma once\n")
+
+	g := testGen(newMemFS(files), "protos")
+
+	cc := findGraphNodeByOutputs(t, g, "$(B)/protos/test.pb.cc.o")
+	args := cc.Cmds[0].CmdArgs.flat()
+
+	pluginInc := indexOfArg(args, "-I$(S)/plugin/runtime/inc")
+	declaredInc := indexOfArg(args, "-I$(S)/declared/peer/inc")
+
+	if pluginInc < 0 || declaredInc < 0 {
+		t.Fatalf("missing -I dirs in compile cmd: plugin=%d declared=%d args=%v", pluginInc, declaredInc, args)
+	}
+
+	if pluginInc > declaredInc {
+		t.Fatalf("proto plugin DEPS include must precede declared peer include: plugin/runtime/inc=%d declared/peer/inc=%d", pluginInc, declaredInc)
+	}
+}
+
 func TestGen_ProtoLibrary_CPPProtoPlugin0WiresToolDeps(t *testing.T) {
 	files := map[string]string{}
 
