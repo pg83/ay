@@ -1266,7 +1266,10 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 			d.setVars[internStr(v.Name)] = internStr(value)
 
 			if v.Name == "RAGEL6_FLAGS" {
-				d.ragel6Flags = []ARG{internArg(value)}
+				// $RAGEL6_FLAGS expands as separate command tokens
+				// (ymake.core.conf:3305): a SET-list value reaches the ragel
+				// command as one arg per whitespace token, not one quoted blob.
+				d.ragel6Flags = internArgs(strings.Fields(value))
 			}
 		case *EndStmt:
 
@@ -2939,6 +2942,12 @@ func applyArchiveStmt(v *UnknownStmt, d *ModuleData) {
 		seenName   bool
 		inNameSlot bool
 	)
+
+	// A direct (SRCDIR-backed) archive member rides into the include closure of a
+	// C++ unit that #includes the generated archive header — upstream lists the
+	// archived sources as that unit's compile inputs. Same model as ARCHIVE_BY_KEYS
+	// and LJ's LuaSources.inc.
+	entry.PropagateSourceMembers = true
 
 	for _, aTok := range v.Args {
 		a := aTok.string()

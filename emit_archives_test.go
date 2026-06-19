@@ -5,6 +5,43 @@ import (
 	"testing"
 )
 
+// TestArchive_PlainPropagatesSourceMembers pins that a plain ARCHIVE (no KEYS)
+// rides its direct source members into the include closure of a C++ unit that
+// #includes the generated archive header — exactly as ARCHIVE_BY_KEYS already
+// does. Reproduces the kernel/lemmer/context/default_decimator make_morphdict-
+// subtree divergence: ref lists $(S)/.../default_decimator.lst on factory.cpp.pic.o
+// (factory.cpp #includes the ARCHIVE(NAME data.inc default_decimator.lst) output);
+// before the fix plain ARCHIVE left PropagateSourceMembers unset, so the member
+// never reached the consumer.
+func TestArchive_PlainPropagatesSourceMembers(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "tools/archiver", "archiver")
+
+	writeTestModuleFile(files, "mod/ya.make",
+		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"+
+			"SRCS(\n    use.cpp\n)\n"+
+			"ARCHIVE(\n    NAME data.inc\n    payload.lst\n)\nEND()\n")
+	writeTestModuleFile(files, "mod/payload.lst", "row\n")
+	writeTestModuleFile(files, "mod/use.cpp", "#include \"data.inc\"\n")
+
+	g := testGen(newMemFS(files), "mod")
+
+	var use *Node
+	for _, n := range g.Graph {
+		if n.KV.P == pkCC && len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), "/use.cpp.o") {
+			use = n
+			break
+		}
+	}
+	if use == nil {
+		t.Fatal("no CC node for use.cpp.o")
+	}
+	if !nodeHasInput(use, "$(S)/mod/payload.lst") {
+		t.Errorf("use.cpp.o inputs %v missing plain-ARCHIVE source member %q", vfsStringsT3(use.flatInputs()), "$(S)/mod/payload.lst")
+	}
+}
+
 // TestArchiveByKeys_TopLevel covers an ordinary top-level ARCHIVE_BY_KEYS (not the
 // synthetic LJ_21_ARCHIVE path): the keyed archive lists its SRCDIR-backed members
 // plain, passes the colon-joined key list through `-k`, and writes the addincl output;
