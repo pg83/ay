@@ -202,6 +202,21 @@ func generatedOutputCarriesIncludes(p string) bool {
 }
 
 func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *RunProgramStmt, moduleInputs ModuleCCInputs) []VFS {
+	// OUTPUT_INCLUDES are upstream's `${hide;output_include:OUTPUT_INCLUDES}`:
+	// induced deps recorded ON the OUT files (per the macro doc, "includes of the
+	// output files needed to build them"), surfaced on whoever CONSUMES an OUT —
+	// the downstream CC recompiling an auto cc-source OUT (see prEmitsIncludes /
+	// emitCodegenDownstreamCC) or a peer that #includes a header OUT. A RUN_PROGRAM
+	// with no IN produces its OUTs purely from the tool and establishes no
+	// scannable include context, so REF lists only the tool (caesar's
+	// features.gen.* run: 1 input). The OUT and OUTPUT_INCLUDES closures below
+	// surface on the command node only once an IN file roots its include graph —
+	// control_board_proto.{h,cpp}, whose `.in` IN templates #include the proto
+	// headers the OUTPUT_INCLUDES name.
+	if len(stmt.INFiles) == 0 {
+		return nil
+	}
+
 	scanIn := ModuleCCInputs{
 		TC:                d.tc,
 		InclArgs:          ctx.inclArgs,
@@ -260,23 +275,12 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		}
 	}
 
-	// OUTPUT_INCLUDES contribute to the PR node's AUTO_INPUT only when the
-	// target resolves to a codegen output (.pb.h from a peer PROTO_LIBRARY,
-	// .h registered by another PR, etc.). Source-tree headers in
-	// OUTPUT_INCLUDES — yql_*_expr_nodes_gen.h, util/generic/hash_set.h, any
-	// path that already lives in the C include graph — do NOT contribute
-	// here in upstream: the PR node's own include graph is rooted at IN, and
-	// pulling source-tree closures via OUTPUT_INCLUDES would massively
-	// over-emit (yql_*_expr_nodes.gen.h would gain libcxx).
-	//
-	// For .pb.h OUTPUT_INCLUDES, upstream tracks the listed .pb.h itself
-	// plus the TRANSITIVE .proto SOURCES of the proto-import graph rooted at
-	// that .pb.h's proto — but NOT the intermediate .pb.h headers along the
-	// chain (control_board_proto.h's OUTPUT_INCLUDES tablet.pb.h + config.pb.h
-	// lands tablet.pb.h, config.pb.h, and the 153 transitive .proto sources,
-	// without the 148 deep .pb.h headers our closure walk otherwise gathers).
-	// Filter the walk: keep the OUTPUT_INCLUDES VFS itself and every .proto
-	// reached through it; drop transitive .pb.h.
+	// For an OUTPUT_INCLUDES target that resolves to a codegen .pb.h, upstream
+	// lists the TRANSITIVE .proto SOURCES of its proto-import graph (plus the
+	// pre-built source-tree .pb.h sibling of any protobuf WKT in the chain), but
+	// not the intermediate generated .pb.h. Source-tree OUTPUT_INCLUDES already
+	// live in the C include graph rooted at IN and must not be walked here (they
+	// would drag libcxx). Gate on the codegen registry and keep only .proto.
 	{
 		reg := codegenRegForInstance(ctx, instance)
 
