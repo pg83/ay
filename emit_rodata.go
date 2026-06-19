@@ -28,7 +28,13 @@ func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
 	return build(base + ".asm"), build(base + instance.Platform.objectSuffix())
 }
 
-func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, tc ModuleToolchain, emit Emitter) (NodeRef, VFS, VFS) {
+// emitRD emits the .rodata → .asm → object yasm pipeline node. extraInputs are
+// the non-expanded closure leaves of a build-generated .rodata source (an
+// ARCHIVE_ASM resource: the producing RUN_PROGRAM/RUN_PYTHON's $(S) source
+// inputs, propagated through the .rodata's closure window); extraDepRefs is the
+// producer node (the AR .rodata) the compile depends on. A declared-SRC .rodata
+// passes nil for both.
+func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, extraInputs []VFS, extraDepRefs []NodeRef, tc ModuleToolchain, emit Emitter) (NodeRef, VFS, VFS) {
 	na := emit.nodeArenas()
 
 	asmVFS, outVFS := composeRodataOutputs(instance, srcRel)
@@ -45,13 +51,17 @@ func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 		Env: yasmEnv,
 		Inputs: na.inputList(na.vfsList(yasmBinaryVFS,
 			rodataScriptVFS,
-			srcVFS)),
+			srcVFS), extraInputs),
 		KV:               KV{P: pkRD, PC: pcLightGreen},
 		Outputs:          na.vfsList(asmVFS, outVFS),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		ForeignDepRefs:   []NodeRef{yasmLD},
 		Resources:        usesPython3,
+	}
+
+	if len(extraDepRefs) > 0 {
+		node.DepRefs = extraDepRefs
 	}
 
 	return emit.emit(node), asmVFS, outVFS
@@ -64,7 +74,7 @@ func emitLibraryRodataSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 
 	yasmLDRef, _ := ctx.tool(argContribToolsYasm)
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
-	ref, _, outPath := emitRD(instance, srcRel, srcVFS, yasmLDRef, in.TC, ctx.emit)
+	ref, _, outPath := emitRD(instance, srcRel, srcVFS, yasmLDRef, nil, nil, in.TC, ctx.emit)
 
 	return &SourceEmit{Ref: ref, OutPath: outPath}
 }
