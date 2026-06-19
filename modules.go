@@ -123,6 +123,11 @@ type ModuleData struct {
 	// into the py-proto cmdline. The protobuf builtins DISABLE it (no self-peer).
 	needGoogleProtoPeerdirs bool
 	cppProtoPlugins         []CppProtoPlugin
+	// buildProtoAsEvlog mirrors upstream's _BUILD_PROTO_AS_EVLOG (ENABLEd by
+	// CPP_EVLOG): the module's .proto outputs are produced as eventlog, so
+	// tools/event2cpp is one of the protoc plugins generating the .pb.h/.pb.cc
+	// and its INDUCED_DEPS(h+cpp) attach to those outputs.
+	buildProtoAsEvlog bool
 	excludeTags             map[STR]bool
 	dynamicLibraryFrom      []STR
 	exportsScript           *STR
@@ -2323,9 +2328,11 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		// ymake.core.conf folds into the CPP_PROTO submodule's PEERDIR — the
 		// same path as tokCppProtoPlugin0 above. Model only that C++ peer edge
 		// so library/cpp/eventlog's transitive GLOBAL ADDINCL propagates into
-		// the proto compile (and its consumers); the event2cpp codegen /
-		// _BUILD_PROTO_AS_EVLOG output modeling remains out of scope.
+		// the proto compile (and its consumers). _BUILD_PROTO_AS_EVLOG makes
+		// event2cpp one of the protoc plugins producing the .pb.h/.pb.cc, so its
+		// INDUCED_DEPS(h+cpp) attach to those outputs (see emit_proto.go).
 		d.peerdirs = append(d.peerdirs, strLibraryCppEventlog)
+		d.buildProtoAsEvlog = true
 	case tokYaff:
 		d.cppProtoPlugins = append(d.cppProtoPlugins, parseYAFF(v))
 	case tokYaffSchema:
