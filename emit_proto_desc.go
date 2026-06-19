@@ -432,6 +432,19 @@ func emitProtoDescriptions(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		deps = append(deps, p.MergeRef)
 	}
 
+	// PROTO_DESCRIPTIONS keeps _NEED_SBOM_INFO (unlike _DESC_PROTO, which
+	// DISABLEs it) and is a _BARE_UNIT final target, so it materializes the
+	// universal YMAKE_PYTHON3 toolchain peer's global toolchain.component.sbom as
+	// a direct input+dep — the merge command renders only the .protodesc subset of
+	// SRCS_GLOBAL, but the whole peer-closure global set attaches. The DESC_PROTO
+	// peers contribute none (feature disabled). Off-contour/non-x86_64 returns nil.
+	if sbomActive(ctx, instance) {
+		if pyRef, pyPath := pythonToolchainSbomComponent(ctx, instance.Platform); pyRef != nil {
+			inputs = append(inputs, *pyPath)
+			deps = append(deps, *pyRef)
+		}
+	}
+
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(
