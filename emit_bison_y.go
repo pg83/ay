@@ -45,7 +45,27 @@ func bisonGeneratedCPPParsed(ctx *GenCtx, instance ModuleInstance, srcVFS, heade
 	return parsed
 }
 
-func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCCInputs, genExt string) *SourceEmit {
+// bisonGeneratedRel is the module-relative path of a bison-generated source.
+// Upstream's nopath output placement: a flat (in-module) source lands its
+// generated .cpp directly in the module build dir; only a subdir source is
+// rebased under the _/ namespace (same rule as ragel6OutVFS / composeCCPaths).
+func bisonGeneratedRel(srcRel, genExt string) string {
+	if strings.Contains(srcRel, "/") {
+		return "_/" + srcRel + genExt
+	}
+
+	return srcRel + genExt
+}
+
+// emitBisonProducer emits the YC (bison + preprocess) node and registers its
+// generated header and source in the codegen registry. It runs in Pass 1's
+// pre-pass — BEFORE any sibling source's include closure is walked — so a
+// sibling that includes the generated <…/parser.h> resolves it to this $(B)
+// output instead of caching an empty closure (the scanCache is keyed by file
+// id, shared across configs; a stale miss would poison every later consumer).
+// emitBisonY then takes the producer ref from the registry and compiles the
+// generated source. This mirrors the flatc/proto register-then-compile split.
+func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCCInputs, genExt string) {
 	na := ctx.na
 
 	bisonRef, bisonBin := bisonTool(ctx, instance)
@@ -54,7 +74,7 @@ func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCC
 
 	baseNoExt := strings.TrimSuffix(srcRel, filepath.Ext(srcRel))
 	headerRel := baseNoExt + ".h"
-	generatedRel := "_/" + srcRel + genExt
+	generatedRel := bisonGeneratedRel(srcRel, genExt)
 	headerVFS := build(instance.Path.rel() + "/" + headerRel)
 	generatedVFS := build(instance.Path.rel() + "/" + generatedRel)
 	srcVFS := source(instance.Path.rel() + "/" + srcRel)
@@ -124,6 +144,16 @@ func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCC
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
 		Resources:        usesPython3,
 	}, ycRef)
+}
+
+func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCCInputs, genExt string) *SourceEmit {
+	preprocessHeader := genExt != ".c"
+	generatedRel := bisonGeneratedRel(srcRel, genExt)
+	generatedVFS := build(instance.Path.rel() + "/" + generatedRel)
+
+	// The YC producer was emitted+registered in the pre-pass (emitBisonProducer);
+	// take its ref from the codegen registry and compile the generated source.
+	ycRef := codegenRegForInstance(ctx, instance).lookup(generatedVFS).ProducerRef
 
 	ccIn := in
 	ccIn.ExtraDepRefs = []NodeRef{ycRef}

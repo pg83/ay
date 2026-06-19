@@ -212,7 +212,7 @@ func classifySrcExt(s string) SrcExtClass {
 		return srcExtRl6
 	case strings.HasSuffix(s, ".rl"):
 		return srcExtRl
-	case strings.HasSuffix(s, ".y"):
+	case strings.HasSuffix(s, ".y"), strings.HasSuffix(s, ".ypp"):
 		return srcExtY
 	case strings.HasSuffix(s, ".cpp.in"):
 		return srcExtCppIn
