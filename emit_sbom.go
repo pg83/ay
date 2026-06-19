@@ -67,6 +67,15 @@ func sbomActive(ctx *GenCtx, instance ModuleInstance) bool {
 // sbomQualifies reports whether a module gets a _GEN_SBOM_COMPONENT — gated by a
 // LICENSE() declaration (the _CONTRIB_MODULE_HOOKS trigger).
 func sbomQualifies(d *ModuleData) bool {
+	// A PROTO_LIBRARY with EXCLUDE_TAGS(CPP_PROTO) builds no CPP_PROTO submodule
+	// — the only proto submodule that keeps _NEED_SBOM_INFO=yes. The remaining
+	// py-proto submodule does DISABLE(_NEED_SBOM_INFO) (proto.conf:806), so the
+	// module emits no component even with LICENSE() (e.g. protobuf builtin_proto).
+	// Our model represents exactly this py-only proto contour (defaults.go).
+	if d.moduleStmt.Name == tokProtoLibrary && moduleExcludesTag(d, "CPP_PROTO") {
+		return false
+	}
+
 	return d.hasLicense
 }
 
@@ -78,6 +87,11 @@ func sbomComponentLang(moduleName TOK) string {
 	switch {
 	case moduleName == tokPrebuiltProgram:
 		return "AGNOSTIC"
+	case moduleName == tokPy23NativeLibrary:
+		// The modeled PY3 submodule of PY23_NATIVE_LIBRARY is `module PY3:
+		// LIBRARY { ... SET(MODULE_LANG CPP) ... }` (python.conf:1245), so its
+		// SBOM component is <name>.CPP.component.sbom despite the py3c prefix.
+		return "CPP"
 	case pyModuleTypeUsesPython3(moduleName):
 		return "PY3"
 	default:
