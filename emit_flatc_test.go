@@ -20,6 +20,7 @@ func TestEmitFL_NodeShape(t *testing.T) {
 		intern("$(B)/contrib/libs/flatbuffers/flatc/flatc"),
 		internArgs([]string{"--scoped-enums"}),
 		[]VFS{intern("$(S)/mod/Schema.fbs")},
+		tagCppFbs,
 		testToolchain(),
 		e,
 		&flatcVariantFL,
@@ -134,6 +135,64 @@ root_type Bar;
 	}
 }
 
+func TestGen_FbsLibraryCarriesCppFbsModuleTag(t *testing.T) {
+	files := map[string]string{}
+	mkdirWrite := func(rel, body string) { files[rel] = body }
+
+	mkdirWrite("mod/ya.make", `FBS_LIBRARY()
+SRCS(
+    File.fbs
+)
+END()
+`)
+	mkdirWrite("mod/File.fbs", `namespace test;
+table Bar {
+  value:int;
+}
+root_type Bar;
+`)
+	// A normal C++ library in a sibling dir must NOT gain the cpp_fbs tag.
+	mkdirWrite("plain/ya.make", `LIBRARY()
+SRCS(
+    plain.cpp
+)
+END()
+`)
+	mkdirWrite("plain/plain.cpp", "int plain() { return 0; }\n")
+
+	mkdirWrite("build/scripts/cpp_flatc_wrapper.py", "print('stub')\n")
+	mkdirWrite("contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h", "#pragma once\n")
+	mkdirWrite("contrib/libs/flatbuffers/ya.make", "LIBRARY()\nSRCS(fb.cpp)\nEND()\n")
+	mkdirWrite("contrib/libs/flatbuffers/fb.cpp", "int fb() { return 0; }\n")
+	mkdirWrite("contrib/libs/flatbuffers/flatc/ya.make", "PROGRAM(flatc)\nSRCS(main.cpp)\nEND()\n")
+	mkdirWrite("contrib/libs/flatbuffers/flatc/main.cpp", "int main() { return 0; }\n")
+
+	fs := newMemFS(files)
+	g := testGen(fs, "mod")
+
+	producer := findGraphNodeByOutputs(t, g, "$(B)/mod/File.fbs.h", "$(B)/mod/File.fbs.cpp", "$(B)/mod/File.bfbs")
+	if got := producer.TargetProperties.ModuleTag; got != tagCppFbs {
+		t.Fatalf("FL producer module_tag = %q, want cpp_fbs", got.string())
+	}
+
+	consumer := findGraphNodeByOutputs(t, g, "$(B)/mod/File.fbs.cpp.o")
+	if got := consumer.TargetProperties.ModuleTag; got != tagCppFbs {
+		t.Fatalf(".fbs.cpp.o consumer module_tag = %q, want cpp_fbs", got.string())
+	}
+
+	archive := findGraphNodeByOutputs(t, g, "$(B)/mod/libmod.a")
+	if got := archive.TargetProperties.ModuleTag; got != tagCppFbs {
+		t.Fatalf("fbs archive module_tag = %q, want cpp_fbs", got.string())
+	}
+
+	// A normal C++ library must NOT gain the cpp_fbs tag.
+	gp := testGen(fs, "plain")
+	plain := findGraphNodeByOutputs(t, gp, "$(B)/plain/plain.cpp.o")
+	if got := plain.TargetProperties.ModuleTag; got != 0 {
+		t.Fatalf("plain C++ .o module_tag = %q, want empty", got.string())
+	}
+}
+
 func TestEmitFL64_NodeShape(t *testing.T) {
 	target := newTestPlatform(OSLinux, ISAX8664, "no")
 	instance := ModuleInstance{
@@ -152,6 +211,7 @@ func TestEmitFL64_NodeShape(t *testing.T) {
 		intern("$(B)/contrib/libs/flatbuffers64/flatc/flatc"),
 		internArgs([]string{"--scoped-enums"}),
 		[]VFS{intern("$(S)/mod/Schema.fbs64")},
+		tagCppFbs,
 		testToolchain(),
 		e,
 		&flatcVariantFL64,

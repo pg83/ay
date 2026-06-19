@@ -157,6 +157,7 @@ var (
 	strVer                                           = internStr("--ver")
 	strYes                                           = internStr("yes")
 	strZero                                          = internStr("0")
+	tagCppFbs                                        = internStr("cpp_fbs")
 	tagCppProto                                      = internStr("cpp_proto")
 	tagDll                                           = internStr("dll")
 	tagGlobal                                        = internStr("global")
