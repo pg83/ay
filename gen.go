@@ -549,19 +549,25 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	reportPerfStats(ctx, parsers, targetScanner, hostScanner)
 
 	if be, ok := plainEmit.(*BufferedEmitter); ok {
-		be.generatedFirstClaim = mergeGeneratedFirstClaims(targetScanner, hostScanner)
+		be.generatedFirstClaim = mergeGeneratedFirstClaims(hostScanner, targetScanner)
 	}
 
 	return root.LDRef
 }
 
-// mergeGeneratedFirstClaims merges the per-scanner first-consumer claim maps.
-// On key conflict the target scanner wins — the host scanner only sees CC
-// compiles for tool builds, which are an orthogonal claim space.
-func mergeGeneratedFirstClaims(scanners ...*IncludeScanner) map[VFS]string {
+// mergeGeneratedFirstClaims merges the two scanners' first-consumer claim maps,
+// the HOST scanner winning on conflict. A generated header whose producer is a
+// host-built tool (the RUN_PROGRAM codegen case) is first consumed by the
+// co-located trait library reached inside that producer-side host closure, which
+// is the module upstream's single Node2Module DFS (json_visitor.cpp:638)
+// attributes it to. The target scanner only re-encounters the same header through
+// downstream peers later, so when both scanners claim the SAME generated file
+// with DIFFERENT owners the host claim is the upstream-faithful one. Files claimed
+// by only one scanner (the common case) keep that scanner's claim.
+func mergeGeneratedFirstClaims(host, target *IncludeScanner) map[VFS]string {
 	var n int
 
-	for _, s := range scanners {
+	for _, s := range []*IncludeScanner{host, target} {
 		if s != nil {
 			n += len(s.generatedFirstClaim)
 		}
@@ -573,7 +579,8 @@ func mergeGeneratedFirstClaims(scanners ...*IncludeScanner) map[VFS]string {
 
 	out := make(map[VFS]string, n)
 
-	for _, s := range scanners {
+	// host first: on conflict the earlier write wins.
+	for _, s := range []*IncludeScanner{host, target} {
 		if s == nil {
 			continue
 		}
