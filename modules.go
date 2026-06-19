@@ -44,6 +44,23 @@ type CppProtoPlugin struct {
 	ExtraOutFlag   string
 }
 
+// event2cpp is the C++ proto plugin CPP_EVLOG() registers via
+// CPP_PROTO_PLUGIN0(event2cpp tools/event2cpp DEPS library/cpp/eventlog)
+// (build/conf/proto.conf:605).
+const (
+	event2cppPluginName = "event2cpp"
+	event2cppToolPath   = "tools/event2cpp"
+)
+
+// addCPPProtoPlugin registers a C++ proto plugin on the module: the plugin
+// participates in the .proto PB producer command/inputs/generator-refs, and its
+// DEPS become module PEERDIRs (upstream: CPP_PROTOBUF_PEERS folded into the
+// CPP_PROTO submodule's PEERDIR).
+func addCPPProtoPlugin(d *ModuleData, plugin CppProtoPlugin) {
+	d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
+	d.peerdirs = append(d.peerdirs, STRS(plugin.Deps...)...)
+}
+
 type ModuleData struct {
 	moduleStmt    *ModuleStmt
 	modver        string // VERSION() args joined by "." (MODVER); "" means default "unknown"
@@ -129,11 +146,6 @@ type ModuleData struct {
 	// into the py-proto cmdline. The protobuf builtins DISABLE it (no self-peer).
 	needGoogleProtoPeerdirs bool
 	cppProtoPlugins         []CppProtoPlugin
-	// buildProtoAsEvlog mirrors upstream's _BUILD_PROTO_AS_EVLOG (ENABLEd by
-	// CPP_EVLOG): the module's .proto outputs are produced as eventlog, so
-	// tools/event2cpp is one of the protoc plugins generating the .pb.h/.pb.cc
-	// and its INDUCED_DEPS(h+cpp) attach to those outputs.
-	buildProtoAsEvlog bool
 	excludeTags             map[STR]bool
 	dynamicLibraryFrom      []STR
 	exportsScript           *STR
@@ -2340,21 +2352,24 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 			d.noCheckImportsDisabled = true
 		}
 	case tokCppProtoPlugin0, tokCppProtoPlugin, tokCppProtoPlugin2:
-		plugin := parseCPPProtoPlugin(v)
-		d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
-		d.peerdirs = append(d.peerdirs, STRS(plugin.Deps...)...)
+		addCPPProtoPlugin(d, parseCPPProtoPlugin(v))
 	case tokCppEvlog:
 		// CPP_EVLOG() expands to CPP_PROTO_PLUGIN0(event2cpp tools/event2cpp
 		// DEPS library/cpp/eventlog) + ENABLE(_BUILD_PROTO_AS_EVLOG)
-		// (build/conf/proto.conf). The DEPS land in CPP_PROTOBUF_PEERS, which
-		// ymake.core.conf folds into the CPP_PROTO submodule's PEERDIR — the
-		// same path as tokCppProtoPlugin0 above. Model only that C++ peer edge
-		// so library/cpp/eventlog's transitive GLOBAL ADDINCL propagates into
-		// the proto compile (and its consumers). _BUILD_PROTO_AS_EVLOG makes
-		// event2cpp one of the protoc plugins producing the .pb.h/.pb.cc, so its
-		// INDUCED_DEPS(h+cpp) attach to those outputs (see emit_proto.go).
-		d.peerdirs = append(d.peerdirs, strLibraryCppEventlog)
-		d.buildProtoAsEvlog = true
+		// (build/conf/proto.conf:605). The CPP_PROTO_PLUGIN0 half is the whole
+		// observable behavior: event2cpp becomes an ordinary C++ proto plugin on
+		// the .proto PB producer — its --plugin=/--event2cpp_out= command tokens,
+		// its tool input, the library/cpp/eventlog peer (whose transitive GLOBAL
+		// ADDINCL reaches the proto compile and consumers), and the plugin LD ref
+		// rides the PB outputs' GeneratorRefs so event2cpp's INDUCED_DEPS(h+cpp)
+		// attach to the .pb.h/.pb.cc closure. _BUILD_PROTO_AS_EVLOG itself only
+		// drives an ASSERT vs USE_VANILLA_PROTOC (proto.conf:733), so it needs no
+		// model here.
+		addCPPProtoPlugin(d, CppProtoPlugin{
+			Name:     event2cppPluginName,
+			ToolPath: event2cppToolPath,
+			Deps:     []string{strLibraryCppEventlog.string()},
+		})
 	case tokYaff:
 		d.cppProtoPlugins = append(d.cppProtoPlugins, parseYAFF(v))
 	case tokYaffSchema:

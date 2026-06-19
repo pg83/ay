@@ -843,6 +843,42 @@ func TestEmitProtoSrcs_CppEvlogCarriesEvent2cppInducedDeps(t *testing.T) {
 		t.Fatalf("CPP_EVLOG foo.pb.cc.o missing event2cpp induced input %q: %v", induced, evCC.flatInputs())
 	}
 
+	// T-58: CPP_EVLOG must also make event2cpp an ordinary C++ proto plugin on the
+	// PB producer command — upstream CPP_PROTO_PLUGIN0(event2cpp tools/event2cpp …).
+	pb := mustNodeByOutput(t, gEv, "$(B)/evlog/foo.pb.h")
+	const event2cppBinary = "$(B)/tools/event2cpp/event2cpp"
+	pbArgs := strStrs(pb.Cmds[0].CmdArgs.flat())
+	const wantPlugin = "--plugin=protoc-gen-event2cpp=" + event2cppBinary
+	const wantOut = "--event2cpp_out=$(B)/"
+	if !containsString(pbArgs, wantPlugin) {
+		t.Fatalf("CPP_EVLOG pb cmd missing event2cpp plugin token %q: %v", wantPlugin, pbArgs)
+	}
+	if !containsString(pbArgs, wantOut) {
+		t.Fatalf("CPP_EVLOG pb cmd missing event2cpp out token %q: %v", wantOut, pbArgs)
+	}
+	srcIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "evlog/foo.proto")
+	pluginIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), wantPlugin)
+	outIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), wantOut)
+	if srcIdx < 0 || pluginIdx < 0 || outIdx < 0 {
+		t.Fatalf("CPP_EVLOG pb cmd missing src/plugin/out args: src=%d plugin=%d out=%d (%v)", srcIdx, pluginIdx, outIdx, pbArgs)
+	}
+	if !(srcIdx < pluginIdx && srcIdx < outIdx) {
+		t.Fatalf("CPP_EVLOG pb plugin tokens must follow source: src=%d plugin=%d out=%d", srcIdx, pluginIdx, outIdx)
+	}
+	if !nodeHasInput(pb, event2cppBinary) {
+		t.Fatalf("CPP_EVLOG pb producer missing event2cpp tool input %q: %v", event2cppBinary, pb.flatInputs())
+	}
+	event2cppNode := mustNodeByOutput(t, gEv, event2cppBinary)
+	refs := 0
+	for _, dep := range graphDeps(gEv, pb) {
+		if dep == event2cppNode.UID {
+			refs++
+		}
+	}
+	if refs != 1 {
+		t.Fatalf("CPP_EVLOG pb event2cpp generator ref count = %d, want 1 (no duplicate)", refs)
+	}
+
 	gPlain := testGen(newMemFS(files), "plain")
 	plainCC := mustNodeByOutput(t, gPlain, "$(B)/plain/foo.pb.cc.o")
 	if nodeHasInput(plainCC, induced) {
