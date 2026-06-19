@@ -17,7 +17,7 @@ func emitCodegenDownstreamAS(ctx *GenCtx, instance ModuleInstance, asmRel string
 	asmPath := copyFileOutputVFS(instance.Path.rel(), asmRel)
 
 	asIn := in
-	asIn.IncludeInputs = withOutTogetherMain(ctx, instance, asmPath, walkClosure(ctx.scannerFor(instance), asmPath, in.ScanCfg))
+	asIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), asmPath, in.ScanCfg)
 	asIn.ExtraDepRefs = depRefs
 
 	if extra := resolveCodegenDepRefs(ctx, instance, asIn.IncludeInputs, depRefs...); len(extra) > 0 {
@@ -36,7 +36,7 @@ func emitCodegenDownstreamAS(ctx *GenCtx, instance ModuleInstance, asmRel string
 func emitCodegenDownstreamCC(ctx *GenCtx, instance ModuleInstance, cppRel string, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
 	cppPath := copyFileOutputVFS(instance.Path.rel(), cppRel)
 
-	includeInputs := withOutTogetherMain(ctx, instance, cppPath, walkClosure(ctx.scannerFor(instance), cppPath, in.ScanCfg))
+	includeInputs := walkClosure(ctx.scannerFor(instance), cppPath, in.ScanCfg)
 
 	ccIn := in
 	ccIn.IncludeInputs = includeInputs
@@ -51,26 +51,4 @@ func emitCodegenDownstreamCC(ctx *GenCtx, instance ModuleInstance, cppRel string
 	ref, outPath, _ := emitCC(instance, cppRel, cppPath, ccIn, ctx.host, ctx.emit)
 
 	return ref, outPath
-}
-
-// withOutTogetherMain appends the producing command's MAIN output to a generated
-// source's include-input window when the source is a NON-main EDT_OutTogether
-// sibling. Upstream a node consuming a non-main output of a multi-output command
-// carries the main output as an input (json_visitor.cpp PrepareLeaving); for
-// caesar this is the generated features.gen.h sibling of features.gen.cpp. The
-// main output never appears in the scanned source closure (it is not an
-// OUTPUT_INCLUDES of the sibling), so this adds exactly one input. Allocates a
-// fresh slice — walkClosure returns a shared cached window that must not be
-// mutated.
-func withOutTogetherMain(ctx *GenCtx, instance ModuleInstance, output VFS, closure []VFS) []VFS {
-	info := codegenRegForInstance(ctx, instance).lookup(output)
-
-	if info == nil || info.OutTogetherMain == 0 {
-		return closure
-	}
-
-	out := make([]VFS, len(closure), len(closure)+1)
-	copy(out, closure)
-
-	return append(out, info.OutTogetherMain)
 }
