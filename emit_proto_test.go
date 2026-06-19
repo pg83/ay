@@ -131,6 +131,71 @@ func TestEmitProtoSrcs_YaffFilesWhitelistSkipsNonWhitelistedHeaderClosure(t *tes
 	}
 }
 
+// TestEmitProtoSrcs_YaffCppInputClosureInducesWireFormatDropsSiblingHeader pins
+// the T-33 divergence. The YaFF protoc plugin writes the generated .yaff.cpp as a
+// thin wrapper whose only content is `#include "<stem>.yaff.h"` (by basename),
+// produced by the same protoc invocation. Upstream resolves that sibling header
+// for its transitive closure but does NOT record the header itself as a compile
+// input; the translation unit's protobuf runtime headers — notably wire_format.h
+// — arrive via protoc's INDUCED_DEPS(cpp …) on the .yaff.cpp output. So the
+// generated .yaff.cpp.o must carry wire_format.h (induced, cpp bucket) and must
+// NOT carry the sibling .yaff.h. Before the fix the .yaff.cpp registration passes
+// no GeneratorRefs (no induced wire_format.h) and records the sibling header.
+func TestEmitProtoSrcs_YaffCppInputClosureInducesWireFormatDropsSiblingHeader(t *testing.T) {
+	files := map[string]string{}
+	// protoc tool declares the real induced-deps split: wire_format.h is cpp-only
+	// (rides .cc/.cpp outputs), message.h is h+cpp (rides headers too).
+	writeTestModuleFile(files, "contrib/tools/protoc/ya.make",
+		"PROGRAM(protoc)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"+
+			"INDUCED_DEPS(cpp ${ARCADIA_ROOT}/contrib/libs/protobuf/src/google/protobuf/wire_format.h)\n"+
+			"INDUCED_DEPS(h+cpp ${ARCADIA_ROOT}/contrib/libs/protobuf/src/google/protobuf/message.h)\n"+
+			"SRCS(main.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/tools/protoc/main.cpp", "int main(){return 0;}\n")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "library/cpp/yaff/tools/protoc_plugin", "protoc_plugin")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/src/google/protobuf/wire_format.h", "#pragma once\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/src/google/protobuf/message.h", "#pragma once\n")
+
+	writeTestModuleFile(files, "library/cpp/yaff/yaff.h", "#pragma once\n")
+	writeTestModuleFile(files, "library/cpp/yaff/struct.h", "#pragma once\n")
+	writeTestModuleFile(files, "library/cpp/yaff/protobuf.h", "#pragma once\n")
+	writeTestModuleFile(files, "library/cpp/yaff/reflect.h", "#pragma once\n")
+	writeTestModuleFile(files, "library/cpp/yaff/experiments/builder.h", "#pragma once\n")
+	writeTestModuleFile(files, "library/cpp/yaff/experiments/column.h", "#pragma once\n")
+	writeTestModuleFile(files, "library/cpp/yaff/experiments/merge.h", "#pragma once\n")
+
+	writeTestModuleFile(files, "proto/ya.make",
+		"PROTO_LIBRARY()\nSET(PROTOC_TRANSITIVE_HEADERS \"no\")\nYAFF(EXPERIMENTAL foo.proto)\nSRCS(foo.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
+	writeTestModuleFile(files, "proto/foo.proto", "syntax = \"proto3\";\npackage test;\nmessage Foo { string v = 1; }\n")
+
+	g := testGen(newMemFS(files), "proto")
+	yaffCC := mustNodeByOutput(t, g, "$(B)/proto/foo.yaff.cpp.o")
+
+	const wireFormat = "$(S)/contrib/libs/protobuf/src/google/protobuf/wire_format.h"
+	const siblingHeader = "$(B)/proto/foo.yaff.h"
+
+	if !nodeHasInput(yaffCC, wireFormat) {
+		t.Errorf("foo.yaff.cpp.o missing induced cpp input %q: %v", wireFormat, yaffCC.flatInputs())
+	}
+	if nodeHasInput(yaffCC, siblingHeader) {
+		t.Errorf("foo.yaff.cpp.o must not record the sibling generated header %q: %v", siblingHeader, yaffCC.flatInputs())
+	}
+	// The header's transitive closure still rides in (walked through the dropped
+	// sibling): the proto's own .pb.h and the yaff runtime headers remain inputs.
+	for _, want := range []string{
+		"$(B)/proto/foo.pb.h",
+		"$(S)/library/cpp/yaff/yaff.h",
+		"$(S)/library/cpp/yaff/protobuf.h",
+	} {
+		if !nodeHasInput(yaffCC, want) {
+			t.Errorf("foo.yaff.cpp.o missing surviving YaFF closure input %q", want)
+		}
+	}
+}
+
 // TestEmitProtoSrcs_YaffOutputOrderFollowsLiteHeaderDeclarationOrder pins the
 // upstream CPP_PROTO_OUTS accumulation order. The wrapper's --outputs list (and
 // the PB node's outputs) is CPP_PROTO_OUTS in statement order, main .pb.h
