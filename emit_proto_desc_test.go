@@ -378,6 +378,73 @@ func TestEmitDescProto_ProtoNamespaceNestedSourceDescOutputAndIncludes(t *testin
 	}
 }
 
+// TestEmitProtoDescriptions_CarriesPythonToolchainSbom reproduces the sg7
+// toolchain-SBOM gap: on linux/x86_64 with the internal SBOM contour, a
+// PROTO_DESCRIPTIONS target keeps _NEED_SBOM_INFO (unlike _DESC_PROTO, which
+// DISABLEs it) and, as a _BARE_UNIT final target, materializes the universal
+// YMAKE_PYTHON3 toolchain peer's global toolchain.component.sbom as a direct
+// input. Before this change the PD merge node omitted that input while the
+// reference lists it exactly once; the DESC_PROTO producer/.self.protodesc
+// nodes (feature disabled) must stay free of it.
+func TestEmitProtoDescriptions_CarriesPythonToolchainSbom(t *testing.T) {
+	const protoDir = "myproto"
+	const descDir = "desc"
+	const sbomInput = "$(B)/build/platform/python/ymake_python3/toolchain.component.sbom"
+
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	files["contrib/libs/protobuf/ya.make"] = "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n"
+	files[protoDir+"/ya.make"] = "PROTO_LIBRARY()\nDISABLE(NEED_GOOGLE_PROTO_PEERDIRS)\nSRCS(foo.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n"
+	files[protoDir+"/foo.proto"] = "syntax = \"proto3\";\npackage foo;\nmessage Foo { int32 x = 1; }\n"
+	files[descDir+"/ya.make"] = "PROTO_DESCRIPTIONS()\nPEERDIR(" + protoDir + ")\nEND()\n"
+
+	// internal SBOM contour + the YMAKE_PYTHON3 TOOLCHAIN(python3) peer whose
+	// global toolchain.component.sbom every _BARE_UNIT carries.
+	files["build/internal/conf/sbom.conf"] = "SBOM_GENERATION_ALLOWED=yes\n"
+	files["build/platform/python/ymake_python3/ya.make"] = "RESOURCES_LIBRARY()\nTOOLCHAIN(python3)\nVERSION(3.12.6)\nDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(YMAKE_PYTHON3 python.json)\nEND()\n"
+	files["build/platform/python/ymake_python3/python.json"] = `{"by_platform":{"linux-x86_64":{"uri":"sbr:test"}}}`
+	files["build/internal/platform/clang_toolchain_info/ya.make"] = "RESOURCES_LIBRARY()\nTOOLCHAIN(clang)\nVERSION(16)\nEND()\n"
+
+	g := testGenX86(newMemFS(files), descDir)
+
+	// The PROTO_DESCRIPTIONS merge node (the .protodesc/.tar producer).
+	pd := mustNodeByAnyOutput(t, g, "$(B)/"+descDir+"/desc.protodesc")
+
+	n := 0
+	for _, in := range pd.flatInputs() {
+		if in.string() == sbomInput {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("PROTO_DESCRIPTIONS node carries python toolchain SBOM %d times, want 1\ninputs: %v", n, pd.flatInputs())
+	}
+
+	// The same node also produces .tar (one node, two outputs) so the .tar
+	// output inherits the input too — guard the sibling.
+	var hasTar bool
+	for _, o := range pd.Outputs {
+		if o.string() == "$(B)/"+descDir+"/desc.tar" {
+			hasTar = true
+		}
+	}
+	if !hasTar {
+		t.Fatalf("PD node does not also emit desc.tar (outputs %v)", pd.Outputs)
+	}
+
+	// Unrelated DESC_PROTO nodes (feature disabled) must NOT carry it.
+	descProducer := mustNodeByAnyOutput(t, g, "$(B)/"+protoDir+"/foo.proto.desc")
+	if nodeHasInput(descProducer, sbomInput) {
+		t.Errorf("DESC_PROTO producer must not carry python toolchain SBOM\ninputs: %v", descProducer.flatInputs())
+	}
+	prj := realPrjName(protoDir)
+	selfMerge := mustNodeByAnyOutput(t, g, "$(B)/"+protoDir+"/"+prj+".self.protodesc")
+	if nodeHasInput(selfMerge, sbomInput) {
+		t.Errorf(".self.protodesc merge node must not carry python toolchain SBOM\ninputs: %v", selfMerge.flatInputs())
+	}
+}
+
 // TestEmitDescProto_ProtoNamespaceRootLevelSourceNoUnderscore pins the
 // complement of the nested case: a root-level (flat) source under a
 // PROTO_NAMESPACE(yt) module must NOT gain the `_/` output-name segment.
