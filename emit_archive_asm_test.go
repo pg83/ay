@@ -15,6 +15,70 @@ func testGenX86(fs FS, targetDir string) *Graph {
 	return Gen(fs, targetDir, host, target, func(Warn) {})
 }
 
+// TestEmitArchiveAsm_RunProgramStdoutEqualsOutNoauto reproduces the
+// kernel/lemmer/new_dict/rus/extra divergence: a RUN_PROGRAM that names the SAME
+// physical file in both STDOUT and OUT_NOAUTO roles (the program's stdout *is*
+// the declared output). Upstream's output set is path-keyed, so the file is
+// listed exactly once on the producer node; before the fix emitPR appended the
+// STDOUT VFS and the OUT_NOAUTO VFS separately, listing the file twice and
+// perturbing the node's content hash (cascading a differing Merkle uid into the
+// whole ARCHIVE_ASM .rodata chain).
+func TestEmitArchiveAsm_RunProgramStdoutEqualsOutNoauto(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "m/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    tools/maker make-all --input lister.txt
+    STDOUT out.dict.bin
+    IN lister.txt
+    OUT_NOAUTO out.dict.bin
+)
+ARCHIVE_ASM(
+    NAME Dict
+    DONTCOMPRESS
+    ${BINDIR}/out.dict.bin
+)
+END()
+`)
+	files["m/lister.txt"] = "word\n"
+	writeToolProgram(files, "tools/maker", "maker")
+	writeToolProgram(files, "tools/archiver", "archiver")
+	writeToolProgram(files, "contrib/tools/yasm", "yasm")
+
+	g := testGenX86(newMemFS(files), "m")
+
+	// (1) the producer lists the generated binary exactly once, despite the file
+	// being declared through both STDOUT and OUT_NOAUTO.
+	pr := mustNodeByOutput(t, g, "$(B)/m/out.dict.bin")
+	if pr.KV.P != pkPR {
+		t.Errorf("out.dict.bin kv.p = %q, want PR", pr.KV.P.string())
+	}
+	n := 0
+	for _, o := range pr.Outputs {
+		if o.string() == "$(B)/m/out.dict.bin" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("PR node must list $(B)/m/out.dict.bin exactly once, got %d: %v", n, vfsStringsT3(pr.Outputs))
+	}
+
+	// (2) the binary still flows once into the ARCHIVE_ASM .rodata resource.
+	ar := mustNodeByOutput(t, g, "$(B)/m/Dict.rodata")
+	m := 0
+	for _, in := range ar.flatInputs() {
+		if in.string() == "$(B)/m/out.dict.bin" {
+			m++
+		}
+	}
+	if m != 1 {
+		t.Fatalf("AR .rodata must list the binary input exactly once, got %d: %v", m, vfsStringsT3(ar.flatInputs()))
+	}
+}
+
 // TestEmitArchiveAsm_RunPythonOutThroughRodata reproduces the
 // kernel/lemmer/new_dict/ara/builtin divergence: a RUN_PYTHON3 OUT_NOAUTO
 // consumed by ARCHIVE_ASM must produce the dictionary binary (PY), the
