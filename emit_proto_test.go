@@ -505,6 +505,69 @@ END()
 	}
 }
 
+// TestEmitProtoSrcs_SrcDirAscentObjectPath reproduces the sg7 market/proto/content
+// path-shape gap: a PROTO_LIBRARY whose SRCDIR points at a PARENT directory and
+// whose SRCS names a .proto living there. The generated .pb.cc therefore has a
+// logical path OUTSIDE the module dir; upstream names the compiled object by
+// rebasing that path under the module's build dir, mapping the `..` ascent into a
+// `__` segment (market/proto/content/ir/common/__/BusinessCleanWebStatus.pb.cc.o),
+// exactly as a SRCDIR-resolved C++ source object is named. The previous build-path
+// branch instead emitted `_/<full-source-path>` (…/common/_/market/proto/content/
+// ir/BusinessCleanWebStatus.pb.cc.o), an output-only divergence.
+func TestEmitProtoSrcs_SrcDirAscentObjectPath(t *testing.T) {
+	const modPath = "market/proto/content/ir/common"
+
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	for path, body := range map[string]string{
+		modPath + "/ya.make": `PROTO_LIBRARY()
+
+SRCDIR(market/proto/content/ir)
+
+SRCS(BusinessCleanWebStatus.proto)
+
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+
+END()
+`,
+		"market/proto/content/ir/BusinessCleanWebStatus.proto": "syntax = \"proto3\";\npackage market.proto.content.ir;\n",
+		"contrib/libs/protobuf/ya.make":                        "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n",
+	} {
+		files[path] = body
+	}
+
+	g := testGen(newMemFS(files), modPath)
+
+	want := "$(B)/" + modPath + "/__/BusinessCleanWebStatus.pb.cc.o"
+	bad := "$(B)/" + modPath + "/_/market/proto/content/ir/BusinessCleanWebStatus.pb.cc.o"
+
+	var gotObj bool
+	for _, n := range g.Graph {
+		if n.KV.P != pkCC {
+			continue
+		}
+		for _, out := range n.Outputs {
+			if out.string() == bad {
+				t.Errorf("CC object uses _/<full-path> shape, want __ ascent: %q", bad)
+			}
+			if out.string() == want {
+				gotObj = true
+			}
+		}
+	}
+
+	if !gotObj {
+		var ccOuts []string
+		for _, n := range g.Graph {
+			if n.KV.P == pkCC {
+				ccOuts = append(ccOuts, n.Outputs[0].string())
+			}
+		}
+		t.Errorf("missing SRCDIR-ascent proto object %q; CC outputs: %v", want, ccOuts)
+	}
+}
+
 // TestGen_PyProtoLibrary_TransitivePROTONamespaceReachesPyProtoCmd reproduces the
 // sg7 brandformance py3_proto gap: a PY-addressed PROTO_LIBRARY reaching a
 // transitive PROTO_LIBRARY that declares a bare (non-GLOBAL) PROTO_NAMESPACE(yt)

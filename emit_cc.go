@@ -274,6 +274,24 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 		}
 	}
 
+	// A build-generated source whose logical path lies OUTSIDE the module dir
+	// (SRCDIR ascent / sibling-rooted SRCS — e.g. market/proto/content/ir/common's
+	// SRCS(BusinessCleanWebStatus.proto) resolved via SRCDIR one level up yields a
+	// generated $(B)/market/proto/content/ir/BusinessCleanWebStatus.pb.cc): the
+	// object is named by rebasing that path under the module BINDIR, mapping each
+	// `..` ascent into a `__` segment — identical to the $(S) SRCDIR source branch
+	// above. srcRel here is the full module-rooted path (TrimPrefix left it intact),
+	// so the normalizeDotDotSegments switch below would wrongly bury it under `_/`.
+	if srcVFS.isBuild() && !in.FlatOutput {
+		rel, dir := srcVFS.rel(), instance.Path.rel()
+
+		if rel != dir && !strings.HasPrefix(rel, dir+"/") {
+			outputRel := composeSrcDirOutputRel(dir, rel)
+
+			return build(dir + "/" + outputRel + suffix), input
+		}
+	}
+
 	var outRel string
 
 	switch {
