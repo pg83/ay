@@ -474,8 +474,8 @@ EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
 
 END()
 `,
-		modPath + "/foo.proto":           "syntax = \"proto3\";\npackage grut.auxiliary;\n",
-		"contrib/libs/protobuf/ya.make":  "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n",
+		modPath + "/foo.proto":          "syntax = \"proto3\";\npackage grut.auxiliary;\n",
+		"contrib/libs/protobuf/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n",
 	} {
 		files[path] = body
 	}
@@ -847,5 +847,66 @@ func TestEmitProtoSrcs_CppEvlogCarriesEvent2cppInducedDeps(t *testing.T) {
 	plainCC := mustNodeByOutput(t, gPlain, "$(B)/plain/foo.pb.cc.o")
 	if nodeHasInput(plainCC, induced) {
 		t.Fatalf("non-CPP_EVLOG foo.pb.cc.o unexpectedly carries event2cpp induced input %q: %v", induced, plainCC.flatInputs())
+	}
+}
+
+// T-54: a PROTO_LIBRARY leaf reached only through a peers list that was included
+// via a variable-bearing INCLUDE path. Before parse-time expansion the peers
+// list was skipped (its ${VAR} stayed literal), FEATURE_PEERDIRS expanded to
+// nothing, and the leaf PY3 proto cluster never entered the graph. This mirrors
+// the sg7 fs_codegen reachability class without real yabs files.
+func TestParseInclude_VarBearingPeersListReachesLeafPyProto(t *testing.T) {
+	const consumer = "app"
+
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "py3cc_slow")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+
+	writeTestModuleFile(files, consumer+"/ya.make", `PY3_LIBRARY(app)
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+INCLUDE(cfg/name.inc)
+INCLUDE(${ARCADIA_ROOT}/gen/artefacts_${CONFIG_NAME}_/peers.lst)
+PEERDIR(${FEATURE_PEERDIRS})
+END()
+`)
+	writeTestModuleFile(files, consumer+"/cfg/name.inc", "SET(CONFIG_NAME caesar)\n")
+	writeTestModuleFile(files, "gen/artefacts_caesar_/peers.lst", "SET(FEATURE_PEERDIRS feature/model)\n")
+	writeTestModuleFile(files, "feature/model/ya.make", `PY3_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+PEERDIR(leaf/proto)
+END()
+`)
+	writeTestModuleFile(files, "leaf/proto/ya.make", `PROTO_LIBRARY()
+NO_MYPY()
+SRCS(enum_options.proto)
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+END()
+`)
+	writeTestModuleFile(files, "leaf/proto/enum_options.proto", "syntax = \"proto3\";\n")
+	files["contrib/libs/protobuf/ya.make"] = "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n"
+	files["contrib/python/protobuf/ya.make"] = "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nEND()\n"
+	files["contrib/libs/python/ya.make"] = "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n"
+
+	g := testGen(newMemFS(files), consumer)
+
+	var pyPB *Node
+	for _, n := range g.Graph {
+		if n.KV.P == pkPB && n.TargetProperties.ModuleTag == tagPy3Proto &&
+			len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), "enum_options__intpy3___pb2.py") {
+			pyPB = n
+			break
+		}
+	}
+	if pyPB == nil {
+		t.Fatal("leaf PY3 proto enum_options__intpy3___pb2.py not reachable through variable-bearing include")
 	}
 }

@@ -1304,3 +1304,175 @@ func TestParseRunProgramToolSection(t *testing.T) {
 		t.Fatalf("OutputIncludes = %v, want [contrib/libs/protobuf/src/google/protobuf/message.h]", stmt.OutputIncludes)
 	}
 }
+
+// T-54: parse-time variable expansion in INCLUDE paths. Upstream
+// (makefile_reader.cpp:49-60) evaluates an INCLUDE argument against the
+// accumulated SET env before resolving the path; ay must do the same so a
+// variable-bearing include reaches the source-root file ymake reaches.
+
+func setStmtByName(stmts []Stmt, name string) *SetStmt {
+	for _, s := range stmts {
+		if v, ok := s.(*SetStmt); ok && v.Name == name {
+			return v
+		}
+	}
+	return nil
+}
+
+func TestParseInclude_ExpandsVarFromEarlierSet(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"app/ya.make": "INCLUDE(cfg/name.inc)\n" +
+			"INCLUDE(${ARCADIA_ROOT}/gen/artefacts_${CONFIG_NAME}_/peers.lst)\n" +
+			"PY3_PROGRAM(app)\nPEERDIR(${FEATURE_PEERDIRS})\nEND()\n",
+		"app/cfg/name.inc":                "SET(CONFIG_NAME caesar)\n",
+		"gen/artefacts_caesar_/peers.lst": "SET(FEATURE_PEERDIRS feature/model)\n",
+	})
+
+	mf, err := parseFile(fs, "app/ya.make")
+	if err != nil {
+		t.Fatalf("parseFile failed: %v", err)
+	}
+
+	for _, s := range mf.Stmts {
+		if _, isInc := s.(*IncludeStmt); isInc {
+			t.Errorf("Stmts contains *IncludeStmt; expected inline expansion")
+		}
+	}
+
+	fp := setStmtByName(mf.Stmts, "FEATURE_PEERDIRS")
+	if fp == nil {
+		t.Fatalf("variable-bearing INCLUDE was skipped: no SET(FEATURE_PEERDIRS); got %#v", mf.Stmts)
+	}
+	if fp.Value != "feature/model" {
+		t.Errorf("FEATURE_PEERDIRS = %q, want feature/model", fp.Value)
+	}
+
+	// Ordering: the SET must precede the module body.
+	var setIdx, modIdx = -1, -1
+	for i, s := range mf.Stmts {
+		switch v := s.(type) {
+		case *SetStmt:
+			if v.Name == "FEATURE_PEERDIRS" {
+				setIdx = i
+			}
+		case *ModuleStmt:
+			if modIdx == -1 {
+				modIdx = i
+			}
+		}
+	}
+	if setIdx == -1 || modIdx == -1 || setIdx >= modIdx {
+		t.Errorf("SET(FEATURE_PEERDIRS) at %d must precede PY3_PROGRAM at %d", setIdx, modIdx)
+	}
+}
+
+func TestParseInclude_MultiArgLeftToRight(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"ya.make":     "LIBRARY()\nINCLUDE(a.inc b_${NAME}.inc)\nEND()\n",
+		"a.inc":       "SET(NAME value)\n",
+		"b_value.inc": "SRCS(found.cpp)\n",
+	})
+
+	mf, err := parseFile(fs, "ya.make")
+	if err != nil {
+		t.Fatalf("parseFile failed: %v", err)
+	}
+
+	var srcs *SrcsStmt
+	for _, s := range mf.Stmts {
+		if v, ok := s.(*SrcsStmt); ok {
+			srcs = v
+		}
+	}
+	if srcs == nil {
+		t.Fatalf("b_value.inc not included via arg-2 expansion; got %#v", mf.Stmts)
+	}
+	if !equalStrings(strStrings(srcs.Sources), []string{"found.cpp"}) {
+		t.Errorf("SRCS = %v, want [found.cpp]", srcs.Sources)
+	}
+}
+
+func TestParseInclude_MissingExpandedTargetIsSilent(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"ya.make": "LIBRARY()\nSET(NAME ghost)\nINCLUDE(${ARCADIA_ROOT}/missing_${NAME}.inc)\nSRCS(x.cpp)\nEND()\n",
+	})
+
+	mf, err := parseFile(fs, "ya.make")
+	if err != nil {
+		t.Fatalf("missing expanded include must not error: %v", err)
+	}
+	// Only the module's own SRCS(x.cpp) survives — nothing from the absent file.
+	var srcs *SrcsStmt
+	for _, s := range mf.Stmts {
+		if v, ok := s.(*SrcsStmt); ok {
+			srcs = v
+		}
+	}
+	if srcs == nil || !equalStrings(strStrings(srcs.Sources), []string{"x.cpp"}) {
+		t.Errorf("unexpected stmts after missing include: %#v", mf.Stmts)
+	}
+}
+
+func TestParseInclude_UnresolvedVarIsSilent(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"ya.make": "LIBRARY()\nINCLUDE(${UNSET}/x.inc)\nSRCS(x.cpp)\nEND()\n",
+	})
+
+	mf, err := parseFile(fs, "ya.make")
+	if err != nil {
+		t.Fatalf("unresolved include var must not error: %v", err)
+	}
+	if setStmtByName(mf.Stmts, "anything") != nil {
+		t.Fatal("unexpected included content")
+	}
+}
+
+func TestParseInclude_AbsoluteAfterExpansionRejected(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"ya.make": "LIBRARY()\nSET(ABS /tmp/nope.inc)\nINCLUDE(${ABS})\nEND()\n",
+	})
+
+	_, err := parseFile(fs, "ya.make")
+	if err == nil {
+		t.Fatal("expected absolute-path rejection, got nil")
+	}
+	if !strings.Contains(err.Error(), "absolute paths escape the source root") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestParseInclude_CycleWithExpandedKey(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"a.inc": "SET(DIR .)\nINCLUDE(${DIR}/a.inc)\n",
+	})
+
+	_, err := parseFile(fs, "a.inc")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "INCLUDE cycle") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestParseInclude_SetInsideIfFeedsLaterInclude(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"ya.make": "LIBRARY()\nIF (OPENSOURCE)\nSET(NAME val)\nENDIF()\n" +
+			"INCLUDE(${ARCADIA_ROOT}/gen_${NAME}.inc)\nEND()\n",
+		"gen_val.inc": "SRCS(fromif.cpp)\n",
+	})
+
+	mf, err := parseFile(fs, "ya.make")
+	if err != nil {
+		t.Fatalf("parseFile failed: %v", err)
+	}
+	var srcs *SrcsStmt
+	for _, s := range mf.Stmts {
+		if v, ok := s.(*SrcsStmt); ok {
+			srcs = v
+		}
+	}
+	if srcs == nil || !equalStrings(strStrings(srcs.Sources), []string{"fromif.cpp"}) {
+		t.Fatalf("SET inside IF body did not feed later INCLUDE; got %#v", mf.Stmts)
+	}
+}
