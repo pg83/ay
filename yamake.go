@@ -910,10 +910,17 @@ func parseInternalWithState(fs FS, name string, src []byte, stack []string, incl
 
 type IncludeState struct {
 	once map[string]struct{}
+	// env is the parse-time SET environment used to expand variables in INCLUDE
+	// path arguments, mirroring upstream's EvalExpr(Context->Vars(), args[0])
+	// (makefile_reader.cpp:49-60). It lives on IncludeState because that is
+	// created fresh per top-level parseFile and threaded through recursive
+	// includes — so the env is module-parse scoped and shared across the same
+	// module's includes, matching Context->Vars()'s lifetime.
+	env Environment
 }
 
 func newIncludeState() *IncludeState {
-	return &IncludeState{once: map[string]struct{}{}}
+	return &IncludeState{once: map[string]struct{}{}, env: newEnvironment()}
 }
 
 type StmtTerminator int
@@ -961,6 +968,14 @@ func (p *Parser) parseMacroInto(into []Stmt, nameTok Token) []Stmt {
 
 	args := p.parseMacroArgs(nameTok)
 	stmt := p.buildStmt(nameTok, args)
+
+	// Fold a SET into the parse-time env so a later INCLUDE path argument can
+	// reference it (upstream: SET writes Context->Vars(), INCLUDE EvalExprs
+	// against the same Vars). The emitted SetStmt is unchanged — gen-time
+	// collection still rebuilds d.setVars from the same statement sequence.
+	if set, ok := stmt.(*SetStmt); ok {
+		p.includes.env.setFromString(set.NameEnv, expandScalarVarRef(set.Value, p.includes.env))
+	}
 
 	return append(into, stmt)
 }
@@ -2033,6 +2048,11 @@ func (p *Parser) expandInclude(into []Stmt, nameTok Token) []Stmt {
 }
 
 func (p *Parser) expandOneInclude(into []Stmt, nameTok Token, rel string) []Stmt {
+	// Expand variables in the path argument first (upstream: EvalExpr against
+	// Context->Vars() before ResolveIncludePath). An unresolved ${VAR} survives
+	// verbatim and falls through to the existing missing-file silent skip.
+	rel = expandScalarVarRef(rel, p.includes.env)
+
 	// The target is source-root-relative: either spelled from the root via
 	// ${ARCADIA_ROOT}/, or relative to the including file's directory. An
 	// absolute path would escape the FS — that is a build-file defect.
