@@ -643,6 +643,25 @@ func unittestForPeerPath(moduleStmt *ModuleStmt) string {
 	return path.Clean(moduleStmt.Args[0].string())
 }
 
+// moduleCCTag returns the module-level node tag a multimodule submodule stamps
+// on every node it owns (producer, generated .o compile, archive). Upstream
+// derives it from the submodule name lowercased — PY3_LIBRARY -> py3, CPP_FBS
+// (FBS_LIBRARY's C++ variant) -> cpp_fbs — with no explicit SET(MODULE_TAG).
+func moduleCCTag(name TOK) STR {
+	switch name {
+	case tokPy23NativeLibrary:
+		return tagPy3Native
+	case tokPy23Library:
+		return tagPy3
+	case tokYqlUdfYdb, tokYqlUdfContrib:
+		return tagYqlUdfStatic
+	case tokFbsLibrary:
+		return tagCppFbs
+	}
+
+	return 0
+}
+
 // moduleStmts parses the module's ya.make and appends the nearest enclosing
 // linters.make.inc (AUTOINCLUDE_PATHS), which ymake INCLUDEs at module finalization.
 func moduleStmts(ctx *GenCtx, dir string) []Stmt {
@@ -1859,16 +1878,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	isPy3NativeLib := d.moduleStmt.Name == tokPy23NativeLibrary ||
 		d.moduleStmt.Name == tokPy23Library
 
-	var perModuleCCTag STR
-
-	switch d.moduleStmt.Name {
-	case tokPy23NativeLibrary:
-		perModuleCCTag = tagPy3Native
-	case tokPy23Library:
-		perModuleCCTag = tagPy3
-	case tokYqlUdfYdb, tokYqlUdfContrib:
-		perModuleCCTag = tagYqlUdfStatic
-	}
+	perModuleCCTag := moduleCCTag(d.moduleStmt.Name)
 
 	var arNameFn func(string) string
 	var globalArNameFn func(string) string
