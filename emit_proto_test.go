@@ -1326,3 +1326,69 @@ END()
 		t.Fatal("leaf PY3 proto enum_options__intpy3___pb2.py not reachable through variable-bearing include")
 	}
 }
+
+// T-32: a py-addressed PROTO_LIBRARY(name) with an explicit module name carries
+// that name into its py-proto global archive basename (libpy3<name>.global.a),
+// exactly as the C++ archive (emit_proto.go) and the objcopy global (gen.go)
+// already do from $MODULE_PREFIX$REALPRJNAME. An unnamed PROTO_LIBRARY() keeps
+// the path-derived form (libpy3<dir-tail>.global.a). The former py-proto path
+// hardcoded the explicit-name arg to "", always emitting the path-derived name.
+func TestEmitPyProtoSrcs_ExplicitProtoLibraryNameNamesGlobalArchive(t *testing.T) {
+	const consumer = "app/pytool"
+
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "py3cc_slow")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "contrib/python/mypy-protobuf/bin/protoc-gen-mypy", "protoc-gen-mypy")
+
+	writeTestModuleFile(files, "ads/caesar/libs/events/proto/ya.make", `PROTO_LIBRARY(ads-caesar-events-proto)
+SRCS(ev.proto)
+END()
+`)
+	writeTestModuleFile(files, "ads/caesar/libs/events/proto/ev.proto", "syntax = \"proto3\";\npackage test;\nmessage Ev {}\n")
+
+	writeTestModuleFile(files, "libs/unnamed/proto/ya.make", `PROTO_LIBRARY()
+SRCS(plain.proto)
+END()
+`)
+	writeTestModuleFile(files, "libs/unnamed/proto/plain.proto", "syntax = \"proto3\";\npackage test;\nmessage Plain {}\n")
+
+	writeTestModuleFile(files, consumer+"/ya.make", `PY3_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+PEERDIR(ads/caesar/libs/events/proto)
+PEERDIR(libs/unnamed/proto)
+END()
+`)
+	files["contrib/libs/protobuf/ya.make"] = "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n"
+	files["contrib/python/protobuf/ya.make"] = "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nEND()\n"
+	files["contrib/libs/python/ya.make"] = "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n"
+
+	g := testGen(newMemFS(files), consumer)
+
+	globals := map[string]bool{}
+	for _, n := range g.Graph {
+		if n.KV.P == pkAR && n.TargetProperties.ModuleTag == tagPy3ProtoGlobal && len(n.Outputs) > 0 {
+			globals[n.Outputs[0].string()] = true
+		}
+	}
+
+	wantNamed := "$(B)/ads/caesar/libs/events/proto/libpy3ads-caesar-events-proto.global.a"
+	if !globals[wantNamed] {
+		t.Fatalf("named PROTO_LIBRARY did not produce %s; py3_proto_global archives: %v", wantNamed, globals)
+	}
+	pathDerivedNamed := "$(B)/ads/caesar/libs/events/proto/libpy3libs-events-proto.global.a"
+	if globals[pathDerivedNamed] {
+		t.Fatalf("named PROTO_LIBRARY still emits path-derived %s", pathDerivedNamed)
+	}
+
+	wantUnnamed := "$(B)/libs/unnamed/proto/libpy3libs-unnamed-proto.global.a"
+	if !globals[wantUnnamed] {
+		t.Fatalf("unnamed PROTO_LIBRARY did not keep path-derived %s; py3_proto_global archives: %v", wantUnnamed, globals)
+	}
+}
