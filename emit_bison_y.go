@@ -111,13 +111,18 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, srcRel string, in M
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envBISON_PKGDATADIR, Value: strBisonPkgData}, {Name: envM4, Value: m4Bin}}
 	preprocessEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	cmds := na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(internStr(bisonBin),
-		argV.str(),
+	// Upstream `$BISON_FLAGS` (default -v, SET_APPEND'd by the BISON_FLAGS macro)
+	// expands between the bison tool and $_BISON_HEADER (--defines): the module's
+	// flags follow the default -v and precede --defines.
+	head := make([]STR, 0, 6+len(in.BisonFlags))
+	head = append(head, internStr(bisonBin), argV.str())
+	head = appendArgStr(head, in.BisonFlags)
+	head = append(head,
 		internStr("--defines="+headerVFS.string()),
 		argDashO.str(),
 		(generatedVFS).str(),
-		(srcVFS).str())),
-		Env: env})
+		(srcVFS).str())
+	cmds := na.cmdList(Cmd{CmdArgs: na.chunkList(head), Env: env})
 	inputs := []VFS{bldContribToolsBisonBison, bldContribToolsM4M4, srcVFS}
 
 	if preprocessHeader {
