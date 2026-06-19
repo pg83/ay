@@ -666,6 +666,108 @@ END()
 	}
 }
 
+// TestGen_ProtoLibrary_TransitiveGlobalNamespaceInterleavesInBothCmds pins T-4:
+// a transitive GLOBAL PROTO_NAMESPACE peer (lib/gapis) reached *after* a bare
+// PROTO_NAMESPACE peer (lib/yt) must land in the single ordered _PROTO__INCLUDE
+// set — once, after the bare namespace (encounter order) — in BOTH the C++ and
+// the mirrored Python protoc commands. Upstream (proto.conf) makes bare and GLOBAL
+// PROTO_NAMESPACE contribute identically to _PROTO__INCLUDE; our former split
+// rendered GLOBAL-before-bare and omitted GLOBAL from the py command entirely.
+func TestGen_ProtoLibrary_TransitiveGlobalNamespaceInterleavesInBothCmds(t *testing.T) {
+	const consumer = "app/pytool"
+
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "py3cc_slow")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "contrib/python/mypy-protobuf/bin/protoc-gen-mypy", "protoc-gen-mypy")
+
+	// GLOBAL PROTO_NAMESPACE peer — its namespace rides _PROTO__INCLUDE everywhere.
+	writeTestModuleFile(files, "lib/gapis/ya.make", `PROTO_LIBRARY()
+PROTO_NAMESPACE(GLOBAL lib/gapis)
+SRCS(g.proto)
+END()
+`)
+	writeTestModuleFile(files, "lib/gapis/g.proto", "syntax = \"proto3\";\npackage gapis;\nmessage G {}\n")
+
+	// Bare PROTO_NAMESPACE peer, encountered before the GLOBAL one (it peers it).
+	writeTestModuleFile(files, "lib/yt/ya.make", `PROTO_LIBRARY()
+PROTO_NAMESPACE(yt)
+PEERDIR(lib/gapis)
+SRCS(y.proto)
+END()
+`)
+	writeTestModuleFile(files, "lib/yt/y.proto", "syntax = \"proto3\";\npackage yt;\nmessage Y {}\n")
+
+	// Consumer PROTO_LIBRARY with no own namespace: its band is purely the peers'.
+	writeTestModuleFile(files, "app/proto/ya.make", `PROTO_LIBRARY()
+PEERDIR(lib/yt)
+SRCS(c.proto)
+END()
+`)
+	writeTestModuleFile(files, "app/proto/c.proto", "syntax = \"proto3\";\npackage app;\nmessage C {}\n")
+
+	writeTestModuleFile(files, consumer+"/ya.make", `PY3_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+PEERDIR(app/proto)
+END()
+`)
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/python/protobuf/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/python/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n")
+
+	g := testGen(newMemFS(files), consumer)
+
+	const ytTok = "-I=$(S)/yt"
+	const gapisTok = "-I=$(S)/lib/gapis"
+
+	assertInterleavedBand := func(label string, args []STR) {
+		t.Helper()
+		ytIdx := indexOfArg(args, ytTok)
+		gapisIdx := indexOfArg(args, gapisTok)
+		gapisCount := 0
+		for _, a := range args {
+			if a.string() == gapisTok {
+				gapisCount++
+			}
+		}
+		if ytIdx < 0 {
+			t.Fatalf("%s: missing bare namespace %s: %v", label, ytTok, strStrs(args))
+		}
+		if gapisCount == 0 {
+			t.Fatalf("%s: missing transitive GLOBAL namespace %s: %v", label, gapisTok, strStrs(args))
+		}
+		if gapisCount > 1 {
+			t.Fatalf("%s: GLOBAL namespace %s duplicated (%d): %v", label, gapisTok, gapisCount, strStrs(args))
+		}
+		if !(ytIdx < gapisIdx) {
+			t.Fatalf("%s: expected bare yt (%d) before GLOBAL gapis (%d): %v", label, ytIdx, gapisIdx, strStrs(args))
+		}
+	}
+
+	// C++ PB command for the consumer's c.pb.h (cpp sibling of the py proto lib).
+	var cppArgs []STR
+	for _, n := range g.Graph {
+		if n.KV.P == pkPB && n.TargetProperties.ModuleTag == tagCppProto &&
+			len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), "app/proto/c.pb.h") {
+			cppArgs = n.Cmds[0].CmdArgs.flat()
+			break
+		}
+	}
+	if cppArgs == nil {
+		t.Fatal("no C++ PB node for app/proto/c.pb.h emitted")
+	}
+	assertInterleavedBand("cpp", cppArgs)
+
+	// Python PB command for the same source.
+	assertInterleavedBand("py", pyProtoCmdArgsForOutput(t, g, "c__intpy3___pb2.py"))
+}
+
 // TestProtoPythonResourceKey_PYNamespacePreservesNestedSubdir pins the T-39B
 // resource-key shape: with PY_NAMESPACE(yt_proto.yt.client) the aux resource key
 // for a nested SRC must keep the module-local proto subdirectory under the

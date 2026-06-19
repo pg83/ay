@@ -308,7 +308,7 @@ type PbArgBlocks struct {
 func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, grpcCppBinary VFS,
 	grpc bool, cppOutRoot string, duplicateOutputRootInclude, liteHeaders bool,
 	extraProtocFlags []ARG, extraPlugins []ResolvedCPPProtoPlugin,
-	peerProtoAddIncl []VFS, protoNamespaceTail []VFS) *PbArgBlocks {
+	protoInclude []VFS) *PbArgBlocks {
 	head := []STR{
 		tc.Python3,
 		internStr(pbWrapperPath),
@@ -327,7 +327,7 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 		cppOutArg = "proto_h=true" + cppOutArg
 	}
 
-	mid := make([]STR, 0, 12+len(peerProtoAddIncl)+len(protoNamespaceTail)+len(extraProtocFlags))
+	mid := make([]STR, 0, 12+len(protoInclude)+len(extraProtocFlags))
 	mid = append(mid,
 		arg2.str(),
 		(protocBinary).str(),
@@ -357,19 +357,13 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 	// NOT enter its peer chain — only PROTO_LIBRARY-internal protos
 	// (which need it via `ADDINCL GLOBAL FOR proto contrib/libs/protobuf/src`
 	// from their own peers).
-	for _, p := range peerProtoAddIncl {
-		mid = append(mid, internStr("-I="+p.string()))
-	}
-
-	// Non-GLOBAL PROTO_NAMESPACE contributions trail the chain. Upstream's
-	// PROTO_NAMESPACE always expands to a `GLOBAL FOR proto $(S)/<ns>` addincl
-	// (proto.conf PROTO_ADDINCL), so it propagates through the CPP_PROTO peer
-	// closure into EVERY transitive consumer's _PROTO__INCLUDE — PROTO_LIBRARY
-	// (cpp_proto) consumers included (sg7: brandformance.pb.h carries
-	// -I=$(S)/yt). _PROTO__INCLUDE is a set: a tail namespace already rendered
-	// (e.g. the module's own cppOutRoot, for a PROTO_NAMESPACE(yt) module under
-	// yt itself) is not re-emitted.
-	for _, p := range protoNamespaceTail {
+	// The single ordered _PROTO__INCLUDE set (proto.conf: PROTO_NAMESPACE always
+	// expands to `GLOBAL FOR proto $(S)/<ns>`, so bare and GLOBAL namespaces both
+	// ride here, in encounter order, propagating into EVERY transitive consumer's
+	// command — PROTO_LIBRARY consumers included (sg7: brandformance.pb.h carries
+	// -I=$(S)/yt). It is a set: a namespace already rendered (e.g. the module's own
+	// cppOutRoot) is not re-emitted.
+	for _, p := range protoInclude {
 		token := internStr("-I=" + p.string())
 		if slices.Contains(mid, token) {
 			continue

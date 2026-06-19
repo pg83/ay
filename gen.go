@@ -192,22 +192,17 @@ type ModuleEmitResult struct {
 
 	OwnAddInclGlobal []VFS
 
-	// ProtoAddInclGlobal carries the $(S)-rooted PROTO_NAMESPACE this module
-	// contributes upstream for downstream proto compiles. Upstream calls the
+	// ProtoInclude carries the $(S)-rooted PROTO_NAMESPACE / PROTO_ADDINCL this
+	// module contributes upstream for downstream proto compiles (own + transitive
+	// peers'), in encounter order, first-encounter deduped. Upstream calls the
 	// collected list _PROTO__INCLUDE and injects it via ${pre=-I=:_PROTO__INCLUDE}
-	// in PROTOC cmdlines, sitting between -I=$(S)/contrib/libs/protobuf/src and
-	// the trailing -I=$(B) / -I=$PROTOBUF_INCLUDE_PATH duplicate. A module
-	// contributes only when its PROTO_NAMESPACE was GLOBAL or its kind is
-	// PROTO_LIBRARY.
-	ProtoAddInclGlobal []VFS
-
-	// ProtoNamespaceTail carries the $(S)-rooted NON-GLOBAL PROTO_NAMESPACE
-	// contributions (own + transitive peers'). Per the reference graphs these
-	// trail the _PROTO__INCLUDE chain in protoc cmdlines and reach only
-	// non-PROTO_LIBRARY consumers (moduleTag == 0) — a PROTO_LIBRARY's own
-	// chain excludes them (yt_proto/yt/client vs yt/yt/library/quantile_digest
-	// in sg5).
-	ProtoNamespaceTail []VFS
+	// in EVERY protoc cmdline (C++, py, ev, desc), sitting between the structural
+	// -I prefixes and the trailing -I=$(B) / -I=$PROTOBUF_INCLUDE_PATH duplicate.
+	// PROTO_NAMESPACE always expands to a `GLOBAL FOR proto $(S)/<ns>` addincl
+	// (proto.conf:136), so bare and GLOBAL PROTO_NAMESPACE both enter this single
+	// set and propagate identically; the GLOBAL keyword only governs the separate
+	// C++ `ADDINCL($(B)/<ns>)` arm carried by AddInclGlobal.
+	ProtoInclude []VFS
 
 	// AddInclOneLevel propagates to direct PEERDIR consumers only (one hop, not
 	// transitive). Direct consumers absorb these paths into their own effective
@@ -1044,32 +1039,24 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		peerGlobalPathsH := peerContribs.globalPaths
 		peerGlobalRefsH := peerContribs.globalRefs
 
-		// Specialized-library path: same narrow rule — only an explicit
-		// PROTO_NAMESPACE GLOBAL contributes to _PROTO__INCLUDE; a bare
-		// PROTO_NAMESPACE rides the ProtoNamespaceTail instead.
-		var ownProtoAddInclH []VFS
-		var ownProtoTailH []VFS
+		// Specialized-library path: the single ordered _PROTO__INCLUDE set, same as
+		// the general path. PROTO_NAMESPACE always expands to `GLOBAL FOR proto
+		// $(S)/<ns>` (proto.conf:136), so bare and GLOBAL both enter this set.
+		var ownProtoIncludeH []VFS
 
 		if d.protoNamespace != nil {
-			ns := source(filepath.ToSlash(filepath.Clean(d.protoNamespace.string())))
-
-			if d.protoNamespaceGlobal {
-				ownProtoAddInclH = []VFS{ns}
-			} else {
-				ownProtoTailH = []VFS{ns}
-			}
+			ownProtoIncludeH = []VFS{source(filepath.ToSlash(filepath.Clean(d.protoNamespace.string())))}
 		}
 
 		// `ADDINCL GLOBAL FOR proto X` (PROTO_ADDINCL macro; e.g. EXPORT_YMAPS_PROTO
 		// -> PROTO_NAMESPACE(maps/doc/proto) -> PROTO_ADDINCL(GLOBAL maps/doc/proto))
 		// contributes a -I=$X to every transitive consumer's protoc command. The
-		// non-specialized path folds it in below (see ownProtoAddIncl); specialized
+		// non-specialized path folds it in below (see ownProtoInclude); specialized
 		// library types (PROTO_LIBRARY/DLL) reach the _PROTO__INCLUDE chain here, so
 		// mirror that fold to keep both paths consistent.
-		ownProtoAddInclH = append(ownProtoAddInclH, d.protoAddInclGlobal...)
+		ownProtoIncludeH = append(ownProtoIncludeH, d.protoAddInclGlobal...)
 
-		effectiveProtoAddInclH := dedupVFS(ownProtoAddInclH, peerContribs.protoAddIncl)
-		effectiveProtoTailH := dedupVFS(ownProtoTailH, peerContribs.protoNamespaceTail)
+		effectiveProtoIncludeH := dedupVFS(ownProtoIncludeH, peerContribs.protoInclude)
 
 		var ownSbomRefH *NodeRef
 		var ownSbomPathH *VFS
@@ -1087,8 +1074,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			GlobalPath:         hOnlyGlobalPath,
 			AddInclGlobal:      dedupVFS(d.addInclGlobal, peerContribs.addIncl),
 			OwnAddInclGlobal:   d.addInclGlobal,
-			ProtoAddInclGlobal: effectiveProtoAddInclH,
-			ProtoNamespaceTail: effectiveProtoTailH,
+			ProtoInclude:       effectiveProtoIncludeH,
 			AddInclOneLevel:    d.addInclOneLevel,
 			AddInclUserGlobal:  d.addInclUserGlobal,
 
@@ -1776,25 +1762,18 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	effectiveAddInclGlobal := dedupVFS(d.addInclGlobal, peerAddInclForProp)
 
-	// ProtoAddInclGlobal: this module's $(S)/<PROTO_NAMESPACE> contribution,
-	// unioned with everything peers reported (transitive — every peer's
-	// ProtoAddInclGlobal already includes its own peers' contributions).
-	// Mirrors upstream's _PROTO__INCLUDE chain and feeds the proto compile
-	// -I= block. peerContribs is not in scope here; iterate `resolved`.
-	// Only PROTO_NAMESPACE GLOBAL contributes to the chain; a bare
-	// PROTO_NAMESPACE propagates too, but trails the chain and reaches only
-	// non-PROTO_LIBRARY consumers — see ProtoNamespaceTail.
-	var ownProtoAddIncl []VFS
-	var ownProtoTail []VFS
+	// ProtoInclude: this module's $(S)/<PROTO_NAMESPACE> contribution unioned with
+	// everything peers reported (transitive — every peer's ProtoInclude already
+	// includes its own peers'), in encounter order, first-encounter deduped.
+	// Mirrors upstream's single _PROTO__INCLUDE set and feeds every protoc -I=
+	// block. peerContribs is not in scope here; iterate `resolved`. PROTO_NAMESPACE
+	// always expands to `GLOBAL FOR proto $(S)/<ns>` (proto.conf:136), so bare and
+	// GLOBAL contribute identically — no protoNamespaceGlobal branch here; the
+	// GLOBAL keyword only drives the C++ $(B)/<ns> arm (applyProtoNamespace).
+	var ownProtoInclude []VFS
 
 	if d.protoNamespace != nil {
-		ns := source(filepath.ToSlash(filepath.Clean(d.protoNamespace.string())))
-
-		if d.protoNamespaceGlobal {
-			ownProtoAddIncl = []VFS{ns}
-		} else {
-			ownProtoTail = []VFS{ns}
-		}
+		ownProtoInclude = []VFS{source(filepath.ToSlash(filepath.Clean(d.protoNamespace.string())))}
 	}
 
 	// `ADDINCL GLOBAL FOR proto X` (yatool/build/conf/proto.conf:117-120
@@ -1802,33 +1781,20 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	// additional -I=$X into the protoc command of every transitive
 	// consumer. Append after the PROTO_NAMESPACE entry — declaration order
 	// matches upstream's PROTO_ADDINCL macro placement.
-	ownProtoAddIncl = append(ownProtoAddIncl, d.protoAddInclGlobal...)
-	peerProtoAddInclGlobal := make([]VFS, 0, 4)
+	ownProtoInclude = append(ownProtoInclude, d.protoAddInclGlobal...)
+	peerProtoInclude := make([]VFS, 0, 4)
 
 	deduper.reset()
 
 	for _, rp := range resolved {
-		for _, p := range rp.result.ProtoAddInclGlobal {
+		for _, p := range rp.result.ProtoInclude {
 			if deduper.add(p) {
-				peerProtoAddInclGlobal = append(peerProtoAddInclGlobal, p)
+				peerProtoInclude = append(peerProtoInclude, p)
 			}
 		}
 	}
 
-	effectiveProtoAddInclGlobal := dedupVFS(ownProtoAddIncl, peerProtoAddInclGlobal)
-	peerProtoTail := make([]VFS, 0, 1)
-
-	deduper.reset()
-
-	for _, rp := range resolved {
-		for _, p := range rp.result.ProtoNamespaceTail {
-			if deduper.add(p) {
-				peerProtoTail = append(peerProtoTail, p)
-			}
-		}
-	}
-
-	effectiveProtoNamespaceTail := dedupVFS(ownProtoTail, peerProtoTail)
+	effectiveProtoInclude := dedupVFS(ownProtoInclude, peerProtoInclude)
 
 	if instance.Path == libraryPythonRuntimePy3 {
 		buildRootPath := bldLibraryPythonRuntimePy3
@@ -1945,8 +1911,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		Flags:                  d.flags,
 		AddIncl:                dedupedAddIncl,
 		PeerAddInclGlobal:      selfPeerAddInclGlobal,
-		PeerProtoAddInclGlobal: effectiveProtoAddInclGlobal,
-		ProtoNamespaceTail:     effectiveProtoNamespaceTail,
+		ProtoInclude:           effectiveProtoInclude,
 		CFlags:                 ownCFlags,
 		CXXFlags:               d.cxxFlags,
 		COnlyFlags:             d.cOnlyFlags,
@@ -2517,8 +2482,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			LDPath:                          &ldPath,
 			AddInclGlobal:                   effectiveAddInclGlobal,
 			OwnAddInclGlobal:                d.addInclGlobal,
-			ProtoAddInclGlobal:              effectiveProtoAddInclGlobal,
-			ProtoNamespaceTail:              effectiveProtoNamespaceTail,
+			ProtoInclude:                    effectiveProtoInclude,
 			AddInclOneLevel:                 d.addInclOneLevel,
 			AddInclUserGlobal:               d.addInclUserGlobal,
 			CFlagsGlobal:                    effectiveCFlagsGlobal,
@@ -2632,8 +2596,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		LDPath:                          arPath,
 		AddInclGlobal:                   effectiveAddInclGlobal,
 		OwnAddInclGlobal:                d.addInclGlobal,
-		ProtoAddInclGlobal:              effectiveProtoAddInclGlobal,
-		ProtoNamespaceTail:              effectiveProtoNamespaceTail,
+		ProtoInclude:                    effectiveProtoInclude,
 		AddInclOneLevel:                 d.addInclOneLevel,
 		AddInclUserGlobal:               d.addInclUserGlobal,
 		CFlagsGlobal:                    effectiveCFlagsGlobal,
@@ -3001,10 +2964,9 @@ func mergeLDPlugins(own, peer *LdPluginsResult) *LdPluginsResult {
 }
 
 type PeerGlobalContribs struct {
-	addIncl            []VFS
-	protoAddIncl       []VFS
-	protoNamespaceTail []VFS
-	cFlags             []ARG
+	addIncl      []VFS
+	protoInclude []VFS
+	cFlags       []ARG
 	cxxFlags           []ARG
 	cOnlyFlags         []ARG
 	objAddLibs         []ARG
@@ -3131,19 +3093,9 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	deduper.reset()
 
 	for _, pr := range resolved {
-		for _, p := range pr.ProtoAddInclGlobal {
+		for _, p := range pr.ProtoInclude {
 			if deduper.add(p) {
-				out.protoAddIncl = append(out.protoAddIncl, p)
-			}
-		}
-	}
-
-	deduper.reset()
-
-	for _, pr := range resolved {
-		for _, p := range pr.ProtoNamespaceTail {
-			if deduper.add(p) {
-				out.protoNamespaceTail = append(out.protoNamespaceTail, p)
+				out.protoInclude = append(out.protoInclude, p)
 			}
 		}
 	}

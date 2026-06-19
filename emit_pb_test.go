@@ -15,7 +15,7 @@ func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 		intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
 		intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
 		false, "", false, false,
-		internArgs([]string{"--fatal_warnings"}), nil, nil, nil)
+		internArgs([]string{"--fatal_warnings"}), nil, nil)
 	emitPB(
 		inst,
 		"pkg/proto/test.proto",
@@ -55,7 +55,7 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 		intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
 		intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
 		false, "", false, true,
-		nil, nil, nil, nil)
+		nil, nil, nil)
 	emitPB(
 		inst,
 		"pkg/proto/test.proto",

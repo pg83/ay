@@ -44,14 +44,12 @@ type DescProtoPeer struct {
 
 // DescPeerSpan is the result of resolving a DESC_PROTO module's peer chain: the
 // merge-node closure (for the .protosrc/.protodesc merges) plus the transitive
-// proto-addincl contributions the peers feed into this module's descriptor
-// protoc command (_PROTO__INCLUDE) — the GLOBAL PROTO_NAMESPACE set and the
-// bare-namespace tail, kept separate so a parent DESC submodule aggregates them
-// the same way the C++ proto path does (gen.go).
+// proto-include contributions the peers feed into this module's descriptor
+// protoc command — the single ordered _PROTO__INCLUDE set, aggregated the same
+// way the C++ proto path does (gen.go).
 type DescPeerSpan struct {
-	peers   []DescProtoPeer
-	globals []VFS
-	tails   []VFS
+	peers    []DescProtoPeer
+	includes []VFS
 }
 
 // realPrjName is upstream's REALPRJNAME for a module dir: the last ≤3 path
@@ -91,8 +89,7 @@ func isProtoLibraryPeer(ctx *GenCtx, peerPath string) bool {
 func descPeerClosure(ctx *GenCtx, instance ModuleInstance, peerdirs []STR, injectBuiltins bool) DescPeerSpan {
 	var span DescPeerSpan
 	seen := make(map[VFS]struct{})
-	globalsSeen := make(map[VFS]struct{})
-	tailsSeen := make(map[VFS]struct{})
+	includesSeen := make(map[VFS]struct{})
 
 	add := func(peers []DescProtoPeer) {
 		for _, p := range peers {
@@ -120,26 +117,17 @@ func descPeerClosure(ctx *GenCtx, instance ModuleInstance, peerdirs []STR, injec
 		add(res.DescClosure)
 
 		// The peer reports its transitive PROTO_NAMESPACE contributions (own +
-		// its own peers'); aggregate them in entry order so the descriptor
-		// protoc command renders the same _PROTO__INCLUDE span the cpp/py proto
-		// commands get. genModule is already memoized for this (path, kind,
+		// its own peers') as one ordered _PROTO__INCLUDE set; aggregate in entry
+		// order so the descriptor protoc command renders the same span the cpp/py
+		// proto commands get. genModule is already memoized for this (path, kind,
 		// language, platform) — reading the cached result adds no new traversal.
-		for _, g := range res.ProtoAddInclGlobal {
-			if _, dup := globalsSeen[g]; dup {
+		for _, g := range res.ProtoInclude {
+			if _, dup := includesSeen[g]; dup {
 				continue
 			}
 
-			globalsSeen[g] = struct{}{}
-			span.globals = append(span.globals, g)
-		}
-
-		for _, ta := range res.ProtoNamespaceTail {
-			if _, dup := tailsSeen[ta]; dup {
-				continue
-			}
-
-			tailsSeen[ta] = struct{}{}
-			span.tails = append(span.tails, ta)
+			includesSeen[g] = struct{}{}
+			span.includes = append(span.includes, g)
 		}
 	}
 
@@ -193,12 +181,9 @@ func emitDescProtoSubmodule(ctx *GenCtx, instance ModuleInstance, d *ModuleData)
 		protoSearchPaths = []VFS{source(cppOutRoot)}
 	}
 
-	// _PROTO__INCLUDE peer band: the GLOBAL proto-addincl set first, then the
-	// bare-namespace tail (an ordered set, deduped across both). Own namespace
-	// is rendered structurally as cppOutRoot, not here.
-	peerProtoAddIncl := dedupVFS(span.globals, span.tails)
-
-	mid := descProtocIncludes(peerProtoAddIncl, cppOutRoot)
+	// _PROTO__INCLUDE peer band: the single ordered proto-include set (encounter
+	// order). Own namespace is rendered structurally as cppOutRoot, not here.
+	mid := descProtocIncludes(span.includes, cppOutRoot)
 
 	// The proto import-closure search config is module-stable (the -I set does
 	// not depend on the individual .proto) — build it once, not per source.
@@ -268,36 +253,26 @@ func emitDescProtoSubmodule(ctx *GenCtx, instance ModuleInstance, d *ModuleData)
 	// This module's own PROTO_NAMESPACE contribution, unioned with the peers' —
 	// the same GLOBAL-vs-bare split the C++ proto path uses (gen.go), so a
 	// parent DESC submodule that PEERDIRs this one aggregates transitively.
-	ownGlobal, ownTail := protoNamespaceContribs(d)
-
 	return &ModuleEmitResult{
-		ARRef:              mergeRef,
-		ARPath:             &selfPath,
-		DescClosure:        closure,
-		ProtoAddInclGlobal: dedupVFS(ownGlobal, span.globals),
-		ProtoNamespaceTail: dedupVFS(ownTail, span.tails),
+		ARRef:        mergeRef,
+		ARPath:       &selfPath,
+		DescClosure:  closure,
+		ProtoInclude: dedupVFS(protoNamespaceContribs(d), span.includes),
 	}
 }
 
-// protoNamespaceContribs splits a module's own PROTO_NAMESPACE / PROTO_ADDINCL
-// into the GLOBAL proto-addincl set and the bare-namespace tail, mirroring the
-// C++ proto path (gen.go): an explicit `PROTO_NAMESPACE(GLOBAL ...)` (and any
-// parsed `GLOBAL FOR proto X`) rides _PROTO__INCLUDE everywhere, while a bare
-// `PROTO_NAMESPACE(ns)` trails and reaches only proto consumers.
-func protoNamespaceContribs(d *ModuleData) (global, tail []VFS) {
-	if d.protoNamespace != nil {
-		ns := source(filepath.ToSlash(filepath.Clean(d.protoNamespace.string())))
+// protoNamespaceContribs builds a module's own _PROTO__INCLUDE contribution: the
+// PROTO_NAMESPACE entry (bare or GLOBAL — proto.conf:136 always emits a GLOBAL FOR
+// proto addincl, so both ride identically) followed by any parsed PROTO_ADDINCL
+// GLOBAL paths. Mirrors gen.go's ownProtoInclude.
+func protoNamespaceContribs(d *ModuleData) []VFS {
+	var own []VFS
 
-		if d.protoNamespaceGlobal {
-			global = []VFS{ns}
-		} else {
-			tail = []VFS{ns}
-		}
+	if d.protoNamespace != nil {
+		own = []VFS{source(filepath.ToSlash(filepath.Clean(d.protoNamespace.string())))}
 	}
 
-	global = append(global, d.protoAddInclGlobal...)
-
-	return global, tail
+	return append(own, d.protoAddInclGlobal...)
 }
 
 // descProtocIncludes builds the protoc -I span of a PD command, mirroring
