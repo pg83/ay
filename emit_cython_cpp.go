@@ -166,6 +166,17 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 		sourceClosure := walkClosureTail(ctx.scannerFor(instance), srcVFS, srcScanIn.ScanCfg)
 		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(ctx, instance, srcVFS, sourceClosure, stmt.CMode, srcScanIn)
 
+		// _H / _API_H variants emit their generated .h as an addincl output;
+		// upstream's cython processor routes the induced "cpp" closure (cdef
+		// extern-from headers, CYTHON_OUTPUT_INCLUDES python headers, embedded-file
+		// include closures) onto that header output for consumers, not onto the
+		// producer node — unlike CYTHON_C/CYTHON_CPP, which keep it on the producer.
+		// So the Header CY node carries only cython.py, the bare embedded utility
+		// TEXT inputs, the source, and the source's cimport/include/pxd closure.
+		if stmt.Header {
+			toolInputs = cythonHeaderToolInputs(ctx, instance, srcVFS, srcScanIn)
+		}
+
 		// Upstream pybuild.py: a CYTHONIZE_PY `.py` source whose module has a
 		// resolving `<mod-as-path>.pxd` passes that pxd as the cython macro's
 		// hidden `Dep` input. The pxd (and its cimport/extern-from source closure)
@@ -261,6 +272,64 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 	}
 
 	return out
+}
+
+// cythonHeaderToolInputs computes the CY-node input closure for a Header
+// (_H / _API_H) cython statement: cython.py, the bare embedded utility TEXT
+// inputs, the source, and the source's cimport/include/pxd ("pyx"-language)
+// closure — but NOT the induced "cpp" closure (cdef extern-from C/C++ headers,
+// the CYTHON_OUTPUT_INCLUDES python headers, or the embedded-file include
+// closures) that the non-Header path carries.
+func cythonHeaderToolInputs(ctx *GenCtx, instance ModuleInstance, src VFS, scanIn ModuleCCInputs) []VFS {
+	singles := make([]VFS, 0, len(py3CythonEmbeddedFiles)+2)
+	singles = append(singles, contribToolsCythonCythonPy, src)
+
+	for _, rel := range py3CythonEmbeddedFiles {
+		singles = append(singles, source(rel))
+	}
+
+	closure := cythonPyxLangClosure(ctx.scannerFor(instance), src, scanIn.ScanCfg)
+
+	return keepOnlySourceVFS(dedupVFS(singles, closure))
+}
+
+// cythonPyxLangClosure walks the transitive cimport/include/pxd closure of a
+// cython source, following only cython-language files (.pyx/.pxd/.pxi/.py) and
+// dropping `cdef extern from` C/C++ header targets — which upstream models as
+// induced "cpp" deps, not direct includes. It reuses the scanner's cached
+// per-file child resolution and builds no closure-window cache entry, so the
+// context-free window cache stays untouched.
+func cythonPyxLangClosure(scanner *IncludeScanner, src VFS, cfg ScanContext) []VFS {
+	sc := scanner.newScanCtx(cfg, includeDirectiveParsers.registeredParserFor(src.rel()))
+
+	seen := make(map[VFS]struct{})
+
+	var out []VFS
+
+	var visit func(v VFS)
+
+	visit = func(v VFS) {
+		if _, ok := seen[v]; ok {
+			return
+		}
+
+		seen[v] = struct{}{}
+		out = append(out, v)
+
+		sc.forEachResolvedChildID(v, func(ch VFS) {
+			if isCythonLangFile(ch.rel()) {
+				visit(ch)
+			}
+		})
+	}
+
+	visit(src)
+
+	return out
+}
+
+func isCythonLangFile(rel string) bool {
+	return hasSuffix(rel, ".pyx") || hasSuffix(rel, ".pxd") || hasSuffix(rel, ".pxi") || hasSuffix(rel, ".py")
 }
 
 func cythonGeneratedOutputInputs(ctx *GenCtx, instance ModuleInstance, src VFS, sourceClosure []VFS, cMode bool, scanIn ModuleCCInputs) ([]VFS, []VFS) {
