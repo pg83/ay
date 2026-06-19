@@ -2090,6 +2090,8 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		cythonizePy := false
 		cythonPlainCpp := false
 		cythonCMode := false
+		cythonHeader := false
+		cythonApiHeader := false
 		swigCMode := false
 		var namespace *STR
 		var groupSrcs []string
@@ -2123,19 +2125,42 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 			case kwCYTHON_CPP:
 				cythonPlainCpp = true
 				cythonCMode = false
+				cythonHeader = false
+				cythonApiHeader = false
 
 				continue
 			case kwCYTHON_C:
 				cythonCMode = true
 				cythonPlainCpp = false
+				cythonHeader = false
+				cythonApiHeader = false
 
 				continue
-			case internStr("CYTHON_C_H"), internStr("CYTHON_C_API_H"):
-				// Cython C mode that additionally emits a (public api) header.
-				// We model the C compilation; the extra generated .h/_api.h is a
-				// node-count gap to close later (stage-1 stub).
+			case internStr("CYTHON_CPP_H"):
+				// C++ mode + companion public header (_BUILDWITH_CYTHON_CPP_H):
+				// noext naming and an extra generated .h output.
+				cythonCMode = false
+				cythonPlainCpp = false
+				cythonHeader = true
+				cythonApiHeader = false
+
+				continue
+			case internStr("CYTHON_C_H"):
+				// C mode + companion public header (_BUILDWITH_CYTHON_C_H):
+				// noext naming and an extra generated .h output.
 				cythonCMode = true
 				cythonPlainCpp = false
+				cythonHeader = true
+				cythonApiHeader = false
+
+				continue
+			case internStr("CYTHON_C_API_H"):
+				// C mode + public api header (_BUILDWITH_CYTHON_C_API_H): noext
+				// naming and extra generated .h plus _api.h outputs.
+				cythonCMode = true
+				cythonPlainCpp = false
+				cythonHeader = true
+				cythonApiHeader = true
 
 				continue
 			case kwCYTHON_DIRECTIVE:
@@ -2178,8 +2203,10 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 				}
 
 				stmt := &CythonStmt{
-					Src:   src,
-					CMode: cythonCMode,
+					Src:       src,
+					CMode:     cythonCMode,
+					Header:    cythonHeader,
+					ApiHeader: cythonApiHeader,
 					Options: []string{
 						"--module-name", modName,
 						"--init-suffix", pythonInitSuffix(modName),
@@ -2206,8 +2233,14 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 					modName = pythonModuleName(modulePath, src, topLevel, namespace)
 				}
 
+				// Upstream CYTHONIZE_PY only flips a flag; the .py source rides
+				// whatever pyxs list the last CYTHON_C/CYTHON_CPP[_H] directive
+				// selected (default C++), so it inherits that variant's mode.
 				d.cythonCpp = append(d.cythonCpp, &CythonStmt{
-					Src: src,
+					Src:       src,
+					CMode:     cythonCMode,
+					Header:    cythonHeader,
+					ApiHeader: cythonApiHeader,
 					Options: []string{
 						"--module-name", modName,
 						"--init-suffix", pythonInitSuffix(modName),
