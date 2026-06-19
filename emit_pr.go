@@ -93,6 +93,19 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		outVFSByToken[*stmt.StdoutFile] = vfs
 	}
 
+	// The run's MAIN output (ymake FindMainElemOrDefault(GetOutput(), 0)): the
+	// first OUT in command order — OUT, then OUT_NOAUTO, then STDOUT. The command
+	// builds one node keyed on it; the other outputs are EDT_OutTogether siblings.
+	var mainOutputVFS VFS
+	switch {
+	case len(stmt.OUTFiles) > 0:
+		mainOutputVFS = outVFSByToken[stmt.OUTFiles[0]]
+	case len(stmt.OUTNoAutoFiles) > 0:
+		mainOutputVFS = outVFSByToken[stmt.OUTNoAutoFiles[0]]
+	case stdoutVFS != nil:
+		mainOutputVFS = *stdoutVFS
+	}
+
 	// The run's $(S) source inputs are real inputs of any unit that transitively
 	// consumes a generated output (directly, or after the output is archived into
 	// an .inc that a CC unit #includes). Record them on each output so the archive
@@ -143,6 +156,13 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 		registerBoundGeneratedParsedOutput(ctx, instance, pkPR, out, parsed, prRef, []NodeRef{toolLDRef})
 		reg.setSourceInputs(out, prSourceInputs)
+
+		// A non-main output is an EDT_OutTogether sibling of the main output; a
+		// consumer of it carries the main output as an input (see GeneratedFileInfo
+		// .OutTogetherMain / emit_codegen_cc.go).
+		if out != mainOutputVFS {
+			reg.lookup(out).OutTogetherMain = mainOutputVFS
+		}
 
 		for _, s := range prGeneratedFromSources {
 			reg.addClosureLeaf(out, s)
