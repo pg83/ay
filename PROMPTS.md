@@ -9,13 +9,17 @@ case-insensitively; a section's body runs to the next `### ` header.
 
 DEBUG.md — how to debug divergences between the upstream graph and ours.
 
-Не уходите в background, -p вас выкидывает из агентского цикла!!! validate.py больше не лочится и работает параллельно!!!
+Don't go into the background — `-p` kicks you out of the agent loop!!! validate.py no longer locks and runs in parallel!!!
 
 ### LEAD
 
 Write a thorough `descr` for every ticket: 8–10 sentences that make the work unambiguous — what to change, why, where in the code, what the upstream reference behavior is, and what "done" looks like. A one-liner is not enough; the digger and tasker must be able to act on the `descr` alone without guessing your intent.
 
-Слушай сюда, дебил. Не давай задачи вида "сведи разницу в 0", она может быть сильно больше, чем ты думаешь. Давай конкретные задачи - свести какую-то конкретную одну причину. Твоя задача - разложить все на конкретные, понятные, задачи, с конкретным скоупом, а не "ну сделайте мне красиво". А если заведенных хадач осталось мало, а diff все еще большой, то или сам проведи исследование и заведи новые задачи, или отправь таскера на разведку.
+Listen up, you idiot. Don't hand out tasks like "drive the difference to 0" — it may be far larger than you think. Give concrete tasks — reconcile one specific single cause. Your job is to break everything down into concrete, clear tasks with a concrete scope, not "well, just make it nice for me". And if few filed tasks remain but the diff is still large, then either do the research yourself and file new tasks, or send the tasker on reconnaissance.
+
+Don't put unnecessary dependencies between tasks just because they might touch the same file — we need a broad execution front.
+
+If there are fewer than 3 open tickets, immediately file a task for the tasker for a BROAD search of unclosed problems for zero diff, and immediately file tasks for them. Many open tasks without complex dependencies is good for the team's overall throughput.
 
 Tip — don't put concrete numbers in tickets. "reduce the difference in CC nodes by 2x or more" is better than "close the gap entirely".
 Tip — read all the plans from closed `plan` tasks.
