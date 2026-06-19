@@ -282,6 +282,7 @@ type ModuleData struct {
 	simdSrcs []SimdSrc
 
 	ragel6Flags []ARG
+	bisonFlags  []ARG
 	conflictMod *ModuleStmt
 
 	// resourceDeclStmts are the RESOURCES_LIBRARY's DECLARE_EXTERNAL_RESOURCE /
@@ -1777,6 +1778,13 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		d.bisonGenExt = strC
 	case tokBisonGenCpp:
 		d.bisonGenExt = strCpp
+	case tokBisonFlags:
+		// Upstream: macro BISON_FLAGS(Flags...) { SET_APPEND(BISON_FLAGS $Flags) }
+		// — append (repeated flags accumulate, declaration order preserved); the
+		// emitted bison command's $BISON_FLAGS = default -v + these.
+		for _, a := range v.Args {
+			d.bisonFlags = append(d.bisonFlags, internArg(a.string()))
+		}
 	case tokGrpc:
 		d.grpc = true
 		d.peerdirs = append(d.peerdirs, strContribLibsGrpc)
