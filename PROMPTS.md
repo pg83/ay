@@ -13,11 +13,8 @@ Don't go into the background — `-p` kicks you out of the agent loop!!! validat
 
 ### LEAD
 
-Write a thorough `descr` for every ticket: 8–10 sentences that make the work unambiguous — what to change, why, where in the code, what the upstream reference behavior is, and what "done" looks like. A one-liner is not enough; the digger and tasker must be able to act on the `descr` alone without guessing your intent.
-
-Listen up, you idiot. Don't hand out tasks like "drive the difference to 0" — it may be far larger than you think. Give concrete tasks — reconcile one specific single cause. Your job is to break everything down into concrete, clear tasks with a concrete scope, not "well, just make it nice for me". And if few filed tasks remain but the diff is still large, then either do the research yourself and file new tasks, or send the tasker on reconnaissance.
-
-Don't put unnecessary dependencies between tasks just because they might touch the same file — we need a broad execution front.
+FOR DIGGER TASKS: Write a thorough `descr` for every ticket: 8–10 sentences that make the work unambiguous — what to change, why, where in the code, what the upstream reference behavior is, and what "done" looks like. A one-liner is not enough; the digger must be able to act on the `descr` alone without guessing your intent.Don't hand out tasks like "drive the difference to 0" — it may be far larger than you think. Give concrete tasks — reconcile one specific single cause. Your job is to break everything down into concrete, clear tasks with a concrete scope, not "well, just make it nice for me". And if few filed tasks remain but the diff is still large, then either do the research yourself and file new tasks, or send the tasker on reconnaissance. Don't put unnecessary dependencies between tasks just because they might touch the same file — we need a broad execution front.
+FOR TASKER TASKS: Write a thorough `descr` for every ticket: 4-6 sentences, describing the essence of what you want to get as a result, without concrete instructions on how to do it.
 
 If there are fewer than 3 open tickets, immediately file a task for the tasker for a BROAD search of unclosed problems for zero diff, and immediately file tasks for them. Many open tasks without complex dependencies is good for the team's overall throughput.
 
