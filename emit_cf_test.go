@@ -41,6 +41,22 @@ func TestEmitCF_GeneratedFromRidesAsClosureLeaf(t *testing.T) {
 	}
 }
 
+// TestBuildCFGVars_BuildTypeFromPlatform pins that a CONFIGURE_FILE template
+// referencing @BUILD_TYPE@ substitutes the instance platform's build type, not a
+// hardcoded DEBUG. Reproduces the library/cpp/build_info make_morphdict-subtree
+// divergence: the tool/host build_info.cpp node must read BUILD_TYPE=RELEASE
+// (ref has a distinct RELEASE configure node), while the debug target keeps DEBUG.
+func TestBuildCFGVars_BuildTypeFromPlatform(t *testing.T) {
+	fs := newMemFS(map[string]string{"m/tmpl.in": "type = @BUILD_TYPE@\n"})
+
+	if got := buildCFGVars(fs, "m/tmpl.in", nil, nil, "RELEASE"); !containsString(got, "BUILD_TYPE=RELEASE") {
+		t.Errorf("release-platform CONFIGURE_FILE vars = %v, want BUILD_TYPE=RELEASE", got)
+	}
+	if got := buildCFGVars(fs, "m/tmpl.in", nil, nil, "DEBUG"); !containsString(got, "BUILD_TYPE=DEBUG") {
+		t.Errorf("debug-platform CONFIGURE_FILE vars = %v, want BUILD_TYPE=DEBUG", got)
+	}
+}
+
 func TestGen_CF_SetVarsReachCfgVars(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"thelib/ya.make":  "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSET(MYVAR hello)\nDEFAULT(MYDEF world)\nSRCS(lib.cpp x.cpp.in)\nEND()\n",
