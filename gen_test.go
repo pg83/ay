@@ -2456,3 +2456,45 @@ END()
 		t.Fatalf("first -Wimplicit-fallthrough (idx %d) must precede -Wdeprecated-this-capture (idx %d); args=%v", firstFallthrough, deprecatedIdx, args)
 	}
 }
+
+// TestMergeGeneratedFirstClaims_HostWinsOnConflict pins the cpp_import/yaff
+// MULTIMODULE attribution rule (T-37): when a RUN_PROGRAM-generated header is
+// claimed by BOTH the host include-scan (the co-located trait library reached in
+// the producer-side host closure) and the target include-scan (a downstream peer
+// that also includes it), the host claim is the upstream Node2Module-faithful
+// owner and must win. A generated file claimed by only one scanner keeps that
+// scanner's claim regardless of merge order.
+func TestMergeGeneratedFirstClaims_HostWinsOnConflict(t *testing.T) {
+	const (
+		effectiveOwner = "yabs/server/cs/libs/plutonium_traits"
+		downstreamPeer = "yabs/server/libs/server"
+		regularOwner   = "yabs/server/libs/regular"
+		toolOnlyOwner  = "yabs/server/cs/libs/tooler"
+	)
+
+	conflicted := build("yabs/server/cs/libs/cpp_import/yaff/plutonium_ctv_content_tags_local.yaff.h")
+	targetOnly := build("yabs/server/libs/regular/regular_gen.h")
+	hostOnly := build("yabs/server/cs/libs/tooler/tool_gen.h")
+
+	host := &IncludeScanner{generatedFirstClaim: map[VFS]string{
+		conflicted: effectiveOwner,
+		hostOnly:   toolOnlyOwner,
+	}}
+	target := &IncludeScanner{generatedFirstClaim: map[VFS]string{
+		conflicted: downstreamPeer,
+		targetOnly: regularOwner,
+	}}
+
+	// Production call order: host scanner first so it wins on conflict.
+	merged := mergeGeneratedFirstClaims(host, target)
+
+	if got := merged[conflicted]; got != effectiveOwner {
+		t.Fatalf("conflicting cpp_import header: got module_dir %q, want effective owner %q", got, effectiveOwner)
+	}
+	if got := merged[targetOnly]; got != regularOwner {
+		t.Fatalf("target-only generated file must keep its claim: got %q, want %q", got, regularOwner)
+	}
+	if got := merged[hostOnly]; got != toolOnlyOwner {
+		t.Fatalf("host-only generated file must keep its claim: got %q, want %q", got, toolOnlyOwner)
+	}
+}

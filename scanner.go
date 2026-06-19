@@ -847,6 +847,20 @@ func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 	return idx
 }
 
+// recordFirstClaim mirrors upstream ymake's Node2Module first-write-wins rule
+// (json_visitor.cpp:638): the first include-scan that resolves a CodegenRegistry
+// output records the consumer module that owns it. attribute_generated.go reads
+// these to re-attribute the producer node's target_properties.module_dir.
+func (s *IncludeScanner) recordFirstClaim(out VFS, ownerModuleDir string) {
+	if ownerModuleDir == "" {
+		return
+	}
+
+	if _, ok := s.generatedFirstClaim[out]; !ok {
+		s.generatedFirstClaim[out] = ownerModuleDir
+	}
+}
+
 func (sc *ScanCtx) cacheSearchTier(targetID STR, out SearchTierResult) SearchTierResult {
 	s := sc.scanner
 	s.searchTierFlat.put(splitMix64(sc.ctxNum, uint32(targetID)), out)
@@ -913,11 +927,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 		out.paths = []VFS{info.OutputPath}
 		out.found = true
 
-		if sc.cfg.OwnerModuleDir != "" {
-			if _, ok := s.generatedFirstClaim[info.OutputPath]; !ok {
-				s.generatedFirstClaim[info.OutputPath] = sc.cfg.OwnerModuleDir
-			}
-		}
+		s.recordFirstClaim(info.OutputPath, sc.cfg.OwnerModuleDir)
 
 		return true
 	}
@@ -985,11 +995,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 				} else {
 					out.paths = []VFS{bestBuild.OutputPath}
 
-					if sc.cfg.OwnerModuleDir != "" {
-						if _, ok := s.generatedFirstClaim[bestBuild.OutputPath]; !ok {
-							s.generatedFirstClaim[bestBuild.OutputPath] = sc.cfg.OwnerModuleDir
-						}
-					}
+					s.recordFirstClaim(bestBuild.OutputPath, sc.cfg.OwnerModuleDir)
 				}
 
 				out.found = true
@@ -1086,11 +1092,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 			out = append(out, info.OutputPath)
 			searchPathFound = true
 
-			if sc.cfg.OwnerModuleDir != "" {
-				if _, ok := s.generatedFirstClaim[info.OutputPath]; !ok {
-					s.generatedFirstClaim[info.OutputPath] = sc.cfg.OwnerModuleDir
-				}
-			}
+			s.recordFirstClaim(info.OutputPath, sc.cfg.OwnerModuleDir)
 		}
 	}
 
@@ -1130,11 +1132,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 				// → X86GenCallingConv.inc), record the first consumer
 				// module so the attribute_generated.go finalize pass can
 				// re-attribute the .inc node's target_properties.module_dir.
-				if sc.cfg.OwnerModuleDir != "" {
-					if _, ok := s.generatedFirstClaim[info.OutputPath]; !ok {
-						s.generatedFirstClaim[info.OutputPath] = sc.cfg.OwnerModuleDir
-					}
-				}
+				s.recordFirstClaim(info.OutputPath, sc.cfg.OwnerModuleDir)
 			}
 		}
 	}
