@@ -54,6 +54,62 @@ func TestCythonImplicitFallthrough(t *testing.T) {
 	}
 }
 
+func TestGen_CythonizePyFollowsCythonCMode(t *testing.T) {
+	// Upstream pybuild.py: CYTHONIZE_PY only flips a flag; a following `.py`
+	// source is appended to whatever pyxs list the last CYTHON_C/CYTHON_CPP
+	// directive selected. After CYTHON_C the .py is built in C mode and named
+	// `<src>.py.c` (DEP variant keeps the extension), like gevent's
+	// `_abstract_linkable.py.c`.
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeTestModuleFile(files, "pkg/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nPY_SRCS(NAMESPACE pkg CYTHON_C mod.pyx CYTHONIZE_PY helper.py)\nEND()\n")
+	writeTestModuleFile(files, "pkg/mod.pyx", "def f():\n    return 0\n")
+	writeTestModuleFile(files, "pkg/helper.py", "def g():\n    return 1\n")
+
+	g := testGen(newMemFS(files), "pkg")
+
+	cy := mustNodeByOutput(t, g, "$(B)/pkg/helper.py.c")
+	if nodeByOutput(g, "$(B)/pkg/helper.py.cpp") != nil {
+		t.Fatalf("CYTHONIZE_PY .py after CYTHON_C must not emit a C++ output")
+	}
+
+	for _, a := range cy.Cmds[0].CmdArgs.flat() {
+		if a.string() == "--cplus" {
+			t.Fatalf("C-mode cython invocation must not pass --cplus: %#v", cy.Cmds[0].CmdArgs.flat())
+		}
+	}
+}
+
+func TestGen_CythonCApiHeaderEmitsCompanionHeaders(t *testing.T) {
+	// Upstream _BUILDWITH_CYTHON_C_API_H uses `noext` naming and emits the
+	// generated `.c` plus companion `.h` and `_api.h` outputs, like lxml's
+	// etree.pyx -> etree.c + etree.h + etree_api.h.
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeTestModuleFile(files, "pkg/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nPY_SRCS(NAMESPACE pkg CYTHON_C_API_H etree.pyx)\nEND()\n")
+	writeTestModuleFile(files, "pkg/etree.pyx", "def f():\n    return 0\n")
+
+	g := testGen(newMemFS(files), "pkg")
+
+	cy := mustNodeByOutput(t, g, "$(B)/pkg/etree.c")
+	if nodeByOutput(g, "$(B)/pkg/etree.pyx.c") != nil {
+		t.Fatalf("CYTHON_C_API_H must use noext naming (etree.c), not etree.pyx.c")
+	}
+
+	got := make(map[string]bool)
+	for _, o := range cy.Outputs {
+		got[o.string()] = true
+	}
+
+	for _, want := range []string{"$(B)/pkg/etree.c", "$(B)/pkg/etree.h", "$(B)/pkg/etree_api.h"} {
+		if !got[want] {
+			t.Fatalf("CY node missing output %q; outputs=%v", want, cy.Outputs)
+		}
+	}
+}
+
 func TestGen_ManualCompanionSourceUsesCythonCompanionCCInputs(t *testing.T) {
 	files := map[string]string{}
 

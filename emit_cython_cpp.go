@@ -75,6 +75,34 @@ type CythonStmt struct {
 	Generated *string
 	Options   []string
 	CMode     bool
+	// Header marks the _H / _API_H variants: the source extension is stripped
+	// (ymake `noext`) and a companion .h output rides the CY node.
+	Header bool
+	// ApiHeader marks the _API_H variant: additionally emit a _api.h output.
+	ApiHeader bool
+}
+
+// cythonNoExt strips the trailing source extension (.pyx/.py), mirroring
+// ymake's `noext` modifier used by the _H / _API_H cython output macros.
+func cythonNoExt(src string) string {
+	dot := -1
+	for i := len(src) - 1; i >= 0; i-- {
+		if src[i] == '/' {
+			break
+		}
+
+		if src[i] == '.' {
+			dot = i
+
+			break
+		}
+	}
+
+	if dot < 0 {
+		return src
+	}
+
+	return src[:dot]
 }
 
 func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []*SourceEmit {
@@ -99,11 +127,33 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 			generated = stmt.Src + ".c"
 		}
 
+		if stmt.Header {
+			// _H / _API_H variants strip the source extension (ymake `noext`).
+			ext := ".cpp"
+
+			if stmt.CMode {
+				ext = ".c"
+			}
+
+			generated = cythonNoExt(stmt.Src) + ext
+		}
+
 		if generatedExplicit {
 			generated = *stmt.Generated
 		}
 
 		generatedVFS := build(instance.Path.rel() + "/" + generated)
+
+		var headerVFS []VFS
+
+		if stmt.Header {
+			base := instance.Path.rel() + "/" + cythonNoExt(stmt.Src)
+			headerVFS = append(headerVFS, build(base+".h"))
+
+			if stmt.ApiHeader {
+				headerVFS = append(headerVFS, build(base+"_api.h"))
+			}
+		}
 		srcVFS := source(instance.Path.rel() + "/" + stmt.Src)
 		srcScanIn := in
 		srcScanIn.AddIncl = appendCythonScanAddIncl(srcScanIn.AddIncl, d.cythonAddIncl, py23Variant)
@@ -118,6 +168,12 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 
 		cyRef := ctx.emit.reserve()
 		registerBoundGeneratedParsedOutput(ctx, instance, pkCY, generatedVFS, parsed, cyRef, nil)
+
+		// Companion headers (.h/_api.h) are produced by the same CY node; register
+		// them so consumers that #include them resolve to this producer.
+		for _, h := range headerVFS {
+			registerBoundGeneratedParsedOutput(ctx, instance, pkCY, h, nil, cyRef, nil)
+		}
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -154,7 +210,7 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 				Env: env}),
 			Env:              env,
 			Inputs:           na.inputList(toolInputs),
-			Outputs:          na.vfsList(generatedVFS),
+			Outputs:          na.vfsList(append([]VFS{generatedVFS}, headerVFS...)...),
 			KV:               KV{P: pkCY, PC: pcYellow},
 			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			TargetProperties: targetProps,
