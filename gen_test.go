@@ -2184,6 +2184,19 @@ func mustNodeByOutput(t *testing.T, g *Graph, output string) *Node {
 	return nil
 }
 
+func mustNodeByOutputSuffix(t *testing.T, g *Graph, suffix string) *Node {
+	t.Helper()
+
+	for _, n := range g.Graph {
+		if len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), suffix) {
+			return n
+		}
+	}
+
+	t.Fatalf("graph is missing an output ending in %q", suffix)
+	return nil
+}
+
 func nodeByOutput(g *Graph, output string) *Node {
 	for _, n := range g.Graph {
 		if len(n.Outputs) > 0 && n.Outputs[0].string() == output {
