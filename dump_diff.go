@@ -752,7 +752,42 @@ func dumpDiffNodeMatchKey(n map[string]any, includeHost bool) string {
 		}
 	}
 
+	// PIC contour: a module reached on both the PIC (host) and non-PIC (target)
+	// platforms emits two nodes at the same output path whose only structural
+	// difference is `.pic.o` vs `.o` members (the emitter derives the suffix
+	// from Platform.PIC). Without this axis those variants share a key and the
+	// pairing can match our non-PIC node against ref's PIC node, reporting a
+	// spurious `.cpp.o` vs `.cpp.pic.o` member diff.
+	if dumpDiffNodePicVariant(n) {
+		key += "\x00P"
+	}
+
 	return key
+}
+
+// dumpDiffNodePicVariant reports whether the node's object contour is PIC: any
+// of its own outputs or member object tokens (inputs / cmd args) is a `.pic.o`
+// object. This mirrors emit_cc.go's `.pic.o` suffix selection.
+func dumpDiffNodePicVariant(n map[string]any) bool {
+	for _, o := range toStrings(n["outputs"]) {
+		if strings.HasSuffix(o, ".pic.o") {
+			return true
+		}
+	}
+
+	for _, in := range toStrings(n["inputs"]) {
+		if strings.HasSuffix(in, ".pic.o") {
+			return true
+		}
+	}
+
+	for _, t := range cmdArgTokens(n) {
+		if strings.HasSuffix(t, ".pic.o") {
+			return true
+		}
+	}
+
+	return false
 }
 
 func dumpDiffExactOutputKey(output string, n map[string]any) string {
