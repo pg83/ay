@@ -543,20 +543,33 @@ func emitPR(
 	// not copied, into the chunk list.
 	inputs := na.inputList(head, deduper.filterSeen(inputClosure))
 
+	// Upstream's output set is path-keyed: a file declared through more than one
+	// output modifier (e.g. STDOUT and OUT_NOAUTO naming the same artifact — the
+	// program's stdout *is* the declared output) is listed once. Collapse equal
+	// VFS in declaration order, mirroring the registeredPROut dedup above.
 	var outputs []VFS
 	var stdoutPath STR
+	emittedOut := map[VFS]bool{}
+	appendOutput := func(v VFS) {
+		if emittedOut[v] {
+			return
+		}
+
+		emittedOut[v] = true
+		outputs = append(outputs, v)
+	}
 
 	if stdoutVFS != nil {
 		stdoutPath = stdoutVFS.str()
-		outputs = append(outputs, *stdoutVFS)
+		appendOutput(*stdoutVFS)
 	}
 
 	for _, f := range stmt.OUTFiles {
-		outputs = append(outputs, outVFSByToken[f])
+		appendOutput(outVFSByToken[f])
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		outputs = append(outputs, outVFSByToken[f])
+		appendOutput(outVFSByToken[f])
 	}
 
 	var toolRefs []NodeRef

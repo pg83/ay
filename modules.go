@@ -2358,6 +2358,8 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 					CMode:     cythonCMode,
 					Header:    cythonHeader,
 					ApiHeader: cythonApiHeader,
+					// Upstream: dep=<mod-as-path>.pxd when it resolves (pybuild.py).
+					Pxd: strings.ReplaceAll(modName, ".", "/") + ".pxd",
 					Options: []string{
 						"--module-name", modName,
 						"--init-suffix", pythonInitSuffix(modName),
