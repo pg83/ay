@@ -53,6 +53,7 @@ var (
 	linkSbomScriptVFS                                                                     = source("build/internal/scripts/link_sbom.py")
 	lldToolchainSbomVFS                                                                   = build("build/platform/lld/toolchain.component.sbom")
 	mapsDocProto                                                                          = source("maps/doc/proto")
+	mapsDocProtoBuild                                                                     = build("maps/doc/proto")
 	objcopyScriptVFS                                                                      = source("build/scripts/objcopy.py")
 	pbDescriptorVFS                                                                       = source("contrib/libs/protobuf/src/google/protobuf/descriptor.proto")
 	pbGrpcCppVFS                                                                          = build("contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp")

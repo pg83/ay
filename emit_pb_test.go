@@ -511,18 +511,79 @@ END()
 		t.Fatalf("expected maps/doc/proto include before --cpp_out: maps=%d cpp_out=%d args=%v", mapsIdx, cppOutIdx, args)
 	}
 
-	// No C++ include leakage: the only graph token mentioning maps/doc/proto must
-	// be the proto-command form above. A C++ `-I$(B)/maps/doc/proto` (the
-	// ADDINCL(GLOBAL $(B)/...) half of PROTO_ADDINCL, deliberately not modeled)
-	// would be leakage.
+	// No source-root C++ include leakage: a C++ `-I$(S)/maps/doc/proto` is the
+	// SOURCE arm of PROTO_ADDINCL's _ORDER_ADDINCL and belongs only to the protoc
+	// command, never to a C++ compile. (The build-root `-I$(B)/maps/doc/proto`,
+	// the ADDINCL(GLOBAL $(B)/...) half, IS expected on C++ compiles — T-32.)
+	const cppSourceLeak = "-I$(S)/maps/doc/proto"
 	for _, n := range g.Graph {
 		for _, cmd := range n.Cmds {
 			for _, a := range strStrs(cmd.CmdArgs.flat()) {
-				if strings.Contains(a, "maps/doc/proto") && a != wantTok {
-					t.Fatalf("C++ include leakage of maps/doc/proto: token %q on outputs %v", a, vfsStrings(n.Outputs))
+				if a == cppSourceLeak {
+					t.Fatalf("source-root C++ include leakage of maps/doc/proto: token %q on outputs %v", a, vfsStrings(n.Outputs))
 				}
 			}
 		}
+	}
+}
+
+func TestGen_ProtoLibrary_ExportYmapsProtoReachesCppBuildRootAddIncl(t *testing.T) {
+	files := map[string]string{}
+
+	// EXPORT_YMAPS_PROTO() -> PROTO_NAMESPACE(maps/doc/proto) ->
+	// PROTO_ADDINCL(GLOBAL maps/doc/proto). Besides the protoc include closure
+	// (T-30), PROTO_ADDINCL emits `ADDINCL(GLOBAL ${ARCADIA_BUILD_ROOT}/$Path)` —
+	// an ordinary GLOBAL C++ ADDINCL of the build root that propagates through the
+	// peer addincl closure into every transitive consumer's C++ compile commands,
+	// including the generated-protobuf compile node `*.pb.cc.o`.
+	writeTestModuleFile(files, "leaf/ya.make", `PROTO_LIBRARY()
+EXPORT_YMAPS_PROTO()
+SRCS(leaf.proto)
+END()
+`)
+	writeTestModuleFile(files, "leaf/leaf.proto", "syntax = \"proto3\";\npackage test;\nmessage Leaf {}\n")
+
+	writeTestModuleFile(files, "consumer/ya.make", `PROTO_LIBRARY()
+PEERDIR(leaf)
+SRCS(brand.proto)
+END()
+`)
+	writeTestModuleFile(files, "consumer/brand.proto", "syntax = \"proto3\";\npackage test;\nmessage Brand {}\n")
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "consumer")
+
+	// The generated-protobuf C++ compile node for the consumer.
+	ccObj := findGraphNodeByOutputs(t, g, "$(B)/consumer/brand.pb.cc.o")
+
+	args := strStrs(ccObj.Cmds[0].CmdArgs.flat())
+
+	const wantBuildTok = "-I$(B)/maps/doc/proto"
+	const sourceTok = "-I$(S)/maps/doc/proto"
+
+	buildCount, sourceCount := 0, 0
+	for _, a := range args {
+		switch a {
+		case wantBuildTok:
+			buildCount++
+		case sourceTok:
+			sourceCount++
+		}
+	}
+
+	if buildCount == 0 {
+		t.Fatalf("consumer pb.cc.o cmd missing transitive build-root addincl %s: %v", wantBuildTok, args)
+	}
+	if buildCount > 1 {
+		t.Fatalf("consumer pb.cc.o cmd duplicates %s (%d times): %v", wantBuildTok, buildCount, args)
+	}
+	if sourceCount != 0 {
+		t.Fatalf("source-root C++ include leakage %s on pb.cc.o (%d times): %v", sourceTok, sourceCount, args)
 	}
 }
 
