@@ -8,6 +8,12 @@ import (
 type SourceEmit struct {
 	Ref     NodeRef
 	OutPath VFS
+
+	// Extra holds additional compiled objects produced by the same source whose
+	// generating statement is shared with the primary object (e.g. a GRPC()
+	// inline .proto yields both <base>.pb.cc.o and <base>.grpc.pb.cc.o). They
+	// archive immediately after the primary object with the same SrcMeta.
+	Extra []SourceEmit
 }
 
 // emitOneSource dispatches a module source to its per-extension emitter. Each
