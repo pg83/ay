@@ -416,8 +416,10 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 			// .pb.h (+ the experiments runtime for an EXPERIMENTAL proto); register
 			// it so a unit that includes the generated yaff header rides that
 			// closure, and register the .yaff.cpp which includes the header. The
-			// plugin declares no INDUCED_DEPS, so no generator refs (the protobuf
-			// runtime arrives via the .pb.h).
+			// .yaff.h / .yaff.cpp are protoc outputs, so protoc's INDUCED_DEPS ride
+			// them via GeneratorRefs (header bucket for .yaff.h, cpp bucket for
+			// .yaff.cpp — the latter is how wire_format.h, a cpp-only induced dep,
+			// reaches the .yaff.cpp.o closure, exactly as it does for .pb.cc).
 			protoBaseName := filepath.Base(protoRelPath)
 
 			for _, plugin := range d.cppProtoPlugins {
@@ -438,7 +440,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 				registerBoundGeneratedParsedOutput(ctx, instance, pkPB, yaffH, yaffHParsed, pbRef, nil)
 
 				yaffCCParsed := []IncludeDirective{{kind: includeQuoted, target: internStr(yaffH.rel())}}
-				registerBoundGeneratedParsedOutput(ctx, instance, pkPB, yaffCC, yaffCCParsed, pbRef, nil)
+				registerBoundGeneratedParsedOutput(ctx, instance, pkPB, yaffCC, yaffCCParsed, pbRef, pbGenRefs)
 			}
 		}
 
@@ -681,6 +683,28 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 
 		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {
 			ccIn.IncludeInputs = append(ccIn.IncludeInputs, wireFormatVFS)
+		}
+
+		// A YaFF .yaff.cpp is a thin protoc-plugin wrapper whose only content is
+		// `#include "<stem>.yaff.h"` (by basename). Upstream resolves that sibling
+		// header for its transitive closure but does not record it as a compile
+		// input; drop the self header from the walked closure (the .pb.h / yaff
+		// runtime closure was already walked through it and survives). wire_format.h
+		// rides in from protoc's INDUCED_DEPS(cpp …) on the .yaff.cpp output (the
+		// yaffCC GeneratorRefs), not a hand-woven append.
+		if strings.HasSuffix(co.srcRel, ".yaff.cpp") {
+			selfH := build(strings.TrimSuffix(co.pbCC.rel(), ".cpp") + ".h")
+			filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
+
+			for _, in := range ccIn.IncludeInputs {
+				if in == selfH {
+					continue
+				}
+
+				filtered = append(filtered, in)
+			}
+
+			ccIn.IncludeInputs = filtered
 		}
 
 		ccIn.ExtraDepRefs = append([]NodeRef{co.genRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, co.genRef)...)
