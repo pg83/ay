@@ -95,7 +95,13 @@ func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCo
 
 	pyInstance := instance
 	pyInstance.Language = LangPy
-	globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path.rel(), "libpy3", "")
+	protoLibName := ""
+
+	if len(d.moduleStmt.Args) > 0 {
+		protoLibName = d.moduleStmt.Args[0].string()
+	}
+
+	globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path.rel(), "libpy3", protoLibName)
 	gRef := emitARGlobalNamedTagged(pyInstance, globalBaseName, tagPy3ProtoGlobal, pyProtoRefs, pyProtoOutputs, d.tc, ctx.host, ctx.emit)
 
 	globalPath := build(instance.Path.rel() + "/" + globalBaseName)
