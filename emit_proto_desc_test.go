@@ -227,3 +227,113 @@ func TestEmitProtoDescriptions_PDProducerShape(t *testing.T) {
 		}
 	}
 }
+
+// TestEmitDescProto_ProtoNamespaceNestedSourceDescOutputAndIncludes reproduces
+// the T-39A residual: a PROTO_LIBRARY with PROTO_NAMESPACE(yt) whose .proto src
+// lives in a subdirectory of the module must (a) write its descriptor under the
+// declaring module root with the ymake `_/` output-name prefix
+// ($(B)/<mod>/_/<sub>/x.proto.desc), and (b) render the descriptor protoc
+// command's full _PROTO__INCLUDE span — the structural -I=$(B) -I=$(S)
+// -I=$(S)/<ns> band plus every proto peer's namespace contribution (here the
+// PEERDIR'd PROTO_NAMESPACE(yt) tail -I=$(S)/yt). Before this change the desc
+// output omitted `_/` and the command omitted the whole middle band. The
+// .rawproto output keeps its natural path (upstream `norel`) and md5 stem.
+func TestEmitDescProto_ProtoNamespaceNestedSourceDescOutputAndIncludes(t *testing.T) {
+	const clientMod = "yt/yt_proto/yt/client"
+	const coreMod = "yt/yt_proto/yt/core"
+	const descDir = "descns"
+
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	files["contrib/libs/protobuf/ya.make"] = "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n"
+
+	files[coreMod+"/ya.make"] = "PROTO_LIBRARY()\nPROTO_NAMESPACE(yt)\nDISABLE(NEED_GOOGLE_PROTO_PEERDIRS)\nSRCS(core.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n"
+	files[coreMod+"/core.proto"] = "syntax = \"proto3\";\npackage yt;\nmessage Core { int32 x = 1; }\n"
+
+	files[clientMod+"/ya.make"] = "PROTO_LIBRARY()\nPROTO_NAMESPACE(yt)\nDISABLE(NEED_GOOGLE_PROTO_PEERDIRS)\nPEERDIR(" + coreMod + ")\nSRCS(hive/proto/cluster.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n"
+	files[clientMod+"/hive/proto/cluster.proto"] = "syntax = \"proto3\";\npackage yt;\nmessage Cluster { int32 x = 1; }\n"
+
+	files[descDir+"/ya.make"] = "PROTO_DESCRIPTIONS()\nPEERDIR(" + clientMod + ")\nEND()\n"
+
+	g := testGen(newMemFS(files), descDir)
+
+	hash := moddirHash(clientMod)
+	descOut := "$(B)/" + clientMod + "/_/hive/proto/cluster.proto.desc"
+	rawOut := "$(B)/" + clientMod + "/hive/proto/cluster.proto." + hash + ".rawproto"
+
+	pd := mustNodeByAnyOutput(t, g, descOut)
+
+	// The .rawproto keeps its natural (non-rebased) path and md5 stem.
+	if mustNodeByAnyOutput(t, g, rawOut) != pd {
+		t.Errorf("rawproto %q not produced by the same node as desc", rawOut)
+	}
+	for _, n := range g.Graph {
+		for _, o := range n.Outputs {
+			if o.string() == "$(B)/"+clientMod+"/hive/proto/cluster.proto.desc" {
+				t.Errorf("found non-rebased desc output %q (should be under _/)", o.string())
+			}
+		}
+	}
+
+	args := pd.Cmds[0].CmdArgs.flat()
+
+	// Exact ordered _PROTO__INCLUDE span: own namespace, structural $(B)/$(S),
+	// own cppOutRoot, the peer namespace tail (-I=$(S)/yt from yt/core), then the
+	// trailing build-root + protobuf-src and --include_source_info.
+	wantSpan := []string{
+		"-I=./yt", "-I=$(S)/yt",
+		"-I=$(B)", "-I=$(S)", "-I=$(S)/yt",
+		"-I=$(S)/yt",
+		"-I=$(B)", "-I=$(S)/contrib/libs/protobuf/src",
+		"--include_source_info",
+	}
+	flat := make([]string, len(args))
+	for i, a := range args {
+		flat[i] = a.string()
+	}
+	start := indexOfArg(args, "-I=./yt")
+	if start < 0 {
+		t.Fatalf("descriptor cmd has no -I=./yt: %v", flat)
+	}
+	got := flat[start:]
+	if len(got) != len(wantSpan) {
+		t.Fatalf("descriptor include span len = %d, want %d\n got=%v\nwant=%v", len(got), len(wantSpan), got, wantSpan)
+	}
+	for i := range wantSpan {
+		if got[i] != wantSpan[i] {
+			t.Fatalf("descriptor include span[%d] = %q, want %q\n got=%v\nwant=%v", i, got[i], wantSpan[i], got, wantSpan)
+		}
+	}
+}
+
+// TestEmitDescProto_ProtoNamespaceRootLevelSourceNoUnderscore pins the
+// complement of the nested case: a root-level (flat) source under a
+// PROTO_NAMESPACE(yt) module must NOT gain the `_/` output-name segment.
+func TestEmitDescProto_ProtoNamespaceRootLevelSourceNoUnderscore(t *testing.T) {
+	const ormMod = "yt/yt_proto/yt/orm/api"
+	const descDir = "descroot"
+
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	files["contrib/libs/protobuf/ya.make"] = "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n"
+
+	files[ormMod+"/ya.make"] = "PROTO_LIBRARY()\nPROTO_NAMESPACE(yt)\nDISABLE(NEED_GOOGLE_PROTO_PEERDIRS)\nSRCS(access_control_service.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n"
+	files[ormMod+"/access_control_service.proto"] = "syntax = \"proto3\";\npackage yt;\nmessage Access { int32 x = 1; }\n"
+
+	files[descDir+"/ya.make"] = "PROTO_DESCRIPTIONS()\nPEERDIR(" + ormMod + ")\nEND()\n"
+
+	g := testGen(newMemFS(files), descDir)
+
+	descOut := "$(B)/" + ormMod + "/access_control_service.proto.desc"
+	mustNodeByAnyOutput(t, g, descOut)
+
+	for _, n := range g.Graph {
+		for _, o := range n.Outputs {
+			if strings.Contains(o.string(), ormMod+"/_/") {
+				t.Errorf("root-level source gained an `_/` segment: %q", o.string())
+			}
+		}
+	}
+}
