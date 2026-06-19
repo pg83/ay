@@ -168,6 +168,7 @@ const (
 	srcExtCppIn
 	srcExtCIn
 	srcExtHIn
+	srcExtSc
 )
 
 func srcExtClassOf(id STR) SrcExtClass {
@@ -216,16 +217,18 @@ func classifySrcExt(s string) SrcExtClass {
 		return srcExtCIn
 	case strings.HasSuffix(s, ".h.in"):
 		return srcExtHIn
+	case strings.HasSuffix(s, ".sc"):
+		return srcExtSc
 	default:
 		return srcExtRegular
 	}
 }
 
 // isCodegenProducingSrcID is isCodegenProducingSrc in id space (the memoized
-// class) — the same eight-extension set.
+// class) — the same nine-extension set.
 func isCodegenProducingSrcID(id STR) bool {
 	switch srcExtClassOf(id) {
-	case srcExtProto, srcExtFbs, srcExtEv, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn:
+	case srcExtProto, srcExtFbs, srcExtEv, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc:
 		return true
 	}
 

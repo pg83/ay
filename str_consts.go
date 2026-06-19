@@ -122,6 +122,7 @@ var (
 	strJ                                             = internStr("J")
 	strLang                                          = internStr("--lang")
 	strLibrary                                       = internStr("library")
+	strLibraryCppDomscheme                           = internStr("library/cpp/domscheme")
 	strLibraryCppEventlog                            = internStr("library/cpp/eventlog")
 	strLibraryPythonImportTracingConstructor         = internStr("library/python/import_tracing/constructor")
 	strLibraryPythonRuntimePy3                       = internStr("library/python/runtime_py3")
