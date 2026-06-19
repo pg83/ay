@@ -78,6 +78,24 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	}
 }
 
+// TestCollectModule_Ragel6FlagsMultiTokenSplit pins the RAGEL6_FLAGS SET-list
+// expansion: SET(RAGEL6_FLAGS -L -G2) is a two-element list, and upstream's
+// $RAGEL6_FLAGS expands as two separate argv tokens (ymake.core.conf:3305), not
+// one quoted "-L -G2" blob. Reproduces the library/cpp/tokenizer nlptok_v2/v3
+// make_morphdict-subtree divergence (`ragel6 '-L -G2' …` vs `ragel6 -L -G2 …`).
+func TestCollectModule_Ragel6FlagsMultiTokenSplit(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"mod/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSET(\n    RAGEL6_FLAGS\n    -L\n    -G2\n)\nSRCS(x.rl6)\nEND()\n",
+		"mod/x.rl6":   "%%{ machine x; }%%\n",
+	})
+	d := collectTestModule(fs, "mod")
+	got := argStrs(d.ragel6Flags)
+	want := []string{"-L", "-G2"}
+	if !equalStrings(got, want) {
+		t.Fatalf("ragel6Flags = %v, want %v (SET-list must expand as separate argv tokens)", got, want)
+	}
+}
+
 func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 	e := newBufferedEmitter()
 
