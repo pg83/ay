@@ -264,16 +264,28 @@ func generatedOutputCarriesIncludes(p string) bool {
 func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *RunProgramStmt, moduleInputs ModuleCCInputs) []VFS {
 	// OUTPUT_INCLUDES are upstream's `${hide;output_include:OUTPUT_INCLUDES}`:
 	// induced deps recorded ON the OUT files (per the macro doc, "includes of the
-	// output files needed to build them"), surfaced on whoever CONSUMES an OUT —
-	// the downstream CC recompiling an auto cc-source OUT (see prEmitsIncludes /
-	// emitCodegenDownstreamCC) or a peer that #includes a header OUT. A RUN_PROGRAM
-	// with no IN produces its OUTs purely from the tool and establishes no
-	// scannable include context, so REF lists only the tool (caesar's
-	// features.gen.* run: 1 input). The OUT and OUTPUT_INCLUDES closures below
-	// surface on the command node only once an IN file roots its include graph —
-	// control_board_proto.{h,cpp}, whose `.in` IN templates #include the proto
-	// headers the OUTPUT_INCLUDES name.
-	if len(stmt.INFiles) == 0 {
+	// output files needed to build them"). They are realized as node inputs at the
+	// point an OUT enters an include scan:
+	//   - an auto cc-source OUT is C-scanned by its downstream CC, so the closure
+	//     surfaces on that CONSUMER (caesar features.gen.cpp); a no-IN run that
+	//     emits such an OUT lists only the tool on the producer.
+	//   - a header-only OUT (no cc-source OUT, no cc-source STDOUT) is never itself
+	//     compiled, so with no IN to root the graph the OUTPUT_INCLUDES closure has
+	//     nowhere else to surface and rides the PRODUCER command node — the full
+	//     $(S) include closure of every OUTPUT_INCLUDES file (plutonium dsp.yaff.h).
+	// With an IN file the producer's graph is rooted at IN regardless (control_board
+	// .{h,cpp}.in #include the proto headers their OUTPUT_INCLUDES name).
+	hasAutoCCSourceOut := stmt.StdoutFile != nil && isCCSourceExt(stmt.StdoutFile.string())
+	for _, f := range stmt.OUTFiles {
+		if isCCSourceExt(f.string()) {
+			hasAutoCCSourceOut = true
+			break
+		}
+	}
+
+	headerOnlyNoIN := len(stmt.INFiles) == 0 && !hasAutoCCSourceOut
+
+	if len(stmt.INFiles) == 0 && !headerOnlyNoIN {
 		return nil
 	}
 
@@ -335,14 +347,29 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		}
 	}
 
-	// For an OUTPUT_INCLUDES target that resolves to a codegen .pb.h, upstream
-	// lists the TRANSITIVE .proto SOURCES of its proto-import graph (plus the
-	// pre-built source-tree .pb.h sibling of any protobuf WKT in the chain), but
-	// not the intermediate generated .pb.h. Source-tree OUTPUT_INCLUDES already
-	// live in the C include graph rooted at IN and must not be walked here (they
-	// would drag libcxx). Gate on the codegen registry and keep only .proto.
+	// OUTPUT_INCLUDES closure realized on the producer.
+	//
+	// headerOnlyNoIN (plutonium dsp.yaff.h): the run has no IN and emits only
+	// header OUTs, so every OUTPUT_INCLUDES file roots a scan here — codegen .pb.h
+	// via the registry's OutputPath, source-tree headers (library/cpp/yaff/*.h)
+	// via their source path. Keep every $(S) entry of the closure (drops the
+	// intermediate $(B) generated .pb.h; the proto-import graph already surfaces
+	// the $(S) .proto sources, and source-tree WKT .pb.h siblings are added below).
+	//
+	// Otherwise (run rooted at IN): the producer's C graph is rooted at IN, which
+	// already carries the protobuf/libcxx closure, so a codegen .pb.h
+	// OUTPUT_INCLUDES contributes only its TRANSITIVE .proto SOURCES (+ WKT .pb.h
+	// sibling); source-tree OUTPUT_INCLUDES are not walked here (they would
+	// redundantly drag libcxx).
 	{
 		reg := codegenRegForInstance(ctx, instance)
+
+		keep := func(v VFS) bool {
+			if headerOnlyNoIN {
+				return v.isSource()
+			}
+			return strings.HasSuffix(v.rel(), ".proto")
+		}
 
 		for _, oi := range stmt.OutputIncludes {
 			target := oi
@@ -352,16 +379,24 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 			}
 
 			candidate := build(target.string())
-			info := reg.lookup(candidate)
 
-			if info == nil {
+			var sub []VFS
+			switch info := reg.lookup(candidate); {
+			case info != nil:
+				// Codegen .pb.h: a build output that always leads its window —
+				// strip the intermediate $(B) root, keep its proto/C closure.
+				sub = walkClosureTail(ctx.scannerFor(instance), info.OutputPath, scanIn.ScanCfg)
+			case headerOnlyNoIN && ctx.fs.isFile(srcRootVFS, target.string()):
+				// Source-tree OUTPUT_INCLUDES header: scan its own $(S) closure,
+				// keeping the header itself (a real header may be an SCC member,
+				// so walkClosureTail is unsound here).
+				sub = walkClosure(ctx.scannerFor(instance), source(target.string()), scanIn.ScanCfg)
+			default:
 				continue
 			}
 
-			sub := walkClosureTail(ctx.scannerFor(instance), info.OutputPath, scanIn.ScanCfg)
-
 			for _, v := range sub {
-				if !strings.HasSuffix(v.rel(), ".proto") {
+				if !keep(v) {
 					continue
 				}
 
@@ -373,8 +408,11 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 				// the pre-built .pb.h as PR inputs when the chain transits
 				// through one. For purely-generated .pb.h's (no source-tree
 				// .pb.h sibling) the IsFile probe returns false, so this is a
-				// no-op outside the WKT path.
-				if v.isSource() {
+				// no-op outside the WKT path. headerOnlyNoIN keeps the whole C
+				// closure, so a genuinely-#included WKT .pb.h already rides as a
+				// source — re-adding the sibling of every .proto would over-emit
+				// the .pb.h of a variant (protobuf_old) that is never #included.
+				if !headerOnlyNoIN && v.isSource() && strings.HasSuffix(v.rel(), ".proto") {
 					sibling := strings.TrimSuffix(v.rel(), ".proto") + ".pb.h"
 					sibDir, sibBase := splitDirName(sibling)
 
