@@ -110,6 +110,57 @@ func TestGen_CythonCApiHeaderEmitsCompanionHeaders(t *testing.T) {
 	}
 }
 
+func TestGen_CythonHeaderVariantOmitsInducedCppClosure(t *testing.T) {
+	// Upstream: the _H/_API_H cython macros emit the generated .h as an addincl
+	// output and route the induced "cpp" closure (cdef extern-from headers and
+	// the CYTHON_OUTPUT_INCLUDES python headers) onto that header output for
+	// consumers, NOT onto the producer node. CYTHON_C / CYTHON_CPP keep it on the
+	// producer. So a Header CY node carries only cython.py, the bare embedded
+	// utility files, the source, and the pyx-language cimport/include/pxd closure
+	// — never the cdef extern-from C/C++ header (lxml's etree.c omits the libxml
+	// headers its pxd cimport-closure declares via `cdef extern from`).
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeTestModuleFile(files, "pkg/ya.make",
+		"PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\n"+
+			"PY_SRCS(NAMESPACE pkg CYTHON_C_API_H api.pyx CYTHON_C plain.pyx)\nEND()\n")
+	writeTestModuleFile(files, "pkg/api.pyx", "cdef extern from \"extlib/foo.h\":\n    pass\n")
+	writeTestModuleFile(files, "pkg/plain.pyx", "cdef extern from \"extlib/foo.h\":\n    pass\n")
+	writeTestModuleFile(files, "pkg/extlib/foo.h", "#pragma once\n")
+
+	g := testGen(newMemFS(files), "pkg")
+
+	const externHeader = "$(S)/pkg/extlib/foo.h"
+	const pythonInclude = "$(S)/contrib/libs/python/Include/Python.h"
+
+	// Header variant (api.c): cdef extern-from target and the python
+	// output-include single must be absent.
+	header := mustNodeByOutput(t, g, "$(B)/pkg/api.c")
+	for _, in := range header.flatInputs() {
+		s := in.string()
+		if s == externHeader {
+			t.Fatalf("Header CY node must not carry the cdef extern-from target %q; inputs=%v", externHeader, header.flatInputs())
+		}
+		if s == pythonInclude {
+			t.Fatalf("Header CY node must not carry the CYTHON_OUTPUT_INCLUDES single %q; inputs=%v", pythonInclude, header.flatInputs())
+		}
+	}
+
+	// Non-Header variant (plain.pyx.c): both must be present (unchanged).
+	plain := mustNodeByOutput(t, g, "$(B)/pkg/plain.pyx.c")
+	plainInputs := map[string]bool{}
+	for _, in := range plain.flatInputs() {
+		plainInputs[in.string()] = true
+	}
+
+	for _, want := range []string{externHeader, pythonInclude} {
+		if !plainInputs[want] {
+			t.Fatalf("non-Header CY node missing input %q; inputs=%v", want, plain.flatInputs())
+		}
+	}
+}
+
 func TestGen_CythonizePyPxdSideInputClosure(t *testing.T) {
 	// Upstream pybuild.py: for a CYTHONIZE_PY `.py` source whose module has a
 	// sibling `<mod-as-path>.pxd`, `dep = pxd` is passed to the cython macro as
