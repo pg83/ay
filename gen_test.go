@@ -1881,6 +1881,35 @@ END()
 	}
 }
 
+// TestCollectModule_ProtoCmdPeersRecorded pins the proto plugin-runtime peers a
+// PROTO_LIBRARY records (the C++ proto plugins' DEPS, in plugin order) AND that
+// the declared PEERDIR keeps its slot in d.peerdirs (link order untouched).
+// CPP_EVLOG registers event2cpp with DEPS library/cpp/eventlog; that eventlog
+// runtime leads the ADDINCL closure (see walkPeersForGlobalAddIncl). The base
+// protobuf runtime is intentionally absent — it keeps its declared placement.
+func TestCollectModule_ProtoCmdPeersRecorded(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"proto/ya.make": `PROTO_LIBRARY()
+PEERDIR(some/declared/peer)
+SRCS(test.proto)
+CPP_EVLOG()
+END()
+`,
+	})
+	mf := throw2(parseFile(fs, "proto/ya.make"))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("proto"), Kind: KindLib, Platform: testTargetP}))
+
+	if !equalStrings(strStrings(d.protoCmdPeers), []string{"library/cpp/eventlog"}) {
+		t.Fatalf("protoCmdPeers = %v, want [library/cpp/eventlog]", strStrings(d.protoCmdPeers))
+	}
+
+	// d.peerdirs (link/archive order) keeps the declared peer first; the front
+	// peers are a subset, not a reordering of, the declared closure.
+	if len(d.peerdirs) == 0 || d.peerdirs[0].string() != "some/declared/peer" {
+		t.Fatalf("d.peerdirs[0] = %v, want some/declared/peer first (link order intact): %v", d.peerdirs, strStrings(d.peerdirs))
+	}
+}
+
 func TestCollectModule_FlatcFlagsRecorded(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"flatcmod/ya.make": `LIBRARY()

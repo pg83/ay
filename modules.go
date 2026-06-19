@@ -106,6 +106,45 @@ func addCPPProtoPlugin(d *ModuleData, plugin CppProtoPlugin) {
 	d.peerdirs = append(d.peerdirs, STRS(plugin.Deps...)...)
 }
 
+// protoCmdPeers returns the C++ proto plugin DEPS (plugin-runtime peers) a
+// PROTO_LIBRARY induces, in plugin order, deduped. These peers must lead the
+// module's GLOBAL ADDINCL (`-I`) order, ahead of the declared PEERDIR closure.
+//
+// Upstream models proto codegen with a per-source command (proto.conf
+// `_CPP_PROTO_EVLOG_CMD .PEERDIR=library/cpp/eventlog …`, grpc's plugin
+// `PEERDIR(contrib/libs/grpc)`) whose plugin-runtime peer is induced ahead of the
+// declared PEERDIR for include-dir propagation. For CPP_EVLOG that runtime is
+// library/cpp/eventlog, whose GLOBAL ADDINCL closure
+// (blockcodecs → codecs/brotli, codecs/snappy, then eventlog/proto → protobuf,
+// abseil, re2) must precede the declared proto peers' protobuf/abseil — without
+// this, declared proto peerdirs reach protobuf first and brotli/snappy land late.
+//
+// The base proto runtime contrib/libs/protobuf is deliberately NOT front-loaded:
+// for a plain or grpc proto its declared/induced placement already matches
+// upstream (grpc's runtime leads, protobuf trails), and for CPP_EVLOG the
+// eventlog subtree already emits protobuf at the correct position. Only the
+// plugin DEPS move; archive/link closure order keeps the declared d.peerdirs
+// order, so this list is kept separate from d.peerdirs (see
+// walkPeersForGlobalAddIncl).
+func protoCmdPeers(d *ModuleData) []STR {
+	front := make([]STR, 0, len(d.cppProtoPlugins))
+	seen := map[STR]struct{}{}
+
+	for _, plugin := range d.cppProtoPlugins {
+		for _, dep := range plugin.Deps {
+			p := internStr(dep)
+			if _, dup := seen[p]; dup {
+				continue
+			}
+
+			seen[p] = struct{}{}
+			front = append(front, p)
+		}
+	}
+
+	return front
+}
+
 type ModuleData struct {
 	moduleStmt    *ModuleStmt
 	modver        string // VERSION() args joined by "." (MODVER); "" means default "unknown"
@@ -128,6 +167,11 @@ type ModuleData struct {
 	noExtendedPySearch bool
 	enumSrcs           []*GenerateEnumSerializationStmt
 	peerdirs           []STR
+	// protoCmdPeers are the proto plugin DEPS (plugin-runtime peers, e.g. CPP_EVLOG
+	// → library/cpp/eventlog) a PROTO_LIBRARY induces; they lead the GLOBAL ADDINCL
+	// order, ahead of the declared PEERDIR closure. See protoCmdPeers(). Subset of
+	// peerdirs; affects ADDINCL order only, not archive/link order.
+	protoCmdPeers      []STR
 	joinSrcs           []*JoinSrcsStmt
 	addIncl            []VFS
 	addInclP           []prioVFS
@@ -903,6 +947,10 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 		if !d.optimizePyProtosSet {
 			d.optimizePyProtos = true
 		}
+	}
+
+	if d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary {
+		d.protoCmdPeers = protoCmdPeers(d)
 	}
 
 	if len(d.pyPyiResources) > 0 || len(d.pySrcs) > 0 || len(d.pyRegister) > 0 {

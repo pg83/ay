@@ -3064,13 +3064,33 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		walk(peerPath)
 	}
 
+	// firstPeerdirIdx marks where the declared-PEERDIR region begins in `resolved`;
+	// everything before it (lang/program defaults, cppSelf, googleapis) keeps its
+	// slot at the front of every aggregation, including the ADDINCL pass.
+	firstPeerdirIdx := len(resolved)
+
+	// frontSet holds the proto plugin-runtime peers (d.protoCmdPeers). For the
+	// ADDINCL pass only they sort ahead of the rest of the declared PEERDIR
+	// closure, reproducing upstream's induced-peer-first include placement; all
+	// other passes (archive/global/link order) keep the declared d.peerdirs order.
+	frontSet := map[string]struct{}{}
+
+	for _, p := range d.protoCmdPeers {
+		frontSet[filepath.Clean(p.string())] = struct{}{}
+	}
+
+	peerdirFront := make([]bool, firstPeerdirIdx, firstPeerdirIdx+len(d.peerdirs))
+
 	for _, p := range d.peerdirs {
 		if _, dup := seen[p.string()]; dup {
 			continue
 		}
 
 		seen[p.string()] = struct{}{}
-		walk(filepath.Clean(p.string()))
+		peerPath := filepath.Clean(p.string())
+		_, isFront := frontSet[peerPath]
+		peerdirFront = append(peerdirFront, isFront)
+		walk(peerPath)
 	}
 
 	out := PeerGlobalContribs{}
@@ -3089,11 +3109,30 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 
 	deduper.reset()
 
-	for _, pr := range resolved {
+	addInclFrom := func(pr *ModuleEmitResult) {
 		for _, p := range pr.AddInclGlobal {
 			if deduper.add(p) {
 				out.addIncl = append(out.addIncl, p)
 			}
+		}
+	}
+
+	// Prefix (defaults/cppSelf/googleapis) keeps its slot; then the proto plugin
+	// peers, then the rest of the declared PEERDIR closure — reproducing upstream's
+	// induced-peer-first include order without disturbing archive/link order.
+	for _, pr := range resolved[:firstPeerdirIdx] {
+		addInclFrom(pr)
+	}
+
+	for i := firstPeerdirIdx; i < len(resolved); i++ {
+		if peerdirFront[i] {
+			addInclFrom(resolved[i])
+		}
+	}
+
+	for i := firstPeerdirIdx; i < len(resolved); i++ {
+		if !peerdirFront[i] {
+			addInclFrom(resolved[i])
 		}
 	}
 
