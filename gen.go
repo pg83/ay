@@ -153,7 +153,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"STYLE_DETEKT":       {},
 	"DEFAULT_JDK_VERSION":       {},
 	"BISON_FLAGS":               {},
-	"ARCHIVE_BY_KEYS":           {},
 }
 
 // acknowledgedTokSet is acknowledgedMacros in TOK space, so the per-invocation

@@ -1895,6 +1895,8 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 	case tokArchive:
 
 		applyArchiveStmt(v, d)
+	case tokArchiveByKeys:
+		applyArchiveByKeysStmt(v, d)
 	case tokLj21Archive:
 		applyLj21ArchiveStmt(v, d)
 	case tokEnable:
@@ -2795,6 +2797,66 @@ func applyArchiveStmt(v *UnknownStmt, d *ModuleData) {
 
 	if len(entry.Files) == 0 {
 		throwFmt("gen: ARCHIVE(NAME %s) has no input files (line %d)", entry.Name, v.Line)
+	}
+
+	d.archives = append(d.archives, entry)
+}
+
+// applyArchiveByKeysStmt parses ARCHIVE_BY_KEYS(NAME <name> KEYS <keys> [DONTCOMPRESS]
+// files...) (ymake.core.conf). It differs from ARCHIVE only in the command shape — the
+// archiver lists members plain and receives the key list via `-k $KEYS` — so it lands in
+// the same d.archives slot with Keys set (non-nil selects the keyed form in emitArchive).
+// KEYS is a single positional: the colon-joined key list authored verbatim in the ya.make.
+// PropagateSourceMembers rides each direct SRCDIR-backed member into the source closure of
+// a C++ unit that #includes the generated archive header, matching upstream's flat input
+// model (the archive's member inputs reach the consumer through the addincl'd output).
+func applyArchiveByKeysStmt(v *UnknownStmt, d *ModuleData) {
+	var (
+		entry      ArchiveEntry
+		seenName   bool
+		inNameSlot bool
+		inKeysSlot bool
+	)
+
+	entry.Keys = []string{}
+	entry.PropagateSourceMembers = true
+
+	for _, aTok := range v.Args {
+		a := aTok.string()
+
+		switch {
+		case inNameSlot:
+			entry.Name = a
+			inNameSlot = false
+			seenName = true
+		case inKeysSlot:
+			entry.Keys = []string{a}
+			inKeysSlot = false
+		case a == "NAME":
+			inNameSlot = true
+		case a == "KEYS":
+			inKeysSlot = true
+		case a == "DONTCOMPRESS":
+			entry.DontCompress = true
+		default:
+			entry.Files = append(entry.Files, a)
+		}
+	}
+
+	if inNameSlot {
+		throwFmt("gen: ARCHIVE_BY_KEYS(NAME ...) missing value after NAME (line %d)", v.Line)
+	}
+
+	if inKeysSlot {
+		throwFmt("gen: ARCHIVE_BY_KEYS(KEYS ...) missing value after KEYS (line %d)", v.Line)
+	}
+
+	if !seenName || entry.Name == "" {
+		throwFmt("gen: ARCHIVE_BY_KEYS expects `NAME <output>` (line %d)", v.Line)
+	}
+
+	if len(entry.Files) == 0 {
+		throwFmt("gen: ARCHIVE_BY_KEYS(NAME %s) has no input files (line %d)", entry.Name, v.Line)
 	}
 
 	d.archives = append(d.archives, entry)
