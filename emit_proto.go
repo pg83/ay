@@ -181,6 +181,11 @@ type PbModuleEmission struct {
 	protocLDRef        NodeRef
 	cppStyleguideLDRef NodeRef
 	grpcCppLDRef       NodeRef
+	// event2cppLDRef is the tools/event2cpp ref under CPP_EVLOG
+	// (d.buildProtoAsEvlog); 0 otherwise. Carried in the PB outputs'
+	// GeneratorRefs so the scanner mixes event2cpp's INDUCED_DEPS(h+cpp) into the
+	// .pb.h/.pb.cc closure — the same attribution the true .ev path already uses.
+	event2cppLDRef NodeRef
 
 	protocBinary        VFS
 	cppStyleguideBinary VFS
@@ -202,6 +207,10 @@ func newPBModuleEmission(ctx *GenCtx, d *ModuleData, cfg ProtoPBConfig, peerProt
 
 	if cfg.grpc {
 		pe.grpcCppLDRef, pe.grpcCppBinary = ctx.tool(argContribToolsProtocPluginsGrpcCpp)
+	}
+
+	if d.buildProtoAsEvlog {
+		pe.event2cppLDRef, _ = ctx.tool(argToolsEvent2cpp)
 	}
 
 	pe.extraPlugins = make([]ResolvedCPPProtoPlugin, 0, len(d.cppProtoPlugins))
@@ -321,6 +330,12 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 
 		if cfg.grpc {
 			pbGenRefs = append(pbGenRefs, pe.grpcCppLDRef)
+		}
+
+		// CPP_EVLOG (_BUILD_PROTO_AS_EVLOG): event2cpp also produces these PB
+		// outputs, so its INDUCED_DEPS(h+cpp) ride the .pb.h/.pb.cc closure.
+		if pe.event2cppLDRef != 0 {
+			pbGenRefs = append(pbGenRefs, pe.event2cppLDRef)
 		}
 
 		for _, p := range pe.extraPlugins {

@@ -803,3 +803,49 @@ END()
 		t.Fatal("grpc python output access_control_service__intpy3___pb2_grpc.py missing")
 	}
 }
+
+// TestEmitProtoSrcs_CppEvlogCarriesEvent2cppInducedDeps reproduces the T-40
+// residual: a PROTO_LIBRARY() with CPP_EVLOG() builds its .proto outputs as
+// eventlog (upstream _BUILD_PROTO_AS_EVLOG), so tools/event2cpp is one of the
+// protoc plugins producing the .pb.h/.pb.cc. event2cpp's INDUCED_DEPS(h+cpp …)
+// must therefore reach the generated foo.pb.cc.o input closure — exactly as the
+// true .ev path already does. An otherwise identical PROTO_LIBRARY() WITHOUT
+// CPP_EVLOG() must NOT gain that induced input.
+func TestEmitProtoSrcs_CppEvlogCarriesEvent2cppInducedDeps(t *testing.T) {
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeTestModuleFile(files, "library/cpp/eventlog/ya.make", "LIBRARY()\nSRCS(eventlog.cpp)\nEND()\n")
+	writeTestModuleFile(files, "library/cpp/eventlog/eventlog.cpp", "int eventlog(){return 0;}\n")
+
+	// Stub event2cpp tool declaring a single (h+cpp) induced header.
+	writeTestModuleFile(files, "tools/event2cpp/ya.make",
+		"PROGRAM(event2cpp)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nINDUCED_DEPS(h+cpp ${ARCADIA_ROOT}/runtime/eventlog_runtime.h)\nSRCS(main.cpp)\nEND()\n")
+	writeTestModuleFile(files, "tools/event2cpp/main.cpp", "int main(){return 0;}\n")
+	writeTestModuleFile(files, "runtime/eventlog_runtime.h", "#pragma once\n")
+
+	writeTestModuleFile(files, "evlog/ya.make",
+		"PROTO_LIBRARY()\nSET(PROTOC_TRANSITIVE_HEADERS \"no\")\nCPP_EVLOG()\nSRCS(foo.proto)\nEND()\n")
+	writeTestModuleFile(files, "evlog/foo.proto", "syntax = \"proto3\";\npackage test;\nmessage Foo { string v = 1; }\n")
+
+	writeTestModuleFile(files, "plain/ya.make",
+		"PROTO_LIBRARY()\nSET(PROTOC_TRANSITIVE_HEADERS \"no\")\nSRCS(foo.proto)\nEND()\n")
+	writeTestModuleFile(files, "plain/foo.proto", "syntax = \"proto3\";\npackage test;\nmessage Foo { string v = 1; }\n")
+
+	const induced = "$(S)/runtime/eventlog_runtime.h"
+
+	gEv := testGen(newMemFS(files), "evlog")
+	evCC := mustNodeByOutput(t, gEv, "$(B)/evlog/foo.pb.cc.o")
+	if !nodeHasInput(evCC, induced) {
+		t.Fatalf("CPP_EVLOG foo.pb.cc.o missing event2cpp induced input %q: %v", induced, evCC.flatInputs())
+	}
+
+	gPlain := testGen(newMemFS(files), "plain")
+	plainCC := mustNodeByOutput(t, gPlain, "$(B)/plain/foo.pb.cc.o")
+	if nodeHasInput(plainCC, induced) {
+		t.Fatalf("non-CPP_EVLOG foo.pb.cc.o unexpectedly carries event2cpp induced input %q: %v", induced, plainCC.flatInputs())
+	}
+}
