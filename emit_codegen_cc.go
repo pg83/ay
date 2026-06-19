@@ -14,7 +14,7 @@ func emitPRDownstreamCC(ctx *GenCtx, instance ModuleInstance, out string, prRef 
 // build dependency so the object's archive edge pulls the producer's tool
 // closure into the consuming program's target closure.
 func emitCodegenDownstreamAS(ctx *GenCtx, instance ModuleInstance, asmRel string, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
-	asmPath := build(instance.Path.rel() + "/" + asmRel)
+	asmPath := copyFileOutputVFS(instance.Path.rel(), asmRel)
 
 	asIn := in
 	asIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), asmPath, in.ScanCfg)
@@ -34,7 +34,7 @@ func emitCodegenDownstreamAS(ctx *GenCtx, instance ModuleInstance, asmRel string
 }
 
 func emitCodegenDownstreamCC(ctx *GenCtx, instance ModuleInstance, cppRel string, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
-	cppPath := build(instance.Path.rel() + "/" + cppRel)
+	cppPath := copyFileOutputVFS(instance.Path.rel(), cppRel)
 
 	includeInputs := walkClosure(ctx.scannerFor(instance), cppPath, in.ScanCfg)
 

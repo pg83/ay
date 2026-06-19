@@ -2,6 +2,7 @@ package main
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -77,6 +78,131 @@ END()
 	}
 	if !slices.Contains(graphDeps(g, use), genH.UID) {
 		t.Fatalf("use.cpp.o deps missing generated-header PR uid %q: %v", genH.UID, graphDeps(g, use))
+	}
+}
+
+// A RUN_PROGRAM with no IN, OUT ${BINDIR}/gen.cpp (a build-rooted auto cc-source
+// after env expansion) and OUTPUT_INCLUDES naming a generated .pb.h exported by a
+// reached PROTO_LIBRARY whose .proto transitively imports a second one. Upstream's
+// ${hide;output_include:OUTPUT_INCLUDES} records induced deps on the OUT, surfaced
+// on the DOWNSTREAM consumer that recompiles that auto cc-source — not on the PR
+// node (which, lacking any IN, lists only the tool). So:
+//   - the CC node compiling gen.cpp must carry both the named a.pb.h and the
+//     transitively-imported b.pb.h, each exactly once;
+//   - its output path must be the plain $(B)/gen/gen.cpp.o (the ${BINDIR}-expanded
+//     $(B)/gen/gen.cpp OUT must not be re-rooted under the module dir again);
+//   - the PR node producing gen.cpp must NOT carry a.pb.h (OUTPUT_INCLUDES is not
+//     a PR input; there is no IN to scan).
+// This is the caesar features.gen.cpp class: the generated source's protobuf
+// header closure must reach the run-program consumer, while the producer stays
+// at the tool only.
+func TestGen_RunProgramOutputIncludesPbHReachConsumerNotProducer(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "tools/genhdr", "genhdr")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make",
+		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
+
+	// q: leaf PROTO_LIBRARY, produces q/b.pb.h.
+	writeTestModuleFile(files, "q/ya.make", `PROTO_LIBRARY()
+SRCS(b.proto)
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+END()
+`)
+	writeTestModuleFile(files, "q/b.proto", "syntax = \"proto3\";\npackage q;\nmessage B {}\n")
+
+	// p: PROTO_LIBRARY importing q/b.proto, so p/a.pb.h #includes "q/b.pb.h".
+	writeTestModuleFile(files, "p/ya.make", `PROTO_LIBRARY()
+PEERDIR(q)
+SRCS(a.proto)
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+END()
+`)
+	writeTestModuleFile(files, "p/a.proto",
+		"syntax = \"proto3\";\npackage p;\nimport \"q/b.proto\";\nmessage A { q.B b = 1; }\n")
+
+	// gen: RUN_PROGRAM with no IN, ${BINDIR}/gen.cpp OUT, OUTPUT_INCLUDES p/a.pb.h.
+	writeTestModuleFile(files, "gen/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(p)
+RUN_PROGRAM(
+    tools/genhdr emit
+    OUTPUT_INCLUDES
+        p/a.pb.h
+    OUT
+        ${BINDIR}/gen.cpp
+)
+END()
+`)
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(gen)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+
+	const aPbH = "$(B)/p/a.pb.h"
+	const bPbH = "$(B)/q/b.pb.h"
+
+	// No node may carry the double-$(B) re-rooted generated source path.
+	for _, n := range g.Graph {
+		for _, o := range n.Outputs {
+			if strings.Contains(o.string(), "/gen/$(B)/") {
+				t.Fatalf("generated source re-rooted under module dir: %q", o.string())
+			}
+		}
+	}
+
+	// The downstream CC compiling the generated gen.cpp.
+	var cc *Node
+	for _, n := range g.Graph {
+		if n.KV.P != pkCC || len(n.Outputs) == 0 {
+			continue
+		}
+		if o := n.Outputs[0].string(); strings.HasPrefix(o, "$(B)/gen/gen.cpp.") &&
+			(strings.HasSuffix(o, ".o") || strings.HasSuffix(o, ".pic.o")) {
+			cc = n
+			break
+		}
+	}
+	if cc == nil {
+		t.Fatal("no CC node compiling $(B)/gen/gen.cpp emitted")
+	}
+
+	countInput := func(n *Node, want string) int {
+		c := 0
+		for _, in := range n.flatInputs() {
+			if in.string() == want {
+				c++
+			}
+		}
+		return c
+	}
+
+	for _, want := range []string{aPbH, bPbH} {
+		if got := countInput(cc, want); got != 1 {
+			t.Fatalf("CC consumer %q lists %q %d times, want exactly 1: %#v",
+				cc.Outputs[0].string(), want, got, vfsStrings(cc.flatInputs()))
+		}
+	}
+
+	// The PR producer of gen.cpp carries no OUTPUT_INCLUDES (no IN to scan).
+	pr := mustNodeByAnyOutput(t, g, "$(B)/gen/gen.cpp")
+	if pr.KV.P != pkPR {
+		t.Fatalf("expected PR producer for gen.cpp, got %v", pr.KV.P)
+	}
+	if nodeHasInput(pr, aPbH) {
+		t.Fatalf("PR producer must not carry OUTPUT_INCLUDES %q as input: %#v", aPbH, vfsStrings(pr.flatInputs()))
 	}
 }
 
