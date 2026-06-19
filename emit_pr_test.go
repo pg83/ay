@@ -206,6 +206,87 @@ END()
 	}
 }
 
+// A multi-output RUN_PROGRAM produces ONE build node keyed on its MAIN output —
+// FindMainElemOrDefault(GetOutput(), 0) picks the first OUT (ymake
+// macro_processor.cpp). Every other output becomes an EDT_OutTogether sibling
+// whose OutTogetherDependency points at the main output. When a node consumes a
+// non-main output, TJSONVisitor::PrepareLeaving adds that OutTogether dependency
+// (the main output) to the consumer's inputs (json_visitor.cpp:658-661). So the
+// compile of a generated cc-source OUT carries the producer's main output as an
+// input even though it is NOT in OUTPUT_INCLUDES. This is the caesar
+// features.gen.cpp.pic.o class: OUT lists features.gen.h (main) before
+// features.gen.cpp, and the cpp's .o lists features.gen.h.
+func TestGen_RunProgramMainOutputSiblingHeaderRidesGeneratedCppConsumer(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "tools/genhdr", "genhdr")
+
+	// gen: RUN_PROGRAM with no IN; OUT lists gen.h FIRST (the main output) then
+	// the compiled sibling gen.cpp.
+	writeTestModuleFile(files, "gen/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    tools/genhdr emit
+    OUT
+        ${BINDIR}/gen.h
+        ${BINDIR}/gen.cpp
+)
+END()
+`)
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(gen)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+
+	const genH = "$(B)/gen/gen.h"
+
+	// The downstream CC compiling the generated gen.cpp.
+	var cc *Node
+	for _, n := range g.Graph {
+		if n.KV.P != pkCC || len(n.Outputs) == 0 {
+			continue
+		}
+		if o := n.Outputs[0].string(); strings.HasPrefix(o, "$(B)/gen/gen.cpp.") &&
+			(strings.HasSuffix(o, ".o") || strings.HasSuffix(o, ".pic.o")) {
+			cc = n
+			break
+		}
+	}
+	if cc == nil {
+		t.Fatal("no CC node compiling $(B)/gen/gen.cpp emitted")
+	}
+
+	c := 0
+	for _, in := range cc.flatInputs() {
+		if in.string() == genH {
+			c++
+		}
+	}
+	if c != 1 {
+		t.Fatalf("CC consumer %q lists main-output sibling %q %d times, want exactly 1: %#v",
+			cc.Outputs[0].string(), genH, c, vfsStrings(cc.flatInputs()))
+	}
+
+	// The PR producer still emits both outputs, gen.h first (main).
+	pr := mustNodeByAnyOutput(t, g, "$(B)/gen/gen.cpp")
+	if pr.KV.P != pkPR {
+		t.Fatalf("expected PR producer for gen.cpp, got %v", pr.KV.P)
+	}
+	if pr.Outputs[0].string() != genH {
+		t.Fatalf("PR main output must be %q (first OUT), got %q", genH, pr.Outputs[0].string())
+	}
+}
+
 // A RUN_PROGRAM whose OUT and TOOL carry an explicit ${ARCADIA_BUILD_ROOT}/…
 // prefix (the apphost cow well_known shape): the OUT lives under the declaring
 // module's ${MODDIR} as a build output, the TOOL names a built module by its
