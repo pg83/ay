@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/md5"
 	enchex "encoding/hex"
+	"path/filepath"
 	"strings"
 )
 
@@ -115,6 +116,24 @@ func descPeerClosure(ctx *GenCtx, instance ModuleInstance, peerdirs []STR, injec
 	return out
 }
 
+// descProtoOutputRel is upstream's ${output;suf=.desc:File} for a DESC_PROTO
+// producer: when the .proto SRC resolves (through SRCDIR) outside the declaring
+// module, the .desc output rebases under the module build dir with the relative
+// ascent mapped to `__` segments (the same SRCDIR output rule emit_cc.go applies
+// via composeSrcDirOutputRel); an in-module source keeps its rootrel path. The
+// paired .rawproto uses ${norel;output:File} and stays at resolvedRel, so it is
+// composed separately. srcRel is the SRCS spelling; resolvedRel is the physical
+// path protoSourceRelPath produced.
+func descProtoOutputRel(instancePath, srcRel, resolvedRel string) string {
+	canonical := filepath.ToSlash(filepath.Clean(instancePath + "/" + srcRel))
+
+	if resolvedRel == canonical {
+		return resolvedRel + ".desc"
+	}
+
+	return instancePath + "/" + composeSrcDirOutputRel(instancePath, resolvedRel) + ".desc"
+}
+
 // emitDescProtoSubmodule emits the DESC_PROTO submodule of a PROTO_LIBRARY: a PD
 // producer per .proto SRC plus the .self.protodesc / .protosrc merge node. The
 // returned result exposes this module's DescClosure (its DESC peer closure with
@@ -159,11 +178,12 @@ func emitDescProtoSubmodule(ctx *GenCtx, instance ModuleInstance, d *ModuleData)
 			continue
 		}
 
-		protoRelPath := protoSourceRelPath(ctx.fs, instance, d, src.string())
+		srcRel := src.string()
+		protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcRel)
 		protoVFS := source(protoRelPath)
 		imports := walkClosureTail(scanner, protoVFS, scanCfg)
 
-		descOut := build(protoRelPath + ".desc")
+		descOut := build(descProtoOutputRel(instance.Path.rel(), srcRel, protoRelPath))
 		rawprotoOut := build(protoRelPath + "." + hash + ".rawproto")
 
 		ref := emitProtoDescProducer(ctx, instance, protoRelPath, descOut, rawprotoOut,
