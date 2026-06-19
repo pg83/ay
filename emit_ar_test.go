@@ -295,6 +295,67 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 	}
 }
 
+// The archive member objects must follow the module's PIC contour: a module
+// built on a PIC platform archives `.pic.o` members, a non-PIC platform
+// archives `.o` members. The suffix is derived generically from Platform.PIC
+// (emit_cc.go), never from a path. sg7 ref archives the PIC variants of
+// host-tool-reached libraries (e.g. library/cpp/yaff/experiments/codecs); this
+// pins that the contour propagates from platform to archive members.
+func TestGen_ArchiveMembersFollowPicContour(t *testing.T) {
+	src := map[string]string{
+		"codecs/ya.make": `LIBRARY()
+SRCS(bitset.cpp bytes.cpp)
+END()
+`,
+	}
+
+	arMembers := func(g *Graph) []string {
+		var members []string
+		for _, n := range g.Graph {
+			if n.KV.P != pkAR {
+				continue
+			}
+			for _, a := range strStrs(n.Cmds[0].CmdArgs.flat()) {
+				if strings.HasSuffix(a, ".o") {
+					members = append(members, a)
+				}
+			}
+		}
+		return members
+	}
+
+	host := newTestPlatform(OSLinux, ISAX8664, "yes")
+
+	picTarget := newPlatform(newMemFS(src), OSLinux, ISAAArch64, func() map[string]string {
+		f := make(map[string]string, len(testToolchainFlags)+1)
+		for k, v := range testToolchainFlags {
+			f[k] = v
+		}
+		f["PIC"] = "yes"
+		return f
+	}(), "", "")
+
+	picMembers := arMembers(Gen(newMemFS(src), "codecs", host, picTarget, func(Warn) {}))
+	if len(picMembers) == 0 {
+		t.Fatal("PIC build produced no archive members")
+	}
+	for _, m := range picMembers {
+		if !strings.HasSuffix(m, ".pic.o") {
+			t.Fatalf("PIC contour: archive member %q is not a .pic.o variant", m)
+		}
+	}
+
+	nonPicMembers := arMembers(testGen(newMemFS(src), "codecs"))
+	if len(nonPicMembers) == 0 {
+		t.Fatal("non-PIC build produced no archive members")
+	}
+	for _, m := range nonPicMembers {
+		if strings.HasSuffix(m, ".pic.o") {
+			t.Fatalf("non-PIC contour: archive member %q is a .pic.o variant", m)
+		}
+	}
+}
+
 func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 	e := newBufferedEmitter()
 
