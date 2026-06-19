@@ -211,6 +211,22 @@ func emitDescProtoSubmodule(ctx *GenCtx, instance ModuleInstance, d *ModuleData)
 	var descOutputs []VFS
 	var rawprotoOutputs []VFS
 
+	// Upstream flattens each producer's source/script closure onto the merge
+	// node as reference-only direct inputs: desc_rawproto_wrapper.py, every
+	// declared source proto, and the parsed proto import closure. Collect the
+	// deduped union while iterating the producers (the producer command inputs
+	// stay unchanged — this only mirrors them on the merge node).
+	var producerSourceInputs []VFS
+	sourceInputSeen := make(map[VFS]struct{})
+	addSourceInput := func(v VFS) {
+		if _, dup := sourceInputSeen[v]; dup {
+			return
+		}
+
+		sourceInputSeen[v] = struct{}{}
+		producerSourceInputs = append(producerSourceInputs, v)
+	}
+
 	for _, src := range d.srcs {
 		if !strings.HasSuffix(src.string(), ".proto") {
 			continue
@@ -230,13 +246,20 @@ func emitDescProtoSubmodule(ctx *GenCtx, instance ModuleInstance, d *ModuleData)
 		producerRefs = append(producerRefs, ref)
 		descOutputs = append(descOutputs, descOut)
 		rawprotoOutputs = append(rawprotoOutputs, rawprotoOut)
+
+		addSourceInput(descRawprotoWrapperVFS)
+		addSourceInput(protoVFS)
+
+		for _, im := range imports {
+			addSourceInput(im)
+		}
 	}
 
 	prj := realPrjName(instance.Path.rel())
 	selfProtodesc := build(instance.Path.rel() + "/" + prj + ".self.protodesc")
 	protosrc := build(instance.Path.rel() + "/" + prj + ".protosrc")
 
-	mergeRef := emitDescProtoMerge(ctx, instance, selfProtodesc, protosrc, descOutputs, rawprotoOutputs, producerRefs)
+	mergeRef := emitDescProtoMerge(ctx, instance, selfProtodesc, protosrc, descOutputs, rawprotoOutputs, producerSourceInputs, producerRefs)
 
 	closure := append(span.peers, DescProtoPeer{SelfProtodesc: selfProtodesc, MergeRef: mergeRef})
 
@@ -362,7 +385,7 @@ func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath st
 // (_PROTO_DESC_MERGE_CMD): merge_files.py over the .desc into .self.protodesc,
 // then collect_rawproto.py over the .rawproto into .protosrc.
 func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, protosrc VFS,
-	descOutputs, rawprotoOutputs []VFS, producerRefs []NodeRef) NodeRef {
+	descOutputs, rawprotoOutputs, producerSourceInputs []VFS, producerRefs []NodeRef) NodeRef {
 	na := ctx.emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -380,9 +403,10 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 		collect = append(collect, internStr(r.rel()))
 	}
 
-	inputs := make([]VFS, 0, len(descOutputs)+len(rawprotoOutputs))
+	inputs := make([]VFS, 0, len(descOutputs)+len(rawprotoOutputs)+len(producerSourceInputs))
 	inputs = append(inputs, descOutputs...)
 	inputs = append(inputs, rawprotoOutputs...)
+	inputs = append(inputs, producerSourceInputs...)
 
 	node := &Node{
 		Platform: instance.Platform,

@@ -228,6 +228,77 @@ func TestEmitProtoDescriptions_PDProducerShape(t *testing.T) {
 	}
 }
 
+// TestEmitDescProto_MergeNodeFlattensProducerSourceInputs reproduces the T-51
+// Split A residual: the DESC_PROTO submodule merge node (.self.protodesc /
+// .protosrc) must carry, as direct inputs, the per-proto producer source/script
+// closure in addition to the generated .desc/.rawproto and its own merge/collect
+// scripts. Upstream-normalized merge nodes flatten the desc_rawproto_wrapper.py
+// script, every declared source proto, and the parsed proto import closure
+// (e.g. an imported, non-source descriptor.proto). Before this change the merge
+// node received only generated descriptor/rawproto inputs plus merge scripts, so
+// the wrapper, source, and import inputs are reference-only.
+func TestEmitDescProto_MergeNodeFlattensProducerSourceInputs(t *testing.T) {
+	const moduleDir = "contrib/libs/protobuf/builtin_proto/protos_from_protobuf"
+	const srcDir = "contrib/libs/protobuf/src"
+	const descDir = "descmerge"
+
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	files["contrib/libs/protobuf/ya.make"] = "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n"
+	files["build/scripts/desc_rawproto_wrapper.py"] = "print('wrap')\n"
+	files["build/scripts/merge_files.py"] = "print('merge')\n"
+	files["build/scripts/collect_rawproto.py"] = "print('collect')\n"
+	// type.proto is a declared source that imports any.proto; any.proto is NOT a
+	// source — it is an import-only descriptor that must still reach the merge
+	// node as a direct input (the protos_from_protoc → descriptor.proto shape).
+	files[moduleDir+"/ya.make"] = "PROTO_LIBRARY()\nDISABLE(NEED_GOOGLE_PROTO_PEERDIRS)\nPROTO_NAMESPACE(GLOBAL " + srcDir + ")\nSRCDIR(" + srcDir + ")\nSRCS(google/protobuf/type.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n"
+	files[srcDir+"/google/protobuf/any.proto"] = "syntax = \"proto3\";\npackage google.protobuf;\nmessage Any { int32 x = 1; }\n"
+	files[srcDir+"/google/protobuf/type.proto"] = "syntax = \"proto3\";\npackage google.protobuf;\nimport \"google/protobuf/any.proto\";\nmessage Type { Any a = 1; }\n"
+	files[descDir+"/ya.make"] = "PROTO_DESCRIPTIONS()\nPEERDIR(" + moduleDir + ")\nEND()\n"
+
+	g := testGen(newMemFS(files), descDir)
+
+	prj := realPrjName(moduleDir)
+	merge := mustNodeByAnyOutput(t, g, "$(B)/"+moduleDir+"/"+prj+".self.protodesc")
+
+	// The same node also produces .protosrc (one merge node, two outputs); the
+	// flattened direct inputs cover the sibling output class too.
+	var hasProtosrc bool
+	for _, o := range merge.Outputs {
+		if o.string() == "$(B)/"+moduleDir+"/"+prj+".protosrc" {
+			hasProtosrc = true
+		}
+	}
+	if !hasProtosrc {
+		t.Fatalf("merge node does not also emit .protosrc (outputs %v)", merge.Outputs)
+	}
+
+	ins := map[string]bool{}
+	for _, in := range merge.flatInputs() {
+		ins[in.string()] = true
+	}
+
+	hash := moddirHash(moduleDir)
+	want := []string{
+		// producer source/script closure flattened onto the merge node
+		"$(S)/build/scripts/desc_rawproto_wrapper.py",
+		"$(S)/" + srcDir + "/google/protobuf/type.proto",
+		"$(S)/" + srcDir + "/google/protobuf/any.proto",
+		// generated descriptor/rawproto inputs
+		"$(B)/" + moduleDir + "/__/__/src/google/protobuf/type.proto.desc",
+		"$(B)/" + srcDir + "/google/protobuf/type.proto." + hash + ".rawproto",
+		// the merge node's own merge/collect scripts
+		"$(S)/build/scripts/merge_files.py",
+		"$(S)/build/scripts/collect_rawproto.py",
+	}
+	for _, w := range want {
+		if !ins[w] {
+			t.Errorf("merge node inputs missing %q\nhave: %v", w, merge.flatInputs())
+		}
+	}
+}
+
 // TestEmitDescProto_ProtoNamespaceNestedSourceDescOutputAndIncludes reproduces
 // the T-39A residual: a PROTO_LIBRARY with PROTO_NAMESPACE(yt) whose .proto src
 // lives in a subdirectory of the module must (a) write its descriptor under the
