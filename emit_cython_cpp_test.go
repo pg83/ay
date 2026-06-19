@@ -182,6 +182,37 @@ func TestGen_CythonizePyPxdSideInputClosure(t *testing.T) {
 	}
 }
 
+func TestGen_CythonPyxCarriesNoPxdDep(t *testing.T) {
+	// Upstream pybuild.py: the cython macro's hidden `Dep` is `dep = path` for a
+	// `.pyx` source (the source itself, already an input → dedup no-op). Only a
+	// CYTHONIZE_PY `.py` source turns `dep` into `<mod-as-path>.pxd`. A `.pyx`
+	// whose `<mod-as-path>.pxd` resolves but is not cimported must therefore NOT
+	// carry that pxd (or its closure) as a side input — that pxd rides a `.pyx`
+	// only through its own cimport scan, never through `Dep`.
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeTestModuleFile(files, "pkg/ya.make",
+		"PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\n"+
+			"ADDINCL(FOR cython pkg)\n"+
+			"PY_SRCS(NAMESPACE pkg sub/mod.pyx=foo)\nEND()\n")
+	writeTestModuleFile(files, "pkg/sub/mod.pyx", "def f():\n    return 0\n")
+	// `<mod-as-path>.pxd` for mod name `foo` resolves under the module dir, but
+	// the .pyx does not cimport it — upstream's `dep == path` excludes it.
+	writeTestModuleFile(files, "pkg/foo.pxd", "cdef extern from \"pkg/extra.h\":\n    pass\n")
+	writeTestModuleFile(files, "pkg/extra.h", "#pragma once\n")
+
+	g := testGen(newMemFS(files), "pkg")
+
+	cy := mustNodeByOutput(t, g, "$(B)/pkg/sub/mod.pyx.cpp")
+	for _, in := range cy.flatInputs() {
+		s := in.string()
+		if s == "$(S)/pkg/foo.pxd" || s == "$(S)/pkg/extra.h" {
+			t.Fatalf("CY node for a .pyx must not carry a non-cimported <mod>.pxd Dep input %q; inputs=%v", s, cy.flatInputs())
+		}
+	}
+}
+
 func TestGen_ManualCompanionSourceUsesCythonCompanionCCInputs(t *testing.T) {
 	files := map[string]string{}
 
