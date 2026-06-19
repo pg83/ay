@@ -15,7 +15,7 @@ DEBUG.md — how to debug divergences between the upstream graph and ours.
 
 Write a thorough `descr` for every ticket: 8–10 sentences that make the work unambiguous — what to change, why, where in the code, what the upstream reference behavior is, and what "done" looks like. A one-liner is not enough; the digger and tasker must be able to act on the `descr` alone without guessing your intent.
 
-Слушай сюда, дебил. Не давай задачи вида "сведи разницу в 0", она может быть сильно больше, чем ты думаешь. Давай конкретные задачи - свести какую-то конкретную одну причину. Твоя задача - разложить все на конкретные, понятные, задачи, с конкретным скоупом, а не "ну сделайте мне красиво".
+Слушай сюда, дебил. Не давай задачи вида "сведи разницу в 0", она может быть сильно больше, чем ты думаешь. Давай конкретные задачи - свести какую-то конкретную одну причину. Твоя задача - разложить все на конкретные, понятные, задачи, с конкретным скоупом, а не "ну сделайте мне красиво". А если заведенных хадач осталось мало, а diff все еще большой, то или сам проведи исследование и заведи новые задачи, или отправь таскера на разведку.
 
 Tip — don't put concrete numbers in tickets. "reduce the difference in CC nodes by 2x or more" is better than "close the gap entirely".
 Tip — read all the plans from closed `plan` tasks.
