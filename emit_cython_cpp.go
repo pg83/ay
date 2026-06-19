@@ -80,6 +80,11 @@ type CythonStmt struct {
 	Header bool
 	// ApiHeader marks the _API_H variant: additionally emit a _api.h output.
 	ApiHeader bool
+	// Pxd is the module-relative `<mod-as-path>.pxd` candidate for a CYTHONIZE_PY
+	// `.py` source (empty otherwise). Upstream pybuild.py passes it as the cython
+	// macro's hidden `Dep` input when it resolves; the CY node then carries the
+	// pxd and its cimport/extern-from source closure.
+	Pxd string
 }
 
 // cythonNoExt strips the trailing source extension (.pyx/.py), mirroring
@@ -160,6 +165,18 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 		srcScanIn.ScanCfg = newScanContext(ctx.parsers, srcScanIn.AddIncl, srcScanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 		sourceClosure := walkClosureTail(ctx.scannerFor(instance), srcVFS, srcScanIn.ScanCfg)
 		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(ctx, instance, srcVFS, sourceClosure, stmt.CMode, srcScanIn)
+
+		// Upstream pybuild.py: a CYTHONIZE_PY `.py` source whose module has a
+		// resolving `<mod-as-path>.pxd` passes that pxd as the cython macro's
+		// hidden `Dep` input. The pxd (and its cimport/extern-from source closure)
+		// rides the CY node, and — like the .pyx source's own cimport closure —
+		// the generated `.c`'s compile inputs as well (so the .py.c.pic.o consumer
+		// matches the .pyx case, which already carries its pxd closure here).
+		if pxdVFS, ok := resolveCythonPxd(ctx, instance, in, stmt.Pxd); ok {
+			pxdClosure := walkClosure(ctx.scannerFor(instance), pxdVFS, srcScanIn.ScanCfg)
+			toolInputs = keepOnlySourceVFS(dedupVFS(toolInputs, pxdClosure))
+			emitsIncludes = dedupVFS(emitsIncludes, pxdClosure)
+		}
 		parsed := make([]IncludeDirective, 0, len(emitsIncludes))
 
 		for _, include := range emitsIncludes {
@@ -303,6 +320,32 @@ func cythonGeneratedOutputInputs(ctx *GenCtx, instance ModuleInstance, src VFS, 
 	// .cpp's own CC closure (emitsIncludes) keeps them.
 	return keepOnlySourceVFS(dedupVFS(append([][]VFS{toolSingles}, append(toolCl, sourceClosure)...)...)),
 		dedupVFS(append([][]VFS{emitsSingles}, append(emitsCl, sourceClosure)...)...)
+}
+
+// resolveCythonPxd resolves a CYTHONIZE_PY .py source's `<mod-as-path>.pxd`
+// candidate the way upstream's unit.resolve_arc_path does (ResolveSourcePath
+// against the module dir, then SRCDIRs, then arcadia root). Returns false when
+// no such file exists, mirroring resolve_arc_path's empty result.
+func resolveCythonPxd(ctx *GenCtx, instance ModuleInstance, in ModuleCCInputs, pxdRel string) (VFS, bool) {
+	if pxdRel == "" {
+		return 0, false
+	}
+
+	if ctx.fs.isFile(dirKey(instance.Path.rel()), pxdRel) {
+		return sourceJoined(instance.Path.rel(), pxdRel), true
+	}
+
+	for i := len(in.SrcDirs) - 1; i >= 1; i-- {
+		if ctx.fs.isFile(in.SrcDirs[i], pxdRel) {
+			return sourceJoined(in.SrcDirs[i].rel(), pxdRel), true
+		}
+	}
+
+	if ctx.fs.isFile(srcRootVFS, pxdRel) {
+		return source(pxdRel), true
+	}
+
+	return 0, false
 }
 
 func cythonUsesPy23Variant(modName TOK) bool {
