@@ -383,6 +383,112 @@ func TestDumpDiffRoots_PartialOverlapMultiOutputNode(t *testing.T) {
 	}
 }
 
+func TestDumpDiffByTokenRoots(t *testing.T) {
+	dir := t.TempDir()
+	left := filepath.Join(dir, "l.jsonl")
+	right := filepath.Join(dir, "r.jsonl")
+	out := filepath.Join(dir, "o.txt")
+
+	n := func(su, uid, output, deps, tok string) string {
+		return `{"self_uid":"` + su + `","uid":"` + uid + `","outputs":["` + output + `"],"deps":` + deps +
+			`,"inputs":[],"cmds":[{"cmd_args":["cc","` + tok + `"]}],"tags":[],"kv":{"p":"CC"},` +
+			`"env":{},"platform":"linux","requirements":{},"target_properties":{}}`
+	}
+
+	throw(os.WriteFile(left, []byte(
+		n("LP", "P", "/p", `["C"]`, "PARENT_OURS")+"\n"+n("LC", "C", "/c", `[]`, "CHILD_OURS")+"\n"), 0o644))
+	throw(os.WriteFile(right, []byte(
+		n("RP", "P", "/p", `["C"]`, "PARENT_REF")+"\n"+n("RC", "C", "/c", `[]`, "CHILD_REF")+"\n"), 0o644))
+
+	if exc := try(func() {
+		cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out, "--by-token", "--roots"})
+	}); exc != nil {
+		t.Fatalf("by-token --roots: %v", exc)
+	}
+	got := string(throw2(os.ReadFile(out)))
+	if !strings.Contains(got, "CHILD_OURS") || !strings.Contains(got, "CHILD_REF") {
+		t.Fatalf("by-token --roots should count the leaf child tokens:\n%s", got)
+	}
+	if strings.Contains(got, "PARENT_OURS") || strings.Contains(got, "PARENT_REF") {
+		t.Fatalf("by-token --roots leaked non-leaf parent tokens:\n%s", got)
+	}
+}
+
+func TestDumpDiffByTokenGroup(t *testing.T) {
+	dir := t.TempDir()
+	left := filepath.Join(dir, "l.jsonl")
+	right := filepath.Join(dir, "r.jsonl")
+	out := filepath.Join(dir, "o.txt")
+
+	n := func(su, kind, output, tok string) string {
+		return `{"self_uid":"` + su + `","uid":"` + su + `","outputs":["` + output + `"],"deps":[],` +
+			`"inputs":[],"cmds":[{"cmd_args":["cc","` + tok + `"]}],"tags":[],"kv":{"p":"` + kind + `"},` +
+			`"env":{},"platform":"linux","requirements":{},"target_properties":{}}`
+	}
+
+	throw(os.WriteFile(left, []byte(
+		n("LA", "CC", "$(B)/dirA/a.o", "TOKA_OURS")+"\n"+n("LB", "PB", "$(B)/dirB/b.o", "TOKB_OURS")+"\n"), 0o644))
+	throw(os.WriteFile(right, []byte(
+		n("RA", "CC", "$(B)/dirA/a.o", "TOKA_REF")+"\n"+n("RB", "PB", "$(B)/dirB/b.o", "TOKB_REF")+"\n"), 0o644))
+
+	if exc := try(func() {
+		cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out, "--by-token", "--group", "kind,dir"})
+	}); exc != nil {
+		t.Fatalf("by-token --group: %v", exc)
+	}
+	got := string(throw2(os.ReadFile(out)))
+	for _, want := range []string{"kind=CC dir=dirA", "kind=PB dir=dirB", "TOKA_OURS", "TOKB_REF"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("by-token --group missing %q:\n%s", want, got)
+		}
+	}
+	// TOKA must sit under the CC/dirA group, TOKB under the PB/dirB group.
+	ccIdx := strings.Index(got, "kind=CC dir=dirA")
+	pbIdx := strings.Index(got, "kind=PB dir=dirB")
+	tokAIdx := strings.Index(got, "TOKA_OURS")
+	tokBIdx := strings.Index(got, "TOKB_OURS")
+	lo, hi := ccIdx, pbIdx
+	if hi < lo {
+		lo, hi = hi, lo
+	}
+	inFirst := func(i int) bool { return i > lo && i < hi }
+	if inFirst(tokAIdx) == inFirst(tokBIdx) {
+		t.Fatalf("group sections did not separate TOKA from TOKB:\n%s", got)
+	}
+}
+
+func TestDumpDiffPairStructuredCmds(t *testing.T) {
+	dir := t.TempDir()
+	left := filepath.Join(dir, "l.jsonl")
+	right := filepath.Join(dir, "r.jsonl")
+	out := filepath.Join(dir, "o.txt")
+
+	n := func(su, cwd, args string) string {
+		return `{"self_uid":"` + su + `","uid":"` + su + `","outputs":["/s"],"deps":[],"inputs":[],` +
+			`"cmds":[{"cmd_args":` + args + `,"cwd":"` + cwd + `"}],"tags":[],"kv":{"p":"CC"},` +
+			`"env":{},"platform":"linux","requirements":{},"target_properties":{}}`
+	}
+
+	throw(os.WriteFile(left, []byte(n("L", "/wd_ours", `["cc","-c","a","b"]`)+"\n"), 0o644))
+	throw(os.WriteFile(right, []byte(n("R", "/wd_ref", `["cc","-c","b","a"]`)+"\n"), 0o644))
+
+	if exc := try(func() {
+		cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out, "--pair", "/s"})
+	}); exc != nil {
+		t.Fatalf("pair structured cmds: %v", exc)
+	}
+	got := string(throw2(os.ReadFile(out)))
+	if !strings.Contains(got, "[field cmds differs]") {
+		t.Fatalf("pair should report cmds differ:\n%s", got)
+	}
+	if !strings.Contains(got, "cwd: ours=/wd_ours ref=/wd_ref") {
+		t.Fatalf("pair should expose structured cwd difference:\n%s", got)
+	}
+	if !strings.Contains(got, "arg order") || !strings.Contains(got, "ours: cc -c a b") || !strings.Contains(got, "ref:  cc -c b a") {
+		t.Fatalf("pair should expose per-cmd arg ordering difference:\n%s", got)
+	}
+}
+
 // TestCanonInputs_ArchiveByKeysIgnoresKeyListBasename pins the upstream archiver
 // convention: ARCHIVE_BY_KEYS' `-k $KEYS` value is a colon-joined archive key
 // list, not input file paths. A source member that ymake over-emits onto the AR

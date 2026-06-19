@@ -18,7 +18,8 @@ type DiffKindRec struct {
 }
 
 func cmdDumpDiff(_ GlobalFlags, args []string) int {
-	var leftPath, rightPath, outPath, mode, pairOut string
+	var leftPath, rightPath, outPath, mode, pairOut, groupSpec string
+	var wantRoots bool
 
 	setMode := func(m string) {
 		if mode != "" {
@@ -48,7 +49,12 @@ func cmdDumpDiff(_ GlobalFlags, args []string) int {
 		case "--by-kind":
 			setMode("by-kind")
 		case "--roots":
-			setMode("roots")
+			// Modifier, not a standalone mode: `--roots` alone runs the roots
+			// listing; `--by-token --roots` restricts token deltas to roots.
+			wantRoots = true
+		case "--group":
+			i++
+			groupSpec = arg(args, i)
 		case "--pair":
 			setMode("pair")
 			i++
@@ -60,6 +66,14 @@ func cmdDumpDiff(_ GlobalFlags, args []string) int {
 
 	if leftPath == "" || rightPath == "" {
 		throwFmt("dump diff: --left and --right are required")
+	}
+
+	if wantRoots && mode != "" && mode != "by-token" {
+		throwFmt("dump diff: --roots cannot combine with --%s", mode)
+	}
+
+	if groupSpec != "" && mode != "by-token" {
+		throwFmt("dump diff: --group is only valid with --by-token")
 	}
 
 	var w io.Writer = os.Stdout
@@ -82,18 +96,40 @@ func cmdDumpDiff(_ GlobalFlags, args []string) int {
 	case "by-field":
 		diffByField(leftPath, rightPath, bw)
 	case "by-token":
-		diffByToken(leftPath, rightPath, bw)
+		diffByToken(leftPath, rightPath, bw, byTokenOpts{rootsOnly: wantRoots, groupBy: parseGroupSpec(groupSpec)})
 	case "by-kind":
 		diffByKind(leftPath, rightPath, bw)
-	case "roots":
-		diffRoots(leftPath, rightPath, bw)
 	case "pair":
 		diffPair(leftPath, rightPath, pairOut, bw)
 	default:
-		diffSections(leftPath, rightPath, bw)
+		if wantRoots {
+			diffRoots(leftPath, rightPath, bw)
+		} else {
+			diffSections(leftPath, rightPath, bw)
+		}
 	}
 
 	return 0
+}
+
+func parseGroupSpec(spec string) []string {
+	if spec == "" {
+		return nil
+	}
+
+	var dims []string
+
+	for _, d := range strings.Split(spec, ",") {
+		d = strings.TrimSpace(d)
+
+		if d != "kind" && d != "dir" {
+			throwFmt("dump diff: --group dimension %q must be one of kind,dir", d)
+		}
+
+		dims = append(dims, d)
+	}
+
+	return dims
 }
 
 func diffSections(leftPath, rightPath string, bw *bufio.Writer) {
@@ -279,7 +315,12 @@ func tokenize(n map[string]any, field string) []string {
 	return toStrings(n[field])
 }
 
-func diffByToken(leftPath, rightPath string, bw *bufio.Writer) {
+type byTokenOpts struct {
+	rootsOnly bool
+	groupBy   []string
+}
+
+func diffByToken(leftPath, rightPath string, bw *bufio.Writer, opts byTokenOpts) {
 	rExact := map[string]map[string][]string{}
 	rAxis := map[string]map[string][]string{}
 	ridx := map[string]map[string][]string{}
@@ -294,13 +335,29 @@ func diffByToken(leftPath, rightPath string, bw *bufio.Writer) {
 			setDumpDiffTokenMatch(rExact, rAxis, ridx, o, n, rec)
 		}
 	})
-	our := map[string]map[string]int{}
-	ref := map[string]map[string]int{}
 
-	for _, f := range tokenFields {
-		our[f], ref[f] = map[string]int{}, map[string]int{}
+	var rootSet map[string]bool
+
+	if opts.rootsOnly {
+		rootSet, _ = computeRootOutputs(leftPath, rightPath)
 	}
 
+	// group -> field -> token -> #nodes. The empty group key "" holds the
+	// ungrouped accounting, identical to the prior single-ranking output.
+	our := map[string]map[string]map[string]int{}
+	ref := map[string]map[string]map[string]int{}
+
+	ensure := func(m map[string]map[string]map[string]int, g string) {
+		if m[g] == nil {
+			m[g] = map[string]map[string]int{}
+
+			for _, f := range tokenFields {
+				m[g][f] = map[string]int{}
+			}
+		}
+	}
+
+	groups := []string{}
 	paired := 0
 	streamJSONL(leftPath, func(n map[string]any) {
 		rec, ok := findDumpDiffTokenMatch(rExact, rAxis, ridx, n)
@@ -309,19 +366,110 @@ func diffByToken(leftPath, rightPath string, bw *bufio.Writer) {
 			return
 		}
 
+		if opts.rootsOnly && !nodeProducesRoot(n, rootSet) {
+			return
+		}
+
 		paired++
+		g := byTokenGroupKey(n, opts.groupBy)
+
+		if _, seen := our[g]; !seen {
+			groups = append(groups, g)
+		}
+
+		ensure(our, g)
+		ensure(ref, g)
 
 		for _, f := range tokenFields {
-			accumMultisetDiff(tokenize(n, f), rec[f], our[f], ref[f])
+			accumMultisetDiff(tokenize(n, f), rec[f], our[g][f], ref[g][f])
 		}
 	})
 
-	throw2(fmt.Fprintf(bw, "=== by-token: %d outputs in both ===\n", paired))
+	scope := ""
 
-	for _, f := range tokenFields {
-		writeTokenRanking(bw, f+" tokens only in OURS", our[f])
-		writeTokenRanking(bw, f+" tokens only in REF", ref[f])
+	if opts.rootsOnly {
+		scope = " (roots only)"
 	}
+
+	throw2(fmt.Fprintf(bw, "=== by-token: %d outputs in both%s ===\n", paired, scope))
+
+	if len(opts.groupBy) == 0 {
+		ensure(our, "")
+		ensure(ref, "")
+
+		for _, f := range tokenFields {
+			writeTokenRanking(bw, f+" tokens only in OURS", our[""][f])
+			writeTokenRanking(bw, f+" tokens only in REF", ref[""][f])
+		}
+
+		return
+	}
+
+	sort.Strings(groups)
+
+	for _, g := range groups {
+		throw2(fmt.Fprintf(bw, "\n########## group: %s ##########\n", g))
+
+		for _, f := range tokenFields {
+			writeTokenRanking(bw, f+" tokens only in OURS", our[g][f])
+			writeTokenRanking(bw, f+" tokens only in REF", ref[g][f])
+		}
+	}
+}
+
+func byTokenGroupKey(n map[string]any, dims []string) string {
+	if len(dims) == 0 {
+		return ""
+	}
+
+	parts := make([]string, 0, len(dims))
+
+	for _, d := range dims {
+		switch d {
+		case "kind":
+			k := nodeKVP(n)
+
+			if k == "" {
+				k = "(none)"
+			}
+
+			parts = append(parts, "kind="+k)
+		case "dir":
+			parts = append(parts, "dir="+nodePrimaryDir(n))
+		}
+	}
+
+	return strings.Join(parts, " ")
+}
+
+// nodePrimaryDir is the top dir of the node's lexically-first output — a stable
+// per-node directory bucket regardless of output emission order.
+func nodePrimaryDir(n map[string]any) string {
+	outs := toStrings(n["outputs"])
+
+	if len(outs) == 0 {
+		return "(no-output)"
+	}
+
+	first := outs[0]
+
+	for _, o := range outs[1:] {
+		if o < first {
+			first = o
+		}
+	}
+
+	return outputTopDir(first)
+}
+
+func nodeProducesRoot(n map[string]any, rootSet map[string]bool) bool {
+	for _, o := range toStrings(n["outputs"]) {
+		if rootSet[o] {
+			return true
+		}
+	}
+
+	return false
 }
 
 func cmdArgTokens(n map[string]any) []string {
@@ -518,7 +666,10 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 	}
 }
 
-func diffRoots(leftPath, rightPath string, bw *bufio.Writer) {
+// computeRootOutputs returns the set of leaf-most divergent outputs (outputs
+// whose producing node differs from the reference but whose every divergent
+// dependency child matches) and the total count of divergent outputs.
+func computeRootOutputs(leftPath, rightPath string) (map[string]bool, int) {
 	rightExact := map[string]string{}
 	rightAxis := map[string]string{}
 	rightSelf := map[string]string{}
@@ -578,6 +729,12 @@ func diffRoots(leftPath, rightPath string, bw *bufio.Writer) {
 		}
 	}
 
+	return leafSet, len(divergent)
+}
+
+func diffRoots(leftPath, rightPath string, bw *bufio.Writer) {
+	leafSet, divergent := computeRootOutputs(leftPath, rightPath)
+
 	leaves := make([]string, 0, len(leafSet))
 
 	for out := range leafSet {
@@ -586,7 +743,7 @@ func diffRoots(leftPath, rightPath string, bw *bufio.Writer) {
 
 	sort.Strings(leaves)
 
-	throw2(fmt.Fprintf(bw, "=== roots: %d leaf-most divergent outputs (of %d divergent) ===\n", len(leaves), len(divergent)))
+	throw2(fmt.Fprintf(bw, "=== roots: %d leaf-most divergent outputs (of %d divergent) ===\n", len(leaves), divergent))
 	throw2(fmt.Fprintf(bw, "(content differs but every dependency child matches the reference — fix these first)\n"))
 
 	for _, o := range leaves {
@@ -617,13 +774,76 @@ func diffPair(leftPath, rightPath, output string, bw *bufio.Writer) {
 
 		switch f {
 		case "cmds":
-			writePairTokens(bw, cmdArgTokens(left), cmdArgTokens(right))
+			writePairCmds(bw, left, right)
 		case "inputs", "tags", "outputs":
 			writePairTokens(bw, toStrings(left[f]), toStrings(right[f]))
 		default:
 			throw2(fmt.Fprintf(bw, "  ours: %s\n  ref:  %s\n", marshalCompact(left[f]), marshalCompact(right[f])))
 		}
 	}
+}
+
+// writePairCmds prints the flat cmd_args multiset delta. When that multiset
+// matches but the cmds field still differs, it falls back to a structured
+// per-cmd comparison (cmd count, cwd, env, stdout, and arg ordering) so that
+// structural command differences are not hidden behind an empty token diff.
+func writePairCmds(bw *bufio.Writer, left, right map[string]any) {
+	lTok, rTok := cmdArgTokens(left), cmdArgTokens(right)
+	onlyL, onlyR := map[string]int{}, map[string]int{}
+	accumMultisetDiff(lTok, rTok, onlyL, onlyR)
+
+	if len(onlyL) > 0 || len(onlyR) > 0 {
+		writePairTokens(bw, lTok, rTok)
+
+		return
+	}
+
+	lc, rc := cmdMaps(left), cmdMaps(right)
+	throw2(fmt.Fprintf(bw, "  [cmds structurally differ; cmd_args multiset matches]\n"))
+
+	if len(lc) != len(rc) {
+		throw2(fmt.Fprintf(bw, "  cmd count: ours=%d ref=%d\n", len(lc), len(rc)))
+	}
+
+	n := len(lc)
+
+	if len(rc) < n {
+		n = len(rc)
+	}
+
+	for i := 0; i < n; i++ {
+		l, r := lc[i], rc[i]
+
+		if lcwd, rcwd := getString(l, "cwd"), getString(r, "cwd"); lcwd != rcwd {
+			throw2(fmt.Fprintf(bw, "  cmd[%d] cwd: ours=%s ref=%s\n", i, lcwd, rcwd))
+		}
+
+		if lso, rso := getString(l, "stdout"), getString(r, "stdout"); lso != rso {
+			throw2(fmt.Fprintf(bw, "  cmd[%d] stdout: ours=%s ref=%s\n", i, lso, rso))
+		}
+
+		if le, re := string(marshalCompact(l["env"])), string(marshalCompact(r["env"])); le != re {
+			throw2(fmt.Fprintf(bw, "  cmd[%d] env: ours=%s ref=%s\n", i, le, re))
+		}
+
+		la, ra := toStrings(l["cmd_args"]), toStrings(r["cmd_args"])
+
+		if strings.Join(la, "\x00") != strings.Join(ra, "\x00") {
+			throw2(fmt.Fprintf(bw, "  cmd[%d] arg order:\n    ours: %s\n    ref:  %s\n", i, strings.Join(la, " "), strings.Join(ra, " ")))
+		}
+	}
+}
+
+func cmdMaps(n map[string]any) []map[string]any {
+	cmds, _ := n["cmds"].([]any)
+	out := make([]map[string]any, 0, len(cmds))
+
+	for _, c := range cmds {
+		cm, _ := c.(map[string]any)
+		out = append(out, cm)
+	}
+
+	return out
 }
 
 func writePairTokens(bw *bufio.Writer, left, right []string) {
