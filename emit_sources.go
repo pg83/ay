@@ -21,7 +21,8 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 	switch {
 	case strings.HasSuffix(srcRel, ".proto"):
 		return emitLibraryProtoSource(ctx, instance, d, srcRel, in)
-	case strings.HasSuffix(srcRel, ".fbs"):
+	case strings.HasSuffix(srcRel, ".fbs64"),
+		strings.HasSuffix(srcRel, ".fbs"):
 		return emitLibraryFlatcSource(ctx, instance, d, srcRel, in)
 	case strings.HasSuffix(srcRel, ".rodata"):
 		return emitLibraryRodataSource(ctx, instance, d, srcRel, in)

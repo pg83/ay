@@ -10,7 +10,7 @@ type extSlot struct {
 	parser IncludeDirectiveParser
 }
 
-var extSlots = [120]extSlot{
+var extSlots = [122]extSlot{
 	1:   {".y", CIncludeDirectiveParser{}},
 	3:   {".l", CIncludeDirectiveParser{}},
 	4:   {".m", CIncludeDirectiveParser{}},
@@ -63,11 +63,12 @@ var extSlots = [120]extSlot{
 	109: {".frag", CIncludeDirectiveParser{}},
 	110: {".vert", CIncludeDirectiveParser{}},
 	114: {".proto", ProtoIncludeDirectiveParser{}},
-	115: {".gperf", CIncludeDirectiveParser{}},
-	116: {".auxcpp", CIncludeDirectiveParser{}},
-	117: {".pxd.pxi", CythonIncludeDirectiveParser{}},
-	118: {".pyx.pxi", CythonIncludeDirectiveParser{}},
-	119: {".gztproto", ProtoIncludeDirectiveParser{}},
+	116: {".fbs64", FlatbuffersIncludeDirectiveParser{}},
+	117: {".gperf", CIncludeDirectiveParser{}},
+	118: {".auxcpp", CIncludeDirectiveParser{}},
+	119: {".pxd.pxi", CythonIncludeDirectiveParser{}},
+	120: {".pyx.pxi", CythonIncludeDirectiveParser{}},
+	121: {".gztproto", ProtoIncludeDirectiveParser{}},
 }
 
 // lookupParserByExt returns the registered parser for an extension, or nil.
@@ -84,13 +85,13 @@ func lookupParserByExt(ext string) IncludeDirectiveParser {
 	case 5:
 		i = 102 + (uint32(ext[4]))%12
 	case 6:
-		i = 114 + (uint32(ext[1]))%2
+		i = 114 + (uint32(ext[1]))%4
 	case 7:
-		i = 116
+		i = 118
 	case 8:
-		i = 117 + (uint32(ext[2]))%2
+		i = 119 + (uint32(ext[2]))%2
 	case 9:
-		i = 119
+		i = 121
 	default:
 		return nil
 	}

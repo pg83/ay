@@ -20,7 +20,7 @@ PARSERS = {
     ],
     'RagelIncludeDirectiveParser': ['.rl', '.rh', '.rli', '.rl6', '.rl5'],
     'CythonIncludeDirectiveParser': ['.pyx', '.pxd', '.pxi', '.pyx.pxi', '.pxd.pxi'],
-    'FlatbuffersIncludeDirectiveParser': ['.fbs'],
+    'FlatbuffersIncludeDirectiveParser': ['.fbs', '.fbs64'],
     'ProtoIncludeDirectiveParser': ['.proto', '.ev', '.gzt', '.gztproto'],
     'SwigIncludeDirectiveParser': ['.swg'],
     'YasmIncludeDirectiveParser': ['.asm', '.asi'],

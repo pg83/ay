@@ -907,6 +907,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		d.peerdirs = append(d.peerdirs, strContribLibsFlatbuffers)
 	}
 
+	// _CPP_FLATC64_CMD's .PEERDIR=contrib/libs/flatbuffers64, the .fbs64 twin.
+	if d.hasFbs64 && instance.Path.rel() != "contrib/libs/flatbuffers64" {
+		d.peerdirs = append(d.peerdirs, strContribLibsFlatbuffers64)
+	}
+
 	// _SRC("y") induces .PEERDIR=build/induced/by_bison (bison_lex.conf) — an empty
 	// licensed library that hangs the bison-grammar license (and its SBOM
 	// component) onto every module with a .y source.
@@ -2003,8 +2008,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	// takes each producer's ref from the codegen registry and walks against a
 	// complete registry.
 	for _, src := range d.srcs {
-		if srcExtClassOf(src) == srcExtFbs {
-			emitFlatcProducer(ctx, instance, d, src.string())
+		switch srcExtClassOf(src) {
+		case srcExtFbs:
+			emitFlatcProducer(ctx, instance, d, src.string(), &flatcVariantFL)
+		case srcExtFbs64:
+			emitFlatcProducer(ctx, instance, d, src.string(), &flatcVariantFL64)
 		}
 	}
 
@@ -3293,6 +3301,7 @@ func isHeaderSource(srcRel string) bool {
 
 func isCodegenProducingSrc(srcRel string) bool {
 	return strings.HasSuffix(srcRel, ".proto") ||
+		strings.HasSuffix(srcRel, ".fbs64") ||
 		strings.HasSuffix(srcRel, ".fbs") ||
 		strings.HasSuffix(srcRel, ".ev") ||
 		strings.HasSuffix(srcRel, ".rl6") ||

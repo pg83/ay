@@ -40,6 +40,7 @@ var (
 	domschemeRuntimeVFS                                                                   = source("library/cpp/domscheme/runtime.h")
 	evEventlogIncludeVFS                                                                  = source("library/cpp/eventlog")
 	flatcRuntimeVFS                                                                       = source("contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h")
+	flatc64RuntimeVFS                                                                     = source("contrib/libs/flatbuffers64/include/flatbuffers/flatbuffers.h")
 	flatcWrapperVFS                                                                       = source("build/scripts/cpp_flatc_wrapper.py")
 	genPy3RegScriptVFS                                                                    = source("build/scripts/gen_py3_reg.py")
 	googleapisCommonProtosAddIncl                                                         = build("contrib/libs/googleapis-common-protos")
