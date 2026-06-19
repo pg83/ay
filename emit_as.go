@@ -39,6 +39,13 @@ func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		Resources:        instance.Platform.UsesClangOnly,
 	}
 
+	// A generated $(B) source (a RUN_PROGRAM/RUN_PYTHON auto OUT/STDOUT .s/.S
+	// re-fed as a module source) depends on its producer; declared-SRC .asm
+	// leaves ExtraDepRefs nil, so this is a no-op for them.
+	if len(in.ExtraDepRefs) > 0 {
+		node.DepRefs = in.ExtraDepRefs
+	}
+
 	return emit.emit(node), outVFS
 }
 
@@ -172,6 +179,13 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	}
 
 	node.ForeignDepRefs = []NodeRef{yasmLD}
+
+	// A generated $(B) source (a RUN_PROGRAM/RUN_PYTHON auto OUT/STDOUT .asm
+	// re-fed as a module source) depends on its producer; declared-SRC .asm
+	// leaves ExtraDepRefs nil, so this is a no-op for them.
+	if len(in.ExtraDepRefs) > 0 {
+		node.DepRefs = in.ExtraDepRefs
+	}
 
 	return emit.emit(node), outVFS
 }

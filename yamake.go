@@ -193,6 +193,7 @@ type RunProgramStmt struct {
 	OUTFiles       []STR
 	OUTNoAutoFiles []STR
 	StdoutFile     *STR
+	StdoutNoAuto   bool
 	EnvPairs       []STR
 	CWD            *STR
 	OutputIncludes []STR
@@ -249,6 +250,7 @@ type RunPythonStmt struct {
 	OUTFiles       []STR
 	OUTNoAutoFiles []STR
 	StdoutFile     *STR
+	StdoutNoAuto   bool
 	EnvPairs       []STR
 	CWD            *STR
 	OutputIncludes []STR
@@ -1453,6 +1455,11 @@ func parseRunProgram(args []STR, line int) *RunProgramStmt {
 		case kwSTDOUT, kwSTDOUT_NOAUTO:
 			if stmt.StdoutFile == nil {
 				stmt.StdoutFile = &tok
+				// Upstream marks STDOUT_NOAUTO with the `noauto` modifier
+				// (${stdout;noauto;output:STDOUT_NOAUTO}): a declared output that
+				// is NOT a module source. Auto STDOUT is, so record which spelling
+				// produced this stdout redirect.
+				stmt.StdoutNoAuto = currentSection == kwSTDOUT_NOAUTO
 			}
 		case kwENV:
 			stmt.EnvPairs = append(stmt.EnvPairs, tok)
@@ -1499,6 +1506,11 @@ func parseRunPython(args []STR, line int) *RunPythonStmt {
 		case kwSTDOUT, kwSTDOUT_NOAUTO:
 			if stmt.StdoutFile == nil {
 				stmt.StdoutFile = &tok
+				// Upstream marks STDOUT_NOAUTO with the `noauto` modifier
+				// (${stdout;noauto;output:STDOUT_NOAUTO}): a declared output that
+				// is NOT a module source. Auto STDOUT is, so record which spelling
+				// produced this stdout redirect.
+				stmt.StdoutNoAuto = currentSection == kwSTDOUT_NOAUTO
 			}
 		case kwENV:
 			stmt.EnvPairs = append(stmt.EnvPairs, tok)

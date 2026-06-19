@@ -38,18 +38,23 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 		outs := make([]string, 0, len(rp.OUTFiles)+len(rp.OUTNoAutoFiles)+1)
 		outs = append(outs, strStrings(rp.OUTFiles)...)
 
-		if rp.StdoutFile != nil {
+		// Only auto STDOUT is a module source; STDOUT_NOAUTO carries upstream's
+		// `noauto` modifier and is excluded, exactly like OUT_NOAUTO.
+		if rp.StdoutFile != nil && !rp.StdoutNoAuto {
 			outs = append(outs, rp.StdoutFile.string())
 		}
 
 		for _, out := range outs {
-			if !isCCSourceExt(out) {
-				continue
+			switch {
+			case isCCSourceExt(out):
+				ccRef, ccOut := emitPRDownstreamCC(ctx, instance, out, prRef, in)
+				res.CCRefs = append(res.CCRefs, ccRef)
+				res.CCOutputs = append(res.CCOutputs, ccOut)
+			case isAsmSourceExt(out):
+				asRef, asOut := emitCodegenDownstreamAS(ctx, instance, out, []NodeRef{prRef}, in)
+				res.CCRefs = append(res.CCRefs, asRef)
+				res.CCOutputs = append(res.CCOutputs, asOut)
 			}
-
-			ccRef, ccOut := emitPRDownstreamCC(ctx, instance, out, prRef, in)
-			res.CCRefs = append(res.CCRefs, ccRef)
-			res.CCOutputs = append(res.CCOutputs, ccOut)
 		}
 	}
 
@@ -184,6 +189,12 @@ func isCCSourceExt(p string) bool {
 		strings.HasSuffix(p, ".cc") ||
 		strings.HasSuffix(p, ".cxx") ||
 		strings.HasSuffix(p, ".c")
+}
+
+func isAsmSourceExt(p string) bool {
+	return strings.HasSuffix(p, ".asm") ||
+		strings.HasSuffix(p, ".s") ||
+		strings.HasSuffix(p, ".S")
 }
 
 func generatedOutputCarriesIncludes(p string) bool {
