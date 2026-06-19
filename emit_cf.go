@@ -17,8 +17,6 @@ var (
 // include closure, emit the configure node, and register the output; they differ
 // only in how src/dst are named and what happens to the output afterwards.
 
-const buildTypeDebug = "BUILD_TYPE=DEBUG"
-
 // emitExplicitCF handles a CONFIGURE_FILE(src dst) macro.
 func emitExplicitCF(ctx *GenCtx, instance ModuleInstance, cf *ConfigureFileStmt, d *ModuleData) {
 	in := ModuleCCInputs{
@@ -73,7 +71,7 @@ func emitConfigureFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	cmdArgs := []STR{in.TC.Python3, configureFilePyVFS.str(), srcVFS.str(), outVFS.str()}
-	cmdArgs = appendInternStrs(cmdArgs, buildCFGVars(ctx.fs, srcVFS.rel(), in.SetVars, in.DefaultVars))
+	cmdArgs = appendInternStrs(cmdArgs, buildCFGVars(ctx.fs, srcVFS.rel(), in.SetVars, in.DefaultVars, instance.Platform.BuildTypeUpperSTR.string()))
 
 	tp := TargetProperties{ModuleDir: instance.Path.rel()}
 
@@ -110,9 +108,11 @@ func emitConfigureFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 }
 
 // buildCFGVars scans the template for @VAR@ / #cmakedefine references and emits a
-// sorted NAME=value arg for each one resolved through SET/DEFAULT vars (BUILD_TYPE
-// falls back to DEBUG). Unreferenced or unresolved names are dropped.
-func buildCFGVars(fs FS, rel string, setVars, defaultVars map[STR]STR) []string {
+// sorted NAME=value arg for each one resolved through SET/DEFAULT vars. BUILD_TYPE
+// falls back to the instance platform's build type (buildTypeUpper) — DEBUG for a
+// debug target, RELEASE for the host/tool platform — matching ymake's per-platform
+// GG_BUILD_TYPE substitution. Unreferenced or unresolved names are dropped.
+func buildCFGVars(fs FS, rel string, setVars, defaultVars map[STR]STR, buildTypeUpper string) []string {
 	referenced := map[string]bool{}
 	data := fs.read(rel)
 
@@ -133,7 +133,7 @@ func buildCFGVars(fs FS, rel string, setVars, defaultVars map[STR]STR) []string 
 		case mapHas(defaultVars, k):
 			vars = append(vars, name+"="+cfgVarValue(defaultVars[k].string()))
 		case name == "BUILD_TYPE":
-			vars = append(vars, buildTypeDebug)
+			vars = append(vars, "BUILD_TYPE="+buildTypeUpper)
 		}
 	}
 
