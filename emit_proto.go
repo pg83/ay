@@ -780,18 +780,33 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
 	// A LIBRARY-hosted .proto compiles identically to one in a PROTO_LIBRARY:
 	// PROTO_NAMESPACE roots the protoc output/import roots (cppOutRoot), and a peer
-	// that re-declares the namespace duplicates its _PROTO__INCLUDE copy.
+	// that re-declares the namespace duplicates its _PROTO__INCLUDE copy. GRPC()
+	// additionally enables the grpc_cpp protoc plugin (build/conf/proto.conf): the
+	// producer gains .grpc.pb.{cc,h} outputs + the plugin tool input, and the
+	// generated .grpc.pb.cc compiles into the module archive — exactly as a
+	// PROTO_LIBRARY() does in emitCPPProtoSrcs.
 	cfg := ProtoPBConfig{
 		cppOutRoot:                 protoCPPOutRoot(d),
 		duplicateOutputRootInclude: in.ProtoOwnNamespaceInPeers,
+		grpc:                       d.grpc,
 	}
 	pe := newPBModuleEmission(ctx, d, cfg, in.ProtoInclude)
 	pb := emitProtoPB(ctx, instance, d, srcRel, cfg, pe, in.ProtoInclude, nil)
-	ccIn := in
-	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), pb.pbCC, in.ScanCfg)
-	ccIn.ExtraDepRefs = append([]NodeRef{pb.pbRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pb.pbRef)...)
-	ccSrcRel := strings.TrimPrefix(pb.pbCC.rel(), instance.Path.rel()+"/")
-	ccRef, ccOut, _ := emitCC(instance, ccSrcRel, pb.pbCC, ccIn, ctx.host, ctx.emit)
 
-	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
+	emitGenCC := func(pbCC VFS) SourceEmit {
+		ccIn := in
+		ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), pbCC, in.ScanCfg)
+		ccIn.ExtraDepRefs = append([]NodeRef{pb.pbRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pb.pbRef)...)
+		ccSrcRel := strings.TrimPrefix(pbCC.rel(), instance.Path.rel()+"/")
+		ccRef, ccOut, _ := emitCC(instance, ccSrcRel, pbCC, ccIn, ctx.host, ctx.emit)
+		return SourceEmit{Ref: ccRef, OutPath: ccOut}
+	}
+
+	se := emitGenCC(pb.pbCC)
+
+	if d.grpc {
+		se.Extra = append(se.Extra, emitGenCC(pb.grpcPbCC))
+	}
+
+	return &se
 }

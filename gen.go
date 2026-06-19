@@ -2092,12 +2092,18 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			return
 		}
 
-		ccRefs = append(ccRefs, emit.Ref)
-		ccOutputs = append(ccOutputs, emit.OutPath)
-
 		m := d.srcMetaOf(srcID)
 		m.Generated = generated
+
+		ccRefs = append(ccRefs, emit.Ref)
+		ccOutputs = append(ccOutputs, emit.OutPath)
 		arDeclMeta[emit.OutPath] = m
+
+		for _, ex := range emit.Extra {
+			ccRefs = append(ccRefs, ex.Ref)
+			ccOutputs = append(ccOutputs, ex.OutPath)
+			arDeclMeta[ex.OutPath] = m
+		}
 	}
 
 	for _, src := range d.srcs {
@@ -2140,6 +2146,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ccRefs = append(ccRefs, emit.Ref)
 		ccOutputs = append(ccOutputs, emit.OutPath)
 		arDeclMeta[emit.OutPath] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
+
+		for _, ex := range emit.Extra {
+			ccRefs = append(ccRefs, ex.Ref)
+			ccOutputs = append(ccOutputs, ex.OutPath)
+			arDeclMeta[ex.OutPath] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
+		}
 	}
 
 	for _, emit := range emitCheckConfigH(ctx, instance, d, moduleInputs) {
