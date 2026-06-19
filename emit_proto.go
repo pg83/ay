@@ -231,7 +231,7 @@ func newPBModuleEmission(ctx *GenCtx, d *ModuleData, cfg ProtoPBConfig, peerProt
 	return pe
 }
 
-func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, cfg ProtoPBConfig, pe *PbModuleEmission, peerProtoAddIncl []VFS) ProtoPBEmission {
+func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, cfg ProtoPBConfig, pe *PbModuleEmission, peerProtoAddIncl []VFS, sprotoProduced map[string]struct{}) ProtoPBEmission {
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcRel)
 	// Search transitive .proto imports through the same -I prefixes protoc
 	// receives: the own PROTO_NAMESPACE (cppOutRoot) plus every peer-contributed
@@ -314,6 +314,16 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 	{
 		directImports := protoDirectPbHIncludes(ctx.parsers, protoRelPath, cfg.cppOutRoot)
 		pbHImports := directImports
+
+		// YMAPS_SPROTO's SET(PROTO_HEADER_EXTS .pb.h .sproto.h): in a maps sproto
+		// module, the generated .pb.h additionally #includes the .sproto.h sibling
+		// of every imported proto whose .sproto.h this module produces, so a
+		// consumer of pb.h (e.g. response.pb.cc.o) reaches the generated .sproto.h
+		// and — through its sprotoc GeneratorRef — the sproto runtime headers.
+		if siblings := sprotoSiblingDirectives(directImports, sprotoProduced); len(siblings) > 0 {
+			pbHImports = append(append([]IncludeDirective(nil), directImports...), siblings...)
+		}
+
 		extras := pbHEmitsIncludesExtras()
 		pbHParsed := make([]IncludeDirective, 0, len(pbHImports)+len(extras)+len(transitiveImports))
 		pbHParsed = append(pbHParsed, pbHImports...)
@@ -469,10 +479,16 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 
 	cppInstance := instance
 
+	// The set of protos whose .sproto.h this module produces (YMAPS_SPROTO). Known
+	// before the PB loop so pb.h registration can add the .sproto.h sibling header;
+	// the producer nodes themselves are emitted after the loop (their input closure
+	// reaches imported .pb.h, which must be registered first).
+	sprotoProduced := ymapsSprotoProducedBases(ctx, instance, d)
+
 	pe := newPBModuleEmission(ctx, d, cfg, peerContribs.protoAddIncl, peerContribs.protoNamespaceTail)
 
 	for _, src := range protoSrcs {
-		pb := emitProtoPB(ctx, instance, d, src, cfg, pe, peerContribs.protoAddIncl)
+		pb := emitProtoPB(ctx, instance, d, src, cfg, pe, peerContribs.protoAddIncl, sprotoProduced)
 
 		ccSrcRel := strings.TrimPrefix(pb.pbCC.rel(), cppInstance.Path.rel()+"/")
 		appendCodegenOutput(pb.pbRef, pb.pbCC, ccSrcRel)
@@ -487,6 +503,11 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 			appendCodegenOutput(pb.pbRef, extraSrc, extraSrcRel)
 		}
 	}
+
+	// Emit the YMAPS_SPROTO .sproto.h producers now that every .pb.h is registered
+	// (a .sproto.h includes its imports' .pb.h) and before the generated-C++
+	// compile closure is walked (so those units resolve the .sproto.h).
+	emitYmapsSprotoHeaders(ctx, instance, d, peerContribs, sprotoProduced)
 
 	if len(evSrcs) > 0 {
 		protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
@@ -668,7 +689,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 
 func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
 	pe := newPBModuleEmission(ctx, d, ProtoPBConfig{}, in.PeerProtoAddInclGlobal, in.ProtoNamespaceTail)
-	pb := emitProtoPB(ctx, instance, d, srcRel, ProtoPBConfig{}, pe, in.PeerProtoAddInclGlobal)
+	pb := emitProtoPB(ctx, instance, d, srcRel, ProtoPBConfig{}, pe, in.PeerProtoAddInclGlobal, nil)
 	ccIn := in
 	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), pb.pbCC, in.ScanCfg)
 	ccIn.ExtraDepRefs = append([]NodeRef{pb.pbRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pb.pbRef)...)
