@@ -110,6 +110,100 @@ END()
 	}
 }
 
+// TestGen_BisonYppFlatOutputAndSiblingInclude verifies that a .ypp source —
+// the C++ bison family, same as .y — produces flat module-build-dir outputs
+// ($(B)/<mod>/parser.h, $(B)/<mod>/parser.ypp.cpp, flat object) and that a
+// sibling source including the generated <parser.h> picks up the build-root
+// addincl and the .ypp source in its include closure.
+func TestGen_BisonYppFlatOutputAndSiblingInclude(t *testing.T) {
+	files := map[string]string{}
+
+	writeBisonTool(files)
+	writeToolProgram(files, "contrib/tools/m4", "m4")
+	writeTestModuleFile(files, "contrib/tools/ragel6/ya.make", "PROGRAM(ragel6)\nSRCS(main.cpp)\nEND()\n")
+	writeTestModuleFile(files, bisonPreprocessPyVFS.rel(), "print('stub')\n")
+	for _, input := range bisonCppSkeletonInputs {
+		writeTestModuleFile(files, input.rel(), "")
+	}
+
+	// The sibling lexer.rl6 is listed BEFORE parser.ypp in SRCS and reaches the
+	// generated header through an intermediate hand-written header by full
+	// $(B)-rooted angle include — the yt query base layout (lexer.rl6 → lexer.h
+	// → <a/b/qbase/parser.h>). The .rl6 closure is walked in Pass 1; without
+	// registering the bison producer before that walk, lexer.h's stale (no
+	// parser.h) children are cached in the file-id-keyed scanCache and reused by
+	// every later consumer of lexer.h.
+	writeTestModuleFile(files, "a/b/qbase/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(lexer.rl6 parser.ypp)
+END()
+`)
+	writeTestModuleFile(files, "a/b/qbase/parser.ypp", "%%\n")
+	writeTestModuleFile(files, "a/b/qbase/lexer.h", "#include <a/b/qbase/parser.h>\n")
+	writeTestModuleFile(files, "a/b/qbase/lexer.rl6", "#include \"lexer.h\"\n")
+
+	g := testGen(newMemFS(files), "a/b/qbase")
+
+	// Flat header + generated source in the module build dir (no _/).
+	yc := mustNodeByOutput(t, g, "$(B)/a/b/qbase/parser.h")
+	mustNodeByAnyOutput(t, g, "$(B)/a/b/qbase/parser.ypp.cpp")
+	for _, out := range yc.Outputs {
+		if strings.Contains(out.string(), "/_/") {
+			t.Fatalf("bison YC output unexpectedly under _/ namespace: %q", out)
+		}
+	}
+
+	// Flat compiled object (no _/), proving the .ypp generated source rebased
+	// to the module build dir, not $(B)/a/b/qbase/_/_/parser.ypp.cpp.o.
+	mustNodeByOutput(t, g, "$(B)/a/b/qbase/parser.ypp.cpp.o")
+
+	// Sibling lexer.rl6's compiled object gets the generated build-root addincl,
+	// the generated parser.h itself, and the .ypp source — all pulled into its
+	// include closure through the bison header producer registered in the
+	// pre-pass (before the .rl6 closure is walked).
+	lexerObj := mustNodeByOutput(t, g, "$(B)/a/b/qbase/lexer.rl6.cpp.o")
+	if indexOfArg(lexerObj.Cmds[0].CmdArgs.flat(), "-I$(B)/a/b/qbase") < 0 {
+		t.Fatalf("sibling CC missing generated bison addincl -I$(B)/a/b/qbase: %#v", lexerObj.Cmds[0].CmdArgs.flat())
+	}
+	for _, want := range []string{"$(B)/a/b/qbase/parser.h", "$(S)/a/b/qbase/parser.ypp"} {
+		if !nodeHasInput(lexerObj, want) {
+			t.Fatalf("sibling CC missing %q in closure: %#v", want, lexerObj.flatInputs())
+		}
+	}
+}
+
+// TestGen_BisonYFlatOutputPath verifies that a flat (in-module) .y source
+// produces its generated .cpp and compiled object directly in the module build
+// dir — upstream's nopath output placement — not under an _/ namespace.
+func TestGen_BisonYFlatOutputPath(t *testing.T) {
+	files := map[string]string{}
+
+	writeBisonTool(files)
+	writeToolProgram(files, "contrib/tools/m4", "m4")
+	writeTestModuleFile(files, bisonPreprocessPyVFS.rel(), "print('stub')\n")
+	for _, input := range bisonCppSkeletonInputs {
+		writeTestModuleFile(files, input.rel(), "")
+	}
+
+	writeTestModuleFile(files, "req/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(req_pars.y)
+END()
+`)
+	writeTestModuleFile(files, "req/req_pars.y", "%%\n")
+
+	g := testGen(newMemFS(files), "req")
+
+	mustNodeByOutput(t, g, "$(B)/req/req_pars.h")
+	mustNodeByAnyOutput(t, g, "$(B)/req/req_pars.y.cpp")
+	// The compiled object must be flat too.
+	mustNodeByOutput(t, g, "$(B)/req/req_pars.y.cpp.o")
+}
+
 // TestGen_BisonCppFlags verifies that the CC node compiling a bison-generated
 // C++ file carries the -Wno-unused-but-set-variable and -Wno-deprecated-copy
 // flags (upstream _LANG_CFLAGS_BISON).

@@ -214,6 +214,7 @@ func isSourceEligibleForCopyAuto(srcRel string) bool {
 		strings.HasSuffix(srcRel, ".ev") ||
 		strings.HasSuffix(srcRel, ".g4") ||
 		strings.HasSuffix(srcRel, ".y") ||
+		strings.HasSuffix(srcRel, ".ypp") ||
 		strings.HasSuffix(srcRel, ".rl") ||
 		strings.HasSuffix(srcRel, ".rl6") ||
 		strings.HasSuffix(srcRel, ".h.in") ||

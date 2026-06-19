@@ -2016,6 +2016,18 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
+	// A bison-generated header (.y/.ypp → <base>.h) is included by SIBLING
+	// sources (e.g. a .rl6 lexer, a hand-written .cpp) that may precede the
+	// grammar in SRCS. Register every bison producer before any sibling closure
+	// is walked, so the sibling resolves <…/parser.h> to the $(B) output instead
+	// of caching an empty closure (scanCache is file-id-keyed, shared across the
+	// module) — same two-phase reason as the .fbs pre-pass above.
+	for _, src := range d.srcs {
+		if srcExtClassOf(src) == srcExtY {
+			emitBisonProducer(ctx, instance, src.string(), moduleInputs, moduleInputs.BisonGenExt)
+		}
+	}
+
 	for _, src := range d.srcs {
 		if !isCodegenProducingSrcID(src) {
 			continue
@@ -3307,6 +3319,7 @@ func isCodegenProducingSrc(srcRel string) bool {
 		strings.HasSuffix(srcRel, ".rl6") ||
 		strings.HasSuffix(srcRel, ".rl") ||
 		strings.HasSuffix(srcRel, ".y") ||
+		strings.HasSuffix(srcRel, ".ypp") ||
 		strings.HasSuffix(srcRel, ".cpp.in") ||
 		strings.HasSuffix(srcRel, ".c.in") ||
 		strings.HasSuffix(srcRel, ".sc")
