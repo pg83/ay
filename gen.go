@@ -148,7 +148,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"STRUCT_CODEGEN":            {},
 	"CPP_ENUMS_SERIALIZATION":   {},
 	"ALL_RESOURCE_FILES":        {},
-	"YMAPS_SPROTO":              {},
 	// PROTO_DESCRIPTIONS is now a modeled module opener (emit_proto_desc.go);
 	// it no longer rides this no-op set.
 	"STYLE_DETEKT":       {},
