@@ -148,8 +148,8 @@ var acknowledgedMacros = map[string]struct{}{
 	"ALL_RESOURCE_FILES":        {},
 	// PROTO_DESCRIPTIONS is now a modeled module opener (emit_proto_desc.go);
 	// it no longer rides this no-op set.
-	"STYLE_DETEKT":       {},
-	"DEFAULT_JDK_VERSION":       {},
+	"STYLE_DETEKT":        {},
+	"DEFAULT_JDK_VERSION": {},
 }
 
 // acknowledgedTokSet is acknowledgedMacros in TOK space, so the per-invocation
@@ -1062,16 +1062,16 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		result := &ModuleEmitResult{
-			isPyLibrary:        isPyLibraryType(d.moduleStmt.Name),
-			ARRef:              hOnlyARRef,
-			ARPath:             hOnlyARPath,
-			GlobalRef:          hOnlyGlobalRef,
-			GlobalPath:         hOnlyGlobalPath,
-			AddInclGlobal:      dedupVFS(d.addInclGlobal, peerContribs.addIncl),
-			OwnAddInclGlobal:   d.addInclGlobal,
-			ProtoInclude:       effectiveProtoIncludeH,
-			AddInclOneLevel:    d.addInclOneLevel,
-			AddInclUserGlobal:  d.addInclUserGlobal,
+			isPyLibrary:       isPyLibraryType(d.moduleStmt.Name),
+			ARRef:             hOnlyARRef,
+			ARPath:            hOnlyARPath,
+			GlobalRef:         hOnlyGlobalRef,
+			GlobalPath:        hOnlyGlobalPath,
+			AddInclGlobal:     dedupVFS(d.addInclGlobal, peerContribs.addIncl),
+			OwnAddInclGlobal:  d.addInclGlobal,
+			ProtoInclude:      effectiveProtoIncludeH,
+			AddInclOneLevel:   d.addInclOneLevel,
+			AddInclUserGlobal: d.addInclUserGlobal,
 
 			CFlagsGlobal:                    dedupARG(peerContribs.cFlags, d.cFlagsGlobal),
 			CXXFlagsGlobal:                  dedupARG(peerContribs.cxxFlags, d.cxxFlagsGlobal),
@@ -1791,6 +1791,16 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	effectiveProtoInclude := dedupVFS(ownProtoInclude, peerProtoInclude)
 
+	// A peer that declares this module's own PROTO_NAMESPACE re-contributes the same
+	// `FOR proto $(S)/<ns>` source addincl, so the namespace lands in _PROTO__INCLUDE
+	// twice (own + peer). dedupVFS collapses it above; record the fact so the
+	// LIBRARY-hosted proc command re-expands the second copy (duplicateOutputRootInclude).
+	protoOwnNamespaceInPeers := false
+
+	if d.protoNamespace != nil {
+		protoOwnNamespaceInPeers = containsVFS(peerProtoInclude, source(filepath.ToSlash(filepath.Clean(d.protoNamespace.string()))))
+	}
+
 	if instance.Path == libraryPythonRuntimePy3 {
 		buildRootPath := bldLibraryPythonRuntimePy3
 		abseilPath := contribRestrictedAbseilCpp
@@ -1902,29 +1912,30 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	moduleInputs := ModuleCCInputs{
-		InclArgs:               ctx.inclArgs,
-		Flags:                  d.flags,
-		AddIncl:                dedupedAddIncl,
-		PeerAddInclGlobal:      selfPeerAddInclGlobal,
-		ProtoInclude:           effectiveProtoInclude,
-		CFlags:                 ownCFlags,
-		CXXFlags:               d.cxxFlags,
-		COnlyFlags:             d.cOnlyFlags,
-		ClangWarnings:          d.clangWarnings,
-		OwnCFlagsGlobal:        ownCFlagsGlobalSelf,
-		OwnCXXFlagsGlobal:      ownCXXFlagsGlobalSelf,
-		OwnCOnlyFlagsGlobal:    ownCOnlyFlagsGlobalSelf,
-		PeerCFlagsGlobal:       peerCFlagsGlobal,
-		PeerCXXFlagsGlobal:     peerCXXFlagsGlobal,
-		PeerCOnlyFlagsGlobal:   peerCOnlyFlagsGlobal,
-		ModuleScopeCFlags:      d.moduleScopeCFlags,
-		SFlags:                 d.sFlags,
-		SrcDirs:                effectiveSrcDirs,
-		FS:                     ctx.fs,
-		DefaultVars:            d.defaultVars,
-		DefaultVarOrder:        d.defaultVarOrder,
-		SetVars:                d.setVars,
-		Py3Suffix:              isPy3NativeLib,
+		InclArgs:                 ctx.inclArgs,
+		Flags:                    d.flags,
+		AddIncl:                  dedupedAddIncl,
+		PeerAddInclGlobal:        selfPeerAddInclGlobal,
+		ProtoInclude:             effectiveProtoInclude,
+		ProtoOwnNamespaceInPeers: protoOwnNamespaceInPeers,
+		CFlags:                   ownCFlags,
+		CXXFlags:                 d.cxxFlags,
+		COnlyFlags:               d.cOnlyFlags,
+		ClangWarnings:            d.clangWarnings,
+		OwnCFlagsGlobal:          ownCFlagsGlobalSelf,
+		OwnCXXFlagsGlobal:        ownCXXFlagsGlobalSelf,
+		OwnCOnlyFlagsGlobal:      ownCOnlyFlagsGlobalSelf,
+		PeerCFlagsGlobal:         peerCFlagsGlobal,
+		PeerCXXFlagsGlobal:       peerCXXFlagsGlobal,
+		PeerCOnlyFlagsGlobal:     peerCOnlyFlagsGlobal,
+		ModuleScopeCFlags:        d.moduleScopeCFlags,
+		SFlags:                   d.sFlags,
+		SrcDirs:                  effectiveSrcDirs,
+		FS:                       ctx.fs,
+		DefaultVars:              d.defaultVars,
+		DefaultVarOrder:          d.defaultVarOrder,
+		SetVars:                  d.setVars,
+		Py3Suffix:                isPy3NativeLib,
 		ObjectSuffixStem: func() *string {
 			if isYqlUdfStaticModule(d.moduleStmt.Name) {
 				return stringPtr("udfs")
@@ -2974,11 +2985,11 @@ type PeerGlobalContribs struct {
 	addIncl      []VFS
 	protoInclude []VFS
 	cFlags       []ARG
-	cxxFlags           []ARG
-	cOnlyFlags         []ARG
-	objAddLibs         []ARG
-	ldFlags            []ARG
-	rpathFlags         []ARG
+	cxxFlags     []ARG
+	cOnlyFlags   []ARG
+	objAddLibs   []ARG
+	ldFlags      []ARG
+	rpathFlags   []ARG
 
 	archiveRefs  []NodeRef
 	archivePaths []VFS
