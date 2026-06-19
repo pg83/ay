@@ -19,7 +19,12 @@ func protoPythonResourceKey(instance ModuleInstance, d *ModuleData, src, suffix 
 
 	nsPath := strings.ReplaceAll(d.pyNamespace.string(), ".", "/")
 
-	return filepath.ToSlash(filepath.Clean(nsPath + "/" + filepath.Base(base) + suffix))
+	// Upstream preserves the module-local proto subdirectory under the Python
+	// namespace (gen_py_protos.py keeps the input's relative path), so a nested
+	// SRC chunk_client/proto/data_statistics.proto under PY_NAMESPACE(yt_proto.yt.client)
+	// becomes yt_proto/yt/client/chunk_client/proto/data_statistics_pb2.py — do
+	// not collapse to filepath.Base.
+	return filepath.ToSlash(filepath.Clean(nsPath + "/" + base + suffix))
 }
 
 func moduleExcludesTag(d *ModuleData, tag string) bool {
@@ -44,7 +49,22 @@ func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCo
 	}
 
 	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
-	pe := newPyPBModuleEmission(ctx, d, instance, protocBinary, peerContribs.protoNamespaceTail)
+
+	// A peer that re-contributes the module's own PROTO_NAMESPACE build root
+	// ($(B)/<ns>) makes upstream render the source-root include -I=$(S)/<ns> a
+	// second time inside _PROTO__INCLUDE — exactly the C++ duplicateOutputRootInclude
+	// rule (emit_proto.go). On the py side the CPP_PROTO self-sibling (peered by
+	// walkPeersForGlobalAddIncl for optimized PROTO_LIBRARYs) carries that GLOBAL
+	// $(B)/<ns> addincl, so a PROTO_NAMESPACE py module duplicates even with no real
+	// proto peer; NO_OPTIMIZE_PY_PROTOS modules (no sibling, e.g. protos_from_protoc)
+	// do not.
+	duplicateOutputRootInclude := false
+
+	if protoRoot := protoPythonOutputRoot(d); protoRoot != "" {
+		duplicateOutputRootInclude = containsVFS(peerContribs.addIncl, build(protoRoot))
+	}
+
+	pe := newPyPBModuleEmission(ctx, d, instance, protocBinary, peerContribs.protoNamespaceTail, duplicateOutputRootInclude)
 
 	var cppSibling *ModuleEmitResult
 
@@ -116,7 +136,7 @@ type PyPBModuleEmission struct {
 	tail []STR
 }
 
-func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, protocBinary VFS, protoNamespaceTail []VFS) *PyPBModuleEmission {
+func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, protocBinary VFS, protoNamespaceTail []VFS, duplicateOutputRootInclude bool) *PyPBModuleEmission {
 	pe := &PyPBModuleEmission{}
 
 	if d.grpc {
@@ -170,10 +190,9 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 	if protoRoot != "" && protoRoot != "contrib/libs/protobuf/src" {
 		mid = append(mid, internStr("-I=$(S)/"+protoRoot))
 
-		// A GLOBAL PROTO_NAMESPACE on a grpc module re-contributes its output root
-		// as an addincl, so protoc receives the -I twice (mirrors EmitPB's
-		// duplicateOutputRootInclude for the cpp side).
-		if d.grpc && d.protoNamespaceGlobal {
+		// A peer re-contributing $(B)/<protoRoot> renders the source-root include a
+		// second time (mirrors EmitPB's duplicateOutputRootInclude for the cpp side).
+		if duplicateOutputRootInclude {
 			mid = append(mid, internStr("-I=$(S)/"+protoRoot))
 		}
 	}

@@ -602,3 +602,204 @@ END()
 		t.Fatalf("expected yt before protoc-src: yt=%d protoc-src=%d args=%v", ytIdx, protocSrcIdx, strStrs(args))
 	}
 }
+
+// TestProtoPythonResourceKey_PYNamespacePreservesNestedSubdir pins the T-39B
+// resource-key shape: with PY_NAMESPACE(yt_proto.yt.client) the aux resource key
+// for a nested SRC must keep the module-local proto subdirectory under the
+// namespace (yt_proto/yt/client/chunk_client/proto/data_statistics_pb2.py), not
+// collapse it to filepath.Base (yt_proto/yt/client/data_statistics_pb2.py).
+// Root-level SRCs (no subdir) are unaffected.
+func TestProtoPythonResourceKey_PYNamespacePreservesNestedSubdir(t *testing.T) {
+	instance := ModuleInstance{Path: source("yt/yt_proto/yt/client")}
+	d := &ModuleData{pyNamespace: strPtr(internStr("yt_proto.yt.client"))}
+
+	got := protoPythonResourceKey(instance, d, "chunk_client/proto/data_statistics.proto", "_pb2.py")
+	const want = "yt_proto/yt/client/chunk_client/proto/data_statistics_pb2.py"
+	if got != want {
+		t.Errorf("nested PY_NAMESPACE key = %q, want %q", got, want)
+	}
+
+	const collapsed = "yt_proto/yt/client/data_statistics_pb2.py"
+	if got == collapsed {
+		t.Errorf("key collapsed nested subdir to %q", collapsed)
+	}
+
+	// Root-level source: no subdirectory to preserve, unchanged.
+	gotRoot := protoPythonResourceKey(instance, d, "access_control_service.proto", "_pb2.py")
+	const wantRoot = "yt_proto/yt/client/access_control_service_pb2.py"
+	if gotRoot != wantRoot {
+		t.Errorf("root-level PY_NAMESPACE key = %q, want %q", gotRoot, wantRoot)
+	}
+}
+
+// pyProtoNamespaceIncludeCounts returns, for the py PB/grpc producer whose first
+// output ends with wantSuffix, the total count of -I=$(S)/yt tokens and the
+// flat command args. yt modules render -I=$(S)/yt three times: the
+// -I=$ARCADIA_ROOT/$PROTO_NAMESPACE output-root arg plus two copies inside
+// _PROTO__INCLUDE (the own namespace + the CPP_PROTO self-sibling re-contribution).
+func pyProtoCmdArgsForOutput(t *testing.T, g *Graph, wantSuffix string) []STR {
+	t.Helper()
+	for _, n := range g.Graph {
+		if n.KV.P == pkPB && n.TargetProperties.ModuleTag == tagPy3Proto &&
+			len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), wantSuffix) {
+			return n.Cmds[0].CmdArgs.flat()
+		}
+	}
+	t.Fatalf("no python PB node for %q", wantSuffix)
+	return nil
+}
+
+func assertYtNamespaceDuplicated(t *testing.T, args []STR) {
+	t.Helper()
+	ytCount := 0
+	for _, a := range args {
+		if a.string() == "-I=$(S)/yt" {
+			ytCount++
+		}
+	}
+	if ytCount != 3 {
+		t.Fatalf("expected 3 -I=$(S)/yt (output-root + duplicated _PROTO__INCLUDE), got %d: %v", ytCount, strStrs(args))
+	}
+
+	// Order: the two _PROTO__INCLUDE copies sit immediately after the bare
+	// -I=$(S) and immediately before the protobuf-src include.
+	bare := indexOfArg(args, "-I=$(S)")
+	if bare < 0 || bare+3 >= len(args) {
+		t.Fatalf("missing bare -I=$(S) anchor: %v", strStrs(args))
+	}
+	if args[bare+1].string() != "-I=$(S)/yt" || args[bare+2].string() != "-I=$(S)/yt" {
+		t.Fatalf("expected two consecutive -I=$(S)/yt after -I=$(S): %v", strStrs(args))
+	}
+	if args[bare+3].string() != "-I=$(S)/contrib/libs/protobuf/src" {
+		t.Fatalf("expected protobuf-src after the duplicated namespace: %v", strStrs(args))
+	}
+}
+
+// TestGen_PyProtoLibrary_OwnPROTONamespaceDuplicatesNamespaceInclude reproduces
+// the T-39B command gap: a PROTO_LIBRARY that declares its own PROTO_NAMESPACE(yt)
+// (with PY_NAMESPACE) must render -I=$(S)/yt twice inside _PROTO__INCLUDE — the
+// own namespace plus the CPP_PROTO self-sibling's GLOBAL re-contribution — exactly
+// as the reference and the C++ duplicateOutputRootInclude path do. The aux
+// resource key for the nested SRC must keep its module-local subdirectory.
+func TestGen_PyProtoLibrary_OwnPROTONamespaceDuplicatesNamespaceInclude(t *testing.T) {
+	const consumer = "app/pytool"
+	const mod = "yt/yt_proto/yt/client"
+
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "py3cc_slow")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "contrib/python/mypy-protobuf/bin/protoc-gen-mypy", "protoc-gen-mypy")
+
+	writeTestModuleFile(files, mod+"/ya.make", `PROTO_LIBRARY()
+PROTO_NAMESPACE(yt)
+PY_NAMESPACE(yt_proto.yt.client)
+SRCS(chunk_client/proto/data_statistics.proto)
+EXCLUDE_TAGS(GO_PROTO)
+END()
+`)
+	writeTestModuleFile(files, mod+"/chunk_client/proto/data_statistics.proto", "syntax = \"proto3\";\npackage yt;\nmessage DataStatistics {}\n")
+
+	writeTestModuleFile(files, consumer+"/ya.make", `PY3_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+PEERDIR(`+mod+`)
+END()
+`)
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/python/protobuf/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/python/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n")
+
+	g := testGen(newMemFS(files), consumer)
+
+	args := pyProtoCmdArgsForOutput(t, g, "data_statistics__intpy3___pb2.py")
+	assertYtNamespaceDuplicated(t, args)
+
+	// End-to-end: the aux/rescompiler resource key preserves the nested subdir.
+	const wantKey = "resfs/file/py/yt_proto/yt/client/chunk_client/proto/data_statistics_pb2.py"
+	const collapsedKey = "resfs/file/py/yt_proto/yt/client/data_statistics_pb2.py"
+	foundKey, foundCollapsed := false, false
+	for _, n := range g.Graph {
+		if n.KV.P != pkPR {
+			continue
+		}
+		for _, a := range n.Cmds[0].CmdArgs.flat() {
+			s := a.string()
+			if strings.Contains(s, wantKey) {
+				foundKey = true
+			}
+			if strings.Contains(s, collapsedKey) {
+				foundCollapsed = true
+			}
+		}
+	}
+	if !foundKey {
+		t.Errorf("no aux resource key %q found", wantKey)
+	}
+	if foundCollapsed {
+		t.Errorf("aux resource key still collapsed to %q", collapsedKey)
+	}
+}
+
+// TestGen_PyProtoLibrary_GrpcRootSourceSharesDuplicateInclude covers the
+// yt/orm/api shape: a GRPC root-level source keeps its existing _pb2_grpc.py
+// output and its shared protoc producer carries the same duplicated -I=$(S)/yt.
+func TestGen_PyProtoLibrary_GrpcRootSourceSharesDuplicateInclude(t *testing.T) {
+	const consumer = "app/pytool"
+	const mod = "yt/yt_proto/yt/orm/api"
+
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/grpc_cpp", "grpc_cpp")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/grpc_python", "grpc_python")
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "py3cc_slow")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "contrib/python/mypy-protobuf/bin/protoc-gen-mypy", "protoc-gen-mypy")
+
+	writeTestModuleFile(files, mod+"/ya.make", `PROTO_LIBRARY()
+GRPC()
+PROTO_NAMESPACE(yt)
+PY_NAMESPACE(yt_proto.yt.orm.api)
+SRCS(access_control_service.proto)
+END()
+`)
+	writeTestModuleFile(files, mod+"/access_control_service.proto", "syntax = \"proto3\";\npackage yt;\nmessage Access {}\n")
+
+	writeTestModuleFile(files, consumer+"/ya.make", `PY3_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+PEERDIR(`+mod+`)
+END()
+`)
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/python/protobuf/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nEND()\n")
+	writeTestModuleFile(files, "contrib/python/grpcio/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/grpc/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/python/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n")
+
+	g := testGen(newMemFS(files), consumer)
+
+	// The grpc python output still exists and shares the PB producer command.
+	args := pyProtoCmdArgsForOutput(t, g, "access_control_service__intpy3___pb2.py")
+	assertYtNamespaceDuplicated(t, args)
+
+	hasGrpcOut := false
+	for _, n := range g.Graph {
+		for _, o := range n.Outputs {
+			if strings.HasSuffix(o.string(), "access_control_service__intpy3___pb2_grpc.py") {
+				hasGrpcOut = true
+			}
+		}
+	}
+	if !hasGrpcOut {
+		t.Fatal("grpc python output access_control_service__intpy3___pb2_grpc.py missing")
+	}
+}
