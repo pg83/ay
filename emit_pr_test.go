@@ -609,3 +609,136 @@ END()
 		t.Fatalf("libbuiltin.a missing member $(B)/builtin/gen.o: %#v", lib.flatInputs())
 	}
 }
+
+// A multi-output RUN_PROGRAM (the transitive_proto "with_transitive_headers"
+// wrapper shape): one command emits several generated .pb.h headers as OUT.
+// Upstream models the outputs with EDT_OutTogether edges and designates the
+// FIRST OUT as the command's "main output" (FindMainElemOrDefault default index
+// 0). Depending on ANY non-main output pulls the main output along
+// (json_visitor PrepareLeaving's "AlsoBuilt" edge), so a consumer that #includes
+// only ONE sibling wrapper still sees the main output as an input. A sibling
+// that nobody includes (and is not the main output) must NOT ride.
+//
+// This is the caesar with_transitive_headers/advm_banner.pb.h class: advm_banner
+// is the first OUT (main) and rides onto every consumer of any wrapper, while no
+// source #includes it directly.
+func TestGen_RunProgramMainOutputRidesWithSiblingOutput(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "tools/genhdr", "genhdr")
+
+	// wrap: a LIBRARY whose RUN_PROGRAM emits three .pb.h headers. first.pb.h is
+	// the first OUT => the command's main output.
+	writeTestModuleFile(files, "wrap/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    tools/genhdr generate
+    OUT
+        first.pb.h
+        second.pb.h
+        third.pb.h
+)
+END()
+`)
+
+	// cons: includes ONLY the non-main sibling second.pb.h.
+	writeTestModuleFile(files, "cons/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(wrap)
+SRCS(use.cpp)
+END()
+`)
+	writeTestModuleFile(files, "cons/use.cpp", `#include <wrap/second.pb.h>
+int use() { return 0; }
+`)
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(cons)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+
+	use := mustNodeByOutput(t, g, "$(B)/cons/use.cpp.o")
+
+	// The gate compares NORMALIZED graphs, whose inputs are a set
+	// (normSortedStrings sort+dedups). A closure leaf rides as a bare member the
+	// splice may append more than once, so "exact-once" is a property of the
+	// deduped input set, not the raw chunk multiset.
+	seen := map[string]int{}
+	for _, in := range use.flatInputs() {
+		seen[in.string()]++
+	}
+
+	const first = "$(B)/wrap/first.pb.h"   // main output: must ride
+	const second = "$(B)/wrap/second.pb.h" // directly included
+	const third = "$(B)/wrap/third.pb.h"   // unrelated sibling: must NOT ride
+
+	if seen[second] == 0 {
+		t.Fatalf("use.cpp.o missing directly-included %q: %#v", second, vfsStrings(use.flatInputs()))
+	}
+	if seen[first] == 0 {
+		t.Fatalf("use.cpp.o missing main output %q (OutTogether): %#v", first, vfsStrings(use.flatInputs()))
+	}
+	if seen[third] != 0 {
+		t.Fatalf("use.cpp.o must not list unrelated sibling %q (got %d): %#v", third, seen[third], vfsStrings(use.flatInputs()))
+	}
+}
+
+// The sys_const shape: a RUN_PROGRAM with an IN template and two OUTs — a header
+// (first OUT = main output) and a generated cc-source sibling. prInputClosure
+// walks the cc-source OUT to surface its OUTPUT_INCLUDES, so the OutTogether
+// main-output leaf attached to the .cpp would otherwise ride back onto the
+// PRODUCER's own input list. A command never inputs its own outputs: the
+// producer must list neither gen.h nor gen.cpp among its inputs, while a
+// downstream consumer of gen.cpp still gets the main output gen.h.
+func TestGen_RunProgramProducerExcludesOwnOutTogetherOutput(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "tools/genhdr", "genhdr")
+
+	writeTestModuleFile(files, "prod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    tools/genhdr generate prod/tmpl.h
+    IN prod/tmpl.h
+    OUT
+        gen.h
+        gen.cpp
+)
+END()
+`)
+	writeTestModuleFile(files, "prod/tmpl.h", "#pragma once\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(prod)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+
+	prod := mustNodeByOutput(t, g, "$(B)/prod/gen.h")
+
+	for _, in := range prod.flatInputs() {
+		s := in.string()
+		if s == "$(B)/prod/gen.h" || s == "$(B)/prod/gen.cpp" {
+			t.Fatalf("RUN_PROGRAM producer must not input its own output %q: %#v", s, vfsStrings(prod.flatInputs()))
+		}
+	}
+}
