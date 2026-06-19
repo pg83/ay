@@ -42,6 +42,51 @@ type CppProtoPlugin struct {
 	OutputSuffixes []string
 	Deps           []string
 	ExtraOutFlag   string
+	// Experimental holds the YaFF EXPERIMENTAL proto names (basenames as written
+	// in the macro). Mirrors the plugin's `experimental=` whitelist: a proto in
+	// this list gets the experiments C++ generator, whose generated .yaff.h
+	// additionally #includes the library/cpp/yaff/experiments runtime.
+	Experimental []string
+	// Files holds the YaFF FILES proto names (basenames). Mirrors the plugin's
+	// `file=` whitelist (FileWhitelist): when non-empty, the plugin runs its
+	// generators — and thus writes any .yaff.h content — only for these protos;
+	// every other <proto>.yaff.h is opened but left empty.
+	Files []string
+}
+
+// isYaff reports whether this plugin is the YaFF protoc plugin (YAFF /
+// YAFF_SCHEMA), which emits a <proto>.yaff.h / .yaff.cpp pair.
+func (p CppProtoPlugin) isYaff() bool {
+	return p.ToolPath == yaffPluginPath
+}
+
+// isExperimental matches upstream NeedExpApi: the experiments generator runs for
+// a proto whose basename is in the plugin's experimental whitelist.
+func (p CppProtoPlugin) isExperimental(protoBaseName string) bool {
+	for _, e := range p.Experimental {
+		if e == protoBaseName {
+			return true
+		}
+	}
+
+	return false
+}
+
+// processesFile matches upstream NeedToProcessFile: the plugin writes generated
+// content into <proto>.yaff.h only when the FILES whitelist is empty, or
+// contains the proto's basename. A non-whitelisted header is emitted empty.
+func (p CppProtoPlugin) processesFile(protoBaseName string) bool {
+	if len(p.Files) == 0 {
+		return true
+	}
+
+	for _, f := range p.Files {
+		if f == protoBaseName {
+			return true
+		}
+	}
+
+	return false
 }
 
 // event2cpp is the C++ proto plugin CPP_EVLOG() registers via
@@ -2723,6 +2768,8 @@ func parseYAFF(v *UnknownStmt) CppProtoPlugin {
 		ToolPath:       yaffPluginPath,
 		OutputSuffixes: []string{".yaff.h", ".yaff.cpp"},
 		ExtraOutFlag:   yaffExtraOutFlag("namespace="+s.namespace, s),
+		Experimental:   s.experimental,
+		Files:          s.files,
 	}
 }
 
@@ -2754,6 +2801,8 @@ func parseYAFFSchema(v *UnknownStmt) CppProtoPlugin {
 		ToolPath:       yaffPluginPath,
 		OutputSuffixes: []string{"_" + schemaName + ".yaff.h", "_" + schemaName + ".yaff.cpp"},
 		ExtraOutFlag:   yaffExtraOutFlag(lead, s),
+		Experimental:   s.experimental,
+		Files:          s.files,
 	}
 }
 

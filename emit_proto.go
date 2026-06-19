@@ -29,6 +29,55 @@ func quotedDirectives(headers []VFS) []IncludeDirective {
 	return out
 }
 
+const yaffRuntimeBase = "library/cpp/yaff/"
+
+// yaffBaseRuntimeHeaders are the includes the base YaFF C++ generator always
+// writes into <proto>.yaff.h (the plugin hardcodes GenerateProtobufApi /
+// GenerateReflectionApi / GenerateStructApi = true): see
+// library/cpp/yaff/compilation/cpp_gen.cpp GenerateHeader.
+var yaffBaseRuntimeHeaders = []string{
+	yaffRuntimeBase + "yaff.h",
+	yaffRuntimeBase + "struct.h",
+	yaffRuntimeBase + "protobuf.h",
+	yaffRuntimeBase + "reflect.h",
+}
+
+// yaffExperimentsRuntimeHeaders are the extra includes the experiments YaFF C++
+// generator appends for an EXPERIMENTAL proto: see
+// library/cpp/yaff/experiments/compilation/cpp_gen.cpp GenerateHeader.
+var yaffExperimentsRuntimeHeaders = []string{
+	yaffRuntimeBase + "experiments/builder.h",
+	yaffRuntimeBase + "experiments/column.h",
+	yaffRuntimeBase + "experiments/merge.h",
+}
+
+// yaffGeneratedHeaderIncludes returns the parsed #includes of a generated
+// <proto>.yaff.h: the base yaff runtime, the proto's own .pb.h, and — for an
+// EXPERIMENTAL proto — the experiments runtime.
+func yaffGeneratedHeaderIncludes(experimental bool, pbHRel string) []IncludeDirective {
+	n := len(yaffBaseRuntimeHeaders) + 1
+
+	if experimental {
+		n += len(yaffExperimentsRuntimeHeaders)
+	}
+
+	dirs := make([]IncludeDirective, 0, n)
+
+	for _, h := range yaffBaseRuntimeHeaders {
+		dirs = append(dirs, IncludeDirective{kind: includeQuoted, target: internStr(h)})
+	}
+
+	dirs = append(dirs, IncludeDirective{kind: includeQuoted, target: internStr(pbHRel)})
+
+	if experimental {
+		for _, h := range yaffExperimentsRuntimeHeaders {
+			dirs = append(dirs, IncludeDirective{kind: includeQuoted, target: internStr(h)})
+		}
+	}
+
+	return dirs
+}
+
 func protoPbHIncludes(pm *IncludeParserManager, srcRel, outputRoot string, bucket ParsedIncludeBucket) []IncludeDirective {
 	hcpp := pm.sourceParsedBuckets(source(srcRel), nil).bucket(bucket)
 
@@ -360,6 +409,36 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 				for _, s := range protoProducerSourceInputs {
 					reg.addClosureLeaf(pbH, s)
 				}
+			}
+
+			// The YaFF protoc plugin emits a <proto>.yaff.h / .yaff.cpp pair off the
+			// same PB node. The header #includes the yaff runtime + the proto's own
+			// .pb.h (+ the experiments runtime for an EXPERIMENTAL proto); register
+			// it so a unit that includes the generated yaff header rides that
+			// closure, and register the .yaff.cpp which includes the header. The
+			// plugin declares no INDUCED_DEPS, so no generator refs (the protobuf
+			// runtime arrives via the .pb.h).
+			protoBaseName := filepath.Base(protoRelPath)
+
+			for _, plugin := range d.cppProtoPlugins {
+				if !plugin.isYaff() || len(plugin.OutputSuffixes) != 2 {
+					continue
+				}
+
+				yaffH := build(protoBase + plugin.OutputSuffixes[0])
+				yaffCC := build(protoBase + plugin.OutputSuffixes[1])
+
+				// Upstream NeedToProcessFile: a YaFF output outside the FILES
+				// whitelist is opened but written empty, so it carries no closure.
+				var yaffHParsed []IncludeDirective
+				if plugin.processesFile(protoBaseName) {
+					yaffHParsed = yaffGeneratedHeaderIncludes(plugin.isExperimental(protoBaseName), pbH.rel())
+				}
+
+				registerBoundGeneratedParsedOutput(ctx, instance, pkPB, yaffH, yaffHParsed, pbRef, nil)
+
+				yaffCCParsed := []IncludeDirective{{kind: includeQuoted, target: internStr(yaffH.rel())}}
+				registerBoundGeneratedParsedOutput(ctx, instance, pkPB, yaffCC, yaffCCParsed, pbRef, nil)
 			}
 		}
 
