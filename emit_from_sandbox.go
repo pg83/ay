@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 // emitFromSandboxes emits the SB (Sandbox fetch) node for every FROM_SANDBOX in
 // the module and registers its OUT/OUT_NOAUTO files as build outputs bound to
 // that node. A name so declared is a fetched build artifact: a RUN_PROGRAM/macro
@@ -7,13 +9,28 @@ package main
 // probe) to the $(B) fetch output and takes the SB node as a dependency, instead
 // of resolving to a nonexistent on-disk source path. Must run before the module's
 // RUN_PROGRAM/RUN_PYTHON emit so the registry already holds the outputs.
-func emitFromSandboxes(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
+//
+// Returns the auto OUT (never OUT_NOAUTO) `.a`/`.o` outputs as module link
+// members: ymake folds an auto FROM_SANDBOX output into $AUTO_INPUT, so a LIBRARY
+// archives it into its own `.a` (LINK_LIB = … $TARGET $AUTO_INPUT) and a PROGRAM
+// links it. The caller appends these to the module's ccRefs/ccOutputs.
+func emitFromSandboxes(ctx *GenCtx, instance ModuleInstance, d *ModuleData) (memberRefs []NodeRef, memberPaths []VFS) {
 	for _, fs := range d.fromSandboxes {
-		emitFromSandbox(ctx, instance, d, fs)
+		refs, paths := emitFromSandbox(ctx, instance, d, fs)
+		memberRefs = append(memberRefs, refs...)
+		memberPaths = append(memberPaths, paths...)
 	}
+
+	return memberRefs, memberPaths
 }
 
-func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *FromSandboxStmt) {
+// fromSandboxAutoLinkMember reports whether an auto OUT file is a linkable
+// artifact (static archive or object) that ymake routes into $AUTO_INPUT.
+func fromSandboxAutoLinkMember(name string) bool {
+	return strings.HasSuffix(name, ".a") || strings.HasSuffix(name, ".o")
+}
+
+func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *FromSandboxStmt) (memberRefs []NodeRef, memberPaths []VFS) {
 	na := ctx.emit.nodeArenas()
 	id := stmt.ResourceId.string()
 
@@ -74,6 +91,15 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 
 	ref := ctx.emit.emit(node)
 
+	// Auto OUT (not OUT_NOAUTO) `.a`/`.o` outputs are module link members: they
+	// occupy the first len(OUTFiles) entries of outVFSs.
+	for i, f := range stmt.OUTFiles {
+		if fromSandboxAutoLinkMember(f.string()) {
+			memberRefs = append(memberRefs, ref)
+			memberPaths = append(memberPaths, outVFSs[i])
+		}
+	}
+
 	// Register each fetched output as a codegen producer so a consuming IN resolves
 	// to the $(B) path and depends on this SB node. The files are opaque fetched
 	// artifacts (no parsed includes); OUTPUT_INCLUDES, when present, ride as the
@@ -83,6 +109,8 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 	for _, out := range outVFSs {
 		registerBoundGeneratedParsedOutput(ctx, instance, pkSB, out, parsed, ref, nil)
 	}
+
+	return memberRefs, memberPaths
 }
 
 func fromSandboxOutputIncludes(stmt *FromSandboxStmt) []IncludeDirective {
