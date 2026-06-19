@@ -1817,11 +1817,18 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		// (proto.conf), whose SOURCE arm is `GLOBAL FOR proto $(S)/maps/doc/proto`.
 		// That GLOBAL proto addincl rides the CPP_PROTO peer closure and renders as
 		// -I=$(S)/maps/doc/proto in every transitive consumer's protoc command via
-		// ${pre=-I=:_PROTO__INCLUDE}. We model only this include-propagation half
-		// (the same protoAddInclGlobal carrier as a parsed `GLOBAL FOR proto X`);
-		// the SET(PROTO_NAMESPACE) output-path half and the C++ ADDINCL(GLOBAL
-		// $(B)/...) half are intentionally out of scope (no C++ -I leakage).
+		// ${pre=-I=:_PROTO__INCLUDE} (the include-propagation half, T-30; same
+		// protoAddInclGlobal carrier as a parsed `GLOBAL FOR proto X`).
 		d.protoAddInclGlobal = append(d.protoAddInclGlobal, mapsDocProto)
+		// PROTO_ADDINCL also emits `ADDINCL(GLOBAL ${ARCADIA_BUILD_ROOT}/$Path)` —
+		// an ordinary GLOBAL C++ ADDINCL of the build root that rides the GLOBAL
+		// peer addincl closure and renders as -I$(B)/maps/doc/proto in every
+		// transitive consumer's C++ compile commands (T-32). Mirrors the
+		// tokProtoNamespace PROTO_LIBRARY branch above. The source-root arm stays
+		// out (protoc-only), so no source-root C++ leakage. The SET(PROTO_NAMESPACE)
+		// output-path half is still out of scope.
+		d.addInclGlobal = append(d.addInclGlobal, mapsDocProtoBuild)
+		d.addInclUserGlobal = append(d.addInclUserGlobal, mapsDocProtoBuild)
 	case tokExcludeTags:
 		// upstream uses EXCLUDE_TAGS to drop submodules of a multimodule
 		// from the build (per the PROTO_LIBRARY definition at
