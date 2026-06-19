@@ -42,6 +42,15 @@ type GeneratedFileInfo struct {
 	// tool / script sources too. Zero len means "nothing to propagate".
 	SourceInputs []VFS
 
+	// OutTogetherMain is the producing command's MAIN output (the first OUT, per
+	// ymake FindMainElemOrDefault(GetOutput(), 0)) when this output is a NON-main
+	// sibling of a multi-output command. A multi-output command builds one node
+	// keyed on the main output; the other outputs are EDT_OutTogether siblings,
+	// and a node consuming a non-main output carries the main output as an input
+	// (json_visitor.cpp PrepareLeaving adds OutTogetherDependency). Zero value:
+	// this output IS the main output, or the command has a single output.
+	OutTogetherMain VFS
+
 	// ClosureLeaves are extra VFS that must ride in this output's include-closure
 	// window as bare, non-expanded members — a "generated-from"/source input edge,
 	// not a C++ include. COPY_FILE(TEXT) registers its $(S) source (+ fs_tools.py
