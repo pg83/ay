@@ -453,7 +453,6 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	}
 
 	cppInstance := instance
-	cppInstance.Path = protoCPPModulePath(instance, d)
 
 	pe := newPBModuleEmission(ctx, d, cfg, peerContribs.protoAddIncl, peerContribs.protoNamespaceTail)
 
@@ -510,7 +509,6 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 			}
 
 			cppInstance := instance
-			cppInstance.Path = protoCPPModulePath(instance, d)
 			evSrcRel := strings.TrimPrefix(evRelPath+".pb.cc", cppInstance.Path.rel()+"/")
 			codegenOutputs = append(codegenOutputs, protoCodegenOutput{
 				genRef: evRef,
