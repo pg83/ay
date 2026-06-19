@@ -2292,6 +2292,7 @@ func TestGen_CppEvlog_PropagatesEventlogGlobalAddIncl(t *testing.T) {
 
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "tools/event2cpp", "event2cpp")
 	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
