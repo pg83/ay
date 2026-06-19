@@ -91,10 +91,6 @@ func emitLD(
 		throwFmt("EmitLD: dynamicRefs/dynamicPaths length mismatch (%d vs %d)", len(dynamicRefs), len(dynamicPaths))
 	}
 
-	if binaryName == "" {
-		binaryName = lastPathComponent(instance.Path.rel())
-	}
-
 	binaryDir := instance.Path.rel()
 
 	binPrefix := binaryDir + "/"
@@ -215,10 +211,6 @@ func emitLD(
 }
 
 func lDOutputPath(instance ModuleInstance, binaryName string) VFS {
-	if binaryName == "" {
-		binaryName = lastPathComponent(instance.Path.rel())
-	}
-
 	return build(instance.Path.rel() + "/" + binaryName)
 }
 

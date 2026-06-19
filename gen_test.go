@@ -2267,14 +2267,36 @@ func TestProgramBinaryName_Py3ProgramBinArgWins(t *testing.T) {
 		t.Fatalf("PY3_PROGRAM_BIN binary name = %q, want py3cc", got)
 	}
 
-	// Without an argument it falls through to the module-dir basename.
-	if got := programBinaryName(inst, &ModuleStmt{Name: tokPy3ProgramBin}); got != "" {
-		t.Fatalf("PY3_PROGRAM_BIN no-arg binary name = %q, want \"\" (dir-basename fallback)", got)
+	// Without an argument it resolves to the module-dir basename — upstream's
+	// REALPRJNAME default, the single source of truth for the binary output, the
+	// .ldcref/.map, and the <REALPRJNAME>.<LANG>.component.sbom name.
+	if got := programBinaryName(inst, &ModuleStmt{Name: tokPy3ProgramBin}); got != "slow" {
+		t.Fatalf("PY3_PROGRAM_BIN no-arg binary name = %q, want slow (dir-basename fallback)", got)
 	}
 
 	// A plain PROGRAM(foo) still honours its explicit name argument.
 	if got := programBinaryName(inst, &ModuleStmt{Name: tokProgram, Args: STRS("foo")}); got != "foo" {
 		t.Fatalf("PROGRAM(foo) binary name = %q, want foo", got)
+	}
+}
+
+// TestProgramBinaryName_UnnamedProgramRealPrjName reproduces T-17: a from-source
+// PROGRAM() with no name argument (e.g. contrib/libs/flatbuffers64/flatc) must
+// resolve REALPRJNAME to the module-dir basename so its _GEN_SBOM_COMPONENT is
+// named <basename>.<LANG>.component.sbom. Before the fix programBinaryName
+// returned "", yielding a degenerate ".CPP.component.sbom" output that diverged
+// from the reference's "flatc.CPP.component.sbom".
+func TestProgramBinaryName_UnnamedProgramRealPrjName(t *testing.T) {
+	inst := ModuleInstance{Path: source("contrib/libs/flatbuffers64/flatc"), Kind: KindBin, Platform: testTargetP}
+
+	if got := programBinaryName(inst, &ModuleStmt{Name: tokProgram}); got != "flatc" {
+		t.Fatalf("unnamed PROGRAM() REALPRJNAME = %q, want flatc (dir basename)", got)
+	}
+
+	// The SBOM component name is REALPRJNAME + ".<LANG>.component.sbom"; an empty
+	// REALPRJNAME would produce the degenerate ".CPP.component.sbom" seen in sg7.
+	if got := programBinaryName(inst, &ModuleStmt{Name: tokProgram}); got == "" {
+		t.Fatal("unnamed PROGRAM() REALPRJNAME is empty; SBOM component would be \".CPP.component.sbom\"")
 	}
 }
 
