@@ -148,7 +148,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"STRUCT_CODEGEN":            {},
 	"CPP_ENUMS_SERIALIZATION":   {},
 	"ALL_RESOURCE_FILES":        {},
-	"EXPORT_YMAPS_PROTO":        {},
 	"YMAPS_SPROTO":              {},
 	// PROTO_DESCRIPTIONS is now a modeled module opener (emit_proto_desc.go);
 	// it no longer rides this no-op set.
@@ -1057,6 +1056,14 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 				ownProtoTailH = []VFS{ns}
 			}
 		}
+
+		// `ADDINCL GLOBAL FOR proto X` (PROTO_ADDINCL macro; e.g. EXPORT_YMAPS_PROTO
+		// -> PROTO_NAMESPACE(maps/doc/proto) -> PROTO_ADDINCL(GLOBAL maps/doc/proto))
+		// contributes a -I=$X to every transitive consumer's protoc command. The
+		// non-specialized path folds it in below (see ownProtoAddIncl); specialized
+		// library types (PROTO_LIBRARY/DLL) reach the _PROTO__INCLUDE chain here, so
+		// mirror that fold to keep both paths consistent.
+		ownProtoAddInclH = append(ownProtoAddInclH, d.protoAddInclGlobal...)
 
 		effectiveProtoAddInclH := dedupVFS(ownProtoAddInclH, peerContribs.protoAddIncl)
 		effectiveProtoTailH := dedupVFS(ownProtoTailH, peerContribs.protoNamespaceTail)
