@@ -146,6 +146,7 @@ var (
 	argLm                                        = internArg("-lm")
 	argLogPath                                   = internArg("--log-path")
 	argM64                                       = internArg("-m64")
+	argMapsLibsSprotoSprotoc                     = internArg("maps/libs/sproto/sprotoc")
 	argMcx16                                     = internArg("-mcx16")
 	argMeta                                      = internArg("--meta")
 	argModule                                    = internArg("-module")

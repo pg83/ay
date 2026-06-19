@@ -114,6 +114,12 @@ type ModuleData struct {
 	pyNamespace          *STR
 	protoNamespace       *STR
 	protoNamespaceGlobal bool
+	// ymapsSprotoSrcs holds the .proto sources named by YMAPS_SPROTO(...) (maps
+	// sproto.conf). Each gets a .sproto.h PB/yellow producer run through
+	// maps/libs/sproto/sprotoc, and the macro's SET(PROTO_HEADER_EXTS .pb.h
+	// .sproto.h) makes proto imports in this module induce the .sproto.h sibling
+	// header in addition to .pb.h. See emitYmapsSprotoHeaders.
+	ymapsSprotoSrcs []STR
 	noMypy               bool
 	optimizePyProtos     bool
 	optimizePyProtosSet  bool
@@ -1828,6 +1834,22 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		// PROTO_NAMESPACE(maps/doc/proto). The protoc-only source arm stays in
 		// protoAddInclGlobal above, so no source-root C++ leakage.
 		applyProtoNamespace(d, mapsDocProtoNS, false)
+	case tokYmapsSproto:
+		// build/internal/conf/project_specific/maps/sproto.conf:
+		//   macro YMAPS_SPROTO(FILES...) {
+		//       SET(PROTO_HEADER_EXTS .pb.h .sproto.h)
+		//       foreach (FILE : $FILES) { _YMAPS_SPROTO_DISPATCH(${lastext:FILE} $FILE) }
+		//   }
+		// _YMAPS_SPROTO_DISPATCH only matches the "proto" lastext arm, so non-.proto
+		// args are dropped upstream; the maps corpus names .proto files exclusively,
+		// so an unexpected extension is a fail-fast modelling gap rather than silent.
+		for _, argTok := range v.Args {
+			if !strings.HasSuffix(argTok.string(), ".proto") {
+				throwFmt("gen: %s: YMAPS_SPROTO expects .proto arguments, got %q", modulePath, argTok.string())
+			}
+
+			d.ymapsSprotoSrcs = append(d.ymapsSprotoSrcs, argTok)
+		}
 	case tokExcludeTags:
 		// upstream uses EXCLUDE_TAGS to drop submodules of a multimodule
 		// from the build (per the PROTO_LIBRARY definition at
