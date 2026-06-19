@@ -6,6 +6,115 @@ import (
 	"testing"
 )
 
+// TestGen_Library_ProtoNamespaceRootsLibraryHostedProtoCommand reproduces the
+// T-29 gap: a plain LIBRARY() (not PROTO_LIBRARY) that carries PROTO_NAMESPACE(yt)
+// and SRCS(*.proto) compiles its proto through emitLibraryProtoSource, which must
+// root the protoc output/import roots at the namespace exactly like the
+// PROTO_LIBRARY path. Representative upstream node:
+// $(B)/yt/yt/library/query/proto/query.pb.cc.
+func TestGen_Library_ProtoNamespaceRootsLibraryHostedProtoCommand(t *testing.T) {
+	files := map[string]string{}
+
+	// Peer LIBRARY with the same PROTO_NAMESPACE(yt): its GLOBAL `FOR proto $(S)/yt`
+	// source addincl propagates, so the consumer's _PROTO__INCLUDE carries the
+	// namespace a second time (own + peer), yielding -I=$(S)/yt three times total.
+	writeTestModuleFile(files, "yt/yt/client/ya.make", `LIBRARY()
+PROTO_NAMESPACE(yt)
+SRCS(data.proto)
+END()
+`)
+	writeTestModuleFile(files, "yt/yt/client/data.proto", "syntax = \"proto3\";\npackage yt;\nmessage Data {}\n")
+
+	writeTestModuleFile(files, "yt/yt/library/query/proto/ya.make", `LIBRARY()
+PROTO_NAMESPACE(yt)
+SRCS(query.proto)
+PEERDIR(yt/yt/client)
+END()
+`)
+	writeTestModuleFile(files, "yt/yt/library/query/proto/query.proto", "syntax = \"proto3\";\npackage yt;\nmessage Query {}\n")
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "yt/yt/library/query/proto")
+
+	pb := findGraphNodeByOutputs(t, g,
+		"$(B)/yt/yt/library/query/proto/query.pb.h",
+		"$(B)/yt/yt/library/query/proto/query.pb.cc",
+	)
+	args := strStrs(pb.Cmds[0].CmdArgs.flat())
+	count := func(want string) int {
+		n := 0
+		for _, a := range args {
+			if a == want {
+				n++
+			}
+		}
+		return n
+	}
+
+	// Output roots and the local-dir / source-root import roots carry the namespace.
+	for _, tok := range []string{
+		"-I=./yt",
+		"--cpp_out=:$(B)/yt",
+		"--cpp_styleguide_out=:$(B)/yt",
+	} {
+		if c := count(tok); c != 1 {
+			t.Fatalf("library-hosted proto cmd: want exactly one %q, got %d: %v", tok, c, args)
+		}
+	}
+
+	// The namespace import appears three times: the explicit -I=$ARCADIA_ROOT/$NS
+	// prefix plus the two _PROTO__INCLUDE copies (own + the namespace-sharing peer).
+	if c := count("-I=$(S)/yt"); c != 3 {
+		t.Fatalf("library-hosted proto cmd: want three -I=$(S)/yt (prefix + own + peer), got %d: %v", c, args)
+	}
+
+	// None of the unrooted forms may survive.
+	for _, tok := range []string{"-I=./", "-I=$(S)/", "--cpp_out=:$(B)/", "--cpp_styleguide_out=:$(B)/"} {
+		if c := count(tok); c != 0 {
+			t.Fatalf("library-hosted proto cmd: unrooted %q must be gone, got %d: %v", tok, c, args)
+		}
+	}
+}
+
+// TestGen_Library_TopLevelProtoKeepsUnrootedCommand pins the complementary case:
+// a top-level LIBRARY proto WITHOUT a PROTO_NAMESPACE keeps the $(B)/ / $(S)/ / ./
+// root shape — the prefix is applied only when the module has an effective
+// source-root namespace.
+func TestGen_Library_TopLevelProtoKeepsUnrootedCommand(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "top/proto/ya.make", `LIBRARY()
+SRCS(top.proto)
+END()
+`)
+	writeTestModuleFile(files, "top/proto/top.proto", "syntax = \"proto3\";\npackage top;\nmessage Top {}\n")
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "top/proto")
+
+	pb := findGraphNodeByOutputs(t, g,
+		"$(B)/top/proto/top.pb.h",
+		"$(B)/top/proto/top.pb.cc",
+	)
+	args := strStrs(pb.Cmds[0].CmdArgs.flat())
+
+	for _, tok := range []string{"-I=./", "--cpp_out=:$(B)/", "--cpp_styleguide_out=:$(B)/"} {
+		if !slices.Contains(args, tok) {
+			t.Fatalf("top-level proto cmd: missing unrooted %q: %v", tok, args)
+		}
+	}
+}
+
 func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 	e := newBufferedEmitter()
 	inst := targetInstance("pkg/proto")
