@@ -110,6 +110,7 @@ var (
 	strCX16CFlags                                    = internStr("-mcx16")
 	strContribLibsCxxsupp                            = internStr("contrib/libs/cxxsupp")
 	strContribLibsFlatbuffers                        = internStr("contrib/libs/flatbuffers")
+	strContribLibsFlatbuffers64                      = internStr("contrib/libs/flatbuffers64")
 	strContribLibsGrpc                               = internStr("contrib/libs/grpc")
 	strContribLibsProtobuf                           = internStr("contrib/libs/protobuf")
 	strContribLibsPython                             = internStr("contrib/libs/python")

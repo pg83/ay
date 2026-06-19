@@ -158,6 +158,9 @@ type ModuleData struct {
 	// genModule's flatbuffers auto-peer gate, so it needn't rescan srcs.
 	hasFbs bool
 
+	// hasFbs64 is the .fbs64 twin (flatbuffers64 auto-peer gate).
+	hasFbs64 bool
+
 	defaultVars map[STR]STR
 
 	defaultVarOrder    []STR
@@ -816,6 +819,8 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 			hasProto = true
 		case srcExtFbs:
 			d.hasFbs = true
+		case srcExtFbs64:
+			d.hasFbs64 = true
 		case srcExtY:
 			d.hasBisonY = true
 		case srcExtSc:

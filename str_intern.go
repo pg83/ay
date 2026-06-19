@@ -161,6 +161,7 @@ const (
 	srcExtRegular
 	srcExtProto
 	srcExtFbs
+	srcExtFbs64
 	srcExtEv
 	srcExtRl6
 	srcExtRl
@@ -201,6 +202,8 @@ func classifySrcExt(s string) SrcExtClass {
 	switch {
 	case strings.HasSuffix(s, ".proto"):
 		return srcExtProto
+	case strings.HasSuffix(s, ".fbs64"):
+		return srcExtFbs64
 	case strings.HasSuffix(s, ".fbs"):
 		return srcExtFbs
 	case strings.HasSuffix(s, ".ev"):
@@ -228,7 +231,7 @@ func classifySrcExt(s string) SrcExtClass {
 // class) — the same nine-extension set.
 func isCodegenProducingSrcID(id STR) bool {
 	switch srcExtClassOf(id) {
-	case srcExtProto, srcExtFbs, srcExtEv, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc:
+	case srcExtProto, srcExtFbs, srcExtFbs64, srcExtEv, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc:
 		return true
 	}
 

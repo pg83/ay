@@ -26,6 +26,63 @@ var flatcIOLeadArgs = []STR{
 	argDashO.str(),
 }
 
+// flatc64ConstFlags / flatc64IOLeadArgs are the _CPP_FLATC64_CMD (fbs.conf)
+// counterparts: no --gen-object-api, --filename-suffix .fbs64, and the fixed
+// include pair -I ${ARCADIA_ROOT} -I ${ARCADIA_BUILD_ROOT} (= -I $(S) -I $(B),
+// opposite order to FL's _FLATC__INCLUDE -I $(B) -I $(S)).
+var flatc64ConstFlags = []STR{
+	argNoWarnings.str(),
+	argCpp.str(),
+	argKeepPrefix.str(),
+	argGenMutable.str(),
+	argSchema.str(),
+	argB2.str(),
+	argFilenameSuffix.str(),
+	argFbs64.str(),
+}
+
+var flatc64IOLeadArgs = []STR{
+	argI.str(), argS.str(),
+	argI.str(), argB.str(),
+	argDashO.str(),
+}
+
+// flatcVariant captures the constant differences between _CPP_FLATC_CMD (FL,
+// .fbs) and _CPP_FLATC64_CMD (FL64, .fbs64): the tool, the flag/IO spans, the
+// node kind, the source/bfbs suffixes, and the runtime header. The producer
+// pre-pass (gen.go) picks the variant by source extension; everything else of
+// the FL path — generated-header resolution, registry registration, the .cpp
+// compile (emitLibraryFlatcSource) — is shared.
+type flatcVariant struct {
+	toolArg    ARG
+	constFlags []STR
+	ioLeadArgs []STR
+	procKind   ProcKind
+	srcExt     string
+	bfbsExt    string
+	runtimeVFS VFS
+}
+
+var flatcVariantFL = flatcVariant{
+	toolArg:    argContribLibsFlatbuffersFlatc,
+	constFlags: flatcConstFlags,
+	ioLeadArgs: flatcIOLeadArgs,
+	procKind:   pkFL,
+	srcExt:     ".fbs",
+	bfbsExt:    ".bfbs",
+	runtimeVFS: flatcRuntimeVFS,
+}
+
+var flatcVariantFL64 = flatcVariant{
+	toolArg:    argContribLibsFlatbuffers64Flatc,
+	constFlags: flatc64ConstFlags,
+	ioLeadArgs: flatc64IOLeadArgs,
+	procKind:   pkFL64,
+	srcExt:     ".fbs64",
+	bfbsExt:    ".bfbs64",
+	runtimeVFS: flatc64RuntimeVFS,
+}
+
 func flatcDirectImportNames(pm *IncludeParserManager, srcRel string) []string {
 	direct := pm.sourceParsedBuckets(source(srcRel), nil).bucket(parsedIncludesLocal)
 
@@ -82,20 +139,20 @@ func flatcDirectGeneratedHeaderIncludes(pm *IncludeParserManager, fs FS, srcRel 
 	return out
 }
 
-func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ARG, transitiveImports []VFS, tc ModuleToolchain, emit Emitter) (NodeRef, VFS, VFS, VFS) {
+func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ARG, transitiveImports []VFS, tc ModuleToolchain, emit Emitter, v *flatcVariant) (NodeRef, VFS, VFS, VFS) {
 	na := emit.nodeArenas()
 
 	headerVFS := build(srcRel + ".h")
 	cppVFS := build(srcRel + ".cpp")
-	bfbsVFS := build(strings.TrimSuffix(srcRel, ".fbs") + ".bfbs")
+	bfbsVFS := build(strings.TrimSuffix(srcRel, v.srcExt) + v.bfbsExt)
 
-	cmdArgs := na.chunkList(na.strList(tc.Python3, (flatcWrapperVFS).str(), (flatcBinary).str()), flatcConstFlags)
+	cmdArgs := na.chunkList(na.strList(tc.Python3, (flatcWrapperVFS).str(), (flatcBinary).str()), v.constFlags)
 
 	if len(flatcFlags) > 0 {
 		cmdArgs = append(cmdArgs, appendArgStr(nil, flatcFlags))
 	}
 
-	cmdArgs = append(cmdArgs, flatcIOLeadArgs, []STR{(headerVFS).str(), (srcVFS).str()})
+	cmdArgs = append(cmdArgs, v.ioLeadArgs, []STR{(headerVFS).str(), (srcVFS).str()})
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -107,7 +164,7 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 		Env:              env,
 		ForeignDepRefs:   depRefs(flatcLDRef),
 		Inputs:           na.inputList(na.vfsList(flatcBinary, flatcWrapperVFS, srcVFS), transitiveImports),
-		KV:               KV{P: pkFL, PC: pcLightGreen},
+		KV:               KV{P: v.procKind, PC: pcLightGreen},
 		Outputs:          na.vfsList(headerVFS, cppVFS, bfbsVFS),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
@@ -122,13 +179,13 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 // module's .fbs before any flatc CC closure is walked, so a .fbs importing a
 // sibling resolves the sibling's generated .h — the same two-phase shape proto
 // uses in emitCPPProtoSrcs (register every pb.h, then compile).
-func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string) {
+func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, v *flatcVariant) {
 	srcVFS := resolveSourceVFS(ctx, instance, srcRel, d.srcDirs)
 
-	flatcRes := ctx.toolResult(argContribLibsFlatbuffersFlatc)
+	flatcRes := ctx.toolResult(v.toolArg)
 	flatcLDRef, flatcBinary := flatcRes.LDRef, *flatcRes.LDPath
 	transitiveImports := walkClosureTail(ctx.scannerFor(instance), srcVFS, newScanContext(ctx.parsers, nil, nil, includeScannerBasePaths(), instance.Path.rel()))
-	flRef, headerVFS, cppVFS, bfbsVFS := emitFL(instance, srcVFS.rel(), srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, d.tc, ctx.emit)
+	flRef, headerVFS, cppVFS, bfbsVFS := emitFL(instance, srcVFS.rel(), srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, d.tc, ctx.emit, v)
 
 	// flatc's INDUCED_DEPS(h+cpp …) — flatbuffers.h + flatbuffers_iter.h, declared
 	// in contrib/libs/flatbuffers/flatc/ya.make — ride into both the .h and .cpp
@@ -137,7 +194,7 @@ func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcR
 	// from arrow IPC CC inputs without this).
 	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.parsers, ctx.fs, srcVFS.rel())
 
-	registerBoundGeneratedParsedOutput(ctx, instance, pkFL, headerVFS, headerIncludes, flRef, []NodeRef{flatcLDRef})
+	registerBoundGeneratedParsedOutput(ctx, instance, v.procKind, headerVFS, headerIncludes, flRef, []NodeRef{flatcLDRef})
 
 	// The flatc tooling, the .fbs source and its transitive imports, plus the
 	// flatbuffers runtime header are real inputs of any unit whose include-closure
@@ -147,7 +204,7 @@ func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcR
 	reg := codegenRegForInstance(ctx, instance)
 	reg.addClosureLeaf(headerVFS, flatcWrapperVFS)
 	reg.addClosureLeaf(headerVFS, srcVFS)
-	reg.addClosureLeaf(headerVFS, flatcRuntimeVFS)
+	reg.addClosureLeaf(headerVFS, v.runtimeVFS)
 
 	for _, imp := range transitiveImports {
 		reg.addClosureLeaf(headerVFS, imp)
@@ -155,8 +212,8 @@ func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcR
 
 	cppIncludes := []IncludeDirective{{kind: includeQuoted, target: internStr(headerVFS.rel())}}
 
-	registerBoundGeneratedParsedOutput(ctx, instance, pkFL, cppVFS, cppIncludes, flRef, []NodeRef{flatcLDRef})
-	registerBoundGeneratedParsedOutput(ctx, instance, pkFL, bfbsVFS, nil, flRef, []NodeRef{flatcLDRef})
+	registerBoundGeneratedParsedOutput(ctx, instance, v.procKind, cppVFS, cppIncludes, flRef, []NodeRef{flatcLDRef})
+	registerBoundGeneratedParsedOutput(ctx, instance, v.procKind, bfbsVFS, nil, flRef, []NodeRef{flatcLDRef})
 }
 
 func emitLibraryFlatcSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
