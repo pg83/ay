@@ -206,6 +206,122 @@ END()
 	}
 }
 
+// A RUN_PROGRAM with no IN whose only OUT is a HEADER (no auto cc-source OUT, no
+// cc-source STDOUT) — the plutonium dsp.yaff.h class. Its OUTPUT_INCLUDES
+// (${hide;output_include:...}) closure has no downstream compile to surface on,
+// so upstream realizes it on the PRODUCER command node: the full $(S) include
+// closure of every OUTPUT_INCLUDES file — the codegen .pb.h's transitive .proto
+// import sources (NOT the intermediate $(B) .pb.h) plus its protobuf C closure,
+// and a source-tree OUTPUT_INCLUDES header's own C closure. Unrelated proto
+// families and other generated headers must stay absent.
+func TestGen_RunProgramHeaderOnlyOutputIncludesImportClosureOnProducer(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "tools/genhdr", "genhdr")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make",
+		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
+
+	// q: leaf PROTO_LIBRARY (q/b.pb.h <- q/b.proto).
+	writeTestModuleFile(files, "q/ya.make", `PROTO_LIBRARY()
+SRCS(b.proto)
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+END()
+`)
+	writeTestModuleFile(files, "q/b.proto", "syntax = \"proto3\";\npackage q;\nmessage B {}\n")
+
+	// p: PROTO_LIBRARY importing q/b.proto, so p/a.pb.h #includes "q/b.pb.h".
+	writeTestModuleFile(files, "p/ya.make", `PROTO_LIBRARY()
+PEERDIR(q)
+SRCS(a.proto)
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+END()
+`)
+	writeTestModuleFile(files, "p/a.proto",
+		"syntax = \"proto3\";\npackage p;\nimport \"q/b.proto\";\nmessage A { q.B b = 1; }\n")
+
+	// r: unrelated PROTO_LIBRARY, never imported — must not appear.
+	writeTestModuleFile(files, "r/ya.make", `PROTO_LIBRARY()
+SRCS(c.proto)
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+END()
+`)
+	writeTestModuleFile(files, "r/c.proto", "syntax = \"proto3\";\npackage r;\nmessage C {}\n")
+
+	// A source-tree OUTPUT_INCLUDES header with its own include.
+	writeTestModuleFile(files, "lib/h1.h", "#pragma once\n#include <lib/h2.h>\n")
+	writeTestModuleFile(files, "lib/h2.h", "#pragma once\n")
+
+	// gen: RUN_PROGRAM, no IN, header-only OUT gen.yaff.h, OUTPUT_INCLUDES the
+	// codegen p/a.pb.h and the source-tree lib/h1.h.
+	writeTestModuleFile(files, "gen/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(p)
+RUN_PROGRAM(
+    tools/genhdr emit
+    OUTPUT_INCLUDES
+        p/a.pb.h
+        lib/h1.h
+    OUT
+        gen.yaff.h
+)
+END()
+`)
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(gen)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+
+	pr := mustNodeByAnyOutput(t, g, "$(B)/gen/gen.yaff.h")
+	if pr.KV.P != pkPR {
+		t.Fatalf("expected PR producer for gen.yaff.h, got %v", pr.KV.P)
+	}
+
+	countInput := func(want string) int {
+		c := 0
+		for _, in := range pr.flatInputs() {
+			if in.string() == want {
+				c++
+			}
+		}
+		return c
+	}
+
+	for _, want := range []string{
+		"$(S)/p/a.proto",
+		"$(S)/q/b.proto",
+		"$(S)/lib/h1.h",
+		"$(S)/lib/h2.h",
+	} {
+		if got := countInput(want); got != 1 {
+			t.Fatalf("PR producer lists %q %d times, want exactly 1: %#v",
+				want, got, vfsStrings(pr.flatInputs()))
+		}
+	}
+
+	for _, absent := range []string{
+		"$(B)/p/a.pb.h", // intermediate generated header, not a producer input
+		"$(B)/q/b.pb.h",
+		"$(S)/r/c.proto", // unrelated proto family
+		"$(B)/r/c.pb.h",
+	} {
+		if countInput(absent) != 0 {
+			t.Fatalf("PR producer must not carry %q: %#v", absent, vfsStrings(pr.flatInputs()))
+		}
+	}
+}
+
 // A multi-output RUN_PROGRAM produces ONE build node keyed on its MAIN output —
 // FindMainElemOrDefault(GetOutput(), 0) picks the first OUT (ymake
 // macro_processor.cpp). Every other output becomes an EDT_OutTogether sibling
