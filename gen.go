@@ -131,12 +131,10 @@ var acknowledgedMacros = map[string]struct{}{
 	// acknowledged as no-ops only to get sg7 generation past the closed-TOK
 	// gate; modelling their nodes is the node-count convergence step.
 	// TODO: implement typed handlers.
-	//   - ARCHIVE_ASM: embed files as a rodata .o.
 	//   - LIST_PROTO: writes a .proto file listing.
 	// JAVA_PROTO_PLUGIN / GO_PROTO_PLUGIN register java/go protoc plugins —
 	// genuinely inert for a C++/Python target (cf. WITH_KOTLIN_GRPC above).
 	"FROM_SANDBOX":      {},
-	"ARCHIVE_ASM":       {},
 	"LIST_PROTO":        {},
 	"JAVA_PROTO_PLUGIN": {},
 	"GO_PROTO_PLUGIN":   {},
@@ -2033,6 +2031,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	emitBaseCodegensForAR(ctx, instance, d, moduleInputs)
 	pyCCRes := emitRunPythonForAR(ctx, instance, d, moduleInputs)
 
+	// ARCHIVE_ASM emits after the RUN_PROGRAM/RUN_PYTHON producers so its archived
+	// members (e.g. a RUN_PYTHON3 dictionary binary) are registered when the
+	// .rodata resource resolves them.
+	aaCCRes := emitArchiveAsmForAR(ctx, instance, d, moduleInputs)
+
 	enCCRes := emitEnumSrcs(ctx, instance, d, selfPeerAddInclGlobal, &moduleInputs)
 
 	// LJ_21_ARCHIVE emits its .raw producers and appends its archive_by_keys
@@ -2155,6 +2158,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if pyCCRes != nil {
 		for i, ref := range pyCCRes.CCRefs {
 			genCC(&SourceEmit{Ref: ref, OutPath: pyCCRes.CCOutputs[i]})
+		}
+	}
+
+	if aaCCRes != nil {
+		for i, ref := range aaCCRes.CCRefs {
+			genCC(&SourceEmit{Ref: ref, OutPath: aaCCRes.CCOutputs[i]})
 		}
 	}
 

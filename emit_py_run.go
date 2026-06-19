@@ -77,19 +77,58 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 		splitSrcs = splitCodegenSrcs(ctx, instance, d, stmt, scriptVFS)
 	}
 
+	// The run's $(S) source inputs (the python script + $(S) IN files) are real
+	// inputs of any unit that transitively consumes a generated output — directly,
+	// or after the output is archived (ARCHIVE_ASM's .rodata embeds out.dict.bin,
+	// whose RD compile must carry the script + IN leaves). A $(B) IN that is itself
+	// a codegen intermediate folds in its own $(S) generator sources, transitively;
+	// the $(B)-derived subset additionally rides as a non-expanded closure leaf so
+	// walkClosure carries it to consumers. Mirrors emitRunProgram.
+	var pySourceInputs []VFS
+	var pyGeneratedFromSources []VFS
+
+	if scriptVFS.isSource() {
+		pySourceInputs = append(pySourceInputs, scriptVFS)
+	}
+
+	reg := codegenRegForInstance(ctx, instance)
+
+	for _, v := range inVFSs {
+		if v.isSource() {
+			pySourceInputs = append(pySourceInputs, v)
+
+			continue
+		}
+
+		if info := reg.lookup(v); info != nil {
+			pyGeneratedFromSources = append(pyGeneratedFromSources, info.SourceInputs...)
+		}
+	}
+
+	pySourceInputs = append(pySourceInputs, pyGeneratedFromSources...)
+
 	// Reserve the PY producer's ref before registering its outputs; see emit_pr.go.
 	pyRef := ctx.emit.reserve()
 
+	registerPYOutput := func(out VFS, parsed []IncludeDirective) {
+		registerBoundGeneratedParsedOutput(ctx, instance, pkPY, out, parsed, pyRef, nil)
+		reg.setSourceInputs(out, pySourceInputs)
+
+		for _, s := range pyGeneratedFromSources {
+			reg.addClosureLeaf(out, s)
+		}
+	}
+
 	for _, f := range stmt.OUTFiles {
-		registerBoundGeneratedParsedOutput(ctx, instance, pkPY, outVFSByToken[f.string()], pyEmitsIncludes(ctx, instance, d, stmt, f.string(), scriptVFS, splitSrcs, hasCCShard), pyRef, nil)
+		registerPYOutput(outVFSByToken[f.string()], pyEmitsIncludes(ctx, instance, d, stmt, f.string(), scriptVFS, splitSrcs, hasCCShard))
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		registerBoundGeneratedParsedOutput(ctx, instance, pkPY, outVFSByToken[f.string()], pyEmitsIncludes(ctx, instance, d, stmt, f.string(), scriptVFS, splitSrcs, hasCCShard), pyRef, nil)
+		registerPYOutput(outVFSByToken[f.string()], pyEmitsIncludes(ctx, instance, d, stmt, f.string(), scriptVFS, splitSrcs, hasCCShard))
 	}
 
 	if stmt.StdoutFile != nil {
-		registerBoundGeneratedParsedOutput(ctx, instance, pkPY, *stdoutVFS, pyEmitsIncludes(ctx, instance, d, stmt, stmt.StdoutFile.string(), scriptVFS, splitSrcs, hasCCShard), pyRef, nil)
+		registerPYOutput(*stdoutVFS, pyEmitsIncludes(ctx, instance, d, stmt, stmt.StdoutFile.string(), scriptVFS, splitSrcs, hasCCShard))
 	}
 
 	inputClosure := pyInputClosure(ctx, instance, stmt, d, moduleInputs)
