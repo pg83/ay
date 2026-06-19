@@ -110,6 +110,78 @@ func TestGen_CythonCApiHeaderEmitsCompanionHeaders(t *testing.T) {
 	}
 }
 
+func TestGen_CythonizePyPxdSideInputClosure(t *testing.T) {
+	// Upstream pybuild.py: for a CYTHONIZE_PY `.py` source whose module has a
+	// sibling `<mod-as-path>.pxd`, `dep = pxd` is passed to the cython macro as
+	// `${hide;input:Dep}` — a hidden input whose transitive cimport / extern-from
+	// closure rides the CY node (gevent _abstract_linkable.py.c carries
+	// _gevent_c_abstract_linkable.pxd + its cimported pxds + greenlet.h).
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeTestModuleFile(files, "pkg/ya.make",
+		"PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\n"+
+			"ADDINCL(FOR cython pkg)\n"+
+			"PY_SRCS(TOP_LEVEL CYTHON_C gevent/mod.pyx CYTHONIZE_PY gevent/helper.py=gevent._helper gevent/plain.py=gevent._plain)\nEND()\n")
+	writeTestModuleFile(files, "pkg/gevent/mod.pyx", "def f():\n    return 0\n")
+	writeTestModuleFile(files, "pkg/gevent/helper.py", "def g():\n    return 1\n")
+	writeTestModuleFile(files, "pkg/gevent/plain.py", "def h():\n    return 2\n")
+	writeTestModuleFile(files, "pkg/gevent/_helper.pxd",
+		"from gevent._dep cimport thing\ncdef extern from \"gevent/api.h\":\n    pass\n")
+	writeTestModuleFile(files, "pkg/gevent/_dep.pxd", "cdef int x\n")
+	writeTestModuleFile(files, "pkg/gevent/api.h", "#pragma once\n")
+
+	g := testGen(newMemFS(files), "pkg")
+
+	cy := mustNodeByOutput(t, g, "$(B)/pkg/gevent/helper.py.c")
+
+	counts := map[string]int{}
+	for _, in := range cy.flatInputs() {
+		counts[in.string()]++
+	}
+
+	for _, want := range []string{
+		"$(S)/pkg/gevent/_helper.pxd",
+		"$(S)/pkg/gevent/_dep.pxd",
+		"$(S)/pkg/gevent/api.h",
+	} {
+		switch counts[want] {
+		case 0:
+			t.Fatalf("CY node missing pxd-side input %q; inputs=%v", want, cy.flatInputs())
+		case 1:
+		default:
+			t.Fatalf("CY node lists pxd-side input %q %d times, want exactly once", want, counts[want])
+		}
+	}
+
+	// The generated .c's compile node carries the same pxd closure (matching the
+	// .pyx case, whose compile already lists its own cimport closure).
+	cc := mustNodeByOutputSuffix(t, g, "gevent/helper.py.c.o")
+
+	ccInputs := map[string]bool{}
+	for _, in := range cc.flatInputs() {
+		ccInputs[in.string()] = true
+	}
+
+	for _, want := range []string{
+		"$(S)/pkg/gevent/_helper.pxd",
+		"$(S)/pkg/gevent/_dep.pxd",
+		"$(S)/pkg/gevent/api.h",
+	} {
+		if !ccInputs[want] {
+			t.Fatalf("generated-.c compile node missing pxd-side input %q; inputs=%v", want, cc.flatInputs())
+		}
+	}
+
+	// A CYTHONIZE_PY .py with no matching pxd carries no pxd side input.
+	plain := mustNodeByOutput(t, g, "$(B)/pkg/gevent/plain.py.c")
+	for _, in := range plain.flatInputs() {
+		if strings.HasSuffix(in.string(), ".pxd") {
+			t.Fatalf("CY node for a pxd-less .py must not carry a pxd input: %q", in.string())
+		}
+	}
+}
+
 func TestGen_ManualCompanionSourceUsesCythonCompanionCCInputs(t *testing.T) {
 	files := map[string]string{}
 
