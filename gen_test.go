@@ -2184,6 +2184,16 @@ func mustNodeByOutput(t *testing.T, g *Graph, output string) *Node {
 	return nil
 }
 
+func nodeByOutput(g *Graph, output string) *Node {
+	for _, n := range g.Graph {
+		if len(n.Outputs) > 0 && n.Outputs[0].string() == output {
+			return n
+		}
+	}
+
+	return nil
+}
+
 func mustNodeByAnyOutput(t *testing.T, g *Graph, output string) *Node {
 	t.Helper()
 

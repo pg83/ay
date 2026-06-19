@@ -17,18 +17,23 @@ func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in 
 		outs := make([]string, 0, len(rp.OUTFiles)+1)
 		outs = append(outs, strStrings(rp.OUTFiles)...)
 
-		if rp.StdoutFile != nil {
+		// Only auto STDOUT is a module source; STDOUT_NOAUTO carries upstream's
+		// `noauto` modifier and is excluded, exactly like OUT_NOAUTO.
+		if rp.StdoutFile != nil && !rp.StdoutNoAuto {
 			outs = append(outs, rp.StdoutFile.string())
 		}
 
 		for _, out := range outs {
-			if !isCCSourceExt(out) {
-				continue
+			switch {
+			case isCCSourceExt(out):
+				ccRef, ccOut := emitPRDownstreamCC(ctx, instance, out, pyRef, in)
+				res.CCRefs = append(res.CCRefs, ccRef)
+				res.CCOutputs = append(res.CCOutputs, ccOut)
+			case isAsmSourceExt(out):
+				asRef, asOut := emitCodegenDownstreamAS(ctx, instance, out, []NodeRef{pyRef}, in)
+				res.CCRefs = append(res.CCRefs, asRef)
+				res.CCOutputs = append(res.CCOutputs, asOut)
 			}
-
-			ccRef, ccOut := emitPRDownstreamCC(ctx, instance, out, pyRef, in)
-			res.CCRefs = append(res.CCRefs, ccRef)
-			res.CCOutputs = append(res.CCOutputs, ccOut)
 		}
 	}
 
