@@ -781,6 +781,7 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 
 	hasEv := false
 	hasProto := false
+	hasSc := false
 
 	// Pure id-space triage (memoized class); .fbs detection rides the same
 	// pass for genModule's flatbuffers auto-peer.
@@ -794,11 +795,19 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 			d.hasFbs = true
 		case srcExtY:
 			d.hasBisonY = true
+		case srcExtSc:
+			hasSc = true
 		}
 	}
 
 	if hasEv {
 		d.peerdirs = append(d.peerdirs, strLibraryCppEventlog, strContribLibsProtobuf)
+	}
+
+	if hasSc {
+		// _SRC("sc").PEERDIR=library/cpp/domscheme — the runtime the generated
+		// .sc.h includes.
+		d.peerdirs = append(d.peerdirs, strLibraryCppDomscheme)
 	}
 
 	if hasProto && !hasEv && d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary {

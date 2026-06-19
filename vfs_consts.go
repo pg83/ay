@@ -37,6 +37,7 @@ var (
 	contribToolsCythonPy2CythonIncludes                                                   = source("contrib/tools/cython_py2/Cython/Includes")
 	copyFsToolsVFS                                                                        = source("build/scripts/fs_tools.py")
 	decimalMD5PyVFS                                                                       = source("build/scripts/decimal_md5.py")
+	domschemeRuntimeVFS                                                                   = source("library/cpp/domscheme/runtime.h")
 	evEventlogIncludeVFS                                                                  = source("library/cpp/eventlog")
 	flatcRuntimeVFS                                                                       = source("contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h")
 	flatcWrapperVFS                                                                       = source("build/scripts/cpp_flatc_wrapper.py")
