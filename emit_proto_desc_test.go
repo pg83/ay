@@ -5,6 +5,109 @@ import (
 	"testing"
 )
 
+// TestDescProtoOutputRel_SRCDIRRebasesDescUnderModule pins the upstream
+// ${output;suf=.desc:File} SRCDIR rebasing for DESC_PROTO `.desc` outputs: when a
+// .proto SRC resolves (through SRCDIR) outside the declaring builtin module, the
+// `.desc` output must root under the module build dir with the `..` ascent mapped
+// to `__` segments; an in-module source keeps its rootrel path. Before the fix
+// descProtoOutputRel does not exist (compile failure) and the resolved physical
+// path was used verbatim.
+func TestDescProtoOutputRel_SRCDIRRebasesDescUnderModule(t *testing.T) {
+	cases := []struct {
+		name, instance, srcRel, resolved, want string
+	}{
+		{
+			name:     "protos_from_protobuf any.proto",
+			instance: "contrib/libs/protobuf/builtin_proto/protos_from_protobuf",
+			srcRel:   "google/protobuf/any.proto",
+			resolved: "contrib/libs/protobuf/src/google/protobuf/any.proto",
+			want:     "contrib/libs/protobuf/builtin_proto/protos_from_protobuf/__/__/src/google/protobuf/any.proto.desc",
+		},
+		{
+			name:     "protos_from_protoc plugin.proto",
+			instance: "contrib/libs/protobuf/builtin_proto/protos_from_protoc",
+			srcRel:   "google/protobuf/compiler/plugin.proto",
+			resolved: "contrib/libs/protoc/src/google/protobuf/compiler/plugin.proto",
+			want:     "contrib/libs/protobuf/builtin_proto/protos_from_protoc/__/__/__/protoc/src/google/protobuf/compiler/plugin.proto.desc",
+		},
+		{
+			name:     "normal in-module source",
+			instance: "myproto",
+			srcRel:   "foo.proto",
+			resolved: "myproto/foo.proto",
+			want:     "myproto/foo.proto.desc",
+		},
+	}
+
+	for _, c := range cases {
+		if got := descProtoOutputRel(c.instance, c.srcRel, c.resolved); got != c.want {
+			t.Errorf("%s: descProtoOutputRel(%q, %q, %q) = %q, want %q",
+				c.name, c.instance, c.srcRel, c.resolved, got, c.want)
+		}
+	}
+}
+
+// TestEmitDescProto_SRCDIRBuiltinDescRoot is the graph regression for the T-37
+// residual: a protos_from_protobuf-style PROTO_LIBRARY whose SRCS resolve through
+// SRCDIR outside the module must emit its `.desc` under the module build root
+// (with `__` ascent), keep `.rawproto` at the physical source root, and feed the
+// rebased `.desc` to its `.self.protodesc` merge command.
+func TestEmitDescProto_SRCDIRBuiltinDescRoot(t *testing.T) {
+	const moduleDir = "contrib/libs/protobuf/builtin_proto/protos_from_protobuf"
+	const srcDir = "contrib/libs/protobuf/src"
+	const descDir = "desc"
+
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	files["contrib/libs/protobuf/ya.make"] = "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n"
+	files[moduleDir+"/ya.make"] = "PROTO_LIBRARY()\nDISABLE(NEED_GOOGLE_PROTO_PEERDIRS)\nPROTO_NAMESPACE(GLOBAL " + srcDir + ")\nSRCDIR(" + srcDir + ")\nSRCS(google/protobuf/any.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n"
+	files[srcDir+"/google/protobuf/any.proto"] = "syntax = \"proto3\";\npackage google.protobuf;\nmessage Any { int32 x = 1; }\n"
+	files[descDir+"/ya.make"] = "PROTO_DESCRIPTIONS()\nPEERDIR(" + moduleDir + ")\nEND()\n"
+
+	g := testGen(newMemFS(files), descDir)
+
+	outputs := make(map[string]*Node, len(g.Graph))
+	for _, n := range g.Graph {
+		for _, o := range n.Outputs {
+			outputs[o.string()] = n
+		}
+	}
+
+	hash := moddirHash(moduleDir)
+	rebasedDesc := "$(B)/" + moduleDir + "/__/__/src/google/protobuf/any.proto.desc"
+	physDesc := "$(B)/" + srcDir + "/google/protobuf/any.proto.desc"
+	rawOut := "$(B)/" + srcDir + "/google/protobuf/any.proto." + hash + ".rawproto"
+
+	if outputs[rebasedDesc] == nil {
+		t.Errorf("graph missing module-rooted .desc output %q", rebasedDesc)
+	}
+	if outputs[physDesc] != nil {
+		t.Errorf("graph still emits physical-source-root .desc output %q", physDesc)
+	}
+	if outputs[rawOut] == nil {
+		t.Errorf("graph missing physical-source-root .rawproto output %q", rawOut)
+	}
+
+	prj := realPrjName(moduleDir)
+	merge := outputs["$(B)/"+moduleDir+"/"+prj+".self.protodesc"]
+	if merge == nil {
+		t.Fatalf("no .self.protodesc merge node")
+	}
+	var mergeCmd string
+	for _, c := range merge.Cmds {
+		for _, a := range c.CmdArgs.flat() {
+			mergeCmd += a.string() + " "
+		}
+	}
+	if !strings.Contains(mergeCmd, moduleDir+"/__/__/src/google/protobuf/any.proto.desc") {
+		t.Errorf(".self.protodesc merge cmd does not consume rebased .desc\ncmd: %s", mergeCmd)
+	}
+	if strings.Contains(mergeCmd, srcDir+"/google/protobuf/any.proto.desc") {
+		t.Errorf(".self.protodesc merge cmd still consumes physical-source-root .desc\ncmd: %s", mergeCmd)
+	}
+}
+
 // TestEmitProtoDescriptions_PDProducerShape reproduces the sg7 PD gap: a
 // PROTO_DESCRIPTIONS target that PEERDIRs a PROTO_LIBRARY must, via the
 // DESC_PROTO submodule, emit one proto-description producer per .proto SRC
