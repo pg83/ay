@@ -29,8 +29,13 @@ type ModuleCCInputs struct {
 	// transitively peered PROTO_LIBRARY, in encounter order). Distinct from
 	// PeerAddInclGlobal which feeds the C++ compile pipeline. See ModuleEmitResult.
 	ProtoInclude []VFS
-	CXXFlags     []ARG
-	COnlyFlags   []ARG
+	// ProtoOwnNamespaceInPeers reports that a peer also declares this module's own
+	// PROTO_NAMESPACE (its GLOBAL `FOR proto $(S)/<ns>` source addincl propagates),
+	// so the module's own namespace appears in _PROTO__INCLUDE a second time. Drives
+	// duplicateOutputRootInclude for LIBRARY-hosted .proto sources (emitLibraryProtoSource).
+	ProtoOwnNamespaceInPeers bool
+	CXXFlags                 []ARG
+	COnlyFlags               []ARG
 	// ClangWarnings is _CLANG_USER_WARNINGS_VALUE — the autoincluded
 	// linters.make.inc CLANG_WARNINGS, emitted just after the -I block and before
 	// the compile-flag pipeline (between GCC_COMPILE_FLAGS and CXXFLAGS upstream).
