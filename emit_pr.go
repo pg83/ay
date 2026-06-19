@@ -157,11 +157,18 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		registerBoundGeneratedParsedOutput(ctx, instance, pkPR, out, parsed, prRef, []NodeRef{toolLDRef})
 		reg.setSourceInputs(out, prSourceInputs)
 
-		// A non-main output is an EDT_OutTogether sibling of the main output; a
-		// consumer of it carries the main output as an input (see GeneratedFileInfo
-		// .OutTogetherMain / emit_codegen_cc.go).
+		// A non-main output is an EDT_OutTogether sibling of the main output: ymake's
+		// json_visitor PrepareLeaving rides the main output onto any node depending on
+		// a non-main sibling. Ride it as a non-expanded closure leaf of the sibling, so
+		// the scanner splices the main output into every window containing the sibling
+		// — the root same-run consumer (caesar features.gen.h sibling of features.gen.cpp)
+		// AND any transitive consumer whose include closure reaches the sibling through
+		// a different module (the with_transitive_headers/advm_banner.pb.h wrapper class,
+		// where advm_banner is the first OUT and no source #includes it directly). The
+		// leaf never rides onto the PR producer itself (dropOwnOutputs strips it from the
+		// producer's own input closure).
 		if out != mainOutputVFS {
-			reg.lookup(out).OutTogetherMain = mainOutputVFS
+			reg.addClosureLeaf(out, mainOutputVFS)
 		}
 
 		for _, s := range prGeneratedFromSources {
@@ -183,6 +190,13 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	inputClosure := prInputClosure(ctx, instance, d, stmt, moduleInputs)
 
+	// A command never inputs its own outputs. prInputClosure walks this run's
+	// cc-source OUTs (to surface OUTPUT_INCLUDES from `.in` templates); those
+	// windows now carry the OutTogether main-output leaf (registerPROutput), which
+	// must ride onto CONSUMERS, not back onto the producer. Drop any own-output VFS
+	// the self-walk pulled in.
+	inputClosure = dropOwnOutputs(inputClosure, outVFSByToken)
+
 	// A build-rooted IN that is a registered codegen output but carries no include
 	// parser (e.g. a FROM_SANDBOX OUT_NOAUTO fetch artifact) never enters
 	// inputClosure, yet the PR still depends on its producer. Resolve producer deps
@@ -202,6 +216,32 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	emitPR(instance, stmt, toolBinPath, toolLDRef, auxTools, inVFSByToken, inVFSs, outVFSByToken, stdoutVFS, inputClosure, prExtraDepRefs, prRef, ctx.emit)
 
 	return prRef
+}
+
+// dropOwnOutputs removes any of this run's declared output VFSs from its own
+// input closure. A producer never depends on a file it produces; the self-walk
+// of cc-source OUTs can otherwise pull a sibling output in via the OutTogether
+// closure leaf. Returns closure unchanged when nothing collides.
+func dropOwnOutputs(closure []VFS, outVFSByToken map[STR]VFS) []VFS {
+	if len(closure) == 0 || len(outVFSByToken) == 0 {
+		return closure
+	}
+
+	owned := make(map[VFS]bool, len(outVFSByToken))
+	for _, v := range outVFSByToken {
+		owned[v] = true
+	}
+
+	kept := closure[:0:0]
+	for _, v := range closure {
+		if owned[v] {
+			continue
+		}
+
+		kept = append(kept, v)
+	}
+
+	return kept
 }
 
 func isCCSourceExt(p string) bool {
