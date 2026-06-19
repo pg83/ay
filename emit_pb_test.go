@@ -455,6 +455,77 @@ END()
 	}
 }
 
+func TestGen_ProtoLibrary_ExportYmapsProtoReachesCppProtoCmd(t *testing.T) {
+	files := map[string]string{}
+
+	// A maps proto leaf uses EXPORT_YMAPS_PROTO(), which upstream expands to
+	// PROTO_NAMESPACE(maps/doc/proto) -> PROTO_ADDINCL(GLOBAL maps/doc/proto).
+	// The GLOBAL FOR proto SOURCE arm propagates $(S)/maps/doc/proto through the
+	// CPP_PROTO peer closure into every transitive consumer's protoc command.
+	writeTestModuleFile(files, "leaf/ya.make", `PROTO_LIBRARY()
+EXPORT_YMAPS_PROTO()
+SRCS(leaf.proto)
+END()
+`)
+	writeTestModuleFile(files, "leaf/leaf.proto", "syntax = \"proto3\";\npackage test;\nmessage Leaf {}\n")
+
+	writeTestModuleFile(files, "consumer/ya.make", `PROTO_LIBRARY()
+PEERDIR(leaf)
+SRCS(brand.proto)
+END()
+`)
+	writeTestModuleFile(files, "consumer/brand.proto", "syntax = \"proto3\";\npackage test;\nmessage Brand {}\n")
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "consumer")
+
+	pb := findGraphNodeByOutputs(t, g,
+		"$(B)/consumer/brand.pb.h",
+		"$(B)/consumer/brand.pb.cc",
+	)
+
+	args := strStrs(pb.Cmds[0].CmdArgs.flat())
+
+	const wantTok = "-I=$(S)/maps/doc/proto"
+	mapsCount := 0
+	for _, a := range args {
+		if a == wantTok {
+			mapsCount++
+		}
+	}
+	if mapsCount == 0 {
+		t.Fatalf("consumer pb cmd missing transitive EXPORT_YMAPS_PROTO token %s: %v", wantTok, args)
+	}
+	if mapsCount > 1 {
+		t.Fatalf("consumer pb cmd duplicates %s (%d times): %v", wantTok, mapsCount, args)
+	}
+
+	mapsIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), wantTok)
+	cppOutIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "--cpp_out=:$(B)/")
+	if !(mapsIdx >= 0 && mapsIdx < cppOutIdx) {
+		t.Fatalf("expected maps/doc/proto include before --cpp_out: maps=%d cpp_out=%d args=%v", mapsIdx, cppOutIdx, args)
+	}
+
+	// No C++ include leakage: the only graph token mentioning maps/doc/proto must
+	// be the proto-command form above. A C++ `-I$(B)/maps/doc/proto` (the
+	// ADDINCL(GLOBAL $(B)/...) half of PROTO_ADDINCL, deliberately not modeled)
+	// would be leakage.
+	for _, n := range g.Graph {
+		for _, cmd := range n.Cmds {
+			for _, a := range strStrs(cmd.CmdArgs.flat()) {
+				if strings.Contains(a, "maps/doc/proto") && a != wantTok {
+					t.Fatalf("C++ include leakage of maps/doc/proto: token %q on outputs %v", a, vfsStrings(n.Outputs))
+				}
+			}
+		}
+	}
+}
+
 func TestGen_ProtoLibrary_TransitiveHeadersNoKeepsPublicImportsOnLitePBHeader(t *testing.T) {
 	files := map[string]string{}
 

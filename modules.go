@@ -1801,6 +1801,18 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 			d.addInclGlobal = append(d.addInclGlobal, protoBuildRoot)
 			d.addInclUserGlobal = append(d.addInclUserGlobal, protoBuildRoot)
 		}
+	case tokExportYmapsProto:
+		// build/internal/conf/project_specific/maps/sproto.conf:
+		//   macro EXPORT_YMAPS_PROTO() { PROTO_NAMESPACE(maps/doc/proto) ... }
+		// PROTO_NAMESPACE always calls PROTO_ADDINCL with a literal GLOBAL
+		// (proto.conf), whose SOURCE arm is `GLOBAL FOR proto $(S)/maps/doc/proto`.
+		// That GLOBAL proto addincl rides the CPP_PROTO peer closure and renders as
+		// -I=$(S)/maps/doc/proto in every transitive consumer's protoc command via
+		// ${pre=-I=:_PROTO__INCLUDE}. We model only this include-propagation half
+		// (the same protoAddInclGlobal carrier as a parsed `GLOBAL FOR proto X`);
+		// the SET(PROTO_NAMESPACE) output-path half and the C++ ADDINCL(GLOBAL
+		// $(B)/...) half are intentionally out of scope (no C++ -I leakage).
+		d.protoAddInclGlobal = append(d.protoAddInclGlobal, mapsDocProto)
 	case tokExcludeTags:
 		// upstream uses EXCLUDE_TAGS to drop submodules of a multimodule
 		// from the build (per the PROTO_LIBRARY definition at
