@@ -5,6 +5,132 @@ import (
 	"testing"
 )
 
+// TestEmitProtoSrcs_YaffGeneratedHeaderClosureRidesIntoConsumer reproduces the
+// sg7 YaFF include-closure gap (representative: ads/argus/libs/common/types.cpp.o).
+// A unit includes a generated <proto>.yaff.h. Upstream's YaFF protoc plugin
+// writes that header so it #includes the yaff runtime (yaff/struct/protobuf/
+// reflect) + the proto's own .pb.h + — for an EXPERIMENTAL proto — the
+// experiments builder/column/merge runtime. The generated header must therefore
+// be registered with those parsed includes so the whole closure rides into every
+// compile that includes it. Before the fix the .yaff.h is an unregistered
+// generated output: the include resolves to nothing and none of the closure
+// (foo.yaff.h, foo.pb.h, the yaff/experiments source headers) reaches the
+// consumer's inputs.
+func TestEmitProtoSrcs_YaffGeneratedHeaderClosureRidesIntoConsumer(t *testing.T) {
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "library/cpp/yaff/tools/protoc_plugin", "protoc_plugin")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	// YaFF runtime source headers. yaff.h and experiments/builder.h each pull a
+	// transitive sibling (base.h) so the test pins closure propagation, not just
+	// the direct includes.
+	writeTestModuleFile(files, "library/cpp/yaff/yaff.h", "#pragma once\n#include <library/cpp/yaff/base.h>\n")
+	writeTestModuleFile(files, "library/cpp/yaff/base.h", "#pragma once\n")
+	writeTestModuleFile(files, "library/cpp/yaff/struct.h", "#pragma once\n")
+	writeTestModuleFile(files, "library/cpp/yaff/protobuf.h", "#pragma once\n")
+	writeTestModuleFile(files, "library/cpp/yaff/reflect.h", "#pragma once\n")
+	writeTestModuleFile(files, "library/cpp/yaff/experiments/builder.h", "#pragma once\n#include <library/cpp/yaff/experiments/base.h>\n")
+	writeTestModuleFile(files, "library/cpp/yaff/experiments/base.h", "#pragma once\n")
+	writeTestModuleFile(files, "library/cpp/yaff/experiments/column.h", "#pragma once\n")
+	writeTestModuleFile(files, "library/cpp/yaff/experiments/merge.h", "#pragma once\n")
+
+	writeTestModuleFile(files, "proto/ya.make",
+		"PROTO_LIBRARY()\nSET(PROTOC_TRANSITIVE_HEADERS \"no\")\nYAFF(EXPERIMENTAL foo.proto)\nSRCS(foo.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
+	writeTestModuleFile(files, "proto/foo.proto", "syntax = \"proto3\";\npackage test;\nmessage Foo { string v = 1; }\n")
+
+	writeTestModuleFile(files, "app/ya.make",
+		"LIBRARY()\nPEERDIR(proto)\nSRCS(use.cpp)\nEND()\n")
+	writeTestModuleFile(files, "app/use.cpp", "#include <proto/foo.yaff.h>\nint use(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+	useCC := mustNodeByOutput(t, g, "$(B)/app/use.cpp.o")
+
+	for _, want := range []string{
+		"$(B)/proto/foo.yaff.h",
+		"$(B)/proto/foo.pb.h",
+		"$(S)/library/cpp/yaff/yaff.h",
+		"$(S)/library/cpp/yaff/base.h",
+		"$(S)/library/cpp/yaff/struct.h",
+		"$(S)/library/cpp/yaff/protobuf.h",
+		"$(S)/library/cpp/yaff/reflect.h",
+		"$(S)/library/cpp/yaff/experiments/builder.h",
+		"$(S)/library/cpp/yaff/experiments/base.h",
+		"$(S)/library/cpp/yaff/experiments/column.h",
+		"$(S)/library/cpp/yaff/experiments/merge.h",
+	} {
+		if !nodeHasInput(useCC, want) {
+			t.Errorf("use.cpp.o missing YaFF closure input %q", want)
+		}
+	}
+}
+
+// TestEmitProtoSrcs_YaffFilesWhitelistSkipsNonWhitelistedHeaderClosure pins the
+// upstream FILES-whitelist gate (proto_plugin.cpp NeedToProcessFile). With
+// YAFF(FILES kept.proto) the plugin runs its generators only for kept.proto;
+// skipped.yaff.h is opened but written empty, so a unit that includes
+// skipped.yaff.h must NOT pull the yaff runtime / .pb.h / experiments closure,
+// while a unit that includes kept.yaff.h still does. Without the whitelist gate
+// the registration over-collects the runtime closure for every YaFF output.
+func TestEmitProtoSrcs_YaffFilesWhitelistSkipsNonWhitelistedHeaderClosure(t *testing.T) {
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "library/cpp/yaff/tools/protoc_plugin", "protoc_plugin")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	writeTestModuleFile(files, "library/cpp/yaff/yaff.h", "#pragma once\n#include <library/cpp/yaff/base.h>\n")
+	writeTestModuleFile(files, "library/cpp/yaff/base.h", "#pragma once\n")
+	writeTestModuleFile(files, "library/cpp/yaff/struct.h", "#pragma once\n")
+	writeTestModuleFile(files, "library/cpp/yaff/protobuf.h", "#pragma once\n")
+	writeTestModuleFile(files, "library/cpp/yaff/reflect.h", "#pragma once\n")
+
+	writeTestModuleFile(files, "proto/ya.make",
+		"PROTO_LIBRARY()\nSET(PROTOC_TRANSITIVE_HEADERS \"no\")\nYAFF(FILES kept.proto)\nSRCS(kept.proto skipped.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
+	writeTestModuleFile(files, "proto/kept.proto", "syntax = \"proto3\";\npackage test;\nmessage Kept { string v = 1; }\n")
+	writeTestModuleFile(files, "proto/skipped.proto", "syntax = \"proto3\";\npackage test;\nmessage Skipped { string v = 1; }\n")
+
+	writeTestModuleFile(files, "app/ya.make",
+		"LIBRARY()\nPEERDIR(proto)\nSRCS(usekept.cpp useskip.cpp)\nEND()\n")
+	writeTestModuleFile(files, "app/usekept.cpp", "#include <proto/kept.yaff.h>\nint usekept(){return 0;}\n")
+	writeTestModuleFile(files, "app/useskip.cpp", "#include <proto/skipped.yaff.h>\nint useskip(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+
+	keptCC := mustNodeByOutput(t, g, "$(B)/app/usekept.cpp.o")
+	for _, want := range []string{
+		"$(B)/proto/kept.yaff.h",
+		"$(B)/proto/kept.pb.h",
+		"$(S)/library/cpp/yaff/yaff.h",
+		"$(S)/library/cpp/yaff/struct.h",
+	} {
+		if !nodeHasInput(keptCC, want) {
+			t.Errorf("usekept.cpp.o missing whitelisted YaFF closure input %q", want)
+		}
+	}
+
+	skipCC := mustNodeByOutput(t, g, "$(B)/app/useskip.cpp.o")
+	// skipped.yaff.h itself still resolves (it is a generated output), but it is
+	// empty upstream: none of the runtime / .pb.h / experiments closure rides in.
+	for _, notWant := range []string{
+		"$(B)/proto/skipped.pb.h",
+		"$(S)/library/cpp/yaff/yaff.h",
+		"$(S)/library/cpp/yaff/base.h",
+		"$(S)/library/cpp/yaff/struct.h",
+		"$(S)/library/cpp/yaff/protobuf.h",
+		"$(S)/library/cpp/yaff/reflect.h",
+	} {
+		if nodeHasInput(skipCC, notWant) {
+			t.Errorf("useskip.cpp.o over-collected non-whitelisted YaFF closure input %q", notWant)
+		}
+	}
+}
+
 // TestEmitProtoSrcs_GeneratedProtoWiresProducerDep reproduces the
 // jsonpath G2 gap: a PROTO_LIBRARY whose SRCS(X.proto) is itself the OUT
 // of a RUN_ANTLR (no X.proto in source tree). The PB protoc node must wire
