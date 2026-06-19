@@ -1795,24 +1795,18 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 			throwFmt("gen: PROTO_NAMESPACE expects at least 1 argument")
 		}
 
-		d.protoNamespace = strPtr(v.Args[len(v.Args)-1])
+		global := false
 
 		for _, arg := range v.Args[:len(v.Args)-1] {
 			if arg.string() == "GLOBAL" {
-				d.protoNamespaceGlobal = true
+				global = true
 			}
 		}
 
-		protoBuildRoot := build(filepath.ToSlash(filepath.Clean(d.protoNamespace.string())))
-		d.addIncl = append(d.addIncl, protoBuildRoot)
-
-		if d.protoNamespaceGlobal || (d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary) {
-			d.addInclGlobal = append(d.addInclGlobal, protoBuildRoot)
-			d.addInclUserGlobal = append(d.addInclUserGlobal, protoBuildRoot)
-		}
+		applyProtoNamespace(d, v.Args[len(v.Args)-1], global)
 	case tokExportYmapsProto:
 		// build/internal/conf/project_specific/maps/sproto.conf:
-		//   macro EXPORT_YMAPS_PROTO() { PROTO_NAMESPACE(maps/doc/proto) ... }
+		//   macro EXPORT_YMAPS_PROTO() { PROTO_NAMESPACE(maps/doc/proto) }
 		// PROTO_NAMESPACE always calls PROTO_ADDINCL with a literal GLOBAL
 		// (proto.conf), whose SOURCE arm is `GLOBAL FOR proto $(S)/maps/doc/proto`.
 		// That GLOBAL proto addincl rides the CPP_PROTO peer closure and renders as
@@ -1820,15 +1814,15 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		// ${pre=-I=:_PROTO__INCLUDE} (the include-propagation half, T-30; same
 		// protoAddInclGlobal carrier as a parsed `GLOBAL FOR proto X`).
 		d.protoAddInclGlobal = append(d.protoAddInclGlobal, mapsDocProto)
-		// PROTO_ADDINCL also emits `ADDINCL(GLOBAL ${ARCADIA_BUILD_ROOT}/$Path)` —
-		// an ordinary GLOBAL C++ ADDINCL of the build root that rides the GLOBAL
-		// peer addincl closure and renders as -I$(B)/maps/doc/proto in every
-		// transitive consumer's C++ compile commands (T-32). Mirrors the
-		// tokProtoNamespace PROTO_LIBRARY branch above. The source-root arm stays
-		// out (protoc-only), so no source-root C++ leakage. The SET(PROTO_NAMESPACE)
-		// output-path half is still out of scope.
-		d.addInclGlobal = append(d.addInclGlobal, mapsDocProtoBuild)
-		d.addInclUserGlobal = append(d.addInclUserGlobal, mapsDocProtoBuild)
+		// SET(PROTO_NAMESPACE maps/doc/proto) plus PROTO_ADDINCL's
+		// `ADDINCL(GLOBAL ${ARCADIA_BUILD_ROOT}/$Path)`: applyProtoNamespace sets the
+		// output root (so the maps module's own protoc commands and outputs root at
+		// maps/doc/proto, T-35) and contributes the GLOBAL build-root C++ ADDINCL
+		// that rides the peer closure into transitive consumers' C++ compiles
+		// (-I$(B)/maps/doc/proto, T-32). The bare (non-GLOBAL) call matches
+		// PROTO_NAMESPACE(maps/doc/proto). The protoc-only source arm stays in
+		// protoAddInclGlobal above, so no source-root C++ leakage.
+		applyProtoNamespace(d, mapsDocProtoNS, false)
 	case tokExcludeTags:
 		// upstream uses EXCLUDE_TAGS to drop submodules of a multimodule
 		// from the build (per the PROTO_LIBRARY definition at
@@ -2697,6 +2691,30 @@ func pythonInitSuffix(name string) string {
 	}
 
 	return mangled.String()
+}
+
+// applyProtoNamespace models PROTO_NAMESPACE (yatool/build/conf/proto.conf):
+//   SET(PROTO_NAMESPACE $Namespace)
+//   PROTO_ADDINCL(GLOBAL $Namespace)  -> ADDINCL(GLOBAL ${ARCADIA_BUILD_ROOT}/$Path)
+// It records the namespace output root and the build-root C++ ADDINCL. For GLOBAL
+// or PROTO_LIBRARY modules the build-root include also rides the GLOBAL/user-global
+// peer addincl closure into transitive consumers. The protoc source arm is carried
+// separately by the caller via d.protoAddInclGlobal. EXPORT_YMAPS_PROTO reuses this
+// so the two macros cannot drift.
+func applyProtoNamespace(d *ModuleData, namespace STR, global bool) {
+	d.protoNamespace = strPtr(namespace)
+
+	if global {
+		d.protoNamespaceGlobal = true
+	}
+
+	protoBuildRoot := build(filepath.ToSlash(filepath.Clean(namespace.string())))
+	d.addIncl = append(d.addIncl, protoBuildRoot)
+
+	if d.protoNamespaceGlobal || (d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary) {
+		d.addInclGlobal = append(d.addInclGlobal, protoBuildRoot)
+		d.addInclUserGlobal = append(d.addInclUserGlobal, protoBuildRoot)
+	}
 }
 
 func applyArchiveStmt(v *UnknownStmt, d *ModuleData) {
