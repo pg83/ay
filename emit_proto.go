@@ -303,7 +303,16 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 	if info := codegenRegForInstance(ctx, instance).lookup(buildProto); info != nil {
 		protoSrcOverride = buildProto
 		extraProtoDeps = []NodeRef{info.ProducerRef}
+
+		// Upstream's flat-input model folds the generated `.proto` producer's full
+		// transitive $(S) closure (its OUTPUT_INCLUDES protos and their imports) onto
+		// the protoc PB node, exactly as on the py PB / py3cc nodes. Prefer the full
+		// closure; fall back to the direct-leaf SourceInputs when none was recorded.
 		protoProducerSourceInputs = info.SourceInputs
+
+		if len(info.ProducerSourceClosure) > 0 {
+			protoProducerSourceInputs = info.ProducerSourceClosure
+		}
 	}
 
 	pbRef := emitPB(
