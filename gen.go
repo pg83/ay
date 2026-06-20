@@ -2068,6 +2068,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		Ragel6Flags: d.ragel6Flags,
 		BisonFlags:  d.bisonFlags,
 		BisonGenExt: d.bisonGenExt.string(),
+		NoOptimize:  d.noOptimize,
 		TC:          d.tc,
 	}
 	moduleInputs.ScanCfg = newScanContext(ctx.parsers, dedupedAddIncl, selfPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
@@ -2599,6 +2600,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			peerObjAddLibsGlobal,
 			d.exportsScript,
 			d.flags.NoCompilerWarnings,
+			d.noOptimize,
 			wantsStrip,
 			d.splitDwarf,
 			programModuleTag,

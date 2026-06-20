@@ -177,6 +177,7 @@ var (
 	argNone                                      = internArg("None")
 	argNostdlib                                  = internArg("-nostdlib")
 	argNs                                        = internArg("--ns")
+	argO0                                        = internArg("-O0")
 	argO3                                        = internArg("-O3")
 	argObjcopy                                   = internArg("--objcopy")
 	argObjcopyExe                                = internArg("--objcopy-exe")
