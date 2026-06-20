@@ -3140,6 +3140,35 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		walk(peerPath)
 	}
 
+	// orderedResolved is `resolved` with the proto plugin-runtime peers
+	// (d.protoCmdPeers) hoisted ahead of the rest of the declared PEERDIR closure,
+	// reproducing upstream's induced-peer-first peer order (CPP_PROTOBUF_PEERS
+	// injected via `PEERDIR+=` ahead of the body's PEERDIR, ymake.core.conf:2002).
+	// ymake derives one peer order for both the GLOBAL ADDINCL (`-I`) closure and
+	// the link/archive closure (UniqPeers), so every link-order aggregation below
+	// (addIncl, archive, sbom, global, whole-archive, dynamic, ldPlugin) walks this
+	// order. The prefix (defaults/cppSelf/googleapis) keeps its front slot. Flag /
+	// resource-global / proto-include unions key off a dedup set, not link order,
+	// so they keep the plain `resolved` order.
+	orderedResolved := resolved
+
+	if firstPeerdirIdx < len(resolved) {
+		orderedResolved = make([]*ModuleEmitResult, 0, len(resolved))
+		orderedResolved = append(orderedResolved, resolved[:firstPeerdirIdx]...)
+
+		for i := firstPeerdirIdx; i < len(resolved); i++ {
+			if peerdirFront[i] {
+				orderedResolved = append(orderedResolved, resolved[i])
+			}
+		}
+
+		for i := firstPeerdirIdx; i < len(resolved); i++ {
+			if !peerdirFront[i] {
+				orderedResolved = append(orderedResolved, resolved[i])
+			}
+		}
+	}
+
 	out := PeerGlobalContribs{}
 
 	// Resource globals, deduped by global-var STR cast into the run-wide
@@ -3164,23 +3193,8 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		}
 	}
 
-	// Prefix (defaults/cppSelf/googleapis) keeps its slot; then the proto plugin
-	// peers, then the rest of the declared PEERDIR closure — reproducing upstream's
-	// induced-peer-first include order without disturbing archive/link order.
-	for _, pr := range resolved[:firstPeerdirIdx] {
+	for _, pr := range orderedResolved {
 		addInclFrom(pr)
-	}
-
-	for i := firstPeerdirIdx; i < len(resolved); i++ {
-		if peerdirFront[i] {
-			addInclFrom(resolved[i])
-		}
-	}
-
-	for i := firstPeerdirIdx; i < len(resolved); i++ {
-		if !peerdirFront[i] {
-			addInclFrom(resolved[i])
-		}
 	}
 
 	deduper.reset()
@@ -3214,7 +3228,7 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	// archive: closure paths, then the peer's own AR output (per peer).
 	deduper.reset()
 
-	for _, pr := range resolved {
+	for _, pr := range orderedResolved {
 		for i, p := range pr.PeerArchiveClosurePaths {
 			if deduper.add(p) {
 				out.archiveRefs = append(out.archiveRefs, pr.PeerArchiveClosureRefs[i])
@@ -3236,7 +3250,7 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	// front of SRCS_GLOBAL instead of its link-position slot.
 	deduper.reset()
 
-	for _, pr := range resolved {
+	for _, pr := range orderedResolved {
 		for i, p := range pr.PeerSbomClosurePaths {
 			if p == lldToolchainSbomVFS {
 				continue
@@ -3257,7 +3271,7 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	// global: closure paths, then the peer's own GLOBAL output.
 	deduper.reset()
 
-	for _, pr := range resolved {
+	for _, pr := range orderedResolved {
 		for i, p := range pr.PeerGlobalClosurePaths {
 			if deduper.add(p) {
 				out.globalRefs = append(out.globalRefs, pr.PeerGlobalClosureRefs[i])
@@ -3274,7 +3288,7 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	// wholeArchive: closure paths, then the peer's own whole-archive paths.
 	deduper.reset()
 
-	for _, pr := range resolved {
+	for _, pr := range orderedResolved {
 		for i, p := range pr.PeerWholeArchiveClosurePaths {
 			if deduper.add(p) {
 				out.wholeArchiveRefs = append(out.wholeArchiveRefs, pr.PeerWholeArchiveClosureRefs[i])
@@ -3293,7 +3307,7 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	// wholeArchiveCmd: command-line whole-archive paths (no refs).
 	deduper.reset()
 
-	for _, pr := range resolved {
+	for _, pr := range orderedResolved {
 		for _, p := range pr.PeerWholeArchiveCmdClosurePaths {
 			if deduper.add(p) {
 				out.wholeArchiveCmdPaths = append(out.wholeArchiveCmdPaths, p)
@@ -3309,7 +3323,7 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 
 	deduper.reset()
 
-	for _, pr := range resolved {
+	for _, pr := range orderedResolved {
 		for i, p := range pr.LDPluginPaths {
 			if deduper.add(p) {
 				out.ldPluginRefs = append(out.ldPluginRefs, pr.LDPluginRefs[i])
@@ -3321,7 +3335,7 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	// dynamic: closure paths, then the peer's own DYNAMIC_LIBRARY output.
 	deduper.reset()
 
-	for _, pr := range resolved {
+	for _, pr := range orderedResolved {
 		for i, p := range pr.PeerDynamicClosurePaths {
 			if deduper.add(p) {
 				out.dynamicRefs = append(out.dynamicRefs, pr.PeerDynamicClosureRefs[i])
