@@ -219,6 +219,16 @@ func (pm *IncludeParserManager) parsedIncludes(vfsPath VFS, ctxParser IncludeDir
 	return pm.sourceParsedBuckets(vfsPath, ctxParser).bucket(walkableBucketFor(vfsPath.rel()))
 }
 
+// injectSourceParse records a precomputed parse under a build-generated file's
+// SOURCE-rooted VFS, so the source-path parse readers (sourceParsedBuckets, used
+// by the proto PB emitter and its transitive-import walk) resolve a generated
+// proto whose on-disk source does not exist. The parse is context-free — the
+// same directives for every asker — so it preserves the resolution-cache
+// invariant. Used by the gztproto emitter for the gztconverter-generated .proto.
+func (pm *IncludeParserManager) injectSourceParse(vfsPath VFS, set ParsedIncludeSet) {
+	pm.cache.parsed.put(STR(vfsPath.strID()), set)
+}
+
 func (pm *IncludeParserManager) registerBuildParsedIncludes(out VFS, parsed []IncludeDirective) {
 	// buildParsed is keyed by VFS and consulted only for build-rooted paths
 	// (parsedIncludes gates on IsBuild), so a source-rooted registration would

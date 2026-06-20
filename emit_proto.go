@@ -370,6 +370,17 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		pbHParsed = append(pbHParsed, extras...)
 
 		for _, ti := range transitiveImports {
+			// A build-generated transitive import (e.g. a peer .gztproto's generated
+			// .proto) is a codegen intermediate: it is a real protoc input on THIS PB
+			// node, but a unit that #includes this .pb.h reaches the import's
+			// pre-generation SOURCE (the .gztproto, riding as a pb.h closure leaf via
+			// protoProducerSourceInputs), not the $(B) .proto. Emitting the $(B) path
+			// here would drag the generated .proto into every consumer's compile,
+			// which upstream does not. Source-rooted imports ride through unchanged.
+			if ti.isBuild() {
+				continue
+			}
+
 			pbHParsed = append(pbHParsed, IncludeDirective{kind: includeQuoted, target: internStr(ti.rel())})
 		}
 
@@ -504,7 +515,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 }
 
 func emitProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerContribs PeerGlobalContribs) *ProtoSrcsResult {
-	var protoSrcs, evSrcs []string
+	var protoSrcs, evSrcs, gztSrcs []string
 
 	for _, src := range d.srcs {
 		switch {
@@ -512,10 +523,12 @@ func emitProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCont
 			protoSrcs = append(protoSrcs, src.string())
 		case strings.HasSuffix(src.string(), ".ev"):
 			evSrcs = append(evSrcs, src.string())
+		case strings.HasSuffix(src.string(), ".gztproto"):
+			gztSrcs = append(gztSrcs, src.string())
 		}
 	}
 
-	if len(protoSrcs) == 0 && len(evSrcs) == 0 {
+	if len(protoSrcs) == 0 && len(evSrcs) == 0 && len(gztSrcs) == 0 {
 		return nil
 	}
 
@@ -523,11 +536,19 @@ func emitProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCont
 	case LangPy:
 		return emitPyProtoSrcs(ctx, instance, d, peerContribs, protoSrcs, evSrcs)
 	default:
-		return emitCPPProtoSrcs(ctx, instance, d, peerContribs, protoSrcs, evSrcs)
+		return emitCPPProtoSrcs(ctx, instance, d, peerContribs, protoSrcs, evSrcs, gztSrcs)
 	}
 }
 
-func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerContribs PeerGlobalContribs, protoSrcs, evSrcs []string) *ProtoSrcsResult {
+func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerContribs PeerGlobalContribs, protoSrcs, evSrcs, gztSrcs []string) *ProtoSrcsResult {
+	// _SRC("gztproto"): run dict/gazetteer/converter to produce <base>.proto, then
+	// compile the generated .proto through the ordinary protoc path below (it is
+	// picked up via the codegen-registry protoSrcOverride lookup in emitProtoPB).
+	for _, gztSrc := range gztSrcs {
+		_, genProtoSrc := emitLibraryGztProtoSource(ctx, instance, d, gztSrc, peerContribs.protoInclude)
+		protoSrcs = append(protoSrcs, genProtoSrc)
+	}
+
 	type protoCodegenOutput struct {
 		genRef NodeRef
 		pbCC   VFS

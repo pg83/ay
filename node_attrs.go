@@ -8,7 +8,7 @@ import (
 var procKindStr = [...]string{
 	pkNone: "", pkAS: "AS", pkAR: "AR", pkBI: "BI", pkBC: "BC", pkCC: "CC",
 	pkCF: "CF", pkCH: "CH", pkCP: "CP", pkCY: "CY", pkEN: "EN", pkEV: "EV",
-	pkFETCH: "FT", pkFL: "FL", pkFL64: "FL64", pkGP: "GP", pkJS: "JS", pkJV: "JV", pkLD: "LD", pkLX: "LX", pkLJ: "LJ", pkOP: "OP",
+	pkFETCH: "FT", pkFL: "FL", pkFL64: "FL64", pkGP: "GP", pkGZ: "GZ", pkJS: "JS", pkJV: "JV", pkLD: "LD", pkLX: "LX", pkLJ: "LJ", pkOP: "OP",
 	pkPB: "PB", pkPR: "PR", pkPY: "PY", pkR5: "R5", pkR6: "R6", pkRD: "RD",
 	pkSB:   "SB",
 	pkSTUB: "STUB", pkSW: "SW", pkTEST: "TEST", pkTEST2: "TEST2", pkTS: "TS", pkYC: "YC",
@@ -181,6 +181,7 @@ const (
 	pkFL
 	pkFL64 // 64-bit flatbuffers (_CPP_FLATC64_CMD): contrib/libs/flatbuffers64/flatc on .fbs64
 	pkGP   // gperf (_SRC("gperf")): contrib/tools/gperf, stdout → <src>.gperf.cpp
+	pkGZ   // gazetteer (_SRC("gztproto")): dict/gazetteer/converter, <src>.gztproto → <src>.proto
 	pkJS
 	pkJV
 	pkLD
