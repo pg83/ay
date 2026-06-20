@@ -2367,21 +2367,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 					bldLibraryCppMallocJemallocLibcppMallocJemallocA,
 				},
 			)
-			ldPeerArchiveRefs, ldPeerArchivePaths = moveArchivePathsBefore(
-				ldPeerArchiveRefs,
-				ldPeerArchivePaths,
-				bldLibraryCppJsonCommonLibcppJsonCommonA,
-				[]VFS{
-					bldToolsEnumParserEnumSerializationRuntimeLibtoolsEnumParserEnumSerializationRuntimeA,
-				},
-			)
-			ldPeerLinkCmdPaths = movePathsBefore(
-				ldPeerLinkCmdPaths,
-				bldLibraryCppJsonCommonLibcppJsonCommonA,
-				[]VFS{
-					bldToolsEnumParserEnumSerializationRuntimeLibtoolsEnumParserEnumSerializationRuntimeA,
-				},
-			)
 		}
 
 		ldInstance := instance
@@ -2832,107 +2817,6 @@ func movePathsAfter(paths []VFS, anchor VFS, moved []VFS) []VFS {
 				}
 			}
 		}
-	}
-
-	if len(outPaths) != len(paths) {
-		return paths
-	}
-
-	return outPaths
-}
-
-func moveArchivePathsBefore(refs []NodeRef, paths []VFS, anchor VFS, moved []VFS) ([]NodeRef, []VFS) {
-	if len(moved) == 0 || len(refs) != len(paths) {
-		return refs, paths
-	}
-
-	deduper.reset()
-
-	for _, path := range moved {
-		deduper.add(path)
-	}
-
-	movedRefs := make(map[VFS]NodeRef, len(moved))
-	movedPaths := make(map[VFS]VFS, len(moved))
-
-	for i, path := range paths {
-		if deduper.has(path) {
-			movedRefs[path] = refs[i]
-			movedPaths[path] = path
-		}
-	}
-
-	if len(movedPaths) != len(moved) {
-		return refs, paths
-	}
-
-	outRefs := make([]NodeRef, 0, len(refs))
-	outPaths := make([]VFS, 0, len(paths))
-
-	for i, path := range paths {
-		if deduper.has(path) {
-			continue
-		}
-
-		if path == anchor {
-			for _, movedPath := range moved {
-				if p, ok := movedPaths[movedPath]; ok {
-					outRefs = append(outRefs, movedRefs[movedPath])
-					outPaths = append(outPaths, p)
-				}
-			}
-		}
-
-		outRefs = append(outRefs, refs[i])
-		outPaths = append(outPaths, path)
-	}
-
-	if len(outPaths) != len(paths) {
-		return refs, paths
-	}
-
-	return outRefs, outPaths
-}
-
-func movePathsBefore(paths []VFS, anchor VFS, moved []VFS) []VFS {
-	if len(moved) == 0 {
-		return paths
-	}
-
-	deduper.reset()
-
-	for _, path := range moved {
-		deduper.add(path)
-	}
-
-	movedPaths := make(map[VFS]VFS, len(moved))
-
-	for _, path := range paths {
-		if deduper.has(path) {
-			movedPaths[path] = path
-		}
-	}
-
-	if len(movedPaths) != len(moved) {
-		return paths
-	}
-
-	outPaths := make([]VFS, 0, len(paths))
-
-	for _, path := range paths {
-		if deduper.has(path) {
-			continue
-		}
-
-		if path == anchor {
-			for _, movedPath := range moved {
-				if p, ok := movedPaths[movedPath]; ok {
-					outPaths = append(outPaths, p)
-				}
-			}
-		}
-
-		outPaths = append(outPaths, path)
 	}
 
 	if len(outPaths) != len(paths) {
