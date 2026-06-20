@@ -19,6 +19,14 @@ const (
 	// are likewise written to both buckets.
 	parsedIncludesHeader
 	parsedIncludesCpp
+	// parsedIncludesProtoConfig holds the file-level `option (NProtoConfig.Include)
+	// = "<h>"` angle-include headers of a `.cfgproto` source. The proto_config
+	// protoc plugin inserts each as `#include <h>` into the generated .pb.h
+	// (library/cpp/proto_config/plugin/main.cpp GenerateIncludes); the cfgproto
+	// emitter reads this bucket to seed that generated header's parsed includes.
+	// Kept off the proto import / induced-.pb.h buckets so it is not walked as a
+	// proto import nor namespace-rewritten.
+	parsedIncludesProtoConfig
 	parsedIncludeBucketCount
 )
 

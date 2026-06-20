@@ -105,32 +105,71 @@ func emitEV(
 ) NodeRef {
 	na := emit.nodeArenas()
 
+	// CPP_EV_OPTS (proto.conf:52): the event2cpp plugin block appended after the
+	// rootrel source — distinct from cfgproto's proto_config plugin block.
+	evOpts := na.strList(internStr("--plugin=protoc-gen-event2cpp="+event2cppBinary.string()),
+		argEvent2cppOutB.str(),
+		internStr("-I="+evEventlogIncludePath))
+
+	return emitProtoWrapperPBNode(instance, evRelPath, pkEV,
+		cppStyleguideLDRef, protocLDRef, event2cppLDRef,
+		cppStyleguideBinary, protocBinary, event2cppBinary,
+		evOpts, moduleTag, transitiveImports, protoInclude, tc, emit)
+}
+
+// emitProtoWrapperPBNode emits the cpp_proto_wrapper.py → protoc producer node
+// shared by CPP_EV_CMDLINE consumers (.ev and .cfgproto, ymake.core.conf:616 /
+// proto.conf:481,496). The command is byte-identical through the styleguide
+// base and the rootrel source; pluginOpts is the per-variant trailing plugin
+// block (event2cpp for .ev, proto_config for .cfgproto) and pluginBinary /
+// pluginLDRef the variant plugin tool. Outputs keep the source extension
+// (CPP_EV_OUTS).
+func emitProtoWrapperPBNode(
+	instance ModuleInstance,
+	relPath string,
+	kvP ProcKind,
+	cppStyleguideLDRef NodeRef,
+	protocLDRef NodeRef,
+	pluginLDRef NodeRef,
+	cppStyleguideBinary VFS,
+	protocBinary VFS,
+	pluginBinary VFS,
+	pluginOpts []STR,
+	moduleTag STR,
+	transitiveImports []VFS,
+	protoInclude []VFS,
+	tc ModuleToolchain,
+	emit Emitter,
+) NodeRef {
+	na := emit.nodeArenas()
+
 	moduleDir := instance.Path.rel()
 
-	evCC := build(evRelPath + ".pb.cc")
-	evH := build(evRelPath + ".pb.h")
-	srcVFS := source(evRelPath)
+	genCC := build(relPath + ".pb.cc")
+	genH := build(relPath + ".pb.h")
+	srcVFS := source(relPath)
 
 	peerIncludes := evPeerProtoIncludes(protoInclude)
+
+	tail := na.strList(append([]STR{
+		internStr("--plugin=protoc-gen-cpp_styleguide=" + cppStyleguideBinary.string()),
+		internStr(relPath),
+	}, pluginOpts...)...)
 
 	cmdArgs := na.chunkList(na.strList(tc.Python3,
 		internStr(pbWrapperPath),
 		argOutputs.str(),
-		(evCC).str(),
-		(evH).str(),
+		(genCC).str(),
+		(genH).str(),
 		arg2.str(),
-		(protocBinary).str()), evProtocConstHead, peerIncludes, evProtocConstTail, na.strList(internStr("--plugin=protoc-gen-cpp_styleguide="+cppStyleguideBinary.string()),
-		internStr(evRelPath),
-		internStr("--plugin=protoc-gen-event2cpp="+event2cppBinary.string()),
-		argEvent2cppOutB.str(),
-		internStr("-I="+evEventlogIncludePath)))
+		(protocBinary).str()), evProtocConstHead, peerIncludes, evProtocConstTail, tail)
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	inputs := []VFS{
 		cppStyleguideBinary,
 		protocBinary,
-		event2cppBinary,
+		pluginBinary,
 		pbWrapperVFS,
 		srcVFS,
 	}
@@ -148,11 +187,11 @@ func emitEV(
 			Env: env}),
 		Env:              env,
 		Inputs:           na.inputList(inputs, transitiveImports),
-		Outputs:          na.vfsList(evCC, evH),
-		KV:               KV{P: pkEV, PC: pcYellow},
+		Outputs:          na.vfsList(genCC, genH),
+		KV:               KV{P: kvP, PC: pcYellow},
 		TargetProperties: targetProps,
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs:   depRefs(cppStyleguideLDRef, protocLDRef, event2cppLDRef),
+		ForeignDepRefs:   depRefs(cppStyleguideLDRef, protocLDRef, pluginLDRef),
 		Resources:        usesPython3,
 	}
 
