@@ -135,6 +135,28 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	prSourceInputs = append(prSourceInputs, prGeneratedFromSources...)
 
+	// A run "self-consumes" when its own module auto-compiles a cc-source or
+	// asm-source OUT (the exact set emitRunProgramsForAR builds downstream: OUT
+	// files and auto STDOUT, never OUT_NOAUTO). Such a producer is the first
+	// DFS-leaver of every output of the run (upstream post-order processes the
+	// producing peer — compiling the sibling and leaving the OutTogether main
+	// output with it — before any external consumer). So its outputs keep the
+	// producer's module_dir; the consumer-claim override must not move them.
+	// A header-only / OUT_NOAUTO run (LLVM *.inc) does not self-consume and keeps
+	// the existing first-consumer attribution.
+	selfConsumes := false
+	for _, f := range stmt.OUTFiles {
+		if s := f.string(); isCCSourceExt(s) || isAsmSourceExt(s) {
+			selfConsumes = true
+			break
+		}
+	}
+	if stmt.StdoutFile != nil && !stmt.StdoutNoAuto {
+		if s := stmt.StdoutFile.string(); isCCSourceExt(s) || isAsmSourceExt(s) {
+			selfConsumes = true
+		}
+	}
+
 	// Reserve the PR producer's ref before registering its outputs: the input
 	// closure walk below resolves sibling codegen deps that may include these
 	// outputs, and registration records the producer ref.
@@ -156,6 +178,15 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 		registerBoundGeneratedParsedOutput(ctx, instance, pkPR, out, parsed, prRef, []NodeRef{toolLDRef})
 		reg.setSourceInputs(out, prSourceInputs)
+
+		// A self-consuming run owns its outputs: record the producer module dir
+		// now (before any consumer can resolve this output) so the override keeps
+		// the node attributed to its producer. registerBoundGeneratedParsedOutput
+		// just created the registry entry resolution depends on, so this write is
+		// strictly the first claim.
+		if selfConsumes {
+			ctx.scannerFor(instance).markGeneratedProducerOwned(out, instance.Path.rel())
+		}
 
 		// A non-main output is an EDT_OutTogether sibling of the main output: ymake's
 		// json_visitor PrepareLeaving rides the main output onto any node depending on

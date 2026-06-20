@@ -1752,6 +1752,21 @@ func testGen(fs FS, targetDir string) *Graph {
 	return testGenContour(fs, targetDir, true)
 }
 
+// testGenDumpGraph builds through the `-G` dump-graph finalize
+// (genDumpGraphWithResources → finalizeDumpGraph), so the generated-output
+// module_dir attribution pass (overrideGeneratedModuleDir) runs — testGen's
+// plain finalize does not exercise it.
+func testGenDumpGraph(fs FS, targetDir string) *Graph {
+	host := newTestPlatform(OSLinux, ISAX8664, "yes")
+	targetFlags := make(map[string]string, len(testToolchainFlags)+1)
+	for k, v := range testToolchainFlags {
+		targetFlags[k] = v
+	}
+	targetFlags["PIC"] = "no"
+	target := newPlatform(fs, OSLinux, ISAAArch64, targetFlags, "", "")
+	return genDumpGraphWithResources(fs, targetDir, host, target, func(Warn) {}, false)
+}
+
 // testGenInternal builds under the internal (non-opensource) contour, where
 // LINK_OR_COPY_SO_CMD is not emitted for plain programs — so fs_tools.py is not
 // a link input via emitCopy and only the BUNDLE MOVE_FILE mechanism can put it
