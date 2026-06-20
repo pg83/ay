@@ -276,6 +276,110 @@ END()
 	}
 }
 
+// TestGen_ProtoLibrary_PluginRuntimeLeadsLinkArchiveOrder reproduces the sg7
+// dsp_profile_gen link-archive-order-only cmds drift: a PROGRAM linking a
+// PROTO_LIBRARY whose CPP_PROTO_PLUGIN0 DEPS (the plugin-runtime peer) and whose
+// declared PEERDIR both contribute an archive must emit the plugin-runtime
+// archive BEFORE the declared peer's archive — upstream induces the
+// plugin-runtime peer (CPP_PROTOBUF_PEERS, ymake.core.conf:2002) ahead of the
+// declared PEERDIR in the single peer order that drives both ADDINCL and the
+// link/archive closure. Before the fix the declared peer's archive leads (the
+// plugin DEP is appended last), which this test rejects. The compile -I order
+// (T-14, already correct) is asserted too: the two move together.
+func TestGen_ProtoLibrary_PluginRuntimeLeadsLinkArchiveOrder(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM(app)
+PEERDIR(protos)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	writeTestModuleFile(files, "protos/ya.make", `PROTO_LIBRARY()
+PEERDIR(declared/peer)
+CPP_PROTO_PLUGIN0(myplug tools/myplug DEPS plugin/runtime)
+SRCS(test.proto)
+END()
+`)
+	writeTestModuleFile(files, "protos/test.proto", `syntax = "proto3";
+package test;
+message Row {}
+`)
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+
+	writeTestModuleFile(files, "tools/myplug/ya.make", `PROGRAM(myplug)
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "tools/myplug/main.cpp", "int main(){return 0;}\n")
+
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	// Both peers carry an archive AND a GLOBAL ADDINCL. The plugin-runtime peer
+	// must precede the declared peer in both the link archive sequence and the
+	// proto compile -I order.
+	writeTestModuleFile(files, "declared/peer/ya.make", "LIBRARY()\nADDINCL(GLOBAL declared/peer/inc)\nSRCS(p.cpp)\nEND()\n")
+	writeTestModuleFile(files, "declared/peer/p.cpp", "int p(){return 0;}\n")
+	writeTestModuleFile(files, "declared/peer/inc/h.h", "#pragma once\n")
+	writeTestModuleFile(files, "plugin/runtime/ya.make", "LIBRARY()\nADDINCL(GLOBAL plugin/runtime/inc)\nSRCS(r.cpp)\nEND()\n")
+	writeTestModuleFile(files, "plugin/runtime/r.cpp", "int r(){return 0;}\n")
+	writeTestModuleFile(files, "plugin/runtime/inc/h.h", "#pragma once\n")
+
+	g := testGen(newMemFS(files), "app")
+
+	var ldNode *Node
+	for _, n := range g.Graph {
+		if n.KV.P == pkLD {
+			ldNode = n
+			break
+		}
+	}
+	if ldNode == nil {
+		t.Fatal("no LD node found in graph")
+	}
+
+	var linkArgs []STR
+	for _, c := range ldNode.Cmds {
+		flat := c.CmdArgs.flat()
+		if indexOfArg(flat, "$(S)/build/scripts/link_exe.py") >= 0 {
+			linkArgs = flat
+			break
+		}
+	}
+	if linkArgs == nil {
+		t.Fatal("no link_exe.py command found on LD node")
+	}
+
+	pluginIdx := indexOfArg(linkArgs, "plugin/runtime/libplugin-runtime.a")
+	declaredIdx := indexOfArg(linkArgs, "declared/peer/libdeclared-peer.a")
+	if pluginIdx < 0 || declaredIdx < 0 {
+		t.Fatalf("link args missing peer archives: plugin=%d declared=%d args=%v", pluginIdx, declaredIdx, linkArgs)
+	}
+	if pluginIdx > declaredIdx {
+		t.Fatalf("plugin-runtime archive [%d] must precede declared peer archive [%d] in link order", pluginIdx, declaredIdx)
+	}
+
+	// ADDINCL stability: the proto compile keeps plugin-runtime's -I ahead of the
+	// declared peer's (T-14 behavior must not regress).
+	cc := findGraphNodeByOutputs(t, g, "$(B)/protos/test.pb.cc.o")
+	ccArgs := cc.Cmds[0].CmdArgs.flat()
+	pluginInc := indexOfArg(ccArgs, "-I$(S)/plugin/runtime/inc")
+	declaredInc := indexOfArg(ccArgs, "-I$(S)/declared/peer/inc")
+	if pluginInc < 0 || declaredInc < 0 {
+		t.Fatalf("missing -I dirs in compile cmd: plugin=%d declared=%d args=%v", pluginInc, declaredInc, ccArgs)
+	}
+	if pluginInc > declaredInc {
+		t.Fatalf("proto plugin DEPS include must precede declared peer include: plugin=%d declared=%d", pluginInc, declaredInc)
+	}
+}
+
 func TestGen_ProtoLibrary_CPPProtoPlugin0WiresToolDeps(t *testing.T) {
 	files := map[string]string{}
 
