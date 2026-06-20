@@ -108,6 +108,33 @@ func protoDirectPbHIncludes(pm *IncludeParserManager, srcRel, outputRoot string)
 	return protoPbHIncludes(pm, srcRel, outputRoot, parsedIncludesHeader)
 }
 
+// protoImportRelsToPbH maps a build-generated proto's declared direct imports
+// (OUTPUT_INCLUDES `.proto` rels) to the `.pb.h` includes a checked-in proto's
+// parse would have produced — `google/protobuf/*` to the protobuf runtime src,
+// every other import to its generated `.pb.h` under the output root. The scanner
+// resolves each through its registered `.pb.h` (whose own direct imports it then
+// walks), so only the DIRECT imports are seeded here; the transitive closure
+// (incl. the canonical descriptor) follows from the per-`.pb.h` walk.
+func protoImportRelsToPbH(importRels []string, outputRoot string) []IncludeDirective {
+	out := make([]IncludeDirective, 0, len(importRels))
+
+	for _, rel := range importRels {
+		pbH := strings.TrimSuffix(rel, ".proto") + ".pb.h"
+
+		if strings.HasPrefix(pbH, "google/protobuf/") {
+			pbH = pbRuntimeBase + pbH
+		} else {
+			pbH = protoOutputRel(outputRoot, pbH)
+		}
+
+		out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(pbH)})
+	}
+
+	sort.Slice(out, func(i, j int) bool { return out[i].target.string() < out[j].target.string() })
+
+	return out
+}
+
 func pbHEmitsIncludesExtras() []IncludeDirective {
 	out := make([]IncludeDirective, 0, len(pbDescriptorImporterDirectives)+1)
 	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())})
@@ -297,6 +324,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 	var protoSrcOverride VFS
 	var extraProtoDeps []NodeRef
 	var protoProducerSourceInputs []VFS
+	var genProtoImportRels []string
 
 	buildProto := build(protoRelPath)
 
@@ -313,6 +341,10 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		if len(info.ProducerSourceClosure) > 0 {
 			protoProducerSourceInputs = info.ProducerSourceClosure
 		}
+
+		// A generated proto's source is not scannable for its `import` statements;
+		// its declared direct imports ride here as OUTPUT_INCLUDES `.proto` rels.
+		genProtoImportRels = info.ProtoImportRels
 	}
 
 	pbRef := emitPB(
@@ -362,6 +394,16 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 
 	{
 		directImports := protoDirectPbHIncludes(ctx.parsers, protoRelPath, cfg.cppOutRoot)
+
+		// A build-generated proto has no scannable source: its direct imports come
+		// from the producer's OUTPUT_INCLUDES (recorded as ProtoImportRels). Map them
+		// to `.pb.h` exactly as the checked-in parse would, so the generated
+		// `<proto>.pb.h` re-exports its imports and the `.pb.cc` compile reaches the
+		// full transitive `.pb.h` closure through the scanner's per-header walk.
+		if protoSrcOverride != 0 && len(genProtoImportRels) > 0 {
+			directImports = protoImportRelsToPbH(genProtoImportRels, cfg.cppOutRoot)
+		}
+
 		pbHImports := directImports
 
 		// YMAPS_SPROTO's SET(PROTO_HEADER_EXTS .pb.h .sproto.h): in a maps sproto

@@ -255,6 +255,22 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// registration would trip the codegen registry's duplicate-producer guard.
 	registeredPROut := map[VFS]bool{}
 
+	// A build-generated `.proto` declares its direct imports through the run's
+	// OUTPUT_INCLUDES `.proto` entries (the proto's source is generated, so ymake
+	// cannot scan its `import` statements). The consuming CPP_PROTO emission reads
+	// these to seed the generated `<proto>.pb.h`'s direct includes — upstream's
+	// `${hide;output_include:OUTPUT_INCLUDES}` induced deps on the generated proto.
+	var protoOutputIncludeRels []string
+	for _, oi := range stmt.OutputIncludes {
+		rel := oi.string()
+		if vfsHasPrefix(rel) {
+			rel = intern(rel).rel()
+		}
+		if strings.HasSuffix(rel, ".proto") {
+			protoOutputIncludeRels = append(protoOutputIncludeRels, rel)
+		}
+	}
+
 	registerPROutput := func(out VFS, parsed []IncludeDirective) {
 		if registeredPROut[out] {
 			return
@@ -264,6 +280,10 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 		registerBoundGeneratedParsedOutput(ctx, instance, pkPR, out, parsed, prRef, []NodeRef{toolLDRef})
 		reg.setSourceInputs(out, prSourceInputs)
+
+		if strings.HasSuffix(out.rel(), ".proto") {
+			reg.setProtoImportRels(out, protoOutputIncludeRels)
+		}
 
 		// A self-consuming run owns its outputs: record the producer module dir
 		// now (before any consumer can resolve this output) so the override keeps
