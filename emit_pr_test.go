@@ -390,6 +390,75 @@ END()
 	}
 }
 
+// Guard the sys_const.h divergence: a self-consuming RUN_PROGRAM in a nested
+// submodule (`gen`: OUT gen.h gen.cpp; gen.cpp #includes gen.h and is auto
+// compiled) is the first DFS-leaver of its own outputs. A parent module that
+// merely names gen/gen.h in a *different* RUN_PROGRAM's OUTPUT_INCLUDES is a
+// consumer reached only after the producer submodule (its PEERDIR) leaves, so
+// upstream's Node2Module keeps the header attributed to `gen`. The external
+// OUTPUT_INCLUDES node-claim must NOT pre-empt the self-owned producer.
+func TestGen_RunProgramSelfOwnedProducerKeepsModuleDirOverOutputIncludesClaim(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "gen/gen_tool", "gen_tool")
+	writeToolProgram(files, "parent/par_tool", "par_tool")
+
+	// gen: self-consuming RUN_PROGRAM — OUT gen.h gen.cpp, gen.cpp includes gen.h.
+	writeTestModuleFile(files, "gen/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    gen/gen_tool emit
+    OUT
+        gen.h
+        gen.cpp
+)
+END()
+`)
+
+	// parent: a different self-consuming RUN_PROGRAM that names gen/gen.h in
+	// OUTPUT_INCLUDES (the by_name_tmpl class), and PEERDIRs the producer.
+	writeTestModuleFile(files, "parent/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(gen)
+RUN_PROGRAM(
+    parent/par_tool tmpl.cpp
+    IN
+        tmpl.cpp
+    OUTPUT_INCLUDES
+        gen/gen.h
+    STDOUT
+        par.cpp
+)
+END()
+`)
+	writeTestModuleFile(files, "parent/tmpl.cpp", "#pragma once\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(parent)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	// The module_dir attribution override runs only in the -G dump-graph finalize.
+	g := testGenDumpGraph(newMemFS(files), "app")
+
+	pr := mustNodeByAnyOutput(t, g, "$(B)/gen/gen.h")
+	if pr.KV.P != pkPR {
+		t.Fatalf("expected PR producer for gen.h, got %v", pr.KV.P)
+	}
+	if got := pr.TargetProperties.ModuleDir; got != "gen" {
+		t.Fatalf("self-owned producer module_dir = %q, want %q (producer keeps it over the parent's OUTPUT_INCLUDES claim)", got, "gen")
+	}
+}
+
 // A RUN_PROGRAM whose IN is a DATA file with no registered include parser
 // (formula.in: YAML-like data) and whose OUTs are a generated .cpp/.h pair plus
 // OUTPUT_INCLUDES — the ads/bsyeti/libs/features/formula.cpp class. Upstream roots
