@@ -428,16 +428,23 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 		}
 	}
 
+	// Token-form lookup: a full `${ARCADIA_BUILD_ROOT}/<full>.py` PY_SRCS token
+	// (swig's injected wrapper) is embedded through the rescompiler _raw.auxcpp
+	// path (emitGeneratedPyAuxChunks), not objcopy, so it is skipped here. A bare
+	// token — whether a checked-in source or a RUN_PROGRAM-generated $(B) file — is
+	// packaged through objcopy resfs.
+	fullName := make(map[string]bool, len(d.pySrcs))
+
+	for i, s := range d.pySrcs {
+		if i < len(d.pySrcsFullName) && d.pySrcsFullName[i] {
+			fullName[s.string()] = true
+		}
+	}
+
 	out := make([]PySrcEntry, 0, len(srcs)*2)
 
 	for _, srcRel := range srcs {
 		if strings.HasSuffix(srcRel, ".pyi") {
-			continue
-		}
-
-		// A build-generated .py (e.g. SWIG output) is resourced by
-		// emitGeneratedPyAuxChunks, not here.
-		if reg.lookupSplit(dirKey(modulePath), internStr(srcRel)) != nil {
 			continue
 		}
 
@@ -451,19 +458,39 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 		// srcRel-based, only the source-side path resolves through srcDirs.
 		resolvedRel := resolvePySrcRel(fs, d.srcDirs, modulePath, srcRel)
 
+		generated := reg.lookupSplit(dirKey(modulePath), internStr(srcRel)) != nil
+
+		// A full-name generated token (swig) is resourced through the rescompiler
+		// _raw.auxcpp path, not here.
+		if generated && fullName[srcRel] {
+			continue
+		}
+
+		// A bare-token build-generated PY_SRCS source (RUN_PROGRAM OUT/OUT_NOAUTO,
+		// ...) is packaged from $(B) with its producer dep; a checked-in source from
+		// $(S). Upstream onpy_srcs routes both through onresource_files, so the resfs
+		// key/kvHash strings — and thus the objcopy hash — are the same regardless of
+		// provenance; only the bound input VFS (and the producer dep, resolved later
+		// from the inputs) differ.
+		pySource := source(resolvedRel)
+
+		if generated {
+			pySource = build(modulePath + "/" + srcRel)
+			resolvedRel = modulePath + "/" + srcRel
+		}
+
 		if !d.pyBuildNoPY {
 			pyKey := "resfs/file/py/" + keyPrefix + srcRel
-			pyPathInput := source(resolvedRel)
 			pyKvHash := "resfs/src/" + pyKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + "\"}"
 			pyKvCmd := "resfs/src/" + pyKey + "=" + resolvedRel
 
 			out = append(out, PySrcEntry{
 				pathHash:  srcRel,
-				pathInput: pyPathInput,
+				pathInput: pySource,
 				key:       pyKey,
 				kvHash:    pyKvHash,
 				kvCmd:     pyKvCmd,
-				inputDep:  pyPathInput,
+				inputDep:  pySource,
 			})
 		}
 
@@ -473,7 +500,7 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 
 			ypKvHash := "resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + suffix + "\"}"
 			ypKvCmd := "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
-			extraSrcInput := vfsPtr(source(resolvedRel))
+			extraSrcInput := vfsPtr(pySource)
 
 			out = append(out, PySrcEntry{
 				pathHash:      srcRel + suffix,
