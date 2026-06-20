@@ -172,40 +172,41 @@ func expandAllResourceFiles(fs FS, modulePath string, env Environment, stmt *All
 	rfArgs = append(rfArgs, "STRIP", "${ARCADIA_ROOT}/"+modulePath+"/"+strip)
 
 	for _, dir := range dirs {
-		storedDir, fsDir, ok := allResourceDir(modulePath, expandStmtTokenSTR(dir, env).string())
+		rel, ok := allResourceDir(modulePath, expandStmtTokenSTR(dir, env).string())
 
 		if !ok {
 			continue
 		}
 
-		for _, name := range globDirSuffix(fs, fsDir, suffix) {
-			rfArgs = append(rfArgs, storedDir+"/"+name)
+		// Upstream forms the per-DIR glob as ${suf=/*.$EXT:DIRS} (FROM_DIRS:
+		// ${suf=/*:DIRS}) — DIR + "/*" + suffix. The DIR may itself carry `*`
+		// segments, so the result is a multi-segment glob (e.g. dir/*/*.json).
+		for _, match := range globMatch(fs, rel+"/*"+suffix) {
+			rfArgs = append(rfArgs, "${ARCADIA_ROOT}/"+match)
 		}
 	}
 
 	return expandResourceFiles(rfArgs)
 }
 
-// allResourceDir splits an expanded DIR token into the stored path form (with the
-// ${ARCADIA_ROOT} marker re-applied) and the source-relative directory used to
-// glob the filesystem. Upstream's _GLOB resolves a bare DIR against the module
-// dir (Module.GetDir()) and stores every match as ${ARCADIA_ROOT}/<arc-rel>
-// (module_loader.cpp: TString::Join("${ARCADIA_ROOT}/", x.CutType())), so a
-// source-rooted ($(S)/ or marker) DIR and a moddir-relative DIR collapse to the
-// same stored form. Relative DIRs (e.g. `templates`, `../../configs/p`) are
-// joined onto modulePath and cleaned of `.`/`..` like upstream's Reconstruct.
-// A non-source typed root (a $(B) build dir, an unresolved $-ref, an out-of-tree
-// `..`) is not globbable and yields ok=false.
-func allResourceDir(modulePath, dir string) (storedDir string, fsDir string, ok bool) {
-	var rel string
-
+// allResourceDir canonicalizes an expanded DIR token into its source-relative form
+// (the path under $(S), which may carry `*` wildcard segments). Upstream's _GLOB
+// resolves a bare DIR against the module dir (Module.GetDir()) and stores every
+// match as ${ARCADIA_ROOT}/<arc-rel> (module_loader.cpp:
+// TString::Join("${ARCADIA_ROOT}/", x.CutType())), so a source-rooted ($(S)/ or
+// marker) DIR and a moddir-relative DIR collapse to the same stored form. Relative
+// DIRs (e.g. `templates`, `../../configs/p`) are joined onto modulePath and cleaned
+// of `.`/`..` like upstream's Reconstruct. A non-source typed root (a $(B) build
+// dir, an unresolved $-ref, an out-of-tree `..`) is not globbable and yields
+// ok=false.
+func allResourceDir(modulePath, dir string) (rel string, ok bool) {
 	switch {
 	case strings.HasPrefix(dir, "$(S)/"):
 		rel = dir[len("$(S)/"):]
 	case strings.HasPrefix(dir, "${ARCADIA_ROOT}/"):
 		rel = dir[len("${ARCADIA_ROOT}/"):]
 	case strings.HasPrefix(dir, "$") || strings.HasPrefix(dir, "/"):
-		return "", "", false
+		return "", false
 	default:
 		rel = modulePath + "/" + dir
 	}
@@ -213,39 +214,118 @@ func allResourceDir(modulePath, dir string) (storedDir string, fsDir string, ok 
 	// Upstream TGlobPattern splits the pattern with SkipEmpty and reconstructs
 	// every match as ${ARCADIA_ROOT}/<arc-rel>, so trailing/double slashes and
 	// `.`/`..` segments are normalized away regardless of how the DIR was rooted.
+	// `*` survives path.Clean as an ordinary segment.
 	rel = path.Clean(rel)
 	if rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
-		return "", "", false
+		return "", false
 	}
 
-	return "${ARCADIA_ROOT}/" + rel, rel, true
+	return rel, true
 }
 
-// globDirSuffix lists the source directory dir and returns the file (non-dir)
-// names ending in suffix, sorted — matching ymake's GLOB ordering.
-func globDirSuffix(fs FS, dir string, suffix string) []string {
-	if !fs.isDir(srcRootVFS, dir) {
-		return nil
-	}
+// globMatch evaluates a source-rooted glob pattern (a rel path under $(S) whose
+// segments may carry `*`/`?` wildcards) and returns the rel paths of matching files
+// in upstream TGlobPattern::Apply (globs.cpp) traversal order. It walks a directory
+// frontier segment by segment: a fixed segment descends into that subdir if it
+// exists; a wildcard segment lists each frontier dir (entries sorted by basename,
+// matching ymake's SortedReadDir) and keeps matching subdirs for non-final segments
+// or matching files for the final segment. The order is therefore
+// sorted-subdir-then-sorted-file — nested iteration over the sorted frontier.
+func globMatch(fs FS, pattern string) []string {
+	segs := strings.Split(pattern, "/")
+	dirs := []string{""} // frontier of source-rel dirs; "" is the source root
+	var matches []string
 
-	view := fs.listdir(source(dir))
-	names := make([]string, 0, len(view.names))
+	for i, seg := range segs {
+		last := i == len(segs)-1
+		wild := strings.ContainsAny(seg, "*?")
 
-	for _, packed := range view.names {
-		if packed&1 != 0 {
-			continue
+		var next []string
+
+		for _, d := range dirs {
+			if !wild {
+				child := path.Join(d, seg)
+
+				present, isDir := fs.exists(srcRootVFS, child)
+				if !present {
+					continue
+				}
+
+				if last {
+					if !isDir {
+						matches = append(matches, child)
+					}
+				} else if isDir {
+					next = append(next, child)
+				}
+
+				continue
+			}
+
+			view := fs.listdir(source(d))
+			entries := append([]uint32(nil), view.names...)
+
+			// Sort by basename (packed name STR<<1 | isDir bit) to reproduce
+			// ymake's SortedReadDir ordering.
+			sort.Slice(entries, func(a, b int) bool {
+				return STR(entries[a]>>1).string() < STR(entries[b]>>1).string()
+			})
+
+			for _, packed := range entries {
+				name := STR(packed >> 1).string()
+				if !globSegMatch(seg, name) {
+					continue
+				}
+
+				isDir := packed&1 != 0
+				child := path.Join(d, name)
+
+				if last {
+					if !isDir {
+						matches = append(matches, child)
+					}
+				} else if isDir {
+					next = append(next, child)
+				}
+			}
 		}
 
-		name := STR(packed >> 1).string()
+		dirs = next
+	}
 
-		if strings.HasSuffix(name, suffix) {
-			names = append(names, name)
+	return matches
+}
+
+// globSegMatch reports whether name (a single path segment) matches the glob
+// segment pat, where `*` matches any run of characters and `?` matches exactly one;
+// all other characters are literal. Segments contain no `/`, so this is the
+// single-segment ANT match upstream applies per directory level.
+func globSegMatch(pat, name string) bool {
+	var px, nx, starPx, starNx int
+	starPx = -1
+
+	for nx < len(name) {
+		if px < len(pat) && (pat[px] == '?' || pat[px] == name[nx]) {
+			px++
+			nx++
+		} else if px < len(pat) && pat[px] == '*' {
+			starPx = px
+			starNx = nx
+			px++
+		} else if starPx != -1 {
+			px = starPx + 1
+			starNx++
+			nx = starNx
+		} else {
+			return false
 		}
 	}
 
-	sort.Strings(names)
+	for px < len(pat) && pat[px] == '*' {
+		px++
+	}
 
-	return names
+	return px == len(pat)
 }
 
 // renderResourceKvCmd applies command-rendering substitution to a resfs/src kv:
