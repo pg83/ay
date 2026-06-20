@@ -29,11 +29,13 @@ type ModuleCCInputs struct {
 	// transitively peered PROTO_LIBRARY, in encounter order). Distinct from
 	// PeerAddInclGlobal which feeds the C++ compile pipeline. See ModuleEmitResult.
 	ProtoInclude []VFS
-	// ProtoOwnNamespaceInPeers reports that a peer also declares this module's own
-	// PROTO_NAMESPACE (its GLOBAL `FOR proto $(S)/<ns>` source addincl propagates),
-	// so the module's own namespace appears in _PROTO__INCLUDE a second time. Drives
-	// duplicateOutputRootInclude for LIBRARY-hosted .proto sources (emitLibraryProtoSource).
-	ProtoOwnNamespaceInPeers bool
+	// ProtoIncludePeers is the peers-only _PROTO__INCLUDE set (without this module's
+	// own prepended namespace), used as the protoc command band for LIBRARY-hosted
+	// .proto sources (emitLibraryProtoSource): the module's own namespace rides the
+	// structural `-I=$(S)/cppOutRoot` arm, and a peer that re-declares it appears
+	// here at its encounter position. ProtoInclude (own-prepended) stays the value
+	// reported to consumers.
+	ProtoIncludePeers []VFS
 	CXXFlags                 []ARG
 	COnlyFlags               []ARG
 	// ClangWarnings is _CLANG_USER_WARNINGS_VALUE — the autoincluded

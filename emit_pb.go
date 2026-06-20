@@ -5,7 +5,6 @@ import (
 	"encoding/base32"
 	enchex "encoding/hex"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 )
@@ -337,7 +336,7 @@ type PbArgBlocks struct {
 }
 
 func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, grpcCppBinary VFS,
-	grpc bool, cppOutRoot string, duplicateOutputRootInclude, liteHeaders bool,
+	grpc bool, cppOutRoot string, liteHeaders bool,
 	extraProtocFlags []ARG, extraPlugins []ResolvedCPPProtoPlugin,
 	protoInclude []VFS) *PbArgBlocks {
 	head := []STR{
@@ -370,37 +369,23 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 
 	if cppOutRoot != "" {
 		mid = append(mid, internStr("-I=$(S)/"+cppOutRoot))
-
-		if duplicateOutputRootInclude {
-			mid = append(mid, internStr("-I=$(S)/"+cppOutRoot))
-		}
 	}
 
-	// Upstream's _CPP_PROTO_CMDLINE_BASE (ymake.core.conf:612) emits
-	// `${pre=-I=:_PROTO__INCLUDE} -I=$ARCADIA_BUILD_ROOT
-	// -I=$PROTOBUF_INCLUDE_PATH` — peers first, then $(B), then protobuf-src.
-	// _PROTO__INCLUDE already contains protobuf-src for LIBRARY modules that
-	// transitively peer contrib/libs/protobuf (its ya.make declares
-	// `ADDINCL GLOBAL FOR proto contrib/libs/protobuf/src`), so the protobuf
-	// -I shows up via the peer loop AS WELL AS via the trailing macro
-	// expansion. PROTO_LIBRARY filters peers to CPP_PROTO-tagged modules
-	// (proto.conf:921), so contrib/libs/protobuf's FOR proto addincl does
-	// NOT enter its peer chain — only PROTO_LIBRARY-internal protos
-	// (which need it via `ADDINCL GLOBAL FOR proto contrib/libs/protobuf/src`
-	// from their own peers).
-	// The single ordered _PROTO__INCLUDE set (proto.conf: PROTO_NAMESPACE always
-	// expands to `GLOBAL FOR proto $(S)/<ns>`, so bare and GLOBAL namespaces both
-	// ride here, in encounter order, propagating into EVERY transitive consumer's
-	// command — PROTO_LIBRARY consumers included (sg7: brandformance.pb.h carries
-	// -I=$(S)/yt). It is a set: a namespace already rendered (e.g. the module's own
-	// cppOutRoot) is not re-emitted.
+	// Upstream's _CPP_PROTO_CMDLINE_BASE (ymake.core.conf:614) renders
+	// `${pre=-I=:_PROTO__INCLUDE}` VERBATIM — the FOR-proto GLOBAL ADDINCL set in
+	// encounter order, with no dedup against the structural prefix. `protoInclude`
+	// is the peers-only set (the module's own namespace rides the structural
+	// `-I=$(S)/cppOutRoot` arm above). protobuf-src enters this set for modules
+	// that transitively peer contrib/libs/protobuf (its ya.make declares
+	// `ADDINCL GLOBAL FOR proto contrib/libs/protobuf/src`), so it shows up here
+	// AS WELL AS via the trailing macro expansion (-I=$PROTOBUF_INCLUDE_PATH).
+	// A peer that re-declares this module's own PROTO_NAMESPACE contributes the
+	// same `FOR proto $(S)/<ns>` addincl, which lands in the set at the PEER's
+	// encounter position (e.g. sg7 taxi_schemas_schemas_proto: -I=$(S)/taxi/...
+	// after -I=$(S)/contrib/libs/protobuf/src) — rendering verbatim preserves it,
+	// where a dedup against the structural own-namespace arm would not.
 	for _, p := range protoInclude {
-		token := internStr("-I=" + p.string())
-		if slices.Contains(mid, token) {
-			continue
-		}
-
-		mid = append(mid, token)
+		mid = append(mid, internStr("-I="+p.string()))
 	}
 
 	mid = append(mid,
