@@ -299,6 +299,16 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 		}
 	}
 
+	// An explicit-dot SRCS token (SRCS(./generated/x.cpp)) resolves canonically
+	// inside the module, so control reaches this generic switch with the raw
+	// `./`-prefixed token. Upstream canonicalizes the source path before
+	// localizing the object under `_/<dir>`, so strip redundant `.` segments
+	// here. cleanRel keeps a leading `..` intact (the `../` -> `__` mapping in
+	// normalizeDotDotSegments below is preserved) and is the identity on
+	// already-clean tokens (the `_/`-prefixed rl6 build leaf, ordinary
+	// generated/foo.cpp, root-relative sources are untouched).
+	srcRel = cleanRel(srcRel)
+
 	var outRel string
 
 	switch {
