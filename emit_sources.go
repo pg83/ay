@@ -50,6 +50,10 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		return emitLibraryEvSource(ctx, instance, d, srcRel, in)
 	case strings.HasSuffix(srcRel, ".rl"):
 		return emitLibraryRagel5Source(ctx, instance, d, srcRel, in)
+	case strings.HasSuffix(srcRel, ".lpp"),
+		strings.HasSuffix(srcRel, ".lex"),
+		strings.HasSuffix(srcRel, ".l"):
+		return emitLibraryFlexSource(ctx, instance, d, srcRel, in)
 	case strings.HasSuffix(srcRel, ".h.in"):
 		return emitLibraryHInSource(ctx, instance, d, srcRel, in)
 	case strings.HasSuffix(srcRel, ".cpp.in"),
