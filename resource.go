@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	encb64 "encoding/base64"
 	enchex "encoding/hex"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
@@ -108,6 +109,156 @@ func expandResourceFiles(args []string) []ResourceEntry {
 	}
 
 	return out
+}
+
+// expandAllResourceFiles reproduces upstream's ALL_RESOURCE_FILES /
+// ALL_RESOURCE_FILES_FROM_DIRS macros (ymake.core.conf:2847-2879): glob each DIR
+// for <dir>/*.<ext> (or <dir>/* for the FROM_DIRS variant) and forward the
+// matches to RESOURCE_FILES with PREFIX and STRIP ${ARCADIA_ROOT}/<moddir>/<strip>.
+//
+// The globbed file paths keep the literal ${ARCADIA_ROOT} marker: upstream's
+// GLOB stores them before ${ARCADIA_ROOT} is bound, so the resfs/file key embeds
+// it verbatim. DIR tokens are expanded with the collection env (resolving user
+// SET vars), then the leading $(S)/ ($(B)/) — what ${ARCADIA_ROOT}
+// (${ARCADIA_BUILD_ROOT}) expands to — is canonicalized back to the marker so
+// the stored path, and thus the objcopy hash, matches REF. The existing resource
+// machinery (moduleRootedVFS/copyFileInputVFS/rootrelExpand) resolves the marker
+// back to $(S) for the actual --inputs and resfs/src values.
+func expandAllResourceFiles(fs FS, modulePath string, env Environment, stmt *AllResourceFilesStmt) []ResourceEntry {
+	prefix := ""
+	strip := ""
+	var ext string
+	var dirs []STR
+
+	i := 0
+
+	if !stmt.FromDirs {
+		ext = expandStmtTokenSTR(stmt.Args[0], env).string()
+		i = 1
+	}
+
+	for i < len(stmt.Args) {
+		switch stmt.Args[i] {
+		case kwPREFIX:
+			if i+1 < len(stmt.Args) {
+				prefix = expandStmtTokenSTR(stmt.Args[i+1], env).string()
+			}
+
+			i += 2
+		case kwSTRIP:
+			if i+1 < len(stmt.Args) {
+				strip = expandStmtTokenSTR(stmt.Args[i+1], env).string()
+			}
+
+			i += 2
+		default:
+			dirs = append(dirs, stmt.Args[i])
+			i++
+		}
+	}
+
+	suffix := ""
+
+	if !stmt.FromDirs {
+		suffix = "." + ext
+	}
+
+	rfArgs := make([]string, 0, len(dirs)*8)
+
+	if prefix != "" {
+		rfArgs = append(rfArgs, "PREFIX", prefix)
+	}
+
+	rfArgs = append(rfArgs, "STRIP", "${ARCADIA_ROOT}/"+modulePath+"/"+strip)
+
+	for _, dir := range dirs {
+		storedDir, fsDir, ok := allResourceDir(modulePath, expandStmtTokenSTR(dir, env).string())
+
+		if !ok {
+			continue
+		}
+
+		for _, name := range globDirSuffix(fs, fsDir, suffix) {
+			rfArgs = append(rfArgs, storedDir+"/"+name)
+		}
+	}
+
+	return expandResourceFiles(rfArgs)
+}
+
+// allResourceDir splits an expanded DIR token into the stored path form (with the
+// ${ARCADIA_ROOT} marker re-applied) and the source-relative directory used to
+// glob the filesystem. Upstream's _GLOB resolves a bare DIR against the module
+// dir (Module.GetDir()) and stores every match as ${ARCADIA_ROOT}/<arc-rel>
+// (module_loader.cpp: TString::Join("${ARCADIA_ROOT}/", x.CutType())), so a
+// source-rooted ($(S)/ or marker) DIR and a moddir-relative DIR collapse to the
+// same stored form. Relative DIRs (e.g. `templates`, `../../configs/p`) are
+// joined onto modulePath and cleaned of `.`/`..` like upstream's Reconstruct.
+// A non-source typed root (a $(B) build dir, an unresolved $-ref, an out-of-tree
+// `..`) is not globbable and yields ok=false.
+func allResourceDir(modulePath, dir string) (storedDir string, fsDir string, ok bool) {
+	var rel string
+
+	switch {
+	case strings.HasPrefix(dir, "$(S)/"):
+		rel = dir[len("$(S)/"):]
+	case strings.HasPrefix(dir, "${ARCADIA_ROOT}/"):
+		rel = dir[len("${ARCADIA_ROOT}/"):]
+	case strings.HasPrefix(dir, "$") || strings.HasPrefix(dir, "/"):
+		return "", "", false
+	default:
+		rel = modulePath + "/" + dir
+	}
+
+	// Upstream TGlobPattern splits the pattern with SkipEmpty and reconstructs
+	// every match as ${ARCADIA_ROOT}/<arc-rel>, so trailing/double slashes and
+	// `.`/`..` segments are normalized away regardless of how the DIR was rooted.
+	rel = path.Clean(rel)
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
+		return "", "", false
+	}
+
+	return "${ARCADIA_ROOT}/" + rel, rel, true
+}
+
+// globDirSuffix lists the source directory dir and returns the file (non-dir)
+// names ending in suffix, sorted — matching ymake's GLOB ordering.
+func globDirSuffix(fs FS, dir string, suffix string) []string {
+	if !fs.isDir(srcRootVFS, dir) {
+		return nil
+	}
+
+	view := fs.listdir(source(dir))
+	names := make([]string, 0, len(view.names))
+
+	for _, packed := range view.names {
+		if packed&1 != 0 {
+			continue
+		}
+
+		name := STR(packed >> 1).string()
+
+		if strings.HasSuffix(name, suffix) {
+			names = append(names, name)
+		}
+	}
+
+	sort.Strings(names)
+
+	return names
+}
+
+// renderResourceKvCmd applies command-rendering substitution to a resfs/src kv:
+// the embedded resfs/file key may carry the literal ${ARCADIA_ROOT} marker (from
+// an ALL_RESOURCE_FILES glob path), which the command form resolves to $(S)
+// (${ARCADIA_BUILD_ROOT} to $(B)). The base64-encoded --keys are shielded from
+// this pass and keep the literal marker, which is why the objcopy hash (computed
+// over the unrendered key) stays stable. A kv with no marker is unchanged.
+func renderResourceKvCmd(kv string) string {
+	kv = strings.ReplaceAll(kv, "${ARCADIA_ROOT}/", "$(S)/")
+	kv = strings.ReplaceAll(kv, "${ARCADIA_BUILD_ROOT}/", "$(B)/")
+
+	return kv
 }
 
 func resourceModuleTag(modName TOK) *string {
