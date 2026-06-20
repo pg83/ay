@@ -196,6 +196,91 @@ func TestEmitProtoSrcs_YaffCppInputClosureInducesWireFormatDropsSiblingHeader(t 
 	}
 }
 
+// TestEmitProtoSrcs_NonWhitelistedYaffCppRidesProtoMainPbHeader pins the T-43
+// divergence. The YaFF plugin ALWAYS writes <proto>.yaff.cpp as a thin
+// `#include "<proto>.yaff.h"` wrapper, but writes <proto>.yaff.h empty for a proto
+// OUTSIDE the YAFF(FILES …) allowlist (NeedToProcessFile false). So an include scan
+// of a non-whitelisted .yaff.cpp reaches only the empty sibling header — no .pb.h.
+//
+// Upstream still records the proto's own .pb.h plus its producer-source bundle
+// (.proto, cpp_proto_wrapper.py) on the non-whitelisted .yaff.cpp.o: the protoc
+// command floats .pb.h to the front as the MAIN output (${main;…:.pb.h}), and every
+// sibling output (incl. .yaff.cpp) rides that main output via EDT_OutTogether
+// (TJSONVisitor::PrepareLeaving), transitively expanded. The whitelisted sibling
+// gets .pb.h coincidentally through its non-empty .yaff.h #include; the
+// non-whitelisted one only through OutTogether.
+//
+// Before the fix the non-whitelisted skipped.yaff.cpp.o carries neither skipped.pb.h
+// nor its .proto/wrapper bundle. The whitelisted kept.yaff.cpp.o (T-33) must stay
+// stable: wire_format.h induced in, sibling kept.yaff.h dropped.
+func TestEmitProtoSrcs_NonWhitelistedYaffCppRidesProtoMainPbHeader(t *testing.T) {
+	files := map[string]string{}
+	// protoc tool declares the real induced-deps split: wire_format.h is cpp-only
+	// (rides .cc/.cpp outputs), message.h is h+cpp (rides headers too).
+	writeTestModuleFile(files, "contrib/tools/protoc/ya.make",
+		"PROGRAM(protoc)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"+
+			"INDUCED_DEPS(cpp ${ARCADIA_ROOT}/contrib/libs/protobuf/src/google/protobuf/wire_format.h)\n"+
+			"INDUCED_DEPS(h+cpp ${ARCADIA_ROOT}/contrib/libs/protobuf/src/google/protobuf/message.h)\n"+
+			"SRCS(main.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/tools/protoc/main.cpp", "int main(){return 0;}\n")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "library/cpp/yaff/tools/protoc_plugin", "protoc_plugin")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/src/google/protobuf/wire_format.h", "#pragma once\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/src/google/protobuf/message.h", "#pragma once\n")
+
+	writeTestModuleFile(files, "library/cpp/yaff/yaff.h", "#pragma once\n")
+	writeTestModuleFile(files, "library/cpp/yaff/struct.h", "#pragma once\n")
+	writeTestModuleFile(files, "library/cpp/yaff/protobuf.h", "#pragma once\n")
+	writeTestModuleFile(files, "library/cpp/yaff/reflect.h", "#pragma once\n")
+
+	writeTestModuleFile(files, "proto/ya.make",
+		"PROTO_LIBRARY()\nSET(PROTOC_TRANSITIVE_HEADERS \"no\")\nYAFF(FILES kept.proto)\nSRCS(kept.proto skipped.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
+	writeTestModuleFile(files, "proto/kept.proto", "syntax = \"proto3\";\npackage test;\nmessage Kept { string v = 1; }\n")
+	writeTestModuleFile(files, "proto/skipped.proto", "syntax = \"proto3\";\npackage test;\nmessage Skipped { string v = 1; }\n")
+
+	g := testGen(newMemFS(files), "proto")
+
+	const wireFormat = "$(S)/contrib/libs/protobuf/src/google/protobuf/wire_format.h"
+	const wrapper = "$(S)/build/scripts/cpp_proto_wrapper.py"
+
+	// Non-whitelisted: the empty skipped.yaff.h yields no closure, but the OutTogether
+	// main output skipped.pb.h still rides — expanded — carrying its .proto and the
+	// wrapper producer source. The sibling self-header is dropped (T-33).
+	skipCC := mustNodeByOutput(t, g, "$(B)/proto/skipped.yaff.cpp.o")
+	for _, want := range []string{
+		"$(B)/proto/skipped.pb.h",
+		"$(S)/proto/skipped.proto",
+		wrapper,
+	} {
+		if !nodeHasInput(skipCC, want) {
+			t.Errorf("skipped.yaff.cpp.o missing producer-source input %q: %v", want, skipCC.flatInputs())
+		}
+	}
+	if nodeHasInput(skipCC, "$(B)/proto/skipped.yaff.h") {
+		t.Errorf("skipped.yaff.cpp.o must not record the sibling self header %q", "$(B)/proto/skipped.yaff.h")
+	}
+
+	// Whitelisted (T-33) stays stable: wire_format.h induced, own .pb.h present,
+	// sibling kept.yaff.h dropped.
+	keptCC := mustNodeByOutput(t, g, "$(B)/proto/kept.yaff.cpp.o")
+	for _, want := range []string{
+		wireFormat,
+		"$(B)/proto/kept.pb.h",
+		"$(S)/proto/kept.proto",
+		wrapper,
+	} {
+		if !nodeHasInput(keptCC, want) {
+			t.Errorf("kept.yaff.cpp.o missing input %q: %v", want, keptCC.flatInputs())
+		}
+	}
+	if nodeHasInput(keptCC, "$(B)/proto/kept.yaff.h") {
+		t.Errorf("kept.yaff.cpp.o must not record the sibling self header %q", "$(B)/proto/kept.yaff.h")
+	}
+}
+
 // TestEmitProtoSrcs_YaffOutputOrderFollowsLiteHeaderDeclarationOrder pins the
 // upstream CPP_PROTO_OUTS accumulation order. The wrapper's --outputs list (and
 // the PB node's outputs) is CPP_PROTO_OUTS in statement order, main .pb.h
