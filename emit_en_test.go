@@ -301,6 +301,54 @@ func TestGen_EnumSerializationWithSRCDIRResolvesHeaderViaSourceDir(t *testing.T)
 	}
 }
 
+func TestGen_EnumSerializationRootedHeaderOutsideModuleDirOutputPath(t *testing.T) {
+	// Reproduces market/idx/datacamp/proto/offer/meta: a PROTO_LIBRARY whose
+	// SRCDIR points at a sibling source root generates the .pb.h THERE, then
+	// GENERATE_ENUM_SERIALIZATION runs over the ${ARCADIA_BUILD_ROOT}-rooted
+	// generated header that lies OUTSIDE the module dir. Upstream's
+	// ${output;suf=_serialized.cpp:File} places the serialized.cpp at the rooted
+	// File's own resolved build location (not doubled under the module BINDIR),
+	// and the compile object rebases the cross-dir source under the module BINDIR
+	// mapping the `..` ascent to `__` (TCommandInfo::InitDirs).
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "m/meta/ya.make", `PROTO_LIBRARY()
+SRCDIR(m)
+SRCS(Offer.proto)
+IF (CPP_PROTO)
+GENERATE_ENUM_SERIALIZATION(${ARCADIA_BUILD_ROOT}/m/Offer.pb.h)
+ENDIF()
+END()
+`)
+	writeTestModuleFile(files, "m/Offer.proto", "syntax = \"proto3\";\npackage test;\nenum Mode {\n  MODE_UNSPECIFIED = 0;\n}\nmessage Offer { Mode mode = 1; }\n")
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "m/meta")
+
+	// EN output lands at the rooted header's own build dir (m/), NOT doubled under
+	// the module dir (m/meta/) nor localized under _/.
+	mustNodeByOutput(t, g, "$(B)/m/Offer.pb.h_serialized.cpp")
+	for _, n := range g.Graph {
+		for _, o := range n.Outputs {
+			s := o.string()
+			if strings.Contains(s, "m/meta/m/Offer.pb.h_serialized") || strings.Contains(s, "m/meta/_/m/Offer.pb.h_serialized") {
+				t.Fatalf("serialized enum output doubled/localized under module dir: %q", s)
+			}
+		}
+	}
+
+	// The compile object rebases the cross-dir source under the module BINDIR with
+	// the `..` ascent mapped to `__`.
+	mustNodeByOutput(t, g, "$(B)/m/meta/__/Offer.pb.h_serialized.cpp.o")
+}
+
 func TestGen_EnumSerializationRootQualifiedHeaderUsesCanonicalInput(t *testing.T) {
 	files := map[string]string{}
 

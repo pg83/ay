@@ -51,23 +51,27 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		withHeader := stmt.Variant == "with_header"
 		headerInput := resolveEnumHeaderInput(ctx, instance, stmt.Header, d.srcDirs)
 
-		// For a rooted spelling (e.g. ${ARCADIA_BUILD_ROOT}/<mod>/foo.pb.h for a
-		// generated proto header), the canonical module-relative headerRel comes
-		// from the resolved VFS, so the _serialized.cpp/.h outputs and the
-		// downstream CC are named under the module's build dir.
-		headerRel := stmt.Header
+		// ymake's ${output;suf=_serialized.cpp:File} names the EN output from the
+		// File argument: a relative spelling joins the raw token under the module
+		// BINDIR (a root-qualified token that repeats the module dir doubles —
+		// TestGen_EnumSerializationRootQualifiedHeaderUsesCanonicalInput); a rooted
+		// spelling (${ARCADIA_BUILD_ROOT}/<dir>/foo.pb.h for a generated proto
+		// header) lands at the File's own resolved build location, which for a
+		// header OUTSIDE the module dir is not under it. The downstream compile then
+		// rebases that cross-dir source under the module BINDIR via composeCCPaths.
+		serializedBase := instance.Path.rel() + "/" + stmt.Header
 
 		if moduleRootedVFS(instance.Path.rel(), stmt.Header) != nil {
-			headerRel = strings.TrimPrefix(headerInput.rel(), instance.Path.rel()+"/")
+			serializedBase = headerInput.rel()
 		}
 
 		closure := walkClosure(ctx.scannerFor(instance), headerInput, scanIn.ScanCfg)
 
-		serializedCPPPath := build(instance.Path.rel() + "/" + headerRel + "_serialized.cpp")
+		serializedCPPPath := build(serializedBase + "_serialized.cpp")
 		var serializedHPath VFS
 
 		if withHeader {
-			serializedHPath = build(instance.Path.rel() + "/" + headerRel + "_serialized.h")
+			serializedHPath = build(serializedBase + "_serialized.h")
 		}
 
 		// Reserve the EN producer's ref before registering its outputs: the own-output
@@ -122,7 +126,8 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		emitEN(
 			instance,
 			headerInput,
-			headerRel,
+			serializedCPPPath,
+			serializedHPath,
 			moduleTag,
 			withHeader,
 			enumParserLD,
@@ -134,12 +139,12 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		)
 
 		if consumerInputs != nil {
-			cppRel := headerRel + "_serialized.cpp"
+			cppRel := strings.TrimPrefix(serializedCPPPath.rel(), instance.Path.rel()+"/")
 
 			allDepRefs := make([]NodeRef, 0, 1+len(augmentedDepENRefs))
 			allDepRefs = append(allDepRefs, enRef)
 			allDepRefs = append(allDepRefs, augmentedDepENRefs...)
-			ccRef, ccOut := emitCodegenDownstreamCC(ctx, instance, cppRel, allDepRefs, *consumerInputs)
+			ccRef, ccOut := emitCodegenDownstreamCCFromVFS(ctx, instance, cppRel, serializedCPPPath, allDepRefs, *consumerInputs)
 			res.CCRefs = append(res.CCRefs, ccRef)
 			res.CCOutputs = append(res.CCOutputs, ccOut)
 		}
@@ -151,7 +156,8 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 func emitEN(
 	instance ModuleInstance,
 	headerInput VFS,
-	headerRel string,
+	serializedCPPVFS VFS,
+	serializedHVFS VFS,
 	moduleTag STR,
 	withHeader bool,
 	enumParserLD NodeRef,
@@ -162,8 +168,6 @@ func emitEN(
 	emit Emitter,
 ) {
 	na := emit.nodeArenas()
-
-	serializedCPPVFS := build(instance.Path.rel() + "/" + headerRel + "_serialized.cpp")
 
 	cmdArgs := []STR{
 		(enumParserBin).str(),
@@ -176,7 +180,6 @@ func emitEN(
 	outputs := []VFS{serializedCPPVFS}
 
 	if withHeader {
-		serializedHVFS := build(instance.Path.rel() + "/" + headerRel + "_serialized.h")
 		cmdArgs = append(cmdArgs, argHeader.str(), (serializedHVFS).str())
 		outputs = append(outputs, serializedHVFS)
 	}

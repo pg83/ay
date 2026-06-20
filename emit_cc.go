@@ -353,6 +353,15 @@ func normalizeDotDotSegments(rel string) string {
 	// No ".." anywhere (the common case): the split/join would be the
 	// identity, so only the "_/" prefix concat remains.
 	if !strings.Contains(rel, "..") {
+		// TCommandInfo::InitDirs localizes a subdir source's object under "_/"
+		// UNLESS the directory relative to the module starts with "__" — the same
+		// StartsWith("__") branch a ".." ascent takes after its .. -> __ transform,
+		// which a literal __-prefixed dir (e.g. __frameworks__/donotuseme) hits too:
+		// such a dir is joined to the module BINDIR directly, with no "_/".
+		if strings.HasPrefix(rel, "__") {
+			return rel
+		}
+
 		return "_/" + rel
 	}
 
