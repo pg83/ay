@@ -196,15 +196,6 @@ func defaultPeerdirsForWithState(ctx *GenCtx, instance ModuleInstance, d *Module
 
 	peers = appendImplicitPeers(peers, unitImplicitPeers, rc)
 
-	// USE_ARCADIA_LIBM (_BASE_UNIT, ymake.core.conf:933-945): the non-Emscripten
-	// arm peers contrib/libs/libm when the effective USE_ARCADIA_LIBM == yes
-	// (captured in d.useArcadiaLibm, Emscripten already excluded there). Self-peer
-	// guarded like the cxxsupp/util defaults so the libm subtree never peers itself.
-	if d.useArcadiaLibm && instance.Path.rel() != "contrib/libs/libm" &&
-		!strings.HasPrefix(instance.Path.rel(), "contrib/libs/libm/") {
-		peers = append(peers, "contrib/libs/libm")
-	}
-
 	if !flags.NoRuntime && !noPlatform && useArcadiaCompilerRuntime(ctx, instance) && instance.Path.rel() != "library/cpp/sanitizer/include" {
 		peers = append(peers, "library/cpp/sanitizer/include")
 	}
@@ -335,6 +326,18 @@ func defaultProgramPeerdirsForWithState(ctx *GenCtx, instance ModuleInstance, d 
 	var peers []string
 
 	if !postUser {
+		// USE_ARCADIA_LIBM (COMMON_LINK_SETTINGS, ymake.core.conf:937-940): a link
+		// module peers contrib/libs/libm when the effective USE_ARCADIA_LIBM == yes
+		// (captured in d.useArcadiaLibm, Emscripten already excluded there). Upstream
+		// adds it inside COMMON_LINK_SETTINGS, just before build/cow/on — not in the
+		// language-default block — so its own GLOBAL ADDINCL lands after the
+		// language/default transitive closure rather than ahead of it. Self/descendant
+		// guarded so the libm subtree never peers itself.
+		if d.useArcadiaLibm && instance.Path.rel() != "contrib/libs/libm" &&
+			!strings.HasPrefix(instance.Path.rel(), "contrib/libs/libm/") {
+			peers = append(peers, "contrib/libs/libm")
+		}
+
 		peers = append(peers, "build/cow/on")
 
 		peers = appendImplicitPeers(peers, programAllocatorDefaults, rc)
