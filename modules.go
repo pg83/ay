@@ -229,6 +229,7 @@ type ModuleData struct {
 	allocatorName        STR
 	muslLite             bool
 	muslEnabled          bool
+	useArcadiaLibm       bool
 	splitDwarf           bool
 	noPythonIncl         bool
 	noImportTracing      bool
@@ -894,6 +895,11 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 	// LIBRARY's already-emitted node is reused, just with its ref/path now
 	// reaching LD.
 	d.muslEnabled = env.bool(envMUSL)
+	// USE_ARCADIA_LIBM (_BASE_UNIT, ymake.core.conf:933-945): ENABLE(USE_ARCADIA_LIBM)
+	// adds the implicit PEERDIR contrib/libs/libm on every non-Emscripten unit
+	// (default "no" → system -lm). Captured here like d.muslEnabled so the default-peer
+	// machinery reads the effective env without re-deriving it.
+	d.useArcadiaLibm = env.bool(envUSE_ARCADIA_LIBM) && !env.bool(envOS_EMSCRIPTEN)
 	// ENABLE(NO_STRIP) and BUILD_TYPE-driven STRIP_FLAG suppression
 	// (ymake.core.conf:2669 — when ($STRIP == "yes" && $NO_STRIP != "yes"))
 	// both clear -Wl,--strip-all. Track the effective NO_STRIP env value
