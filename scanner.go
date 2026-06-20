@@ -1104,6 +1104,20 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 		return addSource(prefix)
 	}
 
+	// Arcadia roots (build + source) precede the module's ADDINCL. Upstream's
+	// TModuleResolver resolves the local plan MakeResolvePlan(srcDir, BldDir,
+	// SrcDir) FIRST and only falls through to the IncDirs (ADDINCL) when it
+	// misses (module_resolver.cpp:238-245, 322-352, applies to every lang in
+	// LANGS_REQUIRE_BUILD_AND_SRC_ROOTS — c/asm/cython/proto/flatc/swig/ydl/nlg).
+	// A fully-qualified target that exists at the build or source root binds
+	// there, not under a peer ADDINCL that happens to mirror the same subtree
+	// (e.g. a peer PROTO_NAMESPACE shadowing a `dep/foo.proto` import). The
+	// includer-dir arm of the local plan is handled by the quoted resolveSourceUnder
+	// branch in resolveSearchPath; this is its BldDir/SrcDir tail.
+	if addInclPath(bld) || addInclPath(v) {
+		return sc.cacheSearchTier(targetID, out)
+	}
+
 	first, _ := firstComponent(target)
 
 	if canRelFilter(first, target) && !strings.Contains(target, "/./") && !strings.Contains(target, "//") {
