@@ -483,12 +483,40 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	// (ads/caesar/.../with_transitive_headers/advm_banner.pb.h). A run with no
 	// .proto IN (control_board's .h.in, registrar's no-IN) still gets the sibling.
 	hasProtoIN := false
+	// An IN roots a real C++ include graph only when its extension maps to a
+	// registered parser (control_board's .{h,cpp}.in); a data IN (formula.in,
+	// geocoding .txt) induces no include edges itself.
+	hasParsedIN := false
 	for _, f := range stmt.INFiles {
 		if strings.HasSuffix(f.string(), ".proto") {
 			hasProtoIN = true
+		}
+
+		if includeDirectiveParsers.hasRegisteredParser(f.string()) {
+			hasParsedIN = true
+		}
+	}
+
+	// When the run also generates a HEADER output, its OUTPUT_INCLUDES ride that
+	// generated header to the cc-source's consumers (the cc-source #includes the
+	// sibling header), so the producer does not self-carry the closure — the
+	// ads/bsyeti/.../formula.{cpp,h} class, the IN-rooted analog of T-72's no-IN
+	// header-sibling guard. A run that generates NO header (libphonenumber's
+	// geocoding_data.cc, bcrypt's _bcrypt.cffi.py3.c) has nowhere else to route its
+	// OUTPUT_INCLUDES, so the generated cc-source's include closure surfaces on the
+	// producer's own self-scan. A parsed IN roots the producer's graph regardless.
+	generatesHeader := stmt.StdoutFile != nil && isHeaderSource(stmt.StdoutFile.string())
+	for _, f := range stmt.OUTFiles {
+		if isHeaderSource(f.string()) {
+			generatesHeader = true
 			break
 		}
 	}
+
+	// The generated cc-source OUT/STDOUT is self-scanned onto the producer for an
+	// IN-rooted run, EXCEPT a data-IN run whose generated header sibling already
+	// carries the OUTPUT_INCLUDES (formula.cpp). A no-IN run never self-scans (T-72).
+	selfScanGeneratedCC := len(stmt.INFiles) > 0 && (hasParsedIN || !generatesHeader)
 
 	scanIn := ModuleCCInputs{
 		TC:                d.tc,
@@ -513,12 +541,14 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		out = append(out, sub...)
 	}
 
-	// The producer scans its own generated cc-source OUT/STDOUT only when the run is
-	// rooted at an IN (control_board's .h.in surfacing the cc-source's
-	// OUTPUT_INCLUDES). A no-IN cc-main run must NOT scan its own .cpp — that drags
-	// the $(B) codegen headers the consumer carries; its producer closure comes
-	// from the OUTPUT_INCLUDES keep=isSource walk below.
-	if len(stmt.INFiles) > 0 {
+	// The producer scans its own generated cc-source OUT/STDOUT for an IN-rooted run
+	// (geocoding_data.cc, bcrypt's .c, control_board's .h.in cc-source), surfacing the
+	// generated source's OUTPUT_INCLUDES closure. A no-IN run, OR a data-IN run that
+	// generates a header sibling carrying those includes (formula.cpp + formula.h),
+	// must NOT scan its own .cpp — that drags the closure the consumer already carries
+	// via the header; its producer closure comes from the OUTPUT_INCLUDES keep=isSource
+	// walk below (selfScanGeneratedCC gates this).
+	if selfScanGeneratedCC {
 		for _, f := range stmt.OUTFiles {
 			if !isCCSourceExt(f.string()) {
 				continue
@@ -534,7 +564,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	// (yql/.../v1_proto_split_antlr4 uses OUT_NOAUTO for .pb.h/.pb.cc, and
 	// upstream tracks only IN + tools as PR inputs; walking the .pb.cc here
 	// over-emits 1253 libcxx/protobuf headers via the parsed pb.h chain.)
-	if len(stmt.INFiles) > 0 && stmt.StdoutFile != nil && isCCSourceExt(stmt.StdoutFile.string()) {
+	if selfScanGeneratedCC && stmt.StdoutFile != nil && isCCSourceExt(stmt.StdoutFile.string()) {
 		walkOne(stmt.StdoutFile.string())
 	}
 
