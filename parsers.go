@@ -21,6 +21,8 @@ var (
 	opensslUnistdInclude    = []byte("OPENSSL_UNISTD")
 	protoLineComment        = []byte("//")
 	protoImportKw           = []byte("import")
+	protoConfigIncludeKw    = []byte("option")
+	protoConfigIncludeExt   = []byte("(NProtoConfig.Include)")
 )
 
 // swigImplicitDirectives are swig's implicit %includes (swig/Source/Modules/
@@ -60,6 +62,7 @@ type CIncludeDirectiveParser struct{}
 type CythonIncludeDirectiveParser struct{}
 type FlatbuffersIncludeDirectiveParser struct{}
 type ProtoIncludeDirectiveParser struct{}
+type CfgProtoIncludeDirectiveParser struct{}
 type RagelIncludeDirectiveParser struct{}
 type SwigIncludeDirectiveParser struct{}
 type YasmIncludeDirectiveParser struct{}
@@ -95,6 +98,10 @@ func (YasmIncludeDirectiveParser) id() uint32 {
 
 func (EmptyIncludeDirectiveParser) id() uint32 {
 	return 8
+}
+
+func (CfgProtoIncludeDirectiveParser) id() uint32 {
+	return 9
 }
 
 // walkableBucketFor selects the directive bucket the scanner closes over for
@@ -389,6 +396,14 @@ func (FlatbuffersIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAll
 }
 
 func (ProtoIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+	return parseProtoDirectiveSet(data, a)
+}
+
+// parseProtoDirectiveSet is the shared proto-family directive scan (used by
+// ProtoIncludeDirectiveParser and CfgProtoIncludeDirectiveParser): the `import`
+// lines land in parsedIncludesLocal (walked as proto edges) and their induced
+// `.pb.h`/`.ev.pb.h` siblings in the header+cpp buckets.
+func parseProtoDirectiveSet(data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	block := a.alloc(directiveBlockHint)
 	k := 0
 
@@ -415,6 +430,10 @@ func (ProtoIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocator
 		switch {
 		case strings.HasSuffix(target, ".ev"):
 			j = addDirective(hblock, j, IncludeDirective{kind: d.kind, target: internStr(strings.TrimSuffix(target, ".ev") + ".ev.pb.h")})
+		case strings.HasSuffix(target, ".cfgproto"):
+			// protoc keeps the non-.proto extension in the output (the EV/cfgproto
+			// rule), so an `import "X.cfgproto"` induces X.cfgproto.pb.h.
+			j = addDirective(hblock, j, IncludeDirective{kind: d.kind, target: internStr(target + ".pb.h")})
 		case strings.HasSuffix(target, ".proto"):
 			j = addDirective(hblock, j, IncludeDirective{kind: d.kind, target: internStr(strings.TrimSuffix(target, ".proto") + ".pb.h")})
 		}
@@ -432,6 +451,35 @@ func (ProtoIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocator
 	// h+cpp applies to both consumer kinds; the two buckets share one buffer.
 	set[parsedIncludesHeader] = hcpp
 	set[parsedIncludesCpp] = hcpp
+
+	return set
+}
+
+// parse handles `.cfgproto`: the proto import/.pb.h scan plus the file-level
+// `option (NProtoConfig.Include) = "<h>"` headers the proto_config plugin
+// inserts into the generated .pb.h (separate bucket, read by the cfgproto
+// emitter).
+func (CfgProtoIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+	set := parseProtoDirectiveSet(data, a)
+
+	block := a.alloc(directiveBlockHint)
+	k := 0
+
+	eachLine(data, func(line []byte) {
+		target, ok := parseProtoConfigIncludeLine(line)
+
+		if !ok {
+			return
+		}
+
+		k = addDirective(block, k, IncludeDirective{kind: includeSystem, target: internStr(target)})
+	})
+
+	if k > 0 {
+		set[parsedIncludesProtoConfig] = block[:k:k]
+	}
+
+	a.commit(k)
 
 	return set
 }
@@ -918,6 +966,45 @@ func parseProtoImportLine(line []byte) (string, IncludeKind, bool) {
 	target, kind, ok := parseDelimitedIncludeTarget(rest)
 
 	return target, kind, ok
+}
+
+// parseProtoConfigIncludeLine matches a `.cfgproto` file-level
+// `option (NProtoConfig.Include) = "<h>";` line and returns the quoted header.
+// The proto_config plugin emits `#include <h>` for each into the generated
+// .pb.h (library/cpp/proto_config/plugin/main.cpp:70-77). Rejected in byte
+// space so non-option lines never materialize a string.
+func parseProtoConfigIncludeLine(line []byte) (string, bool) {
+	b := bytes.TrimSpace(line)
+
+	if !bytes.HasPrefix(b, protoConfigIncludeKw) {
+		return "", false
+	}
+
+	if idx := bytes.Index(b, protoLineComment); idx >= 0 {
+		b = bytes.TrimSpace(b[:idx])
+	}
+
+	rest := bytes.TrimSpace(b[len(protoConfigIncludeKw):])
+
+	if !bytes.HasPrefix(rest, protoConfigIncludeExt) {
+		return "", false
+	}
+
+	rest = bytes.TrimSpace(rest[len(protoConfigIncludeExt):])
+
+	if len(rest) == 0 || rest[0] != '=' {
+		return "", false
+	}
+
+	q := bytes.IndexByte(rest, '"')
+
+	if q < 0 {
+		return "", false
+	}
+
+	target, _, ok := parseDelimitedIncludeTarget(string(rest[q:]))
+
+	return target, ok
 }
 
 func parseRagelNativeIncludeLine(line string) (string, bool) {
