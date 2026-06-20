@@ -75,6 +75,9 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 		})
 
 		d.pySrcs = append(d.pySrcs, internStr(pyOutRel))
+		// Upstream injects swig's generated .py as a `${ARCADIA_BUILD_ROOT}/<full>.py`
+		// PY_SRCS token, so its py3cc module name is the full root-relative path.
+		d.pySrcsFullName = append(d.pySrcsFullName, true)
 		registerBoundGeneratedParsedOutput(ctx, instance, pkSW, cOutVFS, collectSwigInducedIncludes(ctx, srcVFS, swigClosure), swRef, []NodeRef{swigRef})
 		registerBoundGeneratedParsedOutput(ctx, instance, pkSW, pyOutVFS, nil, swRef, []NodeRef{swigRef})
 		// The generated .py's build-from closure (its paired .swg.c, the .swg

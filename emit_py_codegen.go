@@ -37,7 +37,7 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 
 	reg := codegenRegForInstance(ctx, instance)
 
-	for _, srcRel := range d.pySrcs {
+	for i, srcRel := range d.pySrcs {
 		if strings.HasSuffix(srcRel.string(), ".pyi") {
 			continue
 		}
@@ -47,16 +47,33 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		var generatedInputs []VFS
 
 		if genInfo != nil {
-			generatedInputs = genInfo.SourceInputs
+			// Upstream's flat-input model folds the producer's whole transitive $(S)
+			// source closure onto the bytecode node, not just the producer's direct
+			// $(S) leaves. ProducerSourceClosure carries that full set (RUN_PROGRAM
+			// OUT_NOAUTO sources); producers that record only the direct-leaf closure
+			// in SourceInputs (swig) fall back to it.
+			if generatedInputs = genInfo.ProducerSourceClosure; len(generatedInputs) == 0 {
+				generatedInputs = genInfo.SourceInputs
+			}
 		}
 
 		srcAbs := resolveSourceVFS(ctx, instance, srcRel.string(), d.srcDirs)
 
+		// moduleName mirrors pybuild.py's `rootrel_arc_src(path, unit) + '-'`. A
+		// source-tree file (or a build-root-rooted token) resolves to the full
+		// root-relative path; a bare token resolving to a build-generated source
+		// falls through rootrel_arc_src's `return src` and keeps the raw token.
+		moduleName := srcAbs.rel() + "-"
+
 		if genInfo != nil {
 			srcAbs = build(instance.Path.rel() + "/" + srcRel.string())
-		}
 
-		moduleName := srcAbs.rel() + "-"
+			if i < len(d.pySrcsFullName) && d.pySrcsFullName[i] {
+				moduleName = srcAbs.rel() + "-"
+			} else {
+				moduleName = srcRel.string() + "-"
+			}
+		}
 
 		var outputPath VFS
 

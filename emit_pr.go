@@ -280,6 +280,17 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// the self-walk pulled in.
 	inputClosure = dropOwnOutputs(inputClosure, outVFSByToken)
 
+	// Record the producer's transitive $(S) source closure on each registered
+	// output. A bytecode (py3cc) node compiling a generated PY_SRCS source folds
+	// this set onto itself (upstream's flat-input model), while the producer's $(B)
+	// intermediates stay behind the producer node edge. Shared across the run's
+	// outputs; the slice is referenced, not copied.
+	if prSourceClosure := filterSourceVFS(inputClosure); len(prSourceClosure) > 0 {
+		for out := range registeredPROut {
+			reg.setProducerSourceClosure(out, prSourceClosure)
+		}
+	}
+
 	// A build-rooted IN that is a registered codegen output but carries no include
 	// parser (e.g. a FROM_SANDBOX OUT_NOAUTO fetch artifact) never enters
 	// inputClosure, yet the PR still depends on its producer. Resolve producer deps
@@ -325,6 +336,31 @@ func dropOwnOutputs(closure []VFS, outVFSByToken map[STR]VFS) []VFS {
 	}
 
 	return kept
+}
+
+// filterSourceVFS returns the $(S)-rooted subset of vs, sharing the backing
+// array when nothing is dropped. Used to derive a producer's transitive source
+// closure from its full ($(S)+$(B)) input closure.
+func filterSourceVFS(vs []VFS) []VFS {
+	n := 0
+	for _, v := range vs {
+		if v.isSource() {
+			n++
+		}
+	}
+
+	if n == len(vs) {
+		return vs
+	}
+
+	out := make([]VFS, 0, n)
+	for _, v := range vs {
+		if v.isSource() {
+			out = append(out, v)
+		}
+	}
+
+	return out
 }
 
 func isCCSourceExt(p string) bool {
