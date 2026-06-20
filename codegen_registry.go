@@ -63,6 +63,18 @@ type GeneratedFileInfo struct {
 	// read only by emitPySrcs for a generated PY_SRCS source. Zero len means none.
 	ProducerSourceClosure []VFS
 
+	// ProtoImportRels are the declared direct proto imports of a build-generated
+	// `.proto` output: its producer's OUTPUT_INCLUDES `.proto` entries (rel form).
+	// The generated proto's source does not exist at configure time, so its `.pb.h`
+	// cannot register direct imports from a parse; the consuming CPP_PROTO node
+	// reads this list and registers each import's `.pb.h` as a direct include of the
+	// generated `<proto>.pb.h`, exactly as a checked-in proto's parse would. The
+	// scanner's per-`.pb.h` transitive walk then reconstructs the full import
+	// closure (incl. the canonical descriptor remap) on the `.pb.cc` compile.
+	// Upstream's `${hide;output_include:OUTPUT_INCLUDES}` induced deps. Zero len
+	// means "not a generated proto / no declared imports".
+	ProtoImportRels []string
+
 	// CythonMainOut is the producing cython node's MAIN generated output (the .c /
 	// .cpp), recorded on each of its _H / _API_H header outputs. The header is an
 	// OutTogether ${output} sibling of this main; a generated cython compile whose
@@ -278,6 +290,23 @@ func (r *CodegenRegistry) setProducerSourceClosure(path VFS, closure []VFS) {
 	}
 
 	info.ProducerSourceClosure = closure
+}
+
+// setProtoImportRels records a build-generated `.proto` output's declared direct
+// proto imports (its producer's OUTPUT_INCLUDES `.proto` entries). Read by the
+// consuming CPP_PROTO emission to seed the generated `.pb.h`'s direct includes.
+func (r *CodegenRegistry) setProtoImportRels(path VFS, rels []string) {
+	if len(rels) == 0 {
+		return
+	}
+
+	info, ok := r.byStr.get(STR(path.strID()))
+
+	if !ok {
+		throwFmt("CodegenRegistry: setProtoImportRels on unregistered path %q", path.string())
+	}
+
+	info.ProtoImportRels = rels
 }
 
 // registerBoundGeneratedParsedOutput registers a generated output against its
