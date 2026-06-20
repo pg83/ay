@@ -3375,6 +3375,7 @@ func isHeaderSource(srcRel string) bool {
 
 func isCodegenProducingSrc(srcRel string) bool {
 	return strings.HasSuffix(srcRel, ".proto") ||
+		strings.HasSuffix(srcRel, ".gztproto") ||
 		strings.HasSuffix(srcRel, ".fbs64") ||
 		strings.HasSuffix(srcRel, ".fbs") ||
 		strings.HasSuffix(srcRel, ".ev") ||

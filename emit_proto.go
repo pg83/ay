@@ -596,7 +596,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	// compile the generated .proto through the ordinary protoc path below (it is
 	// picked up via the codegen-registry protoSrcOverride lookup in emitProtoPB).
 	for _, gztSrc := range gztSrcs {
-		_, genProtoSrc := emitLibraryGztProtoSource(ctx, instance, d, gztSrc, peerContribs.protoInclude)
+		_, genProtoSrc := emitLibraryGztProtoSource(ctx, instance, d, gztSrc, peerContribs.protoInclude, tagCppProto)
 		protoSrcs = append(protoSrcs, genProtoSrc)
 	}
 
