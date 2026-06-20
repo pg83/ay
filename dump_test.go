@@ -290,6 +290,66 @@ func TestDumpDiffPair_PrefersDivergentDuplicateVariant(t *testing.T) {
 	}
 }
 
+// TestDumpDiffPair_DuplicateOutputsExactCounterpartsNoFieldDiff pins the T-97
+// invariant: when an output is produced by two sibling nodes per side that share
+// one coarse match key (same kind/platform, no host or PIC axis) but differ only
+// in command mode, and each producer has an exact full-node counterpart on the
+// other side, --pair must report parity (header only, no field diff) rather than
+// cross-pairing our mode-A node against ref's mode-B node.
+func TestDumpDiffPair_DuplicateOutputsExactCounterpartsNoFieldDiff(t *testing.T) {
+	dir := t.TempDir()
+	left := filepath.Join(dir, "l.jsonl")
+	right := filepath.Join(dir, "r.jsonl")
+	out := filepath.Join(dir, "o.txt")
+
+	line := func(selfUID, mode string) string {
+		return `{"self_uid":"` + selfUID + `","uid":"` + selfUID + `","outputs":["/dup"],"deps":[],"inputs":[],"cmds":[{"cmd_args":["ragel","` + mode + `"]}],"tags":[]` +
+			`,"kv":{"p":"R6"},"env":{},"platform":"linux","requirements":{},"target_properties":{}}`
+	}
+
+	// Both sides emit identical {-CG2, -CT0} producers at the same output.
+	throw(os.WriteFile(left, []byte(line("L-cg2", "-CG2")+"\n"+line("L-ct0", "-CT0")+"\n"), 0o644))
+	throw(os.WriteFile(right, []byte(line("R-cg2", "-CG2")+"\n"+line("R-ct0", "-CT0")+"\n"), 0o644))
+
+	if exc := try(func() { cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out, "--pair", "/dup"}) }); exc != nil {
+		t.Fatalf("pair duplicate outputs: %v", exc)
+	}
+	got := string(throw2(os.ReadFile(out)))
+	if !strings.Contains(got, "=== pair diff for /dup ===") {
+		t.Fatalf("pair should print the header:\n%s", got)
+	}
+	if strings.Contains(got, "[field cmds differs]") {
+		t.Fatalf("exact counterparts exist on both sides; --pair must not report a spurious cmds delta:\n%s", got)
+	}
+}
+
+// TestDumpDiffPair_DuplicateOutputsOneSiblingDiffersReportsResidual is the
+// control: only the matching sibling is cancelled, so a genuinely divergent
+// duplicate-output sibling (no exact counterpart) is still reported.
+func TestDumpDiffPair_DuplicateOutputsOneSiblingDiffersReportsResidual(t *testing.T) {
+	dir := t.TempDir()
+	left := filepath.Join(dir, "l.jsonl")
+	right := filepath.Join(dir, "r.jsonl")
+	out := filepath.Join(dir, "o.txt")
+
+	line := func(selfUID, mode string) string {
+		return `{"self_uid":"` + selfUID + `","uid":"` + selfUID + `","outputs":["/dup"],"deps":[],"inputs":[],"cmds":[{"cmd_args":["ragel","` + mode + `"]}],"tags":[]` +
+			`,"kv":{"p":"R6"},"env":{},"platform":"linux","requirements":{},"target_properties":{}}`
+	}
+
+	// Mode A is identical on both sides; mode B (ours) vs C (ref) is a real residual.
+	throw(os.WriteFile(left, []byte(line("L-a", "-CG2")+"\n"+line("L-b", "-Bours")+"\n"), 0o644))
+	throw(os.WriteFile(right, []byte(line("R-a", "-CG2")+"\n"+line("R-c", "-Cref")+"\n"), 0o644))
+
+	if exc := try(func() { cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out, "--pair", "/dup"}) }); exc != nil {
+		t.Fatalf("pair duplicate outputs control: %v", exc)
+	}
+	got := string(throw2(os.ReadFile(out)))
+	if !strings.Contains(got, "[field cmds differs]") || !strings.Contains(got, "+-Bours") || !strings.Contains(got, "+-Cref") {
+		t.Fatalf("a genuinely divergent duplicate sibling must still be reported:\n%s", got)
+	}
+}
+
 func TestDumpDiffRoots(t *testing.T) {
 	dir := t.TempDir()
 	left := filepath.Join(dir, "l.jsonl")
