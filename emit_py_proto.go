@@ -260,6 +260,13 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 		internStr("--python_out=$(B)/"+protoRoot),
 	)
 
+	// _PY_PROTO_CMD_BASE (proto.conf:516) renders `$_PROTOC_FLAGS` after
+	// `--python_out` and before the trailing source token, exactly as the cpp
+	// side appends d.protocFlags after `--cpp_out` (composePBArgBlocks). The
+	// PROTOC_FATAL_WARNINGS() macro and SET_APPEND(_PROTOC_FLAGS …) populate
+	// d.protocFlags (modules.go); the source token follows via the chunkList.
+	pe.mid = appendArgStr(pe.mid, d.protocFlags)
+
 	if d.grpc {
 		pe.tail = append(pe.tail,
 			internStr("--plugin=protoc-gen-grpc_py="+pe.grpcPyBinary.string()),

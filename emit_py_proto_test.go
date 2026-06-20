@@ -141,6 +141,92 @@ END()
 	}
 }
 
+// A PROTO_LIBRARY that calls PROTOC_FATAL_WARNINGS() appends `--fatal_warnings`
+// to _PROTOC_FLAGS (proto.conf:144). The python proto command base
+// _PY_PROTO_CMD_BASE (proto.conf:516) renders `$_PROTOC_FLAGS` after
+// `--python_out=$ARCADIA_BUILD_ROOT/$PROTO_NAMESPACE` and before the trailing
+// source token — exactly as the cpp side appends d.protocFlags after --cpp_out.
+// A sibling PROTO_LIBRARY without the macro must NOT carry the flag. Mirrors
+// sg7 sprav/protos (PROTOC_FATAL_WARNINGS on altay_api__intpy3___pb2.py).
+func TestEmitPyProto_ProtocFatalWarningsRidesPyCommand(t *testing.T) {
+	const fwPath = "sprav/test/protos"
+	const plainPath = "sprav/test/plain"
+	const consumer = "sprav/test/app"
+
+	files := map[string]string{
+		consumer + "/ya.make": `PY3_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+PEERDIR(` + fwPath + ` ` + plainPath + `)
+END()
+`,
+		fwPath + "/ya.make": `PROTO_LIBRARY()
+PROTOC_FATAL_WARNINGS()
+SRCS(altay_api.proto)
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+END()
+`,
+		plainPath + "/ya.make": `PROTO_LIBRARY()
+SRCS(plain.proto)
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+END()
+`,
+		fwPath + "/altay_api.proto":       "syntax = \"proto3\";\nmessage AltayApi { int32 x = 1; }\n",
+		plainPath + "/plain.proto":        "syntax = \"proto3\";\nmessage Plain { int32 x = 1; }\n",
+		"contrib/libs/protobuf/ya.make":   "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n",
+		"contrib/python/protobuf/ya.make": "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nEND()\n",
+		"contrib/libs/python/ya.make":     "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
+	}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "contrib/python/mypy-protobuf/bin/protoc-gen-mypy", "protoc-gen-mypy")
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "slow")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+	writeToolProgram(files, "tools/archiver", "archiver")
+
+	g := testGen(newMemFS(files), consumer)
+
+	// The fatal-warnings module's py PB node (and its .pyi share the same node)
+	// must carry --fatal_warnings, positioned after --python_out and before the
+	// trailing source token.
+	fwPy := mustNodeByOutput(t, g, "$(B)/"+fwPath+"/altay_api__intpy3___pb2.py")
+	args := prCmdArgStrings(fwPy)
+	fwIdx := slices.Index(args, "--fatal_warnings")
+	if fwIdx < 0 {
+		t.Fatalf("py PB command for PROTOC_FATAL_WARNINGS module missing --fatal_warnings: %v", args)
+	}
+	var pyOutIdx, srcIdx int = -1, -1
+	for i, a := range args {
+		if strings.HasPrefix(a, "--python_out=") {
+			pyOutIdx = i
+		}
+		if a == fwPath+"/altay_api.proto" && pyOutIdx >= 0 {
+			srcIdx = i
+		}
+	}
+	if !(pyOutIdx >= 0 && pyOutIdx < fwIdx) {
+		t.Fatalf("--fatal_warnings (idx %d) must follow --python_out (idx %d): %v", fwIdx, pyOutIdx, args)
+	}
+	if !(srcIdx >= 0 && fwIdx < srcIdx) {
+		t.Fatalf("--fatal_warnings (idx %d) must precede source token (idx %d): %v", fwIdx, srcIdx, args)
+	}
+
+	// The .pyi rides the same command (single PB node with .py/.pyi outputs).
+	if mustNodeByAnyOutput(t, g, "$(B)/"+fwPath+"/altay_api__intpy3___pb2.pyi") != fwPy {
+		t.Fatalf(".pyi output is not produced by the same PB node as the .py")
+	}
+
+	// The plain sibling (no macro) must NOT carry the flag.
+	plainPy := mustNodeByOutput(t, g, "$(B)/"+plainPath+"/plain__intpy3___pb2.py")
+	if slices.Contains(prCmdArgStrings(plainPy), "--fatal_warnings") {
+		t.Fatalf("py PB command for non-macro module must NOT carry --fatal_warnings: %v", prCmdArgStrings(plainPy))
+	}
+}
+
 // Guard: an ordinary checked-in PROTO_LIBRARY SRCS(foo.proto) stays on the
 // rescompiler `_raw.auxcpp` resource path with a path-id-suffixed yapyc3 — it
 // must NOT be re-routed to objcopy by the generated-proto handling.
