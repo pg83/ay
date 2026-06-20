@@ -25,6 +25,8 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 	}
 
 	switch {
+	case strings.HasSuffix(srcRel, ".gztproto"):
+		return emitLibraryGztProtoCompile(ctx, instance, d, srcRel, in)
 	case strings.HasSuffix(srcRel, ".proto"):
 		return emitLibraryProtoSource(ctx, instance, d, srcRel, in)
 	case strings.HasSuffix(srcRel, ".fbs64"),

@@ -19,7 +19,7 @@ import (
 // generated proto is not on disk at configure time, so its parse (imports +
 // induced .pb.h) is injected under its source VFS — a context-free precomputed
 // parse the existing emitProtoPB source-path readers resolve unchanged.
-func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, protoInclude []VFS) (NodeRef, string) {
+func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, protoInclude []VFS, moduleTag STR) (NodeRef, string) {
 	gztSource := resolveModuleSourceVFS(ctx, instance, d, srcRel, d.srcDirs)
 	moddir := instance.Path.rel()
 
@@ -54,7 +54,7 @@ func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		Inputs:           na.inputList(inputs, imports),
 		Outputs:          []VFS{genProto},
 		KV:               KV{P: pkGZ, PC: pcYellow},
-		TargetProperties: TargetProperties{ModuleDir: moddir, ModuleTag: tagCppProto},
+		TargetProperties: TargetProperties{ModuleDir: moddir, ModuleTag: moduleTag},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs:   depRefs(converterRef),
 	}
@@ -88,6 +88,20 @@ func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	ctx.parsers.injectSourceParse(source(moddir+"/"+genProtoName), gztGeneratedProtoParse(ctx, gztSource, inducedProtos))
 
 	return gzRef, genProtoName
+}
+
+// emitLibraryGztProtoCompile is the regular-module (LIBRARY/PROGRAM) counterpart
+// of emitLibraryProtoSource for a `.gztproto` SRCS entry. _SRC("gztproto") is a
+// per-source macro, so a plain LIBRARY's `.gztproto` must compile and archive its
+// generated `.pb.cc.o` into the module archive exactly like a `.proto` does — the
+// specialized PROTO_LIBRARY path does this in emitCPPProtoSrcs. It runs the GZ
+// producer (writing `$(B)/<base>.proto` and registering it in the codegen
+// registry), then delegates the generated proto to the ordinary protoc-compile
+// path, which picks it up via emitProtoPB's protoSrcOverride lookup.
+func emitLibraryGztProtoCompile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
+	_, genProtoSrc := emitLibraryGztProtoSource(ctx, instance, d, srcRel, in.ProtoInclude, in.ModuleTag)
+
+	return emitLibraryProtoSource(ctx, instance, d, genProtoSrc, in)
 }
 
 // gztCmdArgs builds the converter command:
