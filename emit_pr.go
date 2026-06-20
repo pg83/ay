@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -874,9 +875,19 @@ func emitPR(
 	cmdArgs := make([]STR, 0, 1+len(stmt.Args))
 	cmdArgs = append(cmdArgs, (toolBinPath).str())
 
+	// IN/OUT path deep-replace candidates (ymake args_converter FillTypedArgs): every
+	// relative path passed to a {input}/{output} keyword (IN, IN_NOPARSE, OUT,
+	// OUT_NOAUTO) that occurs as a boundary-delimited substring of a positional arg is
+	// rewritten to its rooted spelling ($(S)/… for inputs, $(B)/… for outputs). This
+	// roots `--in_file=<rel>`/`--out_file=<rel>` flag-args and subsumes bare-token and
+	// `head:modifier` rooting. STDOUT carries no {output} marker upstream, so it is not
+	// a candidate. Sorted longest→shortest; each arg is replaced at most once.
+	cands := deepReplaceCandidates(stmt, inVFSByToken, outVFSByToken)
+
 	for _, aTok := range stmt.Args {
 		a := aTok.string()
 		key := aTok
+		toolReplaced := false
 
 		for _, tool := range auxTools {
 			// A rooted TOOL ($(B)/dir) contributes only the dependency; its binary
@@ -889,39 +900,15 @@ func emitPR(
 			if strings.Contains(a, tool.token) {
 				a = strings.ReplaceAll(a, tool.token, tool.bin.string())
 				key = internStr(a)
+				toolReplaced = true
 			}
 		}
 
-		if !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
-			if vfs, ok := inVFSByToken[key]; ok {
-				cmdArgs = append(cmdArgs, vfs.str())
-
-				continue
-			}
-
-			if vfs, ok := outVFSByToken[key]; ok {
-				cmdArgs = append(cmdArgs, vfs.str())
-
-				continue
-			}
-
-			// A path with a trailing modifier (e.g. CFFI's `build.py:ffi`): the head
-			// before ':' is the relative path declared in IN/OUT, which "becomes
-			// absolute" per RUN_PROGRAM semantics; the modifier rides along.
-			if i := strings.IndexByte(a, ':'); i > 0 {
-				head := internStr(a[:i])
-
-				if vfs, ok := inVFSByToken[head]; ok {
-					cmdArgs = append(cmdArgs, internStr(vfs.string()+a[i:]))
-
-					continue
-				}
-
-				if vfs, ok := outVFSByToken[head]; ok {
-					cmdArgs = append(cmdArgs, internStr(vfs.string()+a[i:]))
-
-					continue
-				}
+		// A position already consumed by a TOOL substitution is not re-rooted (ymake
+		// replaces each arg position once, longest match winning).
+		if !toolReplaced {
+			if rooted, ok := deepReplacePathArg(a, cands); ok {
+				key = internStr(rooted)
 			}
 		}
 
@@ -1025,4 +1012,108 @@ func emitPR(
 	}
 
 	emit.emitReserved(node, id)
+}
+
+// deepReplaceCand is one IN/OUT path candidate: its relative token (as written in
+// the ya.make) and the rooted spelling it resolves to.
+type deepReplaceCand struct {
+	token  string
+	rooted string
+}
+
+// deepReplaceCandidates builds the IN/OUT deep-replace candidate set, longest token
+// first, dropping tokens that are already root-typed (ymake's NPath::MustDeepReplace
+// gate). Inputs resolve through inVFSByToken ($(S)/… or, for a generated IN, $(B)/…),
+// outputs through outVFSByToken ($(B)/…).
+func deepReplaceCandidates(stmt *RunProgramStmt, inVFSByToken, outVFSByToken map[STR]VFS) []deepReplaceCand {
+	cands := make([]deepReplaceCand, 0, len(stmt.INFiles)+len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles))
+
+	add := func(tok STR, vfs VFS, ok bool) {
+		if !ok {
+			return
+		}
+
+		t := tok.string()
+		if !mustDeepReplacePath(t) {
+			return
+		}
+
+		cands = append(cands, deepReplaceCand{token: t, rooted: vfs.string()})
+	}
+
+	for _, f := range stmt.INFiles {
+		vfs, ok := inVFSByToken[f]
+		add(f, vfs, ok)
+	}
+
+	for _, f := range stmt.OUTFiles {
+		vfs, ok := outVFSByToken[f]
+		add(f, vfs, ok)
+	}
+
+	for _, f := range stmt.OUTNoAutoFiles {
+		vfs, ok := outVFSByToken[f]
+		add(f, vfs, ok)
+	}
+
+	sort.SliceStable(cands, func(i, j int) bool {
+		return len(cands[i].token) > len(cands[j].token)
+	})
+
+	return cands
+}
+
+// mustDeepReplacePath mirrors ymake's NPath::MustDeepReplace: a path is rooted only
+// when it is not already root-typed (a $(S)/$(B) link, a ${ARCADIA_*}/${CURDIR}/
+// ${BINDIR} prefix, or an absolute path).
+func mustDeepReplacePath(p string) bool {
+	switch {
+	case strings.HasPrefix(p, "$(S)/"),
+		strings.HasPrefix(p, "$(B)/"),
+		strings.HasPrefix(p, "${ARCADIA_ROOT}/"),
+		strings.HasPrefix(p, "${ARCADIA_BUILD_ROOT}/"),
+		strings.HasPrefix(p, "${CURDIR}/"),
+		strings.HasPrefix(p, "${BINDIR}/"),
+		strings.HasPrefix(p, "/"):
+		return false
+	}
+
+	return true
+}
+
+// deepReplacePathArg rewrites the first (longest) candidate token that occurs in arg
+// with valid boundaries to its rooted spelling, mirroring ymake's args_converter
+// substring deep-replace. A boundary is valid when the char immediately before/after
+// the match is not part of a path token (ymake IsValidSymbol: not ascii-alpha and not
+// one of '.', '_', '-', '"', '/'). Each arg is replaced at most once.
+func deepReplacePathArg(arg string, cands []deepReplaceCand) (string, bool) {
+	for _, c := range cands {
+		idx := strings.Index(arg, c.token)
+		if idx < 0 {
+			continue
+		}
+
+		end := idx + len(c.token)
+		beforeOK := idx == 0 || isDeepReplaceBoundary(arg[idx-1])
+		afterOK := end == len(arg) || isDeepReplaceBoundary(arg[end])
+
+		if beforeOK && afterOK {
+			return arg[:idx] + c.rooted + arg[end:], true
+		}
+	}
+
+	return arg, false
+}
+
+// isDeepReplaceBoundary reports whether c may delimit a deep-replaced path token
+// (ymake args_converter IsValidSymbol).
+func isDeepReplaceBoundary(c byte) bool {
+	switch {
+	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':
+		return false
+	case c == '.', c == '_', c == '-', c == '"', c == '/':
+		return false
+	}
+
+	return true
 }

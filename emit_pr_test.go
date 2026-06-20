@@ -1684,3 +1684,58 @@ END()
 		}
 	}
 }
+
+// A RUN_PROGRAM whose positional args embed an IN/OUT path after a `--flag=`:
+// uca900-shaped libmysql table generation. Upstream's args_converter deep-replace
+// (FillTypedArgs) roots every relative path listed in IN/OUT that appears as a
+// boundary-delimited substring of an arg, so `--in_file=lang_data/ja.txt` becomes
+// `--in_file=$(S)/<dir>/lang_data/ja.txt` and `--out_file=tbls.cc` becomes
+// `--out_file=$(B)/<dir>/tbls.cc`. Bare-token IN/OUT args keep rooting too.
+func TestGen_RunProgramFlagArgPathsAreRooted(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "contrib/libs/libmysql_r/strings/uca9dump", "uca9dump")
+
+	writeTestModuleFile(files, "contrib/libs/libmysql_r/strings/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    contrib/libs/libmysql_r/strings/uca9dump ja --in_file=lang_data/ja_hans.txt --out_file=uca900_ja_tbls.cc
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/libmysql_r/strings
+    IN lang_data/ja_hans.txt
+    OUT uca900_ja_tbls.cc
+)
+END()
+`)
+	writeTestModuleFile(files, "contrib/libs/libmysql_r/strings/lang_data/ja_hans.txt", "data\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(contrib/libs/libmysql_r/strings)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+	pr := mustNodeByOutput(t, g, "$(B)/contrib/libs/libmysql_r/strings/uca900_ja_tbls.cc")
+	if pr.KV.P != pkPR {
+		t.Fatalf("expected PR producer, got %v", pr.KV.P)
+	}
+
+	gotArgs := strStrings(pr.Cmds[0].CmdArgs.flat())
+	wantIn := "--in_file=$(S)/contrib/libs/libmysql_r/strings/lang_data/ja_hans.txt"
+	wantOut := "--out_file=$(B)/contrib/libs/libmysql_r/strings/uca900_ja_tbls.cc"
+	if !slices.Contains(gotArgs, wantIn) {
+		t.Fatalf("PR args missing rooted --in_file %q; got %v", wantIn, gotArgs)
+	}
+	if !slices.Contains(gotArgs, wantOut) {
+		t.Fatalf("PR args missing rooted --out_file %q; got %v", wantOut, gotArgs)
+	}
+	if slices.Contains(gotArgs, "ja") == false {
+		t.Fatalf("PR args dropped the literal positional %q; got %v", "ja", gotArgs)
+	}
+}
