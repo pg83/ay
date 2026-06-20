@@ -159,6 +159,32 @@ func TestEmitCC_CxxSource_UsesClangPlusPlus(t *testing.T) {
 	}
 }
 
+func TestEmitCC_UppercaseCSource_UsesClangPlusPlus(t *testing.T) {
+	emit := newBufferedEmitter()
+	emitCC(targetInstance("contrib/libs/cxxsupp/libcxx"), "src/algorithm.C", intern("$(S)/contrib/libs/cxxsupp/libcxx/src/algorithm.C"), withCCBlocks(targetInstance("contrib/libs/cxxsupp/libcxx").Platform, ModuleCCInputs{TC: testToolchain()}), testHostP, emit)
+
+	args := emit.nodes[0].Cmds[0].CmdArgs.flat()
+
+	wantCxx := testToolchain().CXX.string()
+	if args[0].string() != wantCxx {
+		t.Errorf("compiler = %q, want %q for uppercase .C source", args[0].string(), wantCxx)
+	}
+
+	found := false
+
+	for _, a := range args {
+		if a.string() == cxxStandardFlag.string() {
+			found = true
+
+			break
+		}
+	}
+
+	if !found {
+		t.Errorf("cmd_args missing %q for uppercase .C source; got %v", cxxStandardFlag, args)
+	}
+}
+
 func TestEmitCC_CSource_UsesClang(t *testing.T) {
 	emit := newBufferedEmitter()
 	emitCC(targetInstance("build/cow/on"), "lib.c", intern("$(S)/build/cow/on/lib.c"), withCCBlocks(targetInstance("build/cow/on").Platform, ModuleCCInputs{TC: testToolchain()}), testHostP, emit)
@@ -684,6 +710,98 @@ func TestGen_SRC_AppendsExtraCFlags_PerSource(t *testing.T) {
 
 	if args[len(args)-2].string() != "-DSSE41_STUB" {
 		t.Errorf("second-to-last cmd_arg = %q, want %q (per-source CFLAGS slot)", args[len(args)-2], "-DSSE41_STUB")
+	}
+}
+
+// Upstream _SRC("C") (ymake.core.conf:3466) routes uppercase `.C` through
+// $_SRC_cpp, identical to .cpp/.cc/.cxx. So a `.C` source must emit a C++
+// compile node and participate in ordinary and GLOBAL archive membership.
+func TestGen_UppercaseCSource_CompilesAsCxx(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"cmod/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(regular.C)\nGLOBAL_SRCS(global.C)\nEND()\n",
+	})
+
+	g := testGen(fs, "cmod")
+
+	var ccCount, arCount, globalARs, regularARs int
+
+	var regularCC *Node
+
+	for _, n := range g.Graph {
+		switch n.KV.P {
+		case pkCC:
+			ccCount++
+
+			if len(n.Outputs) == 1 && strings.HasSuffix(n.Outputs[0].string(), "/regular.C.o") {
+				regularCC = n
+			}
+		case pkAR:
+			arCount++
+
+			if n.TargetProperties.ModuleTag == tagGlobal {
+				globalARs++
+			} else if n.TargetProperties.ModuleTag == 0 {
+				regularARs++
+			}
+		}
+	}
+
+	if ccCount != 2 {
+		t.Errorf("CC count = %d, want 2 (regular.C + global.C compile nodes)", ccCount)
+	}
+
+	if arCount != 2 {
+		t.Errorf("AR count = %d, want 2 (regular + global archive)", arCount)
+	}
+
+	if regularARs != 1 {
+		t.Errorf("regular (no-tag) ARs = %d, want 1 (regular.C archive member)", regularARs)
+	}
+
+	if globalARs != 1 {
+		t.Errorf("global ARs = %d, want 1 (GLOBAL global.C contribution)", globalARs)
+	}
+
+	if regularCC == nil {
+		t.Fatalf("no CC node emitted with output suffix /regular.C.o")
+	}
+
+	if regularCC.Outputs[0].string() != "$(B)/cmod/regular.C.o" {
+		t.Errorf("CC output = %q, want %q", regularCC.Outputs[0].string(), "$(B)/cmod/regular.C.o")
+	}
+
+	args := regularCC.Cmds[0].CmdArgs.flat()
+
+	foundStd := false
+
+	for _, a := range args {
+		if a.string() == cxxStandardFlag.string() {
+			foundStd = true
+
+			break
+		}
+	}
+
+	if !foundStd {
+		t.Errorf("cmd_args missing %q for a .C source (must compile as C++, not C); got %v", cxxStandardFlag, args)
+	}
+}
+
+// Negative guard: the case-sensitive extension classifier keeps .c as C and
+// .cpp/.cc/.cxx/.C as C++.
+func TestIsCxxSource_CaseSensitiveExtensions(t *testing.T) {
+	cases := map[string]bool{
+		"foo.c":   false,
+		"foo.cpp": true,
+		"foo.cc":  true,
+		"foo.cxx": true,
+		"foo.C":   true,
+	}
+
+	for src, want := range cases {
+		if got := isCxxSource(src); got != want {
+			t.Errorf("isCxxSource(%q) = %v, want %v", src, got, want)
+		}
 	}
 }
 
