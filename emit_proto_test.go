@@ -939,9 +939,12 @@ END()
 // must carry -I=$(S)/yt in its gen_py_protos protoc command, exactly as the C++
 // pb.h side does. The contributor chain mirrors the reference:
 // ads/autobudget/protos -> grut/libs/proto/public/metadata -> yt/yt_proto/yt/core
-// (PROTO_NAMESPACE(yt)). The reference orders the namespace token after the
-// protobuf-src include and before the NEED_GOOGLE_PROTO_PEERDIRS protoc-src
-// include, inside the -I block (before --python_out).
+// (PROTO_NAMESPACE(yt)). yt and protobuf-src both ride the single ordered
+// _PROTO__INCLUDE set in encounter order: the transitive PROTO_NAMESPACE(yt) is
+// reached before contrib/libs/protobuf, so the reference orders the namespace
+// token *before* the protobuf-src include and before the NEED_GOOGLE_PROTO_PEERDIRS
+// protoc-src include, inside the -I block (before --python_out) — identical to the
+// C++ pb side (no standalone protobuf-src precedes the band).
 func TestGen_PyProtoLibrary_TransitivePROTONamespaceReachesPyProtoCmd(t *testing.T) {
 	const consumer = "app/pytool"
 
@@ -982,7 +985,7 @@ NO_PYTHON_INCLUDES()
 PEERDIR(ads/autobudget/protos)
 END()
 `)
-	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nADDINCL(GLOBAL FOR proto contrib/libs/protobuf/src)\nSRCS(p.cpp)\nEND()\n")
 	writeTestModuleFile(files, "contrib/python/protobuf/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/python/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n")
 
@@ -1022,12 +1025,107 @@ END()
 	if protobufSrcIdx < 0 || pyOutIdx < 0 {
 		t.Fatalf("py PB cmd missing protobuf-src / python_out anchors: %v", strStrs(args))
 	}
-	if !(protobufSrcIdx < ytIdx && ytIdx < pyOutIdx) {
-		t.Fatalf("expected protobuf-src < yt < python_out: protobuf-src=%d yt=%d python_out=%d args=%v",
-			protobufSrcIdx, ytIdx, pyOutIdx, strStrs(args))
+	// Encounter order: the transitive yt namespace precedes contrib/libs/protobuf
+	// in _PROTO__INCLUDE, so yt's include precedes the band's protobuf-src, which in
+	// turn precedes the NEED_GOOGLE_PROTO_PEERDIRS protoc-src — exactly the cpp side.
+	if !(ytIdx < protobufSrcIdx && protobufSrcIdx < pyOutIdx) {
+		t.Fatalf("expected yt < protobuf-src < python_out: yt=%d protobuf-src=%d python_out=%d args=%v",
+			ytIdx, protobufSrcIdx, pyOutIdx, strStrs(args))
 	}
-	if protocSrcIdx >= 0 && !(ytIdx < protocSrcIdx) {
-		t.Fatalf("expected yt before protoc-src: yt=%d protoc-src=%d args=%v", ytIdx, protocSrcIdx, strStrs(args))
+	if protocSrcIdx >= 0 && !(protobufSrcIdx < protocSrcIdx) {
+		t.Fatalf("expected protobuf-src before protoc-src: protobuf-src=%d protoc-src=%d args=%v", protobufSrcIdx, protocSrcIdx, strStrs(args))
+	}
+
+	// The trailing -I=$(B) -I=$(S)/contrib/libs/protobuf/src pair (the structural
+	// -I=$ARCADIA_BUILD_ROOT -I=$PROTOBUF_INCLUDE_PATH suffix) must be preserved
+	// immediately before --python_out, distinct from the band's protobuf-src above.
+	if pyOutIdx < 2 || args[pyOutIdx-1].string() != "-I=$(S)/contrib/libs/protobuf/src" || args[pyOutIdx-2].string() != "-I=$(B)" {
+		t.Fatalf("expected trailing -I=$(B) -I=$(S)/contrib/libs/protobuf/src before --python_out: %v", strStrs(args))
+	}
+}
+
+// TestGen_PyProtoLibrary_ProtobufBuiltinKeepsBandProtobufSrc guards the protobuf
+// runtime's own python protos: their PROTO_NAMESPACE IS contrib/libs/protobuf/src,
+// so the source-root include -I=$(S)/contrib/libs/protobuf/src appears as the
+// structural namespace prefix, AS a band member (the builtin's own GLOBAL FOR proto
+// addincl rides its own _PROTO__INCLUDE), and again in the trailing
+// -I=$PROTOBUF_INCLUDE_PATH — three copies total. Dropping the standalone
+// pre-band protobuf-src (T-75) must not collapse the band copy: EmitPB's
+// `if cppOutRoot != ""` arm (mirrored on the py side) re-renders the namespace
+// after the structural prefix regardless of it being protobuf-src.
+func TestGen_PyProtoLibrary_ProtobufBuiltinKeepsBandProtobufSrc(t *testing.T) {
+	const consumer = "app/pytool"
+
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "py3cc_slow")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "contrib/python/mypy-protobuf/bin/protoc-gen-mypy", "protoc-gen-mypy")
+
+	// The protobuf runtime PROTO_LIBRARY: its own PROTO_NAMESPACE is the protobuf
+	// src root, and it carries the GLOBAL FOR proto addincl for that same root.
+	// NO_OPTIMIZE_PY_PROTOS / NEED_GOOGLE_PROTO_PEERDIRS(no) match the builtin shape
+	// (proto.conf:717,857): no protoc-src include is added.
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", `PROTO_LIBRARY()
+PROTO_NAMESPACE(contrib/libs/protobuf/src)
+NO_MYPY()
+DISABLE(NEED_GOOGLE_PROTO_PEERDIRS)
+ADDINCL(GLOBAL FOR proto contrib/libs/protobuf/src)
+SRCS(google/protobuf/any.proto)
+EXCLUDE_TAGS(GO_PROTO)
+END()
+`)
+	writeTestModuleFile(files, "contrib/libs/protobuf/src/google/protobuf/any.proto", "syntax = \"proto3\";\npackage google.protobuf;\nmessage Any {}\n")
+
+	writeTestModuleFile(files, consumer+"/ya.make", `PY3_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+PEERDIR(contrib/libs/protobuf)
+END()
+`)
+	writeTestModuleFile(files, "contrib/python/protobuf/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/python/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n")
+
+	g := testGen(newMemFS(files), consumer)
+
+	args := pyProtoCmdArgsForOutput(t, g, "any__intpy3___pb2.py")
+
+	const protobufSrc = "-I=$(S)/contrib/libs/protobuf/src"
+
+	// The trailing -I=$(B) -I=$(S)/contrib/libs/protobuf/src pair sits just before
+	// --python_out, unchanged by the T-75 fix.
+	pyOutIdx := indexOfArg(args, "--python_out=$(B)/contrib/libs/protobuf/src")
+	if pyOutIdx < 2 || args[pyOutIdx-1].string() != protobufSrc || args[pyOutIdx-2].string() != "-I=$(B)" {
+		t.Fatalf("expected trailing -I=$(B) %s before --python_out: %v", protobufSrc, strStrs(args))
+	}
+
+	// The band copy (the builtin's own GLOBAL FOR proto addincl in _PROTO__INCLUDE)
+	// must survive: at least one protobuf-src include sits AFTER the structural bare
+	// -I=$(S) prefix and BEFORE the trailing -I=$(B) pair. Removing line 206 without
+	// re-rendering the own-namespace band copy would collapse this to prefix+trailing.
+	bareIdx := indexOfArg(args, "-I=$(S)")
+	trailingBIdx := pyOutIdx - 2
+	if bareIdx < 0 {
+		t.Fatalf("missing structural bare -I=$(S): %v", strStrs(args))
+	}
+	bandCopy := false
+	for i := bareIdx + 1; i < trailingBIdx; i++ {
+		if args[i].string() == protobufSrc {
+			bandCopy = true
+			break
+		}
+	}
+	if !bandCopy {
+		t.Fatalf("band protobuf-src include collapsed for the protobuf builtin (only prefix+trailing remain): %v", strStrs(args))
+	}
+
+	// No NEED_GOOGLE_PROTO_PEERDIRS protoc-src for the builtin (it DISABLEs it).
+	if protocSrcIdx := indexOfArg(args, "-I=$(S)/contrib/libs/protoc/src"); protocSrcIdx >= 0 {
+		t.Fatalf("protobuf builtin must not carry protoc-src include: %v", strStrs(args))
 	}
 }
 
@@ -1082,7 +1180,7 @@ NO_PYTHON_INCLUDES()
 PEERDIR(app/proto)
 END()
 `)
-	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nADDINCL(GLOBAL FOR proto contrib/libs/protobuf/src)\nSRCS(p.cpp)\nEND()\n")
 	writeTestModuleFile(files, "contrib/python/protobuf/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/python/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n")
 
@@ -1240,7 +1338,7 @@ NO_PYTHON_INCLUDES()
 PEERDIR(`+mod+`)
 END()
 `)
-	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nADDINCL(GLOBAL FOR proto contrib/libs/protobuf/src)\nSRCS(p.cpp)\nEND()\n")
 	writeTestModuleFile(files, "contrib/python/protobuf/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/python/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n")
 
@@ -1309,7 +1407,7 @@ NO_PYTHON_INCLUDES()
 PEERDIR(`+mod+`)
 END()
 `)
-	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nADDINCL(GLOBAL FOR proto contrib/libs/protobuf/src)\nSRCS(p.cpp)\nEND()\n")
 	writeTestModuleFile(files, "contrib/python/protobuf/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nEND()\n")
 	writeTestModuleFile(files, "contrib/python/grpcio/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/grpc/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n")
