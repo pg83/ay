@@ -930,6 +930,7 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 	hasEv := false
 	hasProto := false
 	hasSc := false
+	hasCfgProto := false
 
 	// Pure id-space triage (memoized class); .fbs detection rides the same
 	// pass for genModule's flatbuffers auto-peer.
@@ -947,6 +948,8 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 			d.hasBisonY = true
 		case srcExtSc:
 			hasSc = true
+		case srcExtCfgProto:
+			hasCfgProto = true
 		}
 	}
 
@@ -958,6 +961,15 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 		// _SRC("sc").PEERDIR=library/cpp/domscheme — the runtime the generated
 		// .sc.h includes.
 		d.peerdirs = append(d.peerdirs, strLibraryCppDomscheme)
+	}
+
+	if hasCfgProto {
+		// _SRC("cfgproto") → _CPP_CFGPROTO_CMD .PEERDIR=library/cpp/proto_config/codegen
+		// library/cpp/proto_config/protos contrib/libs/protobuf (proto.conf:494): the
+		// config-proto plugin runtime/codegen the generated .cfgproto.pb.* needs. Like
+		// the .ev arm above, the source extension induces the peers regardless of
+		// module kind (the .cfgproto producers are plain LIBRARY()).
+		d.peerdirs = append(d.peerdirs, strLibraryCppProtoConfigCodegen, strLibraryCppProtoConfigProtos, strContribLibsProtobuf)
 	}
 
 	if hasProto && !hasEv && d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary {
