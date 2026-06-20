@@ -110,6 +110,21 @@ func cythonNoExt(src string) string {
 	return src[:dot]
 }
 
+// cythonStmtPlan carries a cython statement's path/scan data from the
+// registration pre-pass (phase 1) into the node-emission pass (phase 2).
+type cythonStmtPlan struct {
+	stmt              *CythonStmt
+	generatedExplicit bool
+	py23Variant       bool
+	generated         string
+	generatedVFS      VFS
+	headerVFS         []VFS
+	srcVFS            VFS
+	srcScanIn         ModuleCCInputs
+	cyRef             NodeRef
+	headerPyxClosure  []VFS
+}
+
 func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []*SourceEmit {
 	na := ctx.na
 
@@ -118,6 +133,18 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 	}
 
 	out := make([]*SourceEmit, 0, len(d.cythonCpp))
+
+	// Phase 1: reserve each statement's CY node and register its generated header
+	// (.h / _api.h) outputs with their "pyx"-language closure BEFORE any source
+	// closure is walked. A cython source can cdef-extern a sibling statement's
+	// generated header (lxml objectify.pyx → includes/etreepublic.pxd →
+	// `cdef extern from "etree_api.h"`), and PY_SRCS may list the consumer before
+	// the producer. Registering all header outputs up front makes the producer's
+	// pyx closure resolvable regardless of statement order, mirroring upstream
+	// ymake, which builds the dep graph before the include-resolution add-iter.
+	// The pyx closure follows only .pyx/.pxd/.pxi/.py and never a generated
+	// header, so this pre-pass is self-consistent.
+	plans := make([]cythonStmtPlan, 0, len(d.cythonCpp))
 
 	for _, stmt := range d.cythonCpp {
 		generatedExplicit := stmt.Generated != nil
@@ -159,23 +186,90 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 				headerVFS = append(headerVFS, build(base+"_api.h"))
 			}
 		}
+
 		srcVFS := source(instance.Path.rel() + "/" + stmt.Src)
 		srcScanIn := in
 		srcScanIn.AddIncl = appendCythonScanAddIncl(srcScanIn.AddIncl, d.cythonAddIncl, py23Variant)
 		srcScanIn.ScanCfg = newScanContext(ctx.parsers, srcScanIn.AddIncl, srcScanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+
+		cyRef := ctx.emit.reserve()
+
+		var headerPyxClosure []VFS
+
+		if stmt.Header {
+			// _H / _API_H variants emit their generated .h as an addincl output;
+			// upstream's cython processor routes the induced "cpp" closure (cdef
+			// extern-from headers, CYTHON_OUTPUT_INCLUDES python headers, embedded-file
+			// include closures) onto that header output for consumers, not onto the
+			// producer node — unlike CYTHON_C/CYTHON_CPP, which keep it on the
+			// producer. So the Header CY node carries only cython.py, the bare embedded
+			// utility TEXT inputs, the source, and the source's cimport/include/pxd
+			// closure.
+			headerPyxClosure = cythonPyxLangClosure(ctx.scannerFor(instance), srcVFS, srcScanIn.ScanCfg)
+
+			// Companion headers (.h/_api.h) are produced by the CY node; register
+			// them so consumers that #include them resolve to this producer, and
+			// record the source's "pyx"-language cimport/include/pxd closure as the
+			// header's cython-induced set. Upstream's TCythonIncludeProcessor attaches
+			// that resolved set to the node as EVI_InducedDeps "pyx" (action Use) with
+			// PassInducedIncludesThroughFiles=true: a CYTHON consumer that cdef-externs
+			// this generated header (lxml objectify.pyx → etreepublic.pxd →
+			// `etree_api.h`) Uses the producer's pyx closure (etree.pyx + its
+			// .pxi/.pxd) as its own cython source dependencies — but a C++ consumer of
+			// the same header (the generated .c's compile) does NOT (it Uses only the
+			// "cpp"/"h+cpp" Pass set). So the set rides the consuming CY node via an
+			// explicit toolInputs augmentation (cythonInducedPyxClosure), not a
+			// closure-window splice that would also reach the C++ compile.
+			pyxInduced := keepOnlySourceVFS(headerPyxClosure)
+
+			for _, h := range headerVFS {
+				registerBoundGeneratedParsedOutput(ctx, instance, pkCY, h, nil, cyRef, nil)
+				ctx.scannerFor(instance).codegen.setCythonPyxInduced(h, pyxInduced)
+			}
+		}
+
+		plans = append(plans, cythonStmtPlan{
+			stmt:              stmt,
+			generatedExplicit: generatedExplicit,
+			py23Variant:       py23Variant,
+			generated:         generated,
+			generatedVFS:      generatedVFS,
+			headerVFS:         headerVFS,
+			srcVFS:            srcVFS,
+			srcScanIn:         srcScanIn,
+			cyRef:             cyRef,
+			headerPyxClosure:  headerPyxClosure,
+		})
+	}
+
+	// Phase 2: every header output is now registered, so a consumer statement's
+	// source closure resolves the producer's api header and rides its pyx closure.
+	for i := range plans {
+		p := &plans[i]
+		stmt := p.stmt
+		generatedExplicit := p.generatedExplicit
+		py23Variant := p.py23Variant
+		generated := p.generated
+		generatedVFS := p.generatedVFS
+		headerVFS := p.headerVFS
+		srcVFS := p.srcVFS
+		srcScanIn := p.srcScanIn
+		cyRef := p.cyRef
+
 		sourceClosure := walkClosureTail(ctx.scannerFor(instance), srcVFS, srcScanIn.ScanCfg)
 		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(ctx, instance, srcVFS, sourceClosure, stmt.CMode, srcScanIn)
 
-		// _H / _API_H variants emit their generated .h as an addincl output;
-		// upstream's cython processor routes the induced "cpp" closure (cdef
-		// extern-from headers, CYTHON_OUTPUT_INCLUDES python headers, embedded-file
-		// include closures) onto that header output for consumers, not onto the
-		// producer node — unlike CYTHON_C/CYTHON_CPP, which keep it on the producer.
-		// So the Header CY node carries only cython.py, the bare embedded utility
-		// TEXT inputs, the source, and the source's cimport/include/pxd closure.
 		if stmt.Header {
-			toolInputs = cythonHeaderToolInputs(ctx, instance, srcVFS, srcScanIn)
+			toolInputs = cythonHeaderToolInputs(srcVFS, p.headerPyxClosure)
 		}
+
+		// A cython source that cdef-externs a sibling statement's generated header
+		// (lxml objectify.pyx → etreepublic.pxd → `etree_api.h`) Uses that header's
+		// recorded cython-induced "pyx" closure (etree.pyx + its .pxi/.pxd) as its
+		// own cython source dependencies — the EVI_InducedDeps "pyx" Use passthrough.
+		// This lands on the CY node only; the generated .c's C++ compile does not Use
+		// it, so emitsIncludes is left untouched.
+		toolInputs = cythonInducedPyxClosure(ctx, instance, sourceClosure, toolInputs)
 
 		// Upstream pybuild.py: a CYTHONIZE_PY `.py` source whose module has a
 		// resolving `<mod-as-path>.pxd` passes that pxd as the cython macro's
@@ -188,20 +282,14 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 			toolInputs = keepOnlySourceVFS(dedupVFS(toolInputs, pxdClosure))
 			emitsIncludes = dedupVFS(emitsIncludes, pxdClosure)
 		}
+
 		parsed := make([]IncludeDirective, 0, len(emitsIncludes))
 
 		for _, include := range emitsIncludes {
 			parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.rel())})
 		}
 
-		cyRef := ctx.emit.reserve()
 		registerBoundGeneratedParsedOutput(ctx, instance, pkCY, generatedVFS, parsed, cyRef, nil)
-
-		// Companion headers (.h/_api.h) are produced by the same CY node; register
-		// them so consumers that #include them resolve to this producer.
-		for _, h := range headerVFS {
-			registerBoundGeneratedParsedOutput(ctx, instance, pkCY, h, nil, cyRef, nil)
-		}
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -279,8 +367,10 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 // inputs, the source, and the source's cimport/include/pxd ("pyx"-language)
 // closure — but NOT the induced "cpp" closure (cdef extern-from C/C++ headers,
 // the CYTHON_OUTPUT_INCLUDES python headers, or the embedded-file include
-// closures) that the non-Header path carries.
-func cythonHeaderToolInputs(ctx *GenCtx, instance ModuleInstance, src VFS, scanIn ModuleCCInputs) []VFS {
+// closures) that the non-Header path carries. The pyx-language closure is
+// precomputed by the caller (it also rides the generated header's parsed
+// includes, see cythonHeaderParsedIncludes).
+func cythonHeaderToolInputs(src VFS, pyxClosure []VFS) []VFS {
 	singles := make([]VFS, 0, len(py3CythonEmbeddedFiles)+2)
 	singles = append(singles, contribToolsCythonCythonPy, src)
 
@@ -288,9 +378,7 @@ func cythonHeaderToolInputs(ctx *GenCtx, instance ModuleInstance, src VFS, scanI
 		singles = append(singles, source(rel))
 	}
 
-	closure := cythonPyxLangClosure(ctx.scannerFor(instance), src, scanIn.ScanCfg)
-
-	return keepOnlySourceVFS(dedupVFS(singles, closure))
+	return keepOnlySourceVFS(dedupVFS(singles, pyxClosure))
 }
 
 // cythonPyxLangClosure walks the transitive cimport/include/pxd closure of a
@@ -330,6 +418,35 @@ func cythonPyxLangClosure(scanner *IncludeScanner, src VFS, cfg ScanContext) []V
 
 func isCythonLangFile(rel string) bool {
 	return hasSuffix(rel, ".pyx") || hasSuffix(rel, ".pxd") || hasSuffix(rel, ".pxi") || hasSuffix(rel, ".py")
+}
+
+// cythonInducedPyxClosure augments a cython node's tool inputs with the recorded
+// "pyx"-language induced closure of every generated _H / _API_H header reached in
+// the source's closure (the upstream EVI_InducedDeps "pyx" Use passthrough). The
+// header itself is a $(B) member of sourceClosure (it carries no parsed includes
+// of its own); its producer's pyx closure is read from the codegen registry and
+// unioned in, so the consuming CY node carries the producer's etree.pyx + .pxi /
+// .pxd. Returns toolInputs unchanged when no reached header records an induced set.
+func cythonInducedPyxClosure(ctx *GenCtx, instance ModuleInstance, sourceClosure, toolInputs []VFS) []VFS {
+	reg := codegenRegForInstance(ctx, instance)
+
+	var induced [][]VFS
+
+	for _, v := range sourceClosure {
+		if !v.isBuild() {
+			continue
+		}
+
+		if pyx := reg.cythonPyxInduced(v); len(pyx) > 0 {
+			induced = append(induced, pyx)
+		}
+	}
+
+	if len(induced) == 0 {
+		return toolInputs
+	}
+
+	return keepOnlySourceVFS(dedupVFS(append([][]VFS{toolInputs}, induced...)...))
 }
 
 func cythonGeneratedOutputInputs(ctx *GenCtx, instance ModuleInstance, src VFS, sourceClosure []VFS, cMode bool, scanIn ModuleCCInputs) ([]VFS, []VFS) {
