@@ -46,3 +46,77 @@ func TestEmitPyRegister_ProducerEmittedAtTargetPlatform(t *testing.T) {
 		}
 	}
 }
+
+// A generated PY_SRCS source (PY_SRCS(__init__.py) where __init__.py is the
+// OUT_NOAUTO output of a RUN_PROGRAM) must reproduce upstream pybuild.py's
+// `rootrel_arc_src(path, unit) + '-'` py3cc source-name argument. For a build-
+// generated source, rootrel_arc_src resolves into $B (not $S) and falls through
+// to `return src`, so the argument is the raw PY_SRCS token (`__init__.py-`),
+// not the module-rooted path (`mod/__init__.py-`). The bytecode node also
+// inherits the producer's transitive $(S) source closure (upstream flat-input
+// model) — the direct IN leaf AND its transitive includes — not just the direct
+// leaf, and depends on the RUN_PROGRAM producer node.
+func TestGen_GeneratedPySrcsBytecodeNamingAndProducerClosure(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "slow")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+	writeToolProgram(files, "tools/archiver", "archiver")
+	writeToolProgram(files, "mod/gen/bin", "gen")
+
+	writeTestModuleFile(files, "other/other.h", "#pragma once\n")
+
+	writeTestModuleFile(files, "mod/ya.make", `PY3_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+PY_SRCS(__init__.py)
+RUN_PROGRAM(
+    mod/gen/bin
+        --save_file_path __init__.py
+    IN_NOPARSE gen.h
+    OUT_NOAUTO __init__.py
+)
+END()
+`)
+	writeTestModuleFile(files, "mod/gen.h", "#pragma once\n#include <other/other.h>\n")
+
+	g := testGen(newMemFS(files), "mod")
+
+	bc := mustNodeByOutput(t, g, "$(B)/mod/__init__.py.yapyc3")
+	args := bc.Cmds[0].CmdArgs.flat()
+
+	// (1) Source-name argument is the raw token, not the module-rooted path.
+	if indexOfArg(args, "__init__.py-") < 0 {
+		t.Fatalf("py3cc cmd missing generated source-name arg %q: %v", "__init__.py-", strStrs(args))
+	}
+	if indexOfArg(args, "mod/__init__.py-") >= 0 {
+		t.Fatalf("py3cc cmd uses module-rooted source name, want raw token: %v", strStrs(args))
+	}
+
+	// (2) Bytecode node depends on the RUN_PROGRAM producer of the generated source.
+	producer := mustNodeByOutput(t, g, "$(B)/mod/__init__.py")
+	foundDep := false
+	for _, d := range graphDeps(g, bc) {
+		if d == producer.UID {
+			foundDep = true
+			break
+		}
+	}
+	if !foundDep {
+		t.Fatalf("bytecode deps %v do not include producer uid %q", graphDeps(g, bc), producer.UID)
+	}
+
+	// (3) Bytecode node carries the producer's transitive $(S) source closure:
+	// the direct IN gen.h AND its transitive include other/other.h.
+	if !nodeHasInput(bc, "$(S)/mod/gen.h") {
+		t.Fatalf("bytecode inputs missing direct generator source gen.h: %#v", bc.flatInputs())
+	}
+	if !nodeHasInput(bc, "$(S)/other/other.h") {
+		t.Fatalf("bytecode inputs missing transitive generator closure other/other.h: %#v", bc.flatInputs())
+	}
+}
