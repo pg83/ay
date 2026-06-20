@@ -175,9 +175,9 @@ type ModuleData struct {
 	// yields the regular non-flat object (default flags), SRC adds a separate FLAT
 	// object with its own flags (e.g. glibcasm's strstr.c + SRC(strstr.c
 	// -fgnu89-inline) → both _/…/strstr.c.o and …/strstr.c.o).
-	srcExtraFlat       []SrcFlatEntry
-	globalSrcs         []STR
-	pySrcs             []STR
+	srcExtraFlat []SrcFlatEntry
+	globalSrcs   []STR
+	pySrcs       []STR
 	// pySrcsFullName is parallel to pySrcs: true when the py3cc module-name
 	// argument is the full root-relative path (a build-root-rooted token, e.g.
 	// swig's `${ARCADIA_BUILD_ROOT}/<full>.py`), false when it is the bare token.
@@ -253,11 +253,11 @@ type ModuleData struct {
 	// maps/libs/sproto/sprotoc, and the macro's SET(PROTO_HEADER_EXTS .pb.h
 	// .sproto.h) makes proto imports in this module induce the .sproto.h sibling
 	// header in addition to .pb.h. See emitYmapsSprotoHeaders.
-	ymapsSprotoSrcs []STR
-	noMypy               bool
-	noOptimize           bool
-	optimizePyProtos     bool
-	optimizePyProtosSet  bool
+	ymapsSprotoSrcs     []STR
+	noMypy              bool
+	noOptimize          bool
+	optimizePyProtos    bool
+	optimizePyProtosSet bool
 	// needGoogleProtoPeerdirs (NEED_GOOGLE_PROTO_PEERDIRS, default yes) drives the
 	// PEERDIR to protobuf/builtin_proto/protos_from_protoc — a PY-only proto whose
 	// GLOBAL PROTO_NAMESPACE(contrib/libs/protoc/src) injects -I=$(S)/.../protoc/src
@@ -1260,7 +1260,20 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 			// upstream's `IF (MODULE_LANG == CPP)` gate around CLANG_WARNINGS only
 			// fires once the module language is known. sbomComponentLang already
 			// maps the module TOK to the uppercase MODULE_LANG token (PY3/CPP/...).
-			env.setString(envMODULE_LANG, sbomComponentLang(d.moduleStmt.Name))
+			moduleLang := sbomComponentLang(d.moduleStmt.Name)
+
+			// A PROTO_LIBRARY is a multimodule: upstream's _CPP_PROTO submodule is
+			// MODULE_LANG==CPP while _PY3_PROTO (module _PY3_PROTO: PY3_LIBRARY,
+			// which SET(MODULE_LANG PY3)) is PY3. genModule selects the submodule by
+			// binding PY3_PROTO into the env before re-collecting, so the language
+			// gate must follow that selection rather than the bare PROTO_LIBRARY tok
+			// (else the py side's optimized-proto resource aux C++ wrongly inherits
+			// MODULE_LANG==CPP CLANG_WARNINGS such as -Wimplicit-fallthrough).
+			if d.moduleStmt.Name == tokProtoLibrary && env.bool(envPY3_PROTO) {
+				moduleLang = moduleLangTokenPy3
+			}
+
+			env.setString(envMODULE_LANG, moduleLang)
 
 			if v.Name == tokPy3Program && kind == KindLib {
 				d.programPairedLib = true
@@ -3033,8 +3046,10 @@ func pythonInitSuffix(name string) string {
 }
 
 // applyProtoNamespace models PROTO_NAMESPACE (yatool/build/conf/proto.conf):
-//   SET(PROTO_NAMESPACE $Namespace)
-//   PROTO_ADDINCL(GLOBAL $Namespace)  -> ADDINCL(GLOBAL ${ARCADIA_BUILD_ROOT}/$Path)
+//
+//	SET(PROTO_NAMESPACE $Namespace)
+//	PROTO_ADDINCL(GLOBAL $Namespace)  -> ADDINCL(GLOBAL ${ARCADIA_BUILD_ROOT}/$Path)
+//
 // It records the namespace output root and the build-root C++ ADDINCL. For GLOBAL
 // or PROTO_LIBRARY modules the build-root include also rides the GLOBAL/user-global
 // peer addincl closure into transitive consumers. The protoc source arm is carried
