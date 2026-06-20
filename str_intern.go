@@ -170,6 +170,7 @@ const (
 	srcExtCIn
 	srcExtHIn
 	srcExtSc
+	srcExtCfgProto
 )
 
 func srcExtClassOf(id STR) SrcExtClass {
@@ -222,6 +223,8 @@ func classifySrcExt(s string) SrcExtClass {
 		return srcExtHIn
 	case strings.HasSuffix(s, ".sc"):
 		return srcExtSc
+	case strings.HasSuffix(s, ".cfgproto"):
+		return srcExtCfgProto
 	default:
 		return srcExtRegular
 	}

@@ -380,6 +380,94 @@ END()
 	}
 }
 
+// TestGen_CfgProto_InducesCodegenAndProtosPeers reproduces the sg7 bs-server LD
+// residue: a plain LIBRARY() with a `.cfgproto` source must induce the
+// `_CPP_CFGPROTO_CMD .PEERDIR=library/cpp/proto_config/codegen
+// library/cpp/proto_config/protos contrib/libs/protobuf` peers (proto.conf:494)
+// into its link closure, exactly as a `.ev` source induces library/cpp/eventlog.
+// `protos` is also a plain declared peerdir elsewhere, but `codegen` reaches the
+// link closure ONLY through the cfgproto command — before the fix it is absent.
+// Asserts both archives appear exactly once and codegen precedes protos.
+func TestGen_CfgProto_InducesCodegenAndProtosPeers(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM(app)
+PEERDIR(lib)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	// Plain LIBRARY with a .cfgproto source — induces codegen+protos+protobuf.
+	writeTestModuleFile(files, "lib/ya.make", `LIBRARY()
+SRCS(backend.cpp backend_config.cfgproto)
+END()
+`)
+	writeTestModuleFile(files, "lib/backend.cpp", "int backend(){return 0;}\n")
+	writeTestModuleFile(files, "lib/backend_config.cfgproto", "message Cfg {}\n")
+
+	writeTestModuleFile(files, "library/cpp/proto_config/codegen/ya.make", "LIBRARY()\nSRCS(parse_value.cpp)\nEND()\n")
+	writeTestModuleFile(files, "library/cpp/proto_config/codegen/parse_value.cpp", "int parse(){return 0;}\n")
+	writeTestModuleFile(files, "library/cpp/proto_config/protos/ya.make", "LIBRARY()\nSRCS(extensions.cpp)\nEND()\n")
+	writeTestModuleFile(files, "library/cpp/proto_config/protos/extensions.cpp", "int ext(){return 0;}\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+
+	var ldNode *Node
+	for _, n := range g.Graph {
+		if n.KV.P == pkLD {
+			ldNode = n
+			break
+		}
+	}
+	if ldNode == nil {
+		t.Fatal("no LD node found in graph")
+	}
+
+	var linkArgs []STR
+	for _, c := range ldNode.Cmds {
+		flat := c.CmdArgs.flat()
+		if indexOfArg(flat, "$(S)/build/scripts/link_exe.py") >= 0 {
+			linkArgs = flat
+			break
+		}
+	}
+	if linkArgs == nil {
+		t.Fatal("no link_exe.py command found on LD node")
+	}
+
+	const codegenA = "library/cpp/proto_config/codegen/libcpp-proto_config-codegen.a"
+	const protosA = "library/cpp/proto_config/protos/libcpp-proto_config-protos.a"
+
+	countArg := func(needle string) (int, int) {
+		count, first := 0, -1
+		for i, a := range linkArgs {
+			if a.string() == needle {
+				if first < 0 {
+					first = i
+				}
+				count++
+			}
+		}
+		return count, first
+	}
+
+	codegenCount, codegenIdx := countArg(codegenA)
+	protosCount, protosIdx := countArg(protosA)
+
+	if codegenCount != 1 {
+		t.Fatalf("codegen archive must appear exactly once, got %d (idx=%d)", codegenCount, codegenIdx)
+	}
+	if protosCount != 1 {
+		t.Fatalf("protos archive must appear exactly once, got %d (idx=%d)", protosCount, protosIdx)
+	}
+	if codegenIdx > protosIdx {
+		t.Fatalf("codegen archive [%d] must precede protos archive [%d] in link order", codegenIdx, protosIdx)
+	}
+}
+
 func TestGen_ProtoLibrary_CPPProtoPlugin0WiresToolDeps(t *testing.T) {
 	files := map[string]string{}
 
