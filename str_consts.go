@@ -127,6 +127,8 @@ var (
 	strLibrary                                       = internStr("library")
 	strLibraryCppDomscheme                           = internStr("library/cpp/domscheme")
 	strLibraryCppEventlog                            = internStr("library/cpp/eventlog")
+	strLibraryCppProtoConfigCodegen                  = internStr("library/cpp/proto_config/codegen")
+	strLibraryCppProtoConfigProtos                   = internStr("library/cpp/proto_config/protos")
 	strLibraryPythonImportTracingConstructor         = internStr("library/python/import_tracing/constructor")
 	strLibraryPythonRuntimePy3                       = internStr("library/python/runtime_py3")
 	strModPath                                       = internStr("--mod-path")
