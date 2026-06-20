@@ -205,6 +205,22 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	prSourceInputs = append(prSourceInputs, prGeneratedFromSources...)
 
+	// A custom header generated FROM a .proto IN (yabs/.../generated/sys_const.h:
+	// `IN sys_const.proto OUT sys_const.h`) #includes the generated `.pb.h` of that
+	// proto's imports — the generator emits `#include "<import>.pb.h"`. We never
+	// scan the generated body, so model it the way upstream propagates a .proto's
+	// induced deps through a generated file: carry the import's `.pb.h` on the
+	// header's parsed-include window, so every consumer (the generated .cpp's
+	// compile, and a downstream RUN_PROGRAM that OUTPUT_INCLUDES this header) reaches
+	// the `.pb.h` and its own transitive closure. Headers only — a `.pb.h` OUT (the
+	// transitive_proto wrapper) already roots its own proto graph (T-48).
+	var protoImportPbH []IncludeDirective
+	for _, v := range inVFSs {
+		if v.isSource() && strings.HasSuffix(v.rel(), ".proto") {
+			protoImportPbH = append(protoImportPbH, protoDirectPbHIncludes(ctx.parsers, v.rel(), "")...)
+		}
+	}
+
 	// A run "self-consumes" when its own module auto-compiles a cc-source or
 	// asm-source OUT (the exact set emitRunProgramsForAR builds downstream: OUT
 	// files and auto STDOUT, never OUT_NOAUTO). Such a producer is the first
@@ -278,15 +294,15 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	}
 
 	for _, f := range stmt.OUTFiles {
-		registerPROutput(outVFSByToken[f], prEmitsIncludes(f, stmt, inVFSs))
+		registerPROutput(outVFSByToken[f], prEmitsIncludes(f, stmt, inVFSs, protoImportPbH))
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		registerPROutput(outVFSByToken[f], prEmitsIncludes(f, stmt, inVFSs))
+		registerPROutput(outVFSByToken[f], prEmitsIncludes(f, stmt, inVFSs, protoImportPbH))
 	}
 
 	if stmt.StdoutFile != nil {
-		registerPROutput(*stdoutVFS, prEmitsIncludes(*stmt.StdoutFile, stmt, inVFSs))
+		registerPROutput(*stdoutVFS, prEmitsIncludes(*stmt.StdoutFile, stmt, inVFSs, protoImportPbH))
 	}
 
 	inputClosure := prInputClosure(ctx, instance, d, stmt, moduleInputs)
@@ -379,6 +395,32 @@ func filterSourceVFS(vs []VFS) []VFS {
 	}
 
 	return out
+}
+
+// isCodegenProtoHeader reports whether v is a registered generated proto header
+// (`x.pb.h`) — the canonical proto output, excluding the lite `.deps.pb.h`
+// intermediate. Used to keep a pkPR custom header's re-exported imports' .pb.h on
+// a downstream producer while dropping the other $(B) codegen siblings.
+func isCodegenProtoHeader(reg *CodegenRegistry, v VFS) bool {
+	rel := v.rel()
+
+	return strings.HasSuffix(rel, ".pb.h") && !strings.HasSuffix(rel, ".deps.pb.h") && reg.lookup(v) != nil
+}
+
+// pbhBasenameSet collects the basenames of every `.pb.h` already in vs — the
+// canonical proto headers a producer has resolved. The WKT checked-in sibling
+// synthesis skips a kept .proto whose basename is already here (a non-canonical
+// same-named variant).
+func pbhBasenameSet(vs []VFS) map[string]bool {
+	m := map[string]bool{}
+
+	for _, v := range vs {
+		if strings.HasSuffix(v.rel(), ".pb.h") {
+			m[filepath.Base(v.rel())] = true
+		}
+	}
+
+	return m
 }
 
 func isCCSourceExt(p string) bool {
@@ -531,12 +573,29 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	{
 		reg := codegenRegForInstance(ctx, instance)
 
-		keep := func(v VFS) bool {
+		// keep decides which entries of an OUTPUT_INCLUDES target's walked closure
+		// ride the producer. A pkPR custom header (sys_const.h) re-exports its proto
+		// imports' generated .pb.h (the prEmitsIncludes window enrichment), so keep
+		// its whole $(S) source closure plus those generated proto .pb.h, dropping
+		// intermediate $(B) codegen artifacts (.yaff.h, .deps.pb.h, .pb.cc). A pkPB
+		// proto header (control_board's tablet.pb.h) lists only the transitive .proto
+		// SOURCES — never the deep generated .pb.h headers (c5549aa/T-48).
+		keep := func(v VFS, customPR bool) bool {
 			if fullSourceClosure {
 				return v.isSource()
 			}
+			if customPR {
+				return v.isSource() || isCodegenProtoHeader(reg, v)
+			}
 			return strings.HasSuffix(v.rel(), ".proto")
 		}
+
+		// Basenames of .pb.h already resolved on this producer (the canonical
+		// variant, e.g. protobuf/descriptor.pb.h via the IN walk). The checked-in
+		// WKT sibling synthesis below consults it: a kept .proto whose .pb.h basename
+		// is already present is a non-canonical duplicate variant
+		// (protobuf_old/descriptor.proto), whose sibling upstream never #includes.
+		pbhSeen := pbhBasenameSet(out)
 
 		for _, oi := range stmt.OutputIncludes {
 			target := oi
@@ -548,11 +607,13 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 			candidate := build(target.string())
 
 			var sub []VFS
+			customPR := false
 			switch info := reg.lookup(candidate); {
 			case info != nil:
-				// Codegen .pb.h: a build output that always leads its window —
+				// Codegen header: a build output that always leads its window —
 				// strip the intermediate $(B) root, keep its proto/C closure.
 				sub = walkClosureTail(ctx.scannerFor(instance), info.OutputPath, scanIn.ScanCfg)
+				customPR = info.ProducerKvP == pkPR
 
 				// This run names the codegen output in OUTPUT_INCLUDES, so it is a
 				// CONSUMER of it. walkClosureTail leads with the output as the window
@@ -576,11 +637,15 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 			}
 
 			for _, v := range sub {
-				if !keep(v) {
+				if !keep(v, customPR) {
 					continue
 				}
 
 				out = append(out, v)
+
+				if strings.HasSuffix(v.rel(), ".pb.h") {
+					pbhSeen[filepath.Base(v.rel())] = true
+				}
 
 				// Protobuf WKTs (google/protobuf/{any,duration,empty,struct,
 				// timestamp,...}.proto) ship pre-built `.pb.h` headers checked
@@ -590,14 +655,17 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 				// .pb.h sibling) the IsFile probe returns false, so this is a
 				// no-op outside the WKT path. fullSourceClosure keeps the whole C
 				// closure, so a genuinely-#included WKT .pb.h already rides as a
-				// source — re-adding the sibling of every .proto would over-emit
-				// the .pb.h of a variant (protobuf_old) that is never #included.
+				// source. The basename guard drops a same-named non-canonical
+				// variant (protobuf_old/descriptor.pb.h) whose canonical sibling
+				// (protobuf/descriptor.pb.h) is already resolved and which upstream
+				// never #includes.
 				if !fullSourceClosure && !hasProtoIN && v.isSource() && strings.HasSuffix(v.rel(), ".proto") {
 					sibling := strings.TrimSuffix(v.rel(), ".proto") + ".pb.h"
 					sibDir, sibBase := splitDirName(sibling)
 
-					if ctx.fs.isFile(dirKey(sibDir), sibBase) {
+					if ctx.fs.isFile(dirKey(sibDir), sibBase) && !pbhSeen[sibBase] {
 						out = append(out, source(sibling))
+						pbhSeen[sibBase] = true
 					}
 				}
 			}
@@ -616,12 +684,22 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 // prEmitsIncludes builds the parsed-include set registered on one PR output.
 // inVFSs mirrors stmt.INFiles in order (computed once by emitRunProgram), so the
 // per-output call needn't re-resolve every IN file.
-func prEmitsIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS) []IncludeDirective {
+func prEmitsIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, protoImportPbH []IncludeDirective) []IncludeDirective {
 	if !generatedOutputCarriesIncludes(outFile.string()) {
 		return nil
 	}
 
-	includes := make([]IncludeDirective, 0, len(inVFSs)+len(stmt.OutputIncludes))
+	// A custom header generated from a .proto IN re-exports the import's generated
+	// `.pb.h` (see protoImportPbH in emitRunProgram). A `.pb.h` OUT is excluded: the
+	// transitive_proto wrapper roots its proto graph at its own IN .proto.
+	carryProtoImportPbH := isHeaderSource(outFile.string()) && !strings.HasSuffix(outFile.string(), ".pb.h")
+
+	n := len(inVFSs) + len(stmt.OutputIncludes)
+	if carryProtoImportPbH {
+		n += len(protoImportPbH)
+	}
+
+	includes := make([]IncludeDirective, 0, n)
 
 	for _, v := range inVFSs {
 		// A generated output never #includes its $(B) inputs — those are codegen
@@ -643,6 +721,10 @@ func prEmitsIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS) []IncludeD
 		}
 
 		includes = append(includes, IncludeDirective{kind: includeQuoted, target: f})
+	}
+
+	if carryProtoImportPbH {
+		includes = append(includes, protoImportPbH...)
 	}
 
 	return includes
