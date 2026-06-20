@@ -614,6 +614,100 @@ END()
 	}
 }
 
+// ALL_RESOURCE_FILES with a DIR token that itself carries a trailing `*` wildcard
+// segment (the real split_configs shape
+// `ALL_RESOURCE_FILES(json PREFIX ${MODELS_PATH} ${ARCADIA_ROOT}/${MODELS_PATH}/*)`):
+// the macro appends `/*.<ext>`, so the per-DIR glob pattern is `dir/*/*.json` — an
+// interior `*` segment that expands to every immediate subdir, then `.json` files
+// inside each. Upstream's TGlobPattern walks the sorted directory frontier segment
+// by segment; the prior single-literal-directory modeling could not match an
+// interior wildcard and dropped the entire match set (no objcopy node at all).
+// This asserts the depth-2 matches feed the objcopy exactly like an equivalent
+// explicit RESOURCE_FILES, that a depth-1 (`dir/top.json`) file is NOT matched by
+// `*/*.json`, and that non-json files are excluded.
+func TestGen_AllResourceFilesGlobDirWildcard(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+
+	files["mod/cfg/sub1/a.json"] = "{\"a\":1}\n"
+	files["mod/cfg/sub2/b.json"] = "{\"b\":2}\n"
+	files["mod/cfg/sub1/skip.txt"] = "not a resource\n"
+	files["mod/cfg/top.json"] = "{\"top\":0}\n" // depth-1: NOT matched by dir/*/*.json
+
+	// DIR ends in `*`, exactly like ${ARCADIA_ROOT}/${MODELS_PATH}/* in split_configs.
+	writeTestModuleFile(files, "mod/libs/cpp/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+ALL_RESOURCE_FILES(
+    json
+    PREFIX cfg
+    ${ARCADIA_ROOT}/mod/cfg/*
+)
+END()
+`)
+
+	g := testGen(newMemFS(files), "mod/libs/cpp")
+
+	const moddir = "mod/libs/cpp"
+	const prefix = "cfg"
+	// Traversal order: sorted subdirs (sub1, sub2), sorted files within each.
+	sorted := []string{"sub1/a.json", "sub2/b.json"}
+
+	var hashPaths, keysB64, kvsHash []string
+	for _, f := range sorted {
+		path := "${ARCADIA_ROOT}/mod/cfg/" + f
+		// STRIP=${ARCADIA_ROOT}/mod/libs/cpp/ is not a prefix of the cfg path, so
+		// the whole marker-rooted path becomes the key tail.
+		fileKey := "resfs/file/" + prefix + path
+		hashPaths = append(hashPaths, path)
+		keysB64 = append(keysB64, encb64.StdEncoding.EncodeToString([]byte(fileKey)))
+		kvsHash = append(kvsHash, "resfs/src/"+fileKey+"=${rootrel;context=TEXT;input=TEXT:\""+path+"\"}")
+	}
+
+	wantHash := objcopyHash(hashPaths, keysB64, kvsHash, moddir, nil)
+	wantOutput := "$(B)/mod/libs/cpp/objcopy_" + wantHash + ".o"
+
+	objcopy := nodeByOutput(g, wantOutput)
+	if objcopy == nil {
+		t.Fatalf("graph is missing the dir/* ALL_RESOURCE_FILES objcopy output %q\nobjcopy nodes: %v", wantOutput, objcopyOutputs(g))
+	}
+
+	if !nodeHasInput(objcopy, "$(S)/mod/cfg/sub1/a.json") || !nodeHasInput(objcopy, "$(S)/mod/cfg/sub2/b.json") {
+		t.Fatalf("objcopy inputs missing the depth-2 globbed json sources: %#v", objcopy.flatInputs())
+	}
+	if nodeHasInput(objcopy, "$(S)/mod/cfg/top.json") {
+		t.Fatalf("dir/*/*.json matched a depth-1 file top.json: %#v", objcopy.flatInputs())
+	}
+	if nodeHasInput(objcopy, "$(S)/mod/cfg/sub1/skip.txt") {
+		t.Fatalf("objcopy picked up the non-json file skip.txt: %#v", objcopy.flatInputs())
+	}
+
+	args := prCmdArgStrings(objcopy)
+	for _, f := range sorted {
+		wantKey := encb64.StdEncoding.EncodeToString([]byte("resfs/file/" + prefix + "${ARCADIA_ROOT}/mod/cfg/" + f))
+		if !slices.Contains(args, wantKey) {
+			t.Fatalf("objcopy --keys missing base64 marker key for %q: %v", f, args)
+		}
+		wantKv := "resfs/src/resfs/file/" + prefix + "$(S)/mod/cfg/" + f + "=mod/cfg/" + f
+		if !slices.Contains(args, wantKv) {
+			t.Fatalf("objcopy --kvs missing rendered resfs/src for %q (want %q): %v", f, wantKv, args)
+		}
+	}
+
+	// The library's global archive links the dir/* resource objcopy as a member.
+	globalAr := nodeByOutput(g, "$(B)/mod/libs/cpp/libmod-libs-cpp.global.a")
+	if globalAr == nil {
+		t.Fatal("graph is missing the global archive libmod-libs-cpp.global.a")
+	}
+	if !slices.Contains(prCmdArgStrings(globalAr), wantOutput) {
+		t.Fatalf("global archive does not link the dir/* resource objcopy %q: %v", wantOutput, prCmdArgStrings(globalAr))
+	}
+}
+
 // A build-generated PY_SRCS source (PY_SRCS(__init__.py) where __init__.py is
 // the OUT_NOAUTO output of a RUN_PROGRAM) is packaged by upstream onpy_srcs
 // exactly like a checked-in py: it flows through unit.onresource_files → an
