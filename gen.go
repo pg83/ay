@@ -550,6 +550,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	if be, ok := plainEmit.(*BufferedEmitter); ok {
 		be.generatedFirstClaim = mergeGeneratedFirstClaims(hostScanner, targetScanner)
 		be.generatedNodeClaim = mergeGeneratedNodeClaims(hostScanner, targetScanner)
+		be.generatedENIncluderDirs = mergeGeneratedENIncluderDirs(hostScanner, targetScanner)
 	}
 
 	return root.LDRef
@@ -622,6 +623,51 @@ func mergeGeneratedNodeClaims(host, target *IncludeScanner) map[NodeRef]string {
 			if _, ok := out[k]; !ok {
 				out[k] = v
 			}
+		}
+	}
+
+	return out
+}
+
+// mergeGeneratedENIncluderDirs unions the two scanners' per-EN-output includer
+// directory sets. Unlike the first-claim map there is no winner: the finalize
+// pass picks the deepest nested-submodule includer regardless of which scanner
+// saw it, so a plain set union is correct.
+func mergeGeneratedENIncluderDirs(host, target *IncludeScanner) map[VFS][]string {
+	var n int
+
+	for _, s := range []*IncludeScanner{host, target} {
+		if s != nil {
+			n += len(s.generatedENIncluderDirs)
+		}
+	}
+
+	if n == 0 {
+		return nil
+	}
+
+	out := make(map[VFS][]string, n)
+
+	for _, s := range []*IncludeScanner{host, target} {
+		if s == nil {
+			continue
+		}
+
+		for k, dirs := range s.generatedENIncluderDirs {
+			cur := out[k]
+
+		next:
+			for _, d := range dirs {
+				for _, e := range cur {
+					if e == d {
+						continue next
+					}
+				}
+
+				cur = append(cur, d)
+			}
+
+			out[k] = cur
 		}
 	}
 
