@@ -115,6 +115,57 @@ END()
 	}
 }
 
+// TestEmitPB_PeerRedeclaredOwnNamespaceRidesProtoIncludeBand reproduces the sg7
+// taxi_schemas_schemas_proto.pb.h cmds-only divergence: when a peer re-declares
+// this module's own PROTO_NAMESPACE, the re-declared `-I=$(S)/<ns>` is a member
+// of _PROTO__INCLUDE and must render at its peer encounter position (after the
+// protobuf-runtime include), exactly as upstream `${pre=-I=:_PROTO__INCLUDE}`
+// renders the set verbatim. The pre-fix dedup-and-hoist drops it from the band
+// and re-emits it adjacent to the structural own-namespace -I, which this test
+// rejects.
+func TestEmitPB_PeerRedeclaredOwnNamespaceRidesProtoIncludeBand(t *testing.T) {
+	const ns = "taxi/schemas/schemas/proto"
+
+	blocks := composePBArgBlocks(testToolchain(),
+		intern("$(B)/contrib/tools/protoc/protoc"),
+		intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
+		intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
+		false, ns, false, nil, nil,
+		// _PROTO__INCLUDE peer set in encounter order: the protobuf runtime, then
+		// the peer that re-declares this module's own namespace, then a grpc peer.
+		[]VFS{
+			source("contrib/libs/protobuf/src"),
+			source(ns),
+			source("taxi/uservices/userver/grpc/proto"),
+		})
+
+	var iflags []string
+	for _, s := range blocks.mid {
+		if str := s.string(); strings.HasPrefix(str, "-I=") {
+			iflags = append(iflags, str)
+		}
+	}
+
+	ownTok := "-I=$(S)/" + ns
+	protobufTok := "-I=$(S)/contrib/libs/protobuf/src"
+
+	lastOwn := -1
+	for i, f := range iflags {
+		if f == ownTok {
+			lastOwn = i
+		}
+	}
+	firstProtobuf := slices.Index(iflags, protobufTok)
+
+	if firstProtobuf < 0 {
+		t.Fatalf("protobuf-runtime -I missing: %v", iflags)
+	}
+	if lastOwn <= firstProtobuf {
+		t.Fatalf("peer-redeclared own namespace must ride _PROTO__INCLUDE after the protobuf runtime: lastOwn=%d firstProtobuf=%d seq=%v",
+			lastOwn, firstProtobuf, iflags)
+	}
+}
+
 func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 	e := newBufferedEmitter()
 	inst := targetInstance("pkg/proto")
@@ -123,7 +174,7 @@ func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 		intern("$(B)/contrib/tools/protoc/protoc"),
 		intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
 		intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
-		false, "", false, false,
+		false, "", false,
 		internArgs([]string{"--fatal_warnings"}), nil, nil)
 	emitPB(
 		inst,
@@ -163,7 +214,7 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 		intern("$(B)/contrib/tools/protoc/protoc"),
 		intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
 		intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
-		false, "", false, true,
+		false, "", true,
 		nil, nil, nil)
 	emitPB(
 		inst,

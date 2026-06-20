@@ -234,10 +234,9 @@ func protoTransitiveHeadersEnabled(d *ModuleData) bool {
 }
 
 type ProtoPBConfig struct {
-	grpc                       bool
-	moduleTag                  STR
-	cppOutRoot                 string
-	duplicateOutputRootInclude bool
+	grpc       bool
+	moduleTag  STR
+	cppOutRoot string
 }
 
 type ProtoPBEmission struct {
@@ -295,7 +294,7 @@ func newPBModuleEmission(ctx *GenCtx, d *ModuleData, cfg ProtoPBConfig, protoInc
 	}
 
 	pe.blocks = composePBArgBlocks(d.tc, pe.protocBinary, pe.cppStyleguideBinary, pe.grpcCppBinary,
-		cfg.grpc, cfg.cppOutRoot, cfg.duplicateOutputRootInclude, pe.liteHeaders,
+		cfg.grpc, cfg.cppOutRoot, pe.liteHeaders,
 		d.protocFlags, pe.extraPlugins, protoInclude)
 
 	return pe
@@ -631,10 +630,6 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		cppOutRoot: protoCPPOutRoot(d),
 	}
 
-	if cfg.cppOutRoot != "" {
-		cfg.duplicateOutputRootInclude = containsVFS(peerContribs.addIncl, build(cfg.cppOutRoot))
-	}
-
 	cppInstance := instance
 
 	// The set of protos whose .sproto.h this module produces (YMAPS_SPROTO). Known
@@ -869,18 +864,19 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 
 func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
 	// A LIBRARY-hosted .proto compiles identically to one in a PROTO_LIBRARY:
-	// PROTO_NAMESPACE roots the protoc output/import roots (cppOutRoot), and a peer
-	// that re-declares the namespace duplicates its _PROTO__INCLUDE copy. GRPC()
+	// PROTO_NAMESPACE roots the protoc output/import roots (cppOutRoot). A peer
+	// that re-declares the namespace re-contributes its `FOR proto $(S)/<ns>`
+	// addincl, which rides the peers-only _PROTO__INCLUDE band at its encounter
+	// position (in.ProtoIncludePeers), exactly as the PROTO_LIBRARY path. GRPC()
 	// additionally enables the grpc_cpp protoc plugin (build/conf/proto.conf): the
 	// producer gains .grpc.pb.{cc,h} outputs + the plugin tool input, and the
 	// generated .grpc.pb.cc compiles into the module archive — exactly as a
 	// PROTO_LIBRARY() does in emitCPPProtoSrcs.
 	cfg := ProtoPBConfig{
-		cppOutRoot:                 protoCPPOutRoot(d),
-		duplicateOutputRootInclude: in.ProtoOwnNamespaceInPeers,
-		grpc:                       d.grpc,
+		cppOutRoot: protoCPPOutRoot(d),
+		grpc:       d.grpc,
 	}
-	pe := newPBModuleEmission(ctx, d, cfg, in.ProtoInclude)
+	pe := newPBModuleEmission(ctx, d, cfg, in.ProtoIncludePeers)
 	pb := emitProtoPB(ctx, instance, d, srcRel, cfg, pe, in.ProtoInclude, nil)
 
 	emitGenCC := func(pbCC VFS) SourceEmit {
