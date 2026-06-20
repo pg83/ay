@@ -34,8 +34,16 @@ func emitCodegenDownstreamAS(ctx *GenCtx, instance ModuleInstance, asmRel string
 }
 
 func emitCodegenDownstreamCC(ctx *GenCtx, instance ModuleInstance, cppRel string, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
-	cppPath := copyFileOutputVFS(instance.Path.rel(), cppRel)
+	return emitCodegenDownstreamCCFromVFS(ctx, instance, cppRel, copyFileOutputVFS(instance.Path.rel(), cppRel), depRefs, in)
+}
 
+// emitCodegenDownstreamCCFromVFS compiles a generated $(B) source whose output VFS
+// is already resolved by the caller — used when that path lies OUTSIDE the module
+// dir (a rooted-spelling EN serialized.cpp at the header's own build location), so
+// the module-dir-prepending copyFileOutputVFS of emitCodegenDownstreamCC would
+// misplace it. cppRel is the source's module-relative spelling (for the cxx-source
+// suffix test); composeCCPaths derives the object path from cppPath directly.
+func emitCodegenDownstreamCCFromVFS(ctx *GenCtx, instance ModuleInstance, cppRel string, cppPath VFS, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
 	includeInputs := walkClosure(ctx.scannerFor(instance), cppPath, in.ScanCfg)
 
 	ccIn := in
