@@ -307,6 +307,102 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 	}
 }
 
+// TestRagel6OutVFS_DefextNoext pins the upstream
+// ${output;defext=.rl6.cpp;nopath;noext:SRC} rule (ymake.core.conf:3303,
+// macro_processor.cpp:1758-1792): noext strips the last extension, then the
+// .rl6.cpp default extension is appended ONLY when the basename has no remaining
+// extension. A .rl6 source whose stem is itself a header (markupfsm.h.rl6) thus
+// generates the header markupfsm.h, not markupfsm.h.rl6.cpp.
+func TestRagel6OutVFS_DefextNoext(t *testing.T) {
+	inst := targetInstance("library/cpp/config")
+
+	cases := []struct {
+		srcRel string
+		want   string
+	}{
+		// Plain source stem has no extension after noext → defext appends .rl6.cpp.
+		{"parser.rl6", "$(B)/library/cpp/config/parser.rl6.cpp"},
+		// Subdir source: nopath keeps the basename, the _/ infix carries the dir.
+		{"datetime/parser.rl6", "$(B)/library/cpp/config/_/datetime/parser.rl6.cpp"},
+		// Stem retains the .h extension after noext → defext is suppressed; the
+		// generated artifact is the header markupfsm.h (consumed by #include).
+		{"markupfsm.h.rl6", "$(B)/library/cpp/config/markupfsm.h"},
+	}
+
+	for _, c := range cases {
+		got := ragel6OutVFS(inst, c.srcRel).string()
+		if got != c.want {
+			t.Errorf("ragel6OutVFS(%q) = %q, want %q", c.srcRel, got, c.want)
+		}
+	}
+}
+
+// TestGen_Ragel6HeaderOutputNotCompiled reproduces the sg7
+// library/cpp/config/markupfsm.h.rl6 divergence: the ragel artifact is a header,
+// so upstream emits the R6 node producing markupfsm.h and does NOT compile it.
+// A sibling parser.rl6 still yields a compiled parser.rl6.cpp (guard the
+// default).
+func TestGen_Ragel6HeaderOutputNotCompiled(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"contrib/tools/ragel6/ya.make": "PROGRAM(ragel6)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nALLOCATOR(FAKE)\nSRCS(main.cpp)\nEND()\n",
+		"mod/ya.make":                  "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(markupfsm.h.rl6 parser.rl6)\nEND()\n",
+		"mod/markupfsm.h.rl6":          "%%{ machine m; }%%\n",
+		"mod/parser.rl6":               "%%{ machine p; }%%\n",
+	})
+
+	g := testGen(fs, "mod")
+
+	var (
+		r6Outs   []string
+		ccOuts   []string
+		headerR6 bool
+	)
+
+	for _, n := range g.Graph {
+		switch n.KV.P.string() {
+		case "R6":
+			for _, o := range n.Outputs {
+				r6Outs = append(r6Outs, o.string())
+				if o.string() == "$(B)/mod/markupfsm.h" {
+					headerR6 = true
+				}
+			}
+		case "CC":
+			for _, o := range n.Outputs {
+				ccOuts = append(ccOuts, o.string())
+			}
+		}
+	}
+
+	if !headerR6 {
+		t.Errorf("no R6 node producing $(B)/mod/markupfsm.h; R6 outputs = %v", r6Outs)
+	}
+
+	for _, o := range r6Outs {
+		if strings.Contains(o, "markupfsm.h.rl6.cpp") {
+			t.Errorf("R6 produced %q, want the header $(B)/mod/markupfsm.h (defext suppressed by .h stem)", o)
+		}
+	}
+
+	for _, o := range ccOuts {
+		if strings.Contains(o, "markupfsm") {
+			t.Errorf("header ragel output was compiled (%q); upstream does not compile a .h artifact", o)
+		}
+	}
+
+	wantParserCC := false
+
+	for _, o := range ccOuts {
+		if strings.Contains(o, "parser.rl6.cpp") {
+			wantParserCC = true
+		}
+	}
+
+	if !wantParserCC {
+		t.Errorf("sibling parser.rl6 lost its compiled parser.rl6.cpp object; CC outputs = %v", ccOuts)
+	}
+}
+
 func TestGen_GeneratorWiredIntoDepRefs_R6(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"r6mod/ya.make": `LIBRARY()
