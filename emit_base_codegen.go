@@ -50,10 +50,19 @@ func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt, 
 	// so a consumer resolving a generated output to a dep edge reads a valid ref.
 	bcRef := ctx.emit.reserve()
 
-	// BASE_CODEGEN has no OUTPUT_INCLUDES; prefix.cpp #includes the generated header.
+	// prefix.cpp #includes the generated header. prefix.h carries OUTPUT_INCLUDES
+	// as parsed includes (empty for plain BASE_CODEGEN; the seven
+	// STRUCT_CODEGEN_OUTPUT_INCLUDES headers for STRUCT_CODEGEN) so every consumer
+	// that includes prefix.h inherits them.
 	cppParsed := []IncludeDirective{{kind: includeQuoted, target: internStr(prefixH.rel())}}
 
-	registerBoundGeneratedParsedOutput(ctx, instance, pkBC, prefixH, nil, bcRef, []NodeRef{toolLDRef})
+	var headerParsed []IncludeDirective
+
+	for _, oi := range bc.OutputIncludes {
+		headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: oi})
+	}
+
+	registerBoundGeneratedParsedOutput(ctx, instance, pkBC, prefixH, headerParsed, bcRef, []NodeRef{toolLDRef})
 	registerBoundGeneratedParsedOutput(ctx, instance, pkBC, prefixCpp, cppParsed, bcRef, []NodeRef{toolLDRef})
 
 	// The generated header carries its generated-from sibling .cpp and the .in

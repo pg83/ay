@@ -221,11 +221,19 @@ type SplitCodegenStmt struct {
 // <prefix>.cpp (noauto: re-fed via SRCS(${BINDIR}/<prefix>.cpp) only when the
 // module declares it) and <prefix>.h. Opts are trailing positional generator
 // options. Unlike SPLIT_CODEGEN there are no numbered parts and no --cpp-parts.
+//
+// STRUCT_CODEGEN (a BASE_CODEGEN specialization, same conf file) lowers to this
+// statement with a fixed tool, OutputIncludes (the STRUCT_CODEGEN_OUTPUT_INCLUDES
+// headers attached to <prefix>.h via ${hide;output_include:...}, not command args)
+// and Peerdirs (the two implicit kernel/struct_codegen peers). Plain BASE_CODEGEN
+// leaves both empty.
 type BaseCodegenStmt struct {
-	ToolPath STR
-	Prefix   STR
-	Opts     []STR
-	Line     int
+	ToolPath       STR
+	Prefix         STR
+	Opts           []STR
+	OutputIncludes []STR
+	Peerdirs       []STR
+	Line           int
 }
 
 // FromSandboxStmt is a FROM_SANDBOX(Id [FILE] [PREFIX dir] [EXECUTABLE]
@@ -1288,6 +1296,12 @@ func buildStmtFor(name string, args []STR, line int, fail func(format string, a 
 		}
 
 		return parseBaseCodegen(args, line)
+	case "STRUCT_CODEGEN":
+		if len(args) != 1 {
+			fail("STRUCT_CODEGEN expects exactly 1 argument (prefix), got %d", len(args))
+		}
+
+		return parseStructCodegen(args[0], line)
 	case "FROM_SANDBOX":
 
 		if len(args) == 0 {
@@ -1665,6 +1679,39 @@ func parseBaseCodegen(args []STR, line int) *BaseCodegenStmt {
 	}
 
 	return stmt
+}
+
+// structCodegenTool, structCodegenOutputIncludes and structCodegenPeerdirs mirror
+// build/internal/conf/codegen.conf's STRUCT_CODEGEN macro: a BASE_CODEGEN over the
+// fixed kernel/struct_codegen/codegen_tool with seven OUTPUT_INCLUDES on the
+// generated header and two implicit PEERDIRs.
+const structCodegenTool = "kernel/struct_codegen/codegen_tool"
+
+var (
+	structCodegenOutputIncludes = STRS(
+		"util/generic/singleton.h",
+		"util/generic/strbuf.h",
+		"util/generic/vector.h",
+		"util/generic/ptr.h",
+		"util/generic/yexception.h",
+		"kernel/struct_codegen/reflection/reflection.h",
+		"kernel/struct_codegen/reflection/floats.h",
+	)
+	structCodegenPeerdirs = STRS(
+		"kernel/struct_codegen/metadata",
+		"kernel/struct_codegen/reflection",
+	)
+)
+
+// parseStructCodegen lowers STRUCT_CODEGEN(Prefix) to its BASE_CODEGEN expansion.
+func parseStructCodegen(prefix STR, line int) *BaseCodegenStmt {
+	return &BaseCodegenStmt{
+		ToolPath:       internStr(structCodegenTool),
+		Prefix:         prefix,
+		OutputIncludes: structCodegenOutputIncludes,
+		Peerdirs:       structCodegenPeerdirs,
+		Line:           line,
+	}
 }
 
 func parseResource(args []STR, nameTok Token) *ResourceStmt {

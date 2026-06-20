@@ -143,7 +143,7 @@ var acknowledgedMacros = map[string]struct{}{
 	// the node-count step; STYLE_DETEKT (kotlin) / DEFAULT_JDK_VERSION (java) inert.
 	"SPLIT_CODEGEN":             {},
 	"DECIMAL_MD5_LOWER_32_BITS": {},
-	"STRUCT_CODEGEN":            {},
+	// STRUCT_CODEGEN is now a typed BASE_CODEGEN specialization (emit_base_codegen.go).
 	// PROTO_DESCRIPTIONS is now a modeled module opener (emit_proto_desc.go);
 	// it no longer rides this no-op set.
 	"STYLE_DETEKT":        {},

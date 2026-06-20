@@ -1527,8 +1527,17 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 			expanded.ToolPath = expandStmtTokenSTR(v.ToolPath, env)
 			expanded.Prefix = expandStmtTokenSTR(v.Prefix, env)
 			expanded.Opts = expandStmtTokensSTR(v.Opts, env)
+			expanded.OutputIncludes = expandStmtTokensSTR(v.OutputIncludes, env)
 
 			d.baseCodegens = append(d.baseCodegens, &expanded)
+
+			// STRUCT_CODEGEN's implicit PEERDIRs enter d.peerdirs at the macro's
+			// textual position (mirrors GENERATE_ENUM_SERIALIZATION), so they sit
+			// after any explicit PEERDIR block declared above the macro. Plain
+			// BASE_CODEGEN carries no Peerdirs.
+			for _, p := range v.Peerdirs {
+				d.peerdirs = append(d.peerdirs, p)
+			}
 		case *RunPythonStmt:
 			expanded := *v
 			expanded.ScriptPath = expandStmtTokenSTR(v.ScriptPath, env)
