@@ -57,6 +57,8 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		return emitLibraryCInSource(ctx, instance, d, srcRel, in)
 	case strings.HasSuffix(srcRel, ".sc"):
 		return emitLibrarySCSource(ctx, instance, d, srcRel, in)
+	case strings.HasSuffix(srcRel, ".gperf"):
+		return emitLibraryGperfSource(ctx, instance, d, srcRel, in)
 	case strings.HasSuffix(srcRel, ".cfgproto"):
 		// The config-proto induced PEERDIR (codegen/protos/protobuf) is wired in
 		// collectModule. The .cfgproto.pb.cc/.pb.h codegen-output emission (and the
