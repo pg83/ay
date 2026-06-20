@@ -241,11 +241,14 @@ type ProtoPBConfig struct {
 }
 
 type ProtoPBEmission struct {
-	pbRef         NodeRef
-	pbCC          VFS
-	grpcPbCC      VFS
-	extraSourceCC []VFS
-	relPath       string
+	pbRef    NodeRef
+	pbCC     VFS
+	grpcPbCC VFS
+	// orderedCC is the proto's buildable codegen outputs (.pb.cc, .grpc.pb.cc,
+	// plugin .cpp's) in $CPP_PROTO_OUTS order — the per-proto archive member
+	// order. See assembleProtoCmdOutputs.
+	orderedCC []VFS
+	relPath   string
 }
 
 // pbModuleEmission is the per-module proto emission context: the resolved
@@ -367,16 +370,10 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 	grpcPbH := build(protoBase + ".grpc.pb.h")
 	grpcPbCC := build(protoBase + ".grpc.pb.cc")
 	extraOutputPaths := make([]VFS, 0, 4)
-	extraSourceOutputs := make([]VFS, 0, 2)
 
 	for _, plugin := range d.cppProtoPlugins {
 		for _, suffix := range plugin.OutputSuffixes {
-			out := build(protoBase + suffix)
-			extraOutputPaths = append(extraOutputPaths, out)
-
-			if isCCSourceExt(out.rel()) {
-				extraSourceOutputs = append(extraSourceOutputs, out)
-			}
+			extraOutputPaths = append(extraOutputPaths, build(protoBase+suffix))
 		}
 	}
 
@@ -556,12 +553,20 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		}
 	}
 
+	orderedCC := make([]VFS, 0, 2+len(extraOutputPaths))
+
+	for _, out := range assembleProtoCmdOutputs(protoBase, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH, pe.extraPlugins, pe.liteHeaders, cfg.grpc) {
+		if isCCSourceExt(out.rel()) {
+			orderedCC = append(orderedCC, out)
+		}
+	}
+
 	return ProtoPBEmission{
-		pbRef:         pbRef,
-		pbCC:          pbCC,
-		grpcPbCC:      grpcPbCC,
-		extraSourceCC: extraSourceOutputs,
-		relPath:       protoRelPath,
+		pbRef:     pbRef,
+		pbCC:      pbCC,
+		grpcPbCC:  grpcPbCC,
+		orderedCC: orderedCC,
+		relPath:   protoRelPath,
 	}
 }
 
@@ -643,17 +648,11 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	for _, src := range protoSrcs {
 		pb := emitProtoPB(ctx, instance, d, src, cfg, pe, peerContribs.protoInclude, sprotoProduced)
 
-		ccSrcRel := strings.TrimPrefix(pb.pbCC.rel(), cppInstance.Path.rel()+"/")
-		appendCodegenOutput(pb.pbRef, pb.pbCC, ccSrcRel)
-
-		if d.grpc {
-			grpcSrcRel := strings.TrimPrefix(pb.grpcPbCC.rel(), cppInstance.Path.rel()+"/")
-			appendCodegenOutput(pb.pbRef, pb.grpcPbCC, grpcSrcRel)
-		}
-
-		for _, extraSrc := range pb.extraSourceCC {
-			extraSrcRel := strings.TrimPrefix(extraSrc.rel(), cppInstance.Path.rel()+"/")
-			appendCodegenOutput(pb.pbRef, extraSrc, extraSrcRel)
+		// orderedCC carries .pb.cc, .grpc.pb.cc and any plugin .cpp's in
+		// $CPP_PROTO_OUTS order, which is the per-proto archive member order.
+		for _, cc := range pb.orderedCC {
+			ccSrcRel := strings.TrimPrefix(cc.rel(), cppInstance.Path.rel()+"/")
+			appendCodegenOutput(pb.pbRef, cc, ccSrcRel)
 		}
 	}
 
