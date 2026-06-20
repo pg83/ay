@@ -1046,6 +1046,76 @@ END()
 	}
 }
 
+// A PY3_PROGRAM is a multimodule: the PROGRAM half (PY3_BIN) has
+// .IGNORED=RESOURCE RESOURCE_FILES and ENABLE(PROCESS_PY_MAIN_ONLY), so the
+// resfs objcopy a RESOURCE() produces is owned by the LIBRARY twin (PY3_BIN_LIB)
+// and stamped module_tag=py3_bin_lib. Only PY_MAIN (program-side) carries
+// module_tag=py3_bin. Before the fix emitResourceObjcopy.flush() stamped the
+// RESOURCE objcopy with py3_bin for the tokPy3Program case, contradicting its own
+// output hash (computed with the py3_bin_lib tag) and diverging from REF
+// (representatives: ads/bsyeti, ads/caesar, bigrt .../codegen/objcopy_*.o).
+func TestGen_Py3ProgramResourceObjcopyUsesLibTagPyMainKeepsBinTag(t *testing.T) {
+	files := map[string]string{
+		"contrib/libs/python/ya.make":             "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
+		"library/python/runtime_py3/main/ya.make":  "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
+		"library/cpp/malloc/jemalloc/ya.make":      "LIBRARY()\nSRCS(je.cpp)\nEND()\n",
+		"library/cpp/malloc/jemalloc/je.cpp":       "int je(){return 0;}\n",
+		"library/cpp/malloc/api/ya.make":           "LIBRARY()\nSRCS(api.cpp)\nEND()\n",
+		"library/cpp/malloc/api/api.cpp":           "int api(){return 0;}\n",
+		"contrib/libs/jemalloc/ya.make":            "LIBRARY()\nSRCS(c.cpp)\nEND()\n",
+		"contrib/libs/jemalloc/c.cpp":              "int c(){return 0;}\n",
+	}
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeTestModuleFile(files, "library/python/import_tracing/constructor/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n")
+	writeTestModuleFile(files, "library/python/testing/import_test/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n")
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "slow")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+	writeToolProgram(files, "tools/archiver", "archiver")
+
+	writeTestModuleFile(files, "app/data.txt", "stub\n")
+	writeTestModuleFile(files, "app/ya.make", `PY3_PROGRAM()
+DISABLE(PYTHON_SQLITE3)
+ENABLE(PYBUILD_NO_PYC)
+RESOURCE(
+    data.txt app/data.txt
+)
+PY_MAIN(app:main)
+END()
+`)
+
+	g := testGen(newMemFS(files), "app")
+
+	var resObjcopy, mainObjcopy *Node
+	for _, n := range g.Graph {
+		if len(n.Outputs) == 0 || !strings.Contains(n.Outputs[0].string(), "/objcopy_") {
+			continue
+		}
+		args := prCmdArgStrings(n)
+		switch {
+		case slices.Contains(args, "PY_MAIN=app:main"):
+			mainObjcopy = n
+		case slices.Contains(args, encb64.StdEncoding.EncodeToString([]byte("app/data.txt"))):
+			resObjcopy = n
+		}
+	}
+
+	if resObjcopy == nil {
+		t.Fatalf("graph is missing the RESOURCE objcopy: %v", objcopyOutputs(g))
+	}
+	if mainObjcopy == nil {
+		t.Fatalf("graph is missing the PY_MAIN objcopy: %v", objcopyOutputs(g))
+	}
+
+	if got := resObjcopy.TargetProperties.ModuleTag.string(); got != "py3_bin_lib" {
+		t.Fatalf("RESOURCE objcopy module_tag = %q, want py3_bin_lib", got)
+	}
+	if got := mainObjcopy.TargetProperties.ModuleTag.string(); got != "py3_bin" {
+		t.Fatalf("PY_MAIN objcopy module_tag = %q, want py3_bin", got)
+	}
+}
+
 func objcopyOutputs(g *Graph) []string {
 	var out []string
 	for _, n := range g.Graph {
