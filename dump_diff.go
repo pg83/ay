@@ -883,6 +883,24 @@ func findNodePairByOutput(leftPath, rightPath, want string) (map[string]any, map
 		return leftNodes[0], nil
 	}
 
+	// An output produced by several sibling nodes per side (e.g. host/target or
+	// PIC/non-PIC command-mode variants that collapse to one coarse match key
+	// after host_platform is normalized away) has parity iff the two node
+	// multisets are equal. Cancel every producer that has an exact full-node
+	// counterpart on the other side first: a per-field delta is only meaningful
+	// for producers left without a counterpart. Without this, the coarse-key
+	// search below would cross-pair our mode-A node against ref's mode-B node and
+	// report a spurious command delta even though L-A==R-A and L-B==R-B.
+	residLeft, residRight, eqLeft, eqRight := stripContentEqualPairs(leftNodes, rightNodes)
+
+	if len(residLeft) == 0 && len(residRight) == 0 {
+		return eqLeft[0], eqRight[0]
+	}
+
+	if len(residLeft) > 0 && len(residRight) > 0 {
+		leftNodes, rightNodes = residLeft, residRight
+	}
+
 	exactDivLeft, exactDivRight, exactAnyLeft, exactAnyRight, exactDivFound, exactAnyFound := findMatchingNodePair(leftNodes, rightNodes, func(left, right map[string]any) bool {
 		return dumpDiffNodeMatchKey(left, true) == dumpDiffNodeMatchKey(right, true)
 	})
@@ -908,6 +926,47 @@ func findNodePairByOutput(leftPath, rightPath, want string) (map[string]any, map
 	}
 
 	return leftNodes[0], rightNodes[0]
+}
+
+// stripContentEqualPairs greedily cancels each left node against an unused
+// content-equal right node, returning the residual left/right producers that have
+// no exact counterpart plus the matched pairs (eqLeft[i] == eqRight[i] in full).
+func stripContentEqualPairs(leftNodes, rightNodes []map[string]any) (residLeft, residRight, eqLeft, eqRight []map[string]any) {
+	usedRight := make([]bool, len(rightNodes))
+
+	for _, left := range leftNodes {
+		matched := -1
+
+		for j, right := range rightNodes {
+			if usedRight[j] {
+				continue
+			}
+
+			if dumpDiffNodeContentEqual(left, right) {
+				matched = j
+
+				break
+			}
+		}
+
+		if matched < 0 {
+			residLeft = append(residLeft, left)
+
+			continue
+		}
+
+		usedRight[matched] = true
+		eqLeft = append(eqLeft, left)
+		eqRight = append(eqRight, rightNodes[matched])
+	}
+
+	for j, right := range rightNodes {
+		if !usedRight[j] {
+			residRight = append(residRight, right)
+		}
+	}
+
+	return residLeft, residRight, eqLeft, eqRight
 }
 
 func findMatchingNodePair(leftNodes, rightNodes []map[string]any, match func(left, right map[string]any) bool) (map[string]any, map[string]any, map[string]any, map[string]any, bool, bool) {
