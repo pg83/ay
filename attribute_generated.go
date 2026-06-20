@@ -45,12 +45,31 @@ func overrideGeneratedModuleDir(e *BufferedEmitter) {
 
 		current := node.TargetProperties.ModuleDir
 
+		// A self-owned producer — its own module compiles a sibling output, so
+		// markGeneratedProducerOwned recorded generatedFirstClaim[out]==current at
+		// registration — is the first DFS-leaver of its outputs (its module is a
+		// PEERDIR dependency of any module that merely OUTPUT_INCLUDES the output,
+		// hence fully visited first). Upstream's Node2Module first-leave-wins keeps
+		// it attributed to its producer; a node-level OUTPUT_INCLUDES claim from an
+		// external consumer must NOT pre-empt it (yabs/server/libs/constant/generated
+		// sys_const.h, named in the parent constant module's OUTPUT_INCLUDES).
+		selfOwned := false
+
+		for _, out := range node.Outputs {
+			if e.generatedFirstClaim[out] == current {
+				selfOwned = true
+
+				break
+			}
+		}
+
 		// A node-level OUTPUT_INCLUDES claim (the structural consumer that names this
-		// producer's output) is authoritative: it attributes the whole node at once,
-		// matching upstream's single Node2Module entry. It wins over the per-output
-		// generatedFirstClaim consensus, which an incidental far peer's include-resolve
-		// of one sibling output would otherwise split into a no-op conflict.
-		if claim := e.generatedNodeClaim[NodeRef(i)]; claim != "" {
+		// producer's output) is authoritative for a NON-self-owned producer: it
+		// attributes the whole node at once, matching upstream's single Node2Module
+		// entry. It wins over the per-output generatedFirstClaim consensus, which an
+		// incidental far peer's include-resolve of one sibling output would otherwise
+		// split into a no-op conflict.
+		if claim := e.generatedNodeClaim[NodeRef(i)]; claim != "" && !selfOwned {
 			if claim != current {
 				node.TargetProperties.ModuleDir = claim
 			}
