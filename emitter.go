@@ -43,7 +43,7 @@ type BufferedEmitter struct {
 	// override producer-node target_properties["module_dir"] with the first
 	// scan-time consumer's module path, mirroring upstream ymake's Node2Module
 	// rule (see scanner.go: generatedFirstClaim doc).
-	generatedFirstClaim map[VFS]string
+	generatedFirstClaim map[VFS]GenOwner
 
 	// generatedNodeClaim is the node-level (producer-ref-keyed) counterpart of
 	// generatedFirstClaim, merged from the per-scanner maps by runGen. It records
