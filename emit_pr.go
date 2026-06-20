@@ -606,6 +606,33 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		}
 	}
 
+	// A header OUT whose generator tool declares INDUCED_DEPS(h …) carries those
+	// induced headers (and their transitive $(S) closure) on its OWN producer node —
+	// upstream's flat-input model lists an output's induced deps as producer inputs,
+	// the same set the scanner mixes onto a CONSUMER that includes the header
+	// (GeneratorRefs + resolveInducedDeps). The output is already registered with its
+	// GeneratorRefs (registerPROutput ran first), so walking the header's own closure
+	// surfaces exactly the induced bucket selected by the output kind — header
+	// outputs read the Header bucket, so a cc-source OUT never inherits it. Keep the
+	// $(S) source entries (the $(B) induced .pb.h intermediate rides the producer dep
+	// edge, not as an input). Gated by fullSourceClosure: a header with a compiled
+	// cc-source sibling routes its induced deps through that sibling to consumers, so
+	// only a header-only run (no cc-source OUT) surfaces them on the producer. The
+	// ads/bsyeti/eagle/collect/generated/query_params.h class.
+	if fullSourceClosure {
+		for _, f := range stmt.OUTFiles {
+			if !isHeaderSource(f.string()) {
+				continue
+			}
+
+			for _, v := range walkClosureTail(ctx.scannerFor(instance), copyFileOutputVFS(instance.Path.rel(), f.string()), scanIn.ScanCfg) {
+				if v.isSource() {
+					out = append(out, v)
+				}
+			}
+		}
+	}
+
 	// OUTPUT_INCLUDES closure realized on the producer.
 	//
 	// fullSourceClosure (plutonium dsp.yaff.h header-only; formula_parameters.cpp
