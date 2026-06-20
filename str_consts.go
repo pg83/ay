@@ -131,6 +131,7 @@ var (
 	strLibraryCppProtoConfigProtos                   = internStr("library/cpp/proto_config/protos")
 	strLibraryPythonImportTracingConstructor         = internStr("library/python/import_tracing/constructor")
 	strLibraryPythonRuntimePy3                       = internStr("library/python/runtime_py3")
+	strMapsLibsSproto                                = internStr("maps/libs/sproto")
 	strModPath                                       = internStr("--mod-path")
 	strNo                                            = internStr("no")
 	strOne                                           = internStr("1")

@@ -128,3 +128,135 @@ END()
 		}
 	}
 }
+
+// TestGen_YmapsSproto_InducesTargetSprotoPeerArchive pins the
+// _YMAPS_GENERATE_SPROTO_HEADER command-level `.PEERDIR=maps/libs/sproto`
+// (build/internal/conf/project_specific/maps/sproto.conf): a module that runs
+// YMAPS_SPROTO(...) also peers the target-side maps/libs/sproto library, so its
+// non-PIC archive reaches a final program link through ordinary peer-archive
+// closure — separate from the PIC archive reached via the host sprotoc tool.
+//
+// Fail-first: before the modules.go change the proto library only induces the
+// PIC archive (through the host sprotoc PROGRAM's own PEERDIR), so the non-PIC
+// $(B)/maps/libs/sproto/sproto.cpp.o object and non-PIC archive are absent and
+// the consumer program link omits maps/libs/sproto/libmaps-libs-sproto.a.
+func TestGen_YmapsSproto_InducesTargetSprotoPeerArchive(t *testing.T) {
+	mod := "maps/doc/proto/yandex/maps/proto/common2"
+	files := ymapsSprotoFixtureFiles(t, mod, true)
+
+	writeTestModuleFile(files, "app/ya.make", "PROGRAM()\nPEERDIR("+mod+")\nSRCS(main.cpp)\nEND()\n")
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+
+	// Both platform variants of the sproto member object exist: non-PIC reached
+	// through the proto library's induced target peer, PIC through the host tool.
+	mustNodeByOutput(t, g, "$(B)/maps/libs/sproto/sproto.cpp.o")
+	mustNodeByOutput(t, g, "$(B)/maps/libs/sproto/sproto.cpp.pic.o")
+
+	// Two AR nodes share the libmaps-libs-sproto.a output: one archives the
+	// non-PIC .o member, the other the PIC .pic.o member.
+	const archive = "$(B)/maps/libs/sproto/libmaps-libs-sproto.a"
+	var hasNonPIC, hasPIC bool
+	for _, n := range g.Graph {
+		if len(n.Outputs) == 0 || n.Outputs[0].string() != archive {
+			continue
+		}
+		if nodeHasInput(n, "$(B)/maps/libs/sproto/sproto.cpp.o") {
+			hasNonPIC = true
+		}
+		if nodeHasInput(n, "$(B)/maps/libs/sproto/sproto.cpp.pic.o") {
+			hasPIC = true
+		}
+	}
+	if !hasNonPIC {
+		t.Fatalf("no AR node archives the non-PIC sproto.cpp.o into %s", archive)
+	}
+	if !hasPIC {
+		t.Fatalf("no AR node archives the PIC sproto.cpp.pic.o into %s", archive)
+	}
+
+	// The consumer program link lists the induced maps/libs/sproto archive before
+	// the proto library's own archive (sproto is a peer of common2).
+	var ldNode *Node
+	for _, n := range g.Graph {
+		if n.KV.P == pkLD {
+			ldNode = n
+			break
+		}
+	}
+	if ldNode == nil {
+		t.Fatal("no LD node found in graph")
+	}
+	linkArgs := ldNode.Cmds[2].CmdArgs.flat()
+	sprotoIdx := indexOfArg(linkArgs, "maps/libs/sproto/libmaps-libs-sproto.a")
+	protoIdx := indexOfArg(linkArgs, mod+"/libmaps-proto-common2.a")
+	if sprotoIdx < 0 {
+		t.Fatalf("program link missing maps/libs/sproto/libmaps-libs-sproto.a: %v", linkArgs)
+	}
+	if protoIdx < 0 {
+		t.Fatalf("program link missing %s/libmaps-proto-common2.a: %v", mod, linkArgs)
+	}
+	if sprotoIdx > protoIdx {
+		t.Fatalf("maps/libs/sproto archive [%d] appears after the proto library archive [%d]; want before", sprotoIdx, protoIdx)
+	}
+}
+
+// TestGen_YmapsSproto_NegativeGuard_NoSprotoPeerWithoutMacro asserts that
+// EXPORT_YMAPS_PROTO() + ordinary .proto SRCS, WITHOUT YMAPS_SPROTO(...), does
+// not induce the maps/libs/sproto target peer. The peer rides only on the
+// command-level .PEERDIR of _YMAPS_GENERATE_SPROTO_HEADER, which runs only for
+// protos named by YMAPS_SPROTO.
+func TestGen_YmapsSproto_NegativeGuard_NoSprotoPeerWithoutMacro(t *testing.T) {
+	mod := "maps/doc/proto/yandex/maps/proto/common2"
+	files := ymapsSprotoFixtureFiles(t, mod, false)
+
+	writeTestModuleFile(files, "app/ya.make", "PROGRAM()\nPEERDIR("+mod+")\nSRCS(main.cpp)\nEND()\n")
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+
+	if n := nodeByOutput(g, "$(B)/maps/libs/sproto/sproto.cpp.o"); n != nil {
+		t.Fatalf("non-PIC sproto.cpp.o emitted without YMAPS_SPROTO; maps/libs/sproto must not be peered")
+	}
+	if n := nodeByOutput(g, "$(B)/maps/libs/sproto/libmaps-libs-sproto.a"); n != nil {
+		t.Fatalf("libmaps-libs-sproto.a emitted without YMAPS_SPROTO; maps/libs/sproto must not be peered")
+	}
+}
+
+// ymapsSprotoFixtureFiles builds a maps proto module fixture: a PROTO_LIBRARY
+// (with YMAPS_SPROTO when withSproto), a normal maps/libs/sproto library, a host
+// sprotoc PROGRAM peering that library, and the protobuf/protoc support modules.
+func ymapsSprotoFixtureFiles(t *testing.T, mod string, withSproto bool) map[string]string {
+	t.Helper()
+
+	files := map[string]string{}
+
+	sprotoStmt := ""
+	if withSproto {
+		sprotoStmt = "YMAPS_SPROTO(\n    image.proto\n)\n"
+	}
+	writeTestModuleFile(files, mod+"/ya.make", "PROTO_LIBRARY()\nEXPORT_YMAPS_PROTO()\nSRCS(\n    image.proto\n)\n"+sprotoStmt+"EXCLUDE_TAGS(GO_PROTO)\nEND()\n")
+	writeTestModuleFile(files, mod+"/image.proto", "syntax = \"proto2\";\npackage yandex.maps.proto.common2.image;\nmessage Image {}\n")
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	writeTestModuleFile(files, "contrib/libs/protoc/ya.make", "LIBRARY()\nSRCS(protoc.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protoc/protoc.cpp", "int protoc(){return 0;}\n")
+
+	writeTestModuleFile(files, "maps/libs/sproto/ya.make", "LIBRARY()\nSRCS(sproto.cpp)\nEND()\n")
+	writeTestModuleFile(files, "maps/libs/sproto/sproto.cpp", "int sproto(){return 0;}\n")
+	writeTestModuleFile(files, "maps/libs/sproto/include/sproto.h",
+		"#pragma once\n#include <maps/libs/sproto/include/msgbase.h>\n")
+	writeTestModuleFile(files, "maps/libs/sproto/include/msgbase.h", "#pragma once\n")
+
+	writeTestModuleFile(files, "maps/libs/sproto/sprotoc/ya.make", "PROGRAM()\nPEERDIR(\n    contrib/libs/protoc\n    maps/libs/sproto\n)\nINDUCED_DEPS(\n    h+cpp\n    ${ARCADIA_ROOT}/maps/libs/sproto/include/sproto.h\n)\nSRCS(main.cpp)\nEND()\n")
+	writeTestModuleFile(files, "maps/libs/sproto/sprotoc/main.cpp", "int main(){return 0;}\n")
+
+	return files
+}
