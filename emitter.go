@@ -45,6 +45,13 @@ type BufferedEmitter struct {
 	// rule (see scanner.go: generatedFirstClaim doc).
 	generatedFirstClaim map[VFS]string
 
+	// generatedNodeClaim is the node-level (producer-ref-keyed) counterpart of
+	// generatedFirstClaim, merged from the per-scanner maps by runGen. It records
+	// the module that names a producer's output in OUTPUT_INCLUDES and takes
+	// precedence over per-output consensus in overrideGeneratedModuleDir (see
+	// scanner.go: generatedNodeClaim doc).
+	generatedNodeClaim map[NodeRef]string
+
 	// fs, set by runGen, lets finalizeNodesInOrder mix $(S) input content hashes
 	// into node uids (see canonBuf.fs).
 	fs FS
