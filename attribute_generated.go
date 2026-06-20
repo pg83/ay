@@ -18,11 +18,11 @@ package main
 // (common — many internal codegen passes have no external consumer in the
 // build closure), the producer-time attribution already matches REF.
 func overrideGeneratedModuleDir(e *BufferedEmitter) {
-	if e == nil || len(e.generatedFirstClaim) == 0 {
+	if e == nil || (len(e.generatedFirstClaim) == 0 && len(e.generatedNodeClaim) == 0) {
 		return
 	}
 
-	for _, node := range e.nodes {
+	for i, node := range e.nodes {
 		kind := node.KV.P
 
 		switch kind {
@@ -36,6 +36,20 @@ func overrideGeneratedModuleDir(e *BufferedEmitter) {
 		}
 
 		current := node.TargetProperties.ModuleDir
+
+		// A node-level OUTPUT_INCLUDES claim (the structural consumer that names this
+		// producer's output) is authoritative: it attributes the whole node at once,
+		// matching upstream's single Node2Module entry. It wins over the per-output
+		// generatedFirstClaim consensus, which an incidental far peer's include-resolve
+		// of one sibling output would otherwise split into a no-op conflict.
+		if claim := e.generatedNodeClaim[NodeRef(i)]; claim != "" {
+			if claim != current {
+				node.TargetProperties.ModuleDir = claim
+			}
+
+			continue
+		}
+
 		var claim string
 
 		for _, out := range node.Outputs {

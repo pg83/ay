@@ -320,6 +320,21 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		return nil
 	}
 
+	// A run that itself consumes .proto IN files (the transitive_proto wrapper:
+	// IN <.proto> OUTPUT_INCLUDES <codegen .pb.h>) roots its proto graph at those
+	// IN .proto, whose scan induces .proto imports — never their generated .pb.h.
+	// So the OUTPUT_INCLUDES walk below must NOT re-synthesize the checked-in WKT
+	// .pb.h sibling: upstream lists only the transitive .proto for such a run
+	// (ads/caesar/.../with_transitive_headers/advm_banner.pb.h). A run with no
+	// .proto IN (control_board's .h.in, registrar's no-IN) still gets the sibling.
+	hasProtoIN := false
+	for _, f := range stmt.INFiles {
+		if strings.HasSuffix(f.string(), ".proto") {
+			hasProtoIN = true
+			break
+		}
+	}
+
 	scanIn := ModuleCCInputs{
 		TC:                d.tc,
 		InclArgs:          ctx.inclArgs,
@@ -417,6 +432,19 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 				// Codegen .pb.h: a build output that always leads its window —
 				// strip the intermediate $(B) root, keep its proto/C closure.
 				sub = walkClosureTail(ctx.scannerFor(instance), info.OutputPath, scanIn.ScanCfg)
+
+				// This run names the codegen output in OUTPUT_INCLUDES, so it is a
+				// CONSUMER of it. walkClosureTail leads with the output as the window
+				// root (added directly, never resolved), so no first-claim is recorded
+				// for it — yet upstream's Node2Module attributes the producer NODE (not
+				// the single output) to the first module that leaves it, which is this
+				// consumer. Record a node-level claim so overrideGeneratedModuleDir
+				// re-attributes a RUN_PROGRAM-class producer (the with_transitive_headers
+				// wrapper, one node / 69 outputs) to this module even when a far peer
+				// later include-resolves an individual sibling output. PB-class producers
+				// (a real PROTO_LIBRARY's .pb.h, e.g. control_board's tablet.pb.h) are
+				// left untouched by the override, so this is a no-op for them.
+				ctx.scannerFor(instance).recordNodeClaim(info.ProducerRef, instance.Path.rel())
 			case headerOnlyNoIN && ctx.fs.isFile(srcRootVFS, target.string()):
 				// Source-tree OUTPUT_INCLUDES header: scan its own $(S) closure,
 				// keeping the header itself (a real header may be an SCC member,
@@ -443,7 +471,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 				// closure, so a genuinely-#included WKT .pb.h already rides as a
 				// source — re-adding the sibling of every .proto would over-emit
 				// the .pb.h of a variant (protobuf_old) that is never #included.
-				if !headerOnlyNoIN && v.isSource() && strings.HasSuffix(v.rel(), ".proto") {
+				if !headerOnlyNoIN && !hasProtoIN && v.isSource() && strings.HasSuffix(v.rel(), ".proto") {
 					sibling := strings.TrimSuffix(v.rel(), ".proto") + ".pb.h"
 					sibDir, sibBase := splitDirName(sibling)
 

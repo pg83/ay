@@ -976,3 +976,147 @@ END()
 		t.Fatalf("header-only generated .inc module_dir = %q, want %q (consumer claims)", got, "cons2")
 	}
 }
+
+// A wrapper RUN_PROGRAM that reads .proto IN files and re-exports their generated
+// .pb.h (the ads/caesar/.../with_transitive_headers/advm_banner.pb.h shape):
+//   - its own input closure carries the transitive .proto sources but NOT the
+//     protobuf WKT .pb.h sibling — the run already roots the proto graph at its IN
+//     .proto, so the OUTPUT_INCLUDES walk must not re-synthesize the checked-in
+//     .pb.h sibling (which it does, correctly, for a run with no .proto IN);
+//   - its producer node is attributed to the profile-like module that names the
+//     wrapper header in OUTPUT_INCLUDES, not to the producing module.
+// A control RUN_PROGRAM with the SAME OUTPUT_INCLUDES but a .h.in IN (no .proto)
+// still carries the WKT .pb.h sibling, guarding the c5549aa control_board path.
+func TestGen_WrapperProtoRunProgramDropsWktSiblingAndClaimsConsumer(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "tools/transitive_proto", "transitive_proto")
+	writeToolProgram(files, "tools/genhdr", "genhdr")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make",
+		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
+
+	// wkt: a PROTO_LIBRARY whose .proto additionally ships a checked-in .pb.h
+	// sibling on disk — the protobuf well-known-type shape (descriptor.proto +
+	// committed descriptor.pb.h).
+	writeTestModuleFile(files, "wkt/ya.make", `PROTO_LIBRARY()
+SRCS(d.proto)
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+END()
+`)
+	writeTestModuleFile(files, "wkt/d.proto", "syntax = \"proto3\";\npackage wkt;\nmessage D {}\n")
+	writeTestModuleFile(files, "wkt/d.pb.h", "#pragma once\n")
+
+	// q: leaf PROTO_LIBRARY.
+	writeTestModuleFile(files, "q/ya.make", `PROTO_LIBRARY()
+SRCS(b.proto)
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+END()
+`)
+	writeTestModuleFile(files, "q/b.proto", "syntax = \"proto3\";\npackage q;\nmessage B {}\n")
+
+	// p: PROTO_LIBRARY importing q/b.proto and the WKT wkt/d.proto, so p/a.pb.h's
+	// closure surfaces both .proto sources (and the checked-in wkt/d.pb.h sibling).
+	writeTestModuleFile(files, "p/ya.make", `PROTO_LIBRARY()
+PEERDIR(q wkt)
+SRCS(a.proto)
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+END()
+`)
+	writeTestModuleFile(files, "p/a.proto",
+		"syntax = \"proto3\";\npackage p;\nimport \"q/b.proto\";\nimport \"wkt/d.proto\";\nmessage A { q.B b = 1; wkt.D d = 2; }\n")
+
+	// wrap: the wrapper — RUN_PROGRAM with a .proto IN re-exporting p/a.pb.h.
+	writeTestModuleFile(files, "wrap/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(p)
+RUN_PROGRAM(
+    tools/transitive_proto generate
+    IN
+        p/a.proto
+    OUTPUT_INCLUDES
+        p/a.pb.h
+    OUT
+        wrap.pb.h
+)
+END()
+`)
+
+	// prof: a profile-like consumer naming the wrapper header in OUTPUT_INCLUDES.
+	writeTestModuleFile(files, "prof/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(wrap)
+RUN_PROGRAM(
+    tools/genhdr emit
+    OUTPUT_INCLUDES
+        wrap/wrap.pb.h
+    OUT
+        prof.yaff.h
+)
+END()
+`)
+
+	// ctl: the control — same OUTPUT_INCLUDES p/a.pb.h, but a .h.in IN (no .proto).
+	writeTestModuleFile(files, "ctl/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(p)
+RUN_PROGRAM(
+    tools/genhdr
+        ctl.h.in
+        ctl.h
+    OUTPUT_INCLUDES
+        p/a.pb.h
+    IN
+        ctl.h.in
+    OUT
+        ctl.h
+)
+END()
+`)
+	writeTestModuleFile(files, "ctl/ctl.h.in", "#pragma once\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(prof ctl)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGenDumpGraph(newMemFS(files), "app")
+
+	wrap := mustNodeByOutput(t, g, "$(B)/wrap/wrap.pb.h")
+	if wrap.KV.P != pkPR {
+		t.Fatalf("expected PR producer for wrap.pb.h, got %v", wrap.KV.P)
+	}
+
+	// Wrapper inputs: transitive .proto sources present, WKT .pb.h sibling absent.
+	for _, want := range []string{"$(S)/p/a.proto", "$(S)/q/b.proto", "$(S)/wkt/d.proto"} {
+		if !nodeHasInput(wrap, want) {
+			t.Fatalf("wrapper producer inputs missing %q: %#v", want, vfsStrings(wrap.flatInputs()))
+		}
+	}
+	if nodeHasInput(wrap, "$(S)/wkt/d.pb.h") {
+		t.Fatalf("wrapper producer (.proto IN) must NOT carry WKT .pb.h sibling: %#v", vfsStrings(wrap.flatInputs()))
+	}
+
+	// Wrapper producer is attributed to the profile-like consumer, not to wrap.
+	if got := wrap.TargetProperties.ModuleDir; got != "prof" {
+		t.Fatalf("wrapper producer module_dir = %q, want %q (OUTPUT_INCLUDES consumer claims)", got, "prof")
+	}
+
+	// Control (no .proto IN) keeps the WKT .pb.h sibling.
+	ctl := mustNodeByOutput(t, g, "$(B)/ctl/ctl.h")
+	if !nodeHasInput(ctl, "$(S)/wkt/d.pb.h") {
+		t.Fatalf("control producer (.h.in IN) must carry WKT .pb.h sibling: %#v", vfsStrings(ctl.flatInputs()))
+	}
+}
