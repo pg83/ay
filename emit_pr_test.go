@@ -91,11 +91,12 @@ END()
 //     transitively-imported b.pb.h, each exactly once;
 //   - its output path must be the plain $(B)/gen/gen.cpp.o (the ${BINDIR}-expanded
 //     $(B)/gen/gen.cpp OUT must not be re-rooted under the module dir again);
-//   - the PR node producing gen.cpp must NOT carry a.pb.h (OUTPUT_INCLUDES is not
-//     a PR input; there is no IN to scan).
-// This is the caesar features.gen.cpp class: the generated source's protobuf
-// header closure must reach the run-program consumer, while the producer stays
-// at the tool only.
+//   - the PR node producing gen.cpp carries the transitive .proto SOURCE closure
+//     of its OUTPUT_INCLUDES (gen.cpp is the run's cc-source MAIN output, so the
+//     induced includes ride the producer), but NOT the $(B) codegen .pb.h
+//     intermediate (reached via the producer dep edge, not a producer input).
+// The generated source's protobuf header closure reaches both the run-program
+// consumer (its C-scan) and the producer (its OUTPUT_INCLUDES, as $(S) sources).
 func TestGen_RunProgramOutputIncludesPbHReachConsumerNotProducer(t *testing.T) {
 	files := map[string]string{}
 
@@ -196,13 +197,245 @@ END()
 		}
 	}
 
-	// The PR producer of gen.cpp carries no OUTPUT_INCLUDES (no IN to scan).
+	// The PR producer of gen.cpp (cc-source main output) carries the OUTPUT_INCLUDES
+	// $(S) source closure but not the $(B) codegen .pb.h intermediate.
 	pr := mustNodeByAnyOutput(t, g, "$(B)/gen/gen.cpp")
 	if pr.KV.P != pkPR {
 		t.Fatalf("expected PR producer for gen.cpp, got %v", pr.KV.P)
 	}
 	if nodeHasInput(pr, aPbH) {
-		t.Fatalf("PR producer must not carry OUTPUT_INCLUDES %q as input: %#v", aPbH, vfsStrings(pr.flatInputs()))
+		t.Fatalf("PR producer must not carry $(B) codegen header %q as input: %#v", aPbH, vfsStrings(pr.flatInputs()))
+	}
+	for _, want := range []string{"$(S)/p/a.proto", "$(S)/q/b.proto"} {
+		if !nodeHasInput(pr, want) {
+			t.Fatalf("PR producer inputs missing OUTPUT_INCLUDES source %q: %#v", want, vfsStrings(pr.flatInputs()))
+		}
+	}
+}
+
+// A RUN_PROGRAM with no IN whose MAIN output is a generated C++ translation unit
+// (STDOUT out.cpp) and that declares generated OUTPUT_INCLUDES — the
+// proto_flat_buf formula_parameters.cpp class. Upstream attaches the
+// OUTPUT_INCLUDES induced includes to the main output; because the main output is
+// itself a cc-source, the transitive $(S) SOURCE closure of those includes rides
+// the PRODUCER command node (the run "needs" them to produce the .cpp), exactly
+// like the header-only case. The producer keeps only its generator dep — the
+// $(B) codegen intermediate header is reached via that dep edge, never a producer
+// input. The downstream compile of the generated .cpp independently carries the
+// $(B) header (its OUTPUT_INCLUDES C-scan), and the object is archived.
+func TestGen_RunProgramGeneratedCppStdoutOutputIncludesClosureOnProducer(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "mod/gen_tool", "gen_tool")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make",
+		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
+
+	// q: leaf PROTO_LIBRARY (q/b.pb.h <- q/b.proto).
+	writeTestModuleFile(files, "q/ya.make", `PROTO_LIBRARY()
+SRCS(b.proto)
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+END()
+`)
+	writeTestModuleFile(files, "q/b.proto", "syntax = \"proto3\";\npackage q;\nmessage B {}\n")
+
+	// dep: PROTO_LIBRARY importing q/b.proto, so dep/dep.pb.h #includes "q/b.pb.h".
+	writeTestModuleFile(files, "dep/ya.make", `PROTO_LIBRARY()
+PEERDIR(q)
+SRCS(dep.proto)
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+END()
+`)
+	writeTestModuleFile(files, "dep/dep.proto",
+		"syntax = \"proto3\";\npackage dep;\nimport \"q/b.proto\";\nmessage D { q.B b = 1; }\n")
+
+	// A source-tree OUTPUT_INCLUDES header with its own transitive include.
+	writeTestModuleFile(files, "mod/generated.h", "#pragma once\n#include <mod/sub.h>\n")
+	writeTestModuleFile(files, "mod/sub.h", "#pragma once\n")
+
+	// mod: RUN_PROGRAM Cpp, no IN, STDOUT out.cpp (cc-source MAIN output),
+	// OUTPUT_INCLUDES the source-tree generated.h and the codegen dep/dep.pb.h.
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(dep)
+RUN_PROGRAM(
+    mod/gen_tool Cpp
+    OUTPUT_INCLUDES
+        mod/generated.h
+        dep/dep.pb.h
+    STDOUT
+        out.cpp
+)
+END()
+`)
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(mod)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+
+	pr := mustNodeByAnyOutput(t, g, "$(B)/mod/out.cpp")
+	if pr.KV.P != pkPR {
+		t.Fatalf("expected PR producer for out.cpp, got %v", pr.KV.P)
+	}
+
+	// The producer carries the transitive $(S) source closure of its
+	// OUTPUT_INCLUDES: the codegen .pb.h's .proto import sources and the
+	// source-tree header's own closure.
+	for _, want := range []string{
+		"$(S)/dep/dep.proto",
+		"$(S)/q/b.proto",
+		"$(S)/mod/generated.h",
+		"$(S)/mod/sub.h",
+	} {
+		if !nodeHasInput(pr, want) {
+			t.Fatalf("PR producer inputs missing %q: %#v", want, vfsStrings(pr.flatInputs()))
+		}
+	}
+
+	// The $(B) codegen intermediate is reached via the producer dep edge, never a
+	// producer input.
+	for _, absent := range []string{"$(B)/dep/dep.pb.h", "$(B)/q/b.pb.h"} {
+		if nodeHasInput(pr, absent) {
+			t.Fatalf("PR producer must not carry $(B) codegen header %q: %#v", absent, vfsStrings(pr.flatInputs()))
+		}
+	}
+
+	// The producer carries no dep on the proto codegen producer — only its
+	// generator binary edge. dep.pb.h's PB producer must not be a dep of the run.
+	pbProducer := mustNodeByAnyOutput(t, g, "$(B)/dep/dep.pb.h")
+	if slices.Contains(graphDeps(g, pr), pbProducer.UID) {
+		t.Fatalf("PR producer must not depend on the dep.pb.h codegen producer %q: %v", pbProducer.UID, graphDeps(g, pr))
+	}
+
+	// The downstream compile of the generated out.cpp carries the $(B) header (its
+	// OUTPUT_INCLUDES C-scan) and is archived.
+	cppO := findGraphNodeByOutputs(t, g, "$(B)/mod/out.cpp.o")
+	if !nodeHasInput(cppO, "$(B)/dep/dep.pb.h") {
+		t.Fatalf("out.cpp.o inputs missing codegen header $(B)/dep/dep.pb.h: %#v", vfsStrings(cppO.flatInputs()))
+	}
+	archive := findGraphNodeByOutputs(t, g, "$(B)/mod/libmod.a")
+	if !nodeHasInput(archive, "$(B)/mod/out.cpp.o") {
+		t.Fatalf("libmod.a missing out.cpp.o member: %#v", vfsStrings(archive.flatInputs()))
+	}
+}
+
+// Guard: a RUN_PROGRAM whose MAIN output is a HEADER (OUT gen.h gen.cpp) with a
+// compiled cc-source sibling — the features.gen.h / profile_traits.h class. The
+// OUTPUT_INCLUDES ride the header to its consumers, NOT the producer; the
+// producer must carry no OUTPUT_INCLUDES source closure.
+func TestGen_RunProgramHeaderMainOutputKeepsClosureOffProducer(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "mod/gen_tool", "gen_tool")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make",
+		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
+
+	writeTestModuleFile(files, "dep/ya.make", `PROTO_LIBRARY()
+SRCS(dep.proto)
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+END()
+`)
+	writeTestModuleFile(files, "dep/dep.proto", "syntax = \"proto3\";\npackage dep;\nmessage D {}\n")
+
+	// MAIN output is the header gen.h; gen.cpp is a compiled sibling.
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(dep)
+RUN_PROGRAM(
+    mod/gen_tool emit
+    OUTPUT_INCLUDES
+        dep/dep.pb.h
+    OUT
+        gen.h
+        gen.cpp
+)
+END()
+`)
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(mod)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+
+	pr := mustNodeByAnyOutput(t, g, "$(B)/mod/gen.h")
+	if pr.KV.P != pkPR {
+		t.Fatalf("expected PR producer for gen.h, got %v", pr.KV.P)
+	}
+	for _, absent := range []string{"$(S)/dep/dep.proto", "$(B)/dep/dep.pb.h"} {
+		if nodeHasInput(pr, absent) {
+			t.Fatalf("header-main producer must not carry OUTPUT_INCLUDES closure %q: %#v", absent, vfsStrings(pr.flatInputs()))
+		}
+	}
+}
+
+// Guard: a no-OUTPUT_INCLUDES cc-source STDOUT run, and a non-cc STDOUT run, must
+// stay byte-stable — the producer lists only its generator binary.
+func TestGen_RunProgramPlainStdoutProducerStaysToolOnly(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "mod/gen_tool", "gen_tool")
+
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    mod/gen_tool plain
+    STDOUT
+        plain.cpp
+)
+RUN_PROGRAM(
+    mod/gen_tool meta
+    STDOUT_NOAUTO
+        meta.txt
+)
+END()
+`)
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(mod)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+
+	const toolBin = "$(B)/mod/gen_tool/gen_tool"
+
+	plain := mustNodeByAnyOutput(t, g, "$(B)/mod/plain.cpp")
+	if got := vfsStrings(plain.flatInputs()); len(got) != 1 || got[0] != toolBin {
+		t.Fatalf("plain cc STDOUT producer inputs = %#v, want only %q", got, toolBin)
+	}
+
+	meta := mustNodeByAnyOutput(t, g, "$(B)/mod/meta.txt")
+	if got := vfsStrings(meta.flatInputs()); len(got) != 1 || got[0] != toolBin {
+		t.Fatalf("non-cc STDOUT producer inputs = %#v, want only %q", got, toolBin)
 	}
 }
 
