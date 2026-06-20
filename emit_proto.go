@@ -439,7 +439,20 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 
 				registerBoundGeneratedParsedOutput(ctx, instance, pkPB, yaffH, yaffHParsed, pbRef, nil)
 
-				yaffCCParsed := []IncludeDirective{{kind: includeQuoted, target: internStr(yaffH.rel())}}
+				// The .yaff.cpp wraps `#include "<stem>.yaff.h"`, but the protoc command
+				// floats the proto's own .pb.h to the front as its MAIN output
+				// (${main;…:.pb.h}); every sibling output (incl. .yaff.cpp) rides that
+				// main output via EDT_OutTogether (json_visitor PrepareLeaving), expanded
+				// — so the .yaff.cpp.o carries .pb.h plus its producer-source bundle
+				// (.proto closure-leaf + cpp_proto_wrapper.py). For a FILES-whitelisted
+				// proto the non-empty .yaff.h already #includes .pb.h (this dedupes); for
+				// a non-whitelisted proto the .yaff.h is empty, so OutTogether is the only
+				// path. Mirrors emit_pr.go's main-output ride; modeled as a parsed include
+				// because .pb.h carries its own window (wrapper, .proto) that must expand.
+				yaffCCParsed := []IncludeDirective{
+					{kind: includeQuoted, target: internStr(yaffH.rel())},
+					{kind: includeQuoted, target: internStr(pbH.rel())},
+				}
 				registerBoundGeneratedParsedOutput(ctx, instance, pkPB, yaffCC, yaffCCParsed, pbRef, pbGenRefs)
 			}
 		}
