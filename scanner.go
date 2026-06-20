@@ -132,6 +132,14 @@ type IncludeScanner struct {
 	// `module_dir` would otherwise be the RUN_PROGRAM-owner module. Used by
 	// the finalize pass in attribute_generated.go to override producer-node
 	// target_properties.
+	//
+	// A self-consuming RUN_PROGRAM (one whose module auto-compiles a cc/asm
+	// sibling output) is the first DFS leaver of its own outputs — post-order
+	// processes the producing peer before any external consumer. Such a producer
+	// records its OWN module dir here at registration (markGeneratedProducerOwned),
+	// strictly before any consumer can resolve the output (resolution needs the
+	// registry entry registration is creating), so the first-claim is the producer
+	// and the override leaves the node attributed to it.
 	generatedFirstClaim map[VFS]string
 
 	walkClosureCalls       uint64
@@ -253,6 +261,18 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 	}
 
 	return s
+}
+
+// markGeneratedProducerOwned records dir as the first-claim for a generated
+// output produced by a module that auto-compiles a cc/asm sibling — see the
+// generatedFirstClaim field comment. Called at registration, before any
+// consumer can resolve the output, so the producer is the guaranteed first
+// writer; the override then sees claim == producer module_dir and leaves the
+// node attributed to its producer.
+func (s *IncludeScanner) markGeneratedProducerOwned(out VFS, dir string) {
+	if _, ok := s.generatedFirstClaim[out]; !ok {
+		s.generatedFirstClaim[out] = dir
+	}
 }
 
 type ScanContext struct {
