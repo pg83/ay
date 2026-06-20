@@ -424,6 +424,20 @@ func contains(xs []STR, target string) bool {
 	return false
 }
 
+func TestEmitCC_OutputPath_ExplicitDotSrc(t *testing.T) {
+	// SRCS(./generated/foo.cpp): the resolved source path is canonical, but the
+	// raw token carries a leading `./`. Upstream canonicalizes the source path
+	// before localizing the object under `_/<dir>`, so the `./` must not leak
+	// into the object name (regression: $(B)/m/_/./generated/foo.cpp.o).
+	e := newBufferedEmitter()
+	_, outPath, _ := emitCC(targetInstance("ysite/yandex/pure"), "./generated/default_pure.cpp", intern("$(S)/ysite/yandex/pure/generated/default_pure.cpp"), withCCBlocks(targetInstance("ysite/yandex/pure").Platform, ModuleCCInputs{}), testHostP, e)
+	want := "$(B)/ysite/yandex/pure/_/generated/default_pure.cpp.o"
+
+	if outPath.string() != want {
+		t.Errorf("outPath = %q, want %q", outPath, want)
+	}
+}
+
 func TestEmitCC_OutputPath_YqlUdfSuffix(t *testing.T) {
 	e := newBufferedEmitter()
 	in := ModuleCCInputs{ObjectSuffixStem: stringPtr("udfs")}
