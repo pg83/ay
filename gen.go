@@ -3363,6 +3363,7 @@ func isCodegenProducingSrc(srcRel string) bool {
 		strings.HasSuffix(srcRel, ".fbs64") ||
 		strings.HasSuffix(srcRel, ".fbs") ||
 		strings.HasSuffix(srcRel, ".ev") ||
+		strings.HasSuffix(srcRel, ".cfgproto") ||
 		strings.HasSuffix(srcRel, ".rl6") ||
 		strings.HasSuffix(srcRel, ".rl") ||
 		strings.HasSuffix(srcRel, ".y") ||

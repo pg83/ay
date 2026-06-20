@@ -22,6 +22,7 @@ PARSERS = {
     'CythonIncludeDirectiveParser': ['.pyx', '.pxd', '.pxi', '.pyx.pxi', '.pxd.pxi'],
     'FlatbuffersIncludeDirectiveParser': ['.fbs', '.fbs64'],
     'ProtoIncludeDirectiveParser': ['.proto', '.ev', '.gzt', '.gztproto'],
+    'CfgProtoIncludeDirectiveParser': ['.cfgproto'],
     'SwigIncludeDirectiveParser': ['.swg'],
     'YasmIncludeDirectiveParser': ['.asm', '.asi'],
     'EmptyIncludeDirectiveParser': ['.g4', '.stg', '.m4'],

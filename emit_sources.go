@@ -60,12 +60,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 	case strings.HasSuffix(srcRel, ".gperf"):
 		return emitLibraryGperfSource(ctx, instance, d, srcRel, in)
 	case strings.HasSuffix(srcRel, ".cfgproto"):
-		// The config-proto induced PEERDIR (codegen/protos/protobuf) is wired in
-		// collectModule. The .cfgproto.pb.cc/.pb.h codegen-output emission (and the
-		// resulting object in this module's own archive) is a separate node-count
-		// class, out of T-45 scope (induced-peer reachability/ordering only). Skip
-		// the object here without the unsupported-source warning.
-		return nil
+		return emitLibraryCfgProtoSource(ctx, instance, d, srcRel, in)
 	}
 
 	// An unmodelled codegen source extension (e.g. .gperf, .pyx not yet wired

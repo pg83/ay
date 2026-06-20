@@ -10,50 +10,50 @@ type extSlot struct {
 	parser IncludeDirectiveParser
 }
 
-var extSlots = [122]extSlot{
-	1:   {".y", CIncludeDirectiveParser{}},
-	3:   {".l", CIncludeDirectiveParser{}},
-	4:   {".m", CIncludeDirectiveParser{}},
-	7:   {".C", CIncludeDirectiveParser{}},
-	8:   {".S", CIncludeDirectiveParser{}},
-	9:   {".c", CIncludeDirectiveParser{}},
-	10:  {".s", CIncludeDirectiveParser{}},
-	12:  {".H", CIncludeDirectiveParser{}},
-	14:  {".h", CIncludeDirectiveParser{}},
-	17:  {".go", CIncludeDirectiveParser{}},
-	18:  {".g4", EmptyIncludeDirectiveParser{}},
-	19:  {".mm", CIncludeDirectiveParser{}},
-	20:  {".xh", CIncludeDirectiveParser{}},
-	21:  {".hh", CIncludeDirectiveParser{}},
-	22:  {".rl", RagelIncludeDirectiveParser{}},
-	23:  {".cc", CIncludeDirectiveParser{}},
-	24:  {".m4", EmptyIncludeDirectiveParser{}},
-	25:  {".cu", CIncludeDirectiveParser{}},
-	29:  {".ev", ProtoIncludeDirectiveParser{}},
-	31:  {".rh", RagelIncludeDirectiveParser{}},
-	32:  {".fbs", FlatbuffersIncludeDirectiveParser{}},
-	34:  {".asi", YasmIncludeDirectiveParser{}},
-	35:  {".pyx", CythonIncludeDirectiveParser{}},
-	37:  {".stg", EmptyIncludeDirectiveParser{}},
-	40:  {".swg", SwigIncludeDirectiveParser{}},
-	41:  {".ypp", CIncludeDirectiveParser{}},
-	44:  {".rli", RagelIncludeDirectiveParser{}},
-	48:  {".rl5", RagelIncludeDirectiveParser{}},
-	54:  {".pxi", CythonIncludeDirectiveParser{}},
-	56:  {".rl6", RagelIncludeDirectiveParser{}},
-	61:  {".inl", CIncludeDirectiveParser{}},
-	65:  {".gzt", ProtoIncludeDirectiveParser{}},
-	66:  {".asm", YasmIncludeDirectiveParser{}},
-	81:  {".lex", CIncludeDirectiveParser{}},
-	84:  {".pxd", CythonIncludeDirectiveParser{}},
-	89:  {".cpp", CIncludeDirectiveParser{}},
-	90:  {".asp", CIncludeDirectiveParser{}},
-	91:  {".cxx", CIncludeDirectiveParser{}},
-	94:  {".hpp", CIncludeDirectiveParser{}},
-	95:  {".ipp", CIncludeDirectiveParser{}},
-	96:  {".hxx", CIncludeDirectiveParser{}},
-	97:  {".ixx", CIncludeDirectiveParser{}},
-	98:  {".lpp", CIncludeDirectiveParser{}},
+var extSlots = [124]extSlot{
+	1: {".y", CIncludeDirectiveParser{}},
+	3: {".l", CIncludeDirectiveParser{}},
+	4: {".m", CIncludeDirectiveParser{}},
+	7: {".C", CIncludeDirectiveParser{}},
+	8: {".S", CIncludeDirectiveParser{}},
+	9: {".c", CIncludeDirectiveParser{}},
+	10: {".s", CIncludeDirectiveParser{}},
+	12: {".H", CIncludeDirectiveParser{}},
+	14: {".h", CIncludeDirectiveParser{}},
+	17: {".go", CIncludeDirectiveParser{}},
+	18: {".g4", EmptyIncludeDirectiveParser{}},
+	19: {".mm", CIncludeDirectiveParser{}},
+	20: {".xh", CIncludeDirectiveParser{}},
+	21: {".hh", CIncludeDirectiveParser{}},
+	22: {".rl", RagelIncludeDirectiveParser{}},
+	23: {".cc", CIncludeDirectiveParser{}},
+	24: {".m4", EmptyIncludeDirectiveParser{}},
+	25: {".cu", CIncludeDirectiveParser{}},
+	29: {".ev", ProtoIncludeDirectiveParser{}},
+	31: {".rh", RagelIncludeDirectiveParser{}},
+	32: {".fbs", FlatbuffersIncludeDirectiveParser{}},
+	34: {".asi", YasmIncludeDirectiveParser{}},
+	35: {".pyx", CythonIncludeDirectiveParser{}},
+	37: {".stg", EmptyIncludeDirectiveParser{}},
+	40: {".swg", SwigIncludeDirectiveParser{}},
+	41: {".ypp", CIncludeDirectiveParser{}},
+	44: {".rli", RagelIncludeDirectiveParser{}},
+	48: {".rl5", RagelIncludeDirectiveParser{}},
+	54: {".pxi", CythonIncludeDirectiveParser{}},
+	56: {".rl6", RagelIncludeDirectiveParser{}},
+	61: {".inl", CIncludeDirectiveParser{}},
+	65: {".gzt", ProtoIncludeDirectiveParser{}},
+	66: {".asm", YasmIncludeDirectiveParser{}},
+	81: {".lex", CIncludeDirectiveParser{}},
+	84: {".pxd", CythonIncludeDirectiveParser{}},
+	89: {".cpp", CIncludeDirectiveParser{}},
+	90: {".asp", CIncludeDirectiveParser{}},
+	91: {".cxx", CIncludeDirectiveParser{}},
+	94: {".hpp", CIncludeDirectiveParser{}},
+	95: {".ipp", CIncludeDirectiveParser{}},
+	96: {".hxx", CIncludeDirectiveParser{}},
+	97: {".ixx", CIncludeDirectiveParser{}},
+	98: {".lpp", CIncludeDirectiveParser{}},
 	100: {".cuh", CIncludeDirectiveParser{}},
 	102: {".sfdl", CIncludeDirectiveParser{}},
 	103: {".geom", CIncludeDirectiveParser{}},
@@ -68,7 +68,8 @@ var extSlots = [122]extSlot{
 	118: {".auxcpp", CIncludeDirectiveParser{}},
 	119: {".pxd.pxi", CythonIncludeDirectiveParser{}},
 	120: {".pyx.pxi", CythonIncludeDirectiveParser{}},
-	121: {".gztproto", ProtoIncludeDirectiveParser{}},
+	121: {".cfgproto", CfgProtoIncludeDirectiveParser{}},
+	122: {".gztproto", ProtoIncludeDirectiveParser{}},
 }
 
 // lookupParserByExt returns the registered parser for an extension, or nil.
@@ -77,7 +78,7 @@ func lookupParserByExt(ext string) IncludeDirectiveParser {
 
 	switch len(ext) {
 	case 2:
-		i = (uint32(ext[1])) % 15
+		i = (uint32(ext[1]))%15
 	case 3:
 		i = 15 + (uint32(ext[1])+2*uint32(ext[2]))%17
 	case 4:
@@ -91,7 +92,7 @@ func lookupParserByExt(ext string) IncludeDirectiveParser {
 	case 8:
 		i = 119 + (uint32(ext[2]))%2
 	case 9:
-		i = 121
+		i = 121 + (uint32(ext[1]))%3
 	default:
 		return nil
 	}
