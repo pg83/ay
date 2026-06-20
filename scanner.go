@@ -17,11 +17,50 @@ type IncludeKind int
 const (
 	includeSystem IncludeKind = iota
 	includeQuoted
+	// includeCythonOptional resolves exactly like includeQuoted but is silently
+	// dropped on a miss — mirroring upstream's ResolveLocalIncludes, which funnels
+	// every speculative cython cimport candidate (package __init__.pxd, module
+	// .pxd, per-name submodule .pxd) and keeps only the resolved ones. A genuine
+	// missing include still warns under includeQuoted; cython cimport probes do not.
+	includeCythonOptional
+	// includeCythonModule is the `from X cimport …` module candidate `X.pxd`. It
+	// resolves like includeCythonOptional, but when it resolves it suppresses the
+	// following includeCythonName probes of the same statement — upstream
+	// cython_processor.cpp sets needCheckLists=false once the module .pxd resolves
+	// (X is a module, the cimported names are names within it, not submodules).
+	includeCythonModule
+	// includeCythonName is a `from X cimport name` per-name submodule candidate's
+	// primary probe `X/name/__init__.pxd`. Best-effort like includeCythonOptional,
+	// and skipped entirely when a preceding includeCythonModule of the same
+	// statement resolved.
+	includeCythonName
+	// includeCythonFallback is the second member of a first-resolved cython probe
+	// pair: CimportSimple's `path/__init__.pxd` (after `path.pxd`) and a name's
+	// `X/name.pxd` (after `X/name/__init__.pxd`). Upstream cython_processor.cpp
+	// probes it only when its primary — the immediately preceding probe — was
+	// attempted and did NOT resolve (CimportSimple/CimportFrom push exactly one
+	// path per module/name). Best-effort like includeCythonOptional.
+	includeCythonFallback
 )
 
 type IncludeDirective struct {
 	kind   IncludeKind
 	target STR
+}
+
+// quotedLike reports whether the directive resolves through the quoted-include
+// search (includer-local dir + addincl tiers + codegen). The cython cimport
+// probe kinds share that resolution; they differ only in suppressing the
+// unresolved warning (cythonProbe) and the name-list suppression ordering.
+func (d IncludeDirective) quotedLike() bool {
+	return d.kind == includeQuoted || d.cythonProbe()
+}
+
+// cythonProbe reports whether the directive is a best-effort cython cimport
+// candidate: resolved like a quoted include but silently dropped on a miss
+// (upstream ResolveLocalIncludes drops unresolved cimport candidates).
+func (d IncludeDirective) cythonProbe() bool {
+	return d.kind == includeCythonOptional || d.kind == includeCythonModule || d.kind == includeCythonName || d.kind == includeCythonFallback
 }
 
 type IncludeScanner struct {
@@ -343,11 +382,47 @@ func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 	s := sc.scanner
 	incDir := dirKey(pathDir(vfsPath.rel()))
 
+	// suppressCimportNames mirrors upstream cython_processor.cpp CimportFrom's
+	// needCheckLists: a `from X cimport names` statement emits its module
+	// candidate (includeCythonModule, `X.pxd`) immediately before its per-name
+	// submodule candidates (includeCythonName/Fallback). When the module .pxd
+	// resolves, the names are names within that module — not submodules — so their
+	// probes are skipped. A statement opener (includeCythonOptional, the package
+	// `X/__init__.pxd` or CimportSimple's `path.pxd`, which always precedes the
+	// module/name probes) clears the flag; name/fallback probes do not, so a name's
+	// fallback can't clear the suppression mid name-list.
+	//
+	// prevProbeMissed mirrors the first-resolved fallback: a fallback probe
+	// (includeCythonFallback) is the second member of a pair and is attempted only
+	// when its primary — the immediately preceding probe — was attempted and did
+	// not resolve. A primary suppressed by suppressCimportNames counts as
+	// not-missed, so a suppressed name's `.pxd` fallback is dropped too.
+	suppressCimportNames := false
+	prevProbeMissed := false
+
 	for _, entry := range s.parsers.parsedIncludes(vfsPath, sc.parser) {
+		isName := entry.kind == includeCythonName
+		isFallback := entry.kind == includeCythonFallback
+
+		if !isName && !isFallback {
+			suppressCimportNames = false
+		}
+
+		if (isName && suppressCimportNames) || (isFallback && !prevProbeMissed) {
+			prevProbeMissed = false
+			continue
+		}
+
 		resolved := sc.resolve(vfsPath, incDir, entry)
 
 		for _, rabs := range resolved {
 			fn(rabs)
+		}
+
+		prevProbeMissed = len(resolved) == 0
+
+		if entry.kind == includeCythonModule && len(resolved) > 0 {
+			suppressCimportNames = true
 		}
 	}
 
@@ -652,6 +727,12 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 	var sysinclClaimed bool
 
 	defer func() {
+		// Cython cimport probes are best-effort: unresolved candidates are dropped
+		// silently (upstream ResolveLocalIncludes), never warned.
+		if d.cythonProbe() {
+			return
+		}
+
 		if len(out) > 0 || sysinclClaimed {
 			return
 		}
@@ -676,7 +757,7 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 	var hasMultiTarget bool
 	mappings, hasMultiTarget, sysinclClaimed = s.sysincl.lookup(includerRel, d.target)
 
-	if d.kind == includeQuoted && len(searchOut) > 0 {
+	if d.quotedLike() && len(searchOut) > 0 {
 		bypass := !hasMultiTarget
 
 		if !bypass && searchOut[0].isSource() {
@@ -1096,7 +1177,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 		}
 	}
 
-	if d.kind == includeQuoted {
+	if d.quotedLike() {
 		matched := false
 
 		// Memoize the includer-local resolve by splitMix64(incDir, target) — both 32-bit
@@ -1150,7 +1231,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 }
 
 func cythonPy2SiblingOverride(includerAbs VFS, d IncludeDirective) (string, bool) {
-	if !includerAbs.isSource() || d.kind != includeQuoted {
+	if !includerAbs.isSource() || !d.quotedLike() {
 		return "", false
 	}
 
