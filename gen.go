@@ -2104,9 +2104,9 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	for _, src := range d.srcs {
 		switch srcExtClassOf(src) {
 		case srcExtFbs:
-			emitFlatcProducer(ctx, instance, d, src.string(), &flatcVariantFL)
+			emitFlatcProducer(ctx, instance, d, resolveSourceVFS(ctx, instance, src.string(), d.srcDirs), &flatcVariantFL, nil)
 		case srcExtFbs64:
-			emitFlatcProducer(ctx, instance, d, src.string(), &flatcVariantFL64)
+			emitFlatcProducer(ctx, instance, d, resolveSourceVFS(ctx, instance, src.string(), d.srcDirs), &flatcVariantFL64, nil)
 		}
 	}
 
