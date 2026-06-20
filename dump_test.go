@@ -350,6 +350,85 @@ func TestDumpDiffPair_DuplicateOutputsOneSiblingDiffersReportsResidual(t *testin
 	}
 }
 
+// TestDumpDiffAggregate_DuplicateOutputsExactCounterpartsNoDrift asserts the
+// aggregate reports apply the same exact-counterpart cancellation as --pair (T-97):
+// an output produced by {-CG2, -CT0} sibling producers on both sides has full
+// parity, so --by-field/--by-kind/--by-token must not cross-pair our sibling against
+// ref's other sibling and report a spurious cmds delta.
+func TestDumpDiffAggregate_DuplicateOutputsExactCounterpartsNoDrift(t *testing.T) {
+	dir := t.TempDir()
+	left := filepath.Join(dir, "l.jsonl")
+	right := filepath.Join(dir, "r.jsonl")
+
+	line := func(selfUID, mode string) string {
+		return `{"self_uid":"` + selfUID + `","uid":"` + selfUID + `","outputs":["/dup"],"deps":[],"inputs":[],"cmds":[{"cmd_args":["ragel","` + mode + `"]}],"tags":[]` +
+			`,"kv":{"p":"R6"},"env":{},"platform":"linux","requirements":{},"target_properties":{}}`
+	}
+
+	// Both sides emit identical {-CG2, -CT0} producers at the same output.
+	throw(os.WriteFile(left, []byte(line("L-cg2", "-CG2")+"\n"+line("L-ct0", "-CT0")+"\n"), 0o644))
+	throw(os.WriteFile(right, []byte(line("R-cg2", "-CG2")+"\n"+line("R-ct0", "-CT0")+"\n"), 0o644))
+
+	run := func(mode ...string) string {
+		out := filepath.Join(dir, "o.txt")
+		args := append([]string{"--left", left, "--right", right, "--out", out}, mode...)
+		if exc := try(func() { cmdDumpDiff(GlobalFlags{}, args) }); exc != nil {
+			t.Fatalf("diff %v: %v", mode, exc)
+		}
+		return string(throw2(os.ReadFile(out)))
+	}
+
+	if bf := run("--by-field"); strings.Contains(bf, "cmds") {
+		t.Fatalf("exact counterparts exist; --by-field must not count a cmds drift:\n%s", bf)
+	}
+	if bk := run("--by-kind"); strings.Contains(bk, "cmds:") {
+		t.Fatalf("exact counterparts exist; --by-kind must not count a cmds drift:\n%s", bk)
+	}
+	if bt := run("--by-token"); strings.Contains(bt, "-CG2") || strings.Contains(bt, "-CT0") {
+		t.Fatalf("exact counterparts exist; --by-token must not surface mode tokens:\n%s", bt)
+	}
+}
+
+// TestDumpDiffAggregate_DuplicateOutputsOneSiblingDiffersReportsResidual is the
+// control: mode A is identical on both sides, but mode B (ours) vs C (ref) is a
+// genuine residual. The aggregate reports must still surface that drift.
+func TestDumpDiffAggregate_DuplicateOutputsOneSiblingDiffersReportsResidual(t *testing.T) {
+	dir := t.TempDir()
+	left := filepath.Join(dir, "l.jsonl")
+	right := filepath.Join(dir, "r.jsonl")
+
+	line := func(selfUID, mode string) string {
+		return `{"self_uid":"` + selfUID + `","uid":"` + selfUID + `","outputs":["/dup"],"deps":[],"inputs":[],"cmds":[{"cmd_args":["ragel","` + mode + `"]}],"tags":[]` +
+			`,"kv":{"p":"R6"},"env":{},"platform":"linux","requirements":{},"target_properties":{}}`
+	}
+
+	throw(os.WriteFile(left, []byte(line("L-a", "-CG2")+"\n"+line("L-b", "-Bours")+"\n"), 0o644))
+	throw(os.WriteFile(right, []byte(line("R-a", "-CG2")+"\n"+line("R-c", "-Cref")+"\n"), 0o644))
+
+	run := func(mode ...string) string {
+		out := filepath.Join(dir, "o.txt")
+		args := append([]string{"--left", left, "--right", right, "--out", out}, mode...)
+		if exc := try(func() { cmdDumpDiff(GlobalFlags{}, args) }); exc != nil {
+			t.Fatalf("diff %v: %v", mode, exc)
+		}
+		return string(throw2(os.ReadFile(out)))
+	}
+
+	bt := run("--by-token")
+	if !strings.Contains(bt, "-Bours") || !strings.Contains(bt, "-Cref") {
+		t.Fatalf("residual sibling drift must surface in --by-token:\n%s", bt)
+	}
+	if strings.Contains(bt, "-CG2") {
+		t.Fatalf("the exact-counterpart sibling -CG2 must be cancelled, not reported:\n%s", bt)
+	}
+	if bf := run("--by-field"); !strings.Contains(bf, "cmds") {
+		t.Fatalf("residual sibling drift must surface in --by-field:\n%s", bf)
+	}
+	if bk := run("--by-kind"); !strings.Contains(bk, "cmds:1") {
+		t.Fatalf("--by-kind must count exactly the one residual cmds divergence:\n%s", bk)
+	}
+}
+
 func TestDumpDiffRoots(t *testing.T) {
 	dir := t.TempDir()
 	left := filepath.Join(dir, "l.jsonl")
