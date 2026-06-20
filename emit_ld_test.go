@@ -687,3 +687,144 @@ func TestGen_FbsSrcsInduceFlatbuffersLinkDep(t *testing.T) {
 		t.Errorf("flatbuffers [%d] appears after arrowlike [%d] in link args; want flatbuffers before the owning library", fbIdx, arrowlikeIdx)
 	}
 }
+
+func TestGen_EnumSerializationRuntimePrecedesProtoLibraryArchive(t *testing.T) {
+	// Reproduces the fs_codegen / counter_proto residual (T-50). A PROTO_LIBRARY
+	// declares an ordinary PEERDIR, then GENERATE_ENUM_SERIALIZATION (which
+	// expands inline to PEERDIR(tools/enum_parser/enum_serialization_runtime) at
+	// that textual position). A downstream PY3_PROGRAM linking the proto library
+	// must list, in its regular start-group archive sequence: the ordinary peer,
+	// then enum_serialization_runtime, then the proto library's own archive — the
+	// upstream UniqPeers closure order, each exactly once.
+	//
+	// A second program peer pulls in library/cpp/json/common AFTER the proto
+	// closure. The removed PY3_PROGRAM relocation (movePathsBefore enum runtime ->
+	// json/common) would yank enum_serialization_runtime out of its closure slot
+	// and reinsert it just before json/common, landing it AFTER the proto archive.
+	files := map[string]string{
+		"app/ya.make":  "PY3_PROGRAM(app)\nDISABLE(PYTHON_SQLITE3)\nENABLE(PYBUILD_NO_PYC)\nPEERDIR(proto_mod)\nPEERDIR(jsondep)\nSRCS(main.cpp)\nEND()\n",
+		"app/main.cpp": "int main(){return 0;}\n",
+
+		"proto_mod/ya.make": "PROTO_LIBRARY()\nNO_MYPY()\nENABLE(PYBUILD_NO_PYC)\nPEERDIR(dep/first)\nSRCS(counter.proto)\n" +
+			"GENERATE_ENUM_SERIALIZATION(counter.pb.h)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n",
+		"proto_mod/counter.proto": "message Counter { optional int32 v = 1; }\n",
+
+		"dep/first/ya.make":   "LIBRARY()\nSRCS(first.cpp)\nEND()\n",
+		"dep/first/first.cpp": "int first(){return 0;}\n",
+
+		"tools/enum_parser/enum_serialization_runtime/ya.make":     "LIBRARY()\nSRCS(runtime.cpp)\nEND()\n",
+		"tools/enum_parser/enum_serialization_runtime/runtime.cpp": "int runtime(){return 0;}\n",
+		"tools/enum_parser/enum_parser/ya.make":                    "PROGRAM(enum_parser)\nSRCS(main.cpp)\nEND()\n",
+		"tools/enum_parser/enum_parser/main.cpp":                   "int main(){return 0;}\n",
+
+		"jsondep/ya.make":                 "LIBRARY()\nPEERDIR(library/cpp/json/common)\nSRCS(j.cpp)\nEND()\n",
+		"jsondep/j.cpp":                   "int j(){return 0;}\n",
+		"library/cpp/json/common/ya.make": "LIBRARY()\nSRCS(jc.cpp)\nEND()\n",
+		"library/cpp/json/common/jc.cpp":  "int jc(){return 0;}\n",
+
+		// J-allocator peers (default for PY3_PROGRAM) and the malloc-relocation
+		// anchors are walked unconditionally — stub them so the graph resolves.
+		"library/cpp/malloc/jemalloc/ya.make": "LIBRARY()\nSRCS(je.cpp)\nEND()\n",
+		"library/cpp/malloc/jemalloc/je.cpp":  "int je(){return 0;}\n",
+		"library/cpp/malloc/api/ya.make":      "LIBRARY()\nSRCS(api.cpp)\nEND()\n",
+		"library/cpp/malloc/api/api.cpp":      "int api(){return 0;}\n",
+		"contrib/libs/jemalloc/ya.make":       "LIBRARY()\nSRCS(c.cpp)\nEND()\n",
+		"contrib/libs/jemalloc/c.cpp":         "int c(){return 0;}\n",
+		"build/cow/on/ya.make":                "LIBRARY()\nSRCS(cow.cpp)\nEND()\n",
+		"build/cow/on/cow.cpp":                "int cow(){return 0;}\n",
+
+		// PY3_PROGRAM unconditionally prepends/peers the python runtime — stub the
+		// leaf modules so the graph resolves. NO_* flags keep them peer-free.
+		"contrib/libs/python/ya.make":                       "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
+		"library/python/runtime_py3/main/ya.make":           "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
+		"library/python/import_tracing/constructor/ya.make": "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
+		"library/python/testing/import_test/ya.make":        "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
+
+		// PROTO_LIBRARY machinery (protoc + cpp plugin + runtimes).
+		"contrib/tools/protoc/ya.make":                         "PROGRAM(protoc)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n",
+		"contrib/tools/protoc/main.cpp":                        "int main(){return 0;}\n",
+		"contrib/tools/protoc/plugins/cpp_styleguide/ya.make":  "PROGRAM(cpp_styleguide)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n",
+		"contrib/tools/protoc/plugins/cpp_styleguide/main.cpp": "int main(){return 0;}\n",
+		"contrib/libs/protobuf/ya.make":                        "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(protobuf.cpp)\nEND()\n",
+		"contrib/libs/protobuf/protobuf.cpp":                   "int protobuf(){return 0;}\n",
+		"contrib/python/protobuf/py3/ya.make":                  "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
+		"contrib/python/protobuf/ya.make":                      "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
+	}
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "py3cc_slow")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+	writeToolProgram(files, "tools/archiver", "archiver")
+
+	g := testGen(newMemFS(files), "app")
+
+	// Find the program link node: the LD node whose command holds the
+	// -Wl,--start-group archive group (the fs_tools link_or_copy LD node does not).
+	var linkArgs []STR
+	for _, n := range g.Graph {
+		if n.KV.P != pkLD {
+			continue
+		}
+		for _, c := range n.Cmds {
+			args := c.CmdArgs.flat()
+			if indexOfArg(args, "-Wl,--start-group") >= 0 {
+				linkArgs = args
+				break
+			}
+		}
+		if linkArgs != nil {
+			break
+		}
+	}
+	if linkArgs == nil {
+		t.Fatal("no program-link LD node with -Wl,--start-group found in graph")
+	}
+
+	// Restrict the assertions to the regular -Wl,--start-group … --end-group
+	// archive window (the proto library's own archive also appears in the
+	// preceding --whole-archive-libs band, which is byte-identical and unrelated).
+	sgStart := indexOfArg(linkArgs, "-Wl,--start-group")
+	sgEnd := indexOfArg(linkArgs, "-Wl,--end-group")
+	if sgStart < 0 || sgEnd < 0 || sgEnd <= sgStart {
+		t.Fatalf("malformed start-group window [%d,%d]: %v", sgStart, sgEnd, argStrs2(linkArgs))
+	}
+	regular := linkArgs[sgStart+1 : sgEnd]
+
+	const (
+		firstA = "dep/first/libdep-first.a"
+		enumA  = "tools/enum_parser/enum_serialization_runtime/libtools-enum_parser-enum_serialization_runtime.a"
+		protoA = "proto_mod/libproto_mod.a"
+	)
+
+	count := func(want string) int {
+		n := 0
+		for _, a := range regular {
+			if a.string() == want {
+				n++
+			}
+		}
+		return n
+	}
+	for _, p := range []string{firstA, enumA, protoA} {
+		if c := count(p); c != 1 {
+			t.Fatalf("archive %s appears %d times in regular start-group, want exactly 1: %v", p, c, argStrs2(regular))
+		}
+	}
+
+	firstIdx := indexOfArg(regular, firstA)
+	enumIdx := indexOfArg(regular, enumA)
+	protoIdx := indexOfArg(regular, protoA)
+
+	if !(firstIdx < enumIdx && enumIdx < protoIdx) {
+		t.Fatalf("regular start-group archive order = first[%d] enum[%d] proto[%d]; want first < enum < proto: %v",
+			firstIdx, enumIdx, protoIdx, argStrs2(regular))
+	}
+}
+
+func argStrs2(args []STR) []string {
+	out := make([]string, len(args))
+	for i, a := range args {
+		out[i] = a.string()
+	}
+	return out
+}
