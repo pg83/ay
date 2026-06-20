@@ -52,6 +52,17 @@ type GeneratedFileInfo struct {
 	// it reaches the cython transpile node but not the generated .c's C++ compile.
 	CythonInducedPyx []VFS
 
+	// ProducerSourceClosure is the producer node's full transitive $(S) input
+	// closure (every source leaf reachable through the producer's command inputs),
+	// not just its direct $(S) leaves. A bytecode (py3cc) node compiling this
+	// generated source carries `${input:Src}` only; upstream's flat-input model
+	// then folds the producer's whole transitive SOURCE closure onto the bytecode
+	// node (the producer's $(B) intermediates stay behind the producer node edge).
+	// Unlike SourceInputs (the direct-leaf subset consumed by archive/proto/objcopy
+	// bridges, which must NOT over-carry the closure), this is the full source set,
+	// read only by emitPySrcs for a generated PY_SRCS source. Zero len means none.
+	ProducerSourceClosure []VFS
+
 	// CythonMainOut is the producing cython node's MAIN generated output (the .c /
 	// .cpp), recorded on each of its _H / _API_H header outputs. The header is an
 	// OutTogether ${output} sibling of this main; a generated cython compile whose
@@ -250,6 +261,23 @@ func (r *CodegenRegistry) setSourceInputs(path VFS, src []VFS) {
 	}
 
 	info.SourceInputs = src
+}
+
+// setProducerSourceClosure records the producer's full transitive $(S) input
+// closure on an already-registered output (see ProducerSourceClosure). The slice
+// is shared, not copied — the producer already holds it as its node inputs.
+func (r *CodegenRegistry) setProducerSourceClosure(path VFS, closure []VFS) {
+	if len(closure) == 0 {
+		return
+	}
+
+	info, ok := r.byStr.get(STR(path.strID()))
+
+	if !ok {
+		throwFmt("CodegenRegistry: setProducerSourceClosure on unregistered path %q", path.string())
+	}
+
+	info.ProducerSourceClosure = closure
 }
 
 // registerBoundGeneratedParsedOutput registers a generated output against its

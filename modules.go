@@ -178,6 +178,14 @@ type ModuleData struct {
 	srcExtraFlat       []SrcFlatEntry
 	globalSrcs         []STR
 	pySrcs             []STR
+	// pySrcsFullName is parallel to pySrcs: true when the py3cc module-name
+	// argument is the full root-relative path (a build-root-rooted token, e.g.
+	// swig's `${ARCADIA_BUILD_ROOT}/<full>.py`), false when it is the bare token.
+	// Mirrors upstream rootrel_arc_src: a `${ARCADIA_BUILD_ROOT}/X` token yields X
+	// (full path), while a bare token resolving to a build-generated source yields
+	// the raw token. Irrelevant for source-tree entries (their module name is the
+	// full path either way).
+	pySrcsFullName     []bool
 	pySrcGroups        []PySrcGroup
 	pyPyiResources     []ResourceEntry
 	pyBuildNoPYC       bool
@@ -2530,6 +2538,11 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 			}
 
 			d.pySrcs = append(d.pySrcs, internStr(src))
+			// A build-root-rooted token keeps its full root-relative path as the
+			// module name (rootrel_arc_src strips the `${ARCADIA_BUILD_ROOT}/`
+			// prefix); a bare token resolving to a generated source uses the raw
+			// token. Source-tree bare tokens are unaffected (full path either way).
+			d.pySrcsFullName = append(d.pySrcsFullName, strings.HasPrefix(src, "${ARCADIA_BUILD_ROOT}/") || strings.HasPrefix(src, "${ARCADIA_ROOT}/") || strings.HasPrefix(src, "$B/"))
 			groupSrcs = append(groupSrcs, src)
 
 			if mainNext {
@@ -3687,6 +3700,8 @@ func applyAllPySrcs(fs FS, modulePath string, v *UnknownStmt, d *ModuleData) {
 
 	sort.Strings(files)
 	d.pySrcs = append(d.pySrcs, STRS(files...)...)
+	// ALL_PY_SRCS globs source-tree files; their module name is the full path.
+	d.pySrcsFullName = append(d.pySrcsFullName, make([]bool, len(files))...)
 
 	if len(files) > 0 {
 		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{
