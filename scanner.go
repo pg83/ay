@@ -48,6 +48,17 @@ type IncludeDirective struct {
 	target STR
 }
 
+// GenOwner is the module a generated file is attributed to under upstream's
+// Node2Module first-leave-wins rule: the directory AND tag of the first module
+// to claim the file. Tag is 0 when the claiming module carries no module_tag
+// (the common case); it is non-zero for a tagged submodule (e.g. a CPP_PROTO
+// proto submodule, tag cpp_proto) so attribute_generated.go can propagate both
+// fields, exactly as upstream inherits dir+tag from the owning module.
+type GenOwner struct {
+	Dir string
+	Tag STR
+}
+
 // quotedLike reports whether the directive resolves through the quoted-include
 // search (includer-local dir + addincl tiers + codegen). The cython cimport
 // probe kinds share that resolution; they differ only in suppressing the
@@ -179,7 +190,7 @@ type IncludeScanner struct {
 	// strictly before any consumer can resolve the output (resolution needs the
 	// registry entry registration is creating), so the first-claim is the producer
 	// and the override leaves the node attributed to it.
-	generatedFirstClaim map[VFS]string
+	generatedFirstClaim map[VFS]GenOwner
 
 	// generatedNodeClaim records, keyed by a generated file's PRODUCER node ref,
 	// the first module that names one of that producer's outputs in OUTPUT_INCLUDES.
@@ -304,7 +315,7 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 	s := &IncludeScanner{
 		sysincl:                 newSysinclCtx(sysincl),
 		parsers:                 parsers,
-		generatedFirstClaim:     make(map[VFS]string, 2048),
+		generatedFirstClaim:     make(map[VFS]GenOwner, 2048),
 		generatedNodeClaim:      make(map[NodeRef]string, 256),
 		generatedENIncluderDirs: make(map[VFS][]string, 16),
 		onWarn:                  onWarn,
@@ -333,7 +344,7 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 // node attributed to its producer.
 func (s *IncludeScanner) markGeneratedProducerOwned(out VFS, dir string) {
 	if _, ok := s.generatedFirstClaim[out]; !ok {
-		s.generatedFirstClaim[out] = dir
+		s.generatedFirstClaim[out] = GenOwner{Dir: dir}
 	}
 }
 
@@ -346,6 +357,14 @@ type ScanContext struct {
 	// IncludeScanner.generatedFirstClaim on the first resolve of any
 	// CodegenRegistry output — see that field's comment for the rationale.
 	OwnerModuleDir string
+
+	// OwnerModuleTag is the module_tag of OwnerModuleDir (0 when the module has
+	// none). Recorded alongside the dir in generatedFirstClaim so a first-claim
+	// re-attribution carries the owning module's tag too (a CPP_PROTO submodule
+	// claiming a plugin-produced cow header → tag cpp_proto). NOT part of
+	// hashScanContext — it is a claim side-channel, never affecting the resolve
+	// result, so resolution caching stays context-free.
+	OwnerModuleTag STR
 
 	// cfg is the resolved scan config — bound exactly once by newScanContext
 	// (the only constructor); walks do no table lookups at all.
@@ -761,6 +780,20 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 	// NPath::ToYPath), with no include search, sysincl, or FS check; mirror
 	// that. The STR already backs the full path, so the binding is a shift.
 	if v := d.target.vfs(); v != 0 {
+		// A rooted include of a generated header (an INDUCED_DEPS / plugin-window
+		// edge, e.g. the apphost cow well-known `$(B)/…/any.cow.pb.h` pulled into a
+		// consuming CPP_PROTO module's .pb.h closure) binds here without an addincl
+		// search. Upstream's Node2Module attributes such a node to the first module
+		// that leaves it in DFS post-order just the same, so record the first-claim
+		// for a registered codegen output — the addincl resolve paths below do this
+		// too; the rooted shortcut must not skip it. Gated to build targets with an
+		// owner: source rooted paths and ownerless walks never carry a claim.
+		if v.isBuild() && sc.cfg.OwnerModuleDir != "" {
+			if info := s.codegen.lookupSTR(d.target); info != nil {
+				s.recordFirstClaim(info.OutputPath, sc.cfg.OwnerModuleDir, sc.cfg.OwnerModuleTag)
+			}
+		}
+
 		out = append(s.resolveOut[:0], v)
 		s.resolveOut = out
 
@@ -975,13 +1008,13 @@ func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 // (json_visitor.cpp:638): the first include-scan that resolves a CodegenRegistry
 // output records the consumer module that owns it. attribute_generated.go reads
 // these to re-attribute the producer node's target_properties.module_dir.
-func (s *IncludeScanner) recordFirstClaim(out VFS, ownerModuleDir string) {
+func (s *IncludeScanner) recordFirstClaim(out VFS, ownerModuleDir string, ownerModuleTag STR) {
 	if ownerModuleDir == "" {
 		return
 	}
 
 	if _, ok := s.generatedFirstClaim[out]; !ok {
-		s.generatedFirstClaim[out] = ownerModuleDir
+		s.generatedFirstClaim[out] = GenOwner{Dir: ownerModuleDir, Tag: ownerModuleTag}
 	}
 }
 
@@ -1091,7 +1124,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 		out.paths = []VFS{info.OutputPath}
 		out.found = true
 
-		s.recordFirstClaim(info.OutputPath, sc.cfg.OwnerModuleDir)
+		s.recordFirstClaim(info.OutputPath, sc.cfg.OwnerModuleDir, sc.cfg.OwnerModuleTag)
 
 		return true
 	}
@@ -1173,7 +1206,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 				} else {
 					out.paths = []VFS{bestBuild.OutputPath}
 
-					s.recordFirstClaim(bestBuild.OutputPath, sc.cfg.OwnerModuleDir)
+					s.recordFirstClaim(bestBuild.OutputPath, sc.cfg.OwnerModuleDir, sc.cfg.OwnerModuleTag)
 				}
 
 				out.found = true
@@ -1270,7 +1303,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 			out = append(out, info.OutputPath)
 			searchPathFound = true
 
-			s.recordFirstClaim(info.OutputPath, sc.cfg.OwnerModuleDir)
+			s.recordFirstClaim(info.OutputPath, sc.cfg.OwnerModuleDir, sc.cfg.OwnerModuleTag)
 			s.recordENIncluderDir(info.OutputPath, info, includerAbs)
 		}
 	}
@@ -1311,7 +1344,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 				// → X86GenCallingConv.inc), record the first consumer
 				// module so the attribute_generated.go finalize pass can
 				// re-attribute the .inc node's target_properties.module_dir.
-				s.recordFirstClaim(info.OutputPath, sc.cfg.OwnerModuleDir)
+				s.recordFirstClaim(info.OutputPath, sc.cfg.OwnerModuleDir, sc.cfg.OwnerModuleTag)
 				s.recordENIncluderDir(info.OutputPath, info, includerAbs)
 			}
 		}

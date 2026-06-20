@@ -564,7 +564,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 // downstream peers later, so when both scanners claim the SAME generated file
 // with DIFFERENT owners the host claim is the upstream-faithful one. Files claimed
 // by only one scanner (the common case) keep that scanner's claim.
-func mergeGeneratedFirstClaims(host, target *IncludeScanner) map[VFS]string {
+func mergeGeneratedFirstClaims(host, target *IncludeScanner) map[VFS]GenOwner {
 	var n int
 
 	for _, s := range []*IncludeScanner{host, target} {
@@ -577,7 +577,7 @@ func mergeGeneratedFirstClaims(host, target *IncludeScanner) map[VFS]string {
 		return nil
 	}
 
-	out := make(map[VFS]string, n)
+	out := make(map[VFS]GenOwner, n)
 
 	// host first: on conflict the earlier write wins.
 	for _, s := range []*IncludeScanner{host, target} {
@@ -2090,6 +2090,13 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		TC:          d.tc,
 	}
 	moduleInputs.ScanCfg = newScanContext(ctx.parsers, dedupedAddIncl, selfPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+	// Carry the module's tag into the scan's first-claim side-channel: a generated
+	// header reached only through this module's compile (e.g. a plugin-produced cow
+	// header pulled in via a rooted induced-dep) is attributed to this module with
+	// both its dir AND tag, mirroring upstream Node2Module dir+tag inheritance.
+	// cfModuleTag (not moduleCCTag) is the module's attribution tag — cpp_proto for
+	// a PROTO_LIBRARY's C++ submodule, the consumer of the cow well-known headers.
+	moduleInputs.ScanCfg.OwnerModuleTag = cfModuleTag(d, instance)
 	moduleInputs.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &moduleInputs)
 
 	// Pass 1 (codegen-producing srcs: .proto, .ev, .fbs, .rl, .cpp.in, .c.in, .y)
