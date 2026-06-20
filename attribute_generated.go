@@ -56,7 +56,7 @@ func overrideGeneratedModuleDir(e *BufferedEmitter) {
 		selfOwned := false
 
 		for _, out := range node.Outputs {
-			if e.generatedFirstClaim[out] == current {
+			if e.generatedFirstClaim[out].Dir == current {
 				selfOwned = true
 
 				break
@@ -77,7 +77,7 @@ func overrideGeneratedModuleDir(e *BufferedEmitter) {
 			continue
 		}
 
-		var claim string
+		var claim GenOwner
 
 		for _, out := range node.Outputs {
 			c, ok := e.generatedFirstClaim[out]
@@ -86,24 +86,32 @@ func overrideGeneratedModuleDir(e *BufferedEmitter) {
 				continue
 			}
 
-			if claim == "" {
+			if claim.Dir == "" {
 				claim = c
 
 				continue
 			}
 
-			if c != claim {
-				claim = ""
+			if c.Dir != claim.Dir {
+				claim = GenOwner{}
 
 				break
 			}
 		}
 
-		if claim == "" || claim == current {
+		if claim.Dir == "" || claim.Dir == current {
 			continue
 		}
 
-		node.TargetProperties.ModuleDir = claim
+		node.TargetProperties.ModuleDir = claim.Dir
+
+		// Inherit the claiming module's tag too: upstream's Node2Module attribution
+		// gives the node the owning module's dir AND tag. A CPP_PROTO consumer of a
+		// plugin-produced header (apphost cow well-known *.cow.pb.h) carries tag
+		// cpp_proto; a claiming module with no tag (the common case) leaves it unset.
+		if claim.Tag != 0 {
+			node.TargetProperties.ModuleTag = claim.Tag
+		}
 	}
 }
 

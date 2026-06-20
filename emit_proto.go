@@ -740,6 +740,12 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		SetVars:              d.setVars,
 		ModuleTag:            tagCppProto,
 	}
+	// The generated .pb.cc compiles here under the CPP_PROTO submodule. A plugin
+	// well-known header it pulls in via a rooted induced-dep (apphost cow
+	// *.cow.pb.h) is first-claimed by this module; carry the cpp_proto tag so the
+	// claim re-attributes the producer node's module_dir AND module_tag (upstream
+	// Node2Module dir+tag inheritance).
+	moduleInputs.ScanCfg.OwnerModuleTag = tagCppProto
 	moduleInputs.CCBlocks = composeCCModuleArgBlocks(ctx.na, cppInstance.Platform, &moduleInputs)
 
 	ccRefs := make([]NodeRef, 0, len(codegenOutputs))
