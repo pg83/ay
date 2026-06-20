@@ -211,11 +211,15 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 
 	var systemLibs, linkPreludeExtra []string
 
+	// Base _C_SYSTEM_LIBRARIES (build/conf/linkers/ld.conf:106-128). The trailing
+	// `-lm` is NOT part of the base set — it is the COMMON_LINK_SETTINGS append in
+	// the USE_ARCADIA_LIBM == "no" arm (ymake.core.conf:941-942), emitted per link
+	// module in composeProgramLinkTrailer.
 	if flags["MUSL"] == "yes" {
-		systemLibs = []string{"-nostdlib", "-lm"}
+		systemLibs = []string{"-nostdlib"}
 	} else {
 		linkPreludeExtra = []string{"-ldl", "-lrt"}
-		systemLibs = []string{"-nodefaultlibs", "-lpthread", "-lc", "-lm"}
+		systemLibs = []string{"-nodefaultlibs", "-lpthread", "-lc"}
 	}
 
 	p := &Platform{

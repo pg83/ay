@@ -16,10 +16,51 @@ func libmProgramFiles(enable bool) map[string]string {
 	writeTestModuleFile(files, "app/ya.make", "PROGRAM(app)\n"+enableStmt+"SRCS(main.cpp)\nEND()\n")
 	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
 
-	writeTestModuleFile(files, "contrib/libs/libm/ya.make", "LIBRARY()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(e_exp.c)\nEND()\n")
+	// Faithful to contrib/libs/libm/ya.make: the module exports its own GLOBAL
+	// ADDINCL(include|platform). T-62 asserts those own-addincl roots land after
+	// the language-default transitive closure, not ahead of it.
+	writeTestModuleFile(files, "contrib/libs/libm/ya.make",
+		"LIBRARY()\nNO_RUNTIME()\nNO_UTIL()\nADDINCL(GLOBAL contrib/libs/libm/include\nGLOBAL contrib/libs/libm/platform)\nSRCS(e_exp.c)\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/libm/e_exp.c", "double e_exp(double x){return x;}\n")
+	// filterExistingSourceDirs (modules.go) drops GLOBAL addincl dirs that do not
+	// exist; materialise the two libm include roots so they survive.
+	writeTestModuleFile(files, "contrib/libs/libm/include/math.h", "#pragma once\n")
+	writeTestModuleFile(files, "contrib/libs/libm/platform/platform.h", "#pragma once\n")
 
 	return files
+}
+
+// libmOrderingProgramFiles adds a `util` language-default peer carrying a
+// transitive GLOBAL ADDINCL (via library/early). The program compile must order
+// that transitive include ahead of libm's own GLOBAL include — the reference
+// places the libm roots after the language/default transitive closure, which is
+// the program-default slot, not the language-default own slot.
+func libmOrderingProgramFiles() map[string]string {
+	files := libmProgramFiles(true)
+
+	// util is a language default for any C++ program (defaults.go). NO_RUNTIME /
+	// NO_UTIL keep it from pulling its own language defaults; it only re-exports
+	// library/early's GLOBAL addincl transitively.
+	writeTestModuleFile(files, "util/ya.make", "LIBRARY()\nNO_RUNTIME()\nNO_UTIL()\nPEERDIR(library/early)\nEND()\n")
+	writeTestModuleFile(files, "util/u.cpp", "int u(){return 0;}\n")
+
+	writeTestModuleFile(files, "library/early/ya.make",
+		"LIBRARY()\nNO_RUNTIME()\nNO_UTIL()\nADDINCL(GLOBAL library/early/include)\nSRCS(early.cpp)\nEND()\n")
+	writeTestModuleFile(files, "library/early/early.cpp", "int early(){return 0;}\n")
+	writeTestModuleFile(files, "library/early/include/early.h", "#pragma once\n")
+
+	return files
+}
+
+func ccArgsOfSuffix(t *testing.T, g *Graph, suffix string) []STR {
+	t.Helper()
+
+	n := mustNodeByOutputSuffix(t, g, suffix)
+	if len(n.Cmds) == 0 {
+		t.Fatalf("CC node %q has no Cmds", suffix)
+	}
+
+	return n.Cmds[0].CmdArgs.flat()
 }
 
 func linkArgsOf(t *testing.T, g *Graph) []STR {
@@ -71,18 +112,69 @@ func TestGen_UseArcadiaLibm_AbsentWithoutEnable(t *testing.T) {
 }
 
 func TestGen_UseArcadiaLibm_NoSelfPeer(t *testing.T) {
-	// A module under contrib/libs/libm that enables the flag must not peer itself.
+	// A link module under contrib/libs/libm that enables the flag must not peer
+	// itself. The libm COMMON_LINK_SETTINGS peer lives in the program-default
+	// path, so the self/descendant guard is checked there.
 	mi := ModuleInstance{
 		Path:     source("contrib/libs/libm"),
-		Kind:     KindLib,
+		Kind:     KindBin,
 		Language: LangCPP,
 		Platform: testTargetP,
 	}
 
-	got := defaultPeerdirsForWithState(nil, mi, &ModuleData{useArcadiaLibm: true})
+	got := defaultProgramPeerdirsForWithState(nil, mi, &ModuleData{useArcadiaLibm: true}, false)
 	for _, p := range got {
 		if p == "contrib/libs/libm" {
 			t.Fatalf("contrib/libs/libm must not peer itself; got %v", got)
 		}
+	}
+}
+
+func TestGen_UseArcadiaLibm_AddInclOrderAfterTransitive(t *testing.T) {
+	g := testGen(newMemFS(libmOrderingProgramFiles()), "app")
+
+	args := ccArgsOfSuffix(t, g, "app/main.cpp.o")
+
+	earlyIdx := indexOfArg(args, "-I$(S)/library/early/include")
+	libmIdx := indexOfArg(args, "-I$(S)/contrib/libs/libm/include")
+
+	if earlyIdx < 0 {
+		t.Fatalf("program compile missing the language-default transitive addincl; args = %v", args)
+	}
+
+	if libmIdx < 0 {
+		t.Fatalf("program compile missing the libm addincl; args = %v", args)
+	}
+
+	if earlyIdx > libmIdx {
+		t.Fatalf("libm addincl (%d) must come after the language-default transitive addincl (%d); args = %v", libmIdx, earlyIdx, args)
+	}
+}
+
+func TestGen_UseArcadiaLibm_NoSystemLm(t *testing.T) {
+	g := testGen(newMemFS(libmProgramFiles(true)), "app")
+
+	linkArgs := linkArgsOf(t, g)
+	if indexOfArg(linkArgs, "-lm") >= 0 {
+		t.Fatalf("USE_ARCADIA_LIBM=yes link must not emit system -lm; link args = %v", linkArgs)
+	}
+
+	const libmLinkArg = "contrib/libs/libm/libcontrib-libs-libm.a"
+	if indexOfArg(linkArgs, libmLinkArg) < 0 {
+		t.Fatalf("USE_ARCADIA_LIBM=yes link must contain %s; link args = %v", libmLinkArg, linkArgs)
+	}
+}
+
+func TestGen_UseArcadiaLibm_KeepsSystemLmWithoutEnable(t *testing.T) {
+	g := testGen(newMemFS(libmProgramFiles(false)), "app")
+
+	linkArgs := linkArgsOf(t, g)
+	if indexOfArg(linkArgs, "-lm") < 0 {
+		t.Fatalf("default USE_ARCADIA_LIBM=no link must keep system -lm; link args = %v", linkArgs)
+	}
+
+	const libmLinkArg = "contrib/libs/libm/libcontrib-libs-libm.a"
+	if indexOfArg(linkArgs, libmLinkArg) >= 0 {
+		t.Fatalf("default link must not gain the Arcadia libm archive; link args = %v", linkArgs)
 	}
 }

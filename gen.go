@@ -2602,6 +2602,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			d.flags.NoCompilerWarnings,
 			d.noOptimize,
 			wantsStrip,
+			d.useArcadiaLibm,
 			d.splitDwarf,
 			programModuleTag,
 			len(d.bundles) > 0,

@@ -53,6 +53,7 @@ func emitLD(
 	noCompilerWarnings bool,
 	noOptimize bool,
 	wantsStrip bool,
+	useArcadiaLibm bool,
 	wantsSplitDwarf bool,
 	programModuleTag STR,
 	hasBundles bool,
@@ -105,7 +106,7 @@ func emitLD(
 
 	cmd0 := composeLDCmdVcsInfo(tc, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, tc, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings, noOptimize)
-	cmd2 := composeLDCmdLinkExe(instance.Platform, tc, outputPath, vcsOPath, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, wantsStrip)
+	cmd2 := composeLDCmdLinkExe(instance.Platform, tc, outputPath, vcsOPath, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, wantsStrip, useArcadiaLibm)
 	splitDwarfCmds := composeLDSplitDwarfCmds(na, tc, outputPath, wantsSplitDwarf)
 
 	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -344,7 +345,7 @@ func composeLDCmdVcsCompile(p *Platform, tc ModuleToolchain, vcsCPath, vcsOPath 
 	return cmdArgs
 }
 
-func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, outputPath, vcsOPath string, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *STR, wantsStrip bool) []STR {
+func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, outputPath, vcsOPath string, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *STR, wantsStrip, useArcadiaLibm bool) []STR {
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 16 + 1 + len(ccPaths) + len(peerLinkCmdPaths) + len(globalPaths) + len(objcopyPaths) + len(peerLDFlagsGlobal) + len(ownLDFlags) + len(ownRPathFlags) + len(peerRPathFlagsGlobal) + len(objAddLibsGlobal)
 
 	argCap += 2 + len(pluginPaths)
@@ -420,12 +421,12 @@ func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, outputPath, vcsOPath s
 
 	cmdArgs = append(cmdArgs, argWlEndGroup.str())
 
-	cmdArgs = append(cmdArgs, composeProgramLinkTrailer(p, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, wantsStrip)...)
+	cmdArgs = append(cmdArgs, composeProgramLinkTrailer(p, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, wantsStrip, useArcadiaLibm)...)
 
 	return cmdArgs
 }
 
-func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *STR, wantsStrip bool) []STR {
+func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *STR, wantsStrip, useArcadiaLibm bool) []STR {
 	// EXPORTS_SCRIPT appends the version-script flag right after -rdynamic
 	// per upstream's EXPORTS_VALUE in build/conf/linkers/ld.conf:138. The macro
 	// arg is already a source-root-relative path, not module-relative.
@@ -460,6 +461,13 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 	// into its individual -l tokens here at the command boundary.
 	trailer = appendArgGroupStr(trailer, objAddLibsGlobal)
 	trailer = append(trailer, p.SystemLibs...)
+
+	// COMMON_LINK_SETTINGS `C_SYSTEM_LIBRARIES += -lm` in the USE_ARCADIA_LIBM ==
+	// "no" arm (ymake.core.conf:941-942). When the flag is enabled the module
+	// links the contrib/libs/libm peer archive instead, so system -lm is omitted.
+	if !useArcadiaLibm {
+		trailer = append(trailer, argDashLm.str())
+	}
 
 	if wantsStrip {
 		trailer = append(trailer, argWlStripAll.str())
