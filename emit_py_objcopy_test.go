@@ -317,3 +317,309 @@ END()
 		t.Fatalf("objcopy command missing base64 resource key %q", wantKey)
 	}
 }
+
+// ALL_RESOURCE_FILES(Ext PREFIX p Dirs...) globs <dir>/*.<ext> and feeds the
+// matches to RESOURCE_FILES with PREFIX p and STRIP ${ARCADIA_ROOT}/<moddir>/.
+// The globbed paths keep the literal ${ARCADIA_ROOT} marker (upstream's GLOB
+// runs before ${ARCADIA_ROOT} is bound), so the resfs/file key embeds it
+// verbatim — exactly the models_meta/libs/cpp shape in sg7. This asserts the
+// emitted objcopy hash/inputs match what the equivalent explicit RESOURCE_FILES
+// produces, that the glob is .json-only and sorted, and that the module's
+// .global.a links the objcopy.
+func TestGen_AllResourceFilesGlobMatchesResourceFiles(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+
+	files["mod/cfg/a.json"] = "{\"a\":1}\n"
+	files["mod/cfg/b.json"] = "{\"b\":2}\n"
+	files["mod/cfg/ignore.txt"] = "not a resource\n"
+
+	// Mirror the sg7 models_meta layout: the consuming module lives in a sibling
+	// dir of the config dir, so STRIP=${ARCADIA_ROOT}/<moddir>/ does NOT strip and
+	// the resfs/file key retains the literal ${ARCADIA_ROOT} marker from the glob.
+	writeTestModuleFile(files, "mod/libs/cpp/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+ALL_RESOURCE_FILES(
+    json
+    PREFIX cfg
+    ${ARCADIA_ROOT}/mod/cfg
+)
+END()
+`)
+
+	g := testGen(newMemFS(files), "mod/libs/cpp")
+
+	const moddir = "mod/libs/cpp"
+	const prefix = "cfg"
+	sorted := []string{"a.json", "b.json"} // glob is .json-only and sorted
+
+	var hashPaths, keysB64, kvsHash []string
+	for _, f := range sorted {
+		path := "${ARCADIA_ROOT}/mod/cfg/" + f
+		// STRIP=${ARCADIA_ROOT}/mod/libs/cpp/ is not a prefix of the cfg path, so
+		// the whole marker-rooted path becomes the key tail.
+		fileKey := "resfs/file/" + prefix + path
+		hashPaths = append(hashPaths, path)
+		keysB64 = append(keysB64, encb64.StdEncoding.EncodeToString([]byte(fileKey)))
+		kvsHash = append(kvsHash, "resfs/src/"+fileKey+"=${rootrel;context=TEXT;input=TEXT:\""+path+"\"}")
+	}
+
+	// The objcopy filename is hashed over the UNRENDERED key (literal marker).
+	wantHash := objcopyHash(hashPaths, keysB64, kvsHash, moddir, nil)
+	wantOutput := "$(B)/mod/libs/cpp/objcopy_" + wantHash + ".o"
+
+	objcopy := nodeByOutput(g, wantOutput)
+	if objcopy == nil {
+		t.Fatalf("graph is missing the ALL_RESOURCE_FILES objcopy output %q\nobjcopy nodes: %v", wantOutput, objcopyOutputs(g))
+	}
+
+	if !nodeHasInput(objcopy, "$(S)/mod/cfg/a.json") || !nodeHasInput(objcopy, "$(S)/mod/cfg/b.json") {
+		t.Fatalf("objcopy inputs missing the globbed json sources: %#v", objcopy.flatInputs())
+	}
+	if nodeHasInput(objcopy, "$(S)/mod/cfg/ignore.txt") {
+		t.Fatalf("objcopy picked up the non-json file ignore.txt: %#v", objcopy.flatInputs())
+	}
+
+	args := prCmdArgStrings(objcopy)
+	for _, f := range sorted {
+		// --keys: base64 of the literal-marker key (shielded from command rendering).
+		wantKey := encb64.StdEncoding.EncodeToString([]byte("resfs/file/" + prefix + "${ARCADIA_ROOT}/mod/cfg/" + f))
+		if !slices.Contains(args, wantKey) {
+			t.Fatalf("objcopy --keys missing base64 marker key for %q: %v", f, args)
+		}
+		// --kvs command form: the marker is rendered to $(S), the rootrel resolved.
+		wantKv := "resfs/src/resfs/file/" + prefix + "$(S)/mod/cfg/" + f + "=mod/cfg/" + f
+		if !slices.Contains(args, wantKv) {
+			t.Fatalf("objcopy --kvs missing rendered resfs/src for %q (want %q): %v", f, wantKv, args)
+		}
+		if slices.Contains(args, "resfs/src/resfs/file/"+prefix+"${ARCADIA_ROOT}/mod/cfg/"+f+"=mod/cfg/"+f) {
+			t.Fatalf("objcopy --kvs leaked the literal ${ARCADIA_ROOT} marker for %q: %v", f, args)
+		}
+	}
+
+	// The library's global archive links the resource objcopy.
+	globalAr := nodeByOutput(g, "$(B)/mod/libs/cpp/libmod-libs-cpp.global.a")
+	if globalAr == nil {
+		t.Fatal("graph is missing the global archive libmod-libs-cpp.global.a")
+	}
+	if !slices.Contains(prCmdArgStrings(globalAr), wantOutput) {
+		t.Fatalf("global archive does not link the resource objcopy %q: %v", wantOutput, prCmdArgStrings(globalAr))
+	}
+}
+
+// ALL_RESOURCE_FILES(Ext Dirs...) with a RELATIVE DIR (e.g. the real
+// `ALL_RESOURCE_FILES(j2 templates)`): upstream resolves the glob against the
+// module dir, so the matches are ${ARCADIA_ROOT}/<moddir>/<dir>/<file>. Here the
+// STRIP=${ARCADIA_ROOT}/<moddir>/ default IS a prefix of those paths, so it
+// strips and the resfs/file key becomes the moddir-relative <dir>/<file> — no
+// literal marker survives in the key. This exercises the relative-DIR path class
+// the prior implementation silently dropped.
+func TestGen_AllResourceFilesGlobRelativeDir(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+
+	files["mod/app/templates/x.j2"] = "x\n"
+	files["mod/app/templates/y.j2"] = "y\n"
+	files["mod/app/templates/skip.txt"] = "not a resource\n"
+
+	writeTestModuleFile(files, "mod/app/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+ALL_RESOURCE_FILES(j2 templates)
+END()
+`)
+
+	g := testGen(newMemFS(files), "mod/app")
+
+	const moddir = "mod/app"
+	sorted := []string{"x.j2", "y.j2"} // glob is .j2-only and sorted
+
+	var hashPaths, keysB64, kvsHash []string
+	for _, f := range sorted {
+		path := "${ARCADIA_ROOT}/mod/app/templates/" + f
+		// STRIP=${ARCADIA_ROOT}/mod/app/ IS a prefix here, so the key tail is the
+		// moddir-relative templates/<file>; no marker survives in the key.
+		fileKey := "resfs/file/templates/" + f
+		hashPaths = append(hashPaths, path)
+		keysB64 = append(keysB64, encb64.StdEncoding.EncodeToString([]byte(fileKey)))
+		kvsHash = append(kvsHash, "resfs/src/"+fileKey+"=${rootrel;context=TEXT;input=TEXT:\""+path+"\"}")
+	}
+
+	wantHash := objcopyHash(hashPaths, keysB64, kvsHash, moddir, nil)
+	wantOutput := "$(B)/mod/app/objcopy_" + wantHash + ".o"
+
+	objcopy := nodeByOutput(g, wantOutput)
+	if objcopy == nil {
+		t.Fatalf("graph is missing the relative-DIR ALL_RESOURCE_FILES objcopy output %q\nobjcopy nodes: %v", wantOutput, objcopyOutputs(g))
+	}
+
+	if !nodeHasInput(objcopy, "$(S)/mod/app/templates/x.j2") || !nodeHasInput(objcopy, "$(S)/mod/app/templates/y.j2") {
+		t.Fatalf("objcopy inputs missing the globbed j2 sources: %#v", objcopy.flatInputs())
+	}
+	if nodeHasInput(objcopy, "$(S)/mod/app/templates/skip.txt") {
+		t.Fatalf("objcopy picked up the non-j2 file skip.txt: %#v", objcopy.flatInputs())
+	}
+
+	args := prCmdArgStrings(objcopy)
+	for _, f := range sorted {
+		wantKey := encb64.StdEncoding.EncodeToString([]byte("resfs/file/templates/" + f))
+		if !slices.Contains(args, wantKey) {
+			t.Fatalf("objcopy --keys missing base64 key for %q: %v", f, args)
+		}
+		wantKv := "resfs/src/resfs/file/templates/" + f + "=mod/app/templates/" + f
+		if !slices.Contains(args, wantKv) {
+			t.Fatalf("objcopy --kvs missing rendered resfs/src for %q (want %q): %v", f, wantKv, args)
+		}
+	}
+}
+
+// ALL_RESOURCE_FILES_FROM_DIRS with a relative DIR carrying `..` segments (the
+// real idm_syncer `../../configs/adminka/projects` shape): upstream globs the
+// dir non-recursively against the module dir and reconstructs the `..`. The
+// resfs/file key is PREFIX-joined to the ${ARCADIA_ROOT}-rooted match (STRIP at
+// the module dir does not cover the parent-relative config dir, exactly like the
+// models_meta sibling-dir case).
+func TestGen_AllResourceFilesFromDirsRelativeParentDir(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+
+	files["base/configs/p/a.cfg"] = "a\n"
+	files["base/configs/p/b.cfg"] = "b\n"
+
+	writeTestModuleFile(files, "base/tools/sync/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+ALL_RESOURCE_FILES_FROM_DIRS(PREFIX adminka ../../configs/p)
+END()
+`)
+
+	g := testGen(newMemFS(files), "base/tools/sync")
+
+	const moddir = "base/tools/sync"
+	const prefix = "adminka"
+	sorted := []string{"a.cfg", "b.cfg"} // FROM_DIRS globs all files, sorted
+
+	var hashPaths, keysB64, kvsHash []string
+	for _, f := range sorted {
+		// ../../configs/p resolved against base/tools/sync cleans to base/configs/p.
+		path := "${ARCADIA_ROOT}/base/configs/p/" + f
+		// STRIP=${ARCADIA_ROOT}/base/tools/sync/ is not a prefix of the parent
+		// config dir, so the whole marker-rooted path is the key tail.
+		fileKey := "resfs/file/" + prefix + path
+		hashPaths = append(hashPaths, path)
+		keysB64 = append(keysB64, encb64.StdEncoding.EncodeToString([]byte(fileKey)))
+		kvsHash = append(kvsHash, "resfs/src/"+fileKey+"=${rootrel;context=TEXT;input=TEXT:\""+path+"\"}")
+	}
+
+	wantHash := objcopyHash(hashPaths, keysB64, kvsHash, moddir, nil)
+	wantOutput := "$(B)/base/tools/sync/objcopy_" + wantHash + ".o"
+
+	objcopy := nodeByOutput(g, wantOutput)
+	if objcopy == nil {
+		t.Fatalf("graph is missing the FROM_DIRS `..` objcopy output %q\nobjcopy nodes: %v", wantOutput, objcopyOutputs(g))
+	}
+
+	if !nodeHasInput(objcopy, "$(S)/base/configs/p/a.cfg") || !nodeHasInput(objcopy, "$(S)/base/configs/p/b.cfg") {
+		t.Fatalf("objcopy inputs missing the `..`-resolved config sources: %#v", objcopy.flatInputs())
+	}
+
+	args := prCmdArgStrings(objcopy)
+	for _, f := range sorted {
+		wantKv := "resfs/src/resfs/file/" + prefix + "$(S)/base/configs/p/" + f + "=base/configs/p/" + f
+		if !slices.Contains(args, wantKv) {
+			t.Fatalf("objcopy --kvs missing rendered resfs/src for %q (want %q): %v", f, wantKv, args)
+		}
+	}
+}
+
+// ALL_RESOURCE_FILES with a SOURCE-ROOTED DIR carrying a trailing slash (the real
+// yabs/air shape `${ARCADIA_ROOT}/yabs/air/ssp/google/asas/pretargetings/`):
+// upstream's TGlobPattern splits the pattern with SkipEmpty, so the empty trailing
+// segment is dropped and each match reconstructs to a normalized
+// ${ARCADIA_ROOT}/<arc-rel>/<file> with no double slash. The stored resource path
+// (and therefore the objcopy hash and keys) must carry no `//`.
+func TestGen_AllResourceFilesGlobSourceRootedTrailingSlash(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+
+	files["mod/cfg/a.json"] = "{\"a\":1}\n"
+	files["mod/cfg/b.json"] = "{\"b\":2}\n"
+
+	// The DIR is source-rooted AND ends with a slash, exactly like the real
+	// yabs/air/infra/solo/registry/alert/ssp usage.
+	writeTestModuleFile(files, "mod/libs/cpp/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+ALL_RESOURCE_FILES(
+    json
+    PREFIX cfg
+    ${ARCADIA_ROOT}/mod/cfg/
+)
+END()
+`)
+
+	g := testGen(newMemFS(files), "mod/libs/cpp")
+
+	const moddir = "mod/libs/cpp"
+	const prefix = "cfg"
+	sorted := []string{"a.json", "b.json"}
+
+	var hashPaths, keysB64, kvsHash []string
+	for _, f := range sorted {
+		// No double slash: the trailing-slash DIR normalizes to ${ARCADIA_ROOT}/mod/cfg.
+		path := "${ARCADIA_ROOT}/mod/cfg/" + f
+		fileKey := "resfs/file/" + prefix + path
+		hashPaths = append(hashPaths, path)
+		keysB64 = append(keysB64, encb64.StdEncoding.EncodeToString([]byte(fileKey)))
+		kvsHash = append(kvsHash, "resfs/src/"+fileKey+"=${rootrel;context=TEXT;input=TEXT:\""+path+"\"}")
+	}
+
+	wantHash := objcopyHash(hashPaths, keysB64, kvsHash, moddir, nil)
+	wantOutput := "$(B)/mod/libs/cpp/objcopy_" + wantHash + ".o"
+
+	objcopy := nodeByOutput(g, wantOutput)
+	if objcopy == nil {
+		t.Fatalf("graph is missing the trailing-slash ALL_RESOURCE_FILES objcopy output %q\nobjcopy nodes: %v", wantOutput, objcopyOutputs(g))
+	}
+
+	args := prCmdArgStrings(objcopy)
+	for _, f := range sorted {
+		wantKey := encb64.StdEncoding.EncodeToString([]byte("resfs/file/" + prefix + "${ARCADIA_ROOT}/mod/cfg/" + f))
+		if !slices.Contains(args, wantKey) {
+			t.Fatalf("objcopy --keys missing normalized base64 marker key for %q: %v", f, args)
+		}
+		// No `//` in any rendered kvs argument.
+		for _, a := range args {
+			if strings.Contains(a, "mod/cfg//") {
+				t.Fatalf("objcopy arg carries a double slash from the trailing-slash DIR: %q", a)
+			}
+		}
+	}
+}
+
+func objcopyOutputs(g *Graph) []string {
+	var out []string
+	for _, n := range g.Graph {
+		if len(n.Outputs) > 0 && strings.Contains(n.Outputs[0].string(), "/objcopy_") {
+			out = append(out, n.Outputs[0].string())
+		}
+	}
+	return out
+}
