@@ -1,6 +1,7 @@
 package main
 
 import (
+	encb64 "encoding/base64"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -77,9 +78,12 @@ func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCo
 	var pyProtoRefs []NodeRef
 	var pyProtoOutputs []VFS
 	var auxEntries []PyProtoAuxEntry
+	var genEntries []GenProtoResEntry
 
 	for _, src := range protoSrcs {
-		auxEntries = append(auxEntries, emitPyProtoSrc(ctx, instance, d, src, protocLDRef, protocBinary, pe)...)
+		aux, gen := emitPyProtoSrc(ctx, instance, d, src, protocLDRef, protocBinary, pe)
+		auxEntries = append(auxEntries, aux...)
+		genEntries = append(genEntries, gen...)
 	}
 
 	auxRes := emitPyProtoAuxChunks(ctx, instance, d, peerContribs, auxEntries, cppSibling)
@@ -87,6 +91,11 @@ func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCo
 	if auxRes != nil {
 		pyProtoRefs = append(pyProtoRefs, auxRes.Refs...)
 		pyProtoOutputs = append(pyProtoOutputs, auxRes.Outputs...)
+	}
+
+	if objRes := emitGeneratedPyProtoObjcopy(ctx, instance, d, genEntries); objRes != nil {
+		pyProtoRefs = append(pyProtoRefs, objRes.Refs...)
+		pyProtoOutputs = append(pyProtoOutputs, objRes.Outputs...)
 	}
 
 	if len(pyProtoRefs) == 0 {
@@ -268,11 +277,11 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 	return pe
 }
 
-func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src string, protocLDRef NodeRef, protocBinary VFS, pe *PyPBModuleEmission) []PyProtoAuxEntry {
+func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src string, protocLDRef NodeRef, protocBinary VFS, pe *PyPBModuleEmission) ([]PyProtoAuxEntry, []GenProtoResEntry) {
 	na := ctx.na
 
 	if d.moduleStmt.Name != tokProtoLibrary {
-		return nil
+		return nil, nil
 	}
 
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
@@ -323,12 +332,25 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 
 	var producerDeps []NodeRef
 	var producerSourceInputs []VFS
+	generated := false
 
 	if info := codegenRegForInstance(ctx, instance).lookup(build(protoRelPath)); info != nil {
 		protoSrcVFS = build(protoRelPath)
 		protoCwd = strB
 		producerDeps = []NodeRef{info.ProducerRef}
+		generated = true
+
+		// Upstream's flat-input model folds the generated `.proto` producer's full
+		// transitive $(S) closure (its OUTPUT_INCLUDES protos and their imports)
+		// onto every node that compiles the generated py output — the PB protoc node
+		// and the py3cc bytecode node both carry it. ProducerSourceClosure is that
+		// full set; SourceInputs is only the direct-leaf subset, so prefer the
+		// closure and fall back when no closure was recorded.
 		producerSourceInputs = info.SourceInputs
+
+		if len(info.ProducerSourceClosure) > 0 {
+			producerSourceInputs = info.ProducerSourceClosure
+		}
 	}
 
 	inputs := []VFS{protocBinary, pbPyWrapperVFS, protoSrcVFS}
@@ -375,17 +397,36 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 	pyPBRef := ctx.emit.emit(pyPBNode)
 	pyYapyc := []VFS{pyOut}
 
-	if d.grpc {
-		pyYapyc = append(pyYapyc, grpcPyOut)
+	// The py3cc / resfs decisions key off upstream's pb2_arg token form
+	// (pybuild.py): stripext(to_build_root(proto)). A checked-in proto is
+	// is_arc_src, so the token is the ${ARCADIA_BUILD_ROOT}/<rootrel> form whose
+	// rootrel == pyOut.rel(); a build-generated proto (RUN_PROGRAM STDOUT) is not
+	// is_arc_src, so to_build_root returns the bare SRCS arg and the token is the
+	// bare `<base>__intpy3___pb2.py`. uniq_suffix is empty for a token with no '/'.
+	pyBuildBase := protoBase
+
+	if generated {
+		pyBuildBase = strings.TrimSuffix(src, ".proto")
 	}
 
-	yapyRes := emitGeneratedPyProtoYapyc(ctx, instance, pyYapyc, pyPBRef, pyProtoSourceInputs(inputs))
+	yapycTokens := []string{pyBuildBase + "__intpy3___pb2.py"}
+
+	if d.grpc {
+		pyYapyc = append(pyYapyc, grpcPyOut)
+		yapycTokens = append(yapycTokens, pyBuildBase+"__intpy3___pb2_grpc.py")
+	}
+
+	yapyRes := emitGeneratedPyProtoYapyc(ctx, instance, pyYapyc, yapycTokens, pyPBRef, pyProtoSourceInputs(inputs))
 
 	if yapyRes == nil {
 		yapyRes = &GeneratedPyProtoYapycResult{}
 	}
 
-	return pyProtoAuxEntriesForSource(instance, d, src, pyPBRef, pyProtoSourceInputs(inputs), outputs, yapyRes.Refs, yapyRes.Outputs)
+	if generated {
+		return nil, genProtoResEntriesForSource(instance, d, src, yapycTokens, pyPBRef, outputs, yapyRes.Refs, yapyRes.Outputs)
+	}
+
+	return pyProtoAuxEntriesForSource(instance, d, src, pyPBRef, pyProtoSourceInputs(inputs), outputs, yapyRes.Refs, yapyRes.Outputs), nil
 }
 
 func protoPythonOutputRoot(d *ModuleData) string {
@@ -407,7 +448,7 @@ type GeneratedPyProtoYapycResult struct {
 	Outputs []VFS
 }
 
-func emitGeneratedPyProtoYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs []VFS, pyPBRef NodeRef, sourceInputs []VFS) *GeneratedPyProtoYapycResult {
+func emitGeneratedPyProtoYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs []VFS, tokens []string, pyPBRef NodeRef, sourceInputs []VFS) *GeneratedPyProtoYapycResult {
 	na := ctx.na
 
 	py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin := py3ccToolRefs(ctx, instance)
@@ -415,12 +456,22 @@ func emitGeneratedPyProtoYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs [
 	res := &GeneratedPyProtoYapycResult{}
 
 	for i, pyOut := range pyOutputs {
-		out := build(pyOut.rel() + "." + suffix + ".yapyc3")
+		// upstream: dst = path + uniq_suffix(path); uniq_suffix is empty when the
+		// pb2_arg token has no '/' (the bare generated-proto token), so the yapyc3
+		// gets no path-id suffix. py3cc's first arg is rootrel_arc_src(token), which
+		// is the bare token for a generated proto and pyOut.rel() for a checked-in one.
+		uniq := ""
+
+		if strings.Contains(tokens[i], "/") {
+			uniq = "." + suffix
+		}
+
+		out := build(pyOut.rel() + uniq + ".yapyc3")
 		cmdArgs := []STR{
 			(py3ccBinary).str(),
 			argSlowPy3cc.str(),
 			(py3ccSlowBin).str(),
-			internStr(pyOut.rel() + "-"),
+			internStr(tokens[i] + "-"),
 			(pyOut).str(),
 			(out).str(),
 		}
@@ -494,6 +545,162 @@ func pyProtoAuxEntriesForSource(instance ModuleInstance, d *ModuleData, src stri
 	}
 
 	return entries
+}
+
+// GenProtoResEntry is one resfs resource of a build-generated proto's python
+// output (the `_pb2.py` / `.yapyc3` files). Upstream feeds the generated py back
+// through onpy_srcs with the bare pb2_arg token, so the resource embeds via
+// objcopy (no ${ARCADIA_BUILD_ROOT} literal in the path) rather than the
+// rescompiler _raw.auxcpp path checked-in protos use.
+type GenProtoResEntry struct {
+	// token is the bare pb2_arg source token (the objcopy hash path and the
+	// resfs/src ${rootrel input} argument).
+	token string
+	// key is the resfs/file/py/<…> resource key.
+	key string
+	// output is the physical $(B) artifact embedded as the resource.
+	output VFS
+	// producer is the node that emits output (the PB protoc node or the py3cc
+	// bytecode node), depended on by the objcopy node.
+	producer NodeRef
+}
+
+func genProtoResEntriesForSource(instance ModuleInstance, d *ModuleData, src string, tokens []string, pyPBRef NodeRef, pyOutputs []VFS, yapyRefs []NodeRef, yapyOuts []VFS) []GenProtoResEntry {
+	var entries []GenProtoResEntry
+
+	add := func(token, suffix string, output VFS, producer NodeRef) {
+		entries = append(entries, GenProtoResEntry{
+			token:    token,
+			key:      "resfs/file/py/" + protoPythonResourceKey(instance, d, src, suffix),
+			output:   output,
+			producer: producer,
+		})
+	}
+
+	// The yapyc3 resource token mirrors the pb2 token plus whatever suffix the
+	// physical output carries over its pb2 sibling (uniq_suffix + ".yapyc3"),
+	// derived from the outputs so it stays correct whether or not uniq is empty.
+	yapToken := func(i int) string {
+		return tokens[i] + strings.TrimPrefix(yapyOuts[i].rel(), pyOutputs[i].rel())
+	}
+
+	add(tokens[0], "_pb2.py", pyOutputs[0], pyPBRef)
+
+	if len(yapyOuts) > 0 {
+		add(yapToken(0), "_pb2.py.yapyc3", yapyOuts[0], yapyRefs[0])
+	}
+
+	if d.grpc && len(pyOutputs) > 1 {
+		add(tokens[1], "_pb2_grpc.py", pyOutputs[1], pyPBRef)
+
+		if len(yapyOuts) > 1 {
+			add(yapToken(1), "_pb2_grpc.py.yapyc3", yapyOuts[1], yapyRefs[1])
+		}
+	}
+
+	return entries
+}
+
+func emitGeneratedPyProtoObjcopy(ctx *GenCtx, instance ModuleInstance, d *ModuleData, entries []GenProtoResEntry) *ObjcopyEmitResult {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	na := ctx.na
+	oc := newObjcopyEmitCtx(ctx, d, instance.Platform)
+	res := &ObjcopyEmitResult{}
+
+	// Upstream tags the PY3_PROTO submodule's resfs objcopy MODULE_TAG=PY3_PROTO,
+	// which folds into the objcopy_<hash> output name; the dumped target property
+	// is the lowercased submodule tag.
+	hashTag := stringPtr("PY3_PROTO")
+
+	type chunk struct {
+		paths   []string
+		keysB64 []string
+		kvsHash []string
+		kvsCmd  []string
+		inputs  []VFS
+		deps    []NodeRef
+		cmdLen  int
+	}
+
+	cur := chunk{}
+	depSeen := map[NodeRef]struct{}{}
+
+	flush := func() {
+		if cur.cmdLen == 0 {
+			return
+		}
+
+		hash := objcopyHash(cur.paths, cur.keysB64, cur.kvsHash, instance.Path.rel(), hashTag)
+		outputObj := build(instance.Path.rel() + "/objcopy_" + hash + ".o")
+
+		payload := make([]STR, 0, 2+len(cur.inputs)+len(cur.keysB64)+1+len(cur.kvsCmd))
+		payload = append(payload, argInputs.str())
+
+		for _, p := range cur.inputs {
+			payload = append(payload, (p).str())
+		}
+
+		payload = append(payload, argKeys.str())
+		payload = appendInternStrs(payload, cur.keysB64)
+		payload = append(payload, argKvs.str())
+		payload = appendInternStrs(payload, cur.kvsCmd)
+
+		cmdArgs := objcopyCmdArgs(oc, outputObj, payload)
+		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+
+		node := &Node{
+			Platform:         instance.Platform,
+			Cmds:             na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
+			Env:              env,
+			Inputs:           na.inputList(rescompilersChunk, cur.inputs, objcopyScriptChunk),
+			Outputs:          na.vfsList(outputObj),
+			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
+			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleTag: tagPy3Proto},
+			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			Resources:        instance.Platform.UsesPython3Clang,
+		}
+
+		node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
+		node.DepRefs = append(node.DepRefs, cur.deps...)
+
+		r := ctx.emit.emit(node)
+		res.Refs = append(res.Refs, r)
+		res.Outputs = append(res.Outputs, outputObj)
+		cur = chunk{}
+		depSeen = map[NodeRef]struct{}{}
+	}
+
+	for _, e := range entries {
+		kvHash := "resfs/src/" + e.key + "=${rootrel;context=TEXT;input=TEXT:\"" + e.token + "\"}"
+		kvCmd := "resfs/src/" + e.key + "=" + e.output.rel()
+		kb64 := encb64.StdEncoding.EncodeToString([]byte(e.key))
+
+		cur.paths = append(cur.paths, e.token)
+		cur.keysB64 = append(cur.keysB64, kb64)
+		cur.kvsHash = append(cur.kvsHash, kvHash)
+		cur.kvsCmd = append(cur.kvsCmd, kvCmd)
+		cur.inputs = append(cur.inputs, e.output)
+
+		if e.producer != NodeRef(0) {
+			if _, ok := depSeen[e.producer]; !ok {
+				depSeen[e.producer] = struct{}{}
+				cur.deps = append(cur.deps, e.producer)
+			}
+		}
+
+		cur.cmdLen += rootCmdLen + len(e.token) + len(kb64) + len(kvHash) + len(kvCmd)
+
+		if cur.cmdLen >= maxCmdLen {
+			flush()
+		}
+	}
+
+	flush()
+
+	return res
 }
 
 func pyProtoSourceInputs(inputs []VFS) []VFS {

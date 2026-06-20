@@ -325,7 +325,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// self-dependency (the old two-phase code bound the ref only after this resolve).
 	prExtraDepRefs := resolveCodegenDepRefs(ctx, instance, depInputs, toolLDRef, prRef)
 
-	emitPR(instance, stmt, toolBinPath, toolLDRef, auxTools, inVFSByToken, inVFSs, outVFSByToken, stdoutVFS, inputClosure, prExtraDepRefs, prRef, ctx.emit)
+	emitPR(instance, stmt, toolBinPath, toolLDRef, auxTools, inVFSByToken, inVFSs, outVFSByToken, stdoutVFS, inputClosure, prExtraDepRefs, cfModuleTag(d, instance), prRef, ctx.emit)
 
 	return prRef
 }
@@ -721,6 +721,7 @@ func emitPR(
 	stdoutVFS *VFS,
 	inputClosure []VFS,
 	extraDepRefs []NodeRef,
+	moduleTag STR,
 	id NodeRef,
 	emit Emitter,
 ) {
@@ -885,7 +886,7 @@ func emitPR(
 		Inputs:           inputs,
 		Outputs:          outputs,
 		KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
+		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleTag: moduleTag},
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:          deps,
 		ForeignDepRefs:   foreignDepRefs,
