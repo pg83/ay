@@ -994,6 +994,25 @@ func (p *Parser) parseMacroInto(into []Stmt, nameTok Token) []Stmt {
 	}
 
 	args := p.parseMacroArgs(nameTok)
+
+	// CPP_ENUMS_SERIALIZATION (build/plugins/pybuild.py) expands to one
+	// ongenerate_enum_serialization_with_header(arg) per header argument; a
+	// NAMESPACE token consumes its following value as a control token and emits
+	// nothing. One macro -> many statements, so it cannot ride the single-Stmt
+	// buildStmtFor path.
+	if nameTok.val == "CPP_ENUMS_SERIALIZATION" {
+		for i := 0; i < len(args); i++ {
+			if args[i].string() == "NAMESPACE" {
+				i++ // skip the namespace value
+				continue
+			}
+
+			into = append(into, &GenerateEnumSerializationStmt{Header: args[i].string(), Variant: "with_header", Line: nameTok.line})
+		}
+
+		return into
+	}
+
 	stmt := p.buildStmt(nameTok, args)
 
 	// Fold a SET into the parse-time env so a later INCLUDE path argument can

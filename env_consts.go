@@ -37,6 +37,7 @@ var (
 	envCXX_RT                       = internEnv("CXX_RT")
 	envDISABLE_INSTRUCTION_SETS     = internEnv("DISABLE_INSTRUCTION_SETS")
 	envDYLD_LIBRARY_PATH            = internEnv("DYLD_LIBRARY_PATH")
+	envCPP_PROTO                    = internEnv("CPP_PROTO")
 	envGEN_PROTO                    = internEnv("GEN_PROTO")
 	envGORACE                       = internEnv("GORACE")
 	envHAVE_MKL                     = internEnv("HAVE_MKL")
