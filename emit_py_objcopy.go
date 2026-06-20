@@ -159,6 +159,16 @@ func emitResourceObjcopy(
 	cur := acc{}
 	moduleTag := resourceLibTagForData(d)
 
+	// A RESOURCE() in a PROTO_LIBRARY body belongs to the C++ _CPP_PROTO submodule
+	// (MODULE_TAG=CPP_PROTO; same predicate as cfModuleTag). Upstream's resfs
+	// objcopy packer folds that submodule tag into the output-name hash and stamps
+	// the node's module_tag with the lowercased tag.
+	cppProtoSubmodule := cfModuleTag(d, instance) == tagCppProto
+	if cppProtoSubmodule {
+		s := strCPPProto.string()
+		moduleTag = &s
+	}
+
 	flush := func() {
 		if cur.cmdLen == 0 {
 			return
@@ -231,6 +241,8 @@ func emitResourceObjcopy(
 			resTargetProps.ModuleTag = tagPy3BinLib
 		case d.moduleStmt.Name == tokPy3Program:
 			resTargetProps.ModuleTag = tagPy3Bin
+		case cppProtoSubmodule:
+			resTargetProps.ModuleTag = tagCppProto
 		}
 
 		node := &Node{

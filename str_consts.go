@@ -164,6 +164,7 @@ var (
 	strZero                                          = internStr("0")
 	tagCppFbs                                        = internStr("cpp_fbs")
 	tagCppProto                                      = internStr("cpp_proto")
+	tagCppProtoGlobal                                = internStr("cpp_proto_global")
 	tagDll                                           = internStr("dll")
 	tagGlobal                                        = internStr("global")
 	tagPy3                                           = internStr("py3")
