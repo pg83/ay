@@ -9,7 +9,7 @@ import (
 var (
 	yasmIncludeRe           = regexp.MustCompile(`(?i)^\s*%\s*include\s*[<"]([^>"]+)[>"]`)
 	swigIncludeRe           = regexp.MustCompile(`^%(include|import|insert\s*\([^\)]*\))\s*([<"].*?[">])`)
-	cythonCimportFromRe     = regexp.MustCompile(`^\s*from\s+([A-Za-z0-9_\.]+)\s+cimport\b`)
+	cythonCimportFromRe     = regexp.MustCompile(`^\s*from\s+([A-Za-z0-9_\.]+)\s+cimport\s+(.+)$`)
 	cythonCimportRe         = regexp.MustCompile(`^\s*cimport\s+(.+)$`)
 	cythonIncludeRe         = regexp.MustCompile(`^\s*include\s+["']([^"']+)["']`)
 	cythonExternFromRe      = regexp.MustCompile(`^\s*cdef\s+extern\s+from\s+(<[^>]+>|"[^"]+"|'[^']+')`)
@@ -215,10 +215,8 @@ func (CythonIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAlloca
 			return
 		}
 
-		if m := cythonCimportFromRe.FindStringSubmatch(s); len(m) == 2 {
-			if t := cythonPxdTarget(m[1]); t != "" {
-				add(IncludeDirective{kind: includeQuoted, target: internStr(t)})
-			}
+		if m := cythonCimportFromRe.FindStringSubmatch(s); len(m) == 3 {
+			addCythonCimportFrom(add, m[1], m[2])
 
 			return
 		}
@@ -235,9 +233,7 @@ func (CythonIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAlloca
 					part = part[:idx]
 				}
 
-				if t := cythonPxdTarget(part); t != "" {
-					add(IncludeDirective{kind: includeQuoted, target: internStr(t)})
-				}
+				addCythonPxdCandidates(add, strings.ReplaceAll(part, ".", "/"))
 			}
 		}
 	})
@@ -251,17 +247,120 @@ func (CythonIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAlloca
 	return ParsedIncludeSet{parsedIncludesLocal: block[:k:k]}
 }
 
-func cythonPxdTarget(module string) string {
-	if module == "cython" || strings.HasPrefix(module, "cython.") {
-		return ""
+// addCythonPxdCandidates emits the cython "pxd-or-package" probe pair for a
+// slash-joined module path — `path.pxd` (includeCythonOptional) then, as a
+// first-resolved fallback, `path/__init__.pxd` (includeCythonFallback). Mirrors
+// upstream cython_processor.cpp CimportSimple, which resolves the module .pxd
+// and only probes the package init when that does not resolve — pushing exactly
+// one path. A `cython`-rooted path declares no source dependency (it is the
+// cython runtime), so it is skipped.
+func addCythonPxdCandidates(add func(IncludeDirective), path string) {
+	if path == "" {
+		return
 	}
 
-	switch module {
-	case "cpython", "libc", "libcpp":
-		return module + "/__init__.pxd"
-	default:
-		return strings.ReplaceAll(module, ".", "/") + ".pxd"
+	if first, _ := firstComponent(path); first == "cython" {
+		return
 	}
+
+	add(IncludeDirective{kind: includeCythonOptional, target: internStr(path + ".pxd")})
+	add(IncludeDirective{kind: includeCythonFallback, target: internStr(path + "/__init__.pxd")})
+}
+
+// addCythonCimportFrom emits the candidate set for `from module cimport names`,
+// mirroring upstream cython_processor.cpp CimportFrom: the package
+// `searchPath/__init__.pxd` (always tried), the module `searchPath.pxd`, and —
+// only when that module .pxd does NOT resolve (needCheckLists) — each cimported
+// name as a submodule `searchPath/name/__init__.pxd` (or, as a first-resolved
+// fallback, `searchPath/name.pxd`). All probes are best-effort; resolution keeps
+// only the files that exist. The module candidate is emitted as
+// includeCythonModule and the per-name primary as includeCythonName immediately
+// after it, so the scanner can apply upstream's needCheckLists=false suppression
+// (a resolving module .pxd drops the name list); each name's `.pxd` is an
+// includeCythonFallback probed only when its `/__init__.pxd` primary misses.
+func addCythonCimportFrom(add func(IncludeDirective), module, names string) {
+	searchPath, ok := cythonFromSearchPath(module)
+
+	if !ok {
+		return
+	}
+
+	if first, _ := firstComponent(searchPath); first == "cython" {
+		return
+	}
+
+	emit := func(kind IncludeKind, rel string) {
+		add(IncludeDirective{kind: kind, target: internStr(rel)})
+	}
+
+	if searchPath == "" {
+		emit(includeCythonOptional, "__init__.pxd")
+	} else {
+		emit(includeCythonOptional, searchPath+"/__init__.pxd")
+		emit(includeCythonModule, searchPath+".pxd")
+	}
+
+	for _, name := range parseCythonCimportNames(names) {
+		base := name
+
+		if searchPath != "" {
+			base = searchPath + "/" + name
+		}
+
+		emit(includeCythonName, base+"/__init__.pxd")
+		emit(includeCythonFallback, base+".pxd")
+	}
+}
+
+// cythonFromSearchPath turns a `from <module> cimport` module spec into a search
+// path, applying cython's relative-import rule: one leading dot is the
+// package-relative marker; each additional dot ascends one level (`../`).
+// Remaining dots become path separators.
+func cythonFromSearchPath(module string) (string, bool) {
+	dots := 0
+
+	for dots < len(module) && module[dots] == '.' {
+		dots++
+	}
+
+	rest := strings.ReplaceAll(module[dots:], ".", "/")
+
+	if dots == 0 {
+		return rest, true
+	}
+
+	return strings.Repeat("../", dots-1) + rest, true
+}
+
+// parseCythonCimportNames extracts the cimported names from a `from … cimport
+// <names>` tail: strips a trailing `#` comment and surrounding parentheses, splits
+// on commas, drops `as`-aliases and the `*` wildcard.
+func parseCythonCimportNames(names string) []string {
+	if i := strings.IndexByte(names, '#'); i >= 0 {
+		names = names[:i]
+	}
+
+	names = strings.TrimSpace(names)
+	names = strings.TrimPrefix(names, "(")
+	names = strings.TrimSuffix(names, ")")
+
+	var out []string
+
+	for _, part := range strings.Split(names, ",") {
+		part = strings.TrimSpace(part)
+
+		if idx := strings.IndexAny(part, " \t"); idx >= 0 {
+			part = part[:idx]
+		}
+
+		if part == "" || part == "*" {
+			continue
+		}
+
+		out = append(out, part)
+	}
+
+	return out
 }
 
 func (FlatbuffersIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {

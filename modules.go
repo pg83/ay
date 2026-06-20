@@ -899,6 +899,7 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 	applyPython3AddIncl(modulePath, d)
 	applyBuildInfoAddIncl(modulePath, d)
 	applyArchiveAddIncl(modulePath, d)
+	applyCythonHeaderAddIncl(modulePath, d)
 
 	cflagPrefix := append(muslCFlags(d.muslEnabled && !effectiveNoPlatform(d.flags)), sseBaseCFlags(env.bool(envARCH_X86_64))...)
 	d.moduleScopeCFlags = append(cflagPrefix, d.moduleScopeCFlags...)
@@ -1119,6 +1120,29 @@ func applyArchiveAddIncl(modulePath string, d *ModuleData) {
 		d.addIncl = append(d.addIncl, include)
 		d.addInclGlobal = append(d.addInclGlobal, include)
 		d.addInclUserGlobal = append(d.addInclUserGlobal, include)
+	}
+}
+
+// applyCythonHeaderAddIncl reproduces the `${hide;addincl;tobindir;output;...}`
+// side effect of the _BUILDWITH_CYTHON_*_H / _API_H macros (ymake.core.conf):
+// the generated .h / _api.h output's build directory enters the module's
+// include dirs at Global scope (macro_processor.cpp AddToIncl →
+// AddIncdir(Parent(output), Global)). A cython source that cdef-externs the bare
+// generated header name (lxml includes/etreepublic.pxd's
+// `cdef extern from "etree_api.h"`) and the generated .c that #includes it both
+// resolve it through this dir; without it the consumer never reaches the api
+// header and misses the producing node's pyx-closure passthrough.
+func applyCythonHeaderAddIncl(modulePath string, d *ModuleData) {
+	for _, stmt := range d.cythonCpp {
+		if !stmt.Header {
+			continue
+		}
+
+		dir := build(pathDir(modulePath + "/" + cythonNoExt(stmt.Src)))
+
+		d.addIncl = append(d.addIncl, dir)
+		d.addInclGlobal = append(d.addInclGlobal, dir)
+		d.addInclUserGlobal = append(d.addInclUserGlobal, dir)
 	}
 }
 

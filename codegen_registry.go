@@ -42,6 +42,16 @@ type GeneratedFileInfo struct {
 	// tool / script sources too. Zero len means "nothing to propagate".
 	SourceInputs []VFS
 
+	// CythonInducedPyx is the producing cython node's resolved "pyx"-language
+	// cimport/include/pxd closure, recorded on a generated _H / _API_H header
+	// output. Upstream's TCythonIncludeProcessor attaches this as EVI_InducedDeps
+	// "pyx" (action Use, PassInducedIncludesThroughFiles=true): a CYTHON source
+	// that cdef-externs this header Uses the set as its own cython source
+	// dependencies. It is read explicitly when building a consuming CY node's
+	// inputs (cythonInducedPyxClosure) — NOT spliced into the closure window — so
+	// it reaches the cython transpile node but not the generated .c's C++ compile.
+	CythonInducedPyx []VFS
+
 	// ClosureLeaves are extra VFS that must ride in this output's include-closure
 	// window as bare, non-expanded members — a "generated-from"/source input edge,
 	// not a C++ include. COPY_FILE(TEXT) registers its $(S) source (+ fs_tools.py
@@ -179,6 +189,28 @@ func (r *CodegenRegistry) isLeafEver(v VFS) bool {
 func (r *CodegenRegistry) closureLeaves(node VFS) []VFS {
 	if info, ok := r.byStr.get(STR(node.strID())); ok {
 		return info.ClosureLeaves
+	}
+
+	return nil
+}
+
+// setCythonPyxInduced records a generated header's cython-induced "pyx" closure
+// (see GeneratedFileInfo.CythonInducedPyx). node must already be registered.
+func (r *CodegenRegistry) setCythonPyxInduced(node VFS, pyx []VFS) {
+	info, ok := r.byStr.get(STR(node.strID()))
+
+	if !ok {
+		throwFmt("CodegenRegistry: setCythonPyxInduced on unregistered path %q", node.string())
+	}
+
+	info.CythonInducedPyx = pyx
+}
+
+// cythonPyxInduced returns node's recorded cython-induced "pyx" closure (nil if
+// node is not a registered generated header or carries none).
+func (r *CodegenRegistry) cythonPyxInduced(node VFS) []VFS {
+	if info, ok := r.byStr.get(STR(node.strID())); ok {
+		return info.CythonInducedPyx
 	}
 
 	return nil
