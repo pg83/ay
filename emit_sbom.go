@@ -126,7 +126,11 @@ func emitSbomComponent(ctx *GenCtx, instance ModuleInstance, d *ModuleData, real
 	// MODULE_TAG of the component — only the multimodule variants carry one (the
 	// same value as their CC objects' module_tag): PY23_LIBRARY -> py3,
 	// PY23_NATIVE_LIBRARY -> py3_native, PY3_PROGRAM -> py3_bin_lib (its
-	// SRCS_GLOBAL-owning lib half). A plain PY3_LIBRARY / CPP carries none.
+	// SRCS_GLOBAL-owning lib half), PROTO_LIBRARY -> cpp_proto (the CPP_PROTO
+	// submodule — the only proto submodule keeping _NEED_SBOM_INFO=yes, so the
+	// one that generates the .CPP component — carries MODULE_TAG=CPP_PROTO;
+	// sbomQualifies already excluded the EXCLUDE_TAGS(CPP_PROTO) py-only case).
+	// A plain PY3_LIBRARY / CPP carries none.
 	var moduleTag STR
 
 	switch d.moduleStmt.Name {
@@ -136,6 +140,8 @@ func emitSbomComponent(ctx *GenCtx, instance ModuleInstance, d *ModuleData, real
 		moduleTag = tagPy3Native
 	case tokPy3Program, tokPy3ProgramBin:
 		moduleTag = tagPy3BinLib
+	case tokProtoLibrary:
+		moduleTag = tagCppProto
 	}
 
 	node := &Node{
