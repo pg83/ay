@@ -371,7 +371,9 @@ func normalizeDotDotSegments(rel string) string {
 func isCxxSource(srcRel string) bool {
 	return strings.HasSuffix(srcRel, ".cpp") ||
 		strings.HasSuffix(srcRel, ".cc") ||
-		strings.HasSuffix(srcRel, ".cxx")
+		strings.HasSuffix(srcRel, ".cxx") ||
+		// Uppercase .C compiles as C++ upstream (_SRC("C") → $_SRC_cpp).
+		strings.HasSuffix(srcRel, ".C")
 }
 
 func pickWarningFlags(noCompilerWarnings bool, noWShadow bool) []ARG {

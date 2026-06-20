@@ -35,7 +35,11 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 	case strings.HasSuffix(srcRel, ".c"),
 		strings.HasSuffix(srcRel, ".cpp"),
 		strings.HasSuffix(srcRel, ".cc"),
-		strings.HasSuffix(srcRel, ".cxx"):
+		strings.HasSuffix(srcRel, ".cxx"),
+		// Uppercase .C is a C++ source upstream (_SRC("C") → $_SRC_cpp,
+		// ymake.core.conf:3466); HasSuffix is case-sensitive so it does not
+		// collide with .c. isCxxSource classifies it as C++.
+		strings.HasSuffix(srcRel, ".C"):
 		return emitLibraryCSource(ctx, instance, d, srcRel, in)
 	case strings.HasSuffix(srcRel, ".S"),
 		strings.HasSuffix(srcRel, ".s"),
