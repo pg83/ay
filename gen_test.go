@@ -2491,25 +2491,25 @@ func TestMergeGeneratedFirstClaims_HostWinsOnConflict(t *testing.T) {
 	targetOnly := build("yabs/server/libs/regular/regular_gen.h")
 	hostOnly := build("yabs/server/cs/libs/tooler/tool_gen.h")
 
-	host := &IncludeScanner{generatedFirstClaim: map[VFS]string{
-		conflicted: effectiveOwner,
-		hostOnly:   toolOnlyOwner,
+	host := &IncludeScanner{generatedFirstClaim: map[VFS]GenOwner{
+		conflicted: {Dir: effectiveOwner},
+		hostOnly:   {Dir: toolOnlyOwner},
 	}}
-	target := &IncludeScanner{generatedFirstClaim: map[VFS]string{
-		conflicted: downstreamPeer,
-		targetOnly: regularOwner,
+	target := &IncludeScanner{generatedFirstClaim: map[VFS]GenOwner{
+		conflicted: {Dir: downstreamPeer},
+		targetOnly: {Dir: regularOwner},
 	}}
 
 	// Production call order: host scanner first so it wins on conflict.
 	merged := mergeGeneratedFirstClaims(host, target)
 
-	if got := merged[conflicted]; got != effectiveOwner {
+	if got := merged[conflicted].Dir; got != effectiveOwner {
 		t.Fatalf("conflicting cpp_import header: got module_dir %q, want effective owner %q", got, effectiveOwner)
 	}
-	if got := merged[targetOnly]; got != regularOwner {
+	if got := merged[targetOnly].Dir; got != regularOwner {
 		t.Fatalf("target-only generated file must keep its claim: got %q, want %q", got, regularOwner)
 	}
-	if got := merged[hostOnly]; got != toolOnlyOwner {
+	if got := merged[hostOnly].Dir; got != toolOnlyOwner {
 		t.Fatalf("host-only generated file must keep its claim: got %q, want %q", got, toolOnlyOwner)
 	}
 }
