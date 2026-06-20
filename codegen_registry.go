@@ -52,6 +52,14 @@ type GeneratedFileInfo struct {
 	// it reaches the cython transpile node but not the generated .c's C++ compile.
 	CythonInducedPyx []VFS
 
+	// CythonMainOut is the producing cython node's MAIN generated output (the .c /
+	// .cpp), recorded on each of its _H / _API_H header outputs. The header is an
+	// OutTogether ${output} sibling of this main; a generated cython compile whose
+	// include closure reaches the header lists the main as an input (upstream's
+	// OutTogether main edge). Read together with CythonInducedPyx by
+	// cythonCompileInducedInputs. Zero value means "no main recorded".
+	CythonMainOut VFS
+
 	// ClosureLeaves are extra VFS that must ride in this output's include-closure
 	// window as bare, non-expanded members — a "generated-from"/source input edge,
 	// not a C++ include. COPY_FILE(TEXT) registers its $(S) source (+ fs_tools.py
@@ -195,8 +203,10 @@ func (r *CodegenRegistry) closureLeaves(node VFS) []VFS {
 }
 
 // setCythonPyxInduced records a generated header's cython-induced "pyx" closure
-// (see GeneratedFileInfo.CythonInducedPyx). node must already be registered.
-func (r *CodegenRegistry) setCythonPyxInduced(node VFS, pyx []VFS) {
+// and the producing node's main generated output (see
+// GeneratedFileInfo.CythonInducedPyx / CythonMainOut). node must already be
+// registered.
+func (r *CodegenRegistry) setCythonPyxInduced(node VFS, pyx []VFS, mainOut VFS) {
 	info, ok := r.byStr.get(STR(node.strID()))
 
 	if !ok {
@@ -204,6 +214,7 @@ func (r *CodegenRegistry) setCythonPyxInduced(node VFS, pyx []VFS) {
 	}
 
 	info.CythonInducedPyx = pyx
+	info.CythonMainOut = mainOut
 }
 
 // cythonPyxInduced returns node's recorded cython-induced "pyx" closure (nil if
@@ -214,6 +225,17 @@ func (r *CodegenRegistry) cythonPyxInduced(node VFS) []VFS {
 	}
 
 	return nil
+}
+
+// cythonPyxInducedInfo returns node's recorded cython-induced "pyx" closure and
+// the producing node's main generated output (nil/0 if node is not a registered
+// generated header or carries none).
+func (r *CodegenRegistry) cythonPyxInducedInfo(node VFS) ([]VFS, VFS) {
+	if info, ok := r.byStr.get(STR(node.strID())); ok {
+		return info.CythonInducedPyx, info.CythonMainOut
+	}
+
+	return nil, 0
 }
 
 func (r *CodegenRegistry) setSourceInputs(path VFS, src []VFS) {

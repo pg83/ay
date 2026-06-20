@@ -224,7 +224,7 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 
 			for _, h := range headerVFS {
 				registerBoundGeneratedParsedOutput(ctx, instance, pkCY, h, nil, cyRef, nil)
-				ctx.scannerFor(instance).codegen.setCythonPyxInduced(h, pyxInduced)
+				ctx.scannerFor(instance).codegen.setCythonPyxInduced(h, pyxInduced, generatedVFS)
 			}
 		}
 
@@ -352,8 +352,21 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 		ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), generatedVFS, scanIn.ScanCfg)
 		// The generated .cpp #includes codegen headers (e.g. proto .pb.h); like a
 		// regular CC source (emit_cc.go), resolve their producers into deps — the CY
-		// node alone does not cover them.
+		// node alone does not cover them. Resolve deps over the un-augmented closure:
+		// the cython-induced "pyx" augmentation below adds the api-header producer's
+		// main output (already a dep through the api-header itself), so deps stay
+		// byte-identical.
 		ccIn.ExtraDepRefs = append([]NodeRef{cyRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, cyRef)...)
+
+		// A generated cython .c/.cpp that #includes a sibling statement's generated
+		// _api.h (objectify.pyx.c → etree_api.h) Uses the producer CY node's "pyx"
+		// induced closure (etree.pyx + its .pxi/.pxd) and lists the producer's main
+		// output (etree.c) — the upstream EVI_InducedDeps "pyx" Use passthrough
+		// (PassInducedIncludesThroughFiles) plus the api-header OutTogether main. This
+		// lands on the generated compile only; resolving the pyx files as regular
+		// includes would re-pull the producer's cdef-extern C headers, so they ride
+		// non-expanded.
+		ccIn.IncludeInputs = cythonCompileInducedInputs(ctx, instance, ccIn.IncludeInputs)
 
 		ccRef, ccOut, _ := emitCC(instance, generated, generatedVFS, ccIn, ctx.host, ctx.emit)
 		out = append(out, &SourceEmit{Ref: ccRef, OutPath: ccOut})
@@ -447,6 +460,44 @@ func cythonInducedPyxClosure(ctx *GenCtx, instance ModuleInstance, sourceClosure
 	}
 
 	return keepOnlySourceVFS(dedupVFS(append([][]VFS{toolInputs}, induced...)...))
+}
+
+// cythonCompileInducedInputs augments a generated cython .c/.cpp compile's input
+// closure with the cython-induced "pyx" Use passthrough of every generated _H /
+// _API_H header reached in the compile's include closure: the producing CY node's
+// "pyx" closure (etree.pyx + its .pxi/.pxd) and the producer's main generated
+// output (etree.c, the api-header OutTogether main). Both ride as bare,
+// non-expanded inputs — re-resolving the .pxd/.pyx through the cython parser would
+// pull the producer's cdef-extern C headers, which the C++ compile must not carry.
+// Returns includeInputs unchanged when no reached header records an induced set.
+func cythonCompileInducedInputs(ctx *GenCtx, instance ModuleInstance, includeInputs []VFS) []VFS {
+	reg := codegenRegForInstance(ctx, instance)
+
+	var extra [][]VFS
+
+	for _, v := range includeInputs {
+		if !v.isBuild() {
+			continue
+		}
+
+		pyx, mainOut := reg.cythonPyxInducedInfo(v)
+
+		if len(pyx) == 0 {
+			continue
+		}
+
+		extra = append(extra, pyx)
+
+		if mainOut != 0 {
+			extra = append(extra, []VFS{mainOut})
+		}
+	}
+
+	if len(extra) == 0 {
+		return includeInputs
+	}
+
+	return dedupVFS(append([][]VFS{includeInputs}, extra...)...)
 }
 
 func cythonGeneratedOutputInputs(ctx *GenCtx, instance ModuleInstance, src VFS, sourceClosure []VFS, cMode bool, scanIn ModuleCCInputs) ([]VFS, []VFS) {

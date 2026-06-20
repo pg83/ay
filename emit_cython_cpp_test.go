@@ -395,6 +395,77 @@ func TestGen_CythonApiHeaderPyxClosurePassThrough(t *testing.T) {
 	}
 }
 
+func TestGen_CythonGeneratedCompileCarriesInducedPyx(t *testing.T) {
+	// Upstream TCythonIncludeProcessor's rule has EVI_InducedDeps "pyx" -> Use with
+	// PassInducedIncludesThroughFiles=true: the producer CY node's "pyx" induced
+	// closure (prod.pyx + its .pxd/.pxi) rides through files that #include any of
+	// the node's outputs onto the consumer. The generated `cons.pyx.c` #includes the
+	// sibling `prod_api.h` (an OutTogether ${output} of the producer whose MAIN
+	// output is `prod.c`), so the C++ compile of `cons.pyx.c`:
+	//   1. Uses the producer's pyx closure (prod.pyx + helper.pxd + h.pxi), and
+	//   2. lists the producer's main output prod.c.
+	// T-27 routes (1) onto the consuming CY node; this checks the same set + the
+	// main output reach the generated .c's C++ compile, while a hand-written C++
+	// compile (helper.cpp.o) that does NOT #include the api header stays clean.
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeTestModuleFile(files, "pkg/ya.make",
+		"PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nSRCS(helper.cpp)\n"+
+			"ADDINCL(FOR cython pkg)\n"+
+			"PY_SRCS(TOP_LEVEL CYTHON_C app/cons.pyx CYTHON_C_API_H app/prod.pyx)\nEND()\n")
+	// Producer: its pyx closure is prod.pyx + helper.pxd (cimport) + h.pxi (include);
+	// its main generated output is prod.c.
+	writeTestModuleFile(files, "pkg/app/prod.pyx", "from app cimport helper\ninclude \"app/h.pxi\"\n")
+	writeTestModuleFile(files, "pkg/app/helper.pxd", "cdef int a\n")
+	writeTestModuleFile(files, "pkg/app/h.pxi", "cdef int b\n")
+	// Consumer: cimports a pxd that cdef-externs the producer's generated _api.h, so
+	// the generated cons.pyx.c #includes prod_api.h.
+	writeTestModuleFile(files, "pkg/app/cons.pyx", "from app.pub cimport thing\n")
+	writeTestModuleFile(files, "pkg/app/pub.pxd", "cdef extern from \"prod_api.h\":\n    pass\n")
+	// Present in the package but NOT in the producer's closure — must stay absent.
+	writeTestModuleFile(files, "pkg/app/unrelated.pxd", "cdef int z\n")
+	// Hand-written C++ compile that does not #include the api header.
+	writeTestModuleFile(files, "pkg/helper.cpp", "int f(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "pkg")
+
+	compile := mustNodeByOutput(t, g, "$(B)/pkg/_/app/cons.pyx.c.o")
+
+	counts := map[string]int{}
+	for _, in := range compile.flatInputs() {
+		counts[in.string()]++
+	}
+
+	for _, want := range []string{
+		"$(S)/pkg/app/prod.pyx",
+		"$(S)/pkg/app/helper.pxd",
+		"$(S)/pkg/app/h.pxi",
+		"$(B)/pkg/app/prod.c",
+	} {
+		switch counts[want] {
+		case 0:
+			t.Fatalf("generated compile missing producer induced input %q; inputs=%v", want, compile.flatInputs())
+		case 1:
+		default:
+			t.Fatalf("generated compile lists producer induced input %q %d times, want exactly once", want, counts[want])
+		}
+	}
+
+	if counts["$(S)/pkg/app/unrelated.pxd"] != 0 {
+		t.Fatalf("generated compile pulls un-cimported sibling $(S)/pkg/app/unrelated.pxd; inputs=%v", compile.flatInputs())
+	}
+
+	// The hand-written C++ compile must not gain the producer's pyx source closure.
+	helper := mustNodeByOutput(t, g, "$(B)/pkg/helper.cpp.o")
+	for _, in := range helper.flatInputs() {
+		switch in.string() {
+		case "$(S)/pkg/app/prod.pyx", "$(S)/pkg/app/helper.pxd", "$(S)/pkg/app/h.pxi":
+			t.Fatalf("hand-written C++ compile helper.cpp.o wrongly carries producer pyx closure input %q; inputs=%v", in.string(), helper.flatInputs())
+		}
+	}
+}
+
 func TestGen_CythonCimportFromModulePxdSuppressesNameList(t *testing.T) {
 	// Upstream cython_processor.cpp CimportFrom: once `from X cimport names`'s
 	// module `X.pxd` resolves, needCheckLists=false — the per-name submodule
