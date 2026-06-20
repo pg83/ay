@@ -24,6 +24,18 @@ func emitFromSandboxes(ctx *GenCtx, instance ModuleInstance, d *ModuleData) (mem
 	return memberRefs, memberPaths
 }
 
+// fromSandboxScriptInputs are the three scripts the FROM_SANDBOX macro names
+// explicitly on its command path (ymake.core.conf FROM_SANDBOX .CMD): the
+// fetch_from_sandbox.py wrapper plus the hidden process_command_files.py and
+// fetch_from.py. ymake's ${input:"…"} adds exactly the named file — it does not
+// expand the script's Python import closure — so the SB node carries only these
+// three, never the helpers they import (retry.py, error.py).
+var fromSandboxScriptInputs = []VFS{
+	buildScriptsFetchFromSandboxPy,
+	buildScriptsProcessCommandFilesPy,
+	buildScriptsFetchFromPy,
+}
+
 // fromSandboxAutoLinkMember reports whether an auto OUT file is a linkable
 // artifact (static archive or object) that ymake routes into $AUTO_INPUT.
 func fromSandboxAutoLinkMember(name string) bool {
@@ -80,7 +92,7 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 		Platform:         instance.Platform,
 		Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(args), Cwd: build(instance.Path.rel()).str(), Env: env}),
 		Env:              env,
-		Inputs:           na.inputList(ctx.scripts[buildScriptsFetchFromSandboxPy]),
+		Inputs:           na.inputList(fromSandboxScriptInputs),
 		KV:               KV{P: pkSB, PC: pcYellow, ShowOut: true},
 		Outputs:          na.vfsList(outVFSs...),
 		Requirements:     Requirements{CPU: float64(1), Network: nwFull, RAM: float64(32)},
