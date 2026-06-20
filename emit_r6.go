@@ -12,17 +12,42 @@ var (
 const (
 	ragel6DefaultFlagOptimized = "-CG2"
 	ragel6DefaultFlagDebug     = "-CT0"
+	// ragel6DefaultOutExt is the `defext=.rl6.cpp` of _SRC("rl6") — appended only
+	// when the noext'd source basename has no remaining extension.
+	ragel6DefaultOutExt = ".rl6.cpp"
 )
 
-// ragel6OutVFS is the generated-cpp path of a ragel source — shared with the
+// ragel6OutVFS is the generated path of a ragel source — shared with the
 // emit_sources.go caller, which registers the output's induced includes and
-// walks its closure before the R6 node exists.
+// walks its closure before the R6 node exists. It reproduces upstream
+// ${output;defext=.rl6.cpp;nopath;noext:SRC} (ymake.core.conf:3303): strip the
+// last extension, then append .rl6.cpp ONLY if the basename has no extension
+// left. So parser.rl6 → parser.rl6.cpp (compiled), but markupfsm.h.rl6 →
+// markupfsm.h (a header, #included not compiled).
 func ragel6OutVFS(instance ModuleInstance, srcRel string) VFS {
-	if strings.Contains(srcRel, "/") {
-		return build(instance.Path.rel() + "/_/" + srcRel + ".cpp")
+	dir := instance.Path.rel() + "/"
+	base := srcRel
+
+	if i := strings.LastIndexByte(srcRel, '/'); i >= 0 {
+		dir = dir + "_/" + srcRel[:i+1]
+		base = srcRel[i+1:]
 	}
 
-	return build(instance.Path.rel() + "/" + srcRel + ".cpp")
+	return build(dir + ragel6OutName(base))
+}
+
+// ragel6OutName applies noext + defext=.rl6.cpp to a ragel source basename.
+func ragel6OutName(base string) string {
+	stem := base
+	if i := strings.LastIndexByte(base, '.'); i >= 0 {
+		stem = base[:i]
+	}
+
+	if strings.ContainsRune(stem, '.') {
+		return stem
+	}
+
+	return stem + ragel6DefaultOutExt
 }
 
 func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ARG, closure []VFS, id NodeRef, emit Emitter) {
@@ -92,6 +117,14 @@ func emitLibraryRagel6Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	rl6Closure := keepOnlySourceVFS(filterEnSerializedSiblings(window))
 
 	emitR6(instance, srcRel, ragelLDRef, ragelBinaryVFS, in.Ragel6Flags, rl6Closure, r6Ref, ctx.emit)
+
+	// A ragel source whose defext'd output is a header (e.g. markupfsm.h.rl6 →
+	// markupfsm.h) generates a #included header, not a translation unit; upstream
+	// drives the follow-up compile purely off the output extension, so a non-C++
+	// artifact is registered (above) but never compiled.
+	if !isCxxSource(r6Out.rel()) {
+		return nil
+	}
 
 	ccSrcRel := strings.TrimPrefix(r6Out.rel(), instance.Path.rel()+"/")
 
