@@ -264,6 +264,252 @@ func TestGen_CythonPyxCarriesNoPxdDep(t *testing.T) {
 	}
 }
 
+func TestGen_CythonNameListCimportClosure(t *testing.T) {
+	// Upstream cython_processor.cpp CimportFrom: `from X cimport name-list`
+	// resolves the package `X/__init__.pxd` (always tried), the module `X.pxd`,
+	// and — when X is a package directory — each cimported name as a submodule
+	// `X/name.pxd` (or `X/name/__init__.pxd`). CimportSimple (`cimport a.b`)
+	// resolves `a/b.pxd` then `a/b/__init__.pxd`. Our parser previously mapped a
+	// cimport to a SINGLE module-as-path `.pxd`, so a `from package cimport names`
+	// whose package has no `package.pxd` resolved nothing (lxml's etree.h missed
+	// lxml/__init__.pxd, includes/__init__.pxd, includes/{config,xpath,c14n}.pxd,
+	// and libc/{limits,stdlib}.pxd).
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeTestModuleFile(files, "pkg/ya.make",
+		"PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\n"+
+			"ADDINCL(FOR cython pkg)\n"+
+			"PY_SRCS(NAMESPACE app mod.pyx)\nEND()\n")
+	writeTestModuleFile(files, "pkg/mod.pyx",
+		"from app cimport top\n"+
+			"from app.includes cimport tree, config\n"+
+			"from libc cimport limits\n"+
+			"include \"x.pxi\"\n")
+	// `from app cimport top`: package init + per-name submodule.
+	writeTestModuleFile(files, "pkg/app/__init__.pxd", "cdef int a\n")
+	writeTestModuleFile(files, "pkg/app/top.pxd", "cdef int b\n")
+	// `from app.includes cimport tree, config`: package init + two submodules.
+	writeTestModuleFile(files, "pkg/app/includes/__init__.pxd", "cdef int c\n")
+	writeTestModuleFile(files, "pkg/app/includes/tree.pxd", "cdef int d\n")
+	writeTestModuleFile(files, "pkg/app/includes/config.pxd", "cdef int e\n")
+	// Present in the same package but NOT cimported — must stay absent.
+	writeTestModuleFile(files, "pkg/app/includes/other.pxd", "cdef int f\n")
+	// `include "x.pxi"`: resolved under the includer dir.
+	writeTestModuleFile(files, "pkg/x.pxi", "cdef int g\n")
+	// `from libc cimport limits`: cython built-in libc include.
+	writeTestModuleFile(files, "contrib/tools/cython/Cython/Includes/libc/__init__.pxd", "")
+	writeTestModuleFile(files, "contrib/tools/cython/Cython/Includes/libc/limits.pxd", "cdef int h\n")
+
+	g := testGen(newMemFS(files), "pkg")
+
+	cy := mustNodeByOutput(t, g, "$(B)/pkg/mod.pyx.cpp")
+
+	counts := map[string]int{}
+	for _, in := range cy.flatInputs() {
+		counts[in.string()]++
+	}
+
+	for _, want := range []string{
+		"$(S)/pkg/app/__init__.pxd",
+		"$(S)/pkg/app/top.pxd",
+		"$(S)/pkg/app/includes/__init__.pxd",
+		"$(S)/pkg/app/includes/tree.pxd",
+		"$(S)/pkg/app/includes/config.pxd",
+		"$(S)/pkg/x.pxi",
+		"$(S)/contrib/tools/cython/Cython/Includes/libc/limits.pxd",
+	} {
+		switch counts[want] {
+		case 0:
+			t.Fatalf("CY node missing name-list cimport input %q; inputs=%v", want, cy.flatInputs())
+		case 1:
+		default:
+			t.Fatalf("CY node lists cimport input %q %d times, want exactly once", want, counts[want])
+		}
+	}
+
+	if counts["$(S)/pkg/app/includes/other.pxd"] != 0 {
+		t.Fatalf("CY node over-collects un-cimported package sibling $(S)/pkg/app/includes/other.pxd; inputs=%v", cy.flatInputs())
+	}
+}
+
+func TestGen_CythonApiHeaderPyxClosurePassThrough(t *testing.T) {
+	// Upstream TCythonIncludeProcessor attaches a cython source's resolved
+	// "pyx"-language cimport/include closure to the node as EVI_InducedDeps "pyx"
+	// (action Use) with PassInducedIncludesThroughFiles=true. So a cython source
+	// that cdef-externs a generated `_api.h` (lxml objectify.pyx → etreepublic.pxd
+	// → `cdef extern from "etree_api.h"`) Uses the producing node's pyx closure
+	// (etree.pyx + its .pxi/.pxd) as its own source dependencies. Before the fix
+	// the generated header carried no parsed includes, so the consumer's CY node
+	// missed the producer's pyx closure (objectify.pyx.c ref-only etree.pyx, the
+	// lxml .pxi set, and the includes/* pxds).
+	//
+	// PY_SRCS lists the consumer (cons) BEFORE the producer (prod) — the lxml
+	// order (CYTHON_C objectify.pyx … CYTHON_C_API_H etree.pyx). The emitter must
+	// register every header output up front (phase 1) so the consumer's closure,
+	// walked while the producer statement is still unprocessed, still resolves the
+	// api header and its pyx closure.
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeTestModuleFile(files, "pkg/ya.make",
+		"PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\n"+
+			"ADDINCL(FOR cython pkg)\n"+
+			"PY_SRCS(TOP_LEVEL CYTHON_C app/cons.pyx CYTHON_C_API_H app/prod.pyx)\nEND()\n")
+	// Producer: its pyx closure is prod.pyx + helper.pxd (cimport) + h.pxi (include).
+	writeTestModuleFile(files, "pkg/app/prod.pyx",
+		"from app cimport helper\ninclude \"app/h.pxi\"\n")
+	writeTestModuleFile(files, "pkg/app/helper.pxd", "cdef int a\n")
+	writeTestModuleFile(files, "pkg/app/h.pxi", "cdef int b\n")
+	// Consumer: cimports a pxd that cdef-externs the producer's generated _api.h.
+	writeTestModuleFile(files, "pkg/app/cons.pyx", "from app.pub cimport thing\n")
+	writeTestModuleFile(files, "pkg/app/pub.pxd", "cdef extern from \"prod_api.h\":\n    pass\n")
+	// Present in the package but NOT in the producer's closure — must stay absent.
+	writeTestModuleFile(files, "pkg/app/unrelated.pxd", "cdef int z\n")
+
+	g := testGen(newMemFS(files), "pkg")
+
+	cons := mustNodeByOutput(t, g, "$(B)/pkg/app/cons.pyx.c")
+
+	counts := map[string]int{}
+	for _, in := range cons.flatInputs() {
+		counts[in.string()]++
+	}
+
+	for _, want := range []string{
+		"$(S)/pkg/app/prod.pyx",
+		"$(S)/pkg/app/helper.pxd",
+		"$(S)/pkg/app/h.pxi",
+	} {
+		switch counts[want] {
+		case 0:
+			t.Fatalf("consumer CY node missing producer pyx-closure input %q; inputs=%v", want, cons.flatInputs())
+		case 1:
+		default:
+			t.Fatalf("consumer CY node lists producer pyx-closure input %q %d times, want exactly once", want, counts[want])
+		}
+	}
+
+	if counts["$(S)/pkg/app/unrelated.pxd"] != 0 {
+		t.Fatalf("consumer CY node pulls un-cimported sibling $(S)/pkg/app/unrelated.pxd; inputs=%v", cons.flatInputs())
+	}
+}
+
+func TestGen_CythonCimportFromModulePxdSuppressesNameList(t *testing.T) {
+	// Upstream cython_processor.cpp CimportFrom: once `from X cimport names`'s
+	// module `X.pxd` resolves, needCheckLists=false — the per-name submodule
+	// probes (`X/name.pxd`) are skipped, because X is a module and the names are
+	// names within it, not submodules. With `X.pxd` reachable through one cython
+	// addincl root and `X/name.pxd` through another (the only way both can resolve,
+	// since a path is a file XOR a directory within a single root), only `X.pxd`
+	// must ride the CY node. Before the fix both were collected.
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeTestModuleFile(files, "pkg/ya.make",
+		"PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\n"+
+			"ADDINCL(FOR cython pkg/ra pkg/rb)\n"+
+			"PY_SRCS(NAMESPACE pkg mod.pyx)\nEND()\n")
+	writeTestModuleFile(files, "pkg/mod.pyx", "from sub cimport leaf\n")
+	// Module `sub.pxd` reachable via root ra → resolves, sets needCheckLists=false.
+	writeTestModuleFile(files, "pkg/ra/sub.pxd", "cdef int a\n")
+	// Submodule `sub/leaf.pxd` reachable via root rb → must be skipped.
+	writeTestModuleFile(files, "pkg/rb/sub/leaf.pxd", "cdef int b\n")
+
+	g := testGen(newMemFS(files), "pkg")
+
+	cy := mustNodeByOutput(t, g, "$(B)/pkg/mod.pyx.cpp")
+
+	got := map[string]bool{}
+	for _, in := range cy.flatInputs() {
+		got[in.string()] = true
+	}
+
+	if !got["$(S)/pkg/ra/sub.pxd"] {
+		t.Fatalf("CY node missing module pxd $(S)/pkg/ra/sub.pxd; inputs=%v", cy.flatInputs())
+	}
+
+	if got["$(S)/pkg/rb/sub/leaf.pxd"] {
+		t.Fatalf("CY node over-collects submodule $(S)/pkg/rb/sub/leaf.pxd after module sub.pxd resolved (needCheckLists must be false); inputs=%v", cy.flatInputs())
+	}
+}
+
+func TestGen_CythonCimportSimpleFirstResolvedFallback(t *testing.T) {
+	// Upstream cython_processor.cpp CimportSimple: `cimport a.b` resolves
+	// `a/b.pxd`; only when that does NOT resolve does it try `a/b/__init__.pxd`.
+	// Exactly one path is pushed. With `sub/leaf.pxd` reachable through one cython
+	// addincl root and `sub/leaf/__init__.pxd` through another (the only way both
+	// can resolve, since a path is a file XOR a directory within a single root),
+	// only `sub/leaf.pxd` must ride the CY node. Before the fix both were collected.
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeTestModuleFile(files, "pkg/ya.make",
+		"PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\n"+
+			"ADDINCL(FOR cython pkg/ra pkg/rb)\n"+
+			"PY_SRCS(NAMESPACE pkg mod.pyx)\nEND()\n")
+	writeTestModuleFile(files, "pkg/mod.pyx", "cimport sub.leaf\n")
+	// `sub/leaf.pxd` reachable via root ra → resolves first, wins.
+	writeTestModuleFile(files, "pkg/ra/sub/leaf.pxd", "cdef int a\n")
+	// `sub/leaf/__init__.pxd` reachable via root rb → fallback, must be skipped.
+	writeTestModuleFile(files, "pkg/rb/sub/leaf/__init__.pxd", "cdef int b\n")
+
+	g := testGen(newMemFS(files), "pkg")
+
+	cy := mustNodeByOutput(t, g, "$(B)/pkg/mod.pyx.cpp")
+
+	got := map[string]bool{}
+	for _, in := range cy.flatInputs() {
+		got[in.string()] = true
+	}
+
+	if !got["$(S)/pkg/ra/sub/leaf.pxd"] {
+		t.Fatalf("CY node missing module pxd $(S)/pkg/ra/sub/leaf.pxd; inputs=%v", cy.flatInputs())
+	}
+
+	if got["$(S)/pkg/rb/sub/leaf/__init__.pxd"] {
+		t.Fatalf("CY node over-collects package fallback $(S)/pkg/rb/sub/leaf/__init__.pxd after sub/leaf.pxd resolved; inputs=%v", cy.flatInputs())
+	}
+}
+
+func TestGen_CythonCimportFromNameFirstResolvedFallback(t *testing.T) {
+	// Upstream cython_processor.cpp CimportFrom per-name: `from X cimport name`
+	// resolves `X/name/__init__.pxd`; only when that does NOT resolve does it try
+	// `X/name.pxd`. Exactly one path is pushed per name. With the module `sub.pxd`
+	// absent (needCheckLists stays true) and `sub/leaf/__init__.pxd` reachable
+	// through one addincl root and `sub/leaf.pxd` through another, only
+	// `sub/leaf/__init__.pxd` must ride the CY node. Before the fix both were collected.
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeTestModuleFile(files, "pkg/ya.make",
+		"PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\n"+
+			"ADDINCL(FOR cython pkg/ra pkg/rb)\n"+
+			"PY_SRCS(NAMESPACE pkg mod.pyx)\nEND()\n")
+	writeTestModuleFile(files, "pkg/mod.pyx", "from sub cimport leaf\n")
+	// Package submodule `sub/leaf/__init__.pxd` reachable via root ra → resolves first, wins.
+	writeTestModuleFile(files, "pkg/ra/sub/leaf/__init__.pxd", "cdef int a\n")
+	// Module-form `sub/leaf.pxd` reachable via root rb → fallback, must be skipped.
+	writeTestModuleFile(files, "pkg/rb/sub/leaf.pxd", "cdef int b\n")
+
+	g := testGen(newMemFS(files), "pkg")
+
+	cy := mustNodeByOutput(t, g, "$(B)/pkg/mod.pyx.cpp")
+
+	got := map[string]bool{}
+	for _, in := range cy.flatInputs() {
+		got[in.string()] = true
+	}
+
+	if !got["$(S)/pkg/ra/sub/leaf/__init__.pxd"] {
+		t.Fatalf("CY node missing submodule pxd $(S)/pkg/ra/sub/leaf/__init__.pxd; inputs=%v", cy.flatInputs())
+	}
+
+	if got["$(S)/pkg/rb/sub/leaf.pxd"] {
+		t.Fatalf("CY node over-collects module-form fallback $(S)/pkg/rb/sub/leaf.pxd after sub/leaf/__init__.pxd resolved; inputs=%v", cy.flatInputs())
+	}
+}
+
 func TestGen_ManualCompanionSourceUsesCythonCompanionCCInputs(t *testing.T) {
 	files := map[string]string{}
 
