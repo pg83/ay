@@ -193,7 +193,13 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 		mid = append(mid, strISContribLibsGoogleapisCommonProtos)
 	}
 
-	if protoRoot != "" && protoRoot != "contrib/libs/protobuf/src" {
+	// The module's own PROTO_NAMESPACE rides its own _PROTO__INCLUDE (the GLOBAL FOR
+	// proto addincl reaches the declaring module too), so it renders once more after
+	// the structural prefix — exactly EmitPB's `if cppOutRoot != ""` arm. This also
+	// covers the protobuf builtins, whose own namespace IS contrib/libs/protobuf/src:
+	// the band copy here would otherwise be deduped against the line-184 namespace
+	// prefix, dropping the reference's middle -I=$(S)/contrib/libs/protobuf/src.
+	if protoRoot != "" {
 		mid = append(mid, internStr("-I=$(S)/"+protoRoot))
 
 		// A peer re-contributing $(B)/<protoRoot> renders the source-root include a
@@ -203,20 +209,23 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 		}
 	}
 
-	mid = append(mid, argISContribLibsProtobufSrc.str())
-
-	// The transitive _PROTO__INCLUDE set trails the protobuf-src include and
-	// precedes the NEED_GOOGLE_PROTO_PEERDIRS protoc-src include, in encounter
-	// order. Upstream's PROTO_NAMESPACE always expands to a `GLOBAL FOR proto
-	// $(S)/<ns>` addincl (proto.conf:136 PROTO_ADDINCL), so bare and GLOBAL
+	// The transitive _PROTO__INCLUDE set sits between the structural -I prefixes and
+	// the trailing -I=$(B) / -I=$PROTOBUF_INCLUDE_PATH pair, exactly as the cpp side
+	// (_PY_PROTO_CMD_BASE proto.conf:516 mirrors _CPP_PROTO_CMDLINE_BASE
+	// ymake.core.conf:612 — neither emits a standalone protobuf-src before the band).
+	// protobuf/src itself rides this set in encounter order: contrib/libs/protobuf's
+	// `ADDINCL(GLOBAL FOR proto contrib/libs/protobuf/src)` makes it one band member
+	// among the namespace addincls, so its position relative to a peer namespace such
+	// as -I=$(S)/yt is per-module (whichever peer is encountered first) and MUST NOT be
+	// pinned ahead of the band. Upstream's PROTO_NAMESPACE always expands to a `GLOBAL
+	// FOR proto $(S)/<ns>` addincl (proto.conf:136 PROTO_ADDINCL), so bare and GLOBAL
 	// namespaces both ride the proto peer closure into every transitive consumer's
 	// _PROTO__INCLUDE — py3_proto consumers included (sg7: brandformance carries
 	// -I=$(S)/yt; caesar carries -I=$(S)/contrib/libs/googleapis-common-protos).
 	// protos_from_protoc is a PY-only implicit peer added after the real proto
 	// peers, so its protoc-src include trails this band. _PROTO__INCLUDE is a set:
-	// a namespace already rendered (the module's own protoRoot, the structural
-	// protobuf-src, or a USE_COMMON_GOOGLE_APIS googleapis emitted above) is
-	// skipped here.
+	// a namespace already rendered (the module's own protoRoot, or a
+	// USE_COMMON_GOOGLE_APIS googleapis emitted above) is skipped here.
 	for _, p := range protoInclude {
 		token := internStr("-I=" + p.string())
 		if slices.Contains(mid, token) {
