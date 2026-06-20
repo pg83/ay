@@ -614,6 +614,230 @@ END()
 	}
 }
 
+// A build-generated PY_SRCS source (PY_SRCS(__init__.py) where __init__.py is
+// the OUT_NOAUTO output of a RUN_PROGRAM) is packaged by upstream onpy_srcs
+// exactly like a checked-in py: it flows through unit.onresource_files → an
+// objcopy_<hash>.o resfs node embedding the generated .py and its .yapyc3 from
+// $(B), with deps on both producers. It is NOT routed through the rescompiler
+// _raw.auxcpp path (that path is for PY proto resources only). It is also
+// EXCLUDED from the py/namespace resource, because is_extended_source_search
+// requires is_arc_src(path) — a $(B) generated file is not an arc source — so a
+// module whose only PY_SRCS is generated emits no namespace node at all.
+func TestGen_GeneratedPySrcsResourcedAsObjcopyNotRawAux(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "slow")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+	writeToolProgram(files, "tools/archiver", "archiver")
+	writeToolProgram(files, "mod/gen/bin", "gen")
+
+	writeTestModuleFile(files, "mod/ya.make", `PY3_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+PY_SRCS(__init__.py)
+RUN_PROGRAM(
+    mod/gen/bin
+        --save_file_path __init__.py
+    OUT_NOAUTO __init__.py
+)
+END()
+`)
+
+	g := testGen(newMemFS(files), "mod")
+
+	// Upstream packages the generated py via onresource_files → objcopy resfs. The
+	// hash is over the same path/key/kvHash strings as a checked-in py (paths are
+	// rootrel-independent of $S vs $B), so reuse buildPySrcEntriesFor's shape.
+	pyKey := "resfs/file/py/mod/__init__.py"
+	ypKey := "resfs/file/py/mod/__init__.py.yapyc3"
+	paths := []string{"__init__.py", "__init__.py.yapyc3"}
+	keysB64 := []string{
+		encb64.StdEncoding.EncodeToString([]byte(pyKey)),
+		encb64.StdEncoding.EncodeToString([]byte(ypKey)),
+	}
+	kvsHash := []string{
+		"resfs/src/" + pyKey + "=${rootrel;context=TEXT;input=TEXT:\"__init__.py\"}",
+		"resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"__init__.py.yapyc3\"}",
+	}
+	wantHash := objcopyHash(paths, keysB64, kvsHash, "mod", stringPtr("PY3"))
+	wantObjcopy := "$(B)/mod/objcopy_" + wantHash + ".o"
+
+	objcopy := nodeByOutput(g, wantObjcopy)
+	if objcopy == nil {
+		t.Fatalf("graph is missing generated-py objcopy output %q\nobjcopy nodes: %v", wantObjcopy, objcopyOutputs(g))
+	}
+
+	// The objcopy embeds the generated .py and its bytecode from $(B), not $(S).
+	if !nodeHasInput(objcopy, "$(B)/mod/__init__.py") {
+		t.Fatalf("objcopy inputs missing build-root generated source: %#v", objcopy.flatInputs())
+	}
+	if !nodeHasInput(objcopy, "$(B)/mod/__init__.py.yapyc3") {
+		t.Fatalf("objcopy inputs missing build-root bytecode: %#v", objcopy.flatInputs())
+	}
+	if nodeHasInput(objcopy, "$(S)/mod/__init__.py") {
+		t.Fatalf("objcopy inputs use a source path for the generated py: %#v", objcopy.flatInputs())
+	}
+
+	// The objcopy depends on both producers: the RUN_PROGRAM that emits __init__.py
+	// and the py3cc that emits its .yapyc3.
+	producer := mustNodeByOutput(t, g, "$(B)/mod/__init__.py")
+	bytecode := mustNodeByOutput(t, g, "$(B)/mod/__init__.py.yapyc3")
+	deps := graphDeps(g, objcopy)
+	if !slices.Contains(deps, producer.UID) {
+		t.Fatalf("objcopy deps %v missing RUN_PROGRAM producer uid %q", deps, producer.UID)
+	}
+	if !slices.Contains(deps, bytecode.UID) {
+		t.Fatalf("objcopy deps %v missing py3cc bytecode producer uid %q", deps, bytecode.UID)
+	}
+
+	// No rescompiler _raw.auxcpp path for a generated PY_SRCS source.
+	for _, n := range g.Graph {
+		if len(n.Outputs) == 0 {
+			continue
+		}
+		o := n.Outputs[0].string()
+		if strings.HasPrefix(o, "$(B)/mod/") && strings.Contains(o, "_raw.auxcpp") {
+			t.Fatalf("generated PY_SRCS produced a rescompiler aux node %q; want objcopy resfs", o)
+		}
+	}
+
+	// No py/namespace resource: the only PY_SRCS is generated (not an arc source).
+	for _, n := range g.Graph {
+		for _, a := range prCmdArgStrings(n) {
+			if strings.Contains(a, "py/namespace") && strings.Contains(a, "/mod=") {
+				t.Fatalf("generated-only PY_SRCS emitted a namespace resource: %q", a)
+			}
+		}
+	}
+
+	// The module's global archive links the resfs objcopy.
+	globalAr := mustNodeByOutput(t, g, "$(B)/mod/libpy3mod.global.a")
+	if !slices.Contains(prCmdArgStrings(globalAr), wantObjcopy) {
+		t.Fatalf("global archive does not link the generated-py objcopy %q: %v", wantObjcopy, prCmdArgStrings(globalAr))
+	}
+}
+
+// Guard: an ordinary checked-in PY_SRCS module is unaffected by the generated-py
+// objcopy routing. Its objcopy embeds the .py from $(S) (the source), and the
+// module still emits a py/namespace resource (a checked-in py IS an arc source,
+// so extended source search applies).
+func TestGen_CheckedInPySrcsObjcopyUnaffected(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "slow")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+	writeToolProgram(files, "tools/archiver", "archiver")
+
+	writeTestModuleFile(files, "modc/foo.py", "x = 1\n")
+	writeTestModuleFile(files, "modc/ya.make", `PY3_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+PY_SRCS(foo.py)
+END()
+`)
+
+	g := testGen(newMemFS(files), "modc")
+
+	pyKey := "resfs/file/py/modc/foo.py"
+	ypKey := "resfs/file/py/modc/foo.py.yapyc3"
+	keysB64 := []string{
+		encb64.StdEncoding.EncodeToString([]byte(pyKey)),
+		encb64.StdEncoding.EncodeToString([]byte(ypKey)),
+	}
+	kvsHash := []string{
+		"resfs/src/" + pyKey + "=${rootrel;context=TEXT;input=TEXT:\"foo.py\"}",
+		"resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"foo.py.yapyc3\"}",
+	}
+	wantHash := objcopyHash([]string{"foo.py", "foo.py.yapyc3"}, keysB64, kvsHash, "modc", stringPtr("PY3"))
+	objcopy := nodeByOutput(g, "$(B)/modc/objcopy_"+wantHash+".o")
+	if objcopy == nil {
+		t.Fatalf("graph is missing checked-in py objcopy: %v", objcopyOutputs(g))
+	}
+
+	// The checked-in .py resource binds to the source path, not a build path.
+	if !nodeHasInput(objcopy, "$(S)/modc/foo.py") {
+		t.Fatalf("checked-in objcopy inputs missing source foo.py: %#v", objcopy.flatInputs())
+	}
+	if nodeHasInput(objcopy, "$(B)/modc/foo.py") {
+		t.Fatalf("checked-in objcopy inputs use a build path for a source py: %#v", objcopy.flatInputs())
+	}
+
+	// A checked-in py IS an arc source, so the namespace resource is emitted.
+	sawNamespace := false
+	for _, n := range g.Graph {
+		for _, a := range prCmdArgStrings(n) {
+			if strings.Contains(a, "py/namespace") && strings.Contains(a, "/modc=") {
+				sawNamespace = true
+			}
+		}
+	}
+	if !sawNamespace {
+		t.Fatal("checked-in PY_SRCS did not emit the expected py/namespace resource")
+	}
+}
+
+// Guard the token-form distinction: a swig-injected PY_SRCS source arrives as a
+// full `${ARCADIA_BUILD_ROOT}/<full>.py` token (d.pySrcsFullName=true) and stays
+// on the rescompiler _raw.auxcpp path — it must NOT be re-routed to objcopy resfs
+// by the generated-py handling. (The bare-token RUN_PROGRAM case above is the one
+// that goes through objcopy.)
+func TestGen_SwigGeneratedPyStaysOnRawAuxNotObjcopy(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "slow")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+	writeToolProgram(files, "tools/archiver", "archiver")
+	writeToolProgram(files, "contrib/tools/swig", "swig")
+
+	writeTestModuleFile(files, "swigmod/_libfoo.swg", "%module libfoo\n")
+	writeTestModuleFile(files, "swigmod/ya.make", `PY3_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+PY_SRCS(
+    SWIG_C
+    TOP_LEVEL
+    _libfoo.swg
+)
+END()
+`)
+
+	g := testGen(newMemFS(files), "swigmod")
+
+	// The swig py is embedded through the rescompiler _raw.auxcpp path.
+	sawAux := false
+	for _, n := range g.Graph {
+		if len(n.Outputs) == 0 {
+			continue
+		}
+		o := n.Outputs[0].string()
+		if strings.HasPrefix(o, "$(B)/swigmod/") && strings.HasSuffix(o, "_raw.auxcpp") {
+			sawAux = true
+		}
+		// No objcopy resfs node for the swig py.
+		if strings.HasPrefix(o, "$(B)/swigmod/objcopy_") {
+			t.Fatalf("swig generated py was routed to objcopy resfs %q; want _raw.auxcpp", o)
+		}
+	}
+	if !sawAux {
+		t.Fatal("swig generated py did not produce the expected _raw.auxcpp resource node")
+	}
+}
+
 func objcopyOutputs(g *Graph) []string {
 	var out []string
 	for _, n := range g.Graph {
