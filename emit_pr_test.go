@@ -390,6 +390,222 @@ END()
 	}
 }
 
+// A RUN_PROGRAM whose IN is a DATA file with no registered include parser
+// (formula.in: YAML-like data) and whose OUTs are a generated .cpp/.h pair plus
+// OUTPUT_INCLUDES — the ads/bsyeti/libs/features/formula.cpp class. Upstream roots
+// the producer's include graph at IN; a data IN contributes no include edges, so
+// the producer keeps only the tool + the direct $(S) data input. The generated
+// cc-source OUT is NOT self-scanned onto the producer (that would drag the
+// OUTPUT_INCLUDES source closure). The downstream compile of the generated .cpp
+// still C-scans it and carries the OUTPUT_INCLUDES closure independently.
+func TestGen_RunProgramDataInGeneratedCppProducerStaysToolPlusData(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "mod/gen_tool", "gen_tool")
+
+	// An OUTPUT_INCLUDES source header with its own transitive include — the
+	// closure that must surface on the CONSUMER (gen.cpp.o) but not the producer.
+	writeTestModuleFile(files, "util/generic/string.h", "#pragma once\n#include <util/generic/strbuf.h>\n")
+	writeTestModuleFile(files, "util/generic/strbuf.h", "#pragma once\n")
+
+	// mod: RUN_PROGRAM with a DATA IN (data.yaml has no registered parser),
+	// generated gen.cpp/gen.h OUTs, OUTPUT_INCLUDES the source header.
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    mod/gen_tool --data data.yaml --cpp gen.cpp --header gen.h
+    IN
+        data.yaml
+    OUTPUT_INCLUDES
+        util/generic/string.h
+    OUT
+        gen.cpp
+        gen.h
+)
+END()
+`)
+	writeTestModuleFile(files, "mod/data.yaml", "key: value\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(mod)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+
+	const toolBin = "$(B)/mod/gen_tool/gen_tool"
+
+	pr := mustNodeByAnyOutput(t, g, "$(B)/mod/gen.cpp")
+	if pr.KV.P != pkPR {
+		t.Fatalf("expected PR producer for gen.cpp, got %v", pr.KV.P)
+	}
+
+	// The producer keeps only the tool + the direct $(S) data input.
+	wantInputs := []string{toolBin, "$(S)/mod/data.yaml"}
+	got := vfsStrings(pr.flatInputs())
+	slices.Sort(got)
+	wantSorted := slices.Clone(wantInputs)
+	slices.Sort(wantSorted)
+	if !slices.Equal(got, wantSorted) {
+		t.Fatalf("data-IN producer inputs = %#v, want exactly %#v", got, wantSorted)
+	}
+
+	// The OUTPUT_INCLUDES source closure must NOT ride the producer.
+	for _, absent := range []string{"$(S)/util/generic/string.h", "$(S)/util/generic/strbuf.h"} {
+		if nodeHasInput(pr, absent) {
+			t.Fatalf("data-IN producer must not carry OUTPUT_INCLUDES source closure %q: %#v", absent, vfsStrings(pr.flatInputs()))
+		}
+	}
+
+	// The downstream compile of the generated gen.cpp independently carries the
+	// OUTPUT_INCLUDES source closure.
+	cppO := findGraphNodeByOutputs(t, g, "$(B)/mod/gen.cpp.o")
+	for _, want := range []string{"$(S)/util/generic/string.h", "$(S)/util/generic/strbuf.h"} {
+		if !nodeHasInput(cppO, want) {
+			t.Fatalf("gen.cpp.o inputs missing OUTPUT_INCLUDES closure %q: %#v", want, vfsStrings(cppO.flatInputs()))
+		}
+	}
+}
+
+// A RUN_PROGRAM with an unparsed data IN that generates ONLY a cc-source (no
+// header output) and names a source header in OUTPUT_INCLUDES — the
+// contrib/libs/libphonenumber generate_geocoding_data / geocoding_data.cc class.
+// With no generated header to route the OUTPUT_INCLUDES through, the generated
+// cc-source's include closure surfaces on the producer's own self-scan: the
+// producer carries the OUTPUT_INCLUDES source closure even though the IN is data
+// and the tool declares no induced C++ deps. This is the discriminator against the
+// formula.cpp class above, whose generated .h sibling carries the includes off the
+// producer.
+func TestGen_RunProgramDataInNoHeaderGeneratedCcProducerKeepsClosure(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "mod/gen_tool", "gen_tool")
+
+	// An OUTPUT_INCLUDES source header with its own transitive include — the
+	// closure that must ride the producer when the run generates no header.
+	writeTestModuleFile(files, "util/generic/string.h", "#pragma once\n#include <util/generic/strbuf.h>\n")
+	writeTestModuleFile(files, "util/generic/strbuf.h", "#pragma once\n")
+
+	// mod: RUN_PROGRAM with a DATA IN, a single generated gen.cc OUT (NO header
+	// output), OUTPUT_INCLUDES the source header.
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    mod/gen_tool --data data.yaml --out gen.cc
+    IN
+        data.yaml
+    OUTPUT_INCLUDES
+        util/generic/string.h
+    OUT
+        gen.cc
+)
+END()
+`)
+	writeTestModuleFile(files, "mod/data.yaml", "key: value\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(mod)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+
+	pr := mustNodeByAnyOutput(t, g, "$(B)/mod/gen.cc")
+	if pr.KV.P != pkPR {
+		t.Fatalf("expected PR producer for gen.cc, got %v", pr.KV.P)
+	}
+
+	// With no generated header sibling, the OUTPUT_INCLUDES source closure rides the
+	// producer (self-scan of the generated gen.cc).
+	for _, want := range []string{"$(S)/util/generic/string.h", "$(S)/util/generic/strbuf.h"} {
+		if !nodeHasInput(pr, want) {
+			t.Fatalf("data-IN no-header producer inputs missing OUTPUT_INCLUDES closure %q: %#v", want, vfsStrings(pr.flatInputs()))
+		}
+	}
+}
+
+// Control: a RUN_PROGRAM whose IN is a PARSEABLE C++ template (tmpl.cpp.in) that
+// #includes a generated codegen .pb.h — the control_board .{h,cpp}.in class. The
+// IN roots the producer's include graph, so the producer must still walk the
+// parsed IN and keep the closure the template names: the codegen header's
+// transitive .proto sources reached through the IN's includes.
+func TestGen_RunProgramParseableInGeneratedHeaderClosureRidesProducer(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "mod/gen_tool", "gen_tool")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make",
+		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
+
+	// dep: PROTO_LIBRARY (dep/dep.pb.h <- dep/dep.proto).
+	writeTestModuleFile(files, "dep/ya.make", `PROTO_LIBRARY()
+SRCS(dep.proto)
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+END()
+`)
+	writeTestModuleFile(files, "dep/dep.proto", "syntax = \"proto3\";\npackage dep;\nmessage D {}\n")
+
+	// mod: RUN_PROGRAM with a PARSEABLE IN tmpl.cpp.in that #includes the codegen
+	// dep/dep.pb.h; STDOUT out.cpp.
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(dep)
+RUN_PROGRAM(
+    mod/gen_tool tmpl.cpp.in
+    IN
+        tmpl.cpp.in
+    OUTPUT_INCLUDES
+        dep/dep.pb.h
+    STDOUT
+        out.cpp
+)
+END()
+`)
+	writeTestModuleFile(files, "mod/tmpl.cpp.in", "#include <dep/dep.pb.h>\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(mod)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+
+	pr := mustNodeByAnyOutput(t, g, "$(B)/mod/out.cpp")
+	if pr.KV.P != pkPR {
+		t.Fatalf("expected PR producer for out.cpp, got %v", pr.KV.P)
+	}
+
+	// The parsed IN roots the graph: the producer keeps the IN and the codegen
+	// header's transitive .proto source reached through it.
+	for _, want := range []string{"$(S)/mod/tmpl.cpp.in", "$(S)/dep/dep.proto"} {
+		if !nodeHasInput(pr, want) {
+			t.Fatalf("parsed-IN producer inputs missing %q: %#v", want, vfsStrings(pr.flatInputs()))
+		}
+	}
+}
+
 // Guard: a no-OUTPUT_INCLUDES cc-source STDOUT run, and a non-cc STDOUT run, must
 // stay byte-stable — the producer lists only its generator binary.
 func TestGen_RunProgramPlainStdoutProducerStaysToolOnly(t *testing.T) {
