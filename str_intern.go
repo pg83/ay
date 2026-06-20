@@ -171,6 +171,7 @@ const (
 	srcExtHIn
 	srcExtSc
 	srcExtCfgProto
+	srcExtGperf
 )
 
 func srcExtClassOf(id STR) SrcExtClass {
@@ -225,16 +226,18 @@ func classifySrcExt(s string) SrcExtClass {
 		return srcExtSc
 	case strings.HasSuffix(s, ".cfgproto"):
 		return srcExtCfgProto
+	case strings.HasSuffix(s, ".gperf"):
+		return srcExtGperf
 	default:
 		return srcExtRegular
 	}
 }
 
 // isCodegenProducingSrcID is isCodegenProducingSrc in id space (the memoized
-// class) — the same nine-extension set.
+// class) — codegen source extensions whose object lands in the module archive.
 func isCodegenProducingSrcID(id STR) bool {
 	switch srcExtClassOf(id) {
-	case srcExtProto, srcExtFbs, srcExtFbs64, srcExtEv, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc:
+	case srcExtProto, srcExtFbs, srcExtFbs64, srcExtEv, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc, srcExtGperf:
 		return true
 	}
 
