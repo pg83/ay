@@ -137,6 +137,18 @@ func protoCmdPeers(d *ModuleData) []STR {
 	front := make([]STR, 0, len(d.cppProtoPlugins))
 	seen := map[STR]struct{}{}
 
+	// GRPC() is upstream's CPP_PROTO_PLUGIN2(grpc_cpp … DEPS contrib/libs/grpc)
+	// (proto.conf:620): contrib/libs/grpc is a proto plugin DEP that feeds
+	// CPP_PROTOBUF_PEERS and so leads the peer order like any other plugin runtime.
+	// We model GRPC as d.grpc + a plain contrib/libs/grpc peerdir (its plugin
+	// command emission rides the d.grpc path, not d.cppProtoPlugins), so surface it
+	// here as a front peer too. Membership is what matters: front order follows the
+	// d.peerdirs declaration order (see walkPeersForGlobalAddIncl's peerdirFront).
+	if d.grpc {
+		seen[strContribLibsGrpc] = struct{}{}
+		front = append(front, strContribLibsGrpc)
+	}
+
 	for _, plugin := range d.cppProtoPlugins {
 		for _, dep := range plugin.Deps {
 			p := internStr(dep)
