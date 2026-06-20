@@ -496,7 +496,7 @@ func emitPyNamespaceForGroup(
 	// namespace node at all.
 	reg := codegenRegForInstance(ctx, instance)
 	pySources := make([]string, 0, len(group.Srcs))
-	arcSources := 0
+	arcSources := make([]string, 0, len(group.Srcs))
 
 	for _, srcRel := range group.Srcs {
 		if !strings.HasSuffix(srcRel.string(), ".py") {
@@ -506,11 +506,11 @@ func emitPyNamespaceForGroup(
 		pySources = append(pySources, srcRel.string())
 
 		if reg.lookupSplit(dirKey(instance.Path.rel()), srcRel) == nil {
-			arcSources++
+			arcSources = append(arcSources, srcRel.string())
 		}
 	}
 
-	if len(pySources) == 0 || arcSources == 0 {
+	if len(pySources) == 0 || len(arcSources) == 0 {
 		return nil
 	}
 
@@ -538,20 +538,44 @@ func emitPyNamespaceForGroup(
 
 	modListMD5 := enchex.EncodeToString(h.Sum(nil))
 
-	keyPath := instance.Path.rel()
+	// Upstream keys each namespace at mod_root_path = rootrel_arc_src(token) minus
+	// its trailing `/<token>` (pybuild.py:390-392), NOT the module dir. For a
+	// module-local token that is the module dir; for a SRCDIR-redirected token the
+	// SRCDIR; for an arcadia-root-relative checked-in token (the file lives at the
+	// root path it names) the prefix above the token — empty when the token IS the
+	// rootrel. resolvePySrcRel is our rootrel_arc_src equivalent. py_namespaces is a
+	// map, so one kv per distinct namespace root, emitted sorted.
+	nsRoots := make(map[string]struct{}, len(arcSources))
 
-	// The namespace is keyed by the dir its sources resolve against — the last
-	// declared SRCDIR (srcDirs[0] is the module dir), not the module dir, whenever
-	// SRCDIR redirects PY_SRCS (e.g. SRCDIR(.../src) PY_SRCS(NAMESPACE … urllib3/…)).
-	if len(d.srcDirs) > 1 {
-		keyPath = d.srcDirs[len(d.srcDirs)-1].rel()
+	for _, srcRel := range arcSources {
+		resolvedRel := resolvePySrcRel(ctx.fs, d.srcDirs, instance.Path.rel(), srcRel)
+		end := len(resolvedRel) - len(srcRel) - 1
+
+		if end < 0 {
+			end = 0
+		}
+
+		nsRoots[resolvedRel[:end]] = struct{}{}
 	}
 
-	key := "py/namespace/" + modListMD5 + "/" + keyPath
-	kvHash := key + "=\"" + nsValue + "\""
-	kvCmd := key + "=" + nsValue
+	keyPaths := make([]string, 0, len(nsRoots))
 
-	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyLib, []string{kvHash}, []string{kvCmd}, d, oc)
+	for keyPath := range nsRoots {
+		keyPaths = append(keyPaths, keyPath)
+	}
+
+	sort.Strings(keyPaths)
+
+	kvsHash := make([]string, 0, len(keyPaths))
+	kvsCmd := make([]string, 0, len(keyPaths))
+
+	for _, keyPath := range keyPaths {
+		key := "py/namespace/" + modListMD5 + "/" + keyPath
+		kvsHash = append(kvsHash, key+"=\""+nsValue+"\"")
+		kvsCmd = append(kvsCmd, key+"="+nsValue)
+	}
+
+	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyLib, kvsHash, kvsCmd, d, oc)
 }
 
 func emitPyMainObjcopy(
