@@ -1939,16 +1939,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	effectiveProtoInclude := dedupVFS(ownProtoInclude, peerProtoInclude)
 
-	// A peer that declares this module's own PROTO_NAMESPACE re-contributes the same
-	// `FOR proto $(S)/<ns>` source addincl, so the namespace lands in _PROTO__INCLUDE
-	// twice (own + peer). dedupVFS collapses it above; record the fact so the
-	// LIBRARY-hosted proc command re-expands the second copy (duplicateOutputRootInclude).
-	protoOwnNamespaceInPeers := false
-
-	if d.protoNamespace != nil {
-		protoOwnNamespaceInPeers = containsVFS(peerProtoInclude, source(filepath.ToSlash(filepath.Clean(d.protoNamespace.string()))))
-	}
-
 	if instance.Path == libraryPythonRuntimePy3 {
 		buildRootPath := bldLibraryPythonRuntimePy3
 		abseilPath := contribRestrictedAbseilCpp
@@ -2056,7 +2046,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		AddIncl:                  dedupedAddIncl,
 		PeerAddInclGlobal:        selfPeerAddInclGlobal,
 		ProtoInclude:             effectiveProtoInclude,
-		ProtoOwnNamespaceInPeers: protoOwnNamespaceInPeers,
+		ProtoIncludePeers:        peerProtoInclude,
 		CFlags:                   ownCFlags,
 		CXXFlags:                 d.cxxFlags,
 		COnlyFlags:               d.cOnlyFlags,
