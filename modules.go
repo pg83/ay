@@ -982,7 +982,13 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 		}
 	}
 
-	if d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary {
+	// The proto plugin DEPS (CPP_PROTOBUF_PEERS, e.g. GRPC()'s contrib/libs/grpc)
+	// lead the peer order whenever the module compiles a .proto to C++, whether it
+	// is a PROTO_LIBRARY or a plain LIBRARY with an inline .proto (the
+	// ads/dssm/inference shape). protoCmdPeers() is keyed off d.grpc /
+	// d.cppProtoPlugins, so for an inline proto without either it returns empty and
+	// the front-hoist is a no-op.
+	if d.moduleStmt != nil && (d.moduleStmt.Name == tokProtoLibrary || hasProto) {
 		d.protoCmdPeers = protoCmdPeers(d)
 	}
 

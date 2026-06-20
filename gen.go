@@ -1224,15 +1224,40 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		peerKinds = append(peerKinds, peerKindProgramDefault)
 	}
 
-	for _, p := range d.peerdirs {
+	// The proto plugin DEPS (d.protoCmdPeers, e.g. GRPC()'s contrib/libs/grpc) are
+	// injected ahead of the body PEERDIR (upstream CPP_PROTOBUF_PEERS, `PEERDIR+=`,
+	// ymake.core.conf:2002), so they lead the user-peer region of the single peer
+	// order that drives both the GLOBAL ADDINCL (`-I`) and the link/archive closure.
+	// Emit the front peers first in d.peerdirs declaration order, then the rest —
+	// the same hoist walkPeersForGlobalAddIncl applies for the specialized
+	// PROTO_LIBRARY path. For an inline proto without grpc/plugins protoCmdPeers is
+	// empty, so frontSet is empty and the two passes collapse to declaration order.
+	frontSet := make(map[STR]struct{}, len(d.protoCmdPeers))
+	for _, p := range d.protoCmdPeers {
+		frontSet[p] = struct{}{}
+	}
+
+	appendUserPeer := func(p STR) {
 		// peerSeen's id-space twin: p is already interned, so membership is a
 		// direct deduper probe — no view, no re-intern.
 		if !deduper.add(VFS(p) << 1) {
-			continue
+			return
 		}
 
 		allPeers = append(allPeers, p.string())
 		peerKinds = append(peerKinds, peerKindUserPeer)
+	}
+
+	for _, p := range d.peerdirs {
+		if _, isFront := frontSet[p]; isFront {
+			appendUserPeer(p)
+		}
+	}
+
+	for _, p := range d.peerdirs {
+		if _, isFront := frontSet[p]; !isFront {
+			appendUserPeer(p)
+		}
 	}
 
 	peerArchiveRefs := make([]NodeRef, 0, len(allPeers))
