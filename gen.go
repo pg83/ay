@@ -1111,6 +1111,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 				tag = tagGlobal
 			}
 
+			// A PROTO_LIBRARY's C++ _CPP_PROTO submodule (MODULE_TAG=CPP_PROTO)
+			// packs its RESOURCE objcopy into a <MODULE_TAG>_global archive.
+			if cfModuleTag(d, instance) == tagCppProto {
+				tag = tagCppProtoGlobal
+			}
+
 			gRef := emitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRes.Refs, objcopyRes.Outputs, d.tc, ctx.host, ctx.emit)
 			hOnlyGlobalRef = &gRef
 			hOnlyGlobalPath = vfsPtr(build(instance.Path.rel() + "/" + globalBaseName))

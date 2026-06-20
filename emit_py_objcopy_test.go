@@ -114,6 +114,45 @@ END()
 	}
 }
 
+// A RESOURCE() declared in a PROTO_LIBRARY body belongs to the C++ _CPP_PROTO
+// submodule (MODULE_TAG=CPP_PROTO). Upstream's TObjCopyResourcePacker folds the
+// owning submodule's MODULE_TAG into the objcopy output-name hash and stamps the
+// objcopy node's module_tag with the lowercased tag (cpp_proto); the submodule's
+// .global.a carries <MODULE_TAG>_global (cpp_proto_global). Before the fix the
+// CPP-proto resource path folded in nothing (wrong hash, missing objcopy tag) and
+// the global archive fell through to the generic `global` tag.
+func TestGen_ProtoLibraryResourceObjcopyAndGlobalUseCppProtoTag(t *testing.T) {
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+
+	writeTestModuleFile(files, "px/ya.make",
+		"PROTO_LIBRARY()\nSRCS(foo.proto)\nRESOURCE(px/tree.pb.txt px/tree.pb.txt)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO PY_PROTO PY3_PROTO)\nEND()\n")
+	writeTestModuleFile(files, "px/foo.proto", "syntax = \"proto3\";\npackage test;\nmessage Foo { string v = 1; }\n")
+	writeTestModuleFile(files, "px/tree.pb.txt", "stub\n")
+
+	g := testGen(newMemFS(files), "px")
+
+	objcopy := findNodeByOutputPrefix(g, "$(B)/px/objcopy_")
+	if objcopy == nil {
+		t.Fatal("graph is missing px objcopy output")
+	}
+	if got := objcopy.TargetProperties.ModuleTag.string(); got != "cpp_proto" {
+		t.Fatalf("objcopy module_tag = %q, want cpp_proto", got)
+	}
+
+	global := mustNodeByOutputSuffix(t, g, "/libpx.global.a")
+	if got := global.TargetProperties.ModuleTag.string(); got != "cpp_proto_global" {
+		t.Fatalf("global archive module_tag = %q, want cpp_proto_global", got)
+	}
+}
+
 // A RESOURCE_FILES path may name an ordinary source file that lives at the
 // arcadia root OUTSIDE the consuming module (e.g. yabs/server/libs/banner_flags
 // embedding modadvert/dyn_disclaimers/disclaimers_config.pb.txt). res.py expands
