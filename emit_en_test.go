@@ -60,6 +60,73 @@ END()
 	}
 }
 
+// Owner/consumer split: an enum-serialization generated C++ output (the EN
+// node) and its compile (CC) carry the DECLARING module's module_dir even when
+// a DIFFERENT module include-resolves the generated *_serialized.h first. This
+// is the converged socdem_type shape (T-49): the serialized-enum EN/CC nodes
+// follow ymake's enum-generation module attribution (the macro's owning module
+// via the emit-time default), NOT a consumer-claim override like the RUN_PROGRAM
+// PR/CF/CP first-claim path. Guards against re-attributing EN nodes to the
+// first consumer (which regresses the yabs/server/libs/enums/* family).
+func TestGen_EnumSerializationOwnerKeepsModuleDirAcrossConsumer(t *testing.T) {
+	files := map[string]string{}
+
+	// own: declares the WITH_HEADER enum serialization for own/mode.h and
+	// compiles the generated mode.h_serialized.cpp into its own library.
+	writeTestModuleFile(files, "own/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(mode.h)
+SRCS(stub.cpp)
+END()
+`)
+	writeTestModuleFile(files, "own/mode.h", "enum class Mode { A = 0, B = 1 };\n")
+	writeTestModuleFile(files, "own/stub.cpp", "int stub(){return 0;}\n")
+
+	// cons: a different module that include-resolves the generated serialized
+	// header own/mode.h_serialized.h — the consumer, distinct from the owner.
+	writeTestModuleFile(files, "cons/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(own)
+SRCS(use.cpp)
+END()
+`)
+	writeTestModuleFile(files, "cons/use.cpp", "#include <own/mode.h_serialized.h>\nint use(){return 0;}\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(cons)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+
+	g := testGenDumpGraph(newMemFS(files), "app")
+
+	// The EN generation node stays with the owner that declared the macro.
+	en := mustNodeByOutput(t, g, "$(B)/own/mode.h_serialized.cpp")
+	if got := en.TargetProperties.ModuleDir; got != "own" {
+		t.Fatalf("EN serialized-enum module_dir = %q, want %q (declaring owner, not consumer)", got, "own")
+	}
+	// The compile of the generated source likewise stays with the owner.
+	cc := mustNodeByOutputSuffix(t, g, "mode.h_serialized.cpp.o")
+	if cc.KV.P != pkCC {
+		t.Fatalf("expected CC node compiling mode.h_serialized.cpp, got KV.p %v", cc.KV.P)
+	}
+	if got := cc.TargetProperties.ModuleDir; got != "own" {
+		t.Fatalf("CC serialized-enum compile module_dir = %q, want %q (declaring owner)", got, "own")
+	}
+}
+
 func TestGen_EnumSerializationWithSRCDIRResolvesHeaderViaSourceDir(t *testing.T) {
 	// Reproduces the purecalc_no_pg_wrapper divergence: a module uses INCLUDE()
 	// to pull in a .ya.make.inc that contains SRCDIR() + GENERATE_ENUM_SERIALIZATION().
