@@ -199,6 +199,7 @@ var (
 	argPythonBin                                 = internArg("--python-bin")
 	argQ                                         = internArg("-q")
 	argRamLimitGb                                = internArg("--ram-limit-gb")
+	argDashLm                                    = internArg("-lm")
 	argRdynamic                                  = internArg("-rdynamic")
 	argRemoveSectionGnuDebuglink                 = internArg("--remove-section=.gnu_debuglink")
 	argRemoveTos                                 = internArg("--remove-tos")
