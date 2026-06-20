@@ -1353,3 +1353,118 @@ END()
 		t.Fatalf("control producer (.h.in IN) must carry WKT .pb.h sibling: %#v", vfsStrings(ctl.flatInputs()))
 	}
 }
+
+// A custom RUN_PROGRAM header generated FROM a .proto (the
+// yabs/.../generated/sys_const.h shape: `IN sys_const.proto OUT sys_const.h`)
+// genuinely #includes the generated `.pb.h` of that proto's imports — the custom
+// generator emits `#include "<import>.pb.h"`. We cannot scan the generated body,
+// so we model it as upstream does (induced deps propagate through generated
+// files): the custom header's parsed-include WINDOW carries the import's
+// generated `.pb.h`, whose own closure (here a distinctive transitive sibling)
+// rides to every consumer.
+//
+// A second RUN_PROGRAM (`IN tmpl.cpp OUTPUT_INCLUDES gen/custom.h STDOUT out.cpp`,
+// the by_name.cpp shape) must therefore carry the import's `.pb.h` + its closure
+// on BOTH its producer node and the generated out.cpp.o — and must NOT introduce
+// an unrelated same-basename `.pb.h` variant (the protobuf_old descriptor.pb.h
+// over-add). Existing proto-IN safeguards (the wrapper test above) stay intact.
+func TestGen_CustomProtoHeaderOutputIncludesRidesGeneratedPbhClosure(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "tools/gen_custom", "gen_custom")
+	writeToolProgram(files, "tools/emit", "emit")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make",
+		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
+
+	// dproto: leaf PROTO_LIBRARY — its generated d.pb.h is the distinctive
+	// transitive closure entry of the import's .pb.h (the YaFF-runtime analog).
+	writeTestModuleFile(files, "dproto/ya.make", "PROTO_LIBRARY()\nSRCS(d.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
+	writeTestModuleFile(files, "dproto/d.proto", "syntax = \"proto3\";\npackage dproto;\nmessage D {}\n")
+
+	// eproto: PROTO_LIBRARY importing dproto/d.proto — generated extra.pb.h
+	// #includes the generated dproto/d.pb.h.
+	writeTestModuleFile(files, "eproto/ya.make", "PROTO_LIBRARY()\nPEERDIR(dproto)\nSRCS(extra.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
+	writeTestModuleFile(files, "eproto/extra.proto",
+		"syntax = \"proto3\";\npackage eproto;\nimport \"dproto/d.proto\";\nmessage Extra { dproto.D d = 1; }\n")
+
+	// gen: a custom RUN_PROGRAM header generated FROM a proto that imports
+	// eproto/extra.proto — registers $(B)/gen/custom.h as a pkPR codegen header
+	// whose window must acquire the import's generated extra.pb.h.
+	writeTestModuleFile(files, "gen/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(eproto)
+RUN_PROGRAM(
+    tools/gen_custom src.proto custom.h
+    IN
+        src.proto
+    OUT
+        custom.h
+)
+END()
+`)
+	writeTestModuleFile(files, "gen/src.proto",
+		"syntax = \"proto3\";\npackage gen;\nimport \"eproto/extra.proto\";\nmessage S { eproto.Extra e = 1; }\n")
+
+	// cons: the producer under test — RUN_PROGRAM IN tmpl.cpp, OUTPUT_INCLUDES the
+	// custom header, STDOUT out.cpp (by_name.cpp shape). tmpl.cpp #includes the
+	// custom header, the way by_name_tmpl.cpp #includes sys_const.h.
+	writeTestModuleFile(files, "cons/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(gen)
+RUN_PROGRAM(
+    tools/emit tmpl.cpp
+    IN
+        tmpl.cpp
+    OUTPUT_INCLUDES
+        gen/custom.h
+    STDOUT
+        out.cpp
+)
+END()
+`)
+	writeTestModuleFile(files, "cons/tmpl.cpp", "#include \"gen/custom.h\"\nint f(){return 0;}\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(cons)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGenDumpGraph(newMemFS(files), "app")
+
+	// The import's generated .pb.h and its distinctive transitive sibling ride the
+	// producer node AND the generated out.cpp.o, alongside their .proto sources.
+	want := []string{
+		"$(B)/eproto/extra.pb.h", // direct import's generated header (sys_const.h -> const_options.pb.h)
+		"$(B)/dproto/d.pb.h",     // its distinctive transitive sibling (-> the YaFF closure)
+		"$(S)/eproto/extra.proto",
+		"$(S)/dproto/d.proto",
+	}
+
+	prod := mustNodeByOutput(t, g, "$(B)/cons/out.cpp")
+	if prod.KV.P != pkPR {
+		t.Fatalf("expected PR producer for out.cpp, got %v", prod.KV.P)
+	}
+	for _, w := range want {
+		if !nodeHasInput(prod, w) {
+			t.Fatalf("out.cpp producer missing %q: %#v", w, vfsStrings(prod.flatInputs()))
+		}
+	}
+
+	obj := mustNodeByOutput(t, g, "$(B)/cons/out.cpp.o")
+	for _, w := range want {
+		if !nodeHasInput(obj, w) {
+			t.Fatalf("out.cpp.o missing %q: %#v", w, vfsStrings(obj.flatInputs()))
+		}
+	}
+}
