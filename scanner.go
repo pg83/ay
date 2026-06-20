@@ -192,6 +192,16 @@ type IncludeScanner struct {
 	// over the per-output generatedFirstClaim consensus in attribute_generated.go.
 	generatedNodeClaim map[NodeRef]string
 
+	// generatedENIncluderDirs records, per EN (GENERATE_ENUM_SERIALIZATION)
+	// output, the set of directories of the files that #include it during the
+	// scan. attribute_generated.go uses this to reproduce ymake's Node2Module
+	// directory-ownership: a generated serialized header reached through a nested
+	// submodule's directory-owned header is attributed to that submodule (which
+	// leaves the node before its enclosing parent in DFS post-order). The
+	// recorded value is intrinsic to the includer file (its directory), not the
+	// scan context, so resolution caching stays context-free.
+	generatedENIncluderDirs map[VFS][]string
+
 	walkClosureCalls       uint64
 	subgraphHits           uint64
 	subgraphMisses         uint64
@@ -292,11 +302,12 @@ type ScannerPerfStats struct {
 
 func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, onWarn func(Warn), tjc *TarjanCtx) *IncludeScanner {
 	s := &IncludeScanner{
-		sysincl:             newSysinclCtx(sysincl),
-		parsers:             parsers,
-		generatedFirstClaim: make(map[VFS]string, 2048),
-		generatedNodeClaim:  make(map[NodeRef]string, 256),
-		onWarn:              onWarn,
+		sysincl:                 newSysinclCtx(sysincl),
+		parsers:                 parsers,
+		generatedFirstClaim:     make(map[VFS]string, 2048),
+		generatedNodeClaim:      make(map[NodeRef]string, 256),
+		generatedENIncluderDirs: make(map[VFS][]string, 16),
+		onWarn:                  onWarn,
 		// Index 0 reserved so a fresh closureRef is always >= 1 (closureOf's
 		// straighten path and closureWindow treat ref as a 1-based index).
 		subgraphClosures: make([][]VFS, 1, 256),
@@ -987,6 +998,33 @@ func (s *IncludeScanner) recordNodeClaim(ref NodeRef, ownerModuleDir string) {
 	}
 }
 
+// recordENIncluderDir records the directory of includerAbs as an includer of the
+// EN output `out`. Only EN (enum-serialization) outputs are tracked; the finalize
+// pass (overrideGeneratedModuleDir) reads these to drift the EN node to a nested
+// submodule whose directory-owned header includes it. The set per output is tiny
+// (one or two includer dirs), so a deduped slice suffices.
+func (s *IncludeScanner) recordENIncluderDir(out VFS, info *GeneratedFileInfo, includerAbs VFS) {
+	if info == nil || info.ProducerKvP != pkEN {
+		return
+	}
+
+	dir := pathDir(includerAbs.rel())
+
+	if dir == "" {
+		return
+	}
+
+	cur := s.generatedENIncluderDirs[out]
+
+	for _, d := range cur {
+		if d == dir {
+			return
+		}
+	}
+
+	s.generatedENIncluderDirs[out] = append(cur, dir)
+}
+
 func (sc *ScanCtx) cacheSearchTier(targetID STR, out SearchTierResult) SearchTierResult {
 	s := sc.scanner
 	s.searchTierFlat.put(splitMix64(sc.ctxNum, uint32(targetID)), out)
@@ -1219,6 +1257,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 			searchPathFound = true
 
 			s.recordFirstClaim(info.OutputPath, sc.cfg.OwnerModuleDir)
+			s.recordENIncluderDir(info.OutputPath, info, includerAbs)
 		}
 	}
 
@@ -1259,6 +1298,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 				// module so the attribute_generated.go finalize pass can
 				// re-attribute the .inc node's target_properties.module_dir.
 				s.recordFirstClaim(info.OutputPath, sc.cfg.OwnerModuleDir)
+				s.recordENIncluderDir(info.OutputPath, info, includerAbs)
 			}
 		}
 	}
@@ -1269,6 +1309,13 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 		if tier.found {
 			out = append(out, tier.paths...)
 			searchPathFound = true
+
+			// Angle/full-path includes of an EN serialized header resolve here
+			// (the addBuild path inside the tier records the PR/CF/CP first-claim
+			// but has no includer). Record the includer dir for EN drift.
+			if len(tier.paths) > 0 && tier.paths[0].isBuild() {
+				s.recordENIncluderDir(tier.paths[0], s.codegen.lookup(tier.paths[0]), includerAbs)
+			}
 		}
 	}
 

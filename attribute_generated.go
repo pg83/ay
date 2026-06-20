@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 // overrideGeneratedModuleDir mirrors upstream ymake's Node2Module attribution
 // (devtools/ymake/json_visitor.cpp:638-645): when a generated file is first
 // encountered by a CC compile's include-scan, the CONSUMER module — not the
@@ -18,7 +20,13 @@ package main
 // (common — many internal codegen passes have no external consumer in the
 // build closure), the producer-time attribution already matches REF.
 func overrideGeneratedModuleDir(e *BufferedEmitter) {
-	if e == nil || (len(e.generatedFirstClaim) == 0 && len(e.generatedNodeClaim) == 0) {
+	if e == nil {
+		return
+	}
+
+	overrideENSubmoduleModuleDir(e)
+
+	if len(e.generatedFirstClaim) == 0 && len(e.generatedNodeClaim) == 0 {
 		return
 	}
 
@@ -77,5 +85,78 @@ func overrideGeneratedModuleDir(e *BufferedEmitter) {
 		}
 
 		node.TargetProperties.ModuleDir = claim
+	}
+}
+
+// overrideENSubmoduleModuleDir reproduces ymake's Node2Module directory-ownership
+// for generated serialized-enum (EN) nodes. A generated *_serialized.h declared
+// by module D but #included through a NESTED submodule's directory-owned header
+// is attributed to that submodule: the nested peerdir submodule leaves the
+// generated node before its enclosing parent D completes (submodule-before-parent
+// DFS post-order), so FindModule on the visitor stack returns the submodule.
+//
+// The discriminator vs the consumer-claim path (PR/CF/CP, OwnerModuleDir) is the
+// directory ownership of the INCLUDER, not the compiling module: the includer's
+// nearest enclosing module must be a real module strictly nested under D. An EN
+// header reached only through a non-module subdir of D (no nested ya.make), or
+// through an unrelated module not nested under D (the yabs/server/libs/enums
+// family), keeps its declaring owner.
+func overrideENSubmoduleModuleDir(e *BufferedEmitter) {
+	if len(e.generatedENIncluderDirs) == 0 {
+		return
+	}
+
+	// Every distinct module_dir is a real module directory (generated nodes carry
+	// their attributed module's dir), so the set of module_dir values across all
+	// nodes is exactly the set of module directories — the basis for resolving an
+	// includer directory to its nearest enclosing module.
+	moduleDirs := make(map[string]struct{}, len(e.nodes))
+
+	for _, node := range e.nodes {
+		if md := node.TargetProperties.ModuleDir; md != "" {
+			moduleDirs[md] = struct{}{}
+		}
+	}
+
+	nearestModuleDir := func(dir string) string {
+		for d := dir; d != ""; d = pathDir(d) {
+			if _, ok := moduleDirs[d]; ok {
+				return d
+			}
+		}
+
+		return ""
+	}
+
+	for _, node := range e.nodes {
+		if node.KV.P != pkEN || len(node.Outputs) == 0 {
+			continue
+		}
+
+		declaring := node.TargetProperties.ModuleDir
+		prefix := declaring + "/"
+
+		var best string
+
+		for _, out := range node.Outputs {
+			for _, incDir := range e.generatedENIncluderDirs[out] {
+				m := nearestModuleDir(incDir)
+
+				// Only a real module strictly nested under the declaring module
+				// pre-empts D in post-order. Among several, the deepest wins (the
+				// most-nested submodule leaves first).
+				if m == "" || !strings.HasPrefix(m, prefix) {
+					continue
+				}
+
+				if len(m) > len(best) {
+					best = m
+				}
+			}
+		}
+
+		if best != "" {
+			node.TargetProperties.ModuleDir = best
+		}
 	}
 }
