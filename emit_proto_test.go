@@ -691,6 +691,8 @@ func TestEmitPyProtoSrc_GeneratedProtoWiresProducerDep(t *testing.T) {
 	writeToolProgram(files, "tools/py3cc", "py3cc")
 	writeToolProgram(files, "tools/py3cc/slow", "py3cc_slow")
 	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+	writeToolProgram(files, "tools/archiver", "archiver")
 	for path, body := range map[string]string{
 		consumer + "/ya.make": `PY3_LIBRARY()
 NO_LIBC()
