@@ -237,10 +237,13 @@ func emitResourceObjcopy(
 		switch {
 		case d.moduleStmt.Name == tokPy23Library || d.moduleStmt.Name == tokPy23NativeLibrary:
 			resTargetProps.ModuleTag = tagPy3
-		case d.programPairedLib:
+		// RESOURCE/RESOURCE_FILES are .IGNORED on the PY3_BIN (PROGRAM) submodule
+		// (conf/python.conf:350), so the resfs objcopy is owned by the PY3_BIN_LIB
+		// (LIBRARY) twin for both the PROGRAM half (emitted then deduped against the
+		// twin) and the paired LIBRARY half. Stamp py3_bin_lib, matching the output
+		// hash tag (resourceLibTagForData).
+		case d.moduleStmt.Name == tokPy3Program || d.programPairedLib:
 			resTargetProps.ModuleTag = tagPy3BinLib
-		case d.moduleStmt.Name == tokPy3Program:
-			resTargetProps.ModuleTag = tagPy3Bin
 		case cppProtoSubmodule:
 			resTargetProps.ModuleTag = tagCppProto
 		}
