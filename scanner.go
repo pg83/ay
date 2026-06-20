@@ -181,6 +181,17 @@ type IncludeScanner struct {
 	// and the override leaves the node attributed to it.
 	generatedFirstClaim map[VFS]string
 
+	// generatedNodeClaim records, keyed by a generated file's PRODUCER node ref,
+	// the first module that names one of that producer's outputs in OUTPUT_INCLUDES.
+	// OUTPUT_INCLUDES is upstream's structural induced-dep declaration: the consumer
+	// command's leave records the producer node in Node2Module (json_visitor.cpp:638)
+	// for the WHOLE node — every output rides one attribution. A multi-output wrapper
+	// run (ads/caesar/.../with_transitive_headers/*.pb.h, one node, 69 outputs) is
+	// thus owned by the profile-like module that OUTPUT_INCLUDES it, regardless of
+	// which far peer later include-resolves an individual output. Takes precedence
+	// over the per-output generatedFirstClaim consensus in attribute_generated.go.
+	generatedNodeClaim map[NodeRef]string
+
 	walkClosureCalls       uint64
 	subgraphHits           uint64
 	subgraphMisses         uint64
@@ -284,6 +295,7 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 		sysincl:             newSysinclCtx(sysincl),
 		parsers:             parsers,
 		generatedFirstClaim: make(map[VFS]string, 2048),
+		generatedNodeClaim:  make(map[NodeRef]string, 256),
 		onWarn:              onWarn,
 		// Index 0 reserved so a fresh closureRef is always >= 1 (closureOf's
 		// straighten path and closureWindow treat ref as a 1-based index).
@@ -959,6 +971,19 @@ func (s *IncludeScanner) recordFirstClaim(out VFS, ownerModuleDir string) {
 
 	if _, ok := s.generatedFirstClaim[out]; !ok {
 		s.generatedFirstClaim[out] = ownerModuleDir
+	}
+}
+
+// recordNodeClaim records, first-write-wins, the module that names an output of
+// the producer node `ref` in OUTPUT_INCLUDES — a node-level (not per-output)
+// attribution. See generatedNodeClaim.
+func (s *IncludeScanner) recordNodeClaim(ref NodeRef, ownerModuleDir string) {
+	if ownerModuleDir == "" {
+		return
+	}
+
+	if _, ok := s.generatedNodeClaim[ref]; !ok {
+		s.generatedNodeClaim[ref] = ownerModuleDir
 	}
 }
 
