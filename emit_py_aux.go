@@ -16,10 +16,19 @@ func emitGeneratedPyAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleDat
 
 	var entries []PyProtoAuxEntry
 
-	for _, srcRel := range d.pySrcs {
+	for i, srcRel := range d.pySrcs {
 		info := reg.lookupSplit(dirKey(instance.Path.rel()), srcRel)
 
 		if info == nil {
+			continue
+		}
+
+		// Only a full `${ARCADIA_BUILD_ROOT}/<full>.py` PY_SRCS token (swig's
+		// injected wrapper) is embedded through the rescompiler _raw.auxcpp path.
+		// A bare generated token (RUN_PROGRAM OUT/OUT_NOAUTO) is packaged like any
+		// other PY_SRCS source — through the objcopy resfs path (buildPySrcEntriesFor
+		// binds it from $(B)) — matching upstream's onresource_files routing.
+		if i >= len(d.pySrcsFullName) || !d.pySrcsFullName[i] {
 			continue
 		}
 

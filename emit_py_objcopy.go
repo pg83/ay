@@ -488,15 +488,29 @@ func emitPyNamespaceForGroup(
 	group PySrcGroup,
 	oc *ObjcopyEmitCtx,
 ) *ObjcopyEmit {
+	// Upstream folds EVERY PY_SRCS mod name into mod_list_md5 (pybuild.py), but
+	// gates the py/namespace resource itself on is_extended_source_search →
+	// is_arc_src(path) (pybuild.py:388): a $(B) build-generated PY_SRCS source is
+	// not an arc source, so it never contributes a namespace entry. So the md5 runs
+	// over all .py sources, while a module whose only PY_SRCS is generated emits no
+	// namespace node at all.
+	reg := codegenRegForInstance(ctx, instance)
 	pySources := make([]string, 0, len(group.Srcs))
+	arcSources := 0
 
 	for _, srcRel := range group.Srcs {
-		if strings.HasSuffix(srcRel.string(), ".py") {
-			pySources = append(pySources, srcRel.string())
+		if !strings.HasSuffix(srcRel.string(), ".py") {
+			continue
+		}
+
+		pySources = append(pySources, srcRel.string())
+
+		if reg.lookupSplit(dirKey(instance.Path.rel()), srcRel) == nil {
+			arcSources++
 		}
 	}
 
-	if len(pySources) == 0 {
+	if len(pySources) == 0 || arcSources == 0 {
 		return nil
 	}
 
