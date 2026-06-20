@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/binary"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -229,10 +230,15 @@ func scanOutputKind(path string) map[string]string {
 }
 
 func diffByField(leftPath, rightPath string, bw *bufio.Writer) {
+	canc := newDumpDiffCanceler(leftPath, rightPath, dumpDiffContentKey)
 	rExact := map[string]DiffFieldHashes{}
 	rAxis := map[string]DiffFieldHashes{}
 	ridx := map[string]DiffFieldHashes{}
 	streamJSONL(rightPath, func(n map[string]any) {
+		if canc.cancelRight(n) {
+			return
+		}
+
 		h := nodeFieldHashes(n)
 
 		for _, o := range toStrings(n["outputs"]) {
@@ -244,6 +250,14 @@ func diffByField(leftPath, rightPath string, bw *bufio.Writer) {
 	combo := map[string]int{}
 	both := 0
 	streamJSONL(leftPath, func(n map[string]any) {
+		// An exact full-content counterpart on the right means this producer is
+		// paired with zero delta; count it in the denominator but never as drift.
+		if canc.cancelLeft(n) {
+			both++
+
+			return
+		}
+
 		var rh DiffFieldHashes
 		found := false
 
@@ -321,10 +335,15 @@ type byTokenOpts struct {
 }
 
 func diffByToken(leftPath, rightPath string, bw *bufio.Writer, opts byTokenOpts) {
+	canc := newDumpDiffCanceler(leftPath, rightPath, dumpDiffContentKey)
 	rExact := map[string]map[string][]string{}
 	rAxis := map[string]map[string][]string{}
 	ridx := map[string]map[string][]string{}
 	streamJSONL(rightPath, func(n map[string]any) {
+		if canc.cancelRight(n) {
+			return
+		}
+
 		rec := map[string][]string{}
 
 		for _, f := range tokenFields {
@@ -360,6 +379,18 @@ func diffByToken(leftPath, rightPath string, bw *bufio.Writer, opts byTokenOpts)
 	groups := []string{}
 	paired := 0
 	streamJSONL(leftPath, func(n map[string]any) {
+		// Exact-counterpart producers are paired with zero token delta: count them
+		// in the denominator (subject to the same roots filter) but emit no tokens.
+		if canc.cancelLeft(n) {
+			if opts.rootsOnly && !nodeProducesRoot(n, rootSet) {
+				return
+			}
+
+			paired++
+
+			return
+		}
+
 		rec, ok := findDumpDiffTokenMatch(rExact, rAxis, ridx, n)
 
 		if !ok {
@@ -572,10 +603,15 @@ func tokenCategory(t string) string {
 }
 
 func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
+	canc := newDumpDiffCanceler(leftPath, rightPath, dumpDiffContentKey)
 	rExact := map[string]DiffKindRec{}
 	rAxis := map[string]DiffKindRec{}
 	ridx := map[string]DiffKindRec{}
 	streamJSONL(rightPath, func(n map[string]any) {
+		if canc.cancelRight(n) {
+			return
+		}
+
 		rr := DiffKindRec{kind: nodeKVP(n), h: nodeFieldHashes(n)}
 
 		for _, o := range toStrings(n["outputs"]) {
@@ -587,17 +623,25 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 	fieldDiff := map[string][]int{}
 	combo := map[string]map[string]int{}
 	streamJSONL(leftPath, func(n map[string]any) {
+		kind := nodeKVP(n)
+
+		if kind == "" {
+			kind = "(none)"
+		}
+
+		// Exact-counterpart producers are paired with zero delta: count them in the
+		// per-kind total but never as a divergence.
+		if canc.cancelLeft(n) {
+			total[kind]++
+
+			return
+		}
+
 		var rr DiffKindRec
 		found := false
 
 		if rr, found = findDumpDiffKindMatch(rExact, rAxis, ridx, n); !found {
 			return
-		}
-
-		kind := nodeKVP(n)
-
-		if kind == "" {
-			kind = "(none)"
 		}
 
 		total[kind]++
@@ -646,7 +690,7 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 		var parts []string
 
 		for i, f := range dumpContentFields {
-			if fd[i] > 0 {
+			if len(fd) > 0 && fd[i] > 0 {
 				parts = append(parts, fmt.Sprintf("%s:%d", f, fd[i]))
 			}
 		}
@@ -670,10 +714,15 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 // whose producing node differs from the reference but whose every divergent
 // dependency child matches) and the total count of divergent outputs.
 func computeRootOutputs(leftPath, rightPath string) (map[string]bool, int) {
+	canc := newDumpDiffCanceler(leftPath, rightPath, dumpDiffSelfUIDKey)
 	rightExact := map[string]string{}
 	rightAxis := map[string]string{}
 	rightSelf := map[string]string{}
 	streamJSONL(rightPath, func(n map[string]any) {
+		if canc.cancelRight(n) {
+			return
+		}
+
 		su := getString(n, "self_uid")
 
 		for _, o := range toStrings(n["outputs"]) {
@@ -684,6 +733,12 @@ func computeRootOutputs(leftPath, rightPath string) (map[string]bool, int) {
 	uidToDivergentOuts := map[string]map[string]bool{}
 	uidToDeps := map[string][]string{}
 	streamJSONL(leftPath, func(n map[string]any) {
+		// An exact full-content counterpart implies an equal self_uid at the same
+		// output: the producer is not divergent, so it cannot be a root.
+		if canc.cancelLeft(n) {
+			return
+		}
+
 		su := getString(n, "self_uid")
 		uid := getString(n, "uid")
 		outs := toStrings(n["outputs"])
@@ -997,6 +1052,105 @@ func findMatchingNodePair(leftNodes, rightNodes []map[string]any, match func(lef
 
 func dumpDiffNodeContentEqual(left, right map[string]any) bool {
 	return nodeFieldHashes(left) == nodeFieldHashes(right)
+}
+
+// dumpDiffCanceler extends T-97's exact-counterpart cancellation
+// (stripContentEqualPairs) to the streaming aggregate reports. An output produced
+// by several sibling nodes per side (host/target or command-mode variants that share
+// a coarse match key) has parity iff the two producer multisets are equal; a
+// per-field/token/kind/root delta is only meaningful for producers left without an
+// exact counterpart on the other side. Without cancellation the streaming "first
+// record wins per (output, match-key)" pairing cross-pairs our mode-A producer
+// against ref's mode-B producer and reports a stale delta that the direct --pair
+// probe shows does not exist.
+//
+// The exact-counterpart identity is supplied as a key function so each report
+// cancels on the identity it actually measures: the field/token/kind reports key on
+// the node content hash (the fields they diff), while roots keys on self_uid (the
+// normalized node identity it tests for divergence). On real normalized data the two
+// coincide — self_uid is the SHA-256 of exactly the content fields nodeFieldHashes
+// covers — so noise reduction is identical; they differ only for synthetic fixtures.
+//
+// It carries no node buffers: two cheap key multisets give, per identity, the number
+// of cancellable pairs; budgetLeft/budgetRight are consumed independently as each
+// side streams in deterministic file order, so residual producers are well-defined
+// and pair residual-to-residual.
+type dumpDiffCanceler struct {
+	key         func(map[string]any) string
+	budgetLeft  map[string]int
+	budgetRight map[string]int
+}
+
+func newDumpDiffCanceler(leftPath, rightPath string, key func(map[string]any) string) *dumpDiffCanceler {
+	left := dumpDiffKeyMultiset(leftPath, key)
+	right := dumpDiffKeyMultiset(rightPath, key)
+	pairs := make(map[string]int, len(left))
+
+	for k, lc := range left {
+		if rc := right[k]; rc > 0 {
+			n := lc
+
+			if rc < n {
+				n = rc
+			}
+
+			pairs[k] = n
+		}
+	}
+
+	budgetRight := make(map[string]int, len(pairs))
+
+	for k, n := range pairs {
+		budgetRight[k] = n
+	}
+
+	return &dumpDiffCanceler{key: key, budgetLeft: pairs, budgetRight: budgetRight}
+}
+
+func dumpDiffKeyMultiset(path string, key func(map[string]any) string) map[string]int {
+	m := map[string]int{}
+	streamJSONL(path, func(n map[string]any) {
+		m[key(n)]++
+	})
+
+	return m
+}
+
+func (c *dumpDiffCanceler) cancelLeft(n map[string]any) bool {
+	return dumpDiffTakeBudget(c.budgetLeft, c.key(n))
+}
+
+func (c *dumpDiffCanceler) cancelRight(n map[string]any) bool {
+	return dumpDiffTakeBudget(c.budgetRight, c.key(n))
+}
+
+func dumpDiffTakeBudget(m map[string]int, k string) bool {
+	if m[k] > 0 {
+		m[k]--
+
+		return true
+	}
+
+	return false
+}
+
+// dumpDiffContentKey is the exact-counterpart identity for the field/token/kind
+// reports: the node's content-field hash, the same fields those reports diff.
+func dumpDiffContentKey(n map[string]any) string {
+	h := nodeFieldHashes(n)
+	var b [len(h) * 8]byte
+
+	for i, v := range h {
+		binary.BigEndian.PutUint64(b[i*8:], v)
+	}
+
+	return string(b[:])
+}
+
+// dumpDiffSelfUIDKey is the exact-counterpart identity for the roots report, which
+// tests producer divergence by normalized self_uid.
+func dumpDiffSelfUIDKey(n map[string]any) string {
+	return getString(n, "self_uid")
 }
 
 func findNodesByOutput(path, want string) []map[string]any {
