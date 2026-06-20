@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestEmitFL_NodeShape(t *testing.T) {
 	target := newTestPlatform(OSLinux, ISAX8664, "no")
@@ -24,6 +27,7 @@ func TestEmitFL_NodeShape(t *testing.T) {
 		testToolchain(),
 		e,
 		&flatcVariantFL,
+		nil,
 	)
 
 	if header.string() != "$(B)/mod/File.fbs.h" {
@@ -193,6 +197,73 @@ END()
 	}
 }
 
+// A RUN_PROGRAM whose auto STDOUT is a generated .fbs (yabs proto_flat_buf's
+// `generator Fbs STDOUT formula_parameters.fbs`) must be bridged into flatc:
+// the build-root generated .fbs becomes the flatc input, flatc emits
+// .fbs.h/.fbs.cpp/.bfbs, the .fbs.cpp compiles and archives, and the flatc node
+// depends on the PR producer. The generated .fbs is a $(B) codegen intermediate,
+// reached via the producer dep edge — it is NOT an include input of .fbs.cpp.o.
+func TestGen_RunProgramFbsStdoutBridgesToFlatc(t *testing.T) {
+	files := map[string]string{}
+	mkdirWrite := func(rel, body string) { files[rel] = body }
+
+	writeToolProgram(files, "mod/gen_tool", "gen_tool")
+
+	mkdirWrite("mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    mod/gen_tool Fbs
+    STDOUT
+        schema.fbs
+)
+END()
+`)
+
+	mkdirWrite("build/scripts/cpp_flatc_wrapper.py", "print('stub')\n")
+	mkdirWrite("contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h", "#pragma once\n")
+	mkdirWrite("contrib/libs/flatbuffers/ya.make", "LIBRARY()\nSRCS(fb.cpp)\nEND()\n")
+	mkdirWrite("contrib/libs/flatbuffers/fb.cpp", "int fb() { return 0; }\n")
+	mkdirWrite("contrib/libs/flatbuffers/flatc/ya.make", "PROGRAM(flatc)\nSRCS(main.cpp)\nEND()\n")
+	mkdirWrite("contrib/libs/flatbuffers/flatc/main.cpp", "int main() { return 0; }\n")
+
+	g := testGen(newMemFS(files), "mod")
+
+	pr := mustNodeByOutput(t, g, "$(B)/mod/schema.fbs")
+	if pr.KV.P != pkPR {
+		t.Fatalf("schema.fbs producer kv.p = %q, want PR", pr.KV.P)
+	}
+
+	fl := findGraphNodeByOutputs(t, g, "$(B)/mod/schema.fbs.h", "$(B)/mod/schema.fbs.cpp", "$(B)/mod/schema.bfbs")
+	if fl.KV.P != pkFL {
+		t.Fatalf("schema flatc producer kv.p = %q, want FL", fl.KV.P)
+	}
+	if !nodeHasInput(fl, "$(B)/mod/schema.fbs") {
+		t.Fatalf("flatc node inputs missing build-root schema.fbs: %#v", fl.flatInputs())
+	}
+	if !slices.Contains(graphDeps(g, fl), pr.UID) {
+		t.Fatalf("flatc node deps missing PR producer uid %q: %v", pr.UID, graphDeps(g, fl))
+	}
+
+	cppO := findGraphNodeByOutputs(t, g, "$(B)/mod/schema.fbs.cpp.o")
+	for _, want := range []string{"$(B)/mod/schema.fbs.cpp", "$(B)/mod/schema.fbs.h"} {
+		if !nodeHasInput(cppO, want) {
+			t.Fatalf("schema.fbs.cpp.o inputs missing %q: %#v", want, cppO.flatInputs())
+		}
+	}
+	// The generated .fbs is a $(B) codegen intermediate reached via the producer
+	// dep edge, not a C++ include — it must NOT ride as a .fbs.cpp.o input.
+	if nodeHasInput(cppO, "$(B)/mod/schema.fbs") {
+		t.Fatalf("schema.fbs.cpp.o must not carry the build-root schema.fbs as an input: %#v", cppO.flatInputs())
+	}
+
+	archive := findGraphNodeByOutputs(t, g, "$(B)/mod/libmod.a")
+	if !nodeHasInput(archive, "$(B)/mod/schema.fbs.cpp.o") {
+		t.Fatalf("libmod.a missing schema.fbs.cpp.o member: %#v", archive.flatInputs())
+	}
+}
+
 func TestEmitFL64_NodeShape(t *testing.T) {
 	target := newTestPlatform(OSLinux, ISAX8664, "no")
 	instance := ModuleInstance{
@@ -215,6 +286,7 @@ func TestEmitFL64_NodeShape(t *testing.T) {
 		testToolchain(),
 		e,
 		&flatcVariantFL64,
+		nil,
 	)
 
 	if header.string() != "$(B)/mod/File.fbs64.h" {
