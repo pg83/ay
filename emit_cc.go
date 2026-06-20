@@ -90,6 +90,11 @@ type ModuleCCInputs struct {
 
 	ForceCxx bool
 
+	// NoOptimize reflects the module's NO_OPTIMIZE() declaration: upstream
+	// `when ($NO_OPTIMIZE=="yes"){OPTIMIZE=-O0}`. When set, the compile C-flag
+	// vector's optimize token (-O3) is reassigned to -O0 (suppressOptimize).
+	NoOptimize bool
+
 	ModuleTag STR
 
 	Variant *string
@@ -477,8 +482,29 @@ type CcModuleArgBlocks struct {
 	cPost   []STR
 }
 
+// suppressOptimize reproduces `when ($NO_OPTIMIZE=="yes"){OPTIMIZE=-O0}`:
+// it returns cf with the optimize token -O3 reassigned to -O0. Only release
+// x86 (hostCFlags) carries an optimize token; debug/target vectors leave
+// OPTIMIZE empty, so they are returned unchanged (no token to reassign).
+func suppressOptimize(cf []ARG) []ARG {
+	for i, a := range cf {
+		if a == argO3 {
+			out := make([]ARG, len(cf))
+			copy(out, cf)
+			out[i] = argO0
+			return out
+		}
+	}
+
+	return cf
+}
+
 func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *CcModuleArgBlocks {
 	bundle := compileFlagBundleFor(p)
+
+	if in.NoOptimize {
+		bundle.CFlags = suppressOptimize(bundle.CFlags)
+	}
 	warningBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
 	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(*in, p)
 	catboost := catboostOpenSourceDefineFor(p)

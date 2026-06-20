@@ -51,6 +51,7 @@ func emitLD(
 	objAddLibsGlobal []ARG,
 	exportsScript *STR,
 	noCompilerWarnings bool,
+	noOptimize bool,
 	wantsStrip bool,
 	wantsSplitDwarf bool,
 	programModuleTag STR,
@@ -103,7 +104,7 @@ func emitLD(
 	outputPath := outputVFS.string()
 
 	cmd0 := composeLDCmdVcsInfo(tc, vcsCPath)
-	cmd1 := composeLDCmdVcsCompile(instance.Platform, tc, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings)
+	cmd1 := composeLDCmdVcsCompile(instance.Platform, tc, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings, noOptimize)
 	cmd2 := composeLDCmdLinkExe(instance.Platform, tc, outputPath, vcsOPath, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, wantsStrip)
 	splitDwarfCmds := composeLDSplitDwarfCmds(na, tc, outputPath, wantsSplitDwarf)
 
@@ -307,8 +308,13 @@ func composeLDCmdVcsInfo(tc ModuleToolchain, vcsCPath string) []STR {
 	}
 }
 
-func composeLDCmdVcsCompile(p *Platform, tc ModuleToolchain, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ARG, noCompilerWarnings bool) []STR {
+func composeLDCmdVcsCompile(p *Platform, tc ModuleToolchain, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ARG, noCompilerWarnings, noOptimize bool) []STR {
 	bundle := compileFlagBundleFor(p)
+
+	if noOptimize {
+		bundle.CFlags = suppressOptimize(bundle.CFlags)
+	}
+
 	cmdArgs := make([]STR, 0, 94+len(moduleCFlags)+len(peerCFlagsGlobal)+len(moduleScopeCFlags))
 	cmdArgs = append(cmdArgs, tc.CC, p.TargetArg)
 	cmdArgs = appendArgStr(cmdArgs, bundle.ArchArgs)

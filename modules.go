@@ -247,6 +247,7 @@ type ModuleData struct {
 	// header in addition to .pb.h. See emitYmapsSprotoHeaders.
 	ymapsSprotoSrcs []STR
 	noMypy               bool
+	noOptimize           bool
 	optimizePyProtos     bool
 	optimizePyProtosSet  bool
 	// needGoogleProtoPeerdirs (NEED_GOOGLE_PROTO_PEERDIRS, default yes) drives the
@@ -2156,6 +2157,8 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		}
 	case tokNoMypy:
 		d.noMypy = true
+	case tokNoOptimize:
+		d.noOptimize = true
 	case tokNoOptimizePyProtos:
 		d.optimizePyProtos = false
 		d.optimizePyProtosSet = true
