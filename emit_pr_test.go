@@ -858,3 +858,121 @@ END()
 		}
 	}
 }
+
+// A self-consuming RUN_PROGRAM producer (LIBRARY with OUT gen.h gen.cpp, the
+// auto cc-source gen.cpp compiled in the producing module) owns its generated
+// outputs. Upstream's Node2Module records the producing module on the first
+// DFS-leave; post-order processes the producer (a peer of every consumer) —
+// compiling gen.cpp.o and leaving the OutTogether main output gen.h with it —
+// before any consumer is visited. So gen.h keeps module_dir = producer even
+// though an external module include-resolves it. This runs through the -G
+// finalize where overrideGeneratedModuleDir applies. (T-41: profile_traits.h /
+// all_profiles.h class.)
+func TestGen_RunProgramSelfConsumingProducerOwnsGeneratedModuleDir(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "tools/genhdr", "genhdr")
+
+	writeTestModuleFile(files, "gen/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    tools/genhdr
+        gen.h
+        gen.cpp
+    OUT
+        gen.h
+        gen.cpp
+)
+END()
+`)
+
+	writeTestModuleFile(files, "cons/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(gen)
+SRCS(use.cpp)
+END()
+`)
+	writeTestModuleFile(files, "cons/use.cpp", `#include <gen/gen.h>
+int use() { return 0; }
+`)
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(cons)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGenDumpGraph(newMemFS(files), "app")
+
+	// The external consumer include-resolves the generated header and claims it;
+	// without producer-ownership the override would re-attribute gen.h to "cons".
+	genH := mustNodeByOutput(t, g, "$(B)/gen/gen.h")
+	if got := genH.TargetProperties.ModuleDir; got != "gen" {
+		t.Fatalf("generated header module_dir = %q, want %q (producer owns its self-consumed output)", got, "gen")
+	}
+	// gen.h and gen.cpp ride together on one PR node; both stay with the producer.
+	if !slices.Contains(vfsStrings(genH.Outputs), "$(B)/gen/gen.cpp") {
+		t.Fatalf("gen.h PR node missing sibling gen.cpp output: %v", vfsStrings(genH.Outputs))
+	}
+}
+
+// Negative: a header-only RUN_PROGRAM producer (OUT_NOAUTO geninc.inc — nothing
+// compiled in the producing module) does NOT self-consume. Upstream's first
+// DFS-leave is the external consumer, so the consumer-claim override still
+// re-attributes the generated .inc to the including module. This is the LLVM
+// `contrib/libs/llvm16/include/*.inc` shape; T-41 must not disturb it.
+func TestGen_HeaderOnlyRunProgramKeepsConsumerModuleDir(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "tools/genhdr", "genhdr")
+
+	writeTestModuleFile(files, "geninc/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    tools/genhdr
+        geninc.inc
+    OUT_NOAUTO
+        geninc.inc
+)
+END()
+`)
+
+	writeTestModuleFile(files, "cons2/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(geninc)
+SRCS(use2.cpp)
+END()
+`)
+	writeTestModuleFile(files, "cons2/use2.cpp", `#include <geninc/geninc.inc>
+int use2() { return 0; }
+`)
+
+	writeTestModuleFile(files, "app2/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(cons2)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app2/main.cpp", "int main(){return 0;}\n")
+
+	g := testGenDumpGraph(newMemFS(files), "app2")
+
+	genInc := mustNodeByOutput(t, g, "$(B)/geninc/geninc.inc")
+	if got := genInc.TargetProperties.ModuleDir; got != "cons2" {
+		t.Fatalf("header-only generated .inc module_dir = %q, want %q (consumer claims)", got, "cons2")
+	}
+}
