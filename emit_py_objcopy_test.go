@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/md5"
 	encb64 "encoding/base64"
+	enchex "encoding/hex"
 	"slices"
 	"sort"
 	"strings"
@@ -783,6 +785,79 @@ END()
 	}
 	if !sawNamespace {
 		t.Fatal("checked-in PY_SRCS did not emit the expected py/namespace resource")
+	}
+}
+
+// A checked-in `.py` passed to PY_SRCS as an arcadia-root-relative token (the
+// file lives at the root path it names, not under the module dir) keys its
+// py/namespace resource at the upstream namespace root derived from the resolved
+// rootrel_arc_src — `mod_root_path = rootrel[:-(len(token)+1)]` — which for a
+// fully-root-relative token is the empty string: `py/namespace/<md5>/=<value>`.
+// The namespace VALUE stays module-derived. Mirrors codegen_bin's
+// PY_SRCS(yabs/.../bin/__main__.py).
+func TestGen_RootRelativePySrcsNamespaceKeyedAtRoot(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "slow")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+	writeToolProgram(files, "tools/archiver", "archiver")
+
+	// The source is checked in at the arcadia root path it names, NOT under mod/.
+	writeTestModuleFile(files, "other/place/thing.py", "x = 1\n")
+	writeTestModuleFile(files, "mod/ya.make", `PY3_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+PY_SRCS(other/place/thing.py)
+END()
+`)
+
+	g := testGen(newMemFS(files), "mod")
+
+	// Upstream key: mod_list_md5 over the module name (ns + dotted token),
+	// mod_root_path = "" (rootrel == token), value = module dotted path + ".".
+	h := md5.New()
+	h.Write([]byte("mod.other.place.thing"))
+	nsMD5 := enchex.EncodeToString(h.Sum(nil))
+
+	wantKeyRoot := "py/namespace/" + nsMD5 + "/"
+	kvHash := wantKeyRoot + "=\"mod.\""
+	kvCmd := wantKeyRoot + "=mod."
+
+	wantHash := objcopyHash(nil, nil, []string{kvHash}, "mod", stringPtr("PY3"))
+	wantObjcopy := "$(B)/mod/objcopy_" + wantHash + ".o"
+
+	// The namespace objcopy command must key at the root (empty path), not the
+	// module dir.
+	sawRoot := false
+	for _, n := range g.Graph {
+		for _, a := range prCmdArgStrings(n) {
+			if a == kvCmd {
+				sawRoot = true
+			}
+			if strings.HasPrefix(a, "py/namespace/") && strings.Contains(a, "/mod=") {
+				t.Fatalf("root-relative PY_SRCS keyed namespace at the module dir: %q", a)
+			}
+		}
+	}
+	if !sawRoot {
+		t.Fatalf("missing root-keyed namespace kv %q\nobjcopy nodes: %v", kvCmd, objcopyOutputs(g))
+	}
+
+	// Output/member identity follows the resource key.
+	objcopy := nodeByOutput(g, wantObjcopy)
+	if objcopy == nil {
+		t.Fatalf("graph is missing root-keyed namespace objcopy %q\nobjcopy nodes: %v", wantObjcopy, objcopyOutputs(g))
+	}
+
+	// The module's global archive links exactly that member.
+	globalAr := mustNodeByOutput(t, g, "$(B)/mod/libpy3mod.global.a")
+	if !slices.Contains(prCmdArgStrings(globalAr), wantObjcopy) {
+		t.Fatalf("global archive does not link the root-keyed namespace objcopy %q: %v", wantObjcopy, prCmdArgStrings(globalAr))
 	}
 }
 
