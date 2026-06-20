@@ -100,6 +100,24 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 	return res
 }
 
+// prMainOutputRel returns the relative path of the run's MAIN output — ymake's
+// FindMainElemOrDefault(GetOutput(), 0) over the output order OUT, OUT_NOAUTO,
+// STDOUT (no run here marks an explicit Main element). The OUTPUT_INCLUDES induced
+// includes attach to this output, so its extension decides whether their closure
+// rides the producer. Empty when the run declares no output.
+func prMainOutputRel(stmt *RunProgramStmt) string {
+	switch {
+	case len(stmt.OUTFiles) > 0:
+		return stmt.OUTFiles[0].string()
+	case len(stmt.OUTNoAutoFiles) > 0:
+		return stmt.OUTNoAutoFiles[0].string()
+	case stmt.StdoutFile != nil:
+		return stmt.StdoutFile.string()
+	}
+
+	return ""
+}
+
 // flatcVariantForExt returns the flatc variant for a generated .fbs/.fbs64 module
 // source (RUN_PROGRAM auto STDOUT/OUT), or nil for any other extension.
 func flatcVariantForExt(p string) *flatcVariant {
@@ -382,16 +400,18 @@ func generatedOutputCarriesIncludes(p string) bool {
 
 func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *RunProgramStmt, moduleInputs ModuleCCInputs) []VFS {
 	// OUTPUT_INCLUDES are upstream's `${hide;output_include:OUTPUT_INCLUDES}`:
-	// induced deps recorded ON the OUT files (per the macro doc, "includes of the
-	// output files needed to build them"). They are realized as node inputs at the
-	// point an OUT enters an include scan:
-	//   - an auto cc-source OUT is C-scanned by its downstream CC, so the closure
-	//     surfaces on that CONSUMER (caesar features.gen.cpp); a no-IN run that
-	//     emits such an OUT lists only the tool on the producer.
-	//   - a header-only OUT (no cc-source OUT, no cc-source STDOUT) is never itself
-	//     compiled, so with no IN to root the graph the OUTPUT_INCLUDES closure has
-	//     nowhere else to surface and rides the PRODUCER command node — the full
-	//     $(S) include closure of every OUTPUT_INCLUDES file (plutonium dsp.yaff.h).
+	// induced deps attached to the run's MAIN output (FindMainElemOrDefault,
+	// macro_processor.cpp). Whether their transitive $(S) source closure surfaces
+	// on the PRODUCER's inputs is decided by the type of that main output:
+	//   - main output is a cc-source translation unit (STDOUT formula_parameters.cpp,
+	//     OUT_NOAUTO registrar.cpp): the closure rides the producer command. The
+	//     downstream compile independently C-scans the generated .cpp and carries
+	//     the closure too — the two are not exclusive.
+	//   - main output is a HEADER with a compiled cc-source sibling (features.gen.h +
+	//     features.gen.cpp, profile_traits.h + .cpp): the includes ride the header
+	//     to its consumers, NOT the producer.
+	//   - a header-only / OUT_NOAUTO-only run (no auto cc-source output at all) has
+	//     nowhere else to surface and rides the PRODUCER (plutonium dsp.yaff.h).
 	// With an IN file the producer's graph is rooted at IN regardless (control_board
 	// .{h,cpp}.in #include the proto headers their OUTPUT_INCLUDES name).
 	hasAutoCCSourceOut := stmt.StdoutFile != nil && isCCSourceExt(stmt.StdoutFile.string())
@@ -402,9 +422,14 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		}
 	}
 
-	headerOnlyNoIN := len(stmt.INFiles) == 0 && !hasAutoCCSourceOut
+	mainIsCCSource := isCCSourceExt(prMainOutputRel(stmt))
 
-	if len(stmt.INFiles) == 0 && !headerOnlyNoIN {
+	// The OUTPUT_INCLUDES source closure rides the producer when the run has no IN
+	// and either no compiled cc-source sibling exists to surface it on, or the
+	// run's own main output is the cc-source.
+	fullSourceClosure := len(stmt.INFiles) == 0 && (!hasAutoCCSourceOut || mainIsCCSource)
+
+	if len(stmt.INFiles) == 0 && !fullSourceClosure {
 		return nil
 	}
 
@@ -446,12 +471,19 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		out = append(out, sub...)
 	}
 
-	for _, f := range stmt.OUTFiles {
-		if !isCCSourceExt(f.string()) {
-			continue
-		}
+	// The producer scans its own generated cc-source OUT/STDOUT only when the run is
+	// rooted at an IN (control_board's .h.in surfacing the cc-source's
+	// OUTPUT_INCLUDES). A no-IN cc-main run must NOT scan its own .cpp — that drags
+	// the $(B) codegen headers the consumer carries; its producer closure comes
+	// from the OUTPUT_INCLUDES keep=isSource walk below.
+	if len(stmt.INFiles) > 0 {
+		for _, f := range stmt.OUTFiles {
+			if !isCCSourceExt(f.string()) {
+				continue
+			}
 
-		walkOne(f.string())
+			walkOne(f.string())
+		}
 	}
 
 	// OUT_NOAUTO outputs use upstream's `${hide;noauto;output:OUT_NOAUTO}`
@@ -460,7 +492,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	// (yql/.../v1_proto_split_antlr4 uses OUT_NOAUTO for .pb.h/.pb.cc, and
 	// upstream tracks only IN + tools as PR inputs; walking the .pb.cc here
 	// over-emits 1253 libcxx/protobuf headers via the parsed pb.h chain.)
-	if stmt.StdoutFile != nil && isCCSourceExt(stmt.StdoutFile.string()) {
+	if len(stmt.INFiles) > 0 && stmt.StdoutFile != nil && isCCSourceExt(stmt.StdoutFile.string()) {
 		walkOne(stmt.StdoutFile.string())
 	}
 
@@ -483,12 +515,13 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 
 	// OUTPUT_INCLUDES closure realized on the producer.
 	//
-	// headerOnlyNoIN (plutonium dsp.yaff.h): the run has no IN and emits only
-	// header OUTs, so every OUTPUT_INCLUDES file roots a scan here — codegen .pb.h
-	// via the registry's OutputPath, source-tree headers (library/cpp/yaff/*.h)
-	// via their source path. Keep every $(S) entry of the closure (drops the
-	// intermediate $(B) generated .pb.h; the proto-import graph already surfaces
-	// the $(S) .proto sources, and source-tree WKT .pb.h siblings are added below).
+	// fullSourceClosure (plutonium dsp.yaff.h header-only; formula_parameters.cpp
+	// cc-main STDOUT): the run has no IN, so every OUTPUT_INCLUDES file roots a scan
+	// here — codegen .pb.h via the registry's OutputPath, source-tree headers
+	// (library/cpp/yaff/*.h) via their source path. Keep every $(S) entry of the
+	// closure (drops the intermediate $(B) generated .pb.h; the proto-import graph
+	// already surfaces the $(S) .proto sources, and source-tree WKT .pb.h siblings
+	// are added below).
 	//
 	// Otherwise (run rooted at IN): the producer's C graph is rooted at IN, which
 	// already carries the protobuf/libcxx closure, so a codegen .pb.h
@@ -499,7 +532,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		reg := codegenRegForInstance(ctx, instance)
 
 		keep := func(v VFS) bool {
-			if headerOnlyNoIN {
+			if fullSourceClosure {
 				return v.isSource()
 			}
 			return strings.HasSuffix(v.rel(), ".proto")
@@ -533,7 +566,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 				// (a real PROTO_LIBRARY's .pb.h, e.g. control_board's tablet.pb.h) are
 				// left untouched by the override, so this is a no-op for them.
 				ctx.scannerFor(instance).recordNodeClaim(info.ProducerRef, instance.Path.rel())
-			case headerOnlyNoIN && ctx.fs.isFile(srcRootVFS, target.string()):
+			case fullSourceClosure && ctx.fs.isFile(srcRootVFS, target.string()):
 				// Source-tree OUTPUT_INCLUDES header: scan its own $(S) closure,
 				// keeping the header itself (a real header may be an SCC member,
 				// so walkClosureTail is unsound here).
@@ -555,11 +588,11 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 				// the pre-built .pb.h as PR inputs when the chain transits
 				// through one. For purely-generated .pb.h's (no source-tree
 				// .pb.h sibling) the IsFile probe returns false, so this is a
-				// no-op outside the WKT path. headerOnlyNoIN keeps the whole C
+				// no-op outside the WKT path. fullSourceClosure keeps the whole C
 				// closure, so a genuinely-#included WKT .pb.h already rides as a
 				// source — re-adding the sibling of every .proto would over-emit
 				// the .pb.h of a variant (protobuf_old) that is never #included.
-				if !headerOnlyNoIN && !hasProtoIN && v.isSource() && strings.HasSuffix(v.rel(), ".proto") {
+				if !fullSourceClosure && !hasProtoIN && v.isSource() && strings.HasSuffix(v.rel(), ".proto") {
 					sibling := strings.TrimSuffix(v.rel(), ".proto") + ".pb.h"
 					sibDir, sibBase := splitDirName(sibling)
 
