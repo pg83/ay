@@ -1325,7 +1325,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	// build/platform/* peers via this closure, not from ambient platform flags.
 	d.tc = resolveModuleToolchain(resourceGlobalsClosure, instance.Platform.ClangVer)
 
-	emitFromSandboxes(ctx, instance, d)
+	fsMemberRefs, fsMemberPaths := emitFromSandboxes(ctx, instance, d)
 	emitBundles(ctx, instance, d)
 
 	deduper.reset()
@@ -2319,6 +2319,13 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			peerSbomPaths = append(peerSbomPaths, *p)
 		}
 	}
+
+	// FROM_SANDBOX auto OUT `.a`/`.o` outputs are $AUTO_INPUT link members: a
+	// LIBRARY archives them into its own `.a`, a PROGRAM links them. Folded in
+	// after the clang-toolchain-SBOM gate (which keys on compiled C-family TUs,
+	// which a fetched archive is not) and before the program-LD / AR emission.
+	ccRefs = append(ccRefs, fsMemberRefs...)
+	ccOutputs = append(ccOutputs, fsMemberPaths...)
 
 	if isProgramModuleType(d.moduleStmt.Name) {
 		binaryName := programBinaryName(instance, d.moduleStmt)
