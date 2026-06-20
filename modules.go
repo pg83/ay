@@ -1280,6 +1280,14 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 				case srcExtY:
 					src := srcTok.string()
 					addGeneratedOwnHeaderInclude(modulePath, strings.TrimSuffix(src, filepath.Ext(src))+".h", d)
+				case srcExtFlex:
+					// _SRC("l"/"lex"/"lpp").ADDINCL=$_FLEX_TOOL_DIR (bison_lex.conf):
+					// the old-flex tool dir enters the module's local include dirs
+					// (User scope, no GLOBAL propagation) so the generated lexer's
+					// `<FlexLexer.h>` resolves. Recorded here, in SRCS declaration
+					// order, so it interleaves with a sibling .y's generated-header
+					// dir exactly as upstream orders the two _SRC ADDINCLs.
+					d.addLocalIncl(prioAddIncl, source(argContribToolsFlexOld.string()))
 				}
 			}
 

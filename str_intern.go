@@ -172,6 +172,7 @@ const (
 	srcExtSc
 	srcExtCfgProto
 	srcExtGperf
+	srcExtFlex
 )
 
 func srcExtClassOf(id STR) SrcExtClass {
@@ -228,6 +229,10 @@ func classifySrcExt(s string) SrcExtClass {
 		return srcExtCfgProto
 	case strings.HasSuffix(s, ".gperf"):
 		return srcExtGperf
+	case strings.HasSuffix(s, ".lpp"),
+		strings.HasSuffix(s, ".lex"),
+		strings.HasSuffix(s, ".l"):
+		return srcExtFlex
 	default:
 		return srcExtRegular
 	}
@@ -237,7 +242,7 @@ func classifySrcExt(s string) SrcExtClass {
 // class) — codegen source extensions whose object lands in the module archive.
 func isCodegenProducingSrcID(id STR) bool {
 	switch srcExtClassOf(id) {
-	case srcExtProto, srcExtFbs, srcExtFbs64, srcExtEv, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc, srcExtGperf:
+	case srcExtProto, srcExtFbs, srcExtFbs64, srcExtEv, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc, srcExtGperf, srcExtFlex:
 		return true
 	}
 

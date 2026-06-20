@@ -31,6 +31,7 @@ var (
 	argContribLibsFlatbuffers64Flatc             = internArg("contrib/libs/flatbuffers64/flatc")
 	argContribPythonMypyProtobufBinProtocGenMypy = internArg("contrib/python/mypy-protobuf/bin/protoc-gen-mypy")
 	argContribToolsBison                         = internArg("contrib/tools/bison")
+	argContribToolsFlexOld                       = internArg("contrib/tools/flex-old")
 	argContribToolsGperf                         = internArg("contrib/tools/gperf")
 	argContribToolsM4                            = internArg("contrib/tools/m4")
 	argContribToolsProtoc                        = internArg("contrib/tools/protoc")
