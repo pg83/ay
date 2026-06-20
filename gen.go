@@ -145,7 +145,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"DECIMAL_MD5_LOWER_32_BITS": {},
 	"STRUCT_CODEGEN":            {},
 	"CPP_ENUMS_SERIALIZATION":   {},
-	"ALL_RESOURCE_FILES":        {},
 	// PROTO_DESCRIPTIONS is now a modeled module opener (emit_proto_desc.go);
 	// it no longer rides this no-op set.
 	"STYLE_DETEKT":        {},

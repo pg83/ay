@@ -289,9 +289,9 @@ func emitResourceObjcopy(
 						kvInput, producerRef := resolveResourceInput(ctx, instance, inner, copyFileInputVFS(ctx.fs, instance.Path.rel(), inner))
 						cur.kvInputs = append(cur.kvInputs, kvInput)
 						cur.pathDeps = append(cur.pathDeps, producerRef)
-						cur.kvsCmd = append(cur.kvsCmd, rootrelExpand(e.Key, kvInput.rel()))
+						cur.kvsCmd = append(cur.kvsCmd, renderResourceKvCmd(rootrelExpand(e.Key, kvInput.rel())))
 					} else {
-						cur.kvsCmd = append(cur.kvsCmd, e.Key)
+						cur.kvsCmd = append(cur.kvsCmd, renderResourceKvCmd(e.Key))
 					}
 				} else {
 					inputVFS, producerRef := resolveResourceInput(ctx, instance, e.Path, copyFileInputVFS(ctx.fs, instance.Path.rel(), e.Path))

@@ -1517,6 +1517,18 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 
 				d.resources = append(d.resources, e)
 			}
+		case *AllResourceFilesStmt:
+			ensureResourcePeer(modulePath, d)
+
+			expanded := expandAllResourceFiles(fs, modulePath, env, v)
+
+			for i, e := range expanded {
+				if i == len(expanded)-1 {
+					e.EndsBatch = true
+				}
+
+				d.resources = append(d.resources, e)
+			}
 		case *DeclareResourceStmt:
 			// Expand args (ya.make argument semantics): PREBUILT_PROGRAM's
 			// DECLARE_EXTERNAL_RESOURCE(NAME ${SANDBOX_RESOURCE_URI}) carries the var

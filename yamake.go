@@ -312,6 +312,16 @@ type ResourceFilesStmt struct {
 	Line int
 }
 
+// AllResourceFilesStmt models ALL_RESOURCE_FILES(Ext [PREFIX p] [STRIP s] Dirs...)
+// and ALL_RESOURCE_FILES_FROM_DIRS([PREFIX p] [STRIP s] Dirs...) (FromDirs=true,
+// no Ext). Upstream globs <dir>/*.<ext> (or <dir>/* for FromDirs) and forwards
+// the matches to RESOURCE_FILES; the glob is performed at collection time.
+type AllResourceFilesStmt struct {
+	Args     []STR
+	FromDirs bool
+	Line     int
+}
+
 func (*ModuleStmt) stmtMarker() {
 }
 
@@ -403,6 +413,9 @@ func (*ResourceStmt) stmtMarker() {
 }
 
 func (*ResourceFilesStmt) stmtMarker() {
+}
+
+func (*AllResourceFilesStmt) stmtMarker() {
 }
 
 type Expr interface {
@@ -1268,6 +1281,14 @@ func buildStmtFor(name string, args []STR, line int, fail func(format string, a 
 		return parseResource(args, Token{val: name, line: line})
 	case "RESOURCE_FILES":
 		return &ResourceFilesStmt{Args: append([]STR(nil), args...), Line: line}
+	case "ALL_RESOURCE_FILES":
+		if len(args) == 0 {
+			fail("ALL_RESOURCE_FILES expects at least 1 argument (the extension)")
+		}
+
+		return &AllResourceFilesStmt{Args: append([]STR(nil), args...), Line: line}
+	case "ALL_RESOURCE_FILES_FROM_DIRS":
+		return &AllResourceFilesStmt{Args: append([]STR(nil), args...), FromDirs: true, Line: line}
 	default:
 		return &UnknownStmt{Name: internTok(name), Args: args, Line: line}
 	}
