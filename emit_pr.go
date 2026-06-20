@@ -32,6 +32,18 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 	reg := codegenRegForInstance(ctx, instance)
 	res := &RunProgramsForARResult{}
 
+	type runEntry struct {
+		prRef NodeRef
+		outs  []string
+	}
+
+	runs := make([]runEntry, 0, len(d.runPrograms))
+
+	// Pass 1: emit every PR node, then bridge each auto `.fbs`/`.fbs64` STDOUT/OUT
+	// to its flatc producer (registering .fbs.h/.fbs.cpp/.bfbs). Producers register
+	// before any cc compile below, so a sibling run whose cc-source #includes a
+	// generated .fbs.h (proto_flat_buf's `Cpp` run names formula_parameters.fbs.h
+	// in OUTPUT_INCLUDES) resolves it to the FL output regardless of run order.
 	for _, rp := range d.runPrograms {
 		prRef := emitRunProgram(ctx, instance, rp, d, reg, in)
 
@@ -44,21 +56,61 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 			outs = append(outs, rp.StdoutFile.string())
 		}
 
+		runs = append(runs, runEntry{prRef: prRef, outs: outs})
+
 		for _, out := range outs {
+			if v := flatcVariantForExt(out); v != nil {
+				emitFlatcProducer(ctx, instance, d, copyFileOutputVFS(instance.Path.rel(), out), v, []NodeRef{prRef})
+			}
+		}
+	}
+
+	// Pass 2: direct cc/asm auto-source compiles — the first-level objects.
+	for _, run := range runs {
+		for _, out := range run.outs {
 			switch {
 			case isCCSourceExt(out):
-				ccRef, ccOut := emitPRDownstreamCC(ctx, instance, out, prRef, in)
+				ccRef, ccOut := emitPRDownstreamCC(ctx, instance, out, run.prRef, in)
 				res.CCRefs = append(res.CCRefs, ccRef)
 				res.CCOutputs = append(res.CCOutputs, ccOut)
 			case isAsmSourceExt(out):
-				asRef, asOut := emitCodegenDownstreamAS(ctx, instance, out, []NodeRef{prRef}, in)
+				asRef, asOut := emitCodegenDownstreamAS(ctx, instance, out, []NodeRef{run.prRef}, in)
 				res.CCRefs = append(res.CCRefs, asRef)
 				res.CCOutputs = append(res.CCOutputs, asOut)
 			}
 		}
 	}
 
+	// Pass 3: flatc-generated .fbs.cpp compiles — archived after the first-level
+	// objects (upstream re-feeds the flatc .fbs.cpp as a second-level generated
+	// source; proto_flat_buf archives [formula_parameters.cpp.o, .fbs.cpp.o]).
+	for _, run := range runs {
+		for _, out := range run.outs {
+			if flatcVariantForExt(out) == nil {
+				continue
+			}
+
+			cppVFS := build(copyFileOutputVFS(instance.Path.rel(), out).rel() + ".cpp")
+			emit := emitFlatcCppCompile(ctx, instance, cppVFS, in)
+			res.CCRefs = append(res.CCRefs, emit.Ref)
+			res.CCOutputs = append(res.CCOutputs, emit.OutPath)
+		}
+	}
+
 	return res
+}
+
+// flatcVariantForExt returns the flatc variant for a generated .fbs/.fbs64 module
+// source (RUN_PROGRAM auto STDOUT/OUT), or nil for any other extension.
+func flatcVariantForExt(p string) *flatcVariant {
+	switch {
+	case strings.HasSuffix(p, ".fbs64"):
+		return &flatcVariantFL64
+	case strings.HasSuffix(p, ".fbs"):
+		return &flatcVariantFL
+	}
+
+	return nil
 }
 
 func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, d *ModuleData, reg *CodegenRegistry, moduleInputs ModuleCCInputs) NodeRef {
