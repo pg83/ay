@@ -2,8 +2,66 @@ package main
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
+
+// cppEnumsSerializationProtoFiles builds a minimal PROTO_LIBRARY that compiles
+// package.proto and runs CPP_ENUMS_SERIALIZATION over the generated header(s).
+// macroArgs is the literal argument list of CPP_ENUMS_SERIALIZATION(...).
+func cppEnumsSerializationProtoFiles(macroArgs string) map[string]string {
+	files := map[string]string{}
+	writeTestModuleFile(files, "pe/proto/ya.make", "PROTO_LIBRARY()\nSRCS(package.proto)\nIF (CPP_PROTO)\nCPP_ENUMS_SERIALIZATION("+macroArgs+")\nENDIF()\nEND()\n")
+	writeTestModuleFile(files, "pe/proto/package.proto", "syntax = \"proto3\";\npackage test;\nenum Mode {\n  MODE_UNSPECIFIED = 0;\n}\nmessage Package { Mode mode = 1; }\n")
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+
+	return files
+}
+
+// TestGen_CppEnumsSerialization mirrors upstream pybuild.py CPP_ENUMS_SERIALIZATION:
+// each header argument expands to GENERATE_ENUM_SERIALIZATION_WITH_HEADER, emitting
+// File_serialized.cpp + File_serialized.h (with --header), compiled and archived.
+func TestGen_CppEnumsSerialization(t *testing.T) {
+	g := testGen(newMemFS(cppEnumsSerializationProtoFiles("package.pb.h")), "pe/proto")
+
+	en := mustNodeByOutput(t, g, "$(B)/pe/proto/package.pb.h_serialized.cpp")
+	mustNodeByAnyOutput(t, g, "$(B)/pe/proto/package.pb.h_serialized.h")
+	if indexOfArg(en.Cmds[0].CmdArgs.flat(), "--header") < 0 {
+		t.Fatalf("EN command missing --header: %#v", en.Cmds[0].CmdArgs.flat())
+	}
+
+	mustNodeByOutputSuffix(t, g, "package.pb.h_serialized.cpp.o")
+
+	ar := mustNodeByOutput(t, g, "$(B)/pe/proto/libpe-proto.a")
+	if !containsString(strStrs(ar.Cmds[0].CmdArgs.flat()), "$(B)/pe/proto/package.pb.h_serialized.cpp.o") {
+		t.Fatalf("archive missing serialized-enum object; cmd_args=%#v", strStrs(ar.Cmds[0].CmdArgs.flat()))
+	}
+}
+
+// TestGen_CppEnumsSerializationNamespaceControlToken verifies that a NAMESPACE
+// pair is consumed as a control token (pybuild.py: `if arg == 'NAMESPACE': next(args)`)
+// and emits no serialized output for NAMESPACE or its value — only the real header.
+func TestGen_CppEnumsSerializationNamespaceControlToken(t *testing.T) {
+	g := testGen(newMemFS(cppEnumsSerializationProtoFiles("NAMESPACE something package.pb.h")), "pe/proto")
+
+	mustNodeByOutput(t, g, "$(B)/pe/proto/package.pb.h_serialized.cpp")
+
+	for _, n := range g.Graph {
+		for _, o := range n.Outputs {
+			s := o.string()
+			if strings.Contains(s, "NAMESPACE_serialized") || strings.Contains(s, "something_serialized") {
+				t.Fatalf("bogus serialized output from NAMESPACE control token: %q", s)
+			}
+		}
+	}
+}
 
 func TestGen_EnumSerializationConsumesRunProgramGeneratedHeader(t *testing.T) {
 	// Reproduces the ads/bsyeti/libs/features divergence: a RUN_PROGRAM OUT
