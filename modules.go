@@ -2084,6 +2084,17 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 
 			d.ymapsSprotoSrcs = append(d.ymapsSprotoSrcs, argTok)
 		}
+
+		// _YMAPS_GENERATE_SPROTO_HEADER (sproto.conf) declares a command-level
+		// .PEERDIR=maps/libs/sproto that runs once per named .proto, so the module
+		// running YMAPS_SPROTO peers the target-side maps/libs/sproto library — its
+		// non-PIC archive then reaches a final program link through ordinary peer
+		// closure, separate from the PIC archive carried by the host sprotoc tool.
+		// Dedup rides the existing peerSeen assembly; one append covers repeated
+		// files and repeated YMAPS_SPROTO(...) statements.
+		if len(v.Args) > 0 {
+			d.peerdirs = append(d.peerdirs, strMapsLibsSproto)
+		}
 	case tokExcludeTags:
 		// upstream uses EXCLUDE_TAGS to drop submodules of a multimodule
 		// from the build (per the PROTO_LIBRARY definition at
