@@ -114,6 +114,34 @@ func TestSbom_PyOnlyProtoLibraryEmitsNoComponent(t *testing.T) {
 	}
 }
 
+// TestSbom_CppProtoLibraryComponentTagged pins the orc-format divergence: a
+// licensed PROTO_LIBRARY (no EXCLUDE_TAGS(CPP_PROTO)) builds a CPP_PROTO
+// submodule — the only proto submodule keeping _NEED_SBOM_INFO=yes — whose
+// MODULE_TAG is CPP_PROTO. Its _GEN_SBOM_COMPONENT therefore carries
+// module_tag=cpp_proto, following the owning submodule rather than the bare
+// emitting module dir.
+func TestSbom_CppProtoLibraryComponentTagged(t *testing.T) {
+	const protoDir = "contrib/libs/cppproto"
+
+	files := map[string]string{}
+	writeSbomFixture(files)
+
+	files[protoDir+"/ya.make"] = "PROTO_LIBRARY()\nLICENSE(BSD-3-Clause)\nVERSION(1.0)\nNO_LIBC()\nNO_RUNTIME()\nNO_PLATFORM()\nNO_UTIL()\nDISABLE(NEED_GOOGLE_PROTO_PEERDIRS)\nEXCLUDE_TAGS(GO_PROTO)\nSRCS(foo.proto)\nEND()\n"
+	files[protoDir+"/foo.proto"] = "syntax = \"proto3\";\npackage foo;\nmessage Foo { int32 x = 1; }\n"
+
+	files["app/ya.make"] = "PROGRAM(app)\nNO_LIBC()\nNO_RUNTIME()\nNO_PLATFORM()\nNO_UTIL()\nPEERDIR(" + protoDir + ")\nSRCS(m.cpp)\nEND()\n"
+	files["app/m.cpp"] = "int main(){return 0;}\n"
+
+	g := testGenX86(newMemFS(files), "app")
+
+	want := "$(B)/" + protoDir + "/" + realPrjName(protoDir) + ".CPP.component.sbom"
+	n := mustNodeByAnyOutput(t, g, want)
+
+	if got := n.TargetProperties.ModuleTag.string(); got != "cpp_proto" {
+		t.Errorf("CPP_PROTO library SBOM component module_tag = %q, want cpp_proto", got)
+	}
+}
+
 // TestSbom_OrdinaryLibrariesUnchanged guards that the two fixes do not disturb
 // ordinary C++ / Python library SBOM behavior: a licensed C++ LIBRARY keeps its
 // .CPP component and a licensed PY3_LIBRARY keeps its .PY3 component.
