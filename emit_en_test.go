@@ -127,6 +127,82 @@ END()
 	}
 }
 
+// Nested-submodule directory-owned header drift (T-52): the parent LIBRARY
+// declares the enum serialization, but a NESTED submodule (own ya.make, its dir
+// strictly under the parent's) owns a header that #includes the generated
+// *_serialized.h. ymake's Node2Module (FindModule on the DFS stack) attributes
+// the EN producer to the nearest module on the stack; the nested peerdir
+// submodule leaves the generated node before the enclosing parent completes
+// (submodule-before-parent post-order), so the EN node drifts to the submodule.
+// A second EN whose generated header is reached only through a NON-module subdir
+// of the parent keeps the parent — the discriminator that the consumer-claim
+// override (T-49) lacked.
+func TestGen_EnumSerializationDriftsToNestedSubmoduleDirectoryOwnedHeader(t *testing.T) {
+	files := map[string]string{}
+
+	// parent declares both enum serializations and compiles sub/services.cpp
+	// (a SRC physically located in the nested submodule's directory).
+	writeTestModuleFile(files, "parent/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(parent/sub)
+SRCS(sub/services.cpp main2.cpp)
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(degr.h)
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(plain.h)
+END()
+`)
+	writeTestModuleFile(files, "parent/degr.h", "enum class Degr { A = 0 };\n")
+	writeTestModuleFile(files, "parent/plain.h", "enum class Plain { A = 0 };\n")
+	// main2.cpp pulls the non-module-subdir header that includes plain's serialized.
+	writeTestModuleFile(files, "parent/main2.cpp", "#include \"util/u.h\"\nint m2(){return 0;}\n")
+	// util/ has NO ya.make: owned by parent, not a nested submodule.
+	writeTestModuleFile(files, "parent/util/u.h", "#include <parent/plain.h_serialized.h>\n")
+
+	// nested submodule: its directory owns services.h, which #includes degr's
+	// generated serialized header. services.cpp is compiled by the PARENT.
+	writeTestModuleFile(files, "parent/sub/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(config.cpp)
+END()
+`)
+	writeTestModuleFile(files, "parent/sub/config.cpp", "int cfg(){return 0;}\n")
+	writeTestModuleFile(files, "parent/sub/services.h", "#include <parent/degr.h_serialized.h>\n")
+	writeTestModuleFile(files, "parent/sub/services.cpp", "#include \"services.h\"\nint svc(){return 0;}\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(parent)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+
+	g := testGenDumpGraph(newMemFS(files), "app")
+
+	// degr's serialized header is reached through the nested submodule's
+	// directory-owned services.h → drifts to the submodule.
+	degr := mustNodeByOutput(t, g, "$(B)/parent/degr.h_serialized.cpp")
+	if got := degr.TargetProperties.ModuleDir; got != "parent/sub" {
+		t.Fatalf("degr EN module_dir = %q, want %q (nested submodule directory-owned header)", got, "parent/sub")
+	}
+
+	// plain's serialized header is reached only through a non-module subdir of
+	// parent → stays with the declaring parent.
+	plain := mustNodeByOutput(t, g, "$(B)/parent/plain.h_serialized.cpp")
+	if got := plain.TargetProperties.ModuleDir; got != "parent" {
+		t.Fatalf("plain EN module_dir = %q, want %q (non-module subdir keeps declaring owner)", got, "parent")
+	}
+}
+
 func TestGen_EnumSerializationWithSRCDIRResolvesHeaderViaSourceDir(t *testing.T) {
 	// Reproduces the purecalc_no_pg_wrapper divergence: a module uses INCLUDE()
 	// to pull in a .ya.make.inc that contains SRCDIR() + GENERATE_ENUM_SERIALIZATION().

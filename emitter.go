@@ -52,6 +52,12 @@ type BufferedEmitter struct {
 	// scanner.go: generatedNodeClaim doc).
 	generatedNodeClaim map[NodeRef]string
 
+	// generatedENIncluderDirs maps an EN serialized-enum output to the set of
+	// directories of the files that #include it. overrideGeneratedModuleDir reads
+	// it to drift an EN node to a nested submodule whose directory-owned header
+	// includes the generated header (see scanner.go: generatedENIncluderDirs).
+	generatedENIncluderDirs map[VFS][]string
+
 	// fs, set by runGen, lets finalizeNodesInOrder mix $(S) input content hashes
 	// into node uids (see canonBuf.fs).
 	fs FS
