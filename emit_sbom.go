@@ -79,6 +79,14 @@ func sbomQualifies(d *ModuleData) bool {
 	return d.hasLicense
 }
 
+// MODULE_LANG / SBOM component-language tokens (uppercase, as compared in the
+// autoincluded linters.make.inc gates and emitted in SBOM component names).
+const (
+	moduleLangTokenCpp      = "CPP"
+	moduleLangTokenPy3      = "PY3"
+	moduleLangTokenAgnostic = "AGNOSTIC"
+)
+
 // sbomComponentLang maps the module type to the uppercase MODULE_LANG token
 // used in both the output suffix and the --lang argument: PY3 for python module
 // types, CPP otherwise. (Driven by the module type, not the instance compile
@@ -86,16 +94,16 @@ func sbomQualifies(d *ModuleData) bool {
 func sbomComponentLang(moduleName TOK) string {
 	switch {
 	case moduleName == tokPrebuiltProgram:
-		return "AGNOSTIC"
+		return moduleLangTokenAgnostic
 	case moduleName == tokPy23NativeLibrary:
 		// The modeled PY3 submodule of PY23_NATIVE_LIBRARY is `module PY3:
 		// LIBRARY { ... SET(MODULE_LANG CPP) ... }` (python.conf:1245), so its
 		// SBOM component is <name>.CPP.component.sbom despite the py3c prefix.
-		return "CPP"
+		return moduleLangTokenCpp
 	case pyModuleTypeUsesPython3(moduleName):
-		return "PY3"
+		return moduleLangTokenPy3
 	default:
-		return "CPP"
+		return moduleLangTokenCpp
 	}
 }
 
