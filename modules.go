@@ -978,12 +978,25 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 		d.peerdirs = append(d.peerdirs, strLibraryCppProtoConfigCodegen, strLibraryCppProtoConfigProtos, strContribLibsProtobuf)
 	}
 
-	if hasProto && !hasEv && d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary {
-		if !env.bool(envPY3_PROTO) {
+	// _CPP_PROTO_CMD (proto.conf:461) attaches .PEERDIR=contrib/libs/protobuf to
+	// every C++ proto compile, so any module that compiles a .proto to C++ — a
+	// PROTO_LIBRARY or a plain LIBRARY with an inline .proto (the html/face shape) —
+	// peers contrib/libs/protobuf and inherits its GLOBAL ADDINCL band (protobuf/src
+	// plus the abseil roots protobuf peers). That band must reach the module's
+	// ordinary and generated C++ sources and propagate to downstream consumers. The
+	// .ev and .cfgproto arms above already add protobuf via their own command
+	// PEERDIRs, so this arm excludes hasEv (and cfgproto carries no .proto src).
+	if hasProto && !hasEv {
+		isProtoLibrary := d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary
+
+		// A PROTO_LIBRARY can be python-only (PY3_PROTO): then no C++ proto compile
+		// runs and protobuf is not peered. A plain C++ LIBRARY with an inline .proto
+		// always compiles the .proto to C++, so it peers protobuf unconditionally.
+		if !isProtoLibrary || !env.bool(envPY3_PROTO) {
 			d.peerdirs = append(d.peerdirs, strContribLibsProtobuf)
 		}
 
-		if !d.optimizePyProtosSet {
+		if isProtoLibrary && !d.optimizePyProtosSet {
 			d.optimizePyProtos = true
 		}
 	}
