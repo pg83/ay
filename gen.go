@@ -549,6 +549,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 
 	if be, ok := plainEmit.(*BufferedEmitter); ok {
 		be.generatedFirstClaim = mergeGeneratedFirstClaims(hostScanner, targetScanner)
+		be.generatedNodeClaim = mergeGeneratedNodeClaims(hostScanner, targetScanner)
 	}
 
 	return root.LDRef
@@ -585,6 +586,39 @@ func mergeGeneratedFirstClaims(host, target *IncludeScanner) map[VFS]string {
 		}
 
 		for k, v := range s.generatedFirstClaim {
+			if _, ok := out[k]; !ok {
+				out[k] = v
+			}
+		}
+	}
+
+	return out
+}
+
+// mergeGeneratedNodeClaims merges the two scanners' producer-ref-keyed
+// OUTPUT_INCLUDES claim maps, the HOST scanner winning on conflict (same
+// rationale as mergeGeneratedFirstClaims).
+func mergeGeneratedNodeClaims(host, target *IncludeScanner) map[NodeRef]string {
+	var n int
+
+	for _, s := range []*IncludeScanner{host, target} {
+		if s != nil {
+			n += len(s.generatedNodeClaim)
+		}
+	}
+
+	if n == 0 {
+		return nil
+	}
+
+	out := make(map[NodeRef]string, n)
+
+	for _, s := range []*IncludeScanner{host, target} {
+		if s == nil {
+			continue
+		}
+
+		for k, v := range s.generatedNodeClaim {
 			if _, ok := out[k]; !ok {
 				out[k] = v
 			}
