@@ -161,6 +161,67 @@ END()
 	}
 }
 
+// The FROM_SANDBOX macro names exactly three script inputs on its command path
+// (ymake.core.conf FROM_SANDBOX .CMD): fetch_from_sandbox.py, plus the hidden
+// process_command_files.py and fetch_from.py. ymake's ${input:"…"} adds the
+// named file only — it does NOT expand that script's Python import closure — so
+// the SB node must carry exactly those three and must NOT append the helper
+// closure (fetch_from imports retry; fetch_from_sandbox inline-imports error).
+func TestGen_FromSandboxScriptInputsExplicitThree(t *testing.T) {
+	files := map[string]string{}
+
+	// build/scripts must exist so the script table is populated; the import edges
+	// here are what the closure-expanded model would over-collect (retry, error).
+	files["build/scripts/fetch_from_sandbox.py"] = "import process_command_files as pcf\nimport fetch_from\n"
+	files["build/scripts/fetch_from.py"] = "import retry\n"
+	files["build/scripts/process_command_files.py"] = "\n"
+	files["build/scripts/retry.py"] = "\n"
+	files["build/scripts/error.py"] = "\n"
+
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+FROM_SANDBOX(1038029059 OUT_NOAUTO trie)
+END()
+`)
+
+	g := testGen(newMemFS(files), "mod")
+
+	sb := mustNodeByOutput(t, g, "$(B)/mod/trie")
+	if sb.KV.P != pkSB {
+		t.Fatalf("trie producer kind = %q, want SB", sb.KV.P.string())
+	}
+
+	want := []string{
+		"$(S)/build/scripts/fetch_from.py",
+		"$(S)/build/scripts/fetch_from_sandbox.py",
+		"$(S)/build/scripts/process_command_files.py",
+	}
+	for _, w := range want {
+		if !nodeHasInput(sb, w) {
+			t.Fatalf("SB node missing explicit script input %q: %#v", w, sb.flatInputs())
+		}
+	}
+
+	for _, bad := range []string{"$(S)/build/scripts/error.py", "$(S)/build/scripts/retry.py"} {
+		if nodeHasInput(sb, bad) {
+			t.Fatalf("SB node must not carry helper-closure input %q: %#v", bad, sb.flatInputs())
+		}
+	}
+
+	// Each explicit script appears exactly once.
+	counts := map[string]int{}
+	for _, in := range sb.flatInputs() {
+		counts[in.string()]++
+	}
+	for _, w := range want {
+		if counts[w] != 1 {
+			t.Fatalf("script input %q appears %d times, want exactly 1: %#v", w, counts[w], sb.flatInputs())
+		}
+	}
+}
+
 func prCmdArgStrings(n *Node) []string {
 	var out []string
 
