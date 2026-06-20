@@ -32,11 +32,30 @@ import sys
 import tempfile
 import threading
 import time
+import traceback
+from dataclasses import dataclass
+
+# validate.py only ever exits 0 (all gating byte-exact) or 1 (some gating
+# failure). Any other code — or a signal-negative — means the validator itself
+# crashed (launch error, uncaught exception, killed), not a candidate rejection.
+VALIDATE_OK_EXITS = (0, 1)
+# How many trailing output lines to echo when a side is unusable, so the merger
+# log shows the crash context instead of a bare header.
+DIAG_TAIL_LINES = 25
 
 # One ./dev/validate.py run budget. The user-stated wall cost of a single run is
 # ~10 minutes; over this we kill the run's whole process group and reject.
 # Override via $ACCEPTANCE_TIMEOUT_S (seconds).
 VALIDATE_TIMEOUT_S = int(os.environ.get("ACCEPTANCE_TIMEOUT_S", "2400"))
+
+# validate.py exit 1 is overloaded: a normal gating rejection (it prints
+# "[<case>] FAIL" lines and exits 1) AND an unhandled Python exception (the
+# interpreter prints this marker line at column 0, then exits 1). validate.py
+# never prints a traceback during normal operation, so this line distinguishes a
+# validator crash (infrastructure failure → unusable) from a candidate rejection
+# (policy applies). Without it, a run that emits a few OK cases then raises is
+# silently ACCEPTed because decide() compares only the cases that survived.
+TRACEBACK_LINE = re.compile(r"^Traceback \(most recent call last\):$", re.M)
 
 # Status lines printed by validate.py, e.g. "[sg2] OK", "[sg7] FAIL (generate)",
 # "[sg7] XFAIL (not gating) — …", "[sg5] SKIP (data not present …)".
@@ -60,16 +79,39 @@ def log(msg=""):
         print(msg, flush=True)
 
 
+@dataclass
+class RunResult:
+    """Outcome of one `dev/validate.py` run.
+
+    completed  — the run launched, streamed, and exited without timing out or
+                 raising in the orchestrator (it may still have crashed: check
+                 returncode). A False here always carries a non-empty `error`.
+    returncode — validate.py's exit code (None if it never launched / was killed
+                 before exit).
+    output     — captured stdout (validate.py's stdout+stderr, streamed).
+    error      — non-empty iff this side is UNUSABLE for comparison and the
+                 string explains why (launch error, timeout, worker crash, …).
+    """
+
+    label: str
+    completed: bool
+    returncode: object = None
+    output: str = ""
+    error: str = ""
+
+
 def run_validate(label, repo, out_dir):
     """Run <repo>/dev/validate.py out_dir, streaming its output live (prefixed)
-    and capturing it. Returns (completed, output_text). completed=False means the
-    run timed out or could not be launched — its output is still returned."""
+    and capturing it. Returns a RunResult. A launch failure, timeout, or stream
+    error is captured into RunResult.error (and logged to stdout) rather than
+    raised — the orchestrator must never lose the reason to stderr."""
     validate = os.path.join(repo, "dev", "validate.py")
 
     if not os.path.isfile(validate):
-        log(f"[acceptance] {label}: missing {validate}")
+        msg = f"missing {validate}"
+        log(f"[acceptance] {label}: {msg}")
 
-        return False, ""
+        return RunResult(label, False, error=msg)
 
     os.makedirs(out_dir, exist_ok=True)
     log(f"[acceptance] === {label}: {validate} {out_dir}  (timeout {VALIDATE_TIMEOUT_S}s) ===")
@@ -77,15 +119,21 @@ def run_validate(label, repo, out_dir):
     t0 = time.monotonic()
     # start_new_session so the whole tree (validate.py + ay) shares a process
     # group we can kill on timeout; ay does not orphan if we only kill validate.
-    proc = subprocess.Popen(
-        [sys.executable, validate, out_dir],
-        cwd=repo,
-        text=True,
-        bufsize=1,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        start_new_session=True,
-    )
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, validate, out_dir],
+            cwd=repo,
+            text=True,
+            bufsize=1,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+    except OSError as e:
+        msg = f"failed to launch validate.py: {e!r}"
+        log(f"[acceptance] {label}: {msg}")
+
+        return RunResult(label, False, error=msg)
 
     timed_out = {"v": False}
 
@@ -101,26 +149,47 @@ def run_validate(label, repo, out_dir):
     watchdog.start()
 
     lines = []
+    # A read/wait failure on the pipe must not escape to stderr, AND it must not
+    # be silently swallowed: a transcript truncated by a stream failure is
+    # UNUSABLE even when the lines parsed so far look fine and the child would
+    # have exited 0/1. Capture the reason so this side becomes a recorded error.
+    stream_error = None
 
     try:
         for ln in proc.stdout:
             lines.append(ln)
             log(f"  [{label}] {ln.rstrip()}")
+    except Exception as e:
+        stream_error = f"reading validate.py stdout failed after {len(lines)} line(s): {e!r}"
+        lines.append(f"<stream error: {e!r}>\n")
+        log(f"[acceptance] {label}: {stream_error}")
     finally:
-        proc.wait()
+        try:
+            proc.wait()
+        except Exception as e:
+            if stream_error is None:
+                stream_error = f"waiting for validate.py failed: {e!r}"
+                lines.append(f"<wait error: {e!r}>\n")
+                log(f"[acceptance] {label}: {stream_error}")
         watchdog.cancel()
 
     dt = time.monotonic() - t0
     output = "".join(lines)
 
     if timed_out["v"]:
-        log(f"[acceptance] {label}: TIMEOUT after {VALIDATE_TIMEOUT_S}s — killed; not mergeable")
+        msg = f"TIMEOUT after {VALIDATE_TIMEOUT_S}s — killed; not mergeable"
+        log(f"[acceptance] {label}: {msg}")
 
-        return False, output
+        return RunResult(label, False, returncode=proc.returncode, output=output, error=msg)
+
+    if stream_error is not None:
+        # The transcript is truncated/unreliable; reject this side regardless of
+        # the child's return code or how many case lines parsed before the fault.
+        return RunResult(label, False, returncode=proc.returncode, output=output, error=stream_error)
 
     log(f"[acceptance] {label}: validate.py exit={proc.returncode} in {dt:.1f}s")
 
-    return True, output
+    return RunResult(label, True, returncode=proc.returncode, output=output)
 
 
 def parse(output):
@@ -145,6 +214,41 @@ def parse(output):
             onlies[case] = (int(m.group(3)), int(m.group(4)))
 
     return status, matched, onlies
+
+
+def _tail(output, n=DIAG_TAIL_LINES):
+    lines = output.splitlines()
+    shown = lines[-n:]
+    body = "\n".join(f"    | {ln}" for ln in shown) if shown else "    | (no output captured)"
+    elided = "" if len(lines) <= n else f"    | … ({len(lines) - n} earlier line(s) elided)\n"
+    return elided + body
+
+
+def usability_reason(res, status):
+    """Return a non-empty reason iff this side cannot be compared: a launch
+    error, timeout, worker crash, a validate.py crash (exit not in {0,1} or
+    killed), or a run that produced no parseable case line at all (crashed
+    before emitting any case). Empty string => usable; parse + policy apply.
+
+    A clean all-SKIP run (exit 0, SKIP lines present) stays usable, preserving
+    the existing 'no data on host' ACCEPT behavior."""
+    if res.error:
+        return res.error
+    if res.returncode is None:
+        return "validate.py never reported an exit code"
+    if res.returncode not in VALIDATE_OK_EXITS:
+        return f"validate.py crashed (exit={res.returncode}); not a candidate rejection"
+    if res.returncode != 0 and TRACEBACK_LINE.search(res.output):
+        return (
+            f"validate.py raised an unhandled exception (exit={res.returncode}; "
+            f"Python traceback in output) — validator crash, not a candidate rejection"
+        )
+    if not status:
+        return (
+            f"validate.py exited {res.returncode} but produced no case results "
+            f"(no [<case>] OK/FAIL/XFAIL/SKIP line) — validator failure, not a candidate rejection"
+        )
+    return ""
 
 
 def decide(so, mo, oo, sn, mn, on):
@@ -227,9 +331,18 @@ def main():
         results = {}
 
         def worker(label, repo, out):
-            done, output = run_validate(label, repo, out)
-            shutil.rmtree(out, ignore_errors=True)
-            results[label] = (done, output)
+            # Any failure here MUST become a recorded RunResult (logged to stdout),
+            # never an uncaught thread exception lost to stderr — otherwise main's
+            # results[label] lookup raises and the merger sees only the header.
+            try:
+                res = run_validate(label, repo, out)
+            except Exception:
+                tb = traceback.format_exc()
+                log(f"[acceptance] {label}: worker crashed:\n{tb}")
+                res = RunResult(label, False, error=f"worker crashed: {tb.strip().splitlines()[-1]}")
+            finally:
+                shutil.rmtree(out, ignore_errors=True)
+            results[label] = res
 
         threads = [
             threading.Thread(target=worker, args=("OLD", old_repo, os.path.join(work, "old"))),
@@ -242,18 +355,33 @@ def main():
         for t in threads:
             t.join()
 
-        done_old, out_old = results["OLD"]
-        done_new, out_new = results["NEW"]
+        # Defensive: a worker that somehow never recorded a result is itself a
+        # diagnostic, not a KeyError.
+        res_old = results.get("OLD", RunResult("OLD", False, error="no result recorded (worker did not run)"))
+        res_new = results.get("NEW", RunResult("NEW", False, error="no result recorded (worker did not run)"))
 
-        not_done = [lbl for lbl in ("OLD", "NEW") if not results[lbl][0]]
+        so, mo, oo = parse(res_old.output)
+        sn, mn, on = parse(res_new.output)
 
-        if not_done:
-            log(f"[acceptance] VERDICT: REJECT ({' & '.join(not_done)} validate.py did not complete in budget)")
+        # A side is comparable only if it ran cleanly and produced case results.
+        # Any infrastructure failure (launch error, timeout, crash, empty output,
+        # missing result) rejects with an actionable, stdout-logged reason that
+        # names the side — so the merger log distinguishes it from a candidate
+        # rejection.
+        unusable = []
+        for res, status in ((res_old, so), (res_new, sn)):
+            reason = usability_reason(res, status)
+            if reason:
+                unusable.append((res.label, reason, res.output))
+
+        if unusable:
+            log("")
+            log("[acceptance] VERDICT: REJECT (validate.py run did not yield usable results)")
+            for label, reason, output in unusable:
+                log(f"  - {label}: {reason}")
+                log(f"    last output:\n{_tail(output)}")
 
             return 1
-
-        so, mo, oo = parse(out_old)
-        sn, mn, on = parse(out_new)
 
         accept, reasons = decide(so, mo, oo, sn, mn, on)
 
