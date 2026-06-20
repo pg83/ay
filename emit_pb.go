@@ -90,41 +90,7 @@ func emitPB(
 		srcVFS = protoSrcOverride
 	}
 
-	// CPP_PROTO_OUTS accumulates in ya.make statement order, with the main .pb.h
-	// floated to the front. A plugin declared before lite headers were turned on
-	// appends its outputs ahead of the cpp_out group (.pb.cc + .deps.pb.h); the
-	// rest append behind it (and behind grpc). See CppProtoPlugin.DeclaredBeforeLiteHeaders.
-	outputs := []VFS{pbH}
-
-	for _, plugin := range extraPlugins {
-		if !pluginOutputsPrecedeCppGroup(plugin, liteHeaders) {
-			continue
-		}
-
-		for _, suffix := range plugin.Spec.OutputSuffixes {
-			outputs = append(outputs, build(protoBase+suffix))
-		}
-	}
-
-	outputs = append(outputs, pbCC)
-
-	if liteHeaders {
-		outputs = append(outputs, pbDepsH)
-	}
-
-	if grpc {
-		outputs = append(outputs, grpcPbCC, grpcPbH)
-	}
-
-	for _, plugin := range extraPlugins {
-		if pluginOutputsPrecedeCppGroup(plugin, liteHeaders) {
-			continue
-		}
-
-		for _, suffix := range plugin.Spec.OutputSuffixes {
-			outputs = append(outputs, build(protoBase+suffix))
-		}
-	}
+	outputs := assembleProtoCmdOutputs(protoBase, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH, extraPlugins, liteHeaders, grpc)
 
 	outsChunk := make([]STR, 0, len(outputs))
 
@@ -204,6 +170,50 @@ func emitPB(
 	}
 
 	return emit.emit(node)
+}
+
+// assembleProtoCmdOutputs returns the proto command's output list in
+// $CPP_PROTO_OUTS order: the main .pb.h floated to the front, then — in ya.make
+// statement order — any plugin declared before lite headers were turned on, the
+// cpp_out group (.pb.cc + the lite-header .deps.pb.h), grpc, and the remaining
+// plugins. The buildable (.cc/.cpp) subset of this list, in this order, is also
+// the per-proto archive member order: ymake queues a command's outputs as module
+// sources in this order (module_builder.cpp QueueCommandOutputs). Single source
+// of truth shared by emitPB (the command) and emitProtoPB (the codegen compiles).
+func assembleProtoCmdOutputs(protoBase string, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH VFS, extraPlugins []ResolvedCPPProtoPlugin, liteHeaders, grpc bool) []VFS {
+	outputs := []VFS{pbH}
+
+	for _, plugin := range extraPlugins {
+		if !pluginOutputsPrecedeCppGroup(plugin, liteHeaders) {
+			continue
+		}
+
+		for _, suffix := range plugin.Spec.OutputSuffixes {
+			outputs = append(outputs, build(protoBase+suffix))
+		}
+	}
+
+	outputs = append(outputs, pbCC)
+
+	if liteHeaders {
+		outputs = append(outputs, pbDepsH)
+	}
+
+	if grpc {
+		outputs = append(outputs, grpcPbCC, grpcPbH)
+	}
+
+	for _, plugin := range extraPlugins {
+		if pluginOutputsPrecedeCppGroup(plugin, liteHeaders) {
+			continue
+		}
+
+		for _, suffix := range plugin.Spec.OutputSuffixes {
+			outputs = append(outputs, build(protoBase+suffix))
+		}
+	}
+
+	return outputs
 }
 
 // pluginOutputsPrecedeCppGroup reports whether a proto plugin's generated

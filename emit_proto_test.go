@@ -770,6 +770,68 @@ END()
 	}
 }
 
+// TestEmitProtoSrcs_YaffArchiveMemberOrderFollowsCppOutsOrder pins the sg7
+// YaFF/proto archive member-order residual (representative:
+// ads/peafowl/.../liblibs-profiles-proto.a). The per-proto AR member order
+// mirrors the proto command's --outputs order: a plugin (YAFF) declared before
+// SET(PROTOC_TRANSITIVE_HEADERS "no") lands its .yaff.cpp.o ahead of .pb.cc.o;
+// one declared after lands behind it. Before the fix emitCPPProtoSrcs always
+// emitted .pb.cc before the plugin extras, so the YAFF-before case archived
+// .pb.cc.o ahead of .yaff.cpp.o, diverging from upstream.
+func TestEmitProtoSrcs_YaffArchiveMemberOrderFollowsCppOutsOrder(t *testing.T) {
+	mkFiles := func() map[string]string {
+		files := map[string]string{}
+		writeToolProgram(files, "contrib/tools/protoc", "protoc")
+		writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+		writeToolProgram(files, "library/cpp/yaff/tools/protoc_plugin", "protoc_plugin")
+		writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+		writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+		writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+		return files
+	}
+
+	arMemberIdx := func(t *testing.T, g *Graph, modPath, rel string) int {
+		t.Helper()
+		ar := mustNodeByOutput(t, g, "$(B)/"+modPath+"/"+archiveNameWithPrefixOrName(modPath, "lib", ""))
+		want := "$(B)/" + modPath + "/" + rel
+		for i, in := range ar.flatInputs() {
+			if in.string() == want {
+				return i
+			}
+		}
+		t.Fatalf("AR for %s missing member %q: %v", modPath, want, ar.flatInputs())
+		return -1
+	}
+
+	// YAFF() before SET(PROTOC_TRANSITIVE_HEADERS "no"): .yaff.cpp.o precedes
+	// .pb.cc.o (matches ads/peafowl).
+	beforeFiles := mkFiles()
+	writeTestModuleFile(beforeFiles, "before/ya.make",
+		"PROTO_LIBRARY()\nYAFF()\nSRCS(foo.proto)\nSET(PROTOC_TRANSITIVE_HEADERS \"no\")\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
+	writeTestModuleFile(beforeFiles, "before/foo.proto", "syntax = \"proto3\";\npackage test;\nmessage Foo { string v = 1; }\n")
+
+	gBefore := testGen(newMemFS(beforeFiles), "before")
+	yaffBefore := arMemberIdx(t, gBefore, "before", "foo.yaff.cpp.o")
+	pbBefore := arMemberIdx(t, gBefore, "before", "foo.pb.cc.o")
+	if !(yaffBefore < pbBefore) {
+		t.Errorf("YAFF-before-SET: .yaff.cpp.o (%d) must precede .pb.cc.o (%d)", yaffBefore, pbBefore)
+	}
+
+	// SET(PROTOC_TRANSITIVE_HEADERS "no") before YAFF(): .pb.cc.o precedes
+	// .yaff.cpp.o (matches ads/keywords).
+	afterFiles := mkFiles()
+	writeTestModuleFile(afterFiles, "after/ya.make",
+		"PROTO_LIBRARY()\nSET(PROTOC_TRANSITIVE_HEADERS \"no\")\nYAFF()\nSRCS(foo.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
+	writeTestModuleFile(afterFiles, "after/foo.proto", "syntax = \"proto3\";\npackage test;\nmessage Foo { string v = 1; }\n")
+
+	gAfter := testGen(newMemFS(afterFiles), "after")
+	pbAfter := arMemberIdx(t, gAfter, "after", "foo.pb.cc.o")
+	yaffAfter := arMemberIdx(t, gAfter, "after", "foo.yaff.cpp.o")
+	if !(pbAfter < yaffAfter) {
+		t.Errorf("SET-before-YAFF: .pb.cc.o (%d) must precede .yaff.cpp.o (%d)", pbAfter, yaffAfter)
+	}
+}
+
 // TestEmitPyProtoSrc_GeneratedProtoWiresProducerDep is the Python protobuf
 // analogue of TestEmitProtoSrcs_GeneratedProtoWiresProducerDep: a PROTO_LIBRARY
 // whose SRCS(X.proto) is the OUT of a RUN_ANTLR (no on-disk X.proto), consumed
