@@ -144,7 +144,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"SPLIT_CODEGEN":             {},
 	"DECIMAL_MD5_LOWER_32_BITS": {},
 	"STRUCT_CODEGEN":            {},
-	"CPP_ENUMS_SERIALIZATION":   {},
 	// PROTO_DESCRIPTIONS is now a modeled module opener (emit_proto_desc.go);
 	// it no longer rides this no-op set.
 	"STYLE_DETEKT":        {},
@@ -831,6 +830,19 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		cppProtoEnv := buildIfEnv(instance)
 		cppProtoEnv.setStringID(envMODULE_TAG, strCPPProto)
 
+		// proto.conf:727-728 — the _CPP_PROTO submodule does ENABLE(CPP_PROTO)
+		// and ENABLE(GEN_PROTO). CPP_PROTO gates `IF (CPP_PROTO)` bodies (e.g.
+		// CPP_ENUMS_SERIALIZATION over the generated .pb.h headers).
+		//
+		// Bind it to its own tag-name "CPP_PROTO", not "yes": CPP_PROTO doubles
+		// as a comparison literal in the autoincluded linters.make.inc gate
+		// `IF (MODULE_LANG == CPP AND MODULE_TAG != CPP_PROTO)` (quality/antifraud
+		// et al.). MODULE_TAG is the literal "CPP_PROTO" here, so the bareword RHS
+		// must compare equal to exclude generated proto code from CLANG_WARNINGS —
+		// matching how DefaultIfEnv self-binds other comparison-literal tokens
+		// (address, memory, PY2, …). The name "CPP_PROTO" is also truthy, so
+		// `IF (CPP_PROTO)` still fires.
+		cppProtoEnv.setStringID(envCPP_PROTO, strCPPProto)
 		cppProtoEnv.setBool(envGEN_PROTO, true)
 		d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, cppProtoEnv)
 	} else if d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangPy {
