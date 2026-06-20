@@ -434,6 +434,11 @@ func parseProtoDirectiveSet(data []byte, a *BumpAllocator[IncludeDirective]) Par
 			// protoc keeps the non-.proto extension in the output (the EV/cfgproto
 			// rule), so an `import "X.cfgproto"` induces X.cfgproto.pb.h.
 			j = addDirective(hblock, j, IncludeDirective{kind: d.kind, target: internStr(target + ".pb.h")})
+		case strings.HasSuffix(target, ".gztproto"):
+			// dict/gazetteer/converter rewrites a .gztproto source to <base>.proto,
+			// so an `import "X.gztproto"` resolves through the generated X.pb.h —
+			// NOT the .cfgproto.pb.h rule (the extension is replaced, not kept).
+			j = addDirective(hblock, j, IncludeDirective{kind: d.kind, target: internStr(strings.TrimSuffix(target, ".gztproto") + ".pb.h")})
 		case strings.HasSuffix(target, ".proto"):
 			j = addDirective(hblock, j, IncludeDirective{kind: d.kind, target: internStr(strings.TrimSuffix(target, ".proto") + ".pb.h")})
 		}
