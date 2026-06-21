@@ -29,6 +29,7 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		cppStyleguideLDRef, protocLDRef, configPluginLDRef,
 		cppStyleguideBinary, protocBinary, configPluginBinary,
 		configOpts, 0, cfgImports, in.ProtoInclude,
+		!protoTransitiveHeadersEnabled(d),
 		d.tc, ctx.emit)
 
 	cfgH := build(cfgRelPath + ".pb.h")
