@@ -177,6 +177,11 @@ type GenerateEnumSerializationStmt struct {
 	Header  string
 	Variant string
 	Line    int
+	// DeclSeq is the module-global declaration sequence assigned in collectStmts
+	// (monotonic across statements and INCLUDEs). It orders this macro's generated
+	// auxiliary archive members relative to other default-priority generated
+	// statements (e.g. RUN_PROGRAM) — see reorderARMembers / SrcMeta.
+	DeclSeq int
 }
 
 type DefaultVarStmt struct {
@@ -199,6 +204,9 @@ type RunProgramStmt struct {
 	OutputIncludes []STR
 	ToolPaths      []STR
 	Line           int
+	// DeclSeq is the module-global declaration sequence assigned in collectStmts;
+	// see GenerateEnumSerializationStmt.DeclSeq.
+	DeclSeq int
 }
 
 // SplitCodegenStmt is a SPLIT_CODEGEN(tool prefix opts... [OUT_NUM n]

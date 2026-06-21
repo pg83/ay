@@ -9,6 +9,14 @@ import (
 type RunProgramsForARResult struct {
 	CCRefs    []NodeRef
 	CCOutputs []VFS
+	// Seqs parallels CCRefs/CCOutputs: each member's declaring RUN_PROGRAM
+	// statement declaration sequence, used to order generated archive members by
+	// declaration order against other default-priority generated statements (EN).
+	Seqs []int
+	// SecondLevel parallels CCRefs/CCOutputs: true for a member compiled from a
+	// second-level generated source (a flatc .fbs.cpp re-fed from a RUN_PROGRAM
+	// .fbs), which archives after every first-level generated member.
+	SecondLevel []bool
 }
 
 type RunProgramAuxTool struct {
@@ -36,6 +44,7 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 	type runEntry struct {
 		prRef NodeRef
 		outs  []string
+		seq   int
 	}
 
 	runs := make([]runEntry, 0, len(d.runPrograms))
@@ -57,7 +66,7 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 			outs = append(outs, rp.StdoutFile.string())
 		}
 
-		runs = append(runs, runEntry{prRef: prRef, outs: outs})
+		runs = append(runs, runEntry{prRef: prRef, outs: outs, seq: rp.DeclSeq})
 
 		for _, out := range outs {
 			if v := flatcVariantForExt(out); v != nil {
@@ -74,10 +83,14 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 				ccRef, ccOut := emitPRDownstreamCC(ctx, instance, out, run.prRef, in)
 				res.CCRefs = append(res.CCRefs, ccRef)
 				res.CCOutputs = append(res.CCOutputs, ccOut)
+				res.Seqs = append(res.Seqs, run.seq)
+				res.SecondLevel = append(res.SecondLevel, false)
 			case isAsmSourceExt(out):
 				asRef, asOut := emitCodegenDownstreamAS(ctx, instance, out, []NodeRef{run.prRef}, in)
 				res.CCRefs = append(res.CCRefs, asRef)
 				res.CCOutputs = append(res.CCOutputs, asOut)
+				res.Seqs = append(res.Seqs, run.seq)
+				res.SecondLevel = append(res.SecondLevel, false)
 			}
 		}
 	}
@@ -95,6 +108,8 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 			emit := emitFlatcCppCompile(ctx, instance, cppVFS, in)
 			res.CCRefs = append(res.CCRefs, emit.Ref)
 			res.CCOutputs = append(res.CCOutputs, emit.OutPath)
+			res.Seqs = append(res.Seqs, run.seq)
+			res.SecondLevel = append(res.SecondLevel, true)
 		}
 	}
 
