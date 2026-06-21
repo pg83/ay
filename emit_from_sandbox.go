@@ -123,9 +123,17 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 	// artifacts (no parsed includes); OUTPUT_INCLUDES, when present, ride as the
 	// outputs' registered includes for downstream scans.
 	parsed := fromSandboxOutputIncludes(stmt)
+	reg := codegenRegForInstance(ctx, instance)
 
 	for _, out := range outVFSs {
 		registerBoundGeneratedParsedOutput(ctx, instance, pkSB, out, parsed, ref, nil)
+
+		// Upstream's flat-input model lists a producer's transitive source closure
+		// on every consumer of its outputs. The SB node's source inputs are exactly
+		// its three explicit fetch scripts; record them so a RUN_PROGRAM that
+		// consumes this fetched file as IN (and any further ARCHIVE_ASM/RD consumer)
+		// carries them — without parsing the opaque fetched data as includes.
+		reg.setSourceInputs(out, fromSandboxScriptInputs)
 	}
 
 	return memberRefs, memberPaths

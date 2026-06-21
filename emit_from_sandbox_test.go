@@ -222,6 +222,92 @@ END()
 	}
 }
 
+// A RUN_PROGRAM consuming opaque FROM_SANDBOX fetch outputs as IN, then embedded
+// by ARCHIVE_ASM, must carry the fetch producer's own source/script inputs on the
+// downstream PR and RD nodes — upstream's flat-input model lists a producer's
+// transitive source closure on every consumer of its outputs, even when the
+// fetched data file itself has no parsed includes. The SB fetch node's own input
+// list stays exactly the three explicit scripts (it is not a consumer).
+// (ads/clemmer/automorphology/uzb in sg7.)
+func TestGen_FromSandboxScriptsPropagateThroughRunProgramAndArchiveAsm(t *testing.T) {
+	files := map[string]string{}
+
+	files["build/scripts/fetch_from_sandbox.py"] = "\n"
+	files["build/scripts/fetch_from.py"] = "\n"
+	files["build/scripts/process_command_files.py"] = "\n"
+
+	writeToolProgram(files, "tools/morph2blob", "morph2blob")
+	writeToolProgram(files, "tools/archiver", "archiver")
+	writeToolProgram(files, "contrib/tools/yasm", "yasm")
+
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+FROM_SANDBOX(1038029059 OUT_NOAUTO trie)
+FROM_SANDBOX(1229967763 OUT_NOAUTO suffixes)
+FROM_SANDBOX(1038025065 OUT_NOAUTO paradigms)
+RUN_PROGRAM(
+    tools/morph2blob trie suffixes paradigms
+    IN trie suffixes paradigms
+    STDOUT ${BINDIR}/pack.bin
+)
+ARCHIVE_ASM(
+    NAME Pack
+    DONTCOMPRESS
+    ${BINDIR}/pack.bin
+)
+END()
+`)
+
+	g := testGenX86(newMemFS(files), "mod")
+
+	scripts := []string{
+		"$(S)/build/scripts/fetch_from.py",
+		"$(S)/build/scripts/fetch_from_sandbox.py",
+		"$(S)/build/scripts/process_command_files.py",
+	}
+
+	// (1) the PR node (pack.bin) carries the fetch producer's three scripts.
+	pr := mustNodeByOutput(t, g, "$(B)/mod/pack.bin")
+	if pr.KV.P != pkPR {
+		t.Fatalf("pack.bin kv.p = %q, want PR", pr.KV.P.string())
+	}
+	for _, s := range scripts {
+		if !nodeHasInput(pr, s) {
+			t.Errorf("PR pack.bin missing propagated fetch script %q: %v", s, vfsStringsT3(pr.flatInputs()))
+		}
+	}
+
+	// (2) the RD node (Pack.rodata.o) carries the same three scripts.
+	rd := mustNodeByAnyOutput(t, g, "$(B)/mod/Pack.rodata.o")
+	if rd.KV.P != pkRD {
+		t.Fatalf("Pack.rodata.o kv.p = %q, want RD", rd.KV.P.string())
+	}
+	for _, s := range scripts {
+		if !nodeHasInput(rd, s) {
+			t.Errorf("RD Pack.rodata.o missing propagated fetch script %q: %v", s, vfsStringsT3(rd.flatInputs()))
+		}
+	}
+
+	// (3) each SB fetch node still lists exactly the three explicit scripts —
+	// the producer's own input list and command tokens are unchanged.
+	for _, out := range []string{"$(B)/mod/trie", "$(B)/mod/suffixes", "$(B)/mod/paradigms"} {
+		sb := mustNodeByOutput(t, g, out)
+		if sb.KV.P != pkSB {
+			t.Fatalf("%s kv.p = %q, want SB", out, sb.KV.P.string())
+		}
+		if got := len(sb.flatInputs()); got != len(scripts) {
+			t.Errorf("SB %s has %d inputs, want exactly %d: %v", out, got, len(scripts), vfsStringsT3(sb.flatInputs()))
+		}
+		for _, s := range scripts {
+			if !nodeHasInput(sb, s) {
+				t.Errorf("SB %s missing explicit script %q: %v", out, s, vfsStringsT3(sb.flatInputs()))
+			}
+		}
+	}
+}
+
 func TestGen_FromSandboxRenameResourceCommand(t *testing.T) {
 	cases := []struct {
 		name   string
