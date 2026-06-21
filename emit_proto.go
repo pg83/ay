@@ -349,6 +349,15 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		genProtoImportRels = info.ProtoImportRels
 	}
 
+	// A build-rooted generated transitive import (e.g. a GZT-converted .proto this
+	// PB source imports) is produced by its own GZ/codegen node; pin that producer
+	// as a PB dep so the generated .proto and its producer-source closure stay
+	// reachable from the LD root. Upstream's flat graph carries these producer
+	// edges (the raw blender_setup.pb.h record has 4 deps to our 2). deps are not a
+	// dumpContentFields member, so this is Merkle-graph parity, not a --pair input.
+	extraProtoDeps = append(extraProtoDeps,
+		resolveCodegenDepRefs(ctx, instance, transitiveImports, extraProtoDeps...)...)
+
 	pbRef := emitPB(
 		instance, protoRelPath, protoSrcOverride, pe.cppStyleguideLDRef, pe.protocLDRef,
 		pe.grpcCppLDRef, pe.cppStyleguideBinary, pe.protocBinary, pe.grpcCppBinary,
