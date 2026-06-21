@@ -467,7 +467,11 @@ type PySrcEntry struct {
 	kvCmd     string
 	inputDep  VFS
 
-	extraSrcInput *VFS
+	// extraInputs are node inputs this resfs entry carries beyond pathInput: the
+	// .yapyc3 entry's compiled source, or — for a COPY_FILE-staged source — the
+	// original $(S) source the staged copy was packaged from (rides on both the
+	// .py and .yapyc3 entries, deduped).
+	extraInputs []VFS
 }
 
 // resolvePySrcRel searches the SRCDIR path (reverse, later declaration wins) for
@@ -538,7 +542,8 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 		// srcRel-based, only the source-side path resolves through srcDirs.
 		resolvedRel := resolvePySrcRel(fs, d.srcDirs, modulePath, srcRel)
 
-		generated := reg.lookupSplit(dirKey(modulePath), internStr(srcRel)) != nil
+		genInfo := reg.lookupSplit(dirKey(modulePath), internStr(srcRel))
+		generated := genInfo != nil
 
 		// A full-name generated token (swig) is resourced through the rescompiler
 		// _raw.auxcpp path, not here.
@@ -559,18 +564,41 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 			resolvedRel = modulePath + "/" + srcRel
 		}
 
+		// A COPY_FILE-staged source whose original lives in $(S) is only a
+		// packaging stage: the staged $(B) copy stays the resfs payload/cmd, but the
+		// objcopy node also names the original $(S) source the copy was packaged from
+		// (upstream's flat input model, copy producer source closure). For an
+		// ordinary source the .yapyc3 entry rides the source itself; for a non-copy
+		// generated source — or a copy whose original is itself a $(B) generated
+		// output — it rides the staged $(B) copy (no original $(S) edge — any such
+		// closure belongs to the generated-resource buckets, not this copy edge).
+		srcEdge := pySource
+		copyStaged := generated && genInfo.SourcePath != 0 && genInfo.SourcePath.isSource()
+
+		if copyStaged {
+			srcEdge = genInfo.SourcePath
+		}
+
 		if !d.pyBuildNoPY {
 			pyKey := "resfs/file/py/" + keyPrefix + srcRel
 			pyKvHash := "resfs/src/" + pyKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + "\"}"
 			pyKvCmd := "resfs/src/" + pyKey + "=" + resolvedRel
 
+			// A copy-staged .py payload is the staged $(B) copy; the original $(S)
+			// source the copy was packaged from rides alongside as a node input.
+			var pyExtra []VFS
+			if copyStaged {
+				pyExtra = []VFS{srcEdge}
+			}
+
 			out = append(out, PySrcEntry{
-				pathHash:  srcRel,
-				pathInput: pySource,
-				key:       pyKey,
-				kvHash:    pyKvHash,
-				kvCmd:     pyKvCmd,
-				inputDep:  pySource,
+				pathHash:    srcRel,
+				pathInput:   pySource,
+				key:         pyKey,
+				kvHash:      pyKvHash,
+				kvCmd:       pyKvCmd,
+				inputDep:    pySource,
+				extraInputs: pyExtra,
 			})
 		}
 
@@ -580,16 +608,15 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 
 			ypKvHash := "resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + suffix + "\"}"
 			ypKvCmd := "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
-			extraSrcInput := vfsPtr(pySource)
 
 			out = append(out, PySrcEntry{
-				pathHash:      srcRel + suffix,
-				pathInput:     ypPathInput,
-				key:           ypKey,
-				kvHash:        ypKvHash,
-				kvCmd:         ypKvCmd,
-				inputDep:      ypPathInput,
-				extraSrcInput: extraSrcInput,
+				pathHash:    srcRel + suffix,
+				pathInput:   ypPathInput,
+				key:         ypKey,
+				kvHash:      ypKvHash,
+				kvCmd:       ypKvCmd,
+				inputDep:    ypPathInput,
+				extraInputs: []VFS{srcEdge},
 			})
 		}
 	}
@@ -632,12 +659,10 @@ func chunkPySrcEntries(entries []PySrcEntry) []PySrcChunk {
 			cur.inps = append(cur.inps, e.pathInput)
 		}
 
-		if e.extraSrcInput == nil {
-			return
-		}
-
-		if deduper.add(*e.extraSrcInput) {
-			cur.inps = append(cur.inps, *e.extraSrcInput)
+		for _, v := range e.extraInputs {
+			if deduper.add(v) {
+				cur.inps = append(cur.inps, v)
+			}
 		}
 	}
 
