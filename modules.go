@@ -247,7 +247,6 @@ type ModuleData struct {
 	pythonSQLite3        bool
 	pyNamespace          *STR
 	protoNamespace       *STR
-	protoNamespaceGlobal bool
 	// ymapsSprotoSrcs holds the .proto sources named by YMAPS_SPROTO(...) (maps
 	// sproto.conf). Each gets a .sproto.h PB/yellow producer run through
 	// maps/libs/sproto/sprotoc, and the macro's SET(PROTO_HEADER_EXTS .pb.h
@@ -2087,15 +2086,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 			throwFmt("gen: PROTO_NAMESPACE expects at least 1 argument")
 		}
 
-		global := false
-
-		for _, arg := range v.Args[:len(v.Args)-1] {
-			if arg.string() == "GLOBAL" {
-				global = true
-			}
-		}
-
-		applyProtoNamespace(d, v.Args[len(v.Args)-1], global)
+		applyProtoNamespace(d, v.Args[len(v.Args)-1])
 	case tokExportYmapsProto:
 		// build/internal/conf/project_specific/maps/sproto.conf:
 		//   macro EXPORT_YMAPS_PROTO() { PROTO_NAMESPACE(maps/doc/proto) }
@@ -2111,10 +2102,10 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		// output root (so the maps module's own protoc commands and outputs root at
 		// maps/doc/proto, T-35) and contributes the GLOBAL build-root C++ ADDINCL
 		// that rides the peer closure into transitive consumers' C++ compiles
-		// (-I$(B)/maps/doc/proto, T-32). The bare (non-GLOBAL) call matches
-		// PROTO_NAMESPACE(maps/doc/proto). The protoc-only source arm stays in
-		// protoAddInclGlobal above, so no source-root C++ leakage.
-		applyProtoNamespace(d, mapsDocProtoNS, false)
+		// (-I$(B)/maps/doc/proto, T-32), mirroring PROTO_NAMESPACE(maps/doc/proto).
+		// The protoc-only source arm stays in protoAddInclGlobal above, so no
+		// source-root C++ leakage.
+		applyProtoNamespace(d, mapsDocProtoNS)
 	case tokYmapsSproto:
 		// build/internal/conf/project_specific/maps/sproto.conf:
 		//   macro YMAPS_SPROTO(FILES...) {
@@ -3081,20 +3072,20 @@ func pythonInitSuffix(name string) string {
 // peer addincl closure into transitive consumers. The protoc source arm is carried
 // separately by the caller via d.protoAddInclGlobal. EXPORT_YMAPS_PROTO reuses this
 // so the two macros cannot drift.
-func applyProtoNamespace(d *ModuleData, namespace STR, global bool) {
+func applyProtoNamespace(d *ModuleData, namespace STR) {
 	d.protoNamespace = strPtr(namespace)
 
-	if global {
-		d.protoNamespaceGlobal = true
-	}
-
+	// PROTO_NAMESPACE always calls PROTO_ADDINCL with a literal GLOBAL token
+	// (proto.conf:136), so the C++ build-root arm is `ADDINCL(GLOBAL $(B)/<ns>)`
+	// unconditionally — the GLOBAL/WITH_GEN keywords on PROTO_NAMESPACE never gate
+	// it. Add the dir to local (LocalUserGlobal) plus the GLOBAL/UserGlobal closure,
+	// matching TLanguageIncDirs::Add(dir, Global). The UserGlobal arm is what lands
+	// the dir first in a consumer's -I band (UserGlobalPropagated before peers'
+	// GlobalPropagated), e.g. -I$(B)/yt ahead of the rpc_proxy build-root include.
 	protoBuildRoot := build(filepath.ToSlash(filepath.Clean(namespace.string())))
 	d.addIncl = append(d.addIncl, protoBuildRoot)
-
-	if d.protoNamespaceGlobal || (d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary) {
-		d.addInclGlobal = append(d.addInclGlobal, protoBuildRoot)
-		d.addInclUserGlobal = append(d.addInclUserGlobal, protoBuildRoot)
-	}
+	d.addInclGlobal = append(d.addInclGlobal, protoBuildRoot)
+	d.addInclUserGlobal = append(d.addInclUserGlobal, protoBuildRoot)
 }
 
 func applyArchiveStmt(v *UnknownStmt, d *ModuleData) {
