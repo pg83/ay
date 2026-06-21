@@ -118,6 +118,66 @@ END()
 	}
 }
 
+// Archive member order for the ads/bsyeti/libs/features shape: a RUN_PROGRAM
+// generates formula.cpp/formula.h, ordinary SRCS follow, then
+// GENERATE_ENUM_SERIALIZATION serializes the generated header. ymake re-queues
+// each generated output at its declaring statement's processing point (default
+// priority 2), so among the generated auxiliary members the archive order is
+// the statement declaration order: the RUN_PROGRAM object (formula.cpp.o)
+// precedes the serialized-header object (formula.h_serialized.cpp.o), after the
+// ordinary direct source. Before the fix every generated member tied at Seq 0
+// and the EN members were appended before the PR members, so
+// formula.h_serialized.cpp.o wrongly preceded formula.cpp.o.
+func TestGen_RunProgramEnumSerializationArchiveMemberOrder(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "tools/formula_gen", "formula_gen")
+
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    tools/formula_gen --formula formula.in --cpp formula.cpp --header formula.h
+    IN formula.in
+    OUT formula.cpp formula.h
+)
+SRCS(plain.cpp)
+GENERATE_ENUM_SERIALIZATION(formula.h)
+END()
+`)
+	writeTestModuleFile(files, "mod/formula.in", "enum class E { A = 0 };\n")
+	writeTestModuleFile(files, "mod/plain.cpp", "int plain(){return 0;}\n")
+
+	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "mod")
+
+	ar := mustNodeByOutput(t, g, "$(B)/mod/libmod.a")
+
+	idxOf := func(rel string) int {
+		want := "$(B)/mod/" + rel
+		for i, in := range ar.flatInputs() {
+			if in.string() == want {
+				return i
+			}
+		}
+		t.Fatalf("libmod.a missing member %q: %v", want, vfsStrings(ar.flatInputs()))
+		return -1
+	}
+
+	plain := idxOf("plain.cpp.o")
+	formula := idxOf("formula.cpp.o")
+	serialized := idxOf("formula.h_serialized.cpp.o")
+
+	if !(plain < formula && formula < serialized) {
+		t.Fatalf("archive order plain.cpp.o(%d) < formula.cpp.o(%d) < formula.h_serialized.cpp.o(%d) violated: %v",
+			plain, formula, serialized, vfsStrings(ar.flatInputs()))
+	}
+}
+
 // Owner/consumer split: an enum-serialization generated C++ output (the EN
 // node) and its compile (CC) carry the DECLARING module's module_dir even when
 // a DIFFERENT module include-resolves the generated *_serialized.h first. This
