@@ -1116,6 +1116,115 @@ END()
 	}
 }
 
+// A PY3_PROGRAM's PROGRAM half (PY3_BIN) has .IGNORED=RESOURCE RESOURCE_FILES
+// (conf/python.conf:350): the RESOURCE objcopy is owned by the PY3_BIN_LIB twin
+// and reaches the program ONLY through .PEERDIRSELF=PY3_BIN_LIB's global archive,
+// never as a direct LD member. The PROGRAM-side PY_MAIN objcopy, by contrast, is
+// a genuine direct LD member. Before the fix emitResourceObjcopy emitted the
+// RESOURCE objcopy on the PROGRAM side too, so the program's LD over-linked it as
+// a coupled cmds+inputs member that upstream's reference lacks (representatives:
+// ads/bsyeti, ads/caesar, apphost cow, bigrt .../codegen/codegen).
+func TestGen_Py3ProgramLDDoesNotDirectlyLinkResourceObjcopy(t *testing.T) {
+	files := map[string]string{
+		"contrib/libs/python/ya.make":            "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
+		"library/python/runtime_py3/main/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
+		"library/cpp/malloc/jemalloc/ya.make":     "LIBRARY()\nSRCS(je.cpp)\nEND()\n",
+		"library/cpp/malloc/jemalloc/je.cpp":      "int je(){return 0;}\n",
+		"library/cpp/malloc/api/ya.make":          "LIBRARY()\nSRCS(api.cpp)\nEND()\n",
+		"library/cpp/malloc/api/api.cpp":          "int api(){return 0;}\n",
+		"contrib/libs/jemalloc/ya.make":           "LIBRARY()\nSRCS(c.cpp)\nEND()\n",
+		"contrib/libs/jemalloc/c.cpp":             "int c(){return 0;}\n",
+	}
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeTestModuleFile(files, "library/python/import_tracing/constructor/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n")
+	writeTestModuleFile(files, "library/python/testing/import_test/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n")
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "slow")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+	writeToolProgram(files, "tools/archiver", "archiver")
+
+	writeTestModuleFile(files, "app/data.txt", "stub\n")
+	writeTestModuleFile(files, "app/ya.make", `PY3_PROGRAM()
+DISABLE(PYTHON_SQLITE3)
+ENABLE(PYBUILD_NO_PYC)
+RESOURCE(
+    data.txt app/data.txt
+)
+PY_MAIN(app:main)
+END()
+`)
+
+	g := testGen(newMemFS(files), "app")
+
+	var resObjcopy, mainObjcopy *Node
+	for _, n := range g.Graph {
+		if len(n.Outputs) == 0 || !strings.Contains(n.Outputs[0].string(), "/objcopy_") {
+			continue
+		}
+		args := prCmdArgStrings(n)
+		switch {
+		case slices.Contains(args, "PY_MAIN=app:main"):
+			mainObjcopy = n
+		case slices.Contains(args, encb64.StdEncoding.EncodeToString([]byte("app/data.txt"))):
+			resObjcopy = n
+		}
+	}
+
+	if resObjcopy == nil {
+		t.Fatalf("graph is missing the RESOURCE objcopy: %v", objcopyOutputs(g))
+	}
+	if mainObjcopy == nil {
+		t.Fatalf("graph is missing the PY_MAIN objcopy: %v", objcopyOutputs(g))
+	}
+
+	ld := mustNodeByOutput(t, g, "$(B)/app/app")
+
+	// (1) over-emission under test: the PROGRAM LD must NOT carry the LIBRARY-owned
+	// RESOURCE objcopy as a direct member, in cmds or inputs, nor depend on it.
+	resOut := resObjcopy.Outputs[0].string()
+	if nodeHasInput(ld, resOut) {
+		t.Errorf("LD inputs over-link the LIBRARY-owned RESOURCE objcopy %q: %v", resOut, vfsStringsT3(ld.flatInputs()))
+	}
+	if slices.Contains(prCmdArgStrings(ld), strings.TrimPrefix(resOut, "$(B)/")) {
+		t.Errorf("LD cmds over-link the LIBRARY-owned RESOURCE objcopy %q", resOut)
+	}
+	if depsContain(graphDeps(g, ld), resObjcopy.UID) {
+		t.Errorf("graphDeps(LD) %v over-includes the RESOURCE objcopy uid %q", graphDeps(g, ld), resObjcopy.UID)
+	}
+
+	// (2) control: the PROGRAM-side PY_MAIN objcopy is a genuine direct LD member.
+	mainOut := mainObjcopy.Outputs[0].string()
+	if !nodeHasInput(ld, mainOut) {
+		t.Errorf("LD inputs missing the PROGRAM-side PY_MAIN objcopy %q: %v", mainOut, vfsStringsT3(ld.flatInputs()))
+	}
+	if !depsContain(graphDeps(g, ld), mainObjcopy.UID) {
+		t.Errorf("graphDeps(LD) %v missing the PY_MAIN objcopy uid %q", graphDeps(g, ld), mainObjcopy.UID)
+	}
+
+	// (3) the RESOURCE objcopy is not lost: the PY3_BIN_LIB twin's global archive
+	// still packs it, so the resource reaches the binary through the peer global.
+	var global *Node
+	for _, n := range g.Graph {
+		if len(n.Outputs) == 0 {
+			continue
+		}
+		if strings.HasSuffix(n.Outputs[0].string(), ".global.a") && n.TargetProperties.ModuleTag.string() == "py3_bin_lib_global" {
+			global = n
+			break
+		}
+	}
+	if global == nil {
+		t.Fatal("graph is missing the py3_bin_lib_global archive that must own the RESOURCE objcopy")
+	}
+	if !nodeHasInput(global, resOut) {
+		t.Errorf("py3_bin_lib_global archive does not pack the RESOURCE objcopy %q: %v", resOut, vfsStringsT3(global.flatInputs()))
+	}
+	if !nodeHasInput(ld, global.Outputs[0].string()) {
+		t.Errorf("LD inputs missing the peer global archive %q: %v", global.Outputs[0].string(), vfsStringsT3(ld.flatInputs()))
+	}
+}
+
 func objcopyOutputs(g *Graph) []string {
 	var out []string
 	for _, n := range g.Graph {
