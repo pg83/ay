@@ -74,10 +74,11 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 	// COPY entry is reached, an entry's closure walk would silently miss
 	// any sibling defined later in the file.
 	type entryReg struct {
-		srcVFS VFS
-		dstVFS VFS
-		parsed []IncludeDirective
-		ref    NodeRef
+		srcVFS         VFS
+		dstVFS         VFS
+		parsed         []IncludeDirective
+		ref            NodeRef
+		producerSource []VFS
 	}
 	entries := make([]entryReg, 0, len(d.copyFiles))
 
@@ -90,7 +91,21 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 		// before any CP is built, and a CP whose source resolves to a sibling CP's
 		// output sees that producer.
 		ref := ctx.emit.reserve()
-		entries = append(entries, entryReg{srcVFS, dstVFS, parsed, ref})
+
+		// When the COPY source is itself a registered build-generated output carrying
+		// a producer source closure (e.g. a parent module COPY_FILE of a child
+		// RUN_PROGRAM's OUT_NOAUTO generated_consts.py), upstream's flat-input model
+		// lists that producer's transitive $(S) closure on both the CP action and the
+		// copied file. Peers resolve through genModule before this module's
+		// emitCopyFiles runs, so the producer's ProducerSourceClosure is already
+		// registered. An ordinary source-to-build copy resolves srcInfo==nil and keeps
+		// current behavior.
+		var producerSource []VFS
+		if srcInfo := reg.lookup(srcVFS); srcInfo != nil {
+			producerSource = srcInfo.ProducerSourceClosure
+		}
+
+		entries = append(entries, entryReg{srcVFS, dstVFS, parsed, ref, producerSource})
 
 		scanner.parsers.registerBuildParsedIncludes(dstVFS, parsed)
 
@@ -130,6 +145,19 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 				if srcVFS.isSource() {
 					info.ProducerSourceClosure = append([]VFS{srcVFS}, ctx.scripts[copyFsToolsVFS]...)
 				}
+			}
+
+			// Carry a copied generated output's producer source closure onto the dst so
+			// a downstream PY_SRCS bytecode (py3cc) node folds the full transitive
+			// source set (upstream's flat-input model). The bytecode compiles the
+			// $(B) copied file: its closure is the CP's own $(S) copy-tool scripts
+			// (fs_tools.py / process_command_files.py) PLUS the $(B) source's producer
+			// closure (the $(B) intermediate stays behind the producer node edge).
+			if len(producerSource) > 0 {
+				dstClosure := make([]VFS, 0, len(producerSource)+len(ctx.scripts[copyFsToolsVFS]))
+				dstClosure = append(dstClosure, producerSource...)
+				dstClosure = append(dstClosure, ctx.scripts[copyFsToolsVFS]...)
+				info.ProducerSourceClosure = dstClosure
 			}
 
 			reg.register(info)
@@ -182,6 +210,13 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 			closure = rewriteClosureCPSource(scanner, closure)
 			closure = keepOnlySourceVFS(closure)
 			closure = dedupVFS(closure)
+		}
+
+		// Copying a registered generated output lists its producer's transitive $(S)
+		// closure on the CP action too (upstream's flat-input model). fs_tools.py /
+		// process_command_files.py already ride as the CP node's own script inputs.
+		if len(entries[i].producerSource) > 0 {
+			closure = append(closure, entries[i].producerSource...)
 		}
 
 		// Upstream attributes the owning submodule's MODULE_TAG to every node it
