@@ -115,6 +115,21 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 				if entry.Text || entry.Auto {
 					info.ClosureLeaves = append(info.ClosureLeaves, srcVFS)
 				}
+
+				// A source-root packaging-stage copy ($(S) original staged into the
+				// module) carries its own $(S) input set: the original source plus the
+				// fs_tools.py copy tooling. Upstream's flat-input model lists this
+				// transitive source closure on every node that consumes the staged
+				// copy — so a PY_SRCS source staged through COPY_FILE carries the
+				// original source (+ copy scripts) on its py3cc bytecode node, and the
+				// original source on the resource objcopy. emit_py_codegen.go reads
+				// ProducerSourceClosure for a generated PY_SRCS source unchanged.
+				// A build-root source ($(B) generated output staged by COPY_FILE) has
+				// no $(S) closure to lift here — its producer's source closure is
+				// modeled by the generated-resource buckets, not this copy edge.
+				if srcVFS.isSource() {
+					info.ProducerSourceClosure = append([]VFS{srcVFS}, ctx.scripts[copyFsToolsVFS]...)
+				}
 			}
 
 			reg.register(info)
