@@ -832,6 +832,59 @@ func TestEmitProtoSrcs_YaffArchiveMemberOrderFollowsCppOutsOrder(t *testing.T) {
 	}
 }
 
+// TestEmitProtoSrcs_EvArchiveMemberOrderFollowsSrcsOrder pins the sg7 EV/proto
+// archive member-order residual (representatives: $(B)/search/idl/libsearch-idl.a,
+// $(B)/extsearch/goods/plutometa/proto/libgoods-plutometa-proto.a). In a
+// PROTO_LIBRARY, .proto and .ev are equal-priority _SRC macros whose generated
+// .pb.cc / .ev.pb.cc compiles are queued back into the module source list in SRCS
+// textual order, so the archive interleaves them by declaration position. Before
+// the fix emitCPPProtoSrcs appended all .ev.pb.cc.o after all .pb.cc.o, so
+// SRCS(a.proto e.ev b.proto) archived e.ev.pb.cc.o at the tail instead of between
+// a.pb.cc.o and b.pb.cc.o.
+func TestEmitProtoSrcs_EvArchiveMemberOrderFollowsSrcsOrder(t *testing.T) {
+	const modPath = "search/idlmix"
+
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "tools/event2cpp", "event2cpp")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeTestModuleFile(files, "library/cpp/eventlog/ya.make", "LIBRARY()\nSRCS(eventlog.cpp)\nEND()\n")
+	writeTestModuleFile(files, "library/cpp/eventlog/eventlog.cpp", "int eventlog(){return 0;}\n")
+
+	writeTestModuleFile(files, modPath+"/ya.make",
+		"PROTO_LIBRARY()\nSRCS(a.proto e.ev b.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
+	writeTestModuleFile(files, modPath+"/a.proto", "syntax = \"proto3\";\npackage test;\nmessage A { string v = 1; }\n")
+	writeTestModuleFile(files, modPath+"/b.proto", "syntax = \"proto3\";\npackage test;\nmessage B { string v = 1; }\n")
+	writeTestModuleFile(files, modPath+"/e.ev", "message TEvent {\n}\n")
+
+	g := testGen(newMemFS(files), modPath)
+
+	ar := mustNodeByOutput(t, g, "$(B)/"+modPath+"/"+archiveNameWithPrefixOrName(modPath, "lib", ""))
+	idxOf := func(rel string) int {
+		want := "$(B)/" + modPath + "/" + rel
+		for i, in := range ar.flatInputs() {
+			if in.string() == want {
+				return i
+			}
+		}
+		return -1
+	}
+
+	aIdx := idxOf("a.pb.cc.o")
+	eIdx := idxOf("e.ev.pb.cc.o")
+	bIdx := idxOf("b.pb.cc.o")
+	if aIdx < 0 || eIdx < 0 || bIdx < 0 {
+		t.Fatalf("missing AR member (a=%d e=%d b=%d): %v", aIdx, eIdx, bIdx, ar.flatInputs())
+	}
+	if !(aIdx < eIdx && eIdx < bIdx) {
+		t.Errorf(".ev.pb.cc.o must archive between surrounding proto objects in SRCS order: a=%d e=%d b=%d (%v)",
+			aIdx, eIdx, bIdx, ar.flatInputs())
+	}
+}
+
 // TestEmitPyProtoSrc_GeneratedProtoWiresProducerDep is the Python protobuf
 // analogue of TestEmitProtoSrcs_GeneratedProtoWiresProducerDep: a PROTO_LIBRARY
 // whose SRCS(X.proto) is the OUT of a RUN_ANTLR (no on-disk X.proto), consumed
