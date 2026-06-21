@@ -134,6 +134,15 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 		// consumes this fetched file as IN (and any further ARCHIVE_ASM/RD consumer)
 		// carries them — without parsing the opaque fetched data as includes.
 		reg.setSourceInputs(out, fromSandboxScriptInputs)
+
+		// The fetch is one command with all OUT/OUT_NOAUTO files as outputs; its
+		// main output is the first declared file (outVFSs[0]). A consumer that
+		// embeds only the additional outputs (e.g. a RESOURCE_FILES objcopy chunk
+		// over later dicts) still lists the main output as a spurious input,
+		// because it depends on the single fetch node via the OutTogether
+		// main-output edge (json_visitor.cpp:999-1023). Record the main output so
+		// the objcopy emitter reproduces that edge.
+		reg.setProducerMainOut(out, outVFSs[0])
 	}
 
 	return memberRefs, memberPaths
