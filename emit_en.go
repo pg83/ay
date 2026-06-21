@@ -13,6 +13,50 @@ type EnumSrcsResult struct {
 	// generated archive members by declaration order against other
 	// default-priority generated statements (RUN_PROGRAM).
 	Seqs []int
+	// SecondLevel parallels CCRefs/CCOutputs: true when the EN's input header is a
+	// .pb.h / .ev.pb.h produced by THIS module's own proto/ev SRCS. Such an EN
+	// cannot run until the proto command produced the header, so ymake defers it
+	// one further FIFO round — it archives after every first-level generated
+	// member (incl. the proto .pb.cc.o that produces the header). An external/peer
+	// build-root .pb.h or a checked-in source header stays first-level (false),
+	// archiving at its prio-2 declaration band ahead of this module's proto
+	// objects. See reorderARMembers / SrcMeta.SecondLevel.
+	SecondLevel []bool
+}
+
+// moduleProtoGenHeaders returns the set of root-relative generated header outputs
+// this module's own proto/ev SRCS produce (`<base>.proto`→`<base>.pb.h`,
+// `<base>.ev`→`<base>.ev.pb.h`), resolved through SRCDIR/PROTO_NAMESPACE the same
+// way emit_proto computes the `.pb.h`/`.pb.cc` output paths (protoSourceRelPath).
+// A raw SRCS token (`Offer.proto`) under SRCDIR(m) generates `m/Offer.pb.h`, not
+// `Offer.pb.h`, so keying on the raw token misclassifies SRCDIR-rooted same-module
+// headers as external. An EN over one of these resolved outputs is second-level;
+// the global codegen registry can't make this distinction (it holds peer outputs
+// too), so provenance keys on the module's own proto/ev source set.
+func moduleProtoGenHeaders(ctx *GenCtx, instance ModuleInstance, d *ModuleData) map[string]struct{} {
+	var set map[string]struct{}
+
+	add := func(h string) {
+		if set == nil {
+			set = map[string]struct{}{}
+		}
+
+		set[h] = struct{}{}
+	}
+
+	for _, src := range d.srcs {
+		s := src.string()
+
+		switch {
+		case strings.HasSuffix(s, ".proto"):
+			base := strings.TrimSuffix(protoSourceRelPath(ctx.fs, instance, d, s), ".proto")
+			add(base + ".pb.h")
+		case strings.HasSuffix(s, ".ev"):
+			add(protoSourceRelPath(ctx.fs, instance, d, s) + ".pb.h")
+		}
+	}
+
+	return set
 }
 
 func resolveEnumHeaderInput(ctx *GenCtx, instance ModuleInstance, headerRel string, srcDirs []VFS) VFS {
@@ -51,6 +95,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		ScanCfg:           newScanContext(ctx.parsers, d.addIncl, peerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel()),
 	}
 	res := &EnumSrcsResult{}
+	protoGenHeaders := moduleProtoGenHeaders(ctx, instance, d)
 
 	// One GENERATE_ENUM_SERIALIZATION declaration's generated header can include
 	// another's generated serialized header from the SAME module (balancer/kernel/
@@ -69,6 +114,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		serializedHPath   VFS
 		enRef             NodeRef
 		declSeq           int
+		secondLevel       bool
 	}
 
 	plans := make([]enumStmtPlan, len(d.enumSrcs))
@@ -90,6 +136,13 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		if moduleRootedVFS(instance.Path.rel(), stmt.Header) != nil {
 			serializedBase = headerInput.rel()
 		}
+
+		// An EN whose input header is a .pb.h / .ev.pb.h produced by this module's
+		// own proto/ev SRCS is second-level (it consumes the proto command output);
+		// see EnumSrcsResult.SecondLevel. headerInput.rel() is the resolved
+		// root-relative header path (SRCDIR/PROTO_NAMESPACE applied, $(B)/$(S) prefix
+		// stripped), matched against the same-resolution proto-output set.
+		_, secondLevel := protoGenHeaders[headerInput.rel()]
 
 		serializedCPPPath := build(serializedBase + "_serialized.cpp")
 		var serializedHPath VFS
@@ -132,6 +185,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 			serializedHPath:   serializedHPath,
 			enRef:             enRef,
 			declSeq:           stmt.DeclSeq,
+			secondLevel:       secondLevel,
 		}
 	}
 
@@ -183,6 +237,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 			res.CCRefs = append(res.CCRefs, ccRef)
 			res.CCOutputs = append(res.CCOutputs, ccOut)
 			res.Seqs = append(res.Seqs, p.declSeq)
+			res.SecondLevel = append(res.SecondLevel, p.secondLevel)
 		}
 	}
 
