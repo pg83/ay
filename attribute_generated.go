@@ -99,6 +99,8 @@ func overrideGeneratedModuleDir(e *BufferedEmitter) {
 			continue
 		}
 
+		rewritePRBindirCwd(node, current, claim.Dir)
+
 		node.TargetProperties.ModuleDir = claim.Dir
 
 		// Inherit the claiming module's tag too: upstream's Node2Module attribution
@@ -131,6 +133,40 @@ func generatedOwnerAttributable(node *Node) bool {
 			!strings.HasSuffix(node.Outputs[0].rel(), ".a")
 	default:
 		return false
+	}
+}
+
+// rewritePRBindirCwd re-resolves a RUN_PROGRAM command's `CWD ${BINDIR}` against
+// the owning module when Node2Module attribution moves the node from its producer
+// (`from`) to a consumer (`to`). Upstream resolves ${BINDIR} at command
+// materialization from the owning module's bin dir (mkcmd.cpp:42), so a cwd that
+// equals the producer bin dir ($(B)/<from>) must follow the new owner — while the
+// OUT path, fixed at graph construction, stays put. An explicit non-${BINDIR} cwd
+// does not match the producer-bindir prefix and is left untouched.
+func rewritePRBindirCwd(node *Node, from, to string) {
+	if node.KV.P != pkPR || from == to {
+		return
+	}
+
+	fromBin := build(from).string()
+
+	for j := range node.Cmds {
+		cwd := node.Cmds[j].Cwd
+
+		if cwd == 0 {
+			continue
+		}
+
+		s := cwd.string()
+
+		toBin := build(to).string()
+
+		switch {
+		case s == fromBin:
+			node.Cmds[j].Cwd = internStr(toBin)
+		case strings.HasPrefix(s, fromBin+"/"):
+			node.Cmds[j].Cwd = internStr(toBin + s[len(fromBin):])
+		}
 	}
 }
 
