@@ -1875,6 +1875,83 @@ END()
 // boundary-delimited substring of an arg, so `--in_file=lang_data/ja.txt` becomes
 // `--in_file=$(S)/<dir>/lang_data/ja.txt` and `--out_file=tbls.cc` becomes
 // `--out_file=$(B)/<dir>/tbls.cc`. Bare-token IN/OUT args keep rooting too.
+// A RUN_PROGRAM defined in an INCLUDE'd macro with `CWD ${BINDIR}` and an
+// `OUT_NOAUTO ${OUTPUT_PATH}` output, used from a CHILD module (gen/gen_consts)
+// whose output is consumed only by the PARENT module's COPY_FILE
+// (${ARCADIA_BUILD_ROOT}/gen/gen_consts/generated_consts.py), is owned by the
+// PARENT under upstream's Node2Module first-DFS-leave rule: the OUT_NOAUTO output
+// never enters the producing child's own subtree, so the parent's COPY_FILE
+// build-path EDT_BuildFrom is the first (only) referencer. Both module_dir AND the
+// late-resolved ${BINDIR} cwd follow the owning parent, while the OUT path stays
+// under the child. This is the feature_store/.../gen_consts/generated_consts.py shape.
+func TestGen_RunProgramIncludedMacroCwdFollowsCopyConsumerOwner(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "tools/genconsts", "genconsts")
+
+	writeTestModuleFile(files, "shared/make_generated_consts.inc", `DEFAULT(OUTPUT_PATH "generated_consts.py")
+RUN_PROGRAM(
+    tools/genconsts
+        --save_file_path ${OUTPUT_PATH}
+    OUT_NOAUTO
+        ${OUTPUT_PATH}
+    CWD
+        ${BINDIR}
+)
+`)
+
+	writeTestModuleFile(files, "gen/gen_consts/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+INCLUDE(${ARCADIA_ROOT}/shared/make_generated_consts.inc)
+END()
+`)
+
+	writeTestModuleFile(files, "gen/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(gen/gen_consts)
+COPY_FILE(${ARCADIA_BUILD_ROOT}/gen/gen_consts/generated_consts.py generated_consts.py)
+END()
+`)
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(gen)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGenDumpGraph(newMemFS(files), "app")
+
+	pr := mustNodeByOutput(t, g, "$(B)/gen/gen_consts/generated_consts.py")
+	if pr.KV.P != pkPR {
+		t.Fatalf("expected PR producer, got %v", pr.KV.P)
+	}
+
+	if got := pr.TargetProperties.ModuleDir; got != "gen" {
+		t.Fatalf("PR module_dir = %q, want %q (parent COPY_FILE consumer owns the OUT_NOAUTO node)", got, "gen")
+	}
+
+	if got := pr.Cmds[0].Cwd.string(); got != "$(B)/gen" {
+		t.Fatalf("PR cwd = %q, want %q (${BINDIR} re-resolves against owning parent)", got, "$(B)/gen")
+	}
+
+	// The OUT path stays under the producing child, unchanged by the ownership move.
+	if !slices.Contains(vfsStrings(pr.Outputs), "$(B)/gen/gen_consts/generated_consts.py") {
+		t.Fatalf("PR output path moved off the child dir: %v", vfsStrings(pr.Outputs))
+	}
+
+	if got := pr.TargetProperties.ModuleTag; got != 0 {
+		t.Fatalf("PR module_tag = %q, want unset (plain LIBRARY owner is not a multimodule)", got.string())
+	}
+}
+
 func TestGen_RunProgramFlagArgPathsAreRooted(t *testing.T) {
 	files := map[string]string{}
 

@@ -129,6 +129,25 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 		// self-dependency (and finalize cycle). The old two-phase code never saw it
 		// because dst was not yet bound at this point.
 		deps := resolveCodegenDepRefs(ctx, instance, []VFS{srcVFS}, entries[i].ref)
+
+		// Upstream Node2Module first-DFS-leave ownership: when a COPY_FILE consumes
+		// another module's generated build output (a ${ARCADIA_BUILD_ROOT}/<dir>/<f>
+		// EDT_BuildFrom), this consuming module is a referencer of the producer node.
+		// For an OUT_NOAUTO producer that its own module never re-references (e.g. a
+		// gen_consts RUN_PROGRAM whose product is copied/consumed only by the parent),
+		// the consuming COPY is the first leaver, so the producer node's module_dir AND
+		// late ${BINDIR} cwd follow this module. Record the consumer first-claim (first
+		// -wins; the override's self/same-module guard makes it a no-op when the
+		// producer already owns the output). moduleCCTag is 0 for a plain/PY3 LIBRARY
+		// (non-multimodule), so no spurious module_tag is added.
+		if len(deps) > 0 && srcVFS.isBuild() && srcVFS != dstVFS {
+			var ownerTag STR
+			if d.moduleStmt != nil {
+				ownerTag = moduleCCTag(d.moduleStmt.Name)
+			}
+			scanner.recordFirstClaim(srcVFS, instance.Path.rel(), ownerTag)
+		}
+
 		var closure []VFS
 
 		// COPY_FILE with WITH_CONTEXT pulls the source file's #include closure;
