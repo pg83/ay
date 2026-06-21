@@ -422,19 +422,32 @@ type SrcMeta struct {
 	Prio      int
 	Seq       int
 	Generated bool
+	// SecondLevel marks a generated source that is itself produced from another
+	// in-module generated source (a deeper ymake FIFO round) — e.g. a flatc
+	// .fbs.cpp compiled from a RUN_PROGRAM-emitted .fbs. ymake processes it a
+	// round later than first-level generated sources, so it archives after every
+	// first-level generated member regardless of its declaring statement's
+	// declaration sequence.
+	SecondLevel bool
 }
 
 // sortKey packs the AR-ordering key into one comparable uint64 (high→low:
-// generated-flag, StatementPriority, declaration sequence) — direct compiles
-// before generated-source compiles (deferred a FIFO round in ymake), then by
-// (priority, seq).
+// generation round, StatementPriority, declaration sequence) — direct compiles
+// (round 0) before first-level generated compiles (round 1) before second-level
+// generated compiles (round 2, deferred a further FIFO round in ymake); within a
+// round, by (priority, seq).
 func (m SrcMeta) sortKey() uint64 {
-	var gen uint64
+	var round uint64
+
 	if m.Generated {
-		gen = 1
+		round = 1
 	}
 
-	return gen<<60 | uint64(m.Prio)<<32 | uint64(uint32(m.Seq))
+	if m.SecondLevel {
+		round = 2
+	}
+
+	return round<<60 | uint64(m.Prio)<<32 | uint64(uint32(m.Seq))
 }
 
 // nextDeclSeq returns the next module-global declaration sequence number. It is
@@ -1419,7 +1432,9 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 		case *GlobalSrcsStmt:
 			appendGlobalSrcGroup(d, expandStmtTokensSTR(v.Sources, env))
 		case *GenerateEnumSerializationStmt:
-			d.enumSrcs = append(d.enumSrcs, v)
+			expandedEN := *v
+			expandedEN.DeclSeq = d.nextDeclSeq()
+			d.enumSrcs = append(d.enumSrcs, &expandedEN)
 			// Upstream's GENERATE_ENUM_SERIALIZATION macro expands inline to
 			// `PEERDIR(tools/enum_parser/enum_serialization_runtime)` (see
 			// yatool/build/ymake.core.conf:4518), so the peer enters d.peerdirs
@@ -1513,6 +1528,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 				expanded.CWD = &cwd
 			}
 
+			expanded.DeclSeq = d.nextDeclSeq()
 			d.runPrograms = append(d.runPrograms, &expanded)
 		case *SplitCodegenStmt:
 			expanded := *v

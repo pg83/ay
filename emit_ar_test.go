@@ -877,6 +877,33 @@ message Ydb {}
 	mustNodeByOutput(t, g, "$(B)/ydb/public/api/protos/libpublic-api-protos.a")
 }
 
+func TestReorderARMembers_SecondLevelTrailsFirstLevelByRound(t *testing.T) {
+	// proto_flat_buf shape: RUN_PROGRAM "Fbs" (declared first, declSeq 1) emits a
+	// .fbs that flatc compiles to a SECOND-LEVEL .fbs.cpp; RUN_PROGRAM "Cpp"
+	// (declared second, declSeq 2) emits a FIRST-LEVEL .cpp. Upstream re-feeds the
+	// flatc .fbs.cpp a further FIFO round, so the first-level .cpp.o archives
+	// before the second-level .fbs.cpp.o even though the .fbs run was declared
+	// first — generation round dominates declaration sequence. Without the
+	// SecondLevel round marker the lower declSeq would pull .fbs.cpp.o ahead.
+	fbsCpp := build("mod/formula.fbs.cpp.o")
+	cpp := build("mod/formula.cpp.o")
+	refs := []NodeRef{NodeRef(1), NodeRef(2)}
+	paths := []VFS{fbsCpp, cpp}
+	declMeta := map[VFS]SrcMeta{
+		fbsCpp: {Prio: stmtPrioDefault, Seq: 1, Generated: true, SecondLevel: true},
+		cpp:    {Prio: stmtPrioDefault, Seq: 2, Generated: true},
+	}
+
+	_, gotPaths := reorderARMembers(refs, paths, declMeta)
+
+	got := []string{gotPaths[0].string(), gotPaths[1].string()}
+	want := []string{cpp.string(), fbsCpp.string()}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("second-level ordering: got %v, want first-level .cpp.o before second-level .fbs.cpp.o %v", got, want)
+	}
+}
+
 func TestGen_ARMemberOrder_PbCcAfterHSerialized(t *testing.T) {
 	// Reproduces the libydb-core-tablet_flat.a divergence: a LIBRARY with both
 	// a .proto SRCS entry (generates pb.cc.o) and GENERATE_ENUM_SERIALIZATION
