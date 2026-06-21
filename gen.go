@@ -2308,7 +2308,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if enCCRes != nil {
 		for i, ref := range enCCRes.CCRefs {
 			genCCMeta(&SourceEmit{Ref: ref, OutPath: enCCRes.CCOutputs[i]},
-				SrcMeta{Prio: stmtPrioDefault, Seq: enCCRes.Seqs[i], Generated: true})
+				SrcMeta{Prio: stmtPrioDefault, Seq: enCCRes.Seqs[i], Generated: true, SecondLevel: enCCRes.SecondLevel[i]})
 		}
 	}
 
