@@ -218,6 +218,139 @@ END()
 	}
 }
 
+// A PY_SRCS source staged into the module by COPY_FILE (a NOAUTO copy of a
+// source that lives in another module) is a packaging stage: upstream's flat
+// input model lists the copy producer's transitive $(S) closure — the ORIGINAL
+// source plus the copy tooling (fs_tools.py -> process_command_files.py) — on
+// every node that consumes the staged copy. So the py3cc bytecode node carries
+// the original $(S) source and the copy scripts (besides the staged $(B) copy
+// it compiles), and the resource-objcopy that embeds the staged .py / .yapyc3
+// carries the original $(S) source (the scripts are normalized away ref-side,
+// so ours must not over-emit them onto the objcopy). Before the fix the
+// COPY_FILE producer recorded no source closure: the bytecode node missed all
+// three, and the objcopy named only the staged $(B) copy.
+func TestGen_CopyFileStagedPySrcCarriesOriginalSourceClosure(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "slow")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+	writeToolProgram(files, "tools/archiver", "archiver")
+
+	// The copy tooling closure (fs_tools.py imports process_command_files).
+	writeTestModuleFile(files, "build/scripts/fs_tools.py", "import process_command_files\n")
+	writeTestModuleFile(files, "build/scripts/process_command_files.py", "pass\n")
+
+	// keys.py exists only in another module; the consumer stages it via COPY_FILE
+	// and then lists the staged copy in PY_SRCS.
+	writeTestModuleFile(files, "pkg/keys.py", "KEY = 1\n")
+
+	writeTestModuleFile(files, "mod/ya.make", `PY3_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+COPY_FILE(pkg/keys.py keys.py)
+PY_SRCS(keys.py)
+END()
+`)
+
+	g := testGen(newMemFS(files), "mod")
+
+	const origSrc = "$(S)/pkg/keys.py"
+	const stagedCopy = "$(B)/mod/keys.py"
+	const fsTools = "$(S)/build/scripts/fs_tools.py"
+	const pcf = "$(S)/build/scripts/process_command_files.py"
+
+	// (1) py3cc bytecode node compiles the staged copy but carries the copy
+	// producer's $(S) closure: original source + both copy scripts.
+	bc := mustNodeByOutput(t, g, "$(B)/mod/keys.py.yapyc3")
+	if !nodeHasInput(bc, stagedCopy) {
+		t.Fatalf("bytecode inputs missing staged copy %q: %#v", stagedCopy, bc.flatInputs())
+	}
+	if !nodeHasInput(bc, origSrc) {
+		t.Fatalf("bytecode inputs missing original source %q: %#v", origSrc, bc.flatInputs())
+	}
+	if !nodeHasInput(bc, fsTools) {
+		t.Fatalf("bytecode inputs missing copy tooling %q: %#v", fsTools, bc.flatInputs())
+	}
+	if !nodeHasInput(bc, pcf) {
+		t.Fatalf("bytecode inputs missing copy tooling %q: %#v", pcf, bc.flatInputs())
+	}
+
+	// (2) resource-objcopy embedding the staged .py / .yapyc3 names the ORIGINAL
+	// source, not just the staged $(B) copy, and does NOT over-emit the copy
+	// scripts (ref normalization drops $(S)/build/*.py; our inputs are unfiltered).
+	objcopy := findNodeByOutputPrefix(g, "$(B)/mod/objcopy_")
+	if objcopy == nil {
+		t.Fatal("graph is missing mod objcopy output")
+	}
+	if !nodeHasInput(objcopy, origSrc) {
+		t.Fatalf("objcopy inputs missing original source %q: %#v", origSrc, objcopy.flatInputs())
+	}
+	if nodeHasInput(objcopy, fsTools) || nodeHasInput(objcopy, pcf) {
+		t.Fatalf("objcopy over-emits copy tooling scripts: %#v", objcopy.flatInputs())
+	}
+}
+
+// A COPY_FILE whose source is itself a $(B) generated output (not a $(S)
+// original) is NOT a source-root packaging stage: there is no $(S) closure to
+// lift onto the staged copy's consumers. The copy producer must record no
+// ProducerSourceClosure, and the resource objcopy / py3cc bytecode node must
+// ride only the staged $(B) copy — never the original $(B) producer-location
+// path. This guards the feature_store generated_consts.py shape, which T-137
+// explicitly scopes out: regression from over-broad copy-closure propagation.
+func TestGen_CopyFileStagedBuildRootSrcCarriesNoOriginalClosure(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "slow")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+	writeToolProgram(files, "tools/archiver", "archiver")
+
+	writeTestModuleFile(files, "build/scripts/fs_tools.py", "import process_command_files\n")
+	writeTestModuleFile(files, "build/scripts/process_command_files.py", "pass\n")
+
+	// gen.py is a $(B) generated output; the consumer stages it via COPY_FILE
+	// (build-root source) and lists the staged copy in PY_SRCS.
+	writeTestModuleFile(files, "mod/ya.make", `PY3_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+COPY_FILE(${ARCADIA_BUILD_ROOT}/gen/gen.py gen.py)
+PY_SRCS(gen.py)
+END()
+`)
+
+	g := testGen(newMemFS(files), "mod")
+
+	const origBuildSrc = "$(B)/gen/gen.py"
+	const stagedCopy = "$(B)/mod/gen.py"
+
+	// Bytecode node rides the staged copy only; no original $(B) producer-location
+	// edge (that closure belongs to the generated-resource buckets, not here).
+	bc := mustNodeByOutput(t, g, "$(B)/mod/gen.py.yapyc3")
+	if !nodeHasInput(bc, stagedCopy) {
+		t.Fatalf("bytecode inputs missing staged copy %q: %#v", stagedCopy, bc.flatInputs())
+	}
+	if nodeHasInput(bc, origBuildSrc) {
+		t.Fatalf("bytecode leaks build-root original %q: %#v", origBuildSrc, bc.flatInputs())
+	}
+
+	objcopy := findNodeByOutputPrefix(g, "$(B)/mod/objcopy_")
+	if objcopy == nil {
+		t.Fatal("graph is missing mod objcopy output")
+	}
+	if nodeHasInput(objcopy, origBuildSrc) {
+		t.Fatalf("objcopy leaks build-root original %q: %#v", origBuildSrc, objcopy.flatInputs())
+	}
+}
+
 func TestGen_ResourceBindirOutputFeedsObjcopyFromBuildRoot(t *testing.T) {
 	files := map[string]string{}
 
