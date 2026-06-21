@@ -814,6 +814,43 @@ func (l *Lexer) readString(startLine, startCol int, quote byte) Token {
 	}
 }
 
+// appendQuotedSegment consumes a quoted segment that begins at the current
+// position (l.src[l.pos] == quote) in the MIDDLE of a word token and appends its
+// inner content — delimiters stripped, backslash escapes preserved like
+// readString — to buf. Upstream's ya.make atom rule (makefile_lang.rl6) keeps an
+// atom going across interior quotes when there is no whitespace, so e.g.
+// `-DNAME='\"${X}\"'` is one argument, not a flag prefix plus a separate string.
+func (l *Lexer) appendQuotedSegment(buf []byte, quote byte, startLine, startCol int) []byte {
+	l.advance()
+
+	for {
+		if l.pos >= len(l.src) {
+			l.throwParse(startLine, startCol, "unterminated string")
+		}
+
+		b := l.src[l.pos]
+
+		if b == quote {
+			l.advance()
+
+			return buf
+		}
+
+		if b == '\n' || b == '\r' {
+			l.throwParse(startLine, startCol, "unterminated string")
+		}
+
+		if b == '\\' && l.pos+1 < len(l.src) {
+			buf = append(buf, l.advance())
+			buf = append(buf, l.advance())
+
+			continue
+		}
+
+		buf = append(buf, l.advance())
+	}
+}
+
 func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
 	buf := l.tokBuf[:0]
 	pureIdent := true
@@ -838,6 +875,13 @@ func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
 		if isWordByte(b) || (b == '@' && len(buf) > 0) {
 			pureIdent = false
 			buf = append(buf, l.advance())
+
+			continue
+		}
+
+		if (b == '"' || b == '\'') && len(buf) > 0 {
+			pureIdent = false
+			buf = l.appendQuotedSegment(buf, b, startLine, startCol)
 
 			continue
 		}
@@ -868,6 +912,12 @@ func (l *Lexer) readWord(startLine, startCol int) Token {
 		if b == '\\' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '"' {
 			buf = append(buf, l.advance())
 			buf = append(buf, l.advance())
+
+			continue
+		}
+
+		if (b == '"' || b == '\'') && len(buf) > 0 {
+			buf = l.appendQuotedSegment(buf, b, startLine, startCol)
 
 			continue
 		}
