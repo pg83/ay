@@ -245,6 +245,7 @@ type FromSandboxStmt struct {
 	OUTFiles       []STR
 	OUTNoAutoFiles []STR
 	OutputIncludes []STR
+	Renames        []STR
 	File           bool
 	Executable     bool
 	Prefix         string
@@ -1454,8 +1455,9 @@ func isRunAntlrKeyword(s STR) bool {
 // parseFromSandbox parses FROM_SANDBOX(Id ...): the first non-keyword token is
 // the resource id, then keyword sections collect OUT/OUT_NOAUTO/OUTPUT_INCLUDES,
 // flag keywords (FILE/EXECUTABLE) toggle, and value keywords (PREFIX/AUTOUPDATED/
-// SBR) consume their single argument. RENAME/INDUCED_DEPS sections are parsed and
-// skipped (not needed by the C++/Python contour).
+// SBR) consume their single argument. RENAME collects the fetch rename list
+// (emitted as `--rename <item>` per upstream's ${pre=--rename :RENAME});
+// INDUCED_DEPS is parsed and skipped (not needed by the C++/Python contour).
 func parseFromSandbox(args []STR, line int) *FromSandboxStmt {
 	stmt := &FromSandboxStmt{Line: line, Prefix: "."}
 	section := ""
@@ -1476,7 +1478,9 @@ func parseFromSandbox(args []STR, line int) *FromSandboxStmt {
 			section = "OUT_NOAUTO"
 		case "OUTPUT_INCLUDES":
 			section = "OUTPUT_INCLUDES"
-		case "INDUCED_DEPS", "RENAME":
+		case "RENAME":
+			section = "RENAME"
+		case "INDUCED_DEPS":
 			section = "SKIP"
 		default:
 			switch section {
@@ -1495,6 +1499,8 @@ func parseFromSandbox(args []STR, line int) *FromSandboxStmt {
 				stmt.OUTNoAutoFiles = append(stmt.OUTNoAutoFiles, args[i])
 			case "OUTPUT_INCLUDES":
 				stmt.OutputIncludes = append(stmt.OutputIncludes, args[i])
+			case "RENAME":
+				stmt.Renames = append(stmt.Renames, args[i])
 			case "SKIP":
 			}
 		}
