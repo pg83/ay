@@ -83,14 +83,14 @@ func objcopyCmdArgs(oc *ObjcopyEmitCtx, outputObj VFS, payload []STR) ArgChunks 
 // producer ref is returned so the objcopy node depends on it. Otherwise the path
 // is an ordinary source file: the fallback VFS (its $(S) location) is used with
 // no extra dep.
-func resolveResourceInput(ctx *GenCtx, instance ModuleInstance, rawPath string, fallback VFS) (VFS, NodeRef) {
+func resolveResourceInput(ctx *GenCtx, instance ModuleInstance, rawPath string, fallback VFS) (VFS, NodeRef, VFS) {
 	output := resourceOutputVFS(instance.Path.rel(), rawPath)
 
 	if info := codegenRegForInstance(ctx, instance).lookup(output); info != nil {
-		return output, info.ProducerRef
+		return output, info.ProducerRef, info.ProducerMainOut
 	}
 
-	return fallback, 0
+	return fallback, 0, 0
 }
 
 func emitResourceObjcopy(
@@ -151,10 +151,16 @@ func emitResourceObjcopy(
 		pathInputs []VFS
 		kvInputs   []VFS
 		pathDeps   []NodeRef
-		keys       []string
-		kvs        []string
-		kvsCmd     []string
-		cmdLen     int
+		// mainOuts collects, per resolved generated resource, the producer's main
+		// output (0 for an ordinary source or a producer with no recorded main).
+		// A multi-output producer's main output rides every consumer of any of its
+		// outputs as a spurious input (the OutTogether main-output edge), even on
+		// a chunk that embeds only the producer's additional outputs.
+		mainOuts []VFS
+		keys     []string
+		kvs      []string
+		kvsCmd   []string
+		cmdLen   int
 	}
 	cur := acc{}
 	moduleTag := resourceLibTagForData(d)
@@ -232,6 +238,29 @@ func emitResourceObjcopy(
 			inputs = append(inputs, kvTail)
 		}
 
+		// Spurious main-output inputs: a multi-output producer's main output rides
+		// every consumer of any of its outputs (the OutTogether main-output edge),
+		// so a chunk that embeds only the producer's additional outputs still lists
+		// the main output. Deduped against the inputs already present (a chunk that
+		// embeds the main output as a payload has it covered).
+		var mainTail []VFS
+
+		for _, p := range cur.mainOuts {
+			if p == 0 {
+				continue
+			}
+
+			if !deduper.add(p) {
+				continue
+			}
+
+			mainTail = append(mainTail, p)
+		}
+
+		if len(mainTail) > 0 {
+			inputs = append(inputs, mainTail)
+		}
+
 		resTargetProps := TargetProperties{ModuleDir: instance.Path.rel()}
 
 		switch {
@@ -301,18 +330,20 @@ func emitResourceObjcopy(
 					// to its $(S) source path. The emitted resfs/src value is that
 					// resolved input's rootrel, not a naive module-dir join.
 					if inner, ok := rootrelInputPath(e.Key); ok {
-						kvInput, producerRef := resolveResourceInput(ctx, instance, inner, copyFileInputVFS(ctx.fs, instance.Path.rel(), inner))
+						kvInput, producerRef, mainOut := resolveResourceInput(ctx, instance, inner, copyFileInputVFS(ctx.fs, instance.Path.rel(), inner))
 						cur.kvInputs = append(cur.kvInputs, kvInput)
 						cur.pathDeps = append(cur.pathDeps, producerRef)
+						cur.mainOuts = append(cur.mainOuts, mainOut)
 						cur.kvsCmd = append(cur.kvsCmd, renderResourceKvCmd(rootrelExpand(e.Key, kvInput.rel())))
 					} else {
 						cur.kvsCmd = append(cur.kvsCmd, renderResourceKvCmd(e.Key))
 					}
 				} else {
-					inputVFS, producerRef := resolveResourceInput(ctx, instance, e.Path, copyFileInputVFS(ctx.fs, instance.Path.rel(), e.Path))
+					inputVFS, producerRef, mainOut := resolveResourceInput(ctx, instance, e.Path, copyFileInputVFS(ctx.fs, instance.Path.rel(), e.Path))
 					cur.paths = append(cur.paths, e.Path)
 					cur.pathInputs = append(cur.pathInputs, inputVFS)
 					cur.pathDeps = append(cur.pathDeps, producerRef)
+					cur.mainOuts = append(cur.mainOuts, mainOut)
 					kb := encb64.StdEncoding.EncodeToString([]byte(e.Key))
 					cur.keys = append(cur.keys, kb)
 					cur.cmdLen += rootCmdLen + len(e.Path) + len(kb)
