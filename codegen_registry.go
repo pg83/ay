@@ -83,6 +83,18 @@ type GeneratedFileInfo struct {
 	// cythonCompileInducedInputs. Zero value means "no main recorded".
 	CythonMainOut VFS
 
+	// ProducerMainOut is the producing node's MAIN output — the first declared
+	// output (ymake's FindMainElemOrDefault(outputs, 0)). A node with several
+	// outputs links the additional ones to this main via EDT_OutTogether; the
+	// build command lives on the main-output node, so a consumer of any additional
+	// output depends on the main-output node and ymake lists the main output in
+	// the consumer's flat inputs even though the command never names it
+	// (json_visitor.cpp:999-1023). Recorded so a resource objcopy that embeds only
+	// additional outputs still carries the spurious main-output input. Zero when
+	// the producer is single-output or does not record a main (no OutTogether
+	// edge to reproduce).
+	ProducerMainOut VFS
+
 	// ClosureLeaves are extra VFS that must ride in this output's include-closure
 	// window as bare, non-expanded members — a "generated-from"/source input edge,
 	// not a C++ include. COPY_FILE(TEXT) registers its $(S) source (+ fs_tools.py
@@ -273,6 +285,19 @@ func (r *CodegenRegistry) setSourceInputs(path VFS, src []VFS) {
 	}
 
 	info.SourceInputs = src
+}
+
+// setProducerMainOut records the producing node's main output on an
+// already-registered output (see ProducerMainOut). Called once per output of a
+// multi-output producer with that producer's first declared output.
+func (r *CodegenRegistry) setProducerMainOut(path VFS, mainOut VFS) {
+	info, ok := r.byStr.get(STR(path.strID()))
+
+	if !ok {
+		throwFmt("CodegenRegistry: setProducerMainOut on unregistered path %q", path.string())
+	}
+
+	info.ProducerMainOut = mainOut
 }
 
 // setProducerSourceClosure records the producer's full transitive $(S) input
