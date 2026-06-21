@@ -2724,13 +2724,19 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		globalRefs = append(globalRefs, objcopyRes.Refs...)
 		globalOutputs = append(globalOutputs, objcopyRes.Outputs...)
 
-		// Upstream always places RESOURCE objcopy objects before SRCS(GLOBAL)
-		// objects in the global archive regardless of their declaration order.
-		// This applies only when there are explicit RESOURCE entries (d.resources);
-		// pySrc objcopy from PY_SRCS follows declaration order instead.
-		if globalSrcMemberCount > 0 && len(objcopyRes.Refs) > 0 && len(d.resources) > 0 {
-			globalRefs = moveTailNodeRefsToFront(globalRefs, len(objcopyRes.Refs))
-			globalOutputs = moveTailVFSToFront(globalOutputs, len(objcopyRes.Outputs))
+		// Upstream's explicit RESOURCE/RESOURCE_FILES objcopy objects are ordered
+		// before the SRCS(GLOBAL) band (their onresource call is seen before the
+		// global source band concludes), but PY_SRCS .py/.pyi resource objcopies
+		// are processed a step later (pybuild's onresource_files) and stay AFTER the
+		// global sources. The combined objcopy result keeps the PY_SRCS objcopies as
+		// its trailing span (PySrcTrailCount), so move only the leading
+		// explicit-resource band before the global sources. Gated on explicit
+		// RESOURCE entries (d.resources); without them nothing moves.
+		leadCount := len(objcopyRes.Refs) - objcopyRes.PySrcTrailCount
+		if globalSrcMemberCount > 0 && leadCount > 0 && len(d.resources) > 0 {
+			objBase := len(globalRefs) - len(objcopyRes.Refs)
+			globalRefs = moveSubrangeToFront(globalRefs, objBase, leadCount)
+			globalOutputs = moveSubrangeToFront(globalOutputs, objBase, leadCount)
 		}
 	}
 
@@ -2959,28 +2965,17 @@ func movePathsAfter(paths []VFS, anchor VFS, moved []VFS) []VFS {
 	return outPaths
 }
 
-func moveTailNodeRefsToFront(in []NodeRef, tailLen int) []NodeRef {
-	if tailLen <= 0 || tailLen >= len(in) {
+// moveSubrangeToFront pulls in[start:start+count] to the front of the slice,
+// preserving the relative order of the moved span and of the remainder.
+func moveSubrangeToFront[T any](in []T, start, count int) []T {
+	if count <= 0 || start < 0 || start+count > len(in) {
 		return in
 	}
 
-	pivot := len(in) - tailLen
-	out := make([]NodeRef, 0, len(in))
-	out = append(out, in[pivot:]...)
-	out = append(out, in[:pivot]...)
-
-	return out
-}
-
-func moveTailVFSToFront(in []VFS, tailLen int) []VFS {
-	if tailLen <= 0 || tailLen >= len(in) {
-		return in
-	}
-
-	pivot := len(in) - tailLen
-	out := make([]VFS, 0, len(in))
-	out = append(out, in[pivot:]...)
-	out = append(out, in[:pivot]...)
+	out := make([]T, 0, len(in))
+	out = append(out, in[start:start+count]...)
+	out = append(out, in[:start]...)
+	out = append(out, in[start+count:]...)
 
 	return out
 }

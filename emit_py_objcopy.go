@@ -20,6 +20,14 @@ var (
 type ObjcopyEmitResult struct {
 	Refs    []NodeRef
 	Outputs []VFS
+	// PySrcTrailCount is the number of trailing Refs that come from PY_SRCS
+	// resource packing — the .py objcopies (emitPySrcObjcopy, including the
+	// py/namespace kv objcopy) and the .pyi objcopies (d.pyPyiResources). Upstream
+	// processes these onresource_files calls a step after the SRCS(GLOBAL) band, so
+	// in a global archive they stay AFTER the global sources while the leading
+	// explicit-resource objcopies move before them. See gen.go's global-archive
+	// member placement.
+	PySrcTrailCount int
 }
 
 // objcopyArgBlocks are the module-stable spans of a resource-objcopy command
@@ -125,12 +133,15 @@ func emitResourceObjcopy(
 	}
 
 	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 {
+		trailStart := len(out.Refs)
 		srcRes := emitPySrcObjcopy(ctx, instance, d, oc)
 
 		if srcRes != nil {
 			out.Refs = append(out.Refs, srcRes.Refs...)
 			out.Outputs = append(out.Outputs, srcRes.Outputs...)
 		}
+
+		out.PySrcTrailCount = len(out.Refs) - trailStart
 
 		return out
 	}
@@ -372,6 +383,8 @@ func emitResourceObjcopy(
 		emitEntries(d.resources)
 	}
 
+	trailStart := len(out.Refs)
+
 	srcRes := emitPySrcObjcopy(ctx, instance, d, oc)
 
 	if srcRes != nil {
@@ -382,6 +395,8 @@ func emitResourceObjcopy(
 	if !py3BinProgramSide {
 		emitEntries(d.pyPyiResources)
 	}
+
+	out.PySrcTrailCount = len(out.Refs) - trailStart
 
 	return out
 }
