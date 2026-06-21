@@ -150,7 +150,17 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 			closure = dedupVFS(closure)
 		}
 
-		emitCPWithDeps(instance, srcVFS, dstVFS, deps, closure, entries[i].ref, d.tc, ctx.scripts, ctx.emit)
+		// Upstream attributes the owning submodule's MODULE_TAG to every node it
+		// produces (Node2Module); a PY23_LIBRARY .py copy node therefore carries
+		// module_tag=py3. moduleInputs.ModuleTag is the already-computed
+		// moduleCCTag(d.moduleStmt.Name) — 0 for an ordinary LIBRARY, so plain
+		// copies stay untagged.
+		var moduleTag STR
+		if moduleInputs != nil {
+			moduleTag = moduleInputs.ModuleTag
+		}
+
+		emitCPWithDeps(instance, srcVFS, dstVFS, deps, closure, entries[i].ref, moduleTag, d.tc, ctx.scripts, ctx.emit)
 
 		if dst := entry.Dst; strings.HasSuffix(dst, ".a") || strings.HasSuffix(dst, ".o") {
 			memberRefs = append(memberRefs, entries[i].ref)
