@@ -222,6 +222,83 @@ END()
 	}
 }
 
+func TestGen_FromSandboxRenameResourceCommand(t *testing.T) {
+	cases := []struct {
+		name   string
+		decl   string
+		out    string
+		outArg string
+	}{
+		{
+			name:   "OUT_NOAUTO",
+			decl:   "FROM_SANDBOX(FILE 123 RENAME RESOURCE OUT_NOAUTO payload.json)",
+			out:    "$(B)/mod/payload.json",
+			outArg: "payload.json",
+		},
+		{
+			name:   "OUT",
+			decl:   "FROM_SANDBOX(FILE 456 RENAME RESOURCE OUT payload.txt)",
+			out:    "$(B)/mod/payload.txt",
+			outArg: "payload.txt",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			files := map[string]string{}
+			files["build/scripts/fetch_from_sandbox.py"] = "\n"
+			files["build/scripts/fetch_from.py"] = "\n"
+			files["build/scripts/process_command_files.py"] = "\n"
+
+			writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+`+tc.decl+`
+END()
+`)
+
+			g := testGen(newMemFS(files), "mod")
+			sb := mustNodeByOutput(t, g, tc.out)
+			if sb.KV.P != pkSB {
+				t.Fatalf("%s producer kind = %q, want SB", tc.outArg, sb.KV.P.string())
+			}
+
+			args := prCmdArgStrings(sb)
+			want := []string{"--copy-to-dir", ".", "--rename", "RESOURCE", "--", tc.outArg}
+			if !containsSubsequence(args, want) {
+				t.Fatalf("SB command missing subsequence %v: %v", want, args)
+			}
+
+			wantInputs := []string{
+				"$(S)/build/scripts/fetch_from.py",
+				"$(S)/build/scripts/fetch_from_sandbox.py",
+				"$(S)/build/scripts/process_command_files.py",
+			}
+			for _, w := range wantInputs {
+				if !nodeHasInput(sb, w) {
+					t.Fatalf("SB node missing explicit script input %q: %#v", w, sb.flatInputs())
+				}
+			}
+			if got := len(sb.flatInputs()); got != len(wantInputs) {
+				t.Fatalf("SB node has %d inputs, want exactly %d: %#v", got, len(wantInputs), sb.flatInputs())
+			}
+		})
+	}
+}
+
+// containsSubsequence reports whether want appears as a contiguous subsequence
+// of args.
+func containsSubsequence(args, want []string) bool {
+	for i := 0; i+len(want) <= len(args); i++ {
+		if slices.Equal(args[i:i+len(want)], want) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func prCmdArgStrings(n *Node) []string {
 	var out []string
 

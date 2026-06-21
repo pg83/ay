@@ -1565,6 +1565,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 			expanded.OUTFiles = expandStmtTokensSTR(v.OUTFiles, env)
 			expanded.OUTNoAutoFiles = expandStmtTokensSTR(v.OUTNoAutoFiles, env)
 			expanded.OutputIncludes = expandStmtTokensSTR(v.OutputIncludes, env)
+			expanded.Renames = expandStmtTokensSTR(v.Renames, env)
 			d.fromSandboxes = append(d.fromSandboxes, &expanded)
 		case *ResourceStmt:
 			ensureResourcePeer(modulePath, d)
