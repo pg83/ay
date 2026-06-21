@@ -327,7 +327,19 @@ func emitResourceObjcopy(
 		flush()
 	}
 
-	emitEntries(d.resources)
+	// Upstream's PY3_BIN (PROGRAM) submodule sets .IGNORED=RESOURCE RESOURCE_FILES
+	// (conf/python.conf:350): the RESOURCE/RESOURCE_FILES objcopy is owned solely by
+	// the PY3_BIN_LIB (LIBRARY) twin, which packs it into its <tag>_global archive;
+	// the PROGRAM links it through .PEERDIRSELF=PY3_BIN_LIB, never as a direct LD
+	// member. Mirror that ignore on the PROGRAM side — the same PROCESS_PY_MAIN_ONLY
+	// split emitPySrcObjcopy already applies to PY_SRCS — so the PROGRAM-side
+	// emission contributes only PROGRAM-owned objcopies (PY_MAIN/NO_CHECK_IMPORTS),
+	// not the LIBRARY-owned resource members.
+	py3BinProgramSide := d.moduleStmt.Name == tokPy3Program && !d.programPairedLib
+
+	if !py3BinProgramSide {
+		emitEntries(d.resources)
+	}
 
 	srcRes := emitPySrcObjcopy(ctx, instance, d, oc)
 
@@ -336,7 +348,9 @@ func emitResourceObjcopy(
 		out.Outputs = append(out.Outputs, srcRes.Outputs...)
 	}
 
-	emitEntries(d.pyPyiResources)
+	if !py3BinProgramSide {
+		emitEntries(d.pyPyiResources)
+	}
 
 	return out
 }
