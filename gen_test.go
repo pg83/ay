@@ -2472,6 +2472,73 @@ END()
 	}
 }
 
+// TestGen_IncludeFirstArgOnlyCXXFLAGS pins INCLUDE first-argument-only parity
+// (T-130) end-to-end through CC command construction. Upstream evaluates only
+// args[0] of INCLUDE(...): a single-argument .inc CXXFLAGS applies; CXXFLAGS
+// reached only via a later INCLUDE argument must not apply; and separate
+// single-argument INCLUDE statements both apply.
+func TestGen_IncludeFirstArgOnlyCXXFLAGS(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"lib/ya.make": `LIBRARY()
+INCLUDE(single.inc)
+INCLUDE(first.inc second.inc)
+INCLUDE(sepA.inc)
+INCLUDE(sepB.inc)
+SRCS(x.cpp)
+END()
+`,
+		"lib/single.inc": "CXXFLAGS(-DSINGLE_FLAG)\n",
+		"lib/first.inc":  "CXXFLAGS(-DFIRST_FLAG)\n",
+		"lib/second.inc": "CXXFLAGS(-DSHOULD_NOT_APPLY)\n",
+		"lib/sepA.inc":   "CXXFLAGS(-DSEP_A)\n",
+		"lib/sepB.inc":   "CXXFLAGS(-DSEP_B)\n",
+		"lib/x.cpp":      "int x() { return 0; }\n",
+	})
+
+	g := testGen(fs, "lib")
+
+	var cc *Node
+	for _, n := range g.Graph {
+		if n.KV.P != pkCC {
+			continue
+		}
+		for _, out := range n.Outputs {
+			if strings.Contains(out.string(), "x.cpp.o") {
+				cc = n
+			}
+		}
+	}
+	if cc == nil {
+		t.Fatal("CC node for lib/x.cpp.o not found")
+	}
+
+	var args []string
+	for _, c := range cc.Cmds {
+		args = append(args, strStrs(c.CmdArgs.flat())...)
+	}
+	contains := func(flag string) bool {
+		for _, a := range args {
+			if a == flag {
+				return true
+			}
+		}
+		return false
+	}
+
+	if !contains("-DSINGLE_FLAG") {
+		t.Errorf("single-argument INCLUDE(single.inc) CXXFLAGS not applied; args=%v", args)
+	}
+	if !contains("-DFIRST_FLAG") {
+		t.Errorf("first INCLUDE argument CXXFLAGS not applied; args=%v", args)
+	}
+	if contains("-DSHOULD_NOT_APPLY") {
+		t.Errorf("second INCLUDE argument CXXFLAGS applied; upstream ignores args after args[0]; args=%v", args)
+	}
+	if !contains("-DSEP_A") || !contains("-DSEP_B") {
+		t.Errorf("separate single-argument INCLUDE statements must both apply; args=%v", args)
+	}
+}
+
 // TestMergeGeneratedFirstClaims_HostWinsOnConflict pins the cpp_import/yaff
 // MULTIMODULE attribution rule (T-37): when a RUN_PROGRAM-generated header is
 // claimed by BOTH the host include-scan (the co-located trait library reached in

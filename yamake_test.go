@@ -1382,7 +1382,10 @@ func TestParseInclude_ExpandsVarFromEarlierSet(t *testing.T) {
 	}
 }
 
-func TestParseInclude_MultiArgLeftToRight(t *testing.T) {
+func TestParseInclude_IgnoresArgumentsAfterFirst(t *testing.T) {
+	// Upstream makefile_reader.cpp evaluates only args[0] of INCLUDE(...) and
+	// silently ignores the rest. The first argument must be read; later
+	// arguments must not be.
 	fs := newMemFS(map[string]string{
 		"ya.make":     "LIBRARY()\nINCLUDE(a.inc b_${NAME}.inc)\nEND()\n",
 		"a.inc":       "SET(NAME value)\n",
@@ -1394,17 +1397,13 @@ func TestParseInclude_MultiArgLeftToRight(t *testing.T) {
 		t.Fatalf("parseFile failed: %v", err)
 	}
 
-	var srcs *SrcsStmt
+	if setStmtByName(mf.Stmts, "NAME") == nil {
+		t.Fatalf("first INCLUDE arg was not read; got %#v", mf.Stmts)
+	}
 	for _, s := range mf.Stmts {
-		if v, ok := s.(*SrcsStmt); ok {
-			srcs = v
+		if v, ok := s.(*SrcsStmt); ok && equalStrings(strStrings(v.Sources), []string{"found.cpp"}) {
+			t.Fatalf("second INCLUDE arg was read; upstream ignores args after args[0]")
 		}
-	}
-	if srcs == nil {
-		t.Fatalf("b_value.inc not included via arg-2 expansion; got %#v", mf.Stmts)
-	}
-	if !equalStrings(strStrings(srcs.Sources), []string{"found.cpp"}) {
-		t.Errorf("SRCS = %v, want [found.cpp]", srcs.Sources)
 	}
 }
 
