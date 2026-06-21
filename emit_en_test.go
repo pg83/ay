@@ -178,6 +178,63 @@ END()
 	}
 }
 
+// Same-module serialized-enum sibling propagation (T-135): two
+// GENERATE_ENUM_SERIALIZATION_WITH_HEADER declarations in one module where the
+// FIRST declared header reaches the SECOND's generated serialized header through
+// an ordinary #include chain. Mirrors balancer/kernel/cookie: set_cookie.h
+// (declared first) includes cookie_errors.h, which includes the generated
+// set_cookie_errors.h_serialized.h (declared second). Both the EN producer of
+// the first header and an ordinary CC consumer that includes the first
+// serialized header must carry the SECOND header's generated serialized outputs
+// (.cpp and .h) as inputs. The previous single-pass emitEnumSrcs registered and
+// walked each declaration in turn, so the first declaration's closure walk saw
+// the sibling unregistered and cached an empty resolution for the including
+// header — poisoning both the EN producer and the later ordinary CC compile.
+func TestGen_EnumSerializationSiblingSerializedOutputsPropagate(t *testing.T) {
+	files := map[string]string{}
+
+	// a.h (declared FIRST) reaches b's generated serialized header through a
+	// plain header, exactly like set_cookie.h -> cookie_errors.h -> ...serialized.h.
+	writeTestModuleFile(files, "m/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(a.h)
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(b.h)
+SRCS(use.cpp)
+END()
+`)
+	writeTestModuleFile(files, "m/a.h", "#pragma once\n#include \"aux.h\"\nenum class A { X = 0 };\n")
+	writeTestModuleFile(files, "m/aux.h", "#pragma once\n#include <m/b.h_serialized.h>\n")
+	writeTestModuleFile(files, "m/b.h", "#pragma once\nenum class B { Y = 0 };\n")
+	writeTestModuleFile(files, "m/use.cpp", "#include <m/a.h_serialized.h>\nint use(){return 0;}\n")
+
+	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "m")
+
+	// EN producer of the FIRST header carries the SECOND header's serialized outputs.
+	enA := mustNodeByOutput(t, g, "$(B)/m/a.h_serialized.cpp")
+	if !nodeHasInput(enA, "$(B)/m/b.h_serialized.h") {
+		t.Fatalf("EN a.h_serialized.cpp missing sibling $(B)/m/b.h_serialized.h: %v", enA.flatInputs())
+	}
+	if !nodeHasInput(enA, "$(B)/m/b.h_serialized.cpp") {
+		t.Fatalf("EN a.h_serialized.cpp missing sibling $(B)/m/b.h_serialized.cpp: %v", enA.flatInputs())
+	}
+
+	// An ordinary CC consumer that includes the first serialized header reaches
+	// the sibling generated outputs too.
+	use := mustNodeByOutputSuffix(t, g, "use.cpp.o")
+	if !nodeHasInput(use, "$(B)/m/b.h_serialized.h") {
+		t.Fatalf("CC use.cpp.o missing sibling $(B)/m/b.h_serialized.h: %v", use.flatInputs())
+	}
+	if !nodeHasInput(use, "$(B)/m/b.h_serialized.cpp") {
+		t.Fatalf("CC use.cpp.o missing sibling $(B)/m/b.h_serialized.cpp: %v", use.flatInputs())
+	}
+}
+
 // Owner/consumer split: an enum-serialization generated C++ output (the EN
 // node) and its compile (CC) carry the DECLARING module's module_dir even when
 // a DIFFERENT module include-resolves the generated *_serialized.h first. This
