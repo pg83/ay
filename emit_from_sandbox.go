@@ -66,6 +66,12 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 		internStr(stmt.Prefix),
 	}
 
+	// Upstream ${pre=--rename :RENAME}: one `--rename <item>` pair per rename,
+	// rendered after $PREFIX and before $EXECUTABLE/--.
+	for _, r := range stmt.Renames {
+		args = append(args, internStr("--rename"), r)
+	}
+
 	if stmt.Executable {
 		args = append(args, internStr("--executable"))
 	}
