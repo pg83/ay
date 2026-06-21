@@ -245,7 +245,7 @@ func classifySrcExt(s string) SrcExtClass {
 // class) — codegen source extensions whose object lands in the module archive.
 func isCodegenProducingSrcID(id STR) bool {
 	switch srcExtClassOf(id) {
-	case srcExtProto, srcExtGztProto, srcExtFbs, srcExtFbs64, srcExtEv, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc, srcExtGperf, srcExtFlex:
+	case srcExtProto, srcExtGztProto, srcExtFbs, srcExtFbs64, srcExtEv, srcExtCfgProto, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc, srcExtGperf, srcExtFlex:
 		return true
 	}
 
