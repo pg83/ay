@@ -43,23 +43,27 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		configIncludes := ctx.parsers.sourceParsedBuckets(cfgSource, nil).bucket(parsedIncludesProtoConfig)
 		extras := pbHEmitsIncludesExtras()
 
-		cfgHParsed := make([]IncludeDirective, 0, len(directImports)+len(configIncludes)+len(extras)+len(cfgImports)+1)
+		cfgHParsed := make([]IncludeDirective, 0, len(directImports)+len(configIncludes)+len(extras)+len(cfgImports))
 		cfgHParsed = append(cfgHParsed, directImports...)
 		cfgHParsed = append(cfgHParsed, configIncludes...)
 		cfgHParsed = append(cfgHParsed, extras...)
-		// CPP_EV_OUTS marks no `main` output, so a unit that #includes this
-		// generated .pb.h must also reach its sibling .pb.cc (EDT_OutTogether) —
-		// the way an importer's .pb.cc.o reaches the imported module's .pb.cc.
-		// Mirrors EV's evWitnessExtras adding evPbCC. The self .pb.cc.o filters
-		// its own .pb.h below, so this ride only affects importers.
-		cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: internStr(cfgPbCC.rel())})
 
 		for _, ti := range cfgImports {
 			cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: internStr(ti.rel())})
 		}
 
+		reg := codegenRegForInstance(ctx, instance)
 		registerBoundGeneratedParsedOutput(ctx, instance, pkPB, cfgH, cfgHParsed, cfgRef, cfgGenRefs)
-		codegenRegForInstance(ctx, instance).addClosureLeaf(cfgH, cfgSource)
+		reg.addClosureLeaf(cfgH, cfgSource)
+		// CPP_EV_OUTS marks no `main` output, so a unit that #includes this
+		// generated .pb.h must also reach its sibling .pb.cc (EDT_OutTogether) —
+		// the way an importer's .pb.cc.o reaches the imported module's .pb.cc. The
+		// sibling rides as a bare, non-expanded closure leaf (NOT a traversed
+		// parsed include): consumers get the .pb.cc itself, but the scanner never
+		// descends into it to re-resolve its cpp-only protoc INDUCED_DEPS(cpp …)
+		// (wire_format.h et al.) into the ordinary downstream consumer. The self
+		// .pb.cc.o still walks cfgPbCC directly and keeps those induced deps.
+		reg.addClosureLeaf(cfgH, cfgPbCC)
 
 		cfgCCParsed := []IncludeDirective{
 			{kind: includeQuoted, target: internStr(cfgH.rel())},
