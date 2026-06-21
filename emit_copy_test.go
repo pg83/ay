@@ -58,6 +58,45 @@ func TestGen_CrossModuleTextCopySourceTracked(t *testing.T) {
 	}
 }
 
+// TestGen_Py23LibraryCopyFileCarriesPy3Tag reproduces the missing module_tag on
+// COPY_FILE nodes owned by a PY23_LIBRARY. Upstream attributes the submodule's
+// MODULE_TAG (py3) to every node it owns, including the .py copy node; ay drops
+// it. A plain LIBRARY copy must NOT gain any tag.
+func TestGen_Py23LibraryCopyFileCarriesPy3Tag(t *testing.T) {
+	files := map[string]string{}
+	mkdirWrite := func(rel, body string) { files[rel] = body }
+
+	mkdirWrite("pylib/ya.make", `PY23_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+COPY_FILE(src/keys.py keys.py)
+END()
+`)
+	mkdirWrite("src/keys.py", "KEY = 1\n")
+
+	mkdirWrite("plain/ya.make", `LIBRARY()
+COPY_FILE(src/plain.txt plain.txt)
+END()
+`)
+	mkdirWrite("src/plain.txt", "data\n")
+
+	fs := newMemFS(files)
+
+	g := testGen(fs, "pylib")
+	cp := findGraphNodeByOutputs(t, g, "$(B)/pylib/keys.py")
+	if got := cp.TargetProperties.ModuleTag; got != tagPy3 {
+		t.Fatalf("PY23_LIBRARY COPY_FILE module_tag = %q, want py3", got.string())
+	}
+
+	gp := testGen(fs, "plain")
+	plainCP := findGraphNodeByOutputs(t, gp, "$(B)/plain/plain.txt")
+	if got := plainCP.TargetProperties.ModuleTag; got != 0 {
+		t.Fatalf("plain LIBRARY COPY_FILE module_tag = %q, want empty", got.string())
+	}
+}
+
 func TestGen_TextCopyResolvesIncludesInConsumerContext(t *testing.T) {
 	files := map[string]string{}
 

@@ -57,7 +57,7 @@ func emitJVCPG4(
 
 func emitCP(instance ModuleInstance, src VFS, dst VFS, tc ModuleToolchain, scripts ScriptDeps, emit Emitter) NodeRef {
 	id := emit.reserve()
-	emitCPWithDeps(instance, src, dst, nil, nil, id, tc, scripts, emit)
+	emitCPWithDeps(instance, src, dst, nil, nil, id, 0, tc, scripts, emit)
 
 	return id
 }
@@ -66,7 +66,7 @@ func emitCP(instance ModuleInstance, src VFS, dst VFS, tc ModuleToolchain, scrip
 // closure to attach (e.g. the source's transitive #include closure when the
 // COPY macro was declared WITH_CONTEXT, so that any header change retriggers
 // the copy).
-func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, id NodeRef, tc ModuleToolchain, scripts ScriptDeps, emit Emitter) {
+func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, id NodeRef, moduleTag STR, tc ModuleToolchain, scripts ScriptDeps, emit Emitter) {
 	na := emit.nodeArenas()
 
 	fsTools := copyFsToolsVFS
@@ -97,6 +97,11 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 
 	inputs := na.inputList(scripts[fsTools], ownInputs)
 
+	tp := TargetProperties{ModuleDir: instance.Path.rel()}
+	if moduleTag != 0 {
+		tp.ModuleTag = moduleTag
+	}
+
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
@@ -106,7 +111,7 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 		KV:               KV{P: pkCP, PC: pcLightCyan},
 		Outputs:          na.vfsList(dst),
 		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
+		TargetProperties: tp,
 		DepRefs:          depRefs,
 		Resources:        usesPython3,
 	}
