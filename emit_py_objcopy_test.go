@@ -6,6 +6,7 @@ import (
 	enchex "encoding/hex"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -1190,13 +1191,13 @@ END()
 func TestGen_Py3ProgramResourceObjcopyUsesLibTagPyMainKeepsBinTag(t *testing.T) {
 	files := map[string]string{
 		"contrib/libs/python/ya.make":             "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
-		"library/python/runtime_py3/main/ya.make":  "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
-		"library/cpp/malloc/jemalloc/ya.make":      "LIBRARY()\nSRCS(je.cpp)\nEND()\n",
-		"library/cpp/malloc/jemalloc/je.cpp":       "int je(){return 0;}\n",
-		"library/cpp/malloc/api/ya.make":           "LIBRARY()\nSRCS(api.cpp)\nEND()\n",
-		"library/cpp/malloc/api/api.cpp":           "int api(){return 0;}\n",
-		"contrib/libs/jemalloc/ya.make":            "LIBRARY()\nSRCS(c.cpp)\nEND()\n",
-		"contrib/libs/jemalloc/c.cpp":              "int c(){return 0;}\n",
+		"library/python/runtime_py3/main/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
+		"library/cpp/malloc/jemalloc/ya.make":     "LIBRARY()\nSRCS(je.cpp)\nEND()\n",
+		"library/cpp/malloc/jemalloc/je.cpp":      "int je(){return 0;}\n",
+		"library/cpp/malloc/api/ya.make":          "LIBRARY()\nSRCS(api.cpp)\nEND()\n",
+		"library/cpp/malloc/api/api.cpp":          "int api(){return 0;}\n",
+		"contrib/libs/jemalloc/ya.make":           "LIBRARY()\nSRCS(c.cpp)\nEND()\n",
+		"contrib/libs/jemalloc/c.cpp":             "int c(){return 0;}\n",
 	}
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
 	writeTestModuleFile(files, "library/python/import_tracing/constructor/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n")
@@ -1259,7 +1260,7 @@ END()
 // ads/bsyeti, ads/caesar, apphost cow, bigrt .../codegen/codegen).
 func TestGen_Py3ProgramLDDoesNotDirectlyLinkResourceObjcopy(t *testing.T) {
 	files := map[string]string{
-		"contrib/libs/python/ya.make":            "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
+		"contrib/libs/python/ya.make":             "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
 		"library/python/runtime_py3/main/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
 		"library/cpp/malloc/jemalloc/ya.make":     "LIBRARY()\nSRCS(je.cpp)\nEND()\n",
 		"library/cpp/malloc/jemalloc/je.cpp":      "int je(){return 0;}\n",
@@ -1366,4 +1367,103 @@ func objcopyOutputs(g *Graph) []string {
 		}
 	}
 	return out
+}
+
+// FROM_SANDBOX(... OUT_NOAUTO ${VAR}) materializes a set of fetched build
+// artifacts, then RESOURCE_FILES(${VAR}) embeds them. Each embedded payload is a
+// $(B) fetch output, not a $(S) source: every objcopy chunk must bind the
+// $(B)/<module>/<file> payload (and resfs/src kv) and depend on the SB fetch
+// node — never resolve to a phantom $(S) path. Mirrors the sg7 units
+// yabs/plutonium/libs/dictionaries_resource{,_for_workers}.
+func TestGen_FromSandboxVarOutNoautoResourceFilesFeedsObjcopyFromBuildRoot(t *testing.T) {
+	files := map[string]string{}
+	files["build/scripts/fetch_from_sandbox.py"] = "\n"
+	files["build/scripts/fetch_from.py"] = "\n"
+	files["build/scripts/process_command_files.py"] = "\n"
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+
+	// Enough dict files to force the RESOURCE_FILES packer into several objcopy
+	// chunks: the SB fetch node's main output is the first listed file
+	// (plutonium_dicts/2.dict). The non-first chunks embed only later dicts, yet
+	// ymake lists the main output in every chunk's inputs because each chunk
+	// depends on the single SB node via the OutTogether main-output edge.
+	var setBody strings.Builder
+	const nDicts = 48
+	for i := 2; i <= nDicts; i++ {
+		setBody.WriteString("    plutonium_dicts/" + strconv.Itoa(i) + ".dict\n")
+	}
+
+	writeTestModuleFile(files, "dictmod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SET_APPEND(DICTS
+`+setBody.String()+`)
+FROM_SANDBOX(12019934890 OUT_NOAUTO
+    ${DICTS}
+)
+RESOURCE_FILES(${DICTS})
+END()
+`)
+
+	g := testGen(newMemFS(files), "dictmod")
+
+	mainOut := "$(B)/dictmod/plutonium_dicts/2.dict"
+	sb := mustNodeByAnyOutput(t, g, mainOut)
+	if sb.KV.P != pkSB {
+		t.Fatalf("main output producer kind = %q, want SB", sb.KV.P.string())
+	}
+
+	// Collect every objcopy chunk; partition by whether it embeds the main output
+	// (2.dict) in its payload command.
+	var chunks []*Node
+	for _, n := range g.Graph {
+		if len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].string(), "$(B)/dictmod/objcopy_") {
+			chunks = append(chunks, n)
+		}
+	}
+	if len(chunks) < 2 {
+		t.Fatalf("expected several objcopy chunks, got %d", len(chunks))
+	}
+
+	embedsMain := func(n *Node) bool {
+		args := prCmdArgStrings(n)
+		inInputs := false
+		for _, a := range args {
+			switch a {
+			case "--inputs":
+				inInputs = true
+			case "--keys", "--kvs":
+				inInputs = false
+			default:
+				if inInputs && a == mainOut {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	sawNonFirst := false
+	for _, c := range chunks {
+		// Every dict payload binds to $(B), never a phantom $(S) source.
+		if nodeHasInput(c, "$(S)/dictmod/plutonium_dicts/2.dict") {
+			t.Fatalf("objcopy %s carries phantom source-root 2.dict: %#v", c.Outputs[0].string(), vfsStringsT3(c.flatInputs()))
+		}
+		// Every chunk that depends on the SB node must list the SB main output
+		// (2.dict) in its inputs — directly if it embeds it, spuriously via the
+		// OutTogether main-output edge otherwise.
+		if !nodeHasInput(c, mainOut) {
+			t.Fatalf("objcopy %s missing SB main-output input %s: %#v", c.Outputs[0].string(), mainOut, vfsStringsT3(c.flatInputs()))
+		}
+		if !embedsMain(c) {
+			sawNonFirst = true
+		}
+	}
+	if !sawNonFirst {
+		t.Fatal("test did not exercise a non-first chunk (one that does not embed 2.dict); increase nDicts")
+	}
 }
