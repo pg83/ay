@@ -616,8 +616,21 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	// yql_*_expr_nodes.gen.h PR nodes, which list only the tool + IN
 	// files).
 	for _, f := range stmt.INFiles {
-		if rel := f.string(); includeDirectiveParsers.hasRegisteredParser(rel) {
+		rel := f.string()
+		if includeDirectiveParsers.hasRegisteredParser(rel) {
 			walkInput(rel)
+
+			continue
+		}
+
+		// An opaque generated IN (a FROM_SANDBOX fetch artifact) has no include
+		// parser, so its window is never walked — but upstream's flat-input model
+		// still lists the producer's own source/script inputs on a node consuming
+		// the fetched file. Fold the registered producer's SourceInputs in directly,
+		// without treating the opaque data as parsed includes. The trailing
+		// dedupVFS collapses repetition when several INs share one producer.
+		if info := codegenRegForInstance(ctx, instance).lookup(runProgramInputVFS(ctx, instance, d, rel)); info != nil {
+			out = append(out, info.SourceInputs...)
 		}
 	}
 
