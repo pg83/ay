@@ -97,6 +97,113 @@ END()
 	}
 }
 
+// TestGen_CopyOfGeneratedPySrcCarriesProducerClosure reproduces the cross-module
+// generated-source-closure residual: a child PY3_LIBRARY RUN_PROGRAM produces
+// generated_consts.py (OUT_NOAUTO); a parent PY3_LIBRARY COPY_FILEs that build
+// output into its own generated_consts.py and PY_SRCSes it. Upstream's flat input
+// model lists the RUN_PROGRAM producer's transitive $(S) closure on (1) the CP
+// action copying the generated file and (2) the py3cc bytecode action compiling
+// the copied file — the latter additionally folds the CP's own copy-tool scripts
+// (fs_tools.py / process_command_files.py). ay carries neither until COPY_FILE
+// propagates the source generated output's ProducerSourceClosure.
+func TestGen_CopyOfGeneratedPySrcCarriesProducerClosure(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "slow")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+	writeToolProgram(files, "tools/archiver", "archiver")
+	writeToolProgram(files, "mod/gen/bin", "gen")
+
+	files["build/scripts/fs_tools.py"] = "import process_command_files as pcf\n"
+	files["build/scripts/process_command_files.py"] = "\n"
+
+	writeTestModuleFile(files, "other/other.h", "#pragma once\n")
+	writeTestModuleFile(files, "mod/gen/gen.h", "#pragma once\n#include <other/other.h>\n")
+
+	// Child: RUN_PROGRAM produces generated_consts.py from gen.h's closure.
+	writeTestModuleFile(files, "mod/gen/ya.make", `PY3_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+RUN_PROGRAM(
+    mod/gen/bin
+        --save_file_path generated_consts.py
+    IN_NOPARSE gen.h
+    OUT_NOAUTO generated_consts.py
+    CWD ${BINDIR}
+)
+END()
+`)
+
+	// Parent: COPY_FILE the child's build output and PY_SRCS it.
+	writeTestModuleFile(files, "mod/ya.make", `PY3_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+PEERDIR(mod/gen)
+COPY_FILE(${ARCADIA_BUILD_ROOT}/mod/gen/generated_consts.py generated_consts.py)
+PY_SRCS(generated_consts.py)
+END()
+`)
+
+	g := testGen(newMemFS(files), "mod")
+
+	// (1) The CP action carries the RUN_PROGRAM producer's transitive $(S) closure.
+	cp := mustNodeByOutput(t, g, "$(B)/mod/generated_consts.py")
+	for _, want := range []string{"$(S)/mod/gen/gen.h", "$(S)/other/other.h"} {
+		if !nodeHasInput(cp, want) {
+			t.Errorf("CP generated_consts.py missing producer closure %q: %v", want, vfsStringsT3(cp.flatInputs()))
+		}
+	}
+
+	// (2) The bytecode action carries the same closure PLUS the CP's own copy-tool
+	// scripts (fs_tools.py / process_command_files.py).
+	bc := mustNodeByOutput(t, g, "$(B)/mod/generated_consts.py.yapyc3")
+	for _, want := range []string{
+		"$(S)/mod/gen/gen.h",
+		"$(S)/other/other.h",
+		"$(S)/build/scripts/fs_tools.py",
+		"$(S)/build/scripts/process_command_files.py",
+	} {
+		if !nodeHasInput(bc, want) {
+			t.Errorf("bytecode generated_consts.py.yapyc3 missing %q: %v", want, vfsStringsT3(bc.flatInputs()))
+		}
+	}
+}
+
+// TestGen_PlainSourceCopyKeepsNoProducerClosure is the control: an ordinary
+// COPY_FILE of a $(S) source (not a registered generated output) registers no
+// ProducerSourceClosure, so its dst carries only the copy-tool scripts and the
+// source — no spurious producer closure.
+func TestGen_PlainSourceCopyKeepsNoProducerClosure(t *testing.T) {
+	files := map[string]string{}
+
+	files["build/scripts/fs_tools.py"] = "import process_command_files as pcf\n"
+	files["build/scripts/process_command_files.py"] = "\n"
+
+	writeTestModuleFile(files, "other/other.h", "#pragma once\n")
+	writeTestModuleFile(files, "mod/orig.txt", "data\n")
+
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+COPY_FILE(orig.txt copied.txt)
+END()
+`)
+
+	g := testGen(newMemFS(files), "mod")
+
+	cp := mustNodeByOutput(t, g, "$(B)/mod/copied.txt")
+	// A plain source copy never resolves a generated producer, so other/other.h
+	// (an unrelated header) and any producer closure stay absent.
+	if nodeHasInput(cp, "$(S)/other/other.h") {
+		t.Errorf("plain source copy leaked unrelated closure: %v", vfsStringsT3(cp.flatInputs()))
+	}
+}
+
 func TestGen_TextCopyResolvesIncludesInConsumerContext(t *testing.T) {
 	files := map[string]string{}
 
