@@ -8,6 +8,11 @@ import (
 type EnumSrcsResult struct {
 	CCRefs    []NodeRef
 	CCOutputs []VFS
+	// Seqs parallels CCRefs/CCOutputs: each member's declaring
+	// GENERATE_ENUM_SERIALIZATION statement declaration sequence, used to order
+	// generated archive members by declaration order against other
+	// default-priority generated statements (RUN_PROGRAM).
+	Seqs []int
 }
 
 func resolveEnumHeaderInput(ctx *GenCtx, instance ModuleInstance, headerRel string, srcDirs []VFS) VFS {
@@ -147,6 +152,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 			ccRef, ccOut := emitCodegenDownstreamCCFromVFS(ctx, instance, cppRel, serializedCPPPath, allDepRefs, *consumerInputs)
 			res.CCRefs = append(res.CCRefs, ccRef)
 			res.CCOutputs = append(res.CCOutputs, ccOut)
+			res.Seqs = append(res.Seqs, stmt.DeclSeq)
 		}
 	}
 

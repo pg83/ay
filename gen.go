@@ -2269,16 +2269,24 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	// Generated-source compiles (config-h, cython, swig, java, enum-serialize,
 	// RUN_PROGRAM/RUN_PYTHON outputs): each consumes an in-module generated source,
 	// so it archives after the direct compiles. Their generating macro is prio 2.
-	genCC := func(emit *SourceEmit) {
+	// genCCMeta archives a generated-source compile under an explicit AR-ordering
+	// key. ymake re-queues each command output at its declaring statement's
+	// processing point (default priority 2) and a deeper FIFO round for sources
+	// produced from other generated sources, so generated auxiliary members order
+	// by (round, declaration sequence); reorderARMembers sorts on that key.
+	genCCMeta := func(emit *SourceEmit, m SrcMeta) {
 		ccRefs = append(ccRefs, emit.Ref)
 		ccOutputs = append(ccOutputs, emit.OutPath)
-		arDeclMeta[emit.OutPath] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
+		arDeclMeta[emit.OutPath] = m
 
 		for _, ex := range emit.Extra {
 			ccRefs = append(ccRefs, ex.Ref)
 			ccOutputs = append(ccOutputs, ex.OutPath)
-			arDeclMeta[ex.OutPath] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
+			arDeclMeta[ex.OutPath] = m
 		}
+	}
+	genCC := func(emit *SourceEmit) {
+		genCCMeta(emit, SrcMeta{Prio: stmtPrioDefault, Generated: true})
 	}
 
 	for _, emit := range emitCheckConfigH(ctx, instance, d, moduleInputs) {
@@ -2299,13 +2307,15 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if enCCRes != nil {
 		for i, ref := range enCCRes.CCRefs {
-			genCC(&SourceEmit{Ref: ref, OutPath: enCCRes.CCOutputs[i]})
+			genCCMeta(&SourceEmit{Ref: ref, OutPath: enCCRes.CCOutputs[i]},
+				SrcMeta{Prio: stmtPrioDefault, Seq: enCCRes.Seqs[i], Generated: true})
 		}
 	}
 
 	if prCCRes != nil {
 		for i, ref := range prCCRes.CCRefs {
-			genCC(&SourceEmit{Ref: ref, OutPath: prCCRes.CCOutputs[i]})
+			genCCMeta(&SourceEmit{Ref: ref, OutPath: prCCRes.CCOutputs[i]},
+				SrcMeta{Prio: stmtPrioDefault, Seq: prCCRes.Seqs[i], Generated: true, SecondLevel: prCCRes.SecondLevel[i]})
 		}
 	}
 
