@@ -2164,13 +2164,9 @@ func (p *Parser) expandInclude(into []Stmt, nameTok Token) []Stmt {
 		p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE expects at least 1 argument (the path)")
 	}
 
-	// INCLUDE accepts several paths in one call (e.g. a list of cxxflags .inc
-	// files); upstream processes each. Expand them left-to-right.
-	for _, a := range args {
-		into = p.expandOneInclude(into, nameTok, a.string())
-	}
-
-	return into
+	// Upstream makefile_reader.cpp evaluates only args[0] of INCLUDE(...) and
+	// silently ignores any later arguments (no loop, no error). Match that.
+	return p.expandOneInclude(into, nameTok, args[0].string())
 }
 
 func (p *Parser) expandOneInclude(into []Stmt, nameTok Token, rel string) []Stmt {
