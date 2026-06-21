@@ -31,11 +31,7 @@ func overrideGeneratedModuleDir(e *BufferedEmitter) {
 	}
 
 	for i, node := range e.nodes {
-		kind := node.KV.P
-
-		switch kind {
-		case pkPR, pkCF, pkCP:
-		default:
+		if !generatedOwnerAttributable(node) {
 			continue
 		}
 
@@ -112,6 +108,29 @@ func overrideGeneratedModuleDir(e *BufferedEmitter) {
 		if claim.Tag != 0 {
 			node.TargetProperties.ModuleTag = claim.Tag
 		}
+	}
+}
+
+// generatedOwnerAttributable reports whether a producer node participates in
+// Node2Module consumer re-attribution. RUN_PROGRAM (PR), CONFIGURE_FILE (CF),
+// COPY_FILE (CP), RUN_PYTHON3 (PY), and SPLIT_CODEGEN/.sc (SC) producers all emit
+// generated header-like outputs that downstream CC include-scans claim. ARCHIVE
+// (AR) participates ONLY in its non-library generated-header shape
+// (ARCHIVE(NAME header ...)): a single non-".a" output with no module_type/
+// module_lang. A library archive (lib*.a, module_type=lib/module_lang=cpp) keeps
+// its producer-module ownership — nothing #includes a .a, so it never accrues a
+// consumer first-claim anyway, but the predicate excludes it explicitly.
+func generatedOwnerAttributable(node *Node) bool {
+	switch node.KV.P {
+	case pkPR, pkCF, pkCP, pkPY, pkSC:
+		return true
+	case pkAR:
+		return node.TargetProperties.ModuleType == mtNone &&
+			node.TargetProperties.ModuleLang == mlNone &&
+			len(node.Outputs) == 1 &&
+			!strings.HasSuffix(node.Outputs[0].rel(), ".a")
+	default:
+		return false
 	}
 }
 
