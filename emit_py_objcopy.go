@@ -97,6 +97,7 @@ func emitResourceObjcopy(
 	ctx *GenCtx,
 	instance ModuleInstance,
 	d *ModuleData,
+	in ModuleCCInputs,
 ) *ObjcopyEmitResult {
 	na := ctx.na
 
@@ -147,10 +148,10 @@ func emitResourceObjcopy(
 	}
 
 	type acc struct {
-		paths      []string
-		pathInputs []VFS
-		kvInputs   []VFS
-		pathDeps   []NodeRef
+		paths         []string
+		pathInputs    []VFS
+		kvInputs      []VFS
+		closureInputs []VFS
 		// mainOuts collects, per resolved generated resource, the producer's main
 		// output (0 for an ordinary source or a producer with no recorded main).
 		// A multi-output producer's main output rides every consumer of any of its
@@ -224,18 +225,29 @@ func emitResourceObjcopy(
 			}
 		}
 
-		var kvTail []VFS
+		// The embedded generated resources' build-root OUTPUT_INCLUDES closure and
+		// the resfs/src kv inputs ride the objcopy node as cache-key inputs only —
+		// never in the --inputs payload (which would change the objcopy_<hash>).
+		var tail []VFS
+
+		for _, p := range cur.closureInputs {
+			if !deduper.add(p) {
+				continue
+			}
+
+			tail = append(tail, p)
+		}
 
 		for _, p := range cur.kvInputs {
 			if !deduper.add(p) {
 				continue
 			}
 
-			kvTail = append(kvTail, p)
+			tail = append(tail, p)
 		}
 
-		if len(kvTail) > 0 {
-			inputs = append(inputs, kvTail)
+		if len(tail) > 0 {
+			inputs = append(inputs, tail)
 		}
 
 		// Spurious main-output inputs: a multi-output producer's main output rides
@@ -292,21 +304,18 @@ func emitResourceObjcopy(
 
 		node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
 
-		// The inputs set above is complete by now, so the deduper is free for the
-		// dep-ref set.
-		deduper.reset()
+		// Every $(B) data input (the embedded generated payloads, their producer's
+		// OUTPUT_INCLUDES closure headers, and generated resfs/src kv files) carries
+		// a producer dependency: resolveCodegenDepRefs maps each registered build
+		// output to its producer ref, deduping and excluding the tool refs already
+		// added. A source-tree resource resolves to nothing, so the common case is a
+		// no-op.
+		dataInputs := make([]VFS, 0, len(cur.pathInputs)+len(cur.closureInputs)+len(cur.kvInputs))
+		dataInputs = append(dataInputs, cur.pathInputs...)
+		dataInputs = append(dataInputs, cur.closureInputs...)
+		dataInputs = append(dataInputs, cur.kvInputs...)
 
-		for _, ref := range cur.pathDeps {
-			if ref == (NodeRef(0)) {
-				continue
-			}
-
-			if !deduper.add(VFS(ref)) {
-				continue
-			}
-
-			node.DepRefs = append(node.DepRefs, ref)
-		}
+		node.DepRefs = append(node.DepRefs, resolveCodegenDepRefs(ctx, instance, dataInputs, oc.rescompilerLDRef, oc.rescompressorLDRef)...)
 
 		r := ctx.emit.emit(node)
 		out.Refs = append(out.Refs, r)
@@ -330,9 +339,8 @@ func emitResourceObjcopy(
 					// to its $(S) source path. The emitted resfs/src value is that
 					// resolved input's rootrel, not a naive module-dir join.
 					if inner, ok := rootrelInputPath(e.Key); ok {
-						kvInput, producerRef, mainOut := resolveResourceInput(ctx, instance, inner, copyFileInputVFS(ctx.fs, instance.Path.rel(), inner))
+						kvInput, _, mainOut := resolveResourceInput(ctx, instance, inner, copyFileInputVFS(ctx.fs, instance.Path.rel(), inner))
 						cur.kvInputs = append(cur.kvInputs, kvInput)
-						cur.pathDeps = append(cur.pathDeps, producerRef)
 						cur.mainOuts = append(cur.mainOuts, mainOut)
 						cur.kvsCmd = append(cur.kvsCmd, renderResourceKvCmd(rootrelExpand(e.Key, kvInput.rel())))
 					} else {
@@ -342,8 +350,22 @@ func emitResourceObjcopy(
 					inputVFS, producerRef, mainOut := resolveResourceInput(ctx, instance, e.Path, copyFileInputVFS(ctx.fs, instance.Path.rel(), e.Path))
 					cur.paths = append(cur.paths, e.Path)
 					cur.pathInputs = append(cur.pathInputs, inputVFS)
-					cur.pathDeps = append(cur.pathDeps, producerRef)
 					cur.mainOuts = append(cur.mainOuts, mainOut)
+
+					// A generated build-root resource (RUN_PROGRAM OUT/STDOUT, …) carries
+					// its producer's OUTPUT_INCLUDES build-root closure onto the objcopy
+					// node — upstream's induced deps on every output, walked through the
+					// .pb's ${input:…}. Keep only the $(B) half (the $(S) over-emit is
+					// pruned ref-side by dump normalize). A source resource resolves to
+					// producerRef 0 and adds nothing.
+					if producerRef != 0 {
+						for _, v := range walkClosureTail(ctx.scannerFor(instance), inputVFS, in.ScanCfg) {
+							if v.isBuild() {
+								cur.closureInputs = append(cur.closureInputs, v)
+							}
+						}
+					}
+
 					kb := encb64.StdEncoding.EncodeToString([]byte(e.Key))
 					cur.keys = append(cur.keys, kb)
 					cur.cmdLen += rootCmdLen + len(e.Path) + len(kb)

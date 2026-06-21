@@ -1077,7 +1077,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		emitPySrcs(ctx, instance, d)
 
-		objcopyRes := emitResourceObjcopy(ctx, instance, d)
+		objcopyRes := emitResourceObjcopy(ctx, instance, d, headerOnlyInputs)
 
 		var hOnlyGlobalRef *NodeRef
 		var hOnlyGlobalPath *VFS
@@ -2534,7 +2534,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			// which Emitter-dedups by output path so the LIBRARY's
 			// already-emitted objcopy_<hash>.o is reused and its ref/path
 			// reach this LD's objcopyPaths slot.
-			objcopyRes := emitResourceObjcopy(ctx, instance, d)
+			objcopyRes := emitResourceObjcopy(ctx, instance, d, moduleInputs)
 
 			if objcopyRes != nil && len(objcopyRes.Refs) > 0 {
 				ldObjcopyRefs = objcopyRes.Refs
@@ -2718,7 +2718,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	emitLLVMBC(ctx, instance, d, moduleInputs, resourceGlobalsClosure)
 
-	objcopyRes := emitResourceObjcopy(ctx, instance, d)
+	objcopyRes := emitResourceObjcopy(ctx, instance, d, moduleInputs)
 
 	if objcopyRes != nil {
 		globalRefs = append(globalRefs, objcopyRes.Refs...)
