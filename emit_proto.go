@@ -670,6 +670,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 				instance, evRelPath, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 				cppStyleguideBinary, protocBinary, event2cppBinary,
 				tagCppProto, evImports, peerContribs.protoInclude,
+				!protoTransitiveHeadersEnabled(d),
 				d.tc, ctx.emit)
 
 			evH := build(evRelPath + ".pb.h")

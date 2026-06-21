@@ -54,6 +54,7 @@ var (
 	argCpp                                       = internArg("--cpp")
 	argConfigOutB                                = internArg("--config_out=$(B)/")
 	argCppOutB                                   = internArg("--cpp_out=:$(B)/")
+	argCppOutProtoHB                             = internArg("--cpp_out=proto_h=true:$(B)/")
 	argCppStyleguideOutB                         = internArg("--cpp_styleguide_out=:$(B)/")
 	argD                                         = internArg("-D")
 	argDDateJan102019                            = internArg("-D__DATE__=\"Jan 10 2019\"")

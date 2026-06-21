@@ -47,6 +47,19 @@ var evProtocConstTail = []STR{
 	argCppStyleguideOutB.str(),
 }
 
+// evProtocConstTailLite is evProtocConstTail with the lite-header cpp_out form.
+// _CPP_PROTO_CMDLINE_BASE renders --cpp_out=${CPP_PROTO_PLUGINS}:... and
+// SET(PROTOC_TRANSITIVE_HEADERS "no") prepends proto_h=true to CPP_PROTO_PLUGINS
+// (ymake.core.conf:656-657); the EV/cfgproto command shares that base, so its
+// cpp_out carries proto_h=true exactly when the PB cpp_out does. CPP_EV_OUTS
+// gains no .deps.pb.h (ymake.core.conf:617), so only this flag changes.
+var evProtocConstTailLite = []STR{
+	argIB2.str(),
+	argISContribLibsProtobufSrc.str(),
+	argCppOutProtoHB.str(),
+	argCppStyleguideOutB.str(),
+}
+
 // evPeerProtoIncludes renders the transitive _PROTO__INCLUDE peer block for an
 // EV protoc command: the single ordered proto-include set in encounter order.
 // _PROTO__INCLUDE is a set, and evProtocConstHead already renders its base
@@ -100,6 +113,7 @@ func emitEV(
 	moduleTag STR,
 	transitiveImports []VFS,
 	protoInclude []VFS,
+	liteHeaders bool,
 	tc ModuleToolchain,
 	emit Emitter,
 ) NodeRef {
@@ -114,7 +128,7 @@ func emitEV(
 	return emitProtoWrapperPBNode(instance, evRelPath, pkEV,
 		cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 		cppStyleguideBinary, protocBinary, event2cppBinary,
-		evOpts, moduleTag, transitiveImports, protoInclude, tc, emit)
+		evOpts, moduleTag, transitiveImports, protoInclude, liteHeaders, tc, emit)
 }
 
 // emitProtoWrapperPBNode emits the cpp_proto_wrapper.py → protoc producer node
@@ -138,6 +152,7 @@ func emitProtoWrapperPBNode(
 	moduleTag STR,
 	transitiveImports []VFS,
 	protoInclude []VFS,
+	liteHeaders bool,
 	tc ModuleToolchain,
 	emit Emitter,
 ) NodeRef {
@@ -151,6 +166,11 @@ func emitProtoWrapperPBNode(
 
 	peerIncludes := evPeerProtoIncludes(protoInclude)
 
+	protocTail := evProtocConstTail
+	if liteHeaders {
+		protocTail = evProtocConstTailLite
+	}
+
 	tail := na.strList(append([]STR{
 		internStr("--plugin=protoc-gen-cpp_styleguide=" + cppStyleguideBinary.string()),
 		internStr(relPath),
@@ -162,7 +182,7 @@ func emitProtoWrapperPBNode(
 		(genCC).str(),
 		(genH).str(),
 		arg2.str(),
-		(protocBinary).str()), evProtocConstHead, peerIncludes, evProtocConstTail, tail)
+		(protocBinary).str()), evProtocConstHead, peerIncludes, protocTail, tail)
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -212,6 +232,7 @@ func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 		cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 		cppStyleguideBinary, protocBinary, event2cppBinary,
 		0, evImports, in.ProtoInclude,
+		!protoTransitiveHeadersEnabled(d),
 		d.tc, ctx.emit)
 
 	evH := build(evRelPath + ".pb.h")
