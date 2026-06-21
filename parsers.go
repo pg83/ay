@@ -399,6 +399,31 @@ func (ProtoIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocator
 	return parseProtoDirectiveSet(data, a)
 }
 
+// protoImportInducedHeader maps a proto `import "X"` target to the generated
+// header protoc induces for it, or reports ok=false for an import with no
+// recognized proto-family extension. Shared by the proto parser (which seeds a
+// generated <proto>.pb.h's parsed includes) and the PB emitter (which roots
+// those headers at the imported proto's actual generated-output location).
+func protoImportInducedHeader(target string) (string, bool) {
+	switch {
+	case strings.HasSuffix(target, ".ev"):
+		return strings.TrimSuffix(target, ".ev") + ".ev.pb.h", true
+	case strings.HasSuffix(target, ".cfgproto"):
+		// protoc keeps the non-.proto extension in the output (the EV/cfgproto
+		// rule), so an `import "X.cfgproto"` induces X.cfgproto.pb.h.
+		return target + ".pb.h", true
+	case strings.HasSuffix(target, ".gztproto"):
+		// dict/gazetteer/converter rewrites a .gztproto source to <base>.proto,
+		// so an `import "X.gztproto"` resolves through the generated X.pb.h —
+		// NOT the .cfgproto.pb.h rule (the extension is replaced, not kept).
+		return strings.TrimSuffix(target, ".gztproto") + ".pb.h", true
+	case strings.HasSuffix(target, ".proto"):
+		return strings.TrimSuffix(target, ".proto") + ".pb.h", true
+	}
+
+	return "", false
+}
+
 // parseProtoDirectiveSet is the shared proto-family directive scan (used by
 // ProtoIncludeDirectiveParser and CfgProtoIncludeDirectiveParser): the `import`
 // lines land in parsedIncludesLocal (walked as proto edges) and their induced
@@ -425,22 +450,8 @@ func parseProtoDirectiveSet(data []byte, a *BumpAllocator[IncludeDirective]) Par
 	j := 0
 
 	for _, d := range local {
-		target := d.target.string()
-
-		switch {
-		case strings.HasSuffix(target, ".ev"):
-			j = addDirective(hblock, j, IncludeDirective{kind: d.kind, target: internStr(strings.TrimSuffix(target, ".ev") + ".ev.pb.h")})
-		case strings.HasSuffix(target, ".cfgproto"):
-			// protoc keeps the non-.proto extension in the output (the EV/cfgproto
-			// rule), so an `import "X.cfgproto"` induces X.cfgproto.pb.h.
-			j = addDirective(hblock, j, IncludeDirective{kind: d.kind, target: internStr(target + ".pb.h")})
-		case strings.HasSuffix(target, ".gztproto"):
-			// dict/gazetteer/converter rewrites a .gztproto source to <base>.proto,
-			// so an `import "X.gztproto"` resolves through the generated X.pb.h —
-			// NOT the .cfgproto.pb.h rule (the extension is replaced, not kept).
-			j = addDirective(hblock, j, IncludeDirective{kind: d.kind, target: internStr(strings.TrimSuffix(target, ".gztproto") + ".pb.h")})
-		case strings.HasSuffix(target, ".proto"):
-			j = addDirective(hblock, j, IncludeDirective{kind: d.kind, target: internStr(strings.TrimSuffix(target, ".proto") + ".pb.h")})
+		if pbH, ok := protoImportInducedHeader(d.target.string()); ok {
+			j = addDirective(hblock, j, IncludeDirective{kind: d.kind, target: internStr(pbH)})
 		}
 	}
 
