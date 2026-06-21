@@ -6,6 +6,83 @@ import (
 	"testing"
 )
 
+// Chained RUN_PROGRAMs over generated OUT_NOAUTO `.bin` artifacts (the sprav
+// working_time/grammar shape): a first run produces first.bin from a proto IN
+// that transitively imports leaf.proto plus an unparsed `.dat` source IN; a
+// second run consumes ${BINDIR}/first.bin; a third consumes both first.bin and
+// second.bin. Upstream's flat-input model lists the first producer's full
+// transitive SOURCE closure on every downstream consumer of its generated `.bin`.
+// The opaque (parser-less) `.bin` IN must therefore carry BOTH the producer's
+// direct source leaves (SourceInputs: the unparsed root.dat) AND its transitive
+// parsed source closure (ProducerSourceClosure: leaf.proto reached through the
+// proto import). The transitive leaf.proto is the residual ours dropped.
+func TestGen_RunProgramGeneratedBinInProducerSourceClosurePropagates(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "tools/gp", "gp")
+
+	writeTestModuleFile(files, "gen/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    tools/gp root.proto root.dat first.bin
+    IN
+        root.proto
+        root.dat
+    OUT_NOAUTO first.bin
+)
+RUN_PROGRAM(
+    tools/gp ${BINDIR}/first.bin second.bin
+    IN
+        ${BINDIR}/first.bin
+    OUT_NOAUTO second.bin
+)
+RUN_PROGRAM(
+    tools/gp ${BINDIR}/first.bin ${BINDIR}/second.bin third.bin
+    IN
+        ${BINDIR}/first.bin
+        ${BINDIR}/second.bin
+    OUT_NOAUTO third.bin
+)
+END()
+`)
+	writeTestModuleFile(files, "gen/root.proto",
+		"syntax = \"proto3\";\npackage gen;\nimport \"gen/leaf.proto\";\nmessage R { gen.L l = 1; }\n")
+	writeTestModuleFile(files, "gen/leaf.proto",
+		"syntax = \"proto3\";\npackage gen;\nmessage L {}\n")
+	writeTestModuleFile(files, "gen/root.dat", "opaque\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(gen)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+
+	// leaf.proto reaches the first producer only transitively (root.proto imports
+	// it), so it lives in first.bin's ProducerSourceClosure, not SourceInputs.
+	// root.dat is an unparsed direct IN: SourceInputs only. Both must ride each
+	// downstream consumer.
+	for _, out := range []string{"$(B)/gen/second.bin", "$(B)/gen/third.bin"} {
+		node := mustNodeByOutput(t, g, out)
+		for _, want := range []string{
+			"$(S)/gen/root.proto",
+			"$(S)/gen/leaf.proto",
+			"$(S)/gen/root.dat",
+		} {
+			if !nodeHasInput(node, want) {
+				t.Fatalf("%s inputs missing %q: %#v", out, want, node.flatInputs())
+			}
+		}
+	}
+}
+
 func TestGen_RunProgramHeaderOutputClosurePropagatesInputs(t *testing.T) {
 	files := map[string]string{}
 

@@ -623,14 +623,22 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 			continue
 		}
 
-		// An opaque generated IN (a FROM_SANDBOX fetch artifact) has no include
-		// parser, so its window is never walked — but upstream's flat-input model
-		// still lists the producer's own source/script inputs on a node consuming
-		// the fetched file. Fold the registered producer's SourceInputs in directly,
-		// without treating the opaque data as parsed includes. The trailing
-		// dedupVFS collapses repetition when several INs share one producer.
+		// An opaque generated IN (a FROM_SANDBOX fetch artifact, a RUN_PROGRAM
+		// OUT_NOAUTO `.bin`) has no include parser, so its window is never walked —
+		// but upstream's flat-input model still lists the producer's full transitive
+		// SOURCE closure on a node consuming the generated file. Fold both recorded
+		// sets without treating the opaque data as parsed includes: SourceInputs
+		// carries the producer's direct source leaves (incl. unparsed INs a closure
+		// walk never reaches — sprav's gazetteer.gzt/.remorph), ProducerSourceClosure
+		// carries its transitive parsed source closure (the proto descriptor sources
+		// reached through the producer's `.proto`/`.gztproto` INs). The chain cascades:
+		// once a downstream `.bin` gains these, its own ProducerSourceClosure carries
+		// them one hop further. The trailing dedupVFS collapses the overlap and any
+		// repetition when several INs share one producer. FROM_SANDBOX producers set
+		// no ProducerSourceClosure, so that path is unaffected.
 		if info := codegenRegForInstance(ctx, instance).lookup(runProgramInputVFS(ctx, instance, d, rel)); info != nil {
 			out = append(out, info.SourceInputs...)
+			out = append(out, info.ProducerSourceClosure...)
 		}
 	}
 
