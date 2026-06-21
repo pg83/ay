@@ -692,8 +692,8 @@ func TestReorderARMembers_Reg3PICVariantsTrailObjcopy(t *testing.T) {
 		{
 			name: "protobuf-style host reg3",
 			paths: []string{
-				"contrib/python/protobuf/py3/google.protobuf.internal._api_implementation.reg3.cpp.pic.o",
-				"contrib/python/protobuf/py3/google.protobuf.pyext._message.reg3.cpp.pic.o",
+				"contrib/python/protobuf/py3/google.protobuf.internal._api_implementation.reg3.cpp.o",
+				"contrib/python/protobuf/py3/google.protobuf.pyext._message.reg3.cpp.o",
 				"contrib/python/protobuf/py3/objcopy_a.o",
 				"contrib/python/protobuf/py3/objcopy_b.o",
 			},
@@ -1027,6 +1027,9 @@ message Cfg {}
 // Upstream always places objcopy objects first regardless of declaration order.
 func TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs(t *testing.T) {
 	files := map[string]string{}
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "slow")
+	writeToolProgram(files, "tools/archiver", "archiver")
 	writeToolProgram(files, "tools/rescompiler", "rescompiler")
 	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
@@ -1117,5 +1120,237 @@ END()
 
 	if !flagsContain(args, "-I$(B)/peer") {
 		t.Errorf("consumer use.cpp.o missing ARCHIVE-generated build include -I$(B)/peer: %v", args)
+	}
+}
+
+// globalARMembers returns the member object paths of the (single) tagGlobal AR
+// node, in command order.
+func globalARMembers(t *testing.T, g *Graph) []string {
+	t.Helper()
+
+	var globalAR *Node
+	for _, n := range g.Graph {
+		if n.KV.P == pkAR && n.TargetProperties.ModuleTag == tagGlobal {
+			globalAR = n
+			break
+		}
+	}
+	if globalAR == nil {
+		t.Fatal("no global AR node in graph")
+	}
+
+	args := strStrs(globalAR.Cmds[0].CmdArgs.flat())
+	if len(args) < 11 {
+		t.Fatalf("global AR cmd_args too short (%d): %v", len(args), args)
+	}
+
+	return args[10:]
+}
+
+// classifyObjcopyMember inspects the objcopy node producing memberPath and
+// classifies it by the resource source file it embeds.
+func classifyObjcopyMember(g *Graph, memberPath string) string {
+	n := nodeByOutput(g, memberPath)
+	if n == nil {
+		return ""
+	}
+	has := func(sub string) bool {
+		for _, in := range n.flatInputs() {
+			if strings.Contains(in.string(), sub) {
+				return true
+			}
+		}
+
+		return false
+	}
+	switch {
+	case has("/data.txt"):
+		return "explicit"
+	case has("/iface.pyi"):
+		return "pyi"
+	case has("/helper.py"):
+		return "py"
+	}
+
+	return "other-objcopy"
+}
+
+// TestGen_GlobalAR_ExplicitResourceBeforeGlobal_PySrcAfter reproduces the
+// tree-sitter divergence (T-148): a PY3_LIBRARY with SRCS(GLOBAL syms.cpp),
+// PY_REGISTER, PY_SRCS(.py + .pyi) and explicit RESOURCE_FILES must order its
+// global archive members as: explicit RESOURCE_FILES objcopy, then the GLOBAL
+// C++ source, then the PY_SRCS .py objcopy, then the .pyi objcopy, then the
+// PY_REGISTER .reg3.cpp. Upstream places the explicit resfs objcopy before the
+// SRCS(GLOBAL) band but the PY_SRCS .py/.pyi resfs objcopies after it. Before
+// the fix ay over-moved the whole combined objcopy result, putting the .py/.pyi
+// objcopies ahead of syms.cpp.pic.o.
+func TestGen_GlobalAR_ExplicitResourceBeforeGlobal_PySrcAfter(t *testing.T) {
+	files := map[string]string{}
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "slow")
+	writeToolProgram(files, "tools/archiver", "archiver")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+
+	writeTestModuleFile(files, "mod/ya.make", `PY3_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+SRCS(GLOBAL syms.cpp)
+PY_REGISTER(mypkg.mymod)
+PY_SRCS(
+    TOP_LEVEL
+    helper.py
+    iface.pyi
+)
+RESOURCE_FILES(
+    PREFIX res/
+    data.txt
+)
+END()
+`)
+	writeTestModuleFile(files, "mod/syms.cpp", "int syms(){return 0;}\n")
+	writeTestModuleFile(files, "mod/helper.py", "x = 1\n")
+	writeTestModuleFile(files, "mod/iface.pyi", "x: int\n")
+	writeTestModuleFile(files, "mod/data.txt", "payload\n")
+
+	g := testGen(newMemFS(files), "mod")
+
+	members := globalARMembers(t, g)
+
+	explicitIdx, globalIdx, pyIdx, pyiIdx, regIdx := -1, -1, -1, -1, -1
+	for i, m := range members {
+		switch {
+		case strings.HasSuffix(m, "/syms.cpp.o"):
+			globalIdx = i
+		case strings.HasSuffix(m, ".reg3.cpp.o"):
+			regIdx = i
+		case strings.Contains(m, "/objcopy_") && strings.HasSuffix(m, ".o"):
+			switch classifyObjcopyMember(g, m) {
+			case "explicit":
+				explicitIdx = i
+			case "py":
+				pyIdx = i
+			case "pyi":
+				pyiIdx = i
+			}
+		}
+	}
+
+	for name, idx := range map[string]int{"explicit objcopy": explicitIdx, "syms.cpp.pic.o": globalIdx, "py objcopy": pyIdx, "pyi objcopy": pyiIdx, ".reg3.cpp.o": regIdx} {
+		if idx < 0 {
+			t.Fatalf("global AR cmd_args missing %s; members=%v", name, members)
+		}
+	}
+
+	// explicit RESOURCE_FILES objcopy precedes the GLOBAL src.
+	if !(explicitIdx < globalIdx) {
+		t.Errorf("explicit objcopy (%d) must precede syms.cpp.pic.o (%d); members=%v", explicitIdx, globalIdx, members)
+	}
+	// PY_SRCS .py/.pyi objcopies follow the GLOBAL src.
+	if !(globalIdx < pyIdx) {
+		t.Errorf("syms.cpp.pic.o (%d) must precede py objcopy (%d); members=%v", globalIdx, pyIdx, members)
+	}
+	if !(globalIdx < pyiIdx) {
+		t.Errorf("syms.cpp.pic.o (%d) must precede pyi objcopy (%d); members=%v", globalIdx, pyiIdx, members)
+	}
+	// .py before .pyi, both before the generated .reg3.cpp.
+	if !(pyIdx < pyiIdx) {
+		t.Errorf("py objcopy (%d) must precede pyi objcopy (%d); members=%v", pyIdx, pyiIdx, members)
+	}
+	if !(pyiIdx < regIdx) {
+		t.Errorf("pyi objcopy (%d) must precede .reg3.cpp.o (%d); members=%v", pyiIdx, regIdx, members)
+	}
+}
+
+// TestGen_GlobalAR_PycryptodomeShape_ExplicitGroupBeforeGlobals guards the
+// pycryptodome divergence (T-148): with SEVERAL SRCS(GLOBAL *_syms.cpp) sources
+// and many PY_SRCS files plus explicit RESOURCE_FILES, ALL explicit-resource
+// objcopies must precede the FIRST GLOBAL source, and ALL PY_SRCS objcopies must
+// follow the LAST GLOBAL source.
+func TestGen_GlobalAR_PycryptodomeShape_ExplicitGroupBeforeGlobals(t *testing.T) {
+	files := map[string]string{}
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "slow")
+	writeToolProgram(files, "tools/archiver", "archiver")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+
+	writeTestModuleFile(files, "crypto/ya.make", `PY3_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+SRCS(
+    GLOBAL a_syms.cpp
+    GLOBAL b_syms.cpp
+    GLOBAL c_syms.cpp
+)
+PY_SRCS(
+    TOP_LEVEL
+    helper.py
+    iface.pyi
+)
+RESOURCE_FILES(
+    PREFIX res/
+    data.txt
+    meta.txt
+)
+END()
+`)
+	writeTestModuleFile(files, "crypto/a_syms.cpp", "int a(){return 0;}\n")
+	writeTestModuleFile(files, "crypto/b_syms.cpp", "int b(){return 0;}\n")
+	writeTestModuleFile(files, "crypto/c_syms.cpp", "int c(){return 0;}\n")
+	writeTestModuleFile(files, "crypto/helper.py", "x = 1\n")
+	writeTestModuleFile(files, "crypto/iface.pyi", "x: int\n")
+	writeTestModuleFile(files, "crypto/data.txt", "payload\n")
+	writeTestModuleFile(files, "crypto/meta.txt", "meta\n")
+
+	g := testGen(newMemFS(files), "crypto")
+
+	members := globalARMembers(t, g)
+
+	firstGlobal, lastGlobal := -1, -1
+	var explicitIdxs, pyIdxs []int
+	for i, m := range members {
+		if strings.HasSuffix(m, "_syms.cpp.o") {
+			if firstGlobal < 0 {
+				firstGlobal = i
+			}
+			lastGlobal = i
+			continue
+		}
+		if strings.Contains(m, "/objcopy_") && strings.HasSuffix(m, ".o") {
+			switch classifyObjcopyMember(g, m) {
+			case "explicit":
+				explicitIdxs = append(explicitIdxs, i)
+			case "py", "pyi":
+				pyIdxs = append(pyIdxs, i)
+			}
+		}
+	}
+
+	if firstGlobal < 0 || lastGlobal < 0 {
+		t.Fatalf("global AR cmd_args missing GLOBAL *_syms.cpp.o members; members=%v", members)
+	}
+	if len(explicitIdxs) == 0 {
+		t.Fatalf("global AR cmd_args missing explicit resource objcopies; members=%v", members)
+	}
+	if len(pyIdxs) == 0 {
+		t.Fatalf("global AR cmd_args missing PY_SRCS objcopies; members=%v", members)
+	}
+
+	for _, idx := range explicitIdxs {
+		if !(idx < firstGlobal) {
+			t.Errorf("explicit objcopy at %d must precede first GLOBAL src at %d; members=%v", idx, firstGlobal, members)
+		}
+	}
+	for _, idx := range pyIdxs {
+		if !(idx > lastGlobal) {
+			t.Errorf("PY_SRCS objcopy at %d must follow last GLOBAL src at %d; members=%v", idx, lastGlobal, members)
+		}
 	}
 }
