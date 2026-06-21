@@ -885,6 +885,65 @@ func TestEmitProtoSrcs_EvArchiveMemberOrderFollowsSrcsOrder(t *testing.T) {
 	}
 }
 
+// A PROTO_LIBRARY mixing GENERATE_ENUM_SERIALIZATION over an EXTERNAL build-root
+// .pb.h (produced by a peer, not this module's SRCS) and over a SAME-MODULE
+// generated .pb.h must split the two by input-header provenance: the external EN
+// is a first-level generated compile keyed at its prio-2 declaration band and
+// archives BEFORE this module's proto .pb.cc.o objects (prio-4 SRCS band); the
+// same-module EN is a second-level compile (its input is produced by this
+// module's own proto command) and archives AFTER all proto objects. Before the
+// provenance fix emitCPPProtoSrcs appended BOTH enum objects at the tail.
+func TestEmitProtoSrcs_EnumSerializationOrderByHeaderProvenance(t *testing.T) {
+	const modPath = "mod/api"
+	const extPath = "ext/protos"
+
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+
+	writeTestModuleFile(files, extPath+"/ya.make", "PROTO_LIBRARY()\nSRCS(external.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
+	writeTestModuleFile(files, extPath+"/external.proto", "syntax = \"proto3\";\npackage ext;\nenum X { X0 = 0; }\nmessage E { X x = 1; }\n")
+
+	writeTestModuleFile(files, modPath+"/ya.make", `PROTO_LIBRARY()
+PEERDIR(`+extPath+`)
+SRCS(own.proto tail.proto)
+GENERATE_ENUM_SERIALIZATION(${ARCADIA_BUILD_ROOT}/`+extPath+`/external.pb.h)
+GENERATE_ENUM_SERIALIZATION(${ARCADIA_BUILD_ROOT}/`+modPath+`/own.pb.h)
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+END()
+`)
+	writeTestModuleFile(files, modPath+"/own.proto", "syntax = \"proto3\";\npackage api;\nenum O { O0 = 0; }\nmessage Own { O o = 1; }\n")
+	writeTestModuleFile(files, modPath+"/tail.proto", "syntax = \"proto3\";\npackage api;\nmessage Tail { string v = 1; }\n")
+
+	g := testGen(newMemFS(files), modPath)
+
+	ar := mustNodeByOutput(t, g, "$(B)/"+modPath+"/"+archiveNameWithPrefixOrName(modPath, "lib", ""))
+	idxOfSuffix := func(suffix string) int {
+		for i, in := range ar.flatInputs() {
+			if strings.HasSuffix(in.string(), "/"+suffix) {
+				return i
+			}
+		}
+		t.Fatalf("archive missing member with suffix %q: %v", suffix, vfsStrings(ar.flatInputs()))
+		return -1
+	}
+
+	extEN := idxOfSuffix("external.pb.h_serialized.cpp.o")
+	own := idxOfSuffix("own.pb.cc.o")
+	tail := idxOfSuffix("tail.pb.cc.o")
+	ownEN := idxOfSuffix("own.pb.h_serialized.cpp.o")
+
+	if !(extEN < own && own < tail && tail < ownEN) {
+		t.Fatalf("archive order external_EN(%d) < own.pb.cc.o(%d) < tail.pb.cc.o(%d) < own_EN(%d) violated: %v",
+			extEN, own, tail, ownEN, vfsStrings(ar.flatInputs()))
+	}
+}
+
 // TestEmitPyProtoSrc_GeneratedProtoWiresProducerDep is the Python protobuf
 // analogue of TestEmitProtoSrcs_GeneratedProtoWiresProducerDep: a PROTO_LIBRARY
 // whose SRCS(X.proto) is the OUT of a RUN_ANTLR (no on-disk X.proto), consumed

@@ -235,6 +235,60 @@ END()
 	}
 }
 
+// A GENERATE_ENUM_SERIALIZATION whose input header is a .pb.h produced by this
+// same module's proto SRCS is a SECOND-level generated compile: it cannot run
+// until the proto command produced the header, so ymake defers it one further
+// FIFO round and archives data.pb.h_serialized.cpp.o AFTER data.pb.cc.o. This is
+// distinct from a checked-in source-header enum (TestGen_Run…), which is a
+// first-level generated compile keyed at its prio-2 declaration band and may sort
+// before a proto SRCS object. Before the provenance fix the EN object (round 1)
+// tied with / preceded data.pb.cc.o.
+func TestGen_ProtoGeneratedHeaderEnumSerializationArchivesAfterProto(t *testing.T) {
+	const modPath = "mod/pg"
+
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+
+	writeTestModuleFile(files, modPath+"/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(data.proto)
+GENERATE_ENUM_SERIALIZATION(data.pb.h)
+END()
+`)
+	writeTestModuleFile(files, modPath+"/data.proto", "syntax = \"proto3\";\npackage test;\nenum E { E0 = 0; }\nmessage M { E e = 1; }\n")
+
+	g := testGen(newMemFS(files), modPath)
+
+	ar := mustNodeByOutput(t, g, "$(B)/"+modPath+"/"+archiveNameWithPrefixOrName(modPath, "lib", ""))
+
+	idxOf := func(rel string) int {
+		want := "$(B)/" + modPath + "/" + rel
+		for i, in := range ar.flatInputs() {
+			if in.string() == want {
+				return i
+			}
+		}
+		t.Fatalf("archive missing member %q: %v", want, vfsStrings(ar.flatInputs()))
+		return -1
+	}
+
+	proto := idxOf("data.pb.cc.o")
+	serialized := idxOf("data.pb.h_serialized.cpp.o")
+
+	if !(proto < serialized) {
+		t.Fatalf("archive order data.pb.cc.o(%d) < data.pb.h_serialized.cpp.o(%d) violated: %v",
+			proto, serialized, vfsStrings(ar.flatInputs()))
+	}
+}
+
 // Owner/consumer split: an enum-serialization generated C++ output (the EN
 // node) and its compile (CC) carry the DECLARING module's module_dir even when
 // a DIFFERENT module include-resolves the generated *_serialized.h first. This
@@ -464,6 +518,27 @@ END()
 	// The compile object rebases the cross-dir source under the module BINDIR with
 	// the `..` ascent mapped to `__`.
 	mustNodeByOutput(t, g, "$(B)/m/meta/__/Offer.pb.h_serialized.cpp.o")
+
+	// Provenance: Offer.pb.h is produced by THIS module's own SRCS(Offer.proto)
+	// (resolved through SRCDIR to m/Offer.pb.h), so the EN compile is second-level
+	// and must archive AFTER the proto .pb.cc.o that produces the header — even
+	// though both objects rebase under the module BINDIR's `__/` cross-dir prefix.
+	ar := mustNodeByOutput(t, g, "$(B)/m/meta/"+archiveNameWithPrefixOrName("m/meta", "lib", ""))
+	idxOf := func(rel string) int {
+		for i, in := range ar.flatInputs() {
+			if in.string() == rel {
+				return i
+			}
+		}
+		t.Fatalf("archive missing member %q: %v", rel, vfsStrings(ar.flatInputs()))
+		return -1
+	}
+	proto := idxOf("$(B)/m/meta/__/Offer.pb.cc.o")
+	serialized := idxOf("$(B)/m/meta/__/Offer.pb.h_serialized.cpp.o")
+	if !(proto < serialized) {
+		t.Fatalf("archive order Offer.pb.cc.o(%d) < Offer.pb.h_serialized.cpp.o(%d) violated: %v",
+			proto, serialized, vfsStrings(ar.flatInputs()))
+	}
 }
 
 func TestGen_EnumSerializationRootQualifiedHeaderUsesCanonicalInput(t *testing.T) {
