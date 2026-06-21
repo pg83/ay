@@ -108,6 +108,54 @@ func protoDirectPbHIncludes(pm *IncludeParserManager, srcRel, outputRoot string)
 	return protoPbHIncludes(pm, srcRel, outputRoot, parsedIncludesHeader)
 }
 
+// protoDirectPbHResolved maps a .proto's direct imports to the generated .pb.h
+// they induce, rooting each at the IMPORTED proto's actual generated-output
+// location (found through the same -I roots protoc/our proto scan search via
+// resolveProtoImportPath) instead of blindly prefixing the IMPORTER's own
+// PROTO_NAMESPACE. protoc writes `#include "<import>.pb.h"` verbatim and ymake
+// resolves it against the GLOBAL PROTO_NAMESPACE addincl of the imported lib, so
+// a generated header lives under the imported proto's namespace root. For a
+// same-namespace import that equals the importer's cppOutRoot (so existing
+// behavior is unchanged); for a cross-namespace import (e.g. a yp-namespace
+// proto importing yt_proto/...) prefixing cppOutRoot mis-roots the directive to
+// a non-existent output and the downstream consumer never reaches the sibling
+// header. The resolved directive is the full output rel, so the scanner binds it
+// context-free (build-includer lookupSTR) — the resolution-cache invariant holds.
+func protoDirectPbHResolved(pm *IncludeParserManager, srcRel string, searchPaths []VFS) []IncludeDirective {
+	local := pm.sourceParsedBuckets(source(srcRel), nil).bucket(parsedIncludesLocal)
+
+	if len(local) == 0 {
+		return nil
+	}
+
+	out := make([]IncludeDirective, 0, len(local))
+
+	for _, d := range local {
+		name := filepath.ToSlash(filepath.Clean(d.target.string()))
+
+		pbH, ok := protoImportInducedHeader(name)
+
+		if !ok {
+			continue
+		}
+
+		if strings.HasPrefix(pbH, "google/protobuf/") {
+			pbH = pbRuntimeBase + pbH
+		} else if resolved := resolveProtoImportPath(pm.fs, name, searchPaths); resolved != "" {
+			// resolved == <root>/<name>; reroot the induced header under the same
+			// <root> the source proto was found at. An unresolved import (no such
+			// source on disk) falls through to the verbatim, addincl-resolved form.
+			pbH = strings.TrimSuffix(resolved, name) + pbH
+		}
+
+		out = append(out, IncludeDirective{kind: d.kind, target: internStr(pbH)})
+	}
+
+	sort.Slice(out, func(i, j int) bool { return out[i].target.string() < out[j].target.string() })
+
+	return out
+}
+
 // protoImportRelsToPbH maps a build-generated proto's declared direct imports
 // (OUTPUT_INCLUDES `.proto` rels) to the `.pb.h` includes a checked-in proto's
 // parse would have produced — `google/protobuf/*` to the protobuf runtime src,
@@ -398,7 +446,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 	}
 
 	{
-		directImports := protoDirectPbHIncludes(ctx.parsers, protoRelPath, cfg.cppOutRoot)
+		directImports := protoDirectPbHResolved(ctx.parsers, protoRelPath, protoSearchPaths)
 
 		// A build-generated proto has no scannable source: its direct imports come
 		// from the producer's OUTPUT_INCLUDES (recorded as ProtoImportRels). Map them
