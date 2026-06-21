@@ -653,32 +653,49 @@ func emitProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCont
 }
 
 func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerContribs PeerGlobalContribs, protoSrcs, evSrcs, gztSrcs []string) *ProtoSrcsResult {
+	// Source FIFO position of each direct SRC: ymake queues a .proto/.ev command's
+	// generated .pb.cc back into the module source list at the source's declaration
+	// position, so equal-priority proto/ev generated compiles archive interleaved
+	// by SRCS textual order (not grouped proto-then-ev). Gzt-generated protos run a
+	// deeper round and sort after all direct sources (declIdx >= len(d.srcs)).
+	srcDeclIdx := make(map[string]int, len(d.srcs))
+	for i, src := range d.srcs {
+		if _, seen := srcDeclIdx[src.string()]; !seen {
+			srcDeclIdx[src.string()] = i
+		}
+	}
+
 	// _SRC("gztproto"): run dict/gazetteer/converter to produce <base>.proto, then
 	// compile the generated .proto through the ordinary protoc path below (it is
 	// picked up via the codegen-registry protoSrcOverride lookup in emitProtoPB).
-	for _, gztSrc := range gztSrcs {
+	for i, gztSrc := range gztSrcs {
 		_, genProtoSrc := emitLibraryGztProtoSource(ctx, instance, d, gztSrc, peerContribs.protoInclude, tagCppProto)
 		protoSrcs = append(protoSrcs, genProtoSrc)
+		// A gztproto's generated .proto compiles one FIFO round later than direct
+		// proto/ev sources; key it past every direct source so it sorts at the tail.
+		srcDeclIdx[genProtoSrc] = len(d.srcs) + i
 	}
 
 	type protoCodegenOutput struct {
-		genRef NodeRef
-		pbCC   VFS
-		srcRel string
+		genRef  NodeRef
+		pbCC    VFS
+		srcRel  string
+		declIdx int
 	}
 
 	var codegenOutputs []protoCodegenOutput
 	codegenOutputSeen := make(map[STR]struct{})
-	appendCodegenOutput := func(genRef NodeRef, pbCC VFS, srcRel string) {
+	appendCodegenOutput := func(genRef NodeRef, pbCC VFS, srcRel string, declIdx int) {
 		if _, dup := codegenOutputSeen[internStr(pbCC.rel())]; dup {
 			return
 		}
 
 		codegenOutputSeen[internStr(pbCC.rel())] = struct{}{}
 		codegenOutputs = append(codegenOutputs, protoCodegenOutput{
-			genRef: genRef,
-			pbCC:   pbCC,
-			srcRel: srcRel,
+			genRef:  genRef,
+			pbCC:    pbCC,
+			srcRel:  srcRel,
+			declIdx: declIdx,
 		})
 	}
 	cfg := ProtoPBConfig{
@@ -704,7 +721,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		// $CPP_PROTO_OUTS order, which is the per-proto archive member order.
 		for _, cc := range pb.orderedCC {
 			ccSrcRel := strings.TrimPrefix(cc.rel(), cppInstance.Path.rel()+"/")
-			appendCodegenOutput(pb.pbRef, cc, ccSrcRel)
+			appendCodegenOutput(pb.pbRef, cc, ccSrcRel, srcDeclIdx[src])
 		}
 	}
 
@@ -752,12 +769,22 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 			cppInstance := instance
 			evSrcRel := strings.TrimPrefix(evRelPath+".pb.cc", cppInstance.Path.rel()+"/")
 			codegenOutputs = append(codegenOutputs, protoCodegenOutput{
-				genRef: evRef,
-				pbCC:   evPbCC,
-				srcRel: evSrcRel,
+				genRef:  evRef,
+				pbCC:    evPbCC,
+				srcRel:  evSrcRel,
+				declIdx: srcDeclIdx[src],
 			})
 		}
 	}
+
+	// Interleave proto and ev generated members by SRCS declaration order (the
+	// ymake source-FIFO queue position), the way upstream archives them. Stable so
+	// each proto's own orderedCC members (.pb.cc, .grpc.pb.cc, plugin .cpp) keep
+	// their relative order, and gzt-generated protos (declIdx >= len(d.srcs)) stay
+	// at the tail.
+	sort.SliceStable(codegenOutputs, func(i, j int) bool {
+		return codegenOutputs[i].declIdx < codegenOutputs[j].declIdx
+	})
 
 	if d.moduleStmt.Name != tokProtoLibrary || len(codegenOutputs) == 0 {
 		return nil
