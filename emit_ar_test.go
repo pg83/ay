@@ -935,6 +935,65 @@ END()
 	}
 }
 
+// TestGen_ARMemberOrder_CfgProtoAfterDirectCpp reproduces the
+// libhttp-parser-status_codes.a divergence (T-123): a plain LIBRARY with
+// SRCS(status_codes.cfgproto status_codes.cpp) must archive the direct
+// status_codes.cpp.o BEFORE the generated status_codes.cfgproto.pb.cc.o, even
+// though the .cfgproto entry is declared first. Upstream queues the cfgproto
+// generated .pb.cc compile in a later FIFO round (proto.conf:_CPP_CFGPROTO_CMD
+// expands $CPP_EV_CMDLINE), so its object archives after the direct compiles.
+func TestGen_ARMemberOrder_CfgProtoAfterDirectCpp(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "lib/ya.make", `LIBRARY()
+SRCS(status_codes.cfgproto status_codes.cpp)
+END()
+`)
+	writeTestModuleFile(files, "lib/status_codes.cpp", "int sc(){return 0;}\n")
+	writeTestModuleFile(files, "lib/status_codes.cfgproto", `package NTest;
+
+import "library/cpp/proto_config/protos/extensions.proto";
+
+message Cfg {}
+`)
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "library/cpp/proto_config/plugin", "plugin")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "library/cpp/proto_config/protos/ya.make", "LIBRARY()\nSRCS(extensions.proto)\nEND()\n")
+	writeTestModuleFile(files, "library/cpp/proto_config/protos/extensions.proto", "syntax = \"proto2\";\nimport \"google/protobuf/descriptor.proto\";\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/src/google/protobuf/descriptor.proto", "syntax = \"proto2\";\n")
+	writeTestModuleFile(files, "library/cpp/proto_config/codegen/ya.make", "LIBRARY()\nSRCS(parse_value.cpp)\nEND()\n")
+	writeTestModuleFile(files, "library/cpp/proto_config/codegen/parse_value.cpp", "int parse(){return 0;}\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "lib")
+
+	ar := mustNodeByOutput(t, g, "$(B)/lib/liblib.a")
+
+	cppPos, cfgPos := -1, -1
+	for i, arg := range strStrs(ar.Cmds[0].CmdArgs.flat()) {
+		if strings.HasSuffix(arg, "/status_codes.cpp.o") {
+			cppPos = i
+		}
+		if strings.HasSuffix(arg, "/status_codes.cfgproto.pb.cc.o") {
+			cfgPos = i
+		}
+	}
+
+	if cppPos < 0 {
+		t.Fatal("AR cmd_args missing status_codes.cpp.o")
+	}
+	if cfgPos < 0 {
+		t.Fatal("AR cmd_args missing status_codes.cfgproto.pb.cc.o")
+	}
+	if cppPos > cfgPos {
+		t.Errorf("AR ordering wrong: status_codes.cpp.o at pos %d, status_codes.cfgproto.pb.cc.o at pos %d — want direct .cpp.o BEFORE generated .cfgproto.pb.cc.o", cppPos, cfgPos)
+	}
+}
+
 // TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs verifies that the resource objcopy
 // object appears BEFORE SRCS(GLOBAL) objects in the global archive cmd_args,
 // even when SRCS(GLOBAL) is declared before RESOURCE in the ya.make file.
