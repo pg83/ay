@@ -83,6 +83,101 @@ END()
 	}
 }
 
+// TestGen_GztProto_ConsumerSeesGeneratedProtoNestedClosure reproduces the T-115
+// sg7 PB input residual: a source `.proto` PB node that imports a GZT-generated
+// `.proto` must see, as protoc would, that generated proto's parsed nested
+// imports — the rewritten `.gztproto`→`.proto` import, the ordinary `.proto`
+// import, and the converter's INDUCED_DEPS(proto …) base.proto — plus the raw
+// `.gztproto` producer-source leaves behind each generated `.proto` in the
+// chain. Representative upstream node: $(B)/search/idl/blender/blender_setup.pb.h
+// importing the GZT-generated xml_auth.proto. Pre-fix the generated proto's
+// parse is registered only SOURCE-rooted (serving its own self-compile), so a
+// consumer resolving the BUILD-rooted $(B)/…/<base>.proto walks no children and
+// the .gztproto leaves never ride. This test fails on pre-fix code.
+func TestGen_GztProto_ConsumerSeesGeneratedProtoNestedClosure(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "gzt/consumer/ya.make", `PROTO_LIBRARY()
+PEERDIR(gzt/model)
+SRCS(consumer.proto)
+END()
+`)
+	writeTestModuleFile(files, "gzt/consumer/consumer.proto", `syntax = "proto2";
+import "gzt/model/model.proto";
+
+package NGzt;
+
+message TConsumer {
+    optional NGzt.TModel Model = 1;
+}
+`)
+
+	writeTestModuleFile(files, "gzt/model/ya.make", `PROTO_LIBRARY()
+PEERDIR(
+    gzt/peer
+    gzt/data
+)
+SRCS(model.gztproto)
+END()
+`)
+	writeTestModuleFile(files, "gzt/model/model.gztproto", `import "gzt/peer/peer.gztproto";
+import "gzt/data/data.proto";
+
+package NGzt;
+
+message TModel {
+    optional NGzt.TPeer Peer = 1;
+    optional NGzt.TData Data = 2;
+}
+`)
+	writeTestModuleFile(files, "gzt/peer/ya.make", "PROTO_LIBRARY()\nSRCS(peer.gztproto)\nEND()\n")
+	writeTestModuleFile(files, "gzt/peer/peer.gztproto", "package NGzt;\nmessage TPeer { optional uint32 X = 1; }\n")
+	writeTestModuleFile(files, "gzt/data/ya.make", "PROTO_LIBRARY()\nSRCS(data.proto)\nEND()\n")
+	writeTestModuleFile(files, "gzt/data/data.proto", "syntax = \"proto2\";\npackage NGzt;\nmessage TData {}\n")
+
+	writeTestModuleFile(files, "dict/gazetteer/converter/ya.make", `PROGRAM(gztconverter)
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(main.cpp)
+INDUCED_DEPS(proto ${ARCADIA_ROOT}/kernel/gazetteer/proto/base.proto)
+INDUCED_DEPS(h+cpp ${ARCADIA_BUILD_ROOT}/kernel/gazetteer/proto/base.pb.h)
+END()
+`)
+	writeTestModuleFile(files, "dict/gazetteer/converter/main.cpp", "int main(){return 0;}\n")
+	writeTestModuleFile(files, "kernel/gazetteer/proto/ya.make", "PROTO_LIBRARY()\nSRCS(base.proto)\nEND()\n")
+	writeTestModuleFile(files, "kernel/gazetteer/proto/base.proto", "syntax = \"proto2\";\npackage NGztBase;\nmessage TBase {}\n")
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "gzt/consumer")
+
+	pb := mustNodeByOutput(t, g, "$(B)/gzt/consumer/consumer.pb.h")
+
+	for _, want := range []string{
+		"$(B)/gzt/model/model.proto",             // direct import (generated)
+		"$(B)/gzt/peer/peer.proto",               // nested rewritten .gztproto→.proto import
+		"$(S)/gzt/model/model.gztproto",          // producer-source leaf of model.proto
+		"$(S)/gzt/peer/peer.gztproto",            // producer-source leaf (transitive .gztproto)
+		"$(S)/gzt/data/data.proto",               // ordinary nested .proto import
+		"$(S)/kernel/gazetteer/proto/base.proto", // converter INDUCED_DEPS(proto …)
+	} {
+		if !nodeHasInput(pb, want) {
+			t.Errorf("consumer PB node missing transitive input %q\ngot: %v", want, pb.flatInputs())
+		}
+	}
+
+	// The generated peer .proto is reached as a .proto import; its pre-generation
+	// .gztproto must not be invented as a .gztproto.pb.h (the .cfgproto rule).
+	if nodeHasInput(pb, "$(B)/gzt/peer/peer.gztproto.pb.h") {
+		t.Errorf("must NOT invent peer.gztproto.pb.h: %v", pb.flatInputs())
+	}
+}
+
 // TestGen_GztProto_ArchivedAfterDirectSourcesRegardlessOfSRCSOrder pins the
 // codegen-ordering invariant the reviewer flagged: a `.gztproto` is a
 // codegen-producing source (its generated `.pb.cc.o` is a generated object), so

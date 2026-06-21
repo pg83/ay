@@ -78,14 +78,35 @@ func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	// mis-induce its INDUCED_DEPS(h+cpp …/base.pb.h) onto the .proto output (a
 	// .proto reads the cpp induced bucket), dragging base.pb.h's C++ closure into
 	// the PB node.
-	codegenRegForInstance(ctx, instance).register(&GeneratedFileInfo{
+	reg := codegenRegForInstance(ctx, instance)
+	reg.register(&GeneratedFileInfo{
 		ProducerKvP:  pkGZ,
 		OutputPath:   genProto,
 		ProducerRef:  gzRef,
 		SourceInputs: sourceInputs,
 	})
 
-	ctx.parsers.injectSourceParse(source(moddir+"/"+genProtoName), gztGeneratedProtoParse(ctx, gztSource, inducedProtos))
+	// The generated .proto's parse, shared by two readers. injectSourceParse
+	// serves the node compiling THIS generated proto itself (emitProtoPB's
+	// protoSrcOverride reads the SOURCE-rooted path). registerBuildParsedIncludes
+	// serves a LATER source-`.proto` PB consumer that imports this generated
+	// proto: it resolves to the BUILD-rooted $(B)/<moddir>/<base>.proto, and
+	// parsedIncludes consults only buildParsed for build paths — so without this
+	// the consumer would walk no nested imports (rewritten .gztproto→.proto, the
+	// ordinary .proto imports, the converter-induced base.proto). The parse is
+	// context-free (one set per file), preserving the resolution-cache invariant.
+	generatedParse := gztGeneratedProtoParse(ctx, gztSource, inducedProtos)
+	ctx.parsers.injectSourceParse(source(moddir+"/"+genProtoName), generatedParse)
+	ctx.parsers.registerBuildParsedIncludes(genProto, generatedParse.bucket(parsedIncludesLocal))
+
+	// The raw .gztproto producer-source leaves (self + transitively-imported
+	// .gztproto) are a generated-from edge of the generated $(B) .proto, not a
+	// parseable proto import: a PB consumer that reaches the generated proto as a
+	// transitive import rides them as non-expanded closure-window leaves, exactly
+	// as a generated .pb.h rides the .proto it was produced from.
+	for _, s := range sourceInputs {
+		reg.addClosureLeaf(genProto, s)
+	}
 
 	return gzRef, genProtoName
 }
