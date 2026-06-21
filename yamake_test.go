@@ -782,6 +782,22 @@ func TestParseCFlags_BackslashQuoteUnescaped(t *testing.T) {
 	}
 }
 
+func TestParseCXXFlags_AdjacentQuotedSuffixStaysSingleFlag(t *testing.T) {
+	mf, err := parse(testParserFS, "test.input",
+		[]byte("CXXFLAGS(-DYTPROF_BUILD_TYPE='\\\"${BUILD_TYPE}\\\"')\n"))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	c, ok := mf.Stmts[0].(*CXXFlagsStmt)
+	if !ok {
+		t.Fatalf("Stmts[0] = %T, want *CXXFlagsStmt", mf.Stmts[0])
+	}
+	want := `-DYTPROF_BUILD_TYPE="${BUILD_TYPE}"`
+	if len(c.OwnFlags) != 1 || c.OwnFlags[0].string() != want {
+		t.Errorf("OwnFlags = %v, want [%s]", c.OwnFlags, want)
+	}
+}
+
 func TestParseCFlags_Global(t *testing.T) {
 	mf, err := parse(testParserFS, "test.input", []byte("CFLAGS(GLOBAL -O2 -Wall)\n"))
 	if err != nil {
