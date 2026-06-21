@@ -830,6 +830,14 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	ccRefs := make([]NodeRef, 0, len(codegenOutputs))
 	ccOutputs := make([]VFS, 0, len(codegenOutputs))
 
+	// arDeclMeta carries each archive member's AR-ordering key so reorderARMembers
+	// merges proto/ev codegen, RUN_ANTLR .cpp, and enum-serialization members into
+	// one ymake-faithful order. Proto/ev .pb.cc are first-level generated compiles
+	// queued in the prio-4 SRCS band (seq = SRCS declaration index → preserves the
+	// T-131 interleave; gzt-generated protos carry a tail declIdx). reorderARMembers
+	// is stable, so each proto's orderedCC members keep their relative order.
+	arDeclMeta := map[VFS]SrcMeta{}
+
 	wireFormatVFS := source(pbRuntimeBase + "google/protobuf/wire_format.h")
 
 	for _, co := range codegenOutputs {
@@ -881,13 +889,21 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		ccRef, ccOut, _ := emitCC(cppInstance, co.srcRel, co.pbCC, ccIn, ctx.host, ctx.emit)
 		ccRefs = append(ccRefs, ccRef)
 		ccOutputs = append(ccOutputs, ccOut)
+		arDeclMeta[ccOut] = SrcMeta{Prio: stmtPrioSrcs, Seq: co.declIdx, Generated: true}
 	}
 
 	enRes := emitEnumSrcs(ctx, instance, d, peerContribs.addIncl, &moduleInputs)
 
 	if enRes != nil {
-		ccRefs = append(ccRefs, enRes.CCRefs...)
-		ccOutputs = append(ccOutputs, enRes.CCOutputs...)
+		// External/source-header EN (first-level, prio-2 declaration band) archives
+		// ahead of this module's proto .pb.cc.o; a same-module generated-.pb.h EN is
+		// second-level and archives after every first-level member. reorderARMembers
+		// places both from these keys.
+		for i := range enRes.CCRefs {
+			ccRefs = append(ccRefs, enRes.CCRefs[i])
+			ccOutputs = append(ccOutputs, enRes.CCOutputs[i])
+			arDeclMeta[enRes.CCOutputs[i]] = SrcMeta{Prio: stmtPrioDefault, Seq: enRes.Seqs[i], Generated: true, SecondLevel: enRes.SecondLevel[i]}
+		}
 	}
 
 	// RUN_ANTLR(... OUT *.cpp ...) inside a PROTO_LIBRARY's IF(GEN_PROTO)
@@ -925,6 +941,10 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 				ccRef, ccOut := emitCodegenDownstreamCC(ctx, cppInstance, cppRel, []NodeRef{info.ProducerRef}, moduleInputs)
 				antlrRefs = append(antlrRefs, ccRef)
 				antlrOutputs = append(antlrOutputs, ccOut)
+				// RUN_ANTLR .cpp is a first-level generated compile queued in its
+				// prio-2 declaration band — ahead of the proto .pb.cc.o (prio-4 SRCS
+				// band), matching the reference jsonpath AR.
+				arDeclMeta[ccOut] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
 			}
 		}
 	}
@@ -933,6 +953,8 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		ccRefs = append(antlrRefs, ccRefs...)
 		ccOutputs = append(antlrOutputs, ccOutputs...)
 	}
+
+	ccRefs, ccOutputs = reorderARMembers(ccRefs, ccOutputs, arDeclMeta)
 
 	var protoLibName string
 
