@@ -47,22 +47,6 @@ var flatc64IOLeadArgs = []STR{
 	argDashO.str(),
 }
 
-// flatcVariant captures the constant differences between _CPP_FLATC_CMD (FL,
-// .fbs) and _CPP_FLATC64_CMD (FL64, .fbs64): the tool, the flag/IO spans, the
-// node kind, the source/bfbs suffixes, and the runtime header. The producer
-// pre-pass (gen.go) picks the variant by source extension; everything else of
-// the FL path — generated-header resolution, registry registration, the .cpp
-// compile (emitLibraryFlatcSource) — is shared.
-type flatcVariant struct {
-	toolArg    ARG
-	constFlags []STR
-	ioLeadArgs []STR
-	procKind   ProcKind
-	srcExt     string
-	bfbsExt    string
-	runtimeVFS VFS
-}
-
 var flatcVariantFL = flatcVariant{
 	toolArg:    argContribLibsFlatbuffersFlatc,
 	constFlags: flatcConstFlags,
@@ -81,6 +65,22 @@ var flatcVariantFL64 = flatcVariant{
 	srcExt:     ".fbs64",
 	bfbsExt:    ".bfbs64",
 	runtimeVFS: flatc64RuntimeVFS,
+}
+
+// flatcVariant captures the constant differences between _CPP_FLATC_CMD (FL,
+// .fbs) and _CPP_FLATC64_CMD (FL64, .fbs64): the tool, the flag/IO spans, the
+// node kind, the source/bfbs suffixes, and the runtime header. The producer
+// pre-pass (gen.go) picks the variant by source extension; everything else of
+// the FL path — generated-header resolution, registry registration, the .cpp
+// compile (emitLibraryFlatcSource) — is shared.
+type flatcVariant struct {
+	toolArg    ARG
+	constFlags []STR
+	ioLeadArgs []STR
+	procKind   ProcKind
+	srcExt     string
+	bfbsExt    string
+	runtimeVFS VFS
 }
 
 func flatcDirectImportNames(pm *IncludeParserManager, srcRel string) []string {

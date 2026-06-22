@@ -472,6 +472,7 @@ func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 
 		if (isName && suppressCimportNames) || (isFallback && !prevProbeMissed) {
 			prevProbeMissed = false
+
 			continue
 		}
 

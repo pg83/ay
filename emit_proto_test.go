@@ -604,7 +604,7 @@ SRCS(leaf.proto)
 EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
 END()
 `,
-		"leaf/leaf.proto":                "syntax = \"proto3\";\nmessage Leaf { int32 x = 1; }\n",
+		"leaf/leaf.proto":                 "syntax = \"proto3\";\nmessage Leaf { int32 x = 1; }\n",
 		"contrib/libs/protobuf/ya.make":   "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n",
 		"contrib/python/protobuf/ya.make": "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nEND()\n",
 		"contrib/libs/python/ya.make":     "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
@@ -2431,8 +2431,8 @@ func TestGen_ProtoImport_SourceRootWinsOverPeerNamespaceMirror(t *testing.T) {
 	inputs := vfsStrings(pb.flatInputs())
 
 	const (
-		want    = "$(S)/dep/foo.proto"
-		mirror  = "$(S)/mirror/dep/foo.proto"
+		want   = "$(S)/dep/foo.proto"
+		mirror = "$(S)/mirror/dep/foo.proto"
 	)
 
 	hasWant, hasMirror := false, false

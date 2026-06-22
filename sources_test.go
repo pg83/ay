@@ -47,7 +47,7 @@ func TestResolveSourceVFS_RootRelativeSrc(t *testing.T) {
 // listed the doubled, nonexistent input.
 func TestGen_RootRelativeSrc_CCInputsNotDoubled(t *testing.T) {
 	fs := newMemFS(map[string]string{
-		"geobase/library/abi/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(local.cpp geobase/library/asset.cpp)\nEND()\n",
+		"geobase/library/abi/ya.make":   "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(local.cpp geobase/library/asset.cpp)\nEND()\n",
 		"geobase/library/abi/local.cpp": "int local(){return 0;}\n",
 		"geobase/library/asset.cpp":     "int asset(){return 1;}\n",
 	})

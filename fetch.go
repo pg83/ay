@@ -256,6 +256,7 @@ func placeSandboxResource(fetched, copyToDir, untarTo string, renames, outs []st
 		}
 
 		s := src
+
 		if untarTo != "" {
 			s = filepath.Join(untarTo, src)
 		}
@@ -267,6 +268,7 @@ func placeSandboxResource(fetched, copyToDir, untarTo string, renames, outs []st
 		throw(os.MkdirAll(copyToDir, 0o755))
 
 		dst := filepath.Join(copyToDir, "resource")
+
 		if len(outs) == 1 {
 			dst = filepath.Join(copyToDir, outs[0])
 		}
@@ -432,11 +434,13 @@ func oauthLogin() string {
 // agent is reachable or no key is accepted.
 func tokenFromSSHAgent(login string) string {
 	sock := os.Getenv("SSH_AUTH_SOCK")
+
 	if sock == "" || login == "" {
 		return ""
 	}
 
 	conn, err := net.Dial("unix", sock)
+
 	if err != nil {
 		return ""
 	}
@@ -446,6 +450,7 @@ func tokenFromSSHAgent(login string) string {
 	ag := agent.NewClient(conn)
 
 	keys, err := ag.List()
+
 	if err != nil {
 		return ""
 	}
@@ -455,6 +460,7 @@ func tokenFromSSHAgent(login string) string {
 
 	for _, key := range keys {
 		sig, err := ag.Sign(key, data)
+
 		if err != nil {
 			continue
 		}
@@ -487,6 +493,7 @@ func tokenFromSSHAgent(login string) string {
 // postOAuthToken posts the token request and returns access_token, or "" on any failure.
 func postOAuthToken(form url.Values) string {
 	resp, err := http.PostForm(oauthTokenURL, form)
+
 	if err != nil {
 		return ""
 	}
@@ -547,6 +554,7 @@ func fetchFromSandbox(id, token, archivePath string) {
 	}
 
 	proxy := info.HTTP.Proxy + sandboxOriginSuffix
+
 	if info.Multifile {
 		proxy += "&stream=tgz"
 	}
@@ -557,6 +565,7 @@ func fetchFromSandbox(id, token, archivePath string) {
 
 	for _, s := range sources {
 		tok := ""
+
 		if s.auth {
 			tok = token
 		}

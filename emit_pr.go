@@ -183,6 +183,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// first OUT in command order — OUT, then OUT_NOAUTO, then STDOUT. The command
 	// builds one node keyed on it; the other outputs are EDT_OutTogether siblings.
 	var mainOutputVFS VFS
+
 	switch {
 	case len(stmt.OUTFiles) > 0:
 		mainOutputVFS = outVFSByToken[stmt.OUTFiles[0]]
@@ -231,6 +232,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// the `.pb.h` and its own transitive closure. Headers only — a `.pb.h` OUT (the
 	// transitive_proto wrapper) already roots its own proto graph (T-48).
 	var protoImportPbH []IncludeDirective
+
 	for _, v := range inVFSs {
 		if v.isSource() && strings.HasSuffix(v.rel(), ".proto") {
 			protoImportPbH = append(protoImportPbH, protoDirectPbHIncludes(ctx.parsers, v.rel(), "")...)
@@ -247,12 +249,15 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// A header-only / OUT_NOAUTO run (LLVM *.inc) does not self-consume and keeps
 	// the existing first-consumer attribution.
 	selfConsumes := false
+
 	for _, f := range stmt.OUTFiles {
 		if s := f.string(); isCCSourceExt(s) || isAsmSourceExt(s) {
 			selfConsumes = true
+
 			break
 		}
 	}
+
 	if stmt.StdoutFile != nil && !stmt.StdoutNoAuto {
 		if s := stmt.StdoutFile.string(); isCCSourceExt(s) || isAsmSourceExt(s) {
 			selfConsumes = true
@@ -277,11 +282,14 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// these to seed the generated `<proto>.pb.h`'s direct includes — upstream's
 	// `${hide;output_include:OUTPUT_INCLUDES}` induced deps on the generated proto.
 	var protoOutputIncludeRels []string
+
 	for _, oi := range stmt.OutputIncludes {
 		rel := oi.string()
+
 		if vfsHasPrefix(rel) {
 			rel = intern(rel).rel()
 		}
+
 		if strings.HasSuffix(rel, ".proto") {
 			protoOutputIncludeRels = append(protoOutputIncludeRels, rel)
 		}
@@ -424,6 +432,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// gate + registry probe + dedup make the IN files a no-op for the common case (a
 	// parsed IN is already in inputClosure, a source IN is skipped).
 	depInputs := inputClosure
+
 	if len(inVFSs) > 0 {
 		depInputs = append(append(make([]VFS, 0, len(inVFSs)+len(inputClosure)), inVFSs...), inputClosure...)
 	}
@@ -448,11 +457,13 @@ func dropOwnOutputs(closure []VFS, outVFSByToken map[STR]VFS) []VFS {
 	}
 
 	owned := make(map[VFS]bool, len(outVFSByToken))
+
 	for _, v := range outVFSByToken {
 		owned[v] = true
 	}
 
 	kept := closure[:0:0]
+
 	for _, v := range closure {
 		if owned[v] {
 			continue
@@ -469,6 +480,7 @@ func dropOwnOutputs(closure []VFS, outVFSByToken map[STR]VFS) []VFS {
 // closure from its full ($(S)+$(B)) input closure.
 func filterSourceVFS(vs []VFS) []VFS {
 	n := 0
+
 	for _, v := range vs {
 		if v.isSource() {
 			n++
@@ -480,6 +492,7 @@ func filterSourceVFS(vs []VFS) []VFS {
 	}
 
 	out := make([]VFS, 0, n)
+
 	for _, v := range vs {
 		if v.isSource() {
 			out = append(out, v)
@@ -556,9 +569,11 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	// With an IN file the producer's graph is rooted at IN regardless (control_board
 	// .{h,cpp}.in #include the proto headers their OUTPUT_INCLUDES name).
 	hasAutoCCSourceOut := stmt.StdoutFile != nil && isCCSourceExt(stmt.StdoutFile.string())
+
 	for _, f := range stmt.OUTFiles {
 		if isCCSourceExt(f.string()) {
 			hasAutoCCSourceOut = true
+
 			break
 		}
 	}
@@ -586,6 +601,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	// registered parser (control_board's .{h,cpp}.in); a data IN (formula.in,
 	// geocoding .txt) induces no include edges itself.
 	hasParsedIN := false
+
 	for _, f := range stmt.INFiles {
 		if strings.HasSuffix(f.string(), ".proto") {
 			hasProtoIN = true
@@ -605,9 +621,11 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	// OUTPUT_INCLUDES, so the generated cc-source's include closure surfaces on the
 	// producer's own self-scan. A parsed IN roots the producer's graph regardless.
 	generatesHeader := stmt.StdoutFile != nil && isHeaderSource(stmt.StdoutFile.string())
+
 	for _, f := range stmt.OUTFiles {
 		if isHeaderSource(f.string()) {
 			generatesHeader = true
+
 			break
 		}
 	}
@@ -694,6 +712,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	// files).
 	for _, f := range stmt.INFiles {
 		rel := f.string()
+
 		if includeDirectiveParsers.hasRegisteredParser(rel) {
 			walkInput(rel)
 
@@ -775,9 +794,11 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 			if fullSourceClosure {
 				return v.isSource()
 			}
+
 			if customPR {
 				return v.isSource() || isCodegenProtoHeader(reg, v)
 			}
+
 			return strings.HasSuffix(v.rel(), ".proto")
 		}
 
@@ -799,6 +820,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 
 			var sub []VFS
 			customPR := false
+
 			switch info := reg.lookup(candidate); {
 			case info != nil:
 				// Codegen header: a build output that always leads its window —
@@ -895,9 +917,11 @@ func prEmitsIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, protoImpor
 	carryProtoImportPbH := isHeaderSource(outFile.string()) && !strings.HasSuffix(outFile.string(), ".pb.h")
 
 	n := len(stmt.OutputIncludes)
+
 	if carries {
 		n += len(inVFSs)
 	}
+
 	if carryProtoImportPbH {
 		n += len(protoImportPbH)
 	}
@@ -1188,6 +1212,7 @@ func deepReplaceCandidates(stmt *RunProgramStmt, inVFSByToken, outVFSByToken map
 		}
 
 		t := tok.string()
+
 		if !mustDeepReplacePath(t) {
 			return
 		}
@@ -1243,6 +1268,7 @@ func mustDeepReplacePath(p string) bool {
 func deepReplacePathArg(arg string, cands []deepReplaceCand) (string, bool) {
 	for _, c := range cands {
 		idx := strings.Index(arg, c.token)
+
 		if idx < 0 {
 			continue
 		}

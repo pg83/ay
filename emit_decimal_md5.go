@@ -53,6 +53,7 @@ func emitDecimalMD5(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *D
 	outVFS := copyFileOutputVFS(modulePath, stmt.File)
 
 	optVFSs := make([]VFS, 0, len(stmt.Opts))
+
 	for _, opt := range stmt.Opts {
 		optVFSs = append(optVFSs, copyFileInputVFS(ctx.fs, modulePath, opt.string()))
 	}
@@ -61,11 +62,11 @@ func emitDecimalMD5(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *D
 	cmdArgs = append(cmdArgs,
 		d.tc.Python3,
 		decimalMD5PyVFS.str(),
-		internStr("--fixed-output="),
+		strFixedOutput,
 		internStr("--func-name="+stmt.FuncName),
-		internStr("--lower-bits"),
-		internStr("32"),
-		internStr("--source-root=" + strS.string()),
+		strLowerBits,
+		str32,
+		internStr("--source-root="+strS.string()),
 	)
 
 	for _, v := range optVFSs {

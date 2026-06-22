@@ -2,8 +2,8 @@ package main
 
 import (
 	"reflect"
-	"testing"
 	"strings"
+	"testing"
 )
 
 func TestPrebuiltToolchainFlags_CarryConfigNotToolPaths(t *testing.T) {

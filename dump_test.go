@@ -281,7 +281,9 @@ func TestDumpDiffPair_PrefersDivergentDuplicateVariant(t *testing.T) {
 	throw(os.WriteFile(left, []byte(line("same-host", "L-host", "host-clean", true)+"\n"+line("left-target", "L-target", "target-ours", false)+"\n"), 0o644))
 	throw(os.WriteFile(right, []byte(line("same-host", "R-host", "host-clean", true)+"\n"+line("right-target", "R-target", "target-ref", false)+"\n"), 0o644))
 
-	if exc := try(func() { cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out, "--pair", "/dup"}) }); exc != nil {
+	if exc := try(func() {
+		cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out, "--pair", "/dup"})
+	}); exc != nil {
 		t.Fatalf("pair duplicate outputs: %v", exc)
 	}
 	got := string(throw2(os.ReadFile(out)))
@@ -311,7 +313,9 @@ func TestDumpDiffPair_DuplicateOutputsExactCounterpartsNoFieldDiff(t *testing.T)
 	throw(os.WriteFile(left, []byte(line("L-cg2", "-CG2")+"\n"+line("L-ct0", "-CT0")+"\n"), 0o644))
 	throw(os.WriteFile(right, []byte(line("R-cg2", "-CG2")+"\n"+line("R-ct0", "-CT0")+"\n"), 0o644))
 
-	if exc := try(func() { cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out, "--pair", "/dup"}) }); exc != nil {
+	if exc := try(func() {
+		cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out, "--pair", "/dup"})
+	}); exc != nil {
 		t.Fatalf("pair duplicate outputs: %v", exc)
 	}
 	got := string(throw2(os.ReadFile(out)))
@@ -341,7 +345,9 @@ func TestDumpDiffPair_DuplicateOutputsOneSiblingDiffersReportsResidual(t *testin
 	throw(os.WriteFile(left, []byte(line("L-a", "-CG2")+"\n"+line("L-b", "-Bours")+"\n"), 0o644))
 	throw(os.WriteFile(right, []byte(line("R-a", "-CG2")+"\n"+line("R-c", "-Cref")+"\n"), 0o644))
 
-	if exc := try(func() { cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out, "--pair", "/dup"}) }); exc != nil {
+	if exc := try(func() {
+		cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out, "--pair", "/dup"})
+	}); exc != nil {
 		t.Fatalf("pair duplicate outputs control: %v", exc)
 	}
 	got := string(throw2(os.ReadFile(out)))
@@ -443,7 +449,9 @@ func TestDumpDiffRoots(t *testing.T) {
 	throw(os.WriteFile(left, []byte(node("Ps", "Pu", "/p", `["Cu"]`, `["a"]`)+"\n"+node("Cs", "Cu", "/c", `[]`, `["a"]`)+"\n"), 0o644))
 	throw(os.WriteFile(right, []byte(node("Ps2", "Pu2", "/p", `["Cu2"]`, `[]`)+"\n"+node("Cs2", "Cu2", "/c", `[]`, `[]`)+"\n"), 0o644))
 
-	if exc := try(func() { cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out, "--roots"}) }); exc != nil {
+	if exc := try(func() {
+		cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out, "--roots"})
+	}); exc != nil {
 		t.Fatalf("roots: %v", exc)
 	}
 	got := string(throw2(os.ReadFile(out)))
@@ -477,7 +485,9 @@ func TestDumpDiffRoots_DedupDuplicateOutputsByVariant(t *testing.T) {
 	throw(os.WriteFile(left, []byte(line("same-host", "L-host", true)+"\n"+line("left-target", "L-target", false)+"\n"), 0o644))
 	throw(os.WriteFile(right, []byte(line("same-host", "R-host", true)+"\n"+line("right-target", "R-target", false)+"\n"), 0o644))
 
-	if exc := try(func() { cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out, "--roots"}) }); exc != nil {
+	if exc := try(func() {
+		cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out, "--roots"})
+	}); exc != nil {
 		t.Fatalf("roots duplicate outputs: %v", exc)
 	}
 	got := string(throw2(os.ReadFile(out)))
@@ -507,7 +517,9 @@ func TestDumpDiffRoots_PartialOverlapMultiOutputNode(t *testing.T) {
 	throw(os.WriteFile(left, []byte(leftNode+"\n"), 0o644))
 	throw(os.WriteFile(right, []byte(rightNode+"\n"), 0o644))
 
-	if exc := try(func() { cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out, "--roots"}) }); exc != nil {
+	if exc := try(func() {
+		cmdDumpDiff(GlobalFlags{}, []string{"--left", left, "--right", right, "--out", out, "--roots"})
+	}); exc != nil {
 		t.Fatalf("roots partial-overlap multi-output: %v", exc)
 	}
 	got := string(throw2(os.ReadFile(out)))

@@ -3,7 +3,7 @@
 set -xue
 
 go build -o ay .
-./ay refac consts
-./ay refac lint
+./ay dev refac consts
+./ay dev refac lint
 gofmt -w .
 go build -o ay .

@@ -1331,6 +1331,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	// PROTO_LIBRARY path. For an inline proto without grpc/plugins protoCmdPeers is
 	// empty, so frontSet is empty and the two passes collapse to declaration order.
 	frontSet := make(map[STR]struct{}, len(d.protoCmdPeers))
+
 	for _, p := range d.protoCmdPeers {
 		frontSet[p] = struct{}{}
 	}
@@ -1599,6 +1600,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	sbomOrder := archiveOrder
 	{
 		cxxIdx, libcxxIdx := -1, -1
+
 		for i, rp := range archiveOrder {
 			switch rp.path {
 			case "contrib/libs/cxxsupp":
@@ -1607,18 +1609,23 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 				libcxxIdx = i
 			}
 		}
+
 		if cxxIdx > libcxxIdx && libcxxIdx >= 0 {
 			reordered := make([]resolvedPeer, 0, len(archiveOrder))
 			cxx := archiveOrder[cxxIdx]
+
 			for i, rp := range archiveOrder {
 				if i == cxxIdx {
 					continue
 				}
+
 				reordered = append(reordered, rp)
+
 				if i == libcxxIdx {
 					reordered = append(reordered, cxx)
 				}
 			}
+
 			sbomOrder = reordered
 		}
 	}
@@ -1632,15 +1639,18 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	// peer to just before the first allocator-explicit peer in the SBOM pass only.
 	if linkTarget && len(allocatorExplicitPeers) > 0 {
 		allocSet := make(map[string]struct{}, len(allocatorExplicitPeers))
+
 		for _, p := range allocatorExplicitPeers {
 			allocSet[filepath.Clean(p)] = struct{}{}
 		}
 
 		lldIdx, allocIdx := -1, -1
+
 		for i, rp := range sbomOrder {
 			if rp.path == "build/platform/lld" {
 				lldIdx = i
 			}
+
 			if _, ok := allocSet[rp.path]; ok && allocIdx < 0 {
 				allocIdx = i
 			}
@@ -1649,15 +1659,19 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		if lldIdx >= 0 && allocIdx >= 0 && lldIdx < allocIdx {
 			relocated := make([]resolvedPeer, 0, len(sbomOrder))
 			lld := sbomOrder[lldIdx]
+
 			for i, rp := range sbomOrder {
 				if i == lldIdx {
 					continue
 				}
+
 				if i == allocIdx {
 					relocated = append(relocated, lld)
 				}
+
 				relocated = append(relocated, rp)
 			}
+
 			sbomOrder = relocated
 		}
 	}
@@ -2041,30 +2055,30 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	moduleInputs := ModuleCCInputs{
-		InclArgs:                 ctx.inclArgs,
-		Flags:                    d.flags,
-		AddIncl:                  dedupedAddIncl,
-		PeerAddInclGlobal:        selfPeerAddInclGlobal,
-		ProtoInclude:             effectiveProtoInclude,
-		ProtoIncludePeers:        peerProtoInclude,
-		CFlags:                   ownCFlags,
-		CXXFlags:                 d.cxxFlags,
-		COnlyFlags:               d.cOnlyFlags,
-		ClangWarnings:            d.clangWarnings,
-		OwnCFlagsGlobal:          ownCFlagsGlobalSelf,
-		OwnCXXFlagsGlobal:        ownCXXFlagsGlobalSelf,
-		OwnCOnlyFlagsGlobal:      ownCOnlyFlagsGlobalSelf,
-		PeerCFlagsGlobal:         peerCFlagsGlobal,
-		PeerCXXFlagsGlobal:       peerCXXFlagsGlobal,
-		PeerCOnlyFlagsGlobal:     peerCOnlyFlagsGlobal,
-		ModuleScopeCFlags:        d.moduleScopeCFlags,
-		SFlags:                   d.sFlags,
-		SrcDirs:                  effectiveSrcDirs,
-		FS:                       ctx.fs,
-		DefaultVars:              d.defaultVars,
-		DefaultVarOrder:          d.defaultVarOrder,
-		SetVars:                  d.setVars,
-		Py3Suffix:                isPy3NativeLib,
+		InclArgs:             ctx.inclArgs,
+		Flags:                d.flags,
+		AddIncl:              dedupedAddIncl,
+		PeerAddInclGlobal:    selfPeerAddInclGlobal,
+		ProtoInclude:         effectiveProtoInclude,
+		ProtoIncludePeers:    peerProtoInclude,
+		CFlags:               ownCFlags,
+		CXXFlags:             d.cxxFlags,
+		COnlyFlags:           d.cOnlyFlags,
+		ClangWarnings:        d.clangWarnings,
+		OwnCFlagsGlobal:      ownCFlagsGlobalSelf,
+		OwnCXXFlagsGlobal:    ownCXXFlagsGlobalSelf,
+		OwnCOnlyFlagsGlobal:  ownCOnlyFlagsGlobalSelf,
+		PeerCFlagsGlobal:     peerCFlagsGlobal,
+		PeerCXXFlagsGlobal:   peerCXXFlagsGlobal,
+		PeerCOnlyFlagsGlobal: peerCOnlyFlagsGlobal,
+		ModuleScopeCFlags:    d.moduleScopeCFlags,
+		SFlags:               d.sFlags,
+		SrcDirs:              effectiveSrcDirs,
+		FS:                   ctx.fs,
+		DefaultVars:          d.defaultVars,
+		DefaultVarOrder:      d.defaultVarOrder,
+		SetVars:              d.setVars,
+		Py3Suffix:            isPy3NativeLib,
 		ObjectSuffixStem: func() *string {
 			if isYqlUdfStaticModule(d.moduleStmt.Name) {
 				return stringPtr("udfs")
@@ -2754,6 +2768,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		// explicit-resource band before the global sources. Gated on explicit
 		// RESOURCE entries (d.resources); without them nothing moves.
 		leadCount := len(objcopyRes.Refs) - objcopyRes.PySrcTrailCount
+
 		if globalSrcMemberCount > 0 && leadCount > 0 && len(d.resources) > 0 {
 			objBase := len(globalRefs) - len(objcopyRes.Refs)
 			globalRefs = moveSubrangeToFront(globalRefs, objBase, leadCount)

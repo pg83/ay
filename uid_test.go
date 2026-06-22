@@ -3,9 +3,9 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/zeebo/xxh3"
 	"strings"
 	"testing"
-	"github.com/zeebo/xxh3"
 )
 
 // tuid derives a deterministic UID from a label for test fixtures.

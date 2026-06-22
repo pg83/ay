@@ -436,6 +436,7 @@ func findSourceRoot(start string) string {
 		}
 
 		parent := filepath.Dir(dir)
+
 		if parent == dir {
 			return start
 		}

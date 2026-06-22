@@ -216,6 +216,7 @@ func allResourceDir(modulePath, dir string) (rel string, ok bool) {
 	// `.`/`..` segments are normalized away regardless of how the DIR was rooted.
 	// `*` survives path.Clean as an ordinary segment.
 	rel = path.Clean(rel)
+
 	if rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
 		return "", false
 	}
@@ -247,6 +248,7 @@ func globMatch(fs FS, pattern string) []string {
 				child := path.Join(d, seg)
 
 				present, isDir := fs.exists(srcRootVFS, child)
+
 				if !present {
 					continue
 				}
@@ -273,6 +275,7 @@ func globMatch(fs FS, pattern string) []string {
 
 			for _, packed := range entries {
 				name := STR(packed >> 1).string()
+
 				if !globSegMatch(seg, name) {
 					continue
 				}
@@ -587,6 +590,7 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 			// A copy-staged .py payload is the staged $(B) copy; the original $(S)
 			// source the copy was packaged from rides alongside as a node input.
 			var pyExtra []VFS
+
 			if copyStaged {
 				pyExtra = []VFS{srcEdge}
 			}

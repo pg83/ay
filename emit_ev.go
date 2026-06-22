@@ -75,6 +75,7 @@ func evPeerProtoIncludes(protoInclude []VFS) []STR {
 
 	for _, p := range protoInclude {
 		token := internStr("-I=" + p.string())
+
 		if slices.Contains(evProtocConstHead, token) || slices.Contains(out, token) {
 			continue
 		}
@@ -167,6 +168,7 @@ func emitProtoWrapperPBNode(
 	peerIncludes := evPeerProtoIncludes(protoInclude)
 
 	protocTail := evProtocConstTail
+
 	if liteHeaders {
 		protocTail = evProtocConstTailLite
 	}

@@ -237,6 +237,7 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 	// USE_COMMON_GOOGLE_APIS googleapis emitted above) is skipped here.
 	for _, p := range protoInclude {
 		token := internStr("-I=" + p.string())
+
 		if slices.Contains(mid, token) {
 			continue
 		}

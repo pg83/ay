@@ -6,6 +6,20 @@ import (
 	"strings"
 )
 
+var DefaultIfEnv = makeDefaultIfEnv()
+
+// intSTR holds the pre-interned decimal STR of the first len(intSTR) integers so
+// SetInt avoids strconv.Itoa + internStr on the common small-int path.
+var intSTR = func() [1024]STR {
+	var a [1024]STR
+
+	for i := range a {
+		a[i] = internStr(strconv.Itoa(i))
+	}
+
+	return a
+}()
+
 // evalAtomString evaluates an IF-condition atom to its string form (the natural
 // representation of ya.make values; ints render decimal, bools as yes/no).
 func evalAtomString(e Expr, env Environment) string {
@@ -24,20 +38,6 @@ func evalAtomString(e Expr, env Environment) string {
 
 	return ""
 }
-
-var DefaultIfEnv = makeDefaultIfEnv()
-
-// intSTR holds the pre-interned decimal STR of the first len(intSTR) integers so
-// SetInt avoids strconv.Itoa + internStr on the common small-int path.
-var intSTR = func() [1024]STR {
-	var a [1024]STR
-
-	for i := range a {
-		a[i] = internStr(strconv.Itoa(i))
-	}
-
-	return a
-}()
 
 // identEnv returns the ENV for an IF identifier, preferring the id interned into
 // the node at parse time; a zero Env (e.g. an ExprIdent built outside the parser,

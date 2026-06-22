@@ -91,6 +91,7 @@ type CythonStmt struct {
 // ymake's `noext` modifier used by the _H / _API_H cython output macros.
 func cythonNoExt(src string) string {
 	dot := -1
+
 	for i := len(src) - 1; i >= 0; i-- {
 		if src[i] == '/' {
 			break

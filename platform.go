@@ -44,9 +44,9 @@ type Platform struct {
 	// raw input map; everything past the platform uses ENV/STR.
 	Flags map[ENV]STR
 
-	PIC             bool
-	BuildType       string
-	BuildRelease    bool
+	PIC            bool
+	BuildType      string
+	BuildRelease   bool
 	BuildSanitized bool
 	// RagelOptimized is upstream's single `optimized` boolean
 	// (Ragel.set_default_flags): release && !sanitized. It selects -G2/-T0 for the

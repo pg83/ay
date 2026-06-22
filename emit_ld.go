@@ -7,6 +7,9 @@ var (
 	ldSvnInterfacePath = ldSvnInterfaceVFS.string()
 	ldLinkExePath      = ldLinkExeVFS.string()
 	ldFsToolsPath      = ldFsToolsVFS.string()
+	// vcsJSONBase64 is vcsJSONContent for the inline `ay fetch base64 <data> $(B)/vcs.json`
+	// producer (cmdFetchBase64 decodes it to the file).
+	vcsJSONBase64 = base64.StdEncoding.EncodeToString([]byte(vcsJSONContent))
 )
 
 // ldScriptInputs seeds the link node's $(S) tooling inputs: the wrapper scripts it
@@ -265,10 +268,6 @@ const vcsJSONContent = `{
     "ARCADIA_PATCH_NUMBER": 0,
     "ARCADIA_TAG": ""
 }`
-
-// vcsJSONBase64 is vcsJSONContent for the inline `ay fetch base64 <data> $(B)/vcs.json`
-// producer (cmdFetchBase64 decodes it to the file).
-var vcsJSONBase64 = base64.StdEncoding.EncodeToString([]byte(vcsJSONContent))
 
 // emitVCSNode emits the single node that writes vcs.json to $(B)/vcs.json — the input
 // the vcs_info step reads to generate __vcs_version__.c and link_sbom stamps the SBOM
