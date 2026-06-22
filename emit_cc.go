@@ -618,6 +618,20 @@ func emitLibraryCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src
 	in.IncludeInputs = walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)
 
 	in.ExtraDepRefs = resolveCodegenDepRefs(ctx, instance, in.IncludeInputs)
+
+	// A handwritten C/C++ source that #includes a Cython generated header from the
+	// same module (gevent's callbacks.c → corecext.h) rides the header's induced
+	// "pyx" closure (the .pyx/.pxd source) and the producing CY node's main output
+	// (corecext.c) — upstream's PassInducedIncludesThroughFiles. They append as bare
+	// inputs (re-resolving the .pxd/.pyx would re-pull the producer's `cdef extern` C
+	// closure), exactly as the generated cython compile does. No-op unless the module
+	// has a CYTHON_C_H / _API_H header and the closure reaches it; deps are resolved
+	// over the un-augmented closure above (the main output is already a dep through
+	// the header itself), so ExtraDepRefs stay byte-identical.
+	if len(d.cythonCpp) > 0 {
+		in.IncludeInputs = cythonCompileInducedInputs(ctx, instance, in.IncludeInputs)
+	}
+
 	ref, outPath, _ := emitCC(instance, srcRel, srcVFS, in, ctx.host, ctx.emit)
 
 	return &SourceEmit{Ref: ref, OutPath: outPath}
