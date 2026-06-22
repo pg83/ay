@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-// rodataConstArgs / rodataYasmConstArgs are the constant spans of the RD node's
-// two commands.
 var rodataConstArgs = []STR{(rodataScriptVFS).str(), argElf.str()}
 
 var rodataYasmConstArgs = []STR{
@@ -27,9 +25,6 @@ func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
 	return build(base + ".asm"), build(base + instance.Platform.objectSuffix())
 }
 
-// emitRD emits the .rodata → .asm → object yasm pipeline node. For a
-// build-generated source, extraInputs are the producer's $(S) closure leaves
-// and extraDepRefs the producer node; a declared-SRC .rodata passes nil for both.
 func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, extraInputs []VFS, extraDepRefs []NodeRef, tc ModuleToolchain, emit Emitter) (NodeRef, VFS, VFS) {
 	na := emit.nodeArenas()
 

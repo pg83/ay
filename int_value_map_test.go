@@ -23,7 +23,7 @@ func TestIntValueMapBasic(t *testing.T) {
 		t.Fatalf("Get(2) = %v want *b", p)
 	}
 
-	m.put(1, "c") // overwrite in place, no new vals entry
+	m.put(1, "c")
 
 	if p := m.get(1); p == nil || *p != "c" {
 		t.Fatalf("Get(1) after overwrite = %v want *c", p)
@@ -49,8 +49,6 @@ func TestIntValueMapStructValues(t *testing.T) {
 	}
 }
 
-// Differential test vs the builtin map across grows, overwrites and negative
-// lookups. Keys non-zero (0 is reserved).
 func TestIntValueMapMatchesBuiltin(t *testing.T) {
 	rng := rand.New(rand.NewSource(2))
 	ref := map[uint64]int64{}

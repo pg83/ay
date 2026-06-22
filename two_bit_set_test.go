@@ -45,7 +45,6 @@ func TestTwoBitSet_OverwriteCell(t *testing.T) {
 func TestTwoBitSet_NeighborCellsIndependent(t *testing.T) {
 	var b TwoBitSet
 
-	// Fill one full word with distinct patterns.
 	for v := uint32(0); v < 32; v++ {
 		b.set(v, uint8(v%4))
 	}
@@ -56,7 +55,6 @@ func TestTwoBitSet_NeighborCellsIndependent(t *testing.T) {
 		}
 	}
 
-	// Overwriting one cell leaves neighbors intact.
 	b.set(17, 3)
 
 	for v := uint32(0); v < 32; v++ {

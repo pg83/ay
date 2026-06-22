@@ -6,11 +6,9 @@ import (
 	"testing"
 )
 
-// TestCopyOne_SkipsExistingDstWithoutTouchingSrc verifies the idempotency invariant: an
-// existing dst is left untouched and src is never read (so a missing src is irrelevant).
 func TestCopyOne_SkipsExistingDstWithoutTouchingSrc(t *testing.T) {
 	dir := t.TempDir()
-	src := filepath.Join(dir, "src") // never created
+	src := filepath.Join(dir, "src")
 	dst := filepath.Join(dir, "dst")
 
 	if err := os.WriteFile(dst, []byte("DST"), 0o644); err != nil {
@@ -38,8 +36,6 @@ func TestCopyOne_SkipsExistingDstWithoutTouchingSrc(t *testing.T) {
 	}
 }
 
-// TestCopyFileMode_IgnoresSrcEPERM verifies a permission-denied read of src returns nil
-// (not a slice failure) and writes no dst.
 func TestCopyFileMode_IgnoresSrcEPERM(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src")
@@ -58,8 +54,6 @@ func TestCopyFileMode_IgnoresSrcEPERM(t *testing.T) {
 	}
 }
 
-// TestCopySliceConcurrent_SkipExistingCopyFresh drives the full pipeline over a partially
-// populated dst: existing files are skipped (content preserved), absent ones copied, tallied separately.
 func TestCopySliceConcurrent_SkipExistingCopyFresh(t *testing.T) {
 	srcRoot := t.TempDir()
 	dst := t.TempDir()
@@ -76,7 +70,6 @@ func TestCopySliceConcurrent_SkipExistingCopyFresh(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// "old" already at dst — must be skipped.
 	if err := os.MkdirAll(filepath.Join(dst, "d"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -108,8 +101,6 @@ func TestCopySliceConcurrent_SkipExistingCopyFresh(t *testing.T) {
 	}
 }
 
-// TestCopySliceConcurrent_ShallowSkipsSubdirs pins the read-dir granularity: a shallow
-// dir copies its own file entries but never descends into subtrees.
 func TestCopySliceConcurrent_ShallowSkipsSubdirs(t *testing.T) {
 	srcRoot := t.TempDir()
 	dst := t.TempDir()
@@ -149,7 +140,6 @@ func TestCopySliceConcurrent_ShallowSkipsSubdirs(t *testing.T) {
 	}
 }
 
-// TestCopySliceConcurrent_RecursiveCopiesSubtree: a recursive dir copies its whole subtree.
 func TestCopySliceConcurrent_RecursiveCopiesSubtree(t *testing.T) {
 	srcRoot := t.TempDir()
 	dst := t.TempDir()
@@ -181,8 +171,6 @@ func TestCopySliceConcurrent_RecursiveCopiesSubtree(t *testing.T) {
 	}
 }
 
-// TestDropUnderRecursive: a dir covered by a recursive dir is dropped; unrelated dirs and
-// strict ancestors are kept.
 func TestDropUnderRecursive(t *testing.T) {
 	got := dropUnderRecursive(
 		[]string{"a/b", "x/y", "build/scripts/sub", "build"},
@@ -202,18 +190,14 @@ func TestDropUnderRecursive(t *testing.T) {
 	}
 }
 
-// TestCopyLooseFiles_DstCheckedBeforeSrc: copyLooseFiles skips a rel whose dst already
-// exists without touching src, and still copies a fresh one.
 func TestCopyLooseFiles_DstCheckedBeforeSrc(t *testing.T) {
 	srcRoot := t.TempDir()
 	dst := t.TempDir()
 
-	// dst present, src absent — skip.
 	if err := os.WriteFile(filepath.Join(dst, "existing"), []byte("OLD"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	// src only — copy.
 	if err := os.WriteFile(filepath.Join(srcRoot, "fresh"), []byte("NEW"), 0o644); err != nil {
 		t.Fatal(err)
 	}

@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// TestEmitCF_GeneratedFromRidesAsClosureLeaf pins generated-from propagation: a
-// cross-module consumer's CC input closure must carry the template source and
-// configure_file.py as ClosureLeaves, plus the template's own #include.
 func TestEmitCF_GeneratedFromRidesAsClosureLeaf(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"prod/ya.make":     "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(config.h.in)\nEND()\n",
@@ -28,9 +25,9 @@ func TestEmitCF_GeneratedFromRidesAsClosureLeaf(t *testing.T) {
 
 	for _, want := range []string{
 		"$(B)/prod/config.h",
-		"$(S)/prod/config.h.in",                // generated-from ClosureLeaf
-		"$(S)/build/scripts/configure_file.py", // generated-from ClosureLeaf
-		"$(S)/prod/marker.h",                   // template's own #include
+		"$(S)/prod/config.h.in",
+		"$(S)/build/scripts/configure_file.py",
+		"$(S)/prod/marker.h",
 	} {
 		if !inputs[want] {
 			t.Errorf("use.cpp.o input closure missing %q", want)
@@ -38,14 +35,13 @@ func TestEmitCF_GeneratedFromRidesAsClosureLeaf(t *testing.T) {
 	}
 }
 
-// TestBuildCFGVars_BuildTypeFromPlatform pins that @BUILD_TYPE@ substitutes the
-// instance platform's build type, not a hardcoded DEBUG.
 func TestBuildCFGVars_BuildTypeFromPlatform(t *testing.T) {
 	fs := newMemFS(map[string]string{"m/tmpl.in": "type = @BUILD_TYPE@\n"})
 
 	if got := buildCFGVars(fs, "m/tmpl.in", nil, nil, "RELEASE"); !containsString(got, "BUILD_TYPE=RELEASE") {
 		t.Errorf("release-platform CONFIGURE_FILE vars = %v, want BUILD_TYPE=RELEASE", got)
 	}
+
 	if got := buildCFGVars(fs, "m/tmpl.in", nil, nil, "DEBUG"); !containsString(got, "BUILD_TYPE=DEBUG") {
 		t.Errorf("debug-platform CONFIGURE_FILE vars = %v, want BUILD_TYPE=DEBUG", got)
 	}
@@ -60,19 +56,25 @@ func TestGen_CF_SetVarsReachCfgVars(t *testing.T) {
 
 	g := testGen(fs, "thelib")
 	var cf *Node
+
 	for _, n := range g.Graph {
 		if len(n.Outputs) > 0 && n.Outputs[0].string() == "$(B)/thelib/x.cpp" {
 			cf = n
+
 			break
 		}
 	}
+
 	if cf == nil {
 		t.Fatal("no CF node emitted for thelib/x.cpp")
 	}
+
 	args := strings.Join(strStrs(cf.Cmds[0].CmdArgs.flat()), " ")
+
 	if !strings.Contains(args, "MYVAR=hello") {
 		t.Errorf("CF cmd_args missing SET var MYVAR=hello; got: %s", args)
 	}
+
 	if !strings.Contains(args, "MYDEF=world") {
 		t.Errorf("CF cmd_args missing DEFAULT var MYDEF=world; got: %s", args)
 	}

@@ -6,8 +6,7 @@ import (
 )
 
 var (
-	evEventlogIncludePath = evEventlogIncludeVFS.string()
-	// Lazy: eager interning would grow the table on targets that never build .ev.
+	evEventlogIncludePath     = evEventlogIncludeVFS.string()
 	evExtraProtobufDirectives = sync.OnceValue(func() []IncludeDirective { return quotedDirectives(evExtraProtobufHeaders) })
 	evAbseilCleanupDirectives = sync.OnceValue(func() []IncludeDirective { return quotedDirectives(evAbseilCleanupHeaders) })
 )
@@ -25,9 +24,6 @@ var evAbseilCleanupHeaders = []VFS{
 	intern("$(S)/contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/internal/cleanup.h"),
 }
 
-// The EV protoc include span is split around the proto-include peer block as PB
-// is: head up to the leading include path, tail the build-root/include pair plus
-// --out args.
 var evProtocConstHead = []STR{
 	argI2.str(),
 	argIS2.str(),
@@ -43,8 +39,6 @@ var evProtocConstTail = []STR{
 	argCppStyleguideOutB.str(),
 }
 
-// evProtocConstTailLite is evProtocConstTail with the lite-header cpp_out form:
-// disabling transitive headers prepends proto_h=true to cpp_out, the only change.
 var evProtocConstTailLite = []STR{
 	argIB2.str(),
 	argISContribLibsProtobufSrc.str(),
@@ -52,8 +46,6 @@ var evProtocConstTailLite = []STR{
 	argCppStyleguideOutB.str(),
 }
 
-// evPeerProtoIncludes renders the transitive proto-include peer block in encounter
-// order; tokens already in evProtocConstHead or earlier here are skipped.
 func evPeerProtoIncludes(protoInclude []VFS) []STR {
 	if len(protoInclude) == 0 {
 		return nil
@@ -108,7 +100,6 @@ func emitEV(
 ) NodeRef {
 	na := emit.nodeArenas()
 
-	// event2cpp plugin block, appended after the rootrel source.
 	evOpts := na.strList(internStr("--plugin=protoc-gen-event2cpp="+event2cppBinary.string()),
 		argEvent2cppOutB.str(),
 		internStr("-I="+evEventlogIncludePath))
@@ -119,9 +110,6 @@ func emitEV(
 		evOpts, moduleTag, transitiveImports, protoInclude, liteHeaders, tc, emit)
 }
 
-// emitProtoWrapperPBNode emits the wrapper → protoc producer node shared by the
-// .ev and .cfgproto consumers. Byte-identical through the styleguide base and the
-// rootrel source; pluginOpts is the per-variant trailing plugin block.
 func emitProtoWrapperPBNode(
 	instance ModuleInstance,
 	relPath string,

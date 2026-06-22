@@ -104,8 +104,6 @@ func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resource
 		argCompressionLevel.str(), arg1.str(),
 	}
 
-	// --global-resource entries are the external-resource globals reachable through
-	// the module-under-test's PEERDIR closure, sorted by global-var name.
 	for _, r := range sortedResourceGlobals(resourceGlobals) {
 		cmdArgs = append(cmdArgs, argGlobalResource.str(), r.Token)
 	}

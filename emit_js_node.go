@@ -35,7 +35,6 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 		srcVFSs = append(srcVFSs, source(instance.Path.rel()+"/"+s))
 	}
 
-	// Chunked: the shared cached join closure is referenced, not copied.
 	inputs := na.inputList(scripts[joinSrcs], srcVFSs, closure)
 
 	node := &Node{

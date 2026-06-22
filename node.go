@@ -2,15 +2,12 @@ package main
 
 import "encoding/json"
 
-// argChunks is a command's chunked arg list. It JSON-marshals FLAT — the chunking
-// is an internal zero-copy layout (shared pre-built blocks), not schema.
 type ArgChunks [][]STR
 
 func (c ArgChunks) marshalJSON() ([]byte, error) {
 	return json.Marshal(c.flat())
 }
 
-// MarshalJSON implements json.Marshaler; internal code calls marshalJSON().
 func (c ArgChunks) MarshalJSON() ([]byte, error) {
 	return c.marshalJSON()
 }
@@ -42,9 +39,7 @@ type Node struct {
 	Cache *bool   `json:"cache,omitempty"`
 	Cmds  []Cmd   `json:"cmds"`
 	Env   EnvVars `json:"env"`
-	// Inputs holds the node's input paths as chunks: emitters hand over their
-	// natural pieces WITHOUT flattening, so a large closure slice is referenced,
-	// never copied. The flattened sequence is the node's input list.
+
 	Inputs           InputChunks      `json:"inputs"`
 	KV               KV               `json:"kv"`
 	Outputs          []VFS            `json:"outputs"`
@@ -58,15 +53,9 @@ type Node struct {
 	DepRefs        []NodeRef `json:"-"`
 	ForeignDepRefs []NodeRef `json:"-"`
 
-	// Resources lists the fetched-resource names whose tool the node's command
-	// invokes via $(B)/resources/<NAME>. The resource emitter turns each into a
-	// dependency on that resource's FETCH node.
 	Resources []STR `json:"-"`
 }
 
-// buildDeps yields every ref that must be built/restored before this node runs:
-// DepRefs (build inputs), ForeignDepRefs (tool deps), then the resolved resource
-// FETCH deps. The "deps" array, the UID, and the executor all use this sequence.
 func (n *Node) buildDeps(fetchRefs *DenseMap[STR, NodeRef]) func(func(NodeRef) bool) {
 	return func(yield func(NodeRef) bool) {
 		for _, r := range n.DepRefs {
@@ -91,9 +80,6 @@ func (n *Node) buildDeps(fetchRefs *DenseMap[STR, NodeRef]) func(func(NodeRef) b
 	}
 }
 
-// depRefs collects refs into a dep slice, dropping NodeRef(0) — the "absent"
-// sentinel for an unresolved optional tool or producer. Returns nil when every
-// ref is zero.
 func depRefs(refs ...NodeRef) []NodeRef {
 	var out []NodeRef
 
@@ -106,8 +92,6 @@ func depRefs(refs ...NodeRef) []NodeRef {
 	return out
 }
 
-// dedupRefs returns refs with duplicate NodeRefs removed, keeping first
-// occurrence and insertion order. Slices are tiny, so a linear scan beats a map.
 func dedupRefs(refs []NodeRef) []NodeRef {
 	out := refs[:0]
 
@@ -130,15 +114,12 @@ func dedupRefs(refs []NodeRef) []NodeRef {
 	return out
 }
 
-// inputChunks is the chunked input list. It JSON-marshals FLAT — the chunking
-// is an internal zero-copy layout (shared slices), not schema.
 type InputChunks [][]VFS
 
 func (c InputChunks) marshalJSON() ([]byte, error) {
 	return json.Marshal(c.flat())
 }
 
-// MarshalJSON implements json.Marshaler; internal code calls marshalJSON().
 func (c InputChunks) MarshalJSON() ([]byte, error) {
 	return c.marshalJSON()
 }
@@ -159,8 +140,6 @@ func (c InputChunks) flat() []VFS {
 	return out
 }
 
-// flatInputs flattens the input chunks into one slice — for cold consumers;
-// hot consumers iterate the chunks.
 func (n *Node) flatInputs() []VFS {
 	return n.Inputs.flat()
 }

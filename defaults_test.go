@@ -7,9 +7,11 @@ import (
 
 func newAllocatorDefaultTestPlatform(os OS, isa ISA) *Platform {
 	flags := make(map[string]string, len(testToolchainFlags)+1)
+
 	for k, v := range testToolchainFlags {
 		flags[k] = v
 	}
+
 	flags["PIC"] = "no"
 
 	return newPlatform(newMemFS(nil), os, isa, flags, "", "")

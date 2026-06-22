@@ -10,9 +10,6 @@ func TestApplyUnknownStmt_ExcludeTagsAcceptsTagNames(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
 	d := &ModuleData{}
 
-	// EXCLUDE_TAGS args are submodule tag names (data), so the audit must not reject
-	// an unmodelled one. Build the tag at runtime so a literal is not mined into
-	// knownServiceTokens (the audit embeds *.go) and mask this check.
 	tag := "PY" + "_" + "PROTO"
 
 	err := try(func() {
@@ -31,7 +28,6 @@ func TestApplyUnknownStmt_ExcludeTagsAcceptsTagNames(t *testing.T) {
 func TestApplyUnknownStmt_AddInclSelf(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
 
-	// ADDINCLSELF() adds -I<own source dir>, resolving to Source(<modulePath>).
 	d := &ModuleData{}
 	applyUnknownStmt(nil, "contrib/libs/foo", &UnknownStmt{Name: internTok("ADDINCLSELF")}, d, env)
 	d.materializeAddIncl()
@@ -49,7 +45,6 @@ func TestApplyUnknownStmt_AddInclSelf(t *testing.T) {
 		t.Fatalf("ADDINCLSELF(): d.addIncl = %v, want it to contain %v", d.addIncl, want)
 	}
 
-	// ADDINCLSELF(FOR cython) routes the own dir to the cython bucket.
 	dc := &ModuleData{}
 	applyUnknownStmt(nil, "contrib/libs/bar", &UnknownStmt{Name: internTok("ADDINCLSELF"), Args: STRS("FOR", "cython")}, dc, env)
 
@@ -58,36 +53,36 @@ func TestApplyUnknownStmt_AddInclSelf(t *testing.T) {
 	}
 }
 
-// internalContourPlatform omits OPENSOURCE so buildIfEnv reaches the upstream
-// HAVE_MKL default rather than the opensource HAVE_MKL=no override.
 func internalContourPlatform(os OS, isa ISA, sanitizer string) *Platform {
 	flags := make(map[string]string, len(testToolchainFlags)+1)
+
 	for k, v := range testToolchainFlags {
 		if k == "OPENSOURCE" {
 			continue
 		}
+
 		flags[k] = v
 	}
+
 	if sanitizer != "" {
 		flags["SANITIZER_TYPE"] = sanitizer
 	}
+
 	return newPlatform(newMemFS(nil), os, isa, flags, "", "")
 }
 
-// opensourceHaveMklYesPlatform pins override ordering: the unconditional
-// opensource override must beat an explicit HAVE_MKL=yes binding.
 func opensourceHaveMklYesPlatform(os OS, isa ISA) *Platform {
 	flags := make(map[string]string, len(testToolchainFlags)+1)
+
 	for k, v := range testToolchainFlags {
 		flags[k] = v
 	}
+
 	flags["HAVE_MKL"] = "yes"
+
 	return newPlatform(newMemFS(nil), os, isa, flags, "", "")
 }
 
-// TestBuildIfEnv_HaveMklFollowsUpstreamEnv pins the HAVE_MKL default (yes iff
-// OS_LINUX && ARCH_X86_64 && !SANITIZER_TYPE, forced no under OPENSOURCE) and proves
-// an IF(HAVE_MKL) module selects the MKL PEERDIR exactly when the env selects MKL.
 func TestBuildIfEnv_HaveMklFollowsUpstreamEnv(t *testing.T) {
 	const mklPeer = "contrib/libs/intel/mkl"
 	const fallbackPeer = "contrib/libs/clapack/part1"
@@ -128,6 +123,7 @@ END()
 			d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "contrib/libs/cblas", KindLib, mf.Stmts, env, noWarn)
 
 			hasMkl, hasFallback := false, false
+
 			for _, p := range d.peerdirs {
 				switch p.string() {
 				case mklPeer:
@@ -151,9 +147,11 @@ func TestApplyUnknownStmt_LLVMBCRequiresConfiguredVersion(t *testing.T) {
 	err := try(func() {
 		applyUnknownStmt(nil, "mod", &UnknownStmt{Name: tokLlvmBc, Args: STRS("src.cpp", "generated.cpp")}, &ModuleData{}, env)
 	})
+
 	if err == nil {
 		t.Fatal("applyUnknownStmt unexpectedly accepted LLVM_BC without USE_LLVM_BC*")
 	}
+
 	if !strings.Contains(err.Error(), "LLVM_BC requires USE_LLVM_BC16/18/20") {
 		t.Fatalf("applyUnknownStmt error = %q, want USE_LLVM_BC guidance", err.Error())
 	}
@@ -193,9 +191,11 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			flags := make(map[string]string, len(testToolchainFlags)+2)
+
 			for k, v := range testToolchainFlags {
 				flags[k] = v
 			}
+
 			flags["PIC"] = "no"
 			flags[tt.resourceKey] = tt.resourceVal
 
@@ -204,22 +204,25 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 			data := &ModuleData{}
 
 			applyUnknownStmt(nil, "mod", &UnknownStmt{Name: internTok(tt.useMacro)}, data, env)
-			// CLANG_BC_ROOT holds the deferred resource reference; emitLLVMBC expands it.
+
 			if got, want := env.string(envCLANG_BC_ROOT), "$"+tt.resourceKey; got != want {
 				t.Fatalf("CLANG_BC_ROOT = %q, want %q", got, want)
 			}
+
 			if got := env.string(envLLVM_LLC_TOOL); got != tt.wantLLCTool {
 				t.Fatalf("LLVM_LLC_TOOL = %q, want %q", got, tt.wantLLCTool)
 			}
+
 			if err := try(func() {
-				// LLVM_BC requires NAME.
 				applyUnknownStmt(nil, "mod", &UnknownStmt{Name: tokLlvmBc, Args: STRS("src.cpp", "generated.cpp", "NAME", "Bytecode")}, data, env)
 			}); err != nil {
 				t.Fatalf("applyUnknownStmt rejected configured LLVM_BC: %v", err)
 			}
+
 			if len(data.llvmBc) != 1 || data.llvmBc[0].Name != "Bytecode" {
 				t.Fatalf("LLVM_BC parse: data.llvmBc = %+v", data.llvmBc)
 			}
+
 			if got := data.llvmBc[0].Sources; !equalStrings(got, []string{"src.cpp", "generated.cpp"}) {
 				t.Fatalf("LLVM_BC sources = %v, want [src.cpp generated.cpp]", got)
 			}
@@ -233,17 +236,20 @@ func TestExpandStmtToken_SetVar(t *testing.T) {
 	env.setFromString(envORIG_SRC_DIR, "$(S)/mylib/src")
 
 	got := expandStmtToken("${ORIG_SRC_DIR}", env)
+
 	if got != "$(S)/mylib/src" {
 		t.Fatalf("expandStmtToken(${ORIG_SRC_DIR}) = %q, want $(S)/mylib/src", got)
 	}
 
 	got = expandStmtToken("${UNKNOWN_VAR}", env)
+
 	if got != "${UNKNOWN_VAR}" {
 		t.Fatalf("expandStmtToken(${UNKNOWN_VAR}) = %q, want ${UNKNOWN_VAR} (no change)", got)
 	}
 
 	env.setFromString(envSRCDIR_RAW, "${ARCADIA_ROOT}/some/path")
 	got = expandStmtToken("${SRCDIR_RAW}", env)
+
 	if got != "$(S)/some/path" {
 		t.Fatalf("expandConfigString with raw ARCADIA_ROOT in SET = %q, want $(S)/some/path", got)
 	}
@@ -259,11 +265,14 @@ func TestPrEmitsIncludes_OutputIncludesVFSPrefixStripped(t *testing.T) {
 		{"$(B)/generated/foo.pb.h", "generated/foo.pb.h"},
 		{"util/generic/string.h", "util/generic/string.h"},
 	}
+
 	for _, c := range cases {
 		got := c.input
+
 		if vfsHasPrefix(c.input) {
 			got = intern(c.input).rel()
 		}
+
 		if got != c.want {
 			t.Errorf("VFS prefix strip(%q) = %q, want %q", c.input, got, c.want)
 		}
@@ -280,17 +289,15 @@ func TestCopyFileInputVFS_ResolvesSourceRootPaths(t *testing.T) {
 	if got := copyFileInputVFS(fs, "mod", "local.txt").string(); got != "$(S)/mod/local.txt" {
 		t.Fatalf("local copy input = %q, want $(S)/mod/local.txt", got)
 	}
+
 	if got := copyFileInputVFS(fs, "mod", "shared/generated.txt").string(); got != "$(S)/shared/generated.txt" {
 		t.Fatalf("root copy input = %q, want $(S)/shared/generated.txt", got)
 	}
+
 	if got := copyFileInputVFS(fs, "pkg/sub", "pkg/sub/codecs.h").string(); got != "$(S)/pkg/sub/codecs.h" {
 		t.Fatalf("module-qualified copy input = %q, want $(S)/pkg/sub/codecs.h", got)
 	}
 }
-
-// ya.make arg expansion: an arg without '$' passes verbatim; with '$' it gets one
-// substitution pass (${NAME} only, unresolved stay literal), splits on space, and
-// drops empty results. SET assigns eagerly, so one pass reaches the fixpoint.
 
 func expandTestEnv(bindings map[string]string) Environment {
 	env := DefaultIfEnv.clone()
@@ -325,7 +332,6 @@ func TestExpandStmtTokens_MultiWordValueResplits(t *testing.T) {
 }
 
 func TestExpandStmtTokens_QuotedLiteralWithoutDollarKeptWhole(t *testing.T) {
-	// A quoted "a b" reaches the arg list as one space-bearing, '$'-free element — untouched.
 	env := expandTestEnv(nil)
 
 	got := expandStmtTokens([]string{"a b", "c"}, env)
@@ -337,7 +343,6 @@ func TestExpandStmtTokens_QuotedLiteralWithoutDollarKeptWhole(t *testing.T) {
 }
 
 func TestExpandStmtTokens_QuotedArgWithDollarResplits(t *testing.T) {
-	// Quotes are stripped at lex time, so a quoted ${V} with a spaced value IS re-split.
 	env := expandTestEnv(map[string]string{"V": "p q"})
 
 	got := expandStmtTokens([]string{"x ${V} y"}, env)
@@ -390,14 +395,11 @@ func TestExpandStmtToken_UnresolvedRefDoesNotBlockLaterRefs(t *testing.T) {
 	}
 }
 
-// TestCollectModule_OwnAddInclToMissingDir_WarnsAndDrops pins the own-ADDINCL
-// existence check: a present dir is kept, an absent one is reported via onWarn and
-// dropped (ymake AddIncdir checkDir=true). The diagnostic lets the sink decide
-// fatal vs warn under --keep-going.
 func TestCollectModule_OwnAddInclToMissingDir_WarnsAndDrops(t *testing.T) {
 	src := "LIBRARY()\nADDINCL(\n    mod/present_inc\n    mod/missing_inc\n)\nEND()\n"
 
 	mf, err := parse(testParserFS, "mod/ya.make", []byte(src))
+
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -410,6 +412,7 @@ func TestCollectModule_OwnAddInclToMissingDir_WarnsAndDrops(t *testing.T) {
 		func(w Warn) { warns = append(warns, w) })
 
 	var rels []string
+
 	for _, v := range d.addIncl {
 		rels = append(rels, v.rel())
 	}
@@ -419,23 +422,25 @@ func TestCollectModule_OwnAddInclToMissingDir_WarnsAndDrops(t *testing.T) {
 	if !hasRel("mod/present_inc") {
 		t.Fatalf("present own ADDINCL was dropped; addIncl=%v", rels)
 	}
+
 	if hasRel("mod/missing_inc") {
 		t.Fatalf("missing own ADDINCL was kept; addIncl=%v", rels)
 	}
+
 	if len(warns) != 1 || warns[0].Kind != WarnMissingAddincl {
 		t.Fatalf("want exactly one WarnMissingAddincl, got %v", warns)
 	}
+
 	if !strings.Contains(warns[0].Message, "mod/missing_inc") {
 		t.Fatalf("warn message lacks the missing dir: %q", warns[0].Message)
 	}
 }
 
 func TestCollectModule_PySrcsExpandsSetList(t *testing.T) {
-	// PY_SRCS(${SRCS}) with a SET-list must expand+split; UnknownStmt macros need
-	// arg-expansion like the typed cases.
 	src := "LIBRARY()\nSET(SRCS\n    a.py\n    b.py\n)\nPY_SRCS(${SRCS})\nEND()\n"
 
 	mf, err := parse(testParserFS, "ya.make", []byte(src))
+
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -449,8 +454,6 @@ func TestCollectModule_PySrcsExpandsSetList(t *testing.T) {
 }
 
 func TestCollectModule_SetAppendExpandsResourceAndSandboxInputs(t *testing.T) {
-	// SET_APPEND(VAR x) binds VAR to "$VAR x", so a later ${VAR} in
-	// FROM_SANDBOX(OUT_NOAUTO …)/RESOURCE_FILES(…) expands before input resolution.
 	src := "LIBRARY()\n" +
 		"SET_APPEND(VAR\n    d/2.dict\n    d/3.dict\n)\n" +
 		"FROM_SANDBOX(123 OUT_NOAUTO\n    ${VAR}\n)\n" +
@@ -458,6 +461,7 @@ func TestCollectModule_SetAppendExpandsResourceAndSandboxInputs(t *testing.T) {
 		"END()\n"
 
 	mf, err := parse(testParserFS, "ya.make", []byte(src))
+
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -487,8 +491,6 @@ func TestCollectModule_SetAppendExpandsResourceAndSandboxInputs(t *testing.T) {
 }
 
 func TestExpandConfigVFSPaths_SplitsSetList(t *testing.T) {
-	// ADDINCL(${__dirs_}) with a SET-list must expand+split into one VFS per dir,
-	// not a single path with embedded spaces.
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
 	env.setFromString(internEnv("DIRS"), "contrib/deprecated/bdb/src contrib/deprecated/bdb/src/dbinc")
 
@@ -502,19 +504,18 @@ func TestExpandConfigVFSPaths_SplitsSetList(t *testing.T) {
 
 func TestCatboostOpenSourceDefineGating(t *testing.T) {
 	osP := newPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{"OPENSOURCE": "yes", "PIC": "no"}, "", "")
+
 	if len(catboostOpenSourceDefineFor(osP)) == 0 {
 		t.Error("OPENSOURCE=yes must include -DCATBOOST_OPENSOURCE")
 	}
 
 	intP := newPlatform(newMemFS(nil), OSLinux, ISAX8664, map[string]string{"PIC": "no"}, "", "")
+
 	if catboostOpenSourceDefineFor(intP) != nil {
 		t.Error("non-OPENSOURCE build must omit -DCATBOOST_OPENSOURCE")
 	}
 }
 
-// testToolchain builds the module toolchain the way genModule does — from a
-// resource-global closure declaring the build/platform/* resources — so emitter
-// tests get the same tool paths without an ambient platform.
 func testToolchain() ModuleToolchain {
 	return resolveModuleToolchain([]ResourceDecl{
 		makeResourceDecl(resourcePatternClang20, "sbr:test-clang"),
@@ -523,15 +524,12 @@ func testToolchain() ModuleToolchain {
 	}, "20")
 }
 
-// addToolchainPeers injects the synthetic build/platform/* RESOURCES_LIBRARYs
-// every module implicitly PEERDIRs, so a gen test's memFS yields a populated
-// module toolchain; without them tool-emitting nodes carry blank paths.
 func addToolchainPeers(files map[string]string) {
 	const json = `{"by_platform":{"linux-x86_64":{"uri":"sbr:test"}}}`
 
 	files["build/platform/clang/ya.make"] = "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(CLANG16 clang16.json)\nDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(CLANG20 clang20.json)\nDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(CLANG clang16.json)\nEND()\n"
 	files["build/platform/clang/clang16.json"] = json
-	// Same sbr so golden output is version-agnostic.
+
 	files["build/platform/clang/clang20.json"] = json
 	files["build/platform/lld/ya.make"] = "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld.json)\nEND()\n"
 	files["build/platform/lld/lld.json"] = json

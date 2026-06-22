@@ -75,7 +75,6 @@ func TestMergeHeap_InterleavedPushPopKeepsMinAtTop(t *testing.T) {
 	}
 }
 
-// The wrappers exist for container/heap dispatch; lower-case twins implement.
 func TestMergeHeap_WrappersDelegate(t *testing.T) {
 	h := MergeHeap{{line: "b"}, {line: "a"}}
 

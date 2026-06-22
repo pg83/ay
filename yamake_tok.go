@@ -1,6 +1,5 @@
 package main
 
-// tokName maps each TOK to its interned macro-name STR.
 var tokName = [...]STR{
 	tokInvalid:                            0,
 	tokAddInclSelf:                        internStr("ADDINCLSELF"),
@@ -193,8 +192,6 @@ var tokName = [...]STR{
 	tokYqlUdfContrib:                   kwYQL_UDF_CONTRIB,
 	tokYqlUdfYdb:                       kwYQL_UDF_YDB,
 
-	// Stub macros: registered so the closed TOK set tokenizes them; acknowledged
-	// as no-ops in acknowledgedMacros.
 	tokAllResourceFiles:      internStr("ALL_RESOURCE_FILES"),
 	tokArchiveByKeys:         internStr("ARCHIVE_BY_KEYS"),
 	tokBisonFlags:            internStr("BISON_FLAGS"),
@@ -223,8 +220,6 @@ var tokByName = func() map[string]TOK {
 	return m
 }()
 
-// TOK is the numeric identity of a build-file macro/directive name. The set is
-// closed: internTok fails fast on an unknown name; tokName recovers the string.
 type TOK uint16
 
 const (
@@ -419,7 +414,6 @@ const (
 	tokYqlUdfContrib
 	tokYqlUdfYdb
 
-	// Stub macros (see tokName block and acknowledgedMacros).
 	tokAllResourceFiles
 	tokArchiveByKeys
 	tokBisonFlags
@@ -436,8 +430,6 @@ const (
 	tokYmapsSproto
 )
 
-// internTok maps a macro name to its TOK; the closed set means an unknown name
-// fails fast.
 func internTok(s string) TOK {
 	if t, ok := tokByName[s]; ok {
 		return t
@@ -448,7 +440,6 @@ func internTok(s string) TOK {
 	return tokInvalid
 }
 
-// str returns the interned macro-name STR for this TOK.
 func (t TOK) str() STR {
 	return tokName[t]
 }
@@ -457,7 +448,6 @@ func (t TOK) string() string {
 	return tokName[t].string()
 }
 
-// String implements fmt.Stringer; internal code calls string().
 func (t TOK) String() string {
 	return t.string()
 }

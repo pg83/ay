@@ -5,16 +5,11 @@ import (
 	"testing"
 )
 
-// TestGen_CrossModuleTextCopySourceTracked verifies that when a CC node in
-// module "consumer" includes a header produced by COPY_FILE(TEXT) in a different
-// module "owner", the original .txt source is tracked as a leaf input of the CC
-// node — upstream records the owning module's .txt file as a real compiler input.
 func TestGen_CrossModuleTextCopySourceTracked(t *testing.T) {
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "src/tmpl.h.txt", "#pragma once\n// template\n")
 
-	// owner TEXT-copies the source-root file and exports the dir globally.
 	writeTestModuleFile(files, "owner/ya.make",
 		"LIBRARY()\nADDINCL(GLOBAL ${ARCADIA_BUILD_ROOT}/${MODDIR})\n"+
 			"COPY_FILE(TEXT src/tmpl.h.txt ${BINDIR}/sub/tmpl.h)\nEND()\n")
@@ -38,9 +33,6 @@ func TestGen_CrossModuleTextCopySourceTracked(t *testing.T) {
 	}
 }
 
-// TestGen_Py23LibraryCopyFileCarriesPy3Tag reproduces the missing module_tag on
-// COPY_FILE nodes owned by a PY23_LIBRARY: the submodule's MODULE_TAG (py3) rides
-// every node it owns. A plain LIBRARY copy must NOT gain any tag.
 func TestGen_Py23LibraryCopyFileCarriesPy3Tag(t *testing.T) {
 	files := map[string]string{}
 	mkdirWrite := func(rel, body string) { files[rel] = body }
@@ -65,23 +57,19 @@ END()
 
 	g := testGen(fs, "pylib")
 	cp := findGraphNodeByOutputs(t, g, "$(B)/pylib/keys.py")
+
 	if got := cp.TargetProperties.ModuleTag; got != tagPy3 {
 		t.Fatalf("PY23_LIBRARY COPY_FILE module_tag = %q, want py3", got.string())
 	}
 
 	gp := testGen(fs, "plain")
 	plainCP := findGraphNodeByOutputs(t, gp, "$(B)/plain/plain.txt")
+
 	if got := plainCP.TargetProperties.ModuleTag; got != 0 {
 		t.Fatalf("plain LIBRARY COPY_FILE module_tag = %q, want empty", got.string())
 	}
 }
 
-// TestGen_CopyOfGeneratedPySrcCarriesProducerClosure reproduces the cross-module
-// generated-source-closure residual: a parent PY3_LIBRARY COPY_FILEs a child's
-// RUN_PROGRAM output and PY_SRCSes it. The flat input model lists the producer's
-// transitive $(S) closure on both the CP action and the py3cc bytecode action
-// (the latter also folds the CP's copy-tool scripts) — neither is carried until
-// COPY_FILE propagates the ProducerSourceClosure.
 func TestGen_CopyOfGeneratedPySrcCarriesProducerClosure(t *testing.T) {
 	files := map[string]string{}
 
@@ -127,16 +115,16 @@ END()
 
 	g := testGen(newMemFS(files), "mod")
 
-	// CP action carries the producer's transitive $(S) closure.
 	cp := mustNodeByOutput(t, g, "$(B)/mod/generated_consts.py")
+
 	for _, want := range []string{"$(S)/mod/gen/gen.h", "$(S)/other/other.h"} {
 		if !nodeHasInput(cp, want) {
 			t.Errorf("CP generated_consts.py missing producer closure %q: %v", want, vfsStringsT3(cp.flatInputs()))
 		}
 	}
 
-	// Bytecode action carries the same closure PLUS the CP's copy-tool scripts.
 	bc := mustNodeByOutput(t, g, "$(B)/mod/generated_consts.py.yapyc3")
+
 	for _, want := range []string{
 		"$(S)/mod/gen/gen.h",
 		"$(S)/other/other.h",
@@ -149,9 +137,6 @@ END()
 	}
 }
 
-// TestGen_PlainSourceCopyKeepsNoProducerClosure is the control: a COPY_FILE of a
-// plain $(S) source registers no ProducerSourceClosure, so its dst carries only
-// the copy-tool scripts and the source.
 func TestGen_PlainSourceCopyKeepsNoProducerClosure(t *testing.T) {
 	files := map[string]string{}
 
@@ -169,7 +154,7 @@ END()
 	g := testGen(newMemFS(files), "mod")
 
 	cp := mustNodeByOutput(t, g, "$(B)/mod/copied.txt")
-	// No generated producer resolved, so unrelated other/other.h stays absent.
+
 	if nodeHasInput(cp, "$(S)/other/other.h") {
 		t.Errorf("plain source copy leaked unrelated closure: %v", vfsStringsT3(cp.flatInputs()))
 	}
@@ -201,12 +186,15 @@ COPY_FILE(TEXT shared/dep.h.txt ${BINDIR}/dep.h)
 	if nodeHasInput(aCC, "$(B)/b/dep.h") {
 		t.Errorf("a.cpp.o leaked peer copy $(B)/b/dep.h: %v", vfsStringsT3(aCC.flatInputs()))
 	}
+
 	if nodeHasInput(bCC, "$(B)/a/dep.h") {
 		t.Errorf("b.cpp.o leaked peer copy $(B)/a/dep.h: %v", vfsStringsT3(bCC.flatInputs()))
 	}
+
 	if !nodeHasInput(aCC, "$(B)/a/dep.h") {
 		t.Errorf("a.cpp.o missing own copy $(B)/a/dep.h: %v", vfsStringsT3(aCC.flatInputs()))
 	}
+
 	if !nodeHasInput(bCC, "$(B)/b/dep.h") {
 		t.Errorf("b.cpp.o missing own copy $(B)/b/dep.h: %v", vfsStringsT3(bCC.flatInputs()))
 	}
@@ -234,13 +222,13 @@ int copied() { return 0; }
 
 	findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp")
 	cc := findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp.o")
-	// The WITH_CONTEXT source's #includes resolve in the dst's own context and the
-	// $(S) source is re-attached as a leaf; assert membership (inputs are sorted).
+
 	for _, want := range []string{"$(B)/mod/copied.cpp", "$(S)/mod/original.cpp", "$(S)/mod/dep.h"} {
 		if !nodeHasInput(cc, want) {
 			t.Fatalf("copied.cpp inputs missing %q: %v", want, vfsStringsT3(cc.flatInputs()))
 		}
 	}
+
 	if len(graphDeps(g, cc)) != 1 {
 		t.Fatalf("len(copied.cpp deps) = %d, want 1 (copy producer)", len(graphDeps(g, cc)))
 	}
@@ -268,8 +256,7 @@ int copied() { return 0; }
 
 	findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp")
 	cc := findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp.o")
-	// The WITH_CONTEXT source's #includes resolve in the dst's own context and the
-	// $(S) source is re-attached as a leaf; assert membership (inputs are sorted).
+
 	for _, want := range []string{"$(B)/mod/copied.cpp", "$(S)/mod/original.cpp", "$(S)/mod/dep.h"} {
 		if !nodeHasInput(cc, want) {
 			t.Fatalf("copied.cpp inputs missing %q: %v", want, vfsStringsT3(cc.flatInputs()))
@@ -300,21 +287,21 @@ int copied() { return 0; }
 	findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp")
 	cc := findGraphNodeByOutputs(t, g, "$(B)/mod/copied.cpp.o")
 	wantInputs := []string{"$(B)/mod/copied.cpp"}
+
 	if got := vfsStringsT3(cc.flatInputs()); !reflect.DeepEqual(got[:len(wantInputs)], wantInputs) {
 		t.Fatalf("copied.cpp inputs prefix = %v, want %v", got[:len(wantInputs)], wantInputs)
 	}
-	// AUTO COPY lists both the $(S) source and the $(B) copy, so the source rides
-	// as a closure leaf of the dst.
+
 	if !slicesContains(vfsStringsT3(cc.flatInputs()), "$(S)/mod/original.cpp") {
 		t.Fatalf("copied.cpp inputs should contain the AUTO source $(S)/mod/original.cpp: %v", vfsStringsT3(cc.flatInputs()))
 	}
-	// The leaf is NON-expanded: original.cpp's #include "dep.h" must not be
-	// followed, so dep.h does not leak.
+
 	for _, in := range vfsStringsT3(cc.flatInputs()) {
 		if in == "$(S)/mod/dep.h" {
 			t.Fatalf("copied.cpp inputs unexpectedly contain non-expanded-leaf's include $(S)/mod/dep.h: %v", vfsStringsT3(cc.flatInputs()))
 		}
 	}
+
 	if len(graphDeps(g, cc)) != 1 {
 		t.Fatalf("len(copied.cpp deps) = %d, want 1 (copy producer)", len(graphDeps(g, cc)))
 	}

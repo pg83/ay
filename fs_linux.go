@@ -7,7 +7,6 @@ import (
 	"unsafe"
 )
 
-// platformInit pins the source root as rootFD; reads/listdirs resolve via openat.
 func (fs *OsFS) platformInit() {
 	for {
 		fd, err := syscall.Open(fs.srcRoot, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_DIRECTORY, 0)
@@ -26,8 +25,6 @@ func (fs *OsFS) platformInit() {
 	}
 }
 
-// openatRel opens rel under rootFD; the NUL-terminated rel reuses scratch, so it
-// allocates nothing.
 func (fs *OsFS) openatRel(rel string, flags int) (int, syscall.Errno) {
 	if rel == "" {
 		rel = "."
@@ -48,9 +45,6 @@ func (fs *OsFS) openatRel(rel string, flags int) (int, syscall.Errno) {
 	}
 }
 
-// readFileRel reads rel into buf (growing as needed) and returns the filled slice.
-// Raw openat/fstat/read/close avoids the *os.File heap object, finalizer and poll.FD
-// indirection (~3% of gen CPU).
 func (fs *OsFS) readFileRel(rel string, buf []byte) []byte {
 	fd, errno := fs.openatRel(rel, syscall.O_RDONLY|syscall.O_CLOEXEC)
 
@@ -62,7 +56,6 @@ func (fs *OsFS) readFileRel(rel string, buf []byte) []byte {
 
 	buf = buf[:0]
 
-	// Fstat into a stack Stat_t instead of a heap-allocating os.FileInfo; n==0 is EOF.
 	var st syscall.Stat_t
 
 	if statErr := syscall.Fstat(fd, &st); statErr == nil {
@@ -114,13 +107,10 @@ func readEINTR(fd int, p []byte) int {
 	}
 }
 
-// direntBlock is the reused getdents64 buffer size: most directories fit one syscall.
 const direntBlock = 1 << 16
 
-// atSymlinkNofollow is AT_SYMLINK_NOFOLLOW (not exported by syscall).
 const atSymlinkNofollow = 0x100
 
-// fstatatRel is lstat relative to rootFD (SYS_NEWFSTATAT; no Fstatat exported).
 func (fs *OsFS) fstatatRel(rel string, st *syscall.Stat_t) bool {
 	p := append(fs.pathBuf[:0], rel...)
 	p = append(p, 0)
@@ -137,8 +127,6 @@ func (fs *OsFS) fstatatRel(rel string, st *syscall.Stat_t) bool {
 	}
 }
 
-// readDirAll reads the whole getdents64 stream at rel into *buf (grown and reused)
-// and returns the filled length. false means "not listable".
 func (fs *OsFS) readDirAll(rel string, buf *[]byte) (int, bool) {
 	fd, errno := fs.openatRel(rel, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_DIRECTORY)
 
@@ -181,9 +169,6 @@ func (fs *OsFS) readDirAll(rel string, buf *[]byte) (int, bool) {
 	}
 }
 
-// readDirViewRel lists rel into the shared name store: one getdents64 stream parsed
-// twice (count for arena reservation, then fill). Names intern packed (STR<<1|isDir);
-// membership goes into dirEntries under splitMix64(dir, name). Zero view = not listable.
 func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 	n, ok := fs.readDirAll(rel, &fs.direntBuf)
 
@@ -207,7 +192,6 @@ func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 		isDir := typ == syscall.DT_DIR
 
 		if typ == syscall.DT_UNKNOWN {
-			// Filesystems without d_type: lstat.
 			var st syscall.Stat_t
 
 			if fs.fstatatRel(joinRel(rel, string(name)), &st) {
@@ -231,8 +215,6 @@ func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 	return DirView{dir: dir, names: block[:k:k]}
 }
 
-// forEachDirent walks the raw linux_dirent64 records in b, skipping "." and "..";
-// the name slice is a view into b.
 func forEachDirent(b []byte, visit func(name []byte, typ byte)) {
 	for off := 0; off < len(b); {
 		reclen := int(binary.LittleEndian.Uint16(b[off+16:]))

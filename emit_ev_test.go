@@ -4,9 +4,6 @@ import (
 	"testing"
 )
 
-// TestGen_ProtoLibrary_TransitivePROTONamespaceReachesEVCmd locks that a .ev source
-// PEERDIR-reaching a bare PROTO_NAMESPACE(yt) provider carries -I=$(S)/yt in its
-// protoc include block.
 func TestGen_ProtoLibrary_TransitivePROTONamespaceReachesEVCmd(t *testing.T) {
 	files := map[string]string{}
 
@@ -43,19 +40,21 @@ END()
 	args := strStrs(ev.Cmds[0].CmdArgs.flat())
 
 	ytCount := 0
+
 	for _, a := range args {
 		if a == "-I=$(S)/yt" {
 			ytCount++
 		}
 	}
+
 	if ytCount == 0 {
 		t.Fatalf("EV cmd missing transitive PROTO_NAMESPACE token -I=$(S)/yt: %v", args)
 	}
+
 	if ytCount > 1 {
 		t.Fatalf("EV cmd duplicates -I=$(S)/yt (%d times): %v", ytCount, args)
 	}
 
-	// No C++ source-root -I leakage: proto include uses -I=$(S)/..., never -I$(S)/yt.
 	for _, a := range args {
 		if a == "-I$(S)/yt" {
 			t.Fatalf("EV cmd leaks C++ source-root include -I$(S)/yt: %v", args)
@@ -64,9 +63,11 @@ END()
 
 	ytIdx := indexOfArg(ev.Cmds[0].CmdArgs.flat(), "-I=$(S)/yt")
 	cppOutIdx := indexOfArg(ev.Cmds[0].CmdArgs.flat(), "--cpp_out=:$(B)/")
+
 	if cppOutIdx < 0 {
 		t.Fatalf("EV cmd missing --cpp_out=:$(B)/: %v", args)
 	}
+
 	if !(ytIdx < cppOutIdx) {
 		t.Fatalf("expected -I=$(S)/yt before --cpp_out: yt=%d cpp_out=%d args=%v", ytIdx, cppOutIdx, args)
 	}
@@ -76,8 +77,6 @@ END()
 	}
 }
 
-// TestGen_EV_LiteHeaders_CppOutProtoH locks that disabling transitive headers makes
-// the EV --cpp_out carry proto_h=true, since the EV command shares the PB base.
 func TestGen_EV_LiteHeaders_CppOutProtoH(t *testing.T) {
 	files := map[string]string{}
 
@@ -109,6 +108,7 @@ END()
 	if !containsString(args, "--cpp_out=proto_h=true:$(B)/") {
 		t.Fatalf("EV cmd missing lite-header cpp_out --cpp_out=proto_h=true:$(B)/: %v", args)
 	}
+
 	if containsString(args, "--cpp_out=:$(B)/") {
 		t.Fatalf("EV cmd retains bare --cpp_out=:$(B)/ alongside proto_h form: %v", args)
 	}

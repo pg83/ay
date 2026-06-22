@@ -6,7 +6,6 @@ import (
 )
 
 func TestPageOffset_GeometricLayout(t *testing.T) {
-	// Page p covers id range [2^p-1, 2^(p+1)-2] with no gaps or overlaps.
 	wantPage := 0
 	wantStart := int64(0)
 
@@ -62,14 +61,13 @@ func TestUidVec_LazyPageAllocation(t *testing.T) {
 		}
 	}
 
-	// Writing id 100 touches only its page, with length 1<<p.
 	v.set(100, UID{Hi: 1})
 	topPage, _ := pageOffset(100)
 
 	for p, page := range v.pages {
 		switch {
 		case p < topPage:
-			// lower pages stay nil until written
+
 			if page != nil {
 				t.Fatalf("page %d allocated without a write into it", p)
 			}
@@ -85,13 +83,10 @@ func TestUidVec_LazyPageAllocation(t *testing.T) {
 	}
 }
 
-// TestUidVec_ConcurrentGetDuringSet: writer fills ids while readers read written
-// ids. Run under -race.
 func TestUidVec_ConcurrentGetDuringSet(t *testing.T) {
 	var v UidVec
 	const n = 1 << 13
 
-	// Pre-seed id 0 so readers always have a resolved id.
 	v.set(0, UID{Hi: 0, Lo: 0})
 
 	var wg sync.WaitGroup
@@ -99,14 +94,17 @@ func TestUidVec_ConcurrentGetDuringSet(t *testing.T) {
 
 	for r := 0; r < 4; r++ {
 		wg.Add(1)
+
 		go func() {
 			defer wg.Done()
+
 			for {
 				select {
 				case <-stop:
 					return
 				default:
 				}
+
 				_ = v.get(0)
 			}
 		}()

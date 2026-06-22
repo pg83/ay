@@ -8,16 +8,17 @@ import (
 
 func TestFindSourceRoot(t *testing.T) {
 	root := t.TempDir()
+
 	if err := os.WriteFile(filepath.Join(root, "ya.conf"), []byte("[flags]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	sub := filepath.Join(root, "util", "system")
+
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	// Nearest ancestor holding ya.conf.
 	if got := findSourceRoot(sub); got != root {
 		t.Fatalf("findSourceRoot(%q) = %q, want %q", sub, got, root)
 	}
@@ -26,8 +27,8 @@ func TestFindSourceRoot(t *testing.T) {
 		t.Fatalf("findSourceRoot(root) = %q, want %q", got, root)
 	}
 
-	// No marker in any ancestor: fall back to start.
 	bare := t.TempDir()
+
 	if got := findSourceRoot(bare); got != bare {
 		t.Fatalf("findSourceRoot(no-marker) = %q, want %q", got, bare)
 	}

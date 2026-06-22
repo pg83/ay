@@ -42,25 +42,18 @@ type CppProtoPlugin struct {
 	OutputSuffixes []string
 	Deps           []string
 	ExtraOutFlag   string
-	// Experimental holds the YaFF EXPERIMENTAL proto basenames: such a proto gets the
-	// experiments C++ generator, whose .yaff.h additionally #includes the experiments
-	// runtime.
+
 	Experimental []string
-	// Files holds the YaFF FILES proto basenames: when non-empty, the plugin writes
-	// .yaff.h content only for these protos; every other one is opened but left empty.
+
 	Files []string
-	// DeclaredBeforeLiteHeaders records whether PROTOC_TRANSITIVE_HEADERS was still on
-	// when this plugin was parsed; CPP_PROTO_OUTS accumulates in statement order, so a
-	// plugin declared before SET(...,"no") appends ahead of the cpp_out group. See emitPB.
+
 	DeclaredBeforeLiteHeaders bool
 }
 
-// isYaff reports whether this is the YaFF protoc plugin, emitting a .yaff.h/.yaff.cpp pair.
 func (p CppProtoPlugin) isYaff() bool {
 	return p.ToolPath == yaffPluginPath
 }
 
-// isExperimental reports whether the proto's basename is in the experimental whitelist.
 func (p CppProtoPlugin) isExperimental(protoBaseName string) bool {
 	for _, e := range p.Experimental {
 		if e == protoBaseName {
@@ -71,8 +64,6 @@ func (p CppProtoPlugin) isExperimental(protoBaseName string) bool {
 	return false
 }
 
-// processesFile reports whether the plugin writes content for the proto (FILES
-// whitelist empty or containing its basename); a non-whitelisted header is emitted empty.
 func (p CppProtoPlugin) processesFile(protoBaseName string) bool {
 	if len(p.Files) == 0 {
 		return true
@@ -87,32 +78,20 @@ func (p CppProtoPlugin) processesFile(protoBaseName string) bool {
 	return false
 }
 
-// event2cpp is the C++ proto plugin CPP_EVLOG() registers.
 const (
 	event2cppPluginName = "event2cpp"
 	event2cppToolPath   = "tools/event2cpp"
 )
 
-// addCPPProtoPlugin registers a C++ proto plugin on the module; its DEPS become
-// module PEERDIRs.
 func addCPPProtoPlugin(d *ModuleData, plugin CppProtoPlugin) {
 	d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
 	d.peerdirs = append(d.peerdirs, STRS(plugin.Deps...)...)
 }
 
-// protoCmdPeers returns the C++ proto plugin DEPS (plugin-runtime peers) a
-// PROTO_LIBRARY induces, in plugin order, deduped. These peers lead the module's GLOBAL
-// ADDINCL order, ahead of the declared PEERDIR closure, because proto codegen runs as a
-// per-source command whose plugin-runtime peer is induced ahead for include-dir
-// propagation. The base proto runtime is NOT front-loaded; only the plugin DEPS move,
-// so this list is kept separate from d.peerdirs.
 func protoCmdPeers(d *ModuleData) []STR {
 	front := make([]STR, 0, len(d.cppProtoPlugins))
 	seen := map[STR]struct{}{}
 
-	// GRPC()'s contrib/libs/grpc is a plugin-runtime DEP that leads the peer order like
-	// any other. We model GRPC as d.grpc + a plain contrib/libs/grpc peerdir, so surface
-	// it here as a front peer too.
 	if d.grpc {
 		seen[strContribLibsGrpc] = struct{}{}
 		front = append(front, strContribLibsGrpc)
@@ -136,19 +115,16 @@ func protoCmdPeers(d *ModuleData) []STR {
 
 type ModuleData struct {
 	moduleStmt    *ModuleStmt
-	modver        string // VERSION() args joined by "." (MODVER); "" means "unknown"
-	hasLicense    bool   // LICENSE() present — gates the _GEN_SBOM_COMPONENT DX node
-	hasBisonY     bool   // a .y bison source — induces PEERDIR build/induced/by_bison
-	toolchainName string // TOOLCHAIN(Name) arg — gates the toolchain SBOM DX node
+	modver        string
+	hasLicense    bool
+	hasBisonY     bool
+	toolchainName string
 	srcs          []STR
-	// srcExtraFlat holds SRC(file flags…) where `file` is also in SRCS: SRC adds a
-	// separate FLAT object with its own flags alongside the regular SRCS object.
+
 	srcExtraFlat []SrcFlatEntry
 	globalSrcs   []STR
 	pySrcs       []STR
-	// pySrcsFullName parallels pySrcs: true when the py3cc module-name argument is the
-	// full root-relative path, false for the bare token. Irrelevant for source-tree
-	// entries (full path either way).
+
 	pySrcsFullName     []bool
 	pySrcGroups        []PySrcGroup
 	pyPyiResources     []ResourceEntry
@@ -158,8 +134,7 @@ type ModuleData struct {
 	noExtendedPySearch bool
 	enumSrcs           []*GenerateEnumSerializationStmt
 	peerdirs           []STR
-	// protoCmdPeers are the proto plugin DEPS leading the GLOBAL ADDINCL order, ahead of
-	// the declared PEERDIR closure. Subset of peerdirs; affects ADDINCL order only.
+
 	protoCmdPeers      []STR
 	joinSrcs           []*JoinSrcsStmt
 	addIncl            []VFS
@@ -183,14 +158,12 @@ type ModuleData struct {
 	sFlags             []ARG
 	protocFlags        []ARG
 	flatcFlags         []ARG
-	// clangWarnings is CLANG_WARNINGS(...) from the autoincluded linter config; emitted
-	// on C/C++ compiles between GCC_COMPILE_FLAGS and CXXFLAGS.
+
 	clangWarnings    []ARG
 	ldFlags          []ARG
 	rpathFlagsGlobal []ARG
 	objAddLibsGlobal []ARG
-	// srcDirs is the cumulative SRCDIR search path: index 0 is the module dir, then
-	// explicit SRCDIRs in declaration order; searched in reverse.
+
 	srcDirs             []VFS
 	flags               FlagSet
 	hadAllocator        bool
@@ -207,15 +180,13 @@ type ModuleData struct {
 	pythonSQLite3       bool
 	pyNamespace         *STR
 	protoNamespace      *STR
-	// ymapsSprotoSrcs holds the .proto sources named by YMAPS_SPROTO(...); each gets a
-	// .sproto.h producer, and proto imports induce the .sproto.h sibling besides .pb.h.
+
 	ymapsSprotoSrcs     []STR
 	noMypy              bool
 	noOptimize          bool
 	optimizePyProtos    bool
 	optimizePyProtosSet bool
-	// needGoogleProtoPeerdirs (default yes) drives the PEERDIR to the protobuf
-	// builtin-proto peer for a PY-only proto; the protobuf builtins DISABLE it.
+
 	needGoogleProtoPeerdirs bool
 	cppProtoPlugins         []CppProtoPlugin
 	excludeTags             map[STR]bool
@@ -226,10 +197,8 @@ type ModuleData struct {
 
 	perSrcCFlags map[STR][]ARG
 
-	// hasFbs marks a .fbs in d.srcs — genModule's flatbuffers auto-peer gate.
 	hasFbs bool
 
-	// hasFbs64 is the .fbs64 twin (flatbuffers64 auto-peer gate).
 	hasFbs64 bool
 
 	defaultVars map[STR]STR
@@ -265,25 +234,17 @@ type ModuleData struct {
 
 	copyFileAutoOutputs map[STR]CopyFileEntry
 	flatSrcs            map[STR]struct{}
-	// srcMeta records, per source, its declaring macro's StatementPriority (SRCS=4,
-	// SRC/JOIN/codegen=2) and a module-global declaration sequence. AR member order is
-	// (prio, seq): SRC/JOIN/codegen ahead of plain SRCS, then by seq.
+
 	srcMeta   map[STR]SrcMeta
 	declSeq   int
 	resources []ResourceEntry
 
-	// bundles are the module's BUNDLE(...) groups; each emits a BN node renaming the
-	// bundled module's primary output into $(B)/<mod>/<name>.
 	bundles []BundleEntry
 
 	pyMain *STR
 
-	// noStrip mirrors ENABLE(NO_STRIP), masking STRIP_FLAG.
 	noStrip bool
 
-	// programPairedLib marks the KindLib half of a PY3_PROGRAM multimodule (PY3_BIN
-	// PROGRAM-side emits PY_MAIN; PY3_BIN_LIB LIBRARY-side emits pysrc + RESOURCE_FILES);
-	// this flag emits the PY3_BIN_LIB-tagged resource objcopy from the LIBRARY twin.
 	programPairedLib bool
 
 	noCheckImports []STR
@@ -300,27 +261,17 @@ type ModuleData struct {
 	bisonFlags  []ARG
 	conflictMod *ModuleStmt
 
-	// resourceDeclStmts are the RESOURCES_LIBRARY's DECLARE_EXTERNAL_RESOURCE /
-	// _HOST_RESOURCES_BUNDLE[_BY_JSON] calls in declaration order; resolved at gen time.
 	resourceDeclStmts []*DeclareResourceStmt
 
-	// primaryOutput is PREBUILT_PROGRAM's PRIMARY_OUTPUT: the fetched binary path
-	// copied to the module's program output.
 	primaryOutput string
 
-	// inducedDeps are the module's INDUCED_DEPS, bucketed by consumer type (cpp/h/h+cpp);
-	// resolveInducedDeps reads one bucket per generated output's kind.
 	inducedDeps ParsedIncludeSet
 
 	setVars map[STR]STR
 
-	// tc carries the module's tool-invocation paths, derived in genModule from the
-	// resource-global closure rather than ambient platform flags.
 	tc ModuleToolchain
 }
 
-// perSrcCFlagsFor / flatSrc gate the sparse per-source maps on len, so modules with
-// none skip the probe.
 func (d *ModuleData) perSrcCFlagsFor(src STR) *[]ARG {
 	if len(d.perSrcCFlags) == 0 {
 		return nil
@@ -343,26 +294,19 @@ func (d *ModuleData) flatSrc(src STR) bool {
 	return ok
 }
 
-// StatementPriority values: statements run in (priority, name) order, lower first.
 const (
-	stmtPrioDefault = 2 // SRC, SRC_C_*, JOIN_SRCS, RUN_PROGRAM, codegen macros…
-	stmtPrioSrcs    = 4 // SRCS, PY_SRCS
+	stmtPrioDefault = 2
+	stmtPrioSrcs    = 4
 )
 
-// SrcMeta carries a source's AR-ordering key: StatementPriority, a module-global
-// declaration sequence, and whether the input is an in-module generated file. Generated
-// objects archive after direct ones; within each group the order is (Prio, Seq).
 type SrcMeta struct {
 	Prio      int
 	Seq       int
 	Generated bool
-	// SecondLevel marks a generated source produced from another in-module generated
-	// source (a deeper round); it archives after every first-level generated member.
+
 	SecondLevel bool
 }
 
-// sortKey packs the AR-ordering key into one comparable uint64 (high→low: generation
-// round, StatementPriority, declaration sequence).
 func (m SrcMeta) sortKey() uint64 {
 	var round uint64
 
@@ -377,8 +321,6 @@ func (m SrcMeta) sortKey() uint64 {
 	return round<<60 | uint64(m.Prio)<<32 | uint64(uint32(m.Seq))
 }
 
-// nextDeclSeq returns the next module-global declaration sequence number, bumped once
-// per source/statement, so it composes across INCLUDEs where a per-file line cannot.
 func (d *ModuleData) nextDeclSeq() int {
 	d.declSeq++
 
@@ -393,8 +335,6 @@ func (d *ModuleData) setSrcMeta(src STR, prio, seq int) {
 	d.srcMeta[src] = SrcMeta{Prio: prio, Seq: seq}
 }
 
-// srcMetaOf returns a source's recorded (prio, seq); sources without an entry default
-// to the macro priority (2), seq 0.
 func (d *ModuleData) srcMetaOf(src STR) SrcMeta {
 	if m, ok := d.srcMeta[src]; ok {
 		return m
@@ -411,8 +351,6 @@ func muslCFlags(on bool) []ARG {
 	return nil
 }
 
-// BundleEntry is one BUNDLE group: the bundled module Target, the collected output
-// Name, and the optional Suffix selecting a secondary module output.
 type BundleEntry struct {
 	Target string
 	Name   string
@@ -422,8 +360,7 @@ type BundleEntry struct {
 type ResourceEntry struct {
 	Path string
 	Key  string
-	// EndsBatch is true on the LAST entry of one RESOURCE / RESOURCE_FILES statement,
-	// flushing the objcopy batch: each statement maps to its own objcopy_<hash>.o.
+
 	EndsBatch bool
 }
 
@@ -433,8 +370,6 @@ type PySrcGroup struct {
 	Namespace *STR
 }
 
-// SrcFlatEntry is a SRC(file flags…) whose file is also in SRCS — an extra FLAT object
-// with its own flags.
 type SrcFlatEntry struct {
 	Src   STR
 	Flags []ARG
@@ -445,25 +380,18 @@ type ArchiveEntry struct {
 	Name         string
 	DontCompress bool
 	Files        []string
-	// Keys is the ordered ARCHIVE_BY_KEYS key list. Non-nil selects the keyed command
-	// shape (key list via `-k`); nil keeps the plain ARCHIVE form.
+
 	Keys []string
-	// PropagateSourceMembers registers each direct source member as a closure leaf of
-	// the archive output, so a unit #including the generated header receives the archived
-	// sources in its input closure. (Generated members propagate via SourceInputs anyway.)
+
 	PropagateSourceMembers bool
 }
 
-// ArchiveAsmEntry holds an ARCHIVE_ASM(...) call: unlike ARCHIVE it emits a
-// `<NAME>.rodata` resource re-fed as a generated source through the .rodata yasm pipeline.
 type ArchiveAsmEntry struct {
 	Name         string
 	DontCompress bool
 	Files        []string
 }
 
-// Lj21Archive holds the ordered .lua names from a LJ_21_ARCHIVE call; the emit phase
-// compiles each to a .raw and wires the LuaScripts.inc/LuaSources.inc archives.
 type Lj21Archive struct {
 	Luas []string
 }
@@ -473,8 +401,7 @@ type CopyFileEntry struct {
 	Dst         string
 	Auto        bool
 	WithContext bool
-	// Text marks COPY_FILE(TEXT) — a textual substitution copy of a shared codegen
-	// template, whose includes must resolve in each consumer's own context.
+
 	Text           bool
 	OutputIncludes []string
 }
@@ -523,8 +450,6 @@ parsedFlags:
 		throwFmt("gen: COPY_FILE at line %d expects at least source and destination, got %d args", line, len(args))
 	}
 
-	// COPY_FILE(TEXT src dst) substitutes src into dst — consumers of dst must depend on
-	// src and its #include closure. The plumbing matches COPY(WITH_CONTEXT), so route through it.
 	entry := CopyFileEntry{
 		Src:         args[i],
 		Dst:         args[i+1],
@@ -690,10 +615,6 @@ func copyFileOutputVFS(modulePath string, dst string) VFS {
 	return build(filepath.ToSlash(filepath.Clean(modulePath + "/" + dst)))
 }
 
-// resourceOutputVFS canonicalizes a RESOURCE/RESOURCE_FILES file argument to its
-// build-output VFS. Unlike copyFileOutputVFS, a RESOURCE path already rooted at the
-// module dir is used verbatim instead of doubled; a module-relative path resolves under
-// the module dir.
 func resourceOutputVFS(modulePath string, path string) VFS {
 	if vfs := moduleRootedVFS(modulePath, path); vfs != nil {
 		return *vfs
@@ -725,29 +646,21 @@ func copyFileIncludeTarget(modulePath string, target string) string {
 	}
 }
 
-// prioVFS is a local ADDINCL dir tagged with its contributing statement's priority.
-// The module's -I list is the addInclP entries stable-sorted by prio, with the stable
-// sort supplying the declaration-order tiebreak.
 type prioVFS struct {
 	prio int
 	vfs  VFS
 }
 
 const (
-	// prioAddIncl: explicit ADDINCL(...), PEERDIR ADDINCL, and generated-header dirs.
 	prioAddIncl = 0
-	// prioAddInclSelf: ADDINCLSELF is a multi macro, so its ${MODDIR} dir sorts after
-	// the non-multi ADDINCL(...) dirs.
+
 	prioAddInclSelf = 1
 )
 
-// addLocalIncl records one local (-I) dir at the given statement priority.
 func (d *ModuleData) addLocalIncl(prio int, v VFS) {
 	d.addInclP = append(d.addInclP, prioVFS{prio: prio, vfs: v})
 }
 
-// materializeAddIncl flattens the priority-tagged local ADDINCL contributions into
-// d.addIncl in (prio, declaration) order.
 func (d *ModuleData) materializeAddIncl() {
 	sort.SliceStable(d.addInclP, func(i, j int) bool {
 		return d.addInclP[i].prio < d.addInclP[j].prio
@@ -775,38 +688,26 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 
 	collectStmts(fs, modulePath, kind, stmts, env, d)
 
-	// Flatten the priority-tagged local ADDINCL contributions into d.addIncl before the
-	// post-collect ADDINCL appends below.
 	d.materializeAddIncl()
 
-	// Seed the SRCDIR search path with the module's own dir at index 0, so the list is
-	// never empty and consumers need no "is there a SRCDIR?" special case.
 	d.srcDirs = append([]VFS{dirKey(modulePath)}, d.srcDirs...)
 
 	d.addIncl = append(d.addIncl, d.cfAddIncl...)
 	d.addInclGlobal = append(d.addInclGlobal, d.cfAddInclGlobal...)
-	// CF-generated include dirs join UserGlobal in the same deferred step, after all
-	// explicit ADDINCL statements.
+
 	d.addInclUserGlobal = append(d.addInclUserGlobal, d.cfAddInclGlobal...)
 	d.cfAddIncl = nil
 	d.cfAddInclGlobal = nil
 	filterInvalidAddIncl(fs, dd, d, modulePath, onWarn)
 
-	// The PY3_PROGRAM BIN half emits PY_MAIN; clear it on the paired LIB half to avoid a
-	// duplicate. A standalone PY3_LIBRARY with explicit PY_SRCS(MAIN …) keeps its PY_MAIN.
 	if kind == KindLib && d.programPairedLib {
 		d.pyMain = nil
 	}
 
-	// Keep pySrcs on the PROGRAM half: clearing it suppressed emitResourceObjcopy (its
-	// only trigger was len(d.pySrcs)>0), so the PROGRAM's LD never threaded its
-	// objcopy_<hash>.o into the link command.
 	d.muslEnabled = env.bool(envMUSL)
-	// USE_ARCADIA_LIBM adds the implicit libm PEERDIR on every non-Emscripten unit;
-	// captured here so the default-peer machinery reads the effective env.
+
 	d.useArcadiaLibm = env.bool(envUSE_ARCADIA_LIBM) && !env.bool(envOS_EMSCRIPTEN)
-	// NO_STRIP and BUILD_TYPE-driven STRIP_FLAG suppression both clear -Wl,--strip-all;
-	// track the effective value so the LD emitter honours it without re-reading env.
+
 	d.noStrip = env.bool(envNO_STRIP)
 
 	if d.muslLite {
@@ -841,7 +742,6 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 	hasSc := false
 	hasCfgProto := false
 
-	// Pure id-space triage; .fbs detection rides the same pass.
 	for _, src := range d.srcs {
 		switch srcExtClassOf(src) {
 		case srcExtEv:
@@ -866,25 +766,16 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 	}
 
 	if hasSc {
-		// _SRC("sc").PEERDIR — the runtime the generated .sc.h includes.
 		d.peerdirs = append(d.peerdirs, strLibraryCppDomscheme)
 	}
 
 	if hasCfgProto {
-		// _SRC("cfgproto") induces the config-proto plugin runtime/codegen peers the
-		// generated .cfgproto.pb.* needs, regardless of module kind.
 		d.peerdirs = append(d.peerdirs, strLibraryCppProtoConfigCodegen, strLibraryCppProtoConfigProtos, strContribLibsProtobuf)
 	}
 
-	// Every C++ proto compile peers contrib/libs/protobuf, so any module compiling a
-	// .proto to C++ inherits protobuf's GLOBAL ADDINCL band (protobuf/src + abseil),
-	// which must reach the module's C++ sources and propagate downstream. The .ev /
-	// .cfgproto arms add protobuf via their own PEERDIRs, so this excludes hasEv.
 	if hasProto && !hasEv {
 		isProtoLibrary := d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary
 
-		// A python-only PROTO_LIBRARY (PY3_PROTO) runs no C++ compile, so protobuf is not
-		// peered; a plain LIBRARY with an inline .proto peers it unconditionally.
 		if !isProtoLibrary || !env.bool(envPY3_PROTO) {
 			d.peerdirs = append(d.peerdirs, strContribLibsProtobuf)
 		}
@@ -894,8 +785,6 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 		}
 	}
 
-	// The proto plugin DEPS lead the peer order whenever the module compiles a .proto to
-	// C++; protoCmdPeers() returns empty (no-op) for an inline proto without grpc/plugins.
 	if d.moduleStmt != nil && (d.moduleStmt.Name == tokProtoLibrary || hasProto) {
 		d.protoCmdPeers = protoCmdPeers(d)
 	}
@@ -937,8 +826,6 @@ func filterInvalidAddIncl(fs FS, dd *DeDuper, d *ModuleData, modulePath string, 
 	d.cythonAddIncl = filterOwnAddIncl(fs, d.cythonAddIncl, modulePath, onWarn)
 	d.asmAddIncl = filterOwnAddIncl(fs, d.asmAddIncl, modulePath, onWarn)
 
-	// Rebuild addInclUserGlobal in declaration order, keeping only paths that survived
-	// the addInclGlobal filter or are in addInclOneLevel.
 	if len(d.addInclUserGlobal) > 0 {
 		dd.reset()
 
@@ -962,10 +849,6 @@ func filterInvalidAddIncl(fs FS, dd *DeDuper, d *ModuleData, modulePath string, 
 	}
 }
 
-// filterOwnAddIncl drops a module's own ADDINCL dirs that point at a non-existent
-// source directory, reporting each via onWarn (fatal, or warn under --keep-going).
-// Mirrors ymake AddIncdir(checkDir=true). Deduplication of repeated reports is the
-// warning sink's concern, not this emitter's.
 func filterOwnAddIncl(fs FS, paths []VFS, modulePath string, onWarn func(Warn)) []VFS {
 	out := paths
 	copied := false
@@ -1041,9 +924,6 @@ func applyPython3AddIncl(modulePath string, d *ModuleData) {
 	d.addIncl = append(d.addIncl, pythonIncludeDir)
 }
 
-// applyArchiveAddIncl reproduces ARCHIVE's ${addincl;noauto;output:NAME} side effect:
-// the output's build directory enters the module's local/user-global/global include
-// buckets at Global scope, reaching own compiles and PEERDIR consumers.
 func applyArchiveAddIncl(modulePath string, d *ModuleData) {
 	for _, a := range d.archives {
 		include := build(generatedIncludeDir(modulePath, a.Name))
@@ -1052,8 +932,6 @@ func applyArchiveAddIncl(modulePath string, d *ModuleData) {
 		d.addInclUserGlobal = append(d.addInclUserGlobal, include)
 	}
 
-	// LJ_21_ARCHIVE's addincl outputs land flat in the module build dir; its archive
-	// entries are synthesized later, so drive the Global-scope addincl from d.lj21 here.
 	if d.lj21 != nil {
 		include := build(modulePath)
 		d.addIncl = append(d.addIncl, include)
@@ -1062,9 +940,6 @@ func applyArchiveAddIncl(modulePath string, d *ModuleData) {
 	}
 }
 
-// applyCythonHeaderAddIncl reproduces the _BUILDWITH_CYTHON_*_H / _API_H addincl side
-// effect: the generated .h / _api.h output's build dir enters the module's include dirs
-// at Global scope, so the cython source and generated .c both resolve the bare header.
 func applyCythonHeaderAddIncl(modulePath string, d *ModuleData) {
 	for _, stmt := range d.cythonCpp {
 		if !stmt.Header {
@@ -1130,15 +1005,8 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 
 			d.moduleStmt = moduleStmtForKind(v, kind)
 
-			// Bind MODULE_LANG for IF evaluation of the autoincluded linters.make.inc:
-			// the `IF (MODULE_LANG == CPP)` gate around CLANG_WARNINGS only fires once
-			// the module language is known.
 			moduleLang := sbomComponentLang(d.moduleStmt.Name)
 
-			// A PROTO_LIBRARY multimodule's _CPP_PROTO submodule is MODULE_LANG==CPP, its
-			// _PY3_PROTO is PY3. genModule selects the submodule by binding PY3_PROTO, so
-			// the language gate must follow that selection (else the py side's aux C++
-			// wrongly inherits CPP CLANG_WARNINGS).
 			if d.moduleStmt.Name == tokProtoLibrary && env.bool(envPY3_PROTO) {
 				moduleLang = moduleLangTokenPy3
 			}
@@ -1161,8 +1029,6 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 					continue
 				}
 
-				// An unresolved ${VAR} stays literal; the source consumer ignores it,
-				// so mirror that (like the PEERDIR arm below).
 				if strHasDollar(srcTok) && strings.Contains(srcTok.string(), "${") {
 					continue
 				}
@@ -1184,10 +1050,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 					src := srcTok.string()
 					addGeneratedOwnHeaderInclude(modulePath, strings.TrimSuffix(src, filepath.Ext(src))+".h", d)
 				case srcExtFlex:
-					// _SRC for flex adds the old-flex tool dir to the module's local
-					// include dirs (User scope) so the generated lexer's `<FlexLexer.h>`
-					// resolves, in SRCS declaration order so it interleaves with a
-					// sibling .y's generated-header dir.
+
 					d.addLocalIncl(prioAddIncl, source(argContribToolsFlexOld.string()))
 				}
 			}
@@ -1233,8 +1096,6 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 			d.setVars[internStr(v.Name)] = internStr(value)
 
 			if v.Name == "RAGEL6_FLAGS" {
-				// $RAGEL6_FLAGS reaches the ragel command as one arg per whitespace
-				// token, not one quoted blob.
 				d.ragel6Flags = internArgs(strings.Fields(value))
 			}
 		case *EndStmt:
@@ -1272,8 +1133,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 		case *LDFlagsStmt:
 			d.ldFlags = append(d.ldFlags, internArgsFromSTR(expandStmtTokensSTR(v.Flags, env))...)
 		case *SrcDirStmt:
-			// SRCDIR is cumulative: each expanded arg becomes a directory VFS appended to
-			// the search path.
+
 			for _, dirTok := range expandStmtTokensSTR(v.Dirs, env) {
 				dir := dirTok.string()
 				d.srcDirs = append(d.srcDirs, dirKey(dir))
@@ -1284,9 +1144,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 			expandedEN := *v
 			expandedEN.DeclSeq = d.nextDeclSeq()
 			d.enumSrcs = append(d.enumSrcs, &expandedEN)
-			// GENERATE_ENUM_SERIALIZATION expands inline to a PEERDIR on the
-			// enum-serialization runtime at the macro's textual position, before any later
-			// explicit PEERDIR block (else its LD link-line slot shifts). Deduped later.
+
 			const enumSerPeer = "tools/enum_parser/enum_serialization_runtime"
 
 			if modulePath != enumSerPeer {
@@ -1391,8 +1249,6 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 
 			d.baseCodegens = append(d.baseCodegens, &expanded)
 
-			// STRUCT_CODEGEN's implicit PEERDIRs enter at the macro's textual position;
-			// plain BASE_CODEGEN carries none.
 			for _, p := range v.Peerdirs {
 				d.peerdirs = append(d.peerdirs, p)
 			}
@@ -1429,8 +1285,6 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 			ensureResourcePeer(modulePath, d)
 
 			for i, pair := range v.Pairs {
-				// RESOURCE() pairs are stored raw (${BINDIR}/... unexpanded) so the
-				// objcopy_<hash> matches; pre-expanding drifts the hash.
 				d.resources = append(d.resources, ResourceEntry{
 					Path:      pair.Path,
 					Key:       pair.Key,
@@ -1462,8 +1316,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 				d.resources = append(d.resources, e)
 			}
 		case *DeclareResourceStmt:
-			// Expand args: DECLARE_EXTERNAL_RESOURCE(NAME ${SANDBOX_RESOURCE_URI}) carries
-			// the SET_RESOURCE_URI_FROM_JSON-bound var; literal args expand to a no-op.
+
 			expanded := *v
 			expanded.Args = expandStmtTokensSTR(v.Args, env)
 			d.resourceDeclStmts = append(d.resourceDeclStmts, &expanded)
@@ -1476,8 +1329,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 
 			collectStmts(fs, modulePath, kind, taken, env, d)
 		case *UnknownStmt:
-			// Expand args: a ${VAR} holding a SET-list must substitute and split into
-			// individual tokens before the macro handler reads them.
+
 			expanded := *v
 			expanded.Args = expandStmtTokensSTR(v.Args, env)
 			applyUnknownStmt(fs, modulePath, &expanded, d, env)
@@ -1498,8 +1350,6 @@ func moduleStmtForKind(stmt *ModuleStmt, kind ModuleKind) *ModuleStmt {
 	return stmt
 }
 
-// generatedIncludeDir resolves the build-root include dir for a generated output `dst`
-// (the parent of $(B)/<mod>/<dst>, falling back to the module dir when dst is flat).
 func generatedIncludeDir(modulePath, dst string) string {
 	outVFS := copyFileOutputVFS(modulePath, dst)
 	dir := filepath.ToSlash(filepath.Clean(filepath.Dir(outVFS.rel())))
@@ -1529,8 +1379,6 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *ModuleData) {
 }
 
 func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, env Environment) {
-	// recordHandledMacro fires only when a typed case handles the macro; the default
-	// branch flips `handled = false` to suppress noise from unmodelled macros.
 	handled := true
 
 	defer func() {
@@ -1541,8 +1389,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 
 	switch v.Name {
 	case tokAddInclSelf:
-		// ADDINCLSELF([FOR preset]) adds -I<own source dir>; a FOR preset routes it to
-		// that preset's bucket (cython/asm).
+
 		self := source(modulePath)
 
 		switch {
@@ -1554,9 +1401,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 			d.addLocalIncl(prioAddInclSelf, self)
 		}
 	case tokSetResourceUriFromJson:
-		// SET_RESOURCE_URI_FROM_JSON(VarName file.json) binds VarName to the
-		// by_platform[<current platform>].uri entry of file.json, gating PREBUILT_PROGRAM
-		// (IF(VarName != "")). An absent entry leaves VarName unset → from-source.
+
 		if len(v.Args) != 2 {
 			throwFmt("gen: %s: SET_RESOURCE_URI_FROM_JSON expects 2 args (var json), got %d", modulePath, len(v.Args))
 		}
@@ -1575,12 +1420,10 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 			env.setString(internEnv(v.Args[0].string()), uri)
 		}
 	case tokNoPlatformResources:
-		// NO_PLATFORM_RESOURCES() == ENABLE(NOPLATFORM_RESOURCES).
+
 		env.setBool(envNoplatformResources, true)
 	case tokPrimaryOutput:
-		// PRIMARY_OUTPUT(path): the module's main output. The arg holds
-		// ${<NAME>_RESOURCE_GLOBAL}/..., binding only after DECLARE_EXTERNAL_RESOURCE, so
-		// genPrebuiltProgram re-collects with the global bound.
+
 		if len(v.Args) >= 1 {
 			d.primaryOutput = v.Args[0].string()
 		}
@@ -1626,8 +1469,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 	case tokNoExtendedSourceSearch:
 		d.noExtendedPySearch = true
 	case tokStyleRuff:
-		// STYLE_RUFF is an optional-kwarg linter macro; we don't model the python lint
-		// pipeline (no-op), so just walk the args to acknowledge each legal kwarg.
+
 		for i := 0; i < len(v.Args); i++ {
 			switch v.Args[i].string() {
 			case "CONFIG_TYPE":
@@ -1637,9 +1479,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 			}
 		}
 	case tokLlvmBc:
-		// LLVM_BC args split into keywords plus a free-arg source list driving
-		// compile → link → opt and then llvm-llc or resource embed. We parse the
-		// keywords and stash the result; node emission is a follow-up.
+
 		if env.string(envCLANG_BC_ROOT) == "" || env.string(envLLVM_LLC_TOOL) == "" {
 			throwFmt("LLVM_BC requires USE_LLVM_BC16/18/20 before invocation")
 		}
@@ -1689,8 +1529,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		d.llvmBc = append(d.llvmBc, stmt)
 
 	case tokBundle:
-		// BUNDLE(<Dir> [SUFFIX s] [NAME n]…): name = basename(target)+suffix when NAME is
-		// absent. We only collect here; node emission needs the emitter.
+
 		i := 0
 
 		for i < len(v.Args) {
@@ -1717,13 +1556,13 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 	case tokMavenGroupId:
 
 	case tokLicense:
-		// LICENSE() presence — not a contrib/ path — gates the _GEN_SBOM_COMPONENT DX node.
+
 		d.hasLicense = true
 	case tokVersion:
-		// SET(MODVER ${Flags}); rendered as join(".", MODVER). Expand toolchain refs.
+
 		d.modver = strings.Join(strStrings(expandStmtTokensSTR(v.Args, env)), ".")
 	case tokToolchain:
-		// TOOLCHAIN(Name) attaches _GEN_SBOM_TOOLCHAIN_COMPONENT (a toolchain.component.sbom).
+
 		if len(v.Args) == 1 {
 			d.toolchainName = v.Args[0].string()
 		}
@@ -1734,8 +1573,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 
 		d.checkConfigHeaders = append(d.checkConfigHeaders, v.Args[0])
 	case tokDecimalMd5Lower32Bits:
-		// DECIMAL_MD5_LOWER_32_BITS(File, FUNCNAME="", Opts...) hashes Opts and emits File
-		// as a build-root .cpp.
+
 		if len(v.Args) == 0 {
 			throwFmt("gen: %s: DECIMAL_MD5_LOWER_32_BITS expects at least 1 argument (File)", modulePath)
 		}
@@ -1781,7 +1619,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 	case tokBisonGenCpp:
 		d.bisonGenExt = strCpp
 	case tokBisonFlags:
-		// BISON_FLAGS(Flags...) appends; the bison command's $BISON_FLAGS = default -v + these.
+
 		for _, a := range v.Args {
 			d.bisonFlags = append(d.bisonFlags, internArg(a.string()))
 		}
@@ -1817,10 +1655,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 
 		d.protocFlags = append(d.protocFlags, argFatalWarnings)
 	case tokUseCommonGoogleApis:
-		// Peer contrib/libs/googleapis-common-protos so the googleapis dir lands first in
-		// the resolved peer list, ahead of even the LIBRARY-chain defaults. d.useCommonGoogleAPIs
-		// drives the GLOBAL-ADDINCL walk to visit it before language defaults; prepending
-		// into d.peerdirs preserves consumer peer-chain propagation.
+
 		d.useCommonGoogleAPIs = true
 		const googleapisPeer = "contrib/libs/googleapis-common-protos"
 		d.peerdirs = append([]STR{internStr(googleapisPeer)}, d.peerdirs...)
@@ -1880,17 +1715,12 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 
 		applyProtoNamespace(d, v.Args[len(v.Args)-1])
 	case tokExportYmapsProto:
-		// EXPORT_YMAPS_PROTO() is PROTO_NAMESPACE(maps/doc/proto), whose `GLOBAL FOR proto
-		// $(S)/maps/doc/proto` addincl renders as -I=$(S)/maps/doc/proto in every
-		// transitive consumer's protoc command.
+
 		d.protoAddInclGlobal = append(d.protoAddInclGlobal, mapsDocProto)
-		// applyProtoNamespace sets the output root and contributes the GLOBAL build-root
-		// C++ ADDINCL (-I$(B)/maps/doc/proto); the protoc-only source arm stays above, so
-		// no source-root C++ leakage.
+
 		applyProtoNamespace(d, mapsDocProtoNS)
 	case tokYmapsSproto:
-		// YMAPS_SPROTO(FILES...) dispatches per .proto file; a non-.proto arg is a
-		// fail-fast modelling gap.
+
 		for _, argTok := range v.Args {
 			if !strings.HasSuffix(argTok.string(), ".proto") {
 				throwFmt("gen: %s: YMAPS_SPROTO expects .proto arguments, got %q", modulePath, argTok.string())
@@ -1899,15 +1729,11 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 			d.ymapsSprotoSrcs = append(d.ymapsSprotoSrcs, argTok)
 		}
 
-		// The sproto-header producer declares a command-level .PEERDIR on
-		// maps/libs/sproto, so the module peers the target-side library (its non-PIC
-		// archive reaches the program link separately from the host sprotoc tool's PIC archive).
 		if len(v.Args) > 0 {
 			d.peerdirs = append(d.peerdirs, strMapsLibsSproto)
 		}
 	case tokExcludeTags:
-		// EXCLUDE_TAGS drops multimodule submodules from the build. We model only
-		// CPP_PROTO submodules (no-op on the graph); record the tag set for parity.
+
 		if d.excludeTags == nil {
 			d.excludeTags = make(map[STR]bool)
 		}
@@ -1917,7 +1743,6 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 
 			switch arg {
 			case "GO_PROTO", "JAVA_PROTO":
-				// known multimodule submodule tags
 			}
 
 			d.excludeTags[internStr(arg)] = true
@@ -1940,9 +1765,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 	case tokLj21Archive:
 		applyLj21ArchiveStmt(v, d)
 	case tokEnable:
-		// ENABLE(X) sets a boolean env var. Args are user-defined flag NAMES (excluded
-		// from the service-keyword check); the cases below keep the few with a direct
-		// module-data side-effect.
+
 		for _, aTok := range v.Args {
 			a := aTok.string()
 			env.setBool(internEnv(a), true)
@@ -1961,7 +1784,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 			}
 		}
 	case tokDisable:
-		// Counterpart to ENABLE: clears the env var and the few specific module-data flags.
+
 		for _, aTok := range v.Args {
 			a := aTok.string()
 			env.setBool(internEnv(a), false)
@@ -1998,9 +1821,6 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 			extras = internArgsFromSTR(v.Args[1:])
 		}
 
-		// A file already in SRCS: SRCS yields its non-flat object (default flags);
-		// this SRC adds a separate FLAT object with its own flags. srcExtraFlat
-		// keeps the SRCS occurrence non-flat and unflagged.
 		if slices.Contains(d.srcs, filename) {
 			d.srcExtraFlat = append(d.srcExtraFlat, SrcFlatEntry{Src: filename, Flags: extras, Seq: d.nextDeclSeq()})
 
@@ -2086,9 +1906,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 
 		d.exportsScript = strPtr(v.Args[0])
 	case tokExtralibs:
-		// One EXTRALIBS(...) call is stored as a single space-joined OBJADDE_LIB value,
-		// deduped cross-peer by the whole-value string. Model each call as one group ARG;
-		// the cmd_args boundary splits it back into tokens.
+
 		libs := make([]string, 0, len(v.Args))
 
 		for _, argTok := range v.Args {
@@ -2126,9 +1944,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		var groupSrcs []string
 		cythonStmtStart := len(d.cythonCpp)
 		var cythonDirectives []string
-		// cythonRegIdx records, in textual order, the d.pyRegister index of each cython
-		// statement's implicit registration, so the variant-bucket reorder below can move
-		// those entries while leaving interleaved swig registrations anchored.
+
 		var cythonRegIdx []int
 
 		for i := 0; i < len(v.Args); i++ {
@@ -2170,7 +1986,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 
 				continue
 			case strCythonCppH:
-				// C++ mode + companion public header: noext naming, extra .h output.
+
 				cythonCMode = false
 				cythonPlainCpp = false
 				cythonHeader = true
@@ -2178,7 +1994,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 
 				continue
 			case strCythonCH:
-				// C mode + companion public header: noext naming, extra .h output.
+
 				cythonCMode = true
 				cythonPlainCpp = false
 				cythonHeader = true
@@ -2186,7 +2002,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 
 				continue
 			case strCythonCApiH:
-				// C mode + public api header: noext naming, extra .h plus _api.h outputs.
+
 				cythonCMode = true
 				cythonPlainCpp = false
 				cythonHeader = true
@@ -2264,14 +2080,12 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 					modName = pythonModuleName(modulePath, src, topLevel, namespace)
 				}
 
-				// CYTHONIZE_PY inherits whichever variant the last CYTHON_C/CYTHON_CPP[_H]
-				// directive selected (default C++).
 				d.cythonCpp = append(d.cythonCpp, &CythonStmt{
 					Src:       src,
 					CMode:     cythonCMode,
 					Header:    cythonHeader,
 					ApiHeader: cythonApiHeader,
-					// dep=<mod-as-path>.pxd when it resolves.
+
 					Pxd: strings.ReplaceAll(modName, ".", "/") + ".pxd",
 					Options: []string{
 						"--module-name", modName,
@@ -2329,8 +2143,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 			}
 
 			d.pySrcs = append(d.pySrcs, internStr(src))
-			// A build-root-rooted token keeps its full root-relative path as the module
-			// name; a bare token uses the raw token.
+
 			d.pySrcsFullName = append(d.pySrcsFullName, strings.HasPrefix(src, "${ARCADIA_BUILD_ROOT}/") || strings.HasPrefix(src, "${ARCADIA_ROOT}/") || strings.HasPrefix(src, "$B/"))
 			groupSrcs = append(groupSrcs, src)
 
@@ -2354,9 +2167,6 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 			} else if d.pyMain == nil && d.moduleStmt != nil &&
 				(d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin) &&
 				(src == "__main__.py" || strings.HasSuffix(src, "/__main__.py")) {
-				// A PY3 PROGRAM-kind unit auto-sets PY_MAIN for `__main__.py` to the
-				// dotted module path (no ":main" suffix — that is only for explicit
-				// PY_MAIN). Without this the LD would miss the `--kvs PY_MAIN=...` entry.
 				ns := strings.ReplaceAll(modulePath, "/", ".") + "."
 
 				if topLevel {
@@ -2426,11 +2236,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 	case tokCppProtoPlugin0, tokCppProtoPlugin, tokCppProtoPlugin2:
 		addCPPProtoPlugin(d, parseCPPProtoPlugin(v))
 	case tokCppEvlog:
-		// CPP_EVLOG() == CPP_PROTO_PLUGIN0(event2cpp … DEPS eventlog) +
-		// ENABLE(_BUILD_PROTO_AS_EVLOG). The plugin half is the whole observable behavior:
-		// event2cpp becomes a C++ proto plugin on the PB producer (command tokens, tool
-		// input, eventlog peer, and its INDUCED_DEPS(h+cpp) via GeneratorRefs).
-		// _BUILD_PROTO_AS_EVLOG only drives an ASSERT, so it needs no model.
+
 		addCPPProtoPlugin(d, CppProtoPlugin{
 			Name:     event2cppPluginName,
 			ToolPath: event2cppToolPath,
@@ -2466,8 +2272,6 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 				}
 			}
 
-			// Bind the variable with append semantics — SET_APPEND(VAR x) sets VAR to
-			// "$VAR x" — so it expands wherever a later macro references ${VAR}.
 			name := v.Args[0].string()
 			value := strings.Join(strStrings(v.Args[1:]), " ")
 
@@ -2486,14 +2290,12 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 	case tokInducedDeps:
 
 		if len(v.Args) >= 2 {
-			// INDUCED_DEPS(h …) -> header consumers; (cpp …) -> TUs; (h+cpp …) -> both.
 			toHeader := v.Args[0].string() != "cpp"
 			toCpp := v.Args[0].string() != "h"
 
 			for _, pTok := range v.Args[1:] {
 				p := pTok.string()
-				// A rooted spelling binds directly; a bare rel keeps quoted-include
-				// search semantics (delayed to include resolution).
+
 				dir := IncludeDirective{kind: includeQuoted, target: internStr(p)}
 
 				if toHeader {
@@ -2506,8 +2308,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 			}
 		}
 	default:
-		// Acknowledged macro: stash its expanded args under d.unhandledMacros and record
-		// it into the audit. Anything outside acknowledgedMacros is a gen bug.
+
 		handled = false
 
 		if !acknowledgedTokSet.has(uint32(v.Name)) {
@@ -2524,9 +2325,6 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 	}
 }
 
-// LlvmBcStmt mirrors the LLVM_BC keyword parse. Sources are the free args; Name is
-// mandatory; Suffix overrides OBJ_SUF; Symbols feeds the -internalize-public-api-list
-// pass; the booleans gate llvm-llc emission and per-input compile dispatch.
 type LlvmBcStmt struct {
 	Sources             []string
 	Name                string
@@ -2534,8 +2332,7 @@ type LlvmBcStmt struct {
 	Symbols             []string
 	GenerateMachineCode bool
 	NoCompile           bool
-	// ClangBCRoot is CLANG_BC_ROOT captured at collection time: a deferred resource-global
-	// reference emitLLVMBC expands to the toolchain bin-root for clang++/llvm-link/opt.
+
 	ClangBCRoot string
 }
 
@@ -2548,28 +2345,21 @@ func isLlvmBcKeyword(s string) bool {
 	return false
 }
 
-// cythonVariantBucket maps a PY_SRCS cython statement to its fixed emission-order
-// bucket (five lists), so archive members group by bucket rather than textual PY_SRCS
-// order. CYTHONIZE_PY .py sources inherit the last directive's bucket (default pyxs_cpp).
 func cythonVariantBucket(s *CythonStmt) int {
 	switch {
 	case s.CMode && !s.Header:
-		return 0 // CYTHON_C
+		return 0
 	case s.CMode && s.Header && !s.ApiHeader:
-		return 1 // CYTHON_C_H
+		return 1
 	case s.CMode && s.Header && s.ApiHeader:
-		return 2 // CYTHON_C_API_H
+		return 2
 	case !s.CMode && !s.Header:
-		return 3 // CYTHON_CPP (default)
-	default: // !s.CMode && s.Header
-		return 4 // CYTHON_CPP_H
+		return 3
+	default:
+		return 4
 	}
 }
 
-// reorderCythonVariantBuckets stable-sorts one PY_SRCS call's cython statements
-// (d.cythonCpp[start:]) into variant-bucket order and applies the same permutation to
-// their paired pyRegister entries (rewritten in place at regIdx), so interleaved swig
-// or explicit registrations keep their textual positions.
 func reorderCythonVariantBuckets(d *ModuleData, start int, regIdx []int) {
 	n := len(d.cythonCpp) - start
 
@@ -2708,11 +2498,8 @@ func parseCPPProtoPlugin(v *UnknownStmt) CppProtoPlugin {
 	return plugin
 }
 
-// yaffPluginPath is the YaFF protoc plugin PROGRAM.
 const yaffPluginPath = "library/cpp/yaff/tools/protoc_plugin"
 
-// yaffSections collects the NAMESPACE scalar and the FILES / EXPERIMENTAL lists shared
-// by YAFF and YAFF_SCHEMA; `positional` receives any leading non-keyword arguments.
 type yaffSections struct {
 	positional   []string
 	namespace    string
@@ -2723,7 +2510,7 @@ type yaffSections struct {
 func parseYAFFSections(v *UnknownStmt) yaffSections {
 	var s yaffSections
 
-	section := STR(0) // 0 = positional/leading
+	section := STR(0)
 
 	for i := 0; i < len(v.Args); i++ {
 		a := v.Args[i]
@@ -2757,8 +2544,6 @@ func parseYAFFSections(v *UnknownStmt) yaffSections {
 	return s
 }
 
-// yaffExtraOutFlag composes the comma-joined EXTRA_OUT_FLAG: the lead group, then
-// `file=` per FILES entry, then `experimental=` per EXPERIMENTAL entry.
 func yaffExtraOutFlag(lead string, s yaffSections) string {
 	groups := []string{
 		lead,
@@ -2809,7 +2594,6 @@ func parseYAFFSchema(v *UnknownStmt) CppProtoPlugin {
 
 	schemaName := s.positional[0]
 
-	// NAMESPACE may arrive positionally or via the NAMESPACE keyword.
 	namespace := s.namespace
 
 	if len(s.positional) >= 2 {
@@ -2866,15 +2650,9 @@ func pythonInitSuffix(name string) string {
 	return mangled.String()
 }
 
-// applyProtoNamespace models PROTO_NAMESPACE (SET(PROTO_NAMESPACE) + PROTO_ADDINCL(GLOBAL)):
-// it records the namespace output root and the build-root C++ ADDINCL, which rides the
-// peer addincl closure into transitive consumers. The protoc source arm is carried
-// separately by the caller via d.protoAddInclGlobal. EXPORT_YMAPS_PROTO reuses this.
 func applyProtoNamespace(d *ModuleData, namespace STR) {
 	d.protoNamespace = strPtr(namespace)
 
-	// PROTO_NAMESPACE's C++ build-root arm is `ADDINCL(GLOBAL $(B)/<ns>)`
-	// unconditionally; the UserGlobal arm lands the dir first in a consumer's -I band.
 	protoBuildRoot := build(filepath.ToSlash(filepath.Clean(namespace.string())))
 	d.addIncl = append(d.addIncl, protoBuildRoot)
 	d.addInclGlobal = append(d.addInclGlobal, protoBuildRoot)
@@ -2888,8 +2666,6 @@ func applyArchiveStmt(v *UnknownStmt, d *ModuleData) {
 		inNameSlot bool
 	)
 
-	// A direct SRCDIR-backed archive member rides into the include closure of a C++ unit
-	// #including the generated archive header. Same model as ARCHIVE_BY_KEYS.
 	entry.PropagateSourceMembers = true
 
 	for _, aTok := range v.Args {
@@ -2924,9 +2700,6 @@ func applyArchiveStmt(v *UnknownStmt, d *ModuleData) {
 	d.archives = append(d.archives, entry)
 }
 
-// applyArchiveByKeysStmt parses ARCHIVE_BY_KEYS(NAME <name> KEYS <keys> [DONTCOMPRESS]
-// files...). It differs from ARCHIVE only in the command shape (key list via `-k $KEYS`),
-// landing in the same d.archives slot with Keys set.
 func applyArchiveByKeysStmt(v *UnknownStmt, d *ModuleData) {
 	var (
 		entry      ArchiveEntry
@@ -2979,9 +2752,6 @@ func applyArchiveByKeysStmt(v *UnknownStmt, d *ModuleData) {
 	d.archives = append(d.archives, entry)
 }
 
-// applyArchiveAsmStmt parses ARCHIVE_ASM(NAME <name> [DONTCOMPRESS] files...), landing
-// in d.archiveAsm — the emit phase produces a `<NAME>.rodata` resource plus the
-// .rodata→asm→object compile.
 func applyArchiveAsmStmt(v *UnknownStmt, d *ModuleData) {
 	var (
 		entry      ArchiveAsmEntry
@@ -3021,8 +2791,6 @@ func applyArchiveAsmStmt(v *UnknownStmt, d *ModuleData) {
 	d.archiveAsm = append(d.archiveAsm, entry)
 }
 
-// applyLj21ArchiveStmt parses LJ_21_ARCHIVE(NAME Name LuaFiles...): the lua list is
-// every arg ending in `.lua`. The emit phase compiles each to a .raw.
 func applyLj21ArchiveStmt(v *UnknownStmt, d *ModuleData) {
 	var luas []string
 
@@ -3137,15 +2905,11 @@ func buildIfEnv(instance ModuleInstance) Environment {
 
 	if env.bool(envOPENSOURCE) {
 		env.setBool(envCATBOOST_OPENSOURCE, true)
-		// The open-source contour ships these libs shared; the internal contour leaves
-		// them unset, falling through to the static PEERDIR.
+
 		env.setString(env_USE_AIO, "dynamic")
 		env.setString(env_USE_ICONV, "dynamic")
 		env.setString(env_USE_IDN, "dynamic")
 	}
-
-	// USE_PREBUILT_TOOLS defaults to yes (opensource ya.conf sets "no"), gating each
-	// tool's `IF (USE_PREBUILT_TOOLS) INCLUDE(ya.make.prebuilt)`.
 
 	switch instance.Platform.ISA {
 	case ISAX8664:
@@ -3157,9 +2921,6 @@ func buildIfEnv(instance ModuleInstance) Environment {
 		env.setBool(envARCH_TYPE_64, true)
 	}
 
-	// HAVE_MKL gates the BLAS/LAPACK selectors. Bound in two steps: default yes iff a
-	// non-sanitized linux/x86_64 contour (a flag binding wins), then forced no under
-	// OPENSOURCE (overriding even an explicit HAVE_MKL=yes).
 	if !env.hasBindingID(envHAVE_MKL) {
 		haveMkl := env.bool(envOS_LINUX) && env.bool(envARCH_X86_64) &&
 			env.string(envSANITIZER_TYPE) == ""
@@ -3170,8 +2931,6 @@ func buildIfEnv(instance ModuleInstance) Environment {
 		env.setBool(envHAVE_MKL, false)
 	}
 
-	// The module-relative path vars; braced and bare forms both resolve through this
-	// binding. A pathless instance (IF-evaluation in tests) carries no module dir.
 	env.setString(envARCADIA_ROOT, "$(S)")
 	env.setString(envARCADIA_BUILD_ROOT, "$(B)")
 
@@ -3204,7 +2963,6 @@ func buildIfEnv(instance ModuleInstance) Environment {
 }
 
 func expandConfigVFSPaths(paths []STR, env Environment) []VFS {
-	// Expand+split so a ${VAR} holding a SET-list yields one VFS per dir.
 	expanded := expandStmtTokensSTR(paths, env)
 	out := make([]VFS, 0, len(expanded))
 
@@ -3223,8 +2981,6 @@ func parseModulePathVFS(path string) VFS {
 	return source(path)
 }
 
-// expandStmtToken substitutes ${NAME} references in one ya.make statement argument; an
-// unresolved reference stays literal. SET assigns eagerly, so one pass reaches the fixpoint.
 func expandStmtToken(s string, env Environment) string {
 	if s == "$S" {
 		return "$(S)"
@@ -3237,8 +2993,6 @@ func expandStmtToken(s string, env Environment) string {
 	for i := 0; i < 8; i++ {
 		prev := s
 
-		// Bare $NAME belongs to the conf command language (.CMD), flattened into the
-		// same pass — RUN_PROGRAM pipelines carry $PROTOC_PATH-style refs.
 		if strings.HasPrefix(s, "$") && !strings.HasPrefix(s, "${") {
 			name := strings.TrimPrefix(s, "$")
 
@@ -3260,7 +3014,6 @@ func expandStmtToken(s string, env Environment) string {
 	return s
 }
 
-// expandBracedVars resolves ${NAME} references left to right; an unresolved one stays literal.
 func expandBracedVars(s string, env Environment) string {
 	searchFrom := 0
 
@@ -3355,9 +3108,6 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 	return b.String()
 }
 
-// expandStmtTokensSTR expands a parsed (interned) token list. The fast path (no '$')
-// returns the SAME id with zero string work; tokens with references re-intern after
-// expansion, splitting on whitespace.
 func expandStmtTokensSTR(items []STR, env Environment) []STR {
 	out := make([]STR, 0, len(items))
 
@@ -3376,7 +3126,6 @@ func expandStmtTokensSTR(items []STR, env Environment) []STR {
 	return out
 }
 
-// expandStmtTokenSTR is the single-token form (no re-splitting); identity for $-free tokens.
 func expandStmtTokenSTR(item STR, env Environment) STR {
 	if !strHasDollar(item) {
 		return item
@@ -3461,7 +3210,6 @@ func applyAllPySrcs(fs FS, modulePath string, v *UnknownStmt, d *ModuleData) {
 
 		fs.walk(walkRoot, func(rel string, isDir bool) bool {
 			if isDir {
-				// A subdir with its own ya.make is a separate module; don't descend.
 				return rel == walkRoot || !fs.isFile(dirKey(rel), "ya.make")
 			}
 
@@ -3483,7 +3231,7 @@ func applyAllPySrcs(fs FS, modulePath string, v *UnknownStmt, d *ModuleData) {
 
 	sort.Strings(files)
 	d.pySrcs = append(d.pySrcs, STRS(files...)...)
-	// ALL_PY_SRCS globs source-tree files; their module name is the full path.
+
 	d.pySrcsFullName = append(d.pySrcsFullName, make([]bool, len(files))...)
 
 	if len(files) > 0 {
@@ -3495,9 +3243,6 @@ func applyAllPySrcs(fs FS, modulePath string, v *UnknownStmt, d *ModuleData) {
 	}
 }
 
-// peerEntryLanguage is the variant the CONSUMER requests of a peer, derived from the
-// consumer alone (the peer is NOT pre-parsed). Requesting py of an arbitrary peer is
-// safe: genModule re-enters as LangCPP when the peer has no python variant.
 func peerEntryLanguage(parent ModuleInstance, parentModuleName TOK) Language {
 	if isPythonModuleType(parentModuleName) {
 		return LangPy

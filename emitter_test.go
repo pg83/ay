@@ -47,8 +47,6 @@ func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
 	return e, a, b, c
 }
 
-// graphDeps / graphForeignDeps resolve a node's refs to dep uids via the graph's
-// uid vector — deps are no longer materialized on the node.
 func graphDeps(g *Graph, n *Node) []UID {
 	var out []UID
 
@@ -61,6 +59,7 @@ func graphDeps(g *Graph, n *Node) []UID {
 
 func graphForeignDeps(g *Graph, n *Node) []UID {
 	out := make([]UID, len(n.ForeignDepRefs))
+
 	for i, r := range n.ForeignDepRefs {
 		out[i] = g.uids.get(r)
 	}
@@ -83,7 +82,6 @@ func finalizeExc(e *BufferedEmitter) (g *Graph, exc *Exception) {
 }
 
 func TestFinalize_TopoOrder_LeavesFirst(t *testing.T) {
-
 	e, _, _, _ := build3NodeDAG()
 	g := finalize(e)
 
@@ -96,6 +94,7 @@ func TestFinalize_TopoOrder_LeavesFirst(t *testing.T) {
 	}
 
 	remaining := map[string]bool{nodeNameByKV(g, 1): true, nodeNameByKV(g, 2): true}
+
 	if !remaining["B"] || !remaining["C"] {
 		t.Errorf("graph[1..2] = [%q, %q], want {B, C} in some order",
 			nodeNameByKV(g, 1), nodeNameByKV(g, 2))
@@ -135,7 +134,6 @@ func TestFinalize_UIDsStableAcrossRuns(t *testing.T) {
 }
 
 func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
-
 	e := newBufferedEmitter()
 	mkLeaf := func(name string) NodeRef {
 		return e.emit(&Node{Platform: &Platform{},
@@ -163,6 +161,7 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 	g := finalize(e)
 
 	var aNode *Node
+
 	for _, n := range g.Graph {
 		if n.KV.Name == "A" {
 			aNode = n
@@ -176,14 +175,15 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 	}
 
 	byName := map[string]UID{}
+
 	for _, n := range g.Graph {
 		if nm := n.KV.Name; nm != "" {
 			byName[nm] = n.UID
 		}
 	}
 
-	// Deps preserve insertion order — no sort, no dedup.
 	want := []UID{byName["Z"], byName["X"], byName["Y"]}
+
 	if !slices.Equal(graphDeps(g, aNode), want) {
 		t.Errorf("A.Deps = %v, want insertion order %v", graphDeps(g, aNode), want)
 	}
@@ -210,6 +210,7 @@ func TestFinalize_KeepsDuplicateDeps(t *testing.T) {
 	g := finalize(e)
 
 	var aNode *Node
+
 	for _, n := range g.Graph {
 		if n.KV.Name == "A" {
 			aNode = n
@@ -220,14 +221,12 @@ func TestFinalize_KeepsDuplicateDeps(t *testing.T) {
 		t.Fatalf("A not found")
 	}
 
-	// No dedup — duplicate DepRefs surface as duplicate Deps.
 	if len(graphDeps(g, aNode)) != 3 {
 		t.Errorf("expected duplicates preserved (len 3); A.Deps = %v", graphDeps(g, aNode))
 	}
 }
 
 func TestFinalize_CycleReturnsError(t *testing.T) {
-
 	e := newBufferedEmitter()
 	aNode := &Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
@@ -250,6 +249,7 @@ func TestFinalize_CycleReturnsError(t *testing.T) {
 	e.result(a)
 
 	_, exc := finalizeExc(e)
+
 	if exc == nil {
 		t.Errorf("Finalize on cyclic graph returned no exception")
 	}
@@ -268,13 +268,13 @@ func TestFinalize_OutOfRangeRefReturnsError(t *testing.T) {
 	e.result(a)
 
 	_, exc := finalizeExc(e)
+
 	if exc == nil {
 		t.Errorf("Finalize with bogus ref returned no exception")
 	}
 }
 
 func TestFinalize_GraphTopLevelKeyOrder(t *testing.T) {
-
 	e, _, _, _ := build3NodeDAG()
 	g := finalize(e)
 	raw := throw2(json.Marshal(g))
@@ -293,7 +293,6 @@ func TestFinalize_GraphTopLevelKeyOrder(t *testing.T) {
 }
 
 func TestFinalize_DedupesIdenticalEmits(t *testing.T) {
-
 	e := newBufferedEmitter()
 	mk := func() NodeRef {
 		return e.emit(&Node{Platform: &Platform{},
@@ -316,11 +315,11 @@ func TestFinalize_DedupesIdenticalEmits(t *testing.T) {
 }
 
 func TestFinalize_SecondCallErrors(t *testing.T) {
-
 	e, _, _, _ := build3NodeDAG()
 	finalize(e)
 
 	_, exc := finalizeExc(e)
+
 	if exc == nil {
 		t.Fatalf("second Finalize returned nil exception; want already-finalized error")
 	}
@@ -331,7 +330,6 @@ func TestFinalize_SecondCallErrors(t *testing.T) {
 }
 
 func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
-
 	e := newBufferedEmitter()
 	a := e.emit(&Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
@@ -345,6 +343,7 @@ func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 	g := finalize(e)
 
 	var aNode *Node
+
 	for _, n := range g.Graph {
 		if n.KV.Name == "A" {
 			aNode = n
@@ -361,13 +360,13 @@ func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 
 	var buf bytes.Buffer
 	writeGraphCompact(&buf, g, false)
+
 	if bytes.Contains(buf.Bytes(), []byte(`"foreign_deps"`)) {
 		t.Errorf("foreign_deps key leaked into JSON for empty ForeignDepRefs: %s", buf.Bytes())
 	}
 }
 
 func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
-
 	e := newBufferedEmitter()
 	a := e.emit(&Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
@@ -402,7 +401,6 @@ func TestEmitter_OnReady_BufferedNoOp(t *testing.T) {
 	case <-ch:
 		t.Fatalf("OnReady channel closed pre-Finalize (BufferedEmitter contract)")
 	default:
-
 	}
 
 	finalize(e)
@@ -422,11 +420,13 @@ func TestEmitter_PostFinalizeEmitPanics(t *testing.T) {
 
 	defer func() {
 		r := recover()
+
 		if r == nil {
 			t.Fatal("expected panic on post-finalize Emit")
 		}
 
 		msg, ok := r.(string)
+
 		if !ok {
 			t.Fatalf("recover returned %T, want string", r)
 		}
@@ -446,11 +446,13 @@ func TestEmitter_PostFinalizeResultPanics(t *testing.T) {
 
 	defer func() {
 		r := recover()
+
 		if r == nil {
 			t.Fatal("expected panic on post-finalize Result")
 		}
 
 		msg, ok := r.(string)
+
 		if !ok {
 			t.Fatalf("recover returned %T, want string", r)
 		}
@@ -464,7 +466,6 @@ func TestEmitter_PostFinalizeResultPanics(t *testing.T) {
 }
 
 func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
-
 	e1 := newBufferedEmitter()
 	c1 := e1.emit(&Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"C", "v1"})}, Env: nil}},
@@ -539,6 +540,7 @@ func TestFinalize_HeapTopo_Determinism(t *testing.T) {
 	}
 
 	pos := make(map[string]int, 6)
+
 	for i, n := range g.Graph {
 		name := n.KV.Name
 		pos[name] = i
@@ -549,6 +551,7 @@ func TestFinalize_HeapTopo_Determinism(t *testing.T) {
 		"M3": {"L0"},
 		"M4": {"L1"},
 	}
+
 	for parent, children := range edges {
 		for _, child := range children {
 			if pos[parent] > pos[child] {

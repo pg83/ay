@@ -1,10 +1,5 @@
 package main
 
-// NodeArenas holds the bump arenas backing the small per-node slices, so they
-// land in shared chunks instead of one heap object each. Committed blocks are
-// never rewritten and chunk backing arrays never move.
-// Single-writer: only the gen goroutine constructs nodes. One instance per gen
-// run, shared via GenCtx.
 type NodeArenas struct {
 	cmds   *BumpAllocator[Cmd]
 	vfs    *BumpAllocator[VFS]
@@ -43,13 +38,10 @@ func (na *NodeArenas) inputList(ch ...[]VFS) InputChunks {
 	return InputChunks(na.inputs.list(ch...))
 }
 
-// srcChunk wraps a single VFS as an input chunk.
 func (na *NodeArenas) srcChunk(v VFS) []VFS {
 	return na.vfsList(v)
 }
 
-// argStrList is appendArgStr's arena twin: the []STR chunk lands in the node
-// STR arena, not a fresh heap slice.
 func (na *NodeArenas) argStrList(groups ...[]ARG) []STR {
 	n := 0
 

@@ -75,6 +75,7 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 	libAR := nodesByOutput[libARout]
 
 	depSet := make(map[UID]struct{}, len(graphDeps(g, rootLD)))
+
 	for _, d := range graphDeps(g, rootLD) {
 		depSet[d] = struct{}{}
 	}
@@ -113,6 +114,7 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 	g := testGen(fs, "mod")
 
 	byOut := make(map[string]*Node, len(g.Graph))
+
 	for _, n := range g.Graph {
 		if len(n.Outputs) > 0 {
 			byOut[n.Outputs[0].string()] = n
@@ -120,6 +122,7 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 	}
 
 	ld := byOut["$(B)/mod/mod"]
+
 	if ld == nil {
 		t.Fatalf("missing UNITTEST_FOR LD output $(B)/mod/mod")
 	}
@@ -133,11 +136,13 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 	}
 
 	deps := make(map[UID]struct{}, len(graphDeps(g, ld)))
+
 	for _, d := range graphDeps(g, ld) {
 		deps[d] = struct{}{}
 	}
 
 	libAR := byOut["$(B)/thelib/libthelib.a"]
+
 	if libAR == nil {
 		t.Fatal("missing tested-lib AR $(B)/thelib/libthelib.a")
 	}
@@ -147,6 +152,7 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 	}
 
 	umAR := byOut["$(B)/library/cpp/testing/unittest_main/libcpp-testing-unittest_main.a"]
+
 	if umAR == nil {
 		t.Fatal("missing unittest_main AR")
 	}
@@ -156,6 +162,7 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 	}
 
 	cc := byOut["$(B)/mod/__/thelib/a_ut.cpp.o"]
+
 	if cc == nil {
 		t.Fatal("missing own CC $(B)/mod/__/thelib/a_ut.cpp.o")
 	}
@@ -165,9 +172,11 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 	}
 
 	inputs := make([]string, 0, len(cc.flatInputs()))
+
 	for _, in := range cc.flatInputs() {
 		inputs = append(inputs, in.string())
 	}
+
 	if !slicesContains(inputs, "$(S)/thelib/a_ut.cpp") {
 		t.Fatalf("cc inputs missing $(S)/thelib/a_ut.cpp: %v", inputs)
 	}
@@ -183,9 +192,11 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 	linkArgs := ld.Cmds[2].CmdArgs.flat()
 	thelibIdx := indexOfArg(linkArgs, "thelib/libthelib.a")
 	cowIdx := indexOfArg(linkArgs, "build/cow/on/libbuild-cow-on.a")
+
 	if thelibIdx < 0 || cowIdx < 0 {
 		t.Fatalf("LD link args missing expected tested-dir/program-default archives: %v", linkArgs)
 	}
+
 	if thelibIdx > cowIdx {
 		t.Fatalf("tested-dir archive lands after build/cow/on in LD cmd: thelib=%d cow=%d args=%v", thelibIdx, cowIdx, linkArgs)
 	}
@@ -204,7 +215,6 @@ func TestGen_RejectsUnsupportedMacro(t *testing.T) {
 		t.Fatal("expected exception for unsupported macro, got nil")
 	}
 
-	// A name outside the closed TOK set fails fast at parse.
 	if !strings.Contains(exc.Error(), "unknown macro name") {
 		t.Errorf("error %q does not contain 'unknown macro name'", exc.Error())
 	}
@@ -305,6 +315,7 @@ END()
 			if strings.Contains(n.Outputs[0].string(), "/zlib/") && n.KV.P == pkAR {
 				zlibIdx = i
 			}
+
 			if strings.Contains(n.Outputs[0].string(), "/alib/") && n.KV.P == pkAR {
 				alibIdx = i
 			}
@@ -422,6 +433,7 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 	files := map[string]string{
 		"consumer/ya.make": "LIBRARY()\nSRCS(main.cpp)\nEND()\n",
 	}
+
 	for _, path := range []string{
 		"contrib/libs/cxxsupp/builtins",
 		"library/cpp/malloc/api",
@@ -432,6 +444,7 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 	} {
 		files[path+"/ya.make"] = stubLib
 	}
+
 	fs := newMemFS(files)
 
 	plain := ModuleInstance{
@@ -483,7 +496,6 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 }
 
 func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
-
 	fullSet := []string{
 		"contrib/libs/cxxsupp/libcxx",
 		"contrib/libs/cxxsupp/libcxxrt",
@@ -571,7 +583,6 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			},
 		},
 
-		// These exercise self-exclusion: a module never peers itself.
 		{
 			name: "self_builtins_not_in_stack",
 			mi: ModuleInstance{
@@ -651,6 +662,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			mi := c.mi
+
 			if mi.Platform == nil {
 				mi.Platform = testTargetP
 			}
@@ -698,9 +710,11 @@ END()
 	g := testGen(fs, "lib1")
 
 	var lib1AR *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkAR && n.TargetProperties.ModuleDir == "lib1" {
 			lib1AR = n
+
 			break
 		}
 	}
@@ -853,17 +867,18 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Fatal("no CC node emitted")
 		}
 
-		// module_dir is the module's own path; SRCDIR is a source-search dir.
 		if ccNode.TargetProperties.ModuleDir != "tools/r6/bin" {
 			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties.ModuleDir, "tools/r6/bin")
 		}
 
 		wantInput := "$(S)/tools/r6/main.cpp"
+
 		if len(ccNode.flatInputs()) == 0 || ccNode.flatInputs()[0].string() != wantInput {
 			t.Errorf("CC inputs = %v, want first = %q", ccNode.flatInputs(), wantInput)
 		}
 
 		wantOutput := "$(B)/tools/r6/bin/__/main.cpp.o"
+
 		if len(ccNode.Outputs) == 0 || ccNode.Outputs[0].string() != wantOutput {
 			t.Errorf("CC outputs = %v, want first = %q", ccNode.Outputs, wantOutput)
 		}
@@ -878,12 +893,15 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		g := testGen(fs, "tools/r6/bin")
 
 		var ccNode *Node
+
 		for _, n := range g.Graph {
 			if n.KV.P == pkCC {
 				ccNode = n
+
 				break
 			}
 		}
+
 		if ccNode == nil {
 			t.Fatal("no CC node emitted")
 		}
@@ -1086,6 +1104,7 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 			for _, out := range n.Outputs {
 				if strings.Contains(out.string(), "main.cpp.o") {
 					consumerCC = n
+
 					break
 				}
 			}
@@ -1112,6 +1131,7 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 	for _, f := range iFlags {
 		if f == wantGlobal {
 			foundGlobal = true
+
 			break
 		}
 	}
@@ -1125,14 +1145,12 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 	for _, f := range iFlags {
 		if f == wantAbsent {
 			t.Errorf("consumer CC -I flags = %v; must NOT contain %q (module-own ADDINCL must stay module-own, PR-31 D13)", iFlags, wantAbsent)
+
 			break
 		}
 	}
 }
 
-// TestGen_OneLevelAddIncl_DeclOrderPreserved: with a peer's mixed ADDINCL(GLOBAL g
-// ONE_LEVEL ol), the consumer sees g before ol — UserGlobal keeps ADDINCL declaration
-// order.
 func TestGen_OneLevelAddIncl_DeclOrderPreserved(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"peerlib/ya.make":              "LIBRARY()\nADDINCL(\n    GLOBAL\n    peerlib/global_include\n    ONE_LEVEL\n    peerlib/onelevel_include\n)\nSRCS(peerlib.cpp)\nEND()\n",
@@ -1145,11 +1163,13 @@ func TestGen_OneLevelAddIncl_DeclOrderPreserved(t *testing.T) {
 	g := testGen(fs, "consumer")
 
 	var consumerCC *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkCC {
 			for _, out := range n.Outputs {
 				if strings.Contains(out.string(), "consumer.cpp.o") {
 					consumerCC = n
+
 					break
 				}
 			}
@@ -1159,6 +1179,7 @@ func TestGen_OneLevelAddIncl_DeclOrderPreserved(t *testing.T) {
 	if consumerCC == nil {
 		t.Fatal("consumer CC node for consumer.cpp.o not found")
 	}
+
 	if len(consumerCC.Cmds) == 0 {
 		t.Fatal("consumer CC node has no commands")
 	}
@@ -1170,20 +1191,18 @@ func TestGen_OneLevelAddIncl_DeclOrderPreserved(t *testing.T) {
 	if globalIdx == -1 {
 		t.Fatal("consumer CC missing -I$(S)/peerlib/global_include (GLOBAL addincl from peer must propagate)")
 	}
+
 	if oneLevelIdx == -1 {
 		t.Fatal("consumer CC missing -I$(S)/peerlib/onelevel_include (ONE_LEVEL addincl from peer must propagate)")
 	}
+
 	if globalIdx > oneLevelIdx {
 		t.Errorf("GLOBAL addincl at idx=%d comes AFTER ONE_LEVEL at idx=%d; want declaration order (GLOBAL before ONE_LEVEL)", globalIdx, oneLevelIdx)
 	}
 }
 
-// TestGen_ImplicitOwnGlobal_BeforeOneLevelAddIncl: a peer's implicit own-global
-// include dir (from SRCS(file.h.in)) appears before a later ADDINCL(ONE_LEVEL) in the
-// consumer's -I list, since UserGlobal accumulates own-global dirs in declaration order.
 func TestGen_ImplicitOwnGlobal_BeforeOneLevelAddIncl(t *testing.T) {
 	fs := newMemFS(map[string]string{
-		// peerlib: generated header declared before ONE_LEVEL ADDINCL.
 		"peerlib/ya.make":       "LIBRARY()\nSRCS(gen.h.in)\nADDINCL(\n    ONE_LEVEL\n    peerlib/onelevel_dir\n)\nSRCS(peerlib.cpp)\nEND()\n",
 		"peerlib/gen.h.in":      "",
 		"peerlib/peerlib.cpp":   "",
@@ -1194,11 +1213,13 @@ func TestGen_ImplicitOwnGlobal_BeforeOneLevelAddIncl(t *testing.T) {
 	g := testGen(fs, "consumer")
 
 	var consumerCC *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkCC {
 			for _, out := range n.Outputs {
 				if strings.Contains(out.string(), "consumer.cpp.o") {
 					consumerCC = n
+
 					break
 				}
 			}
@@ -1208,6 +1229,7 @@ func TestGen_ImplicitOwnGlobal_BeforeOneLevelAddIncl(t *testing.T) {
 	if consumerCC == nil {
 		t.Fatal("consumer CC node for consumer.cpp.o not found")
 	}
+
 	if len(consumerCC.Cmds) == 0 {
 		t.Fatal("consumer CC node has no commands")
 	}
@@ -1219,21 +1241,18 @@ func TestGen_ImplicitOwnGlobal_BeforeOneLevelAddIncl(t *testing.T) {
 	if genHdrIdx == -1 {
 		t.Fatal("consumer CC missing -I$(B)/peerlib (generated-header build dir from peer)")
 	}
+
 	if oneLevelIdx == -1 {
 		t.Fatal("consumer CC missing -I$(S)/peerlib/onelevel_dir (ONE_LEVEL addincl from peer)")
 	}
+
 	if genHdrIdx > oneLevelIdx {
 		t.Errorf("generated-header build include at idx=%d comes AFTER ONE_LEVEL at idx=%d; want own-global (UserGlobal) order before ONE_LEVEL", genHdrIdx, oneLevelIdx)
 	}
 }
 
-// TestGen_ConfigureFileOwnGlobal_AfterExplicitAddIncl: a peer's CF-generated include
-// dir (from CONFIGURE_FILE(non-header dst)) appears AFTER an explicit ADDINCL(GLOBAL)
-// even when CONFIGURE_FILE is declared first. CF output dirs defer past all ADDINCL
-// statements regardless of declaration order, and the CF dir must reach AddInclUserGlobal.
 func TestGen_ConfigureFileOwnGlobal_AfterExplicitAddIncl(t *testing.T) {
 	fs := newMemFS(map[string]string{
-		// peerlib: CONFIGURE_FILE (non-header dst) declared BEFORE ADDINCL(GLOBAL).
 		"peerlib/ya.make":          "LIBRARY()\nCONFIGURE_FILE(config.cfg.in config.cfg)\nADDINCL(\n    GLOBAL\n    peerlib/global_dir\n)\nSRCS(peerlib.cpp)\nEND()\n",
 		"peerlib/config.cfg.in":    "",
 		"peerlib/peerlib.cpp":      "",
@@ -1245,11 +1264,13 @@ func TestGen_ConfigureFileOwnGlobal_AfterExplicitAddIncl(t *testing.T) {
 	g := testGen(fs, "consumer")
 
 	var consumerCC *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkCC {
 			for _, out := range n.Outputs {
 				if strings.Contains(out.string(), "consumer.cpp.o") {
 					consumerCC = n
+
 					break
 				}
 			}
@@ -1259,6 +1280,7 @@ func TestGen_ConfigureFileOwnGlobal_AfterExplicitAddIncl(t *testing.T) {
 	if consumerCC == nil {
 		t.Fatal("consumer CC node for consumer.cpp.o not found")
 	}
+
 	if len(consumerCC.Cmds) == 0 {
 		t.Fatal("consumer CC node has no commands")
 	}
@@ -1270,17 +1292,16 @@ func TestGen_ConfigureFileOwnGlobal_AfterExplicitAddIncl(t *testing.T) {
 	if cfBuildIdx == -1 {
 		t.Fatal("consumer CC missing -I$(B)/peerlib (CF-generated build dir from peer must be in UserGlobal)")
 	}
+
 	if globalIdx == -1 {
 		t.Fatal("consumer CC missing -I$(S)/peerlib/global_dir (explicit ADDINCL GLOBAL from peer)")
 	}
+
 	if globalIdx > cfBuildIdx {
 		t.Errorf("ADDINCL GLOBAL at idx=%d comes AFTER CF build dir at idx=%d; want explicit ADDINCL before deferred CF dir", globalIdx, cfBuildIdx)
 	}
 }
 
-// TestGen_OneLevelAddIncl_AppearsInPeerIncludeSlot: ADDINCL(ONE_LEVEL) from a direct
-// peer lands in the peer-include slot, AFTER the platform linux-headers language
-// default, not in the own-include slot before it.
 func TestGen_OneLevelAddIncl_AppearsInPeerIncludeSlot(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"peerlib/ya.make":                    "LIBRARY()\nADDINCL(\n    ONE_LEVEL\n    peerlib/include\n)\nSRCS(peerlib.cpp)\nEND()\n",
@@ -1293,11 +1314,13 @@ func TestGen_OneLevelAddIncl_AppearsInPeerIncludeSlot(t *testing.T) {
 	g := testGen(fs, "consumer")
 
 	var consumerCC *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkCC {
 			for _, out := range n.Outputs {
 				if strings.Contains(out.string(), "consumer.cpp.o") {
 					consumerCC = n
+
 					break
 				}
 			}
@@ -1320,11 +1343,11 @@ func TestGen_OneLevelAddIncl_AppearsInPeerIncludeSlot(t *testing.T) {
 	if oneLevelIdx == -1 {
 		t.Fatal("consumer CC missing -I$(S)/peerlib/include (ONE_LEVEL addincl from peer should propagate to direct consumer)")
 	}
+
 	if linuxHeadersIdx == -1 {
 		t.Fatal("consumer CC missing -I$(S)/contrib/libs/linux-headers (expected from the platform linux-headers language default)")
 	}
-	// ONE_LEVEL from peer must appear AFTER linux-headers: it lands in
-	// peerAddInclGlobal after the leading linux-headers default, not in the own bag.
+
 	if oneLevelIdx < linuxHeadersIdx {
 		t.Errorf("ONE_LEVEL addincl from peer at idx=%d, before linux-headers at idx=%d; want AFTER (peer-include slot, not own-include slot)", oneLevelIdx, linuxHeadersIdx)
 	}
@@ -1476,9 +1499,11 @@ END()
 	if got := cfTemplate.flatInputs()[1].string(); got != "$(S)/templates/Java.stg.in" {
 		t.Fatalf("template CF input = %q, want $(S)/templates/Java.stg.in", got)
 	}
+
 	if got := cfTemplate.Cmds[0].CmdArgs.flat()[3].string(); got != "$(B)/proto/templates/Java/Java.stg" {
 		t.Fatalf("template CF output arg = %q, want $(B)/proto/templates/Java/Java.stg", got)
 	}
+
 	if got := cfGrammar.Cmds[0].CmdArgs.flat()[3].string(); got != "$(B)/proto/Grammar.g" {
 		t.Fatalf("grammar CF output arg = %q, want $(B)/proto/Grammar.g", got)
 	}
@@ -1486,9 +1511,11 @@ END()
 	if got := antlr.Cmds[0].CmdArgs.flat()[5].string(); got != "$(B)/proto/Grammar.g" {
 		t.Fatalf("antlr grammar arg = %q, want $(B)/proto/Grammar.g", got)
 	}
+
 	if got := antlr.Cmds[0].CmdArgs.flat()[9].string(); got != "$(B)/proto" {
 		t.Fatalf("antlr output dir arg = %q, want $(B)/proto", got)
 	}
+
 	if got := antlr.Cmds[0].Cwd.string(); got != "$(B)/proto" {
 		t.Fatalf("antlr cwd = %q, want $(B)/proto", got)
 	}
@@ -1496,13 +1523,17 @@ END()
 	if got := protoc.Cmds[0].CmdArgs.flat()[0].string(); got != "$(B)/contrib/tools/protoc/bin/protoc" {
 		t.Fatalf("protoc tool arg = %q, want $(B)/contrib/tools/protoc/bin/protoc", got)
 	}
+
 	wantPluginArg := "--plugin=protoc-gen-cpp_styleguide=$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"
+
 	if !containsString(strStrs(protoc.Cmds[0].CmdArgs.flat()), wantPluginArg) {
 		t.Fatalf("protoc cmd args missing %q: %v", wantPluginArg, protoc.Cmds[0].CmdArgs.flat())
 	}
+
 	if !nodeHasInput(protoc, "$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide") {
 		t.Fatalf("protoc inputs missing built plugin binary: %v", protoc.flatInputs())
 	}
+
 	if nodeHasInput(protoc, "$(S)/contrib/tools/protoc/plugins/cpp_styleguide") {
 		t.Fatalf("protoc inputs still contain source-root plugin path: %v", protoc.flatInputs())
 	}
@@ -1510,15 +1541,19 @@ END()
 	if got := py.flatInputs()[0].string(); got != "$(S)/tools/multiproto.py" {
 		t.Fatalf("python script input = %q, want $(S)/tools/multiproto.py", got)
 	}
+
 	if got := py.flatInputs()[1].string(); got != "$(B)/proto/Generated.pb.h" {
 		t.Fatalf("python generated header input = %q, want $(B)/proto/Generated.pb.h", got)
 	}
+
 	if got := py.flatInputs()[2].string(); got != "$(B)/proto/Generated.pb.cc" {
 		t.Fatalf("python generated source input = %q, want $(B)/proto/Generated.pb.cc", got)
 	}
+
 	if got := py.Cmds[0].CmdArgs.flat()[1].string(); got != "$(S)/tools/multiproto.py" {
 		t.Fatalf("python script arg = %q, want $(S)/tools/multiproto.py", got)
 	}
+
 	if got := py.Cmds[0].Cwd.string(); got != "$(B)/proto" {
 		t.Fatalf("python cwd = %q, want $(B)/proto", got)
 	}
@@ -1526,12 +1561,15 @@ END()
 	if !containsString(strStrs(cc.Cmds[0].CmdArgs.flat()), "$(B)/proto/Generated.code0.cc") {
 		t.Fatalf("cc cmd args missing built generated source: %v", cc.Cmds[0].CmdArgs.flat())
 	}
+
 	if containsString(strStrs(cc.Cmds[0].CmdArgs.flat()), "$(S)/proto/Generated.code0.cc") {
 		t.Fatalf("cc cmd args still contain source-root generated source: %v", cc.Cmds[0].CmdArgs.flat())
 	}
+
 	if !nodeHasInput(cc, "$(B)/proto/Generated.code0.cc") {
 		t.Fatalf("cc inputs missing built generated source: %v", cc.flatInputs())
 	}
+
 	for _, want := range []string{
 		"$(S)/tools/multiproto.py",
 		"$(S)/build/scripts/stdout2stderr.py",
@@ -1548,6 +1586,7 @@ END()
 	if nodeHasInput(ar, "$(S)/proto/Generated.code0.cc") {
 		t.Fatalf("ar inputs still contain source-root generated source: %v", ar.flatInputs())
 	}
+
 	if nodeHasInput(ar, "$(B)/proto/Generated.code0.cc") {
 		t.Fatalf("ar inputs still contain build-root generated source: %v", ar.flatInputs())
 	}
@@ -1567,17 +1606,22 @@ END()
 		t.Helper()
 
 		var values []string
+
 		for _, input := range node.flatInputs() {
 			values = append(values, input.string())
 		}
+
 		for _, output := range node.Outputs {
 			values = append(values, output.string())
 		}
+
 		for _, cmd := range node.Cmds {
 			values = append(values, strStrs(cmd.CmdArgs.flat())...)
+
 			if cmd.Cwd != 0 {
 				values = append(values, cmd.Cwd.string())
 			}
+
 			if cmd.Stdout != 0 {
 				values = append(values, cmd.Stdout.string())
 			}
@@ -1587,6 +1631,7 @@ END()
 			if strings.Contains(value, "${") {
 				t.Fatalf("%s contains unresolved placeholder %q", node.KV.P, value)
 			}
+
 			if strings.Contains(value, "/$(S)/") || strings.Contains(value, "/$(B)/") {
 				t.Fatalf("%s contains duplicated rooted path %q", node.KV.P, value)
 			}
@@ -1667,6 +1712,7 @@ int use() { return 0; }
 		"$(B)/protos/main.grpc.pb.cc",
 		"$(B)/protos/main.grpc.pb.h",
 	)
+
 	if !containsString(strStrs(pb.Cmds[0].CmdArgs.flat()), "--cpp_out=proto_h=true:$(B)/") {
 		t.Fatalf("pb cmd args missing lite-header cpp_out flag: %v", pb.Cmds[0].CmdArgs.flat())
 	}
@@ -1675,6 +1721,7 @@ int use() { return 0; }
 	mainPB := mustNodeByOutput(t, g, "$(B)/protos/main.pb.h")
 	depPB := mustNodeByOutput(t, g, "$(B)/protos/dep.pb.h")
 	ar := mustNodeByOutput(t, g, "$(B)/protos/libprotos.a")
+
 	for _, want := range []string{
 		"$(B)/protos/main.deps.pb.h",
 		"$(B)/protos/main.pb.h",
@@ -1684,6 +1731,7 @@ int use() { return 0; }
 			t.Fatalf("use.cpp.o inputs missing %q: %#v", want, useCC.flatInputs())
 		}
 	}
+
 	for _, want := range []UID{mainPB.UID, depPB.UID} {
 		if !slices.Contains(graphDeps(g, useCC), want) {
 			t.Fatalf("use.cpp.o deps missing %q: %v", want, graphDeps(g, useCC))
@@ -1691,26 +1739,30 @@ int use() { return 0; }
 	}
 
 	en := mustNodeByOutput(t, g, "$(B)/protos/main.pb.h_serialized.cpp")
+
 	if !nodeHasInput(en, "$(B)/protos/main.pb.h") {
 		t.Fatalf("enum node inputs missing generated pb.h: %#v", en.flatInputs())
 	}
+
 	if nodeHasInput(en, "$(S)/protos/main.pb.h") {
 		t.Fatalf("enum node still consumes source-root pb.h: %#v", en.flatInputs())
 	}
+
 	if !slices.Contains(graphDeps(g, en), mainPB.UID) {
 		t.Fatalf("enum node deps missing pb producer uid %q: %v", mainPB.UID, graphDeps(g, en))
 	}
+
 	if !slices.Contains(graphDeps(g, en), depPB.UID) {
 		t.Fatalf("enum node deps missing imported pb producer uid %q: %v", depPB.UID, graphDeps(g, en))
 	}
+
 	if got := en.TargetProperties.ModuleTag; got != tagCppProto {
 		t.Fatalf("enum node module_tag = %q, want cpp_proto", got.string())
 	}
+
 	if !nodeHasInput(en, "$(B)/protos/dep.pb.h") {
 		t.Fatalf("enum node inputs missing imported pb.h dep.pb.h: %#v", en.flatInputs())
 	}
-	// Protobuf runtime headers resolve only through the real protobuf ADDINCL tree,
-	// absent in this mock, so the input is not asserted here.
 
 	if !nodeHasInput(ar, "$(B)/protos/main.pb.h_serialized.cpp.o") {
 		t.Fatalf("archive missing enum serialization object: %#v", ar.flatInputs())
@@ -1721,23 +1773,20 @@ func testGen(fs FS, targetDir string) *Graph {
 	return testGenContour(fs, targetDir, true)
 }
 
-// testGenDumpGraph builds through the `-G` dump-graph finalize, so the
-// generated-output module_dir attribution pass runs (testGen's plain finalize
-// does not).
 func testGenDumpGraph(fs FS, targetDir string) *Graph {
 	host := newTestPlatform(OSLinux, ISAX8664, "yes")
 	targetFlags := make(map[string]string, len(testToolchainFlags)+1)
+
 	for k, v := range testToolchainFlags {
 		targetFlags[k] = v
 	}
+
 	targetFlags["PIC"] = "no"
 	target := newPlatform(fs, OSLinux, ISAAArch64, targetFlags, "", "")
+
 	return genDumpGraphWithResources(fs, targetDir, host, target, func(Warn) {}, false)
 }
 
-// testGenInternal builds under the internal (non-opensource) contour, where
-// LINK_OR_COPY_SO_CMD is not emitted for plain programs, so only the BUNDLE MOVE_FILE
-// mechanism can put the tool script on the link node.
 func testGenInternal(fs FS, targetDir string) *Graph {
 	return testGenContour(fs, targetDir, false)
 }
@@ -1745,14 +1794,18 @@ func testGenInternal(fs FS, targetDir string) *Graph {
 func testGenContour(fs FS, targetDir string, opensource bool) *Graph {
 	host := newTestPlatform(OSLinux, ISAX8664, "yes")
 	targetFlags := make(map[string]string, len(testToolchainFlags)+1)
+
 	for k, v := range testToolchainFlags {
 		targetFlags[k] = v
 	}
+
 	if !opensource {
 		delete(targetFlags, "OPENSOURCE")
 	}
+
 	targetFlags["PIC"] = "no"
 	target := newPlatform(fs, OSLinux, ISAAArch64, targetFlags, "", "")
+
 	return Gen(fs, targetDir, host, target, func(Warn) {})
 }
 
@@ -1774,6 +1827,7 @@ END()
 		"-DUDF_ABI_VERSION_MINOR=44",
 		"-DUDF_ABI_VERSION_PATCH=0",
 	}
+
 	if !reflect.DeepEqual(argStrs(d.cxxFlags), want) {
 		t.Fatalf("cxxFlags = %#v, want %#v", argStrs(d.cxxFlags), want)
 	}
@@ -1793,15 +1847,19 @@ END()
 	if d.moduleStmt == nil || d.moduleStmt.Name != tokYqlUdfContrib {
 		t.Fatalf("moduleStmt = %#v, want YQL_UDF_CONTRIB", d.moduleStmt)
 	}
+
 	if !equalStrings(strStrings(d.moduleStmt.Args), []string{"my_udf"}) {
 		t.Fatalf("module args = %v, want [my_udf]", d.moduleStmt.Args)
 	}
+
 	if len(d.srcs) != 0 {
 		t.Fatalf("srcs = %v, want empty (SRCS must alias to GLOBAL_SRCS)", d.srcs)
 	}
+
 	if !equalStrings(strStrings(d.globalSrcs), []string{"lib.cpp", "nested/extra.cpp"}) {
 		t.Fatalf("globalSrcs = %v, want [lib.cpp nested/extra.cpp]", d.globalSrcs)
 	}
+
 	if !equalStrings(strStrings(d.peerdirs), []string{
 		"yql/essentials/public/udf",
 		"yql/essentials/public/udf/support",
@@ -1843,30 +1901,32 @@ END()
 	}
 
 	plugin := d.cppProtoPlugins[0]
+
 	if plugin.Name != "validation" {
 		t.Fatalf("plugin.Name = %q, want validation", plugin.Name)
 	}
+
 	if plugin.ToolPath != "ydb/public/lib/validation" {
 		t.Fatalf("plugin.ToolPath = %q, want ydb/public/lib/validation", plugin.ToolPath)
 	}
+
 	if !equalStrings(plugin.OutputSuffixes, []string{".validation.pb.h"}) {
 		t.Fatalf("plugin.OutputSuffixes = %v, want [.validation.pb.h]", plugin.OutputSuffixes)
 	}
+
 	if !equalStrings(plugin.Deps, []string{"ydb/public/api/protos/annotations"}) {
 		t.Fatalf("plugin.Deps = %v, want [ydb/public/api/protos/annotations]", plugin.Deps)
 	}
+
 	if plugin.ExtraOutFlag != "lite=true" {
 		t.Fatalf("plugin.ExtraOutFlag = %q, want lite=true", plugin.ExtraOutFlag)
 	}
+
 	if !containsString(strStrings(d.peerdirs), "ydb/public/api/protos/annotations") {
 		t.Fatalf("peerdirs = %v, want ydb/public/api/protos/annotations", d.peerdirs)
 	}
 }
 
-// TestCollectModule_ProtoCmdPeersRecorded pins the proto plugin-runtime peers a
-// PROTO_LIBRARY records (the C++ plugins' DEPS, in plugin order) and that the declared
-// PEERDIR keeps its slot in d.peerdirs. CPP_EVLOG registers a plugin with DEPS
-// library/cpp/eventlog.
 func TestCollectModule_ProtoCmdPeersRecorded(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"proto/ya.make": `PROTO_LIBRARY()
@@ -1883,8 +1943,6 @@ END()
 		t.Fatalf("protoCmdPeers = %v, want [library/cpp/eventlog]", strStrings(d.protoCmdPeers))
 	}
 
-	// d.peerdirs keeps the declared peer first; the front peers are a subset of the
-	// declared closure, not a reordering.
 	if len(d.peerdirs) == 0 || d.peerdirs[0].string() != "some/declared/peer" {
 		t.Fatalf("d.peerdirs[0] = %v, want some/declared/peer first (link order intact): %v", d.peerdirs, strStrings(d.peerdirs))
 	}
@@ -1935,19 +1993,21 @@ END()
 	mf := throw2(parseFile(fs, "pytool/ya.make"))
 
 	bin := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "pytool", KindBin, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("pytool"), Kind: KindBin, Platform: testTargetP}), noWarn)
+
 	if got := bin.pyMain; got == nil || got.string() != "pytool.__main__:main" {
 		t.Fatalf("bin pyMain = %#v, want pytool.__main__:main", got)
 	}
-	// PY_SRCS stays populated on KindBin: emitResourceObjcopy needs len(d.pySrcs)>0 to
-	// surface the PY_MAIN objcopy_<hash>.o into LD inputs.
+
 	if !equalStrings(strStrings(bin.pySrcs), []string{"__main__.py"}) {
 		t.Fatalf("bin pySrcs = %v, want [__main__.py]", bin.pySrcs)
 	}
 
 	lib := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "pytool", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("pytool"), Kind: KindLib, Platform: testTargetP}), noWarn)
+
 	if lib.pyMain != nil {
 		t.Fatalf("lib pyMain = %#v, want nil", lib.pyMain)
 	}
+
 	if !equalStrings(strStrings(lib.pySrcs), []string{"__main__.py"}) {
 		t.Fatalf("lib pySrcs = %v, want [__main__.py]", lib.pySrcs)
 	}
@@ -1974,9 +2034,11 @@ END()
 	if !equalStrings(strStrings(d.srcs), []string{"a.cpp", "b.h"}) {
 		t.Fatalf("srcs = %v, want [a.cpp b.h]", d.srcs)
 	}
+
 	if len(d.copyFiles) != 2 {
 		t.Fatalf("len(copyFiles) = %d, want 2", len(d.copyFiles))
 	}
+
 	if d.copyFiles[0].Src != "src/a.cpp" || d.copyFiles[1].Src != "src/b.h" {
 		t.Fatalf("copyFiles srcs = %#v", d.copyFiles)
 	}
@@ -1984,24 +2046,27 @@ END()
 
 func vfsStringsT3(in []VFS) []string {
 	out := make([]string, len(in))
+
 	for i, v := range in {
 		out[i] = v.string()
 	}
+
 	return out
 }
 
-// vfsInputsContainAll reports whether got contains every entry of want,
-// order- and duplicate-agnostic.
 func vfsInputsContainAll(got, want []string) bool {
 	set := make(map[string]struct{}, len(got))
+
 	for _, g := range got {
 		set[g] = struct{}{}
 	}
+
 	for _, w := range want {
 		if _, ok := set[w]; !ok {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -2061,6 +2126,7 @@ func TestCollectModule_SETAPPENDRPathGlobal(t *testing.T) {
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(instance), noWarn)
 
 	want := []string{"-Wl,-rpath,$ORIGIN"}
+
 	if !reflect.DeepEqual(argStrs(d.rpathFlagsGlobal), want) {
 		t.Fatalf("rpathFlagsGlobal mismatch:\n  got:  %#v\n  want: %#v", argStrs(d.rpathFlagsGlobal), want)
 	}
@@ -2080,6 +2146,7 @@ func findGraphNodeByOutputs(t *testing.T, g *Graph, wantOutputs ...string) *Node
 		}
 
 		match := true
+
 		for i, out := range node.Outputs {
 			if out.string() != wantOutputs[i] {
 				match = false
@@ -2094,11 +2161,13 @@ func findGraphNodeByOutputs(t *testing.T, g *Graph, wantOutputs ...string) *Node
 	}
 
 	t.Fatalf("graph node with outputs %v not found", wantOutputs)
+
 	return nil
 }
 
 func md5Hex(s string) string {
 	sum := md5.Sum([]byte(s))
+
 	return strings.ToLower(enchex.EncodeToString(sum[:]))
 }
 
@@ -2147,22 +2216,25 @@ END()
 	g := testGen(newMemFS(files), "db")
 
 	pr := mustNodeByOutput(t, g, "$(B)/db/data.json")
+
 	if !nodeHasInput(pr, "$(S)/db/gen.h") {
 		t.Fatalf("pr inputs missing direct gen.h input: %#v", pr.flatInputs())
 	}
+
 	if !nodeHasInput(pr, "$(S)/dep/dep.h") {
 		t.Fatalf("pr inputs missing transitive dep/dep.h closure: %#v", pr.flatInputs())
 	}
 
 	objcopy := findNodeByOutputPrefix(g, "$(B)/db/objcopy_")
+
 	if objcopy == nil {
 		t.Fatal("graph is missing db objcopy output")
 	}
+
 	if !nodeHasInput(objcopy, "$(B)/db/data.json") {
 		t.Fatalf("objcopy inputs missing build-root data.json: %#v", objcopy.flatInputs())
 	}
-	// The objcopy reads only data.json; the producer's transitive $(S) closure
-	// (dep/dep.h) is NOT an objcopy input. Normalization strips upstream's over-emit.
+
 	if nodeHasInput(objcopy, "$(S)/dep/dep.h") {
 		t.Fatalf("objcopy should not carry producer-closure dep/dep.h: %#v", objcopy.flatInputs())
 	}
@@ -2187,6 +2259,7 @@ func mustNodeByOutput(t *testing.T, g *Graph, output string) *Node {
 	}
 
 	t.Fatalf("graph is missing output %q", output)
+
 	return nil
 }
 
@@ -2200,6 +2273,7 @@ func mustNodeByOutputSuffix(t *testing.T, g *Graph, suffix string) *Node {
 	}
 
 	t.Fatalf("graph is missing an output ending in %q", suffix)
+
 	return nil
 }
 
@@ -2225,6 +2299,7 @@ func mustNodeByAnyOutput(t *testing.T, g *Graph, output string) *Node {
 	}
 
 	t.Fatalf("graph is missing a node with output %q", output)
+
 	return nil
 }
 
@@ -2277,14 +2352,12 @@ func TestIsHeaderSource_ExtendedHeaderExtensions(t *testing.T) {
 func TestProgramBinaryName_Py3ProgramBinArgWins(t *testing.T) {
 	inst := ModuleInstance{Path: source("tools/py3cc/slow"), Kind: KindBin, Platform: testTargetP}
 
-	// PY3_PROGRAM_BIN(name) links as its argument.
 	got := programBinaryName(inst, &ModuleStmt{Name: tokPy3ProgramBin, Args: STRS("py3cc")})
+
 	if got != "py3cc" {
 		t.Fatalf("PY3_PROGRAM_BIN binary name = %q, want py3cc", got)
 	}
 
-	// Without an argument it resolves to the module-dir basename (the REALPRJNAME
-	// default).
 	if got := programBinaryName(inst, &ModuleStmt{Name: tokPy3ProgramBin}); got != "slow" {
 		t.Fatalf("PY3_PROGRAM_BIN no-arg binary name = %q, want slow (dir-basename fallback)", got)
 	}
@@ -2294,9 +2367,6 @@ func TestProgramBinaryName_Py3ProgramBinArgWins(t *testing.T) {
 	}
 }
 
-// TestProgramBinaryName_UnnamedProgramRealPrjName: an unnamed from-source PROGRAM()
-// resolves REALPRJNAME to the module-dir basename, so its SBOM component is named
-// <basename>.<LANG>.component.sbom rather than a degenerate ".CPP.component.sbom".
 func TestProgramBinaryName_UnnamedProgramRealPrjName(t *testing.T) {
 	inst := ModuleInstance{Path: source("contrib/libs/flatbuffers64/flatc"), Kind: KindBin, Platform: testTargetP}
 
@@ -2309,10 +2379,6 @@ func TestProgramBinaryName_UnnamedProgramRealPrjName(t *testing.T) {
 	}
 }
 
-// TestGen_CppEvlog_PropagatesEventlogGlobalAddIncl: a PROTO_LIBRARY with CPP_EVLOG()
-// gains library/cpp/eventlog as a C++ peer (the plugin's DEPS), which transitively
-// PEERDIRs a leaf declaring ADDINCL(GLOBAL leaf/include), so a consumer PEERDIRing the
-// proto must compile with -I$(S)/leaf/include.
 func TestGen_CppEvlog_PropagatesEventlogGlobalAddIncl(t *testing.T) {
 	files := map[string]string{}
 	writeTestModuleFile(files, "leaf/ya.make", "LIBRARY()\nADDINCL(GLOBAL leaf/include)\nSRCS(leaf.cpp)\nEND()\n")
@@ -2337,18 +2403,23 @@ func TestGen_CppEvlog_PropagatesEventlogGlobalAddIncl(t *testing.T) {
 	g := testGen(newMemFS(files), "consumer")
 
 	consumerCC := mustNodeByOutput(t, g, "$(B)/consumer/consumer.cpp.o")
+
 	if len(consumerCC.Cmds) == 0 {
 		t.Fatal("consumer CC node has no commands")
 	}
+
 	args := consumerCC.Cmds[0].CmdArgs.flat()
 	want := "-I$(S)/leaf/include"
+
 	if indexOfArg(args, want) == -1 {
 		var iFlags []string
+
 		for _, a := range strStrs(args) {
 			if strings.HasPrefix(a, "-I") {
 				iFlags = append(iFlags, a)
 			}
 		}
+
 		t.Fatalf("consumer CC -I flags = %v; want %q (CPP_EVLOG must peer library/cpp/eventlog so its transitive GLOBAL ADDINCL reaches the consumer)", iFlags, want)
 	}
 }
@@ -2373,21 +2444,25 @@ END()
 	g := testGen(fs, "ads/bsyeti/lib")
 
 	var cc *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P != pkCC {
 			continue
 		}
+
 		for _, out := range n.Outputs {
 			if strings.Contains(out.string(), "x.cpp.o") {
 				cc = n
 			}
 		}
 	}
+
 	if cc == nil {
 		t.Fatal("CC node for ads/bsyeti/lib/x.cpp.o not found")
 	}
 
 	var args []string
+
 	for _, c := range cc.Cmds {
 		args = append(args, strStrs(c.CmdArgs.flat())...)
 	}
@@ -2396,10 +2471,12 @@ END()
 	firstFallthrough := -1
 	deprecatedIdx := -1
 	deprecatedCount := 0
+
 	for i, a := range args {
 		switch a {
 		case "-Wimplicit-fallthrough":
 			fallthroughCount++
+
 			if firstFallthrough < 0 {
 				firstFallthrough = i
 			}
@@ -2412,17 +2489,16 @@ END()
 	if fallthroughCount != 2 {
 		t.Fatalf("-Wimplicit-fallthrough count = %d, want 2 (early CLANG_WARNINGS slot + CXXFLAGS tail); args=%v", fallthroughCount, args)
 	}
+
 	if deprecatedCount != 1 {
 		t.Fatalf("-Wdeprecated-this-capture count = %d, want 1; args=%v", deprecatedCount, args)
 	}
+
 	if firstFallthrough >= deprecatedIdx {
 		t.Fatalf("first -Wimplicit-fallthrough (idx %d) must precede -Wdeprecated-this-capture (idx %d); args=%v", firstFallthrough, deprecatedIdx, args)
 	}
 }
 
-// TestGen_IncludeFirstArgOnlyCXXFLAGS: only args[0] of INCLUDE(...) is evaluated, so a
-// single-argument .inc CXXFLAGS applies, CXXFLAGS reached only via a later INCLUDE
-// argument does not, and separate single-argument INCLUDEs both apply.
 func TestGen_IncludeFirstArgOnlyCXXFLAGS(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"lib/ya.make": `LIBRARY()
@@ -2444,51 +2520,56 @@ END()
 	g := testGen(fs, "lib")
 
 	var cc *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P != pkCC {
 			continue
 		}
+
 		for _, out := range n.Outputs {
 			if strings.Contains(out.string(), "x.cpp.o") {
 				cc = n
 			}
 		}
 	}
+
 	if cc == nil {
 		t.Fatal("CC node for lib/x.cpp.o not found")
 	}
 
 	var args []string
+
 	for _, c := range cc.Cmds {
 		args = append(args, strStrs(c.CmdArgs.flat())...)
 	}
+
 	contains := func(flag string) bool {
 		for _, a := range args {
 			if a == flag {
 				return true
 			}
 		}
+
 		return false
 	}
 
 	if !contains("-DSINGLE_FLAG") {
 		t.Errorf("single-argument INCLUDE(single.inc) CXXFLAGS not applied; args=%v", args)
 	}
+
 	if !contains("-DFIRST_FLAG") {
 		t.Errorf("first INCLUDE argument CXXFLAGS not applied; args=%v", args)
 	}
+
 	if contains("-DSHOULD_NOT_APPLY") {
 		t.Errorf("second INCLUDE argument CXXFLAGS applied; upstream ignores args after args[0]; args=%v", args)
 	}
+
 	if !contains("-DSEP_A") || !contains("-DSEP_B") {
 		t.Errorf("separate single-argument INCLUDE statements must both apply; args=%v", args)
 	}
 }
 
-// TestMergeGeneratedFirstClaims_HostWinsOnConflict: when a RUN_PROGRAM-generated
-// header is claimed by BOTH the host and the target include-scan, the host claim is
-// the upstream-faithful owner and wins; a file claimed by only one scanner keeps that
-// claim.
 func TestMergeGeneratedFirstClaims_HostWinsOnConflict(t *testing.T) {
 	const (
 		effectiveOwner = "yabs/server/cs/libs/plutonium_traits"
@@ -2510,15 +2591,16 @@ func TestMergeGeneratedFirstClaims_HostWinsOnConflict(t *testing.T) {
 		targetOnly: {Dir: regularOwner},
 	}}
 
-	// Production order: host scanner first so it wins on conflict.
 	merged := mergeGeneratedFirstClaims(host, target)
 
 	if got := merged[conflicted].Dir; got != effectiveOwner {
 		t.Fatalf("conflicting cpp_import header: got module_dir %q, want effective owner %q", got, effectiveOwner)
 	}
+
 	if got := merged[targetOnly].Dir; got != regularOwner {
 		t.Fatalf("target-only generated file must keep its claim: got %q, want %q", got, regularOwner)
 	}
+
 	if got := merged[hostOnly].Dir; got != toolOnlyOwner {
 		t.Fatalf("host-only generated file must keep its claim: got %q, want %q", got, toolOnlyOwner)
 	}
@@ -2538,6 +2620,5 @@ func Gen(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn)) *
 	return genWithResources(fs, targetDir, hostP, targetP, onWarn, false)
 }
 
-// noWarn is a no-op Warn sink for tests that call collectModule directly and do
-// not assert on diagnostics.
-func noWarn(Warn) {}
+func noWarn(Warn) {
+}

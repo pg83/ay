@@ -2,14 +2,10 @@ package main
 
 import "strings"
 
-// flexDefaultGenExt is _FLEX_GEN_EXT's default — old flex emits C++.
 const flexDefaultGenExt = ".cpp"
 
-// flexOutputInclude is the header forced into every generated lexer source.
 var flexOutputInclude = IncludeDirective{kind: includeQuoted, target: internStr("util/system/compiler.h")}
 
-// flexGeneratedVFS is the generated-source path of a lex/flex source; a subdir source is
-// rebased under the _/ namespace.
 func flexGeneratedVFS(instance ModuleInstance, srcRel string) VFS {
 	if strings.Contains(srcRel, "/") {
 		return build(instance.Path.rel() + "/_/" + srcRel + flexDefaultGenExt)
@@ -18,17 +14,12 @@ func flexGeneratedVFS(instance ModuleInstance, srcRel string) VFS {
 	return build(instance.Path.rel() + "/" + srcRel + flexDefaultGenExt)
 }
 
-// emitLibraryFlexSource reproduces default old-flex _SRC: the LX node runs flex to produce
-// a .cpp compiled as C++. No sibling consumes its output as a header, so it stays in the
-// pass-1 codegen loop rather than the bison two-phase pre-pass.
 func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
 	flexRef, flexBin := ctx.tool(argContribToolsFlexOld)
 
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
 	outVFS := flexGeneratedVFS(instance, srcRel)
 
-	// The generated .cpp carries the output_include header plus the .l's prologue
-	// #includes. Register before walking so the closure resolves through the registry.
 	parsed := make([]IncludeDirective, 0, 1)
 	parsed = append(parsed, flexOutputInclude)
 	parsed = append(parsed, ctx.scannerFor(instance).parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
@@ -38,8 +29,6 @@ func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 
 	window := walkClosure(ctx.scannerFor(instance), outVFS, in.ScanCfg)
 
-	// flex only reads source files; generated $(B) headers reach the LX cache key via
-	// their own producers, so keep only source-level inputs.
 	lxClosure := keepOnlySourceVFS(window)
 
 	emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef, ctx.emit)
@@ -50,8 +39,6 @@ func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	ccIn.IncludeInputs = window
 	ccIn.ExtraDepRefs = append([]NodeRef{lxRef}, resolveCodegenDepRefs(ctx, instance, window, lxRef)...)
 
-	// Keyed on the `.l` extension only (not .lex/.lpp): add `-Wno-unused-variable` and
-	// the `.l` source as a hidden input.
 	if strings.HasSuffix(srcRel, ".l") {
 		ccIn.IncludeInputs = dedupVFS(window, []VFS{srcVFS})
 		ccIn.PerSourceCFlags = append(append([]ARG(nil), in.PerSourceCFlags...), argWnoUnusedVariable)

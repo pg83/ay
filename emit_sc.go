@@ -1,9 +1,5 @@
 package main
 
-// emit_sc.go models the _SRC("sc") rule: domschemec turns a .sc schema into a
-// <src>.sc.h header carrying the runtime.h output_include. No compile — the
-// header is consumed via #include.
-
 func emitSC(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary VFS, runtimeClosure []VFS, domschemecLDRef NodeRef, emit Emitter) NodeRef {
 	na := emit.nodeArenas()
 
@@ -34,12 +30,10 @@ func emitLibrarySCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
 	headerVFS := build(srcVFS.rel() + ".h")
 
-	// output_include runtime.h: lead the inputs with runtime.h and its closure.
 	runtimeClosure := walkClosure(ctx.scannerFor(instance), domschemeRuntimeVFS, in.ScanCfg)
 
 	scRef := emitSC(instance, srcVFS, headerVFS, domBinary, runtimeClosure, domLDRef, ctx.emit)
 
-	// Register the generated header so a consumer inherits the output_include.
 	runtimeInclude := []IncludeDirective{{kind: includeQuoted, target: internStr(domschemeRuntimeVFS.rel())}}
 	registerBoundGeneratedParsedOutput(ctx, instance, pkSC, headerVFS, runtimeInclude, scRef, []NodeRef{domLDRef})
 
@@ -47,6 +41,5 @@ func emitLibrarySCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 	reg.addClosureLeaf(headerVFS, srcVFS)
 	reg.addClosureLeaf(headerVFS, domschemeRuntimeVFS)
 
-	// Header-only: no object file to archive.
 	return nil
 }

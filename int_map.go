@@ -1,18 +1,10 @@
 package main
 
-// IntMap is an open-addressing hash map from uint64 keys to V that uses the key
-// itself as its hash (home slot = key & mask, no mixing). Intended for keys that
-// are already well-distributed hashes. Collisions resolve by linear probing over a
-// power-of-two table.
-//
-// Single-goroutine use only (no locking). No delete — insert/lookup only.
-//
-// Key 0 is the empty-slot sentinel and must not be inserted; Get(0) is undefined.
 type IntMap[V any] struct {
 	data     []IntMapEntry[V]
 	mask     uint64
-	count    int // number of stored keys
-	resizeAt int // grow once count reaches this
+	count    int
+	resizeAt int
 }
 
 type IntMapEntry[V any] struct {
@@ -21,18 +13,15 @@ type IntMapEntry[V any] struct {
 }
 
 const (
-	// intMapMinCap is the smallest table; must be a power of two.
 	intMapMinCap = 8
-	// intMapFillNum/intMapFillDen are the max load factor (5/8).
+
 	intMapFillNum = 5
 	intMapFillDen = 8
 )
 
-// NewIntMap returns a map sized to hold at least hint keys without growing.
 func newIntMap[V any](hint int) *IntMap[V] {
 	c := intMapMinCap
 
-	// Grow c (power of two) until its load-factor threshold covers hint.
 	for c*intMapFillNum < hint*intMapFillDen {
 		c <<= 1
 	}
@@ -49,8 +38,6 @@ func (m *IntMap[V]) alloc(capacity int) {
 	m.resizeAt = capacity * intMapFillNum / intMapFillDen
 }
 
-// Get returns a pointer to the value stored for k, or nil if k is absent. Valid
-// only until the next mutating call (Put/Cell may move the array).
 func (m *IntMap[V]) get(k uint64) *V {
 	for i := k & m.mask; ; i = (i + 1) & m.mask {
 		switch m.data[i].k {
@@ -62,9 +49,6 @@ func (m *IntMap[V]) get(k uint64) *V {
 	}
 }
 
-// Cell returns a pointer to the value cell for k and whether k was already present,
-// inserting a zero-valued entry when absent (find-or-insert). Cell grows the table
-// before returning, but the next Put/Cell may move the cell.
 func (m *IntMap[V]) cell(k uint64) (*V, bool) {
 	for {
 		i := k & m.mask
@@ -84,7 +68,7 @@ func (m *IntMap[V]) cell(k uint64) (*V, bool) {
 					return &m.data[i].v, false
 				}
 
-				break // at capacity — grow, then re-probe
+				break
 			}
 
 			i = (i + 1) & m.mask
@@ -94,13 +78,11 @@ func (m *IntMap[V]) cell(k uint64) (*V, bool) {
 	}
 }
 
-// Put inserts or overwrites the value for k.
 func (m *IntMap[V]) put(k uint64, v V) {
 	cell, _ := m.cell(k)
 	*cell = v
 }
 
-// grow doubles the table and reinserts the live entries.
 func (m *IntMap[V]) grow() {
 	old := m.data
 	m.alloc(len(old) * 2)
@@ -113,7 +95,6 @@ func (m *IntMap[V]) grow() {
 	}
 }
 
-// Len reports the number of distinct keys stored.
 func (m *IntMap[V]) len() int {
 	return m.count
 }

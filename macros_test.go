@@ -53,6 +53,7 @@ func TestEvalCond_AndOrNot(t *testing.T) {
 
 func TestEvalCond_UnknownVarDefaultsFalse(t *testing.T) {
 	expr := parseCondForTest(t, "UNKNOWN_VAR")
+
 	if evalCond(expr, DefaultIfEnv) {
 		t.Fatal("EvalCond(UNKNOWN_VAR) = true, want false")
 	}
@@ -84,6 +85,7 @@ func TestEvalCond_YdbIfBindings(t *testing.T) {
 
 	localEnv := DefaultIfEnv.clone()
 	localEnv.setFromString(envOS_SDK, "local")
+
 	if !evalCond(parseCondForTest(t, `OS_SDK == "local"`), localEnv) {
 		t.Error(`EvalCond(OS_SDK == "local") with OS_SDK=local = false, want true`)
 	}
@@ -201,30 +203,31 @@ func TestEvalCond_BareLiteralInPredicateThrows(t *testing.T) {
 }
 
 func TestEnvironment_BoolMethodRejectsTypedBindings(t *testing.T) {
-
 	t.Run("string_in_bool_position_coerces_not_throws", func(t *testing.T) {
-
 		expr := &ExprIdent{Name: "CXX_RT"}
 		exc := try(func() {
 			got := evalCond(expr, DefaultIfEnv)
+
 			if !got {
 				t.Errorf("EvalCond(CXX_RT) = false; want true (non-empty string coerces to true)")
 			}
 		})
+
 		if exc != nil {
 			t.Fatalf("EvalCond(CXX_RT) threw unexpectedly: %v", exc)
 		}
 	})
 
 	t.Run("empty_string_in_bool_position_coerces_false", func(t *testing.T) {
-
 		expr := &ExprIdent{Name: "SANITIZER_TYPE"}
 		exc := try(func() {
 			got := evalCond(expr, DefaultIfEnv)
+
 			if got {
 				t.Errorf("EvalCond(SANITIZER_TYPE) = true; want false (empty string coerces to false)")
 			}
 		})
+
 		if exc != nil {
 			t.Fatalf("EvalCond(SANITIZER_TYPE) threw unexpectedly: %v", exc)
 		}
@@ -281,9 +284,9 @@ func TestEvalCond_BoolStringEqualityCoercion(t *testing.T) {
 		t.Fatalf(`EvalCond(USE_SSE4 == "yes") = false, want true`)
 	}
 
-	// Explicit bool=false coerces to "no"; unset flags are not bool-typed, so set it via SetBool.
 	env := DefaultIfEnv.clone()
 	env.setBool(envPROFILE_MEMORY_ALLOCATIONS, false)
+
 	if !evalCond(parseCondForTest(t, `PROFILE_MEMORY_ALLOCATIONS == "no"`), env) {
 		t.Fatalf(`EvalCond(PROFILE_MEMORY_ALLOCATIONS=false == "no") = false, want true`)
 	}

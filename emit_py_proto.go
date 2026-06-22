@@ -20,8 +20,6 @@ func protoPythonResourceKey(instance ModuleInstance, d *ModuleData, src, suffix 
 
 	nsPath := strings.ReplaceAll(d.pyNamespace.string(), ".", "/")
 
-	// The module-local proto subdir is preserved under the Python namespace, so a
-	// nested SRC keeps its path in the output _pb2.py — do not collapse to Base.
 	return filepath.ToSlash(filepath.Clean(nsPath + "/" + base + suffix))
 }
 
@@ -48,10 +46,6 @@ func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCo
 
 	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
 
-	// A peer re-contributing the module's own PROTO_NAMESPACE build root ($(B)/<ns>)
-	// makes -I=$(S)/<ns> render a second time inside _PROTO__INCLUDE (the same
-	// duplicateOutputRootInclude rule as C++). The CPP_PROTO self-sibling carries that
-	// GLOBAL addincl, so a PROTO_NAMESPACE py module duplicates even with no real peer.
 	duplicateOutputRootInclude := false
 
 	if protoRoot := protoPythonOutputRoot(d); protoRoot != "" {
@@ -113,8 +107,6 @@ func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCo
 	}
 
 	if cppSibling != nil && cppSibling.ARPath != nil {
-		// The CPP sibling's archive is whole-archived here, entering the link closure
-		// as a proper peer, so it is not re-adopted as this module's ARPath.
 		result.WholeArchiveRefs = append(result.WholeArchiveRefs, cppSibling.ARRef)
 		result.WholeArchivePaths = append(result.WholeArchivePaths, *cppSibling.ARPath)
 	} else if moduleExcludesTag(d, "CPP_PROTO") {
@@ -124,9 +116,6 @@ func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCo
 	return result
 }
 
-// pyPBModuleEmission is the per-module py-proto emission context: the resolved
-// plugin tools and the stable spans of the protoc py command line (head, mid, tail),
-// built once per module before its source loop.
 type PyPBModuleEmission struct {
 	grpcPyRef    NodeRef
 	mypyRef      NodeRef
@@ -181,28 +170,18 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 		argIS3.str(),
 	)
 
-	// USE_COMMON_GOOGLE_APIS injects the common-protos -I ahead of the protobuf
-	// runtime include; cpp gets it through the addincl closure, py adds it here.
 	if d.useCommonGoogleAPIs {
 		mid = append(mid, strISContribLibsGoogleapisCommonProtos)
 	}
 
-	// The module's own PROTO_NAMESPACE renders once more after the structural prefix
-	// (mirroring the cpp arm). This also covers the protobuf builtins, whose own
-	// namespace IS contrib/libs/protobuf/src and would otherwise dedupe away.
 	if protoRoot != "" {
 		mid = append(mid, internStr("-I=$(S)/"+protoRoot))
 
-		// A peer re-contributing $(B)/<protoRoot> renders the source-root include twice.
 		if duplicateOutputRootInclude {
 			mid = append(mid, internStr("-I=$(S)/"+protoRoot))
 		}
 	}
 
-	// The transitive _PROTO__INCLUDE set sits between the structural -I prefixes and
-	// the trailing -I=$(B) pair, as on the cpp side. protobuf/src rides this set in
-	// encounter order, so its position relative to a peer namespace is per-module and
-	// MUST NOT be pinned ahead of the band. The set skips a namespace already rendered.
 	for _, p := range protoInclude {
 		token := internStr("-I=" + p.string())
 
@@ -213,8 +192,6 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 		mid = append(mid, token)
 	}
 
-	// NEED_GOOGLE_PROTO_PEERDIRS (default yes) adds protoc/src to the py-proto include
-	// path; if it was already rendered through the proto peer closure, do not re-emit.
 	if d.needGoogleProtoPeerdirs && !slices.Contains(mid, argISContribLibsProtocSrc.str()) {
 		mid = append(mid, argISContribLibsProtocSrc.str())
 	}
@@ -225,8 +202,6 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 		internStr("--python_out=$(B)/"+protoRoot),
 	)
 
-	// $_PROTOC_FLAGS renders after --python_out and before the trailing source token,
-	// as the cpp side appends d.protocFlags after --cpp_out.
 	pe.mid = appendArgStr(pe.mid, d.protocFlags)
 
 	if d.grpc {
@@ -287,11 +262,6 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 		toolRefs = append(toolRefs, depRefs(pe.mypyRef)...)
 	}
 
-	// SRCS(X.proto) may name a build-generated .proto. Mirror the C++ PB override:
-	// swap the proto input to the $(B) build path, pin the producer as a dep, fold in
-	// the producer's $(S) inputs, and run protoc from $(B); otherwise the py PB node
-	// lists a nonexistent $(S) .proto and content-hashing faults. The C++ sibling is
-	// generated first, so the producer is already registered when this lookup runs.
 	protoSrcVFS := source(protoRelPath)
 	protoCwd := strS
 
@@ -305,9 +275,6 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 		producerDeps = []NodeRef{info.ProducerRef}
 		generated = true
 
-		// The flat-input model folds the producer's full transitive $(S) closure onto
-		// every node compiling the generated py output. ProducerSourceClosure is that
-		// full set; prefer it, falling back to the direct-leaf SourceInputs.
 		producerSourceInputs = info.SourceInputs
 
 		if len(info.ProducerSourceClosure) > 0 {
@@ -359,9 +326,6 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 	pyPBRef := ctx.emit.emit(pyPBNode)
 	pyYapyc := []VFS{pyOut}
 
-	// The py3cc / resfs decisions key off the pb2_arg token. A checked-in proto's
-	// token rootrel == pyOut.rel(); a build-generated proto's token is the bare
-	// <base>__intpy3___pb2.py. uniq_suffix is empty for a token with no '/'.
 	pyBuildBase := protoBase
 
 	if generated {
@@ -397,8 +361,6 @@ func protoPythonOutputRoot(d *ModuleData) string {
 		}
 	}
 
-	// Without a PROTO_NAMESPACE the python protos compile against the root, not the
-	// module dir.
 	return ""
 }
 
@@ -415,8 +377,6 @@ func emitGeneratedPyProtoYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs [
 	res := &GeneratedPyProtoYapycResult{}
 
 	for i, pyOut := range pyOutputs {
-		// uniq_suffix is empty when the pb2_arg token has no '/' (the bare
-		// generated-proto token), so the yapyc3 gets no path-id suffix.
 		uniq := ""
 
 		if strings.Contains(tokens[i], "/") {
@@ -435,7 +395,6 @@ func emitGeneratedPyProtoYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs [
 		deps := []NodeRef{pyPBRef}
 		toolRefs := depRefs(py3ccRef, py3ccSlowRef)
 
-		// sourceInputs is shared across the loop — referenced, not copied per node.
 		nodeInputs := na.inputList(na.vfsList(py3ccBinary, py3ccSlowBin, pyOut), sourceInputs)
 
 		if i > 0 {
@@ -485,8 +444,6 @@ func pyProtoAuxEntriesForSource(instance ModuleInstance, d *ModuleData, src stri
 	}
 
 	if d.grpc && len(pyOutputs) > 2 && pyOutputs[1].rel() != "" {
-		// _pb2_grpc.py and _pb2.py share one protoc producer; bundling _pb2_grpc.py
-		// pulls the sibling _pb2.py into the chunk's inputs.
 		entries = append(entries, PyProtoAuxEntry{
 			path:     pyOutputs[1],
 			key:      protoPythonResourceKey(instance, d, src, "_pb2_grpc.py"),
@@ -502,18 +459,13 @@ func pyProtoAuxEntriesForSource(instance ModuleInstance, d *ModuleData, src stri
 	return entries
 }
 
-// GenProtoResEntry is one resfs resource of a build-generated proto's python
-// output. The generated py feeds back through onpy_srcs with the bare pb2_arg
-// token, so the resource embeds via objcopy rather than the rescompiler _raw.auxcpp
-// path that checked-in protos use.
 type GenProtoResEntry struct {
-	// token is the bare pb2_arg source token.
 	token string
-	// key is the resfs/file/py/<…> resource key.
+
 	key string
-	// output is the physical $(B) artifact embedded as the resource.
+
 	output VFS
-	// producer emits output, depended on by the objcopy node.
+
 	producer NodeRef
 }
 
@@ -529,8 +481,6 @@ func genProtoResEntriesForSource(instance ModuleInstance, d *ModuleData, src str
 		})
 	}
 
-	// The yapyc3 token mirrors the pb2 token plus whatever suffix the physical output
-	// carries over its pb2 sibling, derived from the outputs so uniq stays correct.
 	yapToken := func(i int) string {
 		return tokens[i] + strings.TrimPrefix(yapyOuts[i].rel(), pyOutputs[i].rel())
 	}
@@ -561,7 +511,6 @@ func emitGeneratedPyProtoObjcopy(ctx *GenCtx, instance ModuleInstance, d *Module
 	oc := newObjcopyEmitCtx(ctx, d, instance.Platform)
 	res := &ObjcopyEmitResult{}
 
-	// MODULE_TAG=PY3_PROTO folds into the objcopy_<hash> output name.
 	hashTag := stringPtr("PY3_PROTO")
 
 	type chunk struct {
@@ -694,8 +643,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 	var chunks []chunk
 	cur := chunk{}
 	cmdLen := 0
-	// The input set lives on the shared deduper, reset per flush; depSeen stays a
-	// local map live alongside it.
+
 	deduper.reset()
 	depSeen := map[NodeRef]struct{}{}
 	addInput := func(v VFS) {
@@ -787,8 +735,6 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-		// ch.inputs is already deduped; reference it as a chunk and filter only the
-		// rescompiler + closure tail.
 		deduper.reset()
 
 		for _, p := range ch.inputs {
@@ -801,7 +747,6 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 			tail = append(tail, rescompilerBinVFS)
 		}
 
-		// auxClosure is root-led; the PR node's own output never joins its inputs.
 		for _, p := range auxClosure {
 			if p == aux {
 				continue

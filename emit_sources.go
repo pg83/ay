@@ -9,13 +9,9 @@ type SourceEmit struct {
 	Ref     NodeRef
 	OutPath VFS
 
-	// Extra holds additional compiled objects from the same source sharing the
-	// primary's generating statement. They archive immediately after the primary
-	// object with the same SrcMeta.
 	Extra []SourceEmit
 }
 
-// emitOneSource dispatches a module source to its per-extension emitter.
 func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
 	if isHeaderSource(srcRel) {
 		return nil
@@ -35,8 +31,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		strings.HasSuffix(srcRel, ".cpp"),
 		strings.HasSuffix(srcRel, ".cc"),
 		strings.HasSuffix(srcRel, ".cxx"),
-		// Uppercase .C is a C++ source; HasSuffix is case-sensitive so it does not
-		// collide with .c.
+
 		strings.HasSuffix(srcRel, ".C"):
 		return emitLibraryCSource(ctx, instance, d, srcRel, in)
 	case strings.HasSuffix(srcRel, ".S"),
@@ -69,8 +64,6 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		return emitLibraryCfgProtoSource(ctx, instance, d, srcRel, in)
 	}
 
-	// An unmodelled codegen source extension. Under --keep-going this warns and
-	// skips; strict mode makes it fatal.
 	ctx.onWarn(Warn{
 		Kind:    WarnUnsupportedSource,
 		Message: fmt.Sprintf("%s: unsupported source extension in %q", instance.Path.rel(), srcRel),

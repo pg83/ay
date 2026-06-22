@@ -8,8 +8,9 @@ import (
 	"testing"
 )
 
-// tuid derives a deterministic UID from a label.
-func tuid(label string) UID { return computeUID([]byte(label)) }
+func tuid(label string) UID {
+	return computeUID([]byte(label))
+}
 
 func TestComputeUID_LengthAndAlphabet(t *testing.T) {
 	got := computeUID([]byte("hello")).string()
@@ -46,7 +47,6 @@ func TestComputeUID_DifferentInputsDifferentOutputs(t *testing.T) {
 }
 
 func TestComputeUID_KnownVector(t *testing.T) {
-
 	got := computeUID([]byte("")).string()
 	const want = "maoG0wFHmNhgAcMkRo1Jfw"
 
@@ -83,7 +83,6 @@ func TestCanonicalNodeBytes_ZeroesIdentityFields(t *testing.T) {
 }
 
 func TestCanonicalNodeBytes_VsDefaultJSONMarshal(t *testing.T) {
-
 	n := &Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"sh", "-c", "echo <a> & echo b"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},

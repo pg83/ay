@@ -221,6 +221,7 @@ END()
 	if nodeHasInput(asNode, forbidden) {
 		t.Errorf("AS.flatInputs() contains %q — SRCDIR rebase must redirect to %q", forbidden, want)
 	}
+
 	if !nodeHasInput(asNode, want) {
 		t.Errorf("AS.flatInputs() missing %q — SRCDIR rebase for `.S` source: %#v", want, asNode.flatInputs())
 	}

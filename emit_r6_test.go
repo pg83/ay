@@ -25,6 +25,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	outPath := ragel6OutVFS(inst, "datetime/parser.rl6")
 
 	wantOut := "$(B)/util/_/datetime/parser.rl6.cpp"
+
 	if outPath.string() != wantOut {
 		t.Errorf("outPath = %q, want %q", outPath.string(), wantOut)
 	}
@@ -78,8 +79,6 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	}
 }
 
-// TestCollectModule_Ragel6FlagsMultiTokenSplit pins that SET(RAGEL6_FLAGS -L -G2)
-// expands as two separate argv tokens, not one quoted "-L -G2" blob.
 func TestCollectModule_Ragel6FlagsMultiTokenSplit(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"mod/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSET(\n    RAGEL6_FLAGS\n    -L\n    -G2\n)\nSRCS(x.rl6)\nEND()\n",
@@ -88,6 +87,7 @@ func TestCollectModule_Ragel6FlagsMultiTokenSplit(t *testing.T) {
 	d := collectTestModule(fs, "mod")
 	got := argStrs(d.ragel6Flags)
 	want := []string{"-L", "-G2"}
+
 	if !equalStrings(got, want) {
 		t.Fatalf("ragel6Flags = %v, want %v (SET-list must expand as separate argv tokens)", got, want)
 	}
@@ -145,9 +145,11 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 	})
 
 	releaseHostFlags := map[string]string{}
+
 	for k, v := range testToolchainFlags {
 		releaseHostFlags[k] = v
 	}
+
 	releaseHostFlags["PIC"] = "yes"
 	releaseHostFlags["GG_BUILD_TYPE"] = "release"
 	releaseHost := newPlatform(newMemFS(nil), OSLinux, ISAX8664, releaseHostFlags, "", "")
@@ -187,7 +189,6 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
 
-	// The source leads its closure window.
 	closure := []VFS{
 		intern("$(S)/util/datetime/parser.rl6"),
 		intern("$(S)/util/datetime/parser.h"),
@@ -304,9 +305,6 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 	}
 }
 
-// TestRagel6OutVFS_DefextNoext pins the defext+noext rule: append .rl6.cpp only
-// when the stripped basename has no remaining extension, so markupfsm.h.rl6
-// generates the header markupfsm.h, not markupfsm.h.rl6.cpp.
 func TestRagel6OutVFS_DefextNoext(t *testing.T) {
 	inst := targetInstance("library/cpp/config")
 
@@ -315,22 +313,21 @@ func TestRagel6OutVFS_DefextNoext(t *testing.T) {
 		want   string
 	}{
 		{"parser.rl6", "$(B)/library/cpp/config/parser.rl6.cpp"},
-		// Subdir source: _/ infix carries the dir.
+
 		{"datetime/parser.rl6", "$(B)/library/cpp/config/_/datetime/parser.rl6.cpp"},
-		// Stem retains .h → defext suppressed.
+
 		{"markupfsm.h.rl6", "$(B)/library/cpp/config/markupfsm.h"},
 	}
 
 	for _, c := range cases {
 		got := ragel6OutVFS(inst, c.srcRel).string()
+
 		if got != c.want {
 			t.Errorf("ragel6OutVFS(%q) = %q, want %q", c.srcRel, got, c.want)
 		}
 	}
 }
 
-// TestGen_Ragel6HeaderOutputNotCompiled: a header ragel artifact is produced but
-// not compiled, while a sibling parser.rl6 still yields a compiled object.
 func TestGen_Ragel6HeaderOutputNotCompiled(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"contrib/tools/ragel6/ya.make": "PROGRAM(ragel6)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nALLOCATOR(FAKE)\nSRCS(main.cpp)\nEND()\n",
@@ -352,6 +349,7 @@ func TestGen_Ragel6HeaderOutputNotCompiled(t *testing.T) {
 		case "R6":
 			for _, o := range n.Outputs {
 				r6Outs = append(r6Outs, o.string())
+
 				if o.string() == "$(B)/mod/markupfsm.h" {
 					headerR6 = true
 				}
@@ -422,6 +420,7 @@ END()
 		case "CC":
 
 			ip := ""
+
 			if len(n.flatInputs()) > 0 {
 				ip = n.flatInputs()[0].string()
 			}

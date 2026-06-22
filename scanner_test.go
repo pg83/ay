@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// scanClosure returns srcRel's transitive include closure, root file stripped.
 func scanClosure(scanner *IncludeScanner, srcRel string, cfg ScanContext) []VFS {
 	return scanner.newScanCtx(cfg, includeDirectiveParsers.registeredParserFor(srcRel)).closureOf(source(srcRel))[1:]
 }
@@ -601,10 +600,12 @@ import weak 'c.proto';
 
 	got := []string{dirs[0].target.string(), dirs[1].target.string(), dirs[2].target.string()}
 	want := []string{"a.proto", "b.proto", "c.proto"}
+
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("targets = %v, want %v", got, want)
 		}
+
 		if dirs[i].kind != includeQuoted {
 			t.Fatalf("dirs[%d].kind = %v, want includeQuoted", i, dirs[i].kind)
 		}
@@ -626,15 +627,18 @@ import public "d.ev";
 	if len(local) != 4 {
 		t.Fatalf("got %d local entries, want 4; %+v", len(local), local)
 	}
+
 	if len(hcpp) != 4 {
 		t.Fatalf("got %d h+cpp entries, want 4; %+v", len(hcpp), hcpp)
 	}
 
 	wantHCPP := []string{"a.pb.h", "b.pb.h", "c.pb.h", "d.ev.pb.h"}
+
 	for i, want := range wantHCPP {
 		if hcpp[i].target.string() != want {
 			t.Fatalf("hcpp[%d].target.String() = %q, want %q; all=%+v", i, hcpp[i].target.string(), want, hcpp)
 		}
+
 		if hcpp[i].kind != includeQuoted {
 			t.Fatalf("hcpp[%d].kind = %v, want includeQuoted", i, hcpp[i].kind)
 		}
@@ -657,36 +661,39 @@ include "machine.rl";
 	native := parsed.bucket(parsedIncludesRagelNative)
 	hcpp := parsed.bucket(parsedIncludesHeader)
 
-	// C includes only.
 	if len(local) != 2 {
 		t.Fatalf("got %d local entries, want 2 (C includes only); %+v", len(local), local)
 	}
+
 	wantLocalTargets := []string{"outer.h", "tail.h"}
 	wantLocalKinds := []IncludeKind{includeSystem, includeQuoted}
+
 	for i := range wantLocalTargets {
 		if local[i].target.string() != wantLocalTargets[i] {
 			t.Fatalf("local[%d].target.String() = %q, want %q; all=%+v", i, local[i].target.string(), wantLocalTargets[i], local)
 		}
+
 		if local[i].kind != wantLocalKinds[i] {
 			t.Fatalf("local[%d].kind = %v, want %v", i, local[i].kind, wantLocalKinds[i])
 		}
 	}
 
-	// Ragel-native includes, deduped.
 	if len(native) != 2 {
 		t.Fatalf("got %d ragel-native entries, want 2; %+v", len(native), native)
 	}
+
 	wantNativeTargets := []string{"machine.rl", "machine2.rl"}
+
 	for i := range wantNativeTargets {
 		if native[i].target.string() != wantNativeTargets[i] {
 			t.Fatalf("native[%d].target.String() = %q, want %q; all=%+v", i, native[i].target.string(), wantNativeTargets[i], native)
 		}
+
 		if native[i].kind != includeQuoted {
 			t.Fatalf("native[%d].kind = %v, want includeQuoted", i, native[i].kind)
 		}
 	}
 
-	// Induced h+cpp: self-include leads, C/C++ directives follow.
 	wantHCPP := []struct {
 		target string
 		kind   IncludeKind
@@ -707,9 +714,6 @@ include "machine.rl";
 	}
 }
 
-// TestScanner_RagelNativeInclude_DoesNotBleedCHeaders verifies a ragel file's
-// closure follows its native %include edges only; the C side rides as the
-// induced h+cpp set on the generated cpp.
 func TestScanner_RagelNativeInclude_DoesNotBleedCHeaders(t *testing.T) {
 	sysincl := parseSysInclYAML("test.yml", []byte(`
 - includes:
@@ -739,6 +743,7 @@ machine Sub;
 	closure := sc.closureOf(intern("$(S)/pkg/main.rl6"))
 
 	closureSet := make(map[string]bool, len(closure))
+
 	for _, v := range closure {
 		closureSet[v.string()] = true
 	}
@@ -747,22 +752,20 @@ machine Sub;
 		t.Errorf("closure missing $(S)/pkg/main.rl6: %v", closure)
 	}
 
-	// Ragel-native edge — walked directly.
 	if !closureSet["$(S)/pkg/sub.rl6"] {
 		t.Errorf("closure missing $(S)/pkg/sub.rl6 (ragel-native edge): %v", closure)
 	}
 
-	// C include of main.rl6: not a walkable edge, rides the induced h+cpp set.
 	if closureSet["$(S)/stl/vector"] {
 		t.Errorf("closure should NOT contain $(S)/stl/vector (C side rides as induced h+cpp): %v", closure)
 	}
 
-	// C include of sub.rl6 must not bleed in.
 	if closureSet["$(S)/stl/numeric"] {
 		t.Errorf("closure should NOT contain $(S)/stl/numeric (C header of ragel-native-included sub.rl6 must not bleed): %v", closure)
 	}
 
 	induced := scanner.parsers.sourceParsedBuckets(intern("$(S)/pkg/main.rl6"), nil).bucket(parsedIncludesCpp)
+
 	if len(induced) != 2 || induced[0].target.string() != "pkg/main.rl6" || induced[1].target.string() != "vector" {
 		t.Errorf("induced h+cpp of main.rl6 = %v, want [{pkg/main.rl6} {vector}]", induced)
 	}
@@ -777,6 +780,7 @@ func TestParsedIncludes_LeadingUTF8BOM(t *testing.T) {
 	if len(local) != 2 {
 		t.Fatalf("got %d local entries, want 2 (BOM not stripped?); %+v", len(local), local)
 	}
+
 	if local[0].target.string() != "sibling.h" || local[0].kind != includeQuoted {
 		t.Fatalf("local[0] = %+v, want quoted \"sibling.h\"", local[0])
 	}
@@ -797,8 +801,6 @@ func TestParsedIncludes_SwigBuckets(t *testing.T) {
 	local := parsed.bucket(parsedIncludesLocal)
 	hcpp := parsed.bucket(parsedIncludesHeader)
 
-	// A root .swg outside the swig library leads with the 5 implicit
-	// language-runtime system includes (the parser's own directives).
 	if len(local) != 8 {
 		t.Fatalf("got %d local entries, want 8 (5 implicit + 3 parsed); %+v", len(local), local)
 	}
@@ -811,10 +813,12 @@ func TestParsedIncludes_SwigBuckets(t *testing.T) {
 		includeSystem, includeSystem, includeSystem, includeSystem, includeSystem,
 		includeQuoted, includeSystem, includeQuoted,
 	}
+
 	for i := range wantLocalTargets {
 		if local[i].target.string() != wantLocalTargets[i] {
 			t.Fatalf("local[%d].target.String() = %q, want %q; all=%+v", i, local[i].target.string(), wantLocalTargets[i], local)
 		}
+
 		if local[i].kind != wantLocalKinds[i] {
 			t.Fatalf("local[%d].kind = %v, want %v", i, local[i].kind, wantLocalKinds[i])
 		}
@@ -823,6 +827,7 @@ func TestParsedIncludes_SwigBuckets(t *testing.T) {
 	if len(hcpp) != 1 {
 		t.Fatalf("got %d h+cpp entries, want 1; %+v", len(hcpp), hcpp)
 	}
+
 	if hcpp[0].target.string() != "block.h" || hcpp[0].kind != includeQuoted {
 		t.Fatalf("h+cpp = %+v, want block.h quoted", hcpp)
 	}
@@ -1001,14 +1006,10 @@ func TestScanner_CythonStdintSplitKeepsPy3InitButAddsPy2Types(t *testing.T) {
 	assertHasVFS(t, closure, intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libc/stdint.pxd"))
 }
 
-// attachCodegen wires a CodegenRegistry onto an existing scanner.
 func attachCodegen(scanner *IncludeScanner, reg *CodegenRegistry) {
 	scanner.codegen = reg
 }
 
-// TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist: with a Build-rooted
-// ADDINCL declared before a Source-rooted one and the target under both, the
-// Build path wins by declaration-order first-match.
 func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 	reg := newCodegenRegistry()
 	reg.register(&GeneratedFileInfo{
@@ -1035,8 +1036,6 @@ func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 	}
 }
 
-// TestScanner_AddInclSourceBeforeBuildKeepsSource: Source declared first wins
-// even when a Build registration exists.
 func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 	reg := newCodegenRegistry()
 	reg.register(&GeneratedFileInfo{
@@ -1063,8 +1062,6 @@ func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 	}
 }
 
-// TestScanner_AddInclBuildOnlyMatchesCodegen: target only in the codegen
-// registry resolves via the Build/generated path.
 func TestScanner_AddInclBuildOnlyMatchesCodegen(t *testing.T) {
 	reg := newCodegenRegistry()
 	reg.register(&GeneratedFileInfo{
@@ -1089,8 +1086,6 @@ func TestScanner_AddInclBuildOnlyMatchesCodegen(t *testing.T) {
 }
 
 func TestScanCtx_Resolve_RootedTargetBindsDirectly(t *testing.T) {
-	// A rooted target binds to its root without search, sysincl, or FS checks;
-	// the empty memFS proves nothing else could find these.
 	scanner := newTestScanner(newMemFS(nil), nil)
 	sc := scanner.newScanCtx(newScanContext(scanner.parsers, nil, nil, nil, ""), nil)
 

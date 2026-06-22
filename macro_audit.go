@@ -14,37 +14,27 @@ var macroAudit = &MacroAuditState{
 	unknown:  map[string]map[string]int{},
 }
 
-// macrosAcceptingUserFlags lists handled macros whose args are arbitrary
-// user-defined names, not structural keywords, so the strict service-keyword
-// check is suppressed.
 var macrosAcceptingUserFlags = map[TOK]struct{}{
 	tokEnable:  {},
 	tokDisable: {},
-	// EXCLUDE_TAGS args are submodule tag names — user data, not keywords.
+
 	tokExcludeTags: {},
-	// First arg is the user-chosen destination variable name.
+
 	tokSetResourceUriFromJson: {},
-	// Args are SPDX license expressions; only LICENSE's presence is read.
+
 	tokLicense: {},
-	// First arg is the destination variable name; appending to an unmodelled
-	// one is inert.
+
 	tokSetAppend: {},
 }
 
-// serviceArgOK memoizes arg STRs that already passed the service-keyword check;
-// args repeat heavily, so the per-invocation check is a bit probe. Single-writer.
 var serviceArgOK BitSet
 
-// macroAudit collects, during gen, macro invocations we accept but emit nothing
-// for, plus uppercase service-keyword argument tokens — audited to confirm we
-// handle every split key for every accepted macro. Process-global because gen
-// runs serially per-target; surfaced when --dump-ignored-macros is set.
 type MacroAuditState struct {
 	enabled  bool
 	mu       sync.Mutex
-	ignored  map[string]int            // macro name → invocation count
-	services map[string]map[string]int // macro name → service arg → count
-	unknown  map[string]map[string]int // macro name → unhandled service arg → count
+	ignored  map[string]int
+	services map[string]map[string]int
+	unknown  map[string]map[string]int
 }
 
 func enableMacroAudit() {
@@ -55,8 +45,6 @@ func enableMacroAudit() {
 	macroAudit.enabled = true
 }
 
-// recordIgnoredMacro records a macro gen sees but produces nothing from.
-// Service-word args are not inspected: that grammar belongs to the upstream parser.
 func recordIgnoredMacro(name TOK) {
 	if !macroAudit.enabled {
 		return
@@ -69,10 +57,6 @@ func recordIgnoredMacro(name TOK) {
 	macroAudit.ignored[name.string()]++
 }
 
-// recordHandledMacro runs for every macro whose typed branch fired, enforcing
-// that every uppercase service-keyword argument already appears as a "…" literal
-// in this package's .go sources; an unknown keyword throws so it must be modelled
-// before any graph is emitted. Macros in macrosAcceptingUserFlags bypass the check.
 func recordHandledMacro(name TOK, args []STR) {
 	if _, free := macrosAcceptingUserFlags[name]; !free {
 		for _, aTok := range args {
@@ -135,8 +119,6 @@ func recordServiceArgsLocked(macroName string, args []string) {
 	}
 }
 
-// looksLikeServiceWord reports whether a token is an uppercase keyword: at
-// least one ASCII letter, only [A-Z0-9_], equal to its own upper-case form.
 func looksLikeServiceWord(s string) bool {
 	if s == "" {
 		return false
@@ -164,7 +146,6 @@ func looksLikeServiceWord(s string) bool {
 	return s == strings.ToUpper(s)
 }
 
-// dumpMacroAudit writes the collected report to w (cmdMake, --dump-ignored-macros).
 func dumpMacroAudit(w io.Writer) {
 	macroAudit.mu.Lock()
 

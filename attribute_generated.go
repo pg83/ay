@@ -2,23 +2,6 @@ package main
 
 import "strings"
 
-// overrideGeneratedModuleDir mirrors upstream ymake's Node2Module attribution
-// (devtools/ymake/json_visitor.cpp:638-645): when a generated file is first
-// encountered by a CC compile's include-scan, the CONSUMER module — not the
-// RUN_PROGRAM/COPY producer — gets recorded as its module_dir. We collect
-// first-claimer module dirs during the scan pass (scanner.go:
-// generatedFirstClaim) and apply them here, after the emitter has all
-// producer nodes and before finalize computes content hashes.
-//
-// Producer nodes we override: KV.p ∈ {"PR", "CF", "CP"} — RUN_PROGRAM,
-// CONFIGURE_FILE, COPY_FILE. Their outputs are exactly the entries the
-// scanner sees during CC include resolution. Other node kinds keep their
-// emit-time module_dir.
-//
-// Conservative rule: only overwrite when the claim points at a DIFFERENT
-// module than the producer. If the first-claimer is the producer itself
-// (common — many internal codegen passes have no external consumer in the
-// build closure), the producer-time attribution already matches REF.
 func overrideGeneratedModuleDir(e *BufferedEmitter) {
 	if e == nil {
 		return
@@ -41,14 +24,6 @@ func overrideGeneratedModuleDir(e *BufferedEmitter) {
 
 		current := node.TargetProperties.ModuleDir
 
-		// A self-owned producer — its own module compiles a sibling output, so
-		// markGeneratedProducerOwned recorded generatedFirstClaim[out]==current at
-		// registration — is the first DFS-leaver of its outputs (its module is a
-		// PEERDIR dependency of any module that merely OUTPUT_INCLUDES the output,
-		// hence fully visited first). Upstream's Node2Module first-leave-wins keeps
-		// it attributed to its producer; a node-level OUTPUT_INCLUDES claim from an
-		// external consumer must NOT pre-empt it (yabs/server/libs/constant/generated
-		// sys_const.h, named in the parent constant module's OUTPUT_INCLUDES).
 		selfOwned := false
 
 		for _, out := range node.Outputs {
@@ -59,12 +34,6 @@ func overrideGeneratedModuleDir(e *BufferedEmitter) {
 			}
 		}
 
-		// A node-level OUTPUT_INCLUDES claim (the structural consumer that names this
-		// producer's output) is authoritative for a NON-self-owned producer: it
-		// attributes the whole node at once, matching upstream's single Node2Module
-		// entry. It wins over the per-output generatedFirstClaim consensus, which an
-		// incidental far peer's include-resolve of one sibling output would otherwise
-		// split into a no-op conflict.
 		if claim := e.generatedNodeClaim[NodeRef(i)]; claim != "" && !selfOwned {
 			if claim != current {
 				node.TargetProperties.ModuleDir = claim
@@ -103,25 +72,12 @@ func overrideGeneratedModuleDir(e *BufferedEmitter) {
 
 		node.TargetProperties.ModuleDir = claim.Dir
 
-		// Inherit the claiming module's tag too: upstream's Node2Module attribution
-		// gives the node the owning module's dir AND tag. A CPP_PROTO consumer of a
-		// plugin-produced header (apphost cow well-known *.cow.pb.h) carries tag
-		// cpp_proto; a claiming module with no tag (the common case) leaves it unset.
 		if claim.Tag != 0 {
 			node.TargetProperties.ModuleTag = claim.Tag
 		}
 	}
 }
 
-// generatedOwnerAttributable reports whether a producer node participates in
-// Node2Module consumer re-attribution. RUN_PROGRAM (PR), CONFIGURE_FILE (CF),
-// COPY_FILE (CP), RUN_PYTHON3 (PY), and SPLIT_CODEGEN/.sc (SC) producers all emit
-// generated header-like outputs that downstream CC include-scans claim. ARCHIVE
-// (AR) participates ONLY in its non-library generated-header shape
-// (ARCHIVE(NAME header ...)): a single non-".a" output with no module_type/
-// module_lang. A library archive (lib*.a, module_type=lib/module_lang=cpp) keeps
-// its producer-module ownership — nothing #includes a .a, so it never accrues a
-// consumer first-claim anyway, but the predicate excludes it explicitly.
 func generatedOwnerAttributable(node *Node) bool {
 	switch node.KV.P {
 	case pkPR, pkCF, pkCP, pkPY, pkSC:
@@ -136,13 +92,6 @@ func generatedOwnerAttributable(node *Node) bool {
 	}
 }
 
-// rewritePRBindirCwd re-resolves a RUN_PROGRAM command's `CWD ${BINDIR}` against
-// the owning module when Node2Module attribution moves the node from its producer
-// (`from`) to a consumer (`to`). Upstream resolves ${BINDIR} at command
-// materialization from the owning module's bin dir (mkcmd.cpp:42), so a cwd that
-// equals the producer bin dir ($(B)/<from>) must follow the new owner — while the
-// OUT path, fixed at graph construction, stays put. An explicit non-${BINDIR} cwd
-// does not match the producer-bindir prefix and is left untouched.
 func rewritePRBindirCwd(node *Node, from, to string) {
 	if node.KV.P != pkPR || from == to {
 		return
@@ -170,28 +119,11 @@ func rewritePRBindirCwd(node *Node, from, to string) {
 	}
 }
 
-// overrideENSubmoduleModuleDir reproduces ymake's Node2Module directory-ownership
-// for generated serialized-enum (EN) nodes. A generated *_serialized.h declared
-// by module D but #included through a NESTED submodule's directory-owned header
-// is attributed to that submodule: the nested peerdir submodule leaves the
-// generated node before its enclosing parent D completes (submodule-before-parent
-// DFS post-order), so FindModule on the visitor stack returns the submodule.
-//
-// The discriminator vs the consumer-claim path (PR/CF/CP, OwnerModuleDir) is the
-// directory ownership of the INCLUDER, not the compiling module: the includer's
-// nearest enclosing module must be a real module strictly nested under D. An EN
-// header reached only through a non-module subdir of D (no nested ya.make), or
-// through an unrelated module not nested under D (the yabs/server/libs/enums
-// family), keeps its declaring owner.
 func overrideENSubmoduleModuleDir(e *BufferedEmitter) {
 	if len(e.generatedENIncluderDirs) == 0 {
 		return
 	}
 
-	// Every distinct module_dir is a real module directory (generated nodes carry
-	// their attributed module's dir), so the set of module_dir values across all
-	// nodes is exactly the set of module directories — the basis for resolving an
-	// includer directory to its nearest enclosing module.
 	moduleDirs := make(map[string]struct{}, len(e.nodes))
 
 	for _, node := range e.nodes {
@@ -224,9 +156,6 @@ func overrideENSubmoduleModuleDir(e *BufferedEmitter) {
 			for _, incDir := range e.generatedENIncluderDirs[out] {
 				m := nearestModuleDir(incDir)
 
-				// Only a real module strictly nested under the declaring module
-				// pre-empts D in post-order. Among several, the deepest wins (the
-				// most-nested submodule leaves first).
 				if m == "" || !strings.HasPrefix(m, prefix) {
 					continue
 				}

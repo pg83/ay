@@ -58,8 +58,6 @@ func emitArchive(
 		if isPRProduced {
 			absVFS = build(instance.Path.rel() + "/" + f)
 		} else {
-			// Resolve via the module's SRCDIR search, not a blind module-dir
-			// prefix, so a SRCDIR-backed member reads $(S)/<srcdir>/<file>.
 			absVFS = resolveSourceVFS(ctx, instance, f, d.srcDirs)
 		}
 
@@ -67,8 +65,6 @@ func emitArchive(
 
 		pathPerFile = append(pathPerFile, absVFS)
 
-		// ARCHIVE_BY_KEYS passes keys via `-k`; plain ARCHIVE suffixes each
-		// member with an empty-key `:`.
 		if a.Keys != nil {
 			cmdArgs = append(cmdArgs, internStr(absStr))
 		} else {
@@ -82,8 +78,6 @@ func emitArchive(
 
 	cmdArgs = append(cmdArgs, argDashO.str(), internStr(archivePath))
 
-	// Inputs are exactly the archived members plus the archiver tool. Build-order
-	// concerns ride producerRefs / toolLDRef DepRefs, not action inputs.
 	inputs := make([]VFS, 0, len(pathPerFile))
 	deduper.reset()
 
@@ -116,16 +110,12 @@ func emitArchive(
 	arRef := emit.emit(n)
 
 	{
-		// Propagate each member's source inputs as closure leaves of the archive
-		// output, so a CC unit that #includes the archived .inc picks them up
-		// transitively.
 		var leaves []VFS
 
 		for _, p := range pathPerFile {
 			if info := reg.lookup(p); info != nil && len(info.SourceInputs) > 0 {
 				leaves = dedupVFS(leaves, info.SourceInputs)
 			} else if a.PropagateSourceMembers && info == nil {
-				// A direct source member: ride the source into the consumer's closure.
 				leaves = dedupVFS(leaves, []VFS{p})
 			}
 		}

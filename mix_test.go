@@ -7,7 +7,6 @@ import (
 
 var sinkU64 uint64
 
-// splitMix64 must be a bijection: distinct (p,s) pairs never share a key.
 func TestSplitMix64Bijective(t *testing.T) {
 	seen := map[uint64][2]uint32{}
 	rng := rand.New(rand.NewSource(1))
@@ -24,8 +23,6 @@ func TestSplitMix64Bijective(t *testing.T) {
 	}
 }
 
-// For dense sequential ids the key's low bits must spread across the table —
-// what Morton keying lacked. Assert average probe stays near 1 at LF 0.5.
 func TestSplitMix64SpreadsDenseIDs(t *testing.T) {
 	const n = 1 << 16
 	const capacity = 1 << 17
@@ -36,12 +33,15 @@ func TestSplitMix64SpreadsDenseIDs(t *testing.T) {
 	insert := func(h uint64) {
 		i := h & mask
 		probe := 1
+
 		for occupied[i] {
 			i = (i + 1) & mask
 			probe++
 		}
+
 		occupied[i] = true
 		totalProbe += probe
+
 		if probe > maxProbe {
 			maxProbe = probe
 		}
@@ -63,8 +63,10 @@ func TestSplitMix64SpreadsDenseIDs(t *testing.T) {
 
 func BenchmarkSplitMix64(b *testing.B) {
 	var acc uint64
+
 	for i := 0; i < b.N; i++ {
 		acc += splitMix64(uint32(i), uint32(i*2654435761))
 	}
+
 	sinkU64 = acc
 }

@@ -6,34 +6,22 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-// OsFS is the production FS: cached lazily, with per-platform syscall fast paths.
 type OsFS struct {
 	srcRoot   string
 	rootSlash string
-	// dirs is keyed by the directory's STR, not its VFS: a source dir is always
-	// Source-rooted (VFS == STR<<1), so the STR is lossless and halves DenseMap's
-	// idx array.
+
 	dirs DenseMap[STR, DirView]
 
-	// dirNames is the packed name store every DirView windows (bump arena).
-	// dirEntries is the membership/isDir index over ALL directories, keyed by the
-	// bijective splitMix64(dirSTR, nameSTR).
 	dirNames   *BumpAllocator[uint32]
 	dirEntries *IntMap[bool]
 
-	// contentHashes is the xxh3 of each read file's content, indexed by the STR of
-	// its full "$(S)/..." path, so the serializer indexes by v.strID() without
-	// re-interning. Slot 0 means "not recorded". Single gen goroutine, so no lock.
 	contentHashes []uint64
 	readBuf       []byte
 
-	// direntBuf is the reused getdents64 block for listdir misses.
 	direntBuf []byte
 
-	// rootFD pins the source root directory (linux): every read/listdir opens via
-	// openat(rootFD, rel).
 	rootFD  int
-	pathBuf []byte // reused, gen goroutine only
+	pathBuf []byte
 
 	listdirHits   uint64
 	listdirMisses uint64
@@ -41,7 +29,6 @@ type OsFS struct {
 	existsMisses  uint64
 }
 
-// emptyDirNames backs every listable-but-empty directory.
 var emptyDirNames = []uint32{}
 
 func newFS(srcRoot string) FS {
@@ -56,10 +43,6 @@ func newFS(srcRoot string) FS {
 	return fs
 }
 
-// readSourceRels returns the $(S)-relative path of every source file the FS read.
-// Used by --copy-sources to slice the repo by what the build actually opened —
-// strictly more than the graph's recorded inputs (scanned headers never land in
-// a node's inputs).
 func (fs *OsFS) readSourceRels() []string {
 	out := make([]string, 0, len(fs.contentHashes))
 
@@ -76,7 +59,6 @@ func (fs *OsFS) readSourceRels() []string {
 	return out
 }
 
-// recordContentHash stores xxh3(data) at the file's full-path STR.
 func (fs *OsFS) recordContentHash(rel string, data []byte) {
 	s := internPrefixed("$(S)/", cleanRel(rel))
 
@@ -95,8 +77,6 @@ func (fs *OsFS) recordContentHash(rel string, data []byte) {
 	fs.contentHashes[s] = xxh3.Hash(data)
 }
 
-// ContentHash's hot path inlines into the uid writer; the lazy read lives in
-// contentHashSlow to keep the inlining budget.
 func (fs *OsFS) contentHash(v VFS) uint64 {
 	s := v.strID()
 
@@ -107,22 +87,18 @@ func (fs *OsFS) contentHash(v VFS) uint64 {
 	return fs.contentHashSlow(v)
 }
 
-// contentHashSlow lazily reads inputs gen never scanned, on first uid use; a
-// missing file faults.
 func (fs *OsFS) contentHashSlow(v VFS) uint64 {
 	rel := v.rel()
 
 	if p, d := fs.existsRel(rel); p && d {
-		return 0 // directory inputs have no content hash
+		return 0
 	}
 
-	fs.read(rel) // side effect: records the content hash
+	fs.read(rel)
 
 	return fs.contentHashes[v.strID()]
 }
 
-// Listdir returns the entries of the directory at dir. Keyed by VFS so the hot
-// caller passes it directly with no string hashing.
 func (fs *OsFS) listdir(dir VFS) DirView {
 	key := STR(dir.strID())
 
@@ -140,8 +116,6 @@ func (fs *OsFS) listdir(dir VFS) DirView {
 	return v
 }
 
-// dirHas probes one (dir, name) membership: an un-interned name cannot be an
-// entry.
 func (fs *OsFS) dirHas(v DirView, name string) (present bool, isDir bool) {
 	id := interned(name)
 
@@ -166,9 +140,6 @@ func (fs *OsFS) bumpExists(ok bool) {
 	}
 }
 
-// Exists reports whether prefix/suffix exists (and whether it is a directory). It
-// gates on the first component being a directory before listing the deeper one,
-// so dead candidates never grow the intern table.
 func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 	if suffix == "" {
 		return fs.listdir(prefix).listable(), true
@@ -248,8 +219,6 @@ func (fs *OsFS) isDir(prefix VFS, suffix string) bool {
 	return p && d
 }
 
-// existsRel / listdirRel are the string-rel helpers for cold callers holding a
-// whole path: they split and intern the directory directly, no gating.
 func (fs *OsFS) existsRel(rel string) (present bool, isDir bool) {
 	rel = cleanRel(rel)
 
@@ -280,7 +249,6 @@ func (fs *OsFS) read(rel string) []byte {
 	return fs.readBuf
 }
 
-// readIntoRaw reads rel through the per-platform fast path.
 func (fs *OsFS) readIntoRaw(rel string, buf []byte) []byte {
 	return fs.readFileRel(cleanRel(rel), buf)
 }

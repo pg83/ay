@@ -81,7 +81,6 @@ func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
 		"-I$(S)/contrib/libs/foolib/extra",
 	}
 
-	// aarch64, no sysroot: the include block starts at index 7.
 	for i, want := range wantSlot {
 		if args[7+i].string() != want {
 			t.Errorf("cmd_args[%d] = %q, want %q", 7+i, args[7+i].string(), want)
@@ -109,7 +108,6 @@ func TestEmitCC_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 		"-I$(S)/custom/foolib/include",
 	}
 
-	// x86_64, no -march: the include block starts at index 6.
 	for i, want := range wantSlot {
 		if args[6+i].string() != want {
 			t.Fatalf("cmd_args[%d] = %q, want %q; args=%v", 6+i, args[6+i].string(), want, args)
@@ -137,6 +135,7 @@ func TestEmitCC_CxxSource_UsesClangPlusPlus(t *testing.T) {
 	args := emit.nodes[0].Cmds[0].CmdArgs.flat()
 
 	wantCxx := testToolchain().CXX.string()
+
 	if args[0].string() != wantCxx {
 		t.Errorf("compiler = %q, want %q", args[0].string(), wantCxx)
 	}
@@ -163,6 +162,7 @@ func TestEmitCC_UppercaseCSource_UsesClangPlusPlus(t *testing.T) {
 	args := emit.nodes[0].Cmds[0].CmdArgs.flat()
 
 	wantCxx := testToolchain().CXX.string()
+
 	if args[0].string() != wantCxx {
 		t.Errorf("compiler = %q, want %q for uppercase .C source", args[0].string(), wantCxx)
 	}
@@ -189,6 +189,7 @@ func TestEmitCC_CSource_UsesClang(t *testing.T) {
 	args := emit.nodes[0].Cmds[0].CmdArgs.flat()
 
 	wantCC := testToolchain().CC.string()
+
 	if args[0].string() != wantCC {
 		t.Errorf("compiler = %q, want %q", args[0].string(), wantCC)
 	}
@@ -289,9 +290,11 @@ func TestEmitCC_COnlyFlags_AppliesOnlyToCSources(t *testing.T) {
 
 func TestEmitCC_PlatformEnvFlags_TargetOnly(t *testing.T) {
 	flags := make(map[string]string, len(testToolchainFlags)+1)
+
 	for k, v := range testToolchainFlags {
 		flags[k] = v
 	}
+
 	flags["PIC"] = "no"
 
 	target := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, "-DENV_C=1", "-DENV_CXX=1")
@@ -327,13 +330,13 @@ func TestEmitCC_PlatformEnvFlags_TargetOnly(t *testing.T) {
 	}
 }
 
-// nonOpensourcePlatform builds a target with OPENSOURCE unset — the contour where
-// the wrapcc compile wrapper is active (the shared platforms set it and do not wrap).
 func nonOpensourcePlatform() *Platform {
 	flags := make(map[string]string, len(testToolchainFlags)+1)
+
 	for k, v := range testToolchainFlags {
 		flags[k] = v
 	}
+
 	delete(flags, "OPENSOURCE")
 	flags["PIC"] = "no"
 
@@ -388,7 +391,7 @@ func TestEmitCC_WrapccPrefix_NonOpensource(t *testing.T) {
 
 func TestEmitCC_NoWrapcc_Opensource(t *testing.T) {
 	emit := newBufferedEmitter()
-	// testTargetP has OPENSOURCE=yes → no wrapper.
+
 	emitCC(targetInstance("mod"), "lib.cpp", intern("$(S)/mod/lib.cpp"), withCCBlocks(targetInstance("mod").Platform, ModuleCCInputs{TC: testToolchain()}), testHostP, emit)
 
 	node := emit.nodes[0]
@@ -418,8 +421,6 @@ func contains(xs []STR, target string) bool {
 }
 
 func TestEmitCC_OutputPath_ExplicitDotSrc(t *testing.T) {
-	// A `./`-prefixed SRCS token must be canonicalized before localizing under
-	// `_/<dir>`, so the `./` does not leak into the object name.
 	e := newBufferedEmitter()
 	_, outPath, _ := emitCC(targetInstance("ysite/yandex/pure"), "./generated/default_pure.cpp", intern("$(S)/ysite/yandex/pure/generated/default_pure.cpp"), withCCBlocks(targetInstance("ysite/yandex/pure").Platform, ModuleCCInputs{}), testHostP, e)
 	want := "$(B)/ysite/yandex/pure/_/generated/default_pure.cpp.o"
@@ -436,6 +437,7 @@ func TestEmitCC_OutputPath_YqlUdfSuffix(t *testing.T) {
 	_, outPath, _ := emitCC(targetInstance("udfmod"), "lib.cpp", intern("$(S)/udfmod/lib.cpp"), withCCBlocks(targetInstance("udfmod").Platform, in), testHostP, e)
 
 	want := "$(B)/udfmod/lib.cpp.udfs.o"
+
 	if outPath.string() != want {
 		t.Fatalf("outPath = %q, want %q", outPath, want)
 	}
@@ -454,6 +456,7 @@ func TestEmitCC_OutputPath_YqlUdfSuffixPIC(t *testing.T) {
 	_, outPath, _ := emitCC(instance, "lib.cpp", intern("$(S)/udfmod/lib.cpp"), withCCBlocks(instance.Platform, in), testHostP, e)
 
 	want := "$(B)/udfmod/lib.cpp.udfs.pic.o"
+
 	if outPath.string() != want {
 		t.Fatalf("outPath = %q, want %q", outPath, want)
 	}
@@ -471,21 +474,21 @@ func TestEmitCC_NoWShadowAddsWarningFlag(t *testing.T) {
 }
 
 func TestComposeSrcDirOutputRel_FlatSrcInModuleDir(t *testing.T) {
-
 	got := composeSrcDirOutputRel(
 		"contrib/libs/ngtcp2/crypto/quictls",
 		"contrib/libs/ngtcp2/crypto/quictls/quictls.c",
 	)
 	want := "quictls.c"
+
 	if got != want {
 		t.Errorf("composeSrcDirOutputRel = %q, want %q", got, want)
 	}
 }
 
 func TestComposeSrcDirOutputRel_SubdirInModuleDir(t *testing.T) {
-
 	got := composeSrcDirOutputRel("foo/bar", "foo/bar/sub/file.cpp")
 	want := "_/sub/file.cpp"
+
 	if got != want {
 		t.Errorf("composeSrcDirOutputRel = %q, want %q", got, want)
 	}
@@ -503,6 +506,7 @@ func TestComposeCCPaths_DotDotSrc(t *testing.T) {
 
 	got := normalizeDotDotSegments(srcRel)
 	want := "__/ydb_command.cpp"
+
 	if got != want {
 		t.Errorf("normalizeDotDotSegments(%q) = %q, want %q", srcRel, got, want)
 	}
@@ -511,12 +515,12 @@ func TestComposeCCPaths_DotDotSrc(t *testing.T) {
 func TestNormalizeDotDotSegments_Subdir(t *testing.T) {
 	got := normalizeDotDotSegments("subdir/file.cpp")
 	want := "_/subdir/file.cpp"
+
 	if got != want {
 		t.Errorf("normalizeDotDotSegments = %q, want %q", got, want)
 	}
 }
 
-// withCCBlocks builds the module-stable arg blocks for an ad-hoc test input.
 func withCCBlocks(p *Platform, in ModuleCCInputs) ModuleCCInputs {
 	in.CCBlocks = composeCCModuleArgBlocks(newNodeArenas(), p, &in)
 
@@ -550,6 +554,7 @@ END()
 	for _, n := range g.Graph {
 		if len(n.Outputs) == 1 && n.Outputs[0].string() == "$(B)/bridge/x.cpp.o" {
 			args = strStrs(n.Cmds[0].CmdArgs.flat())
+
 			break
 		}
 	}
@@ -717,8 +722,6 @@ func TestGen_SRC_AppendsExtraCFlags_PerSource(t *testing.T) {
 	}
 }
 
-// Uppercase `.C` routes as C++, emitting a C++ compile node and participating in
-// ordinary and GLOBAL archive membership.
 func TestGen_UppercaseCSource_CompilesAsCxx(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"cmod/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(regular.C)\nGLOBAL_SRCS(global.C)\nEND()\n",
@@ -790,7 +793,6 @@ func TestGen_UppercaseCSource_CompilesAsCxx(t *testing.T) {
 	}
 }
 
-// Negative guard: the classifier keeps .c as C and .cpp/.cc/.cxx/.C as C++.
 func TestIsCxxSource_CaseSensitiveExtensions(t *testing.T) {
 	cases := map[string]bool{
 		"foo.c":   false,
@@ -913,6 +915,7 @@ END()
 			t.Fatalf("cc cmd args missing %q: %s", want, args)
 		}
 	}
+
 	for _, bad := range []string{
 		"${",
 		"$MKQL_RUNTIME_VERSION",
@@ -926,14 +929,7 @@ END()
 	}
 }
 
-// TestGen_CC_NoDuplicateInputsWhenBuildProtoDropped reproduces a fast-path
-// regression in emitOneSource: in-place compaction of dropTransitiveGeneratedProto
-// left a stale tail that NodeInputs=full then re-listed as duplicate CC inputs.
-// Triggered by a $(B)-generated .proto in a CC source's closure.
 func TestGen_CC_NoDuplicateInputsWhenBuildProtoDropped(t *testing.T) {
-	// TODO: the generated-from refactor double-lists generator $(S) sources for a
-	// build-generated .proto (gate stays byte-exact since normalize dedups). Re-enable
-	// once the second path is removed.
 	t.Skip("generated-from refactor: generator-source duplication pending dedup of the second path")
 
 	const protoModPath = "yql/essentials/parser/proto_ast/gen/jsonpath"
@@ -943,7 +939,6 @@ func TestGen_CC_NoDuplicateInputsWhenBuildProtoDropped(t *testing.T) {
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
 
-	// PROTO_LIBRARY with a build-generated proto (RUN_ANTLR OUT_NOAUTO).
 	files[protoModPath+"/ya.make"] = `PROTO_LIBRARY()
 IF (GEN_PROTO)
     SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
@@ -974,8 +969,6 @@ END()
 	files["yql/essentials/minikql/jsonpath/JsonPath.g"] = "stub grammar\n"
 	files["contrib/libs/protobuf/ya.make"] = "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n"
 
-	// A header placed in the CC closure AFTER the $(B) proto; it appears twice if
-	// the fast path reuses the un-shrunk slice.
 	files["contrib/libs/protobuf/src/google/protobuf/reflection_ops.h"] = "// stub\n"
 
 	g := testGen(newMemFS(files), appModPath)
@@ -983,9 +976,11 @@ END()
 	useCC := mustNodeByOutput(t, g, "$(B)/"+appModPath+"/use.cpp.o")
 
 	seen := make(map[string]int, len(useCC.flatInputs()))
+
 	for _, in := range useCC.flatInputs() {
 		seen[in.string()]++
 	}
+
 	for inp, count := range seen {
 		if count > 1 {
 			t.Errorf("use.cpp.o has duplicate input %q (appears %d times)", inp, count)
@@ -993,30 +988,35 @@ END()
 	}
 }
 
-// releaseHostPlatform builds the x86_64 host in release mode (carries -O3); the
-// default debug host would not exercise NO_OPTIMIZE's -O3 → -O0.
 func releaseHostPlatform() *Platform {
 	flags := make(map[string]string, len(testToolchainFlags)+2)
+
 	for k, v := range testToolchainFlags {
 		flags[k] = v
 	}
+
 	flags["PIC"] = "yes"
 	flags["BUILD_TYPE"] = "release"
+
 	return newPlatform(newMemFS(nil), OSLinux, ISAX8664, flags, "", "")
 }
 
 func releaseTargetPlatform() *Platform {
 	flags := make(map[string]string, len(testToolchainFlags)+1)
+
 	for k, v := range testToolchainFlags {
 		flags[k] = v
 	}
+
 	flags["PIC"] = "no"
+
 	return newPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, "", "")
 }
 
 func ccArgsForOutput(t *testing.T, g *Graph, output string) []string {
 	t.Helper()
 	n := mustNodeByOutput(t, g, output)
+
 	return strStrs(n.Cmds[0].CmdArgs.flat())
 }
 
@@ -1026,11 +1026,10 @@ func argsContain(args []string, want string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
-// gperfToolFiles writes a gperf PROGRAM plus a gpmod LIBRARY that pulls it in;
-// extraToolMacros is spliced into the tool's ya.make body.
 func gperfToolFiles(extraToolMacros string) map[string]string {
 	files := map[string]string{}
 	files["contrib/tools/gperf/ya.make"] = "PROGRAM(gperf)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n" +
@@ -1038,11 +1037,10 @@ func gperfToolFiles(extraToolMacros string) map[string]string {
 	files["contrib/tools/gperf/main.cpp"] = "int main(){return 0;}\n"
 	files["gpmod/ya.make"] = "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(tags.gperf)\nEND()\n"
 	files["gpmod/tags.gperf"] = "%{\n%}\n%%\n"
+
 	return files
 }
 
-// TestGen_NoOptimizeSuppressesOptimization: NO_OPTIMIZE() compiles with -O0
-// instead of the default release -O3.
 func TestGen_NoOptimizeSuppressesOptimization(t *testing.T) {
 	files := gperfToolFiles("NO_OPTIMIZE()\n")
 
@@ -1053,19 +1051,19 @@ func TestGen_NoOptimizeSuppressesOptimization(t *testing.T) {
 	if !argsContain(args, "-O0") {
 		t.Fatalf("NO_OPTIMIZE compile missing -O0: %v", args)
 	}
+
 	if argsContain(args, "-O3") {
 		t.Fatalf("NO_OPTIMIZE compile still carries -O3: %v", args)
 	}
 
-	// The LD node embeds the __vcs_version__.c compile, sharing the suppression.
 	ld := mustNodeByOutput(t, g, "$(B)/contrib/tools/gperf/gperf")
 	vcs := strStrs(ld.Cmds[1].CmdArgs.flat())
+
 	if !argsContain(vcs, "-O0") || argsContain(vcs, "-O3") {
 		t.Fatalf("NO_OPTIMIZE vcs compile not suppressed: %v", vcs)
 	}
 }
 
-// TestGen_DefaultOptimizationIntact: without NO_OPTIMIZE() the module keeps -O3.
 func TestGen_DefaultOptimizationIntact(t *testing.T) {
 	files := gperfToolFiles("")
 
@@ -1076,6 +1074,7 @@ func TestGen_DefaultOptimizationIntact(t *testing.T) {
 	if !argsContain(args, "-O3") {
 		t.Fatalf("default compile missing -O3: %v", args)
 	}
+
 	if argsContain(args, "-O0") {
 		t.Fatalf("default compile unexpectedly carries -O0: %v", args)
 	}

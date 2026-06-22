@@ -12,8 +12,6 @@ import (
 	"sync/atomic"
 )
 
-// cmdCasAnalyze estimates how much the deduplicated CAS would shrink under
-// content-defined chunking. Read-only.
 func cmdCasAnalyze(_ GlobalFlags, args []string) int {
 	if len(args) == 0 || args[0] != "analyze" {
 		throwFmt("usage: ay dev cas analyze [--chunk=N] <cas-dir>")
@@ -47,7 +45,6 @@ func cmdCasAnalyze(_ GlobalFlags, args []string) int {
 	return casAnalyze(casDir, chunkAvg, minLen)
 }
 
-// casAnalyze chunks every CAS file of at least minLen bytes; smaller are skipped.
 func casAnalyze(casDir string, chunkAvg int, minLen int64) int {
 	type chunkInfo struct {
 		hash [32]byte
@@ -59,7 +56,6 @@ func casAnalyze(casDir string, chunkAvg int, minLen int64) int {
 
 	var files atomic.Int64
 
-	// Lister: feeds regular files >= minLen to workers.
 	go func() {
 		defer close(fileCh)
 
@@ -83,7 +79,6 @@ func casAnalyze(casDir string, chunkAvg int, minLen int64) int {
 		})
 	}()
 
-	// Workers: split each file, hash each chunk, stream the hashes.
 	var wg sync.WaitGroup
 
 	for i := 0; i < runtime.NumCPU(); i++ {
@@ -111,7 +106,6 @@ func casAnalyze(casDir string, chunkAvg int, minLen int64) int {
 		close(hashCh)
 	}()
 
-	// Main: sole owner of the dedup set; builds stats from the hash stream.
 	seen := make(map[[32]byte]struct{})
 
 	var totalBytes, totalChunks, uniqueBytes int64
@@ -135,7 +129,6 @@ func casAnalyze(casDir string, chunkAvg int, minLen int64) int {
 	filesN := files.Load()
 	uniqueChunks := int64(len(seen))
 
-	// A chunked store keeps unique chunk bodies plus one hash ref per occurrence.
 	const refBytes = 32
 
 	refOverhead := totalChunks * refBytes
@@ -162,10 +155,6 @@ func casAnalyze(casDir string, chunkAvg int, minLen int64) int {
 	return 0
 }
 
-// cdcChunks splits data into content-defined chunks averaging ~avg bytes. A
-// boundary cuts where a gear rolling hash hits 0 mod avg, bounded by
-// [avg/4, avg*8]. Boundaries depend only on local content, so chunks dedup
-// across files.
 func cdcChunks(data []byte, avg int, yield func([]byte)) {
 	minSize := avg / 4
 
@@ -200,8 +189,6 @@ func cdcChunks(data []byte, avg int, yield func([]byte)) {
 	}
 }
 
-// gearTable maps each byte to a fixed pseudo-random 64-bit value, seeded
-// deterministically so boundaries are stable across runs.
 var gearTable = func() [256]uint64 {
 	var t [256]uint64
 

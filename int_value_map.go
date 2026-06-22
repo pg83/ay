@@ -1,9 +1,5 @@
 package main
 
-// IntValueMap maps uint64 keys to V, storing values in a side slice and keeping only
-// a uint32 index in the hash table, so table entries stay small (8-byte key + 4-byte
-// index) regardless of sizeof(V). Same constraints as IntMap: identity-hashed,
-// single-goroutine, no delete, key 0 reserved.
 type IntValueMap[V any] struct {
 	idx  *IntMap[uint32]
 	vals []V
@@ -16,8 +12,6 @@ func newIntValueMap[V any](hint int) *IntValueMap[V] {
 	}
 }
 
-// Get returns a pointer to the value for k, or nil if absent. Valid until the
-// next Put grows vals.
 func (m *IntValueMap[V]) get(k uint64) *V {
 	if i := m.idx.get(k); i != nil {
 		return &m.vals[*i]
@@ -26,7 +20,6 @@ func (m *IntValueMap[V]) get(k uint64) *V {
 	return nil
 }
 
-// Put inserts or overwrites the value for k.
 func (m *IntValueMap[V]) put(k uint64, v V) {
 	cell, existed := m.idx.cell(k)
 
@@ -40,7 +33,6 @@ func (m *IntValueMap[V]) put(k uint64, v V) {
 	m.vals = append(m.vals, v)
 }
 
-// Len reports the number of distinct keys stored.
 func (m *IntValueMap[V]) len() int {
 	return len(m.vals)
 }

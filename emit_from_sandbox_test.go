@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// A FROM_SANDBOX OUT file is a fetched build output, not a source. A RUN_PROGRAM
-// consuming it via IN must resolve to the SB node's $(B) output and depend on
-// that node, never to an on-disk source path (which --sandboxing would fault).
 func TestGen_FromSandboxOutputConsumedAsRunProgramInput(t *testing.T) {
 	files := map[string]string{}
 
@@ -41,15 +38,17 @@ END()
 	g := testGen(newMemFS(files), "app")
 
 	sb := mustNodeByOutput(t, g, "$(B)/mod/trie")
+
 	if sb.KV.P != pkSB {
 		t.Fatalf("trie producer kind = %q, want SB", sb.KV.P.string())
 	}
 
-	// pack.bin consumes trie as the fetch output, not a source.
 	pr := mustNodeByOutput(t, g, "$(B)/mod/pack.bin")
+
 	if !nodeHasInput(pr, "$(B)/mod/trie") {
 		t.Fatalf("pack.bin inputs missing $(B)/mod/trie: %#v", pr.flatInputs())
 	}
+
 	if nodeHasInput(pr, "$(S)/mod/trie") {
 		t.Fatalf("pack.bin must not list the source path $(S)/mod/trie: %#v", pr.flatInputs())
 	}
@@ -63,10 +62,6 @@ END()
 	}
 }
 
-// FROM_SANDBOX(OUT file.a) declares an auto module output folded into
-// $AUTO_INPUT, so a LIBRARY archives the fetched .a as a member (emitting its own
-// archive even with no compiled sources) and a dependent PROGRAM links it through
-// the peer closure. OUT_NOAUTO outputs must NOT become members.
 func TestGen_FromSandboxAutoArchiveBecomesLibraryMember(t *testing.T) {
 	files := map[string]string{}
 
@@ -79,7 +74,6 @@ FROM_SANDBOX(420003524 OUT_NOAUTO scratch.a)
 END()
 `)
 
-	// A sibling library with ordinary sources must remain a normal compiled archive.
 	writeTestModuleFile(files, "plain/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -104,14 +98,16 @@ END()
 
 	mustNodeByOutput(t, g, "$(B)/mkllike/libmkl_core.a")
 
-	// The LIBRARY archives the fetched .a as a member despite no compiled sources.
 	ar := mustNodeByOutput(t, g, "$(B)/mkllike/libmkllike.a")
+
 	if ar.KV.P != pkAR {
 		t.Fatalf("libmkllike.a producer kind = %q, want AR", ar.KV.P.string())
 	}
+
 	if !nodeHasInput(ar, "$(B)/mkllike/libmkl_core.a") {
 		t.Fatalf("library archive inputs missing fetched member $(B)/mkllike/libmkl_core.a: %#v", ar.flatInputs())
 	}
+
 	if !slices.Contains(prCmdArgStrings(ar), "$(B)/mkllike/libmkl_core.a") {
 		t.Fatalf("library archive cmd missing fetched member: %v", prCmdArgStrings(ar))
 	}
@@ -121,38 +117,39 @@ END()
 	}
 
 	var ld *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkLD {
 			ld = n
 		}
 	}
+
 	if ld == nil {
 		t.Fatal("no LD node found in graph")
 	}
+
 	if !nodeHasInput(ld, "$(B)/mkllike/libmkllike.a") {
 		t.Fatalf("program LD inputs missing peer archive $(B)/mkllike/libmkllike.a: %v", ld.flatInputs())
 	}
+
 	if !slices.Contains(prCmdArgStrings(ld), "mkllike/libmkllike.a") {
 		t.Fatalf("program LD cmd missing peer archive token mkllike/libmkllike.a")
 	}
 
 	plainAR := mustNodeByOutput(t, g, "$(B)/plain/libplain.a")
+
 	if plainAR.KV.P != pkAR {
 		t.Fatalf("libplain.a producer kind = %q, want AR", plainAR.KV.P.string())
 	}
+
 	if !nodeHasInput(plainAR, "$(B)/plain/plain.cpp.o") {
 		t.Fatalf("plain library archive missing compiled member plain.cpp.o: %#v", plainAR.flatInputs())
 	}
 }
 
-// FROM_SANDBOX names exactly three script inputs (fetch_from_sandbox.py,
-// process_command_files.py, fetch_from.py); ${input} adds the named file only and
-// does NOT expand its import closure, so the SB node carries exactly those three
-// and not the helper closure (retry, error).
 func TestGen_FromSandboxScriptInputsExplicitThree(t *testing.T) {
 	files := map[string]string{}
 
-	// These import edges are what a closure-expanded model would over-collect.
 	files["build/scripts/fetch_from_sandbox.py"] = "import process_command_files as pcf\nimport fetch_from\n"
 	files["build/scripts/fetch_from.py"] = "import retry\n"
 	files["build/scripts/process_command_files.py"] = "\n"
@@ -170,6 +167,7 @@ END()
 	g := testGen(newMemFS(files), "mod")
 
 	sb := mustNodeByOutput(t, g, "$(B)/mod/trie")
+
 	if sb.KV.P != pkSB {
 		t.Fatalf("trie producer kind = %q, want SB", sb.KV.P.string())
 	}
@@ -179,6 +177,7 @@ END()
 		"$(S)/build/scripts/fetch_from_sandbox.py",
 		"$(S)/build/scripts/process_command_files.py",
 	}
+
 	for _, w := range want {
 		if !nodeHasInput(sb, w) {
 			t.Fatalf("SB node missing explicit script input %q: %#v", w, sb.flatInputs())
@@ -192,9 +191,11 @@ END()
 	}
 
 	counts := map[string]int{}
+
 	for _, in := range sb.flatInputs() {
 		counts[in.string()]++
 	}
+
 	for _, w := range want {
 		if counts[w] != 1 {
 			t.Fatalf("script input %q appears %d times, want exactly 1: %#v", w, counts[w], sb.flatInputs())
@@ -202,10 +203,6 @@ END()
 	}
 }
 
-// The flat-input model lists a producer's transitive source closure on every
-// consumer of its outputs, so a RUN_PROGRAM consuming FROM_SANDBOX outputs and
-// the ARCHIVE_ASM embedding it both carry the fetch producer's three scripts. The
-// SB node itself (not a consumer) keeps exactly those three.
 func TestGen_FromSandboxScriptsPropagateThroughRunProgramAndArchiveAsm(t *testing.T) {
 	files := map[string]string{}
 
@@ -245,37 +242,41 @@ END()
 		"$(S)/build/scripts/process_command_files.py",
 	}
 
-	// (1) the PR node carries the three scripts.
 	pr := mustNodeByOutput(t, g, "$(B)/mod/pack.bin")
+
 	if pr.KV.P != pkPR {
 		t.Fatalf("pack.bin kv.p = %q, want PR", pr.KV.P.string())
 	}
+
 	for _, s := range scripts {
 		if !nodeHasInput(pr, s) {
 			t.Errorf("PR pack.bin missing propagated fetch script %q: %v", s, vfsStringsT3(pr.flatInputs()))
 		}
 	}
 
-	// (2) the RD node carries the same three.
 	rd := mustNodeByAnyOutput(t, g, "$(B)/mod/Pack.rodata.o")
+
 	if rd.KV.P != pkRD {
 		t.Fatalf("Pack.rodata.o kv.p = %q, want RD", rd.KV.P.string())
 	}
+
 	for _, s := range scripts {
 		if !nodeHasInput(rd, s) {
 			t.Errorf("RD Pack.rodata.o missing propagated fetch script %q: %v", s, vfsStringsT3(rd.flatInputs()))
 		}
 	}
 
-	// (3) each SB node still lists exactly the three explicit scripts.
 	for _, out := range []string{"$(B)/mod/trie", "$(B)/mod/suffixes", "$(B)/mod/paradigms"} {
 		sb := mustNodeByOutput(t, g, out)
+
 		if sb.KV.P != pkSB {
 			t.Fatalf("%s kv.p = %q, want SB", out, sb.KV.P.string())
 		}
+
 		if got := len(sb.flatInputs()); got != len(scripts) {
 			t.Errorf("SB %s has %d inputs, want exactly %d: %v", out, got, len(scripts), vfsStringsT3(sb.flatInputs()))
 		}
+
 		for _, s := range scripts {
 			if !nodeHasInput(sb, s) {
 				t.Errorf("SB %s missing explicit script %q: %v", out, s, vfsStringsT3(sb.flatInputs()))
@@ -322,12 +323,14 @@ END()
 
 			g := testGen(newMemFS(files), "mod")
 			sb := mustNodeByOutput(t, g, tc.out)
+
 			if sb.KV.P != pkSB {
 				t.Fatalf("%s producer kind = %q, want SB", tc.outArg, sb.KV.P.string())
 			}
 
 			args := prCmdArgStrings(sb)
 			want := []string{"--copy-to-dir", ".", "--rename", "RESOURCE", "--", tc.outArg}
+
 			if !containsSubsequence(args, want) {
 				t.Fatalf("SB command missing subsequence %v: %v", want, args)
 			}
@@ -337,11 +340,13 @@ END()
 				"$(S)/build/scripts/fetch_from_sandbox.py",
 				"$(S)/build/scripts/process_command_files.py",
 			}
+
 			for _, w := range wantInputs {
 				if !nodeHasInput(sb, w) {
 					t.Fatalf("SB node missing explicit script input %q: %#v", w, sb.flatInputs())
 				}
 			}
+
 			if got := len(sb.flatInputs()); got != len(wantInputs) {
 				t.Fatalf("SB node has %d inputs, want exactly %d: %#v", got, len(wantInputs), sb.flatInputs())
 			}
@@ -349,7 +354,6 @@ END()
 	}
 }
 
-// containsSubsequence reports whether want is a contiguous subsequence of args.
 func containsSubsequence(args, want []string) bool {
 	for i := 0; i+len(want) <= len(args); i++ {
 		if slices.Equal(args[i:i+len(want)], want) {

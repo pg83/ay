@@ -6,14 +6,9 @@ import (
 	"testing"
 )
 
-// TestGen_Library_ProtoNamespaceRootsLibraryHostedProtoCommand: a plain LIBRARY()
-// with PROTO_NAMESPACE must root the protoc output/import roots at the namespace
-// like the PROTO_LIBRARY path.
 func TestGen_Library_ProtoNamespaceRootsLibraryHostedProtoCommand(t *testing.T) {
 	files := map[string]string{}
 
-	// Peer with the same PROTO_NAMESPACE(yt) propagates its GLOBAL addincl, so the
-	// namespace appears twice (own + peer), yielding -I=$(S)/yt three times total.
 	writeTestModuleFile(files, "yt/yt/client/ya.make", `LIBRARY()
 PROTO_NAMESPACE(yt)
 SRCS(data.proto)
@@ -44,15 +39,16 @@ END()
 	args := strStrs(pb.Cmds[0].CmdArgs.flat())
 	count := func(want string) int {
 		n := 0
+
 		for _, a := range args {
 			if a == want {
 				n++
 			}
 		}
+
 		return n
 	}
 
-	// Output roots and import roots carry the namespace.
 	for _, tok := range []string{
 		"-I=./yt",
 		"--cpp_out=:$(B)/yt",
@@ -63,7 +59,6 @@ END()
 		}
 	}
 
-	// Namespace import appears three times: prefix + two _PROTO__INCLUDE copies (own + peer).
 	if c := count("-I=$(S)/yt"); c != 3 {
 		t.Fatalf("library-hosted proto cmd: want three -I=$(S)/yt (prefix + own + peer), got %d: %v", c, args)
 	}
@@ -75,8 +70,6 @@ END()
 	}
 }
 
-// TestGen_Library_TopLevelProtoKeepsUnrootedCommand: a top-level LIBRARY proto
-// WITHOUT a PROTO_NAMESPACE keeps the unrooted root shape.
 func TestGen_Library_TopLevelProtoKeepsUnrootedCommand(t *testing.T) {
 	files := map[string]string{}
 
@@ -107,9 +100,6 @@ END()
 	}
 }
 
-// TestEmitPB_PeerRedeclaredOwnNamespaceRidesProtoIncludeBand: when a peer re-declares
-// this module's own PROTO_NAMESPACE, the re-declared `-I=$(S)/<ns>` must render at its
-// peer encounter position (after the protobuf runtime), not hoisted to the structural -I.
 func TestEmitPB_PeerRedeclaredOwnNamespaceRidesProtoIncludeBand(t *testing.T) {
 	const ns = "taxi/schemas/schemas/proto"
 
@@ -118,8 +108,7 @@ func TestEmitPB_PeerRedeclaredOwnNamespaceRidesProtoIncludeBand(t *testing.T) {
 		intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
 		intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
 		false, ns, false, nil, nil,
-		// _PROTO__INCLUDE peer set, encounter order: protobuf runtime, the peer
-		// re-declaring this namespace, a grpc peer.
+
 		[]VFS{
 			source("contrib/libs/protobuf/src"),
 			source(ns),
@@ -127,6 +116,7 @@ func TestEmitPB_PeerRedeclaredOwnNamespaceRidesProtoIncludeBand(t *testing.T) {
 		})
 
 	var iflags []string
+
 	for _, s := range blocks.mid {
 		if str := s.string(); strings.HasPrefix(str, "-I=") {
 			iflags = append(iflags, str)
@@ -137,16 +127,19 @@ func TestEmitPB_PeerRedeclaredOwnNamespaceRidesProtoIncludeBand(t *testing.T) {
 	protobufTok := "-I=$(S)/contrib/libs/protobuf/src"
 
 	lastOwn := -1
+
 	for i, f := range iflags {
 		if f == ownTok {
 			lastOwn = i
 		}
 	}
+
 	firstProtobuf := slices.Index(iflags, protobufTok)
 
 	if firstProtobuf < 0 {
 		t.Fatalf("protobuf-runtime -I missing: %v", iflags)
 	}
+
 	if lastOwn <= firstProtobuf {
 		t.Fatalf("peer-redeclared own namespace must ride _PROTO__INCLUDE after the protobuf runtime: lastOwn=%d firstProtobuf=%d seq=%v",
 			lastOwn, firstProtobuf, iflags)
@@ -234,9 +227,11 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 		"$(B)/pkg/proto/test.pb.cc",
 		"$(B)/pkg/proto/test.deps.pb.h",
 	}
+
 	if len(got.Outputs) != len(wantOutputs) {
 		t.Fatalf("outputs len = %d, want %d (%v)", len(got.Outputs), len(wantOutputs), got.Outputs)
 	}
+
 	for i, want := range wantOutputs {
 		if got.Outputs[i].string() != want {
 			t.Fatalf("outputs[%d] = %q, want %q", i, got.Outputs[i].string(), want)
@@ -246,15 +241,12 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 	if !contains(got.Cmds[0].CmdArgs.flat(), "--cpp_out=proto_h=true:$(B)/") {
 		t.Fatalf("cmd_args missing lite-header cpp_out option: %v", got.Cmds[0].CmdArgs.flat())
 	}
+
 	if !contains(got.Cmds[0].CmdArgs.flat(), "$(B)/pkg/proto/test.deps.pb.h") {
 		t.Fatalf("cmd_args missing deps header output: %v", got.Cmds[0].CmdArgs.flat())
 	}
 }
 
-// TestGen_ProtoLibrary_PluginDepAddInclLeadsDeclaredPeer: a CPP_PROTO compile must
-// emit the proto plugin DEPS' GLOBAL ADDINCL before the declared PEERDIR closure's
-// include dirs, because the per-source plugin command induces the plugin-runtime
-// peer ahead of the declared PEERDIR.
 func TestGen_ProtoLibrary_PluginDepAddInclLeadsDeclaredPeer(t *testing.T) {
 	files := map[string]string{}
 
@@ -284,7 +276,6 @@ END()
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
 
-	// Both peers expose a GLOBAL ADDINCL; the plugin-runtime include must precede the declared one.
 	writeTestModuleFile(files, "declared/peer/ya.make", "LIBRARY()\nADDINCL(GLOBAL declared/peer/inc)\nSRCS(p.cpp)\nEND()\n")
 	writeTestModuleFile(files, "declared/peer/p.cpp", "int p(){return 0;}\n")
 	writeTestModuleFile(files, "declared/peer/inc/h.h", "#pragma once\n")
@@ -309,10 +300,6 @@ END()
 	}
 }
 
-// TestGen_ProtoLibrary_PluginRuntimeLeadsLinkArchiveOrder: when a PROTO_LIBRARY's
-// CPP_PROTO_PLUGIN0 DEPS peer and its declared PEERDIR both contribute an archive, the
-// plugin-runtime archive must precede the declared peer's; the single peer order drives
-// both ADDINCL and the link closure, so compile -I order is asserted too.
 func TestGen_ProtoLibrary_PluginRuntimeLeadsLinkArchiveOrder(t *testing.T) {
 	files := map[string]string{}
 
@@ -349,7 +336,6 @@ END()
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
 
-	// Both peers carry an archive and a GLOBAL ADDINCL; plugin-runtime must lead in both.
 	writeTestModuleFile(files, "declared/peer/ya.make", "LIBRARY()\nADDINCL(GLOBAL declared/peer/inc)\nSRCS(p.cpp)\nEND()\n")
 	writeTestModuleFile(files, "declared/peer/p.cpp", "int p(){return 0;}\n")
 	writeTestModuleFile(files, "declared/peer/inc/h.h", "#pragma once\n")
@@ -360,54 +346,60 @@ END()
 	g := testGen(newMemFS(files), "app")
 
 	var ldNode *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkLD {
 			ldNode = n
+
 			break
 		}
 	}
+
 	if ldNode == nil {
 		t.Fatal("no LD node found in graph")
 	}
 
 	var linkArgs []STR
+
 	for _, c := range ldNode.Cmds {
 		flat := c.CmdArgs.flat()
+
 		if indexOfArg(flat, "$(S)/build/scripts/link_exe.py") >= 0 {
 			linkArgs = flat
+
 			break
 		}
 	}
+
 	if linkArgs == nil {
 		t.Fatal("no link_exe.py command found on LD node")
 	}
 
 	pluginIdx := indexOfArg(linkArgs, "plugin/runtime/libplugin-runtime.a")
 	declaredIdx := indexOfArg(linkArgs, "declared/peer/libdeclared-peer.a")
+
 	if pluginIdx < 0 || declaredIdx < 0 {
 		t.Fatalf("link args missing peer archives: plugin=%d declared=%d args=%v", pluginIdx, declaredIdx, linkArgs)
 	}
+
 	if pluginIdx > declaredIdx {
 		t.Fatalf("plugin-runtime archive [%d] must precede declared peer archive [%d] in link order", pluginIdx, declaredIdx)
 	}
 
-	// ADDINCL stability: plugin-runtime's -I stays ahead of the declared peer's.
 	cc := findGraphNodeByOutputs(t, g, "$(B)/protos/test.pb.cc.o")
 	ccArgs := cc.Cmds[0].CmdArgs.flat()
 	pluginInc := indexOfArg(ccArgs, "-I$(S)/plugin/runtime/inc")
 	declaredInc := indexOfArg(ccArgs, "-I$(S)/declared/peer/inc")
+
 	if pluginInc < 0 || declaredInc < 0 {
 		t.Fatalf("missing -I dirs in compile cmd: plugin=%d declared=%d args=%v", pluginInc, declaredInc, ccArgs)
 	}
+
 	if pluginInc > declaredInc {
 		t.Fatalf("proto plugin DEPS include must precede declared peer include: plugin=%d declared=%d", pluginInc, declaredInc)
 	}
 }
 
-// TestGen_CfgProto_InducesCodegenAndProtosPeers: a plain LIBRARY() with a
-// `.cfgproto` source must induce the cfgproto command's codegen+protos+protobuf
-// peers into its link closure; `codegen` reaches it ONLY through the cfgproto
-// command. Asserts both archives appear once and codegen precedes protos.
 func TestGen_CfgProto_InducesCodegenAndProtosPeers(t *testing.T) {
 	files := map[string]string{}
 
@@ -440,24 +432,31 @@ END()
 	g := testGen(newMemFS(files), "app")
 
 	var ldNode *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkLD {
 			ldNode = n
+
 			break
 		}
 	}
+
 	if ldNode == nil {
 		t.Fatal("no LD node found in graph")
 	}
 
 	var linkArgs []STR
+
 	for _, c := range ldNode.Cmds {
 		flat := c.CmdArgs.flat()
+
 		if indexOfArg(flat, "$(S)/build/scripts/link_exe.py") >= 0 {
 			linkArgs = flat
+
 			break
 		}
 	}
+
 	if linkArgs == nil {
 		t.Fatal("no link_exe.py command found on LD node")
 	}
@@ -467,14 +466,17 @@ END()
 
 	countArg := func(needle string) (int, int) {
 		count, first := 0, -1
+
 		for i, a := range linkArgs {
 			if a.string() == needle {
 				if first < 0 {
 					first = i
 				}
+
 				count++
 			}
 		}
+
 		return count, first
 	}
 
@@ -484,9 +486,11 @@ END()
 	if codegenCount != 1 {
 		t.Fatalf("codegen archive must appear exactly once, got %d (idx=%d)", codegenCount, codegenIdx)
 	}
+
 	if protosCount != 1 {
 		t.Fatalf("protos archive must appear exactly once, got %d (idx=%d)", protosCount, protosIdx)
 	}
+
 	if codegenIdx > protosIdx {
 		t.Fatalf("codegen archive [%d] must precede protos archive [%d] in link order", codegenIdx, protosIdx)
 	}
@@ -550,6 +554,7 @@ END()
 	if !containsString(strStrs(pb.Cmds[0].CmdArgs.flat()), "--plugin=protoc-gen-config_proto_plugin=$(B)/tools/config_plugin/config_proto_plugin") {
 		t.Fatalf("pb cmd args missing config proto plugin: %v", pb.Cmds[0].CmdArgs.flat())
 	}
+
 	if !containsString(strStrs(pb.Cmds[0].CmdArgs.flat()), "--config_proto_plugin_out=$(B)/") {
 		t.Fatalf("pb cmd args missing config proto plugin out flag: %v", pb.Cmds[0].CmdArgs.flat())
 	}
@@ -557,17 +562,21 @@ END()
 	sourceIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "protos/test.proto")
 	grpcIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "--plugin=protoc-gen-grpc_cpp=$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp")
 	configIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "--plugin=protoc-gen-config_proto_plugin=$(B)/tools/config_plugin/config_proto_plugin")
+
 	if sourceIdx < 0 || grpcIdx < 0 || configIdx < 0 {
 		t.Fatalf("missing source/grpc/config args in pb cmd: %v", pb.Cmds[0].CmdArgs.flat())
 	}
+
 	if !(sourceIdx < grpcIdx && grpcIdx < configIdx) {
 		t.Fatalf("pb plugin arg order = source:%d grpc:%d config:%d, want source < grpc < config", sourceIdx, grpcIdx, configIdx)
 	}
 
 	inputs := make([]string, 0, len(pb.flatInputs()))
+
 	for _, input := range pb.flatInputs() {
 		inputs = append(inputs, input.string())
 	}
+
 	wantInputsPrefix := []string{
 		"$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide",
 		"$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp",
@@ -576,19 +585,23 @@ END()
 		"$(S)/build/scripts/cpp_proto_wrapper.py",
 		"$(S)/protos/test.proto",
 	}
+
 	if len(inputs) < len(wantInputsPrefix) || !equalStrings(inputs[:len(wantInputsPrefix)], wantInputsPrefix) {
 		t.Fatalf("pb inputs prefix = %v, want %v", inputs, wantInputsPrefix)
 	}
 
 	wantDeps := []UID{styleguide.UID, grpcCpp.UID, protoc.UID, configPlugin.UID}
+
 	if len(graphDeps(g, pb)) != len(wantDeps) {
 		t.Fatalf("pb deps len = %d, want %d (%v)", len(graphDeps(g, pb)), len(wantDeps), graphDeps(g, pb))
 	}
+
 	for _, want := range wantDeps {
 		if !slices.Contains(graphDeps(g, pb), want) {
 			t.Fatalf("pb deps = %v, missing %q", graphDeps(g, pb), want)
 		}
 	}
+
 	if got := graphForeignDeps(g, pb); len(got) != len(wantDeps) {
 		t.Fatalf("pb foreign_deps[tool] len = %d, want %d (%v)", len(got), len(wantDeps), got)
 	} else {
@@ -598,6 +611,7 @@ END()
 			}
 		}
 	}
+
 	if !slices.Contains(graphDeps(g, configPlugin), pluginRuntime.UID) {
 		t.Fatalf("config proto plugin deps = %v, want runtime peer uid %q", graphDeps(g, configPlugin), pluginRuntime.UID)
 	}
@@ -640,6 +654,7 @@ END()
 
 	outputsIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "--outputs")
 	separatorIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "--")
+
 	if outputsIdx < 0 || separatorIdx < 0 || separatorIdx <= outputsIdx {
 		t.Fatalf("pb wrapper output section malformed: %v", pb.Cmds[0].CmdArgs.flat())
 	}
@@ -650,6 +665,7 @@ END()
 		"$(B)/protos/test.tasklet.h",
 	}
 	gotWrapperOutputs := pb.Cmds[0].CmdArgs.flat()[outputsIdx+1 : separatorIdx]
+
 	if !equalStrings(strStrs(gotWrapperOutputs), wantWrapperOutputs) {
 		t.Fatalf("pb wrapper outputs = %v, want %v", gotWrapperOutputs, wantWrapperOutputs)
 	}
@@ -696,13 +712,13 @@ END()
 		"--yaff_opt=file=a.proto",
 		"--yaff_opt=experimental=b.proto",
 	}
+
 	for _, want := range wantArgs {
 		if !containsString(args, want) {
 			t.Fatalf("pb cmd args missing %q: %v", want, args)
 		}
 	}
 
-	// No unsplit/colon yaff_opt form.
 	for _, bad := range args {
 		if strings.HasPrefix(bad, "--yaff_opt=:") || bad == "--yaff_opt=namespace=NMyNs,file=a.proto,experimental=b.proto" {
 			t.Fatalf("pb cmd args carry unsplit/colon yaff_opt %q: %v", bad, args)
@@ -713,7 +729,6 @@ END()
 		t.Fatalf("pb inputs missing yaff plugin binary: %#v", pb.flatInputs())
 	}
 
-	// Every proto gets per-proto yaff outputs, not just the listed ones.
 	_ = mustNodeByAnyOutput(t, g, "$(B)/protos/b.yaff.h")
 	_ = mustNodeByAnyOutput(t, g, "$(B)/protos/b.yaff.cpp")
 }
@@ -752,15 +767,16 @@ END()
 		"--yaff_tsar_vectors_opt=tag=tsar_vectors",
 		"--yaff_tsar_vectors_opt=namespace=NUserProfileTsarVectors",
 	}
+
 	for _, want := range wantArgs {
 		if !containsString(args, want) {
 			t.Fatalf("pb cmd args missing %q: %v", want, args)
 		}
 	}
 
-	// tag precedes namespace.
 	tagIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "--yaff_tsar_vectors_opt=tag=tsar_vectors")
 	nsIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "--yaff_tsar_vectors_opt=namespace=NUserProfileTsarVectors")
+
 	if !(tagIdx >= 0 && nsIdx >= 0 && tagIdx < nsIdx) {
 		t.Fatalf("yaff_tsar_vectors opt order = tag:%d namespace:%d, want tag < namespace", tagIdx, nsIdx)
 	}
@@ -773,8 +789,6 @@ END()
 func TestGen_ProtoLibrary_SharedYAFFPluginBinaryDedupsToolDep(t *testing.T) {
 	files := map[string]string{}
 
-	// YAFF and YAFF_SCHEMA share one protoc_plugin binary: the shared plugin LD node
-	// must appear once in the PB node's deps (NodeDeps deduped).
 	writeTestModuleFile(files, "protos/ya.make", `PROTO_LIBRARY()
 YAFF(NAMESPACE NMyNs)
 YAFF_SCHEMA(tsar_vectors NUserProfileTsarVectors)
@@ -803,6 +817,7 @@ END()
 	)
 
 	seen := map[NodeRef]int{}
+
 	for _, r := range pb.ForeignDepRefs {
 		seen[r]++
 	}
@@ -817,8 +832,6 @@ END()
 func TestGen_ProtoLibrary_TransitivePROTONamespaceReachesCppProtoCmd(t *testing.T) {
 	files := map[string]string{}
 
-	// Leaf declares a bare PROTO_NAMESPACE(yt); it propagates through the CPP_PROTO
-	// peer closure into every transitive consumer's protoc command as -I=$(S)/yt.
 	writeTestModuleFile(files, "leaf/ya.make", `PROTO_LIBRARY()
 PROTO_NAMESPACE(yt)
 SRCS(leaf.proto)
@@ -826,7 +839,6 @@ END()
 `)
 	writeTestModuleFile(files, "leaf/leaf.proto", "syntax = \"proto3\";\npackage test;\nmessage Leaf {}\n")
 
-	// Intermediate's GLOBAL PROTO_NAMESPACE rides the _PROTO__INCLUDE chain ahead of the bare tail.
 	writeTestModuleFile(files, "mid/ya.make", `PROTO_LIBRARY()
 PROTO_NAMESPACE(GLOBAL midns)
 PEERDIR(leaf)
@@ -858,25 +870,29 @@ END()
 	args := strStrs(pb.Cmds[0].CmdArgs.flat())
 
 	ytCount := 0
+
 	for _, a := range args {
 		if a == "-I=$(S)/yt" {
 			ytCount++
 		}
 	}
+
 	if ytCount == 0 {
 		t.Fatalf("consumer pb cmd missing transitive PROTO_NAMESPACE token -I=$(S)/yt: %v", args)
 	}
+
 	if ytCount > 1 {
 		t.Fatalf("consumer pb cmd duplicates -I=$(S)/yt (%d times): %v", ytCount, args)
 	}
 
-	// The bare tail (yt) trails the GLOBAL chain entry (midns); both precede --cpp_out.
 	chainIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "-I=$(S)/midns")
 	ytIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "-I=$(S)/yt")
 	cppOutIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "--cpp_out=:$(B)/")
+
 	if chainIdx < 0 {
 		t.Fatalf("consumer pb cmd missing GLOBAL chain token -I=$(S)/midns: %v", args)
 	}
+
 	if !(chainIdx < ytIdx && ytIdx < cppOutIdx) {
 		t.Fatalf("expected chain < tail < cpp_out: midns=%d yt=%d cpp_out=%d args=%v", chainIdx, ytIdx, cppOutIdx, args)
 	}
@@ -885,8 +901,6 @@ END()
 func TestGen_ProtoLibrary_ExportYmapsProtoReachesCppProtoCmd(t *testing.T) {
 	files := map[string]string{}
 
-	// EXPORT_YMAPS_PROTO() == PROTO_NAMESPACE(maps/doc/proto); its SOURCE arm propagates
-	// $(S)/maps/doc/proto through the CPP_PROTO peer closure into every consumer's protoc command.
 	writeTestModuleFile(files, "leaf/ya.make", `PROTO_LIBRARY()
 EXPORT_YMAPS_PROTO()
 SRCS(leaf.proto)
@@ -918,26 +932,30 @@ END()
 
 	const wantTok = "-I=$(S)/maps/doc/proto"
 	mapsCount := 0
+
 	for _, a := range args {
 		if a == wantTok {
 			mapsCount++
 		}
 	}
+
 	if mapsCount == 0 {
 		t.Fatalf("consumer pb cmd missing transitive EXPORT_YMAPS_PROTO token %s: %v", wantTok, args)
 	}
+
 	if mapsCount > 1 {
 		t.Fatalf("consumer pb cmd duplicates %s (%d times): %v", wantTok, mapsCount, args)
 	}
 
 	mapsIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), wantTok)
 	cppOutIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "--cpp_out=:$(B)/")
+
 	if !(mapsIdx >= 0 && mapsIdx < cppOutIdx) {
 		t.Fatalf("expected maps/doc/proto include before --cpp_out: maps=%d cpp_out=%d args=%v", mapsIdx, cppOutIdx, args)
 	}
 
-	// No source-root C++ include leakage: `-I$(S)/maps/doc/proto` belongs only to protoc.
 	const cppSourceLeak = "-I$(S)/maps/doc/proto"
+
 	for _, n := range g.Graph {
 		for _, cmd := range n.Cmds {
 			for _, a := range strStrs(cmd.CmdArgs.flat()) {
@@ -952,8 +970,6 @@ END()
 func TestGen_ProtoLibrary_ExportYmapsProtoReachesCppBuildRootAddIncl(t *testing.T) {
 	files := map[string]string{}
 
-	// Besides the protoc include closure, PROTO_ADDINCL emits a GLOBAL C++ ADDINCL of
-	// the build root that propagates into every consumer's C++ compile, including `*.pb.cc.o`.
 	writeTestModuleFile(files, "leaf/ya.make", `PROTO_LIBRARY()
 EXPORT_YMAPS_PROTO()
 SRCS(leaf.proto)
@@ -984,6 +1000,7 @@ END()
 	const sourceTok = "-I$(S)/maps/doc/proto"
 
 	buildCount, sourceCount := 0, 0
+
 	for _, a := range args {
 		switch a {
 		case wantBuildTok:
@@ -996,9 +1013,11 @@ END()
 	if buildCount == 0 {
 		t.Fatalf("consumer pb.cc.o cmd missing transitive build-root addincl %s: %v", wantBuildTok, args)
 	}
+
 	if buildCount > 1 {
 		t.Fatalf("consumer pb.cc.o cmd duplicates %s (%d times): %v", wantBuildTok, buildCount, args)
 	}
+
 	if sourceCount != 0 {
 		t.Fatalf("source-root C++ include leakage %s on pb.cc.o (%d times): %v", sourceTok, sourceCount, args)
 	}
@@ -1007,8 +1026,6 @@ END()
 func TestGen_ProtoLibrary_ExportYmapsProtoSetsProtoNamespaceOutputRoot(t *testing.T) {
 	files := map[string]string{}
 
-	// EXPORT_YMAPS_PROTO() also roots the module's OWN protoc command and output paths
-	// under maps/doc/proto, and roots the proto import search path at $(S)/maps/doc/proto.
 	const moduleDir = "maps/doc/proto/yandex/maps/proto/common2"
 	writeTestModuleFile(files, moduleDir+"/ya.make", `PROTO_LIBRARY()
 EXPORT_YMAPS_PROTO()
@@ -1043,15 +1060,16 @@ message Attribution {}
 	args := strStrs(pb.Cmds[0].CmdArgs.flat())
 	count := func(want string) int {
 		n := 0
+
 		for _, a := range args {
 			if a == want {
 				n++
 			}
 		}
+
 		return n
 	}
 
-	// Output roots and the local-dir import root carry the namespace, once.
 	for _, tok := range []string{
 		"-I=./maps/doc/proto",
 		"--cpp_out=:$(B)/maps/doc/proto",
@@ -1062,7 +1080,6 @@ message Attribution {}
 		}
 	}
 
-	// The source-root namespace include must be present.
 	if count("-I=$(S)/maps/doc/proto") == 0 {
 		t.Fatalf("response.pb cmd missing -I=$(S)/maps/doc/proto: %v", args)
 	}
@@ -1078,17 +1095,17 @@ message Attribution {}
 		}
 	}
 
-	// The imported proto resolves through the namespace root.
 	wantImport := "$(S)/" + moduleDir + "/attribution.proto"
 	inputs := vfsStrings(pb.Inputs.flat())
+
 	if !slices.Contains(inputs, wantImport) {
 		t.Fatalf("response.pb inputs missing imported proto %q: %v", wantImport, inputs)
 	}
 
-	// The generated C++ compile gains the build-root namespace include once, never a source-root one.
 	ccObj := findGraphNodeByOutputs(t, g, "$(B)/"+moduleDir+"/response.pb.cc.o")
 	ccArgs := strStrs(ccObj.Cmds[0].CmdArgs.flat())
 	buildCount, sourceCount := 0, 0
+
 	for _, a := range ccArgs {
 		switch a {
 		case "-I$(B)/maps/doc/proto":
@@ -1097,9 +1114,11 @@ message Attribution {}
 			sourceCount++
 		}
 	}
+
 	if buildCount != 1 {
 		t.Fatalf("response.pb.cc.o: want exactly one -I$(B)/maps/doc/proto, got %d: %v", buildCount, ccArgs)
 	}
+
 	if sourceCount != 0 {
 		t.Fatalf("response.pb.cc.o: source-root C++ include leakage, got %d: %v", sourceCount, ccArgs)
 	}
@@ -1168,6 +1187,7 @@ int use() { return 0; }
 			t.Fatalf("use.cpp.o inputs missing %q: %#v", want, useCC.flatInputs())
 		}
 	}
+
 	for _, want := range []UID{mainPB.UID, publicPB.UID, leafPB.UID} {
 		if !slices.Contains(graphDeps(g, useCC), want) {
 			t.Fatalf("use.cpp.o deps missing %q: %v", want, graphDeps(g, useCC))
@@ -1221,12 +1241,15 @@ message Any {}
 	if !nodeHasInput(use, "$(B)/protos/test.deps.pb.h") {
 		t.Fatalf("use.cpp.o inputs missing deps header output: %#v", use.flatInputs())
 	}
+
 	if !nodeHasInput(use, "$(S)/contrib/libs/protobuf/src/google/protobuf/any.pb.h") {
 		t.Fatalf("use.cpp.o inputs missing protobuf runtime WKT header: %#v", use.flatInputs())
 	}
+
 	if nodeHasInput(use, "$(S)/google/protobuf/any.pb.h") {
 		t.Fatalf("use.cpp.o inputs still contain unrebased WKT header path: %#v", use.flatInputs())
 	}
+
 	if !slices.Contains(graphDeps(g, use), pb.UID) {
 		t.Fatalf("use.cpp.o deps missing PB producer uid %q: %v", pb.UID, graphDeps(g, use))
 	}

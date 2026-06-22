@@ -1,9 +1,5 @@
 package main
 
-// DenseMap maps a dense integer key K to V via two arrays: idx, indexed by K, holds
-// a 1-based slot into vals (0 means absent); vals is the append-only value store.
-// idx stays narrow (4 bytes/key), so it wins when the key space is large and sparse.
-// Single-goroutine use.
 type DenseMap[K ~uint32, V any] struct {
 	idx  []uint32
 	vals []V
@@ -21,7 +17,6 @@ func (m *DenseMap[K, V]) get(k K) (V, bool) {
 	return zero, false
 }
 
-// Put inserts or overwrites the value for k.
 func (m *DenseMap[K, V]) put(k K, v V) {
 	if int(k) < len(m.idx) {
 		if slot := m.idx[k]; slot != 0 {
@@ -32,7 +27,7 @@ func (m *DenseMap[K, V]) put(k K, v V) {
 	}
 
 	if len(m.vals) == 0 {
-		m.vals = append(m.vals, *new(V)) // reserve slot 0 as the absent sentinel
+		m.vals = append(m.vals, *new(V))
 	}
 
 	m.growIdx(int(k))

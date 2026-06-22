@@ -40,8 +40,6 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		peerPaths = append(peerPaths, p.string())
 	}
 
-	// Resolve every peer through genModule first, then aggregate per output kind.
-	// The peer-list guard stays a local map: it must stay live across genModule.
 	seen := make(map[string]struct{}, len(peerPaths)+len(dynLibRPathHelperPeers))
 	resolved := make([]*ModuleEmitResult, 0, len(peerPaths))
 
@@ -55,7 +53,6 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		resolved = append(resolved, genModule(ctx, peerInstance))
 	}
 
-	// rpath helper peers contribute only RPathFlagsGlobal.
 	rpathOnly := make([]*ModuleEmitResult, 0, len(dynLibRPathHelperPeers))
 
 	for _, p := range dynLibRPathHelperPeers {
@@ -68,7 +65,6 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		rpathOnly = append(rpathOnly, genModule(ctx, peerInstance))
 	}
 
-	// Resource globals, deduped by global-var STR through the VFS-keyed deduper.
 	var resourceGlobals []ResourceDecl
 	deduper.reset()
 
@@ -286,11 +282,8 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 func composeDynLibInputs(na *NodeArenas, peerLibPaths, pluginPaths []VFS, fixElfPath VFS, modulePath, exportsScript string, scripts ScriptDeps) InputChunks {
 	chunks := make(InputChunks, 0, 7)
 
-	// Caller's member slices, referenced as their own chunks, never copied.
 	chunks = append(chunks, peerLibPaths, pluginPaths, na.srcChunk(fixElfPath))
 
-	// The scripts the link command runs, each expanded to its import closure as a
-	// shared table slice referenced as its own chunk; dups drop in normalization.
 	for _, w := range []VFS{ldVcsInfoVFS, ldLinkDynLibVFS, ldFsToolsVFS} {
 		chunks = append(chunks, scripts[w])
 	}

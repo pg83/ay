@@ -2,15 +2,6 @@ package main
 
 import "sort"
 
-// Darts is a static byte-keyed double-array trie (Aoe'89). longestMatch returns
-// the index of the longest key prefixing the query parts.
-//
-//	base[s]   child of state s on byte b sits at state base[s]+b+1
-//	check[t]  == s+1 iff t is a child of s; 0 marks a free slot
-//	value[s]  == keyIndex+1 iff a key ends at state s; 0 marks none
-//
-// State 0 is the root. Codes are b+1 so 0 stays usable as the free/non-key
-// sentinel.
 type Darts struct {
 	base  []int32
 	check []int32
@@ -19,7 +10,7 @@ type Darts struct {
 
 type dartsNode struct {
 	children map[byte]*dartsNode
-	key      int32 // keyIndex+1, or 0 for none
+	key      int32
 }
 
 func NewDarts(keys []string) *Darts {
@@ -90,7 +81,6 @@ func NewDarts(keys []string) *Darts {
 	return d
 }
 
-// findBase returns the lowest base with base+c free for every child code c.
 func (d *Darts) findBase(codes []int32) int32 {
 	for base := int32(1); ; base++ {
 		d.ensure(base + codes[len(codes)-1])
@@ -119,8 +109,6 @@ func (d *Darts) ensure(n int32) {
 	}
 }
 
-// longestMatch walks parts as one stream and returns the longest prefixing key's
-// index, plus whether any matched.
 func (d *Darts) longestMatch(parts ...string) (int, bool) {
 	s := int32(0)
 	best := int32(0)

@@ -2,10 +2,8 @@ package main
 
 import "strings"
 
-// luajit21CwdRel is the cwd the objdump runs in.
 const luajit21CwdRel = "contrib/libs/luajit_21"
 
-// emitLJ precompiles a single .lua source to a .raw build output.
 func emitLJ(instance ModuleInstance, luaSrc, rawOut, compilerBin VFS, compilerLDRef NodeRef, cwd STR, emit Emitter) NodeRef {
 	na := emit.nodeArenas()
 
@@ -30,9 +28,6 @@ func emitLJ(instance ModuleInstance, luaSrc, rawOut, compilerBin VFS, compilerLD
 	return emit.emit(node)
 }
 
-// emitLuaJit21 models LJ_21_ARCHIVE: compile each .lua to a .raw, then wire two
-// archive_by_keys outputs — LuaScripts.inc over the raws and LuaSources.inc over
-// the sources. Runs before emitArchives so the appended entries are emitted.
 func emitLuaJit21(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	if d.lj21 == nil {
 		return
@@ -53,8 +48,6 @@ func emitLuaJit21(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		rawOut := build(instance.Path.rel() + "/" + raw)
 		ref := emitLJ(instance, luaSrc, rawOut, compilerBin, compilerLDRef, cwd, ctx.emit)
 
-		// Register the $(S) lua source as a propagated source input so
-		// emitArchive folds it into the archive's closure leaves.
 		reg.register(&GeneratedFileInfo{
 			ProducerKvP:  pkLJ,
 			OutputPath:   rawOut,

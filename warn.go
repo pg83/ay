@@ -32,7 +32,6 @@ func (k WarnKind) string() string {
 	return "warn"
 }
 
-// String implements fmt.Stringer; internal code calls string().
 func (k WarnKind) String() string {
 	return k.string()
 }

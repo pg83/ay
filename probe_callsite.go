@@ -12,9 +12,6 @@ import (
 	"sync"
 )
 
-// probeCallSite splices a recordCall("file:line") as the first statement of each
-// top-level func body. Union the recorded sites across runs; any all-sites
-// entry not in the union is reachable code never exercised. Throwaway.
 func probeCallSite(_ GlobalFlags, args []string) int {
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "usage: ay probe callsite <all-sites-out> [files...]")
@@ -69,11 +66,10 @@ func probeCallSite(_ GlobalFlags, args []string) int {
 			allSites = append(allSites, site)
 
 			lbrace := fset.Position(fd.Body.Lbrace).Offset
-			// Terminate with ';' so the call is complete even on a one-liner body.
+
 			inserts = append(inserts, ins{lbrace + 1, fmt.Sprintf("\n\trecordCall(%q);", site)})
 		}
 
-		// Apply in reverse offset order so earlier offsets stay valid.
 		sort.Slice(inserts, func(i, j int) bool { return inserts[i].off > inserts[j].off })
 		b := src
 
@@ -109,10 +105,6 @@ func probeCallSite(_ GlobalFlags, args []string) int {
 	return 0
 }
 
-// callSiteSeen is the recorded reach-set. A sync.Map (not a channel) because it
-// must work from the first instruction: package-var initializers run before any
-// init(), so an init()-set channel would miss init-time calls. Its zero value is
-// ready at load and safe for concurrent stores; Store is idempotent.
 var callSiteSeen sync.Map
 
 func recordCall(site string) {

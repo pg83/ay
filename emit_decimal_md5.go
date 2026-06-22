@@ -1,22 +1,16 @@
 package main
 
-// DecimalMD5Lower32BitsStmt is one DECIMAL_MD5_LOWER_32_BITS(File, FUNCNAME="",
-// Opts...) declaration.
 type DecimalMD5Lower32BitsStmt struct {
 	File     string
 	FuncName string
 	Opts     []STR
 }
 
-// DecimalMD5Result carries the C/C++ compiles of macro-produced sources for
-// archiving through the ordinary generated-source path.
 type DecimalMD5Result struct {
 	CCRefs    []NodeRef
 	CCOutputs []VFS
 }
 
-// emitDecimalMD5ForAR emits one SV producer per declaration and, for C/C++
-// outputs, the downstream compile. Returns the compiles for archive wiring.
 func emitDecimalMD5ForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) *DecimalMD5Result {
 	if len(d.decimalMD5) == 0 {
 		return nil
@@ -39,9 +33,6 @@ func emitDecimalMD5ForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in
 	return res
 }
 
-// emitDecimalMD5 emits the SV node for one declaration and registers its output
-// as a generated source. The Opt inputs and decimal_md5.py ride to the
-// downstream compile as the output's closure leaves.
 func emitDecimalMD5(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 	na := ctx.emit.nodeArenas()
 	modulePath := instance.Path.rel()

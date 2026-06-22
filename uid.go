@@ -15,8 +15,6 @@ func nodeUIDWithBuf(n *Node, c *CanonBuf) UID {
 	return UID{Hi: sum.Hi, Lo: sum.Lo}
 }
 
-// resourceFetchUID is the stable uid of a resource FETCH node: a hash of the URI
-// and output dir, not the whole command, so it stays cache-stable across machines.
 func resourceFetchUID(uri, output string) UID {
 	sum := xxh3.Hash128([]byte(uri + "\x00" + output))
 
@@ -25,15 +23,11 @@ func resourceFetchUID(uri, output string) UID {
 
 type CanonBuf struct {
 	buf []byte
-	// fs, when set, mixes each $(S) input's content hash into the node hash so a
-	// source edit changes the uid. Nil where only the structural hash is wanted.
+
 	fs FS
 
-	// uids resolves DepRefs/ForeignDepRefs to dep uids for the preimage. Set before writeNode.
 	uids *UidVec
 
-	// fetchRefs resolves Resources patterns to FETCH node refs, folding the fetch
-	// deps into the preimage rather than storing them on the node.
 	fetchRefs *DenseMap[STR, NodeRef]
 }
 
@@ -41,9 +35,6 @@ func (c *CanonBuf) writeByte(b byte) {
 	c.buf = append(c.buf, b)
 }
 
-// writeUint32/writeUint64 append little-endian bytes directly: the spelled-out
-// form inlines to stores, where PutUintNN-into-a-stack-array + append paid a
-// memmove per write — the inner op of the whole uid layer.
 func (c *CanonBuf) writeUint32(n uint32) {
 	c.buf = append(c.buf, byte(n), byte(n>>8), byte(n>>16), byte(n>>24))
 }
@@ -67,13 +58,10 @@ func (c *CanonBuf) writeBytes(s string) {
 	c.buf = append(c.buf, s...)
 }
 
-// writeSTR mixes an interned token by its recorded xxh3 lo, not its bytes: equal
-// strings share a STR and lo, so the hash matches without materialising the string.
 func (c *CanonBuf) writeSTR(s STR) {
 	c.writeUint64(internTable.los[s])
 }
 
-// writeRefUIDs serializes refs as their resolved dep uids.
 func (c *CanonBuf) writeRefUIDs(refs []NodeRef) {
 	c.writeUint32(uint32(len(refs)))
 
@@ -84,9 +72,6 @@ func (c *CanonBuf) writeRefUIDs(refs []NodeRef) {
 	}
 }
 
-// writeDepRefUIDs serializes the node's build deps: DepRefs followed by the
-// resolved resource FETCH deps — the "deps" array minus the separately-hashed
-// ForeignDepRefs. Resources resolve on the fly through fetchRefs.
 func (c *CanonBuf) writeDepRefUIDs(n *Node) {
 	count := len(n.DepRefs)
 
@@ -121,8 +106,6 @@ func (c *CanonBuf) writeStringSlice(ss []string) {
 	}
 }
 
-// writeStrSlice canonicalises cmd args by each token's STR hash, so the same flag
-// hashes identically regardless of which namespace produced it.
 func (c *CanonBuf) writeStrSlice(as []STR) {
 	c.writeUint32(uint32(len(as)))
 
@@ -131,7 +114,6 @@ func (c *CanonBuf) writeStrSlice(as []STR) {
 	}
 }
 
-// writeVFSChunks writes the flattened chunk list — byte-identical to writeVFSSlice.
 func (c *CanonBuf) writeVFSChunks(chunks InputChunks) {
 	total := 0
 
@@ -170,19 +152,12 @@ func (c *CanonBuf) writeVFSSliceBody(vs []VFS) {
 	for _, v := range vs {
 		c.writeSTR(v.str())
 
-		// Mix the content hash of source inputs so editing a $(S) file changes the
-		// uid; $(B) inputs ride their producing node's uid in deps. contentHash
-		// faults if the hash was never recorded during gen.
 		if c.fs != nil && v.isSource() {
 			c.writeUint64(c.fs.contentHash(v))
 		}
 	}
 }
 
-// writeVFSSliceOS is the *osFS arm of writeVFSSlice with loop state hoisted into
-// locals — a hand-devirtualized contentHash whose hot path inlines the array probe
-// and whose cold path (contentHashSlow) may grow and re-hoist the array. Byte
-// output is identical to the generic loop above.
 func (c *CanonBuf) writeVFSSliceOS(vs []VFS, fs *OsFS) {
 	buf := c.buf
 	los := internTable.los
@@ -216,7 +191,6 @@ func (c *CanonBuf) writeVFSSliceOS(vs []VFS, fs *OsFS) {
 	c.buf = buf
 }
 
-// writeStrChunks writes the flattened chunk list — byte-identical to writeStrSlice.
 func (c *CanonBuf) writeStrChunks(chunks ArgChunks) {
 	total := 0
 
@@ -253,9 +227,6 @@ func (c *CanonBuf) writeEnv(env EnvVars) {
 	}
 }
 
-// --- canonical hash (gen-time self_uid): the gate recomputes from JSON, so only
-// determinism matters here. ---
-
 func (c *CanonBuf) writeRequirements(r Requirements) {
 	c.writeUint64(math.Float64bits(r.CPU))
 	c.writeUint64(math.Float64bits(r.RAM))
@@ -284,7 +255,6 @@ func (c *CanonBuf) writeKV(kv KV) {
 	c.writeBool(kv.RunTestNode)
 	c.writeUint32(uint32(len(kv.ExtOut)))
 
-	// Hash ExtOut in slice order; the sorted form is only for JSON output parity.
 	for _, e := range kv.ExtOut {
 		c.writeBytes(e.Key)
 		c.writeBytes(e.Val)

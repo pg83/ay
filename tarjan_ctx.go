@@ -1,7 +1,5 @@
 package main
 
-// tarjanScratch holds the per-node Tarjan SCC state, epoch-stamped so reset()
-// is an O(1) epoch bump. Dense arrays are indexed by uint32(v).
 type TarjanScratch struct {
 	stamp   []uint32
 	index   []int32
@@ -10,9 +8,6 @@ type TarjanScratch struct {
 	epoch   uint32
 }
 
-// tarjanCtx bundles the SCC + closure-splice working state. One instance owned
-// by genCtx is shared run-wide: gen is single-threaded with reset() before every
-// use, so one instance avoids per-scanner duplicates of the dense arrays.
 type TarjanCtx struct {
 	scratch TarjanScratch
 	stack   []VFS
@@ -105,22 +100,16 @@ func (t *TarjanScratch) setOnStack(v VFS, b bool) {
 	t.onStack.set(uint32(v), b)
 }
 
-// closureSink is the scanner surface strongconnect needs. Kept narrow so the SCC
-// algorithm does not depend on scanner internals.
 type ClosureSink interface {
 	forEachChild(v VFS, fn func(VFS))
-	// cachedWindow returns the cached transitive closure of v, if one exists.
+
 	cachedWindow(v VFS) (window []VFS, cached bool)
-	// emitClosure reserves a block, runs fill (which writes the deduped closure
-	// and returns the count), then commits, stores, and caches every member.
+
 	emitClosure(members []VFS, fill func(block []VFS) int)
-	// windowSubsumed reports whether v's whole window is already inside the
-	// block being filled, so a splice loop can skip it.
+
 	windowSubsumed(v VFS) bool
 }
 
-// runSCC resets the per-traversal Tarjan state and runs the SCC build rooted at
-// the cycle entry dfs handed off. Returns the cached-child-edge count.
 func (tc *TarjanCtx) runSCC(g ClosureSink, root VFS) uint64 {
 	tc.scratch.reset(vfsBound())
 	tc.stack = tc.stack[:0]
@@ -129,10 +118,6 @@ func (tc *TarjanCtx) runSCC(g ClosureSink, root VFS) uint64 {
 	return tc.strongconnect(g, root)
 }
 
-// strongconnect is Tarjan's SCC step over the include graph. On each completed
-// SCC it builds that SCC's transitive closure — members deduped, then non-member
-// children's cached windows spliced in — into a block the sink hands it. Returns
-// the cached-child-edge count so the caller bumps subgraphHits once.
 func (tc *TarjanCtx) strongconnect(g ClosureSink, v VFS) (hits uint64) {
 	tc.next++
 	tc.scratch.discover(v, tc.next)

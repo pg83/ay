@@ -2,9 +2,6 @@ package main
 
 import "testing"
 
-// TestGen_SplitCodegenShardInputWiring asserts shard CC nodes carry only
-// source-level generator inputs, not the monolithic $(B)/Proto.pb.cc and
-// $(B)/Proto.pb.h.
 func TestGen_SplitCodegenShardInputWiring(t *testing.T) {
 	files := map[string]string{}
 
@@ -76,7 +73,6 @@ END()
 
 	ccShard := findGraphNodeByOutputs(t, g, "$(B)/split/Proto.pb.code0.cc.o")
 
-	// Not the monolithic build-generated protobuf sources.
 	for _, forbidden := range []string{
 		"$(B)/split/Proto.pb.cc",
 		"$(B)/split/Proto.pb.h",
@@ -86,7 +82,6 @@ END()
 		}
 	}
 
-	// The source-level generator closure.
 	for _, want := range []string{
 		"$(S)/tools/multiproto.py",
 		"$(S)/build/scripts/stdout2stderr.py",
@@ -100,16 +95,16 @@ END()
 		}
 	}
 
-	// Non-first shards carry the first shard (code0.cc) in their input closure.
 	for _, nonFirstShard := range []string{
 		"$(B)/split/Proto.pb.code1.cc.o",
 		"$(B)/split/Proto.pb.data.cc.o",
 	} {
 		shardNode := findGraphNodeByOutputs(t, g, nonFirstShard)
+
 		if !nodeHasInput(shardNode, "$(B)/split/Proto.pb.code0.cc") {
 			t.Errorf("non-first shard %q must carry code0.cc as an input (upstream pattern)", nonFirstShard)
 		}
-		// Nor the monolithic sources.
+
 		for _, forbidden := range []string{"$(B)/split/Proto.pb.cc", "$(B)/split/Proto.pb.h"} {
 			if nodeHasInput(shardNode, forbidden) {
 				t.Errorf("non-first shard %q must not include %q as input", nonFirstShard, forbidden)

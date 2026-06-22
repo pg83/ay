@@ -6,7 +6,6 @@ import (
 
 var yasmBinaryPath = yasmBinaryVFS.string()
 
-// yasmConstHead is the constant lead shared by every yasm invocation.
 var yasmConstHead = []STR{
 	internStr(yasmBinaryPath),
 	argF.str(), argElf64.str(),
@@ -38,8 +37,6 @@ func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		Resources:        instance.Platform.UsesClangOnly,
 	}
 
-	// A generated $(B) source depends on its producer; declared-SRC .asm
-	// leaves ExtraDepRefs nil.
 	if len(in.ExtraDepRefs) > 0 {
 		node.DepRefs = in.ExtraDepRefs
 	}
@@ -148,8 +145,6 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 		argI.str(), argS.str(),
 	)
 
-	// `ADDINCL(FOR asm X)` entries on in.AddIncl, appended after the base
-	// $(B)/$(S) pair so they precede `-o output input`.
 	for _, p := range in.AddIncl {
 		cmdArgs = append(cmdArgs, argI.str(), (p).str())
 	}
@@ -175,8 +170,6 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 
 	node.ForeignDepRefs = []NodeRef{yasmLD}
 
-	// A generated $(B) source depends on its producer; declared-SRC .asm
-	// leaves ExtraDepRefs nil.
 	if len(in.ExtraDepRefs) > 0 {
 		node.DepRefs = in.ExtraDepRefs
 	}
@@ -191,9 +184,6 @@ func emitLibraryAsmSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, s
 	scanIn := in
 
 	if len(d.asmAddIncl) > 0 {
-		// `ADDINCL(FOR asm X)` feeds both the assembler's -I list and the
-		// include scanner's search path; without it `%include "X/..."`
-		// resolves against nothing.
 		scanIn.AddIncl = dedupVFS(in.AddIncl, d.asmAddIncl)
 		scanIn.ScanCfg = newScanContext(ctx.parsers, scanIn.AddIncl, scanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 		asIn.AddIncl = scanIn.AddIncl

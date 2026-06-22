@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-// String-path helpers: pure functions over source-root-relative paths, no FS state.
-
 func cleanRel(rel string) string {
 	if rel == "" || rel == "." {
 		return ""

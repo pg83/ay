@@ -5,10 +5,6 @@ import (
 	"testing"
 )
 
-// TestEmitProtoSrcs_YaffGeneratedHeaderClosureRidesIntoConsumer: the generated
-// <proto>.yaff.h #includes the yaff runtime + the proto's .pb.h + (for EXPERIMENTAL)
-// the experiments runtime, so it must register those includes for the closure to
-// ride into every consumer.
 func TestEmitProtoSrcs_YaffGeneratedHeaderClosureRidesIntoConsumer(t *testing.T) {
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
@@ -18,8 +14,6 @@ func TestEmitProtoSrcs_YaffGeneratedHeaderClosureRidesIntoConsumer(t *testing.T)
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
 
-	// YaFF runtime source headers. yaff.h and experiments/builder.h each pull a
-	// transitive sibling (base.h) so the test pins closure propagation.
 	writeTestModuleFile(files, "library/cpp/yaff/yaff.h", "#pragma once\n#include <library/cpp/yaff/base.h>\n")
 	writeTestModuleFile(files, "library/cpp/yaff/base.h", "#pragma once\n")
 	writeTestModuleFile(files, "library/cpp/yaff/struct.h", "#pragma once\n")
@@ -60,9 +54,6 @@ func TestEmitProtoSrcs_YaffGeneratedHeaderClosureRidesIntoConsumer(t *testing.T)
 	}
 }
 
-// TestEmitProtoSrcs_YaffFilesWhitelistSkipsNonWhitelistedHeaderClosure: with
-// YAFF(FILES kept.proto), skipped.yaff.h is written empty, so a unit including it
-// must NOT pull the runtime / .pb.h / experiments closure, while kept.yaff.h still does.
 func TestEmitProtoSrcs_YaffFilesWhitelistSkipsNonWhitelistedHeaderClosure(t *testing.T) {
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
@@ -91,6 +82,7 @@ func TestEmitProtoSrcs_YaffFilesWhitelistSkipsNonWhitelistedHeaderClosure(t *tes
 	g := testGen(newMemFS(files), "app")
 
 	keptCC := mustNodeByOutput(t, g, "$(B)/app/usekept.cpp.o")
+
 	for _, want := range []string{
 		"$(B)/proto/kept.yaff.h",
 		"$(B)/proto/kept.pb.h",
@@ -103,8 +95,7 @@ func TestEmitProtoSrcs_YaffFilesWhitelistSkipsNonWhitelistedHeaderClosure(t *tes
 	}
 
 	skipCC := mustNodeByOutput(t, g, "$(B)/app/useskip.cpp.o")
-	// skipped.yaff.h still resolves (a generated output) but is empty: none of the
-	// runtime / .pb.h / experiments closure rides in.
+
 	for _, notWant := range []string{
 		"$(B)/proto/skipped.pb.h",
 		"$(S)/library/cpp/yaff/yaff.h",
@@ -119,14 +110,9 @@ func TestEmitProtoSrcs_YaffFilesWhitelistSkipsNonWhitelistedHeaderClosure(t *tes
 	}
 }
 
-// TestEmitProtoSrcs_YaffCppInputClosureInducesWireFormatDropsSiblingHeader:
-// .yaff.cpp is a thin `#include "<stem>.yaff.h"` wrapper whose sibling header is
-// resolved for the closure but not a compile input; the protobuf runtime headers
-// arrive via protoc's INDUCED_DEPS(cpp …). So .yaff.cpp.o must carry wire_format.h
-// (induced) and NOT the sibling .yaff.h.
 func TestEmitProtoSrcs_YaffCppInputClosureInducesWireFormatDropsSiblingHeader(t *testing.T) {
 	files := map[string]string{}
-	// Induced-deps split: wire_format.h is cpp-only, message.h is h+cpp.
+
 	writeTestModuleFile(files, "contrib/tools/protoc/ya.make",
 		"PROGRAM(protoc)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"+
 			"INDUCED_DEPS(cpp ${ARCADIA_ROOT}/contrib/libs/protobuf/src/google/protobuf/wire_format.h)\n"+
@@ -162,10 +148,11 @@ func TestEmitProtoSrcs_YaffCppInputClosureInducesWireFormatDropsSiblingHeader(t 
 	if !nodeHasInput(yaffCC, wireFormat) {
 		t.Errorf("foo.yaff.cpp.o missing induced cpp input %q: %v", wireFormat, yaffCC.flatInputs())
 	}
+
 	if nodeHasInput(yaffCC, siblingHeader) {
 		t.Errorf("foo.yaff.cpp.o must not record the sibling generated header %q: %v", siblingHeader, yaffCC.flatInputs())
 	}
-	// The header's transitive closure still rides in (walked through the dropped sibling).
+
 	for _, want := range []string{
 		"$(B)/proto/foo.pb.h",
 		"$(S)/library/cpp/yaff/yaff.h",
@@ -177,14 +164,9 @@ func TestEmitProtoSrcs_YaffCppInputClosureInducesWireFormatDropsSiblingHeader(t 
 	}
 }
 
-// TestEmitProtoSrcs_NonWhitelistedYaffCppRidesProtoMainPbHeader: for a proto
-// OUTSIDE the YAFF(FILES …) allowlist, .yaff.h is empty so its .yaff.cpp reaches no
-// .pb.h directly — yet the proto's .pb.h plus its producer-source bundle still ride
-// via the OutTogether MAIN output. The whitelisted kept.yaff.cpp.o (T-33) stays
-// stable: wire_format.h induced, sibling kept.yaff.h dropped.
 func TestEmitProtoSrcs_NonWhitelistedYaffCppRidesProtoMainPbHeader(t *testing.T) {
 	files := map[string]string{}
-	// Induced-deps split: wire_format.h is cpp-only, message.h is h+cpp.
+
 	writeTestModuleFile(files, "contrib/tools/protoc/ya.make",
 		"PROGRAM(protoc)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"+
 			"INDUCED_DEPS(cpp ${ARCADIA_ROOT}/contrib/libs/protobuf/src/google/protobuf/wire_format.h)\n"+
@@ -214,9 +196,8 @@ func TestEmitProtoSrcs_NonWhitelistedYaffCppRidesProtoMainPbHeader(t *testing.T)
 	const wireFormat = "$(S)/contrib/libs/protobuf/src/google/protobuf/wire_format.h"
 	const wrapper = "$(S)/build/scripts/cpp_proto_wrapper.py"
 
-	// Non-whitelisted: the empty skipped.yaff.h yields no closure, but the OutTogether
-	// main output skipped.pb.h still rides, carrying its .proto and the wrapper source.
 	skipCC := mustNodeByOutput(t, g, "$(B)/proto/skipped.yaff.cpp.o")
+
 	for _, want := range []string{
 		"$(B)/proto/skipped.pb.h",
 		"$(S)/proto/skipped.proto",
@@ -226,12 +207,13 @@ func TestEmitProtoSrcs_NonWhitelistedYaffCppRidesProtoMainPbHeader(t *testing.T)
 			t.Errorf("skipped.yaff.cpp.o missing producer-source input %q: %v", want, skipCC.flatInputs())
 		}
 	}
+
 	if nodeHasInput(skipCC, "$(B)/proto/skipped.yaff.h") {
 		t.Errorf("skipped.yaff.cpp.o must not record the sibling self header %q", "$(B)/proto/skipped.yaff.h")
 	}
 
-	// Whitelisted (T-33): wire_format.h induced, own .pb.h present, sibling dropped.
 	keptCC := mustNodeByOutput(t, g, "$(B)/proto/kept.yaff.cpp.o")
+
 	for _, want := range []string{
 		wireFormat,
 		"$(B)/proto/kept.pb.h",
@@ -242,15 +224,12 @@ func TestEmitProtoSrcs_NonWhitelistedYaffCppRidesProtoMainPbHeader(t *testing.T)
 			t.Errorf("kept.yaff.cpp.o missing input %q: %v", want, keptCC.flatInputs())
 		}
 	}
+
 	if nodeHasInput(keptCC, "$(B)/proto/kept.yaff.h") {
 		t.Errorf("kept.yaff.cpp.o must not record the sibling self header %q", "$(B)/proto/kept.yaff.h")
 	}
 }
 
-// TestEmitProtoSrcs_YaffOutputOrderFollowsLiteHeaderDeclarationOrder pins the
-// CPP_PROTO_OUTS accumulation order (statement order, main .pb.h floated front): the
-// yaff group precedes the cpp_out group iff YAFF() is declared before SET(PROTOC_
-// TRANSITIVE_HEADERS "no"), else follows.
 func TestEmitProtoSrcs_YaffOutputOrderFollowsLiteHeaderDeclarationOrder(t *testing.T) {
 	mkFiles := func() map[string]string {
 		files := map[string]string{}
@@ -260,10 +239,10 @@ func TestEmitProtoSrcs_YaffOutputOrderFollowsLiteHeaderDeclarationOrder(t *testi
 		writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
 		writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
 		writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
 		return files
 	}
 
-	// YAFF() before SET — yaff group precedes the cpp_out group.
 	beforeFiles := mkFiles()
 	writeTestModuleFile(beforeFiles, "before/ya.make",
 		"PROTO_LIBRARY()\nYAFF()\nSRCS(foo.proto)\nSET(PROTOC_TRANSITIVE_HEADERS \"no\")\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
@@ -280,7 +259,6 @@ func TestEmitProtoSrcs_YaffOutputOrderFollowsLiteHeaderDeclarationOrder(t *testi
 	}
 	assertOutputOrder(t, "YAFF-before-SET", pbBefore, wantBefore)
 
-	// SET before YAFF() — cpp_out group first.
 	afterFiles := mkFiles()
 	writeTestModuleFile(afterFiles, "after/ya.make",
 		"PROTO_LIBRARY()\nSET(PROTOC_TRANSITIVE_HEADERS \"no\")\nYAFF()\nSRCS(foo.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
@@ -302,6 +280,7 @@ func assertOutputOrder(t *testing.T, label string, n *Node, want []string) {
 	t.Helper()
 
 	got := make([]string, len(n.Outputs))
+
 	for i, o := range n.Outputs {
 		got[i] = o.string()
 	}
@@ -310,18 +289,21 @@ func assertOutputOrder(t *testing.T, label string, n *Node, want []string) {
 		t.Fatalf("%s: PB outputs order =\n  %v\nwant\n  %v", label, got, want)
 	}
 
-	// The --outputs command list must mirror the node outputs.
 	args := strStrs(n.Cmds[0].CmdArgs.flat())
 	start := -1
+
 	for i, a := range args {
 		if a == "--outputs" {
 			start = i + 1
+
 			break
 		}
 	}
+
 	if start < 0 {
 		t.Fatalf("%s: --outputs not found in cmd args: %v", label, args)
 	}
+
 	for i, w := range want {
 		if start+i >= len(args) || args[start+i] != w {
 			t.Fatalf("%s: --outputs[%d] = %q, want %q (args=%v)", label, i, args[min(start+i, len(args)-1)], w, args)
@@ -329,16 +311,13 @@ func assertOutputOrder(t *testing.T, label string, n *Node, want []string) {
 	}
 }
 
-// TestEmitProtoSrcs_GeneratedProtoWiresProducerDep: a PROTO_LIBRARY whose
-// SRCS(X.proto) is the OUT of a RUN_ANTLR (no on-disk X.proto). The PB node must wire
-// a dep to the JV producer AND treat the input as build-rooted, or the JV gets
-// DFS-pruned at finalize.
 func TestEmitProtoSrcs_GeneratedProtoWiresProducerDep(t *testing.T) {
 	const modPath = "yql/essentials/parser/proto_ast/gen/jsonpath"
 
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+
 	for path, body := range map[string]string{
 		modPath + "/ya.make": `PROTO_LIBRARY()
 
@@ -376,6 +355,7 @@ END()
 	g := testGen(newMemFS(files), modPath)
 
 	byOut := make(map[string]*Node, len(g.Graph))
+
 	for _, n := range g.Graph {
 		if len(n.Outputs) > 0 {
 			byOut[n.Outputs[0].string()] = n
@@ -392,56 +372,65 @@ END()
 	}
 
 	var pb *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkPB && strings.HasSuffix(n.Outputs[0].string(), "JsonPathParser.pb.h") {
 			pb = n
+
 			break
 		}
 	}
+
 	if pb == nil {
 		t.Fatal("no PB node for JsonPathParser.pb.h emitted")
 	}
 
 	jv := byOut["$(B)/"+modPath+"/JsonPathParser.proto"]
+
 	if jv == nil {
 		t.Fatal("no JV node producing JsonPathParser.proto")
 	}
+
 	if jv.KV.P != pkJV {
 		t.Errorf("expected JV kv.p, got %v", jv.KV.P)
 	}
 
 	found := false
+
 	for _, d := range graphDeps(g, pb) {
 		if d == jv.UID {
 			found = true
+
 			break
 		}
 	}
+
 	if !found {
 		t.Errorf("graphDeps(g, PB) %v does not include JV(.proto) uid %q", graphDeps(g, pb), jv.UID)
 	}
 
 	hasBuildProto := false
+
 	for _, in := range pb.flatInputs() {
 		if in.string() == "$(B)/"+modPath+"/JsonPathParser.proto" {
 			hasBuildProto = true
+
 			break
 		}
 	}
+
 	if !hasBuildProto {
 		t.Errorf("PB.flatInputs() does not include $(B)/.../JsonPathParser.proto: %v", pb.flatInputs())
 	}
 }
 
-// TestEmitProtoSrcs_GeneratedProtoInheritsProducerSourceInputs: when SRCS(X.proto)
-// is build-generated by a RUN_ANTLR (JV) step, the PB node's inputs must include the
-// JV producer's $(S) leaf sources, else the PB self_uid diverges.
 func TestEmitProtoSrcs_GeneratedProtoInheritsProducerSourceInputs(t *testing.T) {
 	const modPath = "yql/essentials/parser/proto_ast/gen/jsonpath"
 
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+
 	for path, body := range map[string]string{
 		modPath + "/ya.make": `PROTO_LIBRARY()
 
@@ -479,20 +468,25 @@ END()
 	g := testGen(newMemFS(files), modPath)
 
 	var pb *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkPB && strings.HasSuffix(n.Outputs[0].string(), "JsonPathParser.pb.h") {
 			pb = n
+
 			break
 		}
 	}
+
 	if pb == nil {
 		t.Fatal("no PB node for JsonPathParser.pb.h emitted")
 	}
 
 	have := make(map[string]struct{}, len(pb.flatInputs()))
+
 	for _, in := range pb.flatInputs() {
 		have[in.string()] = struct{}{}
 	}
+
 	for _, want := range []string{
 		"$(S)/yql/essentials/minikql/jsonpath/JsonPath.g",
 		"$(S)/templates/protobuf.stg.in",
@@ -506,11 +500,6 @@ END()
 	}
 }
 
-// TestEmitProtoSrcs_GeneratedProtoCompileCarriesOutputIncludesPbHClosure: a
-// PROTO_LIBRARY whose SRCS(X.proto) is build-generated by a RUN_PROGRAM STDOUT step
-// declaring its imports via OUTPUT_INCLUDES. The generated source absent at configure
-// time registers no direct imports, so the .pb.cc compile's import .pb.h closure is
-// driven from OUTPUT_INCLUDES instead.
 func TestEmitProtoSrcs_GeneratedProtoCompileCarriesOutputIncludesPbHClosure(t *testing.T) {
 	const modPath = "irt/test/banner_flags"
 	const consumer = "irt/test/app"
@@ -574,28 +563,27 @@ END()
 	const markupPbH = "$(B)/dep/markup.pb.h"
 	const leafPbH = "$(B)/leaf/leaf.pb.h"
 
-	// The .pb.cc compile resolves its include closure context-free.
 	cc := mustNodeByOutput(t, g, "$(B)/"+modPath+"/gen.pb.cc.o")
+
 	if !nodeHasInput(cc, markupPbH) {
 		t.Errorf("gen.pb.cc.o missing OUTPUT_INCLUDES import header %q: %v", markupPbH, vfsStringsT3(cc.flatInputs()))
 	}
+
 	if !nodeHasInput(cc, leafPbH) {
 		t.Errorf("gen.pb.cc.o missing transitive import header %q: %v", leafPbH, vfsStringsT3(cc.flatInputs()))
 	}
 
-	// Guard: the checked-in dep proto's compile carries only its real import.
 	depCC := mustNodeByOutput(t, g, "$(B)/dep/markup.pb.cc.o")
+
 	if !nodeHasInput(depCC, leafPbH) {
 		t.Errorf("checked-in dep markup.pb.cc.o missing real import %q: %v", leafPbH, vfsStringsT3(depCC.flatInputs()))
 	}
+
 	if nodeHasInput(depCC, "$(B)/"+modPath+"/gen.pb.h") {
 		t.Errorf("checked-in dep markup.pb.cc.o unexpectedly carries generated gen.pb.h: %v", vfsStringsT3(depCC.flatInputs()))
 	}
 }
 
-// TestEmitProtoSrcs_ForwardSameModuleImportCarriesGeneratedPbH: in a plain LIBRARY,
-// a .proto importing a SAME-MODULE sibling declared LATER in SRCS must still carry
-// the sibling's generated .pb.h on its .pb.cc compile.
 func TestEmitProtoSrcs_ForwardSameModuleImportCarriesGeneratedPbH(t *testing.T) {
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
@@ -608,7 +596,6 @@ func TestEmitProtoSrcs_ForwardSameModuleImportCarriesGeneratedPbH(t *testing.T) 
 	writeTestModuleFile(files, "contrib/libs/protobuf/p.cpp", "int p(){return 0;}\n")
 	writeTestModuleFile(files, "contrib/libs/protobuf/src/google/protobuf/message.h", "#pragma once\n")
 
-	// main.proto imports the LATER-declared same-module dep.proto.
 	writeTestModuleFile(files, "m/ya.make",
 		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\n"+
 			"PEERDIR(contrib/libs/protobuf)\nSRCS(main.proto dep.proto)\nEND()\n")
@@ -621,20 +608,19 @@ func TestEmitProtoSrcs_ForwardSameModuleImportCarriesGeneratedPbH(t *testing.T) 
 
 	const depPbH = "$(B)/m/dep.pb.h"
 	cc := mustNodeByOutput(t, g, "$(B)/m/main.pb.cc.o")
+
 	if !nodeHasInput(cc, depPbH) {
 		t.Errorf("main.pb.cc.o missing forward same-module import header %q: %v", depPbH, vfsStringsT3(cc.flatInputs()))
 	}
 }
 
-// TestEmitProtoSrcs_AntlrCppOutsCompileIntoProtoArchive: RUN_ANTLR(... OUT *.cpp ...)
-// inside IF(GEN_PROTO) auto-promotes those .cpp outputs to SRCS, archiving the .o into
-// the same proto-library AR alongside .pb.cc.o.
 func TestEmitProtoSrcs_AntlrCppOutsCompileIntoProtoArchive(t *testing.T) {
 	const modPath = "yql/essentials/parser/proto_ast/gen/jsonpath"
 
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+
 	for path, body := range map[string]string{
 		modPath + "/ya.make": `PROTO_LIBRARY()
 
@@ -683,6 +669,7 @@ END()
 	g := testGen(newMemFS(files), modPath)
 
 	byOut := make(map[string]*Node, len(g.Graph))
+
 	for _, n := range g.Graph {
 		if len(n.Outputs) > 0 {
 			byOut[n.Outputs[0].string()] = n
@@ -699,52 +686,56 @@ END()
 	}
 
 	ar := byOut["$(B)/"+modPath+"/libproto_ast-gen-jsonpath.a"]
+
 	if ar == nil {
 		t.Fatal("no proto AR node emitted")
 	}
+
 	for _, want := range []string{
 		"$(B)/" + modPath + "/JsonPathLexer.cpp.o",
 		"$(B)/" + modPath + "/JsonPathParser.cpp.o",
 		"$(B)/" + modPath + "/JsonPathParser.pb.cc.o",
 	} {
 		found := false
+
 		for _, in := range ar.flatInputs() {
 			if in.string() == want {
 				found = true
+
 				break
 			}
 		}
+
 		if !found {
 			t.Errorf("proto AR inputs missing %q: %v", want, ar.flatInputs())
 		}
 	}
 
-	// Member ORDER: the ANTLR-generated .cpp objects (regular archive phase) list
-	// BEFORE the proto .pb.cc.o (proto-codegen phase).
 	idxOf := func(rel string) int {
 		want := "$(B)/" + modPath + "/" + rel
+
 		for i, in := range ar.flatInputs() {
 			if in.string() == want {
 				return i
 			}
 		}
+
 		return -1
 	}
 	parserCpp := idxOf("JsonPathParser.cpp.o")
 	lexerCpp := idxOf("JsonPathLexer.cpp.o")
 	pbCC := idxOf("JsonPathParser.pb.cc.o")
+
 	if parserCpp < 0 || lexerCpp < 0 || pbCC < 0 {
 		t.Fatalf("missing AR member (parser=%d lexer=%d pb=%d): %v", parserCpp, lexerCpp, pbCC, ar.flatInputs())
 	}
+
 	if !(parserCpp < pbCC && lexerCpp < pbCC) {
 		t.Errorf("ANTLR .cpp.o must precede .pb.cc.o in proto AR: parser=%d lexer=%d pb.cc=%d (%v)",
 			parserCpp, lexerCpp, pbCC, ar.flatInputs())
 	}
 }
 
-// TestEmitProtoSrcs_YaffArchiveMemberOrderFollowsCppOutsOrder: the per-proto AR
-// member order mirrors --outputs — YAFF declared before SET(PROTOC_TRANSITIVE_HEADERS
-// "no") lands its .yaff.cpp.o ahead of .pb.cc.o; declared after lands behind.
 func TestEmitProtoSrcs_YaffArchiveMemberOrderFollowsCppOutsOrder(t *testing.T) {
 	mkFiles := func() map[string]string {
 		files := map[string]string{}
@@ -754,6 +745,7 @@ func TestEmitProtoSrcs_YaffArchiveMemberOrderFollowsCppOutsOrder(t *testing.T) {
 		writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
 		writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
 		writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
 		return files
 	}
 
@@ -761,16 +753,18 @@ func TestEmitProtoSrcs_YaffArchiveMemberOrderFollowsCppOutsOrder(t *testing.T) {
 		t.Helper()
 		ar := mustNodeByOutput(t, g, "$(B)/"+modPath+"/"+archiveNameWithPrefixOrName(modPath, "lib", ""))
 		want := "$(B)/" + modPath + "/" + rel
+
 		for i, in := range ar.flatInputs() {
 			if in.string() == want {
 				return i
 			}
 		}
+
 		t.Fatalf("AR for %s missing member %q: %v", modPath, want, ar.flatInputs())
+
 		return -1
 	}
 
-	// YAFF() before SET: .yaff.cpp.o precedes .pb.cc.o.
 	beforeFiles := mkFiles()
 	writeTestModuleFile(beforeFiles, "before/ya.make",
 		"PROTO_LIBRARY()\nYAFF()\nSRCS(foo.proto)\nSET(PROTOC_TRANSITIVE_HEADERS \"no\")\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
@@ -779,11 +773,11 @@ func TestEmitProtoSrcs_YaffArchiveMemberOrderFollowsCppOutsOrder(t *testing.T) {
 	gBefore := testGen(newMemFS(beforeFiles), "before")
 	yaffBefore := arMemberIdx(t, gBefore, "before", "foo.yaff.cpp.o")
 	pbBefore := arMemberIdx(t, gBefore, "before", "foo.pb.cc.o")
+
 	if !(yaffBefore < pbBefore) {
 		t.Errorf("YAFF-before-SET: .yaff.cpp.o (%d) must precede .pb.cc.o (%d)", yaffBefore, pbBefore)
 	}
 
-	// SET before YAFF(): .pb.cc.o precedes .yaff.cpp.o.
 	afterFiles := mkFiles()
 	writeTestModuleFile(afterFiles, "after/ya.make",
 		"PROTO_LIBRARY()\nSET(PROTOC_TRANSITIVE_HEADERS \"no\")\nYAFF()\nSRCS(foo.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
@@ -792,14 +786,12 @@ func TestEmitProtoSrcs_YaffArchiveMemberOrderFollowsCppOutsOrder(t *testing.T) {
 	gAfter := testGen(newMemFS(afterFiles), "after")
 	pbAfter := arMemberIdx(t, gAfter, "after", "foo.pb.cc.o")
 	yaffAfter := arMemberIdx(t, gAfter, "after", "foo.yaff.cpp.o")
+
 	if !(pbAfter < yaffAfter) {
 		t.Errorf("SET-before-YAFF: .pb.cc.o (%d) must precede .yaff.cpp.o (%d)", pbAfter, yaffAfter)
 	}
 }
 
-// TestEmitProtoSrcs_EvArchiveMemberOrderFollowsSrcsOrder: in a PROTO_LIBRARY, .proto
-// and .ev are equal-priority _SRC macros whose generated compiles queue back into the
-// source list in SRCS order, so the archive interleaves them by declaration position.
 func TestEmitProtoSrcs_EvArchiveMemberOrderFollowsSrcsOrder(t *testing.T) {
 	const modPath = "search/idlmix"
 
@@ -824,30 +816,30 @@ func TestEmitProtoSrcs_EvArchiveMemberOrderFollowsSrcsOrder(t *testing.T) {
 	ar := mustNodeByOutput(t, g, "$(B)/"+modPath+"/"+archiveNameWithPrefixOrName(modPath, "lib", ""))
 	idxOf := func(rel string) int {
 		want := "$(B)/" + modPath + "/" + rel
+
 		for i, in := range ar.flatInputs() {
 			if in.string() == want {
 				return i
 			}
 		}
+
 		return -1
 	}
 
 	aIdx := idxOf("a.pb.cc.o")
 	eIdx := idxOf("e.ev.pb.cc.o")
 	bIdx := idxOf("b.pb.cc.o")
+
 	if aIdx < 0 || eIdx < 0 || bIdx < 0 {
 		t.Fatalf("missing AR member (a=%d e=%d b=%d): %v", aIdx, eIdx, bIdx, ar.flatInputs())
 	}
+
 	if !(aIdx < eIdx && eIdx < bIdx) {
 		t.Errorf(".ev.pb.cc.o must archive between surrounding proto objects in SRCS order: a=%d e=%d b=%d (%v)",
 			aIdx, eIdx, bIdx, ar.flatInputs())
 	}
 }
 
-// A PROTO_LIBRARY mixing GENERATE_ENUM_SERIALIZATION over an EXTERNAL build-root
-// .pb.h and a SAME-MODULE generated .pb.h splits the two by input-header provenance:
-// the external EN (prio-2) archives BEFORE this module's proto objects (prio-4 SRCS),
-// the same-module EN (second-level) AFTER all proto objects.
 func TestEmitProtoSrcs_EnumSerializationOrderByHeaderProvenance(t *testing.T) {
 	const modPath = "mod/api"
 	const extPath = "ext/protos"
@@ -884,7 +876,9 @@ END()
 				return i
 			}
 		}
+
 		t.Fatalf("archive missing member with suffix %q: %v", suffix, vfsStrings(ar.flatInputs()))
+
 		return -1
 	}
 
@@ -899,10 +893,6 @@ END()
 	}
 }
 
-// TestEmitPyProtoSrc_GeneratedProtoWiresProducerDep is the Python analogue: a
-// RUN_ANTLR-generated SRCS(X.proto) consumed by a PY3_LIBRARY. The python PB node
-// wires to the build-tree proto, takes the producer dep, and carries its $(S) leaf
-// sources.
 func TestEmitPyProtoSrc_GeneratedProtoWiresProducerDep(t *testing.T) {
 	const modPath = "yql/essentials/parser/proto_ast/gen/jsonpath"
 	const consumer = "app/pytool"
@@ -915,6 +905,7 @@ func TestEmitPyProtoSrc_GeneratedProtoWiresProducerDep(t *testing.T) {
 	writeToolProgram(files, "tools/rescompiler", "rescompiler")
 	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	writeToolProgram(files, "tools/archiver", "archiver")
+
 	for path, body := range map[string]string{
 		consumer + "/ya.make": `PY3_LIBRARY()
 NO_LIBC()
@@ -963,31 +954,37 @@ END()
 	g := testGen(newMemFS(files), consumer)
 
 	var pyPB *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkPB && n.TargetProperties.ModuleTag == tagPy3Proto &&
 			strings.HasSuffix(n.Outputs[0].string(), "JsonPathParser__intpy3___pb2.py") {
 			pyPB = n
+
 			break
 		}
 	}
+
 	if pyPB == nil {
 		t.Fatal("no python PB node for JsonPathParser__intpy3___pb2.py emitted")
 	}
 
 	byOut := make(map[string]*Node, len(g.Graph))
+
 	for _, n := range g.Graph {
 		if len(n.Outputs) > 0 {
 			byOut[n.Outputs[0].string()] = n
 		}
 	}
+
 	jv := byOut["$(B)/"+modPath+"/JsonPathParser.proto"]
+
 	if jv == nil {
 		t.Fatal("no JV node producing JsonPathParser.proto")
 	}
 
-	// (1) build-tree proto input, not the nonexistent $(S) source.
 	hasBuildProto := false
 	hasSourceProto := false
+
 	for _, in := range pyPB.flatInputs() {
 		switch in.string() {
 		case "$(B)/" + modPath + "/JsonPathParser.proto":
@@ -996,30 +993,35 @@ END()
 			hasSourceProto = true
 		}
 	}
+
 	if !hasBuildProto {
 		t.Errorf("py PB.flatInputs() does not include $(B)/.../JsonPathParser.proto: %v", vfsStringsT3(pyPB.flatInputs()))
 	}
+
 	if hasSourceProto {
 		t.Errorf("py PB.flatInputs() still lists the nonexistent $(S)/.../JsonPathParser.proto: %v", vfsStringsT3(pyPB.flatInputs()))
 	}
 
-	// (2) producer dependency.
 	found := false
+
 	for _, d := range graphDeps(g, pyPB) {
 		if d == jv.UID {
 			found = true
+
 			break
 		}
 	}
+
 	if !found {
 		t.Errorf("graphDeps(g, pyPB) %v does not include JV(.proto) uid %q", graphDeps(g, pyPB), jv.UID)
 	}
 
-	// (3) producer source inputs ride on the py PB node's flat inputs.
 	have := make(map[string]struct{}, len(pyPB.flatInputs()))
+
 	for _, in := range pyPB.flatInputs() {
 		have[in.string()] = struct{}{}
 	}
+
 	for _, want := range []string{
 		"$(S)/yql/essentials/minikql/jsonpath/JsonPath.g",
 		"$(S)/templates/protobuf.stg.in",
@@ -1033,16 +1035,13 @@ END()
 	}
 }
 
-// TestEmitProtoSrcs_SetAppendProtoFilesNotDoubled: SET_APPEND(PROTO_FILES …) fed to
-// SRCS(${PROTO_FILES}) is collected twice; cloning the re-collect env from the
-// probe-mutated env re-appends and aborts on a duplicate producer. The re-collect
-// must start from a clean base env so each proto yields one producer.
 func TestEmitProtoSrcs_SetAppendProtoFilesNotDoubled(t *testing.T) {
 	const modPath = "grut/libs/proto/public/auxiliary"
 
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+
 	for path, body := range map[string]string{
 		modPath + "/ya.make": `PROTO_LIBRARY()
 
@@ -1067,10 +1066,12 @@ END()
 	g := testGen(newMemFS(files), modPath)
 
 	var pbH, pbCC int
+
 	for _, n := range g.Graph {
 		if n.KV.P != pkPB {
 			continue
 		}
+
 		for _, out := range n.Outputs {
 			switch out.string() {
 			case "$(B)/" + modPath + "/foo.pb.h":
@@ -1084,21 +1085,19 @@ END()
 	if pbH != 1 {
 		t.Errorf("expected exactly one PB producer for foo.pb.h, got %d", pbH)
 	}
+
 	if pbCC != 1 {
 		t.Errorf("expected exactly one PB producer for foo.pb.cc, got %d", pbCC)
 	}
 }
 
-// TestEmitProtoSrcs_SrcDirAscentObjectPath: a PROTO_LIBRARY whose SRCDIR points at a
-// PARENT dir and SRCS names a .proto there. The generated .pb.cc's object is named by
-// rebasing under the module's build dir, mapping the `..` ascent into a `__` segment,
-// like a SRCDIR-resolved C++ object.
 func TestEmitProtoSrcs_SrcDirAscentObjectPath(t *testing.T) {
 	const modPath = "market/proto/content/ir/common"
 
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+
 	for path, body := range map[string]string{
 		modPath + "/ya.make": `PROTO_LIBRARY()
 
@@ -1122,14 +1121,17 @@ END()
 	bad := "$(B)/" + modPath + "/_/market/proto/content/ir/BusinessCleanWebStatus.pb.cc.o"
 
 	var gotObj bool
+
 	for _, n := range g.Graph {
 		if n.KV.P != pkCC {
 			continue
 		}
+
 		for _, out := range n.Outputs {
 			if out.string() == bad {
 				t.Errorf("CC object uses _/<full-path> shape, want __ ascent: %q", bad)
 			}
+
 			if out.string() == want {
 				gotObj = true
 			}
@@ -1138,19 +1140,17 @@ END()
 
 	if !gotObj {
 		var ccOuts []string
+
 		for _, n := range g.Graph {
 			if n.KV.P == pkCC {
 				ccOuts = append(ccOuts, n.Outputs[0].string())
 			}
 		}
+
 		t.Errorf("missing SRCDIR-ascent proto object %q; CC outputs: %v", want, ccOuts)
 	}
 }
 
-// TestGen_PyProtoLibrary_TransitivePROTONamespaceReachesPyProtoCmd: a PY-addressed
-// PROTO_LIBRARY reaching a transitive PROTO_LIBRARY with a bare PROTO_NAMESPACE(yt)
-// must carry -I=$(S)/yt in its protoc command, ordered by encounter before the
-// protobuf-src and protoc-src includes.
 func TestGen_PyProtoLibrary_TransitivePROTONamespaceReachesPyProtoCmd(t *testing.T) {
 	const consumer = "app/pytool"
 
@@ -1198,13 +1198,16 @@ END()
 	g := testGen(newMemFS(files), consumer)
 
 	var pyPB *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkPB && n.TargetProperties.ModuleTag == tagPy3Proto &&
 			strings.HasSuffix(n.Outputs[0].string(), "brand__intpy3___pb2.py") {
 			pyPB = n
+
 			break
 		}
 	}
+
 	if pyPB == nil {
 		t.Fatal("no python PB node for brand__intpy3___pb2.py emitted")
 	}
@@ -1212,14 +1215,17 @@ END()
 	args := pyPB.Cmds[0].CmdArgs.flat()
 
 	ytCount := 0
+
 	for _, a := range args {
 		if a.string() == "-I=$(S)/yt" {
 			ytCount++
 		}
 	}
+
 	if ytCount == 0 {
 		t.Fatalf("py PB cmd missing transitive PROTO_NAMESPACE token -I=$(S)/yt: %v", strStrs(args))
 	}
+
 	if ytCount > 1 {
 		t.Fatalf("py PB cmd duplicates -I=$(S)/yt (%d times): %v", ytCount, strStrs(args))
 	}
@@ -1228,29 +1234,25 @@ END()
 	ytIdx := indexOfArg(args, "-I=$(S)/yt")
 	protocSrcIdx := indexOfArg(args, "-I=$(S)/contrib/libs/protoc/src")
 	pyOutIdx := indexOfArg(args, "--python_out=$(B)/")
+
 	if protobufSrcIdx < 0 || pyOutIdx < 0 {
 		t.Fatalf("py PB cmd missing protobuf-src / python_out anchors: %v", strStrs(args))
 	}
-	// Encounter order: yt precedes protobuf-src precedes protoc-src.
+
 	if !(ytIdx < protobufSrcIdx && protobufSrcIdx < pyOutIdx) {
 		t.Fatalf("expected yt < protobuf-src < python_out: yt=%d protobuf-src=%d python_out=%d args=%v",
 			ytIdx, protobufSrcIdx, pyOutIdx, strStrs(args))
 	}
+
 	if protocSrcIdx >= 0 && !(protobufSrcIdx < protocSrcIdx) {
 		t.Fatalf("expected protobuf-src before protoc-src: protobuf-src=%d protoc-src=%d args=%v", protobufSrcIdx, protocSrcIdx, strStrs(args))
 	}
 
-	// The trailing -I=$(B) -I=$(S)/contrib/libs/protobuf/src structural suffix is
-	// preserved immediately before --python_out.
 	if pyOutIdx < 2 || args[pyOutIdx-1].string() != "-I=$(S)/contrib/libs/protobuf/src" || args[pyOutIdx-2].string() != "-I=$(B)" {
 		t.Fatalf("expected trailing -I=$(B) -I=$(S)/contrib/libs/protobuf/src before --python_out: %v", strStrs(args))
 	}
 }
 
-// TestGen_PyProtoLibrary_ProtobufBuiltinKeepsBandProtobufSrc: the protobuf runtime's
-// own python protos have PROTO_NAMESPACE = contrib/libs/protobuf/src, so that include
-// appears three times (structural prefix, band member, trailing suffix). Dropping the
-// standalone pre-band copy (T-75) must not collapse the band copy.
 func TestGen_PyProtoLibrary_ProtobufBuiltinKeepsBandProtobufSrc(t *testing.T) {
 	const consumer = "app/pytool"
 
@@ -1262,8 +1264,6 @@ func TestGen_PyProtoLibrary_ProtobufBuiltinKeepsBandProtobufSrc(t *testing.T) {
 	writeToolProgram(files, "tools/rescompiler", "rescompiler")
 	writeToolProgram(files, "contrib/python/mypy-protobuf/bin/protoc-gen-mypy", "protoc-gen-mypy")
 
-	// The protobuf runtime PROTO_LIBRARY: PROTO_NAMESPACE is the protobuf src root.
-	// DISABLE(NEED_GOOGLE_PROTO_PEERDIRS) matches the builtin: no protoc-src added.
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", `PROTO_LIBRARY()
 PROTO_NAMESPACE(contrib/libs/protobuf/src)
 NO_MYPY()
@@ -1292,41 +1292,38 @@ END()
 
 	const protobufSrc = "-I=$(S)/contrib/libs/protobuf/src"
 
-	// The trailing -I=$(B) -I=$(S)/contrib/libs/protobuf/src pair sits just before
-	// --python_out.
 	pyOutIdx := indexOfArg(args, "--python_out=$(B)/contrib/libs/protobuf/src")
+
 	if pyOutIdx < 2 || args[pyOutIdx-1].string() != protobufSrc || args[pyOutIdx-2].string() != "-I=$(B)" {
 		t.Fatalf("expected trailing -I=$(B) %s before --python_out: %v", protobufSrc, strStrs(args))
 	}
 
-	// The band copy must survive: a protobuf-src include sits AFTER the structural bare
-	// -I=$(S) prefix and BEFORE the trailing -I=$(B) pair.
 	bareIdx := indexOfArg(args, "-I=$(S)")
 	trailingBIdx := pyOutIdx - 2
+
 	if bareIdx < 0 {
 		t.Fatalf("missing structural bare -I=$(S): %v", strStrs(args))
 	}
+
 	bandCopy := false
+
 	for i := bareIdx + 1; i < trailingBIdx; i++ {
 		if args[i].string() == protobufSrc {
 			bandCopy = true
+
 			break
 		}
 	}
+
 	if !bandCopy {
 		t.Fatalf("band protobuf-src include collapsed for the protobuf builtin (only prefix+trailing remain): %v", strStrs(args))
 	}
 
-	// No NEED_GOOGLE_PROTO_PEERDIRS protoc-src for the builtin (it DISABLEs it).
 	if protocSrcIdx := indexOfArg(args, "-I=$(S)/contrib/libs/protoc/src"); protocSrcIdx >= 0 {
 		t.Fatalf("protobuf builtin must not carry protoc-src include: %v", strStrs(args))
 	}
 }
 
-// TestGen_ProtoLibrary_TransitiveGlobalNamespaceInterleavesInBothCmds: a transitive
-// GLOBAL PROTO_NAMESPACE peer reached *after* a bare PROTO_NAMESPACE peer must land in
-// _PROTO__INCLUDE once, after the bare namespace (encounter order), in BOTH the C++
-// and Python commands.
 func TestGen_ProtoLibrary_TransitiveGlobalNamespaceInterleavesInBothCmds(t *testing.T) {
 	const consumer = "app/pytool"
 
@@ -1338,7 +1335,6 @@ func TestGen_ProtoLibrary_TransitiveGlobalNamespaceInterleavesInBothCmds(t *test
 	writeToolProgram(files, "tools/rescompiler", "rescompiler")
 	writeToolProgram(files, "contrib/python/mypy-protobuf/bin/protoc-gen-mypy", "protoc-gen-mypy")
 
-	// GLOBAL PROTO_NAMESPACE peer.
 	writeTestModuleFile(files, "lib/gapis/ya.make", `PROTO_LIBRARY()
 PROTO_NAMESPACE(GLOBAL lib/gapis)
 SRCS(g.proto)
@@ -1346,7 +1342,6 @@ END()
 `)
 	writeTestModuleFile(files, "lib/gapis/g.proto", "syntax = \"proto3\";\npackage gapis;\nmessage G {}\n")
 
-	// Bare PROTO_NAMESPACE peer, encountered before the GLOBAL one (it peers it).
 	writeTestModuleFile(files, "lib/yt/ya.make", `PROTO_LIBRARY()
 PROTO_NAMESPACE(yt)
 PEERDIR(lib/gapis)
@@ -1355,7 +1350,6 @@ END()
 `)
 	writeTestModuleFile(files, "lib/yt/y.proto", "syntax = \"proto3\";\npackage yt;\nmessage Y {}\n")
 
-	// Consumer PROTO_LIBRARY with no own namespace: its band is purely the peers'.
 	writeTestModuleFile(files, "app/proto/ya.make", `PROTO_LIBRARY()
 PEERDIR(lib/yt)
 SRCS(c.proto)
@@ -1385,112 +1379,119 @@ END()
 		ytIdx := indexOfArg(args, ytTok)
 		gapisIdx := indexOfArg(args, gapisTok)
 		gapisCount := 0
+
 		for _, a := range args {
 			if a.string() == gapisTok {
 				gapisCount++
 			}
 		}
+
 		if ytIdx < 0 {
 			t.Fatalf("%s: missing bare namespace %s: %v", label, ytTok, strStrs(args))
 		}
+
 		if gapisCount == 0 {
 			t.Fatalf("%s: missing transitive GLOBAL namespace %s: %v", label, gapisTok, strStrs(args))
 		}
+
 		if gapisCount > 1 {
 			t.Fatalf("%s: GLOBAL namespace %s duplicated (%d): %v", label, gapisTok, gapisCount, strStrs(args))
 		}
+
 		if !(ytIdx < gapisIdx) {
 			t.Fatalf("%s: expected bare yt (%d) before GLOBAL gapis (%d): %v", label, ytIdx, gapisIdx, strStrs(args))
 		}
 	}
 
-	// C++ PB command for the consumer's c.pb.h.
 	var cppArgs []STR
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkPB && n.TargetProperties.ModuleTag == tagCppProto &&
 			len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), "app/proto/c.pb.h") {
 			cppArgs = n.Cmds[0].CmdArgs.flat()
+
 			break
 		}
 	}
+
 	if cppArgs == nil {
 		t.Fatal("no C++ PB node for app/proto/c.pb.h emitted")
 	}
+
 	assertInterleavedBand("cpp", cppArgs)
 
-	// Python PB command for the same source.
 	assertInterleavedBand("py", pyProtoCmdArgsForOutput(t, g, "c__intpy3___pb2.py"))
 }
 
-// TestProtoPythonResourceKey_PYNamespacePreservesNestedSubdir: with PY_NAMESPACE the
-// aux key for a nested SRC must keep the module-local subdir under the namespace, not
-// collapse it to filepath.Base.
 func TestProtoPythonResourceKey_PYNamespacePreservesNestedSubdir(t *testing.T) {
 	instance := ModuleInstance{Path: source("yt/yt_proto/yt/client")}
 	d := &ModuleData{pyNamespace: strPtr(internStr("yt_proto.yt.client"))}
 
 	got := protoPythonResourceKey(instance, d, "chunk_client/proto/data_statistics.proto", "_pb2.py")
 	const want = "yt_proto/yt/client/chunk_client/proto/data_statistics_pb2.py"
+
 	if got != want {
 		t.Errorf("nested PY_NAMESPACE key = %q, want %q", got, want)
 	}
 
 	const collapsed = "yt_proto/yt/client/data_statistics_pb2.py"
+
 	if got == collapsed {
 		t.Errorf("key collapsed nested subdir to %q", collapsed)
 	}
 
-	// Root-level source: no subdirectory to preserve, unchanged.
 	gotRoot := protoPythonResourceKey(instance, d, "access_control_service.proto", "_pb2.py")
 	const wantRoot = "yt_proto/yt/client/access_control_service_pb2.py"
+
 	if gotRoot != wantRoot {
 		t.Errorf("root-level PY_NAMESPACE key = %q, want %q", gotRoot, wantRoot)
 	}
 }
 
-// pyProtoCmdArgsForOutput returns the flat command args for the py PB/grpc producer
-// whose first output ends with wantSuffix.
 func pyProtoCmdArgsForOutput(t *testing.T, g *Graph, wantSuffix string) []STR {
 	t.Helper()
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkPB && n.TargetProperties.ModuleTag == tagPy3Proto &&
 			len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), wantSuffix) {
 			return n.Cmds[0].CmdArgs.flat()
 		}
 	}
+
 	t.Fatalf("no python PB node for %q", wantSuffix)
+
 	return nil
 }
 
 func assertYtNamespaceDuplicated(t *testing.T, args []STR) {
 	t.Helper()
 	ytCount := 0
+
 	for _, a := range args {
 		if a.string() == "-I=$(S)/yt" {
 			ytCount++
 		}
 	}
+
 	if ytCount != 3 {
 		t.Fatalf("expected 3 -I=$(S)/yt (output-root + duplicated _PROTO__INCLUDE), got %d: %v", ytCount, strStrs(args))
 	}
 
-	// The two _PROTO__INCLUDE copies sit right after the bare -I=$(S), before protobuf-src.
 	bare := indexOfArg(args, "-I=$(S)")
+
 	if bare < 0 || bare+3 >= len(args) {
 		t.Fatalf("missing bare -I=$(S) anchor: %v", strStrs(args))
 	}
+
 	if args[bare+1].string() != "-I=$(S)/yt" || args[bare+2].string() != "-I=$(S)/yt" {
 		t.Fatalf("expected two consecutive -I=$(S)/yt after -I=$(S): %v", strStrs(args))
 	}
+
 	if args[bare+3].string() != "-I=$(S)/contrib/libs/protobuf/src" {
 		t.Fatalf("expected protobuf-src after the duplicated namespace: %v", strStrs(args))
 	}
 }
 
-// TestGen_PyProtoLibrary_OwnPROTONamespaceDuplicatesNamespaceInclude: a PROTO_LIBRARY
-// with its own PROTO_NAMESPACE(yt) must render -I=$(S)/yt twice inside _PROTO__INCLUDE
-// (own namespace + CPP_PROTO self-sibling). The aux resource key for the nested SRC
-// must keep its module-local subdir.
 func TestGen_PyProtoLibrary_OwnPROTONamespaceDuplicatesNamespaceInclude(t *testing.T) {
 	const consumer = "app/pytool"
 	const mod = "yt/yt_proto/yt/client"
@@ -1529,35 +1530,37 @@ END()
 	args := pyProtoCmdArgsForOutput(t, g, "data_statistics__intpy3___pb2.py")
 	assertYtNamespaceDuplicated(t, args)
 
-	// End-to-end: the aux resource key preserves the nested subdir.
 	const wantKey = "resfs/file/py/yt_proto/yt/client/chunk_client/proto/data_statistics_pb2.py"
 	const collapsedKey = "resfs/file/py/yt_proto/yt/client/data_statistics_pb2.py"
 	foundKey, foundCollapsed := false, false
+
 	for _, n := range g.Graph {
 		if n.KV.P != pkPR {
 			continue
 		}
+
 		for _, a := range n.Cmds[0].CmdArgs.flat() {
 			s := a.string()
+
 			if strings.Contains(s, wantKey) {
 				foundKey = true
 			}
+
 			if strings.Contains(s, collapsedKey) {
 				foundCollapsed = true
 			}
 		}
 	}
+
 	if !foundKey {
 		t.Errorf("no aux resource key %q found", wantKey)
 	}
+
 	if foundCollapsed {
 		t.Errorf("aux resource key still collapsed to %q", collapsedKey)
 	}
 }
 
-// TestGen_PyProtoLibrary_GrpcRootSourceSharesDuplicateInclude: a GRPC root-level
-// source keeps its _pb2_grpc.py output, its shared protoc producer carrying the same
-// duplicated -I=$(S)/yt.
 func TestGen_PyProtoLibrary_GrpcRootSourceSharesDuplicateInclude(t *testing.T) {
 	const consumer = "app/pytool"
 	const mod = "yt/yt_proto/yt/orm/api"
@@ -1597,11 +1600,11 @@ END()
 
 	g := testGen(newMemFS(files), consumer)
 
-	// The grpc python output still exists and shares the PB producer command.
 	args := pyProtoCmdArgsForOutput(t, g, "access_control_service__intpy3___pb2.py")
 	assertYtNamespaceDuplicated(t, args)
 
 	hasGrpcOut := false
+
 	for _, n := range g.Graph {
 		for _, o := range n.Outputs {
 			if strings.HasSuffix(o.string(), "access_control_service__intpy3___pb2_grpc.py") {
@@ -1609,14 +1612,12 @@ END()
 			}
 		}
 	}
+
 	if !hasGrpcOut {
 		t.Fatal("grpc python output access_control_service__intpy3___pb2_grpc.py missing")
 	}
 }
 
-// TestEmitProtoSrcs_CppEvlogCarriesEvent2cppInducedDeps: CPP_EVLOG() makes event2cpp
-// a protoc plugin, so its INDUCED_DEPS(h+cpp …) must reach the generated foo.pb.cc.o
-// closure like the true .ev path; WITHOUT CPP_EVLOG() it must NOT.
 func TestEmitProtoSrcs_CppEvlogCarriesEvent2cppInducedDeps(t *testing.T) {
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
@@ -1627,7 +1628,6 @@ func TestEmitProtoSrcs_CppEvlogCarriesEvent2cppInducedDeps(t *testing.T) {
 	writeTestModuleFile(files, "library/cpp/eventlog/ya.make", "LIBRARY()\nSRCS(eventlog.cpp)\nEND()\n")
 	writeTestModuleFile(files, "library/cpp/eventlog/eventlog.cpp", "int eventlog(){return 0;}\n")
 
-	// Stub event2cpp tool declaring one (h+cpp) induced header.
 	writeTestModuleFile(files, "tools/event2cpp/ya.make",
 		"PROGRAM(event2cpp)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nINDUCED_DEPS(h+cpp ${ARCADIA_ROOT}/runtime/eventlog_runtime.h)\nSRCS(main.cpp)\nEND()\n")
 	writeTestModuleFile(files, "tools/event2cpp/main.cpp", "int main(){return 0;}\n")
@@ -1645,55 +1645,62 @@ func TestEmitProtoSrcs_CppEvlogCarriesEvent2cppInducedDeps(t *testing.T) {
 
 	gEv := testGen(newMemFS(files), "evlog")
 	evCC := mustNodeByOutput(t, gEv, "$(B)/evlog/foo.pb.cc.o")
+
 	if !nodeHasInput(evCC, induced) {
 		t.Fatalf("CPP_EVLOG foo.pb.cc.o missing event2cpp induced input %q: %v", induced, evCC.flatInputs())
 	}
 
-	// T-58: CPP_EVLOG must also make event2cpp a C++ proto plugin on the PB command.
 	pb := mustNodeByOutput(t, gEv, "$(B)/evlog/foo.pb.h")
 	const event2cppBinary = "$(B)/tools/event2cpp/event2cpp"
 	pbArgs := strStrs(pb.Cmds[0].CmdArgs.flat())
 	const wantPlugin = "--plugin=protoc-gen-event2cpp=" + event2cppBinary
 	const wantOut = "--event2cpp_out=$(B)/"
+
 	if !containsString(pbArgs, wantPlugin) {
 		t.Fatalf("CPP_EVLOG pb cmd missing event2cpp plugin token %q: %v", wantPlugin, pbArgs)
 	}
+
 	if !containsString(pbArgs, wantOut) {
 		t.Fatalf("CPP_EVLOG pb cmd missing event2cpp out token %q: %v", wantOut, pbArgs)
 	}
+
 	srcIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "evlog/foo.proto")
 	pluginIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), wantPlugin)
 	outIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), wantOut)
+
 	if srcIdx < 0 || pluginIdx < 0 || outIdx < 0 {
 		t.Fatalf("CPP_EVLOG pb cmd missing src/plugin/out args: src=%d plugin=%d out=%d (%v)", srcIdx, pluginIdx, outIdx, pbArgs)
 	}
+
 	if !(srcIdx < pluginIdx && srcIdx < outIdx) {
 		t.Fatalf("CPP_EVLOG pb plugin tokens must follow source: src=%d plugin=%d out=%d", srcIdx, pluginIdx, outIdx)
 	}
+
 	if !nodeHasInput(pb, event2cppBinary) {
 		t.Fatalf("CPP_EVLOG pb producer missing event2cpp tool input %q: %v", event2cppBinary, pb.flatInputs())
 	}
+
 	event2cppNode := mustNodeByOutput(t, gEv, event2cppBinary)
 	refs := 0
+
 	for _, dep := range graphDeps(gEv, pb) {
 		if dep == event2cppNode.UID {
 			refs++
 		}
 	}
+
 	if refs != 1 {
 		t.Fatalf("CPP_EVLOG pb event2cpp generator ref count = %d, want 1 (no duplicate)", refs)
 	}
 
 	gPlain := testGen(newMemFS(files), "plain")
 	plainCC := mustNodeByOutput(t, gPlain, "$(B)/plain/foo.pb.cc.o")
+
 	if nodeHasInput(plainCC, induced) {
 		t.Fatalf("non-CPP_EVLOG foo.pb.cc.o unexpectedly carries event2cpp induced input %q: %v", induced, plainCC.flatInputs())
 	}
 }
 
-// T-54: a PROTO_LIBRARY leaf reached only through a peers list included via a
-// variable-bearing INCLUDE path must enter the graph (its ${VAR} resolved at parse
-// time, not left literal).
 func TestParseInclude_VarBearingPeersListReachesLeafPyProto(t *testing.T) {
 	const consumer = "app"
 
@@ -1738,21 +1745,21 @@ END()
 	g := testGen(newMemFS(files), consumer)
 
 	var pyPB *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkPB && n.TargetProperties.ModuleTag == tagPy3Proto &&
 			len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), "enum_options__intpy3___pb2.py") {
 			pyPB = n
+
 			break
 		}
 	}
+
 	if pyPB == nil {
 		t.Fatal("leaf PY3 proto enum_options__intpy3___pb2.py not reachable through variable-bearing include")
 	}
 }
 
-// T-32: a py-addressed PROTO_LIBRARY(name) carries that name into its py-proto global
-// archive basename (libpy3<name>.global.a); an unnamed PROTO_LIBRARY() keeps the
-// path-derived form.
 func TestEmitPyProtoSrcs_ExplicitProtoLibraryNameNamesGlobalArchive(t *testing.T) {
 	const consumer = "app/pytool"
 
@@ -1792,6 +1799,7 @@ END()
 	g := testGen(newMemFS(files), consumer)
 
 	globals := map[string]bool{}
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkAR && n.TargetProperties.ModuleTag == tagPy3ProtoGlobal && len(n.Outputs) > 0 {
 			globals[n.Outputs[0].string()] = true
@@ -1799,44 +1807,39 @@ END()
 	}
 
 	wantNamed := "$(B)/ads/caesar/libs/events/proto/libpy3ads-caesar-events-proto.global.a"
+
 	if !globals[wantNamed] {
 		t.Fatalf("named PROTO_LIBRARY did not produce %s; py3_proto_global archives: %v", wantNamed, globals)
 	}
+
 	pathDerivedNamed := "$(B)/ads/caesar/libs/events/proto/libpy3libs-events-proto.global.a"
+
 	if globals[pathDerivedNamed] {
 		t.Fatalf("named PROTO_LIBRARY still emits path-derived %s", pathDerivedNamed)
 	}
 
 	wantUnnamed := "$(B)/libs/unnamed/proto/libpy3libs-unnamed-proto.global.a"
+
 	if !globals[wantUnnamed] {
 		t.Fatalf("unnamed PROTO_LIBRARY did not keep path-derived %s; py3_proto_global archives: %v", wantUnnamed, globals)
 	}
 }
 
-// protoNsOrderFixture: a consumer PEERDIRs a plain LIBRARY `mid` with a bare
-// `PROTO_NAMESPACE(mid)`. `mid` PEERDIRs a sub-module exporting `$(B)/mid/sub` GLOBAL
-// and (later) a deeper module also exporting `$(B)/mid` GLOBAL. Since PROTO_NAMESPACE
-// expands to `ADDINCL(GLOBAL $(B)/mid)`, `mid` contributes `$(B)/mid` first, before
-// the peers' `$(B)/mid/sub`.
 func protoNsOrderFixture() FS {
 	files := map[string]string{}
 
-	// mid: plain LIBRARY, bare PROTO_NAMESPACE(mid), peers sub then deep exporter.
 	writeTestModuleFile(files, "mid/ya.make",
 		"LIBRARY()\nPROTO_NAMESPACE(mid)\nPEERDIR(mid/sub deep)\nSRCS(m.cpp)\nEND()\n")
 	writeTestModuleFile(files, "mid/m.cpp", "int m(){return 0;}\n")
 
-	// sub exporter: a GLOBAL build-root subdir include.
 	writeTestModuleFile(files, "mid/sub/ya.make",
 		"LIBRARY()\nADDINCL(GLOBAL ${ARCADIA_BUILD_ROOT}/mid/sub)\nSRCS(s.cpp)\nEND()\n")
 	writeTestModuleFile(files, "mid/sub/s.cpp", "int s(){return 0;}\n")
 
-	// deep exporter: also provides $(B)/mid GLOBAL, but is reached after mid/sub.
 	writeTestModuleFile(files, "deep/ya.make",
 		"LIBRARY()\nADDINCL(GLOBAL ${ARCADIA_BUILD_ROOT}/mid)\nSRCS(d.cpp)\nEND()\n")
 	writeTestModuleFile(files, "deep/d.cpp", "int d(){return 0;}\n")
 
-	// consumer: ordinary C++ unit that peers mid.
 	writeTestModuleFile(files, "consumer/ya.make",
 		"LIBRARY()\nPEERDIR(mid)\nSRCS(c.cpp)\nEND()\n")
 	writeTestModuleFile(files, "consumer/c.cpp", "int c(){return 0;}\n")
@@ -1844,9 +1847,6 @@ func protoNsOrderFixture() FS {
 	return newMemFS(files)
 }
 
-// TestGen_BareProtoNamespace_BuildRootIncludeIsGlobalAndOrderedFirst: a bare
-// PROTO_NAMESPACE's `$(B)/<ns>` C++ include must be GLOBAL (reaching consumers via the
-// declaring peer) and render before a peer-propagated subdir include.
 func TestGen_BareProtoNamespace_BuildRootIncludeIsGlobalAndOrderedFirst(t *testing.T) {
 	g := testGen(protoNsOrderFixture(), "consumer")
 
@@ -1859,19 +1859,17 @@ func TestGen_BareProtoNamespace_BuildRootIncludeIsGlobalAndOrderedFirst(t *testi
 	if iNs < 0 {
 		t.Fatalf("consumer compile missing -I$(B)/mid\nargs=%v", strStrs(args))
 	}
+
 	if iSub < 0 {
 		t.Fatalf("consumer compile missing -I$(B)/mid/sub\nargs=%v", strStrs(args))
 	}
+
 	if iNs > iSub {
 		t.Fatalf("-I$(B)/mid (idx %d) must precede -I$(B)/mid/sub (idx %d)\nargs=%v",
 			iNs, iSub, strStrs(args))
 	}
 }
 
-// protoAddInclFixture: a plain LIBRARY() listing an inline .proto plus an ordinary
-// .cpp. The C++ proto compile makes the module peer protobuf and inherit its GLOBAL
-// ADDINCL band (protobuf/src + abseil roots), which must reach the module's ordinary
-// sources, its generated .pb.cc, and a downstream consumer.
 func protoAddInclFixture() FS {
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
@@ -1894,14 +1892,11 @@ func protoAddInclFixture() FS {
 		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\n"+
 			"ADDINCL(GLOBAL contrib/restricted/abseil-cpp)\nEND()\n")
 
-	// Inline-proto LIBRARY: ordinary use.cpp + inline svc.proto.
 	writeTestModuleFile(files, "m/lib/ya.make",
 		"LIBRARY()\nSRCS(svc.proto use.cpp)\nEND()\n")
 	writeTestModuleFile(files, "m/lib/svc.proto", "syntax = \"proto3\";\npackage m;\nmessage Svc {}\n")
 	writeTestModuleFile(files, "m/lib/use.cpp", "int use(){return 0;}\n")
 
-	// Consumer: peers the inline-proto module, ordinary c.cpp. Also peers an
-	// unrelated plain library to anchor the negative guard.
 	writeTestModuleFile(files, "consumer/ya.make",
 		"LIBRARY()\nPEERDIR(m/lib plain/lib)\nSRCS(c.cpp)\nEND()\n")
 	writeTestModuleFile(files, "consumer/c.cpp", "int c(){return 0;}\n")
@@ -1913,10 +1908,6 @@ func protoAddInclFixture() FS {
 	return newMemFS(files)
 }
 
-// TestGen_InlineProtoLibrary_ProtobufGlobalAddInclReachesOrdinaryAndConsumer: the
-// protobuf GLOBAL ADDINCL band must land on an inline-proto LIBRARY's ordinary source
-// AND its generated .pb.cc, propagate to a downstream consumer, and NOT leak to an
-// unrelated module without the protobuf provider.
 func TestGen_InlineProtoLibrary_ProtobufGlobalAddInclReachesOrdinaryAndConsumer(t *testing.T) {
 	fs := protoAddInclFixture()
 	g := testGen(fs, "consumer")
@@ -1931,28 +1922,25 @@ func TestGen_InlineProtoLibrary_ProtobufGlobalAddInclReachesOrdinaryAndConsumer(
 		t.Helper()
 		n := mustNodeByOutput(t, g, output)
 		args := strStrs(n.Cmds[0].CmdArgs.flat())
+
 		for _, inc := range band {
 			has := flagsContain(args, inc)
+
 			if has != want {
 				t.Fatalf("%s (%s): include %q present=%v, want %v\nargs=%v", label, output, inc, has, want, args)
 			}
 		}
 	}
 
-	// Ordinary C++ source in the inline-proto module.
 	assertBand("inline-proto ordinary src", "$(B)/m/lib/use.cpp.o", true)
-	// Generated C++ source (the proto .pb.cc) in the same module.
+
 	assertBand("inline-proto generated pb.cc", "$(B)/m/lib/svc.pb.cc.o", true)
-	// Ordinary C++ source in a downstream consumer of the inline-proto module.
+
 	assertBand("consumer ordinary src", "$(B)/consumer/c.cpp.o", true)
-	// Negative guard: unrelated module without the protobuf provider.
+
 	assertBand("unrelated module", "$(B)/plain/lib/plain.cpp.o", false)
 }
 
-// crossNamespaceProtoFixture: a top PROTO_LIBRARY in PROTO_NAMESPACE(tns) imports a
-// CROSS-namespace leaf (PROTO_NAMESPACE lns) whose leaf_a re-includes leaf_b. An app
-// unit including top.pb.h must reach BOTH leaf headers — the import's .pb.h resolves
-// against leaf's own namespace, not the importer's tns.
 func crossNamespaceProtoFixture() FS {
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
@@ -1962,7 +1950,6 @@ func crossNamespaceProtoFixture() FS {
 		"LIBRARY()\nADDINCL(GLOBAL contrib/libs/protobuf/src)\nSRCS(p.cpp)\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/protobuf/p.cpp", "int p(){return 0;}\n")
 
-	// leaf PROTO_LIBRARY, namespace lns. leaf_a imports same-namespace leaf_b.
 	writeTestModuleFile(files, "lns/leaf/ya.make",
 		"PROTO_LIBRARY()\nPROTO_NAMESPACE(lns)\nSRCS(leaf_a.proto leaf_b.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
 	writeTestModuleFile(files, "lns/leaf/leaf_a.proto",
@@ -1970,13 +1957,11 @@ func crossNamespaceProtoFixture() FS {
 	writeTestModuleFile(files, "lns/leaf/leaf_b.proto",
 		"syntax = \"proto3\";\npackage lns;\nmessage LeafB { string v = 1; }\n")
 
-	// top PROTO_LIBRARY, namespace tns. top imports the cross-namespace leaf_a.
 	writeTestModuleFile(files, "tns/top/ya.make",
 		"PROTO_LIBRARY()\nPROTO_NAMESPACE(tns)\nPEERDIR(lns/leaf)\nSRCS(top.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
 	writeTestModuleFile(files, "tns/top/top.proto",
 		"syntax = \"proto3\";\npackage tns;\nimport \"leaf/leaf_a.proto\";\nmessage Top { lns.LeafA a = 1; }\n")
 
-	// app LIBRARY: reaches top.pb.h through a source-header chain.
 	writeTestModuleFile(files, "app/ya.make",
 		"LIBRARY()\nPEERDIR(tns/top)\nSRCS(app.cpp)\nEND()\n")
 	writeTestModuleFile(files, "app/app.cpp", "#include \"app.h\"\nint app(){return 0;}\n")
@@ -1985,8 +1970,6 @@ func crossNamespaceProtoFixture() FS {
 	return newMemFS(files)
 }
 
-// TestEmitProtoSrcs_CrossNamespaceDirectImportPbHRidesIntoConsumer: cross-namespace
-// direct-import generated headers reach an ordinary CC consumer.
 func TestEmitProtoSrcs_CrossNamespaceDirectImportPbHRidesIntoConsumer(t *testing.T) {
 	g := testGen(crossNamespaceProtoFixture(), "app")
 	appCC := mustNodeByOutput(t, g, "$(B)/app/app.cpp.o")
@@ -2002,9 +1985,6 @@ func TestEmitProtoSrcs_CrossNamespaceDirectImportPbHRidesIntoConsumer(t *testing
 	}
 }
 
-// grpcLibraryFixture builds a plain LIBRARY() that lists an inline .proto in SRCS
-// (a LIBRARY, not a PROTO_LIBRARY). withGrpc toggles GRPC(). Returns the graph for
-// module "m/lib".
 func grpcLibraryFixture(t *testing.T, withGrpc bool) *Graph {
 	t.Helper()
 	files := map[string]string{}
@@ -2017,9 +1997,11 @@ func grpcLibraryFixture(t *testing.T, withGrpc bool) *Graph {
 	writeTestModuleFile(files, "contrib/libs/grpc/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n")
 
 	grpc := ""
+
 	if withGrpc {
 		grpc = "GRPC()\n"
 	}
+
 	writeTestModuleFile(files, "m/lib/ya.make", "LIBRARY()\nSRCDIR(m)\nSRCS(svc.proto use.cpp)\n"+grpc+"END()\n")
 	writeTestModuleFile(files, "m/svc.proto", "syntax = \"proto3\";\npackage m;\nmessage Svc {}\n")
 	writeTestModuleFile(files, "m/use.cpp", "int use(){return 0;}\n")
@@ -2027,10 +2009,6 @@ func grpcLibraryFixture(t *testing.T, withGrpc bool) *Graph {
 	return testGen(newMemFS(files), "m/lib")
 }
 
-// TestEmitLibraryProtoSource_GrpcEmitsProducerOutputsAndCompile: for a plain LIBRARY()
-// with an inline .proto, GRPC() makes protoc gain the grpc_cpp plugin — the .pb
-// producer declares .grpc.pb.{cc,h} outputs, takes the grpc_cpp tool input, passes
-// --grpc_cpp_out, and the generated .grpc.pb.cc compiles into a .grpc.pb.cc.o.
 func TestEmitLibraryProtoSource_GrpcEmitsProducerOutputsAndCompile(t *testing.T) {
 	g := grpcLibraryFixture(t, true)
 
@@ -2042,6 +2020,7 @@ func TestEmitLibraryProtoSource_GrpcEmitsProducerOutputsAndCompile(t *testing.T)
 				return true
 			}
 		}
+
 		return false
 	}
 
@@ -2056,9 +2035,11 @@ func TestEmitLibraryProtoSource_GrpcEmitsProducerOutputsAndCompile(t *testing.T)
 	}
 
 	args := pb.Cmds[0].CmdArgs.flat()
+
 	if !contains(args, "--grpc_cpp_out=$(B)/") {
 		t.Errorf("pb cmd missing --grpc_cpp_out; args=%v", args)
 	}
+
 	if !contains(args, "--plugin=protoc-gen-grpc_cpp=$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp") {
 		t.Errorf("pb cmd missing grpc_cpp plugin flag; args=%v", args)
 	}
@@ -2068,10 +2049,6 @@ func TestEmitLibraryProtoSource_GrpcEmitsProducerOutputsAndCompile(t *testing.T)
 	}
 }
 
-// TestEmitLibraryProtoSource_GrpcPluginDepAddInclLeadsDeclaredPeer: a plain LIBRARY()
-// with an inline .proto + GRPC() must hoist the grpc plugin-runtime peer ahead of the
-// declared PEERDIR closure in the proto compile's GLOBAL ADDINCL order, even when the
-// declared peer is listed before GRPC().
 func TestEmitLibraryProtoSource_GrpcPluginDepAddInclLeadsDeclaredPeer(t *testing.T) {
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
@@ -2107,9 +2084,6 @@ func TestEmitLibraryProtoSource_GrpcPluginDepAddInclLeadsDeclaredPeer(t *testing
 	}
 }
 
-// TestEmitLibraryProtoSource_NonGrpcKeepsDeclaredAddInclOrder is the negative control:
-// a plain LIBRARY() with an inline .proto and NO grpc/plugins keeps its declared
-// PEERDIR ADDINCL order untouched.
 func TestEmitLibraryProtoSource_NonGrpcKeepsDeclaredAddInclOrder(t *testing.T) {
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
@@ -2153,12 +2127,10 @@ func graphHasOutputSuffix(g *Graph, suffix string) bool {
 			}
 		}
 	}
+
 	return false
 }
 
-// TestEmitLibraryProtoSource_NoGrpcUnchanged is the negative control: the same
-// inline-proto LIBRARY WITHOUT GRPC() declares none of the grpc outputs, plugin input,
-// flags, or compile node.
 func TestEmitLibraryProtoSource_NoGrpcUnchanged(t *testing.T) {
 	g := grpcLibraryFixture(t, false)
 
@@ -2175,6 +2147,7 @@ func TestEmitLibraryProtoSource_NoGrpcUnchanged(t *testing.T) {
 	}
 
 	args := pb.Cmds[0].CmdArgs.flat()
+
 	if contains(args, "--grpc_cpp_out=$(B)/") {
 		t.Errorf("non-GRPC producer unexpectedly passes --grpc_cpp_out")
 	}
@@ -2184,10 +2157,6 @@ func TestEmitLibraryProtoSource_NoGrpcUnchanged(t *testing.T) {
 	}
 }
 
-// protoImportRootFixture: a fully-qualified proto import (`dep/foo.proto`) existing
-// BOTH at the source root and under a peer PROTO_NAMESPACE addincl mirror. protoc and
-// the module resolver bind it against the src/build roots first, so the source-root
-// copy wins over the ADDINCL mirror.
 func protoImportRootFixture() FS {
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
@@ -2200,19 +2169,14 @@ func protoImportRootFixture() FS {
 	writeTestModuleFile(files, "contrib/libs/protobuf/p.cpp", "int p(){return 0;}\n")
 	writeTestModuleFile(files, "contrib/libs/protobuf/src/google/protobuf/message.h", "#pragma once\n")
 
-	// The real dependency at the source root.
 	writeTestModuleFile(files, "dep/ya.make", "PROTO_LIBRARY()\nSRCS(foo.proto)\nEND()\n")
 	writeTestModuleFile(files, "dep/foo.proto", "syntax = \"proto3\";\npackage dep;\nmessage Foo {}\n")
 
-	// A peer PROTO_LIBRARY publishing the `mirror` PROTO_NAMESPACE GLOBAL addincl; its
-	// on-disk mirror copy of foo.proto would lure an addincl-first resolver.
 	writeTestModuleFile(files, "mirror/peer/ya.make",
 		"PROTO_LIBRARY()\nPROTO_NAMESPACE(mirror)\nSRCS(bar.proto)\nEND()\n")
 	writeTestModuleFile(files, "mirror/peer/bar.proto", "syntax = \"proto3\";\npackage mirror;\nmessage Bar {}\n")
 	writeTestModuleFile(files, "mirror/dep/foo.proto", "syntax = \"proto3\";\npackage dep;\nmessage Foo {}\n")
 
-	// The module under test: imports dep/foo.proto, peers the real dep and the
-	// mirror-namespace peer.
 	writeTestModuleFile(files, "main/ya.make",
 		"PROTO_LIBRARY()\nPEERDIR(dep mirror/peer)\nSRCS(main.proto)\nEND()\n")
 	writeTestModuleFile(files, "main/main.proto",
@@ -2221,9 +2185,6 @@ func protoImportRootFixture() FS {
 	return newMemFS(files)
 }
 
-// TestGen_ProtoImport_SourceRootWinsOverPeerNamespaceMirror: a fully-qualified proto
-// import binds to the source-root copy, not to a peer PROTO_NAMESPACE addincl mirror
-// of the same path.
 func TestGen_ProtoImport_SourceRootWinsOverPeerNamespaceMirror(t *testing.T) {
 	fs := protoImportRootFixture()
 	g := testGen(fs, "main")
@@ -2237,10 +2198,12 @@ func TestGen_ProtoImport_SourceRootWinsOverPeerNamespaceMirror(t *testing.T) {
 	)
 
 	hasWant, hasMirror := false, false
+
 	for _, in := range inputs {
 		if in == want {
 			hasWant = true
 		}
+
 		if in == mirror {
 			hasMirror = true
 		}

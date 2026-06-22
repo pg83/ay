@@ -8,12 +8,13 @@ func TestDenseMap_GetPut(t *testing.T) {
 	if _, ok := m.get(0); ok {
 		t.Fatal("empty map returned present for key 0")
 	}
+
 	if _, ok := m.get(1000); ok {
 		t.Fatal("empty map returned present for out-of-range key")
 	}
 
 	m.put(5, 50)
-	m.put(0, 100) // key 0 must work despite slot-0-is-sentinel
+	m.put(0, 100)
 	m.put(1000, 9)
 
 	for _, c := range []struct {
@@ -21,6 +22,7 @@ func TestDenseMap_GetPut(t *testing.T) {
 		want int
 	}{{5, 50}, {0, 100}, {1000, 9}} {
 		got, ok := m.get(c.k)
+
 		if !ok || got != c.want {
 			t.Fatalf("Get(%d) = (%d, %v), want (%d, true)", c.k, got, ok, c.want)
 		}
@@ -44,14 +46,13 @@ func TestDenseMap_Overwrite(t *testing.T) {
 	if got, _ := m.get(42); got != 3 {
 		t.Fatalf("Get(42) = %d, want 3 (last write)", got)
 	}
+
 	if m.len() != 1 {
 		t.Fatalf("Len = %d, want 1 (overwrite must not grow vals)", m.len())
 	}
 }
 
 func TestDenseMap_PointerValuesShareKeys(t *testing.T) {
-	// One *info stored under several keys; mutation via one key must be visible
-	// through the others.
 	type info struct{ n int }
 	var m DenseMap[STR, *info]
 	shared := &info{n: 1}
@@ -62,6 +63,7 @@ func TestDenseMap_PointerValuesShareKeys(t *testing.T) {
 	got.n = 7
 
 	other, _ := m.get(99)
+
 	if other.n != 7 {
 		t.Fatalf("mutation via key 3 not visible via key 99: got %d", other.n)
 	}
@@ -69,9 +71,11 @@ func TestDenseMap_PointerValuesShareKeys(t *testing.T) {
 
 func TestDenseMap_GeometricGrowth(t *testing.T) {
 	var m DenseMap[STR, int]
+
 	for k := STR(0); k < 1<<12; k++ {
 		m.put(k, int(k)*2)
 	}
+
 	for k := STR(0); k < 1<<12; k++ {
 		if got, ok := m.get(k); !ok || got != int(k)*2 {
 			t.Fatalf("Get(%d) = (%d, %v), want (%d, true)", k, got, ok, int(k)*2)

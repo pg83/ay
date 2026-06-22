@@ -29,8 +29,6 @@ func currentYatoolPath() string {
 	return path
 }
 
-// fetchScriptInputs is the FETCH node's $(S) inputs: the resource-mapping config plus
-// the two fetch scripts.
 func fetchScriptInputs(scripts ScriptDeps) []VFS {
 	out := []VFS{buildMappingConfJson}
 	out = append(out, scripts[buildScriptsFetchFromSandboxPy]...)
@@ -39,8 +37,6 @@ func fetchScriptInputs(scripts ScriptDeps) []VFS {
 	return out
 }
 
-// cmdFetchBase64 (`ay fetch base64 <data> <out>`) writes the base64-decoded data to
-// <out>, for the inline vcs.json node.
 func cmdFetchBase64(_ GlobalFlags, args []string) int {
 	if len(args) != 2 {
 		throwFmt("fetch: usage: ay fetch base64 <data> <out>")
@@ -81,8 +77,6 @@ func resourceOutputName(uri string) string {
 	return name
 }
 
-// forceRemoveAll removes path even when it contains read-only directories (extracted
-// resource trees keep write-less dir perms), making dirs writable and retrying once.
 func forceRemoveAll(path string) error {
 	if err := os.RemoveAll(path); err == nil {
 		return nil
@@ -112,8 +106,6 @@ func fetchResource(sourceRoot, uri, out string) {
 	unpackResourceArchive(archivePath, out)
 }
 
-// downloadResourceArchive resolves a resource uri to a single local archive — the
-// authenticated download shared by fetchResource and FROM_SANDBOX.
 func downloadResourceArchive(sourceRoot, uri, archivePath string) {
 	tmp := filepath.Dir(archivePath)
 	mapping := readResourceMappingMaybe(filepath.Join(sourceRoot, "build/mapping.conf.json"))
@@ -128,7 +120,7 @@ func downloadResourceArchive(sourceRoot, uri, archivePath string) {
 		case mapped != "":
 			fetchURL(mapped, archivePath)
 		case token != "":
-			// Authenticated fetch; the upstream script (401s) is the fallback only when no token exists.
+
 			fetchFromSandbox(id, token, archivePath)
 		default:
 			runPythonScript(tmp, filepath.Join(sourceRoot, "build/scripts/fetch_from_sandbox.py"),
@@ -146,9 +138,6 @@ func downloadResourceArchive(sourceRoot, uri, archivePath string) {
 	}
 }
 
-// cmdFetchSandbox is `ay fetch sandbox` — the authenticated replacement for the upstream
-// FROM_SANDBOX fetch script. It fetches with the OAuth token and lays outputs into the
-// build dir (cwd); we bypass the upstream script because its query is unauthenticated (401s).
 func cmdFetchSandbox(_ GlobalFlags, args []string) int {
 	var sourceRoot, id, copyToDir, untarTo string
 	executable := false
@@ -170,18 +159,17 @@ func cmdFetchSandbox(_ GlobalFlags, args []string) int {
 			i++
 			copyToDir = args[i]
 		case "--rename":
-			// One FILE per flag, pairing positionally with the outputs after `--`. The name
-			// RESOURCE denotes the fetched resource itself.
+
 			i++
 			renames = append(renames, args[i])
 		case "--executable":
 			executable = true
 		case "--resource-file":
-			i++ // we fetch ourselves; ignore the pre-fetched file path
+			i++
 		case "--ya-start-command-file", "--ya-end-command-file":
-			// command-file markers — irrelevant once args are expanded
+
 		case "--":
-			// Everything after `--` is OUT/OUT_NOAUTO, except a trailing command-file marker.
+
 			for _, o := range args[i+1:] {
 				if o == "--ya-start-command-file" || o == "--ya-end-command-file" {
 					continue
@@ -210,8 +198,6 @@ func cmdFetchSandbox(_ GlobalFlags, args []string) int {
 	return 0
 }
 
-// placeSandboxResource lays a fetched Sandbox resource into the build dir (cwd): untar,
-// then resolve each RENAME against its positional output (RESOURCE = the fetched file).
 func placeSandboxResource(fetched, copyToDir, untarTo string, renames, outs []string, executable bool) {
 	if len(renames) > len(outs) {
 		throwFmt("fetch sandbox: %d renames exceed %d outputs", len(renames), len(outs))
@@ -318,8 +304,6 @@ func fetchURL(raw, out string) {
 	httpGetToFile(raw, "", out)
 }
 
-// httpGetToFile downloads raw to out, sending an `Authorization: OAuth <token>` header
-// when token is non-empty (Sandbox proxy/MDS require it; public mirrors do not).
 func httpGetToFile(raw, token, out string) {
 	if raw == "" {
 		throwFmt("fetch: empty URL")
@@ -352,15 +336,12 @@ const (
 	mdsGetSandboxPrefix = "http://storage-int.mds.yandex.net/get-sandbox/"
 )
 
-// OAuth client used to exchange an SSH key for a token.
 const (
 	oauthClientID     = "f4d36b7671004ed9850148fa645acac6"
 	oauthClientSecret = "da475ea72e58427ab5c8a31e17ef2347"
 	oauthTokenURL     = "https://oauth.yandex-team.ru/token"
 )
 
-// argsNeedSandboxToken reports whether a fetch command targets a Sandbox resource
-// (an sbr: URI), the only kind requiring an OAuth token.
 func argsNeedSandboxToken(args []string) bool {
 	for _, a := range args {
 		if strings.HasPrefix(a, "sbr:") {
@@ -371,8 +352,6 @@ func argsNeedSandboxToken(args []string) bool {
 	return false
 }
 
-// resolveSandboxToken returns the Sandbox OAuth token: $YA_TOKEN, then ~/.ya_token, then
-// an SSH-agent key exchanged for a token. Empty if none could be obtained.
 func resolveSandboxToken() string {
 	if t := strings.TrimSpace(os.Getenv("YA_TOKEN")); t != "" {
 		return t
@@ -389,8 +368,6 @@ func resolveSandboxToken() string {
 	return tokenFromSSHAgent(oauthLogin())
 }
 
-// oauthLogin is the login used for the SSH-key exchange: $YA_USER, else the
-// current OS user.
 func oauthLogin() string {
 	if u := strings.TrimSpace(os.Getenv("YA_USER")); u != "" {
 		return u
@@ -403,8 +380,6 @@ func oauthLogin() string {
 	return os.Getenv("USER")
 }
 
-// tokenFromSSHAgent signs "<ts><client_id><login>" with each SSH-agent key and POSTs
-// grant_type=ssh_key; the first accepted key yields the token.
 func tokenFromSSHAgent(login string) string {
 	sock := os.Getenv("SSH_AUTH_SOCK")
 
@@ -444,11 +419,10 @@ func tokenFromSSHAgent(login string) string {
 			"client_secret": {oauthClientSecret},
 			"login":         {login},
 			"ts":            {strconv.FormatInt(ts, 10)},
-			// sig.Blob is the agent's signature; base64url, no padding.
+
 			"ssh_sign": {base64.RawURLEncoding.EncodeToString(sig.Blob)},
 		}
 
-		// A cert key isn't pre-registered; the server needs the cert itself to verify.
 		if strings.Contains(key.Format, "cert") {
 			form.Set("public_cert", base64.RawURLEncoding.EncodeToString(key.Blob))
 		}
@@ -461,7 +435,6 @@ func tokenFromSSHAgent(login string) string {
 	return ""
 }
 
-// postOAuthToken posts the token request and returns access_token, or "" on any failure.
 func postOAuthToken(form url.Values) string {
 	resp, err := http.PostForm(oauthTokenURL, form)
 
@@ -486,7 +459,6 @@ func postOAuthToken(form url.Values) string {
 	return out.AccessToken
 }
 
-// sandboxResource is the subset of the Sandbox resource API response we consume.
 type sandboxResource struct {
 	State     string `json:"state"`
 	Multifile bool   `json:"multifile"`
@@ -498,8 +470,6 @@ type sandboxResource struct {
 	} `json:"attributes"`
 }
 
-// fetchFromSandbox downloads Sandbox resource id to archivePath using the OAuth token:
-// query the resource API, then the tokenless MDS mirror when present, else the proxy link.
 func fetchFromSandbox(id, token, archivePath string) {
 	info := querySandboxResource(id, token)
 
@@ -507,8 +477,6 @@ func fetchFromSandbox(id, token, archivePath string) {
 		throwFmt("fetch: sandbox resource %s is not READY (state=%s)", id, info.State)
 	}
 
-	// Sources tried in order: tokenless MDS mirror, then authenticated proxy. An old
-	// resource's MDS object can be 410 Gone while the proxy still serves it.
 	type source struct {
 		url  string
 		auth bool

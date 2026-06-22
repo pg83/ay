@@ -27,7 +27,6 @@ func TestBitSet_AddHas(t *testing.T) {
 		}
 	}
 
-	// Neighbours of set bits stay clear.
 	for _, v := range []uint32{2, 62, 66, 129, 99999, 100001} {
 		if b.has(v) {
 			t.Errorf("unset %d reported present", v)
@@ -38,7 +37,6 @@ func TestBitSet_AddHas(t *testing.T) {
 func TestBitSet_WordBoundary(t *testing.T) {
 	var b BitSet
 
-	// Bits 63 and 64 fall in different words: no cross-talk.
 	b.add(63)
 
 	if !b.has(63) || b.has(64) {
@@ -56,7 +54,7 @@ func TestBitSet_GrowsPreservingEarlierBits(t *testing.T) {
 	var b BitSet
 
 	b.add(5)
-	b.add(1 << 20) // grows the backing slice
+	b.add(1 << 20)
 
 	if !b.has(5) {
 		t.Error("growth dropped earlier bit 5")

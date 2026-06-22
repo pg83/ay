@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// cppEnumsSerializationProtoFiles builds a minimal PROTO_LIBRARY running
-// CPP_ENUMS_SERIALIZATION(macroArgs) over the generated header(s).
 func cppEnumsSerializationProtoFiles(macroArgs string) map[string]string {
 	files := map[string]string{}
 	writeTestModuleFile(files, "pe/proto/ya.make", "PROTO_LIBRARY()\nSRCS(package.proto)\nIF (CPP_PROTO)\nCPP_ENUMS_SERIALIZATION("+macroArgs+")\nENDIF()\nEND()\n")
@@ -24,13 +22,12 @@ func cppEnumsSerializationProtoFiles(macroArgs string) map[string]string {
 	return files
 }
 
-// TestGen_CppEnumsSerialization: each header argument expands to
-// GENERATE_ENUM_SERIALIZATION_WITH_HEADER, emitting File_serialized.cpp/.h.
 func TestGen_CppEnumsSerialization(t *testing.T) {
 	g := testGen(newMemFS(cppEnumsSerializationProtoFiles("package.pb.h")), "pe/proto")
 
 	en := mustNodeByOutput(t, g, "$(B)/pe/proto/package.pb.h_serialized.cpp")
 	mustNodeByAnyOutput(t, g, "$(B)/pe/proto/package.pb.h_serialized.h")
+
 	if indexOfArg(en.Cmds[0].CmdArgs.flat(), "--header") < 0 {
 		t.Fatalf("EN command missing --header: %#v", en.Cmds[0].CmdArgs.flat())
 	}
@@ -38,13 +35,12 @@ func TestGen_CppEnumsSerialization(t *testing.T) {
 	mustNodeByOutputSuffix(t, g, "package.pb.h_serialized.cpp.o")
 
 	ar := mustNodeByOutput(t, g, "$(B)/pe/proto/libpe-proto.a")
+
 	if !containsString(strStrs(ar.Cmds[0].CmdArgs.flat()), "$(B)/pe/proto/package.pb.h_serialized.cpp.o") {
 		t.Fatalf("archive missing serialized-enum object; cmd_args=%#v", strStrs(ar.Cmds[0].CmdArgs.flat()))
 	}
 }
 
-// TestGen_CppEnumsSerializationNamespaceControlToken: a NAMESPACE pair is consumed
-// as a control token and emits no serialized output for it.
 func TestGen_CppEnumsSerializationNamespaceControlToken(t *testing.T) {
 	g := testGen(newMemFS(cppEnumsSerializationProtoFiles("NAMESPACE something package.pb.h")), "pe/proto")
 
@@ -53,6 +49,7 @@ func TestGen_CppEnumsSerializationNamespaceControlToken(t *testing.T) {
 	for _, n := range g.Graph {
 		for _, o := range n.Outputs {
 			s := o.string()
+
 			if strings.Contains(s, "NAMESPACE_serialized") || strings.Contains(s, "something_serialized") {
 				t.Fatalf("bogus serialized output from NAMESPACE control token: %q", s)
 			}
@@ -61,9 +58,6 @@ func TestGen_CppEnumsSerializationNamespaceControlToken(t *testing.T) {
 }
 
 func TestGen_EnumSerializationConsumesRunProgramGeneratedHeader(t *testing.T) {
-	// GENERATE_ENUM_SERIALIZATION consumes a RUN_PROGRAM-generated header with no $(S)
-	// counterpart; the EN input must resolve to the $(B) producer output and depend on
-	// the producer, never fall back to a nonexistent $(S) source.
 	files := map[string]string{}
 
 	writeToolProgram(files, "tools/genhdr", "genhdr")
@@ -95,23 +89,22 @@ END()
 	if !nodeHasInput(en, "$(B)/mod/gen.h") {
 		t.Fatalf("EN node inputs: want $(B)/mod/gen.h (generated), got: %v", en.flatInputs())
 	}
+
 	if nodeHasInput(en, "$(S)/mod/gen.h") {
 		t.Fatalf("EN node inputs: got nonexistent source $(S)/mod/gen.h: %v", en.flatInputs())
 	}
+
 	if got := en.Cmds[0].CmdArgs.flat()[1].string(); got != "$(B)/mod/gen.h" {
 		t.Fatalf("EN cmd_args[1] = %q, want $(B)/mod/gen.h", got)
 	}
 
-	// The EN node must depend on the RUN_PROGRAM producer (gen.cpp is Outputs[0]).
 	genH := mustNodeByAnyOutput(t, g, "$(B)/mod/gen.h")
+
 	if !slices.Contains(graphDeps(g, en), genH.UID) {
 		t.Fatalf("EN node deps missing generated-header producer uid %q: %v", genH.UID, graphDeps(g, en))
 	}
 }
 
-// Archive member order: generated outputs re-queue at their declaring statement, so
-// among generated auxiliary members the archive order is declaration order — the
-// RUN_PROGRAM object precedes the serialized-header object, after the direct source.
 func TestGen_RunProgramEnumSerializationArchiveMemberOrder(t *testing.T) {
 	files := map[string]string{}
 
@@ -143,12 +136,15 @@ END()
 
 	idxOf := func(rel string) int {
 		want := "$(B)/mod/" + rel
+
 		for i, in := range ar.flatInputs() {
 			if in.string() == want {
 				return i
 			}
 		}
+
 		t.Fatalf("libmod.a missing member %q: %v", want, vfsStrings(ar.flatInputs()))
+
 		return -1
 	}
 
@@ -162,15 +158,9 @@ END()
 	}
 }
 
-// Same-module serialized-enum sibling propagation: the FIRST declared header reaches
-// the SECOND's generated serialized header through a #include chain. Both the EN
-// producer of the first header and a CC consumer including the first serialized
-// header must carry the SECOND header's serialized outputs as inputs — a single-pass
-// walk would cache an empty resolution for the including header.
 func TestGen_EnumSerializationSiblingSerializedOutputsPropagate(t *testing.T) {
 	files := map[string]string{}
 
-	// a.h (declared FIRST) reaches b's serialized header through a plain header.
 	writeTestModuleFile(files, "m/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -192,26 +182,26 @@ END()
 	g := testGen(newMemFS(files), "m")
 
 	enA := mustNodeByOutput(t, g, "$(B)/m/a.h_serialized.cpp")
+
 	if !nodeHasInput(enA, "$(B)/m/b.h_serialized.h") {
 		t.Fatalf("EN a.h_serialized.cpp missing sibling $(B)/m/b.h_serialized.h: %v", enA.flatInputs())
 	}
+
 	if !nodeHasInput(enA, "$(B)/m/b.h_serialized.cpp") {
 		t.Fatalf("EN a.h_serialized.cpp missing sibling $(B)/m/b.h_serialized.cpp: %v", enA.flatInputs())
 	}
 
 	use := mustNodeByOutputSuffix(t, g, "use.cpp.o")
+
 	if !nodeHasInput(use, "$(B)/m/b.h_serialized.h") {
 		t.Fatalf("CC use.cpp.o missing sibling $(B)/m/b.h_serialized.h: %v", use.flatInputs())
 	}
+
 	if !nodeHasInput(use, "$(B)/m/b.h_serialized.cpp") {
 		t.Fatalf("CC use.cpp.o missing sibling $(B)/m/b.h_serialized.cpp: %v", use.flatInputs())
 	}
 }
 
-// A GENERATE_ENUM_SERIALIZATION over a .pb.h produced by this module's proto SRCS is
-// a SECOND-level generated compile: it cannot run until the proto command produced
-// the header, so it defers one further FIFO round and archives
-// data.pb.h_serialized.cpp.o AFTER data.pb.cc.o.
 func TestGen_ProtoGeneratedHeaderEnumSerializationArchivesAfterProto(t *testing.T) {
 	const modPath = "mod/pg"
 
@@ -240,12 +230,15 @@ END()
 
 	idxOf := func(rel string) int {
 		want := "$(B)/" + modPath + "/" + rel
+
 		for i, in := range ar.flatInputs() {
 			if in.string() == want {
 				return i
 			}
 		}
+
 		t.Fatalf("archive missing member %q: %v", want, vfsStrings(ar.flatInputs()))
+
 		return -1
 	}
 
@@ -258,13 +251,9 @@ END()
 	}
 }
 
-// Owner/consumer split: the EN node and its CC compile carry the DECLARING module's
-// module_dir even when a DIFFERENT module include-resolves the *_serialized.h first.
-// EN/CC follow the macro's owning module, NOT a consumer-claim override.
 func TestGen_EnumSerializationOwnerKeepsModuleDirAcrossConsumer(t *testing.T) {
 	files := map[string]string{}
 
-	// own: declares the enum serialization and compiles the generated source.
 	writeTestModuleFile(files, "own/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -276,7 +265,6 @@ END()
 	writeTestModuleFile(files, "own/mode.h", "enum class Mode { A = 0, B = 1 };\n")
 	writeTestModuleFile(files, "own/stub.cpp", "int stub(){return 0;}\n")
 
-	// cons: a different module that include-resolves the serialized header.
 	writeTestModuleFile(files, "cons/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -304,27 +292,25 @@ END()
 	g := testGenDumpGraph(newMemFS(files), "app")
 
 	en := mustNodeByOutput(t, g, "$(B)/own/mode.h_serialized.cpp")
+
 	if got := en.TargetProperties.ModuleDir; got != "own" {
 		t.Fatalf("EN serialized-enum module_dir = %q, want %q (declaring owner, not consumer)", got, "own")
 	}
+
 	cc := mustNodeByOutputSuffix(t, g, "mode.h_serialized.cpp.o")
+
 	if cc.KV.P != pkCC {
 		t.Fatalf("expected CC node compiling mode.h_serialized.cpp, got KV.p %v", cc.KV.P)
 	}
+
 	if got := cc.TargetProperties.ModuleDir; got != "own" {
 		t.Fatalf("CC serialized-enum compile module_dir = %q, want %q (declaring owner)", got, "own")
 	}
 }
 
-// Nested-submodule directory-owned header drift: the parent declares the enum
-// serialization, but a NESTED submodule owns a header that #includes the
-// *_serialized.h. The EN producer attributes to the nearest module on the DFS stack,
-// and the submodule leaves before the parent completes, so the EN drifts to it. A
-// second EN reached only through a NON-module subdir keeps the parent.
 func TestGen_EnumSerializationDriftsToNestedSubmoduleDirectoryOwnedHeader(t *testing.T) {
 	files := map[string]string{}
 
-	// parent declares both enum serializations and compiles sub/services.cpp.
 	writeTestModuleFile(files, "parent/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -337,12 +323,11 @@ END()
 `)
 	writeTestModuleFile(files, "parent/degr.h", "enum class Degr { A = 0 };\n")
 	writeTestModuleFile(files, "parent/plain.h", "enum class Plain { A = 0 };\n")
-	// main2.cpp pulls the non-module-subdir header that includes plain's serialized.
+
 	writeTestModuleFile(files, "parent/main2.cpp", "#include \"util/u.h\"\nint m2(){return 0;}\n")
-	// util/ has NO ya.make: owned by parent, not a nested submodule.
+
 	writeTestModuleFile(files, "parent/util/u.h", "#include <parent/plain.h_serialized.h>\n")
 
-	// nested submodule: owns services.h, which #includes degr's serialized header.
 	writeTestModuleFile(files, "parent/sub/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -370,22 +355,20 @@ END()
 
 	g := testGenDumpGraph(newMemFS(files), "app")
 
-	// degr's serialized header is reached through the submodule's services.h → drifts.
 	degr := mustNodeByOutput(t, g, "$(B)/parent/degr.h_serialized.cpp")
+
 	if got := degr.TargetProperties.ModuleDir; got != "parent/sub" {
 		t.Fatalf("degr EN module_dir = %q, want %q (nested submodule directory-owned header)", got, "parent/sub")
 	}
 
-	// plain's serialized header is reached only through a non-module subdir → stays.
 	plain := mustNodeByOutput(t, g, "$(B)/parent/plain.h_serialized.cpp")
+
 	if got := plain.TargetProperties.ModuleDir; got != "parent" {
 		t.Fatalf("plain EN module_dir = %q, want %q (non-module subdir keeps declaring owner)", got, "parent")
 	}
 }
 
 func TestGen_EnumSerializationWithSRCDIRResolvesHeaderViaSourceDir(t *testing.T) {
-	// INCLUDE() pulls in a .ya.make.inc with SRCDIR() + GENERATE_ENUM_SERIALIZATION();
-	// the header must resolve relative to the SRCDIR, not the including module's path.
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "shared/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(iface.cpp)\nGENERATE_ENUM_SERIALIZATION(iface.h)\nEND()\n")
@@ -402,27 +385,22 @@ func TestGen_EnumSerializationWithSRCDIRResolvesHeaderViaSourceDir(t *testing.T)
 
 	g := testGen(newMemFS(files), "consumer")
 
-	// The EN output is in the consumer's path, but the header input must come from
-	// the SRCDIR (shared/iface.h), not the nonexistent consumer/iface.h.
 	en := mustNodeByOutput(t, g, "$(B)/consumer/iface.h_serialized.cpp")
 
 	if !nodeHasInput(en, "$(S)/shared/iface.h") {
 		t.Fatalf("EN node inputs: want $(S)/shared/iface.h (via SRCDIR), got: %v", en.flatInputs())
 	}
+
 	if nodeHasInput(en, "$(S)/consumer/iface.h") {
 		t.Fatalf("EN node inputs: got wrong path $(S)/consumer/iface.h (SRCDIR not applied): %v", en.flatInputs())
 	}
+
 	if got := en.Cmds[0].CmdArgs.flat()[1].string(); got != "$(S)/shared/iface.h" {
 		t.Fatalf("EN cmd_args[1] = %q, want $(S)/shared/iface.h", got)
 	}
 }
 
 func TestGen_EnumSerializationRootedHeaderOutsideModuleDirOutputPath(t *testing.T) {
-	// A PROTO_LIBRARY whose SRCDIR points at a sibling root generates the .pb.h THERE,
-	// then GENERATE_ENUM_SERIALIZATION runs over the rooted header OUTSIDE the module
-	// dir. The serialized.cpp lands at the rooted file's own build location (not
-	// doubled under the BINDIR); the compile object rebases the cross-dir source with
-	// `..` mapped to `__`.
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "m/meta/ya.make", `PROTO_LIBRARY()
@@ -445,12 +423,12 @@ END()
 
 	g := testGen(newMemFS(files), "m/meta")
 
-	// EN output lands at the rooted header's own build dir, not doubled under the
-	// module dir nor localized under _/.
 	mustNodeByOutput(t, g, "$(B)/m/Offer.pb.h_serialized.cpp")
+
 	for _, n := range g.Graph {
 		for _, o := range n.Outputs {
 			s := o.string()
+
 			if strings.Contains(s, "m/meta/m/Offer.pb.h_serialized") || strings.Contains(s, "m/meta/_/m/Offer.pb.h_serialized") {
 				t.Fatalf("serialized enum output doubled/localized under module dir: %q", s)
 			}
@@ -459,8 +437,6 @@ END()
 
 	mustNodeByOutput(t, g, "$(B)/m/meta/__/Offer.pb.h_serialized.cpp.o")
 
-	// Offer.pb.h is produced by THIS module's own SRCS, so the EN compile is
-	// second-level and must archive AFTER the proto .pb.cc.o producing the header.
 	ar := mustNodeByOutput(t, g, "$(B)/m/meta/"+archiveNameWithPrefixOrName("m/meta", "lib", ""))
 	idxOf := func(rel string) int {
 		for i, in := range ar.flatInputs() {
@@ -468,11 +444,14 @@ END()
 				return i
 			}
 		}
+
 		t.Fatalf("archive missing member %q: %v", rel, vfsStrings(ar.flatInputs()))
+
 		return -1
 	}
 	proto := idxOf("$(B)/m/meta/__/Offer.pb.cc.o")
 	serialized := idxOf("$(B)/m/meta/__/Offer.pb.h_serialized.cpp.o")
+
 	if !(proto < serialized) {
 		t.Fatalf("archive order Offer.pb.cc.o(%d) < Offer.pb.h_serialized.cpp.o(%d) violated: %v",
 			proto, serialized, vfsStrings(ar.flatInputs()))
@@ -499,15 +478,19 @@ END()
 	g := testGen(newMemFS(files), "pkg/sub")
 
 	en := mustNodeByOutput(t, g, "$(B)/pkg/sub/pkg/sub/codecs.h_serialized.cpp")
+
 	if !nodeHasInput(en, "$(S)/pkg/sub/codecs.h") {
 		t.Fatalf("enum inputs missing canonical header path: %#v", en.flatInputs())
 	}
+
 	if nodeHasInput(en, "$(S)/pkg/sub/pkg/sub/codecs.h") {
 		t.Fatalf("enum inputs still carry duplicated header path: %#v", en.flatInputs())
 	}
+
 	if got := en.Cmds[0].CmdArgs.flat()[1].string(); got != "$(S)/pkg/sub/codecs.h" {
 		t.Fatalf("enum parser input = %q, want $(S)/pkg/sub/codecs.h", got)
 	}
+
 	if idx := indexOfArg(en.Cmds[0].CmdArgs.flat(), "--include-path"); idx < 0 || idx+1 >= len(en.Cmds[0].CmdArgs.flat()) || en.Cmds[0].CmdArgs.flat()[idx+1].string() != "pkg/sub/codecs.h" {
 		t.Fatalf("enum --include-path mismatch: %#v", en.Cmds[0].CmdArgs.flat())
 	}
