@@ -56,7 +56,7 @@ CASES = [
     ("sg4", "util/ut", "/home/pg/monorepo/ydb", "/home/pg/monorepo/ydb/sg4.json", False),
     ("sg5", "ydb/apps/ydbd", "/home/pg/monorepo/ydb", "/home/pg/monorepo/ydb/sg5.json", False),
     ("sg6", "devtools/ya/bin", "/home/pg/monorepo/3", "/home/pg/monorepo/3/sg6.json", False),
-    ("sg7", "yabs/server/daemons/bs_static", "/home/pg/monorepo/4", "/home/pg/monorepo/4/sg7.json", True),
+    ("sg7", "yabs/server/daemons/bs_static", "/home/pg/monorepo/4", "/home/pg/monorepo/4/sg7.json", False),
 ]
 
 
