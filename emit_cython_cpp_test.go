@@ -54,6 +54,67 @@ func TestCythonImplicitFallthrough(t *testing.T) {
 	}
 }
 
+// arMemberIndex returns the position of $(B)/<dir>/<rel> among an archive node's
+// members, failing the test when the member is absent.
+func arMemberIndex(t *testing.T, ar *Node, dir, rel string) int {
+	t.Helper()
+
+	want := "$(B)/" + dir + "/" + rel
+
+	for i, in := range ar.flatInputs() {
+		if in.string() == want {
+			return i
+		}
+	}
+
+	t.Fatalf("archive %v missing member %q: %v", ar.Outputs, want, vfsStrings(ar.flatInputs()))
+
+	return -1
+}
+
+// Upstream pybuild.py groups PY_SRCS cython sources into five fixed-order
+// variant buckets (CYTHON_C, CYTHON_C_H, CYTHON_C_API_H, CYTHON_CPP,
+// CYTHON_CPP_H) and emits both the generated compile and the implicit
+// PY_REGISTER `.reg3.cpp` for each in that bucket order, with CYTHONIZE_PY `.py`
+// entries inheriting the current bucket. This mirrors gevent: textual order
+// declares CYTHON_C_H corecext, then CYTHON_C cares, then CYTHONIZE_PY helper
+// (C bucket), but the regular archive lists cares + helper (C bucket) BEFORE
+// corecext (C_H bucket), and the ordinary SRCS callbacks object stays first.
+// The global archive's .reg3.cpp members follow the same bucket order.
+func TestGen_CythonVariantBucketARMemberOrder(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeTestModuleFile(files, "pkg/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nSRCS(callbacks.c)\nPY_SRCS(TOP_LEVEL CYTHON_C_H corecext.pyx CYTHON_C cares.pyx CYTHONIZE_PY helper.py)\nEND()\n")
+	writeTestModuleFile(files, "pkg/callbacks.c", "int cb(){return 0;}\n")
+	writeTestModuleFile(files, "pkg/corecext.pyx", "def f():\n    return 0\n")
+	writeTestModuleFile(files, "pkg/cares.pyx", "def g():\n    return 1\n")
+	writeTestModuleFile(files, "pkg/helper.py", "def h():\n    return 2\n")
+
+	g := testGen(newMemFS(files), "pkg")
+
+	regular := mustNodeByOutput(t, g, "$(B)/pkg/libpy3pkg.a")
+	cb := arMemberIndex(t, regular, "pkg", "callbacks.c.o")
+	cares := arMemberIndex(t, regular, "pkg", "cares.pyx.c.o")
+	helper := arMemberIndex(t, regular, "pkg", "helper.py.c.o")
+	corecext := arMemberIndex(t, regular, "pkg", "corecext.c.o")
+
+	if !(cb < cares && cares < helper && helper < corecext) {
+		t.Fatalf("regular archive order callbacks(%d) < cares(%d) < helper(%d) < corecext(%d) violated: %v",
+			cb, cares, helper, corecext, vfsStrings(regular.flatInputs()))
+	}
+
+	global := mustNodeByOutput(t, g, "$(B)/pkg/libpy3pkg.global.a")
+	caresR := arMemberIndex(t, global, "pkg", "cares.reg3.cpp.o")
+	helperR := arMemberIndex(t, global, "pkg", "helper.reg3.cpp.o")
+	corecextR := arMemberIndex(t, global, "pkg", "corecext.reg3.cpp.o")
+
+	if !(caresR < helperR && helperR < corecextR) {
+		t.Fatalf("global .reg3.cpp order cares(%d) < helper(%d) < corecext(%d) violated: %v",
+			caresR, helperR, corecextR, vfsStrings(global.flatInputs()))
+	}
+}
+
 func TestGen_CythonizePyFollowsCythonCMode(t *testing.T) {
 	// Upstream pybuild.py: CYTHONIZE_PY only flips a flag; a following `.py`
 	// source is appended to whatever pyxs list the last CYTHON_C/CYTHON_CPP
