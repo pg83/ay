@@ -760,7 +760,7 @@ func (d *ModuleData) materializeAddIncl() {
 	d.addInclP = nil
 }
 
-func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kind ModuleKind, stmts []Stmt, env Environment) *ModuleData {
+func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kind ModuleKind, stmts []Stmt, env Environment, onWarn func(Warn)) *ModuleData {
 	fs := pm.fs
 
 	env.setString(envMODDIR, modulePath)
@@ -790,7 +790,7 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 	d.addInclUserGlobal = append(d.addInclUserGlobal, d.cfAddInclGlobal...)
 	d.cfAddIncl = nil
 	d.cfAddInclGlobal = nil
-	filterInvalidAddIncl(fs, dd, d)
+	filterInvalidAddIncl(fs, dd, d, modulePath, onWarn)
 
 	// The PY3_PROGRAM BIN half emits PY_MAIN; clear it on the paired LIB half to avoid a
 	// duplicate. A standalone PY3_LIBRARY with explicit PY_SRCS(MAIN …) keeps its PY_MAIN.
@@ -931,17 +931,15 @@ func ensureResourcePeer(modulePath string, d *ModuleData) {
 	d.peerdirs = append(d.peerdirs, internStr(resourcePeer))
 }
 
-func filterInvalidAddIncl(fs FS, dd *DeDuper, d *ModuleData) {
-	d.addIncl = filterExistingSourceDirs(fs, d.addIncl)
-	d.addInclGlobal = filterExistingSourceDirs(fs, d.addInclGlobal)
-	d.cythonAddIncl = filterExistingSourceDirs(fs, d.cythonAddIncl)
-	d.asmAddIncl = filterExistingSourceDirs(fs, d.asmAddIncl)
+func filterInvalidAddIncl(fs FS, dd *DeDuper, d *ModuleData, modulePath string, onWarn func(Warn)) {
+	d.addIncl = filterOwnAddIncl(fs, d.addIncl, modulePath, onWarn)
+	d.addInclGlobal = filterOwnAddIncl(fs, d.addInclGlobal, modulePath, onWarn)
+	d.cythonAddIncl = filterOwnAddIncl(fs, d.cythonAddIncl, modulePath, onWarn)
+	d.asmAddIncl = filterOwnAddIncl(fs, d.asmAddIncl, modulePath, onWarn)
 
 	// Rebuild addInclUserGlobal in declaration order, keeping only paths that survived
-	// the addInclGlobal filter or are in addInclOneLevel (never filtered).
+	// the addInclGlobal filter or are in addInclOneLevel.
 	if len(d.addInclUserGlobal) > 0 {
-		// One union set through the deduper: the filter tests membership in
-		// addInclGlobal ∪ addInclOneLevel.
 		dd.reset()
 
 		for _, p := range d.addInclGlobal {
@@ -964,19 +962,32 @@ func filterInvalidAddIncl(fs FS, dd *DeDuper, d *ModuleData) {
 	}
 }
 
-func filterExistingSourceDirs(fs FS, paths []VFS) []VFS {
-	if len(paths) == 0 {
-		return paths
-	}
+// filterOwnAddIncl drops a module's own ADDINCL dirs that point at a non-existent
+// source directory, reporting each via onWarn (fatal, or warn under --keep-going).
+// Mirrors ymake AddIncdir(checkDir=true). Deduplication of repeated reports is the
+// warning sink's concern, not this emitter's.
+func filterOwnAddIncl(fs FS, paths []VFS, modulePath string, onWarn func(Warn)) []VFS {
+	out := paths
+	copied := false
 
-	out := paths[:0]
-
-	for _, path := range paths {
+	for i, path := range paths {
 		if shouldCheckSourceDir(path) && !fs.isDir(path, "") {
+			onWarn(Warn{
+				Kind:    WarnMissingAddincl,
+				Message: fmt.Sprintf("%s: ADDINCL to non existent source directory %s", modulePath, path.rel()),
+			})
+
+			if !copied {
+				out = append([]VFS(nil), paths[:i]...)
+				copied = true
+			}
+
 			continue
 		}
 
-		out = append(out, path)
+		if copied {
+			out = append(out, path)
+		}
 	}
 
 	return out

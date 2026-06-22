@@ -188,7 +188,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 	)
 
 	onWarn := func(w Warn) {
-		if (w.Kind == WarnMissingInclude || w.Kind == WarnUnsupportedSource) && !mf.keepGoing {
+		if (w.Kind == WarnMissingInclude || w.Kind == WarnUnsupportedSource || w.Kind == WarnMissingAddincl) && !mf.keepGoing {
 			throwFmt("%s: %s", w.Kind, w.Message)
 		}
 

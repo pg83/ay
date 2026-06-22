@@ -702,7 +702,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	stmts := moduleStmts(ctx, instance.Path.rel())
 
 	env := buildIfEnv(instance)
-	d := collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, env)
+	d := collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, env, ctx.onWarn)
 
 	// Only a PROTO_LIBRARY has a python variant: any other module re-enters as its C++
 	// variant and the py key aliases that result. Must run BEFORE anything is emitted,
@@ -735,11 +735,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		// CLANG_WARNINGS. The name is also truthy, so `IF (CPP_PROTO)` fires.
 		cppProtoEnv.setStringID(envCPP_PROTO, strCPPProto)
 		cppProtoEnv.setBool(envGEN_PROTO, true)
-		d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, cppProtoEnv)
+		d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, cppProtoEnv, ctx.onWarn)
 	} else if d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangPy {
 		py3ProtoEnv := buildIfEnv(instance)
 		py3ProtoEnv.setBool(envPY3_PROTO, true)
-		d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, py3ProtoEnv)
+		d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, py3ProtoEnv, ctx.onWarn)
 	}
 
 	if d.conflictMod != nil {
@@ -770,7 +770,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		// A RESOURCES_LIBRARY's LDFLAGS may reference ${<NAME>_RESOURCE_GLOBAL} ahead of
 		// the DECLARE; bind the declared globals and re-collect so they expand.
 		if bindResourceGlobalVars(ctx, instance, d, env) {
-			d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, env)
+			d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, env, ctx.onWarn)
 		}
 
 		return genResourcesLibrary(ctx, instance, d)
@@ -782,7 +782,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		env.setString(envMODULE_SUFFIX, prebuiltModuleSuffix(instance.Platform))
 
 		if bindResourceGlobalVars(ctx, instance, d, env) {
-			d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, env)
+			d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, env, ctx.onWarn)
 		}
 
 		return genPrebuiltProgram(ctx, instance, d)

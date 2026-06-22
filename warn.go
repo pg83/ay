@@ -13,6 +13,8 @@ const (
 	WarnMissingInclude
 
 	WarnUnsupportedSource
+
+	WarnMissingAddincl
 )
 
 func (k WarnKind) string() string {
@@ -23,6 +25,8 @@ func (k WarnKind) string() string {
 		return "missing-include"
 	case WarnUnsupportedSource:
 		return "unsupported-source"
+	case WarnMissingAddincl:
+		return "missing-addincl"
 	}
 
 	return "warn"

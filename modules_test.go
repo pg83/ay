@@ -125,7 +125,7 @@ END()
 
 			fs := newMemFS(map[string]string{"contrib/libs/cblas/ya.make": mklYaMake})
 			mf := throw2(parseFile(fs, "contrib/libs/cblas/ya.make"))
-			d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "contrib/libs/cblas", KindLib, mf.Stmts, env)
+			d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "contrib/libs/cblas", KindLib, mf.Stmts, env, noWarn)
 
 			hasMkl, hasFallback := false, false
 			for _, p := range d.peerdirs {
@@ -390,6 +390,46 @@ func TestExpandStmtToken_UnresolvedRefDoesNotBlockLaterRefs(t *testing.T) {
 	}
 }
 
+// TestCollectModule_OwnAddInclToMissingDir_WarnsAndDrops pins the own-ADDINCL
+// existence check: a present dir is kept, an absent one is reported via onWarn and
+// dropped (ymake AddIncdir checkDir=true). The diagnostic lets the sink decide
+// fatal vs warn under --keep-going.
+func TestCollectModule_OwnAddInclToMissingDir_WarnsAndDrops(t *testing.T) {
+	src := "LIBRARY()\nADDINCL(\n    mod/present_inc\n    mod/missing_inc\n)\nEND()\n"
+
+	mf, err := parse(testParserFS, "mod/ya.make", []byte(src))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+
+	files := map[string]string{"mod/present_inc/h.h": "#pragma once\n"}
+
+	var warns []Warn
+	d := collectModule(newIncludeParserManagerFS(newMemFS(files), newSharedParseCache()), &DeDuper{}, "mod", KindLib,
+		mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}),
+		func(w Warn) { warns = append(warns, w) })
+
+	var rels []string
+	for _, v := range d.addIncl {
+		rels = append(rels, v.rel())
+	}
+
+	hasRel := func(rel string) bool { return slicesContains(rels, rel) }
+
+	if !hasRel("mod/present_inc") {
+		t.Fatalf("present own ADDINCL was dropped; addIncl=%v", rels)
+	}
+	if hasRel("mod/missing_inc") {
+		t.Fatalf("missing own ADDINCL was kept; addIncl=%v", rels)
+	}
+	if len(warns) != 1 || warns[0].Kind != WarnMissingAddincl {
+		t.Fatalf("want exactly one WarnMissingAddincl, got %v", warns)
+	}
+	if !strings.Contains(warns[0].Message, "mod/missing_inc") {
+		t.Fatalf("warn message lacks the missing dir: %q", warns[0].Message)
+	}
+}
+
 func TestCollectModule_PySrcsExpandsSetList(t *testing.T) {
 	// PY_SRCS(${SRCS}) with a SET-list must expand+split; UnknownStmt macros need
 	// arg-expansion like the typed cases.
@@ -401,7 +441,7 @@ func TestCollectModule_PySrcsExpandsSetList(t *testing.T) {
 	}
 
 	d := collectModule(newIncludeParserManagerFS(newMemFS(nil), newSharedParseCache()), &DeDuper{}, "mod", KindLib,
-		mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}))
+		mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
 	if !equalStrings(strStrings(d.pySrcs), []string{"a.py", "b.py"}) {
 		t.Fatalf("pySrcs = %v, want [a.py b.py]", d.pySrcs)
@@ -423,7 +463,7 @@ func TestCollectModule_SetAppendExpandsResourceAndSandboxInputs(t *testing.T) {
 	}
 
 	d := collectModule(newIncludeParserManagerFS(newMemFS(nil), newSharedParseCache()), &DeDuper{}, "mod", KindLib,
-		mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}))
+		mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
 	if len(d.fromSandboxes) != 1 {
 		t.Fatalf("fromSandboxes = %d, want 1", len(d.fromSandboxes))
@@ -497,4 +537,21 @@ func addToolchainPeers(files map[string]string) {
 	files["build/platform/lld/lld.json"] = json
 	files["build/platform/python/ymake_python3/ya.make"] = "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(YMAKE_PYTHON3 python.json)\nEND()\n"
 	files["build/platform/python/ymake_python3/python.json"] = json
+}
+
+func TestGen_PeerGlobalAddInclToMissingDir_DroppedFromConsumer(t *testing.T) {
+	files := map[string]string{}
+	writeTestModuleFile(files, "lib/ya.make",
+		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nADDINCL(GLOBAL lib/missing_inc)\nSRCS(l.cpp)\nEND()\n")
+	writeTestModuleFile(files, "lib/l.cpp", "int l(){return 0;}\n")
+	writeTestModuleFile(files, "app/ya.make",
+		"PROGRAM()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nPEERDIR(lib)\nSRCS(main.cpp)\nEND()\n")
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+	args := ccArgsForOutput(t, g, "$(B)/app/main.cpp.o")
+
+	if argsContain(args, "-I$(S)/lib/missing_inc") {
+		t.Fatalf("consumer kept a peer GLOBAL ADDINCL to a missing dir; upstream prunes it before propagation:\n%v", args)
+	}
 }
