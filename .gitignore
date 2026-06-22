@@ -29,3 +29,6 @@ __pycache__/
 /root/
 .claude/
 .out/
+
+# Stray strace/debug dumps
+/log
