@@ -161,8 +161,12 @@ func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	ycRef := codegenRegForInstance(ctx, instance).lookup(generatedVFS).ProducerRef
 
 	ccIn := in
-	ccIn.ExtraDepRefs = []NodeRef{ycRef}
 	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), generatedVFS, in.ScanCfg)
+	// A generated proto/codegen header reachable through the parser source's
+	// include closure makes its producer a dep of this compile node — upstream's
+	// flat dep model, the same pass every other generated-source CC emitter runs.
+	// ycRef (the bison producer) is excluded so it is not duplicated.
+	ccIn.ExtraDepRefs = append([]NodeRef{ycRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, ycRef)...)
 
 	if preprocessHeader {
 		ccIn.PerSourceCFlags = append(append([]ARG(nil), in.PerSourceCFlags...), argWnoUnusedButSetVariable, argWnoDeprecatedCopy)
