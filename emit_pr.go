@@ -287,7 +287,41 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		}
 	}
 
-	registerPROutput := func(out VFS, parsed []IncludeDirective) {
+	// The canonical "generated header + its implementation" RUN_PROGRAM
+	// (sys_const.h main output, then sys_const.cpp) emits a generated source that
+	// #includes its own header: the generator writes `#include "sys_const.h"`. We
+	// never scan generated bodies, so model that one edge — the generated source
+	// includes the run's MAIN output when that main output is a header sharing the
+	// source's stem (the source is that header's implementation unit). walkClosure
+	// then expands the header's window — which already carries its proto-import
+	// `.pb.h` closure (carryProtoImportPbH / protoImportPbH, T-83) — into the
+	// generated source's compile inputs, reproducing upstream's scan of the
+	// generated `#include`.
+	//
+	// The stem+main gate is what keeps this off the non-self-including shapes that
+	// upstream's content scan leaves bare: a master-header run (caesar/bsyeti
+	// all_profiles.h main + many <x>_traits.cpp whose stems differ) and a
+	// cc-source-main run (bsyeti formula.cpp main + formula.h sibling), where the
+	// generated source does NOT include the header and the compile carries only the
+	// non-expanded OutTogether main-output leaf. Only an OUT/auto-STDOUT header
+	// participates; OUT_NOAUTO headers stay off the auto chain.
+	mainIsHeader := mainOutputVFS != 0 && isHeaderSource(mainOutputVFS.rel())
+
+	mainHeaderInclude := func(ccOutRel string) (IncludeDirective, bool) {
+		if !mainIsHeader || relStem(ccOutRel) != relStem(mainOutputVFS.rel()) {
+			return IncludeDirective{}, false
+		}
+
+		return IncludeDirective{kind: includeQuoted, target: internStr(mainOutputVFS.rel())}, true
+	}
+
+	// registerPROutput registers one output's parsed includes and closure edges.
+	// ridesHeaderViaParsed marks the auto-compiled cc-source that received the
+	// same-stem main header as a parsed include above: the non-expanded main-output
+	// closure leaf would double that edge (the parsed include already rides it,
+	// expanded), so skip the leaf for exactly that output. Every other non-main
+	// output keeps the OutTogether main-output leaf.
+	registerPROutput := func(out VFS, parsed []IncludeDirective, ridesHeaderViaParsed bool) {
 		if registeredPROut[out] {
 			return
 		}
@@ -320,7 +354,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		// where advm_banner is the first OUT and no source #includes it directly). The
 		// leaf never rides onto the PR producer itself (dropOwnOutputs strips it from the
 		// producer's own input closure).
-		if out != mainOutputVFS {
+		if out != mainOutputVFS && !ridesHeaderViaParsed {
 			reg.addClosureLeaf(out, mainOutputVFS)
 		}
 
@@ -329,16 +363,38 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		}
 	}
 
+	// parsedFor builds an output's registered parsed includes, appending the
+	// same-stem main header (the modeled `#include "gen.h"`) to an auto-compiled
+	// cc-source that is that header's implementation unit. Returns whether the
+	// header include was appended so registerPROutput drops the redundant
+	// main-output closure leaf.
+	parsedFor := func(f STR, out VFS, auto bool) ([]IncludeDirective, bool) {
+		parsed := prEmitsIncludes(f, stmt, inVFSs, protoImportPbH)
+
+		if auto && isCCSourceExt(f.string()) {
+			if inc, ok := mainHeaderInclude(out.rel()); ok {
+				return append(parsed, inc), true
+			}
+		}
+
+		return parsed, false
+	}
+
 	for _, f := range stmt.OUTFiles {
-		registerPROutput(outVFSByToken[f], prEmitsIncludes(f, stmt, inVFSs, protoImportPbH))
+		out := outVFSByToken[f]
+		parsed, rides := parsedFor(f, out, true)
+		registerPROutput(out, parsed, rides)
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		registerPROutput(outVFSByToken[f], prEmitsIncludes(f, stmt, inVFSs, protoImportPbH))
+		out := outVFSByToken[f]
+		parsed, rides := parsedFor(f, out, false)
+		registerPROutput(out, parsed, rides)
 	}
 
 	if stmt.StdoutFile != nil {
-		registerPROutput(*stdoutVFS, prEmitsIncludes(*stmt.StdoutFile, stmt, inVFSs, protoImportPbH))
+		parsed, rides := parsedFor(*stmt.StdoutFile, *stdoutVFS, !stmt.StdoutNoAuto)
+		registerPROutput(*stdoutVFS, parsed, rides)
 	}
 
 	inputClosure := prInputClosure(ctx, instance, d, stmt, moduleInputs)
@@ -459,6 +515,13 @@ func pbhBasenameSet(vs []VFS) map[string]bool {
 	return m
 }
 
+// relStem strips a path's final extension, leaving dir + basename-without-ext.
+// Used to pair a generated cc-source with its same-stem header output
+// (sys_const.cpp ↔ sys_const.h).
+func relStem(rel string) string {
+	return strings.TrimSuffix(rel, filepath.Ext(rel))
+}
+
 func isCCSourceExt(p string) bool {
 	return strings.HasSuffix(p, ".cpp") ||
 		strings.HasSuffix(p, ".cc") ||
@@ -577,6 +640,19 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		out = append(out, sub...)
 	}
 
+	// A generated cc-source that is the implementation unit of a same-producer
+	// HEADER main output (sys_const.h main + sys_const.cpp; the generator writes
+	// `#include "sys_const.h"`) is modeled in emitRunProgram as #including that
+	// header. Its header-routed closure — the header's re-exported proto-import
+	// `.pb.h` and that header's induced deps — belongs to CONSUMERS, not the
+	// producer (the IN-rooted analog of the formula.cpp header-sibling guard).
+	// Self-scanning such a cc-source would expand the header's window back onto the
+	// producer; skip it. The producer's proto graph still roots at IN below.
+	mainRel := prMainOutputRel(stmt)
+	ridesMainHeader := func(ccRel string) bool {
+		return isHeaderSource(mainRel) && relStem(ccRel) == relStem(mainRel)
+	}
+
 	// The producer scans its own generated cc-source OUT/STDOUT for an IN-rooted run
 	// (geocoding_data.cc, bcrypt's .c, control_board's .h.in cc-source), surfacing the
 	// generated source's OUTPUT_INCLUDES closure. A no-IN run, OR a data-IN run that
@@ -586,7 +662,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	// walk below (selfScanGeneratedCC gates this).
 	if selfScanGeneratedCC {
 		for _, f := range stmt.OUTFiles {
-			if !isCCSourceExt(f.string()) {
+			if !isCCSourceExt(f.string()) || ridesMainHeader(f.string()) {
 				continue
 			}
 
@@ -600,7 +676,8 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	// (yql/.../v1_proto_split_antlr4 uses OUT_NOAUTO for .pb.h/.pb.cc, and
 	// upstream tracks only IN + tools as PR inputs; walking the .pb.cc here
 	// over-emits 1253 libcxx/protobuf headers via the parsed pb.h chain.)
-	if selfScanGeneratedCC && stmt.StdoutFile != nil && isCCSourceExt(stmt.StdoutFile.string()) {
+	if selfScanGeneratedCC && stmt.StdoutFile != nil && isCCSourceExt(stmt.StdoutFile.string()) &&
+		!ridesMainHeader(stmt.StdoutFile.string()) {
 		walkOne(stmt.StdoutFile.string())
 	}
 
