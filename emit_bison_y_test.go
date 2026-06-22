@@ -338,3 +338,65 @@ int lex() { return 0; }
 		t.Fatalf("re_lexer.cpp.o inputs missing %q (bison source); got: %#v", want, lexerObj.flatInputs())
 	}
 }
+
+// TestGen_BisonGeneratedSourceCarriesGeneratedProtoProducerDep reproduces the
+// sg7 deps-only gap on bison/ypp parser compile roots (e.g.
+// $(B)/kernel/remorph/tokenlogic/parser.y.cpp.o). The bison-generated source's
+// prologue reaches a generated <foo>.pb.h; upstream's flat dep model records a
+// dep edge to that .pb.h's protoc producer on the compile node, exactly as for
+// a handwritten .cpp that includes the same header. emitBisonY was the only
+// generated-source CC emitter not routing its walked closure through
+// resolveCodegenDepRefs, so the producer dep was dropped.
+func TestGen_BisonGeneratedSourceCarriesGeneratedProtoProducerDep(t *testing.T) {
+	files := map[string]string{}
+
+	writeBisonTool(files)
+	writeToolProgram(files, "contrib/tools/m4", "m4")
+	writeTestModuleFile(files, bisonPreprocessPyVFS.rel(), "print('stub')\n")
+	for _, input := range bisonCppSkeletonInputs {
+		writeTestModuleFile(files, input.rel(), "")
+	}
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	// Same module owns the proto and the bison grammar; the grammar's prologue
+	// includes the generated <foo.pb.h> via the module's own $(B) addincl.
+	writeTestModuleFile(files, "pmod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(foo.proto parser.y)
+END()
+`)
+	writeTestModuleFile(files, "pmod/foo.proto", "syntax = \"proto3\";\npackage pmod;\nmessage Foo {}\n")
+	writeTestModuleFile(files, "pmod/parser.y", `%{
+#include "foo.pb.h"
+%}
+%%
+`)
+
+	g := testGen(newMemFS(files), "pmod")
+
+	parserObj := mustNodeByOutput(t, g, "$(B)/pmod/parser.y.cpp.o")
+
+	// Sanity: the generated proto header IS in the compile closure.
+	if !nodeHasInput(parserObj, "$(B)/pmod/foo.pb.h") {
+		t.Fatalf("generated parser object closure missing $(B)/pmod/foo.pb.h: %#v", parserObj.flatInputs())
+	}
+
+	pb := mustNodeByOutput(t, g, "$(B)/pmod/foo.pb.h")
+
+	found := false
+	for _, dep := range graphDeps(g, parserObj) {
+		if dep == pb.UID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("bison-generated parser object missing dep on proto producer %q; deps=%v", pb.UID, graphDeps(g, parserObj))
+	}
+}
