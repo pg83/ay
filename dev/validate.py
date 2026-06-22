@@ -1,21 +1,29 @@
 #!/usr/bin/env python3
-"""validate.py — L4 byte-exact acceptance orchestrator.
+"""validate.py — L4 byte-exact acceptance orchestrator (parallel DAG).
 
-For each case: run its gen_<graph>.sh generator, normalize both our output
-and the raw upstream reference into canonical JSONL (streaming `ay dev dump
-normalize | ay dev dump sort`), then either byte-compare (gating cases) or run
-diff.py metrics plus exact normalized-node parity counts (xfail cases).
-xfail cases never affect the exit code; the suite fails only when a gating
-case diverges.
+All work is modelled as a DAG of nodes — one node per program invocation, with
+explicit input/output FILES — and run by a small micro-executor that joins nodes
+on those files and runs independent ones concurrently (bounded by VALIDATE_JOBS).
+There is no caching: no content hashes, no timestamps — every node always runs.
+
+Per case the chain is: gen_<graph>.sh -> normalize -> sort for our graph, and
+normalize(--ref-graph) -> sort for the upstream reference (which starts as soon as
+the binary is built, in parallel with the generator), then a compare node byte-
+compares (gating cases) or counts exact normalized-node parity + writes the diff
+(xfail cases). Cross-case and our/ref work overlap, so the wall time collapses to
+the critical path instead of the sum.
 
 xfail values: False = gating (byte-compare); True = xfail (parity metrics only);
 "auto" = gate when byte-exact, xfail otherwise (self-promoting once parity is reached).
 
 Usage: validate.py [out-dir]   (default: <repo>/.out/validate)
+Env:   VALIDATE_JOBS — max concurrent nodes (default min(cpu, 6); lower it if the
+       big sg5/sg7 generators contend for RAM and risk the OOM killer).
 """
 import os
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass
 
@@ -69,55 +77,11 @@ class ParityCounts:
     right_total: int
 
 
-def run(cmd):
-    return subprocess.run(cmd, cwd=WORK_CWD)
-
-
 def _remove_if_exists(path):
     try:
         os.remove(path)
     except FileNotFoundError:
         pass
-
-
-def _normalize_sort_go(raw, target, out, ref_graph=False):
-    """ay dev dump normalize <raw> | ay dev dump sort > out (streaming, bounded mem).
-
-    ref_graph marks the input as the upstream reference (ymake) graph, enabling
-    reference-side normalizations (filterARLDInputs input pruning + build-order-only
-    dep strip) that discount artifacts our generator does not model. Our graph is
-    normalized WITHOUT it (faithful), so any superfluous input/dep WE emit — or any
-    over-filtration on the reference side — surfaces in the diff.
-    """
-    norm_cmd = [AY, "dev", "dump", "normalize", "--in", raw, "--target", target, "--out", "-"]
-    if ref_graph:
-        norm_cmd.append("--ref-graph")
-    tmp = out + ".tmp"
-    _remove_if_exists(tmp)
-    p1 = subprocess.Popen(
-        norm_cmd,
-        cwd=WORK_CWD, stdout=subprocess.PIPE,
-    )
-    p2 = subprocess.Popen(
-        [AY, "dev", "dump", "sort", "--out", tmp],
-        cwd=WORK_CWD, stdin=p1.stdout,
-    )
-    p1.stdout.close()
-    p2.communicate()
-    p1_rc = p1.wait()
-    if p1_rc == 0 and p2.returncode == 0:
-        os.replace(tmp, out)
-        return True
-    _remove_if_exists(tmp)
-    return False
-
-
-def normalize_pair(name, our_raw, ref_raw, target, our_out, ref_out):
-    # Our graph normalized faithfully; upstream ref gets reference-side pruning.
-    if _normalize_sort_go(our_raw, target, our_out) and _normalize_sort_go(ref_raw, target, ref_out, ref_graph=True):
-        return True
-    print(f"[{name}] FAIL (normalize)")
-    return False
 
 
 def _advance_line(handle):
@@ -180,122 +144,313 @@ def normalized_node_parity_counts(left_path, right_path):
     )
 
 
-def _timed_gen(gen, raw):
-    """Run the generator once; return (returncode, wall seconds)."""
-    t0 = time.monotonic()
-    rc = run([gen, raw]).returncode
-    return rc, time.monotonic() - t0
+# ---------------------------------------------------------------------------
+# DAG micro-executor
+# ---------------------------------------------------------------------------
 
 
-def measured_generate(name, gen, raw, budget):
-    """Run `gen`, returning (ok, secs). When a budget is set and the first run
-    blows GEN_TIME_SLACK*budget, re-run twice more and keep the BEST (min) of
-    the three: one wall sample can spike under shared-box contention, but a real
-    regression stays slow across all three. ok=False means the generator itself
-    failed."""
-    rc, secs = _timed_gen(gen, raw)
-    if rc != 0:
-        return False, secs
-    if budget is not None and secs > GEN_TIME_SLACK * budget:
-        samples = [secs]
-        for _ in range(2):
-            rc, s = _timed_gen(gen, raw)
-            if rc != 0:
-                return False, s
-            samples.append(s)
-        secs = min(samples)
-        print(f"[{name}] over limit; remeasured {', '.join(f'{x:.2f}' for x in samples)}s — best {secs:.2f}s")
-    return True, secs
+@dataclass
+class Node:
+    name: str        # unique id, also the log label prefix
+    action: object   # callable() -> result dict; must contain "ok": bool
+    inputs: list     # file paths it reads
+    outputs: list    # file paths it produces
 
 
-def main() -> int:
-    # Absolutize: AY / WORK_CWD / the per-case paths below are all derived from
-    # out_dir and then used from processes whose cwd is WORK_CWD=out_dir. A relative
-    # out_dir (e.g. `.out/reviewer-validate`) would re-resolve against that cwd and
-    # double-nest (the normalize .tmp then lands under out_dir/out_dir and os.replace
-    # fails). Resolve once, up front, so every derived path is cwd-independent.
-    out_dir = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(REPO_ROOT, ".out", "validate"))
-    os.makedirs(out_dir, exist_ok=True)
+def run_graph(nodes, jobs):
+    """Run the node DAG, joining each node on the producers of its input files,
+    up to `jobs` concurrently. No caching — every node runs exactly once. A node
+    whose any dependency failed is not run (marked failed, propagating). Returns
+    {name: result}."""
+    by_out = {o: n.name for n in nodes for o in n.outputs}
+    deps = {n.name: {by_out[i] for i in n.inputs if i in by_out} for n in nodes}
+    dependents = {n.name: [] for n in nodes}
 
-    # Build the binary into the writable out-dir (never into REPO_ROOT, which may
-    # be read-only) and run everything from there: the gen_*.sh scripts invoke
-    # `./ay`, resolved under WORK_CWD=out_dir, and AY (normalize/sort/diff) points
-    # at the same binary. REPO_ROOT stays the build cwd so `go build` finds the module.
-    global AY, WORK_CWD
-    AY = os.path.join(out_dir, "ay")
-    WORK_CWD = out_dir
+    for n in nodes:
+        for d in deps[n.name]:
+            dependents[d].append(n.name)
 
-    # The project has no cgo imports; force CGO_ENABLED=0 so the build never
-    # drags in runtime/cgo (which needs a C toolchain with stddef.h that may be
-    # absent from the host clang resource dir). Pure-Go net/user resolvers are
-    # equivalent for our purposes and more hermetic.
-    build_env = dict(os.environ, CGO_ENABLED="0")
-    subprocess.run([GO, "build", "-o", AY, "."], cwd=REPO_ROOT, check=True, env=build_env)
+    node_by_name = {n.name: n for n in nodes}
+    results = {}
+    failed = set()
+    remaining = {n.name: len(deps[n.name]) for n in nodes}
+    left = [len(nodes)]
+    lock = threading.Lock()
+    sem = threading.Semaphore(jobs)
+    done = threading.Event()
 
-    status = 0
-    for name, target, source_root, ref, xfail in CASES:
-        missing = [p for p in (source_root, ref) if not os.path.exists(p)]
-        if missing:
-            print(f"[{name}] SKIP (data not present on host: {', '.join(missing)})")
-            continue
+    def complete(name, result):
+        ready = []
 
-        raw = os.path.join(out_dir, f"{name}.our.json")
-        our_n = os.path.join(out_dir, f"{name}.our.norm.jsonl")
-        ref_n = os.path.join(out_dir, f"{name}.ref.norm.jsonl")
-        gen = os.path.join(SCRIPT_DIR, f"gen_{name}.sh")
+        with lock:
+            results[name] = result
 
-        print(f"[{name}] generate")
-        budget = GEN_TIME_BUDGET.get(name)
-        ok, gen_secs = measured_generate(name, gen, raw, budget)
-        if not ok:
-            print(f"[{name}] FAIL (generate)")
-            if not xfail:
-                status = 1
-            continue
+            if not result.get("ok"):
+                failed.add(name)
+
+            for dep in dependents[name]:
+                remaining[dep] -= 1
+
+                if remaining[dep] == 0:
+                    ready.append(dep)
+
+            left[0] -= 1
+
+            if left[0] == 0:
+                done.set()
+
+        for dep in ready:
+            dispatch(dep)
+
+    def dispatch(name):
+        with lock:
+            blocked = bool(deps[name] & failed)
+
+        if blocked:
+            complete(name, {"ok": False, "skipped": True})
+
+            return
+
+        def task():
+            sem.acquire()
+
+            try:
+                res = node_by_name[name].action()
+            except Exception as e:  # noqa: BLE001 — surface, don't crash the run
+                res = {"ok": False, "error": str(e)}
+            finally:
+                sem.release()
+
+            complete(name, res)
+
+        threading.Thread(target=task, daemon=True).start()
+
+    for n in nodes:
+        if remaining[n.name] == 0:
+            dispatch(n.name)
+
+    done.wait()
+
+    return results
+
+
+def sh(cmd):
+    """Run a subprocess in WORK_CWD; return its exit code."""
+    return subprocess.run(cmd, cwd=WORK_CWD).returncode
+
+
+# ---------------------------------------------------------------------------
+# Node actions (one per program invocation)
+# ---------------------------------------------------------------------------
+
+
+def build_action():
+    t = time.monotonic()
+    # The project has no cgo imports; force CGO_ENABLED=0 so the build never drags
+    # in runtime/cgo (which needs a C toolchain with stddef.h that may be absent).
+    env = dict(os.environ, CGO_ENABLED="0")
+    rc = subprocess.run([GO, "build", "-o", AY, "."], cwd=REPO_ROOT, env=env).returncode
+    print(f"[build] {time.monotonic() - t:.2f}s", flush=True)
+
+    return {"ok": rc == 0}
+
+
+def gen_action(name, gen, raw, budget):
+    def action():
+        t = time.monotonic()
+        rc = sh([gen, raw])
+        secs = time.monotonic() - t
+        over = budget is not None and secs > GEN_TIME_SLACK * budget
 
         if budget is None:
-            print(f"[{name}] gen time {gen_secs:.2f}s (no budget)")
+            print(f"[{name}] gen {secs:.2f}s (no budget)", flush=True)
         else:
-            limit = GEN_TIME_SLACK * budget
-            print(f"[{name}] gen time {gen_secs:.2f}s (budget {budget:.2f}s, limit {limit:.2f}s)")
-            if gen_secs > limit:
-                print(
-                    f"[{name}] FAIL (perf regression): best gen {gen_secs:.2f}s > "
-                    f"{GEN_TIME_SLACK:g}x budget {budget:.2f}s = {limit:.2f}s — the generator "
-                    f"got slower; optimize the code, do NOT raise the budget"
-                )
-                status = 1
+            print(f"[{name}] gen {secs:.2f}s (budget {budget:.2f}s, limit {GEN_TIME_SLACK * budget:.2f}s)", flush=True)
 
-        print(f"[{name}] normalize our + ref")
-        if not normalize_pair(name, raw, ref, target, our_n, ref_n):
+        return {"ok": rc == 0, "secs": secs, "budget_over": over}
+
+    return action
+
+
+def normalize_action(label, raw, target, out_unsorted, ref_graph):
+    def action():
+        cmd = [AY, "dev", "dump", "normalize", "--in", raw, "--target", target, "--out", out_unsorted]
+
+        if ref_graph:
+            cmd.append("--ref-graph")
+
+        _remove_if_exists(out_unsorted)
+        t = time.monotonic()
+        rc = sh(cmd)
+        print(f"[{label}] subproc: normalize {'ref' if ref_graph else 'our'} {time.monotonic() - t:.2f}s", flush=True)
+
+        return {"ok": rc == 0}
+
+    return action
+
+
+def sort_action(label, in_unsorted, out_sorted, side):
+    def action():
+        _remove_if_exists(out_sorted)
+        t = time.monotonic()
+        rc = sh([AY, "dev", "dump", "sort", "--in", in_unsorted, "--out", out_sorted])
+        print(f"[{label}] subproc: sort {side} {time.monotonic() - t:.2f}s", flush=True)
+
+        if rc == 0:
+            _remove_if_exists(in_unsorted)  # drop the large intermediate; no caching
+
+        return {"ok": rc == 0}
+
+    return action
+
+
+def compare_action(name, xfail, our_sorted, ref_sorted, out_dir):
+    def action():
+        if xfail is False:
+            rc = sh(["cmp", "-s", our_sorted, ref_sorted])
+
+            return {"ok": True, "verdict": "OK" if rc == 0 else "FAIL"}
+
+        if xfail == "auto" and sh(["cmp", "-s", our_sorted, ref_sorted]) == 0:
+            return {"ok": True, "verdict": "OK"}
+
+        parity = normalized_node_parity_counts(our_sorted, ref_sorted)
+        diff_file = os.path.join(out_dir, f"{name}.diff.txt")
+        t = time.monotonic()
+        sh([AY, "dev", "dump", "diff", "--left", our_sorted, "--right", ref_sorted, "--out", diff_file])
+        print(f"[{name}] subproc: diff {time.monotonic() - t:.2f}s", flush=True)
+
+        return {"ok": True, "verdict": "XFAIL", "parity": parity, "diff_file": diff_file}
+
+    return action
+
+
+# ---------------------------------------------------------------------------
+# Graph construction + gating evaluation
+# ---------------------------------------------------------------------------
+
+
+def build_nodes(out_dir, active):
+    """One node per program invocation; deps are implied by the shared files."""
+    nodes = [Node("build", build_action, [], [AY])]
+
+    for name, target, _src, ref, xfail in active:
+        raw = os.path.join(out_dir, f"{name}.our.json")
+        our_u = os.path.join(out_dir, f"{name}.our.norm.unsorted")
+        ref_u = os.path.join(out_dir, f"{name}.ref.norm.unsorted")
+        our_s = os.path.join(out_dir, f"{name}.our.norm.jsonl")
+        ref_s = os.path.join(out_dir, f"{name}.ref.norm.jsonl")
+        gen = os.path.join(SCRIPT_DIR, f"gen_{name}.sh")
+        budget = GEN_TIME_BUDGET.get(name)
+
+        nodes += [
+            Node(f"gen:{name}", gen_action(name, gen, raw, budget), [AY], [raw]),
+            Node(f"norm-our:{name}", normalize_action(name, raw, target, our_u, False), [AY, raw], [our_u]),
+            Node(f"sort-our:{name}", sort_action(name, our_u, our_s, "our"), [AY, our_u], [our_s]),
+            # ref normalize depends only on the binary + the external reference json,
+            # so it starts right after build — in parallel with the generator.
+            Node(f"norm-ref:{name}", normalize_action(name, ref, target, ref_u, True), [AY], [ref_u]),
+            Node(f"sort-ref:{name}", sort_action(name, ref_u, ref_s, "ref"), [AY, ref_u], [ref_s]),
+            Node(f"cmp:{name}", compare_action(name, xfail, our_s, ref_s, out_dir), [our_s, ref_s], []),
+        ]
+
+    return nodes
+
+
+def evaluate(active, results):
+    """Read node results in case order; print the gating contract; return status."""
+    status = 0
+
+    for name, _target, _src, _ref, xfail in active:
+        gen = results.get(f"gen:{name}", {})
+
+        if not gen.get("ok"):
+            print(f"[{name}] FAIL (generate)")
+
             if not xfail:
                 status = 1
+
             continue
 
-        if xfail:
-            if xfail == "auto" and run(["cmp", "-s", our_n, ref_n]).returncode == 0:
-                print(f"[{name}] OK")
-                continue
-            parity = normalized_node_parity_counts(our_n, ref_n)
+        if gen.get("budget_over"):
+            budget = GEN_TIME_BUDGET.get(name)
+            print(
+                f"[{name}] FAIL (perf regression): gen {gen['secs']:.2f}s > "
+                f"{GEN_TIME_SLACK:g}x budget {budget:.2f}s — optimize the code, do NOT raise the budget"
+            )
+            status = 1
+
+        norm_ok = all(
+            results.get(f"{step}:{name}", {}).get("ok")
+            for step in ("norm-our", "sort-our", "norm-ref", "sort-ref")
+        )
+
+        if not norm_ok:
+            print(f"[{name}] FAIL (normalize)")
+
+            if not xfail:
+                status = 1
+
+            continue
+
+        verdict = results.get(f"cmp:{name}", {}).get("verdict")
+
+        if verdict == "OK":
+            print(f"[{name}] OK")
+        elif verdict == "XFAIL":
+            cmp = results[f"cmp:{name}"]
+            p = cmp["parity"]
             print(
                 f"[{name}] exact normalized-node parity: "
-                f"matched={parity.exact} "
-                f"our_only={parity.left_only} ref_only={parity.right_only} "
-                f"our_total={parity.left_total} ref_total={parity.right_total}"
+                f"matched={p.exact} our_only={p.left_only} ref_only={p.right_only} "
+                f"our_total={p.left_total} ref_total={p.right_total}"
             )
-            diff_file = os.path.join(out_dir, f"{name}.diff.txt")
-            run([AY, "dev", "dump", "diff", "--left", our_n, "--right", ref_n, "--out", diff_file])
-            print(f"[{name}] XFAIL (not gating) — full diff: {diff_file}")
-            continue
-
-        print(f"[{name}] compare")
-        if run(["cmp", "-s", our_n, ref_n]).returncode == 0:
-            print(f"[{name}] OK")
+            print(f"[{name}] XFAIL (not gating) — full diff: {cmp['diff_file']}")
         else:
             print(f"[{name}] FAIL")
             status = 1
 
+    return status
+
+
+def main() -> int:
+    # Absolutize so AY / WORK_CWD / the per-case paths are cwd-independent (a
+    # relative out-dir would re-resolve against WORK_CWD and double-nest).
+    out_dir = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(REPO_ROOT, ".out", "validate"))
+    os.makedirs(out_dir, exist_ok=True)
+
+    # Build into the writable out-dir (REPO_ROOT may be read-only) and run gen_*.sh
+    # from there (WORK_CWD=out_dir resolves their `./ay`); AY points at the same binary.
+    global AY, WORK_CWD
+    AY = os.path.join(out_dir, "ay")
+    WORK_CWD = out_dir
+
+    active = []
+
+    for case in CASES:
+        name, _target, source_root, ref, _xfail = case
+        missing = [p for p in (source_root, ref) if not os.path.exists(p)]
+
+        if missing:
+            print(f"[{name}] SKIP (data not present on host: {', '.join(missing)})")
+            continue
+
+        active.append(case)
+
+    jobs = int(os.environ.get("VALIDATE_JOBS", min(os.cpu_count() or 4, 6)))
+    print(f"[graph] {len(active)} cases, jobs={jobs}", flush=True)
+
+    t0 = time.monotonic()
+    results = run_graph(build_nodes(out_dir, active), jobs)
+    print(f"[total] graph wall {time.monotonic() - t0:.2f}s", flush=True)
+
+    if not results.get("build", {}).get("ok"):
+        print("validate.py: build failed")
+        return 1
+
+    status = evaluate(active, results)
     print("validate.py: all gating cases byte-exact" if status == 0 else "validate.py: failures above")
+
     return status
 
 
