@@ -12,8 +12,8 @@ import (
 	"sync"
 )
 
-// alwaysCopyDirs mirrors devtools/ya/tests/copy_inputs.py's ALWAYS_INCLUDE: dirs
-// pulled in at configure time via PEERDIR/ADDINCL from the ya.make files of modules
+// alwaysCopyDirs are dirs pulled in at configure time via PEERDIR/ADDINCL from the
+// ya.make files of modules
 // we copy, but not necessarily read while building the graph — so `ya make` in the
 // slice would bail with "PEERDIR to missing directory" / "ADDINCL to non existent
 // source directory" without them.
@@ -28,9 +28,8 @@ var alwaysCopyDirs = []string{
 // copySourceSlice writes the minimal repo slice the graph build actually touched into
 // dst: every source file the FS read (readSourceRels), coarsened to its directory and
 // copied recursively, plus the ancestor ya.make of every copied directory (configure
-// needs them) and the always-include dirs. It is the in-process replacement for
-// devtools/ya/tests/copy_inputs.py — driven by real FS reads rather than the graph,
-// which omits scanned headers and other opened files. Directories are copied
+// needs them) and the always-include dirs. It is driven by real FS reads rather than
+// the graph, which omits scanned headers and other opened files. Directories are copied
 // concurrently. The graph must have been built first so contentHashes is populated.
 func copySourceSlice(fs *OsFS, srcRoot, dst string, onWarn func(Warn)) error {
 	absSrc, err := filepath.Abs(srcRoot)
