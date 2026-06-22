@@ -52,8 +52,7 @@ func TestIntMapCapacityIsPowerOfTwo(t *testing.T) {
 	}
 }
 
-// Keys that share a home slot (k, k+cap, k+2*cap) must all be found via probing,
-// and probing must wrap around the end of the table.
+// Keys sharing a home slot must all be found via probing, including wraparound.
 func TestIntMapCollisionAndWraparound(t *testing.T) {
 	m := newIntMap[int](0) // cap 8, mask 7
 	cap0 := uint64(len(m.data))
@@ -93,9 +92,8 @@ func TestIntMapGrowKeepsAll(t *testing.T) {
 	}
 }
 
-// Differential test: behave identically to the builtin map across a random
-// mix of inserts, overwrites and lookups (positive and negative). Key 0 is
-// reserved (empty sentinel), so keys are kept non-zero.
+// Differential test: behave identically to the builtin map across a random mix
+// of inserts, overwrites and lookups. Keys kept non-zero (0 is reserved).
 func TestIntMapMatchesBuiltin(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	ref := map[uint64]int64{}
@@ -118,7 +116,7 @@ func TestIntMapMatchesBuiltin(t *testing.T) {
 		}
 	}
 
-	// Negative lookups over the full 64-bit space (mostly absent), non-zero.
+	// Negative lookups over the full 64-bit space, non-zero.
 	for i := 0; i < 100_000; i++ {
 		k := rng.Uint64() | 1
 		_, refOK := ref[k]
@@ -130,8 +128,7 @@ func TestIntMapMatchesBuiltin(t *testing.T) {
 	}
 }
 
-// Cell is the find-or-insert primitive: it returns a writable pointer to the
-// value cell and whether the key existed.
+// Cell is find-or-insert: returns a writable pointer and whether the key existed.
 func TestIntMapCell(t *testing.T) {
 	m := newIntMap[int](0)
 
@@ -191,7 +188,7 @@ func TestIntMapCellGrows(t *testing.T) {
 	}
 }
 
-// Pointer value type round-trips (the codegen split map stores *GeneratedFileInfo).
+// Pointer value type round-trips.
 func TestIntMapPointerValues(t *testing.T) {
 	type box struct{ n int }
 

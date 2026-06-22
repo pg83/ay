@@ -21,11 +21,9 @@ var goKeyword = map[string]bool{
 	"select": true, "struct": true, "switch": true, "type": true, "var": true,
 }
 
-// goPredeclared lists Go's predeclared identifiers (types, constants, builtin
-// funcs). They are not keywords, so a generated name like "any" — from a literal
-// reducing to a single non-alphanumeric run — would parse yet shadow the builtin
-// type wherever the package uses it generically. Reserved so uniqueName never
-// emits one.
+// goPredeclared lists Go's predeclared identifiers. They are not keywords, so a
+// generated name like "any" would parse yet shadow the builtin where the package
+// uses it. Reserved so uniqueName never emits one.
 var goPredeclared = map[string]bool{
 	"any": true, "bool": true, "byte": true, "comparable": true,
 	"complex64": true, "complex128": true, "error": true, "float32": true,
@@ -49,9 +47,9 @@ var linters = []FileLinter{
 	{name: "case-convention", run: lintCaseConvention},
 }
 
-// constFileForKind names the dedicated file that owns every hoisted const of a
-// kind. `ay refac consts` regenerates these files wholesale from the package-wide
-// set of hoisted keys; their previous per-file declarations are removed.
+// constFileForKind names the dedicated file owning every hoisted const of a kind.
+// `ay refac consts` regenerates these files wholesale; previous per-file
+// declarations are removed.
 var constFileForKind = map[HoistKind]string{
 	hoistVFS: "vfs_consts.go",
 	hoistStr: "str_consts.go",
@@ -69,8 +67,8 @@ var constFileHeader = map[HoistKind]string{
 // In-tree refactoring helpers (refac consts|lint|case) mutate source files in
 // place; run them in a throwaway worktree and review the diff.
 
-// goFilesFromArgs returns the explicit file args, or — when none are given —
-// every non-test .go file in the current directory, sorted.
+// goFilesFromArgs returns the explicit file args, or every non-test .go file in
+// the current directory, sorted.
 func goFilesFromArgs(args []string) []string {
 	if len(args) > 0 {
 		return args
@@ -93,15 +91,14 @@ func goFilesFromArgs(args []string) []string {
 
 // refacConsts hoists every intern/source/build call with a constant string literal
 // out of function bodies into a package-level var, deduplicating by the resolved
-// VFS path and reusing any equivalent var already declared. The call site is
-// rewritten to the var name. With no file args it processes every non-test .go
-// file in the current directory.
+// VFS path and reusing any equivalent var already declared; the call site is
+// rewritten to the var name.
 //
-// Dedup and name allocation are package-wide: Go's package-level identifiers share
-// one namespace across all files, so a VFS first hoisted in file A is referenced
-// (not re-declared) when it recurs in file B, and generated names are unique across
-// the whole package. Files are processed in sorted order, so a new var lands in the
-// first file (alphabetically) that uses it.
+// Dedup and name allocation are package-wide (Go's package-level identifiers share
+// one namespace): a VFS first hoisted in one file is referenced, not re-declared,
+// when it recurs in another, and generated names are unique across the package.
+// Files are processed in sorted order, so a new var lands in the first file that
+// uses it.
 func refacConsts(_ GlobalFlags, args []string) int {
 	files := goFilesFromArgs(args)
 
@@ -112,8 +109,8 @@ func refacConsts(_ GlobalFlags, args []string) int {
 	}
 
 	// Phase 1: parse every file and collect package-wide state — all top-level
-	// identifiers (so generated names never collide) and a canon->var map of vars
-	// already hoisted, with their declaring call nodes flagged so we don't re-hoist.
+	// identifiers (so generated names never collide) and a canon->var map of
+	// already-hoisted vars, with declaring call nodes flagged to avoid re-hoisting.
 	var parsed []*ParsedFile
 	existing := map[HoistKey]string{}
 	used := map[string]bool{}
@@ -126,10 +123,9 @@ func refacConsts(_ GlobalFlags, args []string) int {
 		}
 	}
 
-	// Phase 2: classify every hoist-eligible occurrence. A "free" occurrence sits in
-	// a function body; a non-free one is an element of a file-level var/const
-	// composite literal (a per-file interned list). Occurrences are gathered in
-	// (file, source-position) order for deterministic name allocation.
+	// Phase 2: classify every hoist-eligible occurrence. A "free" one sits in a
+	// function body; a non-free one is an element of a file-level composite literal.
+	// Gathered in (file, source-position) order for deterministic name allocation.
 	var occs []Occurrence
 
 	for fi, pf := range parsed {
@@ -137,20 +133,18 @@ func refacConsts(_ GlobalFlags, args []string) int {
 	}
 
 	// emit gathers every const a dest file must declare: all existing package-level
-	// hoist vars (relocated as-is, preserving their names — so duplicate-canon vars
-	// like the several fs_tools aliases each survive and their by-name references stay
-	// valid) plus the new ones hoisted below.
+	// hoist vars (relocated as-is, preserving names — so duplicate-canon vars each
+	// survive and their by-name references stay valid) plus the new ones below.
 	var emit []HoistedVar
 
 	for _, pf := range parsed {
 		emit = append(emit, pf.vars...)
 	}
 
-	// Phase 3: decide which canons get a NEW package-level var. A canon is hoisted only
-	// if it lacks a var (none declared in source, none seen earlier) and it has at least
-	// one free occurrence. A canon that appears ONLY as a file-level-list element is
-	// left inline — hoisting it would create a var referenced exactly once, which is
-	// redundant indirection.
+	// Phase 3: decide which canons get a NEW package-level var. Hoisted only if it
+	// lacks a var and has at least one free occurrence. A canon appearing ONLY as a
+	// file-level-list element stays inline — hoisting it would make a var referenced
+	// exactly once, redundant indirection.
 	for _, o := range occs {
 		if !o.free {
 			continue
@@ -167,10 +161,9 @@ func refacConsts(_ GlobalFlags, args []string) int {
 	}
 
 	// Phase 4: per non-dest file, rewrite every occurrence whose canon now has a var
-	// to that var (list-only canons without a var stay inline), and delete every
-	// existing package-level single-literal hoist declaration — its const moves to
-	// the per-kind dest file. Dest files are regenerated wholesale below, so they are
-	// skipped here.
+	// (list-only canons without a var stay inline) and delete every existing
+	// package-level single-literal hoist declaration — its const moves to the dest
+	// file. Dest files are regenerated wholesale below, so skipped here.
 	editsByFile := make([][]ConstEdit, len(parsed))
 
 	for _, o := range occs {
@@ -196,8 +189,7 @@ func refacConsts(_ GlobalFlags, args []string) int {
 		}
 	}
 
-	// Phase 5: regenerate each per-kind dest file from the full set of hoisted vars
-	// of that kind.
+	// Phase 5: regenerate each per-kind dest file from its full set of hoisted vars.
 	for kind, fname := range constFileForKind {
 		generateConstFile(fname, kind, emit)
 	}
@@ -214,9 +206,9 @@ type Occurrence struct {
 }
 
 // collectOccurrences appends every hoist-eligible call in pf to occs, tagging each
-// as free (inside a function body) or not (an element of a file-level var/const
-// composite literal). The direct-value vars recorded by parseRefacFile (declared)
-// are skipped — they ARE the hoisted vars, not call sites to rewrite.
+// as free (inside a function body) or not (a file-level composite literal element).
+// The declared direct-value vars are skipped — they ARE the hoisted vars, not call
+// sites to rewrite.
 func collectOccurrences(pf *ParsedFile, fileIdx int, occs *[]Occurrence) {
 	record := func(call *ast.CallExpr, free bool) bool {
 		if pf.declared[call] {
@@ -237,7 +229,7 @@ func collectOccurrences(pf *ParsedFile, fileIdx int, occs *[]Occurrence) {
 			free:    free,
 		})
 
-		return false // the only child is the string literal — nothing nested to hoist
+		return false // only child is the string literal — nothing nested
 	}
 
 	for _, decl := range pf.f.Decls {
@@ -281,8 +273,8 @@ type ParsedFile struct {
 	src      []byte
 	fset     *gotoken.FileSet
 	f        *ast.File
-	declared map[*ast.CallExpr]bool // hoist-eligible calls that already ARE package-level var values
-	vars     []HoistedVar           // every package-level single-literal hoist declaration, in source order
+	declared map[*ast.CallExpr]bool // hoist-eligible calls that already ARE var values
+	vars     []HoistedVar           // every single-literal hoist declaration, in source order
 }
 
 // hoistedVar is a package-level const owned by a per-kind dest file: its var name
@@ -293,7 +285,7 @@ type HoistedVar struct {
 }
 
 // parseRefacFile parses path and folds its top-level declarations into the shared
-// existing/used maps. Returns nil (with a warning) if the file fails to parse.
+// existing/used maps. Returns nil (warning) on parse failure.
 func parseRefacFile(path string, existing map[HoistKey]string, used map[string]bool) *ParsedFile {
 	src := throw2(os.ReadFile(path))
 	fset := gotoken.NewFileSet()
@@ -348,9 +340,9 @@ func parseRefacFile(path string, existing map[HoistKey]string, used map[string]b
 	return &ParsedFile{path: path, src: src, fset: fset, f: f, declared: declared, vars: vars}
 }
 
-// hoistKind is the result-type namespace of a hoistable literal call. Calls of
-// different kinds never share a var even when their canon matches, since their
-// results have distinct Go types.
+// hoistKind is the result-type namespace of a hoistable literal call. Different
+// kinds never share a var even when their canon matches, since their results have
+// distinct Go types.
 type HoistKind uint8
 
 const (
@@ -360,10 +352,10 @@ const (
 	hoistEnv                  // internEnv -> ENV
 )
 
-// hoistKey identifies a hoistable literal call and is the dedup key. For
-// hoistVFS, canon is the resolved VFS path ("$(S)/..."/"$(B)/...") so source("x")
-// and intern("$(S)/x") share one var. For hoistStr, canon is the raw literal — its
-// own namespace, since a STR must never share a var with a VFS.
+// hoistKey identifies a hoistable literal call and is the dedup key. For hoistVFS,
+// canon is the resolved VFS path so source("x") and intern("$(S)/x") share one var.
+// For hoistStr, canon is the raw literal — its own namespace, so a STR never shares
+// a var with a VFS.
 type HoistKey struct {
 	kind  HoistKind
 	canon string
@@ -413,7 +405,7 @@ func hoistCall(call *ast.CallExpr) (HoistKey, bool) {
 	return HoistKey{}, false
 }
 
-// constDef renders the var initializer for a key, preferring the Source/Build short
+// constDef renders the var initializer for a key, preferring source/build short
 // forms for VFS paths.
 func constDef(key HoistKey) string {
 	switch key.kind {
@@ -437,19 +429,18 @@ func constDef(key HoistKey) string {
 }
 
 // constEdit replaces the byte range [start,end) with name; an empty name deletes
-// the range (used to remove a relocated declaration).
+// the range (removing a relocated declaration).
 type ConstEdit struct {
 	start, end int
 	name       string
 }
 
 // internArgsRewrites finds every `internArgs([]string{<all string literals>})` call
-// in pf, registers each element string as a hoistArg const (reusing the existing arg
-// const for that string, else allocating a new one appended to *emit), and returns
-// edits rewriting each call to a `[]ARG{argA, argB, …}` literal of those consts — so
+// in pf, registers each element as a hoistArg const (reusing or allocating, appended
+// to *emit), and returns edits rewriting the call to a `[]ARG{argA, …}` literal — so
 // a static flag bundle becomes a vector of pre-interned ARG consts instead of a
-// runtime internArgs() over a string slice. A call whose slice has any non-literal
-// element (a variable or concatenation) or a non-composite argument is left untouched.
+// runtime internArgs(). A call with any non-literal element or non-composite argument
+// is left untouched.
 func internArgsRewrites(pf *ParsedFile, existing map[HoistKey]string, used map[string]bool, emit *[]HoistedVar) []ConstEdit {
 	off := func(p gotoken.Pos) int { return pf.fset.Position(p).Offset }
 
@@ -480,7 +471,7 @@ func internArgsRewrites(pf *ParsedFile, existing map[HoistKey]string, used map[s
 			bl, isLit := el.(*ast.BasicLit)
 
 			if !isLit || bl.Kind != gotoken.STRING {
-				return true // a non-literal element — leave the whole call untouched
+				return true // non-literal element — leave the call untouched
 			}
 
 			lit, err := strconv.Unquote(bl.Value)
@@ -521,8 +512,8 @@ func internArgsRewrites(pf *ParsedFile, existing map[HoistKey]string, used map[s
 }
 
 // specRemovable reports whether spec is a `name = Call("<literal>")` package-level
-// var whose call was flagged hoistable in parseRefacFile — i.e. one whose const is
-// being relocated to a dest file.
+// var flagged hoistable in parseRefacFile — one whose const is being relocated to a
+// dest file.
 func specRemovable(pf *ParsedFile, spec ast.Spec) bool {
 	vs, ok := spec.(*ast.ValueSpec)
 
@@ -535,11 +526,11 @@ func specRemovable(pf *ParsedFile, spec ast.Spec) bool {
 	return ok && pf.declared[call]
 }
 
-// removalEdits returns the byte ranges to delete from pf so that every relocated
-// hoist declaration disappears. A var block all of whose specs relocate is dropped
-// whole (with its doc comment); otherwise each relocated spec is dropped on its own
-// lines (with its own doc/line comments). Per the agreed rule, an attached group
-// doc comment is discarded with the declaration.
+// removalEdits returns the byte ranges to delete from pf so every relocated hoist
+// declaration disappears. A var block whose specs all relocate is dropped whole
+// (with its doc comment); otherwise each relocated spec is dropped on its own lines
+// (with its own doc/line comments). An attached group doc comment is discarded with
+// the declaration.
 func removalEdits(pf *ParsedFile) []ConstEdit {
 	src := pf.src
 	off := func(p gotoken.Pos) int { return pf.fset.Position(p).Offset }
@@ -622,8 +613,8 @@ func removalEdits(pf *ParsedFile) []ConstEdit {
 	return edits
 }
 
-// applyConstEdits applies edits (call-site rewrites and relocation deletions) to pf
-// back-to-front, formats, and writes. Returns whether the file changed.
+// applyConstEdits applies edits to pf back-to-front, formats, and writes. Returns
+// whether the file changed.
 func applyConstEdits(pf *ParsedFile, edits []ConstEdit) bool {
 	if len(edits) == 0 {
 		return false
@@ -653,8 +644,8 @@ func applyConstEdits(pf *ParsedFile, edits []ConstEdit) bool {
 	return true
 }
 
-// generateConstFile (re)writes path with every hoisted var of kind, deduplicated by
-// name and sorted by name. A file with no vars of its kind is removed if present.
+// generateConstFile (re)writes path with every hoisted var of kind, deduplicated and
+// sorted by name. A file with no vars of its kind is removed if present.
 func generateConstFile(path string, kind HoistKind, vars []HoistedVar) {
 	var items []HoistedVar
 	seen := map[string]bool{}
@@ -695,10 +686,9 @@ func generateConstFile(path string, kind HoistKind, vars []HoistedVar) {
 }
 
 // identForVFS turns a key into a lowerCamel identifier: the $(S)/$(B) prefix is
-// dropped ($(B) becomes a leading "bld" word so source/build siblings get distinct
-// names; an internStr key becomes a leading "str" word, an internArg key an "arg"
-// word and an internEnv key an "env" word so none collides with the same-path VFS
-// var or each other), and every non-alphanumeric run separates words.
+// dropped ($(B) gets a leading "bld" word so source/build siblings get distinct
+// names; str/arg/env keys get a leading "str"/"arg"/"env" word so none collides with
+// the same-path VFS var or each other), and every non-alphanumeric run splits words.
 func identForVFS(key HoistKey) string {
 	s := key.canon
 	var words []string
@@ -782,8 +772,7 @@ type FileLinter struct {
 	run  func(path string) bool
 }
 
-// refacLint applies every linter, in order, to each file. With no file args it
-// processes every non-test .go file in the current directory.
+// refacLint applies every linter, in order, to each file.
 func refacLint(_ GlobalFlags, args []string) int {
 	files := goFilesFromArgs(args)
 
@@ -799,9 +788,8 @@ func refacLint(_ GlobalFlags, args []string) int {
 }
 
 // varItem is one package-level var spec extracted for consolidation. body holds the
-// spec without the `var` keyword ("name [type] = value"); doc and blockDoc are the
-// spec's own and its containing block's doc comments; multiline marks specs whose
-// value spans more than one line.
+// spec without the `var` keyword; doc and blockDoc are the spec's own and its block's
+// doc comments; multiline marks specs whose value spans more than one line.
 type VarItem struct {
 	blockDoc  string
 	doc       string
@@ -809,8 +797,8 @@ type VarItem struct {
 	multiline bool
 }
 
-// render emits the item either as a group entry (inGroup, no `var` keyword) or as a
-// standalone declaration.
+// render emits the item as a group entry (inGroup, no `var` keyword) or a standalone
+// declaration.
 func (it VarItem) render(inGroup bool) string {
 	var b strings.Builder
 
@@ -834,15 +822,12 @@ func (it VarItem) render(inGroup bool) string {
 }
 
 // lintConsolidateVars groups a file's single-line package-level vars into one
-// var(...) block placed immediately after the imports, before all other code. A var
-// whose value serialization spans multiple lines (composite literals such as
-// map[...]{...} or []T{...}, multi-line strings — anything that introduces a new
-// indentation level) is kept as its own standalone `var` declaration, emitted below
-// the group, since folding it into the block would add an extra indentation level
-// and hurt readability. Declaration order, doc comments, and trailing comments are
-// preserved. The grouped block is formed only when at least two single-line vars
-// exist; otherwise every var is emitted standalone. Acts only when the file has at
-// least two package-level var specs.
+// var(...) block placed right after the imports. A var whose value spans multiple
+// lines (composite literals, multi-line strings — anything adding an indentation
+// level) is kept standalone below the group, since folding it in would add an extra
+// indentation level. Declaration order, doc comments, and trailing comments are
+// preserved. The block forms only when at least two single-line vars exist;
+// otherwise every var is standalone. Acts only with at least two var specs.
 func lintConsolidateVars(path string) bool {
 	src := throw2(os.ReadFile(path))
 	fset := gotoken.NewFileSet()
@@ -883,7 +868,7 @@ func lintConsolidateVars(path string) bool {
 
 		rmEnd := off(gd.End())
 
-		// A grouped block's own doc comment attaches once, to the first spec it yields.
+		// A grouped block's doc comment attaches once, to its first spec.
 		blockDoc := ""
 
 		if gd.Lparen.IsValid() && gd.Doc != nil {
@@ -932,8 +917,8 @@ func lintConsolidateVars(path string) bool {
 
 	group := simpleCount >= 2
 
-	// Assemble the replacement: the grouped block first (single-line vars, in order),
-	// then standalone declarations for everything that stays ungrouped, in order.
+	// Assemble: the grouped block first (single-line vars), then standalone
+	// declarations for everything ungrouped, in order.
 	var parts []string
 
 	if group {
@@ -963,7 +948,7 @@ func lintConsolidateVars(path string) bool {
 		}
 	}
 
-	// Insert after the import declaration, or after the package clause if none.
+	// Insert after the imports, or the package clause if none.
 	insOff := off(f.Name.End())
 
 	for _, decl := range f.Decls {
@@ -974,8 +959,8 @@ func lintConsolidateVars(path string) bool {
 		}
 	}
 
-	// Delete the original declarations back-to-front (every removal starts after
-	// insOff, so the bytes up to insOff stay put), then splice in the rebuilt vars.
+	// Delete originals back-to-front (every removal starts after insOff, so bytes up
+	// to insOff stay put), then splice in the rebuilt vars.
 	out := append([]byte(nil), src...)
 	sort.Slice(removals, func(i, j int) bool { return removals[i].start > removals[j].start })
 
@@ -1004,17 +989,16 @@ func lintConsolidateVars(path string) bool {
 }
 
 // isControlBlockStmt reports whether stmt is one of the brace-block control
-// statements that STYLE.md requires blank lines around: if/for/range/switch/
-// type-switch/select, and go/defer of a func literal (a `go func(){...}()` block,
-// not a plain `defer f.Close()`). A labeled statement is judged by its inner stmt.
+// statements that require blank lines around them: if/for/range/switch/type-switch/
+// select, and go/defer of a func literal (not a plain `defer f.Close()`). A labeled
+// statement is judged by its inner stmt.
 func isControlBlockStmt(stmt ast.Stmt) bool {
 	switch s := stmt.(type) {
 	case *ast.IfStmt, *ast.ForStmt, *ast.RangeStmt, *ast.SwitchStmt, *ast.TypeSwitchStmt, *ast.SelectStmt:
 		return true
-	// return/defer/continue/break are set off like control blocks: a blank
-	// line on each side, except at their statement list's edges (which have
-	// no adjacent pair). goto/fallthrough stay free — fallthrough belongs to
-	// its case body tail, goto reads as part of its loop shape.
+	// return/defer/continue/break are set off like control blocks, a blank
+	// line each side, except at their statement list's edges. goto/fallthrough
+	// stay free — fallthrough belongs to its case body tail, goto to its loop.
 	case *ast.ReturnStmt, *ast.DeferStmt:
 		return true
 	case *ast.BranchStmt:
@@ -1030,17 +1014,14 @@ func isControlBlockStmt(stmt ast.Stmt) bool {
 	return false
 }
 
-// lintControlBlankLines enforces STYLE.md's "blank lines around control blocks":
-// before and after every control block (if/for/switch/select/go-func) and every
-// flow statement (return/defer/continue/break), except where the statement is
-// the first or last of its enclosing block.
+// lintControlBlankLines enforces blank lines around control blocks: before and
+// after every control block and flow statement (return/defer/continue/break),
+// except where it is the first or last of its enclosing block.
 //
-// That before/after pair of rules, with their first/last exceptions, is exactly the
-// pairwise invariant: between any two adjacent statements in one statement list, if
-// either is a control block there must be a blank line. A control block that is the
-// first statement has no predecessor pair (so no blank is forced after the opening
-// brace), and one that is last has no successor pair (none before the closing brace).
-// The linter only inserts missing blanks; gofmt already collapses extra ones.
+// That pair of rules with first/last exceptions is the pairwise invariant: between
+// any two adjacent statements in one list, if either is a control block there must
+// be a blank line. A first statement has no predecessor pair, a last one no
+// successor pair. The linter only inserts missing blanks; gofmt collapses extras.
 func lintControlBlankLines(path string) bool {
 	src := throw2(os.ReadFile(path))
 	fset := gotoken.NewFileSet()
@@ -1053,8 +1034,8 @@ func lintControlBlankLines(path string) bool {
 	}
 
 	lineOf := func(p gotoken.Pos) int { return fset.Position(p).Line }
-	// Lines covered by a comment, so a control block's own leading comment block can
-	// be skipped over — the blank goes above the comment, keeping it attached.
+	// Lines covered by a comment, so a control block's leading comment can be skipped
+	// — the blank goes above the comment, keeping it attached.
 	commentLine := map[int]bool{}
 
 	for _, cg := range f.Comments {
@@ -1137,11 +1118,10 @@ func lintControlBlankLines(path string) bool {
 	return true
 }
 
-// lintTightBraces removes blank lines immediately after an opening brace and
-// immediately before a closing brace, for every brace pair in the file —
-// block bodies, composite literals, struct and interface types. Brace positions
-// come from the parsed AST, so braces inside strings or comments are never matched.
-// gofmt does not strip these blanks, hence this pass.
+// lintTightBraces removes blank lines right after an opening brace and right before
+// a closing one, for every brace pair — block bodies, composite literals, struct and
+// interface types. Brace positions come from the AST, so braces inside strings or
+// comments are never matched. gofmt does not strip these blanks, hence this pass.
 func lintTightBraces(path string) bool {
 	src := throw2(os.ReadFile(path))
 	fset := gotoken.NewFileSet()
@@ -1160,8 +1140,8 @@ func lintTightBraces(path string) bool {
 	}
 
 	// del holds 1-based line numbers to drop. tighten removes blanks only strictly
-	// between a brace pair's lines, so a same-line pair (e.g. an empty `struct{}`
-	// inside a type expression) never touches the blank that follows it outside.
+	// between a brace pair's lines, so a same-line pair (e.g. an empty `struct{}`)
+	// never touches the blank that follows it outside.
 	del := map[int]bool{}
 	tighten := func(open, close gotoken.Pos) {
 		if !open.IsValid() || !close.IsValid() {
@@ -1229,11 +1209,10 @@ func lintTightBraces(path string) bool {
 	return true
 }
 
-// lintExpandFuncBodies rewrites single-line top-level function bodies
-// (`func f() T { stmt }`) into the multi-line form. gofmt preserves a one-line
-// body but never produces the expansion itself, so this pass inserts a newline
-// after the opening brace and before the closing one and lets gofmt reindent and
-// split any `;`-separated statements. Empty bodies (`{}`) are left alone.
+// lintExpandFuncBodies rewrites single-line top-level function bodies into the
+// multi-line form. gofmt preserves a one-line body but never expands it, so this
+// pass inserts newlines after the opening and before the closing brace and lets
+// gofmt reindent and split `;`-separated statements. Empty bodies are left alone.
 func lintExpandFuncBodies(path string) bool {
 	src := throw2(os.ReadFile(path))
 	fset := gotoken.NewFileSet()
@@ -1262,8 +1241,8 @@ func lintExpandFuncBodies(path string) bool {
 		}
 
 		if len(fn.Body.List) == 0 {
-			// empty body `{}` -> `{\n}` (gofmt keeps the expanded empty body);
-			// Rbrace offset == Lbrace offset + 1, so one insertion suffices.
+			// empty body `{}` -> `{\n}`; Rbrace offset == Lbrace offset + 1, so
+			// one insertion suffices.
 			offs = append(offs, offOf(fn.Body.Rbrace))
 
 			continue
@@ -1301,10 +1280,9 @@ func lintExpandFuncBodies(path string) bool {
 	return true
 }
 
-// lintFuncBlankLines ensures a blank line before and after every top-level
-// function declaration — before its doc comment (if any) and after its closing
-// brace. gofmt does not separate top-level decls itself; it does collapse any
-// duplicate blanks these inserts create.
+// lintFuncBlankLines ensures a blank line before and after every top-level function
+// declaration — before its doc comment and after its closing brace. gofmt does not
+// separate top-level decls itself, but collapses any duplicate blanks these create.
 func lintFuncBlankLines(path string) bool {
 	src := throw2(os.ReadFile(path))
 	fset := gotoken.NewFileSet()

@@ -27,10 +27,8 @@ var sysInclYamlSequence = []SysInclEntry{
 	{file: "libiconv.yml"},
 	{file: "libidn.yml"},
 	{file: "jdk-to-arcadia.yml"},
-	// opensource.yml and proto.yml are mutually exclusive (build/conf/sysincl.conf:45
-	// `when ($OPENSOURCE == "yes") { opensource.yml } otherwise { proto.yml }`). proto.yml
-	// resolves google/protobuf/*.proto to all three vendored variants (protobuf,
-	// protobuf_std, protobuf_old) — needed for the internal contour's proto compiles.
+	// opensource.yml and proto.yml are mutually exclusive on $OPENSOURCE. proto.yml
+	// resolves the vendored protobuf variants — needed for the internal contour.
 	{file: "opensource.yml", predicate: opensourceOn},
 	{file: "proto.yml", predicate: notOpensource},
 	{file: "libc-to-musl.yml", predicate: muslOn},
@@ -62,10 +60,9 @@ type SysIncl struct {
 	CaseInsensitive bool
 
 	// pairs accumulates the record's cooked header->targets mappings in parse
-	// order: CS keys interned (key), CI keys lowercased (keyCI). The YAMLs
-	// carry intra-record duplicate headers (darwin, libc-to-musl, misc, …)
-	// with last-wins semantics — the index build dedups keeping the LAST
-	// occurrence, matching the old per-record map staging.
+	// order: CS keys interned (key), CI keys lowercased (keyCI). Intra-record
+	// duplicate headers carry last-wins semantics — the index build dedups
+	// keeping the LAST occurrence.
 	pairs []SysinclPair
 }
 
@@ -78,8 +75,8 @@ type SysinclPair struct {
 type SysInclSet []SysIncl
 
 // setMapping stores one cooked header→targets mapping into the record's arm
-// (CS keys interned straight from the bytes, CI keys lowercased). paths carries
-// no empty entries, so len>=2 is exactly the multi-target condition.
+// (CS keys interned from the bytes, CI keys lowercased). paths has no empty
+// entries, so len>=2 is exactly the multi-target condition.
 func (rec *SysIncl) setMapping(k []byte, paths []VFS) {
 	if len(paths) >= 2 {
 		rec.HasMultiTarget = true
@@ -116,10 +113,8 @@ func archIs(want string) func(SysInclEnv) bool {
 	return func(e SysInclEnv) bool { return e.arch == want }
 }
 
-// muslOn / muslArchIs gate the musl libc & stl sysincl files, which upstream
-// loads only under MUSL=yes (build/conf/sysincl.conf:52,
-// build/ymake.core.conf:349). Under glibc these must not apply, or libc headers
-// remap into contrib/libs/musl.
+// muslOn / muslArchIs gate the musl libc & stl sysincl files, loaded only under
+// MUSL=yes. Under glibc these must not apply, or libc headers remap into musl.
 func muslOn(e SysInclEnv) bool {
 	return e.musl
 }
@@ -154,16 +149,13 @@ func loadSysInclSetForFS(fs FS, arch string, musl, opensource bool, os OS, onWar
 		set = append(set, records...)
 	}
 
-	// The internal contour (OPENSOURCE != yes) layers build/internal/sysincl/* on top
-	// of the base set. Upstream loads a curated, config-gated subset (build/internal/
-	// conf/sysincl.conf + project_specific/{smart_devices,maps/mapkit}.conf), NOT the
-	// whole directory: each SYSINCL+= sits under a `when` clause on OPENSOURCE/OS_*/
-	// ARCH_*/project flags. internalSysInclApplies reproduces that gating. Loading
-	// every file is wrong — actions_zephyr.yml (OS_ZEPHYR only) carries a broad
-	// ^(alice|util|contrib|…) source_filter that remaps stdint.h/time.h/pthread.h/
-	// syscall.h to Zephyr headers, polluting ordinary C++ closures. Sorted for
-	// deterministic precedence; loaded after the base set so it overrides it (e.g.
-	// taxi.yml's <errno.h>/<pthread.h> → userver libc_workarounds).
+	// The internal contour (opensource != yes) layers the internal sysincl dir on
+	// top of the base set. Upstream loads a curated, config-gated subset, NOT the
+	// whole directory: each entry sits under a `when` clause on OS/ARCH/project
+	// flags, which internalSysInclApplies reproduces. Loading every file is wrong —
+	// an OS_ZEPHYR-only file carries a broad source_filter that would remap common
+	// libc headers, polluting ordinary C++ closures. Sorted for deterministic
+	// precedence; loaded after the base set so it overrides it.
 	if !opensource {
 		set = append(set, loadSysInclDir(fs, internalSysInclDir, env, onWarn)...)
 	}
@@ -171,39 +163,32 @@ func loadSysInclSetForFS(fs FS, arch string, musl, opensource bool, os OS, onWar
 	return set
 }
 
-// internalSysInclApplies gates a build/internal/sysincl/*.yml file the way the
-// upstream conf does. The internal contour (opensource==false) is already ensured
-// by the caller. The OSes this model builds are linux/darwin/windows only — files
-// gated on OS_ZEPHYR/OS_NONE/OS_FREERTOS/OS_ANDROID or MAPSMOBI_BUILD_TARGET can
-// never apply here, so they are never loaded (matching upstream for these graphs).
+// internalSysInclApplies gates an internal sysincl *.yml the way upstream conf
+// does. The internal contour (opensource==false) is ensured by the caller. This
+// model builds linux/darwin/windows only — files gated on any other OS or on a
+// mobile build target can never apply here, so they are never loaded.
 func internalSysInclApplies(name string, env SysInclEnv) bool {
 	switch name {
 	case "macro.yml", "misc.yml", "sdc.yml", "smart_devices.yml", "speechkit.yml", "weird.yml":
-		// build/internal/conf/sysincl.conf: when ($OPENSOURCE != "yes").
+		// when ($OPENSOURCE != "yes").
 		return true
 	case "taxi.yml":
-		// when ($USE_STL_SYSTEM != "yes" && $NORUNTIME != "yes" && $OPENSOURCE != "yes");
-		// USE_STL_SYSTEM / NORUNTIME are unset in every build here.
+		// when (... && $OPENSOURCE != "yes"); the other guards are unset in every build here.
 		return true
 	case "misc-win.yml":
-		// when ($OS_WINDOWS == "yes").
 		return env.os == OSWindows
 	case "smart_devices_linux.yml":
-		// project_specific/smart_devices.conf: when ($OS_LINUX == "yes").
 		return env.os == OSLinux
 	case "smart_devices_darwin.yml":
-		// elsewhen ($OS_DARWIN == "yes").
 		return env.os == OSDarwin
 	}
 
-	// actions_zephyr, amlogic_rtos, sanitizers-to-nothing, smart_devices_{android,
-	// beken,esp32,telink}, mobile-metrica, qt, yx-account-manager: gated on an OS/
-	// ARCH/project this model never builds.
+	// All remaining files are gated on an OS/ARCH/project this model never builds.
 	return false
 }
 
-// loadSysInclDir parses the config-applicable *.yml in the internal sysincl
-// directory, in sorted filename order. Absent directory → no records.
+// loadSysInclDir parses the config-applicable *.yml in sorted filename order.
+// Absent directory → no records.
 func loadSysInclDir(fs FS, dir string, env SysInclEnv, onWarn func(Warn)) SysInclSet {
 	if !fs.isDir(srcRootVFS, dir) {
 		return nil
@@ -448,8 +433,8 @@ func compileSourceFilter(name string, lineno int, pat string, onWarn func(Warn))
 					}
 				}
 			} else if lit, ex, res, okP := extractPrefixedNegativeLookahead(altStr); okP {
-				// `^<literal>(?!<alts>)`: require the literal prefix, reject any
-				// literal+alt. The full excluded prefix is literal+alt.
+				// `^<literal>(?!<alts>)`: require the literal prefix, reject
+				// literal+alt (the full excluded prefix).
 				alt.literalPrefix = lit
 
 				for _, e := range ex {
@@ -524,12 +509,12 @@ func splitTopLevelOr(pat string) []string {
 	return out
 }
 
-// extractPrefixedNegativeLookahead handles the well-known form
+// extractPrefixedNegativeLookahead handles the form
 // `^<literal>(?!<alt1|alt2|…>)<residual>`, where a regex-meta-free literal sits
-// between the anchor and the lookahead (e.g. `^contrib(?!/restricted/libnl)`).
-// RE2 has no lookahead, so it is matched in Go as: starts-with <literal> AND not
-// starts-with <literal><alt> for any alt. Returns the literal, the excluded
-// suffixes (relative to the literal), the residual after the group, and ok.
+// between the anchor and the lookahead. RE2 has no lookahead, so this matches in
+// Go as: starts-with <literal> AND not starts-with <literal><alt> for any alt.
+// Returns the literal, the excluded suffixes (relative to it), the residual
+// after the group, and ok.
 func extractPrefixedNegativeLookahead(pat string) (literal string, excludes []string, residual string, ok bool) {
 	if !strings.HasPrefix(pat, "^") {
 		return "", nil, "", false

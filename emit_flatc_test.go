@@ -110,10 +110,8 @@ root_type Bar;
 		"$(S)/contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h",
 	}
 	// The flatc tooling, sources and runtime header ride to the consumer as
-	// non-expanded closure leaves of the .fbs.h (registered in ensureFlatcEmission);
-	// leaves bypass the closure dedup, so the raw input list is order- and
-	// dup-agnostic — assert membership, mirroring the gate's normalized (sorted,
-	// deduped) comparison.
+	// non-expanded closure leaves of the .fbs.h; leaves bypass closure dedup, so
+	// the raw input list is order- and dup-agnostic — assert membership.
 	if got := vfsStringsT3(fileCC.flatInputs()); !vfsInputsContainAll(got, wantFileInputs) {
 		t.Fatalf("File.fbs.cpp inputs = %v, want all of %v", got, wantFileInputs)
 	}
@@ -197,12 +195,11 @@ END()
 	}
 }
 
-// A RUN_PROGRAM whose auto STDOUT is a generated .fbs (yabs proto_flat_buf's
-// `generator Fbs STDOUT formula_parameters.fbs`) must be bridged into flatc:
-// the build-root generated .fbs becomes the flatc input, flatc emits
-// .fbs.h/.fbs.cpp/.bfbs, the .fbs.cpp compiles and archives, and the flatc node
-// depends on the PR producer. The generated .fbs is a $(B) codegen intermediate,
-// reached via the producer dep edge — it is NOT an include input of .fbs.cpp.o.
+// A RUN_PROGRAM whose auto STDOUT is a generated .fbs must be bridged into flatc:
+// the build-root .fbs becomes the flatc input, flatc emits .fbs.h/.fbs.cpp/.bfbs,
+// the .fbs.cpp compiles and archives, and the flatc node depends on the PR
+// producer. The generated .fbs is reached via the producer dep edge — it is NOT
+// an include input of .fbs.cpp.o.
 func TestGen_RunProgramFbsStdoutBridgesToFlatc(t *testing.T) {
 	files := map[string]string{}
 	mkdirWrite := func(rel, body string) { files[rel] = body }
@@ -252,8 +249,8 @@ END()
 			t.Fatalf("schema.fbs.cpp.o inputs missing %q: %#v", want, cppO.flatInputs())
 		}
 	}
-	// The generated .fbs is a $(B) codegen intermediate reached via the producer
-	// dep edge, not a C++ include — it must NOT ride as a .fbs.cpp.o input.
+	// The generated .fbs is reached via the producer dep edge, not a C++ include —
+	// it must NOT ride as a .fbs.cpp.o input.
 	if nodeHasInput(cppO, "$(B)/mod/schema.fbs") {
 		t.Fatalf("schema.fbs.cpp.o must not carry the build-root schema.fbs as an input: %#v", cppO.flatInputs())
 	}
@@ -316,8 +313,7 @@ func TestEmitFL64_NodeShape(t *testing.T) {
 	if !contains(got, "--scoped-enums") {
 		t.Fatalf("cmd args missing FLATC_FLAGS --scoped-enums: %v", got)
 	}
-	// IO-lead include order for FL64 is -I $(S) -I $(B) (ARCADIA_ROOT then
-	// ARCADIA_BUILD_ROOT), opposite to FL's -I $(B) -I $(S).
+	// FL64 IO-lead include order is -I $(S) -I $(B), opposite to FL's -I $(B) -I $(S).
 	tail := got[len(got)-7:]
 	want := []string{"-I", "$(S)", "-I", "$(B)", "-o", "$(B)/mod/File.fbs64.h", "$(S)/mod/File.fbs64"}
 	for i := range want {

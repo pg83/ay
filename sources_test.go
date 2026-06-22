@@ -14,7 +14,7 @@ func TestResolveSourceVFS_RootRelativeSrc(t *testing.T) {
 	instance := ModuleInstance{Path: source(moduleDir)}
 	srcDirs := []VFS{dirKey(moduleDir)}
 
-	// Root-relative SRCS not under the module dir resolves at the arcadia root.
+	// Root-relative SRCS not under the module dir resolves at the source root.
 	got := resolveSourceVFS(ctx, instance, "geobase/library/asset.cpp", srcDirs)
 	if want := source("geobase/library/asset.cpp"); got != want {
 		t.Fatalf("root-relative src: got %s, want %s", got.rel(), want.rel())
@@ -26,8 +26,8 @@ func TestResolveSourceVFS_RootRelativeSrc(t *testing.T) {
 		t.Fatalf("module-relative src: got %s, want %s", got.rel(), want.rel())
 	}
 
-	// A name that exists under BOTH the module dir and the root prefers the
-	// module dir (curdir wins, matching upstream resolution order).
+	// A name under BOTH the module dir and the root prefers the module dir
+	// (curdir wins).
 	fs2 := newMemFS(map[string]string{
 		"shared.cpp":                     "",
 		"geobase/library/abi/shared.cpp": "",
@@ -39,12 +39,11 @@ func TestResolveSourceVFS_RootRelativeSrc(t *testing.T) {
 	}
 }
 
-// Graph-level regression: a nested module (geobase/library/abi) lists a local
-// source and an arcadia-root-relative source. The emitted CC nodes must carry
-// the correct $(S) input for each — the local source module-relative, the
-// root-relative source bound at the arcadia root, never the doubled
-// $(S)/<moduledir>/<path>. Before the fix the root-relative source's CC node
-// listed the doubled, nonexistent input.
+// Graph-level regression: a nested module lists a local source and a root-relative
+// source. The emitted CC nodes must carry the correct $(S) input for each — the
+// local source module-relative, the root-relative source bound at the source root,
+// never the doubled $(S)/<moduledir>/<path>. Before the fix the root-relative
+// source's CC node listed the doubled, nonexistent input.
 func TestGen_RootRelativeSrc_CCInputsNotDoubled(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"geobase/library/abi/ya.make":   "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(local.cpp geobase/library/asset.cpp)\nEND()\n",

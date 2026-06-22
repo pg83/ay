@@ -27,12 +27,11 @@ func encodeWithHandRolled(g *Graph) []byte {
 	return buf.Bytes()
 }
 
-// TestWriteGraphCompact_RoundTrip builds a real graph (so deps/foreign_deps are
-// resolved from refs via the uid vector, not materialized) and checks: the output
-// is compact (no pretty-print whitespace), parses back as valid JSON, escapes
-// string values correctly, and resolves a node's deps/foreign_deps to the right
-// uids — the deps/foreign_deps paths cannot be covered by the stdlib oracle since
-// they are not struct fields.
+// TestWriteGraphCompact_RoundTrip builds a real graph (deps/foreign_deps
+// resolved from refs via the uid vector) and checks the output is compact,
+// parses as valid JSON, escapes strings, and resolves deps/foreign_deps to the
+// right uids — those paths can't be covered by the stdlib oracle since they are
+// not struct fields.
 func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 	trickyArgs := []string{"a", "b<c>&d", "tab\there", "quote\"x", "back\\slash", "newline\nhere"}
 
@@ -61,8 +60,7 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 
 	out := encodeWithHandRolled(g)
 
-	// Compact: no pretty-print whitespace. Raw tabs/newlines in string values are
-	// escaped, so none should appear as literal bytes.
+	// Compact and string values escaped: no literal tab/newline bytes.
 	for _, b := range out {
 		if b == '\n' || b == '\t' {
 			t.Fatalf("output contains literal %q — not compact: %s", b, out)
@@ -104,17 +102,17 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 		t.Fatal("main node missing from written graph")
 	}
 
-	// deps resolved from DepRefs via the uid vector.
+	// deps resolved from DepRefs.
 	if len(mainNode.Deps) != 1 || mainNode.Deps[0] != leafUID {
 		t.Errorf("deps = %v, want [%s]", mainNode.Deps, leafUID)
 	}
 
-	// foreign_deps wrapped back into the single-key {"tool": [...]} object.
+	// foreign_deps wrapped back into {"tool": [...]}.
 	if got := mainNode.ForeignDeps["tool"]; len(got) != 1 || got[0] != leafUID {
 		t.Errorf("foreign_deps[tool] = %v, want [%s]", got, leafUID)
 	}
 
-	// escaping round-trips: decoded cmd args match the originals exactly.
+	// escaping round-trips: decoded cmd args match the originals.
 	if len(mainNode.Cmds) != 1 || !equalStrings(mainNode.Cmds[0].CmdArgs, trickyArgs) {
 		t.Errorf("cmd_args = %v, want %v", mainNode.Cmds[0].CmdArgs, trickyArgs)
 	}
@@ -124,8 +122,8 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestWriteGraphCompact_StringEscaping checks the hand-rolled escaper matches
-// stdlib (with HTML escaping off) for tricky inputs.
+// TestWriteGraphCompact_StringEscaping checks the escaper matches stdlib (HTML
+// escaping off) for tricky inputs.
 func TestWriteGraphCompact_StringEscaping(t *testing.T) {
 	cases := []string{
 		"plain",
@@ -146,8 +144,8 @@ func TestWriteGraphCompact_StringEscaping(t *testing.T) {
 			t.Fatalf("stdlib marshal %q: %v", s, err)
 		}
 
-		// stdlib escapes <, >, & by default; our writer does not (SetEscapeHTML
-		// false equivalent). Compare against the non-HTML-escaped form.
+		// stdlib escapes <, >, & by default; our writer does not. Compare
+		// against the non-HTML-escaped form.
 		var nb bytes.Buffer
 		enc := json.NewEncoder(&nb)
 		enc.SetEscapeHTML(false)

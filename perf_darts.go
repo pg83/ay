@@ -7,17 +7,15 @@ import (
 	"time"
 )
 
-// perfDartsData holds the benchmark fixtures: the AUTOINCLUDE_PATHS roots and a
-// fixed random sample of 2000 source-tree directories, as two newline-separated
-// sections split by a single blank line.
+// perfDartsData holds the benchmark fixtures: the autoinclude roots and a fixed
+// sample of 2000 source-tree directories, as two newline-separated sections split
+// by a blank line.
 //
 //go:embed perf_darts_data.txt
 var perfDartsData string
 
-// perfDarts benchmarks the autoinclude longest-prefix matcher two ways over a
-// fixed sample of source-tree directories: the byte double-array trie (Darts) vs
-// the former ancestor-walk (IntValueMap keyed by interned root VFS, probed with
-// internedPrefixed per ancestor). Prints ns/op for each.
+// perfDarts benchmarks the autoinclude longest-prefix matcher two ways: the byte
+// double-array trie (Darts) vs the former ancestor-walk. Prints ns/op for each.
 func perfDarts() int {
 	sections := strings.SplitN(strings.TrimRight(perfDartsData, "\n"), "\n\n", 2)
 
@@ -39,9 +37,8 @@ func perfDarts() int {
 
 	darts := NewDarts(keys)
 
-	// Old matcher: IntValueMap keyed by the interned root VFS; lookup walks the
-	// dir's ancestors deepest-first, probing the intern table (a full-path hash
-	// per ancestor) until a root hits.
+	// Old matcher: walks the dir's ancestors deepest-first, probing the intern
+	// table (a full-path hash per ancestor) until a root hits.
 	old := newIntValueMap[int32](len(roots) * 2)
 
 	for i, r := range roots {

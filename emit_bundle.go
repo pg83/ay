@@ -1,23 +1,18 @@
 package main
 
 // emitBundles emits one BN (bundle) node per BUNDLE group and registers its
-// build output so a later RESOURCE/embed of the bundled name resolves to the
-// $(B) build artifact (via the codegen-registry probe in emitResourceObjcopy)
-// instead of opening a nonexistent $(S)/<mod>/<name> source. Must run before
-// the module's resource objcopy emit — same ordering FROM_SANDBOX relies on.
-//
-// Upstream's _BUNDLE_TARGET (build/ymake.core.conf): the BN node runs
-// $MOVE_FILE (= fs_tools.py rename) over the bundled module's primary output
-// (${result:Target}) into ${noauto;output:Destination} = $(B)/<mod>/<name>,
-// and depends on the node producing that primary output.
+// output so a later RESOURCE/embed resolves to the $(B) artifact, not an $(S)
+// source. Must run before the module's resource objcopy emit (the ordering
+// FROM_SANDBOX relies on). The BN node renames the bundled module's primary
+// output into $(B)/<mod>/<name> and depends on its producer.
 func emitBundles(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	reg := codegenRegForInstance(ctx, instance)
 
 	for _, b := range d.bundles {
 		dst := copyFileOutputVFS(instance.Path.rel(), b.Name)
 
-		// A name already produced (e.g. a sibling COPY/BUNDLE) keeps its first
-		// producer; register panics on a duplicate.
+		// A name already produced keeps its first producer; register panics on
+		// a duplicate.
 		if reg.lookup(dst) != nil {
 			continue
 		}
@@ -30,12 +25,11 @@ func emitBundles(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	}
 }
 
-// resolveBundleSource resolves the bundled module's primary build output and the
-// node that produces it (${result:Target}). It peeks the bundled ya.make for a
-// module opener first, so an unmodeled module type (e.g. PROTO_DESCRIPTIONS,
-// which has no *ModuleStmt opener) never reaches genModule — which would throw
-// on the unrecognized module macro. Returns resolved=false when the bundled
-// target is absent, has no module opener, or exposes no linkable primary output.
+// resolveBundleSource resolves the bundled module's primary build output and its
+// producing node. It peeks for a module opener first, so an unmodeled type (no
+// *ModuleStmt opener) never reaches genModule (which would throw). Returns
+// resolved=false when the target is absent, has no opener, or has no linkable
+// output.
 func resolveBundleSource(ctx *GenCtx, parent ModuleInstance, d *ModuleData, target string) (VFS, NodeRef, bool) {
 	if !peerYaMakeExists(ctx.fs, target) {
 		return 0, 0, false

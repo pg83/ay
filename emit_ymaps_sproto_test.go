@@ -3,11 +3,10 @@ package main
 import "testing"
 
 // TestGen_ProtoLibrary_YmapsSprotoEmitsHeadersAndFeedsGeneratedCCInputs models a
-// maps/doc/proto PROTO_LIBRARY with EXPORT_YMAPS_PROTO + YMAPS_SPROTO: it must
-// emit a .sproto.h PB/yellow producer per listed proto (run through
-// maps/libs/sproto/sprotoc), make the maps/libs/sproto/sprotoc tool + library
-// reachable, and thread the generated .sproto.h plus the sprotoc-induced sproto
-// runtime header into the generated C++ compile inputs of an importing proto.
+// PROTO_LIBRARY with EXPORT_YMAPS_PROTO + YMAPS_SPROTO: it must emit a .sproto.h
+// PB/yellow producer per listed proto, make the sprotoc tool + library reachable,
+// and thread the generated .sproto.h plus the sprotoc-induced sproto runtime
+// header into an importing proto's generated C++ compile inputs.
 func TestGen_ProtoLibrary_YmapsSprotoEmitsHeadersAndFeedsGeneratedCCInputs(t *testing.T) {
 	files := map[string]string{}
 
@@ -51,7 +50,7 @@ message Response { optional Attribution a = 1; }
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
 
-	// sprotoc's PROGRAM peer; maps/libs/sproto is its runtime library.
+	// sprotoc's PROGRAM peer; sproto is its runtime library.
 	writeTestModuleFile(files, "contrib/libs/protoc/ya.make", "LIBRARY()\nSRCS(protoc.cpp)\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/protoc/protoc.cpp", "int protoc(){return 0;}\n")
 
@@ -101,12 +100,12 @@ END()
 	mustNodeByOutput(t, g, "$(B)/maps/libs/sproto/sprotoc/sprotoc")
 	mustNodeByOutput(t, g, "$(B)/maps/libs/sproto/libmaps-libs-sproto.a")
 
-	// 3. The importing proto's generated C++ unit sees the generated .sproto.h
+	// 3. The importing proto's generated C++ unit sees the .sproto.h
 	// (PROTO_HEADER_EXTS .pb.h .sproto.h) and — through the sprotoc GeneratorRef
-	// induced deps — the sproto runtime header. attribution directly imports
-	// image, so attribution.pb.cc.o must see image.sproto.h. response imports
-	// attribution (which imports image), so response.pb.cc.o must see the
-	// transitive image.sproto.h plus the direct attribution.sproto.h.
+	// induced deps — the sproto runtime header. attribution imports image, so
+	// attribution.pb.cc.o must see image.sproto.h. response imports attribution
+	// (which imports image), so response.pb.cc.o must see the transitive
+	// image.sproto.h plus the direct attribution.sproto.h.
 	attrCC := mustNodeByOutput(t, g, "$(B)/"+mod+"/attribution.pb.cc.o")
 	for _, want := range []string{
 		"$(B)/" + mod + "/image.sproto.h",
@@ -129,17 +128,15 @@ END()
 	}
 }
 
-// TestGen_YmapsSproto_InducesTargetSprotoPeerArchive pins the
-// _YMAPS_GENERATE_SPROTO_HEADER command-level `.PEERDIR=maps/libs/sproto`
-// (build/internal/conf/project_specific/maps/sproto.conf): a module that runs
-// YMAPS_SPROTO(...) also peers the target-side maps/libs/sproto library, so its
-// non-PIC archive reaches a final program link through ordinary peer-archive
-// closure — separate from the PIC archive reached via the host sprotoc tool.
+// TestGen_YmapsSproto_InducesTargetSprotoPeerArchive pins the command-level
+// .PEERDIR=maps/libs/sproto of the sproto-header macro: a module running
+// YMAPS_SPROTO(...) also peers the target-side sproto library, so its non-PIC
+// archive reaches a final program link through ordinary peer-archive closure —
+// separate from the PIC archive reached via the host sprotoc tool.
 //
-// Fail-first: before the modules.go change the proto library only induces the
-// PIC archive (through the host sprotoc PROGRAM's own PEERDIR), so the non-PIC
-// $(B)/maps/libs/sproto/sproto.cpp.o object and non-PIC archive are absent and
-// the consumer program link omits maps/libs/sproto/libmaps-libs-sproto.a.
+// Fail-first: before the fix the proto library only induces the PIC archive
+// (through the host sprotoc PROGRAM's PEERDIR), so the non-PIC sproto.cpp.o and
+// archive are absent and the consumer link omits libmaps-libs-sproto.a.
 func TestGen_YmapsSproto_InducesTargetSprotoPeerArchive(t *testing.T) {
 	mod := "maps/doc/proto/yandex/maps/proto/common2"
 	files := ymapsSprotoFixtureFiles(t, mod, true)
@@ -149,8 +146,8 @@ func TestGen_YmapsSproto_InducesTargetSprotoPeerArchive(t *testing.T) {
 
 	g := testGen(newMemFS(files), "app")
 
-	// Both platform variants of the sproto member object exist: non-PIC reached
-	// through the proto library's induced target peer, PIC through the host tool.
+	// Both variants of the sproto member object exist: non-PIC via the proto
+	// library's induced target peer, PIC via the host tool.
 	mustNodeByOutput(t, g, "$(B)/maps/libs/sproto/sproto.cpp.o")
 	mustNodeByOutput(t, g, "$(B)/maps/libs/sproto/sproto.cpp.pic.o")
 
@@ -176,8 +173,8 @@ func TestGen_YmapsSproto_InducesTargetSprotoPeerArchive(t *testing.T) {
 		t.Fatalf("no AR node archives the PIC sproto.cpp.pic.o into %s", archive)
 	}
 
-	// The consumer program link lists the induced maps/libs/sproto archive before
-	// the proto library's own archive (sproto is a peer of common2).
+	// The consumer link lists the induced sproto archive before the proto
+	// library's own archive (sproto is a peer of common2).
 	var ldNode *Node
 	for _, n := range g.Graph {
 		if n.KV.P == pkLD {
@@ -203,10 +200,10 @@ func TestGen_YmapsSproto_InducesTargetSprotoPeerArchive(t *testing.T) {
 }
 
 // TestGen_YmapsSproto_NegativeGuard_NoSprotoPeerWithoutMacro asserts that
-// EXPORT_YMAPS_PROTO() + ordinary .proto SRCS, WITHOUT YMAPS_SPROTO(...), does
-// not induce the maps/libs/sproto target peer. The peer rides only on the
-// command-level .PEERDIR of _YMAPS_GENERATE_SPROTO_HEADER, which runs only for
-// protos named by YMAPS_SPROTO.
+// EXPORT_YMAPS_PROTO() + ordinary .proto SRCS WITHOUT YMAPS_SPROTO(...) does not
+// induce the sproto target peer. The peer rides only on the command-level
+// .PEERDIR of the sproto-header macro, which runs only for protos YMAPS_SPROTO
+// names.
 func TestGen_YmapsSproto_NegativeGuard_NoSprotoPeerWithoutMacro(t *testing.T) {
 	mod := "maps/doc/proto/yandex/maps/proto/common2"
 	files := ymapsSprotoFixtureFiles(t, mod, false)
@@ -224,9 +221,9 @@ func TestGen_YmapsSproto_NegativeGuard_NoSprotoPeerWithoutMacro(t *testing.T) {
 	}
 }
 
-// ymapsSprotoFixtureFiles builds a maps proto module fixture: a PROTO_LIBRARY
-// (with YMAPS_SPROTO when withSproto), a normal maps/libs/sproto library, a host
-// sprotoc PROGRAM peering that library, and the protobuf/protoc support modules.
+// ymapsSprotoFixtureFiles builds a proto module fixture: a PROTO_LIBRARY (with
+// YMAPS_SPROTO when withSproto), a sproto library, a host sprotoc PROGRAM peering
+// it, and the protobuf/protoc support modules.
 func ymapsSprotoFixtureFiles(t *testing.T, mod string, withSproto bool) map[string]string {
 	t.Helper()
 

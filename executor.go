@@ -20,16 +20,14 @@ import (
 
 // cmdPrefix prepends prefix tokens before any command argument whose path ends
 // with suffix. It lets the user run fetched binaries through an explicit ELF
-// loader on systems lacking the binary's default interpreter, e.g.
-// --cmd-prefix=bin/java=/bin/ld.linux-so.2 turns `… <JDK>/bin/java …` into
-// `… /bin/ld.linux-so.2 <JDK>/bin/java …`.
+// loader on systems lacking the binary's default interpreter.
 type CmdPrefix struct {
 	suffix string
 	prefix []string
 }
 
-// executorGCPercent is the GOGC value for builds (-j > 0), picked from the sg5
-// GOGC scan — see the comment at the SetGCPercent call in cmdMake.
+// executorGCPercent is the GOGC value for builds (-j > 0) — see the SetGCPercent
+// call in cmdMake.
 const executorGCPercent = 400
 
 type Executor struct {
@@ -41,14 +39,13 @@ type Executor struct {
 	// ninja selects per-line progress output (each status on its own line).
 	// Default (false) repaints a single status line in place (\x1b[2K\r).
 	ninja bool
-	// sandboxing runs each node hermetically: its workspace X gets X/s + X/b, the
-	// declared $(S) inputs are symlinked into X/s (and $(S) mounts to X/s), while the
-	// dep outputs land in X/b as usual ($(B) mounts to X/b). A command that reads an
-	// undeclared source then fails — the input set is exactly what the graph declares.
+	// sandboxing runs each node hermetically: declared $(S) inputs are symlinked
+	// into X/s, dep outputs land in X/b. A command reading an undeclared source
+	// then fails — the input set is exactly what the graph declares.
 	sandboxing bool
 
-	// grbDir (bldRoot/grb, sibling of cas/ and tmp/) is where discard renames doomed
-	// workspaces; startGarbageCollector empties it in the background.
+	// grbDir (bldRoot/grb) is where discard renames doomed workspaces;
+	// startGarbageCollector empties it in the background.
 	grbDir string
 
 	mu      sync.Mutex
@@ -58,14 +55,15 @@ type Executor struct {
 	pending atomic.Uint64
 	done    atomic.Uint64
 
-	// sandboxToken is resolved on demand the first time a FETCH node needs a Sandbox
-	// (sbr:) resource — so a graph with no such fetch never touches the SSH agent.
+	// sandboxToken is resolved on demand the first time a FETCH node needs a
+	// Sandbox (sbr:) resource — so a graph with no such fetch never touches the
+	// SSH agent.
 	tokenOnce sync.Once
 	token     string
 }
 
-// sandboxToken resolves the Sandbox OAuth token once (across all concurrent fetch
-// nodes), the way ya does (env / ~/.ya_token / SSH-agent exchange). "" if none.
+// sandboxToken resolves the Sandbox OAuth token once across all concurrent fetch
+// nodes (env / ~/.ya_token / SSH-agent exchange). "" if none.
 func (ex *Executor) sandboxToken() string {
 	ex.tokenOnce.Do(func() {
 		ex.token = resolveSandboxToken()
@@ -103,12 +101,10 @@ func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, ninja boo
 }
 
 func (ex *Executor) onNode(n *Node, uids *UidVec, fetchRefs *DenseMap[STR, NodeRef]) {
-	// Dedup by uid: the generator may stream the same node (identical uid) more
-	// than once. Each uid is one action and must run in exactly one goroutine —
-	// two goroutines in the same tmp/<uid> would have one's forceRemoveAll wipe the
-	// other's in-flight output (manifesting as clang "unable to rename temporary
-	// … No such file or directory"). The first emit owns the future; later
-	// duplicates are ignored (visit reuses the registered future).
+	// Dedup by uid: the generator may stream the same node more than once. Each
+	// uid is one action run in exactly one goroutine — two in the same tmp/<uid>
+	// would have one's forceRemoveAll wipe the other's in-flight output. The first
+	// emit owns the future; later duplicates are ignored.
 	ex.mu.Lock()
 
 	if _, ok := ex.byUID[n.UID]; ok {
@@ -243,11 +239,10 @@ func (ex *Executor) execute(f *NodeFuture) {
 	tmp := filepath.Join(ex.bldRoot, "tmp", n.UID.string())
 	throw(os.MkdirAll(tmp, 0o755))
 
-	// Lock the workspace DIR (an exclusive flock on its fd) for the whole node, so a
-	// second ay process building the same uid does not clean or clobber it while we
-	// work. Best-effort serialization, not a correctness requirement — outputs are
-	// deterministic and published atomically (CAS hard-link, uid temp+rename), so even
-	// a concurrent rebuild is safe; the lock just avoids the wasted duplicate work.
+	// Lock the workspace DIR (exclusive flock) so a second process building the
+	// same uid does not clobber it. Best-effort, not a correctness requirement —
+	// outputs are deterministic and published atomically; the lock just avoids
+	// wasted duplicate work.
 	dir := throw2(os.Open(tmp))
 
 	defer dir.Close()
@@ -265,8 +260,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 
 	// srcMount/bldMount are what $(S)/$(B) resolve to for this node. Without
 	// sandboxing $(S) is the whole source root and $(B) is the workspace itself.
-	// With sandboxing $(S) is X/s (only the declared source inputs, symlinked in) and
-	// $(B) is X/b (the dep outputs, restored whole as usual).
+	// With sandboxing $(S) is X/s (only the declared source inputs) and $(B) is X/b.
 	srcMount, bldMount := ex.srcRoot, tmp
 
 	if ex.sandboxing {
@@ -363,13 +357,10 @@ func applyCmdPrefixes(args []string, rules []CmdPrefix) []string {
 
 // packCommandFiles replaces every `--ya-start-command-file … --ya-end-command-file`
 // span with a single `@<buildRoot>/ya_command_file_<N>.args` argument whose file
-// holds the enclosed arguments one per line. This is the response-file mechanism
-// ya's runner applies before executing any command (NCommandFile::TCommandArgsPacker
-// in devtools/ya/yalibrary/runner/command_file/command_file.cpp): the wrapper
-// scripts (link_dyn_lib.py, …) and clang/lld consume `@file` but pass the markers
-// through verbatim, so they must be resolved here, not left in the command. Nested
-// spans recurse, the inner @file path being written into the outer file. counter is
-// shared across one node's commands so the file names are unique.
+// holds the enclosed arguments one per line — a response-file mechanism. Wrapper
+// scripts and clang/lld consume `@file` but pass the markers through verbatim, so
+// they must be resolved here. Nested spans recurse. counter is shared across one
+// node's commands so the file names are unique.
 func packCommandFiles(args []string, buildRoot string, counter *int) []string {
 	out := make([]string, 0, len(args))
 
@@ -437,11 +428,11 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 		}
 
 		if n.KV.P == pkSB {
-			// FROM_SANDBOX: the node's command is upstream's fetch_from_sandbox.py,
+			// FROM_SANDBOX: the node's command is the upstream fetch script,
 			// whose metadata query is unauthenticated (401 on private resources).
 			// Run our authenticated `ay fetch sandbox` instead (same flags, leading
-			// --source-root); the graph keeps the upstream command (-G converges),
-			// only execution is substituted. Drop python3 + the script path (args[0:2]).
+			// --source-root); only execution is substituted. Drop python3 + the
+			// script path (args[0:2]).
 			args = append([]string{throw2(os.Executable()), "fetch", "sandbox", "--source-root", ex.srcRoot}, args[2:]...)
 		} else {
 			args = applyCmdPrefixes(args, ex.cmdPrefixes)
@@ -464,9 +455,9 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 			env = append(env, e.Name.string()+"="+mountString(e.Value.string(), srcMount, bldMount))
 		}
 
-		// A FETCH node pulling a Sandbox (sbr:) resource needs an OAuth token; resolve
-		// it lazily (once) and pass it via YA_TOKEN so the `ay fetch` child authenticates
-		// without re-resolving. Only sbr: fetches trigger this — http/mapped ones don't.
+		// A FETCH node pulling a Sandbox (sbr:) resource needs an OAuth token;
+		// resolve it lazily and pass it via YA_TOKEN so the `ay fetch` child
+		// authenticates without re-resolving. Only sbr: fetches trigger this.
 		if os.Getenv("YA_TOKEN") == "" && (n.KV.P == pkSB || (n.KV.P == pkFETCH && argsNeedSandboxToken(args))) {
 			if tok := ex.sandboxToken(); tok != "" {
 				env = append(env, "YA_TOKEN="+tok)
@@ -520,10 +511,9 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 	return result
 }
 
-// linkSourceInputs symlinks the node's declared $(S) inputs into the sandbox source
-// dir (mirroring each input's rel path), so a sandboxed command sees exactly the
-// sources the graph declares and nothing else. $(B) inputs need no such filtering —
-// they are the dep outputs, restored whole into the sandbox build dir.
+// linkSourceInputs symlinks the node's declared $(S) inputs into the sandbox
+// source dir, so a sandboxed command sees exactly the declared sources. $(B)
+// inputs need no filtering — they are the dep outputs, restored whole.
 func (ex *Executor) linkSourceInputs(n *Node, srcMount string) {
 	for _, chunk := range n.Inputs {
 		for _, in := range chunk {
@@ -540,10 +530,9 @@ func (ex *Executor) linkSourceInputs(n *Node, srcMount string) {
 	}
 }
 
-// outputEntry is one materialized leaf of a node's output in the uid manifest:
-// either a CAS-stored regular file (Cas = its content-addressed path) or a symlink
-// (Link = the link target, verbatim). A directory output expands to one entry per
-// leaf, so the CAS holds only files — never directories.
+// outputEntry is one materialized leaf of a node's output: a CAS-stored regular
+// file (Cas = content hash) or a symlink (Link = target, verbatim). A directory
+// output expands to one entry per leaf, so the CAS holds only files.
 type OutputEntry struct {
 	Cas  string `json:"cas,omitempty"`
 	Link string `json:"link,omitempty"`
@@ -564,20 +553,18 @@ func (ex *Executor) storeOutputs(n *Node, tmp string) {
 	throw(os.MkdirAll(filepath.Dir(uidPath), 0o755))
 
 	// Atomic publish: write to a UNIQUE temp in the same dir, then rename over the
-	// final path (rename is atomic on one fs). CreateTemp's unique name means two
-	// writers — even another ay process building the same node — never share the
-	// temp, so the rename target is always a fully-written manifest.
+	// final path. Two writers never share the temp, so the rename target is always
+	// a fully-written manifest.
 	tf := throw2(os.CreateTemp(filepath.Dir(uidPath), "."+n.UID.string()+".*"))
 	throw2(tf.Write(throw2(json.Marshal(meta))))
 	throw(tf.Close())
 	throw(os.Rename(tf.Name(), uidPath))
 }
 
-// storePath records src (a regular file, a symlink, or a directory tree) into meta,
-// keyed by the $(B) output path. Regular files go to the CAS by content; symlinks
-// are kept as symlinks (their target verbatim, NOT followed) so the link structure
-// of a fetched tree (e.g. clang++ -> clang) survives; directories recurse, one entry
-// per leaf — the CAS never holds a directory.
+// storePath records src (regular file, symlink, or directory tree) into meta,
+// keyed by the $(B) output path. Regular files go to the CAS by content;
+// symlinks are kept verbatim (NOT followed) so a fetched tree's link structure
+// survives; directories recurse, one entry per leaf.
 func (ex *Executor) storePath(src, outPath string, meta map[string]OutputEntry) {
 	info := throw2(os.Lstat(src))
 
@@ -594,12 +581,10 @@ func (ex *Executor) storePath(src, outPath string, meta map[string]OutputEntry) 
 }
 
 // storeFileToCAS hard-links src into the CAS at its content hash and returns the
-// hash (the manifest stores the bare hash, not the path). Hard-link, not rename: an
-// unpacked resource tree's dirs are often write-less (archived perms), so renaming a
-// file out of one is denied — linking adds a name in the CAS dir without touching
-// src's dir. Same inode, same content, so the workspace copy is dropped by the tmp
-// cleanup. Content-addressed: a file already present (same content, possibly from a
-// concurrent node) is a no-op.
+// hash. Hard-link, not rename: an unpacked resource tree's dirs are often
+// write-less, so renaming a file out is denied; linking adds a name in the CAS
+// dir without touching src's dir, and the workspace copy is dropped by tmp
+// cleanup. A file already present is a no-op.
 func (ex *Executor) storeFileToCAS(src string) string {
 	hash := casHash(src)
 	dst := ex.casPathForHash(hash)
@@ -632,23 +617,22 @@ func (ex *Executor) restoreInto(uid UID, where string) {
 
 		// Resolve the $(B)/… path directly from the string. Do NOT Intern here:
 		// execution goroutines run concurrently with the still-streaming generator,
-		// and the global intern table is not safe for concurrent writes.
+		// and the global intern table is not concurrent-write safe.
 		target := mountString(outVFS, ex.srcRoot, where)
 		throw(os.MkdirAll(filepath.Dir(target), 0o755))
 		_ = os.Remove(target)
 
 		switch {
 		case e.Link != "":
-			// Re-create the symlink verbatim (its target was kept, not followed); a
-			// relative link like clang++ -> clang resolves within the restored tree.
+			// Re-create the symlink verbatim; a relative link resolves within the
+			// restored tree.
 			throw(os.Symlink(e.Link, target))
 
 		case strings.HasPrefix(outVFS, "$(B)/resources/"):
-			// Toolchain trees are hard-linked, not symlinked: a tool (clang, python)
-			// finds its bundled resources (clang's builtin headers, python's stdlib)
-			// relative to its OWN binary path. A symlink resolves to the flat CAS, so
-			// those relative dirs vanish; a hard link keeps a real file at the tree
-			// path (sharing the CAS inode), so the layout the tool expects survives.
+			// Toolchain trees are hard-linked, not symlinked: a tool finds its
+			// bundled resources relative to its OWN binary path. A symlink resolves
+			// to the flat CAS, so those relative dirs vanish; a hard link keeps a
+			// real file at the tree path, so the expected layout survives.
 			if err := os.Link(ex.casPathForHash(e.Cas), target); err != nil && !os.IsExist(err) {
 				throw(err)
 			}
@@ -667,8 +651,8 @@ func (ex *Executor) installRoot(uid UID, where string) {
 	ex.restoreInto(uid, where)
 }
 
-// removeContents deletes everything inside dir but keeps dir itself — the under-lock
-// clean of a possibly-stale workspace left by a crashed prior run. Best-effort.
+// removeContents deletes everything inside dir but keeps dir itself — the
+// under-lock clean of a possibly-stale workspace. Best-effort.
 func (ex *Executor) removeContents(dir string) {
 	entries, err := os.ReadDir(dir)
 
@@ -681,11 +665,10 @@ func (ex *Executor) removeContents(dir string) {
 	}
 }
 
-// discard removes path the fast way: it renames path into grbDir under a random name
-// (one rename — O(1) regardless of tree size, and fine on write-less trees since
-// rename only touches the parent dirs) and leaves the real delete to the background
-// collector. The random suffix keeps the name unique even against a neighbouring
-// process. If the rename fails (missing path, cross-fs) it deletes in place.
+// discard renames path into grbDir under a random name (O(1) regardless of tree
+// size, and fine on write-less trees) and leaves the real delete to the
+// background collector. If the rename fails (missing path, cross-fs) it deletes
+// in place.
 func (ex *Executor) discard(path string) {
 	dst := filepath.Join(ex.grbDir, strconv.FormatUint(rand.Uint64(), 36))
 
@@ -696,9 +679,9 @@ func (ex *Executor) discard(path string) {
 	_ = forceRemoveAll(path)
 }
 
-// startGarbageCollector deletes grbDir entries once a second in the background. It is
-// best-effort and never waited on: the process exits with it still running, and any
-// leftover is cleared by the next run's collector.
+// startGarbageCollector deletes grbDir entries once a second in the background.
+// Best-effort and never waited on: the process exits with it still running, and
+// any leftover is cleared by the next run's collector.
 func (ex *Executor) startGarbageCollector() {
 	throw(os.MkdirAll(ex.grbDir, 0o755))
 
@@ -719,11 +702,10 @@ func (ex *Executor) startGarbageCollector() {
 	}()
 }
 
-// mountString substitutes the $(S)/$(B) roots. Resources are real graph nodes
-// producing $(B)/resources/NAME (and vcs.json at $(B)/vcs.json), so they resolve
-// through $(B) like any build output — no per-resource $(NAME) mount. The only
-// $(NAME) left ($(TOOL_ROOT) in debug-/macro-prefix-map flags) is deliberately
-// not expanded.
+// mountString substitutes the $(S)/$(B) roots. Resources produce
+// $(B)/resources/NAME, so they resolve through $(B) like any build output — no
+// per-resource $(NAME) mount. The only $(NAME) left (in prefix-map flags) is
+// deliberately not expanded.
 func mountString(s, srcRoot, bldRoot string) string {
 	s = strings.ReplaceAll(s, "$(S)/", srcRoot+"/")
 	s = strings.ReplaceAll(s, "$(B)/", bldRoot+"/")
@@ -734,7 +716,6 @@ func mountString(s, srcRoot, bldRoot string) string {
 }
 
 // casHash is a regular file's content hash (hex sha256) — its identity in the CAS.
-// Only files reach the CAS; directory outputs are expanded to files in storePath.
 func casHash(src string) string {
 	h := sha256.New()
 
@@ -748,7 +729,7 @@ func casHash(src string) string {
 }
 
 // casPathForHash is where a CAS object lives, sharded by the first 2 hash chars:
-// cas/<hh>/<hash>. The uid manifest stores only the bare hash; this rebuilds the path.
+// cas/<hh>/<hash>.
 func (ex *Executor) casPathForHash(hash string) string {
 	return filepath.Join(ex.bldRoot, "cas", hash[:2], hash)
 }

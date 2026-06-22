@@ -6,10 +6,9 @@ import (
 )
 
 // testGenX86ReleaseHost mirrors testGenX86 but pins the host/tool platform to a
-// release build (GG_BUILD_TYPE=release), as production tool builds are
-// (make.go:144). This surfaces the make_morphdict tool-subtree identity: code
-// reachable only through a built tool is generated under the release host
-// platform, distinct from the debug target.
+// release build (GG_BUILD_TYPE=release), as production tool builds are. This
+// surfaces the tool-subtree identity: code reachable only through a built tool
+// is generated under the release host platform, distinct from the debug target.
 func testGenX86ReleaseHost(fs FS, targetDir string) *Graph {
 	hostFlags := make(map[string]string, len(testToolchainFlags)+2)
 	for k, v := range testToolchainFlags {
@@ -29,14 +28,14 @@ func testGenX86ReleaseHost(fs FS, targetDir string) *Graph {
 	return Gen(fs, targetDir, host, target, func(Warn) {})
 }
 
-// TestEmitArchiveAsm_ToolSubtreeIdentity is the make_morphdict regression: a
-// RUN_PROGRAM consumes a built tool whose subtree library carries a CONFIGURE_FILE
-// (@BUILD_TYPE@), a RAGEL6_FLAGS SET-list, and an ARCHIVE-with-source-member that a
-// C++ unit #includes. The tool subtree must take the upstream-style host/release
-// identity — configure_file resolves BUILD_TYPE=RELEASE, $RAGEL6_FLAGS expands as
-// separate argv tokens, the archived source member rides into the consumer
-// closure — while the generated RUN_PROGRAM output (STDOUT == OUT_NOAUTO) is still
-// declared exactly once down the ARCHIVE_ASM chain (guards T-19).
+// TestEmitArchiveAsm_ToolSubtreeIdentity: a RUN_PROGRAM consumes a built tool
+// whose subtree library carries a CONFIGURE_FILE (@BUILD_TYPE@), a RAGEL6_FLAGS
+// SET-list, and an ARCHIVE-with-source-member that a C++ unit #includes. The
+// tool subtree must take the host/release identity — configure_file resolves
+// BUILD_TYPE=RELEASE, $RAGEL6_FLAGS expands as separate argv tokens, the
+// archived source member rides into the consumer closure — while the generated
+// RUN_PROGRAM output (STDOUT == OUT_NOAUTO) is declared exactly once down the
+// ARCHIVE_ASM chain.
 func TestEmitArchiveAsm_ToolSubtreeIdentity(t *testing.T) {
 	files := map[string]string{}
 
@@ -59,7 +58,7 @@ END()
 `)
 	files["m/lister.txt"] = "word\n"
 
-	// The built tool and its content-bearing subtree library.
+	// The built tool and its content-bearing subtree library
 	writeTestModuleFile(files, "tools/maker/ya.make", "PROGRAM(maker)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nPEERDIR(toollib)\nSRCS(main.cpp)\nEND()\n")
 	files["tools/maker/main.cpp"] = "int main(){return 0;}\n"
 
@@ -78,7 +77,7 @@ END()
 
 	g := testGenX86ReleaseHost(newMemFS(files), "m")
 
-	// (1) the RUN_PROGRAM output is declared exactly once (T-19 guard).
+	// (1) the RUN_PROGRAM output is declared exactly once.
 	pr := mustNodeByOutput(t, g, "$(B)/m/out.dict.bin")
 	if pr.KV.P != pkPR {
 		t.Errorf("out.dict.bin kv.p = %q, want PR", pr.KV.P.string())
@@ -132,7 +131,7 @@ END()
 }
 
 // testGenX86 builds the graph for targetDir with an x86_64 target (the .rodata
-// yasm pipeline is x86_64-only), mirroring testGenContour's opensource contour.
+// yasm pipeline is x86_64-only).
 func testGenX86(fs FS, targetDir string) *Graph {
 	host := newTestPlatform(OSLinux, ISAX8664, "yes")
 	targetFlags := make(map[string]string, len(testToolchainFlags)+1)
@@ -144,14 +143,12 @@ func testGenX86(fs FS, targetDir string) *Graph {
 	return Gen(fs, targetDir, host, target, func(Warn) {})
 }
 
-// TestEmitArchiveAsm_RunProgramStdoutEqualsOutNoauto reproduces the
-// kernel/lemmer/new_dict/rus/extra divergence: a RUN_PROGRAM that names the SAME
-// physical file in both STDOUT and OUT_NOAUTO roles (the program's stdout *is*
-// the declared output). Upstream's output set is path-keyed, so the file is
-// listed exactly once on the producer node; before the fix emitPR appended the
-// STDOUT VFS and the OUT_NOAUTO VFS separately, listing the file twice and
-// perturbing the node's content hash (cascading a differing Merkle uid into the
-// whole ARCHIVE_ASM .rodata chain).
+// TestEmitArchiveAsm_RunProgramStdoutEqualsOutNoauto: a RUN_PROGRAM that names
+// the SAME physical file in both STDOUT and OUT_NOAUTO roles (the program's
+// stdout *is* the declared output). The output set is path-keyed, so the file
+// is listed exactly once on the producer node; before the fix it was listed
+// twice, perturbing the node's content hash and cascading a differing Merkle
+// uid into the whole ARCHIVE_ASM .rodata chain.
 func TestEmitArchiveAsm_RunProgramStdoutEqualsOutNoauto(t *testing.T) {
 	files := map[string]string{}
 
@@ -208,13 +205,11 @@ END()
 	}
 }
 
-// TestEmitArchiveAsm_RunPythonOutThroughRodata reproduces the
-// kernel/lemmer/new_dict/ara/builtin divergence: a RUN_PYTHON3 OUT_NOAUTO
+// TestEmitArchiveAsm_RunPythonOutThroughRodata: a RUN_PYTHON3 OUT_NOAUTO
 // consumed by ARCHIVE_ASM must produce the dictionary binary (PY), the
 // archive-as-assembly resource (AR <NAME>.rodata), and the rodata→asm→object
 // compile (RD), with the RD node carrying the PY node's $(S) source leaves and
-// the non-global object archived into the module's .a. Before the fix
-// ARCHIVE_ASM is a no-op, so none of these nodes exist.
+// the non-global object archived into the module's .a.
 func TestEmitArchiveAsm_RunPythonOutThroughRodata(t *testing.T) {
 	files := map[string]string{}
 

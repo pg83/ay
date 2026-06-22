@@ -175,14 +175,13 @@ func TestFS_CleanRel(t *testing.T) {
 	}
 }
 
-// testParserFS is a hermetic empty in-memory FS for parser tests that pass their source
-// inline; an INCLUDE of an absent file is silently skipped (same as over a real root that
-// lacks it), so no test reaches the local filesystem.
+// testParserFS is a hermetic empty in-memory FS for parser tests that pass their
+// source inline; an INCLUDE of an absent file is silently skipped, so no test
+// reaches the local filesystem.
 var testParserFS = newMemFS(nil)
 
-// newTestScanner spins up a scanner backed by the given FS (typically a per-
-// test memFS). Each call yields a fresh scanner so per-test CodegenRegistry /
-// cache state does not leak.
+// newTestScanner returns a fresh scanner backed by the given FS, so per-test
+// CodegenRegistry / cache state does not leak.
 func newTestScanner(fs FS, sysincl SysInclSet) *IncludeScanner {
 	s := newIncludeScannerWith(
 		newIncludeParserManagerFS(fs, newSharedParseCache()),
@@ -190,8 +189,8 @@ func newTestScanner(fs FS, sysincl SysInclSet) *IncludeScanner {
 		func(Warn) {},
 		&TarjanCtx{},
 	)
-	// Prod wiring always attaches a registry and a moduleByRef map (gen.go); the
-	// scanner relies on both being non-nil.
+	// Prod wiring always attaches a registry and a moduleByRef map; the scanner
+	// relies on both being non-nil.
 	s.codegen = newCodegenRegistry()
 	s.moduleByRef = &DenseMap[NodeRef, *ModuleEmitResult]{}
 
@@ -199,9 +198,8 @@ func newTestScanner(fs FS, sysincl SysInclSet) *IncludeScanner {
 }
 
 // wireTestScanners attaches host + target scanners (each with a registry) to a
-// hand-built test GenCtx, mirroring the real gen pipeline (gen.go). Emitter
-// unit tests that build a GenCtx literal call this so codegen/scanner accessors
-// resolve to real objects instead of nil — production never sees nil there.
+// hand-built test GenCtx, mirroring the real gen pipeline, so codegen/scanner
+// accessors resolve to real objects instead of nil.
 func wireTestScanners(ctx *GenCtx) {
 	fs := ctx.fs
 

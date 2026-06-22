@@ -17,29 +17,20 @@ type IncludeKind int
 const (
 	includeSystem IncludeKind = iota
 	includeQuoted
-	// includeCythonOptional resolves exactly like includeQuoted but is silently
-	// dropped on a miss — mirroring upstream's ResolveLocalIncludes, which funnels
-	// every speculative cython cimport candidate (package __init__.pxd, module
-	// .pxd, per-name submodule .pxd) and keeps only the resolved ones. A genuine
-	// missing include still warns under includeQuoted; cython cimport probes do not.
+	// includeCythonOptional resolves like includeQuoted but is silently dropped on
+	// a miss — a speculative cython cimport candidate kept only when it resolves.
 	includeCythonOptional
-	// includeCythonModule is the `from X cimport …` module candidate `X.pxd`. It
-	// resolves like includeCythonOptional, but when it resolves it suppresses the
-	// following includeCythonName probes of the same statement — upstream
-	// cython_processor.cpp sets needCheckLists=false once the module .pxd resolves
-	// (X is a module, the cimported names are names within it, not submodules).
+	// includeCythonModule is the `from X cimport …` module candidate `X.pxd`. On a
+	// hit it suppresses the following includeCythonName probes (X is a module, the
+	// cimported names are within it, not submodules).
 	includeCythonModule
-	// includeCythonName is a `from X cimport name` per-name submodule candidate's
-	// primary probe `X/name/__init__.pxd`. Best-effort like includeCythonOptional,
-	// and skipped entirely when a preceding includeCythonModule of the same
-	// statement resolved.
+	// includeCythonName is a `from X cimport name` submodule candidate's primary
+	// probe `X/name/__init__.pxd`. Skipped when a preceding includeCythonModule
+	// resolved.
 	includeCythonName
-	// includeCythonFallback is the second member of a first-resolved cython probe
-	// pair: CimportSimple's `path/__init__.pxd` (after `path.pxd`) and a name's
-	// `X/name.pxd` (after `X/name/__init__.pxd`). Upstream cython_processor.cpp
-	// probes it only when its primary — the immediately preceding probe — was
-	// attempted and did NOT resolve (CimportSimple/CimportFrom push exactly one
-	// path per module/name). Best-effort like includeCythonOptional.
+	// includeCythonFallback is the second member of a first-resolved probe pair,
+	// probed only when its primary — the preceding probe — was attempted and did
+	// NOT resolve. Best-effort.
 	includeCythonFallback
 )
 
@@ -48,12 +39,10 @@ type IncludeDirective struct {
 	target STR
 }
 
-// GenOwner is the module a generated file is attributed to under upstream's
-// Node2Module first-leave-wins rule: the directory AND tag of the first module
-// to claim the file. Tag is 0 when the claiming module carries no module_tag
-// (the common case); it is non-zero for a tagged submodule (e.g. a CPP_PROTO
-// proto submodule, tag cpp_proto) so attribute_generated.go can propagate both
-// fields, exactly as upstream inherits dir+tag from the owning module.
+// GenOwner is the module a generated file is attributed to under first-leave-wins:
+// the directory AND tag of the first module to claim it. Tag is 0 unless the
+// claiming module is a tagged submodule (e.g. a CPP_PROTO proto submodule), so
+// attribute_generated.go can propagate both fields.
 type GenOwner struct {
 	Dir string
 	Tag STR
@@ -61,15 +50,13 @@ type GenOwner struct {
 
 // quotedLike reports whether the directive resolves through the quoted-include
 // search (includer-local dir + addincl tiers + codegen). The cython cimport
-// probe kinds share that resolution; they differ only in suppressing the
-// unresolved warning (cythonProbe) and the name-list suppression ordering.
+// probes share that resolution, differing only in warning and name-list ordering.
 func (d IncludeDirective) quotedLike() bool {
 	return d.kind == includeQuoted || d.cythonProbe()
 }
 
 // cythonProbe reports whether the directive is a best-effort cython cimport
-// candidate: resolved like a quoted include but silently dropped on a miss
-// (upstream ResolveLocalIncludes drops unresolved cimport candidates).
+// candidate: resolved like a quoted include but silently dropped on a miss.
 func (d IncludeDirective) cythonProbe() bool {
 	return d.kind == includeCythonOptional || d.kind == includeCythonModule || d.kind == includeCythonName || d.kind == includeCythonFallback
 }
@@ -80,137 +67,95 @@ type IncludeScanner struct {
 
 	parsers *IncludeParserManager
 
-	// subgraphClosures holds each cached transitive closure as a slice. The
-	// slices are not owned arrays: they are address-stable sub-slices into
-	// closureArena (a bump allocator), so storing them costs no copy. closureRef
-	// is just an index into this slice.
+	// subgraphClosures holds each cached transitive closure as an address-stable
+	// sub-slice into closureArena (a bump allocator), so storing costs no copy.
+	// closureRef is an index into this slice.
 	subgraphClosures [][]VFS
 	closureArena     *BumpAllocator[VFS]
-	// scanCache holds both the cached transitive closure (under DFS) and the
-	// cached immediate resolved children per includer, keyed by includer
-	// ONLY — no scan-context component. This is the same invariant upstream
-	// ymake exploits: each File node is parsed-and-resolved exactly once across
-	// the whole add-iter (see TUpdEntryStats::OnceProcessedAsFile in
-	// yatool/devtools/ymake/add_iter.h:377, gate in
-	// add_iter.cpp:671 and the set in add_iter.cpp:548,681). Upstream's
-	// TParsersCache (include_processors/parsers_cache.h) likewise keys parse
-	// results by (parserId, fileId) with no module context, and its per-module
-	// TResolveCaches (resolver/resolve_cache.h) only dedupes resolves WITHIN a
-	// single module's visit — not across modules, because cross-module reentry
-	// is blocked by OnceProcessedAsFile.
+	// scanCache holds the cached transitive closure and immediate resolved children
+	// per includer, keyed by includer ONLY — no scan-context component. Relies on
+	// each file being parsed-and-resolved exactly once per run.
 	//
-	// Do NOT add a scanCtx/hashScanContext component to these keys "for
-	// safety" — the load-bearing assumption is that the first scanner to reach
-	// a file is its semantic owner, the resolution is stable thereafter, and
-	// the closure stays valid for every subsequent context. Adding a context
-	// key collapses subgraph caching and regresses wall-time by an order of
-	// magnitude. If you suspect divergence is caused here, fix it upstream of
-	// the cache: parsedIncludes, sysincl rules, or searchTier construction.
+	// Do NOT add a scanCtx/hashScanContext component "for safety": the load-bearing
+	// assumption is that the first scanner to reach a file is its semantic owner and
+	// the closure stays valid thereafter. A context key collapses subgraph caching
+	// and regresses wall-time by an order of magnitude; fix divergence upstream.
 	//
-	// All three caches live in one DenseMap3 keyed by the includer's STR
-	// (v.strID()): column 1 the resolved immediate children, column 2 the
-	// transitive-closure ref, column 3 source-file existence. One idx array
-	// (sized to vfsBound — the expensive part) is shared by all three columns
-	// instead of one per cache. strID is unique per VFS (the $(S)/$(B) prefix is
-	// part of the interned string) and lossless, halving idx versus the 2x-wider
-	// VFS space. The columns are filled at different times (children during dfs
-	// pass 1, closure on pop, existence on first probe), so each relies on its
-	// own per-column presence rather than the map's shared key-present bit.
+	// All three caches live in one DenseMap3 keyed by the includer's STR: column 1
+	// resolved children, column 2 closure ref, column 3 source-file existence. One
+	// shared idx array (strID is unique per VFS and lossless, halving idx vs the
+	// 2x-wider VFS space). The columns fill at different times, so each relies on its
+	// own per-column presence, not the map's key-present bit.
 	scanCache DenseMap3[STR, []VFS, ClosureRef, bool]
 
-	// searchTierFlat caches resolveContextSearchTier results in one scanner-wide
-	// table keyed by splitMix64(ctxNum, target STR) — the two dense ids hashed into a
-	// uniform 64-bit key, so an identity-hashed IntValueMap spreads (ctx, target)
-	// pairs instead of clustering them. ctxNum is a dense per-distinct-config id
-	// (ctxNumByHash). The
-	// value (a searchTierResult) lives in IntValueMap's side slice, so table entries
-	// stay small. searchTierSeen is a 1-bit-per-target-STR presence gate (set once
-	// the target has any cached entry, in any config): a hit there means the table
-	// is worth probing, a miss short-circuits straight to the resolve.
+	// searchTierFlat caches resolveContextSearchTier results, keyed by
+	// splitMix64(ctxNum, target STR) so the IntValueMap spreads (ctx, target) pairs.
+	// ctxNum is a dense per-config id. searchTierSeen is a per-target presence gate;
+	// a miss there short-circuits straight to the resolve.
 	searchTierFlat *IntValueMap[SearchTierResult]
 	searchTierSeen BitSet
 
-	// (scan configs resolve at newScanContext time — see
-	// IncludeParserManager.resolveScanConfig; the scanner holds no config table.)
+	// (scan configs resolve at newScanContext time; the scanner holds no config
+	// table.)
 
-	// sourceUnderCache memoizes the includer-local quoted-include resolve
-	// (resolveSourceUnder(incDir, target)) — the hottest existence probe (~505k/run,
-	// 92% of resolveSourceUnder), since incDir (the includer's own dir) is rarely an
-	// addincl, so the addincl index can't cover it. The result is a pure function of
-	// (incDir, target) and the FS, so it's context-free and run-wide. Keyed by
-	// splitMix64(incDir VFS, target STR) — the two ids hashed into a uniform 64-bit
-	// key so an identity-hashed IntValueMap spreads them. The value is the resolved
-	// $(S) VFS already interned (0 = "does not resolve here"): storing the rel
-	// string made every HIT re-intern it via Source(rel) — a full xxh3 + table
-	// probe per hit, several hundred k per run.
+	// sourceUnderCache memoizes the includer-local quoted-include resolve — the
+	// hottest existence probe, since incDir is rarely an addincl so the addincl
+	// index can't cover it. A pure function of (incDir, target) and the FS, so
+	// context-free and run-wide. Keyed by splitMix64(incDir, target). The value is
+	// the resolved $(S) VFS already interned (0 = "does not resolve here"); storing
+	// the rel string would re-intern it on every hit.
 	sourceUnderCache *IntValueMap[VFS]
 
-	// childArena holds the cached resolved-children blocks (retained for the
-	// whole run; growing them in place churned a grow-chain per file). Filled
-	// like the closure arena: reserve closureAllocHint, collect, commit the
-	// used prefix. Collection never nests, so one pending block suffices.
+	// childArena holds the cached resolved-children blocks (growing in place churned
+	// a grow-chain per file). Filled like the closure arena: reserve, collect,
+	// commit the used prefix. Collection never nests, so one pending block suffices.
 	childArena *BumpAllocator[VFS]
 
 	// spOut / resolveOut back resolveSearchPath's and resolve's per-call result
-	// slices. Both are fully consumed by the caller (values copied into the
-	// children block) before the next resolve, so one scratch per scanner
-	// replaces a fresh allocation per include directive.
+	// slices, consumed by the caller before the next resolve, so one scratch per
+	// scanner replaces a per-directive allocation.
 	spOut      []VFS
 	resolveOut []VFS
 
-	// tjc points at the run-wide Tarjan/closure working state owned by genCtx and
-	// shared by the target and host scanners (see tarjanCtx).
+	// tjc points at the run-wide Tarjan/closure working state owned by genCtx,
+	// shared by the target and host scanners.
 	tjc *TarjanCtx
 
-	// dfsActive marks the roots whose dfs is currently in flight. It is set-once
-	// (never reset): within one scanner a root is cached the moment its dfs
-	// finishes, so closureOf re-enters dfs(root) only along an include cycle —
-	// which dfs hands to strongconnect. Per-scanner, not shared, so the host
-	// scanner does not see target's roots as spurious cycles. A bit set (1 bit/id)
-	// rather than an epoch IdSet, since membership is permanent and binary.
+	// dfsActive marks the roots whose dfs is in flight. Set-once (never reset): a
+	// root is cached once its dfs finishes, so closureOf re-enters dfs(root) only
+	// along an include cycle, which dfs hands to strongconnect. Per-scanner, so the
+	// host scanner does not see target's roots as spurious cycles.
 	dfsActive BitSet
 
 	visitedIDPool sync.Pool
 
 	onWarn func(Warn)
 
-	// generatedFirstClaim records the first scan-context module path that
-	// resolved an include directive to a CodegenRegistry output. This mirrors
-	// upstream ymake's Node2Module rule (devtools/ymake/json_visitor.cpp:638
-	// — Node2Module gets set on first DFS leave by FindModule on the visitor
-	// stack), specifically applied to generated headers whose producer's
-	// `module_dir` would otherwise be the RUN_PROGRAM-owner module. Used by
-	// the finalize pass in attribute_generated.go to override producer-node
+	// generatedFirstClaim records the first module that resolved an include to a
+	// CodegenRegistry output (first-DFS-leave-wins), for generated headers whose
+	// producer's module_dir would otherwise be the RUN_PROGRAM-owner module. The
+	// attribute_generated.go finalize pass uses it to override producer-node
 	// target_properties.
 	//
-	// A self-consuming RUN_PROGRAM (one whose module auto-compiles a cc/asm
-	// sibling output) is the first DFS leaver of its own outputs — post-order
-	// processes the producing peer before any external consumer. Such a producer
-	// records its OWN module dir here at registration (markGeneratedProducerOwned),
-	// strictly before any consumer can resolve the output (resolution needs the
-	// registry entry registration is creating), so the first-claim is the producer
-	// and the override leaves the node attributed to it.
+	// A self-consuming RUN_PROGRAM (whose module auto-compiles a cc/asm sibling) is
+	// the first DFS leaver of its own outputs, so it records its OWN module dir at
+	// registration (markGeneratedProducerOwned) before any consumer can resolve the
+	// output.
 	generatedFirstClaim map[VFS]GenOwner
 
-	// generatedNodeClaim records, keyed by a generated file's PRODUCER node ref,
-	// the first module that names one of that producer's outputs in OUTPUT_INCLUDES.
-	// OUTPUT_INCLUDES is upstream's structural induced-dep declaration: the consumer
-	// command's leave records the producer node in Node2Module (json_visitor.cpp:638)
-	// for the WHOLE node — every output rides one attribution. A multi-output wrapper
-	// run (ads/caesar/.../with_transitive_headers/*.pb.h, one node, 69 outputs) is
-	// thus owned by the profile-like module that OUTPUT_INCLUDES it, regardless of
-	// which far peer later include-resolves an individual output. Takes precedence
-	// over the per-output generatedFirstClaim consensus in attribute_generated.go.
+	// generatedNodeClaim records, keyed by a generated file's PRODUCER node ref, the
+	// first module that names one of that producer's outputs in OUTPUT_INCLUDES — a
+	// node-level (not per-output) attribution: every output rides one claim,
+	// whichever peer later include-resolves an individual one. Takes precedence over
+	// the per-output generatedFirstClaim consensus.
 	generatedNodeClaim map[NodeRef]string
 
-	// generatedENIncluderDirs records, per EN (GENERATE_ENUM_SERIALIZATION)
-	// output, the set of directories of the files that #include it during the
-	// scan. attribute_generated.go uses this to reproduce ymake's Node2Module
-	// directory-ownership: a generated serialized header reached through a nested
-	// submodule's directory-owned header is attributed to that submodule (which
-	// leaves the node before its enclosing parent in DFS post-order). The
-	// recorded value is intrinsic to the includer file (its directory), not the
-	// scan context, so resolution caching stays context-free.
+	// generatedENIncluderDirs records, per EN (GENERATE_ENUM_SERIALIZATION) output,
+	// the directories of the files that #include it. Used for directory-ownership: a
+	// generated serialized header reached through a nested submodule's
+	// directory-owned header is attributed to that submodule. The value is intrinsic
+	// to the includer (its directory), not the scan context, so caching stays
+	// context-free.
 	generatedENIncluderDirs map[VFS][]string
 
 	walkClosureCalls       uint64
@@ -226,8 +171,8 @@ type IncludeScanner struct {
 	codegen *CodegenRegistry
 
 	// moduleByRef points at genCtx.moduleByRef: a generated file's producing tools
-	// (GeneratedFileInfo.GeneratorRefs) are looked up here to mix their declared
-	// INDUCED_DEPS into the file's resolved children. nil in standalone scanners.
+	// are looked up here to mix their declared INDUCED_DEPS into the file's
+	// children. nil in standalone scanners.
 	moduleByRef *DenseMap[NodeRef, *ModuleEmitResult]
 }
 
@@ -237,9 +182,9 @@ type ScanCtx struct {
 	ctxNum       uint32
 	resolveIndex *CfgResolveIndex
 
-	// parser is the scan context's parser for files with UNREGISTERED
-	// extensions (swig's .i, …), resolved ONCE from the walk's root file —
-	// registered extensions always use their own parser. nil = C-like default.
+	// parser handles files with UNREGISTERED extensions (swig's .i, …), resolved
+	// ONCE from the walk's root — registered extensions use their own parser.
+	// nil = C-like default.
 	parser IncludeDirectiveParser
 }
 
@@ -247,8 +192,8 @@ type ScanCtx struct {
 type ClosureRef uint32
 
 // cachedChildren returns the resolved immediate children of v (column 1). A
-// resolved-but-empty child set reads back present with a nil/empty slice, since
-// presence is the column slot, not nil-ness — so no sentinel slice is needed.
+// resolved-but-empty set reads back present with a nil slice, since presence is
+// the column slot, not nil-ness.
 func (s *IncludeScanner) cachedChildren(v VFS) ([]VFS, bool) {
 	return s.scanCache.get1(STR(v.strID()))
 }
@@ -266,9 +211,8 @@ func (s *IncludeScanner) putClosure(v VFS, ref ClosureRef) {
 }
 
 // sourceFileExists memoizes IsFile(srcRootVFS, abs.Rel()) by the file VFS
-// (column 3), so the repeated existence checks of cached sysincl mappings probe
-// the FS — and intern the parent dir — only once per file. The column's own
-// presence is the "already probed" bit; an absent column means not yet checked.
+// (column 3), so cached sysincl mappings probe the FS — and intern the parent dir
+// — only once per file. The column's presence is the "already probed" bit.
 func (s *IncludeScanner) sourceFileExists(abs VFS) bool {
 	key := STR(abs.strID())
 
@@ -283,11 +227,9 @@ func (s *IncludeScanner) sourceFileExists(abs VFS) bool {
 }
 
 const (
-	// closureAllocHint is the per-closure reservation passed to the closure
-	// arena. A single transitive closure never exceeds this, so the arena always
-	// hands back a region large enough to build the closure into without
-	// overflow. Derived from the measured sg5 maximum closure size (3935) with a
-	// ~2x margin.
+	// closureAllocHint is the per-closure arena reservation. A single transitive
+	// closure never exceeds this, so the arena always hands back a region large
+	// enough to build into. The measured maximum closure size with a ~2x margin.
 	closureAllocHint = 1 << 13 // 8192
 
 	// closureArenaInitial is the first chunk size; the arena grows chunks by
@@ -319,8 +261,8 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 		generatedNodeClaim:      make(map[NodeRef]string, 256),
 		generatedENIncluderDirs: make(map[VFS][]string, 16),
 		onWarn:                  onWarn,
-		// Index 0 reserved so a fresh closureRef is always >= 1 (closureOf's
-		// straighten path and closureWindow treat ref as a 1-based index).
+		// Index 0 reserved so a fresh closureRef is always >= 1 (ref is treated
+		// as a 1-based index).
 		subgraphClosures: make([][]VFS, 1, 256),
 		closureArena:     newBumpAllocator[VFS](closureArenaInitial),
 		childArena:       newBumpAllocator[VFS](1 << 12),
@@ -337,11 +279,9 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 }
 
 // markGeneratedProducerOwned records dir as the first-claim for a generated
-// output produced by a module that auto-compiles a cc/asm sibling — see the
-// generatedFirstClaim field comment. Called at registration, before any
-// consumer can resolve the output, so the producer is the guaranteed first
-// writer; the override then sees claim == producer module_dir and leaves the
-// node attributed to its producer.
+// output produced by a module that auto-compiles a cc/asm sibling. Called at
+// registration, before any consumer can resolve the output, so the producer is
+// the guaranteed first writer.
 func (s *IncludeScanner) markGeneratedProducerOwned(out VFS, dir string) {
 	if _, ok := s.generatedFirstClaim[out]; !ok {
 		s.generatedFirstClaim[out] = GenOwner{Dir: dir}
@@ -353,35 +293,31 @@ type ScanContext struct {
 	PeerAddInclSet  []VFS
 	BaseSearchPaths []VFS
 	// OwnerModuleDir identifies the consumer module whose CC compile (or
-	// equivalent) triggered this scan. Used to populate
-	// IncludeScanner.generatedFirstClaim on the first resolve of any
-	// CodegenRegistry output — see that field's comment for the rationale.
+	// equivalent) triggered this scan. Populates generatedFirstClaim on the first
+	// resolve of any CodegenRegistry output.
 	OwnerModuleDir string
 
-	// OwnerModuleTag is the module_tag of OwnerModuleDir (0 when the module has
-	// none). Recorded alongside the dir in generatedFirstClaim so a first-claim
-	// re-attribution carries the owning module's tag too (a CPP_PROTO submodule
-	// claiming a plugin-produced cow header → tag cpp_proto). NOT part of
-	// hashScanContext — it is a claim side-channel, never affecting the resolve
-	// result, so resolution caching stays context-free.
+	// OwnerModuleTag is the module_tag of OwnerModuleDir (0 when none), recorded in
+	// generatedFirstClaim so a re-attribution carries the owning module's tag. NOT
+	// part of hashScanContext — a claim side-channel never affecting the resolve, so
+	// caching stays context-free.
 	OwnerModuleTag STR
 
-	// cfg is the resolved scan config — bound exactly once by newScanContext
-	// (the only constructor); walks do no table lookups at all.
+	// cfg is the resolved scan config, bound once by newScanContext; walks do no
+	// table lookups.
 	cfg *ScanConfig
 }
 
-// ScanConfig is one distinct resolve configuration: its dense id (half of the
-// searchTier cache key) and the prebuilt resolve index. Deduped per config
-// content by IncludeParserManager.resolveScanConfig.
+// ScanConfig is one distinct resolve configuration: its dense id (half the
+// searchTier cache key) and the prebuilt resolve index. Deduped by resolveScanConfig.
 type ScanConfig struct {
 	num uint32
 	ri  *CfgResolveIndex
 }
 
 // newScanContext builds a scan config and binds its resolved ScanConfig. The
-// walk's parser for unregistered-extension files is NOT part of the config —
-// it is a ScanCtx property handed to newScanCtx (derived from the walk root).
+// walk's unregistered-extension parser is NOT part of the config — it is a ScanCtx
+// property handed to newScanCtx.
 func newScanContext(pm *IncludeParserManager, ownAddIncl, peerAddIncl, base []VFS, ownerModuleDir string) ScanContext {
 	cfg := ScanContext{
 		OwnAddIncl:      ownAddIncl,
@@ -394,10 +330,8 @@ func newScanContext(pm *IncludeParserManager, ownAddIncl, peerAddIncl, base []VF
 	return cfg
 }
 
-// newScanCtx wraps cfg (bound by newScanContext) for this scanner; parser
-// handles unregistered-extension files reached from this walk (nil = C
-// default), resolved by the caller from the walk's root. No lookups: the
-// resolved config rides inside cfg.
+// newScanCtx wraps cfg for this scanner; parser handles unregistered-extension
+// files from this walk (nil = C default). No lookups: the config rides in cfg.
 func (s *IncludeScanner) newScanCtx(cfg ScanContext, parser IncludeDirectiveParser) *ScanCtx {
 	if cfg.cfg == nil {
 		throwFmt("newScanCtx: ScanContext built without newScanContext")
@@ -413,13 +347,10 @@ func (s *IncludeScanner) newScanCtx(cfg ScanContext, parser IncludeDirectivePars
 }
 
 // hashScanContext fingerprints the resolve-relevant context fields for the
-// in-memory config maps (ctxNumByHash, resolveIndexByConfig) — nothing
-// persistent, so in-run stability is all it needs. Each element contributes its
-// interned string's xxh3 lo (internTable.los — the same per-STR hash the uid
-// layer mixes), chained through mix64, instead of re-walking the path bytes:
-// the lo is bijective-in-practice with the string (root prefix included), so
-// the discrimination matches the old per-byte FNV at a fraction of the cost.
-// Length-prefixing each slice keeps the three-slice boundaries unambiguous.
+// in-memory config maps (in-run stability is all it needs). Each element
+// contributes its interned string's xxh3 lo, chained through mix64 — the lo is
+// bijective-in-practice with the string. Length-prefixing each slice keeps the
+// three-slice boundaries unambiguous.
 func hashScanContext(ctx *ScanContext) uint64 {
 	// Non-zero seed so the all-empty context cannot hash to 0 (the "unsealed"
 	// sentinel newScanCtx guards on).
@@ -444,21 +375,15 @@ func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 	s := sc.scanner
 	incDir := dirKey(pathDir(vfsPath.rel()))
 
-	// suppressCimportNames mirrors upstream cython_processor.cpp CimportFrom's
-	// needCheckLists: a `from X cimport names` statement emits its module
-	// candidate (includeCythonModule, `X.pxd`) immediately before its per-name
-	// submodule candidates (includeCythonName/Fallback). When the module .pxd
-	// resolves, the names are names within that module — not submodules — so their
-	// probes are skipped. A statement opener (includeCythonOptional, the package
-	// `X/__init__.pxd` or CimportSimple's `path.pxd`, which always precedes the
-	// module/name probes) clears the flag; name/fallback probes do not, so a name's
-	// fallback can't clear the suppression mid name-list.
+	// suppressCimportNames: a `from X cimport names` statement emits its module
+	// candidate (`X.pxd`) before its per-name candidates. When the module .pxd
+	// resolves, the names are within it, not submodules, so their probes are
+	// skipped. A statement opener (includeCythonOptional) clears the flag;
+	// name/fallback probes do not.
 	//
-	// prevProbeMissed mirrors the first-resolved fallback: a fallback probe
-	// (includeCythonFallback) is the second member of a pair and is attempted only
-	// when its primary — the immediately preceding probe — was attempted and did
-	// not resolve. A primary suppressed by suppressCimportNames counts as
-	// not-missed, so a suppressed name's `.pxd` fallback is dropped too.
+	// prevProbeMissed: a fallback probe is attempted only when its primary — the
+	// preceding probe — was attempted and did not resolve. A suppressed primary
+	// counts as not-missed, so its fallback is dropped.
 	suppressCimportNames := false
 	prevProbeMissed := false
 
@@ -493,10 +418,9 @@ func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 }
 
 // resolveInducedDeps mixes the INDUCED_DEPS of a generated file's producing tools
-// into its resolved children, so a tool's runtime headers (and their closure) come
-// from the tool's declared INDUCED_DEPS rather than a hardcoded list woven into the
-// registered parsed includes. Only build outputs with a codegen registry entry and
-// recorded GeneratorRefs contribute.
+// into its resolved children, so a tool's runtime headers come from its declared
+// INDUCED_DEPS rather than a hardcoded list. Only build outputs with a codegen
+// registry entry and recorded GeneratorRefs contribute.
 func (sc *ScanCtx) resolveInducedDeps(vfsPath VFS, incDir VFS, fn func(rabs VFS)) {
 	s := sc.scanner
 
@@ -510,8 +434,8 @@ func (sc *ScanCtx) resolveInducedDeps(vfsPath VFS, incDir VFS, fn func(rabs VFS)
 		return
 	}
 
-	// A header output reads the Header induced bucket; a translation unit reads Cpp.
-	// (h+cpp …) deps live in both buckets, so a single read per output suffices.
+	// A header output reads the Header induced bucket; a translation unit reads
+	// Cpp. h+cpp deps live in both buckets, so a single read per output suffices.
 	bucket := parsedIncludesCpp
 
 	if isHeaderSource(vfsPath.rel()) {
@@ -534,10 +458,8 @@ func (sc *ScanCtx) resolveInducedDeps(vfsPath VFS, incDir VFS, fn func(rabs VFS)
 }
 
 // forEachResolvedChildID returns the resolved immediate children of absID,
-// caching by absID alone (no scan-context key). See the comment above
-// IncludeScanner.scanCache for the upstream-mirroring
-// invariant that makes this correct: each file is parse-and-resolved exactly
-// once per run.
+// caching by absID alone (no scan-context key). See scanCache for the invariant
+// that makes this correct: each file is parse-and-resolved exactly once per run.
 func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
 	s := sc.scanner
 
@@ -549,9 +471,9 @@ func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
 		return
 	}
 
-	// Collect straight into an arena block (the dfs pattern: reserve the hint,
-	// commit the used prefix). Nothing else touches childArena while the block
-	// is open — resolve never re-enters children collection.
+	// Collect into an arena block (reserve, commit the used prefix). Nothing else
+	// touches childArena while the block is open — resolve never re-enters
+	// children collection.
 	block := s.childArena.alloc(closureAllocHint)
 	k := 0
 	sc.forEachResolvedChild(abs, func(rabs VFS) {
@@ -590,24 +512,19 @@ func (s *IncludeScanner) perfStats() ScannerPerfStats {
 	}
 }
 
-// dfs builds the transitive include closure of any root — closureOf routes every
-// uncached file here. Most files are acyclic (a node ∪ its children's windows),
+// dfs builds the transitive include closure of any root. Most files are acyclic,
 // so a flat dfs without Tarjan's SCC bookkeeping suffices: abs leads its own
-// closure (element 0), which the [1:] consumers strip, and the children's flat
-// windows are spliced in — the same cached closures strongconnect builds.
+// closure (element 0, stripped by [1:] consumers) with the children's flat windows
+// spliced in.
 //
-// When the subgraph below abs contains an include cycle, a flat window cannot
-// represent the SCC. dfsActive detects it: a cycle re-enters dfs(abs) before abs
-// is cached, so the guard hands abs to strongconnect, which collapses the SCC
-// (reusing every acyclic subtree dfs already cached). This covers header<->header
-// cycles, the arch-conditional .S sibling includes, and self-includes alike.
+// When the subgraph below abs contains a cycle, a flat window cannot represent the
+// SCC. dfsActive detects it: a cycle re-enters dfs(abs) before abs is cached, so
+// the guard hands abs to strongconnect, which collapses the SCC.
 //
-// Two passes are required by the single-pending arena. Pass 1 builds and caches
-// every direct child's closure (closureOf there may recurse into strongconnect/
-// dfs and allocate from closureArena). Pass 2 reserves our block and splices each
-// child's cached window in place — no temporary [][]VFS — and allocates nothing
-// else, so holding the uncommitted block is safe. tjClosure is the dedup set,
-// shared with strongconnect; dfs's pass-2 use never overlaps a nested call.
+// Two passes, required by the single-pending arena: pass 1 builds and caches every
+// direct child's closure (closureOf may recurse and allocate from closureArena);
+// pass 2 reserves our block and splices each child's cached window in place,
+// allocating nothing else, so holding the uncommitted block is safe.
 func (sc *ScanCtx) dfs(abs VFS) {
 	s := sc.scanner
 
@@ -619,11 +536,9 @@ func (sc *ScanCtx) dfs(abs VFS) {
 
 	s.dfsActive.add(uint32(abs))
 
-	// Pass 1: build and cache each child's closure. closureOf may recurse into
-	// dfs/strongconnect and allocate from closureArena, so it must finish before
-	// pass 2 reserves our block. Skip the self-edge (a source that #includes
-	// itself): abs is not cached yet, so closureOf(abs) would re-enter dfs(abs);
-	// abs leads the window below and its self-contribution is a dedup fixpoint.
+	// Pass 1: build and cache each child's closure, finishing before pass 2 reserves
+	// our block. Skip the self-edge: abs is not cached yet, so closureOf(abs) would
+	// re-enter dfs(abs); abs leads the window below anyway.
 	sc.forEachResolvedChildID(abs, func(ch VFS) {
 		if ch == abs {
 			return
@@ -632,11 +547,9 @@ func (sc *ScanCtx) dfs(abs VFS) {
 		sc.closureOf(ch)
 	})
 
-	// Pass 2: every child is cached now, so splice its window straight from the
-	// cache — no temporary [][]VFS, and forEachResolvedChildID hits scanCache
-	// so nothing here allocates from closureArena while the block is open. tjClosure
-	// is the dedup set (shared with strongconnect): dfs's pass-2 use never overlaps
-	// a nested dfs/strongconnect (pass 1 has fully returned), so no pool is needed.
+	// Pass 2: every child is cached now, so splice its window from the cache —
+	// forEachResolvedChildID hits scanCache, so nothing here allocates from
+	// closureArena while the block is open.
 	s.tjc.closure.reset(vfsBound())
 
 	block := s.closureArena.alloc(closureAllocHint)
@@ -659,11 +572,9 @@ func (sc *ScanCtx) dfs(abs VFS) {
 		k = s.tjc.closure.spliceNew(s.closureWindow(cref), block, k)
 	})
 
-	// Splice non-expanded closure leaves (COPY_FILE(TEXT) $(B) dst → its $(S)
-	// source + copy tooling) for every $(B) member: bare window members that ride
-	// transitively to every consumer (which splices this cached window) but are
-	// never traversed as children — re-resolving their own #includes per consuming
-	// module leaked sibling staging copies.
+	// Splice non-expanded closure leaves for every $(B) member: bare window members
+	// that ride transitively to every consumer but are never traversed as children
+	// — re-resolving their #includes per consuming module leaked staging copies.
 	for i := 0; i < k; i++ {
 		if block[i].isBuild() {
 			k += copy(block[k:], s.codegen.closureLeaves(block[i]))
@@ -699,13 +610,12 @@ func (s *IncludeScanner) closureWindow(ref ClosureRef) []VFS {
 }
 
 // windowSubsumed reports whether ch's whole cached window is already inside the
-// closure block under construction, letting the splice loops (dfs pass 2,
-// strongconnect) skip it after one membership probe instead of re-checking every
-// window element. Windows are transitively closed, so ch arriving via an earlier
-// window splice means that window contained closure(ch) entirely. The leafEver
-// guard keeps this sound: a ClosureLeaf rides in windows as a bare, non-expanded
-// member — its presence does NOT imply its own window is present — so any VFS
-// ever registered as a leaf never short-circuits.
+// closure block under construction, letting the splice loops skip it after one
+// membership probe. Windows are transitively closed, so ch arriving via an earlier
+// splice means that window contained closure(ch) entirely. The leafEver guard
+// keeps this sound: a ClosureLeaf rides as a bare, non-expanded member — its
+// presence does NOT imply its own window is present — so a leaf never
+// short-circuits.
 func (sc *ScanCtx) windowSubsumed(ch VFS) bool {
 	s := sc.scanner
 
@@ -722,8 +632,8 @@ func (sc *ScanCtx) windowSubsumed(ch VFS) bool {
 	return true
 }
 
-// scanCtx implements closureSink (tarjan_ctx.go) so tarjanCtx.strongconnect can
-// build SCC closures without depending on scanner internals.
+// scanCtx implements closureSink so strongconnect can build SCC closures without
+// depending on scanner internals.
 
 func (sc *ScanCtx) forEachChild(v VFS, fn func(VFS)) {
 	sc.forEachResolvedChildID(v, fn)
@@ -739,9 +649,9 @@ func (sc *ScanCtx) cachedWindow(v VFS) ([]VFS, bool) {
 	return sc.scanner.closureWindow(ref), true
 }
 
-// emitClosure reserves an arena block, lets fill write the deduped closure into
-// it (returning the count), then commits that prefix — an address-stable
-// sub-slice of the arena — into subgraphClosures and caches it for every member.
+// emitClosure reserves an arena block, lets fill write the deduped closure (count
+// returned), then commits that prefix into subgraphClosures and caches it for
+// every member.
 func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 	s := sc.scanner
 
@@ -775,20 +685,15 @@ func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []VFS) {
 	s := sc.scanner
 
-	// A rooted target ($(S)/... or $(B)/...) is already bound to its root —
-	// INDUCED_DEPS spells deps via the reserved ${ARCADIA_ROOT}-family refs.
-	// Upstream classifies such paths directly (ResolveAsKnownWithoutCheck →
-	// NPath::ToYPath), with no include search, sysincl, or FS check; mirror
-	// that. The STR already backs the full path, so the binding is a shift.
+	// A rooted target ($(S)/... or $(B)/...) is already bound to its root and
+	// classifies directly, with no include search, sysincl, or FS check. The STR
+	// already backs the full path, so the binding is a shift.
 	if v := d.target.vfs(); v != 0 {
-		// A rooted include of a generated header (an INDUCED_DEPS / plugin-window
-		// edge, e.g. the apphost cow well-known `$(B)/…/any.cow.pb.h` pulled into a
-		// consuming CPP_PROTO module's .pb.h closure) binds here without an addincl
-		// search. Upstream's Node2Module attributes such a node to the first module
-		// that leaves it in DFS post-order just the same, so record the first-claim
-		// for a registered codegen output — the addincl resolve paths below do this
-		// too; the rooted shortcut must not skip it. Gated to build targets with an
-		// owner: source rooted paths and ownerless walks never carry a claim.
+		// A rooted include of a generated header binds here without an addincl
+		// search, but is still attributed to the first module that leaves it in DFS
+		// post-order — so record the first-claim for a registered codegen output, as
+		// the addincl paths below do. Gated to build targets with an owner: source
+		// rooted paths and ownerless walks never carry a claim.
 		if v.isBuild() && sc.cfg.OwnerModuleDir != "" {
 			if info := s.codegen.lookupSTR(d.target); info != nil {
 				s.recordFirstClaim(info.OutputPath, sc.cfg.OwnerModuleDir, sc.cfg.OwnerModuleTag)
@@ -805,7 +710,7 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 
 	defer func() {
 		// Cython cimport probes are best-effort: unresolved candidates are dropped
-		// silently (upstream ResolveLocalIncludes), never warned.
+		// silently, never warned.
 		if d.cythonProbe() {
 			return
 		}
@@ -936,9 +841,9 @@ type CfgResolveIndex struct {
 }
 
 // cfgBuildAddincl is a Build-rooted addincl prefix paired with its rank in the
-// unified declaration order across OwnAddIncl ⨁ PeerAddInclSet. prefixSrc is the
-// pre-interned Source-rooted twin (the bySplit prefix key space), so
-// codegen.LookupSplit needs no per-resolve string work.
+// unified OwnAddIncl ⨁ PeerAddInclSet declaration order. prefixSrc is the
+// pre-interned Source-rooted twin, so codegen.LookupSplit needs no per-resolve
+// string work.
 type CfgBuildAddincl struct {
 	prefix    VFS
 	prefixSrc VFS
@@ -947,12 +852,10 @@ type CfgBuildAddincl struct {
 
 const resolveNoRank = int(^uint(0) >> 1)
 
-// buildCfgResolveIndex assigns a single declaration-order rank to every addincl
-// entry (Source and Build both), so the fast path can pick the first-wins
-// match the way upstream's ResolveName(MakeResolvePlan(MakeIterPair(incDirs)))
-// does (devtools/ymake/module_resolver.cpp:371). Source entries keep their
-// existing inverted-index lookup; Build entries are collected separately for a
-// cheap codegen.LookupSplit pass over a typically tiny set (0–2 per module).
+// buildCfgResolveIndex assigns a declaration-order rank to every addincl entry
+// (Source and Build), so the fast path can pick the first-wins match. Source
+// entries keep their inverted-index lookup; Build entries are collected separately
+// for a cheap codegen.LookupSplit pass over a tiny set (0–2 per module).
 func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 	idx := &CfgResolveIndex{}
 
@@ -971,8 +874,8 @@ func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 	idx.indexable = true
 	idx.rank = newIntValueMap[int32](2 * (len(cfg.OwnAddIncl) + len(cfg.PeerAddInclSet)))
 
-	// Membership rides the global epoch deduper (a bitset probe, not a map
-	// read); the leaf contract holds — nothing below allocates the deduper.
+	// Membership rides the global epoch deduper (a bitset probe); nothing below
+	// allocates it.
 	deduper.reset()
 
 	r := int32(0)
@@ -1005,10 +908,10 @@ func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 	return idx
 }
 
-// recordFirstClaim mirrors upstream ymake's Node2Module first-write-wins rule
-// (json_visitor.cpp:638): the first include-scan that resolves a CodegenRegistry
-// output records the consumer module that owns it. attribute_generated.go reads
-// these to re-attribute the producer node's target_properties.module_dir.
+// recordFirstClaim applies first-write-wins: the first include-scan resolving a
+// CodegenRegistry output records the consumer module that owns it.
+// attribute_generated.go reads these to re-attribute the producer node's
+// target_properties.module_dir.
 func (s *IncludeScanner) recordFirstClaim(out VFS, ownerModuleDir string, ownerModuleTag STR) {
 	if ownerModuleDir == "" {
 		return
@@ -1032,11 +935,10 @@ func (s *IncludeScanner) recordNodeClaim(ref NodeRef, ownerModuleDir string) {
 	}
 }
 
-// recordENIncluderDir records the directory of includerAbs as an includer of the
-// EN output `out`. Only EN (enum-serialization) outputs are tracked; the finalize
-// pass (overrideGeneratedModuleDir) reads these to drift the EN node to a nested
-// submodule whose directory-owned header includes it. The set per output is tiny
-// (one or two includer dirs), so a deduped slice suffices.
+// recordENIncluderDir records includerAbs's directory as an includer of the EN
+// output `out`. Only EN (enum-serialization) outputs are tracked; the finalize
+// pass reads these to drift the EN node to a nested submodule whose
+// directory-owned header includes it. The set per output is tiny.
 func (s *IncludeScanner) recordENIncluderDir(out VFS, info *GeneratedFileInfo, includerAbs VFS) {
 	if info == nil || info.ProducerKvP != pkEN {
 		return
@@ -1070,8 +972,8 @@ func (sc *ScanCtx) cacheSearchTier(targetID STR, out SearchTierResult) SearchTie
 func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 	s := sc.scanner
 
-	// Gate the composite-key hash probe on the 1-bit per-target presence flag: a
-	// target never cached in any config skips straight to the resolve.
+	// Gate the composite-key hash probe on the per-target presence flag: a target
+	// never cached in any config skips straight to the resolve.
 	if s.searchTierSeen.has(uint32(targetID)) {
 		if cached := s.searchTierFlat.get(splitMix64(sc.ctxNum, uint32(targetID))); cached != nil {
 			s.searchTierHits++
@@ -1082,8 +984,8 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 
 	s.searchTierMisses++
 
-	// The string view is only needed on the miss path — cache hits never
-	// leave id space.
+	// The string view is only needed on the miss path — cache hits never leave id
+	// space.
 	target := targetID.string()
 
 	var out SearchTierResult
@@ -1138,16 +1040,12 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 		return addSource(prefix)
 	}
 
-	// Arcadia roots (build + source) precede the module's ADDINCL. Upstream's
-	// TModuleResolver resolves the local plan MakeResolvePlan(srcDir, BldDir,
-	// SrcDir) FIRST and only falls through to the IncDirs (ADDINCL) when it
-	// misses (module_resolver.cpp:238-245, 322-352, applies to every lang in
-	// LANGS_REQUIRE_BUILD_AND_SRC_ROOTS — c/asm/cython/proto/flatc/swig/ydl/nlg).
-	// A fully-qualified target that exists at the build or source root binds
-	// there, not under a peer ADDINCL that happens to mirror the same subtree
-	// (e.g. a peer PROTO_NAMESPACE shadowing a `dep/foo.proto` import). The
-	// includer-dir arm of the local plan is handled by the quoted resolveSourceUnder
-	// branch in resolveSearchPath; this is its BldDir/SrcDir tail.
+	// The build + source roots precede the module's ADDINCL: the local plan
+	// resolves FIRST and falls through to the ADDINCL dirs only on a miss. A
+	// fully-qualified target that exists at the build or source root binds there,
+	// not under a peer ADDINCL mirroring the same subtree (e.g. a PROTO_NAMESPACE
+	// shadowing a `dep/foo.proto` import). The includer-dir arm is handled by the
+	// quoted resolveSourceUnder branch in resolveSearchPath; this is its root tail.
 	if addInclPath(bld) || addInclPath(v) {
 		return sc.cacheSearchTier(targetID, out)
 	}
@@ -1159,7 +1057,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 
 		if idx.indexable {
 			// Source side: precomputed FS-existence inverted index keyed by
-			// target → addincl prefixes containing it. Pick the smallest rank.
+			// target. Pick the smallest rank.
 			bestRank := resolveNoRank
 			var bestAddincl VFS
 
@@ -1174,11 +1072,10 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 
 			bestIsSource := bestRank != resolveNoRank
 
-			// Build side: walk the (typically tiny) set of Build-rooted addincl
-			// entries in declaration order via the registry's 2-level split
-			// lookup. Take the smallest rank among hits — if it beats the Source
-			// best, the Build entry wins, mirroring upstream's first-match
-			// semantics over IncDirs (module_resolver.cpp:371).
+			// Build side: walk the tiny set of Build-rooted addincl entries in
+			// declaration order via the 2-level split lookup. Smallest rank
+			// among hits — if it beats the Source
+			// best, the Build entry wins (first-match order).
 			var bestBuild *GeneratedFileInfo
 
 			if buildSuffix != 0 {
@@ -1250,11 +1147,9 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 	s := sc.scanner
 	s.resolveSearchPathCalls++
 
-	// out doubles as the dedup set: every accepted candidate lands in it, each
-	// branch below adds at most one entry, so membership is a linear scan over
-	// <= 3 elements — no pooled map, no per-call "B:"+rel key allocs, no clear.
-	// Backed by the per-scanner scratch: the caller consumes the result before
-	// the next resolve.
+	// out doubles as the dedup set: each branch adds at most one entry, so
+	// membership is a linear scan over <= 3 elements — no pooled map. Backed by the
+	// per-scanner scratch: the caller consumes the result before the next resolve.
 	out := s.spOut[:0]
 
 	defer func() {
@@ -1295,10 +1190,9 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 		searchPathFound = true
 	}
 
-	// No slash gate before the probe: a registered bare-rel always contains
-	// "/" (outputs live under module dirs) and rooted targets were bound in
-	// resolve() — a slashless target just misses the DenseMap, cheaper than
-	// the string view the gate cost.
+	// No slash gate before the probe: a registered bare-rel always contains "/" and
+	// rooted targets were bound in resolve(), so a slashless target just misses the
+	// DenseMap — cheaper than the string view a gate would cost.
 	if includerAbs.isBuild() {
 		if info := s.codegen.lookupSTR(d.target); info != nil && !outHas(info.OutputPath) {
 			out = append(out, info.OutputPath)
@@ -1312,8 +1206,8 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 	if d.quotedLike() {
 		matched := false
 
-		// Memoize the includer-local resolve by splitMix64(incDir, target) — both 32-bit
-		// ids hashed into one uniform key. 0 means "does not resolve under incDir".
+		// Memoize the includer-local resolve by splitMix64(incDir, target). 0 means
+		// "does not resolve under incDir".
 		suKey := splitMix64(uint32(incDir), uint32(d.target))
 		var sv VFS
 
@@ -1321,7 +1215,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 			sv = *p
 		} else {
 			// 0 is the shared "does not resolve" sentinel — the probe's miss
-			// value caches directly.
+			// value caches as-is.
 			sv = s.resolveSourceUnder(incDir, d.target.string())
 			s.sourceUnderCache.put(suKey, sv)
 		}
@@ -1339,12 +1233,10 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 					searchPathFound = true
 				}
 
-				// Mirror resolveContextSearchTier's addBuild: when a
-				// quoted include resolves to a generated path via the
-				// includer-dir split lookup (e.g. X86CallingConv.cpp
-				// → X86GenCallingConv.inc), record the first consumer
-				// module so the attribute_generated.go finalize pass can
-				// re-attribute the .inc node's target_properties.module_dir.
+				// Mirror addBuild: a quoted include resolving to a
+				// generated path via the includer-dir split lookup records
+				// the first consumer module so the finalize pass can
+				// re-attribute the node's target_properties.module_dir.
 				s.recordFirstClaim(info.OutputPath, sc.cfg.OwnerModuleDir, sc.cfg.OwnerModuleTag)
 				s.recordENIncluderDir(info.OutputPath, info, includerAbs)
 			}
@@ -1359,8 +1251,8 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 			searchPathFound = true
 
 			// Angle/full-path includes of an EN serialized header resolve here
-			// (the addBuild path inside the tier records the PR/CF/CP first-claim
-			// but has no includer). Record the includer dir for EN drift.
+			// (the addBuild path inside the tier records the first-claim but has
+			// no includer). Record the includer dir for EN drift.
 			if len(tier.paths) > 0 && tier.paths[0].isBuild() {
 				s.recordENIncluderDir(tier.paths[0], s.codegen.lookup(tier.paths[0]), includerAbs)
 			}
@@ -1438,10 +1330,9 @@ func normalisePath(p string) string {
 
 // resolveSourceUnder resolves target relative to prefix; 0 means "no such file".
 func (s *IncludeScanner) resolveSourceUnder(prefix VFS, target string) VFS {
-	// IsFile(prefix, target) is exactly the gating this used to hand-roll
-	// (firstComponent + Listdir(prefix), then the deep check) — but keyed off the
-	// already-interned prefix VFS, so it skips the Listdir(srcRoot) + re-gating the
-	// prefix's own components that IsFile(srcRootVFS, joinRel(...)) did from the root.
+	// IsFile(prefix, target) keyed off the already-interned prefix VFS skips the
+	// Listdir(srcRoot) + re-gating the prefix's components that resolving from the
+	// root did.
 	if !s.parsers.fs.isFile(prefix, target) {
 		return 0
 	}

@@ -79,23 +79,18 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	mf := parseMakeFlags(args)
 
-	// The global --verbose seeds make's local verbose; make's own --verbose can
-	// still turn it on independently.
+	// The global --verbose seeds make's local verbose; make's own --verbose also enables it.
 	mf.verbose = mf.verbose || g.Verbose
 
 	if len(mf.targets) == 0 {
 		throwFmt("make: no targets supplied and current working directory is outside the source root")
 	}
 
-	// -j 0 is generate-only: the process emits the graph and exits, so collecting
-	// garbage along the way only costs CPU (measured on sg5: GC off cuts gen user
-	// time ~20%, peak RSS 495->680 MB — fine for a short-lived process). With
-	// executor threads the process lives for the whole build and shares RAM with
-	// the compilers it spawns, so GC stays on — but far rarer than the default:
-	// the sg5 GOGC scan plateaus at ~the GC-off user time from 400 up (the
-	// 400..800 spread is the phase of the last mark cycle, not a trend), so 400
-	// keeps near-full gen speed while still bounding the long-lived build
-	// process's heap. An explicit GOGC in the environment wins in both modes.
+	// -j 0 is generate-only: the process emits the graph and exits, so GC only costs
+	// CPU (measured: GC off cuts gen user time ~20%) — disable it. With executor
+	// threads the process lives for the whole build and shares RAM with the compilers
+	// it spawns, so GC stays on, but at a raised percent that keeps near-full gen speed
+	// while bounding the heap. An explicit GOGC in the environment wins in both modes.
 	if os.Getenv("GOGC") == "" {
 		if mf.threads == 0 {
 			debug.SetGCPercent(-1)
@@ -113,12 +108,9 @@ func cmdMake(g GlobalFlags, args []string) int {
 	targetYaFlags := map[string]string{}
 	copyStatsFlags(hostYaFlags, rootHostYaFlags)
 	copyStatsFlags(targetYaFlags, rootTargetYaFlags)
-	// build/internal/ya.conf carries the internal contour's common flags
-	// (OPENSOURCE, USE_PREBUILT_TOOLS=no, the -fno-omit-frame-pointer /
-	// -Wno-unknown-argument CFLAGS, …). Upstream applies it to every build,
-	// test or not; both sg4 (-ttt) and sg5 references now carry these CFLAGS,
-	// so it is read unconditionally (absent in the opensource snapshots, where
-	// readOptionalYaConfSection returns nil).
+	// The internal contour's common flags (OPENSOURCE, USE_PREBUILT_TOOLS=no, extra
+	// CFLAGS, …) apply to every build, so read them unconditionally. Absent in the
+	// opensource snapshots, where readOptionalYaConfSection returns nil.
 	hostInternalYaFlags := readOptionalYaConfSection(fs, "build/internal/ya.conf", "host_platform_flags")
 	targetInternalYaFlags := readOptionalYaConfSection(fs, "build/internal/ya.conf", "flags")
 	copyStatsFlags(hostYaFlags, hostInternalYaFlags)
@@ -209,7 +201,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	if mf.copySources != "" {
 		// Build the graph as for -G (the FS records every read), then slice the repo
-		// by what was actually opened. The graph itself is discarded.
+		// by what was opened. The graph itself is discarded.
 		for _, target := range mf.targets {
 			genDumpGraphWithResources(fs, target, hostP, targetP, onWarn, mf.testLevel > 0)
 		}
@@ -413,10 +405,8 @@ func parseMakeFlags(args []string) *MakeFlags {
 	if len(mf.targets) == 0 {
 		cwd := throw2(os.Getwd())
 
-		// Default the target to the current directory relative to the source root —
-		// "." at the root itself, "util" in a subdirectory. filepath.Rel yields a
-		// "../"-prefixed path when cwd escapes the root; those are rejected (cwd is
-		// genuinely outside the source root).
+		// Default the target to cwd relative to the source root. filepath.Rel yields a
+		// "../"-prefixed path when cwd escapes the root; reject those (cwd is outside it).
 		if rel, err := filepath.Rel(mf.srcRoot, cwd); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			mf.targets = []string{rel}
 		}
@@ -427,8 +417,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 
 // findSourceRoot resolves the source root when --source-root is not given: it walks up
 // from start to the nearest ancestor containing a ya.conf (the source-root marker), so
-// `ay make` works from any subdirectory the way the upstream `ya` does. With no ya.conf
-// in any ancestor it falls back to start (the previous behavior).
+// make works from any subdirectory. With no ya.conf in any ancestor it falls back to start.
 func findSourceRoot(start string) string {
 	for dir := start; ; {
 		if info, err := os.Stat(filepath.Join(dir, "ya.conf")); err == nil && !info.IsDir() {
@@ -494,9 +483,8 @@ configuration flags:
 	fmt.Fprint(w, colorizeMakeUsage(usage))
 }
 
-// colorizeMakeUsage tints the make help by the same scheme as the top-level
-// listing: section headers ("… flags:" and the Usage: label) light-green, flag
-// columns light-yellow. Descriptions and continuation lines stay plain.
+// colorizeMakeUsage tints section headers ("… flags:" and the usage: label)
+// light-green and flag columns light-yellow; descriptions stay plain.
 func colorizeMakeUsage(s string) string {
 	lines := strings.Split(s, "\n")
 
@@ -514,8 +502,8 @@ func colorizeMakeUsage(s string) string {
 	return strings.Join(lines, "\n")
 }
 
-// colorizeFlagLine tints the flag column (the leading "-…" token up to the 2-space
-// gap before its description) light-yellow; non-flag lines pass through.
+// colorizeFlagLine tints the flag column (leading "-…" token up to the 2-space
+// gap) light-yellow; non-flag lines pass through.
 func colorizeFlagLine(line string) string {
 	trimmed := strings.TrimLeft(line, " ")
 

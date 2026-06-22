@@ -9,16 +9,15 @@ type SourceEmit struct {
 	Ref     NodeRef
 	OutPath VFS
 
-	// Extra holds additional compiled objects produced by the same source whose
-	// generating statement is shared with the primary object (e.g. a GRPC()
-	// inline .proto yields both <base>.pb.cc.o and <base>.grpc.pb.cc.o). They
-	// archive immediately after the primary object with the same SrcMeta.
+	// Extra holds additional compiled objects from the same source sharing the
+	// primary's generating statement (e.g. a GRPC() inline .proto yields both
+	// <base>.pb.cc.o and <base>.grpc.pb.cc.o). They archive immediately after the
+	// primary object with the same SrcMeta.
 	Extra []SourceEmit
 }
 
 // emitOneSource dispatches a module source to its per-extension emitter. Each
-// emitLibrary*Source lives next to the node emitter it drives (emit_cc.go,
-// emit_r6.go, emit_ev.go, …), like emitBisonY in emit_bison_y.go.
+// emitLibrary*Source lives next to the node emitter it drives.
 func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
 	if isHeaderSource(srcRel) {
 		return nil
@@ -38,9 +37,8 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		strings.HasSuffix(srcRel, ".cpp"),
 		strings.HasSuffix(srcRel, ".cc"),
 		strings.HasSuffix(srcRel, ".cxx"),
-		// Uppercase .C is a C++ source upstream (_SRC("C") → $_SRC_cpp,
-		// ymake.core.conf:3466); HasSuffix is case-sensitive so it does not
-		// collide with .c. isCxxSource classifies it as C++.
+		// Uppercase .C is a C++ source upstream; HasSuffix is case-sensitive so it
+		// does not collide with .c. isCxxSource classifies it as C++.
 		strings.HasSuffix(srcRel, ".C"):
 		return emitLibraryCSource(ctx, instance, d, srcRel, in)
 	case strings.HasSuffix(srcRel, ".S"),
@@ -73,10 +71,9 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		return emitLibraryCfgProtoSource(ctx, instance, d, srcRel, in)
 	}
 
-	// An unmodelled codegen source extension (e.g. .gperf, .pyx not yet wired
-	// here). Under --keep-going this warns and the source is skipped so gen can
-	// complete (its compiled object and any headers it would yield are absent —
-	// a node-count gap to close later); in strict mode onWarn makes it fatal.
+	// An unmodelled codegen source extension. Under --keep-going this warns and
+	// skips the source so gen completes (its object and any headers it would
+	// yield are absent — a node-count gap to close later); strict mode makes it fatal.
 	ctx.onWarn(Warn{
 		Kind:    WarnUnsupportedSource,
 		Message: fmt.Sprintf("%s: unsupported source extension in %q", instance.Path.rel(), srcRel),

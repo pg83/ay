@@ -12,18 +12,16 @@ var (
 type Language int
 
 const (
-	// LangNone is the zero value: an instance without an explicit language
-	// (the pre-enum "" string).
+	// LangNone is the zero value: an instance without an explicit language.
 	LangNone Language = iota
 	LangCPP
 	LangProto
 	LangGo
 	LangPy
 	LangJava
-	// LangDescProto is the DESC_PROTO submodule variant of a PROTO_LIBRARY
-	// (proto.conf `module _DESC_PROTO`): the proto-description producer side
-	// (.proto.desc / .rawproto / .self.protodesc) requested via the DESC_PROTO
-	// PEERDIR tag, distinct from the CPP_PROTO (.pb.cc) variant.
+	// LangDescProto is the DESC_PROTO submodule variant of a PROTO_LIBRARY: the
+	// proto-description producer side (.proto.desc / .rawproto / .self.protodesc)
+	// requested via the DESC_PROTO PEERDIR tag, distinct from the CPP_PROTO variant.
 	LangDescProto
 )
 
@@ -68,8 +66,7 @@ func (k ModuleKind) string() string {
 	}
 }
 
-// String implements fmt.Stringer — the fmt machinery finds it by name;
-// internal code calls string().
+// String implements fmt.Stringer; internal code calls string().
 func (k ModuleKind) String() string {
 	return k.string()
 }
@@ -136,8 +133,7 @@ func (mi ModuleInstance) string() string {
 	return b.String()
 }
 
-// String implements fmt.Stringer — the fmt machinery finds it by name;
-// internal code calls string().
+// String implements fmt.Stringer; internal code calls string().
 func (mi ModuleInstance) String() string {
 	return mi.string()
 }

@@ -9,20 +9,17 @@ import (
 var (
 	// Parsed-include directives for the constant protobuf/grpc/event runtime header
 	// lists, built once at init instead of re-interning each header's Rel() per
-	// generated output (was ~260k internStr/run on sg5: the 187-entry deep list
-	// times every pb.cc/grpc.pb.cc). append copies these into the per-output slice,
-	// so sharing the read-only backing is safe.
+	// generated output (the deep list times every pb.cc/grpc.pb.cc). append copies
+	// these into the per-output slice, so sharing the read-only backing is safe.
 	protobufRuntimeDirectives      = quotedDirectives(protobufRuntimeHeaders)
 	pbDescriptorImporterDirectives = quotedDirectives(pbDescriptorImporterHeaders)
-	// pbRuntimeBaseVFS is the protobuf runtime src root (upstream's
-	// $PROTOBUF_INCLUDE_PATH config constant) fed to the proto closure walk.
+	// pbRuntimeBaseVFS is the protobuf runtime src root fed to the proto closure walk.
 	pbRuntimeBaseVFS = source(strings.TrimSuffix(pbRuntimeBase, "/"))
 )
 
 // yaffBaseRuntimeHeaders are the includes the base YaFF C++ generator always
-// writes into <proto>.yaff.h (the plugin hardcodes GenerateProtobufApi /
-// GenerateReflectionApi / GenerateStructApi = true): see
-// library/cpp/yaff/compilation/cpp_gen.cpp GenerateHeader.
+// writes into <proto>.yaff.h (the plugin hardcodes the protobuf/reflection/struct
+// APIs on).
 var yaffBaseRuntimeHeaders = []string{
 	yaffRuntimeBase + "yaff.h",
 	yaffRuntimeBase + "struct.h",
@@ -31,8 +28,7 @@ var yaffBaseRuntimeHeaders = []string{
 }
 
 // yaffExperimentsRuntimeHeaders are the extra includes the experiments YaFF C++
-// generator appends for an EXPERIMENTAL proto: see
-// library/cpp/yaff/experiments/compilation/cpp_gen.cpp GenerateHeader.
+// generator appends for an EXPERIMENTAL proto.
 var yaffExperimentsRuntimeHeaders = []string{
 	yaffRuntimeBase + "experiments/builder.h",
 	yaffRuntimeBase + "experiments/column.h",
@@ -108,19 +104,13 @@ func protoDirectPbHIncludes(pm *IncludeParserManager, srcRel, outputRoot string)
 	return protoPbHIncludes(pm, srcRel, outputRoot, parsedIncludesHeader)
 }
 
-// protoDirectPbHResolved maps a .proto's direct imports to the generated .pb.h
-// they induce, rooting each at the IMPORTED proto's actual generated-output
-// location (found through the same -I roots protoc/our proto scan search via
+// protoDirectPbHResolved maps a .proto's direct imports to the generated .pb.h they
+// induce, rooting each at the IMPORTED proto's actual generated-output location (via
 // resolveProtoImportPath) instead of blindly prefixing the IMPORTER's own
-// PROTO_NAMESPACE. protoc writes `#include "<import>.pb.h"` verbatim and ymake
-// resolves it against the GLOBAL PROTO_NAMESPACE addincl of the imported lib, so
-// a generated header lives under the imported proto's namespace root. For a
-// same-namespace import that equals the importer's cppOutRoot (so existing
-// behavior is unchanged); for a cross-namespace import (e.g. a yp-namespace
-// proto importing yt_proto/...) prefixing cppOutRoot mis-roots the directive to
-// a non-existent output and the downstream consumer never reaches the sibling
-// header. The resolved directive is the full output rel, so the scanner binds it
-// context-free (build-includer lookupSTR) — the resolution-cache invariant holds.
+// PROTO_NAMESPACE. A same-namespace import equals the importer's cppOutRoot (behavior
+// unchanged); a cross-namespace import would otherwise mis-root to a non-existent
+// output. The resolved directive is the full output rel, so the scanner binds it
+// context-free.
 func protoDirectPbHResolved(pm *IncludeParserManager, srcRel string, searchPaths []VFS) []IncludeDirective {
 	local := pm.sourceParsedBuckets(source(srcRel), nil).bucket(parsedIncludesLocal)
 
@@ -159,10 +149,9 @@ func protoDirectPbHResolved(pm *IncludeParserManager, srcRel string, searchPaths
 // protoImportRelsToPbH maps a build-generated proto's declared direct imports
 // (OUTPUT_INCLUDES `.proto` rels) to the `.pb.h` includes a checked-in proto's
 // parse would have produced — `google/protobuf/*` to the protobuf runtime src,
-// every other import to its generated `.pb.h` under the output root. The scanner
-// resolves each through its registered `.pb.h` (whose own direct imports it then
-// walks), so only the DIRECT imports are seeded here; the transitive closure
-// (incl. the canonical descriptor) follows from the per-`.pb.h` walk.
+// every other import to its generated `.pb.h` under the output root. Only the
+// DIRECT imports are seeded here; the transitive closure follows from the scanner's
+// per-`.pb.h` walk.
 func protoImportRelsToPbH(importRels []string, outputRoot string) []IncludeDirective {
 	out := make([]IncludeDirective, 0, len(importRels))
 
@@ -191,12 +180,10 @@ func pbHEmitsIncludesExtras() []IncludeDirective {
 	return out
 }
 
-// protoWalkInputs builds the scan inputs for closing over .proto imports —
-// the FOR-proto addincl data fed to the scanner's STANDARD resolution,
-// mirroring protoc's -I set: the module's _PROTO__INCLUDE chain (own
-// PROTO_NAMESPACE included — upstream's PROTO_ADDINCL is always GLOBAL) plus
-// the protobuf runtime src ($PROTOBUF_INCLUDE_PATH, a contour config
-// constant).
+// protoWalkInputs builds the scan inputs for closing over .proto imports — the
+// FOR-proto addincl data fed to the scanner, mirroring protoc's -I set: the
+// module's _PROTO__INCLUDE chain (own PROTO_NAMESPACE included) plus the protobuf
+// runtime src.
 func protoWalkInputs(pm *IncludeParserManager, peerProtoAddIncl []VFS, ownerModuleDir string) ModuleCCInputs {
 	own := make([]VFS, 0, 1+len(peerProtoAddIncl))
 	own = append(own, pbRuntimeBaseVFS)
@@ -237,13 +224,10 @@ func resolveProtoImportPath(fs FS, importedRel string, peerProtoAddIncl []VFS) s
 		}
 	}
 
-	// Peer PROTO_NAMESPACE / PROTO_LIBRARY contributions land in protoc's -I
-	// flags (peerProtoAddIncl); mirror that here so transitive .proto inputs
-	// resolve through the same search prefix protoc does (e.g. opentelemetry's
-	// `import "opentelemetry/proto/common/v1/common.proto"` finds the file at
-	// $(S)/contrib/libs/opentelemetry-proto/opentelemetry/proto/common/v1/common.proto
-	// via the `contrib/libs/opentelemetry-proto` -I). p is already a VFS, so it
-	// keys Listdir directly — no per-candidate concat or re-intern.
+	// Peer PROTO_NAMESPACE / PROTO_LIBRARY contributions land in protoc's -I flags
+	// (peerProtoAddIncl); mirror that here so transitive .proto inputs resolve through
+	// the same search prefix protoc does. p is already a VFS, so it keys Listdir
+	// directly — no per-candidate concat or re-intern.
 	for _, p := range peerProtoAddIncl {
 		if p.isBuild() {
 			continue
@@ -298,11 +282,9 @@ type ProtoPBEmission struct {
 	relPath   string
 }
 
-// pbModuleEmission is the per-module proto emission context: the resolved
-// tool refs/binaries and the stable protoc arg blocks. Built ONCE per module
-// proto context — emitCPPProtoSrcs before its source loop,
-// emitLibraryProtoSource for its single source — and shared by every PB node
-// it emits.
+// PbModuleEmission is the per-module proto emission context: the resolved tool
+// refs/binaries and the stable protoc arg blocks. Built ONCE per module proto
+// context and shared by every PB node it emits.
 type PbModuleEmission struct {
 	protocLDRef        NodeRef
 	cppStyleguideLDRef NodeRef
@@ -350,11 +332,10 @@ func newPBModuleEmission(ctx *GenCtx, d *ModuleData, cfg ProtoPBConfig, protoInc
 
 func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, cfg ProtoPBConfig, pe *PbModuleEmission, peerProtoAddIncl []VFS, sprotoProduced map[string]struct{}) ProtoPBEmission {
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcRel)
-	// Search transitive .proto imports through the same -I prefixes protoc
-	// receives: the own PROTO_NAMESPACE (cppOutRoot) plus every peer-contributed
-	// proto namespace. Without the own namespace, opentelemetry-proto's
-	// `import "opentelemetry/proto/common/v1/common.proto"` from resource.proto
-	// would not resolve, even though protoc handles it via -I=$(S)/cppOutRoot.
+	// Search transitive .proto imports through the same -I prefixes protoc receives:
+	// the own PROTO_NAMESPACE (cppOutRoot) plus every peer-contributed proto namespace.
+	// Without the own namespace, an import naming a same-namespace sibling would not
+	// resolve, even though protoc handles it via -I=$(S)/cppOutRoot.
 	protoSearchPaths := peerProtoAddIncl
 
 	if cfg.cppOutRoot != "" {
@@ -364,13 +345,11 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 	protoVFS := source(protoRelPath)
 	transitiveImports := walkClosureTail(ctx.scannerFor(instance), protoVFS, protoWalkInputs(ctx.parsers, protoSearchPaths, instance.Path.rel()).ScanCfg)
 
-	// SRCS(X.proto) may name a build-generated .proto (e.g. jsonpath's
-	// RUN_ANTLR -language protobuf emits JsonPathParser.proto with no source
-	// committed). Without rewiring, EmitPB would feed protoc the source-rooted
-	// path and miss the producer dep, leaving the JV(.proto) unreachable from
-	// the LD root after finalize-DFS. Look the proto up in the codegen
-	// registry: if present, swap srcVFS to the build path and pin the
-	// producer ref as a PB dep.
+	// SRCS(X.proto) may name a build-generated .proto (e.g. a RUN_ANTLR-emitted
+	// .proto with no source committed). Without rewiring, EmitPB would feed protoc the
+	// source-rooted path and miss the producer dep, leaving the proto node unreachable
+	// from the LD root after finalize-DFS. Look the proto up in the codegen registry:
+	// if present, swap srcVFS to the build path and pin the producer ref as a PB dep.
 	var protoSrcOverride VFS
 	var extraProtoDeps []NodeRef
 	var protoProducerSourceInputs []VFS
@@ -382,10 +361,10 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		protoSrcOverride = buildProto
 		extraProtoDeps = []NodeRef{info.ProducerRef}
 
-		// Upstream's flat-input model folds the generated `.proto` producer's full
-		// transitive $(S) closure (its OUTPUT_INCLUDES protos and their imports) onto
-		// the protoc PB node, exactly as on the py PB / py3cc nodes. Prefer the full
-		// closure; fall back to the direct-leaf SourceInputs when none was recorded.
+		// The flat-input model folds the generated `.proto` producer's full transitive
+		// $(S) closure (its OUTPUT_INCLUDES protos and their imports) onto the protoc PB
+		// node. Prefer the full closure; fall back to the direct-leaf SourceInputs when
+		// none was recorded.
 		protoProducerSourceInputs = info.SourceInputs
 
 		if len(info.ProducerSourceClosure) > 0 {
@@ -397,12 +376,11 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		genProtoImportRels = info.ProtoImportRels
 	}
 
-	// A build-rooted generated transitive import (e.g. a GZT-converted .proto this
-	// PB source imports) is produced by its own GZ/codegen node; pin that producer
-	// as a PB dep so the generated .proto and its producer-source closure stay
-	// reachable from the LD root. Upstream's flat graph carries these producer
-	// edges (the raw blender_setup.pb.h record has 4 deps to our 2). deps are not a
-	// dumpContentFields member, so this is Merkle-graph parity, not a --pair input.
+	// A build-rooted generated transitive import (e.g. a GZT-converted .proto this PB
+	// source imports) is produced by its own codegen node; pin that producer as a PB
+	// dep so the generated .proto and its producer-source closure stay reachable from
+	// the LD root. deps are not a dumpContentFields member, so this is Merkle-graph
+	// parity, not a --pair input.
 	extraProtoDeps = append(extraProtoDeps,
 		resolveCodegenDepRefs(ctx, instance, transitiveImports, extraProtoDeps...)...)
 
@@ -459,11 +437,10 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 
 		pbHImports := directImports
 
-		// YMAPS_SPROTO's SET(PROTO_HEADER_EXTS .pb.h .sproto.h): in a maps sproto
-		// module, the generated .pb.h additionally #includes the .sproto.h sibling
-		// of every imported proto whose .sproto.h this module produces, so a
-		// consumer of pb.h (e.g. response.pb.cc.o) reaches the generated .sproto.h
-		// and — through its sprotoc GeneratorRef — the sproto runtime headers.
+		// In a sproto module the generated .pb.h additionally #includes the .sproto.h
+		// sibling of every imported proto whose .sproto.h this module produces, so a
+		// consumer of pb.h reaches the generated .sproto.h and — through its sprotoc
+		// GeneratorRef — the sproto runtime headers.
 		if siblings := sprotoSiblingDirectives(directImports, sprotoProduced); len(siblings) > 0 {
 			pbHImports = append(append([]IncludeDirective(nil), directImports...), siblings...)
 		}
@@ -474,13 +451,13 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		pbHParsed = append(pbHParsed, extras...)
 
 		for _, ti := range transitiveImports {
-			// A build-generated transitive import (e.g. a peer .gztproto's generated
-			// .proto) is a codegen intermediate: it is a real protoc input on THIS PB
-			// node, but a unit that #includes this .pb.h reaches the import's
-			// pre-generation SOURCE (the .gztproto, riding as a pb.h closure leaf via
-			// protoProducerSourceInputs), not the $(B) .proto. Emitting the $(B) path
-			// here would drag the generated .proto into every consumer's compile,
-			// which upstream does not. Source-rooted imports ride through unchanged.
+			// A build-generated transitive import (a peer .gztproto's generated
+			// .proto) is a codegen intermediate: a real protoc input on THIS PB node,
+			// but a unit that #includes this .pb.h reaches the import's pre-generation
+			// SOURCE (riding as a pb.h closure leaf via protoProducerSourceInputs), not
+			// the $(B) .proto. Emitting the $(B) path here would drag the generated
+			// .proto into every consumer's compile. Source-rooted imports ride through
+			// unchanged.
 			if ti.isBuild() {
 				continue
 			}
@@ -490,7 +467,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 
 		// protoc induces the protobuf runtime headers; for a grpc service the
 		// grpc_cpp plugin induces the grpcpp service headers too. Both via
-		// GeneratorRefs (type-split by output kind) instead of hand-woven lists.
+		// GeneratorRefs, type-split by output kind.
 		pbGenRefs := []NodeRef{pe.protocLDRef, pe.cppStyleguideLDRef}
 
 		if cfg.grpc {
@@ -507,14 +484,11 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 
 		// The source a generated header is produced FROM is a real input of every
 		// unit that includes that header — a generated-from edge, not a C++ include.
-		// Ride it as a non-expanded closure leaf of pb.h (everything reaches pb.h:
-		// pb.cc/grpc include it, consumers include it), instead of the old fake
-		// `#include "X.proto"` that also dragged the $(B) generated .proto into the
-		// closure. For a real $(S) .proto that source is the .proto itself; for a
-		// generated $(B) .proto (protoSrcOverride != 0) the .proto is a codegen
-		// intermediate (reached via the producer dep edge), so ride the generator's
-		// own $(S) sources instead — the grammar/template/tool/scripts that
-		// produced it (protoProducerSourceInputs = the $(B) .proto's SourceInputs).
+		// Ride it as a non-expanded closure leaf of pb.h (everything reaches pb.h).
+		// For a real $(S) .proto that source is the .proto itself; for a generated
+		// $(B) .proto (protoSrcOverride != 0) the .proto is a codegen intermediate
+		// reached via the producer dep edge, so ride the generator's own $(S) sources
+		// instead (protoProducerSourceInputs).
 		{
 			reg := codegenRegForInstance(ctx, instance)
 
@@ -528,13 +502,12 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 
 			// The YaFF protoc plugin emits a <proto>.yaff.h / .yaff.cpp pair off the
 			// same PB node. The header #includes the yaff runtime + the proto's own
-			// .pb.h (+ the experiments runtime for an EXPERIMENTAL proto); register
-			// it so a unit that includes the generated yaff header rides that
-			// closure, and register the .yaff.cpp which includes the header. The
-			// .yaff.h / .yaff.cpp are protoc outputs, so protoc's INDUCED_DEPS ride
-			// them via GeneratorRefs (header bucket for .yaff.h, cpp bucket for
-			// .yaff.cpp — the latter is how wire_format.h, a cpp-only induced dep,
-			// reaches the .yaff.cpp.o closure, exactly as it does for .pb.cc).
+			// .pb.h (+ the experiments runtime for an EXPERIMENTAL proto); register it
+			// so a unit including the yaff header rides that closure, and register the
+			// .yaff.cpp which includes the header. Both are protoc outputs, so protoc's
+			// INDUCED_DEPS ride them via GeneratorRefs (header bucket for .yaff.h, cpp
+			// bucket for .yaff.cpp — the latter carries a cpp-only induced dep into the
+			// .yaff.cpp.o closure, as for .pb.cc).
 			protoBaseName := filepath.Base(protoRelPath)
 
 			for _, plugin := range d.cppProtoPlugins {
@@ -545,8 +518,8 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 				yaffH := build(protoBase + plugin.OutputSuffixes[0])
 				yaffCC := build(protoBase + plugin.OutputSuffixes[1])
 
-				// Upstream NeedToProcessFile: a YaFF output outside the FILES
-				// whitelist is opened but written empty, so it carries no closure.
+				// A YaFF output outside the FILES whitelist is opened but written
+				// empty, so it carries no closure.
 				var yaffHParsed []IncludeDirective
 
 				if plugin.processesFile(protoBaseName) {
@@ -556,15 +529,13 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 				registerBoundGeneratedParsedOutput(ctx, instance, pkPB, yaffH, yaffHParsed, pbRef, nil)
 
 				// The .yaff.cpp wraps `#include "<stem>.yaff.h"`, but the protoc command
-				// floats the proto's own .pb.h to the front as its MAIN output
-				// (${main;…:.pb.h}); every sibling output (incl. .yaff.cpp) rides that
-				// main output via EDT_OutTogether (json_visitor PrepareLeaving), expanded
-				// — so the .yaff.cpp.o carries .pb.h plus its producer-source bundle
-				// (.proto closure-leaf + cpp_proto_wrapper.py). For a FILES-whitelisted
-				// proto the non-empty .yaff.h already #includes .pb.h (this dedupes); for
-				// a non-whitelisted proto the .yaff.h is empty, so OutTogether is the only
-				// path. Mirrors emit_pr.go's main-output ride; modeled as a parsed include
-				// because .pb.h carries its own window (wrapper, .proto) that must expand.
+				// floats the proto's own .pb.h to the front as its MAIN output; every
+				// sibling output (incl. .yaff.cpp) rides that main output via OutTogether,
+				// expanded — so the .yaff.cpp.o carries .pb.h plus its producer-source
+				// bundle. For a FILES-whitelisted proto the non-empty .yaff.h already
+				// #includes .pb.h (this dedupes); for a non-whitelisted proto the .yaff.h
+				// is empty, so OutTogether is the only path. Modeled as a parsed include
+				// because .pb.h carries its own window that must expand.
 				yaffCCParsed := []IncludeDirective{
 					{kind: includeQuoted, target: internStr(yaffH.rel())},
 					{kind: includeQuoted, target: internStr(pbH.rel())},
@@ -654,11 +625,11 @@ func emitProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCont
 }
 
 func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerContribs PeerGlobalContribs, protoSrcs, evSrcs, gztSrcs []string) *ProtoSrcsResult {
-	// Source FIFO position of each direct SRC: ymake queues a .proto/.ev command's
-	// generated .pb.cc back into the module source list at the source's declaration
-	// position, so equal-priority proto/ev generated compiles archive interleaved
-	// by SRCS textual order (not grouped proto-then-ev). Gzt-generated protos run a
-	// deeper round and sort after all direct sources (declIdx >= len(d.srcs)).
+	// Source FIFO position of each direct SRC: a .proto/.ev command's generated
+	// .pb.cc is queued back into the module source list at the source's declaration
+	// position, so equal-priority proto/ev generated compiles archive interleaved by
+	// SRCS textual order. Gzt-generated protos run a deeper round and sort after all
+	// direct sources (declIdx >= len(d.srcs)).
 	srcDeclIdx := make(map[string]int, len(d.srcs))
 
 	for i, src := range d.srcs {
@@ -667,9 +638,9 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		}
 	}
 
-	// _SRC("gztproto"): run dict/gazetteer/converter to produce <base>.proto, then
-	// compile the generated .proto through the ordinary protoc path below (it is
-	// picked up via the codegen-registry protoSrcOverride lookup in emitProtoPB).
+	// A .gztproto runs a converter to produce <base>.proto, then compiles the
+	// generated .proto through the ordinary protoc path below (picked up via the
+	// codegen-registry protoSrcOverride lookup in emitProtoPB).
 	for i, gztSrc := range gztSrcs {
 		_, genProtoSrc := emitLibraryGztProtoSource(ctx, instance, d, gztSrc, peerContribs.protoInclude, tagCppProto)
 		protoSrcs = append(protoSrcs, genProtoSrc)
@@ -708,10 +679,10 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 
 	cppInstance := instance
 
-	// The set of protos whose .sproto.h this module produces (YMAPS_SPROTO). Known
-	// before the PB loop so pb.h registration can add the .sproto.h sibling header;
-	// the producer nodes themselves are emitted after the loop (their input closure
-	// reaches imported .pb.h, which must be registered first).
+	// The set of protos whose .sproto.h this module produces. Known before the PB
+	// loop so pb.h registration can add the .sproto.h sibling header; the producer
+	// nodes are emitted after the loop (their input closure reaches imported .pb.h,
+	// which must be registered first).
 	sprotoProduced := ymapsSprotoProducedBases(ctx, instance, d)
 
 	pe := newPBModuleEmission(ctx, d, cfg, peerContribs.protoInclude)
@@ -780,10 +751,10 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	}
 
 	// Interleave proto and ev generated members by SRCS declaration order (the
-	// ymake source-FIFO queue position), the way upstream archives them. Stable so
-	// each proto's own orderedCC members (.pb.cc, .grpc.pb.cc, plugin .cpp) keep
-	// their relative order, and gzt-generated protos (declIdx >= len(d.srcs)) stay
-	// at the tail.
+	// source-FIFO queue position), the way upstream archives them. Stable so each
+	// proto's own orderedCC members (.pb.cc, .grpc.pb.cc, plugin .cpp) keep their
+	// relative order, and gzt-generated protos (declIdx >= len(d.srcs)) stay at the
+	// tail.
 	sort.SliceStable(codegenOutputs, func(i, j int) bool {
 		return codegenOutputs[i].declIdx < codegenOutputs[j].declIdx
 	})
@@ -822,10 +793,9 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		ModuleTag:            tagCppProto,
 	}
 	// The generated .pb.cc compiles here under the CPP_PROTO submodule. A plugin
-	// well-known header it pulls in via a rooted induced-dep (apphost cow
-	// *.cow.pb.h) is first-claimed by this module; carry the cpp_proto tag so the
-	// claim re-attributes the producer node's module_dir AND module_tag (upstream
-	// Node2Module dir+tag inheritance).
+	// well-known header it pulls in via a rooted induced-dep is first-claimed by this
+	// module; carry the cpp_proto tag so the claim re-attributes the producer node's
+	// module_dir AND module_tag (Node2Module dir+tag inheritance).
 	moduleInputs.ScanCfg.OwnerModuleTag = tagCppProto
 	moduleInputs.CCBlocks = composeCCModuleArgBlocks(ctx.na, cppInstance.Platform, &moduleInputs)
 
@@ -834,10 +804,10 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 
 	// arDeclMeta carries each archive member's AR-ordering key so reorderARMembers
 	// merges proto/ev codegen, RUN_ANTLR .cpp, and enum-serialization members into
-	// one ymake-faithful order. Proto/ev .pb.cc are first-level generated compiles
-	// queued in the prio-4 SRCS band (seq = SRCS declaration index → preserves the
-	// T-131 interleave; gzt-generated protos carry a tail declIdx). reorderARMembers
-	// is stable, so each proto's orderedCC members keep their relative order.
+	// one faithful order. Proto/ev .pb.cc are first-level generated compiles queued in
+	// the prio-4 SRCS band (seq = SRCS declaration index → preserves the interleave;
+	// gzt-generated protos carry a tail declIdx). reorderARMembers is stable, so each
+	// proto's orderedCC members keep their relative order.
 	arDeclMeta := map[VFS]SrcMeta{}
 
 	wireFormatVFS := source(pbRuntimeBase + "google/protobuf/wire_format.h")
@@ -866,12 +836,11 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		}
 
 		// A YaFF .yaff.cpp is a thin protoc-plugin wrapper whose only content is
-		// `#include "<stem>.yaff.h"` (by basename). Upstream resolves that sibling
-		// header for its transitive closure but does not record it as a compile
-		// input; drop the self header from the walked closure (the .pb.h / yaff
-		// runtime closure was already walked through it and survives). wire_format.h
-		// rides in from protoc's INDUCED_DEPS(cpp …) on the .yaff.cpp output (the
-		// yaffCC GeneratorRefs), not a hand-woven append.
+		// `#include "<stem>.yaff.h"` (by basename). That sibling header is resolved
+		// for its transitive closure but not recorded as a compile input; drop the
+		// self header from the walked closure (the .pb.h / yaff runtime closure was
+		// already walked through it and survives). The cpp-only induced dep rides in
+		// from protoc's INDUCED_DEPS(cpp …) on the .yaff.cpp output.
 		if strings.HasSuffix(co.srcRel, ".yaff.cpp") {
 			selfH := build(strings.TrimSuffix(co.pbCC.rel(), ".cpp") + ".h")
 			filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
@@ -897,10 +866,10 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	enRes := emitEnumSrcs(ctx, instance, d, peerContribs.addIncl, &moduleInputs)
 
 	if enRes != nil {
-		// External/source-header EN (first-level, prio-2 declaration band) archives
-		// ahead of this module's proto .pb.cc.o; a same-module generated-.pb.h EN is
-		// second-level and archives after every first-level member. reorderARMembers
-		// places both from these keys.
+		// External/source-header EN (first-level, prio-2 band) archives ahead of this
+		// module's proto .pb.cc.o; a same-module generated-.pb.h EN is second-level
+		// and archives after every first-level member. reorderARMembers places both
+		// from these keys.
 		for i := range enRes.CCRefs {
 			ccRefs = append(ccRefs, enRes.CCRefs[i])
 			ccOutputs = append(ccOutputs, enRes.CCOutputs[i])
@@ -908,18 +877,10 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		}
 	}
 
-	// RUN_ANTLR(... OUT *.cpp ...) inside a PROTO_LIBRARY's IF(GEN_PROTO)
-	// block: upstream auto-promotes those .cpp outputs to SRCS. Compile each
-	// here and archive the .o alongside .pb.cc.o (jsonpath:
-	// JsonPathParser.cpp / JsonPathLexer.cpp from the second RUN_ANTLR land
-	// in libproto_ast-gen-jsonpath.a).
-	//
-	// These ANTLR .cpp objects are ordinary translation units (the "regular"
-	// archive phase) and upstream orders them BEFORE the proto .pb.cc.o objects
-	// (the proto-codegen phase): the reference jsonpath AR is
-	// [JsonPathParser.cpp.o, JsonPathLexer.cpp.o, JsonPathParser.pb.cc.o].
-	// Collect them separately and prepend, leaving the proto/enum objects built
-	// above in their existing relative order.
+	// RUN_ANTLR(... OUT *.cpp ...) inside a PROTO_LIBRARY's IF(GEN_PROTO) block
+	// auto-promotes those .cpp outputs to SRCS. As ordinary translation units they are
+	// ordered BEFORE the proto .pb.cc.o objects: compile each here, collect separately,
+	// and prepend, leaving the proto/enum objects in their existing relative order.
 	var antlrRefs []NodeRef
 	var antlrOutputs []VFS
 
@@ -944,8 +905,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 				antlrRefs = append(antlrRefs, ccRef)
 				antlrOutputs = append(antlrOutputs, ccOut)
 				// RUN_ANTLR .cpp is a first-level generated compile queued in its
-				// prio-2 declaration band — ahead of the proto .pb.cc.o (prio-4 SRCS
-				// band), matching the reference jsonpath AR.
+				// prio-2 band — ahead of the proto .pb.cc.o (prio-4 SRCS band).
 				arDeclMeta[ccOut] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
 			}
 		}
@@ -971,24 +931,13 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	return &ProtoSrcsResult{ARRef: arRef, ARPath: &archivePath}
 }
 
-// emitProtoProducer emits the PB node for one LIBRARY-hosted .proto (source or
-// gzt-generated) and registers its .pb.h/.pb.cc outputs in the codegen registry.
-// Run in a pre-pass over every module .proto before any proto CC closure is
-// walked, so a .proto importing a LATER-declared same-module sibling resolves the
-// sibling's generated .pb.h — the two-phase shape PROTO_LIBRARY uses in
-// emitCPPProtoSrcs (register every pb.h, then compile) and the .fbs/bison
-// pre-passes in gen.go. emitLibraryProtoSource then compiles against the complete
-// registry, mirroring emitFlatcProducer / emitLibraryFlatcSource.
-//
-// A LIBRARY-hosted .proto compiles identically to one in a PROTO_LIBRARY:
-// PROTO_NAMESPACE roots the protoc output/import roots (cppOutRoot). A peer that
-// re-declares the namespace re-contributes its `FOR proto $(S)/<ns>` addincl,
-// which rides the peers-only _PROTO__INCLUDE band at its encounter position
-// (in.ProtoIncludePeers), exactly as the PROTO_LIBRARY path. GRPC() additionally
-// enables the grpc_cpp protoc plugin (build/conf/proto.conf): the producer gains
-// .grpc.pb.{cc,h} outputs + the plugin tool input, and the generated .grpc.pb.cc
-// compiles into the module archive — exactly as a PROTO_LIBRARY() does in
-// emitCPPProtoSrcs.
+// emitProtoProducer emits the PB node for one LIBRARY-hosted .proto and registers
+// its .pb.h/.pb.cc outputs. Run in a pre-pass before any proto CC closure is walked,
+// so a .proto importing a LATER-declared same-module sibling resolves the sibling's
+// generated .pb.h (register every pb.h, then compile). A LIBRARY-hosted .proto
+// compiles identically to one in a PROTO_LIBRARY: PROTO_NAMESPACE roots the
+// output/import roots (cppOutRoot); GRPC() additionally enables the grpc_cpp plugin,
+// adding .grpc.pb.{cc,h} outputs that compile into the archive.
 func emitProtoProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) {
 	cfg := ProtoPBConfig{
 		cppOutRoot: protoCPPOutRoot(d),
@@ -999,9 +948,9 @@ func emitProtoProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcR
 }
 
 func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
-	// The PB producer was emitted+registered by emitProtoProducer (the gen.go
-	// pre-pass, or emitLibraryGztProtoCompile for a gzt-generated .proto); take its
-	// ref from the codegen registry and compile the generated .pb.cc.
+	// The PB producer was emitted+registered by emitProtoProducer (the pre-pass, or
+	// emitLibraryGztProtoCompile for a gzt-generated .proto); take its ref from the
+	// codegen registry and compile the generated .pb.cc.
 	protoBase := strings.TrimSuffix(protoSourceRelPath(ctx.fs, instance, d, srcRel), ".proto")
 	pbRef := codegenRegForInstance(ctx, instance).lookup(build(protoBase + ".pb.cc")).ProducerRef
 

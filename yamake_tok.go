@@ -1,7 +1,6 @@
 package main
 
-// tokName maps each TOK to its interned macro-name STR; TOK.String() resolves it
-// through the global intern table.
+// tokName maps each TOK to its interned macro-name STR.
 var tokName = [...]STR{
 	tokInvalid:                            0,
 	tokAddInclSelf:                        internStr("ADDINCLSELF"),
@@ -194,10 +193,9 @@ var tokName = [...]STR{
 	tokYqlUdfContrib:                   kwYQL_UDF_CONTRIB,
 	tokYqlUdfYdb:                       kwYQL_UDF_YDB,
 
-	// sg7 stage-1 stub macros: registered so the closed TOK set tokenizes them;
-	// acknowledged as no-ops in acknowledgedMacros (graph-node modelling is the
-	// node-count convergence step). STYLE_DETEKT (kotlin lint) / DEFAULT_JDK_VERSION
-	// (java) are genuinely inert for a C++/Python target.
+	// Stub macros: registered so the closed TOK set tokenizes them; acknowledged
+	// as no-ops in acknowledgedMacros. STYLE_DETEKT (kotlin lint) /
+	// DEFAULT_JDK_VERSION (java) are inert for a C++/Python target.
 	tokAllResourceFiles:      internStr("ALL_RESOURCE_FILES"),
 	tokArchiveByKeys:         internStr("ARCHIVE_BY_KEYS"),
 	tokBisonFlags:            internStr("BISON_FLAGS"),
@@ -226,10 +224,9 @@ var tokByName = func() map[string]TOK {
 	return m
 }()
 
-// TOK is the numeric identity of a ya.make macro/directive name (the parser's
-// macro tokens). The set is closed: every macro name the parser emits as a
-// ModuleStmt/UnknownStmt has a TOK, interned at parse via internTok (fail-fast on
-// an unknown name). tokName recovers the string via the global intern table.
+// TOK is the numeric identity of a build-file macro/directive name. The set is
+// closed: every macro name the parser emits has a TOK, interned at parse via
+// internTok (fail-fast on an unknown name). tokName recovers the string.
 type TOK uint16
 
 const (
@@ -424,7 +421,7 @@ const (
 	tokYqlUdfContrib
 	tokYqlUdfYdb
 
-	// sg7 stage-1 stub macros (see tokName block and acknowledgedMacros).
+	// Stub macros (see tokName block and acknowledgedMacros).
 	tokAllResourceFiles
 	tokArchiveByKeys
 	tokBisonFlags
@@ -441,8 +438,8 @@ const (
 	tokYmapsSproto
 )
 
-// internTok maps a macro name to its TOK; the set is closed, so an unknown name
-// is a parser/corpus gap and fails fast.
+// internTok maps a macro name to its TOK; the closed set means an unknown name
+// fails fast.
 func internTok(s string) TOK {
 	if t, ok := tokByName[s]; ok {
 		return t
@@ -453,8 +450,8 @@ func internTok(s string) TOK {
 	return tokInvalid
 }
 
-// str returns the interned macro-name STR for this TOK — a free conversion
-// (tokName is []STR), uniform with ARG/ENV/VFS str() for cmd-arg assembly.
+// str returns the interned macro-name STR for this TOK — a free conversion,
+// uniform with ARG/ENV/VFS str().
 func (t TOK) str() STR {
 	return tokName[t]
 }
@@ -463,8 +460,7 @@ func (t TOK) string() string {
 	return tokName[t].string()
 }
 
-// String implements fmt.Stringer — the fmt machinery finds it by name;
-// internal code calls string().
+// String implements fmt.Stringer; internal code calls string().
 func (t TOK) String() string {
 	return t.string()
 }

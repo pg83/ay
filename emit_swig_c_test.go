@@ -6,8 +6,8 @@ import (
 )
 
 func TestSwigParser_ImplicitIncludesOnRootSwg(t *testing.T) {
-	// A root .swg outside the swig library carries the implicit language
-	// runtimes as its own system directives (upstream AddImplicitIncludes).
+	// A root .swg outside the swig library carries the implicit language runtimes
+	// as its own system directives.
 	set := SwigIncludeDirectiveParser{}.parse("mod/src.swg", []byte("%include \"local.i\"\n"), newBumpAllocator[IncludeDirective](directiveBlockHint))
 	local := set.bucket(parsedIncludesLocal)
 
@@ -55,12 +55,11 @@ func TestCollectSwigInducedIncludes_UnionAcrossClosure(t *testing.T) {
 	})
 
 	ctx := &GenCtx{fs: fs, parsers: newIncludeParserManagerFS(fs, newSharedParseCache())}
-	// The closure files, hand-listed: collectSwigInducedIncludes runs after the
-	// walk has parsed them (here the parse-cache warms on first read).
+	// The closure files, hand-listed; collectSwigInducedIncludes runs after the
+	// walk has parsed them (the parse-cache warms on first read).
 	closure := []VFS{intern("$(S)/mod/local.i"), intern("$(S)/mod/nested.i")}
 	got := collectSwigInducedIncludes(ctx, intern("$(S)/mod/src.swg"), closure)
-	// Raw union, root first then closure order; cross-file repeats stay (the
-	// consumer-side resolve caches and closure dedup absorb them).
+	// Raw union, root first then closure order; cross-file repeats stay.
 	want := []IncludeDirective{
 		{kind: includeSystem, target: internStr("Python.h")},
 		{kind: includeQuoted, target: internStr("archive.h")},

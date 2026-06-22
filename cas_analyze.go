@@ -12,11 +12,10 @@ import (
 	"sync/atomic"
 )
 
-// cmdCasAnalyze handles `ay dev cas <sub> …`. The only sub is `analyze`: it
-// estimates how much the (already whole-file-deduplicated) CAS would shrink if its
-// files were split into variable-size, content-defined chunks — the rsync rolling-
-// hash idea, a.k.a. content-defined chunking — and identical chunks shared across
-// files. A pure read-only analysis; it never touches the store.
+// cmdCasAnalyze handles the `analyze` sub: it estimates how much the
+// (already whole-file-deduplicated) CAS would shrink under content-defined
+// chunking with identical chunks shared across files. Read-only; never touches
+// the store.
 func cmdCasAnalyze(_ GlobalFlags, args []string) int {
 	if len(args) == 0 || args[0] != "analyze" {
 		throwFmt("usage: ay dev cas analyze [--chunk=N] <cas-dir>")
@@ -51,7 +50,7 @@ func cmdCasAnalyze(_ GlobalFlags, args []string) int {
 }
 
 // casAnalyze chunks every CAS file of at least minLen bytes; smaller files are
-// skipped and excluded from every stat (the counts are over accounted files only).
+// skipped and excluded from every stat.
 func casAnalyze(casDir string, chunkAvg int, minLen int64) int {
 	type chunkInfo struct {
 		hash [32]byte
@@ -63,8 +62,7 @@ func casAnalyze(casDir string, chunkAvg int, minLen int64) int {
 
 	var files atomic.Int64
 
-	// Lister: one goroutine walks the tree and feeds the accounted files (regular,
-	// >= minLen) to the workers.
+	// Lister: walks the tree, feeds accounted files (regular, >= minLen) to workers.
 	go func() {
 		defer close(fileCh)
 
@@ -88,7 +86,7 @@ func casAnalyze(casDir string, chunkAvg int, minLen int64) int {
 		})
 	}()
 
-	// Workers: N chunkers read a file, split it, hash each chunk, stream the hashes.
+	// Workers: read a file, split it, hash each chunk, stream the hashes.
 	var wg sync.WaitGroup
 
 	for i := 0; i < runtime.NumCPU(); i++ {
@@ -116,8 +114,7 @@ func casAnalyze(casDir string, chunkAvg int, minLen int64) int {
 		close(hashCh)
 	}()
 
-	// Main: sole owner of the dedup set; builds every stat from the hash stream
-	// (totalBytes is the sum of chunk sizes, i.e. the accounted files' total).
+	// Main: sole owner of the dedup set; builds every stat from the hash stream.
 	seen := make(map[[32]byte]struct{})
 
 	var totalBytes, totalChunks, uniqueBytes int64
@@ -141,8 +138,8 @@ func casAnalyze(casDir string, chunkAvg int, minLen int64) int {
 	filesN := files.Load()
 	uniqueChunks := int64(len(seen))
 
-	// A chunked store keeps the unique chunk bodies plus, per chunk occurrence, a
-	// reference (the chunk's 32-byte hash) in the file's chunk list.
+	// A chunked store keeps unique chunk bodies plus a 32-byte hash ref per
+	// chunk occurrence.
 	const refBytes = 32
 
 	refOverhead := totalChunks * refBytes
@@ -170,10 +167,10 @@ func casAnalyze(casDir string, chunkAvg int, minLen int64) int {
 }
 
 // cdcChunks splits data into content-defined chunks averaging ~avg bytes, calling
-// yield for each. A boundary is cut where a gear rolling hash (FastCDC-style) over
-// the recent bytes hits 0 mod avg, bounded by [avg/4, avg*8]. Because the boundary
-// depends only on local content, identical regions cut identically regardless of
-// edits elsewhere — the property that lets chunks dedup across files.
+// yield for each. A boundary cuts where a gear rolling hash hits 0 mod avg,
+// bounded by [avg/4, avg*8]. The boundary depends only on local content, so
+// identical regions cut identically regardless of edits elsewhere — letting
+// chunks dedup across files.
 func cdcChunks(data []byte, avg int, yield func([]byte)) {
 	minSize := avg / 4
 
@@ -208,8 +205,8 @@ func cdcChunks(data []byte, avg int, yield func([]byte)) {
 	}
 }
 
-// gearTable maps each byte to a fixed pseudo-random 64-bit value for the gear hash,
-// seeded deterministically (splitmix64) so chunk boundaries are stable across runs.
+// gearTable maps each byte to a fixed pseudo-random 64-bit value for the gear
+// hash, seeded deterministically so chunk boundaries are stable across runs.
 var gearTable = func() [256]uint64 {
 	var t [256]uint64
 

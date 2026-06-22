@@ -94,8 +94,8 @@ func TestAsError_NilExceptionIsNilError(t *testing.T) {
 	}
 }
 
-// Error/Unwrap are the stdlib-interface wrappers over error()/unwrap(): the
-// errors.Is/As chain and %v formatting must see through an *Exception.
+// Error/Unwrap wrap error()/unwrap(): errors.Is/As and %v must see through an
+// *Exception.
 func TestException_ErrorsChainAndFormatting(t *testing.T) {
 	sentinel := errors.New("root cause")
 	exc := try(func() { throw(fmt.Errorf("wrapped: %w", sentinel)) })

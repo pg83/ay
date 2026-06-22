@@ -72,11 +72,10 @@ func TestParseSysInclYAML_Synthetic(t *testing.T) {
 	}
 }
 
-// TestSysInclMuslGating pins the upstream sysincl gating: the musl libc/stl
-// sysincl files load only under MUSL=yes (build/conf/sysincl.conf:52 and
-// build/ymake.core.conf:349). A glibc build (MUSL unset) must not pull them in
-// — otherwise a bare <stdlib.h> remaps into contrib/libs/musl and drags the
-// musl header tree (and its <alloca.h>) into a non-musl closure.
+// TestSysInclMuslGating pins the sysincl gating: the musl libc/stl files load
+// only under MUSL=yes. A glibc build (MUSL unset) must not pull them in, or a
+// bare <stdlib.h> remaps into musl and drags the musl header tree into a
+// non-musl closure.
 func TestSysInclMuslGating(t *testing.T) {
 	muslFiles := []string{
 		"libc-to-musl.yml",
@@ -108,7 +107,7 @@ func TestSysInclMuslGating(t *testing.T) {
 		}
 	}
 
-	// musl on x86_64: libc-to-musl + linux-musl + libc-musl-libcxx; not the aarch64 variant.
+	// musl on x86_64: the x86_64 files, not the aarch64 variant.
 	gotX := selected(SysInclEnv{arch: "x86_64", musl: true})
 
 	for _, f := range []string{"libc-to-musl.yml", "linux-musl.yml", "libc-musl-libcxx.yml"} {
@@ -133,18 +132,15 @@ func TestSysInclMuslGating(t *testing.T) {
 	}
 }
 
-// TestSysInclInternalGating pins the upstream internal-sysincl gating: the files
-// under build/internal/sysincl are a curated, config-gated list (build/internal/
-// conf/sysincl.conf + project_specific/{smart_devices,maps/mapkit}.conf), not the
-// whole directory. actions_zephyr.yml loads only under OS_ZEPHYR && ARCH_ARM_ATS3089P
-// (smart_devices.conf:22), so a native linux build must NOT pull it in — otherwise
-// its broad ^(alice|util|contrib|…) source_filter remaps stdint.h/time.h/pthread.h/
-// syscall.h to Zephyr headers, polluting ordinary C++ closures (e.g. adfox/amacs).
-// smart_devices_linux.yml DOES load on OS_LINUX, and its source_filter still scopes
-// per includer path.
+// TestSysInclInternalGating pins the internal-sysincl gating: the internal files
+// are a curated, config-gated list, not the whole directory. actions_zephyr.yml
+// loads only under OS_ZEPHYR, so a native linux build must NOT pull it in — its
+// broad source_filter would remap common libc headers to Zephyr headers,
+// polluting ordinary C++ closures. smart_devices_linux.yml DOES load on OS_LINUX,
+// and its source_filter still scopes per includer path.
 func TestSysInclInternalGating(t *testing.T) {
 	fs := newMemFS(map[string]string{
-		// base dir must exist (loadSysInclSetForFS guards on it) — one trivial file.
+		// base dir must exist (the loader guards on it) — one trivial file.
 		"build/sysincl/macro.yml": "# empty\n",
 		// gated OUT on linux (OS_ZEPHYR-only).
 		"build/internal/sysincl/actions_zephyr.yml": "" +
@@ -299,8 +295,7 @@ func TestLiteralAltsFromRegex_BailsOnNonLiteral(t *testing.T) {
 	}
 }
 
-// recMapping reads a record's last-wins mapping for k (the pre-pairs tests
-// asserted via the staging map).
+// recMapping reads a record's last-wins mapping for k.
 func recMapping(r SysIncl, k string) ([]VFS, bool) {
 	id := internStr(k)
 

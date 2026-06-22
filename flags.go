@@ -18,11 +18,8 @@ var xclangDebugCompilationDir = []ARG{
 	argTmp,
 }
 
-// commonCFlags / x86TargetCFlags are the debug-build C flag vectors with the
-// debug-info group factored out: the bundle is composed as Pre + Platform.
-// DebugInfoFlags + Post (see composeCompileCFlags), so the debug-info flags
-// (-g, optional -gz=zstd, …) land in their natural slot by construction rather
-// than being spliced in afterward.
+// Debug-build C flag vectors with the debug-info group factored out: composed as
+// Pre + DebugInfoFlags + Post, so the debug-info flags land in their natural slot.
 var commonCFlagsPre = []ARG{
 	argPipe,
 }
@@ -176,9 +173,7 @@ var cxxStandardWarnings = []ARG{
 }
 
 // catboostOpenSourceDefineFor returns the -DCATBOOST_OPENSOURCE=yes define only
-// for opensource builds (OPENSOURCE=yes in the repo ya.conf [flags]). Upstream's
-// build/conf/opensource.conf gates it on OPENSOURCE, so internal-contour builds
-// (where OPENSOURCE is unset) must omit it.
+// for opensource builds (OPENSOURCE=yes). Builds with OPENSOURCE unset omit it.
 func catboostOpenSourceDefineFor(p *Platform) []ARG {
 	if p.Flags[envOPENSOURCE] == strYes {
 		return catboostOpenSourceDefine
@@ -226,13 +221,10 @@ type CompileFlagBundle struct {
 	NoLibcBlock []ARG
 }
 
-// buildDebugInfoFlags mirrors ymake_conf.py's GnuCompiler.debug_info_flags: -g,
-// then -gz=zstd for a non-release Linux target IF the source repo's
-// build/ymake_conf.py carries that rule (compress; see confCompressesDebug —
-// yatool's conf omits it, ydb's has it), then -fdebug-default-version=4 (clang>=14,
-// always here) and -ggnu-pubnames (clang && linux). The release-only
-// -fdebug-info-for-profiling is not modelled: release targets use hostCFlags, which
-// carry no debug-info group.
+// buildDebugInfoFlags builds the debug-info group: -g, then -gz=zstd for a
+// non-release Linux target when compress is set, then -fdebug-default-version=4 and
+// -ggnu-pubnames (linux). Release targets use hostCFlags (no debug-info group), so
+// the release-only -fdebug-info-for-profiling is not modelled.
 func buildDebugInfoFlags(os OS, release, compress bool) []ARG {
 	out := make([]ARG, 0, 4)
 	out = append(out, argDashG)
@@ -250,9 +242,8 @@ func buildDebugInfoFlags(os OS, release, compress bool) []ARG {
 	return out
 }
 
-// composeCompileCFlags builds the platform's compile C flag vector once, splicing
-// the debug-info group into its natural slot (Pre + debugInfo + Post). Release x86
-// uses hostCFlags, which has no debug-info group.
+// composeCompileCFlags builds the platform's compile C flag vector (Pre +
+// debugInfo + Post). Release x86 uses hostCFlags, which has no debug-info group.
 func composeCompileCFlags(isa ISA, release bool, debugInfo []ARG) []ARG {
 	switch isa {
 	case ISAX8664:

@@ -14,53 +14,41 @@ var macroAudit = &MacroAuditState{
 	unknown:  map[string]map[string]int{},
 }
 
-// macrosAcceptingUserFlags lists handled macros whose arguments are not
-// structural keywords but arbitrary user-defined flag names — ENABLE(MY_X)
-// and DISABLE(MY_X) translate into env.SetBool(MY_X, …) and accept anything
-// the ya.make author chose. The strict service-keyword check is suppressed
-// for these so a new project-specific flag does not need to be hard-coded.
+// macrosAcceptingUserFlags lists handled macros whose args are arbitrary
+// user-defined flag names, not structural keywords — ENABLE(MY_X)/DISABLE(MY_X)
+// become env.SetBool(MY_X, …) and accept anything. The strict service-keyword
+// check is suppressed so a new project-specific flag need not be hard-coded.
 var macrosAcceptingUserFlags = map[TOK]struct{}{
 	tokEnable:  {},
 	tokDisable: {},
-	// EXCLUDE_TAGS args are submodule tag NAMES (GO_PROTO, JAVA_PROTO, PY_PROTO,
-	// …) — user data, not structural service-keywords — so they bypass the
-	// strict service-keyword audit.
+	// EXCLUDE_TAGS args are submodule tag names — user data, not keywords.
 	tokExcludeTags: {},
-	// SET_RESOURCE_URI_FROM_JSON(VarName file.json): the first arg is the
-	// user-chosen destination variable name (SANDBOX_RESOURCE_URI, WITH_JDK_URI,
-	// …), not a structural keyword — like ENABLE's flag name.
+	// SET_RESOURCE_URI_FROM_JSON(VarName file.json): first arg is the
+	// user-chosen destination variable name, like ENABLE's flag name.
 	tokSetResourceUriFromJson: {},
-	// LICENSE(...) args are SPDX license expressions (BSD-3-Clause, WITH, AND,
-	// OR, …) — license data, not structural service-keywords. We read only
-	// LICENSE's presence (it gates the SBOM DX node), never the args.
+	// LICENSE(...) args are SPDX license expressions, not keywords. We read
+	// only LICENSE's presence (it gates the SBOM DX node), never the args.
 	tokLicense: {},
-	// SET_APPEND(VarName value…): the first arg is the destination variable
-	// name (PROTO_FILES, RPATH_GLOBAL, SFLAGS, …) — user/build data, not a
-	// structural keyword. The handler dispatches on the few names it models;
-	// appending to any other variable is inert, so bypass the strict audit.
+	// SET_APPEND(VarName value…): first arg is the destination variable name.
+	// The handler dispatches on the few names it models; appending to any
+	// other is inert, so bypass the strict audit.
 	tokSetAppend: {},
 }
 
-// serviceArgOK marks arg STRs the service-keyword check has already passed
-// (either not service-shaped, or a modelled keyword) — args repeat heavily
-// across ya.makes, so the per-invocation check is a bit probe. Single-writer
-// (gen goroutine), like the deduper.
+// serviceArgOK marks arg STRs that already passed the service-keyword check
+// (not service-shaped, or a modelled keyword) — args repeat heavily, so the
+// per-invocation check is a bit probe. Single-writer (gen goroutine).
 var serviceArgOK BitSet
 
 // macroAudit collects two classes of ya.make traffic during gen:
-//   - macro invocations whose name lands in whitelistedMetadataMacros (i.e.,
-//     we accept the macro but emit nothing for it);
-//   - macro argument tokens that are equal to strings.ToUpper(token) AND
-//     consist of [A-Z0-9_] only — those are the service keywords that
-//     upstream's ya.make grammar uses to split macro argument lists
-//     (e.g. NAMESPACE, MAIN, GLOBAL, ADDINCL, ONE_LEVEL, FOR, TOP_LEVEL,
-//     OUTPUT_INCLUDES, IN, OUT_NOAUTO, etc.). Audit them so we can confirm
-//     we handle every meaningful split key for every macro we accept.
+//   - macro invocations we accept but emit nothing for;
+//   - macro argument tokens of [A-Z0-9_] equal to their upper-case form —
+//     the service keywords the grammar uses to split macro argument lists.
+//     Audited to confirm we handle every split key for every accepted macro.
 //
-// The audit is process-global because gen runs serially per-target and
-// collecting across the whole graph keeps the dump compact. Output is
-// surfaced when cmdMake's --dump-ignored-macros flag is set; otherwise
-// recording is a cheap nil-check.
+// Process-global because gen runs serially per-target; collecting across the
+// graph keeps the dump compact. Surfaced when --dump-ignored-macros is set;
+// otherwise recording is a cheap nil-check.
 type MacroAuditState struct {
 	enabled  bool
 	mu       sync.Mutex
@@ -77,11 +65,9 @@ func enableMacroAudit() {
 	macroAudit.enabled = true
 }
 
-// recordIgnoredMacro is called from applyUnknownStmt's default branch when
-// the macro name is in acknowledgedMacros — i.e., gen sees it but produces
-// nothing from it. Service-word args of these macros are intentionally NOT
-// inspected: their argument grammar belongs to upstream's macro parser, not
-// ours, so listing tokens like `MIT` for LICENSE only generates noise.
+// recordIgnoredMacro records a macro gen sees but produces nothing from.
+// Service-word args are not inspected: their argument grammar belongs to the
+// upstream macro parser, so listing tokens like LICENSE's only adds noise.
 func recordIgnoredMacro(name TOK) {
 	if !macroAudit.enabled {
 		return
@@ -94,14 +80,12 @@ func recordIgnoredMacro(name TOK) {
 	macroAudit.ignored[name.string()]++
 }
 
-// recordHandledMacro is called for every macro whose typed branch in
-// applyUnknownStmt fired. It enforces "agent must immediately support all
-// macro flags": every uppercase service-keyword argument must already be
-// present as a "…" literal in this package's .go sources (mined via
-// macro_audit_known.go); an unknown keyword throws so the next agent run
-// is forced to model it before any graph is emitted. Macros listed in
-// macrosAcceptingUserFlags bypass the check. The audit buckets fill only
-// when --dump-ignored-macros is on.
+// recordHandledMacro runs for every macro whose typed branch fired. It
+// enforces that every uppercase service-keyword argument already appears as a
+// "…" literal in this package's .go sources; an unknown keyword throws so it
+// must be modelled before any graph is emitted. Macros in
+// macrosAcceptingUserFlags bypass the check. Audit buckets fill only when
+// --dump-ignored-macros is on.
 func recordHandledMacro(name TOK, args []STR) {
 	if _, free := macrosAcceptingUserFlags[name]; !free {
 		for _, aTok := range args {
@@ -165,9 +149,7 @@ func recordServiceArgsLocked(macroName string, args []string) {
 }
 
 // looksLikeServiceWord reports whether a token is an uppercase keyword: at
-// least one ASCII letter, only [A-Z0-9_], and equal to its own upper-case
-// form (the last check is redundant with the second but kept explicit so the
-// definition matches the user-facing description).
+// least one ASCII letter, only [A-Z0-9_], equal to its own upper-case form.
 func looksLikeServiceWord(s string) bool {
 	if s == "" {
 		return false
@@ -195,8 +177,7 @@ func looksLikeServiceWord(s string) bool {
 	return s == strings.ToUpper(s)
 }
 
-// dumpMacroAudit writes the collected report to w. Called from cmdMake when
-// --dump-ignored-macros was passed.
+// dumpMacroAudit writes the collected report to w (cmdMake, --dump-ignored-macros).
 func dumpMacroAudit(w io.Writer) {
 	macroAudit.mu.Lock()
 

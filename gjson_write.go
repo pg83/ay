@@ -6,11 +6,10 @@ import (
 )
 
 // vfsEscapedJSON caches the JSON-encoded form (`"…"`, escape-body included)
-// of each interned VFS string. writeGraph emits the same path many times —
-// up to ~1.3M emits in sg5 with the new CP closures — and JSON escape was
-// 27% of CPU until this cache went in. The intern table is append-only and
-// strID() is stable, so a slice indexed by strID is safe; we grow it lazily
-// to the current intern bound on the first miss past its length.
+// of each interned VFS string. The same path is emitted many times and JSON
+// escape dominated CPU until this cache went in. The intern table is
+// append-only and strID() is stable, so a slice indexed by strID is safe;
+// grown lazily to the current intern bound on the first miss past its length.
 var vfsEscapedJSON [][]byte
 
 var htmlSafeNoEscape = func() [128]bool {
@@ -30,18 +29,16 @@ var htmlSafeNoEscape = func() [128]bool {
 	return t
 }()
 
-// writeGraph emits the graph as compact JSON (single line, no whitespace between
-// tokens). The graph is consumed by `ay dump` / `ay make`, which parse it — the
-// formatting carries no meaning, so we drop it. Nodes are flushed incrementally
-// to keep the in-memory buffer bounded for multi-GB graphs.
-// writeGraphCompact serialises the graph. dropSrcInputs (set for non-sandboxed
-// runs) omits every $(S)-rooted entry from each node's "inputs" as the JSON is
+// writeGraphCompact serialises the graph as compact JSON (single line); the
+// consumer parses it, so formatting carries no meaning. Nodes flush
+// incrementally to keep the buffer bounded for multi-GB graphs. dropSrcInputs
+// (non-sandboxed runs) omits every $(S)-rooted "inputs" entry as the JSON is
 // built — a streaming filter, no graph copy.
 func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 	buf := make([]byte, 0, 1<<20)
 
-	// No "conf" section: every resource (toolchain + the inline vcs.json) is a real
-	// graph node, so the graph is self-contained — nothing is resolved out-of-band.
+	// No "conf" section: every resource is a real graph node, so the graph is
+	// self-contained — nothing is resolved out-of-band.
 	buf = append(buf, `{"graph":[`...)
 
 	for i, node := range g.Graph {
@@ -78,9 +75,9 @@ func appendNode(buf []byte, n *Node, uids *UidVec, fetchRefs *DenseMap[STR, Node
 	buf = append(buf, `"cmds":`...)
 	buf = appendCmdSlice(buf, n.Cmds)
 
-	// "deps" lists DepRefs, then ForeignDepRefs (tool deps), then the resolved
-	// resource FETCH deps (Resources): tools and resources are not stored on
-	// the node, so the build-deps array materializes them on the fly.
+	// "deps" lists DepRefs, then ForeignDepRefs (tool deps), then resolved
+	// resource FETCH deps; none are stored on the node, so buildDeps
+	// materializes them on the fly.
 	buf = append(buf, `,"deps":`...)
 	buf = appendRefUIDsSeq(buf, n.buildDeps(fetchRefs), uids)
 
@@ -176,8 +173,8 @@ func appendStringSlice(buf []byte, ss []string) []byte {
 	return append(buf, ']')
 }
 
-// appendStrChunks emits the flattened element sequence of the chunk list —
-// the same flat JSON array appendStrSlice writes for the concatenation.
+// appendStrChunks emits the flattened chunk list — the flat JSON array
+// appendStrSlice writes for the concatenation.
 func appendStrChunks(buf []byte, chunks ArgChunks) []byte {
 	buf = append(buf, '[')
 	first := true
@@ -210,8 +207,8 @@ func appendStrSlice(buf []byte, as []STR) []byte {
 	return append(buf, ']')
 }
 
-// appendUID appends the quoted base64 uid directly into buf (the encode lands in a
-// stack array inside UID.appendB64 — no per-uid string allocation).
+// appendUID appends the quoted base64 uid directly into buf (the encode lands
+// in a stack array inside UID.appendB64 — no per-uid string allocation).
 func appendUID(buf []byte, u UID) []byte {
 	buf = append(buf, '"')
 	buf = u.appendB64(buf)
@@ -234,7 +231,7 @@ func appendUIDSlice(buf []byte, us []UID) []byte {
 }
 
 // appendRefUIDs writes refs as the array of their resolved dep uids — direct
-// id->uid lookup, no materialized Deps slice on the node.
+// id->uid lookup, no materialized Deps slice.
 func appendRefUIDs(buf []byte, refs []NodeRef, uids *UidVec) []byte {
 	buf = append(buf, '[')
 
@@ -249,8 +246,8 @@ func appendRefUIDs(buf []byte, refs []NodeRef, uids *UidVec) []byte {
 	return append(buf, ']')
 }
 
-// appendRefUIDsSeq writes the uids of a NodeRef sequence (e.g. Node.buildDeps)
-// as a JSON array, without materializing the sequence into a slice.
+// appendRefUIDsSeq writes a NodeRef sequence's uids as a JSON array without
+// materializing the sequence into a slice.
 func appendRefUIDsSeq(buf []byte, seq func(func(NodeRef) bool), uids *UidVec) []byte {
 	buf = append(buf, '[')
 	first := true
@@ -326,8 +323,8 @@ func appendVFSSlice(buf []byte, vs []VFS) []byte {
 	return append(buf, ']')
 }
 
-// appendBuildOnlyVFSSlice writes only the $(B)-rooted entries, skipping every
-// $(S) source input (non-sandboxed inputs filter).
+// appendBuildOnlyVFSSlice writes only $(B)-rooted entries, skipping $(S)
+// source inputs.
 func appendBuildOnlyVFSSlice(buf []byte, vs []VFS) []byte {
 	buf = append(buf, '[')
 	first := true
@@ -371,8 +368,8 @@ func appendVFS(buf []byte, v VFS) []byte {
 	return append(buf, out...)
 }
 
-// appendToolForeignDeps writes the foreign-dep slice as the single-key object
-// {"tool":[...]} — the only key any node ever uses.
+// appendToolForeignDeps writes the foreign-dep slice as {"tool":[...]} — the
+// only key any node ever uses.
 func appendToolForeignDeps(buf []byte, refs []NodeRef, uids *UidVec) []byte {
 	buf = append(buf, `{"tool":`...)
 	buf = appendRefUIDs(buf, refs, uids)

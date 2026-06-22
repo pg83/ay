@@ -6,14 +6,12 @@ import (
 
 // emitBaseCodegensForAR emits the module's BASE_CODEGEN producers (kv p=BC). Each
 // producer takes a tool dependency on the codegen tool's LD node; resolving that
-// tool runs the tool PROGRAM through genModule, pulling its ordinary PEERDIR
-// closure into the target graph (the reachability rule verified by T-21).
+// tool pulls its ordinary PEERDIR closure into the target graph.
 //
 // Like SPLIT_CODEGEN, the noauto prefix.cpp is NOT compiled here — the module
-// re-feeds it via SRCS(${BINDIR}/prefix.cpp), which the regular (global) source
-// path compiles, picking up the BC producer dep through the codegen registry.
-// Registration runs here (before that source path) so the registry is populated
-// in time. BASE_CODEGEN has no auto-compiled outputs, so nothing is returned.
+// re-feeds it via SRCS(${BINDIR}/prefix.cpp), compiled by the regular source path
+// which picks up the BC producer dep through the codegen registry. Registration
+// runs here first so the registry is populated in time. No outputs are returned.
 func emitBaseCodegensForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) {
 	for _, bc := range d.baseCodegens {
 		emitBaseCodegen(ctx, instance, bc, in)
@@ -46,14 +44,13 @@ func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt, 
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	// Reserve the producer ref before registering outputs: registration records it
-	// so a consumer resolving a generated output to a dep edge reads a valid ref.
+	// Reserve the producer ref before registering outputs so a consumer
+	// resolving a generated output to a dep edge reads a valid ref.
 	bcRef := ctx.emit.reserve()
 
 	// prefix.cpp #includes the generated header. prefix.h carries OUTPUT_INCLUDES
-	// as parsed includes (empty for plain BASE_CODEGEN; the seven
-	// STRUCT_CODEGEN_OUTPUT_INCLUDES headers for STRUCT_CODEGEN) so every consumer
-	// that includes prefix.h inherits them.
+	// as parsed includes (empty for plain BASE_CODEGEN) so every consumer that
+	// includes prefix.h inherits them.
 	cppParsed := []IncludeDirective{{kind: includeQuoted, target: internStr(prefixH.rel())}}
 
 	var headerParsed []IncludeDirective
@@ -65,10 +62,9 @@ func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt, 
 	registerBoundGeneratedParsedOutput(ctx, instance, pkBC, prefixH, headerParsed, bcRef, []NodeRef{toolLDRef})
 	registerBoundGeneratedParsedOutput(ctx, instance, pkBC, prefixCpp, cppParsed, bcRef, []NodeRef{toolLDRef})
 
-	// The generated header carries its generated-from sibling .cpp and the .in
-	// source as non-expanded closure leaves, so every CC node that includes
-	// prefix.h inherits them (upstream's flat-input model; matches the sg7
-	// kernel/factor_slices evidence). Reference order: prefix.cpp, then prefix.in.
+	// The generated header carries its sibling .cpp and the .in source as
+	// non-expanded closure leaves, so every CC node that includes prefix.h
+	// inherits them. Order: prefix.cpp, then prefix.in.
 	reg := codegenRegForInstance(ctx, instance)
 	reg.addClosureLeaf(prefixH, prefixCpp)
 	reg.addClosureLeaf(prefixH, inputIn)

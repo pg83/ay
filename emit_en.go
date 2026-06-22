@@ -8,31 +8,28 @@ import (
 type EnumSrcsResult struct {
 	CCRefs    []NodeRef
 	CCOutputs []VFS
-	// Seqs parallels CCRefs/CCOutputs: each member's declaring
-	// GENERATE_ENUM_SERIALIZATION statement declaration sequence, used to order
-	// generated archive members by declaration order against other
-	// default-priority generated statements (RUN_PROGRAM).
+	// Seqs parallels CCRefs/CCOutputs: each member's declaring statement sequence,
+	// ordering generated archive members by declaration order against other
+	// default-priority generated statements.
 	Seqs []int
 	// SecondLevel parallels CCRefs/CCOutputs: true when the EN's input header is a
 	// .pb.h / .ev.pb.h produced by THIS module's own proto/ev SRCS. Such an EN
-	// cannot run until the proto command produced the header, so ymake defers it
-	// one further FIFO round — it archives after every first-level generated
-	// member (incl. the proto .pb.cc.o that produces the header). An external/peer
-	// build-root .pb.h or a checked-in source header stays first-level (false),
-	// archiving at its prio-2 declaration band ahead of this module's proto
-	// objects. See reorderARMembers / SrcMeta.SecondLevel.
+	// cannot run until the proto command produced the header, so it defers one
+	// further FIFO round, archiving after every first-level generated member
+	// (incl. the proto .pb.cc.o producing the header). An external/peer build-root
+	// .pb.h or a checked-in source header stays first-level (false), archiving at
+	// its prio-2 declaration band ahead of this module's proto objects.
 	SecondLevel []bool
 }
 
-// moduleProtoGenHeaders returns the set of root-relative generated header outputs
-// this module's own proto/ev SRCS produce (`<base>.proto`→`<base>.pb.h`,
-// `<base>.ev`→`<base>.ev.pb.h`), resolved through SRCDIR/PROTO_NAMESPACE the same
-// way emit_proto computes the `.pb.h`/`.pb.cc` output paths (protoSourceRelPath).
-// A raw SRCS token (`Offer.proto`) under SRCDIR(m) generates `m/Offer.pb.h`, not
-// `Offer.pb.h`, so keying on the raw token misclassifies SRCDIR-rooted same-module
-// headers as external. An EN over one of these resolved outputs is second-level;
-// the global codegen registry can't make this distinction (it holds peer outputs
-// too), so provenance keys on the module's own proto/ev source set.
+// moduleProtoGenHeaders returns the root-relative generated header outputs this
+// module's own proto/ev SRCS produce (`.proto`→`.pb.h`, `.ev`→`.ev.pb.h`),
+// resolved through SRCDIR/PROTO_NAMESPACE as the proto output paths are computed.
+// A raw SRCS token under SRCDIR generates a dir-qualified header, so keying on
+// the raw token would misclassify SRCDIR-rooted same-module headers as external.
+// An EN over one of these resolved outputs is second-level; the global codegen
+// registry can't make this distinction (it holds peer outputs too), so
+// provenance keys on the module's own proto/ev source set.
 func moduleProtoGenHeaders(ctx *GenCtx, instance ModuleInstance, d *ModuleData) map[string]struct{} {
 	var set map[string]struct{}
 
@@ -97,16 +94,13 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 	res := &EnumSrcsResult{}
 	protoGenHeaders := moduleProtoGenHeaders(ctx, instance, d)
 
-	// One GENERATE_ENUM_SERIALIZATION declaration's generated header can include
-	// another's generated serialized header from the SAME module (balancer/kernel/
-	// cookie: set_cookie.h -> cookie_errors.h -> set_cookie_errors.h_serialized.h).
-	// The scanner caches a file's resolved children by file id, shared across the
-	// module, so the FIRST declaration's closure walk must already see every
-	// sibling's serialized outputs registered — otherwise the including header
-	// caches an empty resolution that poisons the EN producer AND the later
-	// ordinary CC compile. Split into two passes: register all serialized outputs
-	// first, then walk closures and emit. This mirrors the .fbs / bison / proto
-	// register-all-then-compile pre-passes in gen.go.
+	// One declaration's generated header can include another's generated
+	// serialized header from the SAME module. The scanner caches a file's resolved
+	// children by file id, shared across the module, so the FIRST declaration's
+	// closure walk must already see every sibling's serialized outputs registered;
+	// otherwise the including header caches an empty resolution that poisons the EN
+	// producer AND the later ordinary CC compile. Two passes: register all
+	// serialized outputs first, then walk closures and emit.
 	type enumStmtPlan struct {
 		withHeader        bool
 		headerInput       VFS
@@ -123,14 +117,12 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		withHeader := stmt.Variant == "with_header"
 		headerInput := resolveEnumHeaderInput(ctx, instance, stmt.Header, d.srcDirs)
 
-		// ymake's ${output;suf=_serialized.cpp:File} names the EN output from the
-		// File argument: a relative spelling joins the raw token under the module
-		// BINDIR (a root-qualified token that repeats the module dir doubles —
-		// TestGen_EnumSerializationRootQualifiedHeaderUsesCanonicalInput); a rooted
-		// spelling (${ARCADIA_BUILD_ROOT}/<dir>/foo.pb.h for a generated proto
-		// header) lands at the File's own resolved build location, which for a
-		// header OUTSIDE the module dir is not under it. The downstream compile then
-		// rebases that cross-dir source under the module BINDIR via composeCCPaths.
+		// The EN output is named from the File argument: a relative spelling joins
+		// the raw token under the module BINDIR (a root-qualified token repeating
+		// the module dir doubles); a rooted spelling (build-root header) lands at
+		// the File's own resolved build location, which for a header OUTSIDE the
+		// module dir is not under it. The downstream compile then rebases that
+		// cross-dir source under the module BINDIR via composeCCPaths.
 		serializedBase := instance.Path.rel() + "/" + stmt.Header
 
 		if moduleRootedVFS(instance.Path.rel(), stmt.Header) != nil {
@@ -138,10 +130,9 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		}
 
 		// An EN whose input header is a .pb.h / .ev.pb.h produced by this module's
-		// own proto/ev SRCS is second-level (it consumes the proto command output);
-		// see EnumSrcsResult.SecondLevel. headerInput.rel() is the resolved
-		// root-relative header path (SRCDIR/PROTO_NAMESPACE applied, $(B)/$(S) prefix
-		// stripped), matched against the same-resolution proto-output set.
+		// own proto/ev SRCS is second-level; see EnumSrcsResult.SecondLevel.
+		// headerInput.rel() is the resolved root-relative header path, matched
+		// against the same-resolution proto-output set.
 		_, secondLevel := protoGenHeaders[headerInput.rel()]
 
 		serializedCPPPath := build(serializedBase + "_serialized.cpp")
@@ -152,15 +143,14 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		}
 
 		// Reserve the EN producer's ref before registering its outputs: a consumer
-		// that resolves these outputs to a dep edge reads the producer ref, and the
-		// own-output closure walk in pass 2 needs the parsed includes registered.
+		// resolving these outputs to a dep edge reads the producer ref, and the
+		// pass-2 own-output closure walk needs the parsed includes registered.
 		enRef := ctx.emit.reserve()
 
 		// Only the macro-level output_includes are woven by hand: the enum header
-		// itself (output_include:File) and util/generic/serialized_enum.h. The
-		// runtime headers come from enum_parser's INDUCED_DEPS via the GeneratorRef
-		// (the h+cpp group), and enum_runtime.h's own transitive includes
-		// (dispatch_methods.h, ordered_pairs.h) arrive through the closure walk.
+		// itself and serialized_enum.h. Runtime headers come from enum_parser's
+		// INDUCED_DEPS via the GeneratorRef, and their transitive includes arrive
+		// through the closure walk.
 		cppParsed := []IncludeDirective{
 			{kind: includeQuoted, target: internStr(headerInput.rel())},
 			{kind: includeQuoted, target: strUtilGenericSerializedEnumH},
@@ -169,7 +159,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		registerBoundGeneratedParsedOutput(ctx, instance, pkEN, serializedCPPPath, cppParsed, enRef, []NodeRef{enumParserLD})
 
 		if withHeader {
-			// serialized_enum.h reaches the header via enum_parser's INDUCED_DEPS(h …).
+			// serialized_enum.h reaches the header via enum_parser's INDUCED_DEPS.
 			hParsed := []IncludeDirective{
 				{kind: includeQuoted, target: internStr(headerInput.rel())},
 				{kind: includeQuoted, target: internStr(serializedCPPPath.rel())},
@@ -201,13 +191,12 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		var ownOutputClosure []VFS
 
 		if !p.withHeader {
-			// Tail: serializedCPPPath is the EN node's own output, never its
-			// input (headerInput dedups out via dedupVFS below).
+			// Tail: serializedCPPPath is the EN node's own output, never its input.
 			ownOutputClosure = walkClosureTail(ctx.scannerFor(instance), p.serializedCPPPath, scanIn.ScanCfg)
 		}
 
-		// closure is the headerInput window (header-led), so the EN input list
-		// is the deduped union directly — no separate header prepend.
+		// closure is header-led, so the EN input list is the deduped union
+		// directly — no separate header prepend.
 		enClosure := dedupVFS(closure, ownOutputClosure)
 
 		augmentedDepENRefs := resolveCodegenDepRefs(ctx, instance, enClosure)

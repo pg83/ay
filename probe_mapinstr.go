@@ -12,15 +12,13 @@ import (
 	"sort"
 )
 
-// probeMapInstr instruments every map index/delete in the package: it wraps the
-// KEY expression of each map access in mapKR/mapKW(<key>, "file:line"), a generic
-// passthrough that bumps a per-site counter and returns the key. Wrapping the key
-// (not the map expr) keeps m[...] a valid lvalue/rvalue in every position
-// (single read, comma-ok read, LHS assign, m[k]++), so the edit is a pure text
-// splice with no AST surgery. Type info (go/types) is used to instrument only
-// real maps, not slices/arrays. Throwaway: run in a worktree, build, measure,
-// revert. mapKR/mapKW always tally; the --probe=map global flag dumps the tally
-// (reportMapProbe) on exit, e.g. ay --probe=map make …
+// probeMapInstr wraps the KEY expression of each map index/delete in
+// mapKR/mapKW(<key>, "file:line"), a generic passthrough that bumps a per-site
+// counter and returns the key. Wrapping the key (not the map expr) keeps m[...] a
+// valid lvalue/rvalue in every position (read, comma-ok, LHS assign, m[k]++), so
+// the edit is a pure text splice with no AST surgery. go/types restricts it to
+// real maps, not slices/arrays. Throwaway: build, measure, revert. mapKR/mapKW
+// always tally; the --probe=map flag dumps the tally (reportMapProbe) on exit.
 func probeMapInstr(_ GlobalFlags, args []string) int {
 	files := goFilesFromArgs(args)
 
@@ -71,8 +69,7 @@ func probeMapInstr(_ GlobalFlags, args []string) int {
 	reads, writes := 0, 0
 
 	for _, p := range order {
-		// Don't instrument the probe tooling itself (probe_mapinstr.go's counter
-		// map would recurse; the others are not on the gen path).
+		// Don't instrument the probe tooling itself (its counter map would recurse).
 		base := filepath.Base(p)
 
 		if base == "probe_mapinstr.go" || base == "probe_callsite.go" || base == "probe.go" {
@@ -166,9 +163,9 @@ func isMapExpr(info *types.Info, e ast.Expr) bool {
 	return ok
 }
 
-// --- runtime probe: populated by `ay probe mapinstr` above wrapping each map key
-// in mapKR/mapKW. These helpers are excluded from instrumentation (the counter
-// map must not recurse). Throwaway. ---
+// --- runtime probe populated by the mapKR/mapKW wrappers above. These helpers
+// are excluded from instrumentation (the counter map must not recurse).
+// Throwaway. ---
 
 type MapProbeEntry struct {
 	reads  uint64

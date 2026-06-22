@@ -6,10 +6,8 @@ import (
 	"testing"
 )
 
-// scanClosure returns the transitive include closure of srcRel with the
-// root file stripped (element 0) — the shape tests previously got from the
-// removed IncludeScanner.WalkClosure helper, now expressed directly over
-// closureOf.
+// scanClosure returns srcRel's transitive include closure with the root file
+// stripped (element 0).
 func scanClosure(scanner *IncludeScanner, srcRel string, cfg ScanContext) []VFS {
 	return scanner.newScanCtx(cfg, includeDirectiveParsers.registeredParserFor(srcRel)).closureOf(source(srcRel))[1:]
 }
@@ -660,7 +658,7 @@ include "machine.rl";
 	native := parsed.bucket(parsedIncludesRagelNative)
 	hcpp := parsed.bucket(parsedIncludesHeader)
 
-	// C includes only (ragel-native goes to parsedIncludesRagelNative)
+	// C includes only (ragel-native goes to its own bucket)
 	if len(local) != 2 {
 		t.Fatalf("got %d local entries, want 2 (C includes only); %+v", len(local), local)
 	}
@@ -689,8 +687,7 @@ include "machine.rl";
 		}
 	}
 
-	// h+cpp (the generated cpp's induced set): the self-include leads, the
-	// C/C++ directives follow (upstream AddParsedIncls("h+cpp", cppIncludes)).
+	// h+cpp (generated cpp's induced set): self-include leads, C/C++ directives follow.
 	wantHCPP := []struct {
 		target string
 		kind   IncludeKind
@@ -712,12 +709,8 @@ include "machine.rl";
 }
 
 // TestScanner_RagelNativeInclude_DoesNotBleedCHeaders verifies the ragel walk
-// relation (walkableBucketFor): a ragel file's closure follows its native
-// %include edges ONLY — natively-included ragel files join the window, but no
-// C headers do (neither the root's own nor the included files'). The C side
-// rides as the induced h+cpp set on the generated cpp instead, mirroring
-// upstream ymake's TRagelIncludeProcessor separation of native deps vs
-// ParsedIncls.
+// relation: a ragel file's closure follows its native %include edges ONLY; no C
+// headers join. The C side rides as the induced h+cpp set on the generated cpp.
 func TestScanner_RagelNativeInclude_DoesNotBleedCHeaders(t *testing.T) {
 	sysincl := parseSysInclYAML("test.yml", []byte(`
 - includes:
@@ -751,23 +744,23 @@ machine Sub;
 		closureSet[v.string()] = true
 	}
 
-	// main.rl6 itself must be in closure
+	// main.rl6 itself
 	if !closureSet["$(S)/pkg/main.rl6"] {
 		t.Errorf("closure missing $(S)/pkg/main.rl6: %v", closure)
 	}
 
-	// sub.rl6 is a ragel-native edge — the scanner walks it directly now.
+	// sub.rl6 is a ragel-native edge — walked directly.
 	if !closureSet["$(S)/pkg/sub.rl6"] {
 		t.Errorf("closure missing $(S)/pkg/sub.rl6 (ragel-native edge): %v", closure)
 	}
 
-	// vector (C include of main.rl6) is NOT a walkable edge of the ragel file —
-	// it reaches the compile via the induced h+cpp set on the generated cpp.
+	// vector (C include of main.rl6) is NOT a walkable edge — it reaches the
+	// compile via the induced h+cpp set on the generated cpp.
 	if closureSet["$(S)/stl/vector"] {
 		t.Errorf("closure should NOT contain $(S)/stl/vector (C side rides as induced h+cpp): %v", closure)
 	}
 
-	// numeric (C include of sub.rl6) must NOT bleed into closure
+	// numeric (C include of sub.rl6) must NOT bleed in
 	if closureSet["$(S)/stl/numeric"] {
 		t.Errorf("closure should NOT contain $(S)/stl/numeric (C header of ragel-native-included sub.rl6 must not bleed): %v", closure)
 	}
@@ -1012,20 +1005,16 @@ func TestScanner_CythonStdintSplitKeepsPy3InitButAddsPy2Types(t *testing.T) {
 	assertHasVFS(t, closure, intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libc/stdint.pxd"))
 }
 
-// attachCodegen wires a CodegenRegistry onto an existing scanner the way the
-// real gen pipeline does (the codegen field). Tests use it together with
-// newTestScanner.
+// attachCodegen wires a CodegenRegistry onto an existing scanner (the codegen
+// field), the way the real gen pipeline does.
 func attachCodegen(scanner *IncludeScanner, reg *CodegenRegistry) {
 	scanner.codegen = reg
 }
 
-// TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist locks the upstream
-// resolve order: when ADDINCL declares a Build-rooted prefix BEFORE a
-// Source-rooted prefix and the target header exists under both (committed
-// source stub + codegen-registered generated output), upstream returns the
-// Build path because IncDirs are iterated in declaration order with first
-// match wins (devtools/ymake/module_resolver.cpp:371 → resolver/path_resolver
-// CheckByRoot). Real-world repro of the OMP.inc case in contrib/libs/llvm16.
+// TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist: when ADDINCL declares a
+// Build-rooted prefix BEFORE a Source-rooted one and the target exists under both
+// (source stub + codegen output), the Build path wins (declaration-order
+// first-match).
 func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 	reg := newCodegenRegistry()
 	reg.register(&GeneratedFileInfo{
@@ -1052,9 +1041,8 @@ func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 	}
 }
 
-// TestScanner_AddInclSourceBeforeBuildKeepsSource is the symmetric anchor:
-// when Source is declared before Build, even if a Build registration exists
-// for the same target, Source must win (first-match-in-declaration-order).
+// TestScanner_AddInclSourceBeforeBuildKeepsSource is the symmetric anchor: Source
+// declared first must win even if a Build registration exists.
 func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 	reg := newCodegenRegistry()
 	reg.register(&GeneratedFileInfo{
@@ -1081,11 +1069,9 @@ func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 	}
 }
 
-// TestScanner_AddInclBuildOnlyMatchesCodegen locks the OMP.h.inc-style case:
-// target lives only in codegen registry (no source stub). With Build addincl
-// declared first, resolution must return the Build/generated path. This case
-// already worked via the Build fallback loop; the unified ranker must
-// preserve it.
+// TestScanner_AddInclBuildOnlyMatchesCodegen: target lives only in the codegen
+// registry (no source stub). With Build addincl declared first, resolution must
+// return the Build/generated path.
 func TestScanner_AddInclBuildOnlyMatchesCodegen(t *testing.T) {
 	reg := newCodegenRegistry()
 	reg.register(&GeneratedFileInfo{
@@ -1110,11 +1096,8 @@ func TestScanner_AddInclBuildOnlyMatchesCodegen(t *testing.T) {
 }
 
 func TestScanCtx_Resolve_RootedTargetBindsDirectly(t *testing.T) {
-	// A rooted directive target (INDUCED_DEPS via the reserved
-	// ${ARCADIA_ROOT}-family refs, expanded to $(S)/$(B)) binds to its root
-	// without include search, sysincl, or FS checks — upstream's
-	// ResolveAsKnownWithoutCheck. The memFS is empty on purpose: no search
-	// path could find these, and no FS check must run.
+	// A rooted directive target binds to its root without include search, sysincl,
+	// or FS checks. The memFS is empty on purpose: nothing else could find these.
 	scanner := newTestScanner(newMemFS(nil), nil)
 	sc := scanner.newScanCtx(newScanContext(scanner.parsers, nil, nil, nil, ""), nil)
 

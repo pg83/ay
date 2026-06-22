@@ -134,17 +134,15 @@ func emitPB(
 		foreignDepRefs = append(foreignDepRefs, depRefs(plugin.LDRef)...)
 	}
 
-	// Two plugins can share one tool binary (YAFF + YAFF_SCHEMA both resolve to
-	// library/cpp/yaff/tools/protoc_plugin, hence the same memoized LDRef), so the
-	// loop above lists that LD node twice. Upstream's NodeDeps is a TUniqVector;
-	// dedup here so the graph "deps" array carries the tool node once. The command
-	// `inputs` keep the per-plugin binary occurrence (they match upstream's literal
+	// Two plugins can share one tool binary (YAFF + YAFF_SCHEMA resolve to the same
+	// memoized LDRef), so the loop lists that LD node twice. Upstream's NodeDeps is
+	// a TUniqVector; dedup so the graph "deps" array carries the tool node once. The
+	// command `inputs` keep the per-plugin occurrence (matching upstream's literal
 	// --plugin input list byte-for-byte).
 	foreignDepRefs = dedupRefs(foreignDepRefs)
 
-	// Producer refs for build-generated proto sources (e.g. RUN_ANTLR -lang
-	// protobuf): without these the producer JV is unreachable from the LD
-	// root closure and gets DFS-pruned at finalize.
+	// Producer refs for build-generated proto sources: without these the producer
+	// JV is unreachable from the LD root closure and gets DFS-pruned at finalize.
 	deps := append([]NodeRef(nil), extraDepRefs...)
 
 	// A build-generated .proto (protoSrcOverride set) lives under $(B); protoc
@@ -162,10 +160,9 @@ func emitPB(
 			Cwd: internStr(protocCwd),
 			Env: env}),
 		Env: env,
-		// transitiveProtoImports and producerSourceInputs (the producer's
-		// transitive $(S) leaf sources behind a build-generated .proto — RUN_ANTLR
-		// grammar / template / jar / scripts — matching upstream's flat source
-		// closure) are shared caller slices: referenced as chunks, never copied.
+		// transitiveProtoImports and producerSourceInputs (the producer's transitive
+		// $(S) leaf sources behind a build-generated .proto, matching upstream's flat
+		// source closure) are shared caller slices: referenced as chunks, never copied.
 		Inputs:           na.inputList(inputs, transitiveProtoImports, producerSourceInputs),
 		Outputs:          outputs,
 		KV:               KV{P: pkPB, PC: pcYellow},
@@ -180,13 +177,12 @@ func emitPB(
 }
 
 // assembleProtoCmdOutputs returns the proto command's output list in
-// $CPP_PROTO_OUTS order: the main .pb.h floated to the front, then — in ya.make
-// statement order — any plugin declared before lite headers were turned on, the
-// cpp_out group (.pb.cc + the lite-header .deps.pb.h), grpc, and the remaining
-// plugins. The buildable (.cc/.cpp) subset of this list, in this order, is also
-// the per-proto archive member order: ymake queues a command's outputs as module
-// sources in this order (module_builder.cpp QueueCommandOutputs). Single source
-// of truth shared by emitPB (the command) and emitProtoPB (the codegen compiles).
+// $CPP_PROTO_OUTS order: main .pb.h first, then — in ya.make statement order —
+// any plugin declared before lite headers were turned on, the cpp_out group
+// (.pb.cc + the lite-header .deps.pb.h), grpc, and the remaining plugins. The
+// buildable (.cc/.cpp) subset, in this order, is also the per-proto archive
+// member order (upstream queues a command's outputs as module sources in this
+// order). Single source of truth shared by emitPB and emitProtoPB.
 func assembleProtoCmdOutputs(protoBase string, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH VFS, extraPlugins []ResolvedCPPProtoPlugin, liteHeaders, grpc bool) []VFS {
 	outputs := []VFS{pbH}
 
@@ -223,13 +219,12 @@ func assembleProtoCmdOutputs(protoBase string, pbH, pbCC, pbDepsH, grpcPbCC, grp
 	return outputs
 }
 
-// pluginOutputsPrecedeCppGroup reports whether a proto plugin's generated
-// outputs are accumulated into CPP_PROTO_OUTS ahead of the cpp_out group
-// (.pb.cc + the lite-header .deps.pb.h). That happens only when the plugin was
-// declared before lite headers were turned on: the .deps.pb.h append is driven
-// by the later SET(PROTOC_TRANSITIVE_HEADERS "no"), so a plugin declared first
-// lands ahead of it. With transitive headers (no .deps.pb.h) plugins always
-// follow the cpp_out group.
+// pluginOutputsPrecedeCppGroup reports whether a proto plugin's outputs are
+// accumulated into CPP_PROTO_OUTS ahead of the cpp_out group (.pb.cc + the
+// lite-header .deps.pb.h). True only when the plugin was declared before lite
+// headers were turned on: the .deps.pb.h append is driven by the later
+// SET(PROTOC_TRANSITIVE_HEADERS "no"), so a plugin declared first lands ahead of
+// it. With transitive headers (no .deps.pb.h) plugins always follow the group.
 func pluginOutputsPrecedeCppGroup(plugin ResolvedCPPProtoPlugin, liteHeaders bool) bool {
 	return liteHeaders && plugin.Spec.DeclaredBeforeLiteHeaders
 }
@@ -303,7 +298,7 @@ func pyProtoAuxInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 		return nil
 	}
 
-	// The window is already deduplicated — no further dedup needed.
+	// The window is already deduplicated.
 	return closure
 }
 
@@ -345,8 +340,7 @@ func protoResourceHash(items []string, modulePath, moduleTag string) string {
 //	      the styleguide plugin]
 //	tail: the grpc / extra plugin blocks (they follow the source token)
 //
-// Built once per module proto context (newPBModuleEmission) and referenced as
-// chunks by every PB node of that context.
+// Built once per module proto context, referenced as chunks by every PB node.
 type PbArgBlocks struct {
 	head []STR
 	mid  []STR
@@ -389,19 +383,16 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 		mid = append(mid, internStr("-I=$(S)/"+cppOutRoot))
 	}
 
-	// Upstream's _CPP_PROTO_CMDLINE_BASE (ymake.core.conf:614) renders
-	// `${pre=-I=:_PROTO__INCLUDE}` VERBATIM — the FOR-proto GLOBAL ADDINCL set in
-	// encounter order, with no dedup against the structural prefix. `protoInclude`
-	// is the peers-only set (the module's own namespace rides the structural
-	// `-I=$(S)/cppOutRoot` arm above). protobuf-src enters this set for modules
-	// that transitively peer contrib/libs/protobuf (its ya.make declares
-	// `ADDINCL GLOBAL FOR proto contrib/libs/protobuf/src`), so it shows up here
-	// AS WELL AS via the trailing macro expansion (-I=$PROTOBUF_INCLUDE_PATH).
-	// A peer that re-declares this module's own PROTO_NAMESPACE contributes the
-	// same `FOR proto $(S)/<ns>` addincl, which lands in the set at the PEER's
-	// encounter position (e.g. sg7 taxi_schemas_schemas_proto: -I=$(S)/taxi/...
-	// after -I=$(S)/contrib/libs/protobuf/src) — rendering verbatim preserves it,
-	// where a dedup against the structural own-namespace arm would not.
+	// Upstream renders `${pre=-I=:_PROTO__INCLUDE}` VERBATIM — the FOR-proto GLOBAL
+	// ADDINCL set in encounter order, with no dedup against the structural prefix.
+	// `protoInclude` is the peers-only set (the module's own namespace rides the
+	// structural `-I=$(S)/cppOutRoot` arm above). protobuf-src enters this set for
+	// modules transitively peering the protobuf runtime (its ya.make declares
+	// `ADDINCL GLOBAL FOR proto .../protobuf/src`), so it shows up here AS WELL AS
+	// via the trailing macro expansion. A peer that re-declares this module's own
+	// PROTO_NAMESPACE contributes the same `FOR proto $(S)/<ns>` addincl, landing
+	// at the PEER's encounter position — rendering verbatim preserves it, where a
+	// dedup against the structural own-namespace arm would not.
 	for _, p := range protoInclude {
 		mid = append(mid, internStr("-I="+p.string()))
 	}
@@ -432,10 +423,9 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 			internStr("--"+plugin.Spec.Name+"_out=$(B)/"+cppOutRoot),
 		)
 
-		// Upstream's _PROTO_PLUGIN_ARGS_BASE expands `${pre=--${Name}_opt=:OutParm}`
-		// over OutParm, whose commas are macro-argument separators: the
-		// EXTRA_OUT_FLAG scalar splits on `,`, empty pieces drop, and each
-		// surviving piece becomes its own `--${Name}_opt=<piece>`.
+		// Upstream expands `${pre=--${Name}_opt=:OutParm}` over OutParm, whose
+		// commas are argument separators: the EXTRA_OUT_FLAG scalar splits on `,`,
+		// empty pieces drop, each survivor becomes its own `--${Name}_opt=<piece>`.
 		for _, piece := range strings.Split(plugin.Spec.ExtraOutFlag, ",") {
 			if piece == "" {
 				continue

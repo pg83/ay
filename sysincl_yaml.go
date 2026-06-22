@@ -6,11 +6,10 @@ import (
 	"strings"
 )
 
-// parseSysInclYAML parses a sysincl file — a custom streaming parser over the
-// exact YAML subset the build/sysincl (and build/internal/sysincl) files use,
-// replacing the generic yaml.v3 decode (which re-allocated a node tree per
-// file per scanner, ~14% of the run's object churn). The grammar, verified
-// across the tree (anything else throws):
+// parseSysInclYAML is a custom streaming parser over the exact YAML subset the
+// sysincl files use, replacing the generic yaml.v3 decode (which re-allocated a
+// node tree per file per scanner, ~14% of the run's object churn). The grammar,
+// verified across the tree (anything else throws):
 //
 //   - a top-level block sequence of records;
 //   - record keys: source_filter (plain or double-quoted scalar),
@@ -21,17 +20,17 @@ import (
 //   - comments (full-line and trailing) and blank lines anywhere; double-quoted
 //     scalars know the \\ and \" escapes.
 //
-// No anchors/aliases, flow collections, block scalars, or multi-document
-// markers. Headers intern straight from the line bytes; targets intern via the
-// scratch buffer (sourceBytes); only filters and CI keys materialize strings.
-// The data buffer (the reused FS read buffer) is not retained past the call.
+// No anchors/aliases, flow collections, block scalars, or multi-document markers.
+// Headers intern from the line bytes; targets via the scratch buffer
+// (sourceBytes); only filters and CI keys materialize strings. The data buffer
+// (reused FS read buffer) is not retained past the call.
 func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 	var (
 		out  []SysIncl
 		rec  SysIncl
 		open bool
 
-		// `header:` awaiting a nested fan-out list (or nothing = null target).
+		// `header:` awaiting a nested fan-out list (or null target).
 		pendingKey    []byte
 		pendingPaths  []VFS
 		pendingIndent int
@@ -77,7 +76,7 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 			rec.CaseInsensitive = string(val) == "false"
 		case "includes":
 			// `includes:` opens a block sequence; `includes: []` is the empty flow
-			// form (smart_devices_telink.yml) — both contribute no mappings inline.
+			// form — both contribute no mappings inline.
 			if len(val) != 0 && string(val) != "[]" {
 				throwFmt("%s:%d: inline includes value is not part of the sysincl subset", name, lineNo)
 			}
@@ -144,8 +143,7 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 		}
 
 		if rest[0] == '\t' {
-			// A tab-indented line is in the subset only as a comment
-			// (unsorted.yml carries one such #if line).
+			// A tab-indented line is in the subset only as a comment.
 			j := 0
 
 			for j < len(rest) && (rest[j] == '\t' || rest[j] == ' ') {
@@ -200,9 +198,9 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 		flushPending()
 
 		if indent == 0 {
-			// Single-record document form (smart_devices_telink.yml: a bare
-			// `includes: []` with no leading `-`): an indent-0 key opens, then
-			// continues, one implicit record instead of the block-sequence form.
+			// Single-record document form (a bare `includes: []` with no leading
+			// `-`): an indent-0 key opens one implicit record instead of the
+			// block-sequence form.
 			open = true
 			recordKey(rest)
 
@@ -222,7 +220,7 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 }
 
 // stripYComment drops a trailing ` #...` comment (quote-aware) and right-trims;
-// a line whose first byte is '#' is dropped whole.
+// a line starting with '#' is dropped whole.
 func stripYComment(b []byte) []byte {
 	if len(b) > 0 && b[0] == '#' {
 		return nil
@@ -260,9 +258,9 @@ func trimYSpace(b []byte) []byte {
 	return b
 }
 
-// yScalarColon finds the key/value colon of a `header: target` item — the
-// first ':' followed by a space or end of line ('#'-comments are already
-// stripped). -1 means a bare scalar. A quoted key scans past its closing quote.
+// yScalarColon finds the key/value colon of a `header: target` item — the first
+// ':' followed by a space or end of line. -1 means a bare scalar. A quoted key
+// scans past its closing quote.
 func yScalarColon(b []byte) int {
 	i := 0
 
@@ -291,10 +289,9 @@ func yScalarColon(b []byte) int {
 	return -1
 }
 
-// unquoteYScalar cooks one scalar: a plain scalar is returned as-is (a view),
-// a double-quoted one is unwrapped — escape-free bodies stay views, the \\ and
-// \" escapes rewrite in place into the quoted region (shorter than the input,
-// which lives in the FS read buffer, so the rewrite is safe).
+// unquoteYScalar cooks one scalar: a plain scalar returns as-is (a view), a
+// double-quoted one is unwrapped — escape-free bodies stay views, the \\ and \"
+// escapes rewrite in place into the quoted region (always shorter, so safe).
 func unquoteYScalar(name string, lineNo int, b []byte) []byte {
 	if len(b) == 0 || b[0] != '"' {
 		return b

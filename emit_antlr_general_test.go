@@ -3,13 +3,11 @@ package main
 import "testing"
 
 // TestAntlrParsedIncludes_ExcludesBuildIntermediateInputs locks the induced
-// include set of a RUN_ANTLR output: a consumer that walks the generated
-// output's closure (e.g. the proto-split RUN_PROGRAM protoc node walking
-// SQLParser.proto) must see the generator's $(S) leaf sources (grammar,
-// CONFIGURE_FILE source, jar, scripts) but NOT the $(B) intermediate the
-// generator itself consumed (the CONFIGURE_FILE'd protobuf.stg). Upstream
-// reaches that $(B) intermediate via the producer dep edge, not as a
-// transitive source input; listing it diverges the PR self_uid.
+// include set of a RUN_ANTLR output: a consumer walking the generated output's
+// closure must see the generator's $(S) leaf sources (grammar, CONFIGURE_FILE
+// source, jar, scripts) but NOT the $(B) intermediate the generator consumed.
+// That intermediate is reached via the producer dep edge, not as a transitive
+// source input; listing it diverges the self_uid.
 func TestAntlrParsedIncludes_ExcludesBuildIntermediateInputs(t *testing.T) {
 	const mod = "yql/essentials/parser/proto_ast/gen/v0_proto_split"
 	stgBuild := build(mod + "/org/antlr/codegen/templates/protobuf/protobuf.stg")
@@ -49,16 +47,14 @@ func TestAntlrParsedIncludes_ExcludesBuildIntermediateInputs(t *testing.T) {
 }
 
 // TestAntlrParsedIncludes_LexerCrossIncludesParserCpp locks the ANTLR3
-// combined-grammar include convention observed in the reference graph: a
-// generated *Lexer.cpp's compile reaches the paired *Parser.cpp (which in turn
-// holds the protobuf header), and NEITHER the lexer nor the parser .cpp lists
-// the sibling generated .h files as inputs. Empirically, for jsonpath:
+// combined-grammar include convention: a generated *Lexer.cpp reaches the paired
+// *Parser.cpp (which holds the protobuf header), and NEITHER .cpp lists the
+// sibling generated .h files as inputs. Empirically:
 //
 //	JsonPathLexer.cpp.o inputs = {JsonPathLexer.cpp, JsonPathParser.cpp, .pb.h}
 //	JsonPathParser.cpp.o inputs = {JsonPathParser.cpp, .pb.h}
 //
-// i.e. Lexer.cpp -> Parser.cpp (one direction only), no *.h, Parser.cpp does
-// not pull Lexer.cpp.
+// i.e. Lexer.cpp -> Parser.cpp only, no *.h, no reverse edge.
 func TestAntlrParsedIncludes_LexerCrossIncludesParserCpp(t *testing.T) {
 	const mod = "yql/essentials/parser/proto_ast/gen/jsonpath"
 	outByTok := map[string]VFS{

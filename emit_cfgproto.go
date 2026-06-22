@@ -1,13 +1,12 @@
 package main
 
 // emitLibraryCfgProtoSource emits a `.cfgproto` source: the PB/yellow producer
-// (_CPP_CFGPROTO_CMD, proto.conf:494-497 — the EV protoc wrapper with the
-// proto_config plugin instead of event2cpp, outputs keeping the source
-// extension), the generated `.cfgproto.pb.h`/`.pb.cc` parsed-output
-// registration (standard protoc --cpp_out header: the import-induced .pb.h plus
-// the file-level NProtoConfig.Include headers the plugin inserts, with the
-// protobuf runtime riding protoc's GeneratorRefs as for any .proto), and the
-// downstream `.pb.cc` compile archived as the module's codegen object.
+// (the EV protoc wrapper with the proto_config plugin instead of event2cpp,
+// outputs keeping the source extension), the generated `.cfgproto.pb.h`/`.pb.cc`
+// parsed-output registration (the import-induced .pb.h plus the file-level
+// NProtoConfig.Include headers the plugin inserts, with the protobuf runtime
+// riding protoc's GeneratorRefs as for any .proto), and the downstream `.pb.cc`
+// compile archived as the module's codegen object.
 func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
 	cfgSource := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
 	cfgRelPath := cfgSource.rel()
@@ -17,8 +16,8 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	configPluginLDRef, configPluginBinary := ctx.tool(argLibraryCppProtoConfigPlugin)
 
 	na := ctx.emit.nodeArenas()
-	// CPP_CFGPROTO_CMD trailing plugin block: proto_config plugin + --config_out
-	// (proto.conf:496), in place of CPP_EV_OPTS.
+	// Trailing plugin block: proto_config plugin + --config_out, in place of the
+	// EV options.
 	configOpts := na.strList(internStr("--plugin=protoc-gen-config="+configPluginBinary.string()),
 		argConfigOutB.str())
 
@@ -55,14 +54,13 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		reg := codegenRegForInstance(ctx, instance)
 		registerBoundGeneratedParsedOutput(ctx, instance, pkPB, cfgH, cfgHParsed, cfgRef, cfgGenRefs)
 		reg.addClosureLeaf(cfgH, cfgSource)
-		// CPP_EV_OUTS marks no `main` output, so a unit that #includes this
-		// generated .pb.h must also reach its sibling .pb.cc (EDT_OutTogether) —
-		// the way an importer's .pb.cc.o reaches the imported module's .pb.cc. The
-		// sibling rides as a bare, non-expanded closure leaf (NOT a traversed
-		// parsed include): consumers get the .pb.cc itself, but the scanner never
-		// descends into it to re-resolve its cpp-only protoc INDUCED_DEPS(cpp …)
-		// (wire_format.h et al.) into the ordinary downstream consumer. The self
-		// .pb.cc.o still walks cfgPbCC directly and keeps those induced deps.
+		// No `main` output is marked, so a unit that #includes this generated
+		// .pb.h must also reach its sibling .pb.cc (EDT_OutTogether). The sibling
+		// rides as a bare, non-expanded closure leaf (NOT a traversed parsed
+		// include): consumers get the .pb.cc itself, but the scanner never
+		// descends into it to re-resolve its cpp-only protoc induced deps
+		// (wire_format.h et al.) into the consumer. The self .pb.cc.o still walks
+		// cfgPbCC directly and keeps those induced deps.
 		reg.addClosureLeaf(cfgH, cfgPbCC)
 
 		cfgCCParsed := []IncludeDirective{
@@ -75,10 +73,10 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	ccSrcRel := srcRel + ".pb.cc"
 	ccIn := in
 	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), cfgPbCC, in.ScanCfg)
-	// CPP_EV_OUTS marks neither .pb.cc nor .pb.h as the protoc `main` output
-	// (unlike CPP_PROTO_OUTS), so the generated .pb.h does not ride the .pb.cc.o
-	// as a direct input even though the .pb.cc #includes it — drop it from the
-	// walked closure exactly as the .ev path does (emitLibraryEvSource).
+	// Neither .pb.cc nor .pb.h is marked the protoc `main` output, so the
+	// generated .pb.h does not ride the .pb.cc.o as a direct input even though
+	// the .pb.cc #includes it — drop it from the walked closure as the .ev path
+	// does.
 	{
 		filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
 

@@ -378,7 +378,7 @@ func TestResolvePySrcRel_RootRelativeProto(t *testing.T) {
 	moduleDir := "market/idx/datacamp/proto/external"
 	srcDirs := []VFS{dirKey(moduleDir)}
 
-	// Root-relative proto SRCS resolves at the arcadia root.
+	// Root-relative proto SRCS resolves at the source root.
 	got := resolvePySrcRel(fs, srcDirs, moduleDir, "market/idx/datacamp/proto/api/ExportMessage.proto")
 	if want := "market/idx/datacamp/proto/api/ExportMessage.proto"; got != want {
 		t.Fatalf("root-relative proto: got %s, want %s", got, want)
@@ -393,12 +393,9 @@ func TestResolvePySrcRel_RootRelativeProto(t *testing.T) {
 
 // A dirty (non-clean) srcRel must NOT be source-root bound. FS.isFile
 // normalises `..`/`.` segments, so resolvePySrcRel(modulePath="pkg/sub",
-// srcRel="../root.proto") would otherwise probe and match $(S)/root.proto and
-// return the out-of-tree `../root.proto`. Upstream ymake reconstructs
-// $S/../root.proto as out-of-tree and does not source-root bind it, so the
-// arcadia-root fallback applies only to clean paths — matching the
-// resolveSourceVFS guard. The dirty entry falls through to the module-relative
-// join.
+// srcRel="../root.proto") would otherwise match $(S)/root.proto and return the
+// out-of-tree `../root.proto`. The source-root fallback therefore applies only
+// to clean paths; the dirty entry falls through to the module-relative join.
 func TestResolvePySrcRel_DirtyPathNotRootBound(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"root.proto": "",

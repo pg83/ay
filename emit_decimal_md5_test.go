@@ -6,10 +6,9 @@ import (
 )
 
 // TestEmitDecimalMD5_GeneratedSourceEntersArchive pins the
-// DECIMAL_MD5_LOWER_32_BITS emitter: the macro produces an SV node whose stdout
-// output is a build-root .cpp, that .cpp is compiled by a downstream CC node
-// depending on the SV producer, and the resulting .o joins the module archive
-// through ordinary generated-source handling.
+// DECIMAL_MD5_LOWER_32_BITS emitter: the macro produces an SV node emitting a
+// build-root .cpp, a downstream CC depending on the SV producer compiles it, and
+// the .o joins the module archive via ordinary generated-source handling.
 func TestEmitDecimalMD5_GeneratedSourceEntersArchive(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"mod/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n" +
@@ -65,7 +64,7 @@ func TestEmitDecimalMD5_GeneratedSourceEntersArchive(t *testing.T) {
 		}
 	}
 
-	// Downstream CC compiling the generated source, depending on the SV producer.
+	// Downstream CC compiling the generated source.
 	cc := mustNodeByOutput(t, g, "$(B)/mod/hash.auto.cpp.o")
 
 	if got := cc.KV.P.string(); got != "CC" {
@@ -78,8 +77,8 @@ func TestEmitDecimalMD5_GeneratedSourceEntersArchive(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"$(B)/mod/hash.auto.cpp",            // the generated source
-		"$(S)/mod/data.txt",                 // SV source inputs ride via closure leaves
+		"$(B)/mod/hash.auto.cpp",            // generated source
+		"$(S)/mod/data.txt",                 // SV inputs ride via closure leaves
 		"$(S)/mod/helper.hpp",               //
 		"$(S)/build/scripts/decimal_md5.py", //
 	} {

@@ -5,10 +5,9 @@ import (
 )
 
 // TestGen_FlexOldDefaultLexerGeneration pins the default old-flex _SRC("l")
-// mechanism (build/conf/bison_lex.conf): a `.l` source emits an LX/yellow node
-// `$(B)/contrib/tools/flex-old/flex -o<out>.l.cpp <src>.l`, the generated
-// `.l.cpp` is compiled as C++ and archived, and the module's `.ADDINCL=
-// contrib/tools/flex-old` lands `-I$(S)/contrib/tools/flex-old` on the compile.
+// mechanism: a `.l` source emits an LX/yellow node running flex `-o<out>.l.cpp
+// <src>.l`, the generated `.l.cpp` is compiled as C++ and archived, and the
+// flex-old ADDINCL lands `-I$(S)/contrib/tools/flex-old` on the compile.
 func TestGen_FlexOldDefaultLexerGeneration(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"contrib/tools/flex-old/ya.make":     "PROGRAM(flex)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(main.cpp)\nEND()\n",
@@ -90,9 +89,8 @@ END()
 	}
 }
 
-// TestGen_FlexDoesNotPerturbBisonOrPlainCpp is the negative guard: a `.y`
-// module still emits a YC node and no LX node, and a plain `.cpp` module emits
-// neither.
+// TestGen_FlexDoesNotPerturbBisonOrPlainCpp is the negative guard: a `.y` module
+// still emits a YC node and no LX node; a plain `.cpp` module emits neither.
 func TestGen_FlexDoesNotPerturbBisonOrPlainCpp(t *testing.T) {
 	files := map[string]string{}
 	addToolchainPeers(files)

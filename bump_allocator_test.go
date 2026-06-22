@@ -28,8 +28,8 @@ func TestBumpAllocatorAllocAtLeastN(t *testing.T) {
 func TestBumpAllocatorPacksCommittedRegions(t *testing.T) {
 	a := newBumpAllocator[int](16)
 
-	// Each closure commits exactly what it wrote; reading the region back from
-	// its post-alloc chunk/offset must yield the written values (regions are
+	// Each iteration commits what it wrote; reading the region back from its
+	// post-alloc chunk/offset yields the written values (regions are
 	// address-stable and packed).
 	type span struct {
 		chunk int
@@ -50,8 +50,8 @@ func TestBumpAllocatorPacksCommittedRegions(t *testing.T) {
 
 		r := a.alloc(k)
 		wrote := fill(r, vals...)
-		// Capture the region position AFTER alloc (which may have rolled to a
-		// new chunk) but BEFORE commit advances the boundary.
+		// Capture position after alloc (may have rolled to a new chunk) but
+		// before commit advances the boundary.
 		ci := len(a.chunks) - 1
 		off := a.off
 		a.commit(wrote)
@@ -74,7 +74,7 @@ func TestBumpAllocatorPacksCommittedRegions(t *testing.T) {
 func TestBumpAllocatorGeometricGrowth(t *testing.T) {
 	a := newBumpAllocator[byte](8)
 
-	// Force a new chunk each time by consuming the whole current chunk.
+	// Force a new chunk each time by consuming the whole chunk.
 	sizes := []int{}
 
 	for i := 0; i < 6; i++ {
@@ -83,7 +83,7 @@ func TestBumpAllocatorGeometricGrowth(t *testing.T) {
 		sizes = append(sizes, len(a.chunks[len(a.chunks)-1]))
 	}
 
-	// Expect unbounded 1.5x growth: 8, 12, 18, 27, 40, 60.
+	// Unbounded 1.5x growth: 8, 12, 18, 27, 40, 60.
 	want := []int{8, 12, 18, 27, 40, 60}
 
 	for i, w := range want {
@@ -96,8 +96,8 @@ func TestBumpAllocatorGeometricGrowth(t *testing.T) {
 func TestBumpAllocatorChunkFitsLargeAlloc(t *testing.T) {
 	a := newBumpAllocator[int](4)
 
-	// An alloc larger than the current chunk size must still get a single
-	// contiguous region (the chunk is grown to fit it).
+	// An alloc larger than the chunk size still gets one contiguous region
+	// (the chunk grows to fit it).
 	r := a.alloc(100)
 
 	if len(r) < 100 {

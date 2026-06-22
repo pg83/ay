@@ -7,15 +7,14 @@ var (
 	ldSvnInterfacePath = ldSvnInterfaceVFS.string()
 	ldLinkExePath      = ldLinkExeVFS.string()
 	ldFsToolsPath      = ldFsToolsVFS.string()
-	// vcsJSONBase64 is vcsJSONContent for the inline `ay fetch base64 <data> $(B)/vcs.json`
-	// producer (cmdFetchBase64 decodes it to the file).
+	// vcsJSONBase64 is vcsJSONContent for the inline fetch-base64 producer that
+	// decodes it to $(B)/vcs.json.
 	vcsJSONBase64 = base64.StdEncoding.EncodeToString([]byte(vcsJSONContent))
 )
 
 // ldScriptInputs seeds the link node's $(S) tooling inputs: the wrapper scripts it
-// invokes plus the non-script vcs template. Each .py wrapper's import closure
-// (thinlto_cache, process_command_files, process_whole_archive_option, …) is added
-// from the script table in composeLDInputs — not hand-listed here.
+// invokes plus the non-script vcs template. Each wrapper's import closure is added
+// from the script table in composeLDInputs, not hand-listed here.
 var ldScriptInputs = []VFS{
 	ldVcsInfoVFS,
 	ldSvnInterfaceVFS,
@@ -115,10 +114,9 @@ func emitLD(
 	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	envFull := hostP.toolEnv()
 
-	// _LINK_EXE (build/conf/linkers/ld.conf:321): GENERATE_VCS && _GENERATE_EXTRA_OBJS
-	// && REAL_LINK_EXE(link && LINK_OR_COPY_SO_CMD) && DWARF && LINK_ADDITIONAL_SECTIONS_COMMAND.
-	// _GENERATE_EXTRA_OBJS is the link_sbom.py step (sbom.conf:26, EMBED_SBOM &&
-	// RELEASE); LINK_ADDITIONAL_SECTIONS_COMMAND embeds .rosbomdata via llvm-objcopy.
+	// The link step chains: vcs gen, vcs compile, real link, optional sbom embed,
+	// dwarf, and the additional-sections step. The sbom embed (link_sbom) runs only
+	// under EMBED_SBOM && RELEASE; the sections step embeds .rosbomdata via objcopy.
 	sbomEmbed := len(sbomPaths) > 0
 	sbomJSON := build(binPrefix + "__sbomdata.json").string()
 
@@ -131,10 +129,9 @@ func emitLD(
 
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: strB, Env: envFull})
 
-	// LINK_OR_COPY_SO_CMD is gated on SO_OUTPUTS (build/ymake.core.conf:1065), set
-	// only for OPENSOURCE (opensource.conf:22) or modules with dynamic-lib outputs.
-	// Internal builds (sbom contour) omit it for plain programs — and then fs_tools.py
-	// is not one of the node's $(S) tooling inputs either (composeLDInputs).
+	// The link-or-copy step is gated on SO_OUTPUTS, set only for opensource or
+	// modules with dynamic-lib outputs. Other builds omit it for plain programs,
+	// and then fs_tools is not a $(S) tooling input either (composeLDInputs).
 	emitCopy := instance.Platform.Flags[envOPENSOURCE] == strYes || len(dynamicPaths) > 0
 
 	if emitCopy {
@@ -164,18 +161,16 @@ func emitLD(
 
 	inputs = append(inputs, inputTail)
 
-	// SBOM components of the link closure: collected as link inputs (gen_sbom.py
-	// outputs the embedding program reads via link_sbom.py). Order/dups are
-	// irrelevant — normalize sorts and dedups inputs.
+	// SBOM components of the link closure, collected as link inputs. Order/dups are
+	// irrelevant; normalize sorts and dedups inputs.
 	if len(sbomPaths) > 0 {
 		inputs = append(inputs, sbomPaths)
 		inputs = append(inputs, []VFS{linkSbomScriptVFS})
 	}
 
-	// Whole-archive is a LINK ATTRIBUTE of a subset of the peer archives (the link
-	// command wraps them in --whole-archive), not an independent dependency source:
-	// every wholeArchiveRef is already in peerLDRefs. So it is NOT appended here —
-	// peerLDRefs already covers it, and appending would duplicate the dep.
+	// Whole-archive is a link attribute of a subset of the peer archives (wrapped in
+	// --whole-archive), not an independent dependency source: every wholeArchiveRef
+	// is already in peerLDRefs, so appending here would duplicate the dep.
 	deps := make([]NodeRef, 0, len(ccRefs)+len(pluginRefs)+len(globalRefs)+len(peerLDRefs)+len(dynamicRefs)+len(objcopyRefs))
 	deps = append(deps, ccRefs...)
 	deps = append(deps, pluginRefs...)
@@ -237,17 +232,11 @@ func lastPathComponent(p string) string {
 	return p
 }
 
-// emitVCSNode emits the node that writes the inline vcs.json stub ({}) to
-// $(B)/vcs.json — the input the vcs_info step reads to generate __vcs_version__.c.
-// It is a plain build command (it writes a file, it does not fetch a resource), so
-// it carries no FETCH kind; consumers depend on it like any producer. Its uid is
-// content-stable (set in the node), so emitting it from every link node dedups to
-// one. `dump normalize` folds $(B)/vcs.json back to the upstream $(VCS)/vcs.json
-// reference and strips this producer (upstream mounts vcs.json, has no producer node).
-// vcsJSONContent is the "No VCS" vcs.json the producer node writes — the default
-// get_default_json() from build/scripts/vcs_info.py. The vcs_info / link_sbom steps read
-// these fields (ARCADIA_SOURCE_HG_HASH, PROGRAM_VERSION, …); the empty "{}" stub made
-// link_sbom.py KeyError. The `\n` escapes are JSON-level (literal in this raw string).
+// vcsJSONContent is the "No VCS" default vcs.json the producer node writes — the
+// input the vcs_info step reads to generate __vcs_version__.c. The vcs_info /
+// link_sbom steps read these fields ($(VCS) hash, PROGRAM_VERSION, …); an empty
+// "{}" stub made link_sbom KeyError. The `\n` escapes are JSON-level (literal in
+// this raw string).
 const vcsJSONContent = `{
     "ARCADIA_SOURCE_HG_HASH": "0000000000000000000000000000000000000000",
     "ARCADIA_SOURCE_LAST_AUTHOR": "<UNKNOWN>",
@@ -271,9 +260,9 @@ const vcsJSONContent = `{
 
 // emitVCSNode emits the single node that writes vcs.json to $(B)/vcs.json — the input
 // the vcs_info step reads to generate __vcs_version__.c and link_sbom stamps the SBOM
-// with. It is emitted once (ctx.vcsRef); link nodes depend on that ref. `dump normalize`
-// folds $(B)/vcs.json to the upstream $(VCS)/vcs.json and strips this producer (upstream
-// mounts vcs.json, has no producer node), so its content does not affect graph parity.
+// with. Emitted once (ctx.vcsRef); link nodes depend on that ref. `dump normalize`
+// folds $(B)/vcs.json to the upstream $(VCS)/vcs.json and strips this producer, so its
+// content does not affect graph parity.
 func emitVCSNode(emit Emitter, host *Platform) NodeRef {
 	na := emit.nodeArenas()
 
@@ -327,13 +316,11 @@ func composeLDCmdVcsCompile(p *Platform, tc ModuleToolchain, vcsCPath, vcsOPath 
 	)
 	cmdArgs = append(cmdArgs, argIS.str())
 
-	// The __vcs_version__.c compile sits at the LD node's "own slot": its
-	// own-CFLAGS bucket starts with platform-level CFlags (sourced from
-	// build/internal/ya.conf — -fno-omit-frame-pointer, -Wno-unknown-argument)
-	// just like a regular CC compile assembles via composeOwnAndPeerCFlagsAtOwnSlot.
-	// Forgetting p.CFlags here drops those two flags from this sub-cmd while
-	// the rest of the module's CC compiles keep them, producing the same
-	// post-defines tail divergence in every LD VCS sub-cmd.
+	// The __vcs_version__.c compile sits at the LD node's "own slot": its own-CFLAGS
+	// bucket starts with platform-level p.CFlags, like a regular CC compile via
+	// composeOwnAndPeerCFlagsAtOwnSlot. Omitting p.CFlags here drops those flags from
+	// this sub-cmd while the module's CC compiles keep them, diverging the post-defines
+	// tail in every LD VCS sub-cmd.
 	preNoLibcExtras := make([]ARG, 0, len(p.CFlags)+len(moduleCFlags)+len(peerCFlagsGlobal))
 	preNoLibcExtras = append(preNoLibcExtras, p.CFlags...)
 	preNoLibcExtras = append(preNoLibcExtras, moduleCFlags...)
@@ -426,8 +413,7 @@ func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, outputPath, vcsOPath s
 }
 
 func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *STR, wantsStrip, useArcadiaLibm bool) []STR {
-	// EXPORTS_SCRIPT appends the version-script flag right after -rdynamic
-	// per upstream's EXPORTS_VALUE in build/conf/linkers/ld.conf:138. The macro
+	// EXPORTS_SCRIPT appends the version-script flag right after -rdynamic. The macro
 	// arg is already a source-root-relative path, not module-relative.
 	trailer := []STR{argRdynamic.str()}
 
@@ -457,13 +443,12 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 	trailer = appendInternStrs(trailer, p.linkerSelectionTailFlags())
 	trailer = appendArgStr(trailer, peerLDFlagsGlobal, ownLDFlags)
 	// objAddLibsGlobal entries are group-ARGs (one per EXTRALIBS call); split each
-	// into its individual -l tokens here at the command boundary.
+	// into individual -l tokens here at the command boundary.
 	trailer = appendArgGroupStr(trailer, objAddLibsGlobal)
 	trailer = append(trailer, p.SystemLibs...)
 
-	// COMMON_LINK_SETTINGS `C_SYSTEM_LIBRARIES += -lm` in the USE_ARCADIA_LIBM ==
-	// "no" arm (ymake.core.conf:941-942). When the flag is enabled the module
-	// links the contrib/libs/libm peer archive instead, so system -lm is omitted.
+	// System -lm in the USE_ARCADIA_LIBM == "no" arm. When the flag is enabled the
+	// module links the libm peer archive instead, so system -lm is omitted.
 	if !useArcadiaLibm {
 		trailer = append(trailer, argDashLm.str())
 	}
@@ -479,7 +464,7 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 }
 
 // ldSbomLang maps the program's module language to the uppercase --lang token
-// link_sbom.py expects (CPP for C-family programs, PY3 for python programs).
+// link_sbom expects (CPP for C-family programs, PY3 for python programs).
 func ldSbomLang(instance ModuleInstance) string {
 	if ldModuleLang(instance) == mlPy3 {
 		return "PY3"
@@ -488,9 +473,9 @@ func ldSbomLang(instance ModuleInstance) string {
 	return "CPP"
 }
 
-// composeLDCmdLinkSbom is _GENERATE_EXTRA_OBJS (sbom.conf:26): link_sbom.py reads
-// the ${ext=.component.sbom:SRCS_GLOBAL} of the link closure and the program's own
-// component into $BINDIR/__sbomdata.json, stamped with --vcs-info. cwd=$(B).
+// composeLDCmdLinkSbom: link_sbom reads the .component.sbom files of the link
+// closure and the program's own component into $BINDIR/__sbomdata.json, stamped
+// with --vcs-info. cwd=$(B).
 func composeLDCmdLinkSbom(tc ModuleToolchain, lang, moddir, sbomJSON string, sbomPaths []VFS) []STR {
 	cmd := make([]STR, 0, 10+len(sbomPaths))
 	cmd = append(cmd,
@@ -509,8 +494,8 @@ func composeLDCmdLinkSbom(tc ModuleToolchain, lang, moddir, sbomJSON string, sbo
 	return cmd
 }
 
-// composeLDCmdSbomObjcopy is LINK_ADDITIONAL_SECTIONS_COMMAND with _SBOM_SECTION
-// (sbom.conf:27): llvm-objcopy embeds __sbomdata.json into the binary's .rosbomdata.
+// composeLDCmdSbomObjcopy: objcopy embeds __sbomdata.json into the binary's
+// .rosbomdata section.
 func composeLDCmdSbomObjcopy(tc ModuleToolchain, sbomJSON, targetPath string) []STR {
 	return []STR{
 		tc.Objcopy,
@@ -550,10 +535,9 @@ func composeLDSplitDwarfCmds(na *NodeArenas, tc ModuleToolchain, outputPath stri
 func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts ScriptDeps, emitCopy bool, hasBundles bool) InputChunks {
 	chunks := make(InputChunks, 0, 3+len(ldScriptInputs))
 
-	// peerLibPaths is the caller's member slice, dup-free by construction (gen's
-	// peerArchive collection pass adds via deduper) — referenced as its own
-	// chunk, never copied; it seeds the dedup set the remaining $(B) categories
-	// are filtered through, so the flat order stays byte-identical.
+	// peerLibPaths is the caller's dup-free member slice, referenced as its own
+	// chunk, never copied; it seeds the dedup set the remaining $(B) categories are
+	// filtered through, so the flat order stays byte-identical.
 	deduper.reset()
 
 	for _, p := range peerLibPaths {
@@ -586,17 +570,14 @@ func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPa
 	chunks = append(chunks, buildRootBlock)
 
 	// ldScriptInputs seeds the link's $(S) tooling; expand each wrapper to its
-	// import closure via the table (e.g. link_exe -> process_command_files,
-	// thinlto_cache, process_whole_archive_option) — a shared table slice,
-	// referenced as its own chunk. Non-script entries (svn_interface.c) are not
-	// in the table and pass through. Dups (link_exe and fs_tools both import
-	// process_command_files) are dropped in normalization.
+	// import closure via the table (a shared slice, referenced as its own chunk).
+	// Non-script entries (svn_interface.c) are not in the table and pass through.
+	// Dups across wrappers are dropped in normalization.
 	for _, s := range ldScriptInputs {
-		// fs_tools.py is the LINK_OR_COPY_SO_CMD script; when that step is not
-		// emitted (no SO_OUTPUTS) it is not an input either (its sole import,
-		// process_command_files, still arrives via link_exe.py) — unless the
-		// module declares BUNDLE, whose _BUNDLE_TARGET MOVE_FILE ($FS_TOOLS rename)
-		// attributes the same ${input:"build/scripts/fs_tools.py"} to this link node.
+		// fs_tools is the link-or-copy script; when that step is not emitted (no
+		// SO_OUTPUTS) it is not an input either (its sole import arrives via
+		// link_exe) — unless the module declares BUNDLE, whose move-file rename
+		// attributes the same fs_tools input to this link node.
 		if s == copyFsToolsVFS && !emitCopy && !hasBundles {
 			continue
 		}
@@ -626,11 +607,10 @@ func emitOwnLDPlugins(ctx *GenCtx, instance ModuleInstance, plugins []STR, tc Mo
 		Paths: make([]VFS, 0, len(plugins)),
 	}
 
-	// The .py→.pyplugin copy is platform-independent codegen; upstream attributes
-	// it to the target platform (same rule as reg3.cpp in emit_py_codegen). Emit
-	// under ctx.target so a plugin pulled by both the target and a host tool
-	// produces byte-identical CP nodes that collapse by uid — no cross-platform
-	// cache needed.
+	// The .py→.pyplugin copy is platform-independent codegen, attributed to the
+	// target platform. Emit under ctx.target so a plugin pulled by both the target
+	// and a host tool produces byte-identical CP nodes that collapse by uid — no
+	// cross-platform cache needed.
 	cpInstance := instance
 	cpInstance.Platform = ctx.target
 

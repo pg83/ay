@@ -33,18 +33,14 @@ var moduleTypeStr = [...]string{
 	mtNone: "", mtBin: "bin", mtLib: "lib", mtSO: "so",
 }
 
-// Typed replacements for the former map-valued Node fields. These drop the
-// per-node map iteration, key sort and interface{} boxing the canonical-hash and
-// JSON-write paths paid when KV, Requirements, TargetProperties and Env were
-// string-keyed maps. The fields and their types mirror exactly what upstream
-// ymake emits (see the sg* reference graphs).
+// Typed replacements for the former map-valued Node fields, dropping the per-node
+// map iteration, key sort and interface{} boxing the hash and JSON-write paths
+// paid as string-keyed maps. The fields mirror exactly what upstream emits.
 
 // EnvVar is one environment binding. Node.Env and Cmd.Env are ordered []EnvVar
-// rather than maps: nothing looks them up by key (they are only iterated — to
-// serialize, to hash and to set the child process env), so a slice is cheaper to
-// store (nil for the common empty case, no per-node map alloc) and to write (no
-// key sort). The gate re-parses the env JSON object into a map before hashing, so
-// the emission order is free.
+// rather than maps: nothing looks them up by key, so a slice is cheaper to store
+// (nil when empty) and to write (no key sort). The gate re-parses the env JSON
+// into a map before hashing, so emission order is free.
 type EnvVar struct {
 	Name  ENV
 	Value STR
@@ -70,7 +66,7 @@ func appendEnv(buf []byte, env EnvVars) []byte {
 }
 
 // NetworkMode is a node's "network" requirement; same uint8-enum scheme as
-// ProcKind. The zero value nwNone means absent (the key is omitted).
+// ProcKind. Zero value nwNone means absent (key omitted).
 type NetworkMode uint8
 
 const (
@@ -83,8 +79,7 @@ func (m NetworkMode) string() string {
 	return networkModeStr[m]
 }
 
-// String implements fmt.Stringer — the fmt machinery finds it by name;
-// internal code calls string().
+// String implements fmt.Stringer; internal code calls string().
 func (m NetworkMode) String() string {
 	return m.string()
 }
@@ -95,7 +90,7 @@ type Requirements struct {
 	CPU        float64
 	RAM        float64
 	Network    NetworkMode
-	RAMDisk    float64 // present-with-zero on test nodes, hence the explicit flag
+	RAMDisk    float64 // present-with-zero on test nodes, hence the flag
 	HasRAMDisk bool
 }
 
@@ -103,9 +98,9 @@ func (r Requirements) isEmpty() bool {
 	return r.CPU == 0 && r.RAM == 0 && r.Network == nwNone && !r.HasRAMDisk
 }
 
-// ModuleLang is a node's "module_lang" target property; same uint8-enum scheme
-// as ProcKind. Not the ModuleInstance Language enum: LangPy surfaces as "py3"
-// and test nodes without a module emit "unknown". Zero value mlNone = absent.
+// ModuleLang is a node's "module_lang" target property; same uint8-enum scheme.
+// Not the ModuleInstance Language enum: LangPy surfaces as "py3", module-less test
+// nodes emit "unknown". Zero value mlNone = absent.
 type ModuleLang uint8
 
 const (
@@ -114,7 +109,7 @@ const (
 	mlPy3
 	mlUnknown
 	mlAgnostic
-	mlDescProto         // DESC_PROTO submodule merge node (_DESC_PROTO)
+	mlDescProto         // DESC_PROTO submodule merge node
 	mlProtoDescriptions // PROTO_DESCRIPTIONS merge node
 )
 
@@ -122,8 +117,7 @@ func (l ModuleLang) string() string {
 	return moduleLangStr[l]
 }
 
-// String implements fmt.Stringer — the fmt machinery finds it by name;
-// internal code calls string().
+// String implements fmt.Stringer; internal code calls string().
 func (l ModuleLang) String() string {
 	return l.string()
 }
@@ -143,8 +137,7 @@ func (t ModuleType) string() string {
 	return moduleTypeStr[t]
 }
 
-// String implements fmt.Stringer — the fmt machinery finds it by name;
-// internal code calls string().
+// String implements fmt.Stringer; internal code calls string().
 func (t ModuleType) String() string {
 	return t.string()
 }
@@ -159,9 +152,8 @@ type TargetProperties struct {
 }
 
 // ProcKind is a node's process kind (the kv "p" value): a small fixed set of
-// codes the executor and dumps dispatch on. A uint8 enum (1 byte stored per
-// node, integer compares) expanded to its string only at JSON emit / hash; the
-// zero value pkNone means absent (empty kv has no "p").
+// codes the executor and dumps dispatch on. A uint8 enum expanded to a string
+// only at JSON emit / hash; zero value pkNone means absent.
 type ProcKind uint8
 
 const (
@@ -179,14 +171,14 @@ const (
 	pkEV
 	pkFETCH
 	pkFL
-	pkFL64 // 64-bit flatbuffers (_CPP_FLATC64_CMD): contrib/libs/flatbuffers64/flatc on .fbs64
-	pkGP   // gperf (_SRC("gperf")): contrib/tools/gperf, stdout → <src>.gperf.cpp
-	pkGZ   // gazetteer (_SRC("gztproto")): dict/gazetteer/converter, <src>.gztproto → <src>.proto
+	pkFL64 // 64-bit flatbuffers compiler on .fbs64
+	pkGP   // gperf, stdout → <src>.gperf.cpp
+	pkGZ   // gazetteer converter, <src>.gztproto → <src>.proto
 	pkJS
 	pkJV
 	pkLD
-	pkLX // old-flex lexer producer (_SRC("l"/"lex"/"lpp")): contrib/tools/flex-old/flex → <src>.l.cpp
-	pkLJ // LuaJIT 2.1 objdump (_LUAJIT_21_OBJDUMP): compiles a .lua to a .raw
+	pkLX // old-flex lexer producer → <src>.l.cpp
+	pkLJ // LuaJIT objdump: compiles a .lua to a .raw
 	pkOP
 	pkPB
 	pkPR
@@ -202,19 +194,18 @@ const (
 	pkTS
 	pkYC
 	pkld // lowercase "ld": PREBUILT_PROGRAM copy node (agnostic bin), distinct from pkLD link
-	pkDX // _GEN_SBOM_COMPONENT / toolchain SBOM node (gen_sbom.py)
-	pkBN // BUNDLE rename node (_BUNDLE_TARGET: $MOVE_FILE ${result:Target} → $(B)/<mod>/<name>)
-	pkSV // DECIMAL_MD5_LOWER_32_BITS hash producer (decimal_md5.py, stdout → $(B)/<mod>/<file>)
-	pkSC // SPLIT_CODEGEN producer (_SPLIT_CODEGEN_BASE): prefix.in → prefix.{0..N}.cpp + prefix.cpp + prefix.h
-	pkPD // proto-description producer (_DESC_PROTO / PROTO_DESCRIPTIONS: desc_rawproto_wrapper / merge_files / collect_rawproto / merge_protosrc)
+	pkDX // toolchain SBOM node
+	pkBN // BUNDLE rename node: $MOVE_FILE ${result:Target} → $(B)/<mod>/<name>
+	pkSV // DECIMAL_MD5_LOWER_32_BITS hash producer, stdout → $(B)/<mod>/<file>
+	pkSC // SPLIT_CODEGEN producer: prefix.in → prefix.{0..N}.cpp + prefix.cpp + prefix.h
+	pkPD // proto-description producer (_DESC_PROTO / PROTO_DESCRIPTIONS)
 )
 
 func (k ProcKind) string() string {
 	return procKindStr[k]
 }
 
-// String implements fmt.Stringer — the fmt machinery finds it by name;
-// internal code calls string().
+// String implements fmt.Stringer; internal code calls string().
 func (k ProcKind) String() string {
 	return k.string()
 }
@@ -237,21 +228,20 @@ func (c PColor) string() string {
 	return pColorStr[c]
 }
 
-// String implements fmt.Stringer — the fmt machinery finds it by name;
-// internal code calls string().
+// String implements fmt.Stringer; internal code calls string().
 func (c PColor) String() string {
 	return c.string()
 }
 
 // KV is a node's kv block. P (process kind) is on every node; PC/ShowOut/Name/
-// Path/DisableCache are optional string keys; RunTestNode and the bool form of
-// show_out (ShowOutBool) and the present-but-empty special_runner appear on test
-// nodes; ExtOut carries the dynamic "ext_out_name_for_<file>" entries (py-proto).
+// Path/DisableCache are optional; RunTestNode, ShowOutBool and the present-but-
+// empty special_runner appear on test nodes; ExtOut carries the dynamic
+// "ext_out_name_for_<file>" entries.
 type KV struct {
 	P                ProcKind
 	PC               PColor
 	ShowOut          bool // emitted as the string "yes"
-	ShowOutBool      bool // test nodes emit show_out as bool true (used iff !ShowOut)
+	ShowOutBool      bool // test nodes emit show_out as bool true (iff !ShowOut)
 	Name             string
 	Path             string
 	DisableCache     string
@@ -279,7 +269,7 @@ func (kv KV) sortedExt() []KVExt {
 }
 
 // --- JSON (graph output): keys emitted in sorted order, optional keys omitted,
-// so the bytes match the former sort-then-write of the maps. ---
+// matching the former sort-then-write of the maps. ---
 
 // jsonObj accumulates comma separation for a JSON object being appended.
 type JsonObj struct {
@@ -392,15 +382,13 @@ func appendKV(buf []byte, kv KV) []byte {
 }
 
 // MarshalJSON makes the standard encoder agree with the hand-rolled graph
-// writer (appendKV/appendRequirements/appendTargetProperties) — so json.Marshal
-// of a Node emits {} for the empty case and the sorted keys otherwise, instead
-// of the struct's Go field names.
+// writer, so json.Marshal of a Node emits {} for the empty case and the sorted
+// keys otherwise, not the struct's Go field names.
 func (e EnvVars) marshalJSON() ([]byte, error) {
 	return appendEnv(nil, e), nil
 }
 
-// MarshalJSON implements json.Marshaler — encoding/json finds it by name;
-// internal code calls marshalJSON().
+// MarshalJSON implements json.Marshaler; internal code calls marshalJSON().
 func (e EnvVars) MarshalJSON() ([]byte, error) {
 	return e.marshalJSON()
 }
@@ -409,8 +397,7 @@ func (kv KV) marshalJSON() ([]byte, error) {
 	return appendKV(nil, kv), nil
 }
 
-// MarshalJSON implements json.Marshaler — encoding/json finds it by name;
-// internal code calls marshalJSON().
+// MarshalJSON implements json.Marshaler; internal code calls marshalJSON().
 func (kv KV) MarshalJSON() ([]byte, error) {
 	return kv.marshalJSON()
 }
@@ -419,8 +406,7 @@ func (r Requirements) marshalJSON() ([]byte, error) {
 	return appendRequirements(nil, r), nil
 }
 
-// MarshalJSON implements json.Marshaler — encoding/json finds it by name;
-// internal code calls marshalJSON().
+// MarshalJSON implements json.Marshaler; internal code calls marshalJSON().
 func (r Requirements) MarshalJSON() ([]byte, error) {
 	return r.marshalJSON()
 }
@@ -429,8 +415,7 @@ func (t TargetProperties) marshalJSON() ([]byte, error) {
 	return appendTargetProperties(nil, t), nil
 }
 
-// MarshalJSON implements json.Marshaler — encoding/json finds it by name;
-// internal code calls marshalJSON().
+// MarshalJSON implements json.Marshaler; internal code calls marshalJSON().
 func (t TargetProperties) MarshalJSON() ([]byte, error) {
 	return t.marshalJSON()
 }

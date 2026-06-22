@@ -5,10 +5,9 @@ import (
 )
 
 // TestGen_ProtoLibrary_TransitivePROTONamespaceReachesEVCmd locks the EV
-// counterpart of TestGen_ProtoLibrary_TransitivePROTONamespaceReachesCppProtoCmd:
-// CPP_EV_CMDLINE reuses _CPP_PROTO_CMDLINE_BASE, so a PROTO_LIBRARY with a .ev
-// source that PEERDIR-reaches a bare PROTO_NAMESPACE(yt) provider must carry
-// -I=$(S)/yt in its protoc include block, exactly like the PB path.
+// counterpart of the PB case: a PROTO_LIBRARY with a .ev source that
+// PEERDIR-reaches a bare PROTO_NAMESPACE(yt) provider must carry -I=$(S)/yt in
+// its protoc include block, exactly like the PB path.
 func TestGen_ProtoLibrary_TransitivePROTONamespaceReachesEVCmd(t *testing.T) {
 	files := map[string]string{}
 
@@ -57,8 +56,7 @@ END()
 		t.Fatalf("EV cmd duplicates -I=$(S)/yt (%d times): %v", ytCount, args)
 	}
 
-	// No source-root C++ -I leakage: the proto include uses -I=$(S)/..., never
-	// the C++ form -I$(S)/yt.
+	// No source-root C++ -I leakage: proto include uses -I=$(S)/..., never -I$(S)/yt.
 	for _, a := range args {
 		if a == "-I$(S)/yt" {
 			t.Fatalf("EV cmd leaks C++ source-root include -I$(S)/yt: %v", args)
@@ -75,18 +73,16 @@ END()
 		t.Fatalf("expected -I=$(S)/yt before --cpp_out: yt=%d cpp_out=%d args=%v", ytIdx, cppOutIdx, args)
 	}
 
-	// Control: without SET(PROTOC_TRANSITIVE_HEADERS "no") the EV cpp_out keeps
-	// its bare form and must NOT gain the lite-header proto_h token.
+	// Control: without disabled transitive headers the EV cpp_out keeps its bare
+	// form and must NOT gain the proto_h token.
 	if containsString(args, "--cpp_out=proto_h=true:$(B)/") {
 		t.Fatalf("EV cmd unexpectedly emits proto_h cpp_out without PROTOC_TRANSITIVE_HEADERS=no: %v", args)
 	}
 }
 
 // TestGen_EV_LiteHeaders_CppOutProtoH locks the EV counterpart of the PB
-// lite-header rule: CPP_EV_CMDLINE shares _CPP_PROTO_CMDLINE_BASE with the PB
-// command, so SET(PROTOC_TRANSITIVE_HEADERS "no") (ymake.core.conf:656 →
-// CPP_PROTO_PLUGINS=proto_h=true) makes the EV --cpp_out carry proto_h=true,
-// exactly like the .pb.cc producer. Representative: yabs/server/proto/event_log.
+// lite-header rule: the EV command shares the PB base, so disabling transitive
+// headers makes the EV --cpp_out carry proto_h=true, like the .pb.cc producer.
 func TestGen_EV_LiteHeaders_CppOutProtoH(t *testing.T) {
 	files := map[string]string{}
 

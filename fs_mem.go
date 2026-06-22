@@ -2,23 +2,21 @@ package main
 
 import "github.com/zeebo/xxh3"
 
-// MemFS is an in-memory FS implementation serving Listdir/Read/Walk/Exists from
-// maps populated once at construction; no method reads the OS. Used by the test suite.
+// MemFS is an in-memory FS serving from maps populated at construction; no method
+// reads the OS. Used by the test suite.
 type MemFS struct {
 	srcRoot   string
 	rootSlash string
 	files     map[string][]byte
 	dirs      map[string]map[string]bool
 
-	// views/entries mirror OsFS's DirView model over the in-memory tree,
-	// built lazily per directory.
+	// views/entries mirror OsFS's DirView model, built lazily per directory.
 	views   map[string]DirView
 	entries *IntMap[bool]
 }
 
-// newMemFS builds a *memFS from a flat path→content map. Every intermediate
-// directory is materialised so Exists / IsDir / Listdir match what an osFS
-// rooted at a real tree with the same shape would return.
+// newMemFS builds a *memFS from a flat path→content map, materialising every
+// intermediate directory to match an osFS over the same tree shape.
 func newMemFS(files map[string]string) *MemFS {
 	const root = "/__fake_repo__"
 
@@ -164,10 +162,8 @@ func (fs *MemFS) read(rel string) []byte {
 	return append([]byte(nil), data...)
 }
 
-// ContentHash computes xxh3 of source VFS v's file content, on demand from the
-// in-memory tree (the shared test FS is never mutated). Fixtures are minimal, so a
-// file absent from the tree hashes to 0 rather than faulting — tests assert
-// structure, not exact uids.
+// ContentHash computes xxh3 of v's content on demand. A file absent from the tree
+// hashes to 0 rather than faulting — tests assert structure, not exact uids.
 func (fs *MemFS) contentHash(v VFS) uint64 {
 	data, ok := fs.files[cleanRel(v.rel())]
 

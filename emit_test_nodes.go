@@ -105,9 +105,7 @@ func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resource
 	}
 
 	// --global-resource entries are the external-resource globals reachable through
-	// the module-under-test's PEERDIR closure (the toolchain RESOURCES_LIBRARYs),
-	// sorted by global-var name (upstream collects them in a std::set), replacing
-	// the former hardcoded list.
+	// the module-under-test's PEERDIR closure, sorted by global-var name.
 	for _, r := range sortedResourceGlobals(resourceGlobals) {
 		cmdArgs = append(cmdArgs, argGlobalResource.str(), r.Token)
 	}

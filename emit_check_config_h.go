@@ -26,13 +26,11 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-		// check_config_h.py is platform-independent codegen (fixed python, no
-		// toolchain flags); upstream attributes such a command to the target
-		// platform (same rule as reg3.cpp / .pyplugin — a cross build shows it as
-		// the target ISA, never the host/tool ISA). Emit under ctx.target so the
-		// target and host instances that reach this output produce byte-identical
-		// nodes that collapse by uid. The per-platform compile of the generated
-		// source (emitCC below) keeps its instance platform.
+		// Platform-independent codegen (fixed python, no toolchain flags);
+		// upstream attributes such a command to the target platform (a cross
+		// build shows the target ISA, never the host/tool ISA). Emit under
+		// ctx.target so target and host instances collapse by uid. The
+		// per-platform compile (emitCC below) keeps its instance platform.
 		chRef := ctx.emit.emit(&Node{
 			Platform: ctx.target,
 			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(d.tc.Python3,
@@ -51,7 +49,7 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 
 		ccIn := in
 		ccIn.ExtraDepRefs = []NodeRef{chRef}
-		// IncludeInputs is the CC input window: the generated source leads.
+		// CC input window: the generated source leads.
 		ccIn.IncludeInputs = append([]VFS{generatedVFS}, inputs...)
 
 		ccRef, ccOut, _ := emitCC(instance, generated, generatedVFS, ccIn, ctx.host, ctx.emit)

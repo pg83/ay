@@ -1,16 +1,15 @@
 package main
 
-// emitArchiveAsmForAR models ARCHIVE_ASM(NAME <n> [DONTCOMPRESS] Files...)
-// (ymake.core.conf). Each entry emits an AR `<NAME>.rodata` resource via the
-// archiver (`-q [-p]`), which ymake re-feeds as a generated module source; the
-// .rodata yasm pipeline then compiles it to `<NAME>.rodata$OBJECT_SUF`. The
-// objects are returned as the module's (non-global) compile results so the
-// per-module .a archives them, exactly like a regular SRC object.
+// emitArchiveAsmForAR models ARCHIVE_ASM(NAME <n> [DONTCOMPRESS] Files...).
+// Each entry emits an AR `<NAME>.rodata` resource via the archiver (`-q [-p]`),
+// re-fed as a generated module source; the .rodata yasm pipeline compiles it to
+// `<NAME>.rodata$OBJECT_SUF`. The objects return as the module's non-global
+// compile results so the per-module .a archives them, like a regular SRC object.
 //
-// The archived members are RUN_PROGRAM/RUN_PYTHON outputs (e.g. a dictionary
-// binary built by RUN_PYTHON3): their $(S) source leaves ride into the .rodata's
-// closure window (member SourceInputs -> ClosureLeaves), so the downstream RD
-// compile's walkClosure carries them as inputs, matching upstream's flat model.
+// The archived members are RUN_PROGRAM/RUN_PYTHON outputs: their $(S) source
+// leaves ride into the .rodata's closure window (member SourceInputs ->
+// ClosureLeaves), so the downstream RD compile's walkClosure carries them as
+// inputs.
 func emitArchiveAsmForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) *RunProgramsForARResult {
 	if len(d.archiveAsm) == 0 {
 		return nil
@@ -71,8 +70,7 @@ func emitArchiveAsmNode(
 		}
 
 		pathPerFile = append(pathPerFile, memberVFS)
-		// ARCHIVE_ASM lists each member with the empty-key `:` suffix, as ARCHIVE
-		// does (${suf=\:;input:Files}).
+		// ARCHIVE_ASM lists each member with the empty-key `:` suffix, like ARCHIVE.
 		cmdArgs = append(cmdArgs, internStr(memberVFS.string()+":"))
 	}
 
@@ -107,7 +105,7 @@ func emitArchiveAsmNode(
 	rodataRef := ctx.emit.emit(n)
 
 	// Propagate each member's $(S) source leaves as the .rodata's non-expanded
-	// closure leaves, so the downstream RD compile (and any consumer that includes
+	// closure leaves, so the downstream RD compile (and any consumer including
 	// the resource) picks them up through the cached window.
 	var leaves []VFS
 
@@ -130,7 +128,7 @@ func emitArchiveAsmNode(
 // emitArchiveAsmRodata compiles a build-generated `<NAME>.rodata` resource
 // through the .rodata yasm pipeline, threading the producing AR node as the
 // build dependency and the producer's closure leaves (member source inputs) as
-// the compile's extra inputs — the same idiom emitCodegenDownstreamAS uses.
+// the compile's extra inputs.
 func emitArchiveAsmRodata(ctx *GenCtx, instance ModuleInstance, rodataRel string, producerRef NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
 	if instance.Platform.ISA != ISAX8664 {
 		throwFmt("gen: unsupported .rodata platform %s for ARCHIVE_ASM %q", instance.Platform.ISA, rodataRel)

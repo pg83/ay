@@ -6,16 +6,11 @@ import (
 	"testing"
 )
 
-// Chained RUN_PROGRAMs over generated OUT_NOAUTO `.bin` artifacts (the sprav
-// working_time/grammar shape): a first run produces first.bin from a proto IN
-// that transitively imports leaf.proto plus an unparsed `.dat` source IN; a
-// second run consumes ${BINDIR}/first.bin; a third consumes both first.bin and
-// second.bin. Upstream's flat-input model lists the first producer's full
-// transitive SOURCE closure on every downstream consumer of its generated `.bin`.
-// The opaque (parser-less) `.bin` IN must therefore carry BOTH the producer's
-// direct source leaves (SourceInputs: the unparsed root.dat) AND its transitive
-// parsed source closure (ProducerSourceClosure: leaf.proto reached through the
-// proto import). The transitive leaf.proto is the residual ours dropped.
+// Chained RUN_PROGRAMs over generated OUT_NOAUTO `.bin` artifacts. Every downstream
+// consumer of a generated `.bin` lists the producer's full transitive SOURCE closure:
+// the opaque (parser-less) `.bin` IN must carry BOTH the producer's direct source
+// leaves (SourceInputs: the unparsed root.dat) AND its transitive parsed source closure
+// (ProducerSourceClosure: leaf.proto reached through the proto import).
 func TestGen_RunProgramGeneratedBinInProducerSourceClosurePropagates(t *testing.T) {
 	files := map[string]string{}
 
@@ -158,23 +153,16 @@ END()
 	}
 }
 
-// A RUN_PROGRAM with no IN, OUT ${BINDIR}/gen.cpp (a build-rooted auto cc-source
-// after env expansion) and OUTPUT_INCLUDES naming a generated .pb.h exported by a
-// reached PROTO_LIBRARY whose .proto transitively imports a second one. Upstream's
-// ${hide;output_include:OUTPUT_INCLUDES} records induced deps on the OUT, surfaced
-// on the DOWNSTREAM consumer that recompiles that auto cc-source — not on the PR
+// A RUN_PROGRAM with no IN, OUT ${BINDIR}/gen.cpp and OUTPUT_INCLUDES naming a
+// generated .pb.h whose .proto transitively imports a second one. The induced deps
+// surface on the DOWNSTREAM consumer that recompiles the auto cc-source, not on the PR
 // node (which, lacking any IN, lists only the tool). So:
-//   - the CC node compiling gen.cpp must carry both the named a.pb.h and the
-//     transitively-imported b.pb.h, each exactly once;
-//   - its output path must be the plain $(B)/gen/gen.cpp.o (the ${BINDIR}-expanded
-//     $(B)/gen/gen.cpp OUT must not be re-rooted under the module dir again);
-//   - the PR node producing gen.cpp carries the transitive .proto SOURCE closure
-//     of its OUTPUT_INCLUDES (gen.cpp is the run's cc-source MAIN output, so the
-//     induced includes ride the producer), but NOT the $(B) codegen .pb.h
-//     intermediate (reached via the producer dep edge, not a producer input).
-//
-// The generated source's protobuf header closure reaches both the run-program
-// consumer (its C-scan) and the producer (its OUTPUT_INCLUDES, as $(S) sources).
+//   - the CC node compiling gen.cpp carries both a.pb.h and the transitively-imported
+//     b.pb.h, each exactly once;
+//   - its output is the plain $(B)/gen/gen.cpp.o (the ${BINDIR}-expanded OUT must not
+//     be re-rooted under the module dir again);
+//   - the PR node carries its OUTPUT_INCLUDES transitive .proto SOURCE closure (gen.cpp
+//     is the cc-source MAIN output) but NOT the $(B) codegen .pb.h intermediate.
 func TestGen_RunProgramOutputIncludesPbHReachConsumerNotProducer(t *testing.T) {
 	files := map[string]string{}
 
@@ -184,7 +172,6 @@ func TestGen_RunProgramOutputIncludesPbHReachConsumerNotProducer(t *testing.T) {
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make",
 		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
 
-	// q: leaf PROTO_LIBRARY, produces q/b.pb.h.
 	writeTestModuleFile(files, "q/ya.make", `PROTO_LIBRARY()
 SRCS(b.proto)
 EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
@@ -192,7 +179,7 @@ END()
 `)
 	writeTestModuleFile(files, "q/b.proto", "syntax = \"proto3\";\npackage q;\nmessage B {}\n")
 
-	// p: PROTO_LIBRARY importing q/b.proto, so p/a.pb.h #includes "q/b.pb.h".
+	// p imports q/b.proto, so p/a.pb.h #includes "q/b.pb.h".
 	writeTestModuleFile(files, "p/ya.make", `PROTO_LIBRARY()
 PEERDIR(q)
 SRCS(a.proto)
@@ -292,15 +279,11 @@ END()
 }
 
 // A RUN_PROGRAM with no IN whose MAIN output is a generated C++ translation unit
-// (STDOUT out.cpp) and that declares generated OUTPUT_INCLUDES — the
-// proto_flat_buf formula_parameters.cpp class. Upstream attaches the
-// OUTPUT_INCLUDES induced includes to the main output; because the main output is
-// itself a cc-source, the transitive $(S) SOURCE closure of those includes rides
-// the PRODUCER command node (the run "needs" them to produce the .cpp), exactly
-// like the header-only case. The producer keeps only its generator dep — the
-// $(B) codegen intermediate header is reached via that dep edge, never a producer
-// input. The downstream compile of the generated .cpp independently carries the
-// $(B) header (its OUTPUT_INCLUDES C-scan), and the object is archived.
+// (STDOUT out.cpp) declaring generated OUTPUT_INCLUDES. Because the main output is
+// itself a cc-source, the transitive $(S) SOURCE closure of those includes rides the
+// PRODUCER, like the header-only case — keeping only its generator dep, never the $(B)
+// codegen intermediate header (reached via that dep edge). The downstream compile of
+// the generated .cpp independently carries the $(B) header, and the object is archived.
 func TestGen_RunProgramGeneratedCppStdoutOutputIncludesClosureOnProducer(t *testing.T) {
 	files := map[string]string{}
 
@@ -310,7 +293,6 @@ func TestGen_RunProgramGeneratedCppStdoutOutputIncludesClosureOnProducer(t *test
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make",
 		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
 
-	// q: leaf PROTO_LIBRARY (q/b.pb.h <- q/b.proto).
 	writeTestModuleFile(files, "q/ya.make", `PROTO_LIBRARY()
 SRCS(b.proto)
 EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
@@ -318,7 +300,7 @@ END()
 `)
 	writeTestModuleFile(files, "q/b.proto", "syntax = \"proto3\";\npackage q;\nmessage B {}\n")
 
-	// dep: PROTO_LIBRARY importing q/b.proto, so dep/dep.pb.h #includes "q/b.pb.h".
+	// dep imports q/b.proto, so dep/dep.pb.h #includes "q/b.pb.h".
 	writeTestModuleFile(files, "dep/ya.make", `PROTO_LIBRARY()
 PEERDIR(q)
 SRCS(dep.proto)
@@ -332,8 +314,8 @@ END()
 	writeTestModuleFile(files, "mod/generated.h", "#pragma once\n#include <mod/sub.h>\n")
 	writeTestModuleFile(files, "mod/sub.h", "#pragma once\n")
 
-	// mod: RUN_PROGRAM Cpp, no IN, STDOUT out.cpp (cc-source MAIN output),
-	// OUTPUT_INCLUDES the source-tree generated.h and the codegen dep/dep.pb.h.
+	// mod: STDOUT out.cpp (cc-source MAIN output), OUTPUT_INCLUDES a source-tree
+	// header and the codegen dep/dep.pb.h.
 	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -367,9 +349,8 @@ END()
 		t.Fatalf("expected PR producer for out.cpp, got %v", pr.KV.P)
 	}
 
-	// The producer carries the transitive $(S) source closure of its
-	// OUTPUT_INCLUDES: the codegen .pb.h's .proto import sources and the
-	// source-tree header's own closure.
+	// The producer carries the transitive $(S) source closure of its OUTPUT_INCLUDES:
+	// the codegen .pb.h's .proto import sources and the source-tree header's closure.
 	for _, want := range []string{
 		"$(S)/dep/dep.proto",
 		"$(S)/q/b.proto",
@@ -409,9 +390,8 @@ END()
 }
 
 // Guard: a RUN_PROGRAM whose MAIN output is a HEADER (OUT gen.h gen.cpp) with a
-// compiled cc-source sibling — the features.gen.h / profile_traits.h class. The
-// OUTPUT_INCLUDES ride the header to its consumers, NOT the producer; the
-// producer must carry no OUTPUT_INCLUDES source closure.
+// compiled cc-source sibling. The OUTPUT_INCLUDES ride the header to its consumers,
+// NOT the producer; the producer must carry no OUTPUT_INCLUDES source closure.
 func TestGen_RunProgramHeaderMainOutputKeepsClosureOffProducer(t *testing.T) {
 	files := map[string]string{}
 
@@ -468,12 +448,11 @@ END()
 	}
 }
 
-// Guard the sys_const.h divergence: a self-consuming RUN_PROGRAM in a nested
-// submodule (`gen`: OUT gen.h gen.cpp; gen.cpp #includes gen.h and is auto
-// compiled) is the first DFS-leaver of its own outputs. A parent module that
-// merely names gen/gen.h in a *different* RUN_PROGRAM's OUTPUT_INCLUDES is a
-// consumer reached only after the producer submodule (its PEERDIR) leaves, so
-// upstream's Node2Module keeps the header attributed to `gen`. The external
+// A self-consuming RUN_PROGRAM in a nested submodule (`gen`: OUT gen.h gen.cpp;
+// gen.cpp #includes gen.h and is auto compiled) is the first DFS-leaver of its own
+// outputs. A parent module that merely names gen/gen.h in a *different* RUN_PROGRAM's
+// OUTPUT_INCLUDES is a consumer reached only after the producer submodule (its
+// PEERDIR) leaves, so Node2Module keeps the header attributed to `gen`. The external
 // OUTPUT_INCLUDES node-claim must NOT pre-empt the self-owned producer.
 func TestGen_RunProgramSelfOwnedProducerKeepsModuleDirOverOutputIncludesClaim(t *testing.T) {
 	files := map[string]string{}
@@ -496,7 +475,7 @@ END()
 `)
 
 	// parent: a different self-consuming RUN_PROGRAM that names gen/gen.h in
-	// OUTPUT_INCLUDES (the by_name_tmpl class), and PEERDIRs the producer.
+	// OUTPUT_INCLUDES, and PEERDIRs the producer.
 	writeTestModuleFile(files, "parent/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -537,12 +516,11 @@ END()
 	}
 }
 
-// A RUN_PROGRAM with no IN whose generator tool PROGRAM declares INDUCED_DEPS(h …)
-// — the ads/bsyeti/eagle/collect/generated/query_params.h class. The tool's header
-// induced deps (and their transitive $(S) closure) are inputs of the generated
-// header's own PRODUCER node, exactly as the scanner mixes them onto a consumer
-// that includes the generated header (GeneratorRefs + resolveInducedDeps). The
-// producer must carry the direct induced header AND a transitively-included header.
+// A RUN_PROGRAM with no IN whose generator tool PROGRAM declares INDUCED_DEPS(h …).
+// The tool's header induced deps (and their transitive $(S) closure) are inputs of
+// the generated header's own PRODUCER node, as the scanner mixes them onto a consumer
+// that includes the generated header. The producer must carry the direct induced
+// header AND a transitively-included header.
 func TestGen_RunProgramToolInducedHeaderDepsRideProducer(t *testing.T) {
 	files := map[string]string{}
 
@@ -652,14 +630,13 @@ END()
 	}
 }
 
-// A RUN_PROGRAM whose IN is a DATA file with no registered include parser
-// (formula.in: YAML-like data) and whose OUTs are a generated .cpp/.h pair plus
-// OUTPUT_INCLUDES — the ads/bsyeti/libs/features/formula.cpp class. Upstream roots
-// the producer's include graph at IN; a data IN contributes no include edges, so
-// the producer keeps only the tool + the direct $(S) data input. The generated
-// cc-source OUT is NOT self-scanned onto the producer (that would drag the
-// OUTPUT_INCLUDES source closure). The downstream compile of the generated .cpp
-// still C-scans it and carries the OUTPUT_INCLUDES closure independently.
+// A RUN_PROGRAM whose IN is a DATA file with no registered include parser and whose
+// OUTs are a generated .cpp/.h pair plus OUTPUT_INCLUDES. The producer's include
+// graph roots at IN; a data IN contributes no include edges, so the producer keeps
+// only the tool + the direct $(S) data input. The generated cc-source OUT is NOT
+// self-scanned onto the producer (that would drag the OUTPUT_INCLUDES source
+// closure). The downstream compile of the generated .cpp still C-scans it and carries
+// the OUTPUT_INCLUDES closure independently.
 func TestGen_RunProgramDataInGeneratedCppProducerStaysToolPlusData(t *testing.T) {
 	files := map[string]string{}
 
@@ -670,8 +647,8 @@ func TestGen_RunProgramDataInGeneratedCppProducerStaysToolPlusData(t *testing.T)
 	writeTestModuleFile(files, "util/generic/string.h", "#pragma once\n#include <util/generic/strbuf.h>\n")
 	writeTestModuleFile(files, "util/generic/strbuf.h", "#pragma once\n")
 
-	// mod: RUN_PROGRAM with a DATA IN (data.yaml has no registered parser),
-	// generated gen.cpp/gen.h OUTs, OUTPUT_INCLUDES the source header.
+	// mod: DATA IN (no registered parser), generated gen.cpp/gen.h OUTs,
+	// OUTPUT_INCLUDES the source header.
 	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -736,15 +713,13 @@ END()
 	}
 }
 
-// A RUN_PROGRAM with an unparsed data IN that generates ONLY a cc-source (no
-// header output) and names a source header in OUTPUT_INCLUDES — the
-// contrib/libs/libphonenumber generate_geocoding_data / geocoding_data.cc class.
-// With no generated header to route the OUTPUT_INCLUDES through, the generated
-// cc-source's include closure surfaces on the producer's own self-scan: the
-// producer carries the OUTPUT_INCLUDES source closure even though the IN is data
-// and the tool declares no induced C++ deps. This is the discriminator against the
-// formula.cpp class above, whose generated .h sibling carries the includes off the
-// producer.
+// A RUN_PROGRAM with an unparsed data IN that generates ONLY a cc-source (no header
+// output) and names a source header in OUTPUT_INCLUDES. With no generated header to
+// route the OUTPUT_INCLUDES through, the generated cc-source's include closure
+// surfaces on the producer's own self-scan: the producer carries the OUTPUT_INCLUDES
+// source closure even though the IN is data and the tool declares no induced C++
+// deps. This is the discriminator against the generated-header-sibling class above,
+// whose .h sibling carries the includes off the producer.
 func TestGen_RunProgramDataInNoHeaderGeneratedCcProducerKeepsClosure(t *testing.T) {
 	files := map[string]string{}
 
@@ -755,8 +730,8 @@ func TestGen_RunProgramDataInNoHeaderGeneratedCcProducerKeepsClosure(t *testing.
 	writeTestModuleFile(files, "util/generic/string.h", "#pragma once\n#include <util/generic/strbuf.h>\n")
 	writeTestModuleFile(files, "util/generic/strbuf.h", "#pragma once\n")
 
-	// mod: RUN_PROGRAM with a DATA IN, a single generated gen.cc OUT (NO header
-	// output), OUTPUT_INCLUDES the source header.
+	// mod: DATA IN, a single generated gen.cc OUT (NO header output),
+	// OUTPUT_INCLUDES the source header.
 	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -801,10 +776,9 @@ END()
 }
 
 // Control: a RUN_PROGRAM whose IN is a PARSEABLE C++ template (tmpl.cpp.in) that
-// #includes a generated codegen .pb.h — the control_board .{h,cpp}.in class. The
-// IN roots the producer's include graph, so the producer must still walk the
-// parsed IN and keep the closure the template names: the codegen header's
-// transitive .proto sources reached through the IN's includes.
+// #includes a generated codegen .pb.h. The IN roots the producer's include graph, so
+// the producer must still walk the parsed IN and keep the closure the template names:
+// the codegen header's transitive .proto sources reached through the IN's includes.
 func TestGen_RunProgramParseableInGeneratedHeaderClosureRidesProducer(t *testing.T) {
 	files := map[string]string{}
 
@@ -918,13 +892,12 @@ END()
 }
 
 // A RUN_PROGRAM with no IN whose only OUT is a HEADER (no auto cc-source OUT, no
-// cc-source STDOUT) — the plutonium dsp.yaff.h class. Its OUTPUT_INCLUDES
-// (${hide;output_include:...}) closure has no downstream compile to surface on,
-// so upstream realizes it on the PRODUCER command node: the full $(S) include
-// closure of every OUTPUT_INCLUDES file — the codegen .pb.h's transitive .proto
-// import sources (NOT the intermediate $(B) .pb.h) plus its protobuf C closure,
-// and a source-tree OUTPUT_INCLUDES header's own C closure. Unrelated proto
-// families and other generated headers must stay absent.
+// cc-source STDOUT). Its OUTPUT_INCLUDES closure has no downstream compile to surface
+// on, so it is realized on the PRODUCER command node: the full $(S) include closure
+// of every OUTPUT_INCLUDES file — the codegen .pb.h's transitive .proto import sources
+// (NOT the intermediate $(B) .pb.h) plus its protobuf C closure, and a source-tree
+// OUTPUT_INCLUDES header's own C closure. Unrelated proto families and other generated
+// headers must stay absent.
 func TestGen_RunProgramHeaderOnlyOutputIncludesImportClosureOnProducer(t *testing.T) {
 	files := map[string]string{}
 
@@ -934,7 +907,6 @@ func TestGen_RunProgramHeaderOnlyOutputIncludesImportClosureOnProducer(t *testin
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make",
 		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
 
-	// q: leaf PROTO_LIBRARY (q/b.pb.h <- q/b.proto).
 	writeTestModuleFile(files, "q/ya.make", `PROTO_LIBRARY()
 SRCS(b.proto)
 EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
@@ -942,7 +914,7 @@ END()
 `)
 	writeTestModuleFile(files, "q/b.proto", "syntax = \"proto3\";\npackage q;\nmessage B {}\n")
 
-	// p: PROTO_LIBRARY importing q/b.proto, so p/a.pb.h #includes "q/b.pb.h".
+	// p imports q/b.proto, so p/a.pb.h #includes "q/b.pb.h".
 	writeTestModuleFile(files, "p/ya.make", `PROTO_LIBRARY()
 PEERDIR(q)
 SRCS(a.proto)
@@ -1033,16 +1005,13 @@ END()
 	}
 }
 
-// A multi-output RUN_PROGRAM produces ONE build node keyed on its MAIN output —
-// FindMainElemOrDefault(GetOutput(), 0) picks the first OUT (ymake
-// macro_processor.cpp). Every other output becomes an EDT_OutTogether sibling
-// whose OutTogetherDependency points at the main output. When a node consumes a
-// non-main output, TJSONVisitor::PrepareLeaving adds that OutTogether dependency
-// (the main output) to the consumer's inputs (json_visitor.cpp:658-661). So the
-// compile of a generated cc-source OUT carries the producer's main output as an
-// input even though it is NOT in OUTPUT_INCLUDES. This is the caesar
-// features.gen.cpp.pic.o class: OUT lists features.gen.h (main) before
-// features.gen.cpp, and the cpp's .o lists features.gen.h.
+// A multi-output RUN_PROGRAM produces ONE build node keyed on its MAIN output (the
+// first OUT). Every other output becomes an OutTogether sibling pointing at the main
+// output. When a node consumes a non-main output, the OutTogether dependency (the
+// main output) is added to the consumer's inputs. So the compile of a generated
+// cc-source OUT carries the producer's main output as an input even though it is NOT
+// in OUTPUT_INCLUDES: OUT lists gen.h (main) before gen.cpp, and the cpp's .o lists
+// gen.h.
 func TestGen_RunProgramMainOutputSiblingHeaderRidesGeneratedCppConsumer(t *testing.T) {
 	files := map[string]string{}
 
@@ -1114,14 +1083,13 @@ END()
 	}
 }
 
-// A RUN_PROGRAM whose OUT and TOOL carry an explicit ${ARCADIA_BUILD_ROOT}/…
-// prefix (the apphost cow well_known shape): the OUT lives under the declaring
-// module's ${MODDIR} as a build output, the TOOL names a built module by its
-// build-root path (resolved by stripping the root prefix — not opened as a
-// source ya.make), and the literal $(B)/tool/binary already in the args must
-// survive unrewritten. The module's ADDINCL(GLOBAL ${ARCADIA_BUILD_ROOT}/…)
-// then propagates to a PEERDIR consumer, whose include scan binds the generated
-// build-root header.
+// A RUN_PROGRAM whose OUT and TOOL carry an explicit ${ARCADIA_BUILD_ROOT}/… prefix:
+// the OUT lives under the declaring module's ${MODDIR} as a build output, the TOOL
+// names a built module by its build-root path (resolved by stripping the root prefix,
+// not opened as a source ya.make), and the literal $(B)/tool/binary already in the
+// args must survive unrewritten. The module's GLOBAL build-root ADDINCL then
+// propagates to a PEERDIR consumer, whose include scan binds the generated build-root
+// header.
 func TestGen_RunProgramBuildRootOutToolAndGlobalAddInclPropagate(t *testing.T) {
 	files := map[string]string{}
 
@@ -1198,21 +1166,17 @@ END()
 	}
 }
 
-// A RUN_PROGRAM auto STDOUT output with an assembler extension (.asm) is, per
-// ymake auto-output semantics, a module source: it must be compiled by the
-// assembler and archived into the module library, exactly like a declared .asm
-// SRC. This is the connectivity the sg7 icookie blacklist .pic.o depends on —
-// yabs/server/cs/libs/mkdb_info/builtin RUN_PROGRAMs dump_mkdb_info (a host
-// tool whose PIC closure links the icookie libraries) STDOUT mkdb_info.asm, and
-// only the resulting mkdb_info.o member edge pulls that tool closure into the
-// program's target closure. Before the fix the .asm output was registered for
-// include resolution but never compiled or archived, leaving the tool closure
-// disconnected.
+// A RUN_PROGRAM auto STDOUT output with an assembler extension (.asm) is a module
+// source: it must be compiled by the assembler and archived into the module library,
+// like a declared .asm SRC. A host tool whose PIC closure links other libraries
+// STDOUTs an .asm, and only the resulting .o member edge pulls that tool closure into
+// the program's target closure. A .asm registered for include resolution but never
+// compiled or archived would leave the tool closure disconnected.
 func TestGen_RunProgramAutoStdoutAsmCompiledAndArchived(t *testing.T) {
 	files := map[string]string{}
 
-	// The host tool that produces the .asm, with its own library peer (stands
-	// in for the icookie-style LIBRARY reached only through the tool closure).
+	// The host tool that produces the .asm, with its own library peer reached only
+	// through the tool closure.
 	writeTestModuleFile(files, "cookie/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -1276,21 +1240,17 @@ END()
 		t.Fatalf("libbuiltin.a missing member $(B)/builtin/gen.o: %#v", lib.flatInputs())
 	}
 
-	// (3) The RUN_PROGRAM tool program — and through it its library peer —
-	// becomes reachable from the program target closure (the disconnected-tool
-	// failure mode the icookie residual exhibits).
+	// (3) The RUN_PROGRAM tool program — and through it its library peer — becomes
+	// reachable from the program target closure (the disconnected-tool failure mode).
 	mustNodeByAnyOutput(t, g, "$(B)/tools/dumper/dumper")
 	mustNodeByOutput(t, g, "$(B)/cookie/libcookie.a")
 }
 
-// STDOUT_NOAUTO is upstream's ${stdout;noauto;output:STDOUT_NOAUTO} — the noauto
-// modifier marks the redirect as NOT a module source (ymake.core.conf:4780,4832),
-// exactly like OUT_NOAUTO vs OUT. A RUN_PROGRAM(... STDOUT_NOAUTO gen.asm) must
-// therefore NOT be assembled or archived: the .asm is still a declared output of
-// the producer (so it exists for any consumer that #includes it), but it never
-// becomes a downstream module source. Before the fix the parser collapsed STDOUT
-// and STDOUT_NOAUTO into one field, so the auto-output compile loop assembled the
-// noauto output too.
+// STDOUT_NOAUTO's noauto modifier marks the redirect as NOT a module source, like
+// OUT_NOAUTO vs OUT. A RUN_PROGRAM(... STDOUT_NOAUTO gen.asm) must therefore NOT be
+// assembled or archived: the .asm is still a declared output of the producer (so it
+// exists for any consumer that #includes it), but it never becomes a downstream
+// module source.
 func TestGen_RunProgramStdoutNoautoAsmNotCompiled(t *testing.T) {
 	files := map[string]string{}
 
@@ -1384,13 +1344,10 @@ END()
 	}
 }
 
-// RUN_PYTHON3 shares RUN_PROGRAM's auto-output mechanism: ymake.core.conf:4832
-// spells STDOUT as ${stdout;output:STDOUT} and OUT as ${hide;output:OUT}, the
-// same modifiers RUN_PROGRAM uses, so an auto .asm/.s/.S STDOUT or OUT of a
-// RUN_PYTHON3 is equally a module source — it must be assembled and archived.
-// Before the fix emitRunPythonForAR filtered with !isCCSourceExt and dropped
-// assembler outputs, leaving them registered for include resolution but never
-// compiled or archived.
+// RUN_PYTHON3 shares RUN_PROGRAM's auto-output mechanism — the same STDOUT/OUT
+// modifiers — so an auto .asm/.s/.S STDOUT or OUT of a RUN_PYTHON3 is equally a
+// module source: it must be assembled and archived, not dropped by an isCCSourceExt
+// filter that would leave it registered for include resolution but never compiled.
 func TestGen_RunPython3AutoStdoutAsmCompiledAndArchived(t *testing.T) {
 	files := map[string]string{}
 
@@ -1437,25 +1394,20 @@ END()
 	}
 }
 
-// A multi-output RUN_PROGRAM (the transitive_proto "with_transitive_headers"
-// wrapper shape): one command emits several generated .pb.h headers as OUT.
-// Upstream models the outputs with EDT_OutTogether edges and designates the
-// FIRST OUT as the command's "main output" (FindMainElemOrDefault default index
-// 0). Depending on ANY non-main output pulls the main output along
-// (json_visitor PrepareLeaving's "AlsoBuilt" edge), so a consumer that #includes
-// only ONE sibling wrapper still sees the main output as an input. A sibling
-// that nobody includes (and is not the main output) must NOT ride.
-//
-// This is the caesar with_transitive_headers/advm_banner.pb.h class: advm_banner
-// is the first OUT (main) and rides onto every consumer of any wrapper, while no
-// source #includes it directly.
+// A multi-output RUN_PROGRAM (the wrapper shape): one command emits several generated
+// .pb.h headers as OUT. The outputs carry OutTogether edges and the FIRST OUT is the
+// command's "main output". Depending on ANY non-main output pulls the main output
+// along, so a consumer that #includes only ONE sibling wrapper still sees the main
+// output as an input. A sibling that nobody includes (and is not the main output)
+// must NOT ride. Here the first OUT (main) rides onto every consumer of any wrapper,
+// while no source #includes it directly.
 func TestGen_RunProgramMainOutputRidesWithSiblingOutput(t *testing.T) {
 	files := map[string]string{}
 
 	writeToolProgram(files, "tools/genhdr", "genhdr")
 
-	// wrap: a LIBRARY whose RUN_PROGRAM emits three .pb.h headers. first.pb.h is
-	// the first OUT => the command's main output.
+	// wrap: a LIBRARY whose RUN_PROGRAM emits three .pb.h headers. first.pb.h is the
+	// first OUT => the command's main output.
 	writeTestModuleFile(files, "wrap/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -1497,10 +1449,9 @@ END()
 
 	use := mustNodeByOutput(t, g, "$(B)/cons/use.cpp.o")
 
-	// The gate compares NORMALIZED graphs, whose inputs are a set
-	// (normSortedStrings sort+dedups). A closure leaf rides as a bare member the
-	// splice may append more than once, so "exact-once" is a property of the
-	// deduped input set, not the raw chunk multiset.
+	// The gate compares NORMALIZED graphs, whose inputs are a set (sort+dedup). A
+	// closure leaf rides as a bare member the splice may append more than once, so
+	// "exact-once" is a property of the deduped input set, not the raw chunk multiset.
 	seen := map[string]int{}
 	for _, in := range use.flatInputs() {
 		seen[in.string()]++
@@ -1521,13 +1472,12 @@ END()
 	}
 }
 
-// The sys_const shape: a RUN_PROGRAM with an IN template and two OUTs — a header
-// (first OUT = main output) and a generated cc-source sibling. prInputClosure
-// walks the cc-source OUT to surface its OUTPUT_INCLUDES, so the OutTogether
-// main-output leaf attached to the .cpp would otherwise ride back onto the
-// PRODUCER's own input list. A command never inputs its own outputs: the
-// producer must list neither gen.h nor gen.cpp among its inputs, while a
-// downstream consumer of gen.cpp still gets the main output gen.h.
+// A RUN_PROGRAM with an IN template and two OUTs — a header (first OUT = main output)
+// and a generated cc-source sibling. prInputClosure walks the cc-source OUT to
+// surface its OUTPUT_INCLUDES, so the OutTogether main-output leaf attached to the
+// .cpp would otherwise ride back onto the PRODUCER's own input list. A command never
+// inputs its own outputs: the producer must list neither gen.h nor gen.cpp among its
+// inputs, while a downstream consumer of gen.cpp still gets the main output gen.h.
 func TestGen_RunProgramProducerExcludesOwnOutTogetherOutput(t *testing.T) {
 	files := map[string]string{}
 
@@ -1570,15 +1520,13 @@ END()
 	}
 }
 
-// A self-consuming RUN_PROGRAM producer (LIBRARY with OUT gen.h gen.cpp, the
-// auto cc-source gen.cpp compiled in the producing module) owns its generated
-// outputs. Upstream's Node2Module records the producing module on the first
-// DFS-leave; post-order processes the producer (a peer of every consumer) —
-// compiling gen.cpp.o and leaving the OutTogether main output gen.h with it —
-// before any consumer is visited. So gen.h keeps module_dir = producer even
-// though an external module include-resolves it. This runs through the -G
-// finalize where overrideGeneratedModuleDir applies. (T-41: profile_traits.h /
-// all_profiles.h class.)
+// A self-consuming RUN_PROGRAM producer (LIBRARY with OUT gen.h gen.cpp, the auto
+// cc-source gen.cpp compiled in the producing module) owns its generated outputs.
+// Node2Module records the producing module on the first DFS-leave; post-order
+// processes the producer (a peer of every consumer) — compiling gen.cpp.o and leaving
+// the OutTogether main output gen.h with it — before any consumer is visited. So gen.h
+// keeps module_dir = producer even though an external module include-resolves it. This
+// runs through the -G finalize where overrideGeneratedModuleDir applies.
 func TestGen_RunProgramSelfConsumingProducerOwnsGeneratedModuleDir(t *testing.T) {
 	files := map[string]string{}
 
@@ -1636,10 +1584,9 @@ END()
 }
 
 // Negative: a header-only RUN_PROGRAM producer (OUT_NOAUTO geninc.inc — nothing
-// compiled in the producing module) does NOT self-consume. Upstream's first
-// DFS-leave is the external consumer, so the consumer-claim override still
-// re-attributes the generated .inc to the including module. This is the LLVM
-// `contrib/libs/llvm16/include/*.inc` shape; T-41 must not disturb it.
+// compiled in the producing module) does NOT self-consume. The first DFS-leave is the
+// external consumer, so the consumer-claim override still re-attributes the generated
+// .inc to the including module. The self-ownership rule must not disturb it.
 func TestGen_HeaderOnlyRunProgramKeepsConsumerModuleDir(t *testing.T) {
 	files := map[string]string{}
 
@@ -1689,7 +1636,7 @@ END()
 }
 
 // A wrapper RUN_PROGRAM that reads .proto IN files and re-exports their generated
-// .pb.h (the ads/caesar/.../with_transitive_headers/advm_banner.pb.h shape):
+// .pb.h:
 //   - its own input closure carries the transitive .proto sources but NOT the
 //     protobuf WKT .pb.h sibling — the run already roots the proto graph at its IN
 //     .proto, so the OUTPUT_INCLUDES walk must not re-synthesize the checked-in
@@ -1697,8 +1644,8 @@ END()
 //   - its producer node is attributed to the profile-like module that names the
 //     wrapper header in OUTPUT_INCLUDES, not to the producing module.
 //
-// A control RUN_PROGRAM with the SAME OUTPUT_INCLUDES but a .h.in IN (no .proto)
-// still carries the WKT .pb.h sibling, guarding the c5549aa control_board path.
+// A control RUN_PROGRAM with the SAME OUTPUT_INCLUDES but a .h.in IN (no .proto) still
+// carries the WKT .pb.h sibling.
 func TestGen_WrapperProtoRunProgramDropsWktSiblingAndClaimsConsumer(t *testing.T) {
 	files := map[string]string{}
 
@@ -1709,9 +1656,8 @@ func TestGen_WrapperProtoRunProgramDropsWktSiblingAndClaimsConsumer(t *testing.T
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make",
 		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
 
-	// wkt: a PROTO_LIBRARY whose .proto additionally ships a checked-in .pb.h
-	// sibling on disk — the protobuf well-known-type shape (descriptor.proto +
-	// committed descriptor.pb.h).
+	// wkt: a PROTO_LIBRARY whose .proto additionally ships a checked-in .pb.h sibling
+	// on disk — the protobuf well-known-type shape.
 	writeTestModuleFile(files, "wkt/ya.make", `PROTO_LIBRARY()
 SRCS(d.proto)
 EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
@@ -1728,8 +1674,8 @@ END()
 `)
 	writeTestModuleFile(files, "q/b.proto", "syntax = \"proto3\";\npackage q;\nmessage B {}\n")
 
-	// p: PROTO_LIBRARY importing q/b.proto and the WKT wkt/d.proto, so p/a.pb.h's
-	// closure surfaces both .proto sources (and the checked-in wkt/d.pb.h sibling).
+	// p imports q/b.proto and the WKT wkt/d.proto, so p/a.pb.h's closure surfaces both
+	// .proto sources and the checked-in wkt/d.pb.h sibling.
 	writeTestModuleFile(files, "p/ya.make", `PROTO_LIBRARY()
 PEERDIR(q wkt)
 SRCS(a.proto)
@@ -1833,20 +1779,17 @@ END()
 	}
 }
 
-// A custom RUN_PROGRAM header generated FROM a .proto (the
-// yabs/.../generated/sys_const.h shape: `IN sys_const.proto OUT sys_const.h`)
-// genuinely #includes the generated `.pb.h` of that proto's imports — the custom
-// generator emits `#include "<import>.pb.h"`. We cannot scan the generated body,
-// so we model it as upstream does (induced deps propagate through generated
-// files): the custom header's parsed-include WINDOW carries the import's
-// generated `.pb.h`, whose own closure (here a distinctive transitive sibling)
-// rides to every consumer.
+// A custom RUN_PROGRAM header generated FROM a .proto (`IN x.proto OUT x.h`) #includes
+// the generated `.pb.h` of that proto's imports — the generator emits
+// `#include "<import>.pb.h"`. We cannot scan the generated body, so we model induced
+// deps propagating through generated files: the custom header's parsed-include WINDOW
+// carries the import's generated `.pb.h`, whose own closure (here a distinctive
+// transitive sibling) rides to every consumer.
 //
-// A second RUN_PROGRAM (`IN tmpl.cpp OUTPUT_INCLUDES gen/custom.h STDOUT out.cpp`,
-// the by_name.cpp shape) must therefore carry the import's `.pb.h` + its closure
-// on BOTH its producer node and the generated out.cpp.o — and must NOT introduce
-// an unrelated same-basename `.pb.h` variant (the protobuf_old descriptor.pb.h
-// over-add). Existing proto-IN safeguards (the wrapper test above) stay intact.
+// A second RUN_PROGRAM (`IN tmpl.cpp OUTPUT_INCLUDES gen/custom.h STDOUT out.cpp`) must
+// therefore carry the import's `.pb.h` + its closure on BOTH its producer node and the
+// generated out.cpp.o — and must NOT introduce an unrelated same-basename `.pb.h`
+// variant. Existing proto-IN safeguards stay intact.
 func TestGen_CustomProtoHeaderOutputIncludesRidesGeneratedPbhClosure(t *testing.T) {
 	files := map[string]string{}
 
@@ -1857,20 +1800,19 @@ func TestGen_CustomProtoHeaderOutputIncludesRidesGeneratedPbhClosure(t *testing.
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make",
 		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
 
-	// dproto: leaf PROTO_LIBRARY — its generated d.pb.h is the distinctive
-	// transitive closure entry of the import's .pb.h (the YaFF-runtime analog).
+	// dproto: leaf PROTO_LIBRARY — its generated d.pb.h is the distinctive transitive
+	// closure entry of the import's .pb.h.
 	writeTestModuleFile(files, "dproto/ya.make", "PROTO_LIBRARY()\nSRCS(d.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
 	writeTestModuleFile(files, "dproto/d.proto", "syntax = \"proto3\";\npackage dproto;\nmessage D {}\n")
 
-	// eproto: PROTO_LIBRARY importing dproto/d.proto — generated extra.pb.h
-	// #includes the generated dproto/d.pb.h.
+	// eproto imports dproto/d.proto — extra.pb.h #includes dproto/d.pb.h.
 	writeTestModuleFile(files, "eproto/ya.make", "PROTO_LIBRARY()\nPEERDIR(dproto)\nSRCS(extra.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
 	writeTestModuleFile(files, "eproto/extra.proto",
 		"syntax = \"proto3\";\npackage eproto;\nimport \"dproto/d.proto\";\nmessage Extra { dproto.D d = 1; }\n")
 
-	// gen: a custom RUN_PROGRAM header generated FROM a proto that imports
-	// eproto/extra.proto — registers $(B)/gen/custom.h as a pkPR codegen header
-	// whose window must acquire the import's generated extra.pb.h.
+	// gen: a custom header generated FROM a proto importing eproto/extra.proto —
+	// registers $(B)/gen/custom.h as a pkPR codegen header whose window must acquire
+	// the import's generated extra.pb.h.
 	writeTestModuleFile(files, "gen/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -1889,8 +1831,7 @@ END()
 		"syntax = \"proto3\";\npackage gen;\nimport \"eproto/extra.proto\";\nmessage S { eproto.Extra e = 1; }\n")
 
 	// cons: the producer under test — RUN_PROGRAM IN tmpl.cpp, OUTPUT_INCLUDES the
-	// custom header, STDOUT out.cpp (by_name.cpp shape). tmpl.cpp #includes the
-	// custom header, the way by_name_tmpl.cpp #includes sys_const.h.
+	// custom header, STDOUT out.cpp. tmpl.cpp #includes the custom header.
 	writeTestModuleFile(files, "cons/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -1924,8 +1865,8 @@ END()
 	// The import's generated .pb.h and its distinctive transitive sibling ride the
 	// producer node AND the generated out.cpp.o, alongside their .proto sources.
 	want := []string{
-		"$(B)/eproto/extra.pb.h", // direct import's generated header (sys_const.h -> const_options.pb.h)
-		"$(B)/dproto/d.pb.h",     // its distinctive transitive sibling (-> the YaFF closure)
+		"$(B)/eproto/extra.pb.h", // direct import's generated header
+		"$(B)/dproto/d.pb.h",     // its distinctive transitive sibling
 		"$(S)/eproto/extra.proto",
 		"$(S)/dproto/d.proto",
 	}
@@ -1948,19 +1889,13 @@ END()
 	}
 }
 
-// The sys_const.cpp shape: a RUN_PROGRAM with IN src.proto, OUT gen.h gen.cpp,
-// whose generator writes `#include "gen.h"` into the generated gen.cpp. The
-// header sibling gen.h carries its proto import's generated `.pb.h` closure
-// (T-83's protoImportPbH window). Because the generated gen.cpp #includes the
-// same-producer header, BOTH the non-PIC and the PIC compile of gen.cpp must
-// reach that header sibling's induced proto-header closure — the import's
-// generated `.pb.h` and its distinctive transitive sibling — exactly as upstream
-// resolves the generated source's quoted include of the generated header.
-//
-// Pre-fix the generated cc-source's modeled parsed includes list only the IN
-// `.proto` sources (and the bare non-expanded main-output leaf gen.h), so the
-// `.pb.h` closure never rides the compile: the sys_const.cpp.o / .pic.o input
-// residual.
+// A RUN_PROGRAM with IN src.proto, OUT gen.h gen.cpp, whose generator writes
+// `#include "gen.h"` into the generated gen.cpp. The header sibling gen.h carries its
+// proto import's generated `.pb.h` closure (the protoImportPbH window). Because the
+// generated gen.cpp #includes the same-producer header, BOTH the non-PIC and the PIC
+// compile of gen.cpp must reach that header sibling's induced proto-header closure —
+// the import's generated `.pb.h` and its distinctive transitive sibling — resolving
+// the generated source's quoted include of the generated header.
 func TestGen_RunProgramGeneratedCppRidesHeaderSiblingPbhClosure(t *testing.T) {
 	files := map[string]string{}
 
@@ -1970,13 +1905,12 @@ func TestGen_RunProgramGeneratedCppRidesHeaderSiblingPbhClosure(t *testing.T) {
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make",
 		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
 
-	// dproto: leaf PROTO_LIBRARY — d.pb.h is the distinctive transitive closure
-	// entry of the import's extra.pb.h.
+	// dproto: leaf PROTO_LIBRARY — d.pb.h is the distinctive transitive closure entry
+	// of the import's extra.pb.h.
 	writeTestModuleFile(files, "dproto/ya.make", "PROTO_LIBRARY()\nSRCS(d.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
 	writeTestModuleFile(files, "dproto/d.proto", "syntax = \"proto3\";\npackage dproto;\nmessage D {}\n")
 
-	// eproto: PROTO_LIBRARY importing dproto/d.proto — extra.pb.h #includes d.pb.h
-	// (const_options.pb.h -> descriptor.pb.h analog).
+	// eproto: PROTO_LIBRARY importing dproto/d.proto — extra.pb.h #includes d.pb.h.
 	writeTestModuleFile(files, "eproto/ya.make", "PROTO_LIBRARY()\nPEERDIR(dproto)\nSRCS(extra.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
 	writeTestModuleFile(files, "eproto/extra.proto",
 		"syntax = \"proto3\";\npackage eproto;\nimport \"dproto/d.proto\";\nmessage Extra { dproto.D d = 1; }\n")
@@ -2003,8 +1937,8 @@ END()
 		"syntax = \"proto3\";\npackage gen;\nimport \"eproto/extra.proto\";\nmessage S { eproto.Extra e = 1; }\n")
 
 	// tool PROGRAM PEERDIRs gen — used as a host BASE_CODEGEN tool below, so gen is
-	// instantiated PIC for the host (gen.cpp.pic.o), in addition to the non-PIC
-	// target instance reached through app's PEERDIR (gen.cpp.o).
+	// instantiated PIC for the host (gen.cpp.pic.o), in addition to the non-PIC target
+	// instance reached through app's PEERDIR (gen.cpp.o).
 	writeTestModuleFile(files, "tool/ya.make", `PROGRAM(tool)
 NO_LIBC()
 NO_RUNTIME()
@@ -2059,11 +1993,11 @@ END()
 		}
 	}
 
-	// The PR producer node is IN-rooted: it depends on the proto IN closure, NOT
-	// the header-sibling's re-exported generated `.pb.h` closure. Upstream routes
-	// that closure to consumers (the gen.cpp compiles above), never back onto the
-	// producer. Modeling gen.cpp's `#include "gen.h"` must not leak gen.h's window
-	// into the producer's own self-scan.
+	// The PR producer node is IN-rooted: it depends on the proto IN closure, NOT the
+	// header-sibling's re-exported generated `.pb.h` closure. That closure routes to
+	// consumers (the gen.cpp compiles above), never back onto the producer. Modeling
+	// gen.cpp's `#include "gen.h"` must not leak gen.h's window into the producer's own
+	// self-scan.
 	prod := mustNodeByOutput(t, g, "$(B)/gen/gen.h")
 	for _, leak := range []string{"$(B)/eproto/extra.pb.h", "$(B)/dproto/d.pb.h"} {
 		if nodeHasInput(prod, leak) {
@@ -2072,21 +2006,13 @@ END()
 	}
 }
 
-// A RUN_PROGRAM whose positional args embed an IN/OUT path after a `--flag=`:
-// uca900-shaped libmysql table generation. Upstream's args_converter deep-replace
-// (FillTypedArgs) roots every relative path listed in IN/OUT that appears as a
-// boundary-delimited substring of an arg, so `--in_file=lang_data/ja.txt` becomes
-// `--in_file=$(S)/<dir>/lang_data/ja.txt` and `--out_file=tbls.cc` becomes
-// `--out_file=$(B)/<dir>/tbls.cc`. Bare-token IN/OUT args keep rooting too.
 // A RUN_PROGRAM defined in an INCLUDE'd macro with `CWD ${BINDIR}` and an
-// `OUT_NOAUTO ${OUTPUT_PATH}` output, used from a CHILD module (gen/gen_consts)
-// whose output is consumed only by the PARENT module's COPY_FILE
-// (${ARCADIA_BUILD_ROOT}/gen/gen_consts/generated_consts.py), is owned by the
-// PARENT under upstream's Node2Module first-DFS-leave rule: the OUT_NOAUTO output
-// never enters the producing child's own subtree, so the parent's COPY_FILE
-// build-path EDT_BuildFrom is the first (only) referencer. Both module_dir AND the
-// late-resolved ${BINDIR} cwd follow the owning parent, while the OUT path stays
-// under the child. This is the feature_store/.../gen_consts/generated_consts.py shape.
+// `OUT_NOAUTO ${OUTPUT_PATH}` output, used from a CHILD module (gen/gen_consts) whose
+// output is consumed only by the PARENT module's COPY_FILE, is owned by the PARENT
+// under the first-DFS-leave rule: the OUT_NOAUTO output never enters the producing
+// child's own subtree, so the parent's COPY_FILE build-path is the first (only)
+// referencer. Both module_dir AND the late-resolved ${BINDIR} cwd follow the owning
+// parent, while the OUT path stays under the child.
 func TestGen_RunProgramIncludedMacroCwdFollowsCopyConsumerOwner(t *testing.T) {
 	files := map[string]string{}
 
@@ -2204,21 +2130,16 @@ END()
 	}
 }
 
-// TestGen_RunProgramBuiltToolDepIdentityTracksClosure is the T-36 regression.
+// A RUN_PROGRAM-produced header that runs a built PROGRAM tool records the tool as a
+// dependency carrying that tool's node identity — the tool's LD uid, a Merkle hash
+// over the tool's own source/header link closure — so the producer re-fires when the
+// tool's binary identity changes. This is emitRunProgram -> ctx.toolResult(toolPath)
+// -> LDRef, placed on the producer as ForeignDepRefs. A plain source-file argument to
+// the tool invocation stays a plain $(S) input, never promoted to a built-tool dep.
 //
-// Upstream: a RUN_PROGRAM-produced header that runs a built PROGRAM tool records
-// the tool as a dependency carrying that tool's node identity — the tool's LD
-// uid, a Merkle hash over the tool's own source/header link closure — so the
-// producer re-fires when the tool's binary identity changes. In ay this is
-// emitRunProgram -> ctx.toolResult(toolPath) -> LDRef, placed on the producer as
-// ForeignDepRefs (emit_pr.go). A plain source-file argument to the tool
-// invocation stays a plain $(S) input (runProgramInputVFS), never promoted to a
-// built-tool dep.
-//
-// This guards the property the yabs/plutonium/libs/profiles/*_profile_gen tools
-// rely on for their *.yaff.h producers: the producer's tool dep IS the built
-// tool's linked identity, so the tool's source/header closure (not just its
-// path) feeds the producer's uid — while a source argument is unaffected.
+// So the producer's tool dep IS the built tool's linked identity: the tool's
+// source/header closure (not just its path) feeds the producer's uid, while a source
+// argument is unaffected.
 func TestGen_RunProgramBuiltToolDepIdentityTracksClosure(t *testing.T) {
 	build := func(toolHeader string) *Graph {
 		files := map[string]string{}

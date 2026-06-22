@@ -219,9 +219,9 @@ END()
 	const forbidden = "$(S)/mod/inner/sub/foo.S"
 
 	if nodeHasInput(asNode, forbidden) {
-		t.Errorf("AS.flatInputs() contains %q — SRCDIR rebase must redirect to %q (PR-35y R8)", forbidden, want)
+		t.Errorf("AS.flatInputs() contains %q — SRCDIR rebase must redirect to %q", forbidden, want)
 	}
 	if !nodeHasInput(asNode, want) {
-		t.Errorf("AS.flatInputs() missing %q — PR-35y R8 SRCDIR rebase for `.S` source: %#v", want, asNode.flatInputs())
+		t.Errorf("AS.flatInputs() missing %q — SRCDIR rebase for `.S` source: %#v", want, asNode.flatInputs())
 	}
 }

@@ -2,17 +2,15 @@ package main
 
 import "strings"
 
-// flexDefaultGenExt is _FLEX_GEN_EXT's default (.cpp) — old flex emits C++.
+// flexDefaultGenExt is _FLEX_GEN_EXT's default — old flex emits C++.
 const flexDefaultGenExt = ".cpp"
 
-// flexOutputInclude is the util/system/compiler.h that _SRC("l")'s
-// `${hide;output_include:"util/system/compiler.h"}` forces into every
-// generated lexer source (bison_lex.conf).
+// flexOutputInclude is the header forced into every generated lexer source via
+// output_include.
 var flexOutputInclude = IncludeDirective{kind: includeQuoted, target: internStr("util/system/compiler.h")}
 
-// flexGeneratedVFS is the generated-source path of a lex/flex source — the same
-// nopath placement as ragel6OutVFS / bisonGeneratedRel: a flat (in-module)
-// source lands its .cpp directly in the module build dir; a subdir source is
+// flexGeneratedVFS is the generated-source path of a lex/flex source: a flat
+// (in-module) source lands its .cpp in the module build dir; a subdir source is
 // rebased under the _/ namespace.
 func flexGeneratedVFS(instance ModuleInstance, srcRel string) VFS {
 	if strings.Contains(srcRel, "/") {
@@ -22,22 +20,21 @@ func flexGeneratedVFS(instance ModuleInstance, srcRel string) VFS {
 	return build(instance.Path.rel() + "/" + srcRel + flexDefaultGenExt)
 }
 
-// emitLibraryFlexSource reproduces default old-flex _SRC("l"/"lex"/"lpp")
-// (bison_lex.conf): the LX/yellow node runs `contrib/tools/flex-old/flex
-// -o<src>.cpp <src>` and the generated .cpp is compiled as C++ and archived.
-// Shaped like emitLibraryRagel6Source (single tool, generates a .cpp no sibling
-// consumes as a header), so it stays in the pass-1 codegen loop rather than the
-// bison two-phase pre-pass. The flex-old ADDINCL is applied module-wide in
-// collectModule so the generated lexer's <FlexLexer.h> resolves here.
+// emitLibraryFlexSource reproduces default old-flex _SRC("l"/"lex"/"lpp"): the
+// LX/yellow node runs flex to produce a .cpp, which is compiled as C++ and
+// archived. Single tool, generates a .cpp no sibling consumes as a header, so it
+// stays in the pass-1 codegen loop rather than the bison two-phase pre-pass. The
+// flex-old ADDINCL is applied module-wide in collectModule so the generated
+// lexer's <FlexLexer.h> resolves here.
 func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
 	flexRef, flexBin := ctx.tool(argContribToolsFlexOld)
 
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
 	outVFS := flexGeneratedVFS(instance, srcRel)
 
-	// The generated .cpp carries util/system/compiler.h (output_include) ++ the
-	// .l's own prologue #includes (flex copies the %{…%} block verbatim). Register
-	// before walking so the closure resolves through the codegen registry.
+	// The generated .cpp carries the output_include header plus the .l's own
+	// prologue #includes (flex copies the %{…%} block verbatim). Register before
+	// walking so the closure resolves through the codegen registry.
 	parsed := make([]IncludeDirective, 0, 1)
 	parsed = append(parsed, flexOutputInclude)
 	parsed = append(parsed, ctx.scannerFor(instance).parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
@@ -49,8 +46,7 @@ func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 
 	// flex only reads source files (the .l + the headers its prologue pulls);
 	// generated $(B) headers in the closure reach the LX node's cache key through
-	// their own producers, so keep only source-level inputs — same as the ragel
-	// node (and matching the reference LX node, whose sole $(B) input is the tool).
+	// their own producers, so keep only source-level inputs.
 	lxClosure := keepOnlySourceVFS(window)
 
 	emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef, ctx.emit)
@@ -61,10 +57,8 @@ func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	ccIn.IncludeInputs = window
 	ccIn.ExtraDepRefs = append([]NodeRef{lxRef}, resolveCodegenDepRefs(ctx, instance, window, lxRef)...)
 
-	// _LANG_CFLAGS_VALUE_NEW (ymake.core.conf): the generated .l.cpp compile gets
-	// `-Wno-unused-variable` (_LANG_CFLAGS_LEX) and the `.l` source as a hidden
-	// input — both from the single `${pre=$_LANG_CFLAGS_LEX;ext=.l;…;input:SRC}`
-	// directive, which keys on the `.l` extension only (not .lex/.lpp).
+	// The generated .l.cpp compile gets `-Wno-unused-variable` and the `.l` source
+	// as a hidden input, keyed on the `.l` extension only (not .lex/.lpp).
 	if strings.HasSuffix(srcRel, ".l") {
 		ccIn.IncludeInputs = dedupVFS(window, []VFS{srcVFS})
 		ccIn.PerSourceCFlags = append(append([]ARG(nil), in.PerSourceCFlags...), argWnoUnusedVariable)

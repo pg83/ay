@@ -6,9 +6,9 @@ import (
 )
 
 // TestEmitLj21Archive_RawCompilationAndArchive covers LJ_21_ARCHIVE end to end:
-// each declared .lua compiles to a .raw via an LJ node (luajit_21 compiler, cwd
-// $(S)/contrib/libs/luajit_21, kv p=LJ), and the LuaScripts.inc archive_by_keys
-// consumes those raws (plain members + `-k <keys>`), depending on the producers.
+// each declared .lua compiles to a .raw via an LJ node, and the LuaScripts.inc
+// archive_by_keys consumes those raws (plain members + `-k <keys>`), depending on
+// the producers.
 func TestEmitLj21Archive_RawCompilationAndArchive(t *testing.T) {
 	files := map[string]string{}
 
@@ -52,8 +52,7 @@ func TestEmitLj21Archive_RawCompilationAndArchive(t *testing.T) {
 		t.Errorf("nested LJ inputs %v missing $(S)/mod/sub/b.lua", vfsStringsT3(ljB.flatInputs()))
 	}
 
-	// (2) the LuaScripts.inc archive consumes the raws plain, keyed by lua names,
-	// and depends on the LJ producers.
+	// (2) the LuaScripts.inc archive consumes the raws plain, keyed by lua names.
 	ar := mustNodeByOutput(t, g, "$(B)/mod/LuaScripts.inc")
 	if ar.KV.P != pkAR {
 		t.Errorf("archive node kv.p = %q, want AR", ar.KV.P.string())
@@ -91,12 +90,12 @@ func TestEmitLj21Archive_RawCompilationAndArchive(t *testing.T) {
 	}
 }
 
-// TestEmitLj21Archive_ArchiveOutputAddInclAndClosure covers the ARCHIVE_BY_KEYS
-// generated-header consumer surface of LJ_21_ARCHIVE: the `${addincl;noauto;
-// output:NAME}` outputs put the module build dir on the C++ compile command
-// (-I$(B)/mod), and a C++ unit that #includes a generated archive header receives
-// the archive's source-member closure as inputs (the raws' lua sources through
-// LuaScripts.inc, the direct lua sources through LuaSources.inc).
+// TestEmitLj21Archive_ArchiveOutputAddInclAndClosure covers the generated-header
+// consumer surface of LJ_21_ARCHIVE: the archive outputs put the module build dir
+// on the C++ compile command (-I$(B)/mod), and a C++ unit that #includes a
+// generated archive header receives the archive's source-member closure as inputs
+// (the raws' lua sources through LuaScripts.inc, the direct lua sources through
+// LuaSources.inc).
 func TestEmitLj21Archive_ArchiveOutputAddInclAndClosure(t *testing.T) {
 	files := map[string]string{}
 
@@ -138,8 +137,8 @@ func TestEmitLj21Archive_ArchiveOutputAddInclAndClosure(t *testing.T) {
 		t.Errorf("templates_sources.cpp.o cmd missing %q; got %v", buildInc, strStrs(sources.Cmds[0].CmdArgs.flat()))
 	}
 
-	// (2) the LuaScripts.inc consumer pulls the raw members' lua sources, and the
-	// LuaSources.inc consumer pulls the direct lua sources, as closure-leaf inputs.
+	// (2) the LuaScripts.inc consumer pulls the raw members' lua sources, the
+	// LuaSources.inc consumer the direct lua sources, as closure-leaf inputs.
 	for _, lua := range []string{"$(S)/mod/a.lua", "$(S)/mod/sub/b.lua"} {
 		if !nodeHasInput(scripts, lua) {
 			t.Errorf("templates.cpp.o inputs %v missing LuaScripts.inc closure leaf %q", vfsStringsT3(scripts.flatInputs()), lua)

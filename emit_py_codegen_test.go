@@ -23,10 +23,10 @@ func TestEmitPyRegister_ProducerEmittedAtTargetPlatform(t *testing.T) {
 	emitPyRegister(ctx, hostInst, d, ModuleCCInputs{}, false)
 	emitPyRegister(ctx, targetInst, d, ModuleCCInputs{}, false)
 
-	// No cross-platform cache: each instance emits its own .reg3.cpp producer.
-	// gen_py3_reg.py is platform-independent codegen, attributed to the target
-	// platform, so both producers carry testTargetP and no tool tag — byte-
-	// identical, hence they collapse by uid in the finalized graph.
+	// No cross-platform cache: each instance emits its own .reg3.cpp producer. The
+	// reg-script is platform-independent codegen, attributed to the target platform,
+	// so both producers carry testTargetP and no tool tag — byte-identical, hence
+	// they collapse by uid in the finalized graph.
 	wantOutput := "$(B)/contrib/tools/python3/Modules/_sqlite/_sqlite3.reg3.cpp"
 	var pyNodes []*Node
 
@@ -47,12 +47,11 @@ func TestEmitPyRegister_ProducerEmittedAtTargetPlatform(t *testing.T) {
 	}
 }
 
-// lxml-like fixture: CYTHONIZE_PY appears BEFORE any CYTHON_C/CYTHON_CPP
-// directive, so its `.py` source falls into the default C++ bucket (upstream
-// `pyxs = pyxs_cpp`). Textual order is _difflib(cpp), objectify(C),
-// etree(C_API_H), but the fixed bucket order is CYTHON_C, CYTHON_C_API_H,
-// CYTHON_CPP — so the regular archive lists objectify, etree, _difflib, and the
-// global archive's .reg3.cpp members follow the same order.
+// CYTHONIZE_PY appears BEFORE any CYTHON_C/CYTHON_CPP directive, so its `.py`
+// source falls into the default C++ bucket. Textual order is _difflib(cpp),
+// objectify(C), etree(C_API_H), but the fixed bucket order is CYTHON_C,
+// CYTHON_C_API_H, CYTHON_CPP — so the regular archive lists objectify, etree,
+// _difflib, and the global archive's .reg3.cpp members follow the same order.
 func TestGen_CythonizePyDefaultCppBucketARMemberOrder(t *testing.T) {
 	files := map[string]string{}
 
@@ -86,14 +85,12 @@ func TestGen_CythonizePyDefaultCppBucketARMemberOrder(t *testing.T) {
 }
 
 // A generated PY_SRCS source (PY_SRCS(__init__.py) where __init__.py is the
-// OUT_NOAUTO output of a RUN_PROGRAM) must reproduce upstream pybuild.py's
-// `rootrel_arc_src(path, unit) + '-'` py3cc source-name argument. For a build-
-// generated source, rootrel_arc_src resolves into $B (not $S) and falls through
-// to `return src`, so the argument is the raw PY_SRCS token (`__init__.py-`),
-// not the module-rooted path (`mod/__init__.py-`). The bytecode node also
-// inherits the producer's transitive $(S) source closure (upstream flat-input
-// model) — the direct IN leaf AND its transitive includes — not just the direct
-// leaf, and depends on the RUN_PROGRAM producer node.
+// OUT_NOAUTO output of a RUN_PROGRAM) must reproduce the `rootrel_arc_src(path,
+// unit) + '-'` py3cc source-name argument. For a build-generated source,
+// rootrel_arc_src resolves into $B (not $S), so the argument is the raw PY_SRCS
+// token (`__init__.py-`), not the module-rooted path. The bytecode node also
+// inherits the producer's transitive $(S) source closure (flat-input model) — the
+// direct IN leaf AND its transitive includes — and depends on the producer node.
 func TestGen_GeneratedPySrcsBytecodeNamingAndProducerClosure(t *testing.T) {
 	files := map[string]string{}
 

@@ -5,11 +5,9 @@ import (
 	"testing"
 )
 
-// TestEmitBundle_GeneratedFileWiresProducerDep covers the BUNDLE → RESOURCE
-// consumer path: BUNDLE(<lib> NAME x.bundle) emits a BN node that renames the
-// bundled module's primary output ($(B)/dep/libdep.a) into $(B)/cons/x.bundle,
-// and a RESOURCE(x.bundle …) in the same module embeds the BN build output
-// (not a nonexistent $(S)/cons/x.bundle source) and depends on the BN node.
+// TestEmitBundle_GeneratedFileWiresProducerDep covers the BUNDLE → RESOURCE path:
+// the BN node renames the bundled primary output into $(B)/cons/x.bundle, and a
+// RESOURCE embeds that BN output (not an $(S) source) and depends on the BN node.
 func TestEmitBundle_GeneratedFileWiresProducerDep(t *testing.T) {
 	files := map[string]string{}
 
@@ -28,7 +26,7 @@ func TestEmitBundle_GeneratedFileWiresProducerDep(t *testing.T) {
 	depAR := mustNodeByOutput(t, g, "$(B)/dep/libdep.a")
 	bn := mustNodeByOutput(t, g, "$(B)/cons/x.bundle")
 
-	// (1) BN node identity + faithful rename of the bundled module's primary output.
+	// (1) BN node identity + rename of the bundled primary output.
 	if bn.KV.P != pkBN {
 		t.Errorf("bundle node kv.p = %q, want BN", bn.KV.P.string())
 	}
@@ -50,7 +48,7 @@ func TestEmitBundle_GeneratedFileWiresProducerDep(t *testing.T) {
 		t.Errorf("graphDeps(g, BN) %v does not include the bundled AR uid %q", graphDeps(g, bn), depAR.UID)
 	}
 
-	// (2) the resource objcopy embeds the BN build output and depends on the BN node.
+	// (2) the resource objcopy embeds the BN output and depends on the BN node.
 	oc := findNodeByOutputPrefix(g, "$(B)/cons/objcopy_")
 	if oc == nil {
 		t.Fatal("graph is missing the cons objcopy node")
@@ -74,11 +72,8 @@ func TestEmitBundle_GeneratedFileWiresProducerDep(t *testing.T) {
 }
 
 // TestEmitProgramResource_BundleAttributesFsToolsToModule covers the BUNDLE
-// MOVE_FILE script-input attribution gap (the ads/argus codegen LD class): a
-// linkable C++ module that declares BUNDLE has _BUNDLE_TARGET's non-hidden
-// ${input:"build/scripts/fs_tools.py"} (MOVE_FILE = $FS_TOOLS rename) attributed
-// to the consuming module's link node in addition to the BN bundle producer.
-// The BN producer shape must stay byte-equivalent to the existing model.
+// MOVE_FILE attribution gap: a linkable module declaring BUNDLE has the fs_tools.py
+// input on its link node as well as the BN producer, whose shape stays unchanged.
 func TestEmitProgramResource_BundleAttributesFsToolsToModule(t *testing.T) {
 	files := map[string]string{}
 
@@ -89,22 +84,20 @@ func TestEmitProgramResource_BundleAttributesFsToolsToModule(t *testing.T) {
 	writeTestModuleFile(files, "dep/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(d.cpp)\nEND()\n")
 	writeTestModuleFile(files, "dep/d.cpp", "int d(){return 0;}\n")
 
-	// Seed the FS_TOOLS script closure so the BN producer and (after the fix) the
-	// link node resolve fs_tools.py -> process_command_files.py exactly as upstream.
+	// Seed the FS_TOOLS script closure (fs_tools.py -> process_command_files.py).
 	files["build/scripts/fs_tools.py"] = "import process_command_files as pcf\n"
 	files["build/scripts/process_command_files.py"] = "\n"
 
-	// blib is a BUNDLE-declaring LIBRARY (same shape as the PROGRAM). Upstream does
-	// NOT attribute the MOVE_FILE fs_tools.py to a library's per-module .a node —
-	// only to an executable link (LD) node — so its AR must stay fs_tools-free.
+	// blib is a BUNDLE-declaring LIBRARY. The MOVE_FILE fs_tools.py is attributed
+	// only to an LD node, not a library's .a, so its AR must stay fs_tools-free.
 	writeTestModuleFile(files, "blib/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(b.cpp)\nBUNDLE(dep NAME y.bundle)\nRESOURCE(y.bundle blib/key)\nEND()\n")
 	writeTestModuleFile(files, "blib/b.cpp", "int b(){return 0;}\n")
 
 	writeTestModuleFile(files, "prog/ya.make", "PROGRAM()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(main.cpp)\nPEERDIR(blib)\nBUNDLE(dep NAME x.bundle)\nRESOURCE(x.bundle dep/key)\nEND()\n")
 	writeTestModuleFile(files, "prog/main.cpp", "int main(){return 0;}\n")
 
-	// Internal contour: emitCopy is false for a plain PROGRAM, so fs_tools.py can
-	// only reach the link node through the BUNDLE MOVE_FILE attribution under test.
+	// Internal contour: emitCopy is false for a plain PROGRAM, so fs_tools.py
+	// reaches the link node only through the BUNDLE MOVE_FILE under test.
 	g := testGenInternal(newMemFS(files), "prog")
 
 	const fsTools = "$(S)/build/scripts/fs_tools.py"
@@ -115,8 +108,8 @@ func TestEmitProgramResource_BundleAttributesFsToolsToModule(t *testing.T) {
 		t.Errorf("LD node inputs missing the BUNDLE MOVE_FILE input %q: %v", fsTools, vfsStringsT3(ld.flatInputs()))
 	}
 
-	// (2) the BN bundle producer shape is unchanged: it still carries fs_tools.py
-	// and still depends on the bundled module's archive.
+	// (2) the BN producer shape is unchanged: still carries fs_tools.py and
+	// depends on the bundled archive.
 	depAR := mustNodeByOutput(t, g, "$(B)/dep/libdep.a")
 	bn := mustNodeByOutput(t, g, "$(B)/prog/x.bundle")
 	if !nodeHasInput(bn, fsTools) {
@@ -126,7 +119,7 @@ func TestEmitProgramResource_BundleAttributesFsToolsToModule(t *testing.T) {
 		t.Errorf("graphDeps(BN) %v does not include the bundled AR uid %q", graphDeps(g, bn), depAR.UID)
 	}
 
-	// (3) the T-23 objcopy/BN chain stays paired.
+	// (3) the objcopy/BN chain stays paired.
 	oc := findNodeByOutputPrefix(g, "$(B)/prog/objcopy_")
 	if oc == nil {
 		t.Fatal("graph is missing the prog resource objcopy node")
@@ -138,8 +131,8 @@ func TestEmitProgramResource_BundleAttributesFsToolsToModule(t *testing.T) {
 		t.Errorf("graphDeps(LD) %v does not include the objcopy uid %q", graphDeps(g, ld), oc.UID)
 	}
 
-	// (4) asymmetry: a BUNDLE-declaring LIBRARY's per-module archive node must NOT
-	// carry the MOVE_FILE fs_tools.py input (upstream attributes it to LD only).
+	// (4) asymmetry: a BUNDLE-declaring LIBRARY's archive node must NOT carry the
+	// MOVE_FILE fs_tools.py input (attributed to LD only).
 	blibAR := mustNodeByOutput(t, g, "$(B)/blib/libblib.a")
 	if nodeHasInput(blibAR, fsTools) {
 		t.Errorf("LIBRARY AR node must not carry the BUNDLE MOVE_FILE input %q: %v", fsTools, vfsStringsT3(blibAR.flatInputs()))

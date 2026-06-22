@@ -74,8 +74,8 @@ func TestIntHeap_RandomizedMatchesSort(t *testing.T) {
 	}
 }
 
-// The wrappers exist for container/heap's by-name dispatch; the
-// implementations are the lower-case twins (STYLE.md naming).
+// Exported wrappers exist for container/heap dispatch; they delegate to the
+// lower-case twins.
 func TestIntHeap_WrappersDelegate(t *testing.T) {
 	h := IntHeap{2, 1}
 
