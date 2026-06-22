@@ -33,7 +33,6 @@ func TestComposeDynLibInputs_IncludesVcsAndHelperScripts(t *testing.T) {
 		scripts,
 	)
 
-	// May list a shared helper more than once; normalization dedups, so compare as a set.
 	want := []string{
 		"$(B)/build/cow/on/libbuild-cow-on.a",
 		"$(B)/contrib/libs/foolib/include/foolib.py.pyplugin",
@@ -54,6 +53,7 @@ func TestComposeDynLibInputs_IncludesVcsAndHelperScripts(t *testing.T) {
 	got2 := vfsStrings(got.flat())
 	sort.Strings(got2)
 	got2 = slices.Compact(got2)
+
 	if !reflect.DeepEqual(got2, want) {
 		t.Fatalf("composeDynLibInputs() set = %#v, want %#v", got2, want)
 	}

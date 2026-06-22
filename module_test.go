@@ -35,6 +35,7 @@ func TestModuleInstance_Equality_Hashing(t *testing.T) {
 		Language: a.Language,
 		Platform: testHostP,
 	}
+
 	if host == a {
 		t.Errorf("host-axis copy compared equal to target-axis original: %v == %v", host, a)
 	}

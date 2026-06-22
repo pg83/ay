@@ -6,6 +6,11 @@ import (
 	"testing"
 )
 
+var (
+	testHostP   = newTestPlatform(OSLinux, ISAX8664, "yes")
+	testTargetP = newTestPlatform(OSLinux, ISAAArch64, "no")
+)
+
 var testToolchainFlags = map[string]string{
 	"OPENSOURCE":              "yes",
 	"BUILD_PYTHON_BIN":        "/bin/python3",
@@ -19,17 +24,15 @@ var testToolchainFlags = map[string]string{
 	"CLANG16_RESOURCE_GLOBAL": "CLANG16_RESOURCE_GLOBAL::$(CLANG16)",
 }
 
-var (
-	testHostP   = newTestPlatform(OSLinux, ISAX8664, "yes")
-	testTargetP = newTestPlatform(OSLinux, ISAAArch64, "no")
-)
-
 func newTestPlatform(os OS, isa ISA, pic string) *Platform {
 	flags := make(map[string]string, len(testToolchainFlags)+2)
+
 	for k, v := range testToolchainFlags {
 		flags[k] = v
 	}
+
 	flags["PIC"] = pic
+
 	return newPlatform(newMemFS(nil), os, isa, flags, "", "")
 }
 
@@ -53,9 +56,11 @@ func hostInstance(path string) ModuleInstance {
 
 func vfsStrings(vs []VFS) []string {
 	out := make([]string, len(vs))
+
 	for i, v := range vs {
 		out[i] = v.string()
 	}
+
 	return out
 }
 
@@ -92,7 +97,6 @@ func TestArchiveName(t *testing.T) {
 		moduleDir string
 		want      string
 	}{
-
 		{"util", "libyutil.a"},
 
 		{"tools/archiver", "libtools-archiver.a"},
@@ -282,6 +286,7 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 	got := e.nodes[arRef]
 
 	inputs := got.flatInputs()
+
 	if len(inputs) != 4 {
 		t.Fatalf("inputs len = %d, want 4", len(inputs))
 	}
@@ -295,8 +300,6 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 	}
 }
 
-// Archive members follow the module's PIC contour: a PIC platform archives
-// `.pic.o`, non-PIC archives `.o`. The suffix derives from Platform.PIC.
 func TestGen_ArchiveMembersFollowPicContour(t *testing.T) {
 	src := map[string]string{
 		"codecs/ya.make": `LIBRARY()
@@ -307,16 +310,19 @@ END()
 
 	arMembers := func(g *Graph) []string {
 		var members []string
+
 		for _, n := range g.Graph {
 			if n.KV.P != pkAR {
 				continue
 			}
+
 			for _, a := range strStrs(n.Cmds[0].CmdArgs.flat()) {
 				if strings.HasSuffix(a, ".o") {
 					members = append(members, a)
 				}
 			}
 		}
+
 		return members
 	}
 
@@ -324,17 +330,22 @@ END()
 
 	picTarget := newPlatform(newMemFS(src), OSLinux, ISAAArch64, func() map[string]string {
 		f := make(map[string]string, len(testToolchainFlags)+1)
+
 		for k, v := range testToolchainFlags {
 			f[k] = v
 		}
+
 		f["PIC"] = "yes"
+
 		return f
 	}(), "", "")
 
 	picMembers := arMembers(Gen(newMemFS(src), "codecs", host, picTarget, func(Warn) {}))
+
 	if len(picMembers) == 0 {
 		t.Fatal("PIC build produced no archive members")
 	}
+
 	for _, m := range picMembers {
 		if !strings.HasSuffix(m, ".pic.o") {
 			t.Fatalf("PIC contour: archive member %q is not a .pic.o variant", m)
@@ -342,9 +353,11 @@ END()
 	}
 
 	nonPicMembers := arMembers(testGen(newMemFS(src), "codecs"))
+
 	if len(nonPicMembers) == 0 {
 		t.Fatal("non-PIC build produced no archive members")
 	}
+
 	for _, m := range nonPicMembers {
 		if strings.HasSuffix(m, ".pic.o") {
 			t.Fatalf("non-PIC contour: archive member %q is a .pic.o variant", m)
@@ -378,6 +391,7 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 	got := e.nodes[arRef]
 
 	cmdArgs := got.Cmds[0].CmdArgs.flat()
+
 	if len(cmdArgs) != 13 {
 		t.Fatalf("cmd_args len = %d, want 13", len(cmdArgs))
 	}
@@ -402,6 +416,7 @@ END()
 	g := testGen(fs, "globalmod")
 
 	counts := make(map[string]int)
+
 	for _, n := range g.Graph {
 		p := n.KV.P.string()
 		counts[p]++
@@ -593,11 +608,13 @@ END()
 	}
 
 	regularInputs := map[string]bool{}
+
 	for _, in := range regularAR.flatInputs() {
 		regularInputs[in.string()] = true
 	}
 
 	globalInputs := map[string]bool{}
+
 	for _, in := range globalAR.flatInputs() {
 		globalInputs[in.string()] = true
 	}
@@ -612,6 +629,7 @@ END()
 			t.Errorf("regular AR.flatInputs() must not contain member source %q: %#v", src, regularAR.flatInputs())
 		}
 	}
+
 	if globalInputs[globalSrc] {
 		t.Errorf(".global.a AR.flatInputs() must not contain member source %q: %#v", globalSrc, globalAR.flatInputs())
 	}
@@ -622,11 +640,14 @@ END()
 				return true
 			}
 		}
+
 		return false
 	}
+
 	if !hasObject(regularAR) {
 		t.Errorf("regular AR.flatInputs() has no object: %#v", regularAR.flatInputs())
 	}
+
 	if !hasObject(globalAR) {
 		t.Errorf(".global.a AR.flatInputs() has no object: %#v", globalAR.flatInputs())
 	}
@@ -649,6 +670,7 @@ END()
 	g := testGen(newMemFS(files), "udfmod")
 
 	cc := findGraphNodeByOutputs(t, g, "$(B)/udfmod/lib.cpp.udfs.o")
+
 	if cc.TargetProperties.ModuleTag != tagYqlUdfStatic {
 		t.Fatalf("cc module_tag = %q, want yql_udf_static", cc.TargetProperties.ModuleTag.string())
 	}
@@ -664,6 +686,7 @@ END()
 	}
 
 	globalAR := findGraphNodeByOutputs(t, g, "$(B)/udfmod/libmy_udf.global.a")
+
 	if globalAR.TargetProperties.ModuleTag != tagYqlUdfStaticGlobal {
 		t.Fatalf("global AR module_tag = %q, want yql_udf_static_global", globalAR.TargetProperties.ModuleTag.string())
 	}
@@ -712,10 +735,11 @@ func TestReorderARMembers_Reg3PICVariantsTrailObjcopy(t *testing.T) {
 			refs := make([]NodeRef, len(tc.paths))
 			paths := make([]VFS, len(tc.paths))
 			declMeta := map[VFS]SrcMeta{}
+
 			for i, rel := range tc.paths {
 				refs[i] = NodeRef(int64(i + 1))
 				paths[i] = build(rel)
-				// .reg3.cpp compiles are generated, sorting after direct objcopy members.
+
 				if strings.Contains(rel, ".reg3.cpp") {
 					declMeta[paths[i]] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
 				}
@@ -725,12 +749,14 @@ func TestReorderARMembers_Reg3PICVariantsTrailObjcopy(t *testing.T) {
 
 			wantRefs := make([]NodeRef, len(tc.wantOrder))
 			wantPaths := make([]string, len(tc.wantOrder))
+
 			for i, idx := range tc.wantOrder {
 				wantRefs[i] = refs[idx]
 				wantPaths[i] = build(tc.paths[idx]).string()
 			}
 
 			gotPathStrings := make([]string, len(gotPaths))
+
 			for i, path := range gotPaths {
 				gotPathStrings[i] = path.string()
 			}
@@ -738,6 +764,7 @@ func TestReorderARMembers_Reg3PICVariantsTrailObjcopy(t *testing.T) {
 			if !reflect.DeepEqual(gotPathStrings, wantPaths) {
 				t.Fatalf("paths mismatch:\n got: %v\nwant: %v", gotPathStrings, wantPaths)
 			}
+
 			if !reflect.DeepEqual(gotRefs, wantRefs) {
 				t.Fatalf("refs mismatch:\n got: %v\nwant: %v", gotRefs, wantRefs)
 			}
@@ -759,6 +786,7 @@ func TestGen_LibraryARIncludesResourceObjcopyMemberInputs(t *testing.T) {
 	g := testGen(newMemFS(files), "db")
 	regularAR := mustNodeByOutput(t, g, "$(B)/db/libdb.a")
 	mustNodeByOutput(t, g, "$(B)/db/libdb.global.a")
+
 	if findNodeByOutputPrefix(g, "$(B)/db/objcopy_") == nil {
 		t.Fatal("graph is missing db objcopy output")
 	}
@@ -766,6 +794,7 @@ func TestGen_LibraryARIncludesResourceObjcopyMemberInputs(t *testing.T) {
 	if !nodeHasInput(regularAR, "$(S)/build/scripts/link_lib.py") {
 		t.Fatalf("libdb.a inputs missing its own script link_lib.py: %#v", regularAR.flatInputs())
 	}
+
 	for _, absent := range []string{"$(S)/db/data.sql", "$(S)/build/scripts/objcopy.py"} {
 		if nodeHasInput(regularAR, absent) {
 			t.Errorf("libdb.a must not list %q (not an AR input): %#v", absent, regularAR.flatInputs())
@@ -773,9 +802,6 @@ func TestGen_LibraryARIncludesResourceObjcopyMemberInputs(t *testing.T) {
 	}
 }
 
-// TestGen_Archive_SrcdirMemberResolvesThroughSourcePathPlan: with SRCDIR(data)
-// and ARCHIVE(NAME out.inc member.txt), the member resolves through the SRCDIR
-// path plan ($(S)/data/member.txt), not the phantom $(S)/mod/member.txt.
 func TestGen_Archive_SrcdirMemberResolvesThroughSourcePathPlan(t *testing.T) {
 	files := map[string]string{}
 
@@ -803,9 +829,11 @@ END()
 	const phantomMember = "$(S)/mod/member.txt"
 
 	args := strStrs(ar.Cmds[0].CmdArgs.flat())
+
 	if !containsString(args, wantMember+":") {
 		t.Errorf("ARCHIVE cmd_args missing SRCDIR-resolved member %q: %v", wantMember+":", args)
 	}
+
 	if containsString(args, phantomMember+":") {
 		t.Errorf("ARCHIVE cmd_args must not list phantom module-dir member %q: %v", phantomMember+":", args)
 	}
@@ -813,6 +841,7 @@ END()
 	if !nodeHasInput(ar, wantMember) {
 		t.Errorf("ARCHIVE inputs missing SRCDIR-resolved member %q: %#v", wantMember, ar.flatInputs())
 	}
+
 	if nodeHasInput(ar, phantomMember) {
 		t.Errorf("ARCHIVE inputs must not list phantom module-dir member %q: %#v", phantomMember, ar.flatInputs())
 	}
@@ -869,9 +898,6 @@ message Ydb {}
 }
 
 func TestReorderARMembers_SecondLevelTrailsFirstLevelByRound(t *testing.T) {
-	// A second-level .fbs.cpp (declSeq 1) gets a further FIFO round, so a
-	// first-level .cpp.o (declSeq 2) archives before it: generation round dominates
-	// declaration sequence. Without the SecondLevel marker the lower declSeq wins.
 	fbsCpp := build("mod/formula.fbs.cpp.o")
 	cpp := build("mod/formula.cpp.o")
 	refs := []NodeRef{NodeRef(1), NodeRef(2)}
@@ -892,8 +918,6 @@ func TestReorderARMembers_SecondLevelTrailsFirstLevelByRound(t *testing.T) {
 }
 
 func TestGen_ARMemberOrder_PbCcAfterHSerialized(t *testing.T) {
-	// A LIBRARY with a .proto SRCS (pb.cc.o) and GENERATE_ENUM_SERIALIZATION
-	// (h_serialized.cpp.o) must place pb.cc.o AFTER h_serialized.cpp.o.
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "mylib/ya.make", `LIBRARY()
@@ -923,13 +947,14 @@ END()
 
 	ar := mustNodeByOutput(t, g, "$(B)/mylib/libmylib.a")
 
-	// positions of pb.cc.o and h_serialized.cpp.o in AR cmd_args
 	pbPos := -1
 	hSerPos := -1
+
 	for i, arg := range strStrs(ar.Cmds[0].CmdArgs.flat()) {
 		if strings.HasSuffix(arg, ".pb.cc.o") {
 			pbPos = i
 		}
+
 		if strings.HasSuffix(arg, ".h_serialized.cpp.o") {
 			hSerPos = i
 		}
@@ -938,18 +963,16 @@ END()
 	if pbPos < 0 {
 		t.Fatal("AR cmd_args missing .pb.cc.o")
 	}
+
 	if hSerPos < 0 {
 		t.Fatal("AR cmd_args missing .h_serialized.cpp.o")
 	}
+
 	if hSerPos > pbPos {
 		t.Errorf("AR ordering wrong: .h_serialized.cpp.o at pos %d, .pb.cc.o at pos %d — want h_serialized BEFORE pb.cc", hSerPos, pbPos)
 	}
 }
 
-// TestGen_ARMemberOrder_CfgProtoAfterDirectCpp: with SRCS(status_codes.cfgproto
-// status_codes.cpp), the direct .cpp.o archives BEFORE the generated
-// .cfgproto.pb.cc.o despite the .cfgproto being declared first — its compile
-// runs in a later FIFO round.
 func TestGen_ARMemberOrder_CfgProtoAfterDirectCpp(t *testing.T) {
 	files := map[string]string{}
 
@@ -982,10 +1005,12 @@ message Cfg {}
 	ar := mustNodeByOutput(t, g, "$(B)/lib/liblib.a")
 
 	cppPos, cfgPos := -1, -1
+
 	for i, arg := range strStrs(ar.Cmds[0].CmdArgs.flat()) {
 		if strings.HasSuffix(arg, "/status_codes.cpp.o") {
 			cppPos = i
 		}
+
 		if strings.HasSuffix(arg, "/status_codes.cfgproto.pb.cc.o") {
 			cfgPos = i
 		}
@@ -994,17 +1019,16 @@ message Cfg {}
 	if cppPos < 0 {
 		t.Fatal("AR cmd_args missing status_codes.cpp.o")
 	}
+
 	if cfgPos < 0 {
 		t.Fatal("AR cmd_args missing status_codes.cfgproto.pb.cc.o")
 	}
+
 	if cppPos > cfgPos {
 		t.Errorf("AR ordering wrong: status_codes.cpp.o at pos %d, status_codes.cfgproto.pb.cc.o at pos %d — want direct .cpp.o BEFORE generated .cfgproto.pb.cc.o", cppPos, cfgPos)
 	}
 }
 
-// TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs: the resource objcopy object appears
-// BEFORE SRCS(GLOBAL) objects in the global archive even when SRCS(GLOBAL) is
-// declared first — objcopy objects always come first.
 func TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs(t *testing.T) {
 	files := map[string]string{}
 	writeToolProgram(files, "tools/py3cc", "py3cc")
@@ -1013,7 +1037,7 @@ func TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs(t *testing.T) {
 	writeToolProgram(files, "tools/rescompiler", "rescompiler")
 	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
-	// GLOBAL_SRCS declared BEFORE RESOURCE
+
 	writeTestModuleFile(files, "brkmod/ya.make", "LIBRARY()\nGLOBAL_SRCS(global.cpp)\nRESOURCE(data.txt somekey)\nEND()\n")
 	writeTestModuleFile(files, "brkmod/global.cpp", "int global(){return 0;}\n")
 	writeTestModuleFile(files, "brkmod/data.txt", "some data\n")
@@ -1021,47 +1045,53 @@ func TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs(t *testing.T) {
 	g := testGen(newMemFS(files), "brkmod")
 
 	var globalAR *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkAR && n.TargetProperties.ModuleTag == tagGlobal {
 			globalAR = n
+
 			break
 		}
 	}
+
 	if globalAR == nil {
 		t.Fatal("no global AR node in graph")
 	}
 
 	args := globalAR.Cmds[0].CmdArgs.flat()
-	// members begin at index 10 (after the 10-token prefix + archivePath).
+
 	if len(args) < 12 {
 		t.Fatalf("global AR cmd_args too short (%d): %v", len(args), args)
 	}
+
 	members := args[10:]
 
 	objcopyIdx, globalCppIdx := -1, -1
+
 	for i, m := range strStrs(members) {
 		if strings.Contains(m, "/objcopy_") && strings.HasSuffix(m, ".o") {
 			objcopyIdx = i
 		}
+
 		if strings.HasSuffix(m, "/global.cpp.o") {
 			globalCppIdx = i
 		}
 	}
+
 	if objcopyIdx < 0 {
 		t.Fatalf("global AR cmd_args missing objcopy member: %v", members)
 	}
+
 	if globalCppIdx < 0 {
 		t.Fatalf("global AR cmd_args missing global.cpp.o: %v", members)
 	}
+
 	if objcopyIdx >= globalCppIdx {
 		t.Errorf("objcopy (pos %d) must precede global.cpp.o (pos %d) in global AR cmd_args; members=%v",
 			objcopyIdx, globalCppIdx, members)
 	}
 }
 
-// ARCHIVE(NAME ...) writes its output through the addincl;output modifier, whose
-// side effect adds the output's build dir as a global include reaching PEERDIR
-// consumers, so a consumer compiles with -I$(B)/<peer-dir>.
 func TestGen_Archive_NameOutputDirPropagatesAsBuildInclude(t *testing.T) {
 	files := map[string]string{}
 
@@ -1089,7 +1119,6 @@ END()
 
 	g := testGen(newMemFS(files), "consumer")
 
-	// The archive output must still be emitted.
 	mustNodeByOutput(t, g, "$(B)/peer/data.inc")
 
 	cc := mustNodeByOutput(t, g, "$(B)/consumer/use.cpp.o")
@@ -1100,22 +1129,25 @@ END()
 	}
 }
 
-// globalARMembers returns the tagGlobal AR node's member paths in command order.
 func globalARMembers(t *testing.T, g *Graph) []string {
 	t.Helper()
 
 	var globalAR *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkAR && n.TargetProperties.ModuleTag == tagGlobal {
 			globalAR = n
+
 			break
 		}
 	}
+
 	if globalAR == nil {
 		t.Fatal("no global AR node in graph")
 	}
 
 	args := strStrs(globalAR.Cmds[0].CmdArgs.flat())
+
 	if len(args) < 11 {
 		t.Fatalf("global AR cmd_args too short (%d): %v", len(args), args)
 	}
@@ -1123,13 +1155,13 @@ func globalARMembers(t *testing.T, g *Graph) []string {
 	return args[10:]
 }
 
-// classifyObjcopyMember inspects the objcopy node producing memberPath and
-// classifies it by the resource source file it embeds.
 func classifyObjcopyMember(g *Graph, memberPath string) string {
 	n := nodeByOutput(g, memberPath)
+
 	if n == nil {
 		return ""
 	}
+
 	has := func(sub string) bool {
 		for _, in := range n.flatInputs() {
 			if strings.Contains(in.string(), sub) {
@@ -1139,6 +1171,7 @@ func classifyObjcopyMember(g *Graph, memberPath string) string {
 
 		return false
 	}
+
 	switch {
 	case has("/data.txt"):
 		return "explicit"
@@ -1151,10 +1184,6 @@ func classifyObjcopyMember(g *Graph, memberPath string) string {
 	return "other-objcopy"
 }
 
-// TestGen_GlobalAR_ExplicitResourceBeforeGlobal_PySrcAfter: a PY3_LIBRARY orders
-// its global archive members as explicit RESOURCE_FILES objcopy, GLOBAL src,
-// PY_SRCS .py objcopy, .pyi objcopy, then PY_REGISTER .reg3.cpp — the explicit
-// resfs objcopy precedes the SRCS(GLOBAL) band, the PY_SRCS objcopies follow it.
 func TestGen_GlobalAR_ExplicitResourceBeforeGlobal_PySrcAfter(t *testing.T) {
 	files := map[string]string{}
 	writeToolProgram(files, "tools/py3cc", "py3cc")
@@ -1192,6 +1221,7 @@ END()
 	members := globalARMembers(t, g)
 
 	explicitIdx, globalIdx, pyIdx, pyiIdx, regIdx := -1, -1, -1, -1, -1
+
 	for i, m := range members {
 		switch {
 		case strings.HasSuffix(m, "/syms.cpp.o"):
@@ -1219,23 +1249,24 @@ END()
 	if !(explicitIdx < globalIdx) {
 		t.Errorf("explicit objcopy (%d) must precede syms.cpp.pic.o (%d); members=%v", explicitIdx, globalIdx, members)
 	}
+
 	if !(globalIdx < pyIdx) {
 		t.Errorf("syms.cpp.pic.o (%d) must precede py objcopy (%d); members=%v", globalIdx, pyIdx, members)
 	}
+
 	if !(globalIdx < pyiIdx) {
 		t.Errorf("syms.cpp.pic.o (%d) must precede pyi objcopy (%d); members=%v", globalIdx, pyiIdx, members)
 	}
+
 	if !(pyIdx < pyiIdx) {
 		t.Errorf("py objcopy (%d) must precede pyi objcopy (%d); members=%v", pyIdx, pyiIdx, members)
 	}
+
 	if !(pyiIdx < regIdx) {
 		t.Errorf("pyi objcopy (%d) must precede .reg3.cpp.o (%d); members=%v", pyiIdx, regIdx, members)
 	}
 }
 
-// TestGen_GlobalAR_PycryptodomeShape_ExplicitGroupBeforeGlobals: with several
-// SRCS(GLOBAL *_syms.cpp), PY_SRCS, and explicit RESOURCE_FILES, all explicit
-// objcopies precede the first GLOBAL src and all PY_SRCS objcopies follow the last.
 func TestGen_GlobalAR_PycryptodomeShape_ExplicitGroupBeforeGlobals(t *testing.T) {
 	files := map[string]string{}
 	writeToolProgram(files, "tools/py3cc", "py3cc")
@@ -1281,14 +1312,18 @@ END()
 
 	firstGlobal, lastGlobal := -1, -1
 	var explicitIdxs, pyIdxs []int
+
 	for i, m := range members {
 		if strings.HasSuffix(m, "_syms.cpp.o") {
 			if firstGlobal < 0 {
 				firstGlobal = i
 			}
+
 			lastGlobal = i
+
 			continue
 		}
+
 		if strings.Contains(m, "/objcopy_") && strings.HasSuffix(m, ".o") {
 			switch classifyObjcopyMember(g, m) {
 			case "explicit":
@@ -1302,9 +1337,11 @@ END()
 	if firstGlobal < 0 || lastGlobal < 0 {
 		t.Fatalf("global AR cmd_args missing GLOBAL *_syms.cpp.o members; members=%v", members)
 	}
+
 	if len(explicitIdxs) == 0 {
 		t.Fatalf("global AR cmd_args missing explicit resource objcopies; members=%v", members)
 	}
+
 	if len(pyIdxs) == 0 {
 		t.Fatalf("global AR cmd_args missing PY_SRCS objcopies; members=%v", members)
 	}
@@ -1314,6 +1351,7 @@ END()
 			t.Errorf("explicit objcopy at %d must precede first GLOBAL src at %d; members=%v", idx, firstGlobal, members)
 		}
 	}
+
 	for _, idx := range pyIdxs {
 		if !(idx > lastGlobal) {
 			t.Errorf("PY_SRCS objcopy at %d must follow last GLOBAL src at %d; members=%v", idx, lastGlobal, members)

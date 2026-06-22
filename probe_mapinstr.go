@@ -12,11 +12,6 @@ import (
 	"sort"
 )
 
-// probeMapInstr wraps the KEY expression of each map index/delete in
-// mapKR/mapKW(<key>, "file:line"), a passthrough that tallies a per-site counter.
-// Wrapping the key (not the map expr) keeps m[...] a valid lvalue/rvalue
-// everywhere, so the edit is a pure text splice. go/types restricts it to real
-// maps. Throwaway: build, measure, revert; --probe=map dumps the tally on exit.
 func probeMapInstr(_ GlobalFlags, args []string) int {
 	files := goFilesFromArgs(args)
 
@@ -58,7 +53,7 @@ func probeMapInstr(_ GlobalFlags, args []string) int {
 	_, _ = conf.Check("main", fset, collect, info)
 
 	type edit struct {
-		start, end int // byte range of the key expr to wrap
+		start, end int
 		fn         string
 		site       string
 	}
@@ -67,7 +62,6 @@ func probeMapInstr(_ GlobalFlags, args []string) int {
 	reads, writes := 0, 0
 
 	for _, p := range order {
-		// Skip the probe tooling itself (its counter map would recurse).
 		base := filepath.Base(p)
 
 		if base == "probe_mapinstr.go" || base == "probe_callsite.go" || base == "probe.go" {
@@ -76,7 +70,6 @@ func probeMapInstr(_ GlobalFlags, args []string) int {
 
 		f := asts[p]
 
-		// Collect IndexExpr nodes that are write targets.
 		writeIdx := map[*ast.IndexExpr]bool{}
 		ast.Inspect(f, func(n ast.Node) bool {
 			switch x := n.(type) {
@@ -127,7 +120,6 @@ func probeMapInstr(_ GlobalFlags, args []string) int {
 	}
 
 	for p, es := range edits {
-		// Apply in reverse offset order so earlier offsets stay valid.
 		sort.Slice(es, func(i, j int) bool { return es[i].start > es[j].start })
 		b := src[p]
 
@@ -160,9 +152,6 @@ func isMapExpr(info *types.Info, e ast.Expr) bool {
 
 	return ok
 }
-
-// --- runtime probe populated by the mapKR/mapKW wrappers above; excluded from
-// instrumentation so the counter map does not recurse. Throwaway. ---
 
 type MapProbeEntry struct {
 	reads  uint64

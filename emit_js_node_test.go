@@ -15,6 +15,7 @@ func TestEmitJS_UsesRequestedPlatformTags(t *testing.T) {
 	if string(got.Platform.Target) != string(target.Target) {
 		t.Fatalf("JS platform = %q, want %q", string(got.Platform.Target), target.Target)
 	}
+
 	if got.TargetProperties.ModuleDir != "joinmod" {
 		t.Fatalf("JS module_dir = %q, want joinmod", got.TargetProperties.ModuleDir)
 	}
@@ -32,6 +33,7 @@ END()
 	g := testGen(fs, "joinmod")
 
 	counts := make(map[string]int)
+
 	for _, n := range g.Graph {
 		p := n.KV.P.string()
 		counts[p]++
@@ -92,6 +94,7 @@ END()
 	}
 
 	wantJSOut := "$(B)/joinmod/all_my.cpp"
+
 	if jsOut != wantJSOut {
 		t.Errorf("JS output = %q, want %q", jsOut, wantJSOut)
 	}

@@ -25,8 +25,6 @@ var (
 	protoConfigIncludeExt   = []byte("(NProtoConfig.Include)")
 )
 
-// swigImplicitDirectives are swig's implicit %includes, prepended to every root
-// .swg file outside the swig library.
 var swigImplicitDirectives = func() []IncludeDirective {
 	names := []string{"swig.swg", "go.swg", "java.swg", "perl5.swg", "python.swg"}
 	out := make([]IncludeDirective, 0, len(names))
@@ -39,11 +37,8 @@ var swigImplicitDirectives = func() []IncludeDirective {
 }()
 
 type IncludeDirectiveParser interface {
-	// parse extracts the file's directive buckets, taking its own arena block(s)
-	// and committing them itself.
 	parse(rel string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet
-	// id is the parser's stable identity — the second component of the ambiguous-ext
-	// parse-cache key (one file may carry one result per parser).
+
 	id() uint32
 }
 
@@ -97,9 +92,6 @@ func (CfgProtoIncludeDirectiveParser) id() uint32 {
 	return 9
 }
 
-// walkableBucketFor selects the directive bucket the scanner closes over for a
-// file — a pure function of the file's TYPE, so the context-free scanCache stays
-// valid. Ragel files walk their native %include edges, others the local bucket.
 func walkableBucketFor(rel string) ParsedIncludeBucket {
 	if _, ok := includeDirectiveParsers.registeredParserFor(rel).(RagelIncludeDirectiveParser); ok {
 		return parsedIncludesRagelNative
@@ -112,9 +104,6 @@ func newIncludeDirectiveParserRegistry() IncludeDirectiveParserRegistry {
 	return IncludeDirectiveParserRegistry{defaultParser: CIncludeDirectiveParser{}}
 }
 
-// registeredParserFor returns the explicitly registered parser for rel's
-// extension, or nil — an unregistered extension parses under the scan context's
-// parser.
 func (r *IncludeDirectiveParserRegistry) registeredParserFor(rel string) IncludeDirectiveParser {
 	return lookupParserByExt(directiveParserExt(rel))
 }
@@ -127,9 +116,6 @@ func (r *IncludeDirectiveParserRegistry) parserFor(rel string) IncludeDirectiveP
 	return r.defaultParser
 }
 
-// hasRegisteredParser reports whether the dispatcher would return an explicitly-
-// registered parser — a strict gate so unknown-extension data files aren't parsed
-// for C-style directives.
 func (r *IncludeDirectiveParserRegistry) hasRegisteredParser(rel string) bool {
 	return lookupParserByExt(directiveParserExt(rel)) != nil
 }
@@ -160,11 +146,8 @@ func (CIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator[I
 	return ParsedIncludeSet{parsedIncludesLocal: block[:k:k]}
 }
 
-// directiveBlockHint is the per-parser arena block reservation, above the largest
-// raw directive count of any file. Overflow throws.
 const directiveBlockHint = 1 << 14
 
-// addDirective writes d at block[k] with the overflow guard; returns k+1.
 func addDirective(block []IncludeDirective, k int, d IncludeDirective) int {
 	if k == len(block) {
 		throwFmt("directive block overflowed %d entries — raise directiveBlockHint", len(block))
@@ -237,9 +220,6 @@ func (CythonIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAlloca
 	return ParsedIncludeSet{parsedIncludesLocal: block[:k:k]}
 }
 
-// addCythonPxdCandidates emits the cython "pxd-or-package" probe pair for a module
-// path: `path.pxd`, then `path/__init__.pxd` as a first-resolved fallback. A
-// `cython`-rooted path is the runtime (no source dependency), so skipped.
 func addCythonPxdCandidates(add func(IncludeDirective), path string) {
 	if path == "" {
 		return
@@ -253,9 +233,6 @@ func addCythonPxdCandidates(add func(IncludeDirective), path string) {
 	add(IncludeDirective{kind: includeCythonFallback, target: internStr(path + "/__init__.pxd")})
 }
 
-// addCythonCimportFrom emits the candidate set for `from module cimport names`:
-// the package init, the module .pxd, and each name as `name/__init__.pxd`
-// (fallback `.pxd`). A resolving module .pxd can drop the name list.
 func addCythonCimportFrom(add func(IncludeDirective), module, names string) {
 	searchPath, ok := cythonFromSearchPath(module)
 
@@ -290,9 +267,6 @@ func addCythonCimportFrom(add func(IncludeDirective), module, names string) {
 	}
 }
 
-// cythonFromSearchPath turns a `from <module> cimport` spec into a search path:
-// one leading dot is package-relative, each additional dot ascends one level,
-// remaining dots become path separators.
 func cythonFromSearchPath(module string) (string, bool) {
 	dots := 0
 
@@ -309,8 +283,6 @@ func cythonFromSearchPath(module string) (string, bool) {
 	return strings.Repeat("../", dots-1) + rest, true
 }
 
-// parseCythonCimportNames extracts the cimported names from a `cimport <names>`
-// tail, dropping aliases and the `*` wildcard.
 func parseCythonCimportNames(names string) []string {
 	if i := strings.IndexByte(names, '#'); i >= 0 {
 		names = names[:i]
@@ -368,18 +340,15 @@ func (ProtoIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocator
 	return parseProtoDirectiveSet(data, a)
 }
 
-// protoImportInducedHeader maps a proto `import "X"` target to the generated
-// header, or ok=false for an unrecognized proto-family extension.
 func protoImportInducedHeader(target string) (string, bool) {
 	switch {
 	case strings.HasSuffix(target, ".ev"):
 		return strings.TrimSuffix(target, ".ev") + ".ev.pb.h", true
 	case strings.HasSuffix(target, ".cfgproto"):
-		// protoc keeps the non-.proto extension, so this induces X.cfgproto.pb.h.
+
 		return target + ".pb.h", true
 	case strings.HasSuffix(target, ".gztproto"):
-		// the converter rewrites .gztproto to <base>.proto, so this resolves
-		// through the generated X.pb.h — the extension is replaced, not kept.
+
 		return strings.TrimSuffix(target, ".gztproto") + ".pb.h", true
 	case strings.HasSuffix(target, ".proto"):
 		return strings.TrimSuffix(target, ".proto") + ".pb.h", true
@@ -388,9 +357,6 @@ func protoImportInducedHeader(target string) (string, bool) {
 	return "", false
 }
 
-// parseProtoDirectiveSet is the shared proto-family directive scan: `import` lines
-// land in parsedIncludesLocal and their induced `.pb.h` siblings in the header+cpp
-// buckets.
 func parseProtoDirectiveSet(data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	block := a.alloc(directiveBlockHint)
 	k := 0
@@ -408,7 +374,6 @@ func parseProtoDirectiveSet(data []byte, a *BumpAllocator[IncludeDirective]) Par
 	local := block[:k:k]
 	a.commit(k)
 
-	// The induced .pb.h set derives from the committed imports.
 	hblock := a.alloc(directiveBlockHint)
 	j := 0
 
@@ -427,15 +392,12 @@ func parseProtoDirectiveSet(data []byte, a *BumpAllocator[IncludeDirective]) Par
 		set[parsedIncludesLocal] = local
 	}
 
-	// h+cpp applies to both consumer kinds; the two buckets share one buffer.
 	set[parsedIncludesHeader] = hcpp
 	set[parsedIncludesCpp] = hcpp
 
 	return set
 }
 
-// parse handles `.cfgproto`: the proto import/.pb.h scan plus the file-level
-// `option (NProtoConfig.Include)` headers (separate bucket).
 func (CfgProtoIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	set := parseProtoDirectiveSet(data, a)
 
@@ -511,9 +473,6 @@ func (RagelIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocat
 	native := nblock[:nk:nk]
 	a.commit(nk)
 
-	// A ragel file's walkable edges are the native %include directives; the C/C++
-	// directives ride as the induced h+cpp set. The self-include leads so the .rl6
-	// stays an input of the consuming compile.
 	iblock := a.alloc(directiveBlockHint)
 	j := addDirective(iblock, 0, IncludeDirective{kind: includeQuoted, target: internStr(rel)})
 
@@ -545,8 +504,6 @@ func (SwigIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocato
 	k := 0
 	inBlock := false
 
-	// Embedded C lines (inside %{ %}) are collected and run through the C parser
-	// after this parser commits its bucket.
 	var cChunkArr [32][]byte
 	cChunks := cChunkArr[:0]
 
@@ -625,8 +582,6 @@ func (EmptyIncludeDirectiveParser) parse(_ string, _ []byte, _ *BumpAllocator[In
 	return ParsedIncludeSet{}
 }
 
-// parseCIncludes fills block from k with data's C include directives and returns
-// the new k; the caller owns the block.
 func parseCIncludes(data []byte, block []IncludeDirective, k int) int {
 	n := len(data)
 	p := 0
@@ -709,14 +664,10 @@ func parseDirectiveInline(data []byte, hashPos int) (IncludeDirective, bool, int
 		}
 
 		if q > start && data[start] != '$' && !hasYIgnoreComment(data, q) && !bytes.ContainsAny(data[start:q], "[]") {
-			// `#include BACKTRACE_HEADER` is a macro-form include, not a path:
-			// drop it so the scanner doesn't fail-fast on the unresolved bareword.
 			if data[start] == 'B' && bytes.Equal(data[start:q], backtraceHeaderInclude) {
 				return IncludeDirective{}, false, nextLineStart(data, q)
 			}
 
-			// `#include OPENSSL_UNISTD` expands to <unistd.h>; resolve it here so
-			// the input is picked up without a per-file fixup.
 			if data[start] == 'O' && bytes.Equal(data[start:q], opensslUnistdInclude) {
 				return IncludeDirective{kind: includeSystem, target: opensslUnistdTarget}, true, nextLineStart(data, q)
 			}
@@ -904,7 +855,6 @@ func parseYasmIncludes(data []byte, block []IncludeDirective, k int) int {
 }
 
 func parseProtoImportLine(line []byte) (string, IncludeKind, bool) {
-	// Reject non-import lines in byte space — strings materialize only for imports.
 	b := bytes.TrimSpace(line)
 
 	if len(b) == 0 {
@@ -938,8 +888,6 @@ func parseProtoImportLine(line []byte) (string, IncludeKind, bool) {
 	return target, kind, ok
 }
 
-// parseProtoConfigIncludeLine matches a `.cfgproto` file-level
-// `option (NProtoConfig.Include) = "<h>";` line and returns the quoted header.
 func parseProtoConfigIncludeLine(line []byte) (string, bool) {
 	b := bytes.TrimSpace(line)
 

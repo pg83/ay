@@ -2,16 +2,12 @@ package main
 
 import "testing"
 
-// TestAntlrParsedIncludes_ExcludesBuildIntermediateInputs locks the induced
-// include set of a RUN_ANTLR output: a consumer's closure sees the generator's
-// $(S) leaf sources but NOT the $(B) intermediate, which is reached via the
-// producer dep edge; listing it would diverge the self_uid.
 func TestAntlrParsedIncludes_ExcludesBuildIntermediateInputs(t *testing.T) {
 	const mod = "yql/essentials/parser/proto_ast/gen/v0_proto_split"
 	stgBuild := build(mod + "/org/antlr/codegen/templates/protobuf/protobuf.stg")
 	inputs := []VFS{
 		source("yql/essentials/sql/v0/SQL.g"),
-		stgBuild, // $(B) CONFIGURE_FILE output — generator intermediate
+		stgBuild,
 		source("yql/essentials/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in"),
 	}
 
@@ -25,6 +21,7 @@ func TestAntlrParsedIncludes_ExcludesBuildIntermediateInputs(t *testing.T) {
 	)
 
 	got := make(map[string]struct{}, len(parsed))
+
 	for _, d := range parsed {
 		got[d.target.string()] = struct{}{}
 	}
@@ -32,6 +29,7 @@ func TestAntlrParsedIncludes_ExcludesBuildIntermediateInputs(t *testing.T) {
 	if _, leaked := got[stgBuild.rel()]; leaked {
 		t.Errorf("antlrParsedIncludes leaked $(B) generator intermediate %q: %v", stgBuild.rel(), keysOf(got))
 	}
+
 	for _, want := range []string{
 		"yql/essentials/sql/v0/SQL.g",
 		"yql/essentials/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in",
@@ -44,10 +42,6 @@ func TestAntlrParsedIncludes_ExcludesBuildIntermediateInputs(t *testing.T) {
 	}
 }
 
-// TestAntlrParsedIncludes_LexerCrossIncludesParserCpp locks the ANTLR3
-// combined-grammar include convention: a generated *Lexer.cpp reaches the paired
-// *Parser.cpp, and neither .cpp lists the sibling generated .h files; no reverse
-// edge.
 func TestAntlrParsedIncludes_LexerCrossIncludesParserCpp(t *testing.T) {
 	const mod = "yql/essentials/parser/proto_ast/gen/jsonpath"
 	outByTok := map[string]VFS{
@@ -61,9 +55,11 @@ func TestAntlrParsedIncludes_LexerCrossIncludesParserCpp(t *testing.T) {
 	induced := func(outTok string) map[string]struct{} {
 		parsed := antlrParsedIncludes(mod, run, outTok, outByTok, nil, antlr3JarVFS)
 		got := make(map[string]struct{}, len(parsed))
+
 		for _, d := range parsed {
 			got[d.target.string()] = struct{}{}
 		}
+
 		return got
 	}
 
@@ -73,17 +69,21 @@ func TestAntlrParsedIncludes_LexerCrossIncludesParserCpp(t *testing.T) {
 	parserHRel := outByTok["JsonPathParser.h"].rel()
 
 	lex := induced("JsonPathLexer.cpp")
+
 	if _, ok := lex[parserRel]; !ok {
 		t.Errorf("Lexer.cpp must induce paired Parser.cpp %q: %v", parserRel, keysOf(lex))
 	}
+
 	if _, ok := lex[lexerHRel]; ok {
 		t.Errorf("Lexer.cpp must not induce sibling .h %q: %v", lexerHRel, keysOf(lex))
 	}
 
 	par := induced("JsonPathParser.cpp")
+
 	if _, ok := par[parserHRel]; ok {
 		t.Errorf("Parser.cpp must not induce sibling .h %q: %v", parserHRel, keysOf(par))
 	}
+
 	if _, ok := par[lexerRel]; ok {
 		t.Errorf("Parser.cpp must not induce Lexer.cpp %q: %v", lexerRel, keysOf(par))
 	}
@@ -91,8 +91,10 @@ func TestAntlrParsedIncludes_LexerCrossIncludesParserCpp(t *testing.T) {
 
 func keysOf(m map[string]struct{}) []string {
 	out := make([]string, 0, len(m))
+
 	for k := range m {
 		out = append(out, k)
 	}
+
 	return out
 }

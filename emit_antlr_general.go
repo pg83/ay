@@ -21,8 +21,7 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 
 		inVFSByToken := make(map[string]VFS, len(run.INFiles))
 		inputs := make([]VFS, 0, len(run.INFiles))
-		// When an INFile is a CONFIGURE_FILE output, the JV node lists the CF source and
-		// the configure_file script alongside the dst.
+
 		var cfExtraInputs []VFS
 		deduper.reset()
 		appendCFExtra := func(v VFS) {
@@ -74,9 +73,6 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 		jvRef := emitJVGeneral(instance, jarVFS, args, inputs, outputs, cwd, deps, cfModuleTag(d, instance), d.tc, ctx.emit)
 
 		{
-			// The JV node's full $(S) input set = source-rooted IN/CF inputs plus the two
-			// implicit sources emitJVGeneral appends (stdout2stderr script and antlr jar);
-			// consumers inherit these transitively.
 			jvSourceInputs := make([]VFS, 0, len(inputs)+2)
 
 			for _, v := range inputs {
@@ -148,8 +144,6 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, out
 	}
 
 	if isCCSourceExt(outTok) {
-		// ANTLR combined-grammar convention: the generated *Lexer.cpp reaches the paired
-		// *Parser.cpp (one-way edge); neither .cpp lists the sibling generated .h.
 		base := strings.TrimSuffix(outTok, filepath.Ext(outTok))
 
 		if parserBase, isLexer := strings.CutSuffix(base, "Lexer"); isLexer {
@@ -162,9 +156,6 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, out
 			}
 		}
 	} else if isHeaderSource(outTok) {
-		// For the generated *Lexer.h: register the paired *Parser.cpp (not the *Lexer.cpp
-		// sibling) so cross-module CC nodes reach *Parser.cpp; *Lexer.cpp is compiled
-		// separately and must not appear in other modules' CC inputs.
 		base := strings.TrimSuffix(outTok, filepath.Ext(outTok))
 
 		if parserBase, isLexerH := strings.CutSuffix(base, "Lexer"); isLexerH {
@@ -176,7 +167,6 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, out
 				}
 			}
 		} else {
-			// Non-Lexer headers: sibling .cpp.
 			for _, ext := range []string{".cpp", ".cc", ".cxx", ".c"} {
 				if cppVFS, ok := outVFSByToken[base+ext]; ok {
 					appendUnique(cppVFS.rel())
@@ -188,9 +178,6 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, out
 	}
 
 	for _, input := range inputs {
-		// $(B)-rooted inputs are generator intermediates reached via the producer dep
-		// edge, not as transitive sources — only the $(S) leaf is listed. Emitting the
-		// $(B) intermediate over-includes it and diverges the consumer self_uid.
 		if !input.isSource() {
 			continue
 		}

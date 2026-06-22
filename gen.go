@@ -14,13 +14,6 @@ var asmlibYasmModules = map[string]bool{
 	"contrib/libs/asmlib": true,
 }
 
-// acknowledgedMacros names every ya.make macro the gen accepts without a typed
-// handler: each invocation lands in d.unhandledMacros[name] for a later pass and the
-// --dump-ignored-macros audit. Any macro NOT in this set makes applyUnknownStmt throw —
-// the fix is to add a typed branch, not to extend this set lightly. Contents are macros
-// observed during generation that contribute nothing to the emitted graph today
-// (re-target macros, pure metadata, build-toggles, tag/build-if filters, and
-// java/kotlin/windows-only macros).
 var acknowledgedMacros = map[string]struct{}{
 	"RECURSE":                         {},
 	"RECURSE_FOR_TESTS":               {},
@@ -99,24 +92,17 @@ var acknowledgedMacros = map[string]struct{}{
 	"WITH_KOTLIN_GRPC":                {},
 	"DISABLE_DATA_VALIDATION":         {},
 
-	// Stubs that DO contribute graph nodes upstream, acknowledged as no-ops to pass the
-	// closed-TOK gate; modelling their nodes is the convergence step. JAVA_PROTO_PLUGIN /
-	// GO_PROTO_PLUGIN are inert for a C++/Python target. TODO: implement typed handlers.
 	"FROM_SANDBOX":      {},
 	"LIST_PROTO":        {},
 	"JAVA_PROTO_PLUGIN": {},
 	"GO_PROTO_PLUGIN":   {},
 
-	// More codegen/resource/archive macros — graph-affecting, stubbed for the
-	// node-count step; STYLE_DETEKT (kotlin) / DEFAULT_JDK_VERSION (java) inert.
 	"SPLIT_CODEGEN":             {},
 	"DECIMAL_MD5_LOWER_32_BITS": {},
-	"STYLE_DETEKT":        {},
-	"DEFAULT_JDK_VERSION": {},
+	"STYLE_DETEKT":              {},
+	"DEFAULT_JDK_VERSION":       {},
 }
 
-// acknowledgedTokSet is acknowledgedMacros in TOK space, so the per-invocation gate is
-// a bit probe. Every acknowledged name must exist in the closed TOK enum.
 var acknowledgedTokSet = func() BitSet {
 	var b BitSet
 
@@ -151,16 +137,10 @@ type ModuleEmitResult struct {
 
 	OwnAddInclGlobal []VFS
 
-	// ProtoInclude carries the $(S)-rooted PROTO_NAMESPACE / PROTO_ADDINCL for downstream
-	// proto compiles (own + transitive peers'), injected as -I= into every protoc cmdline.
 	ProtoInclude []VFS
 
-	// AddInclOneLevel propagates to direct PEERDIR consumers only (one hop); they absorb
-	// these into their own addincl and do NOT re-propagate via AddInclGlobal.
 	AddInclOneLevel []VFS
 
-	// AddInclUserGlobal is the peer's own GLOBAL and ONE_LEVEL ADDINCL paths in
-	// declaration order (upstream UserGlobal), used to preserve -I ordering.
 	AddInclUserGlobal []VFS
 
 	CFlagsGlobal     []ARG
@@ -190,9 +170,6 @@ type ModuleEmitResult struct {
 	PeerDynamicClosureRefs  []NodeRef
 	PeerDynamicClosurePaths []VFS
 
-	// SbomComponentRef/Path is this module's own _GEN_SBOM_COMPONENT DX node, set only
-	// for qualifying modules. PeerSbomClosure is the transitive union of qualifying peers'
-	// components, collected into the link node by embedding programs.
 	SbomComponentRef     *NodeRef
 	SbomComponentPath    *VFS
 	PeerSbomClosureRefs  []NodeRef
@@ -206,15 +183,8 @@ type ModuleEmitResult struct {
 
 	testSuiteInfo *TestSuiteInfo
 
-	// DescClosure is the ordered, deduped transitive closure of DESC_PROTO submodules
-	// reachable through a DESC_PROTO peer chain (post-order). Each exposes the merge node
-	// producing that submodule's .self.protodesc, which a PROTO_DESCRIPTIONS module merges
-	// into its .protodesc / .tar.
 	DescClosure []DescProtoPeer
 
-	// ResourceGlobalClosure is the transitive union of external-resource globals reachable
-	// through this module's PEERDIR closure, deduped in first-seen order. Consumers render
-	// it into --global-resource lists.
 	ResourceGlobalClosure []ResourceDecl
 }
 
@@ -242,15 +212,11 @@ type GenCtx struct {
 	fs      FS
 	parsers *IncludeParserManager
 	emit    Emitter
-	// onWarn surfaces non-fatal gen diagnostics; the handler decides fatality by
-	// --keep-going. Threaded so emit paths off the scanner can report too.
+
 	onWarn func(Warn)
-	// na is the emitter's node-construction arenas, shared so ctx-threaded builders reach
-	// them without the Emitter detour.
+
 	na *NodeArenas
 
-	// inclArgValues backs inclArgMemo (the "-I<path>" cache); owned here so future
-	// VFS-keyed value columns share its idx array.
 	inclArgValues   DenseMap[VFS, STR]
 	inclArgs        InclArgMemo
 	memo            *IntValueMap[*ModuleEmitResult]
@@ -262,41 +228,25 @@ type GenCtx struct {
 	scannerTarget *IncludeScanner
 	scannerHost   *IncludeScanner
 
-	// moduleByRef maps a module's LD NodeRef back to its emit result, so the include
-	// scanner can pull a generated file's producing tools' INDUCED_DEPS into the file's
-	// closure (via GeneratorRefs) rather than a hardcoded list.
 	moduleByRef DenseMap[NodeRef, *ModuleEmitResult]
 
-	// tools caches a codegen tool's emit result by module-path ARG, so repeated
-	// ctx.tool(argX) lookups skip rebuilding the ModuleInstance + memo probe.
 	tools DenseMap[ARG, *ModuleEmitResult]
 
-	// scripts maps each script VFS to [self, …transitive import closure].
 	scripts ScriptDeps
 
-	// fetchRefs maps an external-resource name to its FETCH node, emitted once when the
-	// declaring RESOURCES_LIBRARY is gen'd; consumers referencing $(NAME) take the dep here.
 	fetchRefs *DenseMap[STR, NodeRef]
 
 	host   *Platform
 	target *Platform
 
-	// vcsRef is the single $(B)/vcs.json producer node, emitted once at gen start; every
-	// program/dll link node depends on it.
 	vcsRef NodeRef
 
 	testMode bool
 
-	// sbomEnabled gates the _GEN_SBOM_COMPONENT DX nodes (SBOM_GENERATION_ALLOWED=yes);
-	// absent in the open-source contour.
 	sbomEnabled bool
 
-	// autoincludeIdx resolves the nearest enclosing AUTOINCLUDE_PATHS root's
-	// linters.make.inc for a module (longest-prefix match).
 	autoincludeIdx *AutoincludeIndex
 
-	// tarjan is the run-wide Tarjan/closure working state; both scanners share it so its
-	// vfsBound-sized arrays grow once. reset() runs before every use.
 	tarjan TarjanCtx
 }
 
@@ -311,8 +261,6 @@ func resolveCodegenDepRefs(ctx *GenCtx, consumer ModuleInstance, includeInputs [
 		return nil
 	}
 
-	// Reuse the run-wide VFS deduper instead of allocating one per call. NodeRef is a
-	// ~uint32 id cast to VFS at the IdSet boundary (same dense space).
 	deduper.reset()
 
 	for _, r := range exclude {
@@ -321,12 +269,8 @@ func resolveCodegenDepRefs(ctx *GenCtx, consumer ModuleInstance, includeInputs [
 
 	var out []NodeRef
 
-	// All codegen producer refs live on the registry entry's ProducerRef, so one
-	// reg.Lookup resolves every kind.
 	reg := codegenRegForInstance(ctx, consumer)
 
-	// The IsBuild gate guards the lookup inline: the dominant cost was bouncing off this
-	// bit for the $(S) majority.
 	for _, p := range includeInputs {
 		if !p.isBuild() {
 			continue
@@ -350,8 +294,6 @@ func resolveCodegenDepRefs(ctx *GenCtx, consumer ModuleInstance, includeInputs [
 
 func (ctx *GenCtx) perfScanCtxStats(scanner *IncludeScanner) ScanCtxPerfStats {
 	return ScanCtxPerfStats{
-		// subgraph and children are columns of one DenseMap3, so both report its
-		// distinct-key count.
 		subgraphEntries: scanner.scanCache.len(),
 		childrenEntries: scanner.scanCache.len(),
 		closureWindows:  len(scanner.subgraphClosures),
@@ -398,12 +340,9 @@ func reportPerfStats(ctx *GenCtx, parsers *IncludeParserManager, targetScanner, 
 func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, emitter Emitter, onWarn func(Warn), testMode bool) NodeRef {
 	plainEmit := emitter
 	scriptTbl := buildScriptTable(fs)
-	// fetchRefs (resource pattern → FETCH node) is owned by the emitter; genCtx shares its
-	// pointer so emitResourceFetch populates the same map Node.buildDeps resolves through.
+
 	var fetchRefs *DenseMap[STR, NodeRef]
 
-	// Mix $(S) input content hashes into node uids in every mode so a source edit
-	// invalidates the cache.
 	switch e := plainEmit.(type) {
 	case *BufferedEmitter:
 		e.fs = fs
@@ -432,7 +371,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		fetchRefs: fetchRefs,
 		scripts:   scriptTbl,
 		testMode:  testMode,
-		// SBOM_GENERATION_ALLOWED presence is the feature gate.
+
 		sbomEnabled: fs.isFile(srcRootVFS, sbomConfRel),
 
 		autoincludeIdx: loadAutoincludeIndex(fs),
@@ -440,7 +379,6 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
 
-	// Both scanners share ctx.tarjan so its vfsBound-sized arrays grow once.
 	targetScanner := newIncludeScannerWith(parsers, loadSysInclSetForFS(fs, string(targetP.ISA), targetP.Flags[envMUSL] == strYes, targetP.Flags[envOPENSOURCE] == strYes, targetP.OS, onWarn), onWarn, &ctx.tarjan)
 	targetScanner.codegen = targetReg
 	targetScanner.moduleByRef = &ctx.moduleByRef
@@ -450,7 +388,6 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	ctx.scannerTarget = targetScanner
 	ctx.scannerHost = hostScanner
 
-	// The vcs.json producer is emitted once up front.
 	ctx.vcsRef = emitVCSNode(ctx.emit, ctx.host)
 
 	seed := ModuleInstance{
@@ -481,9 +418,6 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	return root.LDRef
 }
 
-// mergeGeneratedFirstClaims merges the two scanners' first-consumer claim maps, the
-// HOST winning on conflict: a header whose producer is a host-built tool is first
-// consumed inside that producer-side host closure, so the host claim is upstream-faithful.
 func mergeGeneratedFirstClaims(host, target *IncludeScanner) map[VFS]GenOwner {
 	var n int
 
@@ -514,8 +448,6 @@ func mergeGeneratedFirstClaims(host, target *IncludeScanner) map[VFS]GenOwner {
 	return out
 }
 
-// mergeGeneratedNodeClaims merges the two scanners' producer-ref-keyed OUTPUT_INCLUDES
-// claim maps, the HOST scanner winning on conflict.
 func mergeGeneratedNodeClaims(host, target *IncludeScanner) map[NodeRef]string {
 	var n int
 
@@ -546,9 +478,6 @@ func mergeGeneratedNodeClaims(host, target *IncludeScanner) map[NodeRef]string {
 	return out
 }
 
-// mergeGeneratedENIncluderDirs unions the two scanners' per-EN-output includer dir sets.
-// There is no winner: finalize picks the deepest nested-submodule includer regardless of
-// scanner, so a plain union is correct.
 func mergeGeneratedENIncluderDirs(host, target *IncludeScanner) map[VFS][]string {
 	var n int
 
@@ -592,8 +521,7 @@ func mergeGeneratedENIncluderDirs(host, target *IncludeScanner) map[VFS][]string
 
 func genDumpGraphWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), testMode bool) *Graph {
 	emitter := newBufferedEmitter()
-	// -G emits the same graph that gets executed; dump normalize folds resource FETCH
-	// nodes back out for the byte-exact compare.
+
 	runGenIntoWithResources(fs, targetDir, hostP, targetP, emitter, onWarn, testMode)
 
 	return finalizeDumpGraph(emitter)
@@ -611,12 +539,10 @@ func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
 		return strings.ReplaceAll(path.Clean(instance.Path.rel()), "/", "-")
 	}
 
-	// PY3_PROGRAM_BIN(progname) links as its argument.
 	if moduleStmt != nil && len(moduleStmt.Args) > 0 {
 		return moduleStmt.Args[0].string()
 	}
 
-	// No explicit name: REALPRJNAME defaults to the module-dir basename.
 	return lastPathComponent(instance.Path.rel())
 }
 
@@ -638,8 +564,6 @@ func unittestForPeerPath(moduleStmt *ModuleStmt) string {
 	return path.Clean(moduleStmt.Args[0].string())
 }
 
-// moduleCCTag returns the module-level node tag a multimodule submodule stamps on every
-// node it owns, derived from the submodule name lowercased (PY3_LIBRARY -> py3).
 func moduleCCTag(name TOK) STR {
 	switch name {
 	case tokPy23NativeLibrary:
@@ -655,8 +579,6 @@ func moduleCCTag(name TOK) STR {
 	return 0
 }
 
-// moduleStmts parses the module's ya.make and appends the nearest enclosing
-// linters.make.inc (AUTOINCLUDE_PATHS).
 func moduleStmts(ctx *GenCtx, dir string) []Stmt {
 	stmts := throw2(parseFile(ctx.fs, joinRel(dir, "ya.make"))).Stmts
 
@@ -697,16 +619,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	defer delete(ctx.walking, instance)
 
-	// The module's parsed ya.make, with the nearest enclosing linters.make.inc appended
-	// so its statements run in the module's context after its own body.
 	stmts := moduleStmts(ctx, instance.Path.rel())
 
 	env := buildIfEnv(instance)
 	d := collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, env, ctx.onWarn)
 
-	// Only a PROTO_LIBRARY has a python variant: any other module re-enters as its C++
-	// variant and the py key aliases that result. Must run BEFORE anything is emitted,
-	// since the streaming emitter cannot retract nodes.
 	if instance.Language == LangPy && d.moduleStmt != nil && d.moduleStmt.Name != tokProtoLibrary {
 		cpp := instance
 		cpp.Language = LangCPP
@@ -721,18 +638,9 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	if d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary && instance.Language != LangPy {
-		// Re-collect from a pristine base env, NOT env.clone(): the probe collectModule
-		// above mutated `env` in place (SET_APPEND set PROTO_FILES). Cloning would
-		// re-apply the append, doubling PROTO_FILES (duplicate-producer abort).
-		// buildIfEnv(instance) reproduces the probe's starting state deterministically.
 		cppProtoEnv := buildIfEnv(instance)
 		cppProtoEnv.setStringID(envMODULE_TAG, strCPPProto)
 
-		// The _CPP_PROTO submodule does ENABLE(CPP_PROTO)/ENABLE(GEN_PROTO). Bind CPP_PROTO
-		// to its own tag-name "CPP_PROTO", not "yes": it doubles as a comparison literal in
-		// the linters.make.inc gate `IF (MODULE_LANG == CPP AND MODULE_TAG != CPP_PROTO)`,
-		// so the bareword RHS must compare equal to exclude generated proto from
-		// CLANG_WARNINGS. The name is also truthy, so `IF (CPP_PROTO)` fires.
 		cppProtoEnv.setStringID(envCPP_PROTO, strCPPProto)
 		cppProtoEnv.setBool(envGEN_PROTO, true)
 		d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, cppProtoEnv, ctx.onWarn)
@@ -750,7 +658,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		throwFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path.rel())
 	}
 
-	// DESC_PROTO submodule of a PROTO_LIBRARY: the proto-description producer side.
 	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangDescProto {
 		result := emitDescProtoSubmodule(ctx, instance, d)
 		ctx.memo.put(ctx.instanceKey(instance), result)
@@ -758,7 +665,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		return result
 	}
 
-	// PROTO_DESCRIPTIONS module: merges its DESC_PROTO peer closure into .protodesc / .tar.
 	if d.moduleStmt.Name == tokProtoDescriptions {
 		result := emitProtoDescriptions(ctx, instance, d)
 		ctx.memo.put(ctx.instanceKey(instance), result)
@@ -767,8 +673,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	if d.moduleStmt.Name == tokResourcesLibrary {
-		// A RESOURCES_LIBRARY's LDFLAGS may reference ${<NAME>_RESOURCE_GLOBAL} ahead of
-		// the DECLARE; bind the declared globals and re-collect so they expand.
 		if bindResourceGlobalVars(ctx, instance, d, env) {
 			d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, env, ctx.onWarn)
 		}
@@ -777,8 +681,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	if d.moduleStmt.Name == tokPrebuiltProgram {
-		// PRIMARY_OUTPUT references ${<NAME>_RESOURCE_GLOBAL} and ${MODULE_SUFFIX}; bind
-		// both and re-collect so primaryOutput is fully expanded.
 		env.setString(envMODULE_SUFFIX, prebuiltModuleSuffix(instance.Platform))
 
 		if bindResourceGlobalVars(ctx, instance, d, env) {
@@ -888,26 +790,18 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		d.peerdirs = append(d.peerdirs, strLibraryPythonImportTracingConstructor)
 	}
 
-	// _CPP_FLATC_CMD carries .PEERDIR=contrib/libs/flatbuffers, induced on every module
-	// with .fbs SRCS. Append after explicit PEERDIRs so it follows the last declared peer.
 	if d.hasFbs && instance.Path.rel() != "contrib/libs/flatbuffers" {
 		d.peerdirs = append(d.peerdirs, strContribLibsFlatbuffers)
 	}
 
-	// _CPP_FLATC64_CMD's .PEERDIR=contrib/libs/flatbuffers64, the .fbs64 twin.
 	if d.hasFbs64 && instance.Path.rel() != "contrib/libs/flatbuffers64" {
 		d.peerdirs = append(d.peerdirs, strContribLibsFlatbuffers64)
 	}
 
-	// _SRC("y") induces .PEERDIR=build/induced/by_bison — an empty licensed library
-	// hanging the bison-grammar license/SBOM onto every module with a .y source.
 	if d.hasBisonY && instance.Path.rel() != strBuildInducedByBison.string() {
 		d.peerdirs = append(d.peerdirs, strBuildInducedByBison)
 	}
 
-	// We shortcut the C++ default straight to libcxx, skipping the licensed
-	// contrib/libs/cxxsupp parent. Under SBOM, add it back for its component only (its
-	// libcxx closure dedups against the existing default, so no extra archive).
 	if ctx.sbomEnabled && !d.flags.NoRuntime && !effectiveNoPlatform(d.flags) && !strings.HasPrefix(instance.Path.rel(), "contrib/libs/cxxsupp") {
 		d.peerdirs = append(d.peerdirs, strContribLibsCxxsupp)
 	}
@@ -988,7 +882,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 				tag = tagGlobal
 			}
 
-			// A _CPP_PROTO submodule packs its RESOURCE objcopy into a <MODULE_TAG>_global archive.
 			if cfModuleTag(d, instance) == tagCppProto {
 				tag = tagCppProtoGlobal
 			}
@@ -998,8 +891,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			hOnlyGlobalPath = vfsPtr(build(instance.Path.rel() + "/" + globalBaseName))
 		}
 
-		// emitMiscNodes registers JV / CF outputs so emitProtoSrcs can wire a
-		// build-generated SRCS(X.proto) to its JV producer.
 		emitMiscNodes(ctx, instance, d, nil)
 
 		protoResult := emitProtoSrcs(ctx, instance, d, peerContribs)
@@ -1031,16 +922,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		peerGlobalPathsH := peerContribs.globalPaths
 		peerGlobalRefsH := peerContribs.globalRefs
 
-		// Specialized-library path: the single ordered _PROTO__INCLUDE set; bare and
-		// GLOBAL both enter it.
 		var ownProtoIncludeH []VFS
 
 		if d.protoNamespace != nil {
 			ownProtoIncludeH = []VFS{source(filepath.ToSlash(filepath.Clean(d.protoNamespace.string())))}
 		}
 
-		// `ADDINCL GLOBAL FOR proto X` contributes a -I=$X to every transitive consumer's
-		// protoc command; mirror the non-specialized path's fold here.
 		ownProtoIncludeH = append(ownProtoIncludeH, d.protoAddInclGlobal...)
 
 		effectiveProtoIncludeH := dedupVFS(ownProtoIncludeH, peerContribs.protoInclude)
@@ -1113,9 +1000,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		postUserProgDefaults = defaultProgramPeerdirsForModule(ctx, instance, d, true)
 	}
 
-	// The allocator is injected at the final program link, not into any library:
-	// otherwise its .a leaks into the lib's archive closure and surfaces early in the
-	// program link instead of its module-epilogue slot. Gate on isProgram.
 	var allocatorExplicitPeers []string
 
 	if isProgram {
@@ -1128,8 +1012,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		unitTestPeerCount = 1
 	}
 
-	// Membership rides the global epoch deduper keyed by the peer string's intern id.
-	// The list assembly below is pure appends, nothing reaches another deduper user.
 	deduper.reset()
 	peerSeen := func(p string) bool {
 		return !deduper.add(VFS(internStr(p)) << 1)
@@ -1188,10 +1070,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		peerKinds = append(peerKinds, peerKindProgramDefault)
 	}
 
-	// The proto plugin DEPS (d.protoCmdPeers) lead the user-peer region of the peer order,
-	// driving both the GLOBAL ADDINCL and the link/archive closure. Emit them first in
-	// declaration order, then the rest. Without grpc/plugins protoCmdPeers is empty, so
-	// the two passes collapse to declaration order.
 	frontSet := make(map[STR]struct{}, len(d.protoCmdPeers))
 
 	for _, p := range d.protoCmdPeers {
@@ -1199,8 +1077,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	appendUserPeer := func(p STR) {
-		// peerSeen's id-space twin: p is already interned, so membership is a direct
-		// deduper probe.
 		if !deduper.add(VFS(p) << 1) {
 			return
 		}
@@ -1233,9 +1109,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	peerLinkCmdPaths := make([]VFS, 0, len(allPeers))
 	peerSbomRefs := make([]NodeRef, 0, len(allPeers))
 	peerSbomPaths := make([]VFS, 0, len(allPeers))
-	// The peer-collection dedup sets are built below, after the recursive peer genModule
-	// loop, each in its own pass sharing the run-wide deduper (a nested genModule would
-	// reset it mid-pass) instead of allocating a map per set.
 
 	peerLDPluginRefs := make([]NodeRef, 0, 1)
 	peerLDPluginPaths := make([]VFS, 0, 1)
@@ -1245,12 +1118,9 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	peerLDFlagsGlobal := make([]ARG, 0, 4)
 	var rpathFlagsSeen BitSet
 	peerRPathFlagsGlobal := make([]ARG, 0, 4)
-	// peerAddInclGlobal aggregation routes through the run-global deduper; the whole add
-	// sequence runs contiguously before the first dedupVFS reset.
+
 	peerAddInclGlobal := make([]VFS, 0, 16)
-	// oneLevelOnlyPaths tracks paths added exclusively via ONE_LEVEL from direct user
-	// peers: in peerAddInclGlobal for CC ordering but excluded from
-	// effectiveAddInclGlobal so they don't re-propagate (ONE_LEVEL is one hop).
+
 	var oneLevelOnlyPaths map[VFS]struct{}
 	var cFlagsSeen BitSet
 	peerCFlagsGlobal := make([]ARG, 0, 16)
@@ -1285,8 +1155,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		resolved = append(resolved, resolvedPeer{path: peerPath, result: peerResult, kind: kind})
 	}
 
-	// Resource globals propagate transitively: fold every peer's closure, deduped by
-	// global-var STR.
 	var resourceGlobalsClosure []ResourceDecl
 	deduper.reset()
 
@@ -1298,7 +1166,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	// Tool paths come from the build/platform/* peers via this closure, not platform flags.
 	d.tc = resolveModuleToolchain(resourceGlobalsClosure, instance.Platform.ClangVer)
 
 	fsMemberRefs, fsMemberPaths := emitFromSandboxes(ctx, instance, d)
@@ -1391,7 +1258,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	// peerArchive: closure paths, then the peer's own AR output (per peer).
 	deduper.reset()
 
 	for _, rp := range archiveOrder {
@@ -1410,7 +1276,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	// peerGlobal: closure paths, then the peer's own GLOBAL output.
 	deduper.reset()
 
 	for _, rp := range archiveOrder {
@@ -1429,18 +1294,10 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	// peerSbom: the .component.sbom global outputs of every qualifying module in the link
-	// closure — mirrors peerArchive but carries the SBOM node per peer.
 	deduper.reset()
 
-	// The linker's toolchain component attaches at the final link, not transitively, so
-	// never carry it as a propagated closure entry and collect its own component only on
-	// a link target (program/DLL).
 	linkTarget := isProgramModuleType(d.moduleStmt.Name)
 
-	// SBOM order: contrib/libs/cxxsupp contributes its component right after its libcxx
-	// subtree, ahead of the linker. We append it last in archiveOrder (correct for link
-	// order); for the SBOM pass only, move it after libcxx.
 	sbomOrder := archiveOrder
 	{
 		cxxIdx, libcxxIdx := -1, -1
@@ -1474,10 +1331,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	// The linker peer's toolchain component sits immediately ahead of the first
-	// allocator-subtree component in the post-order DFS. archiveOrder keeps the linker
-	// early (correct for link, it has no archive); relocate it just before the first
-	// allocator-explicit peer, SBOM only.
 	if linkTarget && len(allocatorExplicitPeers) > 0 {
 		allocSet := make(map[string]struct{}, len(allocatorExplicitPeers))
 
@@ -1517,9 +1370,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	// For Py3 programs the module's own .component.sbom lands ahead of the linker/allocator
-	// group, not at the very end. Capture the peerSbomPaths offset at the linker emission
-	// point so the own component inserts there (PROGRAM modules keep own last; offset -1).
 	ownSbomInsertIdx := -1
 
 	for _, rp := range sbomOrder {
@@ -1546,7 +1396,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	// peerWholeArchive: closure paths, then the peer's own whole-archive paths.
 	deduper.reset()
 
 	for _, rp := range archiveOrder {
@@ -1567,7 +1416,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	// peerWholeArchiveCmd: command-line whole-archive paths (no refs).
 	deduper.reset()
 
 	for _, rp := range archiveOrder {
@@ -1586,7 +1434,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	// peerDynamic: closure paths, then the peer's own DYNAMIC_LIBRARY output.
 	deduper.reset()
 
 	for _, rp := range archiveOrder {
@@ -1605,8 +1452,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	// peerLinkCmd is the dedup-union of the archive and dynamic paths, per peer:
-	// archive-closure, dynamic-closure, the peer's own dynamic-lib, then its AR output.
 	deduper.reset()
 
 	for _, rp := range archiveOrder {
@@ -1633,14 +1478,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	// Seed the run-global deduper for the peerAddInclGlobal aggregation.
 	deduper.reset()
 
-	// Aggregate every peer's propagated ADDINCL(GLOBAL) into peerAddInclGlobal. The passes
-	// run in a fixed kind order — lang defaults, unit-test, program defaults, user peers —
-	// load-bearing because it sets the -I order on the CC command.
-
-	// Lang defaults: own GLOBAL across all, then transitive GLOBAL across all.
 	for _, rp := range resolved {
 		if rp.kind == peerKindLangDefault {
 			for _, p := range rp.result.OwnAddInclGlobal {
@@ -1661,7 +1500,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	// Unit-test peer: transitive GLOBAL.
 	for _, rp := range resolved {
 		if rp.kind == peerKindUnitTestPeer {
 			for _, p := range rp.result.AddInclGlobal {
@@ -1672,7 +1510,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	// Program defaults: transitive GLOBAL.
 	for _, rp := range resolved {
 		if rp.kind == peerKindProgramDefault {
 			for _, p := range rp.result.AddInclGlobal {
@@ -1683,8 +1520,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	// User peers: UserGlobal in declaration order, ONE_LEVEL tracked for one-hop
-	// semantics, then transitive GLOBAL (a GLOBAL re-export beats ONE_LEVEL-only).
 	for _, rp := range resolved {
 		if rp.kind != peerKindUserPeer {
 			continue
@@ -1730,8 +1565,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		addEachARG(&rpathFlagsSeen, &peerRPathFlagsGlobal, rp.result.RPathFlagsGlobal)
 	}
 
-	// ONE_LEVEL paths from direct user peers must not re-propagate (one-hop). Filter them
-	// from the module result; they stay in peerAddInclGlobal for this module's CC command.
 	peerAddInclForProp := peerAddInclGlobal
 
 	if len(oneLevelOnlyPaths) > 0 {
@@ -1746,17 +1579,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	effectiveAddInclGlobal := dedupVFS(d.addInclGlobal, peerAddInclForProp)
 
-	// ProtoInclude: this module's $(S)/<PROTO_NAMESPACE> unioned with everything peers
-	// reported, encounter order, first-encounter deduped. Feeds every protoc -I= block;
-	// bare and GLOBAL contribute identically.
 	var ownProtoInclude []VFS
 
 	if d.protoNamespace != nil {
 		ownProtoInclude = []VFS{source(filepath.ToSlash(filepath.Clean(d.protoNamespace.string())))}
 	}
 
-	// `ADDINCL GLOBAL FOR proto X` propagates a -I=$X into every consumer's protoc
-	// command; append after the PROTO_NAMESPACE entry to match macro placement.
 	ownProtoInclude = append(ownProtoInclude, d.protoAddInclGlobal...)
 	peerProtoInclude := make([]VFS, 0, 4)
 
@@ -1804,8 +1632,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	effectiveRPathFlagsGlobal := dedupARG(peerRPathFlagsGlobal, d.rpathFlagsGlobal)
 
 	if !effectiveNoPlatform(d.flags) && runtimeAncestorCxxConsumers[instance.Path.rel()] {
-		// The libc++ addincl dirs are injected above (before effectiveAddInclGlobal);
-		// only the matching -nostdinc++ flag and the runtime-stack hoist remain here.
 		if !cxxFlagsSeen.has(uint32(baseUnitCxxNostdinc)) {
 			cxxFlagsSeen.add(uint32(baseUnitCxxNostdinc))
 			peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, baseUnitCxxNostdinc)
@@ -1815,9 +1641,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	ccRefs := make([]NodeRef, 0, len(d.srcs)+len(d.joinSrcs))
 	ccOutputs := make([]VFS, 0, len(d.srcs)+len(d.joinSrcs))
 
-	// arDeclMeta maps each compiled object to its source's SrcMeta. reorderARMembers
-	// sorts the AR members by that key, reproducing statement processing order with
-	// generated compiles deferred after the direct ones.
 	arDeclMeta := map[VFS]SrcMeta{}
 
 	ownCFlags := d.cFlags
@@ -1825,10 +1648,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
 	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
 
-	// A module's own resolve uses BOTH local ADDINCL and ADDINCL(GLOBAL ...): GLOBAL
-	// exposes to peers but does NOT skip the own compile. Keeping them separate meant a
-	// module declaring its dest ADDINCL only as GLOBAL couldn't resolve its own COPY
-	// destinations.
 	dedupedAddIncl := dedupVFS(d.addIncl, d.addInclGlobal)
 
 	isPy3NativeLib := d.moduleStmt.Name == tokPy23NativeLibrary ||
@@ -1858,8 +1677,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path.rel(), peerAddInclGlobal, dedupedAddIncl)
 
-	// The cumulative SRCDIR search path. A UNITTEST_FOR program also searches the tested
-	// module's dir, appended last (highest precedence in the reversed search).
 	effectiveSrcDirs := d.srcDirs
 
 	if pd := programSourceDir(d.moduleStmt); pd != nil {
@@ -1906,28 +1723,17 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		TC:          d.tc,
 	}
 	moduleInputs.ScanCfg = newScanContext(ctx.parsers, dedupedAddIncl, selfPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
-	// Carry the module's tag into the scan's first-claim side-channel so a generated
-	// header reached only through this compile is attributed with its dir AND tag.
-	// cfModuleTag (not moduleCCTag) is the attribution tag.
+
 	moduleInputs.ScanCfg.OwnerModuleTag = cfModuleTag(d, instance)
 	moduleInputs.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &moduleInputs)
 
-	// Pass 1 (codegen-producing srcs) runs BEFORE the later emitters that walkClosure
-	// across the module's headers into the SHARED childrenCache: a header including a
-	// codegen output must see the registered entry, else an empty (stale) closure is
-	// cached and a spurious unresolved-include warning fires. Pass 1 registers all
-	// PB/EV/FL/RL/CF outputs first.
 	type codegenEmit struct {
 		srcID STR
 		emit  *SourceEmit
 	}
 
-	// Collected in SRCS order so pass 2 appends them without a side map.
 	codegenEmits := make([]codegenEmit, 0, 4)
 
-	// A .fbs's generated .h references its imported .fbs's .h, so every .fbs producer
-	// must be registered before any .fbs CC closure is walked (same two-phase shape proto
-	// uses).
 	for _, src := range d.srcs {
 		switch srcExtClassOf(src) {
 		case srcExtFbs:
@@ -1937,27 +1743,18 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	// A bison-generated header is included by SIBLING sources that may precede the grammar
-	// in SRCS; register every bison producer first so the sibling resolves to the $(B)
-	// output (same two-phase reason as above).
 	for _, src := range d.srcs {
 		if srcExtClassOf(src) == srcExtY {
 			emitBisonProducer(ctx, instance, src.string(), moduleInputs, moduleInputs.BisonGenExt)
 		}
 	}
 
-	// A same-module proto importing a LATER-declared sibling must see that sibling's
-	// .pb.h when its own .pb.cc closure is walked; emit every proto PB producer first
-	// (same two-phase shape as above).
 	for _, src := range d.srcs {
 		if srcExtClassOf(src) == srcExtProto {
 			emitProtoProducer(ctx, instance, d, src.string(), moduleInputs)
 		}
 	}
 
-	// A CYTHON_C_H / _API_H generated header is #included by ordinary SRCS; register every
-	// cython producer's header output first so the handwritten compile resolves it (same
-	// two-phase reason). Node emission stays at its archive-ordered position below.
 	cythonPlans := planCythonCpp(ctx, instance, d, moduleInputs)
 
 	for _, src := range d.srcs {
@@ -1986,9 +1783,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ccOutputs = append(ccOutputs, cpMemberOuts[i])
 	}
 
-	// Producers emit BEFORE emitEnumSrcs so GENERATE_ENUM_SERIALIZATION resolves a header
-	// input that is itself a RUN_PROGRAM OUT to the $(B) producer output plus its dep, not
-	// a nonexistent source.
 	jvCCRefs, jvCCOutputs := emitMiscNodes(ctx, instance, d, &moduleInputs)
 
 	prCCRes := emitRunProgramsForAR(ctx, instance, d, moduleInputs)
@@ -1997,21 +1791,14 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	emitBaseCodegensForAR(ctx, instance, d, moduleInputs)
 	pyCCRes := emitRunPythonForAR(ctx, instance, d, moduleInputs)
 
-	// ARCHIVE_ASM emits after the RUN_* producers so its members are registered when the
-	// .rodata resource resolves them.
 	aaCCRes := emitArchiveAsmForAR(ctx, instance, d, moduleInputs)
 
 	enCCRes := emitEnumSrcs(ctx, instance, d, selfPeerAddInclGlobal, &moduleInputs)
 
-	// LJ_21_ARCHIVE emits its .raw producers and appends archive_by_keys entries;
-	// emitArchives then materializes them.
 	emitLuaJit21(ctx, instance, d)
 
 	emitArchives(ctx, instance, d)
 
-	// Pass 2 splits d.srcs: non-codegen first (regular .cpp/.c/.h), codegen-produced
-	// ccRefs second (pre-emitted in Pass 1) — upstream archives non-codegen objs first
-	// regardless of SRCS position.
 	emitSrcInputs := func(srcID STR, src string) ModuleCCInputs {
 		si := moduleInputs
 
@@ -2053,14 +1840,10 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		appendCC(src, emitOneSource(ctx, instance, d, srcRel, emitSrcInputs(src, srcRel)), false)
 	}
 
-	// codegen compiles consume an in-module generated source, deferred past the direct
-	// compiles; their (prio, line) is the generating statement's.
 	for _, ce := range codegenEmits {
 		appendCC(ce.srcID, ce.emit, true)
 	}
 
-	// Extra FLAT objects for SRC(file …) whose file is also in SRCS (the SRCS
-	// occurrence already emitted its non-flat object above).
 	for _, fe := range d.srcExtraFlat {
 		si := moduleInputs
 		si.FlatOutput = true
@@ -2076,10 +1859,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	// Generated-source compiles (config-h, cython, swig, java, enum-serialize, RUN_*
-	// outputs) archive after the direct compiles; their generating macro is prio 2, with
-	// a deeper FIFO round for sources produced from other generated sources.
-	// reorderARMembers sorts on (round, declaration sequence).
 	genCCMeta := func(emit *SourceEmit, m SrcMeta) {
 		ccRefs = append(ccRefs, emit.Ref)
 		ccOutputs = append(ccOutputs, emit.OutPath)
@@ -2228,8 +2007,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		for i, ref := range regRes.Refs {
 			globalRefs = append(globalRefs, ref)
 			globalOutputs = append(globalOutputs, regRes.Outputs[i])
-			// PY_REGISTER's .reg.cpp is generated, so it archives after the direct
-			// global members (objcopy resources).
+
 			arDeclMeta[regRes.Outputs[i]] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
 		}
 	}
@@ -2244,9 +2022,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		mergedLDPlugins = &LdPluginsResult{}
 	}
 
-	// A module that compiled any C-family TU carries an induced clang_toolchain_info peer
-	// under SBOM+CLANG; fold its toolchain SBOM component (its only contribution) into the
-	// closure.
 	if ctx.sbomEnabled && env.bool(envCLANG) && len(ccRefs) > 0 {
 		if r, p := clangToolchainSbomComponent(ctx, instance.Platform); r != nil && !containsVFS(peerSbomPaths, *p) {
 			peerSbomRefs = append(peerSbomRefs, *r)
@@ -2254,9 +2029,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	// FROM_SANDBOX auto OUT `.a`/`.o` outputs are $AUTO_INPUT link members: a LIBRARY
-	// archives them, a PROGRAM links them. Folded in after the clang-toolchain-SBOM gate
-	// and before the LD/AR emission.
 	ccRefs = append(ccRefs, fsMemberRefs...)
 	ccOutputs = append(ccOutputs, fsMemberPaths...)
 
@@ -2311,19 +2083,13 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		ldCCRefs := ccRefs
 		ldCCOutputs := ccOutputs
-		// A program links its own objects in the same order it would archive them. See
-		// reorderARMembers.
+
 		ldCCRefs, ldCCOutputs = reorderARMembers(ldCCRefs, ldCCOutputs, arDeclMeta)
 
 		var ldObjcopyRefs []NodeRef
 		var ldObjcopyPaths []VFS
 
 		if resourceLibTagForData(d) != nil || len(d.resources) > 0 {
-			// A plain C++ PROGRAM() declaring RESOURCE/RESOURCE_FILES packs those payloads
-			// into objcopy_<hash>.o and links them as members. resourceLibTagForData is nil
-			// for plain PROGRAM, so the hash uses no module tag. Only emitResourceObjcopy is
-			// called (not emitPySrcs): it Emitter-dedups by output path so a paired
-			// PY3_LIBRARY's already-emitted objcopy_<hash>.o is reused without a duplicate panic.
 			objcopyRes := emitResourceObjcopy(ctx, instance, d, moduleInputs)
 
 			if objcopyRes != nil && len(objcopyRes.Refs) > 0 {
@@ -2338,11 +2104,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ownRPathFlags = append([]ARG(nil), peerRPathFlagsGlobal...)
 		}
 
-		// Both PY3_PROGRAM and PY3_PROGRAM_BIN inherit _BASE_PY3_PROGRAM, which STRIPs;
-		// NO_STRIP or a debug build reverts this.
 		wantsStrip := (d.moduleStmt.Name == tokPy3ProgramBin || d.moduleStmt.Name == tokPy3Program) && !d.noStrip
-		// The PY3_BIN submodule has MODULE_TAG=PY3_BIN auto-set from the submodule name;
-		// the non-multimodule PY3_PROGRAM_BIN has no implicit MODULE_TAG.
+
 		var programModuleTag STR
 
 		if d.moduleStmt.Name == tokPy3Program {
@@ -2356,8 +2119,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ownSbomRef, ownSbomPath = emitSbomComponent(ctx, instance, d, binaryName)
 		}
 
-		// _GENERATE_EXTRA_OBJS collects component.sbom into the link only under release:
-		// a debug program links licensed libs without pulling their components.
 		var ldSbomRefs []NodeRef
 		var ldSbomPaths []VFS
 
@@ -2367,7 +2128,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 			if ownSbomRef != nil {
 				if ownSbomInsertIdx >= 0 && ownSbomInsertIdx <= len(peerSbomPaths) {
-					// Py3 program: own component lands ahead of the relocated tail.
 					ldSbomRefs = make([]NodeRef, 0, len(peerSbomRefs)+1)
 					ldSbomRefs = append(ldSbomRefs, peerSbomRefs[:ownSbomInsertIdx]...)
 					ldSbomRefs = append(ldSbomRefs, *ownSbomRef)
@@ -2506,10 +2266,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		globalRefs = append(globalRefs, objcopyRes.Refs...)
 		globalOutputs = append(globalOutputs, objcopyRes.Outputs...)
 
-		// Explicit RESOURCE/RESOURCE_FILES objcopy objects order before the SRCS(GLOBAL)
-		// band, but PY_SRCS .py/.pyi resource objcopies stay AFTER the global sources
-		// (the combined result keeps them as its trailing PySrcTrailCount span). Move only
-		// the leading explicit-resource band before the global sources.
 		leadCount := len(objcopyRes.Refs) - objcopyRes.PySrcTrailCount
 
 		if globalSrcMemberCount > 0 && leadCount > 0 && len(d.resources) > 0 {
@@ -2536,8 +2292,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	var ownSbomRef *NodeRef
 	var ownSbomPath *VFS
 
-	// The PY3_PROGRAM BIN half emits the component (tagged py3_bin_lib); the paired LIB
-	// half must not duplicate it.
 	if sbomActive(ctx, instance) && sbomQualifies(d) && !d.programPairedLib {
 		realPrjName := strings.TrimSuffix(archiveNameWithPrefixOrName(instance.Path.rel(), "", archiveName), ".a")
 		ownSbomRef, ownSbomPath = emitSbomComponent(ctx, instance, d, realPrjName)
@@ -2596,8 +2350,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			globalTag = tagYqlUdfStaticGlobal
 		}
 
-		// The PY3_BIN_LIB submodule (KindLib half of PY3_PROGRAM multimodule)
-		// composes its global.a tag from <MODULE_TAG>_global ("py3_bin_lib_global").
 		if d.programPairedLib {
 			globalTag = tagPy3BinLibGlobal
 		}
@@ -2743,8 +2495,6 @@ func movePathsAfter(paths []VFS, anchor VFS, moved []VFS) []VFS {
 	return outPaths
 }
 
-// moveSubrangeToFront pulls in[start:start+count] to the front of the slice,
-// preserving the relative order of the moved span and of the remainder.
 func moveSubrangeToFront[T any](in []T, start, count int) []T {
 	if count <= 0 || start < 0 || start+count > len(in) {
 		return in
@@ -2834,9 +2584,6 @@ type PeerGlobalContribs struct {
 	sbomRefs  []NodeRef
 	sbomPaths []VFS
 
-	// resourceGlobals is the transitive resource-global closure aggregated across
-	// peers (deduped by global-var name), feeding resolveModuleToolchain in the
-	// specialized/header-only path (the general path folds it inline instead).
 	resourceGlobals []ResourceDecl
 }
 
@@ -2846,9 +2593,6 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	defaults = suppressMallocAPIDefault(defaults, d.allocatorName)
 	seen := make(map[string]struct{}, len(defaults)+len(d.peerdirs))
 
-	// Resolve every peer through genModule first (memoized), then aggregate per output
-	// kind below. The visited guard stays a local string-keyed map because it must stay
-	// live across the genModule calls.
 	resolved := make([]*ModuleEmitResult, 0, len(defaults)+len(d.peerdirs))
 
 	walkInstance := func(peerInstance ModuleInstance) {
@@ -2859,9 +2603,6 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		walkInstance(derivePeerInstance(ctx, instance, d, peerPath))
 	}
 
-	// PY3_PROTO multimodule: the python proto submodule PEERDIRs its CPP_PROTO sibling
-	// (the same unit/path with CPP flags) ahead of the python-runtime PEERDIRs, so its
-	// archive lands ahead of protobuf-py3. NO_OPTIMIZE_PY_PROTOS drops this self-peer.
 	if instance.Language == LangPy && d.moduleStmt.Name == tokProtoLibrary && d.optimizePyProtos && !moduleExcludesTag(d, "CPP_PROTO") {
 		seen[instance.Path.rel()] = struct{}{}
 		cppSelf := instance
@@ -2893,12 +2634,8 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		walk(peerPath)
 	}
 
-	// firstPeerdirIdx marks where the declared-PEERDIR region begins; everything before
-	// it (defaults, cppSelf, googleapis) keeps its front slot in every aggregation.
 	firstPeerdirIdx := len(resolved)
 
-	// frontSet holds the proto plugin-runtime peers (d.protoCmdPeers); they sort ahead of
-	// the rest of the declared PEERDIR closure for the ADDINCL pass only.
 	frontSet := map[string]struct{}{}
 
 	for _, p := range d.protoCmdPeers {
@@ -2919,10 +2656,6 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		walk(peerPath)
 	}
 
-	// orderedResolved is `resolved` with the proto plugin-runtime peers hoisted ahead of
-	// the rest of the declared PEERDIR closure. Every link-order aggregation below walks
-	// this order; flag / resource-global / proto-include unions key off a dedup set, not
-	// link order, so they keep the plain `resolved` order.
 	orderedResolved := resolved
 
 	if firstPeerdirIdx < len(resolved) {
@@ -2944,7 +2677,6 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 
 	out := PeerGlobalContribs{}
 
-	// Resource globals, deduped by global-var STR.
 	deduper.reset()
 
 	for _, pr := range resolved {
@@ -2979,7 +2711,6 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		}
 	}
 
-	// Flag unions are several independent ARG sets, sharing one pass over local BitSets.
 	var cFlagsSeen BitSet
 	var cxxFlagsSeen BitSet
 	var cOnlyFlagsSeen BitSet
@@ -2996,7 +2727,6 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		addEachARG(&rpathFlagsSeen, &out.rpathFlags, pr.RPathFlagsGlobal)
 	}
 
-	// archive: closure paths, then the peer's own AR output (per peer).
 	deduper.reset()
 
 	for _, pr := range orderedResolved {
@@ -3013,9 +2743,6 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		}
 	}
 
-	// sbom: the SBOM component of every peer in the link closure. The linker toolchain
-	// component is excluded — as a link-time peer it attaches at the final link, not
-	// transitively.
 	deduper.reset()
 
 	for _, pr := range orderedResolved {
@@ -3036,7 +2763,6 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		}
 	}
 
-	// global: closure paths, then the peer's own GLOBAL output.
 	deduper.reset()
 
 	for _, pr := range orderedResolved {
@@ -3053,7 +2779,6 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		}
 	}
 
-	// wholeArchive: closure paths, then the peer's own whole-archive paths.
 	deduper.reset()
 
 	for _, pr := range orderedResolved {
@@ -3072,7 +2797,6 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		}
 	}
 
-	// wholeArchiveCmd: command-line whole-archive paths (no refs).
 	deduper.reset()
 
 	for _, pr := range orderedResolved {
@@ -3100,7 +2824,6 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		}
 	}
 
-	// dynamic: closure paths, then the peer's own DYNAMIC_LIBRARY output.
 	deduper.reset()
 
 	for _, pr := range orderedResolved {
@@ -3158,9 +2881,6 @@ func isCodegenProducingSrc(srcRel string) bool {
 		strings.HasSuffix(srcRel, ".l")
 }
 
-// reorderARMembers reproduces the AR member order: members sort by (prio, ya.make line)
-// — SRC/JOIN/codegen (prio 2) ahead of plain SRCS (prio 4), then by declaration line.
-// The stable sort keeps objects sharing a key in emission order.
 func reorderARMembers(refs []NodeRef, paths []VFS, declMeta map[VFS]SrcMeta) ([]NodeRef, []VFS) {
 	if len(paths) == 0 {
 		return refs, paths
@@ -3213,8 +2933,6 @@ func (ctx *GenCtx) toolResult(modulePath ARG) *ModuleEmitResult {
 
 	res := genModule(ctx, newToolInstance(ctx.host, modulePath.string()))
 
-	// Cache only once it really built: a tolerated PEERDIR cycle yields an empty stub
-	// with LDRef 0 that genModule does NOT memoize, so caching it would poison lookups.
 	if res.LDRef != NodeRef(0) {
 		ctx.tools.put(modulePath, res)
 		ctx.moduleByRef.put(res.LDRef, res)
@@ -3227,8 +2945,6 @@ func (ctx *GenCtx) scannerFor(instance ModuleInstance) *IncludeScanner {
 	return ctx.scannerForPlatform(instance.Platform)
 }
 
-// instanceKey packs a ModuleInstance into the genModule memo key; a run carries exactly
-// two platforms — anything else fails fast.
 func (ctx *GenCtx) instanceKey(in ModuleInstance) uint64 {
 	pbit := uint64(0)
 

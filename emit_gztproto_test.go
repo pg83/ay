@@ -2,10 +2,6 @@ package main
 
 import "testing"
 
-// TestGen_GztProto_InLibraryArchivesPbObject covers a plain LIBRARY() mixing a
-// hand-written .cpp and a .gztproto: the .gztproto must emit its GZ producer, run
-// protoc to <base>.pb.{cc,h}, compile, and archive alongside the .cpp.o. Pre-fix
-// the regular-module SRCS loop skips .gztproto entirely.
 func TestGen_GztProto_InLibraryArchivesPbObject(t *testing.T) {
 	files := map[string]string{}
 
@@ -41,45 +37,42 @@ END()
 
 	g := testGen(newMemFS(files), "lib/syn")
 
-	// 1. GZ producer writes the generated .proto.
 	gz := mustNodeByOutput(t, g, "$(B)/lib/syn/model.proto")
+
 	if gz.KV.P != pkGZ || gz.KV.PC != pcYellow {
 		t.Fatalf("GZ producer KV = {%v,%v}, want {GZ,yellow}", gz.KV.P, gz.KV.PC)
 	}
 
-	// 2. The generated .proto runs through the protoc path.
 	pb := mustNodeByOutput(t, g, "$(B)/lib/syn/model.pb.h")
 	pbHasCC := false
+
 	for _, o := range pb.Outputs {
 		if o.string() == "$(B)/lib/syn/model.pb.cc" {
 			pbHasCC = true
 		}
 	}
+
 	if !pbHasCC {
 		t.Fatalf("PB node missing model.pb.cc output: %v", pb.Outputs)
 	}
 
-	// 3. The generated .pb.cc compiles.
 	obj := mustNodeByOutput(t, g, "$(B)/lib/syn/model.pb.cc.o")
+
 	if !nodeHasInput(obj, "$(B)/lib/syn/model.pb.cc") {
 		t.Fatalf("object missing generated .pb.cc input: %v", obj.flatInputs())
 	}
 
-	// 4. The .pb.cc.o is archived next to syn.cpp.o.
 	ar := mustNodeByOutput(t, g, "$(B)/lib/syn/libsyn.a")
+
 	if !nodeHasInput(ar, "$(B)/lib/syn/model.pb.cc.o") {
 		t.Fatalf("library archive missing model.pb.cc.o member: %v", ar.flatInputs())
 	}
+
 	if !nodeHasInput(ar, "$(B)/lib/syn/syn.cpp.o") {
 		t.Fatalf("library archive missing syn.cpp.o member: %v", ar.flatInputs())
 	}
 }
 
-// TestGen_GztProto_ConsumerSeesGeneratedProtoNestedClosure covers a source
-// `.proto` PB node that imports a GZT-generated `.proto`: it must see that
-// proto's parsed nested imports plus the raw `.gztproto` producer-source leaves.
-// Pre-fix the parse is registered only SOURCE-rooted, so a consumer resolving the
-// BUILD-rooted path walks no children and the .gztproto leaves never ride.
 func TestGen_GztProto_ConsumerSeesGeneratedProtoNestedClosure(t *testing.T) {
 	files := map[string]string{}
 
@@ -145,35 +138,26 @@ END()
 	pb := mustNodeByOutput(t, g, "$(B)/gzt/consumer/consumer.pb.h")
 
 	for _, want := range []string{
-		"$(B)/gzt/model/model.proto",             // direct generated import
-		"$(B)/gzt/peer/peer.proto",               // nested rewritten
-		"$(S)/gzt/model/model.gztproto",          // producer-source leaf
-		"$(S)/gzt/peer/peer.gztproto",            // transitive leaf
-		"$(S)/gzt/data/data.proto",               // nested .proto
-		"$(S)/kernel/gazetteer/proto/base.proto", // INDUCED_DEPS(proto …)
+		"$(B)/gzt/model/model.proto",
+		"$(B)/gzt/peer/peer.proto",
+		"$(S)/gzt/model/model.gztproto",
+		"$(S)/gzt/peer/peer.gztproto",
+		"$(S)/gzt/data/data.proto",
+		"$(S)/kernel/gazetteer/proto/base.proto",
 	} {
 		if !nodeHasInput(pb, want) {
 			t.Errorf("consumer PB node missing transitive input %q\ngot: %v", want, pb.flatInputs())
 		}
 	}
 
-	// The generated peer .proto is reached as a .proto import; its .gztproto must
-	// not be invented as a .gztproto.pb.h.
 	if nodeHasInput(pb, "$(B)/gzt/peer/peer.gztproto.pb.h") {
 		t.Errorf("must NOT invent peer.gztproto.pb.h: %v", pb.flatInputs())
 	}
 }
 
-// TestGen_GztProto_ArchivedAfterDirectSourcesRegardlessOfSRCSOrder pins the
-// codegen-ordering invariant: a `.gztproto`'s generated `.pb.cc.o` archives AFTER
-// the module's direct compiles regardless of SRCS position. Pre-fix, with
-// `.gztproto` declared FIRST, it rode the non-codegen pass-2 loop and archived in
-// declaration order — BEFORE syn.cpp.o. The fix marks the object Generated, which
-// sortKey orders last.
 func TestGen_GztProto_ArchivedAfterDirectSourcesRegardlessOfSRCSOrder(t *testing.T) {
 	files := map[string]string{}
 
-	// .gztproto declared FIRST, hand-written .cpp SECOND.
 	writeTestModuleFile(files, "lib/syn/ya.make", `LIBRARY(syn)
 SRCS(
     model.gztproto
@@ -215,6 +199,7 @@ END()
 				return i
 			}
 		}
+
 		return -1
 	}
 
@@ -224,15 +209,12 @@ END()
 	if cppIdx < 0 || pbIdx < 0 {
 		t.Fatalf("archive missing members: syn.cpp.o=%d model.pb.cc.o=%d in %v", cppIdx, pbIdx, members)
 	}
+
 	if cppIdx > pbIdx {
 		t.Fatalf("generated model.pb.cc.o (idx %d) must archive AFTER direct syn.cpp.o (idx %d) regardless of SRCS order; got %v", pbIdx, cppIdx, members)
 	}
 }
 
-// TestGen_GztProto_EmitsGZProducerPBAndArchive covers a `.gztproto` source: emit
-// a GZ/yellow producer writing <base>.proto, run protoc to <base>.pb.{cc,h},
-// compile, and archive. A `.gztproto` import must resolve through the generated
-// <base>.pb.h — NOT the .cfgproto.pb.h naming rule.
 func TestGen_GztProto_EmitsGZProducerPBAndArchive(t *testing.T) {
 	files := map[string]string{}
 
@@ -280,13 +262,14 @@ END()
 
 	g := testGen(newMemFS(files), "gzt/model")
 
-	// 1. GZ producer writes the generated .proto.
 	gz := mustNodeByOutput(t, g, "$(B)/gzt/model/model.proto")
+
 	if gz.KV.P != pkGZ || gz.KV.PC != pcYellow {
 		t.Fatalf("GZ producer KV = {%v,%v}, want {GZ,yellow}", gz.KV.P, gz.KV.PC)
 	}
 
 	gzArgs := strStrs(gz.Cmds[0].CmdArgs.flat())
+
 	for _, want := range []string{
 		"$(B)/dict/gazetteer/converter/gztconverter",
 		"-I$(S)/contrib/libs/protobuf/src",
@@ -301,62 +284,66 @@ END()
 	}
 
 	for _, want := range []string{
-		"$(B)/dict/gazetteer/converter/gztconverter", // tool binary
-		"$(S)/gzt/model/model.gztproto",              // source
-		"$(S)/gzt/peer/peer.gztproto",                // imported .gztproto
-		"$(S)/gzt/data/data.proto",                   // imported .proto
-		"$(S)/kernel/gazetteer/proto/base.proto",     // INDUCED
+		"$(B)/dict/gazetteer/converter/gztconverter",
+		"$(S)/gzt/model/model.gztproto",
+		"$(S)/gzt/peer/peer.gztproto",
+		"$(S)/gzt/data/data.proto",
+		"$(S)/kernel/gazetteer/proto/base.proto",
 	} {
 		if !nodeHasInput(gz, want) {
 			t.Errorf("GZ producer inputs missing %q\ngot: %v", want, gz.flatInputs())
 		}
 	}
 
-	// 2. The generated .proto runs through the protoc path.
 	pb := mustNodeByOutput(t, g, "$(B)/gzt/model/model.pb.h")
 	pbHasCC := false
+
 	for _, o := range pb.Outputs {
 		if o.string() == "$(B)/gzt/model/model.pb.cc" {
 			pbHasCC = true
 		}
 	}
+
 	if !pbHasCC {
 		t.Fatalf("PB node missing model.pb.cc output: %v", pb.Outputs)
 	}
+
 	if pb.KV.P != pkPB || pb.KV.PC != pcYellow {
 		t.Fatalf("PB producer KV = {%v,%v}, want {PB,yellow}", pb.KV.P, pb.KV.PC)
 	}
-	// The PB node is fed the generated $(B) .proto and the GZ producer's sources.
+
 	if !nodeHasInput(pb, "$(B)/gzt/model/model.proto") {
 		t.Errorf("PB node missing generated $(B) model.proto input: %v", pb.flatInputs())
 	}
+
 	if !nodeHasInput(pb, "$(S)/gzt/model/model.gztproto") {
 		t.Errorf("PB node missing producer-source model.gztproto: %v", pb.flatInputs())
 	}
 
-	// 3. The generated .pb.cc compiles and archives.
 	obj := mustNodeByOutput(t, g, "$(B)/gzt/model/model.pb.cc.o")
+
 	if !nodeHasInput(obj, "$(B)/gzt/model/model.pb.cc") {
 		t.Fatalf("object missing generated .pb.cc input: %v", obj.flatInputs())
 	}
 
 	ar := findNodeByOutputPrefix(g, "$(B)/gzt/model/libgzt-model")
+
 	if ar == nil {
 		t.Fatal("no gzt/model proto archive found")
 	}
+
 	if !nodeHasInput(ar, "$(B)/gzt/model/model.pb.cc.o") {
 		t.Fatalf("archive missing model.pb.cc.o member: %v", ar.flatInputs())
 	}
 
-	// 4. A .gztproto import resolves through the generated <base>.pb.h, NOT the
-	// .cfgproto.pb.h rule.
 	if !nodeHasInput(obj, "$(B)/gzt/peer/peer.pb.h") {
 		t.Errorf("object must reach the imported .gztproto's generated peer.pb.h: %v", obj.flatInputs())
 	}
+
 	if nodeHasInput(obj, "$(B)/gzt/peer/peer.gztproto.pb.h") {
 		t.Errorf("a .gztproto import must NOT induce peer.gztproto.pb.h (the .cfgproto rule): %v", obj.flatInputs())
 	}
-	// The generated peer .proto rides as a producer source, not a compile input.
+
 	if nodeHasInput(obj, "$(B)/gzt/peer/peer.proto") {
 		t.Errorf("generated peer.proto must not be a compile input: %v", obj.flatInputs())
 	}

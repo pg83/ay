@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// TestEmitDecimalMD5_GeneratedSourceEntersArchive pins the
-// DECIMAL_MD5_LOWER_32_BITS emitter: an SV node emits a build-root .cpp, a
-// downstream CC compiles it, and the .o joins the module archive.
 func TestEmitDecimalMD5_GeneratedSourceEntersArchive(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"mod/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n" +
@@ -48,6 +45,7 @@ func TestEmitDecimalMD5_GeneratedSourceEntersArchive(t *testing.T) {
 	}
 
 	svInputs := map[string]bool{}
+
 	for _, in := range sv.flatInputs() {
 		svInputs[in.string()] = true
 	}
@@ -69,12 +67,13 @@ func TestEmitDecimalMD5_GeneratedSourceEntersArchive(t *testing.T) {
 	}
 
 	ccInputs := map[string]bool{}
+
 	for _, in := range cc.flatInputs() {
 		ccInputs[in.string()] = true
 	}
 
 	for _, want := range []string{
-		"$(B)/mod/hash.auto.cpp", // generated source; SV inputs ride via closure leaves
+		"$(B)/mod/hash.auto.cpp",
 		"$(S)/mod/data.txt",
 		"$(S)/mod/helper.hpp",
 		"$(S)/build/scripts/decimal_md5.py",
@@ -85,6 +84,7 @@ func TestEmitDecimalMD5_GeneratedSourceEntersArchive(t *testing.T) {
 	}
 
 	foundDep := false
+
 	for _, dep := range graphDeps(g, cc) {
 		if dep == sv.UID {
 			foundDep = true
@@ -100,11 +100,13 @@ func TestEmitDecimalMD5_GeneratedSourceEntersArchive(t *testing.T) {
 	ar := mustNodeByOutput(t, g, "$(B)/mod/libmod.a")
 
 	arArgs := strings.Join(strStrs(ar.Cmds[0].CmdArgs.flat()), " ")
+
 	if !strings.Contains(arArgs, "$(B)/mod/hash.auto.cpp.o") {
 		t.Errorf("archive cmd_args missing $(B)/mod/hash.auto.cpp.o; got: %s", arArgs)
 	}
 
 	arInputs := false
+
 	for _, in := range ar.flatInputs() {
 		if in.string() == "$(B)/mod/hash.auto.cpp.o" {
 			arInputs = true

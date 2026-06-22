@@ -18,6 +18,7 @@ func TestObjcopyHashCerts(t *testing.T) {
 
 	got := objcopyHash(paths, keysB64, kvs, unitPath, moduleTag)
 	want := "c27c99b2d9d5eade92fd72d0aa"
+
 	if got != want {
 		t.Fatalf("certs objcopy hash: got %q, want %q", got, want)
 	}
@@ -33,18 +34,22 @@ func TestObjcopyHashRapidjson(t *testing.T) {
 	prefix := "devtools/ymake/contrib/python-rapidjson/"
 	keysRaw := make([]string, len(paths))
 	kvs := make([]string, len(paths))
+
 	for i, p := range paths {
 		fileKey := "resfs/file/" + prefix + p
 		keysRaw[i] = fileKey
 		kvs[i] = "resfs/src/" + fileKey + "=${rootrel;context=TEXT;input=TEXT:\"" + p + "\"}"
 	}
+
 	keysB64 := make([]string, len(keysRaw))
+
 	for i, k := range keysRaw {
 		keysB64[i] = base64.StdEncoding.EncodeToString([]byte(k))
 	}
 
 	got := objcopyHash(paths, keysB64, kvs, "devtools/ymake/contrib/python-rapidjson", stringPtr("PY3"))
 	want := "55c44b1fdbfda511798cd895e2"
+
 	if got != want {
 		t.Fatalf("rapidjson objcopy hash: got %q, want %q", got, want)
 	}
@@ -88,6 +93,7 @@ func TestPyNamespaceModListMD5RuntimePy3(t *testing.T) {
 	pys := []string{"entry_points.py"}
 
 	h := md5.New()
+
 	for _, srcRel := range pys {
 		modName := strings.TrimSuffix(srcRel, ".py")
 		modName = strings.ReplaceAll(modName, "/", ".")
@@ -96,6 +102,7 @@ func TestPyNamespaceModListMD5RuntimePy3(t *testing.T) {
 
 	got := enchex.EncodeToString(h.Sum(nil))
 	want := "bd17cfe3d9af11d01ff7b15ebc3786a7"
+
 	if got != want {
 		t.Fatalf("mod_list_md5 runtime_py3: got %q, want %q", got, want)
 	}
@@ -106,6 +113,7 @@ func TestPyNamespaceModListMD5SymbolsModule(t *testing.T) {
 	pys := []string{"__init__.py"}
 
 	h := md5.New()
+
 	for _, srcRel := range pys {
 		modName := strings.TrimSuffix(srcRel, ".py")
 		modName = strings.ReplaceAll(modName, "/", ".")
@@ -114,6 +122,7 @@ func TestPyNamespaceModListMD5SymbolsModule(t *testing.T) {
 
 	got := enchex.EncodeToString(h.Sum(nil))
 	want := "fe680e9ad9bf330ffcdf61616377919b"
+
 	if got != want {
 		t.Fatalf("mod_list_md5 symbols/module: got %q, want %q", got, want)
 	}
@@ -124,6 +133,7 @@ func TestPyNamespaceModListMD5Py3ccSlow(t *testing.T) {
 	pys := []string{"main.py"}
 
 	h := md5.New()
+
 	for _, srcRel := range pys {
 		modName := strings.TrimSuffix(srcRel, ".py")
 		modName = strings.ReplaceAll(modName, "/", ".")
@@ -132,6 +142,7 @@ func TestPyNamespaceModListMD5Py3ccSlow(t *testing.T) {
 
 	got := enchex.EncodeToString(h.Sum(nil))
 	want := "6a808dea4f9b84e552eba97b43845111"
+
 	if got != want {
 		t.Fatalf("mod_list_md5 tools/py3cc/slow: got %q, want %q", got, want)
 	}
@@ -142,6 +153,7 @@ func TestPyNamespaceObjcopyHashRuntimePy3(t *testing.T) {
 
 	got := objcopyHash(nil, nil, []string{kv}, "library/python/runtime_py3", stringPtr("PY3"))
 	want := "3b0561f75631281b973aa8b64e"
+
 	if got != want {
 		t.Fatalf("runtime_py3 namespace objcopy hash: got %q, want %q", got, want)
 	}
@@ -153,6 +165,7 @@ func TestNoCheckImportsObjcopyHashLib2Py(t *testing.T) {
 
 	got := objcopyHash(nil, nil, []string{kv}, "contrib/tools/python3/lib2/py", stringPtr("PY3"))
 	want := "cd47bcaec327e5eb9db4641ec8"
+
 	if got != want {
 		t.Fatalf("contrib/tools/python3/lib2/py no_check_imports objcopy hash: got %q, want %q", got, want)
 	}
@@ -163,6 +176,7 @@ func TestPyMainObjcopyHashPy3ccSlow(t *testing.T) {
 
 	got := objcopyHash(nil, nil, []string{kv}, "tools/py3cc/slow", stringPtr("PY3"))
 	want := "4b1c18d0dc6973976969ad23be"
+
 	if got != want {
 		t.Fatalf("tools/py3cc/slow PY_MAIN objcopy hash: got %q, want %q", got, want)
 	}
@@ -177,28 +191,37 @@ func TestPySrcObjcopyHashRuntimePy3RawEntryPoints(t *testing.T) {
 		moduleStmt:   &ModuleStmt{Name: tokPy3Library},
 	}
 	entries := buildPySrcEntries(d, "library/python/runtime_py3")
+
 	if len(entries) != 1 {
 		t.Fatalf("entries: got %d, want 1", len(entries))
 	}
+
 	if entries[0].pathHash != "entry_points.py" {
 		t.Errorf("pathHash: got %q, want %q", entries[0].pathHash, "entry_points.py")
 	}
+
 	expectedKey := "resfs/file/py/library/python/runtime_py3/entry_points.py"
+
 	if entries[0].key != expectedKey {
 		t.Errorf("key: got %q, want %q", entries[0].key, expectedKey)
 	}
+
 	expectedKv := "resfs/src/" + expectedKey + "=${rootrel;context=TEXT;input=TEXT:\"entry_points.py\"}"
+
 	if entries[0].kvHash != expectedKv {
 		t.Errorf("kvHash: got %q, want %q", entries[0].kvHash, expectedKv)
 	}
 
 	chunks := chunkPySrcEntries(entries)
+
 	if len(chunks) != 1 {
 		t.Fatalf("chunks: got %d, want 1", len(chunks))
 	}
+
 	ch := chunks[0]
 	got := objcopyHash(ch.paths, ch.keys, ch.kvsHash, "library/python/runtime_py3", stringPtr("PY3"))
 	want := "84a3659770bdea15f8ae77837d"
+
 	if got != want {
 		t.Fatalf("runtime_py3 entry_points objcopy hash: got %q, want %q", got, want)
 	}
@@ -214,11 +237,14 @@ func TestPySrcObjcopyHashPy3ccSlowMain(t *testing.T) {
 	}
 	entries := buildPySrcEntries(d, "tools/py3cc/slow")
 	chunks := chunkPySrcEntries(entries)
+
 	if len(chunks) != 1 {
 		t.Fatalf("chunks: got %d, want 1", len(chunks))
 	}
+
 	got := objcopyHash(chunks[0].paths, chunks[0].keys, chunks[0].kvsHash, "tools/py3cc/slow", stringPtr("PY3"))
 	want := "c3a5182796bc68c054c676bcc0"
+
 	if got != want {
 		t.Fatalf("py3cc/slow main.py objcopy hash: got %q, want %q", got, want)
 	}
@@ -233,15 +259,20 @@ func TestPySrcObjcopyHashSymbolsModuleDualEntry(t *testing.T) {
 		moduleStmt:   &ModuleStmt{Name: tokPy23Library},
 	}
 	entries := buildPySrcEntries(d, "library/python/symbols/module")
+
 	if len(entries) != 2 {
 		t.Fatalf("entries: got %d, want 2 (yapyc3 + raw)", len(entries))
 	}
+
 	chunks := chunkPySrcEntries(entries)
+
 	if len(chunks) != 1 {
 		t.Fatalf("chunks: got %d, want 1", len(chunks))
 	}
+
 	got := objcopyHash(chunks[0].paths, chunks[0].keys, chunks[0].kvsHash, "library/python/symbols/module", stringPtr("PY3"))
 	want := "c325f0009e9625395005936d90"
+
 	if got != want {
 		t.Fatalf("symbols/module __init__.py objcopy hash: got %q, want %q", got, want)
 	}
@@ -273,12 +304,15 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 
 	entries := buildPySrcEntries(d, "contrib/python/shellingham")
 	chunks := chunkPySrcEntries(entries)
+
 	if got := len(chunks); got != 2 {
 		t.Fatalf("chunks: got %d, want 2", got)
 	}
+
 	if got := len(chunks[1].kvsCmd); got != 0 {
 		t.Fatalf("tail chunk kvsCmd len: got %d, want 0", got)
 	}
+
 	if got := len(chunks[1].paths); got != 1 {
 		t.Fatalf("tail chunk paths len: got %d, want 1", got)
 	}
@@ -293,16 +327,19 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 		Platform: testTargetP,
 	}
 	res := emitPySrcObjcopy(ctx, instance, d, &ObjcopyEmitCtx{blocks: composeObjcopyArgBlocks(d.tc, testTargetP), na: ctx.na})
+
 	if res == nil {
 		t.Fatal("emitPySrcObjcopy returned nil")
 	}
 
 	emit := ctx.emit.(*BufferedEmitter)
+
 	if got := len(emit.nodes); got != 2 {
 		t.Fatalf("emitted nodes: got %d, want 2", got)
 	}
 
 	tail := emit.nodes[1]
+
 	if got := tail.Outputs[0].string(); got != "$(B)/contrib/python/shellingham/objcopy_e79ae9e993a07f847435dcf3c2.o" {
 		t.Fatalf("tail output = %q, want %q", got, "$(B)/contrib/python/shellingham/objcopy_e79ae9e993a07f847435dcf3c2.o")
 	}
@@ -320,9 +357,11 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 		"--keys", "cmVzZnMvZmlsZS9weS9zaGVsbGluZ2hhbS9wb3NpeC9wcy5weS55YXB5YzM=",
 	}
 	gotArgs := tail.Cmds[0].CmdArgs.flat()
+
 	if !reflect.DeepEqual(strStrs(gotArgs), wantArgs) {
 		t.Fatalf("tail cmd args mismatch:\n got: %v\nwant: %v", gotArgs, wantArgs)
 	}
+
 	if contains(gotArgs, "--kvs") {
 		t.Fatalf("tail cmd args unexpectedly contain --kvs: %v", gotArgs)
 	}
@@ -360,9 +399,11 @@ func TestRootrelInputPath(t *testing.T) {
 			wantOK: false,
 		},
 	}
+
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got, ok := rootrelInputPath(tc.kv)
+
 			if got != tc.want || ok != tc.wantOK {
 				t.Fatalf("rootrelInputPath(%q) = (%q, %v), want (%q, %v)", tc.kv, got, ok, tc.want, tc.wantOK)
 			}
@@ -378,21 +419,19 @@ func TestResolvePySrcRel_RootRelativeProto(t *testing.T) {
 	moduleDir := "market/idx/datacamp/proto/external"
 	srcDirs := []VFS{dirKey(moduleDir)}
 
-	// Root-relative proto resolves at the source root.
 	got := resolvePySrcRel(fs, srcDirs, moduleDir, "market/idx/datacamp/proto/api/ExportMessage.proto")
+
 	if want := "market/idx/datacamp/proto/api/ExportMessage.proto"; got != want {
 		t.Fatalf("root-relative proto: got %s, want %s", got, want)
 	}
 
-	// A proto under the module dir resolves there.
 	got = resolvePySrcRel(fs, srcDirs, moduleDir, "market/idx/datacamp/proto/external/ExportCategory.proto")
+
 	if want := "market/idx/datacamp/proto/external/ExportCategory.proto"; got != want {
 		t.Fatalf("root-relative proto under module: got %s, want %s", got, want)
 	}
 }
 
-// A dirty (non-clean) srcRel must NOT be source-root bound: the fallback applies
-// only to clean paths, so it falls through to the module-relative join.
 func TestResolvePySrcRel_DirtyPathNotRootBound(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"root.proto": "",
@@ -401,6 +440,7 @@ func TestResolvePySrcRel_DirtyPathNotRootBound(t *testing.T) {
 	srcDirs := []VFS{dirKey(moduleDir)}
 
 	got := resolvePySrcRel(fs, srcDirs, moduleDir, "../root.proto")
+
 	if want := "pkg/sub/../root.proto"; got != want {
 		t.Fatalf("dirty srcRel must not source-root bind: got %s, want %s", got, want)
 	}

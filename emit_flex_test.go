@@ -4,9 +4,6 @@ import (
 	"testing"
 )
 
-// TestGen_FlexOldDefaultLexerGeneration pins the default old-flex _SRC("l")
-// mechanism: a `.l` source emits an LX node whose `.l.cpp` is compiled and
-// archived, with the flex-old ADDINCL on the compile.
 func TestGen_FlexOldDefaultLexerGeneration(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"contrib/tools/flex-old/ya.make":     "PROGRAM(flex)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(main.cpp)\nEND()\n",
@@ -41,9 +38,11 @@ END()
 		"$(S)/lex/lexer.l",
 	}
 	got := strStrs(lx.Cmds[0].CmdArgs.flat())
+
 	if len(got) != len(wantCmd) {
 		t.Fatalf("LX cmd_args = %#v, want %#v", got, wantCmd)
 	}
+
 	for i, w := range wantCmd {
 		if got[i] != w {
 			t.Errorf("LX cmd_args[%d] = %q, want %q", i, got[i], w)
@@ -67,11 +66,12 @@ END()
 		}
 	}
 
-	// Generated .l.cpp depends on the LX producer.
 	cc := mustNodeByOutput(t, g, "$(B)/lex/lexer.l.cpp.o")
+
 	if cc.KV.P != pkCC {
 		t.Fatalf("generated lexer.l.cpp.o kv.p = %q, want CC", cc.KV.P.string())
 	}
+
 	if !depsContain(graphDeps(g, cc), lx.UID) {
 		t.Errorf("generated CC deps %v missing LX producer uid %q", graphDeps(g, cc), lx.UID)
 	}
@@ -81,19 +81,19 @@ END()
 	}
 
 	ar := mustNodeByOutput(t, g, "$(B)/lex/liblex.a")
+
 	if !depsContain(graphDeps(g, ar), cc.UID) {
 		t.Errorf("module AR deps %v missing generated object uid %q", graphDeps(g, ar), cc.UID)
 	}
 }
 
-// TestGen_FlexDoesNotPerturbBisonOrPlainCpp is the negative guard: a `.y`
-// module still emits a YC and no LX; a plain `.cpp` emits neither.
 func TestGen_FlexDoesNotPerturbBisonOrPlainCpp(t *testing.T) {
 	files := map[string]string{}
 	addToolchainPeers(files)
 	writeBisonTool(files)
 	writeToolProgram(files, "contrib/tools/m4", "m4")
 	writeTestModuleFile(files, bisonPreprocessPyVFS.rel(), "print('stub')\n")
+
 	for _, input := range bisonCppSkeletonInputs {
 		writeTestModuleFile(files, input.rel(), "")
 	}
@@ -104,14 +104,17 @@ func TestGen_FlexDoesNotPerturbBisonOrPlainCpp(t *testing.T) {
 	writeTestModuleFile(files, "plain/a.cpp", "int a(){return 0;}\n")
 
 	gy := testGen(newMemFS(files), "y")
+
 	if countKind(gy, pkLX) != 0 {
 		t.Errorf("bison module emitted %d LX nodes, want 0", countKind(gy, pkLX))
 	}
+
 	if countKind(gy, pkYC) != 1 {
 		t.Errorf("bison module emitted %d YC nodes, want 1 (unchanged)", countKind(gy, pkYC))
 	}
 
 	gp := testGen(newMemFS(files), "plain")
+
 	if countKind(gp, pkLX) != 0 {
 		t.Errorf("plain .cpp module emitted %d LX nodes, want 0", countKind(gp, pkLX))
 	}
@@ -131,6 +134,7 @@ func cmdHasArg(n *Node, arg string) bool {
 
 func countKind(g *Graph, k ProcKind) int {
 	c := 0
+
 	for _, n := range g.Graph {
 		if n.KV.P == k {
 			c++

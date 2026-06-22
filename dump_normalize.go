@@ -30,10 +30,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 			i++
 			outPath = arg(args, i)
 		case "--ref-graph":
-			// Marks the input as the upstream reference graph, enabling reference-side
-			// normalizations (AR/LD input pruning, dep strip) that discount artifacts
-			// our generator does not model. Our graph is normalized WITHOUT this flag,
-			// so any superfluous input/dep, or over-filtration, surfaces as a diff.
+
 			refGraph = true
 		default:
 			throwFmt("dump normalize: unknown argument %q", args[i])
@@ -48,9 +45,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 	contentHash := map[string][32]byte{}
 	deps := map[string][]string{}
 	fetch := map[string]bool{}
-	// outputsByUID (populated only under --ref-graph) maps each node to its output
-	// paths so the strip pass can check what an edge's target produces against the
-	// source's inputs.
+
 	outputsByUID := map[string][]string{}
 	var ldRoots, tsRoots, arRoots []string
 
@@ -87,8 +82,6 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 				out0 = normPath(outs[0])
 			}
 
-			// Our inline vcs.json producer has no upstream counterpart (upstream mounts
-			// $(VCS)). Strip it like a FETCH node.
 			if out0 == "$(VCS)/vcs.json" {
 				r.isFetch = true
 			}
@@ -142,11 +135,6 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 			}
 		})
 
-	// Optional strip pass (upstream only): drop dep edges u->d where none of d's
-	// outputs is referenced by u — neither among u's inputs nor named in u's command.
-	// Drops induced codegen producers hung off a link node for cache-key folding;
-	// keeps the real .o/.a. The command check only keeps MORE edges than the inputs
-	// check alone. Runs before the Merkle re-uid.
 	if refGraph {
 		type stripResult struct {
 			uid  string
@@ -243,8 +231,6 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 
 	bw := bufio.NewWriterSize(out, 1<<20)
 
-	// Dedup by the recomputed (Merkle) uid: a host instance and its target twin can
-	// collapse to one uid when their subtree matches, but the raw graph lists both.
 	type emitLine struct {
 		uid  string
 		line []byte
@@ -280,8 +266,6 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 	return 0
 }
 
-// depOutputInInputs reports whether any of a dep's outputs is among the
-// consuming node's inputs.
 func depOutputInInputs(depOutputs []string, inputSet map[string]struct{}) bool {
 	for _, o := range depOutputs {
 		if o == "" {
@@ -296,8 +280,6 @@ func depOutputInInputs(depOutputs []string, inputSet map[string]struct{}) bool {
 	return false
 }
 
-// depOutputInCmd reports whether any of a dep's outputs is named in the consuming
-// node's command text. Catches deps consumed via command line without an input entry.
 func depOutputInCmd(depOutputs []string, cmdText string) bool {
 	for _, o := range depOutputs {
 		if o == "" {

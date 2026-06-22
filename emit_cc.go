@@ -15,30 +15,22 @@ type ModuleCCInputs struct {
 
 	InclArgs InclArgMemo
 
-	// CCBlocks: module-stable CC command-line spans, built once and shared by every
-	// per-source copy. nil: EmitCC composes locally (tests).
 	CCBlocks *CcModuleArgBlocks
 
 	PeerAddInclGlobal []VFS
-	// ProtoInclude is the ordered _PROTO__INCLUDE set for proto compiles. Distinct
-	// from PeerAddInclGlobal, which feeds C++.
+
 	ProtoInclude []VFS
-	// ProtoIncludePeers is the peers-only _PROTO__INCLUDE set; the own namespace
-	// rides the `-I=$(S)/cppOutRoot` arm.
+
 	ProtoIncludePeers []VFS
 	CXXFlags          []ARG
 	COnlyFlags        []ARG
-	// ClangWarnings is the autoincluded CLANG_WARNINGS, emitted after the -I block.
+
 	ClangWarnings []ARG
 
 	ExtraDepRefs []NodeRef
 
-	// ScanCfg is the sealed scan config every walkClosure uses; builders that
-	// change the resolve-relevant addincl set reseal it.
 	ScanCfg ScanContext
 
-	// SrcDirs is the cumulative SRCDIR search path; index 0 is the module dir,
-	// searched in reverse. Output naming comes from the resolved source VFS.
 	SrcDirs []VFS
 
 	FS FS
@@ -78,8 +70,6 @@ type ModuleCCInputs struct {
 
 	ForceCxx bool
 
-	// NoOptimize reflects NO_OPTIMIZE(): when set, the compile C-flag vector's
-	// optimize token (-O3) is reassigned to -O0.
 	NoOptimize bool
 
 	ModuleTag STR
@@ -92,8 +82,6 @@ type ModuleCCInputs struct {
 
 	BisonGenExt string
 
-	// TC is the module's tool-invocation paths from the PEERDIR resource-global
-	// closure, so emitters take their tools from the peer toolchain, not ambient flags.
 	TC ModuleToolchain
 }
 
@@ -130,11 +118,9 @@ func emitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 
 	blocks := in.CCBlocks
 
-	// All per-node STR tokens ride ONE arena block (sliced sub-chunks).
 	tok := na.strList((inVFS).str(), argDashC.str(), argDashO.str(), (outVFS).str())
 	inChunk := tok[0:1:1]
 
-	// Chunk-count ceiling: wrapcc(3) + fixed(5) + per-source(1) + cPost(1) + in(1).
 	const ccCmdArgsMax = 11
 
 	chunks := na.chunks.alloc(ccCmdArgsMax)
@@ -177,11 +163,8 @@ func emitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 
 	env := hostP.toolEnv()
 
-	// Inputs are chunks — the include closure is referenced, never copied. When the
-	// wrapper is active the python resource joins the deps.
 	wrap := len(instance.Platform.WrapccHead) > 0
 
-	// IncludeInputs is the full input window (root included) — see walkClosure.
 	var allInputs InputChunks
 
 	if wrap {
@@ -214,7 +197,6 @@ func emitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 	}
 
 	if len(in.ExtraDepRefs) > 0 {
-		// Every caller passes a fresh ExtraDepRefs, never appended-to after — share it.
 		node.DepRefs = in.ExtraDepRefs
 	}
 
@@ -224,8 +206,6 @@ func emitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, suffix string) (out, input VFS) {
 	input = srcVFS
 
-	// Compare against the canonical join: SRCS(../foo.cpp) yields a normalised
-	// srcVFS.Rel() the bare concat would not match.
 	canonMatches := func() bool {
 		if srcRel != "" && pathIsClean(srcRel) {
 			rel, dir := srcVFS.rel(), instance.Path.rel()
@@ -244,8 +224,6 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 		return out, input
 	}
 
-	// A build-rooted SRCS spelling (${BINDIR}/x.cpp) re-feeds a generated in-module
-	// source: the object is $(B)/<rel>.o, keyed off the resolved build path.
 	if srcVFS.isBuild() && vfsHasPrefix(srcRel) {
 		rel := srcVFS.rel()
 
@@ -254,9 +232,6 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 		}
 	}
 
-	// A build-generated source outside the module dir: rebase under the module
-	// BINDIR, mapping each `..` into `__`. The switch below would wrongly bury the
-	// full module-rooted srcRel under `_/`.
 	if srcVFS.isBuild() && !in.FlatOutput {
 		rel, dir := srcVFS.rel(), instance.Path.rel()
 
@@ -267,9 +242,6 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 		}
 	}
 
-	// An explicit-dot SRCS token reaches this switch with the raw `./` prefix; strip
-	// redundant `.` segments before localizing under `_/<dir>`. cleanRel keeps a
-	// leading `..` intact.
 	srcRel = cleanRel(srcRel)
 
 	var outRel string
@@ -288,8 +260,6 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	return build(outRel), input
 }
 
-// composeSrcDirOutputRel rebases the resolved source path under the module's build
-// dir, mapping any `..` ascent into `__` segments.
 func composeSrcDirOutputRel(instancePath, target string) string {
 	rel, err := filepath.Rel(instancePath, target)
 
@@ -322,11 +292,7 @@ func composeSrcDirOutputRel(instancePath, target string) string {
 }
 
 func normalizeDotDotSegments(rel string) string {
-	// No ".." anywhere (common case): only the "_/" prefix concat remains.
 	if !strings.Contains(rel, "..") {
-		// A subdir source's object is localized under "_/" unless its dir starts
-		// with "__" (the form a ".." ascent takes after its .. -> __ transform):
-		// joined to BINDIR with no "_/".
 		if strings.HasPrefix(rel, "__") {
 			return rel
 		}
@@ -355,7 +321,7 @@ func isCxxSource(srcRel string) bool {
 	return strings.HasSuffix(srcRel, ".cpp") ||
 		strings.HasSuffix(srcRel, ".cc") ||
 		strings.HasSuffix(srcRel, ".cxx") ||
-		// Uppercase .C compiles as C++.
+
 		strings.HasSuffix(srcRel, ".C")
 }
 
@@ -390,7 +356,6 @@ func appendCxxStdAndOwn(cmdArgs []STR, isCxx bool, noCompilerWarnings bool, inje
 }
 
 func composePeerExtras(in ModuleCCInputs, isCxx bool) []ARG {
-	// The result is read-only, so return the shared flag slice directly.
 	if isCxx {
 		return in.PeerCXXFlagsGlobal
 	}
@@ -442,13 +407,6 @@ func appendCompileFlagPipeline(cmdArgs []STR, bundle CompileFlagBundle, warningB
 	return appendArgStr(cmdArgs, debugPrefixMapFlags, xclangDebugCompilationDir, bundle.CFlags, warningBundle, defineBundle, preNoLibcExtras, bundle.NoLibcBlock, catboost, moduleScopeCFlags, bundle.NoLibcBlock)
 }
 
-// ccModuleArgBlocks are the module-stable spans of a CC command line, built once
-// and referenced as chunks by every CC node:
-//
-//	cHead/cxxHead: [compiler]
-//	common:        ccIncludesPrefix + the -I block + the compile flag pipeline
-//	cTail/cxxTail: the variant span after the pipeline + the macro tail
-//	cPost:         the C-only own extras (after per-source flags)
 type CcModuleArgBlocks struct {
 	cHead   []STR
 	cxxHead []STR
@@ -458,8 +416,6 @@ type CcModuleArgBlocks struct {
 	cPost   []STR
 }
 
-// suppressOptimize returns cf with the optimize token -O3 reassigned to -O0.
-// Vectors with no optimize token are returned unchanged.
 func suppressOptimize(cf []ARG) []ARG {
 	for i, a := range cf {
 		if a == argO3 {
@@ -485,7 +441,6 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *
 	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(*in, p)
 	catboost := catboostOpenSourceDefineFor(p)
 
-	// Sum the fixed slices appended below — over-estimate beats a realloc.
 	commonCap := 2 +
 		len(ccIncludesPrefix) + len(in.AddIncl) + len(in.PeerAddInclGlobal) +
 		len(debugPrefixMapFlags) + len(xclangDebugCompilationDir) +
@@ -506,12 +461,8 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *
 	common = appendArgStr(common, in.ClangWarnings)
 	common = appendCompileFlagPipeline(common, bundle, warningBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboost)
 
-	// C variant: peer C extras follow the pipeline; own C extras trail per-source
-	// flags (cPost).
 	cTail := na.argStrList(in.PeerCOnlyFlagsGlobal, builtinMacroDateTime, macroPrefixMapFlags)
 
-	// C++ variant: std + warning bundle + own extras, the global flag buckets around
-	// the catboost define, then the shared tail.
 	cxxOwnExtras := in.CXXFlags
 
 	if len(p.CXXFlags) > 0 {
@@ -540,15 +491,9 @@ func appendAddIncl(cmdArgs []STR, addIncl []VFS, memo InclArgMemo) []STR {
 	return cmdArgs
 }
 
-// inclArgMemo caches the "-I<path>" flag per addincl VFS, shared run-wide. The
-// backing DenseMap is owned by genCtx; inclArgMemo holds a pointer, staying
-// copyable by value.
 type InclArgMemo struct {
 	m *DenseMap[VFS, STR]
 }
-
-// newInclArgMemo builds a standalone memo with its own backing store, for tests
-// that emit CC/AS nodes without a genCtx.
 
 func (m InclArgMemo) arg(path VFS) STR {
 	if a, ok := m.m.get(path); ok {
@@ -568,10 +513,6 @@ func emitLibraryCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src
 
 	in.ExtraDepRefs = resolveCodegenDepRefs(ctx, instance, in.IncludeInputs)
 
-	// A handwritten source #including a Cython-generated header from the same module
-	// rides the header's induced "pyx" closure and the CY node's main output as bare
-	// inputs. No-op unless the module has a CYTHON_C_H / _API_H header the closure
-	// reaches; deps resolve over the un-augmented closure, so ExtraDepRefs are stable.
 	if len(d.cythonCpp) > 0 {
 		in.IncludeInputs = cythonCompileInducedInputs(ctx, instance, in.IncludeInputs)
 	}

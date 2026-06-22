@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// TestParseSplitCodegen_KeywordsAnywhere pins that tool and prefix are the first
-// two NON-keyword tokens, so OUT_NUM / OUTPUT_INCLUDES sections may precede them.
 func TestParseSplitCodegen_KeywordsAnywhere(t *testing.T) {
 	args := STRS("OUT_NUM", "30", "tools/codegen", "factors_gen", "NTop", "OUTPUT_INCLUDES", "a.h", "b.h")
 	stmt := parseSplitCodegen(args, 1)
@@ -32,7 +30,6 @@ func TestParseSplitCodegen_KeywordsAnywhere(t *testing.T) {
 	}
 }
 
-// TestParseSplitCodegen_DefaultOutNum: no OUT_NUM keyword → default 25.
 func TestParseSplitCodegen_DefaultOutNum(t *testing.T) {
 	stmt := parseSplitCodegen(STRS("tools/codegen", "factors_gen", "NTop"), 1)
 
@@ -41,8 +38,6 @@ func TestParseSplitCodegen_DefaultOutNum(t *testing.T) {
 	}
 }
 
-// TestGen_SplitCodegenGeneratedClosure pins that prefix.0.cpp and prefix.in ride
-// the generated closure, never prefix.h on a generated cpp part compilation.
 func TestGen_SplitCodegenGeneratedClosure(t *testing.T) {
 	files := map[string]string{}
 
@@ -73,7 +68,6 @@ END()
 	inputIn := "$(S)/lib/factors_gen.in"
 	genHeader := "$(B)/lib/factors_gen.h"
 
-	// Closure carries prefix.0.cpp + prefix.in, never the generated header.
 	for _, ccOut := range []string{
 		"$(B)/lib/factors_gen.1.cpp.o",
 		"$(B)/lib/factors_gen.cpp.o",
@@ -93,7 +87,6 @@ END()
 		}
 	}
 
-	// A source reaching the generated header inherits prefix.0.cpp + prefix.in.
 	fn := mustNodeByOutput(t, g, "$(B)/lib/factor_names.cpp.o")
 
 	if !nodeHasInput(fn, part0) {
@@ -105,10 +98,6 @@ END()
 	}
 }
 
-// TestGen_SplitCodegenProducer pins SPLIT_CODEGEN as a producer (kv p=SC): one SC
-// node outputs the numbered .cpp parts plus prefix.cpp + prefix.h, depends on the
-// codegen tool, and feeds the generated sources back so their CC compiles carry
-// the producer dep.
 func TestGen_SplitCodegenProducer(t *testing.T) {
 	files := map[string]string{}
 
@@ -148,7 +137,6 @@ END()
 		t.Fatalf("no SPLIT_CODEGEN producer (kv p=SC) node in graph")
 	}
 
-	// Outputs: numbered parts + factors_gen.cpp + factors_gen.h.
 	wantOuts := []string{
 		"$(B)/lib/factors_gen.0.cpp",
 		"$(B)/lib/factors_gen.24.cpp",
@@ -176,12 +164,10 @@ END()
 		t.Fatalf("SC node output count = %d, want 27 (25 parts + cpp + h)", got)
 	}
 
-	// kv pc=yellow.
 	if sc.KV.PC != pcYellow {
 		t.Fatalf("SC node pc = %v, want yellow", sc.KV.PC)
 	}
 
-	// Inputs: the tool binary + the .in source.
 	if !nodeHasInput(sc, "$(S)/lib/factors_gen.in") {
 		t.Fatalf("SC node inputs missing $(S)/lib/factors_gen.in: %v", sc.flatInputs())
 	}
@@ -192,12 +178,10 @@ END()
 		t.Fatalf("SC node inputs missing the codegen tool binary: %v", sc.flatInputs())
 	}
 
-	// The tool is a foreign (tool) dep.
 	if !slices.Contains(graphForeignDeps(g, sc), tool.UID) {
 		t.Fatalf("SC node foreign deps missing tool LD uid %q: %v", tool.UID, graphForeignDeps(g, sc))
 	}
 
-	// Every generated cpp compiles to a CC node that depends on the SC producer.
 	for _, ccOut := range []string{
 		"$(B)/lib/factors_gen.cpp.o",
 		"$(B)/lib/factors_gen.0.cpp.o",

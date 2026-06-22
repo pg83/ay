@@ -50,8 +50,7 @@ func cmdDumpDiff(_ GlobalFlags, args []string) int {
 		case "--by-kind":
 			setMode("by-kind")
 		case "--roots":
-			// Modifier, not a standalone mode: alone it lists roots; with --by-token it
-			// restricts token deltas to roots.
+
 			wantRoots = true
 		case "--group":
 			i++
@@ -250,7 +249,6 @@ func diffByField(leftPath, rightPath string, bw *bufio.Writer) {
 	combo := map[string]int{}
 	both := 0
 	streamJSONL(leftPath, func(n map[string]any) {
-		// Exact-counterpart producers have zero delta: count in the denominator only.
 		if canc.cancelLeft(n) {
 			both++
 
@@ -360,7 +358,6 @@ func diffByToken(leftPath, rightPath string, bw *bufio.Writer, opts byTokenOpts)
 		rootSet, _ = computeRootOutputs(leftPath, rightPath)
 	}
 
-	// group -> field -> token -> #nodes; key "" holds the ungrouped accounting.
 	our := map[string]map[string]map[string]int{}
 	ref := map[string]map[string]map[string]int{}
 
@@ -377,8 +374,6 @@ func diffByToken(leftPath, rightPath string, bw *bufio.Writer, opts byTokenOpts)
 	groups := []string{}
 	paired := 0
 	streamJSONL(leftPath, func(n map[string]any) {
-		// Exact-counterpart producers have zero token delta: count in the denominator
-		// (subject to the roots filter) but emit no tokens.
 		if canc.cancelLeft(n) {
 			if opts.rootsOnly && !nodeProducesRoot(n, rootSet) {
 				return
@@ -471,8 +466,6 @@ func byTokenGroupKey(n map[string]any, dims []string) string {
 	return strings.Join(parts, " ")
 }
 
-// nodePrimaryDir is the top dir of the node's lexically-first output — a stable
-// bucket regardless of output emission order.
 func nodePrimaryDir(n map[string]any) string {
 	outs := toStrings(n["outputs"])
 
@@ -627,7 +620,6 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 			kind = "(none)"
 		}
 
-		// Exact-counterpart producers have zero delta: count in the per-kind total only.
 		if canc.cancelLeft(n) {
 			total[kind]++
 
@@ -707,8 +699,6 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 	}
 }
 
-// computeRootOutputs returns the leaf-most divergent outputs (producer differs but
-// every divergent dependency child matches) and the total divergent count.
 func computeRootOutputs(leftPath, rightPath string) (map[string]bool, int) {
 	canc := newDumpDiffCanceler(leftPath, rightPath, dumpDiffSelfUIDKey)
 	rightExact := map[string]string{}
@@ -729,7 +719,6 @@ func computeRootOutputs(leftPath, rightPath string) (map[string]bool, int) {
 	uidToDivergentOuts := map[string]map[string]bool{}
 	uidToDeps := map[string][]string{}
 	streamJSONL(leftPath, func(n map[string]any) {
-		// Exact full-content counterpart implies equal self_uid: not divergent, not a root.
 		if canc.cancelLeft(n) {
 			return
 		}
@@ -833,9 +822,6 @@ func diffPair(leftPath, rightPath, output string, bw *bufio.Writer) {
 	}
 }
 
-// writePairCmds prints the flat cmd_args multiset delta, falling back to a structured
-// per-cmd comparison when that multiset matches but the cmds field still differs, so
-// structural differences are not hidden behind an empty token diff.
 func writePairCmds(bw *bufio.Writer, left, right map[string]any) {
 	lTok, rTok := cmdArgTokens(left), cmdArgTokens(right)
 	onlyL, onlyR := map[string]int{}, map[string]int{}
@@ -932,8 +918,6 @@ func findNodePairByOutput(leftPath, rightPath, want string) (map[string]any, map
 		return leftNodes[0], nil
 	}
 
-	// Cancel exact full-node counterparts first: otherwise the coarse-key search
-	// cross-pairs our mode-A node against ref's mode-B and reports a spurious delta.
 	residLeft, residRight, eqLeft, eqRight := stripContentEqualPairs(leftNodes, rightNodes)
 
 	if len(residLeft) == 0 && len(residRight) == 0 {
@@ -971,8 +955,6 @@ func findNodePairByOutput(leftPath, rightPath, want string) (map[string]any, map
 	return leftNodes[0], rightNodes[0]
 }
 
-// stripContentEqualPairs greedily cancels each left node against an unused
-// content-equal right node, returning the residual producers plus the matched pairs.
 func stripContentEqualPairs(leftNodes, rightNodes []map[string]any) (residLeft, residRight, eqLeft, eqRight []map[string]any) {
 	usedRight := make([]bool, len(rightNodes))
 
@@ -1041,13 +1023,6 @@ func dumpDiffNodeContentEqual(left, right map[string]any) bool {
 	return nodeFieldHashes(left) == nodeFieldHashes(right)
 }
 
-// dumpDiffCanceler extends the exact-counterpart cancellation to the streaming
-// aggregate reports: without it the "first record wins per (output, match-key)"
-// pairing cross-pairs our mode-A producer against ref's mode-B and reports a stale delta.
-//
-// The identity is supplied as a key function so each report cancels on what it
-// measures: field/token/kind on the content hash, roots on self_uid. budgetLeft/Right
-// are consumed independently in file order, so residuals pair residual-to-residual.
 type dumpDiffCanceler struct {
 	key         func(map[string]any) string
 	budgetLeft  map[string]int
@@ -1107,7 +1082,6 @@ func dumpDiffTakeBudget(m map[string]int, k string) bool {
 	return false
 }
 
-// dumpDiffContentKey: the node's content-field hash, identity for field/token/kind.
 func dumpDiffContentKey(n map[string]any) string {
 	h := nodeFieldHashes(n)
 	var b [len(h) * 8]byte
@@ -1119,7 +1093,6 @@ func dumpDiffContentKey(n map[string]any) string {
 	return string(b[:])
 }
 
-// dumpDiffSelfUIDKey: normalized self_uid, identity for the roots report.
 func dumpDiffSelfUIDKey(n map[string]any) string {
 	return getString(n, "self_uid")
 }
@@ -1156,8 +1129,6 @@ func dumpDiffNodeMatchKey(n map[string]any, includeHost bool) string {
 		}
 	}
 
-	// PIC contour: a module reached on both PIC and non-PIC platforms emits two nodes
-	// at the same output path. Without this axis the variants share a key and cross-match.
 	if dumpDiffNodePicVariant(n) {
 		key += "\x00P"
 	}
@@ -1165,8 +1136,6 @@ func dumpDiffNodeMatchKey(n map[string]any, includeHost bool) string {
 	return key
 }
 
-// dumpDiffNodePicVariant reports whether any output or member object token (inputs /
-// cmd args) is a `.pic.o` object.
 func dumpDiffNodePicVariant(n map[string]any) bool {
 	for _, o := range toStrings(n["outputs"]) {
 		if strings.HasSuffix(o, ".pic.o") {

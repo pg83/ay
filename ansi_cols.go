@@ -7,8 +7,6 @@ const (
 	ansiRST = ansiESC + "[0m"
 )
 
-// trueColor wraps s in a 24-bit foreground SGR sequence — theme-independent
-// hues vs the 16-color palette in color().
 func trueColor(r, g, b uint8, s string) string {
 	return ansiESC + "[38;2;" +
 		strconv.Itoa(int(r)) + ";" +

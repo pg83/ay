@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// TestDescProtoOutputRel_SRCDIRRebasesDescUnderModule: when a .proto SRC resolves
-// through SRCDIR outside the declaring module, the `.desc` output roots under the
-// module build dir with `..` ascent mapped to `__`; an in-module source keeps its path.
 func TestDescProtoOutputRel_SRCDIRRebasesDescUnderModule(t *testing.T) {
 	cases := []struct {
 		name, instance, srcRel, resolved, want string
@@ -43,10 +40,6 @@ func TestDescProtoOutputRel_SRCDIRRebasesDescUnderModule(t *testing.T) {
 	}
 }
 
-// TestEmitDescProto_SRCDIRBuiltinDescRoot: a PROTO_LIBRARY whose SRCS resolve
-// through SRCDIR outside the module emits `.desc` under the module build root (with
-// `__` ascent), keeps `.rawproto` at the physical source root, and feeds the rebased
-// `.desc` to its `.self.protodesc` merge.
 func TestEmitDescProto_SRCDIRBuiltinDescRoot(t *testing.T) {
 	const moduleDir = "contrib/libs/protobuf/builtin_proto/protos_from_protobuf"
 	const srcDir = "contrib/libs/protobuf/src"
@@ -63,6 +56,7 @@ func TestEmitDescProto_SRCDIRBuiltinDescRoot(t *testing.T) {
 	g := testGen(newMemFS(files), descDir)
 
 	outputs := make(map[string]*Node, len(g.Graph))
+
 	for _, n := range g.Graph {
 		for _, o := range n.Outputs {
 			outputs[o.string()] = n
@@ -77,36 +71,39 @@ func TestEmitDescProto_SRCDIRBuiltinDescRoot(t *testing.T) {
 	if outputs[rebasedDesc] == nil {
 		t.Errorf("graph missing module-rooted .desc output %q", rebasedDesc)
 	}
+
 	if outputs[physDesc] != nil {
 		t.Errorf("graph still emits physical-source-root .desc output %q", physDesc)
 	}
+
 	if outputs[rawOut] == nil {
 		t.Errorf("graph missing physical-source-root .rawproto output %q", rawOut)
 	}
 
 	prj := realPrjName(moduleDir)
 	merge := outputs["$(B)/"+moduleDir+"/"+prj+".self.protodesc"]
+
 	if merge == nil {
 		t.Fatalf("no .self.protodesc merge node")
 	}
+
 	var mergeCmd string
+
 	for _, c := range merge.Cmds {
 		for _, a := range c.CmdArgs.flat() {
 			mergeCmd += a.string() + " "
 		}
 	}
+
 	if !strings.Contains(mergeCmd, moduleDir+"/__/__/src/google/protobuf/any.proto.desc") {
 		t.Errorf(".self.protodesc merge cmd does not consume rebased .desc\ncmd: %s", mergeCmd)
 	}
+
 	if strings.Contains(mergeCmd, srcDir+"/google/protobuf/any.proto.desc") {
 		t.Errorf(".self.protodesc merge cmd still consumes physical-source-root .desc\ncmd: %s", mergeCmd)
 	}
 }
 
-// TestEmitProtoDescriptions_PDProducerShape: a PROTO_DESCRIPTIONS peering a
-// PROTO_LIBRARY emits one PD producer per .proto SRC writing <proto>.desc and the
-// hashed <proto>.<md5(MODDIR)>.rawproto, plus the .self.protodesc/.protosrc and
-// .protodesc/.tar merge outputs.
 func TestEmitProtoDescriptions_PDProducerShape(t *testing.T) {
 	const protoDir = "myproto"
 	const descDir = "desc"
@@ -122,6 +119,7 @@ func TestEmitProtoDescriptions_PDProducerShape(t *testing.T) {
 	g := testGen(newMemFS(files), descDir)
 
 	outputs := make(map[string]*Node, len(g.Graph))
+
 	for _, n := range g.Graph {
 		for _, o := range n.Outputs {
 			outputs[o.string()] = n
@@ -146,6 +144,7 @@ func TestEmitProtoDescriptions_PDProducerShape(t *testing.T) {
 	}
 
 	pd := outputs[descOut]
+
 	if pd == nil {
 		t.Fatalf("no PD producer node for %q", descOut)
 	}
@@ -153,9 +152,11 @@ func TestEmitProtoDescriptions_PDProducerShape(t *testing.T) {
 	if pd.KV.P != pkPD {
 		t.Errorf("PD producer kv.p = %v, want PD", pd.KV.P)
 	}
+
 	if pd.KV.PC != pcLightCyan {
 		t.Errorf("PD producer kv.pc = %v, want light-cyan", pd.KV.PC)
 	}
+
 	if pd.TargetProperties.ModuleTag != strDescProtoTag {
 		t.Errorf("PD producer module_tag = %q, want desc_proto", pd.TargetProperties.ModuleTag.string())
 	}
@@ -164,18 +165,20 @@ func TestEmitProtoDescriptions_PDProducerShape(t *testing.T) {
 		t.Errorf("PD producer outputs = %v, want [%s %s]", pd.Outputs, descOut, rawOut)
 	}
 
-	// protoc rides ForeignDepRefs, no separate DepRefs.
 	if len(pd.DepRefs) != 0 {
 		t.Errorf("PD producer DepRefs = %d, want 0 (protoc rides foreign_deps)", len(pd.DepRefs))
 	}
+
 	if len(pd.ForeignDepRefs) != 1 {
 		t.Errorf("PD producer ForeignDepRefs = %d, want 1 (protoc)", len(pd.ForeignDepRefs))
 	}
 
 	ins := map[string]bool{}
+
 	for _, in := range pd.flatInputs() {
 		ins[in.string()] = true
 	}
+
 	for _, want := range []string{
 		"$(S)/" + protoDir + "/foo.proto",
 		"$(S)/build/scripts/desc_rawproto_wrapper.py",
@@ -184,22 +187,28 @@ func TestEmitProtoDescriptions_PDProducerShape(t *testing.T) {
 			t.Errorf("PD producer inputs missing %q (have %v)", want, pd.flatInputs())
 		}
 	}
+
 	var hasProtoc bool
+
 	for in := range ins {
 		if strings.HasSuffix(in, "/protoc") {
 			hasProtoc = true
 		}
 	}
+
 	if !hasProtoc {
 		t.Errorf("PD producer inputs missing protoc binary (have %v)", pd.flatInputs())
 	}
 
 	flat := pd.Cmds[0].CmdArgs.flat()
 	joined := make([]string, len(flat))
+
 	for i, a := range flat {
 		joined[i] = a.string()
 	}
+
 	cmd := strings.Join(joined, " ")
+
 	for _, want := range []string{
 		"build/scripts/desc_rawproto_wrapper.py",
 		"--desc-output",
@@ -213,10 +222,6 @@ func TestEmitProtoDescriptions_PDProducerShape(t *testing.T) {
 	}
 }
 
-// TestEmitDescProto_MergeNodeFlattensProducerSourceInputs: the DESC_PROTO merge
-// node carries as direct inputs the per-proto producer source/script closure (the
-// wrapper, every source proto, and the parsed import closure of non-source protos)
-// alongside the generated .desc/.rawproto and its own merge/collect scripts.
 func TestEmitDescProto_MergeNodeFlattensProducerSourceInputs(t *testing.T) {
 	const moduleDir = "contrib/libs/protobuf/builtin_proto/protos_from_protobuf"
 	const srcDir = "contrib/libs/protobuf/src"
@@ -229,8 +234,7 @@ func TestEmitDescProto_MergeNodeFlattensProducerSourceInputs(t *testing.T) {
 	files["build/scripts/desc_rawproto_wrapper.py"] = "print('wrap')\n"
 	files["build/scripts/merge_files.py"] = "print('merge')\n"
 	files["build/scripts/collect_rawproto.py"] = "print('collect')\n"
-	// type.proto (source) imports any.proto (import-only, not a source); any.proto
-	// must still reach the merge node as a direct input.
+
 	files[moduleDir+"/ya.make"] = "PROTO_LIBRARY()\nDISABLE(NEED_GOOGLE_PROTO_PEERDIRS)\nPROTO_NAMESPACE(GLOBAL " + srcDir + ")\nSRCDIR(" + srcDir + ")\nSRCS(google/protobuf/type.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n"
 	files[srcDir+"/google/protobuf/any.proto"] = "syntax = \"proto3\";\npackage google.protobuf;\nmessage Any { int32 x = 1; }\n"
 	files[srcDir+"/google/protobuf/type.proto"] = "syntax = \"proto3\";\npackage google.protobuf;\nimport \"google/protobuf/any.proto\";\nmessage Type { Any a = 1; }\n"
@@ -241,34 +245,36 @@ func TestEmitDescProto_MergeNodeFlattensProducerSourceInputs(t *testing.T) {
 	prj := realPrjName(moduleDir)
 	merge := mustNodeByAnyOutput(t, g, "$(B)/"+moduleDir+"/"+prj+".self.protodesc")
 
-	// The same node also produces .protosrc (one merge node, two outputs).
 	var hasProtosrc bool
+
 	for _, o := range merge.Outputs {
 		if o.string() == "$(B)/"+moduleDir+"/"+prj+".protosrc" {
 			hasProtosrc = true
 		}
 	}
+
 	if !hasProtosrc {
 		t.Fatalf("merge node does not also emit .protosrc (outputs %v)", merge.Outputs)
 	}
 
 	ins := map[string]bool{}
+
 	for _, in := range merge.flatInputs() {
 		ins[in.string()] = true
 	}
 
 	hash := moddirHash(moduleDir)
 	want := []string{
-		// producer source/script closure flattened onto the merge node
 		"$(S)/build/scripts/desc_rawproto_wrapper.py",
 		"$(S)/" + srcDir + "/google/protobuf/type.proto",
 		"$(S)/" + srcDir + "/google/protobuf/any.proto",
 		"$(B)/" + moduleDir + "/__/__/src/google/protobuf/type.proto.desc",
 		"$(B)/" + srcDir + "/google/protobuf/type.proto." + hash + ".rawproto",
-		// the merge node's own scripts
+
 		"$(S)/build/scripts/merge_files.py",
 		"$(S)/build/scripts/collect_rawproto.py",
 	}
+
 	for _, w := range want {
 		if !ins[w] {
 			t.Errorf("merge node inputs missing %q\nhave: %v", w, merge.flatInputs())
@@ -276,10 +282,6 @@ func TestEmitDescProto_MergeNodeFlattensProducerSourceInputs(t *testing.T) {
 	}
 }
 
-// TestEmitDescProto_ProtoNamespaceNestedSourceDescOutputAndIncludes: a
-// PROTO_NAMESPACE(yt) library with a .proto src in a subdirectory writes its
-// descriptor under the module root with the `_/` output-name prefix and renders the
-// full _PROTO__INCLUDE span; the .rawproto keeps its natural path and md5 stem.
 func TestEmitDescProto_ProtoNamespaceNestedSourceDescOutputAndIncludes(t *testing.T) {
 	const clientMod = "yt/yt_proto/yt/client"
 	const coreMod = "yt/yt_proto/yt/core"
@@ -309,6 +311,7 @@ func TestEmitDescProto_ProtoNamespaceNestedSourceDescOutputAndIncludes(t *testin
 	if mustNodeByAnyOutput(t, g, rawOut) != pd {
 		t.Errorf("rawproto %q not produced by the same node as desc", rawOut)
 	}
+
 	for _, n := range g.Graph {
 		for _, o := range n.Outputs {
 			if o.string() == "$(B)/"+clientMod+"/hive/proto/cluster.proto.desc" {
@@ -319,7 +322,6 @@ func TestEmitDescProto_ProtoNamespaceNestedSourceDescOutputAndIncludes(t *testin
 
 	args := pd.Cmds[0].CmdArgs.flat()
 
-	// Exact ordered _PROTO__INCLUDE span.
 	wantSpan := []string{
 		"-I=./yt", "-I=$(S)/yt",
 		"-I=$(B)", "-I=$(S)", "-I=$(S)/yt",
@@ -328,17 +330,23 @@ func TestEmitDescProto_ProtoNamespaceNestedSourceDescOutputAndIncludes(t *testin
 		"--include_source_info",
 	}
 	flat := make([]string, len(args))
+
 	for i, a := range args {
 		flat[i] = a.string()
 	}
+
 	start := indexOfArg(args, "-I=./yt")
+
 	if start < 0 {
 		t.Fatalf("descriptor cmd has no -I=./yt: %v", flat)
 	}
+
 	got := flat[start:]
+
 	if len(got) != len(wantSpan) {
 		t.Fatalf("descriptor include span len = %d, want %d\n got=%v\nwant=%v", len(got), len(wantSpan), got, wantSpan)
 	}
+
 	for i := range wantSpan {
 		if got[i] != wantSpan[i] {
 			t.Fatalf("descriptor include span[%d] = %q, want %q\n got=%v\nwant=%v", i, got[i], wantSpan[i], got, wantSpan)
@@ -346,10 +354,6 @@ func TestEmitDescProto_ProtoNamespaceNestedSourceDescOutputAndIncludes(t *testin
 	}
 }
 
-// TestEmitProtoDescriptions_CarriesPythonToolchainSbom: under the internal SBOM
-// contour a PROTO_DESCRIPTIONS target (unlike DESC_PROTO) materializes the python
-// toolchain peer's global toolchain.component.sbom as a direct input exactly once;
-// DESC_PROTO nodes must stay free of it.
 func TestEmitProtoDescriptions_CarriesPythonToolchainSbom(t *testing.T) {
 	const protoDir = "myproto"
 	const descDir = "desc"
@@ -363,8 +367,6 @@ func TestEmitProtoDescriptions_CarriesPythonToolchainSbom(t *testing.T) {
 	files[protoDir+"/foo.proto"] = "syntax = \"proto3\";\npackage foo;\nmessage Foo { int32 x = 1; }\n"
 	files[descDir+"/ya.make"] = "PROTO_DESCRIPTIONS()\nPEERDIR(" + protoDir + ")\nEND()\n"
 
-	// internal SBOM contour + the python3 toolchain peer whose global SBOM every
-	// bare-unit carries.
 	files["build/internal/conf/sbom.conf"] = "SBOM_GENERATION_ALLOWED=yes\n"
 	files["build/platform/python/ymake_python3/ya.make"] = "RESOURCES_LIBRARY()\nTOOLCHAIN(python3)\nVERSION(3.12.6)\nDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(YMAKE_PYTHON3 python.json)\nEND()\n"
 	files["build/platform/python/ymake_python3/python.json"] = `{"by_platform":{"linux-x86_64":{"uri":"sbr:test"}}}`
@@ -375,40 +377,43 @@ func TestEmitProtoDescriptions_CarriesPythonToolchainSbom(t *testing.T) {
 	pd := mustNodeByAnyOutput(t, g, "$(B)/"+descDir+"/desc.protodesc")
 
 	n := 0
+
 	for _, in := range pd.flatInputs() {
 		if in.string() == sbomInput {
 			n++
 		}
 	}
+
 	if n != 1 {
 		t.Errorf("PROTO_DESCRIPTIONS node carries python toolchain SBOM %d times, want 1\ninputs: %v", n, pd.flatInputs())
 	}
 
-	// The same node also produces .tar (one node, two outputs).
 	var hasTar bool
+
 	for _, o := range pd.Outputs {
 		if o.string() == "$(B)/"+descDir+"/desc.tar" {
 			hasTar = true
 		}
 	}
+
 	if !hasTar {
 		t.Fatalf("PD node does not also emit desc.tar (outputs %v)", pd.Outputs)
 	}
 
-	// DESC_PROTO nodes must NOT carry it.
 	descProducer := mustNodeByAnyOutput(t, g, "$(B)/"+protoDir+"/foo.proto.desc")
+
 	if nodeHasInput(descProducer, sbomInput) {
 		t.Errorf("DESC_PROTO producer must not carry python toolchain SBOM\ninputs: %v", descProducer.flatInputs())
 	}
+
 	prj := realPrjName(protoDir)
 	selfMerge := mustNodeByAnyOutput(t, g, "$(B)/"+protoDir+"/"+prj+".self.protodesc")
+
 	if nodeHasInput(selfMerge, sbomInput) {
 		t.Errorf(".self.protodesc merge node must not carry python toolchain SBOM\ninputs: %v", selfMerge.flatInputs())
 	}
 }
 
-// TestEmitDescProto_ProtoNamespaceRootLevelSourceNoUnderscore: a root-level (flat)
-// source under PROTO_NAMESPACE(yt) must NOT gain the `_/` output-name segment.
 func TestEmitDescProto_ProtoNamespaceRootLevelSourceNoUnderscore(t *testing.T) {
 	const ormMod = "yt/yt_proto/yt/orm/api"
 	const descDir = "descroot"

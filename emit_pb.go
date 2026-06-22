@@ -134,17 +134,10 @@ func emitPB(
 		foreignDepRefs = append(foreignDepRefs, depRefs(plugin.LDRef)...)
 	}
 
-	// Two plugins can share one tool binary, so the loop lists that LD node twice;
-	// dedup so the "deps" array carries it once while command `inputs` keep the
-	// per-plugin occurrence.
 	foreignDepRefs = dedupRefs(foreignDepRefs)
 
-	// Without these producer refs the build-generated proto producer is unreachable
-	// from the LD root closure and gets DFS-pruned at finalize.
 	deps := append([]NodeRef(nil), extraDepRefs...)
 
-	// A build-generated .proto lives under $(B); protoc runs from there so its
-	// relative includes resolve to the generated tree. Source .protos run from $(S).
 	protocCwd := "$(S)"
 
 	if protoSrcOverride != 0 {
@@ -157,8 +150,7 @@ func emitPB(
 			Cwd: internStr(protocCwd),
 			Env: env}),
 		Env: env,
-		// transitiveProtoImports and producerSourceInputs are shared caller slices:
-		// referenced as chunks, never copied.
+
 		Inputs:           na.inputList(inputs, transitiveProtoImports, producerSourceInputs),
 		Outputs:          outputs,
 		KV:               KV{P: pkPB, PC: pcYellow},
@@ -172,11 +164,6 @@ func emitPB(
 	return emit.emit(node)
 }
 
-// assembleProtoCmdOutputs returns the proto command's output list in
-// $CPP_PROTO_OUTS order: main .pb.h first, then plugins declared before lite
-// headers, the cpp_out group (.pb.cc + lite-header .deps.pb.h), grpc, then the
-// remaining plugins. The buildable subset, in this order, is also the per-proto
-// archive member order.
 func assembleProtoCmdOutputs(protoBase string, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH VFS, extraPlugins []ResolvedCPPProtoPlugin, liteHeaders, grpc bool) []VFS {
 	outputs := []VFS{pbH}
 
@@ -213,9 +200,6 @@ func assembleProtoCmdOutputs(protoBase string, pbH, pbCC, pbDepsH, grpcPbCC, grp
 	return outputs
 }
 
-// pluginOutputsPrecedeCppGroup reports whether a proto plugin's outputs precede
-// the cpp_out group. True only when the plugin was declared before lite headers
-// were turned on; with transitive headers (no .deps.pb.h) plugins always follow.
 func pluginOutputsPrecedeCppGroup(plugin ResolvedCPPProtoPlugin, liteHeaders bool) bool {
 	return liteHeaders && plugin.Spec.DeclaredBeforeLiteHeaders
 }
@@ -289,7 +273,6 @@ func pyProtoAuxInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 		return nil
 	}
 
-	// The window is already deduplicated.
 	return closure
 }
 
@@ -322,10 +305,6 @@ func protoResourceHash(items []string, modulePath, moduleTag string) string {
 	return strings.ToLower(enchex.EncodeToString(sum[:]))[:26]
 }
 
-// pbArgBlocks are the module-stable spans of a protoc command line — everything
-// that does not depend on the individual .proto source (head, the -I/--cpp_out
-// mid, and the grpc/plugin tail that follows the source token). Built once per
-// module proto context, referenced as chunks by every PB node.
 type PbArgBlocks struct {
 	head []STR
 	mid  []STR
@@ -368,11 +347,6 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 		mid = append(mid, internStr("-I=$(S)/"+cppOutRoot))
 	}
 
-	// The FOR-proto GLOBAL ADDINCL set is rendered verbatim in encounter order with
-	// no dedup against the structural prefix; `protoInclude` is the peers-only set
-	// (own namespace rides the structural arm above). A duplicate against that arm
-	// is intentional — a dedup would drop a peer's re-declared own-namespace addincl
-	// at its encounter position.
 	for _, p := range protoInclude {
 		mid = append(mid, internStr("-I="+p.string()))
 	}
@@ -403,8 +377,6 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 			internStr("--"+plugin.Spec.Name+"_out=$(B)/"+cppOutRoot),
 		)
 
-		// EXTRA_OUT_FLAG splits on `,` (empty pieces drop); each survivor becomes its
-		// own `--${Name}_opt=<piece>`.
 		for _, piece := range strings.Split(plugin.Spec.ExtraOutFlag, ",") {
 			if piece == "" {
 				continue

@@ -7,14 +7,9 @@ import (
 	"time"
 )
 
-// perfDartsData holds the benchmark fixtures: autoinclude roots and source-tree
-// directories, as two sections split by a blank line.
-//
 //go:embed perf_darts_data.txt
 var perfDartsData string
 
-// perfDarts benchmarks the autoinclude longest-prefix matcher two ways: the
-// double-array trie (Darts) vs the former ancestor-walk.
 func perfDarts() int {
 	sections := strings.SplitN(strings.TrimRight(perfDartsData, "\n"), "\n\n", 2)
 
@@ -27,7 +22,6 @@ func perfDarts() int {
 	roots := strings.Split(sections[0], "\n")
 	dirs := strings.Split(sections[1], "\n")
 
-	// Darts over "<root>/" keys.
 	keys := make([]string, len(roots))
 
 	for i, r := range roots {
@@ -36,8 +30,6 @@ func perfDarts() int {
 
 	darts := NewDarts(keys)
 
-	// Old matcher: walks ancestors deepest-first, probing the intern table until
-	// a root hits.
 	old := newIntValueMap[int32](len(roots) * 2)
 
 	for i, r := range roots {
@@ -62,7 +54,6 @@ func perfDarts() int {
 		}
 	}
 
-	// Both matchers must agree before timing means anything.
 	mismatch := 0
 
 	for _, d := range dirs {

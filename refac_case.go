@@ -12,8 +12,6 @@ import (
 	"strings"
 )
 
-// stdlibCaseMethods must stay upper-case: stdlib finds them by name through
-// well-known interfaces, and renaming silently detaches the implementation.
 var stdlibCaseMethods = map[string]bool{
 	"String":        true,
 	"Error":         true,
@@ -27,8 +25,6 @@ var stdlibCaseMethods = map[string]bool{
 	"Unwrap":        true,
 }
 
-// predeclaredIdents: a package-level function lowered onto one shadows the
-// builtin package-wide.
 var predeclaredIdents = map[string]bool{
 	"new": true, "make": true, "len": true, "cap": true, "copy": true,
 	"append": true, "delete": true, "clear": true, "close": true,
@@ -44,9 +40,6 @@ var predeclaredIdents = map[string]bool{
 
 var caseErrRe = regexp.MustCompile(`^([^:\s]+\.go):(\d+):(\d+): (?:undefined: (\w+)|\S+ undefined \(.*has no field or method (\w+))`)
 
-// refacCase enforces the naming convention (types upper-case, methods
-// lower-case bar stdlibCaseMethods): it renames declarations via AST positions,
-// then drives every reference off the compiler's error positions to a fixpoint.
 func refacCase(_ GlobalFlags, args []string) int {
 	files := goFilesFromArgs(args)
 
@@ -83,8 +76,6 @@ func refacCase(_ GlobalFlags, args []string) int {
 	return 0
 }
 
-// forbiddenLowerNames returns names a lowered function must not collide with:
-// predeclared idents plus every imported package's base name.
 func forbiddenLowerNames(files []string) map[string]bool {
 	out := make(map[string]bool, len(predeclaredIdents)+32)
 
@@ -165,8 +156,6 @@ func renameCaseDecls(path string, typeRen, methodRen map[string]string, forbidde
 			}
 
 			if d.Recv == nil {
-				// Free functions are lower-case too, via the type map. A lowered
-				// name shadowing a predeclared ident is flagged for manual rename.
 				if forbidden[lower(name)] {
 					fmt.Fprintf(os.Stderr, "refac case: %s: function %s lowers to reserved %q — rename manually\n", path, name, lower(name))
 
@@ -205,9 +194,6 @@ func renameCaseDecls(path string, typeRen, methodRen map[string]string, forbidde
 	throw(os.WriteFile(path, []byte(out), 0o644))
 }
 
-// fixCaseRefsOnce compiles package and tests, flipping the case of every
-// reference reported undefined under the recorded renames. Returns the fix
-// count and whether both compiles ran clean.
 func fixCaseRefsOnce(typeRen, methodRen map[string]string) (int, bool) {
 	build, _ := exec.Command("go", "build", "-gcflags=-e", "./...").CombinedOutput()
 	vet := []byte{}
@@ -243,8 +229,6 @@ func fixCaseRefsOnce(typeRen, methodRen map[string]string) (int, bool) {
 		new_, ok := ren[name]
 
 		if !ok {
-			// Type and method references can surface through either table; try
-			// the other map before giving up.
 			if other, ok2 := methodRen[name]; ok2 {
 				new_ = other
 			} else if other, ok2 := typeRen[name]; ok2 {
@@ -274,7 +258,7 @@ func fixCaseRefsOnce(typeRen, methodRen map[string]string) (int, bool) {
 			off := fx.col - 1
 
 			if off+len(fx.old) > len(l) || l[off:off+len(fx.old)] != fx.old {
-				continue // stale position from an earlier fix on this line
+				continue
 			}
 
 			src[fx.line-1] = l[:off] + fx.new_ + l[off+len(fx.old):]
@@ -287,8 +271,6 @@ func fixCaseRefsOnce(typeRen, methodRen map[string]string) (int, bool) {
 	return total, len(build) == 0 && len(vet) == 0
 }
 
-// lintCaseConvention reports declarations that violate the naming convention,
-// without fixing.
 func lintCaseConvention(path string) bool {
 	fset := gotoken.NewFileSet()
 	src := throw2(os.ReadFile(path))
@@ -354,9 +336,6 @@ func lintCaseConvention(path string) bool {
 	return bad
 }
 
-// isInterfaceWrapper reports whether the body is exactly `return
-// recv.lower(args…)` (or the bare call): the upper-case name exists only for
-// stdlib to find, delegating to the lower-case twin.
 func isInterfaceWrapper(d *ast.FuncDecl) bool {
 	if d.Body == nil || len(d.Body.List) != 1 || d.Recv == nil ||
 		len(d.Recv.List) != 1 || len(d.Recv.List[0].Names) != 1 {

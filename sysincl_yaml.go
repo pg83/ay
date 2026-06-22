@@ -6,17 +6,12 @@ import (
 	"strings"
 )
 
-// parseSysInclYAML is a custom streaming parser over the exact YAML subset the
-// sysincl files use, replacing the generic yaml.v3 decode (which re-allocated a
-// node tree per file per scanner, ~14% of the run's object churn). Anything
-// outside the subset throws. The data buffer is not retained past the call.
 func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 	var (
 		out  []SysIncl
 		rec  SysIncl
 		open bool
 
-		// `header:` awaiting a nested fan-out list (or null target).
 		pendingKey    []byte
 		pendingPaths  []VFS
 		pendingIndent int
@@ -43,7 +38,6 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 		}
 	}
 
-	// recordKey handles one `key: value` line of the record body.
 	recordKey := func(b []byte) {
 		colon := bytes.IndexByte(b, ':')
 
@@ -61,7 +55,7 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 		case "case_sensitive":
 			rec.CaseInsensitive = string(val) == "false"
 		case "includes":
-			// `includes:` or `includes: []` contribute no mappings inline.
+
 			if len(val) != 0 && string(val) != "[]" {
 				throwFmt("%s:%d: inline includes value is not part of the sysincl subset", name, lineNo)
 			}
@@ -74,12 +68,10 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 		}
 	}
 
-	// includeItem handles one `- ...` line under includes.
 	includeItem := func(b []byte, indent int) {
 		colon := yScalarColon(b)
 
 		if colon < 0 {
-			// Bare header resolves to nothing.
 			rec.setMapping(unquoteYScalar(name, lineNo, b), nil)
 
 			return
@@ -89,7 +81,6 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 		val := trimYSpace(b[colon+1:])
 
 		if len(val) == 0 {
-			// `header:` — null or nested fan-out.
 			pendingKey = key
 			pendingIndent = indent
 			pendingActive = true
@@ -128,7 +119,6 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 		}
 
 		if rest[0] == '\t' {
-			// A tab-indented line is in the subset only as a comment.
 			j := 0
 
 			for j < len(rest) && (rest[j] == '\t' || rest[j] == ' ') {
@@ -150,7 +140,6 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 			}
 
 			if indent == 0 {
-				// New record; first key rides the same line.
 				flushRecord()
 				open = true
 				recordKey(body)
@@ -160,7 +149,6 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 
 			if pendingActive {
 				if indent > pendingIndent {
-					// Fan-out target of the pending header.
 					if v := unquoteYScalar(name, lineNo, body); len(v) != 0 {
 						pendingPaths = append(pendingPaths, sourceBytes(v))
 					}
@@ -183,8 +171,6 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 		flushPending()
 
 		if indent == 0 {
-			// Single-record document form: an indent-0 key opens one implicit
-			// record instead of the block-sequence form.
 			open = true
 			recordKey(rest)
 
@@ -203,7 +189,6 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 	return out
 }
 
-// stripYComment drops a trailing ` #...` comment (quote-aware) and right-trims.
 func stripYComment(b []byte) []byte {
 	if len(b) > 0 && b[0] == '#' {
 		return nil
@@ -241,8 +226,6 @@ func trimYSpace(b []byte) []byte {
 	return b
 }
 
-// yScalarColon finds the key/value colon of a `header: target` item — the first
-// ':' followed by space or end of line; -1 means a bare scalar.
 func yScalarColon(b []byte) int {
 	i := 0
 
@@ -271,8 +254,6 @@ func yScalarColon(b []byte) int {
 	return -1
 }
 
-// unquoteYScalar cooks one scalar: plain returns as-is (a view); a double-quoted
-// one is unwrapped, rewriting \\ and \" escapes in place (always shorter, so safe).
 func unquoteYScalar(name string, lineNo int, b []byte) []byte {
 	if len(b) == 0 || b[0] != '"' {
 		return b

@@ -10,7 +10,6 @@ import (
 )
 
 var (
-	// Fixed tool/script input prefixes, shared as chunks.
 	rescompilersChunk           = []VFS{rescompilerBinVFS, rescompressorBinVFS}
 	rescompilersWithScriptChunk = []VFS{rescompilerBinVFS, rescompressorBinVFS, objcopyScriptVFS}
 	objcopyScriptChunk          = []VFS{objcopyScriptVFS}
@@ -19,23 +18,16 @@ var (
 type ObjcopyEmitResult struct {
 	Refs    []NodeRef
 	Outputs []VFS
-	// PySrcTrailCount is the number of trailing Refs from PY_SRCS resource packing,
-	// processed after the SRCS(GLOBAL) band so they stay after the global sources.
+
 	PySrcTrailCount int
 }
 
-// ObjcopyArgBlocks are the module-stable spans of a resource-objcopy command line
-// around the per-node output path, built once per module.
 type ObjcopyArgBlocks struct {
-	// pre: [python3, objcopy.py, --compiler, <cxx>, --objcopy, <objcopy>,
-	// --compressor, <path>, --rescompiler, <path>, --output-obj]
 	pre []STR
-	// post: [--target, <triple>]
+
 	post []STR
 }
 
-// objcopyEmitCtx carries per-module objcopy emission state: resource tool refs
-// and the stable arg blocks.
 type ObjcopyEmitCtx struct {
 	rescompilerLDRef   NodeRef
 	rescompressorLDRef NodeRef
@@ -67,29 +59,19 @@ func composeObjcopyArgBlocks(tc ModuleToolchain, p *Platform) ObjcopyArgBlocks {
 	}
 }
 
-// objcopyCmdArgs assembles an objcopy command line; only the output and payload
-// tail are per-node.
 func objcopyCmdArgs(oc *ObjcopyEmitCtx, outputObj VFS, payload []STR) ArgChunks {
 	return oc.na.chunkList(oc.blocks.pre, oc.na.strList((outputObj).str()), oc.blocks.post, payload)
 }
 
-// resolvedResource is the outcome of resolving one embedded RESOURCE path. A
-// generated payload carries the $(B) artifact, producer ref/main output and
-// source-attribution sets; an ordinary source is just the fallback $(S) input.
 type resolvedResource struct {
 	Input           VFS
 	ProducerRef     NodeRef
 	ProducerMainOut VFS
-	// SourceInputs / SourceClosure are the producer's $(S) source-attribution sets,
-	// listed on the objcopy node by the flat-input model. Empty for a source.
+
 	SourceInputs  []VFS
 	SourceClosure []VFS
 }
 
-// resolveResourceInput resolves one embedded resource path to its node input. A
-// generated resource lives in the codegen registry keyed by its output VFS; when
-// found, the input is the $(B) artifact and the producer ref is returned.
-// Otherwise it is an ordinary source: the fallback VFS with no extra dep.
 func resolveResourceInput(ctx *GenCtx, instance ModuleInstance, rawPath string, fallback VFS) resolvedResource {
 	output := resourceOutputVFS(instance.Path.rel(), rawPath)
 
@@ -168,12 +150,9 @@ func emitResourceObjcopy(
 		pathInputs    []VFS
 		kvInputs      []VFS
 		closureInputs []VFS
-		// mainOuts collects each resolved generated resource's producer main output
-		// (0 for a source). A multi-output producer's main output rides every consumer
-		// of any of its outputs as a spurious input (the OutTogether edge).
+
 		mainOuts []VFS
-		// srcAttrInputs collects the producer chain's $(S) source-attribution leaves.
-		// Cache-key inputs only — never in --inputs/--keys/hash/command.
+
 		srcAttrInputs []VFS
 		keys          []string
 		kvs           []string
@@ -183,8 +162,6 @@ func emitResourceObjcopy(
 	cur := acc{}
 	moduleTag := resourceLibTagForData(d)
 
-	// A RESOURCE() in a PROTO_LIBRARY body belongs to the C++ _CPP_PROTO submodule;
-	// the packer folds that tag into the output-name hash and the node's module_tag.
 	cppProtoSubmodule := cfModuleTag(d, instance) == tagCppProto
 
 	if cppProtoSubmodule {
@@ -241,8 +218,6 @@ func emitResourceObjcopy(
 			}
 		}
 
-		// The embedded resources' OUTPUT_INCLUDES closure and resfs/src kv inputs ride
-		// as cache-key inputs only — never in --inputs (which changes objcopy_<hash>).
 		var tail []VFS
 
 		for _, p := range cur.closureInputs {
@@ -261,8 +236,6 @@ func emitResourceObjcopy(
 			tail = append(tail, p)
 		}
 
-		// The producer-chain $(S) source leaves ride as cache-key inputs too, deduped
-		// against everything present.
 		for _, p := range cur.srcAttrInputs {
 			if !deduper.add(p) {
 				continue
@@ -275,8 +248,6 @@ func emitResourceObjcopy(
 			inputs = append(inputs, tail)
 		}
 
-		// Spurious main-output inputs: a multi-output producer's main output rides
-		// every consumer of any of its outputs (the OutTogether edge). Deduped.
 		var mainTail []VFS
 
 		for _, p := range cur.mainOuts {
@@ -300,9 +271,7 @@ func emitResourceObjcopy(
 		switch {
 		case d.moduleStmt.Name == tokPy23Library || d.moduleStmt.Name == tokPy23NativeLibrary:
 			resTargetProps.ModuleTag = tagPy3
-		// RESOURCE/RESOURCE_FILES are .IGNORED on the PY3_BIN (PROGRAM) submodule, so
-		// the resfs objcopy is owned by the PY3_BIN_LIB (LIBRARY) twin. Stamp
-		// py3_bin_lib, matching the output hash tag.
+
 		case d.moduleStmt.Name == tokPy3Program || d.programPairedLib:
 			resTargetProps.ModuleTag = tagPy3BinLib
 		case cppProtoSubmodule:
@@ -324,9 +293,6 @@ func emitResourceObjcopy(
 
 		node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
 
-		// Every $(B) data input carries a producer dependency: resolveCodegenDepRefs
-		// maps each registered build output to its producer ref, excluding the tool
-		// refs. A source-tree resource resolves to nothing.
 		dataInputs := make([]VFS, 0, len(cur.pathInputs)+len(cur.closureInputs)+len(cur.kvInputs))
 		dataInputs = append(dataInputs, cur.pathInputs...)
 		dataInputs = append(dataInputs, cur.closureInputs...)
@@ -347,9 +313,6 @@ func emitResourceObjcopy(
 					cur.kvs = append(cur.kvs, e.Key)
 					cur.cmdLen += rootCmdLen + len(e.Key)
 
-					// The resfs/src kv names the same file as the payload entry;
-					// resolve it the same way (codegen registry, then
-					// copyFileInputVFS). The emitted value is that input's rootrel.
 					if inner, ok := rootrelInputPath(e.Key); ok {
 						r := resolveResourceInput(ctx, instance, inner, copyFileInputVFS(ctx.fs, instance.Path.rel(), inner))
 						cur.kvInputs = append(cur.kvInputs, r.Input)
@@ -364,9 +327,6 @@ func emitResourceObjcopy(
 					cur.pathInputs = append(cur.pathInputs, r.Input)
 					cur.mainOuts = append(cur.mainOuts, r.ProducerMainOut)
 
-					// A generated build-root resource carries its producer's
-					// OUTPUT_INCLUDES closure onto the objcopy node. Keep only the $(B)
-					// half. A source resource resolves to producerRef 0 and adds nothing.
 					if r.ProducerRef != 0 {
 						for _, v := range walkClosureTail(ctx.scannerFor(instance), r.Input, in.ScanCfg) {
 							if v.isBuild() {
@@ -374,10 +334,6 @@ func emitResourceObjcopy(
 							}
 						}
 
-						// The flat-input model also lists the producer chain's transitive
-						// $(S) source leaves, keeping only those that survive the
-						// resource-objcopy over-emit prune (objcopySourceLeafKept). Rides as
-						// a cache-key input below, never in the --inputs payload.
 						for _, v := range r.SourceInputs {
 							if v.isSource() && objcopySourceLeafKept(v.rel()) {
 								cur.srcAttrInputs = append(cur.srcAttrInputs, v)
@@ -405,10 +361,6 @@ func emitResourceObjcopy(
 		flush()
 	}
 
-	// The PY3_BIN (PROGRAM) submodule sets .IGNORED=RESOURCE RESOURCE_FILES: the
-	// objcopy is owned solely by the PY3_BIN_LIB (LIBRARY) twin, linked through
-	// .PEERDIRSELF. Mirror that ignore on the PROGRAM side so it contributes only
-	// PROGRAM-owned objcopies (PY_MAIN/NO_CHECK_IMPORTS).
 	py3BinProgramSide := d.moduleStmt.Name == tokPy3Program && !d.programPairedLib
 
 	if !py3BinProgramSide {
@@ -438,8 +390,6 @@ type ObjcopyEmit struct {
 	Out VFS
 }
 
-// KvOnlyKind selects the submodule whose MODULE_TAG the kv-only objcopy inherits —
-// PY_MAIN / NO_CHECK_IMPORTS belong to PY3_BIN, the rest to PY3_BIN_LIB.
 type KvOnlyKind int
 
 const (
@@ -593,9 +543,6 @@ func emitPyNamespaceForGroup(
 	group PySrcGroup,
 	oc *ObjcopyEmitCtx,
 ) *ObjcopyEmit {
-	// EVERY PY_SRCS mod name folds into mod_list_md5, but the py/namespace resource
-	// is gated on is_arc_src(path): a generated PY_SRCS source contributes no
-	// namespace entry, so a module with only generated PY_SRCS emits no node.
 	reg := codegenRegForInstance(ctx, instance)
 	pySources := make([]string, 0, len(group.Srcs))
 	arcSources := make([]string, 0, len(group.Srcs))
@@ -640,8 +587,6 @@ func emitPyNamespaceForGroup(
 
 	modListMD5 := enchex.EncodeToString(h.Sum(nil))
 
-	// Each namespace is keyed at mod_root_path = rootrel_arc_src(token) minus its
-	// trailing `/<token>`, NOT the module dir. One kv per distinct root, sorted.
 	nsRoots := make(map[string]struct{}, len(arcSources))
 
 	for _, srcRel := range arcSources {
@@ -727,9 +672,6 @@ func emitPySrcObjcopy(
 		return nil
 	}
 
-	// PY3_PROGRAM PROGRAM-side mirrors PY3_BIN (PROCESS_PY_MAIN_ONLY): the LIBRARY
-	// twin emits pys/namespace into its .global.a, linked via PEERDIRSELF. Emitting
-	// here would double-link or produce a tag-divergent twin.
 	if d.moduleStmt.Name == tokPy3Program && !d.programPairedLib {
 		return nil
 	}
@@ -791,8 +733,6 @@ func emitPySrcObjcopy(
 				targetProps.ModuleTag = tagPy3
 			}
 
-			// pysrc/namespace emissions live under the PY3_BIN_LIB submodule; stamp
-			// them with that submodule's lowercased tag.
 			if d.moduleStmt.Name == tokPy3Program || d.programPairedLib {
 				targetProps.ModuleTag = tagPy3BinLib
 			}

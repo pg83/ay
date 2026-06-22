@@ -4,9 +4,6 @@ import (
 	"testing"
 )
 
-// TestGen_CfgProto_EmitsPBProducerAndCompile: a `.cfgproto` source must emit a
-// PB/yellow producer with the proto_config plugin and --config_out, then compile
-// the generated .pb.cc and archive its object.
 func TestGen_CfgProto_EmitsPBProducerAndCompile(t *testing.T) {
 	files := map[string]string{}
 
@@ -46,6 +43,7 @@ message Cfg {}
 		"$(B)/lib/backend_config.cfgproto.pb.cc",
 		"$(B)/lib/backend_config.cfgproto.pb.h",
 	)
+
 	if pb.KV.P != pkPB || pb.KV.PC != pcYellow {
 		t.Fatalf("cfgproto producer KV = {%v,%v}, want {PB,yellow}", pb.KV.P, pb.KV.PC)
 	}
@@ -57,22 +55,25 @@ message Cfg {}
 		"--cpp_styleguide_out=:$(B)/",
 		"--plugin=protoc-gen-config=$(B)/library/cpp/proto_config/plugin/plugin",
 		"--plugin=protoc-gen-cpp_styleguide=$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide",
-		"lib/backend_config.cfgproto", // the rootrel source path
+		"lib/backend_config.cfgproto",
 	}
+
 	for _, want := range wantArgs {
 		found := false
+
 		for _, a := range args {
 			if a == want {
 				found = true
+
 				break
 			}
 		}
+
 		if !found {
 			t.Errorf("cfgproto producer command missing %q\ngot: %v", want, args)
 		}
 	}
 
-	// The ordinary .proto path must NOT receive the config plugin.
 	for _, a := range args {
 		if a == "--plugin=protoc-gen-event2cpp="+"$(B)/tools/event2cpp/event2cpp" {
 			t.Errorf("cfgproto producer must not carry the event2cpp plugin: %v", args)
@@ -88,42 +89,42 @@ message Cfg {}
 		"$(S)/library/cpp/proto_config/protos/extensions.proto",
 		"$(S)/contrib/libs/protobuf/src/google/protobuf/descriptor.proto",
 	}
+
 	for _, want := range wantInputs {
 		if !nodeHasInput(pb, want) {
 			t.Errorf("cfgproto producer inputs missing %q\ngot: %v", want, pb.flatInputs())
 		}
 	}
 
-	// The generated .pb.cc compiles into an object and is an archive member.
 	obj := mustNodeByOutput(t, g, "$(B)/lib/backend_config.cfgproto.pb.cc.o")
+
 	if !nodeHasInput(obj, "$(B)/lib/backend_config.cfgproto.pb.cc") {
 		t.Fatalf("cfgproto object missing generated .pb.cc input: %v", obj.flatInputs())
 	}
-	// No `main` output, so the self .pb.h does NOT ride the .pb.cc.o.
+
 	if nodeHasInput(obj, "$(B)/lib/backend_config.cfgproto.pb.h") {
 		t.Errorf("cfgproto object must not carry its own generated .pb.h: %v", obj.flatInputs())
 	}
-	// NProtoConfig.Include headers land in the generated .pb.h and must ride the .pb.cc.o closure.
+
 	if !nodeHasInput(obj, "$(S)/util/datetime/base.h") {
 		t.Errorf("cfgproto object missing NProtoConfig.Include header util/datetime/base.h: %v", obj.flatInputs())
 	}
+
 	if !nodeHasInput(obj, "$(S)/lib/port.h") {
 		t.Errorf("cfgproto object missing NProtoConfig.Include header lib/port.h: %v", obj.flatInputs())
 	}
 
 	ar := findNodeByOutputPrefix(g, "$(B)/lib/liblib.a")
+
 	if ar == nil {
 		t.Fatal("no lib archive found")
 	}
+
 	if !nodeHasInput(ar, "$(B)/lib/backend_config.cfgproto.pb.cc.o") {
 		t.Fatalf("archive missing cfgproto object member: %v", ar.flatInputs())
 	}
 }
 
-// TestGen_CfgProto_WireFormatDoesNotLeakToConsumer guard: a consumer including the
-// generated `.cfgproto.pb.h` must reach its EDT_OutTogether sibling `.pb.cc` but MUST
-// NOT inherit protoc's cpp-only induced `wire_format.h`, which belongs only on the
-// generated translation unit.
 func TestGen_CfgProto_WireFormatDoesNotLeakToConsumer(t *testing.T) {
 	const wireFormat = "$(S)/contrib/libs/protobuf/src/google/protobuf/wire_format.h"
 
@@ -163,12 +164,13 @@ message Cfg {}
 	g := testGen(newMemFS(files), "app")
 
 	obj := mustNodeByOutput(t, g, "$(B)/lib/backend_config.cfgproto.pb.cc.o")
+
 	if !nodeHasInput(obj, wireFormat) {
 		t.Fatalf("cfgproto .pb.cc.o must keep protoc induced wire_format.h: %v", obj.flatInputs())
 	}
 
 	useCC := mustNodeByOutput(t, g, "$(B)/app/use.cpp.o")
-	// EDT_OutTogether parity: the sibling .pb.cc and .pb.h still ride.
+
 	for _, want := range []string{
 		"$(B)/lib/backend_config.cfgproto.pb.cc",
 		"$(B)/lib/backend_config.cfgproto.pb.h",
@@ -177,14 +179,12 @@ message Cfg {}
 			t.Errorf("consumer use.cpp.o missing OutTogether sibling %q: %v", want, useCC.flatInputs())
 		}
 	}
-	// The cpp-only induced dep must NOT leak into the consumer.
+
 	if nodeHasInput(useCC, wireFormat) {
 		t.Errorf("consumer use.cpp.o must NOT inherit protoc cpp-only wire_format.h: %v", useCC.flatInputs())
 	}
 }
 
-// TestGen_OrdinaryProto_HasNoConfigPlugin is the negative guard: an ordinary
-// `.proto` must NOT receive the proto_config plugin / --config_out.
 func TestGen_OrdinaryProto_HasNoConfigPlugin(t *testing.T) {
 	files := map[string]string{}
 
@@ -203,19 +203,23 @@ END()
 	g := testGen(newMemFS(files), "lib")
 
 	var pb *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P != pkPB {
 			continue
 		}
+
 		for _, o := range n.Outputs {
 			if o.string() == "$(B)/lib/data.pb.h" {
 				pb = n
 			}
 		}
 	}
+
 	if pb == nil {
 		t.Fatal("no PB producer for data.proto found")
 	}
+
 	for _, a := range strStrs(pb.Cmds[0].CmdArgs.flat()) {
 		if a == "--config_out=$(B)/" ||
 			a == "--plugin=protoc-gen-config=$(B)/library/cpp/proto_config/plugin/plugin" {

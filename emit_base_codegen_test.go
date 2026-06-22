@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// TestParseBaseCodegen pins the positional Tool/Prefix/Opts split.
 func TestParseBaseCodegen(t *testing.T) {
 	stmt := parseBaseCodegen(STRS("kernel/fill_factors_codegen", "fill_factors", "NTop"), 1)
 
@@ -22,9 +21,6 @@ func TestParseBaseCodegen(t *testing.T) {
 	}
 }
 
-// TestGen_BaseCodegenGeneratedClosure pins the generated-header include closure:
-// the sibling prefix.cpp and the prefix.in source ride as closure leaves of
-// prefix.h, so every CC node including the generated header inherits them.
 func TestGen_BaseCodegenGeneratedClosure(t *testing.T) {
 	files := map[string]string{}
 
@@ -55,11 +51,6 @@ END()
 	}
 }
 
-// TestGen_BaseCodegenReachability guards the reachability rule: BASE_CODEGEN must
-// emit a BC producer with a tool dependency on the tool PROGRAM's LD, and that
-// dependency must bring the tool's PEERDIR closure into the target graph. Here
-// the tool PEERDIRs an otherwise-unreachable SPLIT_CODEGEN child, so post-fix the
-// graph must contain the child's SC producer and its generated CC consumers.
 func TestGen_BaseCodegenReachability(t *testing.T) {
 	files := map[string]string{}
 
@@ -105,7 +96,6 @@ END()
 
 	g := testGen(newMemFS(files), "consumer")
 
-	// 1. exactly one BC producer node, for the consumer's prefix outputs.
 	var bc *Node
 
 	for _, n := range g.Graph {
@@ -137,18 +127,17 @@ END()
 		t.Fatalf("BC outputs = %v, want %v", gotOuts, wantOuts)
 	}
 
-	// tool bin, $(S) .in, $(B) .cpp, $(B) .h (no --cpp-parts).
 	wantCmd := []string{
 		"$(B)/tool/tool",
 		"$(S)/consumer/fill_factors.in",
 		"$(B)/consumer/fill_factors.cpp",
 		"$(B)/consumer/fill_factors.h",
 	}
+
 	if got := strStrings(bc.Cmds[0].CmdArgs.flat()); !slices.Equal(got, wantCmd) {
 		t.Fatalf("BC cmd = %v, want %v", got, wantCmd)
 	}
 
-	// 2. BC takes a tool (foreign) dependency on the tool PROGRAM's LD.
 	tool := mustNodeByOutput(t, g, "$(B)/tool/tool")
 
 	if !nodeHasInput(bc, "$(B)/tool/tool") {
@@ -159,7 +148,6 @@ END()
 		t.Fatalf("BC node foreign deps missing tool LD uid %q: %v", tool.UID, graphForeignDeps(g, bc))
 	}
 
-	// 3. the tool PEERDIR closure pulled hidden/factors in.
 	scH := mustNodeByAnyOutput(t, g, "$(B)/hidden/factors/factors_gen.h")
 
 	if scH.KV.P != pkSC {
@@ -173,17 +161,11 @@ END()
 	}
 }
 
-// TestGen_StructCodegenProducer pins STRUCT_CODEGEN as the BASE_CODEGEN
-// specialization. STRUCT_CODEGEN(gen) must (1) emit a BC producer running the
-// fixed codegen tool over gen.in -> gen.cpp + gen.h; (2) attach the
-// STRUCT_CODEGEN_OUTPUT_INCLUDES to gen.h so a consumer inherits them; (3) pull
-// the two implicit PEERDIRs (metadata, reflection) into the module closure.
 func TestGen_StructCodegenProducer(t *testing.T) {
 	files := map[string]string{}
 
 	writeToolProgram(files, "kernel/struct_codegen/codegen_tool", "codegen_tool")
 
-	// The two implicit peerdir libraries, plus the referenced reflection headers.
 	writeTestModuleFile(files, "kernel/struct_codegen/metadata/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -223,7 +205,6 @@ END()
 
 	g := testGen(newMemFS(files), "lib")
 
-	// 1. exactly one BC producer node for the consumer's gen outputs.
 	var bc *Node
 
 	for _, n := range g.Graph {
@@ -251,25 +232,23 @@ END()
 		t.Fatalf("BC outputs = %v, want %v", gotOuts, wantOuts)
 	}
 
-	// fixed codegen tool bin, $(S) .in, $(B) .cpp, $(B) .h (no opts).
 	wantCmd := []string{
 		"$(B)/kernel/struct_codegen/codegen_tool/codegen_tool",
 		"$(S)/lib/gen.in",
 		"$(B)/lib/gen.cpp",
 		"$(B)/lib/gen.h",
 	}
+
 	if got := strStrings(bc.Cmds[0].CmdArgs.flat()); !slices.Equal(got, wantCmd) {
 		t.Fatalf("BC cmd = %v, want %v", got, wantCmd)
 	}
 
-	// 2. tool (foreign) dep on the codegen tool LD.
 	tool := mustNodeByOutput(t, g, "$(B)/kernel/struct_codegen/codegen_tool/codegen_tool")
 
 	if !slices.Contains(graphForeignDeps(g, bc), tool.UID) {
 		t.Fatalf("BC node foreign deps missing codegen tool LD uid %q: %v", tool.UID, graphForeignDeps(g, bc))
 	}
 
-	// 3. the OUTPUT_INCLUDES ride gen.h.
 	cc := mustNodeByOutput(t, g, "$(B)/lib/use.cpp.o")
 
 	for _, want := range []string{
@@ -282,7 +261,6 @@ END()
 		}
 	}
 
-	// 4. the two implicit PEERDIRs are in the module closure.
 	mustNodeByAnyOutput(t, g, "$(B)/kernel/struct_codegen/metadata/metadata.cpp.o")
 	mustNodeByAnyOutput(t, g, "$(B)/kernel/struct_codegen/reflection/reflection.cpp.o")
 }

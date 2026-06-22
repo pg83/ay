@@ -1,15 +1,11 @@
 package main
 
-// emitBundles emits one BN (bundle) node per BUNDLE group and registers its
-// output so a later RESOURCE/embed resolves to the $(B) artifact, not an $(S)
-// source. Must run before the module's resource objcopy emit.
 func emitBundles(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	reg := codegenRegForInstance(ctx, instance)
 
 	for _, b := range d.bundles {
 		dst := copyFileOutputVFS(instance.Path.rel(), b.Name)
 
-		// A name already produced keeps its first producer.
 		if reg.lookup(dst) != nil {
 			continue
 		}
@@ -22,10 +18,6 @@ func emitBundles(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	}
 }
 
-// resolveBundleSource resolves the bundled module's primary build output and its
-// producing node. It peeks for a module opener first, so an unmodeled type never
-// reaches genModule (which would throw). Returns resolved=false when the target
-// is absent, has no opener, or has no linkable output.
 func resolveBundleSource(ctx *GenCtx, parent ModuleInstance, d *ModuleData, target string) (VFS, NodeRef, bool) {
 	if !peerYaMakeExists(ctx.fs, target) {
 		return 0, 0, false

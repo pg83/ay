@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-const referenceLDOutput = "$(B)/tools/archiver/archiver"
-
 var archiverPeerLibPaths = []string{
 	"contrib/libs/cxxsupp/libcxxabi-parts/liblibs-cxxsupp-libcxxabi-parts.a",
 	"contrib/libs/libunwind/libcontrib-libs-libunwind.a",
@@ -50,6 +48,8 @@ var archiverPluginPaths = []string{
 var archiverGlobalPaths = []string{
 	"contrib/libs/tcmalloc/no_percpu_cache/liblibs-tcmalloc-no_percpu_cache.global.a",
 }
+
+const referenceLDOutput = "$(B)/tools/archiver/archiver"
 
 func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 	emit := newBufferedEmitter()
@@ -107,6 +107,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 	}
 
 	wantCC := testToolchain().CC.string()
+
 	if got.Cmds[1].CmdArgs.flat()[0].string() != wantCC {
 		t.Errorf("cmd[1][0] = %q, want %q", got.Cmds[1].CmdArgs.flat()[0].string(), wantCC)
 	}
@@ -124,12 +125,14 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 	}
 
 	wantOut := "$(B)/some/prog/prog"
+
 	if len(got.Outputs) != 1 || got.Outputs[0].string() != wantOut {
 		t.Errorf("outputs = %#v, want [%q]", got.Outputs, wantOut)
 	}
 
 	startIdx := slices.Index(strStrs(got.Cmds[2].CmdArgs.flat()), "--start-plugins")
 	endIdx := slices.Index(strStrs(got.Cmds[2].CmdArgs.flat()), "--end-plugins")
+
 	if startIdx < 0 || endIdx != startIdx+1 {
 		t.Fatalf("synthetic LD plugin markers = %v, want adjacent empty --start-plugins/--end-plugins", got.Cmds[2].CmdArgs.flat())
 	}
@@ -142,7 +145,6 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		t.Errorf("target_properties.module_type = %q, want bin", got.TargetProperties.ModuleType.string())
 	}
 
-	// ccRef + vcs.json producer.
 	if len(got.DepRefs) != 2 {
 		t.Errorf("DepRefs = %d, want 2", len(got.DepRefs))
 	}
@@ -200,6 +202,7 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 	}
 
 	gotOutputs := vfsStrings(got.Outputs)
+
 	for _, wantOut := range []string{
 		"$(B)/some/prog/prog",
 		"$(B)/some/prog/prog.debug",
@@ -212,9 +215,11 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 	if !slices.Equal(strStrs(got.Cmds[4].CmdArgs.flat()), []string{testToolchain().Objcopy.string(), "--only-keep-debug", "$(B)/some/prog/prog", "$(B)/some/prog/prog.debug"}) {
 		t.Fatalf("cmd[4].cmd_args = %#v", got.Cmds[4].CmdArgs.flat())
 	}
+
 	if !slices.Equal(strStrs(got.Cmds[5].CmdArgs.flat()), []string{testToolchain().Strip.string(), "--strip-debug", "$(B)/some/prog/prog"}) {
 		t.Fatalf("cmd[5].cmd_args = %#v", got.Cmds[5].CmdArgs.flat())
 	}
+
 	if !slices.Equal(strStrs(got.Cmds[6].CmdArgs.flat()), []string{testToolchain().Objcopy.string(), "--remove-section=.gnu_debuglink", "--add-gnu-debuglink", "$(B)/some/prog/prog.debug", "$(B)/some/prog/prog"}) {
 		t.Fatalf("cmd[6].cmd_args = %#v", got.Cmds[6].CmdArgs.flat())
 	}
@@ -223,9 +228,11 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 		if len(got.Cmds[idx].Env) != 1 {
 			t.Fatalf("cmd[%d].env len = %d, want 1 (env=%#v)", idx, len(got.Cmds[idx].Env), got.Cmds[idx].Env)
 		}
+
 		if got.Cmds[idx].Env[0] != (EnvVar{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}) {
 			t.Fatalf("cmd[%d].env = %#v, want ARCADIA_ROOT_DISTBUILD=$(S)", idx, got.Cmds[idx].Env)
 		}
+
 		if got.Cmds[idx].Cwd != 0 {
 			t.Fatalf("cmd[%d].cwd = %q, want empty", idx, got.Cmds[idx].Cwd.string())
 		}
@@ -281,9 +288,11 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 
 func TestComposeProgramLinkTrailer_NonPICRPathTrailerKeepsNoPie(t *testing.T) {
 	flags := make(map[string]string, len(testToolchainFlags)+1)
+
 	for k, v := range testToolchainFlags {
 		flags[k] = v
 	}
+
 	flags["LLD_TOOL"] = "$(LLD_ROOT)/bin/ld.lld"
 	flags["PIC"] = "no"
 
@@ -325,7 +334,7 @@ func TestComposeProgramLinkTrailer_NonPICRPathTrailerKeepsNoPie(t *testing.T) {
 func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 	emit := newBufferedEmitter()
 	mainRef := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
-	// A whole-archive lib is also a peer archive: one node in both ref lists.
+
 	wholeRef := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
 
 	instance := targetInstance("some/prog")
@@ -368,29 +377,34 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 	)
 
 	got := emit.nodes[ldRef]
+
 	if !slices.Contains(got.flatInputs(), build(wholeArchivePath)) {
 		t.Fatalf("inputs do not contain whole-archive path %q: %#v", wholeArchivePath, got.flatInputs())
 	}
 
-	// Whole-archive is a link attribute, not a second dep source: one DepRef.
 	depCount := 0
+
 	for _, r := range got.DepRefs {
 		if r == wholeRef {
 			depCount++
 		}
 	}
+
 	if depCount != 1 {
 		t.Fatalf("whole-archive/peer ref in DepRefs %d times, want 1: %#v", depCount, got.DepRefs)
 	}
 
 	cmdArgs := strStrs(got.Cmds[2].CmdArgs.flat())
 	found := false
+
 	for i := 0; i+1 < len(cmdArgs); i++ {
 		if cmdArgs[i] == "--whole-archive-libs" && cmdArgs[i+1] == wholeArchivePath {
 			found = true
+
 			break
 		}
 	}
+
 	if !found {
 		t.Fatalf("cmd[2] missing whole-archive marker for %q: %#v", wholeArchivePath, cmdArgs)
 	}
@@ -399,7 +413,7 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T) {
 	emit := newBufferedEmitter()
 	mainRef := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
-	// One node reached as both peer archive and whole-archive lib.
+
 	peerRef := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
 
 	instance := targetInstance("some/prog")
@@ -443,33 +457,40 @@ func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T
 
 	got := emit.nodes[ldRef]
 	count := 0
+
 	for _, input := range got.flatInputs() {
 		if input == dupPath {
 			count++
 		}
 	}
+
 	if count != 1 {
 		t.Fatalf("inputs contain %d copies of %q, want 1: %#v", count, dupPath.string(), got.flatInputs())
 	}
 
 	depCount := 0
+
 	for _, r := range got.DepRefs {
 		if r == peerRef {
 			depCount++
 		}
 	}
+
 	if depCount != 1 {
 		t.Fatalf("peer/whole-archive ref in DepRefs %d times, want 1: %#v", depCount, got.DepRefs)
 	}
 
 	cmdArgs := strStrs(got.Cmds[2].CmdArgs.flat())
 	found := false
+
 	for i := 0; i+1 < len(cmdArgs); i++ {
 		if cmdArgs[i] == "--whole-archive-libs" && cmdArgs[i+1] == dupPath.rel() {
 			found = true
+
 			break
 		}
 	}
+
 	if !found {
 		t.Fatalf("cmd[2] missing whole-archive marker for %q: %#v", dupPath.rel(), cmdArgs)
 	}
@@ -549,6 +570,7 @@ func TestGen_SyntheticPROGRAM_EmitsLD(t *testing.T) {
 	}
 
 	wantOut := "$(B)/lone/lone"
+
 	if len(ld.Outputs) != 1 || ld.Outputs[0].string() != wantOut {
 		t.Errorf("LD outputs = %#v, want [%q]", ld.Outputs, wantOut)
 	}
@@ -567,6 +589,7 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 	g := testGen(fs, "consumer")
 
 	var ldNode *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkLD {
 			ldNode = n
@@ -578,6 +601,7 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 	}
 
 	arCount := 0
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkAR {
 			arCount++
@@ -598,6 +622,7 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 	for _, in := range ldNode.flatInputs() {
 		if in.string() == expectedInput {
 			foundInInputs = true
+
 			break
 		}
 	}
@@ -623,6 +648,7 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 	for _, a := range linkArgs {
 		if a.string() == expectedCmdArg {
 			foundInCmdArgs = true
+
 			break
 		}
 	}
@@ -632,19 +658,16 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 	}
 }
 
-// TestGen_FbsSrcsInduceFlatbuffersLinkDep: a module with .fbs SRCS induces a
-// flatbuffers PEERDIR that must link AFTER all explicit PEERDIRs.
 func TestGen_FbsSrcsInduceFlatbuffersLinkDep(t *testing.T) {
 	files := map[string]string{
 		"prog/ya.make":  "PROGRAM()\nPEERDIR(arrowlike)\nSRCS(main.cpp)\nEND()\n",
 		"prog/main.cpp": "int main() { return 0; }\n",
-		// arrowlike has an explicit peer (peer1) AND a .fbs source; flatbuffers must
-		// insert AFTER peer1 in the link order.
-		"arrowlike/ya.make":    "LIBRARY()\nPEERDIR(peer1)\nSRCS(lib.cpp Schema.fbs)\nEND()\n",
-		"arrowlike/lib.cpp":    "int f() { return 0; }\n",
-		"arrowlike/Schema.fbs": "namespace test; table Foo { value:int; }\n",
-		"peer1/ya.make":        "LIBRARY()\nSRCS(p1.cpp)\nEND()\n",
-		"peer1/p1.cpp":         "int p1() { return 0; }\n",
+
+		"arrowlike/ya.make":                                          "LIBRARY()\nPEERDIR(peer1)\nSRCS(lib.cpp Schema.fbs)\nEND()\n",
+		"arrowlike/lib.cpp":                                          "int f() { return 0; }\n",
+		"arrowlike/Schema.fbs":                                       "namespace test; table Foo { value:int; }\n",
+		"peer1/ya.make":                                              "LIBRARY()\nSRCS(p1.cpp)\nEND()\n",
+		"peer1/p1.cpp":                                               "int p1() { return 0; }\n",
 		"contrib/libs/flatbuffers/ya.make":                           "LIBRARY()\nSRCS(flatbuffers.cpp)\nEND()\n",
 		"contrib/libs/flatbuffers/flatbuffers.cpp":                   "int fb() { return 0; }\n",
 		"contrib/libs/flatbuffers/flatc/ya.make":                     "PROGRAM(flatc)\nSRCS(main.cpp)\nEND()\n",
@@ -656,12 +679,15 @@ func TestGen_FbsSrcsInduceFlatbuffersLinkDep(t *testing.T) {
 	g := testGen(newMemFS(files), "prog")
 
 	var ldNode *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkLD {
 			ldNode = n
+
 			break
 		}
 	}
+
 	if ldNode == nil {
 		t.Fatal("no LD node found in graph")
 	}
@@ -674,28 +700,26 @@ func TestGen_FbsSrcsInduceFlatbuffersLinkDep(t *testing.T) {
 	if peer1Idx < 0 {
 		t.Fatalf("link args missing peer1/libpeer1.a: %v", linkArgs)
 	}
+
 	if fbIdx < 0 {
 		t.Fatalf("link args missing contrib/libs/flatbuffers/libcontrib-libs-flatbuffers.a: "+
 			"induced peerdir from .fbs SRCS not added; args=%v", linkArgs)
 	}
+
 	if arrowlikeIdx < 0 {
 		t.Fatalf("link args missing arrowlike/libarrowlike.a: %v", linkArgs)
 	}
-	// Order: peer1, flatbuffers (induced), arrowlike.
+
 	if peer1Idx > fbIdx {
 		t.Errorf("peer1 [%d] appears after flatbuffers [%d] in link args; want peer1 before flatbuffers", peer1Idx, fbIdx)
 	}
+
 	if fbIdx > arrowlikeIdx {
 		t.Errorf("flatbuffers [%d] appears after arrowlike [%d] in link args; want flatbuffers before the owning library", fbIdx, arrowlikeIdx)
 	}
 }
 
 func TestGen_EnumSerializationRuntimePrecedesProtoLibraryArchive(t *testing.T) {
-	// GENERATE_ENUM_SERIALIZATION expands inline to a PEERDIR at its textual
-	// position; the start-group sequence must keep closure order each once: the
-	// ordinary peer, then enum_serialization_runtime, then the proto archive. The
-	// json/common second-program peer guards against the enum runtime relocating
-	// out of its closure slot to after the proto archive.
 	files := map[string]string{
 		"app/ya.make":  "PY3_PROGRAM(app)\nDISABLE(PYTHON_SQLITE3)\nENABLE(PYBUILD_NO_PYC)\nPEERDIR(proto_mod)\nPEERDIR(jsondep)\nSRCS(main.cpp)\nEND()\n",
 		"app/main.cpp": "int main(){return 0;}\n",
@@ -717,7 +741,6 @@ func TestGen_EnumSerializationRuntimePrecedesProtoLibraryArchive(t *testing.T) {
 		"library/cpp/json/common/ya.make": "LIBRARY()\nSRCS(jc.cpp)\nEND()\n",
 		"library/cpp/json/common/jc.cpp":  "int jc(){return 0;}\n",
 
-		// J-allocator peers and malloc-relocation anchors are walked unconditionally.
 		"library/cpp/malloc/jemalloc/ya.make": "LIBRARY()\nSRCS(je.cpp)\nEND()\n",
 		"library/cpp/malloc/jemalloc/je.cpp":  "int je(){return 0;}\n",
 		"library/cpp/malloc/api/ya.make":      "LIBRARY()\nSRCS(api.cpp)\nEND()\n",
@@ -727,13 +750,11 @@ func TestGen_EnumSerializationRuntimePrecedesProtoLibraryArchive(t *testing.T) {
 		"build/cow/on/ya.make":                "LIBRARY()\nSRCS(cow.cpp)\nEND()\n",
 		"build/cow/on/cow.cpp":                "int cow(){return 0;}\n",
 
-		// PY3_PROGRAM unconditionally peers the python runtime; NO_* keeps leaves peer-free.
 		"contrib/libs/python/ya.make":                       "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
 		"library/python/runtime_py3/main/ya.make":           "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
 		"library/python/import_tracing/constructor/ya.make": "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
 		"library/python/testing/import_test/ya.make":        "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
 
-		// PROTO_LIBRARY machinery.
 		"contrib/tools/protoc/ya.make":                         "PROGRAM(protoc)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n",
 		"contrib/tools/protoc/main.cpp":                        "int main(){return 0;}\n",
 		"contrib/tools/protoc/plugins/cpp_styleguide/ya.make":  "PROGRAM(cpp_styleguide)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n",
@@ -751,34 +772,39 @@ func TestGen_EnumSerializationRuntimePrecedesProtoLibraryArchive(t *testing.T) {
 
 	g := testGen(newMemFS(files), "app")
 
-	// The program link node is the LD node holding the -Wl,--start-group group.
 	var linkArgs []STR
+
 	for _, n := range g.Graph {
 		if n.KV.P != pkLD {
 			continue
 		}
+
 		for _, c := range n.Cmds {
 			args := c.CmdArgs.flat()
+
 			if indexOfArg(args, "-Wl,--start-group") >= 0 {
 				linkArgs = args
+
 				break
 			}
 		}
+
 		if linkArgs != nil {
 			break
 		}
 	}
+
 	if linkArgs == nil {
 		t.Fatal("no program-link LD node with -Wl,--start-group found in graph")
 	}
 
-	// Restrict assertions to the regular --start-group window; the proto archive
-	// also appears in the preceding --whole-archive-libs band.
 	sgStart := indexOfArg(linkArgs, "-Wl,--start-group")
 	sgEnd := indexOfArg(linkArgs, "-Wl,--end-group")
+
 	if sgStart < 0 || sgEnd < 0 || sgEnd <= sgStart {
 		t.Fatalf("malformed start-group window [%d,%d]: %v", sgStart, sgEnd, argStrs2(linkArgs))
 	}
+
 	regular := linkArgs[sgStart+1 : sgEnd]
 
 	const (
@@ -789,13 +815,16 @@ func TestGen_EnumSerializationRuntimePrecedesProtoLibraryArchive(t *testing.T) {
 
 	count := func(want string) int {
 		n := 0
+
 		for _, a := range regular {
 			if a.string() == want {
 				n++
 			}
 		}
+
 		return n
 	}
+
 	for _, p := range []string{firstA, enumA, protoA} {
 		if c := count(p); c != 1 {
 			t.Fatalf("archive %s appears %d times in regular start-group, want exactly 1: %v", p, c, argStrs2(regular))
@@ -814,17 +843,19 @@ func TestGen_EnumSerializationRuntimePrecedesProtoLibraryArchive(t *testing.T) {
 
 func argStrs2(args []STR) []string {
 	out := make([]string, len(args))
+
 	for i, a := range args {
 		out[i] = a.string()
 	}
+
 	return out
 }
 
-// USE_ARCADIA_LIBM: ENABLE adds the implicit libm PEERDIR; default "no" uses system -lm.
 func libmProgramFiles(enable bool) map[string]string {
 	files := map[string]string{}
 
 	enableStmt := ""
+
 	if enable {
 		enableStmt = "ENABLE(USE_ARCADIA_LIBM)\n"
 	}
@@ -832,25 +863,19 @@ func libmProgramFiles(enable bool) map[string]string {
 	writeTestModuleFile(files, "app/ya.make", "PROGRAM(app)\n"+enableStmt+"SRCS(main.cpp)\nEND()\n")
 	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
 
-	// The module's own GLOBAL ADDINCL roots must land after the language-default
-	// transitive closure, not ahead of it.
 	writeTestModuleFile(files, "contrib/libs/libm/ya.make",
 		"LIBRARY()\nNO_RUNTIME()\nNO_UTIL()\nADDINCL(GLOBAL contrib/libs/libm/include\nGLOBAL contrib/libs/libm/platform)\nSRCS(e_exp.c)\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/libm/e_exp.c", "double e_exp(double x){return x;}\n")
-	// filterExistingSourceDirs drops GLOBAL addincl dirs that do not exist.
+
 	writeTestModuleFile(files, "contrib/libs/libm/include/math.h", "#pragma once\n")
 	writeTestModuleFile(files, "contrib/libs/libm/platform/platform.h", "#pragma once\n")
 
 	return files
 }
 
-// libmOrderingProgramFiles adds a `util` language-default peer carrying a
-// transitive GLOBAL ADDINCL; the compile must order that ahead of libm's own.
 func libmOrderingProgramFiles() map[string]string {
 	files := libmProgramFiles(true)
 
-	// util is a C++ language default; NO_RUNTIME/NO_UTIL keep it from pulling its
-	// own defaults, only re-exporting library/early's GLOBAL addincl transitively.
 	writeTestModuleFile(files, "util/ya.make", "LIBRARY()\nNO_RUNTIME()\nNO_UTIL()\nPEERDIR(library/early)\nEND()\n")
 	writeTestModuleFile(files, "util/u.cpp", "int u(){return 0;}\n")
 
@@ -866,6 +891,7 @@ func ccArgsOfSuffix(t *testing.T, g *Graph, suffix string) []STR {
 	t.Helper()
 
 	n := mustNodeByOutputSuffix(t, g, suffix)
+
 	if len(n.Cmds) == 0 {
 		t.Fatalf("CC node %q has no Cmds", suffix)
 	}
@@ -883,6 +909,7 @@ func linkArgsOf(t *testing.T, g *Graph) []STR {
 
 		for _, c := range n.Cmds {
 			flat := c.CmdArgs.flat()
+
 			if indexOfArg(flat, "$(S)/build/scripts/link_exe.py") >= 0 {
 				return flat
 			}
@@ -901,6 +928,7 @@ func TestGen_UseArcadiaLibm_PeersLibmArchive(t *testing.T) {
 
 	const libmLinkArg = "contrib/libs/libm/libcontrib-libs-libm.a"
 	linkArgs := linkArgsOf(t, g)
+
 	if indexOfArg(linkArgs, libmLinkArg) < 0 {
 		t.Fatalf("program link closure missing %s; link args = %v", libmLinkArg, linkArgs)
 	}
@@ -915,14 +943,13 @@ func TestGen_UseArcadiaLibm_AbsentWithoutEnable(t *testing.T) {
 
 	const libmLinkArg = "contrib/libs/libm/libcontrib-libs-libm.a"
 	linkArgs := linkArgsOf(t, g)
+
 	if indexOfArg(linkArgs, libmLinkArg) >= 0 {
 		t.Fatalf("link closure must not contain %s without the enable", libmLinkArg)
 	}
 }
 
 func TestGen_UseArcadiaLibm_NoSelfPeer(t *testing.T) {
-	// A libm module enabling the flag must not peer itself; the self/descendant
-	// guard lives in the program-default path.
 	mi := ModuleInstance{
 		Path:     source("contrib/libs/libm"),
 		Kind:     KindBin,
@@ -931,6 +958,7 @@ func TestGen_UseArcadiaLibm_NoSelfPeer(t *testing.T) {
 	}
 
 	got := defaultProgramPeerdirsForWithState(nil, mi, &ModuleData{useArcadiaLibm: true}, false)
+
 	for _, p := range got {
 		if p == "contrib/libs/libm" {
 			t.Fatalf("contrib/libs/libm must not peer itself; got %v", got)
@@ -963,11 +991,13 @@ func TestGen_UseArcadiaLibm_NoSystemLm(t *testing.T) {
 	g := testGen(newMemFS(libmProgramFiles(true)), "app")
 
 	linkArgs := linkArgsOf(t, g)
+
 	if indexOfArg(linkArgs, "-lm") >= 0 {
 		t.Fatalf("USE_ARCADIA_LIBM=yes link must not emit system -lm; link args = %v", linkArgs)
 	}
 
 	const libmLinkArg = "contrib/libs/libm/libcontrib-libs-libm.a"
+
 	if indexOfArg(linkArgs, libmLinkArg) < 0 {
 		t.Fatalf("USE_ARCADIA_LIBM=yes link must contain %s; link args = %v", libmLinkArg, linkArgs)
 	}
@@ -977,11 +1007,13 @@ func TestGen_UseArcadiaLibm_KeepsSystemLmWithoutEnable(t *testing.T) {
 	g := testGen(newMemFS(libmProgramFiles(false)), "app")
 
 	linkArgs := linkArgsOf(t, g)
+
 	if indexOfArg(linkArgs, "-lm") < 0 {
 		t.Fatalf("default USE_ARCADIA_LIBM=no link must keep system -lm; link args = %v", linkArgs)
 	}
 
 	const libmLinkArg = "contrib/libs/libm/libcontrib-libs-libm.a"
+
 	if indexOfArg(linkArgs, libmLinkArg) >= 0 {
 		t.Fatalf("default link must not gain the Arcadia libm archive; link args = %v", linkArgs)
 	}

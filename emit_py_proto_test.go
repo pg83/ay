@@ -7,10 +7,6 @@ import (
 	"testing"
 )
 
-// A PROTO_LIBRARY whose SRCS(X.proto) is build-generated routes its python output
-// through the bare-token path: PY_SRCS is the bare `X__intpy3___pb2.py`. With no
-// `/`, the yapyc3 is unsuffixed and embeds via objcopy, NOT the rescompiler
-// `_raw.auxcpp` path. The PB and py3cc nodes also carry the producer's `$(S)` closure.
 func TestEmitPyProto_GeneratedProtoBareTokenObjcopyRouting(t *testing.T) {
 	const modPath = "irt/test/banner_flags"
 	const consumer = "irt/test/app"
@@ -57,34 +53,36 @@ END()
 	yapyc3 := pyOut + ".yapyc3"
 	kqhj := pyOut + ".kqhj.yapyc3"
 
-	// (1) No rescompiler `_raw.auxcpp` for the generated proto.
 	for _, n := range g.Graph {
 		if len(n.Outputs) == 0 {
 			continue
 		}
+
 		o := n.Outputs[0].string()
+
 		if strings.HasPrefix(o, "$(B)/"+modPath+"/") && strings.Contains(o, "_raw.auxcpp") {
 			t.Fatalf("generated proto produced a rescompiler aux node %q; want objcopy resfs", o)
 		}
 	}
 
-	// (2) py3cc emits the bare, unsuffixed yapyc3.
 	if nodeByOutput(g, kqhj) != nil {
 		t.Fatalf("py3cc emitted a path-id-suffixed yapyc3 %q; generated proto must be unsuffixed", kqhj)
 	}
+
 	py3cc := mustNodeByOutput(t, g, yapyc3)
+
 	if first := prCmdArgStrings(py3cc); !slices.Contains(first, "banner_flags__intpy3___pb2.py-") {
 		t.Fatalf("py3cc first token is not the bare `banner_flags__intpy3___pb2.py-`: %v", first)
 	}
 
-	// (3a) The generated `.proto` producer carries the CPP_PROTO tag.
 	producer := mustNodeByOutput(t, g, "$(B)/"+modPath+"/banner_flags.proto")
+
 	if producer.TargetProperties.ModuleTag != tagCppProto {
 		t.Fatalf("generated .proto producer module_tag = %q; want cpp_proto", producer.TargetProperties.ModuleTag.string())
 	}
 
-	// (3) Producer closure rides the PB and py3cc nodes.
 	pb := mustNodeByOutput(t, g, pyOut)
+
 	for _, n := range []*Node{pb, py3cc} {
 		if !nodeHasInput(n, "$(S)/dep/markup.proto") {
 			t.Fatalf("node producing %v is missing producer-closure input $(S)/dep/markup.proto: %v",
@@ -92,7 +90,6 @@ END()
 		}
 	}
 
-	// (4) objcopy resfs node: hash over bare tokens + PY3_PROTO tag.
 	pb2Key := "resfs/file/py/" + modPath + "/banner_flags_pb2.py"
 	yapKey := pb2Key + ".yapyc3"
 	bare := []string{"banner_flags__intpy3___pb2.py", "banner_flags__intpy3___pb2.py.yapyc3"}
@@ -108,26 +105,32 @@ END()
 	wantObjcopy := "$(B)/" + modPath + "/objcopy_" + wantHash + ".o"
 
 	objcopy := nodeByOutput(g, wantObjcopy)
+
 	if objcopy == nil {
 		t.Fatalf("graph is missing generated-proto objcopy %q\nobjcopy nodes: %v", wantObjcopy, objcopyOutputs(g))
 	}
+
 	if !nodeHasInput(objcopy, pyOut) || !nodeHasInput(objcopy, yapyc3) {
 		t.Fatalf("objcopy inputs missing generated py/yapyc3 from $(B): %#v", objcopy.flatInputs())
 	}
+
 	deps := graphDeps(g, objcopy)
+
 	if !slices.Contains(deps, pb.UID) {
 		t.Fatalf("objcopy deps %v missing PB producer uid %q", deps, pb.UID)
 	}
+
 	if !slices.Contains(deps, py3cc.UID) {
 		t.Fatalf("objcopy deps %v missing py3cc producer uid %q", deps, py3cc.UID)
 	}
 
-	// (5) The global archive links the objcopy, not an auxcpp `.pic.o`.
 	globalAr := mustNodeByOutput(t, g, "$(B)/"+modPath+"/libpy3irt-test-banner_flags.global.a")
 	arArgs := prCmdArgStrings(globalAr)
+
 	if !slices.Contains(arArgs, wantObjcopy) {
 		t.Fatalf("global archive does not link the generated-proto objcopy %q: %v", wantObjcopy, arArgs)
 	}
+
 	for _, a := range arArgs {
 		if strings.Contains(a, "_raw.auxcpp") {
 			t.Fatalf("global archive still links an auxcpp member %q for a generated proto", a)
@@ -135,9 +138,6 @@ END()
 	}
 }
 
-// A PROTO_LIBRARY that calls PROTOC_FATAL_WARNINGS() renders `--fatal_warnings` in
-// the python proto command after `--python_out` and before the trailing source
-// token. A sibling without the macro must NOT carry the flag.
 func TestEmitPyProto_ProtocFatalWarningsRidesPyCommand(t *testing.T) {
 	const fwPath = "sprav/test/protos"
 	const plainPath = "sprav/test/plain"
@@ -180,44 +180,45 @@ END()
 
 	g := testGen(newMemFS(files), consumer)
 
-	// The module's py PB node must carry --fatal_warnings, after --python_out and
-	// before the trailing source token.
 	fwPy := mustNodeByOutput(t, g, "$(B)/"+fwPath+"/altay_api__intpy3___pb2.py")
 	args := prCmdArgStrings(fwPy)
 	fwIdx := slices.Index(args, "--fatal_warnings")
+
 	if fwIdx < 0 {
 		t.Fatalf("py PB command for PROTOC_FATAL_WARNINGS module missing --fatal_warnings: %v", args)
 	}
+
 	var pyOutIdx, srcIdx int = -1, -1
+
 	for i, a := range args {
 		if strings.HasPrefix(a, "--python_out=") {
 			pyOutIdx = i
 		}
+
 		if a == fwPath+"/altay_api.proto" && pyOutIdx >= 0 {
 			srcIdx = i
 		}
 	}
+
 	if !(pyOutIdx >= 0 && pyOutIdx < fwIdx) {
 		t.Fatalf("--fatal_warnings (idx %d) must follow --python_out (idx %d): %v", fwIdx, pyOutIdx, args)
 	}
+
 	if !(srcIdx >= 0 && fwIdx < srcIdx) {
 		t.Fatalf("--fatal_warnings (idx %d) must precede source token (idx %d): %v", fwIdx, srcIdx, args)
 	}
 
-	// The .pyi rides the same PB node.
 	if mustNodeByAnyOutput(t, g, "$(B)/"+fwPath+"/altay_api__intpy3___pb2.pyi") != fwPy {
 		t.Fatalf(".pyi output is not produced by the same PB node as the .py")
 	}
 
-	// The plain sibling (no macro) must NOT carry the flag.
 	plainPy := mustNodeByOutput(t, g, "$(B)/"+plainPath+"/plain__intpy3___pb2.py")
+
 	if slices.Contains(prCmdArgStrings(plainPy), "--fatal_warnings") {
 		t.Fatalf("py PB command for non-macro module must NOT carry --fatal_warnings: %v", prCmdArgStrings(plainPy))
 	}
 }
 
-// Guard: an ordinary checked-in PROTO_LIBRARY stays on the rescompiler
-// `_raw.auxcpp` path with a path-id-suffixed yapyc3 — not re-routed to objcopy.
 func TestEmitPyProto_CheckedInProtoStaysOnRawAux(t *testing.T) {
 	const modPath = "irt/test/checked"
 	const consumer = "irt/test/checkedapp"
@@ -253,33 +254,35 @@ END()
 	g := testGen(newMemFS(files), consumer)
 
 	sawAux := false
+
 	for _, n := range g.Graph {
 		if len(n.Outputs) == 0 {
 			continue
 		}
+
 		o := n.Outputs[0].string()
+
 		if strings.HasPrefix(o, "$(B)/"+modPath+"/") && strings.HasSuffix(o, "_raw.auxcpp") {
 			sawAux = true
 		}
+
 		if strings.HasPrefix(o, "$(B)/"+modPath+"/objcopy_") {
 			t.Fatalf("checked-in proto routed to objcopy resfs %q; want _raw.auxcpp", o)
 		}
 	}
+
 	if !sawAux {
 		t.Fatal("checked-in proto did not produce the expected _raw.auxcpp resource node")
 	}
 
-	// The path-id-suffixed yapyc3 is the checked-in form.
 	pyRel := "$(B)/" + modPath + "/foo__intpy3___pb2.py"
 	suffix := protoPySuffix(modPath)
+
 	if nodeByOutput(g, pyRel+"."+suffix+".yapyc3") == nil {
 		t.Fatalf("checked-in proto missing path-id-suffixed yapyc3 %q", pyRel+"."+suffix+".yapyc3")
 	}
 }
 
-// linters.make.inc gates CLANG_WARNINGS(-Wimplicit-fallthrough) behind
-// `IF (MODULE_LANG == CPP)`, evaluated per submodule: the _CPP_PROTO .pb.cc compile
-// receives the warning; the _PY3_PROTO resource aux C++ object must NOT carry it.
 func TestGen_PyProtoAux_ExcludesModuleLangCppClangWarnings(t *testing.T) {
 	const modPath = "ads/bsyeti/test/proto"
 	const consumer = "ads/bsyeti/test/app"
@@ -319,14 +322,18 @@ END()
 
 	var auxCC *Node
 	var pbCC *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P != pkCC || len(n.Outputs) == 0 {
 			continue
 		}
+
 		out := n.Outputs[0].string()
+
 		if strings.Contains(out, "_raw.auxcpp.py3") && strings.HasSuffix(out, ".o") {
 			auxCC = n
 		}
+
 		if strings.HasSuffix(out, "foo.pb.cc.o") {
 			pbCC = n
 		}
@@ -335,34 +342,41 @@ END()
 	if auxCC == nil {
 		t.Fatal("no py-proto aux CC node (*_raw.auxcpp.py3.pic.o) emitted")
 	}
+
 	if pbCC == nil {
 		t.Fatal("no CPP proto CC node (foo.pb.cc.o) emitted")
 	}
 
 	flagArgs := func(n *Node) []string {
 		var args []string
+
 		for _, c := range n.Cmds {
 			args = append(args, strStrs(c.CmdArgs.flat())...)
 		}
+
 		return args
 	}
 
 	auxHas := false
+
 	for _, a := range flagArgs(auxCC) {
 		if a == "-Wimplicit-fallthrough" {
 			auxHas = true
 		}
 	}
+
 	if auxHas {
 		t.Errorf("py-proto aux compile must NOT carry -Wimplicit-fallthrough (MODULE_LANG==PY3 for _PY3_PROTO); args=%v", flagArgs(auxCC))
 	}
 
 	pbHas := false
+
 	for _, a := range flagArgs(pbCC) {
 		if a == "-Wimplicit-fallthrough" {
 			pbHas = true
 		}
 	}
+
 	if !pbHas {
 		t.Errorf("CPP proto .pb.cc compile must still carry -Wimplicit-fallthrough (MODULE_LANG==CPP for _CPP_PROTO); args=%v", flagArgs(pbCC))
 	}

@@ -6,6 +6,7 @@ import (
 
 func TestParseDelimitedIncludeTarget_QuotedAngleSystem(t *testing.T) {
 	target, kind, ok := parseDelimitedIncludeTarget("\"<util/system/error.h>\"")
+
 	if !ok {
 		t.Fatal("parseDelimitedIncludeTarget returned ok=false")
 	}
@@ -35,6 +36,7 @@ func TestParseCIncludes_IncludeNextNotMisparsed(t *testing.T) {
 
 	nblock := make([]IncludeDirective, 64)
 	norm := nblock[:parseCIncludes([]byte("#include <foo/bar.h>\n#include \"baz.h\"\n"), nblock, 0)]
+
 	if len(norm) != 2 || norm[0].target.string() != "foo/bar.h" || norm[1].target.string() != "baz.h" {
 		t.Fatalf("normal #include parsing regressed: %+v", norm)
 	}

@@ -6,7 +6,6 @@ import (
 )
 
 func TestSwigParser_ImplicitIncludesOnRootSwg(t *testing.T) {
-	// A root .swg carries the implicit language runtimes as system directives.
 	set := SwigIncludeDirectiveParser{}.parse("mod/src.swg", []byte("%include \"local.i\"\n"), newBumpAllocator[IncludeDirective](directiveBlockHint))
 	local := set.bucket(parsedIncludesLocal)
 
@@ -21,13 +20,13 @@ func TestSwigParser_ImplicitIncludesOnRootSwg(t *testing.T) {
 		t.Fatalf("root .swg directives = %v, want %v", got, want)
 	}
 
-	// Library files get no implicit prefix.
 	libSet := SwigIncludeDirectiveParser{}.parse("contrib/tools/swig/Lib/python/python.swg", []byte("%include \"pyrun.swg\"\n"), newBumpAllocator[IncludeDirective](directiveBlockHint))
 
 	if got := len(libSet.bucket(parsedIncludesLocal)); got != 1 {
 		t.Fatalf("Lib .swg directives = %d, want 1 (no implicit prefix)", got)
 	}
 }
+
 func TestCollectSwigInducedIncludes_UnionAcrossClosure(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"mod/src.swg": `%include "local.i"
@@ -54,10 +53,10 @@ func TestCollectSwigInducedIncludes_UnionAcrossClosure(t *testing.T) {
 	})
 
 	ctx := &GenCtx{fs: fs, parsers: newIncludeParserManagerFS(fs, newSharedParseCache())}
-	// collectSwigInducedIncludes runs after the walk has parsed the closure.
+
 	closure := []VFS{intern("$(S)/mod/local.i"), intern("$(S)/mod/nested.i")}
 	got := collectSwigInducedIncludes(ctx, intern("$(S)/mod/src.swg"), closure)
-	// Raw union, root first; cross-file repeats stay.
+
 	want := []IncludeDirective{
 		{kind: includeSystem, target: internStr("Python.h")},
 		{kind: includeQuoted, target: internStr("archive.h")},

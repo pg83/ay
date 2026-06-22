@@ -8,11 +8,14 @@ import (
 
 func writeTree(t *testing.T, root string, files map[string]string) {
 	t.Helper()
+
 	for rel, content := range files {
 		full := filepath.Join(root, rel)
+
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			t.Fatal(err)
 		}
+
 		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -33,27 +36,35 @@ func TestFS_ExistsAndIsDir(t *testing.T) {
 	if !fs.isFile(dirKey(""), "a/b/c.txt") {
 		t.Errorf("c.txt should be a file")
 	}
+
 	if !fs.isFile(dirKey(""), "top.txt") {
 		t.Errorf("top.txt should be a file")
 	}
+
 	if !fs.isDir(dirKey(""), "a") {
 		t.Errorf("a should be a dir")
 	}
+
 	if !fs.isDir(dirKey(""), "a/b") {
 		t.Errorf("a/b should be a dir")
 	}
+
 	if !fs.isDir(dirKey(""), "") {
 		t.Errorf("root should be a dir")
 	}
+
 	if fs.isFile(dirKey(""), "a") {
 		t.Errorf("a is a dir, not a file")
 	}
+
 	if fs.isDir(dirKey(""), "a/b/c.txt") {
 		t.Errorf("c.txt is a file, not a dir")
 	}
+
 	if fs.isFile(dirKey(""), "a/b/missing") {
 		t.Errorf("missing should not exist")
 	}
+
 	if fs.isFile(dirKey(""), "totally/missing/path") {
 		t.Errorf("missing parent dir should not exist")
 	}
@@ -72,17 +83,21 @@ func TestFS_ExistsRoutesThroughListdir(t *testing.T) {
 	if !fs.isFile(dirKey("d"), "a.txt") {
 		t.Fatal("a missing")
 	}
+
 	if !fs.isFile(dirKey("d"), "b.txt") {
 		t.Fatal("b missing")
 	}
+
 	if !fs.isFile(dirKey("d"), "c.txt") {
 		t.Fatal("c missing")
 	}
 
 	stats := fs.perfStats()
+
 	if stats.listdirMisses != 1 {
 		t.Errorf("expected exactly 1 listdir miss for shared dir, got %d", stats.listdirMisses)
 	}
+
 	if stats.listdirHits != 2 {
 		t.Errorf("expected 2 listdir hits (3 calls - 1 miss), got %d", stats.listdirHits)
 	}
@@ -95,10 +110,13 @@ func TestFS_ListdirCachesNegative(t *testing.T) {
 	if fs.listdir(dirKey("nope")).listable() {
 		t.Error("missing dir should return nil listdir")
 	}
+
 	if fs.listdir(dirKey("nope")).listable() {
 		t.Error("missing dir should still return nil on cache hit")
 	}
+
 	stats := fs.perfStats()
+
 	if stats.listdirMisses != 1 {
 		t.Errorf("expected exactly 1 listdir miss after two calls, got %d", stats.listdirMisses)
 	}
@@ -112,6 +130,7 @@ func TestFS_Read(t *testing.T) {
 	fs := newFS(root)
 
 	data := fs.read("file.txt")
+
 	if string(data) != "hello world" {
 		t.Errorf("got %q", string(data))
 	}
@@ -146,11 +165,13 @@ func TestFS_Walk(t *testing.T) {
 		"a/b/d.txt": true,
 		"a/e.txt":   true,
 	}
+
 	for k := range want {
 		if !files[k] {
 			t.Errorf("Walk missed %q", k)
 		}
 	}
+
 	if files["top.txt"] {
 		t.Errorf("Walk leaked outside the subtree")
 	}
@@ -168,6 +189,7 @@ func TestFS_CleanRel(t *testing.T) {
 		{"a//b", "a/b"},
 		{"a/./b", "a/b"},
 	}
+
 	for _, c := range cases {
 		if got := cleanRel(c.in); got != c.want {
 			t.Errorf("cleanRel(%q) = %q, want %q", c.in, got, c.want)
@@ -175,12 +197,8 @@ func TestFS_CleanRel(t *testing.T) {
 	}
 }
 
-// testParserFS is a hermetic empty in-memory FS for parser tests that pass their
-// source inline; an INCLUDE of an absent file is silently skipped.
 var testParserFS = newMemFS(nil)
 
-// newTestScanner returns a fresh scanner backed by the given FS, so per-test
-// state does not leak.
 func newTestScanner(fs FS, sysincl SysInclSet) *IncludeScanner {
 	s := newIncludeScannerWith(
 		newIncludeParserManagerFS(fs, newSharedParseCache()),
@@ -188,15 +206,13 @@ func newTestScanner(fs FS, sysincl SysInclSet) *IncludeScanner {
 		func(Warn) {},
 		&TarjanCtx{},
 	)
-	// The scanner relies on both being non-nil.
+
 	s.codegen = newCodegenRegistry()
 	s.moduleByRef = &DenseMap[NodeRef, *ModuleEmitResult]{}
 
 	return s
 }
 
-// wireTestScanners attaches host + target scanners to a hand-built test GenCtx,
-// so codegen/scanner accessors resolve to real objects instead of nil.
 func wireTestScanners(ctx *GenCtx) {
 	fs := ctx.fs
 

@@ -2,9 +2,6 @@ package main
 
 import "testing"
 
-// TestGen_ScSourceEmitsDomschemecProducer pins that SRCS(*.sc) yields a producer
-// for its .sc.h: domschemec --in SRC --out SRC.h, tagged kv p=SC/pc yellow, with
-// an implicit PEERDIR to the domscheme lib.
 func TestGen_ScSourceEmitsDomschemecProducer(t *testing.T) {
 	files := map[string]string{}
 
@@ -29,6 +26,7 @@ END()
 	if sc.KV.P != pkSC {
 		t.Fatalf("kv.p = %q, want SC", sc.KV.P)
 	}
+
 	if sc.KV.PC != pcYellow {
 		t.Fatalf("kv.pc = %q, want yellow", sc.KV.PC)
 	}
@@ -41,9 +39,11 @@ END()
 		"--out",
 		"$(B)/mod/options.sc.h",
 	}
+
 	if len(cmd) != len(wantCmd) {
 		t.Fatalf("cmd = %v, want %v", strStrings(cmd), wantCmd)
 	}
+
 	for i, w := range wantCmd {
 		if cmd[i].string() != w {
 			t.Fatalf("cmd[%d] = %q, want %q (full %v)", i, cmd[i].string(), w, strStrings(cmd))
@@ -59,20 +59,18 @@ END()
 		"$(S)/mod/options.sc",
 		"$(S)/library/cpp/domscheme/runtime.h",
 	}
+
 	if got := vfsStringsT3(sc.flatInputs()); !vfsInputsContainAll(got, wantInputs) {
 		t.Fatalf("SC inputs = %v, want all of %v", got, wantInputs)
 	}
 
-	// The implicit PEERDIR must enter the module's peerdirs.
 	d := collectTestModule(newMemFS(files), "mod")
+
 	if !peerdirsContain(d, "library/cpp/domscheme") {
 		t.Fatalf("module peerdirs = %v, want library/cpp/domscheme", strStrings(d.peerdirs))
 	}
 }
 
-// TestGen_ScSourceAddsNoAddIncl pins that SRCS(*.sc) does not leak -I$(B)/<mod>
-// into compiles: _SRC("sc") emits the header with no `addincl` modifier, so the
-// .sc.h producer contributes no ADDINCL dir at any scope.
 func TestGen_ScSourceAddsNoAddIncl(t *testing.T) {
 	files := map[string]string{}
 
@@ -87,6 +85,7 @@ func TestGen_ScSourceAddsNoAddIncl(t *testing.T) {
 	d := collectTestModule(newMemFS(files), "mod")
 
 	genDir := build("mod")
+
 	for _, scope := range []struct {
 		name string
 		dirs []VFS
@@ -106,6 +105,7 @@ func TestGen_ScSourceAddsNoAddIncl(t *testing.T) {
 
 func collectTestModule(fs FS, modulePath string) *ModuleData {
 	mf := throw2(parseFile(fs, modulePath+"/ya.make"))
+
 	return collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, modulePath, KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source(modulePath), Kind: KindLib, Platform: testTargetP}), noWarn)
 }
 

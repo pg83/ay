@@ -12,13 +12,7 @@ var (
 	strProbeCounts  = map[uintptr]uint64{}
 )
 
-// --- runtime probe over STR.string(): the hook lives inside the function and
-// resolves the use site from the call stack. Enabled by --probe=str; disabled
-// it costs one branch. Sites tally by caller PC, resolved to file:line at dump
-// time. ---
-
 func strProbeAt() {
-	// Frame 2 skips strProbeAt and string() itself to the use site.
 	pc, _, _, ok := runtime.Caller(2)
 
 	if ok {

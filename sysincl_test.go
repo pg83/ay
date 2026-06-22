@@ -72,8 +72,6 @@ func TestParseSysInclYAML_Synthetic(t *testing.T) {
 	}
 }
 
-// TestSysInclMuslGating pins the sysincl gating: musl libc/stl files load only
-// under MUSL=yes, else a bare <stdlib.h> remaps into musl in a non-musl closure.
 func TestSysInclMuslGating(t *testing.T) {
 	muslFiles := []string{
 		"libc-to-musl.yml",
@@ -94,7 +92,6 @@ func TestSysInclMuslGating(t *testing.T) {
 		return out
 	}
 
-	// glibc (musl off): no musl file selected.
 	for _, arch := range []string{"x86_64", "aarch64"} {
 		got := selected(SysInclEnv{arch: arch, musl: false})
 
@@ -105,7 +102,6 @@ func TestSysInclMuslGating(t *testing.T) {
 		}
 	}
 
-	// musl on x86_64: x86_64 files, not the aarch64 variant.
 	gotX := selected(SysInclEnv{arch: "x86_64", musl: true})
 
 	for _, f := range []string{"libc-to-musl.yml", "linux-musl.yml", "libc-musl-libcxx.yml"} {
@@ -118,7 +114,6 @@ func TestSysInclMuslGating(t *testing.T) {
 		t.Errorf("musl=on x86_64: linux-musl-aarch64.yml selected, want x86_64 variant only")
 	}
 
-	// musl on aarch64: aarch64 variant only.
 	gotA := selected(SysInclEnv{arch: "aarch64", musl: true})
 
 	if !gotA["linux-musl-aarch64.yml"] {
@@ -130,20 +125,15 @@ func TestSysInclMuslGating(t *testing.T) {
 	}
 }
 
-// TestSysInclInternalGating pins the internal-sysincl gating: a curated,
-// config-gated list, not the whole directory. actions_zephyr.yml loads only under
-// OS_ZEPHYR, else its broad source_filter pollutes ordinary C++ closures;
-// smart_devices_linux.yml loads on OS_LINUX, still scoped per includer path.
 func TestSysInclInternalGating(t *testing.T) {
 	fs := newMemFS(map[string]string{
-		// base dir must exist (the loader guards on it).
 		"build/sysincl/macro.yml": "# empty\n",
-		// gated OUT on linux.
+
 		"build/internal/sysincl/actions_zephyr.yml": "" +
 			"- source_filter: \"^util\"\n" +
 			"  includes:\n" +
 			"  - zephyr_only.h: smart_devices/platforms/monocle_common/firmware/zephyr/zephyr_only.h\n",
-		// gated IN on linux.
+
 		"build/internal/sysincl/smart_devices_linux.yml": "" +
 			"- source_filter: \"^util\"\n" +
 			"  includes:\n" +
@@ -159,13 +149,12 @@ func TestSysInclInternalGating(t *testing.T) {
 		return paths, claimed
 	}
 
-	// gated out: its header is unknown to the rule set.
 	if paths, claimed := claims("util/foo.cpp", "zephyr_only.h"); claimed {
 		t.Errorf("actions_zephyr.yml gated out: util/foo.cpp acquired zephyr_only.h -> %v", paths)
 	}
 
-	// gated in: a matching includer acquires its header.
 	paths, claimed := claims("util/foo.cpp", "sd_linux.h")
+
 	if !claimed {
 		t.Fatalf("smart_devices_linux.yml gated in: util/foo.cpp did not acquire sd_linux.h")
 	}
@@ -174,7 +163,6 @@ func TestSysInclInternalGating(t *testing.T) {
 		t.Errorf("sd_linux.h for util/foo.cpp: got %v, want [smart_devices/linux/sd_linux.h]", paths)
 	}
 
-	// source_filter scope: a non-matching includer does not acquire it.
 	if paths, claimed := claims("adfox/bar.cpp", "sd_linux.h"); claimed {
 		t.Errorf("source_filter ^util: adfox/bar.cpp acquired sd_linux.h -> %v", paths)
 	}
@@ -211,6 +199,7 @@ func TestSourceFilter_NegativeLookahead(t *testing.T) {
 
 			for path, want := range c.match {
 				got := f.match(path)
+
 				if got != want {
 					t.Errorf("%s on %q: got %v, want %v", c.pat, path, got, want)
 				}
@@ -248,6 +237,7 @@ func TestLiteralAltsFromRegex_ParityWithRegex(t *testing.T) {
 
 	for _, pat := range expandable {
 		prefixes, ok := literalAltsFromRegex(pat)
+
 		if !ok {
 			t.Errorf("literalAltsFromRegex(%q) = not expandable, want expandable", pat)
 
@@ -255,10 +245,12 @@ func TestLiteralAltsFromRegex_ParityWithRegex(t *testing.T) {
 		}
 
 		re := regexp.MustCompile(pat)
+
 		for _, p := range paths {
 			want := re.MatchString(p)
 
 			got := false
+
 			for _, pre := range prefixes {
 				if strings.HasPrefix(p, pre) {
 					got = true
@@ -291,7 +283,6 @@ func TestLiteralAltsFromRegex_BailsOnNonLiteral(t *testing.T) {
 	}
 }
 
-// recMapping reads a record's last-wins mapping for k.
 func recMapping(r SysIncl, k string) ([]VFS, bool) {
 	id := internStr(k)
 

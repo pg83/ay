@@ -72,26 +72,27 @@ func TestFinalizeDumpGraph_StripsOnlyTicketScaffolding(t *testing.T) {
 	}
 
 	consumerNode := findGraphNodeByOutput(got.Graph, "obj/consumer.o")
+
 	if consumerNode == nil {
 		t.Fatal("consumer node missing after finalizeDumpGraph")
 	}
 
 	llvmNode := findGraphNodeByOutput(got.Graph, "contrib/libs/llvm16/include/llvm/IR/IntrinsicsX86.h")
+
 	if llvmNode == nil {
 		t.Fatal("llvm referenced node missing after finalizeDumpGraph")
 	}
 
 	pythonNode := findGraphNodeByOutput(got.Graph, "resources/YMAKE_PYTHON3")
+
 	if pythonNode == nil {
 		t.Fatal("python fetch node missing after finalizeDumpGraph")
 	}
 
-	// FETCH nodes are no longer stripped from -G: the -G graph must equal the executed
-	// graph. The consumer keeps its python fetch dep via foreign (tool) deps, which
-	// "deps" unions in after DepRefs.
 	if !reflect.DeepEqual(graphDeps(got, consumerNode), []UID{llvmNode.UID, pythonNode.UID}) {
 		t.Fatalf("consumer deps = %v, want [%s %s]", graphDeps(got, consumerNode), llvmNode.UID, pythonNode.UID)
 	}
+
 	if !reflect.DeepEqual(graphForeignDeps(got, consumerNode), []UID{pythonNode.UID}) {
 		t.Fatalf("consumer foreign_deps = %v, want [%s]", graphForeignDeps(got, consumerNode), pythonNode.UID)
 	}
@@ -116,6 +117,7 @@ func TestFinalizeDumpGraph_KeepsMatchingResultNode(t *testing.T) {
 	if want := []string{expected}; !reflect.DeepEqual(graphPrimaryOutputs(got.Graph), want) {
 		t.Fatalf("dump graph outputs = %v, want %v", graphPrimaryOutputs(got.Graph), want)
 	}
+
 	assertUIDMatchesNode(t, got, findGraphNodeByOutput(got.Graph, expected))
 }
 
@@ -147,9 +149,11 @@ func TestFinalizeDumpGraph_PrunesTransitiveStandaloneLLVM(t *testing.T) {
 	if want := []string{"bin/root"}; !reflect.DeepEqual(graphPrimaryOutputs(got.Graph), want) {
 		t.Fatalf("dump graph outputs = %v, want %v", graphPrimaryOutputs(got.Graph), want)
 	}
+
 	if node := findGraphNodeByOutput(got.Graph, leaf); node != nil {
 		t.Fatalf("transitively standalone llvm leaf survived prune: %+v", node)
 	}
+
 	if node := findGraphNodeByOutput(got.Graph, parent); node != nil {
 		t.Fatalf("standalone llvm parent survived prune: %+v", node)
 	}
@@ -208,11 +212,13 @@ func TestFinalizeDumpGraph_PreservesFinalizeValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, wantExc := finalizeExc(tt.build())
+
 			if wantExc == nil {
 				t.Fatal("Finalize unexpectedly accepted invalid emitter")
 			}
 
 			_, gotExc := finalizeDumpGraphExc(tt.build())
+
 			if gotExc == nil {
 				t.Fatalf("finalizeDumpGraph unexpectedly accepted invalid emitter; want %q", wantExc.error())
 			}
@@ -220,6 +226,7 @@ func TestFinalizeDumpGraph_PreservesFinalizeValidation(t *testing.T) {
 			if got, want := gotExc.error(), wantExc.error(); got != want {
 				t.Fatalf("finalizeDumpGraph error = %q, want Finalize error %q", got, want)
 			}
+
 			if !strings.Contains(gotExc.error(), tt.needle) {
 				t.Fatalf("finalizeDumpGraph error %q does not mention %q", gotExc.error(), tt.needle)
 			}
@@ -237,10 +244,12 @@ func finalizeDumpGraphExc(e *BufferedEmitter) (g *Graph, exc *Exception) {
 
 func graphPrimaryOutputs(nodes []*Node) []string {
 	out := make([]string, len(nodes))
+
 	for i, node := range nodes {
 		if len(node.Outputs) == 0 {
 			continue
 		}
+
 		out[i] = node.Outputs[0].rel()
 	}
 
@@ -267,9 +276,11 @@ func assertUIDMatchesNode(t *testing.T, g *Graph, node *Node) {
 	}
 
 	c := CanonBuf{uids: g.uids}
+
 	if got, want := node.UID, nodeUIDWithBuf(node, &c); got != want {
 		t.Fatalf("uid = %q, want recomputed %q", got, want)
 	}
+
 	if node.SelfUID != node.UID {
 		t.Fatalf("self_uid = %q, want uid %q", node.SelfUID, node.UID)
 	}

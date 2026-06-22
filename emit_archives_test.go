@@ -5,10 +5,6 @@ import (
 	"testing"
 )
 
-// TestArchive_PlainPropagatesSourceMembers pins that a plain ARCHIVE (no KEYS)
-// rides its source members into the include closure of a C++ unit that
-// #includes the generated archive header. Plain ARCHIVE previously left
-// PropagateSourceMembers unset, so the member never reached the consumer.
 func TestArchive_PlainPropagatesSourceMembers(t *testing.T) {
 	files := map[string]string{}
 
@@ -24,23 +20,24 @@ func TestArchive_PlainPropagatesSourceMembers(t *testing.T) {
 	g := testGen(newMemFS(files), "mod")
 
 	var use *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkCC && len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), "/use.cpp.o") {
 			use = n
+
 			break
 		}
 	}
+
 	if use == nil {
 		t.Fatal("no CC node for use.cpp.o")
 	}
+
 	if !nodeHasInput(use, "$(S)/mod/payload.lst") {
 		t.Errorf("use.cpp.o inputs %v missing plain-ARCHIVE source member %q", vfsStringsT3(use.flatInputs()), "$(S)/mod/payload.lst")
 	}
 }
 
-// TestArchiveByKeys_TopLevel covers a top-level ARCHIVE_BY_KEYS: members listed
-// plain, key list through `-k`; a C++ consumer of the generated header gets
-// -I$(B)/<moddir> and the archived members as input-closure leaves.
 func TestArchiveByKeys_TopLevel(t *testing.T) {
 	files := map[string]string{}
 
@@ -56,12 +53,14 @@ func TestArchiveByKeys_TopLevel(t *testing.T) {
 
 	g := testGen(newMemFS(files), "mod")
 
-	// (1) the archive node: members plain, -k <keys>, -o <archive>.
 	ar := mustNodeByOutput(t, g, "$(B)/mod/data.inc")
+
 	if ar.KV.P != pkAR || ar.KV.PC != pcLightRed {
 		t.Errorf("archive kv = {p:%q pc:%q}, want {AR light-red}", ar.KV.P.string(), ar.KV.PC.string())
 	}
+
 	arCmd := strings.Join(strStrs(ar.Cmds[0].CmdArgs.flat()), " ")
+
 	for _, want := range []string{
 		"$(S)/mod/a.txt $(S)/mod/sub/b.txt",
 		"-k /k1:/k2",
@@ -71,31 +70,35 @@ func TestArchiveByKeys_TopLevel(t *testing.T) {
 			t.Errorf("archive cmd %q missing %q", arCmd, want)
 		}
 	}
+
 	if strings.Contains(arCmd, "$(S)/mod/a.txt:") {
 		t.Errorf("ARCHIVE_BY_KEYS must list members plain, got colon-suffixed: %q", arCmd)
 	}
 
-	// members are the archive's action inputs.
 	for _, in := range []string{"$(S)/mod/a.txt", "$(S)/mod/sub/b.txt"} {
 		if !nodeHasInput(ar, in) {
 			t.Errorf("archive inputs %v missing member %q", vfsStringsT3(ar.flatInputs()), in)
 		}
 	}
 
-	// (2) the C++ consumer: -I$(B)/mod plus archived members as leaves.
 	var use *Node
+
 	for _, n := range g.Graph {
 		if n.KV.P == pkCC && len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), "/use.cpp.o") {
 			use = n
+
 			break
 		}
 	}
+
 	if use == nil {
 		t.Fatal("no CC node for use.cpp.o")
 	}
+
 	if !contains(use.Cmds[0].CmdArgs.flat(), "-I$(B)/mod") {
 		t.Errorf("use.cpp.o cmd missing -I$(B)/mod; got %v", strStrs(use.Cmds[0].CmdArgs.flat()))
 	}
+
 	for _, leaf := range []string{"$(S)/mod/a.txt", "$(S)/mod/sub/b.txt"} {
 		if !nodeHasInput(use, leaf) {
 			t.Errorf("use.cpp.o inputs %v missing archive closure leaf %q", vfsStringsT3(use.flatInputs()), leaf)

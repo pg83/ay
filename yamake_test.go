@@ -42,9 +42,11 @@ RECURSE_FOR_TESTS(
 
 func TestParseArchiverYaMake(t *testing.T) {
 	mf, err := parse(testParserFS, "tools/archiver/ya.make", []byte(archiverYaMake))
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	if got, want := len(mf.Stmts), 5; got != want {
 		t.Fatalf("len(Stmts) = %d, want %d (stmts=%#v)", got, want, mf.Stmts)
 	}
@@ -55,9 +57,11 @@ func TestParseArchiverYaMake(t *testing.T) {
 		if m.Name != tokProgram {
 			t.Errorf("Stmts[0].Name = %q, want %q", m.Name, "PROGRAM")
 		}
+
 		if len(m.Args) != 0 {
 			t.Errorf("Stmts[0].Args = %v, want empty", m.Args)
 		}
+
 		if m.Line == 0 {
 			t.Errorf("Stmts[0].Line = 0, want non-zero")
 		}
@@ -67,6 +71,7 @@ func TestParseArchiverYaMake(t *testing.T) {
 		t.Fatalf("Stmts[1] = %T, want *PeerdirStmt", mf.Stmts[1])
 	} else {
 		want := []string{"library/cpp/archive", "library/cpp/digest/md5", "library/cpp/getopt/small"}
+
 		if !equalStrings(strStrings(p.Paths), want) {
 			t.Errorf("PEERDIR.Paths = %v, want %v", p.Paths, want)
 		}
@@ -76,6 +81,7 @@ func TestParseArchiverYaMake(t *testing.T) {
 		t.Fatalf("Stmts[2] = %T, want *SrcsStmt", mf.Stmts[2])
 	} else {
 		want := []string{"main.cpp"}
+
 		if !equalStrings(strStrings(s.Sources), want) {
 			t.Errorf("SRCS.Sources = %v, want %v", s.Sources, want)
 		}
@@ -87,6 +93,7 @@ func TestParseArchiverYaMake(t *testing.T) {
 		if s.Name != "IDE_FOLDER" {
 			t.Errorf("SET.Name = %q, want %q", s.Name, "IDE_FOLDER")
 		}
+
 		if s.Value != "_Builders" {
 			t.Errorf("SET.Value = %q, want %q", s.Value, "_Builders")
 		}
@@ -99,11 +106,14 @@ func TestParseArchiverYaMake(t *testing.T) {
 
 func TestParseLibraryArchiveYaMake(t *testing.T) {
 	mf, err := parse(testParserFS, "library/cpp/archive/ya.make", []byte(libraryArchiveYaMake))
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	sawLibrary := false
 	sawEnd := false
+
 	for _, s := range mf.Stmts {
 		switch v := s.(type) {
 		case *ModuleStmt:
@@ -114,36 +124,42 @@ func TestParseLibraryArchiveYaMake(t *testing.T) {
 			sawEnd = true
 		}
 	}
+
 	if !sawLibrary && !sawEnd {
 		t.Fatalf("expected at least one of LIBRARY or END to appear; got %d stmts: %#v", len(mf.Stmts), mf.Stmts)
 	}
 }
 
 func TestUnknownMacro(t *testing.T) {
-	// NO_LINT is recognized-but-untyped: it lands in UnknownStmt with its args.
 	src := []byte("NO_LINT(foo bar)\n")
 	mf, err := parse(testParserFS, "test.input", src)
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	if len(mf.Stmts) != 1 {
 		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
 	}
+
 	u, ok := mf.Stmts[0].(*UnknownStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *UnknownStmt", mf.Stmts[0])
 	}
+
 	if u.Name != tokNoLint {
 		t.Errorf("UnknownStmt.Name = %q, want %q", u.Name, tokNoLint)
 	}
+
 	want := []string{"foo", "bar"}
+
 	if !equalStrings(strStrings(u.Args), want) {
 		t.Errorf("UnknownStmt.Args = %v, want %v", u.Args, want)
 	}
 }
 
 func TestUnknownMacroNameFailsFast(t *testing.T) {
-	// A name outside the closed TOK set is a corpus gap and must fail fast.
 	if _, err := parse(testParserFS, "test.input", []byte("FROBNICATE(foo bar)\n")); err == nil {
 		t.Fatal("Parse accepted an unknown macro name; want fail-fast error")
 	}
@@ -152,16 +168,21 @@ func TestUnknownMacroNameFailsFast(t *testing.T) {
 func TestCommentHandling(t *testing.T) {
 	src := []byte("# this is a comment\nPROGRAM()\n")
 	mf, err := parse(testParserFS, "test.input", src)
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	if len(mf.Stmts) != 1 {
 		t.Fatalf("len(Stmts) = %d, want 1 (comment should be dropped)", len(mf.Stmts))
 	}
+
 	m, ok := mf.Stmts[0].(*ModuleStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *ModuleStmt", mf.Stmts[0])
 	}
+
 	if m.Name != tokProgram {
 		t.Errorf("ModuleStmt.Name = %q, want %q", m.Name, "PROGRAM")
 	}
@@ -174,17 +195,23 @@ func TestCommentHandling(t *testing.T) {
 func TestMultilineMacro(t *testing.T) {
 	src := []byte("PEERDIR(\n  a/b\n  c/d\n)\n")
 	mf, err := parse(testParserFS, "test.input", src)
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	if len(mf.Stmts) != 1 {
 		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
 	}
+
 	p, ok := mf.Stmts[0].(*PeerdirStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *PeerdirStmt", mf.Stmts[0])
 	}
+
 	want := []string{"a/b", "c/d"}
+
 	if !equalStrings(strStrings(p.Paths), want) {
 		t.Errorf("PEERDIR.Paths = %v, want %v", p.Paths, want)
 	}
@@ -201,22 +228,29 @@ func TestSetQuotedAndUnquoted(t *testing.T) {
 		{"single-quoted", `SET(IDE_FOLDER '_Builders')`, "IDE_FOLDER", "_Builders"},
 		{"unquoted", `SET(NAME bare_value)`, "NAME", "bare_value"},
 	}
+
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			mf, err := parse(testParserFS, "test.input", []byte(tc.src))
+
 			if err != nil {
 				t.Fatalf("Parse(%q) failed: %v", tc.src, err)
 			}
+
 			if len(mf.Stmts) != 1 {
 				t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
 			}
+
 			s, ok := mf.Stmts[0].(*SetStmt)
+
 			if !ok {
 				t.Fatalf("Stmts[0] = %T, want *SetStmt", mf.Stmts[0])
 			}
+
 			if s.Name != tc.wantName {
 				t.Errorf("SET.Name = %q, want %q", s.Name, tc.wantName)
 			}
+
 			if s.Value != tc.wantVal {
 				t.Errorf("SET.Value = %q, want %q", s.Value, tc.wantVal)
 			}
@@ -235,19 +269,25 @@ func TestErrorCases(t *testing.T) {
 		{"unterminated macro", `PROGRAM(`, "unterminated macro", true},
 		{"weird character", `@@@`, "unexpected character", true},
 	}
+
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := parse(testParserFS, "test.input", []byte(tc.src))
+
 			if err == nil {
 				t.Fatalf("Parse(%q) returned nil error, want *ParseError", tc.src)
 			}
+
 			var pe *ParseError
+
 			if !errors.As(err, &pe) {
 				t.Fatalf("Parse(%q) returned %T, want *ParseError", tc.src, err)
 			}
+
 			if tc.wantNonZero && pe.Line == 0 {
 				t.Errorf("ParseError.Line = 0, want non-zero")
 			}
+
 			if !strings.Contains(pe.Message, tc.wantSubstr) {
 				t.Errorf("ParseError.Message = %q, want substring %q", pe.Message, tc.wantSubstr)
 			}
@@ -257,20 +297,25 @@ func TestErrorCases(t *testing.T) {
 
 func TestSetAllowsEmptyValue(t *testing.T) {
 	mf, err := parse(testParserFS, "test.input", []byte(`SET(only_one_arg)`))
+
 	if err != nil {
 		t.Fatalf("Parse returned %v, want success", err)
 	}
+
 	if len(mf.Stmts) != 1 {
 		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
 	}
 
 	stmt, ok := mf.Stmts[0].(*SetStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *SetStmt", mf.Stmts[0])
 	}
+
 	if stmt.Name != "only_one_arg" {
 		t.Fatalf("SetStmt.Name = %q, want only_one_arg", stmt.Name)
 	}
+
 	if stmt.Value != "" {
 		t.Fatalf("SetStmt.Value = %q, want empty", stmt.Value)
 	}
@@ -286,16 +331,21 @@ func TestLineEndings(t *testing.T) {
 		{"cr", "# c\rPROGRAM()\r# c2\rEND()\r"},
 	}
 	var got [3][]int
+
 	for i, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			mf, err := parse(testParserFS, "test.input", []byte(tc.src))
+
 			if err != nil {
 				t.Fatalf("Parse failed: %v", err)
 			}
+
 			if len(mf.Stmts) != 2 {
 				t.Fatalf("len(Stmts) = %d, want 2", len(mf.Stmts))
 			}
+
 			lines := make([]int, 0, 2)
+
 			for _, s := range mf.Stmts {
 				switch v := s.(type) {
 				case *ModuleStmt:
@@ -306,16 +356,21 @@ func TestLineEndings(t *testing.T) {
 					t.Fatalf("unexpected stmt %T", s)
 				}
 			}
+
 			got[i] = lines
 		})
 	}
+
 	if !equalInts(got[0], got[1]) {
 		t.Errorf("CRLF lines %v differ from LF lines %v", got[1], got[0])
 	}
+
 	if !equalInts(got[0], got[2]) {
 		t.Errorf("lone-CR lines %v differ from LF lines %v", got[2], got[0])
 	}
+
 	want := []int{2, 4}
+
 	if !equalInts(got[0], want) {
 		t.Errorf("LF baseline lines = %v, want %v", got[0], want)
 	}
@@ -330,16 +385,21 @@ func TestStringRejectsNewline(t *testing.T) {
 		{"crlf", "SET(N \"no close\r\nEND()"},
 		{"cr", "SET(N \"no close\rEND()"},
 	}
+
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := parse(testParserFS, "test.input", []byte(tc.src))
+
 			if err == nil {
 				t.Fatalf("Parse returned nil error, want *ParseError")
 			}
+
 			var pe *ParseError
+
 			if !errors.As(err, &pe) {
 				t.Fatalf("Parse returned %T, want *ParseError", err)
 			}
+
 			if !strings.Contains(pe.Message, "unterminated string") {
 				t.Errorf("ParseError.Message = %q, want substring %q", pe.Message, "unterminated string")
 			}
@@ -352,7 +412,6 @@ func TestStringRejectsNewline(t *testing.T) {
 }
 
 func TestLowercaseAndMixedCaseMacro(t *testing.T) {
-	// Lowercase/mixed-case names lie outside the closed TOK set, so parsing fails fast.
 	t.Run("lowercase", func(t *testing.T) {
 		if _, err := parse(testParserFS, "test.input", []byte("lowercase_macro()\n")); err == nil {
 			t.Fatal("Parse accepted lowercase non-TOK macro; want fail-fast error")
@@ -365,6 +424,7 @@ func TestLowercaseAndMixedCaseMacro(t *testing.T) {
 	})
 	t.Run("garbage_still_errors", func(t *testing.T) {
 		_, err := parse(testParserFS, "test.input", []byte("@@@()"))
+
 		if err == nil {
 			t.Fatalf("Parse(@@@()): want error, got nil")
 		}
@@ -384,11 +444,13 @@ func TestIsWordByteBoundary(t *testing.T) {
 		'\'', '`', ';', '|', '&', '^', '<', '>', '[', ']',
 		'@',
 	}
+
 	for _, b := range accepted {
 		if !isWordByte(b) {
 			t.Errorf("isWordByte(%q) = false, want true", b)
 		}
 	}
+
 	for _, b := range rejected {
 		if isWordByte(b) {
 			t.Errorf("isWordByte(%q) = true, want false", b)
@@ -399,17 +461,23 @@ func TestIsWordByteBoundary(t *testing.T) {
 func TestMidWordHashIsLiteral(t *testing.T) {
 	src := []byte("PEERDIR(a/b#x  # this IS a comment\n)\n")
 	mf, err := parse(testParserFS, "test.input", src)
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	if len(mf.Stmts) != 1 {
 		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
 	}
+
 	p, ok := mf.Stmts[0].(*PeerdirStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *PeerdirStmt", mf.Stmts[0])
 	}
+
 	want := []string{"a/b#x"}
+
 	if !equalStrings(strStrings(p.Paths), want) {
 		t.Errorf("PEERDIR.Paths = %v, want %v", p.Paths, want)
 	}
@@ -418,20 +486,27 @@ func TestMidWordHashIsLiteral(t *testing.T) {
 func TestStringHasNoEscapeProcessing(t *testing.T) {
 	src := []byte(`SET(N "ab\X")`)
 	mf, err := parse(testParserFS, "test.input", src)
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	if len(mf.Stmts) != 1 {
 		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
 	}
+
 	s, ok := mf.Stmts[0].(*SetStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *SetStmt", mf.Stmts[0])
 	}
+
 	want := `ab\X`
+
 	if s.Value != want {
 		t.Errorf("SET.Value = %q (% x), want %q (% x)", s.Value, s.Value, want, want)
 	}
+
 	if len(s.Value) != 4 {
 		t.Errorf("len(SET.Value) = %d, want 4", len(s.Value))
 	}
@@ -446,21 +521,27 @@ ENDIF()
 `)
 
 	mf, err := parse(testParserFS, "test.input", src)
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	if len(mf.Stmts) != 1 {
 		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
 	}
+
 	ifStmt, ok := mf.Stmts[0].(*IfStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *IfStmt", mf.Stmts[0])
 	}
 
 	cond, ok := ifStmt.Cond.(*ExprIdent)
+
 	if !ok {
 		t.Fatalf("IfStmt.Cond = %T, want *ExprIdent", ifStmt.Cond)
 	}
+
 	if cond.Name != "FOO" {
 		t.Errorf("ExprIdent.Name = %q, want %q", cond.Name, "FOO")
 	}
@@ -468,10 +549,13 @@ ENDIF()
 	if len(ifStmt.Then) != 1 {
 		t.Fatalf("len(Then) = %d, want 1", len(ifStmt.Then))
 	}
+
 	thenSrc, ok := ifStmt.Then[0].(*SrcsStmt)
+
 	if !ok {
 		t.Fatalf("Then[0] = %T, want *SrcsStmt", ifStmt.Then[0])
 	}
+
 	if !equalStrings(strStrings(thenSrc.Sources), []string{"then.cpp"}) {
 		t.Errorf("Then SRCS = %v, want [then.cpp]", thenSrc.Sources)
 	}
@@ -479,10 +563,13 @@ ENDIF()
 	if len(ifStmt.Else) != 1 {
 		t.Fatalf("len(Else) = %d, want 1", len(ifStmt.Else))
 	}
+
 	elseSrc, ok := ifStmt.Else[0].(*SrcsStmt)
+
 	if !ok {
 		t.Fatalf("Else[0] = %T, want *SrcsStmt", ifStmt.Else[0])
 	}
+
 	if !equalStrings(strStrings(elseSrc.Sources), []string{"else.cpp"}) {
 		t.Errorf("Else SRCS = %v, want [else.cpp]", elseSrc.Sources)
 	}
@@ -499,16 +586,21 @@ ENDIF()
 `)
 
 	mf, err := parse(testParserFS, "test.input", src)
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	if len(mf.Stmts) != 1 {
 		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
 	}
+
 	outer, ok := mf.Stmts[0].(*IfStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *IfStmt", mf.Stmts[0])
 	}
+
 	if id, ok := outer.Cond.(*ExprIdent); !ok || id.Name != "A" {
 		t.Fatalf("outer.Cond = %#v, want ExprIdent{A}", outer.Cond)
 	}
@@ -516,23 +608,31 @@ ENDIF()
 	if len(outer.Else) != 1 {
 		t.Fatalf("len(outer.Else) = %d, want 1 (the nested ELSEIF)", len(outer.Else))
 	}
+
 	nested, ok := outer.Else[0].(*IfStmt)
+
 	if !ok {
 		t.Fatalf("outer.Else[0] = %T, want *IfStmt (the ELSEIF)", outer.Else[0])
 	}
+
 	if id, ok := nested.Cond.(*ExprIdent); !ok || id.Name != "B" {
 		t.Fatalf("nested.Cond = %#v, want ExprIdent{B}", nested.Cond)
 	}
+
 	if len(nested.Then) != 1 {
 		t.Fatalf("len(nested.Then) = %d, want 1", len(nested.Then))
 	}
+
 	if len(nested.Else) != 1 {
 		t.Fatalf("len(nested.Else) = %d, want 1", len(nested.Else))
 	}
+
 	finalSrc, ok := nested.Else[0].(*SrcsStmt)
+
 	if !ok {
 		t.Fatalf("nested.Else[0] = %T, want *SrcsStmt", nested.Else[0])
 	}
+
 	if !equalStrings(strStrings(finalSrc.Sources), []string{"c.cpp"}) {
 		t.Errorf("final ELSE SRCS = %v, want [c.cpp]", finalSrc.Sources)
 	}
@@ -545,6 +645,7 @@ func TestParseInclude_RelativePath(t *testing.T) {
 	})
 
 	mf, err := parseFile(fs, "ya.make")
+
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
 	}
@@ -556,14 +657,17 @@ func TestParseInclude_RelativePath(t *testing.T) {
 	}
 
 	var srcs *SrcsStmt
+
 	for _, s := range mf.Stmts {
 		if v, ok := s.(*SrcsStmt); ok {
 			srcs = v
 		}
 	}
+
 	if srcs == nil {
 		t.Fatalf("Stmts has no *SrcsStmt; got %#v", mf.Stmts)
 	}
+
 	if !equalStrings(strStrings(srcs.Sources), []string{"x.cpp"}) {
 		t.Errorf("included SRCS = %v, want [x.cpp]", srcs.Sources)
 	}
@@ -571,19 +675,25 @@ func TestParseInclude_RelativePath(t *testing.T) {
 
 func TestParseJoinSrcs(t *testing.T) {
 	mf, err := parse(testParserFS, "test.input", []byte("JOIN_SRCS(allfoo a.cpp b.cpp)\n"))
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	if len(mf.Stmts) != 1 {
 		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
 	}
+
 	js, ok := mf.Stmts[0].(*JoinSrcsStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *JoinSrcsStmt", mf.Stmts[0])
 	}
+
 	if js.OutputName != "allfoo" {
 		t.Errorf("OutputName = %q, want %q", js.OutputName, "allfoo")
 	}
+
 	if !equalStrings(strStrings(js.Sources), []string{"a.cpp", "b.cpp"}) {
 		t.Errorf("Sources = %v, want [a.cpp b.cpp]", js.Sources)
 	}
@@ -591,13 +701,17 @@ func TestParseJoinSrcs(t *testing.T) {
 
 func TestParseJoinSrcs_RejectsEmpty(t *testing.T) {
 	_, err := parse(testParserFS, "test.input", []byte("JOIN_SRCS()\n"))
+
 	if err == nil {
 		t.Fatal("Parse returned nil error, want *ParseError")
 	}
+
 	var pe *ParseError
+
 	if !errors.As(err, &pe) {
 		t.Fatalf("Parse returned %T, want *ParseError", err)
 	}
+
 	if !strings.Contains(pe.Message, "JOIN_SRCS") {
 		t.Errorf("ParseError.Message = %q, want it to mention JOIN_SRCS", pe.Message)
 	}
@@ -605,6 +719,7 @@ func TestParseJoinSrcs_RejectsEmpty(t *testing.T) {
 
 func TestParseAddIncl_AllGlobal(t *testing.T) {
 	mf, err := parse(testParserFS, "test.input", []byte("ADDINCL(GLOBAL include1 GLOBAL include2)\n"))
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -614,6 +729,7 @@ func TestParseAddIncl_AllGlobal(t *testing.T) {
 	}
 
 	a, ok := mf.Stmts[0].(*AddInclStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
 	}
@@ -629,11 +745,13 @@ func TestParseAddIncl_AllGlobal(t *testing.T) {
 
 func TestParseAddIncl_NoGlobal(t *testing.T) {
 	mf, err := parse(testParserFS, "test.input", []byte("ADDINCL(include1)\n"))
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
 
 	a, ok := mf.Stmts[0].(*AddInclStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
 	}
@@ -660,6 +778,7 @@ func TestParseAddIncl_Mixed(t *testing.T) {
 	}
 
 	a, ok := mf.Stmts[0].(*AddInclStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
 	}
@@ -675,30 +794,36 @@ func TestParseAddIncl_Mixed(t *testing.T) {
 
 func TestParseAddIncl_ForKindDropped(t *testing.T) {
 	mf, err := parse(testParserFS, "test.input", []byte("ADDINCL(FOR proto contrib/libs/protobuf/src)\n"))
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	a, ok := mf.Stmts[0].(*AddInclStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
 	}
+
 	if len(a.GlobalPaths) != 0 {
 		t.Errorf("GlobalPaths = %v, want empty", a.GlobalPaths)
 	}
+
 	if !equalStrings(strStrings(a.OwnPaths), []string{"contrib/libs/protobuf/src"}) {
 		t.Errorf("OwnPaths = %v, want [contrib/libs/protobuf/src]", a.OwnPaths)
 	}
 }
 
 func TestParseAddIncl_GlobalForProtoRouted(t *testing.T) {
-	// `GLOBAL FOR proto X` must split into its own bucket so it does not also
-	// show up in GlobalPaths (C++ ADDINCL).
 	src := "ADDINCL(\n    GLOBAL contrib/libs/protobuf/src\n    GLOBAL FOR\n    proto\n    contrib/libs/protobuf/src\n)\n"
 	mf, err := parse(testParserFS, "test.input", []byte(src))
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	a, ok := mf.Stmts[0].(*AddInclStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
 	}
@@ -706,9 +831,11 @@ func TestParseAddIncl_GlobalForProtoRouted(t *testing.T) {
 	if !equalStrings(strStrings(a.GlobalPaths), []string{"contrib/libs/protobuf/src"}) {
 		t.Errorf("GlobalPaths = %v, want [contrib/libs/protobuf/src]", a.GlobalPaths)
 	}
+
 	if !equalStrings(strStrings(a.ProtoGlobalPaths), []string{"contrib/libs/protobuf/src"}) {
 		t.Errorf("ProtoGlobalPaths = %v, want [contrib/libs/protobuf/src]", a.ProtoGlobalPaths)
 	}
+
 	if len(a.OwnPaths) != 0 {
 		t.Errorf("OwnPaths = %v, want empty", a.OwnPaths)
 	}
@@ -717,22 +844,29 @@ func TestParseAddIncl_GlobalForProtoRouted(t *testing.T) {
 func TestParseAddIncl_ForAsmRouted(t *testing.T) {
 	mf, err := parse(testParserFS, "test.input",
 		[]byte("ADDINCL(FOR asm yt/yt/core/misc/isa_crc64/include)\n"))
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	a, ok := mf.Stmts[0].(*AddInclStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
 	}
+
 	if !equalStrings(strStrings(a.AsmPaths), []string{"yt/yt/core/misc/isa_crc64/include"}) {
 		t.Errorf("AsmPaths = %v, want [yt/yt/core/misc/isa_crc64/include]", a.AsmPaths)
 	}
+
 	if len(a.OwnPaths) != 0 {
 		t.Errorf("OwnPaths = %v, want empty", a.OwnPaths)
 	}
+
 	if len(a.GlobalPaths) != 0 {
 		t.Errorf("GlobalPaths = %v, want empty", a.GlobalPaths)
 	}
+
 	if len(a.AllPaths) != 0 {
 		t.Errorf("AllPaths = %v, want empty", a.AllPaths)
 	}
@@ -741,19 +875,25 @@ func TestParseAddIncl_ForAsmRouted(t *testing.T) {
 func TestParseAddIncl_GlobalForAsmRouted(t *testing.T) {
 	src := "ADDINCL(\n    GLOBAL FOR\n    asm\n    yt/yt/core/misc/isa_crc64/include\n)\n"
 	mf, err := parse(testParserFS, "test.input", []byte(src))
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	a, ok := mf.Stmts[0].(*AddInclStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *AddInclStmt", mf.Stmts[0])
 	}
+
 	if !equalStrings(strStrings(a.AsmPaths), []string{"yt/yt/core/misc/isa_crc64/include"}) {
 		t.Errorf("AsmPaths = %v, want [yt/yt/core/misc/isa_crc64/include]", a.AsmPaths)
 	}
+
 	if len(a.GlobalPaths) != 0 {
 		t.Errorf("GlobalPaths = %v, want empty", a.GlobalPaths)
 	}
+
 	if len(a.AllPaths) != 0 {
 		t.Errorf("AllPaths = %v, want empty", a.AllPaths)
 	}
@@ -761,14 +901,19 @@ func TestParseAddIncl_GlobalForAsmRouted(t *testing.T) {
 
 func TestParseCFlags_BackslashQuoteUnescaped(t *testing.T) {
 	mf, err := parse(testParserFS, "test.input", []byte("CFLAGS(-DENGINESDIR=\\\"/usr/local/lib/engines-1.1\\\")\n"))
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	c, ok := mf.Stmts[0].(*CFlagsStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *CFlagsStmt", mf.Stmts[0])
 	}
+
 	want := `-DENGINESDIR="/usr/local/lib/engines-1.1"`
+
 	if len(c.OwnFlags) != 1 || c.OwnFlags[0].string() != want {
 		t.Errorf("OwnFlags = %v, want [%s]", c.OwnFlags, want)
 	}
@@ -777,14 +922,19 @@ func TestParseCFlags_BackslashQuoteUnescaped(t *testing.T) {
 func TestParseCXXFlags_AdjacentQuotedSuffixStaysSingleFlag(t *testing.T) {
 	mf, err := parse(testParserFS, "test.input",
 		[]byte("CXXFLAGS(-DYTPROF_BUILD_TYPE='\\\"${BUILD_TYPE}\\\"')\n"))
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	c, ok := mf.Stmts[0].(*CXXFlagsStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *CXXFlagsStmt", mf.Stmts[0])
 	}
+
 	want := `-DYTPROF_BUILD_TYPE="${BUILD_TYPE}"`
+
 	if len(c.OwnFlags) != 1 || c.OwnFlags[0].string() != want {
 		t.Errorf("OwnFlags = %v, want [%s]", c.OwnFlags, want)
 	}
@@ -792,16 +942,21 @@ func TestParseCXXFlags_AdjacentQuotedSuffixStaysSingleFlag(t *testing.T) {
 
 func TestParseCFlags_Global(t *testing.T) {
 	mf, err := parse(testParserFS, "test.input", []byte("CFLAGS(GLOBAL -O2 -Wall)\n"))
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	c, ok := mf.Stmts[0].(*CFlagsStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *CFlagsStmt", mf.Stmts[0])
 	}
+
 	if !equalStrings(strStrings(c.GlobalFlags), []string{"-O2"}) {
 		t.Errorf("GlobalFlags = %v, want [-O2]", c.GlobalFlags)
 	}
+
 	if !equalStrings(strStrings(c.OwnFlags), []string{"-Wall"}) {
 		t.Errorf("OwnFlags = %v, want [-Wall]", c.OwnFlags)
 	}
@@ -809,16 +964,21 @@ func TestParseCFlags_Global(t *testing.T) {
 
 func TestParseCFlags_NoModifier(t *testing.T) {
 	mf, err := parse(testParserFS, "test.input", []byte("CFLAGS(-O2)\n"))
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	c, ok := mf.Stmts[0].(*CFlagsStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *CFlagsStmt", mf.Stmts[0])
 	}
+
 	if len(c.GlobalFlags) != 0 {
 		t.Errorf("GlobalFlags = %v, want empty", c.GlobalFlags)
 	}
+
 	if !equalStrings(strStrings(c.OwnFlags), []string{"-O2"}) {
 		t.Errorf("OwnFlags = %v, want [-O2]", c.OwnFlags)
 	}
@@ -826,16 +986,21 @@ func TestParseCFlags_NoModifier(t *testing.T) {
 
 func TestParseCFlags_PerPathGlobal(t *testing.T) {
 	mf, err := parse(testParserFS, "test.input", []byte("CFLAGS(GLOBAL -DA -DB GLOBAL -DC)\n"))
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	c, ok := mf.Stmts[0].(*CFlagsStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *CFlagsStmt", mf.Stmts[0])
 	}
+
 	if !equalStrings(strStrings(c.GlobalFlags), []string{"-DA", "-DC"}) {
 		t.Errorf("GlobalFlags = %v, want [-DA -DC]", c.GlobalFlags)
 	}
+
 	if !equalStrings(strStrings(c.OwnFlags), []string{"-DB"}) {
 		t.Errorf("OwnFlags = %v, want [-DB]", c.OwnFlags)
 	}
@@ -843,16 +1008,21 @@ func TestParseCFlags_PerPathGlobal(t *testing.T) {
 
 func TestParseCXXFlags_Global(t *testing.T) {
 	mf, err := parse(testParserFS, "test.input", []byte("CXXFLAGS(GLOBAL -nostdinc++)\n"))
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	c, ok := mf.Stmts[0].(*CXXFlagsStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *CXXFlagsStmt", mf.Stmts[0])
 	}
+
 	if !equalStrings(strStrings(c.GlobalFlags), []string{"-nostdinc++"}) {
 		t.Errorf("GlobalFlags = %v, want [-nostdinc++]", c.GlobalFlags)
 	}
+
 	if len(c.OwnFlags) != 0 {
 		t.Errorf("OwnFlags = %v, want empty", c.OwnFlags)
 	}
@@ -860,16 +1030,21 @@ func TestParseCXXFlags_Global(t *testing.T) {
 
 func TestParseCONLYFlags_Own(t *testing.T) {
 	mf, err := parse(testParserFS, "test.input", []byte("CONLYFLAGS(-Wno-pointer-sign)\n"))
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	c, ok := mf.Stmts[0].(*CONLYFlagsStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *CONLYFlagsStmt", mf.Stmts[0])
 	}
+
 	if len(c.GlobalFlags) != 0 {
 		t.Errorf("GlobalFlags = %v, want empty", c.GlobalFlags)
 	}
+
 	if !equalStrings(strStrings(c.OwnFlags), []string{"-Wno-pointer-sign"}) {
 		t.Errorf("OwnFlags = %v, want [-Wno-pointer-sign]", c.OwnFlags)
 	}
@@ -877,13 +1052,17 @@ func TestParseCONLYFlags_Own(t *testing.T) {
 
 func TestParseLDFlags(t *testing.T) {
 	mf, err := parse(testParserFS, "test.input", []byte("LDFLAGS(-lpthread -lm)\n"))
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	l, ok := mf.Stmts[0].(*LDFlagsStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *LDFlagsStmt", mf.Stmts[0])
 	}
+
 	if !equalStrings(strStrings(l.Flags), []string{"-lpthread", "-lm"}) {
 		t.Errorf("Flags = %v, want [-lpthread -lm]", l.Flags)
 	}
@@ -891,13 +1070,17 @@ func TestParseLDFlags(t *testing.T) {
 
 func TestParseSrcDir(t *testing.T) {
 	mf, err := parse(testParserFS, "test.input", []byte("SRCDIR(./xx)\n"))
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	s, ok := mf.Stmts[0].(*SrcDirStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *SrcDirStmt", mf.Stmts[0])
 	}
+
 	if len(s.Dirs) != 1 || s.Dirs[0].string() != "./xx" {
 		t.Errorf("Dirs = %q, want [./xx]", s.Dirs)
 	}
@@ -905,13 +1088,17 @@ func TestParseSrcDir(t *testing.T) {
 
 func TestParseGlobalSrcs(t *testing.T) {
 	mf, err := parse(testParserFS, "test.input", []byte("GLOBAL_SRCS(a.cpp b.cpp c.cpp)\n"))
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	g, ok := mf.Stmts[0].(*GlobalSrcsStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *GlobalSrcsStmt", mf.Stmts[0])
 	}
+
 	if !equalStrings(strStrings(g.Sources), []string{"a.cpp", "b.cpp", "c.cpp"}) {
 		t.Errorf("Sources = %v, want [a.cpp b.cpp c.cpp]", g.Sources)
 	}
@@ -1142,11 +1329,13 @@ func equalStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
 	}
+
 	for i := range a {
 		if a[i] != b[i] {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -1154,11 +1343,13 @@ func equalInts(a, b []int) bool {
 	if len(a) != len(b) {
 		return false
 	}
+
 	for i := range a {
 		if a[i] != b[i] {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -1186,20 +1377,25 @@ func TestParseYqlUdfModuleStmts(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			mf, err := parse(testParserFS, "test.input", []byte(tc.src))
+
 			if err != nil {
 				t.Fatalf("Parse failed: %v", err)
 			}
+
 			if len(mf.Stmts) != 1 {
 				t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
 			}
 
 			m, ok := mf.Stmts[0].(*ModuleStmt)
+
 			if !ok {
 				t.Fatalf("Stmts[0] = %T, want *ModuleStmt", mf.Stmts[0])
 			}
+
 			if m.Name.string() != tc.wantName {
 				t.Fatalf("ModuleStmt.Name = %q, want %q", m.Name.string(), tc.wantName)
 			}
+
 			if !equalStrings(strStrings(m.Args), tc.wantArgs) {
 				t.Fatalf("ModuleStmt.Args = %v, want %v", m.Args, tc.wantArgs)
 			}
@@ -1209,20 +1405,25 @@ func TestParseYqlUdfModuleStmts(t *testing.T) {
 
 func TestParseSetAllowsEmptyValue(t *testing.T) {
 	mf, err := parse(testParserFS, "test.input", []byte("SET(DISABLE_HYPERSCAN_BUILD)\n"))
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	if len(mf.Stmts) != 1 {
 		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
 	}
 
 	s, ok := mf.Stmts[0].(*SetStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *SetStmt", mf.Stmts[0])
 	}
+
 	if s.Name != "DISABLE_HYPERSCAN_BUILD" {
 		t.Fatalf("SET.Name = %q, want DISABLE_HYPERSCAN_BUILD", s.Name)
 	}
+
 	if s.Value != "" {
 		t.Fatalf("SET.Value = %q, want empty string", s.Value)
 	}
@@ -1236,9 +1437,11 @@ SRCS(b.cpp)
 ENDIF(OS_LINUX)
 `)
 	mf, err := parse(testParserFS, "test.input", src)
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	if len(mf.Stmts) != 1 {
 		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
 	}
@@ -1257,26 +1460,33 @@ func TestParseRunPy3ProgramAsRunProgramStmt(t *testing.T) {
 )
 `)
 	mf, err := parse(testParserFS, "test.input", src)
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	if len(mf.Stmts) != 1 {
 		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
 	}
 
 	stmt, ok := mf.Stmts[0].(*RunProgramStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *RunProgramStmt", mf.Stmts[0])
 	}
+
 	if stmt.ToolPath.string() != "tools/gen" {
 		t.Fatalf("ToolPath = %q, want tools/gen", stmt.ToolPath)
 	}
+
 	if !equalStrings(strStrings(stmt.Args), []string{"foo"}) {
 		t.Fatalf("Args = %v, want [foo]", stmt.Args)
 	}
+
 	if !equalStrings(strStrings(stmt.INFiles), []string{"input.txt"}) {
 		t.Fatalf("INFiles = %v, want [input.txt]", stmt.INFiles)
 	}
+
 	if !equalStrings(strStrings(stmt.OUTFiles), []string{"output.txt"}) {
 		t.Fatalf("OUTFiles = %v, want [output.txt]", stmt.OUTFiles)
 	}
@@ -1294,27 +1504,29 @@ func TestParseRunProgramToolSection(t *testing.T) {
 )
 `)
 	mf, err := parse(testParserFS, "test.input", src)
+
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
+
 	if len(mf.Stmts) != 1 {
 		t.Fatalf("len(Stmts) = %d, want 1", len(mf.Stmts))
 	}
 
 	stmt, ok := mf.Stmts[0].(*RunProgramStmt)
+
 	if !ok {
 		t.Fatalf("Stmts[0] = %T, want *RunProgramStmt", mf.Stmts[0])
 	}
+
 	if !equalStrings(strStrings(stmt.ToolPaths), []string{"contrib/tools/protoc/plugins/cpp_styleguide"}) {
 		t.Fatalf("ToolPaths = %v, want [contrib/tools/protoc/plugins/cpp_styleguide]", stmt.ToolPaths)
 	}
+
 	if !equalStrings(strStrings(stmt.OutputIncludes), []string{"contrib/libs/protobuf/src/google/protobuf/message.h"}) {
 		t.Fatalf("OutputIncludes = %v, want [contrib/libs/protobuf/src/google/protobuf/message.h]", stmt.OutputIncludes)
 	}
 }
-
-// Parse-time variable expansion in INCLUDE paths: an INCLUDE argument is
-// evaluated against the accumulated SET env before the path is resolved.
 
 func setStmtByName(stmts []Stmt, name string) *SetStmt {
 	for _, s := range stmts {
@@ -1322,6 +1534,7 @@ func setStmtByName(stmts []Stmt, name string) *SetStmt {
 			return v
 		}
 	}
+
 	return nil
 }
 
@@ -1335,6 +1548,7 @@ func TestParseInclude_ExpandsVarFromEarlierSet(t *testing.T) {
 	})
 
 	mf, err := parseFile(fs, "app/ya.make")
+
 	if err != nil {
 		t.Fatalf("parseFile failed: %v", err)
 	}
@@ -1346,15 +1560,17 @@ func TestParseInclude_ExpandsVarFromEarlierSet(t *testing.T) {
 	}
 
 	fp := setStmtByName(mf.Stmts, "FEATURE_PEERDIRS")
+
 	if fp == nil {
 		t.Fatalf("variable-bearing INCLUDE was skipped: no SET(FEATURE_PEERDIRS); got %#v", mf.Stmts)
 	}
+
 	if fp.Value != "feature/model" {
 		t.Errorf("FEATURE_PEERDIRS = %q, want feature/model", fp.Value)
 	}
 
-	// Ordering: the SET must precede the module body.
 	var setIdx, modIdx = -1, -1
+
 	for i, s := range mf.Stmts {
 		switch v := s.(type) {
 		case *SetStmt:
@@ -1367,13 +1583,13 @@ func TestParseInclude_ExpandsVarFromEarlierSet(t *testing.T) {
 			}
 		}
 	}
+
 	if setIdx == -1 || modIdx == -1 || setIdx >= modIdx {
 		t.Errorf("SET(FEATURE_PEERDIRS) at %d must precede PY3_PROGRAM at %d", setIdx, modIdx)
 	}
 }
 
 func TestParseInclude_IgnoresArgumentsAfterFirst(t *testing.T) {
-	// Only args[0] of INCLUDE(...) is read; later arguments must not be.
 	fs := newMemFS(map[string]string{
 		"ya.make":     "LIBRARY()\nINCLUDE(a.inc b_${NAME}.inc)\nEND()\n",
 		"a.inc":       "SET(NAME value)\n",
@@ -1381,6 +1597,7 @@ func TestParseInclude_IgnoresArgumentsAfterFirst(t *testing.T) {
 	})
 
 	mf, err := parseFile(fs, "ya.make")
+
 	if err != nil {
 		t.Fatalf("parseFile failed: %v", err)
 	}
@@ -1388,6 +1605,7 @@ func TestParseInclude_IgnoresArgumentsAfterFirst(t *testing.T) {
 	if setStmtByName(mf.Stmts, "NAME") == nil {
 		t.Fatalf("first INCLUDE arg was not read; got %#v", mf.Stmts)
 	}
+
 	for _, s := range mf.Stmts {
 		if v, ok := s.(*SrcsStmt); ok && equalStrings(strStrings(v.Sources), []string{"found.cpp"}) {
 			t.Fatalf("second INCLUDE arg was read; upstream ignores args after args[0]")
@@ -1401,16 +1619,19 @@ func TestParseInclude_MissingExpandedTargetIsSilent(t *testing.T) {
 	})
 
 	mf, err := parseFile(fs, "ya.make")
+
 	if err != nil {
 		t.Fatalf("missing expanded include must not error: %v", err)
 	}
-	// Only the module's own SRCS(x.cpp) survives — nothing from the absent file.
+
 	var srcs *SrcsStmt
+
 	for _, s := range mf.Stmts {
 		if v, ok := s.(*SrcsStmt); ok {
 			srcs = v
 		}
 	}
+
 	if srcs == nil || !equalStrings(strStrings(srcs.Sources), []string{"x.cpp"}) {
 		t.Errorf("unexpected stmts after missing include: %#v", mf.Stmts)
 	}
@@ -1422,9 +1643,11 @@ func TestParseInclude_UnresolvedVarIsSilent(t *testing.T) {
 	})
 
 	mf, err := parseFile(fs, "ya.make")
+
 	if err != nil {
 		t.Fatalf("unresolved include var must not error: %v", err)
 	}
+
 	if setStmtByName(mf.Stmts, "anything") != nil {
 		t.Fatal("unexpected included content")
 	}
@@ -1436,9 +1659,11 @@ func TestParseInclude_AbsoluteAfterExpansionRejected(t *testing.T) {
 	})
 
 	_, err := parseFile(fs, "ya.make")
+
 	if err == nil {
 		t.Fatal("expected absolute-path rejection, got nil")
 	}
+
 	if !strings.Contains(err.Error(), "absolute paths escape the source root") {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -1450,9 +1675,11 @@ func TestParseInclude_CycleWithExpandedKey(t *testing.T) {
 	})
 
 	_, err := parseFile(fs, "a.inc")
+
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
+
 	if !strings.Contains(err.Error(), "INCLUDE cycle") {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -1466,23 +1693,24 @@ func TestParseInclude_SetInsideIfFeedsLaterInclude(t *testing.T) {
 	})
 
 	mf, err := parseFile(fs, "ya.make")
+
 	if err != nil {
 		t.Fatalf("parseFile failed: %v", err)
 	}
+
 	var srcs *SrcsStmt
+
 	for _, s := range mf.Stmts {
 		if v, ok := s.(*SrcsStmt); ok {
 			srcs = v
 		}
 	}
+
 	if srcs == nil || !equalStrings(strStrings(srcs.Sources), []string{"fromif.cpp"}) {
 		t.Fatalf("SET inside IF body did not feed later INCLUDE; got %#v", mf.Stmts)
 	}
 }
 
-// An included file SETs a list later consumed by a RUN_PROGRAM argument through
-// a ${MODDIR}/DEFAULT-derived include path: the include env must carry MODDIR and
-// fold DEFAULT so the path resolves.
 func TestParseInclude_ModdirDefaultIncludeSetListFeedsRunProgram(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"pkg/cfg/ya.make": "LIBRARY()\n" +
@@ -1498,6 +1726,7 @@ func TestParseInclude_ModdirDefaultIncludeSetListFeedsRunProgram(t *testing.T) {
 	})
 
 	mf, err := parseFile(fs, "pkg/cfg/ya.make")
+
 	if err != nil {
 		t.Fatalf("parseFile failed: %v", err)
 	}
@@ -1515,6 +1744,7 @@ func TestParseInclude_ModdirDefaultIncludeSetListFeedsRunProgram(t *testing.T) {
 
 	got := strStrings(d.runPrograms[0].Args)
 	want := []string{"first.mod", "second.mod", "third.mod", "--bindir", "$(B)/pkg/cfg"}
+
 	if !equalStrings(got, want) {
 		t.Fatalf("RUN_PROGRAM args = %v, want %v (the SET-list must expand, not survive as ${MODULES_INCLUDED})", got, want)
 	}

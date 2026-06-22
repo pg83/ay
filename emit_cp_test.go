@@ -23,9 +23,11 @@ END()
 	g := testGen(newMemFS(files), "mod")
 
 	cp := mustNodeByOutput(t, g, "$(B)/mod/shared/generated.h")
+
 	if !nodeHasInput(cp, "$(S)/shared/generated.txt") {
 		t.Fatalf("copy inputs missing source-root generated.txt: %#v", cp.flatInputs())
 	}
+
 	if nodeHasInput(cp, "$(S)/mod/shared/generated.txt") {
 		t.Fatalf("copy inputs still carry duplicated module-prefixed generated.txt: %#v", cp.flatInputs())
 	}

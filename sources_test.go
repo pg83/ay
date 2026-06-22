@@ -14,32 +14,30 @@ func TestResolveSourceVFS_RootRelativeSrc(t *testing.T) {
 	instance := ModuleInstance{Path: source(moduleDir)}
 	srcDirs := []VFS{dirKey(moduleDir)}
 
-	// Root-relative SRCS resolves at the source root.
 	got := resolveSourceVFS(ctx, instance, "geobase/library/asset.cpp", srcDirs)
+
 	if want := source("geobase/library/asset.cpp"); got != want {
 		t.Fatalf("root-relative src: got %s, want %s", got.rel(), want.rel())
 	}
 
-	// Module-relative src resolves under the module dir.
 	got = resolveSourceVFS(ctx, instance, "local.cpp", srcDirs)
+
 	if want := source("geobase/library/abi/local.cpp"); got != want {
 		t.Fatalf("module-relative src: got %s, want %s", got.rel(), want.rel())
 	}
 
-	// A name under both prefers the module dir (curdir wins).
 	fs2 := newMemFS(map[string]string{
 		"shared.cpp":                     "",
 		"geobase/library/abi/shared.cpp": "",
 	})
 	ctx2 := &GenCtx{fs: fs2}
 	got = resolveSourceVFS(ctx2, instance, "shared.cpp", srcDirs)
+
 	if want := source("geobase/library/abi/shared.cpp"); got != want {
 		t.Fatalf("ambiguous src: got %s, want %s", got.rel(), want.rel())
 	}
 }
 
-// Graph-level regression: the root-relative source's CC node must bind it at
-// the source root, never the doubled $(S)/<moduledir>/<path>.
 func TestGen_RootRelativeSrc_CCInputsNotDoubled(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"geobase/library/abi/ya.make":   "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(local.cpp geobase/library/asset.cpp)\nEND()\n",

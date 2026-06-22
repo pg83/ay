@@ -52,12 +52,12 @@ func TestIntMapCapacityIsPowerOfTwo(t *testing.T) {
 	}
 }
 
-// Keys sharing a home slot must all be found via probing, including wraparound.
 func TestIntMapCollisionAndWraparound(t *testing.T) {
-	m := newIntMap[int](0) // cap 8, mask 7
+	m := newIntMap[int](0)
 	cap0 := uint64(len(m.data))
 
-	keys := []uint64{1, 1 + cap0, 1 + 2*cap0, 7, 7 + cap0, 7 + 2*cap0} // slot 7 wraps
+	keys := []uint64{1, 1 + cap0, 1 + 2*cap0, 7, 7 + cap0, 7 + 2*cap0}
+
 	for i, k := range keys {
 		m.put(k, i)
 	}
@@ -74,7 +74,7 @@ func TestIntMapGrowKeepsAll(t *testing.T) {
 	const n = 100_000
 
 	for i := uint64(1); i <= n; i++ {
-		m.put(i*0x9E3779B97F4A7C15, i) // spread keys
+		m.put(i*0x9E3779B97F4A7C15, i)
 	}
 
 	if m.len() != n {
@@ -92,14 +92,13 @@ func TestIntMapGrowKeepsAll(t *testing.T) {
 	}
 }
 
-// Differential test against the builtin map. Keys kept non-zero (0 is reserved).
 func TestIntMapMatchesBuiltin(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	ref := map[uint64]int64{}
 	m := newIntMap[int64](0)
 
 	for i := 0; i < 300_000; i++ {
-		k := rng.Uint64()%40_000 + 1 // small space → collisions + overwrites; non-zero
+		k := rng.Uint64()%40_000 + 1
 		v := rng.Int63()
 		ref[k] = v
 		m.put(k, v)
@@ -115,7 +114,6 @@ func TestIntMapMatchesBuiltin(t *testing.T) {
 		}
 	}
 
-	// Negative lookups over the full 64-bit space.
 	for i := 0; i < 100_000; i++ {
 		k := rng.Uint64() | 1
 		_, refOK := ref[k]
@@ -127,11 +125,11 @@ func TestIntMapMatchesBuiltin(t *testing.T) {
 	}
 }
 
-// Cell is find-or-insert: writable pointer plus whether the key existed.
 func TestIntMapCell(t *testing.T) {
 	m := newIntMap[int](0)
 
 	p, existed := m.cell(5)
+
 	if existed {
 		t.Fatalf("Cell(5) existed on empty map")
 	}
@@ -147,6 +145,7 @@ func TestIntMapCell(t *testing.T) {
 	}
 
 	p2, existed2 := m.cell(5)
+
 	if !existed2 || *p2 != 99 {
 		t.Fatalf("Cell(5) again = %d,%v want 99,true", *p2, existed2)
 	}
@@ -162,13 +161,13 @@ func TestIntMapCell(t *testing.T) {
 	}
 }
 
-// Cell keeps inserting correctly across the grows it triggers.
 func TestIntMapCellGrows(t *testing.T) {
 	m := newIntMap[int](0)
 	const n = 50_000
 
 	for i := 1; i <= n; i++ {
 		p, existed := m.cell(uint64(i) * 0x9E3779B97F4A7C15)
+
 		if existed {
 			t.Fatalf("Cell reported existing for fresh key %d", i)
 		}
@@ -187,7 +186,6 @@ func TestIntMapCellGrows(t *testing.T) {
 	}
 }
 
-// Pointer value type round-trips.
 func TestIntMapPointerValues(t *testing.T) {
 	type box struct{ n int }
 

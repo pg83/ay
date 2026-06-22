@@ -11,15 +11,15 @@ func TestDartsLongestMatch(t *testing.T) {
 		wantIdx int
 		wantOk  bool
 	}{
-		{[]string{"arc/api/proto/"}, 1, true},     // longest wins
-		{[]string{"arc/api/proto", "/"}, 1, true}, // variadic, no concat
-		{[]string{"arc/", "api/x/"}, 1, true},     // split mid-key
+		{[]string{"arc/api/proto/"}, 1, true},
+		{[]string{"arc/api/proto", "/"}, 1, true},
+		{[]string{"arc/", "api/x/"}, 1, true},
 		{[]string{"arc/x/"}, 0, true},
 		{[]string{"arc/"}, 0, true},
-		{[]string{"arcfoo/x/"}, 0, false}, // arc/ not a prefix
+		{[]string{"arcfoo/x/"}, 0, false},
 		{[]string{"util/x/"}, 2, true},
 		{[]string{"april/arf/x/"}, 3, true},
-		{[]string{"april/"}, 0, false}, // not a key
+		{[]string{"april/"}, 0, false},
 		{[]string{"contrib/x/"}, 0, false},
 		{[]string{""}, 0, false},
 		{nil, 0, false},
@@ -27,6 +27,7 @@ func TestDartsLongestMatch(t *testing.T) {
 
 	for _, c := range cases {
 		idx, ok := d.longestMatch(c.parts...)
+
 		if ok != c.wantOk || (ok && idx != c.wantIdx) {
 			t.Errorf("longestMatch(%q) = (%d,%v), want (%d,%v)", c.parts, idx, ok, c.wantIdx, c.wantOk)
 		}
@@ -53,6 +54,7 @@ func TestDartsEmptyAndExact(t *testing.T) {
 		{"", 0, false},
 	} {
 		idx, ok := d.longestMatch(tc.q)
+
 		if ok != tc.ok || (ok && idx != tc.idx) {
 			t.Errorf("longestMatch(%q) = (%d,%v), want (%d,%v)", tc.q, idx, ok, tc.idx, tc.ok)
 		}

@@ -30,22 +30,17 @@ func dispatch(argv []string) {
 		}
 	}
 
-	code := runCommand(rest, g) // empty rest falls through to choice-point help
+	code := runCommand(rest, g)
 
 	dumpProbes(probes)
-	dumpCalls() // flush callsite reachability when CALLSITE_OUT is set
+	dumpCalls()
 	os.Exit(code)
 }
 
-// GlobalFlags are the options parsed before the subcommand and threaded to
-// every handler.
 type GlobalFlags struct {
 	Verbose bool
 }
 
-// parseGlobalFlags consumes the leading -flags, returning the --probe values,
-// GlobalFlags, and remaining argv. The first non-flag arg or -h/--help ends the
-// global section.
 func parseGlobalFlags(argv []string) (probes []string, g GlobalFlags, rest []string) {
 	i := 0
 
@@ -73,8 +68,6 @@ func parseGlobalFlags(argv []string) (probes []string, g GlobalFlags, rest []str
 	return probes, g, argv[i:]
 }
 
-// command binds a subcommand token path to its handler. hide keeps internal
-// commands (invoked by build-graph nodes) out of the listing.
 type command struct {
 	path []string
 	run  func(g GlobalFlags, args []string) int
@@ -82,8 +75,6 @@ type command struct {
 	hide bool
 }
 
-// commands is the flat subcommand table; dispatch picks the entry whose token
-// path is the longest prefix of the argv.
 var commands = []command{
 	{
 		path: []string{"fetch"}, run: cmdFetch, hide: true,
@@ -166,7 +157,6 @@ var commands = []command{
 	},
 }
 
-// Help palette.
 func clHeader(s string) string {
 	return color("light-green", s)
 }
@@ -179,7 +169,6 @@ func clFlag(s string) string {
 	return color("light-yellow", s)
 }
 
-// isTokenPrefix reports whether p is a token-wise prefix of of.
 func isTokenPrefix(p, of []string) bool {
 	if len(p) > len(of) {
 		return false
@@ -194,8 +183,6 @@ func isTokenPrefix(p, of []string) bool {
 	return true
 }
 
-// usageCommands lists the subcommands under prefix with their help. Hidden
-// commands and the collapsed `dev` group expand only under verbose.
 func usageCommands(prefix []string, verbose bool) string {
 	var b strings.Builder
 
@@ -205,7 +192,6 @@ func usageCommands(prefix []string, verbose bool) string {
 		b.WriteString(clHeader("usage:") + " ay [global-flags] " + strings.Join(prefix, " ") + " <subcommand> [args]")
 	}
 
-	// Only --verbose shows by default; it also reveals the remaining flags.
 	b.WriteString("\n  " + clFlag("-v, --verbose") + "             expand collapsed groups (dev), hidden commands, and the flags below")
 
 	if verbose {
@@ -217,7 +203,6 @@ func usageCommands(prefix []string, verbose bool) string {
 	devCollapsed := false
 	first := true
 
-	// entry opens a subcommand block, blank-line-separated from the previous.
 	entry := func(name string) {
 		if first {
 			b.WriteString("\n  ")
@@ -234,8 +219,6 @@ func usageCommands(prefix []string, verbose bool) string {
 			continue
 		}
 
-		// Collapse the dev group to one line unless --verbose; drilling in
-		// lists it regardless.
 		if len(prefix) == 0 && !verbose && c.path[0] == "dev" {
 			if !devCollapsed {
 				entry("dev:")
@@ -257,8 +240,6 @@ func usageCommands(prefix []string, verbose bool) string {
 	return b.String()
 }
 
-// runCommand dispatches argv by longest matching token path: a leaf match runs
-// its handler, a choice-point prefix shows prefix help, else unknown.
 func runCommand(argv []string, g GlobalFlags) int {
 	best := -1
 	bestLen := 0

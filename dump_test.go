@@ -15,6 +15,7 @@ func TestNormPath(t *testing.T) {
 		"$(LLD_ROOT-12)/x $(YMAKE_PYTHON3-9)/p": "$(LLD_ROOT)/x $(YMAKE_PYTHON3)/p",
 		"/usr/bin/clang":                        "/usr/bin/clang",
 	}
+
 	for in, want := range cases {
 		if got := normPath(in); got != want {
 			t.Errorf("normPath(%q) = %q, want %q", in, got, want)
@@ -35,6 +36,7 @@ func TestDumpSortMergesChunks(t *testing.T) {
 
 	got := string(throw2(os.ReadFile(out)))
 	want := "apple\napple\nbanana\ncherry\ndate\n"
+
 	if got != want {
 		t.Fatalf("sorted = %q, want %q", got, want)
 	}
@@ -43,11 +45,14 @@ func TestDumpSortMergesChunks(t *testing.T) {
 func node(uid, p, out string, deps, inputs []string, extra string) string {
 	q := func(ss []string) string {
 		parts := make([]string, len(ss))
+
 		for i, s := range ss {
 			parts[i] = `"` + s + `"`
 		}
+
 		return "[" + strings.Join(parts, ",") + "]"
 	}
+
 	return `{"uid":"` + uid + `","kv":{"p":"` + p + `"},"outputs":["` + out + `"],"deps":` +
 		q(deps) + `,"inputs":` + q(inputs) + `,"cmds":[],"tags":[],"requirements":{},` +
 		`"target_properties":{},"platform":"linux"` + extra + `}`
@@ -67,9 +72,11 @@ func runNormalizeSort(t *testing.T, dir, name, graphJSON, target string) string 
 	if exc := try(func() { cmdDumpNormalize(GlobalFlags{}, []string{"--in", raw, "--target", target, "--out", norm}) }); exc != nil {
 		t.Fatalf("normalize %s: %v", name, exc)
 	}
+
 	if exc := try(func() { cmdDumpSort(GlobalFlags{}, []string{"--in", norm, "--out", sorted}) }); exc != nil {
 		t.Fatalf("sort %s: %v", name, exc)
 	}
+
 	return string(throw2(os.ReadFile(sorted)))
 }
 
@@ -99,9 +106,11 @@ func TestDumpNormalizeSemanticEquivalence(t *testing.T) {
 	if na != nb {
 		t.Fatalf("isomorphic graphs A and B normalized differently:\nA=%s\nB=%s", na, nb)
 	}
+
 	if na == nc {
 		t.Fatalf("semantically different graph C matched A:\n%s", na)
 	}
+
 	if n := strings.Count(na, "\n"); n != 2 {
 		t.Fatalf("expected 2 nodes in closure, got %d lines:\n%s", n, na)
 	}
@@ -127,6 +136,7 @@ func TestDumpDiff(t *testing.T) {
 	}
 
 	got := string(throw2(os.ReadFile(out)))
+
 	for _, want := range []string{
 		"=== self_uid only in LEFT (2) ===\nB\nC\n",
 		"=== self_uid only in RIGHT (2) ===\nD\nE\n",
@@ -148,9 +158,11 @@ func captureStdout(t *testing.T, fn func()) string {
 	exc := try(fn)
 	os.Stdout = old
 	throw(f.Close())
+
 	if exc != nil {
 		t.Fatalf("captured call threw: %v", exc)
 	}
+
 	return string(throw2(os.ReadFile(f.Name())))
 }
 
@@ -162,11 +174,13 @@ func TestDumpGrep(t *testing.T) {
 			`{"self_uid":"BB","outputs":["$(B)/p/b.o"],"kv":{"p":"CC"}}`+"\n"), 0o644))
 
 	byOut := captureStdout(t, func() { cmdDumpGrep(GlobalFlags{}, []string{"--in", in, "$(BUILD_ROOT)/p/a.o"}) })
+
 	if !strings.Contains(byOut, `"AA"`) || strings.Contains(byOut, `"BB"`) {
 		t.Fatalf("grep by output: want AA only, got:\n%s", byOut)
 	}
 
 	bySU := captureStdout(t, func() { cmdDumpGrep(GlobalFlags{}, []string{"--in", in, "BB"}) })
+
 	if !strings.Contains(bySU, `"BB"`) || strings.Contains(bySU, `"AA"`) {
 		t.Fatalf("grep by self_uid: want BB only, got:\n%s", bySU)
 	}
@@ -180,10 +194,13 @@ func TestDumpGrepSubstrRegex(t *testing.T) {
 			`{"self_uid":"BB","outputs":["/b.o"],"cmds":[{"cmd_args":["clang","-O2"]}]}`+"\n"), 0o644))
 
 	sub := captureStdout(t, func() { cmdDumpGrep(GlobalFlags{}, []string{"--in", in, "--substr", "${SSE41_CFLAGS}"}) })
+
 	if !strings.Contains(sub, `"AA"`) || strings.Contains(sub, `"BB"`) {
 		t.Fatalf("grep --substr: want AA only, got:\n%s", sub)
 	}
+
 	rx := captureStdout(t, func() { cmdDumpGrep(GlobalFlags{}, []string{"--in", in, "--regex", "SSE[0-9]+_CFLAGS"}) })
+
 	if !strings.Contains(rx, `"AA"`) || strings.Contains(rx, `"BB"`) {
 		t.Fatalf("grep --regex: want AA only, got:\n%s", rx)
 	}
@@ -205,18 +222,22 @@ func TestDumpDiffModes(t *testing.T) {
 	run := func(mode ...string) string {
 		out := filepath.Join(dir, "o.txt")
 		args := append([]string{"--left", left, "--right", right, "--out", out}, mode...)
+
 		if exc := try(func() { cmdDumpDiff(GlobalFlags{}, args) }); exc != nil {
 			t.Fatalf("diff %v: %v", mode, exc)
 		}
+
 		return string(throw2(os.ReadFile(out)))
 	}
 
 	if bf := run("--by-field"); !strings.Contains(bf, "cmds") {
 		t.Fatalf("by-field missing cmds:\n%s", bf)
 	}
+
 	if bt := run("--by-token"); !strings.Contains(bt, "${SSE}") || !strings.Contains(bt, "-fno-omit-frame-pointer") {
 		t.Fatalf("by-token missing tokens:\n%s", bt)
 	}
+
 	if pr := run("--pair", "/a.o"); !strings.Contains(pr, "+${SSE}") || !strings.Contains(pr, "+-fno-omit-frame-pointer") {
 		t.Fatalf("pair missing token diffs:\n%s", pr)
 	}
@@ -230,10 +251,12 @@ func TestDumpDiffModes_PairDuplicateOutputsByVariant(t *testing.T) {
 	line := func(uid string, host bool) string {
 		hostField := ""
 		tags := "[]"
+
 		if host {
 			hostField = `,"host_platform":true`
 			tags = `["tool"]`
 		}
+
 		return `{"self_uid":"` + uid + `","uid":"` + uid + `","outputs":["/dup"],"deps":[],"inputs":[],"cmds":[],"tags":` + tags +
 			`,"kv":{"p":"R6"},"env":{},"platform":"linux","requirements":{},"target_properties":{}` + hostField + `}`
 	}
@@ -244,18 +267,22 @@ func TestDumpDiffModes_PairDuplicateOutputsByVariant(t *testing.T) {
 	run := func(mode ...string) string {
 		out := filepath.Join(dir, "o.txt")
 		args := append([]string{"--left", left, "--right", right, "--out", out}, mode...)
+
 		if exc := try(func() { cmdDumpDiff(GlobalFlags{}, args) }); exc != nil {
 			t.Fatalf("diff %v: %v", mode, exc)
 		}
+
 		return string(throw2(os.ReadFile(out)))
 	}
 
 	byField := run("--by-field")
+
 	if strings.Contains(byField, "host_platform") || strings.Contains(byField, "tags") {
 		t.Fatalf("duplicate output pairing leaked variant-only diffs:\n%s", byField)
 	}
 
 	byKind := run("--by-kind")
+
 	if strings.Contains(byKind, "host_platform:") || !strings.Contains(byKind, "R6") {
 		t.Fatalf("by-kind did not pair duplicate variants cleanly:\n%s", byKind)
 	}
@@ -270,10 +297,12 @@ func TestDumpDiffPair_PrefersDivergentDuplicateVariant(t *testing.T) {
 	line := func(selfUID, uid, mode string, host bool) string {
 		hostField := ""
 		tags := "[]"
+
 		if host {
 			hostField = `,"host_platform":true`
 			tags = `["tool"]`
 		}
+
 		return `{"self_uid":"` + selfUID + `","uid":"` + uid + `","outputs":["/dup"],"deps":[],"inputs":[],"cmds":[{"cmd_args":["clang","` + mode + `"]}],"tags":` + tags +
 			`,"kv":{"p":"R6"},"env":{},"platform":"linux","requirements":{},"target_properties":{}` + hostField + `}`
 	}
@@ -286,15 +315,14 @@ func TestDumpDiffPair_PrefersDivergentDuplicateVariant(t *testing.T) {
 	}); exc != nil {
 		t.Fatalf("pair duplicate outputs: %v", exc)
 	}
+
 	got := string(throw2(os.ReadFile(out)))
+
 	if !strings.Contains(got, "[field cmds differs]") || !strings.Contains(got, "+target-ours") || !strings.Contains(got, "+target-ref") {
 		t.Fatalf("pair should report the divergent duplicate variant:\n%s", got)
 	}
 }
 
-// TestDumpDiffPair_DuplicateOutputsExactCounterpartsNoFieldDiff: when each of two
-// sibling producers per side has an exact counterpart on the other side, --pair must
-// report parity (header only), not cross-pair mode-A against mode-B.
 func TestDumpDiffPair_DuplicateOutputsExactCounterpartsNoFieldDiff(t *testing.T) {
 	dir := t.TempDir()
 	left := filepath.Join(dir, "l.jsonl")
@@ -314,17 +342,18 @@ func TestDumpDiffPair_DuplicateOutputsExactCounterpartsNoFieldDiff(t *testing.T)
 	}); exc != nil {
 		t.Fatalf("pair duplicate outputs: %v", exc)
 	}
+
 	got := string(throw2(os.ReadFile(out)))
+
 	if !strings.Contains(got, "=== pair diff for /dup ===") {
 		t.Fatalf("pair should print the header:\n%s", got)
 	}
+
 	if strings.Contains(got, "[field cmds differs]") {
 		t.Fatalf("exact counterparts exist on both sides; --pair must not report a spurious cmds delta:\n%s", got)
 	}
 }
 
-// TestDumpDiffPair_DuplicateOutputsOneSiblingDiffersReportsResidual: control — only the
-// matching sibling is cancelled; a divergent sibling is still reported.
 func TestDumpDiffPair_DuplicateOutputsOneSiblingDiffersReportsResidual(t *testing.T) {
 	dir := t.TempDir()
 	left := filepath.Join(dir, "l.jsonl")
@@ -344,14 +373,14 @@ func TestDumpDiffPair_DuplicateOutputsOneSiblingDiffersReportsResidual(t *testin
 	}); exc != nil {
 		t.Fatalf("pair duplicate outputs control: %v", exc)
 	}
+
 	got := string(throw2(os.ReadFile(out)))
+
 	if !strings.Contains(got, "[field cmds differs]") || !strings.Contains(got, "+-Bours") || !strings.Contains(got, "+-Cref") {
 		t.Fatalf("a genuinely divergent duplicate sibling must still be reported:\n%s", got)
 	}
 }
 
-// TestDumpDiffAggregate_DuplicateOutputsExactCounterpartsNoDrift: aggregate reports apply
-// the same exact-counterpart cancellation as --pair, so full parity yields no spurious delta.
 func TestDumpDiffAggregate_DuplicateOutputsExactCounterpartsNoDrift(t *testing.T) {
 	dir := t.TempDir()
 	left := filepath.Join(dir, "l.jsonl")
@@ -368,25 +397,27 @@ func TestDumpDiffAggregate_DuplicateOutputsExactCounterpartsNoDrift(t *testing.T
 	run := func(mode ...string) string {
 		out := filepath.Join(dir, "o.txt")
 		args := append([]string{"--left", left, "--right", right, "--out", out}, mode...)
+
 		if exc := try(func() { cmdDumpDiff(GlobalFlags{}, args) }); exc != nil {
 			t.Fatalf("diff %v: %v", mode, exc)
 		}
+
 		return string(throw2(os.ReadFile(out)))
 	}
 
 	if bf := run("--by-field"); strings.Contains(bf, "cmds") {
 		t.Fatalf("exact counterparts exist; --by-field must not count a cmds drift:\n%s", bf)
 	}
+
 	if bk := run("--by-kind"); strings.Contains(bk, "cmds:") {
 		t.Fatalf("exact counterparts exist; --by-kind must not count a cmds drift:\n%s", bk)
 	}
+
 	if bt := run("--by-token"); strings.Contains(bt, "-CG2") || strings.Contains(bt, "-CT0") {
 		t.Fatalf("exact counterparts exist; --by-token must not surface mode tokens:\n%s", bt)
 	}
 }
 
-// TestDumpDiffAggregate_DuplicateOutputsOneSiblingDiffersReportsResidual: control — a
-// genuine residual must still surface in aggregate reports.
 func TestDumpDiffAggregate_DuplicateOutputsOneSiblingDiffersReportsResidual(t *testing.T) {
 	dir := t.TempDir()
 	left := filepath.Join(dir, "l.jsonl")
@@ -403,22 +434,28 @@ func TestDumpDiffAggregate_DuplicateOutputsOneSiblingDiffersReportsResidual(t *t
 	run := func(mode ...string) string {
 		out := filepath.Join(dir, "o.txt")
 		args := append([]string{"--left", left, "--right", right, "--out", out}, mode...)
+
 		if exc := try(func() { cmdDumpDiff(GlobalFlags{}, args) }); exc != nil {
 			t.Fatalf("diff %v: %v", mode, exc)
 		}
+
 		return string(throw2(os.ReadFile(out)))
 	}
 
 	bt := run("--by-token")
+
 	if !strings.Contains(bt, "-Bours") || !strings.Contains(bt, "-Cref") {
 		t.Fatalf("residual sibling drift must surface in --by-token:\n%s", bt)
 	}
+
 	if strings.Contains(bt, "-CG2") {
 		t.Fatalf("the exact-counterpart sibling -CG2 must be cancelled, not reported:\n%s", bt)
 	}
+
 	if bf := run("--by-field"); !strings.Contains(bf, "cmds") {
 		t.Fatalf("residual sibling drift must surface in --by-field:\n%s", bf)
 	}
+
 	if bk := run("--by-kind"); !strings.Contains(bk, "cmds:1") {
 		t.Fatalf("--by-kind must count exactly the one residual cmds divergence:\n%s", bk)
 	}
@@ -443,10 +480,13 @@ func TestDumpDiffRoots(t *testing.T) {
 	}); exc != nil {
 		t.Fatalf("roots: %v", exc)
 	}
+
 	got := string(throw2(os.ReadFile(out)))
+
 	if !strings.Contains(got, "\n/c\n") {
 		t.Fatalf("roots should list /c as a leaf:\n%s", got)
 	}
+
 	for _, line := range strings.Split(got, "\n") {
 		if line == "/p" {
 			t.Fatalf("roots should NOT list /p (child /c diverges):\n%s", got)
@@ -463,10 +503,12 @@ func TestDumpDiffRoots_DedupDuplicateOutputsByVariant(t *testing.T) {
 	line := func(selfUID, uid string, host bool) string {
 		hostField := ""
 		tags := "[]"
+
 		if host {
 			hostField = `,"host_platform":true`
 			tags = `["tool"]`
 		}
+
 		return `{"self_uid":"` + selfUID + `","uid":"` + uid + `","outputs":["/dup"],"deps":[],"inputs":[],"cmds":[],"tags":` + tags +
 			`,"kv":{"p":"R6"},"env":{},"platform":"linux","requirements":{},"target_properties":{}` + hostField + `}`
 	}
@@ -479,16 +521,21 @@ func TestDumpDiffRoots_DedupDuplicateOutputsByVariant(t *testing.T) {
 	}); exc != nil {
 		t.Fatalf("roots duplicate outputs: %v", exc)
 	}
+
 	got := string(throw2(os.ReadFile(out)))
+
 	if !strings.Contains(got, "=== roots: 1 leaf-most divergent outputs (of 1 divergent) ===") {
 		t.Fatalf("roots should report one divergent duplicate output:\n%s", got)
 	}
+
 	count := 0
+
 	for _, line := range strings.Split(got, "\n") {
 		if line == "/dup" {
 			count++
 		}
 	}
+
 	if count != 1 {
 		t.Fatalf("roots should list /dup exactly once, got %d:\n%s", count, got)
 	}
@@ -511,13 +558,17 @@ func TestDumpDiffRoots_PartialOverlapMultiOutputNode(t *testing.T) {
 	}); exc != nil {
 		t.Fatalf("roots partial-overlap multi-output: %v", exc)
 	}
+
 	got := string(throw2(os.ReadFile(out)))
+
 	if !strings.Contains(got, "=== roots: 1 leaf-most divergent outputs (of 1 divergent) ===") {
 		t.Fatalf("roots should only count the matched divergent output:\n%s", got)
 	}
+
 	if !strings.Contains(got, "\n/a\n") {
 		t.Fatalf("roots should list /a as the matched divergent output:\n%s", got)
 	}
+
 	if strings.Contains(got, "\n/b\n") {
 		t.Fatalf("roots should not list unmatched /b as divergent:\n%s", got)
 	}
@@ -545,10 +596,13 @@ func TestDumpDiffByTokenRoots(t *testing.T) {
 	}); exc != nil {
 		t.Fatalf("by-token --roots: %v", exc)
 	}
+
 	got := string(throw2(os.ReadFile(out)))
+
 	if !strings.Contains(got, "CHILD_OURS") || !strings.Contains(got, "CHILD_REF") {
 		t.Fatalf("by-token --roots should count the leaf child tokens:\n%s", got)
 	}
+
 	if strings.Contains(got, "PARENT_OURS") || strings.Contains(got, "PARENT_REF") {
 		t.Fatalf("by-token --roots leaked non-leaf parent tokens:\n%s", got)
 	}
@@ -576,21 +630,27 @@ func TestDumpDiffByTokenGroup(t *testing.T) {
 	}); exc != nil {
 		t.Fatalf("by-token --group: %v", exc)
 	}
+
 	got := string(throw2(os.ReadFile(out)))
+
 	for _, want := range []string{"kind=CC dir=dirA", "kind=PB dir=dirB", "TOKA_OURS", "TOKB_REF"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("by-token --group missing %q:\n%s", want, got)
 		}
 	}
+
 	ccIdx := strings.Index(got, "kind=CC dir=dirA")
 	pbIdx := strings.Index(got, "kind=PB dir=dirB")
 	tokAIdx := strings.Index(got, "TOKA_OURS")
 	tokBIdx := strings.Index(got, "TOKB_OURS")
 	lo, hi := ccIdx, pbIdx
+
 	if hi < lo {
 		lo, hi = hi, lo
 	}
+
 	inFirst := func(i int) bool { return i > lo && i < hi }
+
 	if inFirst(tokAIdx) == inFirst(tokBIdx) {
 		t.Fatalf("group sections did not separate TOKA from TOKB:\n%s", got)
 	}
@@ -616,21 +676,22 @@ func TestDumpDiffPairStructuredCmds(t *testing.T) {
 	}); exc != nil {
 		t.Fatalf("pair structured cmds: %v", exc)
 	}
+
 	got := string(throw2(os.ReadFile(out)))
+
 	if !strings.Contains(got, "[field cmds differs]") {
 		t.Fatalf("pair should report cmds differ:\n%s", got)
 	}
+
 	if !strings.Contains(got, "cwd: ours=/wd_ours ref=/wd_ref") {
 		t.Fatalf("pair should expose structured cwd difference:\n%s", got)
 	}
+
 	if !strings.Contains(got, "arg order") || !strings.Contains(got, "ours: cc -c a b") || !strings.Contains(got, "ref:  cc -c b a") {
 		t.Fatalf("pair should expose per-cmd arg ordering difference:\n%s", got)
 	}
 }
 
-// TestCanonInputs_ArchiveByKeysIgnoresKeyListBasename pins the archiver convention:
-// ARCHIVE_BY_KEYS' `-k $KEYS` value is a colon-joined key list, not input paths. A source
-// member named only via that key list must be pruned by the AR input filter.
 func TestCanonInputs_ArchiveByKeysIgnoresKeyListBasename(t *testing.T) {
 	node := &rawNode{
 		Kv: map[string]any{"p": "AR"},
@@ -656,6 +717,7 @@ func TestCanonInputs_ArchiveByKeysIgnoresKeyListBasename(t *testing.T) {
 				return true
 			}
 		}
+
 		return false
 	}
 
@@ -664,6 +726,7 @@ func TestCanonInputs_ArchiveByKeysIgnoresKeyListBasename(t *testing.T) {
 			t.Errorf("canonInputs dropped command-named member %q; got %v", want, got)
 		}
 	}
+
 	for _, drop := range []string{"$(S)/mod/a.lua", "$(S)/mod/sub/b.lua"} {
 		if has(drop) {
 			t.Errorf("canonInputs kept source lua %q named only via the -k key list; got %v", drop, got)

@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-// sbomComponentOutputs returns every `.component.sbom` output path in the graph.
 func sbomComponentOutputs(g *Graph) []string {
 	var out []string
+
 	for _, n := range g.Graph {
 		for _, o := range n.Outputs {
 			if strings.HasSuffix(o.string(), ".component.sbom") {
@@ -15,22 +15,22 @@ func sbomComponentOutputs(g *Graph) []string {
 			}
 		}
 	}
+
 	return out
 }
 
 func hasSbomOutputUnderDir(g *Graph, moddir string) (bool, string) {
 	prefix := "$(B)/" + moddir + "/"
+
 	for _, o := range sbomComponentOutputs(g) {
 		if strings.HasPrefix(o, prefix) {
 			return true, o
 		}
 	}
+
 	return false, ""
 }
 
-// Fixtures: a PY23_NATIVE_LIBRARY's PY3 submodule sets MODULE_LANG CPP (so its
-// component is .CPP, not .PY3); a PROTO_LIBRARY with EXCLUDE_TAGS(CPP_PROTO)
-// emits no .component.sbom (the surviving py-proto submodule disables sbom info).
 func writeSbomFixture(files map[string]string) {
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
@@ -65,21 +65,25 @@ func TestSbom_PY23NativeLibraryIsCPPLangNotPY3(t *testing.T) {
 	if n := nodeByOutput(g, badPY3); n != nil {
 		t.Errorf("PY23_NATIVE_LIBRARY emitted PY3 component %q; MODULE_LANG of its PY3 submodule is CPP", badPY3)
 	}
+
 	cpp := mustNodeByAnyOutput(t, g, wantCPP)
 
-	// --lang must match the suffix (both from MODULE_LANG).
 	var sawLang bool
+
 	for _, c := range cpp.Cmds {
 		args := c.CmdArgs.flat()
+
 		for i, a := range args {
 			if a.string() == "--lang" && i+1 < len(args) {
 				sawLang = true
+
 				if got := args[i+1].string(); got != "CPP" {
 					t.Errorf("--lang = %q, want CPP", got)
 				}
 			}
 		}
 	}
+
 	if !sawLang {
 		t.Fatalf("SBOM component node has no --lang arg; cmds=%v", cpp.Cmds)
 	}
@@ -104,9 +108,6 @@ func TestSbom_PyOnlyProtoLibraryEmitsNoComponent(t *testing.T) {
 	}
 }
 
-// TestSbom_CppProtoLibraryComponentTagged: the component of a licensed
-// PROTO_LIBRARY carries module_tag=cpp_proto, following the owning CPP_PROTO
-// submodule rather than the emitting module dir.
 func TestSbom_CppProtoLibraryComponentTagged(t *testing.T) {
 	const protoDir = "contrib/libs/cppproto"
 
@@ -129,8 +130,6 @@ func TestSbom_CppProtoLibraryComponentTagged(t *testing.T) {
 	}
 }
 
-// TestSbom_OrdinaryLibrariesUnchanged guards that a licensed C++ LIBRARY keeps
-// its .CPP component and a licensed PY3_LIBRARY keeps its .PY3 component.
 func TestSbom_OrdinaryLibrariesUnchanged(t *testing.T) {
 	const cppDir = "contrib/libs/plaincpp"
 	const pyDir = "contrib/libs/plainpy"

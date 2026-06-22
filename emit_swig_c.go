@@ -5,11 +5,8 @@ import (
 	"strings"
 )
 
-// swigAddIncls mirrors the python Lib's ADDINCL(GLOBAL FOR swig …) declarations.
 var swigAddIncls = []VFS{source(swigLibRoot + "/python"), source(swigLibRoot)}
 
-// swigConstArgs is the constant span between the swig binary and the
-// per-statement tail.
 var swigConstArgs = []STR{
 	argIB.str(),
 	argIS.str(),
@@ -44,11 +41,9 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 		srcVFS := source(instance.Path.rel() + "/" + stmt.Src)
 		cOutVFS := build(instance.Path.rel() + "/" + cOutRel)
 		pyOutVFS := build(instance.Path.rel() + "/" + pyOutRel)
-		// implicit %includes come from the swig parser; the Lib dirs are FOR-swig
-		// addincl data.
+
 		swigClosure := walkClosureTail(ctx.scannerFor(instance), srcVFS, newScanContext(ctx.parsers, swigAddIncls, nil, includeScannerBasePaths(), instance.Path.rel()))
 
-		// swigClosure joins as its own chunk: referenced, not copied.
 		inputs := na.inputList(na.vfsList(bldContribToolsSwigSwig, srcVFS), swigClosure)
 
 		cmdArgs := na.chunkList(na.strList(swigBin.str()), swigConstArgs, na.strList(internStr(swigModuleName(stmt.Module)),
@@ -72,13 +67,11 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 		})
 
 		d.pySrcs = append(d.pySrcs, internStr(pyOutRel))
-		// the generated .py is a build-root-relative PY_SRCS token, so its py3cc
-		// module name is the full root-relative path.
+
 		d.pySrcsFullName = append(d.pySrcsFullName, true)
 		registerBoundGeneratedParsedOutput(ctx, instance, pkSW, cOutVFS, collectSwigInducedIncludes(ctx, srcVFS, swigClosure), swRef, []NodeRef{swigRef})
 		registerBoundGeneratedParsedOutput(ctx, instance, pkSW, pyOutVFS, nil, swRef, []NodeRef{swigRef})
-		// the .py's build-from closure reaches its py-bytecode consumers through
-		// the registry's SourceInputs, not a per-module side map.
+
 		codegenRegForInstance(ctx, instance).setSourceInputs(pyOutVFS, append([]VFS{cOutVFS, srcVFS}, swigClosure...))
 
 		ccIn := in
@@ -120,8 +113,6 @@ func swigModuleName(module string) string {
 }
 
 func collectSwigInducedIncludes(ctx *GenCtx, src VFS, closure []VFS) []IncludeDirective {
-	// every closure member was parsed during the walk, so the bucket reads are
-	// cache hits.
 	swigParser := IncludeDirectiveParser(SwigIncludeDirectiveParser{})
 	var out []IncludeDirective
 

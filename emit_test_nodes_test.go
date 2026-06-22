@@ -10,9 +10,11 @@ var testNodeResourceRefPattern = regexp.MustCompile(`\$\((CLANG|LLD_ROOT|YMAKE_P
 
 func sandboxedX8664TargetPlatform() *Platform {
 	flags := make(map[string]string, len(testToolchainFlags)+4)
+
 	for k, v := range testToolchainFlags {
 		flags[k] = v
 	}
+
 	flags["PIC"] = "no"
 	flags["GG_BUILD_TYPE"] = "debug"
 	flags["SANDBOXING"] = "yes"
@@ -239,8 +241,6 @@ func expectedClangFormatNode() *Node {
 	}
 }
 
-// cmdsEqual compares Cmd slices by CmdArgs' materialized string content (source
-// namespace is irrelevant) and the remaining fields structurally.
 func cmdsEqual(got, want []Cmd) bool {
 	if len(got) != len(want) {
 		return false
@@ -268,24 +268,31 @@ func assertNodeFields(t *testing.T, name string, got, want *Node) {
 	if !cmdsEqual(got.Cmds, want.Cmds) {
 		t.Fatalf("%s cmds mismatch\n got: %#v\nwant: %#v", name, got.Cmds, want.Cmds)
 	}
+
 	if !reflect.DeepEqual(got.Env, want.Env) {
 		t.Fatalf("%s env mismatch\n got: %#v\nwant: %#v", name, got.Env, want.Env)
 	}
+
 	if !reflect.DeepEqual(got.flatInputs(), want.flatInputs()) {
 		t.Fatalf("%s inputs mismatch\n got: %#v\nwant: %#v", name, got.flatInputs(), want.flatInputs())
 	}
+
 	if !reflect.DeepEqual(got.KV, want.KV) {
 		t.Fatalf("%s kv mismatch\n got: %#v\nwant: %#v", name, got.KV, want.KV)
 	}
+
 	if !reflect.DeepEqual(got.Outputs, want.Outputs) {
 		t.Fatalf("%s outputs mismatch\n got: %#v\nwant: %#v", name, got.Outputs, want.Outputs)
 	}
+
 	if string(got.Platform.Target) != string(want.Platform.Target) {
 		t.Fatalf("%s platform = %q, want %q", name, string(got.Platform.Target), string(want.Platform.Target))
 	}
+
 	if !reflect.DeepEqual(got.Requirements, want.Requirements) {
 		t.Fatalf("%s requirements mismatch\n got: %#v\nwant: %#v", name, got.Requirements, want.Requirements)
 	}
+
 	if !reflect.DeepEqual(got.TargetProperties, want.TargetProperties) {
 		t.Fatalf("%s target_properties mismatch\n got: %#v\nwant: %#v", name, got.TargetProperties, want.TargetProperties)
 	}
@@ -303,8 +310,6 @@ type CanonicalFixtureNode struct {
 	TargetProperties map[string]interface{}
 }
 
-// testUnittestResourceGlobals is the toolchain resource set, scrambled to
-// exercise buildUnittestNode's sort. Tokens are id-free; verifies ordering only.
 func testUnittestResourceGlobals() []ResourceDecl {
 	decl := func(name string) ResourceDecl {
 		return ResourceDecl{
@@ -349,6 +354,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 	fs := newMemFS(files)
 
 	g := genWithResources(fs, "util/ut", host, p, func(Warn) {}, true)
+
 	if len(g.Result) != 3 {
 		t.Fatalf("result len = %d, want 3", len(g.Result))
 	}
@@ -356,13 +362,16 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 	var ldNode, unittestNode, clangNode, ctxNode, fetchNode *Node
 	byUID := make(map[UID]*Node, len(g.Graph))
 	byOutput := make(map[string]*Node, len(g.Graph))
+
 	for _, node := range g.Graph {
 		byUID[node.UID] = node
+
 		if len(node.Outputs) == 1 {
 			byOutput[node.Outputs[0].string()] = node
 		}
 
 		kvPath := node.KV.Path
+
 		switch {
 		case node.KV.P == pkLD:
 			ldNode = node
@@ -394,46 +403,58 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 	}
 
 	unittestDeps := make(map[UID]struct{}, len(graphDeps(g, unittestNode)))
+
 	for _, dep := range graphDeps(g, unittestNode) {
 		unittestDeps[dep] = struct{}{}
 	}
+
 	if len(graphDeps(g, unittestNode)) != 2 {
 		t.Fatalf("unittest deps = %v, want exactly [ld ctx]", graphDeps(g, unittestNode))
 	}
+
 	if _, ok := unittestDeps[ldNode.UID]; !ok {
 		t.Fatalf("unittest deps missing LD uid %q", ldNode.UID)
 	}
+
 	if _, ok := unittestDeps[ctxNode.UID]; !ok {
 		t.Fatalf("unittest deps missing ctx uid %q", ctxNode.UID)
 	}
+
 	if _, ok := unittestDeps[fetchNode.UID]; ok {
 		t.Fatalf("unittest deps unexpectedly include fetch uid %q", fetchNode.UID)
 	}
+
 	if len(graphDeps(g, clangNode)) != 1 || graphDeps(g, clangNode)[0] != ctxNode.UID {
 		t.Fatalf("clang deps = %v, want [%s]", graphDeps(g, clangNode), ctxNode.UID)
 	}
 
 	unittestArgs := strStrs(unittestNode.Cmds[0].CmdArgs.flat())
 	binaryValue := ""
+
 	for i := 0; i+1 < len(unittestArgs); i++ {
 		if unittestArgs[i] == "--binary" {
 			binaryValue = unittestArgs[i+1]
+
 			break
 		}
 	}
+
 	if binaryValue != "$(B)/util/ut/util-ut" {
 		t.Fatalf("unittest --binary = %q, want $(B)/util/ut/util-ut", binaryValue)
 	}
 
 	clangInputs := make([]string, 0, len(clangNode.flatInputs()))
+
 	for _, input := range clangNode.flatInputs() {
 		clangInputs = append(clangInputs, input.string())
 	}
+
 	for _, want := range []string{"$(S)/util/ysafeptr_ut.cpp", "$(S)/util/ysaveload_ut.cpp"} {
 		if !containsString(clangInputs, want) {
 			t.Fatalf("clang inputs missing %q in %v", want, clangInputs)
 		}
 	}
+
 	for _, bad := range []string{"$(S)/util/ut/ysafeptr_ut.cpp", "$(S)/util/ut/ysaveload_ut.cpp"} {
 		if containsString(clangInputs, bad) {
 			t.Fatalf("clang inputs unexpectedly include %q in %v", bad, clangInputs)
@@ -442,16 +463,19 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 
 	clangArgs := strStrs(clangNode.Cmds[0].CmdArgs.flat())
 	var relatedPaths []string
+
 	for i := 0; i+1 < len(clangArgs); i++ {
 		if clangArgs[i] == "--test-related-path" {
 			relatedPaths = append(relatedPaths, clangArgs[i+1])
 		}
 	}
+
 	for _, want := range []string{"$(S)/util/ysafeptr_ut.cpp", "$(S)/util/ysaveload_ut.cpp"} {
 		if !containsString(relatedPaths, want) {
 			t.Fatalf("clang related paths missing %q in %v", want, relatedPaths)
 		}
 	}
+
 	for _, bad := range []string{"$(S)/util/ut/ysafeptr_ut.cpp", "$(S)/util/ut/ysaveload_ut.cpp"} {
 		if containsString(relatedPaths, bad) {
 			t.Fatalf("clang related paths unexpectedly include %q in %v", bad, relatedPaths)
@@ -465,6 +489,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		"$(S)/util/ysaveload_ut.cpp",
 		"--ya-end-command-file",
 	}
+
 	if !reflect.DeepEqual(tail, wantTail) {
 		t.Fatalf("clang lint-file tail = %v, want %v", tail, wantTail)
 	}
@@ -489,28 +514,37 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 			bad:    "$(S)/util/ut/ysaveload_ut.cpp",
 		},
 	}
+
 	for _, spec := range ccSpecs {
 		ccNode := byOutput[spec.output]
+
 		if ccNode == nil {
 			t.Fatalf("missing rebased test-object output %q", spec.output)
 		}
+
 		if ccNode.TargetProperties.ModuleDir != "util/ut" {
 			t.Fatalf("cc module_dir for %q = %q, want util/ut", spec.output, ccNode.TargetProperties.ModuleDir)
 		}
+
 		ccInputs := make([]string, 0, len(ccNode.flatInputs()))
+
 		for _, input := range ccNode.flatInputs() {
 			ccInputs = append(ccInputs, input.string())
 		}
+
 		if !containsString(ccInputs, spec.input) {
 			t.Fatalf("cc inputs for %q missing %q in %v", spec.output, spec.input, ccInputs)
 		}
+
 		if containsString(ccInputs, spec.bad) {
 			t.Fatalf("cc inputs for %q unexpectedly include %q in %v", spec.output, spec.bad, ccInputs)
 		}
+
 		if !containsString(strStrs(ccNode.Cmds[0].CmdArgs.flat()), "-gz=zstd") {
 			t.Fatalf("cc cmd for %q missing -gz=zstd: %v", spec.output, ccNode.Cmds[0].CmdArgs.flat())
 		}
 	}
+
 	for _, badOutput := range []string{"$(B)/util/ut/ysafeptr_ut.cpp.o", "$(B)/util/ut/ysaveload_ut.cpp.o"} {
 		if byOutput[badOutput] != nil {
 			t.Fatalf("unexpected local test-object output %q", badOutput)
@@ -527,24 +561,30 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		"--start-plugins",
 		"--end-plugins",
 	}
+
 	if got := linkArgs[1 : 1+len(wantLinkPrefix)]; !reflect.DeepEqual(got, wantLinkPrefix) {
 		t.Fatalf("ld link prefix = %v, want %v", got, wantLinkPrefix)
 	}
+
 	linkObjects := []string{
 		"$(B)/util/ut/__vcs_version__.c.o",
 		"$(B)/util/ut/__/ysafeptr_ut.cpp.o",
 		"$(B)/util/ut/__/ysaveload_ut.cpp.o",
 	}
 	oIndex := -1
+
 	for i, arg := range linkArgs {
 		if arg == "-o" {
 			oIndex = i
+
 			break
 		}
 	}
+
 	if oIndex < len(linkObjects) {
 		t.Fatalf("ld link cmd missing object block before -o: %v", linkArgs)
 	}
+
 	if got := linkArgs[oIndex-len(linkObjects) : oIndex]; !reflect.DeepEqual(got, linkObjects) {
 		t.Fatalf("ld object block = %v, want %v", got, linkObjects)
 	}

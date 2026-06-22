@@ -1,9 +1,5 @@
 package main
 
-// emitLibraryCfgProtoSource emits a `.cfgproto` source: the PB/yellow producer
-// (protoc wrapper with the proto_config plugin), the generated `.pb.h`/`.pb.cc`
-// parsed-output registration, and the downstream `.pb.cc` compile archived as the
-// module's codegen object.
 func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
 	cfgSource := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
 	cfgRelPath := cfgSource.rel()
@@ -13,7 +9,7 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	configPluginLDRef, configPluginBinary := ctx.tool(argLibraryCppProtoConfigPlugin)
 
 	na := ctx.emit.nodeArenas()
-	// Trailing plugin block: proto_config plugin + --config_out.
+
 	configOpts := na.strList(internStr("--plugin=protoc-gen-config="+configPluginBinary.string()),
 		argConfigOutB.str())
 
@@ -50,10 +46,7 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		reg := codegenRegForInstance(ctx, instance)
 		registerBoundGeneratedParsedOutput(ctx, instance, pkPB, cfgH, cfgHParsed, cfgRef, cfgGenRefs)
 		reg.addClosureLeaf(cfgH, cfgSource)
-		// No `main` output is marked, so a unit including this .pb.h must also
-		// reach its sibling .pb.cc. The sibling rides as a bare, non-expanded
-		// closure leaf so the scanner never descends into it to re-resolve its
-		// cpp-only induced deps into the consumer.
+
 		reg.addClosureLeaf(cfgH, cfgPbCC)
 
 		cfgCCParsed := []IncludeDirective{
@@ -66,8 +59,7 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	ccSrcRel := srcRel + ".pb.cc"
 	ccIn := in
 	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), cfgPbCC, in.ScanCfg)
-	// Neither output is marked `main`, so the .pb.h does not ride the .pb.cc.o as
-	// a direct input — drop it from the walked closure.
+
 	{
 		filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
 

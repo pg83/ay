@@ -7,12 +7,9 @@ var (
 	ldSvnInterfacePath = ldSvnInterfaceVFS.string()
 	ldLinkExePath      = ldLinkExeVFS.string()
 	ldFsToolsPath      = ldFsToolsVFS.string()
-	// vcsJSONBase64 is vcsJSONContent for the fetch-base64 producer of $(B)/vcs.json.
-	vcsJSONBase64 = base64.StdEncoding.EncodeToString([]byte(vcsJSONContent))
+	vcsJSONBase64      = base64.StdEncoding.EncodeToString([]byte(vcsJSONContent))
 )
 
-// ldScriptInputs seeds the link node's $(S) tooling inputs. Each wrapper's import
-// closure is added from the script table in composeLDInputs, not hand-listed here.
 var ldScriptInputs = []VFS{
 	ldVcsInfoVFS,
 	ldSvnInterfaceVFS,
@@ -124,8 +121,6 @@ func emitLD(
 
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: strB, Env: envFull})
 
-	// The link-or-copy step is gated on SO_OUTPUTS: opensource or dynamic-lib outputs.
-	// When omitted, fs_tools is not a $(S) tooling input either (composeLDInputs).
 	emitCopy := instance.Platform.Flags[envOPENSOURCE] == strYes || len(dynamicPaths) > 0
 
 	if emitCopy {
@@ -155,14 +150,11 @@ func emitLD(
 
 	inputs = append(inputs, inputTail)
 
-	// SBOM components of the link closure; normalize sorts and dedups inputs.
 	if len(sbomPaths) > 0 {
 		inputs = append(inputs, sbomPaths)
 		inputs = append(inputs, []VFS{linkSbomScriptVFS})
 	}
 
-	// Whole-archive is a link attribute of a subset of peerLDRefs, not an independent
-	// source: every wholeArchiveRef is already in peerLDRefs, so appending would dup.
 	deps := make([]NodeRef, 0, len(ccRefs)+len(pluginRefs)+len(globalRefs)+len(peerLDRefs)+len(dynamicRefs)+len(objcopyRefs))
 	deps = append(deps, ccRefs...)
 	deps = append(deps, pluginRefs...)
@@ -224,9 +216,6 @@ func lastPathComponent(p string) string {
 	return p
 }
 
-// vcsJSONContent is the "No VCS" default vcs.json the producer writes; vcs_info reads
-// it to generate __vcs_version__.c. An empty "{}" stub made link_sbom KeyError on the
-// fields it stamps ($(VCS) hash, PROGRAM_VERSION, …).
 const vcsJSONContent = `{
     "ARCADIA_SOURCE_HG_HASH": "0000000000000000000000000000000000000000",
     "ARCADIA_SOURCE_LAST_AUTHOR": "<UNKNOWN>",
@@ -248,9 +237,6 @@ const vcsJSONContent = `{
     "ARCADIA_TAG": ""
 }`
 
-// emitVCSNode emits the single node writing vcs.json to $(B)/vcs.json. Emitted once
-// (ctx.vcsRef); link nodes depend on that ref. `dump normalize` folds it to the
-// upstream $(VCS)/vcs.json and strips this producer, so its content is parity-neutral.
 func emitVCSNode(emit Emitter, host *Platform) NodeRef {
 	na := emit.nodeArenas()
 
@@ -304,9 +290,6 @@ func composeLDCmdVcsCompile(p *Platform, tc ModuleToolchain, vcsCPath, vcsOPath 
 	)
 	cmdArgs = append(cmdArgs, argIS.str())
 
-	// The __vcs_version__.c compile sits at the LD node's "own slot": its own-CFLAGS
-	// bucket must start with platform-level p.CFlags like a regular CC compile.
-	// Omitting p.CFlags here would diverge the post-defines tail from the module's CC.
 	preNoLibcExtras := make([]ARG, 0, len(p.CFlags)+len(moduleCFlags)+len(peerCFlagsGlobal))
 	preNoLibcExtras = append(preNoLibcExtras, p.CFlags...)
 	preNoLibcExtras = append(preNoLibcExtras, moduleCFlags...)
@@ -399,8 +382,6 @@ func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, outputPath, vcsOPath s
 }
 
 func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *STR, wantsStrip, useArcadiaLibm bool) []STR {
-	// EXPORTS_SCRIPT appends the version-script flag right after -rdynamic; the macro
-	// arg is already source-root-relative, not module-relative.
 	trailer := []STR{argRdynamic.str()}
 
 	if exportsScript != nil {
@@ -428,12 +409,10 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 
 	trailer = appendInternStrs(trailer, p.linkerSelectionTailFlags())
 	trailer = appendArgStr(trailer, peerLDFlagsGlobal, ownLDFlags)
-	// objAddLibsGlobal entries are group-ARGs (one per EXTRALIBS call); split into
-	// individual -l tokens at the command boundary.
+
 	trailer = appendArgGroupStr(trailer, objAddLibsGlobal)
 	trailer = append(trailer, p.SystemLibs...)
 
-	// System -lm only when not using the arcadia libm peer archive.
 	if !useArcadiaLibm {
 		trailer = append(trailer, argDashLm.str())
 	}
@@ -448,7 +427,6 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 	return trailer
 }
 
-// ldSbomLang maps the module language to the uppercase --lang token link_sbom expects.
 func ldSbomLang(instance ModuleInstance) string {
 	if ldModuleLang(instance) == mlPy3 {
 		return "PY3"
@@ -457,8 +435,6 @@ func ldSbomLang(instance ModuleInstance) string {
 	return "CPP"
 }
 
-// composeLDCmdLinkSbom: link_sbom reads the link closure's .component.sbom files into
-// $BINDIR/__sbomdata.json, stamped with --vcs-info. cwd=$(B).
 func composeLDCmdLinkSbom(tc ModuleToolchain, lang, moddir, sbomJSON string, sbomPaths []VFS) []STR {
 	cmd := make([]STR, 0, 10+len(sbomPaths))
 	cmd = append(cmd,
@@ -477,8 +453,6 @@ func composeLDCmdLinkSbom(tc ModuleToolchain, lang, moddir, sbomJSON string, sbo
 	return cmd
 }
 
-// composeLDCmdSbomObjcopy: objcopy embeds __sbomdata.json into the binary's
-// .rosbomdata section.
 func composeLDCmdSbomObjcopy(tc ModuleToolchain, sbomJSON, targetPath string) []STR {
 	return []STR{
 		tc.Objcopy,
@@ -518,8 +492,6 @@ func composeLDSplitDwarfCmds(na *NodeArenas, tc ModuleToolchain, outputPath stri
 func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts ScriptDeps, emitCopy bool, hasBundles bool) InputChunks {
 	chunks := make(InputChunks, 0, 3+len(ldScriptInputs))
 
-	// peerLibPaths is the caller's dup-free slice, referenced as its own chunk; it
-	// seeds the dedup set the remaining $(B) categories are filtered through.
 	deduper.reset()
 
 	for _, p := range peerLibPaths {
@@ -551,11 +523,7 @@ func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPa
 
 	chunks = append(chunks, buildRootBlock)
 
-	// Expand each wrapper to its import closure via the table; non-script entries pass
-	// through. Dups across wrappers are dropped in normalization.
 	for _, s := range ldScriptInputs {
-		// fs_tools rides only when the link-or-copy step is emitted (SO_OUTPUTS) or the
-		// module declares BUNDLE; otherwise its sole import arrives via link_exe.
 		if s == copyFsToolsVFS && !emitCopy && !hasBundles {
 			continue
 		}
@@ -585,9 +553,6 @@ func emitOwnLDPlugins(ctx *GenCtx, instance ModuleInstance, plugins []STR, tc Mo
 		Paths: make([]VFS, 0, len(plugins)),
 	}
 
-	// The .py→.pyplugin copy is platform-independent codegen. Emit under ctx.target so
-	// a plugin pulled by both target and a host tool produces byte-identical CP nodes
-	// that collapse by uid — no cross-platform cache needed.
 	cpInstance := instance
 	cpInstance.Platform = ctx.target
 

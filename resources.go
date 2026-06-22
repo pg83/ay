@@ -10,38 +10,24 @@ import (
 var (
 	strLLDRootName      = internStr(resourcePatternLLDRoot)
 	strYMakePython3Name = internStr(resourcePatternYMakePython3)
-	// Shared Resources vectors referenced by every node needing the fixed set.
-	usesPython3        = []STR{strYMakePython3Name}
-	usesPython3JDK17   = []STR{strYMakePython3Name, internStr(resourcePatternJDK17)}
-	usesPython3Clang16 = []STR{strYMakePython3Name, internStr(resourcePatternClang16)}
+	usesPython3         = []STR{strYMakePython3Name}
+	usesPython3JDK17    = []STR{strYMakePython3Name, internStr(resourcePatternJDK17)}
+	usesPython3Clang16  = []STR{strYMakePython3Name, internStr(resourcePatternClang16)}
 )
 
-// External-resource model. A RESOURCES_LIBRARY declares external resources via
-// DECLARE_*. Each yields a <Name>_RESOURCE_GLOBAL variable (the bare "$(<Name>)"
-// ref, propagated through the PEERDIR closure) and a fetch of the host-selected
-// URI into the $(<Name>) resource dir. Every field is interned.
-
-// resourceDecl is one declared external resource after host-platform selection.
 type ResourceDecl struct {
-	Name      STR // resource base name
-	URI       STR // host-selected uri ("sbr:<id>" or an absolute path)
-	GlobalVar STR // propagated variable name (<Name>_RESOURCE_GLOBAL)
-	Value     STR // variable value: the bare resource ref "$(<Name>)"
-	Token     STR // --global-resource arg "<Name>_RESOURCE_GLOBAL::$(<Name>)"
+	Name      STR
+	URI       STR
+	GlobalVar STR
+	Value     STR
+	Token     STR
 }
 
 const resourceGlobalSuffix = "_RESOURCE_GLOBAL"
 
-// platformDefaultArch is the implicit arch in a by_platform key: "linux-x86_64"
-// canonizes to "linux".
 const platformDefaultArch = "x86_64"
 
-// makeResourceDecl interns one resource: the bare ref, global-var name and
-// --global-resource token. The uri drives the fetch.
 func makeResourceDecl(name, uri string) ResourceDecl {
-	// Resource references resolve to the FETCH node's output dir $(B)/resources/NAME,
-	// so ${NAME_RESOURCE_GLOBAL} points at a real graph output the consumer depends
-	// on. dump normalize folds it back to $(NAME).
 	value := "$(B)/resources/" + name
 	globalVar := name + resourceGlobalSuffix
 
@@ -54,14 +40,10 @@ func makeResourceDecl(name, uri string) ResourceDecl {
 	}
 }
 
-// hostPlatformKey is the by_platform json key for the host (os-isa). Resource
-// bundles select the HOST entry; these are host tools.
 func hostPlatformKey(host *Platform) string {
 	return string(host.OS) + "-" + isaPlatformKey(host.ISA)
 }
 
-// resourceJSONPlatformKey is the by_platform key for the instance's platform,
-// canonized with x86_64 implicit and win as "win32".
 func resourceJSONPlatformKey(env Environment) string {
 	switch {
 	case env.bool(envOS_DARWIN):
@@ -81,8 +63,6 @@ func resourceJSONPlatformKey(env Environment) string {
 	}
 }
 
-// canonizePlatformKey lower-cases a by_platform key to <os>[-<arch>] with the
-// default arch dropped, so "linux" and "linux-x86_64" both collapse to "linux".
 func canonizePlatformKey(key string) string {
 	key = strings.ToLower(key)
 
@@ -95,8 +75,6 @@ func canonizePlatformKey(key string) string {
 	return os + "-" + arch
 }
 
-// resolveResourceURIFromBundle returns the bundle URI for env's platform,
-// matching keys by canonical form, scanned in sorted order for determinism.
 func resolveResourceURIFromBundle(bundle map[string]string, env Environment) (string, bool) {
 	want := resourceJSONPlatformKey(env)
 
@@ -125,16 +103,14 @@ func isaPlatformKey(isa ISA) string {
 	return string(isa)
 }
 
-// stripSbrPrefix returns the bare sandbox id of an "sbr:<id>" uri.
 func stripSbrPrefix(uri string) string {
 	return strings.TrimPrefix(uri, "sbr:")
 }
 
-// resolveResourceDecls turns one DECLARE_* call into host-selected declarations.
 func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *DeclareResourceStmt) []ResourceDecl {
 	switch stmt.Macro {
 	case tokDeclareExternalResource:
-		// NAME uri [NAME2 uri2 ...] — direct, host-independent.
+
 		out := make([]ResourceDecl, 0, len(stmt.Args)/2)
 
 		for i := 0; i+1 < len(stmt.Args); i += 2 {
@@ -143,7 +119,7 @@ func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *Declar
 
 		return out
 	case tokDeclareExternalHostResourcesBundle:
-		// NAME uri FOR platform ... — select the host entry.
+
 		name := stmt.Args[0]
 		bundle := map[string]string{}
 
@@ -157,7 +133,7 @@ func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *Declar
 
 		return []ResourceDecl{selectHostResourceDecl(host, modulePath, name.string(), bundle)}
 	case tokDeclareExternalHostResourcesBundleByJson:
-		// NAME file.json — read by_platform.<host>.uri.
+
 		name, jsonRel := stmt.Args[0], stmt.Args[1]
 		bundle := readResourceBundleJSON(fs, filepath.ToSlash(filepath.Join(modulePath, jsonRel.string())))
 
@@ -177,8 +153,6 @@ func selectHostResourceDecl(host *Platform, modulePath, name string, bundle map[
 	return makeResourceDecl(name, uri)
 }
 
-// sortedResourceGlobals orders declarations by global-var name — the order a test
-// node's --global-resource args are emitted.
 func sortedResourceGlobals(in []ResourceDecl) []ResourceDecl {
 	out := append([]ResourceDecl(nil), in...)
 	sort.Slice(out, func(i, j int) bool {
@@ -188,9 +162,6 @@ func sortedResourceGlobals(in []ResourceDecl) []ResourceDecl {
 	return out
 }
 
-// resolveResourceGlobalRef expands a deferred $<NAME>_RESOURCE_GLOBAL reference
-// against the consuming module's resource-global closure, resolving to the decl's
-// value; a non-reference passes through. Deferred until command generation.
 func resolveResourceGlobalRef(s string, globals []ResourceDecl) string {
 	name, ok := strings.CutPrefix(s, "$")
 
@@ -211,9 +182,6 @@ func resolveResourceGlobalRef(s string, globals []ResourceDecl) string {
 	return ""
 }
 
-// bindResourceGlobalVars resolves a RESOURCES_LIBRARY's DECLARE_* statements and
-// binds each <NAME>_RESOURCE_GLOBAL env var. Returns whether any var was bound, so
-// the caller re-collects to expand references that precede the DECLARE.
 func bindResourceGlobalVars(ctx *GenCtx, instance ModuleInstance, d *ModuleData, env Environment) bool {
 	bound := false
 
@@ -227,13 +195,7 @@ func bindResourceGlobalVars(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	return bound
 }
 
-// moduleToolchain holds a module's tool-invocation paths, derived from the
-// external-resource globals reachable through its PEERDIR closure. A field stays 0
-// when its resource is absent from the closure (caught at use, never defaulted).
 type ModuleToolchain struct {
-	// ClangResource is the versioned clang resource the compiler/llvm tools come
-	// from, version-specific so several clang versions can coexist. Consumers list
-	// it in their Resources to depend on that FETCH node.
 	ClangResource STR
 	ClangRoot     STR
 	CC            STR
@@ -243,8 +205,6 @@ type ModuleToolchain struct {
 	Strip         STR
 	LLDRoot       STR
 
-	// ARCmdHead is the pre-built head of every AR command this toolchain drives,
-	// referenced as a chunk by emitARNode, never copied.
 	ARCmdHead []STR
 	LLD       STR
 	Python3   STR
@@ -253,9 +213,8 @@ type ModuleToolchain struct {
 func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolchain {
 	var tc ModuleToolchain
 
-	// The compiler/llvm tools come from the version-specific clang resource.
 	clangRes := resourcePatternClangTool + clangVer
-	// Decl names are compared in id space: one intern probe per call.
+
 	clangResID := internStr(clangRes)
 
 	for _, decl := range globals {
@@ -292,8 +251,6 @@ func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolc
 	return tc
 }
 
-// genResourcesLibrary emits a RESOURCES_LIBRARY: no archive/objects, only the
-// external resource globals it declares, which propagate up the PEERDIR closure.
 func genResourcesLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *ModuleEmitResult {
 	var globals []ResourceDecl
 	deduper.reset()
@@ -307,17 +264,10 @@ func genResourcesLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *M
 		}
 	}
 
-	// A RESOURCES_LIBRARY has no PEERDIRs, so its GLOBAL contributions propagate as
-	// the general path would with an empty peer set — how LDFLAGS_GLOBAL and
-	// RPATH_GLOBAL reach every linking consumer.
 	var sbomRef *NodeRef
 	var sbomPath *VFS
 
 	if sbomActive(ctx, instance) && d.toolchainName != "" {
-		// The toolchain SBOM node runs the python resource; this path resolves no
-		// peers, so resolve the universal python peer explicitly to register the
-		// python FETCH into ctx.fetchRefs BEFORE this node. The python toolchain
-		// declares the python resource itself, so skip it.
 		if instance.Path.rel() != pythonToolchainInfoRel {
 			pythonToolchainSbomComponent(ctx, instance.Platform)
 		}
@@ -347,8 +297,6 @@ func genResourcesLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *M
 	return result
 }
 
-// prebuiltModuleSuffix is the PROGRAM MODULE_SUFFIX for the platform (empty, .exe
-// under WIN32), spliced after the binary name by PREBUILT_PROGRAM's PRIMARY_OUTPUT.
 func prebuiltModuleSuffix(p *Platform) string {
 	if p.OS == OSWindows {
 		return ".exe"
@@ -357,9 +305,6 @@ func prebuiltModuleSuffix(p *Platform) string {
 	return ""
 }
 
-// genPrebuiltProgram emits a PREBUILT_PROGRAM: it fetches a sandbox-built binary
-// and copies it to the module's program output, so a tool's from-source closure
-// never enters the graph. The result is a PROGRAM so tool consumers take it.
 func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *ModuleEmitResult {
 	na := ctx.na
 
@@ -384,15 +329,11 @@ func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		throwFmt("gen: %s: PREBUILT_PROGRAM PRIMARY_OUTPUT %q has an unresolved reference", instance.Path.rel(), d.primaryOutput)
 	}
 
-	// primaryOutput is "$(B)/resources/<NAME>/<bin>" (the fetch node's output dir);
-	// the copy reads it and depends on the fetch. dst is the module's program output.
 	srcVFS := build(strings.TrimPrefix(d.primaryOutput, "$(B)/"))
 	dst := lDOutputPath(instance, programBinaryName(instance, d.moduleStmt))
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	// The prebuilt copy gets a _GEN_SBOM_COMPONENT; on a RELEASE host build with
-	// EMBED the copy node collects its own .component.sbom.
 	var ownSbomRef *NodeRef
 	var ownSbomPath *VFS
 
@@ -400,13 +341,9 @@ func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		ownSbomRef, ownSbomPath = emitSbomComponent(ctx, instance, d, programBinaryName(instance, d.moduleStmt))
 	}
 
-	// The copy command does NOT wrap the primary output in ${input}, so the fetched
-	// binary is a resource (tracked via fetchRef), not a content input.
 	inputs := InputChunks{ctx.scripts[copyFsToolsVFS]}
 	depRefs := []NodeRef{fetchRef}
 
-	// A bare-link PREBUILT_PROGRAM resolves no SBOM peers but the universal python
-	// toolchain component _BARE_UNIT adds, so that is its whole peer SBOM closure.
 	if sbomActive(ctx, instance) && instance.Platform.BuildRelease {
 		if pyRef, pyPath := pythonToolchainSbomComponent(ctx, instance.Platform); pyRef != nil {
 			inputs = append(inputs, []VFS{*pyPath})
@@ -415,8 +352,6 @@ func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 	}
 
 	if ownSbomRef != nil && instance.Platform.BuildRelease {
-		// _GEN_SBOM_COMPONENT declares ${input:gen_sbom.py}; that module input lands
-		// on the single copy node alongside its own .component.sbom global.
 		inputs = append(inputs, []VFS{*ownSbomPath, source(sbomGenScriptRel)})
 		depRefs = append(depRefs, *ownSbomRef)
 	}
@@ -450,8 +385,7 @@ func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		LDRef:          ref,
 		LDPath:         &dst,
 		Peerdirs:       d.peerdirs,
-		// A prebuilt codegen tool keeps its INDUCED_DEPS so a generated file's
-		// consumer pulls them via GeneratorRefs.
+
 		InducedDeps: d.inducedDeps,
 	}
 	ctx.memo.put(ctx.instanceKey(instance), result)
@@ -465,7 +399,6 @@ type ResourceBundleJSON struct {
 	} `json:"by_platform"`
 }
 
-// readResourceBundleJSON parses a bundle json into a platform-key -> uri map.
 func readResourceBundleJSON(fs FS, rel string) map[string]string {
 	var data ResourceBundleJSON
 	throw(json.Unmarshal(fs.read(rel), &data))
