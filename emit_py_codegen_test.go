@@ -47,6 +47,44 @@ func TestEmitPyRegister_ProducerEmittedAtTargetPlatform(t *testing.T) {
 	}
 }
 
+// lxml-like fixture: CYTHONIZE_PY appears BEFORE any CYTHON_C/CYTHON_CPP
+// directive, so its `.py` source falls into the default C++ bucket (upstream
+// `pyxs = pyxs_cpp`). Textual order is _difflib(cpp), objectify(C),
+// etree(C_API_H), but the fixed bucket order is CYTHON_C, CYTHON_C_API_H,
+// CYTHON_CPP — so the regular archive lists objectify, etree, _difflib, and the
+// global archive's .reg3.cpp members follow the same order.
+func TestGen_CythonizePyDefaultCppBucketARMemberOrder(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeTestModuleFile(files, "pkg/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nPY_SRCS(TOP_LEVEL CYTHONIZE_PY _difflib.py CYTHON_C objectify.pyx CYTHON_C_API_H etree.pyx)\nEND()\n")
+	writeTestModuleFile(files, "pkg/_difflib.py", "def d():\n    return 0\n")
+	writeTestModuleFile(files, "pkg/objectify.pyx", "def o():\n    return 1\n")
+	writeTestModuleFile(files, "pkg/etree.pyx", "def e():\n    return 2\n")
+
+	g := testGen(newMemFS(files), "pkg")
+
+	regular := mustNodeByOutput(t, g, "$(B)/pkg/libpy3pkg.a")
+	objectify := arMemberIndex(t, regular, "pkg", "objectify.pyx.c.o")
+	etree := arMemberIndex(t, regular, "pkg", "etree.c.o")
+	difflib := arMemberIndex(t, regular, "pkg", "_difflib.py.cpp.o")
+
+	if !(objectify < etree && etree < difflib) {
+		t.Fatalf("regular archive order objectify(%d) < etree(%d) < _difflib(%d) violated: %v",
+			objectify, etree, difflib, vfsStrings(regular.flatInputs()))
+	}
+
+	global := mustNodeByOutput(t, g, "$(B)/pkg/libpy3pkg.global.a")
+	objectifyR := arMemberIndex(t, global, "pkg", "objectify.reg3.cpp.o")
+	etreeR := arMemberIndex(t, global, "pkg", "etree.reg3.cpp.o")
+	difflibR := arMemberIndex(t, global, "pkg", "_difflib.reg3.cpp.o")
+
+	if !(objectifyR < etreeR && etreeR < difflibR) {
+		t.Fatalf("global .reg3.cpp order objectify(%d) < etree(%d) < _difflib(%d) violated: %v",
+			objectifyR, etreeR, difflibR, vfsStrings(global.flatInputs()))
+	}
+}
+
 // A generated PY_SRCS source (PY_SRCS(__init__.py) where __init__.py is the
 // OUT_NOAUTO output of a RUN_PROGRAM) must reproduce upstream pybuild.py's
 // `rootrel_arc_src(path, unit) + '-'` py3cc source-name argument. For a build-
