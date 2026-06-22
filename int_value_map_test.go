@@ -49,8 +49,8 @@ func TestIntValueMapStructValues(t *testing.T) {
 	}
 }
 
-// Differential test for IntValueMap vs the builtin map across grows, overwrites
-// and negative lookups. Keys non-zero (0 is the reserved sentinel).
+// Differential test vs the builtin map across grows, overwrites and negative
+// lookups. Keys non-zero (0 is reserved).
 func TestIntValueMapMatchesBuiltin(t *testing.T) {
 	rng := rand.New(rand.NewSource(2))
 	ref := map[uint64]int64{}

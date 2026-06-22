@@ -2,13 +2,11 @@ package main
 
 import "testing"
 
-// TestGen_SplitCodegenShardInputWiring reproduces the sg5 divergence where
-// pb.code0.cc.o carries $(B)/Proto.pb.cc and $(B)/Proto.pb.h as inputs but
-// upstream's shard CC nodes carry only source-level generator inputs.
-// After the fix:
-//   - CC shard nodes must NOT have the monolithic $(B)/Proto.pb.cc as input
-//   - CC shard nodes must NOT have the build-generated $(B)/Proto.pb.h as input
-//   - pb.main.h must carry the shard CC paths so consumers get them in their closure
+// TestGen_SplitCodegenShardInputWiring reproduces the divergence where
+// pb.code0.cc.o carries the monolithic $(B)/Proto.pb.cc and $(B)/Proto.pb.h as
+// inputs, but upstream's shard CC nodes carry only source-level generator
+// inputs. After the fix the shard CC nodes drop both monolithic build-generated
+// sources, and pb.main.h carries the shard CC paths for consumers' closures.
 func TestGen_SplitCodegenShardInputWiring(t *testing.T) {
 	files := map[string]string{}
 
@@ -80,8 +78,8 @@ END()
 
 	ccShard := findGraphNodeByOutputs(t, g, "$(B)/split/Proto.pb.code0.cc.o")
 
-	// Split-codegen shard CC nodes must NOT carry the monolithic build-generated
-	// protobuf sources as inputs — only source-level generator chain files.
+	// Shard CC nodes carry only source-level generator chain files, not the
+	// monolithic build-generated protobuf sources.
 	for _, forbidden := range []string{
 		"$(B)/split/Proto.pb.cc",
 		"$(B)/split/Proto.pb.h",
@@ -105,9 +103,8 @@ END()
 		}
 	}
 
-	// Non-first shards (code1.cc, data.cc) must carry the first shard (code0.cc)
-	// in their input closure, matching upstream behavior where each non-first
-	// shard CC compile node lists code0.cc as an input.
+	// Non-first shards (code1.cc, data.cc) carry the first shard (code0.cc) in
+	// their input closure, matching upstream.
 	for _, nonFirstShard := range []string{
 		"$(B)/split/Proto.pb.code1.cc.o",
 		"$(B)/split/Proto.pb.data.cc.o",

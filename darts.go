@@ -2,11 +2,9 @@ package main
 
 import "sort"
 
-// Darts is a static byte-keyed double-array trie (Aoe'89) over a set of strings.
-// It answers longest-prefix-match: longestMatch returns the index (into the
-// NewDarts key slice) of the longest key that is a prefix of the concatenated
-// query parts. Build is one-shot; lookup is pure array indexing — no hashing —
-// and fails fast on the first byte with no transition.
+// Darts is a static byte-keyed double-array trie (Aoe'89). longestMatch returns
+// the index (into the NewDarts key slice) of the longest key that is a prefix of
+// the concatenated query parts. Lookup is pure array indexing, no hashing.
 //
 //	base[s]   child of state s on byte b sits at state base[s]+b+1
 //	check[t]  == s+1 iff t is a child of s; 0 marks a free slot
@@ -93,8 +91,8 @@ func NewDarts(keys []string) *Darts {
 	return d
 }
 
-// findBase returns the lowest base such that base+c is a free slot for every
-// child code c (the classic double-array x_check), growing the arrays to fit.
+// findBase returns the lowest base with base+c free for every child code c (the
+// classic x_check), growing the arrays to fit.
 func (d *Darts) findBase(codes []int32) int32 {
 	for base := int32(1); ; base++ {
 		d.ensure(base + codes[len(codes)-1])
@@ -123,9 +121,8 @@ func (d *Darts) ensure(n int32) {
 	}
 }
 
-// longestMatch walks the concatenation of parts (without concatenating them) and
-// returns the index of the longest key that is a prefix of that byte stream, plus
-// whether any key matched.
+// longestMatch walks parts as one stream (without concatenating) and returns the
+// index of the longest key prefixing it, plus whether any key matched.
 func (d *Darts) longestMatch(parts ...string) (int, bool) {
 	s := int32(0)
 	best := int32(0)

@@ -5,9 +5,9 @@ import (
 	"strings"
 )
 
-// rodataConstArgs / rodataYasmConstArgs are the constant spans of the RD
-// node's two commands: the rodata.py lead (after python3) and the yasm flag
-// tail between the per-platform ISA define and the output path.
+// rodataConstArgs / rodataYasmConstArgs are the constant spans of the RD node's
+// two commands: the script lead (after python) and the yasm flag tail between
+// the per-platform ISA define and the output path.
 var rodataConstArgs = []STR{(rodataScriptVFS).str(), argElf.str()}
 
 var rodataYasmConstArgs = []STR{
@@ -29,11 +29,10 @@ func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
 }
 
 // emitRD emits the .rodata → .asm → object yasm pipeline node. extraInputs are
-// the non-expanded closure leaves of a build-generated .rodata source (an
-// ARCHIVE_ASM resource: the producing RUN_PROGRAM/RUN_PYTHON's $(S) source
-// inputs, propagated through the .rodata's closure window); extraDepRefs is the
-// producer node (the AR .rodata) the compile depends on. A declared-SRC .rodata
-// passes nil for both.
+// the non-expanded closure leaves of a build-generated .rodata source (the
+// producer's $(S) source inputs, propagated through the .rodata's closure
+// window); extraDepRefs is the producer node the compile depends on. A
+// declared-SRC .rodata passes nil for both.
 func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, extraInputs []VFS, extraDepRefs []NodeRef, tc ModuleToolchain, emit Emitter) (NodeRef, VFS, VFS) {
 	na := emit.nodeArenas()
 

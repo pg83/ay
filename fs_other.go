@@ -7,9 +7,9 @@ import (
 	"os"
 )
 
-// readFileInto is the portable fallback of the linux raw-syscall fast path (see
-// fs_read_linux.go): os.Open + (*os.File).Read, sizing the buffer from f.Stat()
-// when available so the common case is a single exact-size read.
+// readFileInto is the portable fallback of the linux raw-syscall fast path:
+// os.Open + Read, sizing the buffer from f.Stat() when available so the common
+// case is a single exact-size read.
 func readFileInto(path string, buf []byte) []byte {
 	f := throw2(os.Open(path))
 
@@ -67,9 +67,8 @@ func (fs *OsFS) readFileRel(rel string, buf []byte) []byte {
 	return readFileInto(fs.rootSlash+rel, buf)
 }
 
-// readDirViewRel is the portable fallback: os.ReadDir already returns the
-// full entry list; names intern and pack into the shared store like the linux
-// arm.
+// readDirViewRel is the portable fallback: os.ReadDir returns the full entry
+// list; names intern and pack into the shared store like the linux arm.
 func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 	full := fs.rootSlash + rel
 

@@ -9,13 +9,13 @@ import (
 type RunProgramsForARResult struct {
 	CCRefs    []NodeRef
 	CCOutputs []VFS
-	// Seqs parallels CCRefs/CCOutputs: each member's declaring RUN_PROGRAM
-	// statement declaration sequence, used to order generated archive members by
-	// declaration order against other default-priority generated statements (EN).
+	// Seqs parallels CCRefs/CCOutputs: each member's RUN_PROGRAM declaration
+	// sequence, ordering generated archive members against other default-priority
+	// generated statements.
 	Seqs []int
 	// SecondLevel parallels CCRefs/CCOutputs: true for a member compiled from a
-	// second-level generated source (a flatc .fbs.cpp re-fed from a RUN_PROGRAM
-	// .fbs), which archives after every first-level generated member.
+	// second-level generated source (a flatc .fbs.cpp re-fed from a .fbs), which
+	// archives after every first-level generated member.
 	SecondLevel []bool
 }
 
@@ -23,13 +23,11 @@ type RunProgramAuxTool struct {
 	token string
 	ref   NodeRef
 	bin   VFS
-	// rooted marks a TOOL whose path already carries a build/source root prefix
-	// ($(B)/… from ${ARCADIA_BUILD_ROOT}/…). Upstream's `${tool:TOOL}` is hidden
-	// and only registers the dependency; the command spells the binary path
-	// literally (e.g. ${ARCADIA_BUILD_ROOT}/dir/binary), so no arg substitution
-	// applies. A relative TOOL (contrib/tools/protoc/plugins/cpp_styleguide) is
-	// the substituting case — ymake rewrites the matching relative arg token to
-	// the resolved binary.
+	// rooted marks a TOOL whose path already carries a build-root prefix ($(B)/…).
+	// Its hidden `${tool:TOOL}` only registers the dependency; the command spells
+	// the binary path literally, so no arg substitution applies. A relative TOOL is
+	// the substituting case — the matching relative arg token is rewritten to the
+	// resolved binary.
 	rooted bool
 }
 
@@ -52,16 +50,15 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 	// Pass 1: emit every PR node, then bridge each auto `.fbs`/`.fbs64` STDOUT/OUT
 	// to its flatc producer (registering .fbs.h/.fbs.cpp/.bfbs). Producers register
 	// before any cc compile below, so a sibling run whose cc-source #includes a
-	// generated .fbs.h (proto_flat_buf's `Cpp` run names formula_parameters.fbs.h
-	// in OUTPUT_INCLUDES) resolves it to the FL output regardless of run order.
+	// generated .fbs.h (named in OUTPUT_INCLUDES) resolves it regardless of run order.
 	for _, rp := range d.runPrograms {
 		prRef := emitRunProgram(ctx, instance, rp, d, reg, in)
 
 		outs := make([]string, 0, len(rp.OUTFiles)+len(rp.OUTNoAutoFiles)+1)
 		outs = append(outs, strStrings(rp.OUTFiles)...)
 
-		// Only auto STDOUT is a module source; STDOUT_NOAUTO carries upstream's
-		// `noauto` modifier and is excluded, exactly like OUT_NOAUTO.
+		// Only auto STDOUT is a module source; STDOUT_NOAUTO carries the `noauto`
+		// modifier and is excluded, like OUT_NOAUTO.
 		if rp.StdoutFile != nil && !rp.StdoutNoAuto {
 			outs = append(outs, rp.StdoutFile.string())
 		}
@@ -95,9 +92,8 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 		}
 	}
 
-	// Pass 3: flatc-generated .fbs.cpp compiles — archived after the first-level
-	// objects (upstream re-feeds the flatc .fbs.cpp as a second-level generated
-	// source; proto_flat_buf archives [formula_parameters.cpp.o, .fbs.cpp.o]).
+	// Pass 3: flatc-generated .fbs.cpp compiles — the second-level generated
+	// sources, archived after every first-level object.
 	for _, run := range runs {
 		for _, out := range run.outs {
 			if flatcVariantForExt(out) == nil {
@@ -116,11 +112,10 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 	return res
 }
 
-// prMainOutputRel returns the relative path of the run's MAIN output — ymake's
-// FindMainElemOrDefault(GetOutput(), 0) over the output order OUT, OUT_NOAUTO,
-// STDOUT (no run here marks an explicit Main element). The OUTPUT_INCLUDES induced
-// includes attach to this output, so its extension decides whether their closure
-// rides the producer. Empty when the run declares no output.
+// prMainOutputRel returns the relative path of the run's MAIN output — the first
+// in output order OUT, OUT_NOAUTO, STDOUT. The OUTPUT_INCLUDES induced includes
+// attach to it, so its extension decides whether their closure rides the producer.
+// Empty when the run declares no output.
 func prMainOutputRel(stmt *RunProgramStmt) string {
 	switch {
 	case len(stmt.OUTFiles) > 0:
@@ -179,9 +174,9 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		outVFSByToken[*stmt.StdoutFile] = vfs
 	}
 
-	// The run's MAIN output (ymake FindMainElemOrDefault(GetOutput(), 0)): the
-	// first OUT in command order — OUT, then OUT_NOAUTO, then STDOUT. The command
-	// builds one node keyed on it; the other outputs are EDT_OutTogether siblings.
+	// The run's MAIN output: the first in command order — OUT, then OUT_NOAUTO,
+	// then STDOUT. The command builds one node keyed on it; the other outputs are
+	// OutTogether siblings.
 	var mainOutputVFS VFS
 
 	switch {
@@ -194,17 +189,11 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	}
 
 	// The run's $(S) source inputs are real inputs of any unit that transitively
-	// consumes a generated output (directly, or after the output is archived into
-	// an .inc that a CC unit #includes). Record them on each output so the archive
-	// emit can propagate them as closure leaves (see emitArchive).
-	//
-	// A $(B) input is itself a codegen intermediate (e.g. a RUN_ANTLR-generated
-	// .proto). Its own $(S) generator sources (grammar/template/jar/scripts) are
-	// real inputs of every consumer of this run's outputs too, so fold them in:
-	// SourceInputs is transitive through the producer chain. prGeneratedFromSources
-	// (the $(B)-derived subset) additionally rides as a non-expanded ClosureLeaf of
-	// each output, so walkClosure carries it to consumers — the vehicle
-	// emit_proto.go uses, replacing the old fake `#include "X.proto"` bridge.
+	// consumes a generated output; record them on each output so the archive emit can
+	// propagate them as closure leaves. A $(B) input is itself a codegen intermediate,
+	// so its own $(S) generator sources fold in too (SourceInputs is transitive through
+	// the producer chain). prGeneratedFromSources (the $(B)-derived subset) additionally
+	// rides as a non-expanded ClosureLeaf, so walkClosure carries it to consumers.
 	var prSourceInputs []VFS
 	var prGeneratedFromSources []VFS
 
@@ -222,15 +211,11 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	prSourceInputs = append(prSourceInputs, prGeneratedFromSources...)
 
-	// A custom header generated FROM a .proto IN (yabs/.../generated/sys_const.h:
-	// `IN sys_const.proto OUT sys_const.h`) #includes the generated `.pb.h` of that
-	// proto's imports — the generator emits `#include "<import>.pb.h"`. We never
-	// scan the generated body, so model it the way upstream propagates a .proto's
-	// induced deps through a generated file: carry the import's `.pb.h` on the
-	// header's parsed-include window, so every consumer (the generated .cpp's
-	// compile, and a downstream RUN_PROGRAM that OUTPUT_INCLUDES this header) reaches
-	// the `.pb.h` and its own transitive closure. Headers only — a `.pb.h` OUT (the
-	// transitive_proto wrapper) already roots its own proto graph (T-48).
+	// A custom header generated FROM a .proto IN (`IN x.proto OUT x.h`) #includes the
+	// generated `.pb.h` of that proto's imports. We never scan the generated body, so
+	// carry the import's `.pb.h` on the header's parsed-include window: every consumer
+	// reaches the `.pb.h` and its transitive closure. Headers only — a `.pb.h` OUT
+	// already roots its own proto graph.
 	var protoImportPbH []IncludeDirective
 
 	for _, v := range inVFSs {
@@ -240,14 +225,12 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	}
 
 	// A run "self-consumes" when its own module auto-compiles a cc-source or
-	// asm-source OUT (the exact set emitRunProgramsForAR builds downstream: OUT
-	// files and auto STDOUT, never OUT_NOAUTO). Such a producer is the first
-	// DFS-leaver of every output of the run (upstream post-order processes the
-	// producing peer — compiling the sibling and leaving the OutTogether main
-	// output with it — before any external consumer). So its outputs keep the
-	// producer's module_dir; the consumer-claim override must not move them.
-	// A header-only / OUT_NOAUTO run (LLVM *.inc) does not self-consume and keeps
-	// the existing first-consumer attribution.
+	// asm-source OUT (the set emitRunProgramsForAR builds: OUT files and auto
+	// STDOUT, never OUT_NOAUTO). Such a producer is the first DFS-leaver of every
+	// output of the run (post-order processes the producing peer before any external
+	// consumer), so its outputs keep the producer's module_dir; the consumer-claim
+	// override must not move them. A header-only / OUT_NOAUTO run does not
+	// self-consume and keeps first-consumer attribution.
 	selfConsumes := false
 
 	for _, f := range stmt.OUTFiles {
@@ -269,18 +252,16 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// outputs, and registration records the producer ref.
 	prRef := ctx.emit.reserve()
 
-	// A RUN_PROGRAM may name the same file in more than one output role —
-	// e.g. STDOUT and OUT_NOAUTO pointing at the same generated artifact (the
-	// program's stdout *is* that declared output). They denote one physical
-	// output, so register each distinct output VFS exactly once; a second
-	// registration would trip the codegen registry's duplicate-producer guard.
+	// A RUN_PROGRAM may name the same file in more than one output role (e.g.
+	// STDOUT and OUT_NOAUTO pointing at the same artifact). They denote one physical
+	// output, so register each distinct output VFS once; a second registration would
+	// trip the codegen registry's duplicate-producer guard.
 	registeredPROut := map[VFS]bool{}
 
 	// A build-generated `.proto` declares its direct imports through the run's
-	// OUTPUT_INCLUDES `.proto` entries (the proto's source is generated, so ymake
-	// cannot scan its `import` statements). The consuming CPP_PROTO emission reads
-	// these to seed the generated `<proto>.pb.h`'s direct includes — upstream's
-	// `${hide;output_include:OUTPUT_INCLUDES}` induced deps on the generated proto.
+	// OUTPUT_INCLUDES `.proto` entries (the generated source's `import` statements
+	// cannot be scanned). The consuming CPP_PROTO emission reads these to seed the
+	// generated `<proto>.pb.h`'s direct includes.
 	var protoOutputIncludeRels []string
 
 	for _, oi := range stmt.OutputIncludes {
@@ -295,24 +276,13 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		}
 	}
 
-	// The canonical "generated header + its implementation" RUN_PROGRAM
-	// (sys_const.h main output, then sys_const.cpp) emits a generated source that
-	// #includes its own header: the generator writes `#include "sys_const.h"`. We
-	// never scan generated bodies, so model that one edge — the generated source
-	// includes the run's MAIN output when that main output is a header sharing the
-	// source's stem (the source is that header's implementation unit). walkClosure
-	// then expands the header's window — which already carries its proto-import
-	// `.pb.h` closure (carryProtoImportPbH / protoImportPbH, T-83) — into the
-	// generated source's compile inputs, reproducing upstream's scan of the
-	// generated `#include`.
-	//
-	// The stem+main gate is what keeps this off the non-self-including shapes that
-	// upstream's content scan leaves bare: a master-header run (caesar/bsyeti
-	// all_profiles.h main + many <x>_traits.cpp whose stems differ) and a
-	// cc-source-main run (bsyeti formula.cpp main + formula.h sibling), where the
-	// generated source does NOT include the header and the compile carries only the
-	// non-expanded OutTogether main-output leaf. Only an OUT/auto-STDOUT header
-	// participates; OUT_NOAUTO headers stay off the auto chain.
+	// A "generated header + its implementation" run emits a source that #includes its
+	// own header. We never scan generated bodies, so model that edge: the source
+	// includes the MAIN output when it is a header sharing the source's stem. walkClosure
+	// then expands the header's window (carrying its proto-import `.pb.h` closure) into
+	// the compile inputs. The stem+main gate keeps this off non-self-including shapes (a
+	// master-header run, a cc-source-main run) where the source does NOT include the
+	// header. Only an OUT/auto-STDOUT header participates.
 	mainIsHeader := mainOutputVFS != 0 && isHeaderSource(mainOutputVFS.rel())
 
 	mainHeaderInclude := func(ccOutRel string) (IncludeDirective, bool) {
@@ -326,9 +296,8 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// registerPROutput registers one output's parsed includes and closure edges.
 	// ridesHeaderViaParsed marks the auto-compiled cc-source that received the
 	// same-stem main header as a parsed include above: the non-expanded main-output
-	// closure leaf would double that edge (the parsed include already rides it,
-	// expanded), so skip the leaf for exactly that output. Every other non-main
-	// output keeps the OutTogether main-output leaf.
+	// closure leaf would double that (already-expanded) edge, so skip the leaf for
+	// that output. Every other non-main output keeps the OutTogether main-output leaf.
 	registerPROutput := func(out VFS, parsed []IncludeDirective, ridesHeaderViaParsed bool) {
 		if registeredPROut[out] {
 			return
@@ -345,23 +314,20 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 		// A self-consuming run owns its outputs: record the producer module dir
 		// now (before any consumer can resolve this output) so the override keeps
-		// the node attributed to its producer. registerBoundGeneratedParsedOutput
-		// just created the registry entry resolution depends on, so this write is
-		// strictly the first claim.
+		// the node attributed to its producer. The registry entry was just created,
+		// so this write is the first claim.
 		if selfConsumes {
 			ctx.scannerFor(instance).markGeneratedProducerOwned(out, instance.Path.rel())
 		}
 
-		// A non-main output is an EDT_OutTogether sibling of the main output: ymake's
-		// json_visitor PrepareLeaving rides the main output onto any node depending on
-		// a non-main sibling. Ride it as a non-expanded closure leaf of the sibling, so
-		// the scanner splices the main output into every window containing the sibling
-		// — the root same-run consumer (caesar features.gen.h sibling of features.gen.cpp)
-		// AND any transitive consumer whose include closure reaches the sibling through
-		// a different module (the with_transitive_headers/advm_banner.pb.h wrapper class,
-		// where advm_banner is the first OUT and no source #includes it directly). The
-		// leaf never rides onto the PR producer itself (dropOwnOutputs strips it from the
-		// producer's own input closure).
+		// A non-main output is an OutTogether sibling of the main output: the main
+		// output rides onto any node depending on a non-main sibling. Ride it as a
+		// non-expanded closure leaf of the sibling, so the scanner splices the main
+		// output into every window containing the sibling — the same-run consumer AND
+		// any transitive consumer whose include closure reaches the sibling through a
+		// different module (the wrapper class, where the first OUT is included by no
+		// source directly). The leaf never rides onto the PR producer itself
+		// (dropOwnOutputs strips it from the producer's own input closure).
 		if out != mainOutputVFS && !ridesHeaderViaParsed {
 			reg.addClosureLeaf(out, mainOutputVFS)
 		}
@@ -372,10 +338,9 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	}
 
 	// parsedFor builds an output's registered parsed includes, appending the
-	// same-stem main header (the modeled `#include "gen.h"`) to an auto-compiled
-	// cc-source that is that header's implementation unit. Returns whether the
-	// header include was appended so registerPROutput drops the redundant
-	// main-output closure leaf.
+	// same-stem main header (the modeled `#include "x.h"`) to an auto-compiled
+	// cc-source that is that header's implementation unit. Returns whether the header
+	// include was appended so registerPROutput drops the redundant main-output leaf.
 	parsedFor := func(f STR, out VFS, auto bool) ([]IncludeDirective, bool) {
 		parsed := prEmitsIncludes(f, stmt, inVFSs, protoImportPbH)
 
@@ -408,17 +373,15 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	inputClosure := prInputClosure(ctx, instance, d, stmt, moduleInputs)
 
 	// A command never inputs its own outputs. prInputClosure walks this run's
-	// cc-source OUTs (to surface OUTPUT_INCLUDES from `.in` templates); those
-	// windows now carry the OutTogether main-output leaf (registerPROutput), which
-	// must ride onto CONSUMERS, not back onto the producer. Drop any own-output VFS
-	// the self-walk pulled in.
+	// cc-source OUTs (to surface OUTPUT_INCLUDES from `.in` templates); those windows
+	// now carry the OutTogether main-output leaf, which must ride onto CONSUMERS, not
+	// back onto the producer. Drop any own-output VFS the self-walk pulled in.
 	inputClosure = dropOwnOutputs(inputClosure, outVFSByToken)
 
 	// Record the producer's transitive $(S) source closure on each registered
-	// output. A bytecode (py3cc) node compiling a generated PY_SRCS source folds
-	// this set onto itself (upstream's flat-input model), while the producer's $(B)
-	// intermediates stay behind the producer node edge. Shared across the run's
-	// outputs; the slice is referenced, not copied.
+	// output. A bytecode node compiling a generated PY_SRCS source folds this set
+	// onto itself, while the producer's $(B) intermediates stay behind the producer
+	// node edge. Shared across the run's outputs; the slice is referenced, not copied.
 	if prSourceClosure := filterSourceVFS(inputClosure); len(prSourceClosure) > 0 {
 		for out := range registeredPROut {
 			reg.setProducerSourceClosure(out, prSourceClosure)
@@ -428,9 +391,8 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	// A build-rooted IN that is a registered codegen output but carries no include
 	// parser (e.g. a FROM_SANDBOX OUT_NOAUTO fetch artifact) never enters
 	// inputClosure, yet the PR still depends on its producer. Resolve producer deps
-	// over the IN set as well as the walked closure; resolveCodegenDepRefs' build
-	// gate + registry probe + dedup make the IN files a no-op for the common case (a
-	// parsed IN is already in inputClosure, a source IN is skipped).
+	// over the IN set as well as the walked closure; the build gate + registry probe
+	// + dedup make the IN files a no-op for the common case.
 	depInputs := inputClosure
 
 	if len(inVFSs) > 0 {
@@ -439,7 +401,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	// Exclude prRef as well as the tool: the outputs are now registered against
 	// prRef, so a PR output appearing in another output's closure must not become a
-	// self-dependency (the old two-phase code bound the ref only after this resolve).
+	// self-dependency.
 	prExtraDepRefs := resolveCodegenDepRefs(ctx, instance, depInputs, toolLDRef, prRef)
 
 	emitPR(instance, stmt, toolBinPath, toolLDRef, auxTools, inVFSByToken, inVFSs, outVFSByToken, stdoutVFS, inputClosure, prExtraDepRefs, cfModuleTag(d, instance), prRef, ctx.emit)
@@ -448,9 +410,8 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 }
 
 // dropOwnOutputs removes any of this run's declared output VFSs from its own
-// input closure. A producer never depends on a file it produces; the self-walk
-// of cc-source OUTs can otherwise pull a sibling output in via the OutTogether
-// closure leaf. Returns closure unchanged when nothing collides.
+// input closure — a producer never depends on a file it produces. Returns closure
+// unchanged when nothing collides.
 func dropOwnOutputs(closure []VFS, outVFSByToken map[STR]VFS) []VFS {
 	if len(closure) == 0 || len(outVFSByToken) == 0 {
 		return closure
@@ -504,8 +465,7 @@ func filterSourceVFS(vs []VFS) []VFS {
 
 // isCodegenProtoHeader reports whether v is a registered generated proto header
 // (`x.pb.h`) — the canonical proto output, excluding the lite `.deps.pb.h`
-// intermediate. Used to keep a pkPR custom header's re-exported imports' .pb.h on
-// a downstream producer while dropping the other $(B) codegen siblings.
+// intermediate.
 func isCodegenProtoHeader(reg *CodegenRegistry, v VFS) bool {
 	rel := v.rel()
 
@@ -514,8 +474,7 @@ func isCodegenProtoHeader(reg *CodegenRegistry, v VFS) bool {
 
 // pbhBasenameSet collects the basenames of every `.pb.h` already in vs — the
 // canonical proto headers a producer has resolved. The WKT checked-in sibling
-// synthesis skips a kept .proto whose basename is already here (a non-canonical
-// same-named variant).
+// synthesis skips a kept .proto whose basename is already here.
 func pbhBasenameSet(vs []VFS) map[string]bool {
 	m := map[string]bool{}
 
@@ -529,8 +488,7 @@ func pbhBasenameSet(vs []VFS) map[string]bool {
 }
 
 // relStem strips a path's final extension, leaving dir + basename-without-ext.
-// Used to pair a generated cc-source with its same-stem header output
-// (sys_const.cpp ↔ sys_const.h).
+// Used to pair a generated cc-source with its same-stem header output.
 func relStem(rel string) string {
 	return strings.TrimSuffix(rel, filepath.Ext(rel))
 }
@@ -553,21 +511,17 @@ func generatedOutputCarriesIncludes(p string) bool {
 }
 
 func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *RunProgramStmt, moduleInputs ModuleCCInputs) []VFS {
-	// OUTPUT_INCLUDES are upstream's `${hide;output_include:OUTPUT_INCLUDES}`:
-	// induced deps attached to the run's MAIN output (FindMainElemOrDefault,
-	// macro_processor.cpp). Whether their transitive $(S) source closure surfaces
-	// on the PRODUCER's inputs is decided by the type of that main output:
-	//   - main output is a cc-source translation unit (STDOUT formula_parameters.cpp,
-	//     OUT_NOAUTO registrar.cpp): the closure rides the producer command. The
-	//     downstream compile independently C-scans the generated .cpp and carries
-	//     the closure too — the two are not exclusive.
-	//   - main output is a HEADER with a compiled cc-source sibling (features.gen.h +
-	//     features.gen.cpp, profile_traits.h + .cpp): the includes ride the header
-	//     to its consumers, NOT the producer.
-	//   - a header-only / OUT_NOAUTO-only run (no auto cc-source output at all) has
-	//     nowhere else to surface and rides the PRODUCER (plutonium dsp.yaff.h).
-	// With an IN file the producer's graph is rooted at IN regardless (control_board
-	// .{h,cpp}.in #include the proto headers their OUTPUT_INCLUDES name).
+	// OUTPUT_INCLUDES are induced deps attached to the run's MAIN output. Whether
+	// their transitive $(S) source closure surfaces on the PRODUCER's inputs is
+	// decided by the type of that main output:
+	//   - main output is a cc-source translation unit: the closure rides the producer
+	//     command. The downstream compile independently C-scans the generated .cpp and
+	//     carries the closure too — the two are not exclusive.
+	//   - main output is a HEADER with a compiled cc-source sibling: the includes ride
+	//     the header to its consumers, NOT the producer.
+	//   - a header-only / OUT_NOAUTO-only run (no auto cc-source output) has nowhere
+	//     else to surface and rides the PRODUCER.
+	// With an IN file the producer's graph is rooted at IN regardless.
 	hasAutoCCSourceOut := stmt.StdoutFile != nil && isCCSourceExt(stmt.StdoutFile.string())
 
 	for _, f := range stmt.OUTFiles {
@@ -589,17 +543,14 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		return nil
 	}
 
-	// A run that itself consumes .proto IN files (the transitive_proto wrapper:
-	// IN <.proto> OUTPUT_INCLUDES <codegen .pb.h>) roots its proto graph at those
-	// IN .proto, whose scan induces .proto imports — never their generated .pb.h.
-	// So the OUTPUT_INCLUDES walk below must NOT re-synthesize the checked-in WKT
-	// .pb.h sibling: upstream lists only the transitive .proto for such a run
-	// (ads/caesar/.../with_transitive_headers/advm_banner.pb.h). A run with no
-	// .proto IN (control_board's .h.in, registrar's no-IN) still gets the sibling.
+	// A run that itself consumes .proto IN files (IN <.proto> OUTPUT_INCLUDES
+	// <codegen .pb.h>) roots its proto graph at those IN .proto, whose scan induces
+	// .proto imports — never their generated .pb.h. So the OUTPUT_INCLUDES walk below
+	// must NOT re-synthesize the checked-in WKT .pb.h sibling: only the transitive
+	// .proto is listed for such a run. A run with no .proto IN still gets the sibling.
 	hasProtoIN := false
 	// An IN roots a real C++ include graph only when its extension maps to a
-	// registered parser (control_board's .{h,cpp}.in); a data IN (formula.in,
-	// geocoding .txt) induces no include edges itself.
+	// registered parser (a .{h,cpp}.in); a data IN induces no include edges itself.
 	hasParsedIN := false
 
 	for _, f := range stmt.INFiles {
@@ -614,12 +565,11 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 
 	// When the run also generates a HEADER output, its OUTPUT_INCLUDES ride that
 	// generated header to the cc-source's consumers (the cc-source #includes the
-	// sibling header), so the producer does not self-carry the closure — the
-	// ads/bsyeti/.../formula.{cpp,h} class, the IN-rooted analog of T-72's no-IN
-	// header-sibling guard. A run that generates NO header (libphonenumber's
-	// geocoding_data.cc, bcrypt's _bcrypt.cffi.py3.c) has nowhere else to route its
-	// OUTPUT_INCLUDES, so the generated cc-source's include closure surfaces on the
-	// producer's own self-scan. A parsed IN roots the producer's graph regardless.
+	// sibling header), so the producer does not self-carry the closure — the IN-rooted
+	// analog of the no-IN header-sibling guard. A run that generates NO header has
+	// nowhere else to route its OUTPUT_INCLUDES, so the generated cc-source's include
+	// closure surfaces on the producer's own self-scan. A parsed IN roots the
+	// producer's graph regardless.
 	generatesHeader := stmt.StdoutFile != nil && isHeaderSource(stmt.StdoutFile.string())
 
 	for _, f := range stmt.OUTFiles {
@@ -632,7 +582,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 
 	// The generated cc-source OUT/STDOUT is self-scanned onto the producer for an
 	// IN-rooted run, EXCEPT a data-IN run whose generated header sibling already
-	// carries the OUTPUT_INCLUDES (formula.cpp). A no-IN run never self-scans (T-72).
+	// carries the OUTPUT_INCLUDES. A no-IN run never self-scans.
 	selfScanGeneratedCC := len(stmt.INFiles) > 0 && (hasParsedIN || !generatesHeader)
 
 	scanIn := ModuleCCInputs{
@@ -659,25 +609,23 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	}
 
 	// A generated cc-source that is the implementation unit of a same-producer
-	// HEADER main output (sys_const.h main + sys_const.cpp; the generator writes
-	// `#include "sys_const.h"`) is modeled in emitRunProgram as #including that
-	// header. Its header-routed closure — the header's re-exported proto-import
-	// `.pb.h` and that header's induced deps — belongs to CONSUMERS, not the
-	// producer (the IN-rooted analog of the formula.cpp header-sibling guard).
-	// Self-scanning such a cc-source would expand the header's window back onto the
-	// producer; skip it. The producer's proto graph still roots at IN below.
+	// HEADER main output (the generator writes `#include "x.h"`) is modeled in
+	// emitRunProgram as #including that header. Its header-routed closure — the
+	// header's re-exported proto-import `.pb.h` and induced deps — belongs to
+	// CONSUMERS, not the producer. Self-scanning such a cc-source would expand the
+	// header's window back onto the producer; skip it. The producer's proto graph
+	// still roots at IN below.
 	mainRel := prMainOutputRel(stmt)
 	ridesMainHeader := func(ccRel string) bool {
 		return isHeaderSource(mainRel) && relStem(ccRel) == relStem(mainRel)
 	}
 
-	// The producer scans its own generated cc-source OUT/STDOUT for an IN-rooted run
-	// (geocoding_data.cc, bcrypt's .c, control_board's .h.in cc-source), surfacing the
-	// generated source's OUTPUT_INCLUDES closure. A no-IN run, OR a data-IN run that
-	// generates a header sibling carrying those includes (formula.cpp + formula.h),
-	// must NOT scan its own .cpp — that drags the closure the consumer already carries
-	// via the header; its producer closure comes from the OUTPUT_INCLUDES keep=isSource
-	// walk below (selfScanGeneratedCC gates this).
+	// The producer scans its own generated cc-source OUT/STDOUT for an IN-rooted run,
+	// surfacing the generated source's OUTPUT_INCLUDES closure. A no-IN run, OR a
+	// data-IN run that generates a header sibling carrying those includes, must NOT
+	// scan its own .cpp — that drags the closure the consumer already carries via the
+	// header; its producer closure comes from the keep=isSource walk below
+	// (selfScanGeneratedCC gates this).
 	if selfScanGeneratedCC {
 		for _, f := range stmt.OUTFiles {
 			if !isCCSourceExt(f.string()) || ridesMainHeader(f.string()) {
@@ -688,28 +636,20 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		}
 	}
 
-	// OUT_NOAUTO outputs use upstream's `${hide;noauto;output:OUT_NOAUTO}`
-	// modifier: registered as outputs but explicitly EXCLUDED from the
-	// auto-input/scan chain — the PR node does not walk their closures.
-	// (yql/.../v1_proto_split_antlr4 uses OUT_NOAUTO for .pb.h/.pb.cc, and
-	// upstream tracks only IN + tools as PR inputs; walking the .pb.cc here
-	// over-emits 1253 libcxx/protobuf headers via the parsed pb.h chain.)
+	// OUT_NOAUTO outputs carry the `noauto` modifier: registered as outputs but
+	// EXCLUDED from the auto-input/scan chain — the PR node does not walk their
+	// closures. (Walking a .pb.cc OUT_NOAUTO here would over-emit the libcxx/protobuf
+	// headers via the parsed pb.h chain; only IN + tools are PR inputs.)
 	if selfScanGeneratedCC && stmt.StdoutFile != nil && isCCSourceExt(stmt.StdoutFile.string()) &&
 		!ridesMainHeader(stmt.StdoutFile.string()) {
 		walkOne(stmt.StdoutFile.string())
 	}
 
-	// Upstream's RUN_PROGRAM macro registers every IN as an input with
-	// scan-on-include (`${hide;input:IN}`); the scanner walks each IN's
-	// parsed-include closure when the file's extension is explicitly mapped
-	// to an include parser (cpp/h/.h.in/etc.). Files outside that map —
-	// Jinja templates (.jnj), JSON, libmagic Magdir entries without an
-	// extension — must not be parsed: our default parser is the C parser,
-	// and it would surface spurious `#include "/mach-o/fat.h"` matches on
-	// random binary data. Gate IN-walk on hasRegisteredParser so unknown
-	// extensions contribute zero closure entries (matches REF's
-	// yql_*_expr_nodes.gen.h PR nodes, which list only the tool + IN
-	// files).
+	// Every IN is an input with scan-on-include, but the scanner walks an IN's closure
+	// only when its extension maps to an include parser. Files outside that map (Jinja
+	// templates, JSON, extensionless data) must not be parsed: the default C parser
+	// would surface spurious `#include` matches on random binary data. Gate IN-walk on
+	// hasRegisteredParser so unknown extensions contribute zero closure entries.
 	for _, f := range stmt.INFiles {
 		rel := f.string()
 
@@ -719,19 +659,13 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 			continue
 		}
 
-		// An opaque generated IN (a FROM_SANDBOX fetch artifact, a RUN_PROGRAM
-		// OUT_NOAUTO `.bin`) has no include parser, so its window is never walked —
-		// but upstream's flat-input model still lists the producer's full transitive
-		// SOURCE closure on a node consuming the generated file. Fold both recorded
-		// sets without treating the opaque data as parsed includes: SourceInputs
-		// carries the producer's direct source leaves (incl. unparsed INs a closure
-		// walk never reaches — sprav's gazetteer.gzt/.remorph), ProducerSourceClosure
-		// carries its transitive parsed source closure (the proto descriptor sources
-		// reached through the producer's `.proto`/`.gztproto` INs). The chain cascades:
-		// once a downstream `.bin` gains these, its own ProducerSourceClosure carries
-		// them one hop further. The trailing dedupVFS collapses the overlap and any
-		// repetition when several INs share one producer. FROM_SANDBOX producers set
-		// no ProducerSourceClosure, so that path is unaffected.
+		// An opaque generated IN (a fetch artifact, an OUT_NOAUTO `.bin`) has no
+		// include parser, so its window is never walked — but a node consuming it still
+		// lists the producer's full transitive SOURCE closure. Fold both recorded sets:
+		// SourceInputs carries the producer's direct source leaves (incl. unparsed INs a
+		// walk never reaches), ProducerSourceClosure its transitive parsed source closure.
+		// The chain cascades one hop further per downstream `.bin`; dedupVFS collapses the
+		// overlap. FROM_SANDBOX producers set no ProducerSourceClosure.
 		if info := codegenRegForInstance(ctx, instance).lookup(runProgramInputVFS(ctx, instance, d, rel)); info != nil {
 			out = append(out, info.SourceInputs...)
 			out = append(out, info.ProducerSourceClosure...)
@@ -739,18 +673,13 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	}
 
 	// A header OUT whose generator tool declares INDUCED_DEPS(h …) carries those
-	// induced headers (and their transitive $(S) closure) on its OWN producer node —
-	// upstream's flat-input model lists an output's induced deps as producer inputs,
-	// the same set the scanner mixes onto a CONSUMER that includes the header
-	// (GeneratorRefs + resolveInducedDeps). The output is already registered with its
-	// GeneratorRefs (registerPROutput ran first), so walking the header's own closure
-	// surfaces exactly the induced bucket selected by the output kind — header
-	// outputs read the Header bucket, so a cc-source OUT never inherits it. Keep the
-	// $(S) source entries (the $(B) induced .pb.h intermediate rides the producer dep
-	// edge, not as an input). Gated by fullSourceClosure: a header with a compiled
-	// cc-source sibling routes its induced deps through that sibling to consumers, so
-	// only a header-only run (no cc-source OUT) surfaces them on the producer. The
-	// ads/bsyeti/eagle/collect/generated/query_params.h class.
+	// induced headers (and their transitive $(S) closure) on its OWN producer node, the
+	// same set the scanner mixes onto a CONSUMER that includes the header. The output is
+	// registered with its GeneratorRefs, so walking the header's own closure surfaces
+	// exactly the induced bucket selected by the output kind (header outputs read the
+	// Header bucket; a cc-source OUT never inherits it). Keep the $(S) source entries.
+	// Gated by fullSourceClosure: a header with a compiled cc-source sibling routes its
+	// induced deps through that sibling, so only a header-only run surfaces them here.
 	if fullSourceClosure {
 		for _, f := range stmt.OUTFiles {
 			if !isHeaderSource(f.string()) {
@@ -765,31 +694,21 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		}
 	}
 
-	// OUTPUT_INCLUDES closure realized on the producer.
-	//
-	// fullSourceClosure (plutonium dsp.yaff.h header-only; formula_parameters.cpp
-	// cc-main STDOUT): the run has no IN, so every OUTPUT_INCLUDES file roots a scan
-	// here — codegen .pb.h via the registry's OutputPath, source-tree headers
-	// (library/cpp/yaff/*.h) via their source path. Keep every $(S) entry of the
-	// closure (drops the intermediate $(B) generated .pb.h; the proto-import graph
-	// already surfaces the $(S) .proto sources, and source-tree WKT .pb.h siblings
-	// are added below).
-	//
-	// Otherwise (run rooted at IN): the producer's C graph is rooted at IN, which
-	// already carries the protobuf/libcxx closure, so a codegen .pb.h
+	// OUTPUT_INCLUDES closure realized on the producer. fullSourceClosure (no IN): every
+	// OUTPUT_INCLUDES file roots a scan here — codegen .pb.h via the registry's
+	// OutputPath, source-tree headers via their source path. Keep every $(S) entry
+	// (drops the intermediate $(B) .pb.h; WKT siblings are added below). Otherwise (run
+	// rooted at IN): the C graph is already rooted at IN, so a codegen .pb.h
 	// OUTPUT_INCLUDES contributes only its TRANSITIVE .proto SOURCES (+ WKT .pb.h
-	// sibling); source-tree OUTPUT_INCLUDES are not walked here (they would
-	// redundantly drag libcxx).
+	// sibling); source-tree OUTPUT_INCLUDES are not walked.
 	{
 		reg := codegenRegForInstance(ctx, instance)
 
-		// keep decides which entries of an OUTPUT_INCLUDES target's walked closure
-		// ride the producer. A pkPR custom header (sys_const.h) re-exports its proto
-		// imports' generated .pb.h (the prEmitsIncludes window enrichment), so keep
-		// its whole $(S) source closure plus those generated proto .pb.h, dropping
-		// intermediate $(B) codegen artifacts (.yaff.h, .deps.pb.h, .pb.cc). A pkPB
-		// proto header (control_board's tablet.pb.h) lists only the transitive .proto
-		// SOURCES — never the deep generated .pb.h headers (c5549aa/T-48).
+		// keep decides which entries of an OUTPUT_INCLUDES target's walked closure ride
+		// the producer. A pkPR custom header re-exports its proto imports' generated
+		// .pb.h, so keep its whole $(S) source closure plus those .pb.h, dropping
+		// intermediate $(B) codegen artifacts. A pkPB proto header lists only the
+		// transitive .proto SOURCES.
 		keep := func(v VFS, customPR bool) bool {
 			if fullSourceClosure {
 				return v.isSource()
@@ -802,11 +721,9 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 			return strings.HasSuffix(v.rel(), ".proto")
 		}
 
-		// Basenames of .pb.h already resolved on this producer (the canonical
-		// variant, e.g. protobuf/descriptor.pb.h via the IN walk). The checked-in
-		// WKT sibling synthesis below consults it: a kept .proto whose .pb.h basename
-		// is already present is a non-canonical duplicate variant
-		// (protobuf_old/descriptor.proto), whose sibling upstream never #includes.
+		// Basenames of .pb.h already resolved on this producer (the canonical variant,
+		// via the IN walk). The WKT sibling synthesis below consults it: a kept .proto
+		// whose .pb.h basename is already present is a non-canonical duplicate variant.
 		pbhSeen := pbhBasenameSet(out)
 
 		for _, oi := range stmt.OutputIncludes {
@@ -830,15 +747,13 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 
 				// This run names the codegen output in OUTPUT_INCLUDES, so it is a
 				// CONSUMER of it. walkClosureTail leads with the output as the window
-				// root (added directly, never resolved), so no first-claim is recorded
-				// for it — yet upstream's Node2Module attributes the producer NODE (not
-				// the single output) to the first module that leaves it, which is this
-				// consumer. Record a node-level claim so overrideGeneratedModuleDir
-				// re-attributes a RUN_PROGRAM-class producer (the with_transitive_headers
-				// wrapper, one node / 69 outputs) to this module even when a far peer
-				// later include-resolves an individual sibling output. PB-class producers
-				// (a real PROTO_LIBRARY's .pb.h, e.g. control_board's tablet.pb.h) are
-				// left untouched by the override, so this is a no-op for them.
+				// root (never resolved), so no first-claim is recorded for it — yet
+				// Node2Module attributes the producer NODE to the first module that
+				// leaves it, which is this consumer. Record a node-level claim so the
+				// override re-attributes a RUN_PROGRAM-class producer (one node, many
+				// outputs) to this module even when a far peer later include-resolves an
+				// individual sibling output. PB-class producers are left untouched by the
+				// override, so this is a no-op for them.
 				ctx.scannerFor(instance).recordNodeClaim(info.ProducerRef, instance.Path.rel())
 			case fullSourceClosure && ctx.fs.isFile(srcRootVFS, target.string()):
 				// Source-tree OUTPUT_INCLUDES header: scan its own $(S) closure,
@@ -860,18 +775,14 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 					pbhSeen[filepath.Base(v.rel())] = true
 				}
 
-				// Protobuf WKTs (google/protobuf/{any,duration,empty,struct,
-				// timestamp,...}.proto) ship pre-built `.pb.h` headers checked
-				// in alongside the .proto. Upstream lists both the .proto and
-				// the pre-built .pb.h as PR inputs when the chain transits
-				// through one. For purely-generated .pb.h's (no source-tree
-				// .pb.h sibling) the IsFile probe returns false, so this is a
-				// no-op outside the WKT path. fullSourceClosure keeps the whole C
-				// closure, so a genuinely-#included WKT .pb.h already rides as a
-				// source. The basename guard drops a same-named non-canonical
-				// variant (protobuf_old/descriptor.pb.h) whose canonical sibling
-				// (protobuf/descriptor.pb.h) is already resolved and which upstream
-				// never #includes.
+				// Protobuf WKTs ship pre-built `.pb.h` headers checked in alongside
+				// the .proto; both the .proto and the pre-built .pb.h are PR inputs when
+				// the chain transits through one. For purely-generated .pb.h's the IsFile
+				// probe returns false, so this is a no-op outside the WKT path.
+				// fullSourceClosure keeps the whole C closure, so a genuinely-#included
+				// WKT .pb.h already rides as a source. The basename guard drops a
+				// same-named non-canonical variant whose canonical sibling is already
+				// resolved.
 				if !fullSourceClosure && !hasProtoIN && v.isSource() && strings.HasSuffix(v.rel(), ".proto") {
 					sibling := strings.TrimSuffix(v.rel(), ".proto") + ".pb.h"
 					sibDir, sibBase := splitDirName(sibling)
@@ -898,13 +809,10 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 // inVFSs mirrors stmt.INFiles in order (computed once by emitRunProgram), so the
 // per-output call needn't re-resolve every IN file.
 func prEmitsIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, protoImportPbH []IncludeDirective) []IncludeDirective {
-	// OUTPUT_INCLUDES are induced deps (EVI_InducedDeps) ymake attaches to EVERY
-	// output of the run (macro_processor addOutputIncludes over all `outs`), so even
-	// a non-carrying data output (a .pb resource payload) exposes them to its
-	// consumers — the RESOURCE objcopy that embeds the .pb walks this window for the
-	// generated-header closure REF lists. A carrying output (cc/header/inc)
-	// additionally models its $(S) IN sources and re-exported proto .pb.h as
-	// #includes; a data output carries OUTPUT_INCLUDES only.
+	// OUTPUT_INCLUDES are induced deps attached to EVERY output of the run, so even a
+	// non-carrying data output (a .pb resource payload) exposes them to its consumers.
+	// A carrying output (cc/header/inc) additionally models its $(S) IN sources and
+	// re-exported proto .pb.h as #includes; a data output carries OUTPUT_INCLUDES only.
 	carries := generatedOutputCarriesIncludes(outFile.string())
 
 	if !carries && len(stmt.OutputIncludes) == 0 {
@@ -913,7 +821,7 @@ func prEmitsIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, protoImpor
 
 	// A custom header generated from a .proto IN re-exports the import's generated
 	// `.pb.h` (see protoImportPbH in emitRunProgram). A `.pb.h` OUT is excluded: the
-	// transitive_proto wrapper roots its proto graph at its own IN .proto.
+	// wrapper roots its proto graph at its own IN .proto.
 	carryProtoImportPbH := isHeaderSource(outFile.string()) && !strings.HasSuffix(outFile.string(), ".pb.h")
 
 	n := len(stmt.OutputIncludes)
@@ -931,10 +839,9 @@ func prEmitsIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, protoImpor
 	if carries {
 		for _, v := range inVFSs {
 			// A generated output never #includes its $(B) inputs — those are codegen
-			// intermediates (e.g. a RUN_ANTLR-generated .proto) reached via the
-			// producer dep edge, not C++ includes. Their $(S) generator sources ride
-			// to consumers as this output's ClosureLeaves (see emitRunProgram),
-			// matching emit_proto.go; fake-including the intermediate here dragged the
+			// intermediates reached via the producer dep edge, not C++ includes. Their
+			// $(S) generator sources ride to consumers as this output's ClosureLeaves
+			// (see emitRunProgram); fake-including the intermediate here dragged the
 			// $(B) file into every consumer's closure.
 			if v.isBuild() {
 				continue
@@ -974,9 +881,9 @@ func resolveRunProgramAuxTools(ctx *GenCtx, toolPaths []string) []RunProgramAuxT
 
 		seen[toolPath] = struct{}{}
 
-		// A TOOL spelled ${ARCADIA_BUILD_ROOT}/dir (expanded to $(B)/dir) names the
-		// built module `dir`; the root prefix only marks it as an output reference.
-		// toolResult expects the source-root module path, so strip the prefix.
+		// A TOOL spelled $(B)/dir names the built module `dir`; the root prefix only
+		// marks it as an output reference. toolResult expects the source-root module
+		// path, so strip the prefix.
 		rooted := vfsHasPrefix(toolPath)
 		modulePath := toolPath
 
@@ -1053,13 +960,12 @@ func emitPR(
 	cmdArgs := make([]STR, 0, 1+len(stmt.Args))
 	cmdArgs = append(cmdArgs, (toolBinPath).str())
 
-	// IN/OUT path deep-replace candidates (ymake args_converter FillTypedArgs): every
-	// relative path passed to a {input}/{output} keyword (IN, IN_NOPARSE, OUT,
-	// OUT_NOAUTO) that occurs as a boundary-delimited substring of a positional arg is
-	// rewritten to its rooted spelling ($(S)/… for inputs, $(B)/… for outputs). This
-	// roots `--in_file=<rel>`/`--out_file=<rel>` flag-args and subsumes bare-token and
-	// `head:modifier` rooting. STDOUT carries no {output} marker upstream, so it is not
-	// a candidate. Sorted longest→shortest; each arg is replaced at most once.
+	// IN/OUT path deep-replace candidates: every relative path passed to an
+	// IN/IN_NOPARSE/OUT/OUT_NOAUTO keyword that occurs as a boundary-delimited
+	// substring of a positional arg is rewritten to its rooted spelling ($(S)/… for
+	// inputs, $(B)/… for outputs). This roots `--in_file=<rel>`/`--out_file=<rel>`
+	// flag-args. STDOUT carries no {output} marker, so it is not a candidate. Sorted
+	// longest→shortest; each arg is replaced at most once.
 	cands := deepReplaceCandidates(stmt, inVFSByToken, outVFSByToken)
 
 	for _, aTok := range stmt.Args {
@@ -1082,8 +988,8 @@ func emitPR(
 			}
 		}
 
-		// A position already consumed by a TOOL substitution is not re-rooted (ymake
-		// replaces each arg position once, longest match winning).
+		// A position already consumed by a TOOL substitution is not re-rooted (each
+		// arg position is replaced once, longest match winning).
 		if !toolReplaced {
 			if rooted, ok := deepReplacePathArg(a, cands); ok {
 				key = internStr(rooted)
@@ -1119,10 +1025,9 @@ func emitPR(
 	// not copied, into the chunk list.
 	inputs := na.inputList(head, deduper.filterSeen(inputClosure))
 
-	// Upstream's output set is path-keyed: a file declared through more than one
-	// output modifier (e.g. STDOUT and OUT_NOAUTO naming the same artifact — the
-	// program's stdout *is* the declared output) is listed once. Collapse equal
-	// VFS in declaration order, mirroring the registeredPROut dedup above.
+	// The output set is path-keyed: a file declared through more than one output
+	// modifier (e.g. STDOUT and OUT_NOAUTO naming the same artifact) is listed once.
+	// Collapse equal VFS in declaration order, mirroring the registeredPROut dedup.
 	var outputs []VFS
 	var stdoutPath STR
 	emittedOut := map[VFS]bool{}
@@ -1158,9 +1063,9 @@ func emitPR(
 
 	deps := append([]NodeRef(nil), extraDepRefs...)
 
-	// toolRefs is a fresh local, not mutated after this; the node owns it as its
-	// foreign (tool) deps. The graph's "deps" array is DepRefs ∪ ForeignDepRefs
-	// (Node.buildDeps), so the tools are not duplicated here.
+	// toolRefs is a fresh local; the node owns it as its foreign (tool) deps. The
+	// graph's "deps" array is DepRefs ∪ ForeignDepRefs, so the tools are not
+	// duplicated here.
 	foreignDepRefs := toolRefs
 
 	cmd := Cmd{
@@ -1200,9 +1105,9 @@ type deepReplaceCand struct {
 }
 
 // deepReplaceCandidates builds the IN/OUT deep-replace candidate set, longest token
-// first, dropping tokens that are already root-typed (ymake's NPath::MustDeepReplace
-// gate). Inputs resolve through inVFSByToken ($(S)/… or, for a generated IN, $(B)/…),
-// outputs through outVFSByToken ($(B)/…).
+// first, dropping tokens that are already root-typed. Inputs resolve through
+// inVFSByToken ($(S)/… or, for a generated IN, $(B)/…), outputs through
+// outVFSByToken ($(B)/…).
 func deepReplaceCandidates(stmt *RunProgramStmt, inVFSByToken, outVFSByToken map[STR]VFS) []deepReplaceCand {
 	cands := make([]deepReplaceCand, 0, len(stmt.INFiles)+len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles))
 
@@ -1242,9 +1147,9 @@ func deepReplaceCandidates(stmt *RunProgramStmt, inVFSByToken, outVFSByToken map
 	return cands
 }
 
-// mustDeepReplacePath mirrors ymake's NPath::MustDeepReplace: a path is rooted only
-// when it is not already root-typed (a $(S)/$(B) link, a ${ARCADIA_*}/${CURDIR}/
-// ${BINDIR} prefix, or an absolute path).
+// mustDeepReplacePath reports whether a path needs rooting: only when it is not
+// already root-typed (a $(S)/$(B) link, a ${ARCADIA_*}/${CURDIR}/${BINDIR} prefix,
+// or an absolute path).
 func mustDeepReplacePath(p string) bool {
 	switch {
 	case strings.HasPrefix(p, "$(S)/"),
@@ -1261,10 +1166,9 @@ func mustDeepReplacePath(p string) bool {
 }
 
 // deepReplacePathArg rewrites the first (longest) candidate token that occurs in arg
-// with valid boundaries to its rooted spelling, mirroring ymake's args_converter
-// substring deep-replace. A boundary is valid when the char immediately before/after
-// the match is not part of a path token (ymake IsValidSymbol: not ascii-alpha and not
-// one of '.', '_', '-', '"', '/'). Each arg is replaced at most once.
+// with valid boundaries to its rooted spelling. A boundary is valid when the char
+// immediately before/after the match is not part of a path token (not ascii-alpha
+// and not one of '.', '_', '-', '"', '/'). Each arg is replaced at most once.
 func deepReplacePathArg(arg string, cands []deepReplaceCand) (string, bool) {
 	for _, c := range cands {
 		idx := strings.Index(arg, c.token)
@@ -1285,8 +1189,7 @@ func deepReplacePathArg(arg string, cands []deepReplaceCand) (string, bool) {
 	return arg, false
 }
 
-// isDeepReplaceBoundary reports whether c may delimit a deep-replaced path token
-// (ymake args_converter IsValidSymbol).
+// isDeepReplaceBoundary reports whether c may delimit a deep-replaced path token.
 func isDeepReplaceBoundary(c byte) bool {
 	switch {
 	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':

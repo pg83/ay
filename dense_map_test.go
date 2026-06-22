@@ -50,8 +50,8 @@ func TestDenseMap_Overwrite(t *testing.T) {
 }
 
 func TestDenseMap_PointerValuesShareKeys(t *testing.T) {
-	// CodegenRegistry stores one *info under several keys; mutating via one key
-	// must be visible through the others.
+	// One *info stored under several keys; mutation via one key must be visible
+	// through the others.
 	type info struct{ n int }
 	var m DenseMap[STR, *info]
 	shared := &info{n: 1}

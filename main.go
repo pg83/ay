@@ -30,24 +30,22 @@ func dispatch(argv []string) {
 		}
 	}
 
-	code := runCommand(rest, g) // empty rest falls through to the choice-point help
+	code := runCommand(rest, g) // empty rest falls through to choice-point help
 
-	dumpProbes(probes) // flush enabled probe stats before exit (cmds os.Exit-free)
-	dumpCalls()        // flush callsite reachability when CALLSITE_OUT is set (env-driven)
+	dumpProbes(probes) // flush enabled probe stats before exit
+	dumpCalls()        // flush callsite reachability when CALLSITE_OUT is set
 	os.Exit(code)
 }
 
-// GlobalFlags are the options parsed before the subcommand and threaded to every
-// handler. For now it carries only --verbose; new global flags go here.
+// GlobalFlags are the options parsed before the subcommand and threaded to
+// every handler. New global flags go here.
 type GlobalFlags struct {
 	Verbose bool
 }
 
-// parseGlobalFlags consumes the leading -flags before the subcommand and returns
-// the requested --probe values, the parsed GlobalFlags, and the remaining argv
-// (subcommand + its args). The first non-flag arg ends the global section;
-// -h/--help fall through to runCommand as the choice-point help. The flags are
-// documented in the usage block (usageCommands).
+// parseGlobalFlags consumes the leading -flags and returns the requested
+// --probe values, the GlobalFlags, and the remaining argv. The first non-flag
+// arg ends the global section; -h/--help fall through to runCommand.
 func parseGlobalFlags(argv []string) (probes []string, g GlobalFlags, rest []string) {
 	i := 0
 
@@ -75,10 +73,9 @@ func parseGlobalFlags(argv []string) (probes []string, g GlobalFlags, rest []str
 	return probes, g, argv[i:]
 }
 
-// command binds a subcommand token path to its handler. The handler receives the
-// args that follow the matched path. help is a short (1–3 line) description shown
-// in the subcommand listing. hide keeps internal commands (invoked by build-graph
-// nodes, not users) out of that listing.
+// command binds a subcommand token path to its handler, which receives the args
+// following the matched path. help is a short description for the listing; hide
+// keeps internal commands (invoked by build-graph nodes) out of it.
 type command struct {
 	path []string
 	run  func(g GlobalFlags, args []string) int
@@ -87,8 +84,8 @@ type command struct {
 }
 
 // commands is the flat subcommand table. Dispatch picks the entry whose token
-// path is the longest prefix of the argv (so {"make"} and {"make","cas"} coexist;
-// `make cas …` takes the latter, `make …` the former).
+// path is the longest prefix of the argv (so {"make"} and {"make","cas"}
+// coexist).
 var commands = []command{
 	{
 		path: []string{"fetch"}, run: cmdFetch, hide: true,
@@ -166,8 +163,7 @@ var commands = []command{
 	},
 }
 
-// Help palette: section headers light-green, subcommands light-red, flags
-// light-yellow.
+// Help palette: headers light-green, subcommands light-red, flags light-yellow.
 func clHeader(s string) string {
 	return color("light-green", s)
 }
@@ -195,11 +191,9 @@ func isTokenPrefix(p, of []string) bool {
 	return true
 }
 
-// usageCommands lists the subcommands under prefix (all, for the empty prefix)
-// with their help — the listing shown at a choice point. Hidden commands appear
-// only under verbose; at the top level the `dev` group is collapsed to a single
-// line unless verbose; every listing documents the global flags parsed before the
-// subcommand.
+// usageCommands lists the subcommands under prefix with their help — the
+// listing shown at a choice point. Hidden commands and the collapsed `dev`
+// group expand only under verbose; every listing documents the global flags.
 func usageCommands(prefix []string, verbose bool) string {
 	var b strings.Builder
 
@@ -209,8 +203,8 @@ func usageCommands(prefix []string, verbose bool) string {
 		b.WriteString(clHeader("usage:") + " ay [global-flags] " + strings.Join(prefix, " ") + " <subcommand> [args]")
 	}
 
-	// Global flags (parsed before the subcommand) live in the usage block at every
-	// level. Only --verbose shows by default; it also reveals the remaining flags.
+	// Global flags live in the usage block at every level. Only --verbose
+	// shows by default; it also reveals the remaining flags.
 	b.WriteString("\n  " + clFlag("-v, --verbose") + "             expand collapsed groups (dev), hidden commands, and the flags below")
 
 	if verbose {
@@ -239,8 +233,8 @@ func usageCommands(prefix []string, verbose bool) string {
 			continue
 		}
 
-		// Collapse the dev group to one pointer line at the top listing unless
-		// --verbose; drilling in (ay dev …) lists it regardless.
+		// Collapse the dev group to one line at the top unless --verbose;
+		// drilling in lists it regardless.
 		if len(prefix) == 0 && !verbose && c.path[0] == "dev" {
 			if !devCollapsed {
 				entry("dev:")
@@ -262,10 +256,9 @@ func usageCommands(prefix []string, verbose bool) string {
 	return b.String()
 }
 
-// runCommand dispatches argv against commands by longest matching token path. A
-// full leaf match runs its handler; otherwise, if argv is a choice-point prefix
-// of some visible command(s) (the empty argv included), the prefix help is shown;
-// anything else is an unknown subcommand.
+// runCommand dispatches argv by longest matching token path. A full leaf match
+// runs its handler; a choice-point prefix of some visible command shows the
+// prefix help; anything else is an unknown subcommand.
 func runCommand(argv []string, g GlobalFlags) int {
 	best := -1
 	bestLen := 0

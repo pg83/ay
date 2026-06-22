@@ -8,8 +8,7 @@ import (
 type EnvKind uint8
 
 // envStore holds the ENV-indexed bindings behind a pointer so copies of an
-// Environment (a value type) share — and can grow — the same state, exactly as
-// the old shared maps did; Clone makes a fresh store.
+// Environment share and can grow the same state; Clone makes a fresh store.
 type EnvStore struct {
 	val  []STR
 	kind []EnvKind
@@ -72,18 +71,14 @@ func isImplicitBuildVar(name string) bool {
 	return hasUpper
 }
 
-// Bool reads name as a boolean IF-flag. The IF flag namespace is unified
-// and lazy: an unset name is indistinguishable from an explicit false
-// (mirroring upstream ymake — $X EvalValue returns "" for unbound vars,
-// and NYMake::IsTrue treats empty / any falseWord as false). The only
-// typed error is an int binding used in boolean position.
+// Bool reads name as a boolean IF-flag: an unset name is indistinguishable from
+// explicit false. The only typed error is an int binding in boolean position.
 func (e Environment) bool(id ENV) bool {
 	return e.boolID(id, "")
 }
 
-// boolID is Bool keyed by a pre-interned ENV (the IF-eval hot path passes the id
-// parsed into ExprIdent; name is only for the int-misuse error message and is
-// derived lazily from the id when the caller passes "").
+// boolID is Bool keyed by a pre-interned ENV; name is only for the int-misuse
+// error message, derived lazily when the caller passes "".
 func (e Environment) boolID(id ENV, name string) bool {
 	switch k, v := e.s.lookup(id); k {
 	case envStr:
@@ -99,8 +94,8 @@ func (e Environment) boolID(id ENV, name string) bool {
 	return false
 }
 
-// strIsTruthy is stringIsTruthy in id space: bool bindings are written as the
-// strYes/strNo constants (setBool), so the common case never takes a view.
+// strIsTruthy is stringIsTruthy in id space: bools are the strYes/strNo
+// constants, so the common case never takes a view.
 func strIsTruthy(v STR) bool {
 	switch v {
 	case strYes:
@@ -112,9 +107,8 @@ func strIsTruthy(v STR) bool {
 	return stringIsTruthy(v.string())
 }
 
-// stringIsTruthy mirrors upstream's NYMake::IsTrue + util/string/type
-// IsFalse: empty or any case-insensitive false-word reads as false; every
-// other non-empty value reads as true.
+// stringIsTruthy: empty or any case-insensitive false-word reads as false;
+// every other non-empty value reads as true.
 func stringIsTruthy(v string) bool {
 	if v == "" {
 		return false
@@ -129,8 +123,8 @@ func stringIsTruthy(v string) bool {
 }
 
 func (e Environment) string(id ENV) string {
-	// envStr stores the string (bools as "yes"/"no"); envInt stores the decimal
-	// form — both round-trip via the value STR.
+	// envStr stores the string (bools as "yes"/"no"), envInt the decimal form —
+	// both round-trip via the value STR.
 	if k, v := e.s.lookup(id); k != envAbsent {
 		return v.string()
 	}
@@ -153,20 +147,19 @@ func (e Environment) clone() Environment {
 	}}
 }
 
-// setStrID binds id to the pre-interned string value v (the unified bool/string
-// slot). The whole env API is keyed by ENV and takes pre-interned STR values so
-// no name or constant value is re-interned per binding (per-module buildIfEnv
-// ran this thousands of times). SetBool folds to strYes/strNo — observably
-// identical to the old bool binding, since Bool reads via stringIsTruthy and
-// String/evalEq map bool↔"yes"/"no".
+// setStrID binds id to the pre-interned value v (the unified bool/string slot).
+// The env API is keyed by ENV and takes pre-interned STR values so nothing is
+// re-interned per binding (this ran thousands of times per module). SetBool
+// folds to strYes/strNo, since Bool reads via stringIsTruthy and String/evalEq
+// map bool↔"yes"/"no".
 func (e Environment) setStrID(id ENV, v STR) {
 	e.s.ensure(id)
 	e.s.kind[id] = envStr
 	e.s.val[id] = v
 }
 
-// SetStringID binds a pre-interned constant value (hoisted STR var); SetString
-// is for computed values that must intern at the call.
+// SetStringID binds a pre-interned constant value; SetString is for computed
+// values that must intern at the call.
 func (e Environment) setStringID(id ENV, v STR) {
 	e.setStrID(id, v)
 }
@@ -207,9 +200,8 @@ func (e Environment) setFromString(id ENV, v string) {
 	}
 }
 
-// SetFromStringID is SetFromString for an already-interned value (Platform.Flags
-// iteration): no string compare, just map the STR to the stored slot, folding the
-// yes/no STRs to themselves (they already are strYes/strNo).
+// SetFromStringID is SetFromString for an already-interned value: no string
+// compare, just store the STR (the yes/no STRs already are strYes/strNo).
 func (e Environment) setFromStringID(id ENV, v STR) {
 	e.setStrID(id, v)
 }
@@ -220,9 +212,9 @@ func (e Environment) hasBindingID(id ENV) bool {
 	return k != envAbsent
 }
 
-// HasBinding reports whether name is bound, taking a string: it first checks
-// whether name is interned at all, so a ${VAR} token that is not a known env
-// var is reported unbound without being interned.
+// HasBinding reports whether name is bound: it first checks whether name is
+// interned at all, so an unknown ${VAR} token is reported unbound without being
+// interned.
 func (e Environment) hasBinding(name string) bool {
 	id := internedEnv(name)
 
@@ -230,7 +222,7 @@ func (e Environment) hasBinding(name string) bool {
 }
 
 // Lookup returns name's bound value and whether it is bound, without interning
-// name (same non-polluting rationale as HasBinding).
+// name (same rationale as HasBinding).
 func (e Environment) lookup(name string) (string, bool) {
 	id := internedEnv(name)
 

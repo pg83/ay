@@ -21,10 +21,9 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 
 		inVFSByToken := make(map[string]VFS, len(run.INFiles))
 		inputs := make([]VFS, 0, len(run.INFiles))
-		// Track CF-source extensions: when an INFile is a CF (CONFIGURE_FILE)
-		// output, upstream's JV node lists both the CF source (e.g. Cpp.stg.in)
-		// and the configure_file.py script as inputs alongside the dst. The
-		// CF entry's SourcePath was set at registration time (emit_cf.go).
+		// When an INFile is a CONFIGURE_FILE output, the JV node lists both the
+		// CF source and the configure_file script alongside the dst. The CF
+		// entry's SourcePath was set at registration time.
 		var cfExtraInputs []VFS
 		deduper.reset()
 		appendCFExtra := func(v VFS) {
@@ -77,9 +76,9 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 
 		{
 			// The JV node's full $(S) input set = source-rooted IN/CF inputs plus
-			// the two implicit sources EmitJVGeneral appends (stdout2stderr.py and
-			// the antlr jar). Consumers compiling a JV output (e.g. a PB protoc
-			// node fed JsonPathParser.proto) inherit these as transitive sources.
+			// the two implicit sources emitJVGeneral appends (the stdout2stderr
+			// script and the antlr jar). Consumers compiling a JV output inherit
+			// these as transitive sources.
 			jvSourceInputs := make([]VFS, 0, len(inputs)+2)
 
 			for _, v := range inputs {
@@ -151,12 +150,10 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, out
 	}
 
 	if isCCSourceExt(outTok) {
-		// ANTLR combined-grammar convention (matches the reference graph): the
-		// generated *Lexer.cpp's compile reaches the paired *Parser.cpp — the
-		// parser TU is what carries the protobuf AST header, and the lexer
-		// delegates to it. The parser .cpp pulls the proto header directly via
-		// OUTPUT_INCLUDES. Neither generated .cpp lists the sibling generated .h
-		// as an input (the lexer→parser edge is one-directional).
+		// ANTLR combined-grammar convention: the generated *Lexer.cpp reaches the
+		// paired *Parser.cpp, which carries the protobuf AST header (pulled via
+		// OUTPUT_INCLUDES); the lexer delegates to it. Neither generated .cpp
+		// lists the sibling generated .h (the lexer→parser edge is one-way).
 		base := strings.TrimSuffix(outTok, filepath.Ext(outTok))
 
 		if parserBase, isLexer := strings.CutSuffix(base, "Lexer"); isLexer {
@@ -170,10 +167,10 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, out
 		}
 	} else if isHeaderSource(outTok) {
 		// For the generated *Lexer.h header: register the paired *Parser.cpp
-		// directly (not the *Lexer.cpp sibling) so that cross-module CC nodes
-		// that include the header reach *Parser.cpp without listing *Lexer.cpp
-		// as an input. The *Lexer.cpp sibling is compiled separately by the ANTLR
-		// module and must not appear in other modules' CC inputs.
+		// directly (not the *Lexer.cpp sibling) so cross-module CC nodes
+		// including the header reach *Parser.cpp without listing *Lexer.cpp.
+		// The *Lexer.cpp sibling is compiled separately and must not appear in
+		// other modules' CC inputs.
 		base := strings.TrimSuffix(outTok, filepath.Ext(outTok))
 
 		if parserBase, isLexerH := strings.CutSuffix(base, "Lexer"); isLexerH {
@@ -185,7 +182,7 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, out
 				}
 			}
 		} else {
-			// Non-Lexer headers: register the sibling .cpp (general case)
+			// Non-Lexer headers: register the sibling .cpp.
 			for _, ext := range []string{".cpp", ".cc", ".cxx", ".c"} {
 				if cppVFS, ok := outVFSByToken[base+ext]; ok {
 					appendUnique(cppVFS.rel())
@@ -198,11 +195,9 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, out
 
 	for _, input := range inputs {
 		// $(B)-rooted inputs are generator intermediates the RUN_ANTLR step
-		// itself consumed (e.g. the CONFIGURE_FILE'd protobuf.stg). Consumers
-		// that walk this output's closure (the proto-split RUN_PROGRAM protoc
-		// node, downstream CC) reach those intermediates through the producer
-		// dep edge, not as transitive source inputs — upstream lists only the
-		// $(S) leaf (the .stg's source .stg.in, also in `inputs`). Emitting the
+		// consumed (e.g. a CONFIGURE_FILE'd template). Consumers walking this
+		// output's closure reach them via the producer dep edge, not as
+		// transitive source inputs — only the $(S) leaf is listed. Emitting the
 		// $(B) intermediate over-includes it and diverges the consumer self_uid.
 		if !input.isSource() {
 			continue

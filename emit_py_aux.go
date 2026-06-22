@@ -26,8 +26,7 @@ func emitGeneratedPyAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleDat
 		// Only a full `${ARCADIA_BUILD_ROOT}/<full>.py` PY_SRCS token (swig's
 		// injected wrapper) is embedded through the rescompiler _raw.auxcpp path.
 		// A bare generated token (RUN_PROGRAM OUT/OUT_NOAUTO) is packaged like any
-		// other PY_SRCS source — through the objcopy resfs path (buildPySrcEntriesFor
-		// binds it from $(B)) — matching upstream's onresource_files routing.
+		// other PY_SRCS source — through the objcopy resfs path, bound from $(B).
 		if i >= len(d.pySrcsFullName) || !d.pySrcsFullName[i] {
 			continue
 		}
@@ -112,10 +111,8 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 	var chunks []chunk
 	cur := chunk{}
 	cmdLen := 0
-	// Chunk accumulation runs no deduper user (pyProtoSourceInputs / the input
-	// tail filter below follow the final flush), so the input set lives on the
-	// deduper, reset per flush. depSeen stays a local map: it is live
-	// simultaneously with the input set.
+	// The input set lives on the deduper, reset per flush. depSeen stays a local
+	// map: it is live simultaneously with the input set.
 	deduper.reset()
 	depSeen := map[NodeRef]struct{}{}
 	addInput := func(v VFS) {
@@ -205,9 +202,8 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-		// ch.inputs is internally deduped already (deduper-gated accumulation),
-		// so it survives a whole-list dedup intact — reference it as a chunk and
-		// filter only the rescompiler + closure tail against it.
+		// ch.inputs is already deduped (deduper-gated accumulation) — reference it
+		// as a chunk and filter only the rescompiler + closure tail against it.
 		deduper.reset()
 
 		for _, p := range ch.inputs {
@@ -220,8 +216,8 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 			tail = append(tail, rescompilerBinVFS)
 		}
 
-		// auxClosure is the aux window (root-led: aux is a build output); the
-		// PR node's own output never joins its inputs, so skip the root.
+		// auxClosure is root-led (aux is a build output); the PR node's own output
+		// never joins its inputs, so skip the root.
 		for _, p := range auxClosure {
 			if p == aux {
 				continue

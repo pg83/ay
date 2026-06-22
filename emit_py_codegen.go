@@ -7,7 +7,7 @@ import (
 var (
 	genPy3RegScriptPath = genPy3RegScriptVFS.string()
 	// genPy3RegScriptChunk is the reg-script input chunk shared by every
-	// py-register node, referenced instead of allocated per node.
+	// py-register node.
 	genPy3RegScriptChunk = []VFS{genPy3RegScriptVFS}
 )
 
@@ -47,11 +47,10 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		var generatedInputs []VFS
 
 		if genInfo != nil {
-			// Upstream's flat-input model folds the producer's whole transitive $(S)
-			// source closure onto the bytecode node, not just the producer's direct
-			// $(S) leaves. ProducerSourceClosure carries that full set (RUN_PROGRAM
-			// OUT_NOAUTO sources); producers that record only the direct-leaf closure
-			// in SourceInputs (swig) fall back to it.
+			// The flat-input model folds the producer's whole transitive $(S) source
+			// closure onto the bytecode node, not just the direct $(S) leaves.
+			// ProducerSourceClosure carries that full set; producers that record only
+			// the direct-leaf closure in SourceInputs (swig) fall back to it.
 			if generatedInputs = genInfo.ProducerSourceClosure; len(generatedInputs) == 0 {
 				generatedInputs = genInfo.SourceInputs
 			}
@@ -59,10 +58,9 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 
 		srcAbs := resolveSourceVFS(ctx, instance, srcRel.string(), d.srcDirs)
 
-		// moduleName mirrors pybuild.py's `rootrel_arc_src(path, unit) + '-'`. A
-		// source-tree file (or a build-root-rooted token) resolves to the full
-		// root-relative path; a bare token resolving to a build-generated source
-		// falls through rootrel_arc_src's `return src` and keeps the raw token.
+		// moduleName mirrors `rootrel_arc_src(path, unit) + '-'`. A source-tree file
+		// (or a build-root-rooted token) resolves to the full root-relative path; a
+		// bare token resolving to a build-generated source keeps the raw token.
 		moduleName := srcAbs.rel() + "-"
 
 		if genInfo != nil {
@@ -93,9 +91,8 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		var inputs []VFS
 
 		if genInfo != nil {
-			// The generated-src input list interleaves the shared generator
-			// inputs around the tool pair and dedups across the whole — stays
-			// flat (resolveCodegenDepRefs below consumes it flat too).
+			// The generated-src input list interleaves the shared generator inputs
+			// around the tool pair and dedups across the whole — stays flat.
 			inputs = []VFS{srcAbs}
 			inputs = append(inputs, generatedInputs...)
 			inputs = append(inputs, py3ccBinary, py3ccSlowBin)
@@ -128,8 +125,7 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 				}
 
 				// PY3_BIN_LIB submodule of PY3_PROGRAM bundles pysrc bytecode
-				// under its lowercased MODULE_TAG, matching the surrounding
-				// objcopy/global.a target_properties.
+				// under its lowercased MODULE_TAG.
 				if d.programPairedLib {
 					tp.ModuleTag = tagPy3BinLib
 				}
@@ -196,11 +192,10 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 			internStr(regCppAbs),
 		}
 
-		// gen_py3_reg.py is platform-independent codegen; upstream attributes such a
-		// command to the TARGET platform (a cross build shows every .reg3.cpp as the
-		// target ISA, never the host/tool ISA, even for a python module also built
-		// for the host). Emit under ctx.target so the target and host instances that
-		// reach this output produce byte-identical nodes that collapse by uid — no
+		// The reg-script is platform-independent codegen, attributed to the TARGET
+		// platform (a cross build shows every .reg3.cpp as the target ISA, never the
+		// host/tool ISA). Emit under ctx.target so target and host instances reaching
+		// this output produce byte-identical nodes that collapse by uid — no
 		// cross-platform dedup map needed. The per-instance compile of the generated
 		// source is emitted below with its own platform.
 		pyNode := &Node{
@@ -216,8 +211,8 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 		}
 
 		if py3Suffix {
-			// A PY23_NATIVE_LIBRARY's reg node carries the py3_native tag, like its
-			// other objects; plain py3 libraries use py3.
+			// A PY23_NATIVE_LIBRARY's reg node carries the py3_native tag; plain py3
+			// libraries use py3.
 			if d.moduleStmt.Name == tokPy23NativeLibrary {
 				pyNode.TargetProperties.ModuleTag = tagPy3Native
 			} else {

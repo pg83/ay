@@ -5,12 +5,11 @@ import (
 	"testing"
 )
 
-// TestEmitCF_GeneratedFromRidesAsClosureLeaf pins the CONFIGURE_FILE emitter's
-// generated-from propagation: a cross-module consumer that #includes a configured
-// header must carry, in its CC input closure, the generated header, the template
-// source (.h.in) and configure_file.py — both riding as registry ClosureLeaves,
-// not as fake #includes — plus the template's own #include (registered as the
-// generated header's parsed includes).
+// TestEmitCF_GeneratedFromRidesAsClosureLeaf pins generated-from propagation: a
+// cross-module consumer that #includes a configured header must carry, in its CC
+// input closure, the generated header, the template source (.h.in) and
+// configure_file.py — both riding as ClosureLeaves, not fake #includes — plus
+// the template's own #include registered as the header's parsed includes.
 func TestEmitCF_GeneratedFromRidesAsClosureLeaf(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"prod/ya.make":     "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(config.h.in)\nEND()\n",
@@ -43,9 +42,8 @@ func TestEmitCF_GeneratedFromRidesAsClosureLeaf(t *testing.T) {
 
 // TestBuildCFGVars_BuildTypeFromPlatform pins that a CONFIGURE_FILE template
 // referencing @BUILD_TYPE@ substitutes the instance platform's build type, not a
-// hardcoded DEBUG. Reproduces the library/cpp/build_info make_morphdict-subtree
-// divergence: the tool/host build_info.cpp node must read BUILD_TYPE=RELEASE
-// (ref has a distinct RELEASE configure node), while the debug target keeps DEBUG.
+// hardcoded DEBUG: the tool/host node reads BUILD_TYPE=RELEASE while the debug
+// target keeps DEBUG.
 func TestBuildCFGVars_BuildTypeFromPlatform(t *testing.T) {
 	fs := newMemFS(map[string]string{"m/tmpl.in": "type = @BUILD_TYPE@\n"})
 

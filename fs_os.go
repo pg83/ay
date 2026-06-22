@@ -6,44 +6,36 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-// OsFS is the production FS: rooted at a real directory, cached lazily, with
-// the per-platform syscall fast paths in fs_linux.go / fs_other.go.
+// OsFS is the production FS: cached lazily, with per-platform syscall fast paths in
+// fs_linux.go / fs_other.go.
 type OsFS struct {
 	srcRoot   string
 	rootSlash string
-	// dirs is keyed by the directory's STR (dir.strID()) rather than its VFS: a
-	// source dir is always Source-rooted (VFS == STR<<1), so the STR is lossless
-	// and halves DenseMap's idx array versus indexing the 2x-wider VFS space.
+	// dirs is keyed by the directory's STR (dir.strID()), not its VFS: a source dir
+	// is always Source-rooted (VFS == STR<<1), so the STR is lossless and halves
+	// DenseMap's idx array.
 	dirs DenseMap[STR, DirView]
 
-	// dirNames is the packed name store every DirView windows (bump arena —
-	// address-stable blocks, filled exactly once per listed directory).
-	// dirEntries is the membership/isDir index over ALL directories, keyed by
-	// splitMix64(dirSTR, nameSTR) — a bijection over the packed id pair, so a
-	// probe is exact. Names intern once globally (repeated basenames share one
-	// table entry instead of one map-key string per directory).
+	// dirNames is the packed name store every DirView windows (bump arena).
+	// dirEntries is the membership/isDir index over ALL directories, keyed by the
+	// bijective splitMix64(dirSTR, nameSTR). Names intern once globally.
 	dirNames   *BumpAllocator[uint32]
 	dirEntries *IntMap[bool]
 
-	// contentHashes is the xxh3 of each read file's content, indexed directly by the
-	// STR of its full "$(S)/..." path — i.e. the source VFS's own strID, so the uid
-	// serializer indexes by v.strID() without re-interning the bare rel (STR ids are
-	// dense, so a plain growing array beats a hash map). Slot 0 means "not recorded"
-	// — xxh3 is effectively never 0. Both writes
-	// (FS reads during gen) and reads (uid computation in StreamingEmitter.Emit)
-	// happen on the single gen goroutine — the executor goroutine is spawned only
-	// after a node's uid is computed — so no lock.
+	// contentHashes is the xxh3 of each read file's content, indexed by the STR of
+	// its full "$(S)/..." path, so the serializer indexes by v.strID() without
+	// re-interning. Slot 0 means "not recorded". All access runs on the single gen
+	// goroutine, so no lock.
 	contentHashes []uint64
 	readBuf       []byte
 
 	// direntBuf is the reused getdents64 block for listdir misses.
 	direntBuf []byte
 
-	// rootFD pins the source root directory (linux): every read/listdir opens
-	// via openat(rootFD, rel) — no rootSlash+rel concat, no per-open path
-	// bytes. pathBuf is the reused NUL-terminated rel scratch for those calls.
+	// rootFD pins the source root directory (linux): every read/listdir opens via
+	// openat(rootFD, rel). pathBuf is the reused NUL-terminated rel scratch.
 	rootFD  int
-	pathBuf []byte // reused buffer returned by Read (gen goroutine only)
+	pathBuf []byte // reused, gen goroutine only
 
 	listdirHits   uint64
 	listdirMisses uint64
@@ -51,7 +43,7 @@ type OsFS struct {
 	existsMisses  uint64
 }
 
-// emptyDirNames is the shared store of every listable-but-empty directory.
+// emptyDirNames backs every listable-but-empty directory.
 var emptyDirNames = []uint32{}
 
 func newFS(srcRoot string) FS {
@@ -66,12 +58,10 @@ func newFS(srcRoot string) FS {
 	return fs
 }
 
-// readSourceRels returns the $(S)-relative path of every source file the FS read
-// (every non-empty contentHashes slot — the slot index is the file's full-path STR).
-// Used by --copy-sources to slice the repo by what the graph build actually opened,
-// which is strictly more than the graph's recorded inputs (scanned headers, ya.make
-// files, and other reads never land in a node's inputs). No extra bookkeeping: the
-// content-hash table already records every read.
+// readSourceRels returns the $(S)-relative path of every source file the FS read.
+// Used by --copy-sources to slice the repo by what the build actually opened —
+// strictly more than the graph's recorded inputs (scanned headers etc. never land
+// in a node's inputs).
 func (fs *OsFS) readSourceRels() []string {
 	out := make([]string, 0, len(fs.contentHashes))
 
@@ -88,8 +78,7 @@ func (fs *OsFS) readSourceRels() []string {
 	return out
 }
 
-// recordContentHash stores xxh3(data) at the file's full-path STR (the source VFS
-// strID), growing the array as ids advance.
+// recordContentHash stores xxh3(data) at the file's full-path STR.
 func (fs *OsFS) recordContentHash(rel string, data []byte) {
 	s := internPrefixed("$(S)/", cleanRel(rel))
 
@@ -108,9 +97,8 @@ func (fs *OsFS) recordContentHash(rel string, data []byte) {
 	fs.contentHashes[s] = xxh3.Hash(data)
 }
 
-// ContentHash's hot path is small enough to inline into the uid writer's
-// monomorphic instantiation (see canonWriter); the lazy read lives in
-// contentHashSlow so it does not blow the inlining budget.
+// ContentHash's hot path inlines into the uid writer (see canonWriter); the lazy
+// read lives in contentHashSlow to keep the inlining budget.
 func (fs *OsFS) contentHash(v VFS) uint64 {
 	s := v.strID()
 
@@ -121,26 +109,22 @@ func (fs *OsFS) contentHash(v VFS) uint64 {
 	return fs.contentHashSlow(v)
 }
 
-// contentHashSlow lazily reads inputs gen never scanned — many $(S) inputs
-// (data files, tablegen .td, python stdlib, tzdata, …) are listed on nodes but
-// their content is never needed during graph construction. Read on first uid
-// use (reusing one buffer) so the hash is recorded; a genuinely missing file
-// faults here.
+// contentHashSlow lazily reads inputs gen never scanned (listed on nodes but never
+// needed during graph construction). Read on first uid use; a missing file faults.
 func (fs *OsFS) contentHashSlow(v VFS) uint64 {
 	rel := v.rel()
 
 	if p, d := fs.existsRel(rel); p && d {
-		return 0 // directory inputs (e.g. a test data dir) have no content hash
+		return 0 // directory inputs have no content hash
 	}
 
-	fs.read(rel) // side effect: records the content hash into contentHashes[s]
+	fs.read(rel) // side effect: records the content hash
 
 	return fs.contentHashes[v.strID()]
 }
 
-// Listdir returns the entries of the directory whose Source-rooted path is dir
-// ("$(S)/<cleandir>"). Keyed by VFS so the hot caller passes the addincl
-// VFS directly with no string hashing; expected to hit the cache.
+// Listdir returns the entries of the directory at dir ("$(S)/<cleandir>"). Keyed by
+// VFS so the hot caller passes it directly with no string hashing.
 func (fs *OsFS) listdir(dir VFS) DirView {
 	key := STR(dir.strID())
 
@@ -158,9 +142,8 @@ func (fs *OsFS) listdir(dir VFS) DirView {
 	return v
 }
 
-// dirHas probes one (dir, name) membership: an un-interned name cannot be a
-// directory entry (every listed name interns at fill), and the splitMix64 key
-// is a bijection over the id pair.
+// dirHas probes one (dir, name) membership: an un-interned name cannot be an entry,
+// and the splitMix64 key is a bijection over the id pair.
 func (fs *OsFS) dirHas(v DirView, name string) (present bool, isDir bool) {
 	id := interned(name)
 
@@ -185,12 +168,10 @@ func (fs *OsFS) bumpExists(ok bool) {
 	}
 }
 
-// Exists reports whether prefix/suffix exists (and whether it is a directory).
-// prefix is a directory VFS; suffix is relative to it. For a clean
-// suffix it gates on the first component being a directory under prefix before
-// listing (and interning) the deeper directory — so dead candidate paths never
-// grow the intern table. A suffix carrying ../././// is normalised jointly with
-// prefix (the boundary-crossing case) and looked up directly.
+// Exists reports whether prefix/suffix exists (and whether it is a directory). For
+// a clean suffix it gates on the first component being a directory before listing
+// the deeper one, so dead candidates never grow the intern table. A suffix carrying
+// ../././// is normalised jointly with prefix.
 func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 	if suffix == "" {
 		return fs.listdir(prefix).listable(), true
@@ -270,9 +251,8 @@ func (fs *OsFS) isDir(prefix VFS, suffix string) bool {
 	return p && d
 }
 
-// existsRel / listdirRel are the string-rel internal helpers for cold callers
-// that hold a whole path (Walk, ExistsAbs, ContentHash): they split and intern
-// the directory directly, no gating.
+// existsRel / listdirRel are the string-rel helpers for cold callers that hold a
+// whole path: they split and intern the directory directly, no gating.
 func (fs *OsFS) existsRel(rel string) (present bool, isDir bool) {
 	rel = cleanRel(rel)
 
@@ -303,9 +283,8 @@ func (fs *OsFS) read(rel string) []byte {
 	return fs.readBuf
 }
 
-// readIntoRaw reads rel through the per-platform fast path (fs_linux.go /
-// fs_other.go) — on linux an openat from the pinned source-root fd, with no
-// rootSlash+rel concat and no per-open path conversion.
+// readIntoRaw reads rel through the per-platform fast path — on linux an openat
+// from the pinned source-root fd.
 func (fs *OsFS) readIntoRaw(rel string, buf []byte) []byte {
 	return fs.readFileRel(cleanRel(rel), buf)
 }

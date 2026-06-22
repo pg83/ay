@@ -2,17 +2,12 @@ package main
 
 import "testing"
 
-// TestGen_GztProto_InLibraryArchivesPbObject reproduces the T-88 sg7 gap:
-// kernel/synnorm is a plain LIBRARY() (not PROTO_LIBRARY) with
-// SRCS(synnorm.cpp, synset.gztproto). _SRC("gztproto") is a per-source macro, so
-// the .gztproto must still emit its GZ producer (<base>.proto), run the generated
-// proto through protoc to <base>.pb.{cc,h}, compile <base>.pb.cc.o, and archive it
-// INTO the library's ordinary archive alongside the hand-written .cpp.o. On the
-// pre-fix code the regular-module SRCS loop skips .gztproto (it is neither in
-// isCodegenProducingSrc nor in emitOneSource's switch), so the whole chain is
-// absent. Representative upstream nodes:
-// $(B)/kernel/synnorm/synset.proto (GZ) and its synset.pb.{h,cc}/.pb.cc.o chain,
-// archived into libsynnorm.a.
+// TestGen_GztProto_InLibraryArchivesPbObject covers a plain LIBRARY() (not
+// PROTO_LIBRARY) mixing a hand-written .cpp and a .gztproto. _SRC("gztproto") is
+// per-source, so the .gztproto must still emit its GZ producer, run protoc to
+// <base>.pb.{cc,h}, compile <base>.pb.cc.o, and archive it alongside the .cpp.o.
+// Pre-fix the regular-module SRCS loop skips .gztproto entirely, so the whole
+// chain is absent.
 func TestGen_GztProto_InLibraryArchivesPbObject(t *testing.T) {
 	files := map[string]string{}
 
@@ -27,7 +22,7 @@ END()
 	writeTestModuleFile(files, "lib/syn/syn.h", "#pragma once\n")
 	writeTestModuleFile(files, "lib/syn/model.gztproto", "package NGzt;\nmessage TModel { optional uint32 X = 1; }\n")
 
-	// dict/gazetteer/converter: the GZ tool, identical to the PROTO_LIBRARY case.
+	// the GZ converter tool, identical to the PROTO_LIBRARY case.
 	writeTestModuleFile(files, "dict/gazetteer/converter/ya.make", `PROGRAM(gztconverter)
 NO_LIBC()
 NO_RUNTIME()
@@ -83,17 +78,13 @@ END()
 	}
 }
 
-// TestGen_GztProto_ConsumerSeesGeneratedProtoNestedClosure reproduces the T-115
-// sg7 PB input residual: a source `.proto` PB node that imports a GZT-generated
-// `.proto` must see, as protoc would, that generated proto's parsed nested
-// imports — the rewritten `.gztproto`→`.proto` import, the ordinary `.proto`
-// import, and the converter's INDUCED_DEPS(proto …) base.proto — plus the raw
-// `.gztproto` producer-source leaves behind each generated `.proto` in the
-// chain. Representative upstream node: $(B)/search/idl/blender/blender_setup.pb.h
-// importing the GZT-generated xml_auth.proto. Pre-fix the generated proto's
-// parse is registered only SOURCE-rooted (serving its own self-compile), so a
-// consumer resolving the BUILD-rooted $(B)/…/<base>.proto walks no children and
-// the .gztproto leaves never ride. This test fails on pre-fix code.
+// TestGen_GztProto_ConsumerSeesGeneratedProtoNestedClosure covers a source
+// `.proto` PB node that imports a GZT-generated `.proto`: it must see that
+// proto's parsed nested imports (the rewritten `.gztproto`→`.proto`, the ordinary
+// `.proto`, and the INDUCED_DEPS base.proto) plus the raw `.gztproto`
+// producer-source leaves behind each generated `.proto`. Pre-fix the parse is
+// registered only SOURCE-rooted, so a consumer resolving the BUILD-rooted path
+// walks no children and the .gztproto leaves never ride.
 func TestGen_GztProto_ConsumerSeesGeneratedProtoNestedClosure(t *testing.T) {
 	files := map[string]string{}
 
@@ -171,24 +162,20 @@ END()
 		}
 	}
 
-	// The generated peer .proto is reached as a .proto import; its pre-generation
-	// .gztproto must not be invented as a .gztproto.pb.h (the .cfgproto rule).
+	// The generated peer .proto is reached as a .proto import; its .gztproto must
+	// not be invented as a .gztproto.pb.h (the .cfgproto rule).
 	if nodeHasInput(pb, "$(B)/gzt/peer/peer.gztproto.pb.h") {
 		t.Errorf("must NOT invent peer.gztproto.pb.h: %v", pb.flatInputs())
 	}
 }
 
 // TestGen_GztProto_ArchivedAfterDirectSourcesRegardlessOfSRCSOrder pins the
-// codegen-ordering invariant the reviewer flagged: a `.gztproto` is a
-// codegen-producing source (its generated `.pb.cc.o` is a generated object), so
-// upstream archives it AFTER the module's direct (hand-written) compiles no
-// matter where the `.gztproto` sits in SRCS. With `.gztproto` declared FIRST,
-// pre-fix code classified it as srcExtRegular (isCodegenProducingSrcID = false),
-// so it rode the non-codegen pass-2 loop and its `.pb.cc.o` was archived in SRCS
-// (declaration) order — i.e. BEFORE the later syn.cpp.o. The fix classifies
-// `.gztproto` as codegen-producing, routing it through pass 1 and marking the
-// object Generated, which sortKey orders last. This test fails on pre-fix code
-// (model.pb.cc.o precedes syn.cpp.o) and passes after.
+// codegen-ordering invariant: a `.gztproto`'s generated `.pb.cc.o` archives AFTER
+// the module's direct (hand-written) compiles regardless of SRCS position. With
+// `.gztproto` declared FIRST, pre-fix code classified it as srcExtRegular, so it
+// rode the non-codegen pass-2 loop and archived in declaration order — BEFORE
+// syn.cpp.o. The fix routes it through pass 1 and marks the object Generated,
+// which sortKey orders last.
 func TestGen_GztProto_ArchivedAfterDirectSourcesRegardlessOfSRCSOrder(t *testing.T) {
 	files := map[string]string{}
 
@@ -248,15 +235,11 @@ END()
 	}
 }
 
-// TestGen_GztProto_EmitsGZProducerPBAndArchive reproduces the T-64 sg7 gap: a
-// `.gztproto` source (_SRC("gztproto"), ymake.core.conf:3324) must emit a
-// GZ/yellow producer (dict/gazetteer/converter) writing <base>.proto, then run
-// that generated .proto through the ordinary protoc path to <base>.pb.{cc,h},
-// compile <base>.pb.cc.o, and archive it. A `.gztproto` import must resolve
-// through the generated <base>.pb.h — NOT the .cfgproto.pb.h naming rule.
-// Representative upstream nodes:
-// $(B)/search/begemot/rules/init/xml_auth/proto/xml_auth.proto (GZ) and its
-// xml_auth.pb.{h,cc}/.pb.cc.o/libinit-xml_auth-proto.a chain.
+// TestGen_GztProto_EmitsGZProducerPBAndArchive covers a `.gztproto` source: it
+// must emit a GZ/yellow producer writing <base>.proto, run the ordinary protoc
+// path to <base>.pb.{cc,h}, compile <base>.pb.cc.o, and archive it. A `.gztproto`
+// import must resolve through the generated <base>.pb.h — NOT the .cfgproto.pb.h
+// naming rule.
 func TestGen_GztProto_EmitsGZProducerPBAndArchive(t *testing.T) {
 	files := map[string]string{}
 
@@ -283,8 +266,8 @@ message TModel {
 	writeTestModuleFile(files, "gzt/data/ya.make", "PROTO_LIBRARY()\nSRCS(data.proto)\nEND()\n")
 	writeTestModuleFile(files, "gzt/data/data.proto", "syntax = \"proto2\";\npackage NGzt;\nmessage TData {}\n")
 
-	// dict/gazetteer/converter: the GZ tool. INDUCED_DEPS(proto …) injects
-	// base.proto into every generated .proto; INDUCED_DEPS(h+cpp …) the .pb.h.
+	// the GZ converter tool. INDUCED_DEPS(proto …) injects base.proto into every
+	// generated .proto; INDUCED_DEPS(h+cpp …) the .pb.h.
 	writeTestModuleFile(files, "dict/gazetteer/converter/ya.make", `PROGRAM(gztconverter)
 NO_LIBC()
 NO_RUNTIME()
@@ -306,7 +289,7 @@ END()
 
 	g := testGen(newMemFS(files), "gzt/model")
 
-	// 1. GZ producer: dict/gazetteer/converter writes the generated .proto.
+	// 1. GZ producer: the converter writes the generated .proto.
 	gz := mustNodeByOutput(t, g, "$(B)/gzt/model/model.proto")
 	if gz.KV.P != pkGZ || gz.KV.PC != pcYellow {
 		t.Fatalf("GZ producer KV = {%v,%v}, want {GZ,yellow}", gz.KV.P, gz.KV.PC)
@@ -352,8 +335,8 @@ END()
 	if pb.KV.P != pkPB || pb.KV.PC != pcYellow {
 		t.Fatalf("PB producer KV = {%v,%v}, want {PB,yellow}", pb.KV.P, pb.KV.PC)
 	}
-	// protoSrcOverride: the PB node is fed the generated $(B) .proto and rides the
-	// GZ producer's .gztproto sources.
+	// The PB node is fed the generated $(B) .proto and rides the GZ producer's
+	// .gztproto sources.
 	if !nodeHasInput(pb, "$(B)/gzt/model/model.proto") {
 		t.Errorf("PB node missing generated $(B) model.proto input: %v", pb.flatInputs())
 	}
@@ -375,7 +358,7 @@ END()
 		t.Fatalf("archive missing model.pb.cc.o member: %v", ar.flatInputs())
 	}
 
-	// 4. Import-shaped: a .gztproto import resolves through the generated <base>.pb.h
+	// 4. A .gztproto import resolves through the generated <base>.pb.h
 	// (model.pb.h #includes peer.pb.h), NOT the .cfgproto.pb.h rule.
 	if !nodeHasInput(obj, "$(B)/gzt/peer/peer.pb.h") {
 		t.Errorf("object must reach the imported .gztproto's generated peer.pb.h: %v", obj.flatInputs())
@@ -383,8 +366,8 @@ END()
 	if nodeHasInput(obj, "$(B)/gzt/peer/peer.gztproto.pb.h") {
 		t.Errorf("a .gztproto import must NOT induce peer.gztproto.pb.h (the .cfgproto rule): %v", obj.flatInputs())
 	}
-	// The generated peer .proto is a codegen intermediate; it must not drag into
-	// the compile closure (it rides as the .gztproto producer source instead).
+	// The generated peer .proto is a codegen intermediate; it rides as the
+	// .gztproto producer source, not a compile input.
 	if nodeHasInput(obj, "$(B)/gzt/peer/peer.proto") {
 		t.Errorf("generated peer.proto must not be a compile input: %v", obj.flatInputs())
 	}

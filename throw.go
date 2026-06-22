@@ -10,7 +10,7 @@ func (e *Exception) error() string {
 	return e.what().Error()
 }
 
-// Error implements the error interface; internal code calls error().
+// Error implements the error interface.
 func (e *Exception) Error() string {
 	return e.error()
 }
@@ -19,7 +19,7 @@ func (e *Exception) unwrap() error {
 	return e.what()
 }
 
-// Unwrap implements the errors.Is/As unwrap chain.
+// Unwrap implements the errors.Is/As chain.
 func (e *Exception) Unwrap() error {
 	return e.unwrap()
 }

@@ -5,12 +5,9 @@ import (
 	"testing"
 )
 
-// TestGen_GperfGeneratesAndCompiles pins the _SRC("gperf") mechanism
-// (ymake.core.conf:3277-3278): contrib/tools/gperf runs with $GP_FLAGS, the
-// generated -Nin_<basename>_set symbol, the .gperf source as input, stdout
-// redirected to <basename>.gperf.cpp (GP/yellow). The generated cpp is then
-// compiled and its object archived into the module library. Representatives:
-// library/cpp/html/html5/tag.gperf, library/cpp/html/spec/tags.gperf.
+// TestGen_GperfGeneratesAndCompiles pins the _SRC("gperf") mechanism: gperf runs
+// with $GP_FLAGS and the -Nin_<basename>_set symbol, stdout redirected to
+// <basename>.gperf.cpp (GP/yellow), then the cpp is compiled and archived.
 func TestGen_GperfGeneratesAndCompiles(t *testing.T) {
 	files := map[string]string{}
 
@@ -92,8 +89,7 @@ END()
 }
 
 // TestGen_OrdinaryCppUnchangedByGperf is the negative guard: an ordinary .cpp
-// source produces no GP producer node and its CC object is archived directly,
-// untouched by the gperf path.
+// produces no GP node and its CC object archives directly, untouched by gperf.
 func TestGen_OrdinaryCppUnchangedByGperf(t *testing.T) {
 	files := map[string]string{}
 

@@ -1,12 +1,11 @@
 package main
 
-// DenseMap is a map from a small dense integer key K (an interned id — STR/VFS)
-// to V, backed by two arrays instead of a hash map: idx, indexed by K, holds a
-// 1-based slot into vals (0 means absent); vals is the compact, append-only value
-// store. Lookup is a bounds check plus two loads — no hashing, no probing — which
-// is why it replaces the hot map[STR] lookups. The idx array grows geometrically
-// on demand and stays narrow (4 bytes/key) while values pack densely, so it pays
-// off when the key space is large and sparsely populated. Single-goroutine use.
+// DenseMap maps a small dense integer key K (an interned id) to V using two arrays
+// rather than a hash map: idx, indexed by K, holds a 1-based slot into vals (0 means
+// absent); vals is the compact, append-only value store. Lookup is a bounds check
+// plus two loads — no hashing or probing. idx grows geometrically and stays narrow
+// (4 bytes/key) while values pack densely, so it wins when the key space is large
+// and sparse. Single-goroutine use.
 type DenseMap[K ~uint32, V any] struct {
 	idx  []uint32
 	vals []V

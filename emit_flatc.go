@@ -5,9 +5,8 @@ import (
 	"strings"
 )
 
-// flatcConstFlags / flatcIOLeadArgs are the constant spans of every flatc
-// command around the module's FLATC_FLAGS; the per-node remainder is
-// [<header>, <src>].
+// flatcConstFlags / flatcIOLeadArgs are the constant spans around the module's
+// FLATC_FLAGS; the per-node remainder is [<header>, <src>].
 var flatcConstFlags = []STR{
 	argNoWarnings.str(),
 	argCpp.str(),
@@ -26,10 +25,9 @@ var flatcIOLeadArgs = []STR{
 	argDashO.str(),
 }
 
-// flatc64ConstFlags / flatc64IOLeadArgs are the _CPP_FLATC64_CMD (fbs.conf)
-// counterparts: no --gen-object-api, --filename-suffix .fbs64, and the fixed
-// include pair -I ${ARCADIA_ROOT} -I ${ARCADIA_BUILD_ROOT} (= -I $(S) -I $(B),
-// opposite order to FL's _FLATC__INCLUDE -I $(B) -I $(S)).
+// flatc64ConstFlags / flatc64IOLeadArgs are the FL64 counterparts: no
+// --gen-object-api, --filename-suffix .fbs64, and include pair -I $(S) -I $(B),
+// opposite order to FL's -I $(B) -I $(S).
 var flatc64ConstFlags = []STR{
 	argNoWarnings.str(),
 	argCpp.str(),
@@ -67,12 +65,10 @@ var flatcVariantFL64 = flatcVariant{
 	runtimeVFS: flatc64RuntimeVFS,
 }
 
-// flatcVariant captures the constant differences between _CPP_FLATC_CMD (FL,
-// .fbs) and _CPP_FLATC64_CMD (FL64, .fbs64): the tool, the flag/IO spans, the
-// node kind, the source/bfbs suffixes, and the runtime header. The producer
-// pre-pass (gen.go) picks the variant by source extension; everything else of
-// the FL path — generated-header resolution, registry registration, the .cpp
-// compile (emitLibraryFlatcSource) — is shared.
+// flatcVariant captures the constant differences between FL (.fbs) and FL64
+// (.fbs64): the tool, flag/IO spans, node kind, source/bfbs suffixes, and runtime
+// header. The producer pre-pass picks the variant by source extension;
+// everything else — header resolution, registration, the .cpp compile — is shared.
 type flatcVariant struct {
 	toolArg    ARG
 	constFlags []STR
@@ -175,42 +171,37 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 	return emit.emit(node), headerVFS, cppVFS, bfbsVFS
 }
 
-// emitFlatcProducer emits the flatc node for one .fbs and registers its outputs
-// (.h/.cpp/.bfbs) in the codegen registry. Run in a pre-pass over all of a
-// module's .fbs before any flatc CC closure is walked, so a .fbs importing a
-// sibling resolves the sibling's generated .h — the same two-phase shape proto
-// uses in emitCPPProtoSrcs (register every pb.h, then compile).
 // emitFlatcProducer emits the flatc node for one .fbs (source or build-root
-// generated) and registers its .h/.cpp/.bfbs outputs. srcVFS is the pre-resolved
-// .fbs VFS; genDeps are extra producer deps the flatc node carries (the
-// RUN_PROGRAM PR producer of a generated .fbs; nil for a checked-in source .fbs).
+// generated) and registers its .h/.cpp/.bfbs outputs in the codegen registry.
+// Run in a pre-pass over a module's .fbs before any CC closure is walked, so a
+// .fbs importing a sibling resolves the sibling's generated .h (the two-phase
+// shape proto uses: register, then compile). srcVFS is the pre-resolved .fbs VFS;
+// genDeps are extra producer deps (the RUN_PROGRAM PR producer of a generated
+// .fbs; nil for a checked-in source .fbs).
 func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS VFS, v *flatcVariant, genDeps []NodeRef) {
 	flatcRes := ctx.toolResult(v.toolArg)
 	flatcLDRef, flatcBinary := flatcRes.LDRef, *flatcRes.LDPath
 	transitiveImports := walkClosureTail(ctx.scannerFor(instance), srcVFS, newScanContext(ctx.parsers, nil, nil, includeScannerBasePaths(), instance.Path.rel()))
 	flRef, headerVFS, cppVFS, bfbsVFS := emitFL(instance, srcVFS.rel(), srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, moduleCCTag(d.moduleStmt.Name), d.tc, ctx.emit, v, genDeps)
 
-	// flatc's INDUCED_DEPS(h+cpp …) — flatbuffers.h + flatbuffers_iter.h, declared
-	// in contrib/libs/flatbuffers/flatc/ya.make — ride into both the .h and .cpp
-	// closures generically via the flatc GeneratorRef below, so a CC transitively
-	// reaching the generated header picks them up (flatbuffers_iter.h was missing
-	// from arrow IPC CC inputs without this).
+	// flatc's induced deps (flatbuffers.h + flatbuffers_iter.h) ride into both the
+	// .h and .cpp closures via the flatc GeneratorRef below, so a CC transitively
+	// reaching the generated header picks them up.
 	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.parsers, ctx.fs, srcVFS.rel())
 
 	registerBoundGeneratedParsedOutput(ctx, instance, v.procKind, headerVFS, headerIncludes, flRef, []NodeRef{flatcLDRef})
 
-	// The flatc tooling, the .fbs source and its transitive imports, plus the
-	// flatbuffers runtime header are real inputs of any unit whose include-closure
-	// reaches this generated header. Ride them as non-expanded closure leaves of
-	// the .h so every consumer picks them up transitively through the cached
-	// window, instead of the former per-CC-source rewalk (flatcCCExtraInputs).
+	// The flatc tooling, .fbs source and its transitive imports, plus the runtime
+	// header are real inputs of any unit whose include-closure reaches this header.
+	// Ride them as non-expanded closure leaves of the .h so every consumer picks
+	// them up transitively through the cached window.
 	reg := codegenRegForInstance(ctx, instance)
 	reg.addClosureLeaf(headerVFS, flatcWrapperVFS)
 
-	// A checked-in source .fbs rides to consumers as a closure leaf of its .fbs.h
-	// (the compile of any consumer lists the $(S) .fbs). A build-root generated
-	// .fbs is a $(B) codegen intermediate reached via the flatc→PR producer dep
-	// edge, never a C++ include, so it must NOT be spliced into consumers' windows.
+	// A checked-in source .fbs rides to consumers as a closure leaf of its .fbs.h.
+	// A build-root generated .fbs is a $(B) codegen intermediate reached via the
+	// flatc→PR producer dep edge, never a C++ include, so it must NOT be spliced
+	// into consumers' windows.
 	if srcVFS.isSource() {
 		reg.addClosureLeaf(headerVFS, srcVFS)
 	}
@@ -228,16 +219,16 @@ func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 }
 
 func emitLibraryFlatcSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
-	// The producer was emitted+registered in the pre-pass (emitFlatcProducer);
-	// take its ref from the codegen registry and compile the generated .cpp.
+	// Producer was emitted+registered in the pre-pass; take its ref from the
+	// codegen registry and compile the generated .cpp.
 	cppVFS := build(resolveSourceVFS(ctx, instance, srcRel, d.srcDirs).rel() + ".cpp")
 
 	return emitFlatcCppCompile(ctx, instance, cppVFS, in)
 }
 
 // emitFlatcCppCompile compiles a flatc-generated .fbs.cpp (its FL producer was
-// already emitted+registered). Shared by the checked-in source .fbs path and the
-// RUN_PROGRAM-generated .fbs bridge (emitRunProgramsForAR).
+// already emitted+registered). Shared by the source .fbs path and the
+// RUN_PROGRAM-generated .fbs bridge.
 func emitFlatcCppCompile(ctx *GenCtx, instance ModuleInstance, cppVFS VFS, in ModuleCCInputs) *SourceEmit {
 	flRef := codegenRegForInstance(ctx, instance).lookup(cppVFS).ProducerRef
 

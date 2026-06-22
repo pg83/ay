@@ -5,21 +5,19 @@ import (
 	"strings"
 )
 
-// gperfFlags is the default $GP_FLAGS (ymake.core.conf:839 DEFAULT(GP_FLAGS
-// -CtTLANSI-C -Dk* -c)) expanded as three separate argv tokens.
+// gperfFlags is the default $GP_FLAGS expanded as three separate argv tokens.
 var gperfFlags = []STR{argGpCtTLANSIC.str(), argGpDk.str(), argDashC.str()}
 
-// gperfGeneratedRel is the module-relative path of a gperf-generated source.
-// Upstream's `${stdout;output;defext=.gperf.cpp;nopath;noext:SRC}` places the
-// output flat in the module build dir (nopath) as <basename>.gperf.cpp — unlike
-// bison/ragel, which rebase a subdir source under the _/ namespace.
+// gperfGeneratedRel is the module-relative path of a gperf-generated source:
+// flat in the module build dir as <basename>.gperf.cpp — unlike bison/ragel,
+// which rebase a subdir source under the _/ namespace.
 func gperfGeneratedRel(srcRel string) string {
 	return filepath.Base(srcRel) + ".cpp"
 }
 
-// gperfSymbolName reproduces `${pre=-Nin_;suf=_set;nopath;noallext:SRC}`: the
-// source basename with every extension stripped (noallext), wrapped as the gperf
-// `-Nin_<name>_set` lookup-function symbol (e.g. tags.gperf → -Nin_tags_set).
+// gperfSymbolName wraps the source basename (every extension stripped) as the
+// gperf `-Nin_<name>_set` lookup-function symbol (e.g. tags.gperf →
+// -Nin_tags_set).
 func gperfSymbolName(srcRel string) string {
 	base := filepath.Base(srcRel)
 
@@ -30,10 +28,10 @@ func gperfSymbolName(srcRel string) string {
 	return "-Nin_" + base + "_set"
 }
 
-// emitGP emits the GP (gperf) producer node: it runs contrib/tools/gperf over the
-// .gperf source with $GP_FLAGS and the generated -N symbol, redirecting stdout to
-// the generated .gperf.cpp. srcInputs is the source-only include closure of the
-// .gperf (the tool reads the .gperf and the headers its preamble #includes).
+// emitGP emits the GP (gperf) producer node: it runs gperf over the .gperf source
+// with $GP_FLAGS and the generated -N symbol, redirecting stdout to the generated
+// .gperf.cpp. srcInputs is the source-only include closure of the .gperf (the
+// tool reads the .gperf and the headers its preamble #includes).
 func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS, gperfLD NodeRef, srcInputs []VFS, emit Emitter) NodeRef {
 	na := emit.nodeArenas()
 
@@ -65,10 +63,9 @@ func emitLibraryGperfSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
 	genVFS := build(instance.Path.rel() + "/" + gperfGeneratedRel(srcRel))
 
-	// The .gperf is parsed for C includes (CIncludeDirectiveParser, registered in
-	// parsers_generated.go). The gperf tool and the generated cpp both read exactly
-	// that closure — gperf copies the .gperf preamble verbatim into its output — so
-	// one walk of the source serves both nodes (the source leads its own window).
+	// The .gperf is parsed for C includes. The gperf tool and the generated cpp
+	// both read exactly that closure — gperf copies the .gperf preamble verbatim
+	// into its output — so one walk of the source serves both nodes.
 	srcClosure := walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)
 
 	gpRef := emitGP(instance, srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, keepOnlySourceVFS(srcClosure), ctx.emit)
@@ -80,8 +77,8 @@ func emitLibraryGperfSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 
 	ccSrcRel := strings.TrimPrefix(genVFS.rel(), instance.Path.rel()+"/")
 	ccIn := in
-	// The compiled file leads IncludeInputs (emitCC takes the window verbatim); the
-	// .gperf source closure follows — the same headers the generated cpp #includes.
+	// The compiled file leads IncludeInputs; the .gperf source closure follows —
+	// the same headers the generated cpp #includes.
 	ccIn.IncludeInputs = append([]VFS{genVFS}, srcClosure...)
 	ccIn.ExtraDepRefs = append([]NodeRef{gpRef}, resolveCodegenDepRefs(ctx, instance, srcClosure, gpRef)...)
 	ccRef, ccOut, _ := emitCC(instance, ccSrcRel, genVFS, ccIn, ctx.host, ctx.emit)

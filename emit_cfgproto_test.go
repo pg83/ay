@@ -4,13 +4,10 @@ import (
 	"testing"
 )
 
-// TestGen_CfgProto_EmitsPBProducerAndCompile reproduces the T-55 sg7 gap: a
-// `.cfgproto` source must emit a PB/yellow producer (_CPP_CFGPROTO_CMD,
-// proto.conf:494-497) whose outputs keep the source extension
+// TestGen_CfgProto_EmitsPBProducerAndCompile: a `.cfgproto` source must emit a
+// PB/yellow producer whose outputs keep the source extension
 // (backend_config.cfgproto.pb.{cc,h}), with the proto_config plugin and
 // --config_out, then compile the generated .pb.cc and archive its object.
-// Representative upstream node:
-// $(B)/balancer/kernel/client_request/backend_config.cfgproto.pb.h.
 func TestGen_CfgProto_EmitsPBProducerAndCompile(t *testing.T) {
 	files := map[string]string{}
 
@@ -76,8 +73,7 @@ message Cfg {}
 		}
 	}
 
-	// The ordinary .proto / .ev path must NOT receive the config plugin — make
-	// sure we did not key the plugin on something broader.
+	// The ordinary .proto / .ev path must NOT receive the config plugin.
 	for _, a := range args {
 		if a == "--plugin=protoc-gen-event2cpp="+"$(B)/tools/event2cpp/event2cpp" {
 			t.Errorf("cfgproto producer must not carry the event2cpp plugin: %v", args)
@@ -104,8 +100,8 @@ message Cfg {}
 	if !nodeHasInput(obj, "$(B)/lib/backend_config.cfgproto.pb.cc") {
 		t.Fatalf("cfgproto object missing generated .pb.cc input: %v", obj.flatInputs())
 	}
-	// CPP_EV_OUTS marks no `main` output, so the self .pb.h does NOT ride the
-	// .pb.cc.o as a direct input (matches the reference; see emit_cfgproto.go).
+	// No `main` output is marked, so the self .pb.h does NOT ride the .pb.cc.o
+	// as a direct input.
 	if nodeHasInput(obj, "$(B)/lib/backend_config.cfgproto.pb.h") {
 		t.Errorf("cfgproto object must not carry its own generated .pb.h: %v", obj.flatInputs())
 	}
@@ -127,15 +123,12 @@ message Cfg {}
 	}
 }
 
-// TestGen_CfgProto_WireFormatDoesNotLeakToConsumer is the T-134 guard: the
-// generated `.cfgproto.pb.h` is an EDT_OutTogether sibling of its `.pb.cc`
-// (CPP_EV_OUTS, no `main` output). An ordinary downstream C++ consumer that
-// includes the generated header must reach the sibling `.pb.cc` (OutTogether
-// parity) but MUST NOT inherit protoc's cpp-only `INDUCED_DEPS(cpp …)`
-// `wire_format.h` — that header belongs only on the generated translation unit
-// (`.pb.cc.o`). Modeling the sibling as a *traversed* parsed include leaks the
-// cpp-only induced dep into every consumer; modeling it as a bare closure leaf
-// does not.
+// TestGen_CfgProto_WireFormatDoesNotLeakToConsumer guard: the generated
+// `.cfgproto.pb.h` is an EDT_OutTogether sibling of its `.pb.cc` (no `main`
+// output). A downstream C++ consumer that includes the header must reach the
+// sibling `.pb.cc` but MUST NOT inherit protoc's cpp-only induced `wire_format.h`
+// — that belongs only on the generated translation unit. A bare closure leaf
+// avoids the leak; a traversed parsed include would not.
 func TestGen_CfgProto_WireFormatDoesNotLeakToConsumer(t *testing.T) {
 	const wireFormat = "$(S)/contrib/libs/protobuf/src/google/protobuf/wire_format.h"
 
@@ -152,8 +145,7 @@ import "library/cpp/proto_config/protos/extensions.proto";
 message Cfg {}
 `)
 
-	// protoc declares wire_format.h as a cpp-only induced dep, exactly as
-	// contrib/tools/protoc/ya.make.induced_deps does upstream.
+	// protoc declares wire_format.h as a cpp-only induced dep.
 	files["contrib/tools/protoc/ya.make"] = "PROGRAM(protoc)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(main.cpp)\n" +
 		"INDUCED_DEPS(cpp ${ARCADIA_ROOT}/contrib/libs/protobuf/src/google/protobuf/wire_format.h)\nEND()\n"
 	files["contrib/tools/protoc/main.cpp"] = "int main(){return 0;}\n"
@@ -177,7 +169,7 @@ message Cfg {}
 
 	g := testGen(newMemFS(files), "app")
 
-	// The generated translation unit MUST keep wire_format.h (required runtime).
+	// The generated translation unit MUST keep wire_format.h.
 	obj := mustNodeByOutput(t, g, "$(B)/lib/backend_config.cfgproto.pb.cc.o")
 	if !nodeHasInput(obj, wireFormat) {
 		t.Fatalf("cfgproto .pb.cc.o must keep protoc induced wire_format.h: %v", obj.flatInputs())
@@ -199,9 +191,9 @@ message Cfg {}
 	}
 }
 
-// TestGen_OrdinaryProto_HasNoConfigPlugin is the T-55 negative guard: an
-// ordinary `.proto` (CPP_PROTO_CMD, proto.conf:462) must NOT receive the
-// proto_config plugin / --config_out — those are exclusive to `.cfgproto`.
+// TestGen_OrdinaryProto_HasNoConfigPlugin is the negative guard: an ordinary
+// `.proto` must NOT receive the proto_config plugin / --config_out — those are
+// exclusive to `.cfgproto`.
 func TestGen_OrdinaryProto_HasNoConfigPlugin(t *testing.T) {
 	files := map[string]string{}
 

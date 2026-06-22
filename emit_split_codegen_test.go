@@ -6,9 +6,9 @@ import (
 )
 
 // TestParseSplitCodegen_KeywordsAnywhere pins that OUT_NUM / OUTPUT_INCLUDES are
-// keyword sections that may precede the positional tool/prefix (mirroring the
-// Python macro's keyword args): tool and prefix are the first two NON-keyword
-// tokens. A naive args[0]/args[1] split mis-binds the tool to "OUT_NUM".
+// keyword sections that may precede the positional tool/prefix: tool and prefix
+// are the first two NON-keyword tokens. A naive args[0]/args[1] split mis-binds
+// the tool to "OUT_NUM".
 func TestParseSplitCodegen_KeywordsAnywhere(t *testing.T) {
 	args := STRS("OUT_NUM", "30", "tools/codegen", "factors_gen", "NTop", "OUTPUT_INCLUDES", "a.h", "b.h")
 	stmt := parseSplitCodegen(args, 1)
@@ -44,14 +44,13 @@ func TestParseSplitCodegen_DefaultOutNum(t *testing.T) {
 }
 
 // TestGen_SplitCodegenGeneratedClosure pins the generated-output include closure
-// for SPLIT_CODEGEN consumers (T-29). Upstream's flat-input model carries the
-// first numbered part (prefix.0.cpp) and the prefix.in source through the
-// generated header / generated cpp closure, and NEVER the generated header
-// prefix.h on a generated cpp part compilation.
+// for SPLIT_CODEGEN consumers. The flat-input model carries the first numbered
+// part (prefix.0.cpp) and the prefix.in source through the generated header /
+// generated cpp closure, and NEVER prefix.h on a generated cpp part compilation.
 //
-// Pre-T-29 the generated cpp parts and the noauto prefix.cpp are modeled as
-// #including prefix.h, so they carry $(B)/lib/factors_gen.h (ours-only) and miss
-// prefix.0.cpp + prefix.in (ref-only) — the exact sg7 factors_gen pair deltas.
+// The wrong model treats the cpp parts and noauto prefix.cpp as #including
+// prefix.h, so they carry $(B)/lib/factors_gen.h (ours-only) and miss
+// prefix.0.cpp + prefix.in (ref-only).
 func TestGen_SplitCodegenGeneratedClosure(t *testing.T) {
 	files := map[string]string{}
 

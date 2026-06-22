@@ -50,9 +50,8 @@ func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
 // graphDeps / graphForeignDeps resolve a node's refs to dep uids via the graph's
 // uid vector — deps are no longer materialized on the node.
 func graphDeps(g *Graph, n *Node) []UID {
-	// The graph's "deps" array is DepRefs + ForeignDepRefs (tools) + the resolved
-	// resource fetch deps (Node.buildDeps); tools and resources are not stored on
-	// the node.
+	// The "deps" array is DepRefs + ForeignDepRefs (tools) + resolved resource
+	// fetch deps (Node.buildDeps); tools and resources are not stored on the node.
 	var out []UID
 
 	for r := range n.buildDeps(g.fetchRefs) {
@@ -185,8 +184,8 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 		}
 	}
 
-	// Deps are the DepRefs resolved to uids in insertion order — no sort, no
-	// dedup (the dump-sort normalization owns ordering; the gate is the oracle).
+	// Deps are DepRefs resolved to uids in insertion order — no sort, no dedup
+	// (dump-sort owns ordering).
 	want := []UID{byName["Z"], byName["X"], byName["Y"]}
 	if !slices.Equal(graphDeps(g, aNode), want) {
 		t.Errorf("A.Deps = %v, want insertion order %v", graphDeps(g, aNode), want)
@@ -225,7 +224,7 @@ func TestFinalize_KeepsDuplicateDeps(t *testing.T) {
 	}
 
 	// resolveAndUID no longer dedups — duplicate DepRefs surface as duplicate
-	// Deps. Generators must not emit duplicate refs (see EmitLD whole-archive).
+	// Deps; generators must not emit duplicate refs.
 	if len(graphDeps(g, aNode)) != 3 {
 		t.Errorf("expected duplicates preserved (len 3); A.Deps = %v", graphDeps(g, aNode))
 	}

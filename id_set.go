@@ -1,10 +1,10 @@
 package main
 
-// IdSet is an epoch-stamped membership set over dense VFS ids. reset() bumps the
-// epoch instead of clearing the backing array, so a fresh set is O(1) amortised and
-// the gen slice is reused across passes (only the rare epoch wraparound zeroes it).
-// A slot is "present" iff its stamp equals the current epoch. The array is indexed
-// by uint32(v), keying on the VFS value directly.
+// IdSet is an epoch-stamped membership set over dense VFS ids. reset() bumps
+// the epoch instead of clearing the backing array, so a fresh set is O(1)
+// amortised and gen is reused across passes (only the rare epoch wraparound
+// zeroes it). A slot is present iff its stamp equals the current epoch; the
+// array is indexed by uint32(v).
 type IdSet struct {
 	gen   []uint32
 	epoch uint32
@@ -60,14 +60,12 @@ func (s *IdSet) add(v VFS) {
 }
 
 // spliceNew appends the window's not-yet-present ids to block[k:], stamping
-// them present, and returns the new k — the splice inner loop of dfs pass-2 /
-// strongconnect. gen and epoch are hoisted into locals: through the receiver
-// the compiler reloads s.gen (pointer and length) and s.epoch on every
-// iteration, since the gen[id] store could alias the fields — the dfs.func2
-// disasm showed 4 dependent loads per element where the hoisted form keeps
-// them in registers. Callers reset(vfsBound()) before splicing and windows
-// hold only already-interned ids, so every id is in range by construction —
-// the runtime bounds check is the fail-fast for a violated invariant.
+// them present, and returns the new k. gen and epoch are hoisted into locals:
+// through the receiver the compiler reloads them every iteration since the
+// gen[id] store could alias the fields, whereas the hoisted form keeps them in
+// registers. Callers reset(vfsBound()) first and windows hold only interned
+// ids, so every id is in range — the runtime bounds check fails fast on a
+// violated invariant.
 func (s *IdSet) spliceNew(win []VFS, block []VFS, k int) int {
 	gen := s.gen
 	epoch := s.epoch

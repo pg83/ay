@@ -8,57 +8,52 @@ import (
 )
 
 var (
-	// resolveModuleToolchain derives the tool paths from the module's resource-global
-	// closure. Tool paths come from peers (build/platform/*), not ambient platform flags.
+	// resolveModuleToolchain derives the tool paths from the module's
+	// resource-global closure: tool paths come from peers, not platform flags.
 	strLLDRootName      = internStr(resourcePatternLLDRoot)
 	strYMakePython3Name = internStr(resourcePatternYMakePython3)
-	// Shared Resources vectors — every emitter that needs one of these
-	// fixed sets references the same slice instead of building it per node.
+	// Shared Resources vectors: emitters needing one of these fixed sets
+	// reference the same slice instead of building it per node.
 	usesPython3        = []STR{strYMakePython3Name}
 	usesPython3JDK17   = []STR{strYMakePython3Name, internStr(resourcePatternJDK17)}
 	usesPython3Clang16 = []STR{strYMakePython3Name, internStr(resourcePatternClang16)}
 )
 
-// External-resource model. A RESOURCES_LIBRARY (build/platform/clang, …) declares
-// external resources via DECLARE_EXTERNAL_RESOURCE /
-// DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE[_BY_JSON]. Each declaration yields:
-//   - a <Name>_RESOURCE_GLOBAL variable bound to the bare "$(<Name>)" resource ref,
-//     which propagates transitively through the PEERDIR closure (ymake's
-//     global_vars_collector mines every *_RESOURCE_GLOBAL var across the closure)
-//     and is rendered into a test node's --global-resource list as
-//     "<Name>_RESOURCE_GLOBAL::$(<Name>)";
-//   - a fetch of the host-selected URI into the same bare $(<Name>) resource dir.
+// External-resource model. A RESOURCES_LIBRARY declares external resources via
+// DECLARE_EXTERNAL_RESOURCE / DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE[_BY_JSON].
+// Each declaration yields:
+//   - a <Name>_RESOURCE_GLOBAL variable bound to the bare "$(<Name>)" ref, which
+//     propagates through the PEERDIR closure and renders into a test node's
+//     --global-resource list as "<Name>_RESOURCE_GLOBAL::$(<Name>)";
+//   - a fetch of the host-selected URI into the same $(<Name>) resource dir.
 //
-// The reference is the bare $(<Name>) the executor mounts mechanically (mountString);
-// the sandbox-rotating "-<id>" suffix ymake carries on the var (NYa::ResourceVarName)
-// has no place in our graph — it would not mount, and dump-normalize only strips it
-// off the upstream reference. Every field is interned: the model carries STR end to
-// end, the raw strings existing only transiently at the json/macro-argument boundary
-// in makeResourceDecl.
+// The upstream sandbox-rotating "-<id>" suffix has no place in our graph. Every
+// field is interned; raw strings exist only transiently at the json/macro-arg
+// boundary in makeResourceDecl.
 
 // resourceDecl is one declared external resource after host-platform selection.
 type ResourceDecl struct {
-	Name      STR // resource base name, e.g. "CLANG16"
-	URI       STR // host-selected uri, e.g. "sbr:6495238978" or an absolute path
-	GlobalVar STR // propagated variable name, e.g. "CLANG16_RESOURCE_GLOBAL"
-	Value     STR // variable value: the bare resource ref "$(CLANG16)"
-	Token     STR // --global-resource arg "CLANG16_RESOURCE_GLOBAL::$(CLANG16)"
+	Name      STR // resource base name
+	URI       STR // host-selected uri ("sbr:<id>" or an absolute path)
+	GlobalVar STR // propagated variable name (<Name>_RESOURCE_GLOBAL)
+	Value     STR // variable value: the bare resource ref "$(<Name>)"
+	Token     STR // --global-resource arg "<Name>_RESOURCE_GLOBAL::$(<Name>)"
 }
 
 const resourceGlobalSuffix = "_RESOURCE_GLOBAL"
 
-// platformDefaultArch is the architecture ya treats as implicit in a by_platform key
-// (NYa::TCanonizedPlatform::DEFAULT_ARCH): "linux-x86_64" canonizes to "linux".
+// platformDefaultArch is the architecture treated as implicit in a by_platform
+// key: "linux-x86_64" canonizes to "linux".
 const platformDefaultArch = "x86_64"
 
-// makeResourceDecl interns one resource (the sole string boundary): it composes the
-// bare resource ref, global-var name and --global-resource token, then carries them
-// as STR. The uri is kept only to drive the fetch — it never enters the ref.
+// makeResourceDecl interns one resource (the sole string boundary): it composes
+// the bare resource ref, global-var name and --global-resource token, then
+// carries them as STR. The uri is kept only to drive the fetch.
 func makeResourceDecl(name, uri string) ResourceDecl {
-	// Resource references resolve to the FETCH node's output dir, $(B)/resources/NAME,
-	// so flags/env that splice ${NAME_RESOURCE_GLOBAL} (e.g. lld's --ld-path) point at
-	// a real graph output the consumer depends on — not an executor-mounted $(NAME).
-	// dump normalize folds $(B)/resources/NAME back to $(NAME) for the comparison.
+	// Resource references resolve to the FETCH node's output dir,
+	// $(B)/resources/NAME, so flags/env that splice ${NAME_RESOURCE_GLOBAL} point
+	// at a real graph output the consumer depends on, not an executor-mounted
+	// $(NAME). dump normalize folds $(B)/resources/NAME back to $(NAME).
 	value := "$(B)/resources/" + name
 	globalVar := name + resourceGlobalSuffix
 
@@ -72,15 +67,14 @@ func makeResourceDecl(name, uri string) ResourceDecl {
 }
 
 // hostPlatformKey is the by_platform json key for the host (os-isa), e.g.
-// "linux-x86_64". Resource bundles select the HOST entry — these are host tools.
+// "linux-x86_64". Resource bundles select the HOST entry; these are host tools.
 func hostPlatformKey(host *Platform) string {
 	return string(host.OS) + "-" + isaPlatformKey(host.ISA)
 }
 
-// resourceJSONPlatformKey is the SET_RESOURCE_URI_FROM_JSON by_platform key for the
-// instance's platform — ymake's canonized platform name where x86_64 is the implicit
-// default (no suffix) and win is "win32": "linux"/"linux-aarch64"/"darwin"/
-// "darwin-arm64"/"win32". Distinct from hostPlatformKey ("linux-x86_64"), which the
+// resourceJSONPlatformKey is the by_platform key for the instance's platform:
+// the canonized platform name where x86_64 is the implicit default (no suffix)
+// and win is "win32". Distinct from hostPlatformKey ("linux-x86_64"), which the
 // DECLARE_*_BUNDLE bundles use.
 func resourceJSONPlatformKey(env Environment) string {
 	switch {
@@ -101,11 +95,10 @@ func resourceJSONPlatformKey(env Environment) string {
 	}
 }
 
-// canonizePlatformKey mirrors NYa::TCanonizedPlatform::AsString (yaplatform): a
-// by_platform key is lower-cased <os>[-<arch>] with the default arch (x86_64) dropped, so
-// "linux" and "linux-x86_64" both collapse to "linux". SET_RESOURCE_URI_FROM_JSON bundles
-// use either spelling (protoc: "linux"; py3cc/slow: "linux-x86_64"); canonizing both sides
-// makes the lookup hit regardless.
+// canonizePlatformKey lower-cases a by_platform key to <os>[-<arch>] with the
+// default arch (x86_64) dropped, so "linux" and "linux-x86_64" both collapse to
+// "linux". Bundles use either spelling; canonizing both sides makes the lookup
+// hit regardless.
 func canonizePlatformKey(key string) string {
 	key = strings.ToLower(key)
 
@@ -118,9 +111,8 @@ func canonizePlatformKey(key string) string {
 	return os + "-" + arch
 }
 
-// resolveResourceURIFromBundle returns the bundle URI for env's platform, matching keys
-// by their canonical form (see canonizePlatformKey). Keys are scanned in sorted order for
-// deterministic selection.
+// resolveResourceURIFromBundle returns the bundle URI for env's platform,
+// matching keys by canonical form, scanned in sorted order for determinism.
 func resolveResourceURIFromBundle(bundle map[string]string, env Environment) (string, bool) {
 	want := resourceJSONPlatformKey(env)
 
@@ -149,8 +141,8 @@ func isaPlatformKey(isa ISA) string {
 	return string(isa)
 }
 
-// stripSbrPrefix returns the bare sandbox id of an "sbr:<id>" uri (used by the
-// fetch mapping), or the uri unchanged when it carries no sbr scheme.
+// stripSbrPrefix returns the bare sandbox id of an "sbr:<id>" uri, or the uri
+// unchanged when it carries no sbr scheme.
 func stripSbrPrefix(uri string) string {
 	return strings.TrimPrefix(uri, "sbr:")
 }
@@ -203,9 +195,8 @@ func selectHostResourceDecl(host *Platform, modulePath, name string, bundle map[
 	return makeResourceDecl(name, uri)
 }
 
-// sortedResourceGlobals returns the declarations ordered by global-var name,
-// mirroring ymake's std::set<TString> ExternalResources collection — the order
-// in which a test node's --global-resource arguments are emitted.
+// sortedResourceGlobals returns the declarations ordered by global-var name —
+// the order in which a test node's --global-resource args are emitted.
 func sortedResourceGlobals(in []ResourceDecl) []ResourceDecl {
 	out := append([]ResourceDecl(nil), in...)
 	sort.Slice(out, func(i, j int) bool {
@@ -215,13 +206,12 @@ func sortedResourceGlobals(in []ResourceDecl) []ResourceDecl {
 	return out
 }
 
-// resolveResourceGlobalRef expands ymake's deferred CLANG_BC_ROOT=$CLANG16_RESOURCE_GLOBAL
-// reference against the consuming module's resource-global closure (the transitive union
-// of <NAME>_RESOURCE_GLOBAL declarations reached through PEERDIR — build/platform/clang
-// declares CLANG16/18/20). "$CLANG16_RESOURCE_GLOBAL" / "${CLANG16_RESOURCE_GLOBAL}"
-// resolves to the decl's value ("$(CLANG16-<id>)"); a non-reference string passes through.
-// This mirrors ymake deferring the expansion until command generation, when the global
-// is available from the closure rather than read eagerly at module-collection time.
+// resolveResourceGlobalRef expands a deferred $<NAME>_RESOURCE_GLOBAL reference
+// against the consuming module's resource-global closure (the transitive union
+// of <NAME>_RESOURCE_GLOBAL declarations reached through PEERDIR).
+// "$<NAME>_RESOURCE_GLOBAL" / "${<NAME>_RESOURCE_GLOBAL}" resolves to the decl's
+// value; a non-reference string passes through. The expansion is deferred until
+// command generation, when the global is available from the closure.
 func resolveResourceGlobalRef(s string, globals []ResourceDecl) string {
 	name, ok := strings.CutPrefix(s, "$")
 
@@ -243,9 +233,9 @@ func resolveResourceGlobalRef(s string, globals []ResourceDecl) string {
 }
 
 // bindResourceGlobalVars resolves a RESOURCES_LIBRARY's DECLARE_* statements and
-// binds each <NAME>_RESOURCE_GLOBAL env var to its "$(<VarName>)" value, mirroring
-// ymake's ProcessExternalResource. Returns whether any var was bound (so the
-// caller re-collects to expand references that textually precede the DECLARE).
+// binds each <NAME>_RESOURCE_GLOBAL env var to its "$(<VarName>)" value. Returns
+// whether any var was bound (so the caller re-collects to expand references that
+// textually precede the DECLARE).
 func bindResourceGlobalVars(ctx *GenCtx, instance ModuleInstance, d *ModuleData, env Environment) bool {
 	bound := false
 
@@ -260,19 +250,15 @@ func bindResourceGlobalVars(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 }
 
 // moduleToolchain holds a module's tool-invocation paths, derived from the
-// external-resource globals reachable through its PEERDIR closure: the compiler/
-// archiver/objcopy/strip live under $(B)/resources/CLANG<ver> (build/platform/clang),
-// the linker under $(B)/resources/LLD_ROOT (build/platform/lld), and python under
-// $(B)/resources/YMAKE_PYTHON3 (build/platform/python/ymake_python3) — each the
-// output dir of that resource's FETCH node, taken as a dep by listing the resource
-// name in the consuming node's Resources. A field stays 0 when its resource is
-// absent from the closure (the consuming emitter then has no peer to take the tool
-// from — caught at use, never silently defaulted).
+// external-resource globals reachable through its PEERDIR closure. Each tool
+// lives under the output dir of its resource's FETCH node, taken as a dep by
+// listing the resource name in the consuming node's Resources. A field stays 0
+// when its resource is absent from the closure (caught at use, never defaulted).
 type ModuleToolchain struct {
 	// ClangResource is the versioned clang resource the compiler/llvm tools come
-	// from (e.g. "CLANG20"), selected by the platform's ClangVer. Consumers list it in
-	// their node's Resources so they depend on that specific FETCH node — version-
-	// specific so several clang versions (CLANG16 for bitcode, CLANG20 to compile) coexist.
+	// from, selected by the platform's ClangVer. Consumers list it in their node's
+	// Resources so they depend on that specific FETCH node — version-specific so
+	// several clang versions (one for bitcode, one to compile) can coexist.
 	ClangResource STR
 	ClangRoot     STR
 	CC            STR
@@ -282,10 +268,9 @@ type ModuleToolchain struct {
 	Strip         STR
 	LLDRoot       STR
 
-	// ARCmdHead is the pre-built head of every AR command this toolchain
-	// drives — [python3, link_lib.py, llvm-ar, llvm, gnu, $(B), None, --] —
-	// referenced as a chunk by emitARNode, never copied. Built here because
-	// it is a pure function of the toolchain.
+	// ARCmdHead is the pre-built head of every AR command this toolchain drives,
+	// referenced as a chunk by emitARNode, never copied. Built here because it is
+	// a pure function of the toolchain.
 	ARCmdHead []STR
 	LLD       STR
 	Python3   STR
@@ -294,13 +279,12 @@ type ModuleToolchain struct {
 func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolchain {
 	var tc ModuleToolchain
 
-	// The compiler/llvm tools come from the version-specific CLANG<ver> resource
-	// (e.g. CLANG20), not the version-independent bare CLANG: $(B)/resources/CLANG20
-	// is the FETCH node's output dir, depended on by listing tc.ClangResource in the
-	// consuming node's Resources.
+	// The compiler/llvm tools come from the version-specific clang resource, not
+	// the bare CLANG: its $(B)/resources dir is the FETCH node's output, depended
+	// on by listing tc.ClangResource in the consuming node's Resources.
 	clangRes := resourcePatternClangTool + clangVer
-	// Decl names are compared in id space: one intern probe per call instead of
-	// a string view per decl (the LLD/python ids are package-level constants).
+	// Decl names are compared in id space: one intern probe per call instead of a
+	// string view per decl.
 	clangResID := internStr(clangRes)
 
 	for _, decl := range globals {
@@ -337,9 +321,9 @@ func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolc
 	return tc
 }
 
-// genResourcesLibrary emits a RESOURCES_LIBRARY: it produces no archive/objects
-// (upstream RESOURCES_LIBRARY is a .pkg.fake IGNORED unit), only the external
-// resource globals it declares, which propagate up the PEERDIR closure.
+// genResourcesLibrary emits a RESOURCES_LIBRARY: it produces no archive/objects,
+// only the external resource globals it declares, which propagate up the PEERDIR
+// closure.
 func genResourcesLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *ModuleEmitResult {
 	var globals []ResourceDecl
 	deduper.reset()
@@ -354,29 +338,22 @@ func genResourcesLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *M
 	}
 
 	// A RESOURCES_LIBRARY has no PEERDIRs, so its GLOBAL contributions (the
-	// .GLOBAL list: RPATH/LDFLAGS/USER_C*FLAGS/OBJADDE_LIB/ADDINCL) are its own,
-	// un-merged, and propagate to consumers exactly as the general path would with
-	// an empty peer set. This is the real toolchain mechanism: build/platform/lld
-	// SET_APPEND(LDFLAGS_GLOBAL -fuse-ld=lld --ld-path=…) and build/platform/local_so
-	// SET_APPEND(RPATH_GLOBAL -Wl,-rpath,$ORIGIN) reach every linking consumer here.
-	// Duplicates of these flags that currently also come from the Platform (the
-	// mine.go stopgap) are removed on the Platform side, not here.
+	// .GLOBAL list: RPATH/LDFLAGS/USER_C*FLAGS/OBJADDE_LIB/ADDINCL) propagate to
+	// consumers as the general path would with an empty peer set — the mechanism
+	// by which the linker's LDFLAGS_GLOBAL and RPATH_GLOBAL reach every linking
+	// consumer. Duplicates also coming from the Platform are removed there.
 	var sbomRef *NodeRef
 	var sbomPath *VFS
 
 	if sbomActive(ctx, instance) && d.toolchainName != "" {
-		// The toolchain SBOM node runs $(B)/resources/YMAKE_PYTHON3/bin/python3.
-		// Upstream reaches that resource via the YMAKE_PYTHON3_PEERDIR that
-		// _BARE_UNIT injects into every unit (RESOURCES_LIBRARY: _BARE_UNIT,
-		// ymake.core.conf:2064/576); this RESOURCES_LIBRARY path otherwise resolves
-		// no peers, so resolve that one universal python peer explicitly. The effect
-		// we need is registering the YMAKE_PYTHON3 FETCH into ctx.fetchRefs BEFORE
-		// this node, so its by-name resource dep is a real edge at build time too,
-		// not just in -G where the fetch map is complete only at finalize. genModule
-		// is memoized (no new nodes; -G is topo-sorted so byte output is unchanged),
-		// and we discard the python toolchain's own SBOM component — it is not this
-		// toolchain's. ymake_python3 declares YMAKE_PYTHON3 itself, so it self-peers
-		// nothing; skip it to avoid a pointless re-entry.
+		// The toolchain SBOM node runs the python resource, normally reached via
+		// the python PEERDIR _BARE_UNIT injects into every unit; this path resolves
+		// no peers, so resolve that one universal python peer explicitly. The point
+		// is registering the python FETCH into ctx.fetchRefs BEFORE this node, so
+		// its by-name resource dep is a real build-time edge, not just complete at
+		// -G finalize. genModule is memoized, and we discard the python toolchain's
+		// own SBOM component. The python toolchain declares the python resource
+		// itself, so skip it to avoid a pointless re-entry.
 		if instance.Path.rel() != pythonToolchainInfoRel {
 			pythonToolchainSbomComponent(ctx, instance.Platform)
 		}
@@ -406,9 +383,9 @@ func genResourcesLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *M
 	return result
 }
 
-// prebuiltModuleSuffix is the PROGRAM MODULE_SUFFIX for the platform (ymake.core.conf:
-// the _LINK_UNIT/PROGRAM default is empty, .exe under WIN32). PREBUILT_PROGRAM's
-// PRIMARY_OUTPUT splices it after the binary name.
+// prebuiltModuleSuffix is the PROGRAM MODULE_SUFFIX for the platform (empty, .exe
+// under WIN32). PREBUILT_PROGRAM's PRIMARY_OUTPUT splices it after the binary
+// name.
 func prebuiltModuleSuffix(p *Platform) string {
 	if p.OS == OSWindows {
 		return ".exe"
@@ -417,13 +394,10 @@ func prebuiltModuleSuffix(p *Platform) string {
 	return ""
 }
 
-// genPrebuiltProgram emits a PREBUILT_PROGRAM: rather than compiling sources, it
-// fetches a sandbox-built binary (DECLARE_EXTERNAL_RESOURCE) and copies it to the
-// module's program output with fs_tools.py, mirroring upstream _PREBUILT_PROGRAM_CMD
-// ($COPY_CMD $_PRIMARY_OUTPUT_VALUE ${TARGET}, kv p=ld pc=light-blue show_out). The
-// USE_PREBUILT_TOOLS contour (internal only) routes protoc/… here, so the tool's
-// from-source object closure (the host-PIC protobuf/abseil/grpc compiles) never enters
-// the graph. The result is a PROGRAM (LDRef/LDPath) so tool consumers take its binary.
+// genPrebuiltProgram emits a PREBUILT_PROGRAM: it fetches a sandbox-built binary
+// (DECLARE_EXTERNAL_RESOURCE) and copies it to the module's program output, so a
+// tool's from-source object closure never enters the graph. The result is a
+// PROGRAM (LDRef/LDPath) so tool consumers take its binary.
 func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *ModuleEmitResult {
 	na := ctx.na
 
@@ -448,17 +422,17 @@ func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		throwFmt("gen: %s: PREBUILT_PROGRAM PRIMARY_OUTPUT %q has an unresolved reference", instance.Path.rel(), d.primaryOutput)
 	}
 
-	// primaryOutput is "$(B)/resources/<NAME>/<bin>" (the fetch node's output dir); the
-	// copy reads it as an input and depends on the fetch. dst is the module's program
-	// output, $(B)/<dir>/<name> — what ${TARGET} expands to and tool consumers reference.
+	// primaryOutput is "$(B)/resources/<NAME>/<bin>" (the fetch node's output dir);
+	// the copy reads it as an input and depends on the fetch. dst is the module's
+	// program output — what ${TARGET} expands to and tool consumers reference.
 	srcVFS := build(strings.TrimPrefix(d.primaryOutput, "$(B)/"))
 	dst := lDOutputPath(instance, programBinaryName(instance, d.moduleStmt))
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	// The prebuilt copy is an agnostic "bin"; like any licensed module it gets a
-	// _GEN_SBOM_COMPONENT, and (when EMBED is on for this RELEASE host build) the
-	// copy node itself collects its own .component.sbom — ref lists it as an input.
+	// Like any licensed module, the prebuilt copy gets a _GEN_SBOM_COMPONENT, and
+	// (when EMBED is on for this RELEASE host build) the copy node collects its own
+	// .component.sbom — ref lists it as an input.
 	var ownSbomRef *NodeRef
 	var ownSbomPath *VFS
 
@@ -466,17 +440,14 @@ func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		ownSbomRef, ownSbomPath = emitSbomComponent(ctx, instance, d, programBinaryName(instance, d.moduleStmt))
 	}
 
-	// _PREBUILT_PROGRAM_CMD (ymake.core.conf:5443) is `GENERATE_MF && COPY_CMD
-	// $_PRIMARY_OUTPUT_VALUE ${TARGET}` — unlike _DLL_PROXY_LIBRARY_CMD it does NOT
-	// wrap the primary output in ${input}, so the fetched binary is a resource
-	// (tracked via fetchRef), not a content input.
+	// The prebuilt copy command does NOT wrap the primary output in ${input}, so
+	// the fetched binary is a resource (tracked via fetchRef), not a content input.
 	inputs := InputChunks{ctx.scripts[copyFsToolsVFS]}
 	depRefs := []NodeRef{fetchRef}
 
-	// Every module descends from _BARE_UNIT, which PEERDIR+=$YMAKE_PYTHON3_PEERDIR
-	// (ymake.core.conf:574). A bare-link PREBUILT_PROGRAM resolves no other SBOM
-	// peers (NO_PLATFORM/NO_RUNTIME), so that universal python toolchain component is
-	// the whole peer SBOM closure it collects at the link.
+	// Every module descends from _BARE_UNIT, which adds the python PEERDIR. A
+	// bare-link PREBUILT_PROGRAM resolves no other SBOM peers, so that universal
+	// python toolchain component is the whole peer SBOM closure it collects.
 	if sbomActive(ctx, instance) && instance.Platform.BuildRelease {
 		if pyRef, pyPath := pythonToolchainSbomComponent(ctx, instance.Platform); pyRef != nil {
 			inputs = append(inputs, []VFS{*pyPath})
@@ -485,10 +456,9 @@ func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 	}
 
 	if ownSbomRef != nil && instance.Platform.BuildRelease {
-		// _GEN_SBOM_COMPONENT (sbom.conf:42, run via _CONTRIB_MODULE_HOOKS on LICENSE)
-		// declares ${input:gen_sbom.py}; that module input lands on the module's
-		// primary node — for a bare PREBUILT_PROGRAM the single copy node — alongside
-		// its own .component.sbom global (a separate DX node also produces the latter).
+		// _GEN_SBOM_COMPONENT declares ${input:gen_sbom.py}; that module input lands
+		// on the module's primary node — for a bare PREBUILT_PROGRAM the single copy
+		// node — alongside its own .component.sbom global.
 		inputs = append(inputs, []VFS{*ownSbomPath, source(sbomGenScriptRel)})
 		depRefs = append(depRefs, *ownSbomRef)
 	}
@@ -522,9 +492,8 @@ func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		LDRef:          ref,
 		LDPath:         &dst,
 		Peerdirs:       d.peerdirs,
-		// A prebuilt codegen tool keeps its INDUCED_DEPS (ya.make.induced_deps,
-		// e.g. grpc_cpp's grpcpp service headers) so a generated file's consumer
-		// pulls them via GeneratorRefs — exactly as the from-source build does.
+		// A prebuilt codegen tool keeps its INDUCED_DEPS so a generated file's
+		// consumer pulls them via GeneratorRefs, as the from-source build does.
 		InducedDeps: d.inducedDeps,
 	}
 	ctx.memo.put(ctx.instanceKey(instance), result)
@@ -538,8 +507,8 @@ type ResourceBundleJSON struct {
 	} `json:"by_platform"`
 }
 
-// readResourceBundleJSON parses a build/platform/*/*.json bundle into a
-// platform-key -> uri map (the by_platform table feeding DECLARE_*_BY_JSON).
+// readResourceBundleJSON parses a bundle json into a platform-key -> uri map
+// (the by_platform table feeding DECLARE_*_BY_JSON).
 func readResourceBundleJSON(fs FS, rel string) map[string]string {
 	var data ResourceBundleJSON
 	throw(json.Unmarshal(fs.read(rel), &data))

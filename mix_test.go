@@ -7,8 +7,7 @@ import (
 
 var sinkU64 uint64
 
-// splitMix64 must be a bijection over the 64-bit (p,s) input: distinct pairs
-// never share a key (so the identity-hashed maps never false-match).
+// splitMix64 must be a bijection: distinct (p,s) pairs never share a key.
 func TestSplitMix64Bijective(t *testing.T) {
 	seen := map[uint64][2]uint32{}
 	rng := rand.New(rand.NewSource(1))
@@ -25,10 +24,9 @@ func TestSplitMix64Bijective(t *testing.T) {
 	}
 }
 
-// For DENSE sequential ids (the real workload: VFS/STR ids), the low bits of the
-// key must spread across the table — the property Morton keying lacked. Insert a
-// dense block via open addressing and assert the average probe stays near 1 at
-// LF 0.5 (Morton keying produced hundreds).
+// For dense sequential ids (the real workload) the key's low bits must spread
+// across the table — what Morton keying lacked. Insert a dense block via open
+// addressing and assert the average probe stays near 1 at LF 0.5.
 func TestSplitMix64SpreadsDenseIDs(t *testing.T) {
 	const n = 1 << 16
 	const capacity = 1 << 17 // LF 0.5

@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-// swigAddIncls mirrors Lib/python's ADDINCL(GLOBAL FOR swig …) declarations —
-// the python contour is the one ay models (swig.conf _SWIG_PYTHON_C/_CPP).
+// swigAddIncls mirrors the python Lib's ADDINCL(GLOBAL FOR swig …) declarations —
+// the python contour is the one modeled here.
 var swigAddIncls = []VFS{source(swigLibRoot + "/python"), source(swigLibRoot)}
 
 // swigConstArgs is the constant span of every SW command between the swig
@@ -45,13 +45,12 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 		srcVFS := source(instance.Path.rel() + "/" + stmt.Src)
 		cOutVFS := build(instance.Path.rel() + "/" + cOutRel)
 		pyOutVFS := build(instance.Path.rel() + "/" + pyOutRel)
-		// The window walk: implicit %includes are the swig parser's own
-		// directives, the Lib dirs are FOR-swig addincl data, the resolution
-		// is the scanner's standard one (sysincl swig.yml included).
+		// The window walk: implicit %includes come from the swig parser, the Lib
+		// dirs are FOR-swig addincl data, resolution is the scanner's standard one.
 		swigClosure := walkClosureTail(ctx.scannerFor(instance), srcVFS, newScanContext(ctx.parsers, swigAddIncls, nil, includeScannerBasePaths(), instance.Path.rel()))
 
 		// swigClosure joins as its own chunk (referenced, not copied; read-only
-		// after this — the later consumers copy out of it).
+		// after this — later consumers copy out of it).
 		inputs := na.inputList(na.vfsList(bldContribToolsSwigSwig, srcVFS), swigClosure)
 
 		cmdArgs := na.chunkList(na.strList(swigBin.str()), swigConstArgs, na.strList(internStr(swigModuleName(stmt.Module)),
@@ -75,14 +74,14 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 		})
 
 		d.pySrcs = append(d.pySrcs, internStr(pyOutRel))
-		// Upstream injects swig's generated .py as a `${ARCADIA_BUILD_ROOT}/<full>.py`
-		// PY_SRCS token, so its py3cc module name is the full root-relative path.
+		// The generated .py is injected as a build-root-relative PY_SRCS token, so
+		// its py3cc module name is the full root-relative path.
 		d.pySrcsFullName = append(d.pySrcsFullName, true)
 		registerBoundGeneratedParsedOutput(ctx, instance, pkSW, cOutVFS, collectSwigInducedIncludes(ctx, srcVFS, swigClosure), swRef, []NodeRef{swigRef})
 		registerBoundGeneratedParsedOutput(ctx, instance, pkSW, pyOutVFS, nil, swRef, []NodeRef{swigRef})
-		// The generated .py's build-from closure (its paired .swg.c, the .swg
-		// source, and the swig include closure) reaches its py-bytecode consumers
-		// through the registry's SourceInputs, not a per-module side map.
+		// The generated .py's build-from closure (paired .swg.c, the .swg source,
+		// and the swig include closure) reaches its py-bytecode consumers through
+		// the registry's SourceInputs, not a per-module side map.
 		codegenRegForInstance(ctx, instance).setSourceInputs(pyOutVFS, append([]VFS{cOutVFS, srcVFS}, swigClosure...))
 
 		ccIn := in
@@ -124,10 +123,9 @@ func swigModuleName(module string) string {
 }
 
 func collectSwigInducedIncludes(ctx *GenCtx, src VFS, closure []VFS) []IncludeDirective {
-	// Every closure member was parsed during the walk, so the bucket reads
-	// below are pure cache hits. Cross-file repeats stay in the registered
-	// set — the consumer-side resolve caches and the closure dedup absorb
-	// them.
+	// Every closure member was parsed during the walk, so the bucket reads below
+	// are cache hits. Cross-file repeats stay in the set — the consumer-side
+	// resolve caches and the closure dedup absorb them.
 	swigParser := IncludeDirectiveParser(SwigIncludeDirectiveParser{})
 	var out []IncludeDirective
 

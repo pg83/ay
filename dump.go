@@ -15,36 +15,30 @@ import (
 
 var (
 	// versionedResourceRe matches a resource reference carrying a sandbox/content
-	// id suffix, e.g. $(CLANG16-1380963495) or $(TEST_TOOL_HOST-sbr:12302016680).
-	// The resource name is an uppercase identifier that MAY contain digits
-	// (CLANG16, CLANG20, JDK17), so the name class allows [A-Z0-9_] after the
-	// first letter; the id is bare digits or an `sbr:<digits>` reference.
-	// Normalization strips the id suffix on both graphs so versioned and bare
-	// references compare equal — these ids churn whenever upstream rotates a
-	// sandbox resource and carry no build-graph meaning.
+	// id suffix. The resource name is an uppercase identifier that MAY contain
+	// digits, so the name class allows [A-Z0-9_] after the first letter; the id is
+	// bare digits or an `sbr:<digits>` reference. Normalization strips the id on both
+	// graphs so versioned and bare references compare equal — these ids churn on
+	// resource rotation and carry no build-graph meaning.
 	versionedResourceRe = regexp.MustCompile(`\$\(([A-Z][A-Z0-9_]*)-(?:sbr:)?[0-9]+\)`)
 	// resourceMountFoldRe folds our self-contained resource path back to upstream's
-	// bare reference form: we emit the toolchain as $(B)/resources/<NAME>/bin/… (a
-	// real FETCH-node output the consumer depends on), upstream emits $(<NAME>)/bin/…
-	// (an executor-resolved mount). Folding $(B)/resources/<NAME> -> $(<NAME>) makes
-	// the two compare equal after the FETCH node itself is stripped.
+	// bare form: we emit $(B)/resources/<NAME>/bin/… (a real FETCH-node output);
+	// upstream emits $(<NAME>)/bin/… (an executor-resolved mount). Folding makes the
+	// two compare equal after the FETCH node is stripped.
 	resourceMountFoldRe = regexp.MustCompile(`\$\(B\)/resources/([A-Z_][A-Z0-9_]*)`)
 	// cmdLiteralBasenames are bare-word command arguments that collide with a real
 	// input's basename but do NOT name that file: "gnu" is the llvm-ar archive-format
-	// selector (link_lib.py ... LLVM_AR gnu $(B) ...), not the magic-database source
-	// contrib/libs/libmagic/magic/Magdir/gnu. An input whose basename is one of these
+	// selector, not a magic-database source. An input whose basename is one of these
 	// is never kept via the command-name rule.
 	cmdLiteralBasenames = map[string]bool{"gnu": true}
 )
 
-// ldOwnScriptRels is the reference-graph AR/LD input whitelist: the build/scripts
-// tooling (and the vcs templates) a link node legitimately carries but never names
-// on its command line, so reference-graph pruning keeps them. This is the FULL set
-// including the wrappers' import closures (link_exe imports process_command_files,
-// thinlto_cache, process_whole_archive_option; fs_tools imports
-// process_command_files). The normalizer is a standalone tool with no access to
-// build/scripts, so unlike the generator (which derives closures from the script
-// table) it must list them explicitly.
+// ldOwnScriptRels is the reference-graph AR/LD input whitelist: the link-wrapper
+// tooling (and vcs templates) a link node carries but never names on its command
+// line, so pruning keeps them. This is the FULL set including the wrappers' import
+// closures. The normalizer is a standalone tool with no access to the script tree,
+// so unlike the generator (which derives closures from the script table) it must
+// list them explicitly.
 var ldOwnScriptRels = map[string]bool{
 	"build/scripts/link_dyn_lib.py":                 true,
 	"build/scripts/link_exe.py":                     true,
@@ -62,12 +56,12 @@ var dumpContentFields = []string{
 	"platform", "requirements", "target_properties",
 }
 
-// objcopyOverEmitExts are the C/C++ source/header extensions that constitute the
-// embedded resource producer's leaked compile closure on a resource-objcopy node.
+// objcopyOverEmitExts are the C/C++ source/header extensions making up the embedded
+// resource producer's leaked compile closure on a resource-objcopy node.
 var objcopyOverEmitExts = map[string]struct{}{
 	".h": {}, ".hpp": {}, ".hxx": {}, ".ipp": {}, ".inc": {}, ".def": {},
 	".proto": {}, ".cpp": {}, ".cc": {}, ".cxx": {}, ".c": {}, ".i": {}, ".td": {},
-	".txt": {}, // COPY_FILE(TEXT) header sources, e.g. mkql_computation_node_codegen.h.txt
+	".txt": {}, // COPY_FILE(TEXT) header sources (.h.txt)
 }
 
 func normPath(s string) string {
@@ -79,14 +73,13 @@ func normPath(s string) string {
 	s = strings.ReplaceAll(s, "$(SOURCE_ROOT)", "$(S)")
 
 	// Fold our $(B)/resources/<NAME>/… toolchain paths back to the bare $(<NAME>)/…
-	// form upstream emits (the FETCH node that produces them is stripped separately).
+	// form upstream emits (the producing FETCH node is stripped separately).
 	if strings.Contains(s, "$(B)/resources/") {
-		// The toolchain compiler is our version-specific CLANG20 resource, but
-		// upstream INVOKES it through the version-independent bare $(CLANG). Map the
-		// tool paths (CLANG20/bin/…, CLANG20/lib) — note the trailing slash, so the
-		// bare CLANG20_RESOURCE_GLOBAL::$(B)/resources/CLANG20 declaration value is NOT
-		// caught here and keeps its versioned $(CLANG20) via the general fold below
-		// (upstream declares the resource global versioned, invokes the tool bare).
+		// Our toolchain compiler is a version-specific resource, but upstream invokes
+		// it through the bare $(CLANG). Map the tool paths — note the trailing slash,
+		// so the resource-global declaration value is NOT caught here and keeps its
+		// versioned ref via the general fold below (upstream declares the global
+		// versioned, invokes the tool bare).
 		s = strings.ReplaceAll(s, "$(B)/resources/CLANG20/", "$(CLANG)/")
 		s = resourceMountFoldRe.ReplaceAllString(s, "$($1)")
 	}
@@ -96,9 +89,8 @@ func normPath(s string) string {
 	s = strings.ReplaceAll(s, "$(B)/vcs.json", "$(VCS)/vcs.json")
 
 	// Strip the id suffix from any versioned resource ref ($(NAME-id) /
-	// $(NAME-sbr:id)). The regex matches only refs carrying an id, so running it
-	// on every $(-bearing string is safe and covers all resources (CLANG*,
-	// LLD_ROOT, YMAKE_PYTHON3, TEST_TOOL_HOST, JDK17, …) without an allow-list.
+	// $(NAME-sbr:id)). The regex matches only refs carrying an id, so running it on
+	// every $(-bearing string is safe and covers all resources without an allow-list.
 	if strings.Contains(s, "-") {
 		s = versionedResourceRe.ReplaceAllStringFunc(s, func(m string) string {
 			return "$(" + versionedResourceRe.FindStringSubmatch(m)[1] + ")"
@@ -150,9 +142,8 @@ func normSortedStrings(in []string) []string {
 	}
 
 	sort.Strings(out)
-	// Dedup adjacent: a node may list the same input more than once — e.g. several
-	// wrapper scripts pulling in a shared helper (link_exe and fs_tools both import
-	// process_command_files) — but the canonical form is a set.
+	// Dedup adjacent: a node may list the same input more than once (e.g. several
+	// wrapper scripts pulling in a shared helper), but the canonical form is a set.
 	w := 0
 
 	for i := range out {
@@ -192,8 +183,7 @@ func nodeProgramKind(node *rawNode) string {
 
 // nodeCmdText flattens a node's command arguments into one NUL-joined, normPath'd
 // string for whole-path substring testing (used by the dep strip to detect a dep
-// output the command names directly, e.g. a TS run_test --context path that is not
-// listed among the node's inputs).
+// output the command names directly but does not list among its inputs).
 func nodeCmdText(node *rawNode) string {
 	cmds, _ := node.Cmds.([]any)
 	var b strings.Builder
@@ -211,17 +201,15 @@ func nodeCmdText(node *rawNode) string {
 }
 
 // nodeCmdBasenames returns the set of file basenames named by a node's command
-// arguments. Each cmd_arg token contributes its basename (the part after the last
-// '/'); a trailing ':' (the resource archiver's "path:" syntax) is stripped.
-// The match is on whole basenames, not substrings, so a source input (foo.c) is
-// not spuriously matched against the object token that embeds its name (foo.c.o).
+// arguments. Each cmd_arg token contributes its basename; a trailing ':' (the
+// resource archiver's "path:" syntax) is stripped. The match is on whole basenames,
+// not substrings, so a source input (foo.c) is not matched against an object token
+// that embeds its name (foo.c.o).
 //
-// The archiver's `-k $KEYS` value (ARCHIVE_BY_KEYS, ymake.core.conf) is a
-// colon-joined list of archive *keys*, not input file paths; the archiver
-// addresses entries by name and reads no file for it. Its trailing key would
-// otherwise leak a phantom file basename (e.g. tests/ft/yabs_md5.lua), spuriously
-// keeping a source member that ymake over-emits as a cache-key input but the
-// command never actually names — so skip the token following -k.
+// The archiver's `-k $KEYS` value is a colon-joined list of archive *keys*, not
+// input paths; the archiver reads no file for it. Its trailing key would otherwise
+// leak a phantom basename, keeping a source member upstream over-emits as a
+// cache-key input but the command never names — so skip the token following -k.
 func nodeCmdBasenames(node *rawNode) map[string]struct{} {
 	cmds, _ := node.Cmds.([]any)
 	set := map[string]struct{}{}
@@ -244,14 +232,12 @@ func nodeCmdBasenames(node *rawNode) map[string]struct{} {
 }
 
 // arLDInputKept decides whether a link/archive input survives reference-graph
-// pruning. Keep it if it is a real build artifact / known script (the white
-// list), OR if the command names its file — its basename matches a whole basename
-// token of the command (cmdBases). ymake propagates the full transitive
-// header/source set onto AR/LD nodes as inputs; those are never named by the
-// link/ar command (the .o/.a go through a response file, headers/protos aren't
-// passed at all), so they fall away — while genuinely-consumed inputs the command
-// DOES name (vcs svnversion.h, llvm-link .bc, exports.symlist, the archiver tool,
-// archived .pyc) are kept.
+// pruning. Keep it if it is a real build artifact / known script (the whitelist),
+// OR if the command names its file (basename matches a whole basename token in
+// cmdBases). Upstream propagates the full transitive header/source set onto AR/LD
+// nodes as inputs; those are never named by the link/ar command (.o/.a go through a
+// response file, headers/protos aren't passed), so they fall away — while
+// genuinely-consumed named inputs are kept.
 func arLDInputKept(s, kind string, cmdBases map[string]struct{}) bool {
 	if strings.HasSuffix(s, ".o") || strings.HasSuffix(s, ".a") ||
 		strings.HasSuffix(s, ".pyplugin") || strings.HasSuffix(s, ".exports") {
@@ -301,14 +287,11 @@ func filterARLDInputs(in []string, kind string, cmdBases map[string]struct{}) []
 
 // filterObjcopyInputs drops the embedded resource producer's transitive $(S)
 // compile/source closure that upstream over-emits onto a resource-objcopy node as
-// cache-key-only inputs (the objcopy.py action reads only the resource it embeds;
-// none of these appear in cmd_args). Classified per file from the our-vs-ref input
-// delta (see bugs/20260615-upstream-resource-objcopy-overemit.md): the closure is
-// everything under $(S)/contrib/libs/ (libcxx/libmagic/clang-rt/protobuf headers &
-// data), every C/C++ source/header by extension (module-local generated .pb.h /
-// .proto included), and the $(S)/build/ generator wrappers (cpp_proto_wrapper.py).
-// Command-named files (the resource, objcopy.py, the tools), $(B) artifacts, the
-// python3 interpreter stdlib and contrib/python package sources are kept.
+// cache-key-only inputs (the objcopy action reads only the resource it embeds; none
+// appear in cmd_args). The closure is everything under $(S)/contrib/libs/, every
+// C/C++ source/header by extension (module-local generated .pb.h/.proto included),
+// and the $(S)/build/ generator wrappers. Command-named files, $(B) artifacts, the
+// python interpreter stdlib and contrib/python package sources are kept.
 func filterObjcopyInputs(in []string, cmdBases map[string]struct{}) []string {
 	out := in[:0]
 
@@ -338,14 +321,13 @@ func objcopyInputKept(s string, cmdBases map[string]struct{}) bool {
 }
 
 // objcopySourceLeafKept reports whether a module-relative $(S) source leaf
-// survives the resource-objcopy input over-emit prune. Upstream lists an embedded
-// generated payload's producer's full transitive $(S) compile closure on the
-// objcopy node, but only genuine data-source leaves are meaningful: the C/C++
-// compile noise (headers, sources, .proto/.txt — objcopyOverEmitExts), contrib/libs
-// sources, and build/*.py tooling are discounted. The faithful (unfiltered) graph
-// side emits exactly this kept set so resource source-attribution matches
-// ref-after-normalization. Shared by objcopyInputKept (refGraph prune) and
-// emit_py_objcopy.go's source-attribution tail.
+// survives the resource-objcopy input over-emit prune. Upstream lists the producer's
+// full transitive $(S) compile closure on the objcopy node, but only genuine
+// data-source leaves are meaningful: C/C++ compile noise (objcopyOverEmitExts),
+// contrib/libs sources, and build/*.py tooling are discounted. The faithful
+// (unfiltered) graph side emits exactly this kept set so source-attribution matches
+// ref-after-normalization. Shared by objcopyInputKept and the source-attribution
+// tail.
 func objcopySourceLeafKept(rel string) bool {
 	b := baseName(rel)
 
@@ -378,12 +360,10 @@ func getString(node map[string]any, key string) string {
 	return s
 }
 
-// canonInputs returns a node's inputs after canonical filtering. filterARLDInputs
-// (AR/LD input pruning) is applied ONLY to the upstream reference graph
-// (refGraph) — it discounts inputs ymake lists on link/archive nodes that our
-// generator does not (or should not) model. Our graph is normalized faithfully so
-// that any genuine over- or under-emission surfaces as a diff, and so the filter
-// can be tightened to drop only what is really superfluous.
+// canonInputs returns a node's inputs after canonical filtering. AR/LD input pruning
+// is applied ONLY to the upstream reference graph (refGraph) — it discounts inputs
+// upstream lists on link/archive nodes that our generator does not model. Our graph
+// is normalized faithfully so any genuine over- or under-emission surfaces as a diff.
 func canonInputs(node *rawNode, refGraph bool) []string {
 	inputs := normSortedStrings(node.Inputs)
 
@@ -397,12 +377,10 @@ func canonInputs(node *rawNode, refGraph bool) []string {
 	case kind == "AR" || kind == "LD":
 		inputs = filterARLDInputs(inputs, kind, nodeCmdBasenames(node))
 	case kind == "PY":
-		// Resource-embedding objcopy (build/scripts/objcopy.py): upstream lists
-		// the embedded resource's producer's full transitive $(S) compile closure
-		// (libcxx/sanitizer headers, cpp_proto_wrapper.py, …) as inputs, though
-		// objcopy.py reads only the resource it embeds — those paths never appear
-		// in cmd_args. Same over-emit class as AR/LD; keep only command-named
-		// inputs. See bugs/20260615-upstream-resource-objcopy-overemit.md.
+		// Resource-embedding objcopy: upstream lists the producer's full
+		// transitive $(S) compile closure as inputs, though the objcopy action
+		// reads only the resource it embeds — those paths never appear in cmd_args.
+		// Same over-emit class as AR/LD; keep only command-named inputs.
 		cmdBases := nodeCmdBasenames(node)
 
 		if _, ok := cmdBases["objcopy.py"]; ok {
@@ -428,10 +406,10 @@ func canonContent(node *rawNode, refGraph bool) map[string]any {
 		"target_properties": normRec(orVal(node.TargetProperties, map[string]any{})),
 	}
 
-	// tags and host_platform are a graph-merge artifact (devtools/ya assigns the
-	// "tool" tag / host_platform to host-contour nodes at merge time); they are not
-	// intrinsic to a node's build action. Strip them from both sides so a host
-	// (tool) instance and its target twin compare on their real content.
+	// tags and host_platform are a graph-merge artifact (the "tool" tag /
+	// host_platform assigned to host-contour nodes at merge time); not intrinsic to a
+	// node's build action. Strip them from both sides so a host (tool) instance and
+	// its target twin compare on their real content.
 	return canon
 }
 
@@ -451,13 +429,11 @@ func marshalCompact(v any) []byte {
 }
 
 // rawNode is the typed decode target for a raw graph node on the normalize hot
-// path (streamGraphFanout). The large string-array fields (deps/inputs/outputs)
-// and scalars (uid/platform) decode directly to their Go types, avoiding the
-// per-element interface boxing of a []any decode and the toStrings copy that
-// followed it. The fields canonContent feeds to normRec (cmds/env/kv/
-// requirements/target_properties) stay any so the canonicalized value tree — and
-// thus marshalCompact's bytes — is identical to the former map[string]any decode;
-// keeping them any also preserves orVal's `v == nil` substitution for absent
+// path. The large string-array fields and scalars decode directly to their Go types,
+// avoiding the per-element interface boxing of a []any decode and the toStrings copy.
+// The fields canonContent feeds to normRec stay any so the canonicalized value tree
+// — and thus marshalCompact's bytes — is identical to the former map[string]any
+// decode; keeping them any also preserves orVal's `v == nil` substitution for absent
 // fields (a typed-nil map wrapped in any is != nil and would emit null, not {}).
 type rawNode struct {
 	UID              string   `json:"uid"`

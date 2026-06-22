@@ -10,11 +10,10 @@ import (
 )
 
 // Two archive variants (non-PIC + PIC) at the same output path, identical on
-// both sides. The diff must pair PIC-with-PIC and non-PIC-with-non-PIC and
-// report no difference. Before the PIC-aware match key, dumpDiffNodeMatchKey
-// keyed only by kind+platform+host, so findMatchingNodePair could pair our
-// non-PIC node against ref's PIC node and emit a spurious
-// `.cpp.o` vs `.cpp.pic.o` member diff (recon sg7 cause #3).
+// both sides. The diff must pair PIC-with-PIC and non-PIC-with-non-PIC, reporting
+// no difference. Before the PIC-aware match key (kind+platform+host only),
+// findMatchingNodePair could pair non-PIC against PIC and emit a spurious
+// `.cpp.o` vs `.cpp.pic.o` member diff.
 func TestDumpDiffPair_PicAndNonPicVariantsDoNotMispair(t *testing.T) {
 	nonPic := `{"self_uid":"%s","kv":{"p":"AR"},"platform":"plat","outputs":["$(B)/x/lib.a"],"cmds":[{"cmd_args":["ar","$(B)/x/foo.cpp.o"]}],"inputs":["$(B)/x/foo.cpp.o"],"tags":[]}`
 	pic := `{"self_uid":"%s","kv":{"p":"AR"},"platform":"plat","outputs":["$(B)/x/lib.a"],"cmds":[{"cmd_args":["ar","$(B)/x/foo.cpp.pic.o"]}],"inputs":["$(B)/x/foo.cpp.pic.o"],"tags":[]}`
@@ -47,8 +46,7 @@ func TestDumpDiffPair_PicAndNonPicVariantsDoNotMispair(t *testing.T) {
 }
 
 // The PIC-aware key must not mask a genuine member divergence: when ref's PIC
-// variant carries an extra member, the PIC-with-PIC pairing must still report
-// it (rather than silently pairing against the matching non-PIC variant).
+// variant carries an extra member, PIC-with-PIC pairing must still report it.
 func TestDumpDiffPair_PicVariantMemberDivergenceStillReported(t *testing.T) {
 	nonPic := `{"self_uid":"%s","kv":{"p":"AR"},"platform":"plat","outputs":["$(B)/x/lib.a"],"cmds":[{"cmd_args":["ar","$(B)/x/foo.cpp.o"]}],"inputs":["$(B)/x/foo.cpp.o"],"tags":[]}`
 	picOurs := `{"self_uid":"l2","kv":{"p":"AR"},"platform":"plat","outputs":["$(B)/x/lib.a"],"cmds":[{"cmd_args":["ar","$(B)/x/foo.cpp.pic.o"]}],"inputs":["$(B)/x/foo.cpp.pic.o"],"tags":[]}`

@@ -7,11 +7,8 @@ import (
 
 // TestArchive_PlainPropagatesSourceMembers pins that a plain ARCHIVE (no KEYS)
 // rides its direct source members into the include closure of a C++ unit that
-// #includes the generated archive header — exactly as ARCHIVE_BY_KEYS already
-// does. Reproduces the kernel/lemmer/context/default_decimator make_morphdict-
-// subtree divergence: ref lists $(S)/.../default_decimator.lst on factory.cpp.pic.o
-// (factory.cpp #includes the ARCHIVE(NAME data.inc default_decimator.lst) output);
-// before the fix plain ARCHIVE left PropagateSourceMembers unset, so the member
+// #includes the generated archive header — as ARCHIVE_BY_KEYS already does.
+// Before the fix plain ARCHIVE left PropagateSourceMembers unset, so the member
 // never reached the consumer.
 func TestArchive_PlainPropagatesSourceMembers(t *testing.T) {
 	files := map[string]string{}
@@ -42,12 +39,11 @@ func TestArchive_PlainPropagatesSourceMembers(t *testing.T) {
 	}
 }
 
-// TestArchiveByKeys_TopLevel covers an ordinary top-level ARCHIVE_BY_KEYS (not the
-// synthetic LJ_21_ARCHIVE path): the keyed archive lists its SRCDIR-backed members
-// plain, passes the colon-joined key list through `-k`, and writes the addincl output;
-// a C++ unit that #includes the generated archive header gets -I$(B)/<moddir> and the
-// archived source members as input-closure leaves. Mirrors the sg7
-// yabs/server/libs/static/static_data.inc / resources.cpp.o reference.
+// TestArchiveByKeys_TopLevel covers an ordinary top-level ARCHIVE_BY_KEYS: the
+// keyed archive lists its SRCDIR-backed members plain, passes the colon-joined
+// key list through `-k`, and writes the addincl output; a C++ unit that
+// #includes the generated archive header gets -I$(B)/<moddir> and the archived
+// source members as input-closure leaves.
 func TestArchiveByKeys_TopLevel(t *testing.T) {
 	files := map[string]string{}
 

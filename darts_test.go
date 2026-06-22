@@ -13,13 +13,13 @@ func TestDartsLongestMatch(t *testing.T) {
 	}{
 		{[]string{"arc/api/proto/"}, 1, true},     // longest of arc/ , arc/api/
 		{[]string{"arc/api/proto", "/"}, 1, true}, // variadic stream, no concat
-		{[]string{"arc/", "api/x/"}, 1, true},     // split mid-key across parts
+		{[]string{"arc/", "api/x/"}, 1, true},     // split mid-key
 		{[]string{"arc/x/"}, 0, true},             // only arc/ matches
 		{[]string{"arc/"}, 0, true},               // exact key
-		{[]string{"arcfoo/x/"}, 0, false},         // component boundary: arc/ not a prefix
+		{[]string{"arcfoo/x/"}, 0, false},         // arc/ not a prefix
 		{[]string{"util/x/"}, 2, true},
 		{[]string{"april/arf/x/"}, 3, true},
-		{[]string{"april/"}, 0, false}, // april/ is not a key (only april/arf/)
+		{[]string{"april/"}, 0, false}, // not a key (only april/arf/)
 		{[]string{"contrib/x/"}, 0, false},
 		{[]string{""}, 0, false},
 		{nil, 0, false},

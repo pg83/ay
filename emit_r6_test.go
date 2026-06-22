@@ -79,10 +79,8 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 }
 
 // TestCollectModule_Ragel6FlagsMultiTokenSplit pins the RAGEL6_FLAGS SET-list
-// expansion: SET(RAGEL6_FLAGS -L -G2) is a two-element list, and upstream's
-// $RAGEL6_FLAGS expands as two separate argv tokens (ymake.core.conf:3305), not
-// one quoted "-L -G2" blob. Reproduces the library/cpp/tokenizer nlptok_v2/v3
-// make_morphdict-subtree divergence (`ragel6 '-L -G2' …` vs `ragel6 -L -G2 …`).
+// expansion: SET(RAGEL6_FLAGS -L -G2) is a two-element list, and $RAGEL6_FLAGS
+// expands as two separate argv tokens, not one quoted "-L -G2" blob.
 func TestCollectModule_Ragel6FlagsMultiTokenSplit(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"mod/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSET(\n    RAGEL6_FLAGS\n    -L\n    -G2\n)\nSRCS(x.rl6)\nEND()\n",
@@ -190,7 +188,7 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
 
-	// The closure is the rl6 source's window — the source itself leads it.
+	// The closure is the rl6 source's window — the source leads it.
 	closure := []VFS{
 		intern("$(S)/util/datetime/parser.rl6"),
 		intern("$(S)/util/datetime/parser.h"),
@@ -307,10 +305,8 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 	}
 }
 
-// TestRagel6OutVFS_DefextNoext pins the upstream
-// ${output;defext=.rl6.cpp;nopath;noext:SRC} rule (ymake.core.conf:3303,
-// macro_processor.cpp:1758-1792): noext strips the last extension, then the
-// .rl6.cpp default extension is appended ONLY when the basename has no remaining
+// TestRagel6OutVFS_DefextNoext pins the defext+noext rule: strip the last
+// extension, then append .rl6.cpp ONLY when the basename has no remaining
 // extension. A .rl6 source whose stem is itself a header (markupfsm.h.rl6) thus
 // generates the header markupfsm.h, not markupfsm.h.rl6.cpp.
 func TestRagel6OutVFS_DefextNoext(t *testing.T) {
@@ -320,12 +316,12 @@ func TestRagel6OutVFS_DefextNoext(t *testing.T) {
 		srcRel string
 		want   string
 	}{
-		// Plain source stem has no extension after noext → defext appends .rl6.cpp.
+		// Plain stem has no extension after noext → defext appends .rl6.cpp.
 		{"parser.rl6", "$(B)/library/cpp/config/parser.rl6.cpp"},
-		// Subdir source: nopath keeps the basename, the _/ infix carries the dir.
+		// Subdir source: basename kept, _/ infix carries the dir.
 		{"datetime/parser.rl6", "$(B)/library/cpp/config/_/datetime/parser.rl6.cpp"},
-		// Stem retains the .h extension after noext → defext is suppressed; the
-		// generated artifact is the header markupfsm.h (consumed by #include).
+		// Stem retains .h after noext → defext suppressed; the artifact is the
+		// header markupfsm.h (consumed by #include).
 		{"markupfsm.h.rl6", "$(B)/library/cpp/config/markupfsm.h"},
 	}
 
@@ -337,11 +333,9 @@ func TestRagel6OutVFS_DefextNoext(t *testing.T) {
 	}
 }
 
-// TestGen_Ragel6HeaderOutputNotCompiled reproduces the sg7
-// library/cpp/config/markupfsm.h.rl6 divergence: the ragel artifact is a header,
-// so upstream emits the R6 node producing markupfsm.h and does NOT compile it.
-// A sibling parser.rl6 still yields a compiled parser.rl6.cpp (guard the
-// default).
+// TestGen_Ragel6HeaderOutputNotCompiled: when the ragel artifact is a header,
+// the R6 node produces markupfsm.h and does NOT compile it. A sibling parser.rl6
+// still yields a compiled parser.rl6.cpp (guards the default).
 func TestGen_Ragel6HeaderOutputNotCompiled(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"contrib/tools/ragel6/ya.make": "PROGRAM(ragel6)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nALLOCATOR(FAKE)\nSRCS(main.cpp)\nEND()\n",

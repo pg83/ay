@@ -110,11 +110,10 @@ END()
 	}
 }
 
-// TestGen_BisonYppFlatOutputAndSiblingInclude verifies that a .ypp source —
-// the C++ bison family, same as .y — produces flat module-build-dir outputs
-// ($(B)/<mod>/parser.h, $(B)/<mod>/parser.ypp.cpp, flat object) and that a
-// sibling source including the generated <parser.h> picks up the build-root
-// addincl and the .ypp source in its include closure.
+// TestGen_BisonYppFlatOutputAndSiblingInclude verifies that a .ypp source (the
+// C++ bison family) produces flat module-build-dir outputs and that a sibling
+// including the generated parser.h picks up the build-root addincl and the .ypp
+// source in its closure.
 func TestGen_BisonYppFlatOutputAndSiblingInclude(t *testing.T) {
 	files := map[string]string{}
 
@@ -126,13 +125,11 @@ func TestGen_BisonYppFlatOutputAndSiblingInclude(t *testing.T) {
 		writeTestModuleFile(files, input.rel(), "")
 	}
 
-	// The sibling lexer.rl6 is listed BEFORE parser.ypp in SRCS and reaches the
-	// generated header through an intermediate hand-written header by full
-	// $(B)-rooted angle include — the yt query base layout (lexer.rl6 → lexer.h
-	// → <a/b/qbase/parser.h>). The .rl6 closure is walked in Pass 1; without
-	// registering the bison producer before that walk, lexer.h's stale (no
-	// parser.h) children are cached in the file-id-keyed scanCache and reused by
-	// every later consumer of lexer.h.
+	// The sibling lexer.rl6 (listed BEFORE parser.ypp) reaches the generated header
+	// through an intermediate header by full $(B)-rooted angle include
+	// (lexer.rl6 → lexer.h → <a/b/qbase/parser.h>). Without registering the bison
+	// producer before the .rl6 walk, lexer.h's stale (no parser.h) children get
+	// cached in the file-id-keyed scanCache and reused by every later consumer.
 	writeTestModuleFile(files, "a/b/qbase/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -146,7 +143,7 @@ END()
 
 	g := testGen(newMemFS(files), "a/b/qbase")
 
-	// Flat header + generated source in the module build dir (no _/).
+	// Flat header + generated source (no _/).
 	yc := mustNodeByOutput(t, g, "$(B)/a/b/qbase/parser.h")
 	mustNodeByAnyOutput(t, g, "$(B)/a/b/qbase/parser.ypp.cpp")
 	for _, out := range yc.Outputs {
@@ -155,14 +152,11 @@ END()
 		}
 	}
 
-	// Flat compiled object (no _/), proving the .ypp generated source rebased
-	// to the module build dir, not $(B)/a/b/qbase/_/_/parser.ypp.cpp.o.
+	// Flat object (no _/): the .ypp source rebased to the module build dir.
 	mustNodeByOutput(t, g, "$(B)/a/b/qbase/parser.ypp.cpp.o")
 
-	// Sibling lexer.rl6's compiled object gets the generated build-root addincl,
-	// the generated parser.h itself, and the .ypp source — all pulled into its
-	// include closure through the bison header producer registered in the
-	// pre-pass (before the .rl6 closure is walked).
+	// Sibling lexer.rl6's object gets the build-root addincl, the parser.h, and
+	// the .ypp source through the pre-pass-registered bison producer.
 	lexerObj := mustNodeByOutput(t, g, "$(B)/a/b/qbase/lexer.rl6.cpp.o")
 	if indexOfArg(lexerObj.Cmds[0].CmdArgs.flat(), "-I$(B)/a/b/qbase") < 0 {
 		t.Fatalf("sibling CC missing generated bison addincl -I$(B)/a/b/qbase: %#v", lexerObj.Cmds[0].CmdArgs.flat())
@@ -175,8 +169,7 @@ END()
 }
 
 // TestGen_BisonYFlatOutputPath verifies that a flat (in-module) .y source
-// produces its generated .cpp and compiled object directly in the module build
-// dir — upstream's nopath output placement — not under an _/ namespace.
+// produces its .cpp and object directly in the module build dir, not under _/.
 func TestGen_BisonYFlatOutputPath(t *testing.T) {
 	files := map[string]string{}
 
@@ -206,9 +199,7 @@ END()
 
 // TestGen_BisonFlagsReachProducerCommand verifies that a module-level
 // BISON_FLAGS(<flags>) reaches the YC producer's bison invocation, positioned
-// after the default -v (the BISON_FLAGS variable default) and before --defines
-// (upstream bison_lex.conf: `${tool} $BISON_FLAGS … $_BISON_HEADER`, with the
-// macro doing SET_APPEND(BISON_FLAGS $Flags)).
+// after the default -v and before --defines.
 func TestGen_BisonFlagsReachProducerCommand(t *testing.T) {
 	files := map[string]string{}
 
@@ -260,7 +251,7 @@ END()
 
 // TestGen_BisonCppFlags verifies that the CC node compiling a bison-generated
 // C++ file carries the -Wno-unused-but-set-variable and -Wno-deprecated-copy
-// flags (upstream _LANG_CFLAGS_BISON).
+// flags.
 func TestGen_BisonCppFlags(t *testing.T) {
 	files := map[string]string{}
 
@@ -290,10 +281,9 @@ END()
 	}
 }
 
-// TestGen_BisonHeaderConsumerIncludesSourceY verifies that a CC node compiling
-// a file that includes a bison-generated header also receives the source .y
-// file as an input (upstream adds it transitively because the bison node that
-// produces the header depends on it).
+// TestGen_BisonHeaderConsumerIncludesSourceY verifies that a CC node compiling a
+// file that includes a bison-generated header also receives the source .y file —
+// added transitively because the bison node producing the header depends on it.
 func TestGen_BisonHeaderConsumerIncludesSourceY(t *testing.T) {
 	files := map[string]string{}
 
@@ -304,7 +294,6 @@ func TestGen_BisonHeaderConsumerIncludesSourceY(t *testing.T) {
 		writeTestModuleFile(files, input.rel(), "")
 	}
 
-	// genlib produces re_parser.y.h from re_parser.y
 	writeTestModuleFile(files, "genlib/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -314,7 +303,6 @@ END()
 `)
 	writeTestModuleFile(files, "genlib/pire/re_parser.y", "%%\n")
 
-	// app/re_lexer.cpp includes the generated re_parser.y.h header
 	writeTestModuleFile(files, "app/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -323,9 +311,8 @@ PEERDIR(genlib)
 SRCS(re_lexer.cpp)
 END()
 `)
-	// The bison-generated header is $(B)/genlib/pire/re_parser.h; the peer
-	// addincl from genlib is $(B)/genlib/pire, so the include uses just the
-	// basename without the pire/ prefix.
+	// The peer addincl from genlib is $(B)/genlib/pire, so the include uses just
+	// the basename without the pire/ prefix.
 	writeTestModuleFile(files, "app/re_lexer.cpp", `#include <re_parser.h>
 int lex() { return 0; }
 `)
@@ -340,13 +327,11 @@ int lex() { return 0; }
 }
 
 // TestGen_BisonGeneratedSourceCarriesGeneratedProtoProducerDep reproduces the
-// sg7 deps-only gap on bison/ypp parser compile roots (e.g.
-// $(B)/kernel/remorph/tokenlogic/parser.y.cpp.o). The bison-generated source's
-// prologue reaches a generated <foo>.pb.h; upstream's flat dep model records a
-// dep edge to that .pb.h's protoc producer on the compile node, exactly as for
-// a handwritten .cpp that includes the same header. emitBisonY was the only
-// generated-source CC emitter not routing its walked closure through
-// resolveCodegenDepRefs, so the producer dep was dropped.
+// deps-only gap on bison/ypp parser compile roots. The generated source's
+// prologue reaches a generated <foo>.pb.h; the compile node must record a dep on
+// that .pb.h's protoc producer, as for a handwritten .cpp including the same
+// header. emitBisonY was the only generated-source CC emitter not routing its
+// closure through resolveCodegenDepRefs, so the producer dep was dropped.
 func TestGen_BisonGeneratedSourceCarriesGeneratedProtoProducerDep(t *testing.T) {
 	files := map[string]string{}
 
@@ -362,8 +347,8 @@ func TestGen_BisonGeneratedSourceCarriesGeneratedProtoProducerDep(t *testing.T) 
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
 
-	// Same module owns the proto and the bison grammar; the grammar's prologue
-	// includes the generated <foo.pb.h> via the module's own $(B) addincl.
+	// Same module owns the proto and the grammar; the grammar's prologue includes
+	// the generated foo.pb.h via the module's own $(B) addincl.
 	writeTestModuleFile(files, "pmod/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -402,7 +387,7 @@ END()
 }
 
 // writeBisonTool writes the bison tool program plus build/induced/by_bison (the
-// empty licensed module _SRC("y") induces via PEERDIR) into a test fixture.
+// empty licensed module _SRC("y") induces via PEERDIR).
 func writeBisonTool(files map[string]string) {
 	writeToolProgram(files, "contrib/tools/bison", "bison")
 	files["build/induced/by_bison/ya.make"] = "LIBRARY()\nNO_UTIL()\nNO_RUNTIME()\nEND()\n"

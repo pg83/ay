@@ -2,12 +2,9 @@ package main
 
 import "testing"
 
-// TestGen_RunPython3OutHeaderAttributedToConsumer reproduces the T-119 PY
-// residual (restrictions_json.h): a RUN_PYTHON3 OUT header produced in one
-// module but first #included by a CC unit in a PEERDIR consumer must be
-// attributed (target_properties.module_dir) to that consumer, mirroring
-// upstream Node2Module first-claim-wins. Before the predicate widening the PY
-// producer kept its own module dir.
+// TestGen_RunPython3OutHeaderAttributedToConsumer: a RUN_PYTHON3 OUT header
+// produced in one module but first #included by a CC unit in a PEERDIR consumer
+// must be attributed (module_dir) to that consumer (first-claim-wins).
 func TestGen_RunPython3OutHeaderAttributedToConsumer(t *testing.T) {
 	files := map[string]string{}
 
@@ -54,10 +51,8 @@ END()
 	}
 }
 
-// TestGen_ScHeaderAttributedToConsumer reproduces the T-119 SC residual
-// (options.sc.h): a SRCS(*.sc) generated .sc.h first #included by a CC unit in a
-// PEERDIR consumer is attributed to that consumer. Before the predicate widening
-// the SC producer kept its own module dir.
+// TestGen_ScHeaderAttributedToConsumer: a SRCS(*.sc) generated .sc.h first
+// #included by a CC unit in a PEERDIR consumer is attributed to that consumer.
 func TestGen_ScHeaderAttributedToConsumer(t *testing.T) {
 	files := map[string]string{}
 
@@ -103,10 +98,9 @@ END()
 	}
 }
 
-// TestGen_ArchiveHeaderAttributedToConsumer reproduces the T-119 non-library AR
-// residual (static.h): an ARCHIVE(NAME header ...) generated header product
-// first #included by a CC unit in a PEERDIR consumer is attributed to that
-// consumer. The producer's own module compiles nothing that includes the header.
+// TestGen_ArchiveHeaderAttributedToConsumer: an ARCHIVE(NAME header ...)
+// generated header first #included by a CC unit in a PEERDIR consumer is
+// attributed to that consumer. The producer's module includes nothing.
 func TestGen_ArchiveHeaderAttributedToConsumer(t *testing.T) {
 	files := map[string]string{}
 
@@ -157,9 +151,8 @@ END()
 
 // TestGen_LibraryArchiveKeepsProducerOwnership guards that an ordinary library
 // archive (lib*.a, module_type=lib/module_lang=cpp) is NOT re-attributed: it has
-// no #include-resolvable header, and the predicate must exclude it on
-// module_type/module_lang/suffix. Its producer module ownership and library
-// module properties stay intact even when consumed via PEERDIR.
+// no #include-resolvable header, so producer ownership stays intact even when
+// consumed via PEERDIR.
 func TestGen_LibraryArchiveKeepsProducerOwnership(t *testing.T) {
 	files := map[string]string{}
 
@@ -199,14 +192,11 @@ END()
 	}
 }
 
-// TestOverrideGeneratedModuleDir_CppProtoConsumerTagPropagation pins the T-99
-// rule: a generated header produced OUTSIDE a PROTO_LIBRARY directory (here a
-// RUN_PROGRAM/PR producer under a plain LIBRARY, the apphost cow well-known
-// generator) but first-claimed by a consuming CPP_PROTO module is re-attributed
-// to that consumer with BOTH its module_dir AND its module_tag — upstream
-// Node2Module inherits dir+tag from the owning module. The pre-T-99 pass set
-// module_dir only, leaving module_tag unset (the reproduced divergence on the
-// well_known *.cow.pb.h nodes).
+// TestOverrideGeneratedModuleDir_CppProtoConsumerTagPropagation: a generated
+// header produced outside a PROTO_LIBRARY (a RUN_PROGRAM/PR producer under a
+// plain LIBRARY) but first-claimed by a consuming CPP_PROTO module is
+// re-attributed to that consumer with BOTH its module_dir AND module_tag —
+// dir+tag are inherited from the owning module.
 func TestOverrideGeneratedModuleDir_CppProtoConsumerTagPropagation(t *testing.T) {
 	const producerDir = "apphost/gp/lib/proto/cow/generator/well_known"
 	const consumerDir = "apphost/lib/proto_answers"
@@ -237,9 +227,9 @@ func TestOverrideGeneratedModuleDir_CppProtoConsumerTagPropagation(t *testing.T)
 	}
 }
 
-// TestOverrideGeneratedModuleDir_UntaggedConsumerLeavesTagUnset guards the
-// common case: a first-claim from a consumer with no module_tag re-attributes
-// the dir but must NOT invent a tag.
+// TestOverrideGeneratedModuleDir_UntaggedConsumerLeavesTagUnset: a first-claim
+// from a consumer with no module_tag re-attributes the dir but must NOT invent
+// a tag.
 func TestOverrideGeneratedModuleDir_UntaggedConsumerLeavesTagUnset(t *testing.T) {
 	const producerDir = "contrib/tools/gen/producer"
 	const consumerDir = "lib/plain_consumer"

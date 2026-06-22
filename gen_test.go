@@ -204,8 +204,8 @@ func TestGen_RejectsUnsupportedMacro(t *testing.T) {
 		t.Fatal("expected exception for unsupported macro, got nil")
 	}
 
-	// A name outside the closed TOK set fails fast at parse (internTok), before
-	// any gen-time modelling check.
+	// A name outside the closed TOK set fails fast at parse, before any gen-time
+	// modelling check.
 	if !strings.Contains(exc.Error(), "unknown macro name") {
 		t.Errorf("error %q does not contain 'unknown macro name'", exc.Error())
 	}
@@ -572,9 +572,8 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 			},
 		},
 
-		// Runtime-ancestor paths no longer take a restricted peer set; suppression
-		// is driven purely by NO_RUNTIME/NO_UTIL/NO_PLATFORM flags (none set here),
-		// so these exercise self-exclusion: a module never peers itself.
+		// Suppression is driven purely by NO_RUNTIME/NO_UTIL/NO_PLATFORM flags (none
+		// set here), so these exercise self-exclusion: a module never peers itself.
 		{
 			name: "self_builtins_not_in_stack",
 			mi: ModuleInstance{
@@ -1135,14 +1134,12 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 }
 
 // TestGen_OneLevelAddIncl_DeclOrderPreserved verifies that when a peer has mixed
-// ADDINCL(GLOBAL g ONE_LEVEL ol), the consumer sees g before ol — upstream ymake
-// preserves declaration order within UserGlobal (GLOBAL and ONE_LEVEL dirs are added
-// to UserGlobal in the order they appear in the ADDINCL call, not GLOBAL-first or
-// ONE_LEVEL-first). A prior implementation always emitted all ONE_LEVEL before all
-// GLOBAL for user peers, breaking declaration order for mixed peers.
+// ADDINCL(GLOBAL g ONE_LEVEL ol), the consumer sees g before ol — UserGlobal keeps
+// ADDINCL declaration order, not GLOBAL-first or ONE_LEVEL-first. A prior
+// implementation emitted all ONE_LEVEL before all GLOBAL, breaking mixed peers.
 func TestGen_OneLevelAddIncl_DeclOrderPreserved(t *testing.T) {
 	fs := newMemFS(map[string]string{
-		// Peer declares GLOBAL first, ONE_LEVEL second. Upstream preserves that order.
+		// Peer declares GLOBAL first, ONE_LEVEL second; that order is preserved.
 		"peerlib/ya.make":              "LIBRARY()\nADDINCL(\n    GLOBAL\n    peerlib/global_include\n    ONE_LEVEL\n    peerlib/onelevel_include\n)\nSRCS(peerlib.cpp)\nEND()\n",
 		"peerlib/peerlib.cpp":          "",
 		"peerlib/global_include/.keep": "", // directory must exist for filterExistingSourceDirs
@@ -1181,21 +1178,21 @@ func TestGen_OneLevelAddIncl_DeclOrderPreserved(t *testing.T) {
 	if oneLevelIdx == -1 {
 		t.Fatal("consumer CC missing -I$(S)/peerlib/onelevel_include (ONE_LEVEL addincl from peer must propagate)")
 	}
-	// GLOBAL was declared before ONE_LEVEL; upstream UserGlobal preserves that order.
+	// GLOBAL was declared before ONE_LEVEL; UserGlobal preserves that order.
 	if globalIdx > oneLevelIdx {
 		t.Errorf("GLOBAL addincl at idx=%d comes AFTER ONE_LEVEL at idx=%d; want declaration order (GLOBAL before ONE_LEVEL)", globalIdx, oneLevelIdx)
 	}
 }
 
 // TestGen_ImplicitOwnGlobal_BeforeOneLevelAddIncl verifies that a peer's implicit
-// own-global include dir (from SRCS(file.h.in)) appears before a later ADDINCL(ONE_LEVEL)
-// in the consumer's -I list. Upstream UserGlobal accumulates own-global dirs in declaration
-// order — generated-header build dirs are added when the SRCS statement is processed, so
-// they precede ADDINCL(ONE_LEVEL) declared later in the same ya.make.
+// own-global include dir (from SRCS(file.h.in)) appears before a later
+// ADDINCL(ONE_LEVEL) in the consumer's -I list. UserGlobal accumulates own-global
+// dirs in declaration order, so a generated-header build dir (added at its SRCS
+// statement) precedes a later ADDINCL(ONE_LEVEL).
 func TestGen_ImplicitOwnGlobal_BeforeOneLevelAddIncl(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		// peerlib: generated header declared before ONE_LEVEL ADDINCL.
-		// Upstream UserGlobal: generated-header build dir comes first, ONE_LEVEL second.
+		// UserGlobal: generated-header build dir comes first, ONE_LEVEL second.
 		"peerlib/ya.make":       "LIBRARY()\nSRCS(gen.h.in)\nADDINCL(\n    ONE_LEVEL\n    peerlib/onelevel_dir\n)\nSRCS(peerlib.cpp)\nEND()\n",
 		"peerlib/gen.h.in":      "",
 		"peerlib/peerlib.cpp":   "",
@@ -1235,7 +1232,7 @@ func TestGen_ImplicitOwnGlobal_BeforeOneLevelAddIncl(t *testing.T) {
 	if oneLevelIdx == -1 {
 		t.Fatal("consumer CC missing -I$(S)/peerlib/onelevel_dir (ONE_LEVEL addincl from peer)")
 	}
-	// Generated-header build dir was added before ONE_LEVEL; upstream UserGlobal preserves that order.
+	// Generated-header build dir was added before ONE_LEVEL; UserGlobal preserves that.
 	if genHdrIdx > oneLevelIdx {
 		t.Errorf("generated-header build include at idx=%d comes AFTER ONE_LEVEL at idx=%d; want own-global (UserGlobal) order before ONE_LEVEL", genHdrIdx, oneLevelIdx)
 	}
@@ -1245,17 +1242,15 @@ func TestGen_ImplicitOwnGlobal_BeforeOneLevelAddIncl(t *testing.T) {
 // include dir (from CONFIGURE_FILE(non-header dst)) appears AFTER an explicit ADDINCL(GLOBAL)
 // in the consumer's -I list, even when CONFIGURE_FILE is declared first in the ya.make.
 //
-// Upstream ymake resolves addincl;output (from CONFIGURE_FILE) AFTER all explicit ADDINCL
-// statements, regardless of source-level declaration order. Our cfAddIncl deferred buffer
-// correctly models this: CF dirs are merged into addInclGlobal and addInclUserGlobal AFTER
-// collectStmts processes all ADDINCL statements.
-//
-// This test also verifies the CF dir IS present in AddInclUserGlobal (i.e. propagated to
-// direct consumers in the UserGlobal phase), not silently dropped.
+// CONFIGURE_FILE output dirs resolve AFTER all explicit ADDINCL statements,
+// regardless of declaration order. The cfAddIncl deferred buffer models this: CF
+// dirs merge into addInclGlobal and addInclUserGlobal after all ADDINCL statements
+// are processed. Also verifies the CF dir IS present in AddInclUserGlobal
+// (propagated to direct consumers), not silently dropped.
 func TestGen_ConfigureFileOwnGlobal_AfterExplicitAddIncl(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		// peerlib: CONFIGURE_FILE (non-header dst) declared BEFORE ADDINCL(GLOBAL).
-		// Upstream: ADDINCL dirs appear first in UserGlobal, CF dirs deferred after.
+		// ADDINCL dirs appear first in UserGlobal, CF dirs deferred after.
 		"peerlib/ya.make":          "LIBRARY()\nCONFIGURE_FILE(config.cfg.in config.cfg)\nADDINCL(\n    GLOBAL\n    peerlib/global_dir\n)\nSRCS(peerlib.cpp)\nEND()\n",
 		"peerlib/config.cfg.in":    "",
 		"peerlib/peerlib.cpp":      "",
@@ -1296,7 +1291,7 @@ func TestGen_ConfigureFileOwnGlobal_AfterExplicitAddIncl(t *testing.T) {
 	if globalIdx == -1 {
 		t.Fatal("consumer CC missing -I$(S)/peerlib/global_dir (explicit ADDINCL GLOBAL from peer)")
 	}
-	// Upstream defers CF-generated include dirs after explicit ADDINCL; GLOBAL must appear first.
+	// CF-generated include dirs defer after explicit ADDINCL; GLOBAL must appear first.
 	if globalIdx > cfBuildIdx {
 		t.Errorf("ADDINCL GLOBAL at idx=%d comes AFTER CF build dir at idx=%d; want explicit ADDINCL before deferred CF dir", globalIdx, cfBuildIdx)
 	}
@@ -1305,10 +1300,8 @@ func TestGen_ConfigureFileOwnGlobal_AfterExplicitAddIncl(t *testing.T) {
 // TestGen_OneLevelAddIncl_AppearsInPeerIncludeSlot verifies that ADDINCL(ONE_LEVEL)
 // from a direct PEERDIR peer lands in the peer-include slot, AFTER the platform
 // linux-headers (which leads peerAddInclGlobal as a language default), NOT in the
-// own-include slot before it.
-// Upstream: ONE_LEVEL dirs go into UserGlobal → PropagateTo → UserGlobalPropagated of the
-// consumer, which renders after the consumer's own LocalUserGlobal and after the
-// platform linux-headers global addincl.
+// own-include slot before it. ONE_LEVEL dirs propagate into the consumer's
+// UserGlobal, rendered after its own local addincl and the linux-headers global.
 func TestGen_OneLevelAddIncl_AppearsInPeerIncludeSlot(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"peerlib/ya.make":                    "LIBRARY()\nADDINCL(\n    ONE_LEVEL\n    peerlib/include\n)\nSRCS(peerlib.cpp)\nEND()\n",
@@ -1738,10 +1731,9 @@ int use() { return 0; }
 	if !nodeHasInput(en, "$(B)/protos/dep.pb.h") {
 		t.Fatalf("enum node inputs missing imported pb.h dep.pb.h: %#v", en.flatInputs())
 	}
-	// Protobuf runtime headers (<google/protobuf/message.h> →
-	// contrib/libs/protobuf/src/...) resolve only through the real protobuf
-	// ADDINCL tree, exercised byte-exact by the sg gates. This mock has no such
-	// tree, so the input is not asserted here.
+	// Protobuf runtime headers resolve only through the real protobuf ADDINCL tree,
+	// exercised byte-exact by the gates. This mock has no such tree, so the input is
+	// not asserted here.
 
 	if !nodeHasInput(ar, "$(B)/protos/main.pb.h_serialized.cpp.o") {
 		t.Fatalf("archive missing enum serialization object: %#v", ar.flatInputs())
@@ -1752,10 +1744,9 @@ func testGen(fs FS, targetDir string) *Graph {
 	return testGenContour(fs, targetDir, true)
 }
 
-// testGenDumpGraph builds through the `-G` dump-graph finalize
-// (genDumpGraphWithResources → finalizeDumpGraph), so the generated-output
-// module_dir attribution pass (overrideGeneratedModuleDir) runs — testGen's
-// plain finalize does not exercise it.
+// testGenDumpGraph builds through the `-G` dump-graph finalize, so the
+// generated-output module_dir attribution pass (overrideGeneratedModuleDir) runs —
+// testGen's plain finalize does not exercise it.
 func testGenDumpGraph(fs FS, targetDir string) *Graph {
 	host := newTestPlatform(OSLinux, ISAX8664, "yes")
 	targetFlags := make(map[string]string, len(testToolchainFlags)+1)
@@ -1768,9 +1759,9 @@ func testGenDumpGraph(fs FS, targetDir string) *Graph {
 }
 
 // testGenInternal builds under the internal (non-opensource) contour, where
-// LINK_OR_COPY_SO_CMD is not emitted for plain programs — so fs_tools.py is not
-// a link input via emitCopy and only the BUNDLE MOVE_FILE mechanism can put it
-// on the link node.
+// LINK_OR_COPY_SO_CMD is not emitted for plain programs — so the tool script is not
+// a link input via emitCopy and only the BUNDLE MOVE_FILE mechanism can put it on
+// the link node.
 func testGenInternal(fs FS, targetDir string) *Graph {
 	return testGenContour(fs, targetDir, false)
 }
@@ -1897,11 +1888,10 @@ END()
 }
 
 // TestCollectModule_ProtoCmdPeersRecorded pins the proto plugin-runtime peers a
-// PROTO_LIBRARY records (the C++ proto plugins' DEPS, in plugin order) AND that
-// the declared PEERDIR keeps its slot in d.peerdirs (link order untouched).
-// CPP_EVLOG registers event2cpp with DEPS library/cpp/eventlog; that eventlog
-// runtime leads the ADDINCL closure (see walkPeersForGlobalAddIncl). The base
-// protobuf runtime is intentionally absent — it keeps its declared placement.
+// PROTO_LIBRARY records (the C++ proto plugins' DEPS, in plugin order) AND that the
+// declared PEERDIR keeps its slot in d.peerdirs (link order untouched). CPP_EVLOG
+// registers a plugin with DEPS library/cpp/eventlog; that runtime leads the ADDINCL
+// closure. The base protobuf runtime is intentionally absent.
 func TestCollectModule_ProtoCmdPeersRecorded(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"proto/ya.make": `PROTO_LIBRARY()
@@ -1918,8 +1908,8 @@ END()
 		t.Fatalf("protoCmdPeers = %v, want [library/cpp/eventlog]", strStrings(d.protoCmdPeers))
 	}
 
-	// d.peerdirs (link/archive order) keeps the declared peer first; the front
-	// peers are a subset, not a reordering of, the declared closure.
+	// d.peerdirs (link/archive order) keeps the declared peer first; the front peers
+	// are a subset, not a reordering, of the declared closure.
 	if len(d.peerdirs) == 0 || d.peerdirs[0].string() != "some/declared/peer" {
 		t.Fatalf("d.peerdirs[0] = %v, want some/declared/peer first (link order intact): %v", d.peerdirs, strStrings(d.peerdirs))
 	}
@@ -1973,9 +1963,9 @@ END()
 	if got := bin.pyMain; got == nil || got.string() != "pytool.__main__:main" {
 		t.Fatalf("bin pyMain = %#v, want pytool.__main__:main", got)
 	}
-	// PY_SRCS stays populated on KindBin since 50cd9e9: the PROGRAM-side
-	// emitResourceObjcopy needs len(d.pySrcs)>0 to enter its hasKvOnly
-	// branch and surface the PY_MAIN objcopy_<hash>.o into LD inputs.
+	// PY_SRCS stays populated on KindBin: the PROGRAM-side emitResourceObjcopy needs
+	// len(d.pySrcs)>0 to enter its hasKvOnly branch and surface the PY_MAIN
+	// objcopy_<hash>.o into LD inputs.
 	if !equalStrings(strStrings(bin.pySrcs), []string{"__main__.py"}) {
 		t.Fatalf("bin pySrcs = %v, want [__main__.py]", bin.pySrcs)
 	}
@@ -2200,7 +2190,7 @@ END()
 	// The objcopy embeds data.json and reads only it; the producer's transitive
 	// $(S) compile closure (dep/dep.h) is NOT an objcopy input. Upstream over-emits
 	// it as a cache-key-only input; we do not, and normalization strips it from the
-	// reference side (see bugs/20260615-upstream-resource-objcopy-overemit.md).
+	// reference side.
 	if nodeHasInput(objcopy, "$(S)/dep/dep.h") {
 		t.Fatalf("objcopy should not carry producer-closure dep/dep.h: %#v", objcopy.flatInputs())
 	}
@@ -2315,18 +2305,17 @@ func TestIsHeaderSource_ExtendedHeaderExtensions(t *testing.T) {
 func TestProgramBinaryName_Py3ProgramBinArgWins(t *testing.T) {
 	inst := ModuleInstance{Path: source("tools/py3cc/slow"), Kind: KindBin, Platform: testTargetP}
 
-	// PY3_PROGRAM_BIN(py3cc) links as its argument (the opensource reference:
-	// tools/py3cc/slow/bin INCLUDEd into tools/py3cc/slow links as .../py3cc). In the
-	// internal contour the dir is a PREBUILT_PROGRAM instead, named .../slow by the
-	// module-dir basename via genPrebuiltProgram — a distinct module type.
+	// PY3_PROGRAM_BIN(name) links as its argument. In the internal contour the dir is
+	// a PREBUILT_PROGRAM instead, named by the module-dir basename via
+	// genPrebuiltProgram — a distinct module type.
 	got := programBinaryName(inst, &ModuleStmt{Name: tokPy3ProgramBin, Args: STRS("py3cc")})
 	if got != "py3cc" {
 		t.Fatalf("PY3_PROGRAM_BIN binary name = %q, want py3cc", got)
 	}
 
-	// Without an argument it resolves to the module-dir basename — upstream's
-	// REALPRJNAME default, the single source of truth for the binary output, the
-	// .ldcref/.map, and the <REALPRJNAME>.<LANG>.component.sbom name.
+	// Without an argument it resolves to the module-dir basename — the REALPRJNAME
+	// default, the single source of truth for the binary output, the .ldcref/.map,
+	// and the component.sbom name.
 	if got := programBinaryName(inst, &ModuleStmt{Name: tokPy3ProgramBin}); got != "slow" {
 		t.Fatalf("PY3_PROGRAM_BIN no-arg binary name = %q, want slow (dir-basename fallback)", got)
 	}
@@ -2337,12 +2326,10 @@ func TestProgramBinaryName_Py3ProgramBinArgWins(t *testing.T) {
 	}
 }
 
-// TestProgramBinaryName_UnnamedProgramRealPrjName reproduces T-17: a from-source
-// PROGRAM() with no name argument (e.g. contrib/libs/flatbuffers64/flatc) must
-// resolve REALPRJNAME to the module-dir basename so its _GEN_SBOM_COMPONENT is
-// named <basename>.<LANG>.component.sbom. Before the fix programBinaryName
-// returned "", yielding a degenerate ".CPP.component.sbom" output that diverged
-// from the reference's "flatc.CPP.component.sbom".
+// TestProgramBinaryName_UnnamedProgramRealPrjName verifies a from-source PROGRAM()
+// with no name argument resolves REALPRJNAME to the module-dir basename so its
+// _GEN_SBOM_COMPONENT is named <basename>.<LANG>.component.sbom. Before the fix
+// programBinaryName returned "", yielding a degenerate ".CPP.component.sbom".
 func TestProgramBinaryName_UnnamedProgramRealPrjName(t *testing.T) {
 	inst := ModuleInstance{Path: source("contrib/libs/flatbuffers64/flatc"), Kind: KindBin, Platform: testTargetP}
 
@@ -2351,20 +2338,18 @@ func TestProgramBinaryName_UnnamedProgramRealPrjName(t *testing.T) {
 	}
 
 	// The SBOM component name is REALPRJNAME + ".<LANG>.component.sbom"; an empty
-	// REALPRJNAME would produce the degenerate ".CPP.component.sbom" seen in sg7.
+	// REALPRJNAME would produce the degenerate ".CPP.component.sbom".
 	if got := programBinaryName(inst, &ModuleStmt{Name: tokProgram}); got == "" {
 		t.Fatal("unnamed PROGRAM() REALPRJNAME is empty; SBOM component would be \".CPP.component.sbom\"")
 	}
 }
 
-// TestGen_CppEvlog_PropagatesEventlogGlobalAddIncl reproduces T-8: a
-// PROTO_LIBRARY with CPP_EVLOG() must gain library/cpp/eventlog as a C++ peer
-// (upstream: CPP_EVLOG -> CPP_PROTO_PLUGIN0(... DEPS library/cpp/eventlog) ->
-// PEERDIR). eventlog transitively PEERDIRs a leaf declaring
-// ADDINCL(GLOBAL leaf/include); a consumer PEERDIRing the proto must therefore
-// compile with -I$(S)/leaf/include. Before modelling CPP_EVLOG (it was a
-// no-op stub) the eventlog peer edge was absent, so the GLOBAL include never
-// reached the consumer's CC command. Mirrors the cookie_cleaner.cpp.o sg7 case.
+// TestGen_CppEvlog_PropagatesEventlogGlobalAddIncl verifies a PROTO_LIBRARY with
+// CPP_EVLOG() gains library/cpp/eventlog as a C++ peer (the proto plugin's DEPS).
+// eventlog transitively PEERDIRs a leaf declaring ADDINCL(GLOBAL leaf/include), so a
+// consumer PEERDIRing the proto must compile with -I$(S)/leaf/include. Before
+// modelling CPP_EVLOG the eventlog peer edge was absent, so the GLOBAL include never
+// reached the consumer's CC command.
 func TestGen_CppEvlog_PropagatesEventlogGlobalAddIncl(t *testing.T) {
 	files := map[string]string{}
 	writeTestModuleFile(files, "leaf/ya.make", "LIBRARY()\nADDINCL(GLOBAL leaf/include)\nSRCS(leaf.cpp)\nEND()\n")
@@ -2473,10 +2458,9 @@ END()
 }
 
 // TestGen_IncludeFirstArgOnlyCXXFLAGS pins INCLUDE first-argument-only parity
-// (T-130) end-to-end through CC command construction. Upstream evaluates only
-// args[0] of INCLUDE(...): a single-argument .inc CXXFLAGS applies; CXXFLAGS
-// reached only via a later INCLUDE argument must not apply; and separate
-// single-argument INCLUDE statements both apply.
+// end-to-end through CC command construction. Only args[0] of INCLUDE(...) is
+// evaluated: a single-argument .inc CXXFLAGS applies; CXXFLAGS reached only via a
+// later INCLUDE argument must not; separate single-argument INCLUDEs both apply.
 func TestGen_IncludeFirstArgOnlyCXXFLAGS(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"lib/ya.make": `LIBRARY()
@@ -2539,13 +2523,12 @@ END()
 	}
 }
 
-// TestMergeGeneratedFirstClaims_HostWinsOnConflict pins the cpp_import/yaff
-// MULTIMODULE attribution rule (T-37): when a RUN_PROGRAM-generated header is
-// claimed by BOTH the host include-scan (the co-located trait library reached in
-// the producer-side host closure) and the target include-scan (a downstream peer
-// that also includes it), the host claim is the upstream Node2Module-faithful
-// owner and must win. A generated file claimed by only one scanner keeps that
-// scanner's claim regardless of merge order.
+// TestMergeGeneratedFirstClaims_HostWinsOnConflict pins the multimodule
+// attribution rule: when a RUN_PROGRAM-generated header is claimed by BOTH the host
+// include-scan (the co-located trait library in the producer-side host closure) and
+// the target include-scan (a downstream peer that also includes it), the host claim
+// is the upstream-faithful owner and must win. A file claimed by only one scanner
+// keeps that scanner's claim regardless of merge order.
 func TestMergeGeneratedFirstClaims_HostWinsOnConflict(t *testing.T) {
 	const (
 		effectiveOwner = "yabs/server/cs/libs/plutonium_traits"
@@ -2567,7 +2550,7 @@ func TestMergeGeneratedFirstClaims_HostWinsOnConflict(t *testing.T) {
 		targetOnly: {Dir: regularOwner},
 	}}
 
-	// Production call order: host scanner first so it wins on conflict.
+	// Production order: host scanner first so it wins on conflict.
 	merged := mergeGeneratedFirstClaims(host, target)
 
 	if got := merged[conflicted].Dir; got != effectiveOwner {

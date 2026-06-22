@@ -6,16 +6,11 @@ import (
 )
 
 // TestEmitProtoSrcs_YaffGeneratedHeaderClosureRidesIntoConsumer reproduces the
-// sg7 YaFF include-closure gap (representative: ads/argus/libs/common/types.cpp.o).
-// A unit includes a generated <proto>.yaff.h. Upstream's YaFF protoc plugin
-// writes that header so it #includes the yaff runtime (yaff/struct/protobuf/
-// reflect) + the proto's own .pb.h + — for an EXPERIMENTAL proto — the
-// experiments builder/column/merge runtime. The generated header must therefore
-// be registered with those parsed includes so the whole closure rides into every
-// compile that includes it. Before the fix the .yaff.h is an unregistered
-// generated output: the include resolves to nothing and none of the closure
-// (foo.yaff.h, foo.pb.h, the yaff/experiments source headers) reaches the
-// consumer's inputs.
+// YaFF include-closure gap. The generated <proto>.yaff.h #includes the yaff
+// runtime + the proto's .pb.h + (for EXPERIMENTAL) the experiments runtime, so it
+// must register those includes for the closure to ride into every consumer. Before
+// the fix it is an unregistered generated output and none of the closure reaches
+// the consumer.
 func TestEmitProtoSrcs_YaffGeneratedHeaderClosureRidesIntoConsumer(t *testing.T) {
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
@@ -26,8 +21,7 @@ func TestEmitProtoSrcs_YaffGeneratedHeaderClosureRidesIntoConsumer(t *testing.T)
 	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
 
 	// YaFF runtime source headers. yaff.h and experiments/builder.h each pull a
-	// transitive sibling (base.h) so the test pins closure propagation, not just
-	// the direct includes.
+	// transitive sibling (base.h) so the test pins closure propagation.
 	writeTestModuleFile(files, "library/cpp/yaff/yaff.h", "#pragma once\n#include <library/cpp/yaff/base.h>\n")
 	writeTestModuleFile(files, "library/cpp/yaff/base.h", "#pragma once\n")
 	writeTestModuleFile(files, "library/cpp/yaff/struct.h", "#pragma once\n")
@@ -69,12 +63,10 @@ func TestEmitProtoSrcs_YaffGeneratedHeaderClosureRidesIntoConsumer(t *testing.T)
 }
 
 // TestEmitProtoSrcs_YaffFilesWhitelistSkipsNonWhitelistedHeaderClosure pins the
-// upstream FILES-whitelist gate (proto_plugin.cpp NeedToProcessFile). With
-// YAFF(FILES kept.proto) the plugin runs its generators only for kept.proto;
-// skipped.yaff.h is opened but written empty, so a unit that includes
-// skipped.yaff.h must NOT pull the yaff runtime / .pb.h / experiments closure,
-// while a unit that includes kept.yaff.h still does. Without the whitelist gate
-// the registration over-collects the runtime closure for every YaFF output.
+// FILES-whitelist gate. With YAFF(FILES kept.proto), skipped.yaff.h is written
+// empty, so a unit including it must NOT pull the runtime / .pb.h / experiments
+// closure, while kept.yaff.h still does. Without the gate the registration
+// over-collects for every YaFF output.
 func TestEmitProtoSrcs_YaffFilesWhitelistSkipsNonWhitelistedHeaderClosure(t *testing.T) {
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
@@ -115,8 +107,8 @@ func TestEmitProtoSrcs_YaffFilesWhitelistSkipsNonWhitelistedHeaderClosure(t *tes
 	}
 
 	skipCC := mustNodeByOutput(t, g, "$(B)/app/useskip.cpp.o")
-	// skipped.yaff.h itself still resolves (it is a generated output), but it is
-	// empty upstream: none of the runtime / .pb.h / experiments closure rides in.
+	// skipped.yaff.h still resolves (a generated output) but is empty: none of the
+	// runtime / .pb.h / experiments closure rides in.
 	for _, notWant := range []string{
 		"$(B)/proto/skipped.pb.h",
 		"$(S)/library/cpp/yaff/yaff.h",
@@ -132,19 +124,14 @@ func TestEmitProtoSrcs_YaffFilesWhitelistSkipsNonWhitelistedHeaderClosure(t *tes
 }
 
 // TestEmitProtoSrcs_YaffCppInputClosureInducesWireFormatDropsSiblingHeader pins
-// the T-33 divergence. The YaFF protoc plugin writes the generated .yaff.cpp as a
-// thin wrapper whose only content is `#include "<stem>.yaff.h"` (by basename),
-// produced by the same protoc invocation. Upstream resolves that sibling header
-// for its transitive closure but does NOT record the header itself as a compile
-// input; the translation unit's protobuf runtime headers — notably wire_format.h
-// — arrive via protoc's INDUCED_DEPS(cpp …) on the .yaff.cpp output. So the
-// generated .yaff.cpp.o must carry wire_format.h (induced, cpp bucket) and must
-// NOT carry the sibling .yaff.h. Before the fix the .yaff.cpp registration passes
-// no GeneratorRefs (no induced wire_format.h) and records the sibling header.
+// the T-33 divergence. .yaff.cpp is a thin `#include "<stem>.yaff.h"` wrapper; the
+// sibling header is resolved for the closure but NOT a compile input. The protobuf
+// runtime headers (wire_format.h) arrive via protoc's INDUCED_DEPS(cpp …). So
+// .yaff.cpp.o must carry wire_format.h (induced) and NOT the sibling .yaff.h.
+// Before the fix it passes no GeneratorRefs and records the sibling.
 func TestEmitProtoSrcs_YaffCppInputClosureInducesWireFormatDropsSiblingHeader(t *testing.T) {
 	files := map[string]string{}
-	// protoc tool declares the real induced-deps split: wire_format.h is cpp-only
-	// (rides .cc/.cpp outputs), message.h is h+cpp (rides headers too).
+	// Induced-deps split: wire_format.h is cpp-only, message.h is h+cpp.
 	writeTestModuleFile(files, "contrib/tools/protoc/ya.make",
 		"PROGRAM(protoc)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"+
 			"INDUCED_DEPS(cpp ${ARCADIA_ROOT}/contrib/libs/protobuf/src/google/protobuf/wire_format.h)\n"+
@@ -184,7 +171,7 @@ func TestEmitProtoSrcs_YaffCppInputClosureInducesWireFormatDropsSiblingHeader(t 
 		t.Errorf("foo.yaff.cpp.o must not record the sibling generated header %q: %v", siblingHeader, yaffCC.flatInputs())
 	}
 	// The header's transitive closure still rides in (walked through the dropped
-	// sibling): the proto's own .pb.h and the yaff runtime headers remain inputs.
+	// sibling): the proto's own .pb.h and the yaff runtime headers.
 	for _, want := range []string{
 		"$(B)/proto/foo.pb.h",
 		"$(S)/library/cpp/yaff/yaff.h",
@@ -197,26 +184,20 @@ func TestEmitProtoSrcs_YaffCppInputClosureInducesWireFormatDropsSiblingHeader(t 
 }
 
 // TestEmitProtoSrcs_NonWhitelistedYaffCppRidesProtoMainPbHeader pins the T-43
-// divergence. The YaFF plugin ALWAYS writes <proto>.yaff.cpp as a thin
-// `#include "<proto>.yaff.h"` wrapper, but writes <proto>.yaff.h empty for a proto
-// OUTSIDE the YAFF(FILES …) allowlist (NeedToProcessFile false). So an include scan
-// of a non-whitelisted .yaff.cpp reaches only the empty sibling header — no .pb.h.
+// divergence. .yaff.h is written empty for a proto OUTSIDE the YAFF(FILES …)
+// allowlist, so scanning a non-whitelisted .yaff.cpp reaches only the empty
+// sibling — no .pb.h. Yet the proto's .pb.h plus its producer-source bundle
+// (.proto, wrapper) are still recorded: protoc floats .pb.h to the front as the
+// MAIN output, and every sibling (incl. .yaff.cpp) rides it via OutTogether,
+// expanded. The whitelisted sibling gets .pb.h through its non-empty .yaff.h
+// #include; the non-whitelisted one only through OutTogether.
 //
-// Upstream still records the proto's own .pb.h plus its producer-source bundle
-// (.proto, cpp_proto_wrapper.py) on the non-whitelisted .yaff.cpp.o: the protoc
-// command floats .pb.h to the front as the MAIN output (${main;…:.pb.h}), and every
-// sibling output (incl. .yaff.cpp) rides that main output via EDT_OutTogether
-// (TJSONVisitor::PrepareLeaving), transitively expanded. The whitelisted sibling
-// gets .pb.h coincidentally through its non-empty .yaff.h #include; the
-// non-whitelisted one only through OutTogether.
-//
-// Before the fix the non-whitelisted skipped.yaff.cpp.o carries neither skipped.pb.h
-// nor its .proto/wrapper bundle. The whitelisted kept.yaff.cpp.o (T-33) must stay
-// stable: wire_format.h induced in, sibling kept.yaff.h dropped.
+// Before the fix the non-whitelisted skipped.yaff.cpp.o carries neither
+// skipped.pb.h nor its bundle. The whitelisted kept.yaff.cpp.o (T-33) must stay
+// stable: wire_format.h induced, sibling kept.yaff.h dropped.
 func TestEmitProtoSrcs_NonWhitelistedYaffCppRidesProtoMainPbHeader(t *testing.T) {
 	files := map[string]string{}
-	// protoc tool declares the real induced-deps split: wire_format.h is cpp-only
-	// (rides .cc/.cpp outputs), message.h is h+cpp (rides headers too).
+	// Induced-deps split: wire_format.h is cpp-only, message.h is h+cpp.
 	writeTestModuleFile(files, "contrib/tools/protoc/ya.make",
 		"PROGRAM(protoc)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"+
 			"INDUCED_DEPS(cpp ${ARCADIA_ROOT}/contrib/libs/protobuf/src/google/protobuf/wire_format.h)\n"+
@@ -246,9 +227,9 @@ func TestEmitProtoSrcs_NonWhitelistedYaffCppRidesProtoMainPbHeader(t *testing.T)
 	const wireFormat = "$(S)/contrib/libs/protobuf/src/google/protobuf/wire_format.h"
 	const wrapper = "$(S)/build/scripts/cpp_proto_wrapper.py"
 
-	// Non-whitelisted: the empty skipped.yaff.h yields no closure, but the OutTogether
-	// main output skipped.pb.h still rides — expanded — carrying its .proto and the
-	// wrapper producer source. The sibling self-header is dropped (T-33).
+	// Non-whitelisted: the empty skipped.yaff.h yields no closure, but the
+	// OutTogether main output skipped.pb.h still rides — expanded — carrying its
+	// .proto and the wrapper producer source. The sibling self-header is dropped.
 	skipCC := mustNodeByOutput(t, g, "$(B)/proto/skipped.yaff.cpp.o")
 	for _, want := range []string{
 		"$(B)/proto/skipped.pb.h",
@@ -263,8 +244,7 @@ func TestEmitProtoSrcs_NonWhitelistedYaffCppRidesProtoMainPbHeader(t *testing.T)
 		t.Errorf("skipped.yaff.cpp.o must not record the sibling self header %q", "$(B)/proto/skipped.yaff.h")
 	}
 
-	// Whitelisted (T-33) stays stable: wire_format.h induced, own .pb.h present,
-	// sibling kept.yaff.h dropped.
+	// Whitelisted (T-33): wire_format.h induced, own .pb.h present, sibling dropped.
 	keptCC := mustNodeByOutput(t, g, "$(B)/proto/kept.yaff.cpp.o")
 	for _, want := range []string{
 		wireFormat,
@@ -282,15 +262,11 @@ func TestEmitProtoSrcs_NonWhitelistedYaffCppRidesProtoMainPbHeader(t *testing.T)
 }
 
 // TestEmitProtoSrcs_YaffOutputOrderFollowsLiteHeaderDeclarationOrder pins the
-// upstream CPP_PROTO_OUTS accumulation order. The wrapper's --outputs list (and
-// the PB node's outputs) is CPP_PROTO_OUTS in statement order, main .pb.h
-// floated to the front. The YAFF() plugin appends .yaff.h/.yaff.cpp; the lite
-// header .deps.pb.h is appended by the `when ($PROTOC_TRANSITIVE_HEADERS=="no")`
-// block triggered by SET(PROTOC_TRANSITIVE_HEADERS "no"). So the yaff group
-// precedes the cpp_out group (.pb.cc + .deps.pb.h) iff YAFF() is declared before
-// lite headers are turned on (sg7 representative ads/peafowl), and follows it
-// otherwise (sg7 majority, e.g. yabs/server/proto/log). Before the fix both
-// orderings emit the cpp_out group first, so the YAFF-before-SET case mismatches.
+// CPP_PROTO_OUTS accumulation order: statement order, main .pb.h floated to the
+// front. YAFF() appends .yaff.h/.yaff.cpp; .deps.pb.h is appended when
+// SET(PROTOC_TRANSITIVE_HEADERS "no") fires. So the yaff group precedes the
+// cpp_out group (.pb.cc + .deps.pb.h) iff YAFF() is declared first, else follows.
+// Before the fix both orderings emit the cpp_out group first.
 func TestEmitProtoSrcs_YaffOutputOrderFollowsLiteHeaderDeclarationOrder(t *testing.T) {
 	mkFiles := func() map[string]string {
 		files := map[string]string{}
@@ -303,8 +279,7 @@ func TestEmitProtoSrcs_YaffOutputOrderFollowsLiteHeaderDeclarationOrder(t *testi
 		return files
 	}
 
-	// YAFF() before SET(PROTOC_TRANSITIVE_HEADERS "no") — yaff group precedes the
-	// cpp_out group.
+	// YAFF() before SET — yaff group precedes the cpp_out group.
 	beforeFiles := mkFiles()
 	writeTestModuleFile(beforeFiles, "before/ya.make",
 		"PROTO_LIBRARY()\nYAFF()\nSRCS(foo.proto)\nSET(PROTOC_TRANSITIVE_HEADERS \"no\")\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
@@ -321,7 +296,7 @@ func TestEmitProtoSrcs_YaffOutputOrderFollowsLiteHeaderDeclarationOrder(t *testi
 	}
 	assertOutputOrder(t, "YAFF-before-SET", pbBefore, wantBefore)
 
-	// SET(PROTOC_TRANSITIVE_HEADERS "no") before YAFF() — cpp_out group first.
+	// SET before YAFF() — cpp_out group first.
 	afterFiles := mkFiles()
 	writeTestModuleFile(afterFiles, "after/ya.make",
 		"PROTO_LIBRARY()\nSET(PROTOC_TRANSITIVE_HEADERS \"no\")\nYAFF()\nSRCS(foo.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
@@ -351,7 +326,7 @@ func assertOutputOrder(t *testing.T, label string, n *Node, want []string) {
 		t.Fatalf("%s: PB outputs order =\n  %v\nwant\n  %v", label, got, want)
 	}
 
-	// The --outputs command list must mirror the node outputs exactly.
+	// The --outputs command list must mirror the node outputs.
 	args := strStrs(n.Cmds[0].CmdArgs.flat())
 	start := -1
 	for i, a := range args {
@@ -370,11 +345,10 @@ func assertOutputOrder(t *testing.T, label string, n *Node, want []string) {
 	}
 }
 
-// TestEmitProtoSrcs_GeneratedProtoWiresProducerDep reproduces the
-// jsonpath G2 gap: a PROTO_LIBRARY whose SRCS(X.proto) is itself the OUT
-// of a RUN_ANTLR (no X.proto in source tree). The PB protoc node must wire
-// a dep to the JV producer of X.proto AND treat the input as build-rooted,
-// or the JV (and its CF dep on protobuf.stg) get DFS-pruned at finalize.
+// TestEmitProtoSrcs_GeneratedProtoWiresProducerDep reproduces the G2 gap: a
+// PROTO_LIBRARY whose SRCS(X.proto) is the OUT of a RUN_ANTLR (no on-disk X.proto).
+// The PB node must wire a dep to the JV producer AND treat the input as
+// build-rooted, or the JV (and its CF dep on the .stg) get DFS-pruned at finalize.
 func TestEmitProtoSrcs_GeneratedProtoWiresProducerDep(t *testing.T) {
 	const modPath = "yql/essentials/parser/proto_ast/gen/jsonpath"
 
@@ -476,11 +450,9 @@ END()
 }
 
 // TestEmitProtoSrcs_GeneratedProtoInheritsProducerSourceInputs locks the
-// transitive source closure: when SRCS(X.proto) is build-generated by a
-// RUN_ANTLR (JV) step, the PB protoc node's inputs must include the JV
-// producer's $(S) leaf sources (grammar, CONFIGURE_FILE source, antlr.jar,
-// and the wrapper scripts), exactly as upstream tracks them — otherwise the
-// PB self_uid diverges and the drift cascades to .pb.cc.o and the proto AR.
+// transitive source closure: when SRCS(X.proto) is build-generated by a RUN_ANTLR
+// (JV) step, the PB node's inputs must include the JV producer's $(S) leaf sources
+// — otherwise the PB self_uid diverges and cascades to .pb.cc.o and the proto AR.
 func TestEmitProtoSrcs_GeneratedProtoInheritsProducerSourceInputs(t *testing.T) {
 	const modPath = "yql/essentials/parser/proto_ast/gen/jsonpath"
 
@@ -552,14 +524,12 @@ END()
 }
 
 // TestEmitProtoSrcs_GeneratedProtoCompileCarriesOutputIncludesPbHClosure
-// reproduces the sg7 banner_flags residual: a PROTO_LIBRARY whose SRCS(X.proto)
-// is build-generated by a RUN_PROGRAM STDOUT step that declares the generated
-// proto's imports via OUTPUT_INCLUDES. The generated proto's source does not
-// exist at configure time, so the .pb.h registers no direct imports and the
-// .pb.cc.o / .pb.cc.pic.o compile closure misses the imported protos' generated
-// .pb.h (modadvert/*.pb.h, descriptor.pb.h in sg7). Upstream drives that closure
-// from OUTPUT_INCLUDES (the declared imports), whose .pb.h transit — through the
-// scanner's existing per-.pb.h walk — to the full import closure.
+// reproduces the residual: a PROTO_LIBRARY whose SRCS(X.proto) is build-generated
+// by a RUN_PROGRAM STDOUT step declaring its imports via OUTPUT_INCLUDES. The
+// generated source does not exist at configure time, so the .pb.h registers no
+// direct imports and the .pb.cc compile misses the imports' generated .pb.h. That
+// closure is driven from OUTPUT_INCLUDES, whose .pb.h transit (the per-.pb.h walk)
+// to the full import closure.
 func TestEmitProtoSrcs_GeneratedProtoCompileCarriesOutputIncludesPbHClosure(t *testing.T) {
 	const modPath = "irt/test/banner_flags"
 	const consumer = "irt/test/app"
@@ -623,11 +593,9 @@ END()
 	const markupPbH = "$(B)/dep/markup.pb.h"
 	const leafPbH = "$(B)/leaf/leaf.pb.h"
 
-	// The .pb.cc compile resolves its include closure context-free: the same
-	// resolved set rides every compile of gen.pb.cc, whether the instance is
-	// non-PIC (.pb.cc.o) or PIC (.pb.cc.pic.o). The minimal contour only
-	// instantiates the non-PIC variant; the sg7 gate proves both banner_flags
-	// .pb.cc.o and .pb.cc.pic.o lose the residual (identical resolved closure).
+	// The .pb.cc compile resolves its include closure context-free: the same set
+	// rides every compile of gen.pb.cc, non-PIC (.pb.cc.o) or PIC (.pb.cc.pic.o).
+	// The minimal contour only instantiates the non-PIC variant.
 	cc := mustNodeByOutput(t, g, "$(B)/"+modPath+"/gen.pb.cc.o")
 	if !nodeHasInput(cc, markupPbH) {
 		t.Errorf("gen.pb.cc.o missing OUTPUT_INCLUDES import header %q: %v", markupPbH, vfsStringsT3(cc.flatInputs()))
@@ -637,8 +605,7 @@ END()
 	}
 
 	// Guard: the checked-in dep proto's compile carries only its real import
-	// (leaf.pb.h) and gains no gen-side input — the checked-in parse path is
-	// unchanged by the generated-proto handling.
+	// (leaf.pb.h) and gains no gen-side input.
 	depCC := mustNodeByOutput(t, g, "$(B)/dep/markup.pb.cc.o")
 	if !nodeHasInput(depCC, leafPbH) {
 		t.Errorf("checked-in dep markup.pb.cc.o missing real import %q: %v", leafPbH, vfsStringsT3(depCC.flatInputs()))
@@ -649,14 +616,11 @@ END()
 }
 
 // TestEmitProtoSrcs_ForwardSameModuleImportCarriesGeneratedPbH pins the T-152
-// divergence (representative: yt/yt/library/query/proto/query_service.pb.cc.pic.o
-// missing $(B)/yt/yt/library/query/proto/functions_cache.pb.h). In a plain
-// LIBRARY (the general module path, not the PROTO_LIBRARY two-phase
-// emitCPPProtoSrcs), a .proto that imports a SAME-MODULE sibling declared LATER
-// in SRCS must still carry the sibling's generated .pb.h on its .pb.cc compile.
-// Before the fix the per-source Pass-1 loop emits main.proto's PB node and walks
-// its .pb.cc closure before dep.proto's PB node is registered, so dep.pb.h is
-// missing from main.pb.cc.o inputs.
+// divergence. In a plain LIBRARY (not the two-phase emitCPPProtoSrcs), a .proto
+// importing a SAME-MODULE sibling declared LATER in SRCS must still carry the
+// sibling's generated .pb.h on its .pb.cc compile. Before the fix the per-source
+// Pass-1 loop walks main.proto's .pb.cc closure before dep.proto's PB node is
+// registered, so dep.pb.h is missing from main.pb.cc.o inputs.
 func TestEmitProtoSrcs_ForwardSameModuleImportCarriesGeneratedPbH(t *testing.T) {
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
@@ -669,8 +633,7 @@ func TestEmitProtoSrcs_ForwardSameModuleImportCarriesGeneratedPbH(t *testing.T) 
 	writeTestModuleFile(files, "contrib/libs/protobuf/p.cpp", "int p(){return 0;}\n")
 	writeTestModuleFile(files, "contrib/libs/protobuf/src/google/protobuf/message.h", "#pragma once\n")
 
-	// A plain C++ LIBRARY with two protos; main.proto imports the LATER-declared
-	// dep.proto from the same module — a forward same-module proto import.
+	// main.proto imports the LATER-declared same-module dep.proto.
 	writeTestModuleFile(files, "m/ya.make",
 		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\n"+
 			"PEERDIR(contrib/libs/protobuf)\nSRCS(main.proto dep.proto)\nEND()\n")
@@ -688,13 +651,10 @@ func TestEmitProtoSrcs_ForwardSameModuleImportCarriesGeneratedPbH(t *testing.T) 
 	}
 }
 
-// TestEmitProtoSrcs_AntlrCppOutsCompileIntoProtoArchive locks the second
-// jsonpath G2 leg: RUN_ANTLR(... OUT *.cpp ...) inside a PROTO_LIBRARY's
-// IF(GEN_PROTO) block — upstream auto-promotes those .cpp outputs to SRCS,
-// compiling them and archiving the .o into the same proto-library AR
-// alongside .pb.cc.o (see jsonpath ya.make: SRCS lists only the .proto, but
-// JsonPathParser.cpp and JsonPathLexer.cpp from the second RUN_ANTLR land
-// in libproto_ast-gen-jsonpath.a).
+// TestEmitProtoSrcs_AntlrCppOutsCompileIntoProtoArchive locks the second G2 leg:
+// RUN_ANTLR(... OUT *.cpp ...) inside IF(GEN_PROTO) — those .cpp outputs
+// auto-promote to SRCS, archiving the .o into the same proto-library AR alongside
+// .pb.cc.o (SRCS lists only the .proto).
 func TestEmitProtoSrcs_AntlrCppOutsCompileIntoProtoArchive(t *testing.T) {
 	const modPath = "yql/essentials/parser/proto_ast/gen/jsonpath"
 
@@ -786,9 +746,8 @@ END()
 	}
 
 	// Member ORDER: the ANTLR-generated .cpp objects are ordinary translation
-	// units (regular archive phase) and upstream lists them BEFORE the proto
-	// .pb.cc.o (proto-codegen phase). Reference jsonpath AR order is
-	// [JsonPathParser.cpp.o, JsonPathLexer.cpp.o, JsonPathParser.pb.cc.o].
+	// units (regular archive phase), listed BEFORE the proto .pb.cc.o
+	// (proto-codegen phase).
 	idxOf := func(rel string) int {
 		want := "$(B)/" + modPath + "/" + rel
 		for i, in := range ar.flatInputs() {
@@ -810,14 +769,11 @@ END()
 	}
 }
 
-// TestEmitProtoSrcs_YaffArchiveMemberOrderFollowsCppOutsOrder pins the sg7
-// YaFF/proto archive member-order residual (representative:
-// ads/peafowl/.../liblibs-profiles-proto.a). The per-proto AR member order
-// mirrors the proto command's --outputs order: a plugin (YAFF) declared before
-// SET(PROTOC_TRANSITIVE_HEADERS "no") lands its .yaff.cpp.o ahead of .pb.cc.o;
-// one declared after lands behind it. Before the fix emitCPPProtoSrcs always
-// emitted .pb.cc before the plugin extras, so the YAFF-before case archived
-// .pb.cc.o ahead of .yaff.cpp.o, diverging from upstream.
+// TestEmitProtoSrcs_YaffArchiveMemberOrderFollowsCppOutsOrder pins the YaFF/proto
+// archive member-order residual. The per-proto AR member order mirrors --outputs:
+// YAFF declared before SET(PROTOC_TRANSITIVE_HEADERS "no") lands its .yaff.cpp.o
+// ahead of .pb.cc.o; declared after lands behind. Before the fix emitCPPProtoSrcs
+// always emitted .pb.cc before the plugin extras.
 func TestEmitProtoSrcs_YaffArchiveMemberOrderFollowsCppOutsOrder(t *testing.T) {
 	mkFiles := func() map[string]string {
 		files := map[string]string{}
@@ -843,8 +799,7 @@ func TestEmitProtoSrcs_YaffArchiveMemberOrderFollowsCppOutsOrder(t *testing.T) {
 		return -1
 	}
 
-	// YAFF() before SET(PROTOC_TRANSITIVE_HEADERS "no"): .yaff.cpp.o precedes
-	// .pb.cc.o (matches ads/peafowl).
+	// YAFF() before SET: .yaff.cpp.o precedes .pb.cc.o.
 	beforeFiles := mkFiles()
 	writeTestModuleFile(beforeFiles, "before/ya.make",
 		"PROTO_LIBRARY()\nYAFF()\nSRCS(foo.proto)\nSET(PROTOC_TRANSITIVE_HEADERS \"no\")\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
@@ -857,8 +812,7 @@ func TestEmitProtoSrcs_YaffArchiveMemberOrderFollowsCppOutsOrder(t *testing.T) {
 		t.Errorf("YAFF-before-SET: .yaff.cpp.o (%d) must precede .pb.cc.o (%d)", yaffBefore, pbBefore)
 	}
 
-	// SET(PROTOC_TRANSITIVE_HEADERS "no") before YAFF(): .pb.cc.o precedes
-	// .yaff.cpp.o (matches ads/keywords).
+	// SET before YAFF(): .pb.cc.o precedes .yaff.cpp.o.
 	afterFiles := mkFiles()
 	writeTestModuleFile(afterFiles, "after/ya.make",
 		"PROTO_LIBRARY()\nSET(PROTOC_TRANSITIVE_HEADERS \"no\")\nYAFF()\nSRCS(foo.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
@@ -872,15 +826,12 @@ func TestEmitProtoSrcs_YaffArchiveMemberOrderFollowsCppOutsOrder(t *testing.T) {
 	}
 }
 
-// TestEmitProtoSrcs_EvArchiveMemberOrderFollowsSrcsOrder pins the sg7 EV/proto
-// archive member-order residual (representatives: $(B)/search/idl/libsearch-idl.a,
-// $(B)/extsearch/goods/plutometa/proto/libgoods-plutometa-proto.a). In a
-// PROTO_LIBRARY, .proto and .ev are equal-priority _SRC macros whose generated
-// .pb.cc / .ev.pb.cc compiles are queued back into the module source list in SRCS
-// textual order, so the archive interleaves them by declaration position. Before
-// the fix emitCPPProtoSrcs appended all .ev.pb.cc.o after all .pb.cc.o, so
-// SRCS(a.proto e.ev b.proto) archived e.ev.pb.cc.o at the tail instead of between
-// a.pb.cc.o and b.pb.cc.o.
+// TestEmitProtoSrcs_EvArchiveMemberOrderFollowsSrcsOrder pins the EV/proto archive
+// member-order residual. In a PROTO_LIBRARY, .proto and .ev are equal-priority
+// _SRC macros whose generated compiles queue back into the source list in SRCS
+// order, so the archive interleaves them by declaration position. Before the fix
+// emitCPPProtoSrcs appended all .ev.pb.cc.o after all .pb.cc.o, so SRCS(a.proto
+// e.ev b.proto) archived e.ev.pb.cc.o at the tail.
 func TestEmitProtoSrcs_EvArchiveMemberOrderFollowsSrcsOrder(t *testing.T) {
 	const modPath = "search/idlmix"
 
@@ -926,13 +877,11 @@ func TestEmitProtoSrcs_EvArchiveMemberOrderFollowsSrcsOrder(t *testing.T) {
 }
 
 // A PROTO_LIBRARY mixing GENERATE_ENUM_SERIALIZATION over an EXTERNAL build-root
-// .pb.h (produced by a peer, not this module's SRCS) and over a SAME-MODULE
-// generated .pb.h must split the two by input-header provenance: the external EN
-// is a first-level generated compile keyed at its prio-2 declaration band and
-// archives BEFORE this module's proto .pb.cc.o objects (prio-4 SRCS band); the
-// same-module EN is a second-level compile (its input is produced by this
-// module's own proto command) and archives AFTER all proto objects. Before the
-// provenance fix emitCPPProtoSrcs appended BOTH enum objects at the tail.
+// .pb.h (from a peer) and a SAME-MODULE generated .pb.h must split the two by
+// input-header provenance: the external EN is a first-level compile (prio-2 band)
+// archiving BEFORE this module's proto objects (prio-4 SRCS band); the same-module
+// EN is a second-level compile archiving AFTER all proto objects. Before the fix
+// emitCPPProtoSrcs appended BOTH at the tail.
 func TestEmitProtoSrcs_EnumSerializationOrderByHeaderProvenance(t *testing.T) {
 	const modPath = "mod/api"
 	const extPath = "ext/protos"
@@ -984,14 +933,12 @@ END()
 	}
 }
 
-// TestEmitPyProtoSrc_GeneratedProtoWiresProducerDep is the Python protobuf
-// analogue of TestEmitProtoSrcs_GeneratedProtoWiresProducerDep: a PROTO_LIBRARY
-// whose SRCS(X.proto) is the OUT of a RUN_ANTLR (no on-disk X.proto), consumed
-// by a PY3_LIBRARY. Upstream wires the python protoc (PB) node to the build-tree
-// proto, takes the producer dependency, and carries the producer's $(S) leaf
-// sources. Before the fix the py PB node listed $(S)/.../JsonPathParser.proto —
-// a nonexistent source path that faults sandboxing content-hashing — with no
-// producer dep and no producer source inputs.
+// TestEmitPyProtoSrc_GeneratedProtoWiresProducerDep is the Python analogue of
+// TestEmitProtoSrcs_GeneratedProtoWiresProducerDep: SRCS(X.proto) is the OUT of a
+// RUN_ANTLR (no on-disk X.proto), consumed by a PY3_LIBRARY. The python PB node
+// wires to the build-tree proto, takes the producer dep, and carries its $(S) leaf
+// sources. Before the fix it listed the nonexistent $(S)/.../JsonPathParser.proto
+// — faulting sandbox content-hashing — with no producer dep or source inputs.
 func TestEmitPyProtoSrc_GeneratedProtoWiresProducerDep(t *testing.T) {
 	const modPath = "yql/essentials/parser/proto_ast/gen/jsonpath"
 	const consumer = "app/pytool"
@@ -1122,15 +1069,12 @@ END()
 	}
 }
 
-// TestEmitProtoSrcs_SetAppendProtoFilesNotDoubled reproduces the grut auxiliary
-// duplicate-PB-producer abort (T-14). A PROTO_LIBRARY that builds its proto list
-// with SET_APPEND(PROTO_FILES …) and feeds it to SRCS(${PROTO_FILES}) is
-// collected twice by genModule: a probe pass to learn the module type, then a
-// cpp-proto re-collect. When the re-collect env is cloned from the probe-mutated
-// env, SET_APPEND re-appends PROTO_FILES (VAR = "$VAR x"), doubling the list, so
-// the same proto is scheduled for PB generation twice and CodegenRegistry aborts
-// on the duplicate producer. The re-collect must start from a clean module base
-// env, so each proto yields exactly one PB producer.
+// TestEmitProtoSrcs_SetAppendProtoFilesNotDoubled reproduces the duplicate-PB-
+// producer abort (T-14). SET_APPEND(PROTO_FILES …) fed to SRCS(${PROTO_FILES}) is
+// collected twice by genModule (probe pass, then cpp-proto re-collect). When the
+// re-collect env is cloned from the probe-mutated env, SET_APPEND re-appends,
+// doubling the list, and CodegenRegistry aborts on the duplicate producer. The
+// re-collect must start from a clean base env, so each proto yields one producer.
 func TestEmitProtoSrcs_SetAppendProtoFilesNotDoubled(t *testing.T) {
 	const modPath = "grut/libs/proto/public/auxiliary"
 
@@ -1183,15 +1127,12 @@ END()
 	}
 }
 
-// TestEmitProtoSrcs_SrcDirAscentObjectPath reproduces the sg7 market/proto/content
-// path-shape gap: a PROTO_LIBRARY whose SRCDIR points at a PARENT directory and
-// whose SRCS names a .proto living there. The generated .pb.cc therefore has a
-// logical path OUTSIDE the module dir; upstream names the compiled object by
-// rebasing that path under the module's build dir, mapping the `..` ascent into a
-// `__` segment (market/proto/content/ir/common/__/BusinessCleanWebStatus.pb.cc.o),
-// exactly as a SRCDIR-resolved C++ source object is named. The previous build-path
-// branch instead emitted `_/<full-source-path>` (…/common/_/market/proto/content/
-// ir/BusinessCleanWebStatus.pb.cc.o), an output-only divergence.
+// TestEmitProtoSrcs_SrcDirAscentObjectPath reproduces the path-shape gap: a
+// PROTO_LIBRARY whose SRCDIR points at a PARENT dir and whose SRCS names a .proto
+// there. The generated .pb.cc has a logical path OUTSIDE the module dir; the object
+// is named by rebasing under the module's build dir, mapping the `..` ascent into a
+// `__` segment, like a SRCDIR-resolved C++ object. The previous build-path branch
+// emitted `_/<full-source-path>`, an output-only divergence.
 func TestEmitProtoSrcs_SrcDirAscentObjectPath(t *testing.T) {
 	const modPath = "market/proto/content/ir/common"
 
@@ -1247,17 +1188,12 @@ END()
 }
 
 // TestGen_PyProtoLibrary_TransitivePROTONamespaceReachesPyProtoCmd reproduces the
-// sg7 brandformance py3_proto gap: a PY-addressed PROTO_LIBRARY reaching a
-// transitive PROTO_LIBRARY that declares a bare (non-GLOBAL) PROTO_NAMESPACE(yt)
-// must carry -I=$(S)/yt in its gen_py_protos protoc command, exactly as the C++
-// pb.h side does. The contributor chain mirrors the reference:
-// ads/autobudget/protos -> grut/libs/proto/public/metadata -> yt/yt_proto/yt/core
-// (PROTO_NAMESPACE(yt)). yt and protobuf-src both ride the single ordered
-// _PROTO__INCLUDE set in encounter order: the transitive PROTO_NAMESPACE(yt) is
-// reached before contrib/libs/protobuf, so the reference orders the namespace
-// token *before* the protobuf-src include and before the NEED_GOOGLE_PROTO_PEERDIRS
-// protoc-src include, inside the -I block (before --python_out) — identical to the
-// C++ pb side (no standalone protobuf-src precedes the band).
+// py3_proto gap: a PY-addressed PROTO_LIBRARY reaching a transitive PROTO_LIBRARY
+// with a bare PROTO_NAMESPACE(yt) must carry -I=$(S)/yt in its protoc command,
+// like the C++ side. _PROTO__INCLUDE is ordered by encounter: the transitive
+// namespace is reached before contrib/libs/protobuf, so its token orders before
+// the protobuf-src include and the NEED_GOOGLE_PROTO_PEERDIRS protoc-src include,
+// inside the -I block (before --python_out).
 func TestGen_PyProtoLibrary_TransitivePROTONamespaceReachesPyProtoCmd(t *testing.T) {
 	const consumer = "app/pytool"
 
@@ -1338,9 +1274,8 @@ END()
 	if protobufSrcIdx < 0 || pyOutIdx < 0 {
 		t.Fatalf("py PB cmd missing protobuf-src / python_out anchors: %v", strStrs(args))
 	}
-	// Encounter order: the transitive yt namespace precedes contrib/libs/protobuf
-	// in _PROTO__INCLUDE, so yt's include precedes the band's protobuf-src, which in
-	// turn precedes the NEED_GOOGLE_PROTO_PEERDIRS protoc-src — exactly the cpp side.
+	// Encounter order in _PROTO__INCLUDE: yt's include precedes the band's
+	// protobuf-src, which precedes the NEED_GOOGLE_PROTO_PEERDIRS protoc-src.
 	if !(ytIdx < protobufSrcIdx && protobufSrcIdx < pyOutIdx) {
 		t.Fatalf("expected yt < protobuf-src < python_out: yt=%d protobuf-src=%d python_out=%d args=%v",
 			ytIdx, protobufSrcIdx, pyOutIdx, strStrs(args))
@@ -1349,9 +1284,9 @@ END()
 		t.Fatalf("expected protobuf-src before protoc-src: protobuf-src=%d protoc-src=%d args=%v", protobufSrcIdx, protocSrcIdx, strStrs(args))
 	}
 
-	// The trailing -I=$(B) -I=$(S)/contrib/libs/protobuf/src pair (the structural
-	// -I=$ARCADIA_BUILD_ROOT -I=$PROTOBUF_INCLUDE_PATH suffix) must be preserved
-	// immediately before --python_out, distinct from the band's protobuf-src above.
+	// The trailing -I=$(B) -I=$(S)/contrib/libs/protobuf/src pair (structural
+	// suffix) must be preserved immediately before --python_out, distinct from the
+	// band's protobuf-src above.
 	if pyOutIdx < 2 || args[pyOutIdx-1].string() != "-I=$(S)/contrib/libs/protobuf/src" || args[pyOutIdx-2].string() != "-I=$(B)" {
 		t.Fatalf("expected trailing -I=$(B) -I=$(S)/contrib/libs/protobuf/src before --python_out: %v", strStrs(args))
 	}
@@ -1359,13 +1294,11 @@ END()
 
 // TestGen_PyProtoLibrary_ProtobufBuiltinKeepsBandProtobufSrc guards the protobuf
 // runtime's own python protos: their PROTO_NAMESPACE IS contrib/libs/protobuf/src,
-// so the source-root include -I=$(S)/contrib/libs/protobuf/src appears as the
-// structural namespace prefix, AS a band member (the builtin's own GLOBAL FOR proto
-// addincl rides its own _PROTO__INCLUDE), and again in the trailing
-// -I=$PROTOBUF_INCLUDE_PATH — three copies total. Dropping the standalone
-// pre-band protobuf-src (T-75) must not collapse the band copy: EmitPB's
-// `if cppOutRoot != ""` arm (mirrored on the py side) re-renders the namespace
-// after the structural prefix regardless of it being protobuf-src.
+// so -I=$(S)/contrib/libs/protobuf/src appears three times — the structural
+// namespace prefix, a band member (its own GLOBAL FOR proto addincl), and the
+// trailing structural suffix. Dropping the standalone pre-band protobuf-src (T-75)
+// must not collapse the band copy: EmitPB's `if cppOutRoot != ""` arm (mirrored on
+// the py side) re-renders the namespace after the structural prefix regardless.
 func TestGen_PyProtoLibrary_ProtobufBuiltinKeepsBandProtobufSrc(t *testing.T) {
 	const consumer = "app/pytool"
 
@@ -1378,9 +1311,8 @@ func TestGen_PyProtoLibrary_ProtobufBuiltinKeepsBandProtobufSrc(t *testing.T) {
 	writeToolProgram(files, "contrib/python/mypy-protobuf/bin/protoc-gen-mypy", "protoc-gen-mypy")
 
 	// The protobuf runtime PROTO_LIBRARY: its own PROTO_NAMESPACE is the protobuf
-	// src root, and it carries the GLOBAL FOR proto addincl for that same root.
-	// NO_OPTIMIZE_PY_PROTOS / NEED_GOOGLE_PROTO_PEERDIRS(no) match the builtin shape
-	// (proto.conf:717,857): no protoc-src include is added.
+	// src root, carrying the GLOBAL FOR proto addincl for that same root.
+	// DISABLE(NEED_GOOGLE_PROTO_PEERDIRS) matches the builtin: no protoc-src added.
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", `PROTO_LIBRARY()
 PROTO_NAMESPACE(contrib/libs/protobuf/src)
 NO_MYPY()
@@ -1410,7 +1342,7 @@ END()
 	const protobufSrc = "-I=$(S)/contrib/libs/protobuf/src"
 
 	// The trailing -I=$(B) -I=$(S)/contrib/libs/protobuf/src pair sits just before
-	// --python_out, unchanged by the T-75 fix.
+	// --python_out, unchanged by T-75.
 	pyOutIdx := indexOfArg(args, "--python_out=$(B)/contrib/libs/protobuf/src")
 	if pyOutIdx < 2 || args[pyOutIdx-1].string() != protobufSrc || args[pyOutIdx-2].string() != "-I=$(B)" {
 		t.Fatalf("expected trailing -I=$(B) %s before --python_out: %v", protobufSrc, strStrs(args))
@@ -1418,8 +1350,8 @@ END()
 
 	// The band copy (the builtin's own GLOBAL FOR proto addincl in _PROTO__INCLUDE)
 	// must survive: at least one protobuf-src include sits AFTER the structural bare
-	// -I=$(S) prefix and BEFORE the trailing -I=$(B) pair. Removing line 206 without
-	// re-rendering the own-namespace band copy would collapse this to prefix+trailing.
+	// -I=$(S) prefix and BEFORE the trailing -I=$(B) pair. Dropping the standalone
+	// pre-band copy without re-rendering the band copy would collapse this.
 	bareIdx := indexOfArg(args, "-I=$(S)")
 	trailingBIdx := pyOutIdx - 2
 	if bareIdx < 0 {
@@ -1442,13 +1374,12 @@ END()
 	}
 }
 
-// TestGen_ProtoLibrary_TransitiveGlobalNamespaceInterleavesInBothCmds pins T-4:
-// a transitive GLOBAL PROTO_NAMESPACE peer (lib/gapis) reached *after* a bare
-// PROTO_NAMESPACE peer (lib/yt) must land in the single ordered _PROTO__INCLUDE
-// set — once, after the bare namespace (encounter order) — in BOTH the C++ and
-// the mirrored Python protoc commands. Upstream (proto.conf) makes bare and GLOBAL
-// PROTO_NAMESPACE contribute identically to _PROTO__INCLUDE; our former split
-// rendered GLOBAL-before-bare and omitted GLOBAL from the py command entirely.
+// TestGen_ProtoLibrary_TransitiveGlobalNamespaceInterleavesInBothCmds pins T-4: a
+// transitive GLOBAL PROTO_NAMESPACE peer (lib/gapis) reached *after* a bare
+// PROTO_NAMESPACE peer (lib/yt) must land in _PROTO__INCLUDE once, after the bare
+// namespace (encounter order), in BOTH the C++ and Python commands. Bare and GLOBAL
+// contribute identically; the former split rendered GLOBAL-before-bare and omitted
+// GLOBAL from the py command.
 func TestGen_ProtoLibrary_TransitiveGlobalNamespaceInterleavesInBothCmds(t *testing.T) {
 	const consumer = "app/pytool"
 
@@ -1460,7 +1391,7 @@ func TestGen_ProtoLibrary_TransitiveGlobalNamespaceInterleavesInBothCmds(t *test
 	writeToolProgram(files, "tools/rescompiler", "rescompiler")
 	writeToolProgram(files, "contrib/python/mypy-protobuf/bin/protoc-gen-mypy", "protoc-gen-mypy")
 
-	// GLOBAL PROTO_NAMESPACE peer — its namespace rides _PROTO__INCLUDE everywhere.
+	// GLOBAL PROTO_NAMESPACE peer.
 	writeTestModuleFile(files, "lib/gapis/ya.make", `PROTO_LIBRARY()
 PROTO_NAMESPACE(GLOBAL lib/gapis)
 SRCS(g.proto)
@@ -1526,7 +1457,7 @@ END()
 		}
 	}
 
-	// C++ PB command for the consumer's c.pb.h (cpp sibling of the py proto lib).
+	// C++ PB command for the consumer's c.pb.h.
 	var cppArgs []STR
 	for _, n := range g.Graph {
 		if n.KV.P == pkPB && n.TargetProperties.ModuleTag == tagCppProto &&
@@ -1545,11 +1476,9 @@ END()
 }
 
 // TestProtoPythonResourceKey_PYNamespacePreservesNestedSubdir pins the T-39B
-// resource-key shape: with PY_NAMESPACE(yt_proto.yt.client) the aux resource key
-// for a nested SRC must keep the module-local proto subdirectory under the
-// namespace (yt_proto/yt/client/chunk_client/proto/data_statistics_pb2.py), not
-// collapse it to filepath.Base (yt_proto/yt/client/data_statistics_pb2.py).
-// Root-level SRCs (no subdir) are unaffected.
+// resource-key shape: with PY_NAMESPACE the aux key for a nested SRC must keep the
+// module-local subdir under the namespace, not collapse it to filepath.Base.
+// Root-level SRCs are unaffected.
 func TestProtoPythonResourceKey_PYNamespacePreservesNestedSubdir(t *testing.T) {
 	instance := ModuleInstance{Path: source("yt/yt_proto/yt/client")}
 	d := &ModuleData{pyNamespace: strPtr(internStr("yt_proto.yt.client"))}
@@ -1573,11 +1502,10 @@ func TestProtoPythonResourceKey_PYNamespacePreservesNestedSubdir(t *testing.T) {
 	}
 }
 
-// pyProtoNamespaceIncludeCounts returns, for the py PB/grpc producer whose first
-// output ends with wantSuffix, the total count of -I=$(S)/yt tokens and the
-// flat command args. yt modules render -I=$(S)/yt three times: the
-// -I=$ARCADIA_ROOT/$PROTO_NAMESPACE output-root arg plus two copies inside
-// _PROTO__INCLUDE (the own namespace + the CPP_PROTO self-sibling re-contribution).
+// pyProtoCmdArgsForOutput returns the flat command args for the py PB/grpc producer
+// whose first output ends with wantSuffix. yt modules render -I=$(S)/yt three times:
+// the output-root arg plus two _PROTO__INCLUDE copies (own namespace + CPP_PROTO
+// self-sibling).
 func pyProtoCmdArgsForOutput(t *testing.T, g *Graph, wantSuffix string) []STR {
 	t.Helper()
 	for _, n := range g.Graph {
@@ -1602,8 +1530,8 @@ func assertYtNamespaceDuplicated(t *testing.T, args []STR) {
 		t.Fatalf("expected 3 -I=$(S)/yt (output-root + duplicated _PROTO__INCLUDE), got %d: %v", ytCount, strStrs(args))
 	}
 
-	// Order: the two _PROTO__INCLUDE copies sit immediately after the bare
-	// -I=$(S) and immediately before the protobuf-src include.
+	// The two _PROTO__INCLUDE copies sit right after the bare -I=$(S) and right
+	// before the protobuf-src include.
 	bare := indexOfArg(args, "-I=$(S)")
 	if bare < 0 || bare+3 >= len(args) {
 		t.Fatalf("missing bare -I=$(S) anchor: %v", strStrs(args))
@@ -1617,11 +1545,10 @@ func assertYtNamespaceDuplicated(t *testing.T, args []STR) {
 }
 
 // TestGen_PyProtoLibrary_OwnPROTONamespaceDuplicatesNamespaceInclude reproduces
-// the T-39B command gap: a PROTO_LIBRARY that declares its own PROTO_NAMESPACE(yt)
-// (with PY_NAMESPACE) must render -I=$(S)/yt twice inside _PROTO__INCLUDE — the
-// own namespace plus the CPP_PROTO self-sibling's GLOBAL re-contribution — exactly
-// as the reference and the C++ duplicateOutputRootInclude path do. The aux
-// resource key for the nested SRC must keep its module-local subdirectory.
+// the T-39B command gap: a PROTO_LIBRARY with its own PROTO_NAMESPACE(yt) (and
+// PY_NAMESPACE) must render -I=$(S)/yt twice inside _PROTO__INCLUDE — the own
+// namespace plus the CPP_PROTO self-sibling's GLOBAL re-contribution. The aux
+// resource key for the nested SRC must keep its module-local subdir.
 func TestGen_PyProtoLibrary_OwnPROTONamespaceDuplicatesNamespaceInclude(t *testing.T) {
 	const consumer = "app/pytool"
 	const mod = "yt/yt_proto/yt/client"
@@ -1660,7 +1587,7 @@ END()
 	args := pyProtoCmdArgsForOutput(t, g, "data_statistics__intpy3___pb2.py")
 	assertYtNamespaceDuplicated(t, args)
 
-	// End-to-end: the aux/rescompiler resource key preserves the nested subdir.
+	// End-to-end: the aux resource key preserves the nested subdir.
 	const wantKey = "resfs/file/py/yt_proto/yt/client/chunk_client/proto/data_statistics_pb2.py"
 	const collapsedKey = "resfs/file/py/yt_proto/yt/client/data_statistics_pb2.py"
 	foundKey, foundCollapsed := false, false
@@ -1686,9 +1613,9 @@ END()
 	}
 }
 
-// TestGen_PyProtoLibrary_GrpcRootSourceSharesDuplicateInclude covers the
-// yt/orm/api shape: a GRPC root-level source keeps its existing _pb2_grpc.py
-// output and its shared protoc producer carries the same duplicated -I=$(S)/yt.
+// TestGen_PyProtoLibrary_GrpcRootSourceSharesDuplicateInclude: a GRPC root-level
+// source keeps its _pb2_grpc.py output and its shared protoc producer carries the
+// same duplicated -I=$(S)/yt.
 func TestGen_PyProtoLibrary_GrpcRootSourceSharesDuplicateInclude(t *testing.T) {
 	const consumer = "app/pytool"
 	const mod = "yt/yt_proto/yt/orm/api"
@@ -1746,12 +1673,10 @@ END()
 }
 
 // TestEmitProtoSrcs_CppEvlogCarriesEvent2cppInducedDeps reproduces the T-40
-// residual: a PROTO_LIBRARY() with CPP_EVLOG() builds its .proto outputs as
-// eventlog (upstream _BUILD_PROTO_AS_EVLOG), so tools/event2cpp is one of the
-// protoc plugins producing the .pb.h/.pb.cc. event2cpp's INDUCED_DEPS(h+cpp …)
-// must therefore reach the generated foo.pb.cc.o input closure — exactly as the
-// true .ev path already does. An otherwise identical PROTO_LIBRARY() WITHOUT
-// CPP_EVLOG() must NOT gain that induced input.
+// residual: CPP_EVLOG() builds the .proto outputs as eventlog, so the event2cpp
+// tool is one of the protoc plugins. Its INDUCED_DEPS(h+cpp …) must reach the
+// generated foo.pb.cc.o closure — like the true .ev path. WITHOUT CPP_EVLOG() it
+// must NOT.
 func TestEmitProtoSrcs_CppEvlogCarriesEvent2cppInducedDeps(t *testing.T) {
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
@@ -1762,7 +1687,7 @@ func TestEmitProtoSrcs_CppEvlogCarriesEvent2cppInducedDeps(t *testing.T) {
 	writeTestModuleFile(files, "library/cpp/eventlog/ya.make", "LIBRARY()\nSRCS(eventlog.cpp)\nEND()\n")
 	writeTestModuleFile(files, "library/cpp/eventlog/eventlog.cpp", "int eventlog(){return 0;}\n")
 
-	// Stub event2cpp tool declaring a single (h+cpp) induced header.
+	// Stub event2cpp tool declaring one (h+cpp) induced header.
 	writeTestModuleFile(files, "tools/event2cpp/ya.make",
 		"PROGRAM(event2cpp)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nINDUCED_DEPS(h+cpp ${ARCADIA_ROOT}/runtime/eventlog_runtime.h)\nSRCS(main.cpp)\nEND()\n")
 	writeTestModuleFile(files, "tools/event2cpp/main.cpp", "int main(){return 0;}\n")
@@ -1785,7 +1710,7 @@ func TestEmitProtoSrcs_CppEvlogCarriesEvent2cppInducedDeps(t *testing.T) {
 	}
 
 	// T-58: CPP_EVLOG must also make event2cpp an ordinary C++ proto plugin on the
-	// PB producer command — upstream CPP_PROTO_PLUGIN0(event2cpp tools/event2cpp …).
+	// PB producer command.
 	pb := mustNodeByOutput(t, gEv, "$(B)/evlog/foo.pb.h")
 	const event2cppBinary = "$(B)/tools/event2cpp/event2cpp"
 	pbArgs := strStrs(pb.Cmds[0].CmdArgs.flat())
@@ -1827,11 +1752,10 @@ func TestEmitProtoSrcs_CppEvlogCarriesEvent2cppInducedDeps(t *testing.T) {
 	}
 }
 
-// T-54: a PROTO_LIBRARY leaf reached only through a peers list that was included
-// via a variable-bearing INCLUDE path. Before parse-time expansion the peers
-// list was skipped (its ${VAR} stayed literal), FEATURE_PEERDIRS expanded to
-// nothing, and the leaf PY3 proto cluster never entered the graph. This mirrors
-// the sg7 fs_codegen reachability class without real yabs files.
+// T-54: a PROTO_LIBRARY leaf reached only through a peers list included via a
+// variable-bearing INCLUDE path. Before parse-time expansion the peers list was
+// skipped (its ${VAR} stayed literal) and the leaf PY3 proto cluster never entered
+// the graph.
 func TestParseInclude_VarBearingPeersListReachesLeafPyProto(t *testing.T) {
 	const consumer = "app"
 
@@ -1888,12 +1812,10 @@ END()
 	}
 }
 
-// T-32: a py-addressed PROTO_LIBRARY(name) with an explicit module name carries
-// that name into its py-proto global archive basename (libpy3<name>.global.a),
-// exactly as the C++ archive (emit_proto.go) and the objcopy global (gen.go)
-// already do from $MODULE_PREFIX$REALPRJNAME. An unnamed PROTO_LIBRARY() keeps
-// the path-derived form (libpy3<dir-tail>.global.a). The former py-proto path
-// hardcoded the explicit-name arg to "", always emitting the path-derived name.
+// T-32: a py-addressed PROTO_LIBRARY(name) carries that name into its py-proto
+// global archive basename (libpy3<name>.global.a), like the C++ archive. An unnamed
+// PROTO_LIBRARY() keeps the path-derived form. The former py-proto path hardcoded
+// the explicit-name arg to "", always emitting the path-derived name.
 func TestEmitPyProtoSrcs_ExplicitProtoLibraryNameNamesGlobalArchive(t *testing.T) {
 	const consumer = "app/pytool"
 
@@ -1954,29 +1876,25 @@ END()
 	}
 }
 
-// protoNsOrderFixture reproduces the YT/proto-namespace peer ADDINCL ordering
-// shape (yt/yt/client/formats): a consumer PEERDIRs a plain LIBRARY `mid` whose
-// only namespace declaration is a bare `PROTO_NAMESPACE(mid)`. `mid` PEERDIRs a
-// sub-module that exports a build-root subdir include `$(B)/mid/sub` GLOBAL, and
-// (later in declaration order) a deeper module that also exports `$(B)/mid`
-// GLOBAL.
+// protoNsOrderFixture reproduces the proto-namespace peer ADDINCL ordering shape:
+// a consumer PEERDIRs a plain LIBRARY `mid` with a bare `PROTO_NAMESPACE(mid)`.
+// `mid` PEERDIRs a sub-module exporting `$(B)/mid/sub` GLOBAL, and (later) a deeper
+// module also exporting `$(B)/mid` GLOBAL.
 //
-// Upstream `PROTO_NAMESPACE` always expands to `ADDINCL(GLOBAL $(B)/mid)` (the
-// literal GLOBAL in proto.conf's PROTO_ADDINCL call), so `mid` itself contributes
-// `$(B)/mid` as a UserGlobal dir and it renders first — before the rpc_proxy-like
-// `$(B)/mid/sub` carried in the peers' GlobalPropagated. The deeper `$(B)/mid`
-// exporter is deduped to that earlier position.
+// `PROTO_NAMESPACE` always expands to `ADDINCL(GLOBAL $(B)/mid)`, so `mid` itself
+// contributes `$(B)/mid` and it renders first — before the `$(B)/mid/sub` from the
+// peers' GlobalPropagated. The deeper `$(B)/mid` exporter is deduped to that
+// earlier position.
 func protoNsOrderFixture() FS {
 	files := map[string]string{}
 
 	// mid: plain LIBRARY, bare PROTO_NAMESPACE(mid). Peers the sub exporter first,
-	// then the deep exporter (so without the fix `$(B)/mid` only arrives last, via
-	// `deep`).
+	// then the deep exporter (so without the fix `$(B)/mid` arrives last, via deep).
 	writeTestModuleFile(files, "mid/ya.make",
 		"LIBRARY()\nPROTO_NAMESPACE(mid)\nPEERDIR(mid/sub deep)\nSRCS(m.cpp)\nEND()\n")
 	writeTestModuleFile(files, "mid/m.cpp", "int m(){return 0;}\n")
 
-	// sub exporter: the rpc_proxy analog — a GLOBAL build-root subdir include.
+	// sub exporter: a GLOBAL build-root subdir include.
 	writeTestModuleFile(files, "mid/sub/ya.make",
 		"LIBRARY()\nADDINCL(GLOBAL ${ARCADIA_BUILD_ROOT}/mid/sub)\nSRCS(s.cpp)\nEND()\n")
 	writeTestModuleFile(files, "mid/sub/s.cpp", "int s(){return 0;}\n")
@@ -1995,11 +1913,10 @@ func protoNsOrderFixture() FS {
 }
 
 // TestGen_BareProtoNamespace_BuildRootIncludeIsGlobalAndOrderedFirst pins the
-// T-143 divergence: a bare PROTO_NAMESPACE's `$(B)/<ns>` C++ include must be
-// GLOBAL (so it reaches consumers via the declaring peer's own propagation) and
-// must render before a peer-propagated build-root subdir include. Before the fix
-// the build-root arm is gated on GLOBAL/PROTO_LIBRARY, so `$(B)/mid` arrives only
-// via the late `deep` exporter and renders after `$(B)/mid/sub`.
+// T-143 divergence: a bare PROTO_NAMESPACE's `$(B)/<ns>` C++ include must be GLOBAL
+// (reaching consumers via the declaring peer) and render before a peer-propagated
+// subdir include. Before the fix the build-root arm is gated on GLOBAL/PROTO_LIBRARY,
+// so `$(B)/mid` arrives only via the late `deep` exporter, after `$(B)/mid/sub`.
 func TestGen_BareProtoNamespace_BuildRootIncludeIsGlobalAndOrderedFirst(t *testing.T) {
 	g := testGen(protoNsOrderFixture(), "consumer")
 
@@ -2021,18 +1938,15 @@ func TestGen_BareProtoNamespace_BuildRootIncludeIsGlobalAndOrderedFirst(t *testi
 	}
 }
 
-// protoAddInclFixture builds the inline-proto-LIBRARY include-propagation shape
-// (library/cpp/html/face): a plain LIBRARY() that lists an inline .proto plus an
-// ordinary .cpp in SRCS. Upstream _CPP_PROTO_CMD (proto.conf:461) attaches
-// `.PEERDIR=contrib/libs/protobuf` to every C++ proto compile, so the module —
-// PROTO_LIBRARY or not — peers contrib/libs/protobuf and inherits its GLOBAL
-// ADDINCL (protobuf/src + the abseil roots protobuf itself peers). That GLOBAL
-// band must reach the module's ORDINARY sources and its generated .pb.cc, and
-// propagate transitively to a downstream consumer's ordinary sources.
+// protoAddInclFixture builds the inline-proto-LIBRARY include-propagation shape: a
+// plain LIBRARY() listing an inline .proto plus an ordinary .cpp. The C++ proto
+// compile attaches `.PEERDIR=contrib/libs/protobuf` to every compile, so the module
+// — PROTO_LIBRARY or not — peers protobuf and inherits its GLOBAL ADDINCL
+// (protobuf/src + the abseil roots). That band must reach the module's ORDINARY
+// sources and its generated .pb.cc, and propagate to a downstream consumer.
 //
-// protobuf carries the same GLOBAL ADDINCL + abseil PEERDIR shape as the real
-// contrib/libs/protobuf/ya.make; abseil-cpp-tstring peers abseil-cpp, so the
-// closure of the three -I roots mirrors the reference parser.cpp.o band.
+// protobuf carries the same GLOBAL ADDINCL + abseil PEERDIR shape as the real one;
+// abseil-cpp-tstring peers abseil-cpp, so the three -I roots mirror the reference.
 func protoAddInclFixture() FS {
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
@@ -2055,14 +1969,14 @@ func protoAddInclFixture() FS {
 		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\n"+
 			"ADDINCL(GLOBAL contrib/restricted/abseil-cpp)\nEND()\n")
 
-	// Inline-proto LIBRARY (the face shape): ordinary use.cpp + inline svc.proto.
+	// Inline-proto LIBRARY: ordinary use.cpp + inline svc.proto.
 	writeTestModuleFile(files, "m/lib/ya.make",
 		"LIBRARY()\nSRCS(svc.proto use.cpp)\nEND()\n")
 	writeTestModuleFile(files, "m/lib/svc.proto", "syntax = \"proto3\";\npackage m;\nmessage Svc {}\n")
 	writeTestModuleFile(files, "m/lib/use.cpp", "int use(){return 0;}\n")
 
-	// Consumer (the html5 shape): peers the inline-proto module, ordinary c.cpp.
-	// Also peers an unrelated plain library to anchor the negative guard.
+	// Consumer: peers the inline-proto module, ordinary c.cpp. Also peers an
+	// unrelated plain library to anchor the negative guard.
 	writeTestModuleFile(files, "consumer/ya.make",
 		"LIBRARY()\nPEERDIR(m/lib plain/lib)\nSRCS(c.cpp)\nEND()\n")
 	writeTestModuleFile(files, "consumer/c.cpp", "int c(){return 0;}\n")
@@ -2074,14 +1988,12 @@ func protoAddInclFixture() FS {
 	return newMemFS(files)
 }
 
-// TestGen_InlineProtoLibrary_ProtobufGlobalAddInclReachesOrdinaryAndConsumer
-// pins the T-60 divergence: the contrib/libs/protobuf GLOBAL ADDINCL band
-// (protobuf/src + abseil-cpp-tstring + abseil-cpp) must land on an inline-proto
-// LIBRARY's ordinary source AND its generated .pb.cc, and propagate to a
-// downstream consumer's ordinary source — while NOT leaking to an unrelated
-// module without the protobuf provider. Before the fix the base protobuf peer is
-// added only for PROTO_LIBRARY, so the inline-proto LIBRARY never peers protobuf
-// and none of these compiles see the band.
+// TestGen_InlineProtoLibrary_ProtobufGlobalAddInclReachesOrdinaryAndConsumer pins
+// the T-60 divergence: the protobuf GLOBAL ADDINCL band (protobuf/src +
+// abseil-cpp-tstring + abseil-cpp) must land on an inline-proto LIBRARY's ordinary
+// source AND its generated .pb.cc, and propagate to a downstream consumer — while
+// NOT leaking to an unrelated module without the protobuf provider. Before the fix
+// the base protobuf peer is added only for PROTO_LIBRARY.
 func TestGen_InlineProtoLibrary_ProtobufGlobalAddInclReachesOrdinaryAndConsumer(t *testing.T) {
 	fs := protoAddInclFixture()
 	g := testGen(fs, "consumer")
@@ -2114,27 +2026,23 @@ func TestGen_InlineProtoLibrary_ProtobufGlobalAddInclReachesOrdinaryAndConsumer(
 	assertBand("unrelated module", "$(B)/plain/lib/plain.cpp.o", false)
 }
 
-// crossNamespaceProtoFixture reproduces the T-120 (sg7) divergence
-// represented by $(B)/ads/bsyeti/libs/scatter/client.cpp.o: a generated
-// <proto>.pb.h that DIRECTLY imports a proto from ANOTHER PROTO_NAMESPACE does
-// not re-export that import's generated .pb.h to downstream CC consumers.
+// crossNamespaceProtoFixture reproduces the T-120 divergence: a generated
+// <proto>.pb.h that DIRECTLY imports a proto from ANOTHER PROTO_NAMESPACE does not
+// re-export that import's generated .pb.h to downstream CC consumers.
 //
-// Shape (mirrors yp data_model -> yt_proto orm object/controls/finalizers):
-//   - leaf PROTO_LIBRARY in PROTO_NAMESPACE(lns): leaf_a.proto, leaf_b.proto;
-//     leaf_a.proto imports its same-namespace sibling leaf_b.proto.
-//   - top PROTO_LIBRARY in PROTO_NAMESPACE(tns): top.proto imports the
-//     CROSS-namespace leaf_a.proto ("leaf/leaf_a.proto", rooted at lns).
+// Shape:
+//   - leaf PROTO_LIBRARY in PROTO_NAMESPACE(lns): leaf_a imports sibling leaf_b.
+//   - top PROTO_LIBRARY in PROTO_NAMESPACE(tns): top imports CROSS-namespace
+//     leaf_a ("leaf/leaf_a.proto", rooted at lns).
 //   - app LIBRARY: app.cpp -> app.h -> <top/top.pb.h>.
 //
-// Upstream: top.pb.h #includes "leaf/leaf_a.pb.h" verbatim and ymake resolves it
-// against leaf's GLOBAL PROTO_NAMESPACE(lns) addincl to
-// $(B)/lns/leaf/leaf_a.pb.h; leaf_a.pb.h re-includes leaf_b.pb.h. So a unit that
-// includes top.pb.h reaches BOTH generated leaf headers.
+// top.pb.h #includes "leaf/leaf_a.pb.h", resolved against leaf's GLOBAL
+// PROTO_NAMESPACE(lns) addincl; leaf_a.pb.h re-includes leaf_b.pb.h. So a unit
+// including top.pb.h reaches BOTH leaf headers.
 //
-// Before the fix protoDirectPbHIncludes roots the import header by prefixing the
-// IMPORTER's PROTO_NAMESPACE (tns), producing the non-existent
-// tns/leaf/leaf_a.pb.h: the directive never binds, so neither leaf_a.pb.h nor
-// (through it) leaf_b.pb.h reaches app.cpp.o.
+// Before the fix protoDirectPbHIncludes prefixes the IMPORTER's namespace (tns),
+// producing the non-existent tns/leaf/leaf_a.pb.h: it never binds, so neither leaf
+// header reaches app.cpp.o.
 func crossNamespaceProtoFixture() FS {
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
@@ -2184,9 +2092,9 @@ func TestEmitProtoSrcs_CrossNamespaceDirectImportPbHRidesIntoConsumer(t *testing
 	}
 }
 
-// grpcLibraryFixture builds a plain LIBRARY() that lists an inline .proto in
-// SRCS (the ads/dssm/inference shape: a LIBRARY, not a PROTO_LIBRARY). withGrpc
-// toggles the GRPC() macro. Returns the generated graph for module "m/lib".
+// grpcLibraryFixture builds a plain LIBRARY() that lists an inline .proto in SRCS
+// (a LIBRARY, not a PROTO_LIBRARY). withGrpc toggles GRPC(). Returns the graph for
+// module "m/lib".
 func grpcLibraryFixture(t *testing.T, withGrpc bool) *Graph {
 	t.Helper()
 	files := map[string]string{}
@@ -2209,11 +2117,11 @@ func grpcLibraryFixture(t *testing.T, withGrpc bool) *Graph {
 	return testGen(newMemFS(files), "m/lib")
 }
 
-// TestEmitLibraryProtoSource_GrpcEmitsProducerOutputsAndCompile pins the upstream
-// GRPC() behavior for a plain LIBRARY() with an inline .proto: protoc gains the
-// grpc_cpp plugin, so the .pb producer declares .grpc.pb.{cc,h} outputs, takes
-// the grpc_cpp plugin tool as a command input, passes --grpc_cpp_out, and the
-// generated .grpc.pb.cc is compiled into a .grpc.pb.cc.o object.
+// TestEmitLibraryProtoSource_GrpcEmitsProducerOutputsAndCompile pins GRPC()
+// behavior for a plain LIBRARY() with an inline .proto: protoc gains the grpc_cpp
+// plugin, so the .pb producer declares .grpc.pb.{cc,h} outputs, takes the grpc_cpp
+// tool as a command input, passes --grpc_cpp_out, and the generated .grpc.pb.cc is
+// compiled into a .grpc.pb.cc.o object.
 func TestEmitLibraryProtoSource_GrpcEmitsProducerOutputsAndCompile(t *testing.T) {
 	g := grpcLibraryFixture(t, true)
 
@@ -2251,15 +2159,12 @@ func TestEmitLibraryProtoSource_GrpcEmitsProducerOutputsAndCompile(t *testing.T)
 	}
 }
 
-// TestEmitLibraryProtoSource_GrpcPluginDepAddInclLeadsDeclaredPeer pins the
-// T-40 divergence: a plain LIBRARY() with an inline .proto + GRPC() must hoist
-// the grpc plugin-runtime peer (contrib/libs/grpc, the CPP_PROTO_PLUGIN2 DEP)
-// ahead of the declared PEERDIR closure in the generated proto compile's GLOBAL
-// ADDINCL (`-I`) order — the same plugin-DEPS-lead-ADDINCL mechanism T-14/T-42
-// pinned for PROTO_LIBRARY, now reached for the inline-proto LIBRARY shape.
-// The declared peer is listed BEFORE GRPC(), so before the fix (grpc not
-// hoisted, appended in declared position) the declared include leads, which this
-// test rejects.
+// TestEmitLibraryProtoSource_GrpcPluginDepAddInclLeadsDeclaredPeer pins the T-40
+// divergence: a plain LIBRARY() with an inline .proto + GRPC() must hoist the grpc
+// plugin-runtime peer (the plugin DEP) ahead of the declared PEERDIR closure in the
+// proto compile's GLOBAL ADDINCL (`-I`) order — the mechanism T-14/T-42 pinned for
+// PROTO_LIBRARY. The declared peer is listed BEFORE GRPC(), so before the fix (grpc
+// appended in declared position) the declared include leads.
 func TestEmitLibraryProtoSource_GrpcPluginDepAddInclLeadsDeclaredPeer(t *testing.T) {
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
@@ -2297,8 +2202,8 @@ func TestEmitLibraryProtoSource_GrpcPluginDepAddInclLeadsDeclaredPeer(t *testing
 
 // TestEmitLibraryProtoSource_NonGrpcKeepsDeclaredAddInclOrder is the negative
 // control for T-40: a plain LIBRARY() with an inline .proto and NO grpc/plugins
-// must keep its declared PEERDIR ADDINCL order untouched (no front-hoist) — the
-// gate broadening only hoists modules whose protoCmdPeers are non-empty.
+// must keep its declared PEERDIR ADDINCL order untouched — the gate only hoists
+// modules whose protoCmdPeers are non-empty.
 func TestEmitLibraryProtoSource_NonGrpcKeepsDeclaredAddInclOrder(t *testing.T) {
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
@@ -2373,17 +2278,13 @@ func TestEmitLibraryProtoSource_NoGrpcUnchanged(t *testing.T) {
 	}
 }
 
-// protoImportRootFixture reproduces the T-91 divergence: a proto import that
-// names a fully-qualified arcadia path (`dep/foo.proto`) which exists BOTH at
-// the source root ($(S)/dep/foo.proto, the real PROTO_LIBRARY) and under a peer
-// PROTO_NAMESPACE addincl that happens to mirror the same subtree
-// ($(S)/mirror/dep/foo.proto). protoc resolves the import against its -I list in
-// order — `-I=./ -I=$(S)/ -I=$(B) -I=$(S)` (the arcadia roots) precede the peer
-// PROTO_NAMESPACE -I — so the source-root copy wins and the mirror copy is never
-// consulted. Upstream's TModuleResolver does the same: for a `proto` (a lang in
-// LANGS_REQUIRE_BUILD_AND_SRC_ROOTS) Local include it resolves
-// MakeResolvePlan(srcDir, BldDir, SrcDir) FIRST and only falls to the module's
-// IncDirs (ADDINCL) if that misses (module_resolver.cpp:238-245, 322-352).
+// protoImportRootFixture reproduces the T-91 divergence: a proto import naming a
+// fully-qualified path (`dep/foo.proto`) that exists BOTH at the source root (the
+// real PROTO_LIBRARY) and under a peer PROTO_NAMESPACE addincl mirroring the same
+// subtree. protoc resolves against its -I list in order — the source roots precede
+// the peer PROTO_NAMESPACE -I — so the source-root copy wins. The module resolver
+// does the same: for a proto Local include it resolves the src/build roots FIRST,
+// only falling to the module's IncDirs (ADDINCL) on a miss.
 func protoImportRootFixture() FS {
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
@@ -2400,16 +2301,16 @@ func protoImportRootFixture() FS {
 	writeTestModuleFile(files, "dep/ya.make", "PROTO_LIBRARY()\nSRCS(foo.proto)\nEND()\n")
 	writeTestModuleFile(files, "dep/foo.proto", "syntax = \"proto3\";\npackage dep;\nmessage Foo {}\n")
 
-	// A peer PROTO_LIBRARY that publishes the `mirror` PROTO_NAMESPACE GLOBAL
-	// addincl. Its subtree mirrors dep/ — the mirror copy of foo.proto exists on
-	// disk so an addincl-first resolver would wrongly bind the import there.
+	// A peer PROTO_LIBRARY publishing the `mirror` PROTO_NAMESPACE GLOBAL addincl.
+	// Its subtree mirrors dep/ — the mirror copy of foo.proto exists on disk so an
+	// addincl-first resolver would wrongly bind the import there.
 	writeTestModuleFile(files, "mirror/peer/ya.make",
 		"PROTO_LIBRARY()\nPROTO_NAMESPACE(mirror)\nSRCS(bar.proto)\nEND()\n")
 	writeTestModuleFile(files, "mirror/peer/bar.proto", "syntax = \"proto3\";\npackage mirror;\nmessage Bar {}\n")
 	writeTestModuleFile(files, "mirror/dep/foo.proto", "syntax = \"proto3\";\npackage dep;\nmessage Foo {}\n")
 
-	// The module under test: imports the fully-qualified dep/foo.proto and peers
-	// both the real dep and the mirror-namespace peer.
+	// The module under test: imports dep/foo.proto, peers the real dep and the
+	// mirror-namespace peer.
 	writeTestModuleFile(files, "main/ya.make",
 		"PROTO_LIBRARY()\nPEERDIR(dep mirror/peer)\nSRCS(main.proto)\nEND()\n")
 	writeTestModuleFile(files, "main/main.proto",
@@ -2419,10 +2320,10 @@ func protoImportRootFixture() FS {
 }
 
 // TestGen_ProtoImport_SourceRootWinsOverPeerNamespaceMirror pins that a
-// fully-qualified proto import binds to the arcadia source-root copy, not to a
-// peer PROTO_NAMESPACE addincl mirror of the same path. Before the fix the
-// scanner consults ADDINCL before the arcadia roots, so main.pb.cc carries the
-// spurious $(S)/mirror/dep/foo.proto input.
+// fully-qualified proto import binds to the source-root copy, not to a peer
+// PROTO_NAMESPACE addincl mirror of the same path. Before the fix the scanner
+// consults ADDINCL before the source roots, so main.pb.cc carries the spurious
+// $(S)/mirror/dep/foo.proto input.
 func TestGen_ProtoImport_SourceRootWinsOverPeerNamespaceMirror(t *testing.T) {
 	fs := protoImportRootFixture()
 	g := testGen(fs, "main")

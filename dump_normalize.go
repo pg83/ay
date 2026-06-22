@@ -30,12 +30,11 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 			i++
 			outPath = arg(args, i)
 		case "--ref-graph":
-			// Marks the input as the upstream reference (ymake) graph, enabling the
-			// reference-side normalizations that discount artifacts our generator
-			// does not model: filterARLDInputs (AR/LD input pruning, via canonInputs)
-			// and the build-order-only dep strip below. Our graph is normalized
-			// WITHOUT this flag (faithful), so any superfluous input/dep we emit, or
-			// any over-filtration on the reference side, surfaces as a diff.
+			// Marks the input as the upstream reference graph, enabling reference-side
+			// normalizations that discount artifacts our generator does not model:
+			// AR/LD input pruning (via canonInputs) and the dep strip below. Our graph
+			// is normalized WITHOUT this flag, so any superfluous input/dep we emit, or
+			// over-filtration on the reference side, surfaces as a diff.
 			refGraph = true
 		default:
 			throwFmt("dump normalize: unknown argument %q", args[i])
@@ -50,9 +49,9 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 	contentHash := map[string][32]byte{}
 	deps := map[string][]string{}
 	fetch := map[string]bool{}
-	// outputsByUID (populated only under --ref-graph) maps each
-	// node to its output paths so the strip pass can resolve, for an edge u->d,
-	// what d produces and check it against u's inputs. Compact (1-3 strings/node).
+	// outputsByUID (populated only under --ref-graph) maps each node to its output
+	// paths so the strip pass can resolve, for an edge u->d, what d produces and
+	// check it against u's inputs.
 	outputsByUID := map[string][]string{}
 	var ldRoots, tsRoots, arRoots []string
 
@@ -91,7 +90,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 
 			// Our inline vcs.json producer ($(B)/vcs.json, folded to $(VCS)/vcs.json by
 			// normPath) has no upstream counterpart — upstream mounts $(VCS). Strip it
-			// like a FETCH node: drop the node and the build-order edges into it.
+			// like a FETCH node: drop the node and the edges into it.
 			if out0 == "$(VCS)/vcs.json" {
 				r.isFetch = true
 			}
@@ -146,16 +145,13 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		})
 
 	// Optional strip pass (upstream only): drop dep edges u->d where none of d's
-	// outputs is referenced by u — neither among u's inputs nor named in u's
-	// command. The induced codegen .pb.h/.gen.h producers ymake hangs off a link
-	// node for cache-key Merkle folding satisfy neither (never a link input, never
-	// on the link command line), so they go; the real .o/.a stay (they ARE inputs,
-	// even though link commands pass them via a response file rather than naming
-	// them), and a dep whose output the command names directly but does not list as
-	// an input stays too (e.g. a TS run_test node's $(B)/common_test.context). The
-	// command check only ever keeps MORE edges than the inputs check alone, so it
-	// cannot collapse the closure. Runs before the Merkle re-uid. Reads inputs/cmds
-	// transiently; only the compact outputsByUID lives across the pass.
+	// outputs is referenced by u — neither among u's inputs nor named in u's command.
+	// Induced codegen .pb.h/.gen.h producers hung off a link node for cache-key Merkle
+	// folding satisfy neither, so they go; the real .o/.a stay (they ARE inputs, even
+	// though link commands pass them via a response file), and a dep whose output the
+	// command names directly but does not list as an input stays too. The command check
+	// only ever keeps MORE edges than the inputs check alone, so it cannot collapse the
+	// closure. Runs before the Merkle re-uid; only outputsByUID lives across the pass.
 	if refGraph {
 		type stripResult struct {
 			uid  string
@@ -252,10 +248,10 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 
 	bw := bufio.NewWriterSize(out, 1<<20)
 
-	// Dedup by the recomputed (Merkle) uid: after stripping tags/host_platform a
-	// host (tool) instance and its target twin can collapse to one uid when their
-	// whole subtree matches; the raw graph still lists both, so emit each uid once.
-	// Instances whose deps genuinely differ keep distinct uids and both survive.
+	// Dedup by the recomputed (Merkle) uid: after stripping tags/host_platform a host
+	// (tool) instance and its target twin can collapse to one uid when their whole
+	// subtree matches; the raw graph still lists both, so emit each uid once. Instances
+	// whose deps genuinely differ keep distinct uids and both survive.
 	type emitLine struct {
 		uid  string
 		line []byte
@@ -292,7 +288,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 }
 
 // depOutputInInputs reports whether any of a dep's outputs is among the
-// consuming node's inputs (the files its action reads).
+// consuming node's inputs.
 func depOutputInInputs(depOutputs []string, inputSet map[string]struct{}) bool {
 	for _, o := range depOutputs {
 		if o == "" {
@@ -308,9 +304,8 @@ func depOutputInInputs(depOutputs []string, inputSet map[string]struct{}) bool {
 }
 
 // depOutputInCmd reports whether any of a dep's outputs is named in the consuming
-// node's command text (a normalized whole-path substring match). Catches deps a
-// node consumes by naming the path on its command line without listing it as an
-// input (e.g. a TS run_test node referencing $(B)/common_test.context).
+// node's command text (normalized whole-path substring match). Catches deps a node
+// consumes by naming the path on its command line without listing it as an input.
 func depOutputInCmd(depOutputs []string, cmdText string) bool {
 	for _, o := range depOutputs {
 		if o == "" {

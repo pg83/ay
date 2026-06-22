@@ -7,18 +7,15 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// toolchainFlags returns the host/target config flags (build type, python mode,
-// CLANG_VER, …). Tool *paths* are no longer here — the compiler/archiver/objcopy/
-// linker/python come from the build/platform/* RESOURCES_LIBRARY peers via the
-// module toolchain (resolveModuleToolchain / d.tc), not from ambient flags.
+// toolchainFlags returns host/target config flags (build type, python mode,
+// CLANG_VER, …). Tool *paths* are not here — they come from the module
+// toolchain's resource peers, not from ambient flags.
 func toolchainFlags(fs FS) map[string]string {
 	return prebuiltToolchainFlags()
 }
 
-// linuxSDKDefault mirrors ymake_conf.py's LINUX_SDK_DEFAULT — the OS_SDK used for a
-// Linux target when ya.conf sets no preset (GnuToolchainOptions: os_sdk = preset or
-// default). It selects the OS_SDK_ROOT sandbox resource (ubuntu-16 → sbr:243881345)
-// that build/platform/linux_sdk declares and the compile sysroot/-B point at.
+// linuxSDKDefault is the OS_SDK used for a Linux target when ya.conf sets no
+// preset. It selects the OS_SDK_ROOT resource the compile sysroot/-B point at.
 const linuxSDKDefault = "ubuntu-16"
 
 func prebuiltToolchainFlags() map[string]string {
@@ -29,19 +26,16 @@ func prebuiltToolchainFlags() map[string]string {
 		"TIDY":               "no",
 		"USE_ARCADIA_PYTHON": "yes",
 		"USE_PYTHON3":        "yes",
-		// CLANG_VER is the clang major version (a scalar, not a tool path): it has no
-		// external-resource counterpart, so it stays a config flag. Read into
-		// Platform.ClangVer (--clang-ver) and COMPILER_VERSION.
+		// CLANG_VER is the clang major version (a scalar, not a tool path), so it
+		// stays a config flag. Read into Platform.ClangVer and COMPILER_VERSION.
 		"CLANG_VER": "20",
 	}
 }
 
 // readYaConfSection decodes ya.conf (TOML) and returns the named top-level
-// table — e.g. "flags" or "host_platform_flags" — as a flat string map. Flag
-// values are scalars; non-scalar entries (arrays, sub-tables) are not flags and
-// are skipped. Because nested tables such as [alias.flags] decode under their
-// parent key (alias), only the genuine top-level section is returned, matching
-// the previous line-parser's exact-section semantics.
+// table as a flat string map. Flag values are scalars; non-scalar entries
+// (arrays, sub-tables) are skipped. Nested tables decode under their parent
+// key, so only the genuine top-level section is returned.
 func readYaConfSection(fs FS, rel, wantSection string) map[string]string {
 	var root map[string]any
 
@@ -52,8 +46,8 @@ func readYaConfSection(fs FS, rel, wantSection string) map[string]string {
 	return yaConfStringTable(root[wantSection])
 }
 
-// yaConfStringTable flattens a decoded TOML table into a string map, stringifying
-// scalar values and dropping composite ones (arrays / sub-tables are never flags).
+// yaConfStringTable flattens a decoded TOML table into a string map: scalars
+// stringified, composite values (arrays / sub-tables) dropped.
 func yaConfStringTable(v any) map[string]string {
 	tbl, ok := v.(map[string]any)
 
@@ -72,9 +66,8 @@ func yaConfStringTable(v any) map[string]string {
 	return out
 }
 
-// yaConfScalar renders a TOML scalar as the literal token the old line parser
-// would have produced (bool -> "true"/"false", ints/floats decimal); composite
-// values return ok=false.
+// yaConfScalar renders a TOML scalar as a literal token (bool -> "true"/"false",
+// ints/floats decimal); composite values return ok=false.
 func yaConfScalar(v any) (string, bool) {
 	switch x := v.(type) {
 	case string:

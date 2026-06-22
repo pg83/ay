@@ -55,9 +55,9 @@ var structCodegenPeerdirs = STRS(
 	"kernel/struct_codegen/reflection",
 )
 
-// strKeySet interns a keyword list into a BitSet over the STR ids — the
-// parser's argument tokens are STR ids and the kw constants intern first at
-// init (tiny ids), so a membership check is one bit probe, no map.
+// strKeySet interns a keyword list into a BitSet over the STR ids — argument
+// tokens are STR ids and the kw constants intern first at init (tiny ids), so
+// membership is one bit probe, no map.
 func strKeySet(words ...string) BitSet {
 	var out BitSet
 
@@ -90,9 +90,8 @@ type PeerdirStmt struct {
 
 // DeclareResourceStmt is a DECLARE_EXTERNAL_RESOURCE /
 // DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE[_BY_JSON] call inside a RESOURCES_LIBRARY.
-// Host-platform uri selection (and json reading for the BY_JSON form) is deferred
-// to gen time, where the host Platform and FS are available; Args holds the raw
-// macro arguments.
+// Host-platform uri selection (and json reading for BY_JSON) is deferred to gen
+// time, where the host Platform and FS are available; Args holds the raw args.
 type DeclareResourceStmt struct {
 	Macro TOK
 	Args  []STR
@@ -147,8 +146,8 @@ type AddInclStmt struct {
 	CythonPaths      []STR
 	AsmPaths         []STR
 	ProtoGlobalPaths []STR
-	// UserGlobalPaths contains GLOBAL and ONE_LEVEL paths in declaration order —
-	// the equivalent of ymake's UserGlobal. Used to preserve upstream -I ordering.
+	// UserGlobalPaths holds GLOBAL and ONE_LEVEL paths in declaration order, to
+	// preserve upstream -I ordering.
 	UserGlobalPaths []STR
 
 	AllPaths []STR
@@ -194,8 +193,8 @@ type GenerateEnumSerializationStmt struct {
 	Line    int
 	// DeclSeq is the module-global declaration sequence assigned in collectStmts
 	// (monotonic across statements and INCLUDEs). It orders this macro's generated
-	// auxiliary archive members relative to other default-priority generated
-	// statements (e.g. RUN_PROGRAM) — see reorderARMembers / SrcMeta.
+	// archive members relative to other default-priority statements (e.g.
+	// RUN_PROGRAM) — see reorderARMembers / SrcMeta.
 	DeclSeq int
 }
 
@@ -225,11 +224,10 @@ type RunProgramStmt struct {
 }
 
 // SplitCodegenStmt is a SPLIT_CODEGEN(tool prefix opts... [OUT_NUM n]
-// [OUTPUT_INCLUDES ...]) macro (build/internal/plugins/split_codegen.py →
-// _SPLIT_CODEGEN_BASE). The tool consumes <prefix>.in and produces OutNum
-// numbered <prefix>.<i>.cpp parts (auto-compiled), plus <prefix>.cpp (noauto:
-// re-fed via SRCS(${BINDIR}/<prefix>.cpp)) and <prefix>.h. Opts are the trailing
-// positional generator options; cpp-parts = OutNum - 5.
+// [OUTPUT_INCLUDES ...]) macro. The tool consumes <prefix>.in and produces OutNum
+// numbered <prefix>.<i>.cpp parts (auto-compiled), plus <prefix>.cpp (noauto,
+// re-fed via SRCS) and <prefix>.h. Opts are trailing positional options;
+// cpp-parts = OutNum - 5.
 type SplitCodegenStmt struct {
 	ToolPath       STR
 	Prefix         STR
@@ -239,17 +237,14 @@ type SplitCodegenStmt struct {
 	Line           int
 }
 
-// BaseCodegenStmt is a BASE_CODEGEN(Tool, Prefix, Opts...) macro
-// (build/internal/conf/codegen.conf). The tool consumes <prefix>.in and produces
-// <prefix>.cpp (noauto: re-fed via SRCS(${BINDIR}/<prefix>.cpp) only when the
-// module declares it) and <prefix>.h. Opts are trailing positional generator
+// BaseCodegenStmt is a BASE_CODEGEN(Tool, Prefix, Opts...) macro. The tool
+// consumes <prefix>.in and produces <prefix>.cpp (noauto, re-fed via SRCS only
+// when the module declares it) and <prefix>.h. Opts are trailing positional
 // options. Unlike SPLIT_CODEGEN there are no numbered parts and no --cpp-parts.
 //
-// STRUCT_CODEGEN (a BASE_CODEGEN specialization, same conf file) lowers to this
-// statement with a fixed tool, OutputIncludes (the STRUCT_CODEGEN_OUTPUT_INCLUDES
-// headers attached to <prefix>.h via ${hide;output_include:...}, not command args)
-// and Peerdirs (the two implicit kernel/struct_codegen peers). Plain BASE_CODEGEN
-// leaves both empty.
+// STRUCT_CODEGEN (a BASE_CODEGEN specialization) lowers to this statement with a
+// fixed tool, OutputIncludes (headers attached to <prefix>.h, not command args)
+// and Peerdirs (the two implicit peers). Plain BASE_CODEGEN leaves both empty.
 type BaseCodegenStmt struct {
 	ToolPath       STR
 	Prefix         STR
@@ -260,9 +255,9 @@ type BaseCodegenStmt struct {
 }
 
 // FromSandboxStmt is a FROM_SANDBOX(Id [FILE] [PREFIX dir] [EXECUTABLE]
-// OUT/OUT_NOAUTO files [OUTPUT_INCLUDES ...]) macro: it fetches a Sandbox
-// resource and unpacks (or, with FILE, copies) its files into the module build
-// dir as the declared OUT/OUT_NOAUTO outputs.
+// OUT/OUT_NOAUTO files [OUTPUT_INCLUDES ...]) macro: it fetches a resource and
+// unpacks (or, with FILE, copies) its files into the module build dir as the
+// declared OUT/OUT_NOAUTO outputs.
 type FromSandboxStmt struct {
 	ResourceId     STR
 	OUTFiles       []STR
@@ -346,8 +341,8 @@ type ResourceFilesStmt struct {
 
 // AllResourceFilesStmt models ALL_RESOURCE_FILES(Ext [PREFIX p] [STRIP s] Dirs...)
 // and ALL_RESOURCE_FILES_FROM_DIRS([PREFIX p] [STRIP s] Dirs...) (FromDirs=true,
-// no Ext). Upstream globs <dir>/*.<ext> (or <dir>/* for FromDirs) and forwards
-// the matches to RESOURCE_FILES; the glob is performed at collection time.
+// no Ext). Globs <dir>/*.<ext> (or <dir>/* for FromDirs) at collection time and
+// forwards the matches to RESOURCE_FILES.
 type AllResourceFilesStmt struct {
 	Args     []STR
 	FromDirs bool
@@ -456,8 +451,8 @@ type Expr interface {
 
 type ExprIdent struct {
 	Name string
-	// Env is the macro name interned to its dense ENV id at parse time, so IF
-	// evaluation indexes the Environment array without re-hashing the string.
+	// Env is the name interned to its dense ENV id at parse time, so IF evaluation
+	// indexes the Environment array without re-hashing.
 	Env ENV
 }
 
@@ -489,20 +484,18 @@ type ExprLt struct {
 	Left, Right Expr
 }
 
-// ExprStartsWith models `<a> STARTS_WITH <b>` — a string-prefix condition used in
-// autoinclude linters.make.inc dispatch (e.g. `MODDIR STARTS_WITH arc/api`).
+// ExprStartsWith models `<a> STARTS_WITH <b>` — a string-prefix condition.
 type ExprStartsWith struct {
 	Left, Right Expr
 }
 
 // ExprDefined models the unary `DEFINED <var>` predicate — true iff the variable
-// has an explicit binding in the environment (e.g. `IF(DEFINED RESERVE_ADDRESS_SPACE)`).
+// has an explicit binding in the environment.
 type ExprDefined struct {
 	Of Expr
 }
 
-// ExprMatches models `<a> MATCHES <re>` — a regular-expression match condition
-// (e.g. `MODDIR MATCHES yabs/.../configs`), the regex analogue of STARTS_WITH.
+// ExprMatches models `<a> MATCHES <re>` — the regex analogue of STARTS_WITH.
 type ExprMatches struct {
 	Left, Right Expr
 }
@@ -555,14 +548,14 @@ func (e *ParseError) error() string {
 	return fmt.Sprintf("%d:%d: %s", e.Line, e.Col, e.Message)
 }
 
-// Error implements the error interface; internal code calls error().
+// Error implements error; internal code calls error().
 func (e *ParseError) Error() string {
 	return e.error()
 }
 
-// parseFile parses the ya.make at the source-root-relative rel. The parser's
-// whole path space (file names, INCLUDE targets, the once/cycle sets) is
-// root-relative: build files cannot reference anything outside the FS.
+// parseFile parses the build file at the source-root-relative rel. The whole
+// path space (file names, INCLUDE targets, once/cycle sets) is root-relative:
+// build files cannot reference anything outside the FS.
 func parseFile(fs FS, rel string) (mf *MakeFile, err error) {
 	exc := try(func() {
 		mf = throw2(parse(fs, cleanRel(rel), readOwnedForParse(fs, cleanRel(rel))))
@@ -576,9 +569,9 @@ func parseFile(fs FS, rel string) (mf *MakeFile, err error) {
 	return mf, err
 }
 
-// readOwnedForParse returns an owned copy of rel's content: the lexer holds
-// its src lazily, and a nested INCLUDE triggers another read mid-parse — which
-// would overwrite the reused FS read buffer the outer lexer still points at.
+// readOwnedForParse returns an owned copy of rel's content: a nested INCLUDE
+// triggers another read mid-parse, which would overwrite the reused FS read
+// buffer the outer lexer still points at.
 func readOwnedForParse(fs FS, rel string) []byte {
 	return append([]byte(nil), fs.read(rel)...)
 }
@@ -617,8 +610,8 @@ type Lexer struct {
 	prevByte byte
 
 	// tokBuf is the reused per-token assembly buffer: token text is interned
-	// straight from it (internBytes copies on a table miss), so no per-token
-	// []byte survives the call and the buffer never escapes.
+	// straight from it (internBytes copies on a miss), so no per-token []byte
+	// survives the call and the buffer never escapes.
 	tokBuf []byte
 }
 
@@ -837,12 +830,12 @@ func (l *Lexer) readString(startLine, startCol int, quote byte) Token {
 	}
 }
 
-// appendQuotedSegment consumes a quoted segment that begins at the current
-// position (l.src[l.pos] == quote) in the MIDDLE of a word token and appends its
-// inner content — delimiters stripped, backslash escapes preserved like
-// readString — to buf. Upstream's ya.make atom rule (makefile_lang.rl6) keeps an
-// atom going across interior quotes when there is no whitespace, so e.g.
-// `-DNAME='\"${X}\"'` is one argument, not a flag prefix plus a separate string.
+// appendQuotedSegment consumes a quoted segment beginning at the current
+// position in the MIDDLE of a word token and appends its inner content
+// (delimiters stripped, backslash escapes preserved like readString) to buf.
+// Upstream keeps an atom going across interior quotes when there is no
+// whitespace, so e.g. `-DNAME='\"${X}\"'` is one argument, not a flag prefix
+// plus a separate string.
 func (l *Lexer) appendQuotedSegment(buf []byte, quote byte, startLine, startCol int) []byte {
 	l.advance()
 
@@ -913,9 +906,9 @@ func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
 	}
 
 	l.tokBuf = buf
-	// Token text is interned straight from the buffer: on a table hit (the
-	// overwhelming case — tokens repeat across ya.makes) the value is a view,
-	// not a fresh string; downstream internStr(tok.val) then hits the same slot.
+	// Token text is interned straight from the buffer: on a hit (the common case,
+	// tokens repeat across build files) the value is a view, not a fresh string;
+	// downstream internStr(tok.val) then hits the same slot.
 	val := internBytes(buf).string()
 	kind := tokIdent
 
@@ -995,14 +988,13 @@ func parseInternal(fs FS, name string, src []byte) *MakeFile {
 func parseInternalWithStack(fs FS, name string, src []byte, stack []string) *MakeFile {
 	st := newIncludeState()
 
-	// Seed MODDIR into the parse-time include env, mirroring upstream's
-	// Context->Vars() which always carries the directory of the ya.make that
-	// opens the module. INCLUDE paths spelled as ${ARCADIA_ROOT}/${MODDIR}/...
-	// (e.g. feature_store run_codegen.inc → modules.lst) resolve only when MODDIR
-	// is bound. ARCADIA_ROOT is intentionally left unbound: expandOneInclude
-	// strips a literal ${ARCADIA_ROOT}/ prefix to route the path to the source
-	// root, so keeping it verbatim is what makes resolution work. MODDIR is the
-	// parsed file's own directory, so this stays a pure function of (file, dir).
+	// Seed MODDIR into the parse-time include env, mirroring upstream which always
+	// carries the directory of the build file that opens the module. INCLUDE paths
+	// spelled ${ARCADIA_ROOT}/${MODDIR}/... resolve only when MODDIR is bound.
+	// ARCADIA_ROOT is intentionally left unbound: expandOneInclude strips a literal
+	// ${ARCADIA_ROOT}/ prefix to route the path to the source root, so keeping it
+	// verbatim is what makes resolution work. MODDIR is the parsed file's own
+	// directory, so this stays a pure function of (file, dir).
 	st.env.setString(envMODDIR, pathDir(name))
 
 	return parseInternalWithState(fs, name, src, stack, st)
@@ -1020,11 +1012,9 @@ func parseInternalWithState(fs FS, name string, src []byte, stack []string, incl
 type IncludeState struct {
 	once map[string]struct{}
 	// env is the parse-time SET environment used to expand variables in INCLUDE
-	// path arguments, mirroring upstream's EvalExpr(Context->Vars(), args[0])
-	// (makefile_reader.cpp:49-60). It lives on IncludeState because that is
-	// created fresh per top-level parseFile and threaded through recursive
-	// includes — so the env is module-parse scoped and shared across the same
-	// module's includes, matching Context->Vars()'s lifetime.
+	// path arguments. It lives on IncludeState (created fresh per top-level
+	// parseFile and threaded through recursive includes), so it is module-parse
+	// scoped and shared across the same module's includes.
 	env Environment
 }
 
@@ -1077,11 +1067,10 @@ func (p *Parser) parseMacroInto(into []Stmt, nameTok Token) []Stmt {
 
 	args := p.parseMacroArgs(nameTok)
 
-	// CPP_ENUMS_SERIALIZATION (build/plugins/pybuild.py) expands to one
-	// ongenerate_enum_serialization_with_header(arg) per header argument; a
-	// NAMESPACE token consumes its following value as a control token and emits
-	// nothing. One macro -> many statements, so it cannot ride the single-Stmt
-	// buildStmtFor path.
+	// CPP_ENUMS_SERIALIZATION expands to one with_header statement per header
+	// argument; a NAMESPACE token consumes its following value and emits nothing.
+	// One macro -> many statements, so it cannot ride the single-Stmt buildStmtFor
+	// path.
 	if nameTok.val == "CPP_ENUMS_SERIALIZATION" {
 		for i := 0; i < len(args); i++ {
 			if args[i].string() == "NAMESPACE" {
@@ -1099,18 +1088,15 @@ func (p *Parser) parseMacroInto(into []Stmt, nameTok Token) []Stmt {
 	stmt := p.buildStmt(nameTok, args)
 
 	// Fold a SET into the parse-time env so a later INCLUDE path argument can
-	// reference it (upstream: SET writes Context->Vars(), INCLUDE EvalExprs
-	// against the same Vars). The emitted SetStmt is unchanged — gen-time
-	// collection still rebuilds d.setVars from the same statement sequence.
+	// reference it. The emitted SetStmt is unchanged — gen-time collection still
+	// rebuilds d.setVars from the same statement sequence.
 	if set, ok := stmt.(*SetStmt); ok {
 		p.includes.env.setFromString(set.NameEnv, expandScalarVarRef(set.Value, p.includes.env))
 	}
 
-	// DEFAULT(NAME value) binds NAME only if not already set (upstream's
-	// SetDefaultVar). Fold it into the parse-time env the same way SET is, so a
-	// later INCLUDE path argument can reference a DEFAULT-defined variable (e.g.
-	// run_codegen.inc DEFAULTs FS_CODEGEN_CONFIG_PATH from ${ARCADIA_ROOT}/${MODDIR},
-	// then INCLUDEs ${FS_CODEGEN_CONFIG_PATH}/modules.lst).
+	// DEFAULT(NAME value) binds NAME only if not already set. Fold it into the
+	// parse-time env the same way SET is, so a later INCLUDE path argument can
+	// reference a DEFAULT-defined variable.
 	if def, ok := stmt.(*DefaultVarStmt); ok && !p.includes.env.hasBindingID(def.NameEnv) {
 		p.includes.env.setFromString(def.NameEnv, expandScalarVarRef(def.Value, p.includes.env))
 	}
@@ -1155,8 +1141,8 @@ func (p *Parser) parseMacroArgs(nameTok Token) []STR {
 		case tokEOF:
 			p.lex.throwParse(nameTok.line, nameTok.col, "unterminated macro call %q (missing ')')", nameTok.val)
 		case tokIdent, tokWord, tokString, tokInt:
-			// The parser's argument output is interned: every downstream layer
-			// (expansion, collect, emit) works in STR id space.
+			// Argument output is interned: every downstream layer works in STR id
+			// space.
 			args = append(args, internStr(tok.val))
 		case tokLParen:
 			p.lex.throwParse(tok.line, tok.col, "unexpected '(' inside macro call %q", nameTok.val)
@@ -1206,9 +1192,8 @@ func (p *Parser) buildStmt(nameTok Token, args []STR) Stmt {
 	})
 }
 
-// buildStmtFor constructs the Stmt for a macro invocation (name + already-tokenized
-// args) — the single source of truth for macro → Stmt mapping. fail reports a malformed
-// invocation (the parser routes it to throwParse with file:line:col).
+// buildStmtFor constructs the Stmt for a macro invocation — the single source of
+// truth for macro → Stmt mapping. fail reports a malformed invocation.
 func buildStmtFor(name string, args []STR, line int, fail func(format string, a ...any)) Stmt {
 	switch name {
 	case "PROGRAM", "LIBRARY",
@@ -1529,9 +1514,8 @@ func isRunAntlrKeyword(s STR) bool {
 // parseFromSandbox parses FROM_SANDBOX(Id ...): the first non-keyword token is
 // the resource id, then keyword sections collect OUT/OUT_NOAUTO/OUTPUT_INCLUDES,
 // flag keywords (FILE/EXECUTABLE) toggle, and value keywords (PREFIX/AUTOUPDATED/
-// SBR) consume their single argument. RENAME collects the fetch rename list
-// (emitted as `--rename <item>` per upstream's ${pre=--rename :RENAME});
-// INDUCED_DEPS is parsed and skipped (not needed by the C++/Python contour).
+// SBR) consume one argument. RENAME collects the fetch rename list (emitted as
+// `--rename <item>`); INDUCED_DEPS is parsed and skipped.
 func parseFromSandbox(args []STR, line int) *FromSandboxStmt {
 	stmt := &FromSandboxStmt{Line: line, Prefix: "."}
 	section := ""
@@ -1610,10 +1594,8 @@ func parseRunProgram(args []STR, line int) *RunProgramStmt {
 		case kwSTDOUT, kwSTDOUT_NOAUTO:
 			if stmt.StdoutFile == nil {
 				stmt.StdoutFile = &tok
-				// Upstream marks STDOUT_NOAUTO with the `noauto` modifier
-				// (${stdout;noauto;output:STDOUT_NOAUTO}): a declared output that
-				// is NOT a module source. Auto STDOUT is, so record which spelling
-				// produced this stdout redirect.
+				// STDOUT_NOAUTO is a declared output that is NOT a module source;
+				// auto STDOUT is. Record which spelling produced this redirect.
 				stmt.StdoutNoAuto = currentSection == kwSTDOUT_NOAUTO
 			}
 		case kwENV:
@@ -1661,10 +1643,8 @@ func parseRunPython(args []STR, line int) *RunPythonStmt {
 		case kwSTDOUT, kwSTDOUT_NOAUTO:
 			if stmt.StdoutFile == nil {
 				stmt.StdoutFile = &tok
-				// Upstream marks STDOUT_NOAUTO with the `noauto` modifier
-				// (${stdout;noauto;output:STDOUT_NOAUTO}): a declared output that
-				// is NOT a module source. Auto STDOUT is, so record which spelling
-				// produced this stdout redirect.
+				// STDOUT_NOAUTO is a declared output that is NOT a module source;
+				// auto STDOUT is. Record which spelling produced this redirect.
 				stmt.StdoutNoAuto = currentSection == kwSTDOUT_NOAUTO
 			}
 		case kwENV:
@@ -1683,9 +1663,9 @@ func parseRunPython(args []STR, line int) *RunPythonStmt {
 	return stmt
 }
 
-// splitCodegenDefaultOutNum mirrors split_codegen.py: _DEFAULT_CPP_PARTS (20) +
-// _ADDITIONAL_STREAM_COUNT (5). The producer emits OutNum numbered .cpp parts and
-// passes --cpp-parts (OutNum - splitCodegenStreamCount) to the tool.
+// splitCodegenDefaultOutNum is the default cpp-parts (20) plus the stream count
+// (5). The producer emits OutNum numbered .cpp parts and passes --cpp-parts
+// (OutNum - splitCodegenStreamCount) to the tool.
 const (
 	splitCodegenDefaultOutNum = 25
 	splitCodegenStreamCount   = 5
@@ -1693,9 +1673,8 @@ const (
 
 // parseSplitCodegen lowers SPLIT_CODEGEN(tool prefix opts... [OUT_NUM n]
 // [OUTPUT_INCLUDES ...]). OUT_NUM (one value) and OUTPUT_INCLUDES (variadic) are
-// keyword sections that may appear anywhere — mirroring the Python macro's
-// keyword args — so tool and prefix are the first two POSITIONAL (non-keyword)
-// tokens, not necessarily args[0]/args[1].
+// keyword sections that may appear anywhere, so tool and prefix are the first two
+// POSITIONAL (non-keyword) tokens, not necessarily args[0]/args[1].
 func parseSplitCodegen(args []STR, line int) *SplitCodegenStmt {
 	stmt := &SplitCodegenStmt{OutNum: splitCodegenDefaultOutNum, Line: line}
 
@@ -1757,9 +1736,8 @@ func parseBaseCodegen(args []STR, line int) *BaseCodegenStmt {
 }
 
 // structCodegenTool, structCodegenOutputIncludes and structCodegenPeerdirs mirror
-// build/internal/conf/codegen.conf's STRUCT_CODEGEN macro: a BASE_CODEGEN over the
-// fixed kernel/struct_codegen/codegen_tool with seven OUTPUT_INCLUDES on the
-// generated header and two implicit PEERDIRs.
+// the STRUCT_CODEGEN macro: a BASE_CODEGEN over a fixed tool with seven
+// OUTPUT_INCLUDES on the generated header and two implicit PEERDIRs.
 const structCodegenTool = "kernel/struct_codegen/codegen_tool"
 
 // parseStructCodegen lowers STRUCT_CODEGEN(Prefix) to its BASE_CODEGEN expansion.
@@ -1872,13 +1850,10 @@ func splitAddInclPaths(args []STR) (globalPaths, oneLevelPaths, ownPaths, cython
 					continue
 				}
 
-				// `GLOBAL FOR proto X` — upstream's PROTO_ADDINCL macro
-				// (yatool/build/conf/proto.conf:117-120) and contrib libs
-				// such as protobuf use this to add `-I=$X` to the protoc
-				// command in every transitive consumer's _PROTO__INCLUDE
-				// chain. Track these separately from the C++ GLOBAL chain
-				// (we were silently coalescing them, missing protobuf-src
-				// from tablet_flat's protoc cmd vs REF).
+				// `GLOBAL FOR proto X` adds `-I=$X` to the protoc command in every
+				// transitive consumer's proto-include chain. Track these separately
+				// from the C++ GLOBAL chain (coalescing them dropped includes from
+				// the protoc cmd).
 				if i+2 < len(args) && args[i+1].string() == "proto" {
 					protoGlobalPaths = append(protoGlobalPaths, args[i+2])
 					i += 2
@@ -2079,7 +2054,7 @@ func (c *CondParser) parseCmp() Expr {
 		return left
 	}
 
-	// STARTS_WITH is spelled as a bare identifier operator (not a punctuation token).
+	// STARTS_WITH is a bare identifier operator, not a punctuation token.
 	if t.kind == tokIdent && t.val == "STARTS_WITH" {
 		c.consume()
 		right := c.parseAtom()
@@ -2088,7 +2063,7 @@ func (c *CondParser) parseCmp() Expr {
 		return &ExprStartsWith{Left: left, Right: right}
 	}
 
-	// MATCHES is the regex-match analogue, likewise spelled as a bare identifier.
+	// MATCHES is the regex analogue, likewise a bare identifier.
 	if t.kind == tokIdent && t.val == "MATCHES" {
 		c.consume()
 		right := c.parseAtom()
@@ -2198,7 +2173,7 @@ func (c *CondParser) parseAtom() Expr {
 	}
 
 	// A non-ident-shaped bare word is an unquoted string literal (e.g. the path
-	// operand of `MODDIR STARTS_WITH arc/robots`).
+	// operand of STARTS_WITH).
 	if t.kind == tokWord {
 		c.consume()
 
@@ -2217,20 +2192,19 @@ func (p *Parser) expandInclude(into []Stmt, nameTok Token) []Stmt {
 		p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE expects at least 1 argument (the path)")
 	}
 
-	// Upstream makefile_reader.cpp evaluates only args[0] of INCLUDE(...) and
-	// silently ignores any later arguments (no loop, no error). Match that.
+	// Upstream evaluates only args[0] of INCLUDE(...) and silently ignores later
+	// arguments. Match that.
 	return p.expandOneInclude(into, nameTok, args[0].string())
 }
 
 func (p *Parser) expandOneInclude(into []Stmt, nameTok Token, rel string) []Stmt {
-	// Expand variables in the path argument first (upstream: EvalExpr against
-	// Context->Vars() before ResolveIncludePath). An unresolved ${VAR} survives
-	// verbatim and falls through to the existing missing-file silent skip.
+	// Expand variables in the path argument first. An unresolved ${VAR} survives
+	// verbatim and falls through to the missing-file silent skip.
 	rel = expandScalarVarRef(rel, p.includes.env)
 
 	// The target is source-root-relative: either spelled from the root via
-	// ${ARCADIA_ROOT}/, or relative to the including file's directory. An
-	// absolute path would escape the FS — that is a build-file defect.
+	// ${ARCADIA_ROOT}/, or relative to the including file's directory. An absolute
+	// path would escape the FS — a build-file defect.
 	var target string
 
 	if suffix, ok := strings.CutPrefix(rel, "${ARCADIA_ROOT}/"); ok {

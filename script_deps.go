@@ -8,22 +8,17 @@ import (
 const buildScriptsRoot = "build/scripts"
 
 // scriptDeps maps a build/scripts script's VFS to [self, …transitive import
-// closure] (all VFS). Threaded from genCtx to emit sites, which add a build script
-// with `append(inputs, scripts[v]...)` so the wrapper and the helpers it imports
-// land in one append.
+// closure]. Emit sites use `append(inputs, scripts[v]...)`, so the wrapper and its
+// imported helpers land in one append.
 type ScriptDeps map[VFS][]VFS
 
-// buildScriptTable parses every build/scripts/*.py and returns, for each script's
-// VFS, a slice whose FIRST element is the script itself followed by its transitive
-// import closure (the other build/scripts it imports), all as VFS. Emit sites that
-// put a build script into a node's inputs use `append(inputs, scripts[v]...)`, so
-// the wrapper and the helper scripts it pulls in land in a single append. Edges come
-// from real `import`/`from … import` statements (see scriptImports), so a new import
-// is picked up automatically — no hand-maintained closure lists. Built once per gen.
+// buildScriptTable parses every build/scripts/*.py and returns, per script VFS, a
+// slice of [self, …transitive import closure]. Edges come from real
+// `import`/`from … import` statements (see scriptImports), so a new import is
+// picked up automatically. Built once per gen.
 //
-// Multiple wrappers can share a helper (link_exe and fs_tools both import
-// process_command_files), so appending several scripts to one node can duplicate a
-// helper; canonInputs dedups, so callers need not.
+// Multiple wrappers can share a helper, so appending can duplicate one;
+// canonInputs dedups, so callers need not.
 func buildScriptTable(fs FS) ScriptDeps {
 	texts := map[string]string{}
 	fs.walk(buildScriptsRoot, func(rel string, isDir bool) bool {
@@ -108,10 +103,9 @@ func buildScriptTable(fs FS) ScriptDeps {
 }
 
 // scriptImports parses the top-level module names a Python script imports via
-// `import a, b.c as d` and `from x import y` statements. Returns the first
-// dotted component of each (the package a flat build/scripts module resolves by),
-// with `as` aliases and leading relative-import dots stripped. Only true import
-// lines are parsed, so identifiers in code, comments, or strings are never
+// `import a, b.c as d` and `from x import y`. Returns the first dotted component of
+// each, with `as` aliases and leading relative-import dots stripped. Only true
+// import lines are parsed, so identifiers in code/comments/strings are never
 // mistaken for imports.
 func scriptImports(txt string) []string {
 	var out []string

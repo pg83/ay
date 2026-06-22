@@ -28,8 +28,7 @@ func (k WarnKind) string() string {
 	return "warn"
 }
 
-// String implements fmt.Stringer — the fmt machinery finds it by name;
-// internal code calls string().
+// String implements fmt.Stringer; internal code calls string().
 func (k WarnKind) String() string {
 	return k.string()
 }

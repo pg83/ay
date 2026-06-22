@@ -2,13 +2,11 @@ package main
 
 import "testing"
 
-// TestEmitR5_RlgenModeFollowsOptimized pins the upstream Ragel.set_default_flags
-// mechanism (ymake_conf.py): the rlgen-cd mode is -G2 under an optimized
-// (release, non-sanitized) toolchain and -T0 otherwise — the SAME `optimized`
-// boolean R6 reads for -CG2/-CT0. A module reachable in both the host (release)
-// and target (debug) contours therefore yields two R5 producers with identical
-// outputs whose commands differ ONLY in the rlgen mode. Reproduces the T-153
-// sg7 ref-only duplicate R5 producer for $(B)/kernel/urlnorm/urlhashval.rl{.tmp,5.cpp}.
+// TestEmitR5_RlgenModeFollowsOptimized pins the rlgen-cd mode: -G2 under an
+// optimized (release, non-sanitized) toolchain, -T0 otherwise — the SAME
+// `optimized` boolean R6 reads for -CG2/-CT0. A module reachable in both the
+// host (release) and target (debug) contours yields two R5 producers with
+// identical outputs whose commands differ ONLY in the rlgen mode.
 func TestEmitR5_RlgenModeFollowsOptimized(t *testing.T) {
 	releaseFlags := make(map[string]string, len(testToolchainFlags)+2)
 	for k, v := range testToolchainFlags {
@@ -39,7 +37,7 @@ func TestEmitR5_RlgenModeFollowsOptimized(t *testing.T) {
 			t.Errorf("cppOut = %q, want $(B)/kernel/urlnorm/urlhashval.rl5.cpp", cppOut.string())
 		}
 
-		// The rlgen-cd command is Cmds[1]; its flag arg sits right after the binary.
+		// rlgen-cd is Cmds[1]; its flag arg sits right after the binary.
 		flat := e.nodes[ref].Cmds[1].CmdArgs.flat()
 		return flat[1].string()
 	}

@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// tuid derives a deterministic UID from a label for test fixtures.
+// tuid derives a deterministic UID from a label.
 func tuid(label string) UID { return computeUID([]byte(label)) }
 
 func TestComputeUID_LengthAndAlphabet(t *testing.T) {

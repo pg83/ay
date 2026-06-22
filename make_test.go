@@ -17,7 +17,7 @@ func TestFindSourceRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// From a subdirectory, the root is the nearest ancestor holding ya.conf.
+	// From a subdirectory: nearest ancestor holding ya.conf.
 	if got := findSourceRoot(sub); got != root {
 		t.Fatalf("findSourceRoot(%q) = %q, want %q", sub, got, root)
 	}
@@ -27,7 +27,7 @@ func TestFindSourceRoot(t *testing.T) {
 		t.Fatalf("findSourceRoot(root) = %q, want %q", got, root)
 	}
 
-	// With no ya.conf in any ancestor, fall back to the start directory.
+	// No ya.conf in any ancestor: fall back to start.
 	bare := t.TempDir()
 	if got := findSourceRoot(bare); got != bare {
 		t.Fatalf("findSourceRoot(no-marker) = %q, want %q", got, bare)

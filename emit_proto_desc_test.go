@@ -5,13 +5,10 @@ import (
 	"testing"
 )
 
-// TestDescProtoOutputRel_SRCDIRRebasesDescUnderModule pins the upstream
-// ${output;suf=.desc:File} SRCDIR rebasing for DESC_PROTO `.desc` outputs: when a
-// .proto SRC resolves (through SRCDIR) outside the declaring builtin module, the
-// `.desc` output must root under the module build dir with the `..` ascent mapped
-// to `__` segments; an in-module source keeps its rootrel path. Before the fix
-// descProtoOutputRel does not exist (compile failure) and the resolved physical
-// path was used verbatim.
+// TestDescProtoOutputRel_SRCDIRRebasesDescUnderModule pins the SRCDIR rebasing for
+// DESC_PROTO `.desc` outputs: when a .proto SRC resolves (through SRCDIR) outside the
+// declaring module, the `.desc` output must root under the module build dir with the
+// `..` ascent mapped to `__` segments; an in-module source keeps its rootrel path.
 func TestDescProtoOutputRel_SRCDIRRebasesDescUnderModule(t *testing.T) {
 	cases := []struct {
 		name, instance, srcRel, resolved, want string
@@ -47,11 +44,10 @@ func TestDescProtoOutputRel_SRCDIRRebasesDescUnderModule(t *testing.T) {
 	}
 }
 
-// TestEmitDescProto_SRCDIRBuiltinDescRoot is the graph regression for the T-37
-// residual: a protos_from_protobuf-style PROTO_LIBRARY whose SRCS resolve through
-// SRCDIR outside the module must emit its `.desc` under the module build root
-// (with `__` ascent), keep `.rawproto` at the physical source root, and feed the
-// rebased `.desc` to its `.self.protodesc` merge command.
+// TestEmitDescProto_SRCDIRBuiltinDescRoot is the graph regression: a PROTO_LIBRARY
+// whose SRCS resolve through SRCDIR outside the module must emit its `.desc` under
+// the module build root (with `__` ascent), keep `.rawproto` at the physical source
+// root, and feed the rebased `.desc` to its `.self.protodesc` merge command.
 func TestEmitDescProto_SRCDIRBuiltinDescRoot(t *testing.T) {
 	const moduleDir = "contrib/libs/protobuf/builtin_proto/protos_from_protobuf"
 	const srcDir = "contrib/libs/protobuf/src"
@@ -108,13 +104,10 @@ func TestEmitDescProto_SRCDIRBuiltinDescRoot(t *testing.T) {
 	}
 }
 
-// TestEmitProtoDescriptions_PDProducerShape reproduces the sg7 PD gap: a
-// PROTO_DESCRIPTIONS target that PEERDIRs a PROTO_LIBRARY must, via the
-// DESC_PROTO submodule, emit one proto-description producer per .proto SRC
-// (desc_rawproto_wrapper.py around protoc) writing <proto>.desc and the hashed
-// <proto>.<md5(MODDIR)>.rawproto, plus the .self.protodesc / .protosrc and the
-// PROTO_DESCRIPTIONS .protodesc / .tar merge outputs. Before this change none of
-// these nodes existed, so the assertions (and the missing emitter symbol) fail.
+// TestEmitProtoDescriptions_PDProducerShape: a PROTO_DESCRIPTIONS target that PEERDIRs
+// a PROTO_LIBRARY must, via the DESC_PROTO submodule, emit one PD producer per .proto
+// SRC writing <proto>.desc and the hashed <proto>.<md5(MODDIR)>.rawproto, plus the
+// .self.protodesc / .protosrc and the .protodesc / .tar merge outputs.
 func TestEmitProtoDescriptions_PDProducerShape(t *testing.T) {
 	const protoDir = "myproto"
 	const descDir = "desc"
@@ -175,8 +168,7 @@ func TestEmitProtoDescriptions_PDProducerShape(t *testing.T) {
 		t.Errorf("PD producer outputs = %v, want [%s %s]", pd.Outputs, descOut, rawOut)
 	}
 
-	// deps == foreign_deps == [protoc]: the tool rides ForeignDepRefs, no
-	// separate DepRefs.
+	// The tool rides ForeignDepRefs, no separate DepRefs.
 	if len(pd.DepRefs) != 0 {
 		t.Errorf("PD producer DepRefs = %d, want 0 (protoc rides foreign_deps)", len(pd.DepRefs))
 	}
@@ -228,15 +220,11 @@ func TestEmitProtoDescriptions_PDProducerShape(t *testing.T) {
 	}
 }
 
-// TestEmitDescProto_MergeNodeFlattensProducerSourceInputs reproduces the T-51
-// Split A residual: the DESC_PROTO submodule merge node (.self.protodesc /
-// .protosrc) must carry, as direct inputs, the per-proto producer source/script
+// TestEmitDescProto_MergeNodeFlattensProducerSourceInputs: the DESC_PROTO submodule
+// merge node must carry, as direct inputs, the per-proto producer source/script
 // closure in addition to the generated .desc/.rawproto and its own merge/collect
-// scripts. Upstream-normalized merge nodes flatten the desc_rawproto_wrapper.py
-// script, every declared source proto, and the parsed proto import closure
-// (e.g. an imported, non-source descriptor.proto). Before this change the merge
-// node received only generated descriptor/rawproto inputs plus merge scripts, so
-// the wrapper, source, and import inputs are reference-only.
+// scripts — the wrapper, every declared source proto, and the parsed proto import
+// closure (e.g. an imported, non-source descriptor.proto).
 func TestEmitDescProto_MergeNodeFlattensProducerSourceInputs(t *testing.T) {
 	const moduleDir = "contrib/libs/protobuf/builtin_proto/protos_from_protobuf"
 	const srcDir = "contrib/libs/protobuf/src"
@@ -250,8 +238,8 @@ func TestEmitDescProto_MergeNodeFlattensProducerSourceInputs(t *testing.T) {
 	files["build/scripts/merge_files.py"] = "print('merge')\n"
 	files["build/scripts/collect_rawproto.py"] = "print('collect')\n"
 	// type.proto is a declared source that imports any.proto; any.proto is NOT a
-	// source — it is an import-only descriptor that must still reach the merge
-	// node as a direct input (the protos_from_protoc → descriptor.proto shape).
+	// source — it is an import-only descriptor that must still reach the merge node
+	// as a direct input.
 	files[moduleDir+"/ya.make"] = "PROTO_LIBRARY()\nDISABLE(NEED_GOOGLE_PROTO_PEERDIRS)\nPROTO_NAMESPACE(GLOBAL " + srcDir + ")\nSRCDIR(" + srcDir + ")\nSRCS(google/protobuf/type.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n"
 	files[srcDir+"/google/protobuf/any.proto"] = "syntax = \"proto3\";\npackage google.protobuf;\nmessage Any { int32 x = 1; }\n"
 	files[srcDir+"/google/protobuf/type.proto"] = "syntax = \"proto3\";\npackage google.protobuf;\nimport \"google/protobuf/any.proto\";\nmessage Type { Any a = 1; }\n"
@@ -299,16 +287,12 @@ func TestEmitDescProto_MergeNodeFlattensProducerSourceInputs(t *testing.T) {
 	}
 }
 
-// TestEmitDescProto_ProtoNamespaceNestedSourceDescOutputAndIncludes reproduces
-// the T-39A residual: a PROTO_LIBRARY with PROTO_NAMESPACE(yt) whose .proto src
-// lives in a subdirectory of the module must (a) write its descriptor under the
-// declaring module root with the ymake `_/` output-name prefix
-// ($(B)/<mod>/_/<sub>/x.proto.desc), and (b) render the descriptor protoc
-// command's full _PROTO__INCLUDE span — the structural -I=$(B) -I=$(S)
-// -I=$(S)/<ns> band plus every proto peer's namespace contribution (here the
-// PEERDIR'd PROTO_NAMESPACE(yt) tail -I=$(S)/yt). Before this change the desc
-// output omitted `_/` and the command omitted the whole middle band. The
-// .rawproto output keeps its natural path (upstream `norel`) and md5 stem.
+// TestEmitDescProto_ProtoNamespaceNestedSourceDescOutputAndIncludes: a PROTO_LIBRARY
+// with PROTO_NAMESPACE(yt) whose .proto src is in a subdirectory must (a) write its
+// descriptor under the module root with the `_/` output-name prefix
+// ($(B)/<mod>/_/<sub>/x.proto.desc), and (b) render the descriptor command's full
+// _PROTO__INCLUDE span (structural -I=$(B) -I=$(S) -I=$(S)/<ns> plus every proto peer's
+// namespace). The .rawproto keeps its natural (non-rebased) path and md5 stem.
 func TestEmitDescProto_ProtoNamespaceNestedSourceDescOutputAndIncludes(t *testing.T) {
 	const clientMod = "yt/yt_proto/yt/client"
 	const coreMod = "yt/yt_proto/yt/core"
@@ -349,9 +333,9 @@ func TestEmitDescProto_ProtoNamespaceNestedSourceDescOutputAndIncludes(t *testin
 
 	args := pd.Cmds[0].CmdArgs.flat()
 
-	// Exact ordered _PROTO__INCLUDE span: own namespace, structural $(B)/$(S),
-	// own cppOutRoot, the peer namespace tail (-I=$(S)/yt from yt/core), then the
-	// trailing build-root + protobuf-src and --include_source_info.
+	// Exact ordered _PROTO__INCLUDE span: own namespace, structural $(B)/$(S), own
+	// cppOutRoot, the peer namespace tail, then the trailing build-root + protobuf-src
+	// and --include_source_info.
 	wantSpan := []string{
 		"-I=./yt", "-I=$(S)/yt",
 		"-I=$(B)", "-I=$(S)", "-I=$(S)/yt",
@@ -378,14 +362,11 @@ func TestEmitDescProto_ProtoNamespaceNestedSourceDescOutputAndIncludes(t *testin
 	}
 }
 
-// TestEmitProtoDescriptions_CarriesPythonToolchainSbom reproduces the sg7
-// toolchain-SBOM gap: on linux/x86_64 with the internal SBOM contour, a
-// PROTO_DESCRIPTIONS target keeps _NEED_SBOM_INFO (unlike _DESC_PROTO, which
-// DISABLEs it) and, as a _BARE_UNIT final target, materializes the universal
-// YMAKE_PYTHON3 toolchain peer's global toolchain.component.sbom as a direct
-// input. Before this change the PD merge node omitted that input while the
-// reference lists it exactly once; the DESC_PROTO producer/.self.protodesc
-// nodes (feature disabled) must stay free of it.
+// TestEmitProtoDescriptions_CarriesPythonToolchainSbom: on linux/x86_64 with the
+// internal SBOM contour, a PROTO_DESCRIPTIONS target keeps SBOM info (unlike
+// DESC_PROTO) and, as a bare-unit final target, materializes the python toolchain
+// peer's global toolchain.component.sbom as a direct input exactly once; the
+// DESC_PROTO nodes (feature disabled) must stay free of it.
 func TestEmitProtoDescriptions_CarriesPythonToolchainSbom(t *testing.T) {
 	const protoDir = "myproto"
 	const descDir = "desc"
@@ -399,8 +380,8 @@ func TestEmitProtoDescriptions_CarriesPythonToolchainSbom(t *testing.T) {
 	files[protoDir+"/foo.proto"] = "syntax = \"proto3\";\npackage foo;\nmessage Foo { int32 x = 1; }\n"
 	files[descDir+"/ya.make"] = "PROTO_DESCRIPTIONS()\nPEERDIR(" + protoDir + ")\nEND()\n"
 
-	// internal SBOM contour + the YMAKE_PYTHON3 TOOLCHAIN(python3) peer whose
-	// global toolchain.component.sbom every _BARE_UNIT carries.
+	// internal SBOM contour + the python3 toolchain peer whose global
+	// toolchain.component.sbom every bare-unit carries.
 	files["build/internal/conf/sbom.conf"] = "SBOM_GENERATION_ALLOWED=yes\n"
 	files["build/platform/python/ymake_python3/ya.make"] = "RESOURCES_LIBRARY()\nTOOLCHAIN(python3)\nVERSION(3.12.6)\nDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(YMAKE_PYTHON3 python.json)\nEND()\n"
 	files["build/platform/python/ymake_python3/python.json"] = `{"by_platform":{"linux-x86_64":{"uri":"sbr:test"}}}`

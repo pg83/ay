@@ -7,28 +7,23 @@ import (
 )
 
 var (
-	// goSources embeds every .go file in this package at build time so the
-	// runtime audit can mine string literals out of the source without
-	// depending on the binary's invocation cwd. Only used when
-	// --dump-ignored-macros is on.
+	// goSources embeds every .go file so the runtime audit can mine string
+	// literals from the source independent of the invocation cwd. Used only
+	// when --dump-ignored-macros is on.
 	//
 	//go:embed *.go
 	goSources embed.FS
-	// stringLiteralRE matches a Go double-quoted string literal that is
-	// composed entirely of `[A-Z0-9_]+` and contains at least one ASCII
-	// letter — i.e., the same shape we treat as a "service keyword" macro
-	// argument. Trailing/leading whitespace is not allowed because Go
-	// string literals don't contain them in our codebase for this idiom.
+	// stringLiteralRE matches a Go double-quoted string literal of [A-Z0-9_]
+	// with at least one ASCII letter — the same shape we treat as a service
+	// keyword macro argument.
 	stringLiteralRE        = regexp.MustCompile(`"([A-Z][A-Z0-9_]*|[A-Z0-9_]*[A-Z][A-Z0-9_]*)"`)
 	knownServiceTokensOnce sync.Once
 	knownServiceTokensVal  map[string]struct{}
 )
 
-// knownServiceTokens returns the set of uppercase string literals appearing
-// in this package's .go sources. Any macro argument that matches the
-// service-keyword shape (looksLikeServiceWord, see macro_audit.go) and is
-// NOT in this set is unhandled — the macro-specific parser branch does not
-// look for it.
+// knownServiceTokens returns the uppercase string literals in this package's
+// .go sources. A macro argument of service-keyword shape (looksLikeServiceWord)
+// not in this set is unhandled — no parser branch looks for it.
 func knownServiceTokens() map[string]struct{} {
 	knownServiceTokensOnce.Do(func() {
 		knownServiceTokensVal = mineServiceTokensFromSources()

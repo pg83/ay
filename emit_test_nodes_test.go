@@ -239,9 +239,9 @@ func expectedClangFormatNode() *Node {
 	}
 }
 
-// cmdsEqual compares two Cmd slices treating CmdArgs by their materialized string
-// content (an arg's source namespace — STR vs VFS vs ARG — is irrelevant to the emitted
-// command; only the string matters), and the remaining Cmd fields structurally.
+// cmdsEqual compares two Cmd slices by CmdArgs' materialized string content (the
+// arg's source namespace — STR/VFS/ARG — is irrelevant; only the string matters)
+// and the remaining Cmd fields structurally.
 func cmdsEqual(got, want []Cmd) bool {
 	if len(got) != len(want) {
 		return false
@@ -304,10 +304,10 @@ type CanonicalFixtureNode struct {
 	TargetProperties map[string]interface{}
 }
 
-// testUnittestResourceGlobals is the toolchain resource set a C++ unittest's
-// closure reaches, in scrambled order, to exercise buildUnittestNode's sort. The
-// tokens are id-free (the production tokens carry an sbr id the gate normalizer
-// discounts); the unit test verifies ordering/rendering only.
+// testUnittestResourceGlobals is the toolchain resource set a C++ unittest
+// reaches, scrambled to exercise buildUnittestNode's sort. Tokens are id-free
+// (production tokens carry an id the gate normalizer discounts); the test
+// verifies ordering/rendering only.
 func testUnittestResourceGlobals() []ResourceDecl {
 	decl := func(name string) ResourceDecl {
 		return ResourceDecl{

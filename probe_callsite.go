@@ -12,13 +12,11 @@ import (
 	"sync"
 )
 
-// probeCallSite instruments every top-level function: it splices a
-// recordCall("file:line") call as the first statement of each func body. Then run
-// the whole gate with the instrumented binary under --probe=callsite (which
-// enables recording and dumps on exit) and CALLSITE_OUT=<file>; union the
-// recorded sites across runs. Any site in the all-sites file (first arg) NOT in
-// the union is reachable code the gate never exercises — refactor garbage.
-// Throwaway: apply, measure, revert.
+// probeCallSite splices a recordCall("file:line") as the first statement of each
+// top-level func body. Run the gate under --probe=callsite (enables recording,
+// dumps on exit) with CALLSITE_OUT=<file>, then union the recorded sites across
+// runs. Any site in the all-sites file (first arg) NOT in the union is reachable
+// code the gate never exercises. Throwaway: apply, measure, revert.
 func probeCallSite(_ GlobalFlags, args []string) int {
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "usage: ay probe callsite <all-sites-out> [files...]")
@@ -73,9 +71,8 @@ func probeCallSite(_ GlobalFlags, args []string) int {
 			allSites = append(allSites, site)
 
 			lbrace := fset.Position(fd.Body.Lbrace).Offset
-			// Terminate with ';' so the call is a complete statement even when
-			// the body is a one-liner (func f() T { return x }) where the
-			// original code stays on the same line as the splice point.
+			// Terminate with ';' so the call is a complete statement even for a
+			// one-liner body where the original code shares the splice line.
 			inserts = append(inserts, ins{lbrace + 1, fmt.Sprintf("\n\trecordCall(%q);", site)})
 		}
 
@@ -115,19 +112,16 @@ func probeCallSite(_ GlobalFlags, args []string) int {
 	return 0
 }
 
-// --- runtime probe: populated by `ay probe callsite` above wrapping each
-// top-level func with recordCall. dumpCalls flushes the called set (append) to
-// $CALLSITE_OUT on cmd exit; union across the gate's runs, diff vs
-// callsites_all.txt to find reachable-but-never-exercised (gate-garbage)
-// functions. Throwaway. ---
+// --- runtime probe populated by the recordCall wrappers above. dumpCalls
+// appends the called set to $CALLSITE_OUT on cmd exit; union across runs, diff
+// vs the all-sites file to find reachable-but-never-exercised funcs. Throwaway.
 
 // callSiteSeen is the recorded reach-set. A sync.Map (not a channel) because it
-// must be usable from the package's very first instruction: package-var
-// initializers — e.g. includeDirectiveParsers = newIncludeDirectiveParserRegistry()
-// — run before any init(), so a channel/goroutine set up in init() would miss
-// those init-time calls and report init-reached funcs as dead. sync.Map's zero
-// value is ready at load and safe for the concurrent stores from make's gen path
-// and dump's streamGraphFanout. Store is idempotent (reachability, not counts).
+// must work from the package's very first instruction: package-var initializers
+// run before any init(), so a channel/goroutine set up in init() would miss
+// init-time calls and report init-reached funcs as dead. sync.Map's zero value
+// is ready at load and safe for concurrent stores. Store is idempotent
+// (reachability, not counts).
 var callSiteSeen sync.Map
 
 func recordCall(site string) {

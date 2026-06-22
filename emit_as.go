@@ -6,8 +6,7 @@ import (
 
 var yasmBinaryPath = yasmBinaryVFS.string()
 
-// yasmConstHead is the constant [yasm -f elf64 -D UNIX …replace…] lead of
-// every yasm invocation (the AS-yasm and rodata nodes share it).
+// yasmConstHead is the constant lead shared by every yasm invocation.
 var yasmConstHead = []STR{
 	internStr(yasmBinaryPath),
 	argF.str(), argElf64.str(),
@@ -39,9 +38,8 @@ func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		Resources:        instance.Platform.UsesClangOnly,
 	}
 
-	// A generated $(B) source (a RUN_PROGRAM/RUN_PYTHON auto OUT/STDOUT .s/.S
-	// re-fed as a module source) depends on its producer; declared-SRC .asm
-	// leaves ExtraDepRefs nil, so this is a no-op for them.
+	// A generated $(B) source depends on its producer; declared-SRC .asm
+	// leaves ExtraDepRefs nil, a no-op for them.
 	if len(in.ExtraDepRefs) > 0 {
 		node.DepRefs = in.ExtraDepRefs
 	}
@@ -150,11 +148,8 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 		argI.str(), argS.str(),
 	)
 
-	// Per-module `ADDINCL(FOR asm X)` entries arrive on in.AddIncl
-	// (emit_sources.go merges them when the source is .asm). Append after
-	// the base $(B)/$(S) pair so paths like
-	// yt/yt/core/misc/isa_crc64/include precede `-o output input` and the
-	// command shape matches REF.
+	// Per-module `ADDINCL(FOR asm X)` entries arrive on in.AddIncl. Append
+	// after the base $(B)/$(S) pair so the paths precede `-o output input`.
 	for _, p := range in.AddIncl {
 		cmdArgs = append(cmdArgs, argI.str(), (p).str())
 	}
@@ -180,9 +175,8 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 
 	node.ForeignDepRefs = []NodeRef{yasmLD}
 
-	// A generated $(B) source (a RUN_PROGRAM/RUN_PYTHON auto OUT/STDOUT .asm
-	// re-fed as a module source) depends on its producer; declared-SRC .asm
-	// leaves ExtraDepRefs nil, so this is a no-op for them.
+	// A generated $(B) source depends on its producer; declared-SRC .asm
+	// leaves ExtraDepRefs nil, a no-op for them.
 	if len(in.ExtraDepRefs) > 0 {
 		node.DepRefs = in.ExtraDepRefs
 	}
@@ -197,13 +191,10 @@ func emitLibraryAsmSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, s
 	scanIn := in
 
 	if len(d.asmAddIncl) > 0 {
-		// `ADDINCL(FOR asm X)` (yatool/build/conf/proto.conf:104-106
-		// _ORDER_ADDINCL routes the FOR asm bucket via ADDINCL) feeds
-		// the assembler's -I list AND the include scanner's search
-		// path. Without it the .asm's `%include "X/..."` resolves
-		// against nothing — and yasm's command misses `-I X` entirely,
-		// diverging from REF (e.g. yt/yt/core/misc/isa_crc64 needs
-		// -I=$(S)/yt/yt/core/misc/isa_crc64/include for reg_sizes.asm).
+		// `ADDINCL(FOR asm X)` feeds both the assembler's -I list and the
+		// include scanner's search path. Without it the .asm's
+		// `%include "X/..."` resolves against nothing and yasm's command
+		// misses `-I X` entirely.
 		scanIn.AddIncl = dedupVFS(in.AddIncl, d.asmAddIncl)
 		scanIn.ScanCfg = newScanContext(ctx.parsers, scanIn.AddIncl, scanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 		asIn.AddIncl = scanIn.AddIncl

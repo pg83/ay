@@ -40,10 +40,10 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		peerPaths = append(peerPaths, p.string())
 	}
 
-	// Resolve every peer through genModule first (memoized; the recursion may
-	// re-enter the deduper), then aggregate per output kind below in sequential
-	// leaf passes. The peer-list guard stays a local string-keyed map because it
-	// must stay live across the genModule calls.
+	// Resolve every peer through genModule first (memoized; recursion may
+	// re-enter the deduper), then aggregate per output kind in sequential leaf
+	// passes. The peer-list guard stays a local map: it must stay live across the
+	// genModule calls.
 	seen := make(map[string]struct{}, len(peerPaths)+len(dynLibRPathHelperPeers))
 	resolved := make([]*ModuleEmitResult, 0, len(peerPaths))
 
@@ -70,8 +70,7 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		rpathOnly = append(rpathOnly, genModule(ctx, peerInstance))
 	}
 
-	// Resource globals, deduped by global-var STR cast into the run-wide
-	// VFS-keyed deduper (single-namespace leaf pass, as in genModule).
+	// Resource globals, deduped by global-var STR through the VFS-keyed deduper.
 	var resourceGlobals []ResourceDecl
 	deduper.reset()
 
@@ -289,21 +288,17 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 func composeDynLibInputs(na *NodeArenas, peerLibPaths, pluginPaths []VFS, fixElfPath VFS, modulePath, exportsScript string, scripts ScriptDeps) InputChunks {
 	chunks := make(InputChunks, 0, 7)
 
-	// peerLibPaths and pluginPaths are the caller's member slices — referenced
-	// as their own chunks, never copied.
+	// Caller's member slices, referenced as their own chunks, never copied.
 	chunks = append(chunks, peerLibPaths, pluginPaths, na.srcChunk(fixElfPath))
 
-	// The scripts the link command actually runs (vcs stamp, the link_dyn_lib
-	// wrapper, the objcopy/strip fs_tools), each expanded to its import closure via
-	// the table — link_dyn_lib pulls in link_exe, process_command_files,
-	// thinlto_cache, process_whole_archive_option; fs_tools pulls in
-	// process_command_files. Each closure is a shared table slice, referenced as
-	// its own chunk. Dups are dropped in normalization.
+	// The scripts the link command runs (vcs stamp, link wrapper, objcopy/strip
+	// tools), each expanded to its import closure via the table. Each closure is a
+	// shared table slice referenced as its own chunk; dups drop in normalization.
 	for _, w := range []VFS{ldVcsInfoVFS, ldLinkDynLibVFS, ldFsToolsVFS} {
 		chunks = append(chunks, scripts[w])
 	}
 
-	// Non-script inputs: the vcs C template + header and the module's exports list.
+	// Non-script inputs: vcs C template + header, the module's exports list.
 	chunks = append(chunks, []VFS{
 		ldSvnInterfaceVFS,
 		ldSvnversionHVFS,

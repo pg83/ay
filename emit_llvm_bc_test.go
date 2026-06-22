@@ -5,20 +5,18 @@ import (
 	"testing"
 )
 
-// addLLVMBCToolchainPeer injects a synthetic build/platform/clang RESOURCES_LIBRARY
-// (the peer every C++ module implicitly PEERDIRs) into the in-memory fixture, so
-// CLANG16_RESOURCE_GLOBAL reaches the module's resource-global closure — the peerdir
-// value emitLLVMBC resolves CLANG_BC_ROOT against. Self-contained: no real FS access;
-// the uri is a fixture token, and the clang++ path is not asserted by these tests.
+// addLLVMBCToolchainPeer injects a synthetic clang RESOURCES_LIBRARY (the peer
+// every C++ module implicitly PEERDIRs) into the fixture, so the toolchain
+// resource-global reaches the module's closure — the value emitLLVMBC resolves
+// CLANG_BC_ROOT against. Self-contained: no real FS; the uri is a fixture token.
 func addLLVMBCToolchainPeer(files map[string]string) {
 	files["build/platform/clang/ya.make"] = "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(CLANG16 clang16.json)\nEND()\n"
 	files["build/platform/clang/clang16.json"] = `{"by_platform":{"linux-x86_64":{"uri":"sbr:test-clang16"}}}`
 }
 
-// TestEmitLLVMBC_OptPassesNoBraceComma verifies that the OP node's -passes arg
-// uses literal commas (not ${__COMMA__}) and has no spurious outer single-quotes.
-// Upstream: ymake expands ${__COMMA__} → , and strips shell-quoting before
-// writing graph JSON. Our code must emit the already-expanded form.
+// TestEmitLLVMBC_OptPassesNoBraceComma verifies the OP node's -passes arg uses
+// literal commas (not ${__COMMA__}) with no spurious outer single-quotes —
+// upstream expands ${__COMMA__} → , and strips shell-quoting before graph JSON.
 func TestEmitLLVMBC_OptPassesNoBraceComma(t *testing.T) {
 	const modPath = "mod/llvm"
 
@@ -92,10 +90,9 @@ END()
 	}
 }
 
-// TestEmitLLVMBC_BCNodeIncludesCompileFlags verifies that BC compile nodes include
-// the standard include paths and defines (like a full CC compile), not just the
-// bare -emit-llvm -c src -o out. Upstream LLVM_COMPILE_CXX macro includes
-// ${pre=-I:_C__INCLUDE} $BC_CXXFLAGS which is the full CXXFLAGS set.
+// TestEmitLLVMBC_BCNodeIncludesCompileFlags verifies BC compile nodes include the
+// standard include paths and defines (like a full CC compile), not just bare
+// -emit-llvm -c src -o out — upstream adds ${pre=-I:_C__INCLUDE} $BC_CXXFLAGS.
 func TestEmitLLVMBC_BCNodeIncludesCompileFlags(t *testing.T) {
 	const modPath = "mod/llvm"
 
@@ -173,15 +170,14 @@ END()
 	}
 }
 
-// TestEmitLLVMBC_PipelineProducesFiveNodes reproduces the G3 yt codec llvm16
-// gap: USE_LLVM_BC16 + LLVM_BC parses (modules.go:1029) but emission is
-// missing. Upstream `build/plugins/llvm_bc.py` drives the 5-step pipeline:
+// TestEmitLLVMBC_PipelineProducesFiveNodes reproduces the gap where USE_LLVM_BC16
+// + LLVM_BC parses but emission is missing. The upstream 5-step pipeline:
 //   - llvm_compile_cxx  → $(B)/<src>.<suffix>.bc                kv.p=BC
 //   - llvm_link         → $(B)/<mod>/<NAME>_merged.<suffix>.bc  kv.p=LD
 //   - llvm_opt          → $(B)/<mod>/<NAME>_optimized.<suffix>.bc kv.p=OP
 //   - onresource([out_bc, '/llvm_bc/'+NAME]) ⇒
-//     objcopy_<hash>.o   kv.p=PY  (handled by existing emitResourceObjcopy)
-//     lib<mod>.global.a  kv.p=AR  (handled by existing global-archive flow)
+//     objcopy_<hash>.o   kv.p=PY  (existing emitResourceObjcopy)
+//     lib<mod>.global.a  kv.p=AR  (existing global-archive flow)
 //
 // Test asserts all 5 nodes reachable from the LIBRARY's archive root.
 func TestEmitLLVMBC_PipelineProducesFiveNodes(t *testing.T) {
@@ -290,10 +286,9 @@ END()
 	}
 }
 
-// TestEmitLLVMBC_BCNodeIncludesArchArgs verifies that the BC compile command
-// carries $C_FLAGS_PLATFORM arch flags (e.g. -march=armv8-a for AArch64).
-// testGen targets AArch64, so bundle.ArchArgs = ["-march=armv8-a"]; the BC
-// command must include that flag between --target=... and -B/usr/bin.
+// TestEmitLLVMBC_BCNodeIncludesArchArgs verifies the BC compile command carries
+// $C_FLAGS_PLATFORM arch flags. testGen targets AArch64, so bundle.ArchArgs =
+// ["-march=armv8-a"]; the flag must sit between --target=... and -B/usr/bin.
 func TestEmitLLVMBC_BCNodeIncludesArchArgs(t *testing.T) {
 	const modPath = "mod/llvm"
 
@@ -372,11 +367,10 @@ END()
 	}
 }
 
-// TestEmitLLVMBC_BCNodeCarriesIncludeClosure verifies that the BC compile node
-// carries the full transitive include closure in Inputs, not just the single
-// source file. Upstream emits all header dependencies as direct node inputs so
-// any header change retriggers the BC compile. Our prior code used
-// Inputs: inputChunks{[]VFS{inputVFS} — only the source — which diverged from upstream.
+// TestEmitLLVMBC_BCNodeCarriesIncludeClosure verifies the BC compile node carries
+// the full transitive include closure in Inputs, not just the source file.
+// Upstream emits all header deps as direct inputs so a header change retriggers
+// the BC compile; prior code carried only the source, diverging from upstream.
 func TestEmitLLVMBC_BCNodeCarriesIncludeClosure(t *testing.T) {
 	const modPath = "mod/llvm"
 
@@ -426,7 +420,7 @@ END()
 		t.Errorf("BC node Inputs has only %d entries; want source + closure: %v", len(bcNode.flatInputs()), vfsStringsT3(bcNode.flatInputs()))
 	}
 
-	// The source rides the closure window (chunked inputs carry no positional
+	// The source rides the closure window (chunked inputs have no positional
 	// contract — the wrapper chunk leads).
 	if !nodeHasInput(bcNode, "$(S)/"+modPath+"/foo.cpp") {
 		t.Errorf("BC node Inputs missing the source foo.cpp: %v", vfsStringsT3(bcNode.flatInputs()))
@@ -438,12 +432,10 @@ END()
 	}
 }
 
-// TestEmitLLVMBC_ObjcopyNodeCarriesBCClosure verifies that the PY objcopy node
-// for the LLVM_BC resource embed carries the BC compilation closure scripts as
-// inputs, matching upstream's flat input propagation. Upstream ymake propagates
-// the OP node's inputs (which include the clang_wrapper.py and llvm_opt_wrapper.py
-// scripts plus all closure headers) into the PY objcopy node. In our code this
-// propagation flows through d.prOutputInputs, which emitLLVMBC must populate.
+// TestEmitLLVMBC_ObjcopyNodeCarriesBCClosure verifies the PY objcopy node for the
+// LLVM_BC resource embed carries the BC closure scripts as inputs. Upstream
+// propagates the OP node's inputs (wrapper scripts plus closure headers) into the
+// PY objcopy node; here that flows through d.prOutputInputs, which emitLLVMBC must populate.
 func TestEmitLLVMBC_ObjcopyNodeCarriesBCClosure(t *testing.T) {
 	const modPath = "mod/llvm"
 
@@ -487,12 +479,10 @@ END()
 		t.Fatal("graph missing PY objcopy node for LLVM_BC resource")
 	}
 
-	// The objcopy.py action reads only the embedded .bc; the BC compilation's
-	// source closure (clang_wrapper.py, llvm_opt_wrapper.py, headers) is NOT an
-	// input of the objcopy node. Upstream over-emits that closure here as
-	// cache-key-only inputs; we do not, and dump normalization strips it from the
-	// reference side (see bugs/20260615-upstream-resource-objcopy-overemit.md and
-	// filterObjcopyInputs).
+	// The objcopy.py action reads only the embedded .bc; the BC source closure
+	// (wrapper scripts, headers) is NOT an input of the objcopy node. Upstream
+	// over-emits that closure here as cache-key-only inputs; we do not, and dump
+	// normalization strips it from the reference side (see filterObjcopyInputs).
 	for _, unwanted := range []string{
 		"$(S)/build/scripts/clang_wrapper.py",
 		"$(S)/build/scripts/llvm_opt_wrapper.py",
@@ -504,10 +494,9 @@ END()
 	}
 }
 
-// TestEmitLLVMBC_BCNodeGeneratedSourceClosure verifies that a BC source produced
-// by COPY_FILE(TEXT) (i.e. a build-root generated source like yt_codec_bc.cpp)
-// compiles the build-root copy as its primary input and carries its include
-// closure — both matching the upstream LLVM_COMPILE_CXX node shape.
+// TestEmitLLVMBC_BCNodeGeneratedSourceClosure verifies a BC source produced by
+// COPY_FILE(TEXT) (a build-root generated source) compiles the build-root copy as
+// its primary input and carries its include closure — matching the upstream node shape.
 func TestEmitLLVMBC_BCNodeGeneratedSourceClosure(t *testing.T) {
 	const modPath = "mod/llvm"
 

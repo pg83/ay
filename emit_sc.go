@@ -1,17 +1,11 @@
 package main
 
-// emit_sc.go models the upstream _SRC("sc") rule (build/ymake.core.conf):
-//
-//	.CMD=${tool:"tools/domschemec"} --in ${input:SRC} --out ${norel;output;suf=.h:SRC}
-//	     ${hide;output_include:"library/cpp/domscheme/runtime.h"}
-//	     ${hide;kv:"p SC"} ${hide;kv:"pc yellow"}
-//	.PEERDIR=library/cpp/domscheme
-//
-// A SRCS(*.sc) entry yields a single SC producer node: domschemec turns the .sc
-// schema into a <src>.sc.h header. The header carries the runtime.h
-// output_include, so the producer's inputs are the tool, the .sc source, and
-// runtime.h together with its scanned include closure. There is no compile —
-// the generated header is consumed via #include (like .h.in).
+// emit_sc.go models the upstream _SRC("sc") rule: a SRCS(*.sc) entry yields a
+// single SC producer node where domschemec turns the .sc schema into a
+// <src>.sc.h header. The header carries the runtime.h output_include, so the
+// producer's inputs are the tool, the .sc source, and runtime.h with its
+// scanned include closure. No compile — the header is consumed via #include
+// (like .h.in). The rule also adds an implicit PEERDIR to the domscheme lib.
 
 func emitSC(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary VFS, runtimeClosure []VFS, domschemecLDRef NodeRef, emit Emitter) NodeRef {
 	na := emit.nodeArenas()
@@ -43,9 +37,8 @@ func emitLibrarySCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
 	headerVFS := build(srcVFS.rel() + ".h")
 
-	// output_include library/cpp/domscheme/runtime.h: the producer's inputs lead
-	// with runtime.h and its full include closure (the sg7 reference carries 976
-	// entries: runtime.h + libcxx). Walk it with the module's scan context.
+	// output_include runtime.h: the producer's inputs lead with runtime.h and its
+	// full include closure (runtime.h + libcxx). Walk it with the module's scan context.
 	runtimeClosure := walkClosure(ctx.scannerFor(instance), domschemeRuntimeVFS, in.ScanCfg)
 
 	scRef := emitSC(instance, srcVFS, headerVFS, domBinary, runtimeClosure, domLDRef, ctx.emit)

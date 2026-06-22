@@ -77,9 +77,8 @@ func dumpGraphDropNodeRefs(nodes []*Node, incoming []int, results map[NodeRef]st
 		}
 
 		switch {
-		// Resource FETCH nodes (CLANG, …) are NOT dropped here: -G must emit the
-		// same graph that gets executed. They are folded out later, only in
-		// `dump normalize`, for the byte-exact comparison against upstream.
+		// Resource FETCH nodes are NOT dropped here: -G must emit the
+		// graph that gets executed. They are folded out later in `dump normalize`.
 		case isDumpGraphStandaloneLLVMPRNode(nodes[nodeID], nodeID, incoming):
 			drop[refID] = struct{}{}
 			queue = append(queue, nodeID)

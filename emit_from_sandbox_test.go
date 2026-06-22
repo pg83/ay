@@ -5,12 +5,12 @@ import (
 	"testing"
 )
 
-// A FROM_SANDBOX OUT/OUT_NOAUTO file is a Sandbox-fetched build output, not a
-// source file. When a RUN_PROGRAM in the same module consumes it via IN, the
-// generator must resolve it to the fetch (SB) node's $(B) output — listing that
-// output as an input and depending on the SB node — never to an on-disk source
-// path. (Under --sandboxing the latter faults the UID finalizer's source-content
-// hash on the nonexistent file; see ads/clemmer/automorphology/uzb in sg7.)
+// A FROM_SANDBOX OUT/OUT_NOAUTO file is a fetched build output, not a source
+// file. When a RUN_PROGRAM in the same module consumes it via IN, the generator
+// must resolve it to the fetch (SB) node's $(B) output — listing that output as
+// an input and depending on the SB node — never to an on-disk source path. (Under
+// --sandboxing the latter faults the UID finalizer's source-content hash on the
+// nonexistent file.)
 func TestGen_FromSandboxOutputConsumedAsRunProgramInput(t *testing.T) {
 	files := map[string]string{}
 
@@ -69,14 +69,11 @@ END()
 	}
 }
 
-// FROM_SANDBOX(OUT file.a) declares an *auto* module output (ymake's
-// ${output:OUT}, not noauto), which is folded into the module's $AUTO_INPUT. For
-// a LIBRARY the archive command (LINK_LIB = … $TARGET $AUTO_INPUT) therefore
+// FROM_SANDBOX(OUT file.a) declares an *auto* module output (not noauto), folded
+// into the module's $AUTO_INPUT. For a LIBRARY the archive command therefore
 // archives the fetched .a as a member, and the module's own library archive is
-// emitted even with no compiled sources — exactly how
-// contrib/libs/intel/mkl/{core,lp64,threads} materialize libintel-mkl-*.a from a
-// FROM_SANDBOX libmkl_*.a. A dependent PROGRAM links that module archive through
-// the peer closure. OUT_NOAUTO outputs must NOT become members.
+// emitted even with no compiled sources. A dependent PROGRAM links that module
+// archive through the peer closure. OUT_NOAUTO outputs must NOT become members.
 func TestGen_FromSandboxAutoArchiveBecomesLibraryMember(t *testing.T) {
 	files := map[string]string{}
 
@@ -161,17 +158,16 @@ END()
 	}
 }
 
-// The FROM_SANDBOX macro names exactly three script inputs on its command path
-// (ymake.core.conf FROM_SANDBOX .CMD): fetch_from_sandbox.py, plus the hidden
-// process_command_files.py and fetch_from.py. ymake's ${input:"…"} adds the
-// named file only — it does NOT expand that script's Python import closure — so
-// the SB node must carry exactly those three and must NOT append the helper
-// closure (fetch_from imports retry; fetch_from_sandbox inline-imports error).
+// The FROM_SANDBOX macro names exactly three script inputs on its command path:
+// fetch_from_sandbox.py, plus the hidden process_command_files.py and
+// fetch_from.py. ${input:"…"} adds the named file only — it does NOT expand that
+// script's Python import closure — so the SB node must carry exactly those three
+// and must NOT append the helper closure (retry, error).
 func TestGen_FromSandboxScriptInputsExplicitThree(t *testing.T) {
 	files := map[string]string{}
 
-	// build/scripts must exist so the script table is populated; the import edges
-	// here are what the closure-expanded model would over-collect (retry, error).
+	// build/scripts must exist so the script table is populated; these import edges
+	// are what the closure-expanded model would over-collect (retry, error).
 	files["build/scripts/fetch_from_sandbox.py"] = "import process_command_files as pcf\nimport fetch_from\n"
 	files["build/scripts/fetch_from.py"] = "import retry\n"
 	files["build/scripts/process_command_files.py"] = "\n"
@@ -224,11 +220,10 @@ END()
 
 // A RUN_PROGRAM consuming opaque FROM_SANDBOX fetch outputs as IN, then embedded
 // by ARCHIVE_ASM, must carry the fetch producer's own source/script inputs on the
-// downstream PR and RD nodes — upstream's flat-input model lists a producer's
-// transitive source closure on every consumer of its outputs, even when the
-// fetched data file itself has no parsed includes. The SB fetch node's own input
-// list stays exactly the three explicit scripts (it is not a consumer).
-// (ads/clemmer/automorphology/uzb in sg7.)
+// downstream PR and RD nodes — the flat-input model lists a producer's transitive
+// source closure on every consumer of its outputs, even when the fetched data
+// file has no parsed includes. The SB fetch node's own input list stays exactly
+// the three explicit scripts (it is not a consumer).
 func TestGen_FromSandboxScriptsPropagateThroughRunProgramAndArchiveAsm(t *testing.T) {
 	files := map[string]string{}
 

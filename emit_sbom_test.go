@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-// sbomComponentOutputs returns every `.component.sbom` output path emitted in
-// the graph (the per-module _GEN_SBOM_COMPONENT DX nodes).
+// sbomComponentOutputs returns every `.component.sbom` output path in the graph
+// (the per-module _GEN_SBOM_COMPONENT DX nodes).
 func sbomComponentOutputs(g *Graph) []string {
 	var out []string
 	for _, n := range g.Graph {
@@ -29,17 +29,15 @@ func hasSbomOutputUnderDir(g *Graph, moddir string) (bool, string) {
 	return false, ""
 }
 
-// TestSbom_PY23NativeLibraryIsCPPLangNotPY3 pins the pycxx divergence: the PY3
-// submodule of a PY23_NATIVE_LIBRARY (build/conf/python.conf:1245) does
-// SET(MODULE_LANG CPP), so its SBOM component is <name>.CPP.component.sbom — not
-// .PY3. The MODULE_LANG drives both the output suffix and the --lang arg
-// (build/internal/conf/sbom.conf:43).
+// TestSbom_PY23NativeLibraryIsCPPLangNotPY3: the PY3 submodule of a
+// PY23_NATIVE_LIBRARY does SET(MODULE_LANG CPP), so its SBOM component is
+// <name>.CPP.component.sbom — not .PY3. MODULE_LANG drives both the output
+// suffix and the --lang arg.
 //
-// TestSbom_PyOnlyProtoLibraryEmitsNoComponent pins the builtin_proto
-// divergence: a PROTO_LIBRARY with EXCLUDE_TAGS(CPP_PROTO) builds no CPP_PROTO
-// submodule (the only proto submodule that carries _NEED_SBOM_INFO=yes); the
-// remaining py-proto submodule does DISABLE(_NEED_SBOM_INFO) (proto.conf:806).
-// So such a module emits no .component.sbom at all.
+// TestSbom_PyOnlyProtoLibraryEmitsNoComponent: a PROTO_LIBRARY with
+// EXCLUDE_TAGS(CPP_PROTO) builds no CPP_PROTO submodule (the only one carrying
+// _NEED_SBOM_INFO=yes); the remaining py-proto submodule does
+// DISABLE(_NEED_SBOM_INFO). So such a module emits no .component.sbom.
 func writeSbomFixture(files map[string]string) {
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
@@ -47,7 +45,7 @@ func writeSbomFixture(files map[string]string) {
 	files["contrib/python/protobuf/ya.make"] = "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nEND()\n"
 	files["contrib/libs/python/ya.make"] = "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n"
 
-	// internal SBOM contour + toolchain peers (mirrors emit_proto_desc_test).
+	// internal SBOM contour + toolchain peers.
 	files["build/internal/conf/sbom.conf"] = "SBOM_GENERATION_ALLOWED=yes\n"
 	files["build/platform/python/ymake_python3/ya.make"] = "RESOURCES_LIBRARY()\nTOOLCHAIN(python3)\nVERSION(3.12.6)\nDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(YMAKE_PYTHON3 python.json)\nEND()\n"
 	files["build/platform/python/ymake_python3/python.json"] = `{"by_platform":{"linux-x86_64":{"uri":"sbr:test"}}}`
@@ -77,7 +75,7 @@ func TestSbom_PY23NativeLibraryIsCPPLangNotPY3(t *testing.T) {
 	}
 	cpp := mustNodeByAnyOutput(t, g, wantCPP)
 
-	// The --lang arg must match the suffix (both come from MODULE_LANG).
+	// --lang must match the suffix (both from MODULE_LANG).
 	var sawLang bool
 	for _, c := range cpp.Cmds {
 		args := c.CmdArgs.flat()
@@ -114,12 +112,11 @@ func TestSbom_PyOnlyProtoLibraryEmitsNoComponent(t *testing.T) {
 	}
 }
 
-// TestSbom_CppProtoLibraryComponentTagged pins the orc-format divergence: a
-// licensed PROTO_LIBRARY (no EXCLUDE_TAGS(CPP_PROTO)) builds a CPP_PROTO
-// submodule — the only proto submodule keeping _NEED_SBOM_INFO=yes — whose
-// MODULE_TAG is CPP_PROTO. Its _GEN_SBOM_COMPONENT therefore carries
-// module_tag=cpp_proto, following the owning submodule rather than the bare
-// emitting module dir.
+// TestSbom_CppProtoLibraryComponentTagged: a licensed PROTO_LIBRARY (no
+// EXCLUDE_TAGS(CPP_PROTO)) builds a CPP_PROTO submodule — the only one keeping
+// _NEED_SBOM_INFO=yes — whose MODULE_TAG is CPP_PROTO. So its
+// _GEN_SBOM_COMPONENT carries module_tag=cpp_proto, following the owning
+// submodule rather than the emitting module dir.
 func TestSbom_CppProtoLibraryComponentTagged(t *testing.T) {
 	const protoDir = "contrib/libs/cppproto"
 
@@ -142,9 +139,9 @@ func TestSbom_CppProtoLibraryComponentTagged(t *testing.T) {
 	}
 }
 
-// TestSbom_OrdinaryLibrariesUnchanged guards that the two fixes do not disturb
-// ordinary C++ / Python library SBOM behavior: a licensed C++ LIBRARY keeps its
-// .CPP component and a licensed PY3_LIBRARY keeps its .PY3 component.
+// TestSbom_OrdinaryLibrariesUnchanged guards that the two fixes leave ordinary
+// SBOM behavior intact: a licensed C++ LIBRARY keeps its .CPP component and a
+// licensed PY3_LIBRARY keeps its .PY3 component.
 func TestSbom_OrdinaryLibrariesUnchanged(t *testing.T) {
 	const cppDir = "contrib/libs/plaincpp"
 	const pyDir = "contrib/libs/plainpy"
