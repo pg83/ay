@@ -31,6 +31,15 @@ def _load_acceptance():
     return mod
 
 
+def _load_validate():
+    path = os.path.join(SCRIPT_DIR, "validate.py")
+    loader = importlib.machinery.SourceFileLoader("validate_mod", path)
+    spec = importlib.util.spec_from_loader("validate_mod", loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
 def _make_repo(root, body):
     """Create a fake repo at root with dev/validate.py whose source is `body`."""
     dev = os.path.join(root, "dev")
@@ -62,6 +71,34 @@ PARTIAL_EXCEPTION = (
     "raise RuntimeError('boom generating sg3')\n"
 )
 ALL_SKIP = "print('[sg2] SKIP (data not present on host: x)')\n"
+
+
+class Sg7GatingPromotionTest(unittest.TestCase):
+    """T-5: sg7 must be a normal gating case, not XFAIL.
+
+    Its residual normalized graph is byte-exact with the upstream reference
+    (verified: 72284 nodes, cmp -s == 0), so validate.py must byte-compare it
+    like sg2–sg6 and emit no XFAIL line on parity. This pins the promotion so a
+    silent regression back to XFAIL is caught."""
+
+    def setUp(self):
+        self.validate = _load_validate()
+        self.cases = {row[0]: row for row in self.validate.CASES}
+
+    def test_sg7_is_gating_not_xfail(self):
+        self.assertIn("sg7", self.cases, "sg7 case must exist")
+        xfail = self.cases["sg7"][4]
+        self.assertIs(xfail, False,
+                      f"sg7 must gate byte-exact (xfail=False), got {xfail!r}; "
+                      "byte parity holds, so it must not stay XFAIL or self-promoting")
+
+    def test_no_case_remains_xfail(self):
+        """GOALS.md: validate.py must stop XFAILing substantively. No case may be
+        left as a perpetual XFAIL (True); 'auto' self-promotion is also disallowed
+        for sg7 since parity already holds."""
+        lingering = [row[0] for row in self.validate.CASES if row[4] is not False]
+        self.assertEqual(lingering, [],
+                         f"these cases still XFAIL instead of gating: {lingering}")
 
 
 class AcceptanceRobustnessTest(unittest.TestCase):
