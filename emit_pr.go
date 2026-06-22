@@ -289,8 +289,6 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	inputClosure := prInputClosure(ctx, instance, d, stmt, moduleInputs)
 
-	inputClosure = dropOwnOutputs(inputClosure, outVFSByToken)
-
 	if prSourceClosure := filterSourceVFS(inputClosure); len(prSourceClosure) > 0 {
 		for out := range registeredPROut {
 			reg.setProducerSourceClosure(out, prSourceClosure)
@@ -308,30 +306,6 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	emitPR(instance, stmt, toolBinPath, toolLDRef, auxTools, inVFSByToken, inVFSs, outVFSByToken, stdoutVFS, inputClosure, prExtraDepRefs, cfModuleTag(d, instance), prRef, ctx.emit)
 
 	return prRef
-}
-
-func dropOwnOutputs(closure []VFS, outVFSByToken map[STR]VFS) []VFS {
-	if len(closure) == 0 || len(outVFSByToken) == 0 {
-		return closure
-	}
-
-	owned := make(map[VFS]bool, len(outVFSByToken))
-
-	for _, v := range outVFSByToken {
-		owned[v] = true
-	}
-
-	kept := closure[:0:0]
-
-	for _, v := range closure {
-		if owned[v] {
-			continue
-		}
-
-		kept = append(kept, v)
-	}
-
-	return kept
 }
 
 func filterSourceVFS(vs []VFS) []VFS {

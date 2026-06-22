@@ -17,8 +17,7 @@ xfail values: False = gating (byte-compare); True = xfail (parity metrics only);
 "auto" = gate when byte-exact, xfail otherwise (self-promoting once parity is reached).
 
 Usage: validate.py [out-dir]   (default: <repo>/.out/validate)
-Env:   VALIDATE_JOBS — max concurrent nodes (default min(cpu, 6); lower it if the
-       big sg5/sg7 generators contend for RAM and risk the OOM killer).
+Env:   VALIDATE_JOBS — max concurrent nodes (default: cpu count).
 """
 import os
 import subprocess
@@ -41,8 +40,8 @@ WORK_CWD = REPO_ROOT
 # GEN_TIME_SLACK * budget FAILs the case as a perf regression — optimize the
 # code, do NOT raise the budget. Only sg5 is meaningfully gated (largest graph,
 # the one the 10x boost regression hit, and stable enough to time). The small
-# sub-2s cases jitter too much under shared-box contention to gate reliably, so
-# they get an effectively-infinite budget (gate disabled, time still printed).
+# sub-2s cases jitter too much to gate reliably, so they get an
+# effectively-infinite budget (gate disabled, time still printed).
 GEN_TIME_BUDGET = {
     "sg2": 10000.0,
     "sg2_x86_64": 10000.0,
@@ -238,8 +237,7 @@ def sh(cmd, gogc=False):
     """Run a subprocess in WORK_CWD; return its exit code. gogc=True passes
     GOGC=800 to that one invocation — the heavy ay commands (gen / normalize /
     sort / diff) spend ~half their CPU on GC at the default GOGC=100; 800 roughly
-    halves it for ~1.5GB RSS, which cuts core contention when several run at once.
-    Set per-command, never process-wide (build / cmp must not get it)."""
+    halves it. Set per-command, never process-wide (build / cmp must not get it)."""
     env = dict(os.environ, GOGC="800") if gogc else None
 
     return subprocess.run(cmd, cwd=WORK_CWD, env=env).returncode
@@ -443,7 +441,7 @@ def main() -> int:
 
         active.append(case)
 
-    jobs = int(os.environ.get("VALIDATE_JOBS", min(os.cpu_count() or 4, 6)))
+    jobs = int(os.environ.get("VALIDATE_JOBS", os.cpu_count() or 4))
     print(f"[graph] {len(active)} cases, jobs={jobs}", flush=True)
 
     t0 = time.monotonic()
