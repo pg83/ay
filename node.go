@@ -117,6 +117,34 @@ func depRefs(refs ...NodeRef) []NodeRef {
 	return out
 }
 
+// dedupRefs returns refs with duplicate NodeRefs removed, keeping the first
+// occurrence and insertion order — the TUniqVector<TNodeId> semantics upstream's
+// json_visitor uses for a node's NodeDeps. A collection site that can resolve two
+// distinct sources to the same node (e.g. two proto plugins sharing one tool
+// binary) wraps its dep slice in this so the graph "deps" array lists the node
+// once. Slices are tiny (a handful of tool deps), so a linear scan beats a map.
+func dedupRefs(refs []NodeRef) []NodeRef {
+	out := refs[:0]
+
+	for _, r := range refs {
+		dup := false
+
+		for _, seen := range out {
+			if seen == r {
+				dup = true
+
+				break
+			}
+		}
+
+		if !dup {
+			out = append(out, r)
+		}
+	}
+
+	return out
+}
+
 // inputChunks is the chunked input list. It JSON-marshals FLAT — the chunking
 // is an internal layout (zero-copy assembly from shared slices), not schema;
 // the hand-rolled writer (appendVFSChunks) emits the same flat array.
