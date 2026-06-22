@@ -1946,6 +1946,130 @@ END()
 	}
 }
 
+// The sys_const.cpp shape: a RUN_PROGRAM with IN src.proto, OUT gen.h gen.cpp,
+// whose generator writes `#include "gen.h"` into the generated gen.cpp. The
+// header sibling gen.h carries its proto import's generated `.pb.h` closure
+// (T-83's protoImportPbH window). Because the generated gen.cpp #includes the
+// same-producer header, BOTH the non-PIC and the PIC compile of gen.cpp must
+// reach that header sibling's induced proto-header closure — the import's
+// generated `.pb.h` and its distinctive transitive sibling — exactly as upstream
+// resolves the generated source's quoted include of the generated header.
+//
+// Pre-fix the generated cc-source's modeled parsed includes list only the IN
+// `.proto` sources (and the bare non-expanded main-output leaf gen.h), so the
+// `.pb.h` closure never rides the compile: the sys_const.cpp.o / .pic.o input
+// residual.
+func TestGen_RunProgramGeneratedCppRidesHeaderSiblingPbhClosure(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "tools/gen_sys", "gen_sys")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make",
+		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
+
+	// dproto: leaf PROTO_LIBRARY — d.pb.h is the distinctive transitive closure
+	// entry of the import's extra.pb.h.
+	writeTestModuleFile(files, "dproto/ya.make", "PROTO_LIBRARY()\nSRCS(d.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
+	writeTestModuleFile(files, "dproto/d.proto", "syntax = \"proto3\";\npackage dproto;\nmessage D {}\n")
+
+	// eproto: PROTO_LIBRARY importing dproto/d.proto — extra.pb.h #includes d.pb.h
+	// (const_options.pb.h -> descriptor.pb.h analog).
+	writeTestModuleFile(files, "eproto/ya.make", "PROTO_LIBRARY()\nPEERDIR(dproto)\nSRCS(extra.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
+	writeTestModuleFile(files, "eproto/extra.proto",
+		"syntax = \"proto3\";\npackage eproto;\nimport \"dproto/d.proto\";\nmessage Extra { dproto.D d = 1; }\n")
+
+	// gen: RUN_PROGRAM IN src.proto, OUT gen.h gen.cpp (gen.h is the main output).
+	// src.proto imports eproto/extra.proto, so the generated gen.h re-exports
+	// eproto/extra.pb.h; the generated gen.cpp #includes "gen.h".
+	writeTestModuleFile(files, "gen/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(eproto)
+RUN_PROGRAM(
+    tools/gen_sys src.proto gen.h gen.cpp
+    IN
+        src.proto
+    OUT
+        gen.h
+        gen.cpp
+)
+END()
+`)
+	writeTestModuleFile(files, "gen/src.proto",
+		"syntax = \"proto3\";\npackage gen;\nimport \"eproto/extra.proto\";\nmessage S { eproto.Extra e = 1; }\n")
+
+	// tool PROGRAM PEERDIRs gen — used as a host BASE_CODEGEN tool below, so gen is
+	// instantiated PIC for the host (gen.cpp.pic.o), in addition to the non-PIC
+	// target instance reached through app's PEERDIR (gen.cpp.o).
+	writeTestModuleFile(files, "tool/ya.make", `PROGRAM(tool)
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(gen)
+SRCS(tmain.cpp)
+END()
+`)
+	writeTestModuleFile(files, "tool/tmain.cpp", "int main(){return 0;}\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(gen)
+BASE_CODEGEN(tool fill_x)
+SRCS(
+    GLOBAL ${BINDIR}/fill_x.cpp
+    main.cpp
+)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGenDumpGraph(newMemFS(files), "app")
+
+	want := []string{
+		"$(B)/eproto/extra.pb.h", // direct import's generated header
+		"$(B)/dproto/d.pb.h",     // its distinctive transitive sibling
+		"$(B)/gen/gen.h",         // the same-producer header sibling itself
+	}
+
+	for _, suffix := range []string{".cpp.o", ".cpp.pic.o"} {
+		obj := mustNodeByOutput(t, g, "$(B)/gen/gen"+suffix)
+		for _, w := range want {
+			if !nodeHasInput(obj, w) {
+				t.Fatalf("gen%s missing %q: %#v", suffix, w, vfsStrings(obj.flatInputs()))
+			}
+		}
+
+		// gen.h must appear exactly once (no double edge from a redundant
+		// non-expanded main-output closure leaf on top of the parsed include).
+		c := 0
+		for _, in := range obj.flatInputs() {
+			if in.string() == "$(B)/gen/gen.h" {
+				c++
+			}
+		}
+		if c != 1 {
+			t.Fatalf("gen%s lists $(B)/gen/gen.h %d times, want exactly 1: %#v",
+				suffix, c, vfsStrings(obj.flatInputs()))
+		}
+	}
+
+	// The PR producer node is IN-rooted: it depends on the proto IN closure, NOT
+	// the header-sibling's re-exported generated `.pb.h` closure. Upstream routes
+	// that closure to consumers (the gen.cpp compiles above), never back onto the
+	// producer. Modeling gen.cpp's `#include "gen.h"` must not leak gen.h's window
+	// into the producer's own self-scan.
+	prod := mustNodeByOutput(t, g, "$(B)/gen/gen.h")
+	for _, leak := range []string{"$(B)/eproto/extra.pb.h", "$(B)/dproto/d.pb.h"} {
+		if nodeHasInput(prod, leak) {
+			t.Fatalf("PR producer leaked header-sibling closure %q: %#v", leak, vfsStrings(prod.flatInputs()))
+		}
+	}
+}
+
 // A RUN_PROGRAM whose positional args embed an IN/OUT path after a `--flag=`:
 // uca900-shaped libmysql table generation. Upstream's args_converter deep-replace
 // (FillTypedArgs) roots every relative path listed in IN/OUT that appears as a
