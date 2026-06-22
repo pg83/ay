@@ -799,7 +799,16 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 // inVFSs mirrors stmt.INFiles in order (computed once by emitRunProgram), so the
 // per-output call needn't re-resolve every IN file.
 func prEmitsIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, protoImportPbH []IncludeDirective) []IncludeDirective {
-	if !generatedOutputCarriesIncludes(outFile.string()) {
+	// OUTPUT_INCLUDES are induced deps (EVI_InducedDeps) ymake attaches to EVERY
+	// output of the run (macro_processor addOutputIncludes over all `outs`), so even
+	// a non-carrying data output (a .pb resource payload) exposes them to its
+	// consumers — the RESOURCE objcopy that embeds the .pb walks this window for the
+	// generated-header closure REF lists. A carrying output (cc/header/inc)
+	// additionally models its $(S) IN sources and re-exported proto .pb.h as
+	// #includes; a data output carries OUTPUT_INCLUDES only.
+	carries := generatedOutputCarriesIncludes(outFile.string())
+
+	if !carries && len(stmt.OutputIncludes) == 0 {
 		return nil
 	}
 
@@ -808,25 +817,30 @@ func prEmitsIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, protoImpor
 	// transitive_proto wrapper roots its proto graph at its own IN .proto.
 	carryProtoImportPbH := isHeaderSource(outFile.string()) && !strings.HasSuffix(outFile.string(), ".pb.h")
 
-	n := len(inVFSs) + len(stmt.OutputIncludes)
+	n := len(stmt.OutputIncludes)
+	if carries {
+		n += len(inVFSs)
+	}
 	if carryProtoImportPbH {
 		n += len(protoImportPbH)
 	}
 
 	includes := make([]IncludeDirective, 0, n)
 
-	for _, v := range inVFSs {
-		// A generated output never #includes its $(B) inputs — those are codegen
-		// intermediates (e.g. a RUN_ANTLR-generated .proto) reached via the
-		// producer dep edge, not C++ includes. Their $(S) generator sources ride
-		// to consumers as this output's ClosureLeaves (see emitRunProgram),
-		// matching emit_proto.go; fake-including the intermediate here dragged the
-		// $(B) file into every consumer's closure.
-		if v.isBuild() {
-			continue
-		}
+	if carries {
+		for _, v := range inVFSs {
+			// A generated output never #includes its $(B) inputs — those are codegen
+			// intermediates (e.g. a RUN_ANTLR-generated .proto) reached via the
+			// producer dep edge, not C++ includes. Their $(S) generator sources ride
+			// to consumers as this output's ClosureLeaves (see emitRunProgram),
+			// matching emit_proto.go; fake-including the intermediate here dragged the
+			// $(B) file into every consumer's closure.
+			if v.isBuild() {
+				continue
+			}
 
-		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(v.rel())})
+			includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(v.rel())})
+		}
 	}
 
 	for _, f := range stmt.OutputIncludes {
