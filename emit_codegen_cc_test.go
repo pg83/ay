@@ -2,11 +2,9 @@ package main
 
 import "testing"
 
-// TestGen_SplitCodegenShardInputWiring reproduces the divergence where
-// pb.code0.cc.o carries the monolithic $(B)/Proto.pb.cc and $(B)/Proto.pb.h as
-// inputs, but upstream's shard CC nodes carry only source-level generator
-// inputs. After the fix the shard CC nodes drop both monolithic build-generated
-// sources, and pb.main.h carries the shard CC paths for consumers' closures.
+// TestGen_SplitCodegenShardInputWiring asserts shard CC nodes carry only
+// source-level generator inputs, not the monolithic $(B)/Proto.pb.cc and
+// $(B)/Proto.pb.h.
 func TestGen_SplitCodegenShardInputWiring(t *testing.T) {
 	files := map[string]string{}
 
@@ -78,8 +76,7 @@ END()
 
 	ccShard := findGraphNodeByOutputs(t, g, "$(B)/split/Proto.pb.code0.cc.o")
 
-	// Shard CC nodes carry only source-level generator chain files, not the
-	// monolithic build-generated protobuf sources.
+	// Not the monolithic build-generated protobuf sources.
 	for _, forbidden := range []string{
 		"$(B)/split/Proto.pb.cc",
 		"$(B)/split/Proto.pb.h",
@@ -89,7 +86,7 @@ END()
 		}
 	}
 
-	// The shard CC node must have the source-level generator closure.
+	// The source-level generator closure.
 	for _, want := range []string{
 		"$(S)/tools/multiproto.py",
 		"$(S)/build/scripts/stdout2stderr.py",
@@ -103,8 +100,7 @@ END()
 		}
 	}
 
-	// Non-first shards (code1.cc, data.cc) carry the first shard (code0.cc) in
-	// their input closure, matching upstream.
+	// Non-first shards carry the first shard (code0.cc) in their input closure.
 	for _, nonFirstShard := range []string{
 		"$(B)/split/Proto.pb.code1.cc.o",
 		"$(B)/split/Proto.pb.data.cc.o",
@@ -113,7 +109,7 @@ END()
 		if !nodeHasInput(shardNode, "$(B)/split/Proto.pb.code0.cc") {
 			t.Errorf("non-first shard %q must carry code0.cc as an input (upstream pattern)", nonFirstShard)
 		}
-		// Must not carry the monolithic sources either.
+		// Nor the monolithic sources.
 		for _, forbidden := range []string{"$(B)/split/Proto.pb.cc", "$(B)/split/Proto.pb.h"} {
 			if nodeHasInput(shardNode, forbidden) {
 				t.Errorf("non-first shard %q must not include %q as input", nonFirstShard, forbidden)

@@ -47,7 +47,7 @@ func (h *IntHeap) pop() interface{} {
 	return x
 }
 
-// Pop implements container/heap.Interface; found by name.
+// Pop implements container/heap.Interface.
 func (h *IntHeap) Pop() interface{} {
 	return h.pop()
 }

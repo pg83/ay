@@ -6,8 +6,7 @@ import (
 
 var (
 	genPy3RegScriptPath = genPy3RegScriptVFS.string()
-	// genPy3RegScriptChunk is the reg-script input chunk shared by every
-	// py-register node.
+	// genPy3RegScriptChunk is the reg-script input chunk shared by every py-register node.
 	genPy3RegScriptChunk = []VFS{genPy3RegScriptVFS}
 )
 
@@ -30,9 +29,8 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	ctx.tool(argToolsRescompressor)
 	ctx.tool(argToolsArchiver)
 
-	// The py3cc tool pair is loop-invariant — one chunk shared by every pysrc node.
+	// The py3cc tool pair and command head are loop-invariant, shared by every pysrc node.
 	py3ccToolsChunk := []VFS{py3ccBinary, py3ccSlowBin}
-	// So is the command head.
 	py3ccArgHead := []STR{(py3ccBinary).str(), argSlowPy3cc.str(), (py3ccSlowBin).str()}
 
 	reg := codegenRegForInstance(ctx, instance)
@@ -47,10 +45,8 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		var generatedInputs []VFS
 
 		if genInfo != nil {
-			// The flat-input model folds the producer's whole transitive $(S) source
-			// closure onto the bytecode node, not just the direct $(S) leaves.
-			// ProducerSourceClosure carries that full set; producers that record only
-			// the direct-leaf closure in SourceInputs (swig) fall back to it.
+			// Fold the producer's whole transitive $(S) source closure onto the bytecode
+			// node. ProducerSourceClosure carries it; fall back to SourceInputs when empty.
 			if generatedInputs = genInfo.ProducerSourceClosure; len(generatedInputs) == 0 {
 				generatedInputs = genInfo.SourceInputs
 			}
@@ -58,9 +54,8 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 
 		srcAbs := resolveSourceVFS(ctx, instance, srcRel.string(), d.srcDirs)
 
-		// moduleName mirrors `rootrel_arc_src(path, unit) + '-'`. A source-tree file
-		// (or a build-root-rooted token) resolves to the full root-relative path; a
-		// bare token resolving to a build-generated source keeps the raw token.
+		// moduleName mirrors `rootrel_arc_src(path, unit) + '-'`: a source-tree file
+		// resolves to the root-relative path; a build-generated token stays raw.
 		moduleName := srcAbs.rel() + "-"
 
 		if genInfo != nil {
@@ -91,8 +86,7 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		var inputs []VFS
 
 		if genInfo != nil {
-			// The generated-src input list interleaves the shared generator inputs
-			// around the tool pair and dedups across the whole — stays flat.
+			// Interleave the shared generator inputs around the tool pair, then dedup.
 			inputs = []VFS{srcAbs}
 			inputs = append(inputs, generatedInputs...)
 			inputs = append(inputs, py3ccBinary, py3ccSlowBin)
@@ -192,12 +186,9 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 			internStr(regCppAbs),
 		}
 
-		// The reg-script is platform-independent codegen, attributed to the TARGET
-		// platform (a cross build shows every .reg3.cpp as the target ISA, never the
-		// host/tool ISA). Emit under ctx.target so target and host instances reaching
-		// this output produce byte-identical nodes that collapse by uid — no
-		// cross-platform dedup map needed. The per-instance compile of the generated
-		// source is emitted below with its own platform.
+		// The reg-script is platform-independent codegen attributed to the TARGET
+		// platform. Emit under ctx.target so target and host instances produce
+		// byte-identical nodes that collapse by uid.
 		pyNode := &Node{
 			Platform:         ctx.target,
 			Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(pyCmdArgs), Env: env}),
@@ -211,8 +202,7 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 		}
 
 		if py3Suffix {
-			// A PY23_NATIVE_LIBRARY's reg node carries the py3_native tag; plain py3
-			// libraries use py3.
+			// PY23_NATIVE_LIBRARY's reg node carries the py3_native tag; plain py3 uses py3.
 			if d.moduleStmt.Name == tokPy23NativeLibrary {
 				pyNode.TargetProperties.ModuleTag = tagPy3Native
 			} else {
@@ -230,8 +220,7 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 			ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl, d.cythonNumpyBeforeInclude)
 		}
 
-		// IncludeInputs is the full input window: the compiled register cpp
-		// itself plus the generator script.
+		// IncludeInputs: the compiled register cpp plus the generator script.
 		ccIn.IncludeInputs = []VFS{regCppVFS, genPy3RegScriptVFS}
 
 		if len(in.CFlags) > 0 {
@@ -250,7 +239,7 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 			ccIn.CFlags = filtered
 		}
 
-		// AddIncl/CFlags feed the module-stable arg blocks — rebuild for this copy.
+		// AddIncl/CFlags feed the module-stable arg blocks; rebuild for this copy.
 		ccIn.CCBlocks = composeCCModuleArgBlocks(na, instance.Platform, &ccIn)
 		ccRef, ccOut, _ := emitCC(instance, regCpp, regCppVFS, ccIn, ctx.host, ctx.emit)
 

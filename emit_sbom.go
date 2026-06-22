@@ -3,25 +3,20 @@ package main
 // SBOM (Software Bill of Materials) component generation. _GEN_SBOM_COMPONENT
 // attaches to every module declaring a LICENSE(): under _NEED_SBOM_INFO (linux
 // x86_64) and non-JAVA it produces a <REALPRJNAME>.<LANG>.component.sbom global
-// output. That output propagates up the link closure; only RELEASE programs
-// collect it, so a debug target links a licensed lib without pulling its
-// component. Emitting one per licensed module and letting the closure +
-// collection gate prune matches upstream's unconditional generation.
+// output propagating up the link closure. Only RELEASE programs collect it, so
+// the closure + collection gate prunes the one emitted per licensed module.
 
 const sbomGenScriptRel = "build/internal/scripts/gen_sbom.py"
 
-// sbomConfRel turns the SBOM feature on (SBOM_GENERATION_ALLOWED=yes); present
-// only in the internal contour.
+// sbomConfRel turns the SBOM feature on; present only in the internal contour.
 const sbomConfRel = "build/internal/conf/sbom.conf"
 
-// clangToolchainInfoRel is the RESOURCES_LIBRARY that TOOLCHAIN(clang) tags; it
-// is the _SRC_CPP_TOOLCHAIN_INFO_PEER PEERDIR every C-family compile carries.
+// clangToolchainInfoRel is the _SRC_CPP_TOOLCHAIN_INFO_PEER PEERDIR every
+// C-family compile carries.
 const clangToolchainInfoRel = "build/internal/platform/clang_toolchain_info"
 
 // clangToolchainSbomComponent resolves the toolchain compiler info on `platform`
-// and returns its toolchain SBOM component (nil if the feature/platform is off).
-// Called for a module that compiled a C-family TU, mirroring the
-// _SRC_CPP_TOOLCHAIN_INFO_PEER those compiles induce.
+// and returns its toolchain SBOM component (nil if off).
 func clangToolchainSbomComponent(ctx *GenCtx, platform *Platform) (*NodeRef, *VFS) {
 	res := genModule(ctx, ModuleInstance{
 		Path:     source(clangToolchainInfoRel),
@@ -34,13 +29,12 @@ func clangToolchainSbomComponent(ctx *GenCtx, platform *Platform) (*NodeRef, *VF
 }
 
 // pythonToolchainInfoRel is the python platform RESOURCES_LIBRARY (TOOLCHAIN).
-// The base of every module PEERDIRs it, so this toolchain SBOM component is a
-// universal peer contribution; a module resolving no other SBOM peers (e.g. a
-// bare-link PREBUILT_PROGRAM) still carries it.
+// The base of every module PEERDIRs it, so this toolchain SBOM component is
+// carried even when no other SBOM peers resolve.
 const pythonToolchainInfoRel = "build/platform/python/ymake_python3"
 
 // pythonToolchainSbomComponent resolves the python toolchain on `platform` and
-// returns its toolchain SBOM component (nil if the feature/platform is off).
+// returns its toolchain SBOM component (nil if off).
 func pythonToolchainSbomComponent(ctx *GenCtx, platform *Platform) (*NodeRef, *VFS) {
 	res := genModule(ctx, ModuleInstance{
 		Path:     source(pythonToolchainInfoRel),
@@ -52,8 +46,8 @@ func pythonToolchainSbomComponent(ctx *GenCtx, platform *Platform) (*NodeRef, *V
 	return res.SbomComponentRef, res.SbomComponentPath
 }
 
-// sbomActive reports whether _NEED_SBOM_INFO holds: the feature is configured
-// (ctx.sbomEnabled) and the platform is linux/x86_64.
+// sbomActive reports whether _NEED_SBOM_INFO holds: feature configured and the
+// platform is linux/x86_64.
 func sbomActive(ctx *GenCtx, instance ModuleInstance) bool {
 	return ctx.sbomEnabled && instance.Platform.OS == OSLinux && instance.Platform.ISA == ISAX8664
 }
@@ -62,9 +56,7 @@ func sbomActive(ctx *GenCtx, instance ModuleInstance) bool {
 // LICENSE() declaration (the _CONTRIB_MODULE_HOOKS trigger).
 func sbomQualifies(d *ModuleData) bool {
 	// A PROTO_LIBRARY with EXCLUDE_TAGS(CPP_PROTO) builds no CPP_PROTO submodule
-	// — the only proto submodule keeping _NEED_SBOM_INFO=yes. The remaining
-	// py-proto submodule does DISABLE(_NEED_SBOM_INFO), so the module emits no
-	// component even with LICENSE(). Our model represents this py-only contour.
+	// — the only proto submodule keeping _NEED_SBOM_INFO=yes.
 	if d.moduleStmt.Name == tokProtoLibrary && moduleExcludesTag(d, "CPP_PROTO") {
 		return false
 	}
@@ -72,25 +64,22 @@ func sbomQualifies(d *ModuleData) bool {
 	return d.hasLicense
 }
 
-// MODULE_LANG / SBOM component-language tokens (uppercase, as emitted in SBOM
-// component names).
+// MODULE_LANG tokens (uppercase, as emitted in SBOM component names).
 const (
 	moduleLangTokenCpp      = "CPP"
 	moduleLangTokenPy3      = "PY3"
 	moduleLangTokenAgnostic = "AGNOSTIC"
 )
 
-// sbomComponentLang maps the module type to the uppercase MODULE_LANG token used
-// in both the output suffix and the --lang argument: PY3 for python module types,
-// CPP otherwise. Driven by the module type, not the instance compile language
-// (which is CPP even for the native half of a PY library).
+// sbomComponentLang maps the module TYPE (not the instance compile language) to
+// the uppercase MODULE_LANG token used in the output suffix and --lang argument:
+// PY3 for python module types, CPP otherwise.
 func sbomComponentLang(moduleName TOK) string {
 	switch {
 	case moduleName == tokPrebuiltProgram:
 		return moduleLangTokenAgnostic
 	case moduleName == tokPy23NativeLibrary:
-		// The PY3 submodule of PY23_NATIVE_LIBRARY does SET(MODULE_LANG CPP),
-		// so its SBOM component is <name>.CPP.component.sbom despite the py3 prefix.
+		// The PY3 submodule of PY23_NATIVE_LIBRARY does SET(MODULE_LANG CPP).
 		return moduleLangTokenCpp
 	case pyModuleTypeUsesPython3(moduleName):
 		return moduleLangTokenPy3
@@ -115,12 +104,8 @@ func emitSbomComponent(ctx *GenCtx, instance ModuleInstance, d *ModuleData, real
 	scriptVFS := source(sbomGenScriptRel)
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	// MODULE_TAG of the component — only multimodule variants carry one (matching
-	// their CC objects' module_tag): PY23_LIBRARY -> py3, PY23_NATIVE_LIBRARY ->
-	// py3_native, PY3_PROGRAM -> py3_bin_lib, PROTO_LIBRARY -> cpp_proto (the
-	// CPP_PROTO submodule that generates the .CPP component; sbomQualifies already
-	// excluded the EXCLUDE_TAGS(CPP_PROTO) py-only case). Plain PY3_LIBRARY / CPP
-	// carries none.
+	// MODULE_TAG of the component — only multimodule variants carry one, matching
+	// their CC objects' module_tag. Plain PY3_LIBRARY / CPP carries none.
 	var moduleTag STR
 
 	switch d.moduleStmt.Name {
@@ -160,8 +145,8 @@ func emitSbomComponent(ctx *GenCtx, instance ModuleInstance, d *ModuleData, real
 }
 
 // emitSbomToolchainComponent emits the TOOLCHAIN(Name) DX node producing
-// <dir>/toolchain.component.sbom. Like the component variant it is a global
-// output propagating via the SBOM closure to consumers.
+// <dir>/toolchain.component.sbom, a global output propagating via the SBOM
+// closure to consumers.
 func emitSbomToolchainComponent(ctx *GenCtx, instance ModuleInstance, toolchainName, ver string) (*NodeRef, *VFS) {
 	na := ctx.na
 	moddir := instance.Path.rel()

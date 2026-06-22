@@ -6,10 +6,9 @@ import (
 )
 
 // TestArchive_PlainPropagatesSourceMembers pins that a plain ARCHIVE (no KEYS)
-// rides its direct source members into the include closure of a C++ unit that
-// #includes the generated archive header — as ARCHIVE_BY_KEYS already does.
-// Before the fix plain ARCHIVE left PropagateSourceMembers unset, so the member
-// never reached the consumer.
+// rides its source members into the include closure of a C++ unit that
+// #includes the generated archive header. Plain ARCHIVE previously left
+// PropagateSourceMembers unset, so the member never reached the consumer.
 func TestArchive_PlainPropagatesSourceMembers(t *testing.T) {
 	files := map[string]string{}
 
@@ -39,11 +38,9 @@ func TestArchive_PlainPropagatesSourceMembers(t *testing.T) {
 	}
 }
 
-// TestArchiveByKeys_TopLevel covers an ordinary top-level ARCHIVE_BY_KEYS: the
-// keyed archive lists its SRCDIR-backed members plain, passes the colon-joined
-// key list through `-k`, and writes the addincl output; a C++ unit that
-// #includes the generated archive header gets -I$(B)/<moddir> and the archived
-// source members as input-closure leaves.
+// TestArchiveByKeys_TopLevel covers a top-level ARCHIVE_BY_KEYS: members listed
+// plain, key list through `-k`; a C++ consumer of the generated header gets
+// -I$(B)/<moddir> and the archived members as input-closure leaves.
 func TestArchiveByKeys_TopLevel(t *testing.T) {
 	files := map[string]string{}
 
@@ -59,7 +56,7 @@ func TestArchiveByKeys_TopLevel(t *testing.T) {
 
 	g := testGen(newMemFS(files), "mod")
 
-	// (1) the archive node: keyed command shape — members plain, -k <keys>, -o <archive>.
+	// (1) the archive node: members plain, -k <keys>, -o <archive>.
 	ar := mustNodeByOutput(t, g, "$(B)/mod/data.inc")
 	if ar.KV.P != pkAR || ar.KV.PC != pcLightRed {
 		t.Errorf("archive kv = {p:%q pc:%q}, want {AR light-red}", ar.KV.P.string(), ar.KV.PC.string())
@@ -78,14 +75,14 @@ func TestArchiveByKeys_TopLevel(t *testing.T) {
 		t.Errorf("ARCHIVE_BY_KEYS must list members plain, got colon-suffixed: %q", arCmd)
 	}
 
-	// members resolve SRCDIR-backed and are the archive's action inputs.
+	// members are the archive's action inputs.
 	for _, in := range []string{"$(S)/mod/a.txt", "$(S)/mod/sub/b.txt"} {
 		if !nodeHasInput(ar, in) {
 			t.Errorf("archive inputs %v missing member %q", vfsStringsT3(ar.flatInputs()), in)
 		}
 	}
 
-	// (2) the C++ consumer: -I$(B)/mod plus the archived members as closure leaves.
+	// (2) the C++ consumer: -I$(B)/mod plus archived members as leaves.
 	var use *Node
 	for _, n := range g.Graph {
 		if n.KV.P == pkCC && len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), "/use.cpp.o") {

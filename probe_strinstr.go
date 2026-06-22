@@ -12,15 +12,13 @@ var (
 	strProbeCounts  = map[uintptr]uint64{}
 )
 
-// --- runtime probe over STR.string(): unlike the map probe (which needs an AST
-// rewrite — a map index has no hook point), .string() is a function, so the hook
-// lives inside it and resolves the use site from the runtime call stack. Enabled
-// by the --probe=str flag; disabled it costs one predictable branch. Sites tally
-// by caller PC; PC -> file:line resolution happens once at dump time. ---
+// --- runtime probe over STR.string(): the hook lives inside the function and
+// resolves the use site from the call stack. Enabled by --probe=str; disabled
+// it costs one branch. Sites tally by caller PC, resolved to file:line at dump
+// time. ---
 
 func strProbeAt() {
-	// Skip strProbeAt and string() itself; runtime.Caller is inline-aware, so
-	// frame 2 is the .string() use site.
+	// Frame 2 skips strProbeAt and string() itself to the use site.
 	pc, _, _, ok := runtime.Caller(2)
 
 	if ok {

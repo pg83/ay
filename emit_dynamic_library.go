@@ -40,10 +40,8 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		peerPaths = append(peerPaths, p.string())
 	}
 
-	// Resolve every peer through genModule first (memoized; recursion may
-	// re-enter the deduper), then aggregate per output kind in sequential leaf
-	// passes. The peer-list guard stays a local map: it must stay live across the
-	// genModule calls.
+	// Resolve every peer through genModule first, then aggregate per output kind.
+	// The peer-list guard stays a local map: it must stay live across genModule.
 	seen := make(map[string]struct{}, len(peerPaths)+len(dynLibRPathHelperPeers))
 	resolved := make([]*ModuleEmitResult, 0, len(peerPaths))
 
@@ -291,14 +289,12 @@ func composeDynLibInputs(na *NodeArenas, peerLibPaths, pluginPaths []VFS, fixElf
 	// Caller's member slices, referenced as their own chunks, never copied.
 	chunks = append(chunks, peerLibPaths, pluginPaths, na.srcChunk(fixElfPath))
 
-	// The scripts the link command runs (vcs stamp, link wrapper, objcopy/strip
-	// tools), each expanded to its import closure via the table. Each closure is a
+	// The scripts the link command runs, each expanded to its import closure as a
 	// shared table slice referenced as its own chunk; dups drop in normalization.
 	for _, w := range []VFS{ldVcsInfoVFS, ldLinkDynLibVFS, ldFsToolsVFS} {
 		chunks = append(chunks, scripts[w])
 	}
 
-	// Non-script inputs: vcs C template + header, the module's exports list.
 	chunks = append(chunks, []VFS{
 		ldSvnInterfaceVFS,
 		ldSvnversionHVFS,

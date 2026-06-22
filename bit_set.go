@@ -1,10 +1,8 @@
 package main
 
-// BitSet is a grow-on-demand set of dense ids backed by a bit vector — one bit
-// per id, indexed by a uint32 key (any dense id: VFS, STR, a composite key). At
-// 1 bit/id it is 32x smaller than an epoch-stamped IdSet. There is no
-// epoch/reset; the zero value is an empty set. It suits set-once, never-cleared
-// usage where the dense IdSet's per-id word would only waste memory.
+// BitSet is a grow-on-demand set of dense uint32 ids backed by a bit vector. At
+// 1 bit/id it is 32x smaller than an epoch-stamped IdSet, but has no reset; the
+// zero value is empty. Suits set-once, never-cleared usage.
 type BitSet struct {
 	words []uint64
 }
@@ -39,8 +37,8 @@ func (b *BitSet) remove(v uint32) {
 	}
 }
 
-// set adds v when on, removes it otherwise — so callers holding a bool need no
-// branch. Only the add path grows the backing words.
+// set adds v when on, removes it otherwise, so callers holding a bool need no
+// branch.
 func (b *BitSet) set(v uint32, on bool) {
 	if on {
 		b.add(v)

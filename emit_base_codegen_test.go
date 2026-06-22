@@ -5,8 +5,7 @@ import (
 	"testing"
 )
 
-// TestParseBaseCodegen pins the positional Tool/Prefix/Opts split of
-// BASE_CODEGEN(Tool, Prefix, Opts...).
+// TestParseBaseCodegen pins the positional Tool/Prefix/Opts split.
 func TestParseBaseCodegen(t *testing.T) {
 	stmt := parseBaseCodegen(STRS("kernel/fill_factors_codegen", "fill_factors", "NTop"), 1)
 
@@ -23,13 +22,9 @@ func TestParseBaseCodegen(t *testing.T) {
 	}
 }
 
-// TestGen_BaseCodegenGeneratedClosure pins the generated-header include closure
-// for BASE_CODEGEN consumers. The sibling prefix.cpp and the prefix.in source
-// ride as closure leaves of prefix.h, so every CC node that includes the
-// generated header inherits them.
-//
-// Without it prefix.h has no closure leaves, so a consumer of base_gen.h sees the
-// header but neither base_gen.cpp nor base_gen.in.
+// TestGen_BaseCodegenGeneratedClosure pins the generated-header include closure:
+// the sibling prefix.cpp and the prefix.in source ride as closure leaves of
+// prefix.h, so every CC node including the generated header inherits them.
 func TestGen_BaseCodegenGeneratedClosure(t *testing.T) {
 	files := map[string]string{}
 
@@ -61,18 +56,13 @@ END()
 }
 
 // TestGen_BaseCodegenReachability guards the reachability rule: BASE_CODEGEN must
-// emit a BC producer taking a tool dependency on the tool PROGRAM's LD, and that
-// dependency must bring the tool's ordinary PEERDIR closure into the target graph.
-// Here the tool PEERDIRs a child module (hidden/factors) otherwise unreachable
-// from the target; the child uses SPLIT_CODEGEN, so post-fix the graph must
-// contain the child's SC producer and its generated CC consumers.
-//
-// When BASE_CODEGEN is a no-op this fails: no BC node exists and hidden/factors is
-// absent, so its SC producer / generated CC are missing.
+// emit a BC producer with a tool dependency on the tool PROGRAM's LD, and that
+// dependency must bring the tool's PEERDIR closure into the target graph. Here
+// the tool PEERDIRs an otherwise-unreachable SPLIT_CODEGEN child, so post-fix the
+// graph must contain the child's SC producer and its generated CC consumers.
 func TestGen_BaseCodegenReachability(t *testing.T) {
 	files := map[string]string{}
 
-	// tool PROGRAM whose PEERDIR reaches the unreachable child module.
 	writeTestModuleFile(files, "tool/ya.make", `PROGRAM(tool)
 NO_LIBC()
 NO_RUNTIME()
@@ -83,10 +73,8 @@ END()
 `)
 	writeTestModuleFile(files, "tool/main.cpp", "int main(){return 0;}\n")
 
-	// tool2: the SPLIT_CODEGEN tool used by the child module.
 	writeToolProgram(files, "tool2", "tool2")
 
-	// child module reached only through the tool's PEERDIR closure.
 	writeTestModuleFile(files, "hidden/factors/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -103,7 +91,6 @@ END()
 `)
 	writeTestModuleFile(files, "hidden/factors/factors_gen.in", "// codegen input\n")
 
-	// consumer: the BASE_CODEGEN user. It is the build target.
 	writeTestModuleFile(files, "consumer/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -139,7 +126,6 @@ END()
 		t.Fatalf("BC node pc = %v, want yellow", bc.KV.PC)
 	}
 
-	// outputs: fill_factors.cpp (noauto) + fill_factors.h, nothing else.
 	wantOuts := []string{"$(B)/consumer/fill_factors.cpp", "$(B)/consumer/fill_factors.h"}
 	gotOuts := make([]string, 0, len(bc.Outputs))
 
@@ -151,7 +137,7 @@ END()
 		t.Fatalf("BC outputs = %v, want %v", gotOuts, wantOuts)
 	}
 
-	// command: tool bin, $(S) .in, $(B) .cpp, $(B) .h (no --cpp-parts).
+	// tool bin, $(S) .in, $(B) .cpp, $(B) .h (no --cpp-parts).
 	wantCmd := []string{
 		"$(B)/tool/tool",
 		"$(S)/consumer/fill_factors.in",
@@ -162,7 +148,7 @@ END()
 		t.Fatalf("BC cmd = %v, want %v", got, wantCmd)
 	}
 
-	// 2. BC takes a tool (foreign) dependency on the tool PROGRAM's LD node.
+	// 2. BC takes a tool (foreign) dependency on the tool PROGRAM's LD.
 	tool := mustNodeByOutput(t, g, "$(B)/tool/tool")
 
 	if !nodeHasInput(bc, "$(B)/tool/tool") {
@@ -173,8 +159,7 @@ END()
 		t.Fatalf("BC node foreign deps missing tool LD uid %q: %v", tool.UID, graphForeignDeps(g, bc))
 	}
 
-	// 3. the tool PEERDIR closure pulled hidden/factors in, so its
-	// SPLIT_CODEGEN producer and a generated CC consumer exist.
+	// 3. the tool PEERDIR closure pulled hidden/factors in.
 	scH := mustNodeByAnyOutput(t, g, "$(B)/hidden/factors/factors_gen.h")
 
 	if scH.KV.P != pkSC {
@@ -190,17 +175,12 @@ END()
 
 // TestGen_StructCodegenProducer pins STRUCT_CODEGEN as the BASE_CODEGEN
 // specialization. STRUCT_CODEGEN(gen) must (1) emit a BC producer running the
-// fixed codegen tool over gen.in -> gen.cpp + gen.h, with a tool dep on the
-// codegen tool's LD; (2) attach the seven STRUCT_CODEGEN_OUTPUT_INCLUDES to gen.h
-// so a consumer of gen.h inherits them; (3) pull the two implicit PEERDIRs
-// (metadata, reflection) into the module closure.
-//
-// When STRUCT_CODEGEN is a no-op none of these hold — the test fails for the right
-// reason (missing producer).
+// fixed codegen tool over gen.in -> gen.cpp + gen.h; (2) attach the
+// STRUCT_CODEGEN_OUTPUT_INCLUDES to gen.h so a consumer inherits them; (3) pull
+// the two implicit PEERDIRs (metadata, reflection) into the module closure.
 func TestGen_StructCodegenProducer(t *testing.T) {
 	files := map[string]string{}
 
-	// The fixed codegen tool.
 	writeToolProgram(files, "kernel/struct_codegen/codegen_tool", "codegen_tool")
 
 	// The two implicit peerdir libraries, plus the referenced reflection headers.
@@ -223,7 +203,6 @@ END()
 	writeTestModuleFile(files, "kernel/struct_codegen/reflection/reflection.h", "#pragma once\n")
 	writeTestModuleFile(files, "kernel/struct_codegen/reflection/floats.h", "#pragma once\n")
 
-	// The util headers referenced by the output includes.
 	for _, h := range []string{
 		"util/generic/singleton.h", "util/generic/strbuf.h", "util/generic/vector.h",
 		"util/generic/ptr.h", "util/generic/yexception.h",
@@ -231,7 +210,6 @@ END()
 		writeTestModuleFile(files, h, "#pragma once\n")
 	}
 
-	// Consumer module: STRUCT_CODEGEN(gen) plus a source that includes gen.h.
 	writeTestModuleFile(files, "lib/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -273,7 +251,7 @@ END()
 		t.Fatalf("BC outputs = %v, want %v", gotOuts, wantOuts)
 	}
 
-	// command: fixed codegen tool bin, $(S) .in, $(B) .cpp, $(B) .h (no opts).
+	// fixed codegen tool bin, $(S) .in, $(B) .cpp, $(B) .h (no opts).
 	wantCmd := []string{
 		"$(B)/kernel/struct_codegen/codegen_tool/codegen_tool",
 		"$(S)/lib/gen.in",
@@ -291,7 +269,7 @@ END()
 		t.Fatalf("BC node foreign deps missing codegen tool LD uid %q: %v", tool.UID, graphForeignDeps(g, bc))
 	}
 
-	// 3. the OUTPUT_INCLUDES ride gen.h: a consumer of gen.h inherits them.
+	// 3. the OUTPUT_INCLUDES ride gen.h.
 	cc := mustNodeByOutput(t, g, "$(B)/lib/use.cpp.o")
 
 	for _, want := range []string{

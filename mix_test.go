@@ -24,12 +24,11 @@ func TestSplitMix64Bijective(t *testing.T) {
 	}
 }
 
-// For dense sequential ids (the real workload) the key's low bits must spread
-// across the table — what Morton keying lacked. Insert a dense block via open
-// addressing and assert the average probe stays near 1 at LF 0.5.
+// For dense sequential ids the key's low bits must spread across the table —
+// what Morton keying lacked. Assert average probe stays near 1 at LF 0.5.
 func TestSplitMix64SpreadsDenseIDs(t *testing.T) {
 	const n = 1 << 16
-	const capacity = 1 << 17 // LF 0.5
+	const capacity = 1 << 17
 	const mask = uint64(capacity - 1)
 	occupied := make([]bool, capacity)
 	totalProbe, maxProbe := 0, 0

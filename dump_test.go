@@ -292,10 +292,9 @@ func TestDumpDiffPair_PrefersDivergentDuplicateVariant(t *testing.T) {
 	}
 }
 
-// TestDumpDiffPair_DuplicateOutputsExactCounterpartsNoFieldDiff: when an output
-// has two sibling producers per side sharing one coarse match key but differing
-// only in command mode, and each has an exact counterpart on the other side,
-// --pair must report parity (header only), not cross-pair mode-A against mode-B.
+// TestDumpDiffPair_DuplicateOutputsExactCounterpartsNoFieldDiff: when each of two
+// sibling producers per side has an exact counterpart on the other side, --pair must
+// report parity (header only), not cross-pair mode-A against mode-B.
 func TestDumpDiffPair_DuplicateOutputsExactCounterpartsNoFieldDiff(t *testing.T) {
 	dir := t.TempDir()
 	left := filepath.Join(dir, "l.jsonl")
@@ -307,7 +306,6 @@ func TestDumpDiffPair_DuplicateOutputsExactCounterpartsNoFieldDiff(t *testing.T)
 			`,"kv":{"p":"R6"},"env":{},"platform":"linux","requirements":{},"target_properties":{}}`
 	}
 
-	// Both sides emit identical {-CG2, -CT0} producers.
 	throw(os.WriteFile(left, []byte(line("L-cg2", "-CG2")+"\n"+line("L-ct0", "-CT0")+"\n"), 0o644))
 	throw(os.WriteFile(right, []byte(line("R-cg2", "-CG2")+"\n"+line("R-ct0", "-CT0")+"\n"), 0o644))
 
@@ -325,9 +323,8 @@ func TestDumpDiffPair_DuplicateOutputsExactCounterpartsNoFieldDiff(t *testing.T)
 	}
 }
 
-// TestDumpDiffPair_DuplicateOutputsOneSiblingDiffersReportsResidual: control —
-// only the matching sibling is cancelled; a divergent sibling (no exact
-// counterpart) is still reported.
+// TestDumpDiffPair_DuplicateOutputsOneSiblingDiffersReportsResidual: control — only the
+// matching sibling is cancelled; a divergent sibling is still reported.
 func TestDumpDiffPair_DuplicateOutputsOneSiblingDiffersReportsResidual(t *testing.T) {
 	dir := t.TempDir()
 	left := filepath.Join(dir, "l.jsonl")
@@ -339,7 +336,6 @@ func TestDumpDiffPair_DuplicateOutputsOneSiblingDiffersReportsResidual(t *testin
 			`,"kv":{"p":"R6"},"env":{},"platform":"linux","requirements":{},"target_properties":{}}`
 	}
 
-	// Mode A identical both sides; mode B vs C is a real residual.
 	throw(os.WriteFile(left, []byte(line("L-a", "-CG2")+"\n"+line("L-b", "-Bours")+"\n"), 0o644))
 	throw(os.WriteFile(right, []byte(line("R-a", "-CG2")+"\n"+line("R-c", "-Cref")+"\n"), 0o644))
 
@@ -354,10 +350,8 @@ func TestDumpDiffPair_DuplicateOutputsOneSiblingDiffersReportsResidual(t *testin
 	}
 }
 
-// TestDumpDiffAggregate_DuplicateOutputsExactCounterpartsNoDrift: aggregate
-// reports apply the same exact-counterpart cancellation as --pair. With
-// {-CG2, -CT0} producers on both sides there is full parity, so
-// --by-field/--by-kind/--by-token must not report a spurious cmds delta.
+// TestDumpDiffAggregate_DuplicateOutputsExactCounterpartsNoDrift: aggregate reports apply
+// the same exact-counterpart cancellation as --pair, so full parity yields no spurious delta.
 func TestDumpDiffAggregate_DuplicateOutputsExactCounterpartsNoDrift(t *testing.T) {
 	dir := t.TempDir()
 	left := filepath.Join(dir, "l.jsonl")
@@ -368,7 +362,6 @@ func TestDumpDiffAggregate_DuplicateOutputsExactCounterpartsNoDrift(t *testing.T
 			`,"kv":{"p":"R6"},"env":{},"platform":"linux","requirements":{},"target_properties":{}}`
 	}
 
-	// Both sides emit identical {-CG2, -CT0} producers.
 	throw(os.WriteFile(left, []byte(line("L-cg2", "-CG2")+"\n"+line("L-ct0", "-CT0")+"\n"), 0o644))
 	throw(os.WriteFile(right, []byte(line("R-cg2", "-CG2")+"\n"+line("R-ct0", "-CT0")+"\n"), 0o644))
 
@@ -392,9 +385,8 @@ func TestDumpDiffAggregate_DuplicateOutputsExactCounterpartsNoDrift(t *testing.T
 	}
 }
 
-// TestDumpDiffAggregate_DuplicateOutputsOneSiblingDiffersReportsResidual:
-// control — mode A identical, mode B vs C a genuine residual; aggregate reports
-// must still surface that drift.
+// TestDumpDiffAggregate_DuplicateOutputsOneSiblingDiffersReportsResidual: control — a
+// genuine residual must still surface in aggregate reports.
 func TestDumpDiffAggregate_DuplicateOutputsOneSiblingDiffersReportsResidual(t *testing.T) {
 	dir := t.TempDir()
 	left := filepath.Join(dir, "l.jsonl")
@@ -590,7 +582,6 @@ func TestDumpDiffByTokenGroup(t *testing.T) {
 			t.Fatalf("by-token --group missing %q:\n%s", want, got)
 		}
 	}
-	// TOKA under CC/dirA, TOKB under PB/dirB.
 	ccIdx := strings.Index(got, "kind=CC dir=dirA")
 	pbIdx := strings.Index(got, "kind=PB dir=dirB")
 	tokAIdx := strings.Index(got, "TOKA_OURS")
@@ -637,12 +628,9 @@ func TestDumpDiffPairStructuredCmds(t *testing.T) {
 	}
 }
 
-// TestCanonInputs_ArchiveByKeysIgnoresKeyListBasename pins the archiver
-// convention: ARCHIVE_BY_KEYS' `-k $KEYS` value is a colon-joined key list, not
-// input file paths. A source member over-emitted onto the AR node but named only
-// via the key list must be pruned by the AR input filter. Regression for a
-// source input that leaked through when baseName of the whole -k token collided
-// with the input.
+// TestCanonInputs_ArchiveByKeysIgnoresKeyListBasename pins the archiver convention:
+// ARCHIVE_BY_KEYS' `-k $KEYS` value is a colon-joined key list, not input paths. A source
+// member named only via that key list must be pruned by the AR input filter.
 func TestCanonInputs_ArchiveByKeysIgnoresKeyListBasename(t *testing.T) {
 	node := &rawNode{
 		Kv: map[string]any{"p": "AR"},

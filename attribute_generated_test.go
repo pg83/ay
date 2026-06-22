@@ -3,8 +3,8 @@ package main
 import "testing"
 
 // TestGen_RunPython3OutHeaderAttributedToConsumer: a RUN_PYTHON3 OUT header
-// produced in one module but first #included by a CC unit in a PEERDIR consumer
-// must be attributed (module_dir) to that consumer (first-claim-wins).
+// first #included by a CC unit in a PEERDIR consumer is attributed to that
+// consumer (first-claim-wins).
 func TestGen_RunPython3OutHeaderAttributedToConsumer(t *testing.T) {
 	files := map[string]string{}
 
@@ -52,7 +52,7 @@ END()
 }
 
 // TestGen_ScHeaderAttributedToConsumer: a SRCS(*.sc) generated .sc.h first
-// #included by a CC unit in a PEERDIR consumer is attributed to that consumer.
+// #included in a PEERDIR consumer is attributed to that consumer.
 func TestGen_ScHeaderAttributedToConsumer(t *testing.T) {
 	files := map[string]string{}
 
@@ -100,7 +100,7 @@ END()
 
 // TestGen_ArchiveHeaderAttributedToConsumer: an ARCHIVE(NAME header ...)
 // generated header first #included by a CC unit in a PEERDIR consumer is
-// attributed to that consumer. The producer's module includes nothing.
+// attributed to that consumer.
 func TestGen_ArchiveHeaderAttributedToConsumer(t *testing.T) {
 	files := map[string]string{}
 
@@ -150,9 +150,8 @@ END()
 }
 
 // TestGen_LibraryArchiveKeepsProducerOwnership guards that an ordinary library
-// archive (lib*.a, module_type=lib/module_lang=cpp) is NOT re-attributed: it has
-// no #include-resolvable header, so producer ownership stays intact even when
-// consumed via PEERDIR.
+// archive is NOT re-attributed: with no #include-resolvable header, producer
+// ownership stays intact even when consumed via PEERDIR.
 func TestGen_LibraryArchiveKeepsProducerOwnership(t *testing.T) {
 	files := map[string]string{}
 
@@ -192,11 +191,9 @@ END()
 	}
 }
 
-// TestOverrideGeneratedModuleDir_CppProtoConsumerTagPropagation: a generated
-// header produced outside a PROTO_LIBRARY (a RUN_PROGRAM/PR producer under a
-// plain LIBRARY) but first-claimed by a consuming CPP_PROTO module is
-// re-attributed to that consumer with BOTH its module_dir AND module_tag —
-// dir+tag are inherited from the owning module.
+// TestOverrideGeneratedModuleDir_CppProtoConsumerTagPropagation: a PR producer's
+// header first-claimed by a consuming CPP_PROTO module is re-attributed with both
+// the consumer's module_dir AND module_tag.
 func TestOverrideGeneratedModuleDir_CppProtoConsumerTagPropagation(t *testing.T) {
 	const producerDir = "apphost/gp/lib/proto/cow/generator/well_known"
 	const consumerDir = "apphost/lib/proto_answers"

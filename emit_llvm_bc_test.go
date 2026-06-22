@@ -5,18 +5,16 @@ import (
 	"testing"
 )
 
-// addLLVMBCToolchainPeer injects a synthetic clang RESOURCES_LIBRARY (the peer
-// every C++ module implicitly PEERDIRs) into the fixture, so the toolchain
-// resource-global reaches the module's closure — the value emitLLVMBC resolves
-// CLANG_BC_ROOT against. Self-contained: no real FS; the uri is a fixture token.
+// addLLVMBCToolchainPeer injects the synthetic clang RESOURCES_LIBRARY every C++
+// module implicitly PEERDIRs, so the toolchain resource-global reaches the closure
+// — the value emitLLVMBC resolves CLANG_BC_ROOT against.
 func addLLVMBCToolchainPeer(files map[string]string) {
 	files["build/platform/clang/ya.make"] = "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(CLANG16 clang16.json)\nEND()\n"
 	files["build/platform/clang/clang16.json"] = `{"by_platform":{"linux-x86_64":{"uri":"sbr:test-clang16"}}}`
 }
 
-// TestEmitLLVMBC_OptPassesNoBraceComma verifies the OP node's -passes arg uses
-// literal commas (not ${__COMMA__}) with no spurious outer single-quotes —
-// upstream expands ${__COMMA__} → , and strips shell-quoting before graph JSON.
+// TestEmitLLVMBC_OptPassesNoBraceComma: the OP node's -passes arg uses literal
+// commas (not ${__COMMA__}) with no spurious outer single-quotes.
 func TestEmitLLVMBC_OptPassesNoBraceComma(t *testing.T) {
 	const modPath = "mod/llvm"
 
@@ -80,7 +78,6 @@ END()
 	if strings.HasPrefix(passesArg, "'") || strings.HasSuffix(passesArg, "'") {
 		t.Errorf("-passes= arg has spurious outer single-quotes: %q", passesArg)
 	}
-	// Must contain commas as separator between passes.
 	if !strings.Contains(passesArg, ",") {
 		t.Errorf("-passes= arg has no comma separators: %q", passesArg)
 	}
@@ -90,9 +87,8 @@ END()
 	}
 }
 
-// TestEmitLLVMBC_BCNodeIncludesCompileFlags verifies BC compile nodes include the
-// standard include paths and defines (like a full CC compile), not just bare
-// -emit-llvm -c src -o out — upstream adds ${pre=-I:_C__INCLUDE} $BC_CXXFLAGS.
+// TestEmitLLVMBC_BCNodeIncludesCompileFlags: BC compile nodes include the standard
+// include paths and defines (like a full CC compile), not just bare -emit-llvm.
 func TestEmitLLVMBC_BCNodeIncludesCompileFlags(t *testing.T) {
 	const modPath = "mod/llvm"
 
@@ -139,7 +135,6 @@ END()
 	}
 	args := strStrs(bcNode.Cmds[0].CmdArgs.flat())
 
-	// Must include standard include paths from ccIncludesPrefix.
 	hasIB := false
 	hasIS := false
 	for _, a := range args {
@@ -157,7 +152,6 @@ END()
 		t.Errorf("BC compile cmd missing -I$(S): %v", args)
 	}
 
-	// Must include ARCADIA_ROOT define (from hostDefines / $BC_CXXFLAGS).
 	hasArcadiaRoot := false
 	for _, a := range args {
 		if a == "-DARCADIA_ROOT=$(S)" {
@@ -170,16 +164,9 @@ END()
 	}
 }
 
-// TestEmitLLVMBC_PipelineProducesFiveNodes reproduces the gap where USE_LLVM_BC16
-// + LLVM_BC parses but emission is missing. The upstream 5-step pipeline:
-//   - llvm_compile_cxx  → $(B)/<src>.<suffix>.bc                kv.p=BC
-//   - llvm_link         → $(B)/<mod>/<NAME>_merged.<suffix>.bc  kv.p=LD
-//   - llvm_opt          → $(B)/<mod>/<NAME>_optimized.<suffix>.bc kv.p=OP
-//   - onresource([out_bc, '/llvm_bc/'+NAME]) ⇒
-//     objcopy_<hash>.o   kv.p=PY  (existing emitResourceObjcopy)
-//     lib<mod>.global.a  kv.p=AR  (existing global-archive flow)
-//
-// Test asserts all 5 nodes reachable from the LIBRARY's archive root.
+// TestEmitLLVMBC_PipelineProducesFiveNodes: USE_LLVM_BC16 + LLVM_BC emits the
+// 5-step pipeline (BC compile, LD link, OP opt, PY objcopy, AR global archive);
+// asserts all 5 nodes reachable from the LIBRARY's archive root.
 func TestEmitLLVMBC_PipelineProducesFiveNodes(t *testing.T) {
 	const modPath = "mod/llvm"
 
@@ -286,9 +273,8 @@ END()
 	}
 }
 
-// TestEmitLLVMBC_BCNodeIncludesArchArgs verifies the BC compile command carries
-// $C_FLAGS_PLATFORM arch flags. testGen targets AArch64, so bundle.ArchArgs =
-// ["-march=armv8-a"]; the flag must sit between --target=... and -B/usr/bin.
+// TestEmitLLVMBC_BCNodeIncludesArchArgs: the BC compile command carries the
+// platform arch flag (-march=armv8-a for AArch64) between --target=... and -B/usr/bin.
 func TestEmitLLVMBC_BCNodeIncludesArchArgs(t *testing.T) {
 	const modPath = "mod/llvm"
 
@@ -335,7 +321,6 @@ END()
 	}
 	args := strStrs(bcNode.Cmds[0].CmdArgs.flat())
 
-	// Must carry -march=armv8-a (AArch64 platform; testGen targets AArch64).
 	hasMarch := false
 	for _, a := range args {
 		if a == "-march=armv8-a" {
@@ -347,7 +332,6 @@ END()
 		t.Errorf("BC compile cmd missing -march=armv8-a (AArch64 ArchArgs): %v", args)
 	}
 
-	// The order must be: --target=... then -march=... then -B/usr/bin.
 	targetIdx, marchIdx, binIdx := -1, -1, -1
 	for i, a := range args {
 		switch {
@@ -367,10 +351,8 @@ END()
 	}
 }
 
-// TestEmitLLVMBC_BCNodeCarriesIncludeClosure verifies the BC compile node carries
-// the full transitive include closure in Inputs, not just the source file.
-// Upstream emits all header deps as direct inputs so a header change retriggers
-// the BC compile; prior code carried only the source, diverging from upstream.
+// TestEmitLLVMBC_BCNodeCarriesIncludeClosure: the BC compile node carries the full
+// transitive include closure in Inputs so a header change retriggers the compile.
 func TestEmitLLVMBC_BCNodeCarriesIncludeClosure(t *testing.T) {
 	const modPath = "mod/llvm"
 
@@ -389,7 +371,6 @@ LLVM_BC(
 SRCS(foo.cpp)
 END()
 `
-	// foo.cpp includes foo.h; the closure must carry foo.h as an input.
 	files[modPath+"/foo.cpp"] = "#include \"foo.h\"\nint Bar(){return 0;}\n"
 	files[modPath+"/foo.h"] = "#pragma once\n"
 
@@ -414,28 +395,23 @@ END()
 		t.Fatal("graph missing BC node for foo.cpp.16.bc")
 	}
 
-	// BC node must carry the source file plus its include closure (foo.h).
-	// Before fix: Inputs was [foo.cpp] only — len == 1.
+	// BC node must carry the source plus its include closure (foo.h).
 	if len(bcNode.flatInputs()) < 2 {
 		t.Errorf("BC node Inputs has only %d entries; want source + closure: %v", len(bcNode.flatInputs()), vfsStringsT3(bcNode.flatInputs()))
 	}
 
-	// The source rides the closure window (chunked inputs have no positional
-	// contract — the wrapper chunk leads).
+	// Chunked inputs have no positional contract; the source rides the window.
 	if !nodeHasInput(bcNode, "$(S)/"+modPath+"/foo.cpp") {
 		t.Errorf("BC node Inputs missing the source foo.cpp: %v", vfsStringsT3(bcNode.flatInputs()))
 	}
 
-	// Closure must include foo.h.
 	if !nodeHasInput(bcNode, "$(S)/"+modPath+"/foo.h") {
 		t.Errorf("BC node Inputs missing foo.h from include closure: %v", vfsStringsT3(bcNode.flatInputs()))
 	}
 }
 
-// TestEmitLLVMBC_ObjcopyNodeCarriesBCClosure verifies the PY objcopy node for the
-// LLVM_BC resource embed carries the BC closure scripts as inputs. Upstream
-// propagates the OP node's inputs (wrapper scripts plus closure headers) into the
-// PY objcopy node; here that flows through d.prOutputInputs, which emitLLVMBC must populate.
+// TestEmitLLVMBC_ObjcopyNodeCarriesBCClosure pins that the PY objcopy node for the
+// LLVM_BC resource embed does NOT carry the BC producer-closure scripts.
 func TestEmitLLVMBC_ObjcopyNodeCarriesBCClosure(t *testing.T) {
 	const modPath = "mod/llvm"
 
@@ -458,7 +434,6 @@ END()
 
 	g := testGen(newMemFS(files), modPath)
 
-	// Find the PY objcopy node that embeds the LLVM BC output.
 	var pyNode *Node
 	for _, n := range g.Graph {
 		if p := n.KV.P.string(); p != "PY" {
@@ -480,9 +455,7 @@ END()
 	}
 
 	// The objcopy.py action reads only the embedded .bc; the BC source closure
-	// (wrapper scripts, headers) is NOT an input of the objcopy node. Upstream
-	// over-emits that closure here as cache-key-only inputs; we do not, and dump
-	// normalization strips it from the reference side (see filterObjcopyInputs).
+	// (wrapper scripts, headers) is NOT an input of the objcopy node.
 	for _, unwanted := range []string{
 		"$(S)/build/scripts/clang_wrapper.py",
 		"$(S)/build/scripts/llvm_opt_wrapper.py",
@@ -494,9 +467,8 @@ END()
 	}
 }
 
-// TestEmitLLVMBC_BCNodeGeneratedSourceClosure verifies a BC source produced by
-// COPY_FILE(TEXT) (a build-root generated source) compiles the build-root copy as
-// its primary input and carries its include closure — matching the upstream node shape.
+// TestEmitLLVMBC_BCNodeGeneratedSourceClosure: a BC source produced by COPY_FILE(TEXT)
+// compiles the build-root copy as its primary input and carries its include closure.
 func TestEmitLLVMBC_BCNodeGeneratedSourceClosure(t *testing.T) {
 	const modPath = "mod/llvm"
 
@@ -504,9 +476,8 @@ func TestEmitLLVMBC_BCNodeGeneratedSourceClosure(t *testing.T) {
 	addLLVMBCToolchainPeer(files)
 	writeToolProgram(files, "tools/rescompiler", "rescompiler")
 	writeToolProgram(files, "tools/rescompressor", "rescompressor")
-	// COPY_FILE(TEXT src.in dst) creates a build-root generated source.
-	// The scanner registers src.in's parsed includes for $(B)/mod/dst,
-	// so walkClosure on $(B)/mod/dst returns the transitive header set.
+	// COPY_FILE(TEXT src.in dst) creates a build-root generated source; the scanner
+	// registers src.in's includes for $(B)/mod/dst so walkClosure returns its headers.
 	files[modPath+"/ya.make"] = `LIBRARY()
 USE_LLVM_BC16()
 COPY_FILE(TEXT gen.cpp.in gen.cpp)
@@ -542,7 +513,7 @@ END()
 		t.Fatal("graph missing BC node for gen.cpp.16.bc")
 	}
 
-	// Primary input must be the build-root generated copy, not the source.
+	// Primary input must be the build-root copy, not the source.
 	if len(bcNode.flatInputs()) == 0 {
 		t.Fatal("BC node has no inputs")
 	}
@@ -560,7 +531,6 @@ END()
 		t.Errorf("BC node Inputs missing $(B)/.../gen.cpp: %v", vfsStringsT3(bcNode.flatInputs()))
 	}
 
-	// BC node must also carry gen.h from the closure.
 	if !nodeHasInput(bcNode, "$(S)/"+modPath+"/gen.h") {
 		t.Errorf("BC node Inputs missing gen.h from closure: %v", vfsStringsT3(bcNode.flatInputs()))
 	}

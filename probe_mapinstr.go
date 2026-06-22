@@ -13,12 +13,10 @@ import (
 )
 
 // probeMapInstr wraps the KEY expression of each map index/delete in
-// mapKR/mapKW(<key>, "file:line"), a generic passthrough that bumps a per-site
-// counter and returns the key. Wrapping the key (not the map expr) keeps m[...] a
-// valid lvalue/rvalue in every position (read, comma-ok, LHS assign, m[k]++), so
-// the edit is a pure text splice with no AST surgery. go/types restricts it to
-// real maps, not slices/arrays. Throwaway: build, measure, revert. mapKR/mapKW
-// always tally; the --probe=map flag dumps the tally (reportMapProbe) on exit.
+// mapKR/mapKW(<key>, "file:line"), a passthrough that tallies a per-site counter.
+// Wrapping the key (not the map expr) keeps m[...] a valid lvalue/rvalue
+// everywhere, so the edit is a pure text splice. go/types restricts it to real
+// maps. Throwaway: build, measure, revert; --probe=map dumps the tally on exit.
 func probeMapInstr(_ GlobalFlags, args []string) int {
 	files := goFilesFromArgs(args)
 
@@ -60,8 +58,8 @@ func probeMapInstr(_ GlobalFlags, args []string) int {
 	_, _ = conf.Check("main", fset, collect, info)
 
 	type edit struct {
-		start, end int    // byte range of the key expr to wrap
-		fn         string // mapKR / mapKW
+		start, end int // byte range of the key expr to wrap
+		fn         string
 		site       string
 	}
 
@@ -69,7 +67,7 @@ func probeMapInstr(_ GlobalFlags, args []string) int {
 	reads, writes := 0, 0
 
 	for _, p := range order {
-		// Don't instrument the probe tooling itself (its counter map would recurse).
+		// Skip the probe tooling itself (its counter map would recurse).
 		base := filepath.Base(p)
 
 		if base == "probe_mapinstr.go" || base == "probe_callsite.go" || base == "probe.go" {
@@ -78,7 +76,7 @@ func probeMapInstr(_ GlobalFlags, args []string) int {
 
 		f := asts[p]
 
-		// Pass 1: collect IndexExpr nodes that are write targets.
+		// Collect IndexExpr nodes that are write targets.
 		writeIdx := map[*ast.IndexExpr]bool{}
 		ast.Inspect(f, func(n ast.Node) bool {
 			switch x := n.(type) {
@@ -163,9 +161,8 @@ func isMapExpr(info *types.Info, e ast.Expr) bool {
 	return ok
 }
 
-// --- runtime probe populated by the mapKR/mapKW wrappers above. These helpers
-// are excluded from instrumentation (the counter map must not recurse).
-// Throwaway. ---
+// --- runtime probe populated by the mapKR/mapKW wrappers above; excluded from
+// instrumentation so the counter map does not recurse. Throwaway. ---
 
 type MapProbeEntry struct {
 	reads  uint64

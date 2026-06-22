@@ -281,9 +281,7 @@ func TestEvalCond_BoolStringEqualityCoercion(t *testing.T) {
 		t.Fatalf(`EvalCond(USE_SSE4 == "yes") = false, want true`)
 	}
 
-	// Explicit bool=false coerces to "no" in evalEq's bool/string branch.
-	// Unset flags are not bool-typed, so set the flag via SetBool to
-	// exercise the coercion rule.
+	// Explicit bool=false coerces to "no"; unset flags are not bool-typed, so set it via SetBool.
 	env := DefaultIfEnv.clone()
 	env.setBool(envPROFILE_MEMORY_ALLOCATIONS, false)
 	if !evalCond(parseCondForTest(t, `PROFILE_MEMORY_ALLOCATIONS == "no"`), env) {

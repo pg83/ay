@@ -194,8 +194,7 @@ var tokName = [...]STR{
 	tokYqlUdfYdb:                       kwYQL_UDF_YDB,
 
 	// Stub macros: registered so the closed TOK set tokenizes them; acknowledged
-	// as no-ops in acknowledgedMacros. STYLE_DETEKT (kotlin lint) /
-	// DEFAULT_JDK_VERSION (java) are inert for a C++/Python target.
+	// as no-ops in acknowledgedMacros.
 	tokAllResourceFiles:      internStr("ALL_RESOURCE_FILES"),
 	tokArchiveByKeys:         internStr("ARCHIVE_BY_KEYS"),
 	tokBisonFlags:            internStr("BISON_FLAGS"),
@@ -225,8 +224,7 @@ var tokByName = func() map[string]TOK {
 }()
 
 // TOK is the numeric identity of a build-file macro/directive name. The set is
-// closed: every macro name the parser emits has a TOK, interned at parse via
-// internTok (fail-fast on an unknown name). tokName recovers the string.
+// closed: internTok fails fast on an unknown name; tokName recovers the string.
 type TOK uint16
 
 const (
@@ -450,8 +448,7 @@ func internTok(s string) TOK {
 	return tokInvalid
 }
 
-// str returns the interned macro-name STR for this TOK — a free conversion,
-// uniform with ARG/ENV/VFS str().
+// str returns the interned macro-name STR for this TOK.
 func (t TOK) str() STR {
 	return tokName[t]
 }

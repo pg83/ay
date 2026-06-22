@@ -5,9 +5,8 @@ import (
 )
 
 // TestGen_FlexOldDefaultLexerGeneration pins the default old-flex _SRC("l")
-// mechanism: a `.l` source emits an LX/yellow node running flex `-o<out>.l.cpp
-// <src>.l`, the generated `.l.cpp` is compiled as C++ and archived, and the
-// flex-old ADDINCL lands `-I$(S)/contrib/tools/flex-old` on the compile.
+// mechanism: a `.l` source emits an LX node whose `.l.cpp` is compiled and
+// archived, with the flex-old ADDINCL on the compile.
 func TestGen_FlexOldDefaultLexerGeneration(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"contrib/tools/flex-old/ya.make":     "PROGRAM(flex)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(main.cpp)\nEND()\n",
@@ -68,7 +67,7 @@ END()
 		}
 	}
 
-	// Generated .l.cpp is compiled and depends on the LX producer.
+	// Generated .l.cpp depends on the LX producer.
 	cc := mustNodeByOutput(t, g, "$(B)/lex/lexer.l.cpp.o")
 	if cc.KV.P != pkCC {
 		t.Fatalf("generated lexer.l.cpp.o kv.p = %q, want CC", cc.KV.P.string())
@@ -77,20 +76,18 @@ END()
 		t.Errorf("generated CC deps %v missing LX producer uid %q", graphDeps(g, cc), lx.UID)
 	}
 
-	// The flex-old ADDINCL lands on the module's compiles.
 	if !cmdHasArg(cc, "-I$(S)/contrib/tools/flex-old") {
 		t.Errorf("generated CC missing -I$(S)/contrib/tools/flex-old: %#v", strStrs(cc.Cmds[0].CmdArgs.flat()))
 	}
 
-	// The generated object is archived into the module library.
 	ar := mustNodeByOutput(t, g, "$(B)/lex/liblex.a")
 	if !depsContain(graphDeps(g, ar), cc.UID) {
 		t.Errorf("module AR deps %v missing generated object uid %q", graphDeps(g, ar), cc.UID)
 	}
 }
 
-// TestGen_FlexDoesNotPerturbBisonOrPlainCpp is the negative guard: a `.y` module
-// still emits a YC node and no LX node; a plain `.cpp` module emits neither.
+// TestGen_FlexDoesNotPerturbBisonOrPlainCpp is the negative guard: a `.y`
+// module still emits a YC and no LX; a plain `.cpp` emits neither.
 func TestGen_FlexDoesNotPerturbBisonOrPlainCpp(t *testing.T) {
 	files := map[string]string{}
 	addToolchainPeers(files)

@@ -10,14 +10,12 @@ type SourceEmit struct {
 	OutPath VFS
 
 	// Extra holds additional compiled objects from the same source sharing the
-	// primary's generating statement (e.g. a GRPC() inline .proto yields both
-	// <base>.pb.cc.o and <base>.grpc.pb.cc.o). They archive immediately after the
-	// primary object with the same SrcMeta.
+	// primary's generating statement. They archive immediately after the primary
+	// object with the same SrcMeta.
 	Extra []SourceEmit
 }
 
-// emitOneSource dispatches a module source to its per-extension emitter. Each
-// emitLibrary*Source lives next to the node emitter it drives.
+// emitOneSource dispatches a module source to its per-extension emitter.
 func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
 	if isHeaderSource(srcRel) {
 		return nil
@@ -37,8 +35,8 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		strings.HasSuffix(srcRel, ".cpp"),
 		strings.HasSuffix(srcRel, ".cc"),
 		strings.HasSuffix(srcRel, ".cxx"),
-		// Uppercase .C is a C++ source upstream; HasSuffix is case-sensitive so it
-		// does not collide with .c. isCxxSource classifies it as C++.
+		// Uppercase .C is a C++ source; HasSuffix is case-sensitive so it does not
+		// collide with .c.
 		strings.HasSuffix(srcRel, ".C"):
 		return emitLibraryCSource(ctx, instance, d, srcRel, in)
 	case strings.HasSuffix(srcRel, ".S"),
@@ -72,8 +70,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 	}
 
 	// An unmodelled codegen source extension. Under --keep-going this warns and
-	// skips the source so gen completes (its object and any headers it would
-	// yield are absent — a node-count gap to close later); strict mode makes it fatal.
+	// skips; strict mode makes it fatal.
 	ctx.onWarn(Warn{
 		Kind:    WarnUnsupportedSource,
 		Message: fmt.Sprintf("%s: unsupported source extension in %q", instance.Path.rel(), srcRel),

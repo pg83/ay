@@ -15,10 +15,8 @@ func nodeUIDWithBuf(n *Node, c *CanonBuf) UID {
 	return UID{Hi: sum.Hi, Lo: sum.Lo}
 }
 
-// resourceFetchUID is the stable uid of a resource FETCH node: a hash of the
-// resource URI and output dir, not the whole command. Independence from the
-// binary path keeps it cache-stable across machines; output is included so two
-// resources sharing a URI but unpacked to different dirs stay distinct.
+// resourceFetchUID is the stable uid of a resource FETCH node: a hash of the URI
+// and output dir, not the whole command, so it stays cache-stable across machines.
 func resourceFetchUID(uri, output string) UID {
 	sum := xxh3.Hash128([]byte(uri + "\x00" + output))
 
@@ -27,17 +25,15 @@ func resourceFetchUID(uri, output string) UID {
 
 type CanonBuf struct {
 	buf []byte
-	// fs, when set, makes writeVFSSlice mix each $(S) input's content hash into
-	// the node hash, so a source edit changes the node uid. Left nil where only
-	// the structural hash is wanted.
+	// fs, when set, mixes each $(S) input's content hash into the node hash so a
+	// source edit changes the uid. Nil where only the structural hash is wanted.
 	fs FS
 
-	// uids resolves DepRefs/ForeignDepRefs to dep uids for the preimage, so deps
-	// are never materialized onto the node. Set before writeNode.
+	// uids resolves DepRefs/ForeignDepRefs to dep uids for the preimage. Set before writeNode.
 	uids *UidVec
 
 	// fetchRefs resolves Resources patterns to FETCH node refs, folding the fetch
-	// deps into the uid preimage on the fly rather than storing them on the node.
+	// deps into the preimage rather than storing them on the node.
 	fetchRefs *DenseMap[STR, NodeRef]
 }
 
@@ -46,8 +42,8 @@ func (c *CanonBuf) writeByte(b byte) {
 }
 
 // writeUint32/writeUint64 append little-endian bytes directly: the spelled-out
-// form inlines to stores, while PutUintNN-into-a-stack-array + append paid a
-// memmove per write — and this is the inner op of the whole uid layer.
+// form inlines to stores, where PutUintNN-into-a-stack-array + append paid a
+// memmove per write — the inner op of the whole uid layer.
 func (c *CanonBuf) writeUint32(n uint32) {
 	c.buf = append(c.buf, byte(n), byte(n>>8), byte(n>>16), byte(n>>24))
 }
@@ -71,16 +67,13 @@ func (c *CanonBuf) writeBytes(s string) {
 	c.buf = append(c.buf, s...)
 }
 
-// writeSTR mixes an interned token (any ARG/ENV/TOK/VFS resolves to a STR via
-// str()) by its recorded xxh3 lo, not its bytes. Equal strings share a STR and
-// lo, so the hash matches without materialising the string. STR 0 (empty) has
-// the sentinel lo 0.
+// writeSTR mixes an interned token by its recorded xxh3 lo, not its bytes: equal
+// strings share a STR and lo, so the hash matches without materialising the string.
 func (c *CanonBuf) writeSTR(s STR) {
 	c.writeUint64(internTable.los[s])
 }
 
-// writeRefUIDs serializes refs as their resolved dep uids, so Deps/ForeignDeps
-// need not be materialized onto the node.
+// writeRefUIDs serializes refs as their resolved dep uids.
 func (c *CanonBuf) writeRefUIDs(refs []NodeRef) {
 	c.writeUint32(uint32(len(refs)))
 
@@ -91,10 +84,9 @@ func (c *CanonBuf) writeRefUIDs(refs []NodeRef) {
 	}
 }
 
-// writeDepRefUIDs serializes the node's build deps for the uid preimage:
-// DepRefs followed by the resolved resource FETCH deps (Resources) — what the
-// "deps" array lists minus the separately-hashed ForeignDepRefs. Resources are
-// resolved on the fly through fetchRefs, never stored on the node.
+// writeDepRefUIDs serializes the node's build deps: DepRefs followed by the
+// resolved resource FETCH deps — the "deps" array minus the separately-hashed
+// ForeignDepRefs. Resources resolve on the fly through fetchRefs.
 func (c *CanonBuf) writeDepRefUIDs(n *Node) {
 	count := len(n.DepRefs)
 
@@ -129,8 +121,8 @@ func (c *CanonBuf) writeStringSlice(ss []string) {
 	}
 }
 
-// writeStrSlice canonicalises cmd args by each token's STR hash, so the same
-// flag string hashes identically regardless of which namespace produced it.
+// writeStrSlice canonicalises cmd args by each token's STR hash, so the same flag
+// hashes identically regardless of which namespace produced it.
 func (c *CanonBuf) writeStrSlice(as []STR) {
 	c.writeUint32(uint32(len(as)))
 
@@ -139,8 +131,7 @@ func (c *CanonBuf) writeStrSlice(as []STR) {
 	}
 }
 
-// writeVFSChunks writes the flattened element sequence of the chunk list —
-// byte-identical to writeVFSSlice over the concatenation.
+// writeVFSChunks writes the flattened chunk list — byte-identical to writeVFSSlice.
 func (c *CanonBuf) writeVFSChunks(chunks InputChunks) {
 	total := 0
 
@@ -180,9 +171,8 @@ func (c *CanonBuf) writeVFSSliceBody(vs []VFS) {
 		c.writeSTR(v.str())
 
 		// Mix the content hash of source inputs so editing a $(S) file changes the
-		// node uid. $(B) inputs are produced — their content rides the producing
-		// node's uid in deps, not here. ContentHash faults if the file was never
-		// read by the FS (the hash must have been recorded during gen).
+		// uid; $(B) inputs ride their producing node's uid in deps. contentHash
+		// faults if the hash was never recorded during gen.
 		if c.fs != nil && v.isSource() {
 			c.writeUint64(c.fs.contentHash(v))
 		}
@@ -190,12 +180,9 @@ func (c *CanonBuf) writeVFSSliceBody(vs []VFS) {
 }
 
 // writeVFSSliceOS is the *osFS arm of writeVFSSlice with loop state hoisted into
-// locals — buf, the los array, and the content-hash array. The interface
-// ContentHash per element forced a c.buf header reload around every append, and
-// gcshape generics keep such a call indirect, so devirtualization is done by
-// hand: the hot path inlines ContentHash's array probe, the cold path
-// (contentHashSlow) may grow the array and is re-hoisted after. Byte output is
-// identical to the generic loop above.
+// locals — a hand-devirtualized contentHash whose hot path inlines the array probe
+// and whose cold path (contentHashSlow) may grow and re-hoist the array. Byte
+// output is identical to the generic loop above.
 func (c *CanonBuf) writeVFSSliceOS(vs []VFS, fs *OsFS) {
 	buf := c.buf
 	los := internTable.los
@@ -229,8 +216,7 @@ func (c *CanonBuf) writeVFSSliceOS(vs []VFS, fs *OsFS) {
 	c.buf = buf
 }
 
-// writeStrChunks writes the flattened element sequence of the chunk list —
-// byte-identical to writeStrSlice over the concatenation.
+// writeStrChunks writes the flattened chunk list — byte-identical to writeStrSlice.
 func (c *CanonBuf) writeStrChunks(chunks ArgChunks) {
 	total := 0
 
@@ -267,8 +253,8 @@ func (c *CanonBuf) writeEnv(env EnvVars) {
 	}
 }
 
-// --- canonical hash (gen-time self_uid): a fixed-field deterministic encoding.
-// The gate recomputes hashes from the JSON, so only determinism matters here. ---
+// --- canonical hash (gen-time self_uid): the gate recomputes from JSON, so only
+// determinism matters here. ---
 
 func (c *CanonBuf) writeRequirements(r Requirements) {
 	c.writeUint64(math.Float64bits(r.CPU))
@@ -298,8 +284,7 @@ func (c *CanonBuf) writeKV(kv KV) {
 	c.writeBool(kv.RunTestNode)
 	c.writeUint32(uint32(len(kv.ExtOut)))
 
-	// Hash ExtOut in slice order — deterministic per node, so the uid needs no
-	// sort (the sorted form is only for the JSON output's parity).
+	// Hash ExtOut in slice order; the sorted form is only for JSON output parity.
 	for _, e := range kv.ExtOut {
 		c.writeBytes(e.Key)
 		c.writeBytes(e.Val)

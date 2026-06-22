@@ -2,11 +2,9 @@ package main
 
 import "testing"
 
-// TestGen_ScSourceEmitsDomschemecProducer reproduces the divergence where a
-// SRCS(*.sc) entry yields no producer for its generated .sc.h: _SRC("sc") runs
-// domschemec --in SRC --out SRC.h, carries the runtime.h output_include, tags kv
-// p=SC/pc yellow, and adds an implicit PEERDIR to the domscheme lib. Before the
-// .sc arm exists the source hits WarnUnsupportedSource and is dropped.
+// TestGen_ScSourceEmitsDomschemecProducer pins that SRCS(*.sc) yields a producer
+// for its .sc.h: domschemec --in SRC --out SRC.h, tagged kv p=SC/pc yellow, with
+// an implicit PEERDIR to the domscheme lib.
 func TestGen_ScSourceEmitsDomschemecProducer(t *testing.T) {
 	files := map[string]string{}
 
@@ -65,19 +63,16 @@ END()
 		t.Fatalf("SC inputs = %v, want all of %v", got, wantInputs)
 	}
 
-	// The implicit PEERDIR from _SRC("sc") must enter the module's peerdirs.
+	// The implicit PEERDIR must enter the module's peerdirs.
 	d := collectTestModule(newMemFS(files), "mod")
 	if !peerdirsContain(d, "library/cpp/domscheme") {
 		t.Fatalf("module peerdirs = %v, want library/cpp/domscheme", strStrings(d.peerdirs))
 	}
 }
 
-// TestGen_ScSourceAddsNoAddIncl pins the divergence where a SRCS(*.sc) module
-// leaked -I$(B)/<mod> into every compile (own and, via the global ADDINCL
-// channel, every PEERDIR consumer). _SRC("sc") emits the generated header with
-// NO `addincl` modifier — unlike CONFIGURE_FILE. So the .sc.h producer must
-// contribute no ADDINCL dir at any scope; the header resolves via the global
-// $(B) build root like any other generated output.
+// TestGen_ScSourceAddsNoAddIncl pins that SRCS(*.sc) does not leak -I$(B)/<mod>
+// into compiles: _SRC("sc") emits the header with no `addincl` modifier, so the
+// .sc.h producer contributes no ADDINCL dir at any scope.
 func TestGen_ScSourceAddsNoAddIncl(t *testing.T) {
 	files := map[string]string{}
 

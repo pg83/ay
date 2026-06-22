@@ -11,8 +11,8 @@ func emitTestCompileGraph(t *testing.T, host, target *Platform) *Graph {
 	t.Helper()
 
 	execEmit := newBufferedEmitter()
-	// The toolchain compiler's FETCH node is emitted up front into the emitter's
-	// fetchRefs, which Node.buildDeps consults on the fly for consumers' $(CLANG) deps.
+	// The compiler FETCH node is emitted up front into fetchRefs, which
+	// Node.buildDeps consults for consumers' $(CLANG) deps.
 	execEmit.fetchRefs.put(internStr(resourcePatternClangTool), execEmit.emit(&Node{
 		Platform: host,
 		Cmds:     []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"ay", "fetch", "$(B)", "$(S)", "sbr:clang", "resources/CLANG"})}}},
@@ -73,11 +73,9 @@ func assertSingleUsedClangFetch(t *testing.T, graph *Graph) {
 	}
 }
 
-// TestPlaceSandboxResource_RenameResource reproduces the failure on the
-// FROM_SANDBOX node `--copy-to-dir . --rename RESOURCE -- blacklist_default.json`:
-// --rename is a single-token append and RESOURCE denotes the fetched file itself,
-// copied onto the output. The former two-token parse ran os.Rename("RESOURCE",
-// "--"), which failed and never produced the output.
+// TestPlaceSandboxResource_RenameResource pins that --rename is a single-token
+// append and RESOURCE denotes the fetched file, copied onto the output. The
+// former two-token parse ran os.Rename("RESOURCE", "--") and produced nothing.
 func TestPlaceSandboxResource_RenameResource(t *testing.T) {
 	t.Chdir(t.TempDir())
 
@@ -98,9 +96,8 @@ func TestPlaceSandboxResource_RenameResource(t *testing.T) {
 	}
 }
 
-// TestPlaceSandboxResource_UntarTo pins the other FROM_SANDBOX pattern
-// (`--untar-to . -- icookie_blacklist.json`): the archive is extracted into the
-// build dir and the declared output is the extracted member.
+// TestPlaceSandboxResource_UntarTo pins the --untar-to pattern: the archive is
+// extracted and the declared output is the extracted member.
 func TestPlaceSandboxResource_UntarTo(t *testing.T) {
 	t.Chdir(t.TempDir())
 
@@ -139,9 +136,8 @@ func TestResourceGraphEmitter_ReusedEmitterEmitsFetchPerEmitter(t *testing.T) {
 	assertSingleUsedClangFetch(t, emitTestCompileGraph(t, host, target))
 }
 
-// TestSSHAgentOAuth exercises the live SSH-agent → OAuth → Sandbox path end to
-// end. Guarded behind AY_TEST_SSH_OAUTH because it talks to the SSH agent (may
-// prompt a Secure-Enclave touch) and the network.
+// TestSSHAgentOAuth exercises the live SSH-agent → OAuth → Sandbox path. Guarded
+// behind AY_TEST_SSH_OAUTH because it touches the SSH agent and the network.
 func TestSSHAgentOAuth(t *testing.T) {
 	if os.Getenv("AY_TEST_SSH_OAUTH") == "" {
 		t.Skip("set AY_TEST_SSH_OAUTH=1 to exercise the live SSH-agent OAuth exchange")
@@ -154,7 +150,6 @@ func TestSSHAgentOAuth(t *testing.T) {
 
 	t.Logf("got OAuth token via SSH agent (login=%s, len=%d)", oauthLogin(), len(tok))
 
-	// The token must authenticate the Sandbox API.
 	info := querySandboxResource("8563229520", tok)
 	if info.State != "READY" {
 		t.Fatalf("sandbox resource state = %q, want READY", info.State)

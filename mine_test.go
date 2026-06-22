@@ -9,8 +9,7 @@ import (
 func TestPrebuiltToolchainFlags_CarryConfigNotToolPaths(t *testing.T) {
 	flags := prebuiltToolchainFlags()
 
-	// CLANG_VER (a scalar version) stays a config flag; tool *paths* and
-	// *_RESOURCE_GLOBAL vars come from the PEERDIR closure, not ambient flags.
+	// CLANG_VER stays a config flag; tool paths come from the PEERDIR closure, not ambient flags.
 	if got, want := flags["CLANG_VER"], "20"; got != want {
 		t.Fatalf("CLANG_VER = %q, want %q", got, want)
 	}

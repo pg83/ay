@@ -8,8 +8,8 @@ import (
 
 var DefaultIfEnv = makeDefaultIfEnv()
 
-// intSTR pre-interns the decimal STR of the first len(intSTR) integers so
-// SetInt avoids strconv.Itoa + internStr on the common small-int path.
+// intSTR pre-interns decimal STRs of small ints so SetInt avoids
+// strconv.Itoa + internStr on the common path.
 var intSTR = func() [1024]STR {
 	var a [1024]STR
 
@@ -20,8 +20,7 @@ var intSTR = func() [1024]STR {
 	return a
 }()
 
-// evalAtomString evaluates an IF-condition atom to its string form (ints render
-// decimal, bools as yes/no).
+// evalAtomString evaluates an IF-condition atom to its string form.
 func evalAtomString(e Expr, env Environment) string {
 	switch v := evalAtom(e, env).(type) {
 	case string:
@@ -39,9 +38,8 @@ func evalAtomString(e Expr, env Environment) string {
 	return ""
 }
 
-// identEnv returns the ENV for an IF identifier, preferring the id interned at
-// parse time; a zero Env (e.g. an ExprIdent built in tests) falls back to
-// interning the name on demand.
+// identEnv returns the ENV for an IF identifier, preferring the parse-time
+// interned id; a zero Env falls back to interning the name on demand.
 func identEnv(x *ExprIdent) ENV {
 	if x.Env != 0 {
 		return x.Env
@@ -52,7 +50,7 @@ func identEnv(x *ExprIdent) ENV {
 
 const (
 	envAbsent EnvKind = iota
-	envStr            // string binding; bools fold to "yes"/"no" (evalEq normalizes them)
+	envStr            // string binding; bools fold to "yes"/"no"
 	envInt            // integer binding, stored as its decimal STR
 )
 
@@ -152,7 +150,7 @@ func evalEq(x *ExprEq, env Environment) bool {
 		}
 
 		// ya.make values are strings; a numeric literal compares by its
-		// decimal form (e.g. a version "20" == 20), matching upstream.
+		// decimal form.
 		if rv, ok := r.(int); ok {
 			return lv == strconv.Itoa(rv)
 		}
@@ -216,26 +214,22 @@ func makeDefaultIfEnv() Environment {
 		envOS_LINUX, envLINUX,
 		envCLANG, envTRUE, envUSE_SSE4,
 		envUSE_ARCADIA_PYTHON, envPYTHON3,
-		// Upstream sets USE_PREBUILT_TOOLS=yes unconditionally. Opensource
-		// snapshots override it to "no" via Platform.Flags -> buildIfEnv,
-		// which wins over this default.
+		// Defaulted yes; snapshots override to "no" via Platform.Flags ->
+		// buildIfEnv, which wins over this default.
 		envUSE_PREBUILT_TOOLS,
 	} {
 		e.setBool(n, true)
 	}
 
-	// OPENSOURCE is NOT defaulted: it is a repository property (opensource
-	// snapshots carry OPENSOURCE="yes") flowing in via Platform.Flags ->
-	// buildIfEnv, so internal-contour builds correctly see it unset.
+	// OPENSOURCE is NOT defaulted: it is a repository property flowing in via
+	// Platform.Flags -> buildIfEnv, so internal builds see it unset.
 
-	// The roots are plain vars in the ya.make language (upstream binds them);
-	// statement-arg expansion resolves them like any ${VAR}.
+	// Roots are plain vars; statement-arg expansion resolves them like any ${VAR}.
 	e.setString(envARCADIA_ROOT, "$(S)")
 	e.setString(envARCADIA_BUILD_ROOT, "$(B)")
 
 	e.setString(envCXX_RT, "libcxxrt")
-	// CORE_LIBS_OPTIMIZATION=-O3 (-O0 only under DEBUG_CORE_LIBS, never set by
-	// the gating builds); spliced into CFLAGS.
+	// CORE_LIBS_OPTIMIZATION spliced into CFLAGS.
 	e.setString(envCORE_LIBS_OPTIMIZATION, "-O3")
 	e.setString(envOPENSOURCE_PROJECT, "")
 	e.setString(envSANITIZER_TYPE, "")

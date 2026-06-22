@@ -5,10 +5,8 @@ import (
 	"testing"
 )
 
-// TestParseSplitCodegen_KeywordsAnywhere pins that OUT_NUM / OUTPUT_INCLUDES are
-// keyword sections that may precede the positional tool/prefix: tool and prefix
-// are the first two NON-keyword tokens. A naive args[0]/args[1] split mis-binds
-// the tool to "OUT_NUM".
+// TestParseSplitCodegen_KeywordsAnywhere pins that tool and prefix are the first
+// two NON-keyword tokens, so OUT_NUM / OUTPUT_INCLUDES sections may precede them.
 func TestParseSplitCodegen_KeywordsAnywhere(t *testing.T) {
 	args := STRS("OUT_NUM", "30", "tools/codegen", "factors_gen", "NTop", "OUTPUT_INCLUDES", "a.h", "b.h")
 	stmt := parseSplitCodegen(args, 1)
@@ -43,14 +41,8 @@ func TestParseSplitCodegen_DefaultOutNum(t *testing.T) {
 	}
 }
 
-// TestGen_SplitCodegenGeneratedClosure pins the generated-output include closure
-// for SPLIT_CODEGEN consumers. The flat-input model carries the first numbered
-// part (prefix.0.cpp) and the prefix.in source through the generated header /
-// generated cpp closure, and NEVER prefix.h on a generated cpp part compilation.
-//
-// The wrong model treats the cpp parts and noauto prefix.cpp as #including
-// prefix.h, so they carry $(B)/lib/factors_gen.h (ours-only) and miss
-// prefix.0.cpp + prefix.in (ref-only).
+// TestGen_SplitCodegenGeneratedClosure pins that prefix.0.cpp and prefix.in ride
+// the generated closure, never prefix.h on a generated cpp part compilation.
 func TestGen_SplitCodegenGeneratedClosure(t *testing.T) {
 	files := map[string]string{}
 
@@ -81,8 +73,7 @@ END()
 	inputIn := "$(S)/lib/factors_gen.in"
 	genHeader := "$(B)/lib/factors_gen.h"
 
-	// Generated cpp part (non-first) and the noauto prefix.cpp re-fed source:
-	// closure carries prefix.0.cpp + prefix.in, never the generated header.
+	// Closure carries prefix.0.cpp + prefix.in, never the generated header.
 	for _, ccOut := range []string{
 		"$(B)/lib/factors_gen.1.cpp.o",
 		"$(B)/lib/factors_gen.cpp.o",
@@ -102,8 +93,7 @@ END()
 		}
 	}
 
-	// Ordinary source that reaches the generated header through its own includes
-	// inherits prefix.0.cpp + prefix.in through that header's closure.
+	// A source reaching the generated header inherits prefix.0.cpp + prefix.in.
 	fn := mustNodeByOutput(t, g, "$(B)/lib/factor_names.cpp.o")
 
 	if !nodeHasInput(fn, part0) {
@@ -115,11 +105,10 @@ END()
 	}
 }
 
-// TestGen_SplitCodegenProducer pins SPLIT_CODEGEN as a generated-output producer
-// (kv p=SC): the macro must emit one SC node whose outputs are the OUT_NUM
-// numbered .cpp parts plus prefix.cpp + prefix.h, depend on the codegen tool, and
-// feed the generated sources back into the module build so the CC compiles of the
-// numbered parts and the ${BINDIR}/prefix.cpp re-fed source carry the producer dep.
+// TestGen_SplitCodegenProducer pins SPLIT_CODEGEN as a producer (kv p=SC): one SC
+// node outputs the numbered .cpp parts plus prefix.cpp + prefix.h, depends on the
+// codegen tool, and feeds the generated sources back so their CC compiles carry
+// the producer dep.
 func TestGen_SplitCodegenProducer(t *testing.T) {
 	files := map[string]string{}
 
@@ -159,7 +148,7 @@ END()
 		t.Fatalf("no SPLIT_CODEGEN producer (kv p=SC) node in graph")
 	}
 
-	// Outputs: factors_gen.0.cpp .. factors_gen.24.cpp + factors_gen.cpp + factors_gen.h.
+	// Outputs: numbered parts + factors_gen.cpp + factors_gen.h.
 	wantOuts := []string{
 		"$(B)/lib/factors_gen.0.cpp",
 		"$(B)/lib/factors_gen.24.cpp",
@@ -192,7 +181,7 @@ END()
 		t.Fatalf("SC node pc = %v, want yellow", sc.KV.PC)
 	}
 
-	// Inputs: the codegen tool binary + the $(S) .in source.
+	// Inputs: the tool binary + the .in source.
 	if !nodeHasInput(sc, "$(S)/lib/factors_gen.in") {
 		t.Fatalf("SC node inputs missing $(S)/lib/factors_gen.in: %v", sc.flatInputs())
 	}
@@ -208,8 +197,7 @@ END()
 		t.Fatalf("SC node foreign deps missing tool LD uid %q: %v", tool.UID, graphForeignDeps(g, sc))
 	}
 
-	// Generated-source consumption: every generated cpp compiles to a CC node that
-	// depends on the SC producer.
+	// Every generated cpp compiles to a CC node that depends on the SC producer.
 	for _, ccOut := range []string{
 		"$(B)/lib/factors_gen.cpp.o",
 		"$(B)/lib/factors_gen.0.cpp.o",

@@ -1,8 +1,7 @@
 package main
 
-// TwoBitSet is a grow-on-demand map of dense ids to 2-bit values (0..3), 32
-// cells per uint64 word. The zero value maps every id to 0, so 0 encodes
-// "unset" and the other three values carry the caller's states.
+// TwoBitSet is a grow-on-demand map of dense ids to 2-bit values, 32 cells per
+// uint64 word. The zero value maps every id to 0, so 0 encodes "unset".
 type TwoBitSet struct {
 	words []uint64
 }

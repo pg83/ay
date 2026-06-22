@@ -12,7 +12,7 @@ var (
 type Language int
 
 const (
-	// LangNone is the zero value: an instance without an explicit language.
+	// LangNone is the zero value: no explicit language.
 	LangNone Language = iota
 	LangCPP
 	LangProto
@@ -20,8 +20,7 @@ const (
 	LangPy
 	LangJava
 	// LangDescProto is the DESC_PROTO submodule variant of a PROTO_LIBRARY: the
-	// proto-description producer side (.proto.desc / .rawproto / .self.protodesc)
-	// requested via the DESC_PROTO PEERDIR tag, distinct from the CPP_PROTO variant.
+	// proto-description producer side, distinct from the CPP_PROTO variant.
 	LangDescProto
 )
 
@@ -66,7 +65,7 @@ func (k ModuleKind) string() string {
 	}
 }
 
-// String implements fmt.Stringer; internal code calls string().
+// String implements fmt.Stringer.
 func (k ModuleKind) String() string {
 	return k.string()
 }
@@ -133,7 +132,7 @@ func (mi ModuleInstance) string() string {
 	return b.String()
 }
 
-// String implements fmt.Stringer; internal code calls string().
+// String implements fmt.Stringer.
 func (mi ModuleInstance) String() string {
 	return mi.string()
 }

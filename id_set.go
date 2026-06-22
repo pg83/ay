@@ -1,10 +1,9 @@
 package main
 
-// IdSet is an epoch-stamped membership set over dense VFS ids. reset() bumps
-// the epoch instead of clearing the backing array, so a fresh set is O(1)
-// amortised and gen is reused across passes (only the rare epoch wraparound
-// zeroes it). A slot is present iff its stamp equals the current epoch; the
-// array is indexed by uint32(v).
+// IdSet is an epoch-stamped membership set over dense VFS ids: reset() bumps the
+// epoch instead of clearing the backing array, so a fresh set is O(1) amortised
+// (only the rare wraparound zeroes it). A slot is present iff its stamp equals
+// the current epoch.
 type IdSet struct {
 	gen   []uint32
 	epoch uint32
@@ -59,13 +58,11 @@ func (s *IdSet) add(v VFS) {
 	s.gen[id] = s.epoch
 }
 
-// spliceNew appends the window's not-yet-present ids to block[k:], stamping
-// them present, and returns the new k. gen and epoch are hoisted into locals:
-// through the receiver the compiler reloads them every iteration since the
-// gen[id] store could alias the fields, whereas the hoisted form keeps them in
-// registers. Callers reset(vfsBound()) first and windows hold only interned
-// ids, so every id is in range — the runtime bounds check fails fast on a
-// violated invariant.
+// spliceNew appends the window's not-yet-present ids to block[k:], stamping them
+// present, and returns the new k. gen and epoch are hoisted into locals because
+// through the receiver the compiler reloads them every iteration (the gen[id]
+// store could alias the fields). Callers reset(vfsBound()) first and windows
+// hold only interned ids, so the runtime bounds check fails fast on a violation.
 func (s *IdSet) spliceNew(win []VFS, block []VFS, k int) int {
 	gen := s.gen
 	epoch := s.epoch

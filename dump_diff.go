@@ -50,8 +50,8 @@ func cmdDumpDiff(_ GlobalFlags, args []string) int {
 		case "--by-kind":
 			setMode("by-kind")
 		case "--roots":
-			// Modifier, not a standalone mode: alone it runs the roots listing;
-			// `--by-token --roots` restricts token deltas to roots.
+			// Modifier, not a standalone mode: alone it lists roots; with --by-token it
+			// restricts token deltas to roots.
 			wantRoots = true
 		case "--group":
 			i++
@@ -250,8 +250,7 @@ func diffByField(leftPath, rightPath string, bw *bufio.Writer) {
 	combo := map[string]int{}
 	both := 0
 	streamJSONL(leftPath, func(n map[string]any) {
-		// An exact full-content counterpart on the right pairs this producer with
-		// zero delta; count it in the denominator but never as drift.
+		// Exact-counterpart producers have zero delta: count in the denominator only.
 		if canc.cancelLeft(n) {
 			both++
 
@@ -361,8 +360,7 @@ func diffByToken(leftPath, rightPath string, bw *bufio.Writer, opts byTokenOpts)
 		rootSet, _ = computeRootOutputs(leftPath, rightPath)
 	}
 
-	// group -> field -> token -> #nodes. The empty group key "" holds the ungrouped
-	// accounting.
+	// group -> field -> token -> #nodes; key "" holds the ungrouped accounting.
 	our := map[string]map[string]map[string]int{}
 	ref := map[string]map[string]map[string]int{}
 
@@ -379,8 +377,8 @@ func diffByToken(leftPath, rightPath string, bw *bufio.Writer, opts byTokenOpts)
 	groups := []string{}
 	paired := 0
 	streamJSONL(leftPath, func(n map[string]any) {
-		// Exact-counterpart producers have zero token delta: count them in the
-		// denominator (subject to the same roots filter) but emit no tokens.
+		// Exact-counterpart producers have zero token delta: count in the denominator
+		// (subject to the roots filter) but emit no tokens.
 		if canc.cancelLeft(n) {
 			if opts.rootsOnly && !nodeProducesRoot(n, rootSet) {
 				return
@@ -474,7 +472,7 @@ func byTokenGroupKey(n map[string]any, dims []string) string {
 }
 
 // nodePrimaryDir is the top dir of the node's lexically-first output — a stable
-// directory bucket regardless of output emission order.
+// bucket regardless of output emission order.
 func nodePrimaryDir(n map[string]any) string {
 	outs := toStrings(n["outputs"])
 
@@ -629,8 +627,7 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 			kind = "(none)"
 		}
 
-		// Exact-counterpart producers have zero delta: count them in the per-kind
-		// total but never as a divergence.
+		// Exact-counterpart producers have zero delta: count in the per-kind total only.
 		if canc.cancelLeft(n) {
 			total[kind]++
 
@@ -710,9 +707,8 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 	}
 }
 
-// computeRootOutputs returns the set of leaf-most divergent outputs (outputs
-// whose producing node differs from the reference but whose every divergent
-// dependency child matches) and the total count of divergent outputs.
+// computeRootOutputs returns the leaf-most divergent outputs (producer differs but
+// every divergent dependency child matches) and the total divergent count.
 func computeRootOutputs(leftPath, rightPath string) (map[string]bool, int) {
 	canc := newDumpDiffCanceler(leftPath, rightPath, dumpDiffSelfUIDKey)
 	rightExact := map[string]string{}
@@ -733,8 +729,7 @@ func computeRootOutputs(leftPath, rightPath string) (map[string]bool, int) {
 	uidToDivergentOuts := map[string]map[string]bool{}
 	uidToDeps := map[string][]string{}
 	streamJSONL(leftPath, func(n map[string]any) {
-		// An exact full-content counterpart implies an equal self_uid at the same
-		// output: the producer is not divergent, hence not a root.
+		// Exact full-content counterpart implies equal self_uid: not divergent, not a root.
 		if canc.cancelLeft(n) {
 			return
 		}
@@ -838,10 +833,9 @@ func diffPair(leftPath, rightPath, output string, bw *bufio.Writer) {
 	}
 }
 
-// writePairCmds prints the flat cmd_args multiset delta. When that multiset matches
-// but the cmds field still differs, it falls back to a structured per-cmd comparison
-// (count, cwd, env, stdout, arg ordering) so structural command differences are not
-// hidden behind an empty token diff.
+// writePairCmds prints the flat cmd_args multiset delta, falling back to a structured
+// per-cmd comparison when that multiset matches but the cmds field still differs, so
+// structural differences are not hidden behind an empty token diff.
 func writePairCmds(bw *bufio.Writer, left, right map[string]any) {
 	lTok, rTok := cmdArgTokens(left), cmdArgTokens(right)
 	onlyL, onlyR := map[string]int{}, map[string]int{}
@@ -938,13 +932,8 @@ func findNodePairByOutput(leftPath, rightPath, want string) (map[string]any, map
 		return leftNodes[0], nil
 	}
 
-	// An output produced by several sibling nodes per side (host/target or
-	// PIC/non-PIC variants that collapse to one coarse match key) has parity iff the
-	// two node multisets are equal. Cancel every producer with an exact full-node
-	// counterpart first: a per-field delta is only meaningful for producers left
-	// without one. Without this, the coarse-key search below cross-pairs our mode-A
-	// node against ref's mode-B node and reports a spurious delta even though
-	// L-A==R-A and L-B==R-B.
+	// Cancel exact full-node counterparts first: otherwise the coarse-key search
+	// cross-pairs our mode-A node against ref's mode-B and reports a spurious delta.
 	residLeft, residRight, eqLeft, eqRight := stripContentEqualPairs(leftNodes, rightNodes)
 
 	if len(residLeft) == 0 && len(residRight) == 0 {
@@ -983,8 +972,7 @@ func findNodePairByOutput(leftPath, rightPath, want string) (map[string]any, map
 }
 
 // stripContentEqualPairs greedily cancels each left node against an unused
-// content-equal right node, returning the residual producers with no exact
-// counterpart plus the matched pairs (eqLeft[i] == eqRight[i] in full).
+// content-equal right node, returning the residual producers plus the matched pairs.
 func stripContentEqualPairs(leftNodes, rightNodes []map[string]any) (residLeft, residRight, eqLeft, eqRight []map[string]any) {
 	usedRight := make([]bool, len(rightNodes))
 
@@ -1053,23 +1041,13 @@ func dumpDiffNodeContentEqual(left, right map[string]any) bool {
 	return nodeFieldHashes(left) == nodeFieldHashes(right)
 }
 
-// dumpDiffCanceler extends the exact-counterpart cancellation
-// (stripContentEqualPairs) to the streaming aggregate reports. An output produced by
-// several sibling nodes per side has parity iff the two producer multisets are equal;
-// a per-field/token/kind/root delta is only meaningful for producers left without an
-// exact counterpart. Without cancellation the streaming "first record wins per
-// (output, match-key)" pairing cross-pairs our mode-A producer against ref's mode-B
-// producer and reports a stale delta the direct --pair probe shows does not exist.
+// dumpDiffCanceler extends the exact-counterpart cancellation to the streaming
+// aggregate reports: without it the "first record wins per (output, match-key)"
+// pairing cross-pairs our mode-A producer against ref's mode-B and reports a stale delta.
 //
-// The exact-counterpart identity is supplied as a key function so each report cancels
-// on the identity it measures: field/token/kind key on the node content hash, roots
-// keys on self_uid. On real normalized data the two coincide — self_uid is the
-// SHA-256 of exactly the content fields nodeFieldHashes covers — so they differ only
-// for synthetic fixtures.
-//
-// It carries no node buffers: two cheap key multisets give the number of cancellable
-// pairs per identity; budgetLeft/budgetRight are consumed independently as each side
-// streams in deterministic file order, so residual producers pair residual-to-residual.
+// The identity is supplied as a key function so each report cancels on what it
+// measures: field/token/kind on the content hash, roots on self_uid. budgetLeft/Right
+// are consumed independently in file order, so residuals pair residual-to-residual.
 type dumpDiffCanceler struct {
 	key         func(map[string]any) string
 	budgetLeft  map[string]int
@@ -1129,8 +1107,7 @@ func dumpDiffTakeBudget(m map[string]int, k string) bool {
 	return false
 }
 
-// dumpDiffContentKey is the exact-counterpart identity for the field/token/kind
-// reports: the node's content-field hash.
+// dumpDiffContentKey: the node's content-field hash, identity for field/token/kind.
 func dumpDiffContentKey(n map[string]any) string {
 	h := nodeFieldHashes(n)
 	var b [len(h) * 8]byte
@@ -1142,8 +1119,7 @@ func dumpDiffContentKey(n map[string]any) string {
 	return string(b[:])
 }
 
-// dumpDiffSelfUIDKey is the exact-counterpart identity for the roots report, which
-// tests producer divergence by normalized self_uid.
+// dumpDiffSelfUIDKey: normalized self_uid, identity for the roots report.
 func dumpDiffSelfUIDKey(n map[string]any) string {
 	return getString(n, "self_uid")
 }
@@ -1180,11 +1156,8 @@ func dumpDiffNodeMatchKey(n map[string]any, includeHost bool) string {
 		}
 	}
 
-	// PIC contour: a module reached on both the PIC (host) and non-PIC (target)
-	// platforms emits two nodes at the same output path differing only in `.pic.o`
-	// vs `.o` members. Without this axis those variants share a key and the pairing
-	// can match our non-PIC node against ref's PIC node, reporting a spurious member
-	// diff.
+	// PIC contour: a module reached on both PIC and non-PIC platforms emits two nodes
+	// at the same output path. Without this axis the variants share a key and cross-match.
 	if dumpDiffNodePicVariant(n) {
 		key += "\x00P"
 	}
@@ -1192,8 +1165,8 @@ func dumpDiffNodeMatchKey(n map[string]any, includeHost bool) string {
 	return key
 }
 
-// dumpDiffNodePicVariant reports whether the node's object contour is PIC: any of
-// its outputs or member object tokens (inputs / cmd args) is a `.pic.o` object.
+// dumpDiffNodePicVariant reports whether any output or member object token (inputs /
+// cmd args) is a `.pic.o` object.
 func dumpDiffNodePicVariant(n map[string]any) bool {
 	for _, o := range toStrings(n["outputs"]) {
 		if strings.HasSuffix(o, ".pic.o") {

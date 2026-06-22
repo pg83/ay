@@ -5,34 +5,29 @@ import (
 	"strings"
 )
 
-// parsedIncludeBucket enumerates the fixed groups a parser sorts a file's
-// #include directives into. Used as the index of parsedIncludeSet.
+// parsedIncludeBucket enumerates the fixed groups a parser sorts a file's #include
+// directives into; the index of parsedIncludeSet.
 type ParsedIncludeBucket uint8
 
 const (
 	parsedIncludesLocal ParsedIncludeBucket = iota
 	parsedIncludesRagelNative
-	// parsedIncludesHeader is consumed by header (.h) outputs; parsedIncludesCpp by
-	// translation-unit (.cc/.cpp) outputs. INDUCED_DEPS(h …) lands in Header only,
-	// (cpp …) in Cpp only, (h+cpp …) in BOTH. Parse-derived directives that apply to
-	// either consumer (proto/ev .pb.h, ragel self-include, swig induced) go to both.
+	// parsedIncludesHeader is consumed by header (.h) outputs, parsedIncludesCpp by
+	// translation-unit outputs. INDUCED_DEPS(h/cpp/h+cpp …) routes accordingly; directives
+	// applying to either consumer go to both.
 	parsedIncludesHeader
 	parsedIncludesCpp
-	// parsedIncludesProtoConfig holds the file-level `option (NProtoConfig.Include)
-	// = "<h>"` angle-include headers of a `.cfgproto` source. The proto_config
-	// plugin inserts each as `#include <h>` into the generated .pb.h; the cfgproto
-	// emitter reads this bucket to seed that header's parsed includes. Kept off the
-	// proto import / induced-.pb.h buckets so it is not walked as a proto import nor
-	// namespace-rewritten.
+	// parsedIncludesProtoConfig holds a .cfgproto source's file-level angle-include
+	// headers, seeding the generated .pb.h's includes. Kept off the proto import buckets
+	// so it is not walked as an import nor namespace-rewritten.
 	parsedIncludesProtoConfig
 	parsedIncludeBucketCount
 )
 
 type ParsedInclude = IncludeDirective
 
-// parsedIncludeSet groups a source file's parsed directives by bucket. The bucket
-// set is fixed, so it is a flat array indexed by the bucket enum, not a map probe.
-// The zero value is the empty set.
+// parsedIncludeSet groups a source file's parsed directives by bucket: a flat array
+// indexed by the bucket enum, zero value being the empty set.
 type ParsedIncludeSet [parsedIncludeBucketCount][]IncludeDirective
 
 func appendParsedDirectives(set ParsedIncludeSet, bucket ParsedIncludeBucket, directives ...IncludeDirective) ParsedIncludeSet {
@@ -49,29 +44,21 @@ func (set ParsedIncludeSet) bucket(bucket ParsedIncludeBucket) []IncludeDirectiv
 	return set[bucket]
 }
 
-// sharedParseCache memoizes the parsed-#include result of a source file by VFS
-// path alone. The parse step is context-free — directives depend on file content
-// only, not on which module requested the parse — so the cache is correct to
-// share globally across all scan contexts. Upstream parses each file exactly once
-// per run; this map's first-write-wins semantics match that. Do not key by scan
-// context.
+// sharedParseCache memoizes a source file's parsed-#include result by VFS path alone.
+// The parse step is context-free, so the cache shares globally across scan contexts;
+// first-write-wins matches upstream's parse-once-per-run. Do not key by scan context.
 type SharedParseCache struct {
-	// ambiguous holds parse results for files with UNREGISTERED extensions,
-	// keyed by splitMix64(strID, parserID): such a file parses under the scan
-	// context's parser, so one file may carry one result per parser (.i under
-	// swig vs under C).
+	// ambiguous holds results for UNREGISTERED extensions, keyed by
+	// splitMix64(strID, parserID): such a file parses under the scan context's parser,
+	// so it may carry one result per parser.
 	ambiguous map[uint64]ParsedIncludeSet
 
-	// directives is the arena behind every retained parse result: a parser
-	// reserves a block, fills it in place and commits the used prefix; the cached
-	// sets below hold its address-stable sub-slices.
+	// directives is the arena behind every retained parse result; the cached sets hold
+	// its address-stable sub-slices.
 	directives *BumpAllocator[IncludeDirective]
 
-	// parsed is keyed by the source file's STR (vfsPath.strID()): a parsed source
-	// is always Source-rooted (VFS == STR<<1), so the STR is lossless and halves
-	// DenseMap's idx array versus the 2x-wider VFS space. A present-but-empty slot
-	// is the negative cache (no such file or no directives), distinct from absent
-	// (not yet parsed); the present/absent bool gates the re-stat.
+	// parsed is keyed by the source file's STR (a parsed source is always Source-rooted,
+	// so the STR is lossless). A present-but-empty slot is the negative cache.
 	parsed DenseMap[STR, ParsedIncludeSet]
 
 	parsedHits   uint64
@@ -89,8 +76,7 @@ type IncludeParserManager struct {
 	fs    FS
 	cache *SharedParseCache
 
-	// scanConfigs dedupes resolved scan configs by content hash; shared by both
-	// scanners (the addincl inverted index it feeds is shared too).
+	// scanConfigs dedupes resolved scan configs by content hash, shared by both scanners.
 	scanConfigs     map[uint64]*ScanConfig
 	scanConfigCount uint32
 
@@ -113,10 +99,9 @@ func newIncludeParserManagerFS(fs FS, cache *SharedParseCache) *IncludeParserMan
 	}
 }
 
-// sourceParsedBuckets parses vfsPath under its extension's registered parser,
-// or — for unregistered extensions — under ctxParser, the scan context's parser
-// (nil falls back to the C-like default). Registered-ext results cache by file;
-// ambiguous ones by (file, parser).
+// sourceParsedBuckets parses vfsPath under its extension's registered parser, or —
+// for unregistered extensions — under ctxParser (nil falls back to the C-like default).
+// Registered-ext results cache by file; ambiguous ones by (file, parser).
 func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser IncludeDirectiveParser) ParsedIncludeSet {
 	key := STR(vfsPath.strID())
 	rel := vfsPath.rel()
@@ -171,11 +156,9 @@ func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser Inclu
 	return put(out)
 }
 
-// withCythonSibling models Cython's implicit sibling .pxd: a .pyx uses its
-// same-named .pxd only when it exists. A pure parser (no FS access) would emit it
-// unconditionally, yielding a spurious unresolved include when absent; gate it
-// here, where the FS is available. .pyx files are rare, so the existence probe is
-// off the hot C/C++ parse path.
+// withCythonSibling models Cython's implicit sibling .pxd: a .pyx uses its same-named
+// .pxd only when it exists. A pure parser would emit it unconditionally, yielding a
+// spurious unresolved include when absent; gate it here, where the FS is available.
 func (pm *IncludeParserManager) withCythonSibling(rel string, set ParsedIncludeSet) ParsedIncludeSet {
 	if !strings.HasSuffix(rel, ".pyx") {
 		return set
@@ -212,17 +195,15 @@ func (pm *IncludeParserManager) parsedIncludes(vfsPath VFS, ctxParser IncludeDir
 }
 
 // injectSourceParse records a precomputed parse under a build-generated file's
-// SOURCE-rooted VFS, so the source-path parse readers resolve a generated proto
-// whose on-disk source does not exist. The parse is context-free — the same
-// directives for every asker — so it preserves the resolution-cache invariant.
-// Used by the gztproto emitter for the generated .proto.
+// SOURCE-rooted VFS, so the source-path readers resolve a generated proto whose on-disk
+// source does not exist.
 func (pm *IncludeParserManager) injectSourceParse(vfsPath VFS, set ParsedIncludeSet) {
 	pm.cache.parsed.put(STR(vfsPath.strID()), set)
 }
 
 func (pm *IncludeParserManager) registerBuildParsedIncludes(out VFS, parsed []IncludeDirective) {
-	// buildParsed is keyed by VFS and consulted only for build-rooted paths, so a
-	// source-rooted registration would be silently unreachable.
+	// buildParsed is consulted only for build-rooted paths, so a source-rooted
+	// registration would be silently unreachable.
 	if !out.isBuild() {
 		throwFmt("RegisterBuildParsedIncludes: source-rooted output %q", out.string())
 	}
@@ -254,9 +235,8 @@ func (pm *IncludeParserManager) indexAddincl(a VFS) {
 	})
 }
 
-// resolveScanConfig returns the deduped ScanConfig for cfg's resolve-relevant
-// content, building the resolve index (and feeding the addincl inverted index) on
-// first sight.
+// resolveScanConfig returns the deduped ScanConfig for cfg's resolve-relevant content,
+// building the resolve index (and feeding the addincl inverted index) on first sight.
 func (pm *IncludeParserManager) resolveScanConfig(cfg *ScanContext) *ScanConfig {
 	h := hashScanContext(cfg)
 

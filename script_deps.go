@@ -8,17 +8,14 @@ import (
 const buildScriptsRoot = "build/scripts"
 
 // scriptDeps maps a build/scripts script's VFS to [self, …transitive import
-// closure]. Emit sites use `append(inputs, scripts[v]...)`, so the wrapper and its
-// imported helpers land in one append.
+// closure], so `append(inputs, scripts[v]...)` lands the wrapper and its helpers.
 type ScriptDeps map[VFS][]VFS
 
-// buildScriptTable parses every build/scripts/*.py and returns, per script VFS, a
-// slice of [self, …transitive import closure]. Edges come from real
-// `import`/`from … import` statements (see scriptImports), so a new import is
-// picked up automatically. Built once per gen.
+// buildScriptTable parses every build/scripts/*.py and returns, per script VFS,
+// [self, …transitive import closure]. Edges come from real import statements, so
+// a new import is picked up automatically. Built once per gen.
 //
-// Multiple wrappers can share a helper, so appending can duplicate one;
-// canonInputs dedups, so callers need not.
+// Shared helpers can duplicate on append; canonInputs dedups, so callers need not.
 func buildScriptTable(fs FS) ScriptDeps {
 	texts := map[string]string{}
 	fs.walk(buildScriptsRoot, func(rel string, isDir bool) bool {
@@ -103,10 +100,9 @@ func buildScriptTable(fs FS) ScriptDeps {
 }
 
 // scriptImports parses the top-level module names a Python script imports via
-// `import a, b.c as d` and `from x import y`. Returns the first dotted component of
-// each, with `as` aliases and leading relative-import dots stripped. Only true
-// import lines are parsed, so identifiers in code/comments/strings are never
-// mistaken for imports.
+// `import a, b.c as d` and `from x import y`, returning the first dotted component
+// of each with `as` aliases and leading relative-import dots stripped. Only true
+// import lines are parsed, so identifiers in code/comments/strings are not matched.
 func scriptImports(txt string) []string {
 	var out []string
 

@@ -34,8 +34,7 @@ func emitJVCPG4(
 		head = append(head, src)
 	}
 
-	// fs_tools closure, jvInputs and closure are referenced as their own chunks,
-	// never copied.
+	// fs_tools closure, jvInputs and closure ride as their own chunks.
 	inputs := na.inputList(head, scripts[fsTools], jvInputs, closure)
 
 	node := &Node{
@@ -63,8 +62,7 @@ func emitCP(instance ModuleInstance, src VFS, dst VFS, tc ModuleToolchain, scrip
 }
 
 // EmitCPWithDeps emits a CP (copy) node. extraInputs is the additional input
-// closure to attach (e.g. the source's #include closure under WITH_CONTEXT, so
-// a header change retriggers the copy).
+// closure to attach, so a change there retriggers the copy.
 func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, id NodeRef, moduleTag STR, tc ModuleToolchain, scripts ScriptDeps, emit Emitter) {
 	na := emit.nodeArenas()
 
@@ -80,8 +78,8 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	// fs_tools closure rides as its own chunk; extraInputs is built locally
-	// because its membership depends on the src/dst exclusion below.
+	// extraInputs is built locally because its membership depends on the src/dst
+	// exclusion below.
 	ownInputs := make([]VFS, 0, 1+len(extraInputs))
 	ownInputs = append(ownInputs, src)
 

@@ -12,16 +12,13 @@ var (
 const (
 	ragel6DefaultFlagOptimized = "-CG2"
 	ragel6DefaultFlagDebug     = "-CT0"
-	// ragel6DefaultOutExt is the defext, appended only when the noext'd source
-	// basename has no remaining extension.
+	// ragel6DefaultOutExt is the defext, appended only when noext leaves no extension.
 	ragel6DefaultOutExt = ".rl6.cpp"
 )
 
-// ragel6OutVFS is the generated path of a ragel source — shared with the caller
-// that registers the output's induced includes and walks its closure before the
-// R6 node exists. Strip the last extension, then append .rl6.cpp ONLY if the
-// basename has no extension left. So parser.rl6 → parser.rl6.cpp (compiled), but
-// markupfsm.h.rl6 → markupfsm.h (a header, #included not compiled).
+// ragel6OutVFS is the generated path of a ragel source. Strip the last extension,
+// then append .rl6.cpp ONLY if the basename has no extension left: parser.rl6 →
+// parser.rl6.cpp (compiled), but markupfsm.h.rl6 → markupfsm.h (a header).
 func ragel6OutVFS(instance ModuleInstance, srcRel string) VFS {
 	dir := instance.Path.rel() + "/"
 	base := srcRel
@@ -97,27 +94,22 @@ func emitLibraryRagel6Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 
 	r6Parsed := ctx.scannerFor(instance).parsers.sourceParsedBuckets(rl6SourceVFS, nil).bucket(parsedIncludesCpp)
 
-	// Register the generated cpp's induced includes BEFORE walking, so ONE
-	// window serves both nodes: induced directives pull the C closure, and the
-	// .rl6's ragel-native %includes pull the natively-included ragel files
-	// WITHOUT their C headers (native deps and ParsedIncls stay apart).
+	// Register induced includes BEFORE walking so ONE window serves both nodes:
+	// induced directives pull the C closure, .rl6 %includes pull native ragel files
+	// without their C headers (native deps and ParsedIncls stay apart).
 	r6Ref := ctx.emit.reserve()
 	registerBoundGeneratedParsedOutput(ctx, instance, pkR6, r6Out, r6Parsed, r6Ref, []NodeRef{ragelLDRef})
 
 	window := walkClosure(ctx.scannerFor(instance), r6Out, in.ScanCfg)
 
-	// The ragel compiler only reads source files (the .rl6 source + natively-
-	// included .rl6 files + C/C++ headers it parses). Build-generated files (the
-	// cpp itself, .pb.h headers pulled via the C++ include chain) must not appear
-	// as direct inputs — the ragel binary doesn't read them.
+	// The ragel compiler only reads source files (.rl6 + the C/C++ headers it
+	// parses); build-generated files must not appear as direct inputs.
 	rl6Closure := keepOnlySourceVFS(filterEnSerializedSiblings(window))
 
 	emitR6(instance, srcRel, ragelLDRef, ragelBinaryVFS, in.Ragel6Flags, rl6Closure, r6Ref, ctx.emit)
 
-	// A ragel source whose defext'd output is a header (markupfsm.h.rl6 →
-	// markupfsm.h) generates a #included header, not a translation unit. The
-	// follow-up compile keys off the output extension, so a non-C++ artifact is
-	// registered (above) but never compiled.
+	// A ragel source whose output is a header generates a #included header, not a
+	// translation unit; registered above but never compiled.
 	if !isCxxSource(r6Out.rel()) {
 		return nil
 	}

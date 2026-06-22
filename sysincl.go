@@ -27,8 +27,7 @@ var sysInclYamlSequence = []SysInclEntry{
 	{file: "libiconv.yml"},
 	{file: "libidn.yml"},
 	{file: "jdk-to-arcadia.yml"},
-	// opensource.yml and proto.yml are mutually exclusive on $OPENSOURCE. proto.yml
-	// resolves the vendored protobuf variants — needed for the internal contour.
+	// opensource.yml and proto.yml are mutually exclusive on $OPENSOURCE.
 	{file: "opensource.yml", predicate: opensourceOn},
 	{file: "proto.yml", predicate: notOpensource},
 	{file: "libc-to-musl.yml", predicate: muslOn},
@@ -60,9 +59,8 @@ type SysIncl struct {
 	CaseInsensitive bool
 
 	// pairs accumulates the record's cooked header->targets mappings in parse
-	// order: CS keys interned (key), CI keys lowercased (keyCI). Intra-record
-	// duplicate headers carry last-wins semantics — the index build dedups
-	// keeping the LAST occurrence.
+	// order: CS keys interned, CI keys lowercased. Duplicate headers are last-wins
+	// — the index build keeps the LAST occurrence.
 	pairs []SysinclPair
 }
 
@@ -74,9 +72,8 @@ type SysinclPair struct {
 
 type SysInclSet []SysIncl
 
-// setMapping stores one cooked header→targets mapping into the record's arm
-// (CS keys interned from the bytes, CI keys lowercased). paths has no empty
-// entries, so len>=2 is exactly the multi-target condition.
+// setMapping stores one cooked header→targets mapping into the record's arm.
+// paths has no empty entries, so len>=2 is exactly the multi-target condition.
 func (rec *SysIncl) setMapping(k []byte, paths []VFS) {
 	if len(paths) >= 2 {
 		rec.HasMultiTarget = true
@@ -113,8 +110,8 @@ func archIs(want string) func(SysInclEnv) bool {
 	return func(e SysInclEnv) bool { return e.arch == want }
 }
 
-// muslOn / muslArchIs gate the musl libc & stl sysincl files, loaded only under
-// MUSL=yes. Under glibc these must not apply, or libc headers remap into musl.
+// muslOn / muslArchIs gate the musl sysincl files. Under glibc these must not
+// apply, or libc headers remap into musl.
 func muslOn(e SysInclEnv) bool {
 	return e.musl
 }
@@ -149,13 +146,11 @@ func loadSysInclSetForFS(fs FS, arch string, musl, opensource bool, os OS, onWar
 		set = append(set, records...)
 	}
 
-	// The internal contour (opensource != yes) layers the internal sysincl dir on
-	// top of the base set. Upstream loads a curated, config-gated subset, NOT the
-	// whole directory: each entry sits under a `when` clause on OS/ARCH/project
-	// flags, which internalSysInclApplies reproduces. Loading every file is wrong —
-	// an OS_ZEPHYR-only file carries a broad source_filter that would remap common
-	// libc headers, polluting ordinary C++ closures. Sorted for deterministic
-	// precedence; loaded after the base set so it overrides it.
+	// The internal contour layers a curated, config-gated subset of the internal
+	// sysincl dir on top of the base set (internalSysInclApplies reproduces the
+	// per-file `when` gates). Loading every file is wrong: a gated-out file's broad
+	// source_filter would remap common libc headers. Loaded after the base set so
+	// it overrides.
 	if !opensource {
 		set = append(set, loadSysInclDir(fs, internalSysInclDir, env, onWarn)...)
 	}
@@ -163,17 +158,14 @@ func loadSysInclSetForFS(fs FS, arch string, musl, opensource bool, os OS, onWar
 	return set
 }
 
-// internalSysInclApplies gates an internal sysincl *.yml the way upstream conf
-// does. The internal contour (opensource==false) is ensured by the caller. This
-// model builds linux/darwin/windows only — files gated on any other OS or on a
-// mobile build target can never apply here, so they are never loaded.
+// internalSysInclApplies gates an internal sysincl *.yml. This model builds
+// linux/darwin/windows only, so files gated on any other OS never apply.
 func internalSysInclApplies(name string, env SysInclEnv) bool {
 	switch name {
 	case "macro.yml", "misc.yml", "sdc.yml", "smart_devices.yml", "speechkit.yml", "weird.yml":
-		// when ($OPENSOURCE != "yes").
 		return true
 	case "taxi.yml":
-		// when (... && $OPENSOURCE != "yes"); the other guards are unset in every build here.
+		// other guards are unset in every build here.
 		return true
 	case "misc-win.yml":
 		return env.os == OSWindows
@@ -188,7 +180,6 @@ func internalSysInclApplies(name string, env SysInclEnv) bool {
 }
 
 // loadSysInclDir parses the config-applicable *.yml in sorted filename order.
-// Absent directory → no records.
 func loadSysInclDir(fs FS, dir string, env SysInclEnv, onWarn func(Warn)) SysInclSet {
 	if !fs.isDir(srcRootVFS, dir) {
 		return nil
@@ -433,8 +424,7 @@ func compileSourceFilter(name string, lineno int, pat string, onWarn func(Warn))
 					}
 				}
 			} else if lit, ex, res, okP := extractPrefixedNegativeLookahead(altStr); okP {
-				// `^<literal>(?!<alts>)`: require the literal prefix, reject
-				// literal+alt (the full excluded prefix).
+				// require the literal prefix, reject literal+alt.
 				alt.literalPrefix = lit
 
 				for _, e := range ex {
@@ -509,12 +499,9 @@ func splitTopLevelOr(pat string) []string {
 	return out
 }
 
-// extractPrefixedNegativeLookahead handles the form
-// `^<literal>(?!<alt1|alt2|…>)<residual>`, where a regex-meta-free literal sits
-// between the anchor and the lookahead. RE2 has no lookahead, so this matches in
-// Go as: starts-with <literal> AND not starts-with <literal><alt> for any alt.
-// Returns the literal, the excluded suffixes (relative to it), the residual
-// after the group, and ok.
+// extractPrefixedNegativeLookahead handles `^<literal>(?!<alts>)<residual>`. RE2
+// has no lookahead, so this matches as: starts-with <literal> AND not starts-with
+// <literal><alt> for any alt.
 func extractPrefixedNegativeLookahead(pat string) (literal string, excludes []string, residual string, ok bool) {
 	if !strings.HasPrefix(pat, "^") {
 		return "", nil, "", false
@@ -523,7 +510,7 @@ func extractPrefixedNegativeLookahead(pat string) (literal string, excludes []st
 	body := pat[1:]
 	i := strings.Index(body, "(?!")
 
-	if i <= 0 { // i<0: no lookahead; i==0: the bare ^(?! form (handled by extractNegativeLookahead)
+	if i <= 0 { // i<0: no lookahead; i==0: the bare ^(?! form
 		return "", nil, "", false
 	}
 
@@ -533,7 +520,7 @@ func extractPrefixedNegativeLookahead(pat string) (literal string, excludes []st
 		return "", nil, "", false
 	}
 
-	// Reuse the group scan + alt split by re-anchoring the lookahead tail.
+	// re-anchor the lookahead tail to reuse the group scan + alt split.
 	ex, res, isExc := extractNegativeLookahead("^" + body[i:])
 
 	if !isExc {

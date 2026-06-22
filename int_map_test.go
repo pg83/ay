@@ -57,7 +57,7 @@ func TestIntMapCollisionAndWraparound(t *testing.T) {
 	m := newIntMap[int](0) // cap 8, mask 7
 	cap0 := uint64(len(m.data))
 
-	keys := []uint64{1, 1 + cap0, 1 + 2*cap0, 7, 7 + cap0, 7 + 2*cap0} // slot 1 and slot 7 (wraps)
+	keys := []uint64{1, 1 + cap0, 1 + 2*cap0, 7, 7 + cap0, 7 + 2*cap0} // slot 7 wraps
 	for i, k := range keys {
 		m.put(k, i)
 	}
@@ -92,15 +92,14 @@ func TestIntMapGrowKeepsAll(t *testing.T) {
 	}
 }
 
-// Differential test: behave identically to the builtin map across a random mix
-// of inserts, overwrites and lookups. Keys kept non-zero (0 is reserved).
+// Differential test against the builtin map. Keys kept non-zero (0 is reserved).
 func TestIntMapMatchesBuiltin(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	ref := map[uint64]int64{}
 	m := newIntMap[int64](0)
 
 	for i := 0; i < 300_000; i++ {
-		k := rng.Uint64()%40_000 + 1 // small space → many collisions + overwrites; non-zero
+		k := rng.Uint64()%40_000 + 1 // small space → collisions + overwrites; non-zero
 		v := rng.Int63()
 		ref[k] = v
 		m.put(k, v)
@@ -116,7 +115,7 @@ func TestIntMapMatchesBuiltin(t *testing.T) {
 		}
 	}
 
-	// Negative lookups over the full 64-bit space, non-zero.
+	// Negative lookups over the full 64-bit space.
 	for i := 0; i < 100_000; i++ {
 		k := rng.Uint64() | 1
 		_, refOK := ref[k]
@@ -128,7 +127,7 @@ func TestIntMapMatchesBuiltin(t *testing.T) {
 	}
 }
 
-// Cell is find-or-insert: returns a writable pointer and whether the key existed.
+// Cell is find-or-insert: writable pointer plus whether the key existed.
 func TestIntMapCell(t *testing.T) {
 	m := newIntMap[int](0)
 
@@ -163,7 +162,7 @@ func TestIntMapCell(t *testing.T) {
 	}
 }
 
-// Cell must keep inserting correctly across the grows it triggers.
+// Cell keeps inserting correctly across the grows it triggers.
 func TestIntMapCellGrows(t *testing.T) {
 	m := newIntMap[int](0)
 	const n = 50_000

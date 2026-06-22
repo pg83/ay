@@ -86,10 +86,9 @@ func TestFinalizeDumpGraph_StripsOnlyTicketScaffolding(t *testing.T) {
 		t.Fatal("python fetch node missing after finalizeDumpGraph")
 	}
 
-	// Resource FETCH nodes are no longer stripped from -G (the -G graph must equal the
-	// executed graph; folded out later in `dump normalize`). So the consumer keeps its
-	// dep on the python fetch node — via foreign (tool) deps, which "deps" unions in
-	// after DepRefs — alongside the llvm reference.
+	// FETCH nodes are no longer stripped from -G: the -G graph must equal the executed
+	// graph. The consumer keeps its python fetch dep via foreign (tool) deps, which
+	// "deps" unions in after DepRefs.
 	if !reflect.DeepEqual(graphDeps(got, consumerNode), []UID{llvmNode.UID, pythonNode.UID}) {
 		t.Fatalf("consumer deps = %v, want [%s %s]", graphDeps(got, consumerNode), llvmNode.UID, pythonNode.UID)
 	}

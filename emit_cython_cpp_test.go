@@ -72,12 +72,10 @@ func arMemberIndex(t *testing.T, ar *Node, dir, rel string) int {
 	return -1
 }
 
-// PY_SRCS cython sources group into five fixed-order variant buckets (CYTHON_C,
-// CYTHON_C_H, CYTHON_C_API_H, CYTHON_CPP, CYTHON_CPP_H); each emits its generated
-// compile and implicit PY_REGISTER `.reg3.cpp` in bucket order, CYTHONIZE_PY `.py`
-// inheriting the current bucket. So cares + helper (C) sort BEFORE corecext (C_H)
-// despite the reverse textual order, the SRCS callbacks object stays first, and
-// the global .reg3.cpp members follow the same bucket order.
+// PY_SRCS cython sources group into five fixed-order variant buckets; each emits
+// its generated compile and `.reg3.cpp` in bucket order. So cares + helper (C)
+// sort BEFORE corecext (C_H) despite the reverse textual order, the SRCS callbacks
+// object stays first, and the global .reg3.cpp members follow bucket order.
 func TestGen_CythonVariantBucketARMemberOrder(t *testing.T) {
 	files := map[string]string{}
 
@@ -113,10 +111,8 @@ func TestGen_CythonVariantBucketARMemberOrder(t *testing.T) {
 }
 
 func TestGen_CythonizePyFollowsCythonCMode(t *testing.T) {
-	// CYTHONIZE_PY only flips a flag; a following `.py` source is appended to
-	// whatever pyxs list the last CYTHON_C/CYTHON_CPP directive selected. After
-	// CYTHON_C the .py is built in C mode and named `<src>.py.c` (DEP variant keeps
-	// the extension).
+	// CYTHONIZE_PY only flips a flag; after CYTHON_C a following `.py` is built in C
+	// mode and named `<src>.py.c`.
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
@@ -140,8 +136,7 @@ func TestGen_CythonizePyFollowsCythonCMode(t *testing.T) {
 
 func TestGen_CythonCApiHeaderEmitsCompanionHeaders(t *testing.T) {
 	// The _API_H variant uses `noext` naming and emits the generated `.c` plus
-	// companion `.h` and `_api.h` outputs (etree.pyx -> etree.c + etree.h +
-	// etree_api.h).
+	// companion `.h` and `_api.h` outputs.
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
@@ -168,11 +163,10 @@ func TestGen_CythonCApiHeaderEmitsCompanionHeaders(t *testing.T) {
 }
 
 func TestGen_CythonHeaderVariantOmitsInducedCppClosure(t *testing.T) {
-	// The _H/_API_H macros route the induced "cpp" closure (cdef extern-from headers
-	// and CYTHON_OUTPUT_INCLUDES python headers) onto the generated .h output, NOT
-	// the producer node (unlike CYTHON_C / CYTHON_CPP). So a Header CY node carries
-	// only cython.py, the bare embedded utility files, the source, and the
-	// pyx-language closure — never the cdef extern-from C/C++ header.
+	// The _H/_API_H macros route the induced "cpp" closure onto the generated .h
+	// output, not the producer node. So a Header CY node carries only cython.py, the
+	// bare embedded utility files, the source, and the pyx-language closure — never
+	// the cdef extern-from C/C++ header.
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
@@ -188,8 +182,7 @@ func TestGen_CythonHeaderVariantOmitsInducedCppClosure(t *testing.T) {
 	const externHeader = "$(S)/pkg/extlib/foo.h"
 	const pythonInclude = "$(S)/contrib/libs/python/Include/Python.h"
 
-	// Header variant (api.c): cdef extern-from target and the python
-	// output-include single must be absent.
+	// Header variant (api.c): both must be absent.
 	header := mustNodeByOutput(t, g, "$(B)/pkg/api.c")
 	for _, in := range header.flatInputs() {
 		s := in.string()
@@ -216,9 +209,8 @@ func TestGen_CythonHeaderVariantOmitsInducedCppClosure(t *testing.T) {
 }
 
 func TestGen_CythonizePyPxdSideInputClosure(t *testing.T) {
-	// For a CYTHONIZE_PY `.py` source whose module has a sibling
-	// `<mod-as-path>.pxd`, `dep = pxd` is passed to the cython macro as a hidden
-	// input whose transitive cimport / extern-from closure rides the CY node.
+	// For a CYTHONIZE_PY `.py` source with a sibling `<mod-as-path>.pxd`, `dep = pxd`
+	// is passed as a hidden input whose transitive closure rides the CY node.
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
@@ -257,8 +249,7 @@ func TestGen_CythonizePyPxdSideInputClosure(t *testing.T) {
 		}
 	}
 
-	// The generated .c's compile node carries the same pxd closure (matching the
-	// .pyx case).
+	// The generated .c's compile node carries the same pxd closure.
 	cc := mustNodeByOutputSuffix(t, g, "gevent/helper.py.c.o")
 
 	ccInputs := map[string]bool{}
@@ -286,10 +277,9 @@ func TestGen_CythonizePyPxdSideInputClosure(t *testing.T) {
 }
 
 func TestGen_CythonPyxCarriesNoPxdDep(t *testing.T) {
-	// The macro's hidden `Dep` is the source itself for a `.pyx` (a dedup no-op);
-	// only a CYTHONIZE_PY `.py` turns `dep` into `<mod-as-path>.pxd`. So a `.pyx`
-	// whose `<mod-as-path>.pxd` resolves but is not cimported must NOT carry that
-	// pxd — it rides a `.pyx` only through the cimport scan, never through `Dep`.
+	// The macro's hidden `Dep` is the source itself for a `.pyx`; only a CYTHONIZE_PY
+	// `.py` turns `dep` into `<mod-as-path>.pxd`. So a `.pyx` whose `<mod>.pxd`
+	// resolves but is not cimported must NOT carry that pxd.
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
@@ -298,8 +288,7 @@ func TestGen_CythonPyxCarriesNoPxdDep(t *testing.T) {
 			"ADDINCL(FOR cython pkg)\n"+
 			"PY_SRCS(NAMESPACE pkg sub/mod.pyx=foo)\nEND()\n")
 	writeTestModuleFile(files, "pkg/sub/mod.pyx", "def f():\n    return 0\n")
-	// `<mod-as-path>.pxd` for mod name `foo` resolves under the module dir, but
-	// the .pyx does not cimport it — `dep == path` excludes it.
+	// `<mod>.pxd` for mod name `foo` resolves but the .pyx does not cimport it.
 	writeTestModuleFile(files, "pkg/foo.pxd", "cdef extern from \"pkg/extra.h\":\n    pass\n")
 	writeTestModuleFile(files, "pkg/extra.h", "#pragma once\n")
 
@@ -315,13 +304,10 @@ func TestGen_CythonPyxCarriesNoPxdDep(t *testing.T) {
 }
 
 func TestGen_CythonNameListCimportClosure(t *testing.T) {
-	// CimportFrom: `from X cimport name-list` resolves the package `X/__init__.pxd`
-	// (always tried), the module `X.pxd`, and — when X is a package directory —
-	// each cimported name as a submodule `X/name.pxd` (or `X/name/__init__.pxd`).
-	// CimportSimple (`cimport a.b`) resolves `a/b.pxd` then `a/b/__init__.pxd`. The
-	// parser previously mapped a cimport to a SINGLE module-as-path `.pxd`, so a
-	// `from package cimport names` whose package has no `package.pxd` resolved
-	// nothing.
+	// CimportFrom: `from X cimport name-list` resolves the package `X/__init__.pxd`,
+	// the module `X.pxd`, and each cimported name as a submodule `X/name.pxd` (or
+	// `X/name/__init__.pxd`). CimportSimple (`cimport a.b`) resolves `a/b.pxd` then
+	// `a/b/__init__.pxd`.
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
@@ -334,18 +320,14 @@ func TestGen_CythonNameListCimportClosure(t *testing.T) {
 			"from app.includes cimport tree, config\n"+
 			"from libc cimport limits\n"+
 			"include \"x.pxi\"\n")
-	// `from app cimport top`: package init + per-name submodule.
 	writeTestModuleFile(files, "pkg/app/__init__.pxd", "cdef int a\n")
 	writeTestModuleFile(files, "pkg/app/top.pxd", "cdef int b\n")
-	// `from app.includes cimport tree, config`: package init + two submodules.
 	writeTestModuleFile(files, "pkg/app/includes/__init__.pxd", "cdef int c\n")
 	writeTestModuleFile(files, "pkg/app/includes/tree.pxd", "cdef int d\n")
 	writeTestModuleFile(files, "pkg/app/includes/config.pxd", "cdef int e\n")
 	// Present in the same package but NOT cimported — must stay absent.
 	writeTestModuleFile(files, "pkg/app/includes/other.pxd", "cdef int f\n")
-	// `include "x.pxi"`: resolved under the includer dir.
 	writeTestModuleFile(files, "pkg/x.pxi", "cdef int g\n")
-	// `from libc cimport limits`: cython built-in libc include.
 	writeTestModuleFile(files, "contrib/tools/cython/Cython/Includes/libc/__init__.pxd", "")
 	writeTestModuleFile(files, "contrib/tools/cython/Cython/Includes/libc/limits.pxd", "cdef int h\n")
 
@@ -383,13 +365,9 @@ func TestGen_CythonNameListCimportClosure(t *testing.T) {
 
 func TestGen_CythonApiHeaderPyxClosurePassThrough(t *testing.T) {
 	// A cython source that cdef-externs a generated `_api.h` Uses the producing
-	// node's pyx closure as its own source deps (the "pyx" Use passthrough). Before
-	// the fix the generated header carried no parsed includes, so the consumer's CY
-	// node missed it.
-	//
-	// PY_SRCS lists the consumer (cons) BEFORE the producer (prod), so phase 1 must
-	// register every header output up front for the consumer's closure to resolve
-	// the api header while the producer statement is still unprocessed.
+	// node's pyx closure as its own source deps. PY_SRCS lists the consumer (cons)
+	// BEFORE the producer (prod), so phase 1 must register every header output up
+	// front for the consumer's closure to resolve the api header.
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
@@ -397,7 +375,7 @@ func TestGen_CythonApiHeaderPyxClosurePassThrough(t *testing.T) {
 		"PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\n"+
 			"ADDINCL(FOR cython pkg)\n"+
 			"PY_SRCS(TOP_LEVEL CYTHON_C app/cons.pyx CYTHON_C_API_H app/prod.pyx)\nEND()\n")
-	// Producer: pyx closure is prod.pyx + helper.pxd (cimport) + h.pxi (include).
+	// Producer: pyx closure is prod.pyx + helper.pxd + h.pxi.
 	writeTestModuleFile(files, "pkg/app/prod.pyx",
 		"from app cimport helper\ninclude \"app/h.pxi\"\n")
 	writeTestModuleFile(files, "pkg/app/helper.pxd", "cdef int a\n")
@@ -405,7 +383,7 @@ func TestGen_CythonApiHeaderPyxClosurePassThrough(t *testing.T) {
 	// Consumer: cimports a pxd that cdef-externs the producer's generated _api.h.
 	writeTestModuleFile(files, "pkg/app/cons.pyx", "from app.pub cimport thing\n")
 	writeTestModuleFile(files, "pkg/app/pub.pxd", "cdef extern from \"prod_api.h\":\n    pass\n")
-	// Present in the package but NOT in the producer's closure — must stay absent.
+	// Present but NOT in the producer's closure — must stay absent.
 	writeTestModuleFile(files, "pkg/app/unrelated.pxd", "cdef int z\n")
 
 	g := testGen(newMemFS(files), "pkg")
@@ -437,13 +415,10 @@ func TestGen_CythonApiHeaderPyxClosurePassThrough(t *testing.T) {
 }
 
 func TestGen_CythonGeneratedCompileCarriesInducedPyx(t *testing.T) {
-	// The "pyx" Use passthrough rides the producer CY node's "pyx" closure through
-	// files that #include any of the node's outputs. The generated `cons.pyx.c`
-	// #includes the sibling `prod_api.h` (whose MAIN output is `prod.c`), so its
-	// C++ compile (1) Uses the producer's pyx closure (prod.pyx + helper.pxd +
-	// h.pxi) and (2) lists prod.c. This checks both reach the generated .c's
-	// compile, while a hand-written C++ compile that does NOT #include the api
-	// header stays clean.
+	// The "pyx" passthrough rides the producer's "pyx" closure through files that
+	// #include any of its outputs. The generated `cons.pyx.c` #includes `prod_api.h`
+	// (main output `prod.c`), so its C++ compile Uses the producer's pyx closure and
+	// lists prod.c. A hand-written C++ compile that does NOT #include it stays clean.
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
@@ -451,16 +426,14 @@ func TestGen_CythonGeneratedCompileCarriesInducedPyx(t *testing.T) {
 		"PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nSRCS(helper.cpp)\n"+
 			"ADDINCL(FOR cython pkg)\n"+
 			"PY_SRCS(TOP_LEVEL CYTHON_C app/cons.pyx CYTHON_C_API_H app/prod.pyx)\nEND()\n")
-	// Producer: pyx closure is prod.pyx + helper.pxd (cimport) + h.pxi (include);
-	// its main generated output is prod.c.
+	// Producer: pyx closure is prod.pyx + helper.pxd + h.pxi; main output prod.c.
 	writeTestModuleFile(files, "pkg/app/prod.pyx", "from app cimport helper\ninclude \"app/h.pxi\"\n")
 	writeTestModuleFile(files, "pkg/app/helper.pxd", "cdef int a\n")
 	writeTestModuleFile(files, "pkg/app/h.pxi", "cdef int b\n")
-	// Consumer: cimports a pxd that cdef-externs the producer's generated _api.h, so
-	// the generated cons.pyx.c #includes prod_api.h.
+	// Consumer: the generated cons.pyx.c #includes prod_api.h.
 	writeTestModuleFile(files, "pkg/app/cons.pyx", "from app.pub cimport thing\n")
 	writeTestModuleFile(files, "pkg/app/pub.pxd", "cdef extern from \"prod_api.h\":\n    pass\n")
-	// Present in the package but NOT in the producer's closure — must stay absent.
+	// Present but NOT in the producer's closure — must stay absent.
 	writeTestModuleFile(files, "pkg/app/unrelated.pxd", "cdef int z\n")
 	// Hand-written C++ compile that does not #include the api header.
 	writeTestModuleFile(files, "pkg/helper.cpp", "int f(){return 0;}\n")
@@ -505,11 +478,9 @@ func TestGen_CythonGeneratedCompileCarriesInducedPyx(t *testing.T) {
 
 func TestGen_CythonCimportFromModulePxdSuppressesNameList(t *testing.T) {
 	// CimportFrom: once `from X cimport names`'s module `X.pxd` resolves,
-	// needCheckLists=false — the per-name submodule probes (`X/name.pxd`) are
-	// skipped, because X is a module and the names are names within it. With `X.pxd`
-	// reachable through one cython addincl root and `X/name.pxd` through another
-	// (the only way both can resolve, since a path is a file XOR a directory within
-	// a single root), only `X.pxd` must ride the CY node.
+	// needCheckLists=false — the per-name submodule probes are skipped. With `X.pxd`
+	// reachable through one addincl root and `X/name.pxd` through another, only
+	// `X.pxd` must ride the CY node.
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
@@ -518,9 +489,9 @@ func TestGen_CythonCimportFromModulePxdSuppressesNameList(t *testing.T) {
 			"ADDINCL(FOR cython pkg/ra pkg/rb)\n"+
 			"PY_SRCS(NAMESPACE pkg mod.pyx)\nEND()\n")
 	writeTestModuleFile(files, "pkg/mod.pyx", "from sub cimport leaf\n")
-	// Module `sub.pxd` reachable via root ra → resolves, sets needCheckLists=false.
+	// Module `sub.pxd` via root ra resolves, sets needCheckLists=false.
 	writeTestModuleFile(files, "pkg/ra/sub.pxd", "cdef int a\n")
-	// Submodule `sub/leaf.pxd` reachable via root rb → must be skipped.
+	// Submodule `sub/leaf.pxd` via root rb must be skipped.
 	writeTestModuleFile(files, "pkg/rb/sub/leaf.pxd", "cdef int b\n")
 
 	g := testGen(newMemFS(files), "pkg")
@@ -542,10 +513,9 @@ func TestGen_CythonCimportFromModulePxdSuppressesNameList(t *testing.T) {
 }
 
 func TestGen_CythonCimportSimpleFirstResolvedFallback(t *testing.T) {
-	// CimportSimple: `cimport a.b` resolves `a/b.pxd`; only when that does NOT
-	// resolve does it try `a/b/__init__.pxd`. Exactly one path is pushed. With
-	// `sub/leaf.pxd` reachable through one addincl root and `sub/leaf/__init__.pxd`
-	// through another, only `sub/leaf.pxd` must ride the CY node.
+	// CimportSimple: `cimport a.b` resolves `a/b.pxd`, falling back to
+	// `a/b/__init__.pxd`. With both reachable through different addincl roots, only
+	// `sub/leaf.pxd` must ride the CY node.
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
@@ -554,9 +524,9 @@ func TestGen_CythonCimportSimpleFirstResolvedFallback(t *testing.T) {
 			"ADDINCL(FOR cython pkg/ra pkg/rb)\n"+
 			"PY_SRCS(NAMESPACE pkg mod.pyx)\nEND()\n")
 	writeTestModuleFile(files, "pkg/mod.pyx", "cimport sub.leaf\n")
-	// `sub/leaf.pxd` reachable via root ra → resolves first, wins.
+	// `sub/leaf.pxd` via root ra wins.
 	writeTestModuleFile(files, "pkg/ra/sub/leaf.pxd", "cdef int a\n")
-	// `sub/leaf/__init__.pxd` reachable via root rb → fallback, must be skipped.
+	// `sub/leaf/__init__.pxd` via root rb is the skipped fallback.
 	writeTestModuleFile(files, "pkg/rb/sub/leaf/__init__.pxd", "cdef int b\n")
 
 	g := testGen(newMemFS(files), "pkg")
@@ -578,11 +548,9 @@ func TestGen_CythonCimportSimpleFirstResolvedFallback(t *testing.T) {
 }
 
 func TestGen_CythonCimportFromNameFirstResolvedFallback(t *testing.T) {
-	// CimportFrom per-name: `from X cimport name` resolves `X/name/__init__.pxd`;
-	// only when that does NOT resolve does it try `X/name.pxd`. Exactly one path per
-	// name. With the module `sub.pxd` absent (needCheckLists stays true) and
-	// `sub/leaf/__init__.pxd` reachable through one addincl root and `sub/leaf.pxd`
-	// through another, only `sub/leaf/__init__.pxd` must ride the CY node.
+	// CimportFrom per-name: `from X cimport name` resolves `X/name/__init__.pxd`,
+	// falling back to `X/name.pxd`. With the module `sub.pxd` absent and both forms
+	// reachable through different roots, only `sub/leaf/__init__.pxd` must ride.
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
@@ -591,9 +559,9 @@ func TestGen_CythonCimportFromNameFirstResolvedFallback(t *testing.T) {
 			"ADDINCL(FOR cython pkg/ra pkg/rb)\n"+
 			"PY_SRCS(NAMESPACE pkg mod.pyx)\nEND()\n")
 	writeTestModuleFile(files, "pkg/mod.pyx", "from sub cimport leaf\n")
-	// Package submodule `sub/leaf/__init__.pxd` reachable via root ra → resolves first, wins.
+	// `sub/leaf/__init__.pxd` via root ra wins.
 	writeTestModuleFile(files, "pkg/ra/sub/leaf/__init__.pxd", "cdef int a\n")
-	// Module-form `sub/leaf.pxd` reachable via root rb → fallback, must be skipped.
+	// Module-form `sub/leaf.pxd` via root rb is the skipped fallback.
 	writeTestModuleFile(files, "pkg/rb/sub/leaf.pxd", "cdef int b\n")
 
 	g := testGen(newMemFS(files), "pkg")
@@ -658,12 +626,9 @@ func TestGen_ManualCompanionSourceUsesCythonCompanionCCInputs(t *testing.T) {
 
 func TestGen_CythonCHeaderPassesInducedClosureToHandwrittenSrc(t *testing.T) {
 	// _H attaches the induced "cpp"/"pyx" closure to the generated .h, which passes
-	// through to any file that #includes it — including a handwritten SRCS C source
-	// from the same module. That consumer lists the generated header, the cython
-	// main output, and the pyx-language closure — but NOT the source's own `cdef
-	// extern` C closure (resolved only at the generated .c's compile). Before the
-	// fix the handwritten SRCS were scanned before the header was registered, so
-	// use.c.o missed the producer closure.
+	// through to any file that #includes it — including a handwritten SRCS C source.
+	// That consumer lists the generated header, the cython main output, and the
+	// pyx-language closure — but NOT the source's own `cdef extern` C closure.
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
@@ -672,15 +637,14 @@ func TestGen_CythonCHeaderPassesInducedClosureToHandwrittenSrc(t *testing.T) {
 			"ADDINCL(${ARCADIA_BUILD_ROOT}/pkg/app FOR cython pkg)\n"+
 			"SRCS(use.c)\n"+
 			"PY_SRCS(TOP_LEVEL CYTHON_C_H app/prod.pyx)\nEND()\n")
-	// Producer: pyx-language closure is prod.pyx + helper.pxd (cimport); it also
-	// cdef-externs a C header that must NOT pass through to the C consumer.
+	// Producer: pyx closure is prod.pyx + helper.pxd; it also cdef-externs a C header
+	// that must NOT pass through to the C consumer.
 	writeTestModuleFile(files, "pkg/app/prod.pyx", "from app cimport helper\ncdef extern from \"extlib/foo.h\":\n    pass\n")
 	writeTestModuleFile(files, "pkg/app/helper.pxd", "cdef int a\n")
 	writeTestModuleFile(files, "pkg/app/extlib/foo.h", "#pragma once\n")
 	// Handwritten C source that #includes the Cython-generated header.
 	writeTestModuleFile(files, "pkg/use.c", "#include \"prod.h\"\nint u(void){return 0;}\n")
-	// A CYTHON_OUTPUT_INCLUDES infra header that the generated header passes
-	// through; must exist for include resolution to keep it.
+	// A CYTHON_OUTPUT_INCLUDES infra header the generated header passes through.
 	writeTestModuleFile(files, "contrib/tools/cython/generated_c_headers.h", "#pragma once\n")
 
 	g := testGen(newMemFS(files), "pkg")
@@ -693,17 +657,14 @@ func TestGen_CythonCHeaderPassesInducedClosureToHandwrittenSrc(t *testing.T) {
 	}
 
 	// The closure passing through the header: the generated header, the cython main
-	// output, and the pyx-language closure. (Closure leaves ride bare and may repeat
-	// in the raw node; the canonical form dedups.)
+	// output, and the pyx-language closure.
 	for _, want := range []string{
 		"$(B)/pkg/app/prod.c",
 		"$(B)/pkg/app/prod.h",
 		"$(S)/pkg/app/prod.pyx",
 		"$(S)/pkg/app/helper.pxd",
 		// An input that ONLY reaches the consumer through the header's parsed-include
-		// pass-through (CYTHON_OUTPUT_INCLUDES). The entries above ride bare via
-		// cythonCompileInducedInputs and would survive without the header
-		// pass-through; this one would not, so it pins the core path.
+		// pass-through, so it pins the core path.
 		"$(S)/contrib/tools/cython/generated_c_headers.h",
 	} {
 		if !present[want] {

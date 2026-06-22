@@ -11,11 +11,9 @@ var (
 	cfgCmakeDefineRe = regexp.MustCompile(`#cmakedefine(?:01)?[ \t]+([A-Z_][A-Z0-9_]*)`)
 )
 
-// A CONFIGURE_FILE / *.in source is a template: configure_file.py substitutes
-// its @VAR@ and #cmakedefine[01] references (resolved from SET/DEFAULT vars) to
-// produce the output. The three entry points below all walk the include
-// closure, emit the configure node, and register the output; they differ only
-// in how src/dst are named and what happens to the output afterwards.
+// A CONFIGURE_FILE / *.in source is a template: configure_file.py substitutes its
+// @VAR@ and #cmakedefine[01] references from SET/DEFAULT vars. The three entry
+// points below differ only in src/dst naming and the output's fate.
 
 // emitExplicitCF handles a CONFIGURE_FILE(src dst) macro.
 func emitExplicitCF(ctx *GenCtx, instance ModuleInstance, cf *ConfigureFileStmt, d *ModuleData) {
@@ -31,8 +29,8 @@ func emitExplicitCF(ctx *GenCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	emitConfigureFile(ctx, instance, d, srcVFS, outVFS, in)
 }
 
-// emitLibraryHInSource handles a .h.in source: the configured header is consumed
-// via #include, so it carries its own quoted includes; no compile follows.
+// emitLibraryHInSource handles a .h.in source: the configured header is #included,
+// so it carries its own quoted includes; no compile.
 func emitLibraryHInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
 	outVFS := build(instance.Path.rel() + "/" + strings.TrimSuffix(srcRel, ".in"))
@@ -42,9 +40,8 @@ func emitLibraryHInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, s
 	return nil
 }
 
-// emitLibraryCInSource handles a .cpp.in / .c.in source: configure the
-// template, then compile the generated translation unit. The output is compiled,
-// never #included, so it registers no extra includes.
+// emitLibraryCInSource handles a .cpp.in / .c.in source: configure the template,
+// then compile the generated unit (never #included, so no extra includes).
 func emitLibraryCInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
 	outVFS := build(instance.Path.rel() + "/" + strings.TrimSuffix(srcRel, ".in"))
@@ -59,12 +56,8 @@ func emitLibraryCInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, s
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }
 
-// emitConfigureFile walks the template's include closure, emits the
-// configure_file.py node producing outVFS from srcVFS, and registers outVFS as a
-// pkCF codegen output. The output's registered includes are the template's own
-// parsed #includes (the substituted output carries the same #include lines). The
-// template and configure_file.py are the generated-from inputs, ridden to
-// consumers as closure leaves. Returns the producer ref.
+// emitConfigureFile emits the configure_file.py node producing outVFS from srcVFS
+// and registers outVFS as a pkCF codegen output. Returns the producer ref.
 func emitConfigureFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS, outVFS VFS, in ModuleCCInputs) NodeRef {
 	na := ctx.emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -90,11 +83,9 @@ func emitConfigureFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 		Resources:        usesPython3,
 	})
 
-	// The output's #include lines are exactly the template's, and being $(B) it
-	// is not on disk at gen time, so register the template's own parsed includes
-	// directly. The template source and configure_file.py are generated-from
-	// inputs, not #includes: they ride to consumers as non-expanded closure
-	// leaves instead of being fake-#included into the output.
+	// The $(B) output is not on disk at gen time, so register the template's own
+	// parsed includes directly. The template and configure_file.py ride to
+	// consumers as closure leaves, not #includes.
 	registerBoundGeneratedParsedOutputWithSource(ctx, instance, pkCF, outVFS, srcVFS, cfTemplateParsedIncludes(ctx.parsers, srcVFS.rel()), cfRef, nil)
 
 	reg := codegenRegForInstance(ctx, instance)
@@ -104,11 +95,9 @@ func emitConfigureFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 	return cfRef
 }
 
-// buildCFGVars scans the template for @VAR@ / #cmakedefine references and emits a
-// sorted NAME=value arg for each one resolved through SET/DEFAULT vars.
-// BUILD_TYPE falls back to the instance platform's build type (buildTypeUpper) —
-// DEBUG for a debug target, RELEASE for the host/tool platform. Unreferenced or
-// unresolved names are dropped.
+// buildCFGVars emits a sorted NAME=value arg for each @VAR@ / #cmakedefine
+// reference resolved through SET/DEFAULT vars. BUILD_TYPE falls back to the
+// platform's build type; unresolved names are dropped.
 func buildCFGVars(fs FS, rel string, setVars, defaultVars map[STR]STR, buildTypeUpper string) []string {
 	referenced := map[string]bool{}
 	data := fs.read(rel)
@@ -145,9 +134,7 @@ func mapHas(m map[STR]STR, k STR) bool {
 	return ok
 }
 
-// cfgVarValue strips one outer pair of quotes — escaped `\"…\"` or plain `"…"` —
-// so the KEY=VALUE arg holds the bare substitution value instead of passing
-// stray quote chars to configure_file.py.
+// cfgVarValue strips one outer pair of quotes — escaped `\"…\"` or plain `"…"`.
 func cfgVarValue(v string) string {
 	if len(v) >= 4 && strings.HasPrefix(v, `\"`) && strings.HasSuffix(v, `\"`) {
 		return v[2 : len(v)-2]
@@ -160,17 +147,15 @@ func cfgVarValue(v string) string {
 	return v
 }
 
-// cfTemplateParsedIncludes is the template's own parsed #includes (local bucket,
-// quoted and angle), registered as the configured output's includes since the
-// $(B) output is not on disk to re-parse. The returned slice aliases the parse
-// cache (read-only on both sides).
+// cfTemplateParsedIncludes is the template's own parsed #includes (local bucket),
+// registered as the output's includes since the $(B) output is not on disk to
+// re-parse. The returned slice aliases the parse cache.
 func cfTemplateParsedIncludes(pm *IncludeParserManager, rel string) []IncludeDirective {
 	return pm.sourceParsedBuckets(source(rel), nil).bucket(parsedIncludesLocal)
 }
 
-// cfModuleTag returns the lowercased submodule tag for the CF node: a
-// PROTO_LIBRARY's CPP_PROTO instance surfaces as `cpp_proto`; other module types
-// leave module_tag unset.
+// cfModuleTag returns the submodule tag for the CF node: a PROTO_LIBRARY's
+// CPP_PROTO instance surfaces as `cpp_proto`; other module types leave it unset.
 func cfModuleTag(d *ModuleData, instance ModuleInstance) STR {
 	if d.moduleStmt.Name == tokProtoLibrary && instance.Language != LangPy {
 		return tagCppProto

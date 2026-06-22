@@ -6,9 +6,7 @@ import (
 )
 
 // testGenX86ReleaseHost mirrors testGenX86 but pins the host/tool platform to a
-// release build (GG_BUILD_TYPE=release), as production tool builds are. This
-// surfaces the tool-subtree identity: code reachable only through a built tool
-// is generated under the release host platform, distinct from the debug target.
+// release build, distinct from the debug target.
 func testGenX86ReleaseHost(fs FS, targetDir string) *Graph {
 	hostFlags := make(map[string]string, len(testToolchainFlags)+2)
 	for k, v := range testToolchainFlags {
@@ -29,13 +27,8 @@ func testGenX86ReleaseHost(fs FS, targetDir string) *Graph {
 }
 
 // TestEmitArchiveAsm_ToolSubtreeIdentity: a RUN_PROGRAM consumes a built tool
-// whose subtree library carries a CONFIGURE_FILE (@BUILD_TYPE@), a RAGEL6_FLAGS
-// SET-list, and an ARCHIVE-with-source-member that a C++ unit #includes. The
-// tool subtree must take the host/release identity — configure_file resolves
-// BUILD_TYPE=RELEASE, $RAGEL6_FLAGS expands as separate argv tokens, the
-// archived source member rides into the consumer closure — while the generated
-// RUN_PROGRAM output (STDOUT == OUT_NOAUTO) is declared exactly once down the
-// ARCHIVE_ASM chain.
+// whose subtree library carries a CONFIGURE_FILE, a RAGEL6_FLAGS SET-list, and an
+// ARCHIVE source member. The tool subtree must take the host/release identity.
 func TestEmitArchiveAsm_ToolSubtreeIdentity(t *testing.T) {
 	files := map[string]string{}
 
@@ -58,7 +51,7 @@ END()
 `)
 	files["m/lister.txt"] = "word\n"
 
-	// The built tool and its content-bearing subtree library
+	// The built tool and its subtree library
 	writeTestModuleFile(files, "tools/maker/ya.make", "PROGRAM(maker)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nPEERDIR(toollib)\nSRCS(main.cpp)\nEND()\n")
 	files["tools/maker/main.cpp"] = "int main(){return 0;}\n"
 
@@ -92,7 +85,7 @@ END()
 		t.Fatalf("PR node must list $(B)/m/out.dict.bin exactly once, got %d: %v", n, vfsStringsT3(pr.Outputs))
 	}
 
-	// (2) the tool subtree configure_file takes the release host build type.
+	// (2) configure_file takes the release host build type.
 	cf := mustNodeByOutput(t, g, "$(B)/toollib/cfg.cpp")
 	cfArgs := strings.Join(strStrs(cf.Cmds[0].CmdArgs.flat()), " ")
 	if !strings.Contains(cfArgs, "BUILD_TYPE=RELEASE") {
@@ -102,7 +95,7 @@ END()
 		t.Errorf("tool-subtree configure_file must not carry the debug build type: %q", cfArgs)
 	}
 
-	// (3) $RAGEL6_FLAGS expands as separate argv tokens in the tool subtree.
+	// (3) $RAGEL6_FLAGS expands as separate argv tokens.
 	r6 := mustNodeByOutput(t, g, "$(B)/toollib/lex.rl6.cpp")
 	r6Args := strStrs(r6.Cmds[0].CmdArgs.flat())
 	if indexOfArg(r6.Cmds[0].CmdArgs.flat(), "-L") < 0 || indexOfArg(r6.Cmds[0].CmdArgs.flat(), "-G2") < 0 {
@@ -114,7 +107,7 @@ END()
 		}
 	}
 
-	// (4) the ARCHIVE source member rides into the tool subtree compile closure.
+	// (4) the ARCHIVE source member rides into the closure.
 	var use *Node
 	for _, nd := range g.Graph {
 		if nd.KV.P == pkCC && len(nd.Outputs) > 0 && strings.HasSuffix(nd.Outputs[0].string(), "/use.cpp.pic.o") {
@@ -130,8 +123,7 @@ END()
 	}
 }
 
-// testGenX86 builds the graph for targetDir with an x86_64 target (the .rodata
-// yasm pipeline is x86_64-only).
+// testGenX86 builds the graph for targetDir with an x86_64 target.
 func testGenX86(fs FS, targetDir string) *Graph {
 	host := newTestPlatform(OSLinux, ISAX8664, "yes")
 	targetFlags := make(map[string]string, len(testToolchainFlags)+1)
@@ -143,12 +135,10 @@ func testGenX86(fs FS, targetDir string) *Graph {
 	return Gen(fs, targetDir, host, target, func(Warn) {})
 }
 
-// TestEmitArchiveAsm_RunProgramStdoutEqualsOutNoauto: a RUN_PROGRAM that names
-// the SAME physical file in both STDOUT and OUT_NOAUTO roles (the program's
-// stdout *is* the declared output). The output set is path-keyed, so the file
-// is listed exactly once on the producer node; before the fix it was listed
-// twice, perturbing the node's content hash and cascading a differing Merkle
-// uid into the whole ARCHIVE_ASM .rodata chain.
+// TestEmitArchiveAsm_RunProgramStdoutEqualsOutNoauto: a RUN_PROGRAM names the
+// SAME file in both STDOUT and OUT_NOAUTO. The path-keyed output set must list it
+// exactly once on the producer; double-listing cascaded a differing uid into the
+// ARCHIVE_ASM .rodata chain.
 func TestEmitArchiveAsm_RunProgramStdoutEqualsOutNoauto(t *testing.T) {
 	files := map[string]string{}
 
@@ -176,8 +166,7 @@ END()
 
 	g := testGenX86(newMemFS(files), "m")
 
-	// (1) the producer lists the generated binary exactly once, despite the file
-	// being declared through both STDOUT and OUT_NOAUTO.
+	// (1) the producer lists the generated binary exactly once.
 	pr := mustNodeByOutput(t, g, "$(B)/m/out.dict.bin")
 	if pr.KV.P != pkPR {
 		t.Errorf("out.dict.bin kv.p = %q, want PR", pr.KV.P.string())
@@ -205,11 +194,9 @@ END()
 	}
 }
 
-// TestEmitArchiveAsm_RunPythonOutThroughRodata: a RUN_PYTHON3 OUT_NOAUTO
-// consumed by ARCHIVE_ASM must produce the dictionary binary (PY), the
-// archive-as-assembly resource (AR <NAME>.rodata), and the rodata→asm→object
-// compile (RD), with the RD node carrying the PY node's $(S) source leaves and
-// the non-global object archived into the module's .a.
+// TestEmitArchiveAsm_RunPythonOutThroughRodata: a RUN_PYTHON3 OUT_NOAUTO consumed
+// by ARCHIVE_ASM must produce the binary (PY), the .rodata resource (AR), and the
+// RD compile carrying the PY node's $(S) source leaves.
 func TestEmitArchiveAsm_RunPythonOutThroughRodata(t *testing.T) {
 	files := map[string]string{}
 
@@ -242,8 +229,8 @@ END()
 		t.Errorf("out.dict.bin kv.p = %q, want PY", py.KV.P.string())
 	}
 
-	// (2) ARCHIVE_ASM emits the AR .rodata resource, kv AR / light-cyan, with
-	// the dictionary binary as a `:`-suffixed member and a producer dep on PY.
+	// (2) ARCHIVE_ASM emits the AR .rodata with the binary as a `:`-suffixed
+	// member and a producer dep on PY.
 	ar := mustNodeByOutput(t, g, "$(B)/m/Dict.rodata")
 	if ar.KV.P != pkAR {
 		t.Errorf("Dict.rodata kv.p = %q, want AR", ar.KV.P.string())
@@ -262,8 +249,7 @@ END()
 		t.Errorf("AR .rodata cmd missing `:`-suffixed member %q: %v", memberArg, strStrs(ar.Cmds[0].CmdArgs.flat()))
 	}
 
-	// (3) the rodata compile (RD) produces the object, carries the PY node's
-	// $(S) source leaves, and depends on the AR .rodata producer.
+	// (3) the RD compile carries the PY node's $(S) source leaves.
 	rd := mustNodeByAnyOutput(t, g, "$(B)/m/Dict.rodata.o")
 	if rd.KV.P != pkRD {
 		t.Errorf("Dict.rodata.o kv.p = %q, want RD", rd.KV.P.string())

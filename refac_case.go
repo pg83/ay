@@ -12,9 +12,8 @@ import (
 	"strings"
 )
 
-// stdlibCaseMethods are method names that MUST stay upper-case: stdlib machinery
-// finds them by name through well-known interfaces (Stringer, error,
-// json/sort/heap, Unwrap). Renaming them silently detaches the implementation.
+// stdlibCaseMethods must stay upper-case: stdlib finds them by name through
+// well-known interfaces, and renaming silently detaches the implementation.
 var stdlibCaseMethods = map[string]bool{
 	"String":        true,
 	"Error":         true,
@@ -28,8 +27,8 @@ var stdlibCaseMethods = map[string]bool{
 	"Unwrap":        true,
 }
 
-// predeclaredIdents are Go's predeclared names: a package-level function
-// lowered onto one shadows the builtin package-wide.
+// predeclaredIdents: a package-level function lowered onto one shadows the
+// builtin package-wide.
 var predeclaredIdents = map[string]bool{
 	"new": true, "make": true, "len": true, "cap": true, "copy": true,
 	"append": true, "delete": true, "clear": true, "close": true,
@@ -45,11 +44,9 @@ var predeclaredIdents = map[string]bool{
 
 var caseErrRe = regexp.MustCompile(`^([^:\s]+\.go):(\d+):(\d+): (?:undefined: (\w+)|\S+ undefined \(.*has no field or method (\w+))`)
 
-// refacCase enforces the naming convention — type names upper-case, method
-// names lower-case (stdlibCaseMethods excepted). It renames the DECLARATIONS via
-// AST positions, then drives every reference off the compiler's error positions
-// (go build, then go vet for tests), iterating to a fixpoint. The compiler
-// resolves receivers, so a same-named method on a foreign type is not clobbered.
+// refacCase enforces the naming convention (types upper-case, methods
+// lower-case bar stdlibCaseMethods): it renames declarations via AST positions,
+// then drives every reference off the compiler's error positions to a fixpoint.
 func refacCase(_ GlobalFlags, args []string) int {
 	files := goFilesFromArgs(args)
 
@@ -86,9 +83,8 @@ func refacCase(_ GlobalFlags, args []string) int {
 	return 0
 }
 
-// forbiddenLowerNames returns the identifiers a lowered function name must not
-// collide with: Go's predeclared names plus every imported package's base name
-// (a package-level `fmt` would shadow the import).
+// forbiddenLowerNames returns names a lowered function must not collide with:
+// predeclared idents plus every imported package's base name.
 func forbiddenLowerNames(files []string) map[string]bool {
 	out := make(map[string]bool, len(predeclaredIdents)+32)
 
@@ -150,7 +146,6 @@ func renameCaseDecls(path string, typeRen, methodRen map[string]string, forbidde
 					add(ts.Name, typeRen[name])
 				}
 
-				// Interface methods follow the method convention.
 				if it, ok := ts.Type.(*ast.InterfaceType); ok {
 					for _, m := range it.Methods.List {
 						for _, id := range m.Names {
@@ -170,9 +165,8 @@ func renameCaseDecls(path string, typeRen, methodRen map[string]string, forbidde
 			}
 
 			if d.Recv == nil {
-				// Free functions are lower-case too, resolved through the same
-				// map as types. A lowered name hitting a predeclared identifier
-				// would shadow the builtin — flag for a manual rename instead.
+				// Free functions are lower-case too, via the type map. A lowered
+				// name shadowing a predeclared ident is flagged for manual rename.
 				if forbidden[lower(name)] {
 					fmt.Fprintf(os.Stderr, "refac case: %s: function %s lowers to reserved %q — rename manually\n", path, name, lower(name))
 
@@ -211,9 +205,9 @@ func renameCaseDecls(path string, typeRen, methodRen map[string]string, forbidde
 	throw(os.WriteFile(path, []byte(out), 0o644))
 }
 
-// fixCaseRefsOnce compiles the package (and tests) and flips the case of every
-// reference reported undefined under the recorded renames. Returns the number
-// of fixes applied and whether both compiles ran clean.
+// fixCaseRefsOnce compiles package and tests, flipping the case of every
+// reference reported undefined under the recorded renames. Returns the fix
+// count and whether both compiles ran clean.
 func fixCaseRefsOnce(typeRen, methodRen map[string]string) (int, bool) {
 	build, _ := exec.Command("go", "build", "-gcflags=-e", "./...").CombinedOutput()
 	vet := []byte{}
@@ -249,8 +243,8 @@ func fixCaseRefsOnce(typeRen, methodRen map[string]string) (int, bool) {
 		new_, ok := ren[name]
 
 		if !ok {
-			// An undefined TYPE reference can surface through the method table
-			// and vice versa; try the other map before giving up.
+			// Type and method references can surface through either table; try
+			// the other map before giving up.
 			if other, ok2 := methodRen[name]; ok2 {
 				new_ = other
 			} else if other, ok2 := typeRen[name]; ok2 {
@@ -293,8 +287,8 @@ func fixCaseRefsOnce(typeRen, methodRen map[string]string) (int, bool) {
 	return total, len(build) == 0 && len(vet) == 0
 }
 
-// lintCaseConvention reports (without fixing) declarations that violate the
-// naming convention `refac case` enforces.
+// lintCaseConvention reports declarations that violate the naming convention,
+// without fixing.
 func lintCaseConvention(path string) bool {
 	fset := gotoken.NewFileSet()
 	src := throw2(os.ReadFile(path))
@@ -360,10 +354,9 @@ func lintCaseConvention(path string) bool {
 	return bad
 }
 
-// isInterfaceWrapper reports whether the method body is exactly
-// `return recv.lower(args…)` (or the bare call for void methods): the
-// implementation lives in the lower-case twin, the upper-case name exists solely
-// so stdlib finds it.
+// isInterfaceWrapper reports whether the body is exactly `return
+// recv.lower(args…)` (or the bare call): the upper-case name exists only for
+// stdlib to find, delegating to the lower-case twin.
 func isInterfaceWrapper(d *ast.FuncDecl) bool {
 	if d.Body == nil || len(d.Body.List) != 1 || d.Recv == nil ||
 		len(d.Recv.List) != 1 || len(d.Recv.List[0].Names) != 1 {

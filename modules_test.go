@@ -10,10 +10,9 @@ func TestApplyUnknownStmt_ExcludeTagsAcceptsTagNames(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
 	d := &ModuleData{}
 
-	// EXCLUDE_TAGS args are submodule tag names (data), not service-keywords, so
-	// the audit must not reject an unmodelled one. Build the tag at runtime: a
-	// literal would be mined into knownServiceTokens (the audit embeds *.go,
-	// _test.go included) and mask the very check this test exercises.
+	// EXCLUDE_TAGS args are submodule tag names (data), so the audit must not reject
+	// an unmodelled one. Build the tag at runtime so a literal is not mined into
+	// knownServiceTokens (the audit embeds *.go) and mask this check.
 	tag := "PY" + "_" + "PROTO"
 
 	err := try(func() {
@@ -32,11 +31,10 @@ func TestApplyUnknownStmt_ExcludeTagsAcceptsTagNames(t *testing.T) {
 func TestApplyUnknownStmt_AddInclSelf(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
 
-	// ADDINCLSELF() adds -I<own source dir> (ADDINCL += ${MODDIR}). It must
-	// resolve to Source(<modulePath>).
+	// ADDINCLSELF() adds -I<own source dir>, resolving to Source(<modulePath>).
 	d := &ModuleData{}
 	applyUnknownStmt(nil, "contrib/libs/foo", &UnknownStmt{Name: internTok("ADDINCLSELF")}, d, env)
-	d.materializeAddIncl() // local ADDINCL is priority-tagged then flattened into addIncl
+	d.materializeAddIncl()
 
 	want := source("contrib/libs/foo")
 	found := false
@@ -60,9 +58,8 @@ func TestApplyUnknownStmt_AddInclSelf(t *testing.T) {
 	}
 }
 
-// internalContourPlatform builds a platform whose Flags omit OPENSOURCE, so
-// buildIfEnv reaches the upstream HAVE_MKL default rather than the opensource
-// HAVE_MKL=no override (testTargetP/testHostP both carry OPENSOURCE=yes).
+// internalContourPlatform omits OPENSOURCE so buildIfEnv reaches the upstream
+// HAVE_MKL default rather than the opensource HAVE_MKL=no override.
 func internalContourPlatform(os OS, isa ISA, sanitizer string) *Platform {
 	flags := make(map[string]string, len(testToolchainFlags)+1)
 	for k, v := range testToolchainFlags {
@@ -77,11 +74,8 @@ func internalContourPlatform(os OS, isa ISA, sanitizer string) *Platform {
 	return newPlatform(newMemFS(nil), os, isa, flags, "", "")
 }
 
-// opensourceHaveMklYesPlatform builds an OPENSOURCE=yes platform that *also*
-// carries an explicit HAVE_MKL=yes flag. It pins the override ordering: the
-// opensource override is unconditional and applied after the default guard, so
-// it must beat an existing HAVE_MKL=yes binding rather than skip an already-set
-// HAVE_MKL.
+// opensourceHaveMklYesPlatform pins override ordering: the unconditional
+// opensource override must beat an explicit HAVE_MKL=yes binding.
 func opensourceHaveMklYesPlatform(os OS, isa ISA) *Platform {
 	flags := make(map[string]string, len(testToolchainFlags)+1)
 	for k, v := range testToolchainFlags {
@@ -91,10 +85,9 @@ func opensourceHaveMklYesPlatform(os OS, isa ISA) *Platform {
 	return newPlatform(newMemFS(nil), os, isa, flags, "", "")
 }
 
-// TestBuildIfEnv_HaveMklFollowsUpstreamEnv pins the upstream HAVE_MKL default
-// (yes iff OS_LINUX && ARCH_X86_64 && !SANITIZER_TYPE, forced no under
-// OPENSOURCE) and proves an IF(HAVE_MKL) module selects the MKL PEERDIR exactly
-// when the configured environment selects MKL.
+// TestBuildIfEnv_HaveMklFollowsUpstreamEnv pins the HAVE_MKL default (yes iff
+// OS_LINUX && ARCH_X86_64 && !SANITIZER_TYPE, forced no under OPENSOURCE) and proves
+// an IF(HAVE_MKL) module selects the MKL PEERDIR exactly when the env selects MKL.
 func TestBuildIfEnv_HaveMklFollowsUpstreamEnv(t *testing.T) {
 	const mklPeer = "contrib/libs/intel/mkl"
 	const fallbackPeer = "contrib/libs/clapack/part1"
@@ -211,8 +204,7 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 			data := &ModuleData{}
 
 			applyUnknownStmt(nil, "mod", &UnknownStmt{Name: internTok(tt.useMacro)}, data, env)
-			// CLANG_BC_ROOT holds the deferred "$<NAME>_RESOURCE_GLOBAL" reference;
-			// emitLLVMBC expands it against the resource-global closure, not here.
+			// CLANG_BC_ROOT holds the deferred resource reference; emitLLVMBC expands it.
 			if got, want := env.string(envCLANG_BC_ROOT), "$"+tt.resourceKey; got != want {
 				t.Fatalf("CLANG_BC_ROOT = %q, want %q", got, want)
 			}
@@ -220,7 +212,7 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 				t.Fatalf("LLVM_LLC_TOOL = %q, want %q", got, tt.wantLLCTool)
 			}
 			if err := try(func() {
-				// LLVM_BC requires NAME per upstream.
+				// LLVM_BC requires NAME.
 				applyUnknownStmt(nil, "mod", &UnknownStmt{Name: tokLlvmBc, Args: STRS("src.cpp", "generated.cpp", "NAME", "Bytecode")}, data, env)
 			}); err != nil {
 				t.Fatalf("applyUnknownStmt rejected configured LLVM_BC: %v", err)
@@ -296,11 +288,9 @@ func TestCopyFileInputVFS_ResolvesSourceRootPaths(t *testing.T) {
 	}
 }
 
-// The ya.make argument-expansion semantics mirror upstream's Deref: an arg
-// without '$' passes through verbatim; an arg with '$' gets one substitution
-// pass (${NAME} only, unresolved refs stay literal), and a result containing a
-// space is split into fields; empty results are dropped. SET assigns eagerly, so
-// one pass reaches the fixpoint.
+// ya.make arg expansion: an arg without '$' passes verbatim; with '$' it gets one
+// substitution pass (${NAME} only, unresolved stay literal), splits on space, and
+// drops empty results. SET assigns eagerly, so one pass reaches the fixpoint.
 
 func expandTestEnv(bindings map[string]string) Environment {
 	env := DefaultIfEnv.clone()
@@ -335,8 +325,7 @@ func TestExpandStmtTokens_MultiWordValueResplits(t *testing.T) {
 }
 
 func TestExpandStmtTokens_QuotedLiteralWithoutDollarKeptWhole(t *testing.T) {
-	// A quoted "a b" reaches the arg list as one element with a space and no
-	// '$' — passed through untouched.
+	// A quoted "a b" reaches the arg list as one space-bearing, '$'-free element — untouched.
 	env := expandTestEnv(nil)
 
 	got := expandStmtTokens([]string{"a b", "c"}, env)
@@ -348,8 +337,7 @@ func TestExpandStmtTokens_QuotedLiteralWithoutDollarKeptWhole(t *testing.T) {
 }
 
 func TestExpandStmtTokens_QuotedArgWithDollarResplits(t *testing.T) {
-	// Quotes are stripped at lex time, so a quoted arg containing ${V} whose
-	// value has spaces IS re-split after substitution.
+	// Quotes are stripped at lex time, so a quoted ${V} with a spaced value IS re-split.
 	env := expandTestEnv(map[string]string{"V": "p q"})
 
 	got := expandStmtTokens([]string{"x ${V} y"}, env)
@@ -403,9 +391,8 @@ func TestExpandStmtToken_UnresolvedRefDoesNotBlockLaterRefs(t *testing.T) {
 }
 
 func TestCollectModule_PySrcsExpandsSetList(t *testing.T) {
-	// PY_SRCS(${SRCS}) where SRCS is a SET-list must expand+split into the
-	// individual py sources — UnknownStmt-handled macros need arg-expansion like
-	// the typed cases.
+	// PY_SRCS(${SRCS}) with a SET-list must expand+split; UnknownStmt macros need
+	// arg-expansion like the typed cases.
 	src := "LIBRARY()\nSET(SRCS\n    a.py\n    b.py\n)\nPY_SRCS(${SRCS})\nEND()\n"
 
 	mf, err := parse(testParserFS, "ya.make", []byte(src))
@@ -422,11 +409,8 @@ func TestCollectModule_PySrcsExpandsSetList(t *testing.T) {
 }
 
 func TestCollectModule_SetAppendExpandsResourceAndSandboxInputs(t *testing.T) {
-	// A module may build its file list with SET_APPEND(VAR …) then reference
-	// ${VAR} in FROM_SANDBOX(OUT_NOAUTO …) and RESOURCE_FILES(…). SET_APPEND(VAR x)
-	// binds VAR to "$VAR x", so the reference expands before resource/sandbox input
-	// resolution; without the binding the literal ${VAR} survives as a nonexistent
-	// path segment.
+	// SET_APPEND(VAR x) binds VAR to "$VAR x", so a later ${VAR} in
+	// FROM_SANDBOX(OUT_NOAUTO …)/RESOURCE_FILES(…) expands before input resolution.
 	src := "LIBRARY()\n" +
 		"SET_APPEND(VAR\n    d/2.dict\n    d/3.dict\n)\n" +
 		"FROM_SANDBOX(123 OUT_NOAUTO\n    ${VAR}\n)\n" +
@@ -463,9 +447,8 @@ func TestCollectModule_SetAppendExpandsResourceAndSandboxInputs(t *testing.T) {
 }
 
 func TestExpandConfigVFSPaths_SplitsSetList(t *testing.T) {
-	// ADDINCL(${__dirs_}) where __dirs_ is a SET-list must expand+split into one
-	// VFS per dir, via the same expandStmtTokens primitive the typed-macro args
-	// use — not a single path with embedded spaces.
+	// ADDINCL(${__dirs_}) with a SET-list must expand+split into one VFS per dir,
+	// not a single path with embedded spaces.
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
 	env.setFromString(internEnv("DIRS"), "contrib/deprecated/bdb/src contrib/deprecated/bdb/src/dbinc")
 
@@ -490,10 +473,8 @@ func TestCatboostOpenSourceDefineGating(t *testing.T) {
 }
 
 // testToolchain builds the module toolchain the way genModule does — from a
-// resource-global closure declaring the build/platform/* resources — so tests
-// that drive the emitters directly get the same compiler/linker/python tool
-// paths without an ambient platform. The compiler comes from the version-specific
-// toolchain resource (ClangVer "20").
+// resource-global closure declaring the build/platform/* resources — so emitter
+// tests get the same tool paths without an ambient platform.
 func testToolchain() ModuleToolchain {
 	return resolveModuleToolchain([]ResourceDecl{
 		makeResourceDecl(resourcePatternClang20, "sbr:test-clang"),
@@ -504,15 +485,13 @@ func testToolchain() ModuleToolchain {
 
 // addToolchainPeers injects the synthetic build/platform/* RESOURCES_LIBRARYs
 // every module implicitly PEERDIRs, so a gen test's memFS yields a populated
-// module toolchain (d.tc) — the source of compiler/python/objcopy/linker paths.
-// Without them the closure is empty and tool-emitting nodes carry blank paths.
+// module toolchain; without them tool-emitting nodes carry blank paths.
 func addToolchainPeers(files map[string]string) {
 	const json = `{"by_platform":{"linux-x86_64":{"uri":"sbr:test"}}}`
 
 	files["build/platform/clang/ya.make"] = "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(CLANG16 clang16.json)\nDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(CLANG20 clang20.json)\nDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(CLANG clang16.json)\nEND()\n"
 	files["build/platform/clang/clang16.json"] = json
-	// CLANG binds to clang${CLANG_VER}.json; same sbr here so golden output is
-	// version-agnostic.
+	// Same sbr so golden output is version-agnostic.
 	files["build/platform/clang/clang20.json"] = json
 	files["build/platform/lld/ya.make"] = "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld.json)\nEND()\n"
 	files["build/platform/lld/lld.json"] = json

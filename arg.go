@@ -1,19 +1,17 @@
 package main
 
-// argTable stores no strings of its own: the string lives once in the global STR
-// intern table, and an ARG is a second dense id layered on top. ids maps a
-// token's STR to its ARG; strs maps an ARG back to that STR — a free, O(1)
-// ARG→STR conversion (ARG.str()).
+// argTable stores no strings of its own: an ARG is a second dense id layered on
+// the global STR table. ids maps STR→ARG, strs maps ARG→STR for free O(1)
+// conversion.
 var argTable = struct {
 	ids  DenseMap[STR, uint32]
 	strs []STR
 }{
-	strs: make([]STR, 1, 256), // index 0 reserved: zero-value ARG is the empty arg
+	strs: make([]STR, 1, 256), // index 0: zero-value ARG is the empty arg
 }
 
-// ARG is a dense interned id for a single compiler/linker argument token (e.g.
-// "-mavx2", "-DFOO=1"). Layered on the STR table, so ARG→STR (str()) and
-// ARG→string (String()) are O(1) array loads.
+// ARG is a dense interned id for a single compiler/linker argument token,
+// layered on the STR table so str() and String() are O(1) array loads.
 type ARG uint32
 
 func internArg(s string) ARG {
@@ -33,7 +31,7 @@ func internArgSTR(st STR) ARG {
 	return id
 }
 
-// str returns the STR backing this ARG — a free conversion (no re-interning).
+// str returns the STR backing this ARG, no re-interning.
 func (a ARG) str() STR {
 	return argTable.strs[a]
 }
@@ -42,15 +40,13 @@ func (a ARG) string() string {
 	return argTable.strs[a].string()
 }
 
-// String implements fmt.Stringer — the fmt machinery finds it by name;
-// internal code calls string().
+// String implements fmt.Stringer; internal code calls string().
 func (a ARG) String() string {
 	return a.string()
 }
 
-// internArgs interns each input as one whole ARG (no whitespace split — a value
-// like `-D__DATE__="Jan 10 2019"` is a single argument). Every element here is
-// already one cmd_args token, split upstream at the env-expansion boundary.
+// internArgs interns each input as one whole ARG, no whitespace split: each
+// element is already one cmd_args token, split upstream.
 func internArgs(ss []string) []ARG {
 	if len(ss) == 0 {
 		return nil
@@ -65,8 +61,8 @@ func internArgs(ss []string) []ARG {
 	return out
 }
 
-// appendArgStrs materializes the given arg slices onto a cmd_args []string with
-// no intermediate allocation — the compose-side boundary.
+// appendArgStrs materializes arg slices onto a cmd_args []string with no
+// intermediate allocation.
 func appendArgStrs(dst []string, srcs ...[]ARG) []string {
 	for _, s := range srcs {
 		for _, a := range s {
@@ -77,7 +73,7 @@ func appendArgStrs(dst []string, srcs ...[]ARG) []string {
 	return dst
 }
 
-// argStrs materializes args back to strings — only at the cmd_args boundary.
+// argStrs materializes args back to strings, only at the cmd_args boundary.
 func argStrs(as []ARG) []string {
 	if len(as) == 0 {
 		return nil
@@ -92,9 +88,8 @@ func argStrs(as []ARG) []string {
 	return out
 }
 
-// addEachARG appends each arg of src not already in seen to *dst, recording it
-// in seen — the order-preserving union used by peer-flag aggregation. seen is a
-// BitSet over the ARG space.
+// addEachARG appends each arg of src not in seen to *dst, recording it: the
+// order-preserving union for peer-flag aggregation.
 func addEachARG(seen *BitSet, dst *[]ARG, src []ARG) {
 	for _, x := range src {
 		if seen.has(uint32(x)) {
@@ -107,8 +102,7 @@ func addEachARG(seen *BitSet, dst *[]ARG, src []ARG) {
 }
 
 // dedupARG unions []ARG lists preserving first-occurrence order via the global
-// VFS deduper, each ARG id cast to VFS as the set key. The deduper is reset
-// first, so ARG and VFS id-spaces never interleave within a single pass.
+// VFS deduper, reset first so ARG and VFS id-spaces never interleave.
 func dedupARG(lists ...[]ARG) []ARG {
 	deduper.reset()
 

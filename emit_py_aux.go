@@ -23,10 +23,9 @@ func emitGeneratedPyAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleDat
 			continue
 		}
 
-		// Only a full `${ARCADIA_BUILD_ROOT}/<full>.py` PY_SRCS token (swig's
-		// injected wrapper) is embedded through the rescompiler _raw.auxcpp path.
-		// A bare generated token (RUN_PROGRAM OUT/OUT_NOAUTO) is packaged like any
-		// other PY_SRCS source — through the objcopy resfs path, bound from $(B).
+		// Only a full `${ARCADIA_BUILD_ROOT}/<full>.py` token (swig's wrapper)
+		// goes through the rescompiler _raw.auxcpp path; a bare generated token
+		// is packaged like any other PY_SRCS source via the objcopy resfs path.
 		if i >= len(d.pySrcsFullName) || !d.pySrcsFullName[i] {
 			continue
 		}
@@ -111,8 +110,8 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 	var chunks []chunk
 	cur := chunk{}
 	cmdLen := 0
-	// The input set lives on the deduper, reset per flush. depSeen stays a local
-	// map: it is live simultaneously with the input set.
+	// depSeen stays a local map because it is live simultaneously with the
+	// deduper-backed input set.
 	deduper.reset()
 	depSeen := map[NodeRef]struct{}{}
 	addInput := func(v VFS) {
@@ -188,8 +187,7 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 
 	for _, ch := range chunks {
 		aux := build(instance.Path.rel() + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path.rel(), moduleTag) + "_raw.auxcpp")
-		// Reserve the aux producer's ref before rawAuxInputClosure registers the
-		// output and walks its closure.
+		// Reserve the ref before rawAuxInputClosure registers the output.
 		auxRef := ctx.emit.reserve()
 		sourceInputs := pyProtoSourceInputs(ch.inputs)
 		auxClosure := rawAuxInputClosure(ctx, instance, aux, sourceInputs, auxRef, in)
@@ -202,8 +200,8 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-		// ch.inputs is already deduped (deduper-gated accumulation) — reference it
-		// as a chunk and filter only the rescompiler + closure tail against it.
+		// ch.inputs is already deduped; filter only the rescompiler + closure
+		// tail against it.
 		deduper.reset()
 
 		for _, p := range ch.inputs {
@@ -216,8 +214,7 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 			tail = append(tail, rescompilerBinVFS)
 		}
 
-		// auxClosure is root-led (aux is a build output); the PR node's own output
-		// never joins its inputs, so skip the root.
+		// The PR node's own output never joins its inputs, so skip the root.
 		for _, p := range auxClosure {
 			if p == aux {
 				continue
@@ -272,6 +269,6 @@ func rawAuxInputClosure(ctx *GenCtx, instance ModuleInstance, aux VFS, seed []VF
 		return nil
 	}
 
-	// walkClosure already returns a deduplicated window — no further dedup needed.
+	// walkClosure already returns a deduplicated window.
 	return closure
 }

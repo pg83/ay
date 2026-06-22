@@ -1,17 +1,14 @@
 package main
 
-// DenseMap maps a small dense integer key K (an interned id) to V using two arrays
-// rather than a hash map: idx, indexed by K, holds a 1-based slot into vals (0 means
-// absent); vals is the compact, append-only value store. Lookup is a bounds check
-// plus two loads — no hashing or probing. idx grows geometrically and stays narrow
-// (4 bytes/key) while values pack densely, so it wins when the key space is large
-// and sparse. Single-goroutine use.
+// DenseMap maps a dense integer key K to V via two arrays: idx, indexed by K, holds
+// a 1-based slot into vals (0 means absent); vals is the append-only value store.
+// idx stays narrow (4 bytes/key), so it wins when the key space is large and sparse.
+// Single-goroutine use.
 type DenseMap[K ~uint32, V any] struct {
 	idx  []uint32
 	vals []V
 }
 
-// Get returns the value for k and whether it was present.
 func (m *DenseMap[K, V]) get(k K) (V, bool) {
 	if int(k) < len(m.idx) {
 		if slot := m.idx[k]; slot != 0 {
@@ -59,7 +56,6 @@ func (m *DenseMap[K, V]) growIdx(k int) {
 	m.idx = grown
 }
 
-// Len reports the number of distinct keys stored.
 func (m *DenseMap[K, V]) len() int {
 	if len(m.vals) == 0 {
 		return 0

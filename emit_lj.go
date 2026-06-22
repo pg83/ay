@@ -2,11 +2,10 @@ package main
 
 import "strings"
 
-// luajit21CwdRel is the cwd the objdump runs in: $(S)/contrib/libs/luajit_21.
+// luajit21CwdRel is the cwd the objdump runs in.
 const luajit21CwdRel = "contrib/libs/luajit_21"
 
-// emitLJ builds one objdump node: it precompiles a single .lua source to a .raw
-// build output with the LuaJIT 2.1 compiler.
+// emitLJ precompiles a single .lua source to a .raw build output.
 func emitLJ(instance ModuleInstance, luaSrc, rawOut, compilerBin VFS, compilerLDRef NodeRef, cwd STR, emit Emitter) NodeRef {
 	na := emit.nodeArenas()
 
@@ -31,11 +30,9 @@ func emitLJ(instance ModuleInstance, luaSrc, rawOut, compilerBin VFS, compilerLD
 	return emit.emit(node)
 }
 
-// emitLuaJit21 models LJ_21_ARCHIVE: compile each declared .lua to a .raw
-// (registering the producer so the archive picks up the dep), then wire the two
+// emitLuaJit21 models LJ_21_ARCHIVE: compile each .lua to a .raw, then wire two
 // archive_by_keys outputs — LuaScripts.inc over the raws and LuaSources.inc over
-// the sources, both keyed by the module-relative lua names. Runs before
-// emitArchives so the appended entries are emitted there.
+// the sources. Runs before emitArchives so the appended entries are emitted.
 func emitLuaJit21(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	if d.lj21 == nil {
 		return
@@ -56,10 +53,8 @@ func emitLuaJit21(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		rawOut := build(instance.Path.rel() + "/" + raw)
 		ref := emitLJ(instance, luaSrc, rawOut, compilerBin, compilerLDRef, cwd, ctx.emit)
 
-		// The flat input model rides each .raw's $(S) lua source through
-		// every archive (and onward to a CC that includes LuaScripts.inc), so
-		// register it as a propagated source input — emitArchive folds member
-		// SourceInputs into the archive's closure leaves.
+		// Register the $(S) lua source as a propagated source input so
+		// emitArchive folds it into the archive's closure leaves.
 		reg.register(&GeneratedFileInfo{
 			ProducerKvP:  pkLJ,
 			OutputPath:   rawOut,

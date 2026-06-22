@@ -19,15 +19,13 @@ import (
 )
 
 // cmdPrefix prepends prefix tokens before any command argument whose path ends
-// with suffix. It lets the user run fetched binaries through an explicit ELF
-// loader on systems lacking the binary's default interpreter.
+// with suffix — runs fetched binaries through an explicit ELF loader.
 type CmdPrefix struct {
 	suffix string
 	prefix []string
 }
 
-// executorGCPercent is the GOGC value for builds (-j > 0) — see the SetGCPercent
-// call in cmdMake.
+// executorGCPercent is the GOGC value for builds (-j > 0).
 const executorGCPercent = 400
 
 type Executor struct {
@@ -36,16 +34,13 @@ type Executor struct {
 	sema        chan struct{}
 	keepGoing   bool
 	cmdPrefixes []CmdPrefix
-	// ninja selects per-line progress output (each status on its own line).
-	// Default (false) repaints a single status line in place (\x1b[2K\r).
+	// ninja selects per-line progress output; default repaints one status line.
 	ninja bool
-	// sandboxing runs each node hermetically: declared $(S) inputs are symlinked
-	// into X/s, dep outputs land in X/b. A command reading an undeclared source
-	// then fails — the input set is exactly what the graph declares.
+	// sandboxing runs each node hermetically: declared $(S) inputs symlinked into
+	// X/s, dep outputs into X/b, so the input set is exactly what the graph declares.
 	sandboxing bool
 
-	// grbDir (bldRoot/grb) is where discard renames doomed workspaces;
-	// startGarbageCollector empties it in the background.
+	// grbDir (bldRoot/grb) is where discard renames doomed workspaces.
 	grbDir string
 
 	mu      sync.Mutex
@@ -56,14 +51,13 @@ type Executor struct {
 	done    atomic.Uint64
 
 	// sandboxToken is resolved on demand the first time a FETCH node needs a
-	// Sandbox (sbr:) resource — so a graph with no such fetch never touches the
-	// SSH agent.
+	// Sandbox (sbr:) resource, so a graph with no such fetch never touches the SSH agent.
 	tokenOnce sync.Once
 	token     string
 }
 
 // sandboxToken resolves the Sandbox OAuth token once across all concurrent fetch
-// nodes (env / ~/.ya_token / SSH-agent exchange). "" if none.
+// nodes. "" if none.
 func (ex *Executor) sandboxToken() string {
 	ex.tokenOnce.Do(func() {
 		ex.token = resolveSandboxToken()
@@ -78,8 +72,8 @@ type CommandResult struct {
 
 type NodeFuture struct {
 	node      *Node
-	uids      *UidVec                 // resolves a ref -> dep uid (per emitter; deps are not materialized)
-	fetchRefs *DenseMap[STR, NodeRef] // resolves Resources -> FETCH ref (per emitter)
+	uids      *UidVec                 // ref -> dep uid (per emitter)
+	fetchRefs *DenseMap[STR, NodeRef] // Resources -> FETCH ref (per emitter)
 	once      sync.Once
 	err       *Exception
 }
@@ -101,10 +95,9 @@ func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, ninja boo
 }
 
 func (ex *Executor) onNode(n *Node, uids *UidVec, fetchRefs *DenseMap[STR, NodeRef]) {
-	// Dedup by uid: the generator may stream the same node more than once. Each
-	// uid is one action run in exactly one goroutine — two in the same tmp/<uid>
-	// would have one's forceRemoveAll wipe the other's in-flight output. The first
-	// emit owns the future; later duplicates are ignored.
+	// Dedup by uid: the generator may stream the same node more than once, but each
+	// uid must run in exactly one goroutine or two in the same tmp/<uid> would wipe
+	// each other's in-flight output. First emit owns the future.
 	ex.mu.Lock()
 
 	if _, ok := ex.byUID[n.UID]; ok {
@@ -239,10 +232,9 @@ func (ex *Executor) execute(f *NodeFuture) {
 	tmp := filepath.Join(ex.bldRoot, "tmp", n.UID.string())
 	throw(os.MkdirAll(tmp, 0o755))
 
-	// Lock the workspace DIR (exclusive flock) so a second process building the
-	// same uid does not clobber it. Best-effort, not a correctness requirement —
-	// outputs are deterministic and published atomically; the lock just avoids
-	// wasted duplicate work.
+	// Lock the workspace DIR (exclusive flock) so a second process building the same
+	// uid does not clobber it. Best-effort: outputs are deterministic and published
+	// atomically; the lock just avoids wasted duplicate work.
 	dir := throw2(os.Open(tmp))
 
 	defer dir.Close()
@@ -258,9 +250,8 @@ func (ex *Executor) execute(f *NodeFuture) {
 
 	defer ex.discard(tmp)
 
-	// srcMount/bldMount are what $(S)/$(B) resolve to for this node. Without
-	// sandboxing $(S) is the whole source root and $(B) is the workspace itself.
-	// With sandboxing $(S) is X/s (only the declared source inputs) and $(B) is X/b.
+	// What $(S)/$(B) resolve to. With sandboxing $(S) is X/s (only the declared
+	// source inputs) and $(B) is X/b; without it, the source root and the workspace.
 	srcMount, bldMount := ex.srcRoot, tmp
 
 	if ex.sandboxing {
@@ -299,7 +290,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 	ex.events <- func() {
 		if cmdResult.Stderr != "" {
 			if !ex.ninja {
-				// erase the in-place status line before committing real output
+				// erase the in-place status line before real output
 				fmt.Fprint(os.Stderr, ansiESC+"[2K\r")
 			}
 
@@ -311,14 +302,13 @@ func (ex *Executor) execute(f *NodeFuture) {
 		if ex.ninja {
 			fmt.Fprintln(os.Stderr, rec)
 		} else {
-			// repaint a single status line in place: clear it, print, return to col 0
+			// repaint one status line in place
 			fmt.Fprint(os.Stderr, ansiESC+"[2K\r"+rec+"\r")
 		}
 	}
 }
 
-// parseCmdPrefix parses a --cmd-prefix=<suffix>=<prefix tokens> value. The prefix
-// (everything after the first '=') is split on whitespace into tokens.
+// parseCmdPrefix parses a --cmd-prefix=<suffix>=<prefix tokens> value.
 func parseCmdPrefix(spec string) CmdPrefix {
 	suffix, prefix, ok := strings.Cut(spec, "=")
 
@@ -331,8 +321,7 @@ func parseCmdPrefix(spec string) CmdPrefix {
 
 // applyCmdPrefixes inserts a rule's prefix tokens before every argument whose path
 // ends with the rule's suffix. Operates on already-mounted (real-path) args, so a
-// fetched binary referenced anywhere in the command — including as an argument to a
-// wrapper that execs it — is run through the configured loader.
+// fetched binary referenced anywhere in the command runs through the loader.
 func applyCmdPrefixes(args []string, rules []CmdPrefix) []string {
 	if len(rules) == 0 {
 		return args
@@ -356,17 +345,16 @@ func applyCmdPrefixes(args []string, rules []CmdPrefix) []string {
 }
 
 // packCommandFiles replaces every `--ya-start-command-file … --ya-end-command-file`
-// span with a single `@<buildRoot>/ya_command_file_<N>.args` argument whose file
-// holds the enclosed arguments one per line — a response-file mechanism. Wrapper
-// scripts and clang/lld consume `@file` but pass the markers through verbatim, so
-// they must be resolved here. Nested spans recurse. counter is shared across one
-// node's commands so the file names are unique.
+// span with a single `@<buildRoot>/ya_command_file_<N>.args` response file holding
+// the enclosed arguments one per line. Wrappers and clang/lld consume `@file` but
+// pass the markers through verbatim, so they must be resolved here. counter is
+// shared across one node's commands to keep file names unique.
 func packCommandFiles(args []string, buildRoot string, counter *int) []string {
 	out := make([]string, 0, len(args))
 
 	for i := 0; i < len(args); i++ {
 		if args[i] == cmdFileStartMarker {
-			i++ // skip the start marker
+			i++
 			out = append(out, consumeCommandFile(args, &i, buildRoot, counter))
 
 			continue
@@ -387,7 +375,7 @@ func consumeCommandFile(args []string, pos *int, buildRoot string, counter *int)
 	for ; *pos < len(args); *pos++ {
 		switch args[*pos] {
 		case cmdFileStartMarker:
-			*pos++ // skip the nested start marker
+			*pos++
 			b.WriteString(consumeCommandFile(args, pos, buildRoot, counter))
 		case cmdFileEndMarker:
 			throw(os.WriteFile(path, []byte(b.String()), 0o644))
@@ -428,11 +416,9 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 		}
 
 		if n.KV.P == pkSB {
-			// FROM_SANDBOX: the node's command is the upstream fetch script,
-			// whose metadata query is unauthenticated (401 on private resources).
-			// Run our authenticated `ay fetch sandbox` instead (same flags, leading
-			// --source-root); only execution is substituted. Drop python3 + the
-			// script path (args[0:2]).
+			// FROM_SANDBOX: the upstream fetch script's metadata query is
+			// unauthenticated (401 on private resources). Substitute our authenticated
+			// `ay fetch sandbox` (same flags), dropping python3 + the script path.
 			args = append([]string{throw2(os.Executable()), "fetch", "sandbox", "--source-root", ex.srcRoot}, args[2:]...)
 		} else {
 			args = applyCmdPrefixes(args, ex.cmdPrefixes)
@@ -455,9 +441,8 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 			env = append(env, e.Name.string()+"="+mountString(e.Value.string(), srcMount, bldMount))
 		}
 
-		// A FETCH node pulling a Sandbox (sbr:) resource needs an OAuth token;
-		// resolve it lazily and pass it via YA_TOKEN so the `ay fetch` child
-		// authenticates without re-resolving. Only sbr: fetches trigger this.
+		// A FETCH node pulling a Sandbox (sbr:) resource needs an OAuth token,
+		// passed via YA_TOKEN so the ay fetch child authenticates without re-resolving.
 		if os.Getenv("YA_TOKEN") == "" && (n.KV.P == pkSB || (n.KV.P == pkFETCH && argsNeedSandboxToken(args))) {
 			if tok := ex.sandboxToken(); tok != "" {
 				env = append(env, "YA_TOKEN="+tok)
@@ -512,8 +497,7 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 }
 
 // linkSourceInputs symlinks the node's declared $(S) inputs into the sandbox
-// source dir, so a sandboxed command sees exactly the declared sources. $(B)
-// inputs need no filtering — they are the dep outputs, restored whole.
+// source dir, so a sandboxed command sees exactly the declared sources.
 func (ex *Executor) linkSourceInputs(n *Node, srcMount string) {
 	for _, chunk := range n.Inputs {
 		for _, in := range chunk {
@@ -531,8 +515,7 @@ func (ex *Executor) linkSourceInputs(n *Node, srcMount string) {
 }
 
 // outputEntry is one materialized leaf of a node's output: a CAS-stored regular
-// file (Cas = content hash) or a symlink (Link = target, verbatim). A directory
-// output expands to one entry per leaf, so the CAS holds only files.
+// file (Cas = content hash) or a symlink (Link = target, verbatim).
 type OutputEntry struct {
 	Cas  string `json:"cas,omitempty"`
 	Link string `json:"link,omitempty"`
@@ -553,8 +536,7 @@ func (ex *Executor) storeOutputs(n *Node, tmp string) {
 	throw(os.MkdirAll(filepath.Dir(uidPath), 0o755))
 
 	// Atomic publish: write to a UNIQUE temp in the same dir, then rename over the
-	// final path. Two writers never share the temp, so the rename target is always
-	// a fully-written manifest.
+	// final path, so the rename target is always a fully-written manifest.
 	tf := throw2(os.CreateTemp(filepath.Dir(uidPath), "."+n.UID.string()+".*"))
 	throw2(tf.Write(throw2(json.Marshal(meta))))
 	throw(tf.Close())
@@ -562,9 +544,8 @@ func (ex *Executor) storeOutputs(n *Node, tmp string) {
 }
 
 // storePath records src (regular file, symlink, or directory tree) into meta,
-// keyed by the $(B) output path. Regular files go to the CAS by content;
-// symlinks are kept verbatim (NOT followed) so a fetched tree's link structure
-// survives; directories recurse, one entry per leaf.
+// keyed by the $(B) output path. Symlinks are kept verbatim (NOT followed) so a
+// fetched tree's link structure survives; directories recurse, one entry per leaf.
 func (ex *Executor) storePath(src, outPath string, meta map[string]OutputEntry) {
 	info := throw2(os.Lstat(src))
 
@@ -582,9 +563,7 @@ func (ex *Executor) storePath(src, outPath string, meta map[string]OutputEntry) 
 
 // storeFileToCAS hard-links src into the CAS at its content hash and returns the
 // hash. Hard-link, not rename: an unpacked resource tree's dirs are often
-// write-less, so renaming a file out is denied; linking adds a name in the CAS
-// dir without touching src's dir, and the workspace copy is dropped by tmp
-// cleanup. A file already present is a no-op.
+// write-less, so renaming a file out is denied; linking touches only the CAS dir.
 func (ex *Executor) storeFileToCAS(src string) string {
 	hash := casHash(src)
 	dst := ex.casPathForHash(hash)
@@ -615,24 +594,21 @@ func (ex *Executor) restoreInto(uid UID, where string) {
 			throwFmt("malformed meta entry %q in %s", outVFS, metaPath)
 		}
 
-		// Resolve the $(B)/… path directly from the string. Do NOT Intern here:
-		// execution goroutines run concurrently with the still-streaming generator,
-		// and the global intern table is not concurrent-write safe.
+		// Resolve directly from the string. Do NOT Intern: execution goroutines run
+		// concurrently with the still-streaming generator, and the global intern
+		// table is not concurrent-write safe.
 		target := mountString(outVFS, ex.srcRoot, where)
 		throw(os.MkdirAll(filepath.Dir(target), 0o755))
 		_ = os.Remove(target)
 
 		switch {
 		case e.Link != "":
-			// Re-create the symlink verbatim; a relative link resolves within the
-			// restored tree.
 			throw(os.Symlink(e.Link, target))
 
 		case strings.HasPrefix(outVFS, "$(B)/resources/"):
-			// Toolchain trees are hard-linked, not symlinked: a tool finds its
-			// bundled resources relative to its OWN binary path. A symlink resolves
-			// to the flat CAS, so those relative dirs vanish; a hard link keeps a
-			// real file at the tree path, so the expected layout survives.
+			// Toolchain trees are hard-linked, not symlinked: a tool finds its bundled
+			// resources relative to its OWN binary path. A symlink resolves to the flat
+			// CAS so those relative dirs vanish; a hard link keeps the tree layout.
 			if err := os.Link(ex.casPathForHash(e.Cas), target); err != nil && !os.IsExist(err) {
 				throw(err)
 			}
@@ -651,8 +627,7 @@ func (ex *Executor) installRoot(uid UID, where string) {
 	ex.restoreInto(uid, where)
 }
 
-// removeContents deletes everything inside dir but keeps dir itself — the
-// under-lock clean of a possibly-stale workspace. Best-effort.
+// removeContents deletes everything inside dir but keeps dir itself. Best-effort.
 func (ex *Executor) removeContents(dir string) {
 	entries, err := os.ReadDir(dir)
 
@@ -665,10 +640,9 @@ func (ex *Executor) removeContents(dir string) {
 	}
 }
 
-// discard renames path into grbDir under a random name (O(1) regardless of tree
-// size, and fine on write-less trees) and leaves the real delete to the
-// background collector. If the rename fails (missing path, cross-fs) it deletes
-// in place.
+// discard renames path into grbDir under a random name (O(1), and fine on
+// write-less trees), leaving the real delete to the background collector. If the
+// rename fails it deletes in place.
 func (ex *Executor) discard(path string) {
 	dst := filepath.Join(ex.grbDir, strconv.FormatUint(rand.Uint64(), 36))
 
@@ -680,8 +654,7 @@ func (ex *Executor) discard(path string) {
 }
 
 // startGarbageCollector deletes grbDir entries once a second in the background.
-// Best-effort and never waited on: the process exits with it still running, and
-// any leftover is cleared by the next run's collector.
+// Best-effort and never waited on; any leftover is cleared by the next run.
 func (ex *Executor) startGarbageCollector() {
 	throw(os.MkdirAll(ex.grbDir, 0o755))
 
@@ -703,9 +676,8 @@ func (ex *Executor) startGarbageCollector() {
 }
 
 // mountString substitutes the $(S)/$(B) roots. Resources produce
-// $(B)/resources/NAME, so they resolve through $(B) like any build output — no
-// per-resource $(NAME) mount. The only $(NAME) left (in prefix-map flags) is
-// deliberately not expanded.
+// $(B)/resources/NAME, so they resolve through $(B); the only $(NAME) left (in
+// prefix-map flags) is deliberately not expanded.
 func mountString(s, srcRoot, bldRoot string) string {
 	s = strings.ReplaceAll(s, "$(S)/", srcRoot+"/")
 	s = strings.ReplaceAll(s, "$(B)/", bldRoot+"/")
@@ -715,7 +687,7 @@ func mountString(s, srcRoot, bldRoot string) string {
 	return s
 }
 
-// casHash is a regular file's content hash (hex sha256) — its identity in the CAS.
+// casHash is a regular file's content hash (hex sha256), its CAS identity.
 func casHash(src string) string {
 	h := sha256.New()
 

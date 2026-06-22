@@ -4,29 +4,21 @@ import (
 	"container/heap"
 )
 
-// NodeRef is a node's index into the emitter's node buffer. uint32 (not a struct)
-// for a dense 4-byte id usable directly as a slice index and dedupable through
-// IdSet/BitSet without a side map.
+// NodeRef is a node's index into the emitter's node buffer. uint32 so it is usable
+// directly as a slice index and dedupable through IdSet/BitSet without a side map.
 type NodeRef uint32
 
 type Emitter interface {
 	emit(n *Node) NodeRef
-	// reserve claims the next node slot (a nil placeholder) and returns the NodeRef
-	// emitReserved will assign to it. A codegen producer reserves its ref, registers
-	// its outputs against that ref — needed because its own closure walk (and any
-	// sibling resolve) runs BEFORE the node exists and must see a valid ref — then
-	// fills the slot via emitReserved. k reserve calls claim k consecutive slots, so
-	// a batch can register before any node is built. An unfilled slot is a fail-fast
-	// error at finalize/finish.
+	// reserve claims the next node slot and returns the NodeRef emitReserved will fill.
+	// A codegen producer reserves its ref so its closure walk (running BEFORE the node
+	// exists) sees a valid ref. An unfilled slot is a fail-fast error at finalize/finish.
 	reserve() NodeRef
-	// emitReserved fills the reserved slot id with n. Resolution (StreamingEmitter
-	// computes the uid eagerly once all deps are resolved) happens here, where an
-	// append emit would have resolved.
+	// emitReserved fills the reserved slot id with n.
 	emitReserved(n *Node, id NodeRef)
 	result(NodeRef)
 	onReady(NodeRef) <-chan struct{}
-	// nodeArenas exposes the run's node-construction arenas; the emitter owns them
-	// so every node builder reaches them through the Emitter it already holds.
+	// nodeArenas exposes the run's node-construction arenas, owned by the emitter.
 	nodeArenas() *NodeArenas
 }
 
@@ -35,36 +27,25 @@ type BufferedEmitter struct {
 	results   []NodeRef
 	finalized bool
 
-	// generatedFirstClaim is populated by runGen after gen, merging the per-scanner
-	// maps. finalizeDumpGraph reads it to override producer module_dir with the
-	// first scan-time consumer's module path, mirroring upstream's Node2Module rule
-	// (see scanner.go).
+	// generatedFirstClaim overrides producer module_dir with the first scan-time
+	// consumer's module path, mirroring upstream's Node2Module rule.
 	generatedFirstClaim map[VFS]GenOwner
 
-	// generatedNodeClaim is the node-level (producer-ref-keyed) counterpart of
-	// generatedFirstClaim. It records the module naming a producer's output in
-	// OUTPUT_INCLUDES and takes precedence over per-output consensus in
-	// overrideGeneratedModuleDir (see scanner.go).
+	// generatedNodeClaim is the producer-ref-keyed counterpart: the module naming a
+	// producer's output in OUTPUT_INCLUDES, taking precedence over per-output consensus.
 	generatedNodeClaim map[NodeRef]string
 
-	// generatedENIncluderDirs maps an EN serialized-enum output to the directories
-	// of files that #include it. overrideGeneratedModuleDir reads it to drift an EN
-	// node to a nested submodule whose directory-owned header includes the generated
-	// header (see scanner.go).
+	// generatedENIncluderDirs maps an EN output to the dirs of files that #include it.
 	generatedENIncluderDirs map[VFS][]string
 
-	// fs, set by runGen, lets finalizeNodesInOrder mix $(S) input content hashes
-	// into node uids (see canonBuf.fs).
+	// fs lets finalizeNodesInOrder mix $(S) input content hashes into node uids.
 	fs FS
-	// fetchRefs maps a resource pattern to its FETCH node; the emitter owns it,
-	// GenCtx shares the pointer to populate it (emitResourceFetch). Node.buildDeps
-	// resolves Resources through it, so resource fetch deps are materialized into
-	// the graph/uid on the fly rather than stored on every consuming node.
+	// fetchRefs maps a resource pattern to its FETCH node, so resource fetch deps are
+	// materialized on the fly rather than stored on every consuming node.
 	fetchRefs *DenseMap[STR, NodeRef]
 	readyCh   chan struct{}
 	na        *NodeArenas
-	// reserved counts slots claimed by reserve() and not yet filled; finalize
-	// fails fast if any remain.
+	// reserved counts slots claimed by reserve() and not yet filled.
 	reserved int
 }
 
@@ -133,12 +114,10 @@ type Graph struct {
 	Inputs map[string]interface{} `json:"inputs"`
 	Result []UID                  `json:"result"`
 
-	// uids resolves each node's DepRefs/ForeignDepRefs to dep uids at JSON-write
-	// time; deps are never materialized onto the node.
+	// uids resolves each node's DepRefs/ForeignDepRefs to dep uids at JSON-write time.
 	uids *UidVec `json:"-"`
 	// fetchRefs resolves a node's Resources patterns to their FETCH node refs at
-	// JSON-write time (Node.buildDeps), so resource fetch deps join the "deps"
-	// array without being stored on the node.
+	// JSON-write time, so resource fetch deps join "deps" without being stored.
 	fetchRefs *DenseMap[STR, NodeRef] `json:"-"`
 }
 
@@ -267,16 +246,13 @@ func finalizeNodes(e *BufferedEmitter, yield func(*Node)) *UidVec {
 }
 
 // resolveAndUID computes a node's uid and stamps Sandboxing/SelfUID. It does NOT
-// materialize Deps/ForeignDeps: the uid preimage resolves DepRefs/ForeignDepRefs
-// through uids, and downstream consumers (JSON writer, executor) do the same
-// id->uid lookup, which is why DepRefs stay on the node. All deps are resolved
-// before a node reaches here, so uids.get(dep) is valid.
+// materialize Deps/ForeignDeps: the uid preimage resolves the refs through uids, as do
+// downstream consumers, which is why DepRefs stay on the node.
 func resolveAndUID(node *Node, uids *UidVec, uidScratch *CanonBuf) UID {
 	node.Sandboxing = true
 
-	// A node may arrive pre-stamped: resource FETCH nodes hash their URI (+ output)
-	// at creation so the uid is stable across machines and independent of the binary
-	// path baked into the fetch command. Keep it; never recompute.
+	// Pre-stamped nodes (resource FETCH) hash their URI (+ output) at creation for a
+	// uid stable across machines and independent of the baked-in binary path. Keep it.
 	if node.UID != (UID{}) {
 		node.SelfUID = node.UID
 
@@ -295,7 +271,7 @@ func resolveAndUID(node *Node, uids *UidVec, uidScratch *CanonBuf) UID {
 type StreamingEmitter struct {
 	nodes      []*Node
 	uids       *UidVec
-	resolved   BitSet // resolved.has(id): uids has the computed uid for id (gen-goroutine only)
+	resolved   BitSet // resolved.has(id): uids has the computed uid for id
 	pendingIdx []NodeRef
 	pendingSet map[NodeRef]bool
 	results    []NodeRef
@@ -306,8 +282,7 @@ type StreamingEmitter struct {
 	na         *NodeArenas
 	// fetchRefs — resource pattern → FETCH node; see BufferedEmitter.fetchRefs.
 	fetchRefs *DenseMap[STR, NodeRef]
-	// reserved counts slots claimed by reserve() and not yet filled; finish fails
-	// fast if any remain.
+	// reserved counts slots claimed by reserve() and not yet filled.
 	reserved int
 }
 
@@ -364,8 +339,8 @@ func (e *StreamingEmitter) emit(n *Node) NodeRef {
 	return id
 }
 
-// resolveOrPend resolves n's uid immediately when all its deps are already
-// resolved (delivering it to onNode), else queues it for finish().
+// resolveOrPend resolves n's uid immediately when all deps are resolved (delivering it
+// to onNode), else queues it for finish().
 func (e *StreamingEmitter) resolveOrPend(n *Node, id NodeRef) {
 	if e.hasUnresolvedDeps(n) {
 		e.pendingSet[id] = true
@@ -467,9 +442,8 @@ func graphFromFinalizedEmitter(e *BufferedEmitter, uids *UidVec) *Graph {
 		out.Result = append(out.Result, u)
 	}
 
-	// DFS the dep DAG by node id (following DepRefs), deduping by uid so each
-	// content-address appears once. Graph order is irrelevant — downstream
-	// dump-sort re-sorts.
+	// DFS the dep DAG by node id, deduping by uid so each content-address appears once.
+	// Graph order is irrelevant — downstream dump-sort re-sorts.
 	seenNode := make(map[UID]struct{}, n)
 	var dfsVisit func(id NodeRef)
 	dfsVisit = func(id NodeRef) {

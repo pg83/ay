@@ -35,11 +35,8 @@ var unitImplicitPeers = []ImplicitPeerRule{
 }
 
 var programImplicitPeers = []ImplicitPeerRule{
-	// The fast asm libc routines (memcpy/memchr/…). A program peers one when non-PIC
-	// and platform-backed: glibcasm for glibc x86_64+SSE4, asmlib otherwise. Both are
-	// x86 assembly, so neither is peered on non-x86_64. NOPLATFORM/PIC/MUSL/sanitizer
-	// disable the glibc variant. The rare MSVC/PIE/MIC/VALGRIND/USE_ASMLIB=no gates
-	// are not modelled.
+	// Fast asm libc routines, peered when non-PIC and platform-backed: glibcasm for
+	// glibc x86_64+SSE4, asmlib otherwise. Both x86 assembly, so neither on non-x86_64.
 	{
 		name: "glibcasm",
 		peer: "contrib/libs/glibcasm",
@@ -139,16 +136,14 @@ func defaultPeerdirsForWithState(ctx *GenCtx, instance ModuleInstance, d *Module
 	flags := d.flags
 	noPlatform := effectiveNoPlatform(flags)
 
-	// contrib/libs/linux-headers is a header-only platform PEERDIR (OS_LINUX &&
-	// NEED_PLATFORM_PEERDIRS), language-independent — every C/C++/ASM compile on Linux
-	// gets its GLOBAL ADDINCL. The gate NEED_PLATFORM_PEERDIRS is not cleared by
-	// NO_PLATFORM/NO_LIBC/NO_RUNTIME, so it is NOT gated on noPlatform. It leads the
-	// platform peerdirs, contributes no link objects, and must not peer itself.
+	// contrib/libs/linux-headers is a header-only platform PEERDIR giving every Linux
+	// compile its GLOBAL ADDINCL. Its gate is not cleared by NO_PLATFORM/NO_LIBC/
+	// NO_RUNTIME, so it is NOT gated on noPlatform; it must not peer itself.
 	addLinuxHeaders := instance.Path.rel() != "contrib/libs/linux-headers" &&
 		!strings.HasPrefix(instance.Path.rel(), "contrib/libs/linux-headers/")
 
-	// The language defaults below are C++-only; linux-headers is not, so it is
-	// decided ahead of the language gate.
+	// The language defaults below are C++-only; linux-headers is not, so it precedes
+	// the language gate.
 	if instance.Language != LangCPP {
 		if addLinuxHeaders {
 			return []string{"contrib/libs/linux-headers"}
@@ -195,12 +190,9 @@ func defaultPeerdirsForWithState(ctx *GenCtx, instance ModuleInstance, d *Module
 		peers = append(peers, "library/cpp/sanitizer/include")
 	}
 
-	// Toolchain resources: the compiler resource peers under NEED_LLVM_TOOLS_PEERDIR
-	// && NEED_PLATFORM_PEERDIRS and the linker resource under the linker selection.
-	// Like linux-headers above, the gate is NEED_PLATFORM_PEERDIRS, not cleared by
-	// NO_PLATFORM/NO_LIBC/NO_RUNTIME, so it is NOT gated on noPlatform. The modules
-	// are inert (no link inputs), contributing resource globals and the propagated
-	// linker LDFLAGS to the closure.
+	// Toolchain resources (compiler/linker). Like linux-headers above, the gate is not
+	// cleared by NO_PLATFORM/NO_LIBC/NO_RUNTIME, so not gated on noPlatform. Inert (no
+	// link inputs), contributing resource globals and propagated linker LDFLAGS.
 	if !strings.HasPrefix(instance.Path.rel(), "build/platform/") {
 		peers = append(peers,
 			"build/platform/clang",
@@ -209,10 +201,8 @@ func defaultPeerdirsForWithState(ctx *GenCtx, instance ModuleInstance, d *Module
 			"build/platform/python/ymake_python3",
 		)
 
-		// build/platform/linux_sdk declares the compile sysroot resource. Peer it only
-		// when this platform uses that resource (Linux, non-opensource, os_sdk != local) —
-		// the same gate the compile/link nodes apply — so opensource/local/non-linux are
-		// unaffected.
+		// linux_sdk declares the compile sysroot resource; peer it only on platforms
+		// that use it, matching the gate the compile/link nodes apply.
 		if instance.Platform.UsesSDKRoot {
 			peers = append(peers, "build/platform/linux_sdk")
 		}
@@ -318,11 +308,9 @@ func defaultProgramPeerdirsForWithState(ctx *GenCtx, instance ModuleInstance, d 
 	var peers []string
 
 	if !postUser {
-		// USE_ARCADIA_LIBM: a link module peers contrib/libs/libm when effective
-		// USE_ARCADIA_LIBM == yes (captured in d.useArcadiaLibm). Added as a link setting
-		// just before build/cow/on, not in the language-default block, so its GLOBAL
-		// ADDINCL lands after the language/default closure. Self/descendant guarded so the
-		// libm subtree never peers itself.
+		// USE_ARCADIA_LIBM: peer contrib/libs/libm when effective. Added just before
+		// build/cow/on so its GLOBAL ADDINCL lands after the language/default closure.
+		// Self/descendant guarded so the libm subtree never peers itself.
 		if d.useArcadiaLibm && instance.Path.rel() != "contrib/libs/libm" &&
 			!strings.HasPrefix(instance.Path.rel(), "contrib/libs/libm/") {
 			peers = append(peers, "contrib/libs/libm")

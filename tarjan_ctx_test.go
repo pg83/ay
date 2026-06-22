@@ -5,12 +5,12 @@ import (
 	"testing"
 )
 
-// mockSink is an in-memory closureSink: a static child graph plus a cache that
-// emitClosure populates, so a node built by one SCC is visible to a later one.
+// mockSink is an in-memory closureSink whose emitClosure cache makes a node built
+// by one SCC visible to a later one.
 type MockSink struct {
 	children map[VFS][]VFS
-	cache    map[VFS][]VFS // node -> its built transitive closure window
-	emits    [][]VFS       // closures emitted, in completion order
+	cache    map[VFS][]VFS // node -> its built closure window
+	emits    [][]VFS       // emitted, in completion order
 }
 
 func newMockSink(children map[VFS][]VFS, preCached map[VFS][]VFS) *MockSink {
@@ -33,8 +33,8 @@ func (m *MockSink) cachedWindow(v VFS) ([]VFS, bool) {
 	return w, ok
 }
 
-// windowSubsumed always declines: the mock exercises SCC splice mechanics, not
-// the subsumption fast path.
+// windowSubsumed always declines: the mock exercises splice mechanics, not the
+// subsumption fast path.
 func (m *MockSink) windowSubsumed(VFS) bool {
 	return false
 }
@@ -74,7 +74,6 @@ func TestTarjan_TwoNodeCycle(t *testing.T) {
 		t.Errorf("hits = %d, want 0 (no cached children)", hits)
 	}
 
-	// Both members share one SCC closure {a,b}, led by root a.
 	want := sourceVFSList("tj/a.h", "tj/b.h")
 	for _, n := range []VFS{a, b} {
 		if got := m.cache[n]; !reflect.DeepEqual(got, want) {
@@ -93,7 +92,7 @@ func TestTarjan_CycleSplicesCachedExternalDep(t *testing.T) {
 		a: {b, x},
 		b: {a},
 	}, map[VFS][]VFS{
-		x: {x, y}, // already built, window leads with itself
+		x: {x, y}, // already built
 	})
 
 	tc := &TarjanCtx{}
@@ -103,7 +102,6 @@ func TestTarjan_CycleSplicesCachedExternalDep(t *testing.T) {
 		t.Errorf("hits = %d, want 1 (the cached x edge)", hits)
 	}
 
-	// SCC {a,b} leads, then x's window.
 	want := sourceVFSList("tj/a.h", "tj/b.h", "tj/x.h", "tj/y.h")
 	if got := m.cache[a]; !reflect.DeepEqual(got, want) {
 		t.Errorf("closure(a) = %v, want %v", relsOf(got), relsOf(want))
@@ -133,8 +131,7 @@ func TestTarjan_SingletonRootWithCachedChild(t *testing.T) {
 }
 
 func TestTarjan_NestedSCCBuiltChildSpliced(t *testing.T) {
-	// a<->b is an SCC; a also reaches uncached acyclic c. c finalizes as a
-	// singleton SCC first and is cached, then {a,b} splices c's window.
+	// c finalizes as a singleton SCC first; then {a,b} splices c's window.
 	a, b, c := source("tj/a.h"), source("tj/b.h"), source("tj/c.h")
 	m := newMockSink(map[VFS][]VFS{
 		a: {b, c},
@@ -162,15 +159,14 @@ func TestTarjan_NestedSCCBuiltChildSpliced(t *testing.T) {
 }
 
 func TestTarjan_DedupesRepeatedWindowEntries(t *testing.T) {
-	// Two members splice cached children with overlapping windows; each node
-	// must appear once.
+	// Overlapping spliced windows; each node must appear once.
 	a, b, x, y, z := source("tj/a.h"), source("tj/b.h"), source("tj/x.h"), source("tj/y.h"), source("tj/z.h")
 	m := newMockSink(map[VFS][]VFS{
 		a: {b, x},
 		b: {a, y},
 	}, map[VFS][]VFS{
 		x: {x, z},
-		y: {y, z}, // z in both windows
+		y: {y, z},
 	})
 
 	tc := &TarjanCtx{}

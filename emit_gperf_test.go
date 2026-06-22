@@ -5,9 +5,8 @@ import (
 	"testing"
 )
 
-// TestGen_GperfGeneratesAndCompiles pins the _SRC("gperf") mechanism: gperf runs
-// with $GP_FLAGS and the -Nin_<basename>_set symbol, stdout redirected to
-// <basename>.gperf.cpp (GP/yellow), then the cpp is compiled and archived.
+// TestGen_GperfGeneratesAndCompiles pins the _SRC("gperf") mechanism: gperf
+// emits a GP/yellow cpp that is then compiled and archived.
 func TestGen_GperfGeneratesAndCompiles(t *testing.T) {
 	files := map[string]string{}
 
@@ -64,7 +63,7 @@ END()
 		t.Fatalf("gperf ForeignDeps = %v, want {tool: [%q]}", fd, ldNode.UID)
 	}
 
-	// The generated cpp compiles and depends on the GP producer.
+	// Generated cpp compiles and depends on the GP producer.
 	cc := mustNodeByOutput(t, g, "$(B)/gpmod/tags.gperf.cpp.o")
 	if !nodeHasInput(cc, "$(B)/gpmod/tags.gperf.cpp") {
 		t.Fatalf("gperf CC inputs missing the generated cpp: %#v", cc.flatInputs())
@@ -81,7 +80,7 @@ END()
 		t.Fatalf("gperf CC deps = %v, want to contain GP UID %q", graphDeps(g, cc), gp.UID)
 	}
 
-	// The generated object is archived into the module library.
+	// Generated object is archived into the library.
 	ar := mustNodeByOutputSuffix(t, g, ".a")
 	if !nodeHasInput(ar, "$(B)/gpmod/tags.gperf.cpp.o") {
 		t.Fatalf("module archive missing the gperf object: %#v", ar.flatInputs())
@@ -89,7 +88,7 @@ END()
 }
 
 // TestGen_OrdinaryCppUnchangedByGperf is the negative guard: an ordinary .cpp
-// produces no GP node and its CC object archives directly, untouched by gperf.
+// produces no GP node.
 func TestGen_OrdinaryCppUnchangedByGperf(t *testing.T) {
 	files := map[string]string{}
 

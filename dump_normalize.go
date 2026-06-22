@@ -31,10 +31,9 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 			outPath = arg(args, i)
 		case "--ref-graph":
 			// Marks the input as the upstream reference graph, enabling reference-side
-			// normalizations that discount artifacts our generator does not model:
-			// AR/LD input pruning (via canonInputs) and the dep strip below. Our graph
-			// is normalized WITHOUT this flag, so any superfluous input/dep we emit, or
-			// over-filtration on the reference side, surfaces as a diff.
+			// normalizations (AR/LD input pruning, dep strip) that discount artifacts
+			// our generator does not model. Our graph is normalized WITHOUT this flag,
+			// so any superfluous input/dep, or over-filtration, surfaces as a diff.
 			refGraph = true
 		default:
 			throwFmt("dump normalize: unknown argument %q", args[i])
@@ -50,8 +49,8 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 	deps := map[string][]string{}
 	fetch := map[string]bool{}
 	// outputsByUID (populated only under --ref-graph) maps each node to its output
-	// paths so the strip pass can resolve, for an edge u->d, what d produces and
-	// check it against u's inputs.
+	// paths so the strip pass can check what an edge's target produces against the
+	// source's inputs.
 	outputsByUID := map[string][]string{}
 	var ldRoots, tsRoots, arRoots []string
 
@@ -88,9 +87,8 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 				out0 = normPath(outs[0])
 			}
 
-			// Our inline vcs.json producer ($(B)/vcs.json, folded to $(VCS)/vcs.json by
-			// normPath) has no upstream counterpart — upstream mounts $(VCS). Strip it
-			// like a FETCH node: drop the node and the edges into it.
+			// Our inline vcs.json producer has no upstream counterpart (upstream mounts
+			// $(VCS)). Strip it like a FETCH node.
 			if out0 == "$(VCS)/vcs.json" {
 				r.isFetch = true
 			}
@@ -146,12 +144,9 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 
 	// Optional strip pass (upstream only): drop dep edges u->d where none of d's
 	// outputs is referenced by u — neither among u's inputs nor named in u's command.
-	// Induced codegen .pb.h/.gen.h producers hung off a link node for cache-key Merkle
-	// folding satisfy neither, so they go; the real .o/.a stay (they ARE inputs, even
-	// though link commands pass them via a response file), and a dep whose output the
-	// command names directly but does not list as an input stays too. The command check
-	// only ever keeps MORE edges than the inputs check alone, so it cannot collapse the
-	// closure. Runs before the Merkle re-uid; only outputsByUID lives across the pass.
+	// Drops induced codegen producers hung off a link node for cache-key folding;
+	// keeps the real .o/.a. The command check only keeps MORE edges than the inputs
+	// check alone. Runs before the Merkle re-uid.
 	if refGraph {
 		type stripResult struct {
 			uid  string
@@ -248,10 +243,8 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 
 	bw := bufio.NewWriterSize(out, 1<<20)
 
-	// Dedup by the recomputed (Merkle) uid: after stripping tags/host_platform a host
-	// (tool) instance and its target twin can collapse to one uid when their whole
-	// subtree matches; the raw graph still lists both, so emit each uid once. Instances
-	// whose deps genuinely differ keep distinct uids and both survive.
+	// Dedup by the recomputed (Merkle) uid: a host instance and its target twin can
+	// collapse to one uid when their subtree matches, but the raw graph lists both.
 	type emitLine struct {
 		uid  string
 		line []byte
@@ -304,8 +297,7 @@ func depOutputInInputs(depOutputs []string, inputSet map[string]struct{}) bool {
 }
 
 // depOutputInCmd reports whether any of a dep's outputs is named in the consuming
-// node's command text (normalized whole-path substring match). Catches deps a node
-// consumes by naming the path on its command line without listing it as an input.
+// node's command text. Catches deps consumed via command line without an input entry.
 func depOutputInCmd(depOutputs []string, cmdText string) bool {
 	for _, o := range depOutputs {
 		if o == "" {

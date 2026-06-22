@@ -6,10 +6,8 @@ import (
 )
 
 // emitSplitCodegensForAR emits the module's SPLIT_CODEGEN producers (kv p=SC) and
-// the CC compiles of their auto-generated numbered .cpp parts. The noauto
-// prefix.cpp is re-fed via SRCS(${BINDIR}/prefix.cpp) and compiled by the regular
-// source path instead. Registration runs here, before that path, so the codegen
-// registry is populated in time.
+// the CC compiles of their numbered .cpp parts. This runs before the regular
+// source path so the codegen registry is populated in time.
 func emitSplitCodegensForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) *RunProgramsForARResult {
 	if len(d.splitCodegens) == 0 {
 		return nil
@@ -31,7 +29,7 @@ func emitSplitCodegensForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 }
 
 // emitSplitCodegen emits one SC producer node and registers its outputs, returning
-// the producer ref and the relative paths of the auto-compiled numbered .cpp parts.
+// the producer ref and the numbered .cpp part paths.
 func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt, in ModuleCCInputs) (NodeRef, []string) {
 	na := ctx.emit.nodeArenas()
 	moduleDir := instance.Path.rel()
@@ -45,7 +43,7 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 	prefixCpp := build(moduleDir + "/" + prefix + ".cpp")
 	prefixH := build(moduleDir + "/" + prefix + ".h")
 
-	// OUT_NUM numbered parts (auto-compiled), then prefix.cpp (noauto) and prefix.h.
+	// OUT_NUM numbered parts, then prefix.cpp and prefix.h.
 	partRels := make([]string, 0, sc.OutNum)
 	outputs := make([]VFS, 0, sc.OutNum+2)
 
@@ -72,31 +70,26 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	// Reserve the producer ref before registering outputs, so a consumer resolving
-	// a generated output to a dep edge reads a valid ref.
+	// Reserve the producer ref before registering outputs, so a consumer reads a
+	// valid ref.
 	scRef := ctx.emit.reserve()
 
-	// The flat-input model carries the first numbered part (prefix.0.cpp) and the
-	// prefix.in source through the generated closure — never prefix.h on a
+	// prefix.0.cpp and prefix.in ride the generated closure — never prefix.h on a
 	// generated cpp compilation.
 	part0 := build(moduleDir + "/" + partRels[0])
 	part0Inc := IncludeDirective{kind: includeQuoted, target: internStr(part0.rel())}
 
-	// prefix.h carries only OUTPUT_INCLUDES as real (traversed) includes. The
-	// generated-from edges (prefix.0.cpp + prefix.in) ride as NON-EXPANDED closure
-	// leaves: traversing prefix.0.cpp (a generated cpp) would pull the tool's cpp
-	// INDUCED_DEPS bucket into header consumers, which belongs only on the compiled
-	// cpp parts, not on header includers.
+	// prefix.h traverses only OUTPUT_INCLUDES; the generated-from edges ride as
+	// non-expanded closure leaves, so the tool's cpp bucket stays off header
+	// consumers and lands only on the compiled cpp parts.
 	headerParsed := make([]IncludeDirective, 0, len(sc.OutputIncludes))
 
 	for _, oi := range sc.OutputIncludes {
 		headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: oi})
 	}
 
-	// The generated .cpp parts and the noauto prefix.cpp #include prefix.0.cpp (not
-	// prefix.h); being cpp outputs they already carry the cpp bucket via their own
-	// GeneratorRefs, so traversing prefix.0.cpp only re-adds it (deduped) plus the
-	// prefix.0.cpp edge and prefix.in source.
+	// The generated .cpp parts and noauto prefix.cpp #include prefix.0.cpp, not
+	// prefix.h.
 	cppParsed := []IncludeDirective{part0Inc}
 
 	registerBoundGeneratedParsedOutput(ctx, instance, pkSC, prefixH, headerParsed, scRef, []NodeRef{toolLDRef})
@@ -106,10 +99,8 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 		registerBoundGeneratedParsedOutput(ctx, instance, pkSC, build(moduleDir+"/"+partRel), cppParsed, scRef, []NodeRef{toolLDRef})
 	}
 
-	// prefix.0.cpp carries prefix.in as a closure leaf; prefix.h carries the
-	// prefix.0.cpp edge and prefix.in so a header consumer inherits the
-	// generated-from closure without expanding prefix.0.cpp's window. Reference
-	// order: prefix.0.cpp, then prefix.in.
+	// prefix.0.cpp carries prefix.in; prefix.h carries both so a header consumer
+	// inherits the generated-from closure without expanding prefix.0.cpp's window.
 	reg := codegenRegForInstance(ctx, instance)
 	reg.addClosureLeaf(part0, inputIn)
 	reg.addClosureLeaf(prefixH, part0)

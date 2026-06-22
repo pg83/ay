@@ -6,9 +6,8 @@ import (
 )
 
 // TestEmitLj21Archive_RawCompilationAndArchive covers LJ_21_ARCHIVE end to end:
-// each declared .lua compiles to a .raw via an LJ node, and the LuaScripts.inc
-// archive_by_keys consumes those raws (plain members + `-k <keys>`), depending on
-// the producers.
+// each .lua compiles to a .raw via an LJ node, and the LuaScripts.inc
+// archive_by_keys consumes those raws depending on the producers.
 func TestEmitLj21Archive_RawCompilationAndArchive(t *testing.T) {
 	files := map[string]string{}
 
@@ -25,7 +24,7 @@ func TestEmitLj21Archive_RawCompilationAndArchive(t *testing.T) {
 
 	const compilerBin = "$(B)/contrib/libs/luajit_21/compiler/compiler"
 
-	// (1) the LJ node for a.lua: exact command, cwd, inputs, outputs, kv.
+	// (1) the LJ node for a.lua.
 	lj := mustNodeByOutput(t, g, "$(B)/mod/a.raw")
 
 	if lj.KV.P != pkLJ || lj.KV.PC != pcLightCyan {
@@ -46,13 +45,13 @@ func TestEmitLj21Archive_RawCompilationAndArchive(t *testing.T) {
 		t.Errorf("LJ inputs %v missing the lua source or compiler binary", vfsStringsT3(lj.flatInputs()))
 	}
 
-	// the nested source resolves under the module dir, not a doubled prefix.
+	// nested source resolves under the module dir, not a doubled prefix.
 	ljB := mustNodeByOutput(t, g, "$(B)/mod/sub/b.raw")
 	if !nodeHasInput(ljB, "$(S)/mod/sub/b.lua") {
 		t.Errorf("nested LJ inputs %v missing $(S)/mod/sub/b.lua", vfsStringsT3(ljB.flatInputs()))
 	}
 
-	// (2) the LuaScripts.inc archive consumes the raws plain, keyed by lua names.
+	// (2) the archive consumes the raws plain, keyed by lua names.
 	ar := mustNodeByOutput(t, g, "$(B)/mod/LuaScripts.inc")
 	if ar.KV.P != pkAR {
 		t.Errorf("archive node kv.p = %q, want AR", ar.KV.P.string())
@@ -82,7 +81,7 @@ func TestEmitLj21Archive_RawCompilationAndArchive(t *testing.T) {
 		t.Errorf("graphDeps(archive) %v does not include the LJ producer uid %q", graphDeps(g, ar), lj.UID)
 	}
 
-	// (3) LuaSources.inc archives the .lua sources themselves.
+	// (3) LuaSources.inc archives the .lua sources.
 	src := mustNodeByOutput(t, g, "$(B)/mod/LuaSources.inc")
 	srcCmd := strings.Join(strStrs(src.Cmds[0].CmdArgs.flat()), " ")
 	if !strings.Contains(srcCmd, "$(S)/mod/a.lua $(S)/mod/sub/b.lua") || !strings.Contains(srcCmd, "-k a.lua:sub/b.lua") {
@@ -90,12 +89,9 @@ func TestEmitLj21Archive_RawCompilationAndArchive(t *testing.T) {
 	}
 }
 
-// TestEmitLj21Archive_ArchiveOutputAddInclAndClosure covers the generated-header
-// consumer surface of LJ_21_ARCHIVE: the archive outputs put the module build dir
-// on the C++ compile command (-I$(B)/mod), and a C++ unit that #includes a
-// generated archive header receives the archive's source-member closure as inputs
-// (the raws' lua sources through LuaScripts.inc, the direct lua sources through
-// LuaSources.inc).
+// TestEmitLj21Archive_ArchiveOutputAddInclAndClosure: archive outputs put
+// -I$(B)/mod on the C++ compile command, and a C++ unit #including a generated
+// archive header receives the archive's source-member closure as inputs.
 func TestEmitLj21Archive_ArchiveOutputAddInclAndClosure(t *testing.T) {
 	files := map[string]string{}
 
@@ -126,7 +122,7 @@ func TestEmitLj21Archive_ArchiveOutputAddInclAndClosure(t *testing.T) {
 
 	const buildInc = "-I$(B)/mod"
 
-	// (1) both C++ objects get the archive output's addincl on their command line.
+	// (1) both C++ objects get the archive output's addincl.
 	scripts := ccBySuffix("/templates.cpp.o")
 	if !contains(scripts.Cmds[0].CmdArgs.flat(), buildInc) {
 		t.Errorf("templates.cpp.o cmd missing %q; got %v", buildInc, strStrs(scripts.Cmds[0].CmdArgs.flat()))
@@ -137,8 +133,7 @@ func TestEmitLj21Archive_ArchiveOutputAddInclAndClosure(t *testing.T) {
 		t.Errorf("templates_sources.cpp.o cmd missing %q; got %v", buildInc, strStrs(sources.Cmds[0].CmdArgs.flat()))
 	}
 
-	// (2) the LuaScripts.inc consumer pulls the raw members' lua sources, the
-	// LuaSources.inc consumer the direct lua sources, as closure-leaf inputs.
+	// (2) each consumer pulls its lua sources as closure-leaf inputs.
 	for _, lua := range []string{"$(S)/mod/a.lua", "$(S)/mod/sub/b.lua"} {
 		if !nodeHasInput(scripts, lua) {
 			t.Errorf("templates.cpp.o inputs %v missing LuaScripts.inc closure leaf %q", vfsStringsT3(scripts.flatInputs()), lua)

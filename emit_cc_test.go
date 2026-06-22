@@ -30,7 +30,6 @@ func TestEmitCC_OutputPath_FlatSrc(t *testing.T) {
 func TestEmitCC_GeneratedSource_BuildRootInput(t *testing.T) {
 	emit := newBufferedEmitter()
 	srcVFS := intern("$(B)/util/_/datetime/parser.rl6.cpp")
-	// IncludeInputs is the full input window; the source leads it.
 	_, outPath, _ := emitCC(targetInstance("util"), "_/datetime/parser.rl6.cpp", srcVFS, withCCBlocks(targetInstance("util").Platform, ModuleCCInputs{IncludeInputs: []VFS{srcVFS}}), testHostP, emit)
 
 	wantOut := "$(B)/util/_/_/datetime/parser.rl6.cpp.o"
@@ -82,8 +81,7 @@ func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
 		"-I$(S)/contrib/libs/foolib/extra",
 	}
 
-	// Prefix (aarch64, no sysroot): compiler, --target, -march, -B, -c, -o,
-	// output → block starts at index 7.
+	// aarch64, no sysroot: the include block starts at index 7.
 	for i, want := range wantSlot {
 		if args[7+i].string() != want {
 			t.Errorf("cmd_args[%d] = %q, want %q", 7+i, args[7+i].string(), want)
@@ -111,8 +109,7 @@ func TestEmitCC_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 		"-I$(S)/custom/foolib/include",
 	}
 
-	// Prefix (x86_64, no -march): compiler, --target, --sysroot, -B, -c, -o,
-	// output → the include block starts at index 7.
+	// x86_64, no -march: the include block starts at index 6.
 	for i, want := range wantSlot {
 		if args[6+i].string() != want {
 			t.Fatalf("cmd_args[%d] = %q, want %q; args=%v", 6+i, args[6+i].string(), want, args)
@@ -330,9 +327,8 @@ func TestEmitCC_PlatformEnvFlags_TargetOnly(t *testing.T) {
 	}
 }
 
-// nonOpensourcePlatform builds a target platform with OPENSOURCE unset — the
-// contour under which the wrapcc compile wrapper is active. The shared
-// testTargetP/testHostP have OPENSOURCE set and do not wrap.
+// nonOpensourcePlatform builds a target with OPENSOURCE unset — the contour where
+// the wrapcc compile wrapper is active (the shared platforms set it and do not wrap).
 func nonOpensourcePlatform() *Platform {
 	flags := make(map[string]string, len(testToolchainFlags)+1)
 	for k, v := range testToolchainFlags {
@@ -377,17 +373,14 @@ func TestEmitCC_WrapccPrefix_NonOpensource(t *testing.T) {
 		}
 	}
 
-	// wrapcc is an input of the wrapped node.
 	if !slicesContains(vfsStrings(node.flatInputs()), "$(S)/build/scripts/wrapcc.py") {
 		t.Errorf("wrapped CC node inputs missing wrapcc.py: %v", vfsStrings(node.flatInputs()))
 	}
 
-	// The source stays first; wrapcc is appended after.
 	if node.flatInputs()[0].string() != "$(S)/mod/lib.cpp" {
 		t.Errorf("inputs[0] = %q, want the source $(S)/mod/lib.cpp", node.flatInputs()[0].string())
 	}
 
-	// The python resource joins the CC deps (the wrapper runs under it).
 	if !strsContain(node.Resources, resourcePatternYMakePython3) {
 		t.Errorf("wrapped CC Resources missing YMAKE_PYTHON3: %v", node.Resources)
 	}
@@ -425,9 +418,8 @@ func contains(xs []STR, target string) bool {
 }
 
 func TestEmitCC_OutputPath_ExplicitDotSrc(t *testing.T) {
-	// A `./`-prefixed SRCS token must be canonicalized before localizing the
-	// object under `_/<dir>`, so the `./` does not leak into the object name
-	// (regression: $(B)/m/_/./generated/foo.cpp.o).
+	// A `./`-prefixed SRCS token must be canonicalized before localizing under
+	// `_/<dir>`, so the `./` does not leak into the object name.
 	e := newBufferedEmitter()
 	_, outPath, _ := emitCC(targetInstance("ysite/yandex/pure"), "./generated/default_pure.cpp", intern("$(S)/ysite/yandex/pure/generated/default_pure.cpp"), withCCBlocks(targetInstance("ysite/yandex/pure").Platform, ModuleCCInputs{}), testHostP, e)
 	want := "$(B)/ysite/yandex/pure/_/generated/default_pure.cpp.o"
@@ -725,8 +717,8 @@ func TestGen_SRC_AppendsExtraCFlags_PerSource(t *testing.T) {
 	}
 }
 
-// Uppercase `.C` routes the same as .cpp/.cc/.cxx, so it must emit a C++
-// compile node and participate in ordinary and GLOBAL archive membership.
+// Uppercase `.C` routes as C++, emitting a C++ compile node and participating in
+// ordinary and GLOBAL archive membership.
 func TestGen_UppercaseCSource_CompilesAsCxx(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"cmod/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(regular.C)\nGLOBAL_SRCS(global.C)\nEND()\n",
@@ -935,18 +927,13 @@ END()
 }
 
 // TestGen_CC_NoDuplicateInputsWhenBuildProtoDropped reproduces a fast-path
-// regression in emitOneSource: dropTransitiveGeneratedProto(full[1:]) compacts
-// the backing array in place, but the fast path then set NodeInputs=full (the
-// un-shrunk slice), whose stale tail held shifted-forward copies, producing
-// duplicate CC inputs. The trigger is a $(B)-generated .proto in a CC source's
-// closure — here a PROTO_LIBRARY whose .proto is emitted by RUN_ANTLR (not in
-// source), reached via the codegen fallback locator.
+// regression in emitOneSource: in-place compaction of dropTransitiveGeneratedProto
+// left a stale tail that NodeInputs=full then re-listed as duplicate CC inputs.
+// Triggered by a $(B)-generated .proto in a CC source's closure.
 func TestGen_CC_NoDuplicateInputsWhenBuildProtoDropped(t *testing.T) {
-	// TODO: the generated-from refactor double-lists generator $(S) sources for
-	// a build-generated .proto — they arrive via both the new pb.h closure leaf
-	// and a pre-existing path. Gate stays byte-exact (normalize dedups); this
-	// raw-graph duplicate is tracked separately. Re-enable once the second path
-	// is removed.
+	// TODO: the generated-from refactor double-lists generator $(S) sources for a
+	// build-generated .proto (gate stays byte-exact since normalize dedups). Re-enable
+	// once the second path is removed.
 	t.Skip("generated-from refactor: generator-source duplication pending dedup of the second path")
 
 	const protoModPath = "yql/essentials/parser/proto_ast/gen/jsonpath"
@@ -956,8 +943,7 @@ func TestGen_CC_NoDuplicateInputsWhenBuildProtoDropped(t *testing.T) {
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
 
-	// PROTO_LIBRARY with a build-generated proto (RUN_ANTLR OUT_NOAUTO);
-	// GEN_PROTO is true so this block runs.
+	// PROTO_LIBRARY with a build-generated proto (RUN_ANTLR OUT_NOAUTO).
 	files[protoModPath+"/ya.make"] = `PROTO_LIBRARY()
 IF (GEN_PROTO)
     SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
@@ -981,18 +967,15 @@ SRCS(JsonPathParser.proto)
 EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
 END()
 `
-	// Consumer LIBRARY including the generated pb.h.
 	files[appModPath+"/ya.make"] = "LIBRARY()\nPEERDIR(" + protoModPath + ")\nSRCS(use.cpp)\nEND()\n"
 	files[appModPath+"/use.cpp"] = "#include <" + protoModPath + "/JsonPathParser.pb.h>\nint use() { return 0; }\n"
 
-	// Source files for the ANTLR and proto chain.
 	files["templates/protobuf.stg.in"] = "stub stg\n"
 	files["yql/essentials/minikql/jsonpath/JsonPath.g"] = "stub grammar\n"
 	files["contrib/libs/protobuf/ya.make"] = "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n"
 
-	// A header placed in the CC closure AFTER the $(B) proto: if the fast path
-	// reuses the un-shrunk full slice as NodeInputs after in-place compaction,
-	// this header appears twice.
+	// A header placed in the CC closure AFTER the $(B) proto; it appears twice if
+	// the fast path reuses the un-shrunk slice.
 	files["contrib/libs/protobuf/src/google/protobuf/reflection_ops.h"] = "// stub\n"
 
 	g := testGen(newMemFS(files), appModPath)
@@ -1010,9 +993,8 @@ END()
 	}
 }
 
-// releaseHostPlatform builds the x86_64 host in release mode, whose C-flag
-// vector carries the optimize token -O3. The default testGen host is a debug
-// build (no optimize token), which would not exercise NO_OPTIMIZE's -O3 → -O0.
+// releaseHostPlatform builds the x86_64 host in release mode (carries -O3); the
+// default debug host would not exercise NO_OPTIMIZE's -O3 → -O0.
 func releaseHostPlatform() *Platform {
 	flags := make(map[string]string, len(testToolchainFlags)+2)
 	for k, v := range testToolchainFlags {
@@ -1047,9 +1029,8 @@ func argsContain(args []string, want string) bool {
 	return false
 }
 
-// gperfToolFiles writes a gperf PROGRAM (built on the host when referenced via
-// a .gperf source) plus a gpmod LIBRARY that pulls it in. extraToolMacros is
-// spliced into the tool's ya.make body.
+// gperfToolFiles writes a gperf PROGRAM plus a gpmod LIBRARY that pulls it in;
+// extraToolMacros is spliced into the tool's ya.make body.
 func gperfToolFiles(extraToolMacros string) map[string]string {
 	files := map[string]string{}
 	files["contrib/tools/gperf/ya.make"] = "PROGRAM(gperf)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n" +
@@ -1060,9 +1041,8 @@ func gperfToolFiles(extraToolMacros string) map[string]string {
 	return files
 }
 
-// TestGen_NoOptimizeSuppressesOptimization pins NO_OPTIMIZE(): a module
-// declaring it compiles with -O0 in the optimize slot instead of the default
-// release -O3.
+// TestGen_NoOptimizeSuppressesOptimization: NO_OPTIMIZE() compiles with -O0
+// instead of the default release -O3.
 func TestGen_NoOptimizeSuppressesOptimization(t *testing.T) {
 	files := gperfToolFiles("NO_OPTIMIZE()\n")
 
@@ -1077,8 +1057,7 @@ func TestGen_NoOptimizeSuppressesOptimization(t *testing.T) {
 		t.Fatalf("NO_OPTIMIZE compile still carries -O3: %v", args)
 	}
 
-	// The LD node embeds the __vcs_version__.c compile, which shares the
-	// module's optimize suppression.
+	// The LD node embeds the __vcs_version__.c compile, sharing the suppression.
 	ld := mustNodeByOutput(t, g, "$(B)/contrib/tools/gperf/gperf")
 	vcs := strStrs(ld.Cmds[1].CmdArgs.flat())
 	if !argsContain(vcs, "-O0") || argsContain(vcs, "-O3") {
@@ -1086,8 +1065,7 @@ func TestGen_NoOptimizeSuppressesOptimization(t *testing.T) {
 	}
 }
 
-// TestGen_DefaultOptimizationIntact is the negative guard: the same module
-// without NO_OPTIMIZE() keeps -O3 and gains no -O0.
+// TestGen_DefaultOptimizationIntact: without NO_OPTIMIZE() the module keeps -O3.
 func TestGen_DefaultOptimizationIntact(t *testing.T) {
 	files := gperfToolFiles("")
 

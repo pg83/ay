@@ -6,8 +6,7 @@ import (
 	"testing"
 )
 
-// scanClosure returns srcRel's transitive include closure with the root file
-// stripped (element 0).
+// scanClosure returns srcRel's transitive include closure, root file stripped.
 func scanClosure(scanner *IncludeScanner, srcRel string, cfg ScanContext) []VFS {
 	return scanner.newScanCtx(cfg, includeDirectiveParsers.registeredParserFor(srcRel)).closureOf(source(srcRel))[1:]
 }
@@ -658,7 +657,7 @@ include "machine.rl";
 	native := parsed.bucket(parsedIncludesRagelNative)
 	hcpp := parsed.bucket(parsedIncludesHeader)
 
-	// C includes only (ragel-native goes to its own bucket)
+	// C includes only.
 	if len(local) != 2 {
 		t.Fatalf("got %d local entries, want 2 (C includes only); %+v", len(local), local)
 	}
@@ -673,7 +672,7 @@ include "machine.rl";
 		}
 	}
 
-	// Ragel-native includes (deduped) in their own bucket
+	// Ragel-native includes, deduped.
 	if len(native) != 2 {
 		t.Fatalf("got %d ragel-native entries, want 2; %+v", len(native), native)
 	}
@@ -687,7 +686,7 @@ include "machine.rl";
 		}
 	}
 
-	// h+cpp (generated cpp's induced set): self-include leads, C/C++ directives follow.
+	// Induced h+cpp: self-include leads, C/C++ directives follow.
 	wantHCPP := []struct {
 		target string
 		kind   IncludeKind
@@ -708,9 +707,9 @@ include "machine.rl";
 	}
 }
 
-// TestScanner_RagelNativeInclude_DoesNotBleedCHeaders verifies the ragel walk
-// relation: a ragel file's closure follows its native %include edges ONLY; no C
-// headers join. The C side rides as the induced h+cpp set on the generated cpp.
+// TestScanner_RagelNativeInclude_DoesNotBleedCHeaders verifies a ragel file's
+// closure follows its native %include edges only; the C side rides as the
+// induced h+cpp set on the generated cpp.
 func TestScanner_RagelNativeInclude_DoesNotBleedCHeaders(t *testing.T) {
 	sysincl := parseSysInclYAML("test.yml", []byte(`
 - includes:
@@ -744,28 +743,25 @@ machine Sub;
 		closureSet[v.string()] = true
 	}
 
-	// main.rl6 itself
 	if !closureSet["$(S)/pkg/main.rl6"] {
 		t.Errorf("closure missing $(S)/pkg/main.rl6: %v", closure)
 	}
 
-	// sub.rl6 is a ragel-native edge — walked directly.
+	// Ragel-native edge — walked directly.
 	if !closureSet["$(S)/pkg/sub.rl6"] {
 		t.Errorf("closure missing $(S)/pkg/sub.rl6 (ragel-native edge): %v", closure)
 	}
 
-	// vector (C include of main.rl6) is NOT a walkable edge — it reaches the
-	// compile via the induced h+cpp set on the generated cpp.
+	// C include of main.rl6: not a walkable edge, rides the induced h+cpp set.
 	if closureSet["$(S)/stl/vector"] {
 		t.Errorf("closure should NOT contain $(S)/stl/vector (C side rides as induced h+cpp): %v", closure)
 	}
 
-	// numeric (C include of sub.rl6) must NOT bleed in
+	// C include of sub.rl6 must not bleed in.
 	if closureSet["$(S)/stl/numeric"] {
 		t.Errorf("closure should NOT contain $(S)/stl/numeric (C header of ragel-native-included sub.rl6 must not bleed): %v", closure)
 	}
 
-	// The generated cpp's induced set: self-include + main's C directives.
 	induced := scanner.parsers.sourceParsedBuckets(intern("$(S)/pkg/main.rl6"), nil).bucket(parsedIncludesCpp)
 	if len(induced) != 2 || induced[0].target.string() != "pkg/main.rl6" || induced[1].target.string() != "vector" {
 		t.Errorf("induced h+cpp of main.rl6 = %v, want [{pkg/main.rl6} {vector}]", induced)
@@ -1005,16 +1001,14 @@ func TestScanner_CythonStdintSplitKeepsPy3InitButAddsPy2Types(t *testing.T) {
 	assertHasVFS(t, closure, intern("$(S)/contrib/tools/cython_py2/Cython/Includes/libc/stdint.pxd"))
 }
 
-// attachCodegen wires a CodegenRegistry onto an existing scanner (the codegen
-// field), the way the real gen pipeline does.
+// attachCodegen wires a CodegenRegistry onto an existing scanner.
 func attachCodegen(scanner *IncludeScanner, reg *CodegenRegistry) {
 	scanner.codegen = reg
 }
 
-// TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist: when ADDINCL declares a
-// Build-rooted prefix BEFORE a Source-rooted one and the target exists under both
-// (source stub + codegen output), the Build path wins (declaration-order
-// first-match).
+// TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist: with a Build-rooted
+// ADDINCL declared before a Source-rooted one and the target under both, the
+// Build path wins by declaration-order first-match.
 func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 	reg := newCodegenRegistry()
 	reg.register(&GeneratedFileInfo{
@@ -1041,8 +1035,8 @@ func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 	}
 }
 
-// TestScanner_AddInclSourceBeforeBuildKeepsSource is the symmetric anchor: Source
-// declared first must win even if a Build registration exists.
+// TestScanner_AddInclSourceBeforeBuildKeepsSource: Source declared first wins
+// even when a Build registration exists.
 func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 	reg := newCodegenRegistry()
 	reg.register(&GeneratedFileInfo{
@@ -1069,9 +1063,8 @@ func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 	}
 }
 
-// TestScanner_AddInclBuildOnlyMatchesCodegen: target lives only in the codegen
-// registry (no source stub). With Build addincl declared first, resolution must
-// return the Build/generated path.
+// TestScanner_AddInclBuildOnlyMatchesCodegen: target only in the codegen
+// registry resolves via the Build/generated path.
 func TestScanner_AddInclBuildOnlyMatchesCodegen(t *testing.T) {
 	reg := newCodegenRegistry()
 	reg.register(&GeneratedFileInfo{
@@ -1096,8 +1089,8 @@ func TestScanner_AddInclBuildOnlyMatchesCodegen(t *testing.T) {
 }
 
 func TestScanCtx_Resolve_RootedTargetBindsDirectly(t *testing.T) {
-	// A rooted directive target binds to its root without include search, sysincl,
-	// or FS checks. The memFS is empty on purpose: nothing else could find these.
+	// A rooted target binds to its root without search, sysincl, or FS checks;
+	// the empty memFS proves nothing else could find these.
 	scanner := newTestScanner(newMemFS(nil), nil)
 	sc := scanner.newScanCtx(newScanContext(scanner.parsers, nil, nil, nil, ""), nil)
 

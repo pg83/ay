@@ -32,7 +32,7 @@ func TestIdSet_ResetClearsMembershipReusingArray(t *testing.T) {
 	}
 
 	before := cap(s.gen)
-	s.reset(8) // same size: bump epoch, keep the array
+	s.reset(8) // same size: keep the array
 
 	if s.has(VFS(2)) {
 		t.Fatal("member survived reset")
@@ -46,7 +46,7 @@ func TestIdSet_ResetClearsMembershipReusingArray(t *testing.T) {
 func TestIdSet_AddGrowsBeyondLen(t *testing.T) {
 	var s IdSet
 	s.reset(4)
-	s.add(VFS(100)) // past the initial length: forces a grow
+	s.add(VFS(100)) // forces a grow
 
 	if !s.has(VFS(100)) {
 		t.Fatal("grown id missing")
@@ -70,7 +70,7 @@ func TestIdSet_ResetGrowsAndClears(t *testing.T) {
 	var s IdSet
 	s.reset(4)
 	s.add(VFS(2))
-	s.reset(64) // larger: realloc, epoch back to 1
+	s.reset(64) // larger: realloc
 
 	if s.has(VFS(2)) {
 		t.Fatal("member survived grow-reset")
@@ -87,9 +87,7 @@ func TestIdSet_EpochWraparoundZeroes(t *testing.T) {
 	var s IdSet
 	s.reset(8)
 
-	// Drive the epoch to overflow on the next reset: epoch++ wraps to 0, which
-	// zeroes gen and restarts at 1. Stamp a stale slot with the pre-wrap epoch
-	// so it would falsely match if gen were NOT zeroed.
+	// Next reset overflows epoch to 0, zeroing gen. Stale slot must not match.
 	s.epoch = 0xFFFFFFFF
 	s.gen[3] = 0xFFFFFFFF
 
@@ -117,7 +115,7 @@ func TestIdSet_SpliceNew(t *testing.T) {
 
 	block := make([]VFS, 8)
 	block[0] = VFS(1)
-	// 5 present (skipped); 3 appended once despite the repeat.
+	// 5 skipped; 3 appended once despite the repeat.
 	k := s.spliceNew([]VFS{VFS(5), VFS(3), VFS(3), VFS(7)}, block, 1)
 
 	if k != 3 || block[1] != VFS(3) || block[2] != VFS(7) {
@@ -130,8 +128,7 @@ func TestIdSet_SpliceNew(t *testing.T) {
 }
 
 func TestIdSet_SpliceNewOutOfBoundPanics(t *testing.T) {
-	// Callers presize via reset(vfsBound()); an id past the bound means a
-	// broken invariant — the bounds check must fail fast, not grow.
+	// Callers presize via reset(vfsBound()); an id past the bound must panic.
 	var s IdSet
 	s.reset(4)
 
