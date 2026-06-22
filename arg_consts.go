@@ -229,6 +229,7 @@ var (
 	argStyle                                     = internArg("style")
 	argSuffixes                                  = internArg("--suffixes")
 	argSupportsTestParameters                    = internArg("--supports-test-parameters")
+	argT0                                        = internArg("-T0")
 	argTar                                       = internArg("--tar")
 	argTarget                                    = internArg("--target")
 	argTargetPlatformDescriptor                  = internArg("--target-platform-descriptor")

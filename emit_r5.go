@@ -26,9 +26,15 @@ func emitR5(
 			(srcVFS).str())),
 		Env: env,
 	}
+	rlgenMode := argT0
+
+	if instance.Platform.RagelOptimized {
+		rlgenMode = argG2
+	}
+
 	cmd1 := Cmd{
 		CmdArgs: na.chunkList(na.strList((rlgenCdBinPath).str(),
-			argG2.str(),
+			rlgenMode.str(),
 			argDashO.str(),
 			(cppVFS).str(),
 			(tmpVFS).str())),
