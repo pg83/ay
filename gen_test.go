@@ -2580,3 +2580,17 @@ func TestMergeGeneratedFirstClaims_HostWinsOnConflict(t *testing.T) {
 		t.Fatalf("host-only generated file must keep its claim: got %q, want %q", got, toolOnlyOwner)
 	}
 }
+
+func slicesContains(xs []string, want string) bool {
+	for _, x := range xs {
+		if x == want {
+			return true
+		}
+	}
+
+	return false
+}
+
+func Gen(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn)) *Graph {
+	return genWithResources(fs, targetDir, hostP, targetP, onWarn, false)
+}

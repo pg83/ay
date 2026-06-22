@@ -496,3 +496,34 @@ func TestCatboostOpenSourceDefineGating(t *testing.T) {
 		t.Error("non-OPENSOURCE build must omit -DCATBOOST_OPENSOURCE")
 	}
 }
+
+// testToolchain builds the module toolchain the way genModule does — from a
+// resource-global closure declaring the build/platform/* resources — so tests that
+// drive the emitters directly get the same $(B)/resources/CLANG20 / LLD_ROOT /
+// YMAKE_PYTHON3 tool paths without an ambient platform. The compiler comes from the
+// version-specific CLANG20 resource (ClangVer "20").
+func testToolchain() ModuleToolchain {
+	return resolveModuleToolchain([]ResourceDecl{
+		makeResourceDecl(resourcePatternClang20, "sbr:test-clang"),
+		makeResourceDecl(resourcePatternLLDRoot, "sbr:test-lld"),
+		makeResourceDecl(resourcePatternYMakePython3, "sbr:test-python"),
+	}, "20")
+}
+
+// addToolchainPeers injects the synthetic build/platform/* RESOURCES_LIBRARYs every
+// module implicitly PEERDIRs, so a gen test's memFS yields a populated module
+// toolchain (d.tc) — the source of compiler/python/objcopy/linker paths. Without
+// them the closure is empty and tool-emitting nodes carry blank tool paths.
+func addToolchainPeers(files map[string]string) {
+	const json = `{"by_platform":{"linux-x86_64":{"uri":"sbr:test"}}}`
+
+	files["build/platform/clang/ya.make"] = "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(CLANG16 clang16.json)\nDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(CLANG20 clang20.json)\nDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(CLANG clang16.json)\nEND()\n"
+	files["build/platform/clang/clang16.json"] = json
+	// CLANG binds to clang${CLANG_VER}.json (=clang20.json); same sbr here so golden
+	// output is version-agnostic.
+	files["build/platform/clang/clang20.json"] = json
+	files["build/platform/lld/ya.make"] = "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld.json)\nEND()\n"
+	files["build/platform/lld/lld.json"] = json
+	files["build/platform/python/ymake_python3/ya.make"] = "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(YMAKE_PYTHON3 python.json)\nEND()\n"
+	files["build/platform/python/ymake_python3/python.json"] = json
+}

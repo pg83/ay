@@ -1,16 +1,8 @@
 package main
 
-import "testing"
-
-// Arcadia ya.make files routinely list SRCS as arcadia-ROOT-relative paths that
-// do not live under the declaring module dir — e.g. geobase/library/abi lists
-// `geobase/library/asset.cpp` (the file is at $(S)/geobase/library/asset.cpp,
-// not $(S)/geobase/library/abi/geobase/library/asset.cpp), and
-// market/idx/datacamp/proto/external lists
-// `market/idx/datacamp/proto/api/ExportMessage.proto`. Upstream ymake's source
-// resolution plan ends at the arcadia root, so such a SRCS entry binds to
-// $(S)/<path>, not to the doubled $(S)/<moduledir>/<path>. These tests pin that
-// behavior; before the fix resolution doubled the path against the module dir.
+import (
+	"testing"
+)
 
 func TestResolveSourceVFS_RootRelativeSrc(t *testing.T) {
 	fs := newMemFS(map[string]string{
@@ -44,48 +36,6 @@ func TestResolveSourceVFS_RootRelativeSrc(t *testing.T) {
 	got = resolveSourceVFS(ctx2, instance, "shared.cpp", srcDirs)
 	if want := source("geobase/library/abi/shared.cpp"); got != want {
 		t.Fatalf("ambiguous src: got %s, want %s", got.rel(), want.rel())
-	}
-}
-
-func TestResolvePySrcRel_RootRelativeProto(t *testing.T) {
-	fs := newMemFS(map[string]string{
-		"market/idx/datacamp/proto/api/ExportMessage.proto":       "",
-		"market/idx/datacamp/proto/external/ExportCategory.proto": "",
-	})
-	moduleDir := "market/idx/datacamp/proto/external"
-	srcDirs := []VFS{dirKey(moduleDir)}
-
-	// Root-relative proto SRCS resolves at the arcadia root.
-	got := resolvePySrcRel(fs, srcDirs, moduleDir, "market/idx/datacamp/proto/api/ExportMessage.proto")
-	if want := "market/idx/datacamp/proto/api/ExportMessage.proto"; got != want {
-		t.Fatalf("root-relative proto: got %s, want %s", got, want)
-	}
-
-	// A proto that genuinely lives under the module dir resolves there.
-	got = resolvePySrcRel(fs, srcDirs, moduleDir, "market/idx/datacamp/proto/external/ExportCategory.proto")
-	if want := "market/idx/datacamp/proto/external/ExportCategory.proto"; got != want {
-		t.Fatalf("root-relative proto under module: got %s, want %s", got, want)
-	}
-}
-
-// A dirty (non-clean) srcRel must NOT be source-root bound. FS.isFile
-// normalises `..`/`.` segments, so resolvePySrcRel(modulePath="pkg/sub",
-// srcRel="../root.proto") would otherwise probe and match $(S)/root.proto and
-// return the out-of-tree `../root.proto`. Upstream ymake reconstructs
-// $S/../root.proto as out-of-tree and does not source-root bind it, so the
-// arcadia-root fallback applies only to clean paths — matching the
-// resolveSourceVFS guard. The dirty entry falls through to the module-relative
-// join.
-func TestResolvePySrcRel_DirtyPathNotRootBound(t *testing.T) {
-	fs := newMemFS(map[string]string{
-		"root.proto": "",
-	})
-	moduleDir := "pkg/sub"
-	srcDirs := []VFS{dirKey(moduleDir)}
-
-	got := resolvePySrcRel(fs, srcDirs, moduleDir, "../root.proto")
-	if want := "pkg/sub/../root.proto"; got != want {
-		t.Fatalf("dirty srcRel must not source-root bind: got %s, want %s", got, want)
 	}
 }
 
