@@ -60,7 +60,7 @@ func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	effectiveFlags := ragel6Flags
 
 	if len(effectiveFlags) == 0 {
-		if instance.Platform.Ragel6Optimized {
+		if instance.Platform.RagelOptimized {
 			effectiveFlags = []ARG{ragel6ArgOptimized}
 		} else {
 			effectiveFlags = []ARG{ragel6ArgDebug}
