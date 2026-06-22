@@ -1,0 +1,1 @@
+(PATH=/home/pg/ix_root/realm/llm/bin/:$PATH; . /home/pg/ix_root/realm/llm/env; wirez -F 127.0.0.1:1083 -D 64:ff9b:0:0:0:0:0808:0808 -- ../overseer/overseer run --harness=codex.exe --digger-harness=claude.exe:opus --root=${PWD}/root --trunk=${PWD} --rw=/place/vartmp)
