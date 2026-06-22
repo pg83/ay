@@ -166,12 +166,10 @@ func downloadResourceArchive(sourceRoot, uri, archivePath string) {
 // / RENAME / EXECUTABLE. fetch_from_sandbox.py's own metadata query is
 // unauthenticated (401s), which is the whole reason we bypass it.
 func cmdFetchSandbox(_ GlobalFlags, args []string) int {
-	var sourceRoot, id string
-	mode, prefix := "untar", "."
+	var sourceRoot, id, copyToDir, untarTo string
 	executable := false
 
-	var renames [][2]string
-	var outs []string
+	var renames, outs []string
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -183,13 +181,17 @@ func cmdFetchSandbox(_ GlobalFlags, args []string) int {
 			id = args[i]
 		case "--untar-to":
 			i++
-			mode, prefix = "untar", args[i]
+			untarTo = args[i]
 		case "--copy-to-dir":
 			i++
-			mode, prefix = "copy", args[i]
+			copyToDir = args[i]
 		case "--rename":
-			renames = append(renames, [2]string{args[i+1], args[i+2]})
-			i += 2
+			// fetch_from.py's --rename is action='append' (one FILE per flag),
+			// pairing positionally with the outputs after `--`; it is NOT a two-token
+			// old/new pair. The special FILE name RESOURCE denotes the fetched
+			// resource itself.
+			i++
+			renames = append(renames, args[i])
 		case "--executable":
 			executable = true
 		case "--resource-file":
@@ -222,31 +224,61 @@ func cmdFetchSandbox(_ GlobalFlags, args []string) int {
 	archivePath := filepath.Join(tmp, "resource")
 	downloadResourceArchive(sourceRoot, "sbr:"+id, archivePath)
 
-	throw(os.MkdirAll(prefix, 0o755))
+	placeSandboxResource(archivePath, copyToDir, untarTo, renames, outs, executable)
 
-	if mode == "copy" {
-		dst := filepath.Join(prefix, "resource")
+	return 0
+}
 
-		if len(outs) == 1 {
-			dst = filepath.Join(prefix, outs[0])
-		}
-
-		throw(copyFile(archivePath, dst))
-	} else {
-		unpackResourceArchive(archivePath, prefix)
+// placeSandboxResource lays a fetched Sandbox resource into the node's build dir
+// (cwd), mirroring build/scripts/fetch_from.py's process(): untar the archive when
+// --untar-to is set, then resolve each RENAME against its positional output —
+// RESOURCE means the fetched file itself (copied onto the output), any other name
+// is an extracted member moved onto the output — and, for a bare --copy-to-dir
+// with no RENAME, copy the single fetched file to the declared output name.
+// Output paths are relative to cwd, as upstream emits them.
+func placeSandboxResource(fetched, copyToDir, untarTo string, renames, outs []string, executable bool) {
+	if len(renames) > len(outs) {
+		throwFmt("fetch sandbox: %d renames exceed %d outputs", len(renames), len(outs))
 	}
 
-	for _, r := range renames {
-		throw(os.Rename(filepath.Join(prefix, r[0]), filepath.Join(prefix, r[1])))
+	if untarTo != "" {
+		unpackResourceArchive(fetched, untarTo)
+	}
+
+	for idx, src := range renames {
+		dst := outs[idx]
+		throw(os.MkdirAll(filepath.Dir(dst), 0o755))
+
+		if src == "RESOURCE" {
+			throw(copyFile(fetched, dst))
+
+			continue
+		}
+
+		s := src
+		if untarTo != "" {
+			s = filepath.Join(untarTo, src)
+		}
+
+		throw(os.Rename(s, dst))
+	}
+
+	if copyToDir != "" && len(renames) == 0 {
+		throw(os.MkdirAll(copyToDir, 0o755))
+
+		dst := filepath.Join(copyToDir, "resource")
+		if len(outs) == 1 {
+			dst = filepath.Join(copyToDir, outs[0])
+		}
+
+		throw(copyFile(fetched, dst))
 	}
 
 	if executable {
 		for _, o := range outs {
-			throw(os.Chmod(filepath.Join(prefix, o), 0o755))
+			throw(os.Chmod(o, 0o755))
 		}
 	}
-
-	return 0
 }
 
 func readResourceMappingMaybe(path string) ResourceMappingConf {
