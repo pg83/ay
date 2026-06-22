@@ -636,16 +636,16 @@ func TestDumpDiffPairStructuredCmds(t *testing.T) {
 // luas. Regression for the residual $(S)/.../tests/ft/yabs_md5.lua input that
 // leaked through because baseName of the whole -k token collided with the input.
 func TestCanonInputs_ArchiveByKeysIgnoresKeyListBasename(t *testing.T) {
-	node := map[string]any{
-		"kv": map[string]any{"p": "AR"},
-		"inputs": []any{
+	node := &rawNode{
+		Kv: map[string]any{"p": "AR"},
+		Inputs: []string{
 			"$(B)/mod/a.raw",
 			"$(B)/mod/sub/b.raw",
 			"$(S)/mod/a.lua",
 			"$(S)/mod/sub/b.lua",
 			"$(B)/tools/archiver/archiver",
 		},
-		"cmds": []any{map[string]any{"cmd_args": []any{
+		Cmds: []any{map[string]any{"cmd_args": []any{
 			"$(B)/tools/archiver/archiver", "-q", "-x", "-p",
 			"$(B)/mod/a.raw", "$(B)/mod/sub/b.raw",
 			"-k", "a.lua:sub/b.lua",
