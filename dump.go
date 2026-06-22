@@ -142,11 +142,11 @@ func toStrings(v any) []string {
 	return out
 }
 
-func normSortedStrings(v any) []string {
-	out := toStrings(v)
+func normSortedStrings(in []string) []string {
+	out := make([]string, len(in))
 
-	for i := range out {
-		out[i] = normPath(out[i])
+	for i := range in {
+		out[i] = normPath(in[i])
 	}
 
 	sort.Strings(out)
@@ -165,11 +165,11 @@ func normSortedStrings(v any) []string {
 	return out[:w]
 }
 
-func normStringsKeepOrder(v any) []string {
-	out := toStrings(v)
+func normStringsKeepOrder(in []string) []string {
+	out := make([]string, len(in))
 
-	for i := range out {
-		out[i] = normPath(out[i])
+	for i := range in {
+		out[i] = normPath(in[i])
 	}
 
 	return out
@@ -183,8 +183,8 @@ func orVal(v, def any) any {
 	return v
 }
 
-func nodeProgramKind(node map[string]any) string {
-	kv, _ := node["kv"].(map[string]any)
+func nodeProgramKind(node *rawNode) string {
+	kv, _ := node.Kv.(map[string]any)
 	p, _ := kv["p"].(string)
 
 	return p
@@ -194,8 +194,8 @@ func nodeProgramKind(node map[string]any) string {
 // string for whole-path substring testing (used by the dep strip to detect a dep
 // output the command names directly, e.g. a TS run_test --context path that is not
 // listed among the node's inputs).
-func nodeCmdText(node map[string]any) string {
-	cmds, _ := node["cmds"].([]any)
+func nodeCmdText(node *rawNode) string {
+	cmds, _ := node.Cmds.([]any)
 	var b strings.Builder
 
 	for _, c := range cmds {
@@ -222,8 +222,8 @@ func nodeCmdText(node map[string]any) string {
 // otherwise leak a phantom file basename (e.g. tests/ft/yabs_md5.lua), spuriously
 // keeping a source member that ymake over-emits as a cache-key input but the
 // command never actually names — so skip the token following -k.
-func nodeCmdBasenames(node map[string]any) map[string]struct{} {
-	cmds, _ := node["cmds"].([]any)
+func nodeCmdBasenames(node *rawNode) map[string]struct{} {
+	cmds, _ := node.Cmds.([]any)
 	set := map[string]struct{}{}
 
 	for _, c := range cmds {
@@ -384,8 +384,8 @@ func getString(node map[string]any, key string) string {
 // generator does not (or should not) model. Our graph is normalized faithfully so
 // that any genuine over- or under-emission surfaces as a diff, and so the filter
 // can be tightened to drop only what is really superfluous.
-func canonInputs(node map[string]any, refGraph bool) []string {
-	inputs := normSortedStrings(node["inputs"])
+func canonInputs(node *rawNode, refGraph bool) []string {
+	inputs := normSortedStrings(node.Inputs)
 
 	if !refGraph {
 		return inputs
@@ -413,19 +413,19 @@ func canonInputs(node map[string]any, refGraph bool) []string {
 	return inputs
 }
 
-func canonContent(node map[string]any, refGraph bool) map[string]any {
+func canonContent(node *rawNode, refGraph bool) map[string]any {
 	inputs := canonInputs(node, refGraph)
 
 	canon := map[string]any{
-		"cmds":              normRec(orVal(node["cmds"], []any{})),
-		"env":               normRec(orVal(node["env"], map[string]any{})),
+		"cmds":              normRec(orVal(node.Cmds, []any{})),
+		"env":               normRec(orVal(node.Env, map[string]any{})),
 		"inputs":            inputs,
-		"kv":                normRec(orVal(node["kv"], map[string]any{})),
-		"outputs":           normStringsKeepOrder(node["outputs"]),
-		"platform":          normPath(getString(node, "platform")),
-		"requirements":      normRec(orVal(node["requirements"], map[string]any{})),
+		"kv":                normRec(orVal(node.Kv, map[string]any{})),
+		"outputs":           normStringsKeepOrder(node.Outputs),
+		"platform":          normPath(node.Platform),
+		"requirements":      normRec(orVal(node.Requirements, map[string]any{})),
 		"sandboxing":        true,
-		"target_properties": normRec(orVal(node["target_properties"], map[string]any{})),
+		"target_properties": normRec(orVal(node.TargetProperties, map[string]any{})),
 	}
 
 	// tags and host_platform are a graph-merge artifact (devtools/ya assigns the
@@ -450,7 +450,29 @@ func marshalCompact(v any) []byte {
 	return b
 }
 
-func streamGraphFanout[R any](path string, workers int, process func(map[string]any) R, collect func(R)) {
+// rawNode is the typed decode target for a raw graph node on the normalize hot
+// path (streamGraphFanout). The large string-array fields (deps/inputs/outputs)
+// and scalars (uid/platform) decode directly to their Go types, avoiding the
+// per-element interface boxing of a []any decode and the toStrings copy that
+// followed it. The fields canonContent feeds to normRec (cmds/env/kv/
+// requirements/target_properties) stay any so the canonicalized value tree — and
+// thus marshalCompact's bytes — is identical to the former map[string]any decode;
+// keeping them any also preserves orVal's `v == nil` substitution for absent
+// fields (a typed-nil map wrapped in any is != nil and would emit null, not {}).
+type rawNode struct {
+	UID              string   `json:"uid"`
+	Deps             []string `json:"deps"`
+	Inputs           []string `json:"inputs"`
+	Outputs          []string `json:"outputs"`
+	Platform         string   `json:"platform"`
+	Cmds             any      `json:"cmds"`
+	Env              any      `json:"env"`
+	Kv               any      `json:"kv"`
+	Requirements     any      `json:"requirements"`
+	TargetProperties any      `json:"target_properties"`
+}
+
+func streamGraphFanout[R any](path string, workers int, process func(*rawNode) R, collect func(R)) {
 	f := throw2(os.Open(path))
 
 	defer func() { throw(f.Close()) }()
@@ -459,7 +481,7 @@ func streamGraphFanout[R any](path string, workers int, process func(map[string]
 	dec.UseNumber()
 	seekToGraph(dec, path)
 
-	nodes := make(chan map[string]any, workers*2)
+	nodes := make(chan *rawNode, workers*2)
 	results := make(chan R, workers*2)
 
 	var wg sync.WaitGroup
@@ -487,8 +509,8 @@ func streamGraphFanout[R any](path string, workers int, process func(map[string]
 	}()
 
 	for dec.More() {
-		node := map[string]any{}
-		throw(dec.Decode(&node))
+		node := &rawNode{}
+		throw(dec.Decode(node))
 		nodes <- node
 	}
 

@@ -70,19 +70,19 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 	}
 
 	streamGraphFanout(inPath, workers,
-		func(node map[string]any) p1Result {
-			uid := getString(node, "uid")
-			kv, _ := node["kv"].(map[string]any)
+		func(node *rawNode) p1Result {
+			uid := node.UID
+			kv, _ := node.Kv.(map[string]any)
 			p, _ := kv["p"].(string)
 
 			r := p1Result{
 				uid:     uid,
-				deps:    toStrings(node["deps"]),
+				deps:    node.Deps,
 				content: sha256.Sum256(marshalCompact(canonContent(node, refGraph))),
 				isFetch: p == "FT",
 			}
 
-			outs := toStrings(node["outputs"])
+			outs := node.Outputs
 			out0 := ""
 
 			if len(outs) > 0 {
@@ -162,8 +162,8 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 			deps []string
 		}
 		streamGraphFanout(inPath, workers,
-			func(node map[string]any) stripResult {
-				uid := getString(node, "uid")
+			func(node *rawNode) stripResult {
+				uid := node.UID
 				inputSet := make(map[string]struct{})
 
 				for _, in := range canonInputs(node, refGraph) {
@@ -171,7 +171,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 				}
 
 				cmdText := nodeCmdText(node)
-				raw := toStrings(node["deps"])
+				raw := node.Deps
 				kept := make([]string, 0, len(raw))
 
 				for _, d := range raw {
@@ -263,8 +263,8 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 	seen := map[string]bool{}
 
 	streamGraphFanout(inPath, workers,
-		func(node map[string]any) emitLine {
-			uid := getString(node, "uid")
+		func(node *rawNode) emitLine {
+			uid := node.UID
 
 			if !closure[uid] {
 				return emitLine{}
