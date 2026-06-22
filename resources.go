@@ -363,6 +363,22 @@ func genResourcesLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *M
 	var sbomPath *VFS
 
 	if sbomActive(ctx, instance) && d.toolchainName != "" {
+		// The toolchain SBOM node runs $(B)/resources/YMAKE_PYTHON3/bin/python3.
+		// Upstream reaches that resource via the YMAKE_PYTHON3_PEERDIR that
+		// _BARE_UNIT injects into every unit (RESOURCES_LIBRARY: _BARE_UNIT,
+		// ymake.core.conf:2064/576); this RESOURCES_LIBRARY path otherwise resolves
+		// no peers, so resolve that one universal python peer explicitly. The effect
+		// we need is registering the YMAKE_PYTHON3 FETCH into ctx.fetchRefs BEFORE
+		// this node, so its by-name resource dep is a real edge at build time too,
+		// not just in -G where the fetch map is complete only at finalize. genModule
+		// is memoized (no new nodes; -G is topo-sorted so byte output is unchanged),
+		// and we discard the python toolchain's own SBOM component — it is not this
+		// toolchain's. ymake_python3 declares YMAKE_PYTHON3 itself, so it self-peers
+		// nothing; skip it to avoid a pointless re-entry.
+		if instance.Path.rel() != pythonToolchainInfoRel {
+			pythonToolchainSbomComponent(ctx, instance.Platform)
+		}
+
 		sbomRef, sbomPath = emitSbomToolchainComponent(ctx, instance, d.toolchainName, d.modver)
 	}
 
