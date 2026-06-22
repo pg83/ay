@@ -47,8 +47,11 @@ type Platform struct {
 	PIC             bool
 	BuildType       string
 	BuildRelease    bool
-	BuildSanitized  bool
-	Ragel6Optimized bool
+	BuildSanitized bool
+	// RagelOptimized is upstream's single `optimized` boolean
+	// (Ragel.set_default_flags): release && !sanitized. It selects -G2/-T0 for the
+	// R5 rlgen-cd mode and -CG2/-CT0 for the R6 ragel6 mode.
+	RagelOptimized bool
 
 	Triple string
 	March  string
@@ -231,7 +234,7 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 		BuildType:         buildType,
 		BuildRelease:      buildRelease,
 		BuildSanitized:    buildSanitized,
-		Ragel6Optimized:   buildRelease && !buildSanitized,
+		RagelOptimized:    buildRelease && !buildSanitized,
 		Triple:            string(isa) + "-" + string(os) + "-gnu",
 		March:             marchFor(isa),
 		CFlags:            internArgs(parseCompilerFlags(cflagsEnv)),
