@@ -134,6 +134,14 @@ func emitPB(
 		foreignDepRefs = append(foreignDepRefs, depRefs(plugin.LDRef)...)
 	}
 
+	// Two plugins can share one tool binary (YAFF + YAFF_SCHEMA both resolve to
+	// library/cpp/yaff/tools/protoc_plugin, hence the same memoized LDRef), so the
+	// loop above lists that LD node twice. Upstream's NodeDeps is a TUniqVector;
+	// dedup here so the graph "deps" array carries the tool node once. The command
+	// `inputs` keep the per-plugin binary occurrence (they match upstream's literal
+	// --plugin input list byte-for-byte).
+	foreignDepRefs = dedupRefs(foreignDepRefs)
+
 	// Producer refs for build-generated proto sources (e.g. RUN_ANTLR -lang
 	// protobuf): without these the producer JV is unreachable from the LD
 	// root closure and gets DFS-pruned at finalize.

@@ -803,6 +803,52 @@ END()
 	}
 }
 
+func TestGen_ProtoLibrary_SharedYAFFPluginBinaryDedupsToolDep(t *testing.T) {
+	files := map[string]string{}
+
+	// YAFF and YAFF_SCHEMA both resolve to the same protoc_plugin binary, so the
+	// module enables two plugins sharing one tool. Upstream's NodeDeps is a
+	// TUniqVector, so the shared plugin LD node appears once in the PB node's
+	// deps; ours must too (dep-multiplicity parity — the sg7 yabs/proto residual).
+	writeTestModuleFile(files, "protos/ya.make", `PROTO_LIBRARY()
+YAFF(NAMESPACE NMyNs)
+YAFF_SCHEMA(tsar_vectors NUserProfileTsarVectors)
+SRCS(
+    user_profile.proto
+)
+END()
+`)
+	writeTestModuleFile(files, "protos/user_profile.proto", "syntax = \"proto3\";\npackage test;\nmessage UserProfile {}\n")
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "library/cpp/yaff/tools/protoc_plugin", "protoc_plugin")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "protos")
+
+	pb := findGraphNodeByOutputs(t, g,
+		"$(B)/protos/user_profile.pb.h",
+		"$(B)/protos/user_profile.pb.cc",
+		"$(B)/protos/user_profile.yaff.h",
+		"$(B)/protos/user_profile.yaff.cpp",
+		"$(B)/protos/user_profile_tsar_vectors.yaff.h",
+		"$(B)/protos/user_profile_tsar_vectors.yaff.cpp",
+	)
+
+	seen := map[NodeRef]int{}
+	for _, r := range pb.ForeignDepRefs {
+		seen[r]++
+	}
+
+	for r, n := range seen {
+		if n != 1 {
+			t.Fatalf("PB ForeignDepRefs lists node %v %d times, want 1 (shared yaff plugin must dedup): %#v", r, n, pb.ForeignDepRefs)
+		}
+	}
+}
+
 func TestGen_ProtoLibrary_TransitivePROTONamespaceReachesCppProtoCmd(t *testing.T) {
 	files := map[string]string{}
 
