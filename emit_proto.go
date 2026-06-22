@@ -969,36 +969,53 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	return &ProtoSrcsResult{ARRef: arRef, ARPath: &archivePath}
 }
 
-func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
-	// A LIBRARY-hosted .proto compiles identically to one in a PROTO_LIBRARY:
-	// PROTO_NAMESPACE roots the protoc output/import roots (cppOutRoot). A peer
-	// that re-declares the namespace re-contributes its `FOR proto $(S)/<ns>`
-	// addincl, which rides the peers-only _PROTO__INCLUDE band at its encounter
-	// position (in.ProtoIncludePeers), exactly as the PROTO_LIBRARY path. GRPC()
-	// additionally enables the grpc_cpp protoc plugin (build/conf/proto.conf): the
-	// producer gains .grpc.pb.{cc,h} outputs + the plugin tool input, and the
-	// generated .grpc.pb.cc compiles into the module archive — exactly as a
-	// PROTO_LIBRARY() does in emitCPPProtoSrcs.
+// emitProtoProducer emits the PB node for one LIBRARY-hosted .proto (source or
+// gzt-generated) and registers its .pb.h/.pb.cc outputs in the codegen registry.
+// Run in a pre-pass over every module .proto before any proto CC closure is
+// walked, so a .proto importing a LATER-declared same-module sibling resolves the
+// sibling's generated .pb.h — the two-phase shape PROTO_LIBRARY uses in
+// emitCPPProtoSrcs (register every pb.h, then compile) and the .fbs/bison
+// pre-passes in gen.go. emitLibraryProtoSource then compiles against the complete
+// registry, mirroring emitFlatcProducer / emitLibraryFlatcSource.
+//
+// A LIBRARY-hosted .proto compiles identically to one in a PROTO_LIBRARY:
+// PROTO_NAMESPACE roots the protoc output/import roots (cppOutRoot). A peer that
+// re-declares the namespace re-contributes its `FOR proto $(S)/<ns>` addincl,
+// which rides the peers-only _PROTO__INCLUDE band at its encounter position
+// (in.ProtoIncludePeers), exactly as the PROTO_LIBRARY path. GRPC() additionally
+// enables the grpc_cpp protoc plugin (build/conf/proto.conf): the producer gains
+// .grpc.pb.{cc,h} outputs + the plugin tool input, and the generated .grpc.pb.cc
+// compiles into the module archive — exactly as a PROTO_LIBRARY() does in
+// emitCPPProtoSrcs.
+func emitProtoProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) {
 	cfg := ProtoPBConfig{
 		cppOutRoot: protoCPPOutRoot(d),
 		grpc:       d.grpc,
 	}
 	pe := newPBModuleEmission(ctx, d, cfg, in.ProtoIncludePeers)
-	pb := emitProtoPB(ctx, instance, d, srcRel, cfg, pe, in.ProtoInclude, nil)
+	emitProtoPB(ctx, instance, d, srcRel, cfg, pe, in.ProtoInclude, nil)
+}
+
+func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
+	// The PB producer was emitted+registered by emitProtoProducer (the gen.go
+	// pre-pass, or emitLibraryGztProtoCompile for a gzt-generated .proto); take its
+	// ref from the codegen registry and compile the generated .pb.cc.
+	protoBase := strings.TrimSuffix(protoSourceRelPath(ctx.fs, instance, d, srcRel), ".proto")
+	pbRef := codegenRegForInstance(ctx, instance).lookup(build(protoBase + ".pb.cc")).ProducerRef
 
 	emitGenCC := func(pbCC VFS) SourceEmit {
 		ccIn := in
 		ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), pbCC, in.ScanCfg)
-		ccIn.ExtraDepRefs = append([]NodeRef{pb.pbRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pb.pbRef)...)
+		ccIn.ExtraDepRefs = append([]NodeRef{pbRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pbRef)...)
 		ccSrcRel := strings.TrimPrefix(pbCC.rel(), instance.Path.rel()+"/")
 		ccRef, ccOut, _ := emitCC(instance, ccSrcRel, pbCC, ccIn, ctx.host, ctx.emit)
 		return SourceEmit{Ref: ccRef, OutPath: ccOut}
 	}
 
-	se := emitGenCC(pb.pbCC)
+	se := emitGenCC(build(protoBase + ".pb.cc"))
 
 	if d.grpc {
-		se.Extra = append(se.Extra, emitGenCC(pb.grpcPbCC))
+		se.Extra = append(se.Extra, emitGenCC(build(protoBase+".grpc.pb.cc")))
 	}
 
 	return &se

@@ -648,6 +648,46 @@ END()
 	}
 }
 
+// TestEmitProtoSrcs_ForwardSameModuleImportCarriesGeneratedPbH pins the T-152
+// divergence (representative: yt/yt/library/query/proto/query_service.pb.cc.pic.o
+// missing $(B)/yt/yt/library/query/proto/functions_cache.pb.h). In a plain
+// LIBRARY (the general module path, not the PROTO_LIBRARY two-phase
+// emitCPPProtoSrcs), a .proto that imports a SAME-MODULE sibling declared LATER
+// in SRCS must still carry the sibling's generated .pb.h on its .pb.cc compile.
+// Before the fix the per-source Pass-1 loop emits main.proto's PB node and walks
+// its .pb.cc closure before dep.proto's PB node is registered, so dep.pb.h is
+// missing from main.pb.cc.o inputs.
+func TestEmitProtoSrcs_ForwardSameModuleImportCarriesGeneratedPbH(t *testing.T) {
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make",
+		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\n"+
+			"ADDINCL(GLOBAL contrib/libs/protobuf/src)\nSRCS(p.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/p.cpp", "int p(){return 0;}\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/src/google/protobuf/message.h", "#pragma once\n")
+
+	// A plain C++ LIBRARY with two protos; main.proto imports the LATER-declared
+	// dep.proto from the same module — a forward same-module proto import.
+	writeTestModuleFile(files, "m/ya.make",
+		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\n"+
+			"PEERDIR(contrib/libs/protobuf)\nSRCS(main.proto dep.proto)\nEND()\n")
+	writeTestModuleFile(files, "m/main.proto",
+		"syntax = \"proto3\";\nimport \"m/dep.proto\";\nmessage Main { Dep d = 1; }\n")
+	writeTestModuleFile(files, "m/dep.proto",
+		"syntax = \"proto3\";\nmessage Dep { int32 x = 1; }\n")
+
+	g := testGen(newMemFS(files), "m")
+
+	const depPbH = "$(B)/m/dep.pb.h"
+	cc := mustNodeByOutput(t, g, "$(B)/m/main.pb.cc.o")
+	if !nodeHasInput(cc, depPbH) {
+		t.Errorf("main.pb.cc.o missing forward same-module import header %q: %v", depPbH, vfsStringsT3(cc.flatInputs()))
+	}
+}
+
 // TestEmitProtoSrcs_AntlrCppOutsCompileIntoProtoArchive locks the second
 // jsonpath G2 leg: RUN_ANTLR(... OUT *.cpp ...) inside a PROTO_LIBRARY's
 // IF(GEN_PROTO) block — upstream auto-promotes those .cpp outputs to SRCS,
