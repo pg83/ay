@@ -182,10 +182,11 @@ func ancestorYamakes(dirs []string) []string {
 	return out
 }
 
-// copyJob is one regular file or symlink to copy, relative to the source root.
+// copyJob is one regular file or symlink to copy, relative to the source root. It
+// carries no mode: the producer classifies by d_type without stat-ing src, and the
+// mode is read off the open fd in copyFileMode only when the file is actually copied.
 type copyJob struct {
 	rel     string
-	mode    os.FileMode
 	symlink bool
 }
 
@@ -241,19 +242,20 @@ func copySliceConcurrent(srcRoot, dst string, dirs []string, onWarn func(Warn)) 
 					return nil
 				}
 
-				info, err := de.Info()
-
-				if err != nil {
-					return nil
-				}
-
-				switch {
-				case info.Mode()&os.ModeSymlink != 0:
-					jobCh <- copyJob{rel: rel, mode: info.Mode(), symlink: true}
+				// Classify from the readdir d_type alone — never stat src here. A
+				// per-file src stat (de.Info) would pound the arc/FUSE mount on every
+				// re-run, including a skip-only one where dst is already populated. The
+				// sole src access (open + fstat for the mode) is deferred into copyOne,
+				// which takes it only after confirming dst is absent — honouring the
+				// "no src op until dst is confirmed absent" invariant for the whole walk,
+				// not just the final write.
+				switch typ := de.Type(); {
+				case typ&os.ModeSymlink != 0:
+					jobCh <- copyJob{rel: rel, symlink: true}
 				case de.IsDir():
 					_ = os.MkdirAll(filepath.Join(dst, rel), 0o755)
-				case info.Mode().IsRegular():
-					jobCh <- copyJob{rel: rel, mode: info.Mode()}
+				case typ.IsRegular():
+					jobCh <- copyJob{rel: rel}
 				}
 
 				return nil
@@ -339,7 +341,7 @@ func copyOne(src, dst string, j copyJob) (skipped bool, err error) {
 		return false, os.Symlink(link, dst)
 	}
 
-	return false, copyFileMode(src, dst, j.mode)
+	return false, copyFileMode(src, dst)
 }
 
 // copyLooseFiles copies individual files (ancestor ya.makes, root-level configs) that a
@@ -363,7 +365,7 @@ func copyLooseFiles(srcRoot, dst string, rels []string) int {
 			continue
 		}
 
-		if copyFileMode(src, target, fi.Mode()) == nil {
+		if copyFileMode(src, target) == nil {
 			n++
 		}
 	}
@@ -371,8 +373,10 @@ func copyLooseFiles(srcRoot, dst string, rels []string) int {
 	return n
 }
 
-// copyFile copies one file's contents into dst (creating parents), preserving mode.
-func copyFileMode(src, dst string, mode os.FileMode) error {
+// copyFileMode copies one file's contents into dst (creating parents), preserving the
+// source mode. The mode is read off the already-open source fd (fstat), so the only src
+// operation is this single open — taken solely on the copy path, never for a skip.
+func copyFileMode(src, dst string) error {
 	in, err := os.Open(src)
 
 	if err != nil {
@@ -387,11 +391,17 @@ func copyFileMode(src, dst string, mode os.FileMode) error {
 
 	defer in.Close()
 
+	fi, err := in.Stat()
+
+	if err != nil {
+		return err
+	}
+
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
 
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode.Perm())
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, fi.Mode().Perm())
 
 	if err != nil {
 		return err

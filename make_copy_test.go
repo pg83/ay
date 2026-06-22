@@ -18,7 +18,7 @@ func TestCopyOne_SkipsExistingDstWithoutTouchingSrc(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	skipped, err := copyOne(src, dst, copyJob{rel: "dst", mode: 0o644})
+	skipped, err := copyOne(src, dst, copyJob{rel: "dst"})
 
 	if err != nil {
 		t.Fatalf("copyOne over existing dst (absent src) = %v, want nil", err)
@@ -50,12 +50,64 @@ func TestCopyFileMode_IgnoresSrcEPERM(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := copyFileMode(src, dst, 0o644); err != nil {
+	if err := copyFileMode(src, dst); err != nil {
 		t.Fatalf("copyFileMode on unreadable src = %v, want nil (EPERM ignored)", err)
 	}
 
 	if _, err := os.Stat(dst); !os.IsNotExist(err) {
 		t.Fatalf("dst created despite EPERM on src: stat err = %v", err)
+	}
+}
+
+// TestCopySliceConcurrent_SkipExistingCopyFresh drives the full producer/worker/printer
+// pipeline over a dir whose dst is partially populated: the file already at dst is
+// skipped (its content preserved, src not re-read), the file absent from dst is copied,
+// and the two are tallied separately.
+func TestCopySliceConcurrent_SkipExistingCopyFresh(t *testing.T) {
+	srcRoot := t.TempDir()
+	dst := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(srcRoot, "d"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(srcRoot, "d", "old"), []byte("SRC-OLD"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(srcRoot, "d", "new"), []byte("SRC-NEW"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// "old" is already present at dst (a prior pass placed it) — must be skipped.
+	if err := os.MkdirAll(filepath.Join(dst, "d"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dst, "d", "old"), []byte("DST-OLD"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	copied, skipped, err := copySliceConcurrent(srcRoot, dst, []string{"d"}, func(Warn) {})
+
+	if err != nil {
+		t.Fatalf("copySliceConcurrent = %v, want nil", err)
+	}
+
+	if copied != 1 {
+		t.Fatalf("copied = %d, want 1 (only d/new)", copied)
+	}
+
+	if skipped != 1 {
+		t.Fatalf("skipped = %d, want 1 (d/old already at dst)", skipped)
+	}
+
+	if got, _ := os.ReadFile(filepath.Join(dst, "d", "old")); string(got) != "DST-OLD" {
+		t.Fatalf("existing dst overwritten: got %q, want %q", got, "DST-OLD")
+	}
+
+	if got, _ := os.ReadFile(filepath.Join(dst, "d", "new")); string(got) != "SRC-NEW" {
+		t.Fatalf("fresh not copied: got %q, want %q", got, "SRC-NEW")
 	}
 }
 
