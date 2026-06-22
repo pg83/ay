@@ -352,6 +352,111 @@ END()
 	}
 }
 
+// A RESOURCE that embeds a RUN_PROGRAM build-root output (payload.pb) carries
+// that producer's build-root OUTPUT_INCLUDES closure onto the objcopy node.
+// Upstream attaches OUTPUT_INCLUDES (EVI_InducedDeps) to EVERY output of the run
+// (macro_processor addOutputIncludes over all outs), so the .pb sibling exposes
+// the generated headers; the objcopy's ${input:payload.pb} walks them. dump
+// normalize keeps only the $(B) half of that closure, so our generator emits the
+// build-root generated .pb.h (and depends on its producer) while leaving the
+// resfs key, objcopy hash and command args untouched. Mirrors the sg7
+// feature_store/caesar objcopy_39091f2a… node (511 generated .pb.h ref-only).
+func TestGen_ResourceBindirOutputCarriesProducerBuildClosure(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+	writeToolProgram(files, "tools/gen/bin", "gen")
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	// A peer PROTO_LIBRARY produces $(B)/p/dep.pb.h, named in the run's
+	// OUTPUT_INCLUDES.
+	writeTestModuleFile(files, "p/ya.make", "PROTO_LIBRARY()\nSRCS(dep.proto)\nEND()\n")
+	writeTestModuleFile(files, "p/dep.proto", "syntax = \"proto3\";\nmessage Dep {}\n")
+
+	writeTestModuleFile(files, "db/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(p)
+RUN_PROGRAM(
+    tools/gen/bin
+        --out
+        ${BINDIR}/payload.pb
+    OUTPUT_INCLUDES
+        p/dep.pb.h
+    OUT ${BINDIR}/payload.pb
+)
+RESOURCE(
+    ${BINDIR}/payload.pb payload.pb
+)
+END()
+`)
+
+	g := testGen(newMemFS(files), "db")
+
+	objcopy := findNodeByOutputPrefix(g, "$(B)/db/objcopy_")
+	if objcopy == nil {
+		t.Fatal("graph is missing db objcopy output")
+	}
+
+	// (1) the embedded build-root payload is an input.
+	if !nodeHasInput(objcopy, "$(B)/db/payload.pb") {
+		t.Fatalf("objcopy inputs missing build-root payload.pb: %#v", objcopy.flatInputs())
+	}
+
+	// (2) the producer's build-root OUTPUT_INCLUDES closure rides the objcopy node.
+	const depPbH = "$(B)/p/dep.pb.h"
+	if !nodeHasInput(objcopy, depPbH) {
+		t.Fatalf("objcopy inputs missing producer build-root closure %q: %#v", depPbH, objcopy.flatInputs())
+	}
+
+	// (3) the source .proto leaf is NOT carried (dump normalize prunes the $(S)
+	// half of upstream's objcopy over-emit; ours must not emit it).
+	if nodeHasInput(objcopy, "$(S)/p/dep.proto") {
+		t.Fatalf("objcopy must not carry source-tree .proto leaf: %#v", objcopy.flatInputs())
+	}
+
+	// (4) the objcopy depends on dep.pb.h's producer.
+	depProducer := mustNodeByOutput(t, g, depPbH)
+	foundDep := false
+	for _, d := range graphDeps(g, objcopy) {
+		if d == depProducer.UID {
+			foundDep = true
+			break
+		}
+	}
+	if !foundDep {
+		t.Fatalf("objcopy deps %v do not include dep.pb.h producer uid %q", graphDeps(g, objcopy), depProducer.UID)
+	}
+
+	// (5) the closure is a node input only — it never enters the --inputs payload
+	// nor the objcopy_<hash> name. The hash is over the raw RESOURCE path + base64
+	// key + $S/db, exactly as without the closure.
+	args := prCmdArgStrings(objcopy)
+	for _, a := range args {
+		if strings.Contains(a, "dep.pb.h") {
+			t.Fatalf("objcopy command must not name the closure header: %v", args)
+		}
+	}
+	wantHashInputs := []string{
+		"${BINDIR}/payload.pb",
+		encb64.StdEncoding.EncodeToString([]byte("payload.pb")),
+		"$S/db",
+	}
+	sort.Strings(wantHashInputs)
+	wantHash := md5Hex(strings.Join(wantHashInputs, ","))[:hashLen]
+	wantOutput := "$(B)/db/objcopy_" + wantHash + ".o"
+	if got := objcopy.Outputs[0].string(); got != wantOutput {
+		t.Fatalf("objcopy output = %q, want %q (hash must ignore the closure)", got, wantOutput)
+	}
+}
+
 func TestGen_ResourceBindirOutputFeedsObjcopyFromBuildRoot(t *testing.T) {
 	files := map[string]string{}
 
