@@ -234,9 +234,15 @@ def run_graph(nodes, jobs):
     return results
 
 
-def sh(cmd):
-    """Run a subprocess in WORK_CWD; return its exit code."""
-    return subprocess.run(cmd, cwd=WORK_CWD).returncode
+def sh(cmd, gogc=False):
+    """Run a subprocess in WORK_CWD; return its exit code. gogc=True passes
+    GOGC=800 to that one invocation — the heavy ay commands (gen / normalize /
+    sort / diff) spend ~half their CPU on GC at the default GOGC=100; 800 roughly
+    halves it for ~1.5GB RSS, which cuts core contention when several run at once.
+    Set per-command, never process-wide (build / cmp must not get it)."""
+    env = dict(os.environ, GOGC="800") if gogc else None
+
+    return subprocess.run(cmd, cwd=WORK_CWD, env=env).returncode
 
 
 # ---------------------------------------------------------------------------
@@ -258,7 +264,7 @@ def build_action():
 def gen_action(name, gen, raw, budget):
     def action():
         t = time.monotonic()
-        rc = sh([gen, raw])
+        rc = sh([gen, raw], gogc=True)
         secs = time.monotonic() - t
         over = budget is not None and secs > GEN_TIME_SLACK * budget
 
@@ -281,7 +287,7 @@ def normalize_action(label, raw, target, out_unsorted, ref_graph):
 
         _remove_if_exists(out_unsorted)
         t = time.monotonic()
-        rc = sh(cmd)
+        rc = sh(cmd, gogc=True)
         print(f"[{label}] subproc: normalize {'ref' if ref_graph else 'our'} {time.monotonic() - t:.2f}s", flush=True)
 
         return {"ok": rc == 0}
@@ -293,7 +299,7 @@ def sort_action(label, in_unsorted, out_sorted, side):
     def action():
         _remove_if_exists(out_sorted)
         t = time.monotonic()
-        rc = sh([AY, "dev", "dump", "sort", "--in", in_unsorted, "--out", out_sorted])
+        rc = sh([AY, "dev", "dump", "sort", "--in", in_unsorted, "--out", out_sorted], gogc=True)
         print(f"[{label}] subproc: sort {side} {time.monotonic() - t:.2f}s", flush=True)
 
         if rc == 0:
@@ -317,7 +323,7 @@ def compare_action(name, xfail, our_sorted, ref_sorted, out_dir):
         parity = normalized_node_parity_counts(our_sorted, ref_sorted)
         diff_file = os.path.join(out_dir, f"{name}.diff.txt")
         t = time.monotonic()
-        sh([AY, "dev", "dump", "diff", "--left", our_sorted, "--right", ref_sorted, "--out", diff_file])
+        sh([AY, "dev", "dump", "diff", "--left", our_sorted, "--right", ref_sorted, "--out", diff_file], gogc=True)
         print(f"[{name}] subproc: diff {time.monotonic() - t:.2f}s", flush=True)
 
         return {"ok": True, "verdict": "XFAIL", "parity": parity, "diff_file": diff_file}
