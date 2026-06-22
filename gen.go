@@ -2137,6 +2137,18 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
+	// A same-module proto that imports a LATER-declared sibling proto must see
+	// that sibling's generated .pb.h when its own .pb.cc closure is walked. Emit
+	// every proto PB producer before any proto CC closure is walked — the same
+	// two-phase shape PROTO_LIBRARY uses in emitCPPProtoSrcs (register every pb.h,
+	// then compile) and the .fbs/bison pre-passes above. gzt-generated protos are
+	// not in d.srcs; emitLibraryGztProtoCompile emits their producer itself.
+	for _, src := range d.srcs {
+		if srcExtClassOf(src) == srcExtProto {
+			emitProtoProducer(ctx, instance, d, src.string(), moduleInputs)
+		}
+	}
+
 	for _, src := range d.srcs {
 		if !isCodegenProducingSrcID(src) {
 			continue

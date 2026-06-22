@@ -122,6 +122,10 @@ func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 func emitLibraryGztProtoCompile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
 	_, genProtoSrc := emitLibraryGztProtoSource(ctx, instance, d, srcRel, in.ProtoInclude, in.ModuleTag)
 
+	// The gzt-generated .proto is not in d.srcs, so gen.go's proto producer
+	// pre-pass never sees it; emit its PB producer here before compiling.
+	emitProtoProducer(ctx, instance, d, genProtoSrc, in)
+
 	return emitLibraryProtoSource(ctx, instance, d, genProtoSrc, in)
 }
 
