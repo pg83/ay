@@ -18,8 +18,14 @@ func TestCopyOne_SkipsExistingDstWithoutTouchingSrc(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := copyOne(src, dst, copyJob{rel: "dst", mode: 0o644}); err != nil {
+	skipped, err := copyOne(src, dst, copyJob{rel: "dst", mode: 0o644})
+
+	if err != nil {
 		t.Fatalf("copyOne over existing dst (absent src) = %v, want nil", err)
+	}
+
+	if !skipped {
+		t.Fatalf("copyOne over existing dst: skipped = false, want true (dst present, src untouched)")
 	}
 
 	got, err := os.ReadFile(dst)
