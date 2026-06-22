@@ -197,7 +197,16 @@ func cmdFetchSandbox(_ GlobalFlags, args []string) int {
 		case "--ya-start-command-file", "--ya-end-command-file":
 			// command-file markers — irrelevant once args are expanded
 		case "--":
-			outs = append(outs, args[i+1:]...)
+			// Everything after `--` is OUT/OUT_NOAUTO, except a trailing
+			// command-file marker that rode along in the same arg span.
+			for _, o := range args[i+1:] {
+				if o == "--ya-start-command-file" || o == "--ya-end-command-file" {
+					continue
+				}
+
+				outs = append(outs, o)
+			}
+
 			i = len(args)
 		}
 	}
