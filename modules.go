@@ -2367,6 +2367,11 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		var groupSrcs []string
 		cythonStmtStart := len(d.cythonCpp)
 		var cythonDirectives []string
+		// cythonRegIdx records, in textual append order, the d.pyRegister index of
+		// each cython statement's implicit registration, so the variant-bucket
+		// reorder below can move those entries while leaving interleaved swig
+		// registrations anchored at their textual positions.
+		var cythonRegIdx []int
 
 		for i := 0; i < len(v.Args); i++ {
 			a := v.Args[i]
@@ -2491,6 +2496,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 
 				d.cythonCpp = append(d.cythonCpp, stmt)
 				appendPyRegister(d, modName, false)
+				cythonRegIdx = append(cythonRegIdx, len(d.pyRegister)-1)
 				mainNext = false
 
 				continue
@@ -2521,6 +2527,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 					},
 				})
 				appendPyRegister(d, modName, false)
+				cythonRegIdx = append(cythonRegIdx, len(d.pyRegister)-1)
 				mainNext = false
 
 				continue
@@ -2621,6 +2628,8 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 				d.cythonCpp[j].Options = append(d.cythonCpp[j].Options, cythonDirectives...)
 			}
 		}
+
+		reorderCythonVariantBuckets(d, cythonStmtStart, cythonRegIdx)
 
 		if len(groupSrcs) > 0 {
 			d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{
@@ -2816,6 +2825,92 @@ func isLlvmBcKeyword(s string) bool {
 	}
 
 	return false
+}
+
+// cythonVariantBucket maps a PY_SRCS cython statement to upstream pybuild.py's
+// fixed emission-order bucket. pybuild.py collects sources into five lists
+// (pyxs_c, pyxs_c_h, pyxs_c_api_h, pyxs_cpp, pyxs_cpp_h) and emits each list —
+// its cython compile and its implicit py_register .reg3.cpp — in that order, so
+// archive members group by bucket rather than textual PY_SRCS order. CYTHONIZE_PY
+// .py sources inherit whichever bucket the last directive selected (default
+// pyxs_cpp).
+func cythonVariantBucket(s *CythonStmt) int {
+	switch {
+	case s.CMode && !s.Header:
+		return 0 // CYTHON_C
+	case s.CMode && s.Header && !s.ApiHeader:
+		return 1 // CYTHON_C_H
+	case s.CMode && s.Header && s.ApiHeader:
+		return 2 // CYTHON_C_API_H
+	case !s.CMode && !s.Header:
+		return 3 // CYTHON_CPP (default)
+	default: // !s.CMode && s.Header
+		return 4 // CYTHON_CPP_H
+	}
+}
+
+// reorderCythonVariantBuckets stable-sorts the cython statements appended by one
+// PY_SRCS call (d.cythonCpp[start:]) into upstream's variant-bucket order and
+// applies the same permutation to their paired implicit pyRegister entries
+// (regIdx holds each statement's register index, in textual order). The register
+// values are rewritten in place at those indices, so any interleaved swig or
+// later explicit registrations keep their textual positions. Within a bucket the
+// stable sort preserves textual order.
+func reorderCythonVariantBuckets(d *ModuleData, start int, regIdx []int) {
+	n := len(d.cythonCpp) - start
+
+	if n < 2 {
+		return
+	}
+
+	perm := make([]int, n)
+
+	for i := range perm {
+		perm[i] = i
+	}
+
+	slices.SortStableFunc(perm, func(a, b int) int {
+		return cythonVariantBucket(d.cythonCpp[start+a]) - cythonVariantBucket(d.cythonCpp[start+b])
+	})
+
+	identity := true
+
+	for i, p := range perm {
+		if i != p {
+			identity = false
+
+			break
+		}
+	}
+
+	if identity {
+		return
+	}
+
+	stmts := make([]*CythonStmt, n)
+
+	for i, p := range perm {
+		stmts[i] = d.cythonCpp[start+p]
+	}
+
+	copy(d.cythonCpp[start:], stmts)
+
+	if len(regIdx) != n {
+		return
+	}
+
+	names := make([]STR, n)
+	explicit := make([]bool, n)
+
+	for i, p := range perm {
+		names[i] = d.pyRegister[regIdx[p]]
+		explicit[i] = d.pyRegisterExplicit[regIdx[p]]
+	}
+
+	for i, idx := range regIdx {
+		d.pyRegister[idx] = names[i]
+		d.pyRegisterExplicit[idx] = explicit[i]
+	}
 }
 
 func appendPyRegister(d *ModuleData, name string, explicit bool) {
