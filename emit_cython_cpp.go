@@ -123,16 +123,24 @@ type cythonStmtPlan struct {
 	srcScanIn         ModuleCCInputs
 	cyRef             NodeRef
 	headerPyxClosure  []VFS
+	ind               cythonCppInduced
 }
 
 func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []*SourceEmit {
-	na := ctx.na
+	return emitCythonCppPlanned(ctx, instance, d, in, planCythonCpp(ctx, instance, d, in))
+}
 
+// planCythonCpp is phase 1: reserve each statement's CY node and register its
+// generated header outputs (with the Cython induced closure they pass through to
+// consumers) BEFORE any source closure is walked. gen.go calls it before the
+// ordinary SRCS are scanned, so a handwritten SRCS file that #includes a Cython
+// generated header (gevent's callbacks.c → corecext.h) resolves the header to its
+// producing CY node and rides the induced closure — the producer is otherwise
+// emitted after the SRCS scan and would be invisible.
+func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []cythonStmtPlan {
 	if len(d.cythonCpp) == 0 {
 		return nil
 	}
-
-	out := make([]*SourceEmit, 0, len(d.cythonCpp))
 
 	// Phase 1: reserve each statement's CY node and register its generated header
 	// (.h / _api.h) outputs with their "pyx"-language closure BEFORE any source
@@ -192,6 +200,12 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 		srcScanIn.AddIncl = appendCythonScanAddIncl(srcScanIn.AddIncl, d.cythonAddIncl, py23Variant)
 		srcScanIn.ScanCfg = newScanContext(ctx.parsers, srcScanIn.AddIncl, srcScanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 
+		// The Cython "cpp"-induced sets (CYTHON_OUTPUT_INCLUDES + embedded utility
+		// files and their closures) are needed here to register the header's
+		// pass-through window, and again in phase 2 for the CY node / generated .c
+		// inputs — compute the heavy closure walks once.
+		ind := cythonCppInducedSets(ctx, instance, srcVFS, stmt.CMode, srcScanIn)
+
 		cyRef := ctx.emit.reserve()
 
 		var headerPyxClosure []VFS
@@ -222,9 +236,32 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 			// closure-window splice that would also reach the C++ compile.
 			pyxInduced := keepOnlySourceVFS(headerPyxClosure)
 
+			// A handwritten C/C++ source from the same module that #includes the
+			// generated header (gevent's callbacks.c → corecext.h) receives, through
+			// the header, the Cython "cpp"-induced closure (upstream
+			// PassInducedIncludesThroughFiles): register that closure as the header's
+			// parsed includes so the consumer's scan splices it as a cached window
+			// (CYTHON_OUTPUT_INCLUDES + embedded utility closures: libcxx/numpy/python).
+			// The Cython source itself is NOT a parsed directive — walking the .pyx
+			// would re-pull its `cdef extern` C closure (gevent's libev), which the
+			// header does not pass through. The bare "pyx"-language source closure and
+			// the main generated output ride onto the consuming compile via
+			// cythonCompileInducedInputs (the recorded CythonInducedPyx / CythonMainOut),
+			// not as closure leaves — a leaf marks every member leafEver, which would
+			// disable the scanner's window-subsumption skip for the producer's .pxd
+			// files where they ARE traversed elsewhere (lxml objectify → etree.pxd).
+			headerInduced := cythonHeaderInducedClosure(ind)
+			headerParsed := make([]IncludeDirective, 0, len(headerInduced))
+
+			for _, v := range headerInduced {
+				headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: internStr(v.rel())})
+			}
+
+			reg := ctx.scannerFor(instance).codegen
+
 			for _, h := range headerVFS {
-				registerBoundGeneratedParsedOutput(ctx, instance, pkCY, h, nil, cyRef, nil)
-				ctx.scannerFor(instance).codegen.setCythonPyxInduced(h, pyxInduced, generatedVFS)
+				registerBoundGeneratedParsedOutput(ctx, instance, pkCY, h, headerParsed, cyRef, nil)
+				reg.setCythonPyxInduced(h, pyxInduced, generatedVFS)
 			}
 		}
 
@@ -239,8 +276,23 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 			srcScanIn:         srcScanIn,
 			cyRef:             cyRef,
 			headerPyxClosure:  headerPyxClosure,
+			ind:               ind,
 		})
 	}
+
+	return plans
+}
+
+// emitCythonCppPlanned is phase 2: with every header output already registered by
+// planCythonCpp, emit each statement's CY node and the generated .c/.cpp compile.
+func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs, plans []cythonStmtPlan) []*SourceEmit {
+	na := ctx.na
+
+	if len(plans) == 0 {
+		return nil
+	}
+
+	out := make([]*SourceEmit, 0, len(plans))
 
 	// Phase 2: every header output is now registered, so a consumer statement's
 	// source closure resolves the producer's api header and rides its pyx closure.
@@ -257,7 +309,7 @@ func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 		cyRef := p.cyRef
 
 		sourceClosure := walkClosureTail(ctx.scannerFor(instance), srcVFS, srcScanIn.ScanCfg)
-		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(ctx, instance, srcVFS, sourceClosure, stmt.CMode, srcScanIn)
+		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(p.ind, sourceClosure)
 
 		if stmt.Header {
 			toolInputs = cythonHeaderToolInputs(srcVFS, p.headerPyxClosure)
@@ -500,7 +552,23 @@ func cythonCompileInducedInputs(ctx *GenCtx, instance ModuleInstance, includeInp
 	return dedupVFS(append([][]VFS{includeInputs}, extra...)...)
 }
 
-func cythonGeneratedOutputInputs(ctx *GenCtx, instance ModuleInstance, src VFS, sourceClosure []VFS, cMode bool, scanIn ModuleCCInputs) ([]VFS, []VFS) {
+// cythonCppInduced holds the Cython "cpp"-induced singles and their transitive
+// closures (the CYTHON_OUTPUT_INCLUDES headers and the embedded utility files) —
+// everything independent of the per-source .pyx closure. Computed once in the
+// registration pre-pass and reused by node emission, so the heavy closure walks
+// run a single time per statement.
+type cythonCppInduced struct {
+	// toolSingles is [cython.py, OUTPUT_INCLUDES…, embedded…, src]; emitsSingles is
+	// [cython.py, src, OUTPUT_INCLUDES…, embedded…]. The orderings mirror the
+	// historical CY-node / generated-.c input sequences (dedupVFS keeps the first
+	// occurrence, so the final node input order is load-bearing).
+	toolSingles  []VFS
+	emitsSingles []VFS
+	toolCl       [][]VFS
+	emitsCl      [][]VFS
+}
+
+func cythonCppInducedSets(ctx *GenCtx, instance ModuleInstance, src VFS, cMode bool, scanIn ModuleCCInputs) cythonCppInduced {
 	scanner := ctx.scannerFor(instance)
 
 	// The bare tool/source/header files collect into one `singles` slice; each
@@ -545,6 +613,10 @@ func cythonGeneratedOutputInputs(ctx *GenCtx, instance ModuleInstance, src VFS, 
 
 	toolSingles = append(toolSingles, src)
 
+	return cythonCppInduced{toolSingles: toolSingles, emitsSingles: emitsSingles, toolCl: toolCl, emitsCl: emitsCl}
+}
+
+func cythonGeneratedOutputInputs(ind cythonCppInduced, sourceClosure []VFS) ([]VFS, []VFS) {
 	// singles first (dedup keeps first occurrence), then the closure chunks and
 	// the .pyx source closure — fed straight to the one-pass dedup as chunks.
 	//
@@ -555,8 +627,26 @@ func cythonGeneratedOutputInputs(ctx *GenCtx, instance ModuleInstance, src VFS, 
 	// ticket2.pb.h/tvm_keys.pb.h, reached via a C++ header that #includes them),
 	// matching upstream (every CY node lists zero $(B) inputs). The generated
 	// .cpp's own CC closure (emitsIncludes) keeps them.
-	return keepOnlySourceVFS(dedupVFS(append([][]VFS{toolSingles}, append(toolCl, sourceClosure)...)...)),
-		dedupVFS(append([][]VFS{emitsSingles}, append(emitsCl, sourceClosure)...)...)
+	return keepOnlySourceVFS(dedupVFS(append([][]VFS{ind.toolSingles}, append(ind.toolCl, sourceClosure)...)...)),
+		dedupVFS(append([][]VFS{ind.emitsSingles}, append(ind.emitsCl, sourceClosure)...)...)
+}
+
+// cythonHeaderInducedClosure returns the Cython "cpp"-induced closure that a
+// generated _H / _API_H header passes through to any file that #includes it
+// (upstream PassInducedIncludesThroughFiles): the CYTHON_OUTPUT_INCLUDES headers,
+// the embedded utility files, and their transitive closures — but NOT the Cython
+// source itself, whose `cdef extern` C closure must not pass through the header
+// (it is resolved only at the generated .c's own compile). The source's
+// pyx-language closure and the main generated output ride separately as bare
+// closure leaves; see planCythonCpp.
+func cythonHeaderInducedClosure(ind cythonCppInduced) []VFS {
+	// toolSingles is [cython.py, OUTPUT_INCLUDES…, embedded…, src]; drop the
+	// trailing src so the header window does not re-walk the .pyx (which would pull
+	// the source's cdef-extern C closure). cython.py + OUTPUT_INCLUDES + embedded
+	// are pure Cython infra and walk to a fixed libcxx/numpy/python/utility set.
+	hdrSingles := ind.toolSingles[:len(ind.toolSingles)-1]
+
+	return dedupVFS(append([][]VFS{hdrSingles}, ind.toolCl...)...)
 }
 
 // resolveCythonPxd resolves a CYTHONIZE_PY .py source's `<mod-as-path>.pxd`
