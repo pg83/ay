@@ -3,8 +3,7 @@ package main
 import "encoding/json"
 
 // JSON arrays of directory prefixes under which the nearest enclosing
-// linters.make.inc is auto-included. The internal file is absent in the
-// open-source contour.
+// linters.make.inc is auto-included.
 var autoincludePathsFiles = []string{
 	"build/conf/autoincludes.json",
 	"build/internal/conf/autoincludes.json",
@@ -12,9 +11,9 @@ var autoincludePathsFiles = []string{
 
 const lintersMakeIncName = "linters.make.inc"
 
-// AutoincludeIndex resolves the auto-included linters.make.inc for a module —
-// the nearest enclosing AUTOINCLUDE_PATHS root (longest-prefix match, component
-// boundary). Roots are held in a byte double-array trie keyed by "<root>/".
+// AutoincludeIndex resolves the auto-included linters.make.inc for a module:
+// the nearest enclosing AUTOINCLUDE_PATHS root, by longest-prefix match on a
+// trie keyed by "<root>/".
 type AutoincludeIndex struct {
 	darts   *Darts
 	linters []VFS // parallel to the trie keys: each root's linters.make.inc
@@ -46,8 +45,7 @@ func loadAutoincludeIndex(fs FS) *AutoincludeIndex {
 
 // lintersMakeIncFor returns the linters.make.inc of the nearest enclosing
 // autoinclude root for moduleDir, or (0,false) when none encloses it. The
-// trailing "/" — a separate part, not concatenated — gives the
-// component-boundary match ("arc/" ∌ "arcfoo/…").
+// trailing "/" as a separate part enforces a component-boundary match.
 func (a *AutoincludeIndex) lintersMakeIncFor(moduleDir string) (VFS, bool) {
 	i, ok := a.darts.longestMatch(moduleDir, "/")
 

@@ -12,8 +12,7 @@ var (
 	stdout2stderrPath       = stdout2stderrVFS.string()
 )
 
-// antlrJavaConstHead is the constant lead of every antlr (JV) command, after
-// the python3 token.
+// antlrJavaConstHead is the constant lead of every JV command, after python3.
 var antlrJavaConstHead = []STR{
 	internStr(stdout2stderrPath),
 	internStr(jdkResourcePath),
@@ -56,8 +55,8 @@ func emitJVDownstreamCPCC(
 		ccIn.ExtraDepRefs = nil
 		closure := walkClosure(ctx.scannerFor(instance), g4CppPath, ccIn.ScanCfg)
 
-		// The CP node's inputs take the tail: g4CppPath is its own build output,
-		// never an SCC member, so the window leads with it.
+		// g4CppPath is its own build output, never an SCC member, so the window leads
+		// with it and the CP node takes the tail.
 		cpClosure := closure
 
 		if len(cpClosure) > 0 {
@@ -259,7 +258,7 @@ func emitJVGeneral(
 	)
 	cmdArgs = appendInternStrs(cmdArgs, args)
 
-	// inputs is the caller's slice, referenced as its own chunk, never copied.
+	// inputs is referenced as its own chunk, never copied.
 	jvInputs := na.inputList(inputs, na.vfsList(stdout2stderrVFS, jarVFS))
 
 	return emitJVNode(instance, cmdArgs, jvInputs, outputs, cwd, depRefs, moduleTag, emit)

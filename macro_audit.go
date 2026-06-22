@@ -15,40 +15,30 @@ var macroAudit = &MacroAuditState{
 }
 
 // macrosAcceptingUserFlags lists handled macros whose args are arbitrary
-// user-defined flag names, not structural keywords — ENABLE(MY_X)/DISABLE(MY_X)
-// become env.SetBool(MY_X, …) and accept anything. The strict service-keyword
-// check is suppressed so a new project-specific flag need not be hard-coded.
+// user-defined names, not structural keywords, so the strict service-keyword
+// check is suppressed.
 var macrosAcceptingUserFlags = map[TOK]struct{}{
 	tokEnable:  {},
 	tokDisable: {},
 	// EXCLUDE_TAGS args are submodule tag names — user data, not keywords.
 	tokExcludeTags: {},
-	// SET_RESOURCE_URI_FROM_JSON(VarName file.json): first arg is the
-	// user-chosen destination variable name, like ENABLE's flag name.
+	// First arg is the user-chosen destination variable name.
 	tokSetResourceUriFromJson: {},
-	// LICENSE(...) args are SPDX license expressions, not keywords. We read
-	// only LICENSE's presence (it gates the SBOM DX node), never the args.
+	// Args are SPDX license expressions; only LICENSE's presence is read.
 	tokLicense: {},
-	// SET_APPEND(VarName value…): first arg is the destination variable name.
-	// The handler dispatches on the few names it models; appending to any
-	// other is inert, so bypass the strict audit.
+	// First arg is the destination variable name; appending to an unmodelled
+	// one is inert.
 	tokSetAppend: {},
 }
 
-// serviceArgOK marks arg STRs that already passed the service-keyword check
-// (not service-shaped, or a modelled keyword) — args repeat heavily, so the
-// per-invocation check is a bit probe. Single-writer (gen goroutine).
+// serviceArgOK memoizes arg STRs that already passed the service-keyword check;
+// args repeat heavily, so the per-invocation check is a bit probe. Single-writer.
 var serviceArgOK BitSet
 
-// macroAudit collects two classes of ya.make traffic during gen:
-//   - macro invocations we accept but emit nothing for;
-//   - macro argument tokens of [A-Z0-9_] equal to their upper-case form —
-//     the service keywords the grammar uses to split macro argument lists.
-//     Audited to confirm we handle every split key for every accepted macro.
-//
-// Process-global because gen runs serially per-target; collecting across the
-// graph keeps the dump compact. Surfaced when --dump-ignored-macros is set;
-// otherwise recording is a cheap nil-check.
+// macroAudit collects, during gen, macro invocations we accept but emit nothing
+// for, plus uppercase service-keyword argument tokens — audited to confirm we
+// handle every split key for every accepted macro. Process-global because gen
+// runs serially per-target; surfaced when --dump-ignored-macros is set.
 type MacroAuditState struct {
 	enabled  bool
 	mu       sync.Mutex
@@ -66,8 +56,7 @@ func enableMacroAudit() {
 }
 
 // recordIgnoredMacro records a macro gen sees but produces nothing from.
-// Service-word args are not inspected: their argument grammar belongs to the
-// upstream macro parser, so listing tokens like LICENSE's only adds noise.
+// Service-word args are not inspected: that grammar belongs to the upstream parser.
 func recordIgnoredMacro(name TOK) {
 	if !macroAudit.enabled {
 		return
@@ -80,12 +69,10 @@ func recordIgnoredMacro(name TOK) {
 	macroAudit.ignored[name.string()]++
 }
 
-// recordHandledMacro runs for every macro whose typed branch fired. It
-// enforces that every uppercase service-keyword argument already appears as a
-// "…" literal in this package's .go sources; an unknown keyword throws so it
-// must be modelled before any graph is emitted. Macros in
-// macrosAcceptingUserFlags bypass the check. Audit buckets fill only when
-// --dump-ignored-macros is on.
+// recordHandledMacro runs for every macro whose typed branch fired, enforcing
+// that every uppercase service-keyword argument already appears as a "…" literal
+// in this package's .go sources; an unknown keyword throws so it must be modelled
+// before any graph is emitted. Macros in macrosAcceptingUserFlags bypass the check.
 func recordHandledMacro(name TOK, args []STR) {
 	if _, free := macrosAcceptingUserFlags[name]; !free {
 		for _, aTok := range args {

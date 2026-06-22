@@ -6,9 +6,8 @@ import (
 )
 
 // TestEmitDecimalMD5_GeneratedSourceEntersArchive pins the
-// DECIMAL_MD5_LOWER_32_BITS emitter: the macro produces an SV node emitting a
-// build-root .cpp, a downstream CC depending on the SV producer compiles it, and
-// the .o joins the module archive via ordinary generated-source handling.
+// DECIMAL_MD5_LOWER_32_BITS emitter: an SV node emits a build-root .cpp, a
+// downstream CC compiles it, and the .o joins the module archive.
 func TestEmitDecimalMD5_GeneratedSourceEntersArchive(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"mod/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n" +
@@ -22,7 +21,6 @@ func TestEmitDecimalMD5_GeneratedSourceEntersArchive(t *testing.T) {
 
 	g := testGen(fs, "mod")
 
-	// SV producer node.
 	sv := mustNodeByOutput(t, g, "$(B)/mod/hash.auto.cpp")
 
 	if got := sv.KV.P.string(); got != "SV" {
@@ -64,7 +62,6 @@ func TestEmitDecimalMD5_GeneratedSourceEntersArchive(t *testing.T) {
 		}
 	}
 
-	// Downstream CC compiling the generated source.
 	cc := mustNodeByOutput(t, g, "$(B)/mod/hash.auto.cpp.o")
 
 	if got := cc.KV.P.string(); got != "CC" {
@@ -77,10 +74,10 @@ func TestEmitDecimalMD5_GeneratedSourceEntersArchive(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"$(B)/mod/hash.auto.cpp",            // generated source
-		"$(S)/mod/data.txt",                 // SV inputs ride via closure leaves
-		"$(S)/mod/helper.hpp",               //
-		"$(S)/build/scripts/decimal_md5.py", //
+		"$(B)/mod/hash.auto.cpp", // generated source; SV inputs ride via closure leaves
+		"$(S)/mod/data.txt",
+		"$(S)/mod/helper.hpp",
+		"$(S)/build/scripts/decimal_md5.py",
 	} {
 		if !ccInputs[want] {
 			t.Errorf("CC input closure missing %q", want)
@@ -100,7 +97,6 @@ func TestEmitDecimalMD5_GeneratedSourceEntersArchive(t *testing.T) {
 		t.Errorf("graphDeps(g, CC) = %v, want to contain SV UID %q", graphDeps(g, cc), sv.UID)
 	}
 
-	// Archive member.
 	ar := mustNodeByOutput(t, g, "$(B)/mod/libmod.a")
 
 	arArgs := strings.Join(strStrs(ar.Cmds[0].CmdArgs.flat()), " ")

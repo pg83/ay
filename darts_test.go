@@ -11,15 +11,15 @@ func TestDartsLongestMatch(t *testing.T) {
 		wantIdx int
 		wantOk  bool
 	}{
-		{[]string{"arc/api/proto/"}, 1, true},     // longest of arc/ , arc/api/
-		{[]string{"arc/api/proto", "/"}, 1, true}, // variadic stream, no concat
+		{[]string{"arc/api/proto/"}, 1, true},     // longest wins
+		{[]string{"arc/api/proto", "/"}, 1, true}, // variadic, no concat
 		{[]string{"arc/", "api/x/"}, 1, true},     // split mid-key
-		{[]string{"arc/x/"}, 0, true},             // only arc/ matches
-		{[]string{"arc/"}, 0, true},               // exact key
-		{[]string{"arcfoo/x/"}, 0, false},         // arc/ not a prefix
+		{[]string{"arc/x/"}, 0, true},
+		{[]string{"arc/"}, 0, true},
+		{[]string{"arcfoo/x/"}, 0, false}, // arc/ not a prefix
 		{[]string{"util/x/"}, 2, true},
 		{[]string{"april/arf/x/"}, 3, true},
-		{[]string{"april/"}, 0, false}, // not a key (only april/arf/)
+		{[]string{"april/"}, 0, false}, // not a key
 		{[]string{"contrib/x/"}, 0, false},
 		{[]string{""}, 0, false},
 		{nil, 0, false},

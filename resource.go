@@ -15,8 +15,7 @@ var (
 	rescompressorBinPath = rescompressorBinVFS.string()
 	rescompilerBinPath   = rescompilerBinVFS.string()
 	yaConfFormulaRE      = regexp.MustCompile(`"formula"\s*:\s*"([^"]+\.json)"`)
-	// A `"resource": "<name>"` entry (no formula) maps to a per-name
-	// resources.json — embedded like a formula.
+	// A `"resource": "<name>"` entry (no formula) maps to a per-name resources.json.
 	yaConfResourceRE = regexp.MustCompile(`"resource"\s*:\s*"([^"]+)"`)
 )
 
@@ -112,14 +111,9 @@ func expandResourceFiles(args []string) []ResourceEntry {
 }
 
 // expandAllResourceFiles reproduces the ALL_RESOURCE_FILES /
-// ALL_RESOURCE_FILES_FROM_DIRS macros: glob each DIR for <dir>/*.<ext> (or
-// <dir>/* for the FROM_DIRS variant) and forward the matches to RESOURCE_FILES.
-//
-// The globbed paths keep the literal ${ARCADIA_ROOT} marker so the resfs/file
-// key embeds it verbatim; the leading $(S)/ ($(B)/) of an expanded DIR is
-// canonicalized back to the marker so the stored path — and thus the objcopy
-// hash — matches. The resource machinery resolves the marker back to $(S) for
-// the actual --inputs and resfs/src values.
+// ALL_RESOURCE_FILES_FROM_DIRS macros: glob each DIR and forward the matches to
+// RESOURCE_FILES. The globbed paths keep the literal ${ARCADIA_ROOT} marker so the
+// objcopy hash stays stable; the machinery resolves it back to $(S) for --inputs.
 func expandAllResourceFiles(fs FS, modulePath string, env Environment, stmt *AllResourceFilesStmt) []ResourceEntry {
 	prefix := ""
 	strip := ""
@@ -174,8 +168,7 @@ func expandAllResourceFiles(fs FS, modulePath string, env Environment, stmt *All
 			continue
 		}
 
-		// The per-DIR glob is DIR + "/*" + suffix. The DIR may itself carry `*`
-		// segments, so the result is a multi-segment glob.
+		// The DIR may itself carry `*` segments, so this is a multi-segment glob.
 		for _, match := range globMatch(fs, rel+"/*"+suffix) {
 			rfArgs = append(rfArgs, "${ARCADIA_ROOT}/"+match)
 		}
@@ -185,10 +178,7 @@ func expandAllResourceFiles(fs FS, modulePath string, env Environment, stmt *All
 }
 
 // allResourceDir canonicalizes an expanded DIR token into its source-relative
-// form (the path under $(S), which may carry `*` wildcard segments). Relative
-// DIRs are joined onto modulePath, so source-rooted and moddir-relative DIRs
-// collapse to the same stored form. A non-source typed root (a $(B) build dir,
-// an unresolved $-ref, an out-of-tree `..`) is not globbable and yields false.
+// form. A non-source typed root is not globbable and yields false.
 func allResourceDir(modulePath, dir string) (rel string, ok bool) {
 	switch {
 	case strings.HasPrefix(dir, "$(S)/"):
@@ -201,9 +191,8 @@ func allResourceDir(modulePath, dir string) (rel string, ok bool) {
 		rel = modulePath + "/" + dir
 	}
 
-	// Trailing/double slashes and `.`/`..` segments are normalized away
-	// regardless of how the DIR was rooted; `*` survives path.Clean as an
-	// ordinary segment.
+	// `.`/`..` and redundant slashes are normalized away; `*` survives path.Clean
+	// as an ordinary segment.
 	rel = path.Clean(rel)
 
 	if rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
@@ -213,11 +202,10 @@ func allResourceDir(modulePath, dir string) (rel string, ok bool) {
 	return rel, true
 }
 
-// globMatch evaluates a source-rooted glob pattern (a rel path under $(S) whose
-// segments may carry `*`/`?` wildcards) and returns the matching files' rel
-// paths. It walks a directory frontier segment by segment: a fixed segment
-// descends into that subdir; a wildcard segment lists each frontier dir (sorted
-// by basename) and keeps matching subdirs (non-final) or files (final segment).
+// globMatch evaluates a source-rooted glob pattern and returns the matching files'
+// rel paths, walking a directory frontier segment by segment: a fixed segment
+// descends, a wildcard segment lists each frontier dir and keeps matching subdirs
+// or files.
 func globMatch(fs FS, pattern string) []string {
 	segs := strings.Split(pattern, "/")
 	dirs := []string{""} // frontier of source-rel dirs; "" is the source root
@@ -253,8 +241,7 @@ func globMatch(fs FS, pattern string) []string {
 			view := fs.listdir(source(d))
 			entries := append([]uint32(nil), view.names...)
 
-			// Sort by basename (packed name STR<<1 | isDir bit) for a
-			// deterministic readdir ordering.
+			// Sort by basename for a deterministic readdir ordering.
 			sort.Slice(entries, func(a, b int) bool {
 				return STR(entries[a]>>1).string() < STR(entries[b]>>1).string()
 			})
@@ -285,9 +272,8 @@ func globMatch(fs FS, pattern string) []string {
 	return matches
 }
 
-// globSegMatch reports whether name (a single path segment) matches the glob
-// segment pat, where `*` matches any run of characters and `?` matches exactly
-// one; all other characters are literal. Segments contain no `/`.
+// globSegMatch reports whether name matches the glob segment pat, where `*`
+// matches any run and `?` exactly one. Segments contain no `/`.
 func globSegMatch(pat, name string) bool {
 	var px, nx, starPx, starNx int
 	starPx = -1
@@ -316,10 +302,9 @@ func globSegMatch(pat, name string) bool {
 	return px == len(pat)
 }
 
-// renderResourceKvCmd resolves the literal ${ARCADIA_ROOT} marker an embedded
-// resfs/file key may carry to $(S) (${ARCADIA_BUILD_ROOT} to $(B)). The
-// base64-encoded --keys keep the marker, so the objcopy hash (computed over the
-// unrendered key) stays stable. A kv with no marker is unchanged.
+// renderResourceKvCmd resolves the ${ARCADIA_ROOT} marker to $(S)
+// (${ARCADIA_BUILD_ROOT} to $(B)). The base64 --keys keep the marker so the hash
+// stays stable.
 func renderResourceKvCmd(kv string) string {
 	kv = strings.ReplaceAll(kv, "${ARCADIA_ROOT}/", "$(S)/")
 	kv = strings.ReplaceAll(kv, "${ARCADIA_BUILD_ROOT}/", "$(B)/")
@@ -337,9 +322,8 @@ func resourceModuleTag(modName TOK) *string {
 }
 
 // resourceBinTagForData returns the MODULE_TAG used by PROGRAM-side resource
-// objcopy emissions (PY_MAIN, NO_CHECK_IMPORTS). For PY3_PROGRAM that's
-// "PY3_BIN": the PY3_BIN submodule has its name-default MODULE_TAG set after
-// body execution, so it wins over the PY3 the body would otherwise set.
+// objcopy emissions. For PY3_PROGRAM that's "PY3_BIN", set after body execution
+// so it wins over the PY3 the body would otherwise set.
 func resourceBinTagForData(d *ModuleData) *string {
 	if d.moduleStmt.Name == tokPy3Program {
 		return stringPtr("PY3_BIN")
@@ -349,11 +333,9 @@ func resourceBinTagForData(d *ModuleData) *string {
 }
 
 // resourceLibTagForData returns the MODULE_TAG used by LIBRARY-side resource
-// objcopy emissions (RESOURCE/RESOURCE_FILES, pysrc bytecode, py/namespace).
-// For PY3_PROGRAM's KindLib twin it's "PY3_BIN_LIB"; for real PY3_LIBRARY etc.
-// it's "PY3". On the PY3_PROGRAM PROGRAM-side path, returning "PY3_BIN_LIB" lets
-// the emitter dedup against the LIBRARY-twin's emission so the PROGRAM's LD
-// reuses it rather than producing a tagged twin with a non-matching hash.
+// objcopy emissions. For PY3_PROGRAM's KindLib twin it's "PY3_BIN_LIB", which lets
+// the emitter dedup against the LIBRARY-twin's emission so the PROGRAM's LD reuses
+// it rather than producing a tagged twin with a non-matching hash.
 func resourceLibTagForData(d *ModuleData) *string {
 	if d.moduleStmt.Name == tokPy3Program || d.programPairedLib {
 		return stringPtr("PY3_BIN_LIB")
@@ -362,11 +344,9 @@ func resourceLibTagForData(d *ModuleData) *string {
 	return resourceModuleTag(d.moduleStmt.Name)
 }
 
-// rootrelExpand substitutes the resolved root-relative path of the input into a
-// resfs/src kv's ${rootrel;…input=TEXT:"<inner>"} marker. `resolved` is the
-// .rel() of the same VFS the payload member binds to: a generated $(B) output
-// yields module/inner, an ordinary source the source-root path — not a naive
-// module-dir join.
+// rootrelExpand substitutes the resolved root-relative path into a resfs/src kv's
+// ${rootrel;…input=TEXT:"<inner>"} marker. `resolved` is the .rel() of the VFS the
+// payload binds to, not a naive module-dir join.
 func rootrelExpand(kv string, resolved string) string {
 	const marker = "${rootrel;context=TEXT;input=TEXT:\""
 	idx := strings.Index(kv, marker)
@@ -421,7 +401,7 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 	}
 
 	// A "resource": "<name>" entry without its own formula embeds the per-name
-	// resources.json when that file exists.
+	// resources.json when it exists.
 	for _, m := range yaConfResourceRE.FindAllSubmatch(raw, -1) {
 		path := "build/external_resources/" + string(m[1]) + "/resources.json"
 
@@ -449,14 +429,12 @@ type PySrcEntry struct {
 	inputDep  VFS
 
 	// extraInputs are node inputs this resfs entry carries beyond pathInput: the
-	// .yapyc3 entry's compiled source, or — for a COPY_FILE-staged source — the
-	// original $(S) source the staged copy was packaged from.
+	// compiled source, or a COPY_FILE-staged source's original $(S) source.
 	extraInputs []VFS
 }
 
 // resolvePySrcRel searches the SRCDIR path (reverse, later declaration wins) for
-// srcRel and returns the resolved source rel; the module dir is the fallback,
-// the same search resolveSourceVFS does for SRCS.
+// srcRel and returns the resolved source rel; the module dir is the fallback.
 func resolvePySrcRel(fs FS, srcDirs []VFS, modulePath, srcRel string) string {
 	for i := len(srcDirs) - 1; i >= 1; i-- {
 		if fs.isFile(srcDirs[i], srcRel) {
@@ -464,9 +442,9 @@ func resolvePySrcRel(fs FS, srcDirs []VFS, modulePath, srcRel string) string {
 		}
 	}
 
-	// Root-relative SRCS (proto/py listed with a source-root path): when the
-	// entry resolves under neither a SRCDIR nor the module dir but exists at the
-	// source root, bind it there instead of doubling it under the module dir.
+	// Root-relative SRCS: when the entry resolves under neither a SRCDIR nor the
+	// module dir but exists at the source root, bind it there instead of doubling
+	// it under the module dir.
 	if srcRel != "" && pathIsClean(srcRel) &&
 		!fs.isFile(dirKey(modulePath), srcRel) && fs.isFile(srcRootVFS, srcRel) {
 		return srcRel
@@ -490,9 +468,8 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 		}
 	}
 
-	// Token-form lookup: a full `${ARCADIA_BUILD_ROOT}/<full>.py` PY_SRCS token
-	// is embedded through the rescompiler _raw.auxcpp path, not objcopy, so it is
-	// skipped here. A bare token (checked-in or build-generated) is packaged
+	// A full `${ARCADIA_BUILD_ROOT}/<full>.py` PY_SRCS token is embedded through
+	// the rescompiler _raw.auxcpp path, so skipped here. A bare token is packaged
 	// through objcopy resfs.
 	fullName := make(map[string]bool, len(d.pySrcs))
 
@@ -523,16 +500,15 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 		generated := genInfo != nil
 
 		// A full-name generated token is resourced through the rescompiler
-		// _raw.auxcpp path, not here.
+		// _raw.auxcpp path.
 		if generated && fullName[srcRel] {
 			continue
 		}
 
 		// A bare-token build-generated PY_SRCS source is packaged from $(B) with
 		// its producer dep; a checked-in source from $(S). Both route through the
-		// same resfs path, so the resfs
-		// key/kvHash strings — and thus the objcopy hash — are the same regardless of
-		// provenance; only the bound input VFS and producer dep differ.
+		// same resfs path, so the key/kvHash — and the objcopy hash — match
+		// regardless of provenance; only the bound input VFS and producer dep differ.
 		pySource := source(resolvedRel)
 
 		if generated {
@@ -541,12 +517,9 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 		}
 
 		// A COPY_FILE-staged source whose original lives in $(S) is only a
-		// packaging stage: the staged $(B) copy stays the resfs payload/cmd, but the
-		// objcopy node also names the original $(S) source the copy was packaged
-		// from. For an ordinary source the .yapyc3 entry rides the source itself;
-		// for a non-copy
-		// generated source — or a copy whose original is itself a $(B) generated
-		// output — it rides the staged $(B) copy.
+		// packaging stage: the staged $(B) copy stays the resfs payload, but the
+		// objcopy node also names the original $(S) source. The .yapyc3 entry rides
+		// the source itself, or the staged $(B) copy for a generated source.
 		srcEdge := pySource
 		copyStaged := generated && genInfo.SourcePath != 0 && genInfo.SourcePath.isSource()
 
@@ -560,7 +533,7 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 			pyKvCmd := "resfs/src/" + pyKey + "=" + resolvedRel
 
 			// A copy-staged .py payload is the staged $(B) copy; the original $(S)
-			// source the copy was packaged from rides alongside as a node input.
+			// source rides alongside as a node input.
 			var pyExtra []VFS
 
 			if copyStaged {

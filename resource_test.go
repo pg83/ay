@@ -378,24 +378,21 @@ func TestResolvePySrcRel_RootRelativeProto(t *testing.T) {
 	moduleDir := "market/idx/datacamp/proto/external"
 	srcDirs := []VFS{dirKey(moduleDir)}
 
-	// Root-relative proto SRCS resolves at the source root.
+	// Root-relative proto resolves at the source root.
 	got := resolvePySrcRel(fs, srcDirs, moduleDir, "market/idx/datacamp/proto/api/ExportMessage.proto")
 	if want := "market/idx/datacamp/proto/api/ExportMessage.proto"; got != want {
 		t.Fatalf("root-relative proto: got %s, want %s", got, want)
 	}
 
-	// A proto that genuinely lives under the module dir resolves there.
+	// A proto under the module dir resolves there.
 	got = resolvePySrcRel(fs, srcDirs, moduleDir, "market/idx/datacamp/proto/external/ExportCategory.proto")
 	if want := "market/idx/datacamp/proto/external/ExportCategory.proto"; got != want {
 		t.Fatalf("root-relative proto under module: got %s, want %s", got, want)
 	}
 }
 
-// A dirty (non-clean) srcRel must NOT be source-root bound. FS.isFile
-// normalises `..`/`.` segments, so resolvePySrcRel(modulePath="pkg/sub",
-// srcRel="../root.proto") would otherwise match $(S)/root.proto and return the
-// out-of-tree `../root.proto`. The source-root fallback therefore applies only
-// to clean paths; the dirty entry falls through to the module-relative join.
+// A dirty (non-clean) srcRel must NOT be source-root bound: the fallback applies
+// only to clean paths, so it falls through to the module-relative join.
 func TestResolvePySrcRel_DirtyPathNotRootBound(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"root.proto": "",

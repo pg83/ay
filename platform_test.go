@@ -21,7 +21,7 @@ func TestParseCompilerFlags(t *testing.T) {
 }
 
 func TestWrapccPrefixFor_GateOnOpensource(t *testing.T) {
-	// OPENSOURCE unset enables the compile wrapper.
+	// OPENSOURCE unset enables the wrapper.
 	head, tail := wrapccPrefixFor(map[string]string{"PIC": "no"})
 
 	wantHead := []string{
@@ -39,7 +39,7 @@ func TestWrapccPrefixFor_GateOnOpensource(t *testing.T) {
 		t.Errorf("wrapcc tail = %v, want %v", strStrs(tail), wantTail)
 	}
 
-	// Opensource (OPENSOURCE=yes) disables it.
+	// OPENSOURCE=yes disables it.
 	head, tail = wrapccPrefixFor(map[string]string{"OPENSOURCE": "yes"})
 
 	if head != nil || tail != nil {
@@ -48,7 +48,7 @@ func TestWrapccPrefixFor_GateOnOpensource(t *testing.T) {
 }
 
 func TestNewPlatform_WrapccVectorsAndResources(t *testing.T) {
-	// Non-opensource platform carries the wrapper prefix plus the python and SDK-sysroot CC deps.
+	// Non-opensource carries the wrapper prefix plus python and SDK-sysroot CC deps.
 	intP := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, map[string]string{"PIC": "no"}, "", "")
 
 	if len(intP.WrapccHead) == 0 {
@@ -60,7 +60,7 @@ func TestNewPlatform_WrapccVectorsAndResources(t *testing.T) {
 		t.Errorf("CCUsesResources = %v, want %v", intP.CCUsesResources, wantRes)
 	}
 
-	// Opensource: no wrapper, clang-only CC deps.
+	// Opensource: clang-only CC deps.
 	osP := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, map[string]string{"PIC": "no", "OPENSOURCE": "yes"}, "", "")
 
 	if len(osP.WrapccHead) != 0 {
@@ -75,17 +75,17 @@ func TestNewPlatform_WrapccVectorsAndResources(t *testing.T) {
 func TestSysrootArgsFor(t *testing.T) {
 	sdk := "$(B)/resources/OS_SDK_ROOT"
 
-	// Default Linux: SDK sysroot + tool-bin dir.
+	// Default Linux: SDK sysroot + tool-bin.
 	if got := strStrs(sysrootArgsFor(OSLinux, map[string]string{})); !reflect.DeepEqual(got, []string{"--sysroot=" + sdk, "-B" + sdk + "/usr/bin"}) {
 		t.Errorf("linux default = %v", got)
 	}
 
-	// MUSL pins --sysroot=/nowhere, keeps the tool-bin dir.
+	// MUSL pins --sysroot=/nowhere.
 	if got := strStrs(sysrootArgsFor(OSLinux, map[string]string{"MUSL": "yes"})); !reflect.DeepEqual(got, []string{"--sysroot=/nowhere", "-B" + sdk + "/usr/bin"}) {
 		t.Errorf("musl = %v", got)
 	}
 
-	// os_sdk=local: bare host tool-bin dir, no fetched SDK.
+	// os_sdk=local: host tool-bin, no fetched SDK.
 	if got := strStrs(sysrootArgsFor(OSLinux, map[string]string{"OS_SDK": "local"})); !reflect.DeepEqual(got, []string{"-B/usr/bin"}) {
 		t.Errorf("local = %v", got)
 	}
@@ -117,12 +117,12 @@ func TestPlatformMultiarchLibPath_UsesCompilerRoot(t *testing.T) {
 		"LLD_TOOL":         "$(LLD_ROOT)/bin/ld.lld",
 	}, "", "")
 
-	// No OPENSOURCE: the resource-resolved SDK form.
+	// No OPENSOURCE: resource-resolved SDK form.
 	if got, want := p.multiarchLibPath(false), "$(B)/resources/CLANG20/lib:$(B)/resources/OS_SDK_ROOT/usr/lib/x86_64-linux-gnu"; got != want {
 		t.Fatalf("multiarchLibPath(internal) = %q, want %q", got, want)
 	}
 
-	// Opensource: the raw resource-global macro, verbatim.
+	// Opensource: raw resource-global macro, verbatim.
 	if got, want := p.multiarchLibPath(true), "$(B)/resources/CLANG20/lib:$OS_SDK_ROOT_RESOURCE_GLOBAL/usr/lib/x86_64-linux-gnu"; got != want {
 		t.Fatalf("multiarchLibPath(opensource) = %q, want %q", got, want)
 	}
@@ -137,8 +137,8 @@ func TestPlatformLinkerSelectionTailFlags_UsesConfiguredLLDPath(t *testing.T) {
 		"LLD_TOOL":         "$(LLD_ROOT)/bin/ld.lld",
 	}, "", "")
 
-	// The lld linker flags now come from the implicit toolchain peer's
-	// propagated LDFLAGS_GLOBAL, not the Platform.
+	// The lld linker flags now come from the toolchain peer's propagated
+	// LDFLAGS_GLOBAL, not the Platform.
 	if got := p.linkerSelectionTailFlags(); got != nil {
 		t.Fatalf("LinkerSelectionTailFlags = %#v, want nil", got)
 	}

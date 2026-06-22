@@ -79,18 +79,17 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	mf := parseMakeFlags(args)
 
-	// The global --verbose seeds make's local verbose; make's own --verbose also enables it.
+	// The global --verbose seeds make's local verbose.
 	mf.verbose = mf.verbose || g.Verbose
 
 	if len(mf.targets) == 0 {
 		throwFmt("make: no targets supplied and current working directory is outside the source root")
 	}
 
-	// -j 0 is generate-only: the process emits the graph and exits, so GC only costs
-	// CPU (measured: GC off cuts gen user time ~20%) — disable it. With executor
-	// threads the process lives for the whole build and shares RAM with the compilers
-	// it spawns, so GC stays on, but at a raised percent that keeps near-full gen speed
-	// while bounding the heap. An explicit GOGC in the environment wins in both modes.
+	// -j 0 is generate-only: the process emits the graph and exits, so disable GC
+	// (measured: ~20% off gen user time). With executor threads it lives for the whole
+	// build and shares RAM with spawned compilers, so GC stays on at a raised percent
+	// that bounds the heap. An explicit GOGC in the environment wins in both modes.
 	if os.Getenv("GOGC") == "" {
 		if mf.threads == 0 {
 			debug.SetGCPercent(-1)
@@ -108,9 +107,8 @@ func cmdMake(g GlobalFlags, args []string) int {
 	targetYaFlags := map[string]string{}
 	copyStatsFlags(hostYaFlags, rootHostYaFlags)
 	copyStatsFlags(targetYaFlags, rootTargetYaFlags)
-	// The internal contour's common flags (OPENSOURCE, USE_PREBUILT_TOOLS=no, extra
-	// CFLAGS, …) apply to every build, so read them unconditionally. Absent in the
-	// opensource snapshots, where readOptionalYaConfSection returns nil.
+	// The internal contour's common flags apply to every build, so read them
+	// unconditionally. Absent in opensource snapshots (the read returns nil).
 	hostInternalYaFlags := readOptionalYaConfSection(fs, "build/internal/ya.conf", "host_platform_flags")
 	targetInternalYaFlags := readOptionalYaConfSection(fs, "build/internal/ya.conf", "flags")
 	copyStatsFlags(hostYaFlags, hostInternalYaFlags)
@@ -200,8 +198,8 @@ func cmdMake(g GlobalFlags, args []string) int {
 	}
 
 	if mf.copySources != "" {
-		// Build the graph as for -G (the FS records every read), then slice the repo
-		// by what was opened. The graph itself is discarded.
+		// Build the graph (the FS records every read), then slice the repo by what was
+		// opened. The graph itself is discarded.
 		for _, target := range mf.targets {
 			genDumpGraphWithResources(fs, target, hostP, targetP, onWarn, mf.testLevel > 0)
 		}
@@ -405,8 +403,8 @@ func parseMakeFlags(args []string) *MakeFlags {
 	if len(mf.targets) == 0 {
 		cwd := throw2(os.Getwd())
 
-		// Default the target to cwd relative to the source root. filepath.Rel yields a
-		// "../"-prefixed path when cwd escapes the root; reject those (cwd is outside it).
+		// Default the target to cwd relative to the source root; reject a "../"-prefixed
+		// rel (cwd escapes the root).
 		if rel, err := filepath.Rel(mf.srcRoot, cwd); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			mf.targets = []string{rel}
 		}
@@ -415,9 +413,8 @@ func parseMakeFlags(args []string) *MakeFlags {
 	return mf
 }
 
-// findSourceRoot resolves the source root when --source-root is not given: it walks up
-// from start to the nearest ancestor containing a ya.conf (the source-root marker), so
-// make works from any subdirectory. With no ya.conf in any ancestor it falls back to start.
+// findSourceRoot walks up from start to the nearest ancestor containing a ya.conf
+// (the source-root marker), falling back to start if none is found.
 func findSourceRoot(start string) string {
 	for dir := start; ; {
 		if info, err := os.Stat(filepath.Join(dir, "ya.conf")); err == nil && !info.IsDir() {
@@ -483,8 +480,7 @@ configuration flags:
 	fmt.Fprint(w, colorizeMakeUsage(usage))
 }
 
-// colorizeMakeUsage tints section headers ("… flags:" and the usage: label)
-// light-green and flag columns light-yellow; descriptions stay plain.
+// colorizeMakeUsage tints section headers light-green and flag columns light-yellow.
 func colorizeMakeUsage(s string) string {
 	lines := strings.Split(s, "\n")
 
@@ -502,8 +498,7 @@ func colorizeMakeUsage(s string) string {
 	return strings.Join(lines, "\n")
 }
 
-// colorizeFlagLine tints the flag column (leading "-…" token up to the 2-space
-// gap) light-yellow; non-flag lines pass through.
+// colorizeFlagLine tints the leading flag token light-yellow; non-flag lines pass through.
 func colorizeFlagLine(line string) string {
 	trimmed := strings.TrimLeft(line, " ")
 

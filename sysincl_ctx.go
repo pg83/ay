@@ -4,25 +4,18 @@ import (
 	"strings"
 )
 
-// sysinclCtx owns the sysincl rule set's lookup indexes. Built once per scanner:
-//   - mightClaim — a cheap, sound prefilter over the rule keys;
-//   - merged — ALL records (source- and includer-keyed) in one header-first index.
-//
-// The scanner matches every filter against the includer's own path, so the
-// source/includer rule split falls out of each record's filter. Result order is
-// irrelevant (the gate sorts node inputs), so both rule kinds share one index.
+// sysinclCtx owns the sysincl rule set's lookup indexes, built once per scanner.
+// Both rule kinds share one index: each filter matches against the includer's
+// own path, so the split falls out of the filter.
 type SysinclCtx struct {
-	// keyBits/keyCI/ciGate/ciMaxLen back mightClaim: a "could any record map this
-	// target" gate evaluated before the full lookup.
+	// keyBits/keyCI/ciGate/ciMaxLen back mightClaim's pre-lookup gate.
 	keyBits  BitSet          // case-sensitive keys, indexed by target STR
 	keyCI    map[string]bool // case-insensitive keys (lowercased)
 	ciGate   BitSet
 	ciMaxLen int // longest CI key; longer targets cannot match (cheap reject)
 
-	// First-touch memo over the CI arm, indexed by target STR: the rule set is
-	// immutable per scanner, so mightClaim(target) is constant per id. Repeated
-	// targets answer from one 2-bit probe without a string view. Cell values:
-	// ciUnseen / ciNo / ciClaimed.
+	// First-touch memo over the CI arm: the rule set is immutable per scanner.
+	// Cells: ciUnseen / ciNo / ciClaimed.
 	ciMemo TwoBitSet
 
 	merged *SysinclIndex
@@ -60,10 +53,9 @@ func newSysinclCtx(set SysInclSet) *SysinclCtx {
 
 		l := uint16(len(k))
 
-		// ciGate keys on uint16(raw[0])*len + uint16(raw[1]) over the RAW
-		// target bytes (no ToLower) — built over both case variants of each CI key's
-		// first two bytes — any CI match passes, a miss proves the target is not
-		// a CI header. The ciMaxLen gate runs first, so the uint16 key never overflows.
+		// ciGate keys on uint16(raw[0])*len + uint16(raw[1]) over RAW target bytes,
+		// over both case variants of each CI key's first two bytes: a miss proves
+		// not a CI header.
 			for _, x0 := range caseVariants(k[0]) {
 				for _, x1 := range caseVariants(k[1]) {
 				c.ciGate.add(uint32(uint16(x0)*l + uint16(x1)))
@@ -76,7 +68,7 @@ func newSysinclCtx(set SysInclSet) *SysinclCtx {
 	return c
 }
 
-// CIMemoState is a ciMemo cell value; ciUnseen doubles as TwoBitSet's zero.
+// CIMemoState is a ciMemo cell value; ciUnseen doubles as the zero.
 type CIMemoState uint8
 
 const (
@@ -85,8 +77,7 @@ const (
 	ciClaimed
 )
 
-// mightClaim is a sound, cheap prefilter: a false result guarantees no record
-// can map target, so the caller skips the full lookup.
+// mightClaim is a sound prefilter: false guarantees no record maps target.
 func (c *SysinclCtx) mightClaim(target STR) bool {
 	if c.keyBits.has(uint32(target)) {
 		return true
@@ -111,10 +102,9 @@ func (c *SysinclCtx) mightClaim(target STR) bool {
 	return false
 }
 
-// ciClaims is the memo-miss arm of mightClaim: the only place the CI check
-// materializes the target string. A claim also binds the target id to its
-// merged-index bucket (byID) in the same touch, so lookup never needs the string
-// for case-variant targets.
+// ciClaims is the memo-miss arm of mightClaim, the only place the CI check
+// materializes the target string. A claim also binds the target id to its byID
+// bucket.
 func (c *SysinclCtx) ciClaims(target STR) bool {
 	raw := target.string()
 
@@ -143,8 +133,8 @@ func (c *SysinclCtx) ciClaims(target STR) bool {
 	return true
 }
 
-// lookup resolves target's sysincl override for a file at path (the scanner
-// passes the includer's own path) via the merged header-first index.
+// lookup resolves target's sysincl override for a file at path (the includer's
+// own path).
 func (c *SysinclCtx) lookup(path string, target STR) ([]VFS, bool, bool) {
 	if !c.mightClaim(target) {
 		return nil, false, false
@@ -155,8 +145,7 @@ func (c *SysinclCtx) lookup(path string, target STR) ([]VFS, bool, bool) {
 	return paths, hasMultiTarget || len(paths) >= 2, claimed
 }
 
-// caseVariants returns b plus, for an ASCII letter, its opposite-case form — the
-// byte values a CI include target could carry at that position.
+// caseVariants returns b plus, for an ASCII letter, its opposite-case form.
 func caseVariants(b byte) []byte {
 	switch {
 	case b >= 'a' && b <= 'z':
@@ -169,31 +158,26 @@ func caseVariants(b byte) []byte {
 }
 
 // sysinclContribution is one record's mapping for a header bucket, carrying the
-// record's Filter so activeness is decided per query against the includer path.
+// Filter so activeness is decided per query.
 type SysinclContribution struct {
 	paths    []VFS
 	filter   *SourceFilter // nil = applies to every path
-	rawKeyID STR           // the record's stored key id (lowered for CI records)
+	rawKeyID STR           // stored key id (lowered for CI records)
 	ci       bool
-	multi    bool // record.HasMultiTarget
+	multi    bool
 }
 
-// sysinclIndex folds ALL records (source- and includer-keyed) into one
-// header-keyed index, so a lookup is a single map probe plus a tiny bucket scan
-// instead of a per-record fan-out. Buckets group records whose key folds to one
-// ToLower form, in declaration order; a matched entry must (a) match the path
-// (filter), (b) match case (CI = whole bucket, non-CI = exact rawKeyID). Lookups
-// address buckets purely by target id via byID (CS and lowered CI keys bound at
-// build, case variants at ciClaims' first touch), so the target string is never
-// materialized. byLower exists for the build and that first-touch fill.
+// sysinclIndex folds ALL records into one header-keyed index, so a lookup is a
+// single map probe plus a tiny bucket scan. Buckets group records folding to one
+// ToLower form; a matched entry must match path (filter) and case (CI = whole
+// bucket, non-CI = exact rawKeyID). Lookups address buckets by target id via byID.
 type SysinclIndex struct {
 	byLower map[string]int32
 	buckets [][]SysinclContribution
 	byID    *IntValueMap[int32]
 
-	// outScratch backs multi-contribution lookup results; the caller (resolve)
-	// consumes the slice before the next lookup. A single matching contribution
-	// returns its paths slice directly, allocation-free.
+	// outScratch backs multi-contribution lookup results, consumed before the next
+	// lookup. A single match returns its paths directly.
 	outScratch []VFS
 }
 
@@ -215,9 +199,8 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 	for order := range set {
 		rec := &set[order]
 
-		// Intra-record duplicate headers carry last-wins semantics: keep only
-		// each key's LAST pair, via a reverse scan over the epoch deduper
-		// (CS arm keyed by the interned key, CI arm by the lowered intern id).
+		// Intra-record duplicate headers are last-wins: keep each key's LAST pair,
+		// via a reverse scan over the epoch deduper.
 		deduper.reset()
 
 		for i := len(rec.pairs) - 1; i >= 0; i-- {
@@ -229,7 +212,6 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 			}
 
 			if !deduper.add(VFS(id) << 1) {
-				// Tombstone the earlier duplicate.
 				p.paths = nil
 				p.key = 0
 				p.keyCI = ""
@@ -304,7 +286,7 @@ func (m *SysinclIndex) lookup(path string, target STR) ([]VFS, bool, bool) {
 		cMulti := c.multi && len(c.paths) >= 2
 
 		if !found {
-			// First (usually only) match: hand back its paths directly.
+			// First match: hand back its paths directly.
 			found = true
 			single = c.paths
 			singleMulti = cMulti

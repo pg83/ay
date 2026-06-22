@@ -176,12 +176,11 @@ func TestFS_CleanRel(t *testing.T) {
 }
 
 // testParserFS is a hermetic empty in-memory FS for parser tests that pass their
-// source inline; an INCLUDE of an absent file is silently skipped, so no test
-// reaches the local filesystem.
+// source inline; an INCLUDE of an absent file is silently skipped.
 var testParserFS = newMemFS(nil)
 
 // newTestScanner returns a fresh scanner backed by the given FS, so per-test
-// CodegenRegistry / cache state does not leak.
+// state does not leak.
 func newTestScanner(fs FS, sysincl SysInclSet) *IncludeScanner {
 	s := newIncludeScannerWith(
 		newIncludeParserManagerFS(fs, newSharedParseCache()),
@@ -189,17 +188,15 @@ func newTestScanner(fs FS, sysincl SysInclSet) *IncludeScanner {
 		func(Warn) {},
 		&TarjanCtx{},
 	)
-	// Prod wiring always attaches a registry and a moduleByRef map; the scanner
-	// relies on both being non-nil.
+	// The scanner relies on both being non-nil.
 	s.codegen = newCodegenRegistry()
 	s.moduleByRef = &DenseMap[NodeRef, *ModuleEmitResult]{}
 
 	return s
 }
 
-// wireTestScanners attaches host + target scanners (each with a registry) to a
-// hand-built test GenCtx, mirroring the real gen pipeline, so codegen/scanner
-// accessors resolve to real objects instead of nil.
+// wireTestScanners attaches host + target scanners to a hand-built test GenCtx,
+// so codegen/scanner accessors resolve to real objects instead of nil.
 func wireTestScanners(ctx *GenCtx) {
 	fs := ctx.fs
 

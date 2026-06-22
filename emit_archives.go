@@ -58,10 +58,8 @@ func emitArchive(
 		if isPRProduced {
 			absVFS = build(instance.Path.rel() + "/" + f)
 		} else {
-			// ARCHIVE members resolve each name via the module's source path
-			// plan (the cumulative SRCDIR search), not a blind module-dir
-			// prefix, so a SRCDIR-backed member reads $(S)/<srcdir>/<file>
-			// rather than the phantom $(S)/<mod>/<file>.
+			// Resolve via the module's SRCDIR search, not a blind module-dir
+			// prefix, so a SRCDIR-backed member reads $(S)/<srcdir>/<file>.
 			absVFS = resolveSourceVFS(ctx, instance, f, d.srcDirs)
 		}
 
@@ -69,8 +67,8 @@ func emitArchive(
 
 		pathPerFile = append(pathPerFile, absVFS)
 
-		// ARCHIVE_BY_KEYS lists members plain and passes keys via `-k`; plain
-		// ARCHIVE suffixes each member with an empty-key `:`.
+		// ARCHIVE_BY_KEYS passes keys via `-k`; plain ARCHIVE suffixes each
+		// member with an empty-key `:`.
 		if a.Keys != nil {
 			cmdArgs = append(cmdArgs, internStr(absStr))
 		} else {
@@ -84,10 +82,8 @@ func emitArchive(
 
 	cmdArgs = append(cmdArgs, argDashO.str(), internStr(archivePath))
 
-	// Archive-node inputs are exactly the files the archiver reads (the archived
-	// members) plus the archiver tool. RUN_PROGRAM source INFiles and non-archived
-	// sibling PR outputs are build-order concerns carried by producerRefs /
-	// toolLDRef DepRefs, not action inputs, so they are not listed here.
+	// Inputs are exactly the archived members plus the archiver tool. Build-order
+	// concerns ride producerRefs / toolLDRef DepRefs, not action inputs.
 	inputs := make([]VFS, 0, len(pathPerFile))
 	deduper.reset()
 
@@ -120,18 +116,16 @@ func emitArchive(
 	arRef := emit.emit(n)
 
 	{
-		// Propagate each archived member's source inputs (e.g. the .py behind a
-		// .pyc compiled by a RUN_PROGRAM) as non-expanded closure leaves of the
-		// archive output, so a CC unit that #includes the archived .inc picks them
-		// up transitively through the cached window.
+		// Propagate each member's source inputs as closure leaves of the archive
+		// output, so a CC unit that #includes the archived .inc picks them up
+		// transitively.
 		var leaves []VFS
 
 		for _, p := range pathPerFile {
 			if info := reg.lookup(p); info != nil && len(info.SourceInputs) > 0 {
 				leaves = dedupVFS(leaves, info.SourceInputs)
 			} else if a.PropagateSourceMembers && info == nil {
-				// A direct source member (an archive of the .lua sources
-				// themselves): ride the source into the consumer's closure.
+				// A direct source member: ride the source into the consumer's closure.
 				leaves = dedupVFS(leaves, []VFS{p})
 			}
 		}

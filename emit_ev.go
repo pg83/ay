@@ -7,8 +7,7 @@ import (
 
 var (
 	evEventlogIncludePath = evEventlogIncludeVFS.string()
-	// Lazy: only reached for .ev sources, so eager interning would grow the
-	// intern table on targets that never build them.
+	// Lazy: eager interning would grow the table on targets that never build .ev.
 	evExtraProtobufDirectives = sync.OnceValue(func() []IncludeDirective { return quotedDirectives(evExtraProtobufHeaders) })
 	evAbseilCleanupDirectives = sync.OnceValue(func() []IncludeDirective { return quotedDirectives(evAbseilCleanupHeaders) })
 )
@@ -26,10 +25,9 @@ var evAbseilCleanupHeaders = []VFS{
 	intern("$(S)/contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/internal/cleanup.h"),
 }
 
-// The EV protoc include span is split around the proto-include peer block
-// exactly as the PB command is: evProtocConstHead is everything up to and
-// including the leading include path; evProtocConstTail is the trailing
-// build-root / include-path pair plus the --out args.
+// The EV protoc include span is split around the proto-include peer block as PB
+// is: head up to the leading include path, tail the build-root/include pair plus
+// --out args.
 var evProtocConstHead = []STR{
 	argI2.str(),
 	argIS2.str(),
@@ -45,11 +43,8 @@ var evProtocConstTail = []STR{
 	argCppStyleguideOutB.str(),
 }
 
-// evProtocConstTailLite is evProtocConstTail with the lite-header cpp_out form.
-// Disabling transitive headers prepends proto_h=true to the cpp_out plugins; the
-// EV/cfgproto command shares the PB base, so its cpp_out carries proto_h=true
-// exactly when the PB cpp_out does. No .deps.pb.h is gained, so only this flag
-// changes.
+// evProtocConstTailLite is evProtocConstTail with the lite-header cpp_out form:
+// disabling transitive headers prepends proto_h=true to cpp_out, the only change.
 var evProtocConstTailLite = []STR{
 	argIB2.str(),
 	argISContribLibsProtobufSrc.str(),
@@ -57,11 +52,8 @@ var evProtocConstTailLite = []STR{
 	argCppStyleguideOutB.str(),
 }
 
-// evPeerProtoIncludes renders the transitive proto-include peer block for an EV
-// protoc command in encounter order. evProtocConstHead already renders the base
-// members ($(B), $(S), protobuf src), so a token present in the const head (or
-// earlier in this block) is skipped — only the extra peer namespace tokens
-// survive.
+// evPeerProtoIncludes renders the transitive proto-include peer block in encounter
+// order; tokens already in evProtocConstHead or earlier here are skipped.
 func evPeerProtoIncludes(protoInclude []VFS) []STR {
 	if len(protoInclude) == 0 {
 		return nil
@@ -116,8 +108,7 @@ func emitEV(
 ) NodeRef {
 	na := emit.nodeArenas()
 
-	// The event2cpp plugin block appended after the rootrel source — distinct
-	// from cfgproto's proto_config plugin block.
+	// event2cpp plugin block, appended after the rootrel source.
 	evOpts := na.strList(internStr("--plugin=protoc-gen-event2cpp="+event2cppBinary.string()),
 		argEvent2cppOutB.str(),
 		internStr("-I="+evEventlogIncludePath))
@@ -129,10 +120,8 @@ func emitEV(
 }
 
 // emitProtoWrapperPBNode emits the wrapper → protoc producer node shared by the
-// .ev and .cfgproto consumers. The command is byte-identical through the
-// styleguide base and the rootrel source; pluginOpts is the per-variant trailing
-// plugin block (event2cpp for .ev, proto_config for .cfgproto) and pluginBinary /
-// pluginLDRef the variant plugin tool. Outputs keep the source extension.
+// .ev and .cfgproto consumers. Byte-identical through the styleguide base and the
+// rootrel source; pluginOpts is the per-variant trailing plugin block.
 func emitProtoWrapperPBNode(
 	instance ModuleInstance,
 	relPath string,

@@ -8,22 +8,8 @@ import (
 
 // parseSysInclYAML is a custom streaming parser over the exact YAML subset the
 // sysincl files use, replacing the generic yaml.v3 decode (which re-allocated a
-// node tree per file per scanner, ~14% of the run's object churn). The grammar,
-// verified across the tree (anything else throws):
-//
-//   - a top-level block sequence of records;
-//   - record keys: source_filter (plain or double-quoted scalar),
-//     case_sensitive (true/false), includes (block sequence);
-//   - an includes item: `header` (resolve to nothing), `header: target`, or
-//     `header:` followed by a deeper `- target` fan-out list; empty / null
-//     targets mean "no path";
-//   - comments (full-line and trailing) and blank lines anywhere; double-quoted
-//     scalars know the \\ and \" escapes.
-//
-// No anchors/aliases, flow collections, block scalars, or multi-document markers.
-// Headers intern from the line bytes; targets via the scratch buffer
-// (sourceBytes); only filters and CI keys materialize strings. The data buffer
-// (reused FS read buffer) is not retained past the call.
+// node tree per file per scanner, ~14% of the run's object churn). Anything
+// outside the subset throws. The data buffer is not retained past the call.
 func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 	var (
 		out  []SysIncl
@@ -75,8 +61,7 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 		case "case_sensitive":
 			rec.CaseInsensitive = string(val) == "false"
 		case "includes":
-			// `includes:` opens a block sequence; `includes: []` is the empty flow
-			// form — both contribute no mappings inline.
+			// `includes:` or `includes: []` contribute no mappings inline.
 			if len(val) != 0 && string(val) != "[]" {
 				throwFmt("%s:%d: inline includes value is not part of the sysincl subset", name, lineNo)
 			}
@@ -94,7 +79,7 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 		colon := yScalarColon(b)
 
 		if colon < 0 {
-			// Bare header: resolve to nothing.
+			// Bare header resolves to nothing.
 			rec.setMapping(unquoteYScalar(name, lineNo, b), nil)
 
 			return
@@ -104,7 +89,7 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 		val := trimYSpace(b[colon+1:])
 
 		if len(val) == 0 {
-			// `header:` — null (no path) or a nested fan-out list.
+			// `header:` — null or nested fan-out.
 			pendingKey = key
 			pendingIndent = indent
 			pendingActive = true
@@ -165,7 +150,7 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 			}
 
 			if indent == 0 {
-				// New record; its first key rides the same line.
+				// New record; first key rides the same line.
 				flushRecord()
 				open = true
 				recordKey(body)
@@ -198,9 +183,8 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 		flushPending()
 
 		if indent == 0 {
-			// Single-record document form (a bare `includes: []` with no leading
-			// `-`): an indent-0 key opens one implicit record instead of the
-			// block-sequence form.
+			// Single-record document form: an indent-0 key opens one implicit
+			// record instead of the block-sequence form.
 			open = true
 			recordKey(rest)
 
@@ -219,8 +203,7 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 	return out
 }
 
-// stripYComment drops a trailing ` #...` comment (quote-aware) and right-trims;
-// a line starting with '#' is dropped whole.
+// stripYComment drops a trailing ` #...` comment (quote-aware) and right-trims.
 func stripYComment(b []byte) []byte {
 	if len(b) > 0 && b[0] == '#' {
 		return nil
@@ -259,8 +242,7 @@ func trimYSpace(b []byte) []byte {
 }
 
 // yScalarColon finds the key/value colon of a `header: target` item — the first
-// ':' followed by a space or end of line. -1 means a bare scalar. A quoted key
-// scans past its closing quote.
+// ':' followed by space or end of line; -1 means a bare scalar.
 func yScalarColon(b []byte) int {
 	i := 0
 
@@ -289,9 +271,8 @@ func yScalarColon(b []byte) int {
 	return -1
 }
 
-// unquoteYScalar cooks one scalar: a plain scalar returns as-is (a view), a
-// double-quoted one is unwrapped — escape-free bodies stay views, the \\ and \"
-// escapes rewrite in place into the quoted region (always shorter, so safe).
+// unquoteYScalar cooks one scalar: plain returns as-is (a view); a double-quoted
+// one is unwrapped, rewriting \\ and \" escapes in place (always shorter, so safe).
 func unquoteYScalar(name string, lineNo int, b []byte) []byte {
 	if len(b) == 0 || b[0] != '"' {
 		return b

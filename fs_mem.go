@@ -3,20 +3,20 @@ package main
 import "github.com/zeebo/xxh3"
 
 // MemFS is an in-memory FS serving from maps populated at construction; no method
-// reads the OS. Used by the test suite.
+// reads the OS.
 type MemFS struct {
 	srcRoot   string
 	rootSlash string
 	files     map[string][]byte
 	dirs      map[string]map[string]bool
 
-	// views/entries mirror OsFS's DirView model, built lazily per directory.
+	// views/entries mirror OsFS's DirView model, built lazily.
 	views   map[string]DirView
 	entries *IntMap[bool]
 }
 
 // newMemFS builds a *memFS from a flat path→content map, materialising every
-// intermediate directory to match an osFS over the same tree shape.
+// intermediate directory to match an osFS over the same tree.
 func newMemFS(files map[string]string) *MemFS {
 	const root = "/__fake_repo__"
 
@@ -163,7 +163,7 @@ func (fs *MemFS) read(rel string) []byte {
 }
 
 // ContentHash computes xxh3 of v's content on demand. A file absent from the tree
-// hashes to 0 rather than faulting — tests assert structure, not exact uids.
+// hashes to 0 rather than faulting.
 func (fs *MemFS) contentHash(v VFS) uint64 {
 	data, ok := fs.files[cleanRel(v.rel())]
 

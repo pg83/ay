@@ -1,11 +1,8 @@
 package main
 
-// emit_sc.go models the upstream _SRC("sc") rule: a SRCS(*.sc) entry yields a
-// single SC producer node where domschemec turns the .sc schema into a
-// <src>.sc.h header. The header carries the runtime.h output_include, so the
-// producer's inputs are the tool, the .sc source, and runtime.h with its
-// scanned include closure. No compile — the header is consumed via #include
-// (like .h.in). The rule also adds an implicit PEERDIR to the domscheme lib.
+// emit_sc.go models the _SRC("sc") rule: domschemec turns a .sc schema into a
+// <src>.sc.h header carrying the runtime.h output_include. No compile — the
+// header is consumed via #include.
 
 func emitSC(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary VFS, runtimeClosure []VFS, domschemecLDRef NodeRef, emit Emitter) NodeRef {
 	na := emit.nodeArenas()
@@ -37,14 +34,12 @@ func emitLibrarySCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
 	headerVFS := build(srcVFS.rel() + ".h")
 
-	// output_include runtime.h: the producer's inputs lead with runtime.h and its
-	// full include closure (runtime.h + libcxx). Walk it with the module's scan context.
+	// output_include runtime.h: lead the inputs with runtime.h and its closure.
 	runtimeClosure := walkClosure(ctx.scannerFor(instance), domschemeRuntimeVFS, in.ScanCfg)
 
 	scRef := emitSC(instance, srcVFS, headerVFS, domBinary, runtimeClosure, domLDRef, ctx.emit)
 
-	// Register the generated header so a consumer's include-closure resolves it
-	// and inherits the runtime.h output_include.
+	// Register the generated header so a consumer inherits the output_include.
 	runtimeInclude := []IncludeDirective{{kind: includeQuoted, target: internStr(domschemeRuntimeVFS.rel())}}
 	registerBoundGeneratedParsedOutput(ctx, instance, pkSC, headerVFS, runtimeInclude, scRef, []NodeRef{domLDRef})
 

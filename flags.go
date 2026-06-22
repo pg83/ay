@@ -19,7 +19,7 @@ var xclangDebugCompilationDir = []ARG{
 }
 
 // Debug-build C flag vectors with the debug-info group factored out: composed as
-// Pre + DebugInfoFlags + Post, so the debug-info flags land in their natural slot.
+// Pre + DebugInfoFlags + Post.
 var commonCFlagsPre = []ARG{
 	argPipe,
 }
@@ -173,7 +173,7 @@ var cxxStandardWarnings = []ARG{
 }
 
 // catboostOpenSourceDefineFor returns the -DCATBOOST_OPENSOURCE=yes define only
-// for opensource builds (OPENSOURCE=yes). Builds with OPENSOURCE unset omit it.
+// for opensource builds (OPENSOURCE=yes).
 func catboostOpenSourceDefineFor(p *Platform) []ARG {
 	if p.Flags[envOPENSOURCE] == strYes {
 		return catboostOpenSourceDefine
@@ -221,10 +221,8 @@ type CompileFlagBundle struct {
 	NoLibcBlock []ARG
 }
 
-// buildDebugInfoFlags builds the debug-info group: -g, then -gz=zstd for a
-// non-release Linux target when compress is set, then -fdebug-default-version=4 and
-// -ggnu-pubnames (linux). Release targets use hostCFlags (no debug-info group), so
-// the release-only -fdebug-info-for-profiling is not modelled.
+// buildDebugInfoFlags builds the debug-info group. Release targets use
+// hostCFlags (no debug-info group), so -fdebug-info-for-profiling is not modelled.
 func buildDebugInfoFlags(os OS, release, compress bool) []ARG {
 	out := make([]ARG, 0, 4)
 	out = append(out, argDashG)
@@ -243,7 +241,7 @@ func buildDebugInfoFlags(os OS, release, compress bool) []ARG {
 }
 
 // composeCompileCFlags builds the platform's compile C flag vector (Pre +
-// debugInfo + Post). Release x86 uses hostCFlags, which has no debug-info group.
+// debugInfo + Post). Release x86 uses hostCFlags.
 func composeCompileCFlags(isa ISA, release bool, debugInfo []ARG) []ARG {
 	switch isa {
 	case ISAX8664:

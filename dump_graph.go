@@ -1,6 +1,6 @@
 package main
 
-// nodeRefDropped marks an old node id that was pruned (no kept remapping).
+// nodeRefDropped marks an old node id that was pruned.
 const nodeRefDropped = ^NodeRef(0)
 
 func finalizeDumpGraph(e *BufferedEmitter) *Graph {
@@ -78,7 +78,7 @@ func dumpGraphDropNodeRefs(nodes []*Node, incoming []int, results map[NodeRef]st
 
 		switch {
 		// Resource FETCH nodes are NOT dropped here: -G must emit the
-		// graph that gets executed. They are folded out later in `dump normalize`.
+		// graph that gets executed.
 		case isDumpGraphStandaloneLLVMPRNode(nodes[nodeID], nodeID, incoming):
 			drop[refID] = struct{}{}
 			queue = append(queue, nodeID)

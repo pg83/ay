@@ -20,17 +20,15 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 		generatedVFS := build(instance.Path.rel() + "/" + generated)
 
 		confVFS := source(instance.Path.rel() + "/" + conf.string())
-		// The walk window leads with confVFS itself — no separate prepend.
+		// The walk window leads with confVFS itself.
 		inputs := []VFS{buildScriptsCheckConfigHPy}
 		inputs = append(inputs, walkClosure(ctx.scannerFor(instance), confVFS, in.ScanCfg)...)
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-		// Platform-independent codegen (fixed python, no toolchain flags);
-		// upstream attributes such a command to the target platform (a cross
-		// build shows the target ISA, never the host/tool ISA). Emit under
-		// ctx.target so target and host instances collapse by uid. The
-		// per-platform compile (emitCC below) keeps its instance platform.
+		// Platform-independent codegen; emit under ctx.target so target and host
+		// instances collapse by uid. The per-platform compile below keeps its
+		// instance platform.
 		chRef := ctx.emit.emit(&Node{
 			Platform: ctx.target,
 			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(d.tc.Python3,
@@ -49,7 +47,7 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 
 		ccIn := in
 		ccIn.ExtraDepRefs = []NodeRef{chRef}
-		// CC input window: the generated source leads.
+		// CC input window leads with the generated source.
 		ccIn.IncludeInputs = append([]VFS{generatedVFS}, inputs...)
 
 		ccRef, ccOut, _ := emitCC(instance, generated, generatedVFS, ccIn, ctx.host, ctx.emit)

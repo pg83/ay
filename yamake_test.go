@@ -120,9 +120,7 @@ func TestParseLibraryArchiveYaMake(t *testing.T) {
 }
 
 func TestUnknownMacro(t *testing.T) {
-	// NO_LINT is a real, recognized-but-untyped macro: it lands in UnknownStmt
-	// with its args. (A name outside the closed TOK set now fails fast at parse —
-	// see TestUnknownMacroNameFailsFast.)
+	// NO_LINT is recognized-but-untyped: it lands in UnknownStmt with its args.
 	src := []byte("NO_LINT(foo bar)\n")
 	mf, err := parse(testParserFS, "test.input", src)
 	if err != nil {
@@ -145,8 +143,7 @@ func TestUnknownMacro(t *testing.T) {
 }
 
 func TestUnknownMacroNameFailsFast(t *testing.T) {
-	// A macro name outside the closed TOK set is a parser/corpus gap and must
-	// fail fast (internTok), rather than silently parsing to an UnknownStmt.
+	// A name outside the closed TOK set is a corpus gap and must fail fast.
 	if _, err := parse(testParserFS, "test.input", []byte("FROBNICATE(foo bar)\n")); err == nil {
 		t.Fatal("Parse accepted an unknown macro name; want fail-fast error")
 	}
@@ -355,8 +352,7 @@ func TestStringRejectsNewline(t *testing.T) {
 }
 
 func TestLowercaseAndMixedCaseMacro(t *testing.T) {
-	// The lexer reads lowercase/mixed-case macro identifiers, but such names are
-	// outside the closed TOK set, so the parser fails fast at internTok.
+	// Lowercase/mixed-case names lie outside the closed TOK set, so parsing fails fast.
 	t.Run("lowercase", func(t *testing.T) {
 		if _, err := parse(testParserFS, "test.input", []byte("lowercase_macro()\n")); err == nil {
 			t.Fatal("Parse accepted lowercase non-TOK macro; want fail-fast error")
@@ -695,12 +691,8 @@ func TestParseAddIncl_ForKindDropped(t *testing.T) {
 }
 
 func TestParseAddIncl_GlobalForProtoRouted(t *testing.T) {
-	// `GLOBAL FOR proto X` is the upstream PROTO_ADDINCL idiom (see
-	// yatool/build/conf/proto.conf:117) — adds X to the proto-only
-	// _PROTO__INCLUDE chain and a plain GLOBAL ADDINCL is separately
-	// expected for the same X (contrib/libs/protobuf's ya.make declares
-	// both). The parser must split the FOR proto path into its own bucket
-	// so it does not double-show up in GlobalPaths (C++ ADDINCL).
+	// `GLOBAL FOR proto X` must split into its own bucket so it does not also
+	// show up in GlobalPaths (C++ ADDINCL).
 	src := "ADDINCL(\n    GLOBAL contrib/libs/protobuf/src\n    GLOBAL FOR\n    proto\n    contrib/libs/protobuf/src\n)\n"
 	mf, err := parse(testParserFS, "test.input", []byte(src))
 	if err != nil {
@@ -1321,10 +1313,8 @@ func TestParseRunProgramToolSection(t *testing.T) {
 	}
 }
 
-// T-54: parse-time variable expansion in INCLUDE paths. Upstream
-// (makefile_reader.cpp:49-60) evaluates an INCLUDE argument against the
-// accumulated SET env before resolving the path; ay must do the same so a
-// variable-bearing include reaches the source-root file ymake reaches.
+// Parse-time variable expansion in INCLUDE paths: an INCLUDE argument is
+// evaluated against the accumulated SET env before the path is resolved.
 
 func setStmtByName(stmts []Stmt, name string) *SetStmt {
 	for _, s := range stmts {
@@ -1383,9 +1373,7 @@ func TestParseInclude_ExpandsVarFromEarlierSet(t *testing.T) {
 }
 
 func TestParseInclude_IgnoresArgumentsAfterFirst(t *testing.T) {
-	// Upstream makefile_reader.cpp evaluates only args[0] of INCLUDE(...) and
-	// silently ignores the rest. The first argument must be read; later
-	// arguments must not be.
+	// Only args[0] of INCLUDE(...) is read; later arguments must not be.
 	fs := newMemFS(map[string]string{
 		"ya.make":     "LIBRARY()\nINCLUDE(a.inc b_${NAME}.inc)\nEND()\n",
 		"a.inc":       "SET(NAME value)\n",
@@ -1492,11 +1480,9 @@ func TestParseInclude_SetInsideIfFeedsLaterInclude(t *testing.T) {
 	}
 }
 
-// T-5: an included file SETs a list later consumed by a RUN_PROGRAM argument,
-// reached through a ${MODDIR}/DEFAULT-derived include path (the feature_store
-// modules.lst pattern). The parse-time include env must carry MODDIR and fold
-// DEFAULT so ${CONFIG_PATH} resolves and modules.lst is spliced; otherwise the
-// later ${MODULES_INCLUDED} survives verbatim into the command.
+// An included file SETs a list later consumed by a RUN_PROGRAM argument through
+// a ${MODDIR}/DEFAULT-derived include path: the include env must carry MODDIR and
+// fold DEFAULT so the path resolves.
 func TestParseInclude_ModdirDefaultIncludeSetListFeedsRunProgram(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"pkg/cfg/ya.make": "LIBRARY()\n" +

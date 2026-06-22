@@ -2,14 +2,12 @@ package main
 
 // IntMap is an open-addressing hash map from uint64 keys to V that uses the key
 // itself as its hash (home slot = key & mask, no mixing). Intended for keys that
-// are already well-distributed hashes, where identity indexing matches a real
-// hash's spread while skipping the per-probe re-hash the runtime map performs.
-// Collisions resolve by linear probing over a power-of-two table.
+// are already well-distributed hashes. Collisions resolve by linear probing over a
+// power-of-two table.
 //
 // Single-goroutine use only (no locking). No delete — insert/lookup only.
 //
-// Key 0 is reserved as the empty-slot sentinel and must not be inserted; Get(0)
-// is undefined. Callers whose keys can be 0 handle that out of band.
+// Key 0 is the empty-slot sentinel and must not be inserted; Get(0) is undefined.
 type IntMap[V any] struct {
 	data     []IntMapEntry[V]
 	mask     uint64
@@ -25,8 +23,7 @@ type IntMapEntry[V any] struct {
 const (
 	// intMapMinCap is the smallest table; must be a power of two.
 	intMapMinCap = 8
-	// intMapFillNum/intMapFillDen are the max load factor as a rational (5/8):
-	// grow when count*Den >= cap*Num.
+	// intMapFillNum/intMapFillDen are the max load factor (5/8).
 	intMapFillNum = 5
 	intMapFillDen = 8
 )
@@ -52,9 +49,8 @@ func (m *IntMap[V]) alloc(capacity int) {
 	m.resizeAt = capacity * intMapFillNum / intMapFillDen
 }
 
-// Get returns a pointer to the value stored for k, or nil if k is absent.
-// Returning a pointer avoids materialising a zero V on a miss and copying V on a
-// hit. Valid only until the next mutating call (Put/Cell may move the array).
+// Get returns a pointer to the value stored for k, or nil if k is absent. Valid
+// only until the next mutating call (Put/Cell may move the array).
 func (m *IntMap[V]) get(k uint64) *V {
 	for i := k & m.mask; ; i = (i + 1) & m.mask {
 		switch m.data[i].k {
@@ -66,11 +62,9 @@ func (m *IntMap[V]) get(k uint64) *V {
 	}
 }
 
-// Cell returns a pointer to the value cell for k and whether k was already
-// present, inserting a zero-valued entry when absent. It is the find-or-insert
-// primitive: the caller writes the value through the returned pointer. Cell
-// grows the table *before* returning, so the cell is never in a soon-to-be-
-// reallocated array, but the next Put/Cell may move it.
+// Cell returns a pointer to the value cell for k and whether k was already present,
+// inserting a zero-valued entry when absent (find-or-insert). Cell grows the table
+// before returning, but the next Put/Cell may move the cell.
 func (m *IntMap[V]) cell(k uint64) (*V, bool) {
 	for {
 		i := k & m.mask

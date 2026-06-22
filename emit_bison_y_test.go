@@ -110,10 +110,9 @@ END()
 	}
 }
 
-// TestGen_BisonYppFlatOutputAndSiblingInclude verifies that a .ypp source (the
-// C++ bison family) produces flat module-build-dir outputs and that a sibling
-// including the generated parser.h picks up the build-root addincl and the .ypp
-// source in its closure.
+// TestGen_BisonYppFlatOutputAndSiblingInclude verifies that a .ypp source
+// produces flat module-build-dir outputs and that a sibling including the
+// generated parser.h picks up the build-root addincl and the .ypp source.
 func TestGen_BisonYppFlatOutputAndSiblingInclude(t *testing.T) {
 	files := map[string]string{}
 
@@ -125,11 +124,9 @@ func TestGen_BisonYppFlatOutputAndSiblingInclude(t *testing.T) {
 		writeTestModuleFile(files, input.rel(), "")
 	}
 
-	// The sibling lexer.rl6 (listed BEFORE parser.ypp) reaches the generated header
-	// through an intermediate header by full $(B)-rooted angle include
-	// (lexer.rl6 → lexer.h → <a/b/qbase/parser.h>). Without registering the bison
-	// producer before the .rl6 walk, lexer.h's stale (no parser.h) children get
-	// cached in the file-id-keyed scanCache and reused by every later consumer.
+	// The sibling lexer.rl6 (listed BEFORE parser.ypp) reaches the generated
+	// header via lexer.h. Without registering the bison producer first, lexer.h's
+	// stale children get cached in scanCache and reused later.
 	writeTestModuleFile(files, "a/b/qbase/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -143,7 +140,6 @@ END()
 
 	g := testGen(newMemFS(files), "a/b/qbase")
 
-	// Flat header + generated source (no _/).
 	yc := mustNodeByOutput(t, g, "$(B)/a/b/qbase/parser.h")
 	mustNodeByAnyOutput(t, g, "$(B)/a/b/qbase/parser.ypp.cpp")
 	for _, out := range yc.Outputs {
@@ -152,11 +148,8 @@ END()
 		}
 	}
 
-	// Flat object (no _/): the .ypp source rebased to the module build dir.
 	mustNodeByOutput(t, g, "$(B)/a/b/qbase/parser.ypp.cpp.o")
 
-	// Sibling lexer.rl6's object gets the build-root addincl, the parser.h, and
-	// the .ypp source through the pre-pass-registered bison producer.
 	lexerObj := mustNodeByOutput(t, g, "$(B)/a/b/qbase/lexer.rl6.cpp.o")
 	if indexOfArg(lexerObj.Cmds[0].CmdArgs.flat(), "-I$(B)/a/b/qbase") < 0 {
 		t.Fatalf("sibling CC missing generated bison addincl -I$(B)/a/b/qbase: %#v", lexerObj.Cmds[0].CmdArgs.flat())
@@ -193,13 +186,11 @@ END()
 
 	mustNodeByOutput(t, g, "$(B)/req/req_pars.h")
 	mustNodeByAnyOutput(t, g, "$(B)/req/req_pars.y.cpp")
-	// The compiled object must be flat too.
 	mustNodeByOutput(t, g, "$(B)/req/req_pars.y.cpp.o")
 }
 
 // TestGen_BisonFlagsReachProducerCommand verifies that a module-level
-// BISON_FLAGS(<flags>) reaches the YC producer's bison invocation, positioned
-// after the default -v and before --defines.
+// BISON_FLAGS reaches the producer's bison invocation, after -v and before --defines.
 func TestGen_BisonFlagsReachProducerCommand(t *testing.T) {
 	files := map[string]string{}
 
@@ -250,8 +241,7 @@ END()
 }
 
 // TestGen_BisonCppFlags verifies that the CC node compiling a bison-generated
-// C++ file carries the -Wno-unused-but-set-variable and -Wno-deprecated-copy
-// flags.
+// C++ file carries the -Wno-unused-but-set-variable and -Wno-deprecated-copy flags.
 func TestGen_BisonCppFlags(t *testing.T) {
 	files := map[string]string{}
 
@@ -282,8 +272,8 @@ END()
 }
 
 // TestGen_BisonHeaderConsumerIncludesSourceY verifies that a CC node compiling a
-// file that includes a bison-generated header also receives the source .y file —
-// added transitively because the bison node producing the header depends on it.
+// file that includes a bison-generated header also receives the source .y file,
+// added transitively because the header's producer depends on it.
 func TestGen_BisonHeaderConsumerIncludesSourceY(t *testing.T) {
 	files := map[string]string{}
 
@@ -311,8 +301,7 @@ PEERDIR(genlib)
 SRCS(re_lexer.cpp)
 END()
 `)
-	// The peer addincl from genlib is $(B)/genlib/pire, so the include uses just
-	// the basename without the pire/ prefix.
+	// The peer addincl is $(B)/genlib/pire, so the include uses just the basename.
 	writeTestModuleFile(files, "app/re_lexer.cpp", `#include <re_parser.h>
 int lex() { return 0; }
 `)
@@ -327,11 +316,10 @@ int lex() { return 0; }
 }
 
 // TestGen_BisonGeneratedSourceCarriesGeneratedProtoProducerDep reproduces the
-// deps-only gap on bison/ypp parser compile roots. The generated source's
-// prologue reaches a generated <foo>.pb.h; the compile node must record a dep on
-// that .pb.h's protoc producer, as for a handwritten .cpp including the same
-// header. emitBisonY was the only generated-source CC emitter not routing its
-// closure through resolveCodegenDepRefs, so the producer dep was dropped.
+// deps-only gap on bison/ypp parser compile roots: the generated source's
+// prologue reaches a generated .pb.h, and the compile node must record a dep on
+// that header's protoc producer. emitBisonY was the only generated-source CC
+// emitter not routing through resolveCodegenDepRefs.
 func TestGen_BisonGeneratedSourceCarriesGeneratedProtoProducerDep(t *testing.T) {
 	files := map[string]string{}
 
@@ -367,7 +355,7 @@ END()
 
 	parserObj := mustNodeByOutput(t, g, "$(B)/pmod/parser.y.cpp.o")
 
-	// Sanity: the generated proto header IS in the compile closure.
+	// Sanity: the generated proto header is in the compile closure.
 	if !nodeHasInput(parserObj, "$(B)/pmod/foo.pb.h") {
 		t.Fatalf("generated parser object closure missing $(B)/pmod/foo.pb.h: %#v", parserObj.flatInputs())
 	}
@@ -386,8 +374,8 @@ END()
 	}
 }
 
-// writeBisonTool writes the bison tool program plus build/induced/by_bison (the
-// empty licensed module _SRC("y") induces via PEERDIR).
+// writeBisonTool writes the bison tool program plus the empty licensed module
+// _SRC("y") induces via PEERDIR.
 func writeBisonTool(files map[string]string) {
 	writeToolProgram(files, "contrib/tools/bison", "bison")
 	files["build/induced/by_bison/ya.make"] = "LIBRARY()\nNO_UTIL()\nNO_RUNTIME()\nEND()\n"

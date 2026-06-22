@@ -27,11 +27,9 @@ func encodeWithHandRolled(g *Graph) []byte {
 	return buf.Bytes()
 }
 
-// TestWriteGraphCompact_RoundTrip builds a real graph (deps/foreign_deps
-// resolved from refs via the uid vector) and checks the output is compact,
-// parses as valid JSON, escapes strings, and resolves deps/foreign_deps to the
-// right uids — those paths can't be covered by the stdlib oracle since they are
-// not struct fields.
+// TestWriteGraphCompact_RoundTrip checks the output is compact, parses, escapes
+// strings, and resolves deps/foreign_deps to the right uids — paths the stdlib
+// oracle can't cover since they are not struct fields.
 func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 	trickyArgs := []string{"a", "b<c>&d", "tab\there", "quote\"x", "back\\slash", "newline\nhere"}
 
@@ -107,7 +105,7 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 		t.Errorf("deps = %v, want [%s]", mainNode.Deps, leafUID)
 	}
 
-	// foreign_deps wrapped back into {"tool": [...]}.
+	// foreign_deps wrapped back into the tool group.
 	if got := mainNode.ForeignDeps["tool"]; len(got) != 1 || got[0] != leafUID {
 		t.Errorf("foreign_deps[tool] = %v, want [%s]", got, leafUID)
 	}
@@ -123,7 +121,7 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 }
 
 // TestWriteGraphCompact_StringEscaping checks the escaper matches stdlib (HTML
-// escaping off) for tricky inputs.
+// escaping off).
 func TestWriteGraphCompact_StringEscaping(t *testing.T) {
 	cases := []string{
 		"plain",
@@ -144,8 +142,7 @@ func TestWriteGraphCompact_StringEscaping(t *testing.T) {
 			t.Fatalf("stdlib marshal %q: %v", s, err)
 		}
 
-		// stdlib escapes <, >, & by default; our writer does not. Compare
-		// against the non-HTML-escaped form.
+		// Compare against the non-HTML-escaped form.
 		var nb bytes.Buffer
 		enc := json.NewEncoder(&nb)
 		enc.SetEscapeHTML(false)

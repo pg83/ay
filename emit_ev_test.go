@@ -4,10 +4,9 @@ import (
 	"testing"
 )
 
-// TestGen_ProtoLibrary_TransitivePROTONamespaceReachesEVCmd locks the EV
-// counterpart of the PB case: a PROTO_LIBRARY with a .ev source that
-// PEERDIR-reaches a bare PROTO_NAMESPACE(yt) provider must carry -I=$(S)/yt in
-// its protoc include block, exactly like the PB path.
+// TestGen_ProtoLibrary_TransitivePROTONamespaceReachesEVCmd locks that a .ev source
+// PEERDIR-reaching a bare PROTO_NAMESPACE(yt) provider carries -I=$(S)/yt in its
+// protoc include block.
 func TestGen_ProtoLibrary_TransitivePROTONamespaceReachesEVCmd(t *testing.T) {
 	files := map[string]string{}
 
@@ -56,14 +55,13 @@ END()
 		t.Fatalf("EV cmd duplicates -I=$(S)/yt (%d times): %v", ytCount, args)
 	}
 
-	// No source-root C++ -I leakage: proto include uses -I=$(S)/..., never -I$(S)/yt.
+	// No C++ source-root -I leakage: proto include uses -I=$(S)/..., never -I$(S)/yt.
 	for _, a := range args {
 		if a == "-I$(S)/yt" {
 			t.Fatalf("EV cmd leaks C++ source-root include -I$(S)/yt: %v", args)
 		}
 	}
 
-	// The peer proto include sits inside the include block, before --cpp_out.
 	ytIdx := indexOfArg(ev.Cmds[0].CmdArgs.flat(), "-I=$(S)/yt")
 	cppOutIdx := indexOfArg(ev.Cmds[0].CmdArgs.flat(), "--cpp_out=:$(B)/")
 	if cppOutIdx < 0 {
@@ -73,16 +71,13 @@ END()
 		t.Fatalf("expected -I=$(S)/yt before --cpp_out: yt=%d cpp_out=%d args=%v", ytIdx, cppOutIdx, args)
 	}
 
-	// Control: without disabled transitive headers the EV cpp_out keeps its bare
-	// form and must NOT gain the proto_h token.
 	if containsString(args, "--cpp_out=proto_h=true:$(B)/") {
 		t.Fatalf("EV cmd unexpectedly emits proto_h cpp_out without PROTOC_TRANSITIVE_HEADERS=no: %v", args)
 	}
 }
 
-// TestGen_EV_LiteHeaders_CppOutProtoH locks the EV counterpart of the PB
-// lite-header rule: the EV command shares the PB base, so disabling transitive
-// headers makes the EV --cpp_out carry proto_h=true, like the .pb.cc producer.
+// TestGen_EV_LiteHeaders_CppOutProtoH locks that disabling transitive headers makes
+// the EV --cpp_out carry proto_h=true, since the EV command shares the PB base.
 func TestGen_EV_LiteHeaders_CppOutProtoH(t *testing.T) {
 	files := map[string]string{}
 

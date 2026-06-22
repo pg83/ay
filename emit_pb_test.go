@@ -7,15 +7,13 @@ import (
 )
 
 // TestGen_Library_ProtoNamespaceRootsLibraryHostedProtoCommand: a plain LIBRARY()
-// (not PROTO_LIBRARY) carrying PROTO_NAMESPACE and SRCS(*.proto) compiles its proto
-// through emitLibraryProtoSource, which must root the protoc output/import roots at
-// the namespace exactly like the PROTO_LIBRARY path.
+// with PROTO_NAMESPACE must root the protoc output/import roots at the namespace
+// like the PROTO_LIBRARY path.
 func TestGen_Library_ProtoNamespaceRootsLibraryHostedProtoCommand(t *testing.T) {
 	files := map[string]string{}
 
-	// Peer LIBRARY with the same PROTO_NAMESPACE(yt): its GLOBAL `FOR proto $(S)/yt`
-	// addincl propagates, so the consumer's _PROTO__INCLUDE carries the namespace a
-	// second time (own + peer), yielding -I=$(S)/yt three times total.
+	// Peer with the same PROTO_NAMESPACE(yt) propagates its GLOBAL addincl, so the
+	// namespace appears twice (own + peer), yielding -I=$(S)/yt three times total.
 	writeTestModuleFile(files, "yt/yt/client/ya.make", `LIBRARY()
 PROTO_NAMESPACE(yt)
 SRCS(data.proto)
@@ -54,7 +52,7 @@ END()
 		return n
 	}
 
-	// Output roots and the local-dir / source-root import roots carry the namespace.
+	// Output roots and import roots carry the namespace.
 	for _, tok := range []string{
 		"-I=./yt",
 		"--cpp_out=:$(B)/yt",
@@ -65,13 +63,11 @@ END()
 		}
 	}
 
-	// The namespace import appears three times: the explicit -I=$ARCADIA_ROOT/$NS
-	// prefix plus the two _PROTO__INCLUDE copies (own + the namespace-sharing peer).
+	// Namespace import appears three times: prefix + two _PROTO__INCLUDE copies (own + peer).
 	if c := count("-I=$(S)/yt"); c != 3 {
 		t.Fatalf("library-hosted proto cmd: want three -I=$(S)/yt (prefix + own + peer), got %d: %v", c, args)
 	}
 
-	// None of the unrooted forms may survive.
 	for _, tok := range []string{"-I=./", "-I=$(S)/", "--cpp_out=:$(B)/", "--cpp_styleguide_out=:$(B)/"} {
 		if c := count(tok); c != 0 {
 			t.Fatalf("library-hosted proto cmd: unrooted %q must be gone, got %d: %v", tok, c, args)
@@ -79,9 +75,8 @@ END()
 	}
 }
 
-// TestGen_Library_TopLevelProtoKeepsUnrootedCommand pins the complementary case:
-// a top-level LIBRARY proto WITHOUT a PROTO_NAMESPACE keeps the $(B)/ / $(S)/ / ./
-// root shape — the prefix applies only with an effective source-root namespace.
+// TestGen_Library_TopLevelProtoKeepsUnrootedCommand: a top-level LIBRARY proto
+// WITHOUT a PROTO_NAMESPACE keeps the unrooted root shape.
 func TestGen_Library_TopLevelProtoKeepsUnrootedCommand(t *testing.T) {
 	files := map[string]string{}
 
@@ -112,12 +107,9 @@ END()
 	}
 }
 
-// TestEmitPB_PeerRedeclaredOwnNamespaceRidesProtoIncludeBand: when a peer
-// re-declares this module's own PROTO_NAMESPACE, the re-declared `-I=$(S)/<ns>` is
-// a member of _PROTO__INCLUDE and must render at its peer encounter position (after
-// the protobuf-runtime include), as upstream renders the set verbatim. The pre-fix
-// dedup-and-hoist drops it from the band and re-emits it adjacent to the structural
-// own-namespace -I, which this test rejects.
+// TestEmitPB_PeerRedeclaredOwnNamespaceRidesProtoIncludeBand: when a peer re-declares
+// this module's own PROTO_NAMESPACE, the re-declared `-I=$(S)/<ns>` must render at its
+// peer encounter position (after the protobuf runtime), not hoisted to the structural -I.
 func TestEmitPB_PeerRedeclaredOwnNamespaceRidesProtoIncludeBand(t *testing.T) {
 	const ns = "taxi/schemas/schemas/proto"
 
@@ -126,8 +118,8 @@ func TestEmitPB_PeerRedeclaredOwnNamespaceRidesProtoIncludeBand(t *testing.T) {
 		intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
 		intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
 		false, ns, false, nil, nil,
-		// _PROTO__INCLUDE peer set in encounter order: protobuf runtime, the peer
-		// re-declaring this module's own namespace, then a grpc peer.
+		// _PROTO__INCLUDE peer set, encounter order: protobuf runtime, the peer
+		// re-declaring this namespace, a grpc peer.
 		[]VFS{
 			source("contrib/libs/protobuf/src"),
 			source(ns),
@@ -260,10 +252,9 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 }
 
 // TestGen_ProtoLibrary_PluginDepAddInclLeadsDeclaredPeer: a CPP_PROTO compile must
-// emit the proto plugin DEPS' GLOBAL ADDINCL BEFORE the declared PEERDIR closure's
-// include dirs. Upstream's per-source plugin command induces the plugin-runtime
-// peer ahead of the declared PEERDIR for include-dir propagation. Before the fix
-// the declared peer's -I leads, which this test rejects.
+// emit the proto plugin DEPS' GLOBAL ADDINCL before the declared PEERDIR closure's
+// include dirs, because the per-source plugin command induces the plugin-runtime
+// peer ahead of the declared PEERDIR.
 func TestGen_ProtoLibrary_PluginDepAddInclLeadsDeclaredPeer(t *testing.T) {
 	files := map[string]string{}
 
@@ -293,8 +284,7 @@ END()
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
 
-	// The declared PEERDIR exposes a GLOBAL ADDINCL; the proto-plugin DEPS runtime
-	// exposes another. The plugin-runtime include must precede the declared one.
+	// Both peers expose a GLOBAL ADDINCL; the plugin-runtime include must precede the declared one.
 	writeTestModuleFile(files, "declared/peer/ya.make", "LIBRARY()\nADDINCL(GLOBAL declared/peer/inc)\nSRCS(p.cpp)\nEND()\n")
 	writeTestModuleFile(files, "declared/peer/p.cpp", "int p(){return 0;}\n")
 	writeTestModuleFile(files, "declared/peer/inc/h.h", "#pragma once\n")
@@ -319,13 +309,10 @@ END()
 	}
 }
 
-// TestGen_ProtoLibrary_PluginRuntimeLeadsLinkArchiveOrder: a PROGRAM linking a
-// PROTO_LIBRARY whose CPP_PROTO_PLUGIN0 DEPS (the plugin-runtime peer) and whose
-// declared PEERDIR both contribute an archive must emit the plugin-runtime archive
-// BEFORE the declared peer's. Upstream induces the plugin-runtime peer ahead of the
-// declared PEERDIR in the single peer order driving both ADDINCL and the link/archive
-// closure. Before the fix the declared peer's archive leads, which this test rejects.
-// The compile -I order is asserted too: the two move together.
+// TestGen_ProtoLibrary_PluginRuntimeLeadsLinkArchiveOrder: when a PROTO_LIBRARY's
+// CPP_PROTO_PLUGIN0 DEPS peer and its declared PEERDIR both contribute an archive, the
+// plugin-runtime archive must precede the declared peer's; the single peer order drives
+// both ADDINCL and the link closure, so compile -I order is asserted too.
 func TestGen_ProtoLibrary_PluginRuntimeLeadsLinkArchiveOrder(t *testing.T) {
 	files := map[string]string{}
 
@@ -362,8 +349,7 @@ END()
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
 
-	// Both peers carry an archive AND a GLOBAL ADDINCL. The plugin-runtime peer must
-	// precede the declared peer in both the link archive sequence and the -I order.
+	// Both peers carry an archive and a GLOBAL ADDINCL; plugin-runtime must lead in both.
 	writeTestModuleFile(files, "declared/peer/ya.make", "LIBRARY()\nADDINCL(GLOBAL declared/peer/inc)\nSRCS(p.cpp)\nEND()\n")
 	writeTestModuleFile(files, "declared/peer/p.cpp", "int p(){return 0;}\n")
 	writeTestModuleFile(files, "declared/peer/inc/h.h", "#pragma once\n")
@@ -405,8 +391,7 @@ END()
 		t.Fatalf("plugin-runtime archive [%d] must precede declared peer archive [%d] in link order", pluginIdx, declaredIdx)
 	}
 
-	// ADDINCL stability: the proto compile keeps plugin-runtime's -I ahead of the
-	// declared peer's (must not regress).
+	// ADDINCL stability: plugin-runtime's -I stays ahead of the declared peer's.
 	cc := findGraphNodeByOutputs(t, g, "$(B)/protos/test.pb.cc.o")
 	ccArgs := cc.Cmds[0].CmdArgs.flat()
 	pluginInc := indexOfArg(ccArgs, "-I$(S)/plugin/runtime/inc")
@@ -420,11 +405,9 @@ END()
 }
 
 // TestGen_CfgProto_InducesCodegenAndProtosPeers: a plain LIBRARY() with a
-// `.cfgproto` source must induce the cfgproto command's codegen + protos + protobuf
-// peers into its link closure, as a `.ev` source induces the eventlog peer. `protos`
-// is also a plain declared peerdir elsewhere, but `codegen` reaches the link closure
-// ONLY through the cfgproto command — before the fix it is absent. Asserts both
-// archives appear exactly once and codegen precedes protos.
+// `.cfgproto` source must induce the cfgproto command's codegen+protos+protobuf
+// peers into its link closure; `codegen` reaches it ONLY through the cfgproto
+// command. Asserts both archives appear once and codegen precedes protos.
 func TestGen_CfgProto_InducesCodegenAndProtosPeers(t *testing.T) {
 	files := map[string]string{}
 
@@ -435,7 +418,6 @@ END()
 `)
 	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
 
-	// Plain LIBRARY with a .cfgproto source — induces codegen+protos+protobuf.
 	writeTestModuleFile(files, "lib/ya.make", `LIBRARY()
 SRCS(backend.cpp backend_config.cfgproto)
 END()
@@ -450,7 +432,6 @@ END()
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
 
-	// The .cfgproto producer resolves these protoc-wrapper tools.
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
 	writeToolProgram(files, "library/cpp/proto_config/plugin", "plugin")
@@ -721,7 +702,7 @@ END()
 		}
 	}
 
-	// The plugin opt block must NOT carry the unsplit/colon form.
+	// No unsplit/colon yaff_opt form.
 	for _, bad := range args {
 		if strings.HasPrefix(bad, "--yaff_opt=:") || bad == "--yaff_opt=namespace=NMyNs,file=a.proto,experimental=b.proto" {
 			t.Fatalf("pb cmd args carry unsplit/colon yaff_opt %q: %v", bad, args)
@@ -732,7 +713,7 @@ END()
 		t.Fatalf("pb inputs missing yaff plugin binary: %#v", pb.flatInputs())
 	}
 
-	// Every proto in the module gets per-proto yaff outputs, not just the listed ones.
+	// Every proto gets per-proto yaff outputs, not just the listed ones.
 	_ = mustNodeByAnyOutput(t, g, "$(B)/protos/b.yaff.h")
 	_ = mustNodeByAnyOutput(t, g, "$(B)/protos/b.yaff.cpp")
 }
@@ -777,7 +758,7 @@ END()
 		}
 	}
 
-	// tag precedes namespace, mirroring the upstream EXTRA_OUT_FLAG order.
+	// tag precedes namespace.
 	tagIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "--yaff_tsar_vectors_opt=tag=tsar_vectors")
 	nsIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "--yaff_tsar_vectors_opt=namespace=NUserProfileTsarVectors")
 	if !(tagIdx >= 0 && nsIdx >= 0 && tagIdx < nsIdx) {
@@ -792,9 +773,8 @@ END()
 func TestGen_ProtoLibrary_SharedYAFFPluginBinaryDedupsToolDep(t *testing.T) {
 	files := map[string]string{}
 
-	// YAFF and YAFF_SCHEMA resolve to the same protoc_plugin binary: two plugins
-	// share one tool. Upstream's NodeDeps is a TUniqVector, so the shared plugin LD
-	// node appears once in the PB node's deps; ours must too.
+	// YAFF and YAFF_SCHEMA share one protoc_plugin binary: the shared plugin LD node
+	// must appear once in the PB node's deps (NodeDeps deduped).
 	writeTestModuleFile(files, "protos/ya.make", `PROTO_LIBRARY()
 YAFF(NAMESPACE NMyNs)
 YAFF_SCHEMA(tsar_vectors NUserProfileTsarVectors)
@@ -837,10 +817,8 @@ END()
 func TestGen_ProtoLibrary_TransitivePROTONamespaceReachesCppProtoCmd(t *testing.T) {
 	files := map[string]string{}
 
-	// Leaf PROTO_LIBRARY declares a bare (non-GLOBAL) PROTO_NAMESPACE(yt). Upstream
-	// expands it to `GLOBAL FOR proto $(S)/yt`, which propagates through the
-	// CPP_PROTO peer closure into every transitive consumer's protoc command as
-	// -I=$(S)/yt.
+	// Leaf declares a bare PROTO_NAMESPACE(yt); it propagates through the CPP_PROTO
+	// peer closure into every transitive consumer's protoc command as -I=$(S)/yt.
 	writeTestModuleFile(files, "leaf/ya.make", `PROTO_LIBRARY()
 PROTO_NAMESPACE(yt)
 SRCS(leaf.proto)
@@ -848,8 +826,7 @@ END()
 `)
 	writeTestModuleFile(files, "leaf/leaf.proto", "syntax = \"proto3\";\npackage test;\nmessage Leaf {}\n")
 
-	// Intermediate declares a GLOBAL PROTO_NAMESPACE: it rides the _PROTO__INCLUDE
-	// chain, ahead of the bare-namespace tail.
+	// Intermediate's GLOBAL PROTO_NAMESPACE rides the _PROTO__INCLUDE chain ahead of the bare tail.
 	writeTestModuleFile(files, "mid/ya.make", `PROTO_LIBRARY()
 PROTO_NAMESPACE(GLOBAL midns)
 PEERDIR(leaf)
@@ -893,8 +870,7 @@ END()
 		t.Fatalf("consumer pb cmd duplicates -I=$(S)/yt (%d times): %v", ytCount, args)
 	}
 
-	// The bare-namespace tail (yt) trails the GLOBAL-namespace chain entry (midns)
-	// in _PROTO__INCLUDE order; both sit inside the include block (before --cpp_out).
+	// The bare tail (yt) trails the GLOBAL chain entry (midns); both precede --cpp_out.
 	chainIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "-I=$(S)/midns")
 	ytIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "-I=$(S)/yt")
 	cppOutIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "--cpp_out=:$(B)/")
@@ -909,10 +885,8 @@ END()
 func TestGen_ProtoLibrary_ExportYmapsProtoReachesCppProtoCmd(t *testing.T) {
 	files := map[string]string{}
 
-	// EXPORT_YMAPS_PROTO() expands to PROTO_NAMESPACE(maps/doc/proto) ->
-	// PROTO_ADDINCL(GLOBAL maps/doc/proto). Its GLOBAL FOR proto SOURCE arm propagates
-	// $(S)/maps/doc/proto through the CPP_PROTO peer closure into every transitive
-	// consumer's protoc command.
+	// EXPORT_YMAPS_PROTO() == PROTO_NAMESPACE(maps/doc/proto); its SOURCE arm propagates
+	// $(S)/maps/doc/proto through the CPP_PROTO peer closure into every consumer's protoc command.
 	writeTestModuleFile(files, "leaf/ya.make", `PROTO_LIBRARY()
 EXPORT_YMAPS_PROTO()
 SRCS(leaf.proto)
@@ -962,9 +936,7 @@ END()
 		t.Fatalf("expected maps/doc/proto include before --cpp_out: maps=%d cpp_out=%d args=%v", mapsIdx, cppOutIdx, args)
 	}
 
-	// No source-root C++ include leakage: a C++ `-I$(S)/maps/doc/proto` is the SOURCE
-	// arm of PROTO_ADDINCL and belongs only to the protoc command, never to a C++
-	// compile. (The build-root `-I$(B)/maps/doc/proto` half IS expected on C++ compiles.)
+	// No source-root C++ include leakage: `-I$(S)/maps/doc/proto` belongs only to protoc.
 	const cppSourceLeak = "-I$(S)/maps/doc/proto"
 	for _, n := range g.Graph {
 		for _, cmd := range n.Cmds {
@@ -980,11 +952,8 @@ END()
 func TestGen_ProtoLibrary_ExportYmapsProtoReachesCppBuildRootAddIncl(t *testing.T) {
 	files := map[string]string{}
 
-	// EXPORT_YMAPS_PROTO() -> PROTO_NAMESPACE(maps/doc/proto) ->
-	// PROTO_ADDINCL(GLOBAL maps/doc/proto). Besides the protoc include closure,
-	// PROTO_ADDINCL emits an ordinary GLOBAL C++ ADDINCL of the build root that
-	// propagates through the peer addincl closure into every transitive consumer's
-	// C++ compile commands, including the generated-protobuf node `*.pb.cc.o`.
+	// Besides the protoc include closure, PROTO_ADDINCL emits a GLOBAL C++ ADDINCL of
+	// the build root that propagates into every consumer's C++ compile, including `*.pb.cc.o`.
 	writeTestModuleFile(files, "leaf/ya.make", `PROTO_LIBRARY()
 EXPORT_YMAPS_PROTO()
 SRCS(leaf.proto)
@@ -1007,7 +976,6 @@ END()
 
 	g := testGen(newMemFS(files), "consumer")
 
-	// The generated-protobuf C++ compile node.
 	ccObj := findGraphNodeByOutputs(t, g, "$(B)/consumer/brand.pb.cc.o")
 
 	args := strStrs(ccObj.Cmds[0].CmdArgs.flat())
@@ -1039,9 +1007,8 @@ END()
 func TestGen_ProtoLibrary_ExportYmapsProtoSetsProtoNamespaceOutputRoot(t *testing.T) {
 	files := map[string]string{}
 
-	// EXPORT_YMAPS_PROTO() == PROTO_NAMESPACE(maps/doc/proto). Besides the transitive
-	// include effects, it roots the module's OWN protoc command and output paths under
-	// maps/doc/proto, and roots the proto import search path at $(S)/maps/doc/proto.
+	// EXPORT_YMAPS_PROTO() also roots the module's OWN protoc command and output paths
+	// under maps/doc/proto, and roots the proto import search path at $(S)/maps/doc/proto.
 	const moduleDir = "maps/doc/proto/yandex/maps/proto/common2"
 	writeTestModuleFile(files, moduleDir+"/ya.make", `PROTO_LIBRARY()
 EXPORT_YMAPS_PROTO()
@@ -1084,7 +1051,7 @@ message Attribution {}
 		return n
 	}
 
-	// Output roots and the local-dir import root must carry the namespace, once.
+	// Output roots and the local-dir import root carry the namespace, once.
 	for _, tok := range []string{
 		"-I=./maps/doc/proto",
 		"--cpp_out=:$(B)/maps/doc/proto",
@@ -1095,13 +1062,11 @@ message Attribution {}
 		}
 	}
 
-	// The source-root namespace include must be present (the generic command
-	// construction emits it both as the include-root and the cppOutRoot arm).
+	// The source-root namespace include must be present.
 	if count("-I=$(S)/maps/doc/proto") == 0 {
 		t.Fatalf("response.pb cmd missing -I=$(S)/maps/doc/proto: %v", args)
 	}
 
-	// None of the unrooted forms may survive.
 	for _, tok := range []string{
 		"-I=./",
 		"-I=$(S)/",
@@ -1113,16 +1078,14 @@ message Attribution {}
 		}
 	}
 
-	// The imported proto resolves through the namespace root, proving the import
-	// search path roots at $(S)/maps/doc/proto.
+	// The imported proto resolves through the namespace root.
 	wantImport := "$(S)/" + moduleDir + "/attribution.proto"
 	inputs := vfsStrings(pb.Inputs.flat())
 	if !slices.Contains(inputs, wantImport) {
 		t.Fatalf("response.pb inputs missing imported proto %q: %v", wantImport, inputs)
 	}
 
-	// The generated C++ compile gains the build-root namespace include exactly
-	// once, and never a source-root C++ include.
+	// The generated C++ compile gains the build-root namespace include once, never a source-root one.
 	ccObj := findGraphNodeByOutputs(t, g, "$(B)/"+moduleDir+"/response.pb.cc.o")
 	ccArgs := strStrs(ccObj.Cmds[0].CmdArgs.flat())
 	buildCount, sourceCount := 0, 0

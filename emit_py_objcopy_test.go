@@ -49,12 +49,9 @@ END()
 	}
 }
 
-// A FROM_SANDBOX output embedded by a RESOURCE in the same module via a
-// root-relative path rooted at the module dir: the objcopy packer must read the
-// artifact from $(B) and depend on the SB fetch node — never a $(S) source path
-// (faults the UID finalizer content hash under sandboxing) nor the module-dir-
-// doubled $(B) path. The resfs key (base64 of the literal RESOURCE key) is
-// unchanged from a source resource.
+// A FROM_SANDBOX output embedded by a RESOURCE via a module-dir root-relative
+// path: the objcopy reads from $(B) and depends on the SB fetch node, never a
+// $(S) path nor the module-dir-doubled $(B) path. The resfs key is unchanged.
 func TestGen_ResourceRootRelativeFromSandboxOutputFeedsObjcopyFromBuildRoot(t *testing.T) {
 	files := map[string]string{}
 
@@ -78,7 +75,6 @@ END()
 
 	g := testGen(newMemFS(files), "yt/bundle")
 
-	// FROM_SANDBOX emits an SB fetch node producing the OUT_NOAUTO file in $(B).
 	sb := mustNodeByOutput(t, g, "$(B)/yt/bundle/llvm-symbolizer")
 	if sb.KV.P != pkSB {
 		t.Fatalf("llvm-symbolizer producer kind = %q, want SB", sb.KV.P.string())
@@ -89,7 +85,6 @@ END()
 		t.Fatal("graph is missing yt/bundle objcopy output")
 	}
 
-	// Embeds from $(B), not a source path and not the module-dir-doubled path.
 	if !nodeHasInput(objcopy, "$(B)/yt/bundle/llvm-symbolizer") {
 		t.Fatalf("objcopy inputs missing build-root fetched artifact: %#v", objcopy.flatInputs())
 	}
@@ -100,24 +95,19 @@ END()
 		t.Fatalf("objcopy inputs double the module dir: %#v", objcopy.flatInputs())
 	}
 
-	// The objcopy depends on the SB fetch node that produces the artifact.
 	if !slices.Contains(graphDeps(g, objcopy), sb.UID) {
 		t.Fatalf("objcopy deps missing SB fetch uid %q: %v", sb.UID, graphDeps(g, objcopy))
 	}
 
-	// The resfs key is unaffected — only the input VFS and producer dep change.
 	wantKey := encb64.StdEncoding.EncodeToString([]byte("/ytprof/llvm-symbolizer"))
 	if !slices.Contains(prCmdArgStrings(objcopy), wantKey) {
 		t.Fatalf("objcopy --keys missing base64 RESOURCE key %q: %v", wantKey, prCmdArgStrings(objcopy))
 	}
 }
 
-// A RESOURCE() in a PROTO_LIBRARY body belongs to the C++ _CPP_PROTO submodule
-// (MODULE_TAG=CPP_PROTO). Upstream folds that MODULE_TAG into the objcopy output-
-// name hash and stamps the node's module_tag with the lowercased tag (cpp_proto);
-// the submodule's .global.a carries <MODULE_TAG>_global (cpp_proto_global). Before
-// the fix the resource path folded in nothing (wrong hash, missing tag) and the
-// global archive fell through to the generic `global` tag.
+// A RESOURCE() in a PROTO_LIBRARY body belongs to the C++ _CPP_PROTO submodule:
+// its MODULE_TAG folds into the objcopy output-name hash and stamps the node's
+// module_tag (cpp_proto); the submodule's .global.a carries cpp_proto_global.
 func TestGen_ProtoLibraryResourceObjcopyAndGlobalUseCppProtoTag(t *testing.T) {
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
@@ -151,12 +141,8 @@ func TestGen_ProtoLibraryResourceObjcopyAndGlobalUseCppProtoTag(t *testing.T) {
 }
 
 // A RESOURCE_FILES path may name an ordinary source file at the root OUTSIDE the
-// consuming module. It expands into a payload member AND a resfs/src kv member
-// (${rootrel;input=TEXT:"<path>"}); upstream resolves both to $(S)/<path> because
-// the file exists there. Before the fix the resfs/src kv fallback naively joined
-// module dir + path, fabricating a phantom $(S)/<module>/<path> input that aborted
-// while content-hashing. Both members must bind to the same root source path, with
-// no producer dep for an ordinary source.
+// consuming module. Both its payload and resfs/src kv members must bind to the
+// same root $(S)/<path> (not a module-dir-joined phantom), with no producer dep.
 func TestGen_ResourceFilesRootRelativeSourceFromOtherModule(t *testing.T) {
 	files := map[string]string{
 		"contrib/libs/python/ya.make":     "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
@@ -166,7 +152,6 @@ func TestGen_ResourceFilesRootRelativeSourceFromOtherModule(t *testing.T) {
 	writeToolProgram(files, "tools/rescompiler", "rescompiler")
 	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 
-	// The embedded source lives at the root, NOT under the module dir.
 	files["modadvert/dyn_disclaimers/disclaimers_config.pb.txt"] = "config\n"
 
 	writeTestModuleFile(files, "yabs/server/libs/banner_flags/ya.make", `PY3_LIBRARY()
@@ -194,13 +179,11 @@ END()
 		t.Fatalf("objcopy inputs carry the module-prefixed phantom %q: %#v", phantom, objcopy.flatInputs())
 	}
 
-	// resfs/file key (literal key, base64) is unchanged.
 	wantKey := encb64.StdEncoding.EncodeToString([]byte("resfs/file/modadvert/dyn_disclaimers/disclaimers_config.pb.txt"))
 	if !slices.Contains(prCmdArgStrings(objcopy), wantKey) {
 		t.Fatalf("objcopy --keys missing base64 resfs/file key %q: %v", wantKey, prCmdArgStrings(objcopy))
 	}
 
-	// resfs/src kv command value carries the root source path, not the phantom.
 	wantKv := "resfs/src/resfs/file/modadvert/dyn_disclaimers/disclaimers_config.pb.txt=modadvert/dyn_disclaimers/disclaimers_config.pb.txt"
 	phantomKv := "resfs/src/resfs/file/modadvert/dyn_disclaimers/disclaimers_config.pb.txt=yabs/server/libs/banner_flags/modadvert/dyn_disclaimers/disclaimers_config.pb.txt"
 	args := prCmdArgStrings(objcopy)
@@ -212,15 +195,10 @@ END()
 	}
 }
 
-// A PY_SRCS source staged by COPY_FILE (a NOAUTO copy from another module) is a
-// packaging stage: the flat input model lists the copy producer's transitive $(S)
-// closure — the ORIGINAL source plus the copy tooling (fs_tools.py ->
-// process_command_files.py) — on every consumer of the staged copy. So the py3cc
-// bytecode node carries the original source and the copy scripts, and the
-// resource-objcopy embedding the staged .py / .yapyc3 carries the original source
-// (the scripts are normalized away ref-side, so ours must not over-emit them).
-// Before the fix the producer recorded no closure: the bytecode node missed all
-// three, the objcopy named only the staged $(B) copy.
+// A PY_SRCS source staged by COPY_FILE is a packaging stage: the copy producer's
+// transitive $(S) closure (original source + copy tooling) rides every consumer.
+// The py3cc bytecode node carries all three; the resource-objcopy carries the
+// original source but not the scripts (normalized away ref-side).
 func TestGen_CopyFileStagedPySrcCarriesOriginalSourceClosure(t *testing.T) {
 	files := map[string]string{}
 
@@ -231,11 +209,9 @@ func TestGen_CopyFileStagedPySrcCarriesOriginalSourceClosure(t *testing.T) {
 	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	writeToolProgram(files, "tools/archiver", "archiver")
 
-	// The copy tooling closure (fs_tools.py imports process_command_files).
 	writeTestModuleFile(files, "build/scripts/fs_tools.py", "import process_command_files\n")
 	writeTestModuleFile(files, "build/scripts/process_command_files.py", "pass\n")
 
-	// keys.py exists only in another module; staged here via COPY_FILE then PY_SRCS.
 	writeTestModuleFile(files, "pkg/keys.py", "KEY = 1\n")
 
 	writeTestModuleFile(files, "mod/ya.make", `PY3_LIBRARY()
@@ -255,8 +231,7 @@ END()
 	const fsTools = "$(S)/build/scripts/fs_tools.py"
 	const pcf = "$(S)/build/scripts/process_command_files.py"
 
-	// (1) py3cc bytecode node compiles the staged copy but carries the copy
-	// producer's $(S) closure: original source + both copy scripts.
+	// (1) bytecode node carries the copy producer's $(S) closure.
 	bc := mustNodeByOutput(t, g, "$(B)/mod/keys.py.yapyc3")
 	if !nodeHasInput(bc, stagedCopy) {
 		t.Fatalf("bytecode inputs missing staged copy %q: %#v", stagedCopy, bc.flatInputs())
@@ -271,8 +246,8 @@ END()
 		t.Fatalf("bytecode inputs missing copy tooling %q: %#v", pcf, bc.flatInputs())
 	}
 
-	// (2) resource-objcopy embedding the staged .py / .yapyc3 names the ORIGINAL
-	// source, not just the staged $(B) copy, and does NOT over-emit the copy scripts.
+	// (2) objcopy names the original source, not just the staged copy, and does
+	// NOT over-emit the copy scripts.
 	objcopy := findNodeByOutputPrefix(g, "$(B)/mod/objcopy_")
 	if objcopy == nil {
 		t.Fatal("graph is missing mod objcopy output")
@@ -285,12 +260,9 @@ END()
 	}
 }
 
-// A COPY_FILE whose source is itself a $(B) generated output (not a $(S)
-// original) is NOT a source-root packaging stage: there is no $(S) closure to
-// lift onto the staged copy's consumers. The copy producer must record no
-// ProducerSourceClosure, and the resource objcopy / py3cc bytecode node must ride
-// only the staged $(B) copy — never the original $(B) producer-location path.
-// Guards against a regression from over-broad copy-closure propagation.
+// A COPY_FILE whose source is a $(B) generated output is NOT a source-root
+// packaging stage: no $(S) closure to lift. The objcopy and bytecode node ride
+// only the staged $(B) copy, never the original $(B) producer-location path.
 func TestGen_CopyFileStagedBuildRootSrcCarriesNoOriginalClosure(t *testing.T) {
 	files := map[string]string{}
 
@@ -304,7 +276,6 @@ func TestGen_CopyFileStagedBuildRootSrcCarriesNoOriginalClosure(t *testing.T) {
 	writeTestModuleFile(files, "build/scripts/fs_tools.py", "import process_command_files\n")
 	writeTestModuleFile(files, "build/scripts/process_command_files.py", "pass\n")
 
-	// gen.py is a $(B) generated output; staged via COPY_FILE then PY_SRCS.
 	writeTestModuleFile(files, "mod/ya.make", `PY3_LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -320,7 +291,6 @@ END()
 	const origBuildSrc = "$(B)/gen/gen.py"
 	const stagedCopy = "$(B)/mod/gen.py"
 
-	// Bytecode node rides the staged copy only; no original $(B) producer edge.
 	bc := mustNodeByOutput(t, g, "$(B)/mod/gen.py.yapyc3")
 	if !nodeHasInput(bc, stagedCopy) {
 		t.Fatalf("bytecode inputs missing staged copy %q: %#v", stagedCopy, bc.flatInputs())
@@ -338,13 +308,10 @@ END()
 	}
 }
 
-// A RESOURCE that embeds a RUN_PROGRAM build-root output (payload.pb) carries
-// that producer's build-root OUTPUT_INCLUDES closure onto the objcopy node.
-// Upstream attaches OUTPUT_INCLUDES to EVERY output of the run, so the .pb
-// sibling exposes the generated headers and the objcopy walks them. Normalization
-// keeps only the $(B) half, so our generator emits the build-root generated .pb.h
-// (and depends on its producer) while leaving the resfs key, objcopy hash and
-// command args untouched.
+// A RESOURCE embedding a RUN_PROGRAM build-root output carries that producer's
+// build-root OUTPUT_INCLUDES closure onto the objcopy node (OUTPUT_INCLUDES
+// attaches to every output of the run). Normalization keeps only the $(B) half,
+// so the generated .pb.h rides (with a producer dep); resfs key and hash unchanged.
 func TestGen_ResourceBindirOutputCarriesProducerBuildClosure(t *testing.T) {
 	files := map[string]string{}
 
@@ -358,7 +325,6 @@ func TestGen_ResourceBindirOutputCarriesProducerBuildClosure(t *testing.T) {
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
 
-	// A peer PROTO_LIBRARY produces $(B)/p/dep.pb.h, named in OUTPUT_INCLUDES.
 	writeTestModuleFile(files, "p/ya.make", "PROTO_LIBRARY()\nSRCS(dep.proto)\nEND()\n")
 	writeTestModuleFile(files, "p/dep.proto", "syntax = \"proto3\";\nmessage Dep {}\n")
 
@@ -388,18 +354,17 @@ END()
 		t.Fatal("graph is missing db objcopy output")
 	}
 
-	// (1) the embedded build-root payload is an input.
 	if !nodeHasInput(objcopy, "$(B)/db/payload.pb") {
 		t.Fatalf("objcopy inputs missing build-root payload.pb: %#v", objcopy.flatInputs())
 	}
 
-	// (2) the producer's build-root OUTPUT_INCLUDES closure rides the objcopy node.
+	// (2) the producer's build-root OUTPUT_INCLUDES closure rides the objcopy.
 	const depPbH = "$(B)/p/dep.pb.h"
 	if !nodeHasInput(objcopy, depPbH) {
 		t.Fatalf("objcopy inputs missing producer build-root closure %q: %#v", depPbH, objcopy.flatInputs())
 	}
 
-	// (3) the source .proto leaf is NOT carried (normalize prunes the $(S) half).
+	// (3) the source .proto leaf is NOT carried.
 	if nodeHasInput(objcopy, "$(S)/p/dep.proto") {
 		t.Fatalf("objcopy must not carry source-tree .proto leaf: %#v", objcopy.flatInputs())
 	}
@@ -417,8 +382,7 @@ END()
 		t.Fatalf("objcopy deps %v do not include dep.pb.h producer uid %q", graphDeps(g, objcopy), depProducer.UID)
 	}
 
-	// (5) the closure is a node input only — never in --inputs nor the
-	// objcopy_<hash> name. The hash is over raw RESOURCE path + base64 key + $S/db.
+	// (5) the closure is a node input only — never in the command nor the hash.
 	args := prCmdArgStrings(objcopy)
 	for _, a := range args {
 		if strings.Contains(a, "dep.pb.h") {
@@ -477,9 +441,8 @@ END()
 		}
 	}
 
-	// Upstream hashes RESOURCE() pair.Path raw, i.e. '${BINDIR}/data.json', NOT the
-	// expanded '$(B)/db/data.json'. Pre-expanding here drifts the objcopy_<hash>
-	// filename. Lock the hash inputs we sort+md5 so a future expansion regresses fast.
+	// The hash is over the RAW RESOURCE() Path ('${BINDIR}/data.json'), not the
+	// expanded form; pre-expanding here would drift the objcopy_<hash> filename.
 	wantHashInputs := []string{
 		"${BINDIR}/data.json",
 		// base64 of "/data.json"; RESOURCE() Key is literal, not resfs/file-prefixed.
@@ -496,10 +459,8 @@ END()
 }
 
 // A RUN_PROGRAM STDOUT(_NOAUTO) output embedded via RESOURCE_FILES is a build
-// artifact, not a source file. RESOURCE_FILES expands each file into a payload
-// entry AND a resfs/src kv entry whose ${rootrel;input=TEXT:"..."} names the same
-// file; both must resolve to $(B) with the producer dependency. Before the fix the
-// resfs/src input resolved to a phantom $(S)/db/common.json with no producer edge.
+// artifact: both its payload and resfs/src kv members must resolve to $(B) with
+// the producer dependency, never a phantom $(S)/db/common.json.
 func TestGen_ResourceFilesStdoutOutputFeedsObjcopyFromBuildRoot(t *testing.T) {
 	files := map[string]string{
 		"contrib/libs/python/ya.make":     "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
@@ -531,8 +492,7 @@ END()
 		t.Fatal("graph is missing db objcopy output")
 	}
 
-	// (1) build-tree input, no phantom $(S) source — both payload and resfs/src
-	// kv entries point at $(B).
+	// (1) both payload and resfs/src kv point at $(B), no phantom $(S).
 	if !nodeHasInput(objcopy, "$(B)/db/common.json") {
 		t.Fatalf("objcopy inputs missing build-root common.json: %#v", objcopy.flatInputs())
 	}
@@ -540,7 +500,7 @@ END()
 		t.Fatalf("objcopy inputs still carry phantom source-root common.json: %#v", objcopy.flatInputs())
 	}
 
-	// (2) the objcopy node depends on the STDOUT_NOAUTO producer of common.json.
+	// (2) the objcopy depends on the STDOUT_NOAUTO producer of common.json.
 	producer := findNodeByOutputPrefix(g, "$(B)/db/common.json")
 	if producer == nil {
 		t.Fatal("graph is missing the RUN_PROGRAM producer of common.json")
@@ -556,7 +516,6 @@ END()
 		t.Fatalf("objcopy deps %v do not include the common.json producer uid %q", graphDeps(g, objcopy), producer.UID)
 	}
 
-	// (3) the RESOURCE_FILES key survives: base64 resfs/file/<PREFIX><file>.
 	wantKey := encb64.StdEncoding.EncodeToString([]byte("resfs/file/feature_store/catalog/common.json"))
 	foundKey := false
 	for _, c := range objcopy.Cmds {
@@ -572,11 +531,9 @@ END()
 }
 
 // ALL_RESOURCE_FILES(Ext PREFIX p Dirs...) globs <dir>/*.<ext> and feeds the
-// matches to RESOURCE_FILES with PREFIX p and STRIP ${ARCADIA_ROOT}/<moddir>/.
-// The globbed paths keep the literal ${ARCADIA_ROOT} marker (the glob runs before
-// the marker is bound), so the resfs/file key embeds it verbatim. Asserts the
-// emitted objcopy hash/inputs match the equivalent explicit RESOURCE_FILES, the
-// glob is .json-only and sorted, and the module's .global.a links the objcopy.
+// matches to RESOURCE_FILES. The globbed paths keep the literal ${ARCADIA_ROOT}
+// marker, so the resfs/file key embeds it verbatim. The emitted objcopy matches
+// the equivalent explicit RESOURCE_FILES, .json-only and sorted.
 func TestGen_AllResourceFilesGlobMatchesResourceFiles(t *testing.T) {
 	files := map[string]string{}
 
@@ -588,9 +545,8 @@ func TestGen_AllResourceFilesGlobMatchesResourceFiles(t *testing.T) {
 	files["mod/cfg/b.json"] = "{\"b\":2}\n"
 	files["mod/cfg/ignore.txt"] = "not a resource\n"
 
-	// The module lives in a sibling dir of the config dir, so
-	// STRIP=${ARCADIA_ROOT}/<moddir>/ does NOT strip and the resfs/file key retains
-	// the literal ${ARCADIA_ROOT} marker.
+	// STRIP=${ARCADIA_ROOT}/<moddir>/ is not a prefix here, so the key retains the
+	// literal ${ARCADIA_ROOT} marker.
 	writeTestModuleFile(files, "mod/libs/cpp/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -612,7 +568,6 @@ END()
 	var hashPaths, keysB64, kvsHash []string
 	for _, f := range sorted {
 		path := "${ARCADIA_ROOT}/mod/cfg/" + f
-		// STRIP not a prefix of the cfg path, so the whole marker-rooted path is the key tail.
 		fileKey := "resfs/file/" + prefix + path
 		hashPaths = append(hashPaths, path)
 		keysB64 = append(keysB64, encb64.StdEncoding.EncodeToString([]byte(fileKey)))
@@ -637,7 +592,6 @@ END()
 
 	args := prCmdArgStrings(objcopy)
 	for _, f := range sorted {
-		// --keys: base64 of the literal-marker key.
 		wantKey := encb64.StdEncoding.EncodeToString([]byte("resfs/file/" + prefix + "${ARCADIA_ROOT}/mod/cfg/" + f))
 		if !slices.Contains(args, wantKey) {
 			t.Fatalf("objcopy --keys missing base64 marker key for %q: %v", f, args)
@@ -652,7 +606,6 @@ END()
 		}
 	}
 
-	// The library's global archive links the resource objcopy.
 	globalAr := nodeByOutput(g, "$(B)/mod/libs/cpp/libmod-libs-cpp.global.a")
 	if globalAr == nil {
 		t.Fatal("graph is missing the global archive libmod-libs-cpp.global.a")
@@ -662,12 +615,9 @@ END()
 	}
 }
 
-// ALL_RESOURCE_FILES(Ext Dirs...) with a RELATIVE DIR (e.g. `(j2 templates)`):
-// the glob resolves against the module dir, so matches are
-// ${ARCADIA_ROOT}/<moddir>/<dir>/<file>. Here the STRIP=${ARCADIA_ROOT}/<moddir>/
-// default IS a prefix, so the resfs/file key becomes the moddir-relative
-// <dir>/<file> — no literal marker survives. Exercises the relative-DIR path class
-// the prior implementation silently dropped.
+// ALL_RESOURCE_FILES(Ext Dirs...) with a RELATIVE DIR globs against the module
+// dir. Here the STRIP=${ARCADIA_ROOT}/<moddir>/ default IS a prefix, so the key
+// becomes the moddir-relative <dir>/<file> — no literal marker survives.
 func TestGen_AllResourceFilesGlobRelativeDir(t *testing.T) {
 	files := map[string]string{}
 
@@ -695,7 +645,6 @@ END()
 	var hashPaths, keysB64, kvsHash []string
 	for _, f := range sorted {
 		path := "${ARCADIA_ROOT}/mod/app/templates/" + f
-		// STRIP IS a prefix here, so the key tail is the moddir-relative templates/<file>.
 		fileKey := "resfs/file/templates/" + f
 		hashPaths = append(hashPaths, path)
 		keysB64 = append(keysB64, encb64.StdEncoding.EncodeToString([]byte(fileKey)))
@@ -731,8 +680,7 @@ END()
 }
 
 // ALL_RESOURCE_FILES_FROM_DIRS with a relative DIR carrying `..` segments: the
-// dir is globbed non-recursively against the module dir and the `..` is
-// reconstructed. The resfs/file key is PREFIX-joined to the ${ARCADIA_ROOT}-rooted
+// `..` is reconstructed and the key is PREFIX-joined to the ${ARCADIA_ROOT}-rooted
 // match (STRIP at the module dir does not cover the parent-relative config dir).
 func TestGen_AllResourceFilesFromDirsRelativeParentDir(t *testing.T) {
 	files := map[string]string{}
@@ -762,7 +710,6 @@ END()
 	for _, f := range sorted {
 		// ../../configs/p resolved against base/tools/sync cleans to base/configs/p.
 		path := "${ARCADIA_ROOT}/base/configs/p/" + f
-		// STRIP not a prefix of the parent config dir, so the whole path is the key tail.
 		fileKey := "resfs/file/" + prefix + path
 		hashPaths = append(hashPaths, path)
 		keysB64 = append(keysB64, encb64.StdEncoding.EncodeToString([]byte(fileKey)))
@@ -791,9 +738,8 @@ END()
 }
 
 // ALL_RESOURCE_FILES with a SOURCE-ROOTED DIR carrying a trailing slash: the
-// glob splits the pattern with SkipEmpty, so the empty trailing segment is dropped
-// and each match reconstructs to a normalized ${ARCADIA_ROOT}/<arc-rel>/<file> with
-// no double slash. The stored resource path (and objcopy hash and keys) carry no `//`.
+// empty trailing segment is dropped, so each match reconstructs to a normalized
+// path with no double slash. The resource path, hash and keys carry no `//`.
 func TestGen_AllResourceFilesGlobSourceRootedTrailingSlash(t *testing.T) {
 	files := map[string]string{}
 
@@ -804,7 +750,6 @@ func TestGen_AllResourceFilesGlobSourceRootedTrailingSlash(t *testing.T) {
 	files["mod/cfg/a.json"] = "{\"a\":1}\n"
 	files["mod/cfg/b.json"] = "{\"b\":2}\n"
 
-	// The DIR is source-rooted AND ends with a slash.
 	writeTestModuleFile(files, "mod/libs/cpp/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -825,7 +770,6 @@ END()
 
 	var hashPaths, keysB64, kvsHash []string
 	for _, f := range sorted {
-		// No double slash: the trailing-slash DIR normalizes to ${ARCADIA_ROOT}/mod/cfg.
 		path := "${ARCADIA_ROOT}/mod/cfg/" + f
 		fileKey := "resfs/file/" + prefix + path
 		hashPaths = append(hashPaths, path)
@@ -856,14 +800,10 @@ END()
 	}
 }
 
-// ALL_RESOURCE_FILES with a DIR token carrying a trailing `*` wildcard segment:
-// the macro appends `/*.<ext>`, so the per-DIR glob pattern is `dir/*/*.json` — an
-// interior `*` segment expanding to every immediate subdir, then `.json` files
-// inside each. The glob walks the sorted directory frontier segment by segment;
-// the prior single-literal-directory modeling could not match an interior wildcard
-// and dropped the entire match set. Asserts the depth-2 matches feed the objcopy
-// like an explicit RESOURCE_FILES, a depth-1 (`dir/top.json`) file is NOT matched
-// by `*/*.json`, and non-json files are excluded.
+// ALL_RESOURCE_FILES with a DIR token ending in `*`: the per-DIR glob pattern is
+// `dir/*/*.json`, an interior `*` expanding to every immediate subdir then `.json`
+// inside each. The depth-2 matches feed the objcopy like explicit RESOURCE_FILES;
+// a depth-1 `dir/top.json` is NOT matched, and non-json files are excluded.
 func TestGen_AllResourceFilesGlobDirWildcard(t *testing.T) {
 	files := map[string]string{}
 
@@ -876,7 +816,6 @@ func TestGen_AllResourceFilesGlobDirWildcard(t *testing.T) {
 	files["mod/cfg/sub1/skip.txt"] = "not a resource\n"
 	files["mod/cfg/top.json"] = "{\"top\":0}\n" // depth-1: NOT matched by dir/*/*.json
 
-	// DIR ends in `*`.
 	writeTestModuleFile(files, "mod/libs/cpp/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -899,7 +838,6 @@ END()
 	var hashPaths, keysB64, kvsHash []string
 	for _, f := range sorted {
 		path := "${ARCADIA_ROOT}/mod/cfg/" + f
-		// STRIP not a prefix of the cfg path, so the whole path is the key tail.
 		fileKey := "resfs/file/" + prefix + path
 		hashPaths = append(hashPaths, path)
 		keysB64 = append(keysB64, encb64.StdEncoding.EncodeToString([]byte(fileKey)))
@@ -936,7 +874,6 @@ END()
 		}
 	}
 
-	// The library's global archive links the dir/* resource objcopy.
 	globalAr := nodeByOutput(g, "$(B)/mod/libs/cpp/libmod-libs-cpp.global.a")
 	if globalAr == nil {
 		t.Fatal("graph is missing the global archive libmod-libs-cpp.global.a")
@@ -946,14 +883,11 @@ END()
 	}
 }
 
-// A build-generated PY_SRCS source (PY_SRCS(__init__.py) where __init__.py is the
-// OUT_NOAUTO output of a RUN_PROGRAM) is packaged like a checked-in py: it flows
-// through onresource_files → an objcopy_<hash>.o resfs node embedding the
-// generated .py and its .yapyc3 from $(B), with deps on both producers. It is NOT
-// routed through the rescompiler _raw.auxcpp path (that path is for PY proto
-// resources only). It is also EXCLUDED from the py/namespace resource, because
-// extended source search requires an arc source — a $(B) generated file is not —
-// so a module whose only PY_SRCS is generated emits no namespace node.
+// A build-generated PY_SRCS source (the OUT_NOAUTO of a RUN_PROGRAM) is packaged
+// like a checked-in py: an objcopy resfs node embeds the generated .py and its
+// .yapyc3 from $(B), with deps on both producers. It is NOT routed through the
+// rescompiler _raw.auxcpp path, and is EXCLUDED from the py/namespace resource
+// (extended source search needs an arc source, which a $(B) file is not).
 func TestGen_GeneratedPySrcsResourcedAsObjcopyNotRawAux(t *testing.T) {
 	files := map[string]string{}
 
@@ -981,9 +915,7 @@ END()
 
 	g := testGen(newMemFS(files), "mod")
 
-	// The generated py packages via onresource_files → objcopy resfs. The hash is
-	// over the same path/key/kvHash strings as a checked-in py (paths are rootrel-
-	// independent of $S vs $B).
+	// The hash is over the same path/key/kvHash strings as a checked-in py.
 	pyKey := "resfs/file/py/mod/__init__.py"
 	ypKey := "resfs/file/py/mod/__init__.py.yapyc3"
 	paths := []string{"__init__.py", "__init__.py.yapyc3"}
@@ -1003,7 +935,6 @@ END()
 		t.Fatalf("graph is missing generated-py objcopy output %q\nobjcopy nodes: %v", wantObjcopy, objcopyOutputs(g))
 	}
 
-	// The objcopy embeds the generated .py and its bytecode from $(B), not $(S).
 	if !nodeHasInput(objcopy, "$(B)/mod/__init__.py") {
 		t.Fatalf("objcopy inputs missing build-root generated source: %#v", objcopy.flatInputs())
 	}
@@ -1036,7 +967,7 @@ END()
 		}
 	}
 
-	// No py/namespace resource: the only PY_SRCS is generated (not an arc source).
+	// No py/namespace resource: the only PY_SRCS is generated.
 	for _, n := range g.Graph {
 		for _, a := range prCmdArgStrings(n) {
 			if strings.Contains(a, "py/namespace") && strings.Contains(a, "/mod=") {
@@ -1045,16 +976,14 @@ END()
 		}
 	}
 
-	// The module's global archive links the resfs objcopy.
 	globalAr := mustNodeByOutput(t, g, "$(B)/mod/libpy3mod.global.a")
 	if !slices.Contains(prCmdArgStrings(globalAr), wantObjcopy) {
 		t.Fatalf("global archive does not link the generated-py objcopy %q: %v", wantObjcopy, prCmdArgStrings(globalAr))
 	}
 }
 
-// Guard: an ordinary checked-in PY_SRCS module is unaffected by the generated-py
-// objcopy routing. Its objcopy embeds the .py from $(S), and the module still
-// emits a py/namespace resource (a checked-in py IS an arc source).
+// Guard: an ordinary checked-in PY_SRCS module is unaffected. Its objcopy embeds
+// the .py from $(S), and it still emits a py/namespace resource.
 func TestGen_CheckedInPySrcsObjcopyUnaffected(t *testing.T) {
 	files := map[string]string{}
 
@@ -1093,7 +1022,6 @@ END()
 		t.Fatalf("graph is missing checked-in py objcopy: %v", objcopyOutputs(g))
 	}
 
-	// The checked-in .py resource binds to the source path, not a build path.
 	if !nodeHasInput(objcopy, "$(S)/modc/foo.py") {
 		t.Fatalf("checked-in objcopy inputs missing source foo.py: %#v", objcopy.flatInputs())
 	}
@@ -1101,7 +1029,6 @@ END()
 		t.Fatalf("checked-in objcopy inputs use a build path for a source py: %#v", objcopy.flatInputs())
 	}
 
-	// A checked-in py IS an arc source, so the namespace resource is emitted.
 	sawNamespace := false
 	for _, n := range g.Graph {
 		for _, a := range prCmdArgStrings(n) {
@@ -1115,12 +1042,10 @@ END()
 	}
 }
 
-// A checked-in `.py` passed to PY_SRCS as a root-relative token (the file lives
-// at the root path it names, not under the module dir) keys its py/namespace
-// resource at the namespace root derived from the resolved rootrel_arc_src —
-// `mod_root_path = rootrel[:-(len(token)+1)]` — which for a fully-root-relative
-// token is the empty string: `py/namespace/<md5>/=<value>`. The namespace VALUE
-// stays module-derived.
+// A checked-in `.py` passed to PY_SRCS as a fully-root-relative token keys its
+// py/namespace resource at the empty namespace root (`py/namespace/<md5>/=<value>`),
+// since mod_root_path = rootrel[:-(len(token)+1)] is empty. The VALUE stays
+// module-derived.
 func TestGen_RootRelativePySrcsNamespaceKeyedAtRoot(t *testing.T) {
 	files := map[string]string{}
 
@@ -1131,7 +1056,6 @@ func TestGen_RootRelativePySrcsNamespaceKeyedAtRoot(t *testing.T) {
 	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	writeToolProgram(files, "tools/archiver", "archiver")
 
-	// The source is checked in at the root path it names, NOT under mod/.
 	writeTestModuleFile(files, "other/place/thing.py", "x = 1\n")
 	writeTestModuleFile(files, "mod/ya.make", `PY3_LIBRARY()
 NO_LIBC()
@@ -1144,8 +1068,6 @@ END()
 
 	g := testGen(newMemFS(files), "mod")
 
-	// Key: md5 over the module name, mod_root_path = "" (rootrel == token),
-	// value = module dotted path + ".".
 	h := md5.New()
 	h.Write([]byte("mod.other.place.thing"))
 	nsMD5 := enchex.EncodeToString(h.Sum(nil))
@@ -1157,7 +1079,7 @@ END()
 	wantHash := objcopyHash(nil, nil, []string{kvHash}, "mod", stringPtr("PY3"))
 	wantObjcopy := "$(B)/mod/objcopy_" + wantHash + ".o"
 
-	// The namespace objcopy command must key at the root, not the module dir.
+	// The namespace must key at the root, not the module dir.
 	sawRoot := false
 	for _, n := range g.Graph {
 		for _, a := range prCmdArgStrings(n) {
@@ -1173,23 +1095,20 @@ END()
 		t.Fatalf("missing root-keyed namespace kv %q\nobjcopy nodes: %v", kvCmd, objcopyOutputs(g))
 	}
 
-	// Output/member identity follows the resource key.
 	objcopy := nodeByOutput(g, wantObjcopy)
 	if objcopy == nil {
 		t.Fatalf("graph is missing root-keyed namespace objcopy %q\nobjcopy nodes: %v", wantObjcopy, objcopyOutputs(g))
 	}
 
-	// The module's global archive links exactly that member.
 	globalAr := mustNodeByOutput(t, g, "$(B)/mod/libpy3mod.global.a")
 	if !slices.Contains(prCmdArgStrings(globalAr), wantObjcopy) {
 		t.Fatalf("global archive does not link the root-keyed namespace objcopy %q: %v", wantObjcopy, prCmdArgStrings(globalAr))
 	}
 }
 
-// Guard the token-form distinction: a swig-injected PY_SRCS source arrives as a
-// full `${ARCADIA_BUILD_ROOT}/<full>.py` token (d.pySrcsFullName=true) and stays
-// on the rescompiler _raw.auxcpp path — it must NOT be re-routed to objcopy resfs.
-// (The bare-token RUN_PROGRAM case above is the one that goes through objcopy.)
+// A swig-injected PY_SRCS source arrives as a full ${ARCADIA_BUILD_ROOT}/<full>.py
+// token and stays on the rescompiler _raw.auxcpp path — NOT re-routed to objcopy
+// resfs (unlike the bare-token RUN_PROGRAM case above).
 func TestGen_SwigGeneratedPyStaysOnRawAuxNotObjcopy(t *testing.T) {
 	files := map[string]string{}
 
@@ -1217,7 +1136,6 @@ END()
 
 	g := testGen(newMemFS(files), "swigmod")
 
-	// The swig py is embedded through the rescompiler _raw.auxcpp path.
 	sawAux := false
 	for _, n := range g.Graph {
 		if len(n.Outputs) == 0 {
@@ -1237,13 +1155,9 @@ END()
 	}
 }
 
-// A PY3_PROGRAM is a multimodule: the PROGRAM half (PY3_BIN) has
-// .IGNORED=RESOURCE RESOURCE_FILES and ENABLE(PROCESS_PY_MAIN_ONLY), so the resfs
-// objcopy a RESOURCE() produces is owned by the LIBRARY twin (PY3_BIN_LIB) and
-// stamped module_tag=py3_bin_lib. Only PY_MAIN (program-side) carries
-// module_tag=py3_bin. Before the fix the flush() stamped the RESOURCE objcopy with
-// py3_bin for the tokPy3Program case, contradicting its own output hash (computed
-// with the py3_bin_lib tag).
+// A PY3_PROGRAM is a multimodule: the PROGRAM half ignores RESOURCE, so a
+// RESOURCE() objcopy is owned by the LIBRARY twin (PY3_BIN_LIB) and stamped
+// module_tag=py3_bin_lib. Only the program-side PY_MAIN carries module_tag=py3_bin.
 func TestGen_Py3ProgramResourceObjcopyUsesLibTagPyMainKeepsBinTag(t *testing.T) {
 	files := map[string]string{
 		"contrib/libs/python/ya.make":             "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
@@ -1306,13 +1220,10 @@ END()
 	}
 }
 
-// A PY3_PROGRAM's PROGRAM half (PY3_BIN) has .IGNORED=RESOURCE RESOURCE_FILES:
-// the RESOURCE objcopy is owned by the PY3_BIN_LIB twin and reaches the program
-// ONLY through .PEERDIRSELF=PY3_BIN_LIB's global archive, never as a direct LD
-// member. The PROGRAM-side PY_MAIN objcopy, by contrast, is a genuine direct LD
-// member. Before the fix the RESOURCE objcopy was emitted on the PROGRAM side too,
-// so the program's LD over-linked it as a coupled cmds+inputs member the reference
-// lacks.
+// A PY3_PROGRAM's PROGRAM half ignores RESOURCE: the RESOURCE objcopy is owned by
+// the PY3_BIN_LIB twin and reaches the program ONLY through that twin's global
+// archive, never as a direct LD member — whereas the PY_MAIN objcopy is a genuine
+// direct LD member.
 func TestGen_Py3ProgramLDDoesNotDirectlyLinkResourceObjcopy(t *testing.T) {
 	files := map[string]string{
 		"contrib/libs/python/ya.make":             "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
@@ -1369,8 +1280,7 @@ END()
 
 	ld := mustNodeByOutput(t, g, "$(B)/app/app")
 
-	// (1) the PROGRAM LD must NOT carry the LIBRARY-owned RESOURCE objcopy as a
-	// direct member (cmds or inputs) nor depend on it.
+	// (1) the PROGRAM LD must NOT carry the LIBRARY-owned RESOURCE objcopy.
 	resOut := resObjcopy.Outputs[0].string()
 	if nodeHasInput(ld, resOut) {
 		t.Errorf("LD inputs over-link the LIBRARY-owned RESOURCE objcopy %q: %v", resOut, vfsStringsT3(ld.flatInputs()))
@@ -1392,7 +1302,7 @@ END()
 	}
 
 	// (3) the RESOURCE objcopy is not lost: the PY3_BIN_LIB twin's global archive
-	// still packs it, so it reaches the binary through the peer global.
+	// still packs it.
 	var global *Node
 	for _, n := range g.Graph {
 		if len(n.Outputs) == 0 {
@@ -1424,10 +1334,9 @@ func objcopyOutputs(g *Graph) []string {
 	return out
 }
 
-// FROM_SANDBOX(... OUT_NOAUTO ${VAR}) materializes a set of fetched build
-// artifacts, then RESOURCE_FILES(${VAR}) embeds them. Each payload is a $(B) fetch
-// output, not a $(S) source: every objcopy chunk must bind the $(B)/<module>/<file>
-// payload (and resfs/src kv) and depend on the SB fetch node — never a phantom $(S).
+// FROM_SANDBOX(... OUT_NOAUTO ${VAR}) materializes fetched build artifacts, then
+// RESOURCE_FILES(${VAR}) embeds them. Each payload is a $(B) fetch output: every
+// objcopy chunk binds the $(B) payload and depends on the SB node, never a $(S).
 func TestGen_FromSandboxVarOutNoautoResourceFilesFeedsObjcopyFromBuildRoot(t *testing.T) {
 	files := map[string]string{}
 	files["build/scripts/fetch_from_sandbox.py"] = "\n"
@@ -1438,10 +1347,9 @@ func TestGen_FromSandboxVarOutNoautoResourceFilesFeedsObjcopyFromBuildRoot(t *te
 	writeToolProgram(files, "tools/rescompiler", "rescompiler")
 	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 
-	// Enough dict files to force the packer into several objcopy chunks: the SB
-	// node's main output is the first listed file (plutonium_dicts/2.dict). Non-first
-	// chunks embed only later dicts, yet the main output is listed in every chunk's
-	// inputs because each chunk depends on the single SB node via the OutTogether edge.
+	// Enough dict files to force several objcopy chunks. The SB node's main output
+	// is the first listed file; it appears in every chunk's inputs because each
+	// chunk depends on the single SB node via the OutTogether edge.
 	var setBody strings.Builder
 	const nDicts = 48
 	for i := 2; i <= nDicts; i++ {
@@ -1469,7 +1377,6 @@ END()
 		t.Fatalf("main output producer kind = %q, want SB", sb.KV.P.string())
 	}
 
-	// Collect every objcopy chunk; partition by whether it embeds the main output.
 	var chunks []*Node
 	for _, n := range g.Graph {
 		if len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].string(), "$(B)/dictmod/objcopy_") {
@@ -1504,8 +1411,7 @@ END()
 		if nodeHasInput(c, "$(S)/dictmod/plutonium_dicts/2.dict") {
 			t.Fatalf("objcopy %s carries phantom source-root 2.dict: %#v", c.Outputs[0].string(), vfsStringsT3(c.flatInputs()))
 		}
-		// Every chunk depending on the SB node lists its main output (2.dict) —
-		// directly if embedded, else via the OutTogether main-output edge.
+		// Every chunk lists the SB main output (directly or via OutTogether).
 		if !nodeHasInput(c, mainOut) {
 			t.Fatalf("objcopy %s missing SB main-output input %s: %#v", c.Outputs[0].string(), mainOut, vfsStringsT3(c.flatInputs()))
 		}
@@ -1519,12 +1425,10 @@ END()
 }
 
 // A RESOURCE embedding a chained-RUN_PROGRAM build output carries the producer
-// chain's transitive $(S) source leaves onto the objcopy node. second.bin embeds
-// here; it must gain c.gztproto (direct) plus a.remorph and gz.gzt (transitive
-// through the opaque first.bin). base.proto is a C/C++ compile-closure leaf
-// (objcopyOverEmitExts) the reference prune drops, so our side must not carry it.
-// The leaves ride as cache-key inputs only: --inputs, --keys, hash and command
-// stay unchanged.
+// chain's transitive $(S) source leaves onto the objcopy. The embedded second.bin
+// gains c.gztproto (direct) plus a.remorph and gz.gzt (transitive through the
+// opaque first.bin), but not base.proto (a compile-closure leaf pruned ref-side).
+// The leaves ride as cache-key inputs only; command and hash stay unchanged.
 func TestGen_ResourceGeneratedPayloadCarriesProducerSourceInputs(t *testing.T) {
 	files := map[string]string{}
 
@@ -1574,14 +1478,11 @@ END()
 		t.Fatal("graph is missing mod objcopy output")
 	}
 
-	// (1) embedded build-root payload is an input.
 	if !nodeHasInput(objcopy, "$(B)/mod/second.bin") {
 		t.Fatalf("objcopy inputs missing build-root second.bin: %#v", objcopy.flatInputs())
 	}
 
-	// (2) the producer chain's transitive $(S) source leaves ride the objcopy:
-	// c.gztproto (direct on second.bin), a.remorph and gz.gzt (transitive through
-	// the opaque generated first.bin).
+	// (2) the producer chain's transitive $(S) source leaves ride the objcopy.
 	for _, want := range []string{
 		"$(S)/mod/c.gztproto",
 		"$(S)/mod/a.remorph",
@@ -1592,14 +1493,12 @@ END()
 		}
 	}
 
-	// (3) base.proto (.proto compile-closure leaf) is pruned ref-side; we must not
-	// over-emit it.
+	// (3) base.proto (compile-closure leaf) is pruned ref-side.
 	if nodeHasInput(objcopy, "$(S)/mod/base.proto") {
 		t.Fatalf("objcopy must not carry the .proto compile-closure leaf: %#v", objcopy.flatInputs())
 	}
 
-	// (4) the source leaves are cache-key inputs only — never in the command, the
-	// --inputs payload, the --keys, or the objcopy_<hash> output name.
+	// (4) the source leaves are cache-key inputs only — never in the command or hash.
 	args := prCmdArgStrings(objcopy)
 	for _, a := range args {
 		if strings.Contains(a, ".remorph") || strings.Contains(a, ".gzt") || strings.Contains(a, ".proto") {
@@ -1619,9 +1518,8 @@ END()
 	}
 }
 
-// Negative control: an ordinary source-tree RESOURCE(data.txt KEY) resolves to no
-// producer, so it must NOT gain any synthetic generated-producer source inputs.
-// Its only data input is the source file itself.
+// Negative control: an ordinary source-tree RESOURCE resolves to no producer, so
+// it gains no synthetic generated-producer source inputs.
 func TestGen_ResourceStaticSourceGainsNoGeneratedProducerInputs(t *testing.T) {
 	files := map[string]string{}
 
@@ -1649,23 +1547,21 @@ END()
 		t.Fatal("graph is missing mod objcopy output")
 	}
 
-	// The static resource's payload is the source file itself (in --inputs).
+	// The payload is the source file itself.
 	if !nodeHasInput(objcopy, "$(S)/mod/data.txt") {
 		t.Fatalf("objcopy inputs missing static source data.txt: %#v", objcopy.flatInputs())
 	}
 
-	// No generated-producer source attribution: the only $(S) data leaf is data.txt.
 	if nodeHasInput(objcopy, "$(S)/mod/extra.remorph") {
 		t.Fatalf("static-resource objcopy gained a synthetic producer source input: %#v", objcopy.flatInputs())
 	}
 }
 
 // TestEmitProgramResource_CppProgramLinksObjcopy covers the C++ PROGRAM resource
-// link path: a plain PROGRAM() declaring BUNDLE(dep NAME x.bundle) +
-// RESOURCE(x.bundle dep/key) must emit the resource objcopy and link it as an LD
-// member, with the objcopy embedding the BN build output ($(B)/prog/x.bundle), not
-// a $(S) placeholder. RESOURCE batches pack into objcopy_<hash>.o for the link
-// side of every module, not only Python ones.
+// link path: a PROGRAM() with BUNDLE + RESOURCE emits the resource objcopy and
+// links it as an LD member, embedding the BN build output ($(B)/prog/x.bundle),
+// not a $(S) placeholder. RESOURCE packs into objcopy for every module, not only
+// Python ones.
 func TestEmitProgramResource_CppProgramLinksObjcopy(t *testing.T) {
 	files := map[string]string{}
 
@@ -1684,7 +1580,6 @@ func TestEmitProgramResource_CppProgramLinksObjcopy(t *testing.T) {
 	depAR := mustNodeByOutput(t, g, "$(B)/dep/libdep.a")
 	bn := mustNodeByOutput(t, g, "$(B)/prog/x.bundle")
 
-	// (1) BN node renames the bundled module's primary output.
 	if bn.KV.P != pkBN {
 		t.Errorf("bundle node kv.p = %q, want BN", bn.KV.P.string())
 	}
@@ -1695,7 +1590,7 @@ func TestEmitProgramResource_CppProgramLinksObjcopy(t *testing.T) {
 		t.Errorf("graphDeps(BN) %v does not include the bundled AR uid %q", graphDeps(g, bn), depAR.UID)
 	}
 
-	// (2) the resource objcopy exists, embeds the BN build output, and depends on it.
+	// (2) the resource objcopy embeds the BN build output and depends on it.
 	oc := findNodeByOutputPrefix(g, "$(B)/prog/objcopy_")
 	if oc == nil {
 		t.Fatal("graph is missing the prog resource objcopy node (C++ PROGRAM resource not linked)")
@@ -1710,7 +1605,7 @@ func TestEmitProgramResource_CppProgramLinksObjcopy(t *testing.T) {
 		t.Errorf("graphDeps(objcopy) %v does not include the BN uid %q", graphDeps(g, oc), bn.UID)
 	}
 
-	// (3) the PROGRAM LD node links the objcopy object and depends on it.
+	// (3) the PROGRAM LD links the objcopy object and depends on it.
 	ld := mustNodeByOutput(t, g, "$(B)/prog/prog")
 	if !nodeHasInput(ld, oc.Outputs[0].string()) {
 		t.Errorf("LD inputs missing the resource objcopy member %q: %v", oc.Outputs[0].string(), vfsStringsT3(ld.flatInputs()))

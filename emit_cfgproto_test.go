@@ -5,9 +5,8 @@ import (
 )
 
 // TestGen_CfgProto_EmitsPBProducerAndCompile: a `.cfgproto` source must emit a
-// PB/yellow producer whose outputs keep the source extension
-// (backend_config.cfgproto.pb.{cc,h}), with the proto_config plugin and
-// --config_out, then compile the generated .pb.cc and archive its object.
+// PB/yellow producer with the proto_config plugin and --config_out, then compile
+// the generated .pb.cc and archive its object.
 func TestGen_CfgProto_EmitsPBProducerAndCompile(t *testing.T) {
 	files := map[string]string{}
 
@@ -73,7 +72,7 @@ message Cfg {}
 		}
 	}
 
-	// The ordinary .proto / .ev path must NOT receive the config plugin.
+	// The ordinary .proto path must NOT receive the config plugin.
 	for _, a := range args {
 		if a == "--plugin=protoc-gen-event2cpp="+"$(B)/tools/event2cpp/event2cpp" {
 			t.Errorf("cfgproto producer must not carry the event2cpp plugin: %v", args)
@@ -100,13 +99,11 @@ message Cfg {}
 	if !nodeHasInput(obj, "$(B)/lib/backend_config.cfgproto.pb.cc") {
 		t.Fatalf("cfgproto object missing generated .pb.cc input: %v", obj.flatInputs())
 	}
-	// No `main` output is marked, so the self .pb.h does NOT ride the .pb.cc.o
-	// as a direct input.
+	// No `main` output, so the self .pb.h does NOT ride the .pb.cc.o.
 	if nodeHasInput(obj, "$(B)/lib/backend_config.cfgproto.pb.h") {
 		t.Errorf("cfgproto object must not carry its own generated .pb.h: %v", obj.flatInputs())
 	}
-	// The proto_config plugin inserts the NProtoConfig.Include headers into the
-	// generated .pb.h; they must ride the .pb.cc.o closure.
+	// NProtoConfig.Include headers land in the generated .pb.h and must ride the .pb.cc.o closure.
 	if !nodeHasInput(obj, "$(S)/util/datetime/base.h") {
 		t.Errorf("cfgproto object missing NProtoConfig.Include header util/datetime/base.h: %v", obj.flatInputs())
 	}
@@ -123,12 +120,10 @@ message Cfg {}
 	}
 }
 
-// TestGen_CfgProto_WireFormatDoesNotLeakToConsumer guard: the generated
-// `.cfgproto.pb.h` is an EDT_OutTogether sibling of its `.pb.cc` (no `main`
-// output). A downstream C++ consumer that includes the header must reach the
-// sibling `.pb.cc` but MUST NOT inherit protoc's cpp-only induced `wire_format.h`
-// — that belongs only on the generated translation unit. A bare closure leaf
-// avoids the leak; a traversed parsed include would not.
+// TestGen_CfgProto_WireFormatDoesNotLeakToConsumer guard: a consumer including the
+// generated `.cfgproto.pb.h` must reach its EDT_OutTogether sibling `.pb.cc` but MUST
+// NOT inherit protoc's cpp-only induced `wire_format.h`, which belongs only on the
+// generated translation unit.
 func TestGen_CfgProto_WireFormatDoesNotLeakToConsumer(t *testing.T) {
 	const wireFormat = "$(S)/contrib/libs/protobuf/src/google/protobuf/wire_format.h"
 
@@ -145,7 +140,6 @@ import "library/cpp/proto_config/protos/extensions.proto";
 message Cfg {}
 `)
 
-	// protoc declares wire_format.h as a cpp-only induced dep.
 	files["contrib/tools/protoc/ya.make"] = "PROGRAM(protoc)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(main.cpp)\n" +
 		"INDUCED_DEPS(cpp ${ARCADIA_ROOT}/contrib/libs/protobuf/src/google/protobuf/wire_format.h)\nEND()\n"
 	files["contrib/tools/protoc/main.cpp"] = "int main(){return 0;}\n"
@@ -163,20 +157,18 @@ message Cfg {}
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
 
-	// Ordinary C++ consumer in a peer module that includes the generated header.
 	writeTestModuleFile(files, "app/ya.make", "LIBRARY()\nPEERDIR(lib)\nSRCS(use.cpp)\nEND()\n")
 	writeTestModuleFile(files, "app/use.cpp", "#include <lib/backend_config.cfgproto.pb.h>\nint use(){return 0;}\n")
 
 	g := testGen(newMemFS(files), "app")
 
-	// The generated translation unit MUST keep wire_format.h.
 	obj := mustNodeByOutput(t, g, "$(B)/lib/backend_config.cfgproto.pb.cc.o")
 	if !nodeHasInput(obj, wireFormat) {
 		t.Fatalf("cfgproto .pb.cc.o must keep protoc induced wire_format.h: %v", obj.flatInputs())
 	}
 
 	useCC := mustNodeByOutput(t, g, "$(B)/app/use.cpp.o")
-	// EDT_OutTogether parity: the sibling .pb.cc and the .pb.h still ride.
+	// EDT_OutTogether parity: the sibling .pb.cc and .pb.h still ride.
 	for _, want := range []string{
 		"$(B)/lib/backend_config.cfgproto.pb.cc",
 		"$(B)/lib/backend_config.cfgproto.pb.h",
@@ -185,15 +177,14 @@ message Cfg {}
 			t.Errorf("consumer use.cpp.o missing OutTogether sibling %q: %v", want, useCC.flatInputs())
 		}
 	}
-	// The cpp-only induced dep must NOT leak into the ordinary consumer.
+	// The cpp-only induced dep must NOT leak into the consumer.
 	if nodeHasInput(useCC, wireFormat) {
 		t.Errorf("consumer use.cpp.o must NOT inherit protoc cpp-only wire_format.h: %v", useCC.flatInputs())
 	}
 }
 
 // TestGen_OrdinaryProto_HasNoConfigPlugin is the negative guard: an ordinary
-// `.proto` must NOT receive the proto_config plugin / --config_out — those are
-// exclusive to `.cfgproto`.
+// `.proto` must NOT receive the proto_config plugin / --config_out.
 func TestGen_OrdinaryProto_HasNoConfigPlugin(t *testing.T) {
 	files := map[string]string{}
 

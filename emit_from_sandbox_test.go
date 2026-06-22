@@ -5,12 +5,9 @@ import (
 	"testing"
 )
 
-// A FROM_SANDBOX OUT/OUT_NOAUTO file is a fetched build output, not a source
-// file. When a RUN_PROGRAM in the same module consumes it via IN, the generator
-// must resolve it to the fetch (SB) node's $(B) output — listing that output as
-// an input and depending on the SB node — never to an on-disk source path. (Under
-// --sandboxing the latter faults the UID finalizer's source-content hash on the
-// nonexistent file.)
+// A FROM_SANDBOX OUT file is a fetched build output, not a source. A RUN_PROGRAM
+// consuming it via IN must resolve to the SB node's $(B) output and depend on
+// that node, never to an on-disk source path (which --sandboxing would fault).
 func TestGen_FromSandboxOutputConsumedAsRunProgramInput(t *testing.T) {
 	files := map[string]string{}
 
@@ -43,13 +40,12 @@ END()
 
 	g := testGen(newMemFS(files), "app")
 
-	// FROM_SANDBOX emits an SB fetch node producing the OUT_NOAUTO file in $(B).
 	sb := mustNodeByOutput(t, g, "$(B)/mod/trie")
 	if sb.KV.P != pkSB {
 		t.Fatalf("trie producer kind = %q, want SB", sb.KV.P.string())
 	}
 
-	// The RUN_PROGRAM (pack.bin) consumes trie as the fetch output, not a source.
+	// pack.bin consumes trie as the fetch output, not a source.
 	pr := mustNodeByOutput(t, g, "$(B)/mod/pack.bin")
 	if !nodeHasInput(pr, "$(B)/mod/trie") {
 		t.Fatalf("pack.bin inputs missing $(B)/mod/trie: %#v", pr.flatInputs())
@@ -58,22 +54,19 @@ END()
 		t.Fatalf("pack.bin must not list the source path $(S)/mod/trie: %#v", pr.flatInputs())
 	}
 
-	// The positional `trie` arg resolves to the same $(B) fetch output.
 	if !slices.Contains(prCmdArgStrings(pr), "$(B)/mod/trie") {
 		t.Fatalf("pack.bin command missing $(B)/mod/trie arg: %v", prCmdArgStrings(pr))
 	}
 
-	// pack.bin depends on the SB fetch node that produces trie.
 	if !slices.Contains(graphDeps(g, pr), sb.UID) {
 		t.Fatalf("pack.bin deps missing SB fetch uid %q: %v", sb.UID, graphDeps(g, pr))
 	}
 }
 
-// FROM_SANDBOX(OUT file.a) declares an *auto* module output (not noauto), folded
-// into the module's $AUTO_INPUT. For a LIBRARY the archive command therefore
-// archives the fetched .a as a member, and the module's own library archive is
-// emitted even with no compiled sources. A dependent PROGRAM links that module
-// archive through the peer closure. OUT_NOAUTO outputs must NOT become members.
+// FROM_SANDBOX(OUT file.a) declares an auto module output folded into
+// $AUTO_INPUT, so a LIBRARY archives the fetched .a as a member (emitting its own
+// archive even with no compiled sources) and a dependent PROGRAM links it through
+// the peer closure. OUT_NOAUTO outputs must NOT become members.
 func TestGen_FromSandboxAutoArchiveBecomesLibraryMember(t *testing.T) {
 	files := map[string]string{}
 
@@ -86,8 +79,7 @@ FROM_SANDBOX(420003524 OUT_NOAUTO scratch.a)
 END()
 `)
 
-	// A sibling library with ordinary sources must remain a normal compiled
-	// archive — the FROM_SANDBOX member mechanism must not perturb it.
+	// A sibling library with ordinary sources must remain a normal compiled archive.
 	writeTestModuleFile(files, "plain/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -110,11 +102,9 @@ END()
 
 	g := testGen(newMemFS(files), "app")
 
-	// The FROM_SANDBOX OUT .a is fetched as an SB node output.
 	mustNodeByOutput(t, g, "$(B)/mkllike/libmkl_core.a")
 
-	// The LIBRARY emits its own module archive even with no compiled sources,
-	// archiving the fetched .a as a member.
+	// The LIBRARY archives the fetched .a as a member despite no compiled sources.
 	ar := mustNodeByOutput(t, g, "$(B)/mkllike/libmkllike.a")
 	if ar.KV.P != pkAR {
 		t.Fatalf("libmkllike.a producer kind = %q, want AR", ar.KV.P.string())
@@ -126,12 +116,10 @@ END()
 		t.Fatalf("library archive cmd missing fetched member: %v", prCmdArgStrings(ar))
 	}
 
-	// OUT_NOAUTO must not be archived as a member.
 	if nodeHasInput(ar, "$(B)/mkllike/scratch.a") {
 		t.Fatalf("OUT_NOAUTO scratch.a must not be a library archive member: %#v", ar.flatInputs())
 	}
 
-	// The dependent PROGRAM links the module archive through the peer closure.
 	var ld *Node
 	for _, n := range g.Graph {
 		if n.KV.P == pkLD {
@@ -148,7 +136,6 @@ END()
 		t.Fatalf("program LD cmd missing peer archive token mkllike/libmkllike.a")
 	}
 
-	// The plain sibling library is unchanged: a normal compiled archive.
 	plainAR := mustNodeByOutput(t, g, "$(B)/plain/libplain.a")
 	if plainAR.KV.P != pkAR {
 		t.Fatalf("libplain.a producer kind = %q, want AR", plainAR.KV.P.string())
@@ -158,16 +145,14 @@ END()
 	}
 }
 
-// The FROM_SANDBOX macro names exactly three script inputs on its command path:
-// fetch_from_sandbox.py, plus the hidden process_command_files.py and
-// fetch_from.py. ${input:"…"} adds the named file only — it does NOT expand that
-// script's Python import closure — so the SB node must carry exactly those three
-// and must NOT append the helper closure (retry, error).
+// FROM_SANDBOX names exactly three script inputs (fetch_from_sandbox.py,
+// process_command_files.py, fetch_from.py); ${input} adds the named file only and
+// does NOT expand its import closure, so the SB node carries exactly those three
+// and not the helper closure (retry, error).
 func TestGen_FromSandboxScriptInputsExplicitThree(t *testing.T) {
 	files := map[string]string{}
 
-	// build/scripts must exist so the script table is populated; these import edges
-	// are what the closure-expanded model would over-collect (retry, error).
+	// These import edges are what a closure-expanded model would over-collect.
 	files["build/scripts/fetch_from_sandbox.py"] = "import process_command_files as pcf\nimport fetch_from\n"
 	files["build/scripts/fetch_from.py"] = "import retry\n"
 	files["build/scripts/process_command_files.py"] = "\n"
@@ -206,7 +191,6 @@ END()
 		}
 	}
 
-	// Each explicit script appears exactly once.
 	counts := map[string]int{}
 	for _, in := range sb.flatInputs() {
 		counts[in.string()]++
@@ -218,12 +202,10 @@ END()
 	}
 }
 
-// A RUN_PROGRAM consuming opaque FROM_SANDBOX fetch outputs as IN, then embedded
-// by ARCHIVE_ASM, must carry the fetch producer's own source/script inputs on the
-// downstream PR and RD nodes — the flat-input model lists a producer's transitive
-// source closure on every consumer of its outputs, even when the fetched data
-// file has no parsed includes. The SB fetch node's own input list stays exactly
-// the three explicit scripts (it is not a consumer).
+// The flat-input model lists a producer's transitive source closure on every
+// consumer of its outputs, so a RUN_PROGRAM consuming FROM_SANDBOX outputs and
+// the ARCHIVE_ASM embedding it both carry the fetch producer's three scripts. The
+// SB node itself (not a consumer) keeps exactly those three.
 func TestGen_FromSandboxScriptsPropagateThroughRunProgramAndArchiveAsm(t *testing.T) {
 	files := map[string]string{}
 
@@ -263,7 +245,7 @@ END()
 		"$(S)/build/scripts/process_command_files.py",
 	}
 
-	// (1) the PR node (pack.bin) carries the fetch producer's three scripts.
+	// (1) the PR node carries the three scripts.
 	pr := mustNodeByOutput(t, g, "$(B)/mod/pack.bin")
 	if pr.KV.P != pkPR {
 		t.Fatalf("pack.bin kv.p = %q, want PR", pr.KV.P.string())
@@ -274,7 +256,7 @@ END()
 		}
 	}
 
-	// (2) the RD node (Pack.rodata.o) carries the same three scripts.
+	// (2) the RD node carries the same three.
 	rd := mustNodeByAnyOutput(t, g, "$(B)/mod/Pack.rodata.o")
 	if rd.KV.P != pkRD {
 		t.Fatalf("Pack.rodata.o kv.p = %q, want RD", rd.KV.P.string())
@@ -285,8 +267,7 @@ END()
 		}
 	}
 
-	// (3) each SB fetch node still lists exactly the three explicit scripts —
-	// the producer's own input list and command tokens are unchanged.
+	// (3) each SB node still lists exactly the three explicit scripts.
 	for _, out := range []string{"$(B)/mod/trie", "$(B)/mod/suffixes", "$(B)/mod/paradigms"} {
 		sb := mustNodeByOutput(t, g, out)
 		if sb.KV.P != pkSB {
@@ -368,8 +349,7 @@ END()
 	}
 }
 
-// containsSubsequence reports whether want appears as a contiguous subsequence
-// of args.
+// containsSubsequence reports whether want is a contiguous subsequence of args.
 func containsSubsequence(args, want []string) bool {
 	for i := 0; i+len(want) <= len(args); i++ {
 		if slices.Equal(args[i:i+len(want)], want) {

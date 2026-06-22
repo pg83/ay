@@ -142,7 +142,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		t.Errorf("target_properties.module_type = %q, want bin", got.TargetProperties.ModuleType.string())
 	}
 
-	// ccRef + the vcs.json producer node (emitVCSNode).
+	// ccRef + vcs.json producer.
 	if len(got.DepRefs) != 2 {
 		t.Errorf("DepRefs = %d, want 2", len(got.DepRefs))
 	}
@@ -325,8 +325,7 @@ func TestComposeProgramLinkTrailer_NonPICRPathTrailerKeepsNoPie(t *testing.T) {
 func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 	emit := newBufferedEmitter()
 	mainRef := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
-	// A whole-archive lib is one of the peer archives, so its ref is in BOTH
-	// peerLDRefs and wholeArchiveRefs — the same node.
+	// A whole-archive lib is also a peer archive: one node in both ref lists.
 	wholeRef := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
 
 	instance := targetInstance("some/prog")
@@ -373,8 +372,7 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 		t.Fatalf("inputs do not contain whole-archive path %q: %#v", wholeArchivePath, got.flatInputs())
 	}
 
-	// The lib is a peer, so it is in DepRefs exactly once (whole-archive is a link
-	// attribute, not a second dep source).
+	// Whole-archive is a link attribute, not a second dep source: one DepRef.
 	depCount := 0
 	for _, r := range got.DepRefs {
 		if r == wholeRef {
@@ -401,7 +399,7 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T) {
 	emit := newBufferedEmitter()
 	mainRef := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
-	// Same node reached as both a peer archive and a whole-archive lib.
+	// One node reached as both peer archive and whole-archive lib.
 	peerRef := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
 
 	instance := targetInstance("some/prog")
@@ -634,14 +632,10 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 	}
 }
 
-// TestGen_FbsSrcsInduceFlatbuffersLinkDep verifies that a module with .fbs SRCS
-// gets the flatbuffers runtime added as an induced PEERDIR. The induced dep must
-// appear AFTER all explicit PEERDIRs so that in the LD link command flatbuffers
-// lands between the last explicit peer's transitive closure and the library
-// itself, matching the upstream link order.
+// TestGen_FbsSrcsInduceFlatbuffersLinkDep: a module with .fbs SRCS induces a
+// flatbuffers PEERDIR that must link AFTER all explicit PEERDIRs.
 func TestGen_FbsSrcsInduceFlatbuffersLinkDep(t *testing.T) {
 	files := map[string]string{
-		// A program that peers a library with .fbs SRCS.
 		"prog/ya.make":  "PROGRAM()\nPEERDIR(arrowlike)\nSRCS(main.cpp)\nEND()\n",
 		"prog/main.cpp": "int main() { return 0; }\n",
 		// arrowlike has an explicit peer (peer1) AND a .fbs source; flatbuffers must
@@ -651,7 +645,6 @@ func TestGen_FbsSrcsInduceFlatbuffersLinkDep(t *testing.T) {
 		"arrowlike/Schema.fbs": "namespace test; table Foo { value:int; }\n",
 		"peer1/ya.make":        "LIBRARY()\nSRCS(p1.cpp)\nEND()\n",
 		"peer1/p1.cpp":         "int p1() { return 0; }\n",
-		// flatbuffers runtime — must have a ya.make so the peerdir resolves.
 		"contrib/libs/flatbuffers/ya.make":                           "LIBRARY()\nSRCS(flatbuffers.cpp)\nEND()\n",
 		"contrib/libs/flatbuffers/flatbuffers.cpp":                   "int fb() { return 0; }\n",
 		"contrib/libs/flatbuffers/flatc/ya.make":                     "PROGRAM(flatc)\nSRCS(main.cpp)\nEND()\n",
@@ -662,7 +655,6 @@ func TestGen_FbsSrcsInduceFlatbuffersLinkDep(t *testing.T) {
 
 	g := testGen(newMemFS(files), "prog")
 
-	// Find the LD node.
 	var ldNode *Node
 	for _, n := range g.Graph {
 		if n.KV.P == pkLD {
@@ -689,7 +681,7 @@ func TestGen_FbsSrcsInduceFlatbuffersLinkDep(t *testing.T) {
 	if arrowlikeIdx < 0 {
 		t.Fatalf("link args missing arrowlike/libarrowlike.a: %v", linkArgs)
 	}
-	// Upstream order: peer1, then flatbuffers (induced from .fbs), then arrowlike.
+	// Order: peer1, flatbuffers (induced), arrowlike.
 	if peer1Idx > fbIdx {
 		t.Errorf("peer1 [%d] appears after flatbuffers [%d] in link args; want peer1 before flatbuffers", peer1Idx, fbIdx)
 	}
@@ -699,16 +691,11 @@ func TestGen_FbsSrcsInduceFlatbuffersLinkDep(t *testing.T) {
 }
 
 func TestGen_EnumSerializationRuntimePrecedesProtoLibraryArchive(t *testing.T) {
-	// A PROTO_LIBRARY declares an ordinary PEERDIR, then GENERATE_ENUM_SERIALIZATION
-	// (which expands inline to a PEERDIR on the enum serialization runtime at that
-	// textual position). A downstream PY3_PROGRAM linking the proto library must list,
-	// in its regular start-group archive sequence: the ordinary peer, then
-	// enum_serialization_runtime, then the proto library's own archive — the upstream
-	// closure order, each exactly once.
-	//
-	// A second program peer pulls in json/common AFTER the proto closure. A relocation
-	// of the enum runtime before json/common would yank it out of its closure slot and
-	// land it AFTER the proto archive.
+	// GENERATE_ENUM_SERIALIZATION expands inline to a PEERDIR at its textual
+	// position; the start-group sequence must keep closure order each once: the
+	// ordinary peer, then enum_serialization_runtime, then the proto archive. The
+	// json/common second-program peer guards against the enum runtime relocating
+	// out of its closure slot to after the proto archive.
 	files := map[string]string{
 		"app/ya.make":  "PY3_PROGRAM(app)\nDISABLE(PYTHON_SQLITE3)\nENABLE(PYBUILD_NO_PYC)\nPEERDIR(proto_mod)\nPEERDIR(jsondep)\nSRCS(main.cpp)\nEND()\n",
 		"app/main.cpp": "int main(){return 0;}\n",
@@ -730,8 +717,7 @@ func TestGen_EnumSerializationRuntimePrecedesProtoLibraryArchive(t *testing.T) {
 		"library/cpp/json/common/ya.make": "LIBRARY()\nSRCS(jc.cpp)\nEND()\n",
 		"library/cpp/json/common/jc.cpp":  "int jc(){return 0;}\n",
 
-		// J-allocator peers (default for PY3_PROGRAM) and malloc-relocation anchors
-		// are walked unconditionally — stub them so the graph resolves.
+		// J-allocator peers and malloc-relocation anchors are walked unconditionally.
 		"library/cpp/malloc/jemalloc/ya.make": "LIBRARY()\nSRCS(je.cpp)\nEND()\n",
 		"library/cpp/malloc/jemalloc/je.cpp":  "int je(){return 0;}\n",
 		"library/cpp/malloc/api/ya.make":      "LIBRARY()\nSRCS(api.cpp)\nEND()\n",
@@ -741,14 +727,13 @@ func TestGen_EnumSerializationRuntimePrecedesProtoLibraryArchive(t *testing.T) {
 		"build/cow/on/ya.make":                "LIBRARY()\nSRCS(cow.cpp)\nEND()\n",
 		"build/cow/on/cow.cpp":                "int cow(){return 0;}\n",
 
-		// PY3_PROGRAM unconditionally peers the python runtime — stub the leaf
-		// modules so the graph resolves. NO_* flags keep them peer-free.
+		// PY3_PROGRAM unconditionally peers the python runtime; NO_* keeps leaves peer-free.
 		"contrib/libs/python/ya.make":                       "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
 		"library/python/runtime_py3/main/ya.make":           "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
 		"library/python/import_tracing/constructor/ya.make": "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
 		"library/python/testing/import_test/ya.make":        "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
 
-		// PROTO_LIBRARY machinery (protoc + cpp plugin + runtimes).
+		// PROTO_LIBRARY machinery.
 		"contrib/tools/protoc/ya.make":                         "PROGRAM(protoc)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n",
 		"contrib/tools/protoc/main.cpp":                        "int main(){return 0;}\n",
 		"contrib/tools/protoc/plugins/cpp_styleguide/ya.make":  "PROGRAM(cpp_styleguide)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n",
@@ -766,8 +751,7 @@ func TestGen_EnumSerializationRuntimePrecedesProtoLibraryArchive(t *testing.T) {
 
 	g := testGen(newMemFS(files), "app")
 
-	// Find the program link node: the LD node whose command holds the
-	// -Wl,--start-group archive group (the link-or-copy LD node does not).
+	// The program link node is the LD node holding the -Wl,--start-group group.
 	var linkArgs []STR
 	for _, n := range g.Graph {
 		if n.KV.P != pkLD {
@@ -788,9 +772,8 @@ func TestGen_EnumSerializationRuntimePrecedesProtoLibraryArchive(t *testing.T) {
 		t.Fatal("no program-link LD node with -Wl,--start-group found in graph")
 	}
 
-	// Restrict the assertions to the regular --start-group … --end-group archive
-	// window (the proto archive also appears in the preceding --whole-archive-libs
-	// band, which is unrelated).
+	// Restrict assertions to the regular --start-group window; the proto archive
+	// also appears in the preceding --whole-archive-libs band.
 	sgStart := indexOfArg(linkArgs, "-Wl,--start-group")
 	sgEnd := indexOfArg(linkArgs, "-Wl,--end-group")
 	if sgStart < 0 || sgEnd < 0 || sgEnd <= sgStart {
@@ -837,9 +820,7 @@ func argStrs2(args []STR) []string {
 	return out
 }
 
-// USE_ARCADIA_LIBM: ENABLE adds the implicit libm PEERDIR on non-Emscripten
-// targets. Default is "no" (system -lm), so only the explicit ENABLE reaches the
-// peer.
+// USE_ARCADIA_LIBM: ENABLE adds the implicit libm PEERDIR; default "no" uses system -lm.
 func libmProgramFiles(enable bool) map[string]string {
 	files := map[string]string{}
 
@@ -851,13 +832,12 @@ func libmProgramFiles(enable bool) map[string]string {
 	writeTestModuleFile(files, "app/ya.make", "PROGRAM(app)\n"+enableStmt+"SRCS(main.cpp)\nEND()\n")
 	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
 
-	// The module exports its own GLOBAL ADDINCL(include|platform); those own-addincl
-	// roots must land after the language-default transitive closure, not ahead of it.
+	// The module's own GLOBAL ADDINCL roots must land after the language-default
+	// transitive closure, not ahead of it.
 	writeTestModuleFile(files, "contrib/libs/libm/ya.make",
 		"LIBRARY()\nNO_RUNTIME()\nNO_UTIL()\nADDINCL(GLOBAL contrib/libs/libm/include\nGLOBAL contrib/libs/libm/platform)\nSRCS(e_exp.c)\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/libm/e_exp.c", "double e_exp(double x){return x;}\n")
-	// filterExistingSourceDirs drops GLOBAL addincl dirs that do not exist;
-	// materialise the two libm include roots so they survive.
+	// filterExistingSourceDirs drops GLOBAL addincl dirs that do not exist.
 	writeTestModuleFile(files, "contrib/libs/libm/include/math.h", "#pragma once\n")
 	writeTestModuleFile(files, "contrib/libs/libm/platform/platform.h", "#pragma once\n")
 
@@ -865,15 +845,12 @@ func libmProgramFiles(enable bool) map[string]string {
 }
 
 // libmOrderingProgramFiles adds a `util` language-default peer carrying a
-// transitive GLOBAL ADDINCL (via library/early). The program compile must order
-// that transitive include ahead of libm's own GLOBAL include: the reference places
-// the libm roots in the program-default slot, after the transitive closure.
+// transitive GLOBAL ADDINCL; the compile must order that ahead of libm's own.
 func libmOrderingProgramFiles() map[string]string {
 	files := libmProgramFiles(true)
 
-	// util is a language default for any C++ program. NO_RUNTIME / NO_UTIL keep it
-	// from pulling its own language defaults; it only re-exports library/early's
-	// GLOBAL addincl transitively.
+	// util is a C++ language default; NO_RUNTIME/NO_UTIL keep it from pulling its
+	// own defaults, only re-exporting library/early's GLOBAL addincl transitively.
 	writeTestModuleFile(files, "util/ya.make", "LIBRARY()\nNO_RUNTIME()\nNO_UTIL()\nPEERDIR(library/early)\nEND()\n")
 	writeTestModuleFile(files, "util/u.cpp", "int u(){return 0;}\n")
 
@@ -922,7 +899,6 @@ func TestGen_UseArcadiaLibm_PeersLibmArchive(t *testing.T) {
 
 	mustNodeByOutput(t, g, "$(B)/contrib/libs/libm/libcontrib-libs-libm.a")
 
-	// In the link group, archives appear as build-root-relative paths.
 	const libmLinkArg = "contrib/libs/libm/libcontrib-libs-libm.a"
 	linkArgs := linkArgsOf(t, g)
 	if indexOfArg(linkArgs, libmLinkArg) < 0 {
@@ -945,9 +921,8 @@ func TestGen_UseArcadiaLibm_AbsentWithoutEnable(t *testing.T) {
 }
 
 func TestGen_UseArcadiaLibm_NoSelfPeer(t *testing.T) {
-	// A link module under contrib/libs/libm that enables the flag must not peer
-	// itself. The libm peer lives in the program-default path, so the
-	// self/descendant guard is checked there.
+	// A libm module enabling the flag must not peer itself; the self/descendant
+	// guard lives in the program-default path.
 	mi := ModuleInstance{
 		Path:     source("contrib/libs/libm"),
 		Kind:     KindBin,

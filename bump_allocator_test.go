@@ -2,7 +2,7 @@ package main
 
 import "testing"
 
-// fill writes the values into region[0:len(vals)] by index and returns len(vals).
+// fill writes vals into region by index and returns len(vals).
 func fill[T any](region []T, vals ...T) int {
 	for i, v := range vals {
 		region[i] = v
@@ -21,16 +21,14 @@ func TestBumpAllocatorAllocAtLeastN(t *testing.T) {
 			t.Fatalf("alloc(%d) returned region of len %d, want >= %d", n, len(r), n)
 		}
 
-		a.commit(0) // commit nothing; next alloc reuses the same boundary
+		a.commit(0) // next alloc reuses the same boundary
 	}
 }
 
 func TestBumpAllocatorPacksCommittedRegions(t *testing.T) {
 	a := newBumpAllocator[int](16)
 
-	// Each iteration commits what it wrote; reading the region back from its
-	// post-alloc chunk/offset yields the written values (regions are
-	// address-stable and packed).
+	// Regions are address-stable and packed.
 	type span struct {
 		chunk int
 		off   int
@@ -50,8 +48,7 @@ func TestBumpAllocatorPacksCommittedRegions(t *testing.T) {
 
 		r := a.alloc(k)
 		wrote := fill(r, vals...)
-		// Capture position after alloc (may have rolled to a new chunk) but
-		// before commit advances the boundary.
+		// Capture position after alloc but before commit advances the boundary.
 		ci := len(a.chunks) - 1
 		off := a.off
 		a.commit(wrote)
@@ -74,7 +71,7 @@ func TestBumpAllocatorPacksCommittedRegions(t *testing.T) {
 func TestBumpAllocatorGeometricGrowth(t *testing.T) {
 	a := newBumpAllocator[byte](8)
 
-	// Force a new chunk each time by consuming the whole chunk.
+	// Consuming the whole chunk forces a new chunk each time.
 	sizes := []int{}
 
 	for i := 0; i < 6; i++ {
@@ -96,8 +93,7 @@ func TestBumpAllocatorGeometricGrowth(t *testing.T) {
 func TestBumpAllocatorChunkFitsLargeAlloc(t *testing.T) {
 	a := newBumpAllocator[int](4)
 
-	// An alloc larger than the chunk size still gets one contiguous region
-	// (the chunk grows to fit it).
+	// An over-sized alloc still gets one contiguous region.
 	r := a.alloc(100)
 
 	if len(r) < 100 {

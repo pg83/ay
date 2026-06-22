@@ -100,8 +100,7 @@ func globalArchiveNameWithPrefixOrName(moduleDir, prefix, name string) string {
 	return base[:len(base)-2] + ".global.a"
 }
 
-// The toolchain archiver is always an LLVM archiver in gnu format — the linker
-// script's archiver type / format arguments.
+// The toolchain archiver is always an LLVM archiver in gnu format.
 const (
 	arTypeLLVM  = "LLVM_AR"
 	arFormatGNU = "gnu"
@@ -138,8 +137,7 @@ func emitARNode(
 
 	cmdArgs := na.chunkList(tc.ARCmdHead, tail)
 
-	// objPaths is referenced as its own chunk, never copied; only the
-	// script/plugin tail is built locally.
+	// objPaths is referenced as its own chunk; only the tail is built locally.
 	inputTail := make([]VFS, 0, 2)
 	inputTail = append(inputTail, buildScriptsLinkLibPy)
 

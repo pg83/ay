@@ -34,16 +34,14 @@ func (v VFS) strID() uint32 {
 }
 
 // str returns the STR backing this VFS's full path — a free conversion (VFS is
-// STR<<1|root), uniform with ARG/ENV/TOK str().
+// STR<<1|root).
 func (v VFS) str() STR {
 	return STR(v.strID())
 }
 
-// vfsPrefixScratch backs internPrefixed's prefix+rel assembly, replacing a
-// heap concat per call — on the common intern hit that string is discarded
-// immediately, and on a miss internBytes makes the one stable copy anyway.
-// Same single-writer contract as internTable: gen is single-threaded and
-// executor goroutines must not intern.
+// vfsPrefixScratch backs internPrefixed's prefix+rel assembly, replacing a heap
+// concat per call. Same single-writer contract as internTable: gen is single-
+// threaded and executor goroutines must not intern.
 var vfsPrefixScratch []byte
 
 func internPrefixed(prefix, rel string) STR {
@@ -53,8 +51,7 @@ func internPrefixed(prefix, rel string) STR {
 	return internBytes(vfsPrefixScratch)
 }
 
-// internedPrefixed is the lookup-only twin of internPrefixed: it probes
-// prefix+rel without inserting.
+// internedPrefixed is the lookup-only twin of internPrefixed.
 func internedPrefixed(prefix, rel string) STR {
 	vfsPrefixScratch = append(vfsPrefixScratch[:0], prefix...)
 	vfsPrefixScratch = append(vfsPrefixScratch, rel...)
@@ -63,8 +60,7 @@ func internedPrefixed(prefix, rel string) STR {
 }
 
 // internPrefixedJoined interns prefix+dir+"/"+rel (or prefix+rel when dir is
-// empty) — the joined-path twin of internPrefixed, allocating nothing beyond
-// the one stable table copy on a miss.
+// empty) — the joined-path twin of internPrefixed.
 func internPrefixedJoined(prefix, dir, rel string) STR {
 	vfsPrefixScratch = append(vfsPrefixScratch[:0], prefix...)
 
@@ -92,8 +88,8 @@ func internedPrefixedJoined(prefix, dir, rel string) STR {
 	return internedBytes(vfsPrefixScratch)
 }
 
-// sourceJoined / buildJoined intern "$(S)/dir/rel" / "$(B)/dir/rel" without the
-// concat garbage. rel must already be clean (pathIsClean).
+// sourceJoined / buildJoined intern "$(S)/dir/rel" / "$(B)/dir/rel". rel must
+// already be clean (pathIsClean).
 func sourceJoined(dir, rel string) VFS {
 	return VFS(uint32(internPrefixedJoined("$(S)/", dir, rel))<<1 | uint32(VFSRootSource))
 }
@@ -102,8 +98,7 @@ func buildJoined(dir, rel string) VFS {
 	return VFS(uint32(internPrefixedJoined("$(B)/", dir, rel))<<1 | uint32(VFSRootBuild))
 }
 
-// sourceBytes interns "$(S)/<rel>" straight from raw bytes — the parser-side
-// twin of source().
+// sourceBytes interns "$(S)/<rel>" from raw bytes — the parser-side twin of source().
 func sourceBytes(rel []byte) VFS {
 	vfsPrefixScratch = append(vfsPrefixScratch[:0], "$(S)/"...)
 	vfsPrefixScratch = append(vfsPrefixScratch, rel...)
@@ -120,8 +115,7 @@ func build(rel string) VFS {
 }
 
 // vfs converts a STR backing a rooted path ("$(S)/…" / "$(B)/…") into the bound
-// VFS — a shift plus the root bit, no re-interning. Returns 0 for a non-rooted
-// string.
+// VFS, no re-interning. Returns 0 for a non-rooted string.
 func (id STR) vfs() VFS {
 	s := internTable.strs[id]
 
@@ -142,8 +136,7 @@ func (v VFS) rel() string {
 	return internTable.strs[v.strID()][vfsPrefixLen:]
 }
 
-// isSource / isBuild read the root bit directly (VFS == STR<<1 | root; 0=source,
-// 1=build).
+// isSource / isBuild read the root bit directly (0=source, 1=build).
 func (v VFS) isSource() bool {
 	return uint32(v)&1 == 0
 }
@@ -156,7 +149,7 @@ func (v VFS) string() string {
 	return internTable.strs[v.strID()]
 }
 
-// String implements fmt.Stringer; internal code calls string().
+// String implements fmt.Stringer.
 func (v VFS) String() string {
 	return v.string()
 }
@@ -169,8 +162,8 @@ func (v VFS) longString() string {
 	return "$(SOURCE_ROOT)/" + v.rel()
 }
 
-// vfsHasPrefix gates on "$(": every such string we classify is a rooted
-// "$(S)/…" / "$(B)/…" path, so the two-byte check suffices.
+// vfsHasPrefix gates on "$(": every classified string is a rooted path, so the
+// two-byte check suffices.
 func vfsHasPrefix(s string) bool {
 	return len(s) >= vfsPrefixLen && s[0] == '$' && s[1] == '('
 }
@@ -179,7 +172,7 @@ func (v VFS) marshalJSON() ([]byte, error) {
 	return json.Marshal(v.string())
 }
 
-// MarshalJSON implements json.Marshaler; internal code calls marshalJSON().
+// MarshalJSON implements json.Marshaler.
 func (v VFS) MarshalJSON() ([]byte, error) {
 	return v.marshalJSON()
 }

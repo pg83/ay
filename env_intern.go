@@ -1,18 +1,16 @@
 package main
 
 // ENV interns IF/macro variable names into a small, dense id space, separate
-// from STR, so Environment stores bindings in ENV-indexed slices (Clone is a
-// slice copy, Set/Get are array ops) instead of string-keyed maps (~8% of
-// map-probing CPU plus per-module Clone churn). Single-writer, like internTable.
+// from STR, so Environment stores bindings in ENV-indexed slices instead of
+// string-keyed maps. Single-writer, like internTable.
 type ENV uint32
 
 // envTable stores no strings of its own: the name is interned once as a STR.
-// ids maps a name's STR to its ENV; strs maps an ENV back to that STR (a free
-// ENV→STR conversion).
+// ids maps a name's STR to its ENV; strs maps an ENV back to that STR.
 var envTable = struct {
 	ids  DenseMap[STR, uint32]
 	strs []STR
-}{strs: []STR{0}} // index 0 reserved = "not interned" (STR 0 is the empty string)
+}{strs: []STR{0}} // index 0 reserved = "not interned"
 
 func internEnv(name string) ENV {
 	return internEnvSTR(internStr(name))
@@ -31,7 +29,7 @@ func internEnvSTR(st STR) ENV {
 	return id
 }
 
-// str returns the STR backing this ENV — a free conversion (no re-interning).
+// str returns the STR backing this ENV.
 func (id ENV) str() STR {
 	return envTable.strs[id]
 }
@@ -45,9 +43,8 @@ func (id ENV) String() string {
 	return id.string()
 }
 
-// internedEnv looks up name's ENV without interning it. Var-expansion probes
-// arbitrary ${VAR} tokens usually not env vars; a never-seen name grows neither
-// the STR nor the ENV table.
+// internedEnv looks up name's ENV without interning it: var-expansion probes
+// arbitrary ${VAR} tokens, and a never-seen name must not grow either table.
 func internedEnv(name string) ENV {
 	st := interned(name)
 

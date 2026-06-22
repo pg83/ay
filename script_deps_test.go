@@ -5,9 +5,8 @@ import (
 	"testing"
 )
 
-// scriptFixtureFS builds a memFS whose build/scripts/ holds Python scripts
-// exercising real imports plus false-positive traps a naive textual match would
-// wrongly treat as dependencies.
+// scriptFixtureFS builds a memFS of Python scripts with real imports plus
+// false-positive traps a naive textual match would treat as dependencies.
 func scriptFixtureFS() *MemFS {
 	return newMemFS(map[string]string{
 		"build/scripts/link_exe.py": "import os\n" +
@@ -15,11 +14,11 @@ func scriptFixtureFS() *MemFS {
 			"import thinlto_cache\n" +
 			"from process_whole_archive_option import ProcessWholeArchiveOption\n" +
 			"def f(args):\n" +
-			"    parser.add_option('--objcopy-exe')\n" + // must NOT pull objcopy.py
-			"    plugins = list(sorted(args))\n" + //       must NOT pull list.py
-			"    thinlto_cache.preprocess(opts)\n", //      must NOT pull preprocess.py
+			"    parser.add_option('--objcopy-exe')\n" + // no objcopy.py
+			"    plugins = list(sorted(args))\n" + //       no list.py
+			"    thinlto_cache.preprocess(opts)\n", //      no preprocess.py
 		"build/scripts/process_whole_archive_option.py": "import process_command_files as pcf\n" +
-			"# an unknown option error may occur here\n", // 'error' in comment: no error.py
+			"# an unknown option error may occur here\n", // no error.py
 		"build/scripts/fs_tools.py":              "import shutil\nimport process_command_files as pcf\n",
 		"build/scripts/process_command_files.py": "import sys\n",
 		"build/scripts/thinlto_cache.py":         "import os\n",
@@ -27,12 +26,12 @@ func scriptFixtureFS() *MemFS {
 		"build/scripts/list.py":                  "import sys\n",
 		"build/scripts/preprocess.py":            "import sys\n",
 		"build/scripts/error.py":                 "import sys\n",
-		// local var `wrapper`; must NOT pull wrapper.py.
+		// local var `wrapper`; no wrapper.py.
 		"build/scripts/vcs_info.py": "import textwrap\n" +
 			"wrapper = textwrap.TextWrapper()\n" +
 			"out = wrapper.wrap(text)\n",
 		"build/scripts/wrapper.py": "import sys\n",
-		// gen_py_reg.py in a usage string; must NOT pull it.
+		// gen_py_reg.py in a usage string; no pull.
 		"build/scripts/gen_py3_reg.py": "import sys\n" +
 			"print('Usage: <path/to/gen_py_reg.py> <module> <out>')\n",
 		"build/scripts/gen_py_reg.py": "import sys\n",
@@ -42,7 +41,7 @@ func scriptFixtureFS() *MemFS {
 func TestBuildScriptTable_ImportsOnly_NoFalsePositives(t *testing.T) {
 	table := buildScriptTable(scriptFixtureFS())
 
-	// Each entry is [self, …sorted transitive closure].
+	// Each entry is [self, …sorted closure].
 	cases := map[string][]string{
 		"build/scripts/link_exe.py": {
 			"build/scripts/link_exe.py", // self
@@ -55,7 +54,7 @@ func TestBuildScriptTable_ImportsOnly_NoFalsePositives(t *testing.T) {
 			"build/scripts/process_command_files.py",
 		},
 		"build/scripts/process_command_files.py": {"build/scripts/process_command_files.py"},
-		// False-positive traps: local var, comment word, usage string — no closure.
+		// Trap entries: no closure beyond self.
 		"build/scripts/vcs_info.py":    {"build/scripts/vcs_info.py"},
 		"build/scripts/gen_py3_reg.py": {"build/scripts/gen_py3_reg.py"},
 	}
@@ -73,7 +72,7 @@ func TestBuildScriptTable_ImportsOnly_NoFalsePositives(t *testing.T) {
 		for i, v := range got {
 			gotRel[i] = v.rel()
 		}
-		// closure (got[1:]) is sorted; self is first. Compare full slice.
+		// self first, closure sorted.
 		if !reflect.DeepEqual(gotRel, want) {
 			t.Errorf("table[%s]:\n  got  %v\n  want %v", script, gotRel, want)
 		}

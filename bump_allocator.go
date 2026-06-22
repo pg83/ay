@@ -2,18 +2,14 @@ package main
 
 // bumpAllocator is a generic, append-free arena allocator.
 //
-// alloc(n) hands out a contiguous, writable region of at least n elements from
-// the current chunk's free tail. The caller writes by index, then commit(k)
-// advances the boundary by k (0 <= k <= len(region)); the unwritten remainder
-// is handed out again by the next alloc. No append: never write past len(region).
+// alloc(n) hands out a writable region of at least n elements; the caller writes by
+// index, then commit(k) advances the boundary. Never write past len(region).
 //
-// Regions are address-stable: chunk backing arrays are never moved once created,
-// so a region (and the prefix retained by commit) stays valid for the arena's
-// lifetime — safe to hand out long-lived slices into.
+// Regions are address-stable: backing arrays are never moved, so a region stays valid
+// for the arena's lifetime — safe to hand out long-lived slices into.
 //
-// Chunks grow geometrically (1.5x each) without bound: small arenas stay small,
-// chunk count stays logarithmic in total size. A chunk is always at least as
-// large as the alloc that triggered it, so any single alloc fits in one chunk.
+// Chunks grow geometrically (1.5x), and a chunk is always at least as large as the
+// alloc that triggered it, so any single alloc fits in one chunk.
 type BumpAllocator[T any] struct {
 	chunks  [][]T
 	off     int // bump boundary within the active (last) chunk
@@ -29,8 +25,7 @@ func newBumpAllocator[T any](initial int) *BumpAllocator[T] {
 	return &BumpAllocator[T]{next: initial}
 }
 
-// alloc returns a writable region of at least n elements, valid until the next
-// alloc; call commit before allocating again.
+// alloc returns a writable region of at least n elements, valid until the next alloc.
 func (a *BumpAllocator[T]) alloc(n int) []T {
 	if len(a.chunks) == 0 || a.off+n > len(a.chunks[len(a.chunks)-1]) {
 		a.addChunk(n)
@@ -42,8 +37,7 @@ func (a *BumpAllocator[T]) alloc(n int) []T {
 	return region
 }
 
-// commit advances the boundary by k, the number of elements written into the
-// region from the preceding alloc.
+// commit advances the boundary by k, the number of elements written since alloc.
 func (a *BumpAllocator[T]) commit(k int) {
 	if k < 0 || k > a.pending {
 		panic("bumpAllocator: commit out of range")
@@ -54,8 +48,7 @@ func (a *BumpAllocator[T]) commit(k int) {
 }
 
 // list copies vs into the arena and returns the committed block — an arena-backed
-// replacement for a small slice literal. The variadic slice is only copied from,
-// so a call replaces the heap literal it wraps.
+// replacement for a small slice literal.
 func (a *BumpAllocator[T]) list(vs ...T) []T {
 	n := len(vs)
 	block := a.alloc(n)

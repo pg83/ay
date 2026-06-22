@@ -13,10 +13,8 @@ import (
 )
 
 // probeCallSite splices a recordCall("file:line") as the first statement of each
-// top-level func body. Run the gate under --probe=callsite (enables recording,
-// dumps on exit) with CALLSITE_OUT=<file>, then union the recorded sites across
-// runs. Any site in the all-sites file (first arg) NOT in the union is reachable
-// code the gate never exercises. Throwaway: apply, measure, revert.
+// top-level func body. Union the recorded sites across runs; any all-sites
+// entry not in the union is reachable code never exercised. Throwaway.
 func probeCallSite(_ GlobalFlags, args []string) int {
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "usage: ay probe callsite <all-sites-out> [files...]")
@@ -71,8 +69,7 @@ func probeCallSite(_ GlobalFlags, args []string) int {
 			allSites = append(allSites, site)
 
 			lbrace := fset.Position(fd.Body.Lbrace).Offset
-			// Terminate with ';' so the call is a complete statement even for a
-			// one-liner body where the original code shares the splice line.
+			// Terminate with ';' so the call is complete even on a one-liner body.
 			inserts = append(inserts, ins{lbrace + 1, fmt.Sprintf("\n\trecordCall(%q);", site)})
 		}
 
@@ -112,16 +109,10 @@ func probeCallSite(_ GlobalFlags, args []string) int {
 	return 0
 }
 
-// --- runtime probe populated by the recordCall wrappers above. dumpCalls
-// appends the called set to $CALLSITE_OUT on cmd exit; union across runs, diff
-// vs the all-sites file to find reachable-but-never-exercised funcs. Throwaway.
-
 // callSiteSeen is the recorded reach-set. A sync.Map (not a channel) because it
-// must work from the package's very first instruction: package-var initializers
-// run before any init(), so a channel/goroutine set up in init() would miss
-// init-time calls and report init-reached funcs as dead. sync.Map's zero value
-// is ready at load and safe for concurrent stores. Store is idempotent
-// (reachability, not counts).
+// must work from the first instruction: package-var initializers run before any
+// init(), so an init()-set channel would miss init-time calls. Its zero value is
+// ready at load and safe for concurrent stores; Store is idempotent.
 var callSiteSeen sync.Map
 
 func recordCall(site string) {

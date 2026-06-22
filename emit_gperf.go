@@ -9,15 +9,13 @@ import (
 var gperfFlags = []STR{argGpCtTLANSIC.str(), argGpDk.str(), argDashC.str()}
 
 // gperfGeneratedRel is the module-relative path of a gperf-generated source:
-// flat in the module build dir as <basename>.gperf.cpp — unlike bison/ragel,
-// which rebase a subdir source under the _/ namespace.
+// flat in the module build dir as <basename>.cpp, unlike bison/ragel.
 func gperfGeneratedRel(srcRel string) string {
 	return filepath.Base(srcRel) + ".cpp"
 }
 
 // gperfSymbolName wraps the source basename (every extension stripped) as the
-// gperf `-Nin_<name>_set` lookup-function symbol (e.g. tags.gperf →
-// -Nin_tags_set).
+// gperf `-Nin_<name>_set` lookup-function symbol.
 func gperfSymbolName(srcRel string) string {
 	base := filepath.Base(srcRel)
 
@@ -28,10 +26,9 @@ func gperfSymbolName(srcRel string) string {
 	return "-Nin_" + base + "_set"
 }
 
-// emitGP emits the GP (gperf) producer node: it runs gperf over the .gperf source
-// with $GP_FLAGS and the generated -N symbol, redirecting stdout to the generated
-// .gperf.cpp. srcInputs is the source-only include closure of the .gperf (the
-// tool reads the .gperf and the headers its preamble #includes).
+// emitGP emits the GP (gperf) producer node, running gperf with $GP_FLAGS and the
+// generated -N symbol, stdout to the generated .cpp. srcInputs is the source-only
+// include closure of the .gperf.
 func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS, gperfLD NodeRef, srcInputs []VFS, emit Emitter) NodeRef {
 	na := emit.nodeArenas()
 
@@ -63,22 +60,19 @@ func emitLibraryGperfSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
 	genVFS := build(instance.Path.rel() + "/" + gperfGeneratedRel(srcRel))
 
-	// The .gperf is parsed for C includes. The gperf tool and the generated cpp
-	// both read exactly that closure — gperf copies the .gperf preamble verbatim
-	// into its output — so one walk of the source serves both nodes.
+	// gperf copies the .gperf preamble verbatim into its output, so the tool and
+	// the generated cpp read the same closure — one walk serves both nodes.
 	srcClosure := walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)
 
 	gpRef := emitGP(instance, srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, keepOnlySourceVFS(srcClosure), ctx.emit)
 
-	// Register the generated cpp so codegen-dep resolution (and any sibling that
-	// includes it) sees the GP producer. Its parsed includes equal the .gperf's.
+	// Register the generated cpp so codegen-dep resolution sees the GP producer.
 	gpParsed := ctx.scannerFor(instance).parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesCpp)
 	registerBoundGeneratedParsedOutput(ctx, instance, pkGP, genVFS, gpParsed, gpRef, []NodeRef{gperfLDRef})
 
 	ccSrcRel := strings.TrimPrefix(genVFS.rel(), instance.Path.rel()+"/")
 	ccIn := in
-	// The compiled file leads IncludeInputs; the .gperf source closure follows —
-	// the same headers the generated cpp #includes.
+	// The compiled file leads IncludeInputs; the .gperf source closure follows.
 	ccIn.IncludeInputs = append([]VFS{genVFS}, srcClosure...)
 	ccIn.ExtraDepRefs = append([]NodeRef{gpRef}, resolveCodegenDepRefs(ctx, instance, srcClosure, gpRef)...)
 	ccRef, ccOut, _ := emitCC(instance, ccSrcRel, genVFS, ccIn, ctx.host, ctx.emit)

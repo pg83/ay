@@ -23,23 +23,16 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, modulePath string, e
 	out := make([]IncludeDirective, 0, len(entry.OutputIncludes)+1)
 
 	if entry.Text {
-		// COPY_FILE(TEXT) substitutes the source's content into the dst, used
-		// for shared codegen templates several sibling modules each copy into
-		// their own staging. The dst must carry the source's *own raw #include
-		// directives* so they resolve in THIS module's context — the per-module
-		// dst is the unit of resolution (its absID is unique per module).
+		// COPY_FILE(TEXT) substitutes the source's content into the dst. The dst
+		// must carry the source's own raw #include directives so they resolve in
+		// THIS module's context — the per-module dst is the unit of resolution.
 		// Pointing the dst at the shared $(S) source node would resolve it once
-		// (cached by absID in IncludeScanner.childrenCache): the first module to
-		// reach the template would fix every consumer's <angle> includes to its
-		// staging copies — a cross-module include leak. The source file rides as
-		// a non-expanded closure leaf of the dst instead (see emitCopyFiles).
+		// and leak one module's <angle> includes to every consumer.
 		srcVFS := copyFileInputVFS(fs, modulePath, entry.Src)
 		out = append(out, scanner.parsers.parsedIncludes(srcVFS, nil)...)
 	} else if entry.WithContext {
-		// Non-TEXT COPY(WITH_CONTEXT …) cannot leak across modules, and its
-		// quoted includes must resolve relative to the SOURCE dir — pointing at
-		// the source node preserves that (`#include "foo.h"` resolves to the
-		// $(S) sibling, not the flat $(B) staging copy).
+		// Non-TEXT COPY(WITH_CONTEXT …) quoted includes must resolve relative to
+		// the SOURCE dir — pointing at the source node preserves that.
 		srcVFS := copyFileInputVFS(fs, modulePath, entry.Src)
 		out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(srcVFS.rel())})
 	}
@@ -55,19 +48,16 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, modulePath string, e
 }
 
 // emitCopyFiles emits the module's COPY_FILE nodes and returns the (ref, output)
-// of any copy whose destination is a linkable object (.a/.o) — upstream archives
-// such a copied object into the module's library (e.g. a prebuilt staticlib
-// COPY_FILE'd into a library).
+// of any copy whose destination is a linkable object (.a/.o), archived into the
+// module's library.
 func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleInputs *ModuleCCInputs) (memberRefs []NodeRef, memberOuts []VFS, memberSrcs []VFS) {
 	scanner := ctx.scannerFor(instance)
 	reg := codegenRegForInstance(ctx, instance)
 
-	// Pre-pass: register every COPY entry's parsed includes AND its codegen
-	// mapping (dst → src) before any closure walk runs. COPY entries reference
-	// each other through OUTPUT_INCLUDES via header back-references, so a
-	// closure may transit through a sibling. Registering only when a COPY entry
-	// is reached would let an entry's closure walk silently miss any sibling
-	// defined later in the file.
+	// Pre-pass: register every COPY entry's parsed includes and codegen mapping
+	// (dst → src) before any closure walk runs. COPY entries reference each other
+	// through OUTPUT_INCLUDES, so a closure may transit through a sibling defined
+	// later in the file.
 	type entryReg struct {
 		srcVFS         VFS
 		dstVFS         VFS
@@ -81,17 +71,13 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 		srcVFS := copyFileInputVFS(ctx.fs, instance.Path.rel(), entry.Src)
 		dstVFS := copyFileOutputVFS(instance.Path.rel(), entry.Dst)
 		parsed := copyFileParsedIncludes(scanner, ctx.fs, instance.Path.rel(), entry)
-		// Reserve the CP node's ref up front, per entry, so every dst carries a
-		// valid ProducerRef before any CP is built and a CP whose source
-		// resolves to a sibling CP's output sees that producer.
+		// Reserve the CP node's ref up front so every dst carries a valid
+		// ProducerRef before any CP is built.
 		ref := ctx.emit.reserve()
 
-		// When the COPY source is itself a registered build-generated output
-		// carrying a producer source closure, upstream's flat-input model lists
-		// that producer's transitive $(S) closure on both the CP action and the
-		// copied file. Peers resolve through genModule before this module's
-		// emitCopyFiles runs, so the producer's ProducerSourceClosure is already
-		// registered. An ordinary source-to-build copy resolves srcInfo==nil.
+		// When the COPY source is itself a registered build-generated output, its
+		// producer's transitive $(S) closure rides on both the CP action and the
+		// copied file. An ordinary source-to-build copy resolves srcInfo==nil.
 		var producerSource []VFS
 
 		if srcInfo := reg.lookup(srcVFS); srcInfo != nil {
@@ -111,12 +97,10 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 				ProducerRef: ref,
 			}
 
-			// The fs_tools.py copy tooling is a real input of every copy
-			// product, so ride it as a non-expanded closure leaf of the dst
-			// — it then reaches the dst's compile (and every consumer)
-			// transitively through the dst's cached window, instead of being
-			// re-attached per CC/BC source. COPY_FILE(TEXT) and AUTO COPY
-			// additionally materialize the $(S) source, so add it as a leaf.
+			// The copy tooling is a real input of every copy product, so ride
+			// it as a closure leaf of the dst — reaching every consumer
+			// transitively instead of being re-attached per source. TEXT and
+			// AUTO copies additionally materialize the $(S) source, so add it.
 			if srcVFS != dstVFS {
 				info.ClosureLeaves = append(info.ClosureLeaves, ctx.scripts[copyFsToolsVFS]...)
 
@@ -124,25 +108,19 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 					info.ClosureLeaves = append(info.ClosureLeaves, srcVFS)
 				}
 
-				// A source-root packaging-stage copy ($(S) original staged into
-				// the module) carries its own $(S) input set: the original
-				// source plus the fs_tools.py copy tooling. Upstream's flat-input
-				// model lists this transitive source closure on every node that
-				// consumes the staged copy. A build-root source ($(B) generated
-				// output staged by COPY_FILE) has no $(S) closure to lift here —
-				// its producer's source closure is modeled by the
-				// generated-resource buckets, not this copy edge.
+				// A source-root packaging-stage copy carries its own $(S) input
+				// set: the original source plus the copy tooling, listed on
+				// every consumer. A $(B) generated source has no $(S) closure
+				// to lift here.
 				if srcVFS.isSource() {
 					info.ProducerSourceClosure = append([]VFS{srcVFS}, ctx.scripts[copyFsToolsVFS]...)
 				}
 			}
 
 			// Carry a copied generated output's producer source closure onto
-			// the dst so a downstream PY_SRCS bytecode (py3cc) node folds the
-			// full transitive source set. The bytecode compiles the $(B)
-			// copied file: its closure is the CP's own $(S) copy-tool scripts
-			// PLUS the $(B) source's producer closure (the $(B) intermediate
-			// stays behind the producer node edge).
+			// the dst so a downstream PY_SRCS bytecode node folds the full
+			// transitive source set: the CP's own copy-tool scripts plus the
+			// $(B) source's producer closure.
 			if len(producerSource) > 0 {
 				dstClosure := make([]VFS, 0, len(producerSource)+len(ctx.scripts[copyFsToolsVFS]))
 				dstClosure = append(dstClosure, producerSource...)
@@ -158,19 +136,15 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 		srcVFS := entries[i].srcVFS
 		dstVFS := entries[i].dstVFS
 		// Exclude this CP's own reserved ref: an AUTO copy may have src == dst,
-		// and without the exclude probe(srcVFS) would resolve to this very node
-		// — a self-dependency (and finalize cycle).
+		// so without the exclude srcVFS would resolve to this node — a
+		// self-dependency (and finalize cycle).
 		deps := resolveCodegenDepRefs(ctx, instance, []VFS{srcVFS}, entries[i].ref)
 
-		// Upstream first-DFS-leave ownership: when a COPY_FILE consumes another
-		// module's generated build output, this consuming module is a referencer
-		// of the producer node. For an OUT_NOAUTO producer its own module never
-		// re-references (product copied/consumed only by the parent), the
-		// consuming COPY is the first leaver, so the producer node's module_dir
-		// AND late ${BINDIR} cwd follow this module. Record the consumer
-		// first-claim (first-wins; the override's self/same-module guard makes it
-		// a no-op when the producer already owns the output). moduleCCTag is 0
-		// for a non-multimodule LIBRARY, so no spurious module_tag is added.
+		// First-DFS-leave ownership: when a COPY_FILE consumes another module's
+		// OUT_NOAUTO build output whose own module never re-references it, the
+		// consuming COPY is the first leaver, so the producer's module_dir and
+		// late ${BINDIR} cwd follow this module. Record the consumer first-claim
+		// (first-wins; a no-op when the producer already owns the output).
 		if len(deps) > 0 && srcVFS.isBuild() && srcVFS != dstVFS {
 			var ownerTag STR
 
@@ -184,16 +158,13 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 		var closure []VFS
 
 		// WITH_CONTEXT pulls the source file's #include closure; OUTPUT_INCLUDES
-		// additionally pulls each declared target's closure. Both fall out of a
-		// single walk from dst, whose registered parsedIncludes contain exactly
-		// those. rewriteClosureCPSource swaps sibling-CP $(B) hits for their $(S)
-		// sources (CP-specific — CC closures keep $(B)). keepOnlySourceVFS then
-		// drops the remaining $(B) entries: upstream's CP closure is source-only.
-		// dedupVFS collapses repeated post-rewrite entries.
+		// each declared target's. Both fall out of a single walk from dst.
+		// rewriteClosureCPSource swaps sibling-CP $(B) hits for their $(S) sources;
+		// keepOnlySourceVFS drops the rest (CP closures are source-only).
 		if moduleInputs != nil && (entry.WithContext || len(entry.OutputIncludes) > 0) {
 			// Closure root is irrelevant: rewriteClosureCPSource maps the dst
-			// root to its SourcePath (== src) and EmitCPWithDeps filters both
-			// src and dst from extraInputs, so the rootless walk is exact.
+			// root to its SourcePath and EmitCPWithDeps filters src and dst from
+			// extraInputs, so the rootless walk is exact.
 			closure = walkClosure(ctx.scannerFor(instance), dstVFS, moduleInputs.ScanCfg)
 			closure = rewriteClosureCPSource(scanner, closure)
 			closure = keepOnlySourceVFS(closure)
@@ -201,16 +172,14 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 		}
 
 		// Copying a registered generated output lists its producer's transitive
-		// $(S) closure on the CP action too. The copy-tool scripts already ride
-		// as the CP node's own script inputs.
+		// $(S) closure on the CP action too.
 		if len(entries[i].producerSource) > 0 {
 			closure = append(closure, entries[i].producerSource...)
 		}
 
-		// Upstream attributes the owning submodule's MODULE_TAG to every node it
-		// produces; a PY23_LIBRARY .py copy node therefore carries module_tag=py3.
-		// moduleInputs.ModuleTag is the already-computed moduleCCTag — 0 for an
-		// ordinary LIBRARY, so plain copies stay untagged.
+		// Every node carries the owning submodule's MODULE_TAG. ModuleTag is the
+		// already-computed moduleCCTag — 0 for an ordinary LIBRARY, so plain
+		// copies stay untagged.
 		var moduleTag STR
 
 		if moduleInputs != nil {
@@ -222,8 +191,8 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 		if dst := entry.Dst; strings.HasSuffix(dst, ".a") || strings.HasSuffix(dst, ".o") {
 			memberRefs = append(memberRefs, entries[i].ref)
 			memberOuts = append(memberOuts, dstVFS)
-			// Upstream archives a copied .a/.o alongside its copy source: the
-			// prebuilt source rides as a direct input of the module's AR.
+			// A copied .a/.o is archived alongside its copy source: the prebuilt
+			// source rides as a direct input of the module's AR.
 			memberSrcs = append(memberSrcs, srcVFS)
 		}
 	}
@@ -234,9 +203,9 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 func generatedModuleSourceVFS(ctx *GenCtx, instance ModuleInstance, srcRel string) *VFS {
 	reg := codegenRegForInstance(ctx, instance)
 
-	// Lookup-only probe: the canonical "$(B)/<mod>/<src>" is assembled in the
-	// scratch buffer and probed without inserting — a plain src (the common
-	// case) otherwise interns a never-registered $(B) path per call.
+	// Lookup-only probe: the canonical "$(B)/<mod>/<src>" is assembled and probed
+	// without inserting — a plain src otherwise interns a never-registered $(B)
+	// path per call.
 	var id STR
 
 	if srcRel != "" && pathIsClean(srcRel) {

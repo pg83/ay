@@ -6,10 +6,8 @@ import (
 )
 
 // TestEmitCF_GeneratedFromRidesAsClosureLeaf pins generated-from propagation: a
-// cross-module consumer that #includes a configured header must carry, in its CC
-// input closure, the generated header, the template source (.h.in) and
-// configure_file.py — both riding as ClosureLeaves, not fake #includes — plus
-// the template's own #include registered as the header's parsed includes.
+// cross-module consumer's CC input closure must carry the template source and
+// configure_file.py as ClosureLeaves, plus the template's own #include.
 func TestEmitCF_GeneratedFromRidesAsClosureLeaf(t *testing.T) {
 	fs := newMemFS(map[string]string{
 		"prod/ya.make":     "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(config.h.in)\nEND()\n",
@@ -29,10 +27,10 @@ func TestEmitCF_GeneratedFromRidesAsClosureLeaf(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"$(B)/prod/config.h",                   // the generated header itself
-		"$(S)/prod/config.h.in",                // template source — generated-from ClosureLeaf
-		"$(S)/build/scripts/configure_file.py", // generator script — generated-from ClosureLeaf
-		"$(S)/prod/marker.h",                   // the template's own #include, registered on config.h
+		"$(B)/prod/config.h",
+		"$(S)/prod/config.h.in",                // generated-from ClosureLeaf
+		"$(S)/build/scripts/configure_file.py", // generated-from ClosureLeaf
+		"$(S)/prod/marker.h",                   // template's own #include
 	} {
 		if !inputs[want] {
 			t.Errorf("use.cpp.o input closure missing %q", want)
@@ -40,10 +38,8 @@ func TestEmitCF_GeneratedFromRidesAsClosureLeaf(t *testing.T) {
 	}
 }
 
-// TestBuildCFGVars_BuildTypeFromPlatform pins that a CONFIGURE_FILE template
-// referencing @BUILD_TYPE@ substitutes the instance platform's build type, not a
-// hardcoded DEBUG: the tool/host node reads BUILD_TYPE=RELEASE while the debug
-// target keeps DEBUG.
+// TestBuildCFGVars_BuildTypeFromPlatform pins that @BUILD_TYPE@ substitutes the
+// instance platform's build type, not a hardcoded DEBUG.
 func TestBuildCFGVars_BuildTypeFromPlatform(t *testing.T) {
 	fs := newMemFS(map[string]string{"m/tmpl.in": "type = @BUILD_TYPE@\n"})
 

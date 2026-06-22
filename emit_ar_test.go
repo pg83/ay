@@ -296,9 +296,7 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 }
 
 // Archive members follow the module's PIC contour: a PIC platform archives
-// `.pic.o` members, a non-PIC platform archives `.o`. The suffix derives from
-// Platform.PIC, never from a path. This pins that the contour propagates from
-// platform to archive members.
+// `.pic.o`, non-PIC archives `.o`. The suffix derives from Platform.PIC.
 func TestGen_ArchiveMembersFollowPicContour(t *testing.T) {
 	src := map[string]string{
 		"codecs/ya.make": `LIBRARY()
@@ -717,8 +715,7 @@ func TestReorderARMembers_Reg3PICVariantsTrailObjcopy(t *testing.T) {
 			for i, rel := range tc.paths {
 				refs[i] = NodeRef(int64(i + 1))
 				paths[i] = build(rel)
-				// The .reg3.cpp compiles are generated sources, so they sort
-				// after the direct objcopy members (which carry the default meta).
+				// .reg3.cpp compiles are generated, sorting after direct objcopy members.
 				if strings.Contains(rel, ".reg3.cpp") {
 					declMeta[paths[i]] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
 				}
@@ -776,10 +773,9 @@ func TestGen_LibraryARIncludesResourceObjcopyMemberInputs(t *testing.T) {
 	}
 }
 
-// TestGen_Archive_SrcdirMemberResolvesThroughSourcePathPlan: a module that
-// declares SRCDIR(data) and ARCHIVE(NAME out.inc member.txt) must resolve the
-// member through the SRCDIR source path plan, reading $(S)/data/member.txt —
-// not the phantom module-dir path $(S)/mod/member.txt, which does not exist.
+// TestGen_Archive_SrcdirMemberResolvesThroughSourcePathPlan: with SRCDIR(data)
+// and ARCHIVE(NAME out.inc member.txt), the member resolves through the SRCDIR
+// path plan ($(S)/data/member.txt), not the phantom $(S)/mod/member.txt.
 func TestGen_Archive_SrcdirMemberResolvesThroughSourcePathPlan(t *testing.T) {
 	files := map[string]string{}
 
@@ -873,12 +869,9 @@ message Ydb {}
 }
 
 func TestReorderARMembers_SecondLevelTrailsFirstLevelByRound(t *testing.T) {
-	// RUN_PROGRAM "Fbs" (declSeq 1) emits a .fbs that flatc compiles to a
-	// SECOND-LEVEL .fbs.cpp; RUN_PROGRAM "Cpp" (declSeq 2) emits a FIRST-LEVEL
-	// .cpp. The flatc .fbs.cpp gets a further FIFO round, so the first-level
-	// .cpp.o archives before the second-level .fbs.cpp.o despite its lower
-	// declSeq — generation round dominates declaration sequence. Without the
-	// SecondLevel round marker the lower declSeq would pull .fbs.cpp.o ahead.
+	// A second-level .fbs.cpp (declSeq 1) gets a further FIFO round, so a
+	// first-level .cpp.o (declSeq 2) archives before it: generation round dominates
+	// declaration sequence. Without the SecondLevel marker the lower declSeq wins.
 	fbsCpp := build("mod/formula.fbs.cpp.o")
 	cpp := build("mod/formula.cpp.o")
 	refs := []NodeRef{NodeRef(1), NodeRef(2)}
@@ -899,9 +892,8 @@ func TestReorderARMembers_SecondLevelTrailsFirstLevelByRound(t *testing.T) {
 }
 
 func TestGen_ARMemberOrder_PbCcAfterHSerialized(t *testing.T) {
-	// A LIBRARY with both a .proto SRCS entry (generates pb.cc.o) and
-	// GENERATE_ENUM_SERIALIZATION (generates h_serialized.cpp.o) must place
-	// pb.cc.o AFTER h_serialized.cpp.o in the AR command args (pb.cc.o last).
+	// A LIBRARY with a .proto SRCS (pb.cc.o) and GENERATE_ENUM_SERIALIZATION
+	// (h_serialized.cpp.o) must place pb.cc.o AFTER h_serialized.cpp.o.
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "mylib/ya.make", `LIBRARY()
@@ -954,12 +946,10 @@ END()
 	}
 }
 
-// TestGen_ARMemberOrder_CfgProtoAfterDirectCpp: a plain LIBRARY with
-// SRCS(status_codes.cfgproto status_codes.cpp) must archive the direct
-// status_codes.cpp.o BEFORE the generated status_codes.cfgproto.pb.cc.o, even
-// though the .cfgproto entry is declared first. The cfgproto generated .pb.cc
-// compile runs in a later FIFO round, so its object archives after the direct
-// compiles.
+// TestGen_ARMemberOrder_CfgProtoAfterDirectCpp: with SRCS(status_codes.cfgproto
+// status_codes.cpp), the direct .cpp.o archives BEFORE the generated
+// .cfgproto.pb.cc.o despite the .cfgproto being declared first — its compile
+// runs in a later FIFO round.
 func TestGen_ARMemberOrder_CfgProtoAfterDirectCpp(t *testing.T) {
 	files := map[string]string{}
 
@@ -1012,10 +1002,9 @@ message Cfg {}
 	}
 }
 
-// TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs verifies the resource objcopy object
-// appears BEFORE SRCS(GLOBAL) objects in the global archive cmd_args, even when
-// SRCS(GLOBAL) is declared first — objcopy objects always come first regardless
-// of declaration order.
+// TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs: the resource objcopy object appears
+// BEFORE SRCS(GLOBAL) objects in the global archive even when SRCS(GLOBAL) is
+// declared first — objcopy objects always come first.
 func TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs(t *testing.T) {
 	files := map[string]string{}
 	writeToolProgram(files, "tools/py3cc", "py3cc")
@@ -1043,7 +1032,7 @@ func TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs(t *testing.T) {
 	}
 
 	args := globalAR.Cmds[0].CmdArgs.flat()
-	// cmd_args: [python3, script, ar_tool, ar_type, ar_format, $(B), None, --, --, archivePath, member0, ...]
+	// members begin at index 10 (after the 10-token prefix + archivePath).
 	if len(args) < 12 {
 		t.Fatalf("global AR cmd_args too short (%d): %v", len(args), args)
 	}
@@ -1070,11 +1059,9 @@ func TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs(t *testing.T) {
 	}
 }
 
-// ARCHIVE(NAME data.inc file.txt) writes its output through the
-// ${addincl;noauto;output:NAME} modifier. Beyond emitting the archive output,
-// the `addincl` side effect adds the output's build directory as a global
-// include reaching the declaring module and its PEERDIR consumers, so a
-// consumer that PEERDIRs the archive module compiles with -I$(B)/<peer-dir>.
+// ARCHIVE(NAME ...) writes its output through the addincl;output modifier, whose
+// side effect adds the output's build dir as a global include reaching PEERDIR
+// consumers, so a consumer compiles with -I$(B)/<peer-dir>.
 func TestGen_Archive_NameOutputDirPropagatesAsBuildInclude(t *testing.T) {
 	files := map[string]string{}
 
@@ -1113,8 +1100,7 @@ END()
 	}
 }
 
-// globalARMembers returns the member object paths of the single tagGlobal AR
-// node, in command order.
+// globalARMembers returns the tagGlobal AR node's member paths in command order.
 func globalARMembers(t *testing.T, g *Graph) []string {
 	t.Helper()
 
@@ -1165,13 +1151,10 @@ func classifyObjcopyMember(g *Graph, memberPath string) string {
 	return "other-objcopy"
 }
 
-// TestGen_GlobalAR_ExplicitResourceBeforeGlobal_PySrcAfter: a PY3_LIBRARY with
-// SRCS(GLOBAL syms.cpp), PY_REGISTER, PY_SRCS(.py + .pyi) and explicit
-// RESOURCE_FILES must order its global archive members as: explicit
-// RESOURCE_FILES objcopy, then the GLOBAL C++ source, then the PY_SRCS .py
-// objcopy, then the .pyi objcopy, then the PY_REGISTER .reg3.cpp. The explicit
-// resfs objcopy precedes the SRCS(GLOBAL) band but the PY_SRCS .py/.pyi
-// objcopies follow it.
+// TestGen_GlobalAR_ExplicitResourceBeforeGlobal_PySrcAfter: a PY3_LIBRARY orders
+// its global archive members as explicit RESOURCE_FILES objcopy, GLOBAL src,
+// PY_SRCS .py objcopy, .pyi objcopy, then PY_REGISTER .reg3.cpp — the explicit
+// resfs objcopy precedes the SRCS(GLOBAL) band, the PY_SRCS objcopies follow it.
 func TestGen_GlobalAR_ExplicitResourceBeforeGlobal_PySrcAfter(t *testing.T) {
 	files := map[string]string{}
 	writeToolProgram(files, "tools/py3cc", "py3cc")
@@ -1233,18 +1216,15 @@ END()
 		}
 	}
 
-	// explicit RESOURCE_FILES objcopy precedes the GLOBAL src
 	if !(explicitIdx < globalIdx) {
 		t.Errorf("explicit objcopy (%d) must precede syms.cpp.pic.o (%d); members=%v", explicitIdx, globalIdx, members)
 	}
-	// PY_SRCS .py/.pyi objcopies follow the GLOBAL src
 	if !(globalIdx < pyIdx) {
 		t.Errorf("syms.cpp.pic.o (%d) must precede py objcopy (%d); members=%v", globalIdx, pyIdx, members)
 	}
 	if !(globalIdx < pyiIdx) {
 		t.Errorf("syms.cpp.pic.o (%d) must precede pyi objcopy (%d); members=%v", globalIdx, pyiIdx, members)
 	}
-	// .py before .pyi, both before the generated .reg3.cpp
 	if !(pyIdx < pyiIdx) {
 		t.Errorf("py objcopy (%d) must precede pyi objcopy (%d); members=%v", pyIdx, pyiIdx, members)
 	}
@@ -1253,10 +1233,9 @@ END()
 	}
 }
 
-// TestGen_GlobalAR_PycryptodomeShape_ExplicitGroupBeforeGlobals: with SEVERAL
-// SRCS(GLOBAL *_syms.cpp) sources and many PY_SRCS files plus explicit
-// RESOURCE_FILES, ALL explicit-resource objcopies must precede the FIRST GLOBAL
-// source, and ALL PY_SRCS objcopies must follow the LAST GLOBAL source.
+// TestGen_GlobalAR_PycryptodomeShape_ExplicitGroupBeforeGlobals: with several
+// SRCS(GLOBAL *_syms.cpp), PY_SRCS, and explicit RESOURCE_FILES, all explicit
+// objcopies precede the first GLOBAL src and all PY_SRCS objcopies follow the last.
 func TestGen_GlobalAR_PycryptodomeShape_ExplicitGroupBeforeGlobals(t *testing.T) {
 	files := map[string]string{}
 	writeToolProgram(files, "tools/py3cc", "py3cc")
