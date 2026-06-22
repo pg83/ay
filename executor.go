@@ -582,6 +582,13 @@ func (ex *Executor) storeFileToCAS(src string) string {
 }
 
 func (ex *Executor) restoreInto(uid UID, where string) {
+	if exc := try(func() { ex.restoreManifest(uid, where) }); exc != nil {
+		_ = os.Remove(ex.uidPath(uid))
+		exc.throw()
+	}
+}
+
+func (ex *Executor) restoreManifest(uid UID, where string) {
 	metaPath := ex.uidPath(uid)
 	data := throw2(os.ReadFile(metaPath))
 
