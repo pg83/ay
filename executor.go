@@ -643,6 +643,12 @@ func (ex *Executor) removeContents(dir string) {
 	}
 }
 
+func (ex *Executor) clearCache() {
+	for _, name := range []string{"cas", "tmp", "uid"} {
+		ex.discard(filepath.Join(ex.bldRoot, name))
+	}
+}
+
 // discard renames path into grbDir under a random name (O(1), and fine on
 // write-less trees), leaving the real delete to the background collector. If the
 // rename fails it deletes in place.

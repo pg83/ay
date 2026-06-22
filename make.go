@@ -37,6 +37,7 @@ type MakeFlags struct {
 	testLevel         int
 	sandboxing        bool
 	dumpIgnoredMacros bool
+	clear             bool
 	cmdPrefixes       []CmdPrefix
 }
 
@@ -235,6 +236,10 @@ func cmdMake(g GlobalFlags, args []string) int {
 	ex := newExecutor(mf.srcRoot, mf.bldRoot, mf.threads, mf.keepGoing, mf.ninja, mf.sandboxing, mf.cmdPrefixes)
 	ex.startGarbageCollector()
 
+	if mf.clear {
+		ex.clearCache()
+	}
+
 	go ex.eventLoop()
 
 	defer ex.close()
@@ -304,7 +309,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 	state := getopt.NewState(append([]string{"ay-make"}, args...))
 	config := getopt.Config{
 		Opts:     getopt.OptStr("GrdktThD:j:B:o:I:"),
-		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stats,build-dir:,source-root:,keep-going,dump-graph,copy-sources:,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose,sandboxing,dump-ignored-macros,cmd-prefix:"),
+		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stats,build-dir:,source-root:,keep-going,dump-graph,copy-sources:,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose,sandboxing,dump-ignored-macros,clear,cmd-prefix:"),
 		Mode:     getopt.ModeInOrder,
 		Func:     getopt.FuncGetOptLong,
 	}
@@ -329,6 +334,8 @@ func parseMakeFlags(args []string) *MakeFlags {
 			os.Exit(0)
 		case opt.Char == 'k' || opt.Name == "keep-going":
 			mf.keepGoing = true
+		case opt.Name == "clear":
+			mf.clear = true
 		case opt.Char == 'G' || opt.Name == "dump-graph":
 			mf.dumpGraph = true
 		case opt.Name == "copy-sources":
@@ -454,15 +461,19 @@ layout flags:
   -I, --install <path>          Install outputs into this directory (default: source-root).
 
 execution flags:
+  -h, --help                    Show this help.
   -j, --jobs <N>                Parallel exec slots (default: NumCPU); 0 = build-only.
   -k, --keep-going              Continue past per-node failures.
+  --clear                       Move cas/tmp/uid into grb at start (fresh build cache).
+  --copy-sources <dir>          Build the graph, copy the source slice it read into <dir>; no build.
   --cmd-prefix <suffix>=<pfx>   Prepend <pfx> tokens before any command arg whose path
                                 ends with <suffix> (repeatable). E.g. run fetched glibc
                                 binaries through a loader: bin/java=/bin/ld.linux-so.2
   -T, --ninja                   Ninja-style per-line output (default: in-place repaint).
   -t, -tt, -ttt                 Generate test nodes (small / +medium / +large).
   --stats                       Print per-kind execution stats after the build.
-  -G, --dump-graph              Log a graph summary to stderr after Gen.
+  -G, --dump-graph              With -j 0, write the generated graph as JSON to stdout.
+  --dump-ignored-macros         With -j 0, print service-keyword macro args no handler models.
   --verbose                     Emit Gen-time diagnostics (unsupported sysincl records, …) to stderr.
   --sandboxing                  Run test nodes under the filesystem sandbox.
 
