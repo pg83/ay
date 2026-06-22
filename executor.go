@@ -605,16 +605,12 @@ func (ex *Executor) restoreInto(uid UID, where string) {
 		case e.Link != "":
 			throw(os.Symlink(e.Link, target))
 
-		case strings.HasPrefix(outVFS, "$(B)/resources/"):
-			// Toolchain trees are hard-linked, not symlinked: a tool finds its bundled
-			// resources relative to its OWN binary path. A symlink resolves to the flat
-			// CAS so those relative dirs vanish; a hard link keeps the tree layout.
-			if err := os.Link(ex.casPathForHash(e.Cas), target); err != nil && !os.IsExist(err) {
-				throw(err)
-			}
-
 		default:
-			throw(os.Symlink(ex.casPathForHash(e.Cas), target))
+			src := ex.casPathForHash(e.Cas)
+
+			if err := os.Link(src, target); err != nil && !os.IsExist(err) {
+				throw(copyFile(src, target))
+			}
 		}
 	}
 }

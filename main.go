@@ -135,6 +135,11 @@ var commands = []command{
 			"the former ancestor-walk. Prints ns/op for each.",
 	},
 	{
+		path: []string{"dev", "perf", "link"}, run: cmdPerfLink,
+		help: "🔗 Benchmark input materialization from CAS: hard link vs symlink vs copy.\n" +
+			"Args: [count] [size-bytes]. Prints ns/op for each.",
+	},
+	{
 		path: []string{"dev", "refac", "consts"}, run: refacConsts,
 		help: "♻️ Regenerate the interned-constant files (str/arg/vfs/env) from the\n" +
 			"literals used across the package. Mutates source in place.",

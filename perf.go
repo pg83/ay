@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -25,6 +26,74 @@ func cmdPerfDarts(_ GlobalFlags, args []string) int {
 	defer startProfilesFromEnv()()
 
 	return perfDarts()
+}
+
+func cmdPerfLink(_ GlobalFlags, args []string) int {
+	defer startProfilesFromEnv()()
+
+	count, size := 5000, 8192
+
+	if len(args) >= 1 {
+		count = throw2(strconv.Atoi(args[0]))
+	}
+
+	if len(args) >= 2 {
+		size = throw2(strconv.Atoi(args[1]))
+	}
+
+	return perfLink(count, size)
+}
+
+func perfLink(count, size int) int {
+	root := throw2(os.MkdirTemp("", "ay-perf-link-*"))
+
+	defer func() { throw(os.RemoveAll(root)) }()
+
+	cas := filepath.Join(root, "cas")
+	throw(os.MkdirAll(cas, 0o755))
+
+	blob := make([]byte, size)
+	srcs := make([]string, count)
+
+	for i := range srcs {
+		p := filepath.Join(cas, strconv.Itoa(i))
+		throw(os.WriteFile(p, blob, 0o444))
+		srcs[i] = p
+	}
+
+	bench := func(name string, materialize func(src, dst string) error) {
+		const minDur = 2 * time.Second
+
+		out := filepath.Join(root, "out")
+		var dur time.Duration
+		iters := 0
+
+		for dur < minDur {
+			throw(os.MkdirAll(out, 0o755))
+
+			start := time.Now()
+
+			for i, src := range srcs {
+				throw(materialize(src, filepath.Join(out, strconv.Itoa(i))))
+			}
+
+			dur += time.Since(start)
+			iters++
+
+			throw(os.RemoveAll(out))
+		}
+
+		ops := int64(iters) * int64(count)
+		fmt.Printf("%-8s %5d files x %3d iters: %8.0f ns/op  %10.0f ops/s\n",
+			name, count, iters, float64(dur.Nanoseconds())/float64(ops), float64(ops)/dur.Seconds())
+	}
+
+	fmt.Printf("materialize %d files of %d bytes from CAS:\n", count, size)
+	bench("link", os.Link)
+	bench("symlink", os.Symlink)
+	bench("copy", copyFile)
+
+	return 0
 }
 
 func cParserSource(path string) bool {
