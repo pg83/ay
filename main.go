@@ -99,6 +99,11 @@ var commands = []command{
 		help: "🔣 Write base64-decoded data to a file (inline vcs.json node).",
 	},
 	{
+		path: []string{"fetch", "sandbox"}, run: cmdFetchSandbox, hide: true,
+		help: "📦 Authenticated FROM_SANDBOX fetch (SB node): replaces the\n" +
+			"unauthenticated fetch_from_sandbox.py; untar/copy outputs into the build dir.",
+	},
+	{
 		path: []string{"make"}, run: cmdMake,
 		help: "🔨 Generate the build graph for the given targets and write it as JSON.\n" +
 			"Mirrors ymake: --source-root, --sandboxing, -G, -j.",

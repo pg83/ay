@@ -436,8 +436,17 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 			args[i] = mountString(a.string(), srcMount, bldMount)
 		}
 
-		args = applyCmdPrefixes(args, ex.cmdPrefixes)
-		args = packCommandFiles(args, bldMount, &cmdFileCounter)
+		if n.KV.P == pkSB {
+			// FROM_SANDBOX: the node's command is upstream's fetch_from_sandbox.py,
+			// whose metadata query is unauthenticated (401 on private resources).
+			// Run our authenticated `ay fetch sandbox` instead (same flags, leading
+			// --source-root); the graph keeps the upstream command (-G converges),
+			// only execution is substituted. Drop python3 + the script path (args[0:2]).
+			args = append([]string{throw2(os.Executable()), "fetch", "sandbox", "--source-root", ex.srcRoot}, args[2:]...)
+		} else {
+			args = applyCmdPrefixes(args, ex.cmdPrefixes)
+			args = packCommandFiles(args, bldMount, &cmdFileCounter)
+		}
 
 		dir := bldMount
 
@@ -458,7 +467,7 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 		// A FETCH node pulling a Sandbox (sbr:) resource needs an OAuth token; resolve
 		// it lazily (once) and pass it via YA_TOKEN so the `ay fetch` child authenticates
 		// without re-resolving. Only sbr: fetches trigger this — http/mapped ones don't.
-		if n.KV.P == pkFETCH && os.Getenv("YA_TOKEN") == "" && argsNeedSandboxToken(args) {
+		if os.Getenv("YA_TOKEN") == "" && (n.KV.P == pkSB || (n.KV.P == pkFETCH && argsNeedSandboxToken(args))) {
 			if tok := ex.sandboxToken(); tok != "" {
 				env = append(env, "YA_TOKEN="+tok)
 			}
