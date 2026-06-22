@@ -116,6 +116,16 @@ func fetchResource(sourceRoot, uri, out string) {
 	defer os.RemoveAll(tmp)
 
 	archivePath := filepath.Join(tmp, "resource")
+	downloadResourceArchive(sourceRoot, uri, archivePath)
+	unpackResourceArchive(archivePath, out)
+}
+
+// downloadResourceArchive resolves a resource uri (sbr: / mapped MDS / plain URL)
+// to a single local archive file at archivePath — the authenticated download step
+// shared by fetchResource (which wipes+unpacks into a resource dir) and the
+// FROM_SANDBOX path (which unpacks into the module build dir without wiping it).
+func downloadResourceArchive(sourceRoot, uri, archivePath string) {
+	tmp := filepath.Dir(archivePath)
 	mapping := readResourceMappingMaybe(filepath.Join(sourceRoot, "build/mapping.conf.json"))
 
 	switch {
@@ -146,8 +156,88 @@ func fetchResource(sourceRoot, uri, out string) {
 	default:
 		fetchURL(uri, archivePath)
 	}
+}
 
-	unpackResourceArchive(archivePath, out)
+// cmdFetchSandbox is `ay fetch sandbox` — the authenticated, in-our-control
+// replacement for upstream's fetch_from_sandbox.py that the executor runs for
+// FROM_SANDBOX (pkSB) nodes. It accepts a leading --source-root plus the same
+// flags the node carries, fetches the Sandbox resource with the OAuth token, and
+// lays its outputs into the module build dir (cwd) per --untar-to / --copy-to-dir
+// / RENAME / EXECUTABLE. fetch_from_sandbox.py's own metadata query is
+// unauthenticated (401s), which is the whole reason we bypass it.
+func cmdFetchSandbox(_ GlobalFlags, args []string) int {
+	var sourceRoot, id string
+	mode, prefix := "untar", "."
+	executable := false
+
+	var renames [][2]string
+	var outs []string
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--source-root":
+			i++
+			sourceRoot = args[i]
+		case "--resource-id":
+			i++
+			id = args[i]
+		case "--untar-to":
+			i++
+			mode, prefix = "untar", args[i]
+		case "--copy-to-dir":
+			i++
+			mode, prefix = "copy", args[i]
+		case "--rename":
+			renames = append(renames, [2]string{args[i+1], args[i+2]})
+			i += 2
+		case "--executable":
+			executable = true
+		case "--resource-file":
+			i++ // we fetch ourselves; ignore the (absent) pre-fetched file path
+		case "--ya-start-command-file", "--ya-end-command-file":
+			// command-file markers — irrelevant once args are expanded
+		case "--":
+			outs = append(outs, args[i+1:]...)
+			i = len(args)
+		}
+	}
+
+	if id == "" {
+		throwFmt("fetch sandbox: missing --resource-id")
+	}
+
+	tmp := throw2(os.MkdirTemp("", "ay-sb-*"))
+
+	defer os.RemoveAll(tmp)
+
+	archivePath := filepath.Join(tmp, "resource")
+	downloadResourceArchive(sourceRoot, "sbr:"+id, archivePath)
+
+	throw(os.MkdirAll(prefix, 0o755))
+
+	if mode == "copy" {
+		dst := filepath.Join(prefix, "resource")
+
+		if len(outs) == 1 {
+			dst = filepath.Join(prefix, outs[0])
+		}
+
+		throw(copyFile(archivePath, dst))
+	} else {
+		unpackResourceArchive(archivePath, prefix)
+	}
+
+	for _, r := range renames {
+		throw(os.Rename(filepath.Join(prefix, r[0]), filepath.Join(prefix, r[1])))
+	}
+
+	if executable {
+		for _, o := range outs {
+			throw(os.Chmod(filepath.Join(prefix, o), 0o755))
+		}
+	}
+
+	return 0
 }
 
 func readResourceMappingMaybe(path string) ResourceMappingConf {
