@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -302,6 +303,14 @@ func copySliceConcurrent(srcRoot, dst string, dirs []string, onWarn func(Warn)) 
 // copyOne copies a single enumerated job: a symlink is recreated (not followed), a
 // regular file is content-copied with its mode. Parent dirs are created as needed.
 func copyOne(src, dst string, j copyJob) error {
+	// Idempotent re-run / overlap with a prior copy: if dst already exists, the file
+	// was placed on an earlier pass. Skip it without touching src — the source lives
+	// on a slow arc/FUSE mount, so we don't pay the read I/O (or risk an EPERM) for a
+	// no-op. Per the invariant: no src operation until dst is confirmed absent.
+	if _, err := os.Lstat(dst); err == nil {
+		return nil
+	}
+
 	if j.symlink {
 		link, err := os.Readlink(src)
 
@@ -324,17 +333,19 @@ func copyLooseFiles(srcRoot, dst string, rels []string) int {
 	n := 0
 
 	for _, rel := range rels {
+		target := filepath.Join(dst, rel)
+
+		// dst first: if it's already present (brought in by a recursive dir copy),
+		// skip before touching src — no src op until dst is confirmed absent.
+		if _, err := os.Lstat(target); err == nil {
+			continue
+		}
+
 		src := filepath.Join(srcRoot, rel)
 		fi, err := os.Lstat(src)
 
 		if err != nil || fi.IsDir() {
 			continue
-		}
-
-		target := filepath.Join(dst, rel)
-
-		if _, err := os.Lstat(target); err == nil {
-			continue // already brought in by a recursive dir copy
 		}
 
 		if copyFileMode(src, target, fi.Mode()) == nil {
@@ -350,6 +361,12 @@ func copyFileMode(src, dst string, mode os.FileMode) error {
 	in, err := os.Open(src)
 
 	if err != nil {
+		// EPERM/EACCES reading the source (restricted file on the arc/FUSE mount):
+		// skip it rather than failing the whole slice. Nothing is written to dst.
+		if errors.Is(err, os.ErrPermission) {
+			return nil
+		}
+
 		return err
 	}
 
