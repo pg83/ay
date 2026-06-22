@@ -78,10 +78,10 @@ func TestEmitDecimalMD5_GeneratedSourceEntersArchive(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"$(B)/mod/hash.auto.cpp",                // the generated source
-		"$(S)/mod/data.txt",                     // SV source inputs ride via closure leaves
-		"$(S)/mod/helper.hpp",                   //
-		"$(S)/build/scripts/decimal_md5.py",     //
+		"$(B)/mod/hash.auto.cpp",            // the generated source
+		"$(S)/mod/data.txt",                 // SV source inputs ride via closure leaves
+		"$(S)/mod/helper.hpp",               //
+		"$(S)/build/scripts/decimal_md5.py", //
 	} {
 		if !ccInputs[want] {
 			t.Errorf("CC input closure missing %q", want)

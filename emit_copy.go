@@ -101,6 +101,7 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 		// registered. An ordinary source-to-build copy resolves srcInfo==nil and keeps
 		// current behavior.
 		var producerSource []VFS
+
 		if srcInfo := reg.lookup(srcVFS); srcInfo != nil {
 			producerSource = srcInfo.ProducerSourceClosure
 		}
@@ -185,9 +186,11 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 		// (non-multimodule), so no spurious module_tag is added.
 		if len(deps) > 0 && srcVFS.isBuild() && srcVFS != dstVFS {
 			var ownerTag STR
+
 			if d.moduleStmt != nil {
 				ownerTag = moduleCCTag(d.moduleStmt.Name)
 			}
+
 			scanner.recordFirstClaim(srcVFS, instance.Path.rel(), ownerTag)
 		}
 
@@ -225,6 +228,7 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 		// moduleCCTag(d.moduleStmt.Name) — 0 for an ordinary LIBRARY, so plain
 		// copies stay untagged.
 		var moduleTag STR
+
 		if moduleInputs != nil {
 			moduleTag = moduleInputs.ModuleTag
 		}

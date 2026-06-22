@@ -98,6 +98,7 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 	inputs := na.inputList(scripts[fsTools], ownInputs)
 
 	tp := TargetProperties{ModuleDir: instance.Path.rel()}
+
 	if moduleTag != 0 {
 		tp.ModuleTag = moduleTag
 	}

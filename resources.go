@@ -110,6 +110,7 @@ func canonizePlatformKey(key string) string {
 	key = strings.ToLower(key)
 
 	os, arch, found := strings.Cut(key, "-")
+
 	if !found || arch == "" || arch == platformDefaultArch {
 		return os
 	}
@@ -124,6 +125,7 @@ func resolveResourceURIFromBundle(bundle map[string]string, env Environment) (st
 	want := resourceJSONPlatformKey(env)
 
 	keys := make([]string, 0, len(bundle))
+
 	for k := range bundle {
 		keys = append(keys, k)
 	}

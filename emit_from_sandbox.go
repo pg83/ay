@@ -50,6 +50,7 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 	// … --resource-id $Id (--untar-to | --copy-to-dir) $PREFIX [--executable] --
 	// $OUT $OUT_NOAUTO, run in the module build dir.
 	mode := "--untar-to"
+
 	if stmt.File {
 		mode = "--copy-to-dir"
 	}
@@ -58,9 +59,9 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 		d.tc.Python3,
 		buildScriptsFetchFromSandboxPy.str(),
 		argYaStartCommandFile.str(),
-		internStr("--resource-file"),
+		strResourceFile,
 		internStr("$(RESOURCE_ROOT)/sbr/" + id + "/resource"),
-		internStr("--resource-id"),
+		strResourceId,
 		stmt.ResourceId,
 		internStr(mode),
 		internStr(stmt.Prefix),
@@ -69,11 +70,11 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 	// Upstream ${pre=--rename :RENAME}: one `--rename <item>` pair per rename,
 	// rendered after $PREFIX and before $EXECUTABLE/--.
 	for _, r := range stmt.Renames {
-		args = append(args, internStr("--rename"), r)
+		args = append(args, strRename, r)
 	}
 
 	if stmt.Executable {
-		args = append(args, internStr("--executable"))
+		args = append(args, strExecutable)
 	}
 
 	args = append(args, arg2.str())

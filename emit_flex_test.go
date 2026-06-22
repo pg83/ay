@@ -11,8 +11,8 @@ import (
 // contrib/tools/flex-old` lands `-I$(S)/contrib/tools/flex-old` on the compile.
 func TestGen_FlexOldDefaultLexerGeneration(t *testing.T) {
 	fs := newMemFS(map[string]string{
-		"contrib/tools/flex-old/ya.make": "PROGRAM(flex)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(main.cpp)\nEND()\n",
-		"contrib/tools/flex-old/main.cpp": "int main(){return 0;}\n",
+		"contrib/tools/flex-old/ya.make":     "PROGRAM(flex)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(main.cpp)\nEND()\n",
+		"contrib/tools/flex-old/main.cpp":    "int main(){return 0;}\n",
 		"contrib/tools/flex-old/FlexLexer.h": "#pragma once\n",
 		"lex/ya.make": `LIBRARY()
 NO_LIBC()

@@ -39,6 +39,7 @@ func ragel6OutVFS(instance ModuleInstance, srcRel string) VFS {
 // ragel6OutName applies noext + defext=.rl6.cpp to a ragel source basename.
 func ragel6OutName(base string) string {
 	stem := base
+
 	if i := strings.LastIndexByte(base, '.'); i >= 0 {
 		stem = base[:i]
 	}

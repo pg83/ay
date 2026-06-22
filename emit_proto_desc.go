@@ -21,12 +21,6 @@ import (
 //     what a BUNDLE(<dir>) moves.
 
 var (
-	descRawprotoWrapperVFS = source("build/scripts/desc_rawproto_wrapper.py")
-	mergeFilesVFS          = source("build/scripts/merge_files.py")
-	collectRawprotoVFS     = source("build/scripts/collect_rawproto.py")
-	mergeProtosrcVFS       = source("build/scripts/merge_protosrc.py")
-
-	strDescProtoTag = internStr("desc_proto")
 
 	// protosFromProtocPeer is the builtin-proto peer NEED_GOOGLE_PROTO_PEERDIRS
 	// injects into a DESC_PROTO submodule (proto.conf: PEERDIR +=
@@ -278,7 +272,9 @@ func protoNamespaceContribs(d *ModuleData) []VFS {
 // descProtocIncludes builds the protoc -I span of a PD command, mirroring
 // upstream `_PROTO_DESC_RAWPROTO_CMD` (proto.conf):
 // `-I=./$PROTO_NAMESPACE -I=$ARCADIA_ROOT/$PROTO_NAMESPACE ${pre=-I=:_PROTO__INCLUDE}
-//  -I=$ARCADIA_BUILD_ROOT -I=$PROTOBUF_INCLUDE_PATH --include_source_info`.
+//
+//	-I=$ARCADIA_BUILD_ROOT -I=$PROTOBUF_INCLUDE_PATH --include_source_info`.
+//
 // The _PROTO__INCLUDE band has the same structure as the C++/PY proto commands
 // (composePBArgBlocks): the structural -I=$(B) -I=$(S), the own cppOutRoot, then
 // the peer PROTO_NAMESPACE span.
@@ -302,7 +298,7 @@ func descProtocIncludes(peerProtoAddIncl []VFS, cppOutRoot string) []STR {
 	out = append(out,
 		argIB2.str(),
 		argISContribLibsProtobufSrc.str(),
-		internStr("--include_source_info"),
+		strIncludeSourceInfo,
 	)
 
 	return out
@@ -318,11 +314,11 @@ func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath st
 	head := na.strList(
 		wrapccPython3STR,
 		descRawprotoWrapperVFS.str(),
-		internStr("--desc-output"),
+		strDescOutput,
 		descOut.str(),
-		internStr("--rawproto-output"),
+		strRawprotoOutput,
 		rawprotoOut.str(),
-		internStr("--proto-file"),
+		strProtoFile,
 		internStr(protoRelPath),
 		arg2.str(),
 		protocBinary.str(),
@@ -372,7 +368,7 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 	}
 
 	collect := make([]STR, 0, 4+len(rawprotoOutputs))
-	collect = append(collect, wrapccPython3STR, collectRawprotoVFS.str(), internStr("--output"), protosrc.str())
+	collect = append(collect, wrapccPython3STR, collectRawprotoVFS.str(), strOutput, protosrc.str())
 
 	for _, r := range rawprotoOutputs {
 		collect = append(collect, internStr(r.rel()))
@@ -420,7 +416,7 @@ func emitProtoDescriptions(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 	merge = append(merge, wrapccPython3STR, mergeFilesVFS.str(), protodesc.str())
 
 	collect := make([]STR, 0, 4+len(closure))
-	collect = append(collect, wrapccPython3STR, mergeProtosrcVFS.str(), internStr("--output"), tar.str())
+	collect = append(collect, wrapccPython3STR, mergeProtosrcVFS.str(), strOutput, tar.str())
 
 	inputs := make([]VFS, 0, len(closure))
 	deps := make([]NodeRef, 0, len(closure))

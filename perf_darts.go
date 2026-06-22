@@ -32,6 +32,7 @@ func perfDarts() int {
 
 	// Darts over "<root>/" keys.
 	keys := make([]string, len(roots))
+
 	for i, r := range roots {
 		keys[i] = r + "/"
 	}
@@ -42,6 +43,7 @@ func perfDarts() int {
 	// dir's ancestors deepest-first, probing the intern table (a full-path hash
 	// per ancestor) until a root hits.
 	old := newIntValueMap[int32](len(roots) * 2)
+
 	for i, r := range roots {
 		old.put(uint64(source(r)), int32(i))
 	}
@@ -66,6 +68,7 @@ func perfDarts() int {
 
 	// Sanity: both matchers must agree before timing means anything.
 	mismatch := 0
+
 	for _, d := range dirs {
 		di, dok := darts.longestMatch(d, "/")
 		oi, ook := oldLookup(d)

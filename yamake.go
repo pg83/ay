@@ -40,6 +40,21 @@ var runProgramKeywords = strKeySet(
 	"TOOL",
 )
 
+var structCodegenOutputIncludes = STRS(
+	"util/generic/singleton.h",
+	"util/generic/strbuf.h",
+	"util/generic/vector.h",
+	"util/generic/ptr.h",
+	"util/generic/yexception.h",
+	"kernel/struct_codegen/reflection/reflection.h",
+	"kernel/struct_codegen/reflection/floats.h",
+)
+
+var structCodegenPeerdirs = STRS(
+	"kernel/struct_codegen/metadata",
+	"kernel/struct_codegen/reflection",
+)
+
 // strKeySet interns a keyword list into a BitSet over the STR ids — the
 // parser's argument tokens are STR ids and the kw constants intern first at
 // init (tiny ids), so a membership check is one bit probe, no map.
@@ -1071,6 +1086,7 @@ func (p *Parser) parseMacroInto(into []Stmt, nameTok Token) []Stmt {
 		for i := 0; i < len(args); i++ {
 			if args[i].string() == "NAMESPACE" {
 				i++ // skip the namespace value
+
 				continue
 			}
 
@@ -1675,11 +1691,6 @@ const (
 	splitCodegenStreamCount   = 5
 )
 
-var (
-	kwSplitOutNum         = internStr("OUT_NUM")
-	kwSplitOutputIncludes = internStr("OUTPUT_INCLUDES")
-)
-
 // parseSplitCodegen lowers SPLIT_CODEGEN(tool prefix opts... [OUT_NUM n]
 // [OUTPUT_INCLUDES ...]). OUT_NUM (one value) and OUTPUT_INCLUDES (variadic) are
 // keyword sections that may appear anywhere — mirroring the Python macro's
@@ -1750,22 +1761,6 @@ func parseBaseCodegen(args []STR, line int) *BaseCodegenStmt {
 // fixed kernel/struct_codegen/codegen_tool with seven OUTPUT_INCLUDES on the
 // generated header and two implicit PEERDIRs.
 const structCodegenTool = "kernel/struct_codegen/codegen_tool"
-
-var (
-	structCodegenOutputIncludes = STRS(
-		"util/generic/singleton.h",
-		"util/generic/strbuf.h",
-		"util/generic/vector.h",
-		"util/generic/ptr.h",
-		"util/generic/yexception.h",
-		"kernel/struct_codegen/reflection/reflection.h",
-		"kernel/struct_codegen/reflection/floats.h",
-	)
-	structCodegenPeerdirs = STRS(
-		"kernel/struct_codegen/metadata",
-		"kernel/struct_codegen/reflection",
-	)
-)
 
 // parseStructCodegen lowers STRUCT_CODEGEN(Prefix) to its BASE_CODEGEN expansion.
 func parseStructCodegen(prefix STR, line int) *BaseCodegenStmt {

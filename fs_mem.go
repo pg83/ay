@@ -33,6 +33,7 @@ func newMemFS(files map[string]string) *MemFS {
 
 	addEntry := func(parent, name string, isDir bool) {
 		entries := fs.dirs[parent]
+
 		if entries == nil {
 			entries = map[string]bool{}
 			fs.dirs[parent] = entries
@@ -120,12 +121,14 @@ func (fs *MemFS) dirHas(v DirView, name string) (present bool, isDir bool) {
 
 func (fs *MemFS) existsRel(rel string) (present bool, isDir bool) {
 	rel = normalisePath(cleanRel(rel))
+
 	if rel == "" {
 		return true, true
 	}
 
 	dir, name := splitDirName(rel)
 	entries, ok := fs.dirs[dir]
+
 	if !ok {
 		return false, false
 	}
@@ -141,16 +144,19 @@ func (fs *MemFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 
 func (fs *MemFS) isFile(prefix VFS, suffix string) bool {
 	p, d := fs.exists(prefix, suffix)
+
 	return p && !d
 }
 
 func (fs *MemFS) isDir(prefix VFS, suffix string) bool {
 	p, d := fs.exists(prefix, suffix)
+
 	return p && d
 }
 
 func (fs *MemFS) read(rel string) []byte {
 	data, ok := fs.files[cleanRel(rel)]
+
 	if !ok {
 		throwFmt("memFS: no such file %q", rel)
 	}
@@ -164,9 +170,11 @@ func (fs *MemFS) read(rel string) []byte {
 // structure, not exact uids.
 func (fs *MemFS) contentHash(v VFS) uint64 {
 	data, ok := fs.files[cleanRel(v.rel())]
+
 	if !ok {
 		return 0
 	}
+
 	return xxh3.Hash(data)
 }
 
@@ -174,6 +182,7 @@ func (fs *MemFS) walk(rel string, visit func(rel string, isDir bool) bool) {
 	rel = cleanRel(rel)
 
 	present, isDir := fs.existsRel(rel)
+
 	if !present {
 		return
 	}
@@ -183,18 +192,24 @@ func (fs *MemFS) walk(rel string, visit func(rel string, isDir bool) bool) {
 	}
 
 	prefix := rel
+
 	if prefix != "" {
 		prefix += "/"
 	}
 
 	for name, childIsDir := range fs.dirs[rel] {
 		child := prefix + name
+
 		if childIsDir {
 			fs.walk(child, visit)
+
 			continue
 		}
+
 		visit(child, false)
 	}
 }
 
-func (fs *MemFS) perfStats() FsPerfStats { return FsPerfStats{} }
+func (fs *MemFS) perfStats() FsPerfStats {
+	return FsPerfStats{}
+}

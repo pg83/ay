@@ -66,7 +66,7 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 		inputIn.str(),
 		prefixCpp.str(),
 		prefixH.str(),
-		internStr("--cpp-parts"),
+		strCppParts,
 		internStr(strconv.Itoa(cppParts)),
 	)
 	cmdArgs = append(cmdArgs, sc.Opts...)
@@ -90,6 +90,7 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 	// output reads both the h+cpp and cpp buckets) into header consumers, which
 	// reference lists only on the compiled cpp parts, not on header includers.
 	headerParsed := make([]IncludeDirective, 0, len(sc.OutputIncludes))
+
 	for _, oi := range sc.OutputIncludes {
 		headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: oi})
 	}

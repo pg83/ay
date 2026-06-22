@@ -208,6 +208,7 @@ func emitResourceObjcopy(
 	// objcopy packer folds that submodule tag into the output-name hash and stamps
 	// the node's module_tag with the lowercased tag.
 	cppProtoSubmodule := cfModuleTag(d, instance) == tagCppProto
+
 	if cppProtoSubmodule {
 		s := strCPPProto.string()
 		moduleTag = &s

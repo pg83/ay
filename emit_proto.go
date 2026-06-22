@@ -19,18 +19,6 @@ var (
 	pbRuntimeBaseVFS = source(strings.TrimSuffix(pbRuntimeBase, "/"))
 )
 
-func quotedDirectives(headers []VFS) []IncludeDirective {
-	out := make([]IncludeDirective, len(headers))
-
-	for i, h := range headers {
-		out[i] = IncludeDirective{kind: includeQuoted, target: internStr(h.rel())}
-	}
-
-	return out
-}
-
-const yaffRuntimeBase = "library/cpp/yaff/"
-
 // yaffBaseRuntimeHeaders are the includes the base YaFF C++ generator always
 // writes into <proto>.yaff.h (the plugin hardcodes GenerateProtobufApi /
 // GenerateReflectionApi / GenerateStructApi = true): see
@@ -50,6 +38,18 @@ var yaffExperimentsRuntimeHeaders = []string{
 	yaffRuntimeBase + "experiments/column.h",
 	yaffRuntimeBase + "experiments/merge.h",
 }
+
+func quotedDirectives(headers []VFS) []IncludeDirective {
+	out := make([]IncludeDirective, len(headers))
+
+	for i, h := range headers {
+		out[i] = IncludeDirective{kind: includeQuoted, target: internStr(h.rel())}
+	}
+
+	return out
+}
+
+const yaffRuntimeBase = "library/cpp/yaff/"
 
 // yaffGeneratedHeaderIncludes returns the parsed #includes of a generated
 // <proto>.yaff.h: the base yaff runtime, the proto's own .pb.h, and — for an
@@ -548,6 +548,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 				// Upstream NeedToProcessFile: a YaFF output outside the FILES
 				// whitelist is opened but written empty, so it carries no closure.
 				var yaffHParsed []IncludeDirective
+
 				if plugin.processesFile(protoBaseName) {
 					yaffHParsed = yaffGeneratedHeaderIncludes(plugin.isExperimental(protoBaseName), pbH.rel())
 				}
@@ -659,6 +660,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	// by SRCS textual order (not grouped proto-then-ev). Gzt-generated protos run a
 	// deeper round and sort after all direct sources (declIdx >= len(d.srcs)).
 	srcDeclIdx := make(map[string]int, len(d.srcs))
+
 	for i, src := range d.srcs {
 		if _, seen := srcDeclIdx[src.string()]; !seen {
 			srcDeclIdx[src.string()] = i
@@ -1009,6 +1011,7 @@ func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 		ccIn.ExtraDepRefs = append([]NodeRef{pbRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, pbRef)...)
 		ccSrcRel := strings.TrimPrefix(pbCC.rel(), instance.Path.rel()+"/")
 		ccRef, ccOut, _ := emitCC(instance, ccSrcRel, pbCC, ccIn, ctx.host, ctx.emit)
+
 		return SourceEmit{Ref: ccRef, OutPath: ccOut}
 	}
 

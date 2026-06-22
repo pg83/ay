@@ -36,8 +36,8 @@ type ModuleCCInputs struct {
 	// here at its encounter position. ProtoInclude (own-prepended) stays the value
 	// reported to consumers.
 	ProtoIncludePeers []VFS
-	CXXFlags                 []ARG
-	COnlyFlags               []ARG
+	CXXFlags          []ARG
+	COnlyFlags        []ARG
 	// ClangWarnings is _CLANG_USER_WARNINGS_VALUE — the autoincluded
 	// linters.make.inc CLANG_WARNINGS, emitted just after the -I block and before
 	// the compile-flag pipeline (between GCC_COMPILE_FLAGS and CXXFLAGS upstream).
@@ -515,6 +515,7 @@ func suppressOptimize(cf []ARG) []ARG {
 			out := make([]ARG, len(cf))
 			copy(out, cf)
 			out[i] = argO0
+
 			return out
 		}
 	}
@@ -528,6 +529,7 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *
 	if in.NoOptimize {
 		bundle.CFlags = suppressOptimize(bundle.CFlags)
 	}
+
 	warningBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
 	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(*in, p)
 	catboost := catboostOpenSourceDefineFor(p)

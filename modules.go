@@ -152,6 +152,7 @@ func protoCmdPeers(d *ModuleData) []STR {
 	for _, plugin := range d.cppProtoPlugins {
 		for _, dep := range plugin.Deps {
 			p := internStr(dep)
+
 			if _, dup := seen[p]; dup {
 				continue
 			}
@@ -231,22 +232,22 @@ type ModuleData struct {
 	// srcDirs is the cumulative SRCDIR search path as directory VFS (the type
 	// fs.IsFile consumes). collectModule seeds index 0 with the module's own dir,
 	// then appends explicit SRCDIRs in declaration order; searched in reverse.
-	srcDirs              []VFS
-	flags                FlagSet
-	hadAllocator         bool
-	allocatorName        STR
-	muslLite             bool
-	muslEnabled          bool
-	useArcadiaLibm       bool
-	splitDwarf           bool
-	noPythonIncl         bool
-	noImportTracing      bool
-	usePython3           bool
-	useCommonGoogleAPIs  bool
-	moduleScopeCFlags    []ARG
-	pythonSQLite3        bool
-	pyNamespace          *STR
-	protoNamespace       *STR
+	srcDirs             []VFS
+	flags               FlagSet
+	hadAllocator        bool
+	allocatorName       STR
+	muslLite            bool
+	muslEnabled         bool
+	useArcadiaLibm      bool
+	splitDwarf          bool
+	noPythonIncl        bool
+	noImportTracing     bool
+	usePython3          bool
+	useCommonGoogleAPIs bool
+	moduleScopeCFlags   []ARG
+	pythonSQLite3       bool
+	pyNamespace         *STR
+	protoNamespace      *STR
 	// ymapsSprotoSrcs holds the .proto sources named by YMAPS_SPROTO(...) (maps
 	// sproto.conf). Each gets a .sproto.h PB/yellow producer run through
 	// maps/libs/sproto/sprotoc, and the macro's SET(PROTO_HEADER_EXTS .pb.h
@@ -1754,7 +1755,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		// NO_PLATFORM_RESOURCES() (ymake.core.conf:4360) is exactly
 		// ENABLE(NOPLATFORM_RESOURCES) — a RESOURCES_LIBRARY (e.g. build/platform/
 		// linux_sdk) marks itself so it carries no platform resources of its own.
-		env.setBool(internEnv("NOPLATFORM_RESOURCES"), true)
+		env.setBool(envNoplatformResources, true)
 	case tokPrimaryOutput:
 		// PRIMARY_OUTPUT(path): the module's main output (PREBUILT_PROGRAM copies a
 		// fetched binary to ${TARGET}). The arg holds ${<NAME>_RESOURCE_GLOBAL}/...,
@@ -1940,6 +1941,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 		stmt := &DecimalMD5Lower32BitsStmt{File: v.Args[0].string()}
 
 		rest := v.Args[1:]
+
 		if len(rest) >= 1 && rest[0] == kwFUNCNAME {
 			if len(rest) < 2 {
 				throwFmt("gen: %s: DECIMAL_MD5_LOWER_32_BITS FUNCNAME requires a value", modulePath)
@@ -2411,7 +2413,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 				cythonApiHeader = false
 
 				continue
-			case internStr("CYTHON_CPP_H"):
+			case strCythonCppH:
 				// C++ mode + companion public header (_BUILDWITH_CYTHON_CPP_H):
 				// noext naming and an extra generated .h output.
 				cythonCMode = false
@@ -2420,7 +2422,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 				cythonApiHeader = false
 
 				continue
-			case internStr("CYTHON_C_H"):
+			case strCythonCH:
 				// C mode + companion public header (_BUILDWITH_CYTHON_C_H):
 				// noext naming and an extra generated .h output.
 				cythonCMode = true
@@ -2429,7 +2431,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 				cythonApiHeader = false
 
 				continue
-			case internStr("CYTHON_C_API_H"):
+			case strCythonCApiH:
 				// C mode + public api header (_BUILDWITH_CYTHON_C_API_H): noext
 				// naming and extra generated .h plus _api.h outputs.
 				cythonCMode = true
@@ -3066,6 +3068,7 @@ func prefixEach(prefix string, items []string) []string {
 	}
 
 	out := make([]string, len(items))
+
 	for i, it := range items {
 		out[i] = prefix + it
 	}
@@ -3487,6 +3490,7 @@ func buildIfEnv(instance ModuleInstance) Environment {
 			env.string(envSANITIZER_TYPE) == ""
 		env.setBool(envHAVE_MKL, haveMkl)
 	}
+
 	if env.bool(envOPENSOURCE) {
 		env.setBool(envHAVE_MKL, false)
 	}

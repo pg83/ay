@@ -172,6 +172,7 @@ END()
 //     of its OUTPUT_INCLUDES (gen.cpp is the run's cc-source MAIN output, so the
 //     induced includes ride the producer), but NOT the $(B) codegen .pb.h
 //     intermediate (reached via the producer dep edge, not a producer input).
+//
 // The generated source's protobuf header closure reaches both the run-program
 // consumer (its C-scan) and the producer (its OUTPUT_INCLUDES, as $(S) sources).
 func TestGen_RunProgramOutputIncludesPbHReachConsumerNotProducer(t *testing.T) {
@@ -1695,6 +1696,7 @@ END()
 //     .pb.h sibling (which it does, correctly, for a run with no .proto IN);
 //   - its producer node is attributed to the profile-like module that names the
 //     wrapper header in OUTPUT_INCLUDES, not to the producing module.
+//
 // A control RUN_PROGRAM with the SAME OUTPUT_INCLUDES but a .h.in IN (no .proto)
 // still carries the WKT .pb.h sibling, guarding the c5549aa control_board path.
 func TestGen_WrapperProtoRunProgramDropsWktSiblingAndClaimsConsumer(t *testing.T) {
