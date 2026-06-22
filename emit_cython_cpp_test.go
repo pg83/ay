@@ -683,3 +683,70 @@ func TestGen_ManualCompanionSourceUsesCythonCompanionCCInputs(t *testing.T) {
 		}
 	}
 }
+
+func TestGen_CythonCHeaderPassesInducedClosureToHandwrittenSrc(t *testing.T) {
+	// Upstream _BUILDWITH_CYTHON_C_H emits the generated .h as an addincl output;
+	// TCythonIncludeProcessor sets PassInducedIncludesThroughFiles=true, so the
+	// Cython induced "cpp"/"pyx" closure attached to the generated header passes
+	// through to any file that #includes it — including a handwritten SRCS C source
+	// from the same module (gevent's callbacks.c #include "corecext.h"). The C
+	// consumer therefore lists the generated header, the Cython main output, and the
+	// pyx-language source closure — but NOT the source's own `cdef extern` C closure
+	// (that is resolved only at the generated .c's compile, not passed through the
+	// header). Before the fix the handwritten SRCS were scanned before the Cython
+	// header was registered, so use.c.o missed the producer closure entirely.
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeTestModuleFile(files, "pkg/ya.make",
+		"PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\n"+
+			"ADDINCL(${ARCADIA_BUILD_ROOT}/pkg/app FOR cython pkg)\n"+
+			"SRCS(use.c)\n"+
+			"PY_SRCS(TOP_LEVEL CYTHON_C_H app/prod.pyx)\nEND()\n")
+	// Producer: its pyx-language closure is prod.pyx + helper.pxd (cimport); it also
+	// cdef-externs a C header that must NOT pass through to the C consumer.
+	writeTestModuleFile(files, "pkg/app/prod.pyx", "from app cimport helper\ncdef extern from \"extlib/foo.h\":\n    pass\n")
+	writeTestModuleFile(files, "pkg/app/helper.pxd", "cdef int a\n")
+	writeTestModuleFile(files, "pkg/app/extlib/foo.h", "#pragma once\n")
+	// Handwritten C source that #includes the Cython-generated header.
+	writeTestModuleFile(files, "pkg/use.c", "#include \"prod.h\"\nint u(void){return 0;}\n")
+	// A CYTHON_OUTPUT_INCLUDES infra header (py3CythonOutputIncludes) that the
+	// generated header passes through; must exist for include resolution to keep it.
+	writeTestModuleFile(files, "contrib/tools/cython/generated_c_headers.h", "#pragma once\n")
+
+	g := testGen(newMemFS(files), "pkg")
+
+	use := mustNodeByOutput(t, g, "$(B)/pkg/use.c.o")
+
+	present := map[string]bool{}
+	for _, in := range use.flatInputs() {
+		present[in.string()] = true
+	}
+
+	// The induced closure that passes through the header: the generated header, the
+	// Cython main output, and the pyx-language source closure. (Inputs are a set
+	// after normalization — a header's closure leaves ride bare and may repeat in
+	// the raw node, like every COPY_FILE(TEXT) consumer; the canonical form dedups.)
+	for _, want := range []string{
+		"$(B)/pkg/app/prod.c",
+		"$(B)/pkg/app/prod.h",
+		"$(S)/pkg/app/prod.pyx",
+		"$(S)/pkg/app/helper.pxd",
+		// A distinctive Cython induced C/C++ input that ONLY reaches the consumer
+		// through the generated header's parsed-include pass-through
+		// (CYTHON_OUTPUT_INCLUDES → py3CythonOutputIncludes). prod.c/prod.h/prod.pyx/
+		// helper.pxd ride bare via cythonCompileInducedInputs and would survive even
+		// if the header pass-through were removed; this one would not, so it pins the
+		// ticket's core induced-closure path.
+		"$(S)/contrib/tools/cython/generated_c_headers.h",
+	} {
+		if !present[want] {
+			t.Fatalf("handwritten use.c.o missing induced header-closure input %q; inputs=%v", want, use.flatInputs())
+		}
+	}
+
+	// The source's own `cdef extern` C closure must NOT pass through the header.
+	if present["$(S)/pkg/app/extlib/foo.h"] {
+		t.Fatalf("handwritten use.c.o wrongly carries the source's cdef-extern C header; inputs=%v", use.flatInputs())
+	}
+}

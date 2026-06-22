@@ -2149,6 +2149,15 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
+	// A CYTHON_C_H / _API_H generated header (gevent's corecext.h) is #included by
+	// ordinary SRCS (callbacks.c) that may precede or follow the PY_SRCS statement.
+	// Register every cython producer's header output (and its pass-through induced
+	// closure) here, before any sibling source closure is walked, so the handwritten
+	// compile resolves it to the producer instead of caching an empty closure in the
+	// shared scanner childrenCache — the same two-phase reason as the .fbs / bison
+	// pre-passes above. Node emission stays at its archive-ordered position below.
+	cythonPlans := planCythonCpp(ctx, instance, d, moduleInputs)
+
 	for _, src := range d.srcs {
 		if !isCodegenProducingSrcID(src) {
 			continue
@@ -2305,7 +2314,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		genCC(emit)
 	}
 
-	for _, emit := range emitCythonCpp(ctx, instance, d, moduleInputs) {
+	for _, emit := range emitCythonCppPlanned(ctx, instance, d, moduleInputs, cythonPlans) {
 		genCC(emit)
 	}
 
