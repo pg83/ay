@@ -1572,3 +1572,152 @@ END()
 		t.Fatal("test did not exercise a non-first chunk (one that does not embed 2.dict); increase nDicts")
 	}
 }
+
+// A RESOURCE that embeds a chained-RUN_PROGRAM build output carries the producer
+// chain's transitive $(S) source leaves onto the objcopy node — upstream's flat
+// input model lists every consumed input's full source closure. first.bin is
+// produced from $(S) sources (a.remorph, base.proto, gz.gzt); second.bin consumes
+// the opaque generated first.bin plus its own $(S) source (c.gztproto), so the
+// SourceInputs/ProducerSourceClosure recorded by emit_pr.go fold first.bin's
+// leaves forward. The objcopy embeds ${BINDIR}/second.bin and must gain a.remorph,
+// gz.gzt (transitive through opaque first.bin) and c.gztproto. base.proto is a
+// C/C++ compile-closure leaf (.proto in objcopyOverEmitExts) that the reference
+// objcopy input over-emit prune drops, so our faithful side must not carry it.
+// The source leaves ride as cache-key inputs only: --inputs, --keys, objcopy hash
+// and the command stay exactly as without them. Mirrors the sg7 sprav
+// working_time/grammar objcopy_d1f5807d944d… node (5 source leaves ref-only).
+func TestGen_ResourceGeneratedPayloadCarriesProducerSourceInputs(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+	writeToolProgram(files, "tools/gen/bin", "gen")
+
+	files["mod/a.remorph"] = "rules\n"
+	files["mod/gz.gzt"] = "gazetteer\n"
+	files["mod/c.gztproto"] = "proto-ish\n"
+	files["mod/base.proto"] = "syntax = \"proto3\";\nmessage Base {}\n"
+
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    tools/gen/bin
+        --out
+        ${BINDIR}/first.bin
+    IN
+        a.remorph
+        base.proto
+        gz.gzt
+    OUT_NOAUTO ${BINDIR}/first.bin
+)
+RUN_PROGRAM(
+    tools/gen/bin
+        --out
+        ${BINDIR}/second.bin
+    IN
+        ${BINDIR}/first.bin
+        c.gztproto
+    OUT_NOAUTO ${BINDIR}/second.bin
+)
+RESOURCE(
+    ${BINDIR}/second.bin KEY
+)
+END()
+`)
+
+	g := testGen(newMemFS(files), "mod")
+
+	objcopy := findNodeByOutputPrefix(g, "$(B)/mod/objcopy_")
+	if objcopy == nil {
+		t.Fatal("graph is missing mod objcopy output")
+	}
+
+	// (1) embedded build-root payload is an input.
+	if !nodeHasInput(objcopy, "$(B)/mod/second.bin") {
+		t.Fatalf("objcopy inputs missing build-root second.bin: %#v", objcopy.flatInputs())
+	}
+
+	// (2) the producer chain's transitive $(S) source leaves ride the objcopy:
+	// c.gztproto (direct on second.bin), a.remorph and gz.gzt (transitive through
+	// the opaque generated first.bin).
+	for _, want := range []string{
+		"$(S)/mod/c.gztproto",
+		"$(S)/mod/a.remorph",
+		"$(S)/mod/gz.gzt",
+	} {
+		if !nodeHasInput(objcopy, want) {
+			t.Fatalf("objcopy inputs missing producer source leaf %q: %#v", want, objcopy.flatInputs())
+		}
+	}
+
+	// (3) base.proto (.proto compile-closure leaf) is pruned ref-side, so our
+	// faithful side must not over-emit it.
+	if nodeHasInput(objcopy, "$(S)/mod/base.proto") {
+		t.Fatalf("objcopy must not carry the .proto compile-closure leaf: %#v", objcopy.flatInputs())
+	}
+
+	// (4) the source leaves are cache-key inputs only — never in the command, the
+	// --inputs payload, the --keys, or the objcopy_<hash> output name.
+	args := prCmdArgStrings(objcopy)
+	for _, a := range args {
+		if strings.Contains(a, ".remorph") || strings.Contains(a, ".gzt") || strings.Contains(a, ".proto") {
+			t.Fatalf("objcopy command must not name a producer source leaf: %v", args)
+		}
+	}
+	wantHashInputs := []string{
+		"${BINDIR}/second.bin",
+		encb64.StdEncoding.EncodeToString([]byte("KEY")),
+		"$S/mod",
+	}
+	sort.Strings(wantHashInputs)
+	wantHash := md5Hex(strings.Join(wantHashInputs, ","))[:hashLen]
+	wantOutput := "$(B)/mod/objcopy_" + wantHash + ".o"
+	if got := objcopy.Outputs[0].string(); got != wantOutput {
+		t.Fatalf("objcopy output = %q, want %q (hash must ignore source attribution)", got, wantOutput)
+	}
+}
+
+// Negative control: an ordinary source-tree RESOURCE(data.txt KEY) resolves to no
+// producer, so it must NOT gain any synthetic generated-producer source inputs.
+// Its only data input is the source file itself.
+func TestGen_ResourceStaticSourceGainsNoGeneratedProducerInputs(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+
+	files["mod/data.txt"] = "static\n"
+	files["mod/extra.remorph"] = "unrelated\n"
+
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RESOURCE(
+    data.txt KEY
+)
+END()
+`)
+
+	g := testGen(newMemFS(files), "mod")
+
+	objcopy := findNodeByOutputPrefix(g, "$(B)/mod/objcopy_")
+	if objcopy == nil {
+		t.Fatal("graph is missing mod objcopy output")
+	}
+
+	// The static resource's payload is the source file itself (in --inputs).
+	if !nodeHasInput(objcopy, "$(S)/mod/data.txt") {
+		t.Fatalf("objcopy inputs missing static source data.txt: %#v", objcopy.flatInputs())
+	}
+
+	// No generated-producer source attribution: the only $(S) data leaf is
+	// data.txt plus the objcopy script — never an unrelated source leaf.
+	if nodeHasInput(objcopy, "$(S)/mod/extra.remorph") {
+		t.Fatalf("static-resource objcopy gained a synthetic producer source input: %#v", objcopy.flatInputs())
+	}
+}

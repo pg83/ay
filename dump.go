@@ -334,6 +334,21 @@ func objcopyInputKept(s string, cmdBases map[string]struct{}) bool {
 		return true
 	}
 
+	return objcopySourceLeafKept(rel)
+}
+
+// objcopySourceLeafKept reports whether a module-relative $(S) source leaf
+// survives the resource-objcopy input over-emit prune. Upstream lists an embedded
+// generated payload's producer's full transitive $(S) compile closure on the
+// objcopy node, but only genuine data-source leaves are meaningful: the C/C++
+// compile noise (headers, sources, .proto/.txt — objcopyOverEmitExts), contrib/libs
+// sources, and build/*.py tooling are discounted. The faithful (unfiltered) graph
+// side emits exactly this kept set so resource source-attribution matches
+// ref-after-normalization. Shared by objcopyInputKept (refGraph prune) and
+// emit_py_objcopy.go's source-attribution tail.
+func objcopySourceLeafKept(rel string) bool {
+	b := baseName(rel)
+
 	if strings.HasPrefix(rel, "contrib/libs/") {
 		return false
 	}
