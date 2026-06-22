@@ -81,7 +81,7 @@ func copySourceSlice(fs *OsFS, srcRoot, dst string, onWarn func(Warn)) error {
 	fmt.Fprintf(os.Stderr, "copy-sources: %d directories (from %d read dirs) + %d loose files -> %s\n",
 		len(dirs), len(dirSet), len(loose), absDst)
 
-	copied, err := copySliceConcurrent(absSrc, absDst, dirs, onWarn)
+	copied, skipped, err := copySliceConcurrent(absSrc, absDst, dirs, onWarn)
 
 	if err != nil {
 		return err
@@ -89,7 +89,8 @@ func copySourceSlice(fs *OsFS, srcRoot, dst string, onWarn func(Warn)) error {
 
 	looseCount := copyLooseFiles(absSrc, absDst, loose)
 
-	fmt.Fprintf(os.Stderr, "copy-sources: done — %d files + %d loose files copied\n", copied, looseCount)
+	fmt.Fprintf(os.Stderr, "copy-sources: done — %d copied, %d skipped (dst existed) + %d loose files copied\n",
+		copied, skipped, looseCount)
 
 	return nil
 }
@@ -190,19 +191,21 @@ type copyJob struct {
 
 // copyStat is one worker's report of a finished file, drained by the single printer.
 type copyStat struct {
-	rel string
-	err error
+	rel     string
+	err     error
+	skipped bool // dst already present — labelled `skip`, not counted as copied
 }
 
 // copySliceConcurrent runs the copy pipeline: one producer walks the dirs (stat-only —
 // never opening a file, so a FIFO/socket can't block it) and streams the regular files
 // / symlinks into jobCh as it finds them, GOMAXPROCS workers copy and report into
-// statCh, and one printer drains statCh — so progress is `{n} rel`, numbered
-// monotonically by that single goroutine with no up-front counting pass. Returns the
-// count copied.
-func copySliceConcurrent(srcRoot, dst string, dirs []string, onWarn func(Warn)) (int, error) {
+// statCh, and one printer drains statCh — so progress is `{n} {copy|skip} rel`,
+// numbered monotonically by that single goroutine with no up-front counting pass. The
+// `skip` lines are files whose dst already existed (idempotent re-run): listed but not
+// re-copied. Returns the counts actually copied and skipped.
+func copySliceConcurrent(srcRoot, dst string, dirs []string, onWarn func(Warn)) (copied, skipped int, err error) {
 	if err := os.MkdirAll(dst, 0o755); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
 	jobCh := make(chan copyJob, 256)
@@ -268,8 +271,8 @@ func copySliceConcurrent(srcRoot, dst string, dirs []string, onWarn func(Warn)) 
 			defer wg.Done()
 
 			for j := range jobCh {
-				err := copyOne(filepath.Join(srcRoot, j.rel), filepath.Join(dst, j.rel), j)
-				statCh <- copyStat{rel: j.rel, err: err}
+				skipped, err := copyOne(filepath.Join(srcRoot, j.rel), filepath.Join(dst, j.rel), j)
+				statCh <- copyStat{rel: j.rel, err: err, skipped: skipped}
 			}
 		}()
 	}
@@ -280,51 +283,63 @@ func copySliceConcurrent(srcRoot, dst string, dirs []string, onWarn func(Warn)) 
 	}()
 
 	// Printer: the single drainer — owns the counter, so numbering is monotonic.
-	copied, n := 0, 0
+	n := 0
+
 	var firstErr error
 
 	for s := range statCh {
 		n++
 
-		fmt.Fprintf(os.Stderr, "%d %s\n", n, s.rel)
+		verb := "copy"
 
-		if s.err != nil {
+		if s.skipped {
+			verb = "skip"
+		}
+
+		fmt.Fprintf(os.Stderr, "%d %s %s\n", n, verb, s.rel)
+
+		switch {
+		case s.err != nil:
 			if firstErr == nil {
 				firstErr = s.err
 			}
-		} else {
+		case s.skipped:
+			skipped++
+		default:
 			copied++
 		}
 	}
 
-	return copied, firstErr
+	return copied, skipped, firstErr
 }
 
 // copyOne copies a single enumerated job: a symlink is recreated (not followed), a
 // regular file is content-copied with its mode. Parent dirs are created as needed.
-func copyOne(src, dst string, j copyJob) error {
+// skipped is true when dst already existed and nothing was touched, so the caller can
+// label it `skip` rather than `copy` in its progress output.
+func copyOne(src, dst string, j copyJob) (skipped bool, err error) {
 	// Idempotent re-run / overlap with a prior copy: if dst already exists, the file
 	// was placed on an earlier pass. Skip it without touching src — the source lives
 	// on a slow arc/FUSE mount, so we don't pay the read I/O (or risk an EPERM) for a
 	// no-op. Per the invariant: no src operation until dst is confirmed absent.
 	if _, err := os.Lstat(dst); err == nil {
-		return nil
+		return true, nil
 	}
 
 	if j.symlink {
 		link, err := os.Readlink(src)
 
 		if err != nil {
-			return err
+			return false, err
 		}
 
 		_ = os.MkdirAll(filepath.Dir(dst), 0o755)
 		_ = os.Remove(dst)
 
-		return os.Symlink(link, dst)
+		return false, os.Symlink(link, dst)
 	}
 
-	return copyFileMode(src, dst, j.mode)
+	return false, copyFileMode(src, dst, j.mode)
 }
 
 // copyLooseFiles copies individual files (ancestor ya.makes, root-level configs) that a
