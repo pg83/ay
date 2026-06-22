@@ -1507,7 +1507,7 @@ func TestParseInclude_ModdirDefaultIncludeSetListFeedsRunProgram(t *testing.T) {
 	}
 
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "pkg/cfg", KindLib, mf.Stmts,
-		buildIfEnv(ModuleInstance{Path: source("pkg/cfg"), Kind: KindLib, Platform: testTargetP}))
+		buildIfEnv(ModuleInstance{Path: source("pkg/cfg"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
 	if len(d.runPrograms) != 1 {
 		t.Fatalf("runPrograms = %d, want 1", len(d.runPrograms))

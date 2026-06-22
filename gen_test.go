@@ -372,7 +372,7 @@ END()
 
 	mf := throw2(parseFile(fs, "nolibcmod/ya.make"))
 
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "nolibcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "nolibcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Kind: KindLib, Platform: testTargetP}), noWarn)
 
 	if !d.flags.NoLibc {
 		t.Errorf("flags.NoLibc = false, want true (macro overlay should have flipped it)")
@@ -1766,7 +1766,7 @@ END()
 `,
 	})
 	mf := throw2(parseFile(fs, "mod/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
 	want := []string{
 		"-DUSE_CURRENT_UDF_ABI_VERSION",
@@ -1788,7 +1788,7 @@ END()
 `,
 	})
 	mf := throw2(parseFile(fs, "mod/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
 	if d.moduleStmt == nil || d.moduleStmt.Name != tokYqlUdfContrib {
 		t.Fatalf("moduleStmt = %#v, want YQL_UDF_CONTRIB", d.moduleStmt)
@@ -1820,7 +1820,7 @@ END()
 `,
 	})
 	mf := throw2(parseFile(fs, "proto/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("proto"), Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("proto"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
 	if !equalStrings(argStrs(d.protocFlags), []string{"--fatal_warnings"}) {
 		t.Fatalf("protocFlags = %v, want [--fatal_warnings]", d.protocFlags)
@@ -1836,7 +1836,7 @@ END()
 `,
 	})
 	mf := throw2(parseFile(fs, "proto/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("proto"), Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("proto"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
 	if len(d.cppProtoPlugins) != 1 {
 		t.Fatalf("cppProtoPlugins = %d, want 1", len(d.cppProtoPlugins))
@@ -1877,7 +1877,7 @@ END()
 `,
 	})
 	mf := throw2(parseFile(fs, "proto/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("proto"), Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("proto"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
 	if !equalStrings(strStrings(d.protoCmdPeers), []string{"library/cpp/eventlog"}) {
 		t.Fatalf("protoCmdPeers = %v, want [library/cpp/eventlog]", strStrings(d.protoCmdPeers))
@@ -1899,7 +1899,7 @@ END()
 `,
 	})
 	mf := throw2(parseFile(fs, "flatcmod/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "flatcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("flatcmod"), Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "flatcmod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("flatcmod"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
 	if !equalStrings(argStrs(d.flatcFlags), []string{"--scoped-enums", "--gen-all"}) {
 		t.Fatalf("flatcFlags = %v, want [--scoped-enums --gen-all]", d.flatcFlags)
@@ -1915,7 +1915,7 @@ END()
 `,
 	})
 	mf := throw2(parseFile(fs, "proto/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("proto"), Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "proto", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("proto"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
 	if !containsString(strStrings(d.peerdirs), "contrib/libs/googleapis-common-protos") {
 		t.Fatalf("peerdirs = %v, want contrib/libs/googleapis-common-protos", d.peerdirs)
@@ -1934,7 +1934,7 @@ END()
 	})
 	mf := throw2(parseFile(fs, "pytool/ya.make"))
 
-	bin := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "pytool", KindBin, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("pytool"), Kind: KindBin, Platform: testTargetP}))
+	bin := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "pytool", KindBin, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("pytool"), Kind: KindBin, Platform: testTargetP}), noWarn)
 	if got := bin.pyMain; got == nil || got.string() != "pytool.__main__:main" {
 		t.Fatalf("bin pyMain = %#v, want pytool.__main__:main", got)
 	}
@@ -1944,7 +1944,7 @@ END()
 		t.Fatalf("bin pySrcs = %v, want [__main__.py]", bin.pySrcs)
 	}
 
-	lib := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "pytool", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("pytool"), Kind: KindLib, Platform: testTargetP}))
+	lib := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "pytool", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("pytool"), Kind: KindLib, Platform: testTargetP}), noWarn)
 	if lib.pyMain != nil {
 		t.Fatalf("lib pyMain = %#v, want nil", lib.pyMain)
 	}
@@ -1969,7 +1969,7 @@ END()
 `,
 	})
 	mf := throw2(parseFile(fs, "copymod/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "copymod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("copymod"), Kind: KindLib, Platform: testTargetP}))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "copymod", KindLib, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("copymod"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
 	if !equalStrings(strStrings(d.srcs), []string{"a.cpp", "b.h"}) {
 		t.Fatalf("srcs = %v, want [a.cpp b.h]", d.srcs)
@@ -2025,7 +2025,7 @@ END()
 	fs := newMemFS(files)
 	mf := throw2(parseFile(fs, "gen/ya.make"))
 	instance := ModuleInstance{Path: source("gen"), Kind: KindLib, Platform: testTargetP}
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "gen", KindLib, mf.Stmts, buildIfEnv(instance))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "gen", KindLib, mf.Stmts, buildIfEnv(instance), noWarn)
 
 	for _, got := range [][]VFS{d.addIncl, d.addInclGlobal} {
 		if !slices.Contains(vfsStrings(got), "$(B)/gen/pire") {
@@ -2058,7 +2058,7 @@ func TestCollectModule_SETAPPENDRPathGlobal(t *testing.T) {
 	})
 	mf := throw2(parseFile(fs, "mod/ya.make"))
 	instance := ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(instance))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "mod", KindLib, mf.Stmts, buildIfEnv(instance), noWarn)
 
 	want := []string{"-Wl,-rpath,$ORIGIN"}
 	if !reflect.DeepEqual(argStrs(d.rpathFlagsGlobal), want) {
@@ -2537,3 +2537,7 @@ func slicesContains(xs []string, want string) bool {
 func Gen(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn)) *Graph {
 	return genWithResources(fs, targetDir, hostP, targetP, onWarn, false)
 }
+
+// noWarn is a no-op Warn sink for tests that call collectModule directly and do
+// not assert on diagnostics.
+func noWarn(Warn) {}
