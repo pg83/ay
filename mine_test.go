@@ -3,6 +3,7 @@ package main
 import (
 	"reflect"
 	"testing"
+	"strings"
 )
 
 func TestPrebuiltToolchainFlags_CarryConfigNotToolPaths(t *testing.T) {
@@ -48,4 +49,52 @@ SHARED = "internal"
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("readYaConfSections() = %#v, want %#v", got, want)
 	}
+}
+
+func readYaConfSections(fs FS, wantSection string, rels ...string) map[string]string {
+	out := map[string]string{}
+
+	for _, rel := range rels {
+		if !fs.isFile(srcRootVFS, rel) {
+			continue
+		}
+
+		raw := fs.read(rel)
+
+		section := ""
+
+		for _, line := range strings.Split(string(raw), "\n") {
+			line = strings.TrimSpace(line)
+
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+
+			if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+				section = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(line, "["), "]"))
+
+				continue
+			}
+
+			if section != wantSection {
+				continue
+			}
+
+			key, val, ok := strings.Cut(line, "=")
+
+			if !ok {
+				continue
+			}
+
+			key = strings.TrimSpace(key)
+			val = strings.TrimSpace(val)
+			val = strings.Trim(val, `"`)
+
+			if key != "" {
+				out[key] = val
+			}
+		}
+	}
+
+	return out
 }

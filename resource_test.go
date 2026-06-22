@@ -369,3 +369,49 @@ func TestRootrelInputPath(t *testing.T) {
 		})
 	}
 }
+
+func TestResolvePySrcRel_RootRelativeProto(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"market/idx/datacamp/proto/api/ExportMessage.proto":       "",
+		"market/idx/datacamp/proto/external/ExportCategory.proto": "",
+	})
+	moduleDir := "market/idx/datacamp/proto/external"
+	srcDirs := []VFS{dirKey(moduleDir)}
+
+	// Root-relative proto SRCS resolves at the arcadia root.
+	got := resolvePySrcRel(fs, srcDirs, moduleDir, "market/idx/datacamp/proto/api/ExportMessage.proto")
+	if want := "market/idx/datacamp/proto/api/ExportMessage.proto"; got != want {
+		t.Fatalf("root-relative proto: got %s, want %s", got, want)
+	}
+
+	// A proto that genuinely lives under the module dir resolves there.
+	got = resolvePySrcRel(fs, srcDirs, moduleDir, "market/idx/datacamp/proto/external/ExportCategory.proto")
+	if want := "market/idx/datacamp/proto/external/ExportCategory.proto"; got != want {
+		t.Fatalf("root-relative proto under module: got %s, want %s", got, want)
+	}
+}
+
+// A dirty (non-clean) srcRel must NOT be source-root bound. FS.isFile
+// normalises `..`/`.` segments, so resolvePySrcRel(modulePath="pkg/sub",
+// srcRel="../root.proto") would otherwise probe and match $(S)/root.proto and
+// return the out-of-tree `../root.proto`. Upstream ymake reconstructs
+// $S/../root.proto as out-of-tree and does not source-root bind it, so the
+// arcadia-root fallback applies only to clean paths — matching the
+// resolveSourceVFS guard. The dirty entry falls through to the module-relative
+// join.
+func TestResolvePySrcRel_DirtyPathNotRootBound(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"root.proto": "",
+	})
+	moduleDir := "pkg/sub"
+	srcDirs := []VFS{dirKey(moduleDir)}
+
+	got := resolvePySrcRel(fs, srcDirs, moduleDir, "../root.proto")
+	if want := "pkg/sub/../root.proto"; got != want {
+		t.Fatalf("dirty srcRel must not source-root bind: got %s, want %s", got, want)
+	}
+}
+
+func buildPySrcEntries(d *ModuleData, modulePath string) []PySrcEntry {
+	return buildPySrcEntriesFor(newCodegenRegistry(), newMemFS(nil), d, modulePath, strStrings(d.pySrcs), d.pyTopLevel, d.pyNamespace)
+}

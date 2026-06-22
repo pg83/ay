@@ -1354,3 +1354,20 @@ END()
 		}
 	}
 }
+
+func EmitAR(
+	instance ModuleInstance,
+	objRefs []NodeRef,
+	objPaths []VFS,
+	peerArchiveRefs []NodeRef,
+	hostP *Platform,
+	emit Emitter,
+) NodeRef {
+	if len(objRefs) != len(objPaths) {
+		throwFmt("EmitAR: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
+	}
+
+	archivePath := build(instance.Path.rel() + "/" + archiveName(instance.Path.rel()))
+
+	return emitARNode(instance, archivePath, 0, objRefs, objPaths, peerArchiveRefs, nil, nil, testToolchain(), hostP, emit)
+}

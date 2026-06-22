@@ -1953,3 +1953,503 @@ END()
 		t.Fatalf("unnamed PROTO_LIBRARY did not keep path-derived %s; py3_proto_global archives: %v", wantUnnamed, globals)
 	}
 }
+
+// protoNsOrderFixture reproduces the YT/proto-namespace peer ADDINCL ordering
+// shape (yt/yt/client/formats): a consumer PEERDIRs a plain LIBRARY `mid` whose
+// only namespace declaration is a bare `PROTO_NAMESPACE(mid)`. `mid` PEERDIRs a
+// sub-module that exports a build-root subdir include `$(B)/mid/sub` GLOBAL, and
+// (later in declaration order) a deeper module that also exports `$(B)/mid`
+// GLOBAL.
+//
+// Upstream `PROTO_NAMESPACE` always expands to `ADDINCL(GLOBAL $(B)/mid)` (the
+// literal GLOBAL in proto.conf's PROTO_ADDINCL call), so `mid` itself contributes
+// `$(B)/mid` as a UserGlobal dir and it renders first — before the rpc_proxy-like
+// `$(B)/mid/sub` carried in the peers' GlobalPropagated. The deeper `$(B)/mid`
+// exporter is deduped to that earlier position.
+func protoNsOrderFixture() FS {
+	files := map[string]string{}
+
+	// mid: plain LIBRARY, bare PROTO_NAMESPACE(mid). Peers the sub exporter first,
+	// then the deep exporter (so without the fix `$(B)/mid` only arrives last, via
+	// `deep`).
+	writeTestModuleFile(files, "mid/ya.make",
+		"LIBRARY()\nPROTO_NAMESPACE(mid)\nPEERDIR(mid/sub deep)\nSRCS(m.cpp)\nEND()\n")
+	writeTestModuleFile(files, "mid/m.cpp", "int m(){return 0;}\n")
+
+	// sub exporter: the rpc_proxy analog — a GLOBAL build-root subdir include.
+	writeTestModuleFile(files, "mid/sub/ya.make",
+		"LIBRARY()\nADDINCL(GLOBAL ${ARCADIA_BUILD_ROOT}/mid/sub)\nSRCS(s.cpp)\nEND()\n")
+	writeTestModuleFile(files, "mid/sub/s.cpp", "int s(){return 0;}\n")
+
+	// deep exporter: also provides $(B)/mid GLOBAL, but is reached after mid/sub.
+	writeTestModuleFile(files, "deep/ya.make",
+		"LIBRARY()\nADDINCL(GLOBAL ${ARCADIA_BUILD_ROOT}/mid)\nSRCS(d.cpp)\nEND()\n")
+	writeTestModuleFile(files, "deep/d.cpp", "int d(){return 0;}\n")
+
+	// consumer: ordinary C++ unit that peers mid.
+	writeTestModuleFile(files, "consumer/ya.make",
+		"LIBRARY()\nPEERDIR(mid)\nSRCS(c.cpp)\nEND()\n")
+	writeTestModuleFile(files, "consumer/c.cpp", "int c(){return 0;}\n")
+
+	return newMemFS(files)
+}
+
+// TestGen_BareProtoNamespace_BuildRootIncludeIsGlobalAndOrderedFirst pins the
+// T-143 divergence: a bare PROTO_NAMESPACE's `$(B)/<ns>` C++ include must be
+// GLOBAL (so it reaches consumers via the declaring peer's own propagation) and
+// must render before a peer-propagated build-root subdir include. Before the fix
+// the build-root arm is gated on GLOBAL/PROTO_LIBRARY, so `$(B)/mid` arrives only
+// via the late `deep` exporter and renders after `$(B)/mid/sub`.
+func TestGen_BareProtoNamespace_BuildRootIncludeIsGlobalAndOrderedFirst(t *testing.T) {
+	g := testGen(protoNsOrderFixture(), "consumer")
+
+	n := mustNodeByOutput(t, g, "$(B)/consumer/c.cpp.o")
+	args := n.Cmds[0].CmdArgs.flat()
+
+	iNs := indexOfArg(args, "-I$(B)/mid")
+	iSub := indexOfArg(args, "-I$(B)/mid/sub")
+
+	if iNs < 0 {
+		t.Fatalf("consumer compile missing -I$(B)/mid\nargs=%v", strStrs(args))
+	}
+	if iSub < 0 {
+		t.Fatalf("consumer compile missing -I$(B)/mid/sub\nargs=%v", strStrs(args))
+	}
+	if iNs > iSub {
+		t.Fatalf("-I$(B)/mid (idx %d) must precede -I$(B)/mid/sub (idx %d)\nargs=%v",
+			iNs, iSub, strStrs(args))
+	}
+}
+
+// protoAddInclFixture builds the inline-proto-LIBRARY include-propagation shape
+// (library/cpp/html/face): a plain LIBRARY() that lists an inline .proto plus an
+// ordinary .cpp in SRCS. Upstream _CPP_PROTO_CMD (proto.conf:461) attaches
+// `.PEERDIR=contrib/libs/protobuf` to every C++ proto compile, so the module —
+// PROTO_LIBRARY or not — peers contrib/libs/protobuf and inherits its GLOBAL
+// ADDINCL (protobuf/src + the abseil roots protobuf itself peers). That GLOBAL
+// band must reach the module's ORDINARY sources and its generated .pb.cc, and
+// propagate transitively to a downstream consumer's ordinary sources.
+//
+// protobuf carries the same GLOBAL ADDINCL + abseil PEERDIR shape as the real
+// contrib/libs/protobuf/ya.make; abseil-cpp-tstring peers abseil-cpp, so the
+// closure of the three -I roots mirrors the reference parser.cpp.o band.
+func protoAddInclFixture() FS {
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make",
+		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\n"+
+			"ADDINCL(GLOBAL contrib/libs/protobuf/src)\n"+
+			"PEERDIR(contrib/restricted/abseil-cpp-tstring)\n"+
+			"SRCS(p.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/p.cpp", "int p(){return 0;}\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/src/google/protobuf/message.h", "#pragma once\n")
+
+	writeTestModuleFile(files, "contrib/restricted/abseil-cpp-tstring/ya.make",
+		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\n"+
+			"ADDINCL(GLOBAL contrib/restricted/abseil-cpp-tstring)\n"+
+			"PEERDIR(contrib/restricted/abseil-cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/restricted/abseil-cpp/ya.make",
+		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\n"+
+			"ADDINCL(GLOBAL contrib/restricted/abseil-cpp)\nEND()\n")
+
+	// Inline-proto LIBRARY (the face shape): ordinary use.cpp + inline svc.proto.
+	writeTestModuleFile(files, "m/lib/ya.make",
+		"LIBRARY()\nSRCS(svc.proto use.cpp)\nEND()\n")
+	writeTestModuleFile(files, "m/lib/svc.proto", "syntax = \"proto3\";\npackage m;\nmessage Svc {}\n")
+	writeTestModuleFile(files, "m/lib/use.cpp", "int use(){return 0;}\n")
+
+	// Consumer (the html5 shape): peers the inline-proto module, ordinary c.cpp.
+	// Also peers an unrelated plain library to anchor the negative guard.
+	writeTestModuleFile(files, "consumer/ya.make",
+		"LIBRARY()\nPEERDIR(m/lib plain/lib)\nSRCS(c.cpp)\nEND()\n")
+	writeTestModuleFile(files, "consumer/c.cpp", "int c(){return 0;}\n")
+
+	writeTestModuleFile(files, "plain/lib/ya.make",
+		"LIBRARY()\nSRCS(plain.cpp)\nEND()\n")
+	writeTestModuleFile(files, "plain/lib/plain.cpp", "int plain(){return 0;}\n")
+
+	return newMemFS(files)
+}
+
+// TestGen_InlineProtoLibrary_ProtobufGlobalAddInclReachesOrdinaryAndConsumer
+// pins the T-60 divergence: the contrib/libs/protobuf GLOBAL ADDINCL band
+// (protobuf/src + abseil-cpp-tstring + abseil-cpp) must land on an inline-proto
+// LIBRARY's ordinary source AND its generated .pb.cc, and propagate to a
+// downstream consumer's ordinary source — while NOT leaking to an unrelated
+// module without the protobuf provider. Before the fix the base protobuf peer is
+// added only for PROTO_LIBRARY, so the inline-proto LIBRARY never peers protobuf
+// and none of these compiles see the band.
+func TestGen_InlineProtoLibrary_ProtobufGlobalAddInclReachesOrdinaryAndConsumer(t *testing.T) {
+	fs := protoAddInclFixture()
+	g := testGen(fs, "consumer")
+
+	band := []string{
+		"-I$(S)/contrib/libs/protobuf/src",
+		"-I$(S)/contrib/restricted/abseil-cpp-tstring",
+		"-I$(S)/contrib/restricted/abseil-cpp",
+	}
+
+	assertBand := func(label, output string, want bool) {
+		t.Helper()
+		n := mustNodeByOutput(t, g, output)
+		args := strStrs(n.Cmds[0].CmdArgs.flat())
+		for _, inc := range band {
+			has := flagsContain(args, inc)
+			if has != want {
+				t.Fatalf("%s (%s): include %q present=%v, want %v\nargs=%v", label, output, inc, has, want, args)
+			}
+		}
+	}
+
+	// Ordinary C++ source in the inline-proto module.
+	assertBand("inline-proto ordinary src", "$(B)/m/lib/use.cpp.o", true)
+	// Generated C++ source (the proto .pb.cc) in the same module.
+	assertBand("inline-proto generated pb.cc", "$(B)/m/lib/svc.pb.cc.o", true)
+	// Ordinary C++ source in a downstream consumer of the inline-proto module.
+	assertBand("consumer ordinary src", "$(B)/consumer/c.cpp.o", true)
+	// Negative guard: unrelated module without the protobuf provider.
+	assertBand("unrelated module", "$(B)/plain/lib/plain.cpp.o", false)
+}
+
+// crossNamespaceProtoFixture reproduces the T-120 (sg7) divergence
+// represented by $(B)/ads/bsyeti/libs/scatter/client.cpp.o: a generated
+// <proto>.pb.h that DIRECTLY imports a proto from ANOTHER PROTO_NAMESPACE does
+// not re-export that import's generated .pb.h to downstream CC consumers.
+//
+// Shape (mirrors yp data_model -> yt_proto orm object/controls/finalizers):
+//   - leaf PROTO_LIBRARY in PROTO_NAMESPACE(lns): leaf_a.proto, leaf_b.proto;
+//     leaf_a.proto imports its same-namespace sibling leaf_b.proto.
+//   - top PROTO_LIBRARY in PROTO_NAMESPACE(tns): top.proto imports the
+//     CROSS-namespace leaf_a.proto ("leaf/leaf_a.proto", rooted at lns).
+//   - app LIBRARY: app.cpp -> app.h -> <top/top.pb.h>.
+//
+// Upstream: top.pb.h #includes "leaf/leaf_a.pb.h" verbatim and ymake resolves it
+// against leaf's GLOBAL PROTO_NAMESPACE(lns) addincl to
+// $(B)/lns/leaf/leaf_a.pb.h; leaf_a.pb.h re-includes leaf_b.pb.h. So a unit that
+// includes top.pb.h reaches BOTH generated leaf headers.
+//
+// Before the fix protoDirectPbHIncludes roots the import header by prefixing the
+// IMPORTER's PROTO_NAMESPACE (tns), producing the non-existent
+// tns/leaf/leaf_a.pb.h: the directive never binds, so neither leaf_a.pb.h nor
+// (through it) leaf_b.pb.h reaches app.cpp.o.
+func crossNamespaceProtoFixture() FS {
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make",
+		"LIBRARY()\nADDINCL(GLOBAL contrib/libs/protobuf/src)\nSRCS(p.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/p.cpp", "int p(){return 0;}\n")
+
+	// leaf PROTO_LIBRARY, namespace lns. leaf_a imports same-namespace leaf_b.
+	writeTestModuleFile(files, "lns/leaf/ya.make",
+		"PROTO_LIBRARY()\nPROTO_NAMESPACE(lns)\nSRCS(leaf_a.proto leaf_b.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
+	writeTestModuleFile(files, "lns/leaf/leaf_a.proto",
+		"syntax = \"proto3\";\npackage lns;\nimport \"leaf/leaf_b.proto\";\nmessage LeafA { LeafB b = 1; }\n")
+	writeTestModuleFile(files, "lns/leaf/leaf_b.proto",
+		"syntax = \"proto3\";\npackage lns;\nmessage LeafB { string v = 1; }\n")
+
+	// top PROTO_LIBRARY, namespace tns. top imports the cross-namespace leaf_a.
+	writeTestModuleFile(files, "tns/top/ya.make",
+		"PROTO_LIBRARY()\nPROTO_NAMESPACE(tns)\nPEERDIR(lns/leaf)\nSRCS(top.proto)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n")
+	writeTestModuleFile(files, "tns/top/top.proto",
+		"syntax = \"proto3\";\npackage tns;\nimport \"leaf/leaf_a.proto\";\nmessage Top { lns.LeafA a = 1; }\n")
+
+	// app LIBRARY: reaches top.pb.h through a source-header chain.
+	writeTestModuleFile(files, "app/ya.make",
+		"LIBRARY()\nPEERDIR(tns/top)\nSRCS(app.cpp)\nEND()\n")
+	writeTestModuleFile(files, "app/app.cpp", "#include \"app.h\"\nint app(){return 0;}\n")
+	writeTestModuleFile(files, "app/app.h", "#pragma once\n#include <top/top.pb.h>\n")
+
+	return newMemFS(files)
+}
+
+// TestEmitProtoSrcs_CrossNamespaceDirectImportPbHRidesIntoConsumer pins that the
+// cross-namespace direct-import generated headers reach an ordinary CC consumer.
+func TestEmitProtoSrcs_CrossNamespaceDirectImportPbHRidesIntoConsumer(t *testing.T) {
+	g := testGen(crossNamespaceProtoFixture(), "app")
+	appCC := mustNodeByOutput(t, g, "$(B)/app/app.cpp.o")
+
+	for _, want := range []string{
+		"$(B)/tns/top/top.pb.h",
+		"$(B)/lns/leaf/leaf_a.pb.h",
+		"$(B)/lns/leaf/leaf_b.pb.h",
+	} {
+		if !nodeHasInput(appCC, want) {
+			t.Errorf("app.cpp.o missing cross-namespace generated header %q\ninputs=%v", want, vfsStrings(appCC.flatInputs()))
+		}
+	}
+}
+
+// grpcLibraryFixture builds a plain LIBRARY() that lists an inline .proto in
+// SRCS (the ads/dssm/inference shape: a LIBRARY, not a PROTO_LIBRARY). withGrpc
+// toggles the GRPC() macro. Returns the generated graph for module "m/lib".
+func grpcLibraryFixture(t *testing.T, withGrpc bool) *Graph {
+	t.Helper()
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/grpc_cpp", "grpc_cpp")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/p.cpp", "int p(){return 0;}\n")
+	writeTestModuleFile(files, "contrib/libs/grpc/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n")
+
+	grpc := ""
+	if withGrpc {
+		grpc = "GRPC()\n"
+	}
+	writeTestModuleFile(files, "m/lib/ya.make", "LIBRARY()\nSRCDIR(m)\nSRCS(svc.proto use.cpp)\n"+grpc+"END()\n")
+	writeTestModuleFile(files, "m/svc.proto", "syntax = \"proto3\";\npackage m;\nmessage Svc {}\n")
+	writeTestModuleFile(files, "m/use.cpp", "int use(){return 0;}\n")
+
+	return testGen(newMemFS(files), "m/lib")
+}
+
+// TestEmitLibraryProtoSource_GrpcEmitsProducerOutputsAndCompile pins the upstream
+// GRPC() behavior for a plain LIBRARY() with an inline .proto: protoc gains the
+// grpc_cpp plugin, so the .pb producer declares .grpc.pb.{cc,h} outputs, takes
+// the grpc_cpp plugin tool as a command input, passes --grpc_cpp_out, and the
+// generated .grpc.pb.cc is compiled into a .grpc.pb.cc.o object.
+func TestEmitLibraryProtoSource_GrpcEmitsProducerOutputsAndCompile(t *testing.T) {
+	g := grpcLibraryFixture(t, true)
+
+	pb := mustNodeByOutput(t, g, "$(B)/m/svc.pb.h")
+
+	hasOut := func(n *Node, want string) bool {
+		for _, o := range n.Outputs {
+			if o.string() == want {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, want := range []string{"$(B)/m/svc.grpc.pb.cc", "$(B)/m/svc.grpc.pb.h"} {
+		if !hasOut(pb, want) {
+			t.Errorf("pb producer missing grpc output %q; outputs=%v", want, pb.Outputs)
+		}
+	}
+
+	if !nodeHasInput(pb, "$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp") {
+		t.Errorf("pb producer missing grpc_cpp plugin input; inputs=%v", pb.flatInputs())
+	}
+
+	args := pb.Cmds[0].CmdArgs.flat()
+	if !contains(args, "--grpc_cpp_out=$(B)/") {
+		t.Errorf("pb cmd missing --grpc_cpp_out; args=%v", args)
+	}
+	if !contains(args, "--plugin=protoc-gen-grpc_cpp=$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp") {
+		t.Errorf("pb cmd missing grpc_cpp plugin flag; args=%v", args)
+	}
+
+	if !graphHasOutputSuffix(g, "svc.grpc.pb.cc.o") {
+		t.Errorf("generated .grpc.pb.cc.o compile node missing")
+	}
+}
+
+// TestEmitLibraryProtoSource_GrpcPluginDepAddInclLeadsDeclaredPeer pins the
+// T-40 divergence: a plain LIBRARY() with an inline .proto + GRPC() must hoist
+// the grpc plugin-runtime peer (contrib/libs/grpc, the CPP_PROTO_PLUGIN2 DEP)
+// ahead of the declared PEERDIR closure in the generated proto compile's GLOBAL
+// ADDINCL (`-I`) order — the same plugin-DEPS-lead-ADDINCL mechanism T-14/T-42
+// pinned for PROTO_LIBRARY, now reached for the inline-proto LIBRARY shape.
+// The declared peer is listed BEFORE GRPC(), so before the fix (grpc not
+// hoisted, appended in declared position) the declared include leads, which this
+// test rejects.
+func TestEmitLibraryProtoSource_GrpcPluginDepAddInclLeadsDeclaredPeer(t *testing.T) {
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/grpc_cpp", "grpc_cpp")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/p.cpp", "int p(){return 0;}\n")
+	writeTestModuleFile(files, "contrib/libs/grpc/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nADDINCL(GLOBAL contrib/libs/grpc/inc)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/grpc/inc/h.h", "#pragma once\n")
+	writeTestModuleFile(files, "declared/peer/ya.make", "LIBRARY()\nADDINCL(GLOBAL declared/peer/inc)\nSRCS(p.cpp)\nEND()\n")
+	writeTestModuleFile(files, "declared/peer/p.cpp", "int p(){return 0;}\n")
+	writeTestModuleFile(files, "declared/peer/inc/h.h", "#pragma once\n")
+
+	writeTestModuleFile(files, "m/lib/ya.make", "LIBRARY()\nPEERDIR(declared/peer)\nSRCDIR(m)\nSRCS(svc.proto use.cpp)\nGRPC()\nEND()\n")
+	writeTestModuleFile(files, "m/svc.proto", "syntax = \"proto3\";\npackage m;\nmessage Svc {}\n")
+	writeTestModuleFile(files, "m/use.cpp", "int use(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "m/lib")
+
+	cc := mustNodeByOutputSuffix(t, g, "svc.grpc.pb.cc.o")
+	args := cc.Cmds[0].CmdArgs.flat()
+
+	grpcInc := indexOfArg(args, "-I$(S)/contrib/libs/grpc/inc")
+	declaredInc := indexOfArg(args, "-I$(S)/declared/peer/inc")
+
+	if grpcInc < 0 || declaredInc < 0 {
+		t.Fatalf("missing -I dirs in grpc.pb.cc.o compile cmd: grpc=%d declared=%d args=%v", grpcInc, declaredInc, args)
+	}
+
+	if grpcInc > declaredInc {
+		t.Fatalf("grpc plugin-runtime include must precede declared peer include: contrib/libs/grpc/inc=%d declared/peer/inc=%d", grpcInc, declaredInc)
+	}
+}
+
+// TestEmitLibraryProtoSource_NonGrpcKeepsDeclaredAddInclOrder is the negative
+// control for T-40: a plain LIBRARY() with an inline .proto and NO grpc/plugins
+// must keep its declared PEERDIR ADDINCL order untouched (no front-hoist) — the
+// gate broadening only hoists modules whose protoCmdPeers are non-empty.
+func TestEmitLibraryProtoSource_NonGrpcKeepsDeclaredAddInclOrder(t *testing.T) {
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/p.cpp", "int p(){return 0;}\n")
+	writeTestModuleFile(files, "peera/ya.make", "LIBRARY()\nADDINCL(GLOBAL peera/inc)\nSRCS(p.cpp)\nEND()\n")
+	writeTestModuleFile(files, "peera/p.cpp", "int p(){return 0;}\n")
+	writeTestModuleFile(files, "peera/inc/h.h", "#pragma once\n")
+	writeTestModuleFile(files, "peerb/ya.make", "LIBRARY()\nADDINCL(GLOBAL peerb/inc)\nSRCS(p.cpp)\nEND()\n")
+	writeTestModuleFile(files, "peerb/p.cpp", "int p(){return 0;}\n")
+	writeTestModuleFile(files, "peerb/inc/h.h", "#pragma once\n")
+
+	writeTestModuleFile(files, "m/lib/ya.make", "LIBRARY()\nPEERDIR(peera)\nPEERDIR(peerb)\nSRCDIR(m)\nSRCS(svc.proto use.cpp)\nEND()\n")
+	writeTestModuleFile(files, "m/svc.proto", "syntax = \"proto3\";\npackage m;\nmessage Svc {}\n")
+	writeTestModuleFile(files, "m/use.cpp", "int use(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "m/lib")
+
+	cc := mustNodeByOutputSuffix(t, g, "svc.pb.cc.o")
+	args := cc.Cmds[0].CmdArgs.flat()
+
+	aInc := indexOfArg(args, "-I$(S)/peera/inc")
+	bInc := indexOfArg(args, "-I$(S)/peerb/inc")
+
+	if aInc < 0 || bInc < 0 {
+		t.Fatalf("missing -I dirs in svc.pb.cc.o compile cmd: peera=%d peerb=%d args=%v", aInc, bInc, args)
+	}
+
+	if aInc > bInc {
+		t.Fatalf("non-grpc inline proto must keep declared peer order: peera/inc=%d peerb/inc=%d", aInc, bInc)
+	}
+}
+
+func graphHasOutputSuffix(g *Graph, suffix string) bool {
+	for _, n := range g.Graph {
+		for _, o := range n.Outputs {
+			if strings.HasSuffix(o.string(), suffix) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// TestEmitLibraryProtoSource_NoGrpcUnchanged is the negative control: the same
+// inline-proto LIBRARY WITHOUT GRPC() must declare none of the grpc outputs,
+// plugin input, flags, or compile node.
+func TestEmitLibraryProtoSource_NoGrpcUnchanged(t *testing.T) {
+	g := grpcLibraryFixture(t, false)
+
+	pb := mustNodeByOutput(t, g, "$(B)/m/svc.pb.h")
+
+	for _, o := range pb.Outputs {
+		if o.string() == "$(B)/m/svc.grpc.pb.cc" || o.string() == "$(B)/m/svc.grpc.pb.h" {
+			t.Errorf("non-GRPC producer unexpectedly declares grpc output %q", o.string())
+		}
+	}
+
+	if nodeHasInput(pb, "$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp") {
+		t.Errorf("non-GRPC producer unexpectedly has grpc_cpp plugin input")
+	}
+
+	args := pb.Cmds[0].CmdArgs.flat()
+	if contains(args, "--grpc_cpp_out=$(B)/") {
+		t.Errorf("non-GRPC producer unexpectedly passes --grpc_cpp_out")
+	}
+
+	if graphHasOutputSuffix(g, "svc.grpc.pb.cc.o") {
+		t.Errorf("non-GRPC module unexpectedly compiles a .grpc.pb.cc.o")
+	}
+}
+
+// protoImportRootFixture reproduces the T-91 divergence: a proto import that
+// names a fully-qualified arcadia path (`dep/foo.proto`) which exists BOTH at
+// the source root ($(S)/dep/foo.proto, the real PROTO_LIBRARY) and under a peer
+// PROTO_NAMESPACE addincl that happens to mirror the same subtree
+// ($(S)/mirror/dep/foo.proto). protoc resolves the import against its -I list in
+// order — `-I=./ -I=$(S)/ -I=$(B) -I=$(S)` (the arcadia roots) precede the peer
+// PROTO_NAMESPACE -I — so the source-root copy wins and the mirror copy is never
+// consulted. Upstream's TModuleResolver does the same: for a `proto` (a lang in
+// LANGS_REQUIRE_BUILD_AND_SRC_ROOTS) Local include it resolves
+// MakeResolvePlan(srcDir, BldDir, SrcDir) FIRST and only falls to the module's
+// IncDirs (ADDINCL) if that misses (module_resolver.cpp:238-245, 322-352).
+func protoImportRootFixture() FS {
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make",
+		"LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\n"+
+			"ADDINCL(GLOBAL contrib/libs/protobuf/src)\nSRCS(p.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/p.cpp", "int p(){return 0;}\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/src/google/protobuf/message.h", "#pragma once\n")
+
+	// The real dependency at the source root.
+	writeTestModuleFile(files, "dep/ya.make", "PROTO_LIBRARY()\nSRCS(foo.proto)\nEND()\n")
+	writeTestModuleFile(files, "dep/foo.proto", "syntax = \"proto3\";\npackage dep;\nmessage Foo {}\n")
+
+	// A peer PROTO_LIBRARY that publishes the `mirror` PROTO_NAMESPACE GLOBAL
+	// addincl. Its subtree mirrors dep/ — the mirror copy of foo.proto exists on
+	// disk so an addincl-first resolver would wrongly bind the import there.
+	writeTestModuleFile(files, "mirror/peer/ya.make",
+		"PROTO_LIBRARY()\nPROTO_NAMESPACE(mirror)\nSRCS(bar.proto)\nEND()\n")
+	writeTestModuleFile(files, "mirror/peer/bar.proto", "syntax = \"proto3\";\npackage mirror;\nmessage Bar {}\n")
+	writeTestModuleFile(files, "mirror/dep/foo.proto", "syntax = \"proto3\";\npackage dep;\nmessage Foo {}\n")
+
+	// The module under test: imports the fully-qualified dep/foo.proto and peers
+	// both the real dep and the mirror-namespace peer.
+	writeTestModuleFile(files, "main/ya.make",
+		"PROTO_LIBRARY()\nPEERDIR(dep mirror/peer)\nSRCS(main.proto)\nEND()\n")
+	writeTestModuleFile(files, "main/main.proto",
+		"syntax = \"proto3\";\npackage main;\nimport \"dep/foo.proto\";\nmessage Main {}\n")
+
+	return newMemFS(files)
+}
+
+// TestGen_ProtoImport_SourceRootWinsOverPeerNamespaceMirror pins that a
+// fully-qualified proto import binds to the arcadia source-root copy, not to a
+// peer PROTO_NAMESPACE addincl mirror of the same path. Before the fix the
+// scanner consults ADDINCL before the arcadia roots, so main.pb.cc carries the
+// spurious $(S)/mirror/dep/foo.proto input.
+func TestGen_ProtoImport_SourceRootWinsOverPeerNamespaceMirror(t *testing.T) {
+	fs := protoImportRootFixture()
+	g := testGen(fs, "main")
+
+	pb := mustNodeByOutput(t, g, "$(B)/main/main.pb.h")
+	inputs := vfsStrings(pb.flatInputs())
+
+	const (
+		want    = "$(S)/dep/foo.proto"
+		mirror  = "$(S)/mirror/dep/foo.proto"
+	)
+
+	hasWant, hasMirror := false, false
+	for _, in := range inputs {
+		if in == want {
+			hasWant = true
+		}
+		if in == mirror {
+			hasMirror = true
+		}
+	}
+
+	if hasMirror {
+		t.Errorf("main.pb.cc carries the peer-namespace mirror import %q; protoc/upstream bind the import to the source root, not the ADDINCL mirror\ninputs=%v", mirror, inputs)
+	}
+
+	if !hasWant {
+		t.Errorf("main.pb.cc is missing the source-root import %q\ninputs=%v", want, inputs)
+	}
+}

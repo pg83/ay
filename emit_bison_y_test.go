@@ -400,3 +400,10 @@ END()
 		t.Fatalf("bison-generated parser object missing dep on proto producer %q; deps=%v", pb.UID, graphDeps(g, parserObj))
 	}
 }
+
+// writeBisonTool writes the bison tool program plus build/induced/by_bison (the
+// empty licensed module _SRC("y") induces via PEERDIR) into a test fixture.
+func writeBisonTool(files map[string]string) {
+	writeToolProgram(files, "contrib/tools/bison", "bison")
+	files["build/induced/by_bison/ya.make"] = "LIBRARY()\nNO_UTIL()\nNO_RUNTIME()\nEND()\n"
+}

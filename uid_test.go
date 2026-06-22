@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"github.com/zeebo/xxh3"
 )
 
 // tuid derives a deterministic UID from a label for test fixtures.
@@ -113,4 +114,17 @@ func TestCanonicalNodeBytes_VsDefaultJSONMarshal(t *testing.T) {
 	if bytes.Contains(canon, []byte(escapedLT)) {
 		t.Errorf("canonicalNodeBytes must NOT contain %s (escaping disabled); got: %s", escapedLT, canon)
 	}
+}
+
+func computeUID(canonicalBytes []byte) UID {
+	sum := xxh3.Hash128(canonicalBytes)
+
+	return UID{Hi: sum.Hi, Lo: sum.Lo}
+}
+
+func canonicalNodeBytes(n *Node) []byte {
+	var c CanonBuf
+	c.writeNode(n)
+
+	return c.buf
 }
