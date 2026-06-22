@@ -82,6 +82,22 @@ func objcopyCmdArgs(oc *ObjcopyEmitCtx, outputObj VFS, payload []STR) ArgChunks 
 	return oc.na.chunkList(oc.blocks.pre, oc.na.strList((outputObj).str()), oc.blocks.post, payload)
 }
 
+// resolvedResource is the outcome of resolving one embedded RESOURCE path. For a
+// generated payload it carries the $(B) build artifact, the producer ref/main
+// output, and the producer's recorded source-attribution sets; for an ordinary
+// source it is just the fallback $(S) input with zero refs and no sources.
+type resolvedResource struct {
+	Input           VFS
+	ProducerRef     NodeRef
+	ProducerMainOut VFS
+	// SourceInputs / SourceClosure are the producer's $(S) source-attribution
+	// sets (GeneratedFileInfo). Upstream's flat-input model lists every consumed
+	// input's transitive source closure on the objcopy node, so an embedded
+	// generated payload carries the chain's source leaves. Empty for a source.
+	SourceInputs  []VFS
+	SourceClosure []VFS
+}
+
 // resolveResourceInput resolves one embedded resource path to its node input. A
 // generated resource (RUN_PROGRAM OUT/OUT_NOAUTO/STDOUT, COPY output, ...) lives
 // in the codegen registry keyed by its output VFS; resourceOutputVFS
@@ -91,14 +107,20 @@ func objcopyCmdArgs(oc *ObjcopyEmitCtx, outputObj VFS, payload []STR) ArgChunks 
 // producer ref is returned so the objcopy node depends on it. Otherwise the path
 // is an ordinary source file: the fallback VFS (its $(S) location) is used with
 // no extra dep.
-func resolveResourceInput(ctx *GenCtx, instance ModuleInstance, rawPath string, fallback VFS) (VFS, NodeRef, VFS) {
+func resolveResourceInput(ctx *GenCtx, instance ModuleInstance, rawPath string, fallback VFS) resolvedResource {
 	output := resourceOutputVFS(instance.Path.rel(), rawPath)
 
 	if info := codegenRegForInstance(ctx, instance).lookup(output); info != nil {
-		return output, info.ProducerRef, info.ProducerMainOut
+		return resolvedResource{
+			Input:           output,
+			ProducerRef:     info.ProducerRef,
+			ProducerMainOut: info.ProducerMainOut,
+			SourceInputs:    info.SourceInputs,
+			SourceClosure:   info.ProducerSourceClosure,
+		}
 	}
 
-	return fallback, 0, 0
+	return resolvedResource{Input: fallback}
 }
 
 func emitResourceObjcopy(
@@ -169,10 +191,14 @@ func emitResourceObjcopy(
 		// outputs as a spurious input (the OutTogether main-output edge), even on
 		// a chunk that embeds only the producer's additional outputs.
 		mainOuts []VFS
-		keys     []string
-		kvs      []string
-		kvsCmd   []string
-		cmdLen   int
+		// srcAttrInputs collects, per resolved generated resource, the producer
+		// chain's $(S) source-attribution leaves (kept by objcopySourceLeafKept).
+		// Cache-key inputs only — never in --inputs/--keys/hash/command.
+		srcAttrInputs []VFS
+		keys          []string
+		kvs           []string
+		kvsCmd        []string
+		cmdLen        int
 	}
 	cur := acc{}
 	moduleTag := resourceLibTagForData(d)
@@ -250,6 +276,17 @@ func emitResourceObjcopy(
 		}
 
 		for _, p := range cur.kvInputs {
+			if !deduper.add(p) {
+				continue
+			}
+
+			tail = append(tail, p)
+		}
+
+		// The embedded generated payloads' producer-chain $(S) source leaves ride
+		// as cache-key inputs too (upstream's flat-input source attribution), deduped
+		// against everything already present.
+		for _, p := range cur.srcAttrInputs {
 			if !deduper.add(p) {
 				continue
 			}
@@ -350,18 +387,18 @@ func emitResourceObjcopy(
 					// to its $(S) source path. The emitted resfs/src value is that
 					// resolved input's rootrel, not a naive module-dir join.
 					if inner, ok := rootrelInputPath(e.Key); ok {
-						kvInput, _, mainOut := resolveResourceInput(ctx, instance, inner, copyFileInputVFS(ctx.fs, instance.Path.rel(), inner))
-						cur.kvInputs = append(cur.kvInputs, kvInput)
-						cur.mainOuts = append(cur.mainOuts, mainOut)
-						cur.kvsCmd = append(cur.kvsCmd, renderResourceKvCmd(rootrelExpand(e.Key, kvInput.rel())))
+						r := resolveResourceInput(ctx, instance, inner, copyFileInputVFS(ctx.fs, instance.Path.rel(), inner))
+						cur.kvInputs = append(cur.kvInputs, r.Input)
+						cur.mainOuts = append(cur.mainOuts, r.ProducerMainOut)
+						cur.kvsCmd = append(cur.kvsCmd, renderResourceKvCmd(rootrelExpand(e.Key, r.Input.rel())))
 					} else {
 						cur.kvsCmd = append(cur.kvsCmd, renderResourceKvCmd(e.Key))
 					}
 				} else {
-					inputVFS, producerRef, mainOut := resolveResourceInput(ctx, instance, e.Path, copyFileInputVFS(ctx.fs, instance.Path.rel(), e.Path))
+					r := resolveResourceInput(ctx, instance, e.Path, copyFileInputVFS(ctx.fs, instance.Path.rel(), e.Path))
 					cur.paths = append(cur.paths, e.Path)
-					cur.pathInputs = append(cur.pathInputs, inputVFS)
-					cur.mainOuts = append(cur.mainOuts, mainOut)
+					cur.pathInputs = append(cur.pathInputs, r.Input)
+					cur.mainOuts = append(cur.mainOuts, r.ProducerMainOut)
 
 					// A generated build-root resource (RUN_PROGRAM OUT/STDOUT, …) carries
 					// its producer's OUTPUT_INCLUDES build-root closure onto the objcopy
@@ -369,10 +406,29 @@ func emitResourceObjcopy(
 					// .pb's ${input:…}. Keep only the $(B) half (the $(S) over-emit is
 					// pruned ref-side by dump normalize). A source resource resolves to
 					// producerRef 0 and adds nothing.
-					if producerRef != 0 {
-						for _, v := range walkClosureTail(ctx.scannerFor(instance), inputVFS, in.ScanCfg) {
+					if r.ProducerRef != 0 {
+						for _, v := range walkClosureTail(ctx.scannerFor(instance), r.Input, in.ScanCfg) {
 							if v.isBuild() {
 								cur.closureInputs = append(cur.closureInputs, v)
+							}
+						}
+
+						// Upstream's flat-input model also lists the producer chain's
+						// transitive $(S) source leaves on the objcopy node (the generated
+						// payload's SourceInputs, folded forward across opaque generated
+						// INs, plus its transitive source closure). Keep only the leaves
+						// that survive the resource-objcopy over-emit prune — the same set
+						// the reference normalizer keeps (objcopySourceLeafKept). Rides as
+						// a cache-key input below, never in the --inputs payload.
+						for _, v := range r.SourceInputs {
+							if v.isSource() && objcopySourceLeafKept(v.rel()) {
+								cur.srcAttrInputs = append(cur.srcAttrInputs, v)
+							}
+						}
+
+						for _, v := range r.SourceClosure {
+							if v.isSource() && objcopySourceLeafKept(v.rel()) {
+								cur.srcAttrInputs = append(cur.srcAttrInputs, v)
 							}
 						}
 					}
