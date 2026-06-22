@@ -2889,24 +2889,24 @@ func reorderARMembers(refs []NodeRef, paths []VFS, declMeta map[VFS]SrcMeta) ([]
 	type member struct {
 		ref  NodeRef
 		path VFS
+		key  uint64
 	}
 
+	defaultKey := SrcMeta{Prio: stmtPrioDefault}.sortKey()
 	members := make([]member, len(paths))
 
 	for i := range paths {
-		members[i] = member{refs[i], paths[i]}
-	}
+		k := defaultKey
 
-	key := func(p VFS) uint64 {
-		if m, ok := declMeta[p]; ok {
-			return m.sortKey()
+		if m, ok := declMeta[paths[i]]; ok {
+			k = m.sortKey()
 		}
 
-		return SrcMeta{Prio: stmtPrioDefault}.sortKey()
+		members[i] = member{refs[i], paths[i], k}
 	}
 
 	slices.SortStableFunc(members, func(a, b member) int {
-		return cmp.Compare(key(a.path), key(b.path))
+		return cmp.Compare(a.key, b.key)
 	})
 
 	outRefs := make([]NodeRef, len(members))
