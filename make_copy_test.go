@@ -88,7 +88,7 @@ func TestCopySliceConcurrent_SkipExistingCopyFresh(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	copied, skipped, err := copySliceConcurrent(srcRoot, dst, []string{"d"}, func(Warn) {})
+	copied, skipped, err := copySliceConcurrent(srcRoot, dst, nil, []string{"d"}, func(Warn) {})
 
 	if err != nil {
 		t.Fatalf("copySliceConcurrent = %v, want nil", err)
@@ -108,6 +108,102 @@ func TestCopySliceConcurrent_SkipExistingCopyFresh(t *testing.T) {
 
 	if got, _ := os.ReadFile(filepath.Join(dst, "d", "new")); string(got) != "SRC-NEW" {
 		t.Fatalf("fresh not copied: got %q, want %q", got, "SRC-NEW")
+	}
+}
+
+// TestCopySliceConcurrent_ShallowSkipsSubdirs pins the read-dir granularity: a shallow
+// dir copies its own file entries but never descends, so a read-less subtree under it is
+// left out of the slice (the yabs/qa over-copy fix).
+func TestCopySliceConcurrent_ShallowSkipsSubdirs(t *testing.T) {
+	srcRoot := t.TempDir()
+	dst := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(srcRoot, "d", "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(srcRoot, "d", "top.txt"), []byte("TOP"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(srcRoot, "d", "sub", "deep.txt"), []byte("DEEP"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	copied, skipped, err := copySliceConcurrent(srcRoot, dst, nil, []string{"d"}, func(Warn) {})
+
+	if err != nil {
+		t.Fatalf("copySliceConcurrent = %v, want nil", err)
+	}
+
+	if copied != 1 {
+		t.Fatalf("copied = %d, want 1 (only d/top.txt; d/sub not descended)", copied)
+	}
+
+	if skipped != 0 {
+		t.Fatalf("skipped = %d, want 0", skipped)
+	}
+
+	if _, err := os.Stat(filepath.Join(dst, "d", "top.txt")); err != nil {
+		t.Fatalf("d/top.txt not copied: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dst, "d", "sub", "deep.txt")); !os.IsNotExist(err) {
+		t.Fatalf("read-less subdir copied (d/sub/deep.txt): stat err = %v, want not-exist", err)
+	}
+}
+
+// TestCopySliceConcurrent_RecursiveCopiesSubtree verifies a recursive dir still copies its
+// whole subtree (alwaysCopyDirs semantics for configure).
+func TestCopySliceConcurrent_RecursiveCopiesSubtree(t *testing.T) {
+	srcRoot := t.TempDir()
+	dst := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(srcRoot, "r", "a", "b"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(srcRoot, "r", "top.txt"), []byte("T"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(srcRoot, "r", "a", "b", "deep.txt"), []byte("D"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	copied, _, err := copySliceConcurrent(srcRoot, dst, []string{"r"}, nil, func(Warn) {})
+
+	if err != nil {
+		t.Fatalf("copySliceConcurrent = %v, want nil", err)
+	}
+
+	if copied != 2 {
+		t.Fatalf("copied = %d, want 2 (whole subtree)", copied)
+	}
+
+	if _, err := os.Stat(filepath.Join(dst, "r", "a", "b", "deep.txt")); err != nil {
+		t.Fatalf("recursive deep file not copied: %v", err)
+	}
+}
+
+// TestDropUnderRecursive verifies a dir covered by a recursive dir (itself or an ancestor)
+// is dropped, while an unrelated dir and a strict ancestor of a recursive dir are kept.
+func TestDropUnderRecursive(t *testing.T) {
+	got := dropUnderRecursive(
+		[]string{"a/b", "x/y", "build/scripts/sub", "build"},
+		[]string{"build/scripts", "x"},
+	)
+
+	want := []string{"a/b", "build"}
+
+	if len(got) != len(want) {
+		t.Fatalf("dropUnderRecursive = %v, want %v", got, want)
+	}
+
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("dropUnderRecursive = %v, want %v", got, want)
+		}
 	}
 }
 

@@ -62,25 +62,33 @@ func copySourceSlice(fs *OsFS, srcRoot, dst string, onWarn func(Warn)) error {
 		}
 	}
 
-	for _, d := range alwaysCopyDirs {
-		dirSet[d] = struct{}{}
+	// alwaysCopyDirs are copied recursively — configure needs their whole subtree even
+	// where nothing was read. Dirs that had a read are copied shallow (their direct files
+	// only): a single read under a large tree — e.g. one ya.make under yabs/qa — must not
+	// drag the entire subtree into the slice. A deeper dir that had its own read is itself
+	// a read dir and copies itself; a read-less subtree is never walked.
+	// The repo root is never a copy unit (a recursive copy of it would clone the whole
+	// tree), so dropRepoRoot strips any entry that resolves back to the source root.
+	recursiveDirs := dropRepoRoot(absSrc, append([]string(nil), alwaysCopyDirs...))
+
+	shallowDirs := make([]string, 0, len(dirSet))
+
+	for d := range dirSet {
+		shallowDirs = append(shallowDirs, d)
 	}
 
-	dirs := dropDescendantDirs(dirSet)
+	sort.Strings(shallowDirs)
+	shallowDirs = dropRepoRoot(absSrc, shallowDirs)
+	shallowDirs = dropUnderRecursive(shallowDirs, recursiveDirs)
 
-	// The repo root is never a copy unit: a recursive copy of it would clone the whole
-	// tree (and would never have been the intended slice). Drop any entry that resolves
-	// to it — "", ".", "/", or a path that joins back to the source root.
-	dirs = dropRepoRoot(absSrc, dirs)
-
-	// Individually-copied files: the ancestor ya.make of every kept dir (configure walks
+	// Individually-copied files: the ancestor ya.make of every copied dir (configure walks
 	// them top-down) plus the root-level files the build read (ya.conf, …).
-	loose := append(ancestorYamakes(dirs), rootFiles...)
+	loose := append(ancestorYamakes(append(append([]string(nil), recursiveDirs...), shallowDirs...)), rootFiles...)
 
-	fmt.Fprintf(os.Stderr, "copy-sources: %d directories (from %d read dirs) + %d loose files -> %s\n",
-		len(dirs), len(dirSet), len(loose), absDst)
+	fmt.Fprintf(os.Stderr, "copy-sources: %d read dirs (shallow) + %d always-dirs (recursive) + %d loose files -> %s\n",
+		len(shallowDirs), len(recursiveDirs), len(loose), absDst)
 
-	copied, skipped, err := copySliceConcurrent(absSrc, absDst, dirs, onWarn)
+	copied, skipped, err := copySliceConcurrent(absSrc, absDst, recursiveDirs, shallowDirs, onWarn)
 
 	if err != nil {
 		return err
@@ -116,33 +124,17 @@ func dropRepoRoot(srcRoot string, dirs []string) []string {
 	return out
 }
 
-// dropDescendantDirs keeps only the topmost directory of every ancestor chain: a
-// recursive copy of an ancestor already covers its descendants. Shallow-first so an
-// ancestor is always seen before the descendants it subsumes.
-func dropDescendantDirs(set map[string]struct{}) []string {
-	all := make([]string, 0, len(set))
+// dropUnderRecursive removes any dir already covered by a recursive copy of one of the
+// recursive dirs (the dir itself or an ancestor of it): that whole subtree is copied
+// wholesale, so a shallow copy of the same dir would be redundant. Order is preserved.
+func dropUnderRecursive(dirs, recursive []string) []string {
+	out := dirs[:0]
 
-	for d := range set {
-		all = append(all, d)
-	}
-
-	sort.Slice(all, func(i, j int) bool {
-		ci, cj := strings.Count(all[i], "/"), strings.Count(all[j], "/")
-
-		if ci != cj {
-			return ci < cj
-		}
-
-		return all[i] < all[j]
-	})
-
-	var kept []string
-
-	for _, d := range all {
+	for _, d := range dirs {
 		covered := false
 
-		for _, k := range kept {
-			if d == k || strings.HasPrefix(d, k+"/") {
+		for _, r := range recursive {
+			if d == r || strings.HasPrefix(d, r+"/") {
 				covered = true
 
 				break
@@ -150,17 +142,17 @@ func dropDescendantDirs(set map[string]struct{}) []string {
 		}
 
 		if !covered {
-			kept = append(kept, d)
+			out = append(out, d)
 		}
 	}
 
-	return kept
+	return out
 }
 
-// ancestorYamakes is the ya.make at every strict ancestor of each kept dir, plus the
+// ancestorYamakes is the ya.make at every strict ancestor of each copied dir, plus the
 // repo-root ya.make. ya make walks these top-down at configure time (RECURSE/PEERDIR
-// resolution), so they must exist even though a recursive dir copy may not include
-// them (a kept dir's ancestors are, by dropDescendantDirs, not themselves copied).
+// resolution), so they must exist even though a dir's ancestors are not themselves
+// copied (a shallow read dir takes only its own level; a recursive dir starts at itself).
 func ancestorYamakes(dirs []string) []string {
 	set := map[string]struct{}{"ya.make": {}}
 
@@ -196,14 +188,19 @@ type copyStat struct {
 	skipped bool // dst already present — labelled `skip`, not counted as copied
 }
 
-// copySliceConcurrent runs the copy pipeline: one producer walks the dirs (stat-only —
-// never opening a file, so a FIFO/socket can't block it) and streams the regular files
-// / symlinks into jobCh as it finds them, GOMAXPROCS workers copy and report into
-// statCh, and one printer drains statCh — so progress is `{n} {copy|skip} rel`,
-// numbered monotonically by that single goroutine with no up-front counting pass. The
-// `skip` lines are files whose dst already existed (idempotent re-run): listed but not
-// re-copied. Returns the counts actually copied and skipped.
-func copySliceConcurrent(srcRoot, dst string, dirs []string, onWarn func(Warn)) (copied, skipped int, err error) {
+// copySliceConcurrent runs the copy pipeline: one producer enumerates the dirs (readdir
+// only — never opening a file, so a FIFO/socket can't block it, and never stat-ing an
+// entry, so a skip-only re-run does not touch src files) and streams the regular files /
+// symlinks into jobCh, GOMAXPROCS workers copy and report into statCh, and one printer
+// drains statCh — so progress is `{n} {copy|skip} rel`, numbered monotonically by that
+// single goroutine with no up-front counting pass. The `skip` lines are files whose dst
+// already existed (idempotent re-run): listed but not re-copied.
+//
+// recursiveDirs are walked in full (whole subtree); shallowDirs copy only their direct
+// file entries, never descending — a read-less subtree under a shallow dir is not walked,
+// so one read under a huge tree does not drag the whole subtree in. Returns the counts
+// actually copied and skipped.
+func copySliceConcurrent(srcRoot, dst string, recursiveDirs, shallowDirs []string, onWarn func(Warn)) (copied, skipped int, err error) {
 	if err := os.MkdirAll(dst, 0o755); err != nil {
 		return 0, 0, err
 	}
@@ -211,11 +208,26 @@ func copySliceConcurrent(srcRoot, dst string, dirs []string, onWarn func(Warn)) 
 	jobCh := make(chan copyJob, 256)
 	statCh := make(chan copyStat, 256)
 
-	// Producer: walk and stream jobs, creating dst dirs as it goes.
+	// Producer: enumerate and stream jobs, creating dst dirs as it goes.
 	go func() {
 		defer close(jobCh)
 
-		for _, d := range dirs {
+		// emit classifies one entry from its readdir d_type alone — never stat src here.
+		// A per-file src stat (de.Info) would pound the arc/FUSE mount on every re-run,
+		// including a skip-only one where dst is already populated. The sole src access
+		// (open + fstat for the mode) is deferred into copyOne, which takes it only after
+		// confirming dst is absent — honouring the "no src op until dst is confirmed
+		// absent" invariant for enumeration too, not just the final write.
+		emit := func(rel string, typ os.FileMode) {
+			switch {
+			case typ&os.ModeSymlink != 0:
+				jobCh <- copyJob{rel: rel, symlink: true}
+			case typ.IsRegular():
+				jobCh <- copyJob{rel: rel}
+			}
+		}
+
+		for _, d := range recursiveDirs {
 			src := filepath.Join(srcRoot, d)
 
 			if abs, err := filepath.Abs(src); err == nil && abs == srcRoot {
@@ -241,24 +253,36 @@ func copySliceConcurrent(srcRoot, dst string, dirs []string, onWarn func(Warn)) 
 					return nil
 				}
 
-				// Classify from the readdir d_type alone — never stat src here. A
-				// per-file src stat (de.Info) would pound the arc/FUSE mount on every
-				// re-run, including a skip-only one where dst is already populated. The
-				// sole src access (open + fstat for the mode) is deferred into copyOne,
-				// which takes it only after confirming dst is absent — honouring the
-				// "no src op until dst is confirmed absent" invariant for the whole walk,
-				// not just the final write.
-				switch typ := de.Type(); {
-				case typ&os.ModeSymlink != 0:
-					jobCh <- copyJob{rel: rel, symlink: true}
-				case de.IsDir():
+				if de.IsDir() {
 					_ = os.MkdirAll(filepath.Join(dst, rel), 0o755)
-				case typ.IsRegular():
-					jobCh <- copyJob{rel: rel}
+
+					return nil
 				}
+
+				emit(rel, de.Type())
 
 				return nil
 			})
+		}
+
+		for _, d := range shallowDirs {
+			src := filepath.Join(srcRoot, d)
+			entries, err := os.ReadDir(src)
+
+			if err != nil {
+				onWarn(Warn{Kind: WarnMissingInclude, Message: "copy-sources: skip (not a directory in repo): " + d})
+
+				continue
+			}
+
+			_ = os.MkdirAll(filepath.Join(dst, d), 0o755)
+
+			for _, de := range entries {
+				// Direct file entries only — never recurse. A subdir that had its own read
+				// is a shallow dir in its own right and copies itself; a read-less subdir
+				// is intentionally left out of the slice.
+				emit(filepath.Join(d, de.Name()), de.Type())
+			}
 		}
 	}()
 
