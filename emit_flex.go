@@ -49,7 +49,7 @@ func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }
 
-func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, outVFS VFS, closure []VFS, id NodeRef, emit Emitter) {
+func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, outVFS VFS, closure []VFS, id NodeRef, emit *StreamingEmitter) {
 	na := emit.nodeArenas()
 
 	cmdArgs := na.chunkList(na.strList(

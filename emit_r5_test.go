@@ -22,7 +22,7 @@ func TestEmitR5_RlgenModeFollowsOptimized(t *testing.T) {
 	}
 
 	rlgenMode := func(p *Platform) string {
-		e := newBufferedEmitter()
+		e := newStreamingEmitter(nil, nil)
 		inst := ModuleInstance{Path: source("kernel/urlnorm"), Kind: KindLib, Language: LangCPP, Platform: p}
 		ref, tmpOut, cppOut := emitR5(inst, "urlhashval.rl",
 			0, 0, intern("$(B)/contrib/tools/ragel5/ragel/ragel5"),

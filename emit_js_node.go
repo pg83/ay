@@ -1,6 +1,6 @@
 package main
 
-func emitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, tc ModuleToolchain, scripts ScriptDeps, emit Emitter) (NodeRef, VFS) {
+func emitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, tc ModuleToolchain, scripts ScriptDeps, emit *StreamingEmitter) (NodeRef, VFS) {
 	na := emit.nodeArenas()
 
 	joinSrcs := buildScriptsGenJoinSrcsPy

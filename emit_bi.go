@@ -11,7 +11,7 @@ func emitBI(
 	outputHeader string,
 	cxxFlags []STR,
 	tc ModuleToolchain,
-	emit Emitter,
+	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
 

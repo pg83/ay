@@ -6,7 +6,7 @@ import (
 )
 
 func TestEmitJS_UsesRequestedPlatformTags(t *testing.T) {
-	emit := newBufferedEmitter()
+	emit := newStreamingEmitter(nil, nil)
 	target := newTestPlatform(OSLinux, ISAX8664, "no")
 
 	ref, _ := emitJS(hostInstance("joinmod"), "all.cpp", []string{"a.cpp"}, nil, target, testToolchain(), nil, emit)

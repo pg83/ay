@@ -52,7 +52,7 @@ var archiverGlobalPaths = []string{
 const referenceLDOutput = "$(B)/tools/archiver/archiver"
 
 func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
-	emit := newBufferedEmitter()
+	emit := newStreamingEmitter(nil, nil)
 	mainRef := emit.emit(&Node{Platform: &Platform{},
 		KV: KV{P: pkSTUB},
 	})
@@ -147,7 +147,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 }
 
 func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
-	emit := newBufferedEmitter()
+	emit := newStreamingEmitter(nil, nil)
 	mainRef := emit.emit(&Node{Platform: &Platform{},
 		KV: KV{P: pkSTUB},
 	})
@@ -236,7 +236,7 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 }
 
 func TestEmitLD_AcceptsHostPIC(t *testing.T) {
-	emit := newBufferedEmitter()
+	emit := newStreamingEmitter(nil, nil)
 	stub := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
 
 	ref := emitLD(
@@ -328,7 +328,7 @@ func TestComposeProgramLinkTrailer_NonPICRPathTrailerKeepsNoPie(t *testing.T) {
 }
 
 func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
-	emit := newBufferedEmitter()
+	emit := newStreamingEmitter(nil, nil)
 	mainRef := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
 
 	wholeRef := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
@@ -407,7 +407,7 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 }
 
 func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T) {
-	emit := newBufferedEmitter()
+	emit := newStreamingEmitter(nil, nil)
 	mainRef := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
 
 	peerRef := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
@@ -509,7 +509,7 @@ func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			e := newBufferedEmitter()
+			e := newStreamingEmitter(nil, nil)
 			instance := targetInstance("test/prog")
 
 			exc := try(func() {

@@ -11,7 +11,7 @@ func emitJVCPG4(
 	id NodeRef,
 	tc ModuleToolchain,
 	scripts ScriptDeps,
-	emit Emitter,
+	emit *StreamingEmitter,
 ) {
 	na := emit.nodeArenas()
 
@@ -52,14 +52,14 @@ func emitJVCPG4(
 	emit.emitReserved(node, id)
 }
 
-func emitCP(instance ModuleInstance, src VFS, dst VFS, tc ModuleToolchain, scripts ScriptDeps, emit Emitter) NodeRef {
+func emitCP(instance ModuleInstance, src VFS, dst VFS, tc ModuleToolchain, scripts ScriptDeps, emit *StreamingEmitter) NodeRef {
 	id := emit.reserve()
 	emitCPWithDeps(instance, src, dst, nil, nil, id, 0, tc, scripts, emit)
 
 	return id
 }
 
-func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, id NodeRef, moduleTag STR, tc ModuleToolchain, scripts ScriptDeps, emit Emitter) {
+func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, id NodeRef, moduleTag STR, tc ModuleToolchain, scripts ScriptDeps, emit *StreamingEmitter) {
 	na := emit.nodeArenas()
 
 	fsTools := copyFsToolsVFS

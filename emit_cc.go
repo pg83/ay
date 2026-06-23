@@ -85,7 +85,7 @@ type ModuleCCInputs struct {
 	TC ModuleToolchain
 }
 
-func emitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS, InputChunks) {
+func emitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit *StreamingEmitter) (NodeRef, VFS, InputChunks) {
 	na := emit.nodeArenas()
 
 	suffix := ".o"

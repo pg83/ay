@@ -317,7 +317,7 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 		t.Fatalf("tail chunk paths len: got %d, want 1", got)
 	}
 
-	em := newBufferedEmitter()
+	em := newStreamingEmitter(nil, nil)
 	ctx := &GenCtx{emit: em, na: em.nodeArenas(), target: testTargetP, fs: newMemFS(nil)}
 	wireTestScanners(ctx)
 	instance := ModuleInstance{
@@ -332,7 +332,7 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 		t.Fatal("emitPySrcObjcopy returned nil")
 	}
 
-	emit := ctx.emit.(*BufferedEmitter)
+	emit := ctx.emit
 
 	if got := len(emit.nodes); got != 2 {
 		t.Fatalf("emitted nodes: got %d, want 2", got)

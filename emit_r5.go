@@ -9,7 +9,7 @@ func emitR5(
 	rlgenCdLD NodeRef,
 	ragel5BinPath VFS,
 	rlgenCdBinPath VFS,
-	emit Emitter,
+	emit *StreamingEmitter,
 ) (NodeRef, VFS, VFS) {
 	na := emit.nodeArenas()
 

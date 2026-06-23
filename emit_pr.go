@@ -660,7 +660,7 @@ func emitPR(
 	extraDepRefs []NodeRef,
 	moduleTag STR,
 	id NodeRef,
-	emit Emitter,
+	emit *StreamingEmitter,
 ) {
 	na := emit.nodeArenas()
 

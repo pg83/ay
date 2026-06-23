@@ -31,7 +31,7 @@ func encodeWithHandRolled(g *Graph) []byte {
 func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 	trickyArgs := []string{"a", "b<c>&d", "tab\there", "quote\"x", "back\\slash", "newline\nhere"}
 
-	e := newBufferedEmitter()
+	e := newStreamingEmitter(nil, nil)
 	leaf := e.emit(&Node{Platform: &Platform{},
 		Cmds:         []Cmd{},
 		Env:          nil,

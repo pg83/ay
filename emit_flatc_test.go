@@ -14,7 +14,7 @@ func TestEmitFL_NodeShape(t *testing.T) {
 		Platform: target,
 	}
 
-	e := newBufferedEmitter()
+	e := newStreamingEmitter(nil, nil)
 	_, header, cpp, bfbs := emitFL(
 		instance,
 		"mod/File.fbs",
@@ -220,7 +220,7 @@ func TestEmitFL64_NodeShape(t *testing.T) {
 		Platform: target,
 	}
 
-	e := newBufferedEmitter()
+	e := newStreamingEmitter(nil, nil)
 	_, header, cpp, bfbs := emitFL(
 		instance,
 		"mod/File.fbs64",

@@ -96,7 +96,7 @@ func emitEV(
 	protoInclude []VFS,
 	liteHeaders bool,
 	tc ModuleToolchain,
-	emit Emitter,
+	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
 
@@ -126,7 +126,7 @@ func emitProtoWrapperPBNode(
 	protoInclude []VFS,
 	liteHeaders bool,
 	tc ModuleToolchain,
-	emit Emitter,
+	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
 

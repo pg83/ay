@@ -83,7 +83,7 @@ func emitJVDownstreamCPCC(
 
 const jdkResourcePath = "$(JDK17)/bin/java"
 
-func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs InputChunks, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag STR, emit Emitter) NodeRef {
+func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs InputChunks, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag STR, emit *StreamingEmitter) NodeRef {
 	na := emit.nodeArenas()
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -113,7 +113,7 @@ func emitJV(
 	listener bool,
 	moduleTag STR,
 	tc ModuleToolchain,
-	emit Emitter,
+	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
 
@@ -169,7 +169,7 @@ func emitJVSplit(
 	listener bool,
 	moduleTag STR,
 	tc ModuleToolchain,
-	emit Emitter,
+	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
 
@@ -232,7 +232,7 @@ func emitJVGeneral(
 	depRefs []NodeRef,
 	moduleTag STR,
 	tc ModuleToolchain,
-	emit Emitter,
+	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
 

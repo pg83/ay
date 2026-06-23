@@ -3,7 +3,7 @@ package main
 import "testing"
 
 func TestEmitPyRegister_ProducerEmittedAtTargetPlatform(t *testing.T) {
-	emit := newBufferedEmitter()
+	emit := newStreamingEmitter(nil, nil)
 	ctx := &GenCtx{
 		emit:   emit,
 		na:     emit.nodeArenas(),

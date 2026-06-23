@@ -14,7 +14,7 @@ func emitARNamed(
 	extraInputs []VFS,
 	tc ModuleToolchain,
 	hostP *Platform,
-	emit Emitter,
+	emit *StreamingEmitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
 		throwFmt("EmitARNamed: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
@@ -36,7 +36,7 @@ func emitARNamedTagged(
 	extraInputs []VFS,
 	tc ModuleToolchain,
 	hostP *Platform,
-	emit Emitter,
+	emit *StreamingEmitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
 		throwFmt("EmitARNamedTagged: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
@@ -55,7 +55,7 @@ func emitARGlobalNamedTagged(
 	objPaths []VFS,
 	tc ModuleToolchain,
 	hostP *Platform,
-	emit Emitter,
+	emit *StreamingEmitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
 		throwFmt("EmitARGlobalNamedTagged: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
@@ -116,7 +116,7 @@ func emitARNode(
 	extraInputs []VFS,
 	tc ModuleToolchain,
 	hostP *Platform,
-	emit Emitter,
+	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
 

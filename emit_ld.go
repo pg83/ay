@@ -57,7 +57,7 @@ func emitLD(
 	tc ModuleToolchain,
 	hostP *Platform,
 	scripts ScriptDeps,
-	emit Emitter,
+	emit *StreamingEmitter,
 	vcsRef NodeRef,
 ) NodeRef {
 	na := emit.nodeArenas()
@@ -224,7 +224,7 @@ const vcsJSONContent = `{
     "ARCADIA_TAG": ""
 }`
 
-func emitVCSNode(emit Emitter, host *Platform) NodeRef {
+func emitVCSNode(emit *StreamingEmitter, host *Platform) NodeRef {
 	na := emit.nodeArenas()
 
 	output := bldVcsJson
