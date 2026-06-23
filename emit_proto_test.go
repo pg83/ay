@@ -19,7 +19,7 @@ func TestEmitProtoSrcs_YaffGeneratedHeaderClosureRidesIntoConsumer(t *testing.T)
 	writeTestModuleFile(files, "library/cpp/yaff/struct.h", "#pragma once\n")
 	writeTestModuleFile(files, "library/cpp/yaff/protobuf.h", "#pragma once\n")
 	writeTestModuleFile(files, "library/cpp/yaff/reflect.h", "#pragma once\n")
-	writeTestModuleFile(files, "library/cpp/yaff/experiments/builder.h", "#pragma once\n#include <library/cpp/yaff/experiments/base.h>\n")
+	writeTestModuleFile(files, "library/cpp/yaff/experiments/serializer.h", "#pragma once\n#include <library/cpp/yaff/experiments/base.h>\n")
 	writeTestModuleFile(files, "library/cpp/yaff/experiments/base.h", "#pragma once\n")
 	writeTestModuleFile(files, "library/cpp/yaff/experiments/column.h", "#pragma once\n")
 	writeTestModuleFile(files, "library/cpp/yaff/experiments/merge.h", "#pragma once\n")
@@ -43,7 +43,7 @@ func TestEmitProtoSrcs_YaffGeneratedHeaderClosureRidesIntoConsumer(t *testing.T)
 		"$(S)/library/cpp/yaff/struct.h",
 		"$(S)/library/cpp/yaff/protobuf.h",
 		"$(S)/library/cpp/yaff/reflect.h",
-		"$(S)/library/cpp/yaff/experiments/builder.h",
+		"$(S)/library/cpp/yaff/experiments/serializer.h",
 		"$(S)/library/cpp/yaff/experiments/base.h",
 		"$(S)/library/cpp/yaff/experiments/column.h",
 		"$(S)/library/cpp/yaff/experiments/merge.h",
@@ -131,7 +131,7 @@ func TestEmitProtoSrcs_YaffCppInputClosureInducesWireFormatDropsSiblingHeader(t 
 	writeTestModuleFile(files, "library/cpp/yaff/struct.h", "#pragma once\n")
 	writeTestModuleFile(files, "library/cpp/yaff/protobuf.h", "#pragma once\n")
 	writeTestModuleFile(files, "library/cpp/yaff/reflect.h", "#pragma once\n")
-	writeTestModuleFile(files, "library/cpp/yaff/experiments/builder.h", "#pragma once\n")
+	writeTestModuleFile(files, "library/cpp/yaff/experiments/serializer.h", "#pragma once\n")
 	writeTestModuleFile(files, "library/cpp/yaff/experiments/column.h", "#pragma once\n")
 	writeTestModuleFile(files, "library/cpp/yaff/experiments/merge.h", "#pragma once\n")
 

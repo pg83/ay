@@ -20,7 +20,7 @@ var yaffBaseRuntimeHeaders = []string{
 }
 
 var yaffExperimentsRuntimeHeaders = []string{
-	yaffRuntimeBase + "experiments/builder.h",
+	yaffRuntimeBase + "experiments/serializer.h",
 	yaffRuntimeBase + "experiments/column.h",
 	yaffRuntimeBase + "experiments/merge.h",
 }
