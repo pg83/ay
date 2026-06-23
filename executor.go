@@ -585,31 +585,25 @@ func (ex *Executor) clearCache() {
 }
 
 func (ex *Executor) discard(path string) {
-	dst := filepath.Join(ex.grbDir, strconv.FormatUint(rand.Uint64(), 36))
+	// The collector blindly rm -rf's grbDir in a tight loop, so recreate it and
+	// retry the move until it lands — that is the whole synchronization.
+	for {
+		_ = os.MkdirAll(ex.grbDir, 0o755)
 
-	if os.Rename(path, dst) == nil {
-		return
+		dst := filepath.Join(ex.grbDir, strconv.FormatUint(rand.Uint64(), 36))
+
+		if os.Rename(path, dst) == nil {
+			return
+		}
 	}
-
-	_ = forceRemoveAll(path)
 }
 
 func (ex *Executor) startGarbageCollector() {
-	throw(os.MkdirAll(ex.grbDir, 0o755))
-
 	go func() {
 		for {
+			_ = exec.Command("rm", "-rf", ex.grbDir).Run()
+
 			time.Sleep(time.Second)
-
-			entries, err := os.ReadDir(ex.grbDir)
-
-			if err != nil {
-				continue
-			}
-
-			for _, e := range entries {
-				_ = forceRemoveAll(filepath.Join(ex.grbDir, e.Name()))
-			}
 		}
 	}()
 }
