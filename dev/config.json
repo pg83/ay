@@ -1,0 +1,19 @@
+[
+  {
+    "id": "devtools_ymake_bin",
+    "vcs": "arc",
+    "remote": "arcadia",
+    "sha": "976f1514372af5ab20a7be93072b63385792f50b",
+    "command": [
+      "ya",
+      "make",
+      "-j0",
+      "-G",
+      "devtools/ymake/bin"
+    ],
+    "target": "devtools/ymake/bin",
+    "xfail": "auto",
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/12550514800",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/12550515498"
+  }
+]
