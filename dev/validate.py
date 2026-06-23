@@ -20,8 +20,15 @@ All work is a DAG of nodes (one per program invocation) joined on shared files
 and run up to VALIDATE_JOBS concurrently. Fetch nodes are cached; everything
 else always runs.
 
-Usage: validate.py [out-dir]   (default: <repo>/.out/validate)
+Usage: validate.py [out-dir] [case-id...] [--warm] [--cache DIR]
+         out-dir   writable scratch (default: <repo>/.out/validate)
+         case-id   restrict to the named case(s) from config.json
+         --warm    only download+unpack every slice/graph into the cache, so a
+                   swarm of agents can share one warmed cache dir (no gen/compare)
+         --cache   cache dir (default: <repo>/.out/acceptance/cache); also read
+                   from AY_VALIDATE_CACHE_DIR (CLI --cache wins)
 Env:   VALIDATE_JOBS — max concurrent nodes (default: cpu count).
+       AY_VALIDATE_CACHE_DIR — shared cache dir (overridden by --cache).
 """
 import json
 import os
@@ -381,17 +388,39 @@ def compare_action(name, xfail, our_sorted, ref_sorted, out_dir):
 # ---------------------------------------------------------------------------
 
 
+def _fetch_node(fetched, kind, url):
+    """Register (once) a fetch node for the resource behind `url`; return its
+    (dst_dir, ready_marker). `fetched` is keyed by the ready path so a slice or
+    graph shared by several cases is fetched + unpacked exactly once."""
+    rid = resource_id(url)
+    dst = os.path.join(CACHE_DIR, f"{kind}-{rid}")
+    ready = dst + ".ready"
+
+    if ready not in fetched:
+        fetched[ready] = Node(f"fetch-{kind}:{rid}", fetch_action(kind, rid, dst, ready), [AY], [ready])
+
+    return dst, ready
+
+
+def warm_nodes(cases):
+    """Just the build + fetch nodes: download and unpack every slice/graph into
+    the cache so a swarm of agents can share a warmed cache dir."""
+    nodes = [Node("build", build_action, [], [AY])]
+    fetched = {}
+
+    for e in cases:
+        _fetch_node(fetched, "slice", e["slice_url"])
+        _fetch_node(fetched, "graph", e["graph_url"])
+
+    return nodes + list(fetched.values())
+
+
 def build_nodes(out_dir, cases):
     nodes = [Node("build", build_action, [], [AY])]
-    fetched = {}  # ready-path -> Node, so a resource shared by several cases is fetched once
+    fetched = {}
 
     def fetch(kind, url):
-        rid = resource_id(url)
-        dst = os.path.join(CACHE_DIR, f"{kind}-{rid}")
-        ready = dst + ".ready"
-        if ready not in fetched:
-            fetched[ready] = Node(f"fetch-{kind}:{rid}", fetch_action(kind, rid, dst, ready), [AY], [ready])
-        return dst, ready
+        return _fetch_node(fetched, kind, url)
 
     for e in cases:
         cid = e["id"]
@@ -497,21 +526,73 @@ def evaluate(cases, results, out_dir):
 
 
 def main() -> int:
-    out_dir = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(REPO_ROOT, ".out", "validate"))
+    cases = load_config()
+    ids = {e["id"] for e in cases}
+
+    # Args: `--warm` (fetch only), `--cache DIR` (or --cache=DIR), a known case
+    # id selects that case (repeatable), anything else is the out-dir. So
+    # `validate.py <id>` runs one case, `validate.py <out-dir>` keeps the
+    # acceptance contract, `validate.py --warm` warms the whole cache.
+    warm = False
+    cache = None
+    selected, out_dir = [], None
+    argv = sys.argv[1:]
+    i = 0
+
+    while i < len(argv):
+        a = argv[i]
+
+        if a == "--warm":
+            warm = True
+        elif a == "--cache":
+            i += 1
+            cache = argv[i]
+        elif a.startswith("--cache="):
+            cache = a.split("=", 1)[1]
+        elif a in ids:
+            selected.append(a)
+        else:
+            out_dir = a
+
+        i += 1
+
+    global CACHE_DIR, AY, WORK_CWD
+    CACHE_DIR = os.path.abspath(cache or os.environ.get("AY_VALIDATE_CACHE_DIR") or CACHE_DIR)
+
+    out_dir = os.path.abspath(out_dir or os.path.join(REPO_ROOT, ".out", "validate"))
     os.makedirs(out_dir, exist_ok=True)
     os.makedirs(CACHE_DIR, exist_ok=True)
 
-    global AY, WORK_CWD
     AY = os.path.join(out_dir, "ay")
     WORK_CWD = out_dir
 
-    cases = load_config()
+    if selected:
+        cases = [e for e in cases if e["id"] in selected]
 
     if not cases:
         print(f"validate.py: no cases in {CONFIG_PATH}")
         return 0
 
     jobs = int(os.environ.get("VALIDATE_JOBS", os.cpu_count() or 4))
+
+    if warm:
+        nodes = warm_nodes(cases)
+        n_fetch = len(nodes) - 1
+        print(f"[warm] {len(cases)} cases, {n_fetch} resources -> {CACHE_DIR}, jobs={jobs}", flush=True)
+        results = run_graph(nodes, jobs)
+
+        if not results.get("build", {}).get("ok"):
+            print("validate.py: build failed")
+            return 1
+
+        bad = sorted(name for name, r in results.items() if name.startswith("fetch-") and not r.get("ok"))
+        print(f"validate.py: warmed {n_fetch - len(bad)}/{n_fetch} resources into {CACHE_DIR}")
+
+        for name in bad:
+            print(f"  FAILED {name}")
+
+        return 1 if bad else 0
+
     print(f"[graph] {len(cases)} cases, jobs={jobs}", flush=True)
 
     t0 = time.monotonic()
