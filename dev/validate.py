@@ -299,6 +299,37 @@ def fetch_action(kind, rid, dst_dir, ready):
     return action
 
 
+def _relink(target, link):
+    if os.path.islink(link) or os.path.lexists(link):
+        if os.path.isdir(link) and not os.path.islink(link):
+            shutil.rmtree(link)
+        else:
+            os.remove(link)
+
+    os.symlink(target, link)
+
+
+def link_case_action(cid, slice_dir, graph_dir):
+    """Create a stable <cache>/<id>/ dir with `slice` → the repo root (resolved
+    past the untar nesting, where .arcadia.root lives) and `graph` → the ref
+    graph json, so an agent debugging <id> has a fixed path independent of the
+    numeric resource ids."""
+    def action():
+        case_dir = os.path.join(CACHE_DIR, cid)
+        os.makedirs(case_dir, exist_ok=True)
+        _relink(resolve_slice_root(slice_dir), os.path.join(case_dir, "slice"))
+        ref = resolve_ref_raw(graph_dir)
+
+        if ref is not None:
+            _relink(ref, os.path.join(case_dir, "graph"))
+
+        print(f"[link:{cid}] {case_dir}", flush=True)
+
+        return {"ok": ref is not None}
+
+    return action
+
+
 def gen_action(name, command, slice_dir, slice_ready, raw, budget):
     def action():
         cmd = [AY] + command[1:] + ["--source-root", resolve_slice_root(slice_dir)]
@@ -409,8 +440,9 @@ def warm_nodes(cases):
     fetched = {}
 
     for e in cases:
-        _fetch_node(fetched, "slice", e["slice_url"])
-        _fetch_node(fetched, "graph", e["graph_url"])
+        slice_dir, slice_ready = _fetch_node(fetched, "slice", e["slice_url"])
+        graph_dir, graph_ready = _fetch_node(fetched, "graph", e["graph_url"])
+        nodes.append(Node(f"link:{e['id']}", link_case_action(e["id"], slice_dir, graph_dir), [slice_ready, graph_ready], []))
 
     return nodes + list(fetched.values())
 
@@ -437,6 +469,7 @@ def build_nodes(out_dir, cases):
         ref_s = os.path.join(out_dir, f"{cid}.ref.norm.jsonl")
 
         nodes += [
+            Node(f"link:{cid}", link_case_action(cid, slice_dir, graph_dir), [slice_ready, graph_ready], []),
             Node(f"gen:{cid}", gen_action(cid, e["command"], slice_dir, slice_ready, raw, budget), [AY, slice_ready], [raw]),
             Node(f"norm-our:{cid}", normalize_our_action(cid, raw, e["target"], our_u), [AY, raw], [our_u]),
             Node(f"sort-our:{cid}", sort_action(cid, our_u, our_s, "our"), [AY, our_u], [our_s]),
@@ -577,7 +610,7 @@ def main() -> int:
 
     if warm:
         nodes = warm_nodes(cases)
-        n_fetch = len(nodes) - 1
+        n_fetch = sum(1 for n in nodes if n.name.startswith("fetch-"))
         print(f"[warm] {len(cases)} cases, {n_fetch} resources -> {CACHE_DIR}, jobs={jobs}", flush=True)
         results = run_graph(nodes, jobs)
 
@@ -585,8 +618,9 @@ def main() -> int:
             print("validate.py: build failed")
             return 1
 
-        bad = sorted(name for name, r in results.items() if name.startswith("fetch-") and not r.get("ok"))
-        print(f"validate.py: warmed {n_fetch - len(bad)}/{n_fetch} resources into {CACHE_DIR}")
+        bad = sorted(name for name, r in results.items()
+                     if (name.startswith("fetch-") or name.startswith("link:")) and not r.get("ok"))
+        print(f"validate.py: warmed {n_fetch} resources + {len(cases)} case links into {CACHE_DIR}")
 
         for name in bad:
             print(f"  FAILED {name}")
