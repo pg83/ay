@@ -1,9 +1,18 @@
 #!/usr/bin/env python3
-"""provision.py — build a self-contained acceptance slice from a source tree.
+"""provision.py — build a self-contained acceptance case from a source tree.
 
-Given a mounted source tree (arc FUSE working copy or a git checkout) and an
-upstream `ya make` command, produce everything the acceptance gate needs for one
-case, WITHOUT depending on the FUSE mount at gate time:
+Two modes:
+
+  --mount <tree>  arc FUSE working copy: STRACE the upstream `ya make -G` run,
+                  copy a minimal slice (reads + listed dirs + stat-only + build/
+                  + root markers), and verify ya reproduces the same graph off
+                  the slice. The slice does not depend on the FUSE mount.
+
+  --url <zip>     github archive .zip: no slicing — download + store the whole
+                  zip, and build the reference graph by running ya on it.
+
+Both then (with --publish) `ya upload` the slice/zip + reference graph (ttl inf)
+and append a dev/config.json entry.
 
   1. resolve the tree's commit sha,
   2. run upstream `ya make -G <CMD>` under strace, capturing the reference graph
@@ -134,6 +143,17 @@ def resolve_strace(mount, override):
     return "strace"
 
 
+def repo_ya(root, tokens):
+    """Run the repo's own ./ya launcher (pinned to this sha's ymake), not the
+    system ya — a version skew breaks config. Replaces argv[0] and ensures the
+    launcher is executable (zip extraction drops the +x bit)."""
+    ya = os.path.join(root, "ya")
+    if not os.path.isfile(ya):
+        return list(tokens)
+    os.chmod(ya, 0o755)
+    return [ya] + list(tokens[1:])
+
+
 def ya_env():
     """Env for every ya invocation here. YA_TC=no keeps ya from spawning the
     persistent tools-cache daemon — under `strace -f` that daemon never exits,
@@ -154,7 +174,7 @@ def strace_run(mount, ya_cmd, trace_path, graph_path, strace_bin):
     ]
 
     with open(graph_path, "wb") as gf:
-        r = run(strace + ya_cmd, cwd=mount, env=ya_env(), stdout=gf)
+        r = run(strace + repo_ya(mount, ya_cmd), cwd=mount, env=ya_env(), stdout=gf)
 
     if r.returncode != 0:
         raise SystemExit(f"provision: FUSE ya run failed (rc={r.returncode}); see {trace_path}")
@@ -291,7 +311,7 @@ def graph_core(path):
 
 def verify_slice(slice_dir, ya_cmd, graph_slice, graph_fuse):
     with open(graph_slice, "wb") as gf:
-        r = run(ya_cmd, cwd=slice_dir, env=ya_env(), stdout=gf)
+        r = run(repo_ya(slice_dir, ya_cmd), cwd=slice_dir, env=ya_env(), stdout=gf)
 
     if r.returncode != 0:
         raise SystemExit(f"provision: slice ya run failed (rc={r.returncode}) — slice incomplete")
@@ -348,11 +368,12 @@ def find_url(obj):
 
 
 def ya_upload(path, tar, owner, descr):
-    """Upload one artifact eternally (ttl inf) as zstd; return its http link."""
-    cmd = ["ya", "upload", path, "--zstd", "--ttl", "inf",
+    """Upload one artifact eternally (ttl inf); return its http link. tar=True
+    tars+zstd a directory; tar=False uploads a single file as-is (e.g. a zip)."""
+    cmd = ["ya", "upload", path, "--ttl", "inf",
            "--owner", owner, "-d", descr, "--json-output"]
     if tar:
-        cmd.insert(3, "--tar")
+        cmd[3:3] = ["--tar", "--zstd"]
 
     print(f"[provision]   ya upload {os.path.basename(path)} ...", flush=True)
     r = run(cmd, env=ya_env(), capture_output=True, text=True)
@@ -377,17 +398,64 @@ def ya_upload(path, tar, owner, descr):
     return url
 
 
-def append_config(config_path, entry):
-    data = []
-    if os.path.exists(config_path):
-        with open(config_path) as f:
-            data = json.load(f)
+def load_config(config_path):
+    if not os.path.exists(config_path):
+        return []
+    with open(config_path) as f:
+        return json.load(f)
 
-    data = [e for e in data if e.get("id") != entry["id"]] + [entry]
+
+def case_key(e):
+    return (e.get("remote"), e.get("sha"), tuple(e.get("command", [])))
+
+
+def append_config(config_path, entry):
+    data = [e for e in load_config(config_path) if case_key(e) != case_key(entry)]
+
+    ids = {e["id"] for e in data}
+    base, i = entry["id"], 2
+    while entry["id"] in ids:
+        entry["id"] = f"{base}-{i}"
+        i += 1
+
+    data.append(entry)
 
     with open(config_path, "w") as f:
         json.dump(data, f, indent=2)
         f.write("\n")
+
+
+def find_arcadia_root(d):
+    if os.path.exists(os.path.join(d, ".arcadia.root")):
+        return d
+    for root, _dirs, files in os.walk(d):
+        if ".arcadia.root" in files:
+            return root
+    raise SystemExit(f"provision: no .arcadia.root under {d}")
+
+
+def sha_from_url(url, fallback_dir):
+    m = re.search(r"/archive/(?:refs/[^/]+/)?(?P<sha>[0-9a-fA-F]{7,40})\.zip", url)
+    if m:
+        return m.group("sha")
+    return os.path.basename(fallback_dir).rsplit("-", 1)[-1]
+
+
+def download(url, dst):
+    print(f"[provision]   download {url}", flush=True)
+    r = run(["curl", "-fSL", "-o", dst, url])
+    if r.returncode != 0:
+        raise SystemExit(f"provision: download failed (rc={r.returncode}): {url}")
+
+
+def extract_zip(zip_path, dst_dir):
+    import zipfile
+    if os.path.exists(dst_dir):
+        shutil.rmtree(dst_dir)
+    os.makedirs(dst_dir, exist_ok=True)
+    with zipfile.ZipFile(zip_path) as z:
+        z.extractall(dst_dir)
+    return find_arcadia_root(dst_dir)
 
 
 def detect_vcs(mount):
@@ -406,7 +474,8 @@ def resolve_remote(mount, vcs, override):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mount", required=True)
+    ap.add_argument("--mount", default=None, help="arc/git working tree (slicing mode)")
+    ap.add_argument("--url", default=None, help="github archive .zip (no-slice mode: store the whole zip)")
     ap.add_argument("--workspace", required=True)
     ap.add_argument("--id", default=None)
     ap.add_argument("--strace", default=os.environ.get("STRACE"),
@@ -418,7 +487,7 @@ def main():
     ap.add_argument("--config", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json"))
     ap.add_argument("--remote", default=None, help="provenance remote (default: git origin / arcadia)")
     ap.add_argument("--xfail", default="auto", help="gating mode for this case (false|true|auto)")
-    ap.usage = "provision.py --mount M --workspace W [opts] -- ya make <flags> <target>"
+    ap.usage = "provision.py (--mount TREE | --url ZIP) --workspace W [opts] -- ya make <flags> <target>"
 
     # Split on the first `--` ourselves; argparse REMAINDER mishandles `--`
     # once other optionals are present.
@@ -434,47 +503,81 @@ def main():
     if not cmd:
         raise SystemExit("provision: missing `-- ya make <flags> <target>`")
 
-    mount = os.path.abspath(args.mount)
+    if bool(args.mount) == bool(args.url):
+        raise SystemExit("provision: pass exactly one of --mount or --url")
+
     ws = os.path.abspath(args.workspace)
     os.makedirs(ws, exist_ok=True)
 
     ya_cmd, target = split_command(cmd)
     ya_run = run_command(ya_cmd)
-    sha = resolve_sha(mount)
     case_id = args.id or target.replace("/", "_")
-
-    trace = os.path.join(ws, "trace")
     graph_fuse = os.path.join(ws, "graph.fuse.json")
-    slice_dir = os.path.join(ws, "slice")
-    graph_slice = os.path.join(ws, "graph.slice.json")
+    owner = os.environ.get("USER") or "ay"
 
-    print(f"[provision] id={case_id} sha={sha} target={target}", flush=True)
-    print(f"[provision] config cmd: {' '.join(ya_cmd)}", flush=True)
-    print(f"[provision] run cmd:    {' '.join(ya_run)}", flush=True)
+    if args.url:
+        # git: no slicing — store the whole archive, build the ref graph off it.
+        vcs, remote = "git", (args.remote or args.url)
+        zip_path = os.path.join(ws, "repo.zip")
+        repo_dir = os.path.join(ws, "repo")
 
-    if not (args.reuse and os.path.exists(trace) and os.path.exists(graph_fuse)):
-        strace_bin = resolve_strace(mount, args.strace)
-        print(f"[provision] phase 1: strace FUSE run ({strace_bin})", flush=True)
-        strace_run(mount, ya_run, trace, graph_fuse, strace_bin)
+        # same url already uploaded? reuse its repo blob link, rebuild only the graph.
+        reuse_slice = next((e.get("slice_url") for e in load_config(args.config)
+                            if e.get("vcs") == "git" and e.get("remote") == remote and e.get("slice_url")), None)
 
-    print("[provision] phase 2: parse trace", flush=True)
-    reads, listed, exists, links = parse_trace(trace, mount)
-    print(f"[provision]   reads={len(reads)} listed_dirs={len(listed)} stat_only={len(exists)} symlinks={len(links)}", flush=True)
+        root = find_arcadia_root(repo_dir) if (args.reuse and os.path.isdir(repo_dir)) else None
+        if root is None:
+            download(args.url, zip_path)
+            root = extract_zip(zip_path, repo_dir)
+        sha = sha_from_url(args.url, root)
 
-    print("[provision] phase 3: build slice", flush=True)
-    build_slice(mount, slice_dir, reads, listed, exists, links)
-    nfiles = sum(len(fs) for _, _, fs in os.walk(slice_dir))
-    print(f"[provision]   slice files={nfiles}", flush=True)
+        print(f"[provision] id={case_id} sha={sha} target={target} (git, no slice)", flush=True)
+        if reuse_slice:
+            print(f"[provision] reusing repo blob {reuse_slice}", flush=True)
+        print(f"[provision] run cmd: {' '.join(ya_run)}  (root {root})", flush=True)
+        print("[provision] build ref graph", flush=True)
+        with open(graph_fuse, "wb") as gf:
+            rc = run(repo_ya(root, ya_run), cwd=root, env=ya_env(), stdout=gf).returncode
+        if rc != 0:
+            raise SystemExit(f"provision: ya graph build failed (rc={rc})")
 
-    print("[provision] phase 4: verify (ya on slice == FUSE)", flush=True)
-    verify_slice(slice_dir, ya_run, graph_slice, graph_fuse)
-    print("[provision]   slice graph byte-identical to FUSE graph ✓", flush=True)
+        slice_artifact, slice_tar, slice_url = zip_path, False, reuse_slice
+    else:
+        mount = os.path.abspath(args.mount)
+        vcs, remote = detect_vcs(mount), resolve_remote(mount, detect_vcs(mount), args.remote)
+        sha = resolve_sha(mount)
+        trace = os.path.join(ws, "trace")
+        slice_dir = os.path.join(ws, "slice")
+        graph_slice = os.path.join(ws, "graph.slice.json")
 
-    vcs = detect_vcs(mount)
+        print(f"[provision] id={case_id} sha={sha} target={target}", flush=True)
+        print(f"[provision] config cmd: {' '.join(ya_cmd)}", flush=True)
+        print(f"[provision] run cmd:    {' '.join(ya_run)}", flush=True)
+
+        if not (args.reuse and os.path.exists(trace) and os.path.exists(graph_fuse)):
+            strace_bin = resolve_strace(mount, args.strace)
+            print(f"[provision] phase 1: strace FUSE run ({strace_bin})", flush=True)
+            strace_run(mount, ya_run, trace, graph_fuse, strace_bin)
+
+        print("[provision] phase 2: parse trace", flush=True)
+        reads, listed, exists, links = parse_trace(trace, mount)
+        print(f"[provision]   reads={len(reads)} listed_dirs={len(listed)} stat_only={len(exists)} symlinks={len(links)}", flush=True)
+
+        print("[provision] phase 3: build slice", flush=True)
+        build_slice(mount, slice_dir, reads, listed, exists, links)
+        nfiles = sum(len(fs) for _, _, fs in os.walk(slice_dir))
+        print(f"[provision]   slice files={nfiles}", flush=True)
+
+        print("[provision] phase 4: verify (ya on slice == FUSE)", flush=True)
+        verify_slice(slice_dir, ya_run, graph_slice, graph_fuse)
+        print("[provision]   slice graph byte-identical to FUSE graph ✓", flush=True)
+
+        slice_artifact, slice_tar, slice_url = slice_dir, True, None
+
     entry = {
         "id": case_id,
         "vcs": vcs,
-        "remote": resolve_remote(mount, vcs, args.remote),
+        "remote": remote,
         "sha": sha,
         "command": ya_cmd,
         "target": target,
@@ -485,12 +588,11 @@ def main():
         json.dump(entry, f, indent=2)
 
     if not args.publish:
-        print(f"[provision] OK — slice at {slice_dir} (pass --publish to upload + write config)", flush=True)
+        print(f"[provision] OK — artifact at {slice_artifact} (pass --publish to upload + write config)", flush=True)
         return 0
 
     print("[provision] phase 6: upload + config", flush=True)
-    owner = os.environ.get("USER") or "ay"
-    entry["slice_url"] = ya_upload(slice_dir, True, owner, f"ay acceptance slice {case_id} @ {sha}")
+    entry["slice_url"] = slice_url or ya_upload(slice_artifact, slice_tar, owner, f"ay acceptance slice {case_id} @ {sha}")
     entry["graph_url"] = ya_upload(graph_fuse, True, owner, f"ay acceptance ref graph {case_id} @ {sha}")
     append_config(args.config, entry)
 

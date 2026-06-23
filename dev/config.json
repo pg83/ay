@@ -1,19 +1,50 @@
 [
   {
     "id": "devtools_ymake_bin",
-    "vcs": "arc",
-    "remote": "arcadia",
-    "sha": "976f1514372af5ab20a7be93072b63385792f50b",
+    "vcs": "git",
+    "remote": "https://github.com/yandex/yatool/archive/890be997710d6e15d284fe21092e88cc28bfb57a.zip",
+    "sha": "890be997710d6e15d284fe21092e88cc28bfb57a",
     "command": [
       "ya",
       "make",
       "-j0",
       "-G",
+      "--musl",
+      "--host-platform-flag=MUSL=yes",
+      "--target-platform",
+      "default-linux-aarch64",
+      "--sandboxing",
+      "-DOS_SDK=local",
+      "--host-platform-flag=OS_SDK=local",
       "devtools/ymake/bin"
     ],
     "target": "devtools/ymake/bin",
     "xfail": "auto",
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/12550514800",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/12550515498"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/12550817609",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/12550818182"
+  },
+  {
+    "id": "devtools_ya_bin",
+    "vcs": "git",
+    "remote": "https://github.com/yandex/yatool/archive/890be997710d6e15d284fe21092e88cc28bfb57a.zip",
+    "sha": "890be997710d6e15d284fe21092e88cc28bfb57a",
+    "command": [
+      "ya",
+      "make",
+      "-j0",
+      "-G",
+      "--musl",
+      "--host-platform-flag=MUSL=yes",
+      "--target-platform",
+      "default-linux-aarch64",
+      "--sandboxing",
+      "-DOS_SDK=local",
+      "--host-platform-flag=OS_SDK=local",
+      "devtools/ya/bin"
+    ],
+    "target": "devtools/ya/bin",
+    "xfail": "auto",
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/12550817609",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/12550826032"
   }
 ]
