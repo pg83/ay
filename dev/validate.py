@@ -25,6 +25,7 @@ Env:   VALIDATE_JOBS — max concurrent nodes (default: cpu count).
 """
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -270,17 +271,18 @@ def build_action():
     return {"ok": rc == 0}
 
 
-def fetch_action(label, kind, url, dst_dir, ready):
+def fetch_action(kind, rid, dst_dir, ready):
     def action():
         if os.path.exists(ready):
-            print(f"[{label}] {kind} cached", flush=True)
+            print(f"[{kind}:{rid}] cached", flush=True)
             return {"ok": True}
 
-        rid = resource_id(url)
         t = time.monotonic()
+        if os.path.exists(dst_dir):
+            shutil.rmtree(dst_dir)
         os.makedirs(dst_dir, exist_ok=True)
         rc = sh([AY, "fetch", "sandbox", "--resource-id", rid, "--untar-to", dst_dir])
-        print(f"[{label}] fetch {kind} {rid} {time.monotonic() - t:.2f}s", flush=True)
+        print(f"[{kind}:{rid}] fetch {time.monotonic() - t:.2f}s", flush=True)
 
         if rc == 0:
             open(ready, "wb").close()
@@ -381,16 +383,23 @@ def compare_action(name, xfail, our_sorted, ref_sorted, out_dir):
 
 def build_nodes(out_dir, cases):
     nodes = [Node("build", build_action, [], [AY])]
+    fetched = {}  # ready-path -> Node, so a resource shared by several cases is fetched once
+
+    def fetch(kind, url):
+        rid = resource_id(url)
+        dst = os.path.join(CACHE_DIR, f"{kind}-{rid}")
+        ready = dst + ".ready"
+        if ready not in fetched:
+            fetched[ready] = Node(f"fetch-{kind}:{rid}", fetch_action(kind, rid, dst, ready), [AY], [ready])
+        return dst, ready
 
     for e in cases:
         cid = e["id"]
         xfail = e.get("xfail", False)
         budget = e.get("budget")
 
-        slice_dir = os.path.join(CACHE_DIR, "slice-" + resource_id(e["slice_url"]))
-        slice_ready = slice_dir + ".ready"
-        graph_dir = os.path.join(CACHE_DIR, "graph-" + resource_id(e["graph_url"]))
-        graph_ready = graph_dir + ".ready"
+        slice_dir, slice_ready = fetch("slice", e["slice_url"])
+        graph_dir, graph_ready = fetch("graph", e["graph_url"])
 
         raw = os.path.join(out_dir, f"{cid}.our.json")
         our_u = os.path.join(out_dir, f"{cid}.our.norm.unsorted")
@@ -399,8 +408,6 @@ def build_nodes(out_dir, cases):
         ref_s = os.path.join(out_dir, f"{cid}.ref.norm.jsonl")
 
         nodes += [
-            Node(f"fetch-slice:{cid}", fetch_action(cid, "slice", e["slice_url"], slice_dir, slice_ready), [AY], [slice_ready]),
-            Node(f"fetch-graph:{cid}", fetch_action(cid, "graph", e["graph_url"], graph_dir, graph_ready), [AY], [graph_ready]),
             Node(f"gen:{cid}", gen_action(cid, e["command"], slice_dir, slice_ready, raw, budget), [AY, slice_ready], [raw]),
             Node(f"norm-our:{cid}", normalize_our_action(cid, raw, e["target"], our_u), [AY, raw], [our_u]),
             Node(f"sort-our:{cid}", sort_action(cid, our_u, our_s, "our"), [AY, our_u], [our_s]),
@@ -409,7 +416,7 @@ def build_nodes(out_dir, cases):
             Node(f"cmp:{cid}", compare_action(cid, xfail, our_s, ref_s, out_dir), [our_s, ref_s], []),
         ]
 
-    return nodes
+    return nodes + list(fetched.values())
 
 
 def print_debug(cid, e, out_dir):
@@ -438,7 +445,8 @@ def evaluate(cases, results, out_dir):
         cid = e["id"]
         xfail = e.get("xfail", False)
 
-        fetch_ok = all(results.get(f"{step}:{cid}", {}).get("ok") for step in ("fetch-slice", "fetch-graph"))
+        fetch_ok = (results.get(f"fetch-slice:{resource_id(e['slice_url'])}", {}).get("ok")
+                    and results.get(f"fetch-graph:{resource_id(e['graph_url'])}", {}).get("ok"))
         if not fetch_ok:
             print(f"[{cid}] FAIL (fetch)")
             if xfail is not True:
