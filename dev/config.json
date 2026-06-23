@@ -63,5 +63,25 @@
     "xfail": "auto",
     "slice_url": "https://proxy.sandbox.yandex-team.ru/12550868159",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/12550868841"
+  },
+  {
+    "id": "ydb_apps_ydbd",
+    "vcs": "git",
+    "remote": "https://github.com/ydb-platform/ydb/archive/99e6ef53013b6196105a0e05fe92b7f4c3985e6d.zip",
+    "sha": "99e6ef53013b6196105a0e05fe92b7f4c3985e6d",
+    "command": [
+      "ya",
+      "make",
+      "-j0",
+      "-G",
+      "--sandboxing",
+      "--host-platform-flag=OS_SDK=local",
+      "-DOS_SDK=local",
+      "ydb/apps/ydbd"
+    ],
+    "target": "ydb/apps/ydbd",
+    "xfail": "auto",
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/12550902338",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/12550903467"
   }
 ]
