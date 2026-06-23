@@ -25,7 +25,7 @@ func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
 	return build(base + ".asm"), build(base + instance.Platform.objectSuffix())
 }
 
-func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, extraInputs []VFS, extraDepRefs []NodeRef, tc ModuleToolchain, emit Emitter) (NodeRef, VFS, VFS) {
+func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, extraInputs []VFS, extraDepRefs []NodeRef, tc ModuleToolchain, emit *StreamingEmitter) (NodeRef, VFS, VFS) {
 	na := emit.nodeArenas()
 
 	asmVFS, outVFS := composeRodataOutputs(instance, srcRel)

@@ -65,7 +65,7 @@ func vfsStrings(vs []VFS) []string {
 }
 
 func TestEmitAR_LengthMismatchPanics(t *testing.T) {
-	e := newBufferedEmitter()
+	e := newStreamingEmitter(nil, nil)
 
 	objRefs := []NodeRef{e.emit(&Node{
 		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
@@ -175,7 +175,7 @@ func TestArchiveName_AllReferenceAR(t *testing.T) {
 }
 
 func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
-	e := newBufferedEmitter()
+	e := newStreamingEmitter(nil, nil)
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.emit(&Node{
@@ -223,7 +223,7 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 }
 
 func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
-	e := newBufferedEmitter()
+	e := newStreamingEmitter(nil, nil)
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.emit(&Node{
@@ -258,7 +258,7 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 }
 
 func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
-	e := newBufferedEmitter()
+	e := newStreamingEmitter(nil, nil)
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.emit(&Node{
@@ -362,7 +362,7 @@ END()
 }
 
 func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
-	e := newBufferedEmitter()
+	e := newStreamingEmitter(nil, nil)
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.emit(&Node{
@@ -1356,7 +1356,7 @@ func EmitAR(
 	objPaths []VFS,
 	peerArchiveRefs []NodeRef,
 	hostP *Platform,
-	emit Emitter,
+	emit *StreamingEmitter,
 ) NodeRef {
 	if len(objRefs) != len(objPaths) {
 		throwFmt("EmitAR: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))

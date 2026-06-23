@@ -21,7 +21,7 @@ func gperfSymbolName(srcRel string) string {
 	return "-Nin_" + base + "_set"
 }
 
-func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS, gperfLD NodeRef, srcInputs []VFS, emit Emitter) NodeRef {
+func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS, gperfLD NodeRef, srcInputs []VFS, emit *StreamingEmitter) NodeRef {
 	na := emit.nodeArenas()
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}

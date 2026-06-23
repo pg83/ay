@@ -336,7 +336,7 @@ func emitPYRun(
 	extraDepRefs []NodeRef,
 	id NodeRef,
 	tc ModuleToolchain,
-	emit Emitter,
+	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
 

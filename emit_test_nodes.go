@@ -30,7 +30,7 @@ type TestSuiteInfo struct {
 	CppSources  []string
 }
 
-func emitTestRunNodes(ctxEmit Emitter, runEmit Emitter, p *Platform, info TestSuiteInfo, ldRef NodeRef, resourceGlobals []ResourceDecl) []NodeRef {
+func emitTestRunNodes(ctxEmit *StreamingEmitter, runEmit *StreamingEmitter, p *Platform, info TestSuiteInfo, ldRef NodeRef, resourceGlobals []ResourceDecl) []NodeRef {
 	ctxRef := ctxEmit.emit(buildTestCtxNode(ctxEmit.nodeArenas(), p))
 
 	unittest := buildUnittestNode(runEmit.nodeArenas(), p, info, resourceGlobals)

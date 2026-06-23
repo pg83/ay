@@ -211,7 +211,7 @@ func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
 type GenCtx struct {
 	fs      FS
 	parsers *IncludeParserManager
-	emit    Emitter
+	emit    *StreamingEmitter
 
 	onWarn func(Warn)
 
@@ -337,21 +337,11 @@ func reportPerfStats(ctx *GenCtx, parsers *IncludeParserManager, targetScanner, 
 	reportScanner("host", hostScanner)
 }
 
-func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, emitter Emitter, onWarn func(Warn), testMode bool) NodeRef {
+func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), testMode bool) NodeRef {
 	plainEmit := emitter
 	scriptTbl := buildScriptTable(fs)
 
-	var fetchRefs *DenseMap[STR, NodeRef]
-
-	switch e := plainEmit.(type) {
-	case *BufferedEmitter:
-		e.fs = fs
-		fetchRefs = e.fetchRefs
-	case *StreamingEmitter:
-		e.uidScratch.fs = fs
-		e.uidScratch.fetchRefs = e.fetchRefs
-		fetchRefs = e.fetchRefs
-	}
+	fetchRefs := emitter.fetchRefs
 
 	parsers := newIncludeParserManagerFS(fs, newSharedParseCache())
 
@@ -413,18 +403,14 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 }
 
 func genDumpGraphWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), testMode bool) *Graph {
-	emitter := newBufferedEmitter()
-
-	runGenIntoWithResources(fs, targetDir, hostP, targetP, emitter, onWarn, testMode)
-
-	return finalizeDumpGraph(emitter)
-}
-
-func genWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), testMode bool) *Graph {
-	emitter := newBufferedEmitter()
+	emitter := newStreamingEmitter(fs, nil)
 	runGenIntoWithResources(fs, targetDir, hostP, targetP, emitter, onWarn, testMode)
 
 	return finalize(emitter)
+}
+
+func genWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), testMode bool) *Graph {
+	return genDumpGraphWithResources(fs, targetDir, hostP, targetP, onWarn, testMode)
 }
 
 func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {

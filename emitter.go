@@ -1,96 +1,6 @@
 package main
 
-import (
-	"container/heap"
-)
-
 type NodeRef uint32
-
-type Emitter interface {
-	emit(n *Node) NodeRef
-
-	reserve() NodeRef
-
-	emitReserved(n *Node, id NodeRef)
-	result(NodeRef)
-	onReady(NodeRef) <-chan struct{}
-
-	nodeArenas() *NodeArenas
-}
-
-type BufferedEmitter struct {
-	nodes     []*Node
-	results   []NodeRef
-	finalized bool
-
-	fs FS
-
-	fetchRefs *DenseMap[STR, NodeRef]
-	readyCh   chan struct{}
-	na        *NodeArenas
-
-	reserved int
-}
-
-func newBufferedEmitter() *BufferedEmitter {
-	return &BufferedEmitter{
-		readyCh:   make(chan struct{}),
-		na:        newNodeArenas(),
-		fetchRefs: &DenseMap[STR, NodeRef]{},
-	}
-}
-
-func (e *BufferedEmitter) nodeArenas() *NodeArenas {
-	return e.na
-}
-
-func (e *BufferedEmitter) reserve() NodeRef {
-	if e.finalized {
-		panic("BufferedEmitter.reserve called after Finalize")
-	}
-
-	id := NodeRef(len(e.nodes))
-	e.nodes = append(e.nodes, nil)
-	e.reserved++
-
-	return id
-}
-
-func (e *BufferedEmitter) emitReserved(n *Node, id NodeRef) {
-	if e.finalized {
-		panic("BufferedEmitter.emitReserved called after Finalize")
-	}
-
-	if e.nodes[id] != nil {
-		throwFmt("emitReserved: slot %d already filled", id)
-	}
-
-	e.nodes[id] = n
-	e.reserved--
-}
-
-func (e *BufferedEmitter) onReady(_ NodeRef) <-chan struct{} {
-	return e.readyCh
-}
-
-func (e *BufferedEmitter) emit(n *Node) NodeRef {
-	if e.finalized {
-		panic("BufferedEmitter.Emit called after Finalize")
-	}
-
-	id := NodeRef(len(e.nodes))
-	e.nodes = append(e.nodes, n)
-
-	return id
-}
-
-func (e *BufferedEmitter) result(r NodeRef) {
-	if e.finalized {
-		panic("BufferedEmitter.Result called after Finalize")
-	}
-
-	e.results = append(e.results, r)
-}
 
 type Graph struct {
 	Graph  []*Node                `json:"graph"`
@@ -102,131 +12,7 @@ type Graph struct {
 	fetchRefs *DenseMap[STR, NodeRef] `json:"-"`
 }
 
-func finalizeNodesInOrder(e *BufferedEmitter, order []int, yield func(*Node)) *UidVec {
-	if e.finalized {
-		throwFmt("finalize: emitter already finalized")
-	}
-
-	n := len(e.nodes)
-
-	if len(order) != n {
-		throwFmt("finalize: order length %d does not match buffer size %d", len(order), n)
-	}
-
-	uids := &UidVec{}
-	uidScratch := CanonBuf{fs: e.fs, uids: uids, fetchRefs: e.fetchRefs}
-
-	for _, i := range order {
-		node := e.nodes[i]
-		uids.set(NodeRef(i), resolveAndUID(node, uids, &uidScratch))
-
-		if yield != nil {
-			yield(node)
-		}
-	}
-
-	e.finalized = true
-
-	if e.readyCh != nil {
-		close(e.readyCh)
-	}
-
-	return uids
-}
-
-func finalizeOrder(e *BufferedEmitter) []int {
-	if e.finalized {
-		throwFmt("finalize: emitter already finalized")
-	}
-
-	if e.reserved != 0 {
-		throwFmt("finalize: %d reserved node slot(s) left unfilled", e.reserved)
-	}
-
-	n := len(e.nodes)
-
-	checkRef := func(owner int, r NodeRef) {
-		if int(r) >= n {
-			throwFmt("node %d references out-of-range NodeRef id=%d (buffer size %d)", owner, r, n)
-		}
-	}
-
-	for i, node := range e.nodes {
-		for r := range node.buildDeps(e.fetchRefs) {
-			checkRef(i, r)
-		}
-	}
-
-	for i, rid := range e.results {
-		if int(rid) >= n {
-			throwFmt("result %d references out-of-range NodeRef id=%d (buffer size %d)", i, rid, n)
-		}
-	}
-
-	indeg := make([]int, n)
-
-	children := make([][]int, n)
-	addEdge := func(child, parent int) {
-		children[child] = append(children[child], parent)
-		indeg[parent]++
-	}
-
-	for i, node := range e.nodes {
-		seen := make(map[NodeRef]struct{})
-
-		for r := range node.buildDeps(e.fetchRefs) {
-			if _, ok := seen[r]; ok {
-				continue
-			}
-
-			seen[r] = struct{}{}
-			addEdge(int(r), i)
-		}
-	}
-
-	queue := make(IntHeap, 0, n)
-
-	for i := 0; i < n; i++ {
-		if indeg[i] == 0 {
-			queue = append(queue, i)
-		}
-	}
-
-	heap.Init(&queue)
-
-	order := make([]int, 0, n)
-
-	for queue.len() > 0 {
-		i := heap.Pop(&queue).(int)
-		order = append(order, i)
-
-		for _, c := range children[i] {
-			indeg[c]--
-
-			if indeg[c] == 0 {
-				heap.Push(&queue, c)
-			}
-		}
-	}
-
-	if len(order) != n {
-		for i, d := range indeg {
-			if d > 0 {
-				throwFmt("cycle detected involving node %d", i)
-			}
-		}
-
-		throwFmt("cycle detected (could not order all %d nodes; ordered %d)", n, len(order))
-	}
-
-	return order
-}
-
-func finalizeNodes(e *BufferedEmitter, yield func(*Node)) *UidVec {
-	return finalizeNodesInOrder(e, finalizeOrder(e), yield)
-}
-
-func resolveAndUID(node *Node, uids *UidVec, uidScratch *CanonBuf) UID {
+func resolveAndUID(node *Node, uidScratch *CanonBuf) UID {
 	node.Sandboxing = true
 
 	if node.UID != (UID{}) {
@@ -234,8 +20,6 @@ func resolveAndUID(node *Node, uids *UidVec, uidScratch *CanonBuf) UID {
 
 		return node.UID
 	}
-
-	uidScratch.uids = uids
 
 	u := nodeUIDWithBuf(node, uidScratch)
 	node.UID = u
@@ -262,8 +46,8 @@ type StreamingEmitter struct {
 	reserved int
 }
 
-func newStreamingEmitter(onNode func(*Node, *UidVec, *DenseMap[STR, NodeRef])) *StreamingEmitter {
-	return &StreamingEmitter{
+func newStreamingEmitter(fs FS, onNode func(*Node, *UidVec, *DenseMap[STR, NodeRef])) *StreamingEmitter {
+	e := &StreamingEmitter{
 		uids:       &UidVec{},
 		pendingSet: map[NodeRef]bool{},
 		onNode:     onNode,
@@ -271,6 +55,12 @@ func newStreamingEmitter(onNode func(*Node, *UidVec, *DenseMap[STR, NodeRef])) *
 		na:         newNodeArenas(),
 		fetchRefs:  &DenseMap[STR, NodeRef]{},
 	}
+
+	e.uidScratch.fs = fs
+	e.uidScratch.uids = e.uids
+	e.uidScratch.fetchRefs = e.fetchRefs
+
+	return e
 }
 
 func (e *StreamingEmitter) nodeArenas() *NodeArenas {
@@ -323,7 +113,7 @@ func (e *StreamingEmitter) resolveOrPend(n *Node, id NodeRef) {
 		return
 	}
 
-	e.uids.set(id, resolveAndUID(n, e.uids, &e.uidScratch))
+	e.uids.set(id, resolveAndUID(n, &e.uidScratch))
 	e.resolved.add(uint32(id))
 
 	if e.onNode != nil {
@@ -364,7 +154,7 @@ func (e *StreamingEmitter) finish() []UID {
 
 	for _, id := range e.pendingIdx {
 		n := e.nodes[id]
-		e.uids.set(id, resolveAndUID(n, e.uids, &e.uidScratch))
+		e.uids.set(id, resolveAndUID(n, &e.uidScratch))
 		e.resolved.add(uint32(id))
 
 		if e.onNode != nil {
@@ -392,21 +182,21 @@ func (e *StreamingEmitter) finish() []UID {
 	return results
 }
 
-func graphFromFinalizedEmitter(e *BufferedEmitter, uids *UidVec) *Graph {
+func graphFromEmitter(e *StreamingEmitter) *Graph {
 	n := len(e.nodes)
 
 	out := &Graph{
 		Inputs:    map[string]interface{}{},
 		Graph:     make([]*Node, 0, n),
 		Result:    make([]UID, 0, len(e.results)),
-		uids:      uids,
+		uids:      e.uids,
 		fetchRefs: e.fetchRefs,
 	}
 
 	seenResult := map[UID]struct{}{}
 
 	for _, rid := range e.results {
-		u := uids.get(rid)
+		u := e.uids.get(rid)
 
 		if _, ok := seenResult[u]; ok {
 			continue
@@ -420,7 +210,7 @@ func graphFromFinalizedEmitter(e *BufferedEmitter, uids *UidVec) *Graph {
 	var dfsVisit func(id NodeRef)
 	dfsVisit = func(id NodeRef) {
 		node := e.nodes[id]
-		u := uids.get(id)
+		u := e.uids.get(id)
 
 		if _, ok := seenNode[u]; ok {
 			return
@@ -445,10 +235,16 @@ func graphFromFinalizedEmitter(e *BufferedEmitter, uids *UidVec) *Graph {
 	return out
 }
 
-func finalizeGraphInOrder(e *BufferedEmitter, order []int) *Graph {
-	return graphFromFinalizedEmitter(e, finalizeNodesInOrder(e, order, nil))
+func finalize(e *StreamingEmitter) *Graph {
+	if e.finalized {
+		throwFmt("finalize: emitter already finalized")
+	}
+
+	e.finish()
+
+	return graphFromEmitter(e)
 }
 
-func finalize(e *BufferedEmitter) *Graph {
-	return graphFromFinalizedEmitter(e, finalizeNodes(e, nil))
+func finalizeDumpGraph(e *StreamingEmitter) *Graph {
+	return finalize(e)
 }

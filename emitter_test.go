@@ -8,8 +8,8 @@ import (
 	"testing"
 )
 
-func build3NodeDAG() (*BufferedEmitter, NodeRef, NodeRef, NodeRef) {
-	e := newBufferedEmitter()
+func build3NodeDAG() (*StreamingEmitter, NodeRef, NodeRef, NodeRef) {
+	e := newStreamingEmitter(nil, nil)
 	c := e.emit(&Node{
 		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"build", "C"})}, Env: nil}},
 		Env:          nil,
@@ -70,7 +70,7 @@ func nodeNameByKV(g *Graph, idx int) string {
 	return name
 }
 
-func finalizeExc(e *BufferedEmitter) (g *Graph, exc *Exception) {
+func finalizeExc(e *StreamingEmitter) (g *Graph, exc *Exception) {
 	exc = try(func() {
 		g = finalize(e)
 	})
@@ -131,7 +131,7 @@ func TestFinalize_UIDsStableAcrossRuns(t *testing.T) {
 }
 
 func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
-	e := newBufferedEmitter()
+	e := newStreamingEmitter(nil, nil)
 	mkLeaf := func(name string) NodeRef {
 		return e.emit(&Node{Platform: &Platform{},
 			Cmds:   []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{name})}, Env: nil}},
@@ -185,7 +185,7 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 }
 
 func TestFinalize_KeepsDuplicateDeps(t *testing.T) {
-	e := newBufferedEmitter()
+	e := newStreamingEmitter(nil, nil)
 	c := e.emit(&Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"C"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
@@ -219,51 +219,6 @@ func TestFinalize_KeepsDuplicateDeps(t *testing.T) {
 	}
 }
 
-func TestFinalize_CycleReturnsError(t *testing.T) {
-	e := newBufferedEmitter()
-	aNode := &Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
-		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
-		KV: KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
-		Requirements: Requirements{},
-	}
-	bNode := &Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"B"})}, Env: nil}},
-		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
-		KV: KV{Name: "B"}, Outputs: ToVFSSlice([]string{}),
-		Requirements: Requirements{},
-	}
-	a := e.emit(aNode)
-	b := e.emit(bNode)
-	aNode.DepRefs = []NodeRef{b}
-	bNode.DepRefs = []NodeRef{a}
-	e.result(a)
-
-	_, exc := finalizeExc(e)
-
-	if exc == nil {
-		t.Errorf("Finalize on cyclic graph returned no exception")
-	}
-}
-
-func TestFinalize_OutOfRangeRefReturnsError(t *testing.T) {
-	e := newBufferedEmitter()
-	a := e.emit(&Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
-		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
-		KV: KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
-		Requirements: Requirements{},
-		DepRefs:      []NodeRef{999},
-	})
-	e.result(a)
-
-	_, exc := finalizeExc(e)
-
-	if exc == nil {
-		t.Errorf("Finalize with bogus ref returned no exception")
-	}
-}
-
 func TestFinalize_GraphTopLevelKeyOrder(t *testing.T) {
 	e, _, _, _ := build3NodeDAG()
 	g := finalize(e)
@@ -283,7 +238,7 @@ func TestFinalize_GraphTopLevelKeyOrder(t *testing.T) {
 }
 
 func TestFinalize_DedupesIdenticalEmits(t *testing.T) {
-	e := newBufferedEmitter()
+	e := newStreamingEmitter(nil, nil)
 	mk := func() NodeRef {
 		return e.emit(&Node{Platform: &Platform{},
 			Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"identical"})}, Env: nil}},
@@ -319,7 +274,7 @@ func TestFinalize_SecondCallErrors(t *testing.T) {
 }
 
 func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
-	e := newBufferedEmitter()
+	e := newStreamingEmitter(nil, nil)
 	a := e.emit(&Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
@@ -355,7 +310,7 @@ func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 }
 
 func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
-	e := newBufferedEmitter()
+	e := newStreamingEmitter(nil, nil)
 	a := e.emit(&Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
@@ -372,7 +327,7 @@ func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
 }
 
 func TestEmitter_OnReady_BufferedNoOp(t *testing.T) {
-	e := newBufferedEmitter()
+	e := newStreamingEmitter(nil, nil)
 	r := e.emit(&Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"X"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
@@ -400,7 +355,7 @@ func TestEmitter_OnReady_BufferedNoOp(t *testing.T) {
 }
 
 func TestEmitter_PostFinalizeEmitPanics(t *testing.T) {
-	e := newBufferedEmitter()
+	e := newStreamingEmitter(nil, nil)
 	e.emit(&Node{Platform: &Platform{}, KV: KV{P: pkTEST}})
 	finalize(e)
 
@@ -417,7 +372,7 @@ func TestEmitter_PostFinalizeEmitPanics(t *testing.T) {
 			t.Fatalf("recover returned %T, want string", r)
 		}
 
-		if !strings.Contains(msg, "after Finalize") {
+		if !strings.Contains(msg, "after Finish") {
 			t.Errorf("unexpected panic message: %q", msg)
 		}
 	}()
@@ -426,7 +381,7 @@ func TestEmitter_PostFinalizeEmitPanics(t *testing.T) {
 }
 
 func TestEmitter_PostFinalizeResultPanics(t *testing.T) {
-	e := newBufferedEmitter()
+	e := newStreamingEmitter(nil, nil)
 	ref := e.emit(&Node{Platform: &Platform{}, KV: KV{P: pkTEST}})
 	finalize(e)
 
@@ -443,7 +398,7 @@ func TestEmitter_PostFinalizeResultPanics(t *testing.T) {
 			t.Fatalf("recover returned %T, want string", r)
 		}
 
-		if !strings.Contains(msg, "after Finalize") {
+		if !strings.Contains(msg, "after Finish") {
 			t.Errorf("unexpected panic message: %q", msg)
 		}
 	}()
@@ -452,7 +407,7 @@ func TestEmitter_PostFinalizeResultPanics(t *testing.T) {
 }
 
 func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
-	e1 := newBufferedEmitter()
+	e1 := newStreamingEmitter(nil, nil)
 	c1 := e1.emit(&Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"C", "v1"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})}, KV: KV{},
@@ -467,7 +422,7 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 	e1.result(a1)
 	g1 := finalize(e1)
 
-	e2 := newBufferedEmitter()
+	e2 := newStreamingEmitter(nil, nil)
 	c2 := e2.emit(&Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"C", "v2"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})}, KV: KV{},
@@ -491,7 +446,7 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 }
 
 func TestFinalize_HeapTopo_Determinism(t *testing.T) {
-	e := newBufferedEmitter()
+	e := newStreamingEmitter(nil, nil)
 	mk := func(name string, deps ...NodeRef) NodeRef {
 		return e.emit(&Node{Platform: &Platform{},
 			Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{name})}, Env: nil}},

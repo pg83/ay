@@ -147,7 +147,7 @@ func TestEmitPB_PeerRedeclaredOwnNamespaceRidesProtoIncludeBand(t *testing.T) {
 }
 
 func TestEmitPB_ExtraProtocFlags(t *testing.T) {
-	e := newBufferedEmitter()
+	e := newStreamingEmitter(nil, nil)
 	inst := targetInstance("pkg/proto")
 
 	blocks := composePBArgBlocks(testToolchain(),
@@ -187,7 +187,7 @@ func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 }
 
 func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
-	e := newBufferedEmitter()
+	e := newStreamingEmitter(nil, nil)
 	inst := targetInstance("pkg/proto")
 
 	blocks := composePBArgBlocks(testToolchain(),

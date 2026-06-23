@@ -15,7 +15,7 @@ var yasmConstHead = []STR{
 	argReplaceToolRootT.str(),
 }
 
-func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit Emitter) (NodeRef, VFS) {
+func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit *StreamingEmitter) (NodeRef, VFS) {
 	na := emit.nodeArenas()
 
 	outVFS, inVFS := composeASPaths(instance, srcRel, srcVFS, in)
@@ -104,7 +104,7 @@ func composeASIncludes(in ModuleCCInputs) []STR {
 	return out
 }
 
-func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, emit Emitter) (NodeRef, VFS) {
+func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, emit *StreamingEmitter) (NodeRef, VFS) {
 	na := emit.nodeArenas()
 
 	stem := strings.TrimSuffix(srcRel, ".asm")

@@ -201,7 +201,7 @@ func emitEN(
 	depENRefs []NodeRef,
 	headerIncludeClosure []VFS,
 	id NodeRef,
-	emit Emitter,
+	emit *StreamingEmitter,
 ) {
 	na := emit.nodeArenas()
 

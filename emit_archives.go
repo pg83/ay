@@ -23,7 +23,7 @@ func emitArchive(
 	d *ModuleData,
 	toolBinPath VFS,
 	toolLDRef NodeRef,
-	emit Emitter,
+	emit *StreamingEmitter,
 	reg *CodegenRegistry,
 ) {
 	na := emit.nodeArenas()

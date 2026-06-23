@@ -41,7 +41,7 @@ func ragel6OutName(base string) string {
 	return stem + ragel6DefaultOutExt
 }
 
-func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ARG, closure []VFS, id NodeRef, emit Emitter) {
+func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ARG, closure []VFS, id NodeRef, emit *StreamingEmitter) {
 	na := emit.nodeArenas()
 
 	outVFS := ragel6OutVFS(instance, srcRel)

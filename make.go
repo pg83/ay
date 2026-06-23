@@ -286,7 +286,7 @@ func genStream(fs FS, targets []string, hostP, targetP *Platform, onNode func(*N
 }
 
 func genStreamOne(fs FS, target string, hostP, targetP *Platform, onNode func(*Node, *UidVec, *DenseMap[STR, NodeRef]), onWarn func(Warn), testMode bool) []UID {
-	emitter := newStreamingEmitter(onNode)
+	emitter := newStreamingEmitter(fs, onNode)
 	runGenIntoWithResources(fs, target, hostP, targetP, emitter, onWarn, testMode)
 
 	return emitter.finish()

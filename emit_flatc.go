@@ -126,7 +126,7 @@ func flatcDirectGeneratedHeaderIncludes(pm *IncludeParserManager, fs FS, srcRel 
 	return out
 }
 
-func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ARG, transitiveImports []VFS, moduleTag STR, tc ModuleToolchain, emit Emitter, v *flatcVariant, genDeps []NodeRef) (NodeRef, VFS, VFS, VFS) {
+func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ARG, transitiveImports []VFS, moduleTag STR, tc ModuleToolchain, emit *StreamingEmitter, v *flatcVariant, genDeps []NodeRef) (NodeRef, VFS, VFS, VFS) {
 	na := emit.nodeArenas()
 
 	headerVFS := build(srcRel + ".h")

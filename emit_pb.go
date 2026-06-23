@@ -70,7 +70,7 @@ func emitPB(
 	extraDepRefs []NodeRef,
 	producerSourceInputs []VFS,
 	blocks *PbArgBlocks,
-	emit Emitter,
+	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
 
