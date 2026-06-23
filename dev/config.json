@@ -48,23 +48,6 @@
     "graph_url": "https://proxy.sandbox.yandex-team.ru/12550826032"
   },
   {
-    "id": "devtools_ya_bin-2",
-    "vcs": "arc",
-    "remote": "arcadia",
-    "sha": "976f1514372af5ab20a7be93072b63385792f50b",
-    "command": [
-      "ya",
-      "make",
-      "-j0",
-      "-G",
-      "devtools/ya/bin"
-    ],
-    "target": "devtools/ya/bin",
-    "xfail": "auto",
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/12550868159",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/12550868841"
-  },
-  {
     "id": "ydb_apps_ydbd",
     "vcs": "git",
     "remote": "https://github.com/ydb-platform/ydb/archive/99e6ef53013b6196105a0e05fe92b7f4c3985e6d.zip",
