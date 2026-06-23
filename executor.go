@@ -31,22 +31,17 @@ type Executor struct {
 	sema        chan struct{}
 	keepGoing   bool
 	cmdPrefixes []CmdPrefix
-
-	ninja bool
-
-	sandboxing bool
-
-	grbDir string
-
-	mu      sync.Mutex
-	byUID   map[UID]*NodeFuture
-	events  chan func()
-	stats   map[string][]time.Duration
-	pending atomic.Uint64
-	done    atomic.Uint64
-
-	tokenOnce sync.Once
-	token     string
+	ninja       bool
+	sandboxing  bool
+	grbDir      string
+	mu          sync.Mutex
+	byUID       map[UID]*NodeFuture
+	events      chan func()
+	stats       map[string][]time.Duration
+	pending     atomic.Uint64
+	done        atomic.Uint64
+	tokenOnce   sync.Once
+	token       string
 }
 
 func (ex *Executor) sandboxToken() string {

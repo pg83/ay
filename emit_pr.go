@@ -7,19 +7,16 @@ import (
 )
 
 type RunProgramsForARResult struct {
-	CCRefs    []NodeRef
-	CCOutputs []VFS
-
-	Seqs []int
-
+	CCRefs      []NodeRef
+	CCOutputs   []VFS
+	Seqs        []int
 	SecondLevel []bool
 }
 
 type RunProgramAuxTool struct {
-	token string
-	ref   NodeRef
-	bin   VFS
-
+	token  string
+	ref    NodeRef
+	bin    VFS
 	rooted bool
 }
 

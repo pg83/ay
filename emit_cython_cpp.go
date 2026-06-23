@@ -73,12 +73,9 @@ type CythonStmt struct {
 	Generated *string
 	Options   []string
 	CMode     bool
-
-	Header bool
-
+	Header    bool
 	ApiHeader bool
-
-	Pxd string
+	Pxd       string
 }
 
 func cythonNoExt(src string) string {

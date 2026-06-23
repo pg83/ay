@@ -7,9 +7,8 @@ type MemFS struct {
 	rootSlash string
 	files     map[string][]byte
 	dirs      map[string]map[string]bool
-
-	views   map[string]DirView
-	entries *IntMap[bool]
+	views     map[string]DirView
+	entries   *IntMap[bool]
 }
 
 func newMemFS(files map[string]string) *MemFS {

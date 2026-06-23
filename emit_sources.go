@@ -8,8 +8,7 @@ import (
 type SourceEmit struct {
 	Ref     NodeRef
 	OutPath VFS
-
-	Extra []SourceEmit
+	Extra   []SourceEmit
 }
 
 func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {

@@ -6,11 +6,9 @@ import (
 )
 
 type EnumSrcsResult struct {
-	CCRefs    []NodeRef
-	CCOutputs []VFS
-
-	Seqs []int
-
+	CCRefs      []NodeRef
+	CCOutputs   []VFS
+	Seqs        []int
 	SecondLevel []bool
 }
 

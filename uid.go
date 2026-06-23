@@ -22,12 +22,9 @@ func resourceFetchUID(uri, output string) UID {
 }
 
 type CanonBuf struct {
-	buf []byte
-
-	fs FS
-
-	uids *UidVec
-
+	buf       []byte
+	fs        FS
+	uids      *UidVec
 	fetchRefs *DenseMap[STR, NodeRef]
 }
 

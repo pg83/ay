@@ -204,10 +204,9 @@ type ModuleToolchain struct {
 	Objcopy       STR
 	Strip         STR
 	LLDRoot       STR
-
-	ARCmdHead []STR
-	LLD       STR
-	Python3   STR
+	ARCmdHead     []STR
+	LLD           STR
+	Python3       STR
 }
 
 func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolchain {

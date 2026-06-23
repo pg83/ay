@@ -37,12 +37,9 @@ func (set ParsedIncludeSet) bucket(bucket ParsedIncludeBucket) []IncludeDirectiv
 }
 
 type SharedParseCache struct {
-	ambiguous map[uint64]ParsedIncludeSet
-
-	directives *BumpAllocator[IncludeDirective]
-
-	parsed DenseMap[STR, ParsedIncludeSet]
-
+	ambiguous    map[uint64]ParsedIncludeSet
+	directives   *BumpAllocator[IncludeDirective]
+	parsed       DenseMap[STR, ParsedIncludeSet]
 	parsedHits   uint64
 	parsedMisses uint64
 }
@@ -55,15 +52,13 @@ func newSharedParseCache() *SharedParseCache {
 }
 
 type IncludeParserManager struct {
-	fs    FS
-	cache *SharedParseCache
-
+	fs              FS
+	cache           *SharedParseCache
 	scanConfigs     map[uint64]*ScanConfig
 	scanConfigCount uint32
-
-	addinclIndex   DenseMap[STR, []VFS]
-	addinclIndexed BitSet
-	buildParsed    map[VFS][]IncludeDirective
+	addinclIndex    DenseMap[STR, []VFS]
+	addinclIndexed  BitSet
+	buildParsed     map[VFS][]IncludeDirective
 }
 
 type ParserPerfStats struct {

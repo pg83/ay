@@ -41,33 +41,21 @@ func (d IncludeDirective) cythonProbe() bool {
 }
 
 type IncludeScanner struct {
-	sysincl *SysinclCtx
-
-	parsers *IncludeParserManager
-
-	subgraphClosures [][]VFS
-	closureArena     *BumpAllocator[VFS]
-
-	scanCache DenseMap3[STR, []VFS, ClosureRef, bool]
-
-	searchTierFlat *IntValueMap[SearchTierResult]
-	searchTierSeen BitSet
-
-	sourceUnderCache *IntValueMap[VFS]
-
-	childArena *BumpAllocator[VFS]
-
-	spOut      []VFS
-	resolveOut []VFS
-
-	tjc *TarjanCtx
-
-	dfsActive BitSet
-
-	visitedIDPool sync.Pool
-
-	onWarn func(Warn)
-
+	sysincl                *SysinclCtx
+	parsers                *IncludeParserManager
+	subgraphClosures       [][]VFS
+	closureArena           *BumpAllocator[VFS]
+	scanCache              DenseMap3[STR, []VFS, ClosureRef, bool]
+	searchTierFlat         *IntValueMap[SearchTierResult]
+	searchTierSeen         BitSet
+	sourceUnderCache       *IntValueMap[VFS]
+	childArena             *BumpAllocator[VFS]
+	spOut                  []VFS
+	resolveOut             []VFS
+	tjc                    *TarjanCtx
+	dfsActive              BitSet
+	visitedIDPool          sync.Pool
+	onWarn                 func(Warn)
 	walkClosureCalls       uint64
 	subgraphHits           uint64
 	subgraphMisses         uint64
@@ -77,10 +65,8 @@ type IncludeScanner struct {
 	searchTierMisses       uint64
 	resolveSearchPathCalls uint64
 	statsCallCount         uint64
-
-	codegen *CodegenRegistry
-
-	moduleByRef *DenseMap[NodeRef, *ModuleEmitResult]
+	codegen                *CodegenRegistry
+	moduleByRef            *DenseMap[NodeRef, *ModuleEmitResult]
 }
 
 type ScanCtx struct {
@@ -88,8 +74,7 @@ type ScanCtx struct {
 	cfg          ScanContext
 	ctxNum       uint32
 	resolveIndex *CfgResolveIndex
-
-	parser IncludeDirectiveParser
+	parser       IncludeDirectiveParser
 }
 
 type ClosureRef uint32
@@ -170,12 +155,9 @@ type ScanContext struct {
 	OwnAddIncl      []VFS
 	PeerAddInclSet  []VFS
 	BaseSearchPaths []VFS
-
-	OwnerModuleDir string
-
-	OwnerModuleTag STR
-
-	cfg *ScanConfig
+	OwnerModuleDir  string
+	OwnerModuleTag  STR
+	cfg             *ScanConfig
 }
 
 type ScanConfig struct {

@@ -36,23 +36,20 @@ type Cmd struct {
 }
 
 type Node struct {
-	Cache *bool   `json:"cache,omitempty"`
-	Cmds  []Cmd   `json:"cmds"`
-	Env   EnvVars `json:"env"`
-
-	Inputs       InputChunks  `json:"inputs"`
-	KV           KV           `json:"kv"`
-	Outputs      []VFS        `json:"outputs"`
-	Platform     *Platform    `json:"platform"`
-	Requirements Requirements `json:"requirements"`
-	Sandboxing   bool         `json:"sandboxing"`
-	SelfUID      UID          `json:"self_uid"`
-	UID          UID          `json:"uid"`
-
-	DepRefs        []NodeRef `json:"-"`
-	ForeignDepRefs []NodeRef `json:"-"`
-
-	Resources []STR `json:"-"`
+	Cache          *bool        `json:"cache,omitempty"`
+	Cmds           []Cmd        `json:"cmds"`
+	Env            EnvVars      `json:"env"`
+	Inputs         InputChunks  `json:"inputs"`
+	KV             KV           `json:"kv"`
+	Outputs        []VFS        `json:"outputs"`
+	Platform       *Platform    `json:"platform"`
+	Requirements   Requirements `json:"requirements"`
+	Sandboxing     bool         `json:"sandboxing"`
+	SelfUID        UID          `json:"self_uid"`
+	UID            UID          `json:"uid"`
+	DepRefs        []NodeRef    `json:"-"`
+	ForeignDepRefs []NodeRef    `json:"-"`
+	Resources      []STR        `json:"-"`
 }
 
 func (n *Node) buildDeps(fetchRefs *DenseMap[STR, NodeRef]) func(func(NodeRef) bool) {

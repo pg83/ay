@@ -10,79 +10,45 @@ var (
 )
 
 type ModuleCCInputs struct {
-	Flags   FlagSet
-	AddIncl []VFS
-
-	InclArgs InclArgMemo
-
-	CCBlocks *CcModuleArgBlocks
-
-	PeerAddInclGlobal []VFS
-
-	ProtoInclude []VFS
-
-	ProtoIncludePeers []VFS
-	CXXFlags          []ARG
-	COnlyFlags        []ARG
-
-	ClangWarnings []ARG
-
-	ExtraDepRefs []NodeRef
-
-	ScanCfg ScanContext
-
-	SrcDirs []VFS
-
-	FS FS
-
-	IncludeInputs []VFS
-
-	PeerCFlagsGlobal []ARG
-
-	PeerCXXFlagsGlobal []ARG
-
+	Flags                FlagSet
+	AddIncl              []VFS
+	InclArgs             InclArgMemo
+	CCBlocks             *CcModuleArgBlocks
+	PeerAddInclGlobal    []VFS
+	ProtoInclude         []VFS
+	ProtoIncludePeers    []VFS
+	CXXFlags             []ARG
+	COnlyFlags           []ARG
+	ClangWarnings        []ARG
+	ExtraDepRefs         []NodeRef
+	ScanCfg              ScanContext
+	SrcDirs              []VFS
+	FS                   FS
+	IncludeInputs        []VFS
+	PeerCFlagsGlobal     []ARG
+	PeerCXXFlagsGlobal   []ARG
 	PeerCOnlyFlagsGlobal []ARG
-
-	CFlags []ARG
-
-	ModuleScopeCFlags []ARG
-
-	OwnCFlagsGlobal []ARG
-
-	OwnCXXFlagsGlobal []ARG
-
-	OwnCOnlyFlagsGlobal []ARG
-
-	SFlags []ARG
-
-	PerSourceCFlags []ARG
-
-	FlatOutput bool
-
-	DefaultVars     map[STR]STR
-	DefaultVarOrder []STR
-
-	SetVars map[STR]STR
-
-	Py3Suffix bool
-
-	ObjectSuffixStem *string
-
-	ForceCxx bool
-
-	NoOptimize bool
-
-	ModuleTag STR
-
-	Variant *string
-
-	Ragel6Flags []ARG
-
-	BisonFlags []ARG
-
-	BisonGenExt string
-
-	TC ModuleToolchain
+	CFlags               []ARG
+	ModuleScopeCFlags    []ARG
+	OwnCFlagsGlobal      []ARG
+	OwnCXXFlagsGlobal    []ARG
+	OwnCOnlyFlagsGlobal  []ARG
+	SFlags               []ARG
+	PerSourceCFlags      []ARG
+	FlatOutput           bool
+	DefaultVars          map[STR]STR
+	DefaultVarOrder      []STR
+	SetVars              map[STR]STR
+	Py3Suffix            bool
+	ObjectSuffixStem     *string
+	ForceCxx             bool
+	NoOptimize           bool
+	ModuleTag            STR
+	Variant              *string
+	Ragel6Flags          []ARG
+	BisonFlags           []ARG
+	BisonGenExt          string
+	TC                   ModuleToolchain
 }
 
 func emitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit *StreamingEmitter) (NodeRef, VFS, InputChunks) {

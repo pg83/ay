@@ -139,11 +139,9 @@ type AddInclStmt struct {
 	CythonPaths      []STR
 	AsmPaths         []STR
 	ProtoGlobalPaths []STR
-
-	UserGlobalPaths []STR
-
-	AllPaths []STR
-	Line     int
+	UserGlobalPaths  []STR
+	AllPaths         []STR
+	Line             int
 }
 
 type CFlagsStmt struct {
@@ -183,7 +181,6 @@ type GenerateEnumSerializationStmt struct {
 	Header  string
 	Variant string
 	Line    int
-
 	DeclSeq int
 }
 
@@ -207,8 +204,7 @@ type RunProgramStmt struct {
 	OutputIncludes []STR
 	ToolPaths      []STR
 	Line           int
-
-	DeclSeq int
+	DeclSeq        int
 }
 
 type SplitCodegenStmt struct {
@@ -418,8 +414,7 @@ type Expr interface {
 
 type ExprIdent struct {
 	Name string
-
-	Env ENV
+	Env  ENV
 }
 
 type ExprNot struct {
@@ -556,15 +551,13 @@ type Token struct {
 }
 
 type Lexer struct {
-	name string
-	src  []byte
-	pos  int
-	line int
-	col  int
-
+	name     string
+	src      []byte
+	pos      int
+	line     int
+	col      int
 	prevByte byte
-
-	tokBuf []byte
+	tokBuf   []byte
 }
 
 func newLexer(name string, src []byte) *Lexer {
@@ -948,8 +941,7 @@ func parseInternalWithState(fs FS, name string, src []byte, stack []string, incl
 
 type IncludeState struct {
 	once map[string]struct{}
-
-	env Environment
+	env  Environment
 }
 
 func newIncludeState() *IncludeState {

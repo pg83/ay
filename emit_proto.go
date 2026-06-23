@@ -235,27 +235,23 @@ type ProtoPBConfig struct {
 }
 
 type ProtoPBEmission struct {
-	pbRef    NodeRef
-	pbCC     VFS
-	grpcPbCC VFS
-
+	pbRef     NodeRef
+	pbCC      VFS
+	grpcPbCC  VFS
 	orderedCC []VFS
 	relPath   string
 }
 
 type PbModuleEmission struct {
-	protocLDRef        NodeRef
-	cppStyleguideLDRef NodeRef
-	grpcCppLDRef       NodeRef
-
+	protocLDRef         NodeRef
+	cppStyleguideLDRef  NodeRef
+	grpcCppLDRef        NodeRef
 	protocBinary        VFS
 	cppStyleguideBinary VFS
 	grpcCppBinary       VFS
-
-	liteHeaders  bool
-	extraPlugins []ResolvedCPPProtoPlugin
-
-	blocks *PbArgBlocks
+	liteHeaders         bool
+	extraPlugins        []ResolvedCPPProtoPlugin
+	blocks              *PbArgBlocks
 }
 
 func newPBModuleEmission(ctx *GenCtx, d *ModuleData, cfg ProtoPBConfig, protoInclude []VFS) *PbModuleEmission {

@@ -52,13 +52,11 @@ const (
 )
 
 type SysIncl struct {
-	Filter         *SourceFilter
-	KeyBySource    bool
-	HasMultiTarget bool
-
+	Filter          *SourceFilter
+	KeyBySource     bool
+	HasMultiTarget  bool
 	CaseInsensitive bool
-
-	pairs []SysinclPair
+	pairs           []SysinclPair
 }
 
 type SysinclPair struct {
@@ -202,11 +200,9 @@ type SourceFilter struct {
 type FilterAlt struct {
 	excludePrefixes []string
 	literalPrefix   string
-
-	containsLit string
-
-	reGuard string
-	re      *regexp.Regexp
+	containsLit     string
+	reGuard         string
+	re              *regexp.Regexp
 }
 
 func (f *SourceFilter) match(sourcePath string) bool {
