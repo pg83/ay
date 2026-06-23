@@ -10,22 +10,6 @@ type Graph struct {
 	fetchRefs *DenseMap[STR, NodeRef] `json:"-"`
 }
 
-func resolveAndUID(node *Node, uidScratch *CanonBuf) UID {
-	node.Sandboxing = true
-
-	if node.UID != (UID{}) {
-		node.SelfUID = node.UID
-
-		return node.UID
-	}
-
-	u := nodeUIDWithBuf(node, uidScratch)
-	node.UID = u
-	node.SelfUID = u
-
-	return u
-}
-
 type StreamingEmitter struct {
 	nodes      []*Node
 	uids       *UidVec
@@ -36,27 +20,39 @@ type StreamingEmitter struct {
 	onNode     func(*Node, *UidVec, *DenseMap[STR, NodeRef])
 	finalized  bool
 	readyCh    chan struct{}
-	uidScratch CanonBuf
+	fs         FS
+	uidBuf     []byte
 	na         *NodeArenas
 	fetchRefs  *DenseMap[STR, NodeRef]
 	reserved   int
 }
 
 func newStreamingEmitter(fs FS, onNode func(*Node, *UidVec, *DenseMap[STR, NodeRef])) *StreamingEmitter {
-	e := &StreamingEmitter{
+	return &StreamingEmitter{
 		uids:       &UidVec{},
 		pendingSet: map[NodeRef]bool{},
 		onNode:     onNode,
 		readyCh:    make(chan struct{}),
 		na:         newNodeArenas(),
 		fetchRefs:  &DenseMap[STR, NodeRef]{},
+		fs:         fs,
+	}
+}
+
+func (e *StreamingEmitter) resolveAndUID(node *Node) UID {
+	node.Sandboxing = true
+
+	if node.UID != (UID{}) {
+		node.SelfUID = node.UID
+
+		return node.UID
 	}
 
-	e.uidScratch.fs = fs
-	e.uidScratch.uids = e.uids
-	e.uidScratch.fetchRefs = e.fetchRefs
+	u := CanonBuf{fs: e.fs, uids: e.uids, fetchRefs: e.fetchRefs, bufStore: &e.uidBuf}.calcUID(node)
+	node.UID = u
+	node.SelfUID = u
 
-	return e
+	return u
 }
 
 func (e *StreamingEmitter) nodeArenas() *NodeArenas {
@@ -109,7 +105,7 @@ func (e *StreamingEmitter) resolveOrPend(n *Node, id NodeRef) {
 		return
 	}
 
-	e.uids.set(id, resolveAndUID(n, &e.uidScratch))
+	e.uids.set(id, e.resolveAndUID(n))
 	e.resolved.add(uint32(id))
 
 	if e.onNode != nil {
@@ -150,7 +146,7 @@ func (e *StreamingEmitter) finish() []UID {
 
 	for _, id := range e.pendingIdx {
 		n := e.nodes[id]
-		e.uids.set(id, resolveAndUID(n, &e.uidScratch))
+		e.uids.set(id, e.resolveAndUID(n))
 		e.resolved.add(uint32(id))
 
 		if e.onNode != nil {
