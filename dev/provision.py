@@ -429,7 +429,7 @@ def append_config(config_path, entry):
     ids = {e["id"] for e in data}
     base, i = entry["id"], 2
     while entry["id"] in ids:
-        entry["id"] = f"{base}-{i}"
+        entry["id"] = f"{base}_{i}"
         i += 1
 
     data.append(entry)
