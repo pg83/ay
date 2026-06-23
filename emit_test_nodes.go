@@ -59,13 +59,12 @@ func buildTestCtxNode(na *NodeArenas, p *Platform) *Node {
 			argTestsRequestedYes.str(),
 			arg4.str(),
 			arg5.str()))}),
-		Env:              nil,
-		Inputs:           na.inputList(na.vfsList(source(testAppendFileScriptRel))),
-		KV:               KV{P: pkCP, PC: pcLightBlue},
-		Outputs:          na.vfsList(bldCommonTestContext),
-		Requirements:     Requirements{Network: nwRestricted},
-		TargetProperties: TargetProperties{},
-		Resources:        usesPython3,
+		Env:          nil,
+		Inputs:       na.inputList(na.vfsList(source(testAppendFileScriptRel))),
+		KV:           KV{P: pkCP, PC: pcLightBlue},
+		Outputs:      na.vfsList(bldCommonTestContext),
+		Requirements: Requirements{Network: nwRestricted},
+		Resources:    usesPython3,
 	}
 }
 
@@ -148,7 +147,6 @@ func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resource
 			RAM:        8,
 			HasRAMDisk: true,
 		},
-		TargetProperties: TargetProperties{ModuleLang: mlCPP},
 	}
 }
 
@@ -250,7 +248,6 @@ func buildClangFormatNode(na *NodeArenas, p *Platform, info TestSuiteInfo) *Node
 			RAM:        8,
 			HasRAMDisk: true,
 		},
-		TargetProperties: TargetProperties{ModuleLang: mlUnknown},
 	}
 }
 

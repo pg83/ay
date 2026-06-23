@@ -33,13 +33,12 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 				internStr(instance.Path.rel()+"/"+conf.string()),
 				(generatedVFS).str())),
 				Env: env}),
-			Env:              env,
-			Inputs:           na.inputList(inputs),
-			Outputs:          na.vfsList(generatedVFS),
-			KV:               KV{P: pkCH, PC: pcYellow},
-			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-			Resources:        usesPython3,
+			Env:          env,
+			Inputs:       na.inputList(inputs),
+			Outputs:      na.vfsList(generatedVFS),
+			KV:           KV{P: pkCH, PC: pcYellow},
+			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			Resources:    usesPython3,
 		})
 
 		ccIn := in

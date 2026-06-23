@@ -74,8 +74,6 @@ func emitPB(
 ) NodeRef {
 	na := emit.nodeArenas()
 
-	moduleDir := instance.Path.rel()
-
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 
 	pbH := build(protoBase + ".pb.h")
@@ -122,12 +120,6 @@ func emitPB(
 	inputs = append(inputs, pbWrapperVFS)
 	inputs = append(inputs, srcVFS)
 
-	targetProps := TargetProperties{ModuleDir: moduleDir}
-
-	if moduleTag != 0 {
-		targetProps.ModuleTag = moduleTag
-	}
-
 	foreignDepRefs := depRefs(cppStyleguideLDRef, grpcCppLDRef, protocLDRef)
 
 	for _, plugin := range extraPlugins {
@@ -151,14 +143,13 @@ func emitPB(
 			Env: env}),
 		Env: env,
 
-		Inputs:           na.inputList(inputs, transitiveProtoImports, producerSourceInputs),
-		Outputs:          outputs,
-		KV:               KV{P: pkPB, PC: pcYellow},
-		TargetProperties: targetProps,
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:          deps,
-		ForeignDepRefs:   foreignDepRefs,
-		Resources:        usesPython3,
+		Inputs:         na.inputList(inputs, transitiveProtoImports, producerSourceInputs),
+		Outputs:        outputs,
+		KV:             KV{P: pkPB, PC: pcYellow},
+		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		DepRefs:        deps,
+		ForeignDepRefs: foreignDepRefs,
+		Resources:      usesPython3,
 	}
 
 	return emit.emit(node)

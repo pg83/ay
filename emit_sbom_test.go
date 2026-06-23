@@ -108,28 +108,6 @@ func TestSbom_PyOnlyProtoLibraryEmitsNoComponent(t *testing.T) {
 	}
 }
 
-func TestSbom_CppProtoLibraryComponentTagged(t *testing.T) {
-	const protoDir = "contrib/libs/cppproto"
-
-	files := map[string]string{}
-	writeSbomFixture(files)
-
-	files[protoDir+"/ya.make"] = "PROTO_LIBRARY()\nLICENSE(BSD-3-Clause)\nVERSION(1.0)\nNO_LIBC()\nNO_RUNTIME()\nNO_PLATFORM()\nNO_UTIL()\nDISABLE(NEED_GOOGLE_PROTO_PEERDIRS)\nEXCLUDE_TAGS(GO_PROTO)\nSRCS(foo.proto)\nEND()\n"
-	files[protoDir+"/foo.proto"] = "syntax = \"proto3\";\npackage foo;\nmessage Foo { int32 x = 1; }\n"
-
-	files["app/ya.make"] = "PROGRAM(app)\nNO_LIBC()\nNO_RUNTIME()\nNO_PLATFORM()\nNO_UTIL()\nPEERDIR(" + protoDir + ")\nSRCS(m.cpp)\nEND()\n"
-	files["app/m.cpp"] = "int main(){return 0;}\n"
-
-	g := testGenX86(newMemFS(files), "app")
-
-	want := "$(B)/" + protoDir + "/" + realPrjName(protoDir) + ".CPP.component.sbom"
-	n := mustNodeByAnyOutput(t, g, want)
-
-	if got := n.TargetProperties.ModuleTag.string(); got != "cpp_proto" {
-		t.Errorf("CPP_PROTO library SBOM component module_tag = %q, want cpp_proto", got)
-	}
-}
-
 func TestSbom_OrdinaryLibrariesUnchanged(t *testing.T) {
 	const cppDir = "contrib/libs/plaincpp"
 	const pyDir = "contrib/libs/plainpy"

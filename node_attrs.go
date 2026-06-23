@@ -24,15 +24,6 @@ var networkModeStr = [...]string{
 	nwNone: "", nwRestricted: "restricted", nwFull: "full",
 }
 
-var moduleLangStr = [...]string{
-	mlNone: "", mlCPP: "cpp", mlPy3: "py3", mlUnknown: "unknown", mlAgnostic: "agnostic",
-	mlDescProto: "desc_proto", mlProtoDescriptions: "proto_descriptions",
-}
-
-var moduleTypeStr = [...]string{
-	mtNone: "", mtBin: "bin", mtLib: "lib", mtSO: "so",
-}
-
 type EnvVar struct {
 	Name  ENV
 	Value STR
@@ -82,50 +73,6 @@ type Requirements struct {
 
 func (r Requirements) isEmpty() bool {
 	return r.CPU == 0 && r.RAM == 0 && r.Network == nwNone && !r.HasRAMDisk
-}
-
-type ModuleLang uint8
-
-const (
-	mlNone ModuleLang = iota
-	mlCPP
-	mlPy3
-	mlUnknown
-	mlAgnostic
-	mlDescProto
-	mlProtoDescriptions
-)
-
-func (l ModuleLang) string() string {
-	return moduleLangStr[l]
-}
-
-func (l ModuleLang) String() string {
-	return l.string()
-}
-
-type ModuleType uint8
-
-const (
-	mtNone ModuleType = iota
-	mtBin
-	mtLib
-	mtSO
-)
-
-func (t ModuleType) string() string {
-	return moduleTypeStr[t]
-}
-
-func (t ModuleType) String() string {
-	return t.string()
-}
-
-type TargetProperties struct {
-	ModuleDir  string
-	ModuleTag  STR
-	ModuleLang ModuleLang
-	ModuleType ModuleType
 }
 
 type ProcKind uint8
@@ -303,17 +250,6 @@ func appendRequirements(buf []byte, r Requirements) []byte {
 	return append(o.buf, '}')
 }
 
-func appendTargetProperties(buf []byte, t TargetProperties) []byte {
-	o := JsonObj{buf: append(buf, '{')}
-
-	o.str("module_dir", t.ModuleDir)
-	o.str("module_lang", t.ModuleLang.string())
-	o.str("module_tag", t.ModuleTag.string())
-	o.str("module_type", t.ModuleType.string())
-
-	return append(o.buf, '}')
-}
-
 func appendKV(buf []byte, kv KV) []byte {
 	o := JsonObj{buf: append(buf, '{')}
 
@@ -364,12 +300,4 @@ func (r Requirements) marshalJSON() ([]byte, error) {
 
 func (r Requirements) MarshalJSON() ([]byte, error) {
 	return r.marshalJSON()
-}
-
-func (t TargetProperties) marshalJSON() ([]byte, error) {
-	return appendTargetProperties(nil, t), nil
-}
-
-func (t TargetProperties) MarshalJSON() ([]byte, error) {
-	return t.marshalJSON()
 }

@@ -22,24 +22,20 @@ func TestFinalizeDumpGraph_StripsOnlyTicketScaffolding(t *testing.T) {
 		Outputs: []VFS{intern("$(B)/tool-cache/CLANG")},
 	})
 	emit.emit(&Node{Platform: testTargetP,
-		KV:               KV{P: pkPR},
-		Outputs:          []VFS{intern("$(B)/contrib/libs/llvm16/include/llvm/IR/Attributes.inc")},
-		TargetProperties: TargetProperties{ModuleDir: "contrib/libs/llvm16/include"},
+		KV:      KV{P: pkPR},
+		Outputs: []VFS{intern("$(B)/contrib/libs/llvm16/include/llvm/IR/Attributes.inc")},
 	})
 	llvmReferenced := emit.emit(&Node{Platform: testTargetP,
-		KV:               KV{P: pkPR},
-		Outputs:          []VFS{intern("$(B)/contrib/libs/llvm16/include/llvm/IR/IntrinsicsX86.h")},
-		TargetProperties: TargetProperties{ModuleDir: "contrib/libs/llvm16/include"},
+		KV:      KV{P: pkPR},
+		Outputs: []VFS{intern("$(B)/contrib/libs/llvm16/include/llvm/IR/IntrinsicsX86.h")},
 	})
 	emit.emit(&Node{Platform: testTargetP,
-		KV:               KV{P: pkPR},
-		Outputs:          []VFS{intern("$(B)/contrib/libs/llvm16/include/generated.cpp")},
-		TargetProperties: TargetProperties{ModuleDir: "contrib/libs/llvm16/include"},
+		KV:      KV{P: pkPR},
+		Outputs: []VFS{intern("$(B)/contrib/libs/llvm16/include/generated.cpp")},
 	})
 	emit.emit(&Node{Platform: testTargetP,
-		KV:               KV{P: pkPR},
-		Outputs:          []VFS{intern("$(B)/other/module/generated.inc")},
-		TargetProperties: TargetProperties{ModuleDir: "other/module"},
+		KV:      KV{P: pkPR},
+		Outputs: []VFS{intern("$(B)/other/module/generated.inc")},
 	})
 	consumer := emit.emit(&Node{Platform: testTargetP,
 		Cmds:           []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"clang"})}}},
@@ -106,9 +102,8 @@ func TestFinalizeDumpGraph_KeepsMatchingResultNode(t *testing.T) {
 	expected := "contrib/libs/llvm16/include/llvm/IR/Attributes.inc"
 
 	root := emit.emit(&Node{Platform: testTargetP,
-		KV:               KV{P: pkPR},
-		Outputs:          []VFS{build(expected)},
-		TargetProperties: TargetProperties{ModuleDir: "contrib/libs/llvm16/include"},
+		KV:      KV{P: pkPR},
+		Outputs: []VFS{build(expected)},
 	})
 	emit.result(root)
 
@@ -128,15 +123,13 @@ func TestFinalizeDumpGraph_PrunesTransitiveStandaloneLLVM(t *testing.T) {
 	parent := "contrib/libs/llvm16/include/llvm/IR/Parent.inc"
 
 	leafRef := emit.emit(&Node{Platform: testTargetP,
-		KV:               KV{P: pkPR},
-		Outputs:          []VFS{build(leaf)},
-		TargetProperties: TargetProperties{ModuleDir: "contrib/libs/llvm16/include"},
+		KV:      KV{P: pkPR},
+		Outputs: []VFS{build(leaf)},
 	})
 	emit.emit(&Node{Platform: testTargetP,
-		DepRefs:          []NodeRef{leafRef},
-		KV:               KV{P: pkPR},
-		Outputs:          []VFS{build(parent)},
-		TargetProperties: TargetProperties{ModuleDir: "contrib/libs/llvm16/include"},
+		DepRefs: []NodeRef{leafRef},
+		KV:      KV{P: pkPR},
+		Outputs: []VFS{build(parent)},
 	})
 	root := emit.emit(&Node{Platform: testTargetP,
 		KV:      KV{P: pkLD},

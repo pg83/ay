@@ -117,16 +117,15 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, srcRel string, in M
 	}
 
 	ctx.emit.emitReserved(&Node{
-		Platform:         instance.Platform,
-		Cmds:             cmds,
-		DepRefs:          []NodeRef{bisonRef, m4Ref},
-		Env:              env,
-		Inputs:           na.inputList(inputs),
-		Outputs:          na.vfsList(headerVFS, generatedVFS),
-		KV:               KV{P: pkYC, PC: pcLightGreen},
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-		Resources:        usesPython3,
+		Platform:     instance.Platform,
+		Cmds:         cmds,
+		DepRefs:      []NodeRef{bisonRef, m4Ref},
+		Env:          env,
+		Inputs:       na.inputList(inputs),
+		Outputs:      na.vfsList(headerVFS, generatedVFS),
+		KV:           KV{P: pkYC, PC: pcLightGreen},
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		Resources:    usesPython3,
 	}, ycRef)
 }
 

@@ -16,13 +16,12 @@ func emitLJ(instance ModuleInstance, luaSrc, rawOut, compilerBin VFS, compilerLD
 			Cwd:     cwd,
 			Env:     env,
 		}),
-		Env:              env,
-		Inputs:           na.inputList(na.vfsList(compilerBin, luaSrc)),
-		KV:               KV{P: pkLJ, PC: pcLightCyan},
-		Outputs:          na.vfsList(rawOut),
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-		ForeignDepRefs:   depRefs(compilerLDRef),
+		Env:            env,
+		Inputs:         na.inputList(na.vfsList(compilerBin, luaSrc)),
+		KV:             KV{P: pkLJ, PC: pcLightCyan},
+		Outputs:        na.vfsList(rawOut),
+		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		ForeignDepRefs: depRefs(compilerLDRef),
 	}
 
 	return emit.emit(node)

@@ -145,16 +145,6 @@ func emitARNode(
 
 	topEnv := hostP.toolEnv()
 
-	targetProperties := TargetProperties{ModuleDir: instance.Path.rel(), ModuleLang: mlCPP, ModuleType: mtLib}
-
-	if instance.Language == LangPy {
-		targetProperties.ModuleLang = mlPy3
-	}
-
-	if tag != 0 {
-		targetProperties.ModuleTag = tag
-	}
-
 	deps := make([]NodeRef, 0, len(objRefs)+len(peerArchiveRefs))
 	deps = append(deps, objRefs...)
 	deps = append(deps, peerArchiveRefs...)
@@ -163,14 +153,13 @@ func emitARNode(
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Env: cmdEnv}),
-		Env:              topEnv,
-		Inputs:           na.inputList(objPaths, inputTail, extraInputs),
-		KV:               KV{P: pkAR, PC: pcLightRed, ShowOut: true},
-		Outputs:          na.vfsList(archivePath),
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: targetProperties,
-		DepRefs:          deps,
-		Resources:        instance.Platform.UsesPython3Clang,
+		Env:          topEnv,
+		Inputs:       na.inputList(objPaths, inputTail, extraInputs),
+		KV:           KV{P: pkAR, PC: pcLightRed, ShowOut: true},
+		Outputs:      na.vfsList(archivePath),
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		DepRefs:      deps,
+		Resources:    instance.Platform.UsesPython3Clang,
 	}
 
 	return emit.emit(n)

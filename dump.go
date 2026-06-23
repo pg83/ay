@@ -33,7 +33,7 @@ var ldOwnScriptRels = map[string]bool{
 
 var dumpContentFields = []string{
 	"cmds", "env", "inputs", "kv", "outputs",
-	"platform", "requirements", "target_properties",
+	"platform", "requirements",
 }
 
 var objcopyOverEmitExts = map[string]struct{}{
@@ -318,15 +318,14 @@ func canonContent(node *rawNode, refGraph bool) map[string]any {
 	inputs := canonInputs(node, refGraph)
 
 	canon := map[string]any{
-		"cmds":              normRec(orVal(node.Cmds, []any{})),
-		"env":               normRec(orVal(node.Env, map[string]any{})),
-		"inputs":            inputs,
-		"kv":                normRec(orVal(node.Kv, map[string]any{})),
-		"outputs":           normStringsKeepOrder(node.Outputs),
-		"platform":          normPath(node.Platform),
-		"requirements":      normRec(orVal(node.Requirements, map[string]any{})),
-		"sandboxing":        true,
-		"target_properties": normRec(orVal(node.TargetProperties, map[string]any{})),
+		"cmds":         normRec(orVal(node.Cmds, []any{})),
+		"env":          normRec(orVal(node.Env, map[string]any{})),
+		"inputs":       inputs,
+		"kv":           normRec(orVal(node.Kv, map[string]any{})),
+		"outputs":      normStringsKeepOrder(node.Outputs),
+		"platform":     normPath(node.Platform),
+		"requirements": normRec(orVal(node.Requirements, map[string]any{})),
+		"sandboxing":   true,
 	}
 
 	return canon
@@ -348,16 +347,15 @@ func marshalCompact(v any) []byte {
 }
 
 type rawNode struct {
-	UID              string   `json:"uid"`
-	Deps             []string `json:"deps"`
-	Inputs           []string `json:"inputs"`
-	Outputs          []string `json:"outputs"`
-	Platform         string   `json:"platform"`
-	Cmds             any      `json:"cmds"`
-	Env              any      `json:"env"`
-	Kv               any      `json:"kv"`
-	Requirements     any      `json:"requirements"`
-	TargetProperties any      `json:"target_properties"`
+	UID          string   `json:"uid"`
+	Deps         []string `json:"deps"`
+	Inputs       []string `json:"inputs"`
+	Outputs      []string `json:"outputs"`
+	Platform     string   `json:"platform"`
+	Cmds         any      `json:"cmds"`
+	Env          any      `json:"env"`
+	Kv           any      `json:"kv"`
+	Requirements any      `json:"requirements"`
 }
 
 func streamGraphFanout[R any](path string, workers int, process func(*rawNode) R, collect func(R)) {

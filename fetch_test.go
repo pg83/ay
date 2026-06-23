@@ -24,13 +24,12 @@ func emitTestCompileGraph(t *testing.T, host, target *Platform) *Graph {
 			CmdArgs: ArgChunks{appendInternStrs(nil, []string{clangTool, "-c", "$(S)/pkg/app/main.cpp", "-o", "$(B)/pkg/app/main.o"})},
 			Env:     nil,
 		}},
-		Env:              nil,
-		Inputs:           InputChunks{{intern("$(S)/pkg/app/main.cpp")}},
-		KV:               KV{P: pkCC},
-		Outputs:          []VFS{intern("$(B)/pkg/app/main.o")},
-		Requirements:     Requirements{},
-		TargetProperties: TargetProperties{},
-		Resources:        []STR{internStr(resourcePatternClangTool)},
+		Env:          nil,
+		Inputs:       InputChunks{{intern("$(S)/pkg/app/main.cpp")}},
+		KV:           KV{P: pkCC},
+		Outputs:      []VFS{intern("$(B)/pkg/app/main.o")},
+		Requirements: Requirements{},
+		Resources:    []STR{internStr(resourcePatternClangTool)},
 	})
 	execEmit.result(ref)
 

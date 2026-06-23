@@ -43,12 +43,11 @@ func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 		Inputs: na.inputList(na.vfsList(yasmBinaryVFS,
 			rodataScriptVFS,
 			srcVFS), extraInputs),
-		KV:               KV{P: pkRD, PC: pcLightGreen},
-		Outputs:          na.vfsList(asmVFS, outVFS),
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-		ForeignDepRefs:   []NodeRef{yasmLD},
-		Resources:        usesPython3,
+		KV:             KV{P: pkRD, PC: pcLightGreen},
+		Outputs:        na.vfsList(asmVFS, outVFS),
+		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		ForeignDepRefs: []NodeRef{yasmLD},
+		Resources:      usesPython3,
 	}
 
 	if len(extraDepRefs) > 0 {

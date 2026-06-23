@@ -76,19 +76,6 @@ func emitSbomComponent(ctx *GenCtx, instance ModuleInstance, d *ModuleData, real
 	scriptVFS := source(sbomGenScriptRel)
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	var moduleTag STR
-
-	switch d.moduleStmt.Name {
-	case tokPy23Library:
-		moduleTag = tagPy3
-	case tokPy23NativeLibrary:
-		moduleTag = tagPy3Native
-	case tokPy3Program, tokPy3ProgramBin:
-		moduleTag = tagPy3BinLib
-	case tokProtoLibrary:
-		moduleTag = tagCppProto
-	}
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList([]STR{
@@ -100,13 +87,12 @@ func emitSbomComponent(ctx *GenCtx, instance ModuleInstance, d *ModuleData, real
 			strVer, internStr(modver),
 			strLang, internStr(lang),
 		}), Env: env}),
-		Env:              env,
-		Inputs:           na.inputList([]VFS{scriptVFS}),
-		KV:               KV{P: pkDX, PC: pcYellow},
-		Outputs:          na.vfsList(out),
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: moddir, ModuleTag: moduleTag},
-		Resources:        usesPython3,
+		Env:          env,
+		Inputs:       na.inputList([]VFS{scriptVFS}),
+		KV:           KV{P: pkDX, PC: pcYellow},
+		Outputs:      na.vfsList(out),
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		Resources:    usesPython3,
 	}
 
 	ref := ctx.emit.emit(node)
@@ -136,13 +122,12 @@ func emitSbomToolchainComponent(ctx *GenCtx, instance ModuleInstance, toolchainN
 			strToolchainName, internStr(toolchainName),
 			strVer, internStr(ver),
 		}), Env: env}),
-		Env:              env,
-		Inputs:           na.inputList([]VFS{scriptVFS}),
-		KV:               KV{P: pkDX, PC: pcYellow},
-		Outputs:          na.vfsList(out),
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: moddir},
-		Resources:        usesPython3,
+		Env:          env,
+		Inputs:       na.inputList([]VFS{scriptVFS}),
+		KV:           KV{P: pkDX, PC: pcYellow},
+		Outputs:      na.vfsList(out),
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		Resources:    usesPython3,
 	}
 
 	ref := ctx.emit.emit(node)

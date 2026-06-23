@@ -93,19 +93,10 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs InputChunks, outp
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env,
 			Cwd: internStr(cwd)}),
-		Env:     env,
-		Inputs:  inputs,
-		KV:      KV{P: pkJV, PC: pcLightBlue, ShowOut: true},
-		Outputs: outputs,
-		TargetProperties: func() TargetProperties {
-			tp := TargetProperties{ModuleDir: instance.Path.rel()}
-
-			if moduleTag != 0 {
-				tp.ModuleTag = moduleTag
-			}
-
-			return tp
-		}(),
+		Env:          env,
+		Inputs:       inputs,
+		KV:           KV{P: pkJV, PC: pcLightBlue, ShowOut: true},
+		Outputs:      outputs,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      depRefs,
 		Resources:    usesPython3JDK17,

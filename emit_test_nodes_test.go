@@ -80,13 +80,12 @@ func expectedTestCtxNode() *Node {
 				"}",
 			})},
 		}},
-		Env:              nil,
-		Inputs:           InputChunks{{intern("$(S)/build/scripts/append_file.py")}},
-		KV:               KV{P: pkCP, PC: pcLightBlue},
-		Outputs:          []VFS{intern("$(B)/common_test.context")},
-		Platform:         &Platform{Target: "default-linux-x86_64"},
-		Requirements:     Requirements{Network: nwRestricted},
-		TargetProperties: TargetProperties{},
+		Env:          nil,
+		Inputs:       InputChunks{{intern("$(S)/build/scripts/append_file.py")}},
+		KV:           KV{P: pkCP, PC: pcLightBlue},
+		Outputs:      []VFS{intern("$(B)/common_test.context")},
+		Platform:     &Platform{Target: "default-linux-x86_64"},
+		Requirements: Requirements{Network: nwRestricted},
 	}
 }
 
@@ -156,9 +155,8 @@ func expectedUnittestNode(info TestSuiteInfo) *Node {
 			intern("$(B)/util/ut/test-results/unittest/run_test.log"),
 			intern("$(B)/util/ut/test-results/unittest/testing_out_stuff.tar.zstd"),
 		},
-		Platform:         &Platform{Target: "default-linux-x86_64"},
-		Requirements:     Requirements{CPU: 1, Network: nwRestricted, RAM: 8, HasRAMDisk: true},
-		TargetProperties: TargetProperties{ModuleLang: mlCPP},
+		Platform:     &Platform{Target: "default-linux-x86_64"},
+		Requirements: Requirements{CPU: 1, Network: nwRestricted, RAM: 8, HasRAMDisk: true},
 	}
 }
 
@@ -235,9 +233,8 @@ func expectedClangFormatNode() *Node {
 			intern("$(B)/util/ut/test-results/clang_format/run_test.log"),
 			intern("$(B)/util/ut/test-results/clang_format/testing_out_stuff.tar.zstd"),
 		},
-		Platform:         &Platform{Target: "default-linux-x86_64"},
-		Requirements:     Requirements{CPU: 1, Network: nwRestricted, RAM: 8, HasRAMDisk: true},
-		TargetProperties: TargetProperties{ModuleLang: mlUnknown},
+		Platform:     &Platform{Target: "default-linux-x86_64"},
+		Requirements: Requirements{CPU: 1, Network: nwRestricted, RAM: 8, HasRAMDisk: true},
 	}
 }
 
@@ -292,22 +289,17 @@ func assertNodeFields(t *testing.T, name string, got, want *Node) {
 	if !reflect.DeepEqual(got.Requirements, want.Requirements) {
 		t.Fatalf("%s requirements mismatch\n got: %#v\nwant: %#v", name, got.Requirements, want.Requirements)
 	}
-
-	if !reflect.DeepEqual(got.TargetProperties, want.TargetProperties) {
-		t.Fatalf("%s target_properties mismatch\n got: %#v\nwant: %#v", name, got.TargetProperties, want.TargetProperties)
-	}
 }
 
 type CanonicalFixtureNode struct {
-	Cmds             interface{}
-	Env              map[string]interface{}
-	KV               map[string]interface{}
-	Inputs           []string
-	Outputs          []string
-	Platform         string
-	Requirements     map[string]interface{}
-	Tags             []string
-	TargetProperties map[string]interface{}
+	Cmds         interface{}
+	Env          map[string]interface{}
+	KV           map[string]interface{}
+	Inputs       []string
+	Outputs      []string
+	Platform     string
+	Requirements map[string]interface{}
+	Tags         []string
 }
 
 func testUnittestResourceGlobals() []ResourceDecl {
@@ -520,10 +512,6 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 
 		if ccNode == nil {
 			t.Fatalf("missing rebased test-object output %q", spec.output)
-		}
-
-		if ccNode.TargetProperties.ModuleDir != "util/ut" {
-			t.Fatalf("cc module_dir for %q = %q, want util/ut", spec.output, ccNode.TargetProperties.ModuleDir)
 		}
 
 		ccInputs := make([]string, 0, len(ccNode.flatInputs()))

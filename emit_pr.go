@@ -187,22 +187,6 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		}
 	}
 
-	selfConsumes := false
-
-	for _, f := range stmt.OUTFiles {
-		if s := f.string(); isCCSourceExt(s) || isAsmSourceExt(s) {
-			selfConsumes = true
-
-			break
-		}
-	}
-
-	if stmt.StdoutFile != nil && !stmt.StdoutNoAuto {
-		if s := stmt.StdoutFile.string(); isCCSourceExt(s) || isAsmSourceExt(s) {
-			selfConsumes = true
-		}
-	}
-
 	prRef := ctx.emit.reserve()
 
 	registeredPROut := map[VFS]bool{}
@@ -243,10 +227,6 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 		if strings.HasSuffix(out.rel(), ".proto") {
 			reg.setProtoImportRels(out, protoOutputIncludeRels)
-		}
-
-		if selfConsumes {
-			ctx.scannerFor(instance).markGeneratedProducerOwned(out, instance.Path.rel())
 		}
 
 		if out != mainOutputVFS && !ridesHeaderViaParsed {
@@ -522,8 +502,6 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 
 				sub = walkClosureTail(ctx.scannerFor(instance), info.OutputPath, scanIn.ScanCfg)
 				customPR = info.ProducerKvP == pkPR
-
-				ctx.scannerFor(instance).recordNodeClaim(info.ProducerRef, instance.Path.rel())
 			case fullSourceClosure && ctx.fs.isFile(srcRootVFS, target.string()):
 
 				sub = walkClosure(ctx.scannerFor(instance), source(target.string()), scanIn.ScanCfg)
@@ -801,16 +779,15 @@ func emitPR(
 	}
 
 	node := &Node{
-		Platform:         instance.Platform,
-		Cmds:             na.cmdList(cmd),
-		Env:              env,
-		Inputs:           inputs,
-		Outputs:          outputs,
-		KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleTag: moduleTag},
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:          deps,
-		ForeignDepRefs:   foreignDepRefs,
+		Platform:       instance.Platform,
+		Cmds:           na.cmdList(cmd),
+		Env:            env,
+		Inputs:         inputs,
+		Outputs:        outputs,
+		KV:             KV{P: pkPR, PC: pcYellow, ShowOut: true},
+		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		DepRefs:        deps,
+		ForeignDepRefs: foreignDepRefs,
 	}
 
 	emit.emitReserved(node, id)

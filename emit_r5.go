@@ -43,15 +43,14 @@ func emitR5(
 	inputs := []VFS{ragel5BinPath, rlgenCdBinPath, srcVFS}
 
 	node := &Node{
-		Platform:         instance.Platform,
-		Cmds:             na.cmdList(cmd0, cmd1),
-		Env:              env,
-		Inputs:           na.inputList(inputs),
-		Outputs:          na.vfsList(tmpVFS, cppVFS),
-		KV:               KV{P: pkR5, PC: pcYellow},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs:   depRefs(ragel5LD, rlgenCdLD),
+		Platform:       instance.Platform,
+		Cmds:           na.cmdList(cmd0, cmd1),
+		Env:            env,
+		Inputs:         na.inputList(inputs),
+		Outputs:        na.vfsList(tmpVFS, cppVFS),
+		KV:             KV{P: pkR5, PC: pcYellow},
+		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		ForeignDepRefs: depRefs(ragel5LD, rlgenCdLD),
 	}
 
 	return emit.emit(node), tmpVFS, cppVFS

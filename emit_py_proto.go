@@ -307,16 +307,15 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 	}
 
 	pyPBNode := &Node{
-		Platform:         instance.Platform,
-		Cmds:             na.cmdList(Cmd{CmdArgs: cmdArgs, Cwd: protoCwd, Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}}),
-		Env:              EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
-		Inputs:           na.inputList(inputs),
-		Outputs:          outputs,
-		KV:               pbKV,
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleTag: tagPy3Proto},
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:          producerDeps,
-		Resources:        usesPython3,
+		Platform:     instance.Platform,
+		Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Cwd: protoCwd, Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}}),
+		Env:          EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
+		Inputs:       na.inputList(inputs),
+		Outputs:      outputs,
+		KV:           pbKV,
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		DepRefs:      producerDeps,
+		Resources:    usesPython3,
 	}
 
 	if len(toolRefs) > 0 {
@@ -402,16 +401,15 @@ func emitGeneratedPyProtoYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs [
 		}
 
 		node := &Node{
-			Platform:         instance.Platform,
-			Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}}),
-			Env:              EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}},
-			Inputs:           nodeInputs,
-			Outputs:          na.vfsList(out),
-			KV:               KV{P: pkPY, PC: pcYellow},
-			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleTag: tagPy3Proto},
-			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			DepRefs:          deps,
-			Resources:        usesPython3,
+			Platform:     instance.Platform,
+			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}}),
+			Env:          EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}},
+			Inputs:       nodeInputs,
+			Outputs:      na.vfsList(out),
+			KV:           KV{P: pkPY, PC: pcYellow},
+			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			DepRefs:      deps,
+			Resources:    usesPython3,
 		}
 
 		if len(toolRefs) > 0 {
@@ -550,15 +548,14 @@ func emitGeneratedPyProtoObjcopy(ctx *GenCtx, instance ModuleInstance, d *Module
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 		node := &Node{
-			Platform:         instance.Platform,
-			Cmds:             na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
-			Env:              env,
-			Inputs:           na.inputList(rescompilersChunk, cur.inputs, objcopyScriptChunk),
-			Outputs:          na.vfsList(outputObj),
-			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
-			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleTag: tagPy3Proto},
-			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			Resources:        instance.Platform.UsesPython3Clang,
+			Platform:     instance.Platform,
+			Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
+			Env:          env,
+			Inputs:       na.inputList(rescompilersChunk, cur.inputs, objcopyScriptChunk),
+			Outputs:      na.vfsList(outputObj),
+			KV:           KV{P: pkPY, PC: pcYellow, ShowOut: true},
+			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			Resources:    instance.Platform.UsesPython3Clang,
 		}
 
 		node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
@@ -758,15 +755,14 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 		}
 
 		ctx.emit.emitReserved(&Node{
-			Platform:         instance.Platform,
-			Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
-			Env:              env,
-			Inputs:           na.inputList(ch.inputs, tail),
-			Outputs:          na.vfsList(aux),
-			KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
-			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleTag: tagPy3Proto},
-			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			DepRefs:          deps,
+			Platform:     instance.Platform,
+			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
+			Env:          env,
+			Inputs:       na.inputList(ch.inputs, tail),
+			Outputs:      na.vfsList(aux),
+			KV:           KV{P: pkPR, PC: pcYellow, ShowOut: true},
+			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			DepRefs:      deps,
 		}, auxRef)
 
 		ccIn := ModuleCCInputs{

@@ -110,41 +110,6 @@ END()
 	}
 }
 
-func TestGen_ProtoLibraryResourceObjcopyAndGlobalUseCppProtoTag(t *testing.T) {
-	files := map[string]string{}
-	writeToolProgram(files, "contrib/tools/protoc", "protoc")
-	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
-	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
-	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
-	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
-	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
-	writeToolProgram(files, "tools/rescompiler", "rescompiler")
-	writeToolProgram(files, "tools/rescompressor", "rescompressor")
-
-	writeTestModuleFile(files, "px/ya.make",
-		"PROTO_LIBRARY()\nSRCS(foo.proto)\nRESOURCE(px/tree.pb.txt px/tree.pb.txt)\nEXCLUDE_TAGS(GO_PROTO JAVA_PROTO PY_PROTO PY3_PROTO)\nEND()\n")
-	writeTestModuleFile(files, "px/foo.proto", "syntax = \"proto3\";\npackage test;\nmessage Foo { string v = 1; }\n")
-	writeTestModuleFile(files, "px/tree.pb.txt", "stub\n")
-
-	g := testGen(newMemFS(files), "px")
-
-	objcopy := findNodeByOutputPrefix(g, "$(B)/px/objcopy_")
-
-	if objcopy == nil {
-		t.Fatal("graph is missing px objcopy output")
-	}
-
-	if got := objcopy.TargetProperties.ModuleTag.string(); got != "cpp_proto" {
-		t.Fatalf("objcopy module_tag = %q, want cpp_proto", got)
-	}
-
-	global := mustNodeByOutputSuffix(t, g, "/libpx.global.a")
-
-	if got := global.TargetProperties.ModuleTag.string(); got != "cpp_proto_global" {
-		t.Fatalf("global archive module_tag = %q, want cpp_proto_global", got)
-	}
-}
-
 func TestGen_ResourceFilesRootRelativeSourceFromOtherModule(t *testing.T) {
 	files := map[string]string{
 		"contrib/libs/python/ya.make":     "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
@@ -1241,14 +1206,6 @@ END()
 	if mainObjcopy == nil {
 		t.Fatalf("graph is missing the PY_MAIN objcopy: %v", objcopyOutputs(g))
 	}
-
-	if got := resObjcopy.TargetProperties.ModuleTag.string(); got != "py3_bin_lib" {
-		t.Fatalf("RESOURCE objcopy module_tag = %q, want py3_bin_lib", got)
-	}
-
-	if got := mainObjcopy.TargetProperties.ModuleTag.string(); got != "py3_bin" {
-		t.Fatalf("PY_MAIN objcopy module_tag = %q, want py3_bin", got)
-	}
 }
 
 func TestGen_Py3ProgramLDDoesNotDirectlyLinkResourceObjcopy(t *testing.T) {
@@ -1342,7 +1299,7 @@ END()
 			continue
 		}
 
-		if strings.HasSuffix(n.Outputs[0].string(), ".global.a") && n.TargetProperties.ModuleTag.string() == "py3_bin_lib_global" {
+		if strings.HasSuffix(n.Outputs[0].string(), ".global.a") && nodeHasInput(n, resOut) {
 			global = n
 
 			break

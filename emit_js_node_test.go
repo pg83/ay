@@ -15,10 +15,6 @@ func TestEmitJS_UsesRequestedPlatformTags(t *testing.T) {
 	if string(got.Platform.Target) != string(target.Target) {
 		t.Fatalf("JS platform = %q, want %q", string(got.Platform.Target), target.Target)
 	}
-
-	if got.TargetProperties.ModuleDir != "joinmod" {
-		t.Fatalf("JS module_dir = %q, want joinmod", got.TargetProperties.ModuleDir)
-	}
 }
 
 func TestGen_JoinSrcs_EmitsJSAndCC(t *testing.T) {

@@ -16,12 +16,11 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 			argS.str(),
 			decl.URI,
 			output.str()))}),
-		Inputs:           na.inputList(fetchScriptInputs(ctx.scripts)),
-		KV:               KV{P: pkFETCH, PC: pcYellow, ShowOut: true},
-		Outputs:          na.vfsList(output),
-		Requirements:     Requirements{CPU: float64(1), Network: nwFull, RAM: float64(32)},
-		Sandboxing:       true,
-		TargetProperties: TargetProperties{ModuleDir: "build/resources"},
+		Inputs:       na.inputList(fetchScriptInputs(ctx.scripts)),
+		KV:           KV{P: pkFETCH, PC: pcYellow, ShowOut: true},
+		Outputs:      na.vfsList(output),
+		Requirements: Requirements{CPU: float64(1), Network: nwFull, RAM: float64(32)},
+		Sandboxing:   true,
 	}
 
 	node.UID = resourceFetchUID(decl.URI.string(), output.string())

@@ -410,16 +410,15 @@ func emitPYRun(
 	}
 
 	node := &Node{
-		Platform:         instance.Platform,
-		Cmds:             na.cmdList(cmd),
-		Env:              env,
-		Inputs:           inputs,
-		KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
-		Outputs:          outputs,
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:          extraDepRefs,
-		Resources:        usesPython3,
+		Platform:     instance.Platform,
+		Cmds:         na.cmdList(cmd),
+		Env:          env,
+		Inputs:       inputs,
+		KV:           KV{P: pkPY, PC: pcYellow, ShowOut: true},
+		Outputs:      outputs,
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		DepRefs:      extraDepRefs,
+		Resources:    usesPython3,
 	}
 
 	emit.emitReserved(node, id)

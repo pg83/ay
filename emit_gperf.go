@@ -32,15 +32,14 @@ func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS
 	head = append(head, internStr(gperfSymbolName(srcRel)), (srcVFS).str())
 
 	node := &Node{
-		Platform:         instance.Platform,
-		Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(head), Env: env, Stdout: (genVFS).str()}),
-		Env:              env,
-		Inputs:           na.inputList(na.vfsList(gperfBin), srcInputs),
-		Outputs:          na.vfsList(genVFS),
-		KV:               KV{P: pkGP, PC: pcYellow},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs:   depRefs(gperfLD),
+		Platform:       instance.Platform,
+		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(head), Env: env, Stdout: (genVFS).str()}),
+		Env:            env,
+		Inputs:         na.inputList(na.vfsList(gperfBin), srcInputs),
+		Outputs:        na.vfsList(genVFS),
+		KV:             KV{P: pkGP, PC: pcYellow},
+		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		ForeignDepRefs: depRefs(gperfLD),
 	}
 
 	return emit.emit(node)

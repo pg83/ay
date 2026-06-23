@@ -157,10 +157,6 @@ func TestEmitProtoDescriptions_PDProducerShape(t *testing.T) {
 		t.Errorf("PD producer kv.pc = %v, want light-cyan", pd.KV.PC)
 	}
 
-	if pd.TargetProperties.ModuleTag != strDescProtoTag {
-		t.Errorf("PD producer module_tag = %q, want desc_proto", pd.TargetProperties.ModuleTag.string())
-	}
-
 	if len(pd.Outputs) != 2 || pd.Outputs[0].string() != descOut || pd.Outputs[1].string() != rawOut {
 		t.Errorf("PD producer outputs = %v, want [%s %s]", pd.Outputs, descOut, rawOut)
 	}

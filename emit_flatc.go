@@ -148,15 +148,14 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Cwd: strB,
 			Env: env}),
-		Env:              env,
-		DepRefs:          genDeps,
-		ForeignDepRefs:   depRefs(flatcLDRef),
-		Inputs:           na.inputList(na.vfsList(flatcBinary, flatcWrapperVFS, srcVFS), transitiveImports),
-		KV:               KV{P: v.procKind, PC: pcLightGreen},
-		Outputs:          na.vfsList(headerVFS, cppVFS, bfbsVFS),
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleTag: moduleTag},
-		Resources:        usesPython3,
+		Env:            env,
+		DepRefs:        genDeps,
+		ForeignDepRefs: depRefs(flatcLDRef),
+		Inputs:         na.inputList(na.vfsList(flatcBinary, flatcWrapperVFS, srcVFS), transitiveImports),
+		KV:             KV{P: v.procKind, PC: pcLightGreen},
+		Outputs:        na.vfsList(headerVFS, cppVFS, bfbsVFS),
+		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		Resources:      usesPython3,
 	}
 
 	return emit.emit(node), headerVFS, cppVFS, bfbsVFS

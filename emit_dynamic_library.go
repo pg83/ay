@@ -154,17 +154,16 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 	deps = append(deps, ctx.vcsRef)
 
 	n := &Node{
-		Platform:         instance.Platform,
-		Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: strB, Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd3), Env: envVcsOnly}),
-		Env:              envFull,
-		Inputs:           inputs,
-		Outputs:          na.vfsList(build(instance.Path.rel() + "/" + outputName)),
-		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		Sandboxing:       true,
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleLang: mlCPP, ModuleTag: tagDll, ModuleType: mtSO},
-		DepRefs:          deps,
-		Resources:        instance.Platform.UsesLinkResources,
+		Platform:     instance.Platform,
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: strB, Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd3), Env: envVcsOnly}),
+		Env:          envFull,
+		Inputs:       inputs,
+		Outputs:      na.vfsList(build(instance.Path.rel() + "/" + outputName)),
+		KV:           KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		Sandboxing:   true,
+		DepRefs:      deps,
+		Resources:    instance.Platform.UsesLinkResources,
 	}
 
 	n.ForeignDepRefs = depRefs(fixElfRef)

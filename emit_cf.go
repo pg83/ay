@@ -54,22 +54,15 @@ func emitConfigureFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 	cmdArgs := []STR{in.TC.Python3, configureFilePyVFS.str(), srcVFS.str(), outVFS.str()}
 	cmdArgs = appendInternStrs(cmdArgs, buildCFGVars(ctx.fs, srcVFS.rel(), in.SetVars, in.DefaultVars, instance.Platform.BuildTypeUpperSTR.string()))
 
-	tp := TargetProperties{ModuleDir: instance.Path.rel()}
-
-	if tag := cfModuleTag(d, instance); tag != 0 {
-		tp.ModuleTag = tag
-	}
-
 	cfRef := ctx.emit.emit(&Node{
-		Platform:         instance.Platform,
-		Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
-		Env:              env,
-		Inputs:           na.inputList(na.vfsList(configureFilePyVFS), walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)),
-		KV:               KV{P: pkCF, PC: pcYellow},
-		Outputs:          na.vfsList(outVFS),
-		TargetProperties: tp,
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		Resources:        usesPython3,
+		Platform:     instance.Platform,
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
+		Env:          env,
+		Inputs:       na.inputList(na.vfsList(configureFilePyVFS), walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)),
+		KV:           KV{P: pkCF, PC: pcYellow},
+		Outputs:      na.vfsList(outVFS),
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		Resources:    usesPython3,
 	})
 
 	registerBoundGeneratedParsedOutputWithSource(ctx, instance, pkCF, outVFS, srcVFS, cfTemplateParsedIncludes(ctx.parsers, srcVFS.rel()), cfRef, nil)

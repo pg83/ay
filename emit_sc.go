@@ -11,13 +11,12 @@ func emitSC(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary VFS, ru
 			CmdArgs: na.chunkList(na.strList(domschemecBinary.str(), argDashIn.str(), srcVFS.str(), argDashOut.str(), headerVFS.str())),
 			Env:     env,
 		}),
-		Env:              env,
-		Inputs:           na.inputList(na.vfsList(domschemecBinary, srcVFS), runtimeClosure),
-		KV:               KV{P: pkSC, PC: pcYellow},
-		Outputs:          na.vfsList(headerVFS),
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-		ForeignDepRefs:   []NodeRef{domschemecLDRef},
+		Env:            env,
+		Inputs:         na.inputList(na.vfsList(domschemecBinary, srcVFS), runtimeClosure),
+		KV:             KV{P: pkSC, PC: pcYellow},
+		Outputs:        na.vfsList(headerVFS),
+		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		ForeignDepRefs: []NodeRef{domschemecLDRef},
 	}
 
 	return emit.emit(node)

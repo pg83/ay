@@ -41,13 +41,12 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 		Platform: statsPlatform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
-		Env:              env,
-		Inputs:           inputs,
-		KV:               KV{P: pkJS, PC: pcMagenta},
-		Outputs:          na.vfsList(outVFS),
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-		Resources:        usesPython3,
+		Env:          env,
+		Inputs:       inputs,
+		KV:           KV{P: pkJS, PC: pcMagenta},
+		Outputs:      na.vfsList(outVFS),
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		Resources:    usesPython3,
 	}
 
 	return emit.emit(node), outVFS

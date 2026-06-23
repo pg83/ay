@@ -33,23 +33,21 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 
 	e := newBufferedEmitter()
 	leaf := e.emit(&Node{Platform: &Platform{},
-		Cmds:             []Cmd{},
-		Env:              nil,
-		Inputs:           InputChunks{ToVFSSlice([]string{})},
-		KV:               KV{Name: "leaf"},
-		Outputs:          ToVFSSlice([]string{"leaf.o"}),
-		Requirements:     Requirements{},
-		TargetProperties: TargetProperties{},
+		Cmds:         []Cmd{},
+		Env:          nil,
+		Inputs:       InputChunks{ToVFSSlice([]string{})},
+		KV:           KV{Name: "leaf"},
+		Outputs:      ToVFSSlice([]string{"leaf.o"}),
+		Requirements: Requirements{},
 	})
 	main := e.emit(&Node{Platform: &Platform{},
-		Cmds:             []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, trickyArgs)}, Cwd: internStr("$(B)"), Env: EnvVars{{Name: internEnv("FOO"), Value: internStr("bar")}}}},
-		ForeignDepRefs:   []NodeRef{leaf},
-		Env:              EnvVars{{Name: internEnv("PATH"), Value: internStr("/usr/bin")}},
-		Inputs:           InputChunks{ToVFSSlice([]string{"in1"})},
-		KV:               KV{Name: "main", P: pkCC},
-		Outputs:          ToVFSSlice([]string{"main.o"}),
-		Requirements:     Requirements{CPU: 1, RAM: 32, Network: nwRestricted},
-		TargetProperties: TargetProperties{ModuleLang: mlCPP},
+		Cmds:           []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, trickyArgs)}, Cwd: internStr("$(B)"), Env: EnvVars{{Name: internEnv("FOO"), Value: internStr("bar")}}}},
+		ForeignDepRefs: []NodeRef{leaf},
+		Env:            EnvVars{{Name: internEnv("PATH"), Value: internStr("/usr/bin")}},
+		Inputs:         InputChunks{ToVFSSlice([]string{"in1"})},
+		KV:             KV{Name: "main", P: pkCC},
+		Outputs:        ToVFSSlice([]string{"main.o"}),
+		Requirements:   Requirements{CPU: 1, RAM: 32, Network: nwRestricted},
 	})
 	e.result(main)
 	g := finalize(e)

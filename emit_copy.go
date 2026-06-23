@@ -108,16 +108,6 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 
 		deps := resolveCodegenDepRefs(ctx, instance, []VFS{srcVFS}, entries[i].ref)
 
-		if len(deps) > 0 && srcVFS.isBuild() && srcVFS != dstVFS {
-			var ownerTag STR
-
-			if d.moduleStmt != nil {
-				ownerTag = moduleCCTag(d.moduleStmt.Name)
-			}
-
-			scanner.recordFirstClaim(srcVFS, instance.Path.rel(), ownerTag)
-		}
-
 		var closure []VFS
 
 		if moduleInputs != nil && (entry.WithContext || len(entry.OutputIncludes) > 0) {

@@ -52,15 +52,14 @@ func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt, 
 	reg.addClosureLeaf(prefixH, inputIn)
 
 	node := &Node{
-		Platform:         instance.Platform,
-		Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
-		Env:              env,
-		Inputs:           na.inputList(na.vfsList(toolBin, inputIn)),
-		Outputs:          []VFS{prefixCpp, prefixH},
-		KV:               KV{P: pkBC, PC: pcYellow},
-		TargetProperties: TargetProperties{ModuleDir: moduleDir},
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs:   depRefs(toolLDRef),
+		Platform:       instance.Platform,
+		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
+		Env:            env,
+		Inputs:         na.inputList(na.vfsList(toolBin, inputIn)),
+		Outputs:        []VFS{prefixCpp, prefixH},
+		KV:             KV{P: pkBC, PC: pcYellow},
+		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		ForeignDepRefs: depRefs(toolLDRef),
 	}
 
 	ctx.emit.emitReserved(node, bcRef)

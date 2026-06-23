@@ -141,10 +141,6 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		t.Errorf("kv = %+v, want {P:LD PC:light-blue ShowOut:true}", got.KV)
 	}
 
-	if got.TargetProperties.ModuleType != mtBin {
-		t.Errorf("target_properties.module_type = %q, want bin", got.TargetProperties.ModuleType.string())
-	}
-
 	if len(got.DepRefs) != 2 {
 		t.Errorf("DepRefs = %d, want 2", len(got.DepRefs))
 	}

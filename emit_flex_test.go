@@ -53,10 +53,6 @@ END()
 		t.Errorf("LX env = %#v, want [ARCADIA_ROOT_DISTBUILD=$(S)]", lx.Env)
 	}
 
-	if lx.TargetProperties.ModuleDir != "lex" {
-		t.Errorf("LX module_dir = %q, want lex", lx.TargetProperties.ModuleDir)
-	}
-
 	for _, want := range []string{
 		"$(B)/contrib/tools/flex-old/flex",
 		"$(S)/lex/lexer.l",
