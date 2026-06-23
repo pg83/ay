@@ -94,11 +94,12 @@
       "make",
       "-j0",
       "-G",
+      "--sandboxing",
       "yabs/server/daemons/bs_static"
     ],
     "target": "yabs/server/daemons/bs_static",
     "xfail": "auto",
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/12550953602",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/12550954169"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/12551534996",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/12551535753"
   }
 ]
