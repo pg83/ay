@@ -208,6 +208,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 	)
 
 	events := newEventQueue()
+
 	defer events.close()
 
 	onWarn := warnHandler(mf.keepGoing, mf.verbose, func(line string) {
