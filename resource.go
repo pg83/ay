@@ -389,13 +389,12 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 }
 
 type PySrcEntry struct {
-	pathHash  string
-	pathInput VFS
-	key       string
-	kvHash    string
-	kvCmd     string
-	inputDep  VFS
-
+	pathHash    string
+	pathInput   VFS
+	key         string
+	kvHash      string
+	kvCmd       string
+	inputDep    VFS
 	extraInputs []VFS
 }
 
@@ -523,8 +522,7 @@ type PySrcChunk struct {
 	kvsHash  []string
 	kvsCmd   []string
 	pathInps []VFS
-
-	inps []VFS
+	inps     []VFS
 }
 
 func chunkPySrcEntries(entries []PySrcEntry) []PySrcChunk {

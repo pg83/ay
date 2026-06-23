@@ -1,41 +1,26 @@
 package main
 
 type GeneratedFileInfo struct {
-	ProducerKvP ProcKind
-
-	OutputPath VFS
-
-	SourcePath VFS
-
-	IsText bool
-
-	ProducerRef NodeRef
-
-	GeneratorRefs []NodeRef
-
-	SourceInputs []VFS
-
-	CythonInducedPyx []VFS
-
+	ProducerKvP           ProcKind
+	OutputPath            VFS
+	SourcePath            VFS
+	IsText                bool
+	ProducerRef           NodeRef
+	GeneratorRefs         []NodeRef
+	SourceInputs          []VFS
+	CythonInducedPyx      []VFS
 	ProducerSourceClosure []VFS
-
-	ProtoImportRels []string
-
-	CythonMainOut VFS
-
-	ProducerMainOut VFS
-
-	ClosureLeaves []VFS
+	ProtoImportRels       []string
+	CythonMainOut         VFS
+	ProducerMainOut       VFS
+	ClosureLeaves         []VFS
 }
 
 type CodegenRegistry struct {
-	byStr DenseMap[STR, *GeneratedFileInfo]
-
+	byStr           DenseMap[STR, *GeneratedFileInfo]
 	splitPrefixSeen BitSet
-
-	leafEver BitSet
-
-	bySplit *IntMap[*GeneratedFileInfo]
+	leafEver        BitSet
+	bySplit         *IntMap[*GeneratedFileInfo]
 }
 
 func splitKey(prefix VFS, suffix STR) uint64 {

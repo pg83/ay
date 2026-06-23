@@ -9,10 +9,8 @@ type SysinclCtx struct {
 	keyCI    map[string]bool
 	ciGate   BitSet
 	ciMaxLen int
-
-	ciMemo TwoBitSet
-
-	merged *SysinclIndex
+	ciMemo   TwoBitSet
+	merged   *SysinclIndex
 }
 
 func newSysinclCtx(set SysInclSet) *SysinclCtx {
@@ -149,10 +147,9 @@ type SysinclContribution struct {
 }
 
 type SysinclIndex struct {
-	byLower map[string]int32
-	buckets [][]SysinclContribution
-	byID    *IntValueMap[int32]
-
+	byLower    map[string]int32
+	buckets    [][]SysinclContribution
+	byID       *IntValueMap[int32]
 	outScratch []VFS
 }
 

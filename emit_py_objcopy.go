@@ -16,15 +16,13 @@ var (
 )
 
 type ObjcopyEmitResult struct {
-	Refs    []NodeRef
-	Outputs []VFS
-
+	Refs            []NodeRef
+	Outputs         []VFS
 	PySrcTrailCount int
 }
 
 type ObjcopyArgBlocks struct {
-	pre []STR
-
+	pre  []STR
 	post []STR
 }
 
@@ -67,9 +65,8 @@ type resolvedResource struct {
 	Input           VFS
 	ProducerRef     NodeRef
 	ProducerMainOut VFS
-
-	SourceInputs  []VFS
-	SourceClosure []VFS
+	SourceInputs    []VFS
+	SourceClosure   []VFS
 }
 
 func resolveResourceInput(ctx *GenCtx, instance ModuleInstance, rawPath string, fallback VFS) resolvedResource {

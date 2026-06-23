@@ -3,12 +3,10 @@ package main
 type NodeRef uint32
 
 type Graph struct {
-	Graph  []*Node                `json:"graph"`
-	Inputs map[string]interface{} `json:"inputs"`
-	Result []UID                  `json:"result"`
-
-	uids *UidVec `json:"-"`
-
+	Graph     []*Node                 `json:"graph"`
+	Inputs    map[string]interface{}  `json:"inputs"`
+	Result    []UID                   `json:"result"`
+	uids      *UidVec                 `json:"-"`
 	fetchRefs *DenseMap[STR, NodeRef] `json:"-"`
 }
 
@@ -40,10 +38,8 @@ type StreamingEmitter struct {
 	readyCh    chan struct{}
 	uidScratch CanonBuf
 	na         *NodeArenas
-
-	fetchRefs *DenseMap[STR, NodeRef]
-
-	reserved int
+	fetchRefs  *DenseMap[STR, NodeRef]
+	reserved   int
 }
 
 func newStreamingEmitter(fs FS, onNode func(*Node, *UidVec, *DenseMap[STR, NodeRef])) *StreamingEmitter {

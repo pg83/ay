@@ -121,10 +121,9 @@ type PyPBModuleEmission struct {
 	mypyRef      NodeRef
 	grpcPyBinary VFS
 	mypyBinary   VFS
-
-	head []STR
-	mid  []STR
-	tail []STR
+	head         []STR
+	mid          []STR
+	tail         []STR
 }
 
 func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, protocBinary VFS, protoInclude []VFS, duplicateOutputRootInclude bool) *PyPBModuleEmission {
@@ -458,12 +457,9 @@ func pyProtoAuxEntriesForSource(instance ModuleInstance, d *ModuleData, src stri
 }
 
 type GenProtoResEntry struct {
-	token string
-
-	key string
-
-	output VFS
-
+	token    string
+	key      string
+	output   VFS
 	producer NodeRef
 }
 

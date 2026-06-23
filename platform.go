@@ -21,59 +21,40 @@ func confCompressesDebug(fs FS) bool {
 }
 
 type Platform struct {
-	OS     OS
-	ISA    ISA
-	Target PlatformID
-
-	Flags map[ENV]STR
-
-	PIC            bool
-	BuildType      string
-	BuildRelease   bool
-	BuildSanitized bool
-
-	RagelOptimized bool
-
-	Triple string
-	March  string
-
-	MultiarchLibPathSTR STR
-
-	TargetArg STR
-
-	MarchArgs []ARG
-
-	CFlags   []ARG
-	CXXFlags []ARG
-
-	DebugInfoFlags []ARG
-	CompileCFlags  []ARG
-
+	OS                    OS
+	ISA                   ISA
+	Target                PlatformID
+	Flags                 map[ENV]STR
+	PIC                   bool
+	BuildType             string
+	BuildRelease          bool
+	BuildSanitized        bool
+	RagelOptimized        bool
+	Triple                string
+	March                 string
+	MultiarchLibPathSTR   STR
+	TargetArg             STR
+	MarchArgs             []ARG
+	CFlags                []ARG
+	CXXFlags              []ARG
+	DebugInfoFlags        []ARG
+	CompileCFlags         []ARG
 	CompressDebugSections bool
-
-	SystemLibs       []STR
-	LinkPreludeExtra []STR
-
-	ClangVer string
-
-	ClangVerSTR       STR
-	BuildTypeUpperSTR STR
-
-	WrapccHead []STR
-	WrapccTail []STR
-
-	CCUsesResources   []STR
-	UsesPython3Clang  []STR
-	UsesLinkResources []STR
-	UsesClangOnly     []STR
-
-	ToolEnvVars EnvVars
-
-	CCHead []STR
-
-	SysrootArgs []STR
-
-	UsesSDKRoot bool
+	SystemLibs            []STR
+	LinkPreludeExtra      []STR
+	ClangVer              string
+	ClangVerSTR           STR
+	BuildTypeUpperSTR     STR
+	WrapccHead            []STR
+	WrapccTail            []STR
+	CCUsesResources       []STR
+	UsesPython3Clang      []STR
+	UsesLinkResources     []STR
+	UsesClangOnly         []STR
+	ToolEnvVars           EnvVars
+	CCHead                []STR
+	SysrootArgs           []STR
+	UsesSDKRoot           bool
 }
 
 func platformUsesSDKRoot(os OS, flags map[string]string) bool {

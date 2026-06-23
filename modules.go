@@ -37,16 +37,13 @@ var allocatorPeers = map[string][]string{
 }
 
 type CppProtoPlugin struct {
-	Name           string
-	ToolPath       string
-	OutputSuffixes []string
-	Deps           []string
-	ExtraOutFlag   string
-
-	Experimental []string
-
-	Files []string
-
+	Name                      string
+	ToolPath                  string
+	OutputSuffixes            []string
+	Deps                      []string
+	ExtraOutFlag              string
+	Experimental              []string
+	Files                     []string
 	DeclaredBeforeLiteHeaders bool
 }
 
@@ -114,162 +111,128 @@ func protoCmdPeers(d *ModuleData) []STR {
 }
 
 type ModuleData struct {
-	moduleStmt    *ModuleStmt
-	modver        string
-	hasLicense    bool
-	hasBisonY     bool
-	toolchainName string
-	srcs          []STR
-
-	srcExtraFlat []SrcFlatEntry
-	globalSrcs   []STR
-	pySrcs       []STR
-
-	pySrcsFullName     []bool
-	pySrcGroups        []PySrcGroup
-	pyPyiResources     []ResourceEntry
-	pyBuildNoPYC       bool
-	pyBuildNoPY        bool
-	pyTopLevel         bool
-	noExtendedPySearch bool
-	enumSrcs           []*GenerateEnumSerializationStmt
-	peerdirs           []STR
-
-	protoCmdPeers      []STR
-	joinSrcs           []*JoinSrcsStmt
-	addIncl            []VFS
-	addInclP           []prioVFS
-	addInclGlobal      []VFS
-	addInclOneLevel    []VFS
-	addInclUserGlobal  []VFS
-	cfAddIncl          []VFS
-	cfAddInclGlobal    []VFS
-	cythonAddIncl      []VFS
-	asmAddIncl         []VFS
-	protoAddInclGlobal []VFS
-	unhandledMacros    map[STR][]STR
-	llvmBc             []*LlvmBcStmt
-	cFlags             []ARG
-	cFlagsGlobal       []ARG
-	cxxFlags           []ARG
-	cxxFlagsGlobal     []ARG
-	cOnlyFlags         []ARG
-	cOnlyFlagsGlobal   []ARG
-	sFlags             []ARG
-	protocFlags        []ARG
-	flatcFlags         []ARG
-
-	clangWarnings    []ARG
-	ldFlags          []ARG
-	rpathFlagsGlobal []ARG
-	objAddLibsGlobal []ARG
-
-	srcDirs             []VFS
-	flags               FlagSet
-	hadAllocator        bool
-	allocatorName       STR
-	muslLite            bool
-	muslEnabled         bool
-	useArcadiaLibm      bool
-	splitDwarf          bool
-	noPythonIncl        bool
-	noImportTracing     bool
-	usePython3          bool
-	useCommonGoogleAPIs bool
-	moduleScopeCFlags   []ARG
-	pythonSQLite3       bool
-	pyNamespace         *STR
-	protoNamespace      *STR
-
-	ymapsSprotoSrcs     []STR
-	noMypy              bool
-	noOptimize          bool
-	optimizePyProtos    bool
-	optimizePyProtosSet bool
-
-	needGoogleProtoPeerdirs bool
-	cppProtoPlugins         []CppProtoPlugin
-	excludeTags             map[STR]bool
-	dynamicLibraryFrom      []STR
-	exportsScript           *STR
-	ldPlugins               []STR
-	arPlugin                *STR
-
-	perSrcCFlags map[STR][]ARG
-
-	hasFbs bool
-
-	hasFbs64 bool
-
-	defaultVars map[STR]STR
-
-	defaultVarOrder    []STR
-	configureFiles     []*ConfigureFileStmt
-	createBuildInfoFor *STR
-	antlr4Grammars     []Antlr4GrammarInfo
-	antlrRuns          []AntlrRunInfo
-	runPrograms        []*RunProgramStmt
-	decimalMD5         []*DecimalMD5Lower32BitsStmt
-	splitCodegens      []*SplitCodegenStmt
-	baseCodegens       []*BaseCodegenStmt
-	runPython          []*RunPythonStmt
-	fromSandboxes      []*FromSandboxStmt
-	checkConfigHeaders []STR
-	cythonCpp          []*CythonStmt
-
+	moduleStmt               *ModuleStmt
+	modver                   string
+	hasLicense               bool
+	hasBisonY                bool
+	toolchainName            string
+	srcs                     []STR
+	srcExtraFlat             []SrcFlatEntry
+	globalSrcs               []STR
+	pySrcs                   []STR
+	pySrcsFullName           []bool
+	pySrcGroups              []PySrcGroup
+	pyPyiResources           []ResourceEntry
+	pyBuildNoPYC             bool
+	pyBuildNoPY              bool
+	pyTopLevel               bool
+	noExtendedPySearch       bool
+	enumSrcs                 []*GenerateEnumSerializationStmt
+	peerdirs                 []STR
+	protoCmdPeers            []STR
+	joinSrcs                 []*JoinSrcsStmt
+	addIncl                  []VFS
+	addInclP                 []prioVFS
+	addInclGlobal            []VFS
+	addInclOneLevel          []VFS
+	addInclUserGlobal        []VFS
+	cfAddIncl                []VFS
+	cfAddInclGlobal          []VFS
+	cythonAddIncl            []VFS
+	asmAddIncl               []VFS
+	protoAddInclGlobal       []VFS
+	unhandledMacros          map[STR][]STR
+	llvmBc                   []*LlvmBcStmt
+	cFlags                   []ARG
+	cFlagsGlobal             []ARG
+	cxxFlags                 []ARG
+	cxxFlagsGlobal           []ARG
+	cOnlyFlags               []ARG
+	cOnlyFlagsGlobal         []ARG
+	sFlags                   []ARG
+	protocFlags              []ARG
+	flatcFlags               []ARG
+	clangWarnings            []ARG
+	ldFlags                  []ARG
+	rpathFlagsGlobal         []ARG
+	objAddLibsGlobal         []ARG
+	srcDirs                  []VFS
+	flags                    FlagSet
+	hadAllocator             bool
+	allocatorName            STR
+	muslLite                 bool
+	muslEnabled              bool
+	useArcadiaLibm           bool
+	splitDwarf               bool
+	noPythonIncl             bool
+	noImportTracing          bool
+	usePython3               bool
+	useCommonGoogleAPIs      bool
+	moduleScopeCFlags        []ARG
+	pythonSQLite3            bool
+	pyNamespace              *STR
+	protoNamespace           *STR
+	ymapsSprotoSrcs          []STR
+	noMypy                   bool
+	noOptimize               bool
+	optimizePyProtos         bool
+	optimizePyProtosSet      bool
+	needGoogleProtoPeerdirs  bool
+	cppProtoPlugins          []CppProtoPlugin
+	excludeTags              map[STR]bool
+	dynamicLibraryFrom       []STR
+	exportsScript            *STR
+	ldPlugins                []STR
+	arPlugin                 *STR
+	perSrcCFlags             map[STR][]ARG
+	hasFbs                   bool
+	hasFbs64                 bool
+	defaultVars              map[STR]STR
+	defaultVarOrder          []STR
+	configureFiles           []*ConfigureFileStmt
+	createBuildInfoFor       *STR
+	antlr4Grammars           []Antlr4GrammarInfo
+	antlrRuns                []AntlrRunInfo
+	runPrograms              []*RunProgramStmt
+	decimalMD5               []*DecimalMD5Lower32BitsStmt
+	splitCodegens            []*SplitCodegenStmt
+	baseCodegens             []*BaseCodegenStmt
+	runPython                []*RunPythonStmt
+	fromSandboxes            []*FromSandboxStmt
+	checkConfigHeaders       []STR
+	cythonCpp                []*CythonStmt
 	cythonNumpyBeforeInclude bool
 	swigC                    []SwigSrc
 	bisonGenExt              STR
 	grpc                     bool
 	yaConfJSON               []STR
 	allPySrcs                []*UnknownStmt
-
-	archives []ArchiveEntry
-
-	archiveAsm []ArchiveAsmEntry
-
-	lj21 *Lj21Archive
-
-	copyFiles []CopyFileEntry
-
-	copyFileAutoOutputs map[STR]CopyFileEntry
-	flatSrcs            map[STR]struct{}
-
-	srcMeta   map[STR]SrcMeta
-	declSeq   int
-	resources []ResourceEntry
-
-	bundles []BundleEntry
-
-	pyMain *STR
-
-	noStrip bool
-
-	programPairedLib bool
-
-	noCheckImports []STR
-
-	noCheckImportsDisabled bool
-
-	pyRegister []STR
-
-	pyRegisterExplicit []bool
-
-	simdSrcs []SimdSrc
-
-	ragel6Flags []ARG
-	bisonFlags  []ARG
-	conflictMod *ModuleStmt
-
-	resourceDeclStmts []*DeclareResourceStmt
-
-	primaryOutput string
-
-	inducedDeps ParsedIncludeSet
-
-	setVars map[STR]STR
-
-	tc ModuleToolchain
+	archives                 []ArchiveEntry
+	archiveAsm               []ArchiveAsmEntry
+	lj21                     *Lj21Archive
+	copyFiles                []CopyFileEntry
+	copyFileAutoOutputs      map[STR]CopyFileEntry
+	flatSrcs                 map[STR]struct{}
+	srcMeta                  map[STR]SrcMeta
+	declSeq                  int
+	resources                []ResourceEntry
+	bundles                  []BundleEntry
+	pyMain                   *STR
+	noStrip                  bool
+	programPairedLib         bool
+	noCheckImports           []STR
+	noCheckImportsDisabled   bool
+	pyRegister               []STR
+	pyRegisterExplicit       []bool
+	simdSrcs                 []SimdSrc
+	ragel6Flags              []ARG
+	bisonFlags               []ARG
+	conflictMod              *ModuleStmt
+	resourceDeclStmts        []*DeclareResourceStmt
+	primaryOutput            string
+	inducedDeps              ParsedIncludeSet
+	setVars                  map[STR]STR
+	tc                       ModuleToolchain
 }
 
 func (d *ModuleData) perSrcCFlagsFor(src STR) *[]ARG {
@@ -300,10 +263,9 @@ const (
 )
 
 type SrcMeta struct {
-	Prio      int
-	Seq       int
-	Generated bool
-
+	Prio        int
+	Seq         int
+	Generated   bool
 	SecondLevel bool
 }
 
@@ -358,9 +320,8 @@ type BundleEntry struct {
 }
 
 type ResourceEntry struct {
-	Path string
-	Key  string
-
+	Path      string
+	Key       string
 	EndsBatch bool
 }
 
@@ -377,12 +338,10 @@ type SrcFlatEntry struct {
 }
 
 type ArchiveEntry struct {
-	Name         string
-	DontCompress bool
-	Files        []string
-
-	Keys []string
-
+	Name                   string
+	DontCompress           bool
+	Files                  []string
+	Keys                   []string
 	PropagateSourceMembers bool
 }
 
@@ -397,11 +356,10 @@ type Lj21Archive struct {
 }
 
 type CopyFileEntry struct {
-	Src         string
-	Dst         string
-	Auto        bool
-	WithContext bool
-
+	Src            string
+	Dst            string
+	Auto           bool
+	WithContext    bool
 	Text           bool
 	OutputIncludes []string
 }
@@ -2332,8 +2290,7 @@ type LlvmBcStmt struct {
 	Symbols             []string
 	GenerateMachineCode bool
 	NoCompile           bool
-
-	ClangBCRoot string
+	ClangBCRoot         string
 }
 
 func isLlvmBcKeyword(s string) bool {

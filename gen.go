@@ -120,72 +120,49 @@ var acknowledgedTokSet = func() BitSet {
 }()
 
 type ModuleEmitResult struct {
-	ARRef      NodeRef
-	ARPath     *VFS
-	isPROGRAM  bool
-	LDRef      NodeRef
-	LDPath     *VFS
-	GlobalRef  *NodeRef
-	GlobalPath *VFS
-
-	WholeArchiveRefs  []NodeRef
-	WholeArchivePaths []VFS
-
-	WholeArchiveCmdPaths []VFS
-
-	AddInclGlobal []VFS
-
-	OwnAddInclGlobal []VFS
-
-	ProtoInclude []VFS
-
-	AddInclOneLevel []VFS
-
-	AddInclUserGlobal []VFS
-
-	CFlagsGlobal     []ARG
-	CXXFlagsGlobal   []ARG
-	COnlyFlagsGlobal []ARG
-	ObjAddLibsGlobal []ARG
-
-	LDFlagsGlobal []ARG
-
-	RPathFlagsGlobal []ARG
-
-	PeerArchiveClosureRefs  []NodeRef
-	PeerArchiveClosurePaths []VFS
-
-	isPyLibrary bool
-
-	PeerGlobalClosureRefs  []NodeRef
-	PeerGlobalClosurePaths []VFS
-
+	ARRef                           NodeRef
+	ARPath                          *VFS
+	isPROGRAM                       bool
+	LDRef                           NodeRef
+	LDPath                          *VFS
+	GlobalRef                       *NodeRef
+	GlobalPath                      *VFS
+	WholeArchiveRefs                []NodeRef
+	WholeArchivePaths               []VFS
+	WholeArchiveCmdPaths            []VFS
+	AddInclGlobal                   []VFS
+	OwnAddInclGlobal                []VFS
+	ProtoInclude                    []VFS
+	AddInclOneLevel                 []VFS
+	AddInclUserGlobal               []VFS
+	CFlagsGlobal                    []ARG
+	CXXFlagsGlobal                  []ARG
+	COnlyFlagsGlobal                []ARG
+	ObjAddLibsGlobal                []ARG
+	LDFlagsGlobal                   []ARG
+	RPathFlagsGlobal                []ARG
+	PeerArchiveClosureRefs          []NodeRef
+	PeerArchiveClosurePaths         []VFS
+	isPyLibrary                     bool
+	PeerGlobalClosureRefs           []NodeRef
+	PeerGlobalClosurePaths          []VFS
 	PeerWholeArchiveClosureRefs     []NodeRef
 	PeerWholeArchiveClosurePaths    []VFS
 	PeerWholeArchiveCmdClosurePaths []VFS
-
-	LDPluginRefs  []NodeRef
-	LDPluginPaths []VFS
-
-	PeerDynamicClosureRefs  []NodeRef
-	PeerDynamicClosurePaths []VFS
-
-	SbomComponentRef     *NodeRef
-	SbomComponentPath    *VFS
-	PeerSbomClosureRefs  []NodeRef
-	PeerSbomClosurePaths []VFS
-
-	InducedDeps ParsedIncludeSet
-
-	Peerdirs []STR
-
-	ModuleStmtName TOK
-
-	testSuiteInfo *TestSuiteInfo
-
-	DescClosure []DescProtoPeer
-
-	ResourceGlobalClosure []ResourceDecl
+	LDPluginRefs                    []NodeRef
+	LDPluginPaths                   []VFS
+	PeerDynamicClosureRefs          []NodeRef
+	PeerDynamicClosurePaths         []VFS
+	SbomComponentRef                *NodeRef
+	SbomComponentPath               *VFS
+	PeerSbomClosureRefs             []NodeRef
+	PeerSbomClosurePaths            []VFS
+	InducedDeps                     ParsedIncludeSet
+	Peerdirs                        []STR
+	ModuleStmtName                  TOK
+	testSuiteInfo                   *TestSuiteInfo
+	DescClosure                     []DescProtoPeer
+	ResourceGlobalClosure           []ResourceDecl
 }
 
 func stringPtr(s string) *string {
@@ -209,45 +186,30 @@ func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
 }
 
 type GenCtx struct {
-	fs      FS
-	parsers *IncludeParserManager
-	emit    *StreamingEmitter
-
-	onWarn func(Warn)
-
-	na *NodeArenas
-
+	fs              FS
+	parsers         *IncludeParserManager
+	emit            *StreamingEmitter
+	onWarn          func(Warn)
+	na              *NodeArenas
 	inclArgValues   DenseMap[VFS, STR]
 	inclArgs        InclArgMemo
 	memo            *IntValueMap[*ModuleEmitResult]
 	walking         map[ModuleInstance]bool
 	cyclesTolerated int
-
-	traceStack []string
-
-	scannerTarget *IncludeScanner
-	scannerHost   *IncludeScanner
-
-	moduleByRef DenseMap[NodeRef, *ModuleEmitResult]
-
-	tools DenseMap[ARG, *ModuleEmitResult]
-
-	scripts ScriptDeps
-
-	fetchRefs *DenseMap[STR, NodeRef]
-
-	host   *Platform
-	target *Platform
-
-	vcsRef NodeRef
-
-	testMode bool
-
-	sbomEnabled bool
-
-	autoincludeIdx *AutoincludeIndex
-
-	tarjan TarjanCtx
+	traceStack      []string
+	scannerTarget   *IncludeScanner
+	scannerHost     *IncludeScanner
+	moduleByRef     DenseMap[NodeRef, *ModuleEmitResult]
+	tools           DenseMap[ARG, *ModuleEmitResult]
+	scripts         ScriptDeps
+	fetchRefs       *DenseMap[STR, NodeRef]
+	host            *Platform
+	target          *Platform
+	vcsRef          NodeRef
+	testMode        bool
+	sbomEnabled     bool
+	autoincludeIdx  *AutoincludeIndex
+	tarjan          TarjanCtx
 }
 
 type ScanCtxPerfStats struct {
@@ -2436,34 +2398,28 @@ func mergeLDPlugins(own, peer *LdPluginsResult) *LdPluginsResult {
 }
 
 type PeerGlobalContribs struct {
-	addIncl      []VFS
-	protoInclude []VFS
-	cFlags       []ARG
-	cxxFlags     []ARG
-	cOnlyFlags   []ARG
-	objAddLibs   []ARG
-	ldFlags      []ARG
-	rpathFlags   []ARG
-
-	archiveRefs  []NodeRef
-	archivePaths []VFS
-
-	globalRefs  []NodeRef
-	globalPaths []VFS
-
+	addIncl              []VFS
+	protoInclude         []VFS
+	cFlags               []ARG
+	cxxFlags             []ARG
+	cOnlyFlags           []ARG
+	objAddLibs           []ARG
+	ldFlags              []ARG
+	rpathFlags           []ARG
+	archiveRefs          []NodeRef
+	archivePaths         []VFS
+	globalRefs           []NodeRef
+	globalPaths          []VFS
 	wholeArchiveRefs     []NodeRef
 	wholeArchivePaths    []VFS
 	wholeArchiveCmdPaths []VFS
-
-	ldPluginRefs  []NodeRef
-	ldPluginPaths []VFS
-	dynamicRefs   []NodeRef
-	dynamicPaths  []VFS
-
-	sbomRefs  []NodeRef
-	sbomPaths []VFS
-
-	resourceGlobals []ResourceDecl
+	ldPluginRefs         []NodeRef
+	ldPluginPaths        []VFS
+	dynamicRefs          []NodeRef
+	dynamicPaths         []VFS
+	sbomRefs             []NodeRef
+	sbomPaths            []VFS
+	resourceGlobals      []ResourceDecl
 }
 
 func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleData) PeerGlobalContribs {

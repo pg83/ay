@@ -7,22 +7,16 @@ import (
 )
 
 type OsFS struct {
-	srcRoot   string
-	rootSlash string
-
-	dirs DenseMap[STR, DirView]
-
-	dirNames   *BumpAllocator[uint32]
-	dirEntries *IntMap[bool]
-
+	srcRoot       string
+	rootSlash     string
+	dirs          DenseMap[STR, DirView]
+	dirNames      *BumpAllocator[uint32]
+	dirEntries    *IntMap[bool]
 	contentHashes []uint64
 	readBuf       []byte
-
-	direntBuf []byte
-
-	rootFD  int
-	pathBuf []byte
-
+	direntBuf     []byte
+	rootFD        int
+	pathBuf       []byte
 	listdirHits   uint64
 	listdirMisses uint64
 	existsHits    uint64
