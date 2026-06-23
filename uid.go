@@ -6,9 +6,10 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-func nodeUIDWithBuf(n *Node, c *CanonBuf) UID {
-	c.buf = c.buf[:0]
+func (c CanonBuf) calcUID(n *Node) UID {
+	c.buf = (*c.bufStore)[:0]
 	c.writeNode(n)
+	*c.bufStore = c.buf
 
 	sum := xxh3.Hash128(c.buf)
 
@@ -23,6 +24,7 @@ func resourceFetchUID(uri, output string) UID {
 
 type CanonBuf struct {
 	buf       []byte
+	bufStore  *[]byte
 	fs        FS
 	uids      *UidVec
 	fetchRefs *DenseMap[STR, NodeRef]
