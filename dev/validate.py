@@ -1,24 +1,29 @@
 #!/usr/bin/env python3
-"""validate.py — L4 byte-exact acceptance orchestrator (parallel DAG).
+"""validate.py — config-driven byte-exact acceptance gate (parallel DAG).
 
-All work is modelled as a DAG of nodes — one node per program invocation, with
-explicit input/output FILES — and run by a small micro-executor that joins nodes
-on those files and runs independent ones concurrently (bounded by VALIDATE_JOBS).
-There is no caching: no content hashes, no timestamps — every node always runs.
+Reads dev/config.json (one entry per case, produced by dev/provision.py), and
+for each case:
 
-Per case the chain is: gen_<graph>.sh -> normalize -> sort for our graph, and
-normalize(--ref-graph) -> sort for the upstream reference (which starts as soon as
-the binary is built, in parallel with the generator), then a compare node byte-
-compares (gating cases) or counts exact normalized-node parity + writes the diff
-(xfail cases). Cross-case and our/ref work overlap, so the wall time collapses to
-the critical path instead of the sum.
+  * fetch the source slice and the raw upstream reference graph from Sandbox
+    (authenticated `ay fetch sandbox`, cached under .out/acceptance/cache so a
+    ~200MB slice downloads once),
+  * generate our graph with `ay make -G ... --source-root <slice>`,
+  * normalize+sort both ours and the reference, then byte-compare (gating cases)
+    or count normalized-node parity + write the diff (xfail cases).
 
-xfail values: False = gating (byte-compare); True = xfail (parity metrics only);
-"auto" = gate when byte-exact, xfail otherwise (self-promoting once parity is reached).
+Each case entry:
+    {id, command:[ya,make,...,target], target, slice_url, graph_url, xfail}
+xfail: false = gating (byte-compare); true = xfail (parity only); "auto" = gate
+when byte-exact else xfail (self-promoting).
+
+All work is a DAG of nodes (one per program invocation) joined on shared files
+and run up to VALIDATE_JOBS concurrently. Fetch nodes are cached; everything
+else always runs.
 
 Usage: validate.py [out-dir]   (default: <repo>/.out/validate)
 Env:   VALIDATE_JOBS — max concurrent nodes (default: cpu count).
 """
+import json
 import os
 import subprocess
 import sys
@@ -29,42 +34,15 @@ from dataclasses import dataclass
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 GO = "go"
-# AY (the built binary) and WORK_CWD (where gen_*.sh runs, resolving its `./ay`)
-# are repointed at the writable out-dir in main(), so REPO_ROOT may be read-only
-# (the ./acceptance merge gate runs both repos from $TMPDIR). Defaults keep a
-# direct `validate.py` invocation working when nothing overrides them.
+CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.json")
+CACHE_DIR = os.path.join(REPO_ROOT, ".out", "acceptance", "cache")
+
+# AY (the built binary) and WORK_CWD are repointed at the writable out-dir in
+# main(), so REPO_ROOT may be read-only.
 AY = os.path.join(REPO_ROOT, "ay")
 WORK_CWD = REPO_ROOT
 
-# Per-case generation wall-time budgets (seconds): a gen slower than
-# GEN_TIME_SLACK * budget FAILs the case as a perf regression — optimize the
-# code, do NOT raise the budget. Only sg5 is meaningfully gated (largest graph,
-# the one the 10x boost regression hit, and stable enough to time). The small
-# sub-2s cases jitter too much to gate reliably, so they get an
-# effectively-infinite budget (gate disabled, time still printed).
-GEN_TIME_BUDGET = {
-    "sg2": 10000.0,
-    "sg2_x86_64": 10000.0,
-    "sg3": 10000.0,
-    "sg4": 10000.0,
-    "sg5": 8.80,
-}
 GEN_TIME_SLACK = 1.2
-
-
-# name, normalize target, source root, raw upstream reference, xfail (see docstring for values)
-# A case is SKIPPED (never affects exit code) when its source root or reference
-# json is absent from this host — references are large and not every box has
-# every checkout, so a missing one means "no data here", not a failure.
-CASES = [
-    ("sg2", "devtools/ymake/bin", "/home/pg/monorepo/yatool", "/home/pg/monorepo/yatool/sg2.json", False),
-    ("sg2_x86_64", "devtools/ymake/bin", "/home/pg/monorepo/yatool", "/home/pg/monorepo/yatool/sg2_x86_64.json", False),
-    ("sg3", "devtools/ya/bin", "/home/pg/monorepo/yatool", "/home/pg/monorepo/yatool/sg3.json", False),
-    ("sg4", "util/ut", "/home/pg/monorepo/ydb", "/home/pg/monorepo/ydb/sg4.json", False),
-    ("sg5", "ydb/apps/ydbd", "/home/pg/monorepo/ydb", "/home/pg/monorepo/ydb/sg5.json", False),
-    ("sg6", "devtools/ya/bin", "/home/pg/monorepo/3", "/home/pg/monorepo/3/sg6.json", False),
-    ("sg7", "yabs/server/daemons/bs_static", "/home/pg/monorepo/4", "/home/pg/monorepo/4/sg7.json", False),
-]
 
 
 @dataclass(frozen=True)
@@ -134,13 +112,7 @@ def normalized_node_parity_counts(left_path, right_path):
             if right_line is not None:
                 right_total += 1
 
-    return ParityCounts(
-        exact=exact,
-        left_only=left_only,
-        right_only=right_only,
-        left_total=left_total,
-        right_total=right_total,
-    )
+    return ParityCounts(exact, left_only, right_only, left_total, right_total)
 
 
 # ---------------------------------------------------------------------------
@@ -150,17 +122,16 @@ def normalized_node_parity_counts(left_path, right_path):
 
 @dataclass
 class Node:
-    name: str        # unique id, also the log label prefix
-    action: object   # callable() -> result dict; must contain "ok": bool
-    inputs: list     # file paths it reads
-    outputs: list    # file paths it produces
+    name: str
+    action: object
+    inputs: list
+    outputs: list
 
 
 def run_graph(nodes, jobs):
     """Run the node DAG, joining each node on the producers of its input files,
-    up to `jobs` concurrently. No caching — every node runs exactly once. A node
-    whose any dependency failed is not run (marked failed, propagating). Returns
-    {name: result}."""
+    up to `jobs` concurrently. A node whose any dependency failed is skipped
+    (marked failed, propagating). Returns {name: result}."""
     by_out = {o: n.name for n in nodes for o in n.outputs}
     deps = {n.name: {by_out[i] for i in n.inputs if i in by_out} for n in nodes}
     dependents = {n.name: [] for n in nodes}
@@ -233,25 +204,65 @@ def run_graph(nodes, jobs):
     return results
 
 
-def sh(cmd, gogc=False):
+def sh(cmd, gogc=False, stdout=None):
     """Run a subprocess in WORK_CWD; return its exit code. gogc=True passes
-    GOGC=800 to that one invocation — the heavy ay commands (gen / normalize /
-    sort / diff) spend ~half their CPU on GC at the default GOGC=100; 800 roughly
-    halves it. Set per-command, never process-wide (build / cmp must not get it)."""
-    env = dict(os.environ, GOGC="800") if gogc else None
+    GOGC=800 (the heavy ay commands spend ~half their CPU on GC at default)."""
+    env = dict(os.environ)
+    if gogc:
+        env["GOGC"] = "800"
+
+    if stdout is not None:
+        with open(stdout, "wb") as f:
+            return subprocess.run(cmd, cwd=WORK_CWD, env=env, stdout=f).returncode
 
     return subprocess.run(cmd, cwd=WORK_CWD, env=env).returncode
 
 
 # ---------------------------------------------------------------------------
-# Node actions (one per program invocation)
+# Config + cache
+# ---------------------------------------------------------------------------
+
+
+def load_config():
+    if not os.path.exists(CONFIG_PATH):
+        return []
+    with open(CONFIG_PATH) as f:
+        return json.load(f)
+
+
+def resource_id(url):
+    return url.rstrip("/").rsplit("/", 1)[-1]
+
+
+def resolve_slice_root(slice_dir):
+    """The arcadia root inside the unpacked slice — `ya upload --tar` nests the
+    tree under the uploaded dir's basename, so the root is not slice_dir itself."""
+    if os.path.exists(os.path.join(slice_dir, ".arcadia.root")):
+        return slice_dir
+    for root, _dirs, files in os.walk(slice_dir):
+        if ".arcadia.root" in files:
+            return root
+    return slice_dir
+
+
+def resolve_ref_raw(graph_dir):
+    cand = os.path.join(graph_dir, "graph.fuse.json")
+    if os.path.exists(cand):
+        return cand
+    for root, _dirs, files in os.walk(graph_dir):
+        for f in files:
+            if f.endswith(".json"):
+                return os.path.join(root, f)
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Node actions
 # ---------------------------------------------------------------------------
 
 
 def build_action():
     t = time.monotonic()
-    # The project has no cgo imports; force CGO_ENABLED=0 so the build never drags
-    # in runtime/cgo (which needs a C toolchain with stddef.h that may be absent).
     env = dict(os.environ, CGO_ENABLED="0")
     rc = subprocess.run([GO, "build", "-o", AY, "."], cwd=REPO_ROOT, env=env).returncode
     print(f"[build] {time.monotonic() - t:.2f}s", flush=True)
@@ -259,10 +270,32 @@ def build_action():
     return {"ok": rc == 0}
 
 
-def gen_action(name, gen, raw, budget):
+def fetch_action(label, kind, url, dst_dir, ready):
     def action():
+        if os.path.exists(ready):
+            print(f"[{label}] {kind} cached", flush=True)
+            return {"ok": True}
+
+        rid = resource_id(url)
         t = time.monotonic()
-        rc = sh([gen, raw], gogc=True)
+        os.makedirs(dst_dir, exist_ok=True)
+        rc = sh([AY, "fetch", "sandbox", "--resource-id", rid, "--untar-to", dst_dir])
+        print(f"[{label}] fetch {kind} {rid} {time.monotonic() - t:.2f}s", flush=True)
+
+        if rc == 0:
+            open(ready, "wb").close()
+
+        return {"ok": rc == 0}
+
+    return action
+
+
+def gen_action(name, command, slice_dir, slice_ready, raw, budget):
+    def action():
+        cmd = [AY] + command[1:] + ["--source-root", resolve_slice_root(slice_dir)]
+        _remove_if_exists(raw)
+        t = time.monotonic()
+        rc = sh(cmd, gogc=True, stdout=raw)
         secs = time.monotonic() - t
         over = budget is not None and secs > GEN_TIME_SLACK * budget
 
@@ -276,17 +309,29 @@ def gen_action(name, gen, raw, budget):
     return action
 
 
-def normalize_action(label, raw, target, out_unsorted, ref_graph):
+def normalize_our_action(label, raw, target, out_unsorted):
     def action():
-        cmd = [AY, "dev", "dump", "normalize", "--in", raw, "--target", target, "--out", out_unsorted]
+        _remove_if_exists(out_unsorted)
+        t = time.monotonic()
+        rc = sh([AY, "dev", "dump", "normalize", "--in", raw, "--target", target, "--out", out_unsorted], gogc=True)
+        print(f"[{label}] subproc: normalize our {time.monotonic() - t:.2f}s", flush=True)
 
-        if ref_graph:
-            cmd.append("--ref-graph")
+        return {"ok": rc == 0}
+
+    return action
+
+
+def normalize_ref_action(label, graph_dir, target, out_unsorted):
+    def action():
+        raw = resolve_ref_raw(graph_dir)
+        if raw is None:
+            print(f"[{label}] no ref graph json under {graph_dir}", flush=True)
+            return {"ok": False}
 
         _remove_if_exists(out_unsorted)
         t = time.monotonic()
-        rc = sh(cmd, gogc=True)
-        print(f"[{label}] subproc: normalize {'ref' if ref_graph else 'our'} {time.monotonic() - t:.2f}s", flush=True)
+        rc = sh([AY, "dev", "dump", "normalize", "--in", raw, "--target", target, "--out", out_unsorted, "--ref-graph"], gogc=True)
+        print(f"[{label}] subproc: normalize ref {time.monotonic() - t:.2f}s", flush=True)
 
         return {"ok": rc == 0}
 
@@ -301,7 +346,7 @@ def sort_action(label, in_unsorted, out_sorted, side):
         print(f"[{label}] subproc: sort {side} {time.monotonic() - t:.2f}s", flush=True)
 
         if rc == 0:
-            _remove_if_exists(in_unsorted)  # drop the large intermediate; no caching
+            _remove_if_exists(in_unsorted)
 
         return {"ok": rc == 0}
 
@@ -334,125 +379,142 @@ def compare_action(name, xfail, our_sorted, ref_sorted, out_dir):
 # ---------------------------------------------------------------------------
 
 
-def build_nodes(out_dir, active):
-    """One node per program invocation; deps are implied by the shared files."""
+def build_nodes(out_dir, cases):
     nodes = [Node("build", build_action, [], [AY])]
 
-    for name, target, _src, ref, xfail in active:
-        raw = os.path.join(out_dir, f"{name}.our.json")
-        our_u = os.path.join(out_dir, f"{name}.our.norm.unsorted")
-        ref_u = os.path.join(out_dir, f"{name}.ref.norm.unsorted")
-        our_s = os.path.join(out_dir, f"{name}.our.norm.jsonl")
-        ref_s = os.path.join(out_dir, f"{name}.ref.norm.jsonl")
-        gen = os.path.join(SCRIPT_DIR, f"gen_{name}.sh")
-        budget = GEN_TIME_BUDGET.get(name)
+    for e in cases:
+        cid = e["id"]
+        xfail = e.get("xfail", False)
+        budget = e.get("budget")
+
+        slice_dir = os.path.join(CACHE_DIR, "slice-" + resource_id(e["slice_url"]))
+        slice_ready = slice_dir + ".ready"
+        graph_dir = os.path.join(CACHE_DIR, "graph-" + resource_id(e["graph_url"]))
+        graph_ready = graph_dir + ".ready"
+
+        raw = os.path.join(out_dir, f"{cid}.our.json")
+        our_u = os.path.join(out_dir, f"{cid}.our.norm.unsorted")
+        ref_u = os.path.join(out_dir, f"{cid}.ref.norm.unsorted")
+        our_s = os.path.join(out_dir, f"{cid}.our.norm.jsonl")
+        ref_s = os.path.join(out_dir, f"{cid}.ref.norm.jsonl")
 
         nodes += [
-            Node(f"gen:{name}", gen_action(name, gen, raw, budget), [AY], [raw]),
-            Node(f"norm-our:{name}", normalize_action(name, raw, target, our_u, False), [AY, raw], [our_u]),
-            Node(f"sort-our:{name}", sort_action(name, our_u, our_s, "our"), [AY, our_u], [our_s]),
-            # ref normalize depends only on the binary + the external reference json,
-            # so it starts right after build — in parallel with the generator.
-            Node(f"norm-ref:{name}", normalize_action(name, ref, target, ref_u, True), [AY], [ref_u]),
-            Node(f"sort-ref:{name}", sort_action(name, ref_u, ref_s, "ref"), [AY, ref_u], [ref_s]),
-            Node(f"cmp:{name}", compare_action(name, xfail, our_s, ref_s, out_dir), [our_s, ref_s], []),
+            Node(f"fetch-slice:{cid}", fetch_action(cid, "slice", e["slice_url"], slice_dir, slice_ready), [AY], [slice_ready]),
+            Node(f"fetch-graph:{cid}", fetch_action(cid, "graph", e["graph_url"], graph_dir, graph_ready), [AY], [graph_ready]),
+            Node(f"gen:{cid}", gen_action(cid, e["command"], slice_dir, slice_ready, raw, budget), [AY, slice_ready], [raw]),
+            Node(f"norm-our:{cid}", normalize_our_action(cid, raw, e["target"], our_u), [AY, raw], [our_u]),
+            Node(f"sort-our:{cid}", sort_action(cid, our_u, our_s, "our"), [AY, our_u], [our_s]),
+            Node(f"norm-ref:{cid}", normalize_ref_action(cid, graph_dir, e["target"], ref_u), [AY, graph_ready], [ref_u]),
+            Node(f"sort-ref:{cid}", sort_action(cid, ref_u, ref_s, "ref"), [AY, ref_u], [ref_s]),
+            Node(f"cmp:{cid}", compare_action(cid, xfail, our_s, ref_s, out_dir), [our_s, ref_s], []),
         ]
 
     return nodes
 
 
-def evaluate(active, results):
-    """Read node results in case order; print the gating contract; return status."""
+def print_debug(cid, e, out_dir):
+    slice_dir = os.path.join(CACHE_DIR, "slice-" + resource_id(e["slice_url"]))
+    graph_dir = os.path.join(CACHE_DIR, "graph-" + resource_id(e["graph_url"]))
+    our_raw = os.path.join(out_dir, f"{cid}.our.json")
+    ref_raw = resolve_ref_raw(graph_dir)
+    our_s = os.path.join(out_dir, f"{cid}.our.norm.jsonl")
+    ref_s = os.path.join(out_dir, f"{cid}.ref.norm.jsonl")
+
+    print(f"[{cid}] debug:")
+    print(f"[{cid}]   source-root : {resolve_slice_root(slice_dir)}")
+    print(f"[{cid}]   target      : {e['target']}")
+    print(f"[{cid}]   our graph   : {our_raw}")
+    print(f"[{cid}]   ref graph   : {ref_raw}")
+    print(f"[{cid}]   our sorted  : {our_s}")
+    print(f"[{cid}]   ref sorted  : {ref_s}")
+    print(f"[{cid}]   diff        : {os.path.join(out_dir, f'{cid}.diff.txt')}")
+    print(f"[{cid}]   inspect     : {AY} dev dump diff --left {our_s} --right {ref_s} --by-token")
+
+
+def evaluate(cases, results, out_dir):
     status = 0
 
-    for name, _target, _src, _ref, xfail in active:
-        gen = results.get(f"gen:{name}", {})
+    for e in cases:
+        cid = e["id"]
+        xfail = e.get("xfail", False)
 
-        if not gen.get("ok"):
-            print(f"[{name}] FAIL (generate)")
-
-            if not xfail:
+        fetch_ok = all(results.get(f"{step}:{cid}", {}).get("ok") for step in ("fetch-slice", "fetch-graph"))
+        if not fetch_ok:
+            print(f"[{cid}] FAIL (fetch)")
+            if xfail is not True:
                 status = 1
+            continue
 
+        gen = results.get(f"gen:{cid}", {})
+        if not gen.get("ok"):
+            print(f"[{cid}] FAIL (generate)")
+            print_debug(cid, e, out_dir)
+            if xfail is not True:
+                status = 1
             continue
 
         if gen.get("budget_over"):
-            budget = GEN_TIME_BUDGET.get(name)
-            print(
-                f"[{name}] FAIL (perf regression): gen {gen['secs']:.2f}s > "
-                f"{GEN_TIME_SLACK:g}x budget {budget:.2f}s — optimize the code, do NOT raise the budget"
-            )
+            budget = e.get("budget")
+            print(f"[{cid}] FAIL (perf regression): gen {gen['secs']:.2f}s > "
+                  f"{GEN_TIME_SLACK:g}x budget {budget:.2f}s — optimize the code, do NOT raise the budget")
             status = 1
 
-        norm_ok = all(
-            results.get(f"{step}:{name}", {}).get("ok")
-            for step in ("norm-our", "sort-our", "norm-ref", "sort-ref")
-        )
-
+        norm_ok = all(results.get(f"{step}:{cid}", {}).get("ok")
+                      for step in ("norm-our", "sort-our", "norm-ref", "sort-ref"))
         if not norm_ok:
-            print(f"[{name}] FAIL (normalize)")
-
-            if not xfail:
+            print(f"[{cid}] FAIL (normalize)")
+            print_debug(cid, e, out_dir)
+            if xfail is not True:
                 status = 1
-
             continue
 
-        verdict = results.get(f"cmp:{name}", {}).get("verdict")
+        verdict = results.get(f"cmp:{cid}", {}).get("verdict")
 
         if verdict == "OK":
-            print(f"[{name}] OK")
+            print(f"[{cid}] OK")
         elif verdict == "XFAIL":
-            cmp = results[f"cmp:{name}"]
+            cmp = results[f"cmp:{cid}"]
             p = cmp["parity"]
-            print(
-                f"[{name}] exact normalized-node parity: "
-                f"matched={p.exact} our_only={p.left_only} ref_only={p.right_only} "
-                f"our_total={p.left_total} ref_total={p.right_total}"
-            )
-            print(f"[{name}] XFAIL (not gating) — full diff: {cmp['diff_file']}")
+            print(f"[{cid}] exact normalized-node parity: "
+                  f"matched={p.exact} our_only={p.left_only} ref_only={p.right_only} "
+                  f"our_total={p.left_total} ref_total={p.right_total}")
+            print(f"[{cid}] XFAIL (not gating) — full diff: {cmp['diff_file']}")
+            print_debug(cid, e, out_dir)
         else:
-            print(f"[{name}] FAIL")
+            print(f"[{cid}] FAIL")
+            print_debug(cid, e, out_dir)
             status = 1
 
     return status
 
 
 def main() -> int:
-    # Absolutize so AY / WORK_CWD / the per-case paths are cwd-independent (a
-    # relative out-dir would re-resolve against WORK_CWD and double-nest).
     out_dir = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(REPO_ROOT, ".out", "validate"))
     os.makedirs(out_dir, exist_ok=True)
+    os.makedirs(CACHE_DIR, exist_ok=True)
 
-    # Build into the writable out-dir (REPO_ROOT may be read-only) and run gen_*.sh
-    # from there (WORK_CWD=out_dir resolves their `./ay`); AY points at the same binary.
     global AY, WORK_CWD
     AY = os.path.join(out_dir, "ay")
     WORK_CWD = out_dir
 
-    active = []
+    cases = load_config()
 
-    for case in CASES:
-        name, _target, source_root, ref, _xfail = case
-        missing = [p for p in (source_root, ref) if not os.path.exists(p)]
-
-        if missing:
-            print(f"[{name}] SKIP (data not present on host: {', '.join(missing)})")
-            continue
-
-        active.append(case)
+    if not cases:
+        print(f"validate.py: no cases in {CONFIG_PATH}")
+        return 0
 
     jobs = int(os.environ.get("VALIDATE_JOBS", os.cpu_count() or 4))
-    print(f"[graph] {len(active)} cases, jobs={jobs}", flush=True)
+    print(f"[graph] {len(cases)} cases, jobs={jobs}", flush=True)
 
     t0 = time.monotonic()
-    results = run_graph(build_nodes(out_dir, active), jobs)
+    results = run_graph(build_nodes(out_dir, cases), jobs)
     print(f"[total] graph wall {time.monotonic() - t0:.2f}s", flush=True)
 
     if not results.get("build", {}).get("ok"):
         print("validate.py: build failed")
         return 1
 
-    status = evaluate(active, results)
+    status = evaluate(cases, results, out_dir)
     print("validate.py: all gating cases byte-exact" if status == 0 else "validate.py: failures above")
 
     return status
