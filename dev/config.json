@@ -83,5 +83,22 @@
     "xfail": "auto",
     "slice_url": "https://proxy.sandbox.yandex-team.ru/12550902338",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/12550903467"
+  },
+  {
+    "id": "yabs_server_daemons_bs_static",
+    "vcs": "arc",
+    "remote": "arcadia",
+    "sha": "976f1514372af5ab20a7be93072b63385792f50b",
+    "command": [
+      "ya",
+      "make",
+      "-j0",
+      "-G",
+      "yabs/server/daemons/bs_static"
+    ],
+    "target": "yabs/server/daemons/bs_static",
+    "xfail": "auto",
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/12550953602",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/12550954169"
   }
 ]
