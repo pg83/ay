@@ -209,6 +209,14 @@ func hashScanContext(ctx *ScanContext) uint64 {
 	return h
 }
 
+func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveParser) []IncludeDirective {
+	if vfsPath.isBuild() {
+		return s.codegen.buildParsedFor(vfsPath)
+	}
+
+	return s.parsers.sourceParsedBuckets(vfsPath, ctxParser).bucket(walkableBucketFor(vfsPath.rel()))
+}
+
 func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 	s := sc.scanner
 	incDir := dirKey(pathDir(vfsPath.rel()))
@@ -216,7 +224,7 @@ func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 	suppressCimportNames := false
 	prevProbeMissed := false
 
-	for _, entry := range s.parsers.parsedIncludes(vfsPath, sc.parser) {
+	for _, entry := range s.parsedIncludes(vfsPath, sc.parser) {
 		isName := entry.kind == includeCythonName
 		isFallback := entry.kind == includeCythonFallback
 

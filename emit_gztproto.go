@@ -60,7 +60,7 @@ func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 
 	generatedParse := gztGeneratedProtoParse(ctx, gztSource, inducedProtos)
 	ctx.parsers.injectSourceParse(source(moddir+"/"+genProtoName), generatedParse)
-	ctx.parsers.registerBuildParsedIncludes(genProto, generatedParse.bucket(parsedIncludesLocal))
+	reg.setBuildParsed(genProto, generatedParse.bucket(parsedIncludesLocal))
 
 	for _, s := range sourceInputs {
 		reg.addClosureLeaf(genProto, s)

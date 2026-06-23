@@ -620,7 +620,7 @@ import weak "c.proto";
 import public "d.ev";
 `,
 	}), SysInclSet{})
-	parsed := scanner.parsedIncludes(intern("$(S)/src.proto"))
+	parsed := scanner.parsedIncludeSet(intern("$(S)/src.proto"))
 	local := parsed.bucket(parsedIncludesLocal)
 	hcpp := parsed.bucket(parsedIncludesHeader)
 
@@ -656,7 +656,7 @@ include "machine.rl";
 #include "tail.h"
 `,
 	}), SysInclSet{})
-	parsed := scanner.parsedIncludes(intern("$(S)/src.rl6"))
+	parsed := scanner.parsedIncludeSet(intern("$(S)/src.rl6"))
 	local := parsed.bucket(parsedIncludesLocal)
 	native := parsed.bucket(parsedIncludesRagelNative)
 	hcpp := parsed.bucket(parsedIncludesHeader)
@@ -775,7 +775,7 @@ func TestParsedIncludes_LeadingUTF8BOM(t *testing.T) {
 	scanner := newTestScanner(newMemFS(map[string]string{
 		"bom.cpp": "\xef\xbb\xbf#include \"sibling.h\"\n#include <system.h>\n",
 	}), SysInclSet{})
-	local := scanner.parsedIncludes(intern("$(S)/bom.cpp")).bucket(parsedIncludesLocal)
+	local := scanner.parsedIncludeSet(intern("$(S)/bom.cpp")).bucket(parsedIncludesLocal)
 
 	if len(local) != 2 {
 		t.Fatalf("got %d local entries, want 2 (BOM not stripped?); %+v", len(local), local)
@@ -797,7 +797,7 @@ func TestParsedIncludes_SwigBuckets(t *testing.T) {
 %}
 `,
 	}), SysInclSet{})
-	parsed := scanner.parsedIncludes(intern("$(S)/src.swg"))
+	parsed := scanner.parsedIncludeSet(intern("$(S)/src.swg"))
 	local := parsed.bucket(parsedIncludesLocal)
 	hcpp := parsed.bucket(parsedIncludesHeader)
 
@@ -915,10 +915,10 @@ func TestScanDirectives_MacroIndirectAugmentation(t *testing.T) {
 }
 
 func (s *IncludeScanner) scanDirectives(vfsPath VFS) []IncludeDirective {
-	return s.parsers.parsedIncludes(vfsPath, nil)
+	return s.parsedIncludes(vfsPath, nil)
 }
 
-func (s *IncludeScanner) parsedIncludes(vfsPath VFS) ParsedIncludeSet {
+func (s *IncludeScanner) parsedIncludeSet(vfsPath VFS) ParsedIncludeSet {
 	return s.parsers.sourceParsedBuckets(vfsPath, nil)
 }
 
