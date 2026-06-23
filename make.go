@@ -79,13 +79,16 @@ func warnHandler(keepGoing, verbose bool, emit func(line string)) func(Warn) {
 	seen := map[string]bool{}
 
 	return func(w Warn) {
-		gated := w.Kind == WarnMissingInclude || w.Kind == WarnUnsupportedSource || w.Kind == WarnMissingAddincl
+		fatalable := w.Kind == WarnMissingInclude || w.Kind == WarnUnsupportedSource
 
-		if gated && !keepGoing {
+		if fatalable && !keepGoing {
 			throwFmt("%s: %s", w.Kind, w.Message)
 		}
 
-		if !gated && !verbose {
+		// missing-addincl is always a warning (never fatal); upstream tolerates an
+		// ADDINCL to a non-existent dir. Other gated kinds print too; the rest only
+		// under --verbose.
+		if !(fatalable || w.Kind == WarnMissingAddincl || verbose) {
 			return
 		}
 
