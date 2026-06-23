@@ -32,11 +32,6 @@ type IncludeDirective struct {
 	target STR
 }
 
-type GenOwner struct {
-	Dir string
-	Tag STR
-}
-
 func (d IncludeDirective) quotedLike() bool {
 	return d.kind == includeQuoted || d.cythonProbe()
 }
@@ -72,12 +67,6 @@ type IncludeScanner struct {
 	visitedIDPool sync.Pool
 
 	onWarn func(Warn)
-
-	generatedFirstClaim map[VFS]GenOwner
-
-	generatedNodeClaim map[NodeRef]string
-
-	generatedENIncluderDirs map[VFS][]string
 
 	walkClosureCalls       uint64
 	subgraphHits           uint64
@@ -158,12 +147,9 @@ type ScannerPerfStats struct {
 
 func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, onWarn func(Warn), tjc *TarjanCtx) *IncludeScanner {
 	s := &IncludeScanner{
-		sysincl:                 newSysinclCtx(sysincl),
-		parsers:                 parsers,
-		generatedFirstClaim:     make(map[VFS]GenOwner, 2048),
-		generatedNodeClaim:      make(map[NodeRef]string, 256),
-		generatedENIncluderDirs: make(map[VFS][]string, 16),
-		onWarn:                  onWarn,
+		sysincl: newSysinclCtx(sysincl),
+		parsers: parsers,
+		onWarn:  onWarn,
 
 		subgraphClosures: make([][]VFS, 1, 256),
 		closureArena:     newBumpAllocator[VFS](closureArenaInitial),
@@ -178,12 +164,6 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 	}
 
 	return s
-}
-
-func (s *IncludeScanner) markGeneratedProducerOwned(out VFS, dir string) {
-	if _, ok := s.generatedFirstClaim[out]; !ok {
-		s.generatedFirstClaim[out] = GenOwner{Dir: dir}
-	}
 }
 
 type ScanContext struct {
@@ -504,12 +484,6 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 	s := sc.scanner
 
 	if v := d.target.vfs(); v != 0 {
-		if v.isBuild() && sc.cfg.OwnerModuleDir != "" {
-			if info := s.codegen.lookupSTR(d.target); info != nil {
-				s.recordFirstClaim(info.OutputPath, sc.cfg.OwnerModuleDir, sc.cfg.OwnerModuleTag)
-			}
-		}
-
 		out = append(s.resolveOut[:0], v)
 		s.resolveOut = out
 
@@ -706,48 +680,6 @@ func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 	return idx
 }
 
-func (s *IncludeScanner) recordFirstClaim(out VFS, ownerModuleDir string, ownerModuleTag STR) {
-	if ownerModuleDir == "" {
-		return
-	}
-
-	if _, ok := s.generatedFirstClaim[out]; !ok {
-		s.generatedFirstClaim[out] = GenOwner{Dir: ownerModuleDir, Tag: ownerModuleTag}
-	}
-}
-
-func (s *IncludeScanner) recordNodeClaim(ref NodeRef, ownerModuleDir string) {
-	if ownerModuleDir == "" {
-		return
-	}
-
-	if _, ok := s.generatedNodeClaim[ref]; !ok {
-		s.generatedNodeClaim[ref] = ownerModuleDir
-	}
-}
-
-func (s *IncludeScanner) recordENIncluderDir(out VFS, info *GeneratedFileInfo, includerAbs VFS) {
-	if info == nil || info.ProducerKvP != pkEN {
-		return
-	}
-
-	dir := pathDir(includerAbs.rel())
-
-	if dir == "" {
-		return
-	}
-
-	cur := s.generatedENIncluderDirs[out]
-
-	for _, d := range cur {
-		if d == dir {
-			return
-		}
-	}
-
-	s.generatedENIncluderDirs[out] = append(cur, dir)
-}
-
 func (sc *ScanCtx) cacheSearchTier(targetID STR, out SearchTierResult) SearchTierResult {
 	s := sc.scanner
 	s.searchTierFlat.put(splitMix64(sc.ctxNum, uint32(targetID)), out)
@@ -809,8 +741,6 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 
 		out.paths = []VFS{info.OutputPath}
 		out.found = true
-
-		s.recordFirstClaim(info.OutputPath, sc.cfg.OwnerModuleDir, sc.cfg.OwnerModuleTag)
 
 		return true
 	}
@@ -874,8 +804,6 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 					out.paths = []VFS{source(joinRel(bestAddincl.rel(), target))}
 				} else {
 					out.paths = []VFS{bestBuild.OutputPath}
-
-					s.recordFirstClaim(bestBuild.OutputPath, sc.cfg.OwnerModuleDir, sc.cfg.OwnerModuleTag)
 				}
 
 				out.found = true
@@ -962,9 +890,6 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 		if info := s.codegen.lookupSTR(d.target); info != nil && !outHas(info.OutputPath) {
 			out = append(out, info.OutputPath)
 			searchPathFound = true
-
-			s.recordFirstClaim(info.OutputPath, sc.cfg.OwnerModuleDir, sc.cfg.OwnerModuleTag)
-			s.recordENIncluderDir(info.OutputPath, info, includerAbs)
 		}
 	}
 
@@ -993,9 +918,6 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 					out = append(out, info.OutputPath)
 					searchPathFound = true
 				}
-
-				s.recordFirstClaim(info.OutputPath, sc.cfg.OwnerModuleDir, sc.cfg.OwnerModuleTag)
-				s.recordENIncluderDir(info.OutputPath, info, includerAbs)
 			}
 		}
 	}
@@ -1006,10 +928,6 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 		if tier.found {
 			out = append(out, tier.paths...)
 			searchPathFound = true
-
-			if len(tier.paths) > 0 && tier.paths[0].isBuild() {
-				s.recordENIncluderDir(tier.paths[0], s.codegen.lookup(tier.paths[0]), includerAbs)
-			}
 		}
 	}
 

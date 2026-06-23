@@ -175,20 +175,15 @@ func emitLD(
 	}
 
 	n := &Node{
-		Platform:         instance.Platform,
-		Cmds:             cmds,
-		Env:              envFull,
-		Inputs:           inputs,
-		Outputs:          outputs,
-		KV:               KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: binaryDir, ModuleLang: ldModuleLang(instance), ModuleType: mtBin},
-		DepRefs:          deps,
-		Resources:        instance.Platform.UsesLinkResources,
-	}
-
-	if programModuleTag != 0 {
-		n.TargetProperties.ModuleTag = programModuleTag
+		Platform:     instance.Platform,
+		Cmds:         cmds,
+		Env:          envFull,
+		Inputs:       inputs,
+		Outputs:      outputs,
+		KV:           KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		DepRefs:      deps,
+		Resources:    instance.Platform.UsesLinkResources,
 	}
 
 	return emit.emit(n)
@@ -196,14 +191,6 @@ func emitLD(
 
 func lDOutputPath(instance ModuleInstance, binaryName string) VFS {
 	return build(instance.Path.rel() + "/" + binaryName)
-}
-
-func ldModuleLang(instance ModuleInstance) ModuleLang {
-	if instance.Language == LangPy {
-		return mlPy3
-	}
-
-	return mlCPP
 }
 
 func lastPathComponent(p string) string {
@@ -248,11 +235,10 @@ func emitVCSNode(emit Emitter, host *Platform) NodeRef {
 			strBase64,
 			internStr(vcsJSONBase64),
 			output.str()))}),
-		KV:               KV{P: pkCP, PC: pcYellow, ShowOut: true},
-		Outputs:          na.vfsList(output),
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(16)},
-		Sandboxing:       true,
-		TargetProperties: TargetProperties{ModuleDir: "build/scripts"},
+		KV:           KV{P: pkCP, PC: pcYellow, ShowOut: true},
+		Outputs:      na.vfsList(output),
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(16)},
+		Sandboxing:   true,
 	}
 
 	node.UID = resourceFetchUID("base64:vcs.json:"+vcsJSONBase64, output.string())
@@ -428,7 +414,7 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 }
 
 func ldSbomLang(instance ModuleInstance) string {
-	if ldModuleLang(instance) == mlPy3 {
+	if instance.Language == LangPy {
 		return "PY3"
 	}
 

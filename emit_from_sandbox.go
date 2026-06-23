@@ -71,16 +71,15 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	node := &Node{
-		Platform:         instance.Platform,
-		Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(args), Cwd: build(instance.Path.rel()).str(), Env: env}),
-		Env:              env,
-		Inputs:           na.inputList(fromSandboxScriptInputs),
-		KV:               KV{P: pkSB, PC: pcYellow, ShowOut: true},
-		Outputs:          na.vfsList(outVFSs...),
-		Requirements:     Requirements{CPU: float64(1), Network: nwFull, RAM: float64(32)},
-		Sandboxing:       true,
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-		Resources:        usesPython3,
+		Platform:     instance.Platform,
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(args), Cwd: build(instance.Path.rel()).str(), Env: env}),
+		Env:          env,
+		Inputs:       na.inputList(fromSandboxScriptInputs),
+		KV:           KV{P: pkSB, PC: pcYellow, ShowOut: true},
+		Outputs:      na.vfsList(outVFSs...),
+		Requirements: Requirements{CPU: float64(1), Network: nwFull, RAM: float64(32)},
+		Sandboxing:   true,
+		Resources:    usesPython3,
 	}
 
 	ref := ctx.emit.emit(node)

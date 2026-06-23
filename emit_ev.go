@@ -130,8 +130,6 @@ func emitProtoWrapperPBNode(
 ) NodeRef {
 	na := emit.nodeArenas()
 
-	moduleDir := instance.Path.rel()
-
 	genCC := build(relPath + ".pb.cc")
 	genH := build(relPath + ".pb.h")
 	srcVFS := source(relPath)
@@ -167,25 +165,18 @@ func emitProtoWrapperPBNode(
 		srcVFS,
 	}
 
-	targetProps := TargetProperties{ModuleDir: moduleDir}
-
-	if moduleTag != 0 {
-		targetProps.ModuleTag = moduleTag
-	}
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Cwd: strS,
 			Env: env}),
-		Env:              env,
-		Inputs:           na.inputList(inputs, transitiveImports),
-		Outputs:          na.vfsList(genCC, genH),
-		KV:               KV{P: kvP, PC: pcYellow},
-		TargetProperties: targetProps,
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs:   depRefs(cppStyleguideLDRef, protocLDRef, pluginLDRef),
-		Resources:        usesPython3,
+		Env:            env,
+		Inputs:         na.inputList(inputs, transitiveImports),
+		Outputs:        na.vfsList(genCC, genH),
+		KV:             KV{P: kvP, PC: pcYellow},
+		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		ForeignDepRefs: depRefs(cppStyleguideLDRef, protocLDRef, pluginLDRef),
+		Resources:      usesPython3,
 	}
 
 	return emit.emit(node)

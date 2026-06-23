@@ -32,13 +32,12 @@ func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 			CmdArgs: na.chunkList(gztCmdArgs(converterBin, protoInclude, gztSource, genProto)),
 			Env:     env,
 		}),
-		Env:              env,
-		Inputs:           na.inputList(inputs, imports),
-		Outputs:          []VFS{genProto},
-		KV:               KV{P: pkGZ, PC: pcYellow},
-		TargetProperties: TargetProperties{ModuleDir: moddir, ModuleTag: moduleTag},
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs:   depRefs(converterRef),
+		Env:            env,
+		Inputs:         na.inputList(inputs, imports),
+		Outputs:        []VFS{genProto},
+		KV:             KV{P: pkGZ, PC: pcYellow},
+		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		ForeignDepRefs: depRefs(converterRef),
 	}
 	gzRef := ctx.emit.emit(node)
 

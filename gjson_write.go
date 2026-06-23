@@ -103,9 +103,6 @@ func appendNode(buf []byte, n *Node, uids *UidVec, fetchRefs *DenseMap[STR, Node
 	buf = append(buf, `,"self_uid":`...)
 	buf = appendUID(buf, n.SelfUID)
 
-	buf = append(buf, `,"target_properties":`...)
-	buf = appendTargetProperties(buf, n.TargetProperties)
-
 	buf = append(buf, `,"uid":`...)
 	buf = appendUID(buf, n.UID)
 

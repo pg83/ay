@@ -63,14 +63,6 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 		t.Errorf("result UID = %q, want mainprog LD uid %q", g.Result[0], rootLD.UID)
 	}
 
-	if rootLD.TargetProperties.ModuleDir != "mainprog" {
-		t.Errorf("root LD module_dir = %q, want %q", rootLD.TargetProperties.ModuleDir, "mainprog")
-	}
-
-	if rootLD.TargetProperties.ModuleType != mtBin {
-		t.Errorf("root LD module_type = %q, want bin", rootLD.TargetProperties.ModuleType.string())
-	}
-
 	mainCC := nodesByOutput[mainCCOut]
 	libAR := nodesByOutput[libARout]
 
@@ -131,10 +123,6 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 		t.Errorf("root node kv.p = %q, want LD", ld.KV.P)
 	}
 
-	if ld.TargetProperties.ModuleType != mtBin {
-		t.Errorf("module_type = %q, want bin", ld.TargetProperties.ModuleType.string())
-	}
-
 	deps := make(map[UID]struct{}, len(graphDeps(g, ld)))
 
 	for _, d := range graphDeps(g, ld) {
@@ -165,10 +153,6 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 
 	if cc == nil {
 		t.Fatal("missing own CC $(B)/mod/__/thelib/a_ut.cpp.o")
-	}
-
-	if cc.TargetProperties.ModuleDir != "mod" {
-		t.Fatalf("cc module_dir = %q, want mod", cc.TargetProperties.ModuleDir)
 	}
 
 	inputs := make([]string, 0, len(cc.flatInputs()))
@@ -415,7 +399,7 @@ func TestGen_AllocatorMacro_ResolvesToPeer(t *testing.T) {
 	var sawMimDir bool
 
 	for _, n := range g.Graph {
-		if n.TargetProperties.ModuleDir == "library/cpp/malloc/mimalloc" {
+		if len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].rel(), "library/cpp/malloc/mimalloc/") {
 			sawMimDir = true
 
 			break
@@ -423,7 +407,7 @@ func TestGen_AllocatorMacro_ResolvesToPeer(t *testing.T) {
 	}
 
 	if !sawMimDir {
-		t.Errorf("expected ALLOCATOR(MIM) to add library/cpp/malloc/mimalloc as peer; got Graph with no such module_dir")
+		t.Errorf("expected ALLOCATOR(MIM) to add library/cpp/malloc/mimalloc as peer; got Graph with no such output dir")
 	}
 }
 
@@ -477,9 +461,25 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 	emittedDirs := make(map[string]bool)
 
 	for _, n := range g.Graph {
-		if md := n.TargetProperties.ModuleDir; md != "" {
-			emittedDirs[md] = true
+		if len(n.Outputs) == 0 {
+			continue
 		}
+
+		rel := n.Outputs[0].rel()
+
+		if i := strings.LastIndex(rel, "/"); i >= 0 {
+			emittedDirs[rel[:i]] = true
+		}
+	}
+
+	hasPrefix := func(dir string) bool {
+		for d := range emittedDirs {
+			if d == dir || strings.HasPrefix(d, dir+"/") {
+				return true
+			}
+		}
+
+		return false
 	}
 
 	for _, want := range []string{
@@ -489,8 +489,8 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		"contrib/libs/libunwind",
 		"util",
 	} {
-		if !emittedDirs[want] {
-			t.Errorf("graph missing module_dir %q; got %v", want, emittedDirs)
+		if !hasPrefix(want) {
+			t.Errorf("graph missing outputs under %q; got %v", want, emittedDirs)
 		}
 	}
 }
@@ -712,7 +712,7 @@ END()
 	var lib1AR *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == pkAR && n.TargetProperties.ModuleDir == "lib1" {
+		if n.KV.P == pkAR && len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].rel(), "lib1/") {
 			lib1AR = n
 
 			break
@@ -726,7 +726,7 @@ END()
 	for _, ref := range graphDeps(g, lib1AR) {
 		for _, n := range g.Graph {
 			if n.UID == ref && n.KV.P == pkAR {
-				t.Errorf("lib1 AR has AR-typed dep %q (module_dir=%q); reference invariant: zero AR-on-AR deps", ref, n.TargetProperties.ModuleDir)
+				t.Errorf("lib1 AR has AR-typed dep %q (outputs=%v); reference invariant: zero AR-on-AR deps", ref, n.Outputs)
 			}
 		}
 	}
@@ -755,10 +755,6 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 
 		if ccNode == nil {
 			t.Fatal("no CC node emitted")
-		}
-
-		if ccNode.TargetProperties.ModuleDir != "mymod" {
-			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties.ModuleDir, "mymod")
 		}
 
 		wantInput := "$(S)/other/dir/foo.cpp"
@@ -797,8 +793,8 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Fatal("no CC node emitted")
 		}
 
-		if ccNode.TargetProperties.ModuleDir != "basemod" {
-			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties.ModuleDir, "basemod")
+		if len(ccNode.Outputs) == 0 || !strings.HasPrefix(ccNode.Outputs[0].rel(), "basemod/") {
+			t.Errorf("CC outputs = %v, want under basemod/", ccNode.Outputs)
 		}
 
 		wantInput := "$(S)/basemod/bar.cpp"
@@ -838,12 +834,12 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Fatal("no CC node emitted")
 		}
 
-		if jsNode.TargetProperties.ModuleDir != "jsmod" {
-			t.Errorf("JS module_dir = %q, want %q", jsNode.TargetProperties.ModuleDir, "jsmod")
+		if len(jsNode.Outputs) == 0 || !strings.HasPrefix(jsNode.Outputs[0].rel(), "jsmod/") {
+			t.Errorf("JS outputs = %v, want under jsmod/", jsNode.Outputs)
 		}
 
-		if ccNode.TargetProperties.ModuleDir != "jsmod" {
-			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties.ModuleDir, "jsmod")
+		if len(ccNode.Outputs) == 0 || !strings.HasPrefix(ccNode.Outputs[0].rel(), "jsmod/") {
+			t.Errorf("CC outputs = %v, want under jsmod/", ccNode.Outputs)
 		}
 	})
 
@@ -865,10 +861,6 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 
 		if ccNode == nil {
 			t.Fatal("no CC node emitted")
-		}
-
-		if ccNode.TargetProperties.ModuleDir != "tools/r6/bin" {
-			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties.ModuleDir, "tools/r6/bin")
 		}
 
 		wantInput := "$(S)/tools/r6/main.cpp"
@@ -904,10 +896,6 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 
 		if ccNode == nil {
 			t.Fatal("no CC node emitted")
-		}
-
-		if ccNode.TargetProperties.ModuleDir != "tools/r6/bin" {
-			t.Errorf("CC module_dir = %q, want %q", ccNode.TargetProperties.ModuleDir, "tools/r6/bin")
 		}
 
 		if got := ccNode.flatInputs()[0].string(); got != "$(S)/tools/r6/sub/main.cpp" {
@@ -954,26 +942,26 @@ END()
 	hasNoPercpu := false
 
 	for _, n := range g.Graph {
-		md := n.TargetProperties.ModuleDir
-
-		if n.KV.P != pkAR {
+		if n.KV.P != pkAR || len(n.Outputs) == 0 {
 			continue
 		}
 
-		switch md {
-		case "library/cpp/malloc/tcmalloc":
+		rel := n.Outputs[0].rel()
+
+		switch {
+		case strings.HasPrefix(rel, "library/cpp/malloc/tcmalloc/"):
 			hasTcmalloc = true
-		case "contrib/libs/tcmalloc/no_percpu_cache":
+		case strings.HasPrefix(rel, "contrib/libs/tcmalloc/no_percpu_cache/"):
 			hasNoPercpu = true
 		}
 	}
 
 	if !hasTcmalloc {
-		t.Errorf("expected AR with module_dir=library/cpp/malloc/tcmalloc; not found")
+		t.Errorf("expected AR output under library/cpp/malloc/tcmalloc/; not found")
 	}
 
 	if !hasNoPercpu {
-		t.Errorf("expected AR with module_dir=contrib/libs/tcmalloc/no_percpu_cache; not found")
+		t.Errorf("expected AR output under contrib/libs/tcmalloc/no_percpu_cache/; not found")
 	}
 }
 
@@ -992,10 +980,14 @@ END()
 	g := testGen(fs, "myprog")
 
 	for _, n := range g.Graph {
-		md := n.TargetProperties.ModuleDir
+		if len(n.Outputs) == 0 {
+			continue
+		}
 
-		if md == "library/cpp/malloc/tcmalloc" || md == "contrib/libs/tcmalloc/no_percpu_cache" {
-			t.Errorf("PROGRAM with ALLOCATOR(FAKE) emitted unexpected node module_dir=%q (TCMALLOC_TC default must be suppressed)", md)
+		rel := n.Outputs[0].rel()
+
+		if strings.HasPrefix(rel, "library/cpp/malloc/tcmalloc/") || strings.HasPrefix(rel, "contrib/libs/tcmalloc/no_percpu_cache/") {
+			t.Errorf("PROGRAM with ALLOCATOR(FAKE) emitted unexpected node output=%q (TCMALLOC_TC default must be suppressed)", rel)
 		}
 	}
 }
@@ -1027,10 +1019,6 @@ END()
 
 	if ccNode == nil {
 		t.Fatal("no CC node emitted")
-	}
-
-	if got := ccNode.TargetProperties.ModuleDir; got != "mylib" {
-		t.Errorf("CC module_dir = %q, want %q (sibling SRCDIR — module_dir stays at instance.Path)", got, "mylib")
 	}
 
 	wantInput := "$(S)/other/src/foo.cpp"
@@ -1754,10 +1742,6 @@ int use() { return 0; }
 
 	if !slices.Contains(graphDeps(g, en), depPB.UID) {
 		t.Fatalf("enum node deps missing imported pb producer uid %q: %v", depPB.UID, graphDeps(g, en))
-	}
-
-	if got := en.TargetProperties.ModuleTag; got != tagCppProto {
-		t.Fatalf("enum node module_tag = %q, want cpp_proto", got.string())
 	}
 
 	if !nodeHasInput(en, "$(B)/protos/dep.pb.h") {
@@ -2567,42 +2551,6 @@ END()
 
 	if !contains("-DSEP_A") || !contains("-DSEP_B") {
 		t.Errorf("separate single-argument INCLUDE statements must both apply; args=%v", args)
-	}
-}
-
-func TestMergeGeneratedFirstClaims_HostWinsOnConflict(t *testing.T) {
-	const (
-		effectiveOwner = "yabs/server/cs/libs/plutonium_traits"
-		downstreamPeer = "yabs/server/libs/server"
-		regularOwner   = "yabs/server/libs/regular"
-		toolOnlyOwner  = "yabs/server/cs/libs/tooler"
-	)
-
-	conflicted := build("yabs/server/cs/libs/cpp_import/yaff/plutonium_ctv_content_tags_local.yaff.h")
-	targetOnly := build("yabs/server/libs/regular/regular_gen.h")
-	hostOnly := build("yabs/server/cs/libs/tooler/tool_gen.h")
-
-	host := &IncludeScanner{generatedFirstClaim: map[VFS]GenOwner{
-		conflicted: {Dir: effectiveOwner},
-		hostOnly:   {Dir: toolOnlyOwner},
-	}}
-	target := &IncludeScanner{generatedFirstClaim: map[VFS]GenOwner{
-		conflicted: {Dir: downstreamPeer},
-		targetOnly: {Dir: regularOwner},
-	}}
-
-	merged := mergeGeneratedFirstClaims(host, target)
-
-	if got := merged[conflicted].Dir; got != effectiveOwner {
-		t.Fatalf("conflicting cpp_import header: got module_dir %q, want effective owner %q", got, effectiveOwner)
-	}
-
-	if got := merged[targetOnly].Dir; got != regularOwner {
-		t.Fatalf("target-only generated file must keep its claim: got %q, want %q", got, regularOwner)
-	}
-
-	if got := merged[hostOnly].Dir; got != toolOnlyOwner {
-		t.Fatalf("host-only generated file must keep its claim: got %q, want %q", got, toolOnlyOwner)
 	}
 }
 

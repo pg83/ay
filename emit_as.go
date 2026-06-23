@@ -28,13 +28,12 @@ func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Cwd: strB,
 			Env: env}),
-		Env:              env,
-		Inputs:           na.inputList(in.IncludeInputs),
-		Outputs:          na.vfsList(outVFS),
-		KV:               KV{P: pkAS, PC: pcLightGreen},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		Resources:        instance.Platform.UsesClangOnly,
+		Env:          env,
+		Inputs:       na.inputList(in.IncludeInputs),
+		Outputs:      na.vfsList(outVFS),
+		KV:           KV{P: pkAS, PC: pcLightGreen},
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		Resources:    instance.Platform.UsesClangOnly,
 	}
 
 	if len(in.ExtraDepRefs) > 0 {
@@ -160,12 +159,11 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
-		Env:              env,
-		Inputs:           na.inputList(na.vfsList(yasmBinaryVFS), in.IncludeInputs),
-		Outputs:          na.vfsList(outVFS),
-		KV:               KV{P: pkAS, PC: pcLightGreen},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		Env:          env,
+		Inputs:       na.inputList(na.vfsList(yasmBinaryVFS), in.IncludeInputs),
+		Outputs:      na.vfsList(outVFS),
+		KV:           KV{P: pkAS, PC: pcLightGreen},
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 	}
 
 	node.ForeignDepRefs = []NodeRef{yasmLD}

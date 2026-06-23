@@ -16,7 +16,6 @@ var expectedKeyOrder = []string{
 	"requirements",
 	"sandboxing",
 	"self_uid",
-	"target_properties",
 	"uid",
 }
 
@@ -30,7 +29,6 @@ var expectedKeyOrderMinimal = []string{
 	"requirements",
 	"sandboxing",
 	"self_uid",
-	"target_properties",
 	"uid",
 }
 
@@ -82,15 +80,14 @@ func TestNodeJSONKeyOrder_AllFieldsPresent(t *testing.T) {
 	n := &Node{
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"echo"})}, Env: nil}},
 
-		Env:              EnvVars{{Name: internEnv("FOO"), Value: internStr("bar")}},
-		Inputs:           InputChunks{ToVFSSlice([]string{"in"})},
-		KV:               KV{P: pkLD},
-		Outputs:          ToVFSSlice([]string{"out"}),
-		Platform:         &Platform{Target: "default-linux-aarch64"},
-		Requirements:     Requirements{CPU: 1, RAM: 32},
-		SelfUID:          tuid("selfuid"),
-		TargetProperties: TargetProperties{ModuleLang: mlCPP},
-		UID:              tuid("uid"),
+		Env:          EnvVars{{Name: internEnv("FOO"), Value: internStr("bar")}},
+		Inputs:       InputChunks{ToVFSSlice([]string{"in"})},
+		KV:           KV{P: pkLD},
+		Outputs:      ToVFSSlice([]string{"out"}),
+		Platform:     &Platform{Target: "default-linux-aarch64"},
+		Requirements: Requirements{CPU: 1, RAM: 32},
+		SelfUID:      tuid("selfuid"),
+		UID:          tuid("uid"),
 	}
 	raw, err := json.Marshal(n)
 
@@ -115,15 +112,14 @@ func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
 	n := &Node{
 		Cmds: []Cmd{},
 
-		Env:              nil,
-		Inputs:           InputChunks{ToVFSSlice([]string{})},
-		KV:               KV{},
-		Outputs:          ToVFSSlice([]string{}),
-		Platform:         nil,
-		Requirements:     Requirements{},
-		SelfUID:          UID{},
-		TargetProperties: TargetProperties{},
-		UID:              UID{},
+		Env:          nil,
+		Inputs:       InputChunks{ToVFSSlice([]string{})},
+		KV:           KV{},
+		Outputs:      ToVFSSlice([]string{}),
+		Platform:     nil,
+		Requirements: Requirements{},
+		SelfUID:      UID{},
+		UID:          UID{},
 	}
 	raw, err := json.Marshal(n)
 
@@ -145,7 +141,7 @@ func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
 
 	s := string(raw)
 
-	for _, frag := range []string{`"cmds":[]`, `"env":{}`, `"inputs":[]`, `"kv":{}`, `"outputs":[]`, `"requirements":{}`, `"target_properties":{}`} {
+	for _, frag := range []string{`"cmds":[]`, `"env":{}`, `"inputs":[]`, `"kv":{}`, `"outputs":[]`, `"requirements":{}`} {
 		if !strings.Contains(s, frag) {
 			t.Errorf("expected output to contain %q, got: %s", frag, s)
 		}
@@ -156,14 +152,13 @@ func TestNodeJSON_DoesNotSerializeInternalRefs(t *testing.T) {
 	n := &Node{Platform: &Platform{},
 		Cmds: []Cmd{},
 
-		Env:              nil,
-		Inputs:           InputChunks{ToVFSSlice([]string{})},
-		KV:               KV{},
-		Outputs:          ToVFSSlice([]string{}),
-		Requirements:     Requirements{},
-		TargetProperties: TargetProperties{},
-		DepRefs:          []NodeRef{7},
-		ForeignDepRefs:   []NodeRef{9},
+		Env:            nil,
+		Inputs:         InputChunks{ToVFSSlice([]string{})},
+		KV:             KV{},
+		Outputs:        ToVFSSlice([]string{}),
+		Requirements:   Requirements{},
+		DepRefs:        []NodeRef{7},
+		ForeignDepRefs: []NodeRef{9},
 	}
 	raw, err := json.Marshal(n)
 

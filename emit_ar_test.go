@@ -68,14 +68,13 @@ func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 	e := newBufferedEmitter()
 
 	objRefs := []NodeRef{e.emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
-		Env:              nil,
-		Inputs:           InputChunks{ToVFSSlice([]string{})},
-		KV:               KV{},
-		Outputs:          ToVFSSlice([]string{"$(B)/build/cow/on/lib.c.o"}),
-		Platform:         &Platform{Target: "default-linux-aarch64"},
-		Requirements:     Requirements{},
-		TargetProperties: TargetProperties{},
+		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
+		Env:          nil,
+		Inputs:       InputChunks{ToVFSSlice([]string{})},
+		KV:           KV{},
+		Outputs:      ToVFSSlice([]string{"$(B)/build/cow/on/lib.c.o"}),
+		Platform:     &Platform{Target: "default-linux-aarch64"},
+		Requirements: Requirements{},
 	})}
 	objPaths := []VFS{intern("$(B)/o1.o"), intern("$(B)/o2.o")}
 
@@ -180,14 +179,13 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
-			Env:              nil,
-			Inputs:           InputChunks{ToVFSSlice([]string{})},
-			KV:               KV{},
-			Outputs:          []VFS{out},
-			Platform:         &Platform{Target: "default-linux-aarch64"},
-			Requirements:     Requirements{},
-			TargetProperties: TargetProperties{},
+			Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
+			Env:          nil,
+			Inputs:       InputChunks{ToVFSSlice([]string{})},
+			KV:           KV{},
+			Outputs:      []VFS{out},
+			Platform:     &Platform{Target: "default-linux-aarch64"},
+			Requirements: Requirements{},
 		})
 	}
 
@@ -229,14 +227,13 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
-			Env:              nil,
-			Inputs:           InputChunks{ToVFSSlice([]string{})},
-			KV:               KV{},
-			Outputs:          []VFS{out},
-			Platform:         &Platform{Target: "default-linux-aarch64"},
-			Requirements:     Requirements{},
-			TargetProperties: TargetProperties{},
+			Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
+			Env:          nil,
+			Inputs:       InputChunks{ToVFSSlice([]string{})},
+			KV:           KV{},
+			Outputs:      []VFS{out},
+			Platform:     &Platform{Target: "default-linux-aarch64"},
+			Requirements: Requirements{},
 		})
 	}
 
@@ -265,14 +262,13 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
-			Env:              nil,
-			Inputs:           InputChunks{ToVFSSlice([]string{})},
-			KV:               KV{},
-			Outputs:          []VFS{out},
-			Platform:         &Platform{Target: "default-linux-aarch64"},
-			Requirements:     Requirements{},
-			TargetProperties: TargetProperties{},
+			Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
+			Env:          nil,
+			Inputs:       InputChunks{ToVFSSlice([]string{})},
+			KV:           KV{},
+			Outputs:      []VFS{out},
+			Platform:     &Platform{Target: "default-linux-aarch64"},
+			Requirements: Requirements{},
 		})
 	}
 
@@ -370,14 +366,13 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.emit(&Node{
-			Cmds:             []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
-			Env:              nil,
-			Inputs:           InputChunks{ToVFSSlice([]string{})},
-			KV:               KV{},
-			Outputs:          []VFS{out},
-			Platform:         &Platform{Target: "default-linux-aarch64"},
-			Requirements:     Requirements{},
-			TargetProperties: TargetProperties{},
+			Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
+			Env:          nil,
+			Inputs:       InputChunks{ToVFSSlice([]string{})},
+			KV:           KV{},
+			Outputs:      []VFS{out},
+			Platform:     &Platform{Target: "default-linux-aarch64"},
+			Requirements: Requirements{},
 		})
 	}
 
@@ -437,9 +432,13 @@ END()
 			continue
 		}
 
-		if n.TargetProperties.ModuleTag == tagGlobal {
+		if len(n.Outputs) == 0 {
+			continue
+		}
+
+		if strings.HasSuffix(n.Outputs[0].string(), ".global.a") {
 			globalARs++
-		} else if n.TargetProperties.ModuleTag == 0 {
+		} else if strings.HasSuffix(n.Outputs[0].string(), ".a") {
 			regularARs++
 		}
 	}
@@ -477,7 +476,7 @@ END()
 	var consumerAR *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == pkAR && n.TargetProperties.ModuleDir == "lib_consumer" {
+		if n.KV.P == pkAR && len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].rel(), "lib_consumer/") {
 			consumerAR = n
 
 			break
@@ -491,7 +490,7 @@ END()
 	for _, dep := range graphDeps(g, consumerAR) {
 		for _, n := range g.Graph {
 			if n.UID == dep && n.KV.P == pkAR {
-				t.Errorf("lib_consumer AR has AR-typed dep (peer module_dir=%q); reference invariant: zero AR-on-AR deps", n.TargetProperties.ModuleDir)
+				t.Errorf("lib_consumer AR has AR-typed dep (peer outputs=%v); reference invariant: zero AR-on-AR deps", n.Outputs)
 			}
 		}
 	}
@@ -549,7 +548,7 @@ func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 	var arNode *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == pkAR && n.TargetProperties.ModuleDir == "consumer" {
+		if n.KV.P == pkAR && len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].rel(), "consumer/") {
 			arNode = n
 
 			break
@@ -592,11 +591,11 @@ END()
 	)
 
 	for _, n := range g.Graph {
-		if n.KV.P != pkAR {
+		if n.KV.P != pkAR || len(n.Outputs) == 0 {
 			continue
 		}
 
-		if n.TargetProperties.ModuleTag == tagGlobal {
+		if strings.HasSuffix(n.Outputs[0].string(), ".global.a") {
 			globalAR = n
 		} else {
 			regularAR = n
@@ -671,10 +670,6 @@ END()
 
 	cc := findGraphNodeByOutputs(t, g, "$(B)/udfmod/lib.cpp.udfs.o")
 
-	if cc.TargetProperties.ModuleTag != tagYqlUdfStatic {
-		t.Fatalf("cc module_tag = %q, want yql_udf_static", cc.TargetProperties.ModuleTag.string())
-	}
-
 	for _, want := range []string{
 		"-DUDF_ABI_VERSION_MAJOR=2",
 		"-DUDF_ABI_VERSION_MINOR=44",
@@ -685,11 +680,7 @@ END()
 		}
 	}
 
-	globalAR := findGraphNodeByOutputs(t, g, "$(B)/udfmod/libmy_udf.global.a")
-
-	if globalAR.TargetProperties.ModuleTag != tagYqlUdfStaticGlobal {
-		t.Fatalf("global AR module_tag = %q, want yql_udf_static_global", globalAR.TargetProperties.ModuleTag.string())
-	}
+	findGraphNodeByOutputs(t, g, "$(B)/udfmod/libmy_udf.global.a")
 
 	for _, n := range g.Graph {
 		for _, out := range n.Outputs {
@@ -1047,7 +1038,7 @@ func TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs(t *testing.T) {
 	var globalAR *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == pkAR && n.TargetProperties.ModuleTag == tagGlobal {
+		if n.KV.P == pkAR && len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), ".global.a") {
 			globalAR = n
 
 			break
@@ -1135,7 +1126,7 @@ func globalARMembers(t *testing.T, g *Graph) []string {
 	var globalAR *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == pkAR && n.TargetProperties.ModuleTag == tagGlobal {
+		if n.KV.P == pkAR && len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), ".global.a") {
 			globalAR = n
 
 			break

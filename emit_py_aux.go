@@ -225,15 +225,14 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 		}
 
 		ctx.emit.emitReserved(&Node{
-			Platform:         instance.Platform,
-			Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
-			Env:              env,
-			Inputs:           inputs,
-			Outputs:          na.vfsList(aux),
-			KV:               KV{P: pkPR, PC: pcYellow, ShowOut: true},
-			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			DepRefs:          chDeps,
+			Platform:     instance.Platform,
+			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
+			Env:          env,
+			Inputs:       inputs,
+			Outputs:      na.vfsList(aux),
+			KV:           KV{P: pkPR, PC: pcYellow, ShowOut: true},
+			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			DepRefs:      chDeps,
 		}, auxRef)
 		res.Refs = append(res.Refs, auxRef)
 		res.Outputs = append(res.Outputs, aux)

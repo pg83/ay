@@ -229,19 +229,14 @@ func emitEN(
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
-		Env:              env,
-		Inputs:           na.inputList(na.vfsList(enumParserBin), headerIncludeClosure),
-		KV:               KV{P: pkEN, PC: pcYellow},
-		Outputs:          outputs,
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		Sandboxing:       true,
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-		DepRefs:          deps,
-		ForeignDepRefs:   foreignDepRefs,
-	}
-
-	if moduleTag != 0 {
-		node.TargetProperties.ModuleTag = moduleTag
+		Env:            env,
+		Inputs:         na.inputList(na.vfsList(enumParserBin), headerIncludeClosure),
+		KV:             KV{P: pkEN, PC: pcYellow},
+		Outputs:        outputs,
+		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		Sandboxing:     true,
+		DepRefs:        deps,
+		ForeignDepRefs: foreignDepRefs,
 	}
 
 	emit.emitReserved(node, id)

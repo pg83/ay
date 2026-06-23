@@ -365,14 +365,13 @@ func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 			srcVFS.str(),
 			dst.str(),
 		}), Env: env}),
-		Env:              env,
-		Inputs:           inputs,
-		KV:               KV{P: pkld, PC: pcLightBlue, ShowOut: true},
-		Outputs:          na.vfsList(dst),
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleLang: mlAgnostic, ModuleType: mtBin},
-		DepRefs:          depRefs,
-		Resources:        usesPython3,
+		Env:          env,
+		Inputs:       inputs,
+		KV:           KV{P: pkld, PC: pcLightBlue, ShowOut: true},
+		Outputs:      na.vfsList(dst),
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		DepRefs:      depRefs,
+		Resources:    usesPython3,
 	}
 
 	ref := ctx.emit.emit(node)

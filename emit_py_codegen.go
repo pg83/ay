@@ -100,23 +100,10 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 			Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 				Env: env}),
-			Env:     env,
-			Inputs:  nodeInputs,
-			Outputs: na.vfsList(outputPath),
-			KV:      KV{P: pkPY, PC: pcYellow},
-			TargetProperties: func() TargetProperties {
-				tp := TargetProperties{ModuleDir: instance.Path.rel()}
-
-				if d.moduleStmt.Name == tokPy23Library {
-					tp.ModuleTag = tagPy3
-				}
-
-				if d.programPairedLib {
-					tp.ModuleTag = tagPy3BinLib
-				}
-
-				return tp
-			}(),
+			Env:          env,
+			Inputs:       nodeInputs,
+			Outputs:      na.vfsList(outputPath),
+			KV:           KV{P: pkPY, PC: pcYellow},
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    usesPython3,
 		}
@@ -178,23 +165,14 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 		}
 
 		pyNode := &Node{
-			Platform:         ctx.target,
-			Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(pyCmdArgs), Env: env}),
-			Env:              env,
-			Inputs:           na.inputList(genPy3RegScriptChunk),
-			Outputs:          na.vfsList(regCppVFS),
-			KV:               KV{P: pkPY, PC: pcYellow},
-			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			Resources:        usesPython3,
-		}
-
-		if py3Suffix {
-			if d.moduleStmt.Name == tokPy23NativeLibrary {
-				pyNode.TargetProperties.ModuleTag = tagPy3Native
-			} else {
-				pyNode.TargetProperties.ModuleTag = tagPy3
-			}
+			Platform:     ctx.target,
+			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(pyCmdArgs), Env: env}),
+			Env:          env,
+			Inputs:       na.inputList(genPy3RegScriptChunk),
+			Outputs:      na.vfsList(regCppVFS),
+			KV:           KV{P: pkPY, PC: pcYellow},
+			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			Resources:    usesPython3,
 		}
 
 		pyRef := ctx.emit.emit(pyNode)

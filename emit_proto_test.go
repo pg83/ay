@@ -956,7 +956,7 @@ END()
 	var pyPB *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == pkPB && n.TargetProperties.ModuleTag == tagPy3Proto &&
+		if n.KV.P == pkPB &&
 			strings.HasSuffix(n.Outputs[0].string(), "JsonPathParser__intpy3___pb2.py") {
 			pyPB = n
 
@@ -1200,7 +1200,7 @@ END()
 	var pyPB *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == pkPB && n.TargetProperties.ModuleTag == tagPy3Proto &&
+		if n.KV.P == pkPB &&
 			strings.HasSuffix(n.Outputs[0].string(), "brand__intpy3___pb2.py") {
 			pyPB = n
 
@@ -1406,7 +1406,7 @@ END()
 	var cppArgs []STR
 
 	for _, n := range g.Graph {
-		if n.KV.P == pkPB && n.TargetProperties.ModuleTag == tagCppProto &&
+		if n.KV.P == pkPB &&
 			len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), "app/proto/c.pb.h") {
 			cppArgs = n.Cmds[0].CmdArgs.flat()
 
@@ -1452,7 +1452,7 @@ func pyProtoCmdArgsForOutput(t *testing.T, g *Graph, wantSuffix string) []STR {
 	t.Helper()
 
 	for _, n := range g.Graph {
-		if n.KV.P == pkPB && n.TargetProperties.ModuleTag == tagPy3Proto &&
+		if n.KV.P == pkPB &&
 			len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), wantSuffix) {
 			return n.Cmds[0].CmdArgs.flat()
 		}
@@ -1747,7 +1747,7 @@ END()
 	var pyPB *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == pkPB && n.TargetProperties.ModuleTag == tagPy3Proto &&
+		if n.KV.P == pkPB &&
 			len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), "enum_options__intpy3___pb2.py") {
 			pyPB = n
 
@@ -1801,7 +1801,9 @@ END()
 	globals := map[string]bool{}
 
 	for _, n := range g.Graph {
-		if n.KV.P == pkAR && n.TargetProperties.ModuleTag == tagPy3ProtoGlobal && len(n.Outputs) > 0 {
+		if n.KV.P == pkAR && len(n.Outputs) > 0 &&
+			strings.HasSuffix(n.Outputs[0].string(), ".global.a") &&
+			strings.Contains(n.Outputs[0].string(), "libpy3") {
 			globals[n.Outputs[0].string()] = true
 		}
 	}

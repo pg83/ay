@@ -57,13 +57,12 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 			Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 				Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}}),
-			DepRefs:          []NodeRef{swigRef},
-			Env:              EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
-			Inputs:           inputs,
-			Outputs:          na.vfsList(cOutVFS, pyOutVFS),
-			KV:               KV{P: pkSW, PC: pcYellow},
-			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
+			DepRefs:      []NodeRef{swigRef},
+			Env:          EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
+			Inputs:       inputs,
+			Outputs:      na.vfsList(cOutVFS, pyOutVFS),
+			KV:           KV{P: pkSW, PC: pcYellow},
+			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		})
 
 		d.pySrcs = append(d.pySrcs, internStr(pyOutRel))

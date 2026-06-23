@@ -235,13 +235,6 @@ func (c *CanonBuf) writeRequirements(r Requirements) {
 	c.writeBool(r.HasRAMDisk)
 }
 
-func (c *CanonBuf) writeTargetProperties(t TargetProperties) {
-	c.writeBytes(t.ModuleDir)
-	c.writeSTR(t.ModuleTag)
-	c.writeByte(byte(t.ModuleLang))
-	c.writeByte(byte(t.ModuleType))
-}
-
 func (c *CanonBuf) writeKV(kv KV) {
 	c.writeByte(byte(kv.P))
 	c.writeByte(byte(kv.PC))
@@ -281,5 +274,4 @@ func (c *CanonBuf) writeNode(n *Node) {
 	c.writeBytes(string(n.Platform.Target))
 	c.writeRequirements(n.Requirements)
 	c.writeBool(n.Sandboxing)
-	c.writeTargetProperties(n.TargetProperties)
 }

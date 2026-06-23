@@ -291,80 +291,12 @@ END()
 
 	g := testGenDumpGraph(newMemFS(files), "app")
 
-	en := mustNodeByOutput(t, g, "$(B)/own/mode.h_serialized.cpp")
-
-	if got := en.TargetProperties.ModuleDir; got != "own" {
-		t.Fatalf("EN serialized-enum module_dir = %q, want %q (declaring owner, not consumer)", got, "own")
-	}
+	mustNodeByOutput(t, g, "$(B)/own/mode.h_serialized.cpp")
 
 	cc := mustNodeByOutputSuffix(t, g, "mode.h_serialized.cpp.o")
 
 	if cc.KV.P != pkCC {
 		t.Fatalf("expected CC node compiling mode.h_serialized.cpp, got KV.p %v", cc.KV.P)
-	}
-
-	if got := cc.TargetProperties.ModuleDir; got != "own" {
-		t.Fatalf("CC serialized-enum compile module_dir = %q, want %q (declaring owner)", got, "own")
-	}
-}
-
-func TestGen_EnumSerializationDriftsToNestedSubmoduleDirectoryOwnedHeader(t *testing.T) {
-	files := map[string]string{}
-
-	writeTestModuleFile(files, "parent/ya.make", `LIBRARY()
-NO_LIBC()
-NO_RUNTIME()
-NO_UTIL()
-PEERDIR(parent/sub)
-SRCS(sub/services.cpp main2.cpp)
-GENERATE_ENUM_SERIALIZATION_WITH_HEADER(degr.h)
-GENERATE_ENUM_SERIALIZATION_WITH_HEADER(plain.h)
-END()
-`)
-	writeTestModuleFile(files, "parent/degr.h", "enum class Degr { A = 0 };\n")
-	writeTestModuleFile(files, "parent/plain.h", "enum class Plain { A = 0 };\n")
-
-	writeTestModuleFile(files, "parent/main2.cpp", "#include \"util/u.h\"\nint m2(){return 0;}\n")
-
-	writeTestModuleFile(files, "parent/util/u.h", "#include <parent/plain.h_serialized.h>\n")
-
-	writeTestModuleFile(files, "parent/sub/ya.make", `LIBRARY()
-NO_LIBC()
-NO_RUNTIME()
-NO_UTIL()
-SRCS(config.cpp)
-END()
-`)
-	writeTestModuleFile(files, "parent/sub/config.cpp", "int cfg(){return 0;}\n")
-	writeTestModuleFile(files, "parent/sub/services.h", "#include <parent/degr.h_serialized.h>\n")
-	writeTestModuleFile(files, "parent/sub/services.cpp", "#include \"services.h\"\nint svc(){return 0;}\n")
-
-	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
-NO_LIBC()
-NO_RUNTIME()
-NO_UTIL()
-PEERDIR(parent)
-SRCS(main.cpp)
-END()
-`)
-	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
-
-	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
-	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
-	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
-
-	g := testGenDumpGraph(newMemFS(files), "app")
-
-	degr := mustNodeByOutput(t, g, "$(B)/parent/degr.h_serialized.cpp")
-
-	if got := degr.TargetProperties.ModuleDir; got != "parent/sub" {
-		t.Fatalf("degr EN module_dir = %q, want %q (nested submodule directory-owned header)", got, "parent/sub")
-	}
-
-	plain := mustNodeByOutput(t, g, "$(B)/parent/plain.h_serialized.cpp")
-
-	if got := plain.TargetProperties.ModuleDir; got != "parent" {
-		t.Fatalf("plain EN module_dir = %q, want %q (non-module subdir keeps declaring owner)", got, "parent")
 	}
 }
 

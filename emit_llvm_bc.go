@@ -16,7 +16,6 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 	python := d.tc.Python3.string()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	reqs := Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)}
-	tp := TargetProperties{ModuleDir: instance.Path.rel()}
 
 	for _, stmt := range d.llvmBc {
 		clangRoot := resolveResourceGlobalRef(stmt.ClangBCRoot, resourceGlobals)
@@ -63,17 +62,16 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 			}
 
 			node := &Node{
-				Platform:         instance.Platform,
-				Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(bcArgs), Env: env}),
-				Env:              env,
-				Inputs:           allInputs,
-				Outputs:          na.vfsList(bcOut),
-				KV:               KV{P: pkBC, PC: pcLightGreen},
-				TargetProperties: tp,
-				Requirements:     reqs,
-				Sandboxing:       true,
-				DepRefs:          deps,
-				Resources:        usesPython3Clang16,
+				Platform:     instance.Platform,
+				Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(bcArgs), Env: env}),
+				Env:          env,
+				Inputs:       allInputs,
+				Outputs:      na.vfsList(bcOut),
+				KV:           KV{P: pkBC, PC: pcLightGreen},
+				Requirements: reqs,
+				Sandboxing:   true,
+				DepRefs:      deps,
+				Resources:    usesPython3Clang16,
 			}
 			ref := ctx.emit.emit(node)
 			bcRefs = append(bcRefs, ref)
@@ -95,17 +93,16 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 		}
 
 		ldNode := &Node{
-			Platform:         instance.Platform,
-			Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(ldArgs), Env: env}),
-			Env:              env,
-			Inputs:           mergeInputs,
-			Outputs:          na.vfsList(mergedOut),
-			KV:               KV{P: pkLD, PC: pcLightRed},
-			TargetProperties: tp,
-			Requirements:     reqs,
-			Sandboxing:       true,
-			DepRefs:          append([]NodeRef(nil), bcRefs...),
-			Resources:        usesPython3Clang16,
+			Platform:     instance.Platform,
+			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(ldArgs), Env: env}),
+			Env:          env,
+			Inputs:       mergeInputs,
+			Outputs:      na.vfsList(mergedOut),
+			KV:           KV{P: pkLD, PC: pcLightRed},
+			Requirements: reqs,
+			Sandboxing:   true,
+			DepRefs:      append([]NodeRef(nil), bcRefs...),
+			Resources:    usesPython3Clang16,
 		}
 		ldRef := ctx.emit.emit(ldNode)
 
@@ -127,17 +124,16 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 		optChunks := na.inputList(dedupVFS(optInputs, bcSourceInputs))
 
 		optNode := &Node{
-			Platform:         instance.Platform,
-			Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(optArgs), Env: env}),
-			Env:              env,
-			Inputs:           optChunks,
-			Outputs:          na.vfsList(optOut),
-			KV:               KV{P: pkOP, PC: pcYellow},
-			TargetProperties: tp,
-			Requirements:     reqs,
-			Sandboxing:       true,
-			DepRefs:          []NodeRef{ldRef},
-			Resources:        usesPython3Clang16,
+			Platform:     instance.Platform,
+			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(optArgs), Env: env}),
+			Env:          env,
+			Inputs:       optChunks,
+			Outputs:      na.vfsList(optOut),
+			KV:           KV{P: pkOP, PC: pcYellow},
+			Requirements: reqs,
+			Sandboxing:   true,
+			DepRefs:      []NodeRef{ldRef},
+			Resources:    usesPython3Clang16,
 		}
 		opRef := ctx.emit.emit(optNode)
 

@@ -57,17 +57,16 @@ func emitBI(
 
 	cacheFalse := false
 	node := &Node{
-		Platform:         instance.Platform,
-		Cache:            &cacheFalse,
-		Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd1Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd2Args), Env: env}),
-		Env:              env,
-		Inputs:           na.inputList(inputs),
-		KV:               KV{P: pkBI, PC: pcYellow, ShowOut: true, DisableCache: "yes"},
-		Outputs:          na.vfsList(outVFS),
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:          []NodeRef{},
-		Resources:        instance.Platform.UsesPython3Clang,
+		Platform:     instance.Platform,
+		Cache:        &cacheFalse,
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd1Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd2Args), Env: env}),
+		Env:          env,
+		Inputs:       na.inputList(inputs),
+		KV:           KV{P: pkBI, PC: pcYellow, ShowOut: true, DisableCache: "yes"},
+		Outputs:      na.vfsList(outVFS),
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		DepRefs:      []NodeRef{},
+		Resources:    instance.Platform.UsesPython3Clang,
 	}
 
 	return emit.emit(node)

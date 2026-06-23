@@ -96,14 +96,13 @@ func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 
 func testYasmLDRef(e *BufferedEmitter) NodeRef {
 	return e.emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"yasm"})}, Env: nil}},
-		Env:              nil,
-		Inputs:           InputChunks{ToVFSSlice([]string{})},
-		Outputs:          ToVFSSlice([]string{"$(B)/tools/yasm/yasm"}),
-		KV:               KV{P: pkLD, PC: pcLightCyan},
-		Platform:         &Platform{Target: PlatformDefaultLinuxX8664},
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: "tools/yasm"},
+		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"yasm"})}, Env: nil}},
+		Env:          nil,
+		Inputs:       InputChunks{ToVFSSlice([]string{})},
+		Outputs:      ToVFSSlice([]string{"$(B)/tools/yasm/yasm"}),
+		KV:           KV{P: pkLD, PC: pcLightCyan},
+		Platform:     &Platform{Target: PlatformDefaultLinuxX8664},
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 	})
 }
 

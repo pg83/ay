@@ -473,10 +473,6 @@ END()
 	if pr.KV.P != pkPR {
 		t.Fatalf("expected PR producer for gen.h, got %v", pr.KV.P)
 	}
-
-	if got := pr.TargetProperties.ModuleDir; got != "gen" {
-		t.Fatalf("self-owned producer module_dir = %q, want %q (producer keeps it over the parent's OUTPUT_INCLUDES claim)", got, "gen")
-	}
 }
 
 func TestGen_RunProgramToolInducedHeaderDepsRideProducer(t *testing.T) {
@@ -1423,61 +1419,8 @@ END()
 
 	genH := mustNodeByOutput(t, g, "$(B)/gen/gen.h")
 
-	if got := genH.TargetProperties.ModuleDir; got != "gen" {
-		t.Fatalf("generated header module_dir = %q, want %q (producer owns its self-consumed output)", got, "gen")
-	}
-
 	if !slices.Contains(vfsStrings(genH.Outputs), "$(B)/gen/gen.cpp") {
 		t.Fatalf("gen.h PR node missing sibling gen.cpp output: %v", vfsStrings(genH.Outputs))
-	}
-}
-
-func TestGen_HeaderOnlyRunProgramKeepsConsumerModuleDir(t *testing.T) {
-	files := map[string]string{}
-
-	writeToolProgram(files, "tools/genhdr", "genhdr")
-
-	writeTestModuleFile(files, "geninc/ya.make", `LIBRARY()
-NO_LIBC()
-NO_RUNTIME()
-NO_UTIL()
-RUN_PROGRAM(
-    tools/genhdr
-        geninc.inc
-    OUT_NOAUTO
-        geninc.inc
-)
-END()
-`)
-
-	writeTestModuleFile(files, "cons2/ya.make", `LIBRARY()
-NO_LIBC()
-NO_RUNTIME()
-NO_UTIL()
-PEERDIR(geninc)
-SRCS(use2.cpp)
-END()
-`)
-	writeTestModuleFile(files, "cons2/use2.cpp", `#include <geninc/geninc.inc>
-int use2() { return 0; }
-`)
-
-	writeTestModuleFile(files, "app2/ya.make", `PROGRAM()
-NO_LIBC()
-NO_RUNTIME()
-NO_UTIL()
-PEERDIR(cons2)
-SRCS(main.cpp)
-END()
-`)
-	writeTestModuleFile(files, "app2/main.cpp", "int main(){return 0;}\n")
-
-	g := testGenDumpGraph(newMemFS(files), "app2")
-
-	genInc := mustNodeByOutput(t, g, "$(B)/geninc/geninc.inc")
-
-	if got := genInc.TargetProperties.ModuleDir; got != "cons2" {
-		t.Fatalf("header-only generated .inc module_dir = %q, want %q (consumer claims)", got, "cons2")
 	}
 }
 
@@ -1593,10 +1536,6 @@ END()
 
 	if nodeHasInput(wrap, "$(S)/wkt/d.pb.h") {
 		t.Fatalf("wrapper producer (.proto IN) must NOT carry WKT .pb.h sibling: %#v", vfsStrings(wrap.flatInputs()))
-	}
-
-	if got := wrap.TargetProperties.ModuleDir; got != "prof" {
-		t.Fatalf("wrapper producer module_dir = %q, want %q (OUTPUT_INCLUDES consumer claims)", got, "prof")
 	}
 
 	ctl := mustNodeByOutput(t, g, "$(B)/ctl/ctl.h")
@@ -1793,74 +1732,6 @@ END()
 		if nodeHasInput(prod, leak) {
 			t.Fatalf("PR producer leaked header-sibling closure %q: %#v", leak, vfsStrings(prod.flatInputs()))
 		}
-	}
-}
-
-func TestGen_RunProgramIncludedMacroCwdFollowsCopyConsumerOwner(t *testing.T) {
-	files := map[string]string{}
-
-	writeToolProgram(files, "tools/genconsts", "genconsts")
-
-	writeTestModuleFile(files, "shared/make_generated_consts.inc", `DEFAULT(OUTPUT_PATH "generated_consts.py")
-RUN_PROGRAM(
-    tools/genconsts
-        --save_file_path ${OUTPUT_PATH}
-    OUT_NOAUTO
-        ${OUTPUT_PATH}
-    CWD
-        ${BINDIR}
-)
-`)
-
-	writeTestModuleFile(files, "gen/gen_consts/ya.make", `LIBRARY()
-NO_LIBC()
-NO_RUNTIME()
-NO_UTIL()
-INCLUDE(${ARCADIA_ROOT}/shared/make_generated_consts.inc)
-END()
-`)
-
-	writeTestModuleFile(files, "gen/ya.make", `LIBRARY()
-NO_LIBC()
-NO_RUNTIME()
-NO_UTIL()
-PEERDIR(gen/gen_consts)
-COPY_FILE(${ARCADIA_BUILD_ROOT}/gen/gen_consts/generated_consts.py generated_consts.py)
-END()
-`)
-
-	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
-NO_LIBC()
-NO_RUNTIME()
-NO_UTIL()
-PEERDIR(gen)
-SRCS(main.cpp)
-END()
-`)
-	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
-
-	g := testGenDumpGraph(newMemFS(files), "app")
-
-	pr := mustNodeByOutput(t, g, "$(B)/gen/gen_consts/generated_consts.py")
-
-	if pr.KV.P != pkPR {
-		t.Fatalf("expected PR producer, got %v", pr.KV.P)
-	}
-
-	if got := pr.TargetProperties.ModuleDir; got != "gen" {
-		t.Fatalf("PR module_dir = %q, want %q (parent COPY_FILE consumer owns the OUT_NOAUTO node)", got, "gen")
-	}
-
-	if got := pr.Cmds[0].Cwd.string(); got != "$(B)/gen" {
-		t.Fatalf("PR cwd = %q, want %q (${BINDIR} re-resolves against owning parent)", got, "$(B)/gen")
-	}
-
-	if !slices.Contains(vfsStrings(pr.Outputs), "$(B)/gen/gen_consts/generated_consts.py") {
-		t.Fatalf("PR output path moved off the child dir: %v", vfsStrings(pr.Outputs))
-	}
-
-	if got := pr.TargetProperties.ModuleTag; got != 0 {
-		t.Fatalf("PR module_tag = %q, want unset (plain LIBRARY owner is not a multimodule)", got.string())
 	}
 }
 

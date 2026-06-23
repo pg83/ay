@@ -1,6 +1,10 @@
 package main
 
+import "strings"
+
 const nodeRefDropped = ^NodeRef(0)
+
+const llvmIncludeModuleDir = "contrib/libs/llvm16/include/"
 
 func finalizeDumpGraph(e *BufferedEmitter) *Graph {
 	if e == nil {
@@ -14,8 +18,6 @@ func finalizeDumpGraph(e *BufferedEmitter) *Graph {
 	if len(e.nodes) == 0 {
 		return finalize(e)
 	}
-
-	overrideGeneratedModuleDir(e)
 
 	order := finalizeOrder(e)
 
@@ -104,15 +106,15 @@ func isDumpGraphStandaloneLLVMPRNode(node *Node, nodeID int, incoming []int) boo
 		return false
 	}
 
-	if node.TargetProperties.ModuleDir != "contrib/libs/llvm16/include" {
-		return false
-	}
-
 	if len(node.Outputs) == 0 {
 		return false
 	}
 
 	for _, out := range node.Outputs {
+		if !strings.HasPrefix(out.rel(), llvmIncludeModuleDir) {
+			return false
+		}
+
 		if isCCSourceExt(out.rel()) {
 			return false
 		}

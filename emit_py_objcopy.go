@@ -266,29 +266,16 @@ func emitResourceObjcopy(
 			inputs = append(inputs, mainTail)
 		}
 
-		resTargetProps := TargetProperties{ModuleDir: instance.Path.rel()}
-
-		switch {
-		case d.moduleStmt.Name == tokPy23Library || d.moduleStmt.Name == tokPy23NativeLibrary:
-			resTargetProps.ModuleTag = tagPy3
-
-		case d.moduleStmt.Name == tokPy3Program || d.programPairedLib:
-			resTargetProps.ModuleTag = tagPy3BinLib
-		case cppProtoSubmodule:
-			resTargetProps.ModuleTag = tagCppProto
-		}
-
 		node := &Node{
 			Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 				Env: env}),
-			Env:              env,
-			Inputs:           inputs,
-			Outputs:          na.vfsList(outputObj),
-			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
-			TargetProperties: resTargetProps,
-			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			Resources:        instance.Platform.UsesPython3Clang,
+			Env:          env,
+			Inputs:       inputs,
+			Outputs:      na.vfsList(outputObj),
+			KV:           KV{P: pkPY, PC: pcYellow, ShowOut: true},
+			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			Resources:    instance.Platform.UsesPython3Clang,
 		}
 
 		node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
@@ -424,32 +411,16 @@ func emitKvOnlyObjcopyNode(
 	cmdArgs := objcopyCmdArgs(oc, outputObj, payload)
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	targetProps := TargetProperties{ModuleDir: instance.Path.rel()}
-
-	switch d.moduleStmt.Name {
-	case tokPy23Library, tokPy23NativeLibrary:
-		targetProps.ModuleTag = tagPy3
-	}
-
-	if d.moduleStmt.Name == tokPy3Program || d.programPairedLib {
-		if kind == kvOnlyLib {
-			targetProps.ModuleTag = tagPy3BinLib
-		} else {
-			targetProps.ModuleTag = tagPy3Bin
-		}
-	}
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Env: env}),
-		Env:              env,
-		Inputs:           na.inputList(rescompilersWithScriptChunk),
-		Outputs:          na.vfsList(outputObj),
-		KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
-		TargetProperties: targetProps,
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		Resources:        instance.Platform.UsesPython3Clang,
+		Env:          env,
+		Inputs:       na.inputList(rescompilersWithScriptChunk),
+		Outputs:      na.vfsList(outputObj),
+		KV:           KV{P: pkPY, PC: pcYellow, ShowOut: true},
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		Resources:    instance.Platform.UsesPython3Clang,
 	}
 
 	node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
@@ -519,13 +490,12 @@ func emitYaConfJSONObjcopy(
 			Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 				Env: env}),
-			Env:              env,
-			Inputs:           na.inputList(rescompilersChunk, na.vfsList(input, objcopyScriptVFS)),
-			Outputs:          na.vfsList(outputObj),
-			KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
-			TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			Resources:        instance.Platform.UsesPython3Clang,
+			Env:          env,
+			Inputs:       na.inputList(rescompilersChunk, na.vfsList(input, objcopyScriptVFS)),
+			Outputs:      na.vfsList(outputObj),
+			KV:           KV{P: pkPY, PC: pcYellow, ShowOut: true},
+			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			Resources:    instance.Platform.UsesPython3Clang,
 		}
 
 		node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
@@ -726,27 +696,16 @@ func emitPySrcObjcopy(
 			cmdArgs := objcopyCmdArgs(oc, outputObj, payload)
 
 			env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-			targetProps := TargetProperties{ModuleDir: instance.Path.rel()}
-
-			switch d.moduleStmt.Name {
-			case tokPy23Library, tokPy23NativeLibrary:
-				targetProps.ModuleTag = tagPy3
-			}
-
-			if d.moduleStmt.Name == tokPy3Program || d.programPairedLib {
-				targetProps.ModuleTag = tagPy3BinLib
-			}
 
 			node := &Node{
-				Platform:         instance.Platform,
-				Cmds:             na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
-				Env:              env,
-				Inputs:           na.inputList(rescompilersChunk, ch.inps, objcopyScriptChunk),
-				Outputs:          na.vfsList(outputObj),
-				KV:               KV{P: pkPY, PC: pcYellow, ShowOut: true},
-				TargetProperties: targetProps,
-				Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-				Resources:        instance.Platform.UsesPython3Clang,
+				Platform:     instance.Platform,
+				Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
+				Env:          env,
+				Inputs:       na.inputList(rescompilersChunk, ch.inps, objcopyScriptChunk),
+				Outputs:      na.vfsList(outputObj),
+				KV:           KV{P: pkPY, PC: pcYellow, ShowOut: true},
+				Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+				Resources:    instance.Platform.UsesPython3Clang,
 			}
 
 			node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)

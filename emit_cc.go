@@ -179,19 +179,10 @@ func emitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 			CmdArgs: cmdArgs,
 			Env:     env,
 		}),
-		Env:     env,
-		Inputs:  allInputs,
-		Outputs: na.vfsList(outVFS),
-		KV:      KV{P: pkCC, PC: pcGreen},
-		TargetProperties: func() TargetProperties {
-			tp := TargetProperties{ModuleDir: instance.Path.rel()}
-
-			if in.ModuleTag != 0 {
-				tp.ModuleTag = in.ModuleTag
-			}
-
-			return tp
-		}(),
+		Env:          env,
+		Inputs:       allInputs,
+		Outputs:      na.vfsList(outVFS),
+		KV:           KV{P: pkCC, PC: pcGreen},
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    instance.Platform.CCUsesResources,
 	}

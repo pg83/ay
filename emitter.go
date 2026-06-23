@@ -23,12 +23,6 @@ type BufferedEmitter struct {
 	results   []NodeRef
 	finalized bool
 
-	generatedFirstClaim map[VFS]GenOwner
-
-	generatedNodeClaim map[NodeRef]string
-
-	generatedENIncluderDirs map[VFS][]string
-
 	fs FS
 
 	fetchRefs *DenseMap[STR, NodeRef]

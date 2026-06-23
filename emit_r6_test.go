@@ -9,14 +9,13 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	e := newBufferedEmitter()
 
 	ragel6LD := e.emit(&Node{
-		Cmds:             []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
-		Env:              nil,
-		Inputs:           InputChunks{ToVFSSlice([]string{})},
-		KV:               KV{P: pkLD},
-		Outputs:          ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
-		Platform:         &Platform{Target: "default-linux-x86_64"},
-		Requirements:     Requirements{},
-		TargetProperties: TargetProperties{ModuleDir: "contrib/tools/ragel6"},
+		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
+		Env:          nil,
+		Inputs:       InputChunks{ToVFSSlice([]string{})},
+		KV:           KV{P: pkLD},
+		Outputs:      ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
+		Platform:     &Platform{Target: "default-linux-x86_64"},
+		Requirements: Requirements{},
 	})
 
 	inst := targetInstance("util")

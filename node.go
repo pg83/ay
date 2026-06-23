@@ -40,15 +40,14 @@ type Node struct {
 	Cmds  []Cmd   `json:"cmds"`
 	Env   EnvVars `json:"env"`
 
-	Inputs           InputChunks      `json:"inputs"`
-	KV               KV               `json:"kv"`
-	Outputs          []VFS            `json:"outputs"`
-	Platform         *Platform        `json:"platform"`
-	Requirements     Requirements     `json:"requirements"`
-	Sandboxing       bool             `json:"sandboxing"`
-	SelfUID          UID              `json:"self_uid"`
-	TargetProperties TargetProperties `json:"target_properties"`
-	UID              UID              `json:"uid"`
+	Inputs       InputChunks  `json:"inputs"`
+	KV           KV           `json:"kv"`
+	Outputs      []VFS        `json:"outputs"`
+	Platform     *Platform    `json:"platform"`
+	Requirements Requirements `json:"requirements"`
+	Sandboxing   bool         `json:"sandboxing"`
+	SelfUID      UID          `json:"self_uid"`
+	UID          UID          `json:"uid"`
 
 	DepRefs        []NodeRef `json:"-"`
 	ForeignDepRefs []NodeRef `json:"-"`

@@ -81,13 +81,12 @@ func emitYmapsSprotoHeader(ctx *GenCtx, instance ModuleInstance, p ymapsSprotoPe
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Cwd: strS,
 			Env: env}),
-		Env:              env,
-		Inputs:           na.inputList(na.vfsList(sprotocBinary), closure),
-		Outputs:          []VFS{p.sprotoH},
-		KV:               KV{P: pkPB, PC: pcYellow},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel(), ModuleTag: tagCppProto},
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs:   depRefs(sprotocLDRef),
+		Env:            env,
+		Inputs:         na.inputList(na.vfsList(sprotocBinary), closure),
+		Outputs:        []VFS{p.sprotoH},
+		KV:             KV{P: pkPB, PC: pcYellow},
+		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		ForeignDepRefs: depRefs(sprotocLDRef),
 	}
 
 	ctx.emit.emitReserved(node, p.ref)

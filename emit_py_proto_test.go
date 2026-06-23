@@ -75,11 +75,7 @@ END()
 		t.Fatalf("py3cc first token is not the bare `banner_flags__intpy3___pb2.py-`: %v", first)
 	}
 
-	producer := mustNodeByOutput(t, g, "$(B)/"+modPath+"/banner_flags.proto")
-
-	if producer.TargetProperties.ModuleTag != tagCppProto {
-		t.Fatalf("generated .proto producer module_tag = %q; want cpp_proto", producer.TargetProperties.ModuleTag.string())
-	}
+	mustNodeByOutput(t, g, "$(B)/"+modPath+"/banner_flags.proto")
 
 	pb := mustNodeByOutput(t, g, pyOut)
 

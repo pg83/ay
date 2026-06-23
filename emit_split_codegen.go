@@ -90,15 +90,14 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 	reg.addClosureLeaf(prefixH, inputIn)
 
 	node := &Node{
-		Platform:         instance.Platform,
-		Cmds:             na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
-		Env:              env,
-		Inputs:           na.inputList(na.vfsList(toolBin, inputIn)),
-		Outputs:          outputs,
-		KV:               KV{P: pkSC, PC: pcYellow},
-		TargetProperties: TargetProperties{ModuleDir: moduleDir},
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs:   depRefs(toolLDRef),
+		Platform:       instance.Platform,
+		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
+		Env:            env,
+		Inputs:         na.inputList(na.vfsList(toolBin, inputIn)),
+		Outputs:        outputs,
+		KV:             KV{P: pkSC, PC: pcYellow},
+		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		ForeignDepRefs: depRefs(toolLDRef),
 	}
 
 	ctx.emit.emitReserved(node, scRef)

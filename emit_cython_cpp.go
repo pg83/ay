@@ -284,23 +284,16 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 			(generatedVFS).str(),
 		)
 
-		targetProps := TargetProperties{ModuleDir: instance.Path.rel()}
-
-		if !stmt.CMode && !generatedExplicit && py23Variant {
-			targetProps.ModuleTag = tagPy3
-		}
-
 		ctx.emit.emitReserved(&Node{
 			Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 				Env: env}),
-			Env:              env,
-			Inputs:           na.inputList(toolInputs),
-			Outputs:          na.vfsList(append([]VFS{generatedVFS}, headerVFS...)...),
-			KV:               KV{P: pkCY, PC: pcYellow},
-			Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			TargetProperties: targetProps,
-			Resources:        usesPython3,
+			Env:          env,
+			Inputs:       na.inputList(toolInputs),
+			Outputs:      na.vfsList(append([]VFS{generatedVFS}, headerVFS...)...),
+			KV:           KV{P: pkCY, PC: pcYellow},
+			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			Resources:    usesPython3,
 		}, cyRef)
 
 		ccIn := in

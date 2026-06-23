@@ -97,14 +97,13 @@ func emitArchive(
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
-		Env:              env,
-		Inputs:           na.inputList(inputs, na.srcChunk(toolBinPath)),
-		KV:               KV{P: pkAR, PC: pcLightRed},
-		Outputs:          na.vfsList(archiveVFS),
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-		DepRefs:          deps,
-		Resources:        instance.Platform.UsesPython3Clang,
+		Env:          env,
+		Inputs:       na.inputList(inputs, na.srcChunk(toolBinPath)),
+		KV:           KV{P: pkAR, PC: pcLightRed},
+		Outputs:      na.vfsList(archiveVFS),
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		DepRefs:      deps,
+		Resources:    instance.Platform.UsesPython3Clang,
 	}
 
 	arRef := emit.emit(n)

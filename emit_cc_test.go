@@ -744,9 +744,9 @@ func TestGen_UppercaseCSource_CompilesAsCxx(t *testing.T) {
 		case pkAR:
 			arCount++
 
-			if n.TargetProperties.ModuleTag == tagGlobal {
+			if len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), ".global.a") {
 				globalARs++
-			} else if n.TargetProperties.ModuleTag == 0 {
+			} else if len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), ".a") {
 				regularARs++
 			}
 		}

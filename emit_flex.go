@@ -61,14 +61,13 @@ func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, o
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	emit.emitReserved(&Node{
-		Platform:         instance.Platform,
-		Cmds:             na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
-		Env:              env,
-		Inputs:           na.inputList(na.vfsList(flexBin, srcVFS), closure),
-		Outputs:          na.vfsList(outVFS),
-		KV:               KV{P: pkLX, PC: pcYellow},
-		Requirements:     Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		TargetProperties: TargetProperties{ModuleDir: instance.Path.rel()},
-		ForeignDepRefs:   []NodeRef{flexRef},
+		Platform:       instance.Platform,
+		Cmds:           na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
+		Env:            env,
+		Inputs:         na.inputList(na.vfsList(flexBin, srcVFS), closure),
+		Outputs:        na.vfsList(outVFS),
+		KV:             KV{P: pkLX, PC: pcYellow},
+		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		ForeignDepRefs: []NodeRef{flexRef},
 	}, id)
 }
