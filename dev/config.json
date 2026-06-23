@@ -19,7 +19,7 @@
       "devtools/ymake/bin"
     ],
     "target": "devtools/ymake/bin",
-    "xfail": "auto",
+    "xfail": false,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/12550817609",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/12550818182"
   },
@@ -43,7 +43,7 @@
       "devtools/ya/bin"
     ],
     "target": "devtools/ya/bin",
-    "xfail": "auto",
+    "xfail": false,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/12550817609",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/12550826032"
   },
@@ -63,7 +63,7 @@
       "ydb/apps/ydbd"
     ],
     "target": "ydb/apps/ydbd",
-    "xfail": "auto",
+    "xfail": false,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/12550902338",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/12550903467"
   },
@@ -99,7 +99,7 @@
       "devtools/ya/bin"
     ],
     "target": "devtools/ya/bin",
-    "xfail": "auto",
+    "xfail": false,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/12551939953",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/12551940409"
   },
@@ -117,7 +117,7 @@
       "devtools/ymake/bin"
     ],
     "target": "devtools/ymake/bin",
-    "xfail": "auto",
+    "xfail": false,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/12551946674",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/12551947029"
   }
