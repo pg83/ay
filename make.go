@@ -75,6 +75,20 @@ func compilerFlagsFromConfig(primary, internal map[string]string, key, env strin
 	return joinCompilerFlagStrings(primary[key], internal[key], env)
 }
 
+func warnHandler(keepGoing, verbose bool, emit func(line string)) func(Warn) {
+	return func(w Warn) {
+		gated := w.Kind == WarnMissingInclude || w.Kind == WarnUnsupportedSource || w.Kind == WarnMissingAddincl
+
+		if gated && !keepGoing {
+			throwFmt("%s: %s", w.Kind, w.Message)
+		}
+
+		if gated || verbose {
+			emit(fmt.Sprintf("\x1b[33m%s: %s\x1b[0m", w.Kind, w.Message))
+		}
+	}
+}
+
 func cmdMake(g GlobalFlags, args []string) int {
 	defer startProfilesFromEnv()()
 
@@ -182,15 +196,9 @@ func cmdMake(g GlobalFlags, args []string) int {
 		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS")),
 	)
 
-	onWarn := func(w Warn) {
-		if (w.Kind == WarnMissingInclude || w.Kind == WarnUnsupportedSource || w.Kind == WarnMissingAddincl) && !mf.keepGoing {
-			throwFmt("%s: %s", w.Kind, w.Message)
-		}
-
-		if mf.verbose {
-			fmt.Fprintf(os.Stderr, "\x1b[33m%s: %s\x1b[0m\n", w.Kind, w.Message)
-		}
-	}
+	onWarn := warnHandler(mf.keepGoing, mf.verbose, func(line string) {
+		fmt.Fprintln(os.Stderr, line)
+	})
 
 	if mf.copySources != "" {
 		for _, target := range mf.targets {
@@ -236,20 +244,11 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	defer ex.close()
 
-	executorWarn := func(w Warn) {
-		if (w.Kind == WarnMissingInclude || w.Kind == WarnUnsupportedSource) && !mf.keepGoing {
-			throwFmt("%s: %s", w.Kind, w.Message)
+	executorWarn := warnHandler(mf.keepGoing, mf.verbose, func(line string) {
+		ex.events <- func() {
+			fmt.Fprintln(os.Stderr, line)
 		}
-
-		if mf.verbose {
-			kind := w.Kind
-			message := w.Message
-
-			ex.events <- func() {
-				fmt.Fprintf(os.Stderr, "\x1b[33m%s: %s\x1b[0m\n", kind, message)
-			}
-		}
-	}
+	})
 
 	results := genStream(fs, mf.targets, hostP, targetP, ex.onNode, executorWarn, mf.testLevel > 0)
 
