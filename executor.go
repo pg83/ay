@@ -36,7 +36,7 @@ type Executor struct {
 	grbDir      string
 	mu          sync.Mutex
 	byUID       map[UID]*NodeFuture
-	events      chan func()
+	events      *EventQueue
 	stats       map[string][]time.Duration
 	pending     atomic.Uint64
 	done        atomic.Uint64
@@ -64,7 +64,7 @@ type NodeFuture struct {
 	err       *Exception
 }
 
-func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, ninja bool, sandboxing bool, cmdPrefixes []CmdPrefix) *Executor {
+func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, ninja bool, sandboxing bool, cmdPrefixes []CmdPrefix, events *EventQueue) *Executor {
 	return &Executor{
 		srcRoot:     srcRoot,
 		bldRoot:     bldRoot,
@@ -75,7 +75,7 @@ func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, ninja boo
 		grbDir:      filepath.Join(bldRoot, "grb"),
 		cmdPrefixes: cmdPrefixes,
 		byUID:       make(map[UID]*NodeFuture, 8192),
-		events:      make(chan func(), 4096),
+		events:      events,
 		stats:       map[string][]time.Duration{},
 	}
 }
@@ -113,16 +113,6 @@ func fatalException(e *Exception) {
 	})
 
 	select {}
-}
-
-func (ex *Executor) eventLoop() {
-	for fn := range ex.events {
-		fn()
-	}
-}
-
-func (ex *Executor) close() {
-	close(ex.events)
 }
 
 func (ex *Executor) run(roots []UID) {
@@ -264,7 +254,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 
 	rec := fmt.Sprintf("[%s] {%d/%d} %s", display, done, pending, outFirst)
 
-	ex.events <- func() {
+	ex.events.post(func() {
 		if cmdResult.Stderr != "" {
 			if !ex.ninja {
 				fmt.Fprint(os.Stderr, ansiESC+"[2K\r")
@@ -280,7 +270,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 		} else {
 			fmt.Fprint(os.Stderr, ansiESC+"[2K\r"+rec+"\r")
 		}
-	}
+	})
 }
 
 func parseCmdPrefix(spec string) CmdPrefix {

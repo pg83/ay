@@ -196,8 +196,13 @@ func cmdMake(g GlobalFlags, args []string) int {
 		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS")),
 	)
 
+	events := newEventQueue()
+	defer events.close()
+
 	onWarn := warnHandler(mf.keepGoing, mf.verbose, func(line string) {
-		fmt.Fprintln(os.Stderr, line)
+		events.post(func() {
+			fmt.Fprintln(os.Stderr, line)
+		})
 	})
 
 	if mf.copySources != "" {
@@ -233,24 +238,14 @@ func cmdMake(g GlobalFlags, args []string) int {
 		return 0
 	}
 
-	ex := newExecutor(mf.srcRoot, mf.bldRoot, mf.threads, mf.keepGoing, mf.ninja, mf.sandboxing, mf.cmdPrefixes)
+	ex := newExecutor(mf.srcRoot, mf.bldRoot, mf.threads, mf.keepGoing, mf.ninja, mf.sandboxing, mf.cmdPrefixes, events)
 	ex.startGarbageCollector()
 
 	if mf.clear {
 		ex.clearCache()
 	}
 
-	go ex.eventLoop()
-
-	defer ex.close()
-
-	executorWarn := warnHandler(mf.keepGoing, mf.verbose, func(line string) {
-		ex.events <- func() {
-			fmt.Fprintln(os.Stderr, line)
-		}
-	})
-
-	results := genStream(fs, mf.targets, hostP, targetP, ex.onNode, executorWarn, mf.testLevel > 0)
+	results := genStream(fs, mf.targets, hostP, targetP, ex.onNode, onWarn, mf.testLevel > 0)
 
 	ex.run(results)
 
