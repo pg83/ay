@@ -76,6 +76,8 @@ func compilerFlagsFromConfig(primary, internal map[string]string, key, env strin
 }
 
 func warnHandler(keepGoing, verbose bool, emit func(line string)) func(Warn) {
+	seen := map[string]bool{}
+
 	return func(w Warn) {
 		gated := w.Kind == WarnMissingInclude || w.Kind == WarnUnsupportedSource || w.Kind == WarnMissingAddincl
 
@@ -83,9 +85,18 @@ func warnHandler(keepGoing, verbose bool, emit func(line string)) func(Warn) {
 			throwFmt("%s: %s", w.Kind, w.Message)
 		}
 
-		if gated || verbose {
-			emit(fmt.Sprintf("\x1b[33m%s: %s\x1b[0m", w.Kind, w.Message))
+		if !gated && !verbose {
+			return
 		}
+
+		line := fmt.Sprintf("\x1b[33m%s: %s\x1b[0m", w.Kind, w.Message)
+
+		if seen[line] {
+			return
+		}
+
+		seen[line] = true
+		emit(line)
 	}
 }
 
