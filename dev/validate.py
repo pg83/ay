@@ -52,6 +52,26 @@ WORK_CWD = REPO_ROOT
 
 GEN_TIME_SLACK = 1.2
 
+# ay reads CFLAGS/CXXFLAGS/CPPFLAGS/... from the environment and injects them into
+# the generated compile commands (as USER_CFLAGS). The reference graph is built in
+# a clean toolchain env, so the caller's CC/CXX/*FLAGS must be stripped before any
+# ay (or go build) invocation, else every CC node diverges by the leaked flags.
+TOOLCHAIN_ENV_VARS = (
+    "CC", "CXX", "CPP", "LD", "AR", "NM", "RANLIB", "STRIP", "OBJCOPY",
+    "CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS", "LDLIBS",
+    "CGO_CFLAGS", "CGO_CXXFLAGS", "CGO_CPPFLAGS", "CGO_LDFLAGS",
+    "NIX_CFLAGS_COMPILE", "NIX_CFLAGS_LINK", "NIX_LDFLAGS",
+)
+
+
+def clean_env(extra=None):
+    env = {k: v for k, v in os.environ.items() if k not in TOOLCHAIN_ENV_VARS}
+
+    if extra:
+        env.update(extra)
+
+    return env
+
 
 @dataclass(frozen=True)
 class ParityCounts:
@@ -215,9 +235,7 @@ def run_graph(nodes, jobs):
 def sh(cmd, gogc=False, stdout=None):
     """Run a subprocess in WORK_CWD; return its exit code. gogc=True passes
     GOGC=800 (the heavy ay commands spend ~half their CPU on GC at default)."""
-    env = dict(os.environ)
-    if gogc:
-        env["GOGC"] = "800"
+    env = clean_env({"GOGC": "800"} if gogc else None)
 
     if stdout is not None:
         with open(stdout, "wb") as f:
@@ -271,7 +289,7 @@ def resolve_ref_raw(graph_dir):
 
 def build_action():
     t = time.monotonic()
-    env = dict(os.environ, CGO_ENABLED="0")
+    env = clean_env({"CGO_ENABLED": "0"})
     rc = subprocess.run([GO, "build", "-o", AY, "."], cwd=REPO_ROOT, env=env).returncode
     print(f"[build] {time.monotonic() - t:.2f}s", flush=True)
 

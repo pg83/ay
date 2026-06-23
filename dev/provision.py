@@ -154,13 +154,27 @@ def repo_ya(root, tokens):
     return [ya] + list(tokens[1:])
 
 
+# Toolchain env vars (CC/CXX/*FLAGS) leak into the generated graph's compile
+# commands; the reference must be built in a clean env, so strip them.
+TOOLCHAIN_ENV_VARS = (
+    "CC", "CXX", "CPP", "LD", "AR", "NM", "RANLIB", "STRIP", "OBJCOPY",
+    "CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS", "LDLIBS",
+    "CGO_CFLAGS", "CGO_CXXFLAGS", "CGO_CPPFLAGS", "CGO_LDFLAGS",
+    "NIX_CFLAGS_COMPILE", "NIX_CFLAGS_LINK", "NIX_LDFLAGS",
+)
+
+
 def ya_env():
-    """Env for every ya invocation here. YA_TC=no keeps ya from spawning the
+    """Env for every ya/ay invocation here. YA_TC=no keeps ya from spawning the
     persistent tools-cache daemon — under `strace -f` that daemon never exits,
     so strace would hang forever after ymake itself finished. YA_NO_RESPAWN
     stops the launcher re-exec'ing itself. -xx (added to run_command) bypasses
-    the graph cache, so reads stay complete without a cold cache dir."""
-    return dict(os.environ, YA_TC="no", YA_NO_RESPAWN="yes")
+    the graph cache, so reads stay complete without a cold cache dir. The
+    caller's toolchain vars are stripped so they don't leak into compile cmds."""
+    env = {k: v for k, v in os.environ.items() if k not in TOOLCHAIN_ENV_VARS}
+    env.update(YA_TC="no", YA_NO_RESPAWN="yes")
+
+    return env
 
 
 def strace_run(mount, ya_cmd, trace_path, graph_path, strace_bin):
