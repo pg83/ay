@@ -11,8 +11,8 @@ Two modes:
   --url <zip>     github archive .zip: no slicing — download + store the whole
                   zip, and build the reference graph by running ya on it.
 
-Both then (with --publish) `ya upload` the slice/zip + reference graph (ttl inf)
-and append a dev/config.json entry.
+Both then `ya upload` the slice/zip + reference graph (ttl inf) and append a
+dev/config.json entry (pass --no-upload to stop after verify).
 
   1. resolve the tree's commit sha,
   2. run upstream `ya make -G <CMD>` under strace, capturing the reference graph
@@ -482,8 +482,8 @@ def main():
                     help="strace binary (default: ya tool strace)")
     ap.add_argument("--reuse", action="store_true",
                     help="skip phases whose artifacts already exist")
-    ap.add_argument("--publish", action="store_true",
-                    help="phase 6: ya upload slice+graph (ttl inf) and append config")
+    ap.add_argument("--no-upload", action="store_true",
+                    help="stop after verify; do not ya upload or write config")
     ap.add_argument("--config", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json"))
     ap.add_argument("--remote", default=None, help="provenance remote (default: git origin / arcadia)")
     ap.add_argument("--xfail", default="auto", help="gating mode for this case (false|true|auto)")
@@ -587,8 +587,8 @@ def main():
     with open(os.path.join(ws, "meta.json"), "w") as f:
         json.dump(entry, f, indent=2)
 
-    if not args.publish:
-        print(f"[provision] OK — artifact at {slice_artifact} (pass --publish to upload + write config)", flush=True)
+    if args.no_upload:
+        print(f"[provision] OK — artifact at {slice_artifact} (--no-upload: skipped upload + config)", flush=True)
         return 0
 
     print("[provision] phase 6: upload + config", flush=True)
