@@ -14,6 +14,7 @@ type GeneratedFileInfo struct {
 	CythonMainOut         VFS
 	ProducerMainOut       VFS
 	ClosureLeaves         []VFS
+	ParsedIncludes        []IncludeDirective
 }
 
 type CodegenRegistry struct {
@@ -191,14 +192,35 @@ func registerBoundGeneratedParsedOutput(ctx *GenCtx, instance ModuleInstance, ki
 
 func registerBoundGeneratedParsedOutputWithSource(ctx *GenCtx, instance ModuleInstance, kind ProcKind, output VFS, sourcePath VFS, parsed []IncludeDirective, ref NodeRef, generatorRefs []NodeRef) {
 	codegenRegForInstance(ctx, instance).register(&GeneratedFileInfo{
-		ProducerKvP:   kind,
-		OutputPath:    output,
-		SourcePath:    sourcePath,
-		ProducerRef:   ref,
-		GeneratorRefs: generatorRefs,
+		ProducerKvP:    kind,
+		OutputPath:     output,
+		SourcePath:     sourcePath,
+		ProducerRef:    ref,
+		GeneratorRefs:  generatorRefs,
+		ParsedIncludes: parsed,
 	})
+}
 
-	ctx.scannerFor(instance).parsers.registerBuildParsedIncludes(output, parsed)
+func (r *CodegenRegistry) setBuildParsed(out VFS, parsed []IncludeDirective) {
+	if !out.isBuild() {
+		throwFmt("setBuildParsed: source-rooted output %q", out.string())
+	}
+
+	info, ok := r.byStr.get(STR(out.strID()))
+
+	if !ok {
+		throwFmt("setBuildParsed: no generated info for %q", out.string())
+	}
+
+	info.ParsedIncludes = parsed
+}
+
+func (r *CodegenRegistry) buildParsedFor(out VFS) []IncludeDirective {
+	if info, ok := r.byStr.get(STR(out.strID())); ok {
+		return info.ParsedIncludes
+	}
+
+	return nil
 }
 
 func generatedOutputClosure(ctx *GenCtx, instance ModuleInstance, output VFS, in ModuleCCInputs) []VFS {

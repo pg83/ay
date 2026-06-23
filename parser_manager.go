@@ -58,20 +58,17 @@ type IncludeParserManager struct {
 	scanConfigCount uint32
 	addinclIndex    DenseMap[STR, []VFS]
 	addinclIndexed  BitSet
-	buildParsed     map[VFS][]IncludeDirective
 }
 
 type ParserPerfStats struct {
 	parsedHits   uint64
 	parsedMisses uint64
-	buildParsed  int
 }
 
 func newIncludeParserManagerFS(fs FS, cache *SharedParseCache) *IncludeParserManager {
 	return &IncludeParserManager{
-		fs:          fs,
-		cache:       cache,
-		buildParsed: make(map[VFS][]IncludeDirective, 256),
+		fs:    fs,
+		cache: cache,
 	}
 }
 
@@ -152,28 +149,8 @@ func (pm *IncludeParserManager) withCythonSibling(rel string, set ParsedIncludeS
 	return set
 }
 
-func (pm *IncludeParserManager) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveParser) []IncludeDirective {
-	if vfsPath.isBuild() {
-		if parsed, ok := pm.buildParsed[vfsPath]; ok {
-			return parsed
-		}
-
-		return nil
-	}
-
-	return pm.sourceParsedBuckets(vfsPath, ctxParser).bucket(walkableBucketFor(vfsPath.rel()))
-}
-
 func (pm *IncludeParserManager) injectSourceParse(vfsPath VFS, set ParsedIncludeSet) {
 	pm.cache.parsed.put(STR(vfsPath.strID()), set)
-}
-
-func (pm *IncludeParserManager) registerBuildParsedIncludes(out VFS, parsed []IncludeDirective) {
-	if !out.isBuild() {
-		throwFmt("RegisterBuildParsedIncludes: source-rooted output %q", out.string())
-	}
-
-	pm.buildParsed[out] = parsed
 }
 
 func (pm *IncludeParserManager) indexAddincl(a VFS) {
@@ -232,6 +209,5 @@ func (pm *IncludeParserManager) perfStats() ParserPerfStats {
 	return ParserPerfStats{
 		parsedHits:   pm.cache.parsedHits,
 		parsedMisses: pm.cache.parsedMisses,
-		buildParsed:  len(pm.buildParsed),
 	}
 }
