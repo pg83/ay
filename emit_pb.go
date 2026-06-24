@@ -145,7 +145,7 @@ func emitPB(
 
 		Inputs:         na.inputList(inputs, transitiveProtoImports, producerSourceInputs),
 		Outputs:        outputs,
-		KV:             KV{P: pkPB, PC: pcYellow},
+		KV:             &pbKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:        deps,
 		ForeignDepRefs: foreignDepRefs,
@@ -379,3 +379,7 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 
 	return &PbArgBlocks{head: head, mid: mid, tail: tail}
 }
+
+var (
+	pbKV = KV{P: pkPB, PC: pcYellow}
+)

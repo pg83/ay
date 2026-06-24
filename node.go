@@ -39,7 +39,7 @@ type Node struct {
 	Cmds           []Cmd        `json:"cmds"`
 	Env            EnvVars      `json:"env"`
 	Inputs         InputChunks  `json:"inputs"`
-	KV             KV           `json:"kv"`
+	KV             *KV          `json:"kv"`
 	Outputs        []VFS        `json:"outputs"`
 	Platform       *Platform    `json:"platform"`
 	Requirements   Requirements `json:"requirements"`

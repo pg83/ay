@@ -1,5 +1,7 @@
 package main
 
+var cfgprotoKV = KV{P: pkPB, PC: pcYellow}
+
 func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
 	cfgSource := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
 	cfgRelPath := cfgSource.rel()
@@ -16,7 +18,7 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	cfgImports := walkClosureTail(ctx.scannerFor(instance), cfgSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()).ScanCfg)
 
 	cfgRef := emitProtoWrapperPBNode(
-		instance, cfgRelPath, pkPB,
+		instance, cfgRelPath, &cfgprotoKV,
 		cppStyleguideLDRef, protocLDRef, configPluginLDRef,
 		cppStyleguideBinary, protocBinary, configPluginBinary,
 		configOpts, 0, cfgImports, in.ProtoInclude,

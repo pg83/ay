@@ -31,7 +31,7 @@ func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		Env:          env,
 		Inputs:       na.inputList(in.IncludeInputs),
 		Outputs:      na.vfsList(outVFS),
-		KV:           KV{P: pkAS, PC: pcLightGreen},
+		KV:           &asKV,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    instance.Platform.UsesClangOnly,
 	}
@@ -162,7 +162,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 		Env:          env,
 		Inputs:       na.inputList(na.vfsList(yasmBinaryVFS), in.IncludeInputs),
 		Outputs:      na.vfsList(outVFS),
-		KV:           KV{P: pkAS, PC: pcLightGreen},
+		KV:           &asKV,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 	}
 
@@ -200,3 +200,7 @@ func emitLibraryAsmSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, s
 
 	return &SourceEmit{Ref: ref, OutPath: outPath}
 }
+
+var (
+	asKV = KV{P: pkAS, PC: pcLightGreen}
+)

@@ -95,7 +95,7 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(toolBin, inputIn)),
 		Outputs:        outputs,
-		KV:             KV{P: pkSC, PC: pcYellow},
+		KV:             &splitCodegenKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: depRefs(toolLDRef),
 	}
@@ -104,3 +104,7 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 
 	return scRef, partRels
 }
+
+var (
+	splitCodegenKV = KV{P: pkSC, PC: pcYellow}
+)

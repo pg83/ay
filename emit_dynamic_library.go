@@ -108,7 +108,7 @@ func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs [
 		Env:          envFull,
 		Inputs:       inputs,
 		Outputs:      na.vfsList(build(instance.Path.rel() + "/" + outputName)),
-		KV:           KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
+		KV:           &dynamicLibraryKV,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      deps,
 		Resources:    instance.Platform.UsesLinkResources,
@@ -281,7 +281,7 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		Env:          envFull,
 		Inputs:       inputs,
 		Outputs:      na.vfsList(build(instance.Path.rel() + "/" + outputName)),
-		KV:           KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
+		KV:           &dynamicLibraryKV,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      deps,
 		Resources:    instance.Platform.UsesLinkResources,
@@ -421,3 +421,7 @@ func composeDynLibInputs(na *NodeArenas, peerLibPaths, pluginPaths []VFS, fixElf
 
 	return chunks
 }
+
+var (
+	dynamicLibraryKV = KV{P: pkLD, PC: pcLightBlue, ShowOut: true}
+)

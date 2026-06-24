@@ -13,7 +13,7 @@ func emitSC(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary VFS, ru
 		}),
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(domschemecBinary, srcVFS), runtimeClosure),
-		KV:             KV{P: pkSC, PC: pcYellow},
+		KV:             &scKV,
 		Outputs:        na.vfsList(headerVFS),
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: []NodeRef{domschemecLDRef},
@@ -42,3 +42,7 @@ func emitLibrarySCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 
 	return nil
 }
+
+var (
+	scKV = KV{P: pkSC, PC: pcYellow}
+)

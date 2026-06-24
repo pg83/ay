@@ -17,7 +17,7 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 			decl.URI,
 			output.str()))}),
 		Inputs:       na.inputList(fetchScriptInputs(ctx.scripts)),
-		KV:           KV{P: pkFETCH, PC: pcYellow, ShowOut: true},
+		KV:           &fetchKV,
 		Outputs:      na.vfsList(output),
 		Requirements: Requirements{CPU: float64(1), Network: nwFull, RAM: float64(32)},
 	}
@@ -30,3 +30,7 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 
 	return ref
 }
+
+var (
+	fetchKV = KV{P: pkFETCH, PC: pcYellow, ShowOut: true}
+)

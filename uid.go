@@ -249,7 +249,7 @@ func (c *CanonBuf) writeNode(n *Node) {
 	c.writeEnv(n.Env)
 	c.writeRefUIDs(n.ForeignDepRefs)
 	c.writeVFSChunks(n.Inputs)
-	c.writeKV(n.KV)
+	c.writeKV(*n.KV)
 	c.writeVFSSlice(n.Outputs)
 	c.writeBytes(string(n.Platform.Target))
 }

@@ -230,7 +230,7 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 			Env:          env,
 			Inputs:       inputs,
 			Outputs:      na.vfsList(aux),
-			KV:           KV{P: pkPR, PC: pcYellow, ShowOut: true},
+			KV:           &pyAuxKV,
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			DepRefs:      chDeps,
 		}, auxRef)
@@ -263,3 +263,7 @@ func rawAuxInputClosure(ctx *GenCtx, instance ModuleInstance, aux VFS, seed []VF
 
 	return closure
 }
+
+var (
+	pyAuxKV = KV{P: pkPR, PC: pcYellow, ShowOut: true}
+)

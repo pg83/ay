@@ -123,7 +123,7 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, srcRel string, in M
 		Env:          env,
 		Inputs:       na.inputList(inputs),
 		Outputs:      na.vfsList(headerVFS, generatedVFS),
-		KV:           KV{P: pkYC, PC: pcLightGreen},
+		KV:           &bisonYKV,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    usesPython3,
 	}, ycRef)
@@ -161,3 +161,7 @@ func m4Tool(ctx *GenCtx, instance ModuleInstance) (NodeRef, STR) {
 
 	return ref, bin.str()
 }
+
+var (
+	bisonYKV = KV{P: pkYC, PC: pcLightGreen}
+)

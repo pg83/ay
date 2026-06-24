@@ -43,7 +43,7 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 			Env: env}),
 		Env:          env,
 		Inputs:       inputs,
-		KV:           KV{P: pkJS, PC: pcMagenta},
+		KV:           &jsNodeKV,
 		Outputs:      na.vfsList(outVFS),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    usesPython3,
@@ -51,3 +51,7 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 
 	return emit.emit(node), outVFS
 }
+
+var (
+	jsNodeKV = KV{P: pkJS, PC: pcMagenta}
+)

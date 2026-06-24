@@ -36,7 +36,7 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 		Cmds:         []Cmd{},
 		Env:          nil,
 		Inputs:       InputChunks{ToVFSSlice([]string{})},
-		KV:           KV{Name: "leaf"},
+		KV:           &KV{Name: "leaf"},
 		Outputs:      ToVFSSlice([]string{"leaf.o"}),
 		Requirements: Requirements{},
 	})
@@ -45,7 +45,7 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 		ForeignDepRefs: []NodeRef{leaf},
 		Env:            EnvVars{{Name: internEnv("PATH"), Value: internStr("/usr/bin")}},
 		Inputs:         InputChunks{ToVFSSlice([]string{"in1"})},
-		KV:             KV{Name: "main", P: pkCC},
+		KV:             &KV{Name: "main", P: pkCC},
 		Outputs:        ToVFSSlice([]string{"main.o"}),
 		Requirements:   Requirements{CPU: 1, RAM: 32, Network: nwRestricted},
 	})

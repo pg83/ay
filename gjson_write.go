@@ -79,7 +79,7 @@ func appendNode(buf []byte, n *Node, uids *UidVec, fetchRefs *DenseMap[STR, Node
 	}
 
 	buf = append(buf, `,"kv":`...)
-	buf = appendKV(buf, n.KV)
+	buf = appendKV(buf, *n.KV)
 
 	buf = append(buf, `,"outputs":`...)
 	buf = appendVFSSlice(buf, n.Outputs)

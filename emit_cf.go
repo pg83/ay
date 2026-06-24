@@ -59,7 +59,7 @@ func emitConfigureFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
 		Env:          env,
 		Inputs:       na.inputList(na.vfsList(configureFilePyVFS), walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)),
-		KV:           KV{P: pkCF, PC: pcYellow},
+		KV:           &cfKV,
 		Outputs:      na.vfsList(outVFS),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    usesPython3,
@@ -133,3 +133,7 @@ func cfModuleTag(d *ModuleData, instance ModuleInstance) STR {
 
 	return 0
 }
+
+var (
+	cfKV = KV{P: pkCF, PC: pcYellow}
+)

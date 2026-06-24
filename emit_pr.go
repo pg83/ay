@@ -781,7 +781,7 @@ func emitPR(
 		Env:            env,
 		Inputs:         inputs,
 		Outputs:        outputs,
-		KV:             KV{P: pkPR, PC: pcYellow, ShowOut: true},
+		KV:             &prKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:        deps,
 		ForeignDepRefs: foreignDepRefs,
@@ -879,3 +879,7 @@ func isDeepReplaceBoundary(c byte) bool {
 
 	return true
 }
+
+var (
+	prKV = KV{P: pkPR, PC: pcYellow, ShowOut: true}
+)

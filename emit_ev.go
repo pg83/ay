@@ -104,16 +104,18 @@ func emitEV(
 		argEvent2cppOutB.str(),
 		internStr("-I="+evEventlogIncludePath))
 
-	return emitProtoWrapperPBNode(instance, evRelPath, pkEV,
+	return emitProtoWrapperPBNode(instance, evRelPath, &evKV,
 		cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 		cppStyleguideBinary, protocBinary, event2cppBinary,
 		evOpts, moduleTag, transitiveImports, protoInclude, liteHeaders, tc, emit)
 }
 
+var evKV = KV{P: pkEV, PC: pcYellow}
+
 func emitProtoWrapperPBNode(
 	instance ModuleInstance,
 	relPath string,
-	kvP ProcKind,
+	kv *KV,
 	cppStyleguideLDRef NodeRef,
 	protocLDRef NodeRef,
 	pluginLDRef NodeRef,
@@ -173,7 +175,7 @@ func emitProtoWrapperPBNode(
 		Env:            env,
 		Inputs:         na.inputList(inputs, transitiveImports),
 		Outputs:        na.vfsList(genCC, genH),
-		KV:             KV{P: kvP, PC: pcYellow},
+		KV:             kv,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: depRefs(cppStyleguideLDRef, protocLDRef, pluginLDRef),
 		Resources:      usesPython3,

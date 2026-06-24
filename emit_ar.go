@@ -155,7 +155,7 @@ func emitARNode(
 			Env: cmdEnv}),
 		Env:          topEnv,
 		Inputs:       na.inputList(objPaths, inputTail, extraInputs),
-		KV:           KV{P: pkAR, PC: pcLightRed, ShowOut: true},
+		KV:           &arKV,
 		Outputs:      na.vfsList(archivePath),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      deps,
@@ -164,3 +164,7 @@ func emitARNode(
 
 	return emit.emit(n)
 }
+
+var (
+	arKV = KV{P: pkAR, PC: pcLightRed, ShowOut: true}
+)

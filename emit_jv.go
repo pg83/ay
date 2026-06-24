@@ -95,7 +95,7 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs InputChunks, outp
 			Cwd: internStr(cwd)}),
 		Env:          env,
 		Inputs:       inputs,
-		KV:           KV{P: pkJV, PC: pcLightBlue, ShowOut: true},
+		KV:           &jvKV,
 		Outputs:      outputs,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      depRefs,
@@ -250,3 +250,7 @@ func emitJVGeneral(
 
 	return emitJVNode(instance, cmdArgs, jvInputs, outputs, cwd, depRefs, moduleTag, emit)
 }
+
+var (
+	jvKV = KV{P: pkJV, PC: pcLightBlue, ShowOut: true}
+)

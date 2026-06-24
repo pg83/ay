@@ -253,7 +253,7 @@ func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath st
 			Env: env}),
 		Env:            env,
 		Inputs:         na.inputList(inputs, imports),
-		KV:             KV{P: pkPD, PC: pcLightCyan},
+		KV:             &protoDescKV,
 		Outputs:        na.vfsList(descOut, rawprotoOut),
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: depRefs(protocLDRef),
@@ -295,7 +295,7 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 		),
 		Env:          env,
 		Inputs:       na.inputList(inputs, ctx.scripts[mergeFilesVFS], ctx.scripts[collectRawprotoVFS]),
-		KV:           KV{P: pkPD, PC: pcLightCyan},
+		KV:           &protoDescKV,
 		Outputs:      na.vfsList(selfProtodesc, protosrc),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      producerRefs,
@@ -346,7 +346,7 @@ func emitProtoDescriptions(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		),
 		Env:          env,
 		Inputs:       na.inputList(inputs, ctx.scripts[mergeFilesVFS], ctx.scripts[mergeProtosrcVFS]),
-		KV:           KV{P: pkPD, PC: pcLightCyan},
+		KV:           &protoDescKV,
 		Outputs:      na.vfsList(protodesc, tar),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      deps,
@@ -362,3 +362,7 @@ func emitProtoDescriptions(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		DescClosure: closure,
 	}
 }
+
+var (
+	protoDescKV = KV{P: pkPD, PC: pcLightCyan}
+)

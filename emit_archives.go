@@ -99,7 +99,7 @@ func emitArchive(
 			Env: env}),
 		Env:          env,
 		Inputs:       na.inputList(inputs, na.srcChunk(toolBinPath)),
-		KV:           KV{P: pkAR, PC: pcLightRed},
+		KV:           &archivesKV,
 		Outputs:      na.vfsList(archiveVFS),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      deps,
@@ -127,3 +127,7 @@ func emitArchive(
 		})
 	}
 }
+
+var (
+	archivesKV = KV{P: pkAR, PC: pcLightRed}
+)

@@ -150,7 +150,7 @@ func emitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		Env:          env,
 		Inputs:       allInputs,
 		Outputs:      na.vfsList(outVFS),
-		KV:           KV{P: pkCC, PC: pcGreen},
+		KV:           &ccKV,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    instance.Platform.CCUsesResources,
 	}
@@ -484,3 +484,7 @@ func emitLibraryCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src
 
 	return &SourceEmit{Ref: ref, OutPath: outPath}
 }
+
+var (
+	ccKV = KV{P: pkCC, PC: pcGreen}
+)

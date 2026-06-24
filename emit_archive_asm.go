@@ -82,7 +82,7 @@ func emitArchiveAsmNode(
 			Env: env}),
 		Env:          env,
 		Inputs:       na.inputList(inputs, na.srcChunk(toolBinPath)),
-		KV:           KV{P: pkAR, PC: pcLightCyan},
+		KV:           &archiveAsmKV,
 		Outputs:      na.vfsList(rodataVFS),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      deps,
@@ -122,3 +122,7 @@ func emitArchiveAsmRodata(ctx *GenCtx, instance ModuleInstance, rodataRel string
 
 	return ref, outPath
 }
+
+var (
+	archiveAsmKV = KV{P: pkAR, PC: pcLightCyan}
+)

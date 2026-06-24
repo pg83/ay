@@ -54,7 +54,7 @@ const referenceLDOutput = "$(B)/tools/archiver/archiver"
 func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 	emit := newStreamingEmitter(nil, nil)
 	mainRef := emit.emit(&Node{Platform: &Platform{},
-		KV: KV{P: pkSTUB},
+		KV: &ldTestKV,
 	})
 	mainPath := "$(B)/some/prog/main.cpp.o"
 
@@ -149,7 +149,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 	emit := newStreamingEmitter(nil, nil)
 	mainRef := emit.emit(&Node{Platform: &Platform{},
-		KV: KV{P: pkSTUB},
+		KV: &ldTestKV,
 	})
 	mainPath := "$(B)/some/prog/main.cpp.o"
 
@@ -237,7 +237,7 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 
 func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 	emit := newStreamingEmitter(nil, nil)
-	stub := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
+	stub := emit.emit(&Node{Platform: &Platform{}, KV: &ldTestKV})
 
 	ref := emitLD(
 		hostInstance("some/prog"),
@@ -329,9 +329,9 @@ func TestComposeProgramLinkTrailer_NonPICRPathTrailerKeepsNoPie(t *testing.T) {
 
 func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 	emit := newStreamingEmitter(nil, nil)
-	mainRef := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
+	mainRef := emit.emit(&Node{Platform: &Platform{}, KV: &ldTestKV})
 
-	wholeRef := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
+	wholeRef := emit.emit(&Node{Platform: &Platform{}, KV: &ldTestKV})
 
 	instance := targetInstance("some/prog")
 	wholeArchivePath := "some/prog/libproto_cpp.a"
@@ -408,9 +408,9 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 
 func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T) {
 	emit := newStreamingEmitter(nil, nil)
-	mainRef := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
+	mainRef := emit.emit(&Node{Platform: &Platform{}, KV: &ldTestKV})
 
-	peerRef := emit.emit(&Node{Platform: &Platform{}, KV: KV{P: pkSTUB}})
+	peerRef := emit.emit(&Node{Platform: &Platform{}, KV: &ldTestKV})
 
 	instance := targetInstance("some/prog")
 	dupPath := intern("$(B)/some/prog/libproto_cpp.a")
@@ -1014,3 +1014,7 @@ func TestGen_UseArcadiaLibm_KeepsSystemLmWithoutEnable(t *testing.T) {
 		t.Fatalf("default link must not gain the Arcadia libm archive; link args = %v", linkArgs)
 	}
 }
+
+var (
+	ldTestKV = KV{P: pkSTUB}
+)

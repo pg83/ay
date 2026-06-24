@@ -78,7 +78,7 @@ func emitBundleNode(ctx *GenCtx, instance ModuleInstance, python3 STR, src, dst 
 		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
 		Env:          env,
 		Inputs:       na.inputList(inputHead, ctx.scripts[fsTools]),
-		KV:           KV{P: pkBN, PC: pcLightCyan},
+		KV:           &bundleKV,
 		Outputs:      na.vfsList(dst),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      depRefs,
@@ -87,3 +87,7 @@ func emitBundleNode(ctx *GenCtx, instance ModuleInstance, python3 STR, src, dst 
 
 	ctx.emit.emitReserved(node, id)
 }
+
+var (
+	bundleKV = KV{P: pkBN, PC: pcLightCyan}
+)

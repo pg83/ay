@@ -84,7 +84,7 @@ func emitYmapsSprotoHeader(ctx *GenCtx, instance ModuleInstance, p ymapsSprotoPe
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(sprotocBinary), closure),
 		Outputs:        []VFS{p.sprotoH},
-		KV:             KV{P: pkPB, PC: pcYellow},
+		KV:             &ymapsSprotoKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: depRefs(sprotocLDRef),
 	}
@@ -133,3 +133,7 @@ func sprotoSiblingDirectives(pbhImports []IncludeDirective, produced map[string]
 
 	return out
 }
+
+var (
+	ymapsSprotoKV = KV{P: pkPB, PC: pcYellow}
+)

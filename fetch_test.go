@@ -15,7 +15,7 @@ func emitTestCompileGraph(t *testing.T, host, target *Platform) *Graph {
 	execEmit.fetchRefs.put(internStr(resourcePatternClangTool), execEmit.emit(&Node{
 		Platform: host,
 		Cmds:     []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"ay", "fetch", "$(B)", "$(S)", "sbr:clang", "resources/CLANG"})}}},
-		KV:       KV{P: pkFETCH, PC: pcYellow, ShowOut: true},
+		KV:       &KV{P: pkFETCH, PC: pcYellow, ShowOut: true},
 		Outputs:  []VFS{build("resources/" + resourcePatternClangTool)},
 	}))
 	clangTool := prebuiltToolchainFlags()["CLANG_TOOL"]
@@ -26,7 +26,7 @@ func emitTestCompileGraph(t *testing.T, host, target *Platform) *Graph {
 		}},
 		Env:          nil,
 		Inputs:       InputChunks{{intern("$(S)/pkg/app/main.cpp")}},
-		KV:           KV{P: pkCC},
+		KV:           &KV{P: pkCC},
 		Outputs:      []VFS{intern("$(B)/pkg/app/main.o")},
 		Requirements: Requirements{},
 		Resources:    []STR{internStr(resourcePatternClangTool)},

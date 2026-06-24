@@ -18,7 +18,7 @@ func emitLJ(instance ModuleInstance, luaSrc, rawOut, compilerBin VFS, compilerLD
 		}),
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(compilerBin, luaSrc)),
-		KV:             KV{P: pkLJ, PC: pcLightCyan},
+		KV:             &ljKV,
 		Outputs:        na.vfsList(rawOut),
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: depRefs(compilerLDRef),
@@ -60,3 +60,7 @@ func emitLuaJit21(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		ArchiveEntry{Name: "LuaSources.inc", DontCompress: true, Files: append([]string(nil), luas...), Keys: luas, PropagateSourceMembers: true},
 	)
 }
+
+var (
+	ljKV = KV{P: pkLJ, PC: pcLightCyan}
+)

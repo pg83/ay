@@ -82,7 +82,7 @@ func expectedTestCtxNode() *Node {
 		}},
 		Env:          nil,
 		Inputs:       InputChunks{{intern("$(S)/build/scripts/append_file.py")}},
-		KV:           KV{P: pkCP, PC: pcLightBlue},
+		KV:           &testNodesTestKV,
 		Outputs:      []VFS{intern("$(B)/common_test.context")},
 		Platform:     &Platform{Target: "default-linux-x86_64"},
 		Requirements: Requirements{Network: nwRestricted},
@@ -148,7 +148,7 @@ func expectedUnittestNode(info TestSuiteInfo) *Node {
 		}},
 		Env:    expectedTestEnv("unittest"),
 		Inputs: InputChunks{{intern("$(S)/util/ut")}},
-		KV:     KV{P: pkTS, Path: "util/ut/unittest", PC: pcYellow, RunTestNode: true, ShowOutBool: true, HasSpecialRunner: true},
+		KV:     &testNodesTestKV2,
 		Outputs: []VFS{
 			intern("$(B)/util/ut/test-results/unittest/meta.json"),
 			intern("$(B)/util/ut/test-results/unittest/ytest.report.trace"),
@@ -226,7 +226,7 @@ func expectedClangFormatNode() *Node {
 			intern("$(S)/util/ysafeptr_ut.cpp"),
 			intern("$(S)/util/ysaveload_ut.cpp"),
 		}},
-		KV: KV{P: pkTS, Path: "util/ut/clang_format", PC: pcYellow, RunTestNode: true, ShowOutBool: true, HasSpecialRunner: true},
+		KV: &testNodesTestKV3,
 		Outputs: []VFS{
 			intern("$(B)/util/ut/test-results/clang_format/meta.json"),
 			intern("$(B)/util/ut/test-results/clang_format/ytest.report.trace"),
@@ -581,3 +581,9 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 func containsString(values []string, want string) bool {
 	return slicesContains(values, want)
 }
+
+var (
+	testNodesTestKV  = KV{P: pkCP, PC: pcLightBlue}
+	testNodesTestKV2 = KV{P: pkTS, Path: "util/ut/unittest", PC: pcYellow, RunTestNode: true, ShowOutBool: true, HasSpecialRunner: true, DisableCache: true}
+	testNodesTestKV3 = KV{P: pkTS, Path: "util/ut/clang_format", PC: pcYellow, RunTestNode: true, ShowOutBool: true, HasSpecialRunner: true}
+)

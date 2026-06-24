@@ -72,7 +72,7 @@ func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(ragel6BinaryPath), closure),
 		Outputs:        na.vfsList(outVFS),
-		KV:             KV{P: pkR6, PC: pcYellow},
+		KV:             &r6KV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: []NodeRef{ragel6LD},
 	}
@@ -111,3 +111,7 @@ func emitLibraryRagel6Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }
+
+var (
+	r6KV = KV{P: pkR6, PC: pcYellow}
+)

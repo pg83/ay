@@ -35,7 +35,7 @@ func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		Env:            env,
 		Inputs:         na.inputList(inputs, imports),
 		Outputs:        []VFS{genProto},
-		KV:             KV{P: pkGZ, PC: pcYellow},
+		KV:             &gztprotoKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: depRefs(converterRef),
 	}
@@ -168,3 +168,7 @@ func gztGeneratedProtoParse(ctx *GenCtx, gztSource VFS, inducedProtos []VFS) Par
 
 	return set
 }
+
+var (
+	gztprotoKV = KV{P: pkGZ, PC: pcYellow}
+)

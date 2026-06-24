@@ -58,7 +58,7 @@ func buildTestCtxNode(na *NodeArenas, p *Platform) *Node {
 			arg5.str()))}),
 		Env:          nil,
 		Inputs:       na.inputList(na.vfsList(source(testAppendFileScriptRel))),
-		KV:           KV{P: pkCP, PC: pcLightBlue},
+		KV:           &testNodesKV,
 		Outputs:      na.vfsList(bldCommonTestContext),
 		Requirements: Requirements{Network: nwRestricted},
 		Resources:    usesPython3,
@@ -127,7 +127,7 @@ func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resource
 			Cwd: internStr(testBuildRoot)}),
 		Env:    testEnv(p, "unittest"),
 		Inputs: na.inputList(na.vfsList(source(info.ProjectPath))),
-		KV: KV{
+		KV: &KV{
 			P:                pkTS,
 			Path:             path.Join(info.ProjectPath, "unittest"),
 			PC:               pcYellow,
@@ -227,7 +227,7 @@ func buildClangFormatNode(na *NodeArenas, p *Platform, info TestSuiteInfo) *Node
 			Cwd: internStr(testBuildRoot)}),
 		Env:    testEnv(p, "clang_format"),
 		Inputs: na.inputList(inputs),
-		KV: KV{
+		KV: &KV{
 			P:                pkTS,
 			Path:             path.Join(info.ProjectPath, "clang_format"),
 			PC:               pcYellow,
@@ -319,3 +319,7 @@ func testOutputs(projectPath, suite string) []VFS {
 		build(path.Join(resultsDir, "testing_out_stuff.tar.zstd")),
 	}
 }
+
+var (
+	testNodesKV = KV{P: pkCP, PC: pcLightBlue}
+)
