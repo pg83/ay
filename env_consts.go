@@ -39,6 +39,7 @@ var (
 	envDYLD_LIBRARY_PATH            = internEnv("DYLD_LIBRARY_PATH")
 	envGEN_PROTO                    = internEnv("GEN_PROTO")
 	envGORACE                       = internEnv("GORACE")
+	envCUDA_ROOT                    = internEnv("CUDA_ROOT")
 	envCUDA_VERSION                 = internEnv("CUDA_VERSION")
 	envHAVE_CUDA                    = internEnv("HAVE_CUDA")
 	envHAVE_MKL                     = internEnv("HAVE_MKL")

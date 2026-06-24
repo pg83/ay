@@ -1,9 +1,9 @@
 package main
 
 const (
-	cudaResourceGlobalRef      = "$CUDA_RESOURCE_GLOBAL"
-	cudaHostToolchainGlobalRef = "$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL"
-	osSdkRootGlobalRef         = "$OS_SDK_ROOT_RESOURCE_GLOBAL"
+	cudaResourceGlobalRef      = "$(B)/resources/CUDA"
+	cudaHostToolchainGlobalRef = "$(B)/resources/CUDA_HOST_TOOLCHAIN"
+	osSdkRootGlobalRef         = "$(B)/resources/OS_SDK_ROOT"
 	nvccStdFlag                = "-std=c++20"
 )
 
@@ -46,7 +46,7 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	p := instance.Platform
 
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
-	outVFS, inVFS := composeCCPaths(instance, srcRel, srcVFS, in, ".cu.o")
+	outVFS, inVFS := composeCCPaths(instance, srcRel, srcVFS, in, ".o")
 	blocks := in.CCBlocks
 
 	mtimeRef, mtimeVFS := ctx.tool(internArg("tools/mtime0"))
@@ -69,6 +69,16 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 		internStr(nvccStdFlag),
 	)
 
+	// nvcc's --cflags carries $CXXFLAGS but not the trailing -D__DATE__/__TIME__
+	// (builtinMacroDateTime) nor the -fmacro-prefix-map block (macroPrefixMapFlags)
+	// that the regular C++ compile appends after CXXFLAGS.
+	cuCxxTail := blocks.cxxTail
+	trim := len(builtinMacroDateTime) + len(macroPrefixMapFlags)
+
+	if trim <= len(cuCxxTail) {
+		cuCxxTail = cuCxxTail[:len(cuCxxTail)-trim]
+	}
+
 	cmdArgs := ArgChunks(na.chunkList(
 		prefix,
 		internStrList(staticNvcc),
@@ -78,7 +88,7 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 		na.strList(internStr("--cflags")),
 		p.CCHead,
 		blocks.flags,
-		blocks.cxxTail,
+		cuCxxTail,
 		na.strList(internStr(nvccStdFlag)),
 	))
 
