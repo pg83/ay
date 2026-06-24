@@ -32,6 +32,8 @@ var nvccGencodeFlags = []string{
 	"-gencode=arch=compute_90,code=sm_90",
 }
 
+var cudaRuntimeIncludeVFS = source("build/internal/platform/cuda/cuda_runtime_include.h")
+
 func internStrList(ss []string) []STR {
 	out := make([]STR, len(ss))
 
@@ -50,7 +52,11 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	outVFS, inVFS := composeCCPaths(instance, srcRel, srcVFS, in, ".o")
 	blocks := in.CCBlocks
 
-	closure := walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)
+	// nvcc force-includes cuda_runtime_include.h; its transitive closure is part
+	// of every .cu compile's inputs (for most sources their own headers already
+	// cover it, but a header-light .cu like operators.cu gets it only from here).
+	scanner := ctx.scannerFor(instance)
+	closure := dedupVFS(walkClosure(scanner, srcVFS, in.ScanCfg), walkClosure(scanner, cudaRuntimeIncludeVFS, in.ScanCfg))
 
 	mtimeRef, mtimeVFS := ctx.tool(internArg("tools/mtime0"))
 	pidRef, pidVFS := ctx.tool(internArg("tools/custom_pid"))
@@ -103,7 +109,7 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 		Platform:     p,
 		Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
 		Env:          env,
-		Inputs:       na.inputList(closure, []VFS{source("build/scripts/compile_cuda.py"), source("build/internal/platform/cuda/cuda_runtime_include.h"), mtimeVFS, pidVFS}),
+		Inputs:       na.inputList(closure, []VFS{source("build/scripts/compile_cuda.py"), mtimeVFS, pidVFS}),
 		Outputs:      na.vfsList(outVFS),
 		KV:           KV{P: pkCU, PC: pcLightGreen},
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
