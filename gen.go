@@ -1529,6 +1529,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	moduleInputs := ModuleCCInputs{
 		InclArgs:             ctx.inclArgs,
 		Flags:                d.flags,
+		CudaNvccFlags:        d.cudaNvccFlags,
 		AddIncl:              dedupedAddIncl,
 		PeerAddInclGlobal:    selfPeerAddInclGlobal,
 		ProtoInclude:         effectiveProtoInclude,
@@ -1940,6 +1941,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 				ldObjcopyPaths = objcopyRes.Outputs
 			}
 		}
+
+		// A program's own GLOBAL srcs are force-linked as plain objects right after
+		// --no-whole-archive (ahead of vcs/objcopy), not whole-archived.
+		ldObjcopyRefs = append(globalRefs, ldObjcopyRefs...)
+		ldObjcopyPaths = append(globalOutputs, ldObjcopyPaths...)
 
 		var ownRPathFlags []ARG
 
