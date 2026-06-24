@@ -1139,7 +1139,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	deduper.reset()
 
-	linkTarget := isProgramModuleType(d.moduleStmt.Name)
+	linkTarget := isProgramModuleType(d.moduleStmt.Name) || d.moduleStmt.Name == tokDllTool
 
 	sbomOrder := archiveOrder
 	{
