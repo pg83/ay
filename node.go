@@ -36,7 +36,6 @@ type Cmd struct {
 }
 
 type Node struct {
-	Cache          *bool        `json:"cache,omitempty"`
 	Cmds           []Cmd        `json:"cmds"`
 	Env            EnvVars      `json:"env"`
 	Inputs         InputChunks  `json:"inputs"`
@@ -44,7 +43,6 @@ type Node struct {
 	Outputs        []VFS        `json:"outputs"`
 	Platform       *Platform    `json:"platform"`
 	Requirements   Requirements `json:"requirements"`
-	Sandboxing     bool         `json:"sandboxing"`
 	SelfUID        UID          `json:"self_uid"`
 	UID            UID          `json:"uid"`
 	DepRefs        []NodeRef    `json:"-"`

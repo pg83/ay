@@ -110,7 +110,6 @@ func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs [
 		Outputs:      na.vfsList(build(instance.Path.rel() + "/" + outputName)),
 		KV:           KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		Sandboxing:   true,
 		DepRefs:      deps,
 		Resources:    instance.Platform.UsesLinkResources,
 	}
@@ -284,7 +283,6 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		Outputs:      na.vfsList(build(instance.Path.rel() + "/" + outputName)),
 		KV:           KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		Sandboxing:   true,
 		DepRefs:      deps,
 		Resources:    instance.Platform.UsesLinkResources,
 	}

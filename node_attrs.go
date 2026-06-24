@@ -159,7 +159,7 @@ type KV struct {
 	ShowOutBool      bool
 	Name             string
 	Path             string
-	DisableCache     string
+	DisableCache     bool
 	SpecialRunner    string
 	HasSpecialRunner bool
 	RunTestNode      bool
@@ -254,7 +254,9 @@ func appendRequirements(buf []byte, r Requirements) []byte {
 func appendKV(buf []byte, kv KV) []byte {
 	o := JsonObj{buf: append(buf, '{')}
 
-	o.str("disable_cache", kv.DisableCache)
+	if kv.DisableCache {
+		o.forceStr("disable_cache", "yes")
+	}
 
 	for _, e := range kv.sortedExt() {
 		o.forceStr(e.Key, e.Val)

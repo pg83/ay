@@ -78,7 +78,6 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 		KV:           KV{P: pkSB, PC: pcYellow, ShowOut: true},
 		Outputs:      na.vfsList(outVFSs...),
 		Requirements: Requirements{CPU: float64(1), Network: nwFull, RAM: float64(32)},
-		Sandboxing:   true,
 		Resources:    usesPython3,
 	}
 

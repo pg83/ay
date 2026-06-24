@@ -45,11 +45,8 @@ func emitTestRunNodes(ctxEmit *StreamingEmitter, runEmit *StreamingEmitter, p *P
 }
 
 func buildTestCtxNode(na *NodeArenas, p *Platform) *Node {
-	cacheTrue := true
-
 	return &Node{
 		Platform: p,
-		Cache:    &cacheTrue,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(internStr(testYMakePython3),
 			(source(testAppendFileScriptRel)).str(),
 			internStr(testContextPath),
@@ -69,7 +66,6 @@ func buildTestCtxNode(na *NodeArenas, p *Platform) *Node {
 }
 
 func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resourceGlobals []ResourceDecl) *Node {
-	cacheFalse := false
 	resultsDir := path.Join(info.ProjectPath, "test-results", "unittest")
 
 	cmdArgs := []STR{
@@ -127,7 +123,6 @@ func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resource
 
 	return &Node{
 		Platform: p,
-		Cache:    &cacheFalse,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Cwd: internStr(testBuildRoot)}),
 		Env:    testEnv(p, "unittest"),
@@ -139,6 +134,7 @@ func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resource
 			RunTestNode:      true,
 			ShowOutBool:      true,
 			HasSpecialRunner: true,
+			DisableCache:     true,
 		},
 		Outputs: testOutputs(info.ProjectPath, "unittest"),
 		Requirements: Requirements{
@@ -151,7 +147,6 @@ func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resource
 }
 
 func buildClangFormatNode(na *NodeArenas, p *Platform, info TestSuiteInfo) *Node {
-	cacheTrue := true
 	resultsDir := path.Join(info.ProjectPath, "test-results", "clang_format")
 
 	cmdArgs := []STR{
@@ -228,7 +223,6 @@ func buildClangFormatNode(na *NodeArenas, p *Platform, info TestSuiteInfo) *Node
 
 	return &Node{
 		Platform: p,
-		Cache:    &cacheTrue,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Cwd: internStr(testBuildRoot)}),
 		Env:    testEnv(p, "clang_format"),
