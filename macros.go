@@ -77,6 +77,8 @@ func evalCond(e Expr, env Environment) bool {
 		return evalLt(x, env)
 	case *ExprStartsWith:
 		return strings.HasPrefix(evalAtomString(x.Left, env), evalAtomString(x.Right, env))
+	case *ExprVersionCmp:
+		return evalVersionCmp(x, env)
 	case *ExprMatches:
 		return throw2(regexp.MatchString(evalAtomString(x.Right, env), evalAtomString(x.Left, env)))
 	case *ExprDefined:
@@ -128,6 +130,54 @@ func evalAtom(e Expr, env Environment) any {
 	throwFmt("macros: unexpected Expr type %T in comparator operand position", e)
 
 	return nil
+}
+
+func evalVersionCmp(x *ExprVersionCmp, env Environment) bool {
+	cmp := compareVersions(evalAtomString(x.Left, env), evalAtomString(x.Right, env))
+
+	switch x.Op {
+	case "VERSION_LT":
+		return cmp < 0
+	case "VERSION_LE":
+		return cmp <= 0
+	case "VERSION_GT":
+		return cmp > 0
+	case "VERSION_GE":
+		return cmp >= 0
+	case "VERSION_EQ":
+		return cmp == 0
+	}
+
+	throwFmt("macros: unknown version operator %q", x.Op)
+
+	return false
+}
+
+func compareVersions(a, b string) int {
+	as := strings.Split(a, ".")
+	bs := strings.Split(b, ".")
+
+	for i := 0; i < len(as) || i < len(bs); i++ {
+		var av, bv int
+
+		if i < len(as) {
+			av, _ = strconv.Atoi(as[i])
+		}
+
+		if i < len(bs) {
+			bv, _ = strconv.Atoi(bs[i])
+		}
+
+		if av != bv {
+			if av < bv {
+				return -1
+			}
+
+			return 1
+		}
+	}
+
+	return 0
 }
 
 func evalEq(x *ExprEq, env Environment) bool {

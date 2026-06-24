@@ -25,6 +25,8 @@ var tokName = [...]STR{
 	tokCppProtoPlugin:                     internStr("CPP_PROTO_PLUGIN"),
 	tokCppProtoPlugin0:                    internStr("CPP_PROTO_PLUGIN0"),
 	tokCppProtoPlugin2:                    internStr("CPP_PROTO_PLUGIN2"),
+	tokCudaNvccFlags:                      internStr("CUDA_NVCC_FLAGS"),
+	tokSetAppendWithGlobal:                internStr("SET_APPEND_WITH_GLOBAL"),
 	tokData:                               internStr("DATA"),
 	tokDeclareExternalResource:            kwDECLARE_EXTERNAL_RESOURCE,
 	tokDeclareExternalHostResourcesBundle: kwDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE,
@@ -34,6 +36,7 @@ var tokName = [...]STR{
 	tokDisable:                         internStr("DISABLE"),
 	tokDisableDataValidation:           internStr("DISABLE_DATA_VALIDATION"),
 	tokDll:                             kwDLL,
+	tokDllTool:                         internStr("DLL_TOOL"),
 	tokDynamicLibrary:                  kwDYNAMIC_LIBRARY,
 	tokDynamicLibraryFrom:              internStr("DYNAMIC_LIBRARY_FROM"),
 	tokEnable:                          internStr("ENABLE"),
@@ -428,6 +431,9 @@ const (
 	tokStructCodegen
 	tokStyleDetekt
 	tokYmapsSproto
+	tokCudaNvccFlags
+	tokSetAppendWithGlobal
+	tokDllTool
 )
 
 func internTok(s string) TOK {

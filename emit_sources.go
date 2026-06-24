@@ -37,6 +37,8 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel s
 		strings.HasSuffix(srcRel, ".s"),
 		strings.HasSuffix(srcRel, ".asm"):
 		return emitLibraryAsmSource(ctx, instance, d, srcRel, in)
+	case strings.HasSuffix(srcRel, ".cu"):
+		return emitLibraryCudaSource(ctx, instance, d, srcRel, in)
 	case strings.HasSuffix(srcRel, ".rl6"):
 		return emitLibraryRagel6Source(ctx, instance, d, srcRel, in)
 	case strings.HasSuffix(srcRel, ".y"),
