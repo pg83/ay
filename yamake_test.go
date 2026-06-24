@@ -536,14 +536,14 @@ ENDIF()
 		t.Fatalf("Stmts[0] = %T, want *IfStmt", mf.Stmts[0])
 	}
 
-	cond, ok := ifStmt.Cond.(*ExprIdent)
+	cond := condRoot(ifStmt.Cond)
 
-	if !ok {
-		t.Fatalf("IfStmt.Cond = %T, want *ExprIdent", ifStmt.Cond)
+	if cond.Kind != ckIdent {
+		t.Fatalf("IfStmt.Cond root = kind %d, want ckIdent", cond.Kind)
 	}
 
 	if cond.Name != "FOO" {
-		t.Errorf("ExprIdent.Name = %q, want %q", cond.Name, "FOO")
+		t.Errorf("cond ident Name = %q, want %q", cond.Name, "FOO")
 	}
 
 	if len(ifStmt.Then) != 1 {
@@ -601,8 +601,8 @@ ENDIF()
 		t.Fatalf("Stmts[0] = %T, want *IfStmt", mf.Stmts[0])
 	}
 
-	if id, ok := outer.Cond.(*ExprIdent); !ok || id.Name != "A" {
-		t.Fatalf("outer.Cond = %#v, want ExprIdent{A}", outer.Cond)
+	if root := condRoot(outer.Cond); root.Kind != ckIdent || root.Name != "A" {
+		t.Fatalf("outer.Cond root = %+v, want ident{A}", root)
 	}
 
 	if len(outer.Else) != 1 {
@@ -615,8 +615,8 @@ ENDIF()
 		t.Fatalf("outer.Else[0] = %T, want *IfStmt (the ELSEIF)", outer.Else[0])
 	}
 
-	if id, ok := nested.Cond.(*ExprIdent); !ok || id.Name != "B" {
-		t.Fatalf("nested.Cond = %#v, want ExprIdent{B}", nested.Cond)
+	if root := condRoot(nested.Cond); root.Kind != ckIdent || root.Name != "B" {
+		t.Fatalf("nested.Cond root = %+v, want ident{B}", root)
 	}
 
 	if len(nested.Then) != 1 {
@@ -1157,18 +1157,18 @@ ENDIF()
 		t.Fatalf("Stmts[0] = %T, want *IfStmt", mf.Stmts[0])
 	}
 
-	eq, ok := ifStmt.Cond.(*ExprEq)
+	eq := condRoot(ifStmt.Cond)
 
-	if !ok {
-		t.Fatalf("IfStmt.Cond = %T, want *ExprEq", ifStmt.Cond)
+	if eq.Kind != ckEq {
+		t.Fatalf("IfStmt.Cond root = kind %d, want ckEq", eq.Kind)
 	}
 
-	if id, ok := eq.Left.(*ExprIdent); !ok || id.Name != "CXX_RT" {
-		t.Errorf("ExprEq.Left = %#v, want ExprIdent{CXX_RT}", eq.Left)
+	if l := ifStmt.Cond[eq.L]; l.Kind != ckIdent || l.Name != "CXX_RT" {
+		t.Errorf("Eq.L = %+v, want ident{CXX_RT}", l)
 	}
 
-	if s, ok := eq.Right.(*ExprString); !ok || s.Value != "libcxxrt" {
-		t.Errorf("ExprEq.Right = %#v, want ExprString{libcxxrt}", eq.Right)
+	if r := ifStmt.Cond[eq.R]; r.Kind != ckString || r.Name != "libcxxrt" {
+		t.Errorf("Eq.R = %+v, want string{libcxxrt}", r)
 	}
 }
 
@@ -1194,18 +1194,18 @@ ENDIF()
 		t.Fatalf("Stmts[0] = %T, want *IfStmt", mf.Stmts[0])
 	}
 
-	lt, ok := ifStmt.Cond.(*ExprLt)
+	lt := condRoot(ifStmt.Cond)
 
-	if !ok {
-		t.Fatalf("IfStmt.Cond = %T, want *ExprLt", ifStmt.Cond)
+	if lt.Kind != ckLt {
+		t.Fatalf("IfStmt.Cond root = kind %d, want ckLt", lt.Kind)
 	}
 
-	if id, ok := lt.Left.(*ExprIdent); !ok || id.Name != "ANDROID_API" {
-		t.Errorf("ExprLt.Left = %#v, want ExprIdent{ANDROID_API}", lt.Left)
+	if l := ifStmt.Cond[lt.L]; l.Kind != ckIdent || l.Name != "ANDROID_API" {
+		t.Errorf("Lt.L = %+v, want ident{ANDROID_API}", l)
 	}
 
-	if i, ok := lt.Right.(*ExprInt); !ok || i.Value != 28 {
-		t.Errorf("ExprLt.Right = %#v, want ExprInt{28}", lt.Right)
+	if r := ifStmt.Cond[lt.R]; r.Kind != ckInt || r.Ival != 28 {
+		t.Errorf("Lt.R = %+v, want int{28}", r)
 	}
 }
 
@@ -1227,24 +1227,24 @@ ENDIF()
 		t.Fatalf("Stmts[0] = %T, want *IfStmt", mf.Stmts[0])
 	}
 
-	not, ok := ifStmt.Cond.(*ExprNot)
+	not := condRoot(ifStmt.Cond)
 
-	if !ok {
-		t.Fatalf("IfStmt.Cond = %T, want *ExprNot (X != Y desugar)", ifStmt.Cond)
+	if not.Kind != ckNot {
+		t.Fatalf("IfStmt.Cond root = kind %d, want ckNot (X != Y desugar)", not.Kind)
 	}
 
-	eq, ok := not.Of.(*ExprEq)
+	eq := ifStmt.Cond[not.L]
 
-	if !ok {
-		t.Fatalf("ExprNot.Of = %T, want *ExprEq", not.Of)
+	if eq.Kind != ckEq {
+		t.Fatalf("Not.Of = kind %d, want ckEq", eq.Kind)
 	}
 
-	if id, ok := eq.Left.(*ExprIdent); !ok || id.Name != "OS_SDK" {
-		t.Errorf("ExprEq.Left = %#v, want ExprIdent{OS_SDK}", eq.Left)
+	if l := ifStmt.Cond[eq.L]; l.Kind != ckIdent || l.Name != "OS_SDK" {
+		t.Errorf("Eq.L = %+v, want ident{OS_SDK}", l)
 	}
 
-	if s, ok := eq.Right.(*ExprString); !ok || s.Value != "ubuntu-20" {
-		t.Errorf("ExprEq.Right = %#v, want ExprString{ubuntu-20}", eq.Right)
+	if r := ifStmt.Cond[eq.R]; r.Kind != ckString || r.Name != "ubuntu-20" {
+		t.Errorf("Eq.R = %+v, want string{ubuntu-20}", r)
 	}
 }
 
@@ -1274,18 +1274,18 @@ ENDIF()
 
 	ifStmt := mf.Stmts[0].(*IfStmt)
 
-	or, ok := ifStmt.Cond.(*ExprOr)
+	or := condRoot(ifStmt.Cond)
 
-	if !ok {
-		t.Fatalf("Cond = %T, want *ExprOr (OR is outermost)", ifStmt.Cond)
+	if or.Kind != ckOr {
+		t.Fatalf("Cond root = kind %d, want ckOr (OR is outermost)", or.Kind)
 	}
 
-	if _, ok := or.Left.(*ExprEq); !ok {
-		t.Errorf("OR.Left = %T, want *ExprEq", or.Left)
+	if l := ifStmt.Cond[or.L]; l.Kind != ckEq {
+		t.Errorf("OR.L = kind %d, want ckEq", l.Kind)
 	}
 
-	if id, ok := or.Right.(*ExprIdent); !ok || id.Name != "FUZZING" {
-		t.Errorf("OR.Right = %#v, want ExprIdent{FUZZING}", or.Right)
+	if r := ifStmt.Cond[or.R]; r.Kind != ckIdent || r.Name != "FUZZING" {
+		t.Errorf("OR.R = %+v, want ident{FUZZING}", r)
 	}
 }
 
@@ -1748,4 +1748,8 @@ func TestParseInclude_ModdirDefaultIncludeSetListFeedsRunProgram(t *testing.T) {
 	if !equalStrings(got, want) {
 		t.Fatalf("RUN_PROGRAM args = %v, want %v (the SET-list must expand, not survive as ${MODULES_INCLUDED})", got, want)
 	}
+}
+
+func condRoot(c []CondNode) CondNode {
+	return c[len(c)-1]
 }

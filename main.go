@@ -271,6 +271,10 @@ func runCommand(argv []string, g GlobalFlags) int {
 func startProfilesFromEnv() func() {
 	var cpuFile *os.File
 
+	if r := os.Getenv("YATOOL_MEMPROFRATE"); r != "" {
+		runtime.MemProfileRate = throw2(strconv.Atoi(r))
+	}
+
 	if path := os.Getenv("YATOOL_CPUPROFILE"); path != "" {
 		cpuFile = throw2(os.Create(path))
 

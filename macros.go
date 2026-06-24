@@ -18,8 +18,8 @@ var intSTR = func() [1024]STR {
 	return a
 }()
 
-func evalAtomString(e Expr, env Environment) string {
-	switch v := evalAtom(e, env).(type) {
+func evalAtomString(nodes []CondNode, i int32, env Environment) string {
+	switch v := evalAtomNode(nodes, i, env).(type) {
 	case string:
 		return v
 	case int:
@@ -35,12 +35,12 @@ func evalAtomString(e Expr, env Environment) string {
 	return ""
 }
 
-func identEnv(x *ExprIdent) ENV {
-	if x.Env != 0 {
-		return x.Env
+func identEnvNode(n *CondNode) ENV {
+	if n.Env != 0 {
+		return n.Env
 	}
 
-	return internEnv(x.Name)
+	return internEnv(n.Name)
 }
 
 const (
@@ -49,93 +49,101 @@ const (
 	envInt
 )
 
-func evalCond(e Expr, env Environment) bool {
-	switch x := e.(type) {
-	case *ExprIdent:
-		if x.Name == "yes" {
+func evalCond(nodes []CondNode, env Environment) bool {
+	return evalCondAt(nodes, int32(len(nodes)-1), env)
+}
+
+func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
+	n := &nodes[i]
+
+	switch n.Kind {
+	case ckIdent:
+		if n.Name == "yes" {
 			return true
 		}
 
-		if x.Name == "no" {
+		if n.Name == "no" {
 			return false
 		}
 
-		return env.boolID(identEnv(x), x.Name)
-	case *ExprNot:
-		return !evalCond(x.Of, env)
-	case *ExprAnd:
-		return evalCond(x.Left, env) && evalCond(x.Right, env)
-	case *ExprOr:
-		return evalCond(x.Left, env) || evalCond(x.Right, env)
-	case *ExprString:
-		throwFmt("macros: bare string %q cannot be evaluated as a boolean condition", x.Value)
-	case *ExprInt:
-		throwFmt("macros: bare integer %d cannot be evaluated as a boolean condition", x.Value)
-	case *ExprEq:
-		return evalEq(x, env)
-	case *ExprLt:
-		return evalLt(x, env)
-	case *ExprStartsWith:
-		return strings.HasPrefix(evalAtomString(x.Left, env), evalAtomString(x.Right, env))
-	case *ExprVersionCmp:
-		return evalVersionCmp(x, env)
-	case *ExprMatches:
-		return throw2(regexp.MatchString(evalAtomString(x.Right, env), evalAtomString(x.Left, env)))
-	case *ExprDefined:
-		id, ok := x.Of.(*ExprIdent)
+		return env.boolID(identEnvNode(n), n.Name)
+	case ckNot:
+		return !evalCondAt(nodes, n.L, env)
+	case ckAnd:
+		return evalCondAt(nodes, n.L, env) && evalCondAt(nodes, n.R, env)
+	case ckOr:
+		return evalCondAt(nodes, n.L, env) || evalCondAt(nodes, n.R, env)
+	case ckString:
+		throwFmt("macros: bare string %q cannot be evaluated as a boolean condition", n.Name)
+	case ckInt:
+		throwFmt("macros: bare integer %d cannot be evaluated as a boolean condition", n.Ival)
+	case ckEq:
+		return evalEq(nodes, n, env)
+	case ckLt:
+		return evalLt(nodes, n, env)
+	case ckStartsWith:
+		return strings.HasPrefix(evalAtomString(nodes, n.L, env), evalAtomString(nodes, n.R, env))
+	case ckVersionCmp:
+		return evalVersionCmp(nodes, n, env)
+	case ckMatches:
+		return throw2(regexp.MatchString(evalAtomString(nodes, n.R, env), evalAtomString(nodes, n.L, env)))
+	case ckDefined:
+		d := &nodes[n.L]
 
-		if !ok {
-			throwFmt("macros: DEFINED expects a variable name, got %T", x.Of)
+		if d.Kind != ckIdent {
+			throwFmt("macros: DEFINED expects a variable name, got kind %d", d.Kind)
 		}
 
-		k, _ := env.s.lookup(identEnv(id))
+		k, _ := env.s.lookup(identEnvNode(d))
 
 		return k != envAbsent
 	}
 
-	throwFmt("macros: unhandled Expr type %T", e)
+	throwFmt("macros: unhandled cond kind %d", n.Kind)
 
 	return false
 }
 
-func evalAtom(e Expr, env Environment) any {
-	switch x := e.(type) {
-	case *ExprIdent:
-		if x.Name == "yes" || x.Name == "no" {
-			return x.Name
+func evalAtomNode(nodes []CondNode, i int32, env Environment) any {
+	n := &nodes[i]
+
+	switch n.Kind {
+	case ckIdent:
+		if n.Name == "yes" || n.Name == "no" {
+			return n.Name
 		}
 
-		switch k, v := env.s.lookup(identEnv(x)); k {
+		switch k, v := env.s.lookup(identEnvNode(n)); k {
 		case envStr:
 			return v.string()
 		case envInt:
-			n, _ := strconv.Atoi(v.string())
+			x, _ := strconv.Atoi(v.string())
 
-			return n
+			return x
 		}
 
-		if isImplicitBuildVar(x.Name) {
-			return x.Name
+		if isImplicitBuildVar(n.Name) {
+			return n.Name
 		}
 
-		throwFmt("macros: unknown IF identifier %q", x.Name)
+		throwFmt("macros: unknown IF identifier %q", n.Name)
 
 		return nil
-	case *ExprString:
-		return x.Value
-	case *ExprInt:
-		return x.Value
+	case ckString:
+		return n.Name
+	case ckInt:
+		return n.Ival
 	}
 
-	throwFmt("macros: unexpected Expr type %T in comparator operand position", e)
+	throwFmt("macros: unexpected cond kind %d in comparator operand position", n.Kind)
 
 	return nil
 }
 
-func evalVersionCmp(x *ExprVersionCmp, env Environment) bool {
-	cmp := compareVersions(evalAtomString(x.Left, env), evalAtomString(x.Right, env))
+func evalVersionCmp(nodes []CondNode, n *CondNode, env Environment) bool {
+	cmp := compareVersions(evalAtomString(nodes, n.L, env), evalAtomString(nodes, n.R, env))
 
-	switch x.Op {
+	switch n.Name {
 	case "VERSION_LT":
 		return cmp < 0
 	case "VERSION_LE":
@@ -148,7 +156,7 @@ func evalVersionCmp(x *ExprVersionCmp, env Environment) bool {
 		return cmp == 0
 	}
 
-	throwFmt("macros: unknown version operator %q", x.Op)
+	throwFmt("macros: unknown version operator %q", n.Name)
 
 	return false
 }
@@ -180,9 +188,9 @@ func compareVersions(a, b string) int {
 	return 0
 }
 
-func evalEq(x *ExprEq, env Environment) bool {
-	l := evalAtom(x.Left, env)
-	r := evalAtom(x.Right, env)
+func evalEq(nodes []CondNode, n *CondNode, env Environment) bool {
+	l := evalAtomNode(nodes, n.L, env)
+	r := evalAtomNode(nodes, n.R, env)
 
 	switch lv := l.(type) {
 	case string:
@@ -236,9 +244,9 @@ func evalEq(x *ExprEq, env Environment) bool {
 	return false
 }
 
-func evalLt(x *ExprLt, env Environment) bool {
-	l := evalAtom(x.Left, env)
-	r := evalAtom(x.Right, env)
+func evalLt(nodes []CondNode, n *CondNode, env Environment) bool {
+	l := evalAtomNode(nodes, n.L, env)
+	r := evalAtomNode(nodes, n.R, env)
 
 	li, lok := l.(int)
 	ri, rok := r.(int)

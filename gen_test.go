@@ -1398,22 +1398,22 @@ func TestEvalCond_ARCH_ARM64_Aliased(t *testing.T) {
 	inst := ModuleInstance{Kind: KindLib, Platform: testTargetP}
 	env := buildIfEnv(inst)
 
-	if !evalCond(&ExprIdent{Name: "ARCH_ARM64"}, env) {
+	if !evalCond(condIdent("ARCH_ARM64"), env) {
 		t.Errorf("EvalCond(ARCH_ARM64) on aarch64 instance = false, want true (alias for ARCH_AARCH64)")
 	}
 
-	if !evalCond(&ExprIdent{Name: "ARCH_AARCH64"}, env) {
+	if !evalCond(condIdent("ARCH_AARCH64"), env) {
 		t.Errorf("EvalCond(ARCH_AARCH64) on aarch64 instance = false, want true")
 	}
 
 	hostInst := ModuleInstance{Kind: KindLib, Platform: testHostP}
 	hostEnv := buildIfEnv(hostInst)
 
-	if evalCond(&ExprIdent{Name: "ARCH_ARM64"}, hostEnv) {
+	if evalCond(condIdent("ARCH_ARM64"), hostEnv) {
 		t.Errorf("EvalCond(ARCH_ARM64) on x86_64 instance = true, want false")
 	}
 
-	if !evalCond(&ExprIdent{Name: "ARCH_X86_64"}, hostEnv) {
+	if !evalCond(condIdent("ARCH_X86_64"), hostEnv) {
 		t.Errorf("EvalCond(ARCH_X86_64) on x86_64 instance = false, want true")
 	}
 }
