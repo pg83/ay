@@ -155,7 +155,7 @@
       "catboost/app"
     ],
     "target": "catboost/app",
-    "xfail": "auto",
+    "xfail": false,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/12552128438",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/12552129011"
   }
