@@ -449,6 +449,11 @@ type ExprStartsWith struct {
 	Left, Right Expr
 }
 
+type ExprVersionCmp struct {
+	Op          string
+	Left, Right Expr
+}
+
 type ExprDefined struct {
 	Of Expr
 }
@@ -482,6 +487,9 @@ func (*ExprLt) exprMarker() {
 }
 
 func (*ExprStartsWith) exprMarker() {
+}
+
+func (*ExprVersionCmp) exprMarker() {
 }
 
 func (*ExprDefined) exprMarker() {
@@ -1116,7 +1124,7 @@ func buildStmtFor(name string, args []STR, line int, fail func(format string, a 
 		"YQL_UDF_YDB", "YQL_UDF_CONTRIB",
 		"PROTO_LIBRARY",
 		"PROTO_DESCRIPTIONS",
-		"DLL", "SO_PROGRAM", "DYNAMIC_LIBRARY",
+		"DLL", "DLL_TOOL", "SO_PROGRAM", "DYNAMIC_LIBRARY",
 		"PACKAGE", "UNION", "RESOURCES_LIBRARY",
 		"PREBUILT_PROGRAM",
 		"FBS_LIBRARY",
@@ -1956,6 +1964,14 @@ func (c *CondParser) parseCmp() Expr {
 		c.rejectChainedCmp(t)
 
 		return &ExprMatches{Left: left, Right: right}
+	}
+
+	if t.kind == tokIdent && strings.HasPrefix(t.val, "VERSION_") {
+		c.consume()
+		right := c.parseAtom()
+		c.rejectChainedCmp(t)
+
+		return &ExprVersionCmp{Op: t.val, Left: left, Right: right}
 	}
 
 	switch t.kind {

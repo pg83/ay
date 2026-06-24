@@ -2841,7 +2841,7 @@ func isPythonModuleType(name TOK) bool {
 func isSpecializedLibraryType(name TOK) bool {
 	switch name {
 	case tokProtoLibrary,
-		tokDll, tokSoProgram, tokDynamicLibrary:
+		tokDll, tokDllTool, tokSoProgram, tokDynamicLibrary:
 		return true
 	}
 
@@ -2894,6 +2894,17 @@ func buildIfEnv(instance ModuleInstance) Environment {
 
 	if env.bool(envOPENSOURCE) {
 		env.setBool(envHAVE_MKL, false)
+	}
+
+	if !env.hasBindingID(envHAVE_CUDA) {
+		// TODO(cuda): gate on once the CUDA toolchain (DLL_TOOL .so wrapper tools,
+		// CUDA/CUDA_HOST_TOOLCHAIN resources, GPU module closure) is byte-exact.
+		// auto_have_cuda = !MUSL && linux && x86_64 && !sanitizer.
+		env.setBool(envHAVE_CUDA, false)
+	}
+
+	if !env.hasBindingID(envCUDA_VERSION) {
+		env.setString(envCUDA_VERSION, "12.9")
 	}
 
 	env.setString(envARCADIA_ROOT, "$(S)")

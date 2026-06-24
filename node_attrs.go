@@ -12,7 +12,7 @@ var procKindStr = [...]string{
 	pkPB: "PB", pkPR: "PR", pkPY: "PY", pkR5: "R5", pkR6: "R6", pkRD: "RD",
 	pkSB:   "SB",
 	pkSTUB: "STUB", pkSW: "SW", pkTEST: "TEST", pkTEST2: "TEST2", pkTS: "TS", pkYC: "YC",
-	pkld: "ld", pkDX: "DX", pkBN: "BN", pkSV: "SV", pkSC: "SC", pkPD: "PD",
+	pkld: "ld", pkDX: "DX", pkBN: "BN", pkSV: "SV", pkSC: "SC", pkPD: "PD", pkCU: "CU",
 }
 
 var pColorStr = [...]string{
@@ -120,6 +120,7 @@ const (
 	pkSV
 	pkSC
 	pkPD
+	pkCU
 )
 
 func (k ProcKind) string() string {

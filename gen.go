@@ -15,6 +15,8 @@ var asmlibYasmModules = map[string]bool{
 }
 
 var acknowledgedMacros = map[string]struct{}{
+	"CUDA_NVCC_FLAGS":                 {},
+	"SET_APPEND_WITH_GLOBAL":          {},
 	"RECURSE":                         {},
 	"RECURSE_FOR_TESTS":               {},
 	"RECURSE_ROOT_RELATIVE":           {},
