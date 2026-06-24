@@ -224,32 +224,12 @@ func (c *CanonBuf) writeEnv(env EnvVars) {
 	}
 }
 
-func (c *CanonBuf) writeKV(kv KV) {
-	c.writeByte(byte(kv.P))
-	c.writeByte(byte(kv.PC))
-	c.writeBool(kv.ShowOut)
-	c.writeBool(kv.ShowOutBool)
-	c.writeBytes(kv.Name)
-	c.writeBytes(kv.Path)
-	c.writeBool(kv.DisableCache)
-	c.writeBytes(kv.SpecialRunner)
-	c.writeBool(kv.HasSpecialRunner)
-	c.writeBool(kv.RunTestNode)
-	c.writeUint32(uint32(len(kv.ExtOut)))
-
-	for _, e := range kv.ExtOut {
-		c.writeBytes(e.Key)
-		c.writeBytes(e.Val)
-	}
-}
-
 func (c *CanonBuf) writeNode(n *Node) {
 	c.writeCmdSlice(n.Cmds)
 	c.writeDepRefUIDs(n)
 	c.writeEnv(n.Env)
 	c.writeRefUIDs(n.ForeignDepRefs)
 	c.writeVFSChunks(n.Inputs)
-	c.writeKV(*n.KV)
 	c.writeVFSSlice(n.Outputs)
 	c.writeBytes(string(n.Platform.Target))
 }
