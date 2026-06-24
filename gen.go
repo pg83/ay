@@ -554,7 +554,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	if d.moduleStmt.Name != tokLibrary && d.moduleStmt.Name != tokFbsLibrary && !isProgramModuleType(d.moduleStmt.Name) && !isPyLibraryType(d.moduleStmt.Name) && !isYqlUdfStaticModule(d.moduleStmt.Name) && !isSpecializedLibraryType(d.moduleStmt.Name) && !isResourceContainerType(d.moduleStmt.Name) {
+	if d.moduleStmt.Name != tokLibrary && d.moduleStmt.Name != tokFbsLibrary && d.moduleStmt.Name != tokDllTool && !isProgramModuleType(d.moduleStmt.Name) && !isPyLibraryType(d.moduleStmt.Name) && !isYqlUdfStaticModule(d.moduleStmt.Name) && !isSpecializedLibraryType(d.moduleStmt.Name) && !isResourceContainerType(d.moduleStmt.Name) {
 		throwFmt("gen: %s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only)", instance.Path.rel(), d.moduleStmt.Name)
 	}
 
@@ -2116,6 +2116,13 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			globalRefs = moveSubrangeToFront(globalRefs, objBase, leadCount)
 			globalOutputs = moveSubrangeToFront(globalOutputs, objBase, leadCount)
 		}
+	}
+
+	if d.moduleStmt.Name == tokDllTool {
+		result := emitDllShared(ctx, instance, d, ccRefs, ccOutputs, peerArchiveRefs, peerArchivePaths)
+		ctx.memo.put(ctx.instanceKey(instance), result)
+
+		return result
 	}
 
 	if len(ccRefs) > 0 {
