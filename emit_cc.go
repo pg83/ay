@@ -87,7 +87,7 @@ func emitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 	tok := na.strList((inVFS).str(), argDashC.str(), argDashO.str(), (outVFS).str())
 	inChunk := tok[0:1:1]
 
-	const ccCmdArgsMax = 11
+	const ccCmdArgsMax = 12
 
 	chunks := na.chunks.alloc(ccCmdArgsMax)
 	k := 0
@@ -108,9 +108,10 @@ func emitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 	chunks[k] = compiler
 	chunks[k+1] = instance.Platform.CCHead
 	chunks[k+2] = tok[1:4:4]
-	chunks[k+3] = blocks.common
-	chunks[k+4] = tail
-	k += 5
+	chunks[k+3] = blocks.includes
+	chunks[k+4] = blocks.flags
+	chunks[k+5] = tail
+	k += 6
 
 	if len(in.PerSourceCFlags) > 0 {
 		chunks[k] = na.argStrList(in.PerSourceCFlags)
@@ -365,12 +366,13 @@ func appendCompileFlagPipeline(cmdArgs []STR, bundle CompileFlagBundle, warningB
 }
 
 type CcModuleArgBlocks struct {
-	cHead   []STR
-	cxxHead []STR
-	common  []STR
-	cTail   []STR
-	cxxTail []STR
-	cPost   []STR
+	cHead    []STR
+	cxxHead  []STR
+	includes []STR
+	flags    []STR
+	cTail    []STR
+	cxxTail  []STR
+	cPost    []STR
 }
 
 func suppressOptimize(cf []ARG) []ARG {
@@ -404,19 +406,21 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *
 		len(bundle.CFlags) + len(warningBundle) + len(bundle.Defines) +
 		len(ownCFlags) + 2*len(bundle.NoLibcBlock) + len(catboost) + len(in.ModuleScopeCFlags) +
 		len(in.ClangWarnings)
-	common := make([]STR, 0, commonCap)
-	common = appendArgStr(common, ccIncludesPrefix)
-	common = appendAddIncl(common, in.AddIncl, in.InclArgs)
+	includes := make([]STR, 0, len(ccIncludesPrefix)+len(in.AddIncl)+len(in.PeerAddInclGlobal))
+	includes = appendArgStr(includes, ccIncludesPrefix)
+	includes = appendAddIncl(includes, in.AddIncl, in.InclArgs)
 	peerAddIncl := in.PeerAddInclGlobal
 
 	if len(peerAddIncl) > 0 && peerAddIncl[0] == googleapisCommonProtosAddIncl {
-		common = append(common, in.InclArgs.arg(peerAddIncl[0]))
+		includes = append(includes, in.InclArgs.arg(peerAddIncl[0]))
 		peerAddIncl = peerAddIncl[1:]
 	}
 
-	common = appendAddIncl(common, peerAddIncl, in.InclArgs)
-	common = appendArgStr(common, in.ClangWarnings)
-	common = appendCompileFlagPipeline(common, bundle, warningBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboost)
+	includes = appendAddIncl(includes, peerAddIncl, in.InclArgs)
+
+	flags := make([]STR, 0, commonCap-len(includes))
+	flags = appendArgStr(flags, in.ClangWarnings)
+	flags = appendCompileFlagPipeline(flags, bundle, warningBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboost)
 
 	cTail := na.argStrList(in.PeerCOnlyFlagsGlobal, builtinMacroDateTime, macroPrefixMapFlags)
 
@@ -431,12 +435,13 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *
 	cxxTail = appendArgStr(cxxTail, cxxBucket, catboost, composePostCatboostBucket(cxxBucket), builtinMacroDateTime, macroPrefixMapFlags)
 
 	return &CcModuleArgBlocks{
-		cHead:   na.strList(in.TC.CC),
-		cxxHead: na.strList(in.TC.CXX),
-		common:  common,
-		cTail:   cTail,
-		cxxTail: cxxTail,
-		cPost:   na.argStrList(in.COnlyFlags),
+		cHead:    na.strList(in.TC.CC),
+		cxxHead:  na.strList(in.TC.CXX),
+		includes: includes,
+		flags:    flags,
+		cTail:    cTail,
+		cxxTail:  cxxTail,
+		cPost:    na.argStrList(in.COnlyFlags),
 	}
 }
 
