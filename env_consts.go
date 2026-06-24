@@ -1,6 +1,7 @@
 package main
 
 var (
+	cudaPathEnv                     = internEnv("PATH")
 	envALLOCATOR                    = internEnv("ALLOCATOR")
 	envAMX_CFLAGS                   = internEnv("AMX_CFLAGS")
 	envANDROID_API                  = internEnv("ANDROID_API")
@@ -32,6 +33,9 @@ var (
 	envCORE_LIBS_OPTIMIZATION       = internEnv("CORE_LIBS_OPTIMIZATION")
 	envCPATH                        = internEnv("CPATH")
 	envCPP_PROTO                    = internEnv("CPP_PROTO")
+	envCUDA_ARCHITECTURES           = internEnv("CUDA_ARCHITECTURES")
+	envCUDA_ROOT                    = internEnv("CUDA_ROOT")
+	envCUDA_VERSION                 = internEnv("CUDA_VERSION")
 	envCURDIR                       = internEnv("CURDIR")
 	envCX16_FLAGS                   = internEnv("CX16_FLAGS")
 	envCXX_RT                       = internEnv("CXX_RT")
@@ -39,10 +43,6 @@ var (
 	envDYLD_LIBRARY_PATH            = internEnv("DYLD_LIBRARY_PATH")
 	envGEN_PROTO                    = internEnv("GEN_PROTO")
 	envGORACE                       = internEnv("GORACE")
-	envCUDA_ARCHITECTURES           = internEnv("CUDA_ARCHITECTURES")
-	envCUDA_ROOT                    = internEnv("CUDA_ROOT")
-	envOBJCOPY_TOOL                 = internEnv("OBJCOPY_TOOL")
-	envCUDA_VERSION                 = internEnv("CUDA_VERSION")
 	envHAVE_CUDA                    = internEnv("HAVE_CUDA")
 	envHAVE_MKL                     = internEnv("HAVE_MKL")
 	envLIBRARY_PATH                 = internEnv("LIBRARY_PATH")
@@ -61,6 +61,7 @@ var (
 	envMUSL_LITE                    = internEnv("MUSL_LITE")
 	envNO_STRIP                     = internEnv("NO_STRIP")
 	envNoplatformResources          = internEnv("NOPLATFORM_RESOURCES")
+	envOBJCOPY_TOOL                 = internEnv("OBJCOPY_TOOL")
 	envOPENSOURCE                   = internEnv("OPENSOURCE")
 	envOPENSOURCE_PROJECT           = internEnv("OPENSOURCE_PROJECT")
 	envORIG_SRC_DIR                 = internEnv("ORIG_SRC_DIR")

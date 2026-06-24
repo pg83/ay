@@ -585,8 +585,6 @@ func (ex *Executor) clearCache() {
 }
 
 func (ex *Executor) discard(path string) {
-	// The collector blindly rm -rf's grbDir in a tight loop, so recreate it and
-	// retry the move until it lands — that is the whole synchronization.
 	for {
 		_ = os.MkdirAll(ex.grbDir, 0o755)
 
