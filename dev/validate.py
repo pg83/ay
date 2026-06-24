@@ -250,14 +250,10 @@ def _fmt_cmd(cmd, cwd, env_extra, stdout):
     return " ".join(parts)
 
 
-def sh(cmd, gogc=False, stdout=None, label=None, cwd=None, env_extra=None):
+def sh(cmd, stdout=None, label=None, cwd=None, env_extra=None):
     """Run a subprocess and print the full runnable command line with its wall
-    time. cwd defaults to WORK_CWD; gogc=True passes GOGC=800 (the heavy ay
-    commands spend ~half their CPU on GC at default); env_extra adds vars."""
+    time. cwd defaults to WORK_CWD; env_extra adds vars."""
     extra = dict(env_extra or {})
-
-    if gogc:
-        extra["GOGC"] = "800"
 
     env = clean_env(extra)
     run_cwd = cwd or WORK_CWD
@@ -379,7 +375,7 @@ def gen_action(name, command, slice_dir, slice_ready, raw, budget):
         cmd = [AY] + command[1:] + ["--source-root", resolve_slice_root(slice_dir)]
         _remove_if_exists(raw)
         t = time.monotonic()
-        rc = sh(cmd, gogc=True, stdout=raw, label=f"gen:{name}")
+        rc = sh(cmd, stdout=raw, label=f"gen:{name}")
         secs = time.monotonic() - t
         over = budget is not None and secs > GEN_TIME_SLACK * budget
 
@@ -391,7 +387,7 @@ def gen_action(name, command, slice_dir, slice_ready, raw, budget):
 def normalize_our_action(label, raw, target, out_unsorted):
     def action():
         _remove_if_exists(out_unsorted)
-        rc = sh([AY, "dev", "dump", "normalize", "--in", raw, "--target", target, "--out", out_unsorted], gogc=True, label=f"norm-our:{label}")
+        rc = sh([AY, "dev", "dump", "normalize", "--in", raw, "--target", target, "--out", out_unsorted], label=f"norm-our:{label}")
 
         return {"ok": rc == 0}
 
@@ -406,7 +402,7 @@ def normalize_ref_action(label, graph_dir, target, out_unsorted):
             return {"ok": False}
 
         _remove_if_exists(out_unsorted)
-        rc = sh([AY, "dev", "dump", "normalize", "--in", raw, "--target", target, "--out", out_unsorted, "--ref-graph"], gogc=True, label=f"norm-ref:{label}")
+        rc = sh([AY, "dev", "dump", "normalize", "--in", raw, "--target", target, "--out", out_unsorted, "--ref-graph"], label=f"norm-ref:{label}")
 
         return {"ok": rc == 0}
 
@@ -416,7 +412,7 @@ def normalize_ref_action(label, graph_dir, target, out_unsorted):
 def sort_action(label, in_unsorted, out_sorted, side):
     def action():
         _remove_if_exists(out_sorted)
-        rc = sh([AY, "dev", "dump", "sort", "--in", in_unsorted, "--out", out_sorted], gogc=True, label=f"sort-{side}:{label}")
+        rc = sh([AY, "dev", "dump", "sort", "--in", in_unsorted, "--out", out_sorted], label=f"sort-{side}:{label}")
 
         if rc == 0:
             _remove_if_exists(in_unsorted)
@@ -438,7 +434,7 @@ def compare_action(name, xfail, our_sorted, ref_sorted, out_dir):
 
         parity = normalized_node_parity_counts(our_sorted, ref_sorted)
         diff_file = os.path.join(out_dir, f"{name}.diff.txt")
-        sh([AY, "dev", "dump", "diff", "--left", our_sorted, "--right", ref_sorted, "--out", diff_file], gogc=True, label=f"diff:{name}")
+        sh([AY, "dev", "dump", "diff", "--left", our_sorted, "--right", ref_sorted, "--out", diff_file], label=f"diff:{name}")
 
         return {"ok": True, "verdict": "XFAIL", "parity": parity, "diff_file": diff_file}
 
