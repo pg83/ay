@@ -55,14 +55,12 @@ func emitBI(
 		buildInfoGenPyVFS,
 	}
 
-	cacheFalse := false
 	node := &Node{
 		Platform:     instance.Platform,
-		Cache:        &cacheFalse,
 		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd1Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd2Args), Env: env}),
 		Env:          env,
 		Inputs:       na.inputList(inputs),
-		KV:           KV{P: pkBI, PC: pcYellow, ShowOut: true, DisableCache: "yes"},
+		KV:           KV{P: pkBI, PC: pcYellow, ShowOut: true, DisableCache: true},
 		Outputs:      na.vfsList(outVFS),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      []NodeRef{},

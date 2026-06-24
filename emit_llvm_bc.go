@@ -69,7 +69,6 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 				Outputs:      na.vfsList(bcOut),
 				KV:           KV{P: pkBC, PC: pcLightGreen},
 				Requirements: reqs,
-				Sandboxing:   true,
 				DepRefs:      deps,
 				Resources:    usesPython3Clang16,
 			}
@@ -100,7 +99,6 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 			Outputs:      na.vfsList(mergedOut),
 			KV:           KV{P: pkLD, PC: pcLightRed},
 			Requirements: reqs,
-			Sandboxing:   true,
 			DepRefs:      append([]NodeRef(nil), bcRefs...),
 			Resources:    usesPython3Clang16,
 		}
@@ -131,7 +129,6 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 			Outputs:      na.vfsList(optOut),
 			KV:           KV{P: pkOP, PC: pcYellow},
 			Requirements: reqs,
-			Sandboxing:   true,
 			DepRefs:      []NodeRef{ldRef},
 			Resources:    usesPython3Clang16,
 		}

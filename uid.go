@@ -241,7 +241,7 @@ func (c *CanonBuf) writeKV(kv KV) {
 	c.writeBool(kv.ShowOutBool)
 	c.writeBytes(kv.Name)
 	c.writeBytes(kv.Path)
-	c.writeBytes(kv.DisableCache)
+	c.writeBool(kv.DisableCache)
 	c.writeBytes(kv.SpecialRunner)
 	c.writeBool(kv.HasSpecialRunner)
 	c.writeBool(kv.RunTestNode)
@@ -254,15 +254,6 @@ func (c *CanonBuf) writeKV(kv KV) {
 }
 
 func (c *CanonBuf) writeNode(n *Node) {
-	switch {
-	case n.Cache == nil:
-		c.writeByte(0)
-	case *n.Cache:
-		c.writeByte(2)
-	default:
-		c.writeByte(1)
-	}
-
 	c.writeCmdSlice(n.Cmds)
 	c.writeDepRefUIDs(n)
 	c.writeEnv(n.Env)
@@ -272,5 +263,4 @@ func (c *CanonBuf) writeNode(n *Node) {
 	c.writeVFSSlice(n.Outputs)
 	c.writeBytes(string(n.Platform.Target))
 	c.writeRequirements(n.Requirements)
-	c.writeBool(n.Sandboxing)
 }

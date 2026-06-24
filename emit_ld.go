@@ -238,7 +238,6 @@ func emitVCSNode(emit *StreamingEmitter, host *Platform) NodeRef {
 		KV:           KV{P: pkCP, PC: pcYellow, ShowOut: true},
 		Outputs:      na.vfsList(output),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(16)},
-		Sandboxing:   true,
 	}
 
 	node.UID = resourceFetchUID("base64:vcs.json:"+vcsJSONBase64, output.string())

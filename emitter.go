@@ -40,8 +40,6 @@ func newStreamingEmitter(fs FS, onNode func(*Node, *UidVec, *DenseMap[STR, NodeR
 }
 
 func (e *StreamingEmitter) resolveAndUID(node *Node) UID {
-	node.Sandboxing = true
-
 	if node.UID != (UID{}) {
 		node.SelfUID = node.UID
 

@@ -232,7 +232,6 @@ func emitEN(
 		KV:             KV{P: pkEN, PC: pcYellow},
 		Outputs:        outputs,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		Sandboxing:     true,
 		DepRefs:        deps,
 		ForeignDepRefs: foreignDepRefs,
 	}

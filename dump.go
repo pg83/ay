@@ -325,7 +325,6 @@ func canonContent(node *rawNode, refGraph bool) map[string]any {
 		"outputs":      normStringsKeepOrder(node.Outputs),
 		"platform":     normPath(node.Platform),
 		"requirements": normRec(orVal(node.Requirements, map[string]any{})),
-		"sandboxing":   true,
 	}
 
 	return canon

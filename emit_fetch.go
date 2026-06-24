@@ -20,7 +20,6 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 		KV:           KV{P: pkFETCH, PC: pcYellow, ShowOut: true},
 		Outputs:      na.vfsList(output),
 		Requirements: Requirements{CPU: float64(1), Network: nwFull, RAM: float64(32)},
-		Sandboxing:   true,
 	}
 
 	node.UID = resourceFetchUID(decl.URI.string(), output.string())

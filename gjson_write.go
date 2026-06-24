@@ -52,12 +52,8 @@ func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 func appendNode(buf []byte, n *Node, uids *UidVec, fetchRefs *DenseMap[STR, NodeRef], dropSrcInputs bool) []byte {
 	buf = append(buf, '{')
 
-	if n.Cache != nil {
-		if *n.Cache {
-			buf = append(buf, `"cache":true,`...)
-		} else {
-			buf = append(buf, `"cache":false,`...)
-		}
+	if n.KV.DisableCache {
+		buf = append(buf, `"cache":false,`...)
 	}
 
 	buf = append(buf, `"cmds":`...)
@@ -93,12 +89,6 @@ func appendNode(buf []byte, n *Node, uids *UidVec, fetchRefs *DenseMap[STR, Node
 
 	buf = append(buf, `,"requirements":`...)
 	buf = appendRequirements(buf, n.Requirements)
-
-	if n.Sandboxing {
-		buf = append(buf, `,"sandboxing":true`...)
-	} else {
-		buf = append(buf, `,"sandboxing":false`...)
-	}
 
 	buf = append(buf, `,"self_uid":`...)
 	buf = appendUID(buf, n.SelfUID)
