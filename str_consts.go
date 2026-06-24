@@ -1,6 +1,12 @@
 package main
 
 var (
+	cudaCflagsStr                                    = internStr("--cflags")
+	cudaCustomPidFlagStr                             = internStr("--custom-pid")
+	cudaMtimeFlagStr                                 = internStr("--mtime")
+	cudaNvccBinStr                                   = internStr("$(B)/resources/CUDA/bin/nvcc")
+	cudaNvccStdStr                                   = internStr("-std=c++20")
+	cudaPathValueStr                                 = internStr("$(B)/resources/CUDA/nvvm/bin:$(B)/resources/CUDA/bin")
 	kwADDINCL                                        = internStr("ADDINCL")
 	kwAND                                            = internStr("AND")
 	kwARGS                                           = internStr("ARGS")

@@ -36,6 +36,8 @@ var (
 	contribToolsCythonCythonPy                       = source("contrib/tools/cython/cython.py")
 	contribToolsCythonPy2CythonIncludes              = source("contrib/tools/cython_py2/Cython/Includes")
 	copyFsToolsVFS                                   = source("build/scripts/fs_tools.py")
+	cudaCompileScriptVFS                             = source("build/scripts/compile_cuda.py")
+	cudaRuntimeIncludeVFS                            = source("build/internal/platform/cuda/cuda_runtime_include.h")
 	decimalMD5PyVFS                                  = source("build/scripts/decimal_md5.py")
 	descRawprotoWrapperVFS                           = source("build/scripts/desc_rawproto_wrapper.py")
 	domschemeRuntimeVFS                              = source("library/cpp/domscheme/runtime.h")

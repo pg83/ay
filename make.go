@@ -85,9 +85,6 @@ func warnHandler(keepGoing, verbose bool, emit func(line string)) func(Warn) {
 			throwFmt("%s: %s", w.Kind, w.Message)
 		}
 
-		// missing-addincl is always a warning (never fatal); upstream tolerates an
-		// ADDINCL to a non-existent dir. Other gated kinds print too; the rest only
-		// under --verbose.
 		if !(fatalable || w.Kind == WarnMissingAddincl || verbose) {
 			return
 		}

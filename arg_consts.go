@@ -326,6 +326,8 @@ var (
 	argYaStartCommandFile                        = internArg("--ya-start-command-file")
 	argZstd                                      = internArg("zstd")
 	baseUnitCxxNostdinc                          = internArg("-nostdinc++")
+	cudaCustomPidArg                             = internArg("tools/custom_pid")
+	cudaMtimeArg                                 = internArg("tools/mtime0")
 	cxxStandardFlag                              = internArg("-std=c++20")
 	wrapccArgEnd                                 = internArg("--wrapcc-end")
 	wrapccArgSrcFile                             = internArg("--source-file")

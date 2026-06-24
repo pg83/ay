@@ -1942,8 +1942,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			}
 		}
 
-		// A program's own GLOBAL srcs are force-linked as plain objects right after
-		// --no-whole-archive (ahead of vcs/objcopy), not whole-archived.
 		ldObjcopyRefs = append(globalRefs, ldObjcopyRefs...)
 		ldObjcopyPaths = append(globalOutputs, ldObjcopyPaths...)
 
