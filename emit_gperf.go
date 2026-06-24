@@ -37,7 +37,7 @@ func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(gperfBin), srcInputs),
 		Outputs:        na.vfsList(genVFS),
-		KV:             KV{P: pkGP, PC: pcYellow},
+		KV:             &gperfKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: depRefs(gperfLD),
 	}
@@ -67,3 +67,7 @@ func emitLibraryGperfSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }
+
+var (
+	gperfKV = KV{P: pkGP, PC: pcYellow}
+)

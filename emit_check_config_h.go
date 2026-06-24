@@ -36,7 +36,7 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 			Env:          env,
 			Inputs:       na.inputList(inputs),
 			Outputs:      na.vfsList(generatedVFS),
-			KV:           KV{P: pkCH, PC: pcYellow},
+			KV:           &checkConfigHKV,
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    usesPython3,
 		})
@@ -52,3 +52,7 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 
 	return out
 }
+
+var (
+	checkConfigHKV = KV{P: pkCH, PC: pcYellow}
+)

@@ -414,7 +414,7 @@ func emitPYRun(
 		Cmds:         na.cmdList(cmd),
 		Env:          env,
 		Inputs:       inputs,
-		KV:           KV{P: pkPY, PC: pcYellow, ShowOut: true},
+		KV:           &pyRunKV,
 		Outputs:      outputs,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      extraDepRefs,
@@ -425,3 +425,7 @@ func emitPYRun(
 
 	return id
 }
+
+var (
+	pyRunKV = KV{P: pkPY, PC: pcYellow, ShowOut: true}
+)

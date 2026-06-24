@@ -66,8 +66,12 @@ func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, o
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(flexBin, srcVFS), closure),
 		Outputs:        na.vfsList(outVFS),
-		KV:             KV{P: pkLX, PC: pcYellow},
+		KV:             &flexKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: []NodeRef{flexRef},
 	}, id)
 }
+
+var (
+	flexKV = KV{P: pkLX, PC: pcYellow}
+)

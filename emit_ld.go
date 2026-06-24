@@ -180,7 +180,7 @@ func emitLD(
 		Env:          envFull,
 		Inputs:       inputs,
 		Outputs:      outputs,
-		KV:           KV{P: pkLD, PC: pcLightBlue, ShowOut: true},
+		KV:           &ldKV,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      deps,
 		Resources:    instance.Platform.UsesLinkResources,
@@ -235,7 +235,7 @@ func emitVCSNode(emit *StreamingEmitter, host *Platform) NodeRef {
 			strBase64,
 			internStr(vcsJSONBase64),
 			output.str()))}),
-		KV:           KV{P: pkCP, PC: pcYellow, ShowOut: true},
+		KV:           &ldKV2,
 		Outputs:      na.vfsList(output),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(16)},
 	}
@@ -553,3 +553,8 @@ func emitOwnLDPlugins(ctx *GenCtx, instance ModuleInstance, plugins []STR, tc Mo
 
 	return res
 }
+
+var (
+	ldKV  = KV{P: pkLD, PC: pcLightBlue, ShowOut: true}
+	ldKV2 = KV{P: pkCP, PC: pcYellow, ShowOut: true}
+)

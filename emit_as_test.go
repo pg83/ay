@@ -100,7 +100,7 @@ func testYasmLDRef(e *StreamingEmitter) NodeRef {
 		Env:          nil,
 		Inputs:       InputChunks{ToVFSSlice([]string{})},
 		Outputs:      ToVFSSlice([]string{"$(B)/tools/yasm/yasm"}),
-		KV:           KV{P: pkLD, PC: pcLightCyan},
+		KV:           &asTestKV,
 		Platform:     &Platform{Target: PlatformDefaultLinuxX8664},
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 	})
@@ -142,7 +142,7 @@ func TestEmitAS_KV(t *testing.T) {
 	got := e.nodes[0]
 	want := KV{P: pkAS, PC: pcLightGreen}
 
-	if !reflect.DeepEqual(got.KV, want) {
+	if !reflect.DeepEqual(*got.KV, want) {
 		t.Errorf("kv:\n  got:  %#v\n  want: %#v", got.KV, want)
 	}
 }
@@ -225,3 +225,7 @@ END()
 		t.Errorf("AS.flatInputs() missing %q — SRCDIR rebase for `.S` source: %#v", want, asNode.flatInputs())
 	}
 }
+
+var (
+	asTestKV = KV{P: pkLD, PC: pcLightCyan}
+)

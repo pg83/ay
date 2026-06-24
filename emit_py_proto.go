@@ -311,7 +311,7 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 		Env:          EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
 		Inputs:       na.inputList(inputs),
 		Outputs:      outputs,
-		KV:           pbKV,
+		KV:           &pbKV,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      producerDeps,
 		Resources:    usesPython3,
@@ -405,7 +405,7 @@ func emitGeneratedPyProtoYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs [
 			Env:          EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}},
 			Inputs:       nodeInputs,
 			Outputs:      na.vfsList(out),
-			KV:           KV{P: pkPY, PC: pcYellow},
+			KV:           &pyProtoKV,
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			DepRefs:      deps,
 			Resources:    usesPython3,
@@ -549,7 +549,7 @@ func emitGeneratedPyProtoObjcopy(ctx *GenCtx, instance ModuleInstance, d *Module
 			Env:          env,
 			Inputs:       na.inputList(rescompilersChunk, cur.inputs, objcopyScriptChunk),
 			Outputs:      na.vfsList(outputObj),
-			KV:           KV{P: pkPY, PC: pcYellow, ShowOut: true},
+			KV:           &pyProtoKV2,
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    instance.Platform.UsesPython3Clang,
 		}
@@ -756,7 +756,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 			Env:          env,
 			Inputs:       na.inputList(ch.inputs, tail),
 			Outputs:      na.vfsList(aux),
-			KV:           KV{P: pkPR, PC: pcYellow, ShowOut: true},
+			KV:           &pyProtoKV3,
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			DepRefs:      deps,
 		}, auxRef)
@@ -789,3 +789,9 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 
 	return res
 }
+
+var (
+	pyProtoKV  = KV{P: pkPY, PC: pcYellow}
+	pyProtoKV2 = KV{P: pkPY, PC: pcYellow, ShowOut: true}
+	pyProtoKV3 = KV{P: pkPR, PC: pcYellow, ShowOut: true}
+)

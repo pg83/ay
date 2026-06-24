@@ -12,7 +12,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
 		Env:          nil,
 		Inputs:       InputChunks{ToVFSSlice([]string{})},
-		KV:           KV{P: pkLD},
+		KV:           &r6TestKV,
 		Outputs:      ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 		Platform:     &Platform{Target: "default-linux-x86_64"},
 		Requirements: Requirements{},
@@ -99,7 +99,7 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 		Cmds:    []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
 		Env:     nil,
 		Inputs:  InputChunks{ToVFSSlice([]string{})},
-		KV:      KV{P: pkLD},
+		KV:      &r6TestKV,
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
 
@@ -139,7 +139,7 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 		Cmds:    []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
 		Env:     nil,
 		Inputs:  InputChunks{ToVFSSlice([]string{})},
-		KV:      KV{P: pkLD},
+		KV:      &r6TestKV,
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
 
@@ -184,7 +184,7 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 		Cmds:    []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
 		Env:     nil,
 		Inputs:  InputChunks{ToVFSSlice([]string{})},
-		KV:      KV{P: pkLD},
+		KV:      &r6TestKV,
 		Outputs: ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 	})
 
@@ -452,3 +452,7 @@ END()
 		t.Errorf("R6-derived graphDeps(g, CC) = %v, want to contain R6 UID %q (PR-30 D04 Generator wiring)", graphDeps(g, ccNode), r6Node.UID)
 	}
 }
+
+var (
+	r6TestKV = KV{P: pkLD}
+)

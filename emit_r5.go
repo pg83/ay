@@ -48,7 +48,7 @@ func emitR5(
 		Env:            env,
 		Inputs:         na.inputList(inputs),
 		Outputs:        na.vfsList(tmpVFS, cppVFS),
-		KV:             KV{P: pkR5, PC: pcYellow},
+		KV:             &r5KV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: depRefs(ragel5LD, rlgenCdLD),
 	}
@@ -79,3 +79,7 @@ func emitLibraryRagel5Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }
+
+var (
+	r5KV = KV{P: pkR5, PC: pcYellow}
+)

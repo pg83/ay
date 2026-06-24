@@ -366,7 +366,7 @@ func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		}), Env: env}),
 		Env:          env,
 		Inputs:       inputs,
-		KV:           KV{P: pkld, PC: pcLightBlue, ShowOut: true},
+		KV:           &resourcesKV,
 		Outputs:      na.vfsList(dst),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      depRefs,
@@ -409,3 +409,7 @@ func readResourceBundleJSON(fs FS, rel string) map[string]string {
 
 	return out
 }
+
+var (
+	resourcesKV = KV{P: pkld, PC: pcLightBlue, ShowOut: true}
+)

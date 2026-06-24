@@ -61,7 +61,7 @@ func TestCanonicalNodeBytes_ZeroesIdentityFields(t *testing.T) {
 
 		Env:          nil,
 		Inputs:       InputChunks{ToVFSSlice([]string{})},
-		KV:           KV{},
+		KV:           &KV{},
 		Outputs:      ToVFSSlice([]string{}),
 		Requirements: Requirements{},
 		UID:          tuid("AAAAA"),
@@ -85,7 +85,7 @@ func TestCanonicalNodeBytes_VsDefaultJSONMarshal(t *testing.T) {
 	n := &Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"sh", "-c", "echo <a> & echo b"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
-		KV: KV{P: pkCC, Name: "a<b>c"}, Outputs: ToVFSSlice([]string{}),
+		KV: &KV{P: pkCC, Name: "a<b>c"}, Outputs: ToVFSSlice([]string{}),
 		Requirements: Requirements{},
 	}
 	canon := canonicalNodeBytes(n)

@@ -40,11 +40,16 @@ var flatc64IOLeadArgs = []STR{
 	argDashO.str(),
 }
 
+var flatcKVFL = KV{P: pkFL, PC: pcLightGreen}
+
+var flatcKVFL64 = KV{P: pkFL64, PC: pcLightGreen}
+
 var flatcVariantFL = flatcVariant{
 	toolArg:    argContribLibsFlatbuffersFlatc,
 	constFlags: flatcConstFlags,
 	ioLeadArgs: flatcIOLeadArgs,
 	procKind:   pkFL,
+	kv:         &flatcKVFL,
 	srcExt:     ".fbs",
 	bfbsExt:    ".bfbs",
 	runtimeVFS: flatcRuntimeVFS,
@@ -55,6 +60,7 @@ var flatcVariantFL64 = flatcVariant{
 	constFlags: flatc64ConstFlags,
 	ioLeadArgs: flatc64IOLeadArgs,
 	procKind:   pkFL64,
+	kv:         &flatcKVFL64,
 	srcExt:     ".fbs64",
 	bfbsExt:    ".bfbs64",
 	runtimeVFS: flatc64RuntimeVFS,
@@ -65,6 +71,7 @@ type flatcVariant struct {
 	constFlags []STR
 	ioLeadArgs []STR
 	procKind   ProcKind
+	kv         *KV
 	srcExt     string
 	bfbsExt    string
 	runtimeVFS VFS
@@ -152,7 +159,7 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 		DepRefs:        genDeps,
 		ForeignDepRefs: depRefs(flatcLDRef),
 		Inputs:         na.inputList(na.vfsList(flatcBinary, flatcWrapperVFS, srcVFS), transitiveImports),
-		KV:             KV{P: v.procKind, PC: pcLightGreen},
+		KV:             v.kv,
 		Outputs:        na.vfsList(headerVFS, cppVFS, bfbsVFS),
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:      usesPython3,

@@ -288,7 +288,7 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 			Env:          env,
 			Inputs:       na.inputList(toolInputs),
 			Outputs:      na.vfsList(append([]VFS{generatedVFS}, headerVFS...)...),
-			KV:           KV{P: pkCY, PC: pcYellow},
+			KV:           &cythonCppKV,
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    usesPython3,
 		}, cyRef)
@@ -602,3 +602,7 @@ func hasPrefix(s, prefix string) bool {
 func hasSuffix(s, suffix string) bool {
 	return len(s) >= len(suffix) && s[len(s)-len(suffix):] == suffix
 }
+
+var (
+	cythonCppKV = KV{P: pkCY, PC: pcYellow}
+)

@@ -57,10 +57,14 @@ func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt, 
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(toolBin, inputIn)),
 		Outputs:        []VFS{prefixCpp, prefixH},
-		KV:             KV{P: pkBC, PC: pcYellow},
+		KV:             &baseCodegenKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: depRefs(toolLDRef),
 	}
 
 	ctx.emit.emitReserved(node, bcRef)
 }
+
+var (
+	baseCodegenKV = KV{P: pkBC, PC: pcYellow}
+)

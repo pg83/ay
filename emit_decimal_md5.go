@@ -67,7 +67,7 @@ func emitDecimalMD5(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *D
 		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env, Stdout: outVFS.str()}),
 		Env:          env,
 		Inputs:       na.inputList(na.vfsList(optVFSs...), na.vfsList(decimalMD5PyVFS)),
-		KV:           KV{P: pkSV, PC: pcYellow, ShowOut: true},
+		KV:           &decimalMd5KV,
 		Outputs:      na.vfsList(outVFS),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    usesPython3,
@@ -88,3 +88,7 @@ func emitDecimalMD5(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *D
 
 	return svRef
 }
+
+var (
+	decimalMd5KV = KV{P: pkSV, PC: pcYellow, ShowOut: true}
+)

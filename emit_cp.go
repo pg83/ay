@@ -42,7 +42,7 @@ func emitJVCPG4(
 			Env: env}),
 		Env:          env,
 		Inputs:       inputs,
-		KV:           KV{P: pkCP, PC: pcLightCyan},
+		KV:           &cpKV,
 		Outputs:      na.vfsList(dst),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      []NodeRef{jvRef},
@@ -93,7 +93,7 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 			Env: env}),
 		Env:          env,
 		Inputs:       inputs,
-		KV:           KV{P: pkCP, PC: pcLightCyan},
+		KV:           &cpKV,
 		Outputs:      na.vfsList(dst),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      depRefs,
@@ -102,3 +102,7 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 
 	emit.emitReserved(node, id)
 }
+
+var (
+	cpKV = KV{P: pkCP, PC: pcLightCyan}
+)

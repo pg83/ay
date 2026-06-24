@@ -43,7 +43,7 @@ func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 		Inputs: na.inputList(na.vfsList(yasmBinaryVFS,
 			rodataScriptVFS,
 			srcVFS), extraInputs),
-		KV:             KV{P: pkRD, PC: pcLightGreen},
+		KV:             &rodataKV,
 		Outputs:        na.vfsList(asmVFS, outVFS),
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: []NodeRef{yasmLD},
@@ -68,3 +68,7 @@ func emitLibraryRodataSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 
 	return &SourceEmit{Ref: ref, OutPath: outPath}
 }
+
+var (
+	rodataKV = KV{P: pkRD, PC: pcLightGreen}
+)

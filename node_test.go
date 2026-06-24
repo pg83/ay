@@ -14,7 +14,6 @@ var expectedKeyOrder = []string{
 	"outputs",
 	"platform",
 	"requirements",
-	"sandboxing",
 	"self_uid",
 	"uid",
 }
@@ -27,7 +26,6 @@ var expectedKeyOrderMinimal = []string{
 	"outputs",
 	"platform",
 	"requirements",
-	"sandboxing",
 	"self_uid",
 	"uid",
 }
@@ -82,7 +80,7 @@ func TestNodeJSONKeyOrder_AllFieldsPresent(t *testing.T) {
 
 		Env:          EnvVars{{Name: internEnv("FOO"), Value: internStr("bar")}},
 		Inputs:       InputChunks{ToVFSSlice([]string{"in"})},
-		KV:           KV{P: pkLD},
+		KV:           &KV{P: pkLD},
 		Outputs:      ToVFSSlice([]string{"out"}),
 		Platform:     &Platform{Target: "default-linux-aarch64"},
 		Requirements: Requirements{CPU: 1, RAM: 32},
@@ -114,7 +112,7 @@ func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
 
 		Env:          nil,
 		Inputs:       InputChunks{ToVFSSlice([]string{})},
-		KV:           KV{},
+		KV:           &KV{},
 		Outputs:      ToVFSSlice([]string{}),
 		Platform:     nil,
 		Requirements: Requirements{},
@@ -154,7 +152,7 @@ func TestNodeJSON_DoesNotSerializeInternalRefs(t *testing.T) {
 
 		Env:            nil,
 		Inputs:         InputChunks{ToVFSSlice([]string{})},
-		KV:             KV{},
+		KV:             &KV{},
 		Outputs:        ToVFSSlice([]string{}),
 		Requirements:   Requirements{},
 		DepRefs:        []NodeRef{7},

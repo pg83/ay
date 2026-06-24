@@ -103,7 +103,7 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 			Env:          env,
 			Inputs:       nodeInputs,
 			Outputs:      na.vfsList(outputPath),
-			KV:           KV{P: pkPY, PC: pcYellow},
+			KV:           &pyCodegenKV,
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    usesPython3,
 		}
@@ -170,7 +170,7 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 			Env:          env,
 			Inputs:       na.inputList(genPy3RegScriptChunk),
 			Outputs:      na.vfsList(regCppVFS),
-			KV:           KV{P: pkPY, PC: pcYellow},
+			KV:           &pyCodegenKV,
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    usesPython3,
 		}
@@ -228,3 +228,7 @@ func pyInitDefineShortname(flag string) (string, bool) {
 
 	return "", false
 }
+
+var (
+	pyCodegenKV = KV{P: pkPY, PC: pcYellow}
+)

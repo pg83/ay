@@ -270,7 +270,7 @@ func emitResourceObjcopy(
 			Env:          env,
 			Inputs:       inputs,
 			Outputs:      na.vfsList(outputObj),
-			KV:           KV{P: pkPY, PC: pcYellow, ShowOut: true},
+			KV:           &pyObjcopyKV,
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    instance.Platform.UsesPython3Clang,
 		}
@@ -415,7 +415,7 @@ func emitKvOnlyObjcopyNode(
 		Env:          env,
 		Inputs:       na.inputList(rescompilersWithScriptChunk),
 		Outputs:      na.vfsList(outputObj),
-		KV:           KV{P: pkPY, PC: pcYellow, ShowOut: true},
+		KV:           &pyObjcopyKV,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    instance.Platform.UsesPython3Clang,
 	}
@@ -490,7 +490,7 @@ func emitYaConfJSONObjcopy(
 			Env:          env,
 			Inputs:       na.inputList(rescompilersChunk, na.vfsList(input, objcopyScriptVFS)),
 			Outputs:      na.vfsList(outputObj),
-			KV:           KV{P: pkPY, PC: pcYellow, ShowOut: true},
+			KV:           &pyObjcopyKV,
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    instance.Platform.UsesPython3Clang,
 		}
@@ -700,7 +700,7 @@ func emitPySrcObjcopy(
 				Env:          env,
 				Inputs:       na.inputList(rescompilersChunk, ch.inps, objcopyScriptChunk),
 				Outputs:      na.vfsList(outputObj),
-				KV:           KV{P: pkPY, PC: pcYellow, ShowOut: true},
+				KV:           &pyObjcopyKV,
 				Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 				Resources:    instance.Platform.UsesPython3Clang,
 			}
@@ -725,3 +725,7 @@ func emitPySrcObjcopy(
 
 	return res
 }
+
+var (
+	pyObjcopyKV = KV{P: pkPY, PC: pcYellow, ShowOut: true}
+)

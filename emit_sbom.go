@@ -89,7 +89,7 @@ func emitSbomComponent(ctx *GenCtx, instance ModuleInstance, d *ModuleData, real
 		}), Env: env}),
 		Env:          env,
 		Inputs:       na.inputList([]VFS{scriptVFS}),
-		KV:           KV{P: pkDX, PC: pcYellow},
+		KV:           &sbomKV,
 		Outputs:      na.vfsList(out),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    usesPython3,
@@ -124,7 +124,7 @@ func emitSbomToolchainComponent(ctx *GenCtx, instance ModuleInstance, toolchainN
 		}), Env: env}),
 		Env:          env,
 		Inputs:       na.inputList([]VFS{scriptVFS}),
-		KV:           KV{P: pkDX, PC: pcYellow},
+		KV:           &sbomKV,
 		Outputs:      na.vfsList(out),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    usesPython3,
@@ -134,3 +134,7 @@ func emitSbomToolchainComponent(ctx *GenCtx, instance ModuleInstance, toolchainN
 
 	return &ref, &out
 }
+
+var (
+	sbomKV = KV{P: pkDX, PC: pcYellow}
+)

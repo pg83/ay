@@ -71,7 +71,7 @@ func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
 		Env:          nil,
 		Inputs:       InputChunks{ToVFSSlice([]string{})},
-		KV:           KV{},
+		KV:           &arTestKV,
 		Outputs:      ToVFSSlice([]string{"$(B)/build/cow/on/lib.c.o"}),
 		Platform:     &Platform{Target: "default-linux-aarch64"},
 		Requirements: Requirements{},
@@ -182,7 +182,7 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 			Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
 			Env:          nil,
 			Inputs:       InputChunks{ToVFSSlice([]string{})},
-			KV:           KV{},
+			KV:           &arTestKV,
 			Outputs:      []VFS{out},
 			Platform:     &Platform{Target: "default-linux-aarch64"},
 			Requirements: Requirements{},
@@ -230,7 +230,7 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 			Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
 			Env:          nil,
 			Inputs:       InputChunks{ToVFSSlice([]string{})},
-			KV:           KV{},
+			KV:           &arTestKV,
 			Outputs:      []VFS{out},
 			Platform:     &Platform{Target: "default-linux-aarch64"},
 			Requirements: Requirements{},
@@ -265,7 +265,7 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 			Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
 			Env:          nil,
 			Inputs:       InputChunks{ToVFSSlice([]string{})},
-			KV:           KV{},
+			KV:           &arTestKV,
 			Outputs:      []VFS{out},
 			Platform:     &Platform{Target: "default-linux-aarch64"},
 			Requirements: Requirements{},
@@ -369,7 +369,7 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 			Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
 			Env:          nil,
 			Inputs:       InputChunks{ToVFSSlice([]string{})},
-			KV:           KV{},
+			KV:           &arTestKV,
 			Outputs:      []VFS{out},
 			Platform:     &Platform{Target: "default-linux-aarch64"},
 			Requirements: Requirements{},
@@ -1366,3 +1366,7 @@ func EmitAR(
 
 	return emitARNode(instance, archivePath, 0, objRefs, objPaths, peerArchiveRefs, nil, nil, testToolchain(), hostP, emit)
 }
+
+var (
+	arTestKV = KV{}
+)

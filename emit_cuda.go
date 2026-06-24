@@ -64,7 +64,7 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 		Env:          env,
 		Inputs:       na.inputList(closure, na.vfsList(cudaCompileScriptVFS, mtimeVFS, pidVFS)),
 		Outputs:      na.vfsList(outVFS),
-		KV:           KV{P: pkCU, PC: pcLightGreen},
+		KV:           &cudaKV,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    p.CCUsesResources,
 		DepRefs:      append([]NodeRef{mtimeRef, pidRef}, in.ExtraDepRefs...),
@@ -72,3 +72,7 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 
 	return &SourceEmit{Ref: ctx.emit.emit(node), OutPath: outVFS}
 }
+
+var (
+	cudaKV = KV{P: pkCU, PC: pcLightGreen}
+)
