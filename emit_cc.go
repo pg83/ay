@@ -11,6 +11,7 @@ var (
 
 type ModuleCCInputs struct {
 	Flags                FlagSet
+	CudaNvccFlags        []STR
 	AddIncl              []VFS
 	InclArgs             InclArgMemo
 	CCBlocks             *CcModuleArgBlocks

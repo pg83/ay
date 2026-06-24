@@ -161,6 +161,7 @@ type ModuleData struct {
 	hadAllocator             bool
 	allocatorName            STR
 	muslLite                 bool
+	cudaNvccFlags            []STR
 	muslEnabled              bool
 	useAsmlib                bool
 	useArcadiaLibm           bool
@@ -2273,6 +2274,8 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 				}
 			}
 		}
+	case tokCudaNvccFlags:
+		d.cudaNvccFlags = append(d.cudaNvccFlags, v.Args...)
 	default:
 
 		handled = false
@@ -2908,6 +2911,14 @@ func buildIfEnv(instance ModuleInstance) Environment {
 
 	if !env.hasBindingID(envCUDA_ROOT) {
 		env.setString(envCUDA_ROOT, "$(B)/resources/CUDA")
+	}
+
+	if !env.hasBindingID(envCUDA_ARCHITECTURES) {
+		env.setString(envCUDA_ARCHITECTURES, cudaArchitectures129)
+	}
+
+	if !env.hasBindingID(envOBJCOPY_TOOL) {
+		env.setString(envOBJCOPY_TOOL, "$(B)/resources/CLANG"+instance.Platform.ClangVer+"/bin/llvm-objcopy")
 	}
 
 	env.setString(envARCADIA_ROOT, "$(S)")

@@ -1,6 +1,7 @@
 package main
 
 const (
+	cudaArchitectures129       = "sm_50:sm_52:sm_60:sm_61:sm_70:sm_75:sm_80:sm_86:sm_89:sm_90:sm_90a:sm_100:sm_100a:sm_120:sm_120a:sm_100f:sm_103:sm_103a:sm_103f:sm_120f"
 	cudaResourceGlobalRef      = "$(B)/resources/CUDA"
 	cudaHostToolchainGlobalRef = "$(B)/resources/CUDA_HOST_TOOLCHAIN"
 	osSdkRootGlobalRef         = "$(B)/resources/OS_SDK_ROOT"
@@ -49,6 +50,8 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	outVFS, inVFS := composeCCPaths(instance, srcRel, srcVFS, in, ".o")
 	blocks := in.CCBlocks
 
+	closure := walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)
+
 	mtimeRef, mtimeVFS := ctx.tool(internArg("tools/mtime0"))
 	pidRef, pidVFS := ctx.tool(internArg("tools/custom_pid"))
 
@@ -57,7 +60,6 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 		"--keep-dir=$(B)/"+instance.Path.rel(),
 		"--compiler-bindir="+cudaHostToolchainGlobalRef+"/bin/clang",
 		"-I"+osSdkRootGlobalRef+"/usr/include/x86_64-linux-gnu",
-		"-Wno-deprecated-gpu-targets",
 	)
 
 	prefix := na.strList(
@@ -82,7 +84,7 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	cmdArgs := ArgChunks(na.chunkList(
 		prefix,
 		internStrList(staticNvcc),
-		internStrList(nvccGencodeFlags),
+		in.CudaNvccFlags,
 		na.strList(argDashC.str(), (inVFS).str(), argDashO.str(), (outVFS).str()),
 		blocks.includes,
 		na.strList(internStr("--cflags")),
@@ -101,7 +103,7 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 		Platform:     p,
 		Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
 		Env:          env,
-		Inputs:       na.inputList(in.IncludeInputs, []VFS{source("build/internal/platform/cuda/cuda_runtime_include.h")}),
+		Inputs:       na.inputList(closure, []VFS{source("build/scripts/compile_cuda.py"), source("build/internal/platform/cuda/cuda_runtime_include.h"), mtimeVFS, pidVFS}),
 		Outputs:      na.vfsList(outVFS),
 		KV:           KV{P: pkCU, PC: pcLightGreen},
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
