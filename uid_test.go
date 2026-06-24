@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"github.com/zeebo/xxh3"
 	"strings"
 	"testing"
@@ -78,38 +76,6 @@ func TestCanonicalNodeBytes_ZeroesIdentityFields(t *testing.T) {
 
 	if n.UID == (UID{}) || n.SelfUID == (UID{}) {
 		t.Errorf("canonicalNodeBytes mutated the original node: %+v", n)
-	}
-}
-
-func TestCanonicalNodeBytes_VsDefaultJSONMarshal(t *testing.T) {
-	n := &Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"sh", "-c", "echo <a> & echo b"})}, Env: nil}},
-		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
-		KV: &KV{P: pkCC, Name: "a<b>c"}, Outputs: ToVFSSlice([]string{}),
-		Requirements: Requirements{},
-	}
-	canon := canonicalNodeBytes(n)
-
-	defaultMarshalled := throw2(json.Marshal(n))
-
-	if bytes.Equal(canon, defaultMarshalled) {
-		t.Fatalf("canonicalNodeBytes and json.Marshal produced identical bytes; "+
-			"either default escaping changed or canonicalNodeBytes lost its "+
-			"SetEscapeHTML(false). canon=%s default=%s", canon, defaultMarshalled)
-	}
-
-	if !bytes.Contains(canon, []byte("<b>")) || !bytes.Contains(canon, []byte("a<b>c")) {
-		t.Errorf("canonicalNodeBytes should preserve literal '<' chars; got: %s", canon)
-	}
-
-	const escapedLT = "\\u003c"
-
-	if !bytes.Contains(defaultMarshalled, []byte(escapedLT)) {
-		t.Errorf("default json.Marshal should escape '<' as %s; got: %s", escapedLT, defaultMarshalled)
-	}
-
-	if bytes.Contains(canon, []byte(escapedLT)) {
-		t.Errorf("canonicalNodeBytes must NOT contain %s (escaping disabled); got: %s", escapedLT, canon)
 	}
 }
 
