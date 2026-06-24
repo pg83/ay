@@ -319,15 +319,13 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 		argTarget.str(), internStr(outputPath),
 	}
 
-	if len(pluginPaths) > 0 {
-		cmdArgs = append(cmdArgs, argStartPlugins.str())
+	cmdArgs = append(cmdArgs, argStartPlugins.str())
 
-		for _, p := range pluginPaths {
-			cmdArgs = append(cmdArgs, (p).str())
-		}
-
-		cmdArgs = append(cmdArgs, argEndPlugins.str())
+	for _, p := range pluginPaths {
+		cmdArgs = append(cmdArgs, (p).str())
 	}
+
+	cmdArgs = append(cmdArgs, argEndPlugins.str())
 
 	for _, peer := range wholeArchivePeers {
 		cmdArgs = append(cmdArgs, argWholeArchivePeers.str(), internStr(peer))
@@ -368,8 +366,9 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 	cmdArgs = append(cmdArgs,
 		argRdynamic.str(),
 		internStr("-Wl,--version-script=$(S)/"+modulePath+"/"+exportsScript),
-		argWlNoAsNeeded.str(),
 	)
+	cmdArgs = append(cmdArgs, p.LinkPreludeExtra...)
+	cmdArgs = append(cmdArgs, argWlNoAsNeeded.str())
 
 	if p.PIC {
 		cmdArgs = append(cmdArgs, (argFPIC).str())
@@ -389,10 +388,9 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 		internStr("--ld-path="+tc.LLD.string()),
 		argWlNoRosegment.str(),
 		argWlBuildIdSha1.str(),
-		argNostdlib.str(),
-		argLm.str(),
-		argWlGcSections.str(),
 	)
+	cmdArgs = append(cmdArgs, p.SystemLibs...)
+	cmdArgs = append(cmdArgs, argLm.str(), argWlGcSections.str())
 
 	return cmdArgs
 }
