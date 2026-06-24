@@ -32,6 +32,7 @@ Env:   VALIDATE_JOBS — max concurrent nodes (default: cpu count).
 """
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -232,16 +233,46 @@ def run_graph(nodes, jobs):
     return results
 
 
-def sh(cmd, gogc=False, stdout=None):
-    """Run a subprocess in WORK_CWD; return its exit code. gogc=True passes
-    GOGC=800 (the heavy ay commands spend ~half their CPU on GC at default)."""
-    env = clean_env({"GOGC": "800"} if gogc else None)
+def _fmt_cmd(cmd, cwd, env_extra, stdout):
+    """A copy-pasteable shell line: cd, the env delta, the quoted argv and any
+    stdout redirect. clean_env only *strips* toolchain vars (unset in a clean
+    shell anyway), so only the added vars need to show."""
+    parts = [f"cd {shlex.quote(cwd)} &&"]
+
+    if env_extra:
+        parts += [f"{k}={shlex.quote(str(v))}" for k, v in env_extra.items()]
+
+    parts.append(" ".join(shlex.quote(c) for c in cmd))
+
+    if stdout is not None:
+        parts.append(f"> {shlex.quote(stdout)}")
+
+    return " ".join(parts)
+
+
+def sh(cmd, gogc=False, stdout=None, label=None, cwd=None, env_extra=None):
+    """Run a subprocess and print the full runnable command line with its wall
+    time. cwd defaults to WORK_CWD; gogc=True passes GOGC=800 (the heavy ay
+    commands spend ~half their CPU on GC at default); env_extra adds vars."""
+    extra = dict(env_extra or {})
+
+    if gogc:
+        extra["GOGC"] = "800"
+
+    env = clean_env(extra)
+    run_cwd = cwd or WORK_CWD
+    t = time.monotonic()
 
     if stdout is not None:
         with open(stdout, "wb") as f:
-            return subprocess.run(cmd, cwd=WORK_CWD, env=env, stdout=f).returncode
+            rc = subprocess.run(cmd, cwd=run_cwd, env=env, stdout=f).returncode
+    else:
+        rc = subprocess.run(cmd, cwd=run_cwd, env=env).returncode
 
-    return subprocess.run(cmd, cwd=WORK_CWD, env=env).returncode
+    tag = f"[{label}] " if label else ""
+    print(f"{tag}{time.monotonic() - t:.2f}s rc={rc}  $ {_fmt_cmd(cmd, run_cwd, extra, stdout)}", flush=True)
+
+    return rc
 
 
 # ---------------------------------------------------------------------------
@@ -288,10 +319,7 @@ def resolve_ref_raw(graph_dir):
 
 
 def build_action():
-    t = time.monotonic()
-    env = clean_env({"CGO_ENABLED": "0"})
-    rc = subprocess.run([GO, "build", "-o", AY, "."], cwd=REPO_ROOT, env=env).returncode
-    print(f"[build] {time.monotonic() - t:.2f}s", flush=True)
+    rc = sh([GO, "build", "-o", AY, "."], label="build", cwd=REPO_ROOT, env_extra={"CGO_ENABLED": "0"})
 
     return {"ok": rc == 0}
 
@@ -302,12 +330,10 @@ def fetch_action(kind, rid, dst_dir, ready):
             print(f"[{kind}:{rid}] cached", flush=True)
             return {"ok": True}
 
-        t = time.monotonic()
         if os.path.exists(dst_dir):
             shutil.rmtree(dst_dir)
         os.makedirs(dst_dir, exist_ok=True)
-        rc = sh([AY, "fetch", "sandbox", "--resource-id", rid, "--untar-to", dst_dir])
-        print(f"[{kind}:{rid}] fetch {time.monotonic() - t:.2f}s", flush=True)
+        rc = sh([AY, "fetch", "sandbox", "--resource-id", rid, "--untar-to", dst_dir], label=f"fetch:{kind}:{rid}")
 
         if rc == 0:
             open(ready, "wb").close()
@@ -353,14 +379,9 @@ def gen_action(name, command, slice_dir, slice_ready, raw, budget):
         cmd = [AY] + command[1:] + ["--source-root", resolve_slice_root(slice_dir)]
         _remove_if_exists(raw)
         t = time.monotonic()
-        rc = sh(cmd, gogc=True, stdout=raw)
+        rc = sh(cmd, gogc=True, stdout=raw, label=f"gen:{name}")
         secs = time.monotonic() - t
         over = budget is not None and secs > GEN_TIME_SLACK * budget
-
-        if budget is None:
-            print(f"[{name}] gen {secs:.2f}s (no budget)", flush=True)
-        else:
-            print(f"[{name}] gen {secs:.2f}s (budget {budget:.2f}s, limit {GEN_TIME_SLACK * budget:.2f}s)", flush=True)
 
         return {"ok": rc == 0, "secs": secs, "budget_over": over}
 
@@ -370,9 +391,7 @@ def gen_action(name, command, slice_dir, slice_ready, raw, budget):
 def normalize_our_action(label, raw, target, out_unsorted):
     def action():
         _remove_if_exists(out_unsorted)
-        t = time.monotonic()
-        rc = sh([AY, "dev", "dump", "normalize", "--in", raw, "--target", target, "--out", out_unsorted], gogc=True)
-        print(f"[{label}] subproc: normalize our {time.monotonic() - t:.2f}s", flush=True)
+        rc = sh([AY, "dev", "dump", "normalize", "--in", raw, "--target", target, "--out", out_unsorted], gogc=True, label=f"norm-our:{label}")
 
         return {"ok": rc == 0}
 
@@ -387,9 +406,7 @@ def normalize_ref_action(label, graph_dir, target, out_unsorted):
             return {"ok": False}
 
         _remove_if_exists(out_unsorted)
-        t = time.monotonic()
-        rc = sh([AY, "dev", "dump", "normalize", "--in", raw, "--target", target, "--out", out_unsorted, "--ref-graph"], gogc=True)
-        print(f"[{label}] subproc: normalize ref {time.monotonic() - t:.2f}s", flush=True)
+        rc = sh([AY, "dev", "dump", "normalize", "--in", raw, "--target", target, "--out", out_unsorted, "--ref-graph"], gogc=True, label=f"norm-ref:{label}")
 
         return {"ok": rc == 0}
 
@@ -399,9 +416,7 @@ def normalize_ref_action(label, graph_dir, target, out_unsorted):
 def sort_action(label, in_unsorted, out_sorted, side):
     def action():
         _remove_if_exists(out_sorted)
-        t = time.monotonic()
-        rc = sh([AY, "dev", "dump", "sort", "--in", in_unsorted, "--out", out_sorted], gogc=True)
-        print(f"[{label}] subproc: sort {side} {time.monotonic() - t:.2f}s", flush=True)
+        rc = sh([AY, "dev", "dump", "sort", "--in", in_unsorted, "--out", out_sorted], gogc=True, label=f"sort-{side}:{label}")
 
         if rc == 0:
             _remove_if_exists(in_unsorted)
@@ -414,18 +429,16 @@ def sort_action(label, in_unsorted, out_sorted, side):
 def compare_action(name, xfail, our_sorted, ref_sorted, out_dir):
     def action():
         if xfail is False:
-            rc = sh(["cmp", "-s", our_sorted, ref_sorted])
+            rc = sh(["cmp", "-s", our_sorted, ref_sorted], label=f"cmp:{name}")
 
             return {"ok": True, "verdict": "OK" if rc == 0 else "FAIL"}
 
-        if xfail == "auto" and sh(["cmp", "-s", our_sorted, ref_sorted]) == 0:
+        if xfail == "auto" and sh(["cmp", "-s", our_sorted, ref_sorted], label=f"cmp:{name}") == 0:
             return {"ok": True, "verdict": "OK"}
 
         parity = normalized_node_parity_counts(our_sorted, ref_sorted)
         diff_file = os.path.join(out_dir, f"{name}.diff.txt")
-        t = time.monotonic()
-        sh([AY, "dev", "dump", "diff", "--left", our_sorted, "--right", ref_sorted, "--out", diff_file], gogc=True)
-        print(f"[{name}] subproc: diff {time.monotonic() - t:.2f}s", flush=True)
+        sh([AY, "dev", "dump", "diff", "--left", our_sorted, "--right", ref_sorted, "--out", diff_file], gogc=True, label=f"diff:{name}")
 
         return {"ok": True, "verdict": "XFAIL", "parity": parity, "diff_file": diff_file}
 
