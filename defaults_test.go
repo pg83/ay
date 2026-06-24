@@ -2,6 +2,7 @@ package main
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -34,6 +35,27 @@ func TestDefaultProgramPeerdirsForWithState_X8664GetsTcmallocDefault(t *testing.
 
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("defaultProgramPeerdirsForWithState() = %v, want %v", got, want)
+	}
+}
+
+func TestDefaultProgramPeerdirs_GlibcasmGatedByUseAsmlib(t *testing.T) {
+	instance := ModuleInstance{
+		Path:     source("prog"),
+		Kind:     KindBin,
+		Language: LangCPP,
+		Platform: newAllocatorDefaultTestPlatform(OSLinux, ISAX8664),
+	}
+
+	with := defaultProgramPeerdirsForWithState(nil, instance, &ModuleData{useAsmlib: true}, true)
+
+	if !slices.Contains(with, "contrib/libs/glibcasm") {
+		t.Fatalf("USE_ASMLIB on: expected glibcasm peer, got %v", with)
+	}
+
+	without := defaultProgramPeerdirsForWithState(nil, instance, &ModuleData{useAsmlib: false}, true)
+
+	if slices.Contains(without, "contrib/libs/glibcasm") || slices.Contains(without, "contrib/libs/asmlib") {
+		t.Fatalf("DISABLE(USE_ASMLIB): expected no glibcasm/asmlib peer, got %v", without)
 	}
 }
 

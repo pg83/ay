@@ -39,7 +39,7 @@ var programImplicitPeers = []ImplicitPeerRule{
 		name: "glibcasm",
 		peer: "contrib/libs/glibcasm",
 		predicate: func(rc ImplicitPeerCtx) bool {
-			return !rc.pic && !rc.noPlatform &&
+			return rc.useAsmlib && !rc.pic && !rc.noPlatform &&
 				rc.osLinux && rc.archX8664 && !rc.muslOn && !rc.sanitizer && rc.useSSE4
 		},
 	},
@@ -49,7 +49,7 @@ var programImplicitPeers = []ImplicitPeerRule{
 		predicate: func(rc ImplicitPeerCtx) bool {
 			glibcasm := rc.osLinux && rc.archX8664 && !rc.muslOn && !rc.sanitizer && rc.useSSE4
 
-			return !rc.pic && !rc.noPlatform && rc.archX8664 && !glibcasm
+			return rc.useAsmlib && !rc.pic && !rc.noPlatform && rc.archX8664 && !glibcasm
 		},
 	},
 	{
@@ -227,6 +227,7 @@ type ImplicitPeerCtx struct {
 	pic           bool
 	sanitizer     bool
 	useSSE4       bool
+	useAsmlib     bool
 	hadAllocator  bool
 	allocatorName string
 }
@@ -289,6 +290,7 @@ func defaultProgramPeerdirsForWithState(ctx *GenCtx, instance ModuleInstance, d 
 		pic:           instance.Platform.PIC,
 		sanitizer:     instance.Platform.BuildSanitized,
 		useSSE4:       env.bool(envUSE_SSE4),
+		useAsmlib:     d.useAsmlib,
 		hadAllocator:  d.hadAllocator,
 		allocatorName: allocatorName.string(),
 	}

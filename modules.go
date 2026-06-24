@@ -162,6 +162,7 @@ type ModuleData struct {
 	allocatorName            STR
 	muslLite                 bool
 	muslEnabled              bool
+	useAsmlib                bool
 	useArcadiaLibm           bool
 	splitDwarf               bool
 	noPythonIncl             bool
@@ -640,6 +641,7 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 
 	d := &ModuleData{
 		pythonSQLite3:           true,
+		useAsmlib:               true,
 		bisonGenExt:             strCpp,
 		needGoogleProtoPeerdirs: true,
 	}
@@ -1739,6 +1741,8 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 				d.noMypy = false
 			case "PYTHON_SQLITE3":
 				d.pythonSQLite3 = true
+			case "USE_ASMLIB":
+				d.useAsmlib = true
 			}
 		}
 	case tokDisable:
@@ -1753,6 +1757,10 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 
 			if a == "NEED_GOOGLE_PROTO_PEERDIRS" {
 				d.needGoogleProtoPeerdirs = false
+			}
+
+			if a == "USE_ASMLIB" {
+				d.useAsmlib = false
 			}
 		}
 	case tokNoMypy:
