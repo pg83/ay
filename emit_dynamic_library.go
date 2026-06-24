@@ -32,6 +32,15 @@ func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs [
 
 	fixElfRef, fixElfPath := ctx.tool(argToolsFixElf)
 
+	if !effectiveNoPlatform(d.flags) {
+		cowRes := genModule(ctx, derivePeerInstance(ctx, instance, d, "build/cow/on"))
+
+		if cowRes.ARPath != nil {
+			peerArchiveRefs = append([]NodeRef{cowRes.ARRef}, peerArchiveRefs...)
+			peerArchivePaths = append([]VFS{*cowRes.ARPath}, peerArchivePaths...)
+		}
+	}
+
 	outputName := dllOutputName(d.moduleStmt)
 	outputPath := build(instance.Path.rel() + "/" + outputName).string()
 	vcsCPath := build(instance.Path.rel() + "/__vcs_version__.c").string()
@@ -69,7 +78,7 @@ func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs [
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull})
 
 	if sbomEmbed {
-		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdLinkSbom(d.tc, ldSbomLang(instance), instance.Path.rel(), sbomJSON, ldSbomPaths)), Env: envFull})
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdLinkSbom(d.tc, ldSbomLang(instance), instance.Path.rel(), sbomJSON, ldSbomPaths)), Cwd: strB, Env: envVcsOnly})
 	}
 
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: strB, Env: envFull})
@@ -78,11 +87,13 @@ func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs [
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdSbomObjcopy(d.tc, sbomJSON, outputPath)), Env: envVcsOnly})
 	}
 
-	inputs := composeDynLibInputs(na, peerArchivePaths, nil, fixElfPath, instance.Path.rel(), d.exportsScript.string(), ctx.scripts)
+	inputs := InputChunks{peerArchivePaths, na.srcChunk(fixElfPath), ctx.scripts[ldVcsInfoVFS], ctx.scripts[ldLinkDynLibVFS]}
+	inputs = append(inputs, []VFS{ldSvnInterfaceVFS, ldSvnversionHVFS, source(instance.Path.rel() + "/" + d.exportsScript.string())})
 	inputs = append(inputs, ccOutputs)
 
 	if sbomEmbed {
 		inputs = append(inputs, ldSbomPaths)
+		inputs = append(inputs, []VFS{linkSbomScriptVFS})
 	}
 
 	deps := make([]NodeRef, 0, len(peerArchiveRefs)+len(ccRefs)+len(ldSbomRefs)+1)
