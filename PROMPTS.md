@@ -7,8 +7,6 @@ case-insensitively; a section's body runs to the next `### ` header.
 
 ### COMMON
 
-DEBUG.md — how to debug divergences between the upstream graph and ours.
-
 Don't go into the background — `-p` kicks you out of the agent loop!!! validate.py no longer locks and runs in parallel!!!
 
 ### LEAD
