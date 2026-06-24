@@ -2125,7 +2125,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	if d.moduleStmt.Name == tokDllTool {
-		result := emitDllShared(ctx, instance, d, ccRefs, ccOutputs, peerArchiveRefs, peerArchivePaths)
+		result := emitDllShared(ctx, instance, d, ccRefs, ccOutputs, peerArchiveRefs, peerArchivePaths, peerSbomRefs, peerSbomPaths)
 		ctx.memo.put(ctx.instanceKey(instance), result)
 
 		return result

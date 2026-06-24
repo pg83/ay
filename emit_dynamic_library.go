@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 var (
 	ldLinkDynLibPath = ldLinkDynLibVFS.string()
 )
@@ -21,7 +23,7 @@ func dllOutputName(stmt *ModuleStmt) string {
 	return prefix + name + ".so"
 }
 
-func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs []NodeRef, ccOutputs []VFS, peerArchiveRefs []NodeRef, peerArchivePaths []VFS) *ModuleEmitResult {
+func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs []NodeRef, ccOutputs []VFS, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS) *ModuleEmitResult {
 	na := ctx.na
 
 	if d.exportsScript == nil {
@@ -38,22 +40,60 @@ func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs [
 	cmd0 := composeLDCmdVcsInfo(d.tc, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
 	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.rel(), outputPath, outputName, vcsOPath, ccOutputs, peerArchivePaths, nil, nil, d.exportsScript.string(), fixElfPath.string())
-	cmd3 := composeLDCmdLinkOrCopy(d.tc, instance.Path.rel())
 
 	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	envFull := ctx.host.toolEnv()
 
+	ldSbomRefs := peerSbomRefs
+	ldSbomPaths := peerSbomPaths
+	sbomJSON := build(instance.Path.rel() + "/__sbomdata.json").string()
+	sbomEmbed := false
+
+	if sbomActive(ctx, instance) && instance.Platform.BuildRelease {
+		if r, p := clangToolchainSbomComponent(ctx, instance.Platform); r != nil && !containsVFS(ldSbomPaths, *p) {
+			ldSbomRefs = append(ldSbomRefs, *r)
+			ldSbomPaths = append(ldSbomPaths, *p)
+		}
+
+		if sbomQualifies(d) {
+			if or, op := emitSbomComponent(ctx, instance, d, strings.TrimSuffix(outputName, ".so")); or != nil {
+				ldSbomRefs = append(ldSbomRefs, *or)
+				ldSbomPaths = append(ldSbomPaths, *op)
+			}
+		}
+
+		sbomEmbed = len(ldSbomPaths) > 0
+	}
+
+	cmds := make([]Cmd, 0, 5)
+	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull})
+
+	if sbomEmbed {
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdLinkSbom(d.tc, ldSbomLang(instance), instance.Path.rel(), sbomJSON, ldSbomPaths)), Env: envFull})
+	}
+
+	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: strB, Env: envFull})
+
+	if sbomEmbed {
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdSbomObjcopy(d.tc, sbomJSON, outputPath)), Env: envVcsOnly})
+	}
+
 	inputs := composeDynLibInputs(na, peerArchivePaths, nil, fixElfPath, instance.Path.rel(), d.exportsScript.string(), ctx.scripts)
 	inputs = append(inputs, ccOutputs)
 
-	deps := make([]NodeRef, 0, len(peerArchiveRefs)+len(ccRefs)+1)
+	if sbomEmbed {
+		inputs = append(inputs, ldSbomPaths)
+	}
+
+	deps := make([]NodeRef, 0, len(peerArchiveRefs)+len(ccRefs)+len(ldSbomRefs)+1)
 	deps = append(deps, peerArchiveRefs...)
 	deps = append(deps, ccRefs...)
+	deps = append(deps, ldSbomRefs...)
 	deps = append(deps, ctx.vcsRef)
 
 	n := &Node{
 		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: strB, Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd3), Env: envVcsOnly}),
+		Cmds:         na.cmdList(cmds...),
 		Env:          envFull,
 		Inputs:       inputs,
 		Outputs:      na.vfsList(build(instance.Path.rel() + "/" + outputName)),
