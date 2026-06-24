@@ -357,6 +357,79 @@ type rawNode struct {
 	Requirements any      `json:"requirements"`
 }
 
+func loadGraph(path string) []*rawNode {
+	f := throw2(os.Open(path))
+
+	defer func() { throw(f.Close()) }()
+
+	dec := json.NewDecoder(bufio.NewReaderSize(f, 1<<20))
+	dec.UseNumber()
+	seekToGraph(dec, path)
+
+	nodes := []*rawNode{}
+
+	for dec.More() {
+		node := &rawNode{}
+		throw(dec.Decode(node))
+		nodes = append(nodes, node)
+	}
+
+	return nodes
+}
+
+type nodeSource struct {
+	path  string
+	nodes []*rawNode
+}
+
+func fanoutNodes[R any](src nodeSource, workers int, process func(*rawNode) R, collect func(R)) {
+	if src.nodes != nil {
+		sliceFanout(src.nodes, workers, process, collect)
+
+		return
+	}
+
+	streamGraphFanout(src.path, workers, process, collect)
+}
+
+func sliceFanout[R any](nodes []*rawNode, workers int, process func(*rawNode) R, collect func(R)) {
+	in := make(chan *rawNode, workers*2)
+	results := make(chan R, workers*2)
+
+	var wg sync.WaitGroup
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			for n := range in {
+				results <- process(n)
+			}
+		}()
+	}
+
+	done := make(chan struct{})
+
+	go func() {
+		for r := range results {
+			collect(r)
+		}
+
+		close(done)
+	}()
+
+	for _, n := range nodes {
+		in <- n
+	}
+
+	close(in)
+	wg.Wait()
+	close(results)
+	<-done
+}
+
 func streamGraphFanout[R any](path string, workers int, process func(*rawNode) R, collect func(R)) {
 	f := throw2(os.Open(path))
 

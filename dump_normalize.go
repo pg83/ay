@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"io"
 	"os"
+	"runtime"
 	"sort"
 	"strings"
 )
@@ -16,7 +17,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 	defer startProfilesFromEnv()()
 
 	var inPath, target, outPath string
-	var refGraph bool
+	var refGraph, streaming bool
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -32,6 +33,9 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		case "--ref-graph":
 
 			refGraph = true
+		case "--streaming":
+
+			streaming = true
 		default:
 			throwFmt("dump normalize: unknown argument %q", args[i])
 		}
@@ -41,7 +45,13 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		throwFmt("dump normalize: --in and --target are required")
 	}
 
-	const workers = 4
+	src := nodeSource{path: inPath}
+	workers := 4
+
+	if !streaming {
+		src.nodes = loadGraph(inPath)
+		workers = min(runtime.NumCPU(), 24)
+	}
 	contentHash := map[string][32]byte{}
 	deps := map[string][]string{}
 	fetch := map[string]bool{}
@@ -62,7 +72,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		outputs  []string
 	}
 
-	streamGraphFanout(inPath, workers,
+	fanoutNodes(src, workers,
 		func(node *rawNode) p1Result {
 			uid := node.UID
 			kv, _ := node.Kv.(map[string]any)
@@ -140,7 +150,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 			uid  string
 			deps []string
 		}
-		streamGraphFanout(inPath, workers,
+		fanoutNodes(src, workers,
 			func(node *rawNode) stripResult {
 				uid := node.UID
 				inputSet := make(map[string]struct{})
@@ -237,7 +247,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 	}
 	seen := map[string]bool{}
 
-	streamGraphFanout(inPath, workers,
+	fanoutNodes(src, workers,
 		func(node *rawNode) emitLine {
 			uid := node.UID
 
