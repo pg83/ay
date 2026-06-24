@@ -1,8 +1,6 @@
 package main
 
 import (
-	"math"
-
 	"github.com/zeebo/xxh3"
 )
 
@@ -226,14 +224,6 @@ func (c *CanonBuf) writeEnv(env EnvVars) {
 	}
 }
 
-func (c *CanonBuf) writeRequirements(r Requirements) {
-	c.writeUint64(math.Float64bits(r.CPU))
-	c.writeUint64(math.Float64bits(r.RAM))
-	c.writeByte(byte(r.Network))
-	c.writeUint64(math.Float64bits(r.RAMDisk))
-	c.writeBool(r.HasRAMDisk)
-}
-
 func (c *CanonBuf) writeKV(kv KV) {
 	c.writeByte(byte(kv.P))
 	c.writeByte(byte(kv.PC))
@@ -262,5 +252,4 @@ func (c *CanonBuf) writeNode(n *Node) {
 	c.writeKV(n.KV)
 	c.writeVFSSlice(n.Outputs)
 	c.writeBytes(string(n.Platform.Target))
-	c.writeRequirements(n.Requirements)
 }
