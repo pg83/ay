@@ -140,5 +140,23 @@
     "xfail": false,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/12552083137",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/12552083400"
+  },
+  {
+    "id": "catboost_app",
+    "vcs": "arc",
+    "remote": "arcadia",
+    "sha": "976f1514372af5ab20a7be93072b63385792f50b",
+    "command": [
+      "ya",
+      "make",
+      "-j0",
+      "-G",
+      "--sandboxing",
+      "catboost/app"
+    ],
+    "target": "catboost/app",
+    "xfail": "auto",
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/12552128438",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/12552129011"
   }
 ]
