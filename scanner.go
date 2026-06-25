@@ -392,7 +392,7 @@ func (sc *ScanCtx) dfs(abs VFS) {
 
 	for i := 0; i < k; i++ {
 		if block[i].isBuild() {
-			k += copy(block[k:], s.codegen.closureLeaves(block[i]))
+			k = s.tjc.closure.spliceNew(s.codegen.closureLeaves(block[i]), block, k)
 		}
 	}
 
@@ -462,7 +462,7 @@ func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 
 	for i := 0; i < k; i++ {
 		if block[i].isBuild() {
-			k += copy(block[k:], s.codegen.closureLeaves(block[i]))
+			k = s.tjc.closure.spliceNew(s.codegen.closureLeaves(block[i]), block, k)
 		}
 	}
 

@@ -8,7 +8,6 @@ type GeneratedFileInfo struct {
 	ProducerRef           NodeRef
 	GeneratorRefs         []NodeRef
 	SourceInputs          []VFS
-	CythonInducedPyx      []VFS
 	ProducerSourceClosure []VFS
 	ProtoImportRels       []string
 	ProducerMainOut       VFS
@@ -104,6 +103,16 @@ func (r *CodegenRegistry) addClosureLeaf(node, leaf VFS) {
 	r.leafEver.add(uint32(leaf))
 }
 
+func (r *CodegenRegistry) addClosureLeafNoSubsume(node, leaf VFS) {
+	info, ok := r.byStr.get(STR(node.strID()))
+
+	if !ok {
+		throwFmt("CodegenRegistry: addClosureLeafNoSubsume on unregistered path %q", node.string())
+	}
+
+	info.ClosureLeaves = append(info.ClosureLeaves, leaf)
+}
+
 func (r *CodegenRegistry) isLeafEver(v VFS) bool {
 	return r.leafEver.has(uint32(v))
 }
@@ -116,31 +125,12 @@ func (r *CodegenRegistry) closureLeaves(node VFS) []VFS {
 	return nil
 }
 
-func (r *CodegenRegistry) setCythonPyxInduced(node VFS, pyx []VFS, mainOut VFS) {
-	info, ok := r.byStr.get(STR(node.strID()))
-
-	if !ok {
-		throwFmt("CodegenRegistry: setCythonPyxInduced on unregistered path %q", node.string())
+func (r *CodegenRegistry) cythonMainOut(node VFS) VFS {
+	if info, ok := r.byStr.get(STR(node.strID())); ok && info.ProducerKvP == pkCY {
+		return info.ProducerMainOut
 	}
 
-	info.CythonInducedPyx = pyx
-	info.ProducerMainOut = mainOut
-}
-
-func (r *CodegenRegistry) cythonPyxInduced(node VFS) []VFS {
-	if info, ok := r.byStr.get(STR(node.strID())); ok {
-		return info.CythonInducedPyx
-	}
-
-	return nil
-}
-
-func (r *CodegenRegistry) cythonPyxInducedInfo(node VFS) ([]VFS, VFS) {
-	if info, ok := r.byStr.get(STR(node.strID())); ok {
-		return info.CythonInducedPyx, info.ProducerMainOut
-	}
-
-	return nil, 0
+	return 0
 }
 
 func (r *CodegenRegistry) setSourceInputs(path VFS, src []VFS) {
