@@ -246,7 +246,13 @@ func pyProtoAuxInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 			}
 		}
 
-		registerBoundGeneratedParsedOutput(ctx, instance, pkPR, aux, emits, ref, []NodeRef{rescompilerRef})
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			ProducerKvP:    pkPR,
+			OutputPath:     aux,
+			ProducerRef:    ref,
+			GeneratorRefs:  []NodeRef{rescompilerRef},
+			ParsedIncludes: emits,
+		})
 	}
 
 	scanIn := ModuleCCInputs{

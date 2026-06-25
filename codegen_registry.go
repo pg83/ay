@@ -161,21 +161,6 @@ func (r *CodegenRegistry) setProtoImportRels(path VFS, rels []string) {
 	r.mustInfo(path, "setProtoImportRels").ProtoImportRels = rels
 }
 
-func registerBoundGeneratedParsedOutput(ctx *GenCtx, instance ModuleInstance, kind ProcKind, output VFS, parsed []IncludeDirective, ref NodeRef, generatorRefs []NodeRef) {
-	registerBoundGeneratedParsedOutputWithSource(ctx, instance, kind, output, 0, parsed, ref, generatorRefs)
-}
-
-func registerBoundGeneratedParsedOutputWithSource(ctx *GenCtx, instance ModuleInstance, kind ProcKind, output VFS, sourcePath VFS, parsed []IncludeDirective, ref NodeRef, generatorRefs []NodeRef) {
-	ctx.codegenFor(instance).register(&GeneratedFileInfo{
-		ProducerKvP:    kind,
-		OutputPath:     output,
-		SourcePath:     sourcePath,
-		ProducerRef:    ref,
-		GeneratorRefs:  generatorRefs,
-		ParsedIncludes: parsed,
-	})
-}
-
 func (r *CodegenRegistry) setBuildParsed(out VFS, parsed []IncludeDirective) {
 	if !out.isBuild() {
 		throwFmt("setBuildParsed: source-rooted output %q", out.string())

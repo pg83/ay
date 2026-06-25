@@ -73,7 +73,13 @@ func emitDecimalMD5(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *D
 		Resources:    usesPython3,
 	})
 
-	registerBoundGeneratedParsedOutput(ctx, instance, pkSV, outVFS, nil, svRef, nil)
+	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		ProducerKvP:    pkSV,
+		OutputPath:     outVFS,
+		ProducerRef:    svRef,
+		GeneratorRefs:  nil,
+		ParsedIncludes: nil,
+	})
 
 	reg := ctx.codegenFor(instance)
 

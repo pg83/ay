@@ -358,7 +358,13 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 			pbGenRefs = append(pbGenRefs, depRefs(p.LDRef)...)
 		}
 
-		registerBoundGeneratedParsedOutput(ctx, instance, pkPB, pbH, pbHParsed, pbRef, pbGenRefs)
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			ProducerKvP:    pkPB,
+			OutputPath:     pbH,
+			ProducerRef:    pbRef,
+			GeneratorRefs:  pbGenRefs,
+			ParsedIncludes: pbHParsed,
+		})
 
 		{
 			reg := ctx.codegenFor(instance)
@@ -387,13 +393,25 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 					yaffHParsed = yaffGeneratedHeaderIncludes(plugin.isExperimental(protoBaseName), pbH.rel())
 				}
 
-				registerBoundGeneratedParsedOutput(ctx, instance, pkPB, yaffH, yaffHParsed, pbRef, nil)
+				ctx.codegenFor(instance).register(&GeneratedFileInfo{
+					ProducerKvP:    pkPB,
+					OutputPath:     yaffH,
+					ProducerRef:    pbRef,
+					GeneratorRefs:  nil,
+					ParsedIncludes: yaffHParsed,
+				})
 
 				yaffCCParsed := []IncludeDirective{
 					{kind: includeQuoted, target: internStr(yaffH.rel())},
 					{kind: includeQuoted, target: internStr(pbH.rel())},
 				}
-				registerBoundGeneratedParsedOutput(ctx, instance, pkPB, yaffCC, yaffCCParsed, pbRef, pbGenRefs)
+				ctx.codegenFor(instance).register(&GeneratedFileInfo{
+					ProducerKvP:    pkPB,
+					OutputPath:     yaffCC,
+					ProducerRef:    pbRef,
+					GeneratorRefs:  pbGenRefs,
+					ParsedIncludes: yaffCCParsed,
+				})
 			}
 		}
 
@@ -401,7 +419,13 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 			depsParsed := make([]IncludeDirective, 0, 1+len(directImports))
 			depsParsed = append(depsParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.rel())})
 			depsParsed = append(depsParsed, directImports...)
-			registerBoundGeneratedParsedOutput(ctx, instance, pkPB, pbDepsH, depsParsed, pbRef, pbGenRefs)
+			ctx.codegenFor(instance).register(&GeneratedFileInfo{
+				ProducerKvP:    pkPB,
+				OutputPath:     pbDepsH,
+				ProducerRef:    pbRef,
+				GeneratorRefs:  pbGenRefs,
+				ParsedIncludes: depsParsed,
+			})
 		}
 
 		pbCCParsed := make([]IncludeDirective, 0, 3+len(directImports))
@@ -413,7 +437,13 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 
 		pbCCParsed = append(pbCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())})
 
-		registerBoundGeneratedParsedOutput(ctx, instance, pkPB, pbCC, pbCCParsed, pbRef, pbGenRefs)
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			ProducerKvP:    pkPB,
+			OutputPath:     pbCC,
+			ProducerRef:    pbRef,
+			GeneratorRefs:  pbGenRefs,
+			ParsedIncludes: pbCCParsed,
+		})
 
 		var grpcCCParsed, grpcHParsed []IncludeDirective
 
@@ -429,8 +459,20 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		}
 
 		if cfg.grpc {
-			registerBoundGeneratedParsedOutput(ctx, instance, pkPB, grpcPbCC, grpcCCParsed, pbRef, []NodeRef{pe.protocLDRef, pe.grpcCppLDRef})
-			registerBoundGeneratedParsedOutput(ctx, instance, pkPB, grpcPbH, grpcHParsed, pbRef, []NodeRef{pe.grpcCppLDRef})
+			ctx.codegenFor(instance).register(&GeneratedFileInfo{
+				ProducerKvP:    pkPB,
+				OutputPath:     grpcPbCC,
+				ProducerRef:    pbRef,
+				GeneratorRefs:  []NodeRef{pe.protocLDRef, pe.grpcCppLDRef},
+				ParsedIncludes: grpcCCParsed,
+			})
+			ctx.codegenFor(instance).register(&GeneratedFileInfo{
+				ProducerKvP:    pkPB,
+				OutputPath:     grpcPbH,
+				ProducerRef:    pbRef,
+				GeneratorRefs:  []NodeRef{pe.grpcCppLDRef},
+				ParsedIncludes: grpcHParsed,
+			})
 		}
 	}
 
@@ -565,13 +607,25 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 				evHParsed = append(evHParsed, directImports...)
 				evHParsed = append(evHParsed, protobufRuntimeDirectives...)
 				evHParsed = append(evHParsed, evExtras...)
-				registerBoundGeneratedParsedOutput(ctx, instance, pkEV, evH, evHParsed, evRef, []NodeRef{event2cppLDRef})
+				ctx.codegenFor(instance).register(&GeneratedFileInfo{
+					ProducerKvP:    pkEV,
+					OutputPath:     evH,
+					ProducerRef:    evRef,
+					GeneratorRefs:  []NodeRef{event2cppLDRef},
+					ParsedIncludes: evHParsed,
+				})
 
 				evCCParsed := make([]IncludeDirective, 0, 1+len(protobufRuntimeHeaders))
 				evCCParsed = append(evCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(evH.rel())})
 				evCCParsed = append(evCCParsed, protobufRuntimeDirectives...)
 
-				registerBoundGeneratedParsedOutput(ctx, instance, pkEV, evPbCC, evCCParsed, evRef, []NodeRef{event2cppLDRef})
+				ctx.codegenFor(instance).register(&GeneratedFileInfo{
+					ProducerKvP:    pkEV,
+					OutputPath:     evPbCC,
+					ProducerRef:    evRef,
+					GeneratorRefs:  []NodeRef{event2cppLDRef},
+					ParsedIncludes: evCCParsed,
+				})
 			}
 
 			cppInstance := instance

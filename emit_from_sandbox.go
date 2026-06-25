@@ -96,7 +96,13 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 	reg := ctx.codegenFor(instance)
 
 	for _, out := range outVFSs {
-		registerBoundGeneratedParsedOutput(ctx, instance, pkSB, out, parsed, ref, nil)
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			ProducerKvP:    pkSB,
+			OutputPath:     out,
+			ProducerRef:    ref,
+			GeneratorRefs:  nil,
+			ParsedIncludes: parsed,
+		})
 
 		reg.setSourceInputs(out, fromSandboxScriptInputs)
 

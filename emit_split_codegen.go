@@ -77,11 +77,29 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 
 	cppParsed := []IncludeDirective{part0Inc}
 
-	registerBoundGeneratedParsedOutput(ctx, instance, pkSC, prefixH, headerParsed, scRef, []NodeRef{toolLDRef})
-	registerBoundGeneratedParsedOutput(ctx, instance, pkSC, prefixCpp, cppParsed, scRef, []NodeRef{toolLDRef})
+	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		ProducerKvP:    pkSC,
+		OutputPath:     prefixH,
+		ProducerRef:    scRef,
+		GeneratorRefs:  []NodeRef{toolLDRef},
+		ParsedIncludes: headerParsed,
+	})
+	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		ProducerKvP:    pkSC,
+		OutputPath:     prefixCpp,
+		ProducerRef:    scRef,
+		GeneratorRefs:  []NodeRef{toolLDRef},
+		ParsedIncludes: cppParsed,
+	})
 
 	for _, partRel := range partRels {
-		registerBoundGeneratedParsedOutput(ctx, instance, pkSC, build(moduleDir+"/"+partRel), cppParsed, scRef, []NodeRef{toolLDRef})
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			ProducerKvP:    pkSC,
+			OutputPath:     build(moduleDir + "/" + partRel),
+			ProducerRef:    scRef,
+			GeneratorRefs:  []NodeRef{toolLDRef},
+			ParsedIncludes: cppParsed,
+		})
 	}
 
 	reg := ctx.codegenFor(instance)

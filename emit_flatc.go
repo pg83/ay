@@ -155,7 +155,13 @@ func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 
 	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.parsers, srcVFS.rel())
 
-	registerBoundGeneratedParsedOutput(ctx, instance, v.procKind, headerVFS, headerIncludes, flRef, []NodeRef{flatcLDRef})
+	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		ProducerKvP:    v.procKind,
+		OutputPath:     headerVFS,
+		ProducerRef:    flRef,
+		GeneratorRefs:  []NodeRef{flatcLDRef},
+		ParsedIncludes: headerIncludes,
+	})
 
 	reg := ctx.codegenFor(instance)
 	reg.addClosureLeaf(headerVFS, flatcWrapperVFS)
@@ -172,8 +178,20 @@ func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 
 	cppIncludes := []IncludeDirective{{kind: includeQuoted, target: internStr(headerVFS.rel())}}
 
-	registerBoundGeneratedParsedOutput(ctx, instance, v.procKind, cppVFS, cppIncludes, flRef, []NodeRef{flatcLDRef})
-	registerBoundGeneratedParsedOutput(ctx, instance, v.procKind, bfbsVFS, nil, flRef, []NodeRef{flatcLDRef})
+	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		ProducerKvP:    v.procKind,
+		OutputPath:     cppVFS,
+		ProducerRef:    flRef,
+		GeneratorRefs:  []NodeRef{flatcLDRef},
+		ParsedIncludes: cppIncludes,
+	})
+	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		ProducerKvP:    v.procKind,
+		OutputPath:     bfbsVFS,
+		ProducerRef:    flRef,
+		GeneratorRefs:  []NodeRef{flatcLDRef},
+		ParsedIncludes: nil,
+	})
 }
 
 func emitLibraryFlatcSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {

@@ -84,7 +84,13 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			jvSourceInputs = append(jvSourceInputs, stdout2stderrVFS, jarVFS)
 
 			for outTok, outVFS := range outVFSByToken {
-				registerBoundGeneratedParsedOutput(ctx, instance, pkJV, outVFS, antlrParsedIncludes(instance.Path.rel(), run, outTok, outVFSByToken, inputs, jarVFS), jvRef, nil)
+				ctx.codegenFor(instance).register(&GeneratedFileInfo{
+					ProducerKvP:    pkJV,
+					OutputPath:     outVFS,
+					ProducerRef:    jvRef,
+					GeneratorRefs:  nil,
+					ParsedIncludes: antlrParsedIncludes(instance.Path.rel(), run, outTok, outVFSByToken, inputs, jarVFS),
+				})
 				reg.setSourceInputs(outVFS, jvSourceInputs)
 			}
 		}

@@ -14,7 +14,13 @@ func emitBundles(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 
 		ref := ctx.emit.reserve()
 		emitBundleNode(ctx, instance, d.tc.Python3, src, dst, srcRef, resolved, ref)
-		registerBoundGeneratedParsedOutput(ctx, instance, pkBN, dst, nil, ref, nil)
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			ProducerKvP:    pkBN,
+			OutputPath:     dst,
+			ProducerRef:    ref,
+			GeneratorRefs:  nil,
+			ParsedIncludes: nil,
+		})
 	}
 }
 

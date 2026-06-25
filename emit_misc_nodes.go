@@ -28,8 +28,20 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 				parserG4 := source(instance.Path.rel() + "/" + g.Parser)
 				lexerCpp := build(outPrefix + lexerBase + ".cpp")
 				parserCpp := build(outPrefix + parserBase + ".cpp")
-				registerBoundGeneratedParsedOutput(ctx, instance, pkJV, lexerCpp, nil, jvRef, nil)
-				registerBoundGeneratedParsedOutput(ctx, instance, pkJV, parserCpp, nil, jvRef, nil)
+				ctx.codegenFor(instance).register(&GeneratedFileInfo{
+					ProducerKvP:    pkJV,
+					OutputPath:     lexerCpp,
+					ProducerRef:    jvRef,
+					GeneratorRefs:  nil,
+					ParsedIncludes: nil,
+				})
+				ctx.codegenFor(instance).register(&GeneratedFileInfo{
+					ProducerKvP:    pkJV,
+					OutputPath:     parserCpp,
+					ProducerRef:    jvRef,
+					GeneratorRefs:  nil,
+					ParsedIncludes: nil,
+				})
 				witnessIncludes := []VFS{
 					antlr4RuntimeHeaderVFS,
 					lexerCpp,
@@ -51,7 +63,13 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 						parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.rel())})
 					}
 
-					registerBoundGeneratedParsedOutput(ctx, instance, pkJV, build(outPrefix+suffix), parsed, jvRef, nil)
+					ctx.codegenFor(instance).register(&GeneratedFileInfo{
+						ProducerKvP:    pkJV,
+						OutputPath:     build(outPrefix + suffix),
+						ProducerRef:    jvRef,
+						GeneratorRefs:  nil,
+						ParsedIncludes: parsed,
+					})
 				}
 			}
 
@@ -80,8 +98,20 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 				grammarG4 := source(instance.Path.rel() + "/" + g.Grammar)
 				lexerCpp := build(outPrefix + base + "Lexer.cpp")
 				parserCpp := build(outPrefix + base + "Parser.cpp")
-				registerBoundGeneratedParsedOutput(ctx, instance, pkJV, lexerCpp, nil, jvRef, nil)
-				registerBoundGeneratedParsedOutput(ctx, instance, pkJV, parserCpp, nil, jvRef, nil)
+				ctx.codegenFor(instance).register(&GeneratedFileInfo{
+					ProducerKvP:    pkJV,
+					OutputPath:     lexerCpp,
+					ProducerRef:    jvRef,
+					GeneratorRefs:  nil,
+					ParsedIncludes: nil,
+				})
+				ctx.codegenFor(instance).register(&GeneratedFileInfo{
+					ProducerKvP:    pkJV,
+					OutputPath:     parserCpp,
+					ProducerRef:    jvRef,
+					GeneratorRefs:  nil,
+					ParsedIncludes: nil,
+				})
 				witnessIncludes := []VFS{
 					antlr4RuntimeHeaderVFS,
 					lexerCpp,
@@ -102,7 +132,13 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 						parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.rel())})
 					}
 
-					registerBoundGeneratedParsedOutput(ctx, instance, pkJV, build(outPrefix+suffix), parsed, jvRef, nil)
+					ctx.codegenFor(instance).register(&GeneratedFileInfo{
+						ProducerKvP:    pkJV,
+						OutputPath:     build(outPrefix + suffix),
+						ProducerRef:    jvRef,
+						GeneratorRefs:  nil,
+						ParsedIncludes: parsed,
+					})
 				}
 			}
 
@@ -127,11 +163,17 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 	if d.createBuildInfoFor != nil {
 		biRef := emitBI(instance, d.createBuildInfoFor.string(), biFlagsForInstance(instance.Platform), d.tc, ctx.emit)
 
-		registerBoundGeneratedParsedOutput(ctx, instance, pkBI, build(outPrefix+d.createBuildInfoFor.string()), []IncludeDirective{
-			{kind: includeQuoted, target: internStr(buildInfoGenPyVFS.rel())},
-			{kind: includeQuoted, target: internStr(xargsPyVFS.rel())},
-			{kind: includeQuoted, target: internStr(yieldLinePyVFS.rel())},
-		}, biRef, nil)
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			ProducerKvP:   pkBI,
+			OutputPath:    build(outPrefix + d.createBuildInfoFor.string()),
+			ProducerRef:   biRef,
+			GeneratorRefs: nil,
+			ParsedIncludes: []IncludeDirective{
+				{kind: includeQuoted, target: internStr(buildInfoGenPyVFS.rel())},
+				{kind: includeQuoted, target: internStr(xargsPyVFS.rel())},
+				{kind: includeQuoted, target: internStr(yieldLinePyVFS.rel())},
+			},
+		})
 	}
 
 	return

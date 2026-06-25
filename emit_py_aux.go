@@ -251,7 +251,13 @@ func rawAuxInputClosure(ctx *GenCtx, instance ModuleInstance, aux VFS, seed []VF
 		emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(v.rel())})
 	}
 
-	registerBoundGeneratedParsedOutput(ctx, instance, pkPR, aux, emits, ref, []NodeRef{rescompilerRef})
+	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		ProducerKvP:    pkPR,
+		OutputPath:     aux,
+		ProducerRef:    ref,
+		GeneratorRefs:  []NodeRef{rescompilerRef},
+		ParsedIncludes: emits,
+	})
 
 	closure := walkClosure(ctx.scannerFor(instance), aux, in.ScanCfg)
 
