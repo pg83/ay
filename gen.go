@@ -212,6 +212,7 @@ type GenCtx struct {
 	sbomEnabled     bool
 	autoincludeIdx  *AutoincludeIndex
 	tarjan          TarjanCtx
+	parsedFiles     map[string]*MakeFile
 }
 
 type ScanCtxPerfStats struct {
@@ -335,6 +336,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		sbomEnabled: fs.isFile(srcRootVFS, sbomConfRel),
 
 		autoincludeIdx: loadAutoincludeIndex(fs),
+		parsedFiles:    map[string]*MakeFile{},
 	}
 
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
@@ -428,11 +430,29 @@ func moduleCCTag(name TOK) STR {
 	return 0
 }
 
+func (ctx *GenCtx) parseFileCached(rel string) []Stmt {
+	rel = cleanRel(rel)
+
+	if mf, ok := ctx.parsedFiles[rel]; ok {
+		return mf.Stmts
+	}
+
+	mf := throw2(parseFile(ctx.fs, rel))
+	ctx.parsedFiles[rel] = mf
+
+	return mf.Stmts
+}
+
 func moduleStmts(ctx *GenCtx, dir string) []Stmt {
-	stmts := throw2(parseFile(ctx.fs, joinRel(dir, "ya.make"))).Stmts
+	stmts := ctx.parseFileCached(joinRel(dir, "ya.make"))
 
 	if inc, ok := ctx.autoincludeIdx.lintersMakeIncFor(dir); ok && ctx.fs.isFile(srcRootVFS, inc.rel()) {
-		stmts = append(stmts, throw2(parseFile(ctx.fs, inc.rel())).Stmts...)
+		incStmts := ctx.parseFileCached(inc.rel())
+		out := make([]Stmt, 0, len(stmts)+len(incStmts))
+		out = append(out, stmts...)
+		out = append(out, incStmts...)
+
+		return out
 	}
 
 	return stmts
