@@ -190,8 +190,7 @@ func emitFlatcCppCompile(ctx *GenCtx, instance ModuleInstance, cppVFS VFS, in Mo
 	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), cppVFS, in.ScanCfg)
 
 	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, flRef)
-	ccSrcRel := strings.TrimPrefix(cppVFS.rel(), instance.Path.rel()+"/")
-	ccRef, ccOut, _ := emitCC(instance, internStr(ccSrcRel), cppVFS, ccIn, ctx.host, ctx.emit)
+	ccRef, ccOut, _ := emitCC(instance, cppVFS.str(), cppVFS, ccIn, ctx.host, ctx.emit)
 
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }

@@ -45,8 +45,7 @@ func emitLibraryCInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, s
 
 	in.IncludeInputs = walkClosure(ctx.scannerFor(instance), outVFS, in.ScanCfg)
 	in.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, in.IncludeInputs, cfRef)
-	ccSrcRel := strings.TrimPrefix(outVFS.rel(), instance.Path.rel()+"/")
-	ccRef, ccOut, _ := emitCC(instance, internStr(ccSrcRel), outVFS, in, ctx.host, ctx.emit)
+	ccRef, ccOut, _ := emitCC(instance, outVFS.str(), outVFS, in, ctx.host, ctx.emit)
 
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }
