@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"strings"
 )
 
@@ -25,29 +26,29 @@ func (SwigIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocato
 	}
 
 	eachLine(data, func(line []byte) {
-		trimmed := strings.TrimSpace(string(line))
+		trimmed := bytes.TrimSpace(line)
 
-		if trimmed == "" {
+		if len(trimmed) == 0 {
 			return
 		}
 
-		if !inBlock && (strings.HasPrefix(trimmed, "%include") || strings.HasPrefix(trimmed, "%import") || strings.HasPrefix(trimmed, "%insert")) {
-			target, kind, ok := parseSwigIncludeLine(trimmed)
+		if !inBlock && (bytes.HasPrefix(trimmed, []byte("%include")) || bytes.HasPrefix(trimmed, []byte("%import")) || bytes.HasPrefix(trimmed, []byte("%insert"))) {
+			target, kind, ok := parseSwigIncludeLine(string(trimmed))
 
 			if ok {
 				k = addDirective(block, k, IncludeDirective{kind: kind, target: internStr(target)})
 			}
 		}
 
-		if strings.HasPrefix(trimmed, "%{") || strings.HasSuffix(trimmed, "%{") {
+		if bytes.HasPrefix(trimmed, []byte("%{")) || bytes.HasSuffix(trimmed, []byte("%{")) {
 			inBlock = true
 		}
 
-		if inBlock && strings.HasPrefix(trimmed, "#") {
-			cChunks = append(cChunks, []byte(trimmed))
+		if inBlock && trimmed[0] == '#' {
+			cChunks = append(cChunks, trimmed)
 		}
 
-		if strings.HasSuffix(trimmed, "%}") {
+		if bytes.HasSuffix(trimmed, []byte("%}")) {
 			inBlock = false
 		}
 	})

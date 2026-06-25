@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"regexp"
 	"strings"
 )
@@ -168,22 +169,22 @@ func isParserIdentContinuation(s string, idx int) bool {
 }
 
 func eachLine(data []byte, fn func(line []byte)) {
-	start := 0
+	for len(data) > 0 {
+		i := bytes.IndexByte(data, '\n')
 
-	for i := 0; i < len(data); i++ {
-		if data[i] == '\n' {
-			line := data[start:i]
+		if i < 0 {
+			fn(data)
 
-			if len(line) > 0 && line[len(line)-1] == '\r' {
-				line = line[:len(line)-1]
-			}
-
-			fn(line)
-			start = i + 1
+			return
 		}
-	}
 
-	if start < len(data) {
-		fn(data[start:])
+		line := data[:i]
+
+		if len(line) > 0 && line[len(line)-1] == '\r' {
+			line = line[:len(line)-1]
+		}
+
+		fn(line)
+		data = data[i+1:]
 	}
 }
