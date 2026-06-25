@@ -208,7 +208,7 @@ type ModuleData struct {
 	bisonGenExt              STR
 	grpc                     bool
 	yaConfJSON               []STR
-	allPySrcs                []*UnknownStmt
+	allPySrcs                []UnknownStmt
 	archives                 []ArchiveEntry
 	archiveAsm               []ArchiveAsmEntry
 	lj21                     *Lj21Archive
@@ -1293,7 +1293,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 
 			expanded := *v
 			expanded.Args = expandStmtTokensSTR(v.Args, env)
-			applyUnknownStmt(fs, modulePath, &expanded, d, env)
+			applyUnknownStmt(fs, modulePath, expanded, d, env)
 		default:
 			throwFmt("gen: %s: unhandled Stmt type %T (parser added a new Stmt subclass without updating gen.go)", modulePath, s)
 		}
@@ -1339,7 +1339,7 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *ModuleData) {
 	addGeneratedHeaderInclude(modulePath, dst, d)
 }
 
-func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, env Environment) {
+func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment) {
 	handled := true
 
 	defer func() {
@@ -2403,7 +2403,7 @@ func appendPyRegister(d *ModuleData, name string, explicit bool) {
 	)
 }
 
-func parseCPPProtoPlugin(v *UnknownStmt) CppProtoPlugin {
+func parseCPPProtoPlugin(v UnknownStmt) CppProtoPlugin {
 	requiredArgs := 0
 	outputSuffixes := 0
 
@@ -2475,7 +2475,7 @@ type yaffSections struct {
 	experimental []string
 }
 
-func parseYAFFSections(v *UnknownStmt) yaffSections {
+func parseYAFFSections(v UnknownStmt) yaffSections {
 	var s yaffSections
 
 	section := STR(0)
@@ -2536,7 +2536,7 @@ func prefixEach(prefix string, items []string) []string {
 	return out
 }
 
-func parseYAFF(v *UnknownStmt) CppProtoPlugin {
+func parseYAFF(v UnknownStmt) CppProtoPlugin {
 	s := parseYAFFSections(v)
 
 	if len(s.positional) != 0 {
@@ -2553,7 +2553,7 @@ func parseYAFF(v *UnknownStmt) CppProtoPlugin {
 	}
 }
 
-func parseYAFFSchema(v *UnknownStmt) CppProtoPlugin {
+func parseYAFFSchema(v UnknownStmt) CppProtoPlugin {
 	s := parseYAFFSections(v)
 
 	if len(s.positional) < 1 {
@@ -2627,7 +2627,7 @@ func applyProtoNamespace(d *ModuleData, namespace STR) {
 	d.addInclUserGlobal = append(d.addInclUserGlobal, protoBuildRoot)
 }
 
-func applyArchiveStmt(v *UnknownStmt, d *ModuleData) {
+func applyArchiveStmt(v UnknownStmt, d *ModuleData) {
 	var (
 		entry      ArchiveEntry
 		seenName   bool
@@ -2668,7 +2668,7 @@ func applyArchiveStmt(v *UnknownStmt, d *ModuleData) {
 	d.archives = append(d.archives, entry)
 }
 
-func applyArchiveByKeysStmt(v *UnknownStmt, d *ModuleData) {
+func applyArchiveByKeysStmt(v UnknownStmt, d *ModuleData) {
 	var (
 		entry      ArchiveEntry
 		seenName   bool
@@ -2720,7 +2720,7 @@ func applyArchiveByKeysStmt(v *UnknownStmt, d *ModuleData) {
 	d.archives = append(d.archives, entry)
 }
 
-func applyArchiveAsmStmt(v *UnknownStmt, d *ModuleData) {
+func applyArchiveAsmStmt(v UnknownStmt, d *ModuleData) {
 	var (
 		entry      ArchiveAsmEntry
 		seenName   bool
@@ -2759,7 +2759,7 @@ func applyArchiveAsmStmt(v *UnknownStmt, d *ModuleData) {
 	d.archiveAsm = append(d.archiveAsm, entry)
 }
 
-func applyLj21ArchiveStmt(v *UnknownStmt, d *ModuleData) {
+func applyLj21ArchiveStmt(v UnknownStmt, d *ModuleData) {
 	var luas []string
 
 	for _, aTok := range v.Args {
@@ -2777,7 +2777,7 @@ func applyLj21ArchiveStmt(v *UnknownStmt, d *ModuleData) {
 	d.lj21 = &Lj21Archive{Luas: luas}
 }
 
-func applyAllocatorStmt(v *UnknownStmt, d *ModuleData) {
+func applyAllocatorStmt(v UnknownStmt, d *ModuleData) {
 	if len(v.Args) != 1 {
 		throwFmt("gen: ALLOCATOR expects exactly 1 argument, got %d (line %d)", len(v.Args), v.Line)
 	}
@@ -3162,7 +3162,7 @@ func expandScalarVarRef(s string, env Environment) string {
 	return expandStmtToken(s, env)
 }
 
-func applyAllPySrcs(fs FS, modulePath string, v *UnknownStmt, d *ModuleData) {
+func applyAllPySrcs(fs FS, modulePath string, v UnknownStmt, d *ModuleData) {
 	dirs := []string{"."}
 	noTestFiles := false
 
