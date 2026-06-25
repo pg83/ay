@@ -129,8 +129,9 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, srcRel string, in M
 	}, ycRef)
 }
 
-func emitBisonY(ctx *GenCtx, instance ModuleInstance, src STR, in ModuleCCInputs, genExt string) *SourceEmit {
+func emitBisonY(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
 	srcRel := src.string()
+	genExt := in.BisonGenExt
 
 	preprocessHeader := genExt != ".c"
 	generatedRel := bisonGeneratedRel(srcRel, genExt)
