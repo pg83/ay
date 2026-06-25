@@ -981,22 +981,16 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	peerLDPluginRefs := make([]NodeRef, 0, 1)
 	peerLDPluginPaths := make([]VFS, 0, 1)
-	var objAddLibSeen BitSet
-	peerObjAddLibsGlobal := make([]ARG, 0, 8)
-	var ldFlagsSeen BitSet
-	peerLDFlagsGlobal := make([]ARG, 0, 4)
-	var rpathFlagsSeen BitSet
-	peerRPathFlagsGlobal := make([]ARG, 0, 4)
+	var peerObjAddLibsGlobal []ARG
+	var peerLDFlagsGlobal []ARG
+	var peerRPathFlagsGlobal []ARG
 
 	peerAddInclGlobal := make([]VFS, 0, 16)
 
 	var oneLevelOnlyPaths map[VFS]struct{}
-	var cFlagsSeen BitSet
-	peerCFlagsGlobal := make([]ARG, 0, 16)
-	var cxxFlagsSeen BitSet
-	peerCXXFlagsGlobal := make([]ARG, 0, 16)
-	var cOnlyFlagsSeen BitSet
-	peerCOnlyFlagsGlobal := make([]ARG, 0, 16)
+	var peerCFlagsGlobal []ARG
+	var peerCXXFlagsGlobal []ARG
+	var peerCOnlyFlagsGlobal []ARG
 	type resolvedPeer struct {
 		path   string
 		result *ModuleEmitResult
@@ -1425,13 +1419,58 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		cflagsAggOrder = archiveOrder
 	}
 
+	deduper.reset()
 	for _, rp := range cflagsAggOrder {
-		addEachARG(&cFlagsSeen, &peerCFlagsGlobal, rp.result.CFlagsGlobal)
-		addEachARG(&cxxFlagsSeen, &peerCXXFlagsGlobal, rp.result.CXXFlagsGlobal)
-		addEachARG(&cOnlyFlagsSeen, &peerCOnlyFlagsGlobal, rp.result.COnlyFlagsGlobal)
-		addEachARG(&objAddLibSeen, &peerObjAddLibsGlobal, rp.result.ObjAddLibsGlobal)
-		addEachARG(&ldFlagsSeen, &peerLDFlagsGlobal, rp.result.LDFlagsGlobal)
-		addEachARG(&rpathFlagsSeen, &peerRPathFlagsGlobal, rp.result.RPathFlagsGlobal)
+		for _, a := range rp.result.CFlagsGlobal {
+			if deduper.add(VFS(a)) {
+				peerCFlagsGlobal = append(peerCFlagsGlobal, a)
+			}
+		}
+	}
+
+	deduper.reset()
+	for _, rp := range cflagsAggOrder {
+		for _, a := range rp.result.CXXFlagsGlobal {
+			if deduper.add(VFS(a)) {
+				peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, a)
+			}
+		}
+	}
+
+	deduper.reset()
+	for _, rp := range cflagsAggOrder {
+		for _, a := range rp.result.COnlyFlagsGlobal {
+			if deduper.add(VFS(a)) {
+				peerCOnlyFlagsGlobal = append(peerCOnlyFlagsGlobal, a)
+			}
+		}
+	}
+
+	deduper.reset()
+	for _, rp := range cflagsAggOrder {
+		for _, a := range rp.result.ObjAddLibsGlobal {
+			if deduper.add(VFS(a)) {
+				peerObjAddLibsGlobal = append(peerObjAddLibsGlobal, a)
+			}
+		}
+	}
+
+	deduper.reset()
+	for _, rp := range cflagsAggOrder {
+		for _, a := range rp.result.LDFlagsGlobal {
+			if deduper.add(VFS(a)) {
+				peerLDFlagsGlobal = append(peerLDFlagsGlobal, a)
+			}
+		}
+	}
+
+	deduper.reset()
+	for _, rp := range cflagsAggOrder {
+		for _, a := range rp.result.RPathFlagsGlobal {
+			if deduper.add(VFS(a)) {
+				peerRPathFlagsGlobal = append(peerRPathFlagsGlobal, a)
+			}
+		}
 	}
 
 	peerAddInclForProp := peerAddInclGlobal
@@ -1501,8 +1540,17 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	effectiveRPathFlagsGlobal := dedupARG(peerRPathFlagsGlobal, d.rpathFlagsGlobal)
 
 	if !effectiveNoPlatform(d.flags) && runtimeAncestorCxxConsumers[instance.Path.rel()] {
-		if !cxxFlagsSeen.has(uint32(baseUnitCxxNostdinc)) {
-			cxxFlagsSeen.add(uint32(baseUnitCxxNostdinc))
+		hasNostdinc := false
+
+		for _, a := range peerCXXFlagsGlobal {
+			if a == baseUnitCxxNostdinc {
+				hasNostdinc = true
+
+				break
+			}
+		}
+
+		if !hasNostdinc {
 			peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, baseUnitCxxNostdinc)
 		}
 	}
@@ -2581,20 +2629,58 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		}
 	}
 
-	var cFlagsSeen BitSet
-	var cxxFlagsSeen BitSet
-	var cOnlyFlagsSeen BitSet
-	var objAddLibSeen BitSet
-	var ldFlagsSeen BitSet
-	var rpathFlagsSeen BitSet
-
+	deduper.reset()
 	for _, pr := range resolved {
-		addEachARG(&cFlagsSeen, &out.cFlags, pr.CFlagsGlobal)
-		addEachARG(&cxxFlagsSeen, &out.cxxFlags, pr.CXXFlagsGlobal)
-		addEachARG(&cOnlyFlagsSeen, &out.cOnlyFlags, pr.COnlyFlagsGlobal)
-		addEachARG(&objAddLibSeen, &out.objAddLibs, pr.ObjAddLibsGlobal)
-		addEachARG(&ldFlagsSeen, &out.ldFlags, pr.LDFlagsGlobal)
-		addEachARG(&rpathFlagsSeen, &out.rpathFlags, pr.RPathFlagsGlobal)
+		for _, a := range pr.CFlagsGlobal {
+			if deduper.add(VFS(a)) {
+				out.cFlags = append(out.cFlags, a)
+			}
+		}
+	}
+
+	deduper.reset()
+	for _, pr := range resolved {
+		for _, a := range pr.CXXFlagsGlobal {
+			if deduper.add(VFS(a)) {
+				out.cxxFlags = append(out.cxxFlags, a)
+			}
+		}
+	}
+
+	deduper.reset()
+	for _, pr := range resolved {
+		for _, a := range pr.COnlyFlagsGlobal {
+			if deduper.add(VFS(a)) {
+				out.cOnlyFlags = append(out.cOnlyFlags, a)
+			}
+		}
+	}
+
+	deduper.reset()
+	for _, pr := range resolved {
+		for _, a := range pr.ObjAddLibsGlobal {
+			if deduper.add(VFS(a)) {
+				out.objAddLibs = append(out.objAddLibs, a)
+			}
+		}
+	}
+
+	deduper.reset()
+	for _, pr := range resolved {
+		for _, a := range pr.LDFlagsGlobal {
+			if deduper.add(VFS(a)) {
+				out.ldFlags = append(out.ldFlags, a)
+			}
+		}
+	}
+
+	deduper.reset()
+	for _, pr := range resolved {
+		for _, a := range pr.RPathFlagsGlobal {
+			if deduper.add(VFS(a)) {
+				out.rpathFlags = append(out.rpathFlags, a)
+			}
+		}
 	}
 
 	deduper.reset()
