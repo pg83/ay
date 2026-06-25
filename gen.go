@@ -1632,7 +1632,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			continue
 		}
 
-		srcRel := src.string()
 		srcInputs := moduleInputs
 
 		if extras := d.perSrcCFlagsFor(src); extras != nil {
@@ -1643,7 +1642,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			srcInputs.FlatOutput = true
 		}
 
-		codegenEmits = append(codegenEmits, codegenEmit{src, emitOneSource(ctx, instance, d, srcRel, srcInputs)})
+		codegenEmits = append(codegenEmits, codegenEmit{src, emitOneSource(ctx, instance, d, src, srcInputs)})
 	}
 
 	cpMemberRefs, cpMemberOuts, cpMemberSrcs := emitCopyFiles(ctx, instance, d, &moduleInputs)
@@ -1706,8 +1705,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			continue
 		}
 
-		srcRel := src.string()
-		appendCC(src, emitOneSource(ctx, instance, d, srcRel, emitSrcInputs(src, srcRel)), false)
+		appendCC(src, emitOneSource(ctx, instance, d, src, emitSrcInputs(src, src.string())), false)
 	}
 
 	for _, ce := range codegenEmits {
@@ -1722,7 +1720,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			si.PerSourceCFlags = fe.Flags
 		}
 
-		if emit := emitOneSource(ctx, instance, d, fe.Src.string(), si); emit != nil {
+		if emit := emitOneSource(ctx, instance, d, fe.Src, si); emit != nil {
 			ccRefs = append(ccRefs, emit.Ref)
 			ccOutputs = append(ccOutputs, emit.OutPath)
 			arDeclMeta[emit.OutPath] = SrcMeta{Prio: stmtPrioDefault, Seq: fe.Seq}
@@ -1811,7 +1809,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		variantIn.PerSourceCFlags = flags
 
-		emit := emitOneSource(ctx, instance, d, e.Src.string(), variantIn)
+		emit := emitOneSource(ctx, instance, d, e.Src, variantIn)
 
 		if emit == nil {
 			continue
@@ -1858,7 +1856,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	globalOutputs := make([]VFS, 0, len(d.globalSrcs))
 
 	for _, src := range d.globalSrcs {
-		emit := emitOneSource(ctx, instance, d, src.string(), moduleInputs)
+		emit := emitOneSource(ctx, instance, d, src, moduleInputs)
 
 		if emit == nil {
 			continue

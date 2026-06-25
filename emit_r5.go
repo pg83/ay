@@ -56,7 +56,9 @@ func emitR5(
 	return emit.emit(node), tmpVFS, cppVFS
 }
 
-func emitLibraryRagel5Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
+func emitLibraryRagel5Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+	srcRel := src.string()
+
 	ragel5LDRef, ragel5BinVFS := ctx.tool(argContribToolsRagel5Ragel)
 	rlgenCdLDRef, rlgenCdBinVFS := ctx.tool(argContribToolsRagel5RlgenCd)
 

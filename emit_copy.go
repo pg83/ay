@@ -5,12 +5,12 @@ import (
 	"strings"
 )
 
-func copyFileAutoSourceVFS(modulePath string, d *ModuleData, srcRel string) *VFS {
+func copyFileAutoSourceVFS(modulePath string, d *ModuleData, src STR) *VFS {
 	if d.copyFileAutoOutputs == nil {
 		return nil
 	}
 
-	entry, ok := d.copyFileAutoOutputs[internStr(srcRel)]
+	entry, ok := d.copyFileAutoOutputs[src]
 
 	if !ok {
 		return nil
@@ -165,10 +165,12 @@ func generatedModuleSourceVFS(ctx *GenCtx, instance ModuleInstance, srcRel strin
 	return nil
 }
 
-func resolveModuleSourceVFS(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, srcDirs []VFS) VFS {
-	if buildVFS := copyFileAutoSourceVFS(instance.Path.rel(), d, srcRel); buildVFS != nil {
+func resolveModuleSourceVFS(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, srcDirs []VFS) VFS {
+	if buildVFS := copyFileAutoSourceVFS(instance.Path.rel(), d, src); buildVFS != nil {
 		return *buildVFS
 	}
+
+	srcRel := src.string()
 
 	if buildVFS := generatedModuleSourceVFS(ctx, instance, srcRel); buildVFS != nil {
 		return *buildVFS

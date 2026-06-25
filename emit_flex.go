@@ -14,10 +14,12 @@ func flexGeneratedVFS(instance ModuleInstance, srcRel string) VFS {
 	return build(instance.Path.rel() + "/" + srcRel + flexDefaultGenExt)
 }
 
-func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
+func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+	srcRel := src.string()
+
 	flexRef, flexBin := ctx.tool(argContribToolsFlexOld)
 
-	srcVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
+	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
 	outVFS := flexGeneratedVFS(instance, srcRel)
 
 	parsed := make([]IncludeDirective, 0, 1)

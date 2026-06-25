@@ -57,13 +57,15 @@ func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 	return emit.emit(node), asmVFS, outVFS
 }
 
-func emitLibraryRodataSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
+func emitLibraryRodataSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+	srcRel := src.string()
+
 	if instance.Platform.ISA != ISAX8664 {
 		throwFmt("gen: unsupported .rodata platform %s for %q", instance.Platform.ISA, srcRel)
 	}
 
 	yasmLDRef, _ := ctx.tool(argContribToolsYasm)
-	srcVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
+	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
 	ref, _, outPath := emitRD(instance, srcRel, srcVFS, yasmLDRef, nil, nil, in.TC, ctx.emit)
 
 	return &SourceEmit{Ref: ref, OutPath: outPath}

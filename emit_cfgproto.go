@@ -2,8 +2,10 @@ package main
 
 var cfgprotoKV = KV{P: pkPB, PC: pcYellow}
 
-func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
-	cfgSource := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
+func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+	srcRel := src.string()
+
+	cfgSource := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
 	cfgRelPath := cfgSource.rel()
 
 	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)

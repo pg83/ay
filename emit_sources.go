@@ -11,58 +11,60 @@ type SourceEmit struct {
 	Extra   []SourceEmit
 }
 
-func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
+func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+	srcRel := src.string()
+
 	if isHeaderSource(srcRel) {
 		return nil
 	}
 
 	switch {
 	case strings.HasSuffix(srcRel, ".gztproto"):
-		return emitLibraryGztProtoCompile(ctx, instance, d, srcRel, in)
+		return emitLibraryGztProtoCompile(ctx, instance, d, src, in)
 	case strings.HasSuffix(srcRel, ".proto"):
-		return emitLibraryProtoSource(ctx, instance, d, srcRel, in)
+		return emitLibraryProtoSource(ctx, instance, d, src, in)
 	case strings.HasSuffix(srcRel, ".fbs64"),
 		strings.HasSuffix(srcRel, ".fbs"):
-		return emitLibraryFlatcSource(ctx, instance, d, srcRel, in)
+		return emitLibraryFlatcSource(ctx, instance, d, src, in)
 	case strings.HasSuffix(srcRel, ".rodata"):
-		return emitLibraryRodataSource(ctx, instance, d, srcRel, in)
+		return emitLibraryRodataSource(ctx, instance, d, src, in)
 	case strings.HasSuffix(srcRel, ".c"),
 		strings.HasSuffix(srcRel, ".cpp"),
 		strings.HasSuffix(srcRel, ".cc"),
 		strings.HasSuffix(srcRel, ".cxx"),
 
 		strings.HasSuffix(srcRel, ".C"):
-		return emitLibraryCSource(ctx, instance, d, srcRel, in)
+		return emitLibraryCSource(ctx, instance, d, src, in)
 	case strings.HasSuffix(srcRel, ".S"),
 		strings.HasSuffix(srcRel, ".s"),
 		strings.HasSuffix(srcRel, ".asm"):
-		return emitLibraryAsmSource(ctx, instance, d, srcRel, in)
+		return emitLibraryAsmSource(ctx, instance, d, src, in)
 	case strings.HasSuffix(srcRel, ".cu"):
-		return emitLibraryCudaSource(ctx, instance, d, srcRel, in)
+		return emitLibraryCudaSource(ctx, instance, d, src, in)
 	case strings.HasSuffix(srcRel, ".rl6"):
-		return emitLibraryRagel6Source(ctx, instance, d, srcRel, in)
+		return emitLibraryRagel6Source(ctx, instance, d, src, in)
 	case strings.HasSuffix(srcRel, ".y"),
 		strings.HasSuffix(srcRel, ".ypp"):
-		return emitBisonY(ctx, instance, srcRel, in, in.BisonGenExt)
+		return emitBisonY(ctx, instance, src, in, in.BisonGenExt)
 	case strings.HasSuffix(srcRel, ".ev"):
-		return emitLibraryEvSource(ctx, instance, d, srcRel, in)
+		return emitLibraryEvSource(ctx, instance, d, src, in)
 	case strings.HasSuffix(srcRel, ".rl"):
-		return emitLibraryRagel5Source(ctx, instance, d, srcRel, in)
+		return emitLibraryRagel5Source(ctx, instance, d, src, in)
 	case strings.HasSuffix(srcRel, ".lpp"),
 		strings.HasSuffix(srcRel, ".lex"),
 		strings.HasSuffix(srcRel, ".l"):
-		return emitLibraryFlexSource(ctx, instance, d, srcRel, in)
+		return emitLibraryFlexSource(ctx, instance, d, src, in)
 	case strings.HasSuffix(srcRel, ".h.in"):
-		return emitLibraryHInSource(ctx, instance, d, srcRel, in)
+		return emitLibraryHInSource(ctx, instance, d, src, in)
 	case strings.HasSuffix(srcRel, ".cpp.in"),
 		strings.HasSuffix(srcRel, ".c.in"):
-		return emitLibraryCInSource(ctx, instance, d, srcRel, in)
+		return emitLibraryCInSource(ctx, instance, d, src, in)
 	case strings.HasSuffix(srcRel, ".sc"):
-		return emitLibrarySCSource(ctx, instance, d, srcRel, in)
+		return emitLibrarySCSource(ctx, instance, d, src, in)
 	case strings.HasSuffix(srcRel, ".gperf"):
-		return emitLibraryGperfSource(ctx, instance, d, srcRel, in)
+		return emitLibraryGperfSource(ctx, instance, d, src, in)
 	case strings.HasSuffix(srcRel, ".cfgproto"):
-		return emitLibraryCfgProtoSource(ctx, instance, d, srcRel, in)
+		return emitLibraryCfgProtoSource(ctx, instance, d, src, in)
 	}
 
 	ctx.onWarn(Warn{

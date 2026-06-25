@@ -6,7 +6,7 @@ import (
 )
 
 func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, protoInclude []VFS, moduleTag STR) (NodeRef, string) {
-	gztSource := resolveModuleSourceVFS(ctx, instance, d, srcRel, d.srcDirs)
+	gztSource := resolveModuleSourceVFS(ctx, instance, d, internStr(srcRel), d.srcDirs)
 	moddir := instance.Path.rel()
 
 	base := strings.TrimSuffix(filepath.Base(gztSource.rel()), filepath.Ext(gztSource.rel()))
@@ -69,12 +69,14 @@ func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	return gzRef, genProtoName
 }
 
-func emitLibraryGztProtoCompile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
+func emitLibraryGztProtoCompile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+	srcRel := src.string()
+
 	_, genProtoSrc := emitLibraryGztProtoSource(ctx, instance, d, srcRel, in.ProtoInclude, in.ModuleTag)
 
 	emitProtoProducer(ctx, instance, d, genProtoSrc, in)
 
-	return emitLibraryProtoSource(ctx, instance, d, genProtoSrc, in)
+	return emitLibraryProtoSource(ctx, instance, d, internStr(genProtoSrc), in)
 }
 
 func gztCmdArgs(converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) []STR {

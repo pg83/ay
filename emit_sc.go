@@ -22,11 +22,11 @@ func emitSC(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary VFS, ru
 	return emit.emit(node)
 }
 
-func emitLibrarySCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
+func emitLibrarySCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
 	domRes := ctx.toolResult(argToolsDomschemec)
 	domLDRef, domBinary := domRes.LDRef, *domRes.LDPath
 
-	srcVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
+	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
 	headerVFS := build(srcVFS.rel() + ".h")
 
 	runtimeClosure := walkClosure(ctx.scannerFor(instance), domschemeRuntimeVFS, in.ScanCfg)
