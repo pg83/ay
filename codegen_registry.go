@@ -92,24 +92,24 @@ func (r *CodegenRegistry) lookupSplit(prefix VFS, suffix STR) *GeneratedFileInfo
 	return nil
 }
 
-func (r *CodegenRegistry) addClosureLeaf(node, leaf VFS) {
-	info, ok := r.byStr.get(STR(node.strID()))
-
-	if !ok {
-		throwFmt("CodegenRegistry: AddClosureLeaf on unregistered path %q", node.string())
+func (r *CodegenRegistry) mustInfo(path VFS, op string) *GeneratedFileInfo {
+	if info, ok := r.byStr.get(STR(path.strID())); ok {
+		return info
 	}
 
+	throwFmt("CodegenRegistry: %s on unregistered path %q", op, path.string())
+
+	return nil
+}
+
+func (r *CodegenRegistry) addClosureLeaf(node, leaf VFS) {
+	info := r.mustInfo(node, "addClosureLeaf")
 	info.ClosureLeaves = append(info.ClosureLeaves, leaf)
 	r.leafEver.add(uint32(leaf))
 }
 
 func (r *CodegenRegistry) addClosureLeafNoSubsume(node, leaf VFS) {
-	info, ok := r.byStr.get(STR(node.strID()))
-
-	if !ok {
-		throwFmt("CodegenRegistry: addClosureLeafNoSubsume on unregistered path %q", node.string())
-	}
-
+	info := r.mustInfo(node, "addClosureLeafNoSubsume")
 	info.ClosureLeaves = append(info.ClosureLeaves, leaf)
 }
 
@@ -118,7 +118,7 @@ func (r *CodegenRegistry) isLeafEver(v VFS) bool {
 }
 
 func (r *CodegenRegistry) closureLeaves(node VFS) []VFS {
-	if info, ok := r.byStr.get(STR(node.strID())); ok {
+	if info := r.lookup(node); info != nil {
 		return info.ClosureLeaves
 	}
 
@@ -126,7 +126,7 @@ func (r *CodegenRegistry) closureLeaves(node VFS) []VFS {
 }
 
 func (r *CodegenRegistry) cythonMainOut(node VFS) VFS {
-	if info, ok := r.byStr.get(STR(node.strID())); ok && info.ProducerKvP == pkCY {
+	if info := r.lookup(node); info != nil && info.ProducerKvP == pkCY {
 		return info.ProducerMainOut
 	}
 
@@ -138,23 +138,11 @@ func (r *CodegenRegistry) setSourceInputs(path VFS, src []VFS) {
 		return
 	}
 
-	info, ok := r.byStr.get(STR(path.strID()))
-
-	if !ok {
-		throwFmt("CodegenRegistry: SetSourceInputs on unregistered path %q", path.string())
-	}
-
-	info.SourceInputs = src
+	r.mustInfo(path, "setSourceInputs").SourceInputs = src
 }
 
 func (r *CodegenRegistry) setProducerMainOut(path VFS, mainOut VFS) {
-	info, ok := r.byStr.get(STR(path.strID()))
-
-	if !ok {
-		throwFmt("CodegenRegistry: setProducerMainOut on unregistered path %q", path.string())
-	}
-
-	info.ProducerMainOut = mainOut
+	r.mustInfo(path, "setProducerMainOut").ProducerMainOut = mainOut
 }
 
 func (r *CodegenRegistry) setProducerSourceClosure(path VFS, closure []VFS) {
@@ -162,13 +150,7 @@ func (r *CodegenRegistry) setProducerSourceClosure(path VFS, closure []VFS) {
 		return
 	}
 
-	info, ok := r.byStr.get(STR(path.strID()))
-
-	if !ok {
-		throwFmt("CodegenRegistry: setProducerSourceClosure on unregistered path %q", path.string())
-	}
-
-	info.ProducerSourceClosure = closure
+	r.mustInfo(path, "setProducerSourceClosure").ProducerSourceClosure = closure
 }
 
 func (r *CodegenRegistry) setProtoImportRels(path VFS, rels []string) {
@@ -176,13 +158,7 @@ func (r *CodegenRegistry) setProtoImportRels(path VFS, rels []string) {
 		return
 	}
 
-	info, ok := r.byStr.get(STR(path.strID()))
-
-	if !ok {
-		throwFmt("CodegenRegistry: setProtoImportRels on unregistered path %q", path.string())
-	}
-
-	info.ProtoImportRels = rels
+	r.mustInfo(path, "setProtoImportRels").ProtoImportRels = rels
 }
 
 func registerBoundGeneratedParsedOutput(ctx *GenCtx, instance ModuleInstance, kind ProcKind, output VFS, parsed []IncludeDirective, ref NodeRef, generatorRefs []NodeRef) {
@@ -205,27 +181,15 @@ func (r *CodegenRegistry) setBuildParsed(out VFS, parsed []IncludeDirective) {
 		throwFmt("setBuildParsed: source-rooted output %q", out.string())
 	}
 
-	info, ok := r.byStr.get(STR(out.strID()))
-
-	if !ok {
-		throwFmt("setBuildParsed: no generated info for %q", out.string())
-	}
-
-	info.ParsedIncludes = parsed
+	r.mustInfo(out, "setBuildParsed").ParsedIncludes = parsed
 }
 
 func (r *CodegenRegistry) setCompileSpec(out VFS, spec *CompileSpec) {
-	info, ok := r.byStr.get(STR(out.strID()))
-
-	if !ok {
-		throwFmt("setCompileSpec: no generated info for %q", out.string())
-	}
-
-	info.Compile = spec
+	r.mustInfo(out, "setCompileSpec").Compile = spec
 }
 
 func (r *CodegenRegistry) buildParsedFor(out VFS) []IncludeDirective {
-	if info, ok := r.byStr.get(STR(out.strID())); ok {
+	if info := r.lookup(out); info != nil {
 		return info.ParsedIncludes
 	}
 
