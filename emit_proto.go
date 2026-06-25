@@ -176,19 +176,20 @@ func protoDirectImportNames(pm *IncludeParserManager, srcRel string) []string {
 }
 
 func resolveProtoImportPath(fs FS, importedRel string, peerProtoAddIncl []VFS) string {
-	clean := filepath.ToSlash(filepath.Clean(importedRel))
-	rootCands := []string{clean}
+	clean := importedRel
 
-	if !strings.HasPrefix(clean, "yt/") {
-		rootCands = append(rootCands, filepath.ToSlash(filepath.Clean("yt/"+clean)))
+	if fs.isFile(srcRootVFS, clean) {
+		return clean
 	}
 
-	rootCands = append(rootCands, filepath.ToSlash(filepath.Clean(pbRuntimeBase+clean)))
-
-	for _, cand := range rootCands {
-		if fs.isFile(srcRootVFS, cand) {
+	if !strings.HasPrefix(clean, "yt/") {
+		if cand := filepath.ToSlash(filepath.Clean("yt/" + clean)); fs.isFile(srcRootVFS, cand) {
 			return cand
 		}
+	}
+
+	if cand := filepath.ToSlash(filepath.Clean(pbRuntimeBase + clean)); fs.isFile(srcRootVFS, cand) {
+		return cand
 	}
 
 	for _, p := range peerProtoAddIncl {
