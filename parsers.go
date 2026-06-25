@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"path"
 	"regexp"
 	"strings"
 )
@@ -163,6 +164,10 @@ func (CythonIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAlloca
 	k := 0
 	add := func(d IncludeDirective) {
 		k = addDirective(block, k, d)
+	}
+
+	if strings.HasSuffix(rel, ".pyx") {
+		add(IncludeDirective{kind: includeCythonSibling, target: internStr(path.Base(rel[:len(rel)-len(".pyx")]) + ".pxd")})
 	}
 
 	eachLine(data, func(line []byte) {

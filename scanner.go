@@ -25,6 +25,8 @@ const (
 	includeCythonName
 
 	includeCythonFallback
+
+	includeCythonSibling
 )
 
 type IncludeDirective struct {
@@ -37,7 +39,7 @@ func (d IncludeDirective) quotedLike() bool {
 }
 
 func (d IncludeDirective) cythonProbe() bool {
-	return d.kind == includeCythonOptional || d.kind == includeCythonModule || d.kind == includeCythonName || d.kind == includeCythonFallback
+	return d.kind == includeCythonOptional || d.kind == includeCythonModule || d.kind == includeCythonName || d.kind == includeCythonFallback || d.kind == includeCythonSibling
 }
 
 type IncludeScanner struct {
@@ -227,6 +229,14 @@ func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 	prevProbeMissed := false
 
 	for _, entry := range s.parsedIncludes(vfsPath, sc.parser) {
+		if entry.kind == includeCythonSibling {
+			for _, rabs := range sc.resolve(vfsPath, incDir, entry) {
+				fn(rabs)
+			}
+
+			continue
+		}
+
 		isName := entry.kind == includeCythonName
 		isFallback := entry.kind == includeCythonFallback
 
