@@ -15,6 +15,8 @@ var nvccFlagsTail = []STR{
 	internStr("-I$(B)/resources/OS_SDK_ROOT/usr/include/x86_64-linux-gnu"),
 }
 
+var cudaKV = KV{P: pkCU, PC: pcLightGreen}
+
 const cudaArchitectures129 = "sm_50:sm_52:sm_60:sm_61:sm_70:sm_75:sm_80:sm_86:sm_89:sm_90:sm_90a:sm_100:sm_100a:sm_120:sm_120a:sm_100f:sm_103:sm_103a:sm_103f:sm_120f"
 
 func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
@@ -74,7 +76,3 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 
 	return &SourceEmit{Ref: ctx.emit.emit(node), OutPath: outVFS}
 }
-
-var (
-	cudaKV = KV{P: pkCU, PC: pcLightGreen}
-)

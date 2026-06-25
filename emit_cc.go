@@ -7,6 +7,7 @@ import (
 
 var (
 	argDashBBin = internStr("-B" + binPath)
+	ccKV        = KV{P: pkCC, PC: pcGreen}
 )
 
 type ModuleCCInputs struct {
@@ -495,7 +496,3 @@ func emitLibraryCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src
 
 	return &SourceEmit{Ref: ref, OutPath: outPath}
 }
-
-var (
-	ccKV = KV{P: pkCC, PC: pcGreen}
-)

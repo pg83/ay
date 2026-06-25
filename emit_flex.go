@@ -2,9 +2,12 @@ package main
 
 import "strings"
 
-const flexDefaultGenExt = ".cpp"
+var (
+	flexOutputInclude = IncludeDirective{kind: includeQuoted, target: internStr("util/system/compiler.h")}
+	flexKV            = KV{P: pkLX, PC: pcYellow}
+)
 
-var flexOutputInclude = IncludeDirective{kind: includeQuoted, target: internStr("util/system/compiler.h")}
+const flexDefaultGenExt = ".cpp"
 
 func flexGeneratedVFS(instance ModuleInstance, srcRel string) VFS {
 	if strings.Contains(srcRel, "/") {
@@ -71,7 +74,3 @@ func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, o
 		ForeignDepRefs: []NodeRef{flexRef},
 	}, id)
 }
-
-var (
-	flexKV = KV{P: pkLX, PC: pcYellow}
-)

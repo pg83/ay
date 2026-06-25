@@ -52,6 +52,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		src.nodes = loadGraph(inPath)
 		workers = min(runtime.NumCPU(), 24)
 	}
+
 	contentHash := map[string][32]byte{}
 	deps := map[string][]string{}
 	fetch := map[string]bool{}

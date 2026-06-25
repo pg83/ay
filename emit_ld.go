@@ -8,6 +8,8 @@ var (
 	ldLinkExePath      = ldLinkExeVFS.string()
 	ldFsToolsPath      = ldFsToolsVFS.string()
 	vcsJSONBase64      = base64.StdEncoding.EncodeToString([]byte(vcsJSONContent))
+	ldKV               = KV{P: pkLD, PC: pcLightBlue, ShowOut: true}
+	ldKV2              = KV{P: pkCP, PC: pcYellow, ShowOut: true}
 )
 
 var ldScriptInputs = []VFS{
@@ -553,8 +555,3 @@ func emitOwnLDPlugins(ctx *GenCtx, instance ModuleInstance, plugins []STR, tc Mo
 
 	return res
 }
-
-var (
-	ldKV  = KV{P: pkLD, PC: pcLightBlue, ShowOut: true}
-	ldKV2 = KV{P: pkCP, PC: pcYellow, ShowOut: true}
-)

@@ -7,6 +7,7 @@ import (
 var (
 	genPy3RegScriptPath  = genPy3RegScriptVFS.string()
 	genPy3RegScriptChunk = []VFS{genPy3RegScriptVFS}
+	pyCodegenKV          = KV{P: pkPY, PC: pcYellow}
 )
 
 func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
@@ -228,7 +229,3 @@ func pyInitDefineShortname(flag string) (string, bool) {
 
 	return "", false
 }
-
-var (
-	pyCodegenKV = KV{P: pkPY, PC: pcYellow}
-)

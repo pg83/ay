@@ -5,7 +5,10 @@ import (
 	"strings"
 )
 
-var gperfFlags = []STR{argGpCtTLANSIC.str(), argGpDk.str(), argDashC.str()}
+var (
+	gperfFlags = []STR{argGpCtTLANSIC.str(), argGpDk.str(), argDashC.str()}
+	gperfKV    = KV{P: pkGP, PC: pcYellow}
+)
 
 func gperfGeneratedRel(srcRel string) string {
 	return filepath.Base(srcRel) + ".cpp"
@@ -68,7 +71,3 @@ func emitLibraryGperfSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }
-
-var (
-	gperfKV = KV{P: pkGP, PC: pcYellow}
-)

@@ -13,6 +13,7 @@ var (
 	rescompilersChunk           = []VFS{rescompilerBinVFS, rescompressorBinVFS}
 	rescompilersWithScriptChunk = []VFS{rescompilerBinVFS, rescompressorBinVFS, objcopyScriptVFS}
 	objcopyScriptChunk          = []VFS{objcopyScriptVFS}
+	pyObjcopyKV                 = KV{P: pkPY, PC: pcYellow, ShowOut: true}
 )
 
 type ObjcopyEmitResult struct {
@@ -717,7 +718,3 @@ func emitPySrcObjcopy(
 
 	return res
 }
-
-var (
-	pyObjcopyKV = KV{P: pkPY, PC: pcYellow, ShowOut: true}
-)

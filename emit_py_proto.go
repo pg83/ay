@@ -7,6 +7,12 @@ import (
 	"strings"
 )
 
+var (
+	pyProtoKV  = KV{P: pkPY, PC: pcYellow}
+	pyProtoKV2 = KV{P: pkPY, PC: pcYellow, ShowOut: true}
+	pyProtoKV3 = KV{P: pkPR, PC: pcYellow, ShowOut: true}
+)
+
 func protoPythonResourceKey(instance ModuleInstance, d *ModuleData, src, suffix string) string {
 	base := strings.TrimSuffix(src, ".proto")
 
@@ -789,9 +795,3 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 
 	return res
 }
-
-var (
-	pyProtoKV  = KV{P: pkPY, PC: pcYellow}
-	pyProtoKV2 = KV{P: pkPY, PC: pcYellow, ShowOut: true}
-	pyProtoKV3 = KV{P: pkPR, PC: pcYellow, ShowOut: true}
-)

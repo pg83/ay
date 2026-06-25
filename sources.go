@@ -106,7 +106,9 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 
 func walkClosure(scanner *IncludeScanner, vfsPath VFS, cfg ScanContext) []VFS {
 	sc := scanner.getScanCtx(cfg, includeDirectiveParsers.registeredParserFor(vfsPath.rel()))
+
 	defer scanner.putScanCtx(sc)
+
 	scanner.walkClosureCalls++
 
 	return sc.closureOf(vfsPath)

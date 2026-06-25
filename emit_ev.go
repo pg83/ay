@@ -9,6 +9,7 @@ var (
 	evEventlogIncludePath     = evEventlogIncludeVFS.string()
 	evExtraProtobufDirectives = sync.OnceValue(func() []IncludeDirective { return quotedDirectives(evExtraProtobufHeaders) })
 	evAbseilCleanupDirectives = sync.OnceValue(func() []IncludeDirective { return quotedDirectives(evAbseilCleanupHeaders) })
+	evKV                      = KV{P: pkEV, PC: pcYellow}
 )
 
 var evExtraProtobufHeaders = []VFS{
@@ -109,8 +110,6 @@ func emitEV(
 		cppStyleguideBinary, protocBinary, event2cppBinary,
 		evOpts, moduleTag, transitiveImports, protoInclude, liteHeaders, tc, emit)
 }
-
-var evKV = KV{P: pkEV, PC: pcYellow}
 
 func emitProtoWrapperPBNode(
 	instance ModuleInstance,

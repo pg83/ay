@@ -4,7 +4,10 @@ import (
 	"strings"
 )
 
-var yasmBinaryPath = yasmBinaryVFS.string()
+var (
+	yasmBinaryPath = yasmBinaryVFS.string()
+	asKV           = KV{P: pkAS, PC: pcLightGreen}
+)
 
 var yasmConstHead = []STR{
 	internStr(yasmBinaryPath),
@@ -202,7 +205,3 @@ func emitLibraryAsmSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, s
 
 	return &SourceEmit{Ref: ref, OutPath: outPath}
 }
-
-var (
-	asKV = KV{P: pkAS, PC: pcLightGreen}
-)

@@ -6,6 +6,7 @@ var (
 	ragel6ArgOptimized = internArg(ragel6DefaultFlagOptimized)
 	ragel6ArgDebug     = internArg(ragel6DefaultFlagDebug)
 	ragel6ConstArgs    = []STR{argL.str(), argIS.str(), argDashO.str()}
+	r6KV               = KV{P: pkR6, PC: pcYellow}
 )
 
 const (
@@ -110,7 +111,3 @@ func emitLibraryRagel6Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 
 	return emitOneSource(ctx, instance, d, r6Out.str(), in)
 }
-
-var (
-	r6KV = KV{P: pkR6, PC: pcYellow}
-)

@@ -5,7 +5,10 @@ import (
 	"strings"
 )
 
-var swigAddIncls = []VFS{source(swigLibRoot + "/python"), source(swigLibRoot)}
+var (
+	swigAddIncls = []VFS{source(swigLibRoot + "/python"), source(swigLibRoot)}
+	swigCKV      = KV{P: pkSW, PC: pcYellow}
+)
 
 var swigConstArgs = []STR{
 	argIB.str(),
@@ -127,7 +130,3 @@ func collectSwigInducedIncludes(ctx *GenCtx, src VFS, closure []VFS) []IncludeDi
 
 	return out
 }
-
-var (
-	swigCKV = KV{P: pkSW, PC: pcYellow}
-)

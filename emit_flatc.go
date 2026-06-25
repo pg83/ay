@@ -4,6 +4,11 @@ import (
 	"strings"
 )
 
+var (
+	flatcKVFL   = KV{P: pkFL, PC: pcLightGreen}
+	flatcKVFL64 = KV{P: pkFL64, PC: pcLightGreen}
+)
+
 var flatcConstFlags = []STR{
 	argNoWarnings.str(),
 	argCpp.str(),
@@ -38,10 +43,6 @@ var flatc64IOLeadArgs = []STR{
 	argI.str(), argB.str(),
 	argDashO.str(),
 }
-
-var flatcKVFL = KV{P: pkFL, PC: pcLightGreen}
-
-var flatcKVFL64 = KV{P: pkFL64, PC: pcLightGreen}
 
 var flatcVariantFL = flatcVariant{
 	toolArg:    argContribLibsFlatbuffersFlatc,

@@ -2,6 +2,14 @@ package main
 
 import "strings"
 
+var fromSandboxScriptInputs = []VFS{
+	buildScriptsFetchFromSandboxPy,
+	buildScriptsProcessCommandFilesPy,
+	buildScriptsFetchFromPy,
+}
+
+var fromSandboxKV = KV{P: pkSB, PC: pcYellow, ShowOut: true}
+
 func emitFromSandboxes(ctx *GenCtx, instance ModuleInstance, d *ModuleData) (memberRefs []NodeRef, memberPaths []VFS) {
 	for _, fs := range d.fromSandboxes {
 		refs, paths := emitFromSandbox(ctx, instance, d, fs)
@@ -10,12 +18,6 @@ func emitFromSandboxes(ctx *GenCtx, instance ModuleInstance, d *ModuleData) (mem
 	}
 
 	return memberRefs, memberPaths
-}
-
-var fromSandboxScriptInputs = []VFS{
-	buildScriptsFetchFromSandboxPy,
-	buildScriptsProcessCommandFilesPy,
-	buildScriptsFetchFromPy,
 }
 
 func fromSandboxAutoLinkMember(name string) bool {
@@ -121,7 +123,3 @@ func fromSandboxOutputIncludes(stmt *FromSandboxStmt) []IncludeDirective {
 
 	return includes
 }
-
-var (
-	fromSandboxKV = KV{P: pkSB, PC: pcYellow, ShowOut: true}
-)

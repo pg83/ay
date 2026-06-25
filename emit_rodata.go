@@ -5,7 +5,10 @@ import (
 	"strings"
 )
 
-var rodataConstArgs = []STR{(rodataScriptVFS).str(), argElf.str()}
+var (
+	rodataConstArgs = []STR{(rodataScriptVFS).str(), argElf.str()}
+	rodataKV        = KV{P: pkRD, PC: pcLightGreen}
+)
 
 var rodataYasmConstArgs = []STR{
 	argDYasm.str(),
@@ -70,7 +73,3 @@ func emitLibraryRodataSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 
 	return &SourceEmit{Ref: ref, OutPath: outPath}
 }
-
-var (
-	rodataKV = KV{P: pkRD, PC: pcLightGreen}
-)
