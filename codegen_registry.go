@@ -11,7 +11,6 @@ type GeneratedFileInfo struct {
 	CythonInducedPyx      []VFS
 	ProducerSourceClosure []VFS
 	ProtoImportRels       []string
-	CythonMainOut         VFS
 	ProducerMainOut       VFS
 	ClosureLeaves         []VFS
 	ParsedIncludes        []IncludeDirective
@@ -125,7 +124,7 @@ func (r *CodegenRegistry) setCythonPyxInduced(node VFS, pyx []VFS, mainOut VFS) 
 	}
 
 	info.CythonInducedPyx = pyx
-	info.CythonMainOut = mainOut
+	info.ProducerMainOut = mainOut
 }
 
 func (r *CodegenRegistry) cythonPyxInduced(node VFS) []VFS {
@@ -138,7 +137,7 @@ func (r *CodegenRegistry) cythonPyxInduced(node VFS) []VFS {
 
 func (r *CodegenRegistry) cythonPyxInducedInfo(node VFS) ([]VFS, VFS) {
 	if info, ok := r.byStr.get(STR(node.strID())); ok {
-		return info.CythonInducedPyx, info.CythonMainOut
+		return info.CythonInducedPyx, info.ProducerMainOut
 	}
 
 	return nil, 0
