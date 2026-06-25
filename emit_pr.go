@@ -640,7 +640,7 @@ func runProgramInputVFS(ctx *GenCtx, instance ModuleInstance, d *ModuleData, rel
 		return source(rel)
 	}
 
-	return resolveModuleSourceVFS(ctx, instance, d, rel, d.srcDirs)
+	return resolveModuleSourceVFS(ctx, instance, d, internStr(rel), d.srcDirs)
 }
 
 func emitPR(

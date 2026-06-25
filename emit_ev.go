@@ -184,8 +184,10 @@ func emitProtoWrapperPBNode(
 	return emit.emit(node)
 }
 
-func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
-	evSource := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
+func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+	srcRel := src.string()
+
+	evSource := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
 	evRelPath := evSource.rel()
 
 	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)

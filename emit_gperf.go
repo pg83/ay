@@ -45,10 +45,12 @@ func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS
 	return emit.emit(node)
 }
 
-func emitLibraryGperfSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
+func emitLibraryGperfSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+	srcRel := src.string()
+
 	gperfLDRef, gperfBinVFS := ctx.tool(argContribToolsGperf)
 
-	srcVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
+	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
 	genVFS := build(instance.Path.rel() + "/" + gperfGeneratedRel(srcRel))
 
 	srcClosure := walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)

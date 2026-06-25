@@ -24,8 +24,10 @@ func emitExplicitCF(ctx *GenCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	emitConfigureFile(ctx, instance, d, srcVFS, outVFS, in)
 }
 
-func emitLibraryHInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
-	srcVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
+func emitLibraryHInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+	srcRel := src.string()
+
+	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
 	outVFS := build(instance.Path.rel() + "/" + strings.TrimSuffix(srcRel, ".in"))
 
 	emitConfigureFile(ctx, instance, d, srcVFS, outVFS, in)
@@ -33,8 +35,10 @@ func emitLibraryHInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, s
 	return nil
 }
 
-func emitLibraryCInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) *SourceEmit {
-	srcVFS := resolveModuleSourceVFS(ctx, instance, d, srcRel, in.SrcDirs)
+func emitLibraryCInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+	srcRel := src.string()
+
+	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
 	outVFS := build(instance.Path.rel() + "/" + strings.TrimSuffix(srcRel, ".in"))
 
 	cfRef := emitConfigureFile(ctx, instance, d, srcVFS, outVFS, in)
