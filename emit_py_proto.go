@@ -451,7 +451,7 @@ func pyProtoAuxEntriesForSource(instance ModuleInstance, d *ModuleData, src stri
 			path:     pyOutputs[1],
 			key:      protoPythonResourceKey(instance, d, src, "_pb2_grpc.py"),
 			producer: pyPBRef,
-			inputs:   append(append([]VFS(nil), producerInputs...), pyOutputs[0]),
+			inputs:   concat(producerInputs, []VFS{pyOutputs[0]}),
 		})
 
 		if len(yapyOuts) > 1 {
@@ -730,7 +730,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 		cmdArgs := []STR{internStr(rescompilerBinPath), (aux).str()}
 		cmdArgs = appendInternStrs(cmdArgs, ch.cmdArgs)
 
-		deps := append(append([]NodeRef(nil), ch.deps...), depRefs(rescompilerRef)...)
+		deps := concat(ch.deps, depRefs(rescompilerRef))
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 

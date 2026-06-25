@@ -73,7 +73,7 @@ func emitArchiveAsmNode(
 		}
 	}
 
-	deps := append(append([]NodeRef(nil), producerRefs...), depRefs(toolLDRef)...)
+	deps := concat(producerRefs, depRefs(toolLDRef))
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	n := &Node{

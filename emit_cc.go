@@ -298,7 +298,7 @@ func pickWarningFlags(noCompilerWarnings bool, noWShadow bool) []ARG {
 	}
 
 	if noWShadow {
-		return append(append([]ARG{}, warningFlags...), argNoShadow)
+		return concat(warningFlags, []ARG{argNoShadow})
 	}
 
 	return warningFlags

@@ -332,7 +332,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		pbHImports := directImports
 
 		if len(sprotoProduced) > 0 {
-			pbHImports = append(append([]IncludeDirective(nil), directImports...), sprotoInducedHeaders(directImports)...)
+			pbHImports = concat(directImports, sprotoInducedHeaders(directImports))
 		}
 
 		extras := pbHEmitsIncludesExtras()

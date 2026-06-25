@@ -71,3 +71,23 @@ func (dd *DeDuper) dedupVFS(lists ...[]VFS) []VFS {
 func dedupVFS(lists ...[]VFS) []VFS {
 	return deduper.dedupVFS(lists...)
 }
+
+func concat[T any](lists ...[]T) []T {
+	total := 0
+
+	for _, l := range lists {
+		total += len(l)
+	}
+
+	if total == 0 {
+		return nil
+	}
+
+	out := make([]T, 0, total)
+
+	for _, l := range lists {
+		out = append(out, l...)
+	}
+
+	return out
+}

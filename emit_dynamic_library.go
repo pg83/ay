@@ -320,10 +320,10 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 	n.ForeignDepRefs = depRefs(fixElfRef)
 
 	ref := ctx.emit.emit(n)
-	addInclGlobal := dedupVFS(d.addInclGlobal, peerAddInclGlobal)
-	cFlagsGlobal := dedupARG(d.cFlagsGlobal, peerCFlagsGlobal)
-	cxxFlagsGlobal := dedupARG(d.cxxFlagsGlobal, peerCXXFlagsGlobal)
-	cOnlyFlagsGlobal := dedupARG(d.cOnlyFlagsGlobal, peerCOnlyFlagsGlobal)
+	addInclGlobal := concat(d.addInclGlobal, peerAddInclGlobal)
+	cFlagsGlobal := concat(d.cFlagsGlobal, peerCFlagsGlobal)
+	cxxFlagsGlobal := concat(d.cxxFlagsGlobal, peerCXXFlagsGlobal)
+	cOnlyFlagsGlobal := concat(d.cOnlyFlagsGlobal, peerCOnlyFlagsGlobal)
 
 	return &ModuleEmitResult{
 		ARPath:                       nil,
@@ -335,7 +335,7 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		CFlagsGlobal:                 cFlagsGlobal,
 		CXXFlagsGlobal:               cxxFlagsGlobal,
 		COnlyFlagsGlobal:             cOnlyFlagsGlobal,
-		RPathFlagsGlobal:             dedupARG(peerRPathFlagsGlobal, d.rpathFlagsGlobal),
+		RPathFlagsGlobal:             concat(peerRPathFlagsGlobal, d.rpathFlagsGlobal),
 		PeerArchiveClosureRefs:       nil,
 		PeerArchiveClosurePaths:      nil,
 		isPyLibrary:                  false,

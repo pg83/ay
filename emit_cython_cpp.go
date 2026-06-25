@@ -402,7 +402,7 @@ func cythonCompileInducedInputs(ctx *GenCtx, instance ModuleInstance, includeInp
 		return includeInputs
 	}
 
-	return dedupVFS(includeInputs, extra)
+	return concat(includeInputs, extra)
 }
 
 type cythonCppInduced struct {

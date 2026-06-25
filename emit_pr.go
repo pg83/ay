@@ -282,7 +282,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	depInputs := inputClosure
 
 	if len(inVFSs) > 0 {
-		depInputs = append(append(make([]VFS, 0, len(inVFSs)+len(inputClosure)), inVFSs...), inputClosure...)
+		depInputs = concat(inVFSs, inputClosure)
 	}
 
 	prExtraDepRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, depInputs)
