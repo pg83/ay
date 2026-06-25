@@ -75,17 +75,6 @@ func argStrs(as []ARG) []string {
 	return out
 }
 
-func addEachARG(seen *BitSet, dst *[]ARG, src []ARG) {
-	for _, x := range src {
-		if seen.has(uint32(x)) {
-			continue
-		}
-
-		seen.add(uint32(x))
-		*dst = append(*dst, x)
-	}
-}
-
 func dedupARG(lists ...[]ARG) []ARG {
 	deduper.reset()
 

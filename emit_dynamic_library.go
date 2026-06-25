@@ -220,24 +220,53 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		}
 	}
 
-	var cFlagsSeen BitSet
-	var cxxFlagsSeen BitSet
-	var cOnlyFlagsSeen BitSet
-	var rpathFlagsSeen BitSet
 	var peerCFlagsGlobal []ARG
 	var peerCXXFlagsGlobal []ARG
 	var peerCOnlyFlagsGlobal []ARG
 	var peerRPathFlagsGlobal []ARG
 
+	deduper.reset()
 	for _, pr := range resolved {
-		addEachARG(&cFlagsSeen, &peerCFlagsGlobal, pr.CFlagsGlobal)
-		addEachARG(&cxxFlagsSeen, &peerCXXFlagsGlobal, pr.CXXFlagsGlobal)
-		addEachARG(&cOnlyFlagsSeen, &peerCOnlyFlagsGlobal, pr.COnlyFlagsGlobal)
-		addEachARG(&rpathFlagsSeen, &peerRPathFlagsGlobal, pr.RPathFlagsGlobal)
+		for _, a := range pr.CFlagsGlobal {
+			if deduper.add(VFS(a)) {
+				peerCFlagsGlobal = append(peerCFlagsGlobal, a)
+			}
+		}
+	}
+
+	deduper.reset()
+	for _, pr := range resolved {
+		for _, a := range pr.CXXFlagsGlobal {
+			if deduper.add(VFS(a)) {
+				peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, a)
+			}
+		}
+	}
+
+	deduper.reset()
+	for _, pr := range resolved {
+		for _, a := range pr.COnlyFlagsGlobal {
+			if deduper.add(VFS(a)) {
+				peerCOnlyFlagsGlobal = append(peerCOnlyFlagsGlobal, a)
+			}
+		}
+	}
+
+	deduper.reset()
+	for _, pr := range resolved {
+		for _, a := range pr.RPathFlagsGlobal {
+			if deduper.add(VFS(a)) {
+				peerRPathFlagsGlobal = append(peerRPathFlagsGlobal, a)
+			}
+		}
 	}
 
 	for _, pr := range rpathOnly {
-		addEachARG(&rpathFlagsSeen, &peerRPathFlagsGlobal, pr.RPathFlagsGlobal)
+		for _, a := range pr.RPathFlagsGlobal {
+			if deduper.add(VFS(a)) {
+				peerRPathFlagsGlobal = append(peerRPathFlagsGlobal, a)
+			}
+		}
 	}
 
 	pluginRefs := []NodeRef{}
