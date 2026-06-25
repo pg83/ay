@@ -31,7 +31,7 @@ func emitArchiveAsmNode(
 ) NodeRef {
 	na := ctx.emit.nodeArenas()
 
-	rodataVFS := build(instance.Path.rel() + "/" + a.Name + ".rodata")
+	rodataVFS := build(instance.Path.rel(), "/", a.Name, ".rodata")
 
 	cmdArgs := make([]STR, 0, 4+len(a.Files)+2)
 	cmdArgs = append(cmdArgs, (toolBinPath).str(), argQ.str())
@@ -59,7 +59,7 @@ func emitArchiveAsmNode(
 
 		pathPerFile = append(pathPerFile, memberVFS)
 
-		cmdArgs = append(cmdArgs, internStr(memberVFS.string()+":"))
+		cmdArgs = append(cmdArgs, internV(memberVFS.string(), ":"))
 	}
 
 	cmdArgs = append(cmdArgs, argDashO.str(), (rodataVFS).str())
@@ -114,7 +114,7 @@ func emitArchiveAsmRodata(ctx *GenCtx, instance ModuleInstance, rodataRel string
 		throwFmt("gen: unsupported .rodata platform %s for ARCHIVE_ASM %q", instance.Platform.ISA, rodataRel)
 	}
 
-	rodataPath := build(instance.Path.rel() + "/" + rodataRel)
+	rodataPath := build(instance.Path.rel(), "/", rodataRel)
 	leaves := walkClosureTail(ctx.scannerFor(instance), rodataPath, in.ScanCfg)
 
 	yasmLDRef, _ := ctx.tool(argContribToolsYasm)

@@ -13,9 +13,9 @@ func emitR5(
 ) (NodeRef, VFS, VFS) {
 	na := emit.nodeArenas()
 
-	srcVFS := source(instance.Path.rel() + "/" + srcRel)
-	tmpVFS := build(instance.Path.rel() + "/" + srcRel + ".tmp")
-	cppVFS := build(instance.Path.rel() + "/" + strings.TrimSuffix(srcRel, ".rl") + ".rl5.cpp")
+	srcVFS := source(instance.Path.rel(), "/", srcRel)
+	tmpVFS := build(instance.Path.rel(), "/", srcRel, ".tmp")
+	cppVFS := build(instance.Path.rel(), "/", strings.TrimSuffix(srcRel, ".rl"), ".rl5.cpp")
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -64,7 +64,7 @@ func emitLibraryRagel5Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 
 	r5Ref, r5TmpOut, r5CppOut := emitR5(instance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, ctx.emit)
 
-	rlSourceVFS := source(instance.Path.rel() + "/" + srcRel)
+	rlSourceVFS := source(instance.Path.rel(), "/", srcRel)
 	reg := ctx.codegenFor(instance)
 	reg.register(&GeneratedFileInfo{
 		ProducerKvP:    pkR5,

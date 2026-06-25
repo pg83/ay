@@ -31,7 +31,7 @@ func loadAutoincludeIndex(fs FS) *AutoincludeIndex {
 
 		for _, r := range roots {
 			keys = append(keys, r+"/")
-			linters = append(linters, source(r+"/"+lintersMakeIncName))
+			linters = append(linters, source(r, "/", lintersMakeIncName))
 		}
 	}
 

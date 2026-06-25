@@ -17,8 +17,8 @@ func emitBI(
 	na := emit.nodeArenas()
 
 	outPrefix := instance.Path.rel() + "/"
-	argsFileVFS := build(outPrefix + "__args")
-	outVFS := build(outPrefix + outputHeader)
+	argsFileVFS := build(outPrefix, "__args")
+	outVFS := build(outPrefix, outputHeader)
 	argsFile := argsFileVFS.string()
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}

@@ -43,9 +43,9 @@ func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs [
 	}
 
 	outputName := dllOutputName(d.moduleStmt)
-	outputPath := build(instance.Path.rel() + "/" + outputName).string()
-	vcsCPath := build(instance.Path.rel() + "/__vcs_version__.c").string()
-	vcsOPath := build(instance.Path.rel() + "/__vcs_version__.c.pic.o").string()
+	outputPath := build(instance.Path.rel(), "/", outputName).string()
+	vcsCPath := build(instance.Path.rel(), "/__vcs_version__.c").string()
+	vcsOPath := build(instance.Path.rel(), "/__vcs_version__.c.pic.o").string()
 
 	cmd0 := composeLDCmdVcsInfo(d.tc, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
@@ -56,7 +56,7 @@ func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs [
 
 	ldSbomRefs := peerSbomRefs
 	ldSbomPaths := peerSbomPaths
-	sbomJSON := build(instance.Path.rel() + "/__sbomdata.json").string()
+	sbomJSON := build(instance.Path.rel(), "/__sbomdata.json").string()
 	sbomEmbed := false
 
 	if sbomActive(ctx, instance) && instance.Platform.BuildRelease {
@@ -89,7 +89,7 @@ func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs [
 	}
 
 	inputs := InputChunks{peerArchivePaths, na.srcChunk(fixElfPath), ctx.scripts[ldVcsInfoVFS], ctx.scripts[ldLinkDynLibVFS]}
-	inputs = append(inputs, []VFS{ldSvnInterfaceVFS, ldSvnversionHVFS, source(instance.Path.rel() + "/" + d.exportsScript.string())})
+	inputs = append(inputs, []VFS{ldSvnInterfaceVFS, ldSvnversionHVFS, source(instance.Path.rel(), "/", d.exportsScript.string())})
 	inputs = append(inputs, ccOutputs)
 
 	if sbomEmbed {
@@ -108,7 +108,7 @@ func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs [
 		Cmds:         na.cmdList(cmds...),
 		Env:          envFull,
 		Inputs:       inputs,
-		Outputs:      na.vfsList(build(instance.Path.rel() + "/" + outputName)),
+		Outputs:      na.vfsList(build(instance.Path.rel(), "/", outputName)),
 		KV:           &dynamicLibraryKV,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      deps,
@@ -120,7 +120,7 @@ func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs [
 
 	return &ModuleEmitResult{
 		LDRef:          ref,
-		LDPath:         vfsPtr(build(instance.Path.rel() + "/" + outputName)),
+		LDPath:         vfsPtr(build(instance.Path.rel(), "/", outputName)),
 		Peerdirs:       d.peerdirs,
 		ModuleStmtName: d.moduleStmt.Name,
 		InducedDeps:    d.inducedDeps,
@@ -287,9 +287,9 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 	fixElfRef, fixElfPath := ctx.tool(argToolsFixElf)
 
 	outputName := "lib" + d.moduleStmt.Args[0].string() + ".so"
-	outputPath := build(instance.Path.rel() + "/" + outputName).string()
-	vcsCPath := build(instance.Path.rel() + "/__vcs_version__.c").string()
-	vcsOPath := build(instance.Path.rel() + "/__vcs_version__.c.pic.o").string()
+	outputPath := build(instance.Path.rel(), "/", outputName).string()
+	vcsCPath := build(instance.Path.rel(), "/__vcs_version__.c").string()
+	vcsOPath := build(instance.Path.rel(), "/__vcs_version__.c.pic.o").string()
 
 	cmd0 := composeLDCmdVcsInfo(d.tc, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
@@ -310,7 +310,7 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: strB, Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd3), Env: envVcsOnly}),
 		Env:          envFull,
 		Inputs:       inputs,
-		Outputs:      na.vfsList(build(instance.Path.rel() + "/" + outputName)),
+		Outputs:      na.vfsList(build(instance.Path.rel(), "/", outputName)),
 		KV:           &dynamicLibraryKV,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      deps,
@@ -329,7 +329,7 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		ARPath:                       nil,
 		isPROGRAM:                    false,
 		LDRef:                        ref,
-		LDPath:                       vfsPtr(build(instance.Path.rel() + "/" + outputName)),
+		LDPath:                       vfsPtr(build(instance.Path.rel(), "/", outputName)),
 		AddInclGlobal:                addInclGlobal,
 		OwnAddInclGlobal:             cloneVFSs(d.addInclGlobal),
 		CFlagsGlobal:                 cFlagsGlobal,
@@ -391,7 +391,7 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 	cmdArgs = append(cmdArgs,
 		argDashO.str(), internStr(outputPath),
 		argShared.str(),
-		internStr("-Wl,-soname,"+outputName),
+		internV("-Wl,-soname,", outputName),
 		p.TargetArg,
 	)
 	cmdArgs = append(cmdArgs, p.SysrootArgs...)
@@ -404,7 +404,7 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 	cmdArgs = append(cmdArgs, argWlEndGroup.str())
 	cmdArgs = append(cmdArgs,
 		argRdynamic.str(),
-		internStr("-Wl,--version-script=$(S)/"+modulePath+"/"+exportsScript),
+		internV("-Wl,--version-script=$(S)/", modulePath, "/", exportsScript),
 	)
 	cmdArgs = append(cmdArgs, p.LinkPreludeExtra...)
 	cmdArgs = append(cmdArgs, argWlNoAsNeeded.str())
@@ -424,7 +424,7 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 
 	cmdArgs = append(cmdArgs,
 		argFuseLdLld.str(),
-		internStr("--ld-path="+tc.LLD.string()),
+		internV("--ld-path=", tc.LLD.string()),
 		argWlNoRosegment.str(),
 		argWlBuildIdSha1.str(),
 	)
@@ -446,7 +446,7 @@ func composeDynLibInputs(na *NodeArenas, peerLibPaths, pluginPaths []VFS, fixElf
 	chunks = append(chunks, []VFS{
 		ldSvnInterfaceVFS,
 		ldSvnversionHVFS,
-		source(modulePath + "/" + exportsScript),
+		source(modulePath, "/", exportsScript),
 	})
 
 	return chunks

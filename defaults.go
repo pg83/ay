@@ -255,8 +255,8 @@ func rebasePerArchPeerAddIncl(hostPeerAddIncl []VFS, from, to ISA) []VFS {
 		out[i] = p
 
 		for _, prefix := range archDependentPeerAddInclPrefixes {
-			if p == source(prefix+string(from)) {
-				out[i] = source(prefix + string(to))
+			if p == source(prefix, string(from)) {
+				out[i] = source(prefix, string(to))
 
 				break
 			}

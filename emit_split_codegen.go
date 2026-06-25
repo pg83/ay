@@ -34,9 +34,9 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 	toolLDRef := toolRes.LDRef
 	toolBin := *toolRes.LDPath
 
-	inputIn := source(moduleDir + "/" + prefix + ".in")
-	prefixCpp := build(moduleDir + "/" + prefix + ".cpp")
-	prefixH := build(moduleDir + "/" + prefix + ".h")
+	inputIn := source(moduleDir, "/", prefix, ".in")
+	prefixCpp := build(moduleDir, "/", prefix, ".cpp")
+	prefixH := build(moduleDir, "/", prefix, ".h")
 
 	partRels := make([]string, 0, sc.OutNum)
 	outputs := make([]VFS, 0, sc.OutNum+2)
@@ -44,7 +44,7 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 	for i := 0; i < sc.OutNum; i++ {
 		partRel := prefix + "." + strconv.Itoa(i) + ".cpp"
 		partRels = append(partRels, partRel)
-		outputs = append(outputs, build(moduleDir+"/"+partRel))
+		outputs = append(outputs, build(moduleDir, "/", partRel))
 	}
 
 	outputs = append(outputs, prefixCpp, prefixH)
@@ -66,7 +66,7 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 
 	scRef := ctx.emit.reserve()
 
-	part0 := build(moduleDir + "/" + partRels[0])
+	part0 := build(moduleDir, "/", partRels[0])
 	part0Inc := IncludeDirective{kind: includeQuoted, target: internStr(part0.rel())}
 
 	headerParsed := make([]IncludeDirective, 0, len(sc.OutputIncludes))
@@ -97,7 +97,7 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 	for i, partRel := range partRels {
 		info := &GeneratedFileInfo{
 			ProducerKvP:    pkSC,
-			OutputPath:     build(moduleDir + "/" + partRel),
+			OutputPath:     build(moduleDir, "/", partRel),
 			ProducerRef:    scRef,
 			GeneratorRefs:  []NodeRef{toolLDRef},
 			ParsedIncludes: cppParsed,

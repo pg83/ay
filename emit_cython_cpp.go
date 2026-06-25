@@ -154,20 +154,20 @@ func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 			generated = *stmt.Generated
 		}
 
-		generatedVFS := build(instance.Path.rel() + "/" + generated)
+		generatedVFS := build(instance.Path.rel(), "/", generated)
 
 		var headerVFS []VFS
 
 		if stmt.Header {
 			base := instance.Path.rel() + "/" + cythonNoExt(stmt.Src)
-			headerVFS = append(headerVFS, build(base+".h"))
+			headerVFS = append(headerVFS, build(base, ".h"))
 
 			if stmt.ApiHeader {
-				headerVFS = append(headerVFS, build(base+"_api.h"))
+				headerVFS = append(headerVFS, build(base, "_api.h"))
 			}
 		}
 
-		srcVFS := source(instance.Path.rel() + "/" + stmt.Src)
+		srcVFS := source(instance.Path.rel(), "/", stmt.Src)
 		srcScanIn := in
 		srcScanIn.AddIncl = appendCythonScanAddIncl(srcScanIn.AddIncl, d.cythonAddIncl, py23Variant)
 		srcScanIn.ScanCfg = newScanContext(ctx.parsers, srcScanIn.AddIncl, srcScanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())

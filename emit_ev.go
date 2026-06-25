@@ -13,11 +13,11 @@ var (
 )
 
 var evExtraProtobufHeaders = []VFS{
-	source(pbRuntimeBase + "google/protobuf/io/printer.h"),
-	source(pbRuntimeBase + "google/protobuf/io/zero_copy_sink.h"),
-	source(pbRuntimeBase + "google/protobuf/stubs/hash.h"),
-	source(pbRuntimeBase + "google/protobuf/stubs/stringpiece.h"),
-	source(pbRuntimeBase + "google/protobuf/stubs/strutil.h"),
+	source(pbRuntimeBase, "google/protobuf/io/printer.h"),
+	source(pbRuntimeBase, "google/protobuf/io/zero_copy_sink.h"),
+	source(pbRuntimeBase, "google/protobuf/stubs/hash.h"),
+	source(pbRuntimeBase, "google/protobuf/stubs/stringpiece.h"),
+	source(pbRuntimeBase, "google/protobuf/stubs/strutil.h"),
 }
 
 var evAbseilCleanupHeaders = []VFS{
@@ -55,7 +55,7 @@ func evPeerProtoIncludes(protoInclude []VFS) []STR {
 	out := make([]STR, 0, len(protoInclude))
 
 	for _, p := range protoInclude {
-		token := internStr("-I=" + p.string())
+		token := internV("-I=", p.string())
 
 		if slices.Contains(evProtocConstHead, token) || slices.Contains(out, token) {
 			continue
@@ -101,9 +101,9 @@ func emitEV(
 ) NodeRef {
 	na := emit.nodeArenas()
 
-	evOpts := na.strList(internStr("--plugin=protoc-gen-event2cpp="+event2cppBinary.string()),
+	evOpts := na.strList(internV("--plugin=protoc-gen-event2cpp=", event2cppBinary.string()),
 		argEvent2cppOutB.str(),
-		internStr("-I="+evEventlogIncludePath))
+		internV("-I=", evEventlogIncludePath))
 
 	return emitProtoWrapperPBNode(instance, evRelPath, &evKV,
 		cppStyleguideLDRef, protocLDRef, event2cppLDRef,
@@ -131,8 +131,8 @@ func emitProtoWrapperPBNode(
 ) NodeRef {
 	na := emit.nodeArenas()
 
-	genCC := build(relPath + ".pb.cc")
-	genH := build(relPath + ".pb.h")
+	genCC := build(relPath, ".pb.cc")
+	genH := build(relPath, ".pb.h")
 	srcVFS := source(relPath)
 
 	peerIncludes := evPeerProtoIncludes(protoInclude)
@@ -144,7 +144,7 @@ func emitProtoWrapperPBNode(
 	}
 
 	tail := na.strList(append([]STR{
-		internStr("--plugin=protoc-gen-cpp_styleguide=" + cppStyleguideBinary.string()),
+		internV("--plugin=protoc-gen-cpp_styleguide=", cppStyleguideBinary.string()),
 		internStr(relPath),
 	}, pluginOpts...)...)
 
@@ -202,8 +202,8 @@ func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 		!protoTransitiveHeadersEnabled(d),
 		d.tc, ctx.emit)
 
-	evH := build(evRelPath + ".pb.h")
-	evPbCC := build(evRelPath + ".pb.cc")
+	evH := build(evRelPath, ".pb.h")
+	evPbCC := build(evRelPath, ".pb.cc")
 
 	{
 		directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, "")
@@ -248,7 +248,7 @@ func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 
 		ccIn.IncludeInputs = filtered
 	}
-	wireFormatVFS := source(pbRuntimeBase + "google/protobuf/wire_format.h")
+	wireFormatVFS := source(pbRuntimeBase, "google/protobuf/wire_format.h")
 	ccIn.IncludeInputs = append(ccIn.IncludeInputs, wireFormatVFS)
 	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, evRef)
 	ref, outPath, _ := emitCC(instance, internStr(evPbCCSuffix), evPbCC, ccIn, ctx.host, ctx.emit)

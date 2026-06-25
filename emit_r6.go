@@ -25,7 +25,7 @@ func ragel6OutVFS(instance ModuleInstance, srcRel string) VFS {
 		base = srcRel[i+1:]
 	}
 
-	return build(dir + ragel6OutName(base))
+	return build(dir, ragel6OutName(base))
 }
 
 func ragel6OutName(base string) string {
@@ -47,7 +47,7 @@ func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 
 	outVFS := ragel6OutVFS(instance, srcRel)
 
-	inVFS := source(instance.Path.rel() + "/" + srcRel)
+	inVFS := source(instance.Path.rel(), "/", srcRel)
 
 	effectiveFlags := ragel6Flags
 

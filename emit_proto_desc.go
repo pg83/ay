@@ -149,7 +149,7 @@ func emitDescProtoSubmodule(ctx *GenCtx, instance ModuleInstance, d *ModuleData)
 		imports := walkClosureTail(scanner, protoVFS, scanCfg)
 
 		descOut := build(descProtoOutputRel(instance.Path.rel(), srcRel, protoRelPath))
-		rawprotoOut := build(protoRelPath + "." + hash + ".rawproto")
+		rawprotoOut := build(protoRelPath, ".", hash, ".rawproto")
 
 		ref := emitProtoDescProducer(ctx, instance, protoRelPath, descOut, rawprotoOut,
 			protocLDRef, protocBinary, mid, imports)
@@ -167,8 +167,8 @@ func emitDescProtoSubmodule(ctx *GenCtx, instance ModuleInstance, d *ModuleData)
 	}
 
 	prj := realPrjName(instance.Path.rel())
-	selfProtodesc := build(instance.Path.rel() + "/" + prj + ".self.protodesc")
-	protosrc := build(instance.Path.rel() + "/" + prj + ".protosrc")
+	selfProtodesc := build(instance.Path.rel(), "/", prj, ".self.protodesc")
+	protosrc := build(instance.Path.rel(), "/", prj, ".protosrc")
 
 	mergeRef := emitDescProtoMerge(ctx, instance, selfProtodesc, protosrc, descOutputs, rawprotoOutputs, producerSourceInputs, producerRefs)
 
@@ -197,18 +197,18 @@ func protoNamespaceContribs(d *ModuleData) []VFS {
 func descProtocIncludes(peerProtoAddIncl []VFS, cppOutRoot string) []STR {
 	out := make([]STR, 0, 8+len(peerProtoAddIncl))
 	out = append(out,
-		internStr("-I=./"+cppOutRoot),
-		internStr("-I=$(S)/"+cppOutRoot),
+		internV("-I=./", cppOutRoot),
+		internV("-I=$(S)/", cppOutRoot),
 		argIB2.str(),
 		argIS3.str(),
 	)
 
 	if cppOutRoot != "" {
-		out = append(out, internStr("-I=$(S)/"+cppOutRoot))
+		out = append(out, internV("-I=$(S)/", cppOutRoot))
 	}
 
 	for _, p := range peerProtoAddIncl {
-		out = append(out, internStr("-I="+p.string()))
+		out = append(out, internV("-I=", p.string()))
 	}
 
 	out = append(out,
@@ -313,8 +313,8 @@ func emitProtoDescriptions(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	prj := realPrjName(instance.Path.rel())
-	protodesc := build(instance.Path.rel() + "/" + prj + ".protodesc")
-	tar := build(instance.Path.rel() + "/" + prj + ".tar")
+	protodesc := build(instance.Path.rel(), "/", prj, ".protodesc")
+	tar := build(instance.Path.rel(), "/", prj, ".tar")
 
 	merge := make([]STR, 0, 3+len(closure))
 	merge = append(merge, wrapccPython3STR, mergeFilesVFS.str(), protodesc.str())

@@ -105,7 +105,7 @@ func flatcDirectGeneratedHeaderIncludes(pm *IncludeParserManager, srcRel string)
 	for _, imp := range direct {
 		out = append(out, IncludeDirective{
 			kind:   includeQuoted,
-			target: internStr(imp + ".h"),
+			target: internV(imp, ".h"),
 		})
 	}
 
@@ -115,9 +115,9 @@ func flatcDirectGeneratedHeaderIncludes(pm *IncludeParserManager, srcRel string)
 func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ARG, transitiveImports []VFS, moduleTag STR, tc ModuleToolchain, emit *StreamingEmitter, v *flatcVariant, genDeps []NodeRef) (NodeRef, VFS, VFS, VFS) {
 	na := emit.nodeArenas()
 
-	headerVFS := build(srcRel + ".h")
-	cppVFS := build(srcRel + ".cpp")
-	bfbsVFS := build(strings.TrimSuffix(srcRel, v.srcExt) + v.bfbsExt)
+	headerVFS := build(srcRel, ".h")
+	cppVFS := build(srcRel, ".cpp")
+	bfbsVFS := build(strings.TrimSuffix(srcRel, v.srcExt), v.bfbsExt)
 
 	cmdArgs := na.chunkList(na.strList(tc.Python3, (flatcWrapperVFS).str(), (flatcBinary).str()), v.constFlags)
 
@@ -195,7 +195,7 @@ func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 func emitLibraryFlatcSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
 	srcRel := src.string()
 
-	cppVFS := build(resolveSourceVFS(ctx, instance, srcRel, d.srcDirs).rel() + ".cpp")
+	cppVFS := build(resolveSourceVFS(ctx, instance, srcRel, d.srcDirs).rel(), ".cpp")
 
 	return emitFlatcCppCompile(ctx, instance, cppVFS, in)
 }

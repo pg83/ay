@@ -17,9 +17,9 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 	for _, conf := range d.checkConfigHeaders {
 		confBase := strings.TrimSuffix(path.Base(conf.string()), path.Ext(conf.string()))
 		generated := confBase + ".config.cpp"
-		generatedVFS := build(instance.Path.rel() + "/" + generated)
+		generatedVFS := build(instance.Path.rel(), "/", generated)
 
-		confVFS := source(instance.Path.rel() + "/" + conf.string())
+		confVFS := source(instance.Path.rel(), "/", conf.string())
 
 		inputs := []VFS{buildScriptsCheckConfigHPy}
 		inputs = append(inputs, walkClosure(ctx.scannerFor(instance), confVFS, in.ScanCfg)...)
@@ -30,7 +30,7 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 			Platform: ctx.target,
 			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(d.tc.Python3,
 				argSBuildScriptsCheckConfigHPy.str(),
-				internStr(instance.Path.rel()+"/"+conf.string()),
+				internV(instance.Path.rel(), "/", conf.string()),
 				(generatedVFS).str())),
 				Env: env}),
 			Env:          env,

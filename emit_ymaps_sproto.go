@@ -39,7 +39,7 @@ func emitYmapsSprotoHeaders(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 
 	for _, srcTok := range d.ymapsSprotoSrcs {
 		protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcTok.string())
-		sprotoH := build(strings.TrimSuffix(protoRelPath, ".proto") + ".sproto.h")
+		sprotoH := build(strings.TrimSuffix(protoRelPath, ".proto"), ".sproto.h")
 		sprotoRef := ctx.emit.reserve()
 
 		pbhImports := protoDirectPbHIncludes(ctx.parsers, protoRelPath, outRoot)
@@ -69,11 +69,11 @@ func emitYmapsSprotoHeader(ctx *GenCtx, instance ModuleInstance, p ymapsSprotoPe
 
 	cmdArgs := na.chunkList(na.strList(
 		sprotocBinary.str(),
-		internStr("-I=./"+outRoot),
-		internStr("-I=$(S)/"+outRoot),
+		internV("-I=./", outRoot),
+		internV("-I=$(S)/", outRoot),
 		argIB2.str(),
 		argISContribLibsProtobufSrc.str(),
-		internStr("--sproto_out=$(B)/"+outRoot),
+		internV("--sproto_out=$(B)/", outRoot),
 		internStr(p.protoRelPath),
 	))
 
@@ -125,7 +125,7 @@ func sprotoInducedHeaders(pbhImports []IncludeDirective) []IncludeDirective {
 			continue
 		}
 
-		out = append(out, IncludeDirective{kind: dir.kind, target: internStr(base + ".sproto.h")})
+		out = append(out, IncludeDirective{kind: dir.kind, target: internV(base, ".sproto.h")})
 	}
 
 	return out

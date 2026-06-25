@@ -100,11 +100,11 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 
 		_, secondLevel := protoGenHeaders[headerInput.rel()]
 
-		serializedCPPPath := build(serializedBase + "_serialized.cpp")
+		serializedCPPPath := build(serializedBase, "_serialized.cpp")
 		var serializedHPath VFS
 
 		if withHeader {
-			serializedHPath = build(serializedBase + "_serialized.h")
+			serializedHPath = build(serializedBase, "_serialized.h")
 		}
 
 		enRef := ctx.emit.reserve()

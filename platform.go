@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	wrapccPython3STR = internStr("$(B)/resources/" + resourcePatternYMakePython3 + "/bin/python3")
+	wrapccPython3STR = internV("$(B)/resources/", resourcePatternYMakePython3, "/bin/python3")
 	wrapccPyChunk    = []VFS{wrapccPyVFS}
 )
 
@@ -74,7 +74,7 @@ func sysrootArgsFor(os OS, flags map[string]string) []STR {
 		sysroot = "--sysroot=/nowhere"
 	}
 
-	return []STR{internStr(sysroot), internStr("-B" + sdkRoot + "/usr/bin")}
+	return []STR{internStr(sysroot), internV("-B", sdkRoot, "/usr/bin")}
 }
 
 func wrapccPrefixFor(flags map[string]string) (head, tail []STR) {
@@ -137,11 +137,11 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 		BuildTypeUpperSTR: internStr(strings.ToUpper(buildType)),
 	}
 
-	p.TargetArg = internStr("--target=" + p.Triple)
+	p.TargetArg = internV("--target=", p.Triple)
 	p.MultiarchLibPathSTR = internStr(p.multiarchLibPath(flags["OPENSOURCE"] == "yes"))
 	p.WrapccHead, p.WrapccTail = wrapccPrefixFor(flags)
 
-	clangRes := internStr(resourcePatternClangTool + p.ClangVer)
+	clangRes := internV(resourcePatternClangTool, p.ClangVer)
 	p.CCUsesResources = []STR{clangRes}
 
 	if len(p.WrapccHead) > 0 {

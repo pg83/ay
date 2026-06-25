@@ -461,7 +461,7 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 		pySource := source(resolvedRel)
 
 		if generated {
-			pySource = build(modulePath + "/" + srcRel)
+			pySource = build(modulePath, "/", srcRel)
 			resolvedRel = modulePath + "/" + srcRel
 		}
 
@@ -496,7 +496,7 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 
 		if !d.pyBuildNoPYC {
 			ypKey := "resfs/file/py/" + keyPrefix + srcRel + ".yapyc3"
-			ypPathInput := build(modulePath + "/" + srcRel + suffix)
+			ypPathInput := build(modulePath, "/", srcRel, suffix)
 
 			ypKvHash := "resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + suffix + "\"}"
 			ypKvCmd := "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix

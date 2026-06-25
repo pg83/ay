@@ -25,7 +25,7 @@ func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
 		base = instance.Path.rel() + "/_/" + srcRel
 	}
 
-	return build(base + ".asm"), build(base + instance.Platform.objectSuffix())
+	return build(base, ".asm"), build(base, instance.Platform.objectSuffix())
 }
 
 func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, extraInputs []VFS, extraDepRefs []NodeRef, tc ModuleToolchain, emit *StreamingEmitter) (NodeRef, VFS, VFS) {
@@ -40,7 +40,7 @@ func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(tc.Python3), rodataConstArgs, na.strList(internStr(toolName), (srcVFS).str(), (asmVFS).str())),
-			Env: pythonEnv}, Cmd{CmdArgs: na.chunkList(yasmConstHead, na.strList(argD.str(), internStr("_"+string(instance.Platform.ISA)+"_")), rodataYasmConstArgs, na.strList((outVFS).str(), (asmVFS).str())),
+			Env: pythonEnv}, Cmd{CmdArgs: na.chunkList(yasmConstHead, na.strList(argD.str(), internV("_", string(instance.Platform.ISA), "_")), rodataYasmConstArgs, na.strList((outVFS).str(), (asmVFS).str())),
 			Env: yasmEnv}),
 		Env: yasmEnv,
 		Inputs: na.inputList(na.vfsList(yasmBinaryVFS,

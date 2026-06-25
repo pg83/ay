@@ -20,7 +20,7 @@ func (CythonIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAlloca
 	}
 
 	if strings.HasSuffix(rel, ".pyx") {
-		add(IncludeDirective{kind: includeCythonSibling, target: internStr(path.Base(rel[:len(rel)-len(".pyx")]) + ".pxd")})
+		add(IncludeDirective{kind: includeCythonSibling, target: internV(path.Base(rel[:len(rel)-len(".pyx")]), ".pxd")})
 	}
 
 	eachLine(data, func(line []byte) {
@@ -87,8 +87,8 @@ func addCythonPxdCandidates(add func(IncludeDirective), path string) {
 		return
 	}
 
-	add(IncludeDirective{kind: includeCythonOptional, target: internStr(path + ".pxd")})
-	add(IncludeDirective{kind: includeCythonFallback, target: internStr(path + "/__init__.pxd")})
+	add(IncludeDirective{kind: includeCythonOptional, target: internV(path, ".pxd")})
+	add(IncludeDirective{kind: includeCythonFallback, target: internV(path, "/__init__.pxd")})
 }
 
 func addCythonCimportFrom(add func(IncludeDirective), module, names string) {

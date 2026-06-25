@@ -14,7 +14,7 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 
 	na := ctx.emit.nodeArenas()
 
-	configOpts := na.strList(internStr("--plugin=protoc-gen-config="+configPluginBinary.string()),
+	configOpts := na.strList(internV("--plugin=protoc-gen-config=", configPluginBinary.string()),
 		argConfigOutB.str())
 
 	cfgImports := walkClosureTail(ctx.scannerFor(instance), cfgSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()).ScanCfg)
@@ -27,8 +27,8 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		!protoTransitiveHeadersEnabled(d),
 		d.tc, ctx.emit)
 
-	cfgH := build(cfgRelPath + ".pb.h")
-	cfgPbCC := build(cfgRelPath + ".pb.cc")
+	cfgH := build(cfgRelPath, ".pb.h")
+	cfgPbCC := build(cfgRelPath, ".pb.cc")
 
 	outputRoot := protoCPPOutRoot(d)
 	cfgGenRefs := []NodeRef{protocLDRef, cppStyleguideLDRef, configPluginLDRef}

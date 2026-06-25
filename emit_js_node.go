@@ -5,7 +5,7 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 
 	joinSrcs := buildScriptsGenJoinSrcsPy
 
-	outVFS := build(instance.Path.rel() + "/" + allName)
+	outVFS := build(instance.Path.rel(), "/", allName)
 
 	statsPlatform := instance.Platform
 
@@ -22,7 +22,7 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 	)
 
 	for _, s := range sources {
-		cmdArgs = append(cmdArgs, internStr(instance.Path.rel()+"/"+s))
+		cmdArgs = append(cmdArgs, internV(instance.Path.rel(), "/", s))
 	}
 
 	cmdArgs = append(cmdArgs, argYaEndCommandFile.str())
@@ -32,7 +32,7 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 	srcVFSs := make([]VFS, 0, len(sources))
 
 	for _, s := range sources {
-		srcVFSs = append(srcVFSs, source(instance.Path.rel()+"/"+s))
+		srcVFSs = append(srcVFSs, source(instance.Path.rel(), "/", s))
 	}
 
 	inputs := na.inputList(scripts[joinSrcs], srcVFSs, closure)

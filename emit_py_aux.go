@@ -28,7 +28,7 @@ func emitGeneratedPyAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleDat
 		}
 
 		genInputs := info.SourceInputs
-		src := build(instance.Path.rel() + "/" + srcRel.string())
+		src := build(instance.Path.rel(), "/", srcRel.string())
 		entries = append(entries, PyProtoAuxEntry{path: src, key: generatedPyResourceKey(instance.Path.rel(), d, srcRel.string()), inputs: genInputs})
 
 		if !d.pyBuildNoPYC {
@@ -38,7 +38,7 @@ func emitGeneratedPyAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleDat
 				suffix = "." + pySrcYapycSuffix(instance.Path.rel()) + ".yapyc3"
 			}
 
-			yp := build(instance.Path.rel() + "/" + srcRel.string() + suffix)
+			yp := build(instance.Path.rel(), "/", srcRel.string(), suffix)
 			entries = append(entries, PyProtoAuxEntry{path: yp, key: generatedPyResourceKey(instance.Path.rel(), d, srcRel.string()+".yapyc3"), inputs: genInputs})
 		}
 	}
@@ -182,7 +182,7 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 	res := &RawAuxResourceChunksResult{}
 
 	for _, ch := range chunks {
-		aux := build(instance.Path.rel() + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path.rel(), moduleTag) + "_raw.auxcpp")
+		aux := build(instance.Path.rel(), "/", protoResourceHash(ch.hashInputs, "$S/"+instance.Path.rel(), moduleTag), "_raw.auxcpp")
 
 		auxRef := ctx.emit.reserve()
 		sourceInputs := pyProtoSourceInputs(ch.inputs)

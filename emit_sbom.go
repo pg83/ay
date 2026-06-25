@@ -72,7 +72,7 @@ func emitSbomComponent(ctx *GenCtx, instance ModuleInstance, d *ModuleData, real
 		modver = "unknown"
 	}
 
-	out := build(moddir + "/" + realPrjName + "." + lang + ".component.sbom")
+	out := build(moddir, "/", realPrjName, ".", lang, ".component.sbom")
 	scriptVFS := source(sbomGenScriptRel)
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -108,7 +108,7 @@ func emitSbomToolchainComponent(ctx *GenCtx, instance ModuleInstance, toolchainN
 		ver = "unknown"
 	}
 
-	out := build(moddir + "/toolchain.component.sbom")
+	out := build(moddir, "/toolchain.component.sbom")
 	scriptVFS := source(sbomGenScriptRel)
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 

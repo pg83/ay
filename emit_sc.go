@@ -27,7 +27,7 @@ func emitLibrarySCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 	domLDRef, domBinary := domRes.LDRef, *domRes.LDPath
 
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
-	headerVFS := build(srcVFS.rel() + ".h")
+	headerVFS := build(srcVFS.rel(), ".h")
 
 	runtimeClosure := walkClosure(ctx.scannerFor(instance), domschemeRuntimeVFS, in.ScanCfg)
 

@@ -11,7 +11,7 @@ func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 
 	base := strings.TrimSuffix(filepath.Base(gztSource.rel()), filepath.Ext(gztSource.rel()))
 	genProtoName := base + ".proto"
-	genProto := build(moddir + "/" + genProtoName)
+	genProto := build(moddir, "/", genProtoName)
 
 	converterRef, converterBin := ctx.tool(argDictGazetteerConverter)
 
@@ -51,7 +51,7 @@ func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	}
 
 	generatedParse := gztGeneratedProtoParse(ctx, gztSource, inducedProtos)
-	ctx.parsers.injectSourceParse(source(moddir+"/"+genProtoName), generatedParse)
+	ctx.parsers.injectSourceParse(source(moddir, "/", genProtoName), generatedParse)
 
 	ctx.codegenFor(instance).register(&GeneratedFileInfo{
 		ProducerKvP:    pkGZ,
@@ -78,7 +78,7 @@ func emitLibraryGztProtoCompile(ctx *GenCtx, instance ModuleInstance, d *ModuleD
 func gztCmdArgs(converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) []STR {
 	args := make([]STR, 0, 6+len(protoInclude))
 	args = append(args, converterBin.str())
-	args = append(args, internStr("-I"+pbRuntimeBaseVFS.string()))
+	args = append(args, internV("-I", pbRuntimeBaseVFS.string()))
 
 	seen := make(map[string]struct{}, 2+len(protoInclude))
 	emitI := func(path string) {
@@ -87,7 +87,7 @@ func gztCmdArgs(converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) [
 		}
 
 		seen[path] = struct{}{}
-		args = append(args, internStr("-I"+path))
+		args = append(args, internV("-I", path))
 	}
 
 	emitI(strB.string())
@@ -97,7 +97,7 @@ func gztCmdArgs(converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) [
 		emitI(p.string())
 	}
 
-	args = append(args, internStr("-I"+strS.string()))
+	args = append(args, internV("-I", strS.string()))
 	args = append(args, gztSource.str(), genProto.str())
 
 	return args
@@ -155,7 +155,7 @@ func gztGeneratedProtoParse(ctx *GenCtx, gztSource VFS, inducedProtos []VFS) Par
 		t := dir.target.string()
 
 		if strings.HasSuffix(t, ".proto") {
-			hcpp = append(hcpp, IncludeDirective{kind: dir.kind, target: internStr(strings.TrimSuffix(t, ".proto") + ".pb.h")})
+			hcpp = append(hcpp, IncludeDirective{kind: dir.kind, target: internV(strings.TrimSuffix(t, ".proto"), ".pb.h")})
 		}
 	}
 

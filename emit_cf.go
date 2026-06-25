@@ -29,7 +29,7 @@ func emitLibraryHInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, s
 	srcRel := src.string()
 
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
-	outVFS := build(instance.Path.rel() + "/" + strings.TrimSuffix(srcRel, ".in"))
+	outVFS := build(instance.Path.rel(), "/", strings.TrimSuffix(srcRel, ".in"))
 
 	emitConfigureFile(ctx, instance, d, srcVFS, outVFS, in)
 
@@ -40,7 +40,7 @@ func emitLibraryCInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, s
 	srcRel := src.string()
 
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
-	outVFS := build(instance.Path.rel() + "/" + strings.TrimSuffix(srcRel, ".in"))
+	outVFS := build(instance.Path.rel(), "/", strings.TrimSuffix(srcRel, ".in"))
 
 	emitConfigureFile(ctx, instance, d, srcVFS, outVFS, in)
 

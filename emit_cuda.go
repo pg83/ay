@@ -45,7 +45,7 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	cmdArgs := ArgChunks(na.chunkList(
 		na.strList(wrapccPython3STR, cudaCompileScriptVFS.str(), cudaMtimeFlagStr, mtimeVFS.str(), cudaCustomPidFlagStr, pidVFS.str(), cudaNvccBinStr, cudaNvccStdStr),
 		nvccFlagsHead,
-		na.strList(internStr("--keep-dir=$(B)/"+instance.Path.rel())),
+		na.strList(internV("--keep-dir=$(B)/", instance.Path.rel())),
 		nvccFlagsTail,
 		in.CudaNvccFlags,
 		na.strList(argDashC.str(), (inVFS).str(), argDashO.str(), (outVFS).str()),

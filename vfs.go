@@ -39,44 +39,59 @@ func (v VFS) str() STR {
 
 var vfsPrefixScratch []byte
 
-func internPrefixed(prefix, rel string) STR {
-	vfsPrefixScratch = append(vfsPrefixScratch[:0], prefix...)
-	vfsPrefixScratch = append(vfsPrefixScratch, rel...)
+// vfsScratchConcat builds prefix + parts into the shared scratch buffer without
+// allocating the joined string. parts must not escape (callers only range it),
+// so the variadic backing array stays on the caller's stack.
+func vfsScratchConcat(prefix string, parts []string) []byte {
+	b := append(vfsPrefixScratch[:0], prefix...)
 
-	return internBytes(vfsPrefixScratch)
+	for _, p := range parts {
+		b = append(b, p...)
+	}
+
+	vfsPrefixScratch = b
+
+	return b
+}
+
+func internVInto(prefix string, parts []string) STR {
+	return internBytes(vfsScratchConcat(prefix, parts))
+}
+
+func internedVInto(prefix string, parts []string) STR {
+	return internedBytes(vfsScratchConcat(prefix, parts))
+}
+
+func internV(parts ...string) STR {
+	return internVInto("", parts)
+}
+
+func internedV(parts ...string) STR {
+	return internedVInto("", parts)
+}
+
+func internPrefixed(prefix, rel string) STR {
+	return internVInto(prefix, []string{rel})
 }
 
 func internedPrefixed(prefix, rel string) STR {
-	vfsPrefixScratch = append(vfsPrefixScratch[:0], prefix...)
-	vfsPrefixScratch = append(vfsPrefixScratch, rel...)
-
-	return internedBytes(vfsPrefixScratch)
+	return internedVInto(prefix, []string{rel})
 }
 
 func internPrefixedJoined(prefix, dir, rel string) STR {
-	vfsPrefixScratch = append(vfsPrefixScratch[:0], prefix...)
-
-	if dir != "" {
-		vfsPrefixScratch = append(vfsPrefixScratch, dir...)
-		vfsPrefixScratch = append(vfsPrefixScratch, '/')
+	if dir == "" {
+		return internVInto(prefix, []string{rel})
 	}
 
-	vfsPrefixScratch = append(vfsPrefixScratch, rel...)
-
-	return internBytes(vfsPrefixScratch)
+	return internVInto(prefix, []string{dir, "/", rel})
 }
 
 func internedPrefixedJoined(prefix, dir, rel string) STR {
-	vfsPrefixScratch = append(vfsPrefixScratch[:0], prefix...)
-
-	if dir != "" {
-		vfsPrefixScratch = append(vfsPrefixScratch, dir...)
-		vfsPrefixScratch = append(vfsPrefixScratch, '/')
+	if dir == "" {
+		return internedVInto(prefix, []string{rel})
 	}
 
-	vfsPrefixScratch = append(vfsPrefixScratch, rel...)
-
-	return internedBytes(vfsPrefixScratch)
+	return internedVInto(prefix, []string{dir, "/", rel})
 }
 
 func sourceJoined(dir, rel string) VFS {
@@ -94,12 +109,12 @@ func sourceBytes(rel []byte) VFS {
 	return VFS(uint32(internBytes(vfsPrefixScratch))<<1 | uint32(VFSRootSource))
 }
 
-func source(rel string) VFS {
-	return VFS(uint32(internPrefixed("$(S)/", rel))<<1 | uint32(VFSRootSource))
+func source(parts ...string) VFS {
+	return VFS(uint32(internVInto("$(S)/", parts))<<1 | uint32(VFSRootSource))
 }
 
-func build(rel string) VFS {
-	return VFS(uint32(internPrefixed("$(B)/", rel))<<1 | uint32(VFSRootBuild))
+func build(parts ...string) VFS {
+	return VFS(uint32(internVInto("$(B)/", parts))<<1 | uint32(VFSRootBuild))
 }
 
 func (id STR) vfs() VFS {

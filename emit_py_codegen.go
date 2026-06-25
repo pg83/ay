@@ -54,7 +54,7 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		moduleName := srcAbs.rel() + "-"
 
 		if genInfo != nil {
-			srcAbs = build(instance.Path.rel() + "/" + srcRel.string())
+			srcAbs = build(instance.Path.rel(), "/", srcRel.string())
 
 			if i < len(d.pySrcsFullName) && d.pySrcsFullName[i] {
 				moduleName = srcAbs.rel() + "-"
@@ -66,9 +66,9 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		var outputPath VFS
 
 		if strings.Contains(srcRel.string(), "/") {
-			outputPath = build(instance.Path.rel() + "/" + srcRel.string() + "." + pySrcYapycSuffix(instance.Path.rel()) + ".yapyc3")
+			outputPath = build(instance.Path.rel(), "/", srcRel.string(), ".", pySrcYapycSuffix(instance.Path.rel()), ".yapyc3")
 		} else {
-			outputPath = build(instance.Path.rel() + "/" + srcRel.string() + ".yapyc3")
+			outputPath = build(instance.Path.rel(), "/", srcRel.string(), ".yapyc3")
 		}
 
 		cmdArgs := na.chunkList(py3ccArgHead, na.strList(internStr(moduleName),
@@ -158,7 +158,7 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 		}
 
 		regCpp := arg.string() + ".reg3.cpp"
-		regCppVFS := build(instance.Path.rel() + "/" + regCpp)
+		regCppVFS := build(instance.Path.rel(), "/", regCpp)
 		regCppAbs := regCppVFS.string()
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
