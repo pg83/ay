@@ -35,8 +35,6 @@ func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 
 	emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef, ctx.emit)
 
-	ccSrcRel := strings.TrimPrefix(outVFS.rel(), instance.Path.rel()+"/")
-
 	ccIn := in
 	ccIn.IncludeInputs = window
 	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, window, lxRef)
@@ -46,7 +44,7 @@ func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 		ccIn.PerSourceCFlags = append(append([]ARG(nil), in.PerSourceCFlags...), argWnoUnusedVariable)
 	}
 
-	ccRef, ccOut, _ := emitCC(instance, internStr(ccSrcRel), outVFS, ccIn, ctx.host, ctx.emit)
+	ccRef, ccOut, _ := emitCC(instance, outVFS.str(), outVFS, ccIn, ctx.host, ctx.emit)
 
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }

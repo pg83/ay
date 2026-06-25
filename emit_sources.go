@@ -55,8 +55,14 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR,
 	}
 
 	if v := src.vfs(); v != 0 {
-		if info := codegenRegForInstance(ctx, instance).lookup(v); info != nil {
-			in.PerSourceCFlags = info.CompileCFlags
+		if info := codegenRegForInstance(ctx, instance).lookup(v); info != nil && info.Compile != nil {
+			sp := info.Compile
+			in.PerSourceCFlags = sp.CFlags
+			in.FlatOutput = sp.FlatOutput
+			in.Variant = sp.Variant
+			in.ObjectSuffixStem = sp.ObjectSuffixStem
+			in.Py3Suffix = sp.Py3Suffix
+			in.ForceCxx = sp.ForceCxx
 		}
 	}
 

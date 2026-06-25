@@ -103,13 +103,11 @@ func emitLibraryRagel6Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		return nil
 	}
 
-	ccSrcRel := strings.TrimPrefix(r6Out.rel(), instance.Path.rel()+"/")
-
 	ccIn := in
 	ccIn.IncludeInputs = window
 	ccIn.PerSourceCFlags = append(append([]ARG(nil), in.PerSourceCFlags...), argWnoImplicitFallthrough)
 	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, window, r6Ref)
-	ccRef, ccOut, _ := emitCC(instance, internStr(ccSrcRel), r6Out, ccIn, ctx.host, ctx.emit)
+	ccRef, ccOut, _ := emitCC(instance, r6Out.str(), r6Out, ccIn, ctx.host, ctx.emit)
 
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }

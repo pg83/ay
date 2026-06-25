@@ -1838,15 +1838,13 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		jsRef, joinOutVFS := emitJS(srcInstance, js.OutputName, jsSources, joinClosure, ctx.target, d.tc, ctx.scripts, ctx.emit)
 
-		jsRel := strings.TrimPrefix(joinOutVFS.rel(), srcInstance.Path.rel()+"/")
-
 		ccIncludeInputs := jsCCIncludeInputs(srcInstance, joinOutVFS, jsSources, ccClosure, ctx.scripts)
 
 		ccIn := moduleInputs
 		ccIn.ExtraDepRefs = []NodeRef{jsRef}
 		ccIn.IncludeInputs = ccIncludeInputs
 
-		ref, outPath, _ := emitCC(srcInstance, internStr(jsRel), joinOutVFS, ccIn, ctx.host, ctx.emit)
+		ref, outPath, _ := emitCC(srcInstance, joinOutVFS.str(), joinOutVFS, ccIn, ctx.host, ctx.emit)
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, outPath)
 		arDeclMeta[outPath] = SrcMeta{Prio: stmtPrioDefault, Seq: js.Seq, Generated: true}

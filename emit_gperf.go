@@ -60,12 +60,11 @@ func emitLibraryGperfSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	gpParsed := ctx.scannerFor(instance).parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesCpp)
 	registerBoundGeneratedParsedOutput(ctx, instance, pkGP, genVFS, gpParsed, gpRef, []NodeRef{gperfLDRef})
 
-	ccSrcRel := strings.TrimPrefix(genVFS.rel(), instance.Path.rel()+"/")
 	ccIn := in
 
 	ccIn.IncludeInputs = append([]VFS{genVFS}, srcClosure...)
 	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, srcClosure, gpRef)
-	ccRef, ccOut, _ := emitCC(instance, internStr(ccSrcRel), genVFS, ccIn, ctx.host, ctx.emit)
+	ccRef, ccOut, _ := emitCC(instance, genVFS.str(), genVFS, ccIn, ctx.host, ctx.emit)
 
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }

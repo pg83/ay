@@ -93,17 +93,17 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 
 	registerBoundGeneratedParsedOutput(ctx, instance, pkYC, generatedVFS, generatedParsed, ycRef, []NodeRef{bisonRef, m4Ref})
 
-	var compileCFlags []ARG
+	spec := &CompileSpec{FlatOutput: d.flatSrc(src)}
 
 	if extras := d.perSrcCFlagsFor(src); extras != nil {
-		compileCFlags = append(compileCFlags, *extras...)
+		spec.CFlags = append(spec.CFlags, *extras...)
 	}
 
 	if preprocessHeader {
-		compileCFlags = append(compileCFlags, argWnoUnusedButSetVariable, argWnoDeprecatedCopy)
+		spec.CFlags = append(spec.CFlags, argWnoUnusedButSetVariable, argWnoDeprecatedCopy)
 	}
 
-	codegenRegForInstance(ctx, instance).setCompileCFlags(generatedVFS, compileCFlags)
+	codegenRegForInstance(ctx, instance).setCompileSpec(generatedVFS, spec)
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envBISON_PKGDATADIR, Value: strBisonPkgData}, {Name: envM4, Value: m4Bin}}
 	preprocessEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
