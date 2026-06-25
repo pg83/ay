@@ -71,13 +71,23 @@ func dedup[T ~uint32](lists ...[]T) []T {
 
 func concat[T any](lists ...[]T) []T {
 	total := 0
+	nonEmpty := 0
+	last := -1
 
-	for _, l := range lists {
-		total += len(l)
+	for i, l := range lists {
+		if len(l) > 0 {
+			total += len(l)
+			nonEmpty++
+			last = i
+		}
 	}
 
 	if total == 0 {
 		return nil
+	}
+
+	if nonEmpty == 1 {
+		return lists[last][:total:total]
 	}
 
 	out := make([]T, 0, total)
