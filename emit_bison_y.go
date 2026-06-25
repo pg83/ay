@@ -128,7 +128,7 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 		})
 		inputs = append(inputs, bisonPreprocessPyVFS)
 		inputs = append(inputs, bisonCppSkeletonInputs...)
-		inputs = dedupVFS(inputs, generatedOutputClosure(ctx, instance, headerVFS, in))
+		inputs = dedupVFS(inputs, walkClosureTail(ctx.scannerFor(instance), headerVFS, in.ScanCfg))
 	}
 
 	ctx.emit.emitReserved(&Node{
