@@ -13,7 +13,7 @@ func TestApplyUnknownStmt_ExcludeTagsAcceptsTagNames(t *testing.T) {
 	tag := "PY" + "_" + "PROTO"
 
 	err := try(func() {
-		applyUnknownStmt(nil, "mod", &UnknownStmt{Name: tokExcludeTags, Args: STRS(tag)}, d, env)
+		applyUnknownStmt(nil, "mod", UnknownStmt{Name: tokExcludeTags, Args: STRS(tag)}, d, env)
 	})
 
 	if err != nil {
@@ -29,7 +29,7 @@ func TestApplyUnknownStmt_AddInclSelf(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
 
 	d := &ModuleData{}
-	applyUnknownStmt(nil, "contrib/libs/foo", &UnknownStmt{Name: internTok("ADDINCLSELF")}, d, env)
+	applyUnknownStmt(nil, "contrib/libs/foo", UnknownStmt{Name: internTok("ADDINCLSELF")}, d, env)
 	d.materializeAddIncl()
 
 	want := source("contrib/libs/foo")
@@ -46,7 +46,7 @@ func TestApplyUnknownStmt_AddInclSelf(t *testing.T) {
 	}
 
 	dc := &ModuleData{}
-	applyUnknownStmt(nil, "contrib/libs/bar", &UnknownStmt{Name: internTok("ADDINCLSELF"), Args: STRS("FOR", "cython")}, dc, env)
+	applyUnknownStmt(nil, "contrib/libs/bar", UnknownStmt{Name: internTok("ADDINCLSELF"), Args: STRS("FOR", "cython")}, dc, env)
 
 	if len(dc.cythonAddIncl) != 1 || dc.cythonAddIncl[0] != source("contrib/libs/bar") {
 		t.Fatalf("ADDINCLSELF(FOR cython): cythonAddIncl = %v, want [%v]", dc.cythonAddIncl, source("contrib/libs/bar"))
@@ -145,7 +145,7 @@ func TestApplyUnknownStmt_LLVMBCRequiresConfiguredVersion(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
 
 	err := try(func() {
-		applyUnknownStmt(nil, "mod", &UnknownStmt{Name: tokLlvmBc, Args: STRS("src.cpp", "generated.cpp")}, &ModuleData{}, env)
+		applyUnknownStmt(nil, "mod", UnknownStmt{Name: tokLlvmBc, Args: STRS("src.cpp", "generated.cpp")}, &ModuleData{}, env)
 	})
 
 	if err == nil {
@@ -203,7 +203,7 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 			env := buildIfEnv(ModuleInstance{Platform: platform})
 			data := &ModuleData{}
 
-			applyUnknownStmt(nil, "mod", &UnknownStmt{Name: internTok(tt.useMacro)}, data, env)
+			applyUnknownStmt(nil, "mod", UnknownStmt{Name: internTok(tt.useMacro)}, data, env)
 
 			if got, want := env.string(envCLANG_BC_ROOT), "$"+tt.resourceKey; got != want {
 				t.Fatalf("CLANG_BC_ROOT = %q, want %q", got, want)
@@ -214,7 +214,7 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 			}
 
 			if err := try(func() {
-				applyUnknownStmt(nil, "mod", &UnknownStmt{Name: tokLlvmBc, Args: STRS("src.cpp", "generated.cpp", "NAME", "Bytecode")}, data, env)
+				applyUnknownStmt(nil, "mod", UnknownStmt{Name: tokLlvmBc, Args: STRS("src.cpp", "generated.cpp", "NAME", "Bytecode")}, data, env)
 			}); err != nil {
 				t.Fatalf("applyUnknownStmt rejected configured LLVM_BC: %v", err)
 			}
