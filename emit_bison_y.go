@@ -82,6 +82,8 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 
 	ycRef := ctx.emit.reserve()
 
+	reg := ctx.codegenFor(instance)
+
 	headerInfo := &GeneratedFileInfo{
 		ProducerKvP:    pkYC,
 		OutputPath:     headerVFS,
@@ -94,21 +96,13 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 		headerInfo.ClosureLeaves = []VFS{srcVFS}
 	}
 
-	ctx.codegenFor(instance).register(headerInfo)
+	reg.register(headerInfo)
 
 	generatedParsed := []IncludeDirective{{kind: includeQuoted, target: internStr(headerVFS.rel())}}
 
 	if preprocessHeader {
 		generatedParsed = bisonGeneratedCPPParsed(ctx, instance, srcVFS, headerVFS)
 	}
-
-	ctx.codegenFor(instance).register(&GeneratedFileInfo{
-		ProducerKvP:    pkYC,
-		OutputPath:     generatedVFS,
-		ProducerRef:    ycRef,
-		GeneratorRefs:  []NodeRef{bisonRef, m4Ref},
-		ParsedIncludes: generatedParsed,
-	})
 
 	spec := &CompileSpec{FlatOutput: d.flatSrc(src)}
 
@@ -120,7 +114,14 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 		spec.CFlags = append(spec.CFlags, argWnoUnusedButSetVariable, argWnoDeprecatedCopy)
 	}
 
-	ctx.codegenFor(instance).setCompileSpec(generatedVFS, spec)
+	reg.register(&GeneratedFileInfo{
+		ProducerKvP:    pkYC,
+		OutputPath:     generatedVFS,
+		ProducerRef:    ycRef,
+		GeneratorRefs:  []NodeRef{bisonRef, m4Ref},
+		ParsedIncludes: generatedParsed,
+		Compile:        spec,
+	})
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envBISON_PKGDATADIR, Value: strBisonPkgData}, {Name: envM4, Value: m4Bin}}
 	preprocessEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}

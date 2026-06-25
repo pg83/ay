@@ -14,7 +14,7 @@ func emitBundles(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 
 		ref := ctx.emit.reserve()
 		emitBundleNode(ctx, instance, d.tc.Python3, src, dst, srcRef, resolved, ref)
-		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		reg.register(&GeneratedFileInfo{
 			ProducerKvP:    pkBN,
 			OutputPath:     dst,
 			ProducerRef:    ref,

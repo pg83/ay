@@ -212,7 +212,8 @@ func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 		evHParsed = append(evHParsed, directImports...)
 		evHParsed = append(evHParsed, protobufRuntimeDirectives...)
 		evHParsed = append(evHParsed, evExtras...)
-		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		reg := ctx.codegenFor(instance)
+		reg.register(&GeneratedFileInfo{
 			ProducerKvP:    pkEV,
 			OutputPath:     evH,
 			ProducerRef:    evRef,
@@ -222,7 +223,7 @@ func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 		evCCParsed := make([]IncludeDirective, 0, 1+len(protobufRuntimeDirectives))
 		evCCParsed = append(evCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(evH.rel())})
 		evCCParsed = append(evCCParsed, protobufRuntimeDirectives...)
-		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		reg.register(&GeneratedFileInfo{
 			ProducerKvP:    pkEV,
 			OutputPath:     evPbCC,
 			ProducerRef:    evRef,

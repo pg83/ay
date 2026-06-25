@@ -100,7 +100,7 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	pyRef := ctx.emit.reserve()
 
 	registerPYOutput := func(out VFS, parsed []IncludeDirective) {
-		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		reg.register(&GeneratedFileInfo{
 			ProducerKvP:    pkPY,
 			OutputPath:     out,
 			ProducerRef:    pyRef,

@@ -98,6 +98,10 @@ func emitLibraryRagel6Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		ProducerRef:    r6Ref,
 		GeneratorRefs:  []NodeRef{ragelLDRef},
 		ParsedIncludes: r6Parsed,
+		Compile: &CompileSpec{
+			FlatOutput: in.FlatOutput,
+			CFlags:     append(append([]ARG(nil), in.PerSourceCFlags...), argWnoImplicitFallthrough),
+		},
 	})
 
 	window := walkClosure(ctx.scannerFor(instance), r6Out, in.ScanCfg)
@@ -109,11 +113,6 @@ func emitLibraryRagel6Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	if !isCxxSource(r6Out.rel()) {
 		return nil
 	}
-
-	ctx.codegenFor(instance).setCompileSpec(r6Out, &CompileSpec{
-		FlatOutput: in.FlatOutput,
-		CFlags:     append(append([]ARG(nil), in.PerSourceCFlags...), argWnoImplicitFallthrough),
-	})
 
 	return emitOneSource(ctx, instance, d, r6Out.str(), in)
 }
