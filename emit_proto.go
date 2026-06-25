@@ -316,7 +316,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		genProtoImportRels = info.ProtoImportRels
 	}
 
-	extraProtoDeps = resolveCodegenDepRefsIncl(ctx, instance, transitiveImports, extraProtoDeps...)
+	extraProtoDeps = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, transitiveImports, extraProtoDeps...)
 
 	pbRef := emitPB(
 		instance, protoRelPath, protoSrcOverride, pe.cppStyleguideLDRef, pe.protocLDRef,
@@ -706,7 +706,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 			ccIn.IncludeInputs = filtered
 		}
 
-		ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ccIn.IncludeInputs, co.genRef)
+		ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, co.genRef)
 		ccRef, ccOut, _ := emitCC(cppInstance, co.srcRel, co.pbCC, ccIn, ctx.host, ctx.emit)
 		ccRefs = append(ccRefs, ccRef)
 		ccOutputs = append(ccOutputs, ccOut)
@@ -788,7 +788,7 @@ func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	emitGenCC := func(pbCC VFS) SourceEmit {
 		ccIn := in
 		ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), pbCC, in.ScanCfg)
-		ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ccIn.IncludeInputs, pbRef)
+		ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, pbRef)
 		ccSrcRel := strings.TrimPrefix(pbCC.rel(), instance.Path.rel()+"/")
 		ccRef, ccOut, _ := emitCC(instance, ccSrcRel, pbCC, ccIn, ctx.host, ctx.emit)
 

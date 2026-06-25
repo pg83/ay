@@ -278,7 +278,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		depInputs = append(append(make([]VFS, 0, len(inVFSs)+len(inputClosure)), inVFSs...), inputClosure...)
 	}
 
-	prExtraDepRefs := resolveCodegenDepRefsIncl(ctx, instance, depInputs)
+	prExtraDepRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, depInputs)
 
 	emitPR(instance, stmt, toolBinPath, toolLDRef, auxTools, inVFSByToken, inVFSs, outVFSByToken, stdoutVFS, inputClosure, prExtraDepRefs, cfModuleTag(d, instance), prRef, ctx.emit)
 

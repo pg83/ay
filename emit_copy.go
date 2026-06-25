@@ -107,7 +107,7 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 		srcVFS := entries[i].srcVFS
 		dstVFS := entries[i].dstVFS
 
-		deps := resolveCodegenDepRefsIncl(ctx, instance, []VFS{srcVFS})
+		deps := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, []VFS{srcVFS})
 
 		var closure []VFS
 

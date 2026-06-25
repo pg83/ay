@@ -62,7 +62,7 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			outputs = append(outputs, vfs)
 		}
 
-		deps := resolveCodegenDepRefsIncl(ctx, instance, inputs)
+		deps := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, inputs)
 		args := antlrRunCmdArgs(instance, run, inVFSByToken, outVFSByToken)
 		cwd := ""
 
