@@ -1,7 +1,7 @@
 package main
 
 func emitBundles(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
-	reg := codegenRegForInstance(ctx, instance)
+	reg := ctx.codegenFor(instance)
 
 	for _, b := range d.bundles {
 		dst := copyFileOutputVFS(instance.Path.rel(), b.Name)

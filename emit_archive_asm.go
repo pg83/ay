@@ -6,7 +6,7 @@ func emitArchiveAsmForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in
 	}
 
 	toolLDRef, toolBinPath := ctx.tool(argToolsArchiver)
-	reg := codegenRegForInstance(ctx, instance)
+	reg := ctx.codegenFor(instance)
 	res := &RunProgramsForARResult{}
 
 	for _, a := range d.archiveAsm {

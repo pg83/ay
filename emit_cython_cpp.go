@@ -188,7 +188,7 @@ func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 				headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: internStr(v.rel())})
 			}
 
-			reg := ctx.scannerFor(instance).codegen
+			reg := ctx.codegenFor(instance)
 
 			for _, h := range headerVFS {
 				registerBoundGeneratedParsedOutput(ctx, instance, pkCY, h, headerParsed, cyRef, nil)
@@ -371,7 +371,7 @@ func isCythonLangFile(rel string) bool {
 }
 
 func cythonCompileInducedInputs(ctx *GenCtx, instance ModuleInstance, includeInputs []VFS) []VFS {
-	reg := codegenRegForInstance(ctx, instance)
+	reg := ctx.codegenFor(instance)
 
 	var extra []VFS
 

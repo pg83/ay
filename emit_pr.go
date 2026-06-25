@@ -25,7 +25,7 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 		return nil
 	}
 
-	reg := codegenRegForInstance(ctx, instance)
+	reg := ctx.codegenFor(instance)
 	res := &RunProgramsForARResult{}
 
 	type runEntry struct {
@@ -445,7 +445,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 			continue
 		}
 
-		if info := codegenRegForInstance(ctx, instance).lookup(runProgramInputVFS(ctx, instance, d, rel)); info != nil {
+		if info := ctx.codegenFor(instance).lookup(runProgramInputVFS(ctx, instance, d, rel)); info != nil {
 			out = append(out, info.SourceInputs...)
 			out = append(out, info.ProducerSourceClosure...)
 		}
@@ -466,7 +466,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	}
 
 	{
-		reg := codegenRegForInstance(ctx, instance)
+		reg := ctx.codegenFor(instance)
 
 		keep := func(v VFS, customPR bool) bool {
 			if fullSourceClosure {
@@ -632,7 +632,7 @@ func runProgramInputVFS(ctx *GenCtx, instance ModuleInstance, d *ModuleData, rel
 
 	buildVFS := build(filepath.ToSlash(filepath.Clean(instance.Path.rel() + "/" + rel)))
 
-	if codegenRegForInstance(ctx, instance).lookup(buildVFS) != nil {
+	if ctx.codegenFor(instance).lookup(buildVFS) != nil {
 		return buildVFS
 	}
 

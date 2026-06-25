@@ -156,7 +156,7 @@ func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 
 	registerBoundGeneratedParsedOutput(ctx, instance, v.procKind, headerVFS, headerIncludes, flRef, []NodeRef{flatcLDRef})
 
-	reg := codegenRegForInstance(ctx, instance)
+	reg := ctx.codegenFor(instance)
 	reg.addClosureLeaf(headerVFS, flatcWrapperVFS)
 
 	if srcVFS.isSource() {
@@ -184,7 +184,7 @@ func emitLibraryFlatcSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 }
 
 func emitFlatcCppCompile(ctx *GenCtx, instance ModuleInstance, cppVFS VFS, in ModuleCCInputs) *SourceEmit {
-	flRef := codegenRegForInstance(ctx, instance).lookup(cppVFS).ProducerRef
+	flRef := ctx.codegenFor(instance).lookup(cppVFS).ProducerRef
 
 	ccIn := in
 	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), cppVFS, in.ScanCfg)

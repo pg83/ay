@@ -103,7 +103,7 @@ func emitLibraryRagel6Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		return nil
 	}
 
-	codegenRegForInstance(ctx, instance).setCompileSpec(r6Out, &CompileSpec{
+	ctx.codegenFor(instance).setCompileSpec(r6Out, &CompileSpec{
 		FlatOutput: in.FlatOutput,
 		CFlags:     append(append([]ARG(nil), in.PerSourceCFlags...), argWnoImplicitFallthrough),
 	})

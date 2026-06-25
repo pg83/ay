@@ -55,7 +55,7 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR,
 	}
 
 	if v := src.vfs(); v != 0 {
-		if info := codegenRegForInstance(ctx, instance).lookup(v); info != nil && info.Compile != nil {
+		if info := ctx.codegenFor(instance).lookup(v); info != nil && info.Compile != nil {
 			sp := info.Compile
 			in.PerSourceCFlags = sp.CFlags
 			in.FlatOutput = sp.FlatOutput

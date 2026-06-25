@@ -84,7 +84,7 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 		registerBoundGeneratedParsedOutput(ctx, instance, pkSC, build(moduleDir+"/"+partRel), cppParsed, scRef, []NodeRef{toolLDRef})
 	}
 
-	reg := codegenRegForInstance(ctx, instance)
+	reg := ctx.codegenFor(instance)
 	reg.addClosureLeaf(part0, inputIn)
 	reg.addClosureLeaf(prefixH, part0)
 	reg.addClosureLeaf(prefixH, inputIn)

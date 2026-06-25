@@ -75,7 +75,7 @@ func emitDecimalMD5(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *D
 
 	registerBoundGeneratedParsedOutput(ctx, instance, pkSV, outVFS, nil, svRef, nil)
 
-	reg := codegenRegForInstance(ctx, instance)
+	reg := ctx.codegenFor(instance)
 
 	sourceInputs := make([]VFS, 0, len(optVFSs)+1)
 	sourceInputs = append(sourceInputs, optVFSs...)
