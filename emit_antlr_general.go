@@ -88,10 +88,9 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 					ProducerKvP:    pkJV,
 					OutputPath:     outVFS,
 					ProducerRef:    jvRef,
-					GeneratorRefs:  nil,
 					ParsedIncludes: antlrParsedIncludes(instance.Path.rel(), run, outTok, outVFSByToken, inputs, jarVFS),
+					SourceInputs:   jvSourceInputs,
 				})
-				reg.setSourceInputs(outVFS, jvSourceInputs)
 			}
 		}
 

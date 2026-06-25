@@ -53,9 +53,8 @@ func emitYmapsSprotoHeaders(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 			ProducerRef:    sprotoRef,
 			GeneratorRefs:  []NodeRef{sprotocLDRef},
 			ParsedIncludes: parsed,
+			ClosureLeaves:  []VFS{source(protoRelPath)},
 		})
-
-		ctx.codegenFor(instance).addClosureLeaf(sprotoH, source(protoRelPath))
 
 		pending = append(pending, ymapsSprotoPending{ref: sprotoRef, sprotoH: sprotoH, protoRelPath: protoRelPath})
 	}

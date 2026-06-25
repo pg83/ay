@@ -50,6 +50,7 @@ func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt, 
 		ProducerRef:    bcRef,
 		GeneratorRefs:  []NodeRef{toolLDRef},
 		ParsedIncludes: headerParsed,
+		ClosureLeaves:  []VFS{prefixCpp, inputIn},
 	})
 	ctx.codegenFor(instance).register(&GeneratedFileInfo{
 		ProducerKvP:    pkBC,
@@ -58,10 +59,6 @@ func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt, 
 		GeneratorRefs:  []NodeRef{toolLDRef},
 		ParsedIncludes: cppParsed,
 	})
-
-	reg := ctx.codegenFor(instance)
-	reg.addClosureLeaf(prefixH, prefixCpp)
-	reg.addClosureLeaf(prefixH, inputIn)
 
 	node := &Node{
 		Platform:       instance.Platform,

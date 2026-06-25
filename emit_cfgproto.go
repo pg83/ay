@@ -47,17 +47,14 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 			cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: internStr(ti.rel())})
 		}
 
-		reg := ctx.codegenFor(instance)
 		ctx.codegenFor(instance).register(&GeneratedFileInfo{
 			ProducerKvP:    pkPB,
 			OutputPath:     cfgH,
 			ProducerRef:    cfgRef,
 			GeneratorRefs:  cfgGenRefs,
 			ParsedIncludes: cfgHParsed,
+			ClosureLeaves:  []VFS{cfgSource, cfgPbCC},
 		})
-		reg.addClosureLeaf(cfgH, cfgSource)
-
-		reg.addClosureLeaf(cfgH, cfgPbCC)
 
 		cfgCCParsed := []IncludeDirective{
 			{kind: includeQuoted, target: internStr(cfgH.rel())},

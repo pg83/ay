@@ -40,11 +40,8 @@ func emitLibrarySCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 		ProducerRef:    scRef,
 		GeneratorRefs:  []NodeRef{domLDRef},
 		ParsedIncludes: runtimeInclude,
+		ClosureLeaves:  []VFS{srcVFS, domschemeRuntimeVFS},
 	})
-
-	reg := ctx.codegenFor(instance)
-	reg.addClosureLeaf(headerVFS, srcVFS)
-	reg.addClosureLeaf(headerVFS, domschemeRuntimeVFS)
 
 	return nil
 }

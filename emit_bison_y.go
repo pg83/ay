@@ -82,17 +82,19 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 
 	ycRef := ctx.emit.reserve()
 
-	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+	headerInfo := &GeneratedFileInfo{
 		ProducerKvP:    pkYC,
 		OutputPath:     headerVFS,
 		ProducerRef:    ycRef,
 		GeneratorRefs:  []NodeRef{bisonRef, m4Ref},
 		ParsedIncludes: headerParsed,
-	})
+	}
 
 	if preprocessHeader {
-		ctx.codegenFor(instance).addClosureLeaf(headerVFS, srcVFS)
+		headerInfo.ClosureLeaves = []VFS{srcVFS}
 	}
+
+	ctx.codegenFor(instance).register(headerInfo)
 
 	generatedParsed := []IncludeDirective{{kind: includeQuoted, target: internStr(headerVFS.rel())}}
 

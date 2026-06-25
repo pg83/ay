@@ -102,12 +102,6 @@ func (r *CodegenRegistry) mustInfo(path VFS, op string) *GeneratedFileInfo {
 	return nil
 }
 
-func (r *CodegenRegistry) addClosureLeaf(node, leaf VFS) {
-	info := r.mustInfo(node, "addClosureLeaf")
-	info.ClosureLeaves = append(info.ClosureLeaves, leaf)
-	r.leafEver.add(uint32(leaf))
-}
-
 func (r *CodegenRegistry) addClosureLeafNoSubsume(node, leaf VFS) {
 	info := r.mustInfo(node, "addClosureLeafNoSubsume")
 	info.ClosureLeaves = append(info.ClosureLeaves, leaf)
@@ -133,40 +127,12 @@ func (r *CodegenRegistry) cythonMainOut(node VFS) VFS {
 	return 0
 }
 
-func (r *CodegenRegistry) setSourceInputs(path VFS, src []VFS) {
-	if len(src) == 0 {
-		return
-	}
-
-	r.mustInfo(path, "setSourceInputs").SourceInputs = src
-}
-
-func (r *CodegenRegistry) setProducerMainOut(path VFS, mainOut VFS) {
-	r.mustInfo(path, "setProducerMainOut").ProducerMainOut = mainOut
-}
-
 func (r *CodegenRegistry) setProducerSourceClosure(path VFS, closure []VFS) {
 	if len(closure) == 0 {
 		return
 	}
 
 	r.mustInfo(path, "setProducerSourceClosure").ProducerSourceClosure = closure
-}
-
-func (r *CodegenRegistry) setProtoImportRels(path VFS, rels []string) {
-	if len(rels) == 0 {
-		return
-	}
-
-	r.mustInfo(path, "setProtoImportRels").ProtoImportRels = rels
-}
-
-func (r *CodegenRegistry) setBuildParsed(out VFS, parsed []IncludeDirective) {
-	if !out.isBuild() {
-		throwFmt("setBuildParsed: source-rooted output %q", out.string())
-	}
-
-	r.mustInfo(out, "setBuildParsed").ParsedIncludes = parsed
 }
 
 func (r *CodegenRegistry) setCompileSpec(out VFS, spec *CompileSpec) {

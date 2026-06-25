@@ -79,14 +79,12 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 			ParsedIncludes: collectSwigInducedIncludes(ctx, srcVFS, swigClosure),
 		})
 		ctx.codegenFor(instance).register(&GeneratedFileInfo{
-			ProducerKvP:    pkSW,
-			OutputPath:     pyOutVFS,
-			ProducerRef:    swRef,
-			GeneratorRefs:  []NodeRef{swigRef},
-			ParsedIncludes: nil,
+			ProducerKvP:   pkSW,
+			OutputPath:    pyOutVFS,
+			ProducerRef:   swRef,
+			GeneratorRefs: []NodeRef{swigRef},
+			SourceInputs:  append([]VFS{cOutVFS, srcVFS}, swigClosure...),
 		})
-
-		ctx.codegenFor(instance).setSourceInputs(pyOutVFS, append([]VFS{cOutVFS, srcVFS}, swigClosure...))
 
 		ccIn := in
 		ccIn.ExtraDepRefs = []NodeRef{swRef}
