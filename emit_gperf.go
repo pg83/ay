@@ -62,7 +62,7 @@ func emitLibraryGperfSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	ccIn := in
 
 	ccIn.IncludeInputs = append([]VFS{genVFS}, srcClosure...)
-	ccIn.ExtraDepRefs = append([]NodeRef{gpRef}, resolveCodegenDepRefs(ctx, instance, srcClosure, gpRef)...)
+	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, srcClosure, gpRef)
 	ccRef, ccOut, _ := emitCC(instance, ccSrcRel, genVFS, ccIn, ctx.host, ctx.emit)
 
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}

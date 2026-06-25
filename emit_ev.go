@@ -236,7 +236,7 @@ func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 	}
 	wireFormatVFS := source(pbRuntimeBase + "google/protobuf/wire_format.h")
 	ccIn.IncludeInputs = append(ccIn.IncludeInputs, wireFormatVFS)
-	ccIn.ExtraDepRefs = append([]NodeRef{evRef}, resolveCodegenDepRefs(ctx, instance, ccIn.IncludeInputs, evRef)...)
+	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ccIn.IncludeInputs, evRef)
 	ref, outPath, _ := emitCC(instance, evPbCCSuffix, evPbCC, ccIn, ctx.host, ctx.emit)
 
 	return &SourceEmit{Ref: ref, OutPath: outPath}

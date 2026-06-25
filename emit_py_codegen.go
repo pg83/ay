@@ -111,7 +111,7 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		toolRefs := depRefs(py3ccLDRef, py3ccSlowLDRef)
 
 		if genInfo != nil {
-			if extras := resolveCodegenDepRefs(ctx, instance, inputs, toolRefs...); len(extras) > 0 {
+			if extras := resolveCodegenDepRefsExcl(ctx, instance, inputs, toolRefs...); len(extras) > 0 {
 				node.DepRefs = append(node.DepRefs, extras...)
 			}
 		}

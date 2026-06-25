@@ -474,7 +474,7 @@ func emitLibraryCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src
 
 	in.IncludeInputs = walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)
 
-	in.ExtraDepRefs = resolveCodegenDepRefs(ctx, instance, in.IncludeInputs)
+	in.ExtraDepRefs = resolveCodegenDepRefsExcl(ctx, instance, in.IncludeInputs)
 
 	if len(d.cythonCpp) > 0 {
 		in.IncludeInputs = cythonCompileInducedInputs(ctx, instance, in.IncludeInputs)
