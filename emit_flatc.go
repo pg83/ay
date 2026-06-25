@@ -1,7 +1,6 @@
 package main
 
 import (
-	"path/filepath"
 	"strings"
 )
 
@@ -93,22 +92,7 @@ func flatcDirectImportNames(pm *IncludeParserManager, srcRel string) []string {
 	return out
 }
 
-func resolveFlatcImportPath(fs FS, includerRel, importedRel string) string {
-	candidates := []string{
-		filepath.ToSlash(filepath.Clean(filepath.Join(filepath.Dir(includerRel), importedRel))),
-		filepath.ToSlash(filepath.Clean(importedRel)),
-	}
-
-	for _, cand := range candidates {
-		if fs.isFile(srcRootVFS, cand) {
-			return cand
-		}
-	}
-
-	return ""
-}
-
-func flatcDirectGeneratedHeaderIncludes(pm *IncludeParserManager, fs FS, srcRel string) []IncludeDirective {
+func flatcDirectGeneratedHeaderIncludes(pm *IncludeParserManager, srcRel string) []IncludeDirective {
 	direct := flatcDirectImportNames(pm, srcRel)
 
 	if len(direct) == 0 {
@@ -118,15 +102,9 @@ func flatcDirectGeneratedHeaderIncludes(pm *IncludeParserManager, fs FS, srcRel 
 	out := make([]IncludeDirective, 0, len(direct))
 
 	for _, imp := range direct {
-		resolved := resolveFlatcImportPath(fs, srcRel, imp)
-
-		if resolved == "" {
-			continue
-		}
-
 		out = append(out, IncludeDirective{
 			kind:   includeQuoted,
-			target: internStr(resolved + ".h"),
+			target: internStr(imp + ".h"),
 		})
 	}
 
@@ -174,7 +152,7 @@ func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 	transitiveImports := walkClosureTail(ctx.scannerFor(instance), srcVFS, newScanContext(ctx.parsers, nil, nil, includeScannerBasePaths(), instance.Path.rel()))
 	flRef, headerVFS, cppVFS, bfbsVFS := emitFL(instance, srcVFS.rel(), srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, moduleCCTag(d.moduleStmt.Name), d.tc, ctx.emit, v, genDeps)
 
-	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.parsers, ctx.fs, srcVFS.rel())
+	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.parsers, srcVFS.rel())
 
 	registerBoundGeneratedParsedOutput(ctx, instance, v.procKind, headerVFS, headerIncludes, flRef, []NodeRef{flatcLDRef})
 
