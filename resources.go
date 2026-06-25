@@ -13,6 +13,7 @@ var (
 	usesPython3         = []STR{strYMakePython3Name}
 	usesPython3JDK17    = []STR{strYMakePython3Name, internStr(resourcePatternJDK17)}
 	usesPython3Clang16  = []STR{strYMakePython3Name, internStr(resourcePatternClang16)}
+	resourcesKV         = KV{P: pkld, PC: pcLightBlue, ShowOut: true}
 )
 
 type ResourceDecl struct {
@@ -409,7 +410,3 @@ func readResourceBundleJSON(fs FS, rel string) map[string]string {
 
 	return out
 }
-
-var (
-	resourcesKV = KV{P: pkld, PC: pcLightBlue, ShowOut: true}
-)

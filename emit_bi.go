@@ -4,6 +4,7 @@ var (
 	yieldLinePyPath    = yieldLinePyVFS.string()
 	xargsPyPath        = xargsPyVFS.string()
 	buildInfoGenPyPath = buildInfoGenPyVFS.string()
+	biKV               = KV{P: pkBI, PC: pcYellow, ShowOut: true, DisableCache: true}
 )
 
 func emitBI(
@@ -83,7 +84,3 @@ func biFlagsForInstance(targetP *Platform) []STR {
 
 	return flags
 }
-
-var (
-	biKV = KV{P: pkBI, PC: pcYellow, ShowOut: true, DisableCache: true}
-)

@@ -10,6 +10,7 @@ var (
 	antlr4JarPath           = antlr4JarVFS.string()
 	antlr3JarPath           = antlr3JarVFS.string()
 	stdout2stderrPath       = stdout2stderrVFS.string()
+	jvKV                    = KV{P: pkJV, PC: pcLightBlue, ShowOut: true}
 )
 
 var antlrJavaConstHead = []STR{
@@ -250,7 +251,3 @@ func emitJVGeneral(
 
 	return emitJVNode(instance, cmdArgs, jvInputs, outputs, cwd, depRefs, moduleTag, emit)
 }
-
-var (
-	jvKV = KV{P: pkJV, PC: pcLightBlue, ShowOut: true}
-)

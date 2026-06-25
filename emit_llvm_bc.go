@@ -2,6 +2,12 @@ package main
 
 import "strings"
 
+var (
+	llvmBcKV  = KV{P: pkBC, PC: pcLightGreen}
+	llvmBcKV2 = KV{P: pkLD, PC: pcLightRed}
+	llvmBcKV3 = KV{P: pkOP, PC: pcYellow}
+)
+
 func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs, resourceGlobals []ResourceDecl) {
 	na := ctx.na
 
@@ -229,9 +235,3 @@ func llvmBcRootRelArcSrc(ctx *GenCtx, instance ModuleInstance, src string) strin
 
 	return src
 }
-
-var (
-	llvmBcKV  = KV{P: pkBC, PC: pcLightGreen}
-	llvmBcKV2 = KV{P: pkLD, PC: pcLightRed}
-	llvmBcKV3 = KV{P: pkOP, PC: pcYellow}
-)

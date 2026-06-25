@@ -4,6 +4,7 @@ import "strings"
 
 var (
 	ldLinkDynLibPath = ldLinkDynLibVFS.string()
+	dynamicLibraryKV = KV{P: pkLD, PC: pcLightBlue, ShowOut: true}
 )
 
 func dllOutputName(stmt *ModuleStmt) string {
@@ -421,7 +422,3 @@ func composeDynLibInputs(na *NodeArenas, peerLibPaths, pluginPaths []VFS, fixElf
 
 	return chunks
 }
-
-var (
-	dynamicLibraryKV = KV{P: pkLD, PC: pcLightBlue, ShowOut: true}
-)

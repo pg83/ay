@@ -5,6 +5,11 @@ import (
 	"strings"
 )
 
+var (
+	bisonCppSkeletonDirectives = quotedDirectives(bisonCppSkeletonInputs)
+	bisonYKV                   = KV{P: pkYC, PC: pcLightGreen}
+)
+
 var bisonCppSkeletonInputs = []VFS{
 	intern("$(S)/contrib/tools/bison/data/m4sugar/foreach.m4"),
 	intern("$(S)/contrib/tools/bison/data/m4sugar/m4sugar.m4"),
@@ -21,8 +26,6 @@ var bisonCppSkeletonInputs = []VFS{
 	intern("$(S)/contrib/tools/bison/data/skeletons/variant.hh"),
 	intern("$(S)/contrib/tools/bison/data/skeletons/yacc.c"),
 }
-
-var bisonCppSkeletonDirectives = quotedDirectives(bisonCppSkeletonInputs)
 
 func bisonCppHeaderParsed(srcVFS VFS) []IncludeDirective {
 	parsed := make([]IncludeDirective, 0, 1+len(bisonCppSkeletonDirectives))
@@ -162,7 +165,3 @@ func m4Tool(ctx *GenCtx, instance ModuleInstance) (NodeRef, STR) {
 
 	return ref, bin.str()
 }
-
-var (
-	bisonYKV = KV{P: pkYC, PC: pcLightGreen}
-)

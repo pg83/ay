@@ -13,6 +13,7 @@ var (
 	pbWrapperPath     = pbWrapperVFS.string()
 	pbPyWrapperPath   = pbPyWrapperVFS.string()
 	pbDescriptorProto = pbDescriptorVFS.string()
+	pbKV              = KV{P: pkPB, PC: pcYellow}
 )
 
 var protobufRuntimeHeaders = []VFS{
@@ -379,7 +380,3 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 
 	return &PbArgBlocks{head: head, mid: mid, tail: tail}
 }
-
-var (
-	pbKV = KV{P: pkPB, PC: pcYellow}
-)

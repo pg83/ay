@@ -9,6 +9,7 @@ import (
 
 var (
 	protosFromProtocPeer = "contrib/libs/protobuf/builtin_proto/protos_from_protoc"
+	protoDescKV          = KV{P: pkPD, PC: pcLightCyan}
 )
 
 type DescProtoPeer struct {
@@ -362,7 +363,3 @@ func emitProtoDescriptions(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		DescClosure: closure,
 	}
 }
-
-var (
-	protoDescKV = KV{P: pkPD, PC: pcLightCyan}
-)

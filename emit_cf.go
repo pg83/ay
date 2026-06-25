@@ -9,6 +9,7 @@ import (
 var (
 	cfgVarRefRe      = regexp.MustCompile(`@([A-Z_][A-Z0-9_]*)@`)
 	cfgCmakeDefineRe = regexp.MustCompile(`#cmakedefine(?:01)?[ \t]+([A-Z_][A-Z0-9_]*)`)
+	cfKV             = KV{P: pkCF, PC: pcYellow}
 )
 
 func emitExplicitCF(ctx *GenCtx, instance ModuleInstance, cf *ConfigureFileStmt, d *ModuleData) {
@@ -132,7 +133,3 @@ func cfModuleTag(d *ModuleData, instance ModuleInstance) STR {
 
 	return 0
 }
-
-var (
-	cfKV = KV{P: pkCF, PC: pcYellow}
-)

@@ -68,6 +68,8 @@ var cythonConstHead = []STR{
 	argUnameSysnameLinux.str(),
 }
 
+var cythonCppKV = KV{P: pkCY, PC: pcYellow}
+
 type CythonStmt struct {
 	Src       string
 	Generated *string
@@ -338,6 +340,7 @@ func cythonHeaderToolInputs(src VFS, pyxClosure []VFS) []VFS {
 
 func cythonPyxLangClosure(scanner *IncludeScanner, src VFS, cfg ScanContext) []VFS {
 	sc := scanner.getScanCtx(cfg, includeDirectiveParsers.registeredParserFor(src.rel()))
+
 	defer scanner.putScanCtx(sc)
 
 	seen := make(map[VFS]struct{})
@@ -576,7 +579,3 @@ func hasPrefix(s, prefix string) bool {
 func hasSuffix(s, suffix string) bool {
 	return len(s) >= len(suffix) && s[len(s)-len(suffix):] == suffix
 }
-
-var (
-	cythonCppKV = KV{P: pkCY, PC: pcYellow}
-)
