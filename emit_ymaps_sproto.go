@@ -45,7 +45,7 @@ func emitYmapsSprotoHeaders(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 		pbhImports := protoDirectPbHIncludes(ctx.parsers, protoRelPath, outRoot)
 		parsed := make([]IncludeDirective, 0, 2*len(pbhImports))
 		parsed = append(parsed, pbhImports...)
-		parsed = append(parsed, sprotoSiblingDirectives(pbhImports, produced)...)
+		parsed = append(parsed, sprotoInducedHeaders(pbhImports)...)
 
 		registerBoundGeneratedParsedOutput(ctx, instance, pkPB, sprotoH, parsed, sprotoRef, []NodeRef{sprotocLDRef})
 
@@ -110,21 +110,13 @@ func dropGeneratedProtoHeaders(closure []VFS) []VFS {
 	return out
 }
 
-func sprotoSiblingDirectives(pbhImports []IncludeDirective, produced map[string]struct{}) []IncludeDirective {
-	if len(produced) == 0 {
-		return nil
-	}
-
+func sprotoInducedHeaders(pbhImports []IncludeDirective) []IncludeDirective {
 	var out []IncludeDirective
 
 	for _, dir := range pbhImports {
 		base, ok := strings.CutSuffix(dir.target.string(), ".pb.h")
 
 		if !ok {
-			continue
-		}
-
-		if _, p := produced[base]; !p {
 			continue
 		}
 
