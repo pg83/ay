@@ -241,28 +241,12 @@ func composeCompileCFlags(isa ISA, release bool, debugInfo []ARG) []ARG {
 			return hostCFlags
 		}
 
-		return concatARG(x86TargetCFlagsPre, debugInfo, x86TargetCFlagsPost)
+		return concat(x86TargetCFlagsPre, debugInfo, x86TargetCFlagsPost)
 	case ISAAArch64:
-		return concatARG(commonCFlagsPre, debugInfo, commonCFlagsPost)
+		return concat(commonCFlagsPre, debugInfo, commonCFlagsPost)
 	}
 
 	return nil
-}
-
-func concatARG(parts ...[]ARG) []ARG {
-	n := 0
-
-	for _, p := range parts {
-		n += len(p)
-	}
-
-	out := make([]ARG, 0, n)
-
-	for _, p := range parts {
-		out = append(out, p...)
-	}
-
-	return out
 }
 
 func compileFlagBundleFor(p *Platform) CompileFlagBundle {

@@ -440,7 +440,7 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *
 	cxxOwnExtras := in.CXXFlags
 
 	if len(p.CXXFlags) > 0 {
-		cxxOwnExtras = concatARG(in.CXXFlags, p.CXXFlags)
+		cxxOwnExtras = concat(in.CXXFlags, p.CXXFlags)
 	}
 
 	cxxBucket := composeOwnAndPeerGlobalBucket(*in, true)
