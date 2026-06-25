@@ -49,7 +49,7 @@ func resolveEnumHeaderInput(ctx *GenCtx, instance ModuleInstance, headerRel stri
 
 	buildHeader := build(headerInput.rel())
 
-	if codegenRegForInstance(ctx, instance).lookup(buildHeader) != nil {
+	if ctx.codegenFor(instance).lookup(buildHeader) != nil {
 		return buildHeader
 	}
 

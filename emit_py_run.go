@@ -81,7 +81,7 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 		pySourceInputs = append(pySourceInputs, scriptVFS)
 	}
 
-	reg := codegenRegForInstance(ctx, instance)
+	reg := ctx.codegenFor(instance)
 
 	for _, v := range inVFSs {
 		if v.isSource() {
@@ -193,7 +193,7 @@ func splitCodegenDetect(stmt *RunPythonStmt) (hasCCShard bool, hasHeader bool) {
 }
 
 func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *RunPythonStmt, scriptVFS VFS) []VFS {
-	reg := codegenRegForInstance(ctx, instance)
+	reg := ctx.codegenFor(instance)
 	seen := make(map[VFS]struct{}, 32)
 	var sources []VFS
 	addSource := func(v VFS) {

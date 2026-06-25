@@ -233,7 +233,7 @@ func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, na *NodeAre
 		k++
 	}
 
-	reg := codegenRegForInstance(ctx, consumer)
+	reg := ctx.codegenFor(consumer)
 
 	for _, p := range includeInputs {
 		if !p.isBuild() {

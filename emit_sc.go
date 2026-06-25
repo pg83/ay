@@ -36,7 +36,7 @@ func emitLibrarySCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 	runtimeInclude := []IncludeDirective{{kind: includeQuoted, target: internStr(domschemeRuntimeVFS.rel())}}
 	registerBoundGeneratedParsedOutput(ctx, instance, pkSC, headerVFS, runtimeInclude, scRef, []NodeRef{domLDRef})
 
-	reg := codegenRegForInstance(ctx, instance)
+	reg := ctx.codegenFor(instance)
 	reg.addClosureLeaf(headerVFS, srcVFS)
 	reg.addClosureLeaf(headerVFS, domschemeRuntimeVFS)
 

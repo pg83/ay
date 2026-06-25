@@ -10,7 +10,7 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 		return nil, nil
 	}
 
-	reg := codegenRegForInstance(ctx, instance)
+	reg := ctx.codegenFor(instance)
 
 	for _, run := range d.antlrRuns {
 		jarVFS := antlr4JarVFS

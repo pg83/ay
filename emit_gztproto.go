@@ -50,7 +50,7 @@ func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		}
 	}
 
-	reg := codegenRegForInstance(ctx, instance)
+	reg := ctx.codegenFor(instance)
 	reg.register(&GeneratedFileInfo{
 		ProducerKvP:  pkGZ,
 		OutputPath:   genProto,

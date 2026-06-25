@@ -166,7 +166,7 @@ func registerBoundGeneratedParsedOutput(ctx *GenCtx, instance ModuleInstance, ki
 }
 
 func registerBoundGeneratedParsedOutputWithSource(ctx *GenCtx, instance ModuleInstance, kind ProcKind, output VFS, sourcePath VFS, parsed []IncludeDirective, ref NodeRef, generatorRefs []NodeRef) {
-	codegenRegForInstance(ctx, instance).register(&GeneratedFileInfo{
+	ctx.codegenFor(instance).register(&GeneratedFileInfo{
 		ProducerKvP:    kind,
 		OutputPath:     output,
 		SourcePath:     sourcePath,
@@ -196,6 +196,6 @@ func (r *CodegenRegistry) buildParsedFor(out VFS) []IncludeDirective {
 	return nil
 }
 
-func codegenRegForInstance(ctx *GenCtx, instance ModuleInstance) *CodegenRegistry {
+func (ctx *GenCtx) codegenFor(instance ModuleInstance) *CodegenRegistry {
 	return ctx.scannerFor(instance).codegen
 }

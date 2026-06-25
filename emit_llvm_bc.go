@@ -193,7 +193,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 }
 
 func llvmBcSourceInfo(ctx *GenCtx, instance ModuleInstance, src string) (inputVFS VFS, producer NodeRef) {
-	reg := codegenRegForInstance(ctx, instance)
+	reg := ctx.codegenFor(instance)
 
 	outVFS := copyFileOutputVFS(instance.Path.rel(), src)
 
@@ -215,7 +215,7 @@ func llvmBcSourceInfo(ctx *GenCtx, instance ModuleInstance, src string) (inputVF
 }
 
 func llvmBcRootRelArcSrc(ctx *GenCtx, instance ModuleInstance, src string) string {
-	if reg := codegenRegForInstance(ctx, instance); reg.lookup(copyFileOutputVFS(instance.Path.rel(), src)) != nil {
+	if reg := ctx.codegenFor(instance); reg.lookup(copyFileOutputVFS(instance.Path.rel(), src)) != nil {
 		return src
 	}
 

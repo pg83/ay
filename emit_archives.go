@@ -9,7 +9,7 @@ func emitArchives(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 
 	toolLDRef, toolBinPath := ctx.tool(argToolsArchiver)
 
-	reg := codegenRegForInstance(ctx, instance)
+	reg := ctx.codegenFor(instance)
 
 	for _, a := range d.archives {
 		emitArchive(ctx, instance, a, d, toolBinPath, toolLDRef, ctx.emit, reg)

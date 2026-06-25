@@ -268,7 +268,7 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 	var producerSourceInputs []VFS
 	generated := false
 
-	if info := codegenRegForInstance(ctx, instance).lookup(build(protoRelPath)); info != nil {
+	if info := ctx.codegenFor(instance).lookup(build(protoRelPath)); info != nil {
 		protoSrcVFS = build(protoRelPath)
 		protoCwd = strB
 		producerDeps = []NodeRef{info.ProducerRef}

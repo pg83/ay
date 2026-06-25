@@ -31,7 +31,7 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	py3ccToolsChunk := []VFS{py3ccBinary, py3ccSlowBin}
 	py3ccArgHead := []STR{(py3ccBinary).str(), argSlowPy3cc.str(), (py3ccSlowBin).str()}
 
-	reg := codegenRegForInstance(ctx, instance)
+	reg := ctx.codegenFor(instance)
 
 	for i, srcRel := range d.pySrcs {
 		if strings.HasSuffix(srcRel.string(), ".pyi") {

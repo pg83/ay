@@ -72,7 +72,7 @@ type resolvedResource struct {
 func resolveResourceInput(ctx *GenCtx, instance ModuleInstance, rawPath string, fallback VFS) resolvedResource {
 	output := resourceOutputVFS(instance.Path.rel(), rawPath)
 
-	if info := codegenRegForInstance(ctx, instance).lookup(output); info != nil {
+	if info := ctx.codegenFor(instance).lookup(output); info != nil {
 		return resolvedResource{
 			Input:           output,
 			ProducerRef:     info.ProducerRef,
@@ -508,7 +508,7 @@ func emitPyNamespaceForGroup(
 	group PySrcGroup,
 	oc *ObjcopyEmitCtx,
 ) *ObjcopyEmit {
-	reg := codegenRegForInstance(ctx, instance)
+	reg := ctx.codegenFor(instance)
 	pySources := make([]string, 0, len(group.Srcs))
 	arcSources := make([]string, 0, len(group.Srcs))
 
@@ -663,7 +663,7 @@ func emitPySrcObjcopy(
 			}
 		}
 
-		entries := buildPySrcEntriesFor(codegenRegForInstance(ctx, instance), ctx.fs, d, instance.Path.rel(), strStrings(group.Srcs), group.TopLevel, group.Namespace)
+		entries := buildPySrcEntriesFor(ctx.codegenFor(instance), ctx.fs, d, instance.Path.rel(), strStrings(group.Srcs), group.TopLevel, group.Namespace)
 
 		if len(entries) == 0 {
 			continue

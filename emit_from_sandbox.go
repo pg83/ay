@@ -91,7 +91,7 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 	}
 
 	parsed := fromSandboxOutputIncludes(stmt)
-	reg := codegenRegForInstance(ctx, instance)
+	reg := ctx.codegenFor(instance)
 
 	for _, out := range outVFSs {
 		registerBoundGeneratedParsedOutput(ctx, instance, pkSB, out, parsed, ref, nil)

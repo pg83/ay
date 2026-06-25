@@ -42,7 +42,7 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, modulePath string, e
 
 func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleInputs *ModuleCCInputs) (memberRefs []NodeRef, memberOuts []VFS, memberSrcs []VFS) {
 	scanner := ctx.scannerFor(instance)
-	reg := codegenRegForInstance(ctx, instance)
+	reg := ctx.codegenFor(instance)
 
 	type entryReg struct {
 		srcVFS         VFS
@@ -142,7 +142,7 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 }
 
 func generatedModuleSourceVFS(ctx *GenCtx, instance ModuleInstance, srcRel string) *VFS {
-	reg := codegenRegForInstance(ctx, instance)
+	reg := ctx.codegenFor(instance)
 
 	var id STR
 

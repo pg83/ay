@@ -34,7 +34,7 @@ func emitLuaJit21(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 
 	luas := d.lj21.Luas
 	compilerLDRef, compilerBin := ctx.tool(argLuajit21Compiler)
-	reg := codegenRegForInstance(ctx, instance)
+	reg := ctx.codegenFor(instance)
 	cwd := source(luajit21CwdRel).str()
 
 	raws := make([]string, len(luas))

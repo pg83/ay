@@ -47,7 +47,7 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 			cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: internStr(ti.rel())})
 		}
 
-		reg := codegenRegForInstance(ctx, instance)
+		reg := ctx.codegenFor(instance)
 		registerBoundGeneratedParsedOutput(ctx, instance, pkPB, cfgH, cfgHParsed, cfgRef, cfgGenRefs)
 		reg.addClosureLeaf(cfgH, cfgSource)
 

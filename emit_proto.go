@@ -268,7 +268,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 
 	buildProto := build(protoRelPath)
 
-	if info := codegenRegForInstance(ctx, instance).lookup(buildProto); info != nil {
+	if info := ctx.codegenFor(instance).lookup(buildProto); info != nil {
 		protoSrcOverride = buildProto
 		extraProtoDeps = []NodeRef{info.ProducerRef}
 
@@ -361,7 +361,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		registerBoundGeneratedParsedOutput(ctx, instance, pkPB, pbH, pbHParsed, pbRef, pbGenRefs)
 
 		{
-			reg := codegenRegForInstance(ctx, instance)
+			reg := ctx.codegenFor(instance)
 
 			if protoSrcOverride == 0 {
 				reg.addClosureLeaf(pbH, source(protoRelPath))
@@ -692,7 +692,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	var antlrOutputs []VFS
 
 	{
-		reg := codegenRegForInstance(ctx, instance)
+		reg := ctx.codegenFor(instance)
 
 		for _, run := range d.antlrRuns {
 			for _, outTok := range run.OUTFiles {
@@ -750,7 +750,7 @@ func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	srcRel := src.string()
 
 	protoBase := strings.TrimSuffix(protoSourceRelPath(ctx.fs, instance, d, srcRel), ".proto")
-	pbRef := codegenRegForInstance(ctx, instance).lookup(build(protoBase + ".pb.cc")).ProducerRef
+	pbRef := ctx.codegenFor(instance).lookup(build(protoBase + ".pb.cc")).ProducerRef
 
 	emitGenCC := func(pbCC VFS) SourceEmit {
 		ccIn := in
