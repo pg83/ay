@@ -504,7 +504,7 @@ func TestComposeCCPaths_DotDotSrc(t *testing.T) {
 	_ = e
 	_ = srcVFS
 
-	got := normalizeDotDotSegments(srcRel)
+	got := joinNormalizedDotDot(srcRel)
 	want := "__/ydb_command.cpp"
 
 	if got != want {
@@ -512,8 +512,18 @@ func TestComposeCCPaths_DotDotSrc(t *testing.T) {
 	}
 }
 
+func joinNormalizedDotDot(rel string) string {
+	body, underscore := normalizeDotDotSegments(rel)
+
+	if underscore {
+		return "_/" + body
+	}
+
+	return body
+}
+
 func TestNormalizeDotDotSegments_Subdir(t *testing.T) {
-	got := normalizeDotDotSegments("subdir/file.cpp")
+	got := joinNormalizedDotDot("subdir/file.cpp")
 	want := "_/subdir/file.cpp"
 
 	if got != want {
