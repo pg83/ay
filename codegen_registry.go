@@ -196,10 +196,6 @@ func (r *CodegenRegistry) buildParsedFor(out VFS) []IncludeDirective {
 	return nil
 }
 
-func generatedOutputClosure(ctx *GenCtx, instance ModuleInstance, output VFS, in ModuleCCInputs) []VFS {
-	return walkClosureTail(ctx.scannerFor(instance), output, in.ScanCfg)
-}
-
 func codegenRegForInstance(ctx *GenCtx, instance ModuleInstance) *CodegenRegistry {
 	return ctx.scannerFor(instance).codegen
 }
