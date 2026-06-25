@@ -94,7 +94,7 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 		incl = append(incl, cClosure...)
 		incl = append(incl, swigClosure...)
 		incl = append(incl, srcVFS)
-		ccIn.IncludeInputs = dedupVFS(incl)
+		ccIn.IncludeInputs = incl
 
 		ccRef, ccOut, _ := emitCC(instance, internStr(cOutRel), cOutVFS, ccIn, ctx.host, ctx.emit)
 		out = append(out, &SourceEmit{Ref: ccRef, OutPath: ccOut})

@@ -353,7 +353,11 @@ func composeOwnAndPeerGlobalBucket(in ModuleCCInputs, isCxx bool) []ARG {
 		out = append(out, in.PeerCOnlyFlagsGlobal...)
 	}
 
-	return dedupARG(out)
+	if len(out) == 0 {
+		return nil
+	}
+
+	return out
 }
 
 func composePostCatboostBucket(preBucket []ARG) []ARG {
