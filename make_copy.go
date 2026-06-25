@@ -61,7 +61,7 @@ func copySourceSlice(fs *OsFS, srcRoot, dst string, onWarn func(Warn)) error {
 	shallowDirs = dropRepoRoot(absSrc, shallowDirs)
 	shallowDirs = dropUnderRecursive(shallowDirs, recursiveDirs)
 
-	loose := append(ancestorYamakes(append(append([]string(nil), recursiveDirs...), shallowDirs...)), rootFiles...)
+	loose := concat(ancestorYamakes(concat(recursiveDirs, shallowDirs)), rootFiles)
 
 	fmt.Fprintf(os.Stderr, "copy-sources: %d read dirs (shallow) + %d always-dirs (recursive) + %d loose files -> %s\n",
 		len(shallowDirs), len(recursiveDirs), len(loose), absDst)

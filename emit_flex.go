@@ -49,8 +49,8 @@ func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, window, lxRef)
 
 	if strings.HasSuffix(srcRel, ".l") {
-		ccIn.IncludeInputs = dedupVFS(window, []VFS{srcVFS})
-		ccIn.PerSourceCFlags = append(append([]ARG(nil), in.PerSourceCFlags...), argWnoUnusedVariable)
+		ccIn.IncludeInputs = concat(window, []VFS{srcVFS})
+		ccIn.PerSourceCFlags = concat(in.PerSourceCFlags, []ARG{argWnoUnusedVariable})
 	}
 
 	ccRef, ccOut, _ := emitCC(instance, outVFS.str(), outVFS, ccIn, ctx.host, ctx.emit)

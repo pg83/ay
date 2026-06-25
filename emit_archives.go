@@ -89,7 +89,7 @@ func emitArchive(
 		inputs = append(inputs, p)
 	}
 
-	deps := append(append([]NodeRef(nil), producerRefs...), depRefs(toolLDRef)...)
+	deps := concat(producerRefs, depRefs(toolLDRef))
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -113,9 +113,9 @@ func emitArchive(
 
 		for _, p := range pathPerFile {
 			if info := reg.lookup(p); info != nil && len(info.SourceInputs) > 0 {
-				leaves = dedupVFS(leaves, info.SourceInputs)
+				leaves = append(leaves, info.SourceInputs...)
 			} else if a.PropagateSourceMembers && info == nil {
-				leaves = dedupVFS(leaves, []VFS{p})
+				leaves = append(leaves, p)
 			}
 		}
 

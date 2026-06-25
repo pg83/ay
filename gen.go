@@ -821,12 +821,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			AddInclOneLevel:   d.addInclOneLevel,
 			AddInclUserGlobal: d.addInclUserGlobal,
 
-			CFlagsGlobal:                    dedupARG(peerContribs.cFlags, d.cFlagsGlobal),
-			CXXFlagsGlobal:                  dedupARG(peerContribs.cxxFlags, d.cxxFlagsGlobal),
-			COnlyFlagsGlobal:                dedupARG(peerContribs.cOnlyFlags, d.cOnlyFlagsGlobal),
-			ObjAddLibsGlobal:                dedupARG(peerContribs.objAddLibs, d.objAddLibsGlobal),
-			LDFlagsGlobal:                   dedupARG(peerContribs.ldFlags, d.ldFlags),
-			RPathFlagsGlobal:                dedupARG(peerContribs.rpathFlags, d.rpathFlagsGlobal),
+			CFlagsGlobal:                    concat(peerContribs.cFlags, d.cFlagsGlobal),
+			CXXFlagsGlobal:                  concat(peerContribs.cxxFlags, d.cxxFlagsGlobal),
+			COnlyFlagsGlobal:                concat(peerContribs.cOnlyFlags, d.cOnlyFlagsGlobal),
+			ObjAddLibsGlobal:                concat(peerContribs.objAddLibs, d.objAddLibsGlobal),
+			LDFlagsGlobal:                   concat(peerContribs.ldFlags, d.ldFlags),
+			RPathFlagsGlobal:                concat(peerContribs.rpathFlags, d.rpathFlagsGlobal),
 			PeerArchiveClosureRefs:          peerArchiveRefsH,
 			PeerArchiveClosurePaths:         peerArchivePathsH,
 			PeerGlobalClosureRefs:           peerGlobalRefsH,
@@ -1535,9 +1535,9 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	effectiveCFlagsGlobal := dedupARG(peerCFlagsGlobal, d.cFlagsGlobal)
-	effectiveCXXFlagsGlobal := dedupARG(peerCXXFlagsGlobal, d.cxxFlagsGlobal)
-	effectiveCOnlyFlagsGlobal := dedupARG(peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
-	effectiveRPathFlagsGlobal := dedupARG(peerRPathFlagsGlobal, d.rpathFlagsGlobal)
+	effectiveCXXFlagsGlobal := concat(peerCXXFlagsGlobal, d.cxxFlagsGlobal)
+	effectiveCOnlyFlagsGlobal := concat(peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
+	effectiveRPathFlagsGlobal := concat(peerRPathFlagsGlobal, d.rpathFlagsGlobal)
 
 	if !effectiveNoPlatform(d.flags) && runtimeAncestorCxxConsumers[instance.Path.rel()] {
 		hasNostdinc := false
@@ -1597,7 +1597,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	effectiveSrcDirs := d.srcDirs
 
 	if pd := programSourceDir(d.moduleStmt); pd != nil {
-		effectiveSrcDirs = append(append([]VFS{}, d.srcDirs...), dirKey(*pd))
+		effectiveSrcDirs = concat(d.srcDirs, []VFS{dirKey(*pd)})
 	}
 
 	moduleInputs := ModuleCCInputs{
@@ -2055,8 +2055,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 					ldSbomPaths = append(ldSbomPaths, *ownSbomPath)
 					ldSbomPaths = append(ldSbomPaths, peerSbomPaths[ownSbomInsertIdx:]...)
 				} else {
-					ldSbomRefs = append(append([]NodeRef(nil), peerSbomRefs...), *ownSbomRef)
-					ldSbomPaths = append(append([]VFS(nil), peerSbomPaths...), *ownSbomPath)
+					ldSbomRefs = concat(peerSbomRefs, []NodeRef{*ownSbomRef})
+					ldSbomPaths = concat(peerSbomPaths, []VFS{*ownSbomPath})
 				}
 			}
 		}
@@ -2118,8 +2118,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			CFlagsGlobal:                    effectiveCFlagsGlobal,
 			CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
 			COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,
-			ObjAddLibsGlobal:                dedupARG(peerObjAddLibsGlobal, d.objAddLibsGlobal),
-			LDFlagsGlobal:                   dedupARG(peerLDFlagsGlobal, d.ldFlags),
+			ObjAddLibsGlobal:                concat(peerObjAddLibsGlobal, d.objAddLibsGlobal),
+			LDFlagsGlobal:                   concat(peerLDFlagsGlobal, d.ldFlags),
 			RPathFlagsGlobal:                effectiveRPathFlagsGlobal,
 			PeerArchiveClosureRefs:          peerArchiveRefs,
 			PeerArchiveClosurePaths:         peerArchivePaths,
@@ -2236,8 +2236,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		CFlagsGlobal:                    effectiveCFlagsGlobal,
 		CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
 		COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,
-		ObjAddLibsGlobal:                dedupARG(peerObjAddLibsGlobal, d.objAddLibsGlobal),
-		LDFlagsGlobal:                   dedupARG(peerLDFlagsGlobal, d.ldFlags),
+		ObjAddLibsGlobal:                concat(peerObjAddLibsGlobal, d.objAddLibsGlobal),
+		LDFlagsGlobal:                   concat(peerLDFlagsGlobal, d.ldFlags),
 		RPathFlagsGlobal:                effectiveRPathFlagsGlobal,
 		PeerArchiveClosureRefs:          peerArchiveRefs,
 		PeerArchiveClosurePaths:         peerArchivePaths,

@@ -121,7 +121,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 		optInputs := make([]VFS, 0, 2+len(bcSourceInputs))
 		optInputs = append(optInputs, mergedOut)
 		optInputs = append(optInputs, optWrapperVFS)
-		optChunks := na.inputList(dedupVFS(optInputs, bcSourceInputs))
+		optChunks := na.inputList(concat(optInputs, bcSourceInputs))
 
 		optNode := &Node{
 			Platform:     instance.Platform,
@@ -168,7 +168,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	ownExtras := in.CXXFlags
 
 	if len(platform.CXXFlags) > 0 {
-		ownExtras = append(append([]ARG{}, ownExtras...), platform.CXXFlags...)
+		ownExtras = concat(ownExtras, platform.CXXFlags)
 	}
 
 	args := make([]STR, 0, 200+len(in.AddIncl)+len(in.PeerAddInclGlobal)+

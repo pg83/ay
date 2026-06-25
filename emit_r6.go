@@ -100,7 +100,7 @@ func emitLibraryRagel6Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		ParsedIncludes: r6Parsed,
 		Compile: &CompileSpec{
 			FlatOutput: in.FlatOutput,
-			CFlags:     append(append([]ARG(nil), in.PerSourceCFlags...), argWnoImplicitFallthrough),
+			CFlags:     concat(in.PerSourceCFlags, []ARG{argWnoImplicitFallthrough}),
 		},
 	})
 
