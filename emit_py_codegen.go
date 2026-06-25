@@ -93,7 +93,6 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 				inputs[3] = toolB
 			}
 
-			inputs = dedupVFS(inputs)
 			nodeInputs = na.inputList(inputs)
 		}
 
