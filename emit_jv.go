@@ -72,7 +72,7 @@ func emitJVDownstreamCPCC(
 		ccIn.IncludeInputs = ccIncludeInputs
 		ccIn.ExtraDepRefs = []NodeRef{jvRef, cpRef}
 		ccIn.PerSourceCFlags = []ARG{argWnoUnusedVariable}
-		ccRef, ccOut, _ := emitCC(instance, g4CppRel, g4CppPath, ccIn, ctx.host, ctx.emit)
+		ccRef, ccOut, _ := emitCC(instance, internStr(g4CppRel), g4CppPath, ccIn, ctx.host, ctx.emit)
 
 		ccRefs = append(ccRefs, ccRef)
 		ccOutputs = append(ccOutputs, ccOut)

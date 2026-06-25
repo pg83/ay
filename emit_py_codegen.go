@@ -204,7 +204,7 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 		}
 
 		ccIn.CCBlocks = composeCCModuleArgBlocks(na, instance.Platform, &ccIn)
-		ccRef, ccOut, _ := emitCC(instance, regCpp, regCppVFS, ccIn, ctx.host, ctx.emit)
+		ccRef, ccOut, _ := emitCC(instance, internStr(regCpp), regCppVFS, ccIn, ctx.host, ctx.emit)
 
 		res.Refs = append(res.Refs, ccRef)
 		res.Outputs = append(res.Outputs, ccOut)

@@ -15,6 +15,7 @@ type GeneratedFileInfo struct {
 	ProducerMainOut       VFS
 	ClosureLeaves         []VFS
 	ParsedIncludes        []IncludeDirective
+	CompileCFlags         []ARG
 }
 
 type CodegenRegistry struct {
@@ -213,6 +214,20 @@ func (r *CodegenRegistry) setBuildParsed(out VFS, parsed []IncludeDirective) {
 	}
 
 	info.ParsedIncludes = parsed
+}
+
+func (r *CodegenRegistry) setCompileCFlags(out VFS, flags []ARG) {
+	if len(flags) == 0 {
+		return
+	}
+
+	info, ok := r.byStr.get(STR(out.strID()))
+
+	if !ok {
+		throwFmt("setCompileCFlags: no generated info for %q", out.string())
+	}
+
+	info.CompileCFlags = flags
 }
 
 func (r *CodegenRegistry) buildParsedFor(out VFS) []IncludeDirective {

@@ -54,6 +54,12 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR,
 		return nil
 	}
 
+	if v := src.vfs(); v != 0 {
+		if info := codegenRegForInstance(ctx, instance).lookup(v); info != nil {
+			in.PerSourceCFlags = info.CompileCFlags
+		}
+	}
+
 	emit, ok := srcExtMatcher.match(srcRel)
 
 	if !ok {
