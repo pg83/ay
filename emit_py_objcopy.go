@@ -280,7 +280,7 @@ func emitResourceObjcopy(
 		dataInputs = append(dataInputs, cur.closureInputs...)
 		dataInputs = append(dataInputs, cur.kvInputs...)
 
-		node.DepRefs = append(node.DepRefs, resolveCodegenDepRefsIncl(ctx, instance, dataInputs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)...)
+		node.DepRefs = resolveCodegenDepRefsIncl(ctx, instance, dataInputs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
 
 		r := ctx.emit.emit(node)
 		out.Refs = append(out.Refs, r)
@@ -703,7 +703,7 @@ func emitPySrcObjcopy(
 				Resources:    instance.Platform.UsesPython3Clang,
 			}
 
-			node.DepRefs = append(node.DepRefs, resolveCodegenDepRefsIncl(ctx, instance, ch.inps, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)...)
+			node.DepRefs = resolveCodegenDepRefsIncl(ctx, instance, ch.inps, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
 
 			r := ctx.emit.emit(node)
 			res.Refs = append(res.Refs, r)
