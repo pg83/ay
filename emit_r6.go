@@ -92,7 +92,13 @@ func emitLibraryRagel6Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	r6Parsed := ctx.scannerFor(instance).parsers.sourceParsedBuckets(rl6SourceVFS, nil).bucket(parsedIncludesCpp)
 
 	r6Ref := ctx.emit.reserve()
-	registerBoundGeneratedParsedOutput(ctx, instance, pkR6, r6Out, r6Parsed, r6Ref, []NodeRef{ragelLDRef})
+	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		ProducerKvP:    pkR6,
+		OutputPath:     r6Out,
+		ProducerRef:    r6Ref,
+		GeneratorRefs:  []NodeRef{ragelLDRef},
+		ParsedIncludes: r6Parsed,
+	})
 
 	window := walkClosure(ctx.scannerFor(instance), r6Out, in.ScanCfg)
 

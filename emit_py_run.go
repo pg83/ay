@@ -100,7 +100,13 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	pyRef := ctx.emit.reserve()
 
 	registerPYOutput := func(out VFS, parsed []IncludeDirective) {
-		registerBoundGeneratedParsedOutput(ctx, instance, pkPY, out, parsed, pyRef, nil)
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			ProducerKvP:    pkPY,
+			OutputPath:     out,
+			ProducerRef:    pyRef,
+			GeneratorRefs:  nil,
+			ParsedIncludes: parsed,
+		})
 		reg.setSourceInputs(out, pySourceInputs)
 
 		for _, s := range pyGeneratedFromSources {

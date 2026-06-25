@@ -82,7 +82,13 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 
 	ycRef := ctx.emit.reserve()
 
-	registerBoundGeneratedParsedOutput(ctx, instance, pkYC, headerVFS, headerParsed, ycRef, []NodeRef{bisonRef, m4Ref})
+	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		ProducerKvP:    pkYC,
+		OutputPath:     headerVFS,
+		ProducerRef:    ycRef,
+		GeneratorRefs:  []NodeRef{bisonRef, m4Ref},
+		ParsedIncludes: headerParsed,
+	})
 
 	if preprocessHeader {
 		ctx.codegenFor(instance).addClosureLeaf(headerVFS, srcVFS)
@@ -94,7 +100,13 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 		generatedParsed = bisonGeneratedCPPParsed(ctx, instance, srcVFS, headerVFS)
 	}
 
-	registerBoundGeneratedParsedOutput(ctx, instance, pkYC, generatedVFS, generatedParsed, ycRef, []NodeRef{bisonRef, m4Ref})
+	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		ProducerKvP:    pkYC,
+		OutputPath:     generatedVFS,
+		ProducerRef:    ycRef,
+		GeneratorRefs:  []NodeRef{bisonRef, m4Ref},
+		ParsedIncludes: generatedParsed,
+	})
 
 	spec := &CompileSpec{FlatOutput: d.flatSrc(src)}
 

@@ -48,7 +48,13 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		}
 
 		reg := ctx.codegenFor(instance)
-		registerBoundGeneratedParsedOutput(ctx, instance, pkPB, cfgH, cfgHParsed, cfgRef, cfgGenRefs)
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			ProducerKvP:    pkPB,
+			OutputPath:     cfgH,
+			ProducerRef:    cfgRef,
+			GeneratorRefs:  cfgGenRefs,
+			ParsedIncludes: cfgHParsed,
+		})
 		reg.addClosureLeaf(cfgH, cfgSource)
 
 		reg.addClosureLeaf(cfgH, cfgPbCC)
@@ -57,7 +63,13 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 			{kind: includeQuoted, target: internStr(cfgH.rel())},
 			{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())},
 		}
-		registerBoundGeneratedParsedOutput(ctx, instance, pkPB, cfgPbCC, cfgCCParsed, cfgRef, cfgGenRefs)
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			ProducerKvP:    pkPB,
+			OutputPath:     cfgPbCC,
+			ProducerRef:    cfgRef,
+			GeneratorRefs:  cfgGenRefs,
+			ParsedIncludes: cfgCCParsed,
+		})
 	}
 
 	ccSrcRel := srcRel + ".pb.cc"

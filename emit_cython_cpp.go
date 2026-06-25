@@ -193,7 +193,13 @@ func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 			reg := ctx.codegenFor(instance)
 
 			for _, h := range headerVFS {
-				registerBoundGeneratedParsedOutput(ctx, instance, pkCY, h, headerParsed, cyRef, nil)
+				ctx.codegenFor(instance).register(&GeneratedFileInfo{
+					ProducerKvP:    pkCY,
+					OutputPath:     h,
+					ProducerRef:    cyRef,
+					GeneratorRefs:  nil,
+					ParsedIncludes: headerParsed,
+				})
 
 				for _, p := range pyxInduced {
 					reg.addClosureLeafNoSubsume(h, p)
@@ -261,7 +267,13 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 			parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.rel())})
 		}
 
-		registerBoundGeneratedParsedOutput(ctx, instance, pkCY, generatedVFS, parsed, cyRef, nil)
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			ProducerKvP:    pkCY,
+			OutputPath:     generatedVFS,
+			ProducerRef:    cyRef,
+			GeneratorRefs:  nil,
+			ParsedIncludes: parsed,
+		})
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 

@@ -114,7 +114,13 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 			{kind: includeQuoted, target: strUtilGenericSerializedEnumH},
 		}
 		sort.Slice(cppParsed, func(i, j int) bool { return cppParsed[i].target.string() < cppParsed[j].target.string() })
-		registerBoundGeneratedParsedOutput(ctx, instance, pkEN, serializedCPPPath, cppParsed, enRef, []NodeRef{enumParserLD})
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			ProducerKvP:    pkEN,
+			OutputPath:     serializedCPPPath,
+			ProducerRef:    enRef,
+			GeneratorRefs:  []NodeRef{enumParserLD},
+			ParsedIncludes: cppParsed,
+		})
 
 		if withHeader {
 			hParsed := []IncludeDirective{
@@ -122,7 +128,13 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 				{kind: includeQuoted, target: internStr(serializedCPPPath.rel())},
 			}
 			sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target.string() < hParsed[j].target.string() })
-			registerBoundGeneratedParsedOutput(ctx, instance, pkEN, serializedHPath, hParsed, enRef, []NodeRef{enumParserLD})
+			ctx.codegenFor(instance).register(&GeneratedFileInfo{
+				ProducerKvP:    pkEN,
+				OutputPath:     serializedHPath,
+				ProducerRef:    enRef,
+				GeneratorRefs:  []NodeRef{enumParserLD},
+				ParsedIncludes: hParsed,
+			})
 		}
 
 		plans[i] = enumStmtPlan{

@@ -65,7 +65,14 @@ func emitConfigureFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 		Resources:    usesPython3,
 	})
 
-	registerBoundGeneratedParsedOutputWithSource(ctx, instance, pkCF, outVFS, srcVFS, cfTemplateParsedIncludes(ctx.parsers, srcVFS.rel()), cfRef, nil)
+	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		ProducerKvP:    pkCF,
+		OutputPath:     outVFS,
+		SourcePath:     srcVFS,
+		ProducerRef:    cfRef,
+		GeneratorRefs:  nil,
+		ParsedIncludes: cfTemplateParsedIncludes(ctx.parsers, srcVFS.rel()),
+	})
 
 	reg := ctx.codegenFor(instance)
 	reg.addClosureLeaf(outVFS, srcVFS)

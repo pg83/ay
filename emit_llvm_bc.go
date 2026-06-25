@@ -142,7 +142,13 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 
 		ensureResourcePeer(instance.Path.rel(), d)
 
-		registerBoundGeneratedParsedOutput(ctx, instance, pkOP, optOut, nil, opRef, nil)
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			ProducerKvP:    pkOP,
+			OutputPath:     optOut,
+			ProducerRef:    opRef,
+			GeneratorRefs:  nil,
+			ParsedIncludes: nil,
+		})
 
 		d.resources = append(d.resources, ResourceEntry{
 			Path:      optOutName,

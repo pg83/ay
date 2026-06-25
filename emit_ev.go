@@ -212,11 +212,23 @@ func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 		evHParsed = append(evHParsed, directImports...)
 		evHParsed = append(evHParsed, protobufRuntimeDirectives...)
 		evHParsed = append(evHParsed, evExtras...)
-		registerBoundGeneratedParsedOutput(ctx, instance, pkEV, evH, evHParsed, evRef, []NodeRef{event2cppLDRef})
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			ProducerKvP:    pkEV,
+			OutputPath:     evH,
+			ProducerRef:    evRef,
+			GeneratorRefs:  []NodeRef{event2cppLDRef},
+			ParsedIncludes: evHParsed,
+		})
 		evCCParsed := make([]IncludeDirective, 0, 1+len(protobufRuntimeDirectives))
 		evCCParsed = append(evCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(evH.rel())})
 		evCCParsed = append(evCCParsed, protobufRuntimeDirectives...)
-		registerBoundGeneratedParsedOutput(ctx, instance, pkEV, evPbCC, evCCParsed, evRef, []NodeRef{event2cppLDRef})
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			ProducerKvP:    pkEV,
+			OutputPath:     evPbCC,
+			ProducerRef:    evRef,
+			GeneratorRefs:  []NodeRef{event2cppLDRef},
+			ParsedIncludes: evCCParsed,
+		})
 	}
 
 	evPbCCSuffix := srcRel + ".pb.cc"

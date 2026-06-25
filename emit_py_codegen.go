@@ -121,7 +121,13 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 
 		pyRef := ctx.emit.emit(node)
 
-		registerBoundGeneratedParsedOutput(ctx, instance, pkPY, outputPath, nil, pyRef, toolRefs)
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			ProducerKvP:    pkPY,
+			OutputPath:     outputPath,
+			ProducerRef:    pyRef,
+			GeneratorRefs:  toolRefs,
+			ParsedIncludes: nil,
+		})
 	}
 }
 

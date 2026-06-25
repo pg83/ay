@@ -48,7 +48,13 @@ func emitJVDownstreamCPCC(
 				emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(h)})
 			}
 
-			registerBoundGeneratedParsedOutput(ctx, instance, pkCP, g4CppPath, emits, cpRef, nil)
+			ctx.codegenFor(instance).register(&GeneratedFileInfo{
+				ProducerKvP:    pkCP,
+				OutputPath:     g4CppPath,
+				ProducerRef:    cpRef,
+				GeneratorRefs:  nil,
+				ParsedIncludes: emits,
+			})
 		}
 
 		ccIn := in

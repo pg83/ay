@@ -30,7 +30,13 @@ func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	parsed = append(parsed, ctx.scannerFor(instance).parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
 
 	lxRef := ctx.emit.reserve()
-	registerBoundGeneratedParsedOutput(ctx, instance, pkLX, outVFS, parsed, lxRef, []NodeRef{flexRef})
+	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		ProducerKvP:    pkLX,
+		OutputPath:     outVFS,
+		ProducerRef:    lxRef,
+		GeneratorRefs:  []NodeRef{flexRef},
+		ParsedIncludes: parsed,
+	})
 
 	window := walkClosure(ctx.scannerFor(instance), outVFS, in.ScanCfg)
 

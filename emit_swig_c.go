@@ -71,8 +71,20 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 		d.pySrcs = append(d.pySrcs, internStr(pyOutRel))
 
 		d.pySrcsFullName = append(d.pySrcsFullName, true)
-		registerBoundGeneratedParsedOutput(ctx, instance, pkSW, cOutVFS, collectSwigInducedIncludes(ctx, srcVFS, swigClosure), swRef, []NodeRef{swigRef})
-		registerBoundGeneratedParsedOutput(ctx, instance, pkSW, pyOutVFS, nil, swRef, []NodeRef{swigRef})
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			ProducerKvP:    pkSW,
+			OutputPath:     cOutVFS,
+			ProducerRef:    swRef,
+			GeneratorRefs:  []NodeRef{swigRef},
+			ParsedIncludes: collectSwigInducedIncludes(ctx, srcVFS, swigClosure),
+		})
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			ProducerKvP:    pkSW,
+			OutputPath:     pyOutVFS,
+			ProducerRef:    swRef,
+			GeneratorRefs:  []NodeRef{swigRef},
+			ParsedIncludes: nil,
+		})
 
 		ctx.codegenFor(instance).setSourceInputs(pyOutVFS, append([]VFS{cOutVFS, srcVFS}, swigClosure...))
 

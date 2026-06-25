@@ -219,7 +219,13 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 		registeredPROut[out] = true
 
-		registerBoundGeneratedParsedOutput(ctx, instance, pkPR, out, parsed, prRef, []NodeRef{toolLDRef})
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			ProducerKvP:    pkPR,
+			OutputPath:     out,
+			ProducerRef:    prRef,
+			GeneratorRefs:  []NodeRef{toolLDRef},
+			ParsedIncludes: parsed,
+		})
 		reg.setSourceInputs(out, prSourceInputs)
 
 		if strings.HasSuffix(out.rel(), ".proto") {
