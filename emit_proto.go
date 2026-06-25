@@ -91,7 +91,7 @@ func protoDirectPbHIncludes(pm *IncludeParserManager, srcRel, outputRoot string)
 	return protoPbHIncludes(pm, srcRel, outputRoot, parsedIncludesHeader)
 }
 
-func protoDirectPbHResolved(pm *IncludeParserManager, srcRel string, searchPaths []VFS) []IncludeDirective {
+func protoDirectPbHResolved(pm *IncludeParserManager, srcRel string) []IncludeDirective {
 	local := pm.sourceParsedBuckets(source(srcRel), nil).bucket(parsedIncludesLocal)
 
 	if len(local) == 0 {
@@ -107,12 +107,6 @@ func protoDirectPbHResolved(pm *IncludeParserManager, srcRel string, searchPaths
 
 		if !ok {
 			continue
-		}
-
-		if strings.HasPrefix(pbH, "google/protobuf/") {
-			pbH = pbRuntimeBase + pbH
-		} else if resolved := resolveProtoImportPath(pm.fs, name, searchPaths); resolved != "" {
-			pbH = strings.TrimSuffix(resolved, name) + pbH
 		}
 
 		out = append(out, IncludeDirective{kind: d.kind, target: internStr(pbH)})
@@ -173,36 +167,6 @@ func protoDirectImportNames(pm *IncludeParserManager, srcRel string) []string {
 	}
 
 	return out
-}
-
-func resolveProtoImportPath(fs FS, importedRel string, peerProtoAddIncl []VFS) string {
-	clean := importedRel
-
-	if fs.isFile(srcRootVFS, clean) {
-		return clean
-	}
-
-	if !strings.HasPrefix(clean, "yt/") {
-		if cand := filepath.ToSlash(filepath.Clean("yt/" + clean)); fs.isFile(srcRootVFS, cand) {
-			return cand
-		}
-	}
-
-	if cand := filepath.ToSlash(filepath.Clean(pbRuntimeBase + clean)); fs.isFile(srcRootVFS, cand) {
-		return cand
-	}
-
-	for _, p := range peerProtoAddIncl {
-		if p.isBuild() {
-			continue
-		}
-
-		if fs.isFile(p, clean) {
-			return filepath.ToSlash(filepath.Clean(p.rel() + "/" + clean))
-		}
-	}
-
-	return ""
 }
 
 func protoOutputRel(outputRoot, rel string) string {
@@ -359,7 +323,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 	}
 
 	{
-		directImports := protoDirectPbHResolved(ctx.parsers, protoRelPath, protoSearchPaths)
+		directImports := protoDirectPbHResolved(ctx.parsers, protoRelPath)
 
 		if protoSrcOverride != 0 && len(genProtoImportRels) > 0 {
 			directImports = protoImportRelsToPbH(genProtoImportRels, cfg.cppOutRoot)
@@ -367,8 +331,8 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 
 		pbHImports := directImports
 
-		if siblings := sprotoSiblingDirectives(directImports, sprotoProduced); len(siblings) > 0 {
-			pbHImports = append(append([]IncludeDirective(nil), directImports...), siblings...)
+		if len(sprotoProduced) > 0 {
+			pbHImports = append(append([]IncludeDirective(nil), directImports...), sprotoInducedHeaders(directImports)...)
 		}
 
 		extras := pbHEmitsIncludesExtras()
