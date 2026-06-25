@@ -41,13 +41,9 @@ func emitLibraryCInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, s
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
 	outVFS := build(instance.Path.rel() + "/" + strings.TrimSuffix(srcRel, ".in"))
 
-	cfRef := emitConfigureFile(ctx, instance, d, srcVFS, outVFS, in)
+	emitConfigureFile(ctx, instance, d, srcVFS, outVFS, in)
 
-	in.IncludeInputs = walkClosure(ctx.scannerFor(instance), outVFS, in.ScanCfg)
-	in.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, in.IncludeInputs, cfRef)
-	ccRef, ccOut, _ := emitCC(instance, outVFS.str(), outVFS, in, ctx.host, ctx.emit)
-
-	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
+	return emitOneSource(ctx, instance, d, outVFS.str(), in)
 }
 
 func emitConfigureFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS, outVFS VFS, in ModuleCCInputs) NodeRef {
