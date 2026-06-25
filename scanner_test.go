@@ -7,7 +7,7 @@ import (
 )
 
 func scanClosure(scanner *IncludeScanner, srcRel string, cfg ScanContext) []VFS {
-	return scanner.newScanCtx(cfg, includeDirectiveParsers.registeredParserFor(srcRel)).closureOf(source(srcRel))[1:]
+	return scanner.getScanCtx(cfg, includeDirectiveParsers.registeredParserFor(srcRel)).closureOf(source(srcRel))[1:]
 }
 
 func TestStripComments_BlockCommentInclude(t *testing.T) {
@@ -194,7 +194,7 @@ func TestScanner_SearchTierCacheReuse_OwnAddIncl(t *testing.T) {
 	})
 
 	scanner := newTestScanner(fs, nil)
-	sc := scanner.newScanCtx(newScanContext(scanner.parsers, VFSesFromStrings([]string{"include"}), nil, nil, ""), nil)
+	sc := scanner.getScanCtx(newScanContext(scanner.parsers, VFSesFromStrings([]string{"include"}), nil, nil, ""), nil)
 	d := IncludeDirective{kind: includeSystem, target: internStr("foo.h")}
 
 	got1 := sc.resolveSearchPath(intern("$(S)/pkg/a.cpp"), dirKey("pkg"), d)
@@ -220,7 +220,7 @@ func TestScanner_SearchTierCacheReuse_OwnAddIncl(t *testing.T) {
 
 func TestScanner_SearchTierCacheReuse_NotFound(t *testing.T) {
 	scanner := newTestScanner(newMemFS(nil), nil)
-	sc := scanner.newScanCtx(newScanContext(scanner.parsers, VFSesFromStrings([]string{"include"}), nil, nil, ""), nil)
+	sc := scanner.getScanCtx(newScanContext(scanner.parsers, VFSesFromStrings([]string{"include"}), nil, nil, ""), nil)
 	d := IncludeDirective{kind: includeSystem, target: internStr("missing.h")}
 
 	got1 := sc.resolveSearchPath(intern("$(S)/pkg/a.cpp"), dirKey("pkg"), d)
@@ -234,7 +234,7 @@ func TestScanner_SearchTierCacheReuse_NotFound(t *testing.T) {
 		t.Fatalf("searchTierFlat entries = %d, want 1", scanner.searchTierFlat.len())
 	}
 
-	if e := scanner.searchTierFlat.get(splitMix64(sc.ctxNum, uint32(internStr("missing.h")))); e != nil && e.found {
+	if e := scanner.searchTierFlat.get(splitMix64(sc.cfg.cfg.num, uint32(internStr("missing.h")))); e != nil && e.found {
 		t.Fatalf("missing header cached as found")
 	}
 
@@ -250,7 +250,7 @@ func TestScanner_SearchTierCacheBypassedBySameDirQuoted(t *testing.T) {
 	})
 
 	scanner := newTestScanner(fs, nil)
-	sc := scanner.newScanCtx(newScanContext(scanner.parsers, VFSesFromStrings([]string{"include"}), nil, nil, ""), nil)
+	sc := scanner.getScanCtx(newScanContext(scanner.parsers, VFSesFromStrings([]string{"include"}), nil, nil, ""), nil)
 	got := sc.resolveSearchPath(intern("$(S)/pkg/a.cpp"), dirKey("pkg"), IncludeDirective{kind: includeQuoted, target: internStr("foo.h")})
 	want := []VFS{intern("$(S)/pkg/foo.h")}
 
@@ -738,7 +738,7 @@ machine Sub;
 
 	scanner := newTestScanner(fs, sysincl)
 
-	sc := scanner.newScanCtx(newScanContext(scanner.parsers, VFSesFromStrings([]string{"stl"}), nil, nil, ""), nil)
+	sc := scanner.getScanCtx(newScanContext(scanner.parsers, VFSesFromStrings([]string{"stl"}), nil, nil, ""), nil)
 
 	closure := sc.closureOf(intern("$(S)/pkg/main.rl6"))
 
@@ -1022,7 +1022,7 @@ func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 	})
 	scanner := newTestScanner(fs, nil)
 	attachCodegen(scanner, reg)
-	sc := scanner.newScanCtx(newScanContext(scanner.parsers, nil, []VFS{
+	sc := scanner.getScanCtx(newScanContext(scanner.parsers, nil, []VFS{
 		build("contrib/libs/llvm16/include"),
 		source("contrib/libs/llvm16/include"),
 	}, nil, ""), nil)
@@ -1048,7 +1048,7 @@ func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 	})
 	scanner := newTestScanner(fs, nil)
 	attachCodegen(scanner, reg)
-	sc := scanner.newScanCtx(newScanContext(scanner.parsers, nil, []VFS{
+	sc := scanner.getScanCtx(newScanContext(scanner.parsers, nil, []VFS{
 		source("contrib/libs/llvm16/include"),
 		build("contrib/libs/llvm16/include"),
 	}, nil, ""), nil)
@@ -1071,7 +1071,7 @@ func TestScanner_AddInclBuildOnlyMatchesCodegen(t *testing.T) {
 
 	scanner := newTestScanner(newMemFS(nil), nil)
 	attachCodegen(scanner, reg)
-	sc := scanner.newScanCtx(newScanContext(scanner.parsers, nil, []VFS{
+	sc := scanner.getScanCtx(newScanContext(scanner.parsers, nil, []VFS{
 		build("contrib/libs/llvm16/include"),
 		source("contrib/libs/llvm16/include"),
 	}, nil, ""), nil)
@@ -1087,7 +1087,7 @@ func TestScanner_AddInclBuildOnlyMatchesCodegen(t *testing.T) {
 
 func TestScanCtx_Resolve_RootedTargetBindsDirectly(t *testing.T) {
 	scanner := newTestScanner(newMemFS(nil), nil)
-	sc := scanner.newScanCtx(newScanContext(scanner.parsers, nil, nil, nil, ""), nil)
+	sc := scanner.getScanCtx(newScanContext(scanner.parsers, nil, nil, nil, ""), nil)
 
 	for _, target := range []string{"$(S)/util/generic/typetraits.h", "$(B)/pkg/gen.h"} {
 		d := IncludeDirective{kind: includeQuoted, target: internStr(target)}

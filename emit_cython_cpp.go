@@ -334,7 +334,8 @@ func cythonHeaderToolInputs(src VFS, pyxClosure []VFS) []VFS {
 }
 
 func cythonPyxLangClosure(scanner *IncludeScanner, src VFS, cfg ScanContext) []VFS {
-	sc := scanner.newScanCtx(cfg, includeDirectiveParsers.registeredParserFor(src.rel()))
+	sc := scanner.getScanCtx(cfg, includeDirectiveParsers.registeredParserFor(src.rel()))
+	defer scanner.putScanCtx(sc)
 
 	seen := make(map[VFS]struct{})
 
