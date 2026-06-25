@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"strings"
 )
 
@@ -22,18 +23,18 @@ func (RagelIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocat
 	inSpecification := false
 
 	eachLine(data, func(line []byte) {
-		trimmed := strings.TrimLeft(string(line), " \t")
+		trimmed := bytes.TrimLeft(line, " \t")
 
-		if trimmed == "" {
+		if len(trimmed) == 0 {
 			return
 		}
 
 		switch {
-		case strings.HasPrefix(trimmed, "%%{"):
+		case bytes.HasPrefix(trimmed, []byte("%%{")):
 			inSpecification = true
 
 			return
-		case strings.HasPrefix(trimmed, "}%%"):
+		case bytes.HasPrefix(trimmed, []byte("}%%")):
 			inSpecification = false
 
 			return
@@ -43,7 +44,7 @@ func (RagelIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocat
 			return
 		}
 
-		target, ok := parseRagelNativeIncludeLine(trimmed)
+		target, ok := parseRagelNativeIncludeLine(string(trimmed))
 
 		if !ok {
 			return
