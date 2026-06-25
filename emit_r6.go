@@ -103,13 +103,12 @@ func emitLibraryRagel6Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		return nil
 	}
 
-	ccIn := in
-	ccIn.IncludeInputs = window
-	ccIn.PerSourceCFlags = append(append([]ARG(nil), in.PerSourceCFlags...), argWnoImplicitFallthrough)
-	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, window, r6Ref)
-	ccRef, ccOut, _ := emitCC(instance, r6Out.str(), r6Out, ccIn, ctx.host, ctx.emit)
+	codegenRegForInstance(ctx, instance).setCompileSpec(r6Out, &CompileSpec{
+		FlatOutput: in.FlatOutput,
+		CFlags:     append(append([]ARG(nil), in.PerSourceCFlags...), argWnoImplicitFallthrough),
+	})
 
-	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
+	return emitOneSource(ctx, instance, d, r6Out.str(), in)
 }
 
 var (
