@@ -1615,7 +1615,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	for _, src := range d.srcs {
 		if srcExtClassOf(src) == srcExtY {
-			emitBisonProducer(ctx, instance, src.string(), moduleInputs, moduleInputs.BisonGenExt)
+			emitBisonProducer(ctx, instance, d, src, moduleInputs)
 		}
 	}
 
@@ -1846,7 +1846,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ccIn.ExtraDepRefs = []NodeRef{jsRef}
 		ccIn.IncludeInputs = ccIncludeInputs
 
-		ref, outPath, _ := emitCC(srcInstance, jsRel, joinOutVFS, ccIn, ctx.host, ctx.emit)
+		ref, outPath, _ := emitCC(srcInstance, internStr(jsRel), joinOutVFS, ccIn, ctx.host, ctx.emit)
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, outPath)
 		arDeclMeta[outPath] = SrcMeta{Prio: stmtPrioDefault, Seq: js.Seq, Generated: true}

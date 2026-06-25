@@ -53,8 +53,11 @@ func bisonGeneratedRel(srcRel, genExt string) string {
 	return srcRel + genExt
 }
 
-func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCCInputs, genExt string) {
+func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) {
 	na := ctx.na
+
+	srcRel := src.string()
+	genExt := in.BisonGenExt
 
 	bisonRef, bisonBin := bisonTool(ctx, instance)
 	m4Ref, m4Bin := m4Tool(ctx, instance)
@@ -89,6 +92,18 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, srcRel string, in M
 	}
 
 	registerBoundGeneratedParsedOutput(ctx, instance, pkYC, generatedVFS, generatedParsed, ycRef, []NodeRef{bisonRef, m4Ref})
+
+	var compileCFlags []ARG
+
+	if extras := d.perSrcCFlagsFor(src); extras != nil {
+		compileCFlags = append(compileCFlags, *extras...)
+	}
+
+	if preprocessHeader {
+		compileCFlags = append(compileCFlags, argWnoUnusedButSetVariable, argWnoDeprecatedCopy)
+	}
+
+	codegenRegForInstance(ctx, instance).setCompileCFlags(generatedVFS, compileCFlags)
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envBISON_PKGDATADIR, Value: strBisonPkgData}, {Name: envM4, Value: m4Bin}}
 	preprocessEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -130,27 +145,10 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, srcRel string, in M
 }
 
 func emitBisonY(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
-	srcRel := src.string()
-	genExt := in.BisonGenExt
-
-	preprocessHeader := genExt != ".c"
-	generatedRel := bisonGeneratedRel(srcRel, genExt)
+	generatedRel := bisonGeneratedRel(src.string(), in.BisonGenExt)
 	generatedVFS := build(instance.Path.rel() + "/" + generatedRel)
 
-	ycRef := codegenRegForInstance(ctx, instance).lookup(generatedVFS).ProducerRef
-
-	ccIn := in
-	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), generatedVFS, in.ScanCfg)
-
-	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, ycRef)
-
-	if preprocessHeader {
-		ccIn.PerSourceCFlags = append(append([]ARG(nil), in.PerSourceCFlags...), argWnoUnusedButSetVariable, argWnoDeprecatedCopy)
-	}
-
-	ccRef, ccOut, _ := emitCC(instance, generatedRel, generatedVFS, ccIn, ctx.host, ctx.emit)
-
-	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
+	return emitOneSource(ctx, instance, d, generatedVFS.str(), in)
 }
 
 func bisonTool(ctx *GenCtx, instance ModuleInstance) (NodeRef, string) {

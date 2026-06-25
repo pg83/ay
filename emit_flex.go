@@ -46,7 +46,7 @@ func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 		ccIn.PerSourceCFlags = append(append([]ARG(nil), in.PerSourceCFlags...), argWnoUnusedVariable)
 	}
 
-	ccRef, ccOut, _ := emitCC(instance, ccSrcRel, outVFS, ccIn, ctx.host, ctx.emit)
+	ccRef, ccOut, _ := emitCC(instance, internStr(ccSrcRel), outVFS, ccIn, ctx.host, ctx.emit)
 
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }

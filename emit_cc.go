@@ -52,8 +52,15 @@ type ModuleCCInputs struct {
 	TC                   ModuleToolchain
 }
 
-func emitCC(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit *StreamingEmitter) (NodeRef, VFS, InputChunks) {
+func emitCC(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit *StreamingEmitter) (NodeRef, VFS, InputChunks) {
 	na := emit.nodeArenas()
+
+	srcRel := src.string()
+
+	if v := src.vfs(); v != 0 {
+		srcVFS = v
+		srcRel = strings.TrimPrefix(v.rel(), instance.Path.rel()+"/")
+	}
 
 	suffix := ".o"
 
@@ -470,9 +477,11 @@ func (m InclArgMemo) arg(path VFS) STR {
 }
 
 func emitLibraryCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
-	srcRel := src.string()
+	srcVFS := src.vfs()
 
-	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
+	if srcVFS == 0 {
+		srcVFS = resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
+	}
 
 	in.IncludeInputs = walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)
 
@@ -482,7 +491,7 @@ func emitLibraryCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src
 		in.IncludeInputs = cythonCompileInducedInputs(ctx, instance, in.IncludeInputs)
 	}
 
-	ref, outPath, _ := emitCC(instance, srcRel, srcVFS, in, ctx.host, ctx.emit)
+	ref, outPath, _ := emitCC(instance, src, srcVFS, in, ctx.host, ctx.emit)
 
 	return &SourceEmit{Ref: ref, OutPath: outPath}
 }

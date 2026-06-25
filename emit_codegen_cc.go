@@ -33,7 +33,7 @@ func emitCodegenDownstreamCCFromVFS(ctx *GenCtx, instance ModuleInstance, cppRel
 	ccIn.IncludeInputs = includeInputs
 	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, includeInputs, depRefs...)
 
-	ref, outPath, _ := emitCC(instance, cppRel, cppPath, ccIn, ctx.host, ctx.emit)
+	ref, outPath, _ := emitCC(instance, internStr(cppRel), cppPath, ccIn, ctx.host, ctx.emit)
 
 	return ref, outPath
 }

@@ -76,7 +76,7 @@ func emitLibraryRagel5Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	ccIn.IncludeInputs = append([]VFS{r5TmpOut}, ccClosure...)
 	ccIn.PerSourceCFlags = append(append([]ARG(nil), in.PerSourceCFlags...), argWnoImplicitFallthrough)
 	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, r5Ref)
-	ccRef, ccOut, _ := emitCC(instance, ccSrcRel, r5CppOut, ccIn, ctx.host, ctx.emit)
+	ccRef, ccOut, _ := emitCC(instance, internStr(ccSrcRel), r5CppOut, ccIn, ctx.host, ctx.emit)
 
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }
