@@ -1,10 +1,5 @@
 package main
 
-import (
-	"path"
-	"strings"
-)
-
 type ParsedIncludeBucket uint8
 
 const (
@@ -121,32 +116,8 @@ func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser Inclu
 	}
 
 	out := parser.parse(rel, data, pm.cache.directives)
-	out = pm.withCythonSibling(rel, out)
 
 	return put(out)
-}
-
-func (pm *IncludeParserManager) withCythonSibling(rel string, set ParsedIncludeSet) ParsedIncludeSet {
-	if !strings.HasSuffix(rel, ".pyx") {
-		return set
-	}
-
-	sibling := rel[:len(rel)-len(".pyx")] + ".pxd"
-	sibDir, sibBase := splitDirName(sibling)
-
-	if !pm.fs.isFile(dirKey(sibDir), sibBase) {
-		return set
-	}
-
-	d := IncludeDirective{kind: includeQuoted, target: internStr(path.Base(sibling))}
-	local := set.bucket(parsedIncludesLocal)
-	merged := make([]IncludeDirective, 0, 1+len(local))
-	merged = append(merged, d)
-	merged = append(merged, local...)
-
-	set[parsedIncludesLocal] = merged
-
-	return set
 }
 
 func (pm *IncludeParserManager) injectSourceParse(vfsPath VFS, set ParsedIncludeSet) {
