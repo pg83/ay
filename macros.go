@@ -19,20 +19,13 @@ var intSTR = func() [1024]STR {
 }()
 
 func evalAtomString(nodes []CondNode, i int32, env Environment) string {
-	switch v := evalAtomNode(nodes, i, env).(type) {
-	case string:
-		return v
-	case int:
-		return strconv.Itoa(v)
-	case bool:
-		if v {
-			return "yes"
-		}
+	v := evalAtomNode(nodes, i, env)
 
-		return "no"
+	if v.isNum {
+		return strconv.Itoa(v.num)
 	}
 
-	return ""
+	return v.str
 }
 
 func identEnvNode(n *CondNode) ENV {
@@ -104,40 +97,54 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 	return false
 }
 
-func evalAtomNode(nodes []CondNode, i int32, env Environment) any {
+type atomVal struct {
+	num   int
+	str   string
+	isNum bool
+}
+
+func atomTypeName(v atomVal) string {
+	if v.isNum {
+		return "int"
+	}
+
+	return "string"
+}
+
+func evalAtomNode(nodes []CondNode, i int32, env Environment) atomVal {
 	n := &nodes[i]
 
 	switch n.Kind {
 	case ckIdent:
 		if n.Name == "yes" || n.Name == "no" {
-			return n.Name
+			return atomVal{str: n.Name}
 		}
 
 		switch k, v := env.s.lookup(identEnvNode(n)); k {
 		case envStr:
-			return v.string()
+			return atomVal{str: v.string()}
 		case envInt:
 			x, _ := strconv.Atoi(v.string())
 
-			return x
+			return atomVal{num: x, isNum: true}
 		}
 
 		if isImplicitBuildVar(n.Name) {
-			return n.Name
+			return atomVal{str: n.Name}
 		}
 
 		throwFmt("macros: unknown IF identifier %q", n.Name)
 
-		return nil
+		return atomVal{}
 	case ckString:
-		return n.Name
+		return atomVal{str: n.Name}
 	case ckInt:
-		return n.Ival
+		return atomVal{num: n.Ival, isNum: true}
 	}
 
 	throwFmt("macros: unexpected cond kind %d in comparator operand position", n.Kind)
 
-	return nil
+	return atomVal{}
 }
 
 func evalVersionCmp(nodes []CondNode, n *CondNode, env Environment) bool {
@@ -192,70 +199,30 @@ func evalEq(nodes []CondNode, n *CondNode, env Environment) bool {
 	l := evalAtomNode(nodes, n.L, env)
 	r := evalAtomNode(nodes, n.R, env)
 
-	switch lv := l.(type) {
-	case string:
-		if rv, ok := r.(bool); ok {
-			if rv {
-				return lv == "yes"
-			}
-
-			return lv == "no"
+	if l.isNum {
+		if !r.isNum {
+			throwFmt("macros: == operand type mismatch: left is int %d, right is %s", l.num, atomTypeName(r))
 		}
 
-		if rv, ok := r.(int); ok {
-			return lv == strconv.Itoa(rv)
-		}
-
-		rv, ok := r.(string)
-
-		if !ok {
-			throwFmt("macros: == operand type mismatch: left is string %q, right is %T", lv, r)
-		}
-
-		return lv == rv
-	case int:
-		rv, ok := r.(int)
-
-		if !ok {
-			throwFmt("macros: == operand type mismatch: left is int %d, right is %T", lv, r)
-		}
-
-		return lv == rv
-	case bool:
-		if rv, ok := r.(string); ok {
-			if lv {
-				return "yes" == rv
-			}
-
-			return "no" == rv
-		}
-
-		rv, ok := r.(bool)
-
-		if !ok {
-			throwFmt("macros: == operand type mismatch: left is bool %v, right is %T", lv, r)
-		}
-
-		return lv == rv
+		return l.num == r.num
 	}
 
-	throwFmt("macros: == operand has unsupported dynamic type %T", l)
+	if r.isNum {
+		return l.str == strconv.Itoa(r.num)
+	}
 
-	return false
+	return l.str == r.str
 }
 
 func evalLt(nodes []CondNode, n *CondNode, env Environment) bool {
 	l := evalAtomNode(nodes, n.L, env)
 	r := evalAtomNode(nodes, n.R, env)
 
-	li, lok := l.(int)
-	ri, rok := r.(int)
-
-	if !lok || !rok {
-		throwFmt("macros: < requires int operands, got left=%T right=%T", l, r)
+	if !l.isNum || !r.isNum {
+		throwFmt("macros: < requires int operands, got left=%s right=%s", atomTypeName(l), atomTypeName(r))
 	}
 
-	return li < ri
+	return l.num < r.num
 }
 
 func makeDefaultIfEnv() Environment {
