@@ -104,14 +104,10 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 			ProducerKvP:    pkPY,
 			OutputPath:     out,
 			ProducerRef:    pyRef,
-			GeneratorRefs:  nil,
 			ParsedIncludes: parsed,
+			SourceInputs:   pySourceInputs,
+			ClosureLeaves:  pyGeneratedFromSources,
 		})
-		reg.setSourceInputs(out, pySourceInputs)
-
-		for _, s := range pyGeneratedFromSources {
-			reg.addClosureLeaf(out, s)
-		}
 	}
 
 	for _, f := range stmt.OUTFiles {

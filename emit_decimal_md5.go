@@ -73,24 +73,17 @@ func emitDecimalMD5(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *D
 		Resources:    usesPython3,
 	})
 
-	ctx.codegenFor(instance).register(&GeneratedFileInfo{
-		ProducerKvP:    pkSV,
-		OutputPath:     outVFS,
-		ProducerRef:    svRef,
-		GeneratorRefs:  nil,
-		ParsedIncludes: nil,
-	})
-
-	reg := ctx.codegenFor(instance)
-
 	sourceInputs := make([]VFS, 0, len(optVFSs)+1)
 	sourceInputs = append(sourceInputs, optVFSs...)
 	sourceInputs = append(sourceInputs, decimalMD5PyVFS)
-	reg.setSourceInputs(outVFS, sourceInputs)
 
-	for _, v := range sourceInputs {
-		reg.addClosureLeaf(outVFS, v)
-	}
+	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		ProducerKvP:   pkSV,
+		OutputPath:    outVFS,
+		ProducerRef:   svRef,
+		SourceInputs:  sourceInputs,
+		ClosureLeaves: sourceInputs,
+	})
 
 	return svRef
 }

@@ -72,11 +72,8 @@ func emitConfigureFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 		ProducerRef:    cfRef,
 		GeneratorRefs:  nil,
 		ParsedIncludes: cfTemplateParsedIncludes(ctx.parsers, srcVFS.rel()),
+		ClosureLeaves:  []VFS{srcVFS, configureFilePyVFS},
 	})
-
-	reg := ctx.codegenFor(instance)
-	reg.addClosureLeaf(outVFS, srcVFS)
-	reg.addClosureLeaf(outVFS, configureFilePyVFS)
 
 	return cfRef
 }

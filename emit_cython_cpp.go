@@ -194,18 +194,16 @@ func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 
 			for _, h := range headerVFS {
 				ctx.codegenFor(instance).register(&GeneratedFileInfo{
-					ProducerKvP:    pkCY,
-					OutputPath:     h,
-					ProducerRef:    cyRef,
-					GeneratorRefs:  nil,
-					ParsedIncludes: headerParsed,
+					ProducerKvP:     pkCY,
+					OutputPath:      h,
+					ProducerRef:     cyRef,
+					ParsedIncludes:  headerParsed,
+					ProducerMainOut: generatedVFS,
 				})
 
 				for _, p := range pyxInduced {
 					reg.addClosureLeafNoSubsume(h, p)
 				}
-
-				reg.setProducerMainOut(h, generatedVFS)
 			}
 		}
 

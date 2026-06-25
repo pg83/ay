@@ -219,26 +219,27 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 		registeredPROut[out] = true
 
-		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		leaves := prGeneratedFromSources
+
+		if out != mainOutputVFS && !ridesHeaderViaParsed {
+			leaves = append([]VFS{mainOutputVFS}, prGeneratedFromSources...)
+		}
+
+		info := &GeneratedFileInfo{
 			ProducerKvP:    pkPR,
 			OutputPath:     out,
 			ProducerRef:    prRef,
 			GeneratorRefs:  []NodeRef{toolLDRef},
 			ParsedIncludes: parsed,
-		})
-		reg.setSourceInputs(out, prSourceInputs)
+			SourceInputs:   prSourceInputs,
+			ClosureLeaves:  leaves,
+		}
 
 		if strings.HasSuffix(out.rel(), ".proto") {
-			reg.setProtoImportRels(out, protoOutputIncludeRels)
+			info.ProtoImportRels = protoOutputIncludeRels
 		}
 
-		if out != mainOutputVFS && !ridesHeaderViaParsed {
-			reg.addClosureLeaf(out, mainOutputVFS)
-		}
-
-		for _, s := range prGeneratedFromSources {
-			reg.addClosureLeaf(out, s)
-		}
+		ctx.codegenFor(instance).register(info)
 	}
 
 	parsedFor := func(f STR, out VFS, auto bool) ([]IncludeDirective, bool) {

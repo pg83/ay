@@ -155,26 +155,23 @@ func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 
 	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.parsers, srcVFS.rel())
 
+	headerLeaves := []VFS{flatcWrapperVFS}
+
+	if srcVFS.isSource() {
+		headerLeaves = append(headerLeaves, srcVFS)
+	}
+
+	headerLeaves = append(headerLeaves, v.runtimeVFS)
+	headerLeaves = append(headerLeaves, transitiveImports...)
+
 	ctx.codegenFor(instance).register(&GeneratedFileInfo{
 		ProducerKvP:    v.procKind,
 		OutputPath:     headerVFS,
 		ProducerRef:    flRef,
 		GeneratorRefs:  []NodeRef{flatcLDRef},
 		ParsedIncludes: headerIncludes,
+		ClosureLeaves:  headerLeaves,
 	})
-
-	reg := ctx.codegenFor(instance)
-	reg.addClosureLeaf(headerVFS, flatcWrapperVFS)
-
-	if srcVFS.isSource() {
-		reg.addClosureLeaf(headerVFS, srcVFS)
-	}
-
-	reg.addClosureLeaf(headerVFS, v.runtimeVFS)
-
-	for _, imp := range transitiveImports {
-		reg.addClosureLeaf(headerVFS, imp)
-	}
 
 	cppIncludes := []IncludeDirective{{kind: includeQuoted, target: internStr(headerVFS.rel())}}
 

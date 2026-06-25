@@ -358,25 +358,22 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 			pbGenRefs = append(pbGenRefs, depRefs(p.LDRef)...)
 		}
 
+		pbHLeaves := []VFS{source(protoRelPath)}
+
+		if protoSrcOverride != 0 {
+			pbHLeaves = protoProducerSourceInputs
+		}
+
 		ctx.codegenFor(instance).register(&GeneratedFileInfo{
 			ProducerKvP:    pkPB,
 			OutputPath:     pbH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pbGenRefs,
 			ParsedIncludes: pbHParsed,
+			ClosureLeaves:  pbHLeaves,
 		})
 
 		{
-			reg := ctx.codegenFor(instance)
-
-			if protoSrcOverride == 0 {
-				reg.addClosureLeaf(pbH, source(protoRelPath))
-			} else {
-				for _, s := range protoProducerSourceInputs {
-					reg.addClosureLeaf(pbH, s)
-				}
-			}
-
 			protoBaseName := filepath.Base(protoRelPath)
 
 			for _, plugin := range d.cppProtoPlugins {
