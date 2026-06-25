@@ -153,7 +153,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 
 		enClosure := dedupVFS(closure, ownOutputClosure)
 
-		augmentedDepENRefs := resolveCodegenDepRefs(ctx, instance, enClosure)
+		augmentedDepENRefs := resolveCodegenDepRefsExcl(ctx, instance, enClosure)
 
 		emitEN(
 			instance,

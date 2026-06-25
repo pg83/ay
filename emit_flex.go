@@ -37,7 +37,7 @@ func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 
 	ccIn := in
 	ccIn.IncludeInputs = window
-	ccIn.ExtraDepRefs = append([]NodeRef{lxRef}, resolveCodegenDepRefs(ctx, instance, window, lxRef)...)
+	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, window, lxRef)
 
 	if strings.HasSuffix(srcRel, ".l") {
 		ccIn.IncludeInputs = dedupVFS(window, []VFS{srcVFS})

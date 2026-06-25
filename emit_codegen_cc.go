@@ -11,11 +11,7 @@ func emitCodegenDownstreamAS(ctx *GenCtx, instance ModuleInstance, asmRel string
 
 	asIn := in
 	asIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), asmPath, in.ScanCfg)
-	asIn.ExtraDepRefs = depRefs
-
-	if extra := resolveCodegenDepRefs(ctx, instance, asIn.IncludeInputs, depRefs...); len(extra) > 0 {
-		asIn.ExtraDepRefs = append(append([]NodeRef(nil), depRefs...), extra...)
-	}
+	asIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, asIn.IncludeInputs, depRefs...)
 
 	if instance.Platform.ISA == ISAX8664 && strings.HasSuffix(asmRel, ".asm") {
 		yasmLD, _ := ctx.tool(argContribToolsYasm)
@@ -35,13 +31,7 @@ func emitCodegenDownstreamCCFromVFS(ctx *GenCtx, instance ModuleInstance, cppRel
 
 	ccIn := in
 	ccIn.IncludeInputs = includeInputs
-	ccIn.ExtraDepRefs = depRefs
-
-	extra := resolveCodegenDepRefs(ctx, instance, includeInputs, depRefs...)
-
-	if len(extra) > 0 {
-		ccIn.ExtraDepRefs = append(append([]NodeRef(nil), depRefs...), extra...)
-	}
+	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, includeInputs, depRefs...)
 
 	ref, outPath, _ := emitCC(instance, cppRel, cppPath, ccIn, ctx.host, ctx.emit)
 

@@ -275,14 +275,12 @@ func emitResourceObjcopy(
 			Resources:    instance.Platform.UsesPython3Clang,
 		}
 
-		node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
-
 		dataInputs := make([]VFS, 0, len(cur.pathInputs)+len(cur.closureInputs)+len(cur.kvInputs))
 		dataInputs = append(dataInputs, cur.pathInputs...)
 		dataInputs = append(dataInputs, cur.closureInputs...)
 		dataInputs = append(dataInputs, cur.kvInputs...)
 
-		node.DepRefs = append(node.DepRefs, resolveCodegenDepRefs(ctx, instance, dataInputs, oc.rescompilerLDRef, oc.rescompressorLDRef)...)
+		node.DepRefs = append(node.DepRefs, resolveCodegenDepRefsIncl(ctx, instance, dataInputs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)...)
 
 		r := ctx.emit.emit(node)
 		out.Refs = append(out.Refs, r)
@@ -705,13 +703,7 @@ func emitPySrcObjcopy(
 				Resources:    instance.Platform.UsesPython3Clang,
 			}
 
-			node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
-
-			exclude := depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)
-
-			if extras := resolveCodegenDepRefs(ctx, instance, ch.inps, exclude...); len(extras) > 0 {
-				node.DepRefs = append(node.DepRefs, extras...)
-			}
+			node.DepRefs = append(node.DepRefs, resolveCodegenDepRefsIncl(ctx, instance, ch.inps, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)...)
 
 			r := ctx.emit.emit(node)
 			res.Refs = append(res.Refs, r)

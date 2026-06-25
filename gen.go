@@ -220,7 +220,7 @@ type ScanCtxPerfStats struct {
 	closureWindows  int
 }
 
-func resolveCodegenDepRefs(ctx *GenCtx, consumer ModuleInstance, includeInputs []VFS, exclude ...NodeRef) []NodeRef {
+func resolveCodegenDepRefsExcl(ctx *GenCtx, consumer ModuleInstance, includeInputs []VFS, exclude ...NodeRef) []NodeRef {
 	if len(includeInputs) == 0 {
 		return nil
 	}
@@ -232,6 +232,38 @@ func resolveCodegenDepRefs(ctx *GenCtx, consumer ModuleInstance, includeInputs [
 	}
 
 	var out []NodeRef
+
+	reg := codegenRegForInstance(ctx, consumer)
+
+	for _, p := range includeInputs {
+		if !p.isBuild() {
+			continue
+		}
+
+		info := reg.lookup(p)
+
+		if info == nil {
+			continue
+		}
+
+		if !deduper.add(VFS(info.ProducerRef)) {
+			continue
+		}
+
+		out = append(out, info.ProducerRef)
+	}
+
+	return out
+}
+
+func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, includeInputs []VFS, incl ...NodeRef) []NodeRef {
+	deduper.reset()
+
+	out := append([]NodeRef(nil), incl...)
+
+	for _, r := range incl {
+		deduper.add(VFS(r))
+	}
 
 	reg := codegenRegForInstance(ctx, consumer)
 
