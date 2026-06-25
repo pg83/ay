@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"path"
 	"strings"
 )
@@ -23,20 +24,20 @@ func (CythonIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAlloca
 	}
 
 	eachLine(data, func(line []byte) {
-		s := strings.TrimSpace(string(line))
+		t := bytes.TrimSpace(line)
 
-		if s == "" || strings.HasPrefix(s, "#") {
+		if len(t) == 0 || t[0] == '#' {
 			return
 		}
 
-		if m := cythonIncludeRe.FindStringSubmatch(s); len(m) == 2 {
-			add(IncludeDirective{kind: includeQuoted, target: internStr(m[1])})
+		if m := cythonIncludeRe.FindSubmatch(t); len(m) == 2 {
+			add(IncludeDirective{kind: includeQuoted, target: internBytes(m[1])})
 
 			return
 		}
 
-		if m := cythonExternFromRe.FindStringSubmatch(s); len(m) == 2 {
-			target, kind, ok := parseDelimitedIncludeTarget(m[1])
+		if m := cythonExternFromRe.FindSubmatch(t); len(m) == 2 {
+			target, kind, ok := parseDelimitedIncludeTarget(string(m[1]))
 
 			if ok {
 				add(IncludeDirective{kind: kind, target: internStr(target)})
@@ -45,14 +46,14 @@ func (CythonIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAlloca
 			return
 		}
 
-		if m := cythonCimportFromRe.FindStringSubmatch(s); len(m) == 3 {
-			addCythonCimportFrom(add, m[1], m[2])
+		if m := cythonCimportFromRe.FindSubmatch(t); len(m) == 3 {
+			addCythonCimportFrom(add, string(m[1]), string(m[2]))
 
 			return
 		}
 
-		if m := cythonCimportRe.FindStringSubmatch(s); len(m) == 2 {
-			for _, part := range strings.Split(m[1], ",") {
+		if m := cythonCimportRe.FindSubmatch(t); len(m) == 2 {
+			for _, part := range strings.Split(string(m[1]), ",") {
 				part = strings.TrimSpace(part)
 
 				if part == "" {
