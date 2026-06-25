@@ -1,0 +1,108 @@
+package main
+
+import (
+	"bytes"
+	"strings"
+)
+
+type ProtoIncludeDirectiveParser struct{}
+
+func (ProtoIncludeDirectiveParser) id() uint32 {
+	return 4
+}
+
+func (ProtoIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+	return parseProtoDirectiveSet(data, a)
+}
+
+func protoImportInducedHeader(target string) (string, bool) {
+	switch {
+	case strings.HasSuffix(target, ".ev"):
+		return strings.TrimSuffix(target, ".ev") + ".ev.pb.h", true
+	case strings.HasSuffix(target, ".cfgproto"):
+
+		return target + ".pb.h", true
+	case strings.HasSuffix(target, ".gztproto"):
+
+		return strings.TrimSuffix(target, ".gztproto") + ".pb.h", true
+	case strings.HasSuffix(target, ".proto"):
+		return strings.TrimSuffix(target, ".proto") + ".pb.h", true
+	}
+
+	return "", false
+}
+
+func parseProtoDirectiveSet(data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+	block := a.alloc(directiveBlockHint)
+	k := 0
+
+	eachLine(data, func(line []byte) {
+		target, kind, ok := parseProtoImportLine(line)
+
+		if !ok {
+			return
+		}
+
+		k = addDirective(block, k, IncludeDirective{kind: kind, target: internStr(target)})
+	})
+
+	local := block[:k:k]
+	a.commit(k)
+
+	hblock := a.alloc(directiveBlockHint)
+	j := 0
+
+	for _, d := range local {
+		if pbH, ok := protoImportInducedHeader(d.target.string()); ok {
+			j = addDirective(hblock, j, IncludeDirective{kind: d.kind, target: internStr(pbH)})
+		}
+	}
+
+	hcpp := hblock[:j:j]
+	a.commit(j)
+
+	var set ParsedIncludeSet
+
+	if len(local) > 0 {
+		set[parsedIncludesLocal] = local
+	}
+
+	set[parsedIncludesHeader] = hcpp
+	set[parsedIncludesCpp] = hcpp
+
+	return set
+}
+
+func parseProtoImportLine(line []byte) (string, IncludeKind, bool) {
+	b := bytes.TrimSpace(line)
+
+	if len(b) == 0 {
+		return "", includeSystem, false
+	}
+
+	if idx := bytes.Index(b, protoLineComment); idx >= 0 {
+		b = bytes.TrimSpace(b[:idx])
+	}
+
+	if !bytes.HasPrefix(b, protoImportKw) {
+		return "", includeSystem, false
+	}
+
+	trimmed := string(b)
+
+	if isParserIdentContinuation(trimmed, len("import")) {
+		return "", includeSystem, false
+	}
+
+	rest := strings.TrimSpace(trimmed[len("import"):])
+
+	if strings.HasPrefix(rest, "public") && !isParserIdentContinuation(rest, len("public")) {
+		rest = strings.TrimSpace(rest[len("public"):])
+	} else if strings.HasPrefix(rest, "weak") && !isParserIdentContinuation(rest, len("weak")) {
+		rest = strings.TrimSpace(rest[len("weak"):])
+	}
+
+	target, kind, ok := parseDelimitedIncludeTarget(rest)
+
+	return target, kind, ok
+}
