@@ -192,7 +192,12 @@ func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 
 			for _, h := range headerVFS {
 				registerBoundGeneratedParsedOutput(ctx, instance, pkCY, h, headerParsed, cyRef, nil)
-				reg.setCythonPyxInduced(h, pyxInduced, generatedVFS)
+
+				for _, p := range pyxInduced {
+					reg.addClosureLeafNoSubsume(h, p)
+				}
+
+				reg.setProducerMainOut(h, generatedVFS)
 			}
 		}
 
@@ -241,8 +246,6 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 		if stmt.Header {
 			toolInputs = cythonHeaderToolInputs(srcVFS, p.headerPyxClosure)
 		}
-
-		toolInputs = cythonInducedPyxClosure(ctx, instance, sourceClosure, toolInputs)
 
 		if pxdVFS, ok := resolveCythonPxd(ctx, instance, in, stmt.Pxd); ok {
 			pxdClosure := walkClosure(ctx.scannerFor(instance), pxdVFS, srcScanIn.ScanCfg)
@@ -367,48 +370,18 @@ func isCythonLangFile(rel string) bool {
 	return hasSuffix(rel, ".pyx") || hasSuffix(rel, ".pxd") || hasSuffix(rel, ".pxi") || hasSuffix(rel, ".py")
 }
 
-func cythonInducedPyxClosure(ctx *GenCtx, instance ModuleInstance, sourceClosure, toolInputs []VFS) []VFS {
-	reg := codegenRegForInstance(ctx, instance)
-
-	var induced [][]VFS
-
-	for _, v := range sourceClosure {
-		if !v.isBuild() {
-			continue
-		}
-
-		if pyx := reg.cythonPyxInduced(v); len(pyx) > 0 {
-			induced = append(induced, pyx)
-		}
-	}
-
-	if len(induced) == 0 {
-		return toolInputs
-	}
-
-	return keepOnlySourceVFS(dedupVFS(append([][]VFS{toolInputs}, induced...)...))
-}
-
 func cythonCompileInducedInputs(ctx *GenCtx, instance ModuleInstance, includeInputs []VFS) []VFS {
 	reg := codegenRegForInstance(ctx, instance)
 
-	var extra [][]VFS
+	var extra []VFS
 
 	for _, v := range includeInputs {
 		if !v.isBuild() {
 			continue
 		}
 
-		pyx, mainOut := reg.cythonPyxInducedInfo(v)
-
-		if len(pyx) == 0 {
-			continue
-		}
-
-		extra = append(extra, pyx)
-
-		if mainOut != 0 {
-			extra = append(extra, []VFS{mainOut})
+		if mainOut := reg.cythonMainOut(v); mainOut != 0 {
+			extra = append(extra, mainOut)
 		}
 	}
 
@@ -416,7 +389,7 @@ func cythonCompileInducedInputs(ctx *GenCtx, instance ModuleInstance, includeInp
 		return includeInputs
 	}
 
-	return dedupVFS(append([][]VFS{includeInputs}, extra...)...)
+	return dedupVFS(includeInputs, extra)
 }
 
 type cythonCppInduced struct {
