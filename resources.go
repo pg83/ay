@@ -37,7 +37,7 @@ func makeResourceDecl(name, uri string) ResourceDecl {
 		URI:       internStr(uri),
 		GlobalVar: internStr(globalVar),
 		Value:     internStr(value),
-		Token:     internStr(globalVar + "::" + value),
+		Token:     internV(globalVar, "::", value),
 	}
 }
 
@@ -223,17 +223,17 @@ func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolc
 			root := "$(B)/resources/" + clangRes
 			tc.ClangResource = clangResID
 			tc.ClangRoot = internStr(root)
-			tc.CC = internStr(root + "/bin/clang")
-			tc.CXX = internStr(root + "/bin/clang++")
-			tc.AR = internStr(root + "/bin/llvm-ar")
-			tc.Objcopy = internStr(root + "/bin/llvm-objcopy")
-			tc.Strip = internStr(root + "/bin/llvm-strip")
+			tc.CC = internV(root, "/bin/clang")
+			tc.CXX = internV(root, "/bin/clang++")
+			tc.AR = internV(root, "/bin/llvm-ar")
+			tc.Objcopy = internV(root, "/bin/llvm-objcopy")
+			tc.Strip = internV(root, "/bin/llvm-strip")
 		case strLLDRootName:
 			root := "$(B)/resources/" + resourcePatternLLDRoot
 			tc.LLDRoot = internStr(root)
-			tc.LLD = internStr(root + "/bin/ld.lld")
+			tc.LLD = internV(root, "/bin/ld.lld")
 		case strYMakePython3Name:
-			tc.Python3 = internStr("$(B)/resources/" + resourcePatternYMakePython3 + "/bin/python3")
+			tc.Python3 = internV("$(B)/resources/", resourcePatternYMakePython3, "/bin/python3")
 		}
 	}
 

@@ -39,7 +39,7 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 		buildScriptsFetchFromSandboxPy.str(),
 		argYaStartCommandFile.str(),
 		strResourceFile,
-		internStr("$(RESOURCE_ROOT)/sbr/" + id + "/resource"),
+		internV("$(RESOURCE_ROOT)/sbr/", id, "/resource"),
 		strResourceId,
 		stmt.ResourceId,
 		internStr(mode),

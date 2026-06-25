@@ -80,7 +80,7 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 				continue
 			}
 
-			cppVFS := build(copyFileOutputVFS(instance.Path.rel(), out).rel() + ".cpp")
+			cppVFS := build(copyFileOutputVFS(instance.Path.rel(), out).rel(), ".cpp")
 			emit := emitFlatcCppCompile(ctx, instance, cppVFS, in)
 			res.CCRefs = append(res.CCRefs, emit.Ref)
 			res.CCOutputs = append(res.CCOutputs, emit.OutPath)

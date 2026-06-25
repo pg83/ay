@@ -41,7 +41,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 
 		for _, src := range stmt.Sources {
 			inputVFS, producer := llvmBcSourceInfo(ctx, instance, src)
-			bcOut := build(llvmBcRootRelArcSrc(ctx, instance, src) + stmt.Suffix + ".bc")
+			bcOut := build(llvmBcRootRelArcSrc(ctx, instance, src), stmt.Suffix, ".bc")
 			bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
 
 			closure := walkClosure(ctx.scannerFor(instance), inputVFS, in.ScanCfg)
@@ -79,7 +79,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 			bcPaths = append(bcPaths, bcOut)
 		}
 
-		mergedOut := build(instance.Path.rel() + "/" + stmt.Name + "_merged" + stmt.Suffix + ".bc")
+		mergedOut := build(instance.Path.rel(), "/", stmt.Name, "_merged", stmt.Suffix, ".bc")
 		ldArgs := []STR{internStr(llvmLink)}
 
 		for _, p := range bcPaths {
@@ -107,16 +107,16 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 		ldRef := ctx.emit.emit(ldNode)
 
 		optOutName := stmt.Name + "_optimized" + stmt.Suffix + ".bc"
-		optOut := build(instance.Path.rel() + "/" + optOutName)
+		optOut := build(instance.Path.rel(), "/", optOutName)
 		optArgs := []STR{internStr(python), internStr(optWrapper), internStr(opt), (mergedOut).str(), argDashO.str(), (optOut).str()}
 		passes := []string{"default<O2>", "globalopt", "globaldce"}
 
 		if len(stmt.Symbols) > 0 {
 			passes = append(passes, "internalize")
-			optArgs = append(optArgs, internStr("-internalize-public-api-list="+strings.Join(stmt.Symbols, "#")))
+			optArgs = append(optArgs, internV("-internalize-public-api-list=", strings.Join(stmt.Symbols, "#")))
 		}
 
-		optArgs = append(optArgs, internStr(`-passes="`+strings.Join(passes, ",")+`"`))
+		optArgs = append(optArgs, internV(`-passes="`, strings.Join(passes, ","), `"`))
 
 		optInputs := make([]VFS, 0, 2+len(bcSourceInputs))
 		optInputs = append(optInputs, mergedOut)

@@ -35,7 +35,7 @@ func emitJVDownstreamCPCC(
 		srcH := pair.h
 
 		base := strings.TrimSuffix(filepath.Base(srcCpp.rel()), ".cpp")
-		g4CppPath := build(instance.Path.rel() + "/" + base + ".g4.cpp")
+		g4CppPath := build(instance.Path.rel(), "/", base, ".g4.cpp")
 		g4CppRel := base + ".g4.cpp"
 
 		cpRef := ctx.emit.reserve()
@@ -124,7 +124,7 @@ func emitJV(
 ) NodeRef {
 	na := emit.nodeArenas()
 
-	grammarVFS := source(instance.Path.rel() + "/" + grammar)
+	grammarVFS := source(instance.Path.rel(), "/", grammar)
 	outDirVFS := build(instance.Path.rel())
 	outDir := outDirVFS.string()
 
@@ -157,12 +157,12 @@ func emitJV(
 	base := strings.TrimSuffix(filepath.Base(grammar), ".g4")
 	outPrefix := instance.Path.rel() + "/" + base
 	outputs := []VFS{
-		build(outPrefix + "Lexer.cpp"),
-		build(outPrefix + "Lexer.h"),
-		build(outPrefix + "Parser.cpp"),
-		build(outPrefix + "Parser.h"),
-		build(outPrefix + "Visitor.h"),
-		build(outPrefix + "BaseVisitor.h"),
+		build(outPrefix, "Lexer.cpp"),
+		build(outPrefix, "Lexer.h"),
+		build(outPrefix, "Parser.cpp"),
+		build(outPrefix, "Parser.h"),
+		build(outPrefix, "Visitor.h"),
+		build(outPrefix, "BaseVisitor.h"),
 	}
 
 	return emitJVNode(instance, cmdArgs, inputs, outputs, outDir, nil, moduleTag, emit)
@@ -180,8 +180,8 @@ func emitJVSplit(
 ) NodeRef {
 	na := emit.nodeArenas()
 
-	lexerVFS := source(instance.Path.rel() + "/" + lexer)
-	parserVFS := source(instance.Path.rel() + "/" + parser)
+	lexerVFS := source(instance.Path.rel(), "/", lexer)
+	parserVFS := source(instance.Path.rel(), "/", parser)
 	outDirVFS := build(instance.Path.rel())
 	outDir := outDirVFS.string()
 
@@ -218,12 +218,12 @@ func emitJVSplit(
 	visitorBase := parserBase
 	outPrefix := instance.Path.rel() + "/"
 	outputs := []VFS{
-		build(outPrefix + lexerBase + ".cpp"),
-		build(outPrefix + lexerBase + ".h"),
-		build(outPrefix + parserBase + ".cpp"),
-		build(outPrefix + parserBase + ".h"),
-		build(outPrefix + visitorBase + "Visitor.h"),
-		build(outPrefix + visitorBase + "BaseVisitor.h"),
+		build(outPrefix, lexerBase, ".cpp"),
+		build(outPrefix, lexerBase, ".h"),
+		build(outPrefix, parserBase, ".cpp"),
+		build(outPrefix, parserBase, ".h"),
+		build(outPrefix, visitorBase, "Visitor.h"),
+		build(outPrefix, visitorBase, "BaseVisitor.h"),
 	}
 
 	return emitJVNode(instance, cmdArgs, inputs, outputs, outDir, nil, moduleTag, emit)

@@ -24,10 +24,10 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
 
 			{
-				lexerG4 := source(instance.Path.rel() + "/" + g.Lexer)
-				parserG4 := source(instance.Path.rel() + "/" + g.Parser)
-				lexerCpp := build(outPrefix + lexerBase + ".cpp")
-				parserCpp := build(outPrefix + parserBase + ".cpp")
+				lexerG4 := source(instance.Path.rel(), "/", g.Lexer)
+				parserG4 := source(instance.Path.rel(), "/", g.Parser)
+				lexerCpp := build(outPrefix, lexerBase, ".cpp")
+				parserCpp := build(outPrefix, parserBase, ".cpp")
 				ctx.codegenFor(instance).register(&GeneratedFileInfo{
 					ProducerKvP:    pkJV,
 					OutputPath:     lexerCpp,
@@ -65,7 +65,7 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 
 					ctx.codegenFor(instance).register(&GeneratedFileInfo{
 						ProducerKvP:    pkJV,
-						OutputPath:     build(outPrefix + suffix),
+						OutputPath:     build(outPrefix, suffix),
 						ProducerRef:    jvRef,
 						GeneratorRefs:  nil,
 						ParsedIncludes: parsed,
@@ -75,15 +75,15 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 
 			if consumerInputs != nil {
 				jvInputs := []VFS{
-					source(instance.Path.rel() + "/" + g.Lexer),
-					source(instance.Path.rel() + "/" + g.Parser),
+					source(instance.Path.rel(), "/", g.Lexer),
+					source(instance.Path.rel(), "/", g.Parser),
 					stdout2stderrVFS,
 					antlr4JarVFS,
 				}
-				jvPrimary := build(outPrefix + lexerBase + ".cpp")
+				jvPrimary := build(outPrefix, lexerBase, ".cpp")
 				cpccPairs := []struct{ cpp, h VFS }{
-					{build(outPrefix + lexerBase + ".cpp"), build(outPrefix + lexerBase + ".h")},
-					{build(outPrefix + parserBase + ".cpp"), build(outPrefix + parserBase + ".h")},
+					{build(outPrefix, lexerBase, ".cpp"), build(outPrefix, lexerBase, ".h")},
+					{build(outPrefix, parserBase, ".cpp"), build(outPrefix, parserBase, ".h")},
 				}
 				refs, outs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
 				ccRefs = append(ccRefs, refs...)
@@ -95,9 +95,9 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
 
 			{
-				grammarG4 := source(instance.Path.rel() + "/" + g.Grammar)
-				lexerCpp := build(outPrefix + base + "Lexer.cpp")
-				parserCpp := build(outPrefix + base + "Parser.cpp")
+				grammarG4 := source(instance.Path.rel(), "/", g.Grammar)
+				lexerCpp := build(outPrefix, base, "Lexer.cpp")
+				parserCpp := build(outPrefix, base, "Parser.cpp")
 				ctx.codegenFor(instance).register(&GeneratedFileInfo{
 					ProducerKvP:    pkJV,
 					OutputPath:     lexerCpp,
@@ -134,7 +134,7 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 
 					ctx.codegenFor(instance).register(&GeneratedFileInfo{
 						ProducerKvP:    pkJV,
-						OutputPath:     build(outPrefix + suffix),
+						OutputPath:     build(outPrefix, suffix),
 						ProducerRef:    jvRef,
 						GeneratorRefs:  nil,
 						ParsedIncludes: parsed,
@@ -144,14 +144,14 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 
 			if consumerInputs != nil {
 				jvInputs := []VFS{
-					source(instance.Path.rel() + "/" + g.Grammar),
+					source(instance.Path.rel(), "/", g.Grammar),
 					stdout2stderrVFS,
 					antlr4JarVFS,
 				}
-				jvPrimary := build(outPrefix + base + "Lexer.cpp")
+				jvPrimary := build(outPrefix, base, "Lexer.cpp")
 				cpccPairs := []struct{ cpp, h VFS }{
-					{build(outPrefix + base + "Lexer.cpp"), build(outPrefix + base + "Lexer.h")},
-					{build(outPrefix + base + "Parser.cpp"), build(outPrefix + base + "Parser.h")},
+					{build(outPrefix, base, "Lexer.cpp"), build(outPrefix, base, "Lexer.h")},
+					{build(outPrefix, base, "Parser.cpp"), build(outPrefix, base, "Parser.h")},
 				}
 				refs, outs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
 				ccRefs = append(ccRefs, refs...)
@@ -165,7 +165,7 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 
 		ctx.codegenFor(instance).register(&GeneratedFileInfo{
 			ProducerKvP:   pkBI,
-			OutputPath:    build(outPrefix + d.createBuildInfoFor.string()),
+			OutputPath:    build(outPrefix, d.createBuildInfoFor.string()),
 			ProducerRef:   biRef,
 			GeneratorRefs: nil,
 			ParsedIncludes: []IncludeDirective{

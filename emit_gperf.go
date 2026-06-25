@@ -54,7 +54,7 @@ func emitLibraryGperfSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	gperfLDRef, gperfBinVFS := ctx.tool(argContribToolsGperf)
 
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
-	genVFS := build(instance.Path.rel() + "/" + gperfGeneratedRel(srcRel))
+	genVFS := build(instance.Path.rel(), "/", gperfGeneratedRel(srcRel))
 
 	srcClosure := walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)
 

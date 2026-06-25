@@ -69,9 +69,9 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 	baseNoExt := strings.TrimSuffix(srcRel, filepath.Ext(srcRel))
 	headerRel := baseNoExt + ".h"
 	generatedRel := bisonGeneratedRel(srcRel, genExt)
-	headerVFS := build(instance.Path.rel() + "/" + headerRel)
-	generatedVFS := build(instance.Path.rel() + "/" + generatedRel)
-	srcVFS := source(instance.Path.rel() + "/" + srcRel)
+	headerVFS := build(instance.Path.rel(), "/", headerRel)
+	generatedVFS := build(instance.Path.rel(), "/", generatedRel)
+	srcVFS := source(instance.Path.rel(), "/", srcRel)
 	headerParsed := []IncludeDirective{{kind: includeQuoted, target: internStr(srcVFS.rel())}}
 
 	if preprocessHeader {
@@ -130,7 +130,7 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 	head = append(head, internStr(bisonBin), argV.str())
 	head = appendArgStr(head, in.BisonFlags)
 	head = append(head,
-		internStr("--defines="+headerVFS.string()),
+		internV("--defines=", headerVFS.string()),
 		argDashO.str(),
 		(generatedVFS).str(),
 		(srcVFS).str())
@@ -164,7 +164,7 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 
 func emitBisonY(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
 	generatedRel := bisonGeneratedRel(src.string(), in.BisonGenExt)
-	generatedVFS := build(instance.Path.rel() + "/" + generatedRel)
+	generatedVFS := build(instance.Path.rel(), "/", generatedRel)
 
 	return emitOneSource(ctx, instance, d, generatedVFS.str(), in)
 }

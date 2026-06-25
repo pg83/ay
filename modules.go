@@ -1858,7 +1858,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 			throwFmt("gen: AR_PLUGIN expects exactly 1 argument, got %d", len(v.Args))
 		}
 
-		d.arPlugin = strPtr(internStr(v.Args[0].string() + ".pyplugin"))
+		d.arPlugin = strPtr(internV(v.Args[0].string(), ".pyplugin"))
 	case tokDynamicLibraryFrom:
 		if len(v.Args) == 0 {
 			throwFmt("gen: DYNAMIC_LIBRARY_FROM expects at least 1 argument")
@@ -2129,7 +2129,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 					modName = ns + modName
 				}
 
-				d.pyMain = strPtr(internStr(modName + ":main"))
+				d.pyMain = strPtr(internV(modName, ":main"))
 				mainNext = false
 			} else if d.pyMain == nil && d.moduleStmt != nil &&
 				(d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin) &&
@@ -2142,7 +2142,7 @@ func applyUnknownStmt(fs FS, modulePath string, v *UnknownStmt, d *ModuleData, e
 
 				modName := strings.TrimSuffix(src, ".py")
 				modName = strings.ReplaceAll(modName, "/", ".")
-				d.pyMain = strPtr(internStr(ns + modName))
+				d.pyMain = strPtr(internV(ns, modName))
 			}
 		}
 

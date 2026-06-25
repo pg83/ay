@@ -11,10 +11,10 @@ const flexDefaultGenExt = ".cpp"
 
 func flexGeneratedVFS(instance ModuleInstance, srcRel string) VFS {
 	if strings.Contains(srcRel, "/") {
-		return build(instance.Path.rel() + "/_/" + srcRel + flexDefaultGenExt)
+		return build(instance.Path.rel(), "/_/", srcRel, flexDefaultGenExt)
 	}
 
-	return build(instance.Path.rel() + "/" + srcRel + flexDefaultGenExt)
+	return build(instance.Path.rel(), "/", srcRel, flexDefaultGenExt)
 }
 
 func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
@@ -63,7 +63,7 @@ func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, o
 
 	cmdArgs := na.chunkList(na.strList(
 		flexBin.str(),
-		internStr(argDashO.string()+outVFS.string()),
+		internV(argDashO.string(), outVFS.string()),
 		srcVFS.str(),
 	))
 

@@ -17,28 +17,28 @@ var (
 )
 
 var protobufRuntimeHeaders = []VFS{
-	source(pbRuntimeBase + "google/protobuf/arena.h"),
-	source(pbRuntimeBase + "google/protobuf/arenastring.h"),
-	source(pbRuntimeBase + "google/protobuf/extension_set.h"),
-	source(pbRuntimeBase + "google/protobuf/generated_message_reflection.h"),
-	source(pbRuntimeBase + "google/protobuf/generated_message_util.h"),
-	source(pbRuntimeBase + "google/protobuf/io/coded_stream.h"),
-	source(pbRuntimeBase + "google/protobuf/message.h"),
-	source(pbRuntimeBase + "google/protobuf/metadata_lite.h"),
-	source(pbRuntimeBase + "google/protobuf/port_def.inc"),
-	source(pbRuntimeBase + "google/protobuf/port_undef.inc"),
-	source(pbRuntimeBase + "google/protobuf/repeated_field.h"),
-	source(pbRuntimeBase + "google/protobuf/unknown_field_set.h"),
+	source(pbRuntimeBase, "google/protobuf/arena.h"),
+	source(pbRuntimeBase, "google/protobuf/arenastring.h"),
+	source(pbRuntimeBase, "google/protobuf/extension_set.h"),
+	source(pbRuntimeBase, "google/protobuf/generated_message_reflection.h"),
+	source(pbRuntimeBase, "google/protobuf/generated_message_util.h"),
+	source(pbRuntimeBase, "google/protobuf/io/coded_stream.h"),
+	source(pbRuntimeBase, "google/protobuf/message.h"),
+	source(pbRuntimeBase, "google/protobuf/metadata_lite.h"),
+	source(pbRuntimeBase, "google/protobuf/port_def.inc"),
+	source(pbRuntimeBase, "google/protobuf/port_undef.inc"),
+	source(pbRuntimeBase, "google/protobuf/repeated_field.h"),
+	source(pbRuntimeBase, "google/protobuf/unknown_field_set.h"),
 }
 
 var pbDescriptorImporterHeaders = []VFS{
-	source(pbRuntimeBase + "google/protobuf/generated_message_bases.h"),
-	source(pbRuntimeBase + "google/protobuf/map_entry.h"),
-	source(pbRuntimeBase + "google/protobuf/map_entry_lite.h"),
-	source(pbRuntimeBase + "google/protobuf/map_field.h"),
-	source(pbRuntimeBase + "google/protobuf/map_field_inl.h"),
-	source(pbRuntimeBase + "google/protobuf/map_field_lite.h"),
-	source(pbRuntimeBase + "google/protobuf/reflection_ops.h"),
+	source(pbRuntimeBase, "google/protobuf/generated_message_bases.h"),
+	source(pbRuntimeBase, "google/protobuf/map_entry.h"),
+	source(pbRuntimeBase, "google/protobuf/map_entry_lite.h"),
+	source(pbRuntimeBase, "google/protobuf/map_field.h"),
+	source(pbRuntimeBase, "google/protobuf/map_field_inl.h"),
+	source(pbRuntimeBase, "google/protobuf/map_field_lite.h"),
+	source(pbRuntimeBase, "google/protobuf/reflection_ops.h"),
 }
 
 const (
@@ -77,11 +77,11 @@ func emitPB(
 
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 
-	pbH := build(protoBase + ".pb.h")
-	pbCC := build(protoBase + ".pb.cc")
-	pbDepsH := build(protoBase + ".deps.pb.h")
-	grpcPbCC := build(protoBase + ".grpc.pb.cc")
-	grpcPbH := build(protoBase + ".grpc.pb.h")
+	pbH := build(protoBase, ".pb.h")
+	pbCC := build(protoBase, ".pb.cc")
+	pbDepsH := build(protoBase, ".deps.pb.h")
+	grpcPbCC := build(protoBase, ".grpc.pb.cc")
+	grpcPbH := build(protoBase, ".grpc.pb.h")
 	srcVFS := source(protoRelPath)
 
 	if protoSrcOverride != 0 {
@@ -165,7 +165,7 @@ func assembleProtoCmdOutputs(protoBase string, pbH, pbCC, pbDepsH, grpcPbCC, grp
 		}
 
 		for _, suffix := range plugin.Spec.OutputSuffixes {
-			outputs = append(outputs, build(protoBase+suffix))
+			outputs = append(outputs, build(protoBase, suffix))
 		}
 	}
 
@@ -185,7 +185,7 @@ func assembleProtoCmdOutputs(protoBase string, pbH, pbCC, pbDepsH, grpcPbCC, grp
 		}
 
 		for _, suffix := range plugin.Spec.OutputSuffixes {
-			outputs = append(outputs, build(protoBase+suffix))
+			outputs = append(outputs, build(protoBase, suffix))
 		}
 	}
 
@@ -335,44 +335,44 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 	mid = append(mid,
 		arg2.str(),
 		(protocBinary).str(),
-		internStr("-I=./"+includeRoot),
-		internStr("-I=$(S)/"+includeRoot),
+		internV("-I=./", includeRoot),
+		internV("-I=$(S)/", includeRoot),
 		argIB2.str(),
 		argIS3.str(),
 	)
 
 	if cppOutRoot != "" {
-		mid = append(mid, internStr("-I=$(S)/"+cppOutRoot))
+		mid = append(mid, internV("-I=$(S)/", cppOutRoot))
 	}
 
 	for _, p := range protoInclude {
-		mid = append(mid, internStr("-I="+p.string()))
+		mid = append(mid, internV("-I=", p.string()))
 	}
 
 	mid = append(mid,
 		argIB2.str(),
 		argISContribLibsProtobufSrc.str(),
-		internStr("--cpp_out="+cppOutArg),
+		internV("--cpp_out=", cppOutArg),
 	)
 	mid = appendArgStr(mid, extraProtocFlags)
 	mid = append(mid,
-		internStr("--cpp_styleguide_out=:$(B)/"+cppOutRoot),
-		internStr("--plugin=protoc-gen-cpp_styleguide="+cppStyleguideBinary.string()),
+		internV("--cpp_styleguide_out=:$(B)/", cppOutRoot),
+		internV("--plugin=protoc-gen-cpp_styleguide=", cppStyleguideBinary.string()),
 	)
 
 	var tail []STR
 
 	if grpc {
 		tail = append(tail,
-			internStr("--plugin=protoc-gen-grpc_cpp="+grpcCppBinary.string()),
-			internStr("--grpc_cpp_out=$(B)/"+cppOutRoot),
+			internV("--plugin=protoc-gen-grpc_cpp=", grpcCppBinary.string()),
+			internV("--grpc_cpp_out=$(B)/", cppOutRoot),
 		)
 	}
 
 	for _, plugin := range extraPlugins {
 		tail = append(tail,
-			internStr("--plugin=protoc-gen-"+plugin.Spec.Name+"="+plugin.Binary.string()),
-			internStr("--"+plugin.Spec.Name+"_out=$(B)/"+cppOutRoot),
+			internV("--plugin=protoc-gen-", plugin.Spec.Name, "=", plugin.Binary.string()),
+			internV("--", plugin.Spec.Name, "_out=$(B)/", cppOutRoot),
 		)
 
 		for _, piece := range strings.Split(plugin.Spec.ExtraOutFlag, ",") {
@@ -380,7 +380,7 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 				continue
 			}
 
-			tail = append(tail, internStr("--"+plugin.Spec.Name+"_opt="+piece))
+			tail = append(tail, internV("--", plugin.Spec.Name, "_opt=", piece))
 		}
 	}
 

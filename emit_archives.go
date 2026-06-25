@@ -28,7 +28,7 @@ func emitArchive(
 ) {
 	na := emit.nodeArenas()
 
-	archiveVFS := build(instance.Path.rel() + "/" + a.Name)
+	archiveVFS := build(instance.Path.rel(), "/", a.Name)
 	archivePath := archiveVFS.string()
 
 	cmdArgs := make([]STR, 0, 4+len(a.Files)+2)
@@ -56,7 +56,7 @@ func emitArchive(
 		var absVFS VFS
 
 		if isPRProduced {
-			absVFS = build(instance.Path.rel() + "/" + f)
+			absVFS = build(instance.Path.rel(), "/", f)
 		} else {
 			absVFS = resolveSourceVFS(ctx, instance, f, d.srcDirs)
 		}
@@ -68,7 +68,7 @@ func emitArchive(
 		if a.Keys != nil {
 			cmdArgs = append(cmdArgs, internStr(absStr))
 		} else {
-			cmdArgs = append(cmdArgs, internStr(absStr+":"))
+			cmdArgs = append(cmdArgs, internV(absStr, ":"))
 		}
 	}
 

@@ -19,9 +19,9 @@ func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt, 
 	toolLDRef := toolRes.LDRef
 	toolBin := *toolRes.LDPath
 
-	inputIn := source(moduleDir + "/" + prefix + ".in")
-	prefixCpp := build(moduleDir + "/" + prefix + ".cpp")
-	prefixH := build(moduleDir + "/" + prefix + ".h")
+	inputIn := source(moduleDir, "/", prefix, ".in")
+	prefixCpp := build(moduleDir, "/", prefix, ".cpp")
+	prefixH := build(moduleDir, "/", prefix, ".h")
 
 	cmdArgs := make([]STR, 0, 4+len(bc.Opts))
 	cmdArgs = append(cmdArgs,

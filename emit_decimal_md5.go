@@ -50,10 +50,10 @@ func emitDecimalMD5(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *D
 		d.tc.Python3,
 		decimalMD5PyVFS.str(),
 		strFixedOutput,
-		internStr("--func-name="+stmt.FuncName),
+		internV("--func-name=", stmt.FuncName),
 		strLowerBits,
 		str32,
-		internStr("--source-root="+strS.string()),
+		internV("--source-root=", strS.string()),
 	)
 
 	for _, v := range optVFSs {

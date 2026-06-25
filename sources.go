@@ -66,7 +66,7 @@ func jsCCIncludeInputs(srcInstance ModuleInstance, joinOut VFS, sources []string
 	out = append(out, scripts[buildScriptsGenJoinSrcsPy]...)
 
 	for _, s := range sources {
-		out = append(out, source(srcInstance.Path.rel()+"/"+s))
+		out = append(out, source(srcInstance.Path.rel(), "/", s))
 	}
 
 	out = append(out, closure...)

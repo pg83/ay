@@ -44,7 +44,7 @@ func emitLuaJit21(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		raws[i] = raw
 
 		luaSrc := resolveSourceVFS(ctx, instance, lua, d.srcDirs)
-		rawOut := build(instance.Path.rel() + "/" + raw)
+		rawOut := build(instance.Path.rel(), "/", raw)
 		ref := emitLJ(instance, luaSrc, rawOut, compilerBin, compilerLDRef, cwd, ctx.emit)
 
 		reg.register(&GeneratedFileInfo{

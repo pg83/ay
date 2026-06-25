@@ -106,7 +106,7 @@ func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCo
 	globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path.rel(), "libpy3", protoLibName)
 	gRef := emitARGlobalNamedTagged(pyInstance, globalBaseName, tagPy3ProtoGlobal, pyProtoRefs, pyProtoOutputs, d.tc, ctx.host, ctx.emit)
 
-	globalPath := build(instance.Path.rel() + "/" + globalBaseName)
+	globalPath := build(instance.Path.rel(), "/", globalBaseName)
 	result := &ProtoSrcsResult{
 		GlobalRef:  &gRef,
 		GlobalPath: &globalPath,
@@ -116,7 +116,7 @@ func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCo
 		result.WholeArchiveRefs = append(result.WholeArchiveRefs, cppSibling.ARRef)
 		result.WholeArchivePaths = append(result.WholeArchivePaths, *cppSibling.ARPath)
 	} else if moduleExcludesTag(d, "CPP_PROTO") {
-		result.WholeArchiveCmdPaths = append(result.WholeArchiveCmdPaths, build(instance.Path.rel()+"/"+archiveName(instance.Path.rel())))
+		result.WholeArchiveCmdPaths = append(result.WholeArchiveCmdPaths, build(instance.Path.rel(), "/", archiveName(instance.Path.rel())))
 	}
 
 	return result
@@ -169,8 +169,8 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 		argNs.str(), internStr(protoPythonNamespaceArg(d)),
 		arg2.str(),
 		(protocBinary).str(),
-		internStr("-I=./"+protoRoot),
-		internStr("-I=$(S)/"+protoRoot),
+		internV("-I=./", protoRoot),
+		internV("-I=$(S)/", protoRoot),
 		argIB2.str(),
 		argIS3.str(),
 	)
@@ -180,15 +180,15 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 	}
 
 	if protoRoot != "" {
-		mid = append(mid, internStr("-I=$(S)/"+protoRoot))
+		mid = append(mid, internV("-I=$(S)/", protoRoot))
 
 		if duplicateOutputRootInclude {
-			mid = append(mid, internStr("-I=$(S)/"+protoRoot))
+			mid = append(mid, internV("-I=$(S)/", protoRoot))
 		}
 	}
 
 	for _, p := range protoInclude {
-		token := internStr("-I=" + p.string())
+		token := internV("-I=", p.string())
 
 		if slices.Contains(mid, token) {
 			continue
@@ -204,22 +204,22 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 	pe.mid = append(mid,
 		argIB2.str(),
 		argISContribLibsProtobufSrc.str(),
-		internStr("--python_out=$(B)/"+protoRoot),
+		internV("--python_out=$(B)/", protoRoot),
 	)
 
 	pe.mid = appendArgStr(pe.mid, d.protocFlags)
 
 	if d.grpc {
 		pe.tail = append(pe.tail,
-			internStr("--plugin=protoc-gen-grpc_py="+pe.grpcPyBinary.string()),
-			internStr("--grpc_py_out=$(B)/"+protoRoot),
+			internV("--plugin=protoc-gen-grpc_py=", pe.grpcPyBinary.string()),
+			internV("--grpc_py_out=$(B)/", protoRoot),
 		)
 	}
 
 	if !d.noMypy {
 		pe.tail = append(pe.tail,
-			internStr("--plugin=protoc-gen-mypy="+pe.mypyBinary.string()),
-			internStr("--mypy_out=$(B)/"+protoRoot),
+			internV("--plugin=protoc-gen-mypy=", pe.mypyBinary.string()),
+			internV("--mypy_out=$(B)/", protoRoot),
 		)
 	}
 
@@ -238,13 +238,13 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 
 	pyBase := protoBase + "__intpy3___pb2.py"
 	pyOut := build(pyBase)
-	pyiOut := build(protoBase + "__intpy3___pb2.pyi")
+	pyiOut := build(protoBase, "__intpy3___pb2.pyi")
 	var grpcPyOut VFS
 	outputs := []VFS{pyOut}
 	suffixes := []string{"_pb2.py"}
 
 	if d.grpc {
-		grpcPyOut = build(protoBase + "__intpy3___pb2_grpc.py")
+		grpcPyOut = build(protoBase, "__intpy3___pb2_grpc.py")
 		outputs = append(outputs, grpcPyOut)
 		suffixes = append(suffixes, "_pb2_grpc.py")
 	}
@@ -387,12 +387,12 @@ func emitGeneratedPyProtoYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs [
 			uniq = "." + suffix
 		}
 
-		out := build(pyOut.rel() + uniq + ".yapyc3")
+		out := build(pyOut.rel(), uniq, ".yapyc3")
 		cmdArgs := []STR{
 			(py3ccBinary).str(),
 			argSlowPy3cc.str(),
 			(py3ccSlowBin).str(),
-			internStr(tokens[i] + "-"),
+			internV(tokens[i], "-"),
 			(pyOut).str(),
 			(out).str(),
 		}
@@ -532,7 +532,7 @@ func emitGeneratedPyProtoObjcopy(ctx *GenCtx, instance ModuleInstance, d *Module
 		}
 
 		hash := objcopyHash(cur.paths, cur.keysB64, cur.kvsHash, instance.Path.rel(), hashTag)
-		outputObj := build(instance.Path.rel() + "/objcopy_" + hash + ".o")
+		outputObj := build(instance.Path.rel(), "/objcopy_", hash, ".o")
 
 		payload := make([]STR, 0, 2+len(cur.inputs)+len(cur.keysB64)+1+len(cur.kvsCmd))
 		payload = append(payload, argInputs.str())
@@ -724,7 +724,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 	res := &PyProtoAuxChunksResult{}
 
 	for _, ch := range chunks {
-		aux := build(instance.Path.rel() + "/" + protoResourceHash(ch.hashInputs, "$S/"+instance.Path.rel(), "PY3_PROTO") + "_raw.auxcpp")
+		aux := build(instance.Path.rel(), "/", protoResourceHash(ch.hashInputs, "$S/"+instance.Path.rel(), "PY3_PROTO"), "_raw.auxcpp")
 		auxRef := ctx.emit.reserve()
 		auxClosure := pyProtoAuxInputClosure(ctx, instance, d, aux, ch.inputs, auxRef, peerAddIncl)
 		cmdArgs := []STR{internStr(rescompilerBinPath), (aux).str()}

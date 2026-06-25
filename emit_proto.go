@@ -297,16 +297,16 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 	)
 
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
-	pbH := build(protoBase + ".pb.h")
-	pbCC := build(protoBase + ".pb.cc")
-	pbDepsH := build(protoBase + ".deps.pb.h")
-	grpcPbH := build(protoBase + ".grpc.pb.h")
-	grpcPbCC := build(protoBase + ".grpc.pb.cc")
+	pbH := build(protoBase, ".pb.h")
+	pbCC := build(protoBase, ".pb.cc")
+	pbDepsH := build(protoBase, ".deps.pb.h")
+	grpcPbH := build(protoBase, ".grpc.pb.h")
+	grpcPbCC := build(protoBase, ".grpc.pb.cc")
 	extraOutputPaths := make([]VFS, 0, 4)
 
 	for _, plugin := range d.cppProtoPlugins {
 		for _, suffix := range plugin.OutputSuffixes {
-			extraOutputPaths = append(extraOutputPaths, build(protoBase+suffix))
+			extraOutputPaths = append(extraOutputPaths, build(protoBase, suffix))
 		}
 	}
 
@@ -383,8 +383,8 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 					continue
 				}
 
-				yaffH := build(protoBase + plugin.OutputSuffixes[0])
-				yaffCC := build(protoBase + plugin.OutputSuffixes[1])
+				yaffH := build(protoBase, plugin.OutputSuffixes[0])
+				yaffCC := build(protoBase, plugin.OutputSuffixes[1])
 
 				var yaffHParsed []IncludeDirective
 
@@ -454,7 +454,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 			grpcHParsed = make([]IncludeDirective, 0, 3+len(directImports))
 			grpcHParsed = append(grpcHParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.rel())})
 			grpcHParsed = append(grpcHParsed, directImports...)
-			grpcHParsed = append(grpcHParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbRuntimeBase + "google/protobuf/port_def.inc")})
+			grpcHParsed = append(grpcHParsed, IncludeDirective{kind: includeQuoted, target: internV(pbRuntimeBase, "google/protobuf/port_def.inc")})
 		}
 
 		if cfg.grpc {
@@ -596,8 +596,8 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 				!protoTransitiveHeadersEnabled(d),
 				d.tc, ctx.emit)
 
-			evH := build(evRelPath + ".pb.h")
-			evPbCC := build(evRelPath + ".pb.cc")
+			evH := build(evRelPath, ".pb.h")
+			evPbCC := build(evRelPath, ".pb.cc")
 
 			{
 				directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, protoCPPOutRoot(d))
@@ -684,14 +684,14 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 
 	arDeclMeta := map[VFS]SrcMeta{}
 
-	wireFormatVFS := source(pbRuntimeBase + "google/protobuf/wire_format.h")
+	wireFormatVFS := source(pbRuntimeBase, "google/protobuf/wire_format.h")
 
 	for _, co := range codegenOutputs {
 		ccIn := moduleInputs
 		ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), co.pbCC, moduleInputs.ScanCfg)
 
 		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {
-			selfH := build(strings.TrimSuffix(co.pbCC.rel(), ".cc") + ".h")
+			selfH := build(strings.TrimSuffix(co.pbCC.rel(), ".cc"), ".h")
 			filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
 
 			for _, in := range ccIn.IncludeInputs {
@@ -710,7 +710,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		}
 
 		if strings.HasSuffix(co.srcRel, ".yaff.cpp") {
-			selfH := build(strings.TrimSuffix(co.pbCC.rel(), ".cpp") + ".h")
+			selfH := build(strings.TrimSuffix(co.pbCC.rel(), ".cpp"), ".h")
 			filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
 
 			for _, in := range ccIn.IncludeInputs {
@@ -784,7 +784,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	}
 
 	arBaseName := archiveNameWithPrefixOrName(instance.Path.rel(), "lib", protoLibName)
-	archivePath := build(instance.Path.rel() + "/" + arBaseName)
+	archivePath := build(instance.Path.rel(), "/", arBaseName)
 	arRef := emitARNode(instance, archivePath, tagCppProto, ccRefs, ccOutputs, nil, nil, nil, d.tc, ctx.host, ctx.emit)
 
 	return &ProtoSrcsResult{ARRef: arRef, ARPath: &archivePath}
@@ -803,7 +803,7 @@ func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	srcRel := src.string()
 
 	protoBase := strings.TrimSuffix(protoSourceRelPath(ctx.fs, instance, d, srcRel), ".proto")
-	pbRef := ctx.codegenFor(instance).lookup(build(protoBase + ".pb.cc")).ProducerRef
+	pbRef := ctx.codegenFor(instance).lookup(build(protoBase, ".pb.cc")).ProducerRef
 
 	emitGenCC := func(pbCC VFS) SourceEmit {
 		ccIn := in
@@ -814,10 +814,10 @@ func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 		return SourceEmit{Ref: ccRef, OutPath: ccOut}
 	}
 
-	se := emitGenCC(build(protoBase + ".pb.cc"))
+	se := emitGenCC(build(protoBase, ".pb.cc"))
 
 	if d.grpc {
-		se.Extra = append(se.Extra, emitGenCC(build(protoBase+".grpc.pb.cc")))
+		se.Extra = append(se.Extra, emitGenCC(build(protoBase, ".grpc.pb.cc")))
 	}
 
 	return &se

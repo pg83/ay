@@ -757,7 +757,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 			gRef := emitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRes.Refs, objcopyRes.Outputs, d.tc, ctx.host, ctx.emit)
 			hOnlyGlobalRef = &gRef
-			hOnlyGlobalPath = vfsPtr(build(instance.Path.rel() + "/" + globalBaseName))
+			hOnlyGlobalPath = vfsPtr(build(instance.Path.rel(), "/", globalBaseName))
 		}
 
 		emitMiscNodes(ctx, instance, d, nil)
@@ -2162,7 +2162,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	var arPluginVFS *VFS
 
 	if d.arPlugin != nil {
-		v := source(instance.Path.rel() + "/" + d.arPlugin.string())
+		v := source(instance.Path.rel(), "/", d.arPlugin.string())
 		arPluginVFS = &v
 	}
 
@@ -2210,7 +2210,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	var arPath *VFS
 
 	if len(ccRefs) > 0 {
-		arPath = vfsPtr(build(instance.Path.rel() + "/" + arBaseName))
+		arPath = vfsPtr(build(instance.Path.rel(), "/", arBaseName))
 	}
 
 	var ownSbomRef *NodeRef
@@ -2281,7 +2281,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, arDeclMeta)
 		globalRef := emitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, d.tc, ctx.host, ctx.emit)
 		result.GlobalRef = &globalRef
-		result.GlobalPath = vfsPtr(build(instance.Path.rel() + "/" + globalBaseName))
+		result.GlobalPath = vfsPtr(build(instance.Path.rel(), "/", globalBaseName))
 	}
 
 	ctx.memo.put(ctx.instanceKey(instance), result)

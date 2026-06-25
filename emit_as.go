@@ -50,7 +50,7 @@ func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	if srcVFS.isSource() && srcVFS.rel() != instance.Path.rel()+"/"+srcRel {
 		outputRel := composeSrcDirOutputRel(instance.Path.rel(), srcVFS.rel())
 
-		return build(instance.Path.rel() + "/" + outputRel + ".o"), srcVFS
+		return build(instance.Path.rel(), "/", outputRel, ".o"), srcVFS
 	}
 
 	var outRel string
@@ -120,9 +120,9 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	var outVFS VFS
 
 	if strings.Contains(srcRel, "/") {
-		outVFS = build(instance.Path.rel() + "/_/" + stem + suffix)
+		outVFS = build(instance.Path.rel(), "/_/", stem, suffix)
 	} else {
-		outVFS = build(instance.Path.rel() + "/" + stem + suffix)
+		outVFS = build(instance.Path.rel(), "/", stem, suffix)
 	}
 
 	inVFS := srcVFS
@@ -138,7 +138,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	cmdArgs := make([]STR, 0, 20+len(predefinedFlags))
 	cmdArgs = append(cmdArgs, yasmConstHead...)
 	cmdArgs = append(cmdArgs,
-		argD.str(), internStr("_"+string(instance.Platform.ISA)+"_"),
+		argD.str(), internV("_", string(instance.Platform.ISA), "_"),
 		argDYasm.str(),
 	)
 	cmdArgs = appendInternStrs(cmdArgs, predefinedFlags)

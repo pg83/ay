@@ -95,9 +95,9 @@ func emitLD(
 	binaryDir := instance.Path.rel()
 
 	binPrefix := binaryDir + "/"
-	outputVFS := build(binPrefix + binaryName)
-	vcsCVFS := build(binPrefix + "__vcs_version__.c")
-	vcsOVFS := build(binPrefix + "__vcs_version__.c" + instance.Platform.objectSuffix())
+	outputVFS := build(binPrefix, binaryName)
+	vcsCVFS := build(binPrefix, "__vcs_version__.c")
+	vcsOVFS := build(binPrefix, "__vcs_version__.c", instance.Platform.objectSuffix())
 
 	vcsCPath := vcsCVFS.string()
 	vcsOPath := vcsOVFS.string()
@@ -112,7 +112,7 @@ func emitLD(
 	envFull := hostP.toolEnv()
 
 	sbomEmbed := len(sbomPaths) > 0
-	sbomJSON := build(binPrefix + "__sbomdata.json").string()
+	sbomJSON := build(binPrefix, "__sbomdata.json").string()
 
 	cmds := na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull})
 
@@ -169,11 +169,11 @@ func emitLD(
 	outputs := []VFS{outputVFS}
 
 	for _, p := range dynamicPaths {
-		outputs = append(outputs, build(binaryDir+"/"+lastPathComponent(p.rel())))
+		outputs = append(outputs, build(binaryDir, "/", lastPathComponent(p.rel())))
 	}
 
 	if wantsSplitDwarf {
-		outputs = append(outputs, build(binPrefix+binaryName+".debug"))
+		outputs = append(outputs, build(binPrefix, binaryName, ".debug"))
 	}
 
 	n := &Node{
@@ -192,7 +192,7 @@ func emitLD(
 }
 
 func lDOutputPath(instance ModuleInstance, binaryName string) VFS {
-	return build(instance.Path.rel() + "/" + binaryName)
+	return build(instance.Path.rel(), "/", binaryName)
 }
 
 func lastPathComponent(p string) string {
@@ -372,7 +372,7 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 	trailer := []STR{argRdynamic.str()}
 
 	if exportsScript != nil {
-		trailer = append(trailer, internStr("-Wl,--version-script=$(S)/"+exportsScript.string()))
+		trailer = append(trailer, internV("-Wl,--version-script=$(S)/", exportsScript.string()))
 	}
 
 	if p != nil && !p.PIC && p.CompressDebugSections {
@@ -444,7 +444,7 @@ func composeLDCmdSbomObjcopy(tc ModuleToolchain, sbomJSON, targetPath string) []
 	return []STR{
 		tc.Objcopy,
 		strAddSection,
-		internStr(".rosbomdata=" + sbomJSON),
+		internV(".rosbomdata=", sbomJSON),
 		internStr(targetPath),
 	}
 }
@@ -544,8 +544,8 @@ func emitOwnLDPlugins(ctx *GenCtx, instance ModuleInstance, plugins []STR, tc Mo
 	cpInstance.Platform = ctx.target
 
 	for _, name := range plugins {
-		src := source(instance.Path.rel() + "/" + name.string())
-		dst := build(instance.Path.rel() + "/" + name.string() + ".pyplugin")
+		src := source(instance.Path.rel(), "/", name.string())
+		dst := build(instance.Path.rel(), "/", name.string(), ".pyplugin")
 
 		ref := emitCP(cpInstance, src, dst, tc, ctx.scripts, ctx.emit)
 

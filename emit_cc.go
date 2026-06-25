@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	argDashBBin = internStr("-B" + binPath)
+	argDashBBin = internV("-B", binPath)
 	ccKV        = KV{P: pkCC, PC: pcGreen}
 )
 
@@ -186,7 +186,7 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 
 	if srcVFS.isSource() && !canonMatches() {
 		outputRel := composeSrcDirOutputRel(instance.Path.rel(), srcVFS.rel())
-		out = build(instance.Path.rel() + "/" + outputRel + suffix)
+		out = build(instance.Path.rel(), "/", outputRel, suffix)
 
 		return out, input
 	}
@@ -195,7 +195,7 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 		rel := srcVFS.rel()
 
 		if dir := instance.Path.rel(); rel == dir || strings.HasPrefix(rel, dir+"/") {
-			return build(rel + suffix), input
+			return build(rel, suffix), input
 		}
 	}
 
@@ -205,26 +205,20 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 		if rel != dir && !strings.HasPrefix(rel, dir+"/") {
 			outputRel := composeSrcDirOutputRel(dir, rel)
 
-			return build(dir + "/" + outputRel + suffix), input
+			return build(dir, "/", outputRel, suffix), input
 		}
 	}
 
 	srcRel = cleanRel(srcRel)
 
-	var outRel string
-
 	switch {
 	case in.FlatOutput:
-
-		outRel = instance.Path.rel() + "/" + srcRel + suffix
+		return build(instance.Path.rel(), "/", srcRel, suffix), input
 	case strings.Contains(srcRel, "/"):
-
-		outRel = instance.Path.rel() + "/" + normalizeDotDotSegments(srcRel) + suffix
+		return build(instance.Path.rel(), "/", normalizeDotDotSegments(srcRel), suffix), input
 	default:
-		outRel = instance.Path.rel() + "/" + srcRel + suffix
+		return build(instance.Path.rel(), "/", srcRel, suffix), input
 	}
-
-	return build(outRel), input
 }
 
 func composeSrcDirOutputRel(instancePath, target string) string {
@@ -475,7 +469,7 @@ func (m InclArgMemo) arg(path VFS) STR {
 		return a
 	}
 
-	a := internStr("-I" + path.string())
+	a := internV("-I", path.string())
 	m.m.put(path, a)
 
 	return a
