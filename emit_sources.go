@@ -2,13 +2,49 @@ package main
 
 import (
 	"fmt"
-	"strings"
 )
 
 type SourceEmit struct {
 	Ref     NodeRef
 	OutPath VFS
 	Extra   []SourceEmit
+}
+
+type srcEmitter = func(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit
+
+var srcExtMatcher *ExtMatcher[srcEmitter]
+
+func init() {
+	srcExtMatcher = NewExtMatcher([]ExtEntry[srcEmitter]{
+		{".gztproto", emitLibraryGztProtoCompile},
+		{".proto", emitLibraryProtoSource},
+		{".fbs64", emitLibraryFlatcSource},
+		{".fbs", emitLibraryFlatcSource},
+		{".rodata", emitLibraryRodataSource},
+		{".c", emitLibraryCSource},
+		{".cpp", emitLibraryCSource},
+		{".cc", emitLibraryCSource},
+		{".cxx", emitLibraryCSource},
+		{".C", emitLibraryCSource},
+		{".S", emitLibraryAsmSource},
+		{".s", emitLibraryAsmSource},
+		{".asm", emitLibraryAsmSource},
+		{".cu", emitLibraryCudaSource},
+		{".rl6", emitLibraryRagel6Source},
+		{".y", emitBisonY},
+		{".ypp", emitBisonY},
+		{".ev", emitLibraryEvSource},
+		{".rl", emitLibraryRagel5Source},
+		{".lpp", emitLibraryFlexSource},
+		{".lex", emitLibraryFlexSource},
+		{".l", emitLibraryFlexSource},
+		{".h.in", emitLibraryHInSource},
+		{".cpp.in", emitLibraryCInSource},
+		{".c.in", emitLibraryCInSource},
+		{".sc", emitLibrarySCSource},
+		{".gperf", emitLibraryGperfSource},
+		{".cfgproto", emitLibraryCfgProtoSource},
+	})
 }
 
 func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
@@ -18,59 +54,16 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR,
 		return nil
 	}
 
-	switch {
-	case strings.HasSuffix(srcRel, ".gztproto"):
-		return emitLibraryGztProtoCompile(ctx, instance, d, src, in)
-	case strings.HasSuffix(srcRel, ".proto"):
-		return emitLibraryProtoSource(ctx, instance, d, src, in)
-	case strings.HasSuffix(srcRel, ".fbs64"),
-		strings.HasSuffix(srcRel, ".fbs"):
-		return emitLibraryFlatcSource(ctx, instance, d, src, in)
-	case strings.HasSuffix(srcRel, ".rodata"):
-		return emitLibraryRodataSource(ctx, instance, d, src, in)
-	case strings.HasSuffix(srcRel, ".c"),
-		strings.HasSuffix(srcRel, ".cpp"),
-		strings.HasSuffix(srcRel, ".cc"),
-		strings.HasSuffix(srcRel, ".cxx"),
+	emit, ok := srcExtMatcher.match(srcRel)
 
-		strings.HasSuffix(srcRel, ".C"):
-		return emitLibraryCSource(ctx, instance, d, src, in)
-	case strings.HasSuffix(srcRel, ".S"),
-		strings.HasSuffix(srcRel, ".s"),
-		strings.HasSuffix(srcRel, ".asm"):
-		return emitLibraryAsmSource(ctx, instance, d, src, in)
-	case strings.HasSuffix(srcRel, ".cu"):
-		return emitLibraryCudaSource(ctx, instance, d, src, in)
-	case strings.HasSuffix(srcRel, ".rl6"):
-		return emitLibraryRagel6Source(ctx, instance, d, src, in)
-	case strings.HasSuffix(srcRel, ".y"),
-		strings.HasSuffix(srcRel, ".ypp"):
-		return emitBisonY(ctx, instance, src, in, in.BisonGenExt)
-	case strings.HasSuffix(srcRel, ".ev"):
-		return emitLibraryEvSource(ctx, instance, d, src, in)
-	case strings.HasSuffix(srcRel, ".rl"):
-		return emitLibraryRagel5Source(ctx, instance, d, src, in)
-	case strings.HasSuffix(srcRel, ".lpp"),
-		strings.HasSuffix(srcRel, ".lex"),
-		strings.HasSuffix(srcRel, ".l"):
-		return emitLibraryFlexSource(ctx, instance, d, src, in)
-	case strings.HasSuffix(srcRel, ".h.in"):
-		return emitLibraryHInSource(ctx, instance, d, src, in)
-	case strings.HasSuffix(srcRel, ".cpp.in"),
-		strings.HasSuffix(srcRel, ".c.in"):
-		return emitLibraryCInSource(ctx, instance, d, src, in)
-	case strings.HasSuffix(srcRel, ".sc"):
-		return emitLibrarySCSource(ctx, instance, d, src, in)
-	case strings.HasSuffix(srcRel, ".gperf"):
-		return emitLibraryGperfSource(ctx, instance, d, src, in)
-	case strings.HasSuffix(srcRel, ".cfgproto"):
-		return emitLibraryCfgProtoSource(ctx, instance, d, src, in)
+	if !ok {
+		ctx.onWarn(Warn{
+			Kind:    WarnUnsupportedSource,
+			Message: fmt.Sprintf("%s: unsupported source extension in %q", instance.Path.rel(), srcRel),
+		})
+
+		return nil
 	}
 
-	ctx.onWarn(Warn{
-		Kind:    WarnUnsupportedSource,
-		Message: fmt.Sprintf("%s: unsupported source extension in %q", instance.Path.rel(), srcRel),
-	})
-
-	return nil
+	return emit(ctx, instance, d, src, in)
 }

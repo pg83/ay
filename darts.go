@@ -109,6 +109,34 @@ func (d *Darts) ensure(n int32) {
 	}
 }
 
+func (d *Darts) longestSuffixMatch(s string) (int, bool) {
+	st := int32(0)
+	best := int32(0)
+	found := false
+
+	if d.value[0] != 0 {
+		best = d.value[0] - 1
+		found = true
+	}
+
+	for i := len(s) - 1; i >= 0; i-- {
+		t := d.base[st] + int32(s[i]) + 1
+
+		if t >= int32(len(d.check)) || d.check[t] != st+1 {
+			return int(best), found
+		}
+
+		st = t
+
+		if d.value[st] != 0 {
+			best = d.value[st] - 1
+			found = true
+		}
+	}
+
+	return int(best), found
+}
+
 func (d *Darts) longestMatch(parts ...string) (int, bool) {
 	s := int32(0)
 	best := int32(0)

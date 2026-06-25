@@ -59,11 +59,11 @@ func newIncludeDirectiveParserRegistry() IncludeDirectiveParserRegistry {
 }
 
 func (r *IncludeDirectiveParserRegistry) registeredParserFor(rel string) IncludeDirectiveParser {
-	return lookupParserByExt(directiveParserExt(rel))
+	return lookupParserForRel(rel)
 }
 
 func (r *IncludeDirectiveParserRegistry) parserFor(rel string) IncludeDirectiveParser {
-	if p := lookupParserByExt(directiveParserExt(rel)); p != nil {
+	if p := lookupParserForRel(rel); p != nil {
 		return p
 	}
 
@@ -71,21 +71,7 @@ func (r *IncludeDirectiveParserRegistry) parserFor(rel string) IncludeDirectiveP
 }
 
 func (r *IncludeDirectiveParserRegistry) hasRegisteredParser(rel string) bool {
-	return lookupParserByExt(directiveParserExt(rel)) != nil
-}
-
-func directiveParserExt(rel string) string {
-	if strings.HasSuffix(rel, ".in") {
-		rel = strings.TrimSuffix(rel, ".in")
-	}
-
-	idx := strings.LastIndexByte(rel, '.')
-
-	if idx < 0 {
-		return ""
-	}
-
-	return rel[idx:]
+	return lookupParserForRel(rel) != nil
 }
 
 const directiveBlockHint = 1 << 14
