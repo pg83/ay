@@ -164,7 +164,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 			ownOutputClosure = walkClosureTail(ctx.scannerFor(instance), p.serializedCPPPath, scanIn.ScanCfg)
 		}
 
-		enClosure := dedupVFS(closure, ownOutputClosure)
+		enClosure := dedup(closure, ownOutputClosure)
 
 		augmentedDepENRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, enClosure)
 

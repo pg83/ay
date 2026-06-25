@@ -44,32 +44,29 @@ func (dd *DeDuper) filterSeen(list []VFS) []VFS {
 	return list
 }
 
-func (dd *DeDuper) dedupVFS(lists ...[]VFS) []VFS {
+func dedup[T ~uint32](lists ...[]T) []T {
 	total := 0
 
 	for _, l := range lists {
 		total += len(l)
 	}
 
-	dd.seen.reset(vfsBound())
-	out := make([]VFS, 0, total)
+	if total == 0 {
+		return nil
+	}
+
+	deduper.reset()
+	out := make([]T, 0, total)
 
 	for _, l := range lists {
 		for _, x := range l {
-			if dd.seen.has(x) {
-				continue
+			if deduper.add(VFS(x)) {
+				out = append(out, x)
 			}
-
-			dd.seen.add(x)
-			out = append(out, x)
 		}
 	}
 
 	return out
-}
-
-func dedupVFS(lists ...[]VFS) []VFS {
-	return deduper.dedupVFS(lists...)
 }
 
 func concat[T any](lists ...[]T) []T {

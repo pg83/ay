@@ -30,7 +30,7 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	blocks := in.CCBlocks
 
 	scanner := ctx.scannerFor(instance)
-	closure := dedupVFS(walkClosure(scanner, srcVFS, in.ScanCfg), walkClosure(scanner, cudaRuntimeIncludeVFS, in.ScanCfg))
+	closure := dedup(walkClosure(scanner, srcVFS, in.ScanCfg), walkClosure(scanner, cudaRuntimeIncludeVFS, in.ScanCfg))
 
 	mtimeRef, mtimeVFS := ctx.tool(cudaMtimeArg)
 	pidRef, pidVFS := ctx.tool(cudaCustomPidArg)

@@ -255,8 +255,8 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 
 		if pxdVFS, ok := resolveCythonPxd(ctx, instance, in, stmt.Pxd); ok {
 			pxdClosure := walkClosure(ctx.scannerFor(instance), pxdVFS, srcScanIn.ScanCfg)
-			toolInputs = keepOnlySourceVFS(dedupVFS(toolInputs, pxdClosure))
-			emitsIncludes = dedupVFS(emitsIncludes, pxdClosure)
+			toolInputs = keepOnlySourceVFS(dedup(toolInputs, pxdClosure))
+			emitsIncludes = dedup(emitsIncludes, pxdClosure)
 		}
 
 		parsed := make([]IncludeDirective, 0, len(emitsIncludes))
@@ -345,7 +345,7 @@ func cythonHeaderToolInputs(src VFS, pyxClosure []VFS) []VFS {
 		singles = append(singles, source(rel))
 	}
 
-	return keepOnlySourceVFS(dedupVFS(singles, pyxClosure))
+	return keepOnlySourceVFS(dedup(singles, pyxClosure))
 }
 
 func cythonPyxLangClosure(scanner *IncludeScanner, src VFS, cfg ScanContext) []VFS {
@@ -448,14 +448,14 @@ func cythonCppInducedSets(ctx *GenCtx, instance ModuleInstance, src VFS, cMode b
 }
 
 func cythonGeneratedOutputInputs(ind cythonCppInduced, sourceClosure []VFS) ([]VFS, []VFS) {
-	return keepOnlySourceVFS(dedupVFS(append([][]VFS{ind.toolSingles}, append(ind.toolCl, sourceClosure)...)...)),
-		dedupVFS(append([][]VFS{ind.emitsSingles}, append(ind.emitsCl, sourceClosure)...)...)
+	return keepOnlySourceVFS(dedup(append([][]VFS{ind.toolSingles}, append(ind.toolCl, sourceClosure)...)...)),
+		dedup(append([][]VFS{ind.emitsSingles}, append(ind.emitsCl, sourceClosure)...)...)
 }
 
 func cythonHeaderInducedClosure(ind cythonCppInduced) []VFS {
 	hdrSingles := ind.toolSingles[:len(ind.toolSingles)-1]
 
-	return dedupVFS(append([][]VFS{hdrSingles}, ind.toolCl...)...)
+	return dedup(append([][]VFS{hdrSingles}, ind.toolCl...)...)
 }
 
 func resolveCythonPxd(ctx *GenCtx, instance ModuleInstance, in ModuleCCInputs, pxdRel string) (VFS, bool) {
@@ -559,7 +559,7 @@ func appendCythonScanAddIncl(addIncl []VFS, cythonAddIncl []VFS, py23 bool) []VF
 	out = append(out, contribLibsCxxsuppLibcxxInclude)
 	out = append(out, cythonNumpyAddIncl...)
 
-	return dedupVFS(out)
+	return dedup(out)
 }
 
 func filterPyRegisterCFlags(cflags []ARG) []ARG {

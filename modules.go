@@ -687,8 +687,8 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 	cflagPrefix := append(muslCFlags(d.muslEnabled && !effectiveNoPlatform(d.flags)), sseBaseCFlags(env.bool(envARCH_X86_64))...)
 	d.moduleScopeCFlags = append(cflagPrefix, d.moduleScopeCFlags...)
 
-	d.addIncl = dd.dedupVFS(d.addIncl, nil)
-	d.addInclGlobal = dd.dedupVFS(d.addInclGlobal, nil)
+	d.addIncl = dedup(d.addIncl, nil)
+	d.addInclGlobal = dedup(d.addInclGlobal, nil)
 
 	for _, a := range d.addIncl {
 		pm.indexAddincl(a)

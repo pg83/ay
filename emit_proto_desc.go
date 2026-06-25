@@ -180,7 +180,7 @@ func emitDescProtoSubmodule(ctx *GenCtx, instance ModuleInstance, d *ModuleData)
 		ARRef:        mergeRef,
 		ARPath:       &selfPath,
 		DescClosure:  closure,
-		ProtoInclude: dedupVFS(protoNamespaceContribs(d), span.includes),
+		ProtoInclude: dedup(protoNamespaceContribs(d), span.includes),
 	}
 }
 

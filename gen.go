@@ -799,7 +799,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		ownProtoIncludeH = append(ownProtoIncludeH, d.protoAddInclGlobal...)
 
-		effectiveProtoIncludeH := dedupVFS(ownProtoIncludeH, peerContribs.protoInclude)
+		effectiveProtoIncludeH := dedup(ownProtoIncludeH, peerContribs.protoInclude)
 
 		var ownSbomRefH *NodeRef
 		var ownSbomPathH *VFS
@@ -815,7 +815,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ARPath:            hOnlyARPath,
 			GlobalRef:         hOnlyGlobalRef,
 			GlobalPath:        hOnlyGlobalPath,
-			AddInclGlobal:     dedupVFS(d.addInclGlobal, peerContribs.addIncl),
+			AddInclGlobal:     dedup(d.addInclGlobal, peerContribs.addIncl),
 			OwnAddInclGlobal:  d.addInclGlobal,
 			ProtoInclude:      effectiveProtoIncludeH,
 			AddInclOneLevel:   d.addInclOneLevel,
@@ -1485,7 +1485,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	effectiveAddInclGlobal := dedupVFS(d.addInclGlobal, peerAddInclForProp)
+	effectiveAddInclGlobal := dedup(d.addInclGlobal, peerAddInclForProp)
 
 	var ownProtoInclude []VFS
 
@@ -1506,7 +1506,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	effectiveProtoInclude := dedupVFS(ownProtoInclude, peerProtoInclude)
+	effectiveProtoInclude := dedup(ownProtoInclude, peerProtoInclude)
 
 	if instance.Path == libraryPythonRuntimePy3 {
 		buildRootPath := bldLibraryPythonRuntimePy3
@@ -1534,7 +1534,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		effectiveAddInclGlobal = spliced
 	}
 
-	effectiveCFlagsGlobal := dedupARG(peerCFlagsGlobal, d.cFlagsGlobal)
+	effectiveCFlagsGlobal := dedup(peerCFlagsGlobal, d.cFlagsGlobal)
 	effectiveCXXFlagsGlobal := concat(peerCXXFlagsGlobal, d.cxxFlagsGlobal)
 	effectiveCOnlyFlagsGlobal := concat(peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
 	effectiveRPathFlagsGlobal := concat(peerRPathFlagsGlobal, d.rpathFlagsGlobal)
@@ -1565,7 +1565,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
 	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
 
-	dedupedAddIncl := dedupVFS(d.addIncl, d.addInclGlobal)
+	dedupedAddIncl := dedup(d.addIncl, d.addInclGlobal)
 
 	isPy3NativeLib := d.moduleStmt.Name == tokPy23NativeLibrary ||
 		d.moduleStmt.Name == tokPy23Library
