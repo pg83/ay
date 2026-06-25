@@ -215,7 +215,13 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	case in.FlatOutput:
 		return build(instance.Path.rel(), "/", srcRel, suffix), input
 	case strings.Contains(srcRel, "/"):
-		return build(instance.Path.rel(), "/", normalizeDotDotSegments(srcRel), suffix), input
+		body, underscore := normalizeDotDotSegments(srcRel)
+
+		if underscore {
+			return build(instance.Path.rel(), "/_/", body, suffix), input
+		}
+
+		return build(instance.Path.rel(), "/", body, suffix), input
 	default:
 		return build(instance.Path.rel(), "/", srcRel, suffix), input
 	}
@@ -252,13 +258,9 @@ func composeSrcDirOutputRel(instancePath, target string) string {
 	return joined
 }
 
-func normalizeDotDotSegments(rel string) string {
+func normalizeDotDotSegments(rel string) (body string, underscore bool) {
 	if !strings.Contains(rel, "..") {
-		if strings.HasPrefix(rel, "__") {
-			return rel
-		}
-
-		return "_/" + rel
+		return rel, !strings.HasPrefix(rel, "__")
 	}
 
 	parts := strings.Split(rel, "/")
@@ -271,11 +273,7 @@ func normalizeDotDotSegments(rel string) string {
 		}
 	}
 
-	if !hasParent {
-		return "_/" + strings.Join(parts, "/")
-	}
-
-	return strings.Join(parts, "/")
+	return strings.Join(parts, "/"), !hasParent
 }
 
 func isCxxSource(srcRel string) bool {
