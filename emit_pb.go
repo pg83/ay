@@ -235,25 +235,23 @@ func protoSourceRelPath(fs FS, instance ModuleInstance, d *ModuleData, src strin
 }
 
 func pyProtoAuxInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, aux VFS, seed []VFS, ref NodeRef, peerAddIncl []VFS) []VFS {
-	{
-		rescompilerRef, _ := ctx.tool(argToolsRescompiler)
+	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 
-		emits := make([]IncludeDirective, 0, len(seed))
+	emits := make([]IncludeDirective, 0, len(seed))
 
-		for _, in := range seed {
-			if in.isSource() {
-				emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(in.rel())})
-			}
+	for _, in := range seed {
+		if in.isSource() {
+			emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(in.rel())})
 		}
-
-		ctx.codegenFor(instance).register(&GeneratedFileInfo{
-			ProducerKvP:    pkPR,
-			OutputPath:     aux,
-			ProducerRef:    ref,
-			GeneratorRefs:  []NodeRef{rescompilerRef},
-			ParsedIncludes: emits,
-		})
 	}
+
+	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		ProducerKvP:    pkPR,
+		OutputPath:     aux,
+		ProducerRef:    ref,
+		GeneratorRefs:  []NodeRef{rescompilerRef},
+		ParsedIncludes: emits,
+	})
 
 	scanIn := ModuleCCInputs{
 		TC:                d.tc,

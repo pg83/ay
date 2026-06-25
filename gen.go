@@ -1047,78 +1047,76 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	archiveOrder := resolved
 
-	{
-		switch d.moduleStmt.Name {
-		case tokPy2Program:
-			head := make([]resolvedPeer, 0, len(resolved))
-			tail := make([]resolvedPeer, 0, 2)
+	switch d.moduleStmt.Name {
+	case tokPy2Program:
+		head := make([]resolvedPeer, 0, len(resolved))
+		tail := make([]resolvedPeer, 0, 2)
 
-			for _, rp := range resolved {
-				if rp.path == "contrib/libs/python" || rp.path == "library/python/runtime_py3" {
-					tail = append(tail, rp)
+		for _, rp := range resolved {
+			if rp.path == "contrib/libs/python" || rp.path == "library/python/runtime_py3" {
+				tail = append(tail, rp)
 
-					continue
-				}
-
-				head = append(head, rp)
+				continue
 			}
 
-			archiveOrder = append(head, tail...)
-		case tokPy3ProgramBin:
-
-			head := make([]resolvedPeer, 0, len(resolved))
-			tail := make([]resolvedPeer, 0, 2)
-
-			for _, rp := range resolved {
-				if rp.path == "contrib/libs/python" || rp.path == "library/python/runtime_py3" {
-					tail = append(tail, rp)
-
-					continue
-				}
-
-				head = append(head, rp)
-			}
-
-			archiveOrder = append(head, tail...)
-		case tokPy3Program:
-			allocatorExplicitSet := make(map[string]struct{}, len(allocatorExplicitPeers))
-
-			for _, p := range allocatorExplicitPeers {
-				allocatorExplicitSet[filepath.Clean(p)] = struct{}{}
-			}
-
-			head := make([]resolvedPeer, 0, len(resolved))
-			programTail := make([]resolvedPeer, 0, len(preUserProgDefaults)+len(allocatorExplicitPeers)+len(postUserProgDefaults))
-			pythonTail := make([]resolvedPeer, 0, 4)
-
-			for _, rp := range resolved {
-				if rp.path == "contrib/tools/python3/Modules/_sqlite" ||
-					rp.path == "library/python/runtime_py3/main" ||
-					rp.path == "library/python/import_tracing/constructor" ||
-					rp.path == "library/python/testing/import_test" {
-					pythonTail = append(pythonTail, rp)
-
-					continue
-				}
-
-				if rp.kind == peerKindProgramDefault {
-					programTail = append(programTail, rp)
-
-					continue
-				}
-
-				if _, ok := allocatorExplicitSet[rp.path]; ok {
-					programTail = append(programTail, rp)
-
-					continue
-				}
-
-				head = append(head, rp)
-			}
-
-			archiveOrder = append(head, programTail...)
-			archiveOrder = append(archiveOrder, pythonTail...)
+			head = append(head, rp)
 		}
+
+		archiveOrder = append(head, tail...)
+	case tokPy3ProgramBin:
+
+		head := make([]resolvedPeer, 0, len(resolved))
+		tail := make([]resolvedPeer, 0, 2)
+
+		for _, rp := range resolved {
+			if rp.path == "contrib/libs/python" || rp.path == "library/python/runtime_py3" {
+				tail = append(tail, rp)
+
+				continue
+			}
+
+			head = append(head, rp)
+		}
+
+		archiveOrder = append(head, tail...)
+	case tokPy3Program:
+		allocatorExplicitSet := make(map[string]struct{}, len(allocatorExplicitPeers))
+
+		for _, p := range allocatorExplicitPeers {
+			allocatorExplicitSet[filepath.Clean(p)] = struct{}{}
+		}
+
+		head := make([]resolvedPeer, 0, len(resolved))
+		programTail := make([]resolvedPeer, 0, len(preUserProgDefaults)+len(allocatorExplicitPeers)+len(postUserProgDefaults))
+		pythonTail := make([]resolvedPeer, 0, 4)
+
+		for _, rp := range resolved {
+			if rp.path == "contrib/tools/python3/Modules/_sqlite" ||
+				rp.path == "library/python/runtime_py3/main" ||
+				rp.path == "library/python/import_tracing/constructor" ||
+				rp.path == "library/python/testing/import_test" {
+				pythonTail = append(pythonTail, rp)
+
+				continue
+			}
+
+			if rp.kind == peerKindProgramDefault {
+				programTail = append(programTail, rp)
+
+				continue
+			}
+
+			if _, ok := allocatorExplicitSet[rp.path]; ok {
+				programTail = append(programTail, rp)
+
+				continue
+			}
+
+			head = append(head, rp)
+		}
+
+		archiveOrder = append(head, programTail...)
+		archiveOrder = append(archiveOrder, pythonTail...)
 	}
 
 	deduper.reset()
@@ -1162,36 +1160,34 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	linkTarget := isProgramModuleType(d.moduleStmt.Name) || d.moduleStmt.Name == tokDllTool
 
 	sbomOrder := archiveOrder
-	{
-		cxxIdx, libcxxIdx := -1, -1
+	cxxIdx, libcxxIdx := -1, -1
+
+	for i, rp := range archiveOrder {
+		switch rp.path {
+		case "contrib/libs/cxxsupp":
+			cxxIdx = i
+		case "contrib/libs/cxxsupp/libcxx":
+			libcxxIdx = i
+		}
+	}
+
+	if cxxIdx > libcxxIdx && libcxxIdx >= 0 {
+		reordered := make([]resolvedPeer, 0, len(archiveOrder))
+		cxx := archiveOrder[cxxIdx]
 
 		for i, rp := range archiveOrder {
-			switch rp.path {
-			case "contrib/libs/cxxsupp":
-				cxxIdx = i
-			case "contrib/libs/cxxsupp/libcxx":
-				libcxxIdx = i
+			if i == cxxIdx {
+				continue
+			}
+
+			reordered = append(reordered, rp)
+
+			if i == libcxxIdx {
+				reordered = append(reordered, cxx)
 			}
 		}
 
-		if cxxIdx > libcxxIdx && libcxxIdx >= 0 {
-			reordered := make([]resolvedPeer, 0, len(archiveOrder))
-			cxx := archiveOrder[cxxIdx]
-
-			for i, rp := range archiveOrder {
-				if i == cxxIdx {
-					continue
-				}
-
-				reordered = append(reordered, rp)
-
-				if i == libcxxIdx {
-					reordered = append(reordered, cxx)
-				}
-			}
-
-			sbomOrder = reordered
-		}
+		sbomOrder = reordered
 	}
 
 	if linkTarget && len(allocatorExplicitPeers) > 0 {

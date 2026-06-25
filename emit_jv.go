@@ -40,22 +40,20 @@ func emitJVDownstreamCPCC(
 
 		cpRef := ctx.emit.reserve()
 
-		{
-			emits := make([]IncludeDirective, 0, 1+len(outputIncludes))
-			emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(antlr4RuntimeHeaderVFS.rel())})
+		emits := make([]IncludeDirective, 0, 1+len(outputIncludes))
+		emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(antlr4RuntimeHeaderVFS.rel())})
 
-			for _, h := range outputIncludes {
-				emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(h)})
-			}
-
-			ctx.codegenFor(instance).register(&GeneratedFileInfo{
-				ProducerKvP:    pkCP,
-				OutputPath:     g4CppPath,
-				ProducerRef:    cpRef,
-				GeneratorRefs:  nil,
-				ParsedIncludes: emits,
-			})
+		for _, h := range outputIncludes {
+			emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(h)})
 		}
+
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			ProducerKvP:    pkCP,
+			OutputPath:     g4CppPath,
+			ProducerRef:    cpRef,
+			GeneratorRefs:  nil,
+			ParsedIncludes: emits,
+		})
 
 		ccIn := in
 		ccIn.ExtraDepRefs = nil
