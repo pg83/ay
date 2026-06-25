@@ -75,28 +75,3 @@ func argStrs(as []ARG) []string {
 	return out
 }
 
-func dedupARG(lists ...[]ARG) []ARG {
-	deduper.reset()
-
-	total := 0
-
-	for _, l := range lists {
-		total += len(l)
-	}
-
-	if total == 0 {
-		return nil
-	}
-
-	out := make([]ARG, 0, total)
-
-	for _, l := range lists {
-		for _, a := range l {
-			if deduper.add(VFS(a)) {
-				out = append(out, a)
-			}
-		}
-	}
-
-	return out
-}

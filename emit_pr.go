@@ -541,7 +541,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		return nil
 	}
 
-	out = dedupVFS(out, nil)
+	out = dedup(out, nil)
 
 	return out
 }

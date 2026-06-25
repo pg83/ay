@@ -175,7 +175,7 @@ func pyInputClosure(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 		return nil
 	}
 
-	out = dedupVFS(out, nil)
+	out = dedup(out, nil)
 
 	return out
 }

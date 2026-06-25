@@ -95,7 +95,7 @@ func emitArchiveAsmNode(
 
 	for _, p := range pathPerFile {
 		if info := reg.lookup(p); info != nil && len(info.SourceInputs) > 0 {
-			leaves = dedupVFS(leaves, info.SourceInputs)
+			leaves = dedup(leaves, info.SourceInputs)
 		}
 	}
 

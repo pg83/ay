@@ -115,7 +115,7 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 			closure = walkClosure(ctx.scannerFor(instance), dstVFS, moduleInputs.ScanCfg)
 			closure = rewriteClosureCPSource(scanner, closure)
 			closure = keepOnlySourceVFS(closure)
-			closure = dedupVFS(closure)
+			closure = dedup(closure)
 		}
 
 		if len(entries[i].producerSource) > 0 {
