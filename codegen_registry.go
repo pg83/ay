@@ -135,10 +135,6 @@ func (r *CodegenRegistry) setProducerSourceClosure(path VFS, closure []VFS) {
 	r.mustInfo(path, "setProducerSourceClosure").ProducerSourceClosure = closure
 }
 
-func (r *CodegenRegistry) setCompileSpec(out VFS, spec *CompileSpec) {
-	r.mustInfo(out, "setCompileSpec").Compile = spec
-}
-
 func (r *CodegenRegistry) buildParsedFor(out VFS) []IncludeDirective {
 	if info := r.lookup(out); info != nil {
 		return info.ParsedIncludes

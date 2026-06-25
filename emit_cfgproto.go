@@ -47,7 +47,8 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 			cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: internStr(ti.rel())})
 		}
 
-		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		reg := ctx.codegenFor(instance)
+		reg.register(&GeneratedFileInfo{
 			ProducerKvP:    pkPB,
 			OutputPath:     cfgH,
 			ProducerRef:    cfgRef,
@@ -60,7 +61,7 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 			{kind: includeQuoted, target: internStr(cfgH.rel())},
 			{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())},
 		}
-		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		reg.register(&GeneratedFileInfo{
 			ProducerKvP:    pkPB,
 			OutputPath:     cfgPbCC,
 			ProducerRef:    cfgRef,

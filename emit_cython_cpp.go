@@ -193,7 +193,7 @@ func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 			reg := ctx.codegenFor(instance)
 
 			for _, h := range headerVFS {
-				ctx.codegenFor(instance).register(&GeneratedFileInfo{
+				reg.register(&GeneratedFileInfo{
 					ProducerKvP:     pkCY,
 					OutputPath:      h,
 					ProducerRef:     cyRef,

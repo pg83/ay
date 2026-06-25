@@ -77,7 +77,8 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 
 	cppParsed := []IncludeDirective{part0Inc}
 
-	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+	reg := ctx.codegenFor(instance)
+	reg.register(&GeneratedFileInfo{
 		ProducerKvP:    pkSC,
 		OutputPath:     prefixH,
 		ProducerRef:    scRef,
@@ -85,7 +86,7 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 		ParsedIncludes: headerParsed,
 		ClosureLeaves:  []VFS{part0, inputIn},
 	})
-	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+	reg.register(&GeneratedFileInfo{
 		ProducerKvP:    pkSC,
 		OutputPath:     prefixCpp,
 		ProducerRef:    scRef,
@@ -106,7 +107,7 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 			info.ClosureLeaves = []VFS{inputIn}
 		}
 
-		ctx.codegenFor(instance).register(info)
+		reg.register(info)
 	}
 
 	node := &Node{

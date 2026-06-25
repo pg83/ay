@@ -44,7 +44,8 @@ func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt, 
 		headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: oi})
 	}
 
-	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+	reg := ctx.codegenFor(instance)
+	reg.register(&GeneratedFileInfo{
 		ProducerKvP:    pkBC,
 		OutputPath:     prefixH,
 		ProducerRef:    bcRef,
@@ -52,7 +53,7 @@ func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt, 
 		ParsedIncludes: headerParsed,
 		ClosureLeaves:  []VFS{prefixCpp, inputIn},
 	})
-	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+	reg.register(&GeneratedFileInfo{
 		ProducerKvP:    pkBC,
 		OutputPath:     prefixCpp,
 		ProducerRef:    bcRef,

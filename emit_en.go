@@ -114,7 +114,8 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 			{kind: includeQuoted, target: strUtilGenericSerializedEnumH},
 		}
 		sort.Slice(cppParsed, func(i, j int) bool { return cppParsed[i].target.string() < cppParsed[j].target.string() })
-		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		reg := ctx.codegenFor(instance)
+		reg.register(&GeneratedFileInfo{
 			ProducerKvP:    pkEN,
 			OutputPath:     serializedCPPPath,
 			ProducerRef:    enRef,
@@ -128,7 +129,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 				{kind: includeQuoted, target: internStr(serializedCPPPath.rel())},
 			}
 			sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target.string() < hParsed[j].target.string() })
-			ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			reg.register(&GeneratedFileInfo{
 				ProducerKvP:    pkEN,
 				OutputPath:     serializedHPath,
 				ProducerRef:    enRef,

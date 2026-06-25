@@ -65,7 +65,8 @@ func emitLibraryRagel5Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	r5Ref, r5TmpOut, r5CppOut := emitR5(instance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, ctx.emit)
 
 	rlSourceVFS := source(instance.Path.rel() + "/" + srcRel)
-	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+	reg := ctx.codegenFor(instance)
+	reg.register(&GeneratedFileInfo{
 		ProducerKvP:    pkR5,
 		OutputPath:     r5TmpOut,
 		ProducerRef:    r5Ref,
@@ -74,7 +75,7 @@ func emitLibraryRagel5Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	})
 	r5Parsed := ctx.scannerFor(instance).parsers.sourceParsedBuckets(rlSourceVFS, nil).bucket(parsedIncludesCpp)
 
-	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+	reg.register(&GeneratedFileInfo{
 		ProducerKvP:    pkR5,
 		OutputPath:     r5CppOut,
 		ProducerRef:    r5Ref,

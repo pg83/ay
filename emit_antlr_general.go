@@ -84,7 +84,7 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			jvSourceInputs = append(jvSourceInputs, stdout2stderrVFS, jarVFS)
 
 			for outTok, outVFS := range outVFSByToken {
-				ctx.codegenFor(instance).register(&GeneratedFileInfo{
+				reg.register(&GeneratedFileInfo{
 					ProducerKvP:    pkJV,
 					OutputPath:     outVFS,
 					ProducerRef:    jvRef,
