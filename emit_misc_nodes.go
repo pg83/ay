@@ -23,54 +23,52 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
 			parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
 
-			{
-				lexerG4 := source(instance.Path.rel(), "/", g.Lexer)
-				parserG4 := source(instance.Path.rel(), "/", g.Parser)
-				lexerCpp := build(outPrefix, lexerBase, ".cpp")
-				parserCpp := build(outPrefix, parserBase, ".cpp")
-				ctx.codegenFor(instance).register(&GeneratedFileInfo{
-					ProducerKvP:    pkJV,
-					OutputPath:     lexerCpp,
-					ProducerRef:    jvRef,
-					GeneratorRefs:  nil,
-					ParsedIncludes: nil,
-				})
-				ctx.codegenFor(instance).register(&GeneratedFileInfo{
-					ProducerKvP:    pkJV,
-					OutputPath:     parserCpp,
-					ProducerRef:    jvRef,
-					GeneratorRefs:  nil,
-					ParsedIncludes: nil,
-				})
-				witnessIncludes := []VFS{
-					antlr4RuntimeHeaderVFS,
-					lexerCpp,
-					stdout2stderrVFS,
-					antlr4JarVFS,
-					lexerG4,
-					parserG4,
+			lexerG4 := source(instance.Path.rel(), "/", g.Lexer)
+			parserG4 := source(instance.Path.rel(), "/", g.Parser)
+			lexerCpp := build(outPrefix, lexerBase, ".cpp")
+			parserCpp := build(outPrefix, parserBase, ".cpp")
+			ctx.codegenFor(instance).register(&GeneratedFileInfo{
+				ProducerKvP:    pkJV,
+				OutputPath:     lexerCpp,
+				ProducerRef:    jvRef,
+				GeneratorRefs:  nil,
+				ParsedIncludes: nil,
+			})
+			ctx.codegenFor(instance).register(&GeneratedFileInfo{
+				ProducerKvP:    pkJV,
+				OutputPath:     parserCpp,
+				ProducerRef:    jvRef,
+				GeneratorRefs:  nil,
+				ParsedIncludes: nil,
+			})
+			witnessIncludes := []VFS{
+				antlr4RuntimeHeaderVFS,
+				lexerCpp,
+				stdout2stderrVFS,
+				antlr4JarVFS,
+				lexerG4,
+				parserG4,
+			}
+
+			for _, suffix := range []string{
+				lexerBase + ".h",
+				parserBase + ".h",
+				parserBase + "Visitor.h",
+				parserBase + "BaseVisitor.h",
+			} {
+				parsed := make([]IncludeDirective, 0, len(witnessIncludes))
+
+				for _, include := range witnessIncludes {
+					parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.rel())})
 				}
 
-				for _, suffix := range []string{
-					lexerBase + ".h",
-					parserBase + ".h",
-					parserBase + "Visitor.h",
-					parserBase + "BaseVisitor.h",
-				} {
-					parsed := make([]IncludeDirective, 0, len(witnessIncludes))
-
-					for _, include := range witnessIncludes {
-						parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.rel())})
-					}
-
-					ctx.codegenFor(instance).register(&GeneratedFileInfo{
-						ProducerKvP:    pkJV,
-						OutputPath:     build(outPrefix, suffix),
-						ProducerRef:    jvRef,
-						GeneratorRefs:  nil,
-						ParsedIncludes: parsed,
-					})
-				}
+				ctx.codegenFor(instance).register(&GeneratedFileInfo{
+					ProducerKvP:    pkJV,
+					OutputPath:     build(outPrefix, suffix),
+					ProducerRef:    jvRef,
+					GeneratorRefs:  nil,
+					ParsedIncludes: parsed,
+				})
 			}
 
 			if consumerInputs != nil {
@@ -94,52 +92,50 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 
 			base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
 
-			{
-				grammarG4 := source(instance.Path.rel(), "/", g.Grammar)
-				lexerCpp := build(outPrefix, base, "Lexer.cpp")
-				parserCpp := build(outPrefix, base, "Parser.cpp")
-				ctx.codegenFor(instance).register(&GeneratedFileInfo{
-					ProducerKvP:    pkJV,
-					OutputPath:     lexerCpp,
-					ProducerRef:    jvRef,
-					GeneratorRefs:  nil,
-					ParsedIncludes: nil,
-				})
-				ctx.codegenFor(instance).register(&GeneratedFileInfo{
-					ProducerKvP:    pkJV,
-					OutputPath:     parserCpp,
-					ProducerRef:    jvRef,
-					GeneratorRefs:  nil,
-					ParsedIncludes: nil,
-				})
-				witnessIncludes := []VFS{
-					antlr4RuntimeHeaderVFS,
-					lexerCpp,
-					stdout2stderrVFS,
-					antlr4JarVFS,
-					grammarG4,
+			grammarG4 := source(instance.Path.rel(), "/", g.Grammar)
+			lexerCpp := build(outPrefix, base, "Lexer.cpp")
+			parserCpp := build(outPrefix, base, "Parser.cpp")
+			ctx.codegenFor(instance).register(&GeneratedFileInfo{
+				ProducerKvP:    pkJV,
+				OutputPath:     lexerCpp,
+				ProducerRef:    jvRef,
+				GeneratorRefs:  nil,
+				ParsedIncludes: nil,
+			})
+			ctx.codegenFor(instance).register(&GeneratedFileInfo{
+				ProducerKvP:    pkJV,
+				OutputPath:     parserCpp,
+				ProducerRef:    jvRef,
+				GeneratorRefs:  nil,
+				ParsedIncludes: nil,
+			})
+			witnessIncludes := []VFS{
+				antlr4RuntimeHeaderVFS,
+				lexerCpp,
+				stdout2stderrVFS,
+				antlr4JarVFS,
+				grammarG4,
+			}
+
+			for _, suffix := range []string{
+				base + "Lexer.h",
+				base + "Parser.h",
+				base + "Visitor.h",
+				base + "BaseVisitor.h",
+			} {
+				parsed := make([]IncludeDirective, 0, len(witnessIncludes))
+
+				for _, include := range witnessIncludes {
+					parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.rel())})
 				}
 
-				for _, suffix := range []string{
-					base + "Lexer.h",
-					base + "Parser.h",
-					base + "Visitor.h",
-					base + "BaseVisitor.h",
-				} {
-					parsed := make([]IncludeDirective, 0, len(witnessIncludes))
-
-					for _, include := range witnessIncludes {
-						parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.rel())})
-					}
-
-					ctx.codegenFor(instance).register(&GeneratedFileInfo{
-						ProducerKvP:    pkJV,
-						OutputPath:     build(outPrefix, suffix),
-						ProducerRef:    jvRef,
-						GeneratorRefs:  nil,
-						ParsedIncludes: parsed,
-					})
-				}
+				ctx.codegenFor(instance).register(&GeneratedFileInfo{
+					ProducerKvP:    pkJV,
+					OutputPath:     build(outPrefix, suffix),
+					ProducerRef:    jvRef,
+					GeneratorRefs:  nil,
+					ParsedIncludes: parsed,
+				})
 			}
 
 			if consumerInputs != nil {

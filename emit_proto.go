@@ -322,157 +322,153 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		}
 	}
 
-	{
-		directImports := protoDirectPbHResolved(ctx.parsers, protoRelPath)
+	directImports := protoDirectPbHResolved(ctx.parsers, protoRelPath)
 
-		if protoSrcOverride != 0 && len(genProtoImportRels) > 0 {
-			directImports = protoImportRelsToPbH(genProtoImportRels, cfg.cppOutRoot)
+	if protoSrcOverride != 0 && len(genProtoImportRels) > 0 {
+		directImports = protoImportRelsToPbH(genProtoImportRels, cfg.cppOutRoot)
+	}
+
+	pbHImports := directImports
+
+	if len(sprotoProduced) > 0 {
+		pbHImports = concat(directImports, sprotoInducedHeaders(directImports))
+	}
+
+	extras := pbHEmitsIncludesExtras()
+	pbHParsed := make([]IncludeDirective, 0, len(pbHImports)+len(extras)+len(transitiveImports))
+	pbHParsed = append(pbHParsed, pbHImports...)
+	pbHParsed = append(pbHParsed, extras...)
+
+	for _, ti := range transitiveImports {
+		if ti.isBuild() {
+			continue
 		}
 
-		pbHImports := directImports
+		pbHParsed = append(pbHParsed, IncludeDirective{kind: includeQuoted, target: internStr(ti.rel())})
+	}
 
-		if len(sprotoProduced) > 0 {
-			pbHImports = concat(directImports, sprotoInducedHeaders(directImports))
+	pbGenRefs := []NodeRef{pe.protocLDRef, pe.cppStyleguideLDRef}
+
+	if cfg.grpc {
+		pbGenRefs = append(pbGenRefs, pe.grpcCppLDRef)
+	}
+
+	for _, p := range pe.extraPlugins {
+		pbGenRefs = append(pbGenRefs, depRefs(p.LDRef)...)
+	}
+
+	pbHLeaves := []VFS{source(protoRelPath)}
+
+	if protoSrcOverride != 0 {
+		pbHLeaves = protoProducerSourceInputs
+	}
+
+	reg := ctx.codegenFor(instance)
+
+	reg.register(&GeneratedFileInfo{
+		ProducerKvP:    pkPB,
+		OutputPath:     pbH,
+		ProducerRef:    pbRef,
+		GeneratorRefs:  pbGenRefs,
+		ParsedIncludes: pbHParsed,
+		ClosureLeaves:  pbHLeaves,
+	})
+
+	protoBaseName := filepath.Base(protoRelPath)
+
+	for _, plugin := range d.cppProtoPlugins {
+		if !plugin.isYaff() || len(plugin.OutputSuffixes) != 2 {
+			continue
 		}
 
-		extras := pbHEmitsIncludesExtras()
-		pbHParsed := make([]IncludeDirective, 0, len(pbHImports)+len(extras)+len(transitiveImports))
-		pbHParsed = append(pbHParsed, pbHImports...)
-		pbHParsed = append(pbHParsed, extras...)
+		yaffH := build(protoBase, plugin.OutputSuffixes[0])
+		yaffCC := build(protoBase, plugin.OutputSuffixes[1])
 
-		for _, ti := range transitiveImports {
-			if ti.isBuild() {
-				continue
-			}
+		var yaffHParsed []IncludeDirective
 
-			pbHParsed = append(pbHParsed, IncludeDirective{kind: includeQuoted, target: internStr(ti.rel())})
+		if plugin.processesFile(protoBaseName) {
+			yaffHParsed = yaffGeneratedHeaderIncludes(plugin.isExperimental(protoBaseName), pbH.rel())
 		}
-
-		pbGenRefs := []NodeRef{pe.protocLDRef, pe.cppStyleguideLDRef}
-
-		if cfg.grpc {
-			pbGenRefs = append(pbGenRefs, pe.grpcCppLDRef)
-		}
-
-		for _, p := range pe.extraPlugins {
-			pbGenRefs = append(pbGenRefs, depRefs(p.LDRef)...)
-		}
-
-		pbHLeaves := []VFS{source(protoRelPath)}
-
-		if protoSrcOverride != 0 {
-			pbHLeaves = protoProducerSourceInputs
-		}
-
-		reg := ctx.codegenFor(instance)
 
 		reg.register(&GeneratedFileInfo{
 			ProducerKvP:    pkPB,
-			OutputPath:     pbH,
+			OutputPath:     yaffH,
 			ProducerRef:    pbRef,
-			GeneratorRefs:  pbGenRefs,
-			ParsedIncludes: pbHParsed,
-			ClosureLeaves:  pbHLeaves,
+			GeneratorRefs:  nil,
+			ParsedIncludes: yaffHParsed,
 		})
 
-		{
-			protoBaseName := filepath.Base(protoRelPath)
-
-			for _, plugin := range d.cppProtoPlugins {
-				if !plugin.isYaff() || len(plugin.OutputSuffixes) != 2 {
-					continue
-				}
-
-				yaffH := build(protoBase, plugin.OutputSuffixes[0])
-				yaffCC := build(protoBase, plugin.OutputSuffixes[1])
-
-				var yaffHParsed []IncludeDirective
-
-				if plugin.processesFile(protoBaseName) {
-					yaffHParsed = yaffGeneratedHeaderIncludes(plugin.isExperimental(protoBaseName), pbH.rel())
-				}
-
-				reg.register(&GeneratedFileInfo{
-					ProducerKvP:    pkPB,
-					OutputPath:     yaffH,
-					ProducerRef:    pbRef,
-					GeneratorRefs:  nil,
-					ParsedIncludes: yaffHParsed,
-				})
-
-				yaffCCParsed := []IncludeDirective{
-					{kind: includeQuoted, target: internStr(yaffH.rel())},
-					{kind: includeQuoted, target: internStr(pbH.rel())},
-				}
-				reg.register(&GeneratedFileInfo{
-					ProducerKvP:    pkPB,
-					OutputPath:     yaffCC,
-					ProducerRef:    pbRef,
-					GeneratorRefs:  pbGenRefs,
-					ParsedIncludes: yaffCCParsed,
-				})
-			}
+		yaffCCParsed := []IncludeDirective{
+			{kind: includeQuoted, target: internStr(yaffH.rel())},
+			{kind: includeQuoted, target: internStr(pbH.rel())},
 		}
-
-		if pe.liteHeaders {
-			depsParsed := make([]IncludeDirective, 0, 1+len(directImports))
-			depsParsed = append(depsParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.rel())})
-			depsParsed = append(depsParsed, directImports...)
-			reg.register(&GeneratedFileInfo{
-				ProducerKvP:    pkPB,
-				OutputPath:     pbDepsH,
-				ProducerRef:    pbRef,
-				GeneratorRefs:  pbGenRefs,
-				ParsedIncludes: depsParsed,
-			})
-		}
-
-		pbCCParsed := make([]IncludeDirective, 0, 3+len(directImports))
-		pbCCParsed = append(pbCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.rel())})
-
-		if pe.liteHeaders {
-			pbCCParsed = append(pbCCParsed, directImports...)
-		}
-
-		pbCCParsed = append(pbCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())})
-
 		reg.register(&GeneratedFileInfo{
 			ProducerKvP:    pkPB,
-			OutputPath:     pbCC,
+			OutputPath:     yaffCC,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pbGenRefs,
-			ParsedIncludes: pbCCParsed,
+			ParsedIncludes: yaffCCParsed,
 		})
+	}
 
-		var grpcCCParsed, grpcHParsed []IncludeDirective
+	if pe.liteHeaders {
+		depsParsed := make([]IncludeDirective, 0, 1+len(directImports))
+		depsParsed = append(depsParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.rel())})
+		depsParsed = append(depsParsed, directImports...)
+		reg.register(&GeneratedFileInfo{
+			ProducerKvP:    pkPB,
+			OutputPath:     pbDepsH,
+			ProducerRef:    pbRef,
+			GeneratorRefs:  pbGenRefs,
+			ParsedIncludes: depsParsed,
+		})
+	}
 
-		if needsGRPCParsed {
-			grpcCCParsed = make([]IncludeDirective, 0, 2)
-			grpcCCParsed = append(grpcCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.rel())})
-			grpcCCParsed = append(grpcCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())})
+	pbCCParsed := make([]IncludeDirective, 0, 3+len(directImports))
+	pbCCParsed = append(pbCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.rel())})
 
-			grpcHParsed = make([]IncludeDirective, 0, 3+len(directImports))
-			grpcHParsed = append(grpcHParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.rel())})
-			grpcHParsed = append(grpcHParsed, directImports...)
-			grpcHParsed = append(grpcHParsed, IncludeDirective{kind: includeQuoted, target: internV(pbRuntimeBase, "google/protobuf/port_def.inc")})
-		}
+	if pe.liteHeaders {
+		pbCCParsed = append(pbCCParsed, directImports...)
+	}
 
-		if cfg.grpc {
-			reg.register(&GeneratedFileInfo{
-				ProducerKvP:    pkPB,
-				OutputPath:     grpcPbCC,
-				ProducerRef:    pbRef,
-				GeneratorRefs:  []NodeRef{pe.protocLDRef, pe.grpcCppLDRef},
-				ParsedIncludes: grpcCCParsed,
-			})
-			reg.register(&GeneratedFileInfo{
-				ProducerKvP:    pkPB,
-				OutputPath:     grpcPbH,
-				ProducerRef:    pbRef,
-				GeneratorRefs:  []NodeRef{pe.grpcCppLDRef},
-				ParsedIncludes: grpcHParsed,
-			})
-		}
+	pbCCParsed = append(pbCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())})
+
+	reg.register(&GeneratedFileInfo{
+		ProducerKvP:    pkPB,
+		OutputPath:     pbCC,
+		ProducerRef:    pbRef,
+		GeneratorRefs:  pbGenRefs,
+		ParsedIncludes: pbCCParsed,
+	})
+
+	var grpcCCParsed, grpcHParsed []IncludeDirective
+
+	if needsGRPCParsed {
+		grpcCCParsed = make([]IncludeDirective, 0, 2)
+		grpcCCParsed = append(grpcCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.rel())})
+		grpcCCParsed = append(grpcCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())})
+
+		grpcHParsed = make([]IncludeDirective, 0, 3+len(directImports))
+		grpcHParsed = append(grpcHParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.rel())})
+		grpcHParsed = append(grpcHParsed, directImports...)
+		grpcHParsed = append(grpcHParsed, IncludeDirective{kind: includeQuoted, target: internV(pbRuntimeBase, "google/protobuf/port_def.inc")})
+	}
+
+	if cfg.grpc {
+		reg.register(&GeneratedFileInfo{
+			ProducerKvP:    pkPB,
+			OutputPath:     grpcPbCC,
+			ProducerRef:    pbRef,
+			GeneratorRefs:  []NodeRef{pe.protocLDRef, pe.grpcCppLDRef},
+			ParsedIncludes: grpcCCParsed,
+		})
+		reg.register(&GeneratedFileInfo{
+			ProducerKvP:    pkPB,
+			OutputPath:     grpcPbH,
+			ProducerRef:    pbRef,
+			GeneratorRefs:  []NodeRef{pe.grpcCppLDRef},
+			ParsedIncludes: grpcHParsed,
+		})
 	}
 
 	orderedCC := make([]VFS, 0, 2+len(extraOutputPaths))
@@ -599,33 +595,31 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 			evH := build(evRelPath, ".pb.h")
 			evPbCC := build(evRelPath, ".pb.cc")
 
-			{
-				directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, protoCPPOutRoot(d))
-				evExtras := evWitnessExtras(evRelPath, evPbCC)
-				evHParsed := make([]IncludeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(evExtras))
-				evHParsed = append(evHParsed, directImports...)
-				evHParsed = append(evHParsed, protobufRuntimeDirectives...)
-				evHParsed = append(evHParsed, evExtras...)
-				ctx.codegenFor(instance).register(&GeneratedFileInfo{
-					ProducerKvP:    pkEV,
-					OutputPath:     evH,
-					ProducerRef:    evRef,
-					GeneratorRefs:  []NodeRef{event2cppLDRef},
-					ParsedIncludes: evHParsed,
-				})
+			directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, protoCPPOutRoot(d))
+			evExtras := evWitnessExtras(evRelPath, evPbCC)
+			evHParsed := make([]IncludeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(evExtras))
+			evHParsed = append(evHParsed, directImports...)
+			evHParsed = append(evHParsed, protobufRuntimeDirectives...)
+			evHParsed = append(evHParsed, evExtras...)
+			ctx.codegenFor(instance).register(&GeneratedFileInfo{
+				ProducerKvP:    pkEV,
+				OutputPath:     evH,
+				ProducerRef:    evRef,
+				GeneratorRefs:  []NodeRef{event2cppLDRef},
+				ParsedIncludes: evHParsed,
+			})
 
-				evCCParsed := make([]IncludeDirective, 0, 1+len(protobufRuntimeHeaders))
-				evCCParsed = append(evCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(evH.rel())})
-				evCCParsed = append(evCCParsed, protobufRuntimeDirectives...)
+			evCCParsed := make([]IncludeDirective, 0, 1+len(protobufRuntimeHeaders))
+			evCCParsed = append(evCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(evH.rel())})
+			evCCParsed = append(evCCParsed, protobufRuntimeDirectives...)
 
-				ctx.codegenFor(instance).register(&GeneratedFileInfo{
-					ProducerKvP:    pkEV,
-					OutputPath:     evPbCC,
-					ProducerRef:    evRef,
-					GeneratorRefs:  []NodeRef{event2cppLDRef},
-					ParsedIncludes: evCCParsed,
-				})
-			}
+			ctx.codegenFor(instance).register(&GeneratedFileInfo{
+				ProducerKvP:    pkEV,
+				OutputPath:     evPbCC,
+				ProducerRef:    evRef,
+				GeneratorRefs:  []NodeRef{event2cppLDRef},
+				ParsedIncludes: evCCParsed,
+			})
 
 			cppInstance := instance
 			evSrcRel := strings.TrimPrefix(evRelPath+".pb.cc", cppInstance.Path.rel()+"/")
@@ -744,29 +738,27 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	var antlrRefs []NodeRef
 	var antlrOutputs []VFS
 
-	{
-		reg := ctx.codegenFor(instance)
+	reg := ctx.codegenFor(instance)
 
-		for _, run := range d.antlrRuns {
-			for _, outTok := range run.OUTFiles {
-				if !isCCSourceExt(outTok.string()) {
-					continue
-				}
-
-				outVFS := copyFileOutputVFS(instance.Path.rel(), outTok.string())
-				info := reg.lookup(outVFS)
-
-				if info == nil {
-					continue
-				}
-
-				cppRel := antlrOutputModuleRel(instance.Path.rel(), outVFS)
-				ccRef, ccOut := emitCodegenDownstreamCC(ctx, cppInstance, cppRel, []NodeRef{info.ProducerRef}, moduleInputs)
-				antlrRefs = append(antlrRefs, ccRef)
-				antlrOutputs = append(antlrOutputs, ccOut)
-
-				arDeclMeta[ccOut] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
+	for _, run := range d.antlrRuns {
+		for _, outTok := range run.OUTFiles {
+			if !isCCSourceExt(outTok.string()) {
+				continue
 			}
+
+			outVFS := copyFileOutputVFS(instance.Path.rel(), outTok.string())
+			info := reg.lookup(outVFS)
+
+			if info == nil {
+				continue
+			}
+
+			cppRel := antlrOutputModuleRel(instance.Path.rel(), outVFS)
+			ccRef, ccOut := emitCodegenDownstreamCC(ctx, cppInstance, cppRel, []NodeRef{info.ProducerRef}, moduleInputs)
+			antlrRefs = append(antlrRefs, ccRef)
+			antlrOutputs = append(antlrOutputs, ccOut)
+
+			arDeclMeta[ccOut] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
 		}
 	}
 

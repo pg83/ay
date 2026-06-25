@@ -472,66 +472,64 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		}
 	}
 
-	{
-		reg := ctx.codegenFor(instance)
+	reg := ctx.codegenFor(instance)
 
-		keep := func(v VFS, customPR bool) bool {
-			if fullSourceClosure {
-				return v.isSource()
-			}
-
-			if customPR {
-				return v.isSource() || isCodegenProtoHeader(reg, v)
-			}
-
-			return strings.HasSuffix(v.rel(), ".proto")
+	keep := func(v VFS, customPR bool) bool {
+		if fullSourceClosure {
+			return v.isSource()
 		}
 
-		pbhSeen := pbhBasenameSet(out)
+		if customPR {
+			return v.isSource() || isCodegenProtoHeader(reg, v)
+		}
 
-		for _, oi := range stmt.OutputIncludes {
-			target := oi
+		return strings.HasSuffix(v.rel(), ".proto")
+	}
 
-			if vfsHasPrefix(target.string()) {
-				target = internStr(intern(target.string()).rel())
-			}
+	pbhSeen := pbhBasenameSet(out)
 
-			candidate := build(target.string())
+	for _, oi := range stmt.OutputIncludes {
+		target := oi
 
-			var sub []VFS
-			customPR := false
+		if vfsHasPrefix(target.string()) {
+			target = internStr(intern(target.string()).rel())
+		}
 
-			switch info := reg.lookup(candidate); {
-			case info != nil:
+		candidate := build(target.string())
 
-				sub = walkClosureTail(ctx.scannerFor(instance), info.OutputPath, scanIn.ScanCfg)
-				customPR = info.ProducerKvP == pkPR
-			case fullSourceClosure && ctx.fs.isFile(srcRootVFS, target.string()):
+		var sub []VFS
+		customPR := false
 
-				sub = walkClosure(ctx.scannerFor(instance), source(target.string()), scanIn.ScanCfg)
-			default:
+		switch info := reg.lookup(candidate); {
+		case info != nil:
+
+			sub = walkClosureTail(ctx.scannerFor(instance), info.OutputPath, scanIn.ScanCfg)
+			customPR = info.ProducerKvP == pkPR
+		case fullSourceClosure && ctx.fs.isFile(srcRootVFS, target.string()):
+
+			sub = walkClosure(ctx.scannerFor(instance), source(target.string()), scanIn.ScanCfg)
+		default:
+			continue
+		}
+
+		for _, v := range sub {
+			if !keep(v, customPR) {
 				continue
 			}
 
-			for _, v := range sub {
-				if !keep(v, customPR) {
-					continue
-				}
+			out = append(out, v)
 
-				out = append(out, v)
+			if strings.HasSuffix(v.rel(), ".pb.h") {
+				pbhSeen[filepath.Base(v.rel())] = true
+			}
 
-				if strings.HasSuffix(v.rel(), ".pb.h") {
-					pbhSeen[filepath.Base(v.rel())] = true
-				}
+			if !fullSourceClosure && !hasProtoIN && v.isSource() && strings.HasSuffix(v.rel(), ".proto") {
+				sibling := strings.TrimSuffix(v.rel(), ".proto") + ".pb.h"
+				sibDir, sibBase := splitDirName(sibling)
 
-				if !fullSourceClosure && !hasProtoIN && v.isSource() && strings.HasSuffix(v.rel(), ".proto") {
-					sibling := strings.TrimSuffix(v.rel(), ".proto") + ".pb.h"
-					sibDir, sibBase := splitDirName(sibling)
-
-					if ctx.fs.isFile(dirKey(sibDir), sibBase) && !pbhSeen[sibBase] {
-						out = append(out, source(sibling))
-						pbhSeen[sibBase] = true
-					}
+				if ctx.fs.isFile(dirKey(sibDir), sibBase) && !pbhSeen[sibBase] {
+					out = append(out, source(sibling))
+					pbhSeen[sibBase] = true
 				}
 			}
 		}

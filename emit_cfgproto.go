@@ -33,60 +33,56 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	outputRoot := protoCPPOutRoot(d)
 	cfgGenRefs := []NodeRef{protocLDRef, cppStyleguideLDRef, configPluginLDRef}
 
-	{
-		directImports := protoDirectPbHIncludes(ctx.parsers, cfgRelPath, outputRoot)
-		configIncludes := ctx.parsers.sourceParsedBuckets(cfgSource, nil).bucket(parsedIncludesProtoConfig)
-		extras := pbHEmitsIncludesExtras()
+	directImports := protoDirectPbHIncludes(ctx.parsers, cfgRelPath, outputRoot)
+	configIncludes := ctx.parsers.sourceParsedBuckets(cfgSource, nil).bucket(parsedIncludesProtoConfig)
+	extras := pbHEmitsIncludesExtras()
 
-		cfgHParsed := make([]IncludeDirective, 0, len(directImports)+len(configIncludes)+len(extras)+len(cfgImports))
-		cfgHParsed = append(cfgHParsed, directImports...)
-		cfgHParsed = append(cfgHParsed, configIncludes...)
-		cfgHParsed = append(cfgHParsed, extras...)
+	cfgHParsed := make([]IncludeDirective, 0, len(directImports)+len(configIncludes)+len(extras)+len(cfgImports))
+	cfgHParsed = append(cfgHParsed, directImports...)
+	cfgHParsed = append(cfgHParsed, configIncludes...)
+	cfgHParsed = append(cfgHParsed, extras...)
 
-		for _, ti := range cfgImports {
-			cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: internStr(ti.rel())})
-		}
-
-		reg := ctx.codegenFor(instance)
-		reg.register(&GeneratedFileInfo{
-			ProducerKvP:    pkPB,
-			OutputPath:     cfgH,
-			ProducerRef:    cfgRef,
-			GeneratorRefs:  cfgGenRefs,
-			ParsedIncludes: cfgHParsed,
-			ClosureLeaves:  []VFS{cfgSource, cfgPbCC},
-		})
-
-		cfgCCParsed := []IncludeDirective{
-			{kind: includeQuoted, target: internStr(cfgH.rel())},
-			{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())},
-		}
-		reg.register(&GeneratedFileInfo{
-			ProducerKvP:    pkPB,
-			OutputPath:     cfgPbCC,
-			ProducerRef:    cfgRef,
-			GeneratorRefs:  cfgGenRefs,
-			ParsedIncludes: cfgCCParsed,
-		})
+	for _, ti := range cfgImports {
+		cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: internStr(ti.rel())})
 	}
+
+	reg := ctx.codegenFor(instance)
+	reg.register(&GeneratedFileInfo{
+		ProducerKvP:    pkPB,
+		OutputPath:     cfgH,
+		ProducerRef:    cfgRef,
+		GeneratorRefs:  cfgGenRefs,
+		ParsedIncludes: cfgHParsed,
+		ClosureLeaves:  []VFS{cfgSource, cfgPbCC},
+	})
+
+	cfgCCParsed := []IncludeDirective{
+		{kind: includeQuoted, target: internStr(cfgH.rel())},
+		{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())},
+	}
+	reg.register(&GeneratedFileInfo{
+		ProducerKvP:    pkPB,
+		OutputPath:     cfgPbCC,
+		ProducerRef:    cfgRef,
+		GeneratorRefs:  cfgGenRefs,
+		ParsedIncludes: cfgCCParsed,
+	})
 
 	ccSrcRel := srcRel + ".pb.cc"
 	ccIn := in
 	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), cfgPbCC, in.ScanCfg)
 
-	{
-		filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
+	filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
 
-		for _, v := range ccIn.IncludeInputs {
-			if v == cfgH {
-				continue
-			}
-
-			filtered = append(filtered, v)
+	for _, v := range ccIn.IncludeInputs {
+		if v == cfgH {
+			continue
 		}
 
-		ccIn.IncludeInputs = filtered
+		filtered = append(filtered, v)
 	}
+
+	ccIn.IncludeInputs = filtered
 	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, cfgRef)
 	ref, outPath, _ := emitCC(instance, internStr(ccSrcRel), cfgPbCC, ccIn, ctx.host, ctx.emit)
 

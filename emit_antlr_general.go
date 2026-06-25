@@ -37,11 +37,9 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			inVFSByToken[inTok.string()] = vfs
 			inputs = append(inputs, vfs)
 
-			{
-				if info := reg.lookup(vfs); info != nil && info.ProducerKvP == pkCF && info.SourcePath != 0 {
-					appendCFExtra(info.SourcePath)
-					appendCFExtra(configureFilePyVFS)
-				}
+			if info := reg.lookup(vfs); info != nil && info.ProducerKvP == pkCF && info.SourcePath != 0 {
+				appendCFExtra(info.SourcePath)
+				appendCFExtra(configureFilePyVFS)
 			}
 		}
 
@@ -72,26 +70,24 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 
 		jvRef := emitJVGeneral(instance, jarVFS, args, inputs, outputs, cwd, deps, cfModuleTag(d, instance), d.tc, ctx.emit)
 
-		{
-			jvSourceInputs := make([]VFS, 0, len(inputs)+2)
+		jvSourceInputs := make([]VFS, 0, len(inputs)+2)
 
-			for _, v := range inputs {
-				if v.isSource() {
-					jvSourceInputs = append(jvSourceInputs, v)
-				}
+		for _, v := range inputs {
+			if v.isSource() {
+				jvSourceInputs = append(jvSourceInputs, v)
 			}
+		}
 
-			jvSourceInputs = append(jvSourceInputs, stdout2stderrVFS, jarVFS)
+		jvSourceInputs = append(jvSourceInputs, stdout2stderrVFS, jarVFS)
 
-			for outTok, outVFS := range outVFSByToken {
-				reg.register(&GeneratedFileInfo{
-					ProducerKvP:    pkJV,
-					OutputPath:     outVFS,
-					ProducerRef:    jvRef,
-					ParsedIncludes: antlrParsedIncludes(instance.Path.rel(), run, outTok, outVFSByToken, inputs, jarVFS),
-					SourceInputs:   jvSourceInputs,
-				})
-			}
+		for outTok, outVFS := range outVFSByToken {
+			reg.register(&GeneratedFileInfo{
+				ProducerKvP:    pkJV,
+				OutputPath:     outVFS,
+				ProducerRef:    jvRef,
+				ParsedIncludes: antlrParsedIncludes(instance.Path.rel(), run, outTok, outVFSByToken, inputs, jarVFS),
+				SourceInputs:   jvSourceInputs,
+			})
 		}
 
 		if consumerInputs == nil {

@@ -108,24 +108,22 @@ func emitArchive(
 
 	arRef := emit.emit(n)
 
-	{
-		var leaves []VFS
+	var leaves []VFS
 
-		for _, p := range pathPerFile {
-			if info := reg.lookup(p); info != nil && len(info.SourceInputs) > 0 {
-				leaves = append(leaves, info.SourceInputs...)
-			} else if a.PropagateSourceMembers && info == nil {
-				leaves = append(leaves, p)
-			}
+	for _, p := range pathPerFile {
+		if info := reg.lookup(p); info != nil && len(info.SourceInputs) > 0 {
+			leaves = append(leaves, info.SourceInputs...)
+		} else if a.PropagateSourceMembers && info == nil {
+			leaves = append(leaves, p)
 		}
-
-		reg.register(&GeneratedFileInfo{
-			ProducerKvP:   pkAR,
-			OutputPath:    archiveVFS,
-			ProducerRef:   arRef,
-			ClosureLeaves: leaves,
-		})
 	}
+
+	reg.register(&GeneratedFileInfo{
+		ProducerKvP:   pkAR,
+		OutputPath:    archiveVFS,
+		ProducerRef:   arRef,
+		ClosureLeaves: leaves,
+	})
 }
 
 var (
