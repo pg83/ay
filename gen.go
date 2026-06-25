@@ -220,13 +220,16 @@ type ScanCtxPerfStats struct {
 	closureWindows  int
 }
 
-func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, includeInputs []VFS, incl ...NodeRef) []NodeRef {
+func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, na *NodeArenas, includeInputs []VFS, incl ...NodeRef) []NodeRef {
 	deduper.reset()
 
-	out := append([]NodeRef(nil), incl...)
+	out := na.noderefs.alloc(len(incl) + len(includeInputs))
+	k := 0
 
 	for _, r := range incl {
 		deduper.add(VFS(r))
+		out[k] = r
+		k++
 	}
 
 	reg := codegenRegForInstance(ctx, consumer)
@@ -246,10 +249,17 @@ func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, includeInpu
 			continue
 		}
 
-		out = append(out, info.ProducerRef)
+		out[k] = info.ProducerRef
+		k++
 	}
 
-	return out
+	na.noderefs.commit(k)
+
+	if k == 0 {
+		return nil
+	}
+
+	return out[:k:k]
 }
 
 func (ctx *GenCtx) perfScanCtxStats(scanner *IncludeScanner) ScanCtxPerfStats {

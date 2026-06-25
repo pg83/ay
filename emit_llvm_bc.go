@@ -40,7 +40,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 
 			closure := walkClosure(ctx.scannerFor(instance), inputVFS, in.ScanCfg)
 
-			deps := resolveCodegenDepRefsIncl(ctx, instance, closure, depRefs(producer)...)
+			deps := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, closure, depRefs(producer)...)
 
 			allInputs := na.inputList(na.vfsList(clangWrapperVFS),
 				closure)

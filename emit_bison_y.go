@@ -139,7 +139,7 @@ func emitBisonY(ctx *GenCtx, instance ModuleInstance, srcRel string, in ModuleCC
 	ccIn := in
 	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), generatedVFS, in.ScanCfg)
 
-	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ccIn.IncludeInputs, ycRef)
+	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, ycRef)
 
 	if preprocessHeader {
 		ccIn.PerSourceCFlags = append(append([]ARG(nil), in.PerSourceCFlags...), argWnoUnusedButSetVariable, argWnoDeprecatedCopy)

@@ -1,20 +1,22 @@
 package main
 
 type NodeArenas struct {
-	cmds   *BumpAllocator[Cmd]
-	vfs    *BumpAllocator[VFS]
-	strs   *BumpAllocator[STR]
-	chunks *BumpAllocator[[]STR]
-	inputs *BumpAllocator[[]VFS]
+	cmds     *BumpAllocator[Cmd]
+	vfs      *BumpAllocator[VFS]
+	strs     *BumpAllocator[STR]
+	chunks   *BumpAllocator[[]STR]
+	inputs   *BumpAllocator[[]VFS]
+	noderefs *BumpAllocator[NodeRef]
 }
 
 func newNodeArenas() *NodeArenas {
 	return &NodeArenas{
-		cmds:   newBumpAllocator[Cmd](1 << 8),
-		vfs:    newBumpAllocator[VFS](1 << 12),
-		strs:   newBumpAllocator[STR](1 << 12),
-		chunks: newBumpAllocator[[]STR](1 << 10),
-		inputs: newBumpAllocator[[]VFS](1 << 10),
+		cmds:     newBumpAllocator[Cmd](1 << 8),
+		vfs:      newBumpAllocator[VFS](1 << 12),
+		strs:     newBumpAllocator[STR](1 << 12),
+		chunks:   newBumpAllocator[[]STR](1 << 10),
+		inputs:   newBumpAllocator[[]VFS](1 << 10),
+		noderefs: newBumpAllocator[NodeRef](1 << 12),
 	}
 }
 

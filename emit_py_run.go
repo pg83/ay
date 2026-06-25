@@ -121,7 +121,7 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	}
 
 	inputClosure := pyInputClosure(ctx, instance, stmt, d, moduleInputs)
-	extraDepRefs := resolveCodegenDepRefsIncl(ctx, instance, inputClosure)
+	extraDepRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, inputClosure)
 
 	return emitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, pyRef, moduleInputs.TC, ctx.emit)
 }

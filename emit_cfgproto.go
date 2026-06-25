@@ -75,7 +75,7 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 
 		ccIn.IncludeInputs = filtered
 	}
-	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ccIn.IncludeInputs, cfgRef)
+	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, cfgRef)
 	ref, outPath, _ := emitCC(instance, ccSrcRel, cfgPbCC, ccIn, ctx.host, ctx.emit)
 
 	return &SourceEmit{Ref: ref, OutPath: outPath}
