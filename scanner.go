@@ -55,6 +55,7 @@ type IncludeScanner struct {
 	tjc                    *TarjanCtx
 	dfsActive              BitSet
 	visitedIDPool          sync.Pool
+	scanCtxPool            sync.Pool
 	onWarn                 func(Warn)
 	walkClosureCalls       uint64
 	subgraphHits           uint64
@@ -70,11 +71,9 @@ type IncludeScanner struct {
 }
 
 type ScanCtx struct {
-	scanner      *IncludeScanner
-	cfg          ScanContext
-	ctxNum       uint32
-	resolveIndex *CfgResolveIndex
-	parser       IncludeDirectiveParser
+	scanner *IncludeScanner
+	cfg     ScanContext
+	parser  IncludeDirectiveParser
 }
 
 type ClosureRef uint32
@@ -148,6 +147,10 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 		return &IdSet{}
 	}
 
+	s.scanCtxPool.New = func() any {
+		return &ScanCtx{}
+	}
+
 	return s
 }
 
@@ -177,18 +180,17 @@ func newScanContext(pm *IncludeParserManager, ownAddIncl, peerAddIncl, base []VF
 	return cfg
 }
 
-func (s *IncludeScanner) newScanCtx(cfg ScanContext, parser IncludeDirectiveParser) *ScanCtx {
-	if cfg.cfg == nil {
-		throwFmt("newScanCtx: ScanContext built without newScanContext")
-	}
+func (s *IncludeScanner) getScanCtx(cfg ScanContext, parser IncludeDirectiveParser) *ScanCtx {
+	sc := s.scanCtxPool.Get().(*ScanCtx)
+	sc.scanner = s
+	sc.cfg = cfg
+	sc.parser = parser
 
-	return &ScanCtx{
-		scanner:      s,
-		cfg:          cfg,
-		ctxNum:       cfg.cfg.num,
-		resolveIndex: cfg.cfg.ri,
-		parser:       parser,
-	}
+	return sc
+}
+
+func (s *IncludeScanner) putScanCtx(sc *ScanCtx) {
+	s.scanCtxPool.Put(sc)
 }
 
 func hashScanContext(ctx *ScanContext) uint64 {
@@ -672,7 +674,7 @@ func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 
 func (sc *ScanCtx) cacheSearchTier(targetID STR, out SearchTierResult) SearchTierResult {
 	s := sc.scanner
-	s.searchTierFlat.put(splitMix64(sc.ctxNum, uint32(targetID)), out)
+	s.searchTierFlat.put(splitMix64(sc.cfg.cfg.num, uint32(targetID)), out)
 	s.searchTierSeen.add(uint32(targetID))
 
 	return out
@@ -682,7 +684,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 	s := sc.scanner
 
 	if s.searchTierSeen.has(uint32(targetID)) {
-		if cached := s.searchTierFlat.get(splitMix64(sc.ctxNum, uint32(targetID))); cached != nil {
+		if cached := s.searchTierFlat.get(splitMix64(sc.cfg.cfg.num, uint32(targetID))); cached != nil {
 			s.searchTierHits++
 
 			return *cached
@@ -750,7 +752,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 	first, _ := firstComponent(target)
 
 	if canRelFilter(first, target) && !strings.Contains(target, "/./") && !strings.Contains(target, "//") {
-		idx := sc.resolveIndex
+		idx := sc.cfg.cfg.ri
 
 		if idx.indexable {
 			bestRank := resolveNoRank

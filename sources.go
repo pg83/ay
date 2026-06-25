@@ -38,7 +38,7 @@ func joinSrcsIncludeClosure(ctx *GenCtx, scanPlatform *Platform, srcInstance Mod
 	cfg := in.ScanCfg
 
 	for _, srcRelOnDisk := range srcRels {
-		sc := scanner.newScanCtx(cfg, includeDirectiveParsers.registeredParserFor(srcRelOnDisk))
+		sc := scanner.getScanCtx(cfg, includeDirectiveParsers.registeredParserFor(srcRelOnDisk))
 
 		for _, v := range sc.closureOf(source(srcRelOnDisk)) {
 			if visited.has(v) {
@@ -48,6 +48,8 @@ func joinSrcsIncludeClosure(ctx *GenCtx, scanPlatform *Platform, srcInstance Mod
 			visited.add(v)
 			order = append(order, v)
 		}
+
+		scanner.putScanCtx(sc)
 	}
 
 	if len(order) == 0 {
@@ -103,7 +105,8 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 }
 
 func walkClosure(scanner *IncludeScanner, vfsPath VFS, cfg ScanContext) []VFS {
-	sc := scanner.newScanCtx(cfg, includeDirectiveParsers.registeredParserFor(vfsPath.rel()))
+	sc := scanner.getScanCtx(cfg, includeDirectiveParsers.registeredParserFor(vfsPath.rel()))
+	defer scanner.putScanCtx(sc)
 	scanner.walkClosureCalls++
 
 	return sc.closureOf(vfsPath)
