@@ -48,9 +48,9 @@ type IncludeScanner struct {
 	subgraphClosures       [][]VFS
 	closureArena           *BumpAllocator[VFS]
 	scanCache              DenseMap3[STR, []VFS, ClosureRef, bool]
-	searchTierFlat         *IntValueMap[SearchTierResult]
+	searchTierFlat         *IntMap[VFS]
 	searchTierSeen         BitSet
-	sourceUnderCache       *IntValueMap[VFS]
+	sourceUnderCache       *IntMap[VFS]
 	childArena             *BumpAllocator[VFS]
 	spOut                  []VFS
 	resolveOut             []VFS
@@ -115,11 +115,6 @@ const (
 	closureArenaInitial = closureAllocHint
 )
 
-type SearchTierResult struct {
-	paths []VFS
-	found bool
-}
-
 type ScannerPerfStats struct {
 	walkClosureCalls       uint64
 	subgraphHits           uint64
@@ -140,8 +135,8 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 		subgraphClosures: make([][]VFS, 1, 256),
 		closureArena:     newBumpAllocator[VFS](closureArenaInitial),
 		childArena:       newBumpAllocator[VFS](1 << 12),
-		searchTierFlat:   newIntValueMap[SearchTierResult](4096),
-		sourceUnderCache: newIntValueMap[VFS](1 << 16),
+		searchTierFlat:   newIntMap[VFS](4096),
+		sourceUnderCache: newIntMap[VFS](1 << 16),
 		tjc:              tjc,
 	}
 
@@ -682,7 +677,7 @@ func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 	return idx
 }
 
-func (sc *ScanCtx) cacheSearchTier(targetID STR, out SearchTierResult) SearchTierResult {
+func (sc *ScanCtx) cacheSearchTier(targetID STR, out VFS) VFS {
 	s := sc.scanner
 	s.searchTierFlat.put(splitMix64(sc.cfg.cfg.num, uint32(targetID)), out)
 	s.searchTierSeen.add(uint32(targetID))
@@ -690,7 +685,7 @@ func (sc *ScanCtx) cacheSearchTier(targetID STR, out SearchTierResult) SearchTie
 	return out
 }
 
-func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
+func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 	s := sc.scanner
 
 	if s.searchTierSeen.has(uint32(targetID)) {
@@ -705,7 +700,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 
 	target := targetID.string()
 
-	var out SearchTierResult
+	var out VFS
 
 	normTarget := normalisePath(target)
 
@@ -716,8 +711,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 			return false
 		}
 
-		out.paths = []VFS{v}
-		out.found = true
+		out = v
 
 		return true
 	}
@@ -741,8 +735,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 			return false
 		}
 
-		out.paths = []VFS{info.OutputPath}
-		out.found = true
+		out = info.OutputPath
 
 		return true
 	}
@@ -803,12 +796,10 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) SearchTierResult {
 
 			if bestRank != resolveNoRank {
 				if bestIsSource {
-					out.paths = []VFS{source(joinRel(bestAddincl.rel(), target))}
+					out = source(joinRel(bestAddincl.rel(), target))
 				} else {
-					out.paths = []VFS{bestBuild.OutputPath}
+					out = bestBuild.OutputPath
 				}
-
-				out.found = true
 
 				return sc.cacheSearchTier(targetID, out)
 			}
@@ -927,8 +918,8 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 	if !searchPathFound {
 		tier := sc.resolveContextSearchTier(d.target)
 
-		if tier.found {
-			out = append(out, tier.paths...)
+		if tier != 0 {
+			out = append(out, tier)
 			searchPathFound = true
 		}
 	}
