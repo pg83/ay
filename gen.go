@@ -491,7 +491,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	stmts := moduleStmts(ctx, instance.Path.rel())
 
 	env := buildIfEnv(instance)
-	d := collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, env, ctx.onWarn)
+	d := collectModule(ctx.parsers, &deduper, instance, stmts, env, ctx.onWarn)
 
 	if instance.Language == LangPy && d.moduleStmt != nil && d.moduleStmt.Name != tokProtoLibrary {
 		cpp := instance
@@ -504,19 +504,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	for _, stmt := range d.allPySrcs {
 		applyAllPySrcs(ctx.fs, instance.Path.rel(), stmt, d)
-	}
-
-	if d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary && instance.Language != LangPy {
-		cppProtoEnv := buildIfEnv(instance)
-		cppProtoEnv.setStringID(envMODULE_TAG, strCPPProto)
-
-		cppProtoEnv.setStringID(envCPP_PROTO, strCPPProto)
-		cppProtoEnv.setBool(envGEN_PROTO, true)
-		d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, cppProtoEnv, ctx.onWarn)
-	} else if d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangPy {
-		py3ProtoEnv := buildIfEnv(instance)
-		py3ProtoEnv.setBool(envPY3_PROTO, true)
-		d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, py3ProtoEnv, ctx.onWarn)
 	}
 
 	if d.conflictMod != nil {
@@ -543,7 +530,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if d.moduleStmt.Name == tokResourcesLibrary {
 		if bindResourceGlobalVars(ctx, instance, d, env) {
-			d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, env, ctx.onWarn)
+			d = collectModule(ctx.parsers, &deduper, instance, stmts, env, ctx.onWarn)
 		}
 
 		return genResourcesLibrary(ctx, instance, d)
@@ -553,7 +540,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		env.setString(envMODULE_SUFFIX, prebuiltModuleSuffix(instance.Platform))
 
 		if bindResourceGlobalVars(ctx, instance, d, env) {
-			d = collectModule(ctx.parsers, &deduper, instance.Path.rel(), instance.Kind, stmts, env, ctx.onWarn)
+			d = collectModule(ctx.parsers, &deduper, instance, stmts, env, ctx.onWarn)
 		}
 
 		return genPrebuiltProgram(ctx, instance, d)

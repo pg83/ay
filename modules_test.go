@@ -120,7 +120,7 @@ END()
 
 			fs := newMemFS(map[string]string{"contrib/libs/cblas/ya.make": mklYaMake})
 			mf := throw2(parseFile(fs, "contrib/libs/cblas/ya.make"))
-			d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, "contrib/libs/cblas", KindLib, mf.Stmts, env, noWarn)
+			d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, ModuleInstance{Path: source("contrib/libs/cblas"), Kind: KindLib}, mf.Stmts, env, noWarn)
 
 			hasMkl, hasFallback := false, false
 
@@ -407,7 +407,7 @@ func TestCollectModule_OwnAddInclToMissingDir_WarnsAndDrops(t *testing.T) {
 	files := map[string]string{"mod/present_inc/h.h": "#pragma once\n"}
 
 	var warns []Warn
-	d := collectModule(newIncludeParserManagerFS(newMemFS(files), newSharedParseCache()), &DeDuper{}, "mod", KindLib,
+	d := collectModule(newIncludeParserManagerFS(newMemFS(files), newSharedParseCache()), &DeDuper{}, ModuleInstance{Path: source("mod"), Kind: KindLib},
 		mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}),
 		func(w Warn) { warns = append(warns, w) })
 
@@ -445,7 +445,7 @@ func TestCollectModule_PySrcsExpandsSetList(t *testing.T) {
 		t.Fatalf("Parse: %v", err)
 	}
 
-	d := collectModule(newIncludeParserManagerFS(newMemFS(nil), newSharedParseCache()), &DeDuper{}, "mod", KindLib,
+	d := collectModule(newIncludeParserManagerFS(newMemFS(nil), newSharedParseCache()), &DeDuper{}, ModuleInstance{Path: source("mod"), Kind: KindLib},
 		mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
 	if !equalStrings(strStrings(d.pySrcs), []string{"a.py", "b.py"}) {
@@ -466,7 +466,7 @@ func TestCollectModule_SetAppendExpandsResourceAndSandboxInputs(t *testing.T) {
 		t.Fatalf("Parse: %v", err)
 	}
 
-	d := collectModule(newIncludeParserManagerFS(newMemFS(nil), newSharedParseCache()), &DeDuper{}, "mod", KindLib,
+	d := collectModule(newIncludeParserManagerFS(newMemFS(nil), newSharedParseCache()), &DeDuper{}, ModuleInstance{Path: source("mod"), Kind: KindLib},
 		mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
 	if len(d.fromSandboxes) != 1 {
