@@ -39,7 +39,7 @@ func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in 
 }
 
 func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d *ModuleData, moduleInputs ModuleCCInputs) NodeRef {
-	scriptVFS := copyFileInputVFS(ctx.fs, instance.Path.rel(), stmt.ScriptPath.string())
+	scriptVFS := copyFileInputVFS(ctx.fs, instance.Path, stmt.ScriptPath.string())
 	inVFSByToken := make(map[string]VFS, len(stmt.INFiles))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
 

@@ -33,7 +33,7 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 		}
 
 		for _, inTok := range run.INFiles {
-			vfs := copyFileInputVFS(ctx.fs, instance.Path.rel(), inTok.string())
+			vfs := copyFileInputVFS(ctx.fs, instance.Path, inTok.string())
 			inVFSByToken[inTok.string()] = vfs
 			inputs = append(inputs, vfs)
 

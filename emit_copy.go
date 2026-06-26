@@ -19,21 +19,21 @@ func copyFileAutoSourceVFS(modulePath string, d *ModuleData, src STR) *VFS {
 	return vfsPtr(copyFileOutputVFS(modulePath, entry.Dst))
 }
 
-func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, modulePath string, entry CopyFileEntry) []IncludeDirective {
+func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, moduleDir VFS, entry CopyFileEntry) []IncludeDirective {
 	out := make([]IncludeDirective, 0, len(entry.OutputIncludes)+1)
 
 	if entry.Text {
-		srcVFS := copyFileInputVFS(fs, modulePath, entry.Src)
+		srcVFS := copyFileInputVFS(fs, moduleDir, entry.Src)
 		out = append(out, scanner.parsedIncludes(srcVFS, nil)...)
 	} else if entry.WithContext {
-		srcVFS := copyFileInputVFS(fs, modulePath, entry.Src)
+		srcVFS := copyFileInputVFS(fs, moduleDir, entry.Src)
 		out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(srcVFS.rel())})
 	}
 
 	for _, include := range entry.OutputIncludes {
 		out = append(out, IncludeDirective{
 			kind:   includeQuoted,
-			target: internStr(copyFileIncludeTarget(modulePath, include)),
+			target: internStr(copyFileIncludeTarget(moduleDir.rel(), include)),
 		})
 	}
 
@@ -54,9 +54,9 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 	entries := make([]entryReg, 0, len(d.copyFiles))
 
 	for _, entry := range d.copyFiles {
-		srcVFS := copyFileInputVFS(ctx.fs, instance.Path.rel(), entry.Src)
+		srcVFS := copyFileInputVFS(ctx.fs, instance.Path, entry.Src)
 		dstVFS := copyFileOutputVFS(instance.Path.rel(), entry.Dst)
-		parsed := copyFileParsedIncludes(scanner, ctx.fs, instance.Path.rel(), entry)
+		parsed := copyFileParsedIncludes(scanner, ctx.fs, instance.Path, entry)
 
 		ref := ctx.emit.reserve()
 

@@ -42,7 +42,7 @@ func resolveEnumHeaderInput(ctx *GenCtx, instance ModuleInstance, headerRel stri
 	headerInput := resolveSourceVFS(ctx, instance, headerRel, srcDirs)
 
 	if !ctx.fs.isFile(srcRootVFS, headerInput.rel()) {
-		if vfs := sourceInputVFS(ctx.fs, instance.Path.rel(), headerRel); vfs != nil && vfs.isSource() {
+		if vfs := sourceInputVFS(ctx.fs, instance.Path, headerRel); vfs != nil && vfs.isSource() {
 			headerInput = *vfs
 		}
 	}

@@ -632,7 +632,7 @@ func runProgramInputVFS(ctx *GenCtx, instance ModuleInstance, d *ModuleData, rel
 		strings.HasPrefix(rel, "${CURDIR}/"),
 		strings.HasPrefix(rel, "${ARCADIA_BUILD_ROOT}/"),
 		strings.HasPrefix(rel, "${BINDIR}/"):
-		return copyFileInputVFS(ctx.fs, instance.Path.rel(), rel)
+		return copyFileInputVFS(ctx.fs, instance.Path, rel)
 	}
 
 	buildVFS := build(filepath.ToSlash(filepath.Clean(instance.Path.rel() + "/" + rel)))
