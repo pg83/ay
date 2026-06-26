@@ -56,6 +56,9 @@ type Platform struct {
 	SysrootArgs           []STR
 	UsesSDKRoot           bool
 	ifEnv                 Environment
+	CompileCFlagsStr      []STR
+	DefinesStr            []STR
+	NoLibcBlockStr        []STR
 }
 
 func platformUsesSDKRoot(os OS, flags map[string]string) bool {
@@ -182,6 +185,11 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 	p.DebugInfoFlags = buildDebugInfoFlags(os, buildRelease, compress)
 	p.CompileCFlags = composeCompileCFlags(isa, buildRelease, p.DebugInfoFlags)
 	p.ifEnv = buildPlatformIfEnv(p)
+
+	bundle := compileFlagBundleFor(p)
+	p.CompileCFlagsStr = argSTRs(bundle.CFlags)
+	p.DefinesStr = argSTRs(bundle.Defines)
+	p.NoLibcBlockStr = argSTRs(bundle.NoLibcBlock)
 
 	return p
 }
