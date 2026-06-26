@@ -61,6 +61,16 @@ func appendArgStrs(dst []string, srcs ...[]ARG) []string {
 	return dst
 }
 
+func argSTRs(as []ARG) []STR {
+	out := make([]STR, len(as))
+
+	for i, a := range as {
+		out[i] = a.str()
+	}
+
+	return out
+}
+
 func argStrs(as []ARG) []string {
 	if len(as) == 0 {
 		return nil
