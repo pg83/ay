@@ -899,6 +899,8 @@ const (
 )
 
 func (p *Parser) parseStmts(term StmtTerminator) (stmts []Stmt, endTok Token) {
+	stmts = make([]Stmt, 0, 8)
+
 	for {
 		tok := p.lex.next()
 
