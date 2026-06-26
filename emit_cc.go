@@ -437,14 +437,14 @@ func suppressOptimize(cf []ARG) []ARG {
 }
 
 func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *CcModuleArgBlocks {
-	bundle := compileFlagBundleFor(p)
+	cflagsStr := p.CompileCFlagsStr
 
 	if in.NoOptimize {
-		bundle.CFlags = suppressOptimize(bundle.CFlags)
+		cflagsStr = na.argStrList(suppressOptimize(p.CompileCFlags))
 	}
 
 	catboostStr := catboostOpenSourceChunk(p)
-	noLibc := na.argStrList(bundle.NoLibcBlock)
+	noLibc := p.NoLibcBlockStr
 
 	inc := na.chunks.alloc(4)
 	ni := 0
@@ -468,9 +468,9 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *
 	fl[0] = na.argStrList(in.ClangWarnings)
 	fl[1] = debugPrefixMapFlagsStr
 	fl[2] = xclangDebugCompilationDirStr
-	fl[3] = na.argStrList(bundle.CFlags)
+	fl[3] = cflagsStr
 	fl[4] = cWarningChunk(na, in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
-	fl[5] = na.argStrList(bundle.Defines)
+	fl[5] = p.DefinesStr
 	fl[6] = na.argStrList(p.CFlags, in.CFlags, in.PeerCFlagsGlobal, in.OwnCFlagsGlobal)
 	fl[7] = noLibc
 	fl[8] = catboostStr
