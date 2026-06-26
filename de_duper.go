@@ -87,7 +87,7 @@ func concat[T any](lists ...[]T) []T {
 	}
 
 	if nonEmpty == 1 {
-		return lists[last][:total:total]
+		return lists[last][:total]
 	}
 
 	out := make([]T, 0, total)

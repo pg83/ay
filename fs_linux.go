@@ -212,7 +212,7 @@ func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 	})
 	fs.dirNames.commit(k)
 
-	return DirView{dir: dir, names: block[:k:k]}
+	return DirView{dir: dir, names: block[:k]}
 }
 
 func forEachDirent(b []byte, visit func(name []byte, typ byte)) {

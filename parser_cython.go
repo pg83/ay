@@ -75,7 +75,7 @@ func (CythonIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAlloca
 		return ParsedIncludeSet{}
 	}
 
-	return ParsedIncludeSet{parsedIncludesLocal: block[:k:k]}
+	return ParsedIncludeSet{parsedIncludesLocal: block[:k]}
 }
 
 func addCythonPxdCandidates(add func(IncludeDirective), path string) {

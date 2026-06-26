@@ -53,7 +53,7 @@ func (SwigIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocato
 		}
 	})
 
-	direct := block[:k:k]
+	direct := block[:k]
 	a.commit(k)
 
 	iblock := a.alloc(directiveBlockHint)
@@ -63,7 +63,7 @@ func (SwigIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocato
 		j = parseCIncludes(chunk, iblock, j)
 	}
 
-	induced := iblock[:j:j]
+	induced := iblock[:j]
 	a.commit(j)
 
 	var set ParsedIncludeSet

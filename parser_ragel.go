@@ -14,7 +14,7 @@ func (RagelIncludeDirectiveParser) id() uint32 {
 func (RagelIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	block := a.alloc(directiveBlockHint)
 	local := block[:parseCIncludes(data, block, 0)]
-	local = local[:len(local):len(local)]
+	local = local[:len(local)]
 	a.commit(len(local))
 
 	nblock := a.alloc(directiveBlockHint)
@@ -58,7 +58,7 @@ func (RagelIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocat
 		nk = addDirective(nblock, nk, IncludeDirective{kind: includeQuoted, target: internStr(target)})
 	})
 
-	native := nblock[:nk:nk]
+	native := nblock[:nk]
 	a.commit(nk)
 
 	iblock := a.alloc(directiveBlockHint)
@@ -68,7 +68,7 @@ func (RagelIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocat
 		j = addDirective(iblock, j, d)
 	}
 
-	induced := iblock[:j:j]
+	induced := iblock[:j]
 	a.commit(j)
 
 	var set ParsedIncludeSet

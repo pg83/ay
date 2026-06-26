@@ -260,7 +260,7 @@ func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, na *NodeAre
 		return nil
 	}
 
-	return out[:k:k]
+	return out[:k]
 }
 
 func (ctx *GenCtx) perfScanCtxStats(scanner *IncludeScanner) ScanCtxPerfStats {

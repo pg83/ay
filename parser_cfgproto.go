@@ -29,7 +29,7 @@ func (p CfgProtoIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllo
 	})
 
 	if k > 0 {
-		set[parsedIncludesProtoConfig] = block[:k:k]
+		set[parsedIncludesProtoConfig] = block[:k]
 	}
 
 	a.commit(k)

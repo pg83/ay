@@ -19,7 +19,7 @@ func (CIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator[I
 		return ParsedIncludeSet{}
 	}
 
-	return ParsedIncludeSet{parsedIncludesLocal: block[:k:k]}
+	return ParsedIncludeSet{parsedIncludesLocal: block[:k]}
 }
 
 func parseCIncludes(data []byte, block []IncludeDirective, k int) int {
