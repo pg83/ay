@@ -3031,6 +3031,20 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 }
 
 func expandStmtTokensSTR(items []STR, env Environment) []STR {
+	anyDollar := false
+
+	for _, item := range items {
+		if strHasDollar(item) {
+			anyDollar = true
+
+			break
+		}
+	}
+
+	if !anyDollar {
+		return items
+	}
+
 	out := make([]STR, 0, len(items))
 
 	for _, item := range items {
