@@ -53,6 +53,7 @@ type IncludeParserManager struct {
 	scanConfigCount uint32
 	addinclIndex    DenseMap[STR, []VFS]
 	addinclIndexed  BitSet
+	registry        IncludeDirectiveParserRegistry
 }
 
 type ParserPerfStats struct {
@@ -62,22 +63,27 @@ type ParserPerfStats struct {
 
 func newIncludeParserManagerFS(fs FS, cache *SharedParseCache) *IncludeParserManager {
 	return &IncludeParserManager{
-		fs:    fs,
-		cache: cache,
+		fs:       fs,
+		cache:    cache,
+		registry: newIncludeDirectiveParserRegistry(),
 	}
+}
+
+func (pm *IncludeParserManager) protoParser() ProtoIncludeDirectiveParser {
+	return pm.registry.proto
 }
 
 func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser IncludeDirectiveParser) ParsedIncludeSet {
 	key := STR(vfsPath.strID())
 	rel := vfsPath.rel()
-	parser := includeDirectiveParsers.registeredParserFor(rel)
+	parser := pm.registry.registeredParserFor(rel)
 	var ambKey uint64
 
 	if parser == nil {
 		parser = ctxParser
 
 		if parser == nil {
-			parser = includeDirectiveParsers.defaultParser
+			parser = pm.registry.defaultParser
 		}
 
 		ambKey = splitMix64(uint32(key), parser.id())

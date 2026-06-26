@@ -5,14 +5,38 @@ import (
 	"strings"
 )
 
-type ProtoIncludeDirectiveParser struct{}
+type ProtoIncludeDirectiveParser struct {
+	induced *IntMap[STR]
+}
 
 func (ProtoIncludeDirectiveParser) id() uint32 {
 	return 4
 }
 
-func (ProtoIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
-	return parseProtoDirectiveSet(data, a)
+func (p ProtoIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+	return p.parseDirectiveSet(data, a)
+}
+
+// inducedHeader maps a proto import target to its induced .pb.h header, memoized
+// by the interned target when induced != nil (0 means "no induced header").
+func (p ProtoIncludeDirectiveParser) inducedHeader(target STR) (STR, bool) {
+	if p.induced != nil {
+		if v := p.induced.get(uint64(target)); v != nil {
+			return *v, *v != 0
+		}
+	}
+
+	var h STR
+
+	if pbH, ok := protoImportInducedHeader(target.string()); ok {
+		h = internStr(pbH)
+	}
+
+	if p.induced != nil {
+		p.induced.put(uint64(target), h)
+	}
+
+	return h, h != 0
 }
 
 func protoImportInducedHeader(target string) (string, bool) {
@@ -32,7 +56,7 @@ func protoImportInducedHeader(target string) (string, bool) {
 	return "", false
 }
 
-func parseProtoDirectiveSet(data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+func (p ProtoIncludeDirectiveParser) parseDirectiveSet(data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	block := a.alloc(directiveBlockHint)
 	k := 0
 
@@ -53,8 +77,8 @@ func parseProtoDirectiveSet(data []byte, a *BumpAllocator[IncludeDirective]) Par
 	j := 0
 
 	for _, d := range local {
-		if pbH, ok := protoImportInducedHeader(d.target.string()); ok {
-			j = addDirective(hblock, j, IncludeDirective{kind: d.kind, target: internStr(pbH)})
+		if pbH, ok := p.inducedHeader(d.target); ok {
+			j = addDirective(hblock, j, IncludeDirective{kind: d.kind, target: pbH})
 		}
 	}
 

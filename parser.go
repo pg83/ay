@@ -14,7 +14,6 @@ var (
 	cythonIncludeRe         = regexp.MustCompile(`^\s*include\s+["']([^"']+)["']`)
 	cythonExternFromRe      = regexp.MustCompile(`^\s*cdef\s+extern\s+from\s+(<[^>]+>|"[^"]+"|'[^']+')`)
 	flatbuffersIncludeRe    = regexp.MustCompile(`^\s*include\s+"([^"]+)"\s*;`)
-	includeDirectiveParsers = newIncludeDirectiveParserRegistry()
 	blockCommentOpen        = []byte("/*")
 	blockCommentClose       = []byte("*/")
 	backtraceHeaderInclude  = []byte("BACKTRACE_HEADER")
@@ -43,27 +42,45 @@ type IncludeDirectiveParser interface {
 }
 
 type IncludeDirectiveParserRegistry struct {
+	matcher       *ExtMatcher[IncludeDirectiveParser]
 	defaultParser IncludeDirectiveParser
+	proto         ProtoIncludeDirectiveParser
 }
 
-func walkableBucketFor(rel string) ParsedIncludeBucket {
-	if _, ok := includeDirectiveParsers.registeredParserFor(rel).(RagelIncludeDirectiveParser); ok {
+func newIncludeDirectiveParserRegistry() IncludeDirectiveParserRegistry {
+	proto := ProtoIncludeDirectiveParser{induced: newIntMap[STR](1 << 12)}
+
+	return IncludeDirectiveParserRegistry{
+		matcher:       buildParserExtMatcher(proto),
+		defaultParser: CIncludeDirectiveParser{},
+		proto:         proto,
+	}
+}
+
+func (r *IncludeDirectiveParserRegistry) lookup(rel string) IncludeDirectiveParser {
+	if strings.HasSuffix(rel, ".in") {
+		rel = rel[:len(rel)-len(".in")]
+	}
+
+	p, _ := r.matcher.match(rel)
+
+	return p
+}
+
+func (r *IncludeDirectiveParserRegistry) walkableBucketFor(rel string) ParsedIncludeBucket {
+	if _, ok := r.lookup(rel).(RagelIncludeDirectiveParser); ok {
 		return parsedIncludesRagelNative
 	}
 
 	return parsedIncludesLocal
 }
 
-func newIncludeDirectiveParserRegistry() IncludeDirectiveParserRegistry {
-	return IncludeDirectiveParserRegistry{defaultParser: CIncludeDirectiveParser{}}
-}
-
 func (r *IncludeDirectiveParserRegistry) registeredParserFor(rel string) IncludeDirectiveParser {
-	return lookupParserForRel(rel)
+	return r.lookup(rel)
 }
 
 func (r *IncludeDirectiveParserRegistry) parserFor(rel string) IncludeDirectiveParser {
-	if p := lookupParserForRel(rel); p != nil {
+	if p := r.lookup(rel); p != nil {
 		return p
 	}
 
@@ -71,7 +88,7 @@ func (r *IncludeDirectiveParserRegistry) parserFor(rel string) IncludeDirectiveP
 }
 
 func (r *IncludeDirectiveParserRegistry) hasRegisteredParser(rel string) bool {
-	return lookupParserForRel(rel) != nil
+	return r.lookup(rel) != nil
 }
 
 const directiveBlockHint = 1 << 14

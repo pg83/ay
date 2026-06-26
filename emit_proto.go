@@ -103,13 +103,13 @@ func protoDirectPbHResolved(pm *IncludeParserManager, srcRel string) []IncludeDi
 	for _, d := range local {
 		name := filepath.ToSlash(filepath.Clean(d.target.string()))
 
-		pbH, ok := protoImportInducedHeader(name)
+		pbH, ok := pm.protoParser().inducedHeader(internStr(name))
 
 		if !ok {
 			continue
 		}
 
-		out = append(out, IncludeDirective{kind: d.kind, target: internStr(pbH)})
+		out = append(out, IncludeDirective{kind: d.kind, target: pbH})
 	}
 
 	sort.Slice(out, func(i, j int) bool { return out[i].target.string() < out[j].target.string() })
