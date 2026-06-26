@@ -633,8 +633,10 @@ func (d *ModuleData) materializeAddIncl() {
 	d.addInclP = nil
 }
 
-func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kind ModuleKind, stmts []Stmt, env Environment, onWarn func(Warn)) *ModuleData {
+func collectModule(pm *IncludeParserManager, dd *DeDuper, instance ModuleInstance, stmts []Stmt, env Environment, onWarn func(Warn)) *ModuleData {
 	fs := pm.fs
+	modulePath := instance.Path.rel()
+	kind := instance.Kind
 
 	env.setString(envMODDIR, modulePath)
 	env.setString(envCURDIR, "$(S)/"+modulePath)
@@ -647,7 +649,7 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, modulePath string, kin
 		needGoogleProtoPeerdirs: true,
 	}
 
-	collectStmts(fs, modulePath, kind, stmts, env, d)
+	collectStmts(fs, modulePath, kind, instance.Language, stmts, env, d)
 
 	d.materializeAddIncl()
 
@@ -936,7 +938,7 @@ func pyModuleTypeUsesPython3(name TOK) bool {
 	return false
 }
 
-func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env Environment, d *ModuleData) {
+func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, stmts []Stmt, env Environment, d *ModuleData) {
 	for _, s := range stmts {
 		switch v := s.(type) {
 		case *ModuleStmt:
@@ -965,6 +967,16 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 			}
 
 			d.moduleStmt = moduleStmtForKind(v, kind)
+
+			if d.moduleStmt.Name == tokProtoLibrary {
+				if language == LangPy {
+					env.setBool(envPY3_PROTO, true)
+				} else {
+					env.setStringID(envMODULE_TAG, strCPPProto)
+					env.setStringID(envCPP_PROTO, strCPPProto)
+					env.setBool(envGEN_PROTO, true)
+				}
+			}
 
 			moduleLang := sbomComponentLang(d.moduleStmt.Name)
 
@@ -1288,7 +1300,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, stmts []Stmt, env E
 				taken = v.Else
 			}
 
-			collectStmts(fs, modulePath, kind, taken, env, d)
+			collectStmts(fs, modulePath, kind, language, taken, env, d)
 		case *UnknownStmt:
 
 			expanded := *v
