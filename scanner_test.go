@@ -7,7 +7,7 @@ import (
 )
 
 func scanClosure(scanner *IncludeScanner, srcRel string, cfg ScanContext) []VFS {
-	return scanner.getScanCtx(cfg, includeDirectiveParsers.registeredParserFor(srcRel)).closureOf(source(srcRel))[1:]
+	return scanner.getScanCtx(cfg, scanner.parsers.registry.registeredParserFor(srcRel)).closureOf(source(srcRel))[1:]
 }
 
 func TestStripComments_BlockCommentInclude(t *testing.T) {

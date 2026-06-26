@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestReverseStr(t *testing.T) {
 	cases := map[string]string{
@@ -113,15 +116,17 @@ func TestParserExtMatcherParity(t *testing.T) {
 		"foo.h.in":     CIncludeDirectiveParser{},
 	}
 
-	for path, want := range cases {
-		got := lookupParserForRel(path)
+	reg := newIncludeDirectiveParserRegistry()
 
-		if got != want {
-			t.Errorf("lookupParserForRel(%q) = %T, want %T", path, got, want)
+	for path, want := range cases {
+		got := reg.lookup(path)
+
+		if fmt.Sprintf("%T", got) != fmt.Sprintf("%T", want) {
+			t.Errorf("lookup(%q) = %T, want %T", path, got, want)
 		}
 	}
 
-	if got := lookupParserForRel("foo.unknown"); got != nil {
-		t.Errorf("lookupParserForRel(foo.unknown) = %T, want nil", got)
+	if got := reg.lookup("foo.unknown"); got != nil {
+		t.Errorf("lookup(foo.unknown) = %T, want nil", got)
 	}
 }

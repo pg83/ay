@@ -349,7 +349,7 @@ func cythonHeaderToolInputs(src VFS, pyxClosure []VFS) []VFS {
 }
 
 func cythonPyxLangClosure(scanner *IncludeScanner, src VFS, cfg ScanContext) []VFS {
-	sc := scanner.getScanCtx(cfg, includeDirectiveParsers.registeredParserFor(src.rel()))
+	sc := scanner.getScanCtx(cfg, scanner.parsers.registry.registeredParserFor(src.rel()))
 
 	defer scanner.putScanCtx(sc)
 

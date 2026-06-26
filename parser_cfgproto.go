@@ -4,14 +4,16 @@ import (
 	"bytes"
 )
 
-type CfgProtoIncludeDirectiveParser struct{}
+type CfgProtoIncludeDirectiveParser struct {
+	proto ProtoIncludeDirectiveParser
+}
 
 func (CfgProtoIncludeDirectiveParser) id() uint32 {
 	return 9
 }
 
-func (CfgProtoIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
-	set := parseProtoDirectiveSet(data, a)
+func (p CfgProtoIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+	set := p.proto.parseDirectiveSet(data, a)
 
 	block := a.alloc(directiveBlockHint)
 	k := 0

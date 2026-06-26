@@ -383,7 +383,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 			hasProtoIN = true
 		}
 
-		if includeDirectiveParsers.hasRegisteredParser(f.string()) {
+		if ctx.parsers.registry.hasRegisteredParser(f.string()) {
 			hasParsedIN = true
 		}
 	}
@@ -446,7 +446,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	for _, f := range stmt.INFiles {
 		rel := f.string()
 
-		if includeDirectiveParsers.hasRegisteredParser(rel) {
+		if ctx.parsers.registry.hasRegisteredParser(rel) {
 			walkInput(rel)
 
 			continue
