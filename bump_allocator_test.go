@@ -27,13 +27,7 @@ func TestBumpAllocatorAllocAtLeastN(t *testing.T) {
 func TestBumpAllocatorPacksCommittedRegions(t *testing.T) {
 	a := newBumpAllocator[int](16)
 
-	type span struct {
-		chunk int
-		off   int
-		n     int
-	}
-
-	var spans []span
+	var got [][]int
 	var want [][]int
 
 	for i := 0; i < 50; i++ {
@@ -46,21 +40,16 @@ func TestBumpAllocatorPacksCommittedRegions(t *testing.T) {
 
 		r := a.alloc(k)
 		wrote := fill(r, vals...)
-
-		ci := len(a.chunks) - 1
-		off := a.off
+		got = append(got, r[:wrote:wrote]) // retained subslice keeps its backing alive
 		a.commit(wrote)
 
-		spans = append(spans, span{chunk: ci, off: off, n: k})
 		want = append(want, vals)
 	}
 
-	for i, sp := range spans {
-		got := a.chunks[sp.chunk][sp.off : sp.off+sp.n]
-
+	for i := range want {
 		for j := range want[i] {
-			if got[j] != want[i][j] {
-				t.Fatalf("span %d elem %d = %d, want %d", i, j, got[j], want[i][j])
+			if got[i][j] != want[i][j] {
+				t.Fatalf("region %d elem %d = %d, want %d", i, j, got[i][j], want[i][j])
 			}
 		}
 	}
@@ -71,18 +60,19 @@ func TestBumpAllocatorFixedChunkSize(t *testing.T) {
 
 	for i := 0; i < 4; i++ {
 		r := a.alloc(1)
-		a.commit(len(r)) // exhaust the chunk so the next alloc opens a fresh one
 
-		if got := len(a.chunks[len(a.chunks)-1]); got != bumpChunkBytes {
-			t.Fatalf("chunk %d size = %d, want fixed %d", i, got, bumpChunkBytes)
+		if len(r) != bumpChunkSize {
+			t.Fatalf("alloc %d: fresh chunk len = %d, want fixed %d", i, len(r), bumpChunkSize)
 		}
+
+		a.commit(len(r)) // exhaust the chunk so the next alloc opens a fresh one
 	}
 }
 
 func TestBumpAllocatorOversizedAllocFits(t *testing.T) {
 	a := newBumpAllocator[byte](8)
 
-	big := bumpChunkBytes * 3
+	big := bumpChunkSize * 3
 	r := a.alloc(big)
 
 	if len(r) < big {

@@ -1,29 +1,13 @@
 package main
 
-import "unsafe"
+const bumpChunkSize = 200_000
 
-const bumpChunkBytes = 1 << 20
-
+// BumpAllocator hands out subslices of a single fixed-size chunk. commit advances
+// past the consumed prefix; when the chunk runs out a fresh one is made (sized up
+// for a request larger than the default chunk). Old chunks stay alive only through
+// the subslices callers keep, so no chunk list is needed.
 type BumpAllocator[T any] struct {
-	chunks  [][]T
-	off     int
-	pending int
-}
-
-func bumpChunkElems[T any]() int {
-	sz := int(unsafe.Sizeof(*new(T)))
-
-	if sz < 1 {
-		sz = 1
-	}
-
-	n := bumpChunkBytes / sz
-
-	if n < 1 {
-		n = 1
-	}
-
-	return n
+	chunk []T
 }
 
 func newBumpAllocator[T any](int) *BumpAllocator[T] {
@@ -31,23 +15,21 @@ func newBumpAllocator[T any](int) *BumpAllocator[T] {
 }
 
 func (a *BumpAllocator[T]) alloc(n int) []T {
-	if len(a.chunks) == 0 || a.off+n > len(a.chunks[len(a.chunks)-1]) {
-		a.addChunk(n)
+	if len(a.chunk) < n {
+		size := bumpChunkSize
+
+		if size < n {
+			size = n
+		}
+
+		a.chunk = make([]T, size)
 	}
 
-	region := a.chunks[len(a.chunks)-1][a.off:]
-	a.pending = len(region)
-
-	return region
+	return a.chunk
 }
 
 func (a *BumpAllocator[T]) commit(k int) {
-	if k < 0 || k > a.pending {
-		panic("bumpAllocator: commit out of range")
-	}
-
-	a.off += k
-	a.pending = 0
+	a.chunk = a.chunk[k:]
 }
 
 func (a *BumpAllocator[T]) list(vs ...T) []T {
@@ -57,15 +39,4 @@ func (a *BumpAllocator[T]) list(vs ...T) []T {
 	a.commit(n)
 
 	return block[:n:n]
-}
-
-func (a *BumpAllocator[T]) addChunk(min int) {
-	size := bumpChunkElems[T]()
-
-	if size < min {
-		size = min
-	}
-
-	a.chunks = append(a.chunks, make([]T, size))
-	a.off = 0
 }
