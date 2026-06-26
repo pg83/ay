@@ -796,7 +796,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 
 			if bestRank != resolveNoRank {
 				if bestIsSource {
-					out = source(joinRel(bestAddincl.rel(), target))
+					out = sourceJoined(bestAddincl.rel(), target)
 				} else {
 					out = bestBuild.OutputPath
 				}
