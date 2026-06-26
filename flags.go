@@ -5,6 +5,19 @@ var ccIncludesPrefix = []ARG{
 	argIS,
 }
 
+var (
+	ccIncludesPrefixStr          = argSTRs(ccIncludesPrefix)
+	debugPrefixMapFlagsStr       = argSTRs(debugPrefixMapFlags)
+	xclangDebugCompilationDirStr = argSTRs(xclangDebugCompilationDir)
+	builtinMacroDateTimeStr      = argSTRs(builtinMacroDateTime)
+	macroPrefixMapFlagsStr       = argSTRs(macroPrefixMapFlags)
+	noWarningsBundleStr          = argSTRs(noWarningsBundle)
+	cxxStandardWarningsStr       = argSTRs(cxxStandardWarnings)
+	warningFlagsStr              = argSTRs(warningFlags)
+	catboostOpenSourceDefineStr  = argSTRs(catboostOpenSourceDefine)
+	cxxStandardFlagStr           = []STR{cxxStandardFlag.str()}
+)
+
 var debugPrefixMapFlags = []ARG{
 	argFdebugPrefixMapBB,
 	argFdebugPrefixMapSS,

@@ -44,6 +44,18 @@ func (na *NodeArenas) srcChunk(v VFS) []VFS {
 	return na.vfsList(v)
 }
 
+func (na *NodeArenas) inclArgList(addIncl []VFS, memo InclArgMemo) []STR {
+	block := na.strs.alloc(len(addIncl))
+
+	for i, p := range addIncl {
+		block[i] = memo.arg(p)
+	}
+
+	na.strs.commit(len(addIncl))
+
+	return block[:len(addIncl):len(addIncl)]
+}
+
 func (na *NodeArenas) argStrList(groups ...[]ARG) []STR {
 	n := 0
 

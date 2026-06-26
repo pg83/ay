@@ -36,26 +36,34 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	pidRef, pidVFS := ctx.tool(cudaCustomPidArg)
 
 	cuCxxTail := blocks.cxxTail
-	trim := len(builtinMacroDateTime) + len(macroPrefixMapFlags)
 
-	if trim <= len(cuCxxTail) {
-		cuCxxTail = cuCxxTail[:len(cuCxxTail)-trim]
+	// drop the trailing builtinMacroDateTime + macroPrefixMapFlags chunks
+	if len(cuCxxTail) >= 2 {
+		cuCxxTail = cuCxxTail[:len(cuCxxTail)-2]
 	}
 
-	cmdArgs := ArgChunks(na.chunkList(
+	head := []([]STR){
 		na.strList(wrapccPython3STR, cudaCompileScriptVFS.str(), cudaMtimeFlagStr, mtimeVFS.str(), cudaCustomPidFlagStr, pidVFS.str(), cudaNvccBinStr, cudaNvccStdStr),
 		nvccFlagsHead,
 		na.strList(internV("--keep-dir=$(B)/", instance.Path.rel())),
 		nvccFlagsTail,
 		in.CudaNvccFlags,
 		na.strList(argDashC.str(), (inVFS).str(), argDashO.str(), (outVFS).str()),
-		blocks.includes,
-		na.strList(cudaCflagsStr),
-		p.CCHead,
-		blocks.flags,
-		cuCxxTail,
-		na.strList(cudaNvccStdStr),
-	))
+	}
+
+	total := len(head) + len(blocks.includes) + 2 + len(blocks.flags) + len(cuCxxTail) + 1
+	chunks := na.chunks.alloc(total)
+	k := copy(chunks, head)
+	k += copy(chunks[k:], blocks.includes)
+	chunks[k] = na.strList(cudaCflagsStr)
+	chunks[k+1] = p.CCHead
+	k += 2
+	k += copy(chunks[k:], blocks.flags)
+	k += copy(chunks[k:], cuCxxTail)
+	chunks[k] = na.strList(cudaNvccStdStr)
+	k++
+	na.chunks.commit(k)
+	cmdArgs := ArgChunks(chunks[:k:k])
 
 	env := EnvVars{
 		{Name: envARCADIA_ROOT_DISTBUILD, Value: strS},
