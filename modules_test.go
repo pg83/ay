@@ -286,15 +286,15 @@ func TestCopyFileInputVFS_ResolvesSourceRootPaths(t *testing.T) {
 		"pkg/sub/codecs.h":     "stub\n",
 	})
 
-	if got := copyFileInputVFS(fs, "mod", "local.txt").string(); got != "$(S)/mod/local.txt" {
+	if got := copyFileInputVFS(fs, dirKey("mod"), "local.txt").string(); got != "$(S)/mod/local.txt" {
 		t.Fatalf("local copy input = %q, want $(S)/mod/local.txt", got)
 	}
 
-	if got := copyFileInputVFS(fs, "mod", "shared/generated.txt").string(); got != "$(S)/shared/generated.txt" {
+	if got := copyFileInputVFS(fs, dirKey("mod"), "shared/generated.txt").string(); got != "$(S)/shared/generated.txt" {
 		t.Fatalf("root copy input = %q, want $(S)/shared/generated.txt", got)
 	}
 
-	if got := copyFileInputVFS(fs, "pkg/sub", "pkg/sub/codecs.h").string(); got != "$(S)/pkg/sub/codecs.h" {
+	if got := copyFileInputVFS(fs, dirKey("pkg/sub"), "pkg/sub/codecs.h").string(); got != "$(S)/pkg/sub/codecs.h" {
 		t.Fatalf("module-qualified copy input = %q, want $(S)/pkg/sub/codecs.h", got)
 	}
 }

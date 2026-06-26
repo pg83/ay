@@ -42,7 +42,7 @@ func emitDecimalMD5(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *D
 	optVFSs := make([]VFS, 0, len(stmt.Opts))
 
 	for _, opt := range stmt.Opts {
-		optVFSs = append(optVFSs, copyFileInputVFS(ctx.fs, modulePath, opt.string()))
+		optVFSs = append(optVFSs, copyFileInputVFS(ctx.fs, instance.Path, opt.string()))
 	}
 
 	cmdArgs := make([]STR, 0, 7+len(optVFSs))

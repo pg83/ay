@@ -19,7 +19,7 @@ func emitExplicitCF(ctx *GenCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 		DefaultVars: d.defaultVars,
 		ScanCfg:     newScanContext(ctx.parsers, nil, nil, includeScannerBasePaths(), instance.Path.rel()),
 	}
-	srcVFS := copyFileInputVFS(ctx.fs, instance.Path.rel(), cf.Src)
+	srcVFS := copyFileInputVFS(ctx.fs, instance.Path, cf.Src)
 	outVFS := copyFileOutputVFS(instance.Path.rel(), cf.Dst)
 
 	emitConfigureFile(ctx, instance, d, srcVFS, outVFS, in)

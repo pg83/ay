@@ -223,7 +223,7 @@ func llvmBcSourceInfo(ctx *GenCtx, instance ModuleInstance, src string) (inputVF
 		return *buildVFS, ref
 	}
 
-	return copyFileInputVFS(ctx.fs, instance.Path.rel(), src), NodeRef(0)
+	return copyFileInputVFS(ctx.fs, instance.Path, src), NodeRef(0)
 }
 
 func llvmBcRootRelArcSrc(ctx *GenCtx, instance ModuleInstance, src string) string {
@@ -235,7 +235,7 @@ func llvmBcRootRelArcSrc(ctx *GenCtx, instance ModuleInstance, src string) strin
 		return src
 	}
 
-	if sourceInputVFS(ctx.fs, instance.Path.rel(), src) != nil {
+	if sourceInputVFS(ctx.fs, instance.Path, src) != nil {
 		return instance.Path.rel() + "/" + src
 	}
 

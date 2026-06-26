@@ -510,7 +510,9 @@ parsedFlags:
 	return out
 }
 
-func sourceInputVFS(fs FS, modulePath string, path string) *VFS {
+func sourceInputVFS(fs FS, moduleDir VFS, path string) *VFS {
+	modulePath := moduleDir.rel()
+
 	if vfs := moduleRootedVFS(modulePath, path); vfs != nil {
 		return vfs
 	}
@@ -518,18 +520,21 @@ func sourceInputVFS(fs FS, modulePath string, path string) *VFS {
 	clean := filepath.ToSlash(filepath.Clean(path))
 
 	if clean == "." || clean == "" {
-		return vfsPtr(source(modulePath))
+		return vfsPtr(moduleDir)
 	}
 
-	if clean == modulePath || strings.HasPrefix(clean, modulePath+"/") {
+	if clean == modulePath ||
+		(len(clean) > len(modulePath) && clean[len(modulePath)] == '/' && clean[:len(modulePath)] == modulePath) {
 		return vfsPtr(source(clean))
 	}
 
 	if fs != nil {
-		moduleRel := filepath.ToSlash(filepath.Clean(modulePath + "/" + clean))
+		if fs.isFile(moduleDir, clean) {
+			if strings.Contains(clean, "..") {
+				return vfsPtr(source(filepath.ToSlash(filepath.Clean(modulePath + "/" + clean))))
+			}
 
-		if fs.isFile(dirKey(modulePath), clean) {
-			return vfsPtr(source(moduleRel))
+			return vfsPtr(source(modulePath, "/", clean))
 		}
 
 		if fs.isFile(srcRootVFS, clean) {
@@ -540,12 +545,12 @@ func sourceInputVFS(fs FS, modulePath string, path string) *VFS {
 	return nil
 }
 
-func copyFileInputVFS(fs FS, modulePath string, src string) VFS {
-	if vfs := sourceInputVFS(fs, modulePath, src); vfs != nil {
+func copyFileInputVFS(fs FS, moduleDir VFS, src string) VFS {
+	if vfs := sourceInputVFS(fs, moduleDir, src); vfs != nil {
 		return *vfs
 	}
 
-	return source(filepath.ToSlash(filepath.Clean(modulePath + "/" + src)))
+	return source(filepath.ToSlash(filepath.Clean(moduleDir.rel() + "/" + src)))
 }
 
 func moduleRootedVFS(modulePath string, path string) *VFS {
