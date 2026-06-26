@@ -55,6 +55,7 @@ type Platform struct {
 	CCHead                []STR
 	SysrootArgs           []STR
 	UsesSDKRoot           bool
+	ifEnv                 Environment
 }
 
 func platformUsesSDKRoot(os OS, flags map[string]string) bool {
@@ -180,6 +181,7 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 	p.CompressDebugSections = compress && !buildRelease && os == OSLinux
 	p.DebugInfoFlags = buildDebugInfoFlags(os, buildRelease, compress)
 	p.CompileCFlags = composeCompileCFlags(isa, buildRelease, p.DebugInfoFlags)
+	p.ifEnv = buildPlatformIfEnv(p)
 
 	return p
 }

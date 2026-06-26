@@ -2861,9 +2861,21 @@ func isResourceContainerType(name TOK) bool {
 }
 
 func buildIfEnv(instance ModuleInstance) Environment {
+	env := instance.Platform.ifEnv.clone()
+
+	if instance.Path != 0 {
+		env.setString(envCURDIR, instance.Path.string())
+		env.setString(envBINDIR, build(instance.Path.rel()).string())
+		env.setString(envMODDIR, instance.Path.rel())
+	}
+
+	return env
+}
+
+func buildPlatformIfEnv(p *Platform) Environment {
 	env := DefaultIfEnv.clone()
 
-	for k, v := range instance.Platform.Flags {
+	for k, v := range p.Flags {
 		env.setFromStringID(k, v)
 	}
 
@@ -2879,7 +2891,7 @@ func buildIfEnv(instance ModuleInstance) Environment {
 		env.setString(env_USE_IDN, "dynamic")
 	}
 
-	switch instance.Platform.ISA {
+	switch p.ISA {
 	case ISAX8664:
 		env.setBool(envARCH_X86_64, true)
 		env.setBool(envARCH_TYPE_64, true)
@@ -2918,24 +2930,18 @@ func buildIfEnv(instance ModuleInstance) Environment {
 	}
 
 	if !env.hasBindingID(envOBJCOPY_TOOL) {
-		env.setString(envOBJCOPY_TOOL, "$(B)/resources/CLANG"+instance.Platform.ClangVer+"/bin/llvm-objcopy")
+		env.setString(envOBJCOPY_TOOL, "$(B)/resources/CLANG"+p.ClangVer+"/bin/llvm-objcopy")
 	}
 
 	env.setString(envARCADIA_ROOT, "$(S)")
 	env.setString(envARCADIA_BUILD_ROOT, "$(B)")
 
-	if instance.Path != 0 {
-		env.setString(envCURDIR, instance.Path.string())
-		env.setString(envBINDIR, build(instance.Path.rel()).string())
-		env.setString(envMODDIR, instance.Path.rel())
-	}
-
-	useRuntime := instance.Platform.Flags[envUSE_ARCADIA_COMPILER_RUNTIME]
+	useRuntime := p.Flags[envUSE_ARCADIA_COMPILER_RUNTIME]
 	env.setBool(envUSE_ARCADIA_COMPILER_RUNTIME, useRuntime != strNo)
-	env.setStringID(envCOMPILER_VERSION, instance.Platform.ClangVerSTR)
-	env.setStringID(envBUILD_TYPE, instance.Platform.BuildTypeUpperSTR)
+	env.setStringID(envCOMPILER_VERSION, p.ClangVerSTR)
+	env.setStringID(envBUILD_TYPE, p.BuildTypeUpperSTR)
 
-	if (instance.Platform.ISA == ISAX8664 || env.bool(envARCH_I386)) &&
+	if (p.ISA == ISAX8664 || env.bool(envARCH_I386)) &&
 		!env.bool(envDISABLE_INSTRUCTION_SETS) {
 		env.setStringID(envSSE41_CFLAGS, strSSE41CFlags)
 		env.setStringID(envSSE42_CFLAGS, strSSE42CFlags)
