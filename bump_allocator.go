@@ -1,18 +1,33 @@
 package main
 
+import "unsafe"
+
+const bumpChunkBytes = 1 << 20
+
 type BumpAllocator[T any] struct {
 	chunks  [][]T
 	off     int
-	next    int
 	pending int
 }
 
-func newBumpAllocator[T any](initial int) *BumpAllocator[T] {
-	if initial < 1 {
-		initial = 1
+func bumpChunkElems[T any]() int {
+	sz := int(unsafe.Sizeof(*new(T)))
+
+	if sz < 1 {
+		sz = 1
 	}
 
-	return &BumpAllocator[T]{next: initial}
+	n := bumpChunkBytes / sz
+
+	if n < 1 {
+		n = 1
+	}
+
+	return n
+}
+
+func newBumpAllocator[T any](int) *BumpAllocator[T] {
+	return &BumpAllocator[T]{}
 }
 
 func (a *BumpAllocator[T]) alloc(n int) []T {
@@ -45,7 +60,7 @@ func (a *BumpAllocator[T]) list(vs ...T) []T {
 }
 
 func (a *BumpAllocator[T]) addChunk(min int) {
-	size := a.next
+	size := bumpChunkElems[T]()
 
 	if size < min {
 		size = min
@@ -53,6 +68,4 @@ func (a *BumpAllocator[T]) addChunk(min int) {
 
 	a.chunks = append(a.chunks, make([]T, size))
 	a.off = 0
-
-	a.next = size + size/2
 }

@@ -66,24 +66,30 @@ func TestBumpAllocatorPacksCommittedRegions(t *testing.T) {
 	}
 }
 
-func TestBumpAllocatorGeometricGrowth(t *testing.T) {
+func TestBumpAllocatorFixedChunkSize(t *testing.T) {
 	a := newBumpAllocator[byte](8)
 
-	sizes := []int{}
-
-	for i := 0; i < 6; i++ {
+	for i := 0; i < 4; i++ {
 		r := a.alloc(1)
-		a.commit(len(r))
-		sizes = append(sizes, len(a.chunks[len(a.chunks)-1]))
-	}
+		a.commit(len(r)) // exhaust the chunk so the next alloc opens a fresh one
 
-	want := []int{8, 12, 18, 27, 40, 60}
-
-	for i, w := range want {
-		if sizes[i] != w {
-			t.Fatalf("chunk %d size = %d, want %d (sizes=%v)", i, sizes[i], w, sizes)
+		if got := len(a.chunks[len(a.chunks)-1]); got != bumpChunkBytes {
+			t.Fatalf("chunk %d size = %d, want fixed %d", i, got, bumpChunkBytes)
 		}
 	}
+}
+
+func TestBumpAllocatorOversizedAllocFits(t *testing.T) {
+	a := newBumpAllocator[byte](8)
+
+	big := bumpChunkBytes * 3
+	r := a.alloc(big)
+
+	if len(r) < big {
+		t.Fatalf("alloc(%d) returned len %d, want >= %d", big, len(r), big)
+	}
+
+	a.commit(big)
 }
 
 func TestBumpAllocatorChunkFitsLargeAlloc(t *testing.T) {
