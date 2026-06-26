@@ -19,7 +19,7 @@ func (YasmIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocator[
 		return ParsedIncludeSet{}
 	}
 
-	return ParsedIncludeSet{parsedIncludesLocal: block[:k:k]}
+	return ParsedIncludeSet{parsedIncludesLocal: block[:k]}
 }
 
 func parseYasmIncludes(data []byte, block []IncludeDirective, k int) int {

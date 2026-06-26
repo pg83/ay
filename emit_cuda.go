@@ -63,7 +63,7 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	chunks[k] = na.strList(cudaNvccStdStr)
 	k++
 	na.chunks.commit(k)
-	cmdArgs := ArgChunks(chunks[:k:k])
+	cmdArgs := ArgChunks(chunks[:k])
 
 	env := EnvVars{
 		{Name: envARCADIA_ROOT_DISTBUILD, Value: strS},

@@ -94,7 +94,7 @@ func emitCC(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInputs, hos
 	blocks := in.CCBlocks
 
 	tok := na.strList((inVFS).str(), argDashC.str(), argDashO.str(), (outVFS).str())
-	inChunk := tok[0:1:1]
+	inChunk := tok[0:1]
 
 	wrapcc := len(instance.Platform.WrapccHead) > 0
 
@@ -132,7 +132,7 @@ func emitCC(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInputs, hos
 
 	chunks[k] = compiler
 	chunks[k+1] = instance.Platform.CCHead
-	chunks[k+2] = tok[1:4:4]
+	chunks[k+2] = tok[1:4]
 	k += 3
 	k += copy(chunks[k:], blocks.includes)
 	k += copy(chunks[k:], blocks.flags)
@@ -150,7 +150,7 @@ func emitCC(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInputs, hos
 	chunks[k] = inChunk
 	k++
 	na.chunks.commit(k)
-	cmdArgs := ArgChunks(chunks[:k:k])
+	cmdArgs := ArgChunks(chunks[:k])
 
 	env := hostP.toolEnv()
 
@@ -512,10 +512,10 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *
 	return &CcModuleArgBlocks{
 		cHead:    na.strList(in.TC.CC),
 		cxxHead:  na.strList(in.TC.CXX),
-		includes: ArgChunks(inc[:ni:ni]),
-		flags:    ArgChunks(fl[:11:11]),
-		cTail:    ArgChunks(ct[:3:3]),
-		cxxTail:  ArgChunks(cxt[:8:8]),
+		includes: ArgChunks(inc[:ni]),
+		flags:    ArgChunks(fl[:11]),
+		cTail:    ArgChunks(ct[:3]),
+		cxxTail:  ArgChunks(cxt[:8]),
 		cPost:    cPost,
 	}
 }

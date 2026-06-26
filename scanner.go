@@ -317,7 +317,7 @@ func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
 	var children []VFS
 
 	if k > 0 {
-		children = block[:k:k]
+		children = block[:k]
 	}
 
 	s.putChildren(abs, children)
@@ -393,7 +393,7 @@ func (sc *ScanCtx) dfs(abs VFS) {
 
 	s.closureArena.commit(k)
 	ref := ClosureRef(len(s.subgraphClosures))
-	s.subgraphClosures = append(s.subgraphClosures, block[:k:k])
+	s.subgraphClosures = append(s.subgraphClosures, block[:k])
 	s.putClosure(abs, ref)
 }
 
@@ -464,7 +464,7 @@ func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 	s.closureArena.commit(k)
 
 	ref := ClosureRef(len(s.subgraphClosures))
-	s.subgraphClosures = append(s.subgraphClosures, block[:k:k])
+	s.subgraphClosures = append(s.subgraphClosures, block[:k])
 
 	s.subgraphMisses += uint64(len(members))
 

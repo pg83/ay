@@ -28,5 +28,5 @@ func (FlatbuffersIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAll
 		return ParsedIncludeSet{}
 	}
 
-	return ParsedIncludeSet{parsedIncludesLocal: block[:k:k]}
+	return ParsedIncludeSet{parsedIncludesLocal: block[:k]}
 }

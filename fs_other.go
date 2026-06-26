@@ -95,5 +95,5 @@ func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 
 	fs.dirNames.commit(len(entries))
 
-	return DirView{dir: dir, names: block[:len(entries):len(entries)]}
+	return DirView{dir: dir, names: block[:len(entries)]}
 }
