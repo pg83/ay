@@ -464,25 +464,25 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *
 	ni++
 	na.chunks.commit(ni)
 
-	fl := na.chunks.alloc(11)
-	fl[0] = na.argStrList(in.ClangWarnings)
-	fl[1] = debugPrefixMapFlagsStr
-	fl[2] = xclangDebugCompilationDirStr
-	fl[3] = cflagsStr
-	fl[4] = cWarningChunk(na, in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
-	fl[5] = p.DefinesStr
-	fl[6] = na.argStrList(p.CFlags, in.CFlags, in.PeerCFlagsGlobal, in.OwnCFlagsGlobal)
-	fl[7] = noLibc
-	fl[8] = catboostStr
-	fl[9] = na.argStrList(in.ModuleScopeCFlags)
-	fl[10] = noLibc
-	na.chunks.commit(11)
+	flags := na.chunkList(
+		na.argStrList(in.ClangWarnings),
+		debugPrefixMapFlagsStr,
+		xclangDebugCompilationDirStr,
+		cflagsStr,
+		cWarningChunk(na, in.Flags.NoCompilerWarnings, in.Flags.NoWShadow),
+		p.DefinesStr,
+		na.argStrList(p.CFlags, in.CFlags, in.PeerCFlagsGlobal, in.OwnCFlagsGlobal),
+		noLibc,
+		catboostStr,
+		na.argStrList(in.ModuleScopeCFlags),
+		noLibc,
+	)
 
-	ct := na.chunks.alloc(3)
-	ct[0] = na.argStrList(in.PeerCOnlyFlagsGlobal)
-	ct[1] = builtinMacroDateTimeStr
-	ct[2] = macroPrefixMapFlagsStr
-	na.chunks.commit(3)
+	cTail := na.chunkList(
+		na.argStrList(in.PeerCOnlyFlagsGlobal),
+		builtinMacroDateTimeStr,
+		macroPrefixMapFlagsStr,
+	)
 
 	cxxOwnExtras := in.CXXFlags
 
@@ -492,16 +492,16 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *
 
 	cxxBucket := composeOwnAndPeerGlobalBucket(*in, true)
 
-	cxt := na.chunks.alloc(8)
-	cxt[0] = cxxStandardFlagStr
-	cxt[1] = cxxWarningChunk(in.Flags.NoCompilerWarnings)
-	cxt[2] = na.argStrList(cxxOwnExtras)
-	cxt[3] = na.argStrList(cxxBucket)
-	cxt[4] = catboostStr
-	cxt[5] = na.argStrList(composePostCatboostBucket(cxxBucket))
-	cxt[6] = builtinMacroDateTimeStr
-	cxt[7] = macroPrefixMapFlagsStr
-	na.chunks.commit(8)
+	cxxTail := na.chunkList(
+		cxxStandardFlagStr,
+		cxxWarningChunk(in.Flags.NoCompilerWarnings),
+		na.argStrList(cxxOwnExtras),
+		na.argStrList(cxxBucket),
+		catboostStr,
+		na.argStrList(composePostCatboostBucket(cxxBucket)),
+		builtinMacroDateTimeStr,
+		macroPrefixMapFlagsStr,
+	)
 
 	var cPost ArgChunks
 
@@ -513,9 +513,9 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *
 		cHead:    na.strList(in.TC.CC),
 		cxxHead:  na.strList(in.TC.CXX),
 		includes: ArgChunks(inc[:ni]),
-		flags:    ArgChunks(fl[:11]),
-		cTail:    ArgChunks(ct[:3]),
-		cxxTail:  ArgChunks(cxt[:8]),
+		flags:    flags,
+		cTail:    cTail,
+		cxxTail:  cxxTail,
 		cPost:    cPost,
 	}
 }
