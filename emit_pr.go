@@ -108,17 +108,6 @@ func prMainOutputRel(stmt *RunProgramStmt) string {
 	return ""
 }
 
-func flatcVariantForExt(p string) *flatcVariant {
-	switch {
-	case strings.HasSuffix(p, ".fbs64"):
-		return &flatcVariantFL64
-	case strings.HasSuffix(p, ".fbs"):
-		return &flatcVariantFL
-	}
-
-	return nil
-}
-
 func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, d *ModuleData, reg *CodegenRegistry, moduleInputs ModuleCCInputs) NodeRef {
 	res := ctx.toolResult(internArg(filepath.Clean(stmt.ToolPath.string())))
 	toolLDRef := res.LDRef
@@ -339,23 +328,6 @@ func pbhBasenameSet(vs []VFS) map[string]bool {
 	}
 
 	return m
-}
-
-func isCCSourceExt(p string) bool {
-	return strings.HasSuffix(p, ".cpp") ||
-		strings.HasSuffix(p, ".cc") ||
-		strings.HasSuffix(p, ".cxx") ||
-		strings.HasSuffix(p, ".c")
-}
-
-func isAsmSourceExt(p string) bool {
-	return strings.HasSuffix(p, ".asm") ||
-		strings.HasSuffix(p, ".s") ||
-		strings.HasSuffix(p, ".S")
-}
-
-func generatedOutputCarriesIncludes(p string) bool {
-	return isCCSourceExt(p) || isHeaderSource(p) || strings.HasSuffix(p, ".inc")
 }
 
 func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *RunProgramStmt, moduleInputs ModuleCCInputs) []VFS {
