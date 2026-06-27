@@ -131,6 +131,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		vfs := runProgramInputVFS(ctx, instance, d, f.string())
 
 		inVFSByToken[f] = vfs
+
 		inVFSs = append(inVFSs, vfs)
 	}
 
@@ -150,6 +151,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		vfs := copyFileOutputVFS(instance.Path.rel(), stmt.StdoutFile.string())
 
 		stdoutVFS = &vfs
+
 		outVFSByToken[*stmt.StdoutFile] = vfs
 	}
 
@@ -515,6 +517,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		case info != nil:
 
 			sub = walkClosureTail(ctx.scannerFor(instance), info.OutputPath, scanIn.ScanCfg)
+
 			customPR = info.ProducerKvP == pkPR
 		case fullSourceClosure && ctx.fs.isFile(srcRootVFS, target.string()):
 
@@ -540,6 +543,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 
 				if ctx.fs.isFile(dirKey(sibDir), sibBase) && !pbhSeen[sibBase] {
 					out = append(out, source(sibling))
+
 					pbhSeen[sibBase] = true
 				}
 			}
@@ -706,7 +710,9 @@ func emitPR(
 
 			if strings.Contains(a, tool.token) {
 				a = strings.ReplaceAll(a, tool.token, tool.bin.string())
+
 				key = internStr(a)
+
 				toolReplaced = true
 			}
 		}
@@ -755,6 +761,7 @@ func emitPR(
 		}
 
 		emittedOut[v] = true
+
 		outputs = append(outputs, v)
 	}
 

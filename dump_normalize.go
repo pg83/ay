@@ -50,6 +50,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 
 	if !streaming {
 		src.nodes = loadGraph(inPath)
+
 		workers = min(runtime.NumCPU(), 24)
 	}
 
@@ -126,6 +127,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		},
 		func(r p1Result) {
 			contentHash[r.uid] = r.content
+
 			deps[r.uid] = r.deps
 
 			if refGraph {
@@ -390,6 +392,7 @@ func reuidClosure(
 		h.Write([]byte{0})
 		h.Write([]byte(strings.Join(tokens, "\x00")))
 		newUID[uid] = base64.RawURLEncoding.EncodeToString(h.Sum(nil))[:dumpUIDLen]
+
 		state[uid] = done
 	}
 
@@ -418,6 +421,7 @@ func reuidClosure(
 
 				if state[child] == 0 {
 					state[child] = onStack
+
 					stack = append(stack, frame{uid: child, children: closureChildren(child)})
 				}
 
@@ -442,6 +446,7 @@ func dedupKeepOrder(in []string) []string {
 		}
 
 		seen[s] = true
+
 		out = append(out, s)
 	}
 

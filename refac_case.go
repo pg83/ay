@@ -226,6 +226,7 @@ func fixCaseRefsOnce(typeRen, methodRen map[string]string) (int, bool) {
 
 		if name == "" {
 			name = m[5]
+
 			ren = methodRen
 		}
 

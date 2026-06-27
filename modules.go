@@ -91,6 +91,7 @@ func protoCmdPeers(d *ModuleData) []STR {
 
 	if d.grpc {
 		seen[strContribLibsGrpc] = struct{}{}
+
 		front = append(front, strContribLibsGrpc)
 	}
 
@@ -103,6 +104,7 @@ func protoCmdPeers(d *ModuleData) []STR {
 			}
 
 			seen[p] = struct{}{}
+
 			front = append(front, p)
 		}
 	}
@@ -829,6 +831,7 @@ func filterOwnAddIncl(fs FS, paths []VFS, modulePath string, onWarn func(Warn)) 
 
 			if !copied {
 				out = append([]VFS(nil), paths[:i]...)
+
 				copied = true
 			}
 
@@ -1085,6 +1088,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			expanded.Sources = expandStmtTokensSTR(v.Sources, env)
 			expanded.Seq = d.nextDeclSeq()
+
 			d.joinSrcs = append(d.joinSrcs, &expanded)
 		case *AddInclStmt:
 
@@ -1126,6 +1130,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			expandedEN := *v
 
 			expandedEN.DeclSeq = d.nextDeclSeq()
+
 			d.enumSrcs = append(d.enumSrcs, &expandedEN)
 
 			const enumSerPeer = "tools/enum_parser/enum_serialization_runtime"
@@ -1150,6 +1155,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			expanded.Src = expandStmtToken(v.Src, env)
 			expanded.Dst = expandStmtToken(v.Dst, env)
+
 			d.configureFiles = append(d.configureFiles, &expanded)
 
 			if strings.HasSuffix(expanded.Src, ".h.in") || strings.HasSuffix(expanded.Dst, ".h") {
@@ -1219,6 +1225,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			}
 
 			expanded.DeclSeq = d.nextDeclSeq()
+
 			d.runPrograms = append(d.runPrograms, &expanded)
 		case *SplitCodegenStmt:
 			expanded := *v
@@ -1227,6 +1234,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			expanded.Prefix = expandStmtTokenSTR(v.Prefix, env)
 			expanded.Opts = expandStmtTokensSTR(v.Opts, env)
 			expanded.OutputIncludes = expandStmtTokensSTR(v.OutputIncludes, env)
+
 			d.splitCodegens = append(d.splitCodegens, &expanded)
 		case *BaseCodegenStmt:
 			expanded := *v
@@ -1235,6 +1243,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			expanded.Prefix = expandStmtTokenSTR(v.Prefix, env)
 			expanded.Opts = expandStmtTokensSTR(v.Opts, env)
 			expanded.OutputIncludes = expandStmtTokensSTR(v.OutputIncludes, env)
+
 			d.baseCodegens = append(d.baseCodegens, &expanded)
 
 			for _, p := range v.Peerdirs {
@@ -1272,6 +1281,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			expanded.OUTNoAutoFiles = expandStmtTokensSTR(v.OUTNoAutoFiles, env)
 			expanded.OutputIncludes = expandStmtTokensSTR(v.OutputIncludes, env)
 			expanded.Renames = expandStmtTokensSTR(v.Renames, env)
+
 			d.fromSandboxes = append(d.fromSandboxes, &expanded)
 		case *ResourceStmt:
 			ensureResourcePeer(modulePath, d)
@@ -1312,6 +1322,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			expanded := *v
 
 			expanded.Args = expandStmtTokensSTR(v.Args, env)
+
 			d.resourceDeclStmts = append(d.resourceDeclStmts, &expanded)
 		case *IfStmt:
 			taken := v.Then
@@ -1585,10 +1596,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 
 			stmt.FuncName = rest[1].string()
+
 			rest = rest[2:]
 		}
 
 		stmt.Opts = append([]STR(nil), rest...)
+
 		d.decimalMD5 = append(d.decimalMD5, stmt)
 	case tokBuildwithCythonCpp:
 		if len(v.Args) == 0 {
@@ -1964,6 +1977,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			switch a {
 			case kwTOP_LEVEL:
 				topLevel = true
+
 				d.pyTopLevel = true
 
 				continue
@@ -1975,6 +1989,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				}
 
 				namespace = strPtr(v.Args[i])
+
 				d.pyNamespace = namespace
 
 				continue
@@ -1984,39 +1999,54 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				continue
 			case kwCYTHON_CPP:
 				cythonPlainCpp = true
+
 				cythonCMode = false
+
 				cythonHeader = false
+
 				cythonApiHeader = false
 
 				continue
 			case kwCYTHON_C:
 				cythonCMode = true
+
 				cythonPlainCpp = false
+
 				cythonHeader = false
+
 				cythonApiHeader = false
 
 				continue
 			case strCythonCppH:
 
 				cythonCMode = false
+
 				cythonPlainCpp = false
+
 				cythonHeader = true
+
 				cythonApiHeader = false
 
 				continue
 			case strCythonCH:
 
 				cythonCMode = true
+
 				cythonPlainCpp = false
+
 				cythonHeader = true
+
 				cythonApiHeader = false
 
 				continue
 			case strCythonCApiH:
 
 				cythonCMode = true
+
 				cythonPlainCpp = false
+
 				cythonHeader = true
+
 				cythonApiHeader = true
 
 				continue
@@ -2049,6 +2079,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 			if eq := strings.IndexByte(src, '='); eq >= 0 {
 				modNameOverride = src[eq+1:]
+
 				src = src[:eq]
 			}
 
@@ -2079,6 +2110,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				d.cythonCpp = append(d.cythonCpp, stmt)
 				appendPyRegister(d, modName, false)
 				cythonRegIdx = append(cythonRegIdx, len(d.pyRegister)-1)
+
 				mainNext = false
 
 				continue
@@ -2107,6 +2139,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				})
 				appendPyRegister(d, modName, false)
 				cythonRegIdx = append(cythonRegIdx, len(d.pyRegister)-1)
+
 				mainNext = false
 
 				continue
@@ -2145,6 +2178,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				dest := "py/" + strings.ReplaceAll(modName, ".", "/") + ".pyi"
 
 				d.pyPyiResources = append(d.pyPyiResources, expandResourceFiles([]string{"DEST", dest, src})...)
+
 				mainNext = false
 
 				continue
@@ -2156,6 +2190,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 			d.pySrcs = append(d.pySrcs, internStr(src))
 			d.pySrcsFullName = append(d.pySrcsFullName, strings.HasPrefix(src, "${ARCADIA_BUILD_ROOT}/") || strings.HasPrefix(src, "${ARCADIA_ROOT}/") || strings.HasPrefix(src, "$B/"))
+
 			groupSrcs = append(groupSrcs, src)
 
 			if mainNext {
@@ -2174,6 +2209,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				}
 
 				d.pyMain = strPtr(internV(modName, ":main"))
+
 				mainNext = false
 			} else if d.pyMain == nil && d.moduleStmt != nil &&
 				(d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin) &&
@@ -2187,6 +2223,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				modName := strings.TrimSuffix(src, ".py")
 
 				modName = strings.ReplaceAll(modName, "/", ".")
+
 				d.pyMain = strPtr(internV(ns, modName))
 			}
 		}
@@ -2258,11 +2295,13 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		plugin := parseYAFF(v)
 
 		plugin.DeclaredBeforeLiteHeaders = protoTransitiveHeadersEnabled(d)
+
 		d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
 	case tokYaffSchema:
 		plugin := parseYAFFSchema(v)
 
 		plugin.DeclaredBeforeLiteHeaders = protoTransitiveHeadersEnabled(d)
+
 		d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
 	case tokPyRegister:
 
@@ -2284,6 +2323,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 					arg := argTok.string()
 
 					arg = strings.ReplaceAll(arg, `${"$"}`, "$")
+
 					d.rpathFlagsGlobal = append(d.rpathFlagsGlobal, internArg(arg))
 				}
 			}
@@ -2425,6 +2465,7 @@ func reorderCythonVariantBuckets(d *ModuleData, start int, regIdx []int) {
 
 	for i, p := range perm {
 		names[i] = d.pyRegister[regIdx[p]]
+
 		explicit[i] = d.pyRegisterExplicit[regIdx[p]]
 	}
 
@@ -2462,9 +2503,11 @@ func parseCPPProtoPlugin(v UnknownStmt) CppProtoPlugin {
 		requiredArgs = 2
 	case tokCppProtoPlugin:
 		requiredArgs = 3
+
 		outputSuffixes = 1
 	case tokCppProtoPlugin2:
 		requiredArgs = 4
+
 		outputSuffixes = 2
 	default:
 		throwFmt("gen: internal error: parseCPPProtoPlugin called for %q", v.Name)
@@ -2542,6 +2585,7 @@ func parseYAFFSections(v UnknownStmt) yaffSections {
 			}
 
 			s.namespace = v.Args[i].string()
+
 			section = STR(0)
 		case kwFILES:
 			section = kwFILES
@@ -2693,7 +2737,9 @@ func applyArchiveStmt(v UnknownStmt, d *ModuleData) {
 		switch {
 		case inNameSlot:
 			entry.Name = a
+
 			inNameSlot = false
+
 			seenName = true
 		case a == "NAME":
 			inNameSlot = true
@@ -2736,10 +2782,13 @@ func applyArchiveByKeysStmt(v UnknownStmt, d *ModuleData) {
 		switch {
 		case inNameSlot:
 			entry.Name = a
+
 			inNameSlot = false
+
 			seenName = true
 		case inKeysSlot:
 			entry.Keys = []string{a}
+
 			inKeysSlot = false
 		case a == "NAME":
 			inNameSlot = true
@@ -2784,7 +2833,9 @@ func applyArchiveAsmStmt(v UnknownStmt, d *ModuleData) {
 		switch {
 		case inNameSlot:
 			entry.Name = a
+
 			inNameSlot = false
+
 			seenName = true
 		case a == "NAME":
 			inNameSlot = true
@@ -3005,6 +3056,7 @@ func expandBracedVars(s string, env Environment) string {
 		}
 
 		s = s[:start] + val + s[end+1:]
+
 		searchFrom = start + len(val)
 	}
 }
@@ -3060,6 +3112,7 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 
 		b.WriteString(val)
 		i = j
+
 		changed = true
 	}
 

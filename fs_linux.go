@@ -33,6 +33,7 @@ func (fs *OsFS) openatRel(rel string, flags int) (int, syscall.Errno) {
 	p := append(fs.pathBuf[:0], rel...)
 
 	p = append(p, 0)
+
 	fs.pathBuf = p
 
 	for {
@@ -116,6 +117,7 @@ func (fs *OsFS) fstatatRel(rel string, st *syscall.Stat_t) bool {
 	p := append(fs.pathBuf[:0], rel...)
 
 	p = append(p, 0)
+
 	fs.pathBuf = p
 
 	for {

@@ -59,6 +59,7 @@ func emitCC(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInputs, hos
 
 	if v := src.vfs(); v != 0 {
 		srcVFS = v
+
 		srcRel = strings.TrimPrefix(v.rel(), instance.Path.rel()+"/")
 	}
 
@@ -249,6 +250,7 @@ func composeSrcDirOutputRel(instancePath, target string) string {
 	for i, p := range parts {
 		if p == ".." {
 			parts[i] = "__"
+
 			hasParent = true
 		}
 	}
@@ -277,6 +279,7 @@ func normalizeDotDotSegments(rel string) (body string, underscore bool) {
 	for i, p := range parts {
 		if p == ".." {
 			parts[i] = "__"
+
 			hasParent = true
 		}
 	}

@@ -182,6 +182,7 @@ func cdcChunks(data []byte, avg int, yield func([]byte)) {
 		if h%mod == 0 || size >= maxSize {
 			yield(data[start : i+1])
 			start = i + 1
+
 			h = 0
 		}
 	}
@@ -203,6 +204,7 @@ var gearTable = func() [256]uint64 {
 
 		z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9
 		z = (z ^ (z >> 27)) * 0x94D049BB133111EB
+
 		t[i] = z ^ (z >> 31)
 	}
 

@@ -30,6 +30,7 @@ func NewDarts(keys []string) *Darts {
 
 			if c == nil {
 				c = &dartsNode{}
+
 				n.children[b] = c
 			}
 
@@ -81,6 +82,7 @@ func NewDarts(keys []string) *Darts {
 			child := n.children[byte(c-1)]
 
 			d.value[t] = child.key
+
 			queue = append(queue, item{child, t})
 		}
 	}
@@ -123,6 +125,7 @@ func (d *Darts) longestSuffixMatch(s string) (int, bool) {
 
 	if d.value[0] != 0 {
 		best = d.value[0] - 1
+
 		found = true
 	}
 
@@ -137,6 +140,7 @@ func (d *Darts) longestSuffixMatch(s string) (int, bool) {
 
 		if d.value[st] != 0 {
 			best = d.value[st] - 1
+
 			found = true
 		}
 	}
@@ -151,6 +155,7 @@ func (d *Darts) longestMatch(parts ...string) (int, bool) {
 
 	if d.value[0] != 0 {
 		best = d.value[0] - 1
+
 		found = true
 	}
 
@@ -166,6 +171,7 @@ func (d *Darts) longestMatch(parts ...string) (int, bool) {
 
 			if d.value[s] != 0 {
 				best = d.value[s] - 1
+
 				found = true
 			}
 		}

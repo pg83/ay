@@ -236,6 +236,7 @@ func emitEN(
 
 	if withHeader {
 		cmdArgs = append(cmdArgs, argHeader.str(), (serializedHVFS).str())
+
 		outputs = append(outputs, serializedHVFS)
 	}
 

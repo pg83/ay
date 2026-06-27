@@ -281,12 +281,14 @@ func emitResourceObjcopy(
 		dataInputs = append(dataInputs, cur.pathInputs...)
 		dataInputs = append(dataInputs, cur.closureInputs...)
 		dataInputs = append(dataInputs, cur.kvInputs...)
+
 		node.DepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, dataInputs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
 
 		r := ctx.emit.emit(node)
 
 		out.Refs = append(out.Refs, r)
 		out.Outputs = append(out.Outputs, outputObj)
+
 		cur = acc{}
 	}
 
@@ -501,6 +503,7 @@ func emitYaConfJSONObjcopy(
 		}
 
 		node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
+
 		out = append(out, &ObjcopyEmit{Ref: ctx.emit.emit(node), Out: outputObj})
 	}
 
@@ -544,6 +547,7 @@ func emitPyNamespaceForGroup(
 
 	if group.TopLevel {
 		nsPrefix = ""
+
 		nsValue = "."
 	}
 
@@ -588,6 +592,7 @@ func emitPyNamespaceForGroup(
 		key := "py/namespace/" + modListMD5 + "/" + keyPath
 
 		kvsHash = append(kvsHash, key+"=\""+nsValue+"\"")
+
 		kvsCmd = append(kvsCmd, key+"="+nsValue)
 	}
 

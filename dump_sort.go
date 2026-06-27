@@ -105,7 +105,9 @@ func spillChunks(in io.Reader, chunkBytes int, tmpDir string) []string {
 		throw(f.Close())
 
 		chunks = append(chunks, path)
+
 		lines = lines[:0]
+
 		size = 0
 	}
 

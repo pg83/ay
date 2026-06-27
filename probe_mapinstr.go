@@ -37,7 +37,9 @@ func probeMapInstr(_ GlobalFlags, args []string) int {
 		}
 
 		asts[p] = f
+
 		src[p] = b
+
 		order = append(order, p)
 	}
 
@@ -167,6 +169,7 @@ func mapProbeAt(site string, write bool) {
 
 	if e == nil {
 		e = &MapProbeEntry{}
+
 		mapProbeCounts[site] = e
 	}
 

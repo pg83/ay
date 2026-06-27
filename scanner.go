@@ -488,6 +488,7 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 
 	if v := d.target.vfs(); v != 0 {
 		out = append(s.resolveOut[:0], v)
+
 		s.resolveOut = out
 
 		return out
@@ -602,6 +603,7 @@ mapLoop:
 
 		if !added {
 			merged = append(merged, searchOut...)
+
 			added = true
 		}
 
@@ -775,6 +777,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 			for _, a := range cands {
 				if rp := idx.rank.get(uint64(a)); rp != nil && int(*rp) < bestRank {
 					bestRank = int(*rp)
+
 					bestAddincl = a
 				}
 			}
@@ -798,7 +801,9 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 					}
 
 					bestRank = b.rank
+
 					bestBuild = info
+
 					bestIsSource = false
 				}
 			}
@@ -892,6 +897,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 	if includerAbs.isBuild() {
 		if info := s.codegen.lookupSTR(d.target); info != nil && !outHas(info.OutputPath) {
 			out = append(out, info.OutputPath)
+
 			searchPathFound = true
 		}
 	}
@@ -911,7 +917,9 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 
 		if sv != 0 {
 			out = append(out, sv)
+
 			searchPathFound = true
+
 			matched = true
 		}
 
@@ -919,6 +927,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 			if info := s.codegen.lookupSplit(incDir, d.target); info != nil {
 				if !outHas(info.OutputPath) {
 					out = append(out, info.OutputPath)
+
 					searchPathFound = true
 				}
 			}
@@ -930,6 +939,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 
 		if tier != 0 {
 			out = append(out, tier)
+
 			searchPathFound = true
 		}
 	}

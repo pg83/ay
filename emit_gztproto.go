@@ -86,6 +86,7 @@ func gztCmdArgs(converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) [
 		}
 
 		seen[path] = struct{}{}
+
 		args = append(args, internV("-I", path))
 	}
 
@@ -124,6 +125,7 @@ func gztConverterInducedProtos(ctx *GenCtx) []VFS {
 		}
 
 		seen[v] = struct{}{}
+
 		out = append(out, v)
 	}
 

@@ -22,6 +22,7 @@ func ragel6OutVFS(instance ModuleInstance, srcRel string) VFS {
 
 	if i := strings.LastIndexByte(srcRel, '/'); i >= 0 {
 		dir = dir + "_/" + srcRel[:i+1]
+
 		base = srcRel[i+1:]
 	}
 
