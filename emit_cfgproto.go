@@ -10,9 +10,12 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
 	configPluginLDRef, configPluginBinary := ctx.tool(argLibraryCppProtoConfigPlugin)
 	na := ctx.emit.nodeArenas()
+
 	configOpts := na.strList(internV("--plugin=protoc-gen-config=", configPluginBinary.string()),
 		argConfigOutB.str())
+
 	cfgImports := walkClosureTail(ctx.scannerFor(instance), cfgSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()).ScanCfg)
+
 	cfgRef := emitProtoWrapperPBNode(
 		instance, cfgRelPath, &cfgprotoKV,
 		cppStyleguideLDRef, protocLDRef, configPluginLDRef,
@@ -20,6 +23,7 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		configOpts, 0, cfgImports, in.ProtoInclude,
 		!protoTransitiveHeadersEnabled(d),
 		d.tc, ctx.emit)
+
 	cfgH := build(cfgRelPath, ".pb.h")
 	cfgPbCC := build(cfgRelPath, ".pb.cc")
 	outputRoot := protoCPPOutRoot(d)
@@ -50,6 +54,7 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		{kind: includeQuoted, target: internStr(cfgH.rel())},
 		{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())},
 	}
+
 	reg.register(&GeneratedFileInfo{
 		ProducerKvP:    pkPB,
 		OutputPath:     cfgPbCC,

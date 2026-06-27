@@ -39,6 +39,7 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 				GeneratorRefs:  nil,
 				ParsedIncludes: nil,
 			})
+
 			witnessIncludes := []VFS{
 				antlr4RuntimeHeaderVFS,
 				lexerCpp,
@@ -76,11 +77,14 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 					stdout2stderrVFS,
 					antlr4JarVFS,
 				}
+
 				jvPrimary := build(outPrefix, lexerBase, ".cpp")
+
 				cpccPairs := []struct{ cpp, h VFS }{
 					{build(outPrefix, lexerBase, ".cpp"), build(outPrefix, lexerBase, ".h")},
 					{build(outPrefix, parserBase, ".cpp"), build(outPrefix, parserBase, ".h")},
 				}
+
 				refs, outs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
 				ccRefs = append(ccRefs, refs...)
 				ccOutputs = append(ccOutputs, outs...)
@@ -105,6 +109,7 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 				GeneratorRefs:  nil,
 				ParsedIncludes: nil,
 			})
+
 			witnessIncludes := []VFS{
 				antlr4RuntimeHeaderVFS,
 				lexerCpp,
@@ -140,11 +145,14 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 					stdout2stderrVFS,
 					antlr4JarVFS,
 				}
+
 				jvPrimary := build(outPrefix, base, "Lexer.cpp")
+
 				cpccPairs := []struct{ cpp, h VFS }{
 					{build(outPrefix, base, "Lexer.cpp"), build(outPrefix, base, "Lexer.h")},
 					{build(outPrefix, base, "Parser.cpp"), build(outPrefix, base, "Parser.h")},
 				}
+
 				refs, outs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
 				ccRefs = append(ccRefs, refs...)
 				ccOutputs = append(ccOutputs, outs...)

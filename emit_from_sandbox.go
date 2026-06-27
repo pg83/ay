@@ -70,6 +70,7 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 	args = append(args, argYaEndCommandFile.str())
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+
 	node := &Node{
 		Platform:     instance.Platform,
 		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(args), Cwd: build(instance.Path.rel()).str(), Env: env}),
@@ -80,6 +81,7 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 		Requirements: Requirements{CPU: float64(1), Network: nwFull, RAM: float64(32)},
 		Resources:    usesPython3,
 	}
+
 	ref := ctx.emit.emit(node)
 
 	for i, f := range stmt.OUTFiles {

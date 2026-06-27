@@ -155,6 +155,7 @@ type SysinclIndex struct {
 
 func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 	m := &SysinclIndex{byLower: make(map[string]int32), byID: newIntValueMap[int32](4096)}
+
 	bucketFor := func(lc string) int32 {
 		if i, ok := m.byLower[lc]; ok {
 			return i

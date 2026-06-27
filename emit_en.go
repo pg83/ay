@@ -62,6 +62,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 	}
 
 	enumParserLD, enumParserBin := ctx.tool(argToolsEnumParserEnumParser)
+
 	scanIn := ModuleCCInputs{
 		TC:                d.tc,
 		InclArgs:          ctx.inclArgs,
@@ -72,6 +73,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		SrcDirs:           d.srcDirs,
 		ScanCfg:           newScanContext(ctx.parsers, d.addIncl, peerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel()),
 	}
+
 	res := &EnumSrcsResult{}
 	protoGenHeaders := moduleProtoGenHeaders(ctx, instance, d)
 
@@ -105,10 +107,12 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		}
 
 		enRef := ctx.emit.reserve()
+
 		cppParsed := []IncludeDirective{
 			{kind: includeQuoted, target: internStr(headerInput.rel())},
 			{kind: includeQuoted, target: strUtilGenericSerializedEnumH},
 		}
+
 		sort.Slice(cppParsed, func(i, j int) bool { return cppParsed[i].target.string() < cppParsed[j].target.string() })
 		reg := ctx.codegenFor(instance)
 		reg.register(&GeneratedFileInfo{
@@ -124,6 +128,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 				{kind: includeQuoted, target: internStr(headerInput.rel())},
 				{kind: includeQuoted, target: internStr(serializedCPPPath.rel())},
 			}
+
 			sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target.string() < hParsed[j].target.string() })
 			reg.register(&GeneratedFileInfo{
 				ProducerKvP:    pkEN,
@@ -209,6 +214,7 @@ func emitEN(
 	emit *StreamingEmitter,
 ) {
 	na := emit.nodeArenas()
+
 	cmdArgs := []STR{
 		(enumParserBin).str(),
 		(headerInput).str(),
@@ -217,6 +223,7 @@ func emitEN(
 		argOutput.str(),
 		(serializedCPPVFS).str(),
 	}
+
 	outputs := []VFS{serializedCPPVFS}
 
 	if withHeader {
@@ -227,6 +234,7 @@ func emitEN(
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	deps := append([]NodeRef(nil), depENRefs...)
 	foreignDepRefs := depRefs(enumParserLD)
+
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),

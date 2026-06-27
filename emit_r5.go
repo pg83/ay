@@ -16,6 +16,7 @@ func emitR5(
 	tmpVFS := build(instance.Path.rel(), "/", srcRel, ".tmp")
 	cppVFS := build(instance.Path.rel(), "/", strings.TrimSuffix(srcRel, ".rl"), ".rl5.cpp")
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+
 	cmd0 := Cmd{
 		CmdArgs: na.chunkList(na.strList((ragel5BinPath).str(),
 			argDashO.str(),
@@ -23,6 +24,7 @@ func emitR5(
 			(srcVFS).str())),
 		Env: env,
 	}
+
 	rlgenMode := argT0
 
 	if instance.Platform.RagelOptimized {
@@ -37,7 +39,9 @@ func emitR5(
 			(tmpVFS).str())),
 		Env: env,
 	}
+
 	inputs := []VFS{ragel5BinPath, rlgenCdBinPath, srcVFS}
+
 	node := &Node{
 		Platform:       instance.Platform,
 		Cmds:           na.cmdList(cmd0, cmd1),

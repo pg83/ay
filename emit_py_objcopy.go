@@ -132,6 +132,7 @@ func emitResourceObjcopy(
 	}
 
 	bad := []string{"${ARCADIA_BUILD_ROOT}", "${ARCADIA_SOURCE_ROOT}", "conftest.py"}
+
 	contains := func(s string) bool {
 		for _, b := range bad {
 			if strings.Contains(s, b) {
@@ -271,6 +272,7 @@ func emitResourceObjcopy(
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    instance.Platform.UsesPython3Clang,
 		}
+
 		dataInputs := make([]VFS, 0, len(cur.pathInputs)+len(cur.closureInputs)+len(cur.kvInputs))
 		dataInputs = append(dataInputs, cur.pathInputs...)
 		dataInputs = append(dataInputs, cur.closureInputs...)
@@ -283,6 +285,7 @@ func emitResourceObjcopy(
 		out.Outputs = append(out.Outputs, outputObj)
 		cur = acc{}
 	}
+
 	emitEntries := func(entries []ResourceEntry) {
 		for _, e := range entries {
 			if !contains(e.Path) && !contains(e.Key) {
@@ -337,6 +340,7 @@ func emitResourceObjcopy(
 
 		flush()
 	}
+
 	py3BinProgramSide := d.moduleStmt.Name == tokPy3Program && !d.programPairedLib
 
 	if !py3BinProgramSide {
@@ -397,6 +401,7 @@ func emitKvOnlyObjcopyNode(
 	payload := appendInternStrs([]STR{argKvs.str()}, kvsCmd)
 	cmdArgs := objcopyCmdArgs(oc, outputObj, payload)
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
@@ -465,12 +470,15 @@ func emitYaConfJSONObjcopy(
 		hash := objcopyHash([]string{res.hashPath}, []string{keyB64}, []string{kvHash}, instance.Path.rel(), moduleTag)
 		outputObj := build(instance.Path.rel(), "/objcopy_", hash, ".o")
 		input := source(res.sourcePath)
+
 		cmdArgs := objcopyCmdArgs(oc, outputObj, []STR{
 			argInputs.str(), (input).str(),
 			argKeys.str(), internStr(keyB64),
 			argKvs.str(), internStr(kvCmd),
 		})
+
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+
 		node := &Node{
 			Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
@@ -640,6 +648,7 @@ func emitPySrcObjcopy(
 		!strings.HasPrefix(instance.Path.rel(), "contrib/python") &&
 		!strings.HasPrefix(instance.Path.rel(), "contrib/tools/python3") &&
 		resourceModuleTag(d.moduleStmt.Name) != nil
+
 	moduleTag := resourceLibTagForData(d)
 	res := &ObjcopyEmitResult{}
 
@@ -677,6 +686,7 @@ func emitPySrcObjcopy(
 
 			cmdArgs := objcopyCmdArgs(oc, outputObj, payload)
 			env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+
 			node := &Node{
 				Platform:     instance.Platform,
 				Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),

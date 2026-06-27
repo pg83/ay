@@ -290,6 +290,7 @@ func genResourcesLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *M
 		SbomComponentRef:      sbomRef,
 		SbomComponentPath:     sbomPath,
 	}
+
 	ctx.memo.put(ctx.instanceKey(instance), result)
 
 	return result
@@ -370,7 +371,9 @@ func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		DepRefs:      depRefs,
 		Resources:    usesPython3,
 	}
+
 	ref := ctx.emit.emit(node)
+
 	result := &ModuleEmitResult{
 		ModuleStmtName: d.moduleStmt.Name,
 		ARRef:          ref,
@@ -382,6 +385,7 @@ func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 
 		InducedDeps: d.inducedDeps,
 	}
+
 	ctx.memo.put(ctx.instanceKey(instance), result)
 
 	return result

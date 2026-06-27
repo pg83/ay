@@ -56,11 +56,13 @@ func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 
 func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, outVFS VFS, closure []VFS, id NodeRef, emit *StreamingEmitter) {
 	na := emit.nodeArenas()
+
 	cmdArgs := na.chunkList(na.strList(
 		flexBin.str(),
 		internV(argDashO.string(), outVFS.string()),
 		srcVFS.str(),
 	))
+
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	emit.emitReserved(&Node{

@@ -162,6 +162,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CFLAGS", ""),
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CXXFLAGS", ""),
 	)
+
 	targetSpec := mf.targetPlat
 
 	if targetSpec == "" {
@@ -196,6 +197,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 	}
 
 	targetFlags["PIC"] = "no"
+
 	targetP := newPlatform(
 		fs,
 		tOS,
@@ -204,6 +206,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CFLAGS", os.Getenv("CFLAGS")),
 		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS")),
 	)
+
 	events := newEventQueue()
 
 	defer events.close()
@@ -302,12 +305,14 @@ const (
 
 func parseMakeFlags(args []string) *MakeFlags {
 	state := getopt.NewState(append([]string{"ay-make"}, args...))
+
 	config := getopt.Config{
 		Opts:     getopt.OptStr("GrdktThD:j:B:o:I:"),
 		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stats,build-dir:,source-root:,keep-going,dump-graph,copy-sources:,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose,sandboxing,dump-ignored-macros,clear,cmd-prefix:"),
 		Mode:     getopt.ModeInOrder,
 		Func:     getopt.FuncGetOptLong,
 	}
+
 	mf := &MakeFlags{
 		buildType: "debug",
 		threads:   runtime.NumCPU(),

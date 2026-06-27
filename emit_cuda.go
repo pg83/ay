@@ -44,6 +44,7 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 		in.CudaNvccFlags,
 		na.strList(argDashC.str(), (inVFS).str(), argDashO.str(), (outVFS).str()),
 	}
+
 	total := len(head) + len(blocks.includes) + 2 + len(blocks.flags) + len(cuCxxTail) + 1
 	chunks := na.chunks.alloc(total)
 	k := copy(chunks, head)
@@ -57,10 +58,12 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	k++
 	na.chunks.commit(k)
 	cmdArgs := ArgChunks(chunks[:k])
+
 	env := EnvVars{
 		{Name: envARCADIA_ROOT_DISTBUILD, Value: strS},
 		{Name: cudaPathEnv, Value: cudaPathValueStr},
 	}
+
 	node := &Node{
 		Platform:     p,
 		Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),

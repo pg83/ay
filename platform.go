@@ -225,6 +225,7 @@ func buildPlatformIfEnv(p *Platform) Environment {
 	if !env.hasBindingID(envHAVE_MKL) {
 		haveMkl := env.bool(envOS_LINUX) && env.bool(envARCH_X86_64) &&
 			env.string(envSANITIZER_TYPE) == ""
+
 		env.setBool(envHAVE_MKL, haveMkl)
 	}
 
@@ -235,6 +236,7 @@ func buildPlatformIfEnv(p *Platform) Environment {
 	if !env.hasBindingID(envHAVE_CUDA) {
 		haveCuda := !env.bool(envMUSL) && env.bool(envOS_LINUX) && env.bool(envARCH_X86_64) &&
 			env.string(envSANITIZER_TYPE) == ""
+
 		env.setBool(envHAVE_CUDA, haveCuda)
 	}
 
@@ -323,6 +325,7 @@ func parseCompilerFlags(s string) []string {
 	var b strings.Builder
 	var quote byte
 	escaped := false
+
 	flush := func() {
 		if b.Len() == 0 {
 			return

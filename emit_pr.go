@@ -201,6 +201,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	}
 
 	mainIsHeader := mainOutputVFS != 0 && isHeaderSource(mainOutputVFS.rel())
+
 	mainHeaderInclude := func(ccOutRel string) (IncludeDirective, bool) {
 		if !mainIsHeader || relStem(ccOutRel) != relStem(mainOutputVFS.rel()) {
 			return IncludeDirective{}, false
@@ -208,6 +209,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 		return IncludeDirective{kind: includeQuoted, target: internStr(mainOutputVFS.rel())}, true
 	}
+
 	registerPROutput := func(out VFS, parsed []IncludeDirective, ridesHeaderViaParsed bool) {
 		if registeredPROut[out] {
 			return
@@ -237,6 +239,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 		ctx.codegenFor(instance).register(info)
 	}
+
 	parsedFor := func(f STR, out VFS, auto bool) ([]IncludeDirective, bool) {
 		parsed := prEmitsIncludes(f, stmt, inVFSs, protoImportPbH)
 
@@ -392,6 +395,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	}
 
 	selfScanGeneratedCC := len(stmt.INFiles) > 0 && (hasParsedIN || !generatesHeader)
+
 	scanIn := ModuleCCInputs{
 		TC:                d.tc,
 		InclArgs:          ctx.inclArgs,
@@ -404,17 +408,21 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	}
 
 	var out []VFS
+
 	walkOne := func(rel string) {
 		buildRootPath := copyFileOutputVFS(instance.Path.rel(), rel)
 		sub := walkClosureTail(ctx.scannerFor(instance), buildRootPath, scanIn.ScanCfg)
 		out = append(out, sub...)
 	}
+
 	walkInput := func(rel string) {
 		inputVFS := runProgramInputVFS(ctx, instance, d, rel)
 		sub := walkClosure(ctx.scannerFor(instance), inputVFS, scanIn.ScanCfg)
 		out = append(out, sub...)
 	}
+
 	mainRel := prMainOutputRel(stmt)
+
 	ridesMainHeader := func(ccRel string) bool {
 		return isHeaderSource(mainRel) && relStem(ccRel) == relStem(mainRel)
 	}
@@ -464,6 +472,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	}
 
 	reg := ctx.codegenFor(instance)
+
 	keep := func(v VFS, customPR bool) bool {
 		if fullSourceClosure {
 			return v.isSource()
@@ -475,6 +484,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 
 		return strings.HasSuffix(v.rel(), ".proto")
 	}
+
 	pbhSeen := pbhBasenameSet(out)
 
 	for _, oi := range stmt.OutputIncludes {
@@ -698,6 +708,7 @@ func emitPR(
 
 	head := make([]VFS, 0, 1+len(auxTools)+len(stmt.INFiles))
 	deduper.reset()
+
 	appendUnique := func(p VFS) {
 		if !deduper.add(p) {
 			return
@@ -705,6 +716,7 @@ func emitPR(
 
 		head = append(head, p)
 	}
+
 	appendUnique(toolBinPath)
 
 	for _, tool := range auxTools {
@@ -720,6 +732,7 @@ func emitPR(
 	var outputs []VFS
 	var stdoutPath STR
 	emittedOut := map[VFS]bool{}
+
 	appendOutput := func(v VFS) {
 		if emittedOut[v] {
 			return
@@ -752,6 +765,7 @@ func emitPR(
 
 	deps := append([]NodeRef(nil), extraDepRefs...)
 	foreignDepRefs := toolRefs
+
 	cmd := Cmd{
 		CmdArgs: na.chunkList(cmdArgs),
 		Env:     env,
@@ -787,6 +801,7 @@ type deepReplaceCand struct {
 
 func deepReplaceCandidates(stmt *RunProgramStmt, inVFSByToken, outVFSByToken map[STR]VFS) []deepReplaceCand {
 	cands := make([]deepReplaceCand, 0, len(stmt.INFiles)+len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles))
+
 	add := func(tok STR, vfs VFS, ok bool) {
 		if !ok {
 			return

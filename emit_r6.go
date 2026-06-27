@@ -61,6 +61,7 @@ func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	head = appendArgStr(head, effectiveFlags)
 	cmdArgs := na.chunkList(head, ragel6ConstArgs, na.strList((outVFS).str(), (inVFS).str()))
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,

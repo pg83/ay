@@ -172,6 +172,7 @@ func newScanContext(pm *IncludeParserManager, ownAddIncl, peerAddIncl, base []VF
 		BaseSearchPaths: base,
 		OwnerModuleDir:  ownerModuleDir,
 	}
+
 	cfg.cfg = pm.resolveScanConfig(&cfg)
 
 	return cfg
@@ -192,6 +193,7 @@ func (s *IncludeScanner) putScanCtx(sc *ScanCtx) {
 
 func hashScanContext(ctx *ScanContext) uint64 {
 	h := uint64(0x9e3779b97f4a7c15)
+
 	mixSlice := func(ss []VFS) {
 		h = mix64(h ^ uint64(len(ss)))
 
@@ -643,6 +645,7 @@ func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 	deduper.reset()
 
 	r := int32(0)
+
 	add := func(p VFS) {
 		if !deduper.add(p) {
 			return
@@ -698,6 +701,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 	var out VFS
 
 	normTarget := normalisePath(target)
+
 	addSource := func(prefix VFS) bool {
 		v := s.resolveSourceUnder(prefix, target)
 
@@ -709,7 +713,9 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 
 		return true
 	}
+
 	buildSuffix := interned(normTarget)
+
 	addBuild := func(prefixRel string) bool {
 		if buildSuffix == 0 {
 			return false
@@ -731,6 +737,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 
 		return true
 	}
+
 	addInclPath := func(prefix VFS) bool {
 		if prefix.isBuild() {
 			return addBuild(prefix.rel())
@@ -845,6 +852,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 
 		return false
 	}
+
 	addPath := func(rel string) bool {
 		rel = normalisePath(rel)
 
@@ -862,6 +870,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 
 		return true
 	}
+
 	searchPathFound := false
 
 	if candidate, ok := cythonPy2SiblingOverride(includerAbs, d); ok && addPath(candidate) {

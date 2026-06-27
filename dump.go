@@ -316,6 +316,7 @@ func canonInputs(node *rawNode, refGraph bool) []string {
 
 func canonContent(node *rawNode, refGraph bool) map[string]any {
 	inputs := canonInputs(node, refGraph)
+
 	canon := map[string]any{
 		"cmds":         normRec(orVal(node.Cmds, []any{})),
 		"env":          normRec(orVal(node.Env, map[string]any{})),

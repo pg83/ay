@@ -43,6 +43,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 			bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
 			closure := walkClosure(ctx.scannerFor(instance), inputVFS, in.ScanCfg)
 			deps := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, closure, depRefs(producer)...)
+
 			allInputs := na.inputList(na.vfsList(clangWrapperVFS),
 				closure)
 
@@ -69,6 +70,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 				DepRefs:      deps,
 				Resources:    usesPython3Clang16,
 			}
+
 			ref := ctx.emit.emit(node)
 			bcRefs = append(bcRefs, ref)
 			bcPaths = append(bcPaths, bcOut)
@@ -99,6 +101,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 			DepRefs:      append([]NodeRef(nil), bcRefs...),
 			Resources:    usesPython3Clang16,
 		}
+
 		ldRef := ctx.emit.emit(ldNode)
 		optOutName := stmt.Name + "_optimized" + stmt.Suffix + ".bc"
 		optOut := build(instance.Path.rel(), "/", optOutName)
@@ -116,6 +119,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 		optInputs = append(optInputs, mergedOut)
 		optInputs = append(optInputs, optWrapperVFS)
 		optChunks := na.inputList(concat(optInputs, bcSourceInputs))
+
 		optNode := &Node{
 			Platform:     instance.Platform,
 			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(optArgs), Env: env}),
@@ -127,6 +131,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 			DepRefs:      []NodeRef{ldRef},
 			Resources:    usesPython3Clang16,
 		}
+
 		opRef := ctx.emit.emit(optNode)
 
 		if stmt.GenerateMachineCode {

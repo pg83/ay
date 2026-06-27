@@ -100,6 +100,7 @@ func emitPB(
 	}
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+
 	inputs := []VFS{
 		cppStyleguideBinary,
 	}
@@ -256,6 +257,7 @@ func pyProtoAuxInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 		FS:                ctx.fs,
 		ScanCfg:           newScanContext(ctx.parsers, d.addIncl, peerAddIncl, includeScannerBasePaths(), instance.Path.rel()),
 	}
+
 	closure := walkClosure(ctx.scannerFor(instance), aux, scanIn.ScanCfg)
 
 	if len(closure) == 0 {
@@ -309,6 +311,7 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 		internStr(pbWrapperPath),
 		argOutputs.str(),
 	}
+
 	includeRoot := ""
 
 	if cppOutRoot != "" {

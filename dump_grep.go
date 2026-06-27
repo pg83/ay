@@ -108,6 +108,7 @@ func cmdDumpGrep(_ GlobalFlags, args []string) int {
 	defer func() { throw(bw.Flush()) }()
 
 	exact := !substr && !useRegex
+
 	emit := func(node map[string]any) {
 		hit := false
 

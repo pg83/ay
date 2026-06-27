@@ -45,12 +45,14 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 		pyOutVFS := build(instance.Path.rel(), "/", pyOutRel)
 		swigClosure := walkClosureTail(ctx.scannerFor(instance), srcVFS, newScanContext(ctx.parsers, swigAddIncls, nil, includeScannerBasePaths(), instance.Path.rel()))
 		inputs := na.inputList(na.vfsList(bldContribToolsSwigSwig, srcVFS), swigClosure)
+
 		cmdArgs := na.chunkList(na.strList(swigBin.str()), swigConstArgs, na.strList(internStr(swigModuleName(stmt.Module)),
 			argInterface.str(),
 			internV(swigModuleName(stmt.Module), "_swg"),
 			argDashO.str(),
 			(cOutVFS).str(),
 			(srcVFS).str()))
+
 		swRef := ctx.emit.emit(&Node{
 			Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,

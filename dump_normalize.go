@@ -77,12 +77,14 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 			uid := node.UID
 			kv, _ := node.Kv.(map[string]any)
 			p, _ := kv["p"].(string)
+
 			r := p1Result{
 				uid:     uid,
 				deps:    node.Deps,
 				content: sha256.Sum256(marshalCompact(canonContent(node, refGraph))),
 				isFetch: p == "FT",
 			}
+
 			outs := node.Outputs
 			out0 := ""
 
@@ -334,6 +336,7 @@ func reuidClosure(
 		done    = 2
 	)
 	state := make(map[string]int, len(closure))
+
 	closureChildren := func(uid string) []string {
 		var ch []string
 
@@ -347,6 +350,7 @@ func reuidClosure(
 
 		return ch
 	}
+
 	finish := func(uid string) {
 		tokens := make([]string, 0, len(deps[uid]))
 

@@ -222,6 +222,7 @@ const vcsJSONContent = `{
 func emitVCSNode(emit *StreamingEmitter, host *Platform) NodeRef {
 	na := emit.nodeArenas()
 	output := bldVcsJson
+
 	node := &Node{
 		Platform: host,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(internStr(currentYatoolPath()),
@@ -482,6 +483,7 @@ func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPa
 	chunks = append(chunks, peerLibPaths)
 
 	buildRootBlock := make([]VFS, 0, len(pluginPaths)+len(globalPaths)+len(wholeArchivePaths)+len(dynamicPaths)+len(ccPaths)+len(objcopyPaths))
+
 	appendBuildRoot := func(paths []VFS) {
 		for _, p := range paths {
 			if !deduper.add(p) {
@@ -531,6 +533,7 @@ func emitOwnLDPlugins(ctx *GenCtx, instance ModuleInstance, plugins []STR, tc Mo
 		Refs:  make([]NodeRef, 0, len(plugins)),
 		Paths: make([]VFS, 0, len(plugins)),
 	}
+
 	cpInstance := instance
 	cpInstance.Platform = ctx.target
 

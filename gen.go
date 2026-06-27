@@ -315,6 +315,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	parsers := newIncludeParserManagerFS(fs, newSharedParseCache())
 	targetReg := newCodegenRegistry()
 	hostReg := newCodegenRegistry()
+
 	ctx := &GenCtx{
 		fs:        fs,
 		parsers:   parsers,
@@ -354,6 +355,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		Language: LangCPP,
 		Platform: targetP,
 	}
+
 	root := genModule(ctx, seed)
 
 	ctx.emit.result(root.LDRef)
@@ -671,6 +673,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		emitBundles(ctx, instance, d)
 
 		ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
+
 		ldPlugins := mergeLDPlugins(ownLDPlugins, &LdPluginsResult{
 			Refs:  peerContribs.ldPluginRefs,
 			Paths: peerContribs.ldPluginPaths,
@@ -691,6 +694,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			DefaultVarOrder:   d.defaultVarOrder,
 			TC:                d.tc,
 		}
+
 		headerOnlyInputs.ScanCfg = newScanContext(ctx.parsers, d.addIncl, peerContribs.addIncl, includeScannerBasePaths(), instance.Path.rel())
 		headerOnlyInputs.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &headerOnlyInputs)
 		emitRunProgramsForAR(ctx, instance, d, headerOnlyInputs)
@@ -830,6 +834,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			Peerdirs:                        d.peerdirs,
 			ModuleStmtName:                  d.moduleStmt.Name,
 		}
+
 		ctx.memo.put(ctx.instanceKey(instance), result)
 
 		return result
@@ -863,9 +868,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	deduper.reset()
+
 	peerSeen := func(p string) bool {
 		return !deduper.add(VFS(internStr(p)) << 1)
 	}
+
 	allPeers := make([]string, 0, len(languageDefaults)+unitTestPeerCount+len(preUserProgDefaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
 
 	const (
@@ -1543,8 +1550,10 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
 	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
 	dedupedAddIncl := dedup(d.addIncl, d.addInclGlobal)
+
 	isPy3NativeLib := d.moduleStmt.Name == tokPy23NativeLibrary ||
 		d.moduleStmt.Name == tokPy23Library
+
 	perModuleCCTag := moduleCCTag(d.moduleStmt.Name)
 
 	var arNameFn func(string) string
@@ -1614,6 +1623,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		NoOptimize:  d.noOptimize,
 		TC:          d.tc,
 	}
+
 	moduleInputs.ScanCfg = newScanContext(ctx.parsers, dedupedAddIncl, selfPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 
 	moduleInputs.ScanCfg.OwnerModuleTag = cfModuleTag(d, instance)
@@ -1700,6 +1710,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		return adjustCythonCompanionSourceInputs(ctx.na, instance.Platform, d, src, si)
 	}
+
 	appendCC := func(srcID STR, emit *SourceEmit, generated bool) {
 		if emit == nil {
 			return
@@ -1757,6 +1768,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			arDeclMeta[ex.OutPath] = m
 		}
 	}
+
 	genCC := func(emit *SourceEmit) {
 		genCCMeta(emit, SrcMeta{Prio: stmtPrioDefault, Generated: true})
 	}
@@ -1893,6 +1905,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
+
 	mergedLDPlugins := mergeLDPlugins(ownLDPlugins, &LdPluginsResult{
 		Refs:  peerLDPluginRefs,
 		Paths: peerLDPluginPaths,
@@ -2061,6 +2074,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ctx.emit,
 			ctx.vcsRef,
 		)
+
 		ldPath := lDOutputPath(instance, binaryName)
 		var suiteInfo *TestSuiteInfo
 
@@ -2107,6 +2121,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ResourceGlobalClosure:           resourceGlobalsClosure,
 			testSuiteInfo:                   suiteInfo,
 		}
+
 		ctx.memo.put(ctx.instanceKey(instance), result)
 
 		return result
@@ -2417,6 +2432,7 @@ func mergeLDPlugins(own, peer *LdPluginsResult) *LdPluginsResult {
 	}
 
 	deduper.reset()
+
 	out := &LdPluginsResult{
 		Refs:  make([]NodeRef, 0, len(ownPaths)+len(peerPaths)),
 		Paths: make([]VFS, 0, len(ownPaths)+len(peerPaths)),
@@ -2474,9 +2490,11 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	defaults = suppressMallocAPIDefault(defaults, d.allocatorName)
 	seen := make(map[string]struct{}, len(defaults)+len(d.peerdirs))
 	resolved := make([]*ModuleEmitResult, 0, len(defaults)+len(d.peerdirs))
+
 	walkInstance := func(peerInstance ModuleInstance) {
 		resolved = append(resolved, genModule(ctx, peerInstance))
 	}
+
 	walk := func(peerPath string) {
 		walkInstance(derivePeerInstance(ctx, instance, d, peerPath))
 	}

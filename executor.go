@@ -182,6 +182,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 	if ex.keepGoing {
 		for r := range n.buildDeps(f.fetchRefs) {
 			dep := f.uids.get(r)
+
 			exc := try(func() {
 				ex.visit(dep)
 			})

@@ -8,6 +8,7 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 	}
 
 	output := build("resources/", decl.Name.string())
+
 	node := &Node{
 		Platform: ctx.host,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(internStr(currentYatoolPath()),

@@ -32,6 +32,7 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 	}
 
 	inputs := na.inputList(scripts[joinSrcs], srcVFSs, closure)
+
 	node := &Node{
 		Platform: statsPlatform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),

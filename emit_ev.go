@@ -70,8 +70,10 @@ func evPeerProtoIncludes(protoInclude []VFS) []STR {
 func evWitnessExtras(evRelPath string, evPbCC VFS) []IncludeDirective {
 	evExtraProtobuf := evExtraProtobufDirectives()
 	evAbseilCleanup := evAbseilCleanupDirectives()
+
 	out := make([]IncludeDirective, 0,
 		3+len(pbDescriptorImporterDirectives)+len(evExtraProtobuf)+len(evAbseilCleanup))
+
 	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())})
 	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(pbDescriptorVFS.rel())})
 	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(evRelPath)})
@@ -100,6 +102,7 @@ func emitEV(
 	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
+
 	evOpts := na.strList(internV("--plugin=protoc-gen-event2cpp=", event2cppBinary.string()),
 		argEvent2cppOutB.str(),
 		internV("-I=", evEventlogIncludePath))
@@ -143,6 +146,7 @@ func emitProtoWrapperPBNode(
 		internV("--plugin=protoc-gen-cpp_styleguide=", cppStyleguideBinary.string()),
 		internStr(relPath),
 	}, pluginOpts...)...)
+
 	cmdArgs := na.chunkList(na.strList(tc.Python3,
 		internStr(pbWrapperPath),
 		argOutputs.str(),
@@ -150,7 +154,9 @@ func emitProtoWrapperPBNode(
 		(genH).str(),
 		arg2.str(),
 		(protocBinary).str()), evProtocConstHead, peerIncludes, protocTail, tail)
+
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+
 	inputs := []VFS{
 		cppStyleguideBinary,
 		protocBinary,
@@ -158,6 +164,7 @@ func emitProtoWrapperPBNode(
 		pbWrapperVFS,
 		srcVFS,
 	}
+
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
@@ -183,6 +190,7 @@ func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 	cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
 	event2cppLDRef, event2cppBinary := ctx.tool(argToolsEvent2cpp)
 	evImports := walkClosureTail(ctx.scannerFor(instance), evSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()).ScanCfg)
+
 	evRef := emitEV(
 		instance, evRelPath,
 		cppStyleguideLDRef, protocLDRef, event2cppLDRef,
@@ -190,6 +198,7 @@ func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 		0, evImports, in.ProtoInclude,
 		!protoTransitiveHeadersEnabled(d),
 		d.tc, ctx.emit)
+
 	evH := build(evRelPath, ".pb.h")
 	evPbCC := build(evRelPath, ".pb.cc")
 	directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, "")

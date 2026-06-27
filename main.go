@@ -202,6 +202,7 @@ func usageCommands(prefix []string, verbose bool) string {
 
 	devCollapsed := false
 	first := true
+
 	entry := func(name string) {
 		if first {
 			b.WriteString("\n  ")

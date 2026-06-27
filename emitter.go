@@ -174,6 +174,7 @@ func (e *StreamingEmitter) finish() []UID {
 
 func graphFromEmitter(e *StreamingEmitter) *Graph {
 	n := len(e.nodes)
+
 	out := &Graph{
 		Inputs:    map[string]interface{}{},
 		Graph:     make([]*Node, 0, n),
@@ -181,6 +182,7 @@ func graphFromEmitter(e *StreamingEmitter) *Graph {
 		uids:      e.uids,
 		fetchRefs: e.fetchRefs,
 	}
+
 	seenResult := map[UID]struct{}{}
 
 	for _, rid := range e.results {

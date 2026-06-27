@@ -20,6 +20,7 @@ func emitBI(
 	outVFS := build(outPrefix, outputHeader)
 	argsFile := argsFileVFS.string()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+
 	cmd0Args := []STR{
 		tc.Python3,
 		(yieldLinePyVFS).str(),
@@ -27,6 +28,7 @@ func emitBI(
 		internStr(argsFile),
 		tc.CXX,
 	}
+
 	cmd1Args := make([]STR, 0, 4+len(cxxFlags))
 	cmd1Args = append(cmd1Args,
 		tc.Python3,
@@ -45,11 +47,13 @@ func emitBI(
 		(buildInfoGenPyVFS).str(),
 		(outVFS).str(),
 	}
+
 	inputs := []VFS{
 		yieldLinePyVFS,
 		xargsPyVFS,
 		buildInfoGenPyVFS,
 	}
+
 	node := &Node{
 		Platform:     instance.Platform,
 		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd1Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd2Args), Env: env}),
