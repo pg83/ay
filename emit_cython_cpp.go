@@ -538,10 +538,7 @@ func adjustCythonCompanionSourceInputs(na *NodeArenas, p *Platform, d *ModuleDat
 		return in
 	}
 
-	if !hasSuffix(src, ".c") &&
-		!hasSuffix(src, ".cc") &&
-		!hasSuffix(src, ".cpp") &&
-		!hasSuffix(src, ".cxx") {
+	if !isCCSourceExt(src) {
 		return in
 	}
 
