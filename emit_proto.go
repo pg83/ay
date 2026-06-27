@@ -420,6 +420,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 
 		depsParsed = append(depsParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.rel())})
 		depsParsed = append(depsParsed, directImports...)
+
 		reg.register(&GeneratedFileInfo{
 			ProducerKvP:    pkPB,
 			OutputPath:     pbDepsH,
@@ -468,6 +469,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 			GeneratorRefs:  []NodeRef{pe.protocLDRef, pe.grpcCppLDRef},
 			ParsedIncludes: grpcCCParsed,
 		})
+
 		reg.register(&GeneratedFileInfo{
 			ProducerKvP:    pkPB,
 			OutputPath:     grpcPbH,
@@ -610,6 +612,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 			evHParsed = append(evHParsed, directImports...)
 			evHParsed = append(evHParsed, protobufRuntimeDirectives...)
 			evHParsed = append(evHParsed, evExtras...)
+
 			ctx.codegenFor(instance).register(&GeneratedFileInfo{
 				ProducerKvP:    pkEV,
 				OutputPath:     evH,

@@ -1132,6 +1132,7 @@ func dumpDiffSelfUIDKey(n map[string]any) string {
 
 func findNodesByOutput(path, want string) []map[string]any {
 	var found []map[string]any
+
 	streamJSONL(path, func(n map[string]any) {
 		for _, o := range toStrings(n["outputs"]) {
 			if normPath(o) == want {

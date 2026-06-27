@@ -1127,8 +1127,20 @@ func lintControlBlankLines(path string) bool {
 	insertBefore := map[int]bool{}
 	singleLine := func(s ast.Stmt) bool { return lineOf(s.Pos()) == lineOf(s.End()) }
 
+	multiLineCall := func(s ast.Stmt) bool {
+		es, ok := s.(*ast.ExprStmt)
+
+		if !ok {
+			return false
+		}
+
+		_, ok = es.X.(*ast.CallExpr)
+
+		return ok && lineOf(s.End()) > lineOf(s.Pos())
+	}
+
 	blockLike := func(s ast.Stmt) bool {
-		return isControlBlockStmt(s) || isDefineAssign(s)
+		return isControlBlockStmt(s) || isDefineAssign(s) || multiLineCall(s)
 	}
 
 	process := func(list []ast.Stmt) {

@@ -215,6 +215,7 @@ func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 		k++
 		fs.dirEntries.put(splitMix64(uint32(dir), uint32(id)), isDir)
 	})
+
 	fs.dirNames.commit(k)
 
 	return DirView{dir: dir, names: block[:k]}

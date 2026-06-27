@@ -34,6 +34,7 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 				GeneratorRefs:  nil,
 				ParsedIncludes: nil,
 			})
+
 			ctx.codegenFor(instance).register(&GeneratedFileInfo{
 				ProducerKvP:    pkJV,
 				OutputPath:     parserCpp,
@@ -106,6 +107,7 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 				GeneratorRefs:  nil,
 				ParsedIncludes: nil,
 			})
+
 			ctx.codegenFor(instance).register(&GeneratedFileInfo{
 				ProducerKvP:    pkJV,
 				OutputPath:     parserCpp,

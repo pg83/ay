@@ -243,6 +243,7 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			DepRefs:      chDeps,
 		}, auxRef)
+
 		res.Refs = append(res.Refs, auxRef)
 		res.Outputs = append(res.Outputs, aux)
 		res.PRRefs = append(res.PRRefs, auxRef)

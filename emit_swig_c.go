@@ -78,6 +78,7 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 			GeneratorRefs:  []NodeRef{swigRef},
 			ParsedIncludes: collectSwigInducedIncludes(ctx, srcVFS, swigClosure),
 		})
+
 		reg.register(&GeneratedFileInfo{
 			ProducerKvP:   pkSW,
 			OutputPath:    pyOutVFS,
