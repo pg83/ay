@@ -21,7 +21,6 @@ func perfDarts() int {
 
 	roots := strings.Split(sections[0], "\n")
 	dirs := strings.Split(sections[1], "\n")
-
 	keys := make([]string, len(roots))
 
 	for i, r := range roots {
@@ -29,7 +28,6 @@ func perfDarts() int {
 	}
 
 	darts := NewDarts(keys)
-
 	old := newIntValueMap[int32](len(roots) * 2)
 
 	for i, r := range roots {
@@ -53,7 +51,6 @@ func perfDarts() int {
 			d = d[:i]
 		}
 	}
-
 	mismatch := 0
 
 	for _, d := range dirs {
@@ -70,7 +67,6 @@ func perfDarts() int {
 	const iters = 2000
 	ops := int64(iters) * int64(len(dirs))
 	sink := 0
-
 	t0 := time.Now()
 
 	for it := 0; it < iters; it++ {
@@ -82,7 +78,6 @@ func perfDarts() int {
 	}
 
 	dartsDur := time.Since(t0)
-
 	t1 := time.Now()
 
 	for it := 0; it < iters; it++ {

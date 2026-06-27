@@ -71,7 +71,6 @@ func sysrootArgsFor(os OS, flags map[string]string) []STR {
 	}
 
 	sdkRoot := "$(B)/resources/" + resourcePatternOSSDKRoot
-
 	sysroot := "--sysroot=" + sdkRoot
 
 	if flags["MUSL"] == "yes" {
@@ -324,7 +323,6 @@ func parseCompilerFlags(s string) []string {
 	var b strings.Builder
 	var quote byte
 	escaped := false
-
 	flush := func() {
 		if b.Len() == 0 {
 			return

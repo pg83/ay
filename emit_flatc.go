@@ -114,11 +114,9 @@ func flatcDirectGeneratedHeaderIncludes(pm *IncludeParserManager, srcRel string)
 
 func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ARG, transitiveImports []VFS, moduleTag STR, tc ModuleToolchain, emit *StreamingEmitter, v *flatcVariant, genDeps []NodeRef) (NodeRef, VFS, VFS, VFS) {
 	na := emit.nodeArenas()
-
 	headerVFS := build(srcRel, ".h")
 	cppVFS := build(srcRel, ".cpp")
 	bfbsVFS := build(strings.TrimSuffix(srcRel, v.srcExt), v.bfbsExt)
-
 	cmdArgs := na.chunkList(na.strList(tc.Python3, (flatcWrapperVFS).str(), (flatcBinary).str()), v.constFlags)
 
 	if len(flatcFlags) > 0 {
@@ -128,7 +126,6 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 	cmdArgs = append(cmdArgs, v.ioLeadArgs, []STR{(headerVFS).str(), (srcVFS).str()})
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
@@ -152,9 +149,7 @@ func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 	flatcLDRef, flatcBinary := flatcRes.LDRef, *flatcRes.LDPath
 	transitiveImports := walkClosureTail(ctx.scannerFor(instance), srcVFS, newScanContext(ctx.parsers, nil, nil, includeScannerBasePaths(), instance.Path.rel()))
 	flRef, headerVFS, cppVFS, bfbsVFS := emitFL(instance, srcVFS.rel(), srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, moduleCCTag(d.moduleStmt.Name), d.tc, ctx.emit, v, genDeps)
-
 	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.parsers, srcVFS.rel())
-
 	headerLeaves := []VFS{flatcWrapperVFS}
 
 	if srcVFS.isSource() {
@@ -194,7 +189,6 @@ func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 
 func emitLibraryFlatcSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
 	srcRel := src.string()
-
 	cppVFS := build(resolveSourceVFS(ctx, instance, srcRel, d.srcDirs).rel(), ".cpp")
 
 	return emitFlatcCppCompile(ctx, instance, cppVFS, in)
@@ -202,7 +196,6 @@ func emitLibraryFlatcSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 
 func emitFlatcCppCompile(ctx *GenCtx, instance ModuleInstance, cppVFS VFS, in ModuleCCInputs) *SourceEmit {
 	flRef := ctx.codegenFor(instance).lookup(cppVFS).ProducerRef
-
 	ccIn := in
 	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), cppVFS, in.ScanCfg)
 

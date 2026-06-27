@@ -27,7 +27,6 @@ func emitExplicitCF(ctx *GenCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 
 func emitLibraryHInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
 	srcRel := src.string()
-
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
 	outVFS := build(instance.Path.rel(), "/", strings.TrimSuffix(srcRel, ".in"))
 
@@ -38,7 +37,6 @@ func emitLibraryHInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, s
 
 func emitLibraryCInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
 	srcRel := src.string()
-
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
 	outVFS := build(instance.Path.rel(), "/", strings.TrimSuffix(srcRel, ".in"))
 
@@ -50,7 +48,6 @@ func emitLibraryCInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, s
 func emitConfigureFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS, outVFS VFS, in ModuleCCInputs) NodeRef {
 	na := ctx.emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	cmdArgs := []STR{in.TC.Python3, configureFilePyVFS.str(), srcVFS.str(), outVFS.str()}
 	cmdArgs = appendInternStrs(cmdArgs, buildCFGVars(ctx.fs, srcVFS.rel(), in.SetVars, in.DefaultVars, instance.Platform.BuildTypeUpperSTR.string()))
 

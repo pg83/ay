@@ -2,11 +2,8 @@ package main
 
 func emitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, tc ModuleToolchain, scripts ScriptDeps, emit *StreamingEmitter) (NodeRef, VFS) {
 	na := emit.nodeArenas()
-
 	joinSrcs := buildScriptsGenJoinSrcsPy
-
 	outVFS := build(instance.Path.rel(), "/", allName)
-
 	statsPlatform := instance.Platform
 
 	if p != nil {
@@ -28,7 +25,6 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 	cmdArgs = append(cmdArgs, argYaEndCommandFile.str())
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	srcVFSs := make([]VFS, 0, len(sources))
 
 	for _, s := range sources {
@@ -36,7 +32,6 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 	}
 
 	inputs := na.inputList(scripts[joinSrcs], srcVFSs, closure)
-
 	node := &Node{
 		Platform: statsPlatform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),

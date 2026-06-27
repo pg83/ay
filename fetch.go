@@ -396,7 +396,6 @@ func tokenFromSSHAgent(login string) string {
 	defer conn.Close()
 
 	ag := agent.NewClient(conn)
-
 	keys, err := ag.List()
 
 	if err != nil {

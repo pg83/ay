@@ -46,14 +46,11 @@ func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs [
 	outputPath := build(instance.Path.rel(), "/", outputName).string()
 	vcsCPath := build(instance.Path.rel(), "/__vcs_version__.c").string()
 	vcsOPath := build(instance.Path.rel(), "/__vcs_version__.c.pic.o").string()
-
 	cmd0 := composeLDCmdVcsInfo(d.tc, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
 	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.rel(), outputPath, outputName, vcsOPath, ccOutputs, peerArchivePaths, nil, nil, d.exportsScript.string(), fixElfPath.string())
-
 	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	envFull := ctx.host.toolEnv()
-
 	ldSbomRefs := peerSbomRefs
 	ldSbomPaths := peerSbomPaths
 	sbomJSON := build(instance.Path.rel(), "/__sbomdata.json").string()
@@ -226,6 +223,7 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 	var peerRPathFlagsGlobal []ARG
 
 	deduper.reset()
+
 	for _, pr := range resolved {
 		for _, a := range pr.CFlagsGlobal {
 			if deduper.add(VFS(a)) {
@@ -235,6 +233,7 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 	}
 
 	deduper.reset()
+
 	for _, pr := range resolved {
 		for _, a := range pr.CXXFlagsGlobal {
 			if deduper.add(VFS(a)) {
@@ -244,6 +243,7 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 	}
 
 	deduper.reset()
+
 	for _, pr := range resolved {
 		for _, a := range pr.COnlyFlagsGlobal {
 			if deduper.add(VFS(a)) {
@@ -253,6 +253,7 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 	}
 
 	deduper.reset()
+
 	for _, pr := range resolved {
 		for _, a := range pr.RPathFlagsGlobal {
 			if deduper.add(VFS(a)) {
@@ -285,21 +286,17 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 	d.tc = resolveModuleToolchain(resourceGlobals, instance.Platform.ClangVer)
 
 	fixElfRef, fixElfPath := ctx.tool(argToolsFixElf)
-
 	outputName := "lib" + d.moduleStmt.Args[0].string() + ".so"
 	outputPath := build(instance.Path.rel(), "/", outputName).string()
 	vcsCPath := build(instance.Path.rel(), "/__vcs_version__.c").string()
 	vcsOPath := build(instance.Path.rel(), "/__vcs_version__.c.pic.o").string()
-
 	cmd0 := composeLDCmdVcsInfo(d.tc, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
 	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.rel(), outputPath, outputName, vcsOPath, nil, peerArchivePaths, pluginPaths, strStrings(d.dynamicLibraryFrom), d.exportsScript.string(), fixElfPath.string())
 	cmd3 := composeLDCmdLinkOrCopy(d.tc, instance.Path.rel())
 	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	envFull := ctx.host.toolEnv()
-
 	inputs := composeDynLibInputs(na, peerArchivePaths, pluginPaths, fixElfPath, instance.Path.rel(), d.exportsScript.string(), ctx.scripts)
-
 	deps := make([]NodeRef, 0, len(peerArchiveRefs)+len(pluginRefs)+1)
 	deps = append(deps, peerArchiveRefs...)
 	deps = append(deps, pluginRefs...)

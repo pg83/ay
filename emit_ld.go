@@ -93,27 +93,21 @@ func emitLD(
 	}
 
 	binaryDir := instance.Path.rel()
-
 	binPrefix := binaryDir + "/"
 	outputVFS := build(binPrefix, binaryName)
 	vcsCVFS := build(binPrefix, "__vcs_version__.c")
 	vcsOVFS := build(binPrefix, "__vcs_version__.c", instance.Platform.objectSuffix())
-
 	vcsCPath := vcsCVFS.string()
 	vcsOPath := vcsOVFS.string()
 	outputPath := outputVFS.string()
-
 	cmd0 := composeLDCmdVcsInfo(tc, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, tc, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings, noOptimize)
 	cmd2 := composeLDCmdLinkExe(instance.Platform, tc, outputPath, vcsOPath, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, wantsStrip, useArcadiaLibm)
 	splitDwarfCmds := composeLDSplitDwarfCmds(na, tc, outputPath, wantsSplitDwarf)
-
 	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	envFull := hostP.toolEnv()
-
 	sbomEmbed := len(sbomPaths) > 0
 	sbomJSON := build(binPrefix, "__sbomdata.json").string()
-
 	cmds := na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull})
 
 	if sbomEmbed {
@@ -142,7 +136,6 @@ func emitLD(
 	}
 
 	inputs := composeLDInputs(na, instance.Path.rel(), ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts, emitCopy, hasBundles)
-
 	inputTail := make([]VFS, 0, 2)
 	inputTail = append(inputTail, ldSvnversionHVFS)
 
@@ -228,7 +221,6 @@ const vcsJSONContent = `{
 
 func emitVCSNode(emit *StreamingEmitter, host *Platform) NodeRef {
 	na := emit.nodeArenas()
-
 	output := bldVcsJson
 	node := &Node{
 		Platform: host,
@@ -539,14 +531,12 @@ func emitOwnLDPlugins(ctx *GenCtx, instance ModuleInstance, plugins []STR, tc Mo
 		Refs:  make([]NodeRef, 0, len(plugins)),
 		Paths: make([]VFS, 0, len(plugins)),
 	}
-
 	cpInstance := instance
 	cpInstance.Platform = ctx.target
 
 	for _, name := range plugins {
 		src := source(instance.Path.rel(), "/", name.string())
 		dst := build(instance.Path.rel(), "/", name.string(), ".pyplugin")
-
 		ref := emitCP(cpInstance, src, dst, tc, ctx.scripts, ctx.emit)
 
 		res.Refs = append(res.Refs, ref)

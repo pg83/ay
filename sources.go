@@ -6,14 +6,12 @@ import (
 
 func joinSrcsIncludeClosure(ctx *GenCtx, scanPlatform *Platform, srcInstance ModuleInstance, sources []string, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerForPlatform(scanPlatform)
-
 	visited := scanner.visitedIDPool.Get().(*IdSet)
 	visited.reset(vfsBound())
 
 	defer scanner.visitedIDPool.Put(visited)
 
 	modDirKey := dirKey(srcInstance.Path.rel())
-
 	srcRels := make([]string, len(sources))
 
 	for i, src := range sources {
@@ -34,7 +32,6 @@ func joinSrcsIncludeClosure(ctx *GenCtx, scanPlatform *Platform, srcInstance Mod
 	}
 
 	order := make([]VFS, 0, 1024)
-
 	cfg := in.ScanCfg
 
 	for _, srcRelOnDisk := range srcRels {

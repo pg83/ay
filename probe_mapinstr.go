@@ -14,7 +14,6 @@ import (
 
 func probeMapInstr(_ GlobalFlags, args []string) int {
 	files := goFilesFromArgs(args)
-
 	fset := gotoken.NewFileSet()
 	asts := make(map[string]*ast.File, len(files))
 	src := map[string][]byte{}
@@ -69,7 +68,6 @@ func probeMapInstr(_ GlobalFlags, args []string) int {
 		}
 
 		f := asts[p]
-
 		writeIdx := map[*ast.IndexExpr]bool{}
 		ast.Inspect(f, func(n ast.Node) bool {
 			switch x := n.(type) {

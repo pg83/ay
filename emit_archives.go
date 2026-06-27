@@ -8,7 +8,6 @@ func emitArchives(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	}
 
 	toolLDRef, toolBinPath := ctx.tool(argToolsArchiver)
-
 	reg := ctx.codegenFor(instance)
 
 	for _, a := range d.archives {
@@ -27,10 +26,8 @@ func emitArchive(
 	reg *CodegenRegistry,
 ) {
 	na := emit.nodeArenas()
-
 	archiveVFS := build(instance.Path.rel(), "/", a.Name)
 	archivePath := archiveVFS.string()
-
 	cmdArgs := make([]STR, 0, 4+len(a.Files)+2)
 	cmdArgs = append(cmdArgs, (toolBinPath).str(), argQ.str(), argX.str())
 
@@ -90,9 +87,7 @@ func emitArchive(
 	}
 
 	deps := concat(producerRefs, depRefs(toolLDRef))
-
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	n := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
@@ -105,7 +100,6 @@ func emitArchive(
 		DepRefs:      deps,
 		Resources:    instance.Platform.UsesPython3Clang,
 	}
-
 	arRef := emit.emit(n)
 
 	var leaves []VFS

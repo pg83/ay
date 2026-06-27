@@ -93,7 +93,6 @@ func emitResourceObjcopy(
 	in ModuleCCInputs,
 ) *ObjcopyEmitResult {
 	na := ctx.na
-
 	hasKvOnly := d.pyMain != nil || len(d.noCheckImports) > 0 || len(d.pySrcs) > 0 || len(d.yaConfJSON) > 0
 
 	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 && !hasKvOnly {
@@ -159,7 +158,6 @@ func emitResourceObjcopy(
 	}
 	cur := acc{}
 	moduleTag := resourceLibTagForData(d)
-
 	cppProtoSubmodule := cfModuleTag(d, instance) == tagCppProto
 
 	if cppProtoSubmodule {
@@ -174,7 +172,6 @@ func emitResourceObjcopy(
 
 		hash := objcopyHash(cur.paths, cur.keys, cur.kvs, instance.Path.rel(), moduleTag)
 		outputObj := build(instance.Path.rel(), "/objcopy_", hash, ".o")
-
 		payload := make([]STR, 0, 2+len(cur.pathInputs)+len(cur.keys)+1+len(cur.kvs))
 
 		if len(cur.paths) > 0 {
@@ -197,7 +194,6 @@ func emitResourceObjcopy(
 		}
 
 		cmdArgs := objcopyCmdArgs(oc, outputObj, payload)
-
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 		var inputs InputChunks
@@ -275,7 +271,6 @@ func emitResourceObjcopy(
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    instance.Platform.UsesPython3Clang,
 		}
-
 		dataInputs := make([]VFS, 0, len(cur.pathInputs)+len(cur.closureInputs)+len(cur.kvInputs))
 		dataInputs = append(dataInputs, cur.pathInputs...)
 		dataInputs = append(dataInputs, cur.closureInputs...)
@@ -288,7 +283,6 @@ func emitResourceObjcopy(
 		out.Outputs = append(out.Outputs, outputObj)
 		cur = acc{}
 	}
-
 	emitEntries := func(entries []ResourceEntry) {
 		for _, e := range entries {
 			if !contains(e.Path) && !contains(e.Key) {
@@ -343,7 +337,6 @@ func emitResourceObjcopy(
 
 		flush()
 	}
-
 	py3BinProgramSide := d.moduleStmt.Name == tokPy3Program && !d.programPairedLib
 
 	if !py3BinProgramSide {
@@ -351,7 +344,6 @@ func emitResourceObjcopy(
 	}
 
 	trailStart := len(out.Refs)
-
 	srcRes := emitPySrcObjcopy(ctx, instance, d, oc)
 
 	if srcRes != nil {
@@ -402,11 +394,9 @@ func emitKvOnlyObjcopyNode(
 
 	hash := objcopyHash(nil, nil, kvsHash, instance.Path.rel(), moduleTag)
 	outputObj := build(instance.Path.rel(), "/objcopy_", hash, ".o")
-
 	payload := appendInternStrs([]STR{argKvs.str()}, kvsCmd)
 	cmdArgs := objcopyCmdArgs(oc, outputObj, payload)
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
@@ -475,7 +465,6 @@ func emitYaConfJSONObjcopy(
 		hash := objcopyHash([]string{res.hashPath}, []string{keyB64}, []string{kvHash}, instance.Path.rel(), moduleTag)
 		outputObj := build(instance.Path.rel(), "/objcopy_", hash, ".o")
 		input := source(res.sourcePath)
-
 		cmdArgs := objcopyCmdArgs(oc, outputObj, []STR{
 			argInputs.str(), (input).str(),
 			argKeys.str(), internStr(keyB64),
@@ -552,7 +541,6 @@ func emitPyNamespaceForGroup(
 	}
 
 	modListMD5 := enchex.EncodeToString(h.Sum(nil))
-
 	nsRoots := make(map[string]struct{}, len(arcSources))
 
 	for _, srcRel := range arcSources {
@@ -652,7 +640,6 @@ func emitPySrcObjcopy(
 		!strings.HasPrefix(instance.Path.rel(), "contrib/python") &&
 		!strings.HasPrefix(instance.Path.rel(), "contrib/tools/python3") &&
 		resourceModuleTag(d.moduleStmt.Name) != nil
-
 	moduleTag := resourceLibTagForData(d)
 	res := &ObjcopyEmitResult{}
 
@@ -673,7 +660,6 @@ func emitPySrcObjcopy(
 		for _, ch := range chunkPySrcEntries(entries) {
 			hash := objcopyHash(ch.paths, ch.keys, ch.kvsHash, instance.Path.rel(), moduleTag)
 			outputObj := build(instance.Path.rel(), "/objcopy_", hash, ".o")
-
 			payload := make([]STR, 0, 2+len(ch.pathInps)+len(ch.keys)+1+len(ch.kvsCmd))
 			payload = append(payload, argInputs.str())
 
@@ -690,9 +676,7 @@ func emitPySrcObjcopy(
 			}
 
 			cmdArgs := objcopyCmdArgs(oc, outputObj, payload)
-
 			env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 			node := &Node{
 				Platform:     instance.Platform,
 				Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),

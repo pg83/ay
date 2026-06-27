@@ -28,7 +28,6 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 		clangxx := clangRoot + "/bin/clang++"
 		llvmLink := clangRoot + "/bin/llvm-link"
 		opt := clangRoot + "/bin/opt"
-
 		clangWrapperVFS := intern(clangWrapper)
 		optWrapperVFS := intern(optWrapper)
 
@@ -36,18 +35,14 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 
 		bcRefs := make([]NodeRef, 0, len(stmt.Sources))
 		bcPaths := make([]VFS, 0, len(stmt.Sources))
-
 		linksCopy := false
 
 		for _, src := range stmt.Sources {
 			inputVFS, producer := llvmBcSourceInfo(ctx, instance, src)
 			bcOut := build(llvmBcRootRelArcSrc(ctx, instance, src), stmt.Suffix, ".bc")
 			bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
-
 			closure := walkClosure(ctx.scannerFor(instance), inputVFS, in.ScanCfg)
-
 			deps := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, closure, depRefs(producer)...)
-
 			allInputs := na.inputList(na.vfsList(clangWrapperVFS),
 				closure)
 
@@ -105,7 +100,6 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 			Resources:    usesPython3Clang16,
 		}
 		ldRef := ctx.emit.emit(ldNode)
-
 		optOutName := stmt.Name + "_optimized" + stmt.Suffix + ".bc"
 		optOut := build(instance.Path.rel(), "/", optOutName)
 		optArgs := []STR{internStr(python), internStr(optWrapper), internStr(opt), (mergedOut).str(), argDashO.str(), (optOut).str()}
@@ -122,7 +116,6 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 		optInputs = append(optInputs, mergedOut)
 		optInputs = append(optInputs, optWrapperVFS)
 		optChunks := na.inputList(concat(optInputs, bcSourceInputs))
-
 		optNode := &Node{
 			Platform:     instance.Platform,
 			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(optArgs), Env: env}),
@@ -161,10 +154,8 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platform, in ModuleCCInputs, inVFS, outVFS VFS) []STR {
 	bundle := compileFlagBundleFor(platform)
 	warningBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
-
 	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in, platform)
 	ownGlobalBucket := composeOwnAndPeerGlobalBucket(in, true)
-
 	ownExtras := in.CXXFlags
 
 	if len(platform.CXXFlags) > 0 {
@@ -206,7 +197,6 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 
 func llvmBcSourceInfo(ctx *GenCtx, instance ModuleInstance, src string) (inputVFS VFS, producer NodeRef) {
 	reg := ctx.codegenFor(instance)
-
 	outVFS := copyFileOutputVFS(instance.Path.rel(), src)
 
 	if info := reg.lookup(outVFS); info != nil {

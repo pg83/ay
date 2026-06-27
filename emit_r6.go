@@ -44,11 +44,8 @@ func ragel6OutName(base string) string {
 
 func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ARG, closure []VFS, id NodeRef, emit *StreamingEmitter) {
 	na := emit.nodeArenas()
-
 	outVFS := ragel6OutVFS(instance, srcRel)
-
 	inVFS := source(instance.Path.rel(), "/", srcRel)
-
 	effectiveFlags := ragel6Flags
 
 	if len(effectiveFlags) == 0 {
@@ -63,9 +60,7 @@ func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	head = append(head, (ragel6BinaryPath).str())
 	head = appendArgStr(head, effectiveFlags)
 	cmdArgs := na.chunkList(head, ragel6ConstArgs, na.strList((outVFS).str(), (inVFS).str()))
-
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
@@ -83,14 +78,10 @@ func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 
 func emitLibraryRagel6Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
 	srcRel := src.string()
-
 	ragelLDRef, ragelBinaryVFS := ctx.tool(argContribToolsRagel6)
-
 	rl6SourceVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
 	r6Out := ragel6OutVFS(instance, srcRel)
-
 	r6Parsed := ctx.scannerFor(instance).parsers.sourceParsedBuckets(rl6SourceVFS, nil).bucket(parsedIncludesCpp)
-
 	r6Ref := ctx.emit.reserve()
 	ctx.codegenFor(instance).register(&GeneratedFileInfo{
 		ProducerKvP:    pkR6,
@@ -105,7 +96,6 @@ func emitLibraryRagel6Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	})
 
 	window := walkClosure(ctx.scannerFor(instance), r6Out, in.ScanCfg)
-
 	rl6Closure := keepOnlySourceVFS(filterEnSerializedSiblings(window))
 
 	emitR6(instance, srcRel, ragelLDRef, ragelBinaryVFS, in.Ragel6Flags, rl6Closure, r6Ref, ctx.emit)

@@ -119,9 +119,7 @@ func emitARNode(
 	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
-
 	cmdEnv := hostP.toolEnv()
-
 	tail := make([]STR, 0, 4+len(objPaths))
 
 	if arPluginPath != nil {
@@ -135,7 +133,6 @@ func emitARNode(
 	}
 
 	cmdArgs := na.chunkList(tc.ARCmdHead, tail)
-
 	inputTail := make([]VFS, 0, 2)
 	inputTail = append(inputTail, buildScriptsLinkLibPy)
 
@@ -144,7 +141,6 @@ func emitARNode(
 	}
 
 	topEnv := hostP.toolEnv()
-
 	deps := make([]NodeRef, 0, len(objRefs)+len(peerArchiveRefs))
 	deps = append(deps, objRefs...)
 	deps = append(deps, peerArchiveRefs...)

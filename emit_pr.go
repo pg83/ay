@@ -38,7 +38,6 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 
 	for _, rp := range d.runPrograms {
 		prRef := emitRunProgram(ctx, instance, rp, d, reg, in)
-
 		outs := make([]string, 0, len(rp.OUTFiles)+len(rp.OUTNoAutoFiles)+1)
 		outs = append(outs, strStrings(rp.OUTFiles)...)
 
@@ -185,7 +184,6 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	}
 
 	prRef := ctx.emit.reserve()
-
 	registeredPROut := map[VFS]bool{}
 
 	var protoOutputIncludeRels []string
@@ -203,7 +201,6 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	}
 
 	mainIsHeader := mainOutputVFS != 0 && isHeaderSource(mainOutputVFS.rel())
-
 	mainHeaderInclude := func(ccOutRel string) (IncludeDirective, bool) {
 		if !mainIsHeader || relStem(ccOutRel) != relStem(mainOutputVFS.rel()) {
 			return IncludeDirective{}, false
@@ -211,7 +208,6 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 		return IncludeDirective{kind: includeQuoted, target: internStr(mainOutputVFS.rel())}, true
 	}
-
 	registerPROutput := func(out VFS, parsed []IncludeDirective, ridesHeaderViaParsed bool) {
 		if registeredPROut[out] {
 			return
@@ -241,7 +237,6 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 		ctx.codegenFor(instance).register(info)
 	}
-
 	parsedFor := func(f STR, out VFS, auto bool) ([]IncludeDirective, bool) {
 		parsed := prEmitsIncludes(f, stmt, inVFSs, protoImportPbH)
 
@@ -367,7 +362,6 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	}
 
 	mainIsCCSource := isCCSourceExt(prMainOutputRel(stmt))
-
 	fullSourceClosure := len(stmt.INFiles) == 0 && (!hasAutoCCSourceOut || mainIsCCSource)
 
 	if len(stmt.INFiles) == 0 && !fullSourceClosure {
@@ -375,7 +369,6 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	}
 
 	hasProtoIN := false
-
 	hasParsedIN := false
 
 	for _, f := range stmt.INFiles {
@@ -399,7 +392,6 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	}
 
 	selfScanGeneratedCC := len(stmt.INFiles) > 0 && (hasParsedIN || !generatesHeader)
-
 	scanIn := ModuleCCInputs{
 		TC:                d.tc,
 		InclArgs:          ctx.inclArgs,
@@ -422,7 +414,6 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		sub := walkClosure(ctx.scannerFor(instance), inputVFS, scanIn.ScanCfg)
 		out = append(out, sub...)
 	}
-
 	mainRel := prMainOutputRel(stmt)
 	ridesMainHeader := func(ccRel string) bool {
 		return isHeaderSource(mainRel) && relStem(ccRel) == relStem(mainRel)
@@ -473,7 +464,6 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	}
 
 	reg := ctx.codegenFor(instance)
-
 	keep := func(v VFS, customPR bool) bool {
 		if fullSourceClosure {
 			return v.isSource()
@@ -485,7 +475,6 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 
 		return strings.HasSuffix(v.rel(), ".proto")
 	}
-
 	pbhSeen := pbhBasenameSet(out)
 
 	for _, oi := range stmt.OutputIncludes {
@@ -552,7 +541,6 @@ func prEmitsIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, protoImpor
 	}
 
 	carryProtoImportPbH := isHeaderSource(outFile.string()) && !strings.HasSuffix(outFile.string(), ".pb.h")
-
 	n := len(stmt.OutputIncludes)
 
 	if carries {
@@ -665,7 +653,6 @@ func emitPR(
 	emit *StreamingEmitter,
 ) {
 	na := emit.nodeArenas()
-
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	for _, kv := range stmt.EnvPairs {
@@ -764,9 +751,7 @@ func emitPR(
 	toolRefs = append(toolRefs, depRefs(toolLDRef)...)
 
 	deps := append([]NodeRef(nil), extraDepRefs...)
-
 	foreignDepRefs := toolRefs
-
 	cmd := Cmd{
 		CmdArgs: na.chunkList(cmdArgs),
 		Env:     env,
@@ -802,7 +787,6 @@ type deepReplaceCand struct {
 
 func deepReplaceCandidates(stmt *RunProgramStmt, inVFSByToken, outVFSByToken map[STR]VFS) []deepReplaceCand {
 	cands := make([]deepReplaceCand, 0, len(stmt.INFiles)+len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles))
-
 	add := func(tok STR, vfs VFS, ok bool) {
 		if !ok {
 			return

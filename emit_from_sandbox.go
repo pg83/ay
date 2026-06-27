@@ -27,7 +27,6 @@ func fromSandboxAutoLinkMember(name string) bool {
 func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *FromSandboxStmt) (memberRefs []NodeRef, memberPaths []VFS) {
 	na := ctx.emit.nodeArenas()
 	id := stmt.ResourceId.string()
-
 	mode := "--untar-to"
 
 	if stmt.File {
@@ -71,7 +70,6 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 	args = append(args, argYaEndCommandFile.str())
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	node := &Node{
 		Platform:     instance.Platform,
 		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(args), Cwd: build(instance.Path.rel()).str(), Env: env}),
@@ -82,7 +80,6 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 		Requirements: Requirements{CPU: float64(1), Network: nwFull, RAM: float64(32)},
 		Resources:    usesPython3,
 	}
-
 	ref := ctx.emit.emit(node)
 
 	for i, f := range stmt.OUTFiles {
@@ -93,6 +90,7 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 	}
 
 	parsed := fromSandboxOutputIncludes(stmt)
+
 	for _, out := range outVFSs {
 		ctx.codegenFor(instance).register(&GeneratedFileInfo{
 			ProducerKvP:     pkSB,

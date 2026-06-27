@@ -8,7 +8,6 @@ func emitPRDownstreamCC(ctx *GenCtx, instance ModuleInstance, out string, prRef 
 
 func emitCodegenDownstreamAS(ctx *GenCtx, instance ModuleInstance, asmRel string, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
 	asmPath := copyFileOutputVFS(instance.Path.rel(), asmRel)
-
 	asIn := in
 	asIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), asmPath, in.ScanCfg)
 	asIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, asIn.IncludeInputs, depRefs...)
@@ -28,7 +27,6 @@ func emitCodegenDownstreamCC(ctx *GenCtx, instance ModuleInstance, cppRel string
 
 func emitCodegenDownstreamCCFromVFS(ctx *GenCtx, instance ModuleInstance, cppRel string, cppPath VFS, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
 	includeInputs := walkClosure(ctx.scannerFor(instance), cppPath, in.ScanCfg)
-
 	ccIn := in
 	ccIn.IncludeInputs = includeInputs
 	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, includeInputs, depRefs...)

@@ -35,7 +35,6 @@ func parseYasmIncludes(data []byte, block []IncludeDirective, k int) int {
 		}
 
 		kind := includeSystem
-
 		idx := indexOfAngleOrQuote(line)
 
 		if idx >= 0 && line[idx] == '"' {

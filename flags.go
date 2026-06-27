@@ -1,10 +1,5 @@
 package main
 
-var ccIncludesPrefix = []ARG{
-	argIB,
-	argIS,
-}
-
 var (
 	ccIncludesPrefixStr          = argSTRs(ccIncludesPrefix)
 	debugPrefixMapFlagsStr       = argSTRs(debugPrefixMapFlags)
@@ -17,6 +12,11 @@ var (
 	catboostOpenSourceDefineStr  = argSTRs(catboostOpenSourceDefine)
 	cxxStandardFlagStr           = []STR{cxxStandardFlag.str()}
 )
+
+var ccIncludesPrefix = []ARG{
+	argIB,
+	argIS,
+}
 
 var debugPrefixMapFlags = []ARG{
 	argFdebugPrefixMapBB,

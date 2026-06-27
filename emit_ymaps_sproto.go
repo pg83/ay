@@ -29,19 +29,15 @@ func emitYmapsSprotoHeaders(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	}
 
 	outRoot := protoCPPOutRoot(d)
-
 	sprotocRes := ctx.toolResult(argMapsLibsSprotoSprotoc)
 	sprotocLDRef, sprotocBinary := sprotocRes.LDRef, *sprotocRes.LDPath
-
 	scanCfg := newScanContext(ctx.parsers, d.addIncl, peerContribs.addIncl, includeScannerBasePaths(), instance.Path.rel())
-
 	pending := make([]ymapsSprotoPending, 0, len(d.ymapsSprotoSrcs))
 
 	for _, srcTok := range d.ymapsSprotoSrcs {
 		protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcTok.string())
 		sprotoH := build(strings.TrimSuffix(protoRelPath, ".proto"), ".sproto.h")
 		sprotoRef := ctx.emit.reserve()
-
 		pbhImports := protoDirectPbHIncludes(ctx.parsers, protoRelPath, outRoot)
 		parsed := make([]IncludeDirective, 0, 2*len(pbhImports))
 		parsed = append(parsed, pbhImports...)
@@ -66,7 +62,6 @@ func emitYmapsSprotoHeaders(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 
 func emitYmapsSprotoHeader(ctx *GenCtx, instance ModuleInstance, p ymapsSprotoPending, outRoot string, sprotocLDRef NodeRef, sprotocBinary VFS, scanCfg ScanContext) {
 	na := ctx.emit.nodeArenas()
-
 	cmdArgs := na.chunkList(na.strList(
 		sprotocBinary.str(),
 		internV("-I=./", outRoot),
@@ -76,11 +71,8 @@ func emitYmapsSprotoHeader(ctx *GenCtx, instance ModuleInstance, p ymapsSprotoPe
 		internV("--sproto_out=$(B)/", outRoot),
 		internStr(p.protoRelPath),
 	))
-
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	closure := dropGeneratedProtoHeaders(walkClosureTail(ctx.scannerFor(instance), p.sprotoH, scanCfg))
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,

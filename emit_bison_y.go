@@ -58,14 +58,11 @@ func bisonGeneratedRel(srcRel, genExt string) string {
 
 func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) {
 	na := ctx.na
-
 	srcRel := src.string()
 	genExt := in.BisonGenExt
-
 	bisonRef, bisonBin := bisonTool(ctx, instance)
 	m4Ref, m4Bin := m4Tool(ctx, instance)
 	preprocessHeader := genExt != ".c"
-
 	baseNoExt := strings.TrimSuffix(srcRel, filepath.Ext(srcRel))
 	headerRel := baseNoExt + ".h"
 	generatedRel := bisonGeneratedRel(srcRel, genExt)
@@ -81,9 +78,7 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 	}
 
 	ycRef := ctx.emit.reserve()
-
 	reg := ctx.codegenFor(instance)
-
 	headerInfo := &GeneratedFileInfo{
 		ProducerKvP:    pkYC,
 		OutputPath:     headerVFS,
@@ -125,7 +120,6 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envBISON_PKGDATADIR, Value: strBisonPkgData}, {Name: envM4, Value: m4Bin}}
 	preprocessEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	head := make([]STR, 0, 6+len(in.BisonFlags))
 	head = append(head, internStr(bisonBin), argV.str())
 	head = appendArgStr(head, in.BisonFlags)

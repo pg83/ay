@@ -35,7 +35,6 @@ func parseCIncludes(data []byte, block []IncludeDirective, k int) int {
 		}
 
 		hi := p + rel
-
 		ls := hi
 
 		for ls > 0 && data[ls-1] != '\n' {
@@ -159,7 +158,6 @@ func leadingBlockCoversHi(data []byte, from, hi int) (int, bool) {
 		}
 
 		open := i + rel
-
 		lineLeading := true
 
 		for k := open; k > 0 && data[k-1] != '\n'; k-- {

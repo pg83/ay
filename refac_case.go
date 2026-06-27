@@ -42,7 +42,6 @@ var caseErrRe = regexp.MustCompile(`^([^:\s]+\.go):(\d+):(\d+): (?:undefined: (\
 
 func refacCase(_ GlobalFlags, args []string) int {
 	files := goFilesFromArgs(args)
-
 	typeRen := map[string]string{}
 	methodRen := map[string]string{}
 	forbidden := forbiddenLowerNames(files)
@@ -118,7 +117,6 @@ func renameCaseDecls(path string, typeRen, methodRen map[string]string, forbidde
 	add := func(id *ast.Ident, new_ string) {
 		edits = append(edits, edit{off: fset.Position(id.Pos()).Offset, old: id.Name, new_: new_})
 	}
-
 	capitalize := func(s string) string { return strings.ToUpper(s[:1]) + s[1:] }
 	lower := func(s string) string { return strings.ToLower(s[:1]) + s[1:] }
 
@@ -275,7 +273,6 @@ func lintCaseConvention(path string) bool {
 	fset := gotoken.NewFileSet()
 	src := throw2(os.ReadFile(path))
 	f := throw2(goparser.ParseFile(fset, path, src, goparser.SkipObjectResolution))
-
 	bad := false
 	report := func(pos gotoken.Pos, kind, name string) {
 		p := fset.Position(pos)

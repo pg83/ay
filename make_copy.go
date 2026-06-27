@@ -50,7 +50,6 @@ func copySourceSlice(fs *OsFS, srcRoot, dst string, onWarn func(Warn)) error {
 	}
 
 	recursiveDirs := dropRepoRoot(absSrc, append([]string(nil), alwaysCopyDirs...))
-
 	shallowDirs := make([]string, 0, len(dirSet))
 
 	for d := range dirSet {

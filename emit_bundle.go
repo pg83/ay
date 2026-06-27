@@ -11,7 +11,6 @@ func emitBundles(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		}
 
 		src, srcRef, resolved := resolveBundleSource(ctx, instance, d, b.Target)
-
 		ref := ctx.emit.reserve()
 		emitBundleNode(ctx, instance, d.tc.Python3, src, dst, srcRef, resolved, ref)
 		reg.register(&GeneratedFileInfo{
@@ -59,7 +58,6 @@ func hasModuleOpener(stmts []Stmt) bool {
 func emitBundleNode(ctx *GenCtx, instance ModuleInstance, python3 STR, src, dst VFS, srcRef NodeRef, resolved bool, id NodeRef) {
 	na := ctx.emit.nodeArenas()
 	fsTools := copyFsToolsVFS
-
 	cmdArgs := make([]STR, 0, 5)
 	cmdArgs = append(cmdArgs, python3, fsTools.str(), argRename.str())
 

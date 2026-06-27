@@ -1722,7 +1722,6 @@ func (p *Parser) parseIf(ifTok Token) *IfStmt {
 	}
 
 	cond := parseCondExpr(p, ifTok, condToks)
-
 	thenBody, endTok := p.parseStmts(termIfBody)
 	node := &IfStmt{Cond: cond, Then: thenBody, Line: ifTok.line}
 
@@ -1889,7 +1888,6 @@ func (c *CondParser) parseNot() int32 {
 
 func (c *CondParser) parseCmp() int32 {
 	left := c.parseAtom()
-
 	t, ok := c.peek()
 
 	if !ok {
@@ -2086,7 +2084,6 @@ func (p *Parser) expandOneInclude(into []Stmt, nameTok Token, rel string) []Stmt
 	}
 
 	data := readOwnedForParse(p.fs, target)
-
 	included := parseInternalWithState(p.fs, target, data, chain, p.includes)
 
 	return append(into, included.Stmts...)

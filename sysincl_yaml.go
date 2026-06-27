@@ -27,7 +27,6 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 			pendingPaths = nil
 		}
 	}
-
 	flushRecord := func() {
 		flushPending()
 
@@ -37,7 +36,6 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 			open = false
 		}
 	}
-
 	recordKey := func(b []byte) {
 		colon := bytes.IndexByte(b, ':')
 
@@ -67,7 +65,6 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 			rec.Filter = &SourceFilter{unsupported: true}
 		}
 	}
-
 	includeItem := func(b []byte, indent int) {
 		colon := yScalarColon(b)
 

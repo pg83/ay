@@ -14,9 +14,7 @@ func emitJVCPG4(
 	emit *StreamingEmitter,
 ) {
 	na := emit.nodeArenas()
-
 	fsTools := copyFsToolsVFS
-
 	cmdArgs := []STR{
 		tc.Python3,
 		(fsTools).str(),
@@ -24,9 +22,7 @@ func emitJVCPG4(
 		(src).str(),
 		(dst).str(),
 	}
-
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	head := make([]VFS, 0, 2)
 	head = append(head, jvPrimary)
 
@@ -35,7 +31,6 @@ func emitJVCPG4(
 	}
 
 	inputs := na.inputList(head, scripts[fsTools], jvInputs, closure)
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
@@ -61,9 +56,7 @@ func emitCP(instance ModuleInstance, src VFS, dst VFS, tc ModuleToolchain, scrip
 
 func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, id NodeRef, moduleTag STR, tc ModuleToolchain, scripts ScriptDeps, emit *StreamingEmitter) {
 	na := emit.nodeArenas()
-
 	fsTools := copyFsToolsVFS
-
 	cmdArgs := []STR{
 		tc.Python3,
 		(fsTools).str(),
@@ -71,9 +64,7 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 		(src).str(),
 		(dst).str(),
 	}
-
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	ownInputs := make([]VFS, 0, 1+len(extraInputs))
 	ownInputs = append(ownInputs, src)
 
@@ -86,7 +77,6 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 	}
 
 	inputs := na.inputList(scripts[fsTools], ownInputs)
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),

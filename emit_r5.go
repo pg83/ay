@@ -12,13 +12,10 @@ func emitR5(
 	emit *StreamingEmitter,
 ) (NodeRef, VFS, VFS) {
 	na := emit.nodeArenas()
-
 	srcVFS := source(instance.Path.rel(), "/", srcRel)
 	tmpVFS := build(instance.Path.rel(), "/", srcRel, ".tmp")
 	cppVFS := build(instance.Path.rel(), "/", strings.TrimSuffix(srcRel, ".rl"), ".rl5.cpp")
-
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	cmd0 := Cmd{
 		CmdArgs: na.chunkList(na.strList((ragel5BinPath).str(),
 			argDashO.str(),
@@ -41,7 +38,6 @@ func emitR5(
 		Env: env,
 	}
 	inputs := []VFS{ragel5BinPath, rlgenCdBinPath, srcVFS}
-
 	node := &Node{
 		Platform:       instance.Platform,
 		Cmds:           na.cmdList(cmd0, cmd1),
@@ -58,12 +54,9 @@ func emitR5(
 
 func emitLibraryRagel5Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
 	srcRel := src.string()
-
 	ragel5LDRef, ragel5BinVFS := ctx.tool(argContribToolsRagel5Ragel)
 	rlgenCdLDRef, rlgenCdBinVFS := ctx.tool(argContribToolsRagel5RlgenCd)
-
 	r5Ref, r5TmpOut, r5CppOut := emitR5(instance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, ctx.emit)
-
 	rlSourceVFS := source(instance.Path.rel(), "/", srcRel)
 	reg := ctx.codegenFor(instance)
 	reg.register(&GeneratedFileInfo{

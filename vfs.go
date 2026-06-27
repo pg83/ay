@@ -39,9 +39,6 @@ func (v VFS) str() STR {
 
 var vfsPrefixScratch []byte
 
-// vfsScratchConcat builds prefix + parts into the shared scratch buffer without
-// allocating the joined string. parts must not escape (callers only range it),
-// so the variadic backing array stays on the caller's stack.
 func vfsScratchConcat(prefix string, parts []string) []byte {
 	b := append(vfsPrefixScratch[:0], prefix...)
 

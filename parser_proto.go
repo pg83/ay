@@ -17,8 +17,6 @@ func (p ProtoIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocat
 	return p.parseDirectiveSet(data, a)
 }
 
-// inducedHeader maps a proto import target to its induced .pb.h header, memoized
-// by the interned target when induced != nil (0 means "no induced header").
 func (p ProtoIncludeDirectiveParser) inducedHeader(target STR) (STR, bool) {
 	if p.induced != nil {
 		if v := p.induced.get(uint64(target)); v != nil {
