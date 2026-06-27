@@ -28,6 +28,7 @@ func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt, 
 		prefixCpp.str(),
 		prefixH.str(),
 	)
+
 	cmdArgs = append(cmdArgs, bc.Opts...)
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}

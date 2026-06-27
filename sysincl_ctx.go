@@ -204,6 +204,7 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 					ci:       false,
 					multi:    rec.HasMultiTarget,
 				})
+
 				m.byID.put(uint64(p.key), bi)
 
 				continue
@@ -219,6 +220,7 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 				ci:       true,
 				multi:    rec.HasMultiTarget,
 			})
+
 			m.byID.put(uint64(ciID), bi)
 		}
 	}

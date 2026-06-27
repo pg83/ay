@@ -33,6 +33,7 @@ func bisonCppHeaderParsed(srcVFS VFS) []IncludeDirective {
 	parsed = append(parsed,
 		IncludeDirective{kind: includeQuoted, target: internStr(bisonPreprocessPyVFS.rel())},
 	)
+
 	parsed = append(parsed, bisonCppSkeletonDirectives...)
 
 	return parsed
@@ -126,6 +127,7 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 
 	head = append(head, internStr(bisonBin), argV.str())
 	head = appendArgStr(head, in.BisonFlags)
+
 	head = append(head,
 		internV("--defines=", headerVFS.string()),
 		argDashO.str(),
@@ -142,6 +144,7 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 				(headerVFS).str())),
 			Env: preprocessEnv,
 		})
+
 		inputs = append(inputs, bisonPreprocessPyVFS)
 		inputs = append(inputs, bisonCppSkeletonInputs...)
 		inputs = dedup(inputs, walkClosureTail(ctx.scannerFor(instance), headerVFS, in.ScanCfg))

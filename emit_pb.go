@@ -350,7 +350,9 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 		argISContribLibsProtobufSrc.str(),
 		internV("--cpp_out=", cppOutArg),
 	)
+
 	mid = appendArgStr(mid, extraProtocFlags)
+
 	mid = append(mid,
 		internV("--cpp_styleguide_out=:$(B)/", cppOutRoot),
 		internV("--plugin=protoc-gen-cpp_styleguide=", cppStyleguideBinary.string()),

@@ -554,6 +554,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		}
 
 		codegenOutputSeen[internStr(pbCC.rel())] = struct{}{}
+
 		codegenOutputs = append(codegenOutputs, protoCodegenOutput{
 			genRef:  genRef,
 			pbCC:    pbCC,

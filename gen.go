@@ -1989,6 +1989,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 					bldLibraryCppMallocJemallocLibcppMallocJemallocA,
 				},
 			)
+
 			ldPeerLinkCmdPaths = movePathsAfter(
 				ldPeerLinkCmdPaths,
 				bldBuildCowOnLibbuildCowOnA,
