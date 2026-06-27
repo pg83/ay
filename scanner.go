@@ -968,41 +968,6 @@ func cythonPy2SiblingOverride(includerAbs VFS, d IncludeDirective) (string, bool
 	return "", false
 }
 
-func pathDir(p string) string {
-	idx := strings.LastIndexByte(p, '/')
-
-	if idx < 0 {
-		return ""
-	}
-
-	return p[:idx]
-}
-
-func normalisePath(p string) string {
-	if !strings.Contains(p, "..") && !strings.Contains(p, "./") && !strings.Contains(p, "//") {
-		return p
-	}
-
-	parts := strings.Split(p, "/")
-	out := make([]string, 0, len(parts))
-
-	for _, seg := range parts {
-		switch seg {
-		case "", ".":
-
-			continue
-		case "..":
-			if len(out) > 0 {
-				out = out[:len(out)-1]
-			}
-		default:
-			out = append(out, seg)
-		}
-	}
-
-	return strings.Join(out, "/")
-}
-
 func (s *IncludeScanner) resolveSourceUnder(prefix VFS, target string) VFS {
 	if !s.parsers.fs.isFile(prefix, target) {
 		return 0

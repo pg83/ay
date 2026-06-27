@@ -194,16 +194,6 @@ func lDOutputPath(instance ModuleInstance, binaryName string) VFS {
 	return build(instance.Path.rel(), "/", binaryName)
 }
 
-func lastPathComponent(p string) string {
-	for i := len(p) - 1; i >= 0; i-- {
-		if p[i] == '/' {
-			return p[i+1:]
-		}
-	}
-
-	return p
-}
-
 const vcsJSONContent = `{
     "ARCADIA_SOURCE_HG_HASH": "0000000000000000000000000000000000000000",
     "ARCADIA_SOURCE_LAST_AUTHOR": "<UNKNOWN>",
