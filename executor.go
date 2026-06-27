@@ -242,10 +242,8 @@ func (ex *Executor) execute(f *NodeFuture) {
 	col := n.KV.PC
 	kind := n.KV.P
 	display := color(col.string(), kind.string())
-
 	done := ex.done.Load() + 1
 	pending := ex.pending.Load()
-
 	outFirst := ""
 
 	if len(n.Outputs) > 0 {
@@ -617,7 +615,6 @@ func mountString(s, srcRoot, bldRoot string) string {
 
 func casHash(src string) string {
 	h := sha256.New()
-
 	f := throw2(os.Open(src))
 
 	defer f.Close()

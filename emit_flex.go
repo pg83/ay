@@ -19,12 +19,9 @@ func flexGeneratedVFS(instance ModuleInstance, srcRel string) VFS {
 
 func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
 	srcRel := src.string()
-
 	flexRef, flexBin := ctx.tool(argContribToolsFlexOld)
-
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
 	outVFS := flexGeneratedVFS(instance, srcRel)
-
 	parsed := make([]IncludeDirective, 0, 1)
 	parsed = append(parsed, flexOutputInclude)
 	parsed = append(parsed, ctx.scannerFor(instance).parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
@@ -39,7 +36,6 @@ func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	})
 
 	window := walkClosure(ctx.scannerFor(instance), outVFS, in.ScanCfg)
-
 	lxClosure := keepOnlySourceVFS(window)
 
 	emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef, ctx.emit)
@@ -60,13 +56,11 @@ func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 
 func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, outVFS VFS, closure []VFS, id NodeRef, emit *StreamingEmitter) {
 	na := emit.nodeArenas()
-
 	cmdArgs := na.chunkList(na.strList(
 		flexBin.str(),
 		internV(argDashO.string(), outVFS.string()),
 		srcVFS.str(),
 	))
-
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	emit.emitReserved(&Node{

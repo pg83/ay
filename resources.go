@@ -78,7 +78,6 @@ func canonizePlatformKey(key string) string {
 
 func resolveResourceURIFromBundle(bundle map[string]string, env Environment) (string, bool) {
 	want := resourceJSONPlatformKey(env)
-
 	keys := make([]string, 0, len(bundle))
 
 	for k := range bundle {
@@ -214,7 +213,6 @@ func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolc
 	var tc ModuleToolchain
 
 	clangRes := resourcePatternClangTool + clangVer
-
 	clangResID := internStr(clangRes)
 
 	for _, decl := range globals {
@@ -331,7 +329,6 @@ func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 
 	srcVFS := build(strings.TrimPrefix(d.primaryOutput, "$(B)/"))
 	dst := lDOutputPath(instance, programBinaryName(instance, d.moduleStmt))
-
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	var ownSbomRef *NodeRef
@@ -373,9 +370,7 @@ func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		DepRefs:      depRefs,
 		Resources:    usesPython3,
 	}
-
 	ref := ctx.emit.emit(node)
-
 	result := &ModuleEmitResult{
 		ModuleStmtName: d.moduleStmt.Name,
 		ARRef:          ref,

@@ -57,7 +57,6 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 		srcVFS := copyFileInputVFS(ctx.fs, instance.Path, entry.Src)
 		dstVFS := copyFileOutputVFS(instance.Path.rel(), entry.Dst)
 		parsed := copyFileParsedIncludes(scanner, ctx.fs, instance.Path, entry)
-
 		ref := ctx.emit.reserve()
 
 		var producerSource []VFS
@@ -106,7 +105,6 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 	for i, entry := range d.copyFiles {
 		srcVFS := entries[i].srcVFS
 		dstVFS := entries[i].dstVFS
-
 		deps := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, []VFS{srcVFS})
 
 		var closure []VFS

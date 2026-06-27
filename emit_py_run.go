@@ -13,7 +13,6 @@ func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in 
 
 	for _, rp := range d.runPython {
 		pyRef := emitRunPython(ctx, instance, rp, d, in)
-
 		outs := make([]string, 0, len(rp.OUTFiles)+1)
 		outs = append(outs, strStrings(rp.OUTFiles)...)
 
@@ -98,7 +97,6 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	pySourceInputs = append(pySourceInputs, pyGeneratedFromSources...)
 
 	pyRef := ctx.emit.reserve()
-
 	registerPYOutput := func(out VFS, parsed []IncludeDirective) {
 		reg.register(&GeneratedFileInfo{
 			ProducerKvP:    pkPY,
@@ -145,7 +143,6 @@ func pyInputClosure(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 		buildRootPath := copyFileOutputVFS(instance.Path.rel(), rel)
 		out = append(out, walkClosureTail(ctx.scannerFor(instance), buildRootPath, scanIn.ScanCfg)...)
 	}
-
 	hasCCShard, _ := splitCodegenDetect(stmt)
 
 	if hasCCShard {
@@ -210,7 +207,6 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 		seen[v] = struct{}{}
 		sources = append(sources, v)
 	}
-
 	addInducedSources := func(deps []IncludeDirective) {
 		for _, d := range deps {
 			if v := d.target.vfs(); v != 0 {
@@ -341,7 +337,6 @@ func emitPYRun(
 	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
-
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	for _, kv := range stmt.EnvPairs {

@@ -311,14 +311,10 @@ func reportPerfStats(ctx *GenCtx, parsers *IncludeParserManager, targetScanner, 
 func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), testMode bool) NodeRef {
 	plainEmit := emitter
 	scriptTbl := buildScriptTable(fs)
-
 	fetchRefs := emitter.fetchRefs
-
 	parsers := newIncludeParserManagerFS(fs, newSharedParseCache())
-
 	targetReg := newCodegenRegistry()
 	hostReg := newCodegenRegistry()
-
 	ctx := &GenCtx{
 		fs:        fs,
 		parsers:   parsers,
@@ -358,7 +354,6 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		Language: LangCPP,
 		Platform: targetP,
 	}
-
 	root := genModule(ctx, seed)
 
 	ctx.emit.result(root.LDRef)
@@ -489,7 +484,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	defer delete(ctx.walking, instance)
 
 	stmts := moduleStmts(ctx, instance.Path.rel())
-
 	env := buildIfEnv(instance)
 	d := collectModule(ctx.parsers, &deduper, instance, stmts, env, ctx.onWarn)
 
@@ -965,7 +959,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	peerLinkCmdPaths := make([]VFS, 0, len(allPeers))
 	peerSbomRefs := make([]NodeRef, 0, len(allPeers))
 	peerSbomPaths := make([]VFS, 0, len(allPeers))
-
 	peerLDPluginRefs := make([]NodeRef, 0, 1)
 	peerLDPluginPaths := make([]VFS, 0, 1)
 	var peerObjAddLibsGlobal []ARG
@@ -988,7 +981,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	for i, p := range allPeers {
 		peerPath := filepath.Clean(p)
-
 		kind := peerKinds[i]
 
 		if kind != peerKindUserPeer && !peerYaMakeExists(ctx.fs, peerPath) {
@@ -1145,7 +1137,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	deduper.reset()
 
 	linkTarget := isProgramModuleType(d.moduleStmt.Name) || d.moduleStmt.Name == tokDllTool
-
 	sbomOrder := archiveOrder
 	cxxIdx, libcxxIdx := -1, -1
 
@@ -1403,6 +1394,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	deduper.reset()
+
 	for _, rp := range cflagsAggOrder {
 		for _, a := range rp.result.CFlagsGlobal {
 			if deduper.add(VFS(a)) {
@@ -1412,6 +1404,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	deduper.reset()
+
 	for _, rp := range cflagsAggOrder {
 		for _, a := range rp.result.CXXFlagsGlobal {
 			if deduper.add(VFS(a)) {
@@ -1421,6 +1414,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	deduper.reset()
+
 	for _, rp := range cflagsAggOrder {
 		for _, a := range rp.result.COnlyFlagsGlobal {
 			if deduper.add(VFS(a)) {
@@ -1430,6 +1424,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	deduper.reset()
+
 	for _, rp := range cflagsAggOrder {
 		for _, a := range rp.result.ObjAddLibsGlobal {
 			if deduper.add(VFS(a)) {
@@ -1439,6 +1434,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	deduper.reset()
+
 	for _, rp := range cflagsAggOrder {
 		for _, a := range rp.result.LDFlagsGlobal {
 			if deduper.add(VFS(a)) {
@@ -1448,6 +1444,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	deduper.reset()
+
 	for _, rp := range cflagsAggOrder {
 		for _, a := range rp.result.RPathFlagsGlobal {
 			if deduper.add(VFS(a)) {
@@ -1540,19 +1537,14 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	ccRefs := make([]NodeRef, 0, len(d.srcs)+len(d.joinSrcs))
 	ccOutputs := make([]VFS, 0, len(d.srcs)+len(d.joinSrcs))
-
 	arDeclMeta := map[VFS]SrcMeta{}
-
 	ownCFlags := d.cFlags
 	ownCFlagsGlobalSelf := d.cFlagsGlobal
 	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
 	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
-
 	dedupedAddIncl := dedup(d.addIncl, d.addInclGlobal)
-
 	isPy3NativeLib := d.moduleStmt.Name == tokPy23NativeLibrary ||
 		d.moduleStmt.Name == tokPy23Library
-
 	perModuleCCTag := moduleCCTag(d.moduleStmt.Name)
 
 	var arNameFn func(string) string
@@ -1576,7 +1568,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path.rel(), peerAddInclGlobal, dedupedAddIncl)
-
 	effectiveSrcDirs := d.srcDirs
 
 	if pd := programSourceDir(d.moduleStmt); pd != nil {
@@ -1684,15 +1675,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	jvCCRefs, jvCCOutputs := emitMiscNodes(ctx, instance, d, &moduleInputs)
-
 	prCCRes := emitRunProgramsForAR(ctx, instance, d, moduleInputs)
 	dmCCRes := emitDecimalMD5ForAR(ctx, instance, d, moduleInputs)
 	scCCRes := emitSplitCodegensForAR(ctx, instance, d, moduleInputs)
 	emitBaseCodegensForAR(ctx, instance, d, moduleInputs)
 	pyCCRes := emitRunPythonForAR(ctx, instance, d, moduleInputs)
-
 	aaCCRes := emitArchiveAsmForAR(ctx, instance, d, moduleInputs)
-
 	enCCRes := emitEnumSrcs(ctx, instance, d, selfPeerAddInclGlobal, &moduleInputs)
 
 	emitLuaJit21(ctx, instance, d)
@@ -1853,10 +1841,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	for _, js := range d.joinSrcs {
 		srcInstance := instance
-
 		jsSources := strStrings(js.Sources)
 		joinClosure := joinSrcsIncludeClosure(ctx, srcInstance.Platform, srcInstance, jsSources, moduleInputs)
-
 		ccClosure := joinClosure
 
 		if srcInstance.Platform.ISA == ISAX8664 {
@@ -1868,9 +1854,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		jsRef, joinOutVFS := emitJS(srcInstance, js.OutputName, jsSources, joinClosure, ctx.target, d.tc, ctx.scripts, ctx.emit)
-
 		ccIncludeInputs := jsCCIncludeInputs(srcInstance, joinOutVFS, jsSources, ccClosure, ctx.scripts)
-
 		ccIn := moduleInputs
 		ccIn.ExtraDepRefs = []NodeRef{jsRef}
 		ccIn.IncludeInputs = ccIncludeInputs
@@ -1896,7 +1880,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	globalSrcMemberCount := len(globalRefs)
-
 	regCCPy3Suffix := isPy3NativeLib || d.moduleStmt.Name == tokPy23Library
 	regRes := emitPyRegister(ctx, instance, d, moduleInputs, regCCPy3Suffix)
 
@@ -1931,7 +1914,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if isProgramModuleType(d.moduleStmt.Name) {
 		binaryName := programBinaryName(instance, d.moduleStmt)
-
 		ldPeerArchiveRefs := peerArchiveRefs
 		ldPeerArchivePaths := peerArchivePaths
 		ldPeerLinkCmdPaths := peerLinkCmdPaths
@@ -2134,7 +2116,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	var arRef NodeRef
 	arBaseName := arNameFn(instance.Path.rel())
-
 	arInstance := instance
 
 	switch d.moduleStmt.Name {
@@ -2245,7 +2226,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if len(globalRefs) > 0 {
 		globalBaseName := globalArNameFn(instance.Path.rel())
-
 		globalTag := tagGlobal
 
 		switch d.moduleStmt.Name {
@@ -2493,13 +2473,10 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 
 	defaults = suppressMallocAPIDefault(defaults, d.allocatorName)
 	seen := make(map[string]struct{}, len(defaults)+len(d.peerdirs))
-
 	resolved := make([]*ModuleEmitResult, 0, len(defaults)+len(d.peerdirs))
-
 	walkInstance := func(peerInstance ModuleInstance) {
 		resolved = append(resolved, genModule(ctx, peerInstance))
 	}
-
 	walk := func(peerPath string) {
 		walkInstance(derivePeerInstance(ctx, instance, d, peerPath))
 	}
@@ -2536,7 +2513,6 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	}
 
 	firstPeerdirIdx := len(resolved)
-
 	frontSet := map[string]struct{}{}
 
 	for _, p := range d.protoCmdPeers {
@@ -2613,6 +2589,7 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	}
 
 	deduper.reset()
+
 	for _, pr := range resolved {
 		for _, a := range pr.CFlagsGlobal {
 			if deduper.add(VFS(a)) {
@@ -2622,6 +2599,7 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	}
 
 	deduper.reset()
+
 	for _, pr := range resolved {
 		for _, a := range pr.CXXFlagsGlobal {
 			if deduper.add(VFS(a)) {
@@ -2631,6 +2609,7 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	}
 
 	deduper.reset()
+
 	for _, pr := range resolved {
 		for _, a := range pr.COnlyFlagsGlobal {
 			if deduper.add(VFS(a)) {
@@ -2640,6 +2619,7 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	}
 
 	deduper.reset()
+
 	for _, pr := range resolved {
 		for _, a := range pr.ObjAddLibsGlobal {
 			if deduper.add(VFS(a)) {
@@ -2649,6 +2629,7 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	}
 
 	deduper.reset()
+
 	for _, pr := range resolved {
 		for _, a := range pr.LDFlagsGlobal {
 			if deduper.add(VFS(a)) {
@@ -2658,6 +2639,7 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	}
 
 	deduper.reset()
+
 	for _, pr := range resolved {
 		for _, a := range pr.RPathFlagsGlobal {
 			if deduper.add(VFS(a)) {

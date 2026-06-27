@@ -55,7 +55,6 @@ type ModuleCCInputs struct {
 
 func emitCC(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit *StreamingEmitter) (NodeRef, VFS, InputChunks) {
 	na := emit.nodeArenas()
-
 	srcRel := src.string()
 
 	if v := src.vfs(); v != 0 {
@@ -88,16 +87,11 @@ func emitCC(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInputs, hos
 	}
 
 	outVFS, inVFS := composeCCPaths(instance, srcRel, srcVFS, in, suffix)
-
 	isCxx := in.ForceCxx || isCxxSource(srcRel)
-
 	blocks := in.CCBlocks
-
 	tok := na.strList((inVFS).str(), argDashC.str(), argDashO.str(), (outVFS).str())
 	inChunk := tok[0:1]
-
 	wrapcc := len(instance.Platform.WrapccHead) > 0
-
 	compiler, tail := blocks.cHead, blocks.cxxTail
 
 	if isCxx {
@@ -151,9 +145,7 @@ func emitCC(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInputs, hos
 	k++
 	na.chunks.commit(k)
 	cmdArgs := ArgChunks(chunks[:k])
-
 	env := hostP.toolEnv()
-
 	wrap := len(instance.Platform.WrapccHead) > 0
 
 	var allInputs InputChunks
@@ -250,7 +242,6 @@ func composeSrcDirOutputRel(instancePath, target string) string {
 	}
 
 	parts := strings.Split(rel, string(filepath.Separator))
-
 	hasParent := false
 
 	for i, p := range parts {
@@ -445,7 +436,6 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *
 
 	catboostStr := catboostOpenSourceChunk(p)
 	noLibc := p.NoLibcBlockStr
-
 	inc := na.chunks.alloc(4)
 	ni := 0
 	inc[ni] = ccIncludesPrefixStr
@@ -477,13 +467,11 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *
 		na.argStrList(in.ModuleScopeCFlags),
 		noLibc,
 	)
-
 	cTail := na.chunkList(
 		na.argStrList(in.PeerCOnlyFlagsGlobal),
 		builtinMacroDateTimeStr,
 		macroPrefixMapFlagsStr,
 	)
-
 	cxxOwnExtras := in.CXXFlags
 
 	if len(p.CXXFlags) > 0 {
@@ -491,7 +479,6 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *
 	}
 
 	cxxBucket := composeOwnAndPeerGlobalBucket(*in, true)
-
 	cxxTail := na.chunkList(
 		cxxStandardFlagStr,
 		cxxWarningChunk(in.Flags.NoCompilerWarnings),

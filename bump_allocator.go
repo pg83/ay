@@ -2,10 +2,6 @@ package main
 
 const bumpChunkSize = 200_000
 
-// BumpAllocator hands out subslices of a single fixed-size chunk. commit advances
-// past the consumed prefix; when the chunk runs out a fresh one is made (sized up
-// for a request larger than the default chunk). Old chunks stay alive only through
-// the subslices callers keep, so no chunk list is needed.
 type BumpAllocator[T any] struct {
 	chunk []T
 }

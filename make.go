@@ -120,7 +120,6 @@ func cmdMake(g GlobalFlags, args []string) int {
 	}
 
 	fs := newFS(mf.srcRoot)
-
 	tools := toolchainFlags(fs)
 	rootHostYaFlags := readYaConfSection(fs, "ya.conf", "host_platform_flags")
 	rootTargetYaFlags := readYaConfSection(fs, "ya.conf", "flags")
@@ -163,7 +162,6 @@ func cmdMake(g GlobalFlags, args []string) int {
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CFLAGS", ""),
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CXXFLAGS", ""),
 	)
-
 	targetSpec := mf.targetPlat
 
 	if targetSpec == "" {
@@ -206,7 +204,6 @@ func cmdMake(g GlobalFlags, args []string) int {
 		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CFLAGS", os.Getenv("CFLAGS")),
 		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS")),
 	)
-
 	events := newEventQueue()
 
 	defer events.close()
@@ -311,7 +308,6 @@ func parseMakeFlags(args []string) *MakeFlags {
 		Mode:     getopt.ModeInOrder,
 		Func:     getopt.FuncGetOptLong,
 	}
-
 	mf := &MakeFlags{
 		buildType: "debug",
 		threads:   runtime.NumCPU(),

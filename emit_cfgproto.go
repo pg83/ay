@@ -4,21 +4,15 @@ var cfgprotoKV = KV{P: pkPB, PC: pcYellow}
 
 func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
 	srcRel := src.string()
-
 	cfgSource := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
 	cfgRelPath := cfgSource.rel()
-
 	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
 	cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
 	configPluginLDRef, configPluginBinary := ctx.tool(argLibraryCppProtoConfigPlugin)
-
 	na := ctx.emit.nodeArenas()
-
 	configOpts := na.strList(internV("--plugin=protoc-gen-config=", configPluginBinary.string()),
 		argConfigOutB.str())
-
 	cfgImports := walkClosureTail(ctx.scannerFor(instance), cfgSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()).ScanCfg)
-
 	cfgRef := emitProtoWrapperPBNode(
 		instance, cfgRelPath, &cfgprotoKV,
 		cppStyleguideLDRef, protocLDRef, configPluginLDRef,
@@ -26,17 +20,13 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		configOpts, 0, cfgImports, in.ProtoInclude,
 		!protoTransitiveHeadersEnabled(d),
 		d.tc, ctx.emit)
-
 	cfgH := build(cfgRelPath, ".pb.h")
 	cfgPbCC := build(cfgRelPath, ".pb.cc")
-
 	outputRoot := protoCPPOutRoot(d)
 	cfgGenRefs := []NodeRef{protocLDRef, cppStyleguideLDRef, configPluginLDRef}
-
 	directImports := protoDirectPbHIncludes(ctx.parsers, cfgRelPath, outputRoot)
 	configIncludes := ctx.parsers.sourceParsedBuckets(cfgSource, nil).bucket(parsedIncludesProtoConfig)
 	extras := pbHEmitsIncludesExtras()
-
 	cfgHParsed := make([]IncludeDirective, 0, len(directImports)+len(configIncludes)+len(extras)+len(cfgImports))
 	cfgHParsed = append(cfgHParsed, directImports...)
 	cfgHParsed = append(cfgHParsed, configIncludes...)

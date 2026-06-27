@@ -151,7 +151,6 @@ func perfParser(dir string) int {
 	}
 
 	dur := time.Since(start)
-
 	perPass := dur / time.Duration(iters)
 	fmt.Printf("files=%d bytes=%d iters=%d per-pass=%v (%.0f MB/s)\n",
 		len(datas), total, iters, perPass,

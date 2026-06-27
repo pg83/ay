@@ -183,7 +183,6 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 
 	for _, ch := range chunks {
 		aux := build(instance.Path.rel(), "/", protoResourceHash(ch.hashInputs, "$S/"+instance.Path.rel(), moduleTag), "_raw.auxcpp")
-
 		auxRef := ctx.emit.reserve()
 		sourceInputs := pyProtoSourceInputs(ch.inputs)
 		auxClosure := rawAuxInputClosure(ctx, instance, aux, sourceInputs, auxRef, in)
@@ -244,7 +243,6 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 
 func rawAuxInputClosure(ctx *GenCtx, instance ModuleInstance, aux VFS, seed []VFS, ref NodeRef, in ModuleCCInputs) []VFS {
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
-
 	emits := make([]IncludeDirective, 0, len(seed))
 
 	for _, v := range seed {

@@ -33,13 +33,10 @@ func emitJVDownstreamCPCC(
 	for _, pair := range cpccPairs {
 		srcCpp := pair.cpp
 		srcH := pair.h
-
 		base := strings.TrimSuffix(filepath.Base(srcCpp.rel()), ".cpp")
 		g4CppPath := build(instance.Path.rel(), "/", base, ".g4.cpp")
 		g4CppRel := base + ".g4.cpp"
-
 		cpRef := ctx.emit.reserve()
-
 		emits := make([]IncludeDirective, 0, 1+len(outputIncludes))
 		emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(antlr4RuntimeHeaderVFS.rel())})
 
@@ -58,7 +55,6 @@ func emitJVDownstreamCPCC(
 		ccIn := in
 		ccIn.ExtraDepRefs = nil
 		closure := walkClosure(ctx.scannerFor(instance), g4CppPath, ccIn.ScanCfg)
-
 		cpClosure := closure
 
 		if len(cpClosure) > 0 {
@@ -90,9 +86,7 @@ const jdkResourcePath = "$(JDK17)/bin/java"
 
 func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs InputChunks, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag STR, emit *StreamingEmitter) NodeRef {
 	na := emit.nodeArenas()
-
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
@@ -121,11 +115,9 @@ func emitJV(
 	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
-
 	grammarVFS := source(instance.Path.rel(), "/", grammar)
 	outDirVFS := build(instance.Path.rel())
 	outDir := outDirVFS.string()
-
 	cmdArgs := make([]STR, 0, 8+len(antlrJavaConstHead))
 	cmdArgs = append(cmdArgs, tc.Python3)
 	cmdArgs = append(cmdArgs, antlrJavaConstHead...)
@@ -151,7 +143,6 @@ func emitJV(
 	inputs := na.inputList(na.vfsList(grammarVFS,
 		stdout2stderrVFS,
 		antlr4JarVFS))
-
 	base := strings.TrimSuffix(filepath.Base(grammar), ".g4")
 	outPrefix := instance.Path.rel() + "/" + base
 	outputs := []VFS{
@@ -177,12 +168,10 @@ func emitJVSplit(
 	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
-
 	lexerVFS := source(instance.Path.rel(), "/", lexer)
 	parserVFS := source(instance.Path.rel(), "/", parser)
 	outDirVFS := build(instance.Path.rel())
 	outDir := outDirVFS.string()
-
 	cmdArgs := []STR{
 		tc.Python3,
 		internStr(stdout2stderrPath),
@@ -210,7 +199,6 @@ func emitJVSplit(
 		parserVFS,
 		stdout2stderrVFS,
 		antlr4JarVFS))
-
 	lexerBase := strings.TrimSuffix(filepath.Base(lexer), ".g4")
 	parserBase := strings.TrimSuffix(filepath.Base(parser), ".g4")
 	visitorBase := parserBase
@@ -240,7 +228,6 @@ func emitJVGeneral(
 	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
-
 	cmdArgs := make([]STR, 0, 5+len(args))
 	cmdArgs = append(cmdArgs,
 		tc.Python3,

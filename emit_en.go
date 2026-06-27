@@ -62,7 +62,6 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 	}
 
 	enumParserLD, enumParserBin := ctx.tool(argToolsEnumParserEnumParser)
-
 	scanIn := ModuleCCInputs{
 		TC:                d.tc,
 		InclArgs:          ctx.inclArgs,
@@ -91,7 +90,6 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 	for i, stmt := range d.enumSrcs {
 		withHeader := stmt.Variant == "with_header"
 		headerInput := resolveEnumHeaderInput(ctx, instance, stmt.Header, d.srcDirs)
-
 		serializedBase := instance.Path.rel() + "/" + stmt.Header
 
 		if moduleRootedVFS(instance.Path.rel(), stmt.Header) != nil {
@@ -99,7 +97,6 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		}
 
 		_, secondLevel := protoGenHeaders[headerInput.rel()]
-
 		serializedCPPPath := build(serializedBase, "_serialized.cpp")
 		var serializedHPath VFS
 
@@ -108,7 +105,6 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		}
 
 		enRef := ctx.emit.reserve()
-
 		cppParsed := []IncludeDirective{
 			{kind: includeQuoted, target: internStr(headerInput.rel())},
 			{kind: includeQuoted, target: strUtilGenericSerializedEnumH},
@@ -165,7 +161,6 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		}
 
 		enClosure := dedup(closure, ownOutputClosure)
-
 		augmentedDepENRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, enClosure)
 
 		emitEN(
@@ -185,7 +180,6 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 
 		if consumerInputs != nil {
 			cppRel := strings.TrimPrefix(p.serializedCPPPath.rel(), instance.Path.rel()+"/")
-
 			allDepRefs := make([]NodeRef, 0, 1+len(augmentedDepENRefs))
 			allDepRefs = append(allDepRefs, p.enRef)
 			allDepRefs = append(allDepRefs, augmentedDepENRefs...)
@@ -215,7 +209,6 @@ func emitEN(
 	emit *StreamingEmitter,
 ) {
 	na := emit.nodeArenas()
-
 	cmdArgs := []STR{
 		(enumParserBin).str(),
 		(headerInput).str(),
@@ -232,10 +225,8 @@ func emitEN(
 	}
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	deps := append([]NodeRef(nil), depENRefs...)
 	foreignDepRefs := depRefs(enumParserLD)
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),

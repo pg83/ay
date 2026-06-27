@@ -14,7 +14,6 @@ func (CfgProtoIncludeDirectiveParser) id() uint32 {
 
 func (p CfgProtoIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	set := p.proto.parseDirectiveSet(data, a)
-
 	block := a.alloc(directiveBlockHint)
 	k := 0
 

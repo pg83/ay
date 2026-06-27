@@ -14,15 +14,12 @@ func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt, 
 	na := ctx.emit.nodeArenas()
 	moduleDir := instance.Path.rel()
 	prefix := bc.Prefix.string()
-
 	toolRes := ctx.toolResult(internArg(filepath.Clean(bc.ToolPath.string())))
 	toolLDRef := toolRes.LDRef
 	toolBin := *toolRes.LDPath
-
 	inputIn := source(moduleDir, "/", prefix, ".in")
 	prefixCpp := build(moduleDir, "/", prefix, ".cpp")
 	prefixH := build(moduleDir, "/", prefix, ".h")
-
 	cmdArgs := make([]STR, 0, 4+len(bc.Opts))
 	cmdArgs = append(cmdArgs,
 		toolBin.str(),
@@ -33,9 +30,7 @@ func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt, 
 	cmdArgs = append(cmdArgs, bc.Opts...)
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	bcRef := ctx.emit.reserve()
-
 	cppParsed := []IncludeDirective{{kind: includeQuoted, target: internStr(prefixH.rel())}}
 
 	var headerParsed []IncludeDirective

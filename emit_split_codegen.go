@@ -29,15 +29,12 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 	na := ctx.emit.nodeArenas()
 	moduleDir := instance.Path.rel()
 	prefix := sc.Prefix.string()
-
 	toolRes := ctx.toolResult(internArg(filepath.Clean(sc.ToolPath.string())))
 	toolLDRef := toolRes.LDRef
 	toolBin := *toolRes.LDPath
-
 	inputIn := source(moduleDir, "/", prefix, ".in")
 	prefixCpp := build(moduleDir, "/", prefix, ".cpp")
 	prefixH := build(moduleDir, "/", prefix, ".h")
-
 	partRels := make([]string, 0, sc.OutNum)
 	outputs := make([]VFS, 0, sc.OutNum+2)
 
@@ -50,7 +47,6 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 	outputs = append(outputs, prefixCpp, prefixH)
 
 	cppParts := sc.OutNum - splitCodegenStreamCount
-
 	cmdArgs := make([]STR, 0, 6+len(sc.Opts))
 	cmdArgs = append(cmdArgs,
 		toolBin.str(),
@@ -63,12 +59,9 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 	cmdArgs = append(cmdArgs, sc.Opts...)
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	scRef := ctx.emit.reserve()
-
 	part0 := build(moduleDir, "/", partRels[0])
 	part0Inc := IncludeDirective{kind: includeQuoted, target: internStr(part0.rel())}
-
 	headerParsed := make([]IncludeDirective, 0, len(sc.OutputIncludes))
 
 	for _, oi := range sc.OutputIncludes {
@@ -76,7 +69,6 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 	}
 
 	cppParsed := []IncludeDirective{part0Inc}
-
 	reg := ctx.codegenFor(instance)
 	reg.register(&GeneratedFileInfo{
 		ProducerKvP:    pkSC,

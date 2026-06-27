@@ -74,9 +74,7 @@ func emitPB(
 	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
-
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
-
 	pbH := build(protoBase, ".pb.h")
 	pbCC := build(protoBase, ".pb.cc")
 	pbDepsH := build(protoBase, ".deps.pb.h")
@@ -89,7 +87,6 @@ func emitPB(
 	}
 
 	outputs := assembleProtoCmdOutputs(protoBase, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH, extraPlugins, liteHeaders, grpc)
-
 	outsChunk := make([]STR, 0, len(outputs))
 
 	for _, output := range outputs {
@@ -103,7 +100,6 @@ func emitPB(
 	}
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	inputs := []VFS{
 		cppStyleguideBinary,
 	}
@@ -130,7 +126,6 @@ func emitPB(
 	foreignDepRefs = dedupRefs(foreignDepRefs)
 
 	deps := append([]NodeRef(nil), extraDepRefs...)
-
 	protocCwd := "$(S)"
 
 	if protoSrcOverride != 0 {
@@ -236,7 +231,6 @@ func protoSourceRelPath(fs FS, instance ModuleInstance, d *ModuleData, src strin
 
 func pyProtoAuxInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, aux VFS, seed []VFS, ref NodeRef, peerAddIncl []VFS) []VFS {
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
-
 	emits := make([]IncludeDirective, 0, len(seed))
 
 	for _, in := range seed {
@@ -262,7 +256,6 @@ func pyProtoAuxInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 		FS:                ctx.fs,
 		ScanCfg:           newScanContext(ctx.parsers, d.addIncl, peerAddIncl, includeScannerBasePaths(), instance.Path.rel()),
 	}
-
 	closure := walkClosure(ctx.scannerFor(instance), aux, scanIn.ScanCfg)
 
 	if len(closure) == 0 {
@@ -316,7 +309,6 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 		internStr(pbWrapperPath),
 		argOutputs.str(),
 	}
-
 	includeRoot := ""
 
 	if cppOutRoot != "" {

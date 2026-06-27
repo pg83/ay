@@ -50,7 +50,6 @@ func descPeerClosure(ctx *GenCtx, instance ModuleInstance, peerdirs []STR, injec
 	var span DescPeerSpan
 	seen := make(map[VFS]struct{})
 	includesSeen := make(map[VFS]struct{})
-
 	add := func(peers []DescProtoPeer) {
 		for _, p := range peers {
 			if _, dup := seen[p.SelfProtodesc]; dup {
@@ -61,7 +60,6 @@ func descPeerClosure(ctx *GenCtx, instance ModuleInstance, peerdirs []STR, injec
 			span.peers = append(span.peers, p)
 		}
 	}
-
 	enter := func(peerPath string) {
 		if !isProtoLibraryPeer(ctx, peerPath) {
 			return
@@ -105,9 +103,7 @@ func descProtoOutputRel(instancePath, srcRel, resolvedRel string) string {
 
 func emitDescProtoSubmodule(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *ModuleEmitResult {
 	span := descPeerClosure(ctx, instance, d.peerdirs, d.needGoogleProtoPeerdirs)
-
 	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
-
 	cppOutRoot := protoCPPOutRoot(d)
 
 	var protoSearchPaths []VFS
@@ -117,10 +113,8 @@ func emitDescProtoSubmodule(ctx *GenCtx, instance ModuleInstance, d *ModuleData)
 	}
 
 	mid := descProtocIncludes(span.includes, cppOutRoot)
-
 	scanCfg := protoWalkInputs(ctx.parsers, protoSearchPaths, instance.Path.rel()).ScanCfg
 	scanner := ctx.scannerFor(instance)
-
 	hash := moddirHash(instance.Path.rel())
 
 	var producerRefs []NodeRef
@@ -147,10 +141,8 @@ func emitDescProtoSubmodule(ctx *GenCtx, instance ModuleInstance, d *ModuleData)
 		protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcRel)
 		protoVFS := source(protoRelPath)
 		imports := walkClosureTail(scanner, protoVFS, scanCfg)
-
 		descOut := build(descProtoOutputRel(instance.Path.rel(), srcRel, protoRelPath))
 		rawprotoOut := build(protoRelPath, ".", hash, ".rawproto")
-
 		ref := emitProtoDescProducer(ctx, instance, protoRelPath, descOut, rawprotoOut,
 			protocLDRef, protocBinary, mid, imports)
 
@@ -169,11 +161,8 @@ func emitDescProtoSubmodule(ctx *GenCtx, instance ModuleInstance, d *ModuleData)
 	prj := realPrjName(instance.Path.rel())
 	selfProtodesc := build(instance.Path.rel(), "/", prj, ".self.protodesc")
 	protosrc := build(instance.Path.rel(), "/", prj, ".protosrc")
-
 	mergeRef := emitDescProtoMerge(ctx, instance, selfProtodesc, protosrc, descOutputs, rawprotoOutputs, producerSourceInputs, producerRefs)
-
 	closure := append(span.peers, DescProtoPeer{SelfProtodesc: selfProtodesc, MergeRef: mergeRef})
-
 	selfPath := selfProtodesc
 
 	return &ModuleEmitResult{
@@ -223,7 +212,6 @@ func descProtocIncludes(peerProtoAddIncl []VFS, cppOutRoot string) []STR {
 func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath string,
 	descOut, rawprotoOut VFS, protocLDRef NodeRef, protocBinary VFS, mid []STR, imports []VFS) NodeRef {
 	na := ctx.emit.nodeArenas()
-
 	head := na.strList(
 		wrapccPython3STR,
 		descRawprotoWrapperVFS.str(),
@@ -236,17 +224,13 @@ func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath st
 		arg2.str(),
 		protocBinary.str(),
 	)
-
 	cmdArgs := na.chunkList(head, mid)
-
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	inputs := []VFS{
 		protocBinary,
 		source(protoRelPath),
 		descRawprotoWrapperVFS,
 	}
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
@@ -268,7 +252,6 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 	descOutputs, rawprotoOutputs, producerSourceInputs []VFS, producerRefs []NodeRef) NodeRef {
 	na := ctx.emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	merge := make([]STR, 0, 3+len(descOutputs))
 	merge = append(merge, wrapccPython3STR, mergeFilesVFS.str(), selfProtodesc.str())
 
@@ -308,14 +291,11 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 
 func emitProtoDescriptions(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *ModuleEmitResult {
 	closure := descPeerClosure(ctx, instance, d.peerdirs, false).peers
-
 	na := ctx.emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	prj := realPrjName(instance.Path.rel())
 	protodesc := build(instance.Path.rel(), "/", prj, ".protodesc")
 	tar := build(instance.Path.rel(), "/", prj, ".tar")
-
 	merge := make([]STR, 0, 3+len(closure))
 	merge = append(merge, wrapccPython3STR, mergeFilesVFS.str(), protodesc.str())
 
@@ -353,7 +333,6 @@ func emitProtoDescriptions(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		DepRefs:      deps,
 		Resources:    usesPython3,
 	}
-
 	mergeRef := ctx.emit.emit(node)
 	primary := protodesc
 

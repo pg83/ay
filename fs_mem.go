@@ -22,7 +22,6 @@ func newMemFS(files map[string]string) *MemFS {
 		views:     map[string]DirView{},
 		entries:   newIntMap[bool](64),
 	}
-
 	addEntry := func(parent, name string, isDir bool) {
 		entries := fs.dirs[parent]
 

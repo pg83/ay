@@ -1557,7 +1557,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		stmt := &DecimalMD5Lower32BitsStmt{File: v.Args[0].string()}
-
 		rest := v.Args[1:]
 
 		if len(rest) >= 1 && rest[0] == kwFUNCNAME {
@@ -2279,7 +2278,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 			for _, pTok := range v.Args[1:] {
 				p := pTok.string()
-
 				dir := IncludeDirective{kind: includeQuoted, target: internStr(p)}
 
 				if toHeader {
@@ -2445,7 +2443,6 @@ func parseCPPProtoPlugin(v UnknownStmt) CppProtoPlugin {
 		Name:     v.Args[0].string(),
 		ToolPath: v.Args[1].string(),
 	}
-
 	tail := 2
 
 	if outputSuffixes > 0 {
@@ -2578,7 +2575,6 @@ func parseYAFFSchema(v UnknownStmt) CppProtoPlugin {
 	}
 
 	schemaName := s.positional[0]
-
 	namespace := s.namespace
 
 	if len(s.positional) >= 2 {
@@ -2960,7 +2956,6 @@ func expandBracedVars(s string, env Environment) string {
 
 		end += start + 2
 		name := s[start+2 : end]
-
 		val, ok := env.lookup(name)
 
 		if !isExpandVarName(name) || !ok {
@@ -3013,7 +3008,6 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 		}
 
 		name := s[i+1 : j]
-
 		val, ok := env.lookup(name)
 
 		if !ok {

@@ -75,7 +75,6 @@ func emitSbomComponent(ctx *GenCtx, instance ModuleInstance, d *ModuleData, real
 	out := build(moddir, "/", realPrjName, ".", lang, ".component.sbom")
 	scriptVFS := source(sbomGenScriptRel)
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList([]STR{
@@ -94,7 +93,6 @@ func emitSbomComponent(ctx *GenCtx, instance ModuleInstance, d *ModuleData, real
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    usesPython3,
 	}
-
 	ref := ctx.emit.emit(node)
 
 	return &ref, &out
@@ -111,7 +109,6 @@ func emitSbomToolchainComponent(ctx *GenCtx, instance ModuleInstance, toolchainN
 	out := build(moddir, "/toolchain.component.sbom")
 	scriptVFS := source(sbomGenScriptRel)
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList([]STR{
@@ -129,7 +126,6 @@ func emitSbomToolchainComponent(ctx *GenCtx, instance ModuleInstance, toolchainN
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    usesPython3,
 	}
-
 	ref := ctx.emit.emit(node)
 
 	return &ref, &out

@@ -173,7 +173,6 @@ func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 		srcScanIn.ScanCfg = newScanContext(ctx.parsers, srcScanIn.AddIncl, srcScanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 
 		ind := cythonCppInducedSets(ctx, instance, srcVFS, stmt.CMode, srcScanIn)
-
 		cyRef := ctx.emit.reserve()
 
 		var headerPyxClosure []VFS
@@ -182,7 +181,6 @@ func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 			headerPyxClosure = cythonPyxLangClosure(ctx.scannerFor(instance), srcVFS, srcScanIn.ScanCfg)
 
 			pyxInduced := keepOnlySourceVFS(headerPyxClosure)
-
 			headerInduced := cythonHeaderInducedClosure(ind)
 			headerParsed := make([]IncludeDirective, 0, len(headerInduced))
 
@@ -245,7 +243,6 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 		srcVFS := p.srcVFS
 		srcScanIn := p.srcScanIn
 		cyRef := p.cyRef
-
 		sourceClosure := walkClosureTail(ctx.scannerFor(instance), srcVFS, srcScanIn.ScanCfg)
 		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(p.ind, sourceClosure)
 
@@ -274,7 +271,6 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 		})
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 		cmdArgs := make([]STR, 0, 8+len(cythonConstHead)+len(stmt.Options))
 		cmdArgs = append(cmdArgs, d.tc.Python3)
 		cmdArgs = append(cmdArgs, cythonConstHead...)
@@ -414,7 +410,6 @@ type cythonCppInduced struct {
 
 func cythonCppInducedSets(ctx *GenCtx, instance ModuleInstance, src VFS, cMode bool, scanIn ModuleCCInputs) cythonCppInduced {
 	scanner := ctx.scannerFor(instance)
-
 	toolSingles := []VFS{contribToolsCythonCythonPy}
 	emitsSingles := []VFS{contribToolsCythonCythonPy, src}
 	var toolCl, emitsCl [][]VFS

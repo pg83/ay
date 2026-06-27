@@ -20,12 +20,9 @@ var yasmConstHead = []STR{
 
 func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit *StreamingEmitter) (NodeRef, VFS) {
 	na := emit.nodeArenas()
-
 	outVFS, inVFS := composeASPaths(instance, srcRel, srcVFS, in)
-
 	cmdArgs := composeASCmdArgs(instance, outVFS, inVFS, in)
 	env := hostP.toolEnv()
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
@@ -72,13 +69,9 @@ func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInputs) []STR {
 	bundle := compileFlagBundleFor(instance.Platform)
 	prologueArgs := 2 + len(bundle.ArchArgs) + len(instance.Platform.SysrootArgs)
-
 	warnBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
-
 	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in, instance.Platform)
-
 	includes := composeASIncludes(in)
-
 	betweenBlocks := len(catboostOpenSourceDefine)
 	betweenBlocks += len(in.ModuleScopeCFlags)
 
@@ -109,7 +102,6 @@ func composeASIncludes(in ModuleCCInputs) []STR {
 
 func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, emit *StreamingEmitter) (NodeRef, VFS) {
 	na := emit.nodeArenas()
-
 	stem := strings.TrimSuffix(srcRel, ".asm")
 	suffix := ".o"
 
@@ -157,7 +149,6 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	)
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envYASM_TEST_SUITE, Value: strOne}}
-
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
@@ -180,10 +171,8 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 
 func emitLibraryAsmSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
 	srcRel := src.string()
-
 	asIn := in
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
-
 	scanIn := in
 
 	if len(d.asmAddIncl) > 0 {

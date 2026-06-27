@@ -192,7 +192,6 @@ func (s *IncludeScanner) putScanCtx(sc *ScanCtx) {
 
 func hashScanContext(ctx *ScanContext) uint64 {
 	h := uint64(0x9e3779b97f4a7c15)
-
 	mixSlice := func(ss []VFS) {
 		h = mix64(h ^ uint64(len(ss)))
 
@@ -219,7 +218,6 @@ func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveP
 func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 	s := sc.scanner
 	incDir := dirKey(pathDir(vfsPath.rel()))
-
 	suppressCimportNames := false
 	prevProbeMissed := false
 
@@ -399,7 +397,6 @@ func (sc *ScanCtx) dfs(abs VFS) {
 
 func (sc *ScanCtx) closureOf(abs VFS) []VFS {
 	s := sc.scanner
-
 	ref, ok := s.cachedClosure(abs)
 
 	if ok {
@@ -451,7 +448,6 @@ func (sc *ScanCtx) cachedWindow(v VFS) ([]VFS, bool) {
 
 func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 	s := sc.scanner
-
 	block := s.closureArena.alloc(closureAllocHint)
 	k := fill(block)
 
@@ -512,7 +508,6 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 	}()
 
 	searchOut := sc.resolveSearchPath(includerAbs, incDir, d)
-
 	includerRel := includerAbs.rel()
 	var mappings []VFS
 	var hasMultiTarget bool
@@ -703,7 +698,6 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 	var out VFS
 
 	normTarget := normalisePath(target)
-
 	addSource := func(prefix VFS) bool {
 		v := s.resolveSourceUnder(prefix, target)
 
@@ -715,9 +709,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 
 		return true
 	}
-
 	buildSuffix := interned(normTarget)
-
 	addBuild := func(prefixRel string) bool {
 		if buildSuffix == 0 {
 			return false
@@ -739,7 +731,6 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 
 		return true
 	}
-
 	addInclPath := func(prefix VFS) bool {
 		if prefix.isBuild() {
 			return addBuild(prefix.rel())
@@ -854,7 +845,6 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 
 		return false
 	}
-
 	addPath := func(rel string) bool {
 		rel = normalisePath(rel)
 
@@ -872,7 +862,6 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 
 		return true
 	}
-
 	searchPathFound := false
 
 	if candidate, ok := cythonPy2SiblingOverride(includerAbs, d); ok && addPath(candidate) {
@@ -888,7 +877,6 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 
 	if d.quotedLike() {
 		matched := false
-
 		suKey := splitMix64(uint32(incDir), uint32(d.target))
 		var sv VFS
 

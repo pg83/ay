@@ -543,7 +543,6 @@ func extractNegativeLookahead(pat string) ([]string, string, bool) {
 
 	inner := rest[:end]
 	residual := rest[end+1:]
-
 	excludes := parseLookaheadAlts(inner)
 
 	return excludes, residual, true
@@ -557,7 +556,6 @@ func parseLookaheadAlts(body string) []string {
 	}
 
 	parts := splitTopLevelOr(body)
-
 	out := make([]string, 0, len(parts))
 
 	for _, p := range parts {

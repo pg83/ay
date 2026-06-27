@@ -180,7 +180,6 @@ func scanDiffIndex(path string) (map[string]bool, map[string]map[string]bool) {
 func diffSummary(leftPath, rightPath string, bw *bufio.Writer) {
 	leftKind := scanOutputKind(leftPath)
 	rightKind := scanOutputKind(rightPath)
-
 	summarize := func(title string, only map[string]string) {
 		throw2(fmt.Fprintf(bw, "=== %s (%d) ===\n", title, len(only)))
 		byKind, byExt, byDir := map[string]int{}, map[string]int{}, map[string]int{}
@@ -360,7 +359,6 @@ func diffByToken(leftPath, rightPath string, bw *bufio.Writer, opts byTokenOpts)
 
 	our := map[string]map[string]map[string]int{}
 	ref := map[string]map[string]map[string]int{}
-
 	ensure := func(m map[string]map[string]map[string]int, g string) {
 		if m[g] == nil {
 			m[g] = map[string]map[string]int{}
@@ -370,7 +368,6 @@ func diffByToken(leftPath, rightPath string, bw *bufio.Writer, opts byTokenOpts)
 			}
 		}
 	}
-
 	groups := []string{}
 	paired := 0
 	streamJSONL(leftPath, func(n map[string]any) {
@@ -773,7 +770,6 @@ func computeRootOutputs(leftPath, rightPath string) (map[string]bool, int) {
 
 func diffRoots(leftPath, rightPath string, bw *bufio.Writer) {
 	leafSet, divergent := computeRootOutputs(leftPath, rightPath)
-
 	leaves := make([]string, 0, len(leafSet))
 
 	for out := range leafSet {

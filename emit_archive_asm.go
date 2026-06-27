@@ -11,7 +11,6 @@ func emitArchiveAsmForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in
 
 	for _, a := range d.archiveAsm {
 		rodataRef := emitArchiveAsmNode(ctx, instance, a, d, toolBinPath, toolLDRef, reg)
-
 		rdRef, rdOut := emitArchiveAsmRodata(ctx, instance, a.Name+".rodata", rodataRef, in)
 		res.CCRefs = append(res.CCRefs, rdRef)
 		res.CCOutputs = append(res.CCOutputs, rdOut)
@@ -30,9 +29,7 @@ func emitArchiveAsmNode(
 	reg *CodegenRegistry,
 ) NodeRef {
 	na := ctx.emit.nodeArenas()
-
 	rodataVFS := build(instance.Path.rel(), "/", a.Name, ".rodata")
-
 	cmdArgs := make([]STR, 0, 4+len(a.Files)+2)
 	cmdArgs = append(cmdArgs, (toolBinPath).str(), argQ.str())
 
@@ -75,7 +72,6 @@ func emitArchiveAsmNode(
 
 	deps := concat(producerRefs, depRefs(toolLDRef))
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 	n := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
@@ -88,7 +84,6 @@ func emitArchiveAsmNode(
 		DepRefs:      deps,
 		Resources:    instance.Platform.UsesPython3Clang,
 	}
-
 	rodataRef := ctx.emit.emit(n)
 
 	var leaves []VFS
@@ -116,7 +111,6 @@ func emitArchiveAsmRodata(ctx *GenCtx, instance ModuleInstance, rodataRel string
 
 	rodataPath := build(instance.Path.rel(), "/", rodataRel)
 	leaves := walkClosureTail(ctx.scannerFor(instance), rodataPath, in.ScanCfg)
-
 	yasmLDRef, _ := ctx.tool(argContribToolsYasm)
 	ref, _, outPath := emitRD(instance, rodataRel, rodataPath, yasmLDRef, leaves, []NodeRef{producerRef}, in.TC, ctx.emit)
 

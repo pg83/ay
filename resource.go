@@ -48,7 +48,6 @@ func expandResourceFiles(args []string) []ResourceEntry {
 	prefix := ""
 	prefixToStrip := ""
 	dest := ""
-
 	out := make([]ResourceEntry, 0, len(args))
 	i := 0
 
@@ -206,7 +205,6 @@ func globMatch(fs FS, pattern string) []string {
 		for _, d := range dirs {
 			if !wild {
 				child := path.Join(d, seg)
-
 				present, isDir := fs.exists(srcRootVFS, child)
 
 				if !present {
@@ -450,7 +448,6 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 		}
 
 		resolvedRel := resolvePySrcRel(fs, d.srcDirs, modulePath, srcRel)
-
 		genInfo := reg.lookupSplit(dirKey(modulePath), internStr(srcRel))
 		generated := genInfo != nil
 
@@ -497,7 +494,6 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 		if !d.pyBuildNoPYC {
 			ypKey := "resfs/file/py/" + keyPrefix + srcRel + ".yapyc3"
 			ypPathInput := build(modulePath, "/", srcRel, suffix)
-
 			ypKvHash := "resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + suffix + "\"}"
 			ypKvCmd := "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
 
@@ -544,7 +540,6 @@ func chunkPySrcEntries(entries []PySrcEntry) []PySrcChunk {
 		cmdLen = 0
 		deduper.reset()
 	}
-
 	addInps := func(e PySrcEntry) {
 		if deduper.add(e.pathInput) {
 			cur.inps = append(cur.inps, e.pathInput)

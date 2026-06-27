@@ -133,7 +133,6 @@ func defaultPeerdirsForModule(ctx *GenCtx, instance ModuleInstance, d *ModuleDat
 func defaultPeerdirsForWithState(ctx *GenCtx, instance ModuleInstance, d *ModuleData) []string {
 	flags := d.flags
 	noPlatform := effectiveNoPlatform(flags)
-
 	addLinuxHeaders := instance.Path.rel() != "contrib/libs/linux-headers" &&
 		!strings.HasPrefix(instance.Path.rel(), "contrib/libs/linux-headers/")
 
@@ -279,7 +278,6 @@ func defaultProgramPeerdirsForWithState(ctx *GenCtx, instance ModuleInstance, d 
 	allocatorName := d.allocatorName
 	env := buildIfEnv(instance)
 	muslLite := env.bool(envMUSL_LITE) || d.muslLite
-
 	rc := ImplicitPeerCtx{
 		flags:         flags,
 		noPlatform:    effectiveNoPlatform(flags),

@@ -21,23 +21,17 @@ const cudaArchitectures129 = "sm_50:sm_52:sm_60:sm_61:sm_70:sm_75:sm_80:sm_86:sm
 
 func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
 	srcRel := src.string()
-
 	na := ctx.emit.nodeArenas()
 	p := instance.Platform
-
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
 	outVFS, inVFS := composeCCPaths(instance, srcRel, srcVFS, in, ".o")
 	blocks := in.CCBlocks
-
 	scanner := ctx.scannerFor(instance)
 	closure := dedup(walkClosure(scanner, srcVFS, in.ScanCfg), walkClosure(scanner, cudaRuntimeIncludeVFS, in.ScanCfg))
-
 	mtimeRef, mtimeVFS := ctx.tool(cudaMtimeArg)
 	pidRef, pidVFS := ctx.tool(cudaCustomPidArg)
-
 	cuCxxTail := blocks.cxxTail
 
-	// drop the trailing builtinMacroDateTime + macroPrefixMapFlags chunks
 	if len(cuCxxTail) >= 2 {
 		cuCxxTail = cuCxxTail[:len(cuCxxTail)-2]
 	}
@@ -50,7 +44,6 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 		in.CudaNvccFlags,
 		na.strList(argDashC.str(), (inVFS).str(), argDashO.str(), (outVFS).str()),
 	}
-
 	total := len(head) + len(blocks.includes) + 2 + len(blocks.flags) + len(cuCxxTail) + 1
 	chunks := na.chunks.alloc(total)
 	k := copy(chunks, head)
@@ -64,12 +57,10 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	k++
 	na.chunks.commit(k)
 	cmdArgs := ArgChunks(chunks[:k])
-
 	env := EnvVars{
 		{Name: envARCADIA_ROOT_DISTBUILD, Value: strS},
 		{Name: cudaPathEnv, Value: cudaPathValueStr},
 	}
-
 	node := &Node{
 		Platform:     p,
 		Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),

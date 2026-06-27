@@ -18,14 +18,11 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 		confBase := strings.TrimSuffix(path.Base(conf.string()), path.Ext(conf.string()))
 		generated := confBase + ".config.cpp"
 		generatedVFS := build(instance.Path.rel(), "/", generated)
-
 		confVFS := source(instance.Path.rel(), "/", conf.string())
-
 		inputs := []VFS{buildScriptsCheckConfigHPy}
 		inputs = append(inputs, walkClosure(ctx.scannerFor(instance), confVFS, in.ScanCfg)...)
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 		chRef := ctx.emit.emit(&Node{
 			Platform: ctx.target,
 			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(d.tc.Python3,
@@ -40,7 +37,6 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    usesPython3,
 		})
-
 		ccIn := in
 		ccIn.ExtraDepRefs = []NodeRef{chRef}
 
