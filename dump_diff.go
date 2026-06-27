@@ -161,8 +161,10 @@ func diffSections(leftPath, rightPath string, bw *bufio.Writer) {
 func scanDiffIndex(path string) (map[string]bool, map[string]map[string]bool) {
 	selfUIDs := map[string]bool{}
 	outToUIDs := map[string]map[string]bool{}
+
 	streamJSONL(path, func(n map[string]any) {
 		su := getString(n, "self_uid")
+
 		selfUIDs[su] = true
 
 		for _, out := range toStrings(n["outputs"]) {
@@ -183,6 +185,7 @@ func diffSummary(leftPath, rightPath string, bw *bufio.Writer) {
 
 	summarize := func(title string, only map[string]string) {
 		throw2(fmt.Fprintf(bw, "=== %s (%d) ===\n", title, len(only)))
+
 		byKind, byExt, byDir := map[string]int{}, map[string]int{}, map[string]int{}
 
 		for out, kind := range only {
@@ -218,6 +221,7 @@ func diffSummary(leftPath, rightPath string, bw *bufio.Writer) {
 
 func scanOutputKind(path string) map[string]string {
 	out := map[string]string{}
+
 	streamJSONL(path, func(n map[string]any) {
 		k := nodeKVP(n)
 
@@ -234,6 +238,7 @@ func diffByField(leftPath, rightPath string, bw *bufio.Writer) {
 	rExact := map[string]DiffFieldHashes{}
 	rAxis := map[string]DiffFieldHashes{}
 	ridx := map[string]DiffFieldHashes{}
+
 	streamJSONL(rightPath, func(n map[string]any) {
 		if canc.cancelRight(n) {
 			return
@@ -249,6 +254,7 @@ func diffByField(leftPath, rightPath string, bw *bufio.Writer) {
 	fieldDiff := make([]int, len(dumpContentFields))
 	combo := map[string]int{}
 	both := 0
+
 	streamJSONL(leftPath, func(n map[string]any) {
 		if canc.cancelLeft(n) {
 			both++
@@ -257,6 +263,7 @@ func diffByField(leftPath, rightPath string, bw *bufio.Writer) {
 		}
 
 		var rh DiffFieldHashes
+
 		found := false
 
 		if rh, found = findDumpDiffFieldMatch(rExact, rAxis, ridx, n); !found {
@@ -264,7 +271,9 @@ func diffByField(leftPath, rightPath string, bw *bufio.Writer) {
 		}
 
 		both++
+
 		lh := nodeFieldHashes(n)
+
 		var diffs []string
 
 		for i, f := range dumpContentFields {
@@ -281,6 +290,7 @@ func diffByField(leftPath, rightPath string, bw *bufio.Writer) {
 
 	throw2(fmt.Fprintf(bw, "=== by-field: %d outputs in both ===\n", both))
 	throw2(fmt.Fprintf(bw, "\n[content field -> #nodes where it differs]\n"))
+
 	order := make([]int, len(dumpContentFields))
 
 	for i := range order {
@@ -337,6 +347,7 @@ func diffByToken(leftPath, rightPath string, bw *bufio.Writer, opts byTokenOpts)
 	rExact := map[string]map[string][]string{}
 	rAxis := map[string]map[string][]string{}
 	ridx := map[string]map[string][]string{}
+
 	streamJSONL(rightPath, func(n map[string]any) {
 		if canc.cancelRight(n) {
 			return
@@ -374,6 +385,7 @@ func diffByToken(leftPath, rightPath string, bw *bufio.Writer, opts byTokenOpts)
 
 	groups := []string{}
 	paired := 0
+
 	streamJSONL(leftPath, func(n map[string]any) {
 		if canc.cancelLeft(n) {
 			if opts.rootsOnly && !nodeProducesRoot(n, rootSet) {
@@ -396,6 +408,7 @@ func diffByToken(leftPath, rightPath string, bw *bufio.Writer, opts byTokenOpts)
 		}
 
 		paired++
+
 		g := byTokenGroupKey(n, opts.groupBy)
 
 		if _, seen := our[g]; !seen {
@@ -497,10 +510,12 @@ func nodeProducesRoot(n map[string]any, rootSet map[string]bool) bool {
 
 func cmdArgTokens(n map[string]any) []string {
 	var out []string
+
 	cmds, _ := n["cmds"].([]any)
 
 	for _, c := range cmds {
 		cm, _ := c.(map[string]any)
+
 		out = append(out, toStrings(cm["cmd_args"])...)
 	}
 
@@ -533,6 +548,7 @@ func accumMultisetDiff(left, right []string, onlyL, onlyR map[string]int) {
 
 func writeTokenRanking(bw *bufio.Writer, title string, m map[string]int) {
 	throw2(fmt.Fprintf(bw, "\n[%s]  (token: #nodes, by category)\n", title))
+
 	byCat := map[string]int{}
 
 	for t := range m {
@@ -599,6 +615,7 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 	rExact := map[string]DiffKindRec{}
 	rAxis := map[string]DiffKindRec{}
 	ridx := map[string]DiffKindRec{}
+
 	streamJSONL(rightPath, func(n map[string]any) {
 		if canc.cancelRight(n) {
 			return
@@ -610,10 +627,12 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 			setDumpDiffKindMatch(rExact, rAxis, ridx, o, n, rr)
 		}
 	})
+
 	total := map[string]int{}
 	diverge := map[string]int{}
 	fieldDiff := map[string][]int{}
 	combo := map[string]map[string]int{}
+
 	streamJSONL(leftPath, func(n map[string]any) {
 		kind := nodeKVP(n)
 
@@ -628,6 +647,7 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 		}
 
 		var rr DiffKindRec
+
 		found := false
 
 		if rr, found = findDumpDiffKindMatch(rExact, rAxis, ridx, n); !found {
@@ -677,6 +697,7 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 
 	for _, k := range kinds {
 		fd := fieldDiff[k]
+
 		var parts []string
 
 		for i, f := range dumpContentFields {
@@ -686,6 +707,7 @@ func diffByKind(leftPath, rightPath string, bw *bufio.Writer) {
 		}
 
 		sort.Slice(parts, func(a, b int) bool { return parts[a] > parts[b] })
+
 		topCombo := ""
 		best := 0
 
@@ -705,6 +727,7 @@ func computeRootOutputs(leftPath, rightPath string) (map[string]bool, int) {
 	rightExact := map[string]string{}
 	rightAxis := map[string]string{}
 	rightSelf := map[string]string{}
+
 	streamJSONL(rightPath, func(n map[string]any) {
 		if canc.cancelRight(n) {
 			return
@@ -716,9 +739,11 @@ func computeRootOutputs(leftPath, rightPath string) (map[string]bool, int) {
 			setDumpDiffSelfMatch(rightExact, rightAxis, rightSelf, o, n, su)
 		}
 	})
+
 	divergent := map[string]bool{}
 	uidToDivergentOuts := map[string]map[string]bool{}
 	uidToDeps := map[string][]string{}
+
 	streamJSONL(leftPath, func(n map[string]any) {
 		if canc.cancelLeft(n) {
 			return
@@ -727,6 +752,7 @@ func computeRootOutputs(leftPath, rightPath string) (map[string]bool, int) {
 		su := getString(n, "self_uid")
 		uid := getString(n, "uid")
 		outs := toStrings(n["outputs"])
+
 		uidToDeps[uid] = toStrings(n["deps"])
 
 		for _, o := range outs {
@@ -745,6 +771,7 @@ func computeRootOutputs(leftPath, rightPath string) (map[string]bool, int) {
 			uidToDivergentOuts[uid][o] = true
 		}
 	})
+
 	leafSet := map[string]bool{}
 
 	for uid, outs := range uidToDivergentOuts {
@@ -825,6 +852,7 @@ func diffPair(leftPath, rightPath, output string, bw *bufio.Writer) {
 func writePairCmds(bw *bufio.Writer, left, right map[string]any) {
 	lTok, rTok := cmdArgTokens(left), cmdArgTokens(right)
 	onlyL, onlyR := map[string]int{}, map[string]int{}
+
 	accumMultisetDiff(lTok, rTok, onlyL, onlyR)
 
 	if len(onlyL) > 0 || len(onlyR) > 0 {
@@ -834,6 +862,7 @@ func writePairCmds(bw *bufio.Writer, left, right map[string]any) {
 	}
 
 	lc, rc := cmdMaps(left), cmdMaps(right)
+
 	throw2(fmt.Fprintf(bw, "  [cmds structurally differ; cmd_args multiset matches]\n"))
 
 	if len(lc) != len(rc) {
@@ -875,6 +904,7 @@ func cmdMaps(n map[string]any) []map[string]any {
 
 	for _, c := range cmds {
 		cm, _ := c.(map[string]any)
+
 		out = append(out, cm)
 	}
 
@@ -883,6 +913,7 @@ func cmdMaps(n map[string]any) []map[string]any {
 
 func writePairTokens(bw *bufio.Writer, left, right []string) {
 	onlyL, onlyR := map[string]int{}, map[string]int{}
+
 	accumMultisetDiff(left, right, onlyL, onlyR)
 	var lk, rk []string
 
@@ -1057,6 +1088,7 @@ func newDumpDiffCanceler(leftPath, rightPath string, key func(map[string]any) st
 
 func dumpDiffKeyMultiset(path string, key func(map[string]any) string) map[string]int {
 	m := map[string]int{}
+
 	streamJSONL(path, func(n map[string]any) {
 		m[key(n)]++
 	})
@@ -1084,6 +1116,7 @@ func dumpDiffTakeBudget(m map[string]int, k string) bool {
 
 func dumpDiffContentKey(n map[string]any) string {
 	h := nodeFieldHashes(n)
+
 	var b [len(h) * 8]byte
 
 	for i, v := range h {
@@ -1306,6 +1339,7 @@ func findDumpDiffOutputSelfMatch(exact, axis, any map[string]string, output stri
 
 func fnvHash(b []byte) uint64 {
 	h := fnv.New64a()
+
 	throw2(h.Write(b))
 
 	return h.Sum64()

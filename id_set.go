@@ -47,6 +47,7 @@ func (s *IdSet) add(v VFS) {
 		}
 
 		g := make([]uint32, grown)
+
 		copy(g, s.gen)
 		s.gen = g
 	}

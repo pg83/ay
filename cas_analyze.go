@@ -18,7 +18,9 @@ func cmdCasAnalyze(_ GlobalFlags, args []string) int {
 	}
 
 	chunkAvg := 8192
+
 	var minLen int64
+
 	casDir := ""
 
 	for _, a := range args[1:] {
@@ -196,7 +198,9 @@ var gearTable = func() [256]uint64 {
 
 	for i := range t {
 		x += 0x9E3779B97F4A7C15
+
 		z := x
+
 		z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9
 		z = (z ^ (z >> 27)) * 0x94D049BB133111EB
 		t[i] = z ^ (z >> 31)

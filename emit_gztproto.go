@@ -17,6 +17,7 @@ func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	na := ctx.emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	inputs := make([]VFS, 0, 1+len(inducedProtos)+1)
+
 	inputs = append(inputs, converterBin)
 	inputs = append(inputs, inducedProtos...)
 	inputs = append(inputs, gztSource)
@@ -37,6 +38,7 @@ func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 
 	gzRef := ctx.emit.emit(node)
 	sourceInputs := make([]VFS, 0, 1+len(imports))
+
 	sourceInputs = append(sourceInputs, gztSource)
 
 	for _, v := range imports {
@@ -46,6 +48,7 @@ func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	}
 
 	generatedParse := gztGeneratedProtoParse(ctx, gztSource, inducedProtos)
+
 	ctx.parsers.injectSourceParse(source(moddir, "/", genProtoName), generatedParse)
 
 	ctx.codegenFor(instance).register(&GeneratedFileInfo{
@@ -71,6 +74,7 @@ func emitLibraryGztProtoCompile(ctx *GenCtx, instance ModuleInstance, d *ModuleD
 
 func gztCmdArgs(converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) []STR {
 	args := make([]STR, 0, 6+len(protoInclude))
+
 	args = append(args, converterBin.str())
 	args = append(args, internV("-I", pbRuntimeBaseVFS.string()))
 
@@ -102,6 +106,7 @@ func gztConverterInducedProtos(ctx *GenCtx) []VFS {
 	res := ctx.toolResult(argDictGazetteerConverter)
 
 	var out []VFS
+
 	seen := make(map[VFS]struct{}, 2)
 
 	for _, dir := range res.InducedDeps.bucket(parsedIncludesCpp) {

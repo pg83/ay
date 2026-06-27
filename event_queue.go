@@ -7,6 +7,7 @@ type EventQueue struct {
 
 func newEventQueue() *EventQueue {
 	q := &EventQueue{ch: make(chan func(), 4096), done: make(chan struct{})}
+
 	go q.loop()
 
 	return q

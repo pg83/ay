@@ -69,6 +69,7 @@ func (p ProtoIncludeDirectiveParser) parseDirectiveSet(data []byte, a *BumpAlloc
 	})
 
 	local := block[:k]
+
 	a.commit(k)
 
 	hblock := a.alloc(directiveBlockHint)
@@ -81,6 +82,7 @@ func (p ProtoIncludeDirectiveParser) parseDirectiveSet(data []byte, a *BumpAlloc
 	}
 
 	hcpp := hblock[:j]
+
 	a.commit(j)
 
 	var set ParsedIncludeSet

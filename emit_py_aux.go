@@ -29,6 +29,7 @@ func emitGeneratedPyAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleDat
 
 		genInputs := info.SourceInputs
 		src := build(instance.Path.rel(), "/", srcRel.string())
+
 		entries = append(entries, PyProtoAuxEntry{path: src, key: generatedPyResourceKey(instance.Path.rel(), d, srcRel.string()), inputs: genInputs})
 
 		if !d.pyBuildNoPYC {
@@ -39,6 +40,7 @@ func emitGeneratedPyAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleDat
 			}
 
 			yp := build(instance.Path.rel(), "/", srcRel.string(), suffix)
+
 			entries = append(entries, PyProtoAuxEntry{path: yp, key: generatedPyResourceKey(instance.Path.rel(), d, srcRel.string()+".yapyc3"), inputs: genInputs})
 		}
 	}
@@ -59,12 +61,14 @@ func emitGeneratedPyAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleDat
 	for i, prRef := range rawRes.PRRefs {
 		aux := rawRes.PROutputs[i]
 		ccIn := in
+
 		ccIn.ExtraDepRefs = []NodeRef{prRef}
 		ccIn.ForceCxx = true
 		ccIn.PerSourceCFlags = concat(in.PerSourceCFlags, []ARG{argX, argC})
 		ccIn.IncludeInputs = rawRes.AuxClosures[i]
 
 		ccRef, ccOut, _ := emitCC(instance, internStr(aux.rel()[strings.LastIndex(aux.rel(), "/")+1:]), aux, ccIn, ctx.host, ctx.emit)
+
 		res.Refs = append(res.Refs, ccRef)
 		res.Outputs = append(res.Outputs, ccOut)
 	}
@@ -105,10 +109,12 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 	}
 
 	var chunks []chunk
+
 	cur := chunk{}
 	cmdLen := 0
 
 	deduper.reset()
+
 	depSeen := map[NodeRef]struct{}{}
 
 	addInput := func(v VFS) {
@@ -182,6 +188,7 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 	}
 
 	flush()
+
 	res := &RawAuxResourceChunksResult{}
 
 	for _, ch := range chunks {
@@ -190,9 +197,11 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 		sourceInputs := pyProtoSourceInputs(ch.inputs)
 		auxClosure := rawAuxInputClosure(ctx, instance, aux, sourceInputs, auxRef, in)
 		cmdArgs := []STR{internStr(rescompilerBinPath), (aux).str()}
+
 		cmdArgs = appendInternStrs(cmdArgs, ch.cmdArgs)
 
 		chDeps := append([]NodeRef(nil), deps...)
+
 		chDeps = append(chDeps, ch.deps...)
 		chDeps = append(chDeps, depRefs(rescompilerRef)...)
 

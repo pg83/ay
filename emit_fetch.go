@@ -27,6 +27,7 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 	node.SelfUID = node.UID
 
 	ref := ctx.emit.emit(node)
+
 	ctx.fetchRefs.put(decl.Name, ref)
 
 	return ref

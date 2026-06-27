@@ -56,6 +56,7 @@ func dedup[T ~uint32](lists ...[]T) []T {
 	}
 
 	deduper.reset()
+
 	out := make([]T, 0, total)
 
 	for _, l := range lists {

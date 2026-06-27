@@ -57,8 +57,10 @@ func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	}
 
 	head := make([]STR, 0, 1+len(effectiveFlags))
+
 	head = append(head, (ragel6BinaryPath).str())
 	head = appendArgStr(head, effectiveFlags)
+
 	cmdArgs := na.chunkList(head, ragel6ConstArgs, na.strList((outVFS).str(), (inVFS).str()))
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -84,6 +86,7 @@ func emitLibraryRagel6Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	r6Out := ragel6OutVFS(instance, srcRel)
 	r6Parsed := ctx.scannerFor(instance).parsers.sourceParsedBuckets(rl6SourceVFS, nil).bucket(parsedIncludesCpp)
 	r6Ref := ctx.emit.reserve()
+
 	ctx.codegenFor(instance).register(&GeneratedFileInfo{
 		ProducerKvP:    pkR6,
 		OutputPath:     r6Out,

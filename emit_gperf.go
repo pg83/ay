@@ -28,6 +28,7 @@ func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS
 	na := emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	head := make([]STR, 0, 3+len(gperfFlags))
+
 	head = append(head, (gperfBin).str())
 	head = append(head, gperfFlags...)
 	head = append(head, internStr(gperfSymbolName(srcRel)), (srcVFS).str())
@@ -54,6 +55,7 @@ func emitLibraryGperfSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	srcClosure := walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)
 	gpRef := emitGP(instance, srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, keepOnlySourceVFS(srcClosure), ctx.emit)
 	gpParsed := ctx.scannerFor(instance).parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesCpp)
+
 	ctx.codegenFor(instance).register(&GeneratedFileInfo{
 		ProducerKvP:    pkGP,
 		OutputPath:     genVFS,
@@ -66,6 +68,7 @@ func emitLibraryGperfSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 
 	ccIn.IncludeInputs = append([]VFS{genVFS}, srcClosure...)
 	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, srcClosure, gpRef)
+
 	ccRef, ccOut, _ := emitCC(instance, genVFS.str(), genVFS, ccIn, ctx.host, ctx.emit)
 
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}

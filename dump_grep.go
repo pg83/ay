@@ -12,7 +12,9 @@ import (
 
 func cmdDumpGrep(_ GlobalFlags, args []string) int {
 	var inPath string
+
 	raw, substr, useRegex := false, false, false
+
 	var keys []string
 
 	for i := 0; i < len(args); i++ {
@@ -43,6 +45,7 @@ func cmdDumpGrep(_ GlobalFlags, args []string) int {
 
 	if len(keys) == 0 {
 		sc := bufio.NewScanner(os.Stdin)
+
 		sc.Buffer(make([]byte, 1<<20), 1<<26)
 
 		for sc.Scan() {
@@ -144,11 +147,13 @@ func cmdDumpGrep(_ GlobalFlags, args []string) int {
 		defer func() { throw(f.Close()) }()
 
 		dec := json.NewDecoder(bufio.NewReaderSize(f, 1<<20))
+
 		dec.UseNumber()
 		seekToGraph(dec, inPath)
 
 		for dec.More() {
 			node := map[string]any{}
+
 			throw(dec.Decode(&node))
 			emit(node)
 		}
@@ -167,6 +172,7 @@ func cmdDumpGrep(_ GlobalFlags, args []string) int {
 
 		if len(line) > 0 {
 			node := map[string]any{}
+
 			throw(json.Unmarshal([]byte(line), &node))
 			emit(node)
 		}

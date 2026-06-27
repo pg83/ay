@@ -232,6 +232,7 @@ type CompileFlagBundle struct {
 
 func buildDebugInfoFlags(os OS, release, compress bool) []ARG {
 	out := make([]ARG, 0, 4)
+
 	out = append(out, argDashG)
 
 	if compress && !release && os == OSLinux {

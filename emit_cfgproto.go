@@ -32,6 +32,7 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	configIncludes := ctx.parsers.sourceParsedBuckets(cfgSource, nil).bucket(parsedIncludesProtoConfig)
 	extras := pbHEmitsIncludesExtras()
 	cfgHParsed := make([]IncludeDirective, 0, len(directImports)+len(configIncludes)+len(extras)+len(cfgImports))
+
 	cfgHParsed = append(cfgHParsed, directImports...)
 	cfgHParsed = append(cfgHParsed, configIncludes...)
 	cfgHParsed = append(cfgHParsed, extras...)
@@ -41,6 +42,7 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	}
 
 	reg := ctx.codegenFor(instance)
+
 	reg.register(&GeneratedFileInfo{
 		ProducerKvP:    pkPB,
 		OutputPath:     cfgH,
@@ -65,6 +67,7 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 
 	ccSrcRel := srcRel + ".pb.cc"
 	ccIn := in
+
 	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), cfgPbCC, in.ScanCfg)
 
 	filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
@@ -79,6 +82,7 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 
 	ccIn.IncludeInputs = filtered
 	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, cfgRef)
+
 	ref, outPath, _ := emitCC(instance, internStr(ccSrcRel), cfgPbCC, ccIn, ctx.host, ctx.emit)
 
 	return &SourceEmit{Ref: ref, OutPath: outPath}

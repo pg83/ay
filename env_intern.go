@@ -17,6 +17,7 @@ func internEnvSTR(st STR) ENV {
 	}
 
 	id := ENV(len(envTable.strs))
+
 	envTable.strs = append(envTable.strs, st)
 	envTable.ids.put(st, uint32(id))
 

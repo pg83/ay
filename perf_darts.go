@@ -66,6 +66,7 @@ func perfDarts() int {
 	fmt.Printf("roots=%d queries=%d darts-vs-old mismatches=%d\n", len(roots), len(dirs), mismatch)
 
 	const iters = 2000
+
 	ops := int64(iters) * int64(len(dirs))
 	sink := 0
 	t0 := time.Now()

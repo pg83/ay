@@ -45,6 +45,7 @@ func newMemFS(files map[string]string) *MemFS {
 
 		for {
 			parent, name := splitDirName(cur)
+
 			addEntry(parent, name, isDirEntry)
 
 			if parent == "" {
@@ -90,6 +91,7 @@ func (fs *MemFS) listdir(dir VFS) DirView {
 	}
 
 	v := DirView{dir: key, names: packed}
+
 	fs.views[rel] = v
 
 	return v

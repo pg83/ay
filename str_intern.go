@@ -35,6 +35,7 @@ func internOwnedCopy(b []byte) string {
 	}
 
 	block := internTable.bytes.alloc(n)
+
 	copy(block, b)
 	internTable.bytes.commit(n)
 
@@ -45,6 +46,7 @@ type STR uint32
 
 func internAppend(s string, lo uint64) STR {
 	id := STR(len(internTable.strs))
+
 	internTable.strs = append(internTable.strs, s)
 	internTable.los = append(internTable.los, lo)
 
@@ -64,12 +66,14 @@ func internStr(s string) STR {
 		}
 
 		id := internAppend(s, h.Lo)
+
 		internTable.overflow[s] = id
 
 		return id
 	}
 
 	id := internAppend(s, h.Lo)
+
 	internTable.ids.put(h.Hi, id)
 
 	return id
@@ -89,12 +93,14 @@ func internBytes(b []byte) STR {
 
 		s := internOwnedCopy(b)
 		id := internAppend(s, h.Lo)
+
 		internTable.overflow[s] = id
 
 		return id
 	}
 
 	id := internAppend(internOwnedCopy(b), h.Lo)
+
 	internTable.ids.put(h.Hi, id)
 
 	return id
@@ -163,6 +169,7 @@ func srcExtClassOf(id STR) SrcExtClass {
 		}
 
 		next := make([]uint8, grown)
+
 		copy(next, srcExtClasses)
 		srcExtClasses = next
 	}

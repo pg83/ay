@@ -90,6 +90,7 @@ func (ex *Executor) onNode(n *Node, uids *UidVec, fetchRefs *DenseMap[STR, NodeR
 	}
 
 	f := &NodeFuture{node: n, uids: uids, fetchRefs: fetchRefs}
+
 	ex.byUID[n.UID] = f
 	ex.mu.Unlock()
 
@@ -161,7 +162,9 @@ func (ex *Executor) failedRoots(roots []UID) []UID {
 
 func (ex *Executor) lookup(uid UID) *NodeFuture {
 	ex.mu.Lock()
+
 	f := ex.byUID[uid]
+
 	ex.mu.Unlock()
 
 	return f
@@ -204,6 +207,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 	defer func() { <-ex.sema }()
 
 	tmp := filepath.Join(ex.bldRoot, "tmp", n.UID.string())
+
 	throw(os.MkdirAll(tmp, 0o755))
 
 	dir := throw2(os.Open(tmp))
@@ -323,6 +327,7 @@ func packCommandFiles(args []string, buildRoot string, counter *int) []string {
 
 func consumeCommandFile(args []string, pos *int, buildRoot string, counter *int) string {
 	path := filepath.Join(buildRoot, "ya_command_file_"+strconv.Itoa(*counter)+".args")
+
 	*counter++
 
 	var b strings.Builder
@@ -357,6 +362,7 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 		}
 
 		mounted := filepath.Join(bldMount, out.rel())
+
 		throw(os.MkdirAll(filepath.Dir(mounted), 0o755))
 	}
 
@@ -410,6 +416,7 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 
 		if c.Stdout != 0 {
 			path := mountString(c.Stdout.string(), srcMount, bldMount)
+
 			throw(os.MkdirAll(filepath.Dir(path), 0o755))
 
 			f := throw2(os.Create(path))
@@ -455,6 +462,7 @@ func (ex *Executor) linkSourceInputs(n *Node, srcMount string) {
 
 			rel := in.rel()
 			target := filepath.Join(srcMount, rel)
+
 			throw(os.MkdirAll(filepath.Dir(target), 0o755))
 			_ = os.Remove(target)
 			throw(os.Symlink(filepath.Join(ex.srcRoot, rel), target))
@@ -479,9 +487,11 @@ func (ex *Executor) storeOutputs(n *Node, tmp string) {
 	}
 
 	uidPath := ex.uidPath(n.UID)
+
 	throw(os.MkdirAll(filepath.Dir(uidPath), 0o755))
 
 	tf := throw2(os.CreateTemp(filepath.Dir(uidPath), "."+n.UID.string()+".*"))
+
 	throw2(tf.Write(throw2(json.Marshal(meta))))
 	throw(tf.Close())
 	throw(os.Rename(tf.Name(), uidPath))
@@ -540,6 +550,7 @@ func (ex *Executor) restoreManifest(uid UID, where string) {
 		}
 
 		target := mountString(outVFS, ex.srcRoot, where)
+
 		throw(os.MkdirAll(filepath.Dir(target), 0o755))
 		_ = os.Remove(target)
 

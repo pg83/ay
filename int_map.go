@@ -27,6 +27,7 @@ func newIntMap[V any](hint int) *IntMap[V] {
 	}
 
 	m := &IntMap[V]{}
+
 	m.alloc(c)
 
 	return m
@@ -80,11 +81,13 @@ func (m *IntMap[V]) cell(k uint64) (*V, bool) {
 
 func (m *IntMap[V]) put(k uint64, v V) {
 	cell, _ := m.cell(k)
+
 	*cell = v
 }
 
 func (m *IntMap[V]) grow() {
 	old := m.data
+
 	m.alloc(len(old) * 2)
 	m.count = 0
 

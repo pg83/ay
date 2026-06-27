@@ -17,6 +17,7 @@ func emitSplitCodegensForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 
 		for _, partRel := range parts {
 			ccRef, ccOut := emitCodegenDownstreamCC(ctx, instance, partRel, []NodeRef{scRef}, in)
+
 			res.CCRefs = append(res.CCRefs, ccRef)
 			res.CCOutputs = append(res.CCOutputs, ccOut)
 		}
@@ -40,6 +41,7 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 
 	for i := 0; i < sc.OutNum; i++ {
 		partRel := prefix + "." + strconv.Itoa(i) + ".cpp"
+
 		partRels = append(partRels, partRel)
 		outputs = append(outputs, build(moduleDir, "/", partRel))
 	}
@@ -48,6 +50,7 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 
 	cppParts := sc.OutNum - splitCodegenStreamCount
 	cmdArgs := make([]STR, 0, 6+len(sc.Opts))
+
 	cmdArgs = append(cmdArgs,
 		toolBin.str(),
 		inputIn.str(),
@@ -70,6 +73,7 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 
 	cppParsed := []IncludeDirective{part0Inc}
 	reg := ctx.codegenFor(instance)
+
 	reg.register(&GeneratedFileInfo{
 		ProducerKvP:    pkSC,
 		OutputPath:     prefixH,

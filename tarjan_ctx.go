@@ -60,12 +60,17 @@ func (t *TarjanScratch) discover(v VFS, idx int32) {
 		}
 
 		stamp := make([]uint32, grown)
+
 		copy(stamp, t.stamp)
 		t.stamp = stamp
+
 		index := make([]int32, grown)
+
 		copy(index, t.index)
 		t.index = index
+
 		low := make([]int32, grown)
+
 		copy(low, t.low)
 		t.low = low
 	}
@@ -179,6 +184,7 @@ func (tc *TarjanCtx) strongconnect(g ClosureSink, v VFS) (hits uint64) {
 				}
 
 				win, _ := g.cachedWindow(ch)
+
 				k = tc.closure.spliceNew(win, block, k)
 			})
 		}

@@ -36,6 +36,7 @@ type ObjcopyEmitCtx struct {
 
 func newObjcopyEmitCtx(ctx *GenCtx, d *ModuleData, p *Platform) *ObjcopyEmitCtx {
 	oc := &ObjcopyEmitCtx{na: ctx.na}
+
 	oc.rescompilerLDRef, _ = ctx.tool(argToolsRescompiler)
 	oc.rescompressorLDRef, _ = ctx.tool(argToolsRescompressor)
 	oc.blocks = composeObjcopyArgBlocks(d.tc, p)
@@ -157,12 +158,14 @@ func emitResourceObjcopy(
 		kvsCmd        []string
 		cmdLen        int
 	}
+
 	cur := acc{}
 	moduleTag := resourceLibTagForData(d)
 	cppProtoSubmodule := cfModuleTag(d, instance) == tagCppProto
 
 	if cppProtoSubmodule {
 		s := strCPPProto.string()
+
 		moduleTag = &s
 	}
 
@@ -274,6 +277,7 @@ func emitResourceObjcopy(
 		}
 
 		dataInputs := make([]VFS, 0, len(cur.pathInputs)+len(cur.closureInputs)+len(cur.kvInputs))
+
 		dataInputs = append(dataInputs, cur.pathInputs...)
 		dataInputs = append(dataInputs, cur.closureInputs...)
 		dataInputs = append(dataInputs, cur.kvInputs...)
@@ -281,6 +285,7 @@ func emitResourceObjcopy(
 		node.DepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, dataInputs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
 
 		r := ctx.emit.emit(node)
+
 		out.Refs = append(out.Refs, r)
 		out.Outputs = append(out.Outputs, outputObj)
 		cur = acc{}
@@ -295,6 +300,7 @@ func emitResourceObjcopy(
 
 					if inner, ok := rootrelInputPath(e.Key); ok {
 						r := resolveResourceInput(ctx, instance, inner, copyFileInputVFS(ctx.fs, instance.Path, inner))
+
 						cur.kvInputs = append(cur.kvInputs, r.Input)
 						cur.mainOuts = append(cur.mainOuts, r.ProducerMainOut)
 						cur.kvsCmd = append(cur.kvsCmd, renderResourceKvCmd(rootrelExpand(e.Key, r.Input.rel())))
@@ -303,6 +309,7 @@ func emitResourceObjcopy(
 					}
 				} else {
 					r := resolveResourceInput(ctx, instance, e.Path, copyFileInputVFS(ctx.fs, instance.Path, e.Path))
+
 					cur.paths = append(cur.paths, e.Path)
 					cur.pathInputs = append(cur.pathInputs, r.Input)
 					cur.mainOuts = append(cur.mainOuts, r.ProducerMainOut)
@@ -328,6 +335,7 @@ func emitResourceObjcopy(
 					}
 
 					kb := encb64.StdEncoding.EncodeToString([]byte(e.Key))
+
 					cur.keys = append(cur.keys, kb)
 					cur.cmdLen += rootCmdLen + len(e.Path) + len(kb)
 				}
@@ -447,7 +455,9 @@ func emitYaConfJSONObjcopy(
 			keyPath:    "ya.conf.json",
 			hashPath:   "ya.conf.json",
 		})
+
 		formulas := yaConfFormulaResources(ctx.fs, file.string())
+
 		sort.Strings(formulas)
 
 		for _, formula := range formulas {
@@ -543,8 +553,11 @@ func emitPyNamespaceForGroup(
 
 	for _, srcRel := range pySources {
 		modName := strings.TrimSuffix(srcRel, ".py")
+
 		modName = strings.ReplaceAll(modName, "/", ".")
+
 		mod := nsPrefix + modName
+
 		h.Write([]byte(mod))
 	}
 
@@ -575,6 +588,7 @@ func emitPyNamespaceForGroup(
 
 	for _, keyPath := range keyPaths {
 		key := "py/namespace/" + modListMD5 + "/" + keyPath
+
 		kvsHash = append(kvsHash, key+"=\""+nsValue+"\"")
 		kvsCmd = append(kvsCmd, key+"="+nsValue)
 	}
@@ -610,7 +624,9 @@ func emitNoCheckImportsObjcopy(
 	value := strings.Join(strStrings(d.noCheckImports), " ")
 	sum := md5.Sum([]byte(value))
 	b32 := strings.ToLower(enc32.StdEncoding.EncodeToString(sum[:]))
+
 	b32 = strings.TrimRight(b32, "=")
+
 	key := "py/no_check_imports/" + b32
 	kvHash := key + "=\"" + value + "\""
 	kvCmd := key + "=" + value
@@ -670,6 +686,7 @@ func emitPySrcObjcopy(
 			hash := objcopyHash(ch.paths, ch.keys, ch.kvsHash, instance.Path.rel(), moduleTag)
 			outputObj := build(instance.Path.rel(), "/objcopy_", hash, ".o")
 			payload := make([]STR, 0, 2+len(ch.pathInps)+len(ch.keys)+1+len(ch.kvsCmd))
+
 			payload = append(payload, argInputs.str())
 
 			for _, p := range ch.pathInps {
@@ -701,6 +718,7 @@ func emitPySrcObjcopy(
 			node.DepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ch.inps, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
 
 			r := ctx.emit.emit(node)
+
 			res.Refs = append(res.Refs, r)
 			res.Outputs = append(res.Outputs, outputObj)
 		}

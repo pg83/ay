@@ -50,6 +50,7 @@ func perfLink(count, size int) int {
 	defer func() { throw(os.RemoveAll(root)) }()
 
 	cas := filepath.Join(root, "cas")
+
 	throw(os.MkdirAll(cas, 0o755))
 
 	blob := make([]byte, size)
@@ -57,6 +58,7 @@ func perfLink(count, size int) int {
 
 	for i := range srcs {
 		p := filepath.Join(cas, strconv.Itoa(i))
+
 		throw(os.WriteFile(p, blob, 0o444))
 		srcs[i] = p
 	}
@@ -65,7 +67,9 @@ func perfLink(count, size int) int {
 		const minDur = 2 * time.Second
 
 		out := filepath.Join(root, "out")
+
 		var dur time.Duration
+
 		iters := 0
 
 		for dur < minDur {
@@ -84,6 +88,7 @@ func perfLink(count, size int) int {
 		}
 
 		ops := int64(iters) * int64(count)
+
 		fmt.Printf("%-8s %5d files x %3d iters: %8.0f ns/op  %10.0f ops/s\n",
 			name, count, iters, float64(dur.Nanoseconds())/float64(ops), float64(ops)/dur.Seconds())
 	}
@@ -139,6 +144,7 @@ func perfParser(dir string) int {
 	}
 
 	const minDur = 3 * time.Second
+
 	start := time.Now()
 	iters := 0
 
@@ -152,6 +158,7 @@ func perfParser(dir string) int {
 
 	dur := time.Since(start)
 	perPass := dur / time.Duration(iters)
+
 	fmt.Printf("files=%d bytes=%d iters=%d per-pass=%v (%.0f MB/s)\n",
 		len(datas), total, iters, perPass,
 		float64(total)/(float64(perPass)/float64(time.Second))/1e6)

@@ -57,6 +57,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 	deps := map[string][]string{}
 	fetch := map[string]bool{}
 	outputsByUID := map[string][]string{}
+
 	var ldRoots, tsRoots, arRoots []string
 
 	ldPrefix := "$(B)/" + target + "/"
@@ -206,6 +207,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 
 	for len(queue) > 0 {
 		uid := queue[0]
+
 		queue = queue[1:]
 
 		if closure[uid] || fetch[uid] {
@@ -245,6 +247,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		uid  string
 		line []byte
 	}
+
 	seen := map[string]bool{}
 
 	fanoutNodes(src, workers,
@@ -256,11 +259,15 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 			}
 
 			canon := canonContent(node, refGraph)
+
 			canon["deps"] = rewriteDeps(deps[uid], closure, fetch, newUID)
 
 			nu := newUID[uid]
+
 			canon["uid"] = nu
+
 			ch := contentHash[uid]
+
 			canon["self_uid"] = base64.RawURLEncoding.EncodeToString(ch[:])[:dumpUIDLen]
 
 			return emitLine{uid: nu, line: append(marshalCompact(canon), '\n')}
@@ -331,10 +338,12 @@ func reuidClosure(
 	contentHash map[string][32]byte,
 ) map[string]string {
 	newUID := make(map[string]string, len(closure))
+
 	const (
 		onStack = 1
 		done    = 2
 	)
+
 	state := make(map[string]int, len(closure))
 
 	closureChildren := func(uid string) []string {
@@ -374,6 +383,7 @@ func reuidClosure(
 
 		h := sha256.New()
 		ch := contentHash[uid]
+
 		h.Write(ch[:])
 		h.Write([]byte{0})
 		h.Write([]byte(strings.Join(tokens, "\x00")))
@@ -393,6 +403,7 @@ func reuidClosure(
 		}
 
 		stack := []frame{{uid: r, children: closureChildren(r)}}
+
 		state[r] = onStack
 
 		for len(stack) > 0 {
@@ -400,6 +411,7 @@ func reuidClosure(
 
 			if top.idx < len(top.children) {
 				child := top.children[top.idx]
+
 				top.idx++
 
 				if state[child] == 0 {

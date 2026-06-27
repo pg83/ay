@@ -68,7 +68,9 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 		d.pySrcs = append(d.pySrcs, internStr(pyOutRel))
 
 		d.pySrcsFullName = append(d.pySrcsFullName, true)
+
 		reg := ctx.codegenFor(instance)
+
 		reg.register(&GeneratedFileInfo{
 			ProducerKvP:    pkSW,
 			OutputPath:     cOutVFS,
@@ -85,15 +87,19 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 		})
 
 		ccIn := in
+
 		ccIn.ExtraDepRefs = []NodeRef{swRef}
+
 		cClosure := walkClosure(ctx.scannerFor(instance), cOutVFS, in.ScanCfg)
 		incl := make([]VFS, 0, len(cClosure)+len(swigClosure)+1)
+
 		incl = append(incl, cClosure...)
 		incl = append(incl, swigClosure...)
 		incl = append(incl, srcVFS)
 		ccIn.IncludeInputs = incl
 
 		ccRef, ccOut, _ := emitCC(instance, internStr(cOutRel), cOutVFS, ccIn, ctx.host, ctx.emit)
+
 		out = append(out, &SourceEmit{Ref: ccRef, OutPath: ccOut})
 	}
 
@@ -124,6 +130,7 @@ func swigModuleName(module string) string {
 
 func collectSwigInducedIncludes(ctx *GenCtx, src VFS, closure []VFS) []IncludeDirective {
 	swigParser := IncludeDirectiveParser(SwigIncludeDirectiveParser{})
+
 	var out []IncludeDirective
 
 	add := func(v VFS) {

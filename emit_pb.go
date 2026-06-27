@@ -281,6 +281,7 @@ func protoPySuffix(modulePath string) string {
 func protoPathID(path string) string {
 	sum := md5.Sum([]byte(path))
 	encoded := base32.StdEncoding.EncodeToString(sum[:])
+
 	encoded = strings.ToLower(encoded)
 
 	return strings.TrimRight(encoded, "=")
@@ -288,6 +289,7 @@ func protoPathID(path string) string {
 
 func protoResourceHash(items []string, modulePath, moduleTag string) string {
 	list := append([]string(nil), items...)
+
 	list = append(list, modulePath)
 	sort.Strings(list)
 
@@ -325,6 +327,7 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 	}
 
 	mid := make([]STR, 0, 12+len(protoInclude)+len(extraProtocFlags))
+
 	mid = append(mid,
 		arg2.str(),
 		(protocBinary).str(),

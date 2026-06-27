@@ -65,6 +65,7 @@ func (fs *OsFS) recordContentHash(rel string, data []byte) {
 		}
 
 		grown := make([]uint64, n)
+
 		copy(grown, fs.contentHashes)
 		fs.contentHashes = grown
 	}
@@ -106,6 +107,7 @@ func (fs *OsFS) listdir(dir VFS) DirView {
 	fs.listdirMisses++
 
 	v := fs.readDirViewRel(key, dir.rel())
+
 	fs.dirs.put(key, v)
 
 	return v
@@ -159,6 +161,7 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 		}
 
 		ok, d := fs.dirHas(v, name)
+
 		fs.bumpExists(ok)
 
 		return ok, d
@@ -176,6 +179,7 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 
 	if !more {
 		ok, d := fs.dirHas(v, first)
+
 		fs.bumpExists(ok)
 
 		return ok, d
@@ -188,6 +192,7 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 	}
 
 	dname, base := splitDirName(suffix)
+
 	v = fs.listdir(dirKey(joinRel(prefixRel, dname)))
 
 	if !v.listable() {
@@ -197,6 +202,7 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 	}
 
 	ok, d := fs.dirHas(v, base)
+
 	fs.bumpExists(ok)
 
 	return ok, d

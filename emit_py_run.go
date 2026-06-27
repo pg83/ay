@@ -14,6 +14,7 @@ func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in 
 	for _, rp := range d.runPython {
 		pyRef := emitRunPython(ctx, instance, rp, d, in)
 		outs := make([]string, 0, len(rp.OUTFiles)+1)
+
 		outs = append(outs, strStrings(rp.OUTFiles)...)
 
 		if rp.StdoutFile != nil && !rp.StdoutNoAuto {
@@ -24,10 +25,12 @@ func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in 
 			switch {
 			case isCCSourceExt(out):
 				ccRef, ccOut := emitPRDownstreamCC(ctx, instance, out, pyRef, in)
+
 				res.CCRefs = append(res.CCRefs, ccRef)
 				res.CCOutputs = append(res.CCOutputs, ccOut)
 			case isAsmSourceExt(out):
 				asRef, asOut := emitCodegenDownstreamAS(ctx, instance, out, []NodeRef{pyRef}, in)
+
 				res.CCRefs = append(res.CCRefs, asRef)
 				res.CCOutputs = append(res.CCOutputs, asOut)
 			}
@@ -44,6 +47,7 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 
 	for _, f := range stmt.INFiles {
 		vfs := runProgramInputVFS(ctx, instance, d, f.string())
+
 		inVFSByToken[f.string()] = vfs
 		inVFSs = append(inVFSs, vfs)
 	}
@@ -62,11 +66,13 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 
 	if stmt.StdoutFile != nil {
 		vfs := copyFileOutputVFS(instance.Path.rel(), stmt.StdoutFile.string())
+
 		stdoutVFS = &vfs
 		outVFSByToken[stmt.StdoutFile.string()] = vfs
 	}
 
 	hasCCShard, _ := splitCodegenDetect(stmt)
+
 	var splitSrcs []VFS
 
 	if hasCCShard {
@@ -143,6 +149,7 @@ func pyInputClosure(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 
 	walkOne := func(rel string) {
 		buildRootPath := copyFileOutputVFS(instance.Path.rel(), rel)
+
 		out = append(out, walkClosureTail(ctx.scannerFor(instance), buildRootPath, scanIn.ScanCfg)...)
 	}
 
@@ -151,6 +158,7 @@ func pyInputClosure(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 	if hasCCShard {
 		for _, f := range stmt.INFiles {
 			vfs := runProgramInputVFS(ctx, instance, d, f.string())
+
 			out = append(out, walkClosure(ctx.scannerFor(instance), vfs, scanIn.ScanCfg)...)
 		}
 	} else {
@@ -197,6 +205,7 @@ func splitCodegenDetect(stmt *RunPythonStmt) (hasCCShard bool, hasHeader bool) {
 func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *RunPythonStmt, scriptVFS VFS) []VFS {
 	reg := ctx.codegenFor(instance)
 	seen := make(map[VFS]struct{}, 32)
+
 	var sources []VFS
 
 	addSource := func(v VFS) {
@@ -369,6 +378,7 @@ func emitPYRun(
 	}
 
 	head := make([]VFS, 0, 1+len(stmt.INFiles))
+
 	deduper.reset()
 
 	appendUnique := func(vfs VFS) {

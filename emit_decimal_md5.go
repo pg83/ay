@@ -26,6 +26,7 @@ func emitDecimalMD5ForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in
 		}
 
 		ccRef, ccOut := emitCodegenDownstreamCC(ctx, instance, stmt.File, []NodeRef{svRef}, in)
+
 		res.CCRefs = append(res.CCRefs, ccRef)
 		res.CCOutputs = append(res.CCOutputs, ccOut)
 	}
@@ -44,6 +45,7 @@ func emitDecimalMD5(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *D
 	}
 
 	cmdArgs := make([]STR, 0, 7+len(optVFSs))
+
 	cmdArgs = append(cmdArgs,
 		d.tc.Python3,
 		decimalMD5PyVFS.str(),
@@ -72,6 +74,7 @@ func emitDecimalMD5(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *D
 	})
 
 	sourceInputs := make([]VFS, 0, len(optVFSs)+1)
+
 	sourceInputs = append(sourceInputs, optVFSs...)
 	sourceInputs = append(sourceInputs, decimalMD5PyVFS)
 

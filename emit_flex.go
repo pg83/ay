@@ -23,10 +23,12 @@ func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
 	outVFS := flexGeneratedVFS(instance, srcRel)
 	parsed := make([]IncludeDirective, 0, 1)
+
 	parsed = append(parsed, flexOutputInclude)
 	parsed = append(parsed, ctx.scannerFor(instance).parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
 
 	lxRef := ctx.emit.reserve()
+
 	ctx.codegenFor(instance).register(&GeneratedFileInfo{
 		ProducerKvP:    pkLX,
 		OutputPath:     outVFS,
@@ -41,6 +43,7 @@ func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef, ctx.emit)
 
 	ccIn := in
+
 	ccIn.IncludeInputs = window
 	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, window, lxRef)
 

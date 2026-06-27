@@ -177,6 +177,7 @@ func (kv KV) sortedExt() []KVExt {
 	}
 
 	out := append([]KVExt(nil), kv.ExtOut...)
+
 	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
 
 	return out

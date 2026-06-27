@@ -38,6 +38,7 @@ func (h *IntHeap) pop() interface{} {
 	old := *h
 	n := len(old)
 	x := old[n-1]
+
 	*h = old[:n-1]
 
 	return x

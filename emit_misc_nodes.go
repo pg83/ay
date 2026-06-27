@@ -13,6 +13,7 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 	}
 
 	antlrCCRefs, antlrCCOutputs := emitAntlrRuns(ctx, instance, d, consumerInputs)
+
 	ccRefs = append(ccRefs, antlrCCRefs...)
 	ccOutputs = append(ccOutputs, antlrCCOutputs...)
 
@@ -25,6 +26,7 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			parserG4 := source(instance.Path.rel(), "/", g.Parser)
 			lexerCpp := build(outPrefix, lexerBase, ".cpp")
 			parserCpp := build(outPrefix, parserBase, ".cpp")
+
 			ctx.codegenFor(instance).register(&GeneratedFileInfo{
 				ProducerKvP:    pkJV,
 				OutputPath:     lexerCpp,
@@ -86,6 +88,7 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 				}
 
 				refs, outs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
+
 				ccRefs = append(ccRefs, refs...)
 				ccOutputs = append(ccOutputs, outs...)
 			}
@@ -95,6 +98,7 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			grammarG4 := source(instance.Path.rel(), "/", g.Grammar)
 			lexerCpp := build(outPrefix, base, "Lexer.cpp")
 			parserCpp := build(outPrefix, base, "Parser.cpp")
+
 			ctx.codegenFor(instance).register(&GeneratedFileInfo{
 				ProducerKvP:    pkJV,
 				OutputPath:     lexerCpp,
@@ -154,6 +158,7 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 				}
 
 				refs, outs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
+
 				ccRefs = append(ccRefs, refs...)
 				ccOutputs = append(ccOutputs, outs...)
 			}

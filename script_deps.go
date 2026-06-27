@@ -11,6 +11,7 @@ type ScriptDeps map[VFS][]VFS
 
 func buildScriptTable(fs FS) ScriptDeps {
 	texts := map[string]string{}
+
 	fs.walk(buildScriptsRoot, func(rel string, isDir bool) bool {
 		if isDir {
 			return true
@@ -27,6 +28,7 @@ func buildScriptTable(fs FS) ScriptDeps {
 
 	for rel := range texts {
 		base := rel[strings.LastIndexByte(rel, '/')+1:]
+
 		byStem[strings.TrimSuffix(base, ".py")] = rel
 	}
 
@@ -56,6 +58,7 @@ func buildScriptTable(fs FS) ScriptDeps {
 
 		for len(stack) > 0 {
 			d := stack[len(stack)-1]
+
 			stack = stack[:len(stack)-1]
 
 			if d == rel || seen[d] {
@@ -80,6 +83,7 @@ func buildScriptTable(fs FS) ScriptDeps {
 		sort.Strings(deps)
 
 		out := make([]VFS, 1, 1+len(deps))
+
 		out[0] = source(rel)
 
 		for _, d := range deps {
@@ -97,6 +101,7 @@ func scriptImports(txt string) []string {
 
 	for _, line := range strings.Split(txt, "\n") {
 		l := strings.TrimSpace(line)
+
 		var mods string
 
 		switch {

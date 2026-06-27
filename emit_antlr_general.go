@@ -35,6 +35,7 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 
 		for _, inTok := range run.INFiles {
 			vfs := copyFileInputVFS(ctx.fs, instance.Path, inTok.string())
+
 			inVFSByToken[inTok.string()] = vfs
 			inputs = append(inputs, vfs)
 
@@ -51,12 +52,14 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 
 		for _, outTok := range run.OUTFiles {
 			vfs := copyFileOutputVFS(instance.Path.rel(), outTok.string())
+
 			outVFSByToken[outTok.string()] = vfs
 			outputs = append(outputs, vfs)
 		}
 
 		for _, outTok := range run.OUTNoAutoFiles {
 			vfs := copyFileOutputVFS(instance.Path.rel(), outTok.string())
+
 			outVFSByToken[outTok.string()] = vfs
 			outputs = append(outputs, vfs)
 		}
@@ -102,6 +105,7 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			outVFS := outVFSByToken[outTok.string()]
 			cppRel := antlrOutputModuleRel(instance.Path.rel(), outVFS)
 			ccRef, ccOut := emitCodegenDownstreamCC(ctx, instance, cppRel, []NodeRef{jvRef}, *consumerInputs)
+
 			ccRefs = append(ccRefs, ccRef)
 			ccOutputs = append(ccOutputs, ccOut)
 		}
@@ -130,6 +134,7 @@ func antlrRunCmdArgs(instance ModuleInstance, run AntlrRunInfo, inVFSByToken, ou
 
 func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, outVFSByToken map[string]VFS, inputs []VFS, jarVFS VFS) []IncludeDirective {
 	var parsed []IncludeDirective
+
 	seen := map[string]struct{}{}
 
 	appendUnique := func(target string) {

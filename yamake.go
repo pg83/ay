@@ -527,6 +527,7 @@ func (l *Lexer) throwParse(line, col int, format string, args ...any) {
 
 func (l *Lexer) advance() byte {
 	b := l.src[l.pos]
+
 	l.pos++
 
 	switch {
@@ -875,8 +876,10 @@ func parseInternalWithStack(fs FS, name string, src []byte, stack []string) *Mak
 
 func parseInternalWithState(fs FS, name string, src []byte, stack []string, includes *IncludeState) *MakeFile {
 	src = bytes.TrimPrefix(src, []byte{0xEF, 0xBB, 0xBF})
+
 	p := &Parser{lex: newLexer(name, src), name: name, includeStack: stack, includes: includes, fs: fs}
 	mf := &MakeFile{Path: name}
+
 	mf.Stmts, _ = p.parseStmts(termTopLevel)
 
 	return mf
@@ -1525,6 +1528,7 @@ func parseSplitCodegen(args []STR, line int) *SplitCodegenStmt {
 	stmt := &SplitCodegenStmt{OutNum: splitCodegenDefaultOutNum, Line: line}
 
 	var positional []STR
+
 	section := STR(0)
 
 	for _, tok := range args {
@@ -1746,6 +1750,7 @@ func (p *Parser) parseIf(ifTok Token) *IfStmt {
 	case "ELSEIF":
 
 		nested := p.parseIf(endTok)
+
 		node.Else = []Stmt{nested}
 
 		return node
@@ -1804,11 +1809,14 @@ type CondParser struct {
 
 func parseCondExpr(parent *Parser, ifTok Token, toks []Token) []CondNode {
 	parent.condScratch = parent.condScratch[:0]
+
 	cp := CondParser{toks: toks, parent: parent, ifTok: ifTok}
+
 	cp.parseOr()
 
 	if cp.pos != len(cp.toks) {
 		t := cp.toks[cp.pos]
+
 		parent.lex.throwParse(t.line, t.col, "unexpected %s in IF condition", describeToken(t))
 	}
 
@@ -1831,6 +1839,7 @@ func (c *CondParser) peek() (Token, bool) {
 
 func (c *CondParser) consume() Token {
 	t := c.toks[c.pos]
+
 	c.pos++
 
 	return t
@@ -1847,7 +1856,9 @@ func (c *CondParser) parseOr() int32 {
 		}
 
 		c.consume()
+
 		right := c.parseAnd()
+
 		left = c.emit(CondNode{Kind: ckOr, L: left, R: right})
 	}
 }
@@ -1863,7 +1874,9 @@ func (c *CondParser) parseAnd() int32 {
 		}
 
 		c.consume()
+
 		right := c.parseNot()
+
 		left = c.emit(CondNode{Kind: ckAnd, L: left, R: right})
 	}
 }
@@ -1896,7 +1909,9 @@ func (c *CondParser) parseCmp() int32 {
 
 	if t.kind == tokIdent && t.val == "STARTS_WITH" {
 		c.consume()
+
 		right := c.parseAtom()
+
 		c.rejectChainedCmp(t)
 
 		return c.emit(CondNode{Kind: ckStartsWith, L: left, R: right})
@@ -1904,7 +1919,9 @@ func (c *CondParser) parseCmp() int32 {
 
 	if t.kind == tokIdent && t.val == "MATCHES" {
 		c.consume()
+
 		right := c.parseAtom()
+
 		c.rejectChainedCmp(t)
 
 		return c.emit(CondNode{Kind: ckMatches, L: left, R: right})
@@ -1912,7 +1929,9 @@ func (c *CondParser) parseCmp() int32 {
 
 	if t.kind == tokIdent && strings.HasPrefix(t.val, "VERSION_") {
 		c.consume()
+
 		right := c.parseAtom()
+
 		c.rejectChainedCmp(t)
 
 		return c.emit(CondNode{Kind: ckVersionCmp, Name: t.val, L: left, R: right})
@@ -1921,20 +1940,26 @@ func (c *CondParser) parseCmp() int32 {
 	switch t.kind {
 	case tokEq:
 		c.consume()
+
 		right := c.parseAtom()
+
 		c.rejectChainedCmp(t)
 
 		return c.emit(CondNode{Kind: ckEq, L: left, R: right})
 	case tokLt:
 		c.consume()
+
 		right := c.parseAtom()
+
 		c.rejectChainedCmp(t)
 
 		return c.emit(CondNode{Kind: ckLt, L: left, R: right})
 	case tokNotEq:
 
 		c.consume()
+
 		right := c.parseAtom()
+
 		c.rejectChainedCmp(t)
 
 		eq := c.emit(CondNode{Kind: ckEq, L: left, R: right})
@@ -1943,14 +1968,18 @@ func (c *CondParser) parseCmp() int32 {
 	case tokGt:
 
 		c.consume()
+
 		right := c.parseAtom()
+
 		c.rejectChainedCmp(t)
 
 		return c.emit(CondNode{Kind: ckLt, L: right, R: left})
 	case tokGe:
 
 		c.consume()
+
 		right := c.parseAtom()
+
 		c.rejectChainedCmp(t)
 
 		lt := c.emit(CondNode{Kind: ckLt, L: left, R: right})
@@ -1982,6 +2011,7 @@ func (c *CondParser) parseAtom() int32 {
 
 	if t.kind == tokLParen {
 		c.consume()
+
 		inner := c.parseOr()
 		closer, hasCloser := c.peek()
 

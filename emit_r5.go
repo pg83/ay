@@ -63,6 +63,7 @@ func emitLibraryRagel5Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	r5Ref, r5TmpOut, r5CppOut := emitR5(instance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, ctx.emit)
 	rlSourceVFS := source(instance.Path.rel(), "/", srcRel)
 	reg := ctx.codegenFor(instance)
+
 	reg.register(&GeneratedFileInfo{
 		ProducerKvP:    pkR5,
 		OutputPath:     r5TmpOut,
@@ -70,6 +71,7 @@ func emitLibraryRagel5Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		GeneratorRefs:  []NodeRef{ragel5LDRef, rlgenCdLDRef},
 		ParsedIncludes: nil,
 	})
+
 	r5Parsed := ctx.scannerFor(instance).parsers.sourceParsedBuckets(rlSourceVFS, nil).bucket(parsedIncludesCpp)
 
 	reg.register(&GeneratedFileInfo{
@@ -82,9 +84,11 @@ func emitLibraryRagel5Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 
 	ccIn := in
 	ccClosure := walkClosure(ctx.scannerFor(instance), r5CppOut, in.ScanCfg)
+
 	ccIn.IncludeInputs = append([]VFS{r5TmpOut}, ccClosure...)
 	ccIn.PerSourceCFlags = concat(in.PerSourceCFlags, []ARG{argWnoImplicitFallthrough})
 	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, r5Ref)
+
 	ccRef, ccOut, _ := emitCC(instance, r5CppOut.str(), r5CppOut, ccIn, ctx.host, ctx.emit)
 
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}

@@ -49,6 +49,7 @@ func probeMapInstr(_ GlobalFlags, args []string) int {
 
 	info := &types.Info{Types: make(map[ast.Expr]types.TypeAndValue)}
 	conf := types.Config{Importer: importer.Default(), Error: func(error) {}}
+
 	_, _ = conf.Check("main", fset, collect, info)
 
 	type edit struct {
@@ -69,6 +70,7 @@ func probeMapInstr(_ GlobalFlags, args []string) int {
 
 		f := asts[p]
 		writeIdx := map[*ast.IndexExpr]bool{}
+
 		ast.Inspect(f, func(n ast.Node) bool {
 			switch x := n.(type) {
 			case *ast.AssignStmt:
@@ -119,11 +121,13 @@ func probeMapInstr(_ GlobalFlags, args []string) int {
 
 	for p, es := range edits {
 		sort.Slice(es, func(i, j int) bool { return es[i].start > es[j].start })
+
 		b := src[p]
 
 		for _, e := range es {
 			key := string(b[e.start:e.end])
 			repl := fmt.Sprintf("%s(%s, %q)", e.fn, key, e.site)
+
 			b = append(b[:e.start:e.start], append([]byte(repl), b[e.end:]...)...)
 		}
 
@@ -191,6 +195,7 @@ func reportMapProbe() {
 		reads  uint64
 		writes uint64
 	}
+
 	rows := make([]row, 0, len(mapProbeCounts))
 
 	for s, e := range mapProbeCounts {

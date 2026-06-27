@@ -11,6 +11,7 @@ func ymapsSprotoProducedBases(ctx *GenCtx, instance ModuleInstance, d *ModuleDat
 
 	for _, srcTok := range d.ymapsSprotoSrcs {
 		protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcTok.string())
+
 		produced[strings.TrimSuffix(protoRelPath, ".proto")] = struct{}{}
 	}
 
@@ -40,6 +41,7 @@ func emitYmapsSprotoHeaders(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 		sprotoRef := ctx.emit.reserve()
 		pbhImports := protoDirectPbHIncludes(ctx.parsers, protoRelPath, outRoot)
 		parsed := make([]IncludeDirective, 0, 2*len(pbhImports))
+
 		parsed = append(parsed, pbhImports...)
 		parsed = append(parsed, sprotoInducedHeaders(pbhImports)...)
 

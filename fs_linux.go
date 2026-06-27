@@ -31,6 +31,7 @@ func (fs *OsFS) openatRel(rel string, flags int) (int, syscall.Errno) {
 	}
 
 	p := append(fs.pathBuf[:0], rel...)
+
 	p = append(p, 0)
 	fs.pathBuf = p
 
@@ -113,6 +114,7 @@ const atSymlinkNofollow = 0x100
 
 func (fs *OsFS) fstatatRel(rel string, st *syscall.Stat_t) bool {
 	p := append(fs.pathBuf[:0], rel...)
+
 	p = append(p, 0)
 	fs.pathBuf = p
 
@@ -147,6 +149,7 @@ func (fs *OsFS) readDirAll(rel string, buf *[]byte) (int, bool) {
 			}
 
 			next := make([]byte, grown)
+
 			copy(next, (*buf)[:total])
 			*buf = next
 		}
@@ -178,6 +181,7 @@ func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 
 	ents := fs.direntBuf[:n]
 	count := 0
+
 	forEachDirent(ents, func([]byte, byte) {
 		count++
 	})
@@ -188,6 +192,7 @@ func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 
 	block := fs.dirNames.alloc(count)
 	k := 0
+
 	forEachDirent(ents, func(name []byte, typ byte) {
 		isDir := typ == syscall.DT_DIR
 

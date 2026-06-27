@@ -17,6 +17,7 @@ func (SwigIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocato
 	inBlock := false
 
 	var cChunkArr [32][]byte
+
 	cChunks := cChunkArr[:0]
 
 	if !strings.Contains(rel, "/swig/Lib/") {
@@ -54,6 +55,7 @@ func (SwigIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocato
 	})
 
 	direct := block[:k]
+
 	a.commit(k)
 
 	iblock := a.alloc(directiveBlockHint)
@@ -64,6 +66,7 @@ func (SwigIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocato
 	}
 
 	induced := iblock[:j]
+
 	a.commit(j)
 
 	var set ParsedIncludeSet

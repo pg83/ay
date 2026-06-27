@@ -21,6 +21,7 @@ func (b *BitSet) add(v uint32) {
 		}
 
 		next := make([]uint64, grown)
+
 		copy(next, b.words)
 		b.words = next
 	}
