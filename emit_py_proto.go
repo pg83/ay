@@ -286,7 +286,6 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 		protoCwd = strB
 		producerDeps = []NodeRef{info.ProducerRef}
 		generated = true
-
 		producerSourceInputs = info.SourceInputs
 
 		if len(info.ProducerSourceClosure) > 0 {

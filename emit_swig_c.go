@@ -66,7 +66,6 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 		})
 
 		d.pySrcs = append(d.pySrcs, internStr(pyOutRel))
-
 		d.pySrcsFullName = append(d.pySrcsFullName, true)
 
 		reg := ctx.codegenFor(instance)

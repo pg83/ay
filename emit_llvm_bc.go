@@ -178,7 +178,6 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 		len(bundle.ArchArgs)+len(bundle.CFlags)+len(warningBundle))
 
 	args = append(args, internStr(python), internStr(clangWrapper), argNo.str(), internStr(clangBC))
-
 	args = appendArgStr(args, ccIncludesPrefix)
 	args = appendAddIncl(args, in.AddIncl, in.InclArgs)
 
@@ -190,17 +189,12 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	}
 
 	args = appendAddIncl(args, peerAddIncl, in.InclArgs)
-
 	args = appendCompileFlagPipeline(args, bundle, warningBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboostOpenSourceDefineFor(platform))
-
 	args = appendCxxStdAndOwn(args, true, in.Flags.NoCompilerWarnings, true, ownExtras)
-
 	args = appendArgStr(args, ownGlobalBucket, catboostOpenSourceDefineFor(platform), composePostCatboostBucket(ownGlobalBucket))
-
 	args = append(args, platform.TargetArg)
 	args = appendArgStr(args, bundle.ArchArgs)
 	args = append(args, argDashBBin)
-
 	args = append(args, argWnoUnknownWarningOption.str(), argEmitLlvm.str(), argDashC.str(), (inVFS).str(), argDashO.str(), (outVFS).str())
 
 	return args

@@ -1452,7 +1452,6 @@ func parseRunProgram(args []STR, line int) *RunProgramStmt {
 		case kwSTDOUT, kwSTDOUT_NOAUTO:
 			if stmt.StdoutFile == nil {
 				stmt.StdoutFile = &tok
-
 				stmt.StdoutNoAuto = currentSection == kwSTDOUT_NOAUTO
 			}
 		case kwENV:
@@ -1500,7 +1499,6 @@ func parseRunPython(args []STR, line int) *RunPythonStmt {
 		case kwSTDOUT, kwSTDOUT_NOAUTO:
 			if stmt.StdoutFile == nil {
 				stmt.StdoutFile = &tok
-
 				stmt.StdoutNoAuto = currentSection == kwSTDOUT_NOAUTO
 			}
 		case kwENV:

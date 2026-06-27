@@ -202,7 +202,6 @@ func emitFlatcCppCompile(ctx *GenCtx, instance ModuleInstance, cppVFS VFS, in Mo
 	ccIn := in
 
 	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), cppVFS, in.ScanCfg)
-
 	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, flRef)
 
 	ccRef, ccOut, _ := emitCC(instance, cppVFS.str(), cppVFS, ccIn, ctx.host, ctx.emit)

@@ -304,7 +304,6 @@ func defaultProgramPeerdirsForWithState(ctx *GenCtx, instance ModuleInstance, d 
 		}
 
 		peers = append(peers, "build/cow/on")
-
 		peers = appendImplicitPeers(peers, programAllocatorDefaults, rc)
 	} else {
 		peers = appendImplicitPeers(peers, programImplicitPeers, rc)

@@ -155,7 +155,6 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 	p.UsesPython3Clang = []STR{strYMakePython3Name, clangRes}
 	p.UsesLinkResources = []STR{clangRes, strLLDRootName, strYMakePython3Name}
 	p.UsesClangOnly = []STR{clangRes}
-
 	p.SysrootArgs = sysrootArgsFor(os, flags)
 	p.UsesSDKRoot = platformUsesSDKRoot(os, flags)
 
