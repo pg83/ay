@@ -110,6 +110,7 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 
 	deduper.reset()
 	depSeen := map[NodeRef]struct{}{}
+
 	addInput := func(v VFS) {
 		if !deduper.add(v) {
 			return
@@ -117,6 +118,7 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 
 		cur.inputs = append(cur.inputs, v)
 	}
+
 	addDep := func(ref NodeRef) {
 		if ref == (NodeRef(0)) {
 			return
@@ -129,6 +131,7 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 		depSeen[ref] = struct{}{}
 		cur.deps = append(cur.deps, ref)
 	}
+
 	flush := func() {
 		if cmdLen == 0 {
 			return

@@ -34,6 +34,7 @@ func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: depRefs(converterRef),
 	}
+
 	gzRef := ctx.emit.emit(node)
 	sourceInputs := make([]VFS, 0, 1+len(imports))
 	sourceInputs = append(sourceInputs, gztSource)
@@ -74,6 +75,7 @@ func gztCmdArgs(converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) [
 	args = append(args, internV("-I", pbRuntimeBaseVFS.string()))
 
 	seen := make(map[string]struct{}, 2+len(protoInclude))
+
 	emitI := func(path string) {
 		if _, ok := seen[path]; ok {
 			return

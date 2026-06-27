@@ -32,6 +32,7 @@ func newFS(srcRoot string) FS {
 		dirNames:   newBumpAllocator[uint32](1 << 12),
 		dirEntries: newIntMap[bool](1 << 12),
 	}
+
 	fs.platformInit()
 
 	return fs

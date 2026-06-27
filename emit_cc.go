@@ -467,11 +467,13 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *
 		na.argStrList(in.ModuleScopeCFlags),
 		noLibc,
 	)
+
 	cTail := na.chunkList(
 		na.argStrList(in.PeerCOnlyFlagsGlobal),
 		builtinMacroDateTimeStr,
 		macroPrefixMapFlagsStr,
 	)
+
 	cxxOwnExtras := in.CXXFlags
 
 	if len(p.CXXFlags) > 0 {
@@ -479,6 +481,7 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *
 	}
 
 	cxxBucket := composeOwnAndPeerGlobalBucket(*in, true)
+
 	cxxTail := na.chunkList(
 		cxxStandardFlagStr,
 		cxxWarningChunk(in.Flags.NoCompilerWarnings),

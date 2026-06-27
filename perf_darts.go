@@ -51,6 +51,7 @@ func perfDarts() int {
 			d = d[:i]
 		}
 	}
+
 	mismatch := 0
 
 	for _, d := range dirs {

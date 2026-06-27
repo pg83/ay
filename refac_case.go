@@ -114,9 +114,11 @@ func renameCaseDecls(path string, typeRen, methodRen map[string]string, forbidde
 	}
 
 	var edits []edit
+
 	add := func(id *ast.Ident, new_ string) {
 		edits = append(edits, edit{off: fset.Position(id.Pos()).Offset, old: id.Name, new_: new_})
 	}
+
 	capitalize := func(s string) string { return strings.ToUpper(s[:1]) + s[1:] }
 	lower := func(s string) string { return strings.ToLower(s[:1]) + s[1:] }
 
@@ -274,6 +276,7 @@ func lintCaseConvention(path string) bool {
 	src := throw2(os.ReadFile(path))
 	f := throw2(goparser.ParseFile(fset, path, src, goparser.SkipObjectResolution))
 	bad := false
+
 	report := func(pos gotoken.Pos, kind, name string) {
 		p := fset.Position(pos)
 		fmt.Fprintf(os.Stderr, "refac lint: case-convention: %s:%d: %s %s\n", path, p.Line, kind, name)

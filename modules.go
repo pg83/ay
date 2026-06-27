@@ -417,6 +417,7 @@ parsedFlags:
 		WithContext: withContext || text,
 		Text:        text,
 	}
+
 	i += 2
 
 	section := ""
@@ -2443,6 +2444,7 @@ func parseCPPProtoPlugin(v UnknownStmt) CppProtoPlugin {
 		Name:     v.Args[0].string(),
 		ToolPath: v.Args[1].string(),
 	}
+
 	tail := 2
 
 	if outputSuffixes > 0 {

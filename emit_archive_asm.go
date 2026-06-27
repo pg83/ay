@@ -72,6 +72,7 @@ func emitArchiveAsmNode(
 
 	deps := concat(producerRefs, depRefs(toolLDRef))
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+
 	n := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
@@ -84,6 +85,7 @@ func emitArchiveAsmNode(
 		DepRefs:      deps,
 		Resources:    instance.Platform.UsesPython3Clang,
 	}
+
 	rodataRef := ctx.emit.emit(n)
 
 	var leaves []VFS

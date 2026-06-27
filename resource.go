@@ -530,6 +530,7 @@ func chunkPySrcEntries(entries []PySrcEntry) []PySrcChunk {
 	cur := PySrcChunk{}
 	cmdLen := 0
 	deduper.reset()
+
 	flush := func() {
 		if cmdLen == 0 {
 			return
@@ -540,6 +541,7 @@ func chunkPySrcEntries(entries []PySrcEntry) []PySrcChunk {
 		cmdLen = 0
 		deduper.reset()
 	}
+
 	addInps := func(e PySrcEntry) {
 		if deduper.add(e.pathInput) {
 			cur.inps = append(cur.inps, e.pathInput)

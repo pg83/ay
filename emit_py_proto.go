@@ -105,6 +105,7 @@ func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCo
 	globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path.rel(), "libpy3", protoLibName)
 	gRef := emitARGlobalNamedTagged(pyInstance, globalBaseName, tagPy3ProtoGlobal, pyProtoRefs, pyProtoOutputs, d.tc, ctx.host, ctx.emit)
 	globalPath := build(instance.Path.rel(), "/", globalBaseName)
+
 	result := &ProtoSrcsResult{
 		GlobalRef:  &gRef,
 		GlobalPath: &globalPath,
@@ -152,12 +153,14 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 	}
 
 	protoRoot := protoPythonOutputRoot(d)
+
 	head := []STR{
 		d.tc.Python3,
 		internStr(pbPyWrapperPath),
 		argPyVer.str(), argPy3.str(),
 		argSuffixes.str(),
 	}
+
 	head = appendInternStrs(head, suffixes)
 	pe.head = append(head, argInput.str())
 
@@ -382,6 +385,7 @@ func emitGeneratedPyProtoYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs [
 		}
 
 		out := build(pyOut.rel(), uniq, ".yapyc3")
+
 		cmdArgs := []STR{
 			(py3ccBinary).str(),
 			argSlowPy3cc.str(),
@@ -390,6 +394,7 @@ func emitGeneratedPyProtoYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs [
 			(pyOut).str(),
 			(out).str(),
 		}
+
 		deps := []NodeRef{pyPBRef}
 		toolRefs := depRefs(py3ccRef, py3ccSlowRef)
 		nodeInputs := na.inputList(na.vfsList(py3ccBinary, py3ccSlowBin, pyOut), sourceInputs)
@@ -430,9 +435,11 @@ type PyProtoAuxEntry struct {
 
 func pyProtoAuxEntriesForSource(instance ModuleInstance, d *ModuleData, src string, pyPBRef NodeRef, producerInputs []VFS, pyOutputs []VFS, yapyRefs []NodeRef, yapyOuts []VFS) []PyProtoAuxEntry {
 	var entries []PyProtoAuxEntry
+
 	addResource := func(srcPath VFS, key string, producer NodeRef) {
 		entries = append(entries, PyProtoAuxEntry{path: srcPath, key: key, producer: producer, inputs: producerInputs})
 	}
+
 	addResource(pyOutputs[0], protoPythonResourceKey(instance, d, src, "_pb2.py"), pyPBRef)
 
 	if len(yapyOuts) > 0 {
@@ -473,6 +480,7 @@ func genProtoResEntriesForSource(instance ModuleInstance, d *ModuleData, src str
 			producer: producer,
 		})
 	}
+
 	yapToken := func(i int) string {
 		return tokens[i] + strings.TrimPrefix(yapyOuts[i].rel(), pyOutputs[i].rel())
 	}
@@ -516,6 +524,7 @@ func emitGeneratedPyProtoObjcopy(ctx *GenCtx, instance ModuleInstance, d *Module
 
 	cur := chunk{}
 	depSeen := map[NodeRef]struct{}{}
+
 	flush := func() {
 		if cur.cmdLen == 0 {
 			return
@@ -537,6 +546,7 @@ func emitGeneratedPyProtoObjcopy(ctx *GenCtx, instance ModuleInstance, d *Module
 
 		cmdArgs := objcopyCmdArgs(oc, outputObj, payload)
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+
 		node := &Node{
 			Platform:     instance.Platform,
 			Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
@@ -633,6 +643,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 
 	deduper.reset()
 	depSeen := map[NodeRef]struct{}{}
+
 	addInput := func(v VFS) {
 		if !deduper.add(v) {
 			return
@@ -640,6 +651,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 
 		cur.inputs = append(cur.inputs, v)
 	}
+
 	addDep := func(ref NodeRef) {
 		if ref == (NodeRef(0)) {
 			return
@@ -652,6 +664,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 		depSeen[ref] = struct{}{}
 		cur.deps = append(cur.deps, ref)
 	}
+
 	flush := func() {
 		if cmdLen == 0 {
 			return
@@ -774,6 +787,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 			ModuleTag:            tagPy3Proto,
 			IncludeInputs:        auxClosure,
 		}
+
 		ccIn.CCBlocks = composeCCModuleArgBlocks(na, instance.Platform, &ccIn)
 		ccRef, ccOut, _ := emitCC(instance, internStr(aux.rel()[strings.LastIndex(aux.rel(), "/")+1:]), aux, ccIn, ctx.host, ctx.emit)
 		res.Refs = append(res.Refs, ccRef)

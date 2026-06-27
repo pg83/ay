@@ -111,6 +111,7 @@ func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs [
 		DepRefs:      deps,
 		Resources:    instance.Platform.UsesLinkResources,
 	}
+
 	n.ForeignDepRefs = depRefs(fixElfRef)
 
 	ref := ctx.emit.emit(n)

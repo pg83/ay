@@ -82,6 +82,7 @@ func spillChunks(in io.Reader, chunkBytes int, tmpDir string) []string {
 	var chunks []string
 	var lines []string
 	size := 0
+
 	spill := func() {
 		if len(lines) == 0 {
 			return

@@ -71,6 +71,7 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		cmdArgs := na.chunkList(py3ccArgHead, na.strList(internStr(moduleName),
 			(srcAbs).str(),
 			(outputPath).str()))
+
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}
 		nodeInputs := na.inputList(py3ccToolsChunk, na.srcChunk(srcAbs))
 
@@ -103,6 +104,7 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    usesPython3,
 		}
+
 		toolRefs := depRefs(py3ccLDRef, py3ccSlowLDRef)
 
 		if genInfo != nil {
@@ -156,12 +158,14 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 		regCppVFS := build(instance.Path.rel(), "/", regCpp)
 		regCppAbs := regCppVFS.string()
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+
 		pyCmdArgs := []STR{
 			d.tc.Python3,
 			(genPy3RegScriptVFS).str(),
 			internStr(arg.string()),
 			internStr(regCppAbs),
 		}
+
 		pyNode := &Node{
 			Platform:     ctx.target,
 			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(pyCmdArgs), Env: env}),
@@ -172,6 +176,7 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    usesPython3,
 		}
+
 		pyRef := ctx.emit.emit(pyNode)
 		ccIn := in
 		ccIn.ExtraDepRefs = []NodeRef{pyRef}

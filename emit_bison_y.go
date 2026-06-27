@@ -79,6 +79,7 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 
 	ycRef := ctx.emit.reserve()
 	reg := ctx.codegenFor(instance)
+
 	headerInfo := &GeneratedFileInfo{
 		ProducerKvP:    pkYC,
 		OutputPath:     headerVFS,

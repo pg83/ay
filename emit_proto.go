@@ -223,6 +223,7 @@ func newPBModuleEmission(ctx *GenCtx, d *ModuleData, cfg ProtoPBConfig, protoInc
 		liteHeaders:   !protoTransitiveHeadersEnabled(d),
 		grpcCppBinary: pbGrpcCppVFS,
 	}
+
 	pe.protocLDRef, pe.protocBinary = ctx.tool(argContribToolsProtoc)
 	pe.cppStyleguideLDRef, pe.cppStyleguideBinary = ctx.tool(argContribToolsProtocPluginsCppStyleguide)
 
@@ -293,6 +294,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		pe.blocks,
 		ctx.emit,
 	)
+
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	pbH := build(protoBase, ".pb.h")
 	pbCC := build(protoBase, ".pb.cc")
@@ -399,6 +401,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 			{kind: includeQuoted, target: internStr(yaffH.rel())},
 			{kind: includeQuoted, target: internStr(pbH.rel())},
 		}
+
 		reg.register(&GeneratedFileInfo{
 			ProducerKvP:    pkPB,
 			OutputPath:     yaffCC,
@@ -536,6 +539,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 
 	var codegenOutputs []protoCodegenOutput
 	codegenOutputSeen := make(map[STR]struct{})
+
 	appendCodegenOutput := func(genRef NodeRef, pbCC VFS, srcRel string, declIdx int) {
 		if _, dup := codegenOutputSeen[internStr(pbCC.rel())]; dup {
 			return
@@ -549,11 +553,13 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 			declIdx: declIdx,
 		})
 	}
+
 	cfg := ProtoPBConfig{
 		grpc:       d.grpc,
 		moduleTag:  tagCppProto,
 		cppOutRoot: protoCPPOutRoot(d),
 	}
+
 	cppInstance := instance
 	sprotoProduced := ymapsSprotoProducedBases(ctx, instance, d)
 	pe := newPBModuleEmission(ctx, d, cfg, peerContribs.protoInclude)
@@ -578,12 +584,14 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 			evRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
 			evVFS := source(evRelPath)
 			evImports := walkClosureTail(ctx.scannerFor(instance), evVFS, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()).ScanCfg)
+
 			evRef := emitEV(
 				instance, evRelPath, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 				cppStyleguideBinary, protocBinary, event2cppBinary,
 				tagCppProto, evImports, peerContribs.protoInclude,
 				!protoTransitiveHeadersEnabled(d),
 				d.tc, ctx.emit)
+
 			evH := build(evRelPath, ".pb.h")
 			evPbCC := build(evRelPath, ".pb.cc")
 			directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, protoCPPOutRoot(d))
@@ -634,6 +642,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	ownCFlagsGlobalSelf := d.cFlagsGlobal
 	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
 	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
+
 	moduleInputs := ModuleCCInputs{
 		TC:                   d.tc,
 		InclArgs:             ctx.inclArgs,
@@ -775,6 +784,7 @@ func emitProtoProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcR
 		cppOutRoot: protoCPPOutRoot(d),
 		grpc:       d.grpc,
 	}
+
 	pe := newPBModuleEmission(ctx, d, cfg, in.ProtoIncludePeers)
 	emitProtoPB(ctx, instance, d, srcRel, cfg, pe, in.ProtoInclude, nil)
 }
@@ -783,6 +793,7 @@ func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	srcRel := src.string()
 	protoBase := strings.TrimSuffix(protoSourceRelPath(ctx.fs, instance, d, srcRel), ".proto")
 	pbRef := ctx.codegenFor(instance).lookup(build(protoBase, ".pb.cc")).ProducerRef
+
 	emitGenCC := func(pbCC VFS) SourceEmit {
 		ccIn := in
 		ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), pbCC, in.ScanCfg)
@@ -791,6 +802,7 @@ func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 
 		return SourceEmit{Ref: ccRef, OutPath: ccOut}
 	}
+
 	se := emitGenCC(build(protoBase, ".pb.cc"))
 
 	if d.grpc {

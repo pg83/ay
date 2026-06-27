@@ -59,6 +59,7 @@ func emitDecimalMD5(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *D
 	}
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+
 	svRef := ctx.emit.emit(&Node{
 		Platform:     instance.Platform,
 		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env, Stdout: outVFS.str()}),
@@ -69,6 +70,7 @@ func emitDecimalMD5(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *D
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    usesPython3,
 	})
+
 	sourceInputs := make([]VFS, 0, len(optVFSs)+1)
 	sourceInputs = append(sourceInputs, optVFSs...)
 	sourceInputs = append(sourceInputs, decimalMD5PyVFS)

@@ -62,6 +62,7 @@ func emitYmapsSprotoHeaders(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 
 func emitYmapsSprotoHeader(ctx *GenCtx, instance ModuleInstance, p ymapsSprotoPending, outRoot string, sprotocLDRef NodeRef, sprotocBinary VFS, scanCfg ScanContext) {
 	na := ctx.emit.nodeArenas()
+
 	cmdArgs := na.chunkList(na.strList(
 		sprotocBinary.str(),
 		internV("-I=./", outRoot),
@@ -71,8 +72,10 @@ func emitYmapsSprotoHeader(ctx *GenCtx, instance ModuleInstance, p ymapsSprotoPe
 		internV("--sproto_out=$(B)/", outRoot),
 		internStr(p.protoRelPath),
 	))
+
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	closure := dropGeneratedProtoHeaders(walkClosureTail(ctx.scannerFor(instance), p.sprotoH, scanCfg))
+
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,

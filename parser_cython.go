@@ -15,6 +15,7 @@ func (CythonIncludeDirectiveParser) id() uint32 {
 func (CythonIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	block := a.alloc(directiveBlockHint)
 	k := 0
+
 	add := func(d IncludeDirective) {
 		k = addDirective(block, k, d)
 	}

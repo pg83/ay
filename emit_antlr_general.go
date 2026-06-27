@@ -24,6 +24,7 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 
 		var cfExtraInputs []VFS
 		deduper.reset()
+
 		appendCFExtra := func(v VFS) {
 			if !deduper.add(v) {
 				return
@@ -130,6 +131,7 @@ func antlrRunCmdArgs(instance ModuleInstance, run AntlrRunInfo, inVFSByToken, ou
 func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, outVFSByToken map[string]VFS, inputs []VFS, jarVFS VFS) []IncludeDirective {
 	var parsed []IncludeDirective
 	seen := map[string]struct{}{}
+
 	appendUnique := func(target string) {
 		if target == "" {
 			return

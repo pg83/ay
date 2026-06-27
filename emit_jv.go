@@ -87,6 +87,7 @@ const jdkResourcePath = "$(JDK17)/bin/java"
 func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs InputChunks, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag STR, emit *StreamingEmitter) NodeRef {
 	na := emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
@@ -143,8 +144,10 @@ func emitJV(
 	inputs := na.inputList(na.vfsList(grammarVFS,
 		stdout2stderrVFS,
 		antlr4JarVFS))
+
 	base := strings.TrimSuffix(filepath.Base(grammar), ".g4")
 	outPrefix := instance.Path.rel() + "/" + base
+
 	outputs := []VFS{
 		build(outPrefix, "Lexer.cpp"),
 		build(outPrefix, "Lexer.h"),
@@ -172,6 +175,7 @@ func emitJVSplit(
 	parserVFS := source(instance.Path.rel(), "/", parser)
 	outDirVFS := build(instance.Path.rel())
 	outDir := outDirVFS.string()
+
 	cmdArgs := []STR{
 		tc.Python3,
 		internStr(stdout2stderrPath),
@@ -199,10 +203,12 @@ func emitJVSplit(
 		parserVFS,
 		stdout2stderrVFS,
 		antlr4JarVFS))
+
 	lexerBase := strings.TrimSuffix(filepath.Base(lexer), ".g4")
 	parserBase := strings.TrimSuffix(filepath.Base(parser), ".g4")
 	visitorBase := parserBase
 	outPrefix := instance.Path.rel() + "/"
+
 	outputs := []VFS{
 		build(outPrefix, lexerBase, ".cpp"),
 		build(outPrefix, lexerBase, ".h"),

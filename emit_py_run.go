@@ -97,6 +97,7 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	pySourceInputs = append(pySourceInputs, pyGeneratedFromSources...)
 
 	pyRef := ctx.emit.reserve()
+
 	registerPYOutput := func(out VFS, parsed []IncludeDirective) {
 		reg.register(&GeneratedFileInfo{
 			ProducerKvP:    pkPY,
@@ -139,10 +140,12 @@ func pyInputClosure(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 	}
 
 	var out []VFS
+
 	walkOne := func(rel string) {
 		buildRootPath := copyFileOutputVFS(instance.Path.rel(), rel)
 		out = append(out, walkClosureTail(ctx.scannerFor(instance), buildRootPath, scanIn.ScanCfg)...)
 	}
+
 	hasCCShard, _ := splitCodegenDetect(stmt)
 
 	if hasCCShard {
@@ -195,6 +198,7 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 	reg := ctx.codegenFor(instance)
 	seen := make(map[VFS]struct{}, 32)
 	var sources []VFS
+
 	addSource := func(v VFS) {
 		if !v.isSource() {
 			return
@@ -207,6 +211,7 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 		seen[v] = struct{}{}
 		sources = append(sources, v)
 	}
+
 	addInducedSources := func(deps []IncludeDirective) {
 		for _, d := range deps {
 			if v := d.target.vfs(); v != 0 {
@@ -365,6 +370,7 @@ func emitPYRun(
 
 	head := make([]VFS, 0, 1+len(stmt.INFiles))
 	deduper.reset()
+
 	appendUnique := func(vfs VFS) {
 		if !deduper.add(vfs) {
 			return
@@ -372,6 +378,7 @@ func emitPYRun(
 
 		head = append(head, vfs)
 	}
+
 	appendUnique(scriptVFS)
 
 	for _, f := range stmt.INFiles {

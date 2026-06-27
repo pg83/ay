@@ -50,6 +50,7 @@ func descPeerClosure(ctx *GenCtx, instance ModuleInstance, peerdirs []STR, injec
 	var span DescPeerSpan
 	seen := make(map[VFS]struct{})
 	includesSeen := make(map[VFS]struct{})
+
 	add := func(peers []DescProtoPeer) {
 		for _, p := range peers {
 			if _, dup := seen[p.SelfProtodesc]; dup {
@@ -60,6 +61,7 @@ func descPeerClosure(ctx *GenCtx, instance ModuleInstance, peerdirs []STR, injec
 			span.peers = append(span.peers, p)
 		}
 	}
+
 	enter := func(peerPath string) {
 		if !isProtoLibraryPeer(ctx, peerPath) {
 			return
@@ -71,6 +73,7 @@ func descPeerClosure(ctx *GenCtx, instance ModuleInstance, peerdirs []STR, injec
 			Language: LangDescProto,
 			Platform: instance.Platform,
 		}
+
 		res := genModule(ctx, peerInstance)
 		add(res.DescClosure)
 
@@ -123,6 +126,7 @@ func emitDescProtoSubmodule(ctx *GenCtx, instance ModuleInstance, d *ModuleData)
 
 	var producerSourceInputs []VFS
 	sourceInputSeen := make(map[VFS]struct{})
+
 	addSourceInput := func(v VFS) {
 		if _, dup := sourceInputSeen[v]; dup {
 			return
@@ -143,6 +147,7 @@ func emitDescProtoSubmodule(ctx *GenCtx, instance ModuleInstance, d *ModuleData)
 		imports := walkClosureTail(scanner, protoVFS, scanCfg)
 		descOut := build(descProtoOutputRel(instance.Path.rel(), srcRel, protoRelPath))
 		rawprotoOut := build(protoRelPath, ".", hash, ".rawproto")
+
 		ref := emitProtoDescProducer(ctx, instance, protoRelPath, descOut, rawprotoOut,
 			protocLDRef, protocBinary, mid, imports)
 
@@ -212,6 +217,7 @@ func descProtocIncludes(peerProtoAddIncl []VFS, cppOutRoot string) []STR {
 func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath string,
 	descOut, rawprotoOut VFS, protocLDRef NodeRef, protocBinary VFS, mid []STR, imports []VFS) NodeRef {
 	na := ctx.emit.nodeArenas()
+
 	head := na.strList(
 		wrapccPython3STR,
 		descRawprotoWrapperVFS.str(),
@@ -224,13 +230,16 @@ func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath st
 		arg2.str(),
 		protocBinary.str(),
 	)
+
 	cmdArgs := na.chunkList(head, mid)
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+
 	inputs := []VFS{
 		protocBinary,
 		source(protoRelPath),
 		descRawprotoWrapperVFS,
 	}
+
 	node := &Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
@@ -333,6 +342,7 @@ func emitProtoDescriptions(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		DepRefs:      deps,
 		Resources:    usesPython3,
 	}
+
 	mergeRef := ctx.emit.emit(node)
 	primary := protodesc
 

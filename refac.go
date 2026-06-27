@@ -88,18 +88,24 @@ func lintCoalesceAssign(path string) bool {
 	}
 
 	lines := strings.Split(string(src), "\n")
+
 	blank := func(l int) bool {
 		return l >= 1 && l <= len(lines) && strings.TrimSpace(lines[l-1]) == ""
 	}
+
+	singleLine := func(s ast.Stmt) bool { return lineOf(s.Pos()) == lineOf(s.End()) }
 	remove := map[int]bool{}
+
 	process := func(list []ast.Stmt) {
 		for i := 1; i < len(list); i++ {
-			if !isDefineAssign(list[i-1]) || !isDefineAssign(list[i]) {
+			a, b := list[i-1], list[i]
+
+			if !isDefineAssign(a) || !isDefineAssign(b) || !singleLine(a) || !singleLine(b) {
 				continue
 			}
 
-			aEnd := lineOf(list[i-1].End())
-			bStart := lineOf(list[i].Pos())
+			aEnd := lineOf(a.End())
+			bStart := lineOf(b.Pos())
 			allBlank := bStart > aEnd+1
 
 			for l := aEnd + 1; l < bStart; l++ {
@@ -565,6 +571,7 @@ func specRemovable(pf *ParsedFile, spec ast.Spec) bool {
 func removalEdits(pf *ParsedFile) []ConstEdit {
 	src := pf.src
 	off := func(p gotoken.Pos) int { return pf.fset.Position(p).Offset }
+
 	lineStart := func(o int) int {
 		for o > 0 && src[o-1] != '\n' {
 			o--
@@ -572,6 +579,7 @@ func removalEdits(pf *ParsedFile) []ConstEdit {
 
 		return o
 	}
+
 	lineEndIncl := func(o int) int {
 		for o < len(src) && src[o] != '\n' {
 			o++
@@ -731,6 +739,7 @@ func identForVFS(key HoistKey) string {
 	}
 
 	var cur strings.Builder
+
 	flush := func() {
 		if cur.Len() > 0 {
 			words = append(words, cur.String())
@@ -1104,11 +1113,16 @@ func lintControlBlankLines(path string) bool {
 	}
 
 	insertBefore := map[int]bool{}
+
+	blockLike := func(s ast.Stmt) bool {
+		return isControlBlockStmt(s) || (isDefineAssign(s) && lineOf(s.End()) > lineOf(s.Pos()))
+	}
+
 	process := func(list []ast.Stmt) {
 		for i := 1; i < len(list); i++ {
 			a, b := list[i-1], list[i]
 
-			if !isControlBlockStmt(a) && !isControlBlockStmt(b) {
+			if !blockLike(a) && !blockLike(b) {
 				continue
 			}
 
@@ -1187,10 +1201,13 @@ func lintTightBraces(path string) bool {
 
 	lineOf := func(p gotoken.Pos) int { return fset.Position(p).Line }
 	lines := strings.Split(string(src), "\n")
+
 	isBlank := func(l int) bool {
 		return l >= 1 && l <= len(lines) && strings.TrimSpace(lines[l-1]) == ""
 	}
+
 	del := map[int]bool{}
+
 	tighten := func(open, close gotoken.Pos) {
 		if !open.IsValid() || !close.IsValid() {
 			return
@@ -1334,9 +1351,11 @@ func lintFuncBlankLines(path string) bool {
 
 	lineOf := func(p gotoken.Pos) int { return fset.Position(p).Line }
 	lines := strings.Split(string(src), "\n")
+
 	isBlank := func(l int) bool {
 		return l >= 1 && l <= len(lines) && strings.TrimSpace(lines[l-1]) == ""
 	}
+
 	insertBefore := map[int]bool{}
 
 	for _, d := range f.Decls {

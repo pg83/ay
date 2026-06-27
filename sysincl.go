@@ -381,6 +381,7 @@ func compileSourceFilter(name string, lineno int, pat string, onWarn func(Warn))
 	}
 
 	f := &SourceFilter{}
+
 	exc := try(func() {
 		altStrs := splitTopLevelOr(pat)
 
