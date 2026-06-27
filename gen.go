@@ -353,7 +353,6 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	hostScanner.moduleByRef = &ctx.moduleByRef
 	ctx.scannerTarget = targetScanner
 	ctx.scannerHost = hostScanner
-
 	ctx.vcsRef = emitVCSNode(ctx.emit, ctx.host)
 
 	seed := ModuleInstance{
@@ -1652,7 +1651,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	moduleInputs.ScanCfg = newScanContext(ctx.parsers, dedupedAddIncl, selfPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
-
 	moduleInputs.ScanCfg.OwnerModuleTag = cfModuleTag(d, instance)
 	moduleInputs.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &moduleInputs)
 
@@ -1748,7 +1746,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		m := d.srcMetaOf(srcID)
 
 		m.Generated = generated
-
 		ccRefs = append(ccRefs, emit.Ref)
 		ccOutputs = append(ccOutputs, emit.OutPath)
 		arDeclMeta[emit.OutPath] = m
@@ -1894,7 +1891,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 			jsModuleInputs.PeerAddInclGlobal = rebasePerArchPeerAddIncl(moduleInputs.PeerAddInclGlobal, srcInstance.Platform.ISA, ctx.target.ISA)
 			jsModuleInputs.ScanCfg = newScanContext(ctx.parsers, jsModuleInputs.AddIncl, jsModuleInputs.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
-
 			joinClosure = joinSrcsIncludeClosure(ctx, ctx.target, srcInstance, jsSources, jsModuleInputs)
 		}
 
@@ -1934,7 +1930,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		for i, ref := range regRes.Refs {
 			globalRefs = append(globalRefs, ref)
 			globalOutputs = append(globalOutputs, regRes.Outputs[i])
-
 			arDeclMeta[regRes.Outputs[i]] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
 		}
 	}
@@ -2062,7 +2057,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 					ldSbomRefs = append(ldSbomRefs, peerSbomRefs[:ownSbomInsertIdx]...)
 					ldSbomRefs = append(ldSbomRefs, *ownSbomRef)
 					ldSbomRefs = append(ldSbomRefs, peerSbomRefs[ownSbomInsertIdx:]...)
-
 					ldSbomPaths = make([]VFS, 0, len(peerSbomPaths)+1)
 					ldSbomPaths = append(ldSbomPaths, peerSbomPaths[:ownSbomInsertIdx]...)
 					ldSbomPaths = append(ldSbomPaths, *ownSbomPath)

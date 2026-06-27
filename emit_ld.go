@@ -282,7 +282,6 @@ func composeLDCmdVcsCompile(p *Platform, tc ModuleToolchain, vcsCPath, vcsOPath 
 	preNoLibcExtras = append(preNoLibcExtras, p.CFlags...)
 	preNoLibcExtras = append(preNoLibcExtras, moduleCFlags...)
 	preNoLibcExtras = append(preNoLibcExtras, peerCFlagsGlobal...)
-
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(noCompilerWarnings, false), bundle.Defines, preNoLibcExtras, moduleScopeCFlags, catboostOpenSourceDefineFor(p))
 
 	return cmdArgs
@@ -356,7 +355,6 @@ func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, outputPath, vcsOPath s
 	cmdArgs = append(cmdArgs, p.TargetArg)
 	cmdArgs = appendArgStr(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs, p.SysrootArgs...)
-
 	cmdArgs = append(cmdArgs, argWlStartGroup.str())
 
 	for _, p := range peerLinkCmdPaths {
@@ -364,7 +362,6 @@ func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, outputPath, vcsOPath s
 	}
 
 	cmdArgs = append(cmdArgs, argWlEndGroup.str())
-
 	cmdArgs = append(cmdArgs, composeProgramLinkTrailer(p, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, wantsStrip, useArcadiaLibm)...)
 
 	return cmdArgs
@@ -398,7 +395,6 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 
 	trailer = appendInternStrs(trailer, p.linkerSelectionTailFlags())
 	trailer = appendArgStr(trailer, peerLDFlagsGlobal, ownLDFlags)
-
 	trailer = appendArgGroupStr(trailer, objAddLibsGlobal)
 	trailer = append(trailer, p.SystemLibs...)
 

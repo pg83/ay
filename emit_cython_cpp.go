@@ -314,7 +314,6 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 		ccIn.Py3Suffix = !stmt.CMode && !generatedExplicit && py23Variant
 		ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl, d.cythonNumpyBeforeInclude)
 		ccIn.CFlags = filterPyRegisterCFlags(ccIn.CFlags)
-
 		ccIn.CCBlocks = composeCCModuleArgBlocks(na, instance.Platform, &ccIn)
 		ccIn.PerSourceCFlags = append([]ARG(nil), in.PerSourceCFlags...)
 
@@ -327,9 +326,7 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 		scanIn.AddIncl = appendCythonScanAddIncl(in.AddIncl, d.cythonAddIncl, py23Variant)
 		scanIn.ScanCfg = newScanContext(ctx.parsers, scanIn.AddIncl, scanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 		ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), generatedVFS, scanIn.ScanCfg)
-
 		ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, cyRef)
-
 		ccIn.IncludeInputs = cythonCompileInducedInputs(ctx, instance, ccIn.IncludeInputs)
 
 		ccRef, ccOut, _ := emitCC(instance, internStr(generated), generatedVFS, ccIn, ctx.host, ctx.emit)
@@ -547,7 +544,6 @@ func adjustCythonCompanionSourceInputs(na *NodeArenas, p *Platform, d *ModuleDat
 
 	in.AddIncl = appendCythonCCAddIncl(in.AddIncl, d.cythonNumpyBeforeInclude)
 	in.CFlags = filterPyRegisterCFlags(in.CFlags)
-
 	in.CCBlocks = composeCCModuleArgBlocks(na, p, &in)
 
 	return in

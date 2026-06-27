@@ -662,10 +662,8 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, instance ModuleInstanc
 	d.materializeAddIncl()
 
 	d.srcDirs = append([]VFS{dirKey(modulePath)}, d.srcDirs...)
-
 	d.addIncl = append(d.addIncl, d.cfAddIncl...)
 	d.addInclGlobal = append(d.addInclGlobal, d.cfAddInclGlobal...)
-
 	d.addInclUserGlobal = append(d.addInclUserGlobal, d.cfAddInclGlobal...)
 	d.cfAddIncl = nil
 	d.cfAddInclGlobal = nil
@@ -676,9 +674,7 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, instance ModuleInstanc
 	}
 
 	d.muslEnabled = env.bool(envMUSL)
-
 	d.useArcadiaLibm = env.bool(envUSE_ARCADIA_LIBM) && !env.bool(envOS_EMSCRIPTEN)
-
 	d.noStrip = env.bool(envNO_STRIP)
 
 	if d.muslLite {
@@ -697,7 +693,6 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, instance ModuleInstanc
 	cflagPrefix := append(muslCFlags(d.muslEnabled && !effectiveNoPlatform(d.flags)), sseBaseCFlags(env.bool(envARCH_X86_64))...)
 
 	d.moduleScopeCFlags = append(cflagPrefix, d.moduleScopeCFlags...)
-
 	d.addIncl = dedup(d.addIncl, nil)
 	d.addInclGlobal = dedup(d.addInclGlobal, nil)
 
@@ -888,9 +883,7 @@ func applyPython3AddIncl(modulePath string, d *ModuleData) {
 	}
 
 	d.usePython3 = true
-
 	d.moduleScopeCFlags = append(d.moduleScopeCFlags, argDusePython3)
-
 	d.addInclGlobal = append(d.addInclGlobal, pythonIncludeDir)
 	d.addInclUserGlobal = append(d.addInclUserGlobal, pythonIncludeDir)
 	d.addIncl = append(d.addIncl, pythonIncludeDir)
@@ -1234,7 +1227,6 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			expanded.Prefix = expandStmtTokenSTR(v.Prefix, env)
 			expanded.Opts = expandStmtTokensSTR(v.Opts, env)
 			expanded.OutputIncludes = expandStmtTokensSTR(v.OutputIncludes, env)
-
 			d.splitCodegens = append(d.splitCodegens, &expanded)
 		case *BaseCodegenStmt:
 			expanded := *v
@@ -1243,7 +1235,6 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			expanded.Prefix = expandStmtTokenSTR(v.Prefix, env)
 			expanded.Opts = expandStmtTokensSTR(v.Opts, env)
 			expanded.OutputIncludes = expandStmtTokensSTR(v.OutputIncludes, env)
-
 			d.baseCodegens = append(d.baseCodegens, &expanded)
 
 			for _, p := range v.Peerdirs {
@@ -2164,7 +2155,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 
 			d.pySrcs = append(d.pySrcs, internStr(src))
-
 			d.pySrcsFullName = append(d.pySrcsFullName, strings.HasPrefix(src, "${ARCADIA_BUILD_ROOT}/") || strings.HasPrefix(src, "${ARCADIA_ROOT}/") || strings.HasPrefix(src, "$B/"))
 			groupSrcs = append(groupSrcs, src)
 
@@ -3218,7 +3208,6 @@ func applyAllPySrcs(fs FS, modulePath string, v UnknownStmt, d *ModuleData) {
 
 	sort.Strings(files)
 	d.pySrcs = append(d.pySrcs, STRS(files...)...)
-
 	d.pySrcsFullName = append(d.pySrcsFullName, make([]bool, len(files))...)
 
 	if len(files) > 0 {

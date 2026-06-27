@@ -273,7 +273,6 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 	if info := ctx.codegenFor(instance).lookup(buildProto); info != nil {
 		protoSrcOverride = buildProto
 		extraProtoDeps = []NodeRef{info.ProducerRef}
-
 		protoProducerSourceInputs = info.SourceInputs
 
 		if len(info.ProducerSourceClosure) > 0 {
@@ -454,7 +453,6 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		grpcCCParsed = make([]IncludeDirective, 0, 2)
 		grpcCCParsed = append(grpcCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.rel())})
 		grpcCCParsed = append(grpcCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())})
-
 		grpcHParsed = make([]IncludeDirective, 0, 3+len(directImports))
 		grpcHParsed = append(grpcHParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.rel())})
 		grpcHParsed = append(grpcHParsed, directImports...)
@@ -535,7 +533,6 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		_, genProtoSrc := emitLibraryGztProtoSource(ctx, instance, d, gztSrc, peerContribs.protoInclude, tagCppProto)
 
 		protoSrcs = append(protoSrcs, genProtoSrc)
-
 		srcDeclIdx[genProtoSrc] = len(d.srcs) + i
 	}
 
@@ -773,7 +770,6 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 
 			antlrRefs = append(antlrRefs, ccRef)
 			antlrOutputs = append(antlrOutputs, ccOut)
-
 			arDeclMeta[ccOut] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
 		}
 	}

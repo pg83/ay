@@ -58,10 +58,8 @@ func appendNode(buf []byte, n *Node, uids *UidVec, fetchRefs *DenseMap[STR, Node
 
 	buf = append(buf, `"cmds":`...)
 	buf = appendCmdSlice(buf, n.Cmds)
-
 	buf = append(buf, `,"deps":`...)
 	buf = appendRefUIDsSeq(buf, n.buildDeps(fetchRefs), uids)
-
 	buf = append(buf, `,"env":`...)
 	buf = appendEnv(buf, n.Env)
 
@@ -80,19 +78,14 @@ func appendNode(buf []byte, n *Node, uids *UidVec, fetchRefs *DenseMap[STR, Node
 
 	buf = append(buf, `,"kv":`...)
 	buf = appendKV(buf, *n.KV)
-
 	buf = append(buf, `,"outputs":`...)
 	buf = appendVFSSlice(buf, n.Outputs)
-
 	buf = append(buf, `,"platform":`...)
 	buf = appendString(buf, string(n.Platform.Target))
-
 	buf = append(buf, `,"requirements":`...)
 	buf = appendRequirements(buf, n.Requirements)
-
 	buf = append(buf, `,"self_uid":`...)
 	buf = appendUID(buf, n.SelfUID)
-
 	buf = append(buf, `,"uid":`...)
 	buf = appendUID(buf, n.UID)
 

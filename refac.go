@@ -65,6 +65,16 @@ func isDefineAssign(s ast.Stmt) bool {
 	return ok && as.Tok == gotoken.DEFINE
 }
 
+func coalescableAssign(s ast.Stmt) (gotoken.Token, bool) {
+	as, ok := s.(*ast.AssignStmt)
+
+	if !ok || (as.Tok != gotoken.DEFINE && as.Tok != gotoken.ASSIGN) {
+		return 0, false
+	}
+
+	return as.Tok, true
+}
+
 func lintCoalesceAssign(path string) bool {
 	src := throw2(os.ReadFile(path))
 	fset := gotoken.NewFileSet()
@@ -99,8 +109,10 @@ func lintCoalesceAssign(path string) bool {
 	process := func(list []ast.Stmt) {
 		for i := 1; i < len(list); i++ {
 			a, b := list[i-1], list[i]
+			ta, oka := coalescableAssign(a)
+			tb, okb := coalescableAssign(b)
 
-			if !isDefineAssign(a) || !isDefineAssign(b) || !singleLine(a) || !singleLine(b) {
+			if !oka || !okb || ta != tb || !singleLine(a) || !singleLine(b) {
 				continue
 			}
 

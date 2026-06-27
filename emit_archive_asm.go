@@ -59,7 +59,6 @@ func emitArchiveAsmNode(
 		}
 
 		pathPerFile = append(pathPerFile, memberVFS)
-
 		cmdArgs = append(cmdArgs, internV(memberVFS.string(), ":"))
 	}
 
