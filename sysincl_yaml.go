@@ -65,6 +65,7 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 				Kind:    WarnSysIncl,
 				Message: fmt.Sprintf("%s:%d: unrecognised record key %q — record disabled", name, lineNo, b[:colon]),
 			})
+
 			rec.Filter = &SourceFilter{unsupported: true}
 		}
 	}

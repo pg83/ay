@@ -281,8 +281,10 @@ func reportPerfStats(ctx *GenCtx, parsers *IncludeParserManager, targetScanner, 
 
 	fmt.Fprintf(os.Stderr, "perf: parser parsedHits=%d parsedMisses=%d\n",
 		parserStats.parsedHits, parserStats.parsedMisses)
+
 	fmt.Fprintf(os.Stderr, "perf: fs listdirHits=%d listdirMisses=%d existsHits=%d existsMisses=%d dirsCached=%d\n",
 		fsStats.listdirHits, fsStats.listdirMisses, fsStats.existsHits, fsStats.existsMisses, fsStats.dirsCached)
+
 	fmt.Fprintf(os.Stderr, "perf: intern strs=%d args=%d envs=%d overflow=%d\n",
 		len(internTable.strs), len(argTable.strs), len(envTable.strs), len(internTable.overflow))
 

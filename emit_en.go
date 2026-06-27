@@ -134,6 +134,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 			}
 
 			sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target.string() < hParsed[j].target.string() })
+
 			reg.register(&GeneratedFileInfo{
 				ProducerKvP:    pkEN,
 				OutputPath:     serializedHPath,

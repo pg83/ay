@@ -151,6 +151,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 			uid  string
 			deps []string
 		}
+
 		fanoutNodes(src, workers,
 			func(node *rawNode) stripResult {
 				uid := node.UID
@@ -278,6 +279,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 				throw2(bw.Write(e.line))
 			}
 		})
+
 	throw(bw.Flush())
 
 	return 0

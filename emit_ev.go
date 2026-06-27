@@ -223,6 +223,7 @@ func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 
 	evCCParsed = append(evCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(evH.rel())})
 	evCCParsed = append(evCCParsed, protobufRuntimeDirectives...)
+
 	reg.register(&GeneratedFileInfo{
 		ProducerKvP:    pkEV,
 		OutputPath:     evPbCC,

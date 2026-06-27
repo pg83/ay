@@ -82,6 +82,7 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 		ParsedIncludes: headerParsed,
 		ClosureLeaves:  []VFS{part0, inputIn},
 	})
+
 	reg.register(&GeneratedFileInfo{
 		ProducerKvP:    pkSC,
 		OutputPath:     prefixCpp,

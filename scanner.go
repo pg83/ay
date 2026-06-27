@@ -315,6 +315,7 @@ func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
 		block[k] = rabs
 		k++
 	})
+
 	s.childArena.commit(k)
 
 	var children []VFS

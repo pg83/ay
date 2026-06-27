@@ -50,6 +50,7 @@ func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt, 
 		ParsedIncludes: headerParsed,
 		ClosureLeaves:  []VFS{prefixCpp, inputIn},
 	})
+
 	reg.register(&GeneratedFileInfo{
 		ProducerKvP:    pkBC,
 		OutputPath:     prefixCpp,

@@ -180,6 +180,7 @@ func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 		GeneratorRefs:  []NodeRef{flatcLDRef},
 		ParsedIncludes: cppIncludes,
 	})
+
 	reg.register(&GeneratedFileInfo{
 		ProducerKvP:    v.procKind,
 		OutputPath:     bfbsVFS,
