@@ -743,23 +743,17 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			switch d.moduleStmt.Name {
 			case tokPy23NativeLibrary:
 				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.rel(), "libpy3c", archiveName)
-
 				tag = tagPy3NativeGlobal
 			case tokPy23Library:
 				arInstance.Language = LangPy
-
 				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.rel(), "libpy3", archiveName)
-
 				tag = tagPy3Global
 			case tokPy3Library, tokPy2Library, tokPy2Program, tokPy3Program:
 				arInstance.Language = LangPy
-
 				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.rel(), "libpy3", archiveName)
-
 				tag = tagGlobal
 			default:
 				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.rel(), "lib", archiveName)
-
 				tag = tagGlobal
 			}
 
@@ -770,7 +764,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			gRef := emitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRes.Refs, objcopyRes.Outputs, d.tc, ctx.host, ctx.emit)
 
 			hOnlyGlobalRef = &gRef
-
 			hOnlyGlobalPath = vfsPtr(build(instance.Path.rel(), "/", globalBaseName))
 		}
 
@@ -789,18 +782,15 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		if protoResult != nil {
 			if protoResult.ARPath != nil {
 				hOnlyARRef = protoResult.ARRef
-
 				hOnlyARPath = protoResult.ARPath
 			}
 
 			if protoResult.GlobalRef != nil && protoResult.GlobalPath != nil {
 				hOnlyGlobalRef = protoResult.GlobalRef
-
 				hOnlyGlobalPath = protoResult.GlobalPath
 			}
 
 			hOnlyWholeArchiveRefs = append(hOnlyWholeArchiveRefs, protoResult.WholeArchiveRefs...)
-
 			hOnlyWholeArchivePaths = append(hOnlyWholeArchivePaths, protoResult.WholeArchivePaths...)
 		}
 
@@ -886,7 +876,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if isProgram {
 		preUserProgDefaults = defaultProgramPeerdirsForModule(ctx, instance, d, false)
-
 		postUserProgDefaults = defaultProgramPeerdirsForModule(ctx, instance, d, true)
 	}
 
@@ -925,14 +914,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		allPeers = append(allPeers, p)
-
 		peerKinds = append(peerKinds, peerKindLangDefault)
 	}
 
 	if unitTestPeer != "" {
 		if !peerSeen(unitTestPeer) {
 			allPeers = append(allPeers, unitTestPeer)
-
 			peerKinds = append(peerKinds, peerKindUnitTestPeer)
 		}
 	}
@@ -943,7 +930,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		allPeers = append(allPeers, p)
-
 		peerKinds = append(peerKinds, peerKindProgramDefault)
 	}
 
@@ -953,7 +939,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		allPeers = append(allPeers, p)
-
 		peerKinds = append(peerKinds, peerKindUserPeer)
 	}
 
@@ -963,7 +948,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		allPeers = append(allPeers, p)
-
 		peerKinds = append(peerKinds, peerKindProgramDefault)
 	}
 
@@ -979,7 +963,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		allPeers = append(allPeers, p.string())
-
 		peerKinds = append(peerKinds, peerKindUserPeer)
 	}
 
@@ -1069,7 +1052,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		for i, p := range rp.result.LDPluginPaths {
 			if deduper.add(p) {
 				peerLDPluginRefs = append(peerLDPluginRefs, rp.result.LDPluginRefs[i])
-
 				peerLDPluginPaths = append(peerLDPluginPaths, p)
 			}
 		}
@@ -1157,14 +1139,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		for i, p := range pr.PeerArchiveClosurePaths {
 			if deduper.add(p) {
 				peerArchiveRefs = append(peerArchiveRefs, pr.PeerArchiveClosureRefs[i])
-
 				peerArchivePaths = append(peerArchivePaths, p)
 			}
 		}
 
 		if pr.ARPath != nil && deduper.add(*pr.ARPath) {
 			peerArchiveRefs = append(peerArchiveRefs, pr.ARRef)
-
 			peerArchivePaths = append(peerArchivePaths, *pr.ARPath)
 		}
 	}
@@ -1177,14 +1157,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		for i, p := range pr.PeerGlobalClosurePaths {
 			if deduper.add(p) {
 				peerGlobalRefs = append(peerGlobalRefs, pr.PeerGlobalClosureRefs[i])
-
 				peerGlobalPaths = append(peerGlobalPaths, p)
 			}
 		}
 
 		if pr.GlobalRef != nil && pr.GlobalPath != nil && deduper.add(*pr.GlobalPath) {
 			peerGlobalRefs = append(peerGlobalRefs, *pr.GlobalRef)
-
 			peerGlobalPaths = append(peerGlobalPaths, *pr.GlobalPath)
 		}
 	}
@@ -1274,7 +1252,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 			if deduper.add(p) {
 				peerSbomRefs = append(peerSbomRefs, pr.PeerSbomClosureRefs[i])
-
 				peerSbomPaths = append(peerSbomPaths, p)
 			}
 		}
@@ -1285,7 +1262,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		if pr.SbomComponentRef != nil && (*pr.SbomComponentPath != lldToolchainSbomVFS || linkTarget) && deduper.add(*pr.SbomComponentPath) {
 			peerSbomRefs = append(peerSbomRefs, *pr.SbomComponentRef)
-
 			peerSbomPaths = append(peerSbomPaths, *pr.SbomComponentPath)
 		}
 	}
@@ -1298,7 +1274,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		for i, p := range pr.PeerWholeArchiveClosurePaths {
 			if deduper.add(p) {
 				peerWholeArchiveRefs = append(peerWholeArchiveRefs, pr.PeerWholeArchiveClosureRefs[i])
-
 				peerWholeArchivePaths = append(peerWholeArchivePaths, p)
 			}
 		}
@@ -1306,7 +1281,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		for i, p := range pr.WholeArchivePaths {
 			if deduper.add(p) {
 				peerWholeArchiveRefs = append(peerWholeArchiveRefs, pr.WholeArchiveRefs[i])
-
 				peerWholeArchivePaths = append(peerWholeArchivePaths, p)
 			}
 		}
@@ -1338,14 +1312,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		for i, p := range pr.PeerDynamicClosurePaths {
 			if deduper.add(p) {
 				peerDynamicRefs = append(peerDynamicRefs, pr.PeerDynamicClosureRefs[i])
-
 				peerDynamicPaths = append(peerDynamicPaths, p)
 			}
 		}
 
 		if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil && deduper.add(*pr.LDPath) {
 			peerDynamicRefs = append(peerDynamicRefs, pr.LDRef)
-
 			peerDynamicPaths = append(peerDynamicPaths, *pr.LDPath)
 		}
 	}
@@ -1565,7 +1537,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 			if !inserted && p == abseilPath {
 				spliced = append(spliced, buildRootPath)
-
 				inserted = true
 			}
 		}
@@ -1624,15 +1595,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	switch d.moduleStmt.Name {
 	case tokPy23NativeLibrary:
 		arNameFn = func(dir string) string { return archiveNameWithPrefixOrName(dir, "libpy3c", archiveName) }
-
 		globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefixOrName(dir, "libpy3c", archiveName) }
 	case tokPy3Library, tokPy2Library, tokPy23Library, tokPy2Program, tokPy3Program:
 		arNameFn = func(dir string) string { return archiveNameWithPrefixOrName(dir, "libpy3", archiveName) }
-
 		globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefixOrName(dir, "libpy3", archiveName) }
 	default:
 		arNameFn = func(dir string) string { return archiveNameWithPrefixOrName(dir, "lib", archiveName) }
-
 		globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefixOrName(dir, "lib", archiveName) }
 	}
 
@@ -1740,7 +1708,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	for i, ref := range cpMemberRefs {
 		ccRefs = append(ccRefs, ref)
-
 		ccOutputs = append(ccOutputs, cpMemberOuts[i])
 	}
 
@@ -1781,18 +1748,13 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		m := d.srcMetaOf(srcID)
 
 		m.Generated = generated
-
 		ccRefs = append(ccRefs, emit.Ref)
-
 		ccOutputs = append(ccOutputs, emit.OutPath)
-
 		arDeclMeta[emit.OutPath] = m
 
 		for _, ex := range emit.Extra {
 			ccRefs = append(ccRefs, ex.Ref)
-
 			ccOutputs = append(ccOutputs, ex.OutPath)
-
 			arDeclMeta[ex.OutPath] = m
 		}
 	}
@@ -1820,25 +1782,19 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		if emit := emitOneSource(ctx, instance, d, fe.Src, si); emit != nil {
 			ccRefs = append(ccRefs, emit.Ref)
-
 			ccOutputs = append(ccOutputs, emit.OutPath)
-
 			arDeclMeta[emit.OutPath] = SrcMeta{Prio: stmtPrioDefault, Seq: fe.Seq}
 		}
 	}
 
 	genCCMeta := func(emit *SourceEmit, m SrcMeta) {
 		ccRefs = append(ccRefs, emit.Ref)
-
 		ccOutputs = append(ccOutputs, emit.OutPath)
-
 		arDeclMeta[emit.OutPath] = m
 
 		for _, ex := range emit.Extra {
 			ccRefs = append(ccRefs, ex.Ref)
-
 			ccOutputs = append(ccOutputs, ex.OutPath)
-
 			arDeclMeta[ex.OutPath] = m
 		}
 	}
@@ -1922,9 +1878,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		ccRefs = append(ccRefs, emit.Ref)
-
 		ccOutputs = append(ccOutputs, emit.OutPath)
-
 		arDeclMeta[emit.OutPath] = SrcMeta{Prio: stmtPrioDefault, Seq: e.Seq}
 	}
 
@@ -1953,9 +1907,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ref, outPath, _ := emitCC(srcInstance, joinOutVFS.str(), joinOutVFS, ccIn, ctx.host, ctx.emit)
 
 		ccRefs = append(ccRefs, ref)
-
 		ccOutputs = append(ccOutputs, outPath)
-
 		arDeclMeta[outPath] = SrcMeta{Prio: stmtPrioDefault, Seq: js.Seq, Generated: true}
 	}
 
@@ -1970,7 +1922,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		globalRefs = append(globalRefs, emit.Ref)
-
 		globalOutputs = append(globalOutputs, emit.OutPath)
 	}
 
@@ -1981,9 +1932,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if regRes != nil {
 		for i, ref := range regRes.Refs {
 			globalRefs = append(globalRefs, ref)
-
 			globalOutputs = append(globalOutputs, regRes.Outputs[i])
-
 			arDeclMeta[regRes.Outputs[i]] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
 		}
 	}
@@ -2002,13 +1951,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if ctx.sbomEnabled && env.bool(envCLANG) && len(ccRefs) > 0 {
 		if r, p := clangToolchainSbomComponent(ctx, instance.Platform); r != nil && !containsVFS(peerSbomPaths, *p) {
 			peerSbomRefs = append(peerSbomRefs, *r)
-
 			peerSbomPaths = append(peerSbomPaths, *p)
 		}
 	}
 
 	ccRefs = append(ccRefs, fsMemberRefs...)
-
 	ccOutputs = append(ccOutputs, fsMemberPaths...)
 
 	if isProgramModuleType(d.moduleStmt.Name) {
@@ -2019,7 +1966,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		if d.allocatorName == strFAKE {
 			ldPeerArchiveRefs = make([]NodeRef, 0, len(peerArchiveRefs))
-
 			ldPeerArchivePaths = make([]VFS, 0, len(peerArchivePaths))
 
 			for i, p := range peerArchivePaths {
@@ -2028,7 +1974,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 				}
 
 				ldPeerArchiveRefs = append(ldPeerArchiveRefs, peerArchiveRefs[i])
-
 				ldPeerArchivePaths = append(ldPeerArchivePaths, p)
 			}
 		}
@@ -2074,13 +2019,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 			if objcopyRes != nil && len(objcopyRes.Refs) > 0 {
 				ldObjcopyRefs = objcopyRes.Refs
-
 				ldObjcopyPaths = objcopyRes.Outputs
 			}
 		}
 
 		ldObjcopyRefs = append(globalRefs, ldObjcopyRefs...)
-
 		ldObjcopyPaths = append(globalOutputs, ldObjcopyPaths...)
 
 		var ownRPathFlags []ARG
@@ -2109,7 +2052,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		if instance.Platform.BuildRelease {
 			ldSbomRefs = peerSbomRefs
-
 			ldSbomPaths = peerSbomPaths
 
 			if ownSbomRef != nil {
@@ -2125,7 +2067,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 					ldSbomPaths = append(ldSbomPaths, peerSbomPaths[ownSbomInsertIdx:]...)
 				} else {
 					ldSbomRefs = concat(peerSbomRefs, []NodeRef{*ownSbomRef})
-
 					ldSbomPaths = concat(peerSbomPaths, []VFS{*ownSbomPath})
 				}
 			}
@@ -2246,7 +2187,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if genPyAuxRes != nil {
 		globalRefs = append(globalRefs, genPyAuxRes.Refs...)
-
 		globalOutputs = append(globalOutputs, genPyAuxRes.Outputs...)
 	}
 
@@ -2256,7 +2196,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if objcopyRes != nil {
 		globalRefs = append(globalRefs, objcopyRes.Refs...)
-
 		globalOutputs = append(globalOutputs, objcopyRes.Outputs...)
 
 		leadCount := len(objcopyRes.Refs) - objcopyRes.PySrcTrailCount
@@ -2265,7 +2204,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			objBase := len(globalRefs) - len(objcopyRes.Refs)
 
 			globalRefs = moveSubrangeToFront(globalRefs, objBase, leadCount)
-
 			globalOutputs = moveSubrangeToFront(globalOutputs, objBase, leadCount)
 		}
 	}
@@ -2438,21 +2376,18 @@ func moveArchivePathsAfter(refs []NodeRef, paths []VFS, anchor VFS, moved []VFS)
 	for i, path := range paths {
 		if deduper.has(path) {
 			movedRefs[path] = refs[i]
-
 			movedPaths[path] = path
 
 			continue
 		}
 
 		outRefs = append(outRefs, refs[i])
-
 		outPaths = append(outPaths, path)
 
 		if path == anchor {
 			for _, movedPath := range moved {
 				if p, ok := movedPaths[movedPath]; ok {
 					outRefs = append(outRefs, movedRefs[movedPath])
-
 					outPaths = append(outPaths, p)
 				}
 			}
@@ -2525,7 +2460,6 @@ func mergeLDPlugins(own, peer *LdPluginsResult) *LdPluginsResult {
 
 	if own != nil {
 		ownRefs = own.Refs
-
 		ownPaths = own.Paths
 	}
 
@@ -2534,7 +2468,6 @@ func mergeLDPlugins(own, peer *LdPluginsResult) *LdPluginsResult {
 
 	if peer != nil {
 		peerRefs = peer.Refs
-
 		peerPaths = peer.Paths
 	}
 
@@ -2970,7 +2903,6 @@ func reorderARMembers(refs []NodeRef, paths []VFS, declMeta map[VFS]SrcMeta) ([]
 
 	for i, m := range members {
 		outRefs[i] = m.ref
-
 		outPaths[i] = m.path
 	}
 

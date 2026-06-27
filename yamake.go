@@ -459,7 +459,6 @@ func parseFile(fs FS, rel string) (mf *MakeFile, err error) {
 
 	if exc != nil {
 		err = exc.asError()
-
 		mf = nil
 	}
 
@@ -775,7 +774,6 @@ func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
 
 		if isWordByte(b) || (b == '@' && len(buf) > 0) {
 			pureIdent = false
-
 			buf = append(buf, l.advance())
 
 			continue
@@ -783,7 +781,6 @@ func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
 
 		if (b == '"' || b == '\'') && len(buf) > 0 {
 			pureIdent = false
-
 			buf = l.appendQuotedSegment(buf, b, startLine, startCol)
 
 			continue
@@ -860,7 +857,6 @@ func parse(fs FS, name string, src []byte) (mf *MakeFile, err error) {
 
 	if exc != nil {
 		err = exc.asError()
-
 		mf = nil
 	}
 
@@ -1387,11 +1383,9 @@ func parseFromSandbox(args []STR, line int) *FromSandboxStmt {
 		switch args[i].string() {
 		case "FILE":
 			stmt.File = true
-
 			section = ""
 		case "EXECUTABLE":
 			stmt.Executable = true
-
 			section = ""
 		case "AUTOUPDATED", "PREFIX", "SBR":
 			section = args[i].string()
@@ -1413,7 +1407,6 @@ func parseFromSandbox(args []STR, line int) *FromSandboxStmt {
 				}
 			case "PREFIX":
 				stmt.Prefix = args[i].string()
-
 				section = ""
 			case "AUTOUPDATED", "SBR":
 				section = ""
@@ -1653,11 +1646,8 @@ func splitAddInclPaths(args []STR) (globalPaths, oneLevelPaths, ownPaths, cython
 
 			if i < len(args) {
 				oneLevelPaths = append(oneLevelPaths, args[i])
-
 				ownPaths = append(ownPaths, args[i])
-
 				userGlobalPaths = append(userGlobalPaths, args[i])
-
 				allPaths = append(allPaths, args[i])
 			}
 
@@ -1715,14 +1705,11 @@ func splitAddInclPaths(args []STR) (globalPaths, oneLevelPaths, ownPaths, cython
 
 			if i < len(args) {
 				globalPaths = append(globalPaths, args[i])
-
 				userGlobalPaths = append(userGlobalPaths, args[i])
-
 				allPaths = append(allPaths, args[i])
 			}
 		} else {
 			ownPaths = append(ownPaths, args[i])
-
 			allPaths = append(allPaths, args[i])
 		}
 	}

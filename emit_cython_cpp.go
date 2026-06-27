@@ -256,7 +256,6 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 			pxdClosure := walkClosure(ctx.scannerFor(instance), pxdVFS, srcScanIn.ScanCfg)
 
 			toolInputs = keepOnlySourceVFS(dedup(toolInputs, pxdClosure))
-
 			emitsIncludes = dedup(emitsIncludes, pxdClosure)
 		}
 
@@ -368,7 +367,6 @@ func cythonPyxLangClosure(scanner *IncludeScanner, src VFS, cfg ScanContext) []V
 		}
 
 		seen[v] = struct{}{}
-
 		out = append(out, v)
 
 		sc.forEachResolvedChildID(v, func(ch VFS) {
@@ -429,13 +427,11 @@ func cythonCppInducedSets(ctx *GenCtx, instance ModuleInstance, src VFS, cMode b
 		}
 
 		toolSingles = append(toolSingles, v)
-
 		emitsSingles = append(emitsSingles, v)
 
 		cl := walkClosureTail(scanner, v, scanIn.ScanCfg)
 
 		toolCl = append(toolCl, cl)
-
 		emitsCl = append(emitsCl, cl)
 	}
 
@@ -443,13 +439,11 @@ func cythonCppInducedSets(ctx *GenCtx, instance ModuleInstance, src VFS, cMode b
 		v := source(rel)
 
 		toolSingles = append(toolSingles, v)
-
 		emitsSingles = append(emitsSingles, v)
 
 		cl := walkClosureTail(scanner, v, scanIn.ScanCfg)
 
 		toolCl = append(toolCl, cl)
-
 		emitsCl = append(emitsCl, cl)
 	}
 

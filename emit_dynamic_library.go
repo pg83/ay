@@ -38,7 +38,6 @@ func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs [
 
 		if cowRes.ARPath != nil {
 			peerArchiveRefs = append([]NodeRef{cowRes.ARRef}, peerArchiveRefs...)
-
 			peerArchivePaths = append([]VFS{*cowRes.ARPath}, peerArchivePaths...)
 		}
 	}
@@ -60,14 +59,12 @@ func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs [
 	if sbomActive(ctx, instance) && instance.Platform.BuildRelease {
 		if r, p := clangToolchainSbomComponent(ctx, instance.Platform); r != nil && !containsVFS(ldSbomPaths, *p) {
 			ldSbomRefs = append(ldSbomRefs, *r)
-
 			ldSbomPaths = append(ldSbomPaths, *p)
 		}
 
 		if sbomQualifies(d) {
 			if or, op := emitSbomComponent(ctx, instance, d, strings.TrimSuffix(outputName, ".so")); or != nil {
 				ldSbomRefs = append(ldSbomRefs, *or)
-
 				ldSbomPaths = append(ldSbomPaths, *op)
 			}
 		}
@@ -213,7 +210,6 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 	for _, pr := range resolved {
 		if pr.ARPath != nil {
 			peerArchiveRefs = append(peerArchiveRefs, pr.ARRef)
-
 			peerArchivePaths = append(peerArchivePaths, *pr.ARPath)
 		}
 	}
@@ -291,7 +287,6 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		for i, pp := range pr.LDPluginPaths {
 			if deduper.add(pp) {
 				pluginRefs = append(pluginRefs, pr.LDPluginRefs[i])
-
 				pluginPaths = append(pluginPaths, pp)
 			}
 		}

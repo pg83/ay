@@ -15,7 +15,6 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 	antlrCCRefs, antlrCCOutputs := emitAntlrRuns(ctx, instance, d, consumerInputs)
 
 	ccRefs = append(ccRefs, antlrCCRefs...)
-
 	ccOutputs = append(ccOutputs, antlrCCOutputs...)
 
 	for _, g := range d.antlr4Grammars {
@@ -92,7 +91,6 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 				refs, outs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
 
 				ccRefs = append(ccRefs, refs...)
-
 				ccOutputs = append(ccOutputs, outs...)
 			}
 		} else {
@@ -164,7 +162,6 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 				refs, outs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
 
 				ccRefs = append(ccRefs, refs...)
-
 				ccOutputs = append(ccOutputs, outs...)
 			}
 		}

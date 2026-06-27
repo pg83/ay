@@ -182,7 +182,6 @@ func cdcChunks(data []byte, avg int, yield func([]byte)) {
 		if h%mod == 0 || size >= maxSize {
 			yield(data[start : i+1])
 			start = i + 1
-
 			h = 0
 		}
 	}

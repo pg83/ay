@@ -75,7 +75,6 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 			ref := ctx.emit.emit(node)
 
 			bcRefs = append(bcRefs, ref)
-
 			bcPaths = append(bcPaths, bcOut)
 		}
 
@@ -114,7 +113,6 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 
 		if len(stmt.Symbols) > 0 {
 			passes = append(passes, "internalize")
-
 			optArgs = append(optArgs, internV("-internalize-public-api-list=", strings.Join(stmt.Symbols, "#")))
 		}
 
@@ -187,7 +185,6 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 
 	if len(peerAddIncl) > 0 && peerAddIncl[0] == googleapisCommonProtosAddIncl {
 		args = append(args, in.InclArgs.arg(peerAddIncl[0]))
-
 		peerAddIncl = peerAddIncl[1:]
 	}
 

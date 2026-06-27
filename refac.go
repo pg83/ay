@@ -113,6 +113,41 @@ func sameAssignBlock(a, b ast.Stmt, aSingle, bSingle bool) bool {
 	return ra == rb && ra != ""
 }
 
+func assignBlockSizes(list []ast.Stmt, single func(ast.Stmt) bool) []int {
+	size := make([]int, len(list))
+
+	for i := 0; i < len(list); {
+		j := i
+
+		for j+1 < len(list) && sameAssignBlock(list[j], list[j+1], single(list[j]), single(list[j+1])) {
+			j++
+		}
+
+		for k := i; k <= j; k++ {
+			size[k] = j - i + 1
+		}
+
+		i = j + 1
+	}
+
+	return size
+}
+
+func sigAssignBoundary(a, b ast.Stmt, sizeA, sizeB int) bool {
+	ta, ra, oka := assignBlockKey(a)
+	tb, rb, okb := assignBlockKey(b)
+
+	if !oka || !okb || ta != gotoken.ASSIGN || tb != gotoken.ASSIGN {
+		return false
+	}
+
+	if ra == rb && ra != "" {
+		return false
+	}
+
+	return sizeA >= 2 || sizeB >= 2
+}
+
 func lintCoalesceAssign(path string) bool {
 	src := throw2(os.ReadFile(path))
 	fset := gotoken.NewFileSet()
@@ -145,10 +180,23 @@ func lintCoalesceAssign(path string) bool {
 	remove := map[int]bool{}
 
 	process := func(list []ast.Stmt) {
+		sizes := assignBlockSizes(list, singleLine)
+
 		for i := 1; i < len(list); i++ {
 			a, b := list[i-1], list[i]
 
-			if !sameAssignBlock(a, b, singleLine(a), singleLine(b)) {
+			if !singleLine(a) || !singleLine(b) {
+				continue
+			}
+
+			ta, _, oka := assignBlockKey(a)
+			tb, _, okb := assignBlockKey(b)
+
+			if !oka || !okb || ta != tb {
+				continue
+			}
+
+			if ta == gotoken.ASSIGN && sigAssignBoundary(a, b, sizes[i-1], sizes[i]) {
 				continue
 			}
 
@@ -285,9 +333,7 @@ func refacConsts(_ GlobalFlags, args []string) int {
 		name := uniqueName(identForVFS(o.key), used)
 
 		used[name] = true
-
 		existing[o.key] = name
-
 		emit = append(emit, HoistedVar{name, o.key})
 	}
 
@@ -446,7 +492,6 @@ func parseRefacFile(path string, existing map[HoistKey]string, used map[string]b
 								}
 
 								declared[call] = true
-
 								vars = append(vars, HoistedVar{s.Names[i].Name, key})
 							}
 						}
@@ -584,11 +629,8 @@ func internArgsRewrites(pf *ParsedFile, existing map[HoistKey]string, used map[s
 
 			if !seen {
 				name = uniqueName(identForVFS(key), used)
-
 				used[name] = true
-
 				existing[key] = name
-
 				*emit = append(*emit, HoistedVar{name, key})
 			}
 
@@ -748,7 +790,6 @@ func generateConstFile(path string, kind HoistKind, vars []HoistedVar) {
 		}
 
 		seen[v.name] = true
-
 		items = append(items, v)
 	}
 
@@ -797,7 +838,6 @@ func identForVFS(key HoistKey) string {
 			s = rel
 		} else if rel, ok := strings.CutPrefix(s, "$(B)/"); ok {
 			s = rel
-
 			words = append(words, "bld")
 		}
 	}
@@ -903,7 +943,6 @@ func lintStripComments(path string) bool {
 
 		if len(dir) > 0 {
 			g.List = dir
-
 			kept = append(kept, g)
 		}
 	}
@@ -1201,6 +1240,8 @@ func lintControlBlankLines(path string) bool {
 	}
 
 	process := func(list []ast.Stmt) {
+		sizes := assignBlockSizes(list, singleLine)
+
 		for i := 1; i < len(list); i++ {
 			a, b := list[i-1], list[i]
 
@@ -1210,11 +1251,8 @@ func lintControlBlankLines(path string) bool {
 
 			sep := blockLike(a) || blockLike(b)
 
-			if !sep {
-				ta, _, oka := assignBlockKey(a)
-				tb, _, okb := assignBlockKey(b)
-
-				sep = oka && okb && ta == gotoken.ASSIGN && tb == gotoken.ASSIGN && singleLine(a) && singleLine(b)
+			if !sep && singleLine(a) && singleLine(b) {
+				sep = sigAssignBoundary(a, b, sizes[i-1], sizes[i])
 			}
 
 			if !sep {

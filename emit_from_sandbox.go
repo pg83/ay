@@ -15,7 +15,6 @@ func emitFromSandboxes(ctx *GenCtx, instance ModuleInstance, d *ModuleData) (mem
 		refs, paths := emitFromSandbox(ctx, instance, d, fs)
 
 		memberRefs = append(memberRefs, refs...)
-
 		memberPaths = append(memberPaths, paths...)
 	}
 
@@ -61,13 +60,11 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 
 	for _, f := range stmt.OUTFiles {
 		args = append(args, f)
-
 		outVFSs = append(outVFSs, copyFileOutputVFS(instance.Path.rel(), f.string()))
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
 		args = append(args, f)
-
 		outVFSs = append(outVFSs, copyFileOutputVFS(instance.Path.rel(), f.string()))
 	}
 
@@ -91,7 +88,6 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 	for i, f := range stmt.OUTFiles {
 		if fromSandboxAutoLinkMember(f.string()) {
 			memberRefs = append(memberRefs, ref)
-
 			memberPaths = append(memberPaths, outVFSs[i])
 		}
 	}
