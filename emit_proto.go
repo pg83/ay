@@ -272,9 +272,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 
 	if info := ctx.codegenFor(instance).lookup(buildProto); info != nil {
 		protoSrcOverride = buildProto
-
 		extraProtoDeps = []NodeRef{info.ProducerRef}
-
 		protoProducerSourceInputs = info.SourceInputs
 
 		if len(info.ProducerSourceClosure) > 0 {
@@ -536,7 +534,6 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		_, genProtoSrc := emitLibraryGztProtoSource(ctx, instance, d, gztSrc, peerContribs.protoInclude, tagCppProto)
 
 		protoSrcs = append(protoSrcs, genProtoSrc)
-
 		srcDeclIdx[genProtoSrc] = len(d.srcs) + i
 	}
 
@@ -737,9 +734,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		ccRef, ccOut, _ := emitCC(cppInstance, co.pbCC.str(), co.pbCC, ccIn, ctx.host, ctx.emit)
 
 		ccRefs = append(ccRefs, ccRef)
-
 		ccOutputs = append(ccOutputs, ccOut)
-
 		arDeclMeta[ccOut] = SrcMeta{Prio: stmtPrioSrcs, Seq: co.declIdx, Generated: true}
 	}
 
@@ -748,9 +743,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	if enRes != nil {
 		for i := range enRes.CCRefs {
 			ccRefs = append(ccRefs, enRes.CCRefs[i])
-
 			ccOutputs = append(ccOutputs, enRes.CCOutputs[i])
-
 			arDeclMeta[enRes.CCOutputs[i]] = SrcMeta{Prio: stmtPrioDefault, Seq: enRes.Seqs[i], Generated: true, SecondLevel: enRes.SecondLevel[i]}
 		}
 	}
@@ -777,16 +770,13 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 			ccRef, ccOut := emitCodegenDownstreamCC(ctx, cppInstance, cppRel, []NodeRef{info.ProducerRef}, moduleInputs)
 
 			antlrRefs = append(antlrRefs, ccRef)
-
 			antlrOutputs = append(antlrOutputs, ccOut)
-
 			arDeclMeta[ccOut] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
 		}
 	}
 
 	if len(antlrRefs) > 0 {
 		ccRefs = append(antlrRefs, ccRefs...)
-
 		ccOutputs = append(antlrOutputs, ccOutputs...)
 	}
 

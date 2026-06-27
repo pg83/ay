@@ -503,7 +503,6 @@ func emitYaConfJSONObjcopy(
 		}
 
 		node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
-
 		out = append(out, &ObjcopyEmit{Ref: ctx.emit.emit(node), Out: outputObj})
 	}
 
@@ -547,7 +546,6 @@ func emitPyNamespaceForGroup(
 
 	if group.TopLevel {
 		nsPrefix = ""
-
 		nsValue = "."
 	}
 
@@ -592,7 +590,6 @@ func emitPyNamespaceForGroup(
 		key := "py/namespace/" + modListMD5 + "/" + keyPath
 
 		kvsHash = append(kvsHash, key+"=\""+nsValue+"\"")
-
 		kvsCmd = append(kvsCmd, key+"="+nsValue)
 	}
 

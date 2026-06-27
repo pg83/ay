@@ -318,7 +318,6 @@ func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		for _, decl := range resolveResourceDecls(ctx.fs, ctx.host, instance.Path.rel(), stmt) {
 			if deduper.add(VFS(decl.Name)) {
 				globals = append(globals, decl)
-
 				fetchRef = emitResourceFetch(ctx, decl)
 			}
 		}
@@ -349,14 +348,12 @@ func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 	if sbomActive(ctx, instance) && instance.Platform.BuildRelease {
 		if pyRef, pyPath := pythonToolchainSbomComponent(ctx, instance.Platform); pyRef != nil {
 			inputs = append(inputs, []VFS{*pyPath})
-
 			depRefs = append(depRefs, *pyRef)
 		}
 	}
 
 	if ownSbomRef != nil && instance.Platform.BuildRelease {
 		inputs = append(inputs, []VFS{*ownSbomPath, source(sbomGenScriptRel)})
-
 		depRefs = append(depRefs, *ownSbomRef)
 	}
 

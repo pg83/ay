@@ -228,7 +228,6 @@ func (ex *Executor) execute(f *NodeFuture) {
 
 	if ex.sandboxing {
 		srcMount = filepath.Join(tmp, "s")
-
 		bldMount = filepath.Join(tmp, "b")
 		throw(os.MkdirAll(srcMount, 0o755))
 		throw(os.MkdirAll(bldMount, 0o755))

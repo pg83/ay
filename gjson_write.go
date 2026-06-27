@@ -150,7 +150,6 @@ func appendStrChunks(buf []byte, chunks ArgChunks) []byte {
 			}
 
 			first = false
-
 			buf = appendString(buf, a.string())
 		}
 	}
@@ -218,7 +217,6 @@ func appendRefUIDsSeq(buf []byte, seq func(func(NodeRef) bool), uids *UidVec) []
 		}
 
 		first = false
-
 		buf = appendUID(buf, uids.get(r))
 
 		return true
@@ -239,7 +237,6 @@ func appendVFSChunks(buf []byte, chunks [][]VFS) []byte {
 			}
 
 			first = false
-
 			buf = appendVFS(buf, v)
 		}
 	}
@@ -263,7 +260,6 @@ func appendBuildOnlyVFSChunks(buf []byte, chunks [][]VFS) []byte {
 			}
 
 			first = false
-
 			buf = appendVFS(buf, v)
 		}
 	}
@@ -300,7 +296,6 @@ func appendBuildOnlyVFSSlice(buf []byte, vs []VFS) []byte {
 		}
 
 		first = false
-
 		buf = appendVFS(buf, v)
 	}
 

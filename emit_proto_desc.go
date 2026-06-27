@@ -59,7 +59,6 @@ func descPeerClosure(ctx *GenCtx, instance ModuleInstance, peerdirs []STR, injec
 			}
 
 			seen[p.SelfProtodesc] = struct{}{}
-
 			span.peers = append(span.peers, p)
 		}
 	}
@@ -86,7 +85,6 @@ func descPeerClosure(ctx *GenCtx, instance ModuleInstance, peerdirs []STR, injec
 			}
 
 			includesSeen[g] = struct{}{}
-
 			span.includes = append(span.includes, g)
 		}
 	}
@@ -138,7 +136,6 @@ func emitDescProtoSubmodule(ctx *GenCtx, instance ModuleInstance, d *ModuleData)
 		}
 
 		sourceInputSeen[v] = struct{}{}
-
 		producerSourceInputs = append(producerSourceInputs, v)
 	}
 
@@ -158,9 +155,7 @@ func emitDescProtoSubmodule(ctx *GenCtx, instance ModuleInstance, d *ModuleData)
 			protocLDRef, protocBinary, mid, imports)
 
 		producerRefs = append(producerRefs, ref)
-
 		descOutputs = append(descOutputs, descOut)
-
 		rawprotoOutputs = append(rawprotoOutputs, rawprotoOut)
 
 		addSourceInput(descRawprotoWrapperVFS)
@@ -330,18 +325,14 @@ func emitProtoDescriptions(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 
 	for _, p := range closure {
 		merge = append(merge, p.SelfProtodesc.str())
-
 		collect = append(collect, internStr(p.SelfProtodesc.rel()))
-
 		inputs = append(inputs, p.SelfProtodesc)
-
 		deps = append(deps, p.MergeRef)
 	}
 
 	if sbomActive(ctx, instance) {
 		if pyRef, pyPath := pythonToolchainSbomComponent(ctx, instance.Platform); pyRef != nil {
 			inputs = append(inputs, *pyPath)
-
 			deps = append(deps, *pyRef)
 		}
 	}

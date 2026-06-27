@@ -56,7 +56,6 @@ func (RagelIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocat
 		}
 
 		seenNative[target] = struct{}{}
-
 		nk = addDirective(nblock, nk, IncludeDirective{kind: includeQuoted, target: internStr(target)})
 	})
 

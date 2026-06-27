@@ -258,9 +258,7 @@ func (m *SysinclIndex) lookup(path string, target STR) ([]VFS, bool, bool) {
 
 		if !found {
 			found = true
-
 			single = c.paths
-
 			singleMulti = cMulti
 
 			continue
@@ -268,7 +266,6 @@ func (m *SysinclIndex) lookup(path string, target STR) ([]VFS, bool, bool) {
 
 		if out == nil {
 			out = append(m.outScratch[:0], single...)
-
 			hasMultiTarget = singleMulti
 		}
 

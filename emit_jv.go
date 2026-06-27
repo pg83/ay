@@ -81,7 +81,6 @@ func emitJVDownstreamCPCC(
 		ccRef, ccOut, _ := emitCC(instance, internStr(g4CppRel), g4CppPath, ccIn, ctx.host, ctx.emit)
 
 		ccRefs = append(ccRefs, ccRef)
-
 		ccOutputs = append(ccOutputs, ccOut)
 	}
 

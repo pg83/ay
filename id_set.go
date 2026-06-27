@@ -65,7 +65,6 @@ func (s *IdSet) spliceNew(win []VFS, block []VFS, k int) int {
 		}
 
 		gen[v] = epoch
-
 		block[k] = v
 		k++
 	}

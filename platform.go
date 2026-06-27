@@ -86,7 +86,6 @@ func wrapccPrefixFor(flags map[string]string) (head, tail []STR) {
 	}
 
 	head = []STR{wrapccPython3STR, wrapccPyVFS.str(), wrapccArgSrcFile.str()}
-
 	tail = []STR{argSourceRoot.str(), strS, argBuildRoot.str(), strB, wrapccArgEnd.str()}
 
 	return head, tail
@@ -117,7 +116,6 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 		systemLibs = []string{"-nostdlib"}
 	} else {
 		linkPreludeExtra = []string{"-ldl", "-lrt"}
-
 		systemLibs = []string{"-nodefaultlibs", "-lpthread", "-lc"}
 	}
 

@@ -30,7 +30,6 @@ func (m *IntValueMap[V]) put(k uint64, v V) {
 	}
 
 	*cell = uint32(len(m.vals))
-
 	m.vals = append(m.vals, v)
 }
 

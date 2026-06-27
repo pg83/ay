@@ -26,7 +26,6 @@ func NewExtMatcher[T any](entries []ExtEntry[T]) *ExtMatcher[T] {
 
 	for i, e := range entries {
 		keys[i] = reverseStr(e.Ext)
-
 		values[i] = e.Val
 	}
 

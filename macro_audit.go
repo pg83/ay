@@ -99,7 +99,6 @@ func recordServiceArgsLocked(macroName string, args []string) {
 
 		if !ok {
 			bucket = map[string]int{}
-
 			macroAudit.services[macroName] = bucket
 		}
 
@@ -113,7 +112,6 @@ func recordServiceArgsLocked(macroName string, args []string) {
 
 		if !ok {
 			unkBucket = map[string]int{}
-
 			macroAudit.unknown[macroName] = unkBucket
 		}
 
