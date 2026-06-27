@@ -24,6 +24,7 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 		if pendingActive {
 			rec.setMapping(pendingKey, pendingPaths)
 			pendingActive = false
+
 			pendingPaths = nil
 		}
 	}
@@ -33,7 +34,9 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 
 		if open {
 			out = append(out, rec)
+
 			rec = SysIncl{}
+
 			open = false
 		}
 	}
@@ -84,7 +87,9 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 
 		if len(val) == 0 {
 			pendingKey = key
+
 			pendingIndent = indent
+
 			pendingActive = true
 
 			return

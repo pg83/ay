@@ -43,6 +43,7 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 		partRel := prefix + "." + strconv.Itoa(i) + ".cpp"
 
 		partRels = append(partRels, partRel)
+
 		outputs = append(outputs, build(moduleDir, "/", partRel))
 	}
 

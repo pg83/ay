@@ -135,6 +135,7 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 		}
 
 		depSeen[ref] = struct{}{}
+
 		cur.deps = append(cur.deps, ref)
 	}
 
@@ -144,7 +145,9 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 		}
 
 		chunks = append(chunks, cur)
+
 		cur = chunk{}
+
 		cmdLen = 0
 		deduper.reset()
 		depSeen = map[NodeRef]struct{}{}

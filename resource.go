@@ -64,6 +64,7 @@ func expandResourceFiles(args []string) []ResourceEntry {
 			}
 
 			prefix = args[i+1]
+
 			dest = ""
 			i += 2
 		case "DEST":
@@ -72,6 +73,7 @@ func expandResourceFiles(args []string) []ResourceEntry {
 			}
 
 			dest = args[i+1]
+
 			prefix = ""
 			i += 2
 		case "STRIP":
@@ -122,6 +124,7 @@ func expandAllResourceFiles(fs FS, modulePath string, env Environment, stmt *All
 
 	if !stmt.FromDirs {
 		ext = expandStmtTokenSTR(stmt.Args[0], env).string()
+
 		i = 1
 	}
 
@@ -270,6 +273,7 @@ func globSegMatch(pat, name string) bool {
 			nx++
 		} else if px < len(pat) && pat[px] == '*' {
 			starPx = px
+
 			starNx = nx
 			px++
 		} else if starPx != -1 {
@@ -373,6 +377,7 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 		}
 
 		seen[formula] = struct{}{}
+
 		out = append(out, formula)
 	}
 
@@ -388,6 +393,7 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 		}
 
 		seen[path] = struct{}{}
+
 		out = append(out, path)
 	}
 
@@ -467,6 +473,7 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 
 		if generated {
 			pySource = build(modulePath, "/", srcRel)
+
 			resolvedRel = modulePath + "/" + srcRel
 		}
 
@@ -546,7 +553,9 @@ func chunkPySrcEntries(entries []PySrcEntry) []PySrcChunk {
 		}
 
 		chunks = append(chunks, cur)
+
 		cur = PySrcChunk{}
+
 		cmdLen = 0
 		deduper.reset()
 	}

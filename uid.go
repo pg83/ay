@@ -181,6 +181,7 @@ func (c *CanonBuf) writeVFSSliceOS(vs []VFS, fs *OsFS) {
 			h = hashes[s]
 		} else {
 			h = fs.contentHashSlow(v)
+
 			hashes = fs.contentHashes
 		}
 

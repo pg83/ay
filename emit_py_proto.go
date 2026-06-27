@@ -65,6 +65,7 @@ func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCo
 		cppInstance := instance
 
 		cppInstance.Language = LangCPP
+
 		cppSibling = genModule(ctx, cppInstance)
 	}
 
@@ -77,6 +78,7 @@ func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCo
 		aux, gen := emitPyProtoSrc(ctx, instance, d, src, protocLDRef, protocBinary, pe)
 
 		auxEntries = append(auxEntries, aux...)
+
 		genEntries = append(genEntries, gen...)
 	}
 
@@ -84,11 +86,13 @@ func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCo
 
 	if auxRes != nil {
 		pyProtoRefs = append(pyProtoRefs, auxRes.Refs...)
+
 		pyProtoOutputs = append(pyProtoOutputs, auxRes.Outputs...)
 	}
 
 	if objRes := emitGeneratedPyProtoObjcopy(ctx, instance, d, genEntries); objRes != nil {
 		pyProtoRefs = append(pyProtoRefs, objRes.Refs...)
+
 		pyProtoOutputs = append(pyProtoOutputs, objRes.Outputs...)
 	}
 
@@ -166,6 +170,7 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 	}
 
 	head = appendInternStrs(head, suffixes)
+
 	pe.head = append(head, argInput.str())
 
 	mid := make([]STR, 0, 16)
@@ -251,12 +256,15 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 
 	if d.grpc {
 		grpcPyOut = build(protoBase, "__intpy3___pb2_grpc.py")
+
 		outputs = append(outputs, grpcPyOut)
+
 		suffixes = append(suffixes, "_pb2_grpc.py")
 	}
 
 	if !d.noMypy {
 		outputs = append(outputs, pyiOut)
+
 		suffixes = append(suffixes, "_pb2.pyi")
 	}
 
@@ -283,9 +291,13 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 
 	if info := ctx.codegenFor(instance).lookup(build(protoRelPath)); info != nil {
 		protoSrcVFS = build(protoRelPath)
+
 		protoCwd = strB
+
 		producerDeps = []NodeRef{info.ProducerRef}
+
 		generated = true
+
 		producerSourceInputs = info.SourceInputs
 
 		if len(info.ProducerSourceClosure) > 0 {
@@ -345,6 +357,7 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 
 	if d.grpc {
 		pyYapyc = append(pyYapyc, grpcPyOut)
+
 		yapycTokens = append(yapycTokens, pyBuildBase+"__intpy3___pb2_grpc.py")
 	}
 
@@ -573,7 +586,9 @@ func emitGeneratedPyProtoObjcopy(ctx *GenCtx, instance ModuleInstance, d *Module
 
 		res.Refs = append(res.Refs, r)
 		res.Outputs = append(res.Outputs, outputObj)
+
 		cur = chunk{}
+
 		depSeen = map[NodeRef]struct{}{}
 	}
 
@@ -591,6 +606,7 @@ func emitGeneratedPyProtoObjcopy(ctx *GenCtx, instance ModuleInstance, d *Module
 		if e.producer != NodeRef(0) {
 			if _, ok := depSeen[e.producer]; !ok {
 				depSeen[e.producer] = struct{}{}
+
 				cur.deps = append(cur.deps, e.producer)
 			}
 		}
@@ -675,6 +691,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 		}
 
 		depSeen[ref] = struct{}{}
+
 		cur.deps = append(cur.deps, ref)
 	}
 
@@ -684,7 +701,9 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 		}
 
 		chunks = append(chunks, cur)
+
 		cur = chunk{}
+
 		cmdLen = 0
 		deduper.reset()
 		depSeen = map[NodeRef]struct{}{}

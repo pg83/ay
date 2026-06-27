@@ -308,6 +308,7 @@ func stripComments(data []byte) []byte {
 		if atLineStart {
 			if next, ok := scanIncludeDirectiveTarget(data, i); ok {
 				i = next
+
 				atLineStart = false
 
 				continue

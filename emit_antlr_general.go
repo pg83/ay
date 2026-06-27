@@ -37,6 +37,7 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			vfs := copyFileInputVFS(ctx.fs, instance.Path, inTok.string())
 
 			inVFSByToken[inTok.string()] = vfs
+
 			inputs = append(inputs, vfs)
 
 			if info := reg.lookup(vfs); info != nil && info.ProducerKvP == pkCF && info.SourcePath != 0 {
@@ -54,6 +55,7 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			vfs := copyFileOutputVFS(instance.Path.rel(), outTok.string())
 
 			outVFSByToken[outTok.string()] = vfs
+
 			outputs = append(outputs, vfs)
 		}
 
@@ -61,6 +63,7 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			vfs := copyFileOutputVFS(instance.Path.rel(), outTok.string())
 
 			outVFSByToken[outTok.string()] = vfs
+
 			outputs = append(outputs, vfs)
 		}
 
@@ -107,6 +110,7 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			ccRef, ccOut := emitCodegenDownstreamCC(ctx, instance, cppRel, []NodeRef{jvRef}, *consumerInputs)
 
 			ccRefs = append(ccRefs, ccRef)
+
 			ccOutputs = append(ccOutputs, ccOut)
 		}
 	}
@@ -147,6 +151,7 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, out
 		}
 
 		seen[target] = struct{}{}
+
 		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(target)})
 	}
 

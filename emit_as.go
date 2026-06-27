@@ -185,6 +185,7 @@ func emitLibraryAsmSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, s
 	if len(d.asmAddIncl) > 0 {
 		scanIn.AddIncl = dedup(in.AddIncl, d.asmAddIncl)
 		scanIn.ScanCfg = newScanContext(ctx.parsers, scanIn.AddIncl, scanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+
 		asIn.AddIncl = scanIn.AddIncl
 	}
 

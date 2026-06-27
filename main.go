@@ -247,6 +247,7 @@ func runCommand(argv []string, g GlobalFlags) int {
 	for i, c := range commands {
 		if isTokenPrefix(c.path, argv) && (best < 0 || len(c.path) > bestLen) {
 			best = i
+
 			bestLen = len(c.path)
 		}
 	}

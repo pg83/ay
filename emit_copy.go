@@ -99,6 +99,7 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 
 				dstClosure = append(dstClosure, producerSource...)
 				dstClosure = append(dstClosure, ctx.scripts[copyFsToolsVFS]...)
+
 				info.ProducerSourceClosure = dstClosure
 			}
 
@@ -134,7 +135,9 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 
 		if dst := entry.Dst; strings.HasSuffix(dst, ".a") || strings.HasSuffix(dst, ".o") {
 			memberRefs = append(memberRefs, entries[i].ref)
+
 			memberOuts = append(memberOuts, dstVFS)
+
 			memberSrcs = append(memberSrcs, srcVFS)
 		}
 	}

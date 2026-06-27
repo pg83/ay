@@ -170,6 +170,7 @@ func (e *StreamingEmitter) finish() []UID {
 		}
 
 		seen[u] = struct{}{}
+
 		results = append(results, u)
 	}
 
@@ -197,6 +198,7 @@ func graphFromEmitter(e *StreamingEmitter) *Graph {
 		}
 
 		seenResult[u] = struct{}{}
+
 		out.Result = append(out.Result, u)
 	}
 
@@ -212,6 +214,7 @@ func graphFromEmitter(e *StreamingEmitter) *Graph {
 		}
 
 		seenNode[u] = struct{}{}
+
 		out.Graph = append(out.Graph, node)
 
 		for _, r := range node.DepRefs {

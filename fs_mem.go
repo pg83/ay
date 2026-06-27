@@ -28,6 +28,7 @@ func newMemFS(files map[string]string) *MemFS {
 
 		if entries == nil {
 			entries = map[string]bool{}
+
 			fs.dirs[parent] = entries
 		}
 
@@ -38,6 +39,7 @@ func newMemFS(files map[string]string) *MemFS {
 
 	for rel, content := range files {
 		rel = cleanRel(rel)
+
 		fs.files[rel] = []byte(content)
 
 		cur := rel
@@ -53,6 +55,7 @@ func newMemFS(files map[string]string) *MemFS {
 			}
 
 			cur = parent
+
 			isDirEntry = true
 		}
 	}

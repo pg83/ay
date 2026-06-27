@@ -49,6 +49,7 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 		vfs := runProgramInputVFS(ctx, instance, d, f.string())
 
 		inVFSByToken[f.string()] = vfs
+
 		inVFSs = append(inVFSs, vfs)
 	}
 
@@ -68,6 +69,7 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 		vfs := copyFileOutputVFS(instance.Path.rel(), stmt.StdoutFile.string())
 
 		stdoutVFS = &vfs
+
 		outVFSByToken[stmt.StdoutFile.string()] = vfs
 	}
 
@@ -218,6 +220,7 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 		}
 
 		seen[v] = struct{}{}
+
 		sources = append(sources, v)
 	}
 
@@ -278,6 +281,7 @@ func pyEmitsIncludes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 		for _, f := range stmt.OUTNoAutoFiles {
 			if isCCSourceExt(f.string()) {
 				firstShardFile = f.string()
+
 				firstShardVFS = copyFileOutputVFS(instance.Path.rel(), f.string())
 
 				break
@@ -402,6 +406,7 @@ func emitPYRun(
 
 	if stdoutVFS != nil {
 		stdoutPath = stdoutVFS.str()
+
 		outputs = append(outputs, *stdoutVFS)
 	}
 

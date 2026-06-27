@@ -256,6 +256,7 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 			pxdClosure := walkClosure(ctx.scannerFor(instance), pxdVFS, srcScanIn.ScanCfg)
 
 			toolInputs = keepOnlySourceVFS(dedup(toolInputs, pxdClosure))
+
 			emitsIncludes = dedup(emitsIncludes, pxdClosure)
 		}
 
@@ -325,6 +326,7 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 
 		scanIn.AddIncl = appendCythonScanAddIncl(in.AddIncl, d.cythonAddIncl, py23Variant)
 		scanIn.ScanCfg = newScanContext(ctx.parsers, scanIn.AddIncl, scanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+
 		ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), generatedVFS, scanIn.ScanCfg)
 		ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, cyRef)
 		ccIn.IncludeInputs = cythonCompileInducedInputs(ctx, instance, ccIn.IncludeInputs)
@@ -366,6 +368,7 @@ func cythonPyxLangClosure(scanner *IncludeScanner, src VFS, cfg ScanContext) []V
 		}
 
 		seen[v] = struct{}{}
+
 		out = append(out, v)
 
 		sc.forEachResolvedChildID(v, func(ch VFS) {
@@ -426,11 +429,13 @@ func cythonCppInducedSets(ctx *GenCtx, instance ModuleInstance, src VFS, cMode b
 		}
 
 		toolSingles = append(toolSingles, v)
+
 		emitsSingles = append(emitsSingles, v)
 
 		cl := walkClosureTail(scanner, v, scanIn.ScanCfg)
 
 		toolCl = append(toolCl, cl)
+
 		emitsCl = append(emitsCl, cl)
 	}
 
@@ -438,11 +443,13 @@ func cythonCppInducedSets(ctx *GenCtx, instance ModuleInstance, src VFS, cMode b
 		v := source(rel)
 
 		toolSingles = append(toolSingles, v)
+
 		emitsSingles = append(emitsSingles, v)
 
 		cl := walkClosureTail(scanner, v, scanIn.ScanCfg)
 
 		toolCl = append(toolCl, cl)
+
 		emitsCl = append(emitsCl, cl)
 	}
 

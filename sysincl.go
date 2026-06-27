@@ -474,6 +474,7 @@ func splitTopLevelOr(pat string) []string {
 			depth--
 		case c == '|' && depth == 0 && !bracket:
 			out = append(out, pat[last:i])
+
 			last = i + 1
 		}
 	}

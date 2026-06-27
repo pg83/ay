@@ -1011,7 +1011,9 @@ func stripContentEqualPairs(leftNodes, rightNodes []map[string]any) (residLeft, 
 		}
 
 		usedRight[matched] = true
+
 		eqLeft = append(eqLeft, left)
+
 		eqRight = append(eqRight, rightNodes[matched])
 	}
 

@@ -73,6 +73,7 @@ func emitJVDownstreamCPCC(
 		ccIncludeInputs = append(ccIncludeInputs, ctx.scripts[antlr4FsToolsVFS]...)
 		ccIncludeInputs = append(ccIncludeInputs, jvInputs...)
 		ccIncludeInputs = append(ccIncludeInputs, closure...)
+
 		ccIn.IncludeInputs = ccIncludeInputs
 		ccIn.ExtraDepRefs = []NodeRef{jvRef, cpRef}
 		ccIn.PerSourceCFlags = []ARG{argWnoUnusedVariable}
@@ -80,6 +81,7 @@ func emitJVDownstreamCPCC(
 		ccRef, ccOut, _ := emitCC(instance, internStr(g4CppRel), g4CppPath, ccIn, ctx.host, ctx.emit)
 
 		ccRefs = append(ccRefs, ccRef)
+
 		ccOutputs = append(ccOutputs, ccOut)
 	}
 

@@ -77,6 +77,7 @@ func emitBundleNode(ctx *GenCtx, instance ModuleInstance, python3 STR, src, dst 
 
 	if resolved {
 		inputHead = []VFS{src}
+
 		depRefs = []NodeRef{srcRef}
 	}
 
