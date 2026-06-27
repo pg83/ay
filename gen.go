@@ -399,7 +399,7 @@ func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
 		return moduleStmt.Args[0].string()
 	}
 
-	return lastPathComponent(instance.Path.rel())
+	return baseName(instance.Path.rel())
 }
 
 func programSourceDir(moduleStmt *ModuleStmt) *string {

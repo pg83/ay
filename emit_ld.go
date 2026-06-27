@@ -168,7 +168,7 @@ func emitLD(
 	outputs := []VFS{outputVFS}
 
 	for _, p := range dynamicPaths {
-		outputs = append(outputs, build(binaryDir, "/", lastPathComponent(p.rel())))
+		outputs = append(outputs, build(binaryDir, "/", baseName(p.rel())))
 	}
 
 	if wantsSplitDwarf {

@@ -98,16 +98,6 @@ func baseName(s string) string {
 	return s
 }
 
-func lastPathComponent(p string) string {
-	for i := len(p) - 1; i >= 0; i-- {
-		if p[i] == '/' {
-			return p[i+1:]
-		}
-	}
-
-	return p
-}
-
 func pathDir(p string) string {
 	idx := strings.LastIndexByte(p, '/')
 
