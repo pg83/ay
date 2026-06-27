@@ -179,45 +179,6 @@ func srcExtClassOf(id STR) SrcExtClass {
 	return c
 }
 
-func classifySrcExt(s string) SrcExtClass {
-	switch {
-	case strings.HasSuffix(s, ".gztproto"):
-		return srcExtGztProto
-	case strings.HasSuffix(s, ".proto"):
-		return srcExtProto
-	case strings.HasSuffix(s, ".fbs64"):
-		return srcExtFbs64
-	case strings.HasSuffix(s, ".fbs"):
-		return srcExtFbs
-	case strings.HasSuffix(s, ".ev"):
-		return srcExtEv
-	case strings.HasSuffix(s, ".rl6"):
-		return srcExtRl6
-	case strings.HasSuffix(s, ".rl"):
-		return srcExtRl
-	case strings.HasSuffix(s, ".y"), strings.HasSuffix(s, ".ypp"):
-		return srcExtY
-	case strings.HasSuffix(s, ".cpp.in"):
-		return srcExtCppIn
-	case strings.HasSuffix(s, ".c.in"):
-		return srcExtCIn
-	case strings.HasSuffix(s, ".h.in"):
-		return srcExtHIn
-	case strings.HasSuffix(s, ".sc"):
-		return srcExtSc
-	case strings.HasSuffix(s, ".cfgproto"):
-		return srcExtCfgProto
-	case strings.HasSuffix(s, ".gperf"):
-		return srcExtGperf
-	case strings.HasSuffix(s, ".lpp"),
-		strings.HasSuffix(s, ".lex"),
-		strings.HasSuffix(s, ".l"):
-		return srcExtFlex
-	default:
-		return srcExtRegular
-	}
-}
-
 func isCodegenProducingSrcID(id STR) bool {
 	switch srcExtClassOf(id) {
 	case srcExtProto, srcExtGztProto, srcExtFbs, srcExtFbs64, srcExtEv, srcExtCfgProto, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc, srcExtGperf, srcExtFlex:

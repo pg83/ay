@@ -2833,44 +2833,6 @@ func walkPeersForGlobalAddIncl(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	return out
 }
 
-func isHeaderSource(srcRel string) bool {
-	switch {
-	case strings.HasSuffix(srcRel, ".h"),
-		strings.HasSuffix(srcRel, ".hh"),
-		strings.HasSuffix(srcRel, ".hpp"),
-		strings.HasSuffix(srcRel, ".cuh"),
-		strings.HasSuffix(srcRel, ".H"),
-		strings.HasSuffix(srcRel, ".hxx"),
-		strings.HasSuffix(srcRel, ".xh"),
-		strings.HasSuffix(srcRel, ".ipp"),
-		strings.HasSuffix(srcRel, ".ixx"),
-		strings.HasSuffix(srcRel, ".inl"):
-		return true
-	}
-
-	return false
-}
-
-func isCodegenProducingSrc(srcRel string) bool {
-	return strings.HasSuffix(srcRel, ".proto") ||
-		strings.HasSuffix(srcRel, ".gztproto") ||
-		strings.HasSuffix(srcRel, ".fbs64") ||
-		strings.HasSuffix(srcRel, ".fbs") ||
-		strings.HasSuffix(srcRel, ".ev") ||
-		strings.HasSuffix(srcRel, ".cfgproto") ||
-		strings.HasSuffix(srcRel, ".rl6") ||
-		strings.HasSuffix(srcRel, ".rl") ||
-		strings.HasSuffix(srcRel, ".y") ||
-		strings.HasSuffix(srcRel, ".ypp") ||
-		strings.HasSuffix(srcRel, ".cpp.in") ||
-		strings.HasSuffix(srcRel, ".c.in") ||
-		strings.HasSuffix(srcRel, ".sc") ||
-		strings.HasSuffix(srcRel, ".gperf") ||
-		strings.HasSuffix(srcRel, ".lpp") ||
-		strings.HasSuffix(srcRel, ".lex") ||
-		strings.HasSuffix(srcRel, ".l")
-}
-
 func reorderARMembers(refs []NodeRef, paths []VFS, declMeta map[VFS]SrcMeta) ([]NodeRef, []VFS) {
 	if len(paths) == 0 {
 		return refs, paths

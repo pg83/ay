@@ -284,14 +284,6 @@ func normalizeDotDotSegments(rel string) (body string, underscore bool) {
 	return strings.Join(parts, "/"), !hasParent
 }
 
-func isCxxSource(srcRel string) bool {
-	return strings.HasSuffix(srcRel, ".cpp") ||
-		strings.HasSuffix(srcRel, ".cc") ||
-		strings.HasSuffix(srcRel, ".cxx") ||
-
-		strings.HasSuffix(srcRel, ".C")
-}
-
 func pickWarningFlags(noCompilerWarnings bool, noWShadow bool) []ARG {
 	if noCompilerWarnings {
 		return noWarningsBundle

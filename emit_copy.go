@@ -180,21 +180,3 @@ func resolveModuleSourceVFS(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 
 	return resolveSourceVFS(ctx, instance, srcRel, srcDirs)
 }
-
-func isSourceEligibleForCopyAuto(srcRel string) bool {
-	return isHeaderSource(srcRel) ||
-		strings.HasSuffix(srcRel, ".c") ||
-		strings.HasSuffix(srcRel, ".cpp") ||
-		strings.HasSuffix(srcRel, ".cc") ||
-		strings.HasSuffix(srcRel, ".cxx") ||
-		strings.HasSuffix(srcRel, ".proto") ||
-		strings.HasSuffix(srcRel, ".ev") ||
-		strings.HasSuffix(srcRel, ".g4") ||
-		strings.HasSuffix(srcRel, ".y") ||
-		strings.HasSuffix(srcRel, ".ypp") ||
-		strings.HasSuffix(srcRel, ".rl") ||
-		strings.HasSuffix(srcRel, ".rl6") ||
-		strings.HasSuffix(srcRel, ".h.in") ||
-		strings.HasSuffix(srcRel, ".c.in") ||
-		strings.HasSuffix(srcRel, ".cpp.in")
-}
