@@ -341,10 +341,6 @@ func pbhBasenameSet(vs []VFS) map[string]bool {
 	return m
 }
 
-func relStem(rel string) string {
-	return strings.TrimSuffix(rel, filepath.Ext(rel))
-}
-
 func isCCSourceExt(p string) bool {
 	return strings.HasSuffix(p, ".cpp") ||
 		strings.HasSuffix(p, ".cc") ||

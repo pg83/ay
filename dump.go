@@ -212,14 +212,6 @@ func arLDInputKept(s, kind string, cmdBases map[string]struct{}) bool {
 	return ok
 }
 
-func baseName(s string) string {
-	if i := strings.LastIndexByte(s, '/'); i >= 0 {
-		return s[i+1:]
-	}
-
-	return s
-}
-
 func filterARLDInputs(in []string, kind string, cmdBases map[string]struct{}) []string {
 	out := in[:0]
 
@@ -276,14 +268,6 @@ func objcopySourceLeafKept(rel string) bool {
 	}
 
 	return true
-}
-
-func fileExt(base string) string {
-	if i := strings.LastIndexByte(base, '.'); i >= 0 {
-		return base[i:]
-	}
-
-	return ""
 }
 
 func getString(node map[string]any, key string) string {

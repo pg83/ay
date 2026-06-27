@@ -2,6 +2,7 @@ package main
 
 import (
 	"path"
+	"path/filepath"
 	"strings"
 )
 
@@ -87,4 +88,69 @@ func joinRel(prefix, suffix string) string {
 	default:
 		return prefix + "/" + suffix
 	}
+}
+
+func baseName(s string) string {
+	if i := strings.LastIndexByte(s, '/'); i >= 0 {
+		return s[i+1:]
+	}
+
+	return s
+}
+
+func lastPathComponent(p string) string {
+	for i := len(p) - 1; i >= 0; i-- {
+		if p[i] == '/' {
+			return p[i+1:]
+		}
+	}
+
+	return p
+}
+
+func pathDir(p string) string {
+	idx := strings.LastIndexByte(p, '/')
+
+	if idx < 0 {
+		return ""
+	}
+
+	return p[:idx]
+}
+
+func fileExt(base string) string {
+	if i := strings.LastIndexByte(base, '.'); i >= 0 {
+		return base[i:]
+	}
+
+	return ""
+}
+
+func relStem(rel string) string {
+	return strings.TrimSuffix(rel, filepath.Ext(rel))
+}
+
+func normalisePath(p string) string {
+	if !strings.Contains(p, "..") && !strings.Contains(p, "./") && !strings.Contains(p, "//") {
+		return p
+	}
+
+	parts := strings.Split(p, "/")
+	out := make([]string, 0, len(parts))
+
+	for _, seg := range parts {
+		switch seg {
+		case "", ".":
+
+			continue
+		case "..":
+			if len(out) > 0 {
+				out = out[:len(out)-1]
+			}
+		default:
+			out = append(out, seg)
+		}
+	}
+
+	return strings.Join(out, "/")
 }
