@@ -1095,6 +1095,7 @@ func lintConsolidateVars(path string) bool {
 				body:      text(vs.Pos(), hi),
 				multiline: strings.IndexByte(text(vs.Pos(), vs.End()), '\n') >= 0,
 			})
+
 			blockDoc = ""
 		}
 
@@ -1224,15 +1225,24 @@ func lintControlBlankLines(path string) bool {
 	singleLine := func(s ast.Stmt) bool { return lineOf(s.Pos()) == lineOf(s.End()) }
 
 	multiLineCall := func(s ast.Stmt) bool {
-		es, ok := s.(*ast.ExprStmt)
-
-		if !ok {
+		if lineOf(s.End()) <= lineOf(s.Pos()) {
 			return false
 		}
 
-		_, ok = es.X.(*ast.CallExpr)
+		switch x := s.(type) {
+		case *ast.ExprStmt:
+			_, ok := x.X.(*ast.CallExpr)
 
-		return ok && lineOf(s.End()) > lineOf(s.Pos())
+			return ok
+		case *ast.AssignStmt:
+			for _, r := range x.Rhs {
+				if _, ok := r.(*ast.CallExpr); ok {
+					return true
+				}
+			}
+		}
+
+		return false
 	}
 
 	blockLike := func(s ast.Stmt) bool {

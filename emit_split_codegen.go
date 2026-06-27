@@ -59,6 +59,7 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 		strCppParts,
 		internStr(strconv.Itoa(cppParts)),
 	)
+
 	cmdArgs = append(cmdArgs, sc.Opts...)
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}

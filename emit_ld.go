@@ -269,12 +269,14 @@ func composeLDCmdVcsCompile(p *Platform, tc ModuleToolchain, vcsCPath, vcsOPath 
 	cmdArgs = append(cmdArgs, tc.CC, p.TargetArg)
 	cmdArgs = appendArgStr(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs, p.SysrootArgs...)
+
 	cmdArgs = append(cmdArgs,
 		argDashC.str(),
 		argDashO.str(),
 		internStr(vcsOPath),
 		internStr(vcsCPath),
 	)
+
 	cmdArgs = append(cmdArgs, argIS.str())
 
 	preNoLibcExtras := make([]ARG, 0, len(p.CFlags)+len(moduleCFlags)+len(peerCFlagsGlobal))

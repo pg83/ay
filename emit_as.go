@@ -135,11 +135,14 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	cmdArgs := make([]STR, 0, 20+len(predefinedFlags))
 
 	cmdArgs = append(cmdArgs, yasmConstHead...)
+
 	cmdArgs = append(cmdArgs,
 		argD.str(), internV("_", string(instance.Platform.ISA), "_"),
 		argDYasm.str(),
 	)
+
 	cmdArgs = appendInternStrs(cmdArgs, predefinedFlags)
+
 	cmdArgs = append(cmdArgs,
 		argI.str(), argB.str(),
 		argI.str(), argS.str(),

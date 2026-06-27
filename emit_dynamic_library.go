@@ -401,6 +401,7 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 		internV("-Wl,-soname,", outputName),
 		p.TargetArg,
 	)
+
 	cmdArgs = append(cmdArgs, p.SysrootArgs...)
 	cmdArgs = append(cmdArgs, argWlStartGroup.str())
 
@@ -409,10 +410,12 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 	}
 
 	cmdArgs = append(cmdArgs, argWlEndGroup.str())
+
 	cmdArgs = append(cmdArgs,
 		argRdynamic.str(),
 		internV("-Wl,--version-script=$(S)/", modulePath, "/", exportsScript),
 	)
+
 	cmdArgs = append(cmdArgs, p.LinkPreludeExtra...)
 	cmdArgs = append(cmdArgs, argWlNoAsNeeded.str())
 
@@ -435,6 +438,7 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 		argWlNoRosegment.str(),
 		argWlBuildIdSha1.str(),
 	)
+
 	cmdArgs = append(cmdArgs, p.SystemLibs...)
 	cmdArgs = append(cmdArgs, argLm.str(), argWlGcSections.str())
 

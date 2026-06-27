@@ -128,6 +128,7 @@ func emitJV(
 
 	cmdArgs = append(cmdArgs, tc.Python3)
 	cmdArgs = append(cmdArgs, antlrJavaConstHead...)
+
 	cmdArgs = append(cmdArgs,
 		(grammarVFS).str(),
 		argDlanguageCpp.str(),
@@ -249,6 +250,7 @@ func emitJVGeneral(
 		argJar.str(),
 		(jarVFS).str(),
 	)
+
 	cmdArgs = appendInternStrs(cmdArgs, args)
 
 	jvInputs := na.inputList(inputs, na.vfsList(stdout2stderrVFS, jarVFS))

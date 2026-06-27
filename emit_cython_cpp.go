@@ -288,7 +288,9 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 			argIB.str(),
 			argIS.str(),
 		)
+
 		cmdArgs = appendCythonAddIncl(cmdArgs, d.cythonAddIncl, ctx.inclArgs)
+
 		cmdArgs = append(cmdArgs,
 			argISContribToolsCythonCythonIncludes.str(),
 			(srcVFS).str(),

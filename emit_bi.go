@@ -37,6 +37,7 @@ func emitBI(
 		arg2.str(),
 		internStr(argsFile),
 	)
+
 	cmd1Args = append(cmd1Args, cxxFlags...)
 
 	cmd2Args := []STR{

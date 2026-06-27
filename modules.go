@@ -1604,6 +1604,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			Src:     v.Args[0].string(),
 			Options: strStrings(v.Args[1:]),
 		})
+
 		d.cythonNumpyBeforeInclude = true
 	case tokBuildwithCythonC:
 		if len(v.Args) == 0 {
@@ -1615,6 +1616,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			Options: strStrings(v.Args[1:]),
 			CMode:   true,
 		})
+
 		d.cythonNumpyBeforeInclude = true
 	case tokBisonGenC:
 		d.bisonGenExt = strC
@@ -2110,6 +2112,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 						"-X", "set_initial_path=" + modulePath + "/" + src,
 					},
 				})
+
 				appendPyRegister(d, modName, false)
 				cythonRegIdx = append(cythonRegIdx, len(d.pyRegister)-1)
 				mainNext = false
