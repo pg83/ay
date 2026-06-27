@@ -11,6 +11,7 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 	}
 
 	cmdArgs := make([]STR, 0, 4+len(sources))
+
 	cmdArgs = append(cmdArgs,
 		tc.Python3,
 		(joinSrcs).str(),

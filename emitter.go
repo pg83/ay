@@ -47,6 +47,7 @@ func (e *StreamingEmitter) resolveAndUID(node *Node) UID {
 	}
 
 	u := CanonBuf{fs: e.fs, uids: e.uids, fetchRefs: e.fetchRefs, bufStore: &e.uidBuf}.calcUID(node)
+
 	node.UID = u
 	node.SelfUID = u
 
@@ -63,6 +64,7 @@ func (e *StreamingEmitter) reserve() NodeRef {
 	}
 
 	id := NodeRef(len(e.nodes))
+
 	e.nodes = append(e.nodes, nil)
 	e.reserved++
 
@@ -89,6 +91,7 @@ func (e *StreamingEmitter) emit(n *Node) NodeRef {
 	}
 
 	id := NodeRef(len(e.nodes))
+
 	e.nodes = append(e.nodes, n)
 	e.resolveOrPend(n, id)
 
@@ -144,6 +147,7 @@ func (e *StreamingEmitter) finish() []UID {
 
 	for _, id := range e.pendingIdx {
 		n := e.nodes[id]
+
 		e.uids.set(id, e.resolveAndUID(n))
 		e.resolved.add(uint32(id))
 
@@ -197,6 +201,7 @@ func graphFromEmitter(e *StreamingEmitter) *Graph {
 	}
 
 	seenNode := make(map[UID]struct{}, n)
+
 	var dfsVisit func(id NodeRef)
 	dfsVisit = func(id NodeRef) {
 		node := e.nodes[id]

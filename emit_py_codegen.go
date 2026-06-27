@@ -85,6 +85,7 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 			if len(inputs) > 4 {
 				toolA := inputs[len(inputs)-2]
 				toolB := inputs[len(inputs)-1]
+
 				copy(inputs[4:], inputs[2:len(inputs)-2])
 				inputs[2] = toolA
 				inputs[3] = toolB
@@ -151,6 +152,7 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 
 			prior := d.pyRegister[j]
 			priorStr := prior.string()
+
 			priorShort[priorStr[strings.LastIndexByte(priorStr, '.')+1:]] = struct{}{}
 		}
 
@@ -179,6 +181,7 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 
 		pyRef := ctx.emit.emit(pyNode)
 		ccIn := in
+
 		ccIn.ExtraDepRefs = []NodeRef{pyRef}
 		ccIn.Py3Suffix = py3Suffix
 
@@ -205,6 +208,7 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 		}
 
 		ccIn.CCBlocks = composeCCModuleArgBlocks(na, instance.Platform, &ccIn)
+
 		ccRef, ccOut, _ := emitCC(instance, internStr(regCpp), regCppVFS, ccIn, ctx.host, ctx.emit)
 
 		res.Refs = append(res.Refs, ccRef)

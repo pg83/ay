@@ -148,6 +148,7 @@ func nodeProgramKind(node *rawNode) string {
 
 func nodeCmdText(node *rawNode) string {
 	cmds, _ := node.Cmds.([]any)
+
 	var b strings.Builder
 
 	for _, c := range cmds {
@@ -176,6 +177,7 @@ func nodeCmdBasenames(node *rawNode) map[string]struct{} {
 			}
 
 			b := strings.TrimRight(baseName(normPath(a)), ":")
+
 			set[b] = struct{}{}
 		}
 	}
@@ -332,7 +334,9 @@ func canonContent(node *rawNode, refGraph bool) map[string]any {
 
 func marshalCompact(v any) []byte {
 	var buf bytes.Buffer
+
 	enc := json.NewEncoder(&buf)
+
 	enc.SetEscapeHTML(false)
 	throw(enc.Encode(v))
 
@@ -363,6 +367,7 @@ func loadGraph(path string) []*rawNode {
 	defer func() { throw(f.Close()) }()
 
 	dec := json.NewDecoder(bufio.NewReaderSize(f, 1<<20))
+
 	dec.UseNumber()
 	seekToGraph(dec, path)
 
@@ -370,6 +375,7 @@ func loadGraph(path string) []*rawNode {
 
 	for dec.More() {
 		node := &rawNode{}
+
 		throw(dec.Decode(node))
 		nodes = append(nodes, node)
 	}
@@ -436,6 +442,7 @@ func streamGraphFanout[R any](path string, workers int, process func(*rawNode) R
 	defer func() { throw(f.Close()) }()
 
 	dec := json.NewDecoder(bufio.NewReaderSize(f, 1<<20))
+
 	dec.UseNumber()
 	seekToGraph(dec, path)
 
@@ -468,6 +475,7 @@ func streamGraphFanout[R any](path string, workers int, process func(*rawNode) R
 
 	for dec.More() {
 		node := &rawNode{}
+
 		throw(dec.Decode(node))
 		nodes <- node
 	}
@@ -490,6 +498,7 @@ func streamJSONL(path string, fn func(map[string]any)) {
 
 		if len(line) > 0 {
 			n := map[string]any{}
+
 			throw(json.Unmarshal([]byte(line), &n))
 			fn(n)
 		}

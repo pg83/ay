@@ -65,7 +65,9 @@ func refacCase(_ GlobalFlags, args []string) int {
 
 		if fixed == 0 {
 			fmt.Fprintln(os.Stderr, "refac case: unfixable build errors remain:")
+
 			out, _ := exec.Command("go", "build", "-gcflags=-e", "./...").CombinedOutput()
+
 			os.Stderr.Write(out)
 
 			return 1
@@ -212,6 +214,7 @@ func fixCaseRefsOnce(typeRen, methodRen map[string]string) (int, bool) {
 
 	for _, lineS := range strings.Split(string(build)+string(vet), "\n") {
 		lineS = strings.TrimPrefix(strings.TrimSpace(lineS), "vet: ")
+
 		m := caseErrRe.FindStringSubmatch(lineS)
 
 		if m == nil {
@@ -239,12 +242,14 @@ func fixCaseRefsOnce(typeRen, methodRen map[string]string) (int, bool) {
 		}
 
 		f := fix{old: name, new_: new_}
+
 		fmt.Sscanf(m[2]+" "+m[3], "%d %d", &f.line, &f.col)
 		byFile[strings.TrimPrefix(m[1], "./")] = append(byFile[strings.TrimPrefix(m[1], "./")], f)
 	}
 
 	for path, fixes := range byFile {
 		src := strings.Split(string(throw2(os.ReadFile(path))), "\n")
+
 		sort.Slice(fixes, func(i, j int) bool {
 			if fixes[i].line != fixes[j].line {
 				return fixes[i].line > fixes[j].line
@@ -279,6 +284,7 @@ func lintCaseConvention(path string) bool {
 
 	report := func(pos gotoken.Pos, kind, name string) {
 		p := fset.Position(pos)
+
 		fmt.Fprintf(os.Stderr, "refac lint: case-convention: %s:%d: %s %s\n", path, p.Line, kind, name)
 
 		bad = true

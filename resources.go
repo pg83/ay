@@ -155,6 +155,7 @@ func selectHostResourceDecl(host *Platform, modulePath, name string, bundle map[
 
 func sortedResourceGlobals(in []ResourceDecl) []ResourceDecl {
 	out := append([]ResourceDecl(nil), in...)
+
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].GlobalVar.string() < out[j].GlobalVar.string()
 	})
@@ -219,6 +220,7 @@ func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolc
 		switch decl.Name {
 		case clangResID:
 			root := "$(B)/resources/" + clangRes
+
 			tc.ClangResource = clangResID
 			tc.ClangRoot = internStr(root)
 			tc.CC = internV(root, "/bin/clang")
@@ -228,6 +230,7 @@ func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolc
 			tc.Strip = internV(root, "/bin/llvm-strip")
 		case strLLDRootName:
 			root := "$(B)/resources/" + resourcePatternLLDRoot
+
 			tc.LLDRoot = internStr(root)
 			tc.LLD = internV(root, "/bin/ld.lld")
 		case strYMakePython3Name:

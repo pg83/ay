@@ -112,6 +112,7 @@ func emitLD(
 
 	if sbomEmbed {
 		linkSbom := composeLDCmdLinkSbom(tc, ldSbomLang(instance), binaryDir, sbomJSON, sbomPaths)
+
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(linkSbom), Cwd: strB, Env: envVcsOnly})
 	}
 
@@ -121,6 +122,7 @@ func emitLD(
 
 	if emitCopy {
 		cmd3 := composeLDCmdLinkOrCopy(tc, binaryDir, dynamicPaths...)
+
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd3), Env: envVcsOnly})
 	}
 
@@ -132,11 +134,13 @@ func emitLD(
 
 	if sbomEmbed {
 		objcopy := composeLDCmdSbomObjcopy(tc, sbomJSON, outputPath)
+
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(objcopy), Env: envVcsOnly})
 	}
 
 	inputs := composeLDInputs(na, instance.Path.rel(), ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts, emitCopy, hasBundles)
 	inputTail := make([]VFS, 0, 2)
+
 	inputTail = append(inputTail, ldSvnversionHVFS)
 
 	if exportsScript != nil {
@@ -151,6 +155,7 @@ func emitLD(
 	}
 
 	deps := make([]NodeRef, 0, len(ccRefs)+len(pluginRefs)+len(globalRefs)+len(peerLDRefs)+len(dynamicRefs)+len(objcopyRefs))
+
 	deps = append(deps, ccRefs...)
 	deps = append(deps, pluginRefs...)
 	deps = append(deps, globalRefs...)
@@ -159,6 +164,7 @@ func emitLD(
 	deps = append(deps, objcopyRefs...)
 	deps = append(deps, sbomRefs...)
 	deps = append(deps, vcsRef)
+
 	outputs := []VFS{outputVFS}
 
 	for _, p := range dynamicPaths {
@@ -259,6 +265,7 @@ func composeLDCmdVcsCompile(p *Platform, tc ModuleToolchain, vcsCPath, vcsOPath 
 	}
 
 	cmdArgs := make([]STR, 0, 94+len(moduleCFlags)+len(peerCFlagsGlobal)+len(moduleScopeCFlags))
+
 	cmdArgs = append(cmdArgs, tc.CC, p.TargetArg)
 	cmdArgs = appendArgStr(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs, p.SysrootArgs...)
@@ -271,6 +278,7 @@ func composeLDCmdVcsCompile(p *Platform, tc ModuleToolchain, vcsCPath, vcsOPath 
 	cmdArgs = append(cmdArgs, argIS.str())
 
 	preNoLibcExtras := make([]ARG, 0, len(p.CFlags)+len(moduleCFlags)+len(peerCFlagsGlobal))
+
 	preNoLibcExtras = append(preNoLibcExtras, p.CFlags...)
 	preNoLibcExtras = append(preNoLibcExtras, moduleCFlags...)
 	preNoLibcExtras = append(preNoLibcExtras, peerCFlagsGlobal...)
@@ -344,6 +352,7 @@ func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, outputPath, vcsOPath s
 	cmdArgs = append(cmdArgs, argDashO.str(), internStr(outputPath))
 
 	bundle := compileFlagBundleFor(p)
+
 	cmdArgs = append(cmdArgs, p.TargetArg)
 	cmdArgs = appendArgStr(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs, p.SysrootArgs...)
@@ -417,6 +426,7 @@ func ldSbomLang(instance ModuleInstance) string {
 
 func composeLDCmdLinkSbom(tc ModuleToolchain, lang, moddir, sbomJSON string, sbomPaths []VFS) []STR {
 	cmd := make([]STR, 0, 10+len(sbomPaths))
+
 	cmd = append(cmd,
 		tc.Python3,
 		linkSbomScriptVFS.str(),
@@ -535,6 +545,7 @@ func emitOwnLDPlugins(ctx *GenCtx, instance ModuleInstance, plugins []STR, tc Mo
 	}
 
 	cpInstance := instance
+
 	cpInstance.Platform = ctx.target
 
 	for _, name := range plugins {

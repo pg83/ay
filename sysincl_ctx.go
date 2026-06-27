@@ -162,6 +162,7 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 		}
 
 		i := int32(len(m.buckets))
+
 		m.buckets = append(m.buckets, nil)
 		m.byLower[lc] = i
 
@@ -195,6 +196,7 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 
 			if p.key != 0 {
 				bi := bucketFor(strings.ToLower(p.key.string()))
+
 				m.buckets[bi] = append(m.buckets[bi], SysinclContribution{
 					paths:    p.paths,
 					filter:   rec.Filter,
@@ -209,6 +211,7 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 
 			ciID := internStr(p.keyCI)
 			bi := bucketFor(p.keyCI)
+
 			m.buckets[bi] = append(m.buckets[bi], SysinclContribution{
 				paths:    p.paths,
 				filter:   rec.Filter,

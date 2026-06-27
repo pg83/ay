@@ -22,6 +22,7 @@ func (u UID) raw() [16]byte {
 
 func (u UID) appendB64(buf []byte) []byte {
 	raw := u.raw()
+
 	var enc [uidB64Len]byte
 	base64.RawURLEncoding.Encode(enc[:], raw[:])
 
@@ -40,6 +41,7 @@ func (u UID) String() string {
 
 func (u UID) marshalJSON() ([]byte, error) {
 	out := make([]byte, 0, uidB64Len+2)
+
 	out = append(out, '"')
 	out = u.appendB64(out)
 	out = append(out, '"')

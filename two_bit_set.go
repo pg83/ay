@@ -25,10 +25,12 @@ func (b *TwoBitSet) set(v uint32, val uint8) {
 		}
 
 		next := make([]uint64, grown)
+
 		copy(next, b.words)
 		b.words = next
 	}
 
 	shift := (v & 31) * 2
+
 	b.words[w] = b.words[w]&^(3<<shift) | uint64(val&3)<<shift
 }

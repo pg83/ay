@@ -40,6 +40,7 @@ func NewDarts(keys []string) *Darts {
 	}
 
 	d := &Darts{base: []int32{0}, check: []int32{0}, value: []int32{0}}
+
 	d.value[0] = root.key
 
 	type item struct {
@@ -51,7 +52,9 @@ func NewDarts(keys []string) *Darts {
 
 	for len(queue) > 0 {
 		it := queue[0]
+
 		queue = queue[1:]
+
 		n := it.node
 
 		if len(n.children) == 0 {
@@ -67,12 +70,16 @@ func NewDarts(keys []string) *Darts {
 		sort.Slice(codes, func(i, j int) bool { return codes[i] < codes[j] })
 
 		base := d.findBase(codes)
+
 		d.base[it.state] = base
 
 		for _, c := range codes {
 			t := base + c
+
 			d.check[t] = it.state + 1
+
 			child := n.children[byte(c-1)]
+
 			d.value[t] = child.key
 			queue = append(queue, item{child, t})
 		}

@@ -238,6 +238,7 @@ func copySliceConcurrent(srcRoot, dst string, recursiveDirs, shallowDirs []strin
 
 			for j := range jobCh {
 				skipped, err := copyOne(filepath.Join(srcRoot, j.rel), filepath.Join(dst, j.rel), j)
+
 				statCh <- copyStat{rel: j.rel, err: err, skipped: skipped}
 			}
 		}()

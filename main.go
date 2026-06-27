@@ -293,6 +293,7 @@ func startProfilesFromEnv() func() {
 
 		if path := os.Getenv("YATOOL_MEMPROFILE"); path != "" {
 			f := throw2(os.Create(path))
+
 			runtime.GC()
 			throw(pprof.WriteHeapProfile(f))
 			throw(f.Close())
@@ -316,6 +317,7 @@ func writeGraph(out string, g *Graph, dropSrcInputs bool) {
 	}
 
 	bw := bufio.NewWriterSize(w, 1<<20)
+
 	writeGraphCompact(bw, g, dropSrcInputs)
 	throw(bw.Flush())
 }

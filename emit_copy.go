@@ -24,9 +24,11 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, moduleDir VFS, entry
 
 	if entry.Text {
 		srcVFS := copyFileInputVFS(fs, moduleDir, entry.Src)
+
 		out = append(out, scanner.parsedIncludes(srcVFS, nil)...)
 	} else if entry.WithContext {
 		srcVFS := copyFileInputVFS(fs, moduleDir, entry.Src)
+
 		out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(srcVFS.rel())})
 	}
 
@@ -51,6 +53,7 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 		ref            NodeRef
 		producerSource []VFS
 	}
+
 	entries := make([]entryReg, 0, len(d.copyFiles))
 
 	for _, entry := range d.copyFiles {
@@ -93,6 +96,7 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 
 			if len(producerSource) > 0 {
 				dstClosure := make([]VFS, 0, len(producerSource)+len(ctx.scripts[copyFsToolsVFS]))
+
 				dstClosure = append(dstClosure, producerSource...)
 				dstClosure = append(dstClosure, ctx.scripts[copyFsToolsVFS]...)
 				info.ProducerSourceClosure = dstClosure

@@ -33,7 +33,9 @@ func (m *DenseMap3[K, V1, V2, V3]) ensureRow(k K) uint32 {
 
 	m.growIdx(int(k))
 	m.rows = append(m.rows, DenseRow3{})
+
 	slot := uint32(len(m.rows) - 1)
+
 	m.idx[k] = slot
 
 	return slot
@@ -51,6 +53,7 @@ func (m *DenseMap3[K, V1, V2, V3]) growIdx(k int) {
 	}
 
 	grown := make([]uint32, n)
+
 	copy(grown, m.idx)
 	m.idx = grown
 }

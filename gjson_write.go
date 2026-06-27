@@ -147,6 +147,7 @@ func appendStringSlice(buf []byte, ss []string) []byte {
 
 func appendStrChunks(buf []byte, chunks ArgChunks) []byte {
 	buf = append(buf, '[')
+
 	first := true
 
 	for _, ch := range chunks {
@@ -214,6 +215,7 @@ func appendRefUIDs(buf []byte, refs []NodeRef, uids *UidVec) []byte {
 
 func appendRefUIDsSeq(buf []byte, seq func(func(NodeRef) bool), uids *UidVec) []byte {
 	buf = append(buf, '[')
+
 	first := true
 
 	seq(func(r NodeRef) bool {
@@ -232,6 +234,7 @@ func appendRefUIDsSeq(buf []byte, seq func(func(NodeRef) bool), uids *UidVec) []
 
 func appendVFSChunks(buf []byte, chunks [][]VFS) []byte {
 	buf = append(buf, '[')
+
 	first := true
 
 	for _, ch := range chunks {
@@ -250,6 +253,7 @@ func appendVFSChunks(buf []byte, chunks [][]VFS) []byte {
 
 func appendBuildOnlyVFSChunks(buf []byte, chunks [][]VFS) []byte {
 	buf = append(buf, '[')
+
 	first := true
 
 	for _, ch := range chunks {
@@ -286,6 +290,7 @@ func appendVFSSlice(buf []byte, vs []VFS) []byte {
 
 func appendBuildOnlyVFSSlice(buf []byte, vs []VFS) []byte {
 	buf = append(buf, '[')
+
 	first := true
 
 	for _, v := range vs {
@@ -313,12 +318,14 @@ func appendVFS(buf []byte, v VFS) []byte {
 		}
 	} else {
 		nc := make([][]byte, internBound())
+
 		copy(nc, vfsEscapedJSON)
 		vfsEscapedJSON = nc
 	}
 
 	s := STR(id).string()
 	out := make([]byte, 0, len(s)+2)
+
 	out = append(out, '"')
 	out = appendStringEscapedBody(out, s)
 	out = append(out, '"')

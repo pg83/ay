@@ -21,6 +21,7 @@ func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt, 
 	prefixCpp := build(moduleDir, "/", prefix, ".cpp")
 	prefixH := build(moduleDir, "/", prefix, ".h")
 	cmdArgs := make([]STR, 0, 4+len(bc.Opts))
+
 	cmdArgs = append(cmdArgs,
 		toolBin.str(),
 		inputIn.str(),
@@ -40,6 +41,7 @@ func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt, 
 	}
 
 	reg := ctx.codegenFor(instance)
+
 	reg.register(&GeneratedFileInfo{
 		ProducerKvP:    pkBC,
 		OutputPath:     prefixH,

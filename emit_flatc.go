@@ -161,6 +161,7 @@ func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 	headerLeaves = append(headerLeaves, transitiveImports...)
 
 	reg := ctx.codegenFor(instance)
+
 	reg.register(&GeneratedFileInfo{
 		ProducerKvP:    v.procKind,
 		OutputPath:     headerVFS,
@@ -198,9 +199,11 @@ func emitLibraryFlatcSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 func emitFlatcCppCompile(ctx *GenCtx, instance ModuleInstance, cppVFS VFS, in ModuleCCInputs) *SourceEmit {
 	flRef := ctx.codegenFor(instance).lookup(cppVFS).ProducerRef
 	ccIn := in
+
 	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), cppVFS, in.ScanCfg)
 
 	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, flRef)
+
 	ccRef, ccOut, _ := emitCC(instance, cppVFS.str(), cppVFS, ccIn, ctx.host, ctx.emit)
 
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}

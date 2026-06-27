@@ -49,6 +49,7 @@ func (h *MergeHeap) pop() any {
 	old := *h
 	n := len(old)
 	it := old[n-1]
+
 	*h = old[:n-1]
 
 	return it

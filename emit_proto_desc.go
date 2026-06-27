@@ -48,6 +48,7 @@ func isProtoLibraryPeer(ctx *GenCtx, peerPath string) bool {
 
 func descPeerClosure(ctx *GenCtx, instance ModuleInstance, peerdirs []STR, injectBuiltins bool) DescPeerSpan {
 	var span DescPeerSpan
+
 	seen := make(map[VFS]struct{})
 	includesSeen := make(map[VFS]struct{})
 
@@ -75,6 +76,7 @@ func descPeerClosure(ctx *GenCtx, instance ModuleInstance, peerdirs []STR, injec
 		}
 
 		res := genModule(ctx, peerInstance)
+
 		add(res.DescClosure)
 
 		for _, g := range res.ProtoInclude {
@@ -125,6 +127,7 @@ func emitDescProtoSubmodule(ctx *GenCtx, instance ModuleInstance, d *ModuleData)
 	var rawprotoOutputs []VFS
 
 	var producerSourceInputs []VFS
+
 	sourceInputSeen := make(map[VFS]struct{})
 
 	addSourceInput := func(v VFS) {
@@ -190,6 +193,7 @@ func protoNamespaceContribs(d *ModuleData) []VFS {
 
 func descProtocIncludes(peerProtoAddIncl []VFS, cppOutRoot string) []STR {
 	out := make([]STR, 0, 8+len(peerProtoAddIncl))
+
 	out = append(out,
 		internV("-I=./", cppOutRoot),
 		internV("-I=$(S)/", cppOutRoot),
@@ -262,6 +266,7 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 	na := ctx.emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	merge := make([]STR, 0, 3+len(descOutputs))
+
 	merge = append(merge, wrapccPython3STR, mergeFilesVFS.str(), selfProtodesc.str())
 
 	for _, d := range descOutputs {
@@ -269,6 +274,7 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 	}
 
 	collect := make([]STR, 0, 4+len(rawprotoOutputs))
+
 	collect = append(collect, wrapccPython3STR, collectRawprotoVFS.str(), strOutput, protosrc.str())
 
 	for _, r := range rawprotoOutputs {
@@ -276,6 +282,7 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 	}
 
 	inputs := make([]VFS, 0, len(descOutputs)+len(rawprotoOutputs)+len(producerSourceInputs))
+
 	inputs = append(inputs, descOutputs...)
 	inputs = append(inputs, rawprotoOutputs...)
 	inputs = append(inputs, producerSourceInputs...)
@@ -306,9 +313,11 @@ func emitProtoDescriptions(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 	protodesc := build(instance.Path.rel(), "/", prj, ".protodesc")
 	tar := build(instance.Path.rel(), "/", prj, ".tar")
 	merge := make([]STR, 0, 3+len(closure))
+
 	merge = append(merge, wrapccPython3STR, mergeFilesVFS.str(), protodesc.str())
 
 	collect := make([]STR, 0, 4+len(closure))
+
 	collect = append(collect, wrapccPython3STR, mergeProtosrcVFS.str(), strOutput, tar.str())
 
 	inputs := make([]VFS, 0, len(closure))

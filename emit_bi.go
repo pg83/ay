@@ -30,6 +30,7 @@ func emitBI(
 	}
 
 	cmd1Args := make([]STR, 0, 4+len(cxxFlags))
+
 	cmd1Args = append(cmd1Args,
 		tc.Python3,
 		(yieldLinePyVFS).str(),
@@ -73,6 +74,7 @@ func biFlagsForInstance(targetP *Platform) []STR {
 	bundle := compileFlagBundleFor(targetP)
 	flags := make([]STR, 0, 100)
 	cflagPrefix := append(muslCFlags(targetP.Flags[envMUSL] == strYes), sseBaseCFlags(targetP.ISA == ISAX8664)...)
+
 	flags = appendCompileFlagPipeline(flags, bundle, warningFlags, bundle.Defines, targetP.CFlags, cflagPrefix, catboostOpenSourceDefineFor(targetP))
 	flags = append(flags, (cxxStandardFlag).str())
 	flags = appendArgStr(flags, cxxStandardWarnings)

@@ -14,6 +14,7 @@ const defaultSortChunkBytes = 256 << 20
 
 func cmdDumpSort(_ GlobalFlags, args []string) int {
 	var inPath, outPath string
+
 	chunkBytes := defaultSortChunkBytes
 
 	for i := 0; i < len(args); i++ {
@@ -71,6 +72,7 @@ func cmdDumpSort(_ GlobalFlags, args []string) int {
 	defer func() { throw(os.RemoveAll(tmpDir)) }()
 
 	chunks := spillChunks(in, chunkBytes, tmpDir)
+
 	mergeChunks(chunks, out)
 
 	return 0
@@ -81,6 +83,7 @@ func spillChunks(in io.Reader, chunkBytes int, tmpDir string) []string {
 
 	var chunks []string
 	var lines []string
+
 	size := 0
 
 	spill := func() {
@@ -136,6 +139,7 @@ func mergeChunks(chunks []string, out io.Writer) {
 	defer func() { throw(bw.Flush()) }()
 
 	h := &MergeHeap{}
+
 	heap.Init(h)
 
 	for _, path := range chunks {
@@ -158,6 +162,7 @@ func mergeChunks(chunks []string, out io.Writer) {
 
 	for h.len() > 0 {
 		it := heap.Pop(h).(*MergeItem)
+
 		throw2(bw.WriteString(it.line))
 
 		next, err := it.reader.ReadString('\n')

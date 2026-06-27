@@ -33,10 +33,14 @@ type TestSuiteInfo struct {
 func emitTestRunNodes(ctxEmit *StreamingEmitter, runEmit *StreamingEmitter, p *Platform, info TestSuiteInfo, ldRef NodeRef, resourceGlobals []ResourceDecl) []NodeRef {
 	ctxRef := ctxEmit.emit(buildTestCtxNode(ctxEmit.nodeArenas(), p))
 	unittest := buildUnittestNode(runEmit.nodeArenas(), p, info, resourceGlobals)
+
 	unittest.DepRefs = []NodeRef{ldRef, ctxRef}
+
 	unittestRef := runEmit.emit(unittest)
 	clangFormat := buildClangFormatNode(runEmit.nodeArenas(), p, info)
+
 	clangFormat.DepRefs = []NodeRef{ctxRef}
+
 	clangFormatRef := runEmit.emit(clangFormat)
 
 	return []NodeRef{unittestRef, clangFormatRef}

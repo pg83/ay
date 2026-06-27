@@ -29,6 +29,7 @@ func emitArchive(
 	archiveVFS := build(instance.Path.rel(), "/", a.Name)
 	archivePath := archiveVFS.string()
 	cmdArgs := make([]STR, 0, 4+len(a.Files)+2)
+
 	cmdArgs = append(cmdArgs, (toolBinPath).str(), argQ.str(), argX.str())
 
 	if a.DontCompress {
@@ -36,7 +37,9 @@ func emitArchive(
 	}
 
 	producerRefs := []NodeRef{}
+
 	deduper.reset()
+
 	pathPerFile := make([]VFS, 0, len(a.Files))
 
 	for _, f := range a.Files {
@@ -76,6 +79,7 @@ func emitArchive(
 	cmdArgs = append(cmdArgs, argDashO.str(), internStr(archivePath))
 
 	inputs := make([]VFS, 0, len(pathPerFile))
+
 	deduper.reset()
 
 	for _, p := range pathPerFile {

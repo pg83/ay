@@ -26,6 +26,7 @@ const maxCmdLen = 8000
 
 func objcopyHash(paths []string, keysB64 []string, kvs []string, unitPath string, moduleTag *string) string {
 	list := make([]string, 0, len(paths)+len(keysB64)+len(kvs)+1)
+
 	list = append(list, paths...)
 	list = append(list, keysB64...)
 	list = append(list, kvs...)
@@ -82,6 +83,7 @@ func expandResourceFiles(args []string) []ResourceEntry {
 			i += 2
 		default:
 			path := tok
+
 			i++
 
 			keyTail := path
@@ -100,6 +102,7 @@ func expandResourceFiles(args []string) []ResourceEntry {
 
 			fileKey := "resfs/file/" + computedKey
 			srcKv := "resfs/src/" + fileKey + "=${rootrel;context=TEXT;input=TEXT:\"" + path + "\"}"
+
 			out = append(out, ResourceEntry{Path: "-", Key: srcKv})
 			out = append(out, ResourceEntry{Path: path, Key: fileKey})
 		}
@@ -111,6 +114,7 @@ func expandResourceFiles(args []string) []ResourceEntry {
 func expandAllResourceFiles(fs FS, modulePath string, env Environment, stmt *AllResourceFilesStmt) []ResourceEntry {
 	prefix := ""
 	strip := ""
+
 	var ext string
 	var dirs []STR
 
@@ -194,6 +198,7 @@ func allResourceDir(modulePath, dir string) (rel string, ok bool) {
 func globMatch(fs FS, pattern string) []string {
 	segs := strings.Split(pattern, "/")
 	dirs := []string{""}
+
 	var matches []string
 
 	for i, seg := range segs {
@@ -317,6 +322,7 @@ func resourceLibTagForData(d *ModuleData) *string {
 
 func rootrelExpand(kv string, resolved string) string {
 	const marker = "${rootrel;context=TEXT;input=TEXT:\""
+
 	idx := strings.Index(kv, marker)
 
 	if idx < 0 {
@@ -335,6 +341,7 @@ func rootrelExpand(kv string, resolved string) string {
 
 func rootrelInputPath(kv string) (string, bool) {
 	const marker = "${rootrel;context=TEXT;input=TEXT:\""
+
 	idx := strings.Index(kv, marker)
 
 	if idx < 0 {
@@ -355,6 +362,7 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 	raw := fs.read(confPath)
 
 	var out []string
+
 	seen := map[string]struct{}{}
 
 	for _, m := range yaConfFormulaRE.FindAllSubmatch(raw, -1) {
@@ -529,6 +537,7 @@ func chunkPySrcEntries(entries []PySrcEntry) []PySrcChunk {
 	chunks := make([]PySrcChunk, 0)
 	cur := PySrcChunk{}
 	cmdLen := 0
+
 	deduper.reset()
 
 	flush := func() {
@@ -565,6 +574,7 @@ func chunkPySrcEntries(entries []PySrcEntry) []PySrcChunk {
 		}
 
 		kb64 := encb64.StdEncoding.EncodeToString([]byte(e.key))
+
 		cur.paths = append(cur.paths, e.pathHash)
 		cur.keys = append(cur.keys, kb64)
 		cur.pathInps = append(cur.pathInps, e.pathInput)

@@ -471,6 +471,7 @@ parsedFlags:
 	}
 
 	fromDir := args[i]
+
 	i++
 
 	files := make([]string, 0, 8)
@@ -499,6 +500,7 @@ parsedFlags:
 
 	for _, file := range files {
 		src := filepath.ToSlash(filepath.Clean(fromDir + "/" + file))
+
 		out = append(out, CopyFileEntry{
 			Src:            src,
 			Dst:            file,
@@ -693,6 +695,7 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, instance ModuleInstanc
 	applyCythonHeaderAddIncl(modulePath, d)
 
 	cflagPrefix := append(muslCFlags(d.muslEnabled && !effectiveNoPlatform(d.flags)), sseBaseCFlags(env.bool(envARCH_X86_64))...)
+
 	d.moduleScopeCFlags = append(cflagPrefix, d.moduleScopeCFlags...)
 
 	d.addIncl = dedup(d.addIncl, nil)
@@ -896,6 +899,7 @@ func applyPython3AddIncl(modulePath string, d *ModuleData) {
 func applyArchiveAddIncl(modulePath string, d *ModuleData) {
 	for _, a := range d.archives {
 		include := build(generatedIncludeDir(modulePath, a.Name))
+
 		d.addIncl = append(d.addIncl, include)
 		d.addInclGlobal = append(d.addInclGlobal, include)
 		d.addInclUserGlobal = append(d.addInclUserGlobal, include)
@@ -903,6 +907,7 @@ func applyArchiveAddIncl(modulePath string, d *ModuleData) {
 
 	if d.lj21 != nil {
 		include := build(modulePath)
+
 		d.addIncl = append(d.addIncl, include)
 		d.addInclGlobal = append(d.addInclGlobal, include)
 		d.addInclUserGlobal = append(d.addInclUserGlobal, include)
@@ -929,6 +934,7 @@ func applyBuildInfoAddIncl(modulePath string, d *ModuleData) {
 	}
 
 	biDir := build(modulePath)
+
 	d.addIncl = append(d.addIncl, biDir)
 	d.addInclGlobal = append(d.addInclGlobal, biDir)
 	d.addInclUserGlobal = append(d.addInclUserGlobal, biDir)
@@ -1027,6 +1033,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 					addGeneratedHeaderInclude(modulePath, strings.TrimSuffix(srcTok.string(), ".in"), d)
 				case srcExtY:
 					src := srcTok.string()
+
 					addGeneratedOwnHeaderInclude(modulePath, strings.TrimSuffix(src, filepath.Ext(src))+".h", d)
 				case srcExtFlex:
 
@@ -1066,6 +1073,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 		case *SetStmt:
 
 			value := expandScalarVarRef(v.Value, env)
+
 			env.setFromString(v.NameEnv, value)
 
 			if d.setVars == nil {
@@ -1081,6 +1089,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 		case *JoinSrcsStmt:
 			expanded := *v
+
 			expanded.Sources = expandStmtTokensSTR(v.Sources, env)
 			expanded.Seq = d.nextDeclSeq()
 			d.joinSrcs = append(d.joinSrcs, &expanded)
@@ -1115,12 +1124,14 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			for _, dirTok := range expandStmtTokensSTR(v.Dirs, env) {
 				dir := dirTok.string()
+
 				d.srcDirs = append(d.srcDirs, dirKey(dir))
 			}
 		case *GlobalSrcsStmt:
 			appendGlobalSrcGroup(d, expandStmtTokensSTR(v.Sources, env))
 		case *GenerateEnumSerializationStmt:
 			expandedEN := *v
+
 			expandedEN.DeclSeq = d.nextDeclSeq()
 			d.enumSrcs = append(d.enumSrcs, &expandedEN)
 
@@ -1143,6 +1154,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			env.setDefaultString(v.NameEnv, expandScalarVarRef(v.Value, env))
 		case *ConfigureFileStmt:
 			expanded := *v
+
 			expanded.Src = expandStmtToken(v.Src, env)
 			expanded.Dst = expandStmtToken(v.Dst, env)
 			d.configureFiles = append(d.configureFiles, &expanded)
@@ -1184,12 +1196,14 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			if v.CWD != nil {
 				cwd := expandStmtTokenSTR(*v.CWD, env)
+
 				expanded.CWD = &cwd
 			}
 
 			d.antlrRuns = append(d.antlrRuns, expanded)
 		case *RunProgramStmt:
 			expanded := *v
+
 			expanded.ToolPath = expandStmtTokenSTR(v.ToolPath, env)
 			expanded.Args = expandStmtTokensSTR(v.Args, env)
 			expanded.INFiles = expandStmtTokensSTR(v.INFiles, env)
@@ -1201,11 +1215,13 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			if v.StdoutFile != nil {
 				stdout := expandStmtTokenSTR(*v.StdoutFile, env)
+
 				expanded.StdoutFile = &stdout
 			}
 
 			if v.CWD != nil {
 				cwd := expandStmtTokenSTR(*v.CWD, env)
+
 				expanded.CWD = &cwd
 			}
 
@@ -1213,6 +1229,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			d.runPrograms = append(d.runPrograms, &expanded)
 		case *SplitCodegenStmt:
 			expanded := *v
+
 			expanded.ToolPath = expandStmtTokenSTR(v.ToolPath, env)
 			expanded.Prefix = expandStmtTokenSTR(v.Prefix, env)
 			expanded.Opts = expandStmtTokensSTR(v.Opts, env)
@@ -1221,6 +1238,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			d.splitCodegens = append(d.splitCodegens, &expanded)
 		case *BaseCodegenStmt:
 			expanded := *v
+
 			expanded.ToolPath = expandStmtTokenSTR(v.ToolPath, env)
 			expanded.Prefix = expandStmtTokenSTR(v.Prefix, env)
 			expanded.Opts = expandStmtTokensSTR(v.Opts, env)
@@ -1233,6 +1251,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			}
 		case *RunPythonStmt:
 			expanded := *v
+
 			expanded.ScriptPath = expandStmtTokenSTR(v.ScriptPath, env)
 			expanded.Args = expandStmtTokensSTR(v.Args, env)
 			expanded.INFiles = expandStmtTokensSTR(v.INFiles, env)
@@ -1243,17 +1262,20 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			if v.StdoutFile != nil {
 				stdout := expandStmtTokenSTR(*v.StdoutFile, env)
+
 				expanded.StdoutFile = &stdout
 			}
 
 			if v.CWD != nil {
 				cwd := expandStmtTokenSTR(*v.CWD, env)
+
 				expanded.CWD = &cwd
 			}
 
 			d.runPython = append(d.runPython, &expanded)
 		case *FromSandboxStmt:
 			expanded := *v
+
 			expanded.ResourceId = expandStmtTokenSTR(v.ResourceId, env)
 			expanded.OUTFiles = expandStmtTokensSTR(v.OUTFiles, env)
 			expanded.OUTNoAutoFiles = expandStmtTokensSTR(v.OUTNoAutoFiles, env)
@@ -1297,6 +1319,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 		case *DeclareResourceStmt:
 
 			expanded := *v
+
 			expanded.Args = expandStmtTokensSTR(v.Args, env)
 			d.resourceDeclStmts = append(d.resourceDeclStmts, &expanded)
 		case *IfStmt:
@@ -1310,6 +1333,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 		case *UnknownStmt:
 
 			expanded := *v
+
 			expanded.Args = expandStmtTokensSTR(v.Args, env)
 			applyUnknownStmt(fs, modulePath, expanded, d, env)
 		default:
@@ -1321,6 +1345,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 func moduleStmtForKind(stmt *ModuleStmt, kind ModuleKind) *ModuleStmt {
 	if stmt.Name == tokPy3Program && kind == KindLib {
 		out := *stmt
+
 		out.Name = tokPy3Library
 
 		return &out
@@ -1342,6 +1367,7 @@ func generatedIncludeDir(modulePath, dst string) string {
 
 func addGeneratedHeaderInclude(modulePath, dst string, d *ModuleData) {
 	include := build(generatedIncludeDir(modulePath, dst))
+
 	d.addLocalIncl(prioAddIncl, include)
 	d.addInclGlobal = append(d.addInclGlobal, include)
 	d.addInclUserGlobal = append(d.addInclUserGlobal, include)
@@ -1349,6 +1375,7 @@ func addGeneratedHeaderInclude(modulePath, dst string, d *ModuleData) {
 
 func addGeneratedHeaderIncludeCF(modulePath, dst string, d *ModuleData) {
 	include := build(generatedIncludeDir(modulePath, dst))
+
 	d.cfAddIncl = append(d.cfAddIncl, include)
 	d.cfAddInclGlobal = append(d.cfAddInclGlobal, include)
 }
@@ -1513,6 +1540,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		for i < len(v.Args) {
 			target := v.Args[i].string()
+
 			i++
 
 			suffix := ""
@@ -1643,6 +1671,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.flatcFlags = append(d.flatcFlags, internArgsFromSTR(v.Args)...)
 	case tokCopyFile, tokCopyFileWithContext:
 		entry := parseCopyFileEntry(strStrings(v.Args), v.Name == tokCopyFileWithContext, v.Line)
+
 		d.copyFiles = append(d.copyFiles, entry)
 
 		if entry.Auto {
@@ -1746,6 +1775,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		for _, aTok := range v.Args {
 			a := aTok.string()
+
 			env.setBool(internEnv(a), true)
 
 			switch a {
@@ -1767,6 +1797,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		for _, aTok := range v.Args {
 			a := aTok.string()
+
 			env.setBool(internEnv(a), false)
 
 			if a == "PYTHON_SQLITE3" {
@@ -1834,6 +1865,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		filename := v.Args[0]
+
 		d.srcs = append(d.srcs, filename)
 
 		if d.flatSrcs == nil {
@@ -1857,6 +1889,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		filename := v.Args[0]
 		flags := make([]string, 0, len(variant.CFlags)+len(v.Args)-1)
+
 		flags = append(flags, variant.CFlags...)
 		flags = append(flags, strStrings(v.Args[1:])...)
 
@@ -1924,9 +1957,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		cythonHeader := false
 		cythonApiHeader := false
 		swigCMode := false
+
 		var namespace *STR
 		var groupSrcs []string
+
 		cythonStmtStart := len(d.cythonCpp)
+
 		var cythonDirectives []string
 
 		var cythonRegIdx []int
@@ -2116,6 +2152,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				}
 
 				dest := "py/" + strings.ReplaceAll(modName, ".", "/") + ".pyi"
+
 				d.pyPyiResources = append(d.pyPyiResources, expandResourceFiles([]string{"DEST", dest, src})...)
 				mainNext = false
 
@@ -2158,6 +2195,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				}
 
 				modName := strings.TrimSuffix(src, ".py")
+
 				modName = strings.ReplaceAll(modName, "/", ".")
 				d.pyMain = strPtr(internV(ns, modName))
 			}
@@ -2228,16 +2266,19 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		})
 	case tokYaff:
 		plugin := parseYAFF(v)
+
 		plugin.DeclaredBeforeLiteHeaders = protoTransitiveHeadersEnabled(d)
 		d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
 	case tokYaffSchema:
 		plugin := parseYAFFSchema(v)
+
 		plugin.DeclaredBeforeLiteHeaders = protoTransitiveHeadersEnabled(d)
 		d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
 	case tokPyRegister:
 
 		for _, nameTok := range v.Args {
 			name := nameTok.string()
+
 			appendPyRegister(d, name, true)
 		}
 	case tokSetAppend:
@@ -2251,6 +2292,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			case "RPATH_GLOBAL":
 				for _, argTok := range v.Args[1:] {
 					arg := argTok.string()
+
 					arg = strings.ReplaceAll(arg, `${"$"}`, "$")
 					d.rpathFlagsGlobal = append(d.rpathFlagsGlobal, internArg(arg))
 				}
@@ -2305,6 +2347,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		name := v.Name.str()
+
 		d.unhandledMacros[name] = append(d.unhandledMacros[name], v.Args...)
 		recordIgnoredMacro(v.Name)
 	}
@@ -2413,6 +2456,7 @@ func appendPyRegister(d *ModuleData, name string, explicit bool) {
 
 	shortname := name[dot+1:]
 	mangled := pythonInitSuffix(name)
+
 	d.cFlags = append(d.cFlags,
 		internArg("-DPyInit_"+shortname+"=PyInit_"+mangled),
 		internArg("-Dinit_module_"+shortname+"=init_module_"+mangled),
@@ -2611,6 +2655,7 @@ func pythonModuleName(modulePath, src string, topLevel bool, namespace *STR) str
 	}
 
 	modName := strings.TrimSuffix(src, ".py")
+
 	modName = strings.TrimSuffix(modName, ".pyx")
 	modName = strings.ReplaceAll(modName, "/", ".")
 
@@ -2637,6 +2682,7 @@ func applyProtoNamespace(d *ModuleData, namespace STR) {
 	d.protoNamespace = strPtr(namespace)
 
 	protoBuildRoot := build(filepath.ToSlash(filepath.Clean(namespace.string())))
+
 	d.addIncl = append(d.addIncl, protoBuildRoot)
 	d.addInclGlobal = append(d.addInclGlobal, protoBuildRoot)
 	d.addInclUserGlobal = append(d.addInclUserGlobal, protoBuildRoot)
@@ -2950,6 +2996,7 @@ func expandBracedVars(s string, env Environment) string {
 		}
 
 		start += searchFrom
+
 		end := strings.IndexByte(s[start+2:], '}')
 
 		if end < 0 {
@@ -2957,6 +3004,7 @@ func expandBracedVars(s string, env Environment) string {
 		}
 
 		end += start + 2
+
 		name := s[start+2 : end]
 		val, ok := env.lookup(name)
 
@@ -2978,6 +3026,7 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 
 	var b strings.Builder
 	b.Grow(len(s))
+
 	changed := false
 
 	for i := 0; i < len(s); {
@@ -3140,6 +3189,7 @@ func applyAllPySrcs(fs FS, modulePath string, v UnknownStmt, d *ModuleData) {
 	}
 
 	var files []string
+
 	moduleRootRel := modulePath
 
 	for _, dir := range dirs {

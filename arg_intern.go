@@ -19,6 +19,7 @@ func internArgSTR(st STR) ARG {
 	}
 
 	id := ARG(len(argTable.strs))
+
 	argTable.strs = append(argTable.strs, st)
 	argTable.ids.put(st, uint32(id))
 

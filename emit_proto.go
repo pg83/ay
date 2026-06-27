@@ -138,6 +138,7 @@ func protoImportRelsToPbH(importRels []string, outputRoot string) []IncludeDirec
 
 func pbHEmitsIncludesExtras() []IncludeDirective {
 	out := make([]IncludeDirective, 0, len(pbDescriptorImporterDirectives)+1)
+
 	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())})
 	out = append(out, pbDescriptorImporterDirectives...)
 
@@ -146,6 +147,7 @@ func pbHEmitsIncludesExtras() []IncludeDirective {
 
 func protoWalkInputs(pm *IncludeParserManager, peerProtoAddIncl []VFS, ownerModuleDir string) ModuleCCInputs {
 	own := make([]VFS, 0, 1+len(peerProtoAddIncl))
+
 	own = append(own, pbRuntimeBaseVFS)
 	own = append(own, peerProtoAddIncl...)
 
@@ -235,6 +237,7 @@ func newPBModuleEmission(ctx *GenCtx, d *ModuleData, cfg ProtoPBConfig, protoInc
 
 	for _, spec := range d.cppProtoPlugins {
 		ldRef, binary := ctx.tool(internArg(spec.ToolPath))
+
 		pe.extraPlugins = append(pe.extraPlugins, ResolvedCPPProtoPlugin{
 			Spec:   spec,
 			LDRef:  ldRef,
@@ -335,6 +338,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 
 	extras := pbHEmitsIncludesExtras()
 	pbHParsed := make([]IncludeDirective, 0, len(pbHImports)+len(extras)+len(transitiveImports))
+
 	pbHParsed = append(pbHParsed, pbHImports...)
 	pbHParsed = append(pbHParsed, extras...)
 
@@ -413,6 +417,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 
 	if pe.liteHeaders {
 		depsParsed := make([]IncludeDirective, 0, 1+len(directImports))
+
 		depsParsed = append(depsParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.rel())})
 		depsParsed = append(depsParsed, directImports...)
 		reg.register(&GeneratedFileInfo{
@@ -425,6 +430,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 	}
 
 	pbCCParsed := make([]IncludeDirective, 0, 3+len(directImports))
+
 	pbCCParsed = append(pbCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.rel())})
 
 	if pe.liteHeaders {
@@ -525,6 +531,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 
 	for i, gztSrc := range gztSrcs {
 		_, genProtoSrc := emitLibraryGztProtoSource(ctx, instance, d, gztSrc, peerContribs.protoInclude, tagCppProto)
+
 		protoSrcs = append(protoSrcs, genProtoSrc)
 
 		srcDeclIdx[genProtoSrc] = len(d.srcs) + i
@@ -538,6 +545,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	}
 
 	var codegenOutputs []protoCodegenOutput
+
 	codegenOutputSeen := make(map[STR]struct{})
 
 	appendCodegenOutput := func(genRef NodeRef, pbCC VFS, srcRel string, declIdx int) {
@@ -569,6 +577,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 
 		for _, cc := range pb.orderedCC {
 			ccSrcRel := strings.TrimPrefix(cc.rel(), cppInstance.Path.rel()+"/")
+
 			appendCodegenOutput(pb.pbRef, cc, ccSrcRel, srcDeclIdx[src])
 		}
 	}
@@ -597,6 +606,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 			directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, protoCPPOutRoot(d))
 			evExtras := evWitnessExtras(evRelPath, evPbCC)
 			evHParsed := make([]IncludeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(evExtras))
+
 			evHParsed = append(evHParsed, directImports...)
 			evHParsed = append(evHParsed, protobufRuntimeDirectives...)
 			evHParsed = append(evHParsed, evExtras...)
@@ -609,6 +619,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 			})
 
 			evCCParsed := make([]IncludeDirective, 0, 1+len(protobufRuntimeHeaders))
+
 			evCCParsed = append(evCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(evH.rel())})
 			evCCParsed = append(evCCParsed, protobufRuntimeDirectives...)
 
@@ -622,6 +633,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 
 			cppInstance := instance
 			evSrcRel := strings.TrimPrefix(evRelPath+".pb.cc", cppInstance.Path.rel()+"/")
+
 			codegenOutputs = append(codegenOutputs, protoCodegenOutput{
 				genRef:  evRef,
 				pbCC:    evPbCC,
@@ -679,6 +691,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 
 	for _, co := range codegenOutputs {
 		ccIn := moduleInputs
+
 		ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), co.pbCC, moduleInputs.ScanCfg)
 
 		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {
@@ -716,7 +729,9 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		}
 
 		ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, co.genRef)
+
 		ccRef, ccOut, _ := emitCC(cppInstance, co.pbCC.str(), co.pbCC, ccIn, ctx.host, ctx.emit)
+
 		ccRefs = append(ccRefs, ccRef)
 		ccOutputs = append(ccOutputs, ccOut)
 		arDeclMeta[ccOut] = SrcMeta{Prio: stmtPrioSrcs, Seq: co.declIdx, Generated: true}
@@ -752,6 +767,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 
 			cppRel := antlrOutputModuleRel(instance.Path.rel(), outVFS)
 			ccRef, ccOut := emitCodegenDownstreamCC(ctx, cppInstance, cppRel, []NodeRef{info.ProducerRef}, moduleInputs)
+
 			antlrRefs = append(antlrRefs, ccRef)
 			antlrOutputs = append(antlrOutputs, ccOut)
 
@@ -786,6 +802,7 @@ func emitProtoProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcR
 	}
 
 	pe := newPBModuleEmission(ctx, d, cfg, in.ProtoIncludePeers)
+
 	emitProtoPB(ctx, instance, d, srcRel, cfg, pe, in.ProtoInclude, nil)
 }
 
@@ -796,8 +813,10 @@ func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 
 	emitGenCC := func(pbCC VFS) SourceEmit {
 		ccIn := in
+
 		ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), pbCC, in.ScanCfg)
 		ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, pbRef)
+
 		ccRef, ccOut, _ := emitCC(instance, pbCC.str(), pbCC, ccIn, ctx.host, ctx.emit)
 
 		return SourceEmit{Ref: ccRef, OutPath: ccOut}

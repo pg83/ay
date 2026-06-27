@@ -48,6 +48,7 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	total := len(head) + len(blocks.includes) + 2 + len(blocks.flags) + len(cuCxxTail) + 1
 	chunks := na.chunks.alloc(total)
 	k := copy(chunks, head)
+
 	k += copy(chunks[k:], blocks.includes)
 	chunks[k] = na.strList(cudaCflagsStr)
 	chunks[k+1] = p.CCHead
@@ -57,6 +58,7 @@ func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	chunks[k] = na.strList(cudaNvccStdStr)
 	k++
 	na.chunks.commit(k)
+
 	cmdArgs := ArgChunks(chunks[:k])
 
 	env := EnvVars{

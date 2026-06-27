@@ -13,6 +13,7 @@ func (CIncludeDirectiveParser) id() uint32 {
 func (CIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	block := a.alloc(directiveBlockHint)
 	k := parseCIncludes(data, block, 0)
+
 	a.commit(k)
 
 	if k == 0 {
@@ -130,6 +131,7 @@ func parseDirectiveInline(data []byte, hashPos int) (IncludeDirective, bool, int
 	}
 
 	targetBytes := data[start:q]
+
 	q++
 
 	kind := includeSystem
@@ -251,6 +253,7 @@ func bytesHasPrefixAt(data []byte, i int, s string) bool {
 
 func hasYIgnoreComment(data []byte, i int) bool {
 	n := len(data)
+
 	i = skipWSAndBlockComments(data, i)
 
 	if i+2 > n || data[i] != '/' || data[i+1] != '/' {
@@ -367,6 +370,7 @@ func stripComments(data []byte) []byte {
 			}
 
 			delim := make([]byte, j-delimStart)
+
 			copy(delim, data[delimStart:j])
 
 			i = j + 1

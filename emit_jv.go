@@ -38,6 +38,7 @@ func emitJVDownstreamCPCC(
 		g4CppRel := base + ".g4.cpp"
 		cpRef := ctx.emit.reserve()
 		emits := make([]IncludeDirective, 0, 1+len(outputIncludes))
+
 		emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(antlr4RuntimeHeaderVFS.rel())})
 
 		for _, h := range outputIncludes {
@@ -53,7 +54,9 @@ func emitJVDownstreamCPCC(
 		})
 
 		ccIn := in
+
 		ccIn.ExtraDepRefs = nil
+
 		closure := walkClosure(ctx.scannerFor(instance), g4CppPath, ccIn.ScanCfg)
 		cpClosure := closure
 
@@ -64,6 +67,7 @@ func emitJVDownstreamCPCC(
 		emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, in.TC, ctx.scripts, ctx.emit)
 
 		ccIncludeInputs := make([]VFS, 0, 3+len(jvInputs)+len(closure)+2)
+
 		ccIncludeInputs = append(ccIncludeInputs, jvPrimary)
 		ccIncludeInputs = append(ccIncludeInputs, srcH)
 		ccIncludeInputs = append(ccIncludeInputs, ctx.scripts[antlr4FsToolsVFS]...)
@@ -73,6 +77,7 @@ func emitJVDownstreamCPCC(
 		ccIn.IncludeInputs = ccIncludeInputs
 		ccIn.ExtraDepRefs = []NodeRef{jvRef, cpRef}
 		ccIn.PerSourceCFlags = []ARG{argWnoUnusedVariable}
+
 		ccRef, ccOut, _ := emitCC(instance, internStr(g4CppRel), g4CppPath, ccIn, ctx.host, ctx.emit)
 
 		ccRefs = append(ccRefs, ccRef)
@@ -120,6 +125,7 @@ func emitJV(
 	outDirVFS := build(instance.Path.rel())
 	outDir := outDirVFS.string()
 	cmdArgs := make([]STR, 0, 8+len(antlrJavaConstHead))
+
 	cmdArgs = append(cmdArgs, tc.Python3)
 	cmdArgs = append(cmdArgs, antlrJavaConstHead...)
 	cmdArgs = append(cmdArgs,
@@ -235,6 +241,7 @@ func emitJVGeneral(
 ) NodeRef {
 	na := emit.nodeArenas()
 	cmdArgs := make([]STR, 0, 5+len(args))
+
 	cmdArgs = append(cmdArgs,
 		tc.Python3,
 		internStr(stdout2stderrPath),

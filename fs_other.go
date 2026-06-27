@@ -23,6 +23,7 @@ func readFileInto(path string, buf []byte) []byte {
 
 		for len(buf) < sz {
 			n, err := f.Read(buf[len(buf):sz])
+
 			buf = buf[:len(buf)+n]
 
 			if err != nil {
@@ -43,6 +44,7 @@ func readFileInto(path string, buf []byte) []byte {
 		}
 
 		n, err := f.Read(buf[len(buf):cap(buf)])
+
 		buf = buf[:len(buf)+n]
 
 		if err != nil {

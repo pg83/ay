@@ -31,6 +31,7 @@ func (a *BumpAllocator[T]) commit(k int) {
 func (a *BumpAllocator[T]) list(vs ...T) []T {
 	n := len(vs)
 	block := a.alloc(n)
+
 	copy(block, vs)
 	a.commit(n)
 

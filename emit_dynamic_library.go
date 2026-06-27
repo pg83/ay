@@ -73,6 +73,7 @@ func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs [
 	}
 
 	cmds := make([]Cmd, 0, 5)
+
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull})
 
 	if sbomEmbed {
@@ -86,6 +87,7 @@ func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs [
 	}
 
 	inputs := InputChunks{peerArchivePaths, na.srcChunk(fixElfPath), ctx.scripts[ldVcsInfoVFS], ctx.scripts[ldLinkDynLibVFS]}
+
 	inputs = append(inputs, []VFS{ldSvnInterfaceVFS, ldSvnversionHVFS, source(instance.Path.rel(), "/", d.exportsScript.string())})
 	inputs = append(inputs, ccOutputs)
 
@@ -95,6 +97,7 @@ func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs [
 	}
 
 	deps := make([]NodeRef, 0, len(peerArchiveRefs)+len(ccRefs)+len(ldSbomRefs)+1)
+
 	deps = append(deps, peerArchiveRefs...)
 	deps = append(deps, ccRefs...)
 	deps = append(deps, ldSbomRefs...)
@@ -170,7 +173,9 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		}
 
 		seen[p] = struct{}{}
+
 		peerInstance := derivePeerInstance(ctx, instance, d, p)
+
 		resolved = append(resolved, genModule(ctx, peerInstance))
 	}
 
@@ -182,7 +187,9 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 		}
 
 		seen[p] = struct{}{}
+
 		peerInstance := derivePeerInstance(ctx, instance, d, p)
+
 		rpathOnly = append(rpathOnly, genModule(ctx, peerInstance))
 	}
 
@@ -273,6 +280,7 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 
 	pluginRefs := []NodeRef{}
 	pluginPaths := []VFS{}
+
 	deduper.reset()
 
 	for _, pr := range resolved {
@@ -299,6 +307,7 @@ func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 	envFull := ctx.host.toolEnv()
 	inputs := composeDynLibInputs(na, peerArchivePaths, pluginPaths, fixElfPath, instance.Path.rel(), d.exportsScript.string(), ctx.scripts)
 	deps := make([]NodeRef, 0, len(peerArchiveRefs)+len(pluginRefs)+1)
+
 	deps = append(deps, peerArchiveRefs...)
 	deps = append(deps, pluginRefs...)
 	deps = append(deps, ctx.vcsRef)

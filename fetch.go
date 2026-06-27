@@ -31,6 +31,7 @@ func currentYatoolPath() string {
 
 func fetchScriptInputs(scripts ScriptDeps) []VFS {
 	out := []VFS{buildMappingConfJson}
+
 	out = append(out, scripts[buildScriptsFetchFromSandboxPy]...)
 	out = append(out, scripts[buildScriptsFetchFromMdsPy]...)
 
@@ -44,6 +45,7 @@ func cmdFetchBase64(_ GlobalFlags, args []string) int {
 
 	data := throw2(base64.StdEncoding.DecodeString(args[0]))
 	out := args[1]
+
 	throw(os.MkdirAll(filepath.Dir(out), 0o755))
 	throw(os.WriteFile(out, data, 0o644))
 
@@ -71,6 +73,7 @@ func cmdFetch(_ GlobalFlags, args []string) int {
 
 func resourceOutputName(uri string) string {
 	name := strings.TrimPrefix(uri, "sbr:")
+
 	name = strings.ReplaceAll(name, "/", "_")
 	name = strings.ReplaceAll(name, ":", "_")
 
@@ -102,6 +105,7 @@ func fetchResource(sourceRoot, uri, out string) {
 	defer os.RemoveAll(tmp)
 
 	archivePath := filepath.Join(tmp, "resource")
+
 	downloadResourceArchive(sourceRoot, uri, archivePath)
 	unpackResourceArchive(archivePath, out)
 }
@@ -140,6 +144,7 @@ func downloadResourceArchive(sourceRoot, uri, archivePath string) {
 
 func cmdFetchSandbox(_ GlobalFlags, args []string) int {
 	var sourceRoot, id, copyToDir, untarTo string
+
 	executable := false
 
 	var renames, outs []string
@@ -191,6 +196,7 @@ func cmdFetchSandbox(_ GlobalFlags, args []string) int {
 	defer os.RemoveAll(tmp)
 
 	archivePath := filepath.Join(tmp, "resource")
+
 	downloadResourceArchive(sourceRoot, "sbr:"+id, archivePath)
 
 	placeSandboxResource(archivePath, copyToDir, untarTo, renames, outs, executable)
@@ -209,6 +215,7 @@ func placeSandboxResource(fetched, copyToDir, untarTo string, renames, outs []st
 
 	for idx, src := range renames {
 		dst := outs[idx]
+
 		throw(os.MkdirAll(filepath.Dir(dst), 0o755))
 
 		if src == "RESOURCE" {
@@ -247,6 +254,7 @@ func placeSandboxResource(fetched, copyToDir, untarTo string, renames, outs []st
 
 func readResourceMappingMaybe(path string) ResourceMappingConf {
 	var out ResourceMappingConf
+
 	raw, err := os.ReadFile(path)
 
 	if err != nil {
@@ -293,6 +301,7 @@ func mdsKeyFromMappedResource(raw string) string {
 func runPythonScript(cwd, script string, args ...string) {
 	cmdArgs := append([]string{script}, args...)
 	cmd := exec.Command("python3", cmdArgs...)
+
 	cmd.Dir = cwd
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -514,6 +523,7 @@ func fetchFromSandbox(id, token, archivePath string) {
 
 func querySandboxResource(id, token string) sandboxResource {
 	req := throw2(http.NewRequest(http.MethodGet, sandboxAPIBase+"/resource/"+id, nil))
+
 	req.Header.Set("Authorization", "OAuth "+token)
 
 	resp := throw2(http.DefaultClient.Do(req))
@@ -535,6 +545,7 @@ func unpackResourceArchive(archivePath, out string) {
 	throw(os.MkdirAll(out, 0o755))
 
 	cmd := exec.Command("tar", "-xf", archivePath, "-C", out)
+
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -545,6 +556,7 @@ func unpackResourceArchive(archivePath, out string) {
 	throw(os.MkdirAll(out, 0o755))
 
 	zipCmd := exec.Command("unzip", "-q", archivePath, "-d", out)
+
 	zipCmd.Stdout = os.Stdout
 	zipCmd.Stderr = os.Stderr
 
@@ -555,6 +567,7 @@ func unpackResourceArchive(archivePath, out string) {
 	throw(os.MkdirAll(out, 0o755))
 
 	dst := filepath.Join(out, "resource")
+
 	throw(copyFile(archivePath, dst))
 }
 

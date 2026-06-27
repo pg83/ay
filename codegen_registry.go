@@ -49,6 +49,7 @@ func (r *CodegenRegistry) register(info *GeneratedFileInfo) {
 	}
 
 	rel := info.OutputPath.rel()
+
 	r.byStr.put(full, info)
 	r.byStr.put(internStr(rel), info)
 
@@ -104,6 +105,7 @@ func (r *CodegenRegistry) mustInfo(path VFS, op string) *GeneratedFileInfo {
 
 func (r *CodegenRegistry) addClosureLeafNoSubsume(node, leaf VFS) {
 	info := r.mustInfo(node, "addClosureLeafNoSubsume")
+
 	info.ClosureLeaves = append(info.ClosureLeaves, leaf)
 }
 

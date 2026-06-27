@@ -39,6 +39,7 @@ func emitLuaJit21(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 
 	for i, lua := range luas {
 		raw := strings.TrimSuffix(lua, ".lua") + ".raw"
+
 		raws[i] = raw
 
 		luaSrc := resolveSourceVFS(ctx, instance, lua, d.srcDirs)

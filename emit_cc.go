@@ -144,6 +144,7 @@ func emitCC(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInputs, hos
 	chunks[k] = inChunk
 	k++
 	na.chunks.commit(k)
+
 	cmdArgs := ArgChunks(chunks[:k])
 	env := hostP.toolEnv()
 	wrap := len(instance.Platform.WrapccHead) > 0
@@ -193,6 +194,7 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 
 	if srcVFS.isSource() && !canonMatches() {
 		outputRel := composeSrcDirOutputRel(instance.Path.rel(), srcVFS.rel())
+
 		out = build(instance.Path.rel(), "/", outputRel, suffix)
 
 		return out, input
@@ -330,6 +332,7 @@ func composePeerExtras(in ModuleCCInputs, isCxx bool) []ARG {
 
 func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCCInputs, p *Platform) []ARG {
 	out := make([]ARG, 0, len(p.CFlags)+len(in.CFlags)+len(in.PeerCFlagsGlobal)+len(in.OwnCFlagsGlobal))
+
 	out = append(out, p.CFlags...)
 	out = append(out, in.CFlags...)
 	out = append(out, in.PeerCFlagsGlobal...)
@@ -366,6 +369,7 @@ func composePostCatboostBucket(preBucket []ARG) []ARG {
 	}
 
 	out := make([]ARG, 0, len(preBucket)+1)
+
 	out = append(out, preBucket...)
 	out = append(out, baseUnitCxxNostdinc)
 
@@ -417,6 +421,7 @@ func suppressOptimize(cf []ARG) []ARG {
 	for i, a := range cf {
 		if a == argO3 {
 			out := make([]ARG, len(cf))
+
 			copy(out, cf)
 			out[i] = argO0
 
@@ -438,10 +443,12 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *
 	noLibc := p.NoLibcBlockStr
 	inc := na.chunks.alloc(4)
 	ni := 0
+
 	inc[ni] = ccIncludesPrefixStr
 	ni++
 	inc[ni] = na.inclArgList(in.AddIncl, in.InclArgs)
 	ni++
+
 	peerAddIncl := in.PeerAddInclGlobal
 
 	if len(peerAddIncl) > 0 && peerAddIncl[0] == googleapisCommonProtosAddIncl {
@@ -528,6 +535,7 @@ func (m InclArgMemo) arg(path VFS) STR {
 	}
 
 	a := internV("-I", path.string())
+
 	m.m.put(path, a)
 
 	return a

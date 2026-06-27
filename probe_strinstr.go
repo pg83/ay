@@ -37,6 +37,7 @@ func reportStrProbe() {
 	for _, r := range rows {
 		frames := runtime.CallersFrames([]uintptr{r.pc})
 		f, _ := frames.Next()
+
 		fmt.Fprintf(os.Stderr, "strop\t%d\t%s:%d\t%s\n", r.count, f.File, f.Line, f.Function)
 	}
 }

@@ -63,6 +63,7 @@ func probeCallSite(_ GlobalFlags, args []string) int {
 
 			line := fset.Position(fd.Pos()).Line
 			site := fmt.Sprintf("%s:%d", base, line)
+
 			allSites = append(allSites, site)
 
 			lbrace := fset.Position(fd.Body.Lbrace).Offset
@@ -71,6 +72,7 @@ func probeCallSite(_ GlobalFlags, args []string) int {
 		}
 
 		sort.Slice(inserts, func(i, j int) bool { return inserts[i].off > inserts[j].off })
+
 		b := src
 
 		for _, in := range inserts {

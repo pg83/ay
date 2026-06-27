@@ -77,6 +77,7 @@ func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser Inclu
 	key := STR(vfsPath.strID())
 	rel := vfsPath.rel()
 	parser := pm.registry.registeredParserFor(rel)
+
 	var ambKey uint64
 
 	if parser == nil {
@@ -140,7 +141,9 @@ func (pm *IncludeParserManager) indexAddincl(a VFS) {
 	}
 
 	pm.addinclIndexed.add(uint32(a))
+
 	base := a.rel()
+
 	pm.fs.walk(base, func(rel string, isDir bool) bool {
 		if isDir {
 			return true
@@ -148,6 +151,7 @@ func (pm *IncludeParserManager) indexAddincl(a VFS) {
 
 		t := internStr(rel[len(base)+1:])
 		cur, _ := pm.addinclIndex.get(t)
+
 		pm.addinclIndex.put(t, append(cur, a))
 
 		return false
@@ -166,6 +170,7 @@ func (pm *IncludeParserManager) resolveScanConfig(cfg *ScanContext) *ScanConfig 
 	}
 
 	sc := &ScanConfig{num: pm.scanConfigCount, ri: buildCfgResolveIndex(cfg)}
+
 	pm.scanConfigCount++
 	pm.scanConfigs[h] = sc
 

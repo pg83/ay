@@ -104,6 +104,7 @@ func (s *IncludeScanner) sourceFileExists(abs VFS) bool {
 	}
 
 	v := s.parsers.fs.isFile(srcRootVFS, abs.rel())
+
 	s.scanCache.put3(key, v)
 
 	return v
@@ -180,6 +181,7 @@ func newScanContext(pm *IncludeParserManager, ownAddIncl, peerAddIncl, base []VF
 
 func (s *IncludeScanner) getScanCtx(cfg ScanContext, parser IncludeDirectiveParser) *ScanCtx {
 	sc := s.scanCtxPool.Get().(*ScanCtx)
+
 	sc.scanner = s
 	sc.cfg = cfg
 	sc.parser = parser
@@ -308,6 +310,7 @@ func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
 
 	block := s.childArena.alloc(closureAllocHint)
 	k := 0
+
 	sc.forEachResolvedChild(abs, func(rabs VFS) {
 		block[k] = rabs
 		k++
@@ -382,6 +385,7 @@ func (sc *ScanCtx) dfs(abs VFS) {
 		}
 
 		cref, _ := s.cachedClosure(ch)
+
 		k = s.tjc.closure.spliceNew(s.closureWindow(cref), block, k)
 	})
 
@@ -392,7 +396,9 @@ func (sc *ScanCtx) dfs(abs VFS) {
 	}
 
 	s.closureArena.commit(k)
+
 	ref := ClosureRef(len(s.subgraphClosures))
+
 	s.subgraphClosures = append(s.subgraphClosures, block[:k])
 	s.putClosure(abs, ref)
 }
@@ -462,6 +468,7 @@ func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 	s.closureArena.commit(k)
 
 	ref := ClosureRef(len(s.subgraphClosures))
+
 	s.subgraphClosures = append(s.subgraphClosures, block[:k])
 
 	s.subgraphMisses += uint64(len(members))
@@ -511,6 +518,7 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 
 	searchOut := sc.resolveSearchPath(includerAbs, incDir, d)
 	includerRel := includerAbs.rel()
+
 	var mappings []VFS
 	var hasMultiTarget bool
 	mappings, hasMultiTarget, sysinclClaimed = s.sysincl.lookup(includerRel, d.target)
@@ -677,6 +685,7 @@ func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 
 func (sc *ScanCtx) cacheSearchTier(targetID STR, out VFS) VFS {
 	s := sc.scanner
+
 	s.searchTierFlat.put(splitMix64(sc.cfg.cfg.num, uint32(targetID)), out)
 	s.searchTierSeen.add(uint32(targetID))
 
@@ -757,6 +766,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 
 		if idx.indexable {
 			bestRank := resolveNoRank
+
 			var bestAddincl VFS
 
 			cands, _ := s.parsers.addinclIndex.get(targetID)
@@ -835,6 +845,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 
 func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective) []VFS {
 	s := sc.scanner
+
 	s.resolveSearchPathCalls++
 
 	out := s.spOut[:0]
@@ -887,6 +898,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 	if d.quotedLike() {
 		matched := false
 		suKey := splitMix64(uint32(incDir), uint32(d.target))
+
 		var sv VFS
 
 		if p := s.sourceUnderCache.get(suKey); p != nil {

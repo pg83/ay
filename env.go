@@ -30,10 +30,12 @@ func (s *EnvStore) ensure(e ENV) {
 	}
 
 	nk := make([]EnvKind, n)
+
 	copy(nk, s.kind)
 	s.kind = nk
 
 	nv := make([]STR, n)
+
 	copy(nv, s.val)
 	s.val = nv
 }

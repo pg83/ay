@@ -145,6 +145,7 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 	p.WrapccHead, p.WrapccTail = wrapccPrefixFor(flags)
 
 	clangRes := internV(resourcePatternClangTool, p.ClangVer)
+
 	p.CCUsesResources = []STR{clangRes}
 
 	if len(p.WrapccHead) > 0 {
@@ -160,6 +161,7 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 
 	if p.UsesSDKRoot {
 		osSDKRoot := internStr(resourcePatternOSSDKRoot)
+
 		p.CCUsesResources = append(p.CCUsesResources, osSDKRoot)
 		p.UsesClangOnly = append(p.UsesClangOnly, osSDKRoot)
 		p.UsesLinkResources = append(p.UsesLinkResources, osSDKRoot)
@@ -180,12 +182,14 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 	}
 
 	compress := confCompressesDebug(fs)
+
 	p.CompressDebugSections = compress && !buildRelease && os == OSLinux
 	p.DebugInfoFlags = buildDebugInfoFlags(os, buildRelease, compress)
 	p.CompileCFlags = composeCompileCFlags(isa, buildRelease, p.DebugInfoFlags)
 	p.ifEnv = buildPlatformIfEnv(p)
 
 	bundle := compileFlagBundleFor(p)
+
 	p.CompileCFlagsStr = argSTRs(bundle.CFlags)
 	p.DefinesStr = argSTRs(bundle.Defines)
 	p.NoLibcBlockStr = argSTRs(bundle.NoLibcBlock)
@@ -260,6 +264,7 @@ func buildPlatformIfEnv(p *Platform) Environment {
 	env.setString(envARCADIA_BUILD_ROOT, "$(B)")
 
 	useRuntime := p.Flags[envUSE_ARCADIA_COMPILER_RUNTIME]
+
 	env.setBool(envUSE_ARCADIA_COMPILER_RUNTIME, useRuntime != strNo)
 	env.setStringID(envCOMPILER_VERSION, p.ClangVerSTR)
 	env.setStringID(envBUILD_TYPE, p.BuildTypeUpperSTR)
@@ -324,6 +329,7 @@ func parseCompilerFlags(s string) []string {
 	var out []string
 	var b strings.Builder
 	var quote byte
+
 	escaped := false
 
 	flush := func() {

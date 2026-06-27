@@ -7,6 +7,7 @@ import (
 func joinSrcsIncludeClosure(ctx *GenCtx, scanPlatform *Platform, srcInstance ModuleInstance, sources []string, in ModuleCCInputs) []VFS {
 	scanner := ctx.scannerForPlatform(scanPlatform)
 	visited := scanner.visitedIDPool.Get().(*IdSet)
+
 	visited.reset(vfsBound())
 
 	defer scanner.visitedIDPool.Put(visited)

@@ -13,6 +13,7 @@ func (YasmIncludeDirectiveParser) id() uint32 {
 func (YasmIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	block := a.alloc(directiveBlockHint)
 	k := parseYasmIncludes(data, block, 0)
+
 	a.commit(k)
 
 	if k == 0 {

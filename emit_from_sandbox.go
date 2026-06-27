@@ -13,6 +13,7 @@ var fromSandboxKV = KV{P: pkSB, PC: pcYellow, ShowOut: true}
 func emitFromSandboxes(ctx *GenCtx, instance ModuleInstance, d *ModuleData) (memberRefs []NodeRef, memberPaths []VFS) {
 	for _, fs := range d.fromSandboxes {
 		refs, paths := emitFromSandbox(ctx, instance, d, fs)
+
 		memberRefs = append(memberRefs, refs...)
 		memberPaths = append(memberPaths, paths...)
 	}

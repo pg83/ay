@@ -52,6 +52,7 @@ func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	}
 
 	var outRel string
+
 	outName := srcRel + ".o"
 
 	if strings.HasSuffix(srcRel, ".asm") {
@@ -74,6 +75,7 @@ func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInp
 	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in, instance.Platform)
 	includes := composeASIncludes(in)
 	betweenBlocks := len(catboostOpenSourceDefine)
+
 	betweenBlocks += len(in.ModuleScopeCFlags)
 
 	fixed := prologueArgs + len(debugPrefixMapFlags) + len(xclangDebugCompilationDir) +
@@ -95,6 +97,7 @@ func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInp
 
 func composeASIncludes(in ModuleCCInputs) []STR {
 	out := make([]STR, 0, len(ccIncludesPrefix)+len(in.AddIncl)+len(in.PeerAddInclGlobal))
+
 	out = appendArgStr(out, ccIncludesPrefix)
 	out = appendAddIncl(out, in.AddIncl, in.InclArgs)
 	out = appendAddIncl(out, in.PeerAddInclGlobal, in.InclArgs)
@@ -130,6 +133,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	}
 
 	cmdArgs := make([]STR, 0, 20+len(predefinedFlags))
+
 	cmdArgs = append(cmdArgs, yasmConstHead...)
 	cmdArgs = append(cmdArgs,
 		argD.str(), internV("_", string(instance.Platform.ISA), "_"),

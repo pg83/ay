@@ -19,6 +19,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 		clangWrapper = "$(S)/build/scripts/clang_wrapper.py"
 		optWrapper   = "$(S)/build/scripts/llvm_opt_wrapper.py"
 	)
+
 	python := d.tc.Python3.string()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	reqs := Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)}
@@ -72,6 +73,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 			}
 
 			ref := ctx.emit.emit(node)
+
 			bcRefs = append(bcRefs, ref)
 			bcPaths = append(bcPaths, bcOut)
 		}
@@ -84,6 +86,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 		}
 
 		ldArgs = append(ldArgs, argDashO.str(), (mergedOut).str())
+
 		mergeInputs := na.inputList(bcPaths)
 
 		if linksCopy {
@@ -116,8 +119,10 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 		optArgs = append(optArgs, internV(`-passes="`, strings.Join(passes, ","), `"`))
 
 		optInputs := make([]VFS, 0, 2+len(bcSourceInputs))
+
 		optInputs = append(optInputs, mergedOut)
 		optInputs = append(optInputs, optWrapperVFS)
+
 		optChunks := na.inputList(concat(optInputs, bcSourceInputs))
 
 		optNode := &Node{
@@ -176,6 +181,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 
 	args = appendArgStr(args, ccIncludesPrefix)
 	args = appendAddIncl(args, in.AddIncl, in.InclArgs)
+
 	peerAddIncl := in.PeerAddInclGlobal
 
 	if len(peerAddIncl) > 0 && peerAddIncl[0] == googleapisCommonProtosAddIncl {

@@ -201,6 +201,7 @@ func refacConsts(_ GlobalFlags, args []string) int {
 	}
 
 	var parsed []*ParsedFile
+
 	existing := map[HoistKey]string{}
 	used := map[string]bool{}
 
@@ -234,6 +235,7 @@ func refacConsts(_ GlobalFlags, args []string) int {
 		}
 
 		name := uniqueName(identForVFS(o.key), used)
+
 		used[name] = true
 		existing[o.key] = name
 		emit = append(emit, HoistedVar{name, o.key})
@@ -363,6 +365,7 @@ func parseRefacFile(path string, existing map[HoistKey]string, used map[string]b
 	}
 
 	declared := map[*ast.CallExpr]bool{}
+
 	var vars []HoistedVar
 
 	for _, decl := range f.Decls {
@@ -656,6 +659,7 @@ func applyConstEdits(pf *ParsedFile, edits []ConstEdit) bool {
 	}
 
 	sort.Slice(edits, func(i, j int) bool { return edits[i].start > edits[j].start })
+
 	out := append([]byte(nil), pf.src...)
 
 	for _, e := range edits {
@@ -681,6 +685,7 @@ func applyConstEdits(pf *ParsedFile, edits []ConstEdit) bool {
 
 func generateConstFile(path string, kind HoistKind, vars []HoistedVar) {
 	var items []HoistedVar
+
 	seen := map[string]bool{}
 
 	for _, v := range vars {
@@ -713,13 +718,16 @@ func generateConstFile(path string, kind HoistKind, vars []HoistedVar) {
 	}
 
 	b.WriteString(")\n")
+
 	formatted := throw2(format.Source([]byte(b.String())))
+
 	throw(os.WriteFile(path, formatted, 0o644))
 	fmt.Fprintf(os.Stderr, "refac consts: generated %s (%d consts)\n", path, len(items))
 }
 
 func identForVFS(key HoistKey) string {
 	s := key.canon
+
 	var words []string
 
 	switch {
@@ -930,6 +938,7 @@ func lintConsolidateVars(path string) bool {
 	}
 
 	var varDecls []*ast.GenDecl
+
 	totalSpecs := 0
 
 	for _, decl := range f.Decls {
@@ -945,6 +954,7 @@ func lintConsolidateVars(path string) bool {
 
 	off := func(p gotoken.Pos) int { return fset.Position(p).Offset }
 	text := func(lo, hi gotoken.Pos) string { return string(src[off(lo):off(hi)]) }
+
 	type span struct{ start, end int }
 	var items []VarItem
 	var removals []span
@@ -1045,6 +1055,7 @@ func lintConsolidateVars(path string) bool {
 	}
 
 	out := append([]byte(nil), src...)
+
 	sort.Slice(removals, func(i, j int) bool { return removals[i].start > removals[j].start })
 
 	for _, r := range removals {
@@ -1052,6 +1063,7 @@ func lintConsolidateVars(path string) bool {
 	}
 
 	block := "\n\n" + strings.Join(parts, "\n\n") + "\n"
+
 	out = append(out[:insOff], append([]byte(block), out[insOff:]...)...)
 
 	formatted, err := format.Source(out)
@@ -1113,14 +1125,19 @@ func lintControlBlankLines(path string) bool {
 	}
 
 	insertBefore := map[int]bool{}
+	singleLine := func(s ast.Stmt) bool { return lineOf(s.Pos()) == lineOf(s.End()) }
 
 	blockLike := func(s ast.Stmt) bool {
-		return isControlBlockStmt(s) || (isDefineAssign(s) && lineOf(s.End()) > lineOf(s.Pos()))
+		return isControlBlockStmt(s) || isDefineAssign(s)
 	}
 
 	process := func(list []ast.Stmt) {
 		for i := 1; i < len(list); i++ {
 			a, b := list[i-1], list[i]
+
+			if isDefineAssign(a) && singleLine(a) && isDefineAssign(b) && singleLine(b) {
+				continue
+			}
 
 			if !blockLike(a) && !blockLike(b) {
 				continue
@@ -1157,6 +1174,7 @@ func lintControlBlankLines(path string) bool {
 	}
 
 	lines := strings.Split(string(src), "\n")
+
 	var b strings.Builder
 
 	for i, ln := range lines {
@@ -1315,6 +1333,7 @@ func lintExpandFuncBodies(path string) bool {
 	}
 
 	sort.Sort(sort.Reverse(sort.IntSlice(offs)))
+
 	b := src
 
 	for _, off := range offs {

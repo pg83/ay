@@ -125,11 +125,13 @@ func cmdMake(g GlobalFlags, args []string) int {
 	rootTargetYaFlags := readYaConfSection(fs, "ya.conf", "flags")
 	hostYaFlags := map[string]string{}
 	targetYaFlags := map[string]string{}
+
 	copyStatsFlags(hostYaFlags, rootHostYaFlags)
 	copyStatsFlags(targetYaFlags, rootTargetYaFlags)
 
 	hostInternalYaFlags := readOptionalYaConfSection(fs, "build/internal/ya.conf", "host_platform_flags")
 	targetInternalYaFlags := readOptionalYaConfSection(fs, "build/internal/ya.conf", "flags")
+
 	copyStatsFlags(hostYaFlags, hostInternalYaFlags)
 	copyStatsFlags(targetYaFlags, targetInternalYaFlags)
 
@@ -237,6 +239,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 		if mf.dumpGraph {
 			for _, target := range mf.targets {
 				g := genDumpGraphWithResources(fs, target, hostP, targetP, onWarn, mf.testLevel > 0)
+
 				writeGraph("-", g, !mf.sandboxing)
 			}
 		} else {
@@ -251,6 +254,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 	}
 
 	ex := newExecutor(mf.srcRoot, mf.bldRoot, mf.threads, mf.keepGoing, mf.ninja, mf.sandboxing, mf.cmdPrefixes, events)
+
 	ex.startGarbageCollector()
 
 	if mf.clear {
@@ -285,6 +289,7 @@ func genStream(fs FS, targets []string, hostP, targetP *Platform, onNode func(*N
 
 	for _, t := range targets {
 		ec := genStreamOne(fs, t, hostP, targetP, onNode, onWarn, testMode)
+
 		all = append(all, ec...)
 	}
 
@@ -293,6 +298,7 @@ func genStream(fs FS, targets []string, hostP, targetP *Platform, onNode func(*N
 
 func genStreamOne(fs FS, target string, hostP, targetP *Platform, onNode func(*Node, *UidVec, *DenseMap[STR, NodeRef]), onWarn func(Warn), testMode bool) []UID {
 	emitter := newStreamingEmitter(fs, onNode)
+
 	runGenIntoWithResources(fs, target, hostP, targetP, emitter, onWarn, testMode)
 
 	return emitter.finish()
@@ -361,6 +367,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 			parseKV(mf.tflags, opt.OptArg)
 		case opt.Char == 'j':
 			n, perr := strconv.Atoi(opt.OptArg)
+
 			throw(perr)
 			mf.threads = n
 		case opt.Char == 'r' || opt.Name == "release":

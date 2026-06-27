@@ -63,6 +63,7 @@ func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCo
 
 	if !moduleExcludesTag(d, "CPP_PROTO") {
 		cppInstance := instance
+
 		cppInstance.Language = LangCPP
 		cppSibling = genModule(ctx, cppInstance)
 	}
@@ -74,6 +75,7 @@ func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCo
 
 	for _, src := range protoSrcs {
 		aux, gen := emitPyProtoSrc(ctx, instance, d, src, protocLDRef, protocBinary, pe)
+
 		auxEntries = append(auxEntries, aux...)
 		genEntries = append(genEntries, gen...)
 	}
@@ -95,7 +97,9 @@ func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCo
 	}
 
 	pyInstance := instance
+
 	pyInstance.Language = LangPy
+
 	protoLibName := ""
 
 	if len(d.moduleStmt.Args) > 0 {
@@ -165,6 +169,7 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 	pe.head = append(head, argInput.str())
 
 	mid := make([]STR, 0, 16)
+
 	mid = append(mid,
 		argNs.str(), internStr(protoPythonNamespaceArg(d)),
 		arg2.str(),
@@ -238,7 +243,9 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 	pyBase := protoBase + "__intpy3___pb2.py"
 	pyOut := build(pyBase)
 	pyiOut := build(protoBase, "__intpy3___pb2.pyi")
+
 	var grpcPyOut VFS
+
 	outputs := []VFS{pyOut}
 	suffixes := []string{"_pb2.py"}
 
@@ -271,6 +278,7 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 
 	var producerDeps []NodeRef
 	var producerSourceInputs []VFS
+
 	generated := false
 
 	if info := ctx.codegenFor(instance).lookup(build(protoRelPath)); info != nil {
@@ -533,6 +541,7 @@ func emitGeneratedPyProtoObjcopy(ctx *GenCtx, instance ModuleInstance, d *Module
 		hash := objcopyHash(cur.paths, cur.keysB64, cur.kvsHash, instance.Path.rel(), hashTag)
 		outputObj := build(instance.Path.rel(), "/objcopy_", hash, ".o")
 		payload := make([]STR, 0, 2+len(cur.inputs)+len(cur.keysB64)+1+len(cur.kvsCmd))
+
 		payload = append(payload, argInputs.str())
 
 		for _, p := range cur.inputs {
@@ -562,6 +571,7 @@ func emitGeneratedPyProtoObjcopy(ctx *GenCtx, instance ModuleInstance, d *Module
 		node.DepRefs = append(node.DepRefs, cur.deps...)
 
 		r := ctx.emit.emit(node)
+
 		res.Refs = append(res.Refs, r)
 		res.Outputs = append(res.Outputs, outputObj)
 		cur = chunk{}
@@ -600,6 +610,7 @@ func emitGeneratedPyProtoObjcopy(ctx *GenCtx, instance ModuleInstance, d *Module
 
 func pyProtoSourceInputs(inputs []VFS) []VFS {
 	out := make([]VFS, 0, len(inputs))
+
 	deduper.reset()
 
 	for _, input := range inputs {
@@ -630,6 +641,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 	}
 
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
+
 	type chunk struct {
 		hashInputs []string
 		cmdArgs    []string
@@ -638,10 +650,12 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 	}
 
 	var chunks []chunk
+
 	cur := chunk{}
 	cmdLen := 0
 
 	deduper.reset()
+
 	depSeen := map[NodeRef]struct{}{}
 
 	addInput := func(v VFS) {
@@ -729,6 +743,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 		auxRef := ctx.emit.reserve()
 		auxClosure := pyProtoAuxInputClosure(ctx, instance, d, aux, ch.inputs, auxRef, peerAddIncl)
 		cmdArgs := []STR{internStr(rescompilerBinPath), (aux).str()}
+
 		cmdArgs = appendInternStrs(cmdArgs, ch.cmdArgs)
 
 		deps := concat(ch.deps, depRefs(rescompilerRef))
@@ -789,7 +804,9 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 		}
 
 		ccIn.CCBlocks = composeCCModuleArgBlocks(na, instance.Platform, &ccIn)
+
 		ccRef, ccOut, _ := emitCC(instance, internStr(aux.rel()[strings.LastIndex(aux.rel(), "/")+1:]), aux, ccIn, ctx.host, ctx.emit)
+
 		res.Refs = append(res.Refs, ccRef)
 		res.Outputs = append(res.Outputs, ccOut)
 	}

@@ -12,6 +12,7 @@ func emitArchiveAsmForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in
 	for _, a := range d.archiveAsm {
 		rodataRef := emitArchiveAsmNode(ctx, instance, a, d, toolBinPath, toolLDRef, reg)
 		rdRef, rdOut := emitArchiveAsmRodata(ctx, instance, a.Name+".rodata", rodataRef, in)
+
 		res.CCRefs = append(res.CCRefs, rdRef)
 		res.CCOutputs = append(res.CCOutputs, rdOut)
 	}
@@ -31,6 +32,7 @@ func emitArchiveAsmNode(
 	na := ctx.emit.nodeArenas()
 	rodataVFS := build(instance.Path.rel(), "/", a.Name, ".rodata")
 	cmdArgs := make([]STR, 0, 4+len(a.Files)+2)
+
 	cmdArgs = append(cmdArgs, (toolBinPath).str(), argQ.str())
 
 	if a.DontCompress {
@@ -38,7 +40,9 @@ func emitArchiveAsmNode(
 	}
 
 	producerRefs := []NodeRef{}
+
 	deduper.reset()
+
 	pathPerFile := make([]VFS, 0, len(a.Files))
 
 	for _, f := range a.Files {
@@ -62,6 +66,7 @@ func emitArchiveAsmNode(
 	cmdArgs = append(cmdArgs, argDashO.str(), (rodataVFS).str())
 
 	inputs := make([]VFS, 0, len(pathPerFile))
+
 	deduper.reset()
 
 	for _, p := range pathPerFile {

@@ -29,6 +29,7 @@ func moduleProtoGenHeaders(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		switch {
 		case strings.HasSuffix(s, ".proto"):
 			base := strings.TrimSuffix(protoSourceRelPath(ctx.fs, instance, d, s), ".proto")
+
 			add(base + ".pb.h")
 		case strings.HasSuffix(s, ".ev"):
 			add(protoSourceRelPath(ctx.fs, instance, d, s) + ".pb.h")
@@ -100,6 +101,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 
 		_, secondLevel := protoGenHeaders[headerInput.rel()]
 		serializedCPPPath := build(serializedBase, "_serialized.cpp")
+
 		var serializedHPath VFS
 
 		if withHeader {
@@ -114,7 +116,9 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		}
 
 		sort.Slice(cppParsed, func(i, j int) bool { return cppParsed[i].target.string() < cppParsed[j].target.string() })
+
 		reg := ctx.codegenFor(instance)
+
 		reg.register(&GeneratedFileInfo{
 			ProducerKvP:    pkEN,
 			OutputPath:     serializedCPPPath,
@@ -186,9 +190,12 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		if consumerInputs != nil {
 			cppRel := strings.TrimPrefix(p.serializedCPPPath.rel(), instance.Path.rel()+"/")
 			allDepRefs := make([]NodeRef, 0, 1+len(augmentedDepENRefs))
+
 			allDepRefs = append(allDepRefs, p.enRef)
 			allDepRefs = append(allDepRefs, augmentedDepENRefs...)
+
 			ccRef, ccOut := emitCodegenDownstreamCCFromVFS(ctx, instance, cppRel, p.serializedCPPPath, allDepRefs, *consumerInputs)
+
 			res.CCRefs = append(res.CCRefs, ccRef)
 			res.CCOutputs = append(res.CCOutputs, ccOut)
 			res.Seqs = append(res.Seqs, p.declSeq)

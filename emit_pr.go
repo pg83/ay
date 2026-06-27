@@ -39,6 +39,7 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 	for _, rp := range d.runPrograms {
 		prRef := emitRunProgram(ctx, instance, rp, d, reg, in)
 		outs := make([]string, 0, len(rp.OUTFiles)+len(rp.OUTNoAutoFiles)+1)
+
 		outs = append(outs, strStrings(rp.OUTFiles)...)
 
 		if rp.StdoutFile != nil && !rp.StdoutNoAuto {
@@ -59,12 +60,14 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 			switch {
 			case isCCSourceExt(out):
 				ccRef, ccOut := emitPRDownstreamCC(ctx, instance, out, run.prRef, in)
+
 				res.CCRefs = append(res.CCRefs, ccRef)
 				res.CCOutputs = append(res.CCOutputs, ccOut)
 				res.Seqs = append(res.Seqs, run.seq)
 				res.SecondLevel = append(res.SecondLevel, false)
 			case isAsmSourceExt(out):
 				asRef, asOut := emitCodegenDownstreamAS(ctx, instance, out, []NodeRef{run.prRef}, in)
+
 				res.CCRefs = append(res.CCRefs, asRef)
 				res.CCOutputs = append(res.CCOutputs, asOut)
 				res.Seqs = append(res.Seqs, run.seq)
@@ -81,6 +84,7 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 
 			cppVFS := build(copyFileOutputVFS(instance.Path.rel(), out).rel(), ".cpp")
 			emit := emitFlatcCppCompile(ctx, instance, cppVFS, in)
+
 			res.CCRefs = append(res.CCRefs, emit.Ref)
 			res.CCOutputs = append(res.CCOutputs, emit.OutPath)
 			res.Seqs = append(res.Seqs, run.seq)
@@ -125,6 +129,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	for _, f := range stmt.INFiles {
 		vfs := runProgramInputVFS(ctx, instance, d, f.string())
+
 		inVFSByToken[f] = vfs
 		inVFSs = append(inVFSs, vfs)
 	}
@@ -143,6 +148,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	if stmt.StdoutFile != nil {
 		vfs := copyFileOutputVFS(instance.Path.rel(), stmt.StdoutFile.string())
+
 		stdoutVFS = &vfs
 		outVFSByToken[*stmt.StdoutFile] = vfs
 	}
@@ -255,17 +261,20 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	for _, f := range stmt.OUTFiles {
 		out := outVFSByToken[f]
 		parsed, rides := parsedFor(f, out, true)
+
 		registerPROutput(out, parsed, rides)
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
 		out := outVFSByToken[f]
 		parsed, rides := parsedFor(f, out, false)
+
 		registerPROutput(out, parsed, rides)
 	}
 
 	if stmt.StdoutFile != nil {
 		parsed, rides := parsedFor(*stmt.StdoutFile, *stdoutVFS, !stmt.StdoutNoAuto)
+
 		registerPROutput(*stdoutVFS, parsed, rides)
 	}
 
@@ -412,12 +421,14 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	walkOne := func(rel string) {
 		buildRootPath := copyFileOutputVFS(instance.Path.rel(), rel)
 		sub := walkClosureTail(ctx.scannerFor(instance), buildRootPath, scanIn.ScanCfg)
+
 		out = append(out, sub...)
 	}
 
 	walkInput := func(rel string) {
 		inputVFS := runProgramInputVFS(ctx, instance, d, rel)
 		sub := walkClosure(ctx.scannerFor(instance), inputVFS, scanIn.ScanCfg)
+
 		out = append(out, sub...)
 	}
 
@@ -497,6 +508,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		candidate := build(target.string())
 
 		var sub []VFS
+
 		customPR := false
 
 		switch info := reg.lookup(candidate); {
@@ -611,6 +623,7 @@ func resolveRunProgramAuxTools(ctx *GenCtx, toolPaths []string) []RunProgramAuxT
 		}
 
 		res := ctx.toolResult(internArg(filepath.Clean(modulePath)))
+
 		out = append(out, RunProgramAuxTool{
 			token:  toolPath,
 			ref:    res.LDRef,
@@ -676,6 +689,7 @@ func emitPR(
 	}
 
 	cmdArgs := make([]STR, 0, 1+len(stmt.Args))
+
 	cmdArgs = append(cmdArgs, (toolBinPath).str())
 
 	cands := deepReplaceCandidates(stmt, inVFSByToken, outVFSByToken)
@@ -707,6 +721,7 @@ func emitPR(
 	}
 
 	head := make([]VFS, 0, 1+len(auxTools)+len(stmt.INFiles))
+
 	deduper.reset()
 
 	appendUnique := func(p VFS) {
@@ -731,6 +746,7 @@ func emitPR(
 
 	var outputs []VFS
 	var stdoutPath STR
+
 	emittedOut := map[VFS]bool{}
 
 	appendOutput := func(v VFS) {
@@ -818,16 +834,19 @@ func deepReplaceCandidates(stmt *RunProgramStmt, inVFSByToken, outVFSByToken map
 
 	for _, f := range stmt.INFiles {
 		vfs, ok := inVFSByToken[f]
+
 		add(f, vfs, ok)
 	}
 
 	for _, f := range stmt.OUTFiles {
 		vfs, ok := outVFSByToken[f]
+
 		add(f, vfs, ok)
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
 		vfs, ok := outVFSByToken[f]
+
 		add(f, vfs, ok)
 	}
 

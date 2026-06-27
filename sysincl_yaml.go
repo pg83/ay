@@ -50,6 +50,7 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 		switch string(b[:colon]) {
 		case "source_filter":
 			s := string(unquoteYScalar(name, lineNo, val))
+
 			rec.Filter = compileSourceFilter(name, lineNo, s, onWarn)
 			rec.KeyBySource = strings.Contains(s, "(?!")
 		case "case_sensitive":
@@ -97,6 +98,7 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 
 	for start := 0; start < len(data); {
 		lineNo++
+
 		line := data[start:]
 
 		if nl := bytes.IndexByte(line, '\n'); nl >= 0 {

@@ -29,6 +29,7 @@ var bisonCppSkeletonInputs = []VFS{
 
 func bisonCppHeaderParsed(srcVFS VFS) []IncludeDirective {
 	parsed := make([]IncludeDirective, 0, 1+len(bisonCppSkeletonDirectives))
+
 	parsed = append(parsed,
 		IncludeDirective{kind: includeQuoted, target: internStr(bisonPreprocessPyVFS.rel())},
 	)
@@ -122,6 +123,7 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envBISON_PKGDATADIR, Value: strBisonPkgData}, {Name: envM4, Value: m4Bin}}
 	preprocessEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	head := make([]STR, 0, 6+len(in.BisonFlags))
+
 	head = append(head, internStr(bisonBin), argV.str())
 	head = appendArgStr(head, in.BisonFlags)
 	head = append(head,
@@ -129,6 +131,7 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 		argDashO.str(),
 		(generatedVFS).str(),
 		(srcVFS).str())
+
 	cmds := na.cmdList(Cmd{CmdArgs: na.chunkList(head), Env: env})
 	inputs := []VFS{bldContribToolsBisonBison, bldContribToolsM4M4, srcVFS}
 

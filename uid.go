@@ -64,6 +64,7 @@ func (c *CanonBuf) writeRefUIDs(refs []NodeRef) {
 
 	for _, r := range refs {
 		u := c.uids.get(r)
+
 		c.writeUint64(u.Hi)
 		c.writeUint64(u.Lo)
 	}
@@ -82,6 +83,7 @@ func (c *CanonBuf) writeDepRefUIDs(n *Node) {
 
 	for _, r := range n.DepRefs {
 		u := c.uids.get(r)
+
 		c.writeUint64(u.Hi)
 		c.writeUint64(u.Lo)
 	}
@@ -89,6 +91,7 @@ func (c *CanonBuf) writeDepRefUIDs(n *Node) {
 	for _, pat := range n.Resources {
 		if ref, ok := c.fetchRefs.get(pat); ok {
 			u := c.uids.get(ref)
+
 			c.writeUint64(u.Hi)
 			c.writeUint64(u.Lo)
 		}
@@ -163,6 +166,7 @@ func (c *CanonBuf) writeVFSSliceOS(vs []VFS, fs *OsFS) {
 	for _, v := range vs {
 		s := v.strID()
 		lo := los[s]
+
 		buf = append(buf,
 			byte(lo), byte(lo>>8), byte(lo>>16), byte(lo>>24),
 			byte(lo>>32), byte(lo>>40), byte(lo>>48), byte(lo>>56))

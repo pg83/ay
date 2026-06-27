@@ -160,6 +160,7 @@ func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 
 		if stmt.Header {
 			base := instance.Path.rel() + "/" + cythonNoExt(stmt.Src)
+
 			headerVFS = append(headerVFS, build(base, ".h"))
 
 			if stmt.ApiHeader {
@@ -169,6 +170,7 @@ func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 
 		srcVFS := source(instance.Path.rel(), "/", stmt.Src)
 		srcScanIn := in
+
 		srcScanIn.AddIncl = appendCythonScanAddIncl(srcScanIn.AddIncl, d.cythonAddIncl, py23Variant)
 		srcScanIn.ScanCfg = newScanContext(ctx.parsers, srcScanIn.AddIncl, srcScanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 
@@ -252,6 +254,7 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 
 		if pxdVFS, ok := resolveCythonPxd(ctx, instance, in, stmt.Pxd); ok {
 			pxdClosure := walkClosure(ctx.scannerFor(instance), pxdVFS, srcScanIn.ScanCfg)
+
 			toolInputs = keepOnlySourceVFS(dedup(toolInputs, pxdClosure))
 			emitsIncludes = dedup(emitsIncludes, pxdClosure)
 		}
@@ -272,6 +275,7 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 		cmdArgs := make([]STR, 0, 8+len(cythonConstHead)+len(stmt.Options))
+
 		cmdArgs = append(cmdArgs, d.tc.Python3)
 		cmdArgs = append(cmdArgs, cythonConstHead...)
 		cmdArgs = appendInternStrs(cmdArgs, stmt.Options)
@@ -305,6 +309,7 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 		}, cyRef)
 
 		ccIn := in
+
 		ccIn.ExtraDepRefs = []NodeRef{cyRef}
 		ccIn.Py3Suffix = !stmt.CMode && !generatedExplicit && py23Variant
 		ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl, d.cythonNumpyBeforeInclude)
@@ -318,6 +323,7 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 		}
 
 		scanIn := ccIn
+
 		scanIn.AddIncl = appendCythonScanAddIncl(in.AddIncl, d.cythonAddIncl, py23Variant)
 		scanIn.ScanCfg = newScanContext(ctx.parsers, scanIn.AddIncl, scanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 		ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), generatedVFS, scanIn.ScanCfg)
@@ -327,6 +333,7 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 		ccIn.IncludeInputs = cythonCompileInducedInputs(ctx, instance, ccIn.IncludeInputs)
 
 		ccRef, ccOut, _ := emitCC(instance, internStr(generated), generatedVFS, ccIn, ctx.host, ctx.emit)
+
 		out = append(out, &SourceEmit{Ref: ccRef, OutPath: ccOut})
 	}
 
@@ -335,6 +342,7 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 
 func cythonHeaderToolInputs(src VFS, pyxClosure []VFS) []VFS {
 	singles := make([]VFS, 0, len(py3CythonEmbeddedFiles)+2)
+
 	singles = append(singles, contribToolsCythonCythonPy, src)
 
 	for _, rel := range py3CythonEmbeddedFiles {
@@ -412,6 +420,7 @@ func cythonCppInducedSets(ctx *GenCtx, instance ModuleInstance, src VFS, cMode b
 	scanner := ctx.scannerFor(instance)
 	toolSingles := []VFS{contribToolsCythonCythonPy}
 	emitsSingles := []VFS{contribToolsCythonCythonPy, src}
+
 	var toolCl, emitsCl [][]VFS
 
 	for _, v := range py3CythonOutputIncludes {
@@ -423,16 +432,19 @@ func cythonCppInducedSets(ctx *GenCtx, instance ModuleInstance, src VFS, cMode b
 		emitsSingles = append(emitsSingles, v)
 
 		cl := walkClosureTail(scanner, v, scanIn.ScanCfg)
+
 		toolCl = append(toolCl, cl)
 		emitsCl = append(emitsCl, cl)
 	}
 
 	for _, rel := range py3CythonEmbeddedFiles {
 		v := source(rel)
+
 		toolSingles = append(toolSingles, v)
 		emitsSingles = append(emitsSingles, v)
 
 		cl := walkClosureTail(scanner, v, scanIn.ScanCfg)
+
 		toolCl = append(toolCl, cl)
 		emitsCl = append(emitsCl, cl)
 	}
@@ -543,6 +555,7 @@ func adjustCythonCompanionSourceInputs(na *NodeArenas, p *Platform, d *ModuleDat
 
 func appendCythonScanAddIncl(addIncl []VFS, cythonAddIncl []VFS, py23 bool) []VFS {
 	out := make([]VFS, 0, len(addIncl)+len(cythonAddIncl)+3+len(cythonNumpyAddIncl))
+
 	out = append(out, addIncl...)
 	out = append(out, cythonAddIncl...)
 

@@ -47,6 +47,7 @@ func (m *DenseMap[K, V]) growIdx(k int) {
 	}
 
 	grown := make([]uint32, n)
+
 	copy(grown, m.idx)
 	m.idx = grown
 }
