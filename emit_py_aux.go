@@ -38,7 +38,7 @@ func emitGeneratedPyAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleDat
 			suffix := ".yapyc3"
 
 			if strings.Contains(srcRel.string(), "/") {
-				suffix = "." + pySrcYapycSuffix(instance.Path.rel()) + ".yapyc3"
+				suffix = "." + d.pyYapycSuffix + ".yapyc3"
 			}
 
 			yp := build(instance.Path.rel(), "/", srcRel.string(), suffix)

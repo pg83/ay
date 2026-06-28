@@ -63,7 +63,7 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		var outputPath VFS
 
 		if strings.Contains(srcRel.string(), "/") {
-			outputPath = build(instance.Path.rel(), "/", srcRel.string(), ".", pySrcYapycSuffix(instance.Path.rel()), ".yapyc3")
+			outputPath = build(instance.Path.rel(), "/", srcRel.string(), ".", d.pyYapycSuffix, ".yapyc3")
 		} else {
 			outputPath = build(instance.Path.rel(), "/", srcRel.string(), ".yapyc3")
 		}

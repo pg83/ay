@@ -131,6 +131,7 @@ type ModuleData struct {
 	pyBuildNoPYC             bool
 	pyBuildNoPY              bool
 	pyTopLevel               bool
+	pyYapycSuffix            string
 	noExtendedPySearch       bool
 	enumSrcs                 []*GenerateEnumSerializationStmt
 	peerdirs                 []STR
@@ -652,6 +653,10 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, instance ModuleInstanc
 	}
 
 	collectStmts(fs, modulePath, kind, instance.Language, stmts, env, d)
+
+	if len(d.pySrcs) > 0 {
+		d.pyYapycSuffix = pySrcYapycSuffix(modulePath)
+	}
 
 	d.materializeAddIncl()
 
