@@ -90,6 +90,97 @@ func stringIsTruthy(v string) bool {
 	return true
 }
 
+func trimSurroundingQuotes(v string) string {
+	if len(v) >= 4 && strings.HasPrefix(v, `\"`) && strings.HasSuffix(v, `\"`) {
+		return v[2 : len(v)-2]
+	}
+
+	if len(v) >= 2 && strings.HasPrefix(v, `"`) && strings.HasSuffix(v, `"`) {
+		return v[1 : len(v)-1]
+	}
+
+	return v
+}
+
+func containsRegexMeta(s string) bool {
+	const meta = `\.+*?[]{}()|^$`
+
+	for i := 0; i < len(s); i++ {
+		for j := 0; j < len(meta); j++ {
+			if s[i] == meta[j] {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func splitShellWords(s string) []string {
+	if s == "" {
+		return nil
+	}
+
+	var out []string
+	var b strings.Builder
+	var quote byte
+
+	escaped := false
+
+	flush := func() {
+		if b.Len() == 0 {
+			return
+		}
+
+		out = append(out, b.String())
+		b.Reset()
+	}
+
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+
+		if escaped {
+			b.WriteByte(ch)
+			escaped = false
+
+			continue
+		}
+
+		if ch == '\\' {
+			escaped = true
+
+			continue
+		}
+
+		if quote != 0 {
+			if ch == quote {
+				quote = 0
+			} else {
+				b.WriteByte(ch)
+			}
+
+			continue
+		}
+
+		switch ch {
+		case '\t', '\n', '\r', ' ':
+			flush()
+		case '\'', '"':
+			quote = ch
+		default:
+			b.WriteByte(ch)
+		}
+	}
+
+	if escaped {
+		b.WriteByte('\\')
+	}
+
+	flush()
+
+	return out
+}
+
 func humanBytes(n int64) string {
 	const unit = 1024
 

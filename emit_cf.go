@@ -94,9 +94,9 @@ func buildCFGVars(fs FS, rel string, setVars, defaultVars map[STR]STR, buildType
 
 		switch {
 		case mapHas(setVars, k):
-			vars = append(vars, name+"="+cfgVarValue(setVars[k].string()))
+			vars = append(vars, name+"="+trimSurroundingQuotes(setVars[k].string()))
 		case mapHas(defaultVars, k):
-			vars = append(vars, name+"="+cfgVarValue(defaultVars[k].string()))
+			vars = append(vars, name+"="+trimSurroundingQuotes(defaultVars[k].string()))
 		case name == "BUILD_TYPE":
 			vars = append(vars, "BUILD_TYPE="+buildTypeUpper)
 		}
@@ -111,18 +111,6 @@ func mapHas(m map[STR]STR, k STR) bool {
 	_, ok := m[k]
 
 	return ok
-}
-
-func cfgVarValue(v string) string {
-	if len(v) >= 4 && strings.HasPrefix(v, `\"`) && strings.HasSuffix(v, `\"`) {
-		return v[2 : len(v)-2]
-	}
-
-	if len(v) >= 2 && strings.HasPrefix(v, `"`) && strings.HasSuffix(v, `"`) {
-		return v[1 : len(v)-1]
-	}
-
-	return v
 }
 
 func cfTemplateParsedIncludes(pm *IncludeParserManager, rel string) []IncludeDirective {

@@ -80,28 +80,6 @@ type CythonStmt struct {
 	Pxd       string
 }
 
-func cythonNoExt(src string) string {
-	dot := -1
-
-	for i := len(src) - 1; i >= 0; i-- {
-		if src[i] == '/' {
-			break
-		}
-
-		if src[i] == '.' {
-			dot = i
-
-			break
-		}
-	}
-
-	if dot < 0 {
-		return src
-	}
-
-	return src[:dot]
-}
-
 type cythonStmtPlan struct {
 	stmt              *CythonStmt
 	generatedExplicit bool
@@ -147,7 +125,7 @@ func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 				ext = ".c"
 			}
 
-			generated = cythonNoExt(stmt.Src) + ext
+			generated = relStem(stmt.Src) + ext
 		}
 
 		if generatedExplicit {
@@ -159,7 +137,7 @@ func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 		var headerVFS []VFS
 
 		if stmt.Header {
-			base := instance.Path.rel() + "/" + cythonNoExt(stmt.Src)
+			base := instance.Path.rel() + "/" + relStem(stmt.Src)
 
 			headerVFS = append(headerVFS, build(base, ".h"))
 

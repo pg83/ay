@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-func TestParseCompilerFlags(t *testing.T) {
-	got := parseCompilerFlags(`-O2 -DNAME="hello world" '-DOTHER=two words' -DQUOTE=\"x\" trailing\ slash`)
+func TestSplitShellWords(t *testing.T) {
+	got := splitShellWords(`-O2 -DNAME="hello world" '-DOTHER=two words' -DQUOTE=\"x\" trailing\ slash`)
 	want := []string{
 		"-O2",
 		"-DNAME=hello world",
@@ -16,7 +16,7 @@ func TestParseCompilerFlags(t *testing.T) {
 	}
 
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("parseCompilerFlags mismatch:\n got: %#v\nwant: %#v", got, want)
+		t.Fatalf("splitShellWords mismatch:\n got: %#v\nwant: %#v", got, want)
 	}
 }
 
