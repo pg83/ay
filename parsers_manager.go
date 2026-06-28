@@ -1,7 +1,5 @@
 package main
 
-type ParsedIncludeBucket uint8
-
 const (
 	parsedIncludesLocal ParsedIncludeBucket = iota
 	parsedIncludesRagelNative
@@ -12,6 +10,8 @@ const (
 	parsedIncludesProtoConfig
 	parsedIncludeBucketCount
 )
+
+type ParsedIncludeBucket uint8
 
 type ParsedInclude = IncludeDirective
 

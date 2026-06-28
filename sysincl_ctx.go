@@ -4,6 +4,12 @@ import (
 	"strings"
 )
 
+const (
+	ciUnseen CIMemoState = iota
+	ciNo
+	ciClaimed
+)
+
 type SysinclCtx struct {
 	keyBits  BitSet
 	keyCI    map[string]bool
@@ -58,12 +64,6 @@ func newSysinclCtx(set SysInclSet) *SysinclCtx {
 }
 
 type CIMemoState uint8
-
-const (
-	ciUnseen CIMemoState = iota
-	ciNo
-	ciClaimed
-)
 
 func (c *SysinclCtx) mightClaim(target STR) bool {
 	if c.keyBits.has(uint32(target)) {

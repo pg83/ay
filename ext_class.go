@@ -1,7 +1,5 @@
 package main
 
-type extFlags uint8
-
 const (
 	extCxxSource extFlags = 1 << iota
 	extCCSource
@@ -11,6 +9,8 @@ const (
 	extCodegen
 	extCopyAuto
 )
+
+type extFlags uint8
 
 type extClass struct {
 	flags  extFlags

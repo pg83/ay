@@ -25,6 +25,8 @@ var yaffExperimentsRuntimeHeaders = []string{
 	yaffRuntimeBase + "experiments/merge.h",
 }
 
+const yaffRuntimeBase = "library/cpp/yaff/"
+
 func quotedDirectives(headers []VFS) []IncludeDirective {
 	out := make([]IncludeDirective, len(headers))
 
@@ -34,8 +36,6 @@ func quotedDirectives(headers []VFS) []IncludeDirective {
 
 	return out
 }
-
-const yaffRuntimeBase = "library/cpp/yaff/"
 
 func yaffGeneratedHeaderIncludes(experimental bool, pbHRel string) []IncludeDirective {
 	n := len(yaffBaseRuntimeHeaders) + 1

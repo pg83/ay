@@ -183,6 +183,8 @@ var cxxStandardWarnings = []ARG{
 	argWnoUndefinedVarTemplate,
 }
 
+const binPath = "/usr/bin"
+
 func catboostOpenSourceDefineFor(p *Platform) []ARG {
 	if p.Flags[envOPENSOURCE] == strYes {
 		return catboostOpenSourceDefine
@@ -190,8 +192,6 @@ func catboostOpenSourceDefineFor(p *Platform) []ARG {
 
 	return nil
 }
-
-const binPath = "/usr/bin"
 
 func sseBaseCFlags(x8664 bool) []ARG {
 	if x8664 {

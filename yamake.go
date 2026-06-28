@@ -55,6 +55,47 @@ var structCodegenPeerdirs = STRS(
 	"kernel/struct_codegen/reflection",
 )
 
+const (
+	splitCodegenDefaultOutNum = 25
+	splitCodegenStreamCount   = 5
+	structCodegenTool         = "kernel/struct_codegen/codegen_tool"
+)
+
+const (
+	ckIdent CondKind = iota
+	ckString
+	ckInt
+	ckNot
+	ckAnd
+	ckOr
+	ckEq
+	ckLt
+	ckStartsWith
+	ckMatches
+	ckVersionCmp
+	ckDefined
+)
+
+const (
+	tokEOF TokKind = iota
+	tokIdent
+	tokString
+	tokWord
+	tokLParen
+	tokRParen
+	tokInt
+	tokEq
+	tokLt
+	tokNotEq
+	tokGe
+	tokGt
+)
+
+const (
+	termTopLevel StmtTerminator = iota
+	termIfBody
+)
+
 func strKeySet(words ...string) BitSet {
 	var out BitSet
 
@@ -410,21 +451,6 @@ func (*AllResourceFilesStmt) stmtMarker() {
 
 type CondKind uint8
 
-const (
-	ckIdent CondKind = iota
-	ckString
-	ckInt
-	ckNot
-	ckAnd
-	ckOr
-	ckEq
-	ckLt
-	ckStartsWith
-	ckMatches
-	ckVersionCmp
-	ckDefined
-)
-
 type CondNode struct {
 	Kind CondKind
 	Name string
@@ -470,21 +496,6 @@ func readOwnedForParse(fs FS, rel string) []byte {
 }
 
 type TokKind int
-
-const (
-	tokEOF TokKind = iota
-	tokIdent
-	tokString
-	tokWord
-	tokLParen
-	tokRParen
-	tokInt
-	tokEq
-	tokLt
-	tokNotEq
-	tokGe
-	tokGt
-)
 
 type Token struct {
 	kind TokKind
@@ -896,11 +907,6 @@ func newIncludeState() *IncludeState {
 }
 
 type StmtTerminator int
-
-const (
-	termTopLevel StmtTerminator = iota
-	termIfBody
-)
 
 func (p *Parser) parseStmts(term StmtTerminator) (stmts []Stmt, endTok Token) {
 	stmts = make([]Stmt, 0, 8)
@@ -1518,11 +1524,6 @@ func parseRunPython(args []STR, line int) *RunPythonStmt {
 	return stmt
 }
 
-const (
-	splitCodegenDefaultOutNum = 25
-	splitCodegenStreamCount   = 5
-)
-
 func parseSplitCodegen(args []STR, line int) *SplitCodegenStmt {
 	stmt := &SplitCodegenStmt{OutNum: splitCodegenDefaultOutNum, Line: line}
 
@@ -1580,8 +1581,6 @@ func parseBaseCodegen(args []STR, line int) *BaseCodegenStmt {
 
 	return stmt
 }
-
-const structCodegenTool = "kernel/struct_codegen/codegen_tool"
 
 func parseStructCodegen(prefix STR, line int) *BaseCodegenStmt {
 	return &BaseCodegenStmt{

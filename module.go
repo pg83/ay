@@ -9,7 +9,14 @@ var (
 	PlatformDefaultLinuxX8664   = makePlatformID(OSLinux, ISAX8664)
 )
 
-type Language int
+const (
+	OSLinux    OS  = "linux"
+	OSDarwin   OS  = "darwin"
+	OSWindows  OS  = "windows"
+	ISAX8664   ISA = "x86_64"
+	ISAAArch64 ISA = "aarch64"
+	ISAArm64   ISA = "arm64"
+)
 
 const (
 	LangNone Language = iota
@@ -21,6 +28,13 @@ const (
 
 	LangDescProto
 )
+
+const (
+	KindBin ModuleKind = iota
+	KindLib
+)
+
+type Language int
 
 func (l Language) string() string {
 	switch l {
@@ -47,11 +61,6 @@ func (l Language) string() string {
 
 type ModuleKind int
 
-const (
-	KindBin ModuleKind = iota
-	KindLib
-)
-
 func (k ModuleKind) string() string {
 	switch k {
 	case KindBin:
@@ -69,19 +78,7 @@ func (k ModuleKind) String() string {
 
 type OS string
 
-const (
-	OSLinux   OS = "linux"
-	OSDarwin  OS = "darwin"
-	OSWindows OS = "windows"
-)
-
 type ISA string
-
-const (
-	ISAX8664   ISA = "x86_64"
-	ISAAArch64 ISA = "aarch64"
-	ISAArm64   ISA = "arm64"
-)
 
 type PlatformID string
 

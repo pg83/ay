@@ -24,6 +24,8 @@ var htmlSafeNoEscape = func() [128]bool {
 	return t
 }()
 
+const hex = "0123456789abcdef"
+
 func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 	buf := make([]byte, 0, 1<<20)
 
@@ -334,8 +336,6 @@ func appendToolForeignDeps(buf []byte, refs []NodeRef, uids *UidVec) []byte {
 
 	return append(buf, '}')
 }
-
-const hex = "0123456789abcdef"
 
 func appendString(buf []byte, s string) []byte {
 	buf = append(buf, '"')

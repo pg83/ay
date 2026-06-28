@@ -7,11 +7,11 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+const linuxSDKDefault = "ubuntu-16"
+
 func toolchainFlags(fs FS) map[string]string {
 	return prebuiltToolchainFlags()
 }
-
-const linuxSDKDefault = "ubuntu-16"
 
 func prebuiltToolchainFlags() map[string]string {
 	return map[string]string{

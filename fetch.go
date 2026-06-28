@@ -18,6 +18,15 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 )
 
+const (
+	sandboxAPIBase      = "https://sandbox.yandex-team.ru/api/v1.0"
+	sandboxOriginSuffix = "?origin=fetch-from-sandbox"
+	mdsGetSandboxPrefix = "http://storage-int.mds.yandex.net/get-sandbox/"
+	oauthClientID       = "f4d36b7671004ed9850148fa645acac6"
+	oauthClientSecret   = "da475ea72e58427ab5c8a31e17ef2347"
+	oauthTokenURL       = "https://oauth.yandex-team.ru/token"
+)
+
 type ResourceMappingConf struct {
 	Extensions map[string]string `json:"extensions"`
 	Resources  map[string]string `json:"resources"`
@@ -338,18 +347,6 @@ func httpGetToFile(raw, token, out string) {
 
 	throw2(io.Copy(f, resp.Body))
 }
-
-const (
-	sandboxAPIBase      = "https://sandbox.yandex-team.ru/api/v1.0"
-	sandboxOriginSuffix = "?origin=fetch-from-sandbox"
-	mdsGetSandboxPrefix = "http://storage-int.mds.yandex.net/get-sandbox/"
-)
-
-const (
-	oauthClientID     = "f4d36b7671004ed9850148fa645acac6"
-	oauthClientSecret = "da475ea72e58427ab5c8a31e17ef2347"
-	oauthTokenURL     = "https://oauth.yandex-team.ru/token"
-)
 
 func argsNeedSandboxToken(args []string) bool {
 	for _, a := range args {

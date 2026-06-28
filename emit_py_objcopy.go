@@ -16,6 +16,11 @@ var (
 	pyObjcopyKV                 = KV{P: pkPY, PC: pcYellow, ShowOut: true}
 )
 
+const (
+	kvOnlyBin KvOnlyKind = iota
+	kvOnlyLib
+)
+
 type ObjcopyEmitResult struct {
 	Refs            []NodeRef
 	Outputs         []VFS
@@ -379,11 +384,6 @@ type ObjcopyEmit struct {
 }
 
 type KvOnlyKind int
-
-const (
-	kvOnlyBin KvOnlyKind = iota
-	kvOnlyLib
-)
 
 func emitKvOnlyObjcopyNode(
 	ctx *GenCtx,

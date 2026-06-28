@@ -19,6 +19,27 @@ var ldScriptInputs = []VFS{
 	copyFsToolsVFS,
 }
 
+const vcsJSONContent = `{
+    "ARCADIA_SOURCE_HG_HASH": "0000000000000000000000000000000000000000",
+    "ARCADIA_SOURCE_LAST_AUTHOR": "<UNKNOWN>",
+    "ARCADIA_SOURCE_LAST_CHANGE": -1,
+    "ARCADIA_SOURCE_PATH": "/",
+    "ARCADIA_SOURCE_REVISION": -1,
+    "ARCADIA_SOURCE_URL": "",
+    "BRANCH": "unknown-vcs-branch",
+    "BUILD_DATE": "",
+    "BUILD_TIMESTAMP": 0,
+    "BUILD_HOST": "localhost",
+    "BUILD_USER": "nobody",
+    "CUSTOM_VERSION": "",
+    "RELEASE_VERSION": "",
+    "PROGRAM_VERSION": "Arc info:\n    Branch: unknown-vcs-branch\n    Commit: 0000000000000000000000000000000000000000\n    Author: <UNKNOWN>\n    Summary: No VCS\n\n",
+    "SCM_DATA": "Arc info:\n    Branch: unknown-vcs-branch\n    Commit: 0000000000000000000000000000000000000000\n    Author: <UNKNOWN>\n    Summary: No VCS\n",
+    "VCS": "arc",
+    "ARCADIA_PATCH_NUMBER": 0,
+    "ARCADIA_TAG": ""
+}`
+
 func emitLD(
 	instance ModuleInstance,
 	binaryName string,
@@ -193,27 +214,6 @@ func emitLD(
 func lDOutputPath(instance ModuleInstance, binaryName string) VFS {
 	return build(instance.Path.rel(), "/", binaryName)
 }
-
-const vcsJSONContent = `{
-    "ARCADIA_SOURCE_HG_HASH": "0000000000000000000000000000000000000000",
-    "ARCADIA_SOURCE_LAST_AUTHOR": "<UNKNOWN>",
-    "ARCADIA_SOURCE_LAST_CHANGE": -1,
-    "ARCADIA_SOURCE_PATH": "/",
-    "ARCADIA_SOURCE_REVISION": -1,
-    "ARCADIA_SOURCE_URL": "",
-    "BRANCH": "unknown-vcs-branch",
-    "BUILD_DATE": "",
-    "BUILD_TIMESTAMP": 0,
-    "BUILD_HOST": "localhost",
-    "BUILD_USER": "nobody",
-    "CUSTOM_VERSION": "",
-    "RELEASE_VERSION": "",
-    "PROGRAM_VERSION": "Arc info:\n    Branch: unknown-vcs-branch\n    Commit: 0000000000000000000000000000000000000000\n    Author: <UNKNOWN>\n    Summary: No VCS\n\n",
-    "SCM_DATA": "Arc info:\n    Branch: unknown-vcs-branch\n    Commit: 0000000000000000000000000000000000000000\n    Author: <UNKNOWN>\n    Summary: No VCS\n",
-    "VCS": "arc",
-    "ARCADIA_PATCH_NUMBER": 0,
-    "ARCADIA_TAG": ""
-}`
 
 func emitVCSNode(emit *StreamingEmitter, host *Platform) NodeRef {
 	na := emit.nodeArenas()

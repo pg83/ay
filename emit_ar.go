@@ -4,6 +4,11 @@ import (
 	"strings"
 )
 
+const (
+	arTypeLLVM  = "LLVM_AR"
+	arFormatGNU = "gnu"
+)
+
 func emitARNamed(
 	instance ModuleInstance,
 	archiveBaseName string,
@@ -99,11 +104,6 @@ func globalArchiveNameWithPrefixOrName(moduleDir, prefix, name string) string {
 
 	return base[:len(base)-2] + ".global.a"
 }
-
-const (
-	arTypeLLVM  = "LLVM_AR"
-	arFormatGNU = "gnu"
-)
 
 func emitARNode(
 	instance ModuleInstance,

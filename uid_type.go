@@ -5,12 +5,12 @@ import (
 	"encoding/binary"
 )
 
+const uidB64Len = 22
+
 type UID struct {
 	Hi uint64
 	Lo uint64
 }
-
-const uidB64Len = 22
 
 func (u UID) raw() [16]byte {
 	var b [16]byte

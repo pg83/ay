@@ -16,6 +16,11 @@ import (
 
 var fatalOnce sync.Once
 
+const (
+	cmdFileStartMarker = "--ya-start-command-file"
+	cmdFileEndMarker   = "--ya-end-command-file"
+)
+
 type MakeFlags struct {
 	srcRoot           string
 	bldRoot           string
@@ -303,11 +308,6 @@ func genStreamOne(fs FS, target string, hostP, targetP *Platform, onNode func(*N
 
 	return emitter.finish()
 }
-
-const (
-	cmdFileStartMarker = "--ya-start-command-file"
-	cmdFileEndMarker   = "--ya-end-command-file"
-)
 
 func parseMakeFlags(args []string) *MakeFlags {
 	state := getopt.NewState(append([]string{"ay-make"}, args...))

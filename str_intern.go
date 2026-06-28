@@ -27,6 +27,32 @@ var internTable = struct {
 	bytes:    newBumpAllocator[byte](1 << 20),
 }
 
+const (
+	dollarUnseen DollarMemoState = iota
+	dollarAbsent
+	dollarPresent
+)
+
+const (
+	srcExtUnseen SrcExtClass = iota
+	srcExtRegular
+	srcExtProto
+	srcExtGztProto
+	srcExtFbs
+	srcExtFbs64
+	srcExtEv
+	srcExtRl6
+	srcExtRl
+	srcExtY
+	srcExtCppIn
+	srcExtCIn
+	srcExtHIn
+	srcExtSc
+	srcExtCfgProto
+	srcExtGperf
+	srcExtFlex
+)
+
 func internOwnedCopy(b []byte) string {
 	n := len(b)
 
@@ -108,12 +134,6 @@ func internBytes(b []byte) STR {
 
 type DollarMemoState uint8
 
-const (
-	dollarUnseen DollarMemoState = iota
-	dollarAbsent
-	dollarPresent
-)
-
 func strHasDollar(id STR) bool {
 	if cell := DollarMemoState(strDollar.get(uint32(id))); cell != dollarUnseen {
 		return cell == dollarPresent
@@ -131,26 +151,6 @@ func strHasDollar(id STR) bool {
 }
 
 type SrcExtClass uint8
-
-const (
-	srcExtUnseen SrcExtClass = iota
-	srcExtRegular
-	srcExtProto
-	srcExtGztProto
-	srcExtFbs
-	srcExtFbs64
-	srcExtEv
-	srcExtRl6
-	srcExtRl
-	srcExtY
-	srcExtCppIn
-	srcExtCIn
-	srcExtHIn
-	srcExtSc
-	srcExtCfgProto
-	srcExtGperf
-	srcExtFlex
-)
 
 func srcExtClassOf(id STR) SrcExtClass {
 	if int(id) < len(srcExtClasses) {

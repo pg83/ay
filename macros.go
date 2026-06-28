@@ -18,6 +18,12 @@ var intSTR = func() [1024]STR {
 	return a
 }()
 
+const (
+	envAbsent EnvKind = iota
+	envStr
+	envInt
+)
+
 func evalAtomString(nodes []CondNode, i int32, env Environment) string {
 	v := evalAtomNode(nodes, i, env)
 
@@ -35,12 +41,6 @@ func identEnvNode(n *CondNode) ENV {
 
 	return internEnv(n.Name)
 }
-
-const (
-	envAbsent EnvKind = iota
-	envStr
-	envInt
-)
 
 func evalCond(nodes []CondNode, env Environment) bool {
 	return evalCondAt(nodes, int32(len(nodes)-1), env)

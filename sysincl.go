@@ -47,8 +47,9 @@ var supportedSysInclArchs = map[string]struct{}{
 }
 
 const (
-	baseSysInclDir     = "build/sysincl"
-	internalSysInclDir = "build/internal/sysincl"
+	baseSysInclDir         = "build/sysincl"
+	internalSysInclDir     = "build/internal/sysincl"
+	maxLiteralAltExpansion = 64
 )
 
 type SysIncl struct {
@@ -264,8 +265,6 @@ func literalContainsPattern(pat string) (string, bool) {
 
 	return mid, true
 }
-
-const maxLiteralAltExpansion = 64
 
 func literalAltsFromRegex(pat string) ([]string, bool) {
 	re, err := syntax.Parse(pat, syntax.Perl)
