@@ -103,97 +103,9 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, entries []Py
 		return nil
 	}
 
-	type chunk struct {
-		hashInputs []string
-		cmdArgs    []string
-		inputs     []VFS
-		deps       []NodeRef
-	}
-
-	var chunks []chunk
-
-	cur := chunk{}
-	cmdLen := 0
-
-	deduper.reset()
-
-	depSeen := map[NodeRef]struct{}{}
-
-	addInput := func(v VFS) {
-		if !deduper.add(v) {
-			return
-		}
-
-		cur.inputs = append(cur.inputs, v)
-	}
-
-	addDep := func(ref NodeRef) {
-		if ref == (NodeRef(0)) {
-			return
-		}
-
-		if _, ok := depSeen[ref]; ok {
-			return
-		}
-
-		depSeen[ref] = struct{}{}
-		cur.deps = append(cur.deps, ref)
-	}
-
-	flush := func() {
-		if cmdLen == 0 {
-			return
-		}
-
-		chunks = append(chunks, cur)
-		cur = chunk{}
-		cmdLen = 0
-		deduper.reset()
-		depSeen = map[NodeRef]struct{}{}
-	}
-
-	for _, e := range entries {
-		key := "resfs/file/py/" + e.key
-		arcBuildPath := "${ARCADIA_BUILD_ROOT}/" + e.path.rel()
-		kvHash := "resfs/src/" + key + "=${rootrel;context=TEXT;input=TEXT:\"" + arcBuildPath + "\"}"
-		kvCmd := "resfs/src/" + key + "=" + e.path.rel()
-
-		cur.hashInputs = append(cur.hashInputs, "-", kvHash)
-		cur.cmdArgs = append(cur.cmdArgs, "-", kvCmd)
-		addInput(e.path)
-
-		for _, input := range e.inputs {
-			addInput(input)
-		}
-
-		addDep(e.producer)
-		cmdLen += rootCmdLen + len("-") + len(kvHash)
-
-		if cmdLen >= maxCmdLen {
-			flush()
-		}
-
-		cur.hashInputs = append(cur.hashInputs, arcBuildPath, "-"+key)
-		cur.cmdArgs = append(cur.cmdArgs, e.path.string(), "-"+key)
-		addInput(e.path)
-
-		for _, input := range e.inputs {
-			addInput(input)
-		}
-
-		addDep(e.producer)
-		cmdLen += rootCmdLen + len(arcBuildPath) + len(key)
-
-		if cmdLen >= maxCmdLen {
-			flush()
-		}
-	}
-
-	flush()
-
 	res := &RawAuxResourceChunksResult{}
 
-	for _, ch := range chunks {
+	for _, ch := range chunkAuxEntries(entries) {
 		aux := build(instance.Path.rel(), "/", protoResourceHash(ch.hashInputs, "$S/"+instance.Path.rel(), moduleTag), "_raw.auxcpp")
 		auxRef := ctx.emit.reserve()
 		sourceInputs := pyProtoSourceInputs(ch.inputs)
