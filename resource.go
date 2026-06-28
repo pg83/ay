@@ -452,7 +452,7 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 		suffix := ".yapyc3"
 
 		if strings.Contains(srcRel, "/") {
-			suffix = "." + pySrcYapycSuffix(modulePath) + ".yapyc3"
+			suffix = "." + d.pyYapycSuffix + ".yapyc3"
 		}
 
 		resolvedRel := resolvePySrcRel(fs, d.srcDirs, modulePath, srcRel)
@@ -529,6 +529,10 @@ type PySrcChunk struct {
 	inps     []VFS
 }
 
+func pySrcYapycSuffix(modulePath string) string {
+	return protoPathID("$S/" + modulePath)[:4]
+}
+
 func chunkPySrcEntries(entries []PySrcEntry) []PySrcChunk {
 	if len(entries) == 0 {
 		return nil
@@ -589,8 +593,4 @@ func chunkPySrcEntries(entries []PySrcEntry) []PySrcChunk {
 	flush()
 
 	return chunks
-}
-
-func pySrcYapycSuffix(modulePath string) string {
-	return protoPathID("$S/" + modulePath)[:4]
 }

@@ -296,10 +296,11 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 			"shellingham/posix/proc.py",
 			"shellingham/posix/ps.py",
 		),
-		pyBuildNoPY:  false,
-		pyBuildNoPYC: false,
-		pyTopLevel:   true,
-		moduleStmt:   &ModuleStmt{Name: tokPy3Library},
+		pyBuildNoPY:   false,
+		pyBuildNoPYC:  false,
+		pyTopLevel:    true,
+		pyYapycSuffix: pySrcYapycSuffix("contrib/python/shellingham"),
+		moduleStmt:    &ModuleStmt{Name: tokPy3Library},
 	}
 
 	entries := buildPySrcEntries(d, "contrib/python/shellingham")
