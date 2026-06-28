@@ -1,5 +1,7 @@
 package main
 
+var extClassMatcher = buildExtClassMatcher()
+
 const (
 	extCxxSource extFlags = 1 << iota
 	extCCSource
@@ -17,8 +19,6 @@ type extClass struct {
 	flatc  *flatcVariant
 	srcExt SrcExtClass
 }
-
-var extClassMatcher = buildExtClassMatcher()
 
 func buildExtClassMatcher() *ExtMatcher[extClass] {
 	m := map[string]*extClass{}

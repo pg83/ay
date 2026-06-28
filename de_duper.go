@@ -1,10 +1,10 @@
 package main
 
+var deduper DeDuper
+
 type DeDuper struct {
 	seen IdSet
 }
-
-var deduper DeDuper
 
 func (dd *DeDuper) reset() {
 	dd.seen.reset(vfsBound())

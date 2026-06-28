@@ -2,6 +2,8 @@ package main
 
 import "strings"
 
+var pyAuxKV = KV{P: pkPR, PC: pcYellow, ShowOut: true}
+
 type GeneratedPyAuxChunksResult struct {
 	Refs    []NodeRef
 	Outputs []VFS
@@ -278,7 +280,3 @@ func rawAuxInputClosure(ctx *GenCtx, instance ModuleInstance, aux VFS, seed []VF
 
 	return closure
 }
-
-var (
-	pyAuxKV = KV{P: pkPR, PC: pcYellow, ShowOut: true}
-)

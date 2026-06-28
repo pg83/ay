@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+var checkConfigHKV = KV{P: pkCH, PC: pcYellow}
+
 func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []*SourceEmit {
 	na := ctx.na
 
@@ -52,7 +54,3 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 
 	return out
 }
-
-var (
-	checkConfigHKV = KV{P: pkCH, PC: pcYellow}
-)

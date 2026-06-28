@@ -11,70 +11,6 @@ import (
 	"strings"
 )
 
-func main() {
-	exc := try(func() {
-		dispatch(os.Args)
-	})
-
-	exc.catch(func(e *Exception) {
-		fatalException(e)
-	})
-}
-
-func dispatch(argv []string) {
-	probes, g, rest := parseGlobalFlags(argv[1:])
-
-	for _, p := range probes {
-		if p == "str" {
-			strProbeEnabled = true
-		}
-	}
-
-	code := runCommand(rest, g)
-
-	dumpProbes(probes)
-	dumpCalls()
-	os.Exit(code)
-}
-
-type GlobalFlags struct {
-	Verbose bool
-}
-
-func parseGlobalFlags(argv []string) (probes []string, g GlobalFlags, rest []string) {
-	i := 0
-
-	for ; i < len(argv); i++ {
-		a := argv[i]
-
-		if a == "" || a[0] != '-' || a == "-h" || a == "--help" {
-			break
-		}
-
-		k, v, _ := strings.Cut(strings.TrimLeft(a, "-"), "=")
-
-		switch {
-		case k == "probe" && (v == "map" || v == "callsite" || v == "str"):
-			probes = append(probes, v)
-		case k == "probe":
-			throwFmt("unknown --probe=%q (want map|callsite|str)", v)
-		case k == "verbose" || k == "v":
-			g.Verbose = true
-		default:
-			throwFmt("unknown global flag %q", a)
-		}
-	}
-
-	return probes, g, argv[i:]
-}
-
-type command struct {
-	path []string
-	run  func(g GlobalFlags, args []string) int
-	help string
-	hide bool
-}
-
 var commands = []command{
 	{
 		path: []string{"fetch"}, run: cmdFetch, hide: true,
@@ -155,6 +91,70 @@ var commands = []command{
 		help: "📞 Throwaway: instrument per-function call sites for reachability; build\n" +
 			"under --probe=callsite with CALLSITE_OUT to find never-run code.",
 	},
+}
+
+func main() {
+	exc := try(func() {
+		dispatch(os.Args)
+	})
+
+	exc.catch(func(e *Exception) {
+		fatalException(e)
+	})
+}
+
+func dispatch(argv []string) {
+	probes, g, rest := parseGlobalFlags(argv[1:])
+
+	for _, p := range probes {
+		if p == "str" {
+			strProbeEnabled = true
+		}
+	}
+
+	code := runCommand(rest, g)
+
+	dumpProbes(probes)
+	dumpCalls()
+	os.Exit(code)
+}
+
+type GlobalFlags struct {
+	Verbose bool
+}
+
+func parseGlobalFlags(argv []string) (probes []string, g GlobalFlags, rest []string) {
+	i := 0
+
+	for ; i < len(argv); i++ {
+		a := argv[i]
+
+		if a == "" || a[0] != '-' || a == "-h" || a == "--help" {
+			break
+		}
+
+		k, v, _ := strings.Cut(strings.TrimLeft(a, "-"), "=")
+
+		switch {
+		case k == "probe" && (v == "map" || v == "callsite" || v == "str"):
+			probes = append(probes, v)
+		case k == "probe":
+			throwFmt("unknown --probe=%q (want map|callsite|str)", v)
+		case k == "verbose" || k == "v":
+			g.Verbose = true
+		default:
+			throwFmt("unknown global flag %q", a)
+		}
+	}
+
+	return probes, g, argv[i:]
+}
+
+type command struct {
+	path []string
+	run  func(g GlobalFlags, args []string) int
+	help string
+	hide bool
 }
 
 func clHeader(s string) string {

@@ -1,5 +1,7 @@
 package main
 
+var scKV = KV{P: pkSC, PC: pcYellow}
+
 func emitSC(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary VFS, runtimeClosure []VFS, domschemecLDRef NodeRef, emit *StreamingEmitter) NodeRef {
 	na := emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -41,7 +43,3 @@ func emitLibrarySCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 
 	return nil
 }
-
-var (
-	scKV = KV{P: pkSC, PC: pcYellow}
-)

@@ -6,6 +6,8 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
+var emptyDirNames = []uint32{}
+
 type OsFS struct {
 	srcRoot       string
 	rootSlash     string
@@ -22,8 +24,6 @@ type OsFS struct {
 	existsHits    uint64
 	existsMisses  uint64
 }
-
-var emptyDirNames = []uint32{}
 
 func newFS(srcRoot string) FS {
 	fs := &OsFS{

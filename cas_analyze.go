@@ -12,6 +12,25 @@ import (
 	"sync/atomic"
 )
 
+var gearTable = func() [256]uint64 {
+	var t [256]uint64
+
+	x := uint64(0x2545F4914F6CDD1D)
+
+	for i := range t {
+		x += 0x9E3779B97F4A7C15
+
+		z := x
+
+		z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9
+		z = (z ^ (z >> 27)) * 0x94D049BB133111EB
+
+		t[i] = z ^ (z >> 31)
+	}
+
+	return t
+}()
+
 func cmdCasAnalyze(_ GlobalFlags, args []string) int {
 	if len(args) == 0 || args[0] != "analyze" {
 		throwFmt("usage: ay dev cas analyze [--chunk=N] <cas-dir>")
@@ -190,25 +209,6 @@ func cdcChunks(data []byte, avg int, yield func([]byte)) {
 		yield(data[start:])
 	}
 }
-
-var gearTable = func() [256]uint64 {
-	var t [256]uint64
-
-	x := uint64(0x2545F4914F6CDD1D)
-
-	for i := range t {
-		x += 0x9E3779B97F4A7C15
-
-		z := x
-
-		z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9
-		z = (z ^ (z >> 27)) * 0x94D049BB133111EB
-
-		t[i] = z ^ (z >> 31)
-	}
-
-	return t
-}()
 
 func humanBytes(n int64) string {
 	const unit = 1024

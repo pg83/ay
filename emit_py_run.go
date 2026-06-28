@@ -4,6 +4,8 @@ import (
 	"strings"
 )
 
+var pyRunKV = KV{P: pkPY, PC: pcYellow, ShowOut: true}
+
 func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) *RunProgramsForARResult {
 	if len(d.runPython) == 0 {
 		return nil
@@ -439,7 +441,3 @@ func emitPYRun(
 
 	return id
 }
-
-var (
-	pyRunKV = KV{P: pkPY, PC: pcYellow, ShowOut: true}
-)

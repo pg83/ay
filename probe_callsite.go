@@ -12,6 +12,8 @@ import (
 	"sync"
 )
 
+var callSiteSeen sync.Map
+
 func probeCallSite(_ GlobalFlags, args []string) int {
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "usage: ay probe callsite <all-sites-out> [files...]")
@@ -106,8 +108,6 @@ func probeCallSite(_ GlobalFlags, args []string) int {
 
 	return 0
 }
-
-var callSiteSeen sync.Map
 
 func recordCall(site string) {
 	callSiteSeen.Store(site, struct{}{})

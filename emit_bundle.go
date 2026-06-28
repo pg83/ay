@@ -1,5 +1,7 @@
 package main
 
+var bundleKV = KV{P: pkBN, PC: pcLightCyan}
+
 func emitBundles(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	reg := ctx.codegenFor(instance)
 
@@ -94,7 +96,3 @@ func emitBundleNode(ctx *GenCtx, instance ModuleInstance, python3 STR, src, dst 
 
 	ctx.emit.emitReserved(node, id)
 }
-
-var (
-	bundleKV = KV{P: pkBN, PC: pcLightCyan}
-)

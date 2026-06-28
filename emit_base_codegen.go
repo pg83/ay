@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 )
 
+var baseCodegenKV = KV{P: pkBC, PC: pcYellow}
+
 func emitBaseCodegensForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) {
 	for _, bc := range d.baseCodegens {
 		emitBaseCodegen(ctx, instance, bc, in)
@@ -73,7 +75,3 @@ func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt, 
 
 	ctx.emit.emitReserved(node, bcRef)
 }
-
-var (
-	baseCodegenKV = KV{P: pkBC, PC: pcYellow}
-)

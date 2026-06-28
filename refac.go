@@ -1046,7 +1046,7 @@ func lintConsolidateVars(path string) bool {
 		}
 	}
 
-	if totalSpecs < 2 {
+	if totalSpecs == 0 {
 		return false
 	}
 

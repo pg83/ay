@@ -1,5 +1,7 @@
 package main
 
+var cpKV = KV{P: pkCP, PC: pcLightCyan}
+
 func emitJVCPG4(
 	instance ModuleInstance,
 	src VFS,
@@ -101,7 +103,3 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 
 	emit.emitReserved(node, id)
 }
-
-var (
-	cpKV = KV{P: pkCP, PC: pcLightCyan}
-)

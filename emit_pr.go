@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+var prKV = KV{P: pkPR, PC: pcYellow, ShowOut: true}
+
 type RunProgramsForARResult struct {
 	CCRefs      []NodeRef
 	CCOutputs   []VFS
@@ -870,7 +872,3 @@ func isDeepReplaceBoundary(c byte) bool {
 
 	return true
 }
-
-var (
-	prKV = KV{P: pkPR, PC: pcYellow, ShowOut: true}
-)

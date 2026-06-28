@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+var enKV = KV{P: pkEN, PC: pcYellow}
+
 type EnumSrcsResult struct {
 	CCRefs      []NodeRef
 	CCOutputs   []VFS
@@ -258,7 +260,3 @@ func emitEN(
 
 	emit.emitReserved(node, id)
 }
-
-var (
-	enKV = KV{P: pkEN, PC: pcYellow}
-)
