@@ -853,16 +853,6 @@ func shouldCheckSourceDir(path VFS) bool {
 	return true
 }
 
-func flagsContain(flags []string, want string) bool {
-	for _, flag := range flags {
-		if flag == want {
-			return true
-		}
-	}
-
-	return false
-}
-
 func applyPython3AddIncl(modulePath string, d *ModuleData) {
 	if d.moduleStmt == nil {
 		return
@@ -2571,20 +2561,6 @@ func yaffExtraOutFlag(lead string, s yaffSections) string {
 	}
 
 	return strings.Join(groups, ",")
-}
-
-func prefixEach(prefix string, items []string) []string {
-	if len(items) == 0 {
-		return nil
-	}
-
-	out := make([]string, len(items))
-
-	for i, it := range items {
-		out[i] = prefix + it
-	}
-
-	return out
 }
 
 func parseYAFF(v UnknownStmt) CppProtoPlugin {

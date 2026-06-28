@@ -2,7 +2,6 @@ package main
 
 import (
 	"strconv"
-	"strings"
 )
 
 type EnvKind uint8
@@ -99,19 +98,6 @@ func strIsTruthy(v STR) bool {
 	}
 
 	return stringIsTruthy(v.string())
-}
-
-func stringIsTruthy(v string) bool {
-	if v == "" {
-		return false
-	}
-
-	switch strings.ToLower(v) {
-	case "false", "f", "no", "n", "off", "0", "net":
-		return false
-	}
-
-	return true
 }
 
 func (e Environment) string(id ENV) string {

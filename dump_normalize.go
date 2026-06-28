@@ -432,22 +432,6 @@ func reuidClosure(
 	return newUID
 }
 
-func dedupKeepOrder(in []string) []string {
-	seen := make(map[string]bool, len(in))
-	out := in[:0]
-
-	for _, s := range in {
-		if seen[s] {
-			continue
-		}
-
-		seen[s] = true
-		out = append(out, s)
-	}
-
-	return out
-}
-
 func arg(args []string, i int) string {
 	if i >= len(args) {
 		throwFmt("dump: missing value for flag %q", args[i-1])

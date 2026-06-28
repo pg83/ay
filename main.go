@@ -169,20 +169,6 @@ func clFlag(s string) string {
 	return color("light-yellow", s)
 }
 
-func isTokenPrefix(p, of []string) bool {
-	if len(p) > len(of) {
-		return false
-	}
-
-	for i, tok := range p {
-		if of[i] != tok {
-			return false
-		}
-	}
-
-	return true
-}
-
 func usageCommands(prefix []string, verbose bool) string {
 	var b strings.Builder
 
