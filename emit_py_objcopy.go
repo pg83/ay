@@ -28,7 +28,6 @@ func emitResourceObjcopy(
 	d *ModuleData,
 	in ModuleCCInputs,
 ) *ObjcopyEmitResult {
-	na := ctx.na
 	hasKvOnly := d.pyMain != nil || len(d.noCheckImports) > 0 || len(d.pySrcs) > 0 || len(d.yaConfJSON) > 0
 
 	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 && !hasKvOnly {
@@ -67,6 +66,45 @@ func emitResourceObjcopy(
 		return out
 	}
 
+	moduleTag := resourceLibTagForData(d)
+
+	if cfModuleTag(d, instance) == tagCppProto {
+		s := strCPPProto.string()
+
+		moduleTag = &s
+	}
+
+	py3BinProgramSide := d.moduleStmt.Name == tokPy3Program && !d.programPairedLib
+
+	if !py3BinProgramSide {
+		r, o := emitResourceFile(ctx, instance, d, oc, in, d.resources, moduleTag)
+
+		out.Refs = append(out.Refs, r...)
+		out.Outputs = append(out.Outputs, o...)
+	}
+
+	trailStart := len(out.Refs)
+	srcRes := emitPySrcObjcopy(ctx, instance, d, oc)
+
+	if srcRes != nil {
+		out.Refs = append(out.Refs, srcRes.Refs...)
+		out.Outputs = append(out.Outputs, srcRes.Outputs...)
+	}
+
+	if !py3BinProgramSide {
+		r, o := emitResourceFile(ctx, instance, d, oc, in, d.pyPyiResources, moduleTag)
+
+		out.Refs = append(out.Refs, r...)
+		out.Outputs = append(out.Outputs, o...)
+	}
+
+	out.PySrcTrailCount = len(out.Refs) - trailStart
+
+	return out
+}
+
+func emitResourceFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, oc *ObjcopyEmitCtx, in ModuleCCInputs, entries []ResourceEntry, moduleTag *string) (refs []NodeRef, outputs []VFS) {
+	na := ctx.na
 	bad := []string{"${ARCADIA_BUILD_ROOT}", "${ARCADIA_SOURCE_ROOT}", "conftest.py"}
 
 	contains := func(s string) bool {
@@ -95,14 +133,6 @@ func emitResourceObjcopy(
 	}
 
 	cur := acc{}
-	moduleTag := resourceLibTagForData(d)
-	cppProtoSubmodule := cfModuleTag(d, instance) == tagCppProto
-
-	if cppProtoSubmodule {
-		s := strCPPProto.string()
-
-		moduleTag = &s
-	}
 
 	flush := func() {
 		if cur.cmdLen == 0 {
@@ -191,91 +221,69 @@ func emitResourceObjcopy(
 			deps:       resolveCodegenDepRefsIncl(ctx, instance, ctx.na, dataInputs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...),
 		})
 
-		out.Refs = append(out.Refs, r)
-		out.Outputs = append(out.Outputs, outputObj)
+		refs = append(refs, r)
+		outputs = append(outputs, outputObj)
 
 		cur = acc{}
 	}
 
-	emitEntries := func(entries []ResourceEntry) {
-		for _, e := range entries {
-			if !contains(e.Path) && !contains(e.Key) {
-				if e.Path == "-" {
-					cur.kvs = append(cur.kvs, e.Key)
-					cur.cmdLen += rootCmdLen + len(e.Key)
+	for _, e := range entries {
+		if !contains(e.Path) && !contains(e.Key) {
+			if e.Path == "-" {
+				cur.kvs = append(cur.kvs, e.Key)
+				cur.cmdLen += rootCmdLen + len(e.Key)
 
-					if inner, ok := rootrelInputPath(e.Key); ok {
-						r := resolveResourceInput(ctx, instance, inner, copyFileInputVFS(ctx.fs, instance.Path, inner))
+				if inner, ok := rootrelInputPath(e.Key); ok {
+					r := resolveResourceInput(ctx, instance, inner, copyFileInputVFS(ctx.fs, instance.Path, inner))
 
-						cur.kvInputs = append(cur.kvInputs, r.Input)
-						cur.mainOuts = append(cur.mainOuts, r.ProducerMainOut)
-						cur.kvsCmd = append(cur.kvsCmd, renderResourceKvCmd(rootrelExpand(e.Key, r.Input.rel())))
-					} else {
-						cur.kvsCmd = append(cur.kvsCmd, renderResourceKvCmd(e.Key))
-					}
-				} else {
-					r := resolveResourceInput(ctx, instance, e.Path, copyFileInputVFS(ctx.fs, instance.Path, e.Path))
-
-					cur.paths = append(cur.paths, e.Path)
-					cur.pathInputs = append(cur.pathInputs, r.Input)
+					cur.kvInputs = append(cur.kvInputs, r.Input)
 					cur.mainOuts = append(cur.mainOuts, r.ProducerMainOut)
+					cur.kvsCmd = append(cur.kvsCmd, renderResourceKvCmd(rootrelExpand(e.Key, r.Input.rel())))
+				} else {
+					cur.kvsCmd = append(cur.kvsCmd, renderResourceKvCmd(e.Key))
+				}
+			} else {
+				r := resolveResourceInput(ctx, instance, e.Path, copyFileInputVFS(ctx.fs, instance.Path, e.Path))
 
-					if r.ProducerRef != 0 {
-						for _, v := range walkClosureTail(ctx.scannerFor(instance), r.Input, in.ScanCfg) {
-							if v.isBuild() {
-								cur.closureInputs = append(cur.closureInputs, v)
-							}
-						}
+				cur.paths = append(cur.paths, e.Path)
+				cur.pathInputs = append(cur.pathInputs, r.Input)
+				cur.mainOuts = append(cur.mainOuts, r.ProducerMainOut)
 
-						for _, v := range r.SourceInputs {
-							if v.isSource() && objcopySourceLeafKept(v.rel()) {
-								cur.srcAttrInputs = append(cur.srcAttrInputs, v)
-							}
-						}
-
-						for _, v := range r.SourceClosure {
-							if v.isSource() && objcopySourceLeafKept(v.rel()) {
-								cur.srcAttrInputs = append(cur.srcAttrInputs, v)
-							}
+				if r.ProducerRef != 0 {
+					for _, v := range walkClosureTail(ctx.scannerFor(instance), r.Input, in.ScanCfg) {
+						if v.isBuild() {
+							cur.closureInputs = append(cur.closureInputs, v)
 						}
 					}
 
-					kb := encb64.StdEncoding.EncodeToString([]byte(e.Key))
+					for _, v := range r.SourceInputs {
+						if v.isSource() && objcopySourceLeafKept(v.rel()) {
+							cur.srcAttrInputs = append(cur.srcAttrInputs, v)
+						}
+					}
 
-					cur.keys = append(cur.keys, kb)
-					cur.cmdLen += rootCmdLen + len(e.Path) + len(kb)
+					for _, v := range r.SourceClosure {
+						if v.isSource() && objcopySourceLeafKept(v.rel()) {
+							cur.srcAttrInputs = append(cur.srcAttrInputs, v)
+						}
+					}
 				}
-			}
 
-			if cur.cmdLen > maxCmdLen || e.EndsBatch {
-				flush()
+				kb := encb64.StdEncoding.EncodeToString([]byte(e.Key))
+
+				cur.keys = append(cur.keys, kb)
+				cur.cmdLen += rootCmdLen + len(e.Path) + len(kb)
 			}
 		}
 
-		flush()
+		if cur.cmdLen > maxCmdLen || e.EndsBatch {
+			flush()
+		}
 	}
 
-	py3BinProgramSide := d.moduleStmt.Name == tokPy3Program && !d.programPairedLib
+	flush()
 
-	if !py3BinProgramSide {
-		emitEntries(d.resources)
-	}
-
-	trailStart := len(out.Refs)
-	srcRes := emitPySrcObjcopy(ctx, instance, d, oc)
-
-	if srcRes != nil {
-		out.Refs = append(out.Refs, srcRes.Refs...)
-		out.Outputs = append(out.Outputs, srcRes.Outputs...)
-	}
-
-	if !py3BinProgramSide {
-		emitEntries(d.pyPyiResources)
-	}
-
-	out.PySrcTrailCount = len(out.Refs) - trailStart
-
-	return out
+	return refs, outputs
 }
 
 type ObjcopyEmit struct {
