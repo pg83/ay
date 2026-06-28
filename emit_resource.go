@@ -435,3 +435,54 @@ func resolveResourceInput(ctx *GenCtx, instance ModuleInstance, rawPath string, 
 
 	return resolvedResource{Input: fallback}
 }
+
+type objcopyNode struct {
+	moduleTag  *string
+	kv         *KV
+	hashPaths  []string
+	keysB64    []string
+	kvsHash    []string
+	kvsCmd     []string
+	pathInputs []VFS
+	inputs     InputChunks
+	deps       []NodeRef
+}
+
+func buildObjcopyNode(ctx *GenCtx, instance ModuleInstance, oc *ObjcopyEmitCtx, n objcopyNode) (NodeRef, VFS) {
+	na := oc.na
+	hash := objcopyHash(n.hashPaths, n.keysB64, n.kvsHash, instance.Path.rel(), n.moduleTag)
+	outputObj := build(instance.Path.rel(), "/objcopy_", hash, ".o")
+	payload := make([]STR, 0, 2+len(n.pathInputs)+len(n.keysB64)+1+len(n.kvsCmd))
+
+	if len(n.hashPaths) > 0 {
+		payload = append(payload, argInputs.str())
+
+		for _, p := range n.pathInputs {
+			payload = append(payload, (p).str())
+		}
+
+		payload = append(payload, argKeys.str())
+		payload = appendInternStrs(payload, n.keysB64)
+	}
+
+	if len(n.kvsCmd) > 0 {
+		payload = append(payload, argKvs.str())
+		payload = appendInternStrs(payload, n.kvsCmd)
+	}
+
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+
+	node := &Node{
+		Platform:     instance.Platform,
+		Cmds:         na.cmdList(Cmd{CmdArgs: objcopyCmdArgs(oc, outputObj, payload), Env: env}),
+		Env:          env,
+		Inputs:       n.inputs,
+		Outputs:      na.vfsList(outputObj),
+		KV:           n.kv,
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		Resources:    instance.Platform.UsesPython3Clang,
+		DepRefs:      n.deps,
+	}
+
+	return ctx.emit.emit(node), outputObj
+}

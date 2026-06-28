@@ -537,39 +537,17 @@ func emitGeneratedPyProtoObjcopy(ctx *GenCtx, instance ModuleInstance, d *Module
 			return
 		}
 
-		hash := objcopyHash(cur.paths, cur.keysB64, cur.kvsHash, instance.Path.rel(), hashTag)
-		outputObj := build(instance.Path.rel(), "/objcopy_", hash, ".o")
-		payload := make([]STR, 0, 2+len(cur.inputs)+len(cur.keysB64)+1+len(cur.kvsCmd))
-
-		payload = append(payload, argInputs.str())
-
-		for _, p := range cur.inputs {
-			payload = append(payload, (p).str())
-		}
-
-		payload = append(payload, argKeys.str())
-		payload = appendInternStrs(payload, cur.keysB64)
-		payload = append(payload, argKvs.str())
-		payload = appendInternStrs(payload, cur.kvsCmd)
-
-		cmdArgs := objcopyCmdArgs(oc, outputObj, payload)
-		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
-		node := &Node{
-			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
-			Env:          env,
-			Inputs:       na.inputList(rescompilersChunk, cur.inputs, objcopyScriptChunk),
-			Outputs:      na.vfsList(outputObj),
-			KV:           &pyProtoKV2,
-			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			Resources:    instance.Platform.UsesPython3Clang,
-		}
-
-		node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
-		node.DepRefs = append(node.DepRefs, cur.deps...)
-
-		r := ctx.emit.emit(node)
+		r, outputObj := buildObjcopyNode(ctx, instance, oc, objcopyNode{
+			moduleTag:  hashTag,
+			kv:         &pyProtoKV2,
+			hashPaths:  cur.paths,
+			keysB64:    cur.keysB64,
+			kvsHash:    cur.kvsHash,
+			kvsCmd:     cur.kvsCmd,
+			pathInputs: cur.inputs,
+			inputs:     na.inputList(rescompilersChunk, cur.inputs, objcopyScriptChunk),
+			deps:       concat(depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef), cur.deps),
+		})
 
 		res.Refs = append(res.Refs, r)
 		res.Outputs = append(res.Outputs, outputObj)
