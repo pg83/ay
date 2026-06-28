@@ -579,20 +579,6 @@ func parseLookaheadAlts(body string) []string {
 	return out
 }
 
-func containsRegexMeta(s string) bool {
-	const meta = `\.+*?[]{}()|^$`
-
-	for i := 0; i < len(s); i++ {
-		for j := 0; j < len(meta); j++ {
-			if s[i] == meta[j] {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
 func extractLiteralAnchoredPrefix(pat string) string {
 	if !strings.HasPrefix(pat, "^") {
 		return ""

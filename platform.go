@@ -131,8 +131,8 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 		RagelOptimized:    buildRelease && !buildSanitized,
 		Triple:            string(isa) + "-" + string(os) + "-gnu",
 		March:             marchFor(isa),
-		CFlags:            internArgs(parseCompilerFlags(cflagsEnv)),
-		CXXFlags:          internArgs(parseCompilerFlags(cxxflagsEnv)),
+		CFlags:            internArgs(splitShellWords(cflagsEnv)),
+		CXXFlags:          internArgs(splitShellWords(cxxflagsEnv)),
 		SystemLibs:        internStrs(systemLibs),
 		LinkPreludeExtra:  internStrs(linkPreludeExtra),
 		ClangVer:          platformClangVersion(flags),
@@ -318,71 +318,6 @@ func platformBuildSanitized(flags map[string]string) bool {
 	sanitizer := strings.ToLower(flags["SANITIZER_TYPE"])
 
 	return sanitizer != "" && sanitizer != "no" && sanitizer != "false" && sanitizer != "0"
-}
-
-func parseCompilerFlags(s string) []string {
-	if s == "" {
-		return nil
-	}
-
-	var out []string
-	var b strings.Builder
-	var quote byte
-
-	escaped := false
-
-	flush := func() {
-		if b.Len() == 0 {
-			return
-		}
-
-		out = append(out, b.String())
-		b.Reset()
-	}
-
-	for i := 0; i < len(s); i++ {
-		ch := s[i]
-
-		if escaped {
-			b.WriteByte(ch)
-			escaped = false
-
-			continue
-		}
-
-		if ch == '\\' {
-			escaped = true
-
-			continue
-		}
-
-		if quote != 0 {
-			if ch == quote {
-				quote = 0
-			} else {
-				b.WriteByte(ch)
-			}
-
-			continue
-		}
-
-		switch ch {
-		case '\t', '\n', '\r', ' ':
-			flush()
-		case '\'', '"':
-			quote = ch
-		default:
-			b.WriteByte(ch)
-		}
-	}
-
-	if escaped {
-		b.WriteByte('\\')
-	}
-
-	flush()
-
-	return out
 }
 
 func marchFor(isa ISA) string {

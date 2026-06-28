@@ -897,7 +897,7 @@ func applyCythonHeaderAddIncl(modulePath string, d *ModuleData) {
 			continue
 		}
 
-		dir := build(pathDir(modulePath + "/" + cythonNoExt(stmt.Src)))
+		dir := build(pathDir(modulePath + "/" + relStem(stmt.Src)))
 
 		d.addIncl = append(d.addIncl, dir)
 		d.addInclGlobal = append(d.addInclGlobal, dir)
