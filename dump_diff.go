@@ -11,6 +11,8 @@ import (
 	"strings"
 )
 
+var tokenFields = []string{"cmds", "inputs", "tags", "outputs"}
+
 type DiffFieldHashes [10]uint64
 
 type DiffKindRec struct {
@@ -326,8 +328,6 @@ func nodeFieldHashes(n map[string]any) [10]uint64 {
 
 	return h
 }
-
-var tokenFields = []string{"cmds", "inputs", "tags", "outputs"}
 
 func tokenize(n map[string]any, field string) []string {
 	if field == "cmds" {

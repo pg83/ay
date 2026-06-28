@@ -5,6 +5,8 @@ import (
 	"strconv"
 )
 
+var splitCodegenKV = KV{P: pkSC, PC: pcYellow}
+
 func emitSplitCodegensForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) *RunProgramsForARResult {
 	if len(d.splitCodegens) == 0 {
 		return nil
@@ -123,7 +125,3 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 
 	return scRef, partRels
 }
-
-var (
-	splitCodegenKV = KV{P: pkSC, PC: pcYellow}
-)

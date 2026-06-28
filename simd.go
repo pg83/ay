@@ -1,10 +1,5 @@
 package main
 
-type SimdVariant struct {
-	Suffix string
-	CFlags []string
-}
-
 var simdVariants = map[string]SimdVariant{
 	"SRC_C_SSE2":  {Suffix: "sse2", CFlags: []string{"-msse2"}},
 	"SRC_C_SSE3":  {Suffix: "sse3", CFlags: []string{"-msse3"}},
@@ -21,6 +16,11 @@ var simdVariants = map[string]SimdVariant{
 	}},
 	"SRC_C_XOP":  {Suffix: "xop", CFlags: []string{"-mxop"}},
 	"SRC_C_SSE4": {Suffix: "sse4", CFlags: []string{"-msse4.1", "-msse4.2", "-mpopcnt", "-mcx16"}},
+}
+
+type SimdVariant struct {
+	Suffix string
+	CFlags []string
 }
 
 func simdVariantFor(macroName TOK) (SimdVariant, bool) {

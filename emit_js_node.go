@@ -1,5 +1,7 @@
 package main
 
+var jsNodeKV = KV{P: pkJS, PC: pcMagenta}
+
 func emitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, tc ModuleToolchain, scripts ScriptDeps, emit *StreamingEmitter) (NodeRef, VFS) {
 	na := emit.nodeArenas()
 	joinSrcs := buildScriptsGenJoinSrcsPy
@@ -48,7 +50,3 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 
 	return emit.emit(node), outVFS
 }
-
-var (
-	jsNodeKV = KV{P: pkJS, PC: pcMagenta}
-)

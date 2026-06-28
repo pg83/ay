@@ -1,5 +1,7 @@
 package main
 
+var decimalMd5KV = KV{P: pkSV, PC: pcYellow, ShowOut: true}
+
 type DecimalMD5Lower32BitsStmt struct {
 	File     string
 	FuncName string
@@ -88,7 +90,3 @@ func emitDecimalMD5(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *D
 
 	return svRef
 }
-
-var (
-	decimalMd5KV = KV{P: pkSV, PC: pcYellow, ShowOut: true}
-)

@@ -12,6 +12,8 @@ import (
 	"sort"
 )
 
+var mapProbeCounts = map[string]*MapProbeEntry{}
+
 func probeMapInstr(_ GlobalFlags, args []string) int {
 	files := goFilesFromArgs(args)
 	fset := gotoken.NewFileSet()
@@ -159,8 +161,6 @@ type MapProbeEntry struct {
 	reads  uint64
 	writes uint64
 }
-
-var mapProbeCounts = map[string]*MapProbeEntry{}
 
 func mapProbeAt(site string, write bool) {
 	e := mapProbeCounts[site]

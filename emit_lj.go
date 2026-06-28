@@ -2,6 +2,8 @@ package main
 
 import "strings"
 
+var ljKV = KV{P: pkLJ, PC: pcLightCyan}
+
 const luajit21CwdRel = "contrib/libs/luajit_21"
 
 func emitLJ(instance ModuleInstance, luaSrc, rawOut, compilerBin VFS, compilerLDRef NodeRef, cwd STR, emit *StreamingEmitter) NodeRef {
@@ -59,7 +61,3 @@ func emitLuaJit21(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		ArchiveEntry{Name: "LuaSources.inc", DontCompress: true, Files: append([]string(nil), luas...), Keys: luas, PropagateSourceMembers: true},
 	)
 }
-
-var (
-	ljKV = KV{P: pkLJ, PC: pcLightCyan}
-)

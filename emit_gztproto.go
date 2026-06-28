@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+var gztprotoKV = KV{P: pkGZ, PC: pcYellow}
+
 func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, protoInclude []VFS, moduleTag STR) (NodeRef, string) {
 	gztSource := resolveModuleSourceVFS(ctx, instance, d, internStr(srcRel), d.srcDirs)
 	moddir := instance.Path.rel()
@@ -165,7 +167,3 @@ func gztGeneratedProtoParse(ctx *GenCtx, gztSource VFS, inducedProtos []VFS) Par
 
 	return set
 }
-
-var (
-	gztprotoKV = KV{P: pkGZ, PC: pcYellow}
-)

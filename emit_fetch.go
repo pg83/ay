@@ -1,5 +1,7 @@
 package main
 
+var fetchKV = KV{P: pkFETCH, PC: pcYellow, ShowOut: true}
+
 func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 	na := ctx.na
 
@@ -32,7 +34,3 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 
 	return ref
 }
-
-var (
-	fetchKV = KV{P: pkFETCH, PC: pcYellow, ShowOut: true}
-)

@@ -2,6 +2,8 @@ package main
 
 import "strings"
 
+var ymapsSprotoKV = KV{P: pkPB, PC: pcYellow}
+
 func ymapsSprotoProducedBases(ctx *GenCtx, instance ModuleInstance, d *ModuleData) map[string]struct{} {
 	if len(d.ymapsSprotoSrcs) == 0 {
 		return nil
@@ -127,7 +129,3 @@ func sprotoInducedHeaders(pbhImports []IncludeDirective) []IncludeDirective {
 
 	return out
 }
-
-var (
-	ymapsSprotoKV = KV{P: pkPB, PC: pcYellow}
-)

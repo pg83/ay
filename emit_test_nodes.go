@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+var testNodesKV = KV{P: pkCP, PC: pcLightBlue}
+
 const (
 	testToolHostPath          = "$(TEST_TOOL_HOST)/test_tool"
 	testContextPath           = "$(B)/common_test.context"
@@ -321,7 +323,3 @@ func testOutputs(projectPath, suite string) []VFS {
 		build(path.Join(resultsDir, "testing_out_stuff.tar.zstd")),
 	}
 }
-
-var (
-	testNodesKV = KV{P: pkCP, PC: pcLightBlue}
-)

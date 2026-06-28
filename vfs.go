@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 )
 
+var vfsPrefixScratch []byte
+
 const vfsPrefixLen = len("$(S)/")
 
 const (
@@ -36,8 +38,6 @@ func (v VFS) strID() uint32 {
 func (v VFS) str() STR {
 	return STR(v.strID())
 }
-
-var vfsPrefixScratch []byte
 
 func vfsScratchConcat(prefix string, parts []string) []byte {
 	b := append(vfsPrefixScratch[:0], prefix...)

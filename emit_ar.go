@@ -4,6 +4,8 @@ import (
 	"strings"
 )
 
+var arKV = KV{P: pkAR, PC: pcLightRed, ShowOut: true}
+
 const (
 	arTypeLLVM  = "LLVM_AR"
 	arFormatGNU = "gnu"
@@ -162,7 +164,3 @@ func emitARNode(
 
 	return emit.emit(n)
 }
-
-var (
-	arKV = KV{P: pkAR, PC: pcLightRed, ShowOut: true}
-)

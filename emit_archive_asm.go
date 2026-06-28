@@ -1,5 +1,7 @@
 package main
 
+var archiveAsmKV = KV{P: pkAR, PC: pcLightCyan}
+
 func emitArchiveAsmForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) *RunProgramsForARResult {
 	if len(d.archiveAsm) == 0 {
 		return nil
@@ -122,7 +124,3 @@ func emitArchiveAsmRodata(ctx *GenCtx, instance ModuleInstance, rodataRel string
 
 	return ref, outPath
 }
-
-var (
-	archiveAsmKV = KV{P: pkAR, PC: pcLightCyan}
-)

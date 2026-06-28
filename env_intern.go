@@ -1,11 +1,11 @@
 package main
 
-type ENV uint32
-
 var envTable = struct {
 	ids  DenseMap[STR, uint32]
 	strs []STR
 }{strs: []STR{0}}
+
+type ENV uint32
 
 func internEnv(name string) ENV {
 	return internEnvSTR(internStr(name))

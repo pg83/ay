@@ -4,6 +4,8 @@ import (
 	"fmt"
 )
 
+var srcExtMatcher *ExtMatcher[srcEmitter]
+
 type SourceEmit struct {
 	Ref     NodeRef
 	OutPath VFS
@@ -11,8 +13,6 @@ type SourceEmit struct {
 }
 
 type srcEmitter = func(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit
-
-var srcExtMatcher *ExtMatcher[srcEmitter]
 
 func init() {
 	srcExtMatcher = NewExtMatcher([]ExtEntry[srcEmitter]{

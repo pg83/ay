@@ -2,6 +2,8 @@ package main
 
 import "strings"
 
+var archivesKV = KV{P: pkAR, PC: pcLightRed}
+
 func emitArchives(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	if len(d.archives) == 0 {
 		return
@@ -125,7 +127,3 @@ func emitArchive(
 		ClosureLeaves: leaves,
 	})
 }
-
-var (
-	archivesKV = KV{P: pkAR, PC: pcLightRed}
-)

@@ -1,5 +1,7 @@
 package main
 
+var sbomKV = KV{P: pkDX, PC: pcYellow}
+
 const (
 	sbomGenScriptRel        = "build/internal/scripts/gen_sbom.py"
 	sbomConfRel             = "build/internal/conf/sbom.conf"
@@ -130,7 +132,3 @@ func emitSbomToolchainComponent(ctx *GenCtx, instance ModuleInstance, toolchainN
 
 	return &ref, &out
 }
-
-var (
-	sbomKV = KV{P: pkDX, PC: pcYellow}
-)

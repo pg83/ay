@@ -2,6 +2,8 @@ package main
 
 import "strings"
 
+var r5KV = KV{P: pkR5, PC: pcYellow}
+
 func emitR5(
 	instance ModuleInstance,
 	srcRel string,
@@ -93,7 +95,3 @@ func emitLibraryRagel5Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 
 	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
 }
-
-var (
-	r5KV = KV{P: pkR5, PC: pcYellow}
-)
