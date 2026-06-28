@@ -10,16 +10,6 @@ type ExtMatcher[T any] struct {
 	values []T
 }
 
-func reverseStr(s string) string {
-	b := []byte(s)
-
-	for i, j := 0, len(b)-1; i < j; i, j = i+1, j-1 {
-		b[i], b[j] = b[j], b[i]
-	}
-
-	return string(b)
-}
-
 func NewExtMatcher[T any](entries []ExtEntry[T]) *ExtMatcher[T] {
 	keys := make([]string, len(entries))
 	values := make([]T, len(entries))

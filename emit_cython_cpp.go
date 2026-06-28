@@ -585,11 +585,3 @@ func filterPyRegisterCFlags(cflags []ARG) []ARG {
 
 	return out
 }
-
-func hasPrefix(s, prefix string) bool {
-	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
-}
-
-func hasSuffix(s, suffix string) bool {
-	return len(s) >= len(suffix) && s[len(s)-len(suffix):] == suffix
-}

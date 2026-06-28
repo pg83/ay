@@ -209,20 +209,3 @@ func cdcChunks(data []byte, avg int, yield func([]byte)) {
 		yield(data[start:])
 	}
 }
-
-func humanBytes(n int64) string {
-	const unit = 1024
-
-	if n < unit {
-		return fmt.Sprintf("%d B", n)
-	}
-
-	div, exp := int64(unit), 0
-
-	for x := n / unit; x >= unit; x /= unit {
-		div *= unit
-		exp++
-	}
-
-	return fmt.Sprintf("%.2f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
-}
