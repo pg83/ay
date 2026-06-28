@@ -324,8 +324,6 @@ func emitKvOnlyObjcopyNode(
 	d *ModuleData,
 	oc *ObjcopyEmitCtx,
 ) *ObjcopyEmit {
-	na := ctx.na
-
 	var moduleTag *string
 
 	switch kind {
@@ -335,29 +333,16 @@ func emitKvOnlyObjcopyNode(
 		moduleTag = resourceBinTagForData(d)
 	}
 
-	hash := objcopyHash(nil, nil, kvsHash, instance.Path.rel(), moduleTag)
-	outputObj := build(instance.Path.rel(), "/objcopy_", hash, ".o")
-	payload := appendInternStrs([]STR{argKvs.str()}, kvsCmd)
-	cmdArgs := objcopyCmdArgs(oc, outputObj, payload)
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+	ref, out := buildObjcopyNode(ctx, instance, oc, objcopyNode{
+		moduleTag: moduleTag,
+		kv:        &pyObjcopyKV,
+		kvsHash:   kvsHash,
+		kvsCmd:    kvsCmd,
+		inputs:    ctx.na.inputList(rescompilersWithScriptChunk),
+		deps:      depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef),
+	})
 
-	node := &Node{
-		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
-			Env: env}),
-		Env:          env,
-		Inputs:       na.inputList(rescompilersWithScriptChunk),
-		Outputs:      na.vfsList(outputObj),
-		KV:           &pyObjcopyKV,
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		Resources:    instance.Platform.UsesPython3Clang,
-	}
-
-	node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
-
-	ref := ctx.emit.emit(node)
-
-	return &ObjcopyEmit{Ref: ref, Out: outputObj}
+	return &ObjcopyEmit{Ref: ref, Out: out}
 }
 
 func emitYaConfJSONObjcopy(
@@ -408,32 +393,21 @@ func emitYaConfJSONObjcopy(
 		keyB64 := encb64.StdEncoding.EncodeToString([]byte(key))
 		kvHash := "resfs/src/" + key + "=${rootrel;context=TEXT;input=TEXT:\"" + res.hashPath + "\"}"
 		kvCmd := "resfs/src/" + key + "=" + res.sourcePath
-		hash := objcopyHash([]string{res.hashPath}, []string{keyB64}, []string{kvHash}, instance.Path.rel(), moduleTag)
-		outputObj := build(instance.Path.rel(), "/objcopy_", hash, ".o")
 		input := source(res.sourcePath)
 
-		cmdArgs := objcopyCmdArgs(oc, outputObj, []STR{
-			argInputs.str(), (input).str(),
-			argKeys.str(), internStr(keyB64),
-			argKvs.str(), internStr(kvCmd),
+		ref, outputObj := buildObjcopyNode(ctx, instance, oc, objcopyNode{
+			moduleTag:  moduleTag,
+			kv:         &pyObjcopyKV,
+			hashPaths:  []string{res.hashPath},
+			keysB64:    []string{keyB64},
+			kvsHash:    []string{kvHash},
+			kvsCmd:     []string{kvCmd},
+			pathInputs: []VFS{input},
+			inputs:     na.inputList(rescompilersChunk, na.vfsList(input, objcopyScriptVFS)),
+			deps:       depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef),
 		})
 
-		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
-		node := &Node{
-			Platform: instance.Platform,
-			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
-				Env: env}),
-			Env:          env,
-			Inputs:       na.inputList(rescompilersChunk, na.vfsList(input, objcopyScriptVFS)),
-			Outputs:      na.vfsList(outputObj),
-			KV:           &pyObjcopyKV,
-			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			Resources:    instance.Platform.UsesPython3Clang,
-		}
-
-		node.DepRefs = append(node.DepRefs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
-		out = append(out, &ObjcopyEmit{Ref: ctx.emit.emit(node), Out: outputObj})
+		out = append(out, &ObjcopyEmit{Ref: ref, Out: outputObj})
 	}
 
 	return out
@@ -613,41 +587,17 @@ func emitPySrcObjcopy(
 		}
 
 		for _, ch := range chunkPySrcEntries(entries) {
-			hash := objcopyHash(ch.paths, ch.keys, ch.kvsHash, instance.Path.rel(), moduleTag)
-			outputObj := build(instance.Path.rel(), "/objcopy_", hash, ".o")
-			payload := make([]STR, 0, 2+len(ch.pathInps)+len(ch.keys)+1+len(ch.kvsCmd))
-
-			payload = append(payload, argInputs.str())
-
-			for _, p := range ch.pathInps {
-				payload = append(payload, (p).str())
-			}
-
-			payload = append(payload, argKeys.str())
-			payload = appendInternStrs(payload, ch.keys)
-
-			if len(ch.kvsCmd) > 0 {
-				payload = append(payload, argKvs.str())
-				payload = appendInternStrs(payload, ch.kvsCmd)
-			}
-
-			cmdArgs := objcopyCmdArgs(oc, outputObj, payload)
-			env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
-			node := &Node{
-				Platform:     instance.Platform,
-				Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
-				Env:          env,
-				Inputs:       na.inputList(rescompilersChunk, ch.inps, objcopyScriptChunk),
-				Outputs:      na.vfsList(outputObj),
-				KV:           &pyObjcopyKV,
-				Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-				Resources:    instance.Platform.UsesPython3Clang,
-			}
-
-			node.DepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ch.inps, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
-
-			r := ctx.emit.emit(node)
+			r, outputObj := buildObjcopyNode(ctx, instance, oc, objcopyNode{
+				moduleTag:  moduleTag,
+				kv:         &pyObjcopyKV,
+				hashPaths:  ch.paths,
+				keysB64:    ch.keys,
+				kvsHash:    ch.kvsHash,
+				kvsCmd:     ch.kvsCmd,
+				pathInputs: ch.pathInps,
+				inputs:     na.inputList(rescompilersChunk, ch.inps, objcopyScriptChunk),
+				deps:       resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ch.inps, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...),
+			})
 
 			res.Refs = append(res.Refs, r)
 			res.Outputs = append(res.Outputs, outputObj)
