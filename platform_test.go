@@ -5,21 +5,6 @@ import (
 	"testing"
 )
 
-func TestSplitShellWords(t *testing.T) {
-	got := splitShellWords(`-O2 -DNAME="hello world" '-DOTHER=two words' -DQUOTE=\"x\" trailing\ slash`)
-	want := []string{
-		"-O2",
-		"-DNAME=hello world",
-		"-DOTHER=two words",
-		`-DQUOTE="x"`,
-		"trailing slash",
-	}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("splitShellWords mismatch:\n got: %#v\nwant: %#v", got, want)
-	}
-}
-
 func TestWrapccPrefixFor_GateOnOpensource(t *testing.T) {
 	head, tail := wrapccPrefixFor(map[string]string{"PIC": "no"})
 

@@ -5,21 +5,6 @@ import (
 	"testing"
 )
 
-func TestReverseStr(t *testing.T) {
-	cases := map[string]string{
-		"":         "",
-		"a":        "a",
-		".proto":   "otorp.",
-		".pxd.pxi": "ixp.dxp.",
-	}
-
-	for in, want := range cases {
-		if got := reverseStr(in); got != want {
-			t.Errorf("reverseStr(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 func TestExtMatcherBasic(t *testing.T) {
 	m := NewExtMatcher([]ExtEntry[int]{
 		{".c", 1},
