@@ -109,32 +109,6 @@ func emitResourceObjcopy(
 			return
 		}
 
-		hash := objcopyHash(cur.paths, cur.keys, cur.kvs, instance.Path.rel(), moduleTag)
-		outputObj := build(instance.Path.rel(), "/objcopy_", hash, ".o")
-		payload := make([]STR, 0, 2+len(cur.pathInputs)+len(cur.keys)+1+len(cur.kvs))
-
-		if len(cur.paths) > 0 {
-			payload = append(payload, argInputs.str())
-
-			for _, p := range cur.pathInputs {
-				payload = append(payload, (p).str())
-			}
-
-			payload = append(payload, argKeys.str())
-			payload = appendInternStrs(payload, cur.keys)
-		}
-
-		if len(cur.kvs) > 0 {
-			payload = append(payload, argKvs.str())
-
-			for _, kv := range cur.kvsCmd {
-				payload = append(payload, internStr(kv))
-			}
-		}
-
-		cmdArgs := objcopyCmdArgs(oc, outputObj, payload)
-		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
 		var inputs InputChunks
 
 		if len(cur.paths) <= 1 {
@@ -199,27 +173,23 @@ func emitResourceObjcopy(
 			inputs = append(inputs, mainTail)
 		}
 
-		node := &Node{
-			Platform: instance.Platform,
-			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
-				Env: env}),
-			Env:          env,
-			Inputs:       inputs,
-			Outputs:      na.vfsList(outputObj),
-			KV:           &pyObjcopyKV,
-			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			Resources:    instance.Platform.UsesPython3Clang,
-		}
-
 		dataInputs := make([]VFS, 0, len(cur.pathInputs)+len(cur.closureInputs)+len(cur.kvInputs))
 
 		dataInputs = append(dataInputs, cur.pathInputs...)
 		dataInputs = append(dataInputs, cur.closureInputs...)
 		dataInputs = append(dataInputs, cur.kvInputs...)
 
-		node.DepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, dataInputs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
-
-		r := ctx.emit.emit(node)
+		r, outputObj := buildObjcopyNode(ctx, instance, oc, objcopyNode{
+			moduleTag:  moduleTag,
+			kv:         &pyObjcopyKV,
+			hashPaths:  cur.paths,
+			keysB64:    cur.keys,
+			kvsHash:    cur.kvs,
+			kvsCmd:     cur.kvsCmd,
+			pathInputs: cur.pathInputs,
+			inputs:     inputs,
+			deps:       resolveCodegenDepRefsIncl(ctx, instance, ctx.na, dataInputs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...),
+		})
 
 		out.Refs = append(out.Refs, r)
 		out.Outputs = append(out.Outputs, outputObj)
