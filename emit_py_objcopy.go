@@ -9,12 +9,7 @@ import (
 	"strings"
 )
 
-var (
-	rescompilersChunk           = []VFS{rescompilerBinVFS, rescompressorBinVFS}
-	rescompilersWithScriptChunk = []VFS{rescompilerBinVFS, rescompressorBinVFS, objcopyScriptVFS}
-	objcopyScriptChunk          = []VFS{objcopyScriptVFS}
-	pyObjcopyKV                 = KV{P: pkPY, PC: pcYellow, ShowOut: true}
-)
+var pyObjcopyKV = KV{P: pkPY, PC: pcYellow, ShowOut: true}
 
 const (
 	kvOnlyBin KvOnlyKind = iota
@@ -25,71 +20,6 @@ type ObjcopyEmitResult struct {
 	Refs            []NodeRef
 	Outputs         []VFS
 	PySrcTrailCount int
-}
-
-type ObjcopyArgBlocks struct {
-	pre  []STR
-	post []STR
-}
-
-type ObjcopyEmitCtx struct {
-	rescompilerLDRef   NodeRef
-	rescompressorLDRef NodeRef
-	blocks             ObjcopyArgBlocks
-	na                 *NodeArenas
-}
-
-func newObjcopyEmitCtx(ctx *GenCtx, d *ModuleData, p *Platform) *ObjcopyEmitCtx {
-	oc := &ObjcopyEmitCtx{na: ctx.na}
-
-	oc.rescompilerLDRef, _ = ctx.tool(argToolsRescompiler)
-	oc.rescompressorLDRef, _ = ctx.tool(argToolsRescompressor)
-	oc.blocks = composeObjcopyArgBlocks(d.tc, p)
-
-	return oc
-}
-
-func composeObjcopyArgBlocks(tc ModuleToolchain, p *Platform) ObjcopyArgBlocks {
-	return ObjcopyArgBlocks{
-		pre: []STR{
-			tc.Python3,
-			internStr(objcopyScriptPath),
-			argCompiler.str(), tc.CXX,
-			argObjcopy.str(), tc.Objcopy,
-			argCompressor.str(), internStr(rescompressorBinPath),
-			argRescompiler.str(), internStr(rescompilerBinPath),
-			argOutputObj.str(),
-		},
-		post: []STR{argTarget.str(), internStr(p.Triple)},
-	}
-}
-
-func objcopyCmdArgs(oc *ObjcopyEmitCtx, outputObj VFS, payload []STR) ArgChunks {
-	return oc.na.chunkList(oc.blocks.pre, oc.na.strList((outputObj).str()), oc.blocks.post, payload)
-}
-
-type resolvedResource struct {
-	Input           VFS
-	ProducerRef     NodeRef
-	ProducerMainOut VFS
-	SourceInputs    []VFS
-	SourceClosure   []VFS
-}
-
-func resolveResourceInput(ctx *GenCtx, instance ModuleInstance, rawPath string, fallback VFS) resolvedResource {
-	output := resourceOutputVFS(instance.Path.rel(), rawPath)
-
-	if info := ctx.codegenFor(instance).lookup(output); info != nil {
-		return resolvedResource{
-			Input:           output,
-			ProducerRef:     info.ProducerRef,
-			ProducerMainOut: info.ProducerMainOut,
-			SourceInputs:    info.SourceInputs,
-			SourceClosure:   info.ProducerSourceClosure,
-		}
-	}
-
-	return resolvedResource{Input: fallback}
 }
 
 func emitResourceObjcopy(
