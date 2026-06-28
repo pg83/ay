@@ -1,5 +1,11 @@
 package main
 
+const (
+	intMapMinCap  = 8
+	intMapFillNum = 5
+	intMapFillDen = 8
+)
+
 type IntMap[V any] struct {
 	data     []IntMapEntry[V]
 	mask     uint64
@@ -11,13 +17,6 @@ type IntMapEntry[V any] struct {
 	k uint64
 	v V
 }
-
-const (
-	intMapMinCap = 8
-
-	intMapFillNum = 5
-	intMapFillDen = 8
-)
 
 func newIntMap[V any](hint int) *IntMap[V] {
 	c := intMapMinCap

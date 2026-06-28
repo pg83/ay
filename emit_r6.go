@@ -12,8 +12,7 @@ var (
 const (
 	ragel6DefaultFlagOptimized = "-CG2"
 	ragel6DefaultFlagDebug     = "-CT0"
-
-	ragel6DefaultOutExt = ".rl6.cpp"
+	ragel6DefaultOutExt        = ".rl6.cpp"
 )
 
 func ragel6OutVFS(instance ModuleInstance, srcRel string) VFS {

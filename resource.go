@@ -18,11 +18,11 @@ var (
 	yaConfResourceRE     = regexp.MustCompile(`"resource"\s*:\s*"([^"]+)"`)
 )
 
-const hashLen = 26
-
-const rootCmdLen = 200
-
-const maxCmdLen = 8000
+const (
+	hashLen    = 26
+	rootCmdLen = 200
+	maxCmdLen  = 8000
+)
 
 func objcopyHash(paths []string, keysB64 []string, kvs []string, unitPath string, moduleTag *string) string {
 	list := make([]string, 0, len(paths)+len(keysB64)+len(kvs)+1)

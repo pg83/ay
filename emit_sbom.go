@@ -1,10 +1,14 @@
 package main
 
-const sbomGenScriptRel = "build/internal/scripts/gen_sbom.py"
-
-const sbomConfRel = "build/internal/conf/sbom.conf"
-
-const clangToolchainInfoRel = "build/internal/platform/clang_toolchain_info"
+const (
+	sbomGenScriptRel        = "build/internal/scripts/gen_sbom.py"
+	sbomConfRel             = "build/internal/conf/sbom.conf"
+	clangToolchainInfoRel   = "build/internal/platform/clang_toolchain_info"
+	pythonToolchainInfoRel  = "build/platform/python/ymake_python3"
+	moduleLangTokenCpp      = "CPP"
+	moduleLangTokenPy3      = "PY3"
+	moduleLangTokenAgnostic = "AGNOSTIC"
+)
 
 func clangToolchainSbomComponent(ctx *GenCtx, platform *Platform) (*NodeRef, *VFS) {
 	res := genModule(ctx, ModuleInstance{
@@ -16,8 +20,6 @@ func clangToolchainSbomComponent(ctx *GenCtx, platform *Platform) (*NodeRef, *VF
 
 	return res.SbomComponentRef, res.SbomComponentPath
 }
-
-const pythonToolchainInfoRel = "build/platform/python/ymake_python3"
 
 func pythonToolchainSbomComponent(ctx *GenCtx, platform *Platform) (*NodeRef, *VFS) {
 	res := genModule(ctx, ModuleInstance{
@@ -41,12 +43,6 @@ func sbomQualifies(d *ModuleData) bool {
 
 	return d.hasLicense
 }
-
-const (
-	moduleLangTokenCpp      = "CPP"
-	moduleLangTokenPy3      = "PY3"
-	moduleLangTokenAgnostic = "AGNOSTIC"
-)
 
 func sbomComponentLang(moduleName TOK) string {
 	switch {

@@ -1,12 +1,5 @@
 package main
 
-type Warn struct {
-	Kind    WarnKind
-	Message string
-}
-
-type WarnKind int
-
 const (
 	WarnSysIncl WarnKind = iota
 
@@ -16,6 +9,13 @@ const (
 
 	WarnMissingAddincl
 )
+
+type Warn struct {
+	Kind    WarnKind
+	Message string
+}
+
+type WarnKind int
 
 func (k WarnKind) string() string {
 	switch k {

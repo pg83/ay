@@ -24,58 +24,11 @@ var networkModeStr = [...]string{
 	nwNone: "", nwRestricted: "restricted", nwFull: "full",
 }
 
-type EnvVar struct {
-	Name  ENV
-	Value STR
-}
-
-type EnvVars []EnvVar
-
-func appendEnv(buf []byte, env EnvVars) []byte {
-	buf = append(buf, '{')
-
-	for i, e := range env {
-		if i > 0 {
-			buf = append(buf, ',')
-		}
-
-		buf = appendString(buf, e.Name.string())
-		buf = append(buf, ':')
-		buf = appendString(buf, e.Value.string())
-	}
-
-	return append(buf, '}')
-}
-
-type NetworkMode uint8
-
 const (
 	nwNone NetworkMode = iota
 	nwRestricted
 	nwFull
 )
-
-func (m NetworkMode) string() string {
-	return networkModeStr[m]
-}
-
-func (m NetworkMode) String() string {
-	return m.string()
-}
-
-type Requirements struct {
-	CPU        float64
-	RAM        float64
-	Network    NetworkMode
-	RAMDisk    float64
-	HasRAMDisk bool
-}
-
-func (r Requirements) isEmpty() bool {
-	return r.CPU == 0 && r.RAM == 0 && r.Network == nwNone && !r.HasRAMDisk
-}
-
-type ProcKind uint8
 
 const (
 	pkNone ProcKind = iota
@@ -123,16 +76,6 @@ const (
 	pkCU
 )
 
-func (k ProcKind) string() string {
-	return procKindStr[k]
-}
-
-func (k ProcKind) String() string {
-	return k.string()
-}
-
-type PColor uint8
-
 const (
 	pcNone PColor = iota
 	pcGreen
@@ -143,6 +86,63 @@ const (
 	pcMagenta
 	pcYellow
 )
+
+type EnvVar struct {
+	Name  ENV
+	Value STR
+}
+
+type EnvVars []EnvVar
+
+func appendEnv(buf []byte, env EnvVars) []byte {
+	buf = append(buf, '{')
+
+	for i, e := range env {
+		if i > 0 {
+			buf = append(buf, ',')
+		}
+
+		buf = appendString(buf, e.Name.string())
+		buf = append(buf, ':')
+		buf = appendString(buf, e.Value.string())
+	}
+
+	return append(buf, '}')
+}
+
+type NetworkMode uint8
+
+func (m NetworkMode) string() string {
+	return networkModeStr[m]
+}
+
+func (m NetworkMode) String() string {
+	return m.string()
+}
+
+type Requirements struct {
+	CPU        float64
+	RAM        float64
+	Network    NetworkMode
+	RAMDisk    float64
+	HasRAMDisk bool
+}
+
+func (r Requirements) isEmpty() bool {
+	return r.CPU == 0 && r.RAM == 0 && r.Network == nwNone && !r.HasRAMDisk
+}
+
+type ProcKind uint8
+
+func (k ProcKind) string() string {
+	return procKindStr[k]
+}
+
+func (k ProcKind) String() string {
+	return k.string()
+}
+
+type PColor uint8
 
 func (c PColor) string() string {
 	return pColorStr[c]

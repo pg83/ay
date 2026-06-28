@@ -35,6 +35,8 @@ var swigImplicitDirectives = func() []IncludeDirective {
 	return out
 }()
 
+const directiveBlockHint = 1 << 14
+
 type IncludeDirectiveParser interface {
 	parse(rel string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet
 
@@ -90,8 +92,6 @@ func (r *IncludeDirectiveParserRegistry) parserFor(rel string) IncludeDirectiveP
 func (r *IncludeDirectiveParserRegistry) hasRegisteredParser(rel string) bool {
 	return r.lookup(rel) != nil
 }
-
-const directiveBlockHint = 1 << 14
 
 func addDirective(block []IncludeDirective, k int, d IncludeDirective) int {
 	if k == len(block) {

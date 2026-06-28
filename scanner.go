@@ -12,7 +12,11 @@ var (
 	perfStatsEnabled    = os.Getenv("YATOOL_PERF_STATS") != ""
 )
 
-type IncludeKind int
+const (
+	closureAllocHint    = 1 << 13
+	closureArenaInitial = closureAllocHint
+	resolveNoRank       = int(^uint(0) >> 1)
+)
 
 const (
 	includeSystem IncludeKind = iota
@@ -28,6 +32,8 @@ const (
 
 	includeCythonSibling
 )
+
+type IncludeKind int
 
 type IncludeDirective struct {
 	kind   IncludeKind
@@ -109,12 +115,6 @@ func (s *IncludeScanner) sourceFileExists(abs VFS) bool {
 
 	return v
 }
-
-const (
-	closureAllocHint = 1 << 13
-
-	closureArenaInitial = closureAllocHint
-)
 
 type ScannerPerfStats struct {
 	walkClosureCalls       uint64
@@ -630,8 +630,6 @@ type CfgBuildAddincl struct {
 	prefixSrc VFS
 	rank      int
 }
-
-const resolveNoRank = int(^uint(0) >> 1)
 
 func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 	idx := &CfgResolveIndex{}

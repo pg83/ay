@@ -16,6 +16,11 @@ var (
 	resourcesKV         = KV{P: pkld, PC: pcLightBlue, ShowOut: true}
 )
 
+const (
+	resourceGlobalSuffix = "_RESOURCE_GLOBAL"
+	platformDefaultArch  = "x86_64"
+)
+
 type ResourceDecl struct {
 	Name      STR
 	URI       STR
@@ -23,10 +28,6 @@ type ResourceDecl struct {
 	Value     STR
 	Token     STR
 }
-
-const resourceGlobalSuffix = "_RESOURCE_GLOBAL"
-
-const platformDefaultArch = "x86_64"
 
 func makeResourceDecl(name, uri string) ResourceDecl {
 	value := "$(B)/resources/" + name

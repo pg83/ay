@@ -7,6 +7,11 @@ import (
 	"unsafe"
 )
 
+const (
+	direntBlock       = 1 << 16
+	atSymlinkNofollow = 0x100
+)
+
 func (fs *OsFS) platformInit() {
 	for {
 		fd, err := syscall.Open(fs.srcRoot, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_DIRECTORY, 0)
@@ -107,10 +112,6 @@ func readEINTR(fd int, p []byte) int {
 		return n
 	}
 }
-
-const direntBlock = 1 << 16
-
-const atSymlinkNofollow = 0x100
 
 func (fs *OsFS) fstatatRel(rel string, st *syscall.Stat_t) bool {
 	p := append(fs.pathBuf[:0], rel...)

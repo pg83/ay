@@ -42,8 +42,7 @@ var pbDescriptorImporterHeaders = []VFS{
 }
 
 const (
-	pbRuntimeBase = "contrib/libs/protobuf/src/"
-
+	pbRuntimeBase   = "contrib/libs/protobuf/src/"
 	abslTstringBase = "contrib/restricted/abseil-cpp-tstring/"
 )
 

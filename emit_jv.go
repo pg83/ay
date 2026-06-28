@@ -20,6 +20,8 @@ var antlrJavaConstHead = []STR{
 	internStr(antlr4JarPath),
 }
 
+const jdkResourcePath = "$(JDK17)/bin/java"
+
 func emitJVDownstreamCPCC(
 	ctx *GenCtx,
 	instance ModuleInstance,
@@ -86,8 +88,6 @@ func emitJVDownstreamCPCC(
 
 	return
 }
-
-const jdkResourcePath = "$(JDK17)/bin/java"
 
 func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs InputChunks, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag STR, emit *StreamingEmitter) NodeRef {
 	na := emit.nodeArenas()

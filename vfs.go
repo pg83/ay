@@ -4,16 +4,16 @@ import (
 	"encoding/json"
 )
 
-type VFSRoot uint8
+const vfsPrefixLen = len("$(S)/")
 
 const (
 	VFSRootSource VFSRoot = iota
 	VFSRootBuild
 )
 
-type VFS uint32
+type VFSRoot uint8
 
-const vfsPrefixLen = len("$(S)/")
+type VFS uint32
 
 func vfsBound() uint32 {
 	return uint32(len(internTable.strs)) << 1

@@ -223,8 +223,6 @@ var tokByName = func() map[string]TOK {
 	return m
 }()
 
-type TOK uint16
-
 const (
 	tokInvalid TOK = iota
 	tokAddInclSelf
@@ -435,6 +433,8 @@ const (
 	tokSetAppendWithGlobal
 	tokDllTool
 )
+
+type TOK uint16
 
 func internTok(s string) TOK {
 	if t, ok := tokByName[s]; ok {

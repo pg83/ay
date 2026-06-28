@@ -19,12 +19,12 @@ var swigConstArgs = []STR{
 	argModule.str(),
 }
 
+const swigLibRoot = "contrib/tools/swig/Lib"
+
 type SwigSrc struct {
 	Src    string
 	Module string
 }
-
-const swigLibRoot = "contrib/tools/swig/Lib"
 
 func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []*SourceEmit {
 	na := ctx.na

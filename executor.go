@@ -18,12 +18,12 @@ import (
 	"time"
 )
 
+const executorGCPercent = 400
+
 type CmdPrefix struct {
 	suffix string
 	prefix []string
 }
-
-const executorGCPercent = 400
 
 type Executor struct {
 	srcRoot     string

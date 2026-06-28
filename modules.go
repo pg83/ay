@@ -36,6 +36,16 @@ var allocatorPeers = map[string][]string{
 	"DEFAULT":                   nil,
 }
 
+const (
+	event2cppPluginName = "event2cpp"
+	event2cppToolPath   = "tools/event2cpp"
+	stmtPrioDefault     = 2
+	stmtPrioSrcs        = 4
+	prioAddIncl         = 0
+	prioAddInclSelf     = 1
+	yaffPluginPath      = "library/cpp/yaff/tools/protoc_plugin"
+)
+
 type CppProtoPlugin struct {
 	Name                      string
 	ToolPath                  string
@@ -74,11 +84,6 @@ func (p CppProtoPlugin) processesFile(protoBaseName string) bool {
 
 	return false
 }
-
-const (
-	event2cppPluginName = "event2cpp"
-	event2cppToolPath   = "tools/event2cpp"
-)
 
 func addCPPProtoPlugin(d *ModuleData, plugin CppProtoPlugin) {
 	d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
@@ -258,11 +263,6 @@ func (d *ModuleData) flatSrc(src STR) bool {
 
 	return ok
 }
-
-const (
-	stmtPrioDefault = 2
-	stmtPrioSrcs    = 4
-)
 
 type SrcMeta struct {
 	Prio        int
@@ -618,12 +618,6 @@ type prioVFS struct {
 	prio int
 	vfs  VFS
 }
-
-const (
-	prioAddIncl = 0
-
-	prioAddInclSelf = 1
-)
 
 func (d *ModuleData) addLocalIncl(prio int, v VFS) {
 	d.addInclP = append(d.addInclP, prioVFS{prio: prio, vfs: v})
@@ -2524,8 +2518,6 @@ func parseCPPProtoPlugin(v UnknownStmt) CppProtoPlugin {
 
 	return plugin
 }
-
-const yaffPluginPath = "library/cpp/yaff/tools/protoc_plugin"
 
 type yaffSections struct {
 	positional   []string
