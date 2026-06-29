@@ -296,12 +296,6 @@ func filterSourceVFS(vs []VFS) []VFS {
 	return out
 }
 
-func isCodegenProtoHeader(reg *CodegenRegistry, v VFS) bool {
-	rel := v.rel()
-
-	return strings.HasSuffix(rel, ".pb.h") && !strings.HasSuffix(rel, ".deps.pb.h") && reg.lookup(v) != nil
-}
-
 func pbhBasenameSet(vs []VFS) map[string]bool {
 	m := map[string]bool{}
 
@@ -435,13 +429,9 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 
 	reg := ctx.codegenFor(instance)
 
-	keep := func(v VFS, customPR bool) bool {
+	keep := func(v VFS) bool {
 		if fullSourceClosure {
 			return v.isSource()
-		}
-
-		if customPR {
-			return v.isSource() || isCodegenProtoHeader(reg, v)
 		}
 
 		return strings.HasSuffix(v.rel(), ".proto")
@@ -460,13 +450,10 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 
 		var sub []VFS
 
-		customPR := false
-
 		switch info := reg.lookup(candidate); {
 		case info != nil:
 
 			sub = walkClosureTail(ctx.scannerFor(instance), info.OutputPath, scanIn.ScanCfg)
-			customPR = info.ProducerKvP == pkPR
 		case fullSourceClosure && ctx.fs.isFile(srcRootVFS, target.string()):
 
 			sub = walkClosure(ctx.scannerFor(instance), source(target.string()), scanIn.ScanCfg)
@@ -475,7 +462,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		}
 
 		for _, v := range sub {
-			if !keep(v, customPR) {
+			if !keep(v) {
 				continue
 			}
 
