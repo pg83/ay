@@ -182,7 +182,6 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	prRef := ctx.emit.reserve()
 	registeredPROut := map[VFS]bool{}
-
 	mainIsHeader := mainOutputVFS != 0 && isHeaderSource(mainOutputVFS.rel())
 
 	mainHeaderInclude := func(ccOutRel string) (IncludeDirective, bool) {

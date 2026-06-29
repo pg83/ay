@@ -143,37 +143,69 @@ func classifySrcExt(s string) SrcExtClass {
 	return c.srcExt
 }
 
-func extIsProto(p string) bool { return strings.HasSuffix(p, ".proto") }
+func extIsProto(p string) bool {
+	return strings.HasSuffix(p, ".proto")
+}
 
-func extIsEv(p string) bool { return strings.HasSuffix(p, ".ev") }
+func extIsEv(p string) bool {
+	return strings.HasSuffix(p, ".ev")
+}
 
-func extIsGztproto(p string) bool { return strings.HasSuffix(p, ".gztproto") }
+func extIsGztproto(p string) bool {
+	return strings.HasSuffix(p, ".gztproto")
+}
 
-func extIsCfgproto(p string) bool { return strings.HasSuffix(p, ".cfgproto") }
+func extIsCfgproto(p string) bool {
+	return strings.HasSuffix(p, ".cfgproto")
+}
 
-func extIsPbH(p string) bool { return strings.HasSuffix(p, ".pb.h") }
+func extIsPbH(p string) bool {
+	return strings.HasSuffix(p, ".pb.h")
+}
 
-func extIsEvPbCC(p string) bool { return strings.HasSuffix(p, ".ev.pb.cc") }
+func extIsEvPbCC(p string) bool {
+	return strings.HasSuffix(p, ".ev.pb.cc")
+}
 
-func extIsYaffCpp(p string) bool { return strings.HasSuffix(p, ".yaff.cpp") }
+func extIsYaffCpp(p string) bool {
+	return strings.HasSuffix(p, ".yaff.cpp")
+}
 
-func extIsAsm(p string) bool { return strings.HasSuffix(p, ".asm") }
+func extIsAsm(p string) bool {
+	return strings.HasSuffix(p, ".asm")
+}
 
-func extIsFlexL(p string) bool { return strings.HasSuffix(p, ".l") }
+func extIsFlexL(p string) bool {
+	return strings.HasSuffix(p, ".l")
+}
 
-func extIsPy(p string) bool { return strings.HasSuffix(p, ".py") }
+func extIsPy(p string) bool {
+	return strings.HasSuffix(p, ".py")
+}
 
-func extIsPyi(p string) bool { return strings.HasSuffix(p, ".pyi") }
+func extIsPyi(p string) bool {
+	return strings.HasSuffix(p, ".pyi")
+}
 
-func extIsPyx(p string) bool { return strings.HasSuffix(p, ".pyx") }
+func extIsPyx(p string) bool {
+	return strings.HasSuffix(p, ".pyx")
+}
 
-func extIsSwg(p string) bool { return strings.HasSuffix(p, ".swg") }
+func extIsSwg(p string) bool {
+	return strings.HasSuffix(p, ".swg")
+}
 
-func extIsLua(p string) bool { return strings.HasSuffix(p, ".lua") }
+func extIsLua(p string) bool {
+	return strings.HasSuffix(p, ".lua")
+}
 
-func extIsTemplateIn(p string) bool { return strings.HasSuffix(p, ".in") }
+func extIsTemplateIn(p string) bool {
+	return strings.HasSuffix(p, ".in")
+}
 
-func extIsPicObject(p string) bool { return strings.HasSuffix(p, ".pic.o") }
+func extIsPicObject(p string) bool {
+	return strings.HasSuffix(p, ".pic.o")
+}
 
 func extIsArchiveMember(p string) bool {
 	return strings.HasSuffix(p, ".a") || strings.HasSuffix(p, ".o")
