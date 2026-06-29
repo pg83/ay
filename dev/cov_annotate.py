@@ -35,6 +35,11 @@ DEV = {
 }
 EXEC = {"executor.go", "ssh_agent.go", "fetch.go"}
 MIXED = {"fs_os.go", "fs_linux.go", "fs_mem.go", "fs_other.go", "main.go"}
+# Structurally out of scope: error-handling infra and flag-gated make modes the
+# `-G` corpus never drives. Excluded from CORE so they are not marked.
+KEEP = {"throw.go", "make.go", "make_copy.go"}
+
+THROW_RE = re.compile(r"\b[Tt]hrow")
 
 
 def bucket(f):
@@ -46,7 +51,36 @@ def bucket(f):
         return "EXEC"
     if f in MIXED:
         return "MIXED"
+    if f in KEEP:
+        return "KEEP"
     return "CORE"
+
+
+def drop_throw_runs(deadlines, lines):
+    """Remove from `deadlines` every contiguous run of dead lines that contains a
+    throw* call — error-handling branches are uncovered on the happy path, not
+    dead."""
+    out = set(deadlines)
+    i, n = 1, len(lines)
+
+    while i <= n:
+        if i not in deadlines:
+            i += 1
+            continue
+
+        j = i
+
+        while j <= n and j in deadlines:
+            j += 1
+
+        run = range(i, j)
+
+        if any(THROW_RE.search(lines[k - 1]) for k in run):
+            out.difference_update(run)
+
+        i = j
+
+    return out
 
 
 LINE_RE = re.compile(r"^([^:]+):(\d+)\.\d+,(\d+)\.\d+ (\d+) (\d+)$")
@@ -85,6 +119,8 @@ def main():
     ap.add_argument("--prefix", default="---")
     ap.add_argument("--buckets", default="CORE",
                     help="comma list of buckets to touch (default CORE)")
+    ap.add_argument("--keep-throw", action="store_true",
+                    help="do not strip throw* error-handling blocks from the set")
     args = ap.parse_args()
 
     want = set(args.buckets.split(",")) if args.buckets else None
@@ -105,6 +141,9 @@ def main():
             continue
 
         lines = open(src_path, errors="replace").read().splitlines()
+
+        if not args.keep_throw:
+            deadlines = drop_throw_runs(deadlines, lines)
 
         if args.inplace:
             with open(src_path, "w") as w:
