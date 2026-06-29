@@ -39,9 +39,10 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			inVFSByToken[inTok.string()] = vfs
 			inputs = append(inputs, vfs)
 
-			if info := reg.lookup(vfs); info != nil && info.ProducerKvP == pkCF && info.SourcePath != 0 {
-				appendCFExtra(info.SourcePath)
-				appendCFExtra(configureFilePyVFS)
+			if info := reg.lookup(vfs); info != nil {
+				for _, v := range info.SourceInputs {
+					appendCFExtra(v)
+				}
 			}
 		}
 
