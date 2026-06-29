@@ -417,7 +417,6 @@ type resolvedResource struct {
 	ProducerRef     NodeRef
 	ProducerMainOut VFS
 	SourceInputs    []VFS
-	SourceClosure   []VFS
 }
 
 func resolveResourceInput(ctx *GenCtx, instance ModuleInstance, rawPath string, fallback VFS) resolvedResource {
@@ -429,7 +428,6 @@ func resolveResourceInput(ctx *GenCtx, instance ModuleInstance, rawPath string, 
 			ProducerRef:     info.ProducerRef,
 			ProducerMainOut: info.ProducerMainOut,
 			SourceInputs:    info.SourceInputs,
-			SourceClosure:   info.SourceInputs,
 		}
 	}
 

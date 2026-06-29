@@ -261,12 +261,6 @@ func emitResourceFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, oc *O
 							cur.srcAttrInputs = append(cur.srcAttrInputs, v)
 						}
 					}
-
-					for _, v := range r.SourceClosure {
-						if v.isSource() && objcopySourceLeafKept(v.rel()) {
-							cur.srcAttrInputs = append(cur.srcAttrInputs, v)
-						}
-					}
 				}
 
 				kb := encb64.StdEncoding.EncodeToString([]byte(e.Key))
