@@ -20,7 +20,7 @@ func (CythonIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAlloca
 		k = addDirective(block, k, d)
 	}
 
-	if strings.HasSuffix(rel, ".pyx") {
+	if extIsPyx(rel) {
 		add(IncludeDirective{kind: includeCythonSibling, target: internV(path.Base(rel[:len(rel)-len(".pyx")]), ".pxd")})
 	}
 

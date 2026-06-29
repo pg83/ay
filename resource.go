@@ -81,7 +81,7 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 	out := make([]PySrcEntry, 0, len(srcs)*2)
 
 	for _, srcRel := range srcs {
-		if strings.HasSuffix(srcRel, ".pyi") {
+		if extIsPyi(srcRel) {
 			continue
 		}
 

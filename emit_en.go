@@ -29,11 +29,11 @@ func moduleProtoGenHeaders(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		s := src.string()
 
 		switch {
-		case strings.HasSuffix(s, ".proto"):
+		case extIsProto(s):
 			base := strings.TrimSuffix(protoSourceRelPath(ctx.fs, instance, d, s), ".proto")
 
 			add(base + ".pb.h")
-		case strings.HasSuffix(s, ".ev"):
+		case extIsEv(s):
 			add(protoSourceRelPath(ctx.fs, instance, d, s) + ".pb.h")
 		}
 	}

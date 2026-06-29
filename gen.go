@@ -561,7 +561,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		hasProtoSrc := false
 
 		for _, src := range d.srcs {
-			if strings.HasSuffix(src.string(), ".proto") {
+			if extIsProto(src.string()) {
 				hasProtoSrc = true
 
 				break
@@ -2348,7 +2348,7 @@ func filterEnSerializedSiblings(in []VFS) []VFS {
 	out := make([]VFS, 0, len(in))
 
 	for _, p := range in {
-		if strings.HasSuffix(p.rel(), "_serialized.cpp") || strings.HasSuffix(p.rel(), "_serialized.h") {
+		if extIsEnumSerialized(p.rel()) {
 			continue
 		}
 

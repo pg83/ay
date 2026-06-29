@@ -17,7 +17,7 @@ func buildScriptTable(fs FS) ScriptDeps {
 			return true
 		}
 
-		if strings.HasSuffix(rel, ".py") {
+		if extIsPy(rel) {
 			texts[rel] = string(fs.read(rel))
 		}
 

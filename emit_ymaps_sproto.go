@@ -102,7 +102,7 @@ func dropGeneratedProtoHeaders(closure []VFS) []VFS {
 		if !v.isSource() {
 			rel := v.rel()
 
-			if strings.HasSuffix(rel, ".pb.h") || strings.HasSuffix(rel, ".sproto.h") {
+			if extIsProtoGeneratedHeader(rel) {
 				continue
 			}
 		}

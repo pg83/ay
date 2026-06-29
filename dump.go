@@ -186,8 +186,7 @@ func nodeCmdBasenames(node *rawNode) map[string]struct{} {
 }
 
 func arLDInputKept(s, kind string, cmdBases map[string]struct{}) bool {
-	if strings.HasSuffix(s, ".o") || strings.HasSuffix(s, ".a") ||
-		strings.HasSuffix(s, ".pyplugin") || strings.HasSuffix(s, ".exports") {
+	if extIsRefOnlyArtifact(s) {
 		return true
 	}
 
@@ -263,7 +262,7 @@ func objcopySourceLeafKept(rel string) bool {
 		return false
 	}
 
-	if strings.HasPrefix(rel, "build/") && strings.HasSuffix(b, ".py") {
+	if strings.HasPrefix(rel, "build/") && extIsPy(b) {
 		return false
 	}
 

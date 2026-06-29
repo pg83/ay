@@ -55,7 +55,7 @@ func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 
 	outName := srcRel + ".o"
 
-	if strings.HasSuffix(srcRel, ".asm") {
+	if extIsAsm(srcRel) {
 		outName = strings.TrimSuffix(srcRel, ".asm") + ".o"
 	}
 
@@ -194,7 +194,7 @@ func emitLibraryAsmSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, s
 
 	asIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), srcVFS, scanIn.ScanCfg)
 
-	if instance.Platform.ISA == ISAX8664 && strings.HasSuffix(srcRel, ".asm") {
+	if instance.Platform.ISA == ISAX8664 && extIsAsm(srcRel) {
 		yasmLD, _ := ctx.tool(argContribToolsYasm)
 		ref, outPath := emitASYasm(instance, srcRel, srcVFS, asIn, yasmLD, ctx.emit)
 

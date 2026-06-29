@@ -1716,7 +1716,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokYmapsSproto:
 
 		for _, argTok := range v.Args {
-			if !strings.HasSuffix(argTok.string(), ".proto") {
+			if !extIsProto(argTok.string()) {
 				throwFmt("gen: %s: YMAPS_SPROTO expects .proto arguments, got %q", modulePath, argTok.string())
 			}
 
@@ -2048,7 +2048,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				src = src[:eq]
 			}
 
-			if strings.HasSuffix(src, ".pyx") {
+			if extIsPyx(src) {
 				modName := modNameOverride
 
 				if modName == "" {
@@ -2080,7 +2080,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				continue
 			}
 
-			if cythonizePy && strings.HasSuffix(src, ".py") {
+			if cythonizePy && extIsPy(src) {
 				modName := modNameOverride
 
 				if modName == "" {
@@ -2109,7 +2109,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				continue
 			}
 
-			if strings.HasSuffix(src, ".swg") {
+			if extIsSwg(src) {
 				modName := modNameOverride
 
 				if modName == "" {
@@ -2132,7 +2132,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				continue
 			}
 
-			if strings.HasSuffix(src, ".pyi") {
+			if extIsPyi(src) {
 				modName := modNameOverride
 
 				if modName == "" {
@@ -2147,7 +2147,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				continue
 			}
 
-			if strings.Contains(a.string(), "=") && !strings.HasSuffix(src, ".py") {
+			if strings.Contains(a.string(), "=") && !extIsPy(src) {
 				continue
 			}
 
@@ -2798,7 +2798,7 @@ func applyLj21ArchiveStmt(v UnknownStmt, d *ModuleData) {
 	for _, aTok := range v.Args {
 		a := aTok.string()
 
-		if strings.HasSuffix(a, ".lua") {
+		if extIsLua(a) {
 			luas = append(luas, a)
 		}
 	}

@@ -397,7 +397,7 @@ func emitPyNamespaceForGroup(
 	arcSources := make([]string, 0, len(group.Srcs))
 
 	for _, srcRel := range group.Srcs {
-		if !strings.HasSuffix(srcRel.string(), ".py") {
+		if !extIsPy(srcRel.string()) {
 			continue
 		}
 

@@ -44,7 +44,7 @@ func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	sourceInputs = append(sourceInputs, gztSource)
 
 	for _, v := range imports {
-		if v.isSource() && strings.HasSuffix(v.rel(), ".gztproto") {
+		if v.isSource() && extIsGztproto(v.rel()) {
 			sourceInputs = append(sourceInputs, v)
 		}
 	}
@@ -113,7 +113,7 @@ func gztConverterInducedProtos(ctx *GenCtx) []VFS {
 	for _, dir := range res.InducedDeps.bucket(parsedIncludesCpp) {
 		t := dir.target.string()
 
-		if !strings.HasSuffix(t, ".proto") {
+		if !extIsProto(t) {
 			continue
 		}
 
@@ -142,7 +142,7 @@ func gztGeneratedProtoParse(ctx *GenCtx, gztSource VFS, inducedProtos []VFS) Par
 	for _, dir := range gztLocal {
 		t := dir.target.string()
 
-		if strings.HasSuffix(t, ".gztproto") {
+		if extIsGztproto(t) {
 			t = strings.TrimSuffix(t, ".gztproto") + ".proto"
 		}
 
@@ -154,7 +154,7 @@ func gztGeneratedProtoParse(ctx *GenCtx, gztSource VFS, inducedProtos []VFS) Par
 	for _, dir := range local {
 		t := dir.target.string()
 
-		if strings.HasSuffix(t, ".proto") {
+		if extIsProto(t) {
 			hcpp = append(hcpp, IncludeDirective{kind: dir.kind, target: internV(strings.TrimSuffix(t, ".proto"), ".pb.h")})
 		}
 	}

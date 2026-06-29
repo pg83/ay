@@ -2,7 +2,6 @@ package main
 
 import (
 	"path/filepath"
-	"strings"
 )
 
 func copyFileAutoSourceVFS(modulePath string, d *ModuleData, src STR) *VFS {
@@ -132,7 +131,7 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 
 		emitCPWithDeps(instance, srcVFS, dstVFS, deps, closure, entries[i].ref, moduleTag, d.tc, ctx.scripts, ctx.emit)
 
-		if dst := entry.Dst; strings.HasSuffix(dst, ".a") || strings.HasSuffix(dst, ".o") {
+		if dst := entry.Dst; extIsArchiveMember(dst) {
 			memberRefs = append(memberRefs, entries[i].ref)
 			memberOuts = append(memberOuts, dstVFS)
 			memberSrcs = append(memberSrcs, srcVFS)

@@ -33,7 +33,7 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	reg := ctx.codegenFor(instance)
 
 	for i, srcRel := range d.pySrcs {
-		if strings.HasSuffix(srcRel.string(), ".pyi") {
+		if extIsPyi(srcRel.string()) {
 			continue
 		}
 

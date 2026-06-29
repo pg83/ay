@@ -1,7 +1,5 @@
 package main
 
-import "strings"
-
 func emitPRDownstreamCC(ctx *GenCtx, instance ModuleInstance, out string, prRef NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
 	return emitCodegenDownstreamCC(ctx, instance, out, []NodeRef{prRef}, in)
 }
@@ -13,7 +11,7 @@ func emitCodegenDownstreamAS(ctx *GenCtx, instance ModuleInstance, asmRel string
 	asIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), asmPath, in.ScanCfg)
 	asIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, asIn.IncludeInputs, depRefs...)
 
-	if instance.Platform.ISA == ISAX8664 && strings.HasSuffix(asmRel, ".asm") {
+	if instance.Platform.ISA == ISAX8664 && extIsAsm(asmRel) {
 		yasmLD, _ := ctx.tool(argContribToolsYasm)
 
 		return emitASYasm(instance, asmRel, asmPath, asIn, yasmLD, ctx.emit)

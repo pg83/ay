@@ -1,7 +1,5 @@
 package main
 
-import "strings"
-
 var fromSandboxScriptInputs = []VFS{
 	buildScriptsFetchFromSandboxPy,
 	buildScriptsProcessCommandFilesPy,
@@ -22,7 +20,7 @@ func emitFromSandboxes(ctx *GenCtx, instance ModuleInstance, d *ModuleData) (mem
 }
 
 func fromSandboxAutoLinkMember(name string) bool {
-	return strings.HasSuffix(name, ".a") || strings.HasSuffix(name, ".o")
+	return extIsArchiveMember(name)
 }
 
 func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *FromSandboxStmt) (memberRefs []NodeRef, memberPaths []VFS) {
