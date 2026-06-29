@@ -240,7 +240,6 @@ func pyProtoAuxInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	}
 
 	ctx.codegenFor(instance).register(&GeneratedFileInfo{
-		ProducerKvP:    pkPR,
 		OutputPath:     aux,
 		ProducerRef:    ref,
 		GeneratorRefs:  []NodeRef{rescompilerRef},

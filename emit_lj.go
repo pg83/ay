@@ -49,7 +49,6 @@ func emitLuaJit21(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		ref := emitLJ(instance, luaSrc, rawOut, compilerBin, compilerLDRef, cwd, ctx.emit)
 
 		reg.register(&GeneratedFileInfo{
-			ProducerKvP:  pkLJ,
 			OutputPath:   rawOut,
 			ProducerRef:  ref,
 			SourceInputs: []VFS{luaSrc},

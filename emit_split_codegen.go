@@ -78,7 +78,6 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 	reg := ctx.codegenFor(instance)
 
 	reg.register(&GeneratedFileInfo{
-		ProducerKvP:    pkSC,
 		OutputPath:     prefixH,
 		ProducerRef:    scRef,
 		GeneratorRefs:  []NodeRef{toolLDRef},
@@ -87,7 +86,6 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 	})
 
 	reg.register(&GeneratedFileInfo{
-		ProducerKvP:    pkSC,
 		OutputPath:     prefixCpp,
 		ProducerRef:    scRef,
 		GeneratorRefs:  []NodeRef{toolLDRef},
@@ -96,7 +94,6 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 
 	for i, partRel := range partRels {
 		info := &GeneratedFileInfo{
-			ProducerKvP:    pkSC,
 			OutputPath:     build(moduleDir, "/", partRel),
 			ProducerRef:    scRef,
 			GeneratorRefs:  []NodeRef{toolLDRef},

@@ -18,7 +18,6 @@ func emitBundles(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		emitBundleNode(ctx, instance, d.tc.Python3, src, dst, srcRef, resolved, ref)
 
 		reg.register(&GeneratedFileInfo{
-			ProducerKvP:    pkBN,
 			OutputPath:     dst,
 			ProducerRef:    ref,
 			GeneratorRefs:  nil,

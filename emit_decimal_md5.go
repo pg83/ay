@@ -81,7 +81,6 @@ func emitDecimalMD5(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *D
 	sourceInputs = append(sourceInputs, decimalMD5PyVFS)
 
 	ctx.codegenFor(instance).register(&GeneratedFileInfo{
-		ProducerKvP:   pkSV,
 		OutputPath:    outVFS,
 		ProducerRef:   svRef,
 		SourceInputs:  sourceInputs,

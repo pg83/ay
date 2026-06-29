@@ -87,7 +87,6 @@ func emitLibraryRagel6Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	r6Ref := ctx.emit.reserve()
 
 	ctx.codegenFor(instance).register(&GeneratedFileInfo{
-		ProducerKvP:    pkR6,
 		OutputPath:     r6Out,
 		ProducerRef:    r6Ref,
 		GeneratorRefs:  []NodeRef{ragelLDRef},

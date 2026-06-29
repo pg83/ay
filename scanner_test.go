@@ -1013,8 +1013,7 @@ func attachCodegen(scanner *IncludeScanner, reg *CodegenRegistry) {
 func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 	reg := newCodegenRegistry()
 	reg.register(&GeneratedFileInfo{
-		ProducerKvP: pkPR,
-		OutputPath:  build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc"),
+		OutputPath: build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc"),
 	})
 
 	fs := newMemFS(map[string]string{
@@ -1039,8 +1038,7 @@ func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 	reg := newCodegenRegistry()
 	reg.register(&GeneratedFileInfo{
-		ProducerKvP: pkPR,
-		OutputPath:  build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc"),
+		OutputPath: build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc"),
 	})
 
 	fs := newMemFS(map[string]string{
@@ -1065,8 +1063,7 @@ func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 func TestScanner_AddInclBuildOnlyMatchesCodegen(t *testing.T) {
 	reg := newCodegenRegistry()
 	reg.register(&GeneratedFileInfo{
-		ProducerKvP: pkPR,
-		OutputPath:  build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.h.inc"),
+		OutputPath: build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.h.inc"),
 	})
 
 	scanner := newTestScanner(newMemFS(nil), nil)

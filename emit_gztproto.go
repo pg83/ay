@@ -54,7 +54,6 @@ func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	ctx.parsers.injectSourceParse(source(moddir, "/", genProtoName), generatedParse)
 
 	ctx.codegenFor(instance).register(&GeneratedFileInfo{
-		ProducerKvP:    pkGZ,
 		OutputPath:     genProto,
 		ProducerRef:    gzRef,
 		SourceInputs:   sourceInputs,

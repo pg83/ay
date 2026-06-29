@@ -177,7 +177,6 @@ func rawAuxInputClosure(ctx *GenCtx, instance ModuleInstance, aux VFS, seed []VF
 	}
 
 	ctx.codegenFor(instance).register(&GeneratedFileInfo{
-		ProducerKvP:    pkPR,
 		OutputPath:     aux,
 		ProducerRef:    ref,
 		GeneratorRefs:  []NodeRef{rescompilerRef},

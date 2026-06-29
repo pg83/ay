@@ -1,7 +1,6 @@
 package main
 
 type GeneratedFileInfo struct {
-	ProducerKvP     ProcKind
 	OutputPath      VFS
 	SourcePath      VFS
 	IsText          bool
@@ -42,8 +41,8 @@ func (r *CodegenRegistry) register(info *GeneratedFileInfo) {
 	full := STR(info.OutputPath.strID())
 
 	if existing, ok := r.byStr.get(full); ok {
-		throwFmt("CodegenRegistry: duplicate producer for %q (existing kind=%q, new kind=%q)",
-			info.OutputPath.string(), existing.ProducerKvP, info.ProducerKvP)
+		throwFmt("CodegenRegistry: duplicate producer for %q (existing ref=%d, new ref=%d)",
+			info.OutputPath.string(), existing.ProducerRef, info.ProducerRef)
 	}
 
 	rel := info.OutputPath.rel()
@@ -120,7 +119,7 @@ func (r *CodegenRegistry) closureLeaves(node VFS) []VFS {
 }
 
 func (r *CodegenRegistry) cythonMainOut(node VFS) VFS {
-	if info := r.lookup(node); info != nil && info.ProducerKvP == pkCY {
+	if info := r.lookup(node); info != nil {
 		return info.ProducerMainOut
 	}
 

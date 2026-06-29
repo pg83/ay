@@ -83,7 +83,6 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 	reg := ctx.codegenFor(instance)
 
 	headerInfo := &GeneratedFileInfo{
-		ProducerKvP:    pkYC,
 		OutputPath:     headerVFS,
 		ProducerRef:    ycRef,
 		GeneratorRefs:  []NodeRef{bisonRef, m4Ref},
@@ -113,7 +112,6 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 	}
 
 	reg.register(&GeneratedFileInfo{
-		ProducerKvP:    pkYC,
 		OutputPath:     generatedVFS,
 		ProducerRef:    ycRef,
 		GeneratorRefs:  []NodeRef{bisonRef, m4Ref},

@@ -28,7 +28,6 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			parserCpp := build(outPrefix, parserBase, ".cpp")
 
 			ctx.codegenFor(instance).register(&GeneratedFileInfo{
-				ProducerKvP:    pkJV,
 				OutputPath:     lexerCpp,
 				ProducerRef:    jvRef,
 				GeneratorRefs:  nil,
@@ -36,7 +35,6 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			})
 
 			ctx.codegenFor(instance).register(&GeneratedFileInfo{
-				ProducerKvP:    pkJV,
 				OutputPath:     parserCpp,
 				ProducerRef:    jvRef,
 				GeneratorRefs:  nil,
@@ -65,7 +63,6 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 				}
 
 				ctx.codegenFor(instance).register(&GeneratedFileInfo{
-					ProducerKvP:    pkJV,
 					OutputPath:     build(outPrefix, suffix),
 					ProducerRef:    jvRef,
 					GeneratorRefs:  nil,
@@ -101,7 +98,6 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			parserCpp := build(outPrefix, base, "Parser.cpp")
 
 			ctx.codegenFor(instance).register(&GeneratedFileInfo{
-				ProducerKvP:    pkJV,
 				OutputPath:     lexerCpp,
 				ProducerRef:    jvRef,
 				GeneratorRefs:  nil,
@@ -109,7 +105,6 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			})
 
 			ctx.codegenFor(instance).register(&GeneratedFileInfo{
-				ProducerKvP:    pkJV,
 				OutputPath:     parserCpp,
 				ProducerRef:    jvRef,
 				GeneratorRefs:  nil,
@@ -137,7 +132,6 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 				}
 
 				ctx.codegenFor(instance).register(&GeneratedFileInfo{
-					ProducerKvP:    pkJV,
 					OutputPath:     build(outPrefix, suffix),
 					ProducerRef:    jvRef,
 					GeneratorRefs:  nil,
@@ -171,7 +165,6 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 		biRef := emitBI(instance, d.createBuildInfoFor.string(), biFlagsForInstance(instance.Platform), d.tc, ctx.emit)
 
 		ctx.codegenFor(instance).register(&GeneratedFileInfo{
-			ProducerKvP:   pkBI,
 			OutputPath:    build(outPrefix, d.createBuildInfoFor.string()),
 			ProducerRef:   biRef,
 			GeneratorRefs: nil,

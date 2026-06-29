@@ -207,7 +207,6 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		}
 
 		info := &GeneratedFileInfo{
-			ProducerKvP:    pkPR,
 			OutputPath:     out,
 			ProducerRef:    prRef,
 			GeneratorRefs:  []NodeRef{toolLDRef},

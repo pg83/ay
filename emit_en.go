@@ -122,7 +122,6 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		reg := ctx.codegenFor(instance)
 
 		reg.register(&GeneratedFileInfo{
-			ProducerKvP:    pkEN,
 			OutputPath:     serializedCPPPath,
 			ProducerRef:    enRef,
 			GeneratorRefs:  []NodeRef{enumParserLD},
@@ -138,7 +137,6 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 			sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target.string() < hParsed[j].target.string() })
 
 			reg.register(&GeneratedFileInfo{
-				ProducerKvP:    pkEN,
 				OutputPath:     serializedHPath,
 				ProducerRef:    enRef,
 				GeneratorRefs:  []NodeRef{enumParserLD},

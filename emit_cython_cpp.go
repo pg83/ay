@@ -172,7 +172,6 @@ func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 
 			for _, h := range headerVFS {
 				reg.register(&GeneratedFileInfo{
-					ProducerKvP:     pkCY,
 					OutputPath:      h,
 					ProducerRef:     cyRef,
 					ParsedIncludes:  headerParsed,
@@ -244,7 +243,6 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 		}
 
 		ctx.codegenFor(instance).register(&GeneratedFileInfo{
-			ProducerKvP:    pkCY,
 			OutputPath:     generatedVFS,
 			ProducerRef:    cyRef,
 			GeneratorRefs:  nil,

@@ -343,7 +343,6 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 	reg := ctx.codegenFor(instance)
 
 	reg.register(&GeneratedFileInfo{
-		ProducerKvP:    pkPB,
 		OutputPath:     pbH,
 		ProducerRef:    pbRef,
 		GeneratorRefs:  pbGenRefs,
@@ -368,7 +367,6 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		}
 
 		reg.register(&GeneratedFileInfo{
-			ProducerKvP:    pkPB,
 			OutputPath:     yaffH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  nil,
@@ -381,7 +379,6 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		}
 
 		reg.register(&GeneratedFileInfo{
-			ProducerKvP:    pkPB,
 			OutputPath:     yaffCC,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pbGenRefs,
@@ -396,7 +393,6 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		depsParsed = append(depsParsed, directImports...)
 
 		reg.register(&GeneratedFileInfo{
-			ProducerKvP:    pkPB,
 			OutputPath:     pbDepsH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pbGenRefs,
@@ -415,7 +411,6 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 	pbCCParsed = append(pbCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())})
 
 	reg.register(&GeneratedFileInfo{
-		ProducerKvP:    pkPB,
 		OutputPath:     pbCC,
 		ProducerRef:    pbRef,
 		GeneratorRefs:  pbGenRefs,
@@ -437,7 +432,6 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 
 	if cfg.grpc {
 		reg.register(&GeneratedFileInfo{
-			ProducerKvP:    pkPB,
 			OutputPath:     grpcPbCC,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  []NodeRef{pe.protocLDRef, pe.grpcCppLDRef},
@@ -445,7 +439,6 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		})
 
 		reg.register(&GeneratedFileInfo{
-			ProducerKvP:    pkPB,
 			OutputPath:     grpcPbH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  []NodeRef{pe.grpcCppLDRef},
@@ -588,7 +581,6 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 			evHParsed = append(evHParsed, evExtras...)
 
 			ctx.codegenFor(instance).register(&GeneratedFileInfo{
-				ProducerKvP:    pkEV,
 				OutputPath:     evH,
 				ProducerRef:    evRef,
 				GeneratorRefs:  []NodeRef{event2cppLDRef},
@@ -601,7 +593,6 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 			evCCParsed = append(evCCParsed, protobufRuntimeDirectives...)
 
 			ctx.codegenFor(instance).register(&GeneratedFileInfo{
-				ProducerKvP:    pkEV,
 				OutputPath:     evPbCC,
 				ProducerRef:    evRef,
 				GeneratorRefs:  []NodeRef{event2cppLDRef},

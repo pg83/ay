@@ -103,7 +103,6 @@ func emitArchiveAsmNode(
 	}
 
 	reg.register(&GeneratedFileInfo{
-		ProducerKvP:   pkAR,
 		OutputPath:    rodataVFS,
 		ProducerRef:   rodataRef,
 		ClosureLeaves: leaves,

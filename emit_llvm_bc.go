@@ -146,7 +146,6 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 		ensureResourcePeer(instance.Path.rel(), d)
 
 		ctx.codegenFor(instance).register(&GeneratedFileInfo{
-			ProducerKvP:    pkOP,
 			OutputPath:     optOut,
 			ProducerRef:    opRef,
 			GeneratorRefs:  nil,

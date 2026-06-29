@@ -117,7 +117,6 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		pyRef := ctx.emit.emit(node)
 
 		reg.register(&GeneratedFileInfo{
-			ProducerKvP:    pkPY,
 			OutputPath:     outputPath,
 			ProducerRef:    pyRef,
 			GeneratorRefs:  toolRefs,

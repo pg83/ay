@@ -65,7 +65,6 @@ func emitConfigureFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 	})
 
 	ctx.codegenFor(instance).register(&GeneratedFileInfo{
-		ProducerKvP:    pkCF,
 		OutputPath:     outVFS,
 		SourcePath:     srcVFS,
 		ProducerRef:    cfRef,
