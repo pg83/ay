@@ -373,8 +373,8 @@ func cythonCompileInducedInputs(ctx *GenCtx, instance ModuleInstance, includeInp
 			continue
 		}
 
-		if mainOut := reg.cythonMainOut(v); mainOut != 0 {
-			extra = append(extra, mainOut)
+		if info := reg.lookup(v); info != nil && info.ProducerMainOut != 0 {
+			extra = append(extra, info.ProducerMainOut)
 		}
 	}
 
