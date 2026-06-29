@@ -75,7 +75,7 @@ func TestGen_CythonizePyDefaultCppBucketARMemberOrder(t *testing.T) {
 	}
 }
 
-func TestGen_GeneratedPySrcsBytecodeNamingAndProducerClosure(t *testing.T) {
+func TestGen_GeneratedPySrcsBytecodeNamingAndSourceInputs(t *testing.T) {
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")

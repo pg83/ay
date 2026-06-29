@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestGen_RunProgramGeneratedBinInProducerSourceClosurePropagates(t *testing.T) {
+func TestGen_RunProgramGeneratedBinInSourceInputsPropagates(t *testing.T) {
 	files := map[string]string{}
 
 	writeToolProgram(files, "tools/gp", "gp")

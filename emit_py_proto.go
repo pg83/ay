@@ -287,10 +287,6 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 		producerDeps = []NodeRef{info.ProducerRef}
 		generated = true
 		producerSourceInputs = info.SourceInputs
-
-		if len(info.ProducerSourceClosure) > 0 {
-			producerSourceInputs = info.ProducerSourceClosure
-		}
 	}
 
 	inputs := []VFS{protocBinary, pbPyWrapperVFS, protoSrcVFS}

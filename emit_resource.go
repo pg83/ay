@@ -429,7 +429,7 @@ func resolveResourceInput(ctx *GenCtx, instance ModuleInstance, rawPath string, 
 			ProducerRef:     info.ProducerRef,
 			ProducerMainOut: info.ProducerMainOut,
 			SourceInputs:    info.SourceInputs,
-			SourceClosure:   info.ProducerSourceClosure,
+			SourceClosure:   info.SourceInputs,
 		}
 	}
 

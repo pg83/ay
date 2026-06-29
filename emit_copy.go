@@ -65,7 +65,7 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 		var producerSource []VFS
 
 		if srcInfo := reg.lookup(srcVFS); srcInfo != nil {
-			producerSource = srcInfo.ProducerSourceClosure
+			producerSource = srcInfo.SourceInputs
 		}
 
 		entries = append(entries, entryReg{srcVFS, dstVFS, parsed, ref, producerSource})
@@ -90,7 +90,7 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 				}
 
 				if srcVFS.isSource() {
-					info.ProducerSourceClosure = append([]VFS{srcVFS}, ctx.scripts[copyFsToolsVFS]...)
+					info.SourceInputs = append([]VFS{srcVFS}, ctx.scripts[copyFsToolsVFS]...)
 				}
 			}
 
@@ -100,7 +100,7 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 				dstClosure = append(dstClosure, producerSource...)
 				dstClosure = append(dstClosure, ctx.scripts[copyFsToolsVFS]...)
 
-				info.ProducerSourceClosure = dstClosure
+				info.SourceInputs = dstClosure
 			}
 
 			reg.register(info)

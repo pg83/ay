@@ -42,9 +42,7 @@ func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 		var generatedInputs []VFS
 
 		if genInfo != nil {
-			if generatedInputs = genInfo.ProducerSourceClosure; len(generatedInputs) == 0 {
-				generatedInputs = genInfo.SourceInputs
-			}
+			generatedInputs = genInfo.SourceInputs
 		}
 
 		srcAbs := resolveSourceVFS(ctx, instance, srcRel.string(), d.srcDirs)

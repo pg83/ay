@@ -33,7 +33,7 @@ func TestGen_CrossModuleTextCopySourceTracked(t *testing.T) {
 	}
 }
 
-func TestGen_CopyOfGeneratedPySrcCarriesProducerClosure(t *testing.T) {
+func TestGen_CopyOfGeneratedPySrcCarriesSourceInputs(t *testing.T) {
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
@@ -100,7 +100,7 @@ END()
 	}
 }
 
-func TestGen_PlainSourceCopyKeepsNoProducerClosure(t *testing.T) {
+func TestGen_PlainSourceCopyKeepsNoUnrelatedClosure(t *testing.T) {
 	files := map[string]string{}
 
 	files["build/scripts/fs_tools.py"] = "import process_command_files as pcf\n"

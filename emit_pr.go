@@ -255,7 +255,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 
 	if prSourceClosure := filterSourceVFS(inputClosure); len(prSourceClosure) > 0 {
 		for out := range registeredPROut {
-			reg.setProducerSourceClosure(out, prSourceClosure)
+			reg.addSourceInputs(out, prSourceClosure)
 		}
 	}
 
@@ -416,7 +416,6 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 
 		if info := ctx.codegenFor(instance).lookup(runProgramInputVFS(ctx, instance, d, rel)); info != nil {
 			out = append(out, info.SourceInputs...)
-			out = append(out, info.ProducerSourceClosure...)
 		}
 	}
 
