@@ -210,10 +210,6 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 	var sources []VFS
 
 	addSource := func(v VFS) {
-		if !v.isSource() {
-			return
-		}
-
 		if _, dup := seen[v]; dup {
 			return
 		}
@@ -231,12 +227,6 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 
 				continue
 			}
-
-			target := d.target.string()
-
-			if ctx.fs.isFile(srcRootVFS, target) {
-				addSource(source(target))
-			}
 		}
 	}
 
@@ -244,12 +234,6 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 
 	for _, f := range stmt.INFiles {
 		vfs := runProgramInputVFS(ctx, instance, d, f.string())
-
-		if vfs.isSource() {
-			addSource(vfs)
-
-			continue
-		}
 
 		if info := reg.lookup(vfs); info != nil {
 			for _, si := range info.SourceInputs {
@@ -380,23 +364,13 @@ func emitPYRun(
 
 	head := make([]VFS, 0, 1+len(stmt.INFiles))
 
-	deduper.reset()
-
-	appendUnique := func(vfs VFS) {
-		if !deduper.add(vfs) {
-			return
-		}
-
-		head = append(head, vfs)
-	}
-
-	appendUnique(scriptVFS)
+	head = append(head, scriptVFS)
 
 	for _, f := range stmt.INFiles {
-		appendUnique(inVFSByToken[f.string()])
+		head = append(head, inVFSByToken[f.string()])
 	}
 
-	inputs := na.inputList(head, deduper.filterSeen(inputClosure))
+	inputs := na.inputList(head, inputClosure)
 
 	var outputs []VFS
 	var stdoutPath STR

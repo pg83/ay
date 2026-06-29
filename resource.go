@@ -56,10 +56,6 @@ func resolvePySrcRel(fs FS, srcDirs []VFS, modulePath, srcRel string) string {
 }
 
 func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath string, srcs []string, topLevel bool, namespace *STR) []PySrcEntry {
-	if len(srcs) == 0 {
-		return nil
-	}
-
 	keyPrefix := ""
 
 	if !topLevel {
@@ -81,10 +77,6 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 	out := make([]PySrcEntry, 0, len(srcs)*2)
 
 	for _, srcRel := range srcs {
-		if extIsPyi(srcRel) {
-			continue
-		}
-
 		suffix := ".yapyc3"
 
 		if strings.Contains(srcRel, "/") {
@@ -94,10 +86,6 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 		resolvedRel := resolvePySrcRel(fs, d.srcDirs, modulePath, srcRel)
 		genInfo := reg.lookupSplit(dirKey(modulePath), internStr(srcRel))
 		generated := genInfo != nil
-
-		if generated && fullName[srcRel] {
-			continue
-		}
 
 		pySource := source(resolvedRel)
 
@@ -170,10 +158,6 @@ func pySrcYapycSuffix(modulePath string) string {
 }
 
 func chunkPySrcEntries(entries []PySrcEntry) []PySrcChunk {
-	if len(entries) == 0 {
-		return nil
-	}
-
 	chunks := make([]PySrcChunk, 0)
 	cur := PySrcChunk{}
 	cmdLen := 0

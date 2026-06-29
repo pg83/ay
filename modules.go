@@ -92,23 +92,14 @@ func addCPPProtoPlugin(d *ModuleData, plugin CppProtoPlugin) {
 
 func protoCmdPeers(d *ModuleData) []STR {
 	front := make([]STR, 0, len(d.cppProtoPlugins))
-	seen := map[STR]struct{}{}
 
 	if d.grpc {
-		seen[strContribLibsGrpc] = struct{}{}
 		front = append(front, strContribLibsGrpc)
 	}
 
 	for _, plugin := range d.cppProtoPlugins {
 		for _, dep := range plugin.Deps {
-			p := internStr(dep)
-
-			if _, dup := seen[p]; dup {
-				continue
-			}
-
-			seen[p] = struct{}{}
-			front = append(front, p)
+			front = append(front, internStr(dep))
 		}
 	}
 

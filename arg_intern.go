@@ -52,35 +52,11 @@ func internArgs(ss []string) []ARG {
 	return out
 }
 
-func appendArgStrs(dst []string, srcs ...[]ARG) []string {
-	for _, s := range srcs {
-		for _, a := range s {
-			dst = append(dst, a.string())
-		}
-	}
-
-	return dst
-}
-
 func argSTRs(as []ARG) []STR {
 	out := make([]STR, len(as))
 
 	for i, a := range as {
 		out[i] = a.str()
-	}
-
-	return out
-}
-
-func argStrs(as []ARG) []string {
-	if len(as) == 0 {
-		return nil
-	}
-
-	out := make([]string, len(as))
-
-	for i, a := range as {
-		out[i] = a.string()
 	}
 
 	return out

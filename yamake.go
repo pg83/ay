@@ -353,102 +353,6 @@ type AllResourceFilesStmt struct {
 	Line     int
 }
 
-func (*ModuleStmt) stmtMarker() {
-}
-
-func (*DeclareResourceStmt) stmtMarker() {
-}
-
-func (*PeerdirStmt) stmtMarker() {
-}
-
-func (*SrcsStmt) stmtMarker() {
-}
-
-func (*SetStmt) stmtMarker() {
-}
-
-func (*EndStmt) stmtMarker() {
-}
-
-func (*UnknownStmt) stmtMarker() {
-}
-
-func (*IfStmt) stmtMarker() {
-}
-
-func (*IncludeStmt) stmtMarker() {
-}
-
-func (*JoinSrcsStmt) stmtMarker() {
-}
-
-func (*AddInclStmt) stmtMarker() {
-}
-
-func (*CFlagsStmt) stmtMarker() {
-}
-
-func (*CXXFlagsStmt) stmtMarker() {
-}
-
-func (*CONLYFlagsStmt) stmtMarker() {
-}
-
-func (*LDFlagsStmt) stmtMarker() {
-}
-
-func (*SrcDirStmt) stmtMarker() {
-}
-
-func (*GlobalSrcsStmt) stmtMarker() {
-}
-
-func (*GenerateEnumSerializationStmt) stmtMarker() {
-}
-
-func (*DefaultVarStmt) stmtMarker() {
-}
-
-func (*RunProgramStmt) stmtMarker() {
-}
-
-func (*RunPythonStmt) stmtMarker() {
-}
-
-func (*FromSandboxStmt) stmtMarker() {
-}
-
-func (*SplitCodegenStmt) stmtMarker() {
-}
-
-func (*BaseCodegenStmt) stmtMarker() {
-}
-
-func (*ConfigureFileStmt) stmtMarker() {
-}
-
-func (*CreateBuildInfoStmt) stmtMarker() {
-}
-
-func (*RunAntlr4CppStmt) stmtMarker() {
-}
-
-func (*RunAntlr4CppSplitStmt) stmtMarker() {
-}
-
-func (*RunAntlrStmt) stmtMarker() {
-}
-
-func (*ResourceStmt) stmtMarker() {
-}
-
-func (*ResourceFilesStmt) stmtMarker() {
-}
-
-func (*AllResourceFilesStmt) stmtMarker() {
-}
-
 type CondKind uint8
 
 type CondNode struct {
@@ -2146,4 +2050,100 @@ func describeToken(t Token) string {
 	default:
 		return fmt.Sprintf("token(kind=%d)", t.kind)
 	}
+}
+
+func (*ModuleStmt) stmtMarker() {
+}
+
+func (*DeclareResourceStmt) stmtMarker() {
+}
+
+func (*PeerdirStmt) stmtMarker() {
+}
+
+func (*SrcsStmt) stmtMarker() {
+}
+
+func (*SetStmt) stmtMarker() {
+}
+
+func (*EndStmt) stmtMarker() {
+}
+
+func (*UnknownStmt) stmtMarker() {
+}
+
+func (*IfStmt) stmtMarker() {
+}
+
+func (*IncludeStmt) stmtMarker() {
+}
+
+func (*JoinSrcsStmt) stmtMarker() {
+}
+
+func (*AddInclStmt) stmtMarker() {
+}
+
+func (*CFlagsStmt) stmtMarker() {
+}
+
+func (*CXXFlagsStmt) stmtMarker() {
+}
+
+func (*CONLYFlagsStmt) stmtMarker() {
+}
+
+func (*LDFlagsStmt) stmtMarker() {
+}
+
+func (*SrcDirStmt) stmtMarker() {
+}
+
+func (*GlobalSrcsStmt) stmtMarker() {
+}
+
+func (*GenerateEnumSerializationStmt) stmtMarker() {
+}
+
+func (*DefaultVarStmt) stmtMarker() {
+}
+
+func (*RunProgramStmt) stmtMarker() {
+}
+
+func (*RunPythonStmt) stmtMarker() {
+}
+
+func (*FromSandboxStmt) stmtMarker() {
+}
+
+func (*SplitCodegenStmt) stmtMarker() {
+}
+
+func (*BaseCodegenStmt) stmtMarker() {
+}
+
+func (*ConfigureFileStmt) stmtMarker() {
+}
+
+func (*CreateBuildInfoStmt) stmtMarker() {
+}
+
+func (*RunAntlr4CppStmt) stmtMarker() {
+}
+
+func (*RunAntlr4CppSplitStmt) stmtMarker() {
+}
+
+func (*RunAntlrStmt) stmtMarker() {
+}
+
+func (*ResourceStmt) stmtMarker() {
+}
+
+func (*ResourceFilesStmt) stmtMarker() {
+}
+
+func (*AllResourceFilesStmt) stmtMarker() {
 }
