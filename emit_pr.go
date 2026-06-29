@@ -183,20 +183,6 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	prRef := ctx.emit.reserve()
 	registeredPROut := map[VFS]bool{}
 
-	var protoOutputIncludeRels []string
-
-	for _, oi := range stmt.OutputIncludes {
-		rel := oi.string()
-
-		if vfsHasPrefix(rel) {
-			rel = intern(rel).rel()
-		}
-
-		if strings.HasSuffix(rel, ".proto") {
-			protoOutputIncludeRels = append(protoOutputIncludeRels, rel)
-		}
-	}
-
 	mainIsHeader := mainOutputVFS != 0 && isHeaderSource(mainOutputVFS.rel())
 
 	mainHeaderInclude := func(ccOutRel string) (IncludeDirective, bool) {
@@ -228,10 +214,6 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 			ParsedIncludes: parsed,
 			SourceInputs:   prSourceInputs,
 			ClosureLeaves:  leaves,
-		}
-
-		if strings.HasSuffix(out.rel(), ".proto") {
-			info.ProtoImportRels = protoOutputIncludeRels
 		}
 
 		ctx.codegenFor(instance).register(info)

@@ -91,9 +91,7 @@ func protoDirectPbHIncludes(pm *IncludeParserManager, srcRel, outputRoot string)
 	return protoPbHIncludes(pm, srcRel, outputRoot, parsedIncludesHeader)
 }
 
-func protoDirectPbHResolved(pm *IncludeParserManager, srcRel string) []IncludeDirective {
-	local := pm.sourceParsedBuckets(source(srcRel), nil).bucket(parsedIncludesLocal)
-
+func protoInducedPbH(pm *IncludeParserManager, local []IncludeDirective) []IncludeDirective {
 	if len(local) == 0 {
 		return nil
 	}
@@ -109,26 +107,6 @@ func protoDirectPbHResolved(pm *IncludeParserManager, srcRel string) []IncludeDi
 		}
 
 		out = append(out, IncludeDirective{kind: d.kind, target: pbH})
-	}
-
-	sort.Slice(out, func(i, j int) bool { return out[i].target.string() < out[j].target.string() })
-
-	return out
-}
-
-func protoImportRelsToPbH(importRels []string, outputRoot string) []IncludeDirective {
-	out := make([]IncludeDirective, 0, len(importRels))
-
-	for _, rel := range importRels {
-		pbH := strings.TrimSuffix(rel, ".proto") + ".pb.h"
-
-		if strings.HasPrefix(pbH, "google/protobuf/") {
-			pbH = pbRuntimeBase + pbH
-		} else {
-			pbH = protoOutputRel(outputRoot, pbH)
-		}
-
-		out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(pbH)})
 	}
 
 	sort.Slice(out, func(i, j int) bool { return out[i].target.string() < out[j].target.string() })
@@ -266,7 +244,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 	var protoSrcOverride VFS
 	var extraProtoDeps []NodeRef
 	var protoProducerSourceInputs []VFS
-	var genProtoImportRels []string
+	var genProtoParsed []IncludeDirective
 
 	buildProto := build(protoRelPath)
 
@@ -279,7 +257,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 			protoProducerSourceInputs = info.ProducerSourceClosure
 		}
 
-		genProtoImportRels = info.ProtoImportRels
+		genProtoParsed = info.ParsedIncludes
 	}
 
 	extraProtoDeps = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, transitiveImports, extraProtoDeps...)
@@ -323,10 +301,10 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		}
 	}
 
-	directImports := protoDirectPbHResolved(ctx.parsers, protoRelPath)
+	directImports := protoInducedPbH(ctx.parsers, ctx.parsers.sourceParsedBuckets(source(protoRelPath), nil).bucket(parsedIncludesLocal))
 
-	if protoSrcOverride != 0 && len(genProtoImportRels) > 0 {
-		directImports = protoImportRelsToPbH(genProtoImportRels, cfg.cppOutRoot)
+	if protoSrcOverride != 0 {
+		directImports = protoInducedPbH(ctx.parsers, genProtoParsed)
 	}
 
 	pbHImports := directImports

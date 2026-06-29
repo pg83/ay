@@ -9,7 +9,6 @@ type GeneratedFileInfo struct {
 	GeneratorRefs         []NodeRef
 	SourceInputs          []VFS
 	ProducerSourceClosure []VFS
-	ProtoImportRels       []string
 	ProducerMainOut       VFS
 	ClosureLeaves         []VFS
 	ParsedIncludes        []IncludeDirective
