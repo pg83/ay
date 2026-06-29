@@ -238,18 +238,17 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		protoSearchPaths = append([]VFS{source(cfg.cppOutRoot)}, peerProtoAddIncl...)
 	}
 
+	buildProto := build(protoRelPath)
 	protoVFS := source(protoRelPath)
-	transitiveImports := walkClosureTail(ctx.scannerFor(instance), protoVFS, protoWalkInputs(ctx.parsers, protoSearchPaths, instance.Path.rel()).ScanCfg)
 
 	var protoSrcOverride VFS
 	var extraProtoDeps []NodeRef
 	var protoProducerSourceInputs []VFS
 	var genProtoParsed []IncludeDirective
 
-	buildProto := build(protoRelPath)
-
 	if info := ctx.codegenFor(instance).lookup(buildProto); info != nil {
 		protoSrcOverride = buildProto
+		protoVFS = buildProto
 		extraProtoDeps = []NodeRef{info.ProducerRef}
 		protoProducerSourceInputs = info.SourceInputs
 
@@ -259,6 +258,8 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 
 		genProtoParsed = info.ParsedIncludes
 	}
+
+	transitiveImports := walkClosureTail(ctx.scannerFor(instance), protoVFS, protoWalkInputs(ctx.parsers, protoSearchPaths, instance.Path.rel()).ScanCfg)
 
 	extraProtoDeps = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, transitiveImports, extraProtoDeps...)
 
