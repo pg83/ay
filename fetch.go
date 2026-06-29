@@ -365,7 +365,7 @@ func resolveSandboxToken() string {
 	return tokenFromSSHAgent(oauthLogin())
 }
 
-type sandboxResource struct {
+type SandboxResource struct {
 	State     string `json:"state"`
 	Multifile bool   `json:"multifile"`
 	HTTP      struct {
@@ -419,7 +419,7 @@ func fetchFromSandbox(id, token, archivePath string) {
 	last.throw()
 }
 
-func querySandboxResource(id, token string) sandboxResource {
+func querySandboxResource(id, token string) SandboxResource {
 	req := throw2(http.NewRequest(http.MethodGet, sandboxAPIBase+"/resource/"+id, nil))
 
 	req.Header.Set("Authorization", "OAuth "+token)
@@ -432,7 +432,7 @@ func querySandboxResource(id, token string) sandboxResource {
 		throwFmt("fetch: sandbox resource %s API returned %s", id, resp.Status)
 	}
 
-	var info sandboxResource
+	var info SandboxResource
 
 	throw(json.NewDecoder(resp.Body).Decode(&info))
 

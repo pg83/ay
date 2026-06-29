@@ -11,7 +11,7 @@ var (
 )
 
 func buildParserExtMatcher(proto ProtoIncludeDirectiveParser) *ExtMatcher[IncludeDirectiveParser] {
-	return NewExtMatcher([]ExtEntry[IncludeDirectiveParser]{
+	return newExtMatcher([]ExtEntry[IncludeDirectiveParser]{
 		{".y", cParser},
 		{".l", cParser},
 		{".m", cParser},

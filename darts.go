@@ -8,13 +8,13 @@ type Darts struct {
 	value []int32
 }
 
-type dartsNode struct {
-	children map[byte]*dartsNode
+type DartsNode struct {
+	children map[byte]*DartsNode
 	key      int32
 }
 
-func NewDarts(keys []string) *Darts {
-	root := &dartsNode{}
+func newDarts(keys []string) *Darts {
+	root := &DartsNode{}
 
 	for i, k := range keys {
 		n := root
@@ -23,13 +23,13 @@ func NewDarts(keys []string) *Darts {
 			b := k[j]
 
 			if n.children == nil {
-				n.children = make(map[byte]*dartsNode)
+				n.children = make(map[byte]*DartsNode)
 			}
 
 			c := n.children[b]
 
 			if c == nil {
-				c = &dartsNode{}
+				c = &DartsNode{}
 				n.children[b] = c
 			}
 
@@ -44,7 +44,7 @@ func NewDarts(keys []string) *Darts {
 	d.value[0] = root.key
 
 	type item struct {
-		node  *dartsNode
+		node  *DartsNode
 		state int32
 	}
 

@@ -87,7 +87,7 @@ func (p CppProtoPlugin) processesFile(protoBaseName string) bool {
 
 func addCPPProtoPlugin(d *ModuleData, plugin CppProtoPlugin) {
 	d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
-	d.peerdirs = append(d.peerdirs, STRS(plugin.Deps...)...)
+	d.peerdirs = append(d.peerdirs, sTRS(plugin.Deps...)...)
 }
 
 func protoCmdPeers(d *ModuleData) []STR {
@@ -138,7 +138,7 @@ type ModuleData struct {
 	protoCmdPeers            []STR
 	joinSrcs                 []*JoinSrcsStmt
 	addIncl                  []VFS
-	addInclP                 []prioVFS
+	addInclP                 []PrioVFS
 	addInclGlobal            []VFS
 	addInclOneLevel          []VFS
 	addInclUserGlobal        []VFS
@@ -615,13 +615,13 @@ func copyFileIncludeTarget(modulePath string, target string) string {
 	}
 }
 
-type prioVFS struct {
+type PrioVFS struct {
 	prio int
 	vfs  VFS
 }
 
 func (d *ModuleData) addLocalIncl(prio int, v VFS) {
-	d.addInclP = append(d.addInclP, prioVFS{prio: prio, vfs: v})
+	d.addInclP = append(d.addInclP, PrioVFS{prio: prio, vfs: v})
 }
 
 func (d *ModuleData) materializeAddIncl() {
@@ -957,7 +957,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			}
 
 			if isYqlUdfStaticModule(v.Name) {
-				d.peerdirs = append(d.peerdirs, STRS(yqlUdfImplicitPeers()...)...)
+				d.peerdirs = append(d.peerdirs, sTRS(yqlUdfImplicitPeers()...)...)
 			}
 
 			d.moduleStmt = moduleStmtForKind(v, kind)
@@ -2199,7 +2199,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		if len(groupSrcs) > 0 {
 			d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{
-				Srcs:      STRS(groupSrcs...),
+				Srcs:      sTRS(groupSrcs...),
 				TopLevel:  topLevel,
 				Namespace: namespace,
 			})
@@ -2514,15 +2514,15 @@ func parseCPPProtoPlugin(v UnknownStmt) CppProtoPlugin {
 	return plugin
 }
 
-type yaffSections struct {
+type YaffSections struct {
 	positional   []string
 	namespace    string
 	files        []string
 	experimental []string
 }
 
-func parseYAFFSections(v UnknownStmt) yaffSections {
-	var s yaffSections
+func parseYAFFSections(v UnknownStmt) YaffSections {
+	var s YaffSections
 
 	section := STR(0)
 
@@ -2558,7 +2558,7 @@ func parseYAFFSections(v UnknownStmt) yaffSections {
 	return s
 }
 
-func yaffExtraOutFlag(lead string, s yaffSections) string {
+func yaffExtraOutFlag(lead string, s YaffSections) string {
 	groups := []string{
 		lead,
 		strings.Join(prefixEach("file=", s.files), ","),
@@ -3189,12 +3189,12 @@ func applyAllPySrcs(fs FS, modulePath string, v UnknownStmt, d *ModuleData) {
 	}
 
 	sort.Strings(files)
-	d.pySrcs = append(d.pySrcs, STRS(files...)...)
+	d.pySrcs = append(d.pySrcs, sTRS(files...)...)
 	d.pySrcsFullName = append(d.pySrcsFullName, make([]bool, len(files))...)
 
 	if len(files) > 0 {
 		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{
-			Srcs:      STRS(files...),
+			Srcs:      sTRS(files...),
 			TopLevel:  d.pyTopLevel,
 			Namespace: d.pyNamespace,
 		})

@@ -6,7 +6,7 @@ import (
 )
 
 func TestExtMatcherBasic(t *testing.T) {
-	m := NewExtMatcher([]ExtEntry[int]{
+	m := newExtMatcher([]ExtEntry[int]{
 		{".c", 1},
 		{".cpp", 2},
 		{".proto", 3},
@@ -37,7 +37,7 @@ func TestExtMatcherBasic(t *testing.T) {
 }
 
 func TestExtMatcherLongestSuffixWins(t *testing.T) {
-	m := NewExtMatcher([]ExtEntry[int]{
+	m := newExtMatcher([]ExtEntry[int]{
 		{".pxi", 1},
 		{".pxd.pxi", 2},
 		{".cpp", 3},
@@ -64,7 +64,7 @@ func TestExtMatcherLongestSuffixWins(t *testing.T) {
 }
 
 func TestExtMatcherDotAlignment(t *testing.T) {
-	m := NewExtMatcher([]ExtEntry[int]{
+	m := newExtMatcher([]ExtEntry[int]{
 		{".proto", 1},
 		{".s", 2},
 	})

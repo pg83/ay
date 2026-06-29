@@ -64,7 +64,7 @@ func strStrings(items []STR) []string {
 	return out
 }
 
-func STRS(items ...string) []STR {
+func sTRS(items ...string) []STR {
 	out := make([]STR, 0, len(items))
 
 	for _, s := range items {

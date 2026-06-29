@@ -141,12 +141,12 @@ func ancestorYamakes(dirs []string) []string {
 	return out
 }
 
-type copyJob struct {
+type CopyJob struct {
 	rel     string
 	symlink bool
 }
 
-type copyStat struct {
+type CopyStat struct {
 	rel     string
 	err     error
 	skipped bool
@@ -157,8 +157,8 @@ func copySliceConcurrent(srcRoot, dst string, recursiveDirs, shallowDirs []strin
 		return 0, 0, err
 	}
 
-	jobCh := make(chan copyJob, 256)
-	statCh := make(chan copyStat, 256)
+	jobCh := make(chan CopyJob, 256)
+	statCh := make(chan CopyStat, 256)
 
 	go func() {
 		defer close(jobCh)
@@ -166,9 +166,9 @@ func copySliceConcurrent(srcRoot, dst string, recursiveDirs, shallowDirs []strin
 		emit := func(rel string, typ os.FileMode) {
 			switch {
 			case typ&os.ModeSymlink != 0:
-				jobCh <- copyJob{rel: rel, symlink: true}
+				jobCh <- CopyJob{rel: rel, symlink: true}
 			case typ.IsRegular():
-				jobCh <- copyJob{rel: rel}
+				jobCh <- CopyJob{rel: rel}
 			}
 		}
 
@@ -239,7 +239,7 @@ func copySliceConcurrent(srcRoot, dst string, recursiveDirs, shallowDirs []strin
 			for j := range jobCh {
 				skipped, err := copyOne(filepath.Join(srcRoot, j.rel), filepath.Join(dst, j.rel), j)
 
-				statCh <- copyStat{rel: j.rel, err: err, skipped: skipped}
+				statCh <- CopyStat{rel: j.rel, err: err, skipped: skipped}
 			}
 		}()
 	}
@@ -279,7 +279,7 @@ func copySliceConcurrent(srcRoot, dst string, recursiveDirs, shallowDirs []strin
 	return copied, skipped, firstErr
 }
 
-func copyOne(src, dst string, j copyJob) (skipped bool, err error) {
+func copyOne(src, dst string, j CopyJob) (skipped bool, err error) {
 	if _, err := os.Lstat(dst); err == nil {
 		return true, nil
 	}

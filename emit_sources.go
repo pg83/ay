@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-var srcExtMatcher *ExtMatcher[srcEmitter]
+var srcExtMatcher *ExtMatcher[SrcEmitter]
 
 type SourceEmit struct {
 	Ref     NodeRef
@@ -12,10 +12,10 @@ type SourceEmit struct {
 	Extra   []SourceEmit
 }
 
-type srcEmitter = func(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit
+type SrcEmitter = func(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit
 
 func init() {
-	srcExtMatcher = NewExtMatcher([]ExtEntry[srcEmitter]{
+	srcExtMatcher = newExtMatcher([]ExtEntry[SrcEmitter]{
 		{".gztproto", emitLibraryGztProtoCompile},
 		{".proto", emitLibraryProtoSource},
 		{".fbs64", emitLibraryFlatcSource},

@@ -209,7 +209,7 @@ func emitResourceFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, oc *O
 		dataInputs = append(dataInputs, cur.closureInputs...)
 		dataInputs = append(dataInputs, cur.kvInputs...)
 
-		r, outputObj := buildObjcopyNode(ctx, instance, oc, objcopyNode{
+		r, outputObj := buildObjcopyNode(ctx, instance, oc, ObjcopyNode{
 			moduleTag:  moduleTag,
 			kv:         &pyObjcopyKV,
 			hashPaths:  cur.paths,
@@ -304,7 +304,7 @@ func emitKvOnlyObjcopyNode(
 		moduleTag = resourceBinTagForData(d)
 	}
 
-	ref, out := buildObjcopyNode(ctx, instance, oc, objcopyNode{
+	ref, out := buildObjcopyNode(ctx, instance, oc, ObjcopyNode{
 		moduleTag: moduleTag,
 		kv:        &pyObjcopyKV,
 		kvsHash:   kvsHash,
@@ -366,7 +366,7 @@ func emitYaConfJSONObjcopy(
 		kvCmd := "resfs/src/" + key + "=" + res.sourcePath
 		input := source(res.sourcePath)
 
-		ref, outputObj := buildObjcopyNode(ctx, instance, oc, objcopyNode{
+		ref, outputObj := buildObjcopyNode(ctx, instance, oc, ObjcopyNode{
 			moduleTag:  moduleTag,
 			kv:         &pyObjcopyKV,
 			hashPaths:  []string{res.hashPath},
@@ -558,7 +558,7 @@ func emitPySrcObjcopy(
 		}
 
 		for _, ch := range chunkPySrcEntries(entries) {
-			r, outputObj := buildObjcopyNode(ctx, instance, oc, objcopyNode{
+			r, outputObj := buildObjcopyNode(ctx, instance, oc, ObjcopyNode{
 				moduleTag:  moduleTag,
 				kv:         &pyObjcopyKV,
 				hashPaths:  ch.paths,

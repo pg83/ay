@@ -50,7 +50,7 @@ func oldCopyAuto(s string) bool {
 		strings.HasSuffix(s, ".h.in") || strings.HasSuffix(s, ".c.in") || strings.HasSuffix(s, ".cpp.in")
 }
 
-func oldFlatc(p string) *flatcVariant {
+func oldFlatc(p string) *FlatcVariant {
 	switch {
 	case strings.HasSuffix(p, ".fbs64"):
 		return &flatcVariantFL64

@@ -40,7 +40,7 @@ var runProgramKeywords = strKeySet(
 	"TOOL",
 )
 
-var structCodegenOutputIncludes = STRS(
+var structCodegenOutputIncludes = sTRS(
 	"util/generic/singleton.h",
 	"util/generic/strbuf.h",
 	"util/generic/vector.h",
@@ -50,7 +50,7 @@ var structCodegenOutputIncludes = STRS(
 	"kernel/struct_codegen/reflection/floats.h",
 )
 
-var structCodegenPeerdirs = STRS(
+var structCodegenPeerdirs = sTRS(
 	"kernel/struct_codegen/metadata",
 	"kernel/struct_codegen/reflection",
 )

@@ -97,13 +97,13 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 	return false
 }
 
-type atomVal struct {
+type AtomVal struct {
 	num   int
 	str   string
 	isNum bool
 }
 
-func atomTypeName(v atomVal) string {
+func atomTypeName(v AtomVal) string {
 	if v.isNum {
 		return "int"
 	}
@@ -111,40 +111,40 @@ func atomTypeName(v atomVal) string {
 	return "string"
 }
 
-func evalAtomNode(nodes []CondNode, i int32, env Environment) atomVal {
+func evalAtomNode(nodes []CondNode, i int32, env Environment) AtomVal {
 	n := &nodes[i]
 
 	switch n.Kind {
 	case ckIdent:
 		if n.Name == "yes" || n.Name == "no" {
-			return atomVal{str: n.Name}
+			return AtomVal{str: n.Name}
 		}
 
 		switch k, v := env.s.lookup(identEnvNode(n)); k {
 		case envStr:
-			return atomVal{str: v.string()}
+			return AtomVal{str: v.string()}
 		case envInt:
 			x, _ := strconv.Atoi(v.string())
 
-			return atomVal{num: x, isNum: true}
+			return AtomVal{num: x, isNum: true}
 		}
 
 		if isImplicitBuildVar(n.Name) {
-			return atomVal{str: n.Name}
+			return AtomVal{str: n.Name}
 		}
 
 		throwFmt("macros: unknown IF identifier %q", n.Name)
 
-		return atomVal{}
+		return AtomVal{}
 	case ckString:
-		return atomVal{str: n.Name}
+		return AtomVal{str: n.Name}
 	case ckInt:
-		return atomVal{num: n.Ival, isNum: true}
+		return AtomVal{num: n.Ival, isNum: true}
 	}
 
 	throwFmt("macros: unexpected cond kind %d in comparator operand position", n.Kind)
 
-	return atomVal{}
+	return AtomVal{}
 }
 
 func evalVersionCmp(nodes []CondNode, n *CondNode, env Environment) bool {

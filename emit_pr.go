@@ -746,13 +746,13 @@ func emitPR(
 	emit.emitReserved(node, id)
 }
 
-type deepReplaceCand struct {
+type DeepReplaceCand struct {
 	token  string
 	rooted string
 }
 
-func deepReplaceCandidates(stmt *RunProgramStmt, inVFSByToken, outVFSByToken map[STR]VFS) []deepReplaceCand {
-	cands := make([]deepReplaceCand, 0, len(stmt.INFiles)+len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles))
+func deepReplaceCandidates(stmt *RunProgramStmt, inVFSByToken, outVFSByToken map[STR]VFS) []DeepReplaceCand {
+	cands := make([]DeepReplaceCand, 0, len(stmt.INFiles)+len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles))
 
 	add := func(tok STR, vfs VFS, ok bool) {
 		if !ok {
@@ -765,7 +765,7 @@ func deepReplaceCandidates(stmt *RunProgramStmt, inVFSByToken, outVFSByToken map
 			return
 		}
 
-		cands = append(cands, deepReplaceCand{token: t, rooted: vfs.string()})
+		cands = append(cands, DeepReplaceCand{token: t, rooted: vfs.string()})
 	}
 
 	for _, f := range stmt.INFiles {
@@ -808,7 +808,7 @@ func mustDeepReplacePath(p string) bool {
 	return true
 }
 
-func deepReplacePathArg(arg string, cands []deepReplaceCand) (string, bool) {
+func deepReplacePathArg(arg string, cands []DeepReplaceCand) (string, bool) {
 	for _, c := range cands {
 		idx := strings.Index(arg, c.token)
 
