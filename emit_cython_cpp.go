@@ -450,16 +450,6 @@ func resolveCythonPxd(ctx *GenCtx, instance ModuleInstance, in ModuleCCInputs, p
 		return sourceJoined(instance.Path.rel(), pxdRel), true
 	}
 
-	for i := len(in.SrcDirs) - 1; i >= 1; i-- {
-		if ctx.fs.isFile(in.SrcDirs[i], pxdRel) {
-			return sourceJoined(in.SrcDirs[i].rel(), pxdRel), true
-		}
-	}
-
-	if ctx.fs.isFile(srcRootVFS, pxdRel) {
-		return source(pxdRel), true
-	}
-
 	return 0, false
 }
 
@@ -507,14 +497,6 @@ func appendCythonCCAddIncl(addIncl []VFS, numpyBeforeInclude bool) []VFS {
 
 func adjustCythonCompanionSourceInputs(na *NodeArenas, p *Platform, d *ModuleData, src string, in ModuleCCInputs) ModuleCCInputs {
 	if len(d.cythonCpp) == 0 {
-		return in
-	}
-
-	if isHeaderSource(src) || isCodegenProducingSrc(src) {
-		return in
-	}
-
-	if !isCCSourceExt(src) {
 		return in
 	}
 

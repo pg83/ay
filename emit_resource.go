@@ -188,13 +188,7 @@ func allResourceDir(modulePath, dir string) (rel string, ok bool) {
 		rel = modulePath + "/" + dir
 	}
 
-	rel = path.Clean(rel)
-
-	if rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
-		return "", false
-	}
-
-	return rel, true
+	return path.Clean(rel), true
 }
 
 func globMatch(fs FS, pattern string) []string {

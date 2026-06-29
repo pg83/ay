@@ -48,10 +48,6 @@ func (s *EnvStore) lookup(e ENV) (EnvKind, STR) {
 }
 
 func isImplicitBuildVar(name string) bool {
-	if name == "" {
-		return false
-	}
-
 	hasUpper := false
 
 	for i := 0; i < len(name); i++ {

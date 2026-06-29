@@ -234,10 +234,6 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src string, protocLDRef NodeRef, protocBinary VFS, pe *PyPBModuleEmission) ([]PyProtoAuxEntry, []GenProtoResEntry) {
 	na := ctx.na
 
-	if d.moduleStmt.Name != tokProtoLibrary {
-		return nil, nil
-	}
-
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	pyBase := protoBase + "__intpy3___pb2.py"
@@ -345,10 +341,6 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 	}
 
 	yapyRes := emitGeneratedPyProtoYapyc(ctx, instance, pyYapyc, yapycTokens, pyPBRef, pyProtoSourceInputs(inputs))
-
-	if yapyRes == nil {
-		yapyRes = &GeneratedPyProtoYapycResult{}
-	}
 
 	if generated {
 		return nil, genProtoResEntriesForSource(instance, d, src, yapycTokens, pyPBRef, outputs, yapyRes.Refs, yapyRes.Outputs)

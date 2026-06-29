@@ -200,14 +200,6 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 		return out, input
 	}
 
-	if srcVFS.isBuild() && vfsHasPrefix(srcRel) {
-		rel := srcVFS.rel()
-
-		if dir := instance.Path.rel(); rel == dir || strings.HasPrefix(rel, dir+"/") {
-			return build(rel, suffix), input
-		}
-	}
-
 	if srcVFS.isBuild() && !in.FlatOutput {
 		rel, dir := srcVFS.rel(), instance.Path.rel()
 

@@ -48,10 +48,6 @@ var evProtocConstTailLite = []STR{
 }
 
 func evPeerProtoIncludes(protoInclude []VFS) []STR {
-	if len(protoInclude) == 0 {
-		return nil
-	}
-
 	out := make([]STR, 0, len(protoInclude))
 
 	for _, p := range protoInclude {

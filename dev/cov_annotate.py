@@ -140,15 +140,19 @@ def main():
         if not os.path.exists(src_path):
             continue
 
-        lines = open(src_path, errors="replace").read().splitlines()
+        # split on \n only: str.splitlines() also breaks on U+2028/U+2029 and
+        # friends, corrupting source that embeds them (e.g. gjson_write.go).
+        lines = open(src_path, errors="replace").read().split("\n")
 
         if not args.keep_throw:
             deadlines = drop_throw_runs(deadlines, lines)
 
         if args.inplace:
+            out = [args.prefix + t if i in deadlines else t
+                   for i, t in enumerate(lines, 1)]
+
             with open(src_path, "w") as w:
-                for i, text in enumerate(lines, 1):
-                    w.write((args.prefix + text if i in deadlines else text) + "\n")
+                w.write("\n".join(out))
         elif args.out:
             out_path = os.path.join(args.out, f)
             os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)

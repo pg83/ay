@@ -52,29 +52,6 @@ func (t *TarjanScratch) visited(v VFS) bool {
 func (t *TarjanScratch) discover(v VFS, idx int32) {
 	id := uint32(v)
 
-	if id >= uint32(len(t.stamp)) {
-		grown := uint32(len(t.stamp)) * 2
-
-		if grown <= id {
-			grown = id + 1
-		}
-
-		stamp := make([]uint32, grown)
-
-		copy(stamp, t.stamp)
-		t.stamp = stamp
-
-		index := make([]int32, grown)
-
-		copy(index, t.index)
-		t.index = index
-
-		low := make([]int32, grown)
-
-		copy(low, t.low)
-		t.low = low
-	}
-
 	t.stamp[id] = t.epoch
 	t.index[id] = idx
 	t.low[id] = idx

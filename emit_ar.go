@@ -74,12 +74,6 @@ func emitARGlobalNamedTagged(
 }
 
 func archiveNameWithPrefix(moduleDir, prefix string) string {
-	if moduleDir == "util" {
-		base := "libyutil.a"
-
-		return prefix + base[len("lib"):]
-	}
-
 	parts := strings.Split(moduleDir, "/")
 
 	if len(parts) > 3 {
