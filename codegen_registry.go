@@ -118,14 +118,6 @@ func (r *CodegenRegistry) closureLeaves(node VFS) []VFS {
 	return nil
 }
 
-func (r *CodegenRegistry) cythonMainOut(node VFS) VFS {
-	if info := r.lookup(node); info != nil {
-		return info.ProducerMainOut
-	}
-
-	return 0
-}
-
 func (r *CodegenRegistry) addSourceInputs(path VFS, extra []VFS) {
 	if len(extra) == 0 {
 		return
