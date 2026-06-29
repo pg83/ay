@@ -140,7 +140,7 @@ func emitDescProtoSubmodule(ctx *GenCtx, instance ModuleInstance, d *ModuleData)
 	}
 
 	for _, src := range d.srcs {
-		if !strings.HasSuffix(src.string(), ".proto") {
+		if !extIsProto(src.string()) {
 			continue
 		}
 

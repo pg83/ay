@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 var extClassMatcher = buildExtClassMatcher()
 
 const (
@@ -139,4 +141,60 @@ func classifySrcExt(s string) SrcExtClass {
 	}
 
 	return c.srcExt
+}
+
+func extIsProto(p string) bool { return strings.HasSuffix(p, ".proto") }
+
+func extIsEv(p string) bool { return strings.HasSuffix(p, ".ev") }
+
+func extIsGztproto(p string) bool { return strings.HasSuffix(p, ".gztproto") }
+
+func extIsCfgproto(p string) bool { return strings.HasSuffix(p, ".cfgproto") }
+
+func extIsPbH(p string) bool { return strings.HasSuffix(p, ".pb.h") }
+
+func extIsEvPbCC(p string) bool { return strings.HasSuffix(p, ".ev.pb.cc") }
+
+func extIsYaffCpp(p string) bool { return strings.HasSuffix(p, ".yaff.cpp") }
+
+func extIsAsm(p string) bool { return strings.HasSuffix(p, ".asm") }
+
+func extIsFlexL(p string) bool { return strings.HasSuffix(p, ".l") }
+
+func extIsPy(p string) bool { return strings.HasSuffix(p, ".py") }
+
+func extIsPyi(p string) bool { return strings.HasSuffix(p, ".pyi") }
+
+func extIsPyx(p string) bool { return strings.HasSuffix(p, ".pyx") }
+
+func extIsSwg(p string) bool { return strings.HasSuffix(p, ".swg") }
+
+func extIsLua(p string) bool { return strings.HasSuffix(p, ".lua") }
+
+func extIsTemplateIn(p string) bool { return strings.HasSuffix(p, ".in") }
+
+func extIsPicObject(p string) bool { return strings.HasSuffix(p, ".pic.o") }
+
+func extIsArchiveMember(p string) bool {
+	return strings.HasSuffix(p, ".a") || strings.HasSuffix(p, ".o")
+}
+
+func extIsRefOnlyArtifact(p string) bool {
+	return strings.HasSuffix(p, ".o") || strings.HasSuffix(p, ".a") ||
+		strings.HasSuffix(p, ".pyplugin") || strings.HasSuffix(p, ".exports")
+}
+
+func extIsCOrHeaderSource(p string) bool {
+	return strings.HasSuffix(p, ".cpp") || strings.HasSuffix(p, ".cc") ||
+		strings.HasSuffix(p, ".cxx") || strings.HasSuffix(p, ".c") ||
+		strings.HasSuffix(p, ".h") || strings.HasSuffix(p, ".hpp") ||
+		strings.HasSuffix(p, ".hxx")
+}
+
+func extIsEnumSerialized(p string) bool {
+	return strings.HasSuffix(p, "_serialized.cpp") || strings.HasSuffix(p, "_serialized.h")
+}
+
+func extIsProtoGeneratedHeader(p string) bool {
+	return extIsPbH(p) || strings.HasSuffix(p, ".sproto.h")
 }

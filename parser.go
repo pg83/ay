@@ -60,7 +60,7 @@ func newIncludeDirectiveParserRegistry() IncludeDirectiveParserRegistry {
 }
 
 func (r *IncludeDirectiveParserRegistry) lookup(rel string) IncludeDirectiveParser {
-	if strings.HasSuffix(rel, ".in") {
+	if extIsTemplateIn(rel) {
 		rel = rel[:len(rel)-len(".in")]
 	}
 

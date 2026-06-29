@@ -73,7 +73,7 @@ func protoPbHIncludes(pm *IncludeParserManager, srcRel, outputRoot string, bucke
 	for _, d := range hcpp {
 		target := d.target.string()
 
-		if strings.HasPrefix(target, "google/protobuf/") && strings.HasSuffix(target, ".pb.h") {
+		if strings.HasPrefix(target, "google/protobuf/") && extIsPbH(target) {
 			target = pbRuntimeBase + target
 		} else {
 			target = protoOutputRel(outputRoot, target)
@@ -468,11 +468,11 @@ func emitProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCont
 
 	for _, src := range d.srcs {
 		switch {
-		case strings.HasSuffix(src.string(), ".proto"):
+		case extIsProto(src.string()):
 			protoSrcs = append(protoSrcs, src.string())
-		case strings.HasSuffix(src.string(), ".ev"):
+		case extIsEv(src.string()):
 			evSrcs = append(evSrcs, src.string())
-		case strings.HasSuffix(src.string(), ".gztproto"):
+		case extIsGztproto(src.string()):
 			gztSrcs = append(gztSrcs, src.string())
 		}
 	}
@@ -662,7 +662,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 
 		ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), co.pbCC, moduleInputs.ScanCfg)
 
-		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {
+		if extIsEvPbCC(co.srcRel) {
 			selfH := build(strings.TrimSuffix(co.pbCC.rel(), ".cc"), ".h")
 			filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
 
@@ -677,11 +677,11 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 			ccIn.IncludeInputs = filtered
 		}
 
-		if strings.HasSuffix(co.srcRel, ".ev.pb.cc") {
+		if extIsEvPbCC(co.srcRel) {
 			ccIn.IncludeInputs = append(ccIn.IncludeInputs, wireFormatVFS)
 		}
 
-		if strings.HasSuffix(co.srcRel, ".yaff.cpp") {
+		if extIsYaffCpp(co.srcRel) {
 			selfH := build(strings.TrimSuffix(co.pbCC.rel(), ".cpp"), ".h")
 			filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
 

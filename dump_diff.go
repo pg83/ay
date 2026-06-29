@@ -1172,19 +1172,19 @@ func dumpDiffNodeMatchKey(n map[string]any, includeHost bool) string {
 
 func dumpDiffNodePicVariant(n map[string]any) bool {
 	for _, o := range toStrings(n["outputs"]) {
-		if strings.HasSuffix(o, ".pic.o") {
+		if extIsPicObject(o) {
 			return true
 		}
 	}
 
 	for _, in := range toStrings(n["inputs"]) {
-		if strings.HasSuffix(in, ".pic.o") {
+		if extIsPicObject(in) {
 			return true
 		}
 	}
 
 	for _, t := range cmdArgTokens(n) {
-		if strings.HasSuffix(t, ".pic.o") {
+		if extIsPicObject(t) {
 			return true
 		}
 	}

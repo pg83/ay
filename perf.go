@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -103,13 +102,7 @@ func perfLink(count, size int) int {
 
 func cParserSource(path string) bool {
 	switch {
-	case strings.HasSuffix(path, ".cpp"),
-		strings.HasSuffix(path, ".cc"),
-		strings.HasSuffix(path, ".cxx"),
-		strings.HasSuffix(path, ".c"),
-		strings.HasSuffix(path, ".h"),
-		strings.HasSuffix(path, ".hpp"),
-		strings.HasSuffix(path, ".hxx"):
+	case extIsCOrHeaderSource(path):
 		return true
 	}
 

@@ -175,7 +175,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 	var protoImportPbH []IncludeDirective
 
 	for _, v := range inVFSs {
-		if v.isSource() && strings.HasSuffix(v.rel(), ".proto") {
+		if v.isSource() && extIsProto(v.rel()) {
 			protoImportPbH = append(protoImportPbH, protoDirectPbHIncludes(ctx.parsers, v.rel(), "")...)
 		}
 	}
@@ -299,7 +299,7 @@ func pbhBasenameSet(vs []VFS) map[string]bool {
 	m := map[string]bool{}
 
 	for _, v := range vs {
-		if strings.HasSuffix(v.rel(), ".pb.h") {
+		if extIsPbH(v.rel()) {
 			m[filepath.Base(v.rel())] = true
 		}
 	}
@@ -329,7 +329,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 	hasParsedIN := false
 
 	for _, f := range stmt.INFiles {
-		if strings.HasSuffix(f.string(), ".proto") {
+		if extIsProto(f.string()) {
 			hasProtoIN = true
 		}
 
@@ -433,7 +433,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 			return v.isSource()
 		}
 
-		return strings.HasSuffix(v.rel(), ".proto")
+		return extIsProto(v.rel())
 	}
 
 	pbhSeen := pbhBasenameSet(out)
@@ -467,11 +467,11 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 
 			out = append(out, v)
 
-			if strings.HasSuffix(v.rel(), ".pb.h") {
+			if extIsPbH(v.rel()) {
 				pbhSeen[filepath.Base(v.rel())] = true
 			}
 
-			if !fullSourceClosure && !hasProtoIN && v.isSource() && strings.HasSuffix(v.rel(), ".proto") {
+			if !fullSourceClosure && !hasProtoIN && v.isSource() && extIsProto(v.rel()) {
 				sibling := strings.TrimSuffix(v.rel(), ".proto") + ".pb.h"
 				sibDir, sibBase := splitDirName(sibling)
 
@@ -499,7 +499,7 @@ func prEmitsIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, protoImpor
 		return nil
 	}
 
-	carryProtoImportPbH := isHeaderSource(outFile.string()) && !strings.HasSuffix(outFile.string(), ".pb.h")
+	carryProtoImportPbH := isHeaderSource(outFile.string()) && !extIsPbH(outFile.string())
 	n := len(stmt.OutputIncludes)
 
 	if carries {

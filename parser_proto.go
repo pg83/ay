@@ -39,15 +39,15 @@ func (p ProtoIncludeDirectiveParser) inducedHeader(target STR) (STR, bool) {
 
 func protoImportInducedHeader(target string) (string, bool) {
 	switch {
-	case strings.HasSuffix(target, ".ev"):
+	case extIsEv(target):
 		return strings.TrimSuffix(target, ".ev") + ".ev.pb.h", true
-	case strings.HasSuffix(target, ".cfgproto"):
+	case extIsCfgproto(target):
 
 		return target + ".pb.h", true
-	case strings.HasSuffix(target, ".gztproto"):
+	case extIsGztproto(target):
 
 		return strings.TrimSuffix(target, ".gztproto") + ".pb.h", true
-	case strings.HasSuffix(target, ".proto"):
+	case extIsProto(target):
 		return strings.TrimSuffix(target, ".proto") + ".pb.h", true
 	}
 
