@@ -223,7 +223,6 @@ func emitResourceFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, oc *O
 
 		refs = append(refs, r)
 		outputs = append(outputs, outputObj)
-
 		cur = acc{}
 	}
 

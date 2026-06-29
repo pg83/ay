@@ -124,6 +124,7 @@ func (r *CodegenRegistry) addSourceInputs(path VFS, extra []VFS) {
 	}
 
 	info := r.mustInfo(path, "addSourceInputs")
+
 	info.SourceInputs = dedup(info.SourceInputs, extra)
 }
 

@@ -251,7 +251,6 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		protoVFS = buildProto
 		extraProtoDeps = []NodeRef{info.ProducerRef}
 		protoProducerSourceInputs = info.SourceInputs
-
 		genProtoParsed = info.ParsedIncludes
 	}
 
