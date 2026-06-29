@@ -1,18 +1,17 @@
 package main
 
 type GeneratedFileInfo struct {
-	ProducerKvP           ProcKind
-	OutputPath            VFS
-	SourcePath            VFS
-	IsText                bool
-	ProducerRef           NodeRef
-	GeneratorRefs         []NodeRef
-	SourceInputs          []VFS
-	ProducerSourceClosure []VFS
-	ProducerMainOut       VFS
-	ClosureLeaves         []VFS
-	ParsedIncludes        []IncludeDirective
-	Compile               *CompileSpec
+	ProducerKvP     ProcKind
+	OutputPath      VFS
+	SourcePath      VFS
+	IsText          bool
+	ProducerRef     NodeRef
+	GeneratorRefs   []NodeRef
+	SourceInputs    []VFS
+	ProducerMainOut VFS
+	ClosureLeaves   []VFS
+	ParsedIncludes  []IncludeDirective
+	Compile         *CompileSpec
 }
 
 type CompileSpec struct {
@@ -128,12 +127,13 @@ func (r *CodegenRegistry) cythonMainOut(node VFS) VFS {
 	return 0
 }
 
-func (r *CodegenRegistry) setProducerSourceClosure(path VFS, closure []VFS) {
-	if len(closure) == 0 {
+func (r *CodegenRegistry) addSourceInputs(path VFS, extra []VFS) {
+	if len(extra) == 0 {
 		return
 	}
 
-	r.mustInfo(path, "setProducerSourceClosure").ProducerSourceClosure = closure
+	info := r.mustInfo(path, "addSourceInputs")
+	info.SourceInputs = dedup(info.SourceInputs, extra)
 }
 
 func (r *CodegenRegistry) buildParsedFor(out VFS) []IncludeDirective {

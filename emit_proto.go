@@ -252,10 +252,6 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		extraProtoDeps = []NodeRef{info.ProducerRef}
 		protoProducerSourceInputs = info.SourceInputs
 
-		if len(info.ProducerSourceClosure) > 0 {
-			protoProducerSourceInputs = info.ProducerSourceClosure
-		}
-
 		genProtoParsed = info.ParsedIncludes
 	}
 
