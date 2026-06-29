@@ -70,6 +70,7 @@ func emitConfigureFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 		SourcePath:     srcVFS,
 		ProducerRef:    cfRef,
 		GeneratorRefs:  nil,
+		SourceInputs:   []VFS{srcVFS, configureFilePyVFS},
 		ParsedIncludes: cfTemplateParsedIncludes(ctx.parsers, srcVFS.rel()),
 		ClosureLeaves:  []VFS{srcVFS, configureFilePyVFS},
 	})
