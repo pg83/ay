@@ -35,7 +35,7 @@ func loadAutoincludeIndex(fs FS) *AutoincludeIndex {
 		}
 	}
 
-	return &AutoincludeIndex{darts: NewDarts(keys), linters: linters}
+	return &AutoincludeIndex{darts: newDarts(keys), linters: linters}
 }
 
 func (a *AutoincludeIndex) lintersMakeIncFor(moduleDir string) (VFS, bool) {

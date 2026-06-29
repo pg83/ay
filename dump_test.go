@@ -693,7 +693,7 @@ func TestDumpDiffPairStructuredCmds(t *testing.T) {
 }
 
 func TestCanonInputs_ArchiveByKeysIgnoresKeyListBasename(t *testing.T) {
-	node := &rawNode{
+	node := &RawNode{
 		Kv: map[string]any{"p": "AR"},
 		Inputs: []string{
 			"$(B)/mod/a.raw",

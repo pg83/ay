@@ -4,7 +4,7 @@ import "testing"
 
 func TestDartsLongestMatch(t *testing.T) {
 	keys := []string{"arc/", "arc/api/", "util/", "april/arf/"}
-	d := NewDarts(keys)
+	d := newDarts(keys)
 
 	cases := []struct {
 		parts   []string
@@ -35,11 +35,11 @@ func TestDartsLongestMatch(t *testing.T) {
 }
 
 func TestDartsEmptyAndExact(t *testing.T) {
-	if _, ok := NewDarts(nil).longestMatch("anything"); ok {
+	if _, ok := newDarts(nil).longestMatch("anything"); ok {
 		t.Error("empty Darts matched")
 	}
 
-	d := NewDarts([]string{"a", "ab", "abc"})
+	d := newDarts([]string{"a", "ab", "abc"})
 
 	for _, tc := range []struct {
 		q   string
@@ -62,7 +62,7 @@ func TestDartsEmptyAndExact(t *testing.T) {
 }
 
 func TestDartsLastDuplicateWins(t *testing.T) {
-	d := NewDarts([]string{"x/", "x/"})
+	d := newDarts([]string{"x/", "x/"})
 
 	if idx, ok := d.longestMatch("x/y"); !ok || idx != 1 {
 		t.Errorf("dup key: got (%d,%v), want (1,true)", idx, ok)

@@ -20,7 +20,7 @@ func ymapsSprotoProducedBases(ctx *GenCtx, instance ModuleInstance, d *ModuleDat
 	return produced
 }
 
-type ymapsSprotoPending struct {
+type YmapsSprotoPending struct {
 	ref          NodeRef
 	sprotoH      VFS
 	protoRelPath string
@@ -35,7 +35,7 @@ func emitYmapsSprotoHeaders(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	sprotocRes := ctx.toolResult(argMapsLibsSprotoSprotoc)
 	sprotocLDRef, sprotocBinary := sprotocRes.LDRef, *sprotocRes.LDPath
 	scanCfg := newScanContext(ctx.parsers, d.addIncl, peerContribs.addIncl, includeScannerBasePaths(), instance.Path.rel())
-	pending := make([]ymapsSprotoPending, 0, len(d.ymapsSprotoSrcs))
+	pending := make([]YmapsSprotoPending, 0, len(d.ymapsSprotoSrcs))
 
 	for _, srcTok := range d.ymapsSprotoSrcs {
 		protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcTok.string())
@@ -55,7 +55,7 @@ func emitYmapsSprotoHeaders(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 			ClosureLeaves:  []VFS{source(protoRelPath)},
 		})
 
-		pending = append(pending, ymapsSprotoPending{ref: sprotoRef, sprotoH: sprotoH, protoRelPath: protoRelPath})
+		pending = append(pending, YmapsSprotoPending{ref: sprotoRef, sprotoH: sprotoH, protoRelPath: protoRelPath})
 	}
 
 	for _, p := range pending {
@@ -63,7 +63,7 @@ func emitYmapsSprotoHeaders(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	}
 }
 
-func emitYmapsSprotoHeader(ctx *GenCtx, instance ModuleInstance, p ymapsSprotoPending, outRoot string, sprotocLDRef NodeRef, sprotocBinary VFS, scanCfg ScanContext) {
+func emitYmapsSprotoHeader(ctx *GenCtx, instance ModuleInstance, p YmapsSprotoPending, outRoot string, sprotocLDRef NodeRef, sprotocBinary VFS, scanCfg ScanContext) {
 	na := ctx.emit.nodeArenas()
 
 	cmdArgs := na.chunkList(na.strList(

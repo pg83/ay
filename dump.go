@@ -139,14 +139,14 @@ func orVal(v, def any) any {
 	return v
 }
 
-func nodeProgramKind(node *rawNode) string {
+func nodeProgramKind(node *RawNode) string {
 	kv, _ := node.Kv.(map[string]any)
 	p, _ := kv["p"].(string)
 
 	return p
 }
 
-func nodeCmdText(node *rawNode) string {
+func nodeCmdText(node *RawNode) string {
 	cmds, _ := node.Cmds.([]any)
 
 	var b strings.Builder
@@ -163,7 +163,7 @@ func nodeCmdText(node *rawNode) string {
 	return b.String()
 }
 
-func nodeCmdBasenames(node *rawNode) map[string]struct{} {
+func nodeCmdBasenames(node *RawNode) map[string]struct{} {
 	cmds, _ := node.Cmds.([]any)
 	set := map[string]struct{}{}
 
@@ -275,7 +275,7 @@ func getString(node map[string]any, key string) string {
 	return s
 }
 
-func canonInputs(node *rawNode, refGraph bool) []string {
+func canonInputs(node *RawNode, refGraph bool) []string {
 	inputs := normSortedStrings(node.Inputs)
 
 	if !refGraph {
@@ -299,7 +299,7 @@ func canonInputs(node *rawNode, refGraph bool) []string {
 	return inputs
 }
 
-func canonContent(node *rawNode, refGraph bool) map[string]any {
+func canonContent(node *RawNode, refGraph bool) map[string]any {
 	inputs := canonInputs(node, refGraph)
 
 	canon := map[string]any{
@@ -332,7 +332,7 @@ func marshalCompact(v any) []byte {
 	return b
 }
 
-type rawNode struct {
+type RawNode struct {
 	UID          string   `json:"uid"`
 	Deps         []string `json:"deps"`
 	Inputs       []string `json:"inputs"`
@@ -344,7 +344,7 @@ type rawNode struct {
 	Requirements any      `json:"requirements"`
 }
 
-func loadGraph(path string) []*rawNode {
+func loadGraph(path string) []*RawNode {
 	f := throw2(os.Open(path))
 
 	defer func() { throw(f.Close()) }()
@@ -354,10 +354,10 @@ func loadGraph(path string) []*rawNode {
 	dec.UseNumber()
 	seekToGraph(dec, path)
 
-	nodes := []*rawNode{}
+	nodes := []*RawNode{}
 
 	for dec.More() {
-		node := &rawNode{}
+		node := &RawNode{}
 
 		throw(dec.Decode(node))
 		nodes = append(nodes, node)
@@ -366,12 +366,12 @@ func loadGraph(path string) []*rawNode {
 	return nodes
 }
 
-type nodeSource struct {
+type NodeSource struct {
 	path  string
-	nodes []*rawNode
+	nodes []*RawNode
 }
 
-func fanoutNodes[R any](src nodeSource, workers int, process func(*rawNode) R, collect func(R)) {
+func fanoutNodes[R any](src NodeSource, workers int, process func(*RawNode) R, collect func(R)) {
 	if src.nodes != nil {
 		sliceFanout(src.nodes, workers, process, collect)
 
@@ -381,8 +381,8 @@ func fanoutNodes[R any](src nodeSource, workers int, process func(*rawNode) R, c
 	streamGraphFanout(src.path, workers, process, collect)
 }
 
-func sliceFanout[R any](nodes []*rawNode, workers int, process func(*rawNode) R, collect func(R)) {
-	in := make(chan *rawNode, workers*2)
+func sliceFanout[R any](nodes []*RawNode, workers int, process func(*RawNode) R, collect func(R)) {
+	in := make(chan *RawNode, workers*2)
 	results := make(chan R, workers*2)
 
 	var wg sync.WaitGroup
@@ -419,7 +419,7 @@ func sliceFanout[R any](nodes []*rawNode, workers int, process func(*rawNode) R,
 	<-done
 }
 
-func streamGraphFanout[R any](path string, workers int, process func(*rawNode) R, collect func(R)) {
+func streamGraphFanout[R any](path string, workers int, process func(*RawNode) R, collect func(R)) {
 	f := throw2(os.Open(path))
 
 	defer func() { throw(f.Close()) }()
@@ -429,7 +429,7 @@ func streamGraphFanout[R any](path string, workers int, process func(*rawNode) R
 	dec.UseNumber()
 	seekToGraph(dec, path)
 
-	nodes := make(chan *rawNode, workers*2)
+	nodes := make(chan *RawNode, workers*2)
 	results := make(chan R, workers*2)
 
 	var wg sync.WaitGroup
@@ -457,7 +457,7 @@ func streamGraphFanout[R any](path string, workers int, process func(*rawNode) R
 	}()
 
 	for dec.More() {
-		node := &rawNode{}
+		node := &RawNode{}
 
 		throw(dec.Decode(node))
 		nodes <- node

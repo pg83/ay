@@ -44,7 +44,7 @@ var flatc64IOLeadArgs = []STR{
 	argDashO.str(),
 }
 
-var flatcVariantFL = flatcVariant{
+var flatcVariantFL = FlatcVariant{
 	toolArg:    argContribLibsFlatbuffersFlatc,
 	constFlags: flatcConstFlags,
 	ioLeadArgs: flatcIOLeadArgs,
@@ -54,7 +54,7 @@ var flatcVariantFL = flatcVariant{
 	runtimeVFS: flatcRuntimeVFS,
 }
 
-var flatcVariantFL64 = flatcVariant{
+var flatcVariantFL64 = FlatcVariant{
 	toolArg:    argContribLibsFlatbuffers64Flatc,
 	constFlags: flatc64ConstFlags,
 	ioLeadArgs: flatc64IOLeadArgs,
@@ -64,7 +64,7 @@ var flatcVariantFL64 = flatcVariant{
 	runtimeVFS: flatc64RuntimeVFS,
 }
 
-type flatcVariant struct {
+type FlatcVariant struct {
 	toolArg    ARG
 	constFlags []STR
 	ioLeadArgs []STR
@@ -109,7 +109,7 @@ func flatcDirectGeneratedHeaderIncludes(pm *IncludeParserManager, srcRel string)
 	return out
 }
 
-func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ARG, transitiveImports []VFS, moduleTag STR, tc ModuleToolchain, emit *StreamingEmitter, v *flatcVariant, genDeps []NodeRef) (NodeRef, VFS, VFS, VFS) {
+func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ARG, transitiveImports []VFS, moduleTag STR, tc ModuleToolchain, emit *StreamingEmitter, v *FlatcVariant, genDeps []NodeRef) (NodeRef, VFS, VFS, VFS) {
 	na := emit.nodeArenas()
 	headerVFS := build(srcRel, ".h")
 	cppVFS := build(srcRel, ".cpp")
@@ -142,7 +142,7 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 	return emit.emit(node), headerVFS, cppVFS, bfbsVFS
 }
 
-func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS VFS, v *flatcVariant, genDeps []NodeRef) {
+func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS VFS, v *FlatcVariant, genDeps []NodeRef) {
 	flatcRes := ctx.toolResult(v.toolArg)
 	flatcLDRef, flatcBinary := flatcRes.LDRef, *flatcRes.LDPath
 	transitiveImports := walkClosureTail(ctx.scannerFor(instance), srcVFS, newScanContext(ctx.parsers, nil, nil, includeScannerBasePaths(), instance.Path.rel()))

@@ -5,7 +5,7 @@ import "strings"
 var extClassMatcher = buildExtClassMatcher()
 
 const (
-	extCxxSource extFlags = 1 << iota
+	extCxxSource ExtFlags = 1 << iota
 	extCCSource
 	extAsmSource
 	extHeader
@@ -14,29 +14,29 @@ const (
 	extCopyAuto
 )
 
-type extFlags uint8
+type ExtFlags uint8
 
-type extClass struct {
-	flags  extFlags
-	flatc  *flatcVariant
+type ExtClass struct {
+	flags  ExtFlags
+	flatc  *FlatcVariant
 	srcExt SrcExtClass
 }
 
-func buildExtClassMatcher() *ExtMatcher[extClass] {
-	m := map[string]*extClass{}
+func buildExtClassMatcher() *ExtMatcher[ExtClass] {
+	m := map[string]*ExtClass{}
 
-	get := func(ext string) *extClass {
+	get := func(ext string) *ExtClass {
 		c := m[ext]
 
 		if c == nil {
-			c = &extClass{srcExt: srcExtRegular}
+			c = &ExtClass{srcExt: srcExtRegular}
 			m[ext] = c
 		}
 
 		return c
 	}
 
-	set := func(flag extFlags, exts ...string) {
+	set := func(flag ExtFlags, exts ...string) {
 		for _, e := range exts {
 			get(e).flags |= flag
 		}
@@ -76,7 +76,7 @@ func buildExtClassMatcher() *ExtMatcher[extClass] {
 	get(".fbs").flatc = &flatcVariantFL
 	get(".inc")
 
-	entries := make([]ExtEntry[extClass], 0, len(m))
+	entries := make([]ExtEntry[ExtClass], 0, len(m))
 
 	for ext, c := range m {
 		if c.flags&extHeader != 0 {
@@ -87,13 +87,13 @@ func buildExtClassMatcher() *ExtMatcher[extClass] {
 			c.flags |= extCarriesIncl
 		}
 
-		entries = append(entries, ExtEntry[extClass]{Ext: ext, Val: *c})
+		entries = append(entries, ExtEntry[ExtClass]{Ext: ext, Val: *c})
 	}
 
-	return NewExtMatcher(entries)
+	return newExtMatcher(entries)
 }
 
-func extHas(p string, flag extFlags) bool {
+func extHas(p string, flag ExtFlags) bool {
 	c, _ := extClassMatcher.match(p)
 
 	return c.flags&flag != 0
@@ -127,7 +127,7 @@ func isSourceEligibleForCopyAuto(srcRel string) bool {
 	return extHas(srcRel, extCopyAuto)
 }
 
-func flatcVariantForExt(p string) *flatcVariant {
+func flatcVariantForExt(p string) *FlatcVariant {
 	c, _ := extClassMatcher.match(p)
 
 	return c.flatc

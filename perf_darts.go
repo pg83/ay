@@ -27,7 +27,7 @@ func perfDarts() int {
 		keys[i] = r + "/"
 	}
 
-	darts := NewDarts(keys)
+	darts := newDarts(keys)
 	old := newIntValueMap[int32](len(roots) * 2)
 
 	for i, r := range roots {

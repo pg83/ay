@@ -533,7 +533,7 @@ func emitGeneratedPyProtoObjcopy(ctx *GenCtx, instance ModuleInstance, d *Module
 			return
 		}
 
-		r, outputObj := buildObjcopyNode(ctx, instance, oc, objcopyNode{
+		r, outputObj := buildObjcopyNode(ctx, instance, oc, ObjcopyNode{
 			moduleTag:  hashTag,
 			kv:         &pyProtoKV2,
 			hashPaths:  cur.paths,

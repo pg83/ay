@@ -80,7 +80,7 @@ type CythonStmt struct {
 	Pxd       string
 }
 
-type cythonStmtPlan struct {
+type CythonStmtPlan struct {
 	stmt              *CythonStmt
 	generatedExplicit bool
 	py23Variant       bool
@@ -91,19 +91,19 @@ type cythonStmtPlan struct {
 	srcScanIn         ModuleCCInputs
 	cyRef             NodeRef
 	headerPyxClosure  []VFS
-	ind               cythonCppInduced
+	ind               CythonCppInduced
 }
 
 func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []*SourceEmit {
 	return emitCythonCppPlanned(ctx, instance, d, in, planCythonCpp(ctx, instance, d, in))
 }
 
-func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []cythonStmtPlan {
+func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []CythonStmtPlan {
 	if len(d.cythonCpp) == 0 {
 		return nil
 	}
 
-	plans := make([]cythonStmtPlan, 0, len(d.cythonCpp))
+	plans := make([]CythonStmtPlan, 0, len(d.cythonCpp))
 
 	for _, stmt := range d.cythonCpp {
 		generatedExplicit := stmt.Generated != nil
@@ -184,7 +184,7 @@ func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 			}
 		}
 
-		plans = append(plans, cythonStmtPlan{
+		plans = append(plans, CythonStmtPlan{
 			stmt:              stmt,
 			generatedExplicit: generatedExplicit,
 			py23Variant:       py23Variant,
@@ -202,7 +202,7 @@ func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 	return plans
 }
 
-func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs, plans []cythonStmtPlan) []*SourceEmit {
+func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs, plans []CythonStmtPlan) []*SourceEmit {
 	na := ctx.na
 
 	if len(plans) == 0 {
@@ -385,14 +385,14 @@ func cythonCompileInducedInputs(ctx *GenCtx, instance ModuleInstance, includeInp
 	return concat(includeInputs, extra)
 }
 
-type cythonCppInduced struct {
+type CythonCppInduced struct {
 	toolSingles  []VFS
 	emitsSingles []VFS
 	toolCl       [][]VFS
 	emitsCl      [][]VFS
 }
 
-func cythonCppInducedSets(ctx *GenCtx, instance ModuleInstance, src VFS, cMode bool, scanIn ModuleCCInputs) cythonCppInduced {
+func cythonCppInducedSets(ctx *GenCtx, instance ModuleInstance, src VFS, cMode bool, scanIn ModuleCCInputs) CythonCppInduced {
 	scanner := ctx.scannerFor(instance)
 	toolSingles := []VFS{contribToolsCythonCythonPy}
 	emitsSingles := []VFS{contribToolsCythonCythonPy, src}
@@ -427,15 +427,15 @@ func cythonCppInducedSets(ctx *GenCtx, instance ModuleInstance, src VFS, cMode b
 
 	toolSingles = append(toolSingles, src)
 
-	return cythonCppInduced{toolSingles: toolSingles, emitsSingles: emitsSingles, toolCl: toolCl, emitsCl: emitsCl}
+	return CythonCppInduced{toolSingles: toolSingles, emitsSingles: emitsSingles, toolCl: toolCl, emitsCl: emitsCl}
 }
 
-func cythonGeneratedOutputInputs(ind cythonCppInduced, sourceClosure []VFS) ([]VFS, []VFS) {
+func cythonGeneratedOutputInputs(ind CythonCppInduced, sourceClosure []VFS) ([]VFS, []VFS) {
 	return keepOnlySourceVFS(dedup(append([][]VFS{ind.toolSingles}, append(ind.toolCl, sourceClosure)...)...)),
 		dedup(append([][]VFS{ind.emitsSingles}, append(ind.emitsCl, sourceClosure)...)...)
 }
 
-func cythonHeaderInducedClosure(ind cythonCppInduced) []VFS {
+func cythonHeaderInducedClosure(ind CythonCppInduced) []VFS {
 	hdrSingles := ind.toolSingles[:len(ind.toolSingles)-1]
 
 	return dedup(append([][]VFS{hdrSingles}, ind.toolCl...)...)

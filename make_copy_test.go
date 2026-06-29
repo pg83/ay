@@ -15,7 +15,7 @@ func TestCopyOne_SkipsExistingDstWithoutTouchingSrc(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	skipped, err := copyOne(src, dst, copyJob{rel: "dst"})
+	skipped, err := copyOne(src, dst, CopyJob{rel: "dst"})
 
 	if err != nil {
 		t.Fatalf("copyOne over existing dst (absent src) = %v, want nil", err)

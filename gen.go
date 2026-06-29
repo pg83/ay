@@ -636,7 +636,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			spliced := make([]STR, 0, len(d.peerdirs)+len(filteredEarly))
 
 			spliced = append(spliced, d.peerdirs[:insertAt]...)
-			spliced = append(spliced, STRS(filteredEarly...)...)
+			spliced = append(spliced, sTRS(filteredEarly...)...)
 			spliced = append(spliced, d.peerdirs[insertAt:]...)
 
 			d.peerdirs = spliced

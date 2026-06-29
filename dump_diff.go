@@ -98,7 +98,7 @@ func cmdDumpDiff(_ GlobalFlags, args []string) int {
 	case "by-field":
 		diffByField(leftPath, rightPath, bw)
 	case "by-token":
-		diffByToken(leftPath, rightPath, bw, byTokenOpts{rootsOnly: wantRoots, groupBy: parseGroupSpec(groupSpec)})
+		diffByToken(leftPath, rightPath, bw, ByTokenOpts{rootsOnly: wantRoots, groupBy: parseGroupSpec(groupSpec)})
 	case "by-kind":
 		diffByKind(leftPath, rightPath, bw)
 	case "pair":
@@ -337,12 +337,12 @@ func tokenize(n map[string]any, field string) []string {
 	return toStrings(n[field])
 }
 
-type byTokenOpts struct {
+type ByTokenOpts struct {
 	rootsOnly bool
 	groupBy   []string
 }
 
-func diffByToken(leftPath, rightPath string, bw *bufio.Writer, opts byTokenOpts) {
+func diffByToken(leftPath, rightPath string, bw *bufio.Writer, opts ByTokenOpts) {
 	canc := newDumpDiffCanceler(leftPath, rightPath, dumpDiffContentKey)
 	rExact := map[string]map[string][]string{}
 	rAxis := map[string]map[string][]string{}
@@ -1054,13 +1054,13 @@ func dumpDiffNodeContentEqual(left, right map[string]any) bool {
 	return nodeFieldHashes(left) == nodeFieldHashes(right)
 }
 
-type dumpDiffCanceler struct {
+type DumpDiffCanceler struct {
 	key         func(map[string]any) string
 	budgetLeft  map[string]int
 	budgetRight map[string]int
 }
 
-func newDumpDiffCanceler(leftPath, rightPath string, key func(map[string]any) string) *dumpDiffCanceler {
+func newDumpDiffCanceler(leftPath, rightPath string, key func(map[string]any) string) *DumpDiffCanceler {
 	left := dumpDiffKeyMultiset(leftPath, key)
 	right := dumpDiffKeyMultiset(rightPath, key)
 	pairs := make(map[string]int, len(left))
@@ -1083,7 +1083,7 @@ func newDumpDiffCanceler(leftPath, rightPath string, key func(map[string]any) st
 		budgetRight[k] = n
 	}
 
-	return &dumpDiffCanceler{key: key, budgetLeft: pairs, budgetRight: budgetRight}
+	return &DumpDiffCanceler{key: key, budgetLeft: pairs, budgetRight: budgetRight}
 }
 
 func dumpDiffKeyMultiset(path string, key func(map[string]any) string) map[string]int {
@@ -1096,11 +1096,11 @@ func dumpDiffKeyMultiset(path string, key func(map[string]any) string) map[strin
 	return m
 }
 
-func (c *dumpDiffCanceler) cancelLeft(n map[string]any) bool {
+func (c *DumpDiffCanceler) cancelLeft(n map[string]any) bool {
 	return dumpDiffTakeBudget(c.budgetLeft, c.key(n))
 }
 
-func (c *dumpDiffCanceler) cancelRight(n map[string]any) bool {
+func (c *DumpDiffCanceler) cancelRight(n map[string]any) bool {
 	return dumpDiffTakeBudget(c.budgetRight, c.key(n))
 }
 

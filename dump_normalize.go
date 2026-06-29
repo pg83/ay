@@ -45,7 +45,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		throwFmt("dump normalize: --in and --target are required")
 	}
 
-	src := nodeSource{path: inPath}
+	src := NodeSource{path: inPath}
 	workers := 4
 
 	if !streaming {
@@ -74,7 +74,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 	}
 
 	fanoutNodes(src, workers,
-		func(node *rawNode) p1Result {
+		func(node *RawNode) p1Result {
 			uid := node.UID
 			kv, _ := node.Kv.(map[string]any)
 			p, _ := kv["p"].(string)
@@ -153,7 +153,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		}
 
 		fanoutNodes(src, workers,
-			func(node *rawNode) stripResult {
+			func(node *RawNode) stripResult {
 				uid := node.UID
 				inputSet := make(map[string]struct{})
 
@@ -252,7 +252,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 	seen := map[string]bool{}
 
 	fanoutNodes(src, workers,
-		func(node *rawNode) emitLine {
+		func(node *RawNode) emitLine {
 			uid := node.UID
 
 			if !closure[uid] {

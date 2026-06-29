@@ -39,7 +39,7 @@ func TestNewPlatform_WrapccVectorsAndResources(t *testing.T) {
 
 	wantRes := []string{resourcePatternClangTool + intP.ClangVer, resourcePatternYMakePython3, resourcePatternOSSDKRoot}
 
-	if !reflect.DeepEqual(intP.CCUsesResources, STRS(wantRes...)) {
+	if !reflect.DeepEqual(intP.CCUsesResources, sTRS(wantRes...)) {
 		t.Errorf("CCUsesResources = %v, want %v", intP.CCUsesResources, wantRes)
 	}
 

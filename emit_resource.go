@@ -412,18 +412,18 @@ func objcopyCmdArgs(oc *ObjcopyEmitCtx, outputObj VFS, payload []STR) ArgChunks 
 	return oc.na.chunkList(oc.blocks.pre, oc.na.strList((outputObj).str()), oc.blocks.post, payload)
 }
 
-type resolvedResource struct {
+type ResolvedResource struct {
 	Input           VFS
 	ProducerRef     NodeRef
 	ProducerMainOut VFS
 	SourceInputs    []VFS
 }
 
-func resolveResourceInput(ctx *GenCtx, instance ModuleInstance, rawPath string, fallback VFS) resolvedResource {
+func resolveResourceInput(ctx *GenCtx, instance ModuleInstance, rawPath string, fallback VFS) ResolvedResource {
 	output := resourceOutputVFS(instance.Path.rel(), rawPath)
 
 	if info := ctx.codegenFor(instance).lookup(output); info != nil {
-		return resolvedResource{
+		return ResolvedResource{
 			Input:           output,
 			ProducerRef:     info.ProducerRef,
 			ProducerMainOut: info.ProducerMainOut,
@@ -431,10 +431,10 @@ func resolveResourceInput(ctx *GenCtx, instance ModuleInstance, rawPath string, 
 		}
 	}
 
-	return resolvedResource{Input: fallback}
+	return ResolvedResource{Input: fallback}
 }
 
-type objcopyNode struct {
+type ObjcopyNode struct {
 	moduleTag  *string
 	kv         *KV
 	hashPaths  []string
@@ -446,7 +446,7 @@ type objcopyNode struct {
 	deps       []NodeRef
 }
 
-func buildObjcopyNode(ctx *GenCtx, instance ModuleInstance, oc *ObjcopyEmitCtx, n objcopyNode) (NodeRef, VFS) {
+func buildObjcopyNode(ctx *GenCtx, instance ModuleInstance, oc *ObjcopyEmitCtx, n ObjcopyNode) (NodeRef, VFS) {
 	na := oc.na
 	hash := objcopyHash(n.hashPaths, n.keysB64, n.kvsHash, instance.Path.rel(), n.moduleTag)
 	outputObj := build(instance.Path.rel(), "/objcopy_", hash, ".o")
@@ -485,17 +485,17 @@ func buildObjcopyNode(ctx *GenCtx, instance ModuleInstance, oc *ObjcopyEmitCtx, 
 	return ctx.emit.emit(node), outputObj
 }
 
-type auxChunk struct {
+type AuxChunk struct {
 	hashInputs []string
 	cmdArgs    []string
 	inputs     []VFS
 	deps       []NodeRef
 }
 
-func chunkAuxEntries(entries []PyProtoAuxEntry) []auxChunk {
-	var chunks []auxChunk
+func chunkAuxEntries(entries []PyProtoAuxEntry) []AuxChunk {
+	var chunks []AuxChunk
 
-	cur := auxChunk{}
+	cur := AuxChunk{}
 	cmdLen := 0
 
 	deduper.reset()
@@ -529,7 +529,7 @@ func chunkAuxEntries(entries []PyProtoAuxEntry) []auxChunk {
 		}
 
 		chunks = append(chunks, cur)
-		cur = auxChunk{}
+		cur = AuxChunk{}
 		cmdLen = 0
 		deduper.reset()
 		depSeen = map[NodeRef]struct{}{}

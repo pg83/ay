@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-var commands = []command{
+var commands = []Command{
 	{
 		path: []string{"fetch"}, run: cmdFetch, hide: true,
 		help: "📥 Fetch a Sandbox/MDS resource into the build root (FETCH node).",
@@ -150,7 +150,7 @@ func parseGlobalFlags(argv []string) (probes []string, g GlobalFlags, rest []str
 	return probes, g, argv[i:]
 }
 
-type command struct {
+type Command struct {
 	path []string
 	run  func(g GlobalFlags, args []string) int
 	help string
