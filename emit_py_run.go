@@ -108,7 +108,6 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 
 	registerPYOutput := func(out VFS, parsed []IncludeDirective) {
 		reg.register(&GeneratedFileInfo{
-			ProducerKvP:    pkPY,
 			OutputPath:     out,
 			ProducerRef:    pyRef,
 			ParsedIncludes: parsed,

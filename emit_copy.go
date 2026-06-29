@@ -74,7 +74,6 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 			existing.ParsedIncludes = parsed
 		} else {
 			info := &GeneratedFileInfo{
-				ProducerKvP:    pkCP,
 				OutputPath:     dstVFS,
 				SourcePath:     srcVFS,
 				IsText:         entry.Text,

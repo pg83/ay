@@ -71,7 +71,6 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 		reg := ctx.codegenFor(instance)
 
 		reg.register(&GeneratedFileInfo{
-			ProducerKvP:    pkSW,
 			OutputPath:     cOutVFS,
 			ProducerRef:    swRef,
 			GeneratorRefs:  []NodeRef{swigRef},
@@ -79,7 +78,6 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 		})
 
 		reg.register(&GeneratedFileInfo{
-			ProducerKvP:   pkSW,
 			OutputPath:    pyOutVFS,
 			ProducerRef:   swRef,
 			GeneratorRefs: []NodeRef{swigRef},

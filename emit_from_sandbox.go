@@ -96,7 +96,6 @@ func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 
 	for _, out := range outVFSs {
 		ctx.codegenFor(instance).register(&GeneratedFileInfo{
-			ProducerKvP:     pkSB,
 			OutputPath:      out,
 			ProducerRef:     ref,
 			ParsedIncludes:  parsed,

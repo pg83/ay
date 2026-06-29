@@ -48,7 +48,6 @@ var flatcVariantFL = flatcVariant{
 	toolArg:    argContribLibsFlatbuffersFlatc,
 	constFlags: flatcConstFlags,
 	ioLeadArgs: flatcIOLeadArgs,
-	procKind:   pkFL,
 	kv:         &flatcKVFL,
 	srcExt:     ".fbs",
 	bfbsExt:    ".bfbs",
@@ -59,7 +58,6 @@ var flatcVariantFL64 = flatcVariant{
 	toolArg:    argContribLibsFlatbuffers64Flatc,
 	constFlags: flatc64ConstFlags,
 	ioLeadArgs: flatc64IOLeadArgs,
-	procKind:   pkFL64,
 	kv:         &flatcKVFL64,
 	srcExt:     ".fbs64",
 	bfbsExt:    ".bfbs64",
@@ -70,7 +68,6 @@ type flatcVariant struct {
 	toolArg    ARG
 	constFlags []STR
 	ioLeadArgs []STR
-	procKind   ProcKind
 	kv         *KV
 	srcExt     string
 	bfbsExt    string
@@ -163,7 +160,6 @@ func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 	reg := ctx.codegenFor(instance)
 
 	reg.register(&GeneratedFileInfo{
-		ProducerKvP:    v.procKind,
 		OutputPath:     headerVFS,
 		ProducerRef:    flRef,
 		GeneratorRefs:  []NodeRef{flatcLDRef},
@@ -174,7 +170,6 @@ func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 	cppIncludes := []IncludeDirective{{kind: includeQuoted, target: internStr(headerVFS.rel())}}
 
 	reg.register(&GeneratedFileInfo{
-		ProducerKvP:    v.procKind,
 		OutputPath:     cppVFS,
 		ProducerRef:    flRef,
 		GeneratorRefs:  []NodeRef{flatcLDRef},
@@ -182,7 +177,6 @@ func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 	})
 
 	reg.register(&GeneratedFileInfo{
-		ProducerKvP:    v.procKind,
 		OutputPath:     bfbsVFS,
 		ProducerRef:    flRef,
 		GeneratorRefs:  []NodeRef{flatcLDRef},

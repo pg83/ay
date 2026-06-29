@@ -30,7 +30,6 @@ func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	lxRef := ctx.emit.reserve()
 
 	ctx.codegenFor(instance).register(&GeneratedFileInfo{
-		ProducerKvP:    pkLX,
 		OutputPath:     outVFS,
 		ProducerRef:    lxRef,
 		GeneratorRefs:  []NodeRef{flexRef},

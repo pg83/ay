@@ -48,7 +48,6 @@ func emitYmapsSprotoHeaders(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 		parsed = append(parsed, sprotoInducedHeaders(pbhImports)...)
 
 		ctx.codegenFor(instance).register(&GeneratedFileInfo{
-			ProducerKvP:    pkPB,
 			OutputPath:     sprotoH,
 			ProducerRef:    sprotoRef,
 			GeneratorRefs:  []NodeRef{sprotocLDRef},

@@ -48,7 +48,6 @@ func emitJVDownstreamCPCC(
 		}
 
 		ctx.codegenFor(instance).register(&GeneratedFileInfo{
-			ProducerKvP:    pkCP,
 			OutputPath:     g4CppPath,
 			ProducerRef:    cpRef,
 			GeneratorRefs:  nil,

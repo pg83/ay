@@ -33,7 +33,6 @@ func emitLibrarySCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 	runtimeInclude := []IncludeDirective{{kind: includeQuoted, target: internStr(domschemeRuntimeVFS.rel())}}
 
 	ctx.codegenFor(instance).register(&GeneratedFileInfo{
-		ProducerKvP:    pkSC,
 		OutputPath:     headerVFS,
 		ProducerRef:    scRef,
 		GeneratorRefs:  []NodeRef{domLDRef},

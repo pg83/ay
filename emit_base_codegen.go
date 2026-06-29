@@ -46,7 +46,6 @@ func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt, 
 	reg := ctx.codegenFor(instance)
 
 	reg.register(&GeneratedFileInfo{
-		ProducerKvP:    pkBC,
 		OutputPath:     prefixH,
 		ProducerRef:    bcRef,
 		GeneratorRefs:  []NodeRef{toolLDRef},
@@ -55,7 +54,6 @@ func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt, 
 	})
 
 	reg.register(&GeneratedFileInfo{
-		ProducerKvP:    pkBC,
 		OutputPath:     prefixCpp,
 		ProducerRef:    bcRef,
 		GeneratorRefs:  []NodeRef{toolLDRef},

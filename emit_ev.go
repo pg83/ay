@@ -212,7 +212,6 @@ func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 	reg := ctx.codegenFor(instance)
 
 	reg.register(&GeneratedFileInfo{
-		ProducerKvP:    pkEV,
 		OutputPath:     evH,
 		ProducerRef:    evRef,
 		GeneratorRefs:  []NodeRef{event2cppLDRef},
@@ -225,7 +224,6 @@ func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 	evCCParsed = append(evCCParsed, protobufRuntimeDirectives...)
 
 	reg.register(&GeneratedFileInfo{
-		ProducerKvP:    pkEV,
 		OutputPath:     evPbCC,
 		ProducerRef:    evRef,
 		GeneratorRefs:  []NodeRef{event2cppLDRef},

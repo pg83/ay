@@ -67,7 +67,6 @@ func emitLibraryRagel5Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	reg := ctx.codegenFor(instance)
 
 	reg.register(&GeneratedFileInfo{
-		ProducerKvP:    pkR5,
 		OutputPath:     r5TmpOut,
 		ProducerRef:    r5Ref,
 		GeneratorRefs:  []NodeRef{ragel5LDRef, rlgenCdLDRef},
@@ -77,7 +76,6 @@ func emitLibraryRagel5Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	r5Parsed := ctx.scannerFor(instance).parsers.sourceParsedBuckets(rlSourceVFS, nil).bucket(parsedIncludesCpp)
 
 	reg.register(&GeneratedFileInfo{
-		ProducerKvP:    pkR5,
 		OutputPath:     r5CppOut,
 		ProducerRef:    r5Ref,
 		GeneratorRefs:  []NodeRef{ragel5LDRef, rlgenCdLDRef},

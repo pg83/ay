@@ -44,7 +44,6 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	reg := ctx.codegenFor(instance)
 
 	reg.register(&GeneratedFileInfo{
-		ProducerKvP:    pkPB,
 		OutputPath:     cfgH,
 		ProducerRef:    cfgRef,
 		GeneratorRefs:  cfgGenRefs,
@@ -58,7 +57,6 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	}
 
 	reg.register(&GeneratedFileInfo{
-		ProducerKvP:    pkPB,
 		OutputPath:     cfgPbCC,
 		ProducerRef:    cfgRef,
 		GeneratorRefs:  cfgGenRefs,
