@@ -20,7 +20,8 @@ type CompileSpec struct {
 	ObjectSuffixStem *string
 	Py3Suffix        bool
 	ForceCxx         bool
-	EnvCFlags        *[]ARG
+	EnvAddIncl       []VFS
+	EnvCFlags        []ARG
 }
 
 type CodegenRegistry struct {
