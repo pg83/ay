@@ -177,16 +177,20 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 		}
 
 		pyRef := ctx.emit.emit(pyNode)
+
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			OutputPath:    regCppVFS,
+			ProducerRef:   pyRef,
+			ClosureLeaves: []VFS{genPy3RegScriptVFS},
+		})
+
 		ccIn := in
 
-		ccIn.ExtraDepRefs = []NodeRef{pyRef}
 		ccIn.Py3Suffix = py3Suffix
 
 		if len(d.cythonCpp) > 0 {
 			ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl, d.cythonNumpyBeforeInclude)
 		}
-
-		ccIn.IncludeInputs = []VFS{regCppVFS, genPy3RegScriptVFS}
 
 		if len(in.CFlags) > 0 {
 			filtered := make([]ARG, 0, len(in.CFlags))
@@ -206,10 +210,10 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 
 		ccIn.CCBlocks = composeCCModuleArgBlocks(na, instance.Platform, &ccIn)
 
-		ccRef, ccOut, _ := emitCC(instance, internStr(regCpp), regCppVFS, ccIn, ctx.host, ctx.emit)
+		se := emitOneSource(ctx, instance, d, regCppVFS.str(), ccIn)
 
-		res.Refs = append(res.Refs, ccRef)
-		res.Outputs = append(res.Outputs, ccOut)
+		res.Refs = append(res.Refs, se.Ref)
+		res.Outputs = append(res.Outputs, se.OutPath)
 	}
 
 	return res
