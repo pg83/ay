@@ -1882,33 +1882,13 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		arDeclMeta[emit.OutPath] = SrcMeta{Prio: stmtPrioDefault, Seq: e.Seq}
 	}
 
-	for _, js := range d.joinSrcs {
-		srcInstance := instance
-		jsSources := strStrings(js.Sources)
-		joinClosure := joinSrcsIncludeClosure(ctx, srcInstance.Platform, srcInstance, jsSources, moduleInputs)
-		ccClosure := joinClosure
+	jsRefs, jsOuts, jsMeta := emitJoinSrcs(ctx, instance, d, moduleInputs)
 
-		if srcInstance.Platform.ISA == ISAX8664 {
-			jsModuleInputs := moduleInputs
+	ccRefs = append(ccRefs, jsRefs...)
+	ccOutputs = append(ccOutputs, jsOuts...)
 
-			jsModuleInputs.PeerAddInclGlobal = rebasePerArchPeerAddIncl(moduleInputs.PeerAddInclGlobal, srcInstance.Platform.ISA, ctx.target.ISA)
-			jsModuleInputs.ScanCfg = newScanContext(ctx.parsers, jsModuleInputs.AddIncl, jsModuleInputs.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
-
-			joinClosure = joinSrcsIncludeClosure(ctx, ctx.target, srcInstance, jsSources, jsModuleInputs)
-		}
-
-		jsRef, joinOutVFS := emitJS(srcInstance, js.OutputName, jsSources, joinClosure, ctx.target, d.tc, ctx.scripts, ctx.emit)
-		ccIncludeInputs := jsCCIncludeInputs(srcInstance, joinOutVFS, jsSources, ccClosure, ctx.scripts)
-		ccIn := moduleInputs
-
-		ccIn.ExtraDepRefs = []NodeRef{jsRef}
-		ccIn.IncludeInputs = ccIncludeInputs
-
-		ref, outPath, _ := emitCC(srcInstance, joinOutVFS.str(), joinOutVFS, ccIn, ctx.host, ctx.emit)
-
-		ccRefs = append(ccRefs, ref)
-		ccOutputs = append(ccOutputs, outPath)
-		arDeclMeta[outPath] = SrcMeta{Prio: stmtPrioDefault, Seq: js.Seq, Generated: true}
+	for k, v := range jsMeta {
+		arDeclMeta[k] = v
 	}
 
 	globalRefs := make([]NodeRef, 0, len(d.globalSrcs))
