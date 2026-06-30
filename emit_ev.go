@@ -63,7 +63,7 @@ func evPeerProtoIncludes(protoInclude []VFS) []STR {
 	return out
 }
 
-func evWitnessExtras(evRelPath string, evPbCC VFS) []IncludeDirective {
+func evWitnessExtras(evRelPath string) []IncludeDirective {
 	evExtraProtobuf := evExtraProtobufDirectives()
 	evAbseilCleanup := evAbseilCleanupDirectives()
 
@@ -73,7 +73,6 @@ func evWitnessExtras(evRelPath string, evPbCC VFS) []IncludeDirective {
 	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())})
 	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(pbDescriptorVFS.rel())})
 	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(evRelPath)})
-	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(evPbCC.rel())})
 	out = append(out, pbDescriptorImporterDirectives...)
 	out = append(out, evExtraProtobuf...)
 	out = append(out, evAbseilCleanup...)
@@ -179,7 +178,6 @@ func emitProtoWrapperPBNode(
 }
 
 func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
-	srcRel := src.string()
 	evSource := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
 	evRelPath := evSource.rel()
 	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
@@ -198,7 +196,7 @@ func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 	evH := build(evRelPath, ".pb.h")
 	evPbCC := build(evRelPath, ".pb.cc")
 	directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, "")
-	evExtras := evWitnessExtras(evRelPath, evPbCC)
+	evExtras := evWitnessExtras(evRelPath)
 	evHParsed := make([]IncludeDirective, 0, len(directImports)+len(protobufRuntimeDirectives)+len(evExtras))
 
 	evHParsed = append(evHParsed, directImports...)
@@ -212,43 +210,19 @@ func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 		ProducerRef:    evRef,
 		GeneratorRefs:  []NodeRef{event2cppLDRef},
 		ParsedIncludes: evHParsed,
+		ClosureLeaves:  []VFS{evPbCC},
 	})
 
-	evCCParsed := make([]IncludeDirective, 0, 1+len(protobufRuntimeDirectives))
-
-	evCCParsed = append(evCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(evH.rel())})
-	evCCParsed = append(evCCParsed, protobufRuntimeDirectives...)
+	evCCParsed := append(append([]IncludeDirective(nil), evHParsed...),
+		IncludeDirective{kind: includeQuoted, target: internStr(source(pbRuntimeBase, "google/protobuf/wire_format.h").rel())})
 
 	reg.register(&GeneratedFileInfo{
 		OutputPath:     evPbCC,
 		ProducerRef:    evRef,
 		GeneratorRefs:  []NodeRef{event2cppLDRef},
 		ParsedIncludes: evCCParsed,
+		Compile:        &CompileSpec{FlatOutput: in.FlatOutput, CFlags: in.PerSourceCFlags},
 	})
 
-	evPbCCSuffix := srcRel + ".pb.cc"
-	ccIn := in
-
-	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), evPbCC, in.ScanCfg)
-
-	filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
-
-	for _, v := range ccIn.IncludeInputs {
-		if v == evH {
-			continue
-		}
-
-		filtered = append(filtered, v)
-	}
-
-	ccIn.IncludeInputs = filtered
-
-	wireFormatVFS := source(pbRuntimeBase, "google/protobuf/wire_format.h")
-
-	ccIn.IncludeInputs = append(ccIn.IncludeInputs, wireFormatVFS)
-	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, evRef)
-
-	ref, outPath, _ := emitCC(instance, internStr(evPbCCSuffix), evPbCC, ccIn, ctx.host, ctx.emit)
-
-	return &SourceEmit{Ref: ref, OutPath: outPath}
+	return emitOneSource(ctx, instance, d, evPbCC.str(), in)
 }
