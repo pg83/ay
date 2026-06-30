@@ -184,13 +184,13 @@ func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 	})
 }
 
-func emitLibraryFlatcSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+func emitLibraryFlatcSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
 	srcRel := src.string()
 	cppVFS := build(resolveSourceVFS(ctx, instance, srcRel, d.srcDirs).rel(), ".cpp")
 
-	return emitFlatcCppCompile(ctx, instance, d, cppVFS, in)
+	return emitFlatcCppCompile(ctx, instance, d, cppVFS)
 }
 
-func emitFlatcCppCompile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, cppVFS VFS, in ModuleCCInputs) *SourceEmit {
-	return emitOneSource(ctx, instance, d, cppVFS.str(), in)
+func emitFlatcCppCompile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, cppVFS VFS) *SourceEmit {
+	return emitOneSource(ctx, instance, d, cppVFS.str())
 }

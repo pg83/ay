@@ -8,7 +8,7 @@ var (
 	llvmBcKV3 = KV{P: pkOP, PC: pcYellow}
 )
 
-func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs, resourceGlobals []ResourceDecl) {
+func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, resourceGlobals []ResourceDecl) {
 	na := ctx.na
 
 	if len(d.llvmBc) == 0 {
@@ -40,6 +40,7 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 
 		for _, src := range stmt.Sources {
 			inputVFS, producer := llvmBcSourceInfo(ctx, instance, src)
+			in := d.cc.ccInputsFor(ctx, instance, d, inputVFS)
 			bcOut := build(llvmBcRootRelArcSrc(ctx, instance, src), stmt.Suffix, ".bc")
 			bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
 			closure := walkClosure(ctx.scannerFor(instance), inputVFS, in.ScanCfg)
@@ -163,8 +164,8 @@ func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCC
 func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platform, in ModuleCCInputs, inVFS, outVFS VFS) []STR {
 	bundle := compileFlagBundleFor(platform)
 	warningBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
-	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in, platform)
-	ownGlobalBucket := composeOwnAndPeerGlobalBucket(in, true)
+	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in.ModuleCompileEnv, platform)
+	ownGlobalBucket := composeOwnAndPeerGlobalBucket(in.ModuleCompileEnv, true)
 	ownExtras := in.CXXFlags
 
 	if len(platform.CXXFlags) > 0 {

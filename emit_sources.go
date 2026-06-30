@@ -12,7 +12,7 @@ type SourceEmit struct {
 	Extra   []SourceEmit
 }
 
-type SrcEmitter = func(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit
+type SrcEmitter = func(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit
 
 func init() {
 	srcExtMatcher = newExtMatcher([]ExtEntry[SrcEmitter]{
@@ -48,24 +48,11 @@ func init() {
 	})
 }
 
-func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
 	srcRel := src.string()
 
 	if isHeaderSource(srcRel) {
 		return nil
-	}
-
-	if v := src.vfs(); v != 0 {
-		if info := ctx.codegenFor(instance).lookup(v); info != nil && info.Compile != nil {
-			sp := info.Compile
-
-			in.PerSourceCFlags = sp.CFlags
-			in.FlatOutput = sp.FlatOutput
-			in.Variant = sp.Variant
-			in.ObjectSuffixStem = sp.ObjectSuffixStem
-			in.Py3Suffix = sp.Py3Suffix
-			in.ForceCxx = sp.ForceCxx
-		}
 	}
 
 	emit, ok := srcExtMatcher.match(srcRel)
@@ -79,5 +66,5 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR,
 		return nil
 	}
 
-	return emit(ctx, instance, d, src, in)
+	return emit(ctx, instance, d, src)
 }

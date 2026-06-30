@@ -58,10 +58,10 @@ func bisonGeneratedRel(srcRel, genExt string) string {
 	return srcRel + genExt
 }
 
-func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) {
+func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) {
 	na := ctx.na
 	srcRel := src.string()
-	genExt := in.BisonGenExt
+	genExt := d.cc.BisonGenExt
 	bisonRef, bisonBin := bisonTool(ctx, instance)
 	m4Ref, m4Bin := m4Tool(ctx, instance)
 	preprocessHeader := genExt != ".c"
@@ -121,10 +121,10 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envBISON_PKGDATADIR, Value: strBisonPkgData}, {Name: envM4, Value: m4Bin}}
 	preprocessEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-	head := make([]STR, 0, 6+len(in.BisonFlags))
+	head := make([]STR, 0, 6+len(d.cc.BisonFlags))
 
 	head = append(head, internStr(bisonBin), argV.str())
-	head = appendArgStr(head, in.BisonFlags)
+	head = appendArgStr(head, d.cc.BisonFlags)
 
 	head = append(head,
 		internV("--defines=", headerVFS.string()),
@@ -137,7 +137,7 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 
 	if preprocessHeader {
 		cmds = append(cmds, Cmd{
-			CmdArgs: na.chunkList(na.strList(in.TC.Python3,
+			CmdArgs: na.chunkList(na.strList(d.cc.TC.Python3,
 				(bisonPreprocessPyVFS).str(),
 				(headerVFS).str())),
 			Env: preprocessEnv,
@@ -145,7 +145,7 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 
 		inputs = append(inputs, bisonPreprocessPyVFS)
 		inputs = append(inputs, bisonCppSkeletonInputs...)
-		inputs = dedup(inputs, walkClosureTail(ctx.scannerFor(instance), headerVFS, in.ScanCfg))
+		inputs = dedup(inputs, walkClosureTail(ctx.scannerFor(instance), headerVFS, d.cc.ScanCfg))
 	}
 
 	ctx.emit.emitReserved(&Node{
@@ -161,11 +161,11 @@ func emitBisonProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src 
 	}, ycRef)
 }
 
-func emitBisonY(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
-	generatedRel := bisonGeneratedRel(src.string(), in.BisonGenExt)
+func emitBisonY(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
+	generatedRel := bisonGeneratedRel(src.string(), d.cc.BisonGenExt)
 	generatedVFS := build(instance.Path.rel(), "/", generatedRel)
 
-	return emitOneSource(ctx, instance, d, generatedVFS.str(), in)
+	return emitOneSource(ctx, instance, d, generatedVFS.str())
 }
 
 func bisonTool(ctx *GenCtx, instance ModuleInstance) (NodeRef, string) {

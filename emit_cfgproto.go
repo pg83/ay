@@ -2,8 +2,8 @@ package main
 
 var cfgprotoKV = KV{P: pkPB, PC: pcYellow}
 
-func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
-	cfgSource := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
+func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
+	cfgSource := resolveModuleSourceVFS(ctx, instance, d, src, d.cc.SrcDirs)
 	cfgRelPath := cfgSource.rel()
 	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
 	cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
@@ -13,13 +13,13 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	configOpts := na.strList(internV("--plugin=protoc-gen-config=", configPluginBinary.string()),
 		argConfigOutB.str())
 
-	cfgImports := walkClosureTail(ctx.scannerFor(instance), cfgSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()).ScanCfg)
+	cfgImports := walkClosureTail(ctx.scannerFor(instance), cfgSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
 
 	cfgRef := emitProtoWrapperPBNode(
 		instance, cfgRelPath, &cfgprotoKV,
 		cppStyleguideLDRef, protocLDRef, configPluginLDRef,
 		cppStyleguideBinary, protocBinary, configPluginBinary,
-		configOpts, 0, cfgImports, in.ProtoInclude,
+		configOpts, 0, cfgImports, d.cc.ProtoInclude,
 		!protoTransitiveHeadersEnabled(d),
 		d.tc, ctx.emit)
 
@@ -61,5 +61,5 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		ClosureLeaves:  []VFS{cfgSource},
 	})
 
-	return emitOneSource(ctx, instance, d, cfgPbCC.str(), in)
+	return emitOneSource(ctx, instance, d, cfgPbCC.str())
 }

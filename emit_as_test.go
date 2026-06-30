@@ -17,13 +17,13 @@ var builtinsASOwnAddIncl = []VFS{
 func TestEmitAS_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 	e := newStreamingEmitter(nil, nil)
 	inst := hostInstance("contrib/libs/foolib")
-	in := ModuleCCInputs{
+	in := ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{
 		InclArgs: newInclArgMemo(),
 		AddIncl: []VFS{
 			intern("$(S)/custom/foolib/arch/x86_64"),
 			intern("$(S)/custom/foolib/include"),
 		},
-	}
+	}}
 	emitAS(inst, "src/math/x86_64/ceill.s", intern("$(S)/contrib/libs/foolib/src/math/x86_64/ceill.s"), in, testHostP, e)
 
 	args := e.nodes[0].Cmds[0].CmdArgs.flat()
@@ -78,7 +78,7 @@ func TestEmitAS_OutputPath_NestedSrc(t *testing.T) {
 func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 	e := newStreamingEmitter(nil, nil)
 
-	in := ModuleCCInputs{SrcDirs: []VFS{dirKey("contrib/libs/tcmalloc")}, FS: newMemFS(nil)}
+	in := ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{SrcDirs: []VFS{dirKey("contrib/libs/tcmalloc")}, FS: newMemFS(nil)}}
 	_, outPath := emitAS(
 		targetInstance("contrib/libs/tcmalloc/no_percpu_cache"),
 		"tcmalloc/internal/percpu_rseq_asm.S",
@@ -110,7 +110,7 @@ func TestEmitASYasm_YasmLD_PopulatesDepRefs(t *testing.T) {
 	e := newStreamingEmitter(nil, nil)
 	yasmLDRef := testYasmLDRef(e)
 
-	yasmTestIn := ModuleCCInputs{InclArgs: newInclArgMemo(), AddIncl: builtinsASOwnAddIncl}
+	yasmTestIn := ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{InclArgs: newInclArgMemo(), AddIncl: builtinsASOwnAddIncl}}
 	ref, _ := emitASYasm(hostInstance("contrib/libs/asmlib"), "memset64.asm", intern("$(S)/contrib/libs/asmlib/memset64.asm"), yasmTestIn, yasmLDRef, e)
 
 	if len(e.nodes) != 2 {

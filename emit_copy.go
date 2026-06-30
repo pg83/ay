@@ -41,7 +41,7 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, moduleDir VFS, entry
 	return out
 }
 
-func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleInputs *ModuleCCInputs) (memberRefs []NodeRef, memberOuts []VFS, memberSrcs []VFS) {
+func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData) (memberRefs []NodeRef, memberOuts []VFS, memberSrcs []VFS) {
 	scanner := ctx.scannerFor(instance)
 	reg := ctx.codegenFor(instance)
 
@@ -112,8 +112,8 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 
 		var closure []VFS
 
-		if moduleInputs != nil && (entry.WithContext || len(entry.OutputIncludes) > 0) {
-			closure = walkClosure(ctx.scannerFor(instance), dstVFS, moduleInputs.ScanCfg)
+		if entry.WithContext || len(entry.OutputIncludes) > 0 {
+			closure = walkClosure(ctx.scannerFor(instance), dstVFS, d.cc.ScanCfg)
 			closure = rewriteClosureCPSource(scanner, closure)
 			closure = keepOnlySourceVFS(closure)
 			closure = dedup(closure)
@@ -123,13 +123,7 @@ func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleIn
 			closure = append(closure, entries[i].producerSource...)
 		}
 
-		var moduleTag STR
-
-		if moduleInputs != nil {
-			moduleTag = moduleInputs.ModuleTag
-		}
-
-		emitCPWithDeps(instance, srcVFS, dstVFS, deps, closure, entries[i].ref, moduleTag, d.tc, ctx.scripts, ctx.emit)
+		emitCPWithDeps(instance, srcVFS, dstVFS, deps, closure, entries[i].ref, d.cc.ModuleTag, d.tc, ctx.scripts, ctx.emit)
 
 		if dst := entry.Dst; extIsArchiveMember(dst) {
 			memberRefs = append(memberRefs, entries[i].ref)

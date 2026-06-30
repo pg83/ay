@@ -51,36 +51,40 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 	return emit.emit(node), outVFS
 }
 
-func emitJoinSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleInputs ModuleCCInputs) ([]NodeRef, []VFS, map[VFS]SrcMeta) {
+func emitJoinSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) ([]NodeRef, []VFS, map[VFS]SrcMeta) {
 	refs := make([]NodeRef, 0, len(d.joinSrcs))
 	outs := make([]VFS, 0, len(d.joinSrcs))
 	meta := make(map[VFS]SrcMeta, len(d.joinSrcs))
 
 	for _, js := range d.joinSrcs {
 		jsSources := strStrings(js.Sources)
-		joinClosure := joinSrcsIncludeClosure(ctx, instance.Platform, instance, jsSources, moduleInputs)
+		joinClosure := joinSrcsIncludeClosure(ctx, instance.Platform, instance, jsSources, d, d.cc.ScanCfg)
 		ccClosure := joinClosure
 
 		if instance.Platform.ISA == ISAX8664 {
-			jsModuleInputs := moduleInputs
+			jsPeerAddInclGlobal := rebasePerArchPeerAddIncl(d.cc.PeerAddInclGlobal, instance.Platform.ISA, ctx.target.ISA)
+			jsScanCfg := newScanContext(ctx.parsers, d.cc.AddIncl, jsPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 
-			jsModuleInputs.PeerAddInclGlobal = rebasePerArchPeerAddIncl(moduleInputs.PeerAddInclGlobal, instance.Platform.ISA, ctx.target.ISA)
-			jsModuleInputs.ScanCfg = newScanContext(ctx.parsers, jsModuleInputs.AddIncl, jsModuleInputs.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
-
-			joinClosure = joinSrcsIncludeClosure(ctx, ctx.target, instance, jsSources, jsModuleInputs)
+			joinClosure = joinSrcsIncludeClosure(ctx, ctx.target, instance, jsSources, d, jsScanCfg)
 		}
 
 		jsRef, joinOutVFS := emitJS(instance, js.OutputName, jsSources, joinClosure, ctx.target, d.tc, ctx.scripts, ctx.emit)
 		ccIncl := jsCCIncludeInputs(instance, joinOutVFS, jsSources, ccClosure, ctx.scripts)
 
+		var psc []ARG
+
+		if p := d.perSrcCFlagsFor(joinOutVFS.str()); p != nil {
+			psc = *p
+		}
+
 		ctx.codegenFor(instance).register(&GeneratedFileInfo{
 			OutputPath:    joinOutVFS,
 			ProducerRef:   jsRef,
 			ClosureLeaves: ccIncl[1:],
-			Compile:       &CompileSpec{FlatOutput: moduleInputs.FlatOutput, CFlags: moduleInputs.PerSourceCFlags},
+			Compile:       &CompileSpec{FlatOutput: d.flatSrc(joinOutVFS.str()), CFlags: psc},
 		})
 
-		if se := emitOneSource(ctx, instance, d, joinOutVFS.str(), moduleInputs); se != nil {
+		if se := emitOneSource(ctx, instance, d, joinOutVFS.str()); se != nil {
 			refs = append(refs, se.Ref)
 			outs = append(outs, se.OutPath)
 			meta[se.OutPath] = SrcMeta{Prio: stmtPrioDefault, Seq: js.Seq, Generated: true}
@@ -90,7 +94,7 @@ func emitJoinSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleInp
 	return refs, outs, meta
 }
 
-func joinSrcsIncludeClosure(ctx *GenCtx, scanPlatform *Platform, srcInstance ModuleInstance, sources []string, in ModuleCCInputs) []VFS {
+func joinSrcsIncludeClosure(ctx *GenCtx, scanPlatform *Platform, srcInstance ModuleInstance, sources []string, d *ModuleData, scanCfg ScanContext) []VFS {
 	scanner := ctx.scannerForPlatform(scanPlatform)
 	visited := scanner.visitedIDPool.Get().(*IdSet)
 
@@ -105,7 +109,7 @@ func joinSrcsIncludeClosure(ctx *GenCtx, scanPlatform *Platform, srcInstance Mod
 		srcRelOnDisk := srcInstance.Path.rel() + "/" + src
 
 		if !ctx.fs.isFile(modDirKey, src) {
-			for _, dir := range in.SrcDirs {
+			for _, dir := range d.cc.SrcDirs {
 				if dir != modDirKey && ctx.fs.isFile(dir, src) {
 					srcRelOnDisk = dir.rel() + "/" + src
 
@@ -119,7 +123,7 @@ func joinSrcsIncludeClosure(ctx *GenCtx, scanPlatform *Platform, srcInstance Mod
 	}
 
 	order := make([]VFS, 0, 1024)
-	cfg := in.ScanCfg
+	cfg := scanCfg
 
 	for _, srcRelOnDisk := range srcRels {
 		sc := scanner.getScanCtx(cfg, scanner.parsers.registry.registeredParserFor(srcRelOnDisk))

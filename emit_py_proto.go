@@ -286,7 +286,7 @@ func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src str
 	}
 
 	inputs := []VFS{protocBinary, pbPyWrapperVFS, protoSrcVFS}
-	transitive := walkClosureTail(ctx.scannerFor(instance), source(protoRelPath), protoWalkInputs(ctx.parsers, nil, instance.Path.rel()).ScanCfg)
+	transitive := walkClosureTail(ctx.scannerFor(instance), source(protoRelPath), protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
 
 	inputs = append(inputs, transitive...)
 	inputs = append(inputs, producerSourceInputs...)
@@ -660,28 +660,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 			DepRefs:      deps,
 		}, auxRef)
 
-		ccIn := ModuleCCInputs{
-			TC:                   d.tc,
-			InclArgs:             ctx.inclArgs,
-			Flags:                d.flags,
-			AddIncl:              d.addIncl,
-			PeerAddInclGlobal:    peerAddIncl,
-			ScanCfg:              newScanContext(ctx.parsers, d.addIncl, peerAddIncl, includeScannerBasePaths(), instance.Path.rel()),
-			PeerCFlagsGlobal:     peerContribs.cFlags,
-			PeerCXXFlagsGlobal:   peerContribs.cxxFlags,
-			PeerCOnlyFlagsGlobal: peerContribs.cOnlyFlags,
-			ModuleScopeCFlags:    d.moduleScopeCFlags,
-			ClangWarnings:        d.clangWarnings,
-			PerSourceCFlags:      []ARG{argX, argC},
-			FS:                   ctx.fs,
-			Py3Suffix:            true,
-			ForceCxx:             true,
-			ModuleTag:            tagPy3Proto,
-		}
-
-		ccIn.CCBlocks = composeCCModuleArgBlocks(na, instance.Platform, &ccIn)
-
-		se := emitOneSource(ctx, instance, d, aux.str(), ccIn)
+		se := emitOneSource(ctx, instance, d, aux.str())
 
 		res.Refs = append(res.Refs, se.Ref)
 		res.Outputs = append(res.Outputs, se.OutPath)

@@ -6,13 +6,13 @@ import (
 
 var baseCodegenKV = KV{P: pkBC, PC: pcYellow}
 
-func emitBaseCodegensForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) {
+func emitBaseCodegensForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	for _, bc := range d.baseCodegens {
-		emitBaseCodegen(ctx, instance, bc, in)
+		emitBaseCodegen(ctx, instance, bc)
 	}
 }
 
-func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt, in ModuleCCInputs) {
+func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt) {
 	na := ctx.emit.nodeArenas()
 	moduleDir := instance.Path.rel()
 	prefix := bc.Prefix.string()

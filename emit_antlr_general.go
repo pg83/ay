@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumerInputs *ModuleCCInputs) (ccRefs []NodeRef, ccOutputs []VFS) {
+func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData) (ccRefs []NodeRef, ccOutputs []VFS) {
 	if len(d.antlrRuns) == 0 {
 		return nil, nil
 	}
@@ -93,10 +93,6 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 			})
 		}
 
-		if consumerInputs == nil {
-			continue
-		}
-
 		for _, outTok := range run.OUTFiles {
 			if !isCCSourceExt(outTok.string()) {
 				continue
@@ -104,7 +100,7 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 
 			outVFS := outVFSByToken[outTok.string()]
 			cppRel := antlrOutputModuleRel(instance.Path.rel(), outVFS)
-			se := emitOneSource(ctx, instance, d, copyFileOutputVFS(instance.Path.rel(), cppRel).str(), *consumerInputs)
+			se := emitOneSource(ctx, instance, d, copyFileOutputVFS(instance.Path.rel(), cppRel).str())
 			ccRef, ccOut := se.Ref, se.OutPath
 
 			ccRefs = append(ccRefs, ccRef)

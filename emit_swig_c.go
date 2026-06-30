@@ -26,7 +26,7 @@ type SwigSrc struct {
 	Module string
 }
 
-func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []*SourceEmit {
+func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData) []*SourceEmit {
 	na := ctx.na
 
 	if len(d.swigC) == 0 {
@@ -70,13 +70,19 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 
 		reg := ctx.codegenFor(instance)
 
+		var psc []ARG
+
+		if p := d.perSrcCFlagsFor(cOutVFS.str()); p != nil {
+			psc = *p
+		}
+
 		reg.register(&GeneratedFileInfo{
 			OutputPath:     cOutVFS,
 			ProducerRef:    swRef,
 			GeneratorRefs:  []NodeRef{swigRef},
 			ParsedIncludes: collectSwigInducedIncludes(ctx, srcVFS, swigClosure),
 			ClosureLeaves:  append(append([]VFS{}, swigClosure...), srcVFS),
-			Compile:        &CompileSpec{FlatOutput: in.FlatOutput, CFlags: in.PerSourceCFlags},
+			Compile:        &CompileSpec{FlatOutput: d.flatSrc(cOutVFS.str()), CFlags: psc},
 		})
 
 		reg.register(&GeneratedFileInfo{
@@ -86,7 +92,7 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 			SourceInputs:  append([]VFS{cOutVFS, srcVFS}, swigClosure...),
 		})
 
-		if se := emitOneSource(ctx, instance, d, cOutVFS.str(), in); se != nil {
+		if se := emitOneSource(ctx, instance, d, cOutVFS.str()); se != nil {
 			out = append(out, se)
 		}
 	}

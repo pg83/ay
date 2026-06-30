@@ -14,7 +14,7 @@ func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	genProtoName := base + ".proto"
 	genProto := build(moddir, "/", genProtoName)
 	converterRef, converterBin := ctx.tool(argDictGazetteerConverter)
-	imports := walkClosureTail(ctx.scannerFor(instance), gztSource, protoWalkInputs(ctx.parsers, protoInclude, moddir).ScanCfg)
+	imports := walkClosureTail(ctx.scannerFor(instance), gztSource, protoWalkInputs(ctx.parsers, protoInclude, moddir))
 	inducedProtos := gztConverterInducedProtos(ctx)
 	na := ctx.emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -64,13 +64,13 @@ func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	return gzRef, genProtoName
 }
 
-func emitLibraryGztProtoCompile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+func emitLibraryGztProtoCompile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
 	srcRel := src.string()
-	_, genProtoSrc := emitLibraryGztProtoSource(ctx, instance, d, srcRel, in.ProtoInclude, in.ModuleTag)
+	_, genProtoSrc := emitLibraryGztProtoSource(ctx, instance, d, srcRel, d.cc.ProtoInclude, d.cc.ModuleTag)
 
-	emitProtoProducer(ctx, instance, d, genProtoSrc, in)
+	emitProtoProducer(ctx, instance, d, genProtoSrc)
 
-	return emitLibraryProtoSource(ctx, instance, d, internStr(genProtoSrc), in)
+	return emitLibraryProtoSource(ctx, instance, d, internStr(genProtoSrc))
 }
 
 func gztCmdArgs(converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) []STR {

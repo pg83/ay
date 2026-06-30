@@ -177,19 +177,19 @@ func emitProtoWrapperPBNode(
 	return emit.emit(node)
 }
 
-func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
-	evSource := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
+func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
+	evSource := resolveModuleSourceVFS(ctx, instance, d, src, d.cc.SrcDirs)
 	evRelPath := evSource.rel()
 	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
 	cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
 	event2cppLDRef, event2cppBinary := ctx.tool(argToolsEvent2cpp)
-	evImports := walkClosureTail(ctx.scannerFor(instance), evSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()).ScanCfg)
+	evImports := walkClosureTail(ctx.scannerFor(instance), evSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
 
 	evRef := emitEV(
 		instance, evRelPath,
 		cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 		cppStyleguideBinary, protocBinary, event2cppBinary,
-		0, evImports, in.ProtoInclude,
+		0, evImports, d.cc.ProtoInclude,
 		!protoTransitiveHeadersEnabled(d),
 		d.tc, ctx.emit)
 
@@ -204,6 +204,11 @@ func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 	evHParsed = append(evHParsed, evExtras...)
 
 	reg := ctx.codegenFor(instance)
+
+	var psc []ARG
+	if p := d.perSrcCFlagsFor(src); p != nil {
+		psc = *p
+	}
 
 	reg.register(&GeneratedFileInfo{
 		OutputPath:     evH,
@@ -221,8 +226,8 @@ func emitLibraryEvSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, sr
 		ProducerRef:    evRef,
 		GeneratorRefs:  []NodeRef{event2cppLDRef},
 		ParsedIncludes: evCCParsed,
-		Compile:        &CompileSpec{FlatOutput: in.FlatOutput, CFlags: in.PerSourceCFlags},
+		Compile:        &CompileSpec{FlatOutput: d.flatSrc(src), CFlags: psc},
 	})
 
-	return emitOneSource(ctx, instance, d, evPbCC.str(), in)
+	return emitOneSource(ctx, instance, d, evPbCC.str())
 }

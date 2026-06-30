@@ -7,7 +7,7 @@ import (
 
 var splitCodegenKV = KV{P: pkSC, PC: pcYellow}
 
-func emitSplitCodegensForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) *RunProgramsForARResult {
+func emitSplitCodegensForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *RunProgramsForARResult {
 	if len(d.splitCodegens) == 0 {
 		return nil
 	}
@@ -15,10 +15,10 @@ func emitSplitCodegensForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	res := &RunProgramsForARResult{}
 
 	for _, sc := range d.splitCodegens {
-		_, parts := emitSplitCodegen(ctx, instance, sc, in)
+		_, parts := emitSplitCodegen(ctx, instance, sc)
 
 		for _, partRel := range parts {
-			se := emitOneSource(ctx, instance, d, copyFileOutputVFS(instance.Path.rel(), partRel).str(), in)
+			se := emitOneSource(ctx, instance, d, copyFileOutputVFS(instance.Path.rel(), partRel).str())
 			ccRef, ccOut := se.Ref, se.OutPath
 
 			res.CCRefs = append(res.CCRefs, ccRef)
@@ -29,7 +29,7 @@ func emitSplitCodegensForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	return res
 }
 
-func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt, in ModuleCCInputs) (NodeRef, []string) {
+func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt) (NodeRef, []string) {
 	na := ctx.emit.nodeArenas()
 	moduleDir := instance.Path.rel()
 	prefix := sc.Prefix.string()

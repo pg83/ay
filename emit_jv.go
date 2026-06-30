@@ -31,7 +31,6 @@ func emitJVDownstreamCPCC(
 	jvInputs []VFS,
 	cpccPairs []struct{ cpp, h VFS },
 	outputIncludes []string,
-	in ModuleCCInputs,
 ) (ccRefs []NodeRef, ccOutputs []VFS) {
 	for _, pair := range cpccPairs {
 		srcCpp := pair.cpp
@@ -56,10 +55,10 @@ func emitJVDownstreamCPCC(
 			GeneratorRefs:  nil,
 			ParsedIncludes: emits,
 			ClosureLeaves:  leaves,
-			Compile:        &CompileSpec{FlatOutput: in.FlatOutput, CFlags: []ARG{argWnoUnusedVariable}},
+			Compile:        &CompileSpec{FlatOutput: d.flatSrc(g4CppPath.str()), CFlags: []ARG{argWnoUnusedVariable}},
 		})
 
-		closure := walkClosure(ctx.scannerFor(instance), g4CppPath, in.ScanCfg)
+		closure := walkClosure(ctx.scannerFor(instance), g4CppPath, d.cc.ScanCfg)
 		leafSet := make(map[VFS]bool, len(leaves))
 
 		for _, l := range leaves {
@@ -74,9 +73,9 @@ func emitJVDownstreamCPCC(
 			}
 		}
 
-		emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, in.TC, ctx.scripts, ctx.emit)
+		emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, d.cc.TC, ctx.scripts, ctx.emit)
 
-		if se := emitOneSource(ctx, instance, d, g4CppPath.str(), in); se != nil {
+		if se := emitOneSource(ctx, instance, d, g4CppPath.str()); se != nil {
 			ccRefs = append(ccRefs, se.Ref)
 			ccOutputs = append(ccOutputs, se.OutPath)
 		}

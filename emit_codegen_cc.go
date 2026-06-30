@@ -1,7 +1,8 @@
 package main
 
-func emitCodegenDownstreamAS(ctx *GenCtx, instance ModuleInstance, asmRel string, depRefs []NodeRef, in ModuleCCInputs) (NodeRef, VFS) {
+func emitCodegenDownstreamAS(ctx *GenCtx, instance ModuleInstance, d *ModuleData, asmRel string, depRefs []NodeRef) (NodeRef, VFS) {
 	asmPath := copyFileOutputVFS(instance.Path.rel(), asmRel)
+	in := d.cc.ccInputsFor(ctx, instance, d, asmPath)
 	asIn := in
 
 	asIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), asmPath, in.ScanCfg)

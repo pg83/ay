@@ -7,7 +7,7 @@ import (
 
 var checkConfigHKV = KV{P: pkCH, PC: pcYellow}
 
-func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []*SourceEmit {
+func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData) []*SourceEmit {
 	na := ctx.na
 
 	if len(d.checkConfigHeaders) == 0 {
@@ -23,7 +23,7 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 		confVFS := source(instance.Path.rel(), "/", conf.string())
 		inputs := []VFS{buildScriptsCheckConfigHPy}
 
-		inputs = append(inputs, walkClosure(ctx.scannerFor(instance), confVFS, in.ScanCfg)...)
+		inputs = append(inputs, walkClosure(ctx.scannerFor(instance), confVFS, d.cc.ScanCfg)...)
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -42,6 +42,12 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 			Resources:    usesPython3,
 		})
 
+		var psc []ARG
+
+		if p := d.perSrcCFlagsFor(generatedVFS.str()); p != nil {
+			psc = *p
+		}
+
 		ctx.codegenFor(instance).register(&GeneratedFileInfo{
 			OutputPath:  generatedVFS,
 			ProducerRef: chRef,
@@ -49,10 +55,10 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 				{kind: includeQuoted, target: internStr(confVFS.rel())},
 			},
 			ClosureLeaves: []VFS{buildScriptsCheckConfigHPy},
-			Compile:       &CompileSpec{FlatOutput: in.FlatOutput, CFlags: in.PerSourceCFlags},
+			Compile:       &CompileSpec{FlatOutput: d.flatSrc(generatedVFS.str()), CFlags: psc},
 		})
 
-		if se := emitOneSource(ctx, instance, d, generatedVFS.str(), in); se != nil {
+		if se := emitOneSource(ctx, instance, d, generatedVFS.str()); se != nil {
 			out = append(out, se)
 		}
 	}

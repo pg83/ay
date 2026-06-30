@@ -26,7 +26,6 @@ func emitResourceObjcopy(
 	ctx *GenCtx,
 	instance ModuleInstance,
 	d *ModuleData,
-	in ModuleCCInputs,
 ) *ObjcopyEmitResult {
 	hasKvOnly := d.pyMain != nil || len(d.noCheckImports) > 0 || len(d.pySrcs) > 0 || len(d.yaConfJSON) > 0
 
@@ -77,7 +76,7 @@ func emitResourceObjcopy(
 	py3BinProgramSide := d.moduleStmt.Name == tokPy3Program && !d.programPairedLib
 
 	if !py3BinProgramSide {
-		r, o := emitResourceFile(ctx, instance, d, oc, in, d.resources, moduleTag)
+		r, o := emitResourceFile(ctx, instance, d, oc, d.resources, moduleTag)
 
 		out.Refs = append(out.Refs, r...)
 		out.Outputs = append(out.Outputs, o...)
@@ -92,7 +91,7 @@ func emitResourceObjcopy(
 	}
 
 	if !py3BinProgramSide {
-		r, o := emitResourceFile(ctx, instance, d, oc, in, d.pyPyiResources, moduleTag)
+		r, o := emitResourceFile(ctx, instance, d, oc, d.pyPyiResources, moduleTag)
 
 		out.Refs = append(out.Refs, r...)
 		out.Outputs = append(out.Outputs, o...)
@@ -103,7 +102,7 @@ func emitResourceObjcopy(
 	return out
 }
 
-func emitResourceFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, oc *ObjcopyEmitCtx, in ModuleCCInputs, entries []ResourceEntry, moduleTag *string) (refs []NodeRef, outputs []VFS) {
+func emitResourceFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, oc *ObjcopyEmitCtx, entries []ResourceEntry, moduleTag *string) (refs []NodeRef, outputs []VFS) {
 	na := ctx.na
 	bad := []string{"${ARCADIA_BUILD_ROOT}", "${ARCADIA_SOURCE_ROOT}", "conftest.py"}
 
@@ -249,7 +248,7 @@ func emitResourceFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, oc *O
 				cur.mainOuts = append(cur.mainOuts, r.ProducerMainOut)
 
 				if r.ProducerRef != 0 {
-					for _, v := range walkClosureTail(ctx.scannerFor(instance), r.Input, in.ScanCfg) {
+					for _, v := range walkClosureTail(ctx.scannerFor(instance), r.Input, d.cc.ScanCfg) {
 						if v.isBuild() {
 							cur.closureInputs = append(cur.closureInputs, v)
 						}

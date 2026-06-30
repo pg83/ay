@@ -123,13 +123,13 @@ func pbHEmitsIncludesExtras() []IncludeDirective {
 	return out
 }
 
-func protoWalkInputs(pm *IncludeParserManager, peerProtoAddIncl []VFS, ownerModuleDir string) ModuleCCInputs {
+func protoWalkInputs(pm *IncludeParserManager, peerProtoAddIncl []VFS, ownerModuleDir string) ScanContext {
 	own := make([]VFS, 0, 1+len(peerProtoAddIncl))
 
 	own = append(own, pbRuntimeBaseVFS)
 	own = append(own, peerProtoAddIncl...)
 
-	return ModuleCCInputs{AddIncl: own, ScanCfg: newScanContext(pm, own, nil, includeScannerBasePaths(), ownerModuleDir)}
+	return newScanContext(pm, own, nil, includeScannerBasePaths(), ownerModuleDir)
 }
 
 func protoDirectImportNames(pm *IncludeParserManager, srcRel string) []string {
@@ -254,7 +254,7 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 		genProtoParsed = info.ParsedIncludes
 	}
 
-	transitiveImports := walkClosureTail(ctx.scannerFor(instance), protoVFS, protoWalkInputs(ctx.parsers, protoSearchPaths, instance.Path.rel()).ScanCfg)
+	transitiveImports := walkClosureTail(ctx.scannerFor(instance), protoVFS, protoWalkInputs(ctx.parsers, protoSearchPaths, instance.Path.rel()))
 
 	extraProtoDeps = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, transitiveImports, extraProtoDeps...)
 
@@ -558,7 +558,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		for _, src := range evSrcs {
 			evRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
 			evVFS := source(evRelPath)
-			evImports := walkClosureTail(ctx.scannerFor(instance), evVFS, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()).ScanCfg)
+			evImports := walkClosureTail(ctx.scannerFor(instance), evVFS, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
 
 			evRef := emitEV(
 				instance, evRelPath, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
@@ -615,52 +615,19 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		return nil
 	}
 
-	ownCFlagsGlobalSelf := d.cFlagsGlobal
-	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
-	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
-
-	moduleInputs := ModuleCCInputs{
-		TC:                   d.tc,
-		InclArgs:             ctx.inclArgs,
-		Flags:                d.flags,
-		AddIncl:              d.addIncl,
-		PeerAddInclGlobal:    peerContribs.addIncl,
-		ScanCfg:              newScanContext(ctx.parsers, d.addIncl, peerContribs.addIncl, includeScannerBasePaths(), instance.Path.rel()),
-		CFlags:               d.cFlags,
-		CXXFlags:             d.cxxFlags,
-		COnlyFlags:           d.cOnlyFlags,
-		OwnCFlagsGlobal:      ownCFlagsGlobalSelf,
-		OwnCXXFlagsGlobal:    ownCXXFlagsGlobalSelf,
-		OwnCOnlyFlagsGlobal:  ownCOnlyFlagsGlobalSelf,
-		PeerCFlagsGlobal:     peerContribs.cFlags,
-		PeerCXXFlagsGlobal:   peerContribs.cxxFlags,
-		PeerCOnlyFlagsGlobal: peerContribs.cOnlyFlags,
-		ModuleScopeCFlags:    d.moduleScopeCFlags,
-		ClangWarnings:        d.clangWarnings,
-		SrcDirs:              d.srcDirs,
-		FS:                   ctx.fs,
-		DefaultVars:          d.defaultVars,
-		DefaultVarOrder:      d.defaultVarOrder,
-		SetVars:              d.setVars,
-		ModuleTag:            tagCppProto,
-	}
-
-	moduleInputs.ScanCfg.OwnerModuleTag = tagCppProto
-	moduleInputs.CCBlocks = composeCCModuleArgBlocks(ctx.na, cppInstance.Platform, &moduleInputs)
-
 	ccRefs := make([]NodeRef, 0, len(codegenOutputs))
 	ccOutputs := make([]VFS, 0, len(codegenOutputs))
 	arDeclMeta := map[VFS]SrcMeta{}
 
 	for _, co := range codegenOutputs {
-		se := emitOneSource(ctx, cppInstance, d, co.pbCC.str(), moduleInputs)
+		se := emitOneSource(ctx, cppInstance, d, co.pbCC.str())
 
 		ccRefs = append(ccRefs, se.Ref)
 		ccOutputs = append(ccOutputs, se.OutPath)
 		arDeclMeta[se.OutPath] = SrcMeta{Prio: stmtPrioSrcs, Seq: co.declIdx, Generated: true}
 	}
 
-	enRes := emitEnumSrcs(ctx, instance, d, peerContribs.addIncl, &moduleInputs)
+	enRes := emitEnumSrcs(ctx, instance, d, peerContribs.addIncl)
 
 	if enRes != nil {
 		for i := range enRes.CCRefs {
@@ -689,7 +656,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 			}
 
 			cppRel := antlrOutputModuleRel(instance.Path.rel(), outVFS)
-			se := emitOneSource(ctx, cppInstance, d, copyFileOutputVFS(cppInstance.Path.rel(), cppRel).str(), moduleInputs)
+			se := emitOneSource(ctx, cppInstance, d, copyFileOutputVFS(cppInstance.Path.rel(), cppRel).str())
 			ccRef, ccOut := se.Ref, se.OutPath
 
 			antlrRefs = append(antlrRefs, ccRef)
@@ -718,25 +685,25 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	return &ProtoSrcsResult{ARRef: arRef, ARPath: &archivePath}
 }
 
-func emitProtoProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, in ModuleCCInputs) {
+func emitProtoProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string) {
 	cfg := ProtoPBConfig{
 		cppOutRoot: protoCPPOutRoot(d),
 		grpc:       d.grpc,
 	}
 
-	pe := newPBModuleEmission(ctx, d, cfg, in.ProtoIncludePeers)
+	pe := newPBModuleEmission(ctx, d, cfg, d.cc.ProtoIncludePeers)
 
-	emitProtoPB(ctx, instance, d, srcRel, cfg, pe, in.ProtoInclude, nil)
+	emitProtoPB(ctx, instance, d, srcRel, cfg, pe, d.cc.ProtoInclude, nil)
 }
 
-func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
 	srcRel := src.string()
 	protoBase := strings.TrimSuffix(protoSourceRelPath(ctx.fs, instance, d, srcRel), ".proto")
 
-	se := emitOneSource(ctx, instance, d, build(protoBase, ".pb.cc").str(), in)
+	se := emitOneSource(ctx, instance, d, build(protoBase, ".pb.cc").str())
 
 	if d.grpc {
-		se.Extra = append(se.Extra, *emitOneSource(ctx, instance, d, build(protoBase, ".grpc.pb.cc").str(), in))
+		se.Extra = append(se.Extra, *emitOneSource(ctx, instance, d, build(protoBase, ".grpc.pb.cc").str()))
 	}
 
 	return se

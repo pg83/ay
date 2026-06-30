@@ -702,7 +702,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ldPlugins = &LdPluginsResult{}
 		}
 
-		headerOnlyInputs := ModuleCCInputs{
+		d.cc = ModuleCompileEnv{
 			InclArgs:          ctx.inclArgs,
 			Flags:             d.flags,
 			AddIncl:           d.addIncl,
@@ -714,14 +714,14 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			TC:                d.tc,
 		}
 
-		headerOnlyInputs.ScanCfg = newScanContext(ctx.parsers, d.addIncl, peerContribs.addIncl, includeScannerBasePaths(), instance.Path.rel())
-		headerOnlyInputs.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &headerOnlyInputs)
-		emitRunProgramsForAR(ctx, instance, d, headerOnlyInputs)
-		emitRunPythonForAR(ctx, instance, d, headerOnlyInputs)
+		d.cc.ScanCfg = newScanContext(ctx.parsers, d.addIncl, peerContribs.addIncl, includeScannerBasePaths(), instance.Path.rel())
+		d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
+		emitRunProgramsForAR(ctx, instance, d)
+		emitRunPythonForAR(ctx, instance, d)
 
 		emitPySrcs(ctx, instance, d)
 
-		objcopyRes := emitResourceObjcopy(ctx, instance, d, headerOnlyInputs)
+		objcopyRes := emitResourceObjcopy(ctx, instance, d)
 
 		var hOnlyGlobalRef *NodeRef
 		var hOnlyGlobalPath *VFS
@@ -767,12 +767,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			hOnlyGlobalPath = vfsPtr(build(instance.Path.rel(), "/", globalBaseName))
 		}
 
-		emitMiscNodes(ctx, instance, d, nil)
+		emitMiscNodes(ctx, instance, d)
 
 		protoResult := emitProtoSrcs(ctx, instance, d, peerContribs)
 
 		if d.moduleStmt.Name != tokProtoLibrary {
-			emitEnumSrcs(ctx, instance, d, peerContribs.addIncl, nil)
+			emitEnumSrcs(ctx, instance, d, peerContribs.addIncl)
 		}
 
 		hOnlyARRef := NodeRef(0)
@@ -1611,7 +1611,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		effectiveSrcDirs = concat(d.srcDirs, []VFS{dirKey(*pd)})
 	}
 
-	moduleInputs := ModuleCCInputs{
+	d.cc = ModuleCompileEnv{
 		InclArgs:             ctx.inclArgs,
 		Flags:                d.flags,
 		CudaNvccFlags:        d.cudaNvccFlags,
@@ -1652,9 +1652,9 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		TC:          d.tc,
 	}
 
-	moduleInputs.ScanCfg = newScanContext(ctx.parsers, dedupedAddIncl, selfPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
-	moduleInputs.ScanCfg.OwnerModuleTag = cfModuleTag(d, instance)
-	moduleInputs.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &moduleInputs)
+	d.cc.ScanCfg = newScanContext(ctx.parsers, dedupedAddIncl, selfPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+	d.cc.ScanCfg.OwnerModuleTag = cfModuleTag(d, instance)
+	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
 
 	type codegenEmit struct {
 		srcID STR
@@ -1674,71 +1674,47 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	for _, src := range d.srcs {
 		if srcExtClassOf(src) == srcExtY {
-			emitBisonProducer(ctx, instance, d, src, moduleInputs)
+			emitBisonProducer(ctx, instance, d, src)
 		}
 	}
 
 	for _, src := range d.srcs {
 		if srcExtClassOf(src) == srcExtProto {
-			emitProtoProducer(ctx, instance, d, src.string(), moduleInputs)
+			emitProtoProducer(ctx, instance, d, src.string())
 		}
 	}
 
-	cythonPlans := planCythonCpp(ctx, instance, d, moduleInputs)
+	cythonPlans := planCythonCpp(ctx, instance, d)
 
 	for _, src := range d.srcs {
 		if !isCodegenProducingSrcID(src) {
 			continue
 		}
 
-		srcInputs := moduleInputs
-
-		if extras := d.perSrcCFlagsFor(src); extras != nil {
-			srcInputs.PerSourceCFlags = *extras
-		}
-
-		if d.flatSrc(src) {
-			srcInputs.FlatOutput = true
-		}
-
-		codegenEmits = append(codegenEmits, codegenEmit{src, emitOneSource(ctx, instance, d, src, srcInputs)})
+		codegenEmits = append(codegenEmits, codegenEmit{src, emitOneSource(ctx, instance, d, src)})
 	}
 
-	cpMemberRefs, cpMemberOuts, cpMemberSrcs := emitCopyFiles(ctx, instance, d, &moduleInputs)
+	cpMemberRefs, cpMemberOuts, cpMemberSrcs := emitCopyFiles(ctx, instance, d)
 
 	for i, ref := range cpMemberRefs {
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, cpMemberOuts[i])
 	}
 
-	jvCCRefs, jvCCOutputs := emitMiscNodes(ctx, instance, d, &moduleInputs)
-	prCCRes := emitRunProgramsForAR(ctx, instance, d, moduleInputs)
-	dmCCRes := emitDecimalMD5ForAR(ctx, instance, d, moduleInputs)
-	scCCRes := emitSplitCodegensForAR(ctx, instance, d, moduleInputs)
+	jvCCRefs, jvCCOutputs := emitMiscNodes(ctx, instance, d)
+	prCCRes := emitRunProgramsForAR(ctx, instance, d)
+	dmCCRes := emitDecimalMD5ForAR(ctx, instance, d)
+	scCCRes := emitSplitCodegensForAR(ctx, instance, d)
 
-	emitBaseCodegensForAR(ctx, instance, d, moduleInputs)
+	emitBaseCodegensForAR(ctx, instance, d)
 
-	pyCCRes := emitRunPythonForAR(ctx, instance, d, moduleInputs)
-	aaCCRes := emitArchiveAsmForAR(ctx, instance, d, moduleInputs)
-	enCCRes := emitEnumSrcs(ctx, instance, d, selfPeerAddInclGlobal, &moduleInputs)
+	pyCCRes := emitRunPythonForAR(ctx, instance, d)
+	aaCCRes := emitArchiveAsmForAR(ctx, instance, d)
+	enCCRes := emitEnumSrcs(ctx, instance, d, selfPeerAddInclGlobal)
 
 	emitLuaJit21(ctx, instance, d)
 
 	emitArchives(ctx, instance, d)
-
-	emitSrcInputs := func(srcID STR, src string) ModuleCCInputs {
-		si := moduleInputs
-
-		if extras := d.perSrcCFlagsFor(srcID); extras != nil {
-			si.PerSourceCFlags = *extras
-		}
-
-		if d.flatSrc(srcID) {
-			si.FlatOutput = true
-		}
-
-		return adjustCythonCompanionSourceInputs(ctx.na, instance.Platform, d, src, si)
-	}
 
 	appendCC := func(srcID STR, emit *SourceEmit, generated bool) {
 		if emit == nil {
@@ -1764,7 +1740,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			continue
 		}
 
-		appendCC(src, emitOneSource(ctx, instance, d, src, emitSrcInputs(src, src.string())), false)
+		appendCC(src, emitOneSource(ctx, instance, d, src), false)
 	}
 
 	for _, ce := range codegenEmits {
@@ -1772,15 +1748,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	for _, fe := range d.srcExtraFlat {
-		si := moduleInputs
-
-		si.FlatOutput = true
-
-		if len(fe.Flags) > 0 {
-			si.PerSourceCFlags = fe.Flags
-		}
-
-		if emit := emitOneSource(ctx, instance, d, fe.Src, si); emit != nil {
+		if emit := emitOneSource(ctx, instance, d, fe.Src); emit != nil {
 			ccRefs = append(ccRefs, emit.Ref)
 			ccOutputs = append(ccOutputs, emit.OutPath)
 			arDeclMeta[emit.OutPath] = SrcMeta{Prio: stmtPrioDefault, Seq: fe.Seq}
@@ -1803,15 +1771,15 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		genCCMeta(emit, SrcMeta{Prio: stmtPrioDefault, Generated: true})
 	}
 
-	for _, emit := range emitCheckConfigH(ctx, instance, d, moduleInputs) {
+	for _, emit := range emitCheckConfigH(ctx, instance, d) {
 		genCC(emit)
 	}
 
-	for _, emit := range emitCythonCppPlanned(ctx, instance, d, moduleInputs, cythonPlans) {
+	for _, emit := range emitCythonCppPlanned(ctx, instance, d, cythonPlans) {
 		genCC(emit)
 	}
 
-	for _, emit := range emitSwigC(ctx, instance, d, moduleInputs) {
+	for _, emit := range emitSwigC(ctx, instance, d) {
 		genCC(emit)
 	}
 
@@ -1858,20 +1826,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	for _, e := range d.simdSrcs {
-		variantIn := moduleInputs
-
-		variantIn.FlatOutput = true
-		variantIn.Variant = stringPtr(e.Variant)
-
-		flags := internArgs(e.CFlags)
-
-		if extras := d.perSrcCFlagsFor(e.Src); extras != nil {
-			flags = append(flags, *extras...)
-		}
-
-		variantIn.PerSourceCFlags = flags
-
-		emit := emitOneSource(ctx, instance, d, e.Src, variantIn)
+		emit := emitOneSource(ctx, instance, d, e.Src)
 
 		if emit == nil {
 			continue
@@ -1882,7 +1837,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		arDeclMeta[emit.OutPath] = SrcMeta{Prio: stmtPrioDefault, Seq: e.Seq}
 	}
 
-	jsRefs, jsOuts, jsMeta := emitJoinSrcs(ctx, instance, d, moduleInputs)
+	jsRefs, jsOuts, jsMeta := emitJoinSrcs(ctx, instance, d)
 
 	ccRefs = append(ccRefs, jsRefs...)
 	ccOutputs = append(ccOutputs, jsOuts...)
@@ -1895,7 +1850,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	globalOutputs := make([]VFS, 0, len(d.globalSrcs))
 
 	for _, src := range d.globalSrcs {
-		emit := emitOneSource(ctx, instance, d, src, moduleInputs)
+		emit := emitOneSource(ctx, instance, d, src)
 
 		if emit == nil {
 			continue
@@ -1907,7 +1862,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	globalSrcMemberCount := len(globalRefs)
 	regCCPy3Suffix := isPy3NativeLib || d.moduleStmt.Name == tokPy23Library
-	regRes := emitPyRegister(ctx, instance, d, moduleInputs, regCCPy3Suffix)
+	regRes := emitPyRegister(ctx, instance, d, regCCPy3Suffix)
 
 	if regRes != nil {
 		for i, ref := range regRes.Refs {
@@ -1996,7 +1951,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		var ldObjcopyPaths []VFS
 
 		if resourceLibTagForData(d) != nil || len(d.resources) > 0 {
-			objcopyRes := emitResourceObjcopy(ctx, instance, d, moduleInputs)
+			objcopyRes := emitResourceObjcopy(ctx, instance, d)
 
 			if objcopyRes != nil && len(objcopyRes.Refs) > 0 {
 				ldObjcopyRefs = objcopyRes.Refs
@@ -2164,16 +2119,16 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	emitPySrcs(ctx, instance, d)
 
-	genPyAuxRes := emitGeneratedPyAuxChunks(ctx, instance, d, moduleInputs)
+	genPyAuxRes := emitGeneratedPyAuxChunks(ctx, instance, d)
 
 	if genPyAuxRes != nil {
 		globalRefs = append(globalRefs, genPyAuxRes.Refs...)
 		globalOutputs = append(globalOutputs, genPyAuxRes.Outputs...)
 	}
 
-	emitLLVMBC(ctx, instance, d, moduleInputs, resourceGlobalsClosure)
+	emitLLVMBC(ctx, instance, d, resourceGlobalsClosure)
 
-	objcopyRes := emitResourceObjcopy(ctx, instance, d, moduleInputs)
+	objcopyRes := emitResourceObjcopy(ctx, instance, d)
 
 	if objcopyRes != nil {
 		globalRefs = append(globalRefs, objcopyRes.Refs...)
