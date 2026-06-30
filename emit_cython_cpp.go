@@ -216,7 +216,6 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 		stmt := p.stmt
 		generatedExplicit := p.generatedExplicit
 		py23Variant := p.py23Variant
-		generated := p.generated
 		generatedVFS := p.generatedVFS
 		headerVFS := p.headerVFS
 		srcVFS := p.srcVFS
@@ -242,11 +241,19 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 			parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.rel())})
 		}
 
+		py3Suffix := !stmt.CMode && !generatedExplicit && py23Variant
+		ccCFlags := append([]ARG(nil), in.PerSourceCFlags...)
+
+		if cythonImplicitFallthrough(stmt, py23Variant) {
+			ccCFlags = append(ccCFlags, argWnoImplicitFallthrough)
+		}
+
 		ctx.codegenFor(instance).register(&GeneratedFileInfo{
 			OutputPath:     generatedVFS,
 			ProducerRef:    cyRef,
 			GeneratorRefs:  nil,
 			ParsedIncludes: parsed,
+			Compile:        &CompileSpec{FlatOutput: in.FlatOutput, Py3Suffix: py3Suffix, CFlags: ccCFlags},
 		})
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -288,24 +295,14 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 
 		ccIn := in
 
-		ccIn.ExtraDepRefs = []NodeRef{cyRef}
-		ccIn.Py3Suffix = !stmt.CMode && !generatedExplicit && py23Variant
+		ccIn.Py3Suffix = py3Suffix
 		ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl, d.cythonNumpyBeforeInclude)
 		ccIn.CFlags = filterPyRegisterCFlags(ccIn.CFlags)
 		ccIn.CCBlocks = composeCCModuleArgBlocks(na, instance.Platform, &ccIn)
-		ccIn.PerSourceCFlags = append([]ARG(nil), in.PerSourceCFlags...)
 
-		if cythonImplicitFallthrough(stmt, py23Variant) {
-			ccIn.PerSourceCFlags = append(ccIn.PerSourceCFlags, argWnoImplicitFallthrough)
+		if se := emitOneSource(ctx, instance, d, generatedVFS.str(), ccIn); se != nil {
+			out = append(out, se)
 		}
-
-		ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), generatedVFS, ccIn.ScanCfg)
-		ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, cyRef)
-		ccIn.IncludeInputs = cythonCompileInducedInputs(ctx, instance, ccIn.IncludeInputs)
-
-		ccRef, ccOut, _ := emitCC(instance, internStr(generated), generatedVFS, ccIn, ctx.host, ctx.emit)
-
-		out = append(out, &SourceEmit{Ref: ccRef, OutPath: ccOut})
 	}
 
 	return out
