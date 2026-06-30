@@ -10,6 +10,7 @@ func TestEmitPyRegister_ProducerEmittedAtTargetPlatform(t *testing.T) {
 		host:   testHostP,
 		target: testTargetP,
 	}
+	wireTestScanners(ctx)
 	d := &ModuleData{pyRegister: sTRS("_sqlite3")}
 	hostInst := ModuleInstance{
 		Path:     source("contrib/tools/python3/Modules/_sqlite"),
