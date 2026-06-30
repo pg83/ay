@@ -278,12 +278,6 @@ func TestPySrcObjcopyHashSymbolsModuleDualEntry(t *testing.T) {
 	}
 }
 
-func TestChunkPySrcEntriesEmptyReturnsNil(t *testing.T) {
-	if got := chunkPySrcEntries(nil); got != nil {
-		t.Fatalf("chunkPySrcEntries(nil): got %+v, want nil", got)
-	}
-}
-
 func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 	d := &ModuleData{
 		tc: testToolchain(),

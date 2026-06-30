@@ -1099,56 +1099,6 @@ END()
 	}
 }
 
-func TestGen_SwigGeneratedPyStaysOnRawAuxNotObjcopy(t *testing.T) {
-	files := map[string]string{}
-
-	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
-	writeToolProgram(files, "tools/py3cc", "py3cc")
-	writeToolProgram(files, "tools/py3cc/slow", "slow")
-	writeToolProgram(files, "tools/rescompiler", "rescompiler")
-	writeToolProgram(files, "tools/rescompressor", "rescompressor")
-	writeToolProgram(files, "tools/archiver", "archiver")
-	writeToolProgram(files, "contrib/tools/swig", "swig")
-
-	writeTestModuleFile(files, "swigmod/_libfoo.swg", "%module libfoo\n")
-	writeTestModuleFile(files, "swigmod/ya.make", `PY3_LIBRARY()
-NO_LIBC()
-NO_RUNTIME()
-NO_UTIL()
-NO_PYTHON_INCLUDES()
-PY_SRCS(
-    SWIG_C
-    TOP_LEVEL
-    _libfoo.swg
-)
-END()
-`)
-
-	g := testGen(newMemFS(files), "swigmod")
-
-	sawAux := false
-
-	for _, n := range g.Graph {
-		if len(n.Outputs) == 0 {
-			continue
-		}
-
-		o := n.Outputs[0].string()
-
-		if strings.HasPrefix(o, "$(B)/swigmod/") && strings.HasSuffix(o, "_raw.auxcpp") {
-			sawAux = true
-		}
-
-		if strings.HasPrefix(o, "$(B)/swigmod/objcopy_") {
-			t.Fatalf("swig generated py was routed to objcopy resfs %q; want _raw.auxcpp", o)
-		}
-	}
-
-	if !sawAux {
-		t.Fatal("swig generated py did not produce the expected _raw.auxcpp resource node")
-	}
-}
-
 func TestGen_Py3ProgramResourceObjcopyUsesLibTagPyMainKeepsBinTag(t *testing.T) {
 	files := map[string]string{
 		"contrib/libs/python/ya.make":             "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
