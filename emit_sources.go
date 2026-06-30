@@ -26,6 +26,7 @@ func init() {
 		{".cc", emitLibraryCSource},
 		{".cxx", emitLibraryCSource},
 		{".C", emitLibraryCSource},
+		{".auxcpp", emitLibraryCSource},
 		{".S", emitLibraryAsmSource},
 		{".s", emitLibraryAsmSource},
 		{".asm", emitLibraryAsmSource},
