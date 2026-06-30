@@ -3,7 +3,6 @@ package main
 var cfgprotoKV = KV{P: pkPB, PC: pcYellow}
 
 func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
-	srcRel := src.string()
 	cfgSource := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
 	cfgRelPath := cfgSource.rel()
 	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
@@ -51,37 +50,16 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		ClosureLeaves:  []VFS{cfgSource, cfgPbCC},
 	})
 
-	cfgCCParsed := []IncludeDirective{
-		{kind: includeQuoted, target: internStr(cfgH.rel())},
-		{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())},
-	}
+	cfgCCParsed := append(append([]IncludeDirective(nil), cfgHParsed...),
+		IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())})
 
 	reg.register(&GeneratedFileInfo{
 		OutputPath:     cfgPbCC,
 		ProducerRef:    cfgRef,
 		GeneratorRefs:  cfgGenRefs,
 		ParsedIncludes: cfgCCParsed,
+		ClosureLeaves:  []VFS{cfgSource},
 	})
 
-	ccSrcRel := srcRel + ".pb.cc"
-	ccIn := in
-
-	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), cfgPbCC, in.ScanCfg)
-
-	filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
-
-	for _, v := range ccIn.IncludeInputs {
-		if v == cfgH {
-			continue
-		}
-
-		filtered = append(filtered, v)
-	}
-
-	ccIn.IncludeInputs = filtered
-	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, cfgRef)
-
-	ref, outPath, _ := emitCC(instance, internStr(ccSrcRel), cfgPbCC, ccIn, ctx.host, ctx.emit)
-
-	return &SourceEmit{Ref: ref, OutPath: outPath}
+	return emitOneSource(ctx, instance, d, cfgPbCC.str(), in)
 }
