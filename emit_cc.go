@@ -107,10 +107,18 @@ func emitCC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS VFS) (No
 	return emitCCWith(ctx, instance, d, srcVFS, d.cc.ccInputsFor(ctx, instance, d, srcVFS))
 }
 
-func emitCCVariant(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS VFS, variant string, cflags []ARG) (NodeRef, VFS) {
+func moduleSourceVFS(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) VFS {
+	if v := src.vfs(); v != 0 {
+		return v
+	}
+
+	return resolveModuleSourceVFS(ctx, instance, d, src, d.cc.SrcDirs)
+}
+
+func emitCCFlat(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS VFS, variant *string, cflags []ARG) (NodeRef, VFS) {
 	in := d.cc.ccInputsFor(ctx, instance, d, srcVFS)
 	in.FlatOutput = true
-	in.Variant = &variant
+	in.Variant = variant
 	in.PerSourceCFlags = cflags
 
 	return emitCCWith(ctx, instance, d, srcVFS, in)
