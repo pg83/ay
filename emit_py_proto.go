@@ -674,19 +674,17 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 			ClangWarnings:        d.clangWarnings,
 			PerSourceCFlags:      []ARG{argX, argC},
 			FS:                   ctx.fs,
-			ExtraDepRefs:         []NodeRef{auxRef},
 			Py3Suffix:            true,
 			ForceCxx:             true,
 			ModuleTag:            tagPy3Proto,
-			IncludeInputs:        auxClosure,
 		}
 
 		ccIn.CCBlocks = composeCCModuleArgBlocks(na, instance.Platform, &ccIn)
 
-		ccRef, ccOut, _ := emitCC(instance, internStr(aux.rel()[strings.LastIndex(aux.rel(), "/")+1:]), aux, ccIn, ctx.host, ctx.emit)
+		se := emitOneSource(ctx, instance, d, aux.str(), ccIn)
 
-		res.Refs = append(res.Refs, ccRef)
-		res.Outputs = append(res.Outputs, ccOut)
+		res.Refs = append(res.Refs, se.Ref)
+		res.Outputs = append(res.Outputs, se.OutPath)
 	}
 
 	return res
