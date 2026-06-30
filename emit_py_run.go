@@ -6,7 +6,7 @@ import (
 
 var pyRunKV = KV{P: pkPY, PC: pcYellow, ShowOut: true}
 
-func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) *RunProgramsForARResult {
+func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *RunProgramsForARResult {
 	if len(d.runPython) == 0 {
 		return nil
 	}
@@ -14,7 +14,7 @@ func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in 
 	res := &RunProgramsForARResult{}
 
 	for _, rp := range d.runPython {
-		pyRef := emitRunPython(ctx, instance, rp, d, in)
+		pyRef := emitRunPython(ctx, instance, rp, d)
 		outs := make([]string, 0, len(rp.OUTFiles)+1)
 
 		outs = append(outs, strStrings(rp.OUTFiles)...)
@@ -26,13 +26,13 @@ func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in 
 		for _, out := range outs {
 			switch {
 			case isCCSourceExt(out):
-				se := emitOneSource(ctx, instance, d, copyFileOutputVFS(instance.Path.rel(), out).str(), in)
+				se := emitOneSource(ctx, instance, d, copyFileOutputVFS(instance.Path.rel(), out).str())
 				ccRef, ccOut := se.Ref, se.OutPath
 
 				res.CCRefs = append(res.CCRefs, ccRef)
 				res.CCOutputs = append(res.CCOutputs, ccOut)
 			case isAsmSourceExt(out):
-				asRef, asOut := emitCodegenDownstreamAS(ctx, instance, out, []NodeRef{pyRef}, in)
+				asRef, asOut := emitCodegenDownstreamAS(ctx, instance, d, out, []NodeRef{pyRef})
 
 				res.CCRefs = append(res.CCRefs, asRef)
 				res.CCOutputs = append(res.CCOutputs, asOut)
@@ -43,7 +43,7 @@ func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in 
 	return res
 }
 
-func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d *ModuleData, moduleInputs ModuleCCInputs) NodeRef {
+func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d *ModuleData) NodeRef {
 	scriptVFS := copyFileInputVFS(ctx.fs, instance.Path, stmt.ScriptPath.string())
 	inVFSByToken := make(map[string]VFS, len(stmt.INFiles))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
@@ -129,30 +129,21 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 		registerPYOutput(*stdoutVFS, pyEmitsIncludes(ctx, instance, d, stmt, stmt.StdoutFile.string(), scriptVFS, splitSrcs, hasCCShard))
 	}
 
-	inputClosure := pyInputClosure(ctx, instance, stmt, d, moduleInputs)
+	inputClosure := pyInputClosure(ctx, instance, stmt, d)
 	extraDepRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, inputClosure)
 
-	return emitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, pyRef, moduleInputs.TC, ctx.emit)
+	return emitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, pyRef, d.cc.TC, ctx.emit)
 }
 
-func pyInputClosure(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d *ModuleData, moduleInputs ModuleCCInputs) []VFS {
-	scanIn := ModuleCCInputs{
-		TC:                d.tc,
-		InclArgs:          ctx.inclArgs,
-		Flags:             moduleInputs.Flags,
-		AddIncl:           moduleInputs.AddIncl,
-		PeerAddInclGlobal: moduleInputs.PeerAddInclGlobal,
-		SrcDirs:           moduleInputs.SrcDirs,
-		FS:                ctx.fs,
-		ScanCfg:           newScanContext(ctx.parsers, moduleInputs.AddIncl, moduleInputs.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel()),
-	}
+func pyInputClosure(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d *ModuleData) []VFS {
+	scanCfg := newScanContext(ctx.parsers, d.cc.AddIncl, d.cc.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 
 	var out []VFS
 
 	walkOne := func(rel string) {
 		buildRootPath := copyFileOutputVFS(instance.Path.rel(), rel)
 
-		out = append(out, walkClosureTail(ctx.scannerFor(instance), buildRootPath, scanIn.ScanCfg)...)
+		out = append(out, walkClosureTail(ctx.scannerFor(instance), buildRootPath, scanCfg)...)
 	}
 
 	hasCCShard, _ := splitCodegenDetect(stmt)
@@ -161,7 +152,7 @@ func pyInputClosure(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 		for _, f := range stmt.INFiles {
 			vfs := runProgramInputVFS(ctx, instance, d, f.string())
 
-			out = append(out, walkClosure(ctx.scannerFor(instance), vfs, scanIn.ScanCfg)...)
+			out = append(out, walkClosure(ctx.scannerFor(instance), vfs, scanCfg)...)
 		}
 	} else {
 		for _, f := range stmt.OUTFiles {

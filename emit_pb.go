@@ -247,17 +247,9 @@ func pyProtoAuxInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 		Compile:        &CompileSpec{ForceCxx: true, Py3Suffix: true, CFlags: []ARG{argX, argC}},
 	})
 
-	scanIn := ModuleCCInputs{
-		TC:                d.tc,
-		InclArgs:          ctx.inclArgs,
-		Flags:             d.flags,
-		AddIncl:           d.addIncl,
-		PeerAddInclGlobal: peerAddIncl,
-		FS:                ctx.fs,
-		ScanCfg:           newScanContext(ctx.parsers, d.addIncl, peerAddIncl, includeScannerBasePaths(), instance.Path.rel()),
-	}
+	scanCfg := newScanContext(ctx.parsers, d.addIncl, peerAddIncl, includeScannerBasePaths(), instance.Path.rel())
 
-	closure := walkClosure(ctx.scannerFor(instance), aux, scanIn.ScanCfg)
+	closure := walkClosure(ctx.scannerFor(instance), aux, scanCfg)
 
 	if len(closure) == 0 {
 		return nil

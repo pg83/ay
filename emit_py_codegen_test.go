@@ -21,8 +21,8 @@ func TestEmitPyRegister_ProducerEmittedAtTargetPlatform(t *testing.T) {
 	targetInst := hostInst
 	targetInst.Platform = testTargetP
 
-	emitPyRegister(ctx, hostInst, d, ModuleCCInputs{}, false)
-	emitPyRegister(ctx, targetInst, d, ModuleCCInputs{}, false)
+	emitPyRegister(ctx, hostInst, d, false)
+	emitPyRegister(ctx, targetInst, d, false)
 
 	wantOutput := "$(B)/contrib/tools/python3/Modules/_sqlite/_sqlite3.reg3.cpp"
 	var pyNodes []*Node

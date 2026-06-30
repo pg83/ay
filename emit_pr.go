@@ -22,7 +22,7 @@ type RunProgramAuxTool struct {
 	rooted bool
 }
 
-func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) *RunProgramsForARResult {
+func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *RunProgramsForARResult {
 	if len(d.runPrograms) == 0 {
 		return nil
 	}
@@ -39,7 +39,7 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 	runs := make([]runEntry, 0, len(d.runPrograms))
 
 	for _, rp := range d.runPrograms {
-		prRef := emitRunProgram(ctx, instance, rp, d, reg, in)
+		prRef := emitRunProgram(ctx, instance, rp, d, reg)
 		outs := make([]string, 0, len(rp.OUTFiles)+len(rp.OUTNoAutoFiles)+1)
 
 		outs = append(outs, strStrings(rp.OUTFiles)...)
@@ -61,7 +61,7 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 		for _, out := range run.outs {
 			switch {
 			case isCCSourceExt(out):
-				se := emitOneSource(ctx, instance, d, copyFileOutputVFS(instance.Path.rel(), out).str(), in)
+				se := emitOneSource(ctx, instance, d, copyFileOutputVFS(instance.Path.rel(), out).str())
 				ccRef, ccOut := se.Ref, se.OutPath
 
 				res.CCRefs = append(res.CCRefs, ccRef)
@@ -69,7 +69,7 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 				res.Seqs = append(res.Seqs, run.seq)
 				res.SecondLevel = append(res.SecondLevel, false)
 			case isAsmSourceExt(out):
-				asRef, asOut := emitCodegenDownstreamAS(ctx, instance, out, []NodeRef{run.prRef}, in)
+				asRef, asOut := emitCodegenDownstreamAS(ctx, instance, d, out, []NodeRef{run.prRef})
 
 				res.CCRefs = append(res.CCRefs, asRef)
 				res.CCOutputs = append(res.CCOutputs, asOut)
@@ -86,7 +86,7 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 			}
 
 			cppVFS := build(copyFileOutputVFS(instance.Path.rel(), out).rel(), ".cpp")
-			emit := emitFlatcCppCompile(ctx, instance, d, cppVFS, in)
+			emit := emitFlatcCppCompile(ctx, instance, d, cppVFS)
 
 			res.CCRefs = append(res.CCRefs, emit.Ref)
 			res.CCOutputs = append(res.CCOutputs, emit.OutPath)
@@ -111,7 +111,7 @@ func prMainOutputRel(stmt *RunProgramStmt) string {
 	return ""
 }
 
-func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, d *ModuleData, reg *CodegenRegistry, moduleInputs ModuleCCInputs) NodeRef {
+func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, d *ModuleData, reg *CodegenRegistry) NodeRef {
 	res := ctx.toolResult(internArg(filepath.Clean(stmt.ToolPath.string())))
 	toolLDRef := res.LDRef
 	toolBinPath := *res.LDPath
@@ -250,7 +250,7 @@ func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, 
 		registerPROutput(*stdoutVFS, parsed, rides)
 	}
 
-	inputClosure := prInputClosure(ctx, instance, d, stmt, moduleInputs)
+	inputClosure := prInputClosure(ctx, instance, d, stmt)
 
 	if prSourceClosure := filterSourceVFS(inputClosure); len(prSourceClosure) > 0 {
 		for out := range registeredPROut {
@@ -307,7 +307,7 @@ func pbhBasenameSet(vs []VFS) map[string]bool {
 	return m
 }
 
-func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *RunProgramStmt, moduleInputs ModuleCCInputs) []VFS {
+func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *RunProgramStmt) []VFS {
 	hasAutoCCSourceOut := stmt.StdoutFile != nil && isCCSourceExt(stmt.StdoutFile.string())
 
 	for _, f := range stmt.OUTFiles {
@@ -350,29 +350,20 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 
 	selfScanGeneratedCC := len(stmt.INFiles) > 0 && (hasParsedIN || !generatesHeader)
 
-	scanIn := ModuleCCInputs{
-		TC:                d.tc,
-		InclArgs:          ctx.inclArgs,
-		Flags:             moduleInputs.Flags,
-		AddIncl:           moduleInputs.AddIncl,
-		PeerAddInclGlobal: moduleInputs.PeerAddInclGlobal,
-		SrcDirs:           moduleInputs.SrcDirs,
-		FS:                ctx.fs,
-		ScanCfg:           newScanContext(ctx.parsers, moduleInputs.AddIncl, moduleInputs.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel()),
-	}
+	scanCfg := newScanContext(ctx.parsers, d.cc.AddIncl, d.cc.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 
 	var out []VFS
 
 	walkOne := func(rel string) {
 		buildRootPath := copyFileOutputVFS(instance.Path.rel(), rel)
-		sub := walkClosureTail(ctx.scannerFor(instance), buildRootPath, scanIn.ScanCfg)
+		sub := walkClosureTail(ctx.scannerFor(instance), buildRootPath, scanCfg)
 
 		out = append(out, sub...)
 	}
 
 	walkInput := func(rel string) {
 		inputVFS := runProgramInputVFS(ctx, instance, d, rel)
-		sub := walkClosure(ctx.scannerFor(instance), inputVFS, scanIn.ScanCfg)
+		sub := walkClosure(ctx.scannerFor(instance), inputVFS, scanCfg)
 
 		out = append(out, sub...)
 	}
@@ -418,7 +409,7 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 				continue
 			}
 
-			for _, v := range walkClosureTail(ctx.scannerFor(instance), copyFileOutputVFS(instance.Path.rel(), f.string()), scanIn.ScanCfg) {
+			for _, v := range walkClosureTail(ctx.scannerFor(instance), copyFileOutputVFS(instance.Path.rel(), f.string()), scanCfg) {
 				if v.isSource() {
 					out = append(out, v)
 				}
@@ -452,10 +443,10 @@ func prInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *R
 		switch info := reg.lookup(candidate); {
 		case info != nil:
 
-			sub = walkClosureTail(ctx.scannerFor(instance), info.OutputPath, scanIn.ScanCfg)
+			sub = walkClosureTail(ctx.scannerFor(instance), info.OutputPath, scanCfg)
 		case fullSourceClosure && ctx.fs.isFile(srcRootVFS, target.string()):
 
-			sub = walkClosure(ctx.scannerFor(instance), source(target.string()), scanIn.ScanCfg)
+			sub = walkClosure(ctx.scannerFor(instance), source(target.string()), scanCfg)
 		default:
 			continue
 		}

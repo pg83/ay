@@ -47,21 +47,26 @@ func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS
 	return emit.emit(node)
 }
 
-func emitLibraryGperfSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+func emitLibraryGperfSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
 	srcRel := src.string()
 	gperfLDRef, gperfBinVFS := ctx.tool(argContribToolsGperf)
-	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
+	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, d.cc.SrcDirs)
 	genVFS := build(instance.Path.rel(), "/", gperfGeneratedRel(srcRel))
-	srcClosure := walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)
+	srcClosure := walkClosure(ctx.scannerFor(instance), srcVFS, d.cc.ScanCfg)
 	gpRef := emitGP(instance, srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, keepOnlySourceVFS(srcClosure), ctx.emit)
+
+	var psc []ARG
+	if p := d.perSrcCFlagsFor(src); p != nil {
+		psc = *p
+	}
 
 	ctx.codegenFor(instance).register(&GeneratedFileInfo{
 		OutputPath:     genVFS,
 		ProducerRef:    gpRef,
 		GeneratorRefs:  []NodeRef{gperfLDRef},
 		ParsedIncludes: []IncludeDirective{{kind: includeQuoted, target: internStr(srcVFS.rel())}},
-		Compile:        &CompileSpec{FlatOutput: in.FlatOutput, CFlags: in.PerSourceCFlags},
+		Compile:        &CompileSpec{FlatOutput: d.flatSrc(src), CFlags: psc},
 	})
 
-	return emitOneSource(ctx, instance, d, genVFS.str(), in)
+	return emitOneSource(ctx, instance, d, genVFS.str())
 }

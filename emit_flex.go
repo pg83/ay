@@ -17,21 +17,26 @@ func flexGeneratedVFS(instance ModuleInstance, srcRel string) VFS {
 	return build(instance.Path.rel(), "/", srcRel, flexDefaultGenExt)
 }
 
-func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
 	srcRel := src.string()
 	flexRef, flexBin := ctx.tool(argContribToolsFlexOld)
-	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
+	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, d.cc.SrcDirs)
 	outVFS := flexGeneratedVFS(instance, srcRel)
 	parsed := make([]IncludeDirective, 0, 2)
 
 	parsed = append(parsed, flexOutputInclude)
 	parsed = append(parsed, ctx.scannerFor(instance).parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
 
-	cflags := in.PerSourceCFlags
+	var psc []ARG
+	if p := d.perSrcCFlagsFor(src); p != nil {
+		psc = *p
+	}
+
+	cflags := psc
 
 	if extIsFlexL(srcRel) {
 		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(srcVFS.rel())})
-		cflags = concat(in.PerSourceCFlags, []ARG{argWnoUnusedVariable})
+		cflags = concat(psc, []ARG{argWnoUnusedVariable})
 	}
 
 	lxRef := ctx.emit.reserve()
@@ -41,15 +46,15 @@ func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 		ProducerRef:    lxRef,
 		GeneratorRefs:  []NodeRef{flexRef},
 		ParsedIncludes: parsed,
-		Compile:        &CompileSpec{FlatOutput: in.FlatOutput, CFlags: cflags},
+		Compile:        &CompileSpec{FlatOutput: d.flatSrc(src), CFlags: cflags},
 	})
 
-	window := walkClosure(ctx.scannerFor(instance), outVFS, in.ScanCfg)
+	window := walkClosure(ctx.scannerFor(instance), outVFS, d.cc.ScanCfg)
 	lxClosure := keepOnlySourceVFS(window)
 
 	emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef, ctx.emit)
 
-	return emitOneSource(ctx, instance, d, outVFS.str(), in)
+	return emitOneSource(ctx, instance, d, outVFS.str())
 }
 
 func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, outVFS VFS, closure []VFS, id NodeRef, emit *StreamingEmitter) {

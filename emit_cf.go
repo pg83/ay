@@ -13,51 +13,44 @@ var (
 )
 
 func emitExplicitCF(ctx *GenCtx, instance ModuleInstance, cf *ConfigureFileStmt, d *ModuleData) {
-	in := ModuleCCInputs{
-		TC:          d.tc,
-		SetVars:     d.setVars,
-		DefaultVars: d.defaultVars,
-		ScanCfg:     newScanContext(ctx.parsers, nil, nil, includeScannerBasePaths(), instance.Path.rel()),
-	}
-
 	srcVFS := copyFileInputVFS(ctx.fs, instance.Path, cf.Src)
 	outVFS := copyFileOutputVFS(instance.Path.rel(), cf.Dst)
 
-	emitConfigureFile(ctx, instance, d, srcVFS, outVFS, in)
+	emitConfigureFile(ctx, instance, d, srcVFS, outVFS)
 }
 
-func emitLibraryHInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+func emitLibraryHInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
 	srcRel := src.string()
-	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
+	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, d.cc.SrcDirs)
 	outVFS := build(instance.Path.rel(), "/", strings.TrimSuffix(srcRel, ".in"))
 
-	emitConfigureFile(ctx, instance, d, srcVFS, outVFS, in)
+	emitConfigureFile(ctx, instance, d, srcVFS, outVFS)
 
 	return nil
 }
 
-func emitLibraryCInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+func emitLibraryCInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
 	srcRel := src.string()
-	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
+	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, d.cc.SrcDirs)
 	outVFS := build(instance.Path.rel(), "/", strings.TrimSuffix(srcRel, ".in"))
 
-	emitConfigureFile(ctx, instance, d, srcVFS, outVFS, in)
+	emitConfigureFile(ctx, instance, d, srcVFS, outVFS)
 
-	return emitOneSource(ctx, instance, d, outVFS.str(), in)
+	return emitOneSource(ctx, instance, d, outVFS.str())
 }
 
-func emitConfigureFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS, outVFS VFS, in ModuleCCInputs) NodeRef {
+func emitConfigureFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS, outVFS VFS) NodeRef {
 	na := ctx.emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-	cmdArgs := []STR{in.TC.Python3, configureFilePyVFS.str(), srcVFS.str(), outVFS.str()}
+	cmdArgs := []STR{d.cc.TC.Python3, configureFilePyVFS.str(), srcVFS.str(), outVFS.str()}
 
-	cmdArgs = appendInternStrs(cmdArgs, buildCFGVars(ctx.fs, srcVFS.rel(), in.SetVars, in.DefaultVars, instance.Platform.BuildTypeUpperSTR.string()))
+	cmdArgs = appendInternStrs(cmdArgs, buildCFGVars(ctx.fs, srcVFS.rel(), d.cc.SetVars, d.cc.DefaultVars, instance.Platform.BuildTypeUpperSTR.string()))
 
 	cfRef := ctx.emit.emit(&Node{
 		Platform:     instance.Platform,
 		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
 		Env:          env,
-		Inputs:       na.inputList(na.vfsList(configureFilePyVFS), walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)),
+		Inputs:       na.inputList(na.vfsList(configureFilePyVFS), walkClosure(ctx.scannerFor(instance), srcVFS, d.cc.ScanCfg)),
 		KV:           &cfKV,
 		Outputs:      na.vfsList(outVFS),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

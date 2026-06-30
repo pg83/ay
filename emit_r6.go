@@ -78,13 +78,18 @@ func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	emit.emitReserved(node, id)
 }
 
-func emitLibraryRagel6Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+func emitLibraryRagel6Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
 	srcRel := src.string()
 	ragelLDRef, ragelBinaryVFS := ctx.tool(argContribToolsRagel6)
-	rl6SourceVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
+	rl6SourceVFS := resolveModuleSourceVFS(ctx, instance, d, src, d.cc.SrcDirs)
 	r6Out := ragel6OutVFS(instance, srcRel)
 	r6Parsed := ctx.scannerFor(instance).parsers.sourceParsedBuckets(rl6SourceVFS, nil).bucket(parsedIncludesCpp)
 	r6Ref := ctx.emit.reserve()
+
+	var psc []ARG
+	if p := d.perSrcCFlagsFor(src); p != nil {
+		psc = *p
+	}
 
 	ctx.codegenFor(instance).register(&GeneratedFileInfo{
 		OutputPath:     r6Out,
@@ -92,19 +97,19 @@ func emitLibraryRagel6Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		GeneratorRefs:  []NodeRef{ragelLDRef},
 		ParsedIncludes: r6Parsed,
 		Compile: &CompileSpec{
-			FlatOutput: in.FlatOutput,
-			CFlags:     concat(in.PerSourceCFlags, []ARG{argWnoImplicitFallthrough}),
+			FlatOutput: d.flatSrc(src),
+			CFlags:     concat(psc, []ARG{argWnoImplicitFallthrough}),
 		},
 	})
 
-	window := walkClosure(ctx.scannerFor(instance), r6Out, in.ScanCfg)
+	window := walkClosure(ctx.scannerFor(instance), r6Out, d.cc.ScanCfg)
 	rl6Closure := keepOnlySourceVFS(filterEnSerializedSiblings(window))
 
-	emitR6(instance, srcRel, ragelLDRef, ragelBinaryVFS, in.Ragel6Flags, rl6Closure, r6Ref, ctx.emit)
+	emitR6(instance, srcRel, ragelLDRef, ragelBinaryVFS, d.cc.Ragel6Flags, rl6Closure, r6Ref, ctx.emit)
 
 	if !isCxxSource(r6Out.rel()) {
 		return nil
 	}
 
-	return emitOneSource(ctx, instance, d, r6Out.str(), in)
+	return emitOneSource(ctx, instance, d, r6Out.str())
 }

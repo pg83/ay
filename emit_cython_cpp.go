@@ -88,17 +88,17 @@ type CythonStmtPlan struct {
 	generatedVFS      VFS
 	headerVFS         []VFS
 	srcVFS            VFS
-	srcScanIn         ModuleCCInputs
+	srcScanIn         ScanContext
 	cyRef             NodeRef
 	headerPyxClosure  []VFS
 	ind               CythonCppInduced
 }
 
-func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []*SourceEmit {
-	return emitCythonCppPlanned(ctx, instance, d, in, planCythonCpp(ctx, instance, d, in))
+func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData) []*SourceEmit {
+	return emitCythonCppPlanned(ctx, instance, d, planCythonCpp(ctx, instance, d))
 }
 
-func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) []CythonStmtPlan {
+func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData) []CythonStmtPlan {
 	if len(d.cythonCpp) == 0 {
 		return nil
 	}
@@ -147,10 +147,8 @@ func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 		}
 
 		srcVFS := source(instance.Path.rel(), "/", stmt.Src)
-		srcScanIn := in
-
-		srcScanIn.AddIncl = appendCythonScanAddIncl(srcScanIn.AddIncl, d.cythonAddIncl, py23Variant)
-		srcScanIn.ScanCfg = newScanContext(ctx.parsers, srcScanIn.AddIncl, srcScanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+		scanAddIncl := appendCythonScanAddIncl(d.cc.AddIncl, d.cythonAddIncl, py23Variant)
+		srcScanIn := newScanContext(ctx.parsers, scanAddIncl, d.cc.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 
 		ind := cythonCppInducedSets(ctx, instance, srcVFS, stmt.CMode, srcScanIn)
 		cyRef := ctx.emit.reserve()
@@ -158,7 +156,7 @@ func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 		var headerPyxClosure []VFS
 
 		if stmt.Header {
-			headerPyxClosure = cythonPyxLangClosure(ctx.scannerFor(instance), srcVFS, srcScanIn.ScanCfg)
+			headerPyxClosure = cythonPyxLangClosure(ctx.scannerFor(instance), srcVFS, srcScanIn)
 
 			pyxInduced := keepOnlySourceVFS(headerPyxClosure)
 			headerInduced := cythonHeaderInducedClosure(ind)
@@ -202,7 +200,7 @@ func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modul
 	return plans
 }
 
-func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs, plans []CythonStmtPlan) []*SourceEmit {
+func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, plans []CythonStmtPlan) []*SourceEmit {
 	na := ctx.na
 
 	if len(plans) == 0 {
@@ -221,15 +219,15 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 		srcVFS := p.srcVFS
 		srcScanIn := p.srcScanIn
 		cyRef := p.cyRef
-		sourceClosure := walkClosureTail(ctx.scannerFor(instance), srcVFS, srcScanIn.ScanCfg)
+		sourceClosure := walkClosureTail(ctx.scannerFor(instance), srcVFS, srcScanIn)
 		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(p.ind, sourceClosure)
 
 		if stmt.Header {
 			toolInputs = cythonHeaderToolInputs(srcVFS, p.headerPyxClosure)
 		}
 
-		if pxdVFS, ok := resolveCythonPxd(ctx, instance, in, stmt.Pxd); ok {
-			pxdClosure := walkClosure(ctx.scannerFor(instance), pxdVFS, srcScanIn.ScanCfg)
+		if pxdVFS, ok := resolveCythonPxd(ctx, instance, stmt.Pxd); ok {
+			pxdClosure := walkClosure(ctx.scannerFor(instance), pxdVFS, srcScanIn)
 
 			toolInputs = keepOnlySourceVFS(dedup(toolInputs, pxdClosure))
 			emitsIncludes = dedup(emitsIncludes, pxdClosure)
@@ -242,7 +240,15 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 		}
 
 		py3Suffix := !stmt.CMode && !generatedExplicit && py23Variant
-		ccCFlags := append([]ARG(nil), in.PerSourceCFlags...)
+		genSrcID := internStr(p.generated)
+
+		var psc []ARG
+
+		if pcf := d.perSrcCFlagsFor(genSrcID); pcf != nil {
+			psc = *pcf
+		}
+
+		ccCFlags := append([]ARG(nil), psc...)
 
 		if cythonImplicitFallthrough(stmt, py23Variant) {
 			ccCFlags = append(ccCFlags, argWnoImplicitFallthrough)
@@ -253,7 +259,7 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 			ProducerRef:    cyRef,
 			GeneratorRefs:  nil,
 			ParsedIncludes: parsed,
-			Compile:        &CompileSpec{FlatOutput: in.FlatOutput, Py3Suffix: py3Suffix, CFlags: ccCFlags},
+			Compile:        &CompileSpec{FlatOutput: d.flatSrc(genSrcID), Py3Suffix: py3Suffix, CFlags: ccCFlags},
 		})
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -293,14 +299,7 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 			Resources:    usesPython3,
 		}, cyRef)
 
-		ccIn := in
-
-		ccIn.Py3Suffix = py3Suffix
-		ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl, d.cythonNumpyBeforeInclude)
-		ccIn.CFlags = filterPyRegisterCFlags(ccIn.CFlags)
-		ccIn.CCBlocks = composeCCModuleArgBlocks(na, instance.Platform, &ccIn)
-
-		if se := emitOneSource(ctx, instance, d, generatedVFS.str(), ccIn); se != nil {
+		if se := emitOneSource(ctx, instance, d, generatedVFS.str()); se != nil {
 			out = append(out, se)
 		}
 	}
@@ -384,7 +383,7 @@ type CythonCppInduced struct {
 	emitsCl      [][]VFS
 }
 
-func cythonCppInducedSets(ctx *GenCtx, instance ModuleInstance, src VFS, cMode bool, scanIn ModuleCCInputs) CythonCppInduced {
+func cythonCppInducedSets(ctx *GenCtx, instance ModuleInstance, src VFS, cMode bool, scanIn ScanContext) CythonCppInduced {
 	scanner := ctx.scannerFor(instance)
 	toolSingles := []VFS{contribToolsCythonCythonPy}
 	emitsSingles := []VFS{contribToolsCythonCythonPy, src}
@@ -399,7 +398,7 @@ func cythonCppInducedSets(ctx *GenCtx, instance ModuleInstance, src VFS, cMode b
 		toolSingles = append(toolSingles, v)
 		emitsSingles = append(emitsSingles, v)
 
-		cl := walkClosureTail(scanner, v, scanIn.ScanCfg)
+		cl := walkClosureTail(scanner, v, scanIn)
 
 		toolCl = append(toolCl, cl)
 		emitsCl = append(emitsCl, cl)
@@ -411,7 +410,7 @@ func cythonCppInducedSets(ctx *GenCtx, instance ModuleInstance, src VFS, cMode b
 		toolSingles = append(toolSingles, v)
 		emitsSingles = append(emitsSingles, v)
 
-		cl := walkClosureTail(scanner, v, scanIn.ScanCfg)
+		cl := walkClosureTail(scanner, v, scanIn)
 
 		toolCl = append(toolCl, cl)
 		emitsCl = append(emitsCl, cl)
@@ -433,7 +432,7 @@ func cythonHeaderInducedClosure(ind CythonCppInduced) []VFS {
 	return dedup(append([][]VFS{hdrSingles}, ind.toolCl...)...)
 }
 
-func resolveCythonPxd(ctx *GenCtx, instance ModuleInstance, in ModuleCCInputs, pxdRel string) (VFS, bool) {
+func resolveCythonPxd(ctx *GenCtx, instance ModuleInstance, pxdRel string) (VFS, bool) {
 	if pxdRel == "" {
 		return 0, false
 	}
@@ -485,18 +484,6 @@ func appendCythonCCAddIncl(addIncl []VFS, numpyBeforeInclude bool) []VFS {
 	out = append(out, cythonNumpyAddIncl...)
 
 	return out
-}
-
-func adjustCythonCompanionSourceInputs(na *NodeArenas, p *Platform, d *ModuleData, src string, in ModuleCCInputs) ModuleCCInputs {
-	if len(d.cythonCpp) == 0 {
-		return in
-	}
-
-	in.AddIncl = appendCythonCCAddIncl(in.AddIncl, d.cythonNumpyBeforeInclude)
-	in.CFlags = filterPyRegisterCFlags(in.CFlags)
-	in.CCBlocks = composeCCModuleArgBlocks(na, p, &in)
-
-	return in
 }
 
 func appendCythonScanAddIncl(addIncl []VFS, cythonAddIncl []VFS, py23 bool) []VFS {

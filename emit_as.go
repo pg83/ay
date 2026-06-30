@@ -72,7 +72,7 @@ func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInp
 	bundle := compileFlagBundleFor(instance.Platform)
 	prologueArgs := 2 + len(bundle.ArchArgs) + len(instance.Platform.SysrootArgs)
 	warnBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
-	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in, instance.Platform)
+	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in.ModuleCompileEnv, instance.Platform)
 	includes := composeASIncludes(in)
 	betweenBlocks := len(catboostOpenSourceDefine)
 
@@ -179,10 +179,11 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	return emit.emit(node), outVFS
 }
 
-func emitLibraryAsmSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+func emitLibraryAsmSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
 	srcRel := src.string()
+	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, d.cc.SrcDirs)
+	in := d.cc.ccInputsFor(ctx, instance, d, srcVFS)
 	asIn := in
-	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
 	scanIn := in
 
 	if len(d.asmAddIncl) > 0 {

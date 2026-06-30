@@ -232,6 +232,7 @@ type ModuleData struct {
 	inducedDeps              ParsedIncludeSet
 	setVars                  map[STR]STR
 	tc                       ModuleToolchain
+	cc                       ModuleCompileEnv
 }
 
 func (d *ModuleData) perSrcCFlagsFor(src STR) *[]ARG {

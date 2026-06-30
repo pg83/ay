@@ -23,12 +23,12 @@ func emitSC(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary VFS, ru
 	return emit.emit(node)
 }
 
-func emitLibrarySCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+func emitLibrarySCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
 	domRes := ctx.toolResult(argToolsDomschemec)
 	domLDRef, domBinary := domRes.LDRef, *domRes.LDPath
-	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
+	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, d.cc.SrcDirs)
 	headerVFS := build(srcVFS.rel(), ".h")
-	runtimeClosure := walkClosure(ctx.scannerFor(instance), domschemeRuntimeVFS, in.ScanCfg)
+	runtimeClosure := walkClosure(ctx.scannerFor(instance), domschemeRuntimeVFS, d.cc.ScanCfg)
 	scRef := emitSC(instance, srcVFS, headerVFS, domBinary, runtimeClosure, domLDRef, ctx.emit)
 	runtimeInclude := []IncludeDirective{{kind: includeQuoted, target: internStr(domschemeRuntimeVFS.rel())}}
 

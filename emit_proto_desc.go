@@ -118,7 +118,7 @@ func emitDescProtoSubmodule(ctx *GenCtx, instance ModuleInstance, d *ModuleData)
 	}
 
 	mid := descProtocIncludes(span.includes, cppOutRoot)
-	scanCfg := protoWalkInputs(ctx.parsers, protoSearchPaths, instance.Path.rel()).ScanCfg
+	scanCfg := protoWalkInputs(ctx.parsers, protoSearchPaths, instance.Path.rel())
 	scanner := ctx.scannerFor(instance)
 	hash := moddirHash(instance.Path.rel())
 

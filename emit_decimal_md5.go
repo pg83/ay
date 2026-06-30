@@ -13,7 +13,7 @@ type DecimalMD5Result struct {
 	CCOutputs []VFS
 }
 
-func emitDecimalMD5ForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs) *DecimalMD5Result {
+func emitDecimalMD5ForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *DecimalMD5Result {
 	if len(d.decimalMD5) == 0 {
 		return nil
 	}
@@ -27,7 +27,7 @@ func emitDecimalMD5ForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in
 			continue
 		}
 
-		if se := emitOneSource(ctx, instance, d, copyFileOutputVFS(instance.Path.rel(), stmt.File).str(), in); se != nil {
+		if se := emitOneSource(ctx, instance, d, copyFileOutputVFS(instance.Path.rel(), stmt.File).str()); se != nil {
 			res.CCRefs = append(res.CCRefs, se.Ref)
 			res.CCOutputs = append(res.CCOutputs, se.OutPath)
 		}

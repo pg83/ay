@@ -10,7 +10,11 @@ var (
 	ccKV        = KV{P: pkCC, PC: pcGreen}
 )
 
-type ModuleCCInputs struct {
+// ModuleCompileEnv is the durable, immutable per-module (or per-sub-module)
+// compile environment. It is built once from ModuleData (+peer contributions)
+// and threaded to emitters and producers. It never carries per-source or
+// transient state — those live on ModuleCCInputs, which only emitCC assembles.
+type ModuleCompileEnv struct {
 	Flags                FlagSet
 	CudaNvccFlags        []STR
 	AddIncl              []VFS
@@ -22,11 +26,9 @@ type ModuleCCInputs struct {
 	CXXFlags             []ARG
 	COnlyFlags           []ARG
 	ClangWarnings        []ARG
-	ExtraDepRefs         []NodeRef
 	ScanCfg              ScanContext
 	SrcDirs              []VFS
 	FS                   FS
-	IncludeInputs        []VFS
 	PeerCFlagsGlobal     []ARG
 	PeerCXXFlagsGlobal   []ARG
 	PeerCOnlyFlagsGlobal []ARG
@@ -36,24 +38,95 @@ type ModuleCCInputs struct {
 	OwnCXXFlagsGlobal    []ARG
 	OwnCOnlyFlagsGlobal  []ARG
 	SFlags               []ARG
-	PerSourceCFlags      []ARG
-	FlatOutput           bool
 	DefaultVars          map[STR]STR
 	DefaultVarOrder      []STR
 	SetVars              map[STR]STR
 	Py3Suffix            bool
 	ObjectSuffixStem     *string
-	ForceCxx             bool
 	NoOptimize           bool
 	ModuleTag            STR
-	Variant              *string
 	Ragel6Flags          []ARG
 	BisonFlags           []ARG
 	BisonGenExt          string
 	TC                   ModuleToolchain
 }
 
-func emitCC(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit *StreamingEmitter) (NodeRef, VFS, InputChunks) {
+// ModuleCCInputs is the fully-resolved compile request for a single object.
+// It is assembled only inside the cc subsystem (emitCC / emitLibraryCSource)
+// from a ModuleCompileEnv plus the per-source override (from ModuleData or a
+// GeneratedFileInfo.Compile spec). No other code constructs it.
+type ModuleCCInputs struct {
+	ModuleCompileEnv
+
+	PerSourceCFlags []ARG
+	FlatOutput      bool
+	ForceCxx        bool
+	Variant         *string
+	ExtraDepRefs    []NodeRef
+	IncludeInputs   []VFS
+}
+
+// ccInputsFor resolves the per-object compile inputs from the module env plus
+// per-source enrichment: from the registered CompileSpec for generated
+// sources, otherwise from ModuleData's per-source knowledge.
+func (env ModuleCompileEnv) ccInputsFor(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS VFS) ModuleCCInputs {
+	in := ModuleCCInputs{ModuleCompileEnv: env}
+
+	if info := ctx.codegenFor(instance).lookup(srcVFS); info != nil && info.Compile != nil {
+		sp := info.Compile
+
+		if sp.Env != nil {
+			in.ModuleCompileEnv = *sp.Env
+		}
+
+		in.PerSourceCFlags = sp.CFlags
+		in.FlatOutput = sp.FlatOutput
+		in.Variant = sp.Variant
+		in.ObjectSuffixStem = sp.ObjectSuffixStem
+		in.Py3Suffix = sp.Py3Suffix
+		in.ForceCxx = sp.ForceCxx
+
+		if len(sp.AddInclExtra) > 0 {
+			in.AddIncl = concat(in.AddIncl, sp.AddInclExtra)
+			in.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &in.ModuleCompileEnv)
+		}
+
+		return in
+	}
+
+	srcID := internStr(strings.TrimPrefix(srcVFS.rel(), instance.Path.rel()+"/"))
+
+	if extras := d.perSrcCFlagsFor(srcID); extras != nil {
+		in.PerSourceCFlags = *extras
+	}
+
+	if d.flatSrc(srcID) {
+		in.FlatOutput = true
+	}
+
+	return in
+}
+
+// emitCC is the sole constructor of ModuleCCInputs. It takes the module's
+// compile environment from ModuleData (d.cc), enriches it with per-source
+// module knowledge, and for generated sources pulls the enrichment from the
+// source's registered CompileSpec. No other code assembles cc flags.
+func emitCC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS VFS) (NodeRef, VFS) {
+	in := d.cc.ccInputsFor(ctx, instance, d, srcVFS)
+
+	in.IncludeInputs = walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)
+	in.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, in.IncludeInputs)
+
+	if len(d.cythonCpp) > 0 {
+		in.IncludeInputs = cythonCompileInducedInputs(ctx, instance, in.IncludeInputs)
+	}
+
+	ref, outPath, _ := composeCCNode(instance, srcVFS.str(), srcVFS, in, ctx.host, ctx.emit)
+
+	return ref, outPath
+}
+
+func composeCCNode(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit *StreamingEmitter) (NodeRef, VFS, InputChunks) {
 	na := emit.nodeArenas()
 	srcRel := src.string()
 
@@ -306,7 +379,7 @@ func appendCxxStdAndOwn(cmdArgs []STR, isCxx bool, noCompilerWarnings bool, inje
 	return cmdArgs
 }
 
-func composePeerExtras(in ModuleCCInputs, isCxx bool) []ARG {
+func composePeerExtras(in ModuleCompileEnv, isCxx bool) []ARG {
 	if isCxx {
 		return in.PeerCXXFlagsGlobal
 	}
@@ -314,7 +387,7 @@ func composePeerExtras(in ModuleCCInputs, isCxx bool) []ARG {
 	return in.PeerCOnlyFlagsGlobal
 }
 
-func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCCInputs, p *Platform) []ARG {
+func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCompileEnv, p *Platform) []ARG {
 	out := make([]ARG, 0, len(p.CFlags)+len(in.CFlags)+len(in.PeerCFlagsGlobal)+len(in.OwnCFlagsGlobal))
 
 	out = append(out, p.CFlags...)
@@ -325,7 +398,7 @@ func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCCInputs, p *Platform) []ARG {
 	return out
 }
 
-func composeOwnAndPeerGlobalBucket(in ModuleCCInputs, isCxx bool) []ARG {
+func composeOwnAndPeerGlobalBucket(in ModuleCompileEnv, isCxx bool) []ARG {
 	out := make([]ARG, 0,
 		len(in.OwnCXXFlagsGlobal)+len(in.PeerCXXFlagsGlobal)+
 			len(in.OwnCOnlyFlagsGlobal)+len(in.PeerCOnlyFlagsGlobal))
@@ -416,7 +489,7 @@ func suppressOptimize(cf []ARG) []ARG {
 	return cf
 }
 
-func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCCInputs) *CcModuleArgBlocks {
+func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv) *CcModuleArgBlocks {
 	cflagsStr := p.CompileCFlagsStr
 
 	if in.NoOptimize {
@@ -525,21 +598,14 @@ func (m InclArgMemo) arg(path VFS) STR {
 	return a
 }
 
-func emitLibraryCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+func emitLibraryCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
 	srcVFS := src.vfs()
 
 	if srcVFS == 0 {
-		srcVFS = resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
+		srcVFS = resolveModuleSourceVFS(ctx, instance, d, src, d.cc.SrcDirs)
 	}
 
-	in.IncludeInputs = walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)
-	in.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, in.IncludeInputs)
-
-	if len(d.cythonCpp) > 0 {
-		in.IncludeInputs = cythonCompileInducedInputs(ctx, instance, in.IncludeInputs)
-	}
-
-	ref, outPath, _ := emitCC(instance, src, srcVFS, in, ctx.host, ctx.emit)
+	ref, outPath := emitCC(ctx, instance, d, srcVFS)
 
 	return &SourceEmit{Ref: ref, OutPath: outPath}
 }

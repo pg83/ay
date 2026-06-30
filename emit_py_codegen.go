@@ -130,7 +130,7 @@ type PyRegisterResult struct {
 	Outputs []VFS
 }
 
-func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCInputs, py3Suffix bool) *PyRegisterResult {
+func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, py3Suffix bool) *PyRegisterResult {
 	na := ctx.na
 
 	if len(d.pyRegister) == 0 {
@@ -182,35 +182,10 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Modu
 			OutputPath:    regCppVFS,
 			ProducerRef:   pyRef,
 			ClosureLeaves: []VFS{genPy3RegScriptVFS},
+			Compile:       &CompileSpec{Py3Suffix: py3Suffix},
 		})
 
-		ccIn := in
-
-		ccIn.Py3Suffix = py3Suffix
-
-		if len(d.cythonCpp) > 0 {
-			ccIn.AddIncl = appendCythonCCAddIncl(ccIn.AddIncl, d.cythonNumpyBeforeInclude)
-		}
-
-		if len(in.CFlags) > 0 {
-			filtered := make([]ARG, 0, len(in.CFlags))
-
-			for _, f := range in.CFlags {
-				if short, ok := pyInitDefineShortname(f.string()); ok {
-					if _, keep := priorShort[short]; !keep {
-						continue
-					}
-				}
-
-				filtered = append(filtered, f)
-			}
-
-			ccIn.CFlags = filtered
-		}
-
-		ccIn.CCBlocks = composeCCModuleArgBlocks(na, instance.Platform, &ccIn)
-
-		se := emitOneSource(ctx, instance, d, regCppVFS.str(), ccIn)
+		se := emitOneSource(ctx, instance, d, regCppVFS.str())
 
 		res.Refs = append(res.Refs, se.Ref)
 		res.Outputs = append(res.Outputs, se.OutPath)

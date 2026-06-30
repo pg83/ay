@@ -58,8 +58,12 @@ func emitR5(
 	return emit.emit(node), tmpVFS, cppVFS
 }
 
-func emitLibraryRagel5Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
+func emitLibraryRagel5Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
 	srcRel := src.string()
+	var psc []ARG
+	if p := d.perSrcCFlagsFor(src); p != nil {
+		psc = *p
+	}
 	ragel5LDRef, ragel5BinVFS := ctx.tool(argContribToolsRagel5Ragel)
 	rlgenCdLDRef, rlgenCdBinVFS := ctx.tool(argContribToolsRagel5RlgenCd)
 	r5Ref, r5TmpOut, r5CppOut := emitR5(instance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, ctx.emit)
@@ -81,10 +85,10 @@ func emitLibraryRagel5Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		GeneratorRefs:  []NodeRef{ragel5LDRef, rlgenCdLDRef},
 		ParsedIncludes: append([]IncludeDirective{{kind: includeQuoted, target: internStr(r5TmpOut.rel())}}, r5Parsed...),
 		Compile: &CompileSpec{
-			FlatOutput: in.FlatOutput,
-			CFlags:     concat(in.PerSourceCFlags, []ARG{argWnoImplicitFallthrough}),
+			FlatOutput: d.flatSrc(src),
+			CFlags:     concat(psc, []ARG{argWnoImplicitFallthrough}),
 		},
 	})
 
-	return emitOneSource(ctx, instance, d, r5CppOut.str(), in)
+	return emitOneSource(ctx, instance, d, r5CppOut.str())
 }

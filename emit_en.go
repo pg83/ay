@@ -59,23 +59,14 @@ func resolveEnumHeaderInput(ctx *GenCtx, instance ModuleInstance, headerRel stri
 	return headerInput
 }
 
-func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddInclGlobal []VFS, consumerInputs *ModuleCCInputs) *EnumSrcsResult {
+func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddInclGlobal []VFS) *EnumSrcsResult {
 	if len(d.enumSrcs) == 0 {
 		return nil
 	}
 
 	enumParserLD, enumParserBin := ctx.tool(argToolsEnumParserEnumParser)
 
-	scanIn := ModuleCCInputs{
-		TC:                d.tc,
-		InclArgs:          ctx.inclArgs,
-		Flags:             d.flags,
-		AddIncl:           d.addIncl,
-		PeerAddInclGlobal: peerAddInclGlobal,
-		FS:                ctx.fs,
-		SrcDirs:           d.srcDirs,
-		ScanCfg:           newScanContext(ctx.parsers, d.addIncl, peerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel()),
-	}
+	scanCfg := newScanContext(ctx.parsers, d.addIncl, peerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 
 	res := &EnumSrcsResult{}
 	protoGenHeaders := moduleProtoGenHeaders(ctx, instance, d)
@@ -162,12 +153,12 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 	}
 
 	for _, p := range plans {
-		closure := walkClosure(ctx.scannerFor(instance), p.headerInput, scanIn.ScanCfg)
+		closure := walkClosure(ctx.scannerFor(instance), p.headerInput, scanCfg)
 
 		var ownOutputClosure []VFS
 
 		if !p.withHeader {
-			ownOutputClosure = walkClosureTail(ctx.scannerFor(instance), p.serializedCPPPath, scanIn.ScanCfg)
+			ownOutputClosure = walkClosureTail(ctx.scannerFor(instance), p.serializedCPPPath, scanCfg)
 		}
 
 		enClosure := dedup(closure, ownOutputClosure)
@@ -188,15 +179,13 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 			ctx.emit,
 		)
 
-		if consumerInputs != nil {
-			se := emitOneSource(ctx, instance, d, p.serializedCPPPath.str(), *consumerInputs)
-			ccRef, ccOut := se.Ref, se.OutPath
+		se := emitOneSource(ctx, instance, d, p.serializedCPPPath.str())
+		ccRef, ccOut := se.Ref, se.OutPath
 
-			res.CCRefs = append(res.CCRefs, ccRef)
-			res.CCOutputs = append(res.CCOutputs, ccOut)
-			res.Seqs = append(res.Seqs, p.declSeq)
-			res.SecondLevel = append(res.SecondLevel, p.secondLevel)
-		}
+		res.CCRefs = append(res.CCRefs, ccRef)
+		res.CCOutputs = append(res.CCOutputs, ccOut)
+		res.Seqs = append(res.Seqs, p.declSeq)
+		res.SecondLevel = append(res.SecondLevel, p.secondLevel)
 	}
 
 	return res
