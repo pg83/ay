@@ -465,6 +465,17 @@ func appendCythonAddIncl(cmdArgs []STR, addIncl []VFS, memo InclArgMemo) []STR {
 	return cmdArgs
 }
 
+func cythonAdjustModuleCCBlocks(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
+	if len(d.cythonCpp) == 0 {
+		return
+	}
+
+	cy := d.cc
+	cy.AddIncl = appendCythonCCAddIncl(d.cc.AddIncl, d.cythonNumpyBeforeInclude)
+	cy.CFlags = filterPyRegisterCFlags(d.cc.CFlags)
+	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &cy)
+}
+
 func appendCythonCCAddIncl(addIncl []VFS, numpyBeforeInclude bool) []VFS {
 	out := make([]VFS, 0, len(addIncl)+len(cythonNumpyAddIncl))
 

@@ -190,11 +190,17 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, py3Suff
 			envCFlags = append(envCFlags, f)
 		}
 
+		spec := &CompileSpec{Py3Suffix: py3Suffix, EnvCFlags: envCFlags}
+
+		if len(d.cythonCpp) > 0 {
+			spec.EnvAddIncl = appendCythonCCAddIncl(d.cc.AddIncl, d.cythonNumpyBeforeInclude)
+		}
+
 		ctx.codegenFor(instance).register(&GeneratedFileInfo{
 			OutputPath:    regCppVFS,
 			ProducerRef:   pyRef,
 			ClosureLeaves: []VFS{genPy3RegScriptVFS},
-			Compile:       &CompileSpec{Py3Suffix: py3Suffix, EnvCFlags: &envCFlags},
+			Compile:       spec,
 		})
 
 		se := emitOneSource(ctx, instance, d, regCppVFS.str())
