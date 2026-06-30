@@ -1761,11 +1761,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	for _, fe := range d.srcExtraFlat {
-		if emit := emitOneSource(ctx, instance, d, fe.Src); emit != nil {
-			ccRefs = append(ccRefs, emit.Ref)
-			ccOutputs = append(ccOutputs, emit.OutPath)
-			arDeclMeta[emit.OutPath] = SrcMeta{Prio: stmtPrioDefault, Seq: fe.Seq}
-		}
+		srcVFS := moduleSourceVFS(ctx, instance, d, fe.Src)
+		ref, out := emitCCFlat(ctx, instance, d, srcVFS, nil, fe.Flags)
+
+		ccRefs = append(ccRefs, ref)
+		ccOutputs = append(ccOutputs, out)
+		arDeclMeta[out] = SrcMeta{Prio: stmtPrioDefault, Seq: fe.Seq}
 	}
 
 	genCCMeta := func(emit *SourceEmit, m SrcMeta) {
@@ -1839,14 +1840,15 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	for _, e := range d.simdSrcs {
-		srcVFS := resolveModuleSourceVFS(ctx, instance, d, e.Src, d.cc.SrcDirs)
+		srcVFS := moduleSourceVFS(ctx, instance, d, e.Src)
 		flags := internArgs(e.CFlags)
 
 		if extras := d.perSrcCFlagsFor(e.Src); extras != nil {
 			flags = append(flags, *extras...)
 		}
 
-		ref, out := emitCCVariant(ctx, instance, d, srcVFS, e.Variant, flags)
+		variant := e.Variant
+		ref, out := emitCCFlat(ctx, instance, d, srcVFS, &variant, flags)
 
 		ccRefs = append(ccRefs, ref)
 		ccOutputs = append(ccOutputs, out)
