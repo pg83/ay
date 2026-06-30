@@ -50,3 +50,42 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 
 	return emit.emit(node), outVFS
 }
+
+func emitJoinSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, moduleInputs ModuleCCInputs) ([]NodeRef, []VFS, map[VFS]SrcMeta) {
+	refs := make([]NodeRef, 0, len(d.joinSrcs))
+	outs := make([]VFS, 0, len(d.joinSrcs))
+	meta := make(map[VFS]SrcMeta, len(d.joinSrcs))
+
+	for _, js := range d.joinSrcs {
+		jsSources := strStrings(js.Sources)
+		joinClosure := joinSrcsIncludeClosure(ctx, instance.Platform, instance, jsSources, moduleInputs)
+		ccClosure := joinClosure
+
+		if instance.Platform.ISA == ISAX8664 {
+			jsModuleInputs := moduleInputs
+
+			jsModuleInputs.PeerAddInclGlobal = rebasePerArchPeerAddIncl(moduleInputs.PeerAddInclGlobal, instance.Platform.ISA, ctx.target.ISA)
+			jsModuleInputs.ScanCfg = newScanContext(ctx.parsers, jsModuleInputs.AddIncl, jsModuleInputs.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+
+			joinClosure = joinSrcsIncludeClosure(ctx, ctx.target, instance, jsSources, jsModuleInputs)
+		}
+
+		jsRef, joinOutVFS := emitJS(instance, js.OutputName, jsSources, joinClosure, ctx.target, d.tc, ctx.scripts, ctx.emit)
+		ccIncl := jsCCIncludeInputs(instance, joinOutVFS, jsSources, ccClosure, ctx.scripts)
+
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			OutputPath:    joinOutVFS,
+			ProducerRef:   jsRef,
+			ClosureLeaves: ccIncl[1:],
+			Compile:       &CompileSpec{FlatOutput: moduleInputs.FlatOutput, CFlags: moduleInputs.PerSourceCFlags},
+		})
+
+		if se := emitOneSource(ctx, instance, d, joinOutVFS.str(), moduleInputs); se != nil {
+			refs = append(refs, se.Ref)
+			outs = append(outs, se.OutPath)
+			meta[se.OutPath] = SrcMeta{Prio: stmtPrioDefault, Seq: js.Seq, Generated: true}
+		}
+	}
+
+	return refs, outs, meta
+}
