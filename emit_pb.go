@@ -244,6 +244,7 @@ func pyProtoAuxInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 		ProducerRef:    ref,
 		GeneratorRefs:  []NodeRef{rescompilerRef},
 		ParsedIncludes: emits,
+		Compile:        &CompileSpec{ForceCxx: true, Py3Suffix: true, CFlags: []ARG{argX, argC}},
 	})
 
 	scanIn := ModuleCCInputs{
