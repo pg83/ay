@@ -15,10 +15,11 @@ func emitSplitCodegensForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	res := &RunProgramsForARResult{}
 
 	for _, sc := range d.splitCodegens {
-		scRef, parts := emitSplitCodegen(ctx, instance, sc, in)
+		_, parts := emitSplitCodegen(ctx, instance, sc, in)
 
 		for _, partRel := range parts {
-			ccRef, ccOut := emitCodegenDownstreamCC(ctx, instance, partRel, []NodeRef{scRef}, in)
+			se := emitOneSource(ctx, instance, d, copyFileOutputVFS(instance.Path.rel(), partRel).str(), in)
+			ccRef, ccOut := se.Ref, se.OutPath
 
 			res.CCRefs = append(res.CCRefs, ccRef)
 			res.CCOutputs = append(res.CCOutputs, ccOut)

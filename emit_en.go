@@ -189,13 +189,8 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 		)
 
 		if consumerInputs != nil {
-			cppRel := strings.TrimPrefix(p.serializedCPPPath.rel(), instance.Path.rel()+"/")
-			allDepRefs := make([]NodeRef, 0, 1+len(augmentedDepENRefs))
-
-			allDepRefs = append(allDepRefs, p.enRef)
-			allDepRefs = append(allDepRefs, augmentedDepENRefs...)
-
-			ccRef, ccOut := emitCodegenDownstreamCCFromVFS(ctx, instance, cppRel, p.serializedCPPPath, allDepRefs, *consumerInputs)
+			se := emitOneSource(ctx, instance, d, p.serializedCPPPath.str(), *consumerInputs)
+			ccRef, ccOut := se.Ref, se.OutPath
 
 			res.CCRefs = append(res.CCRefs, ccRef)
 			res.CCOutputs = append(res.CCOutputs, ccOut)

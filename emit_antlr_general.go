@@ -104,7 +104,8 @@ func emitAntlrRuns(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 
 			outVFS := outVFSByToken[outTok.string()]
 			cppRel := antlrOutputModuleRel(instance.Path.rel(), outVFS)
-			ccRef, ccOut := emitCodegenDownstreamCC(ctx, instance, cppRel, []NodeRef{jvRef}, *consumerInputs)
+			se := emitOneSource(ctx, instance, d, copyFileOutputVFS(instance.Path.rel(), cppRel).str(), *consumerInputs)
+			ccRef, ccOut := se.Ref, se.OutPath
 
 			ccRefs = append(ccRefs, ccRef)
 			ccOutputs = append(ccOutputs, ccOut)
