@@ -10,10 +10,6 @@ var (
 	ccKV        = KV{P: pkCC, PC: pcGreen}
 )
 
-// ModuleCompileEnv is the durable, immutable per-module (or per-sub-module)
-// compile environment. It is built once from ModuleData (+peer contributions)
-// and threaded to emitters and producers. It never carries per-source or
-// transient state — those live on ModuleCCInputs, which only emitCC assembles.
 type ModuleCompileEnv struct {
 	Flags                FlagSet
 	CudaNvccFlags        []STR
@@ -51,10 +47,6 @@ type ModuleCompileEnv struct {
 	TC                   ModuleToolchain
 }
 
-// ModuleCCInputs is the fully-resolved compile request for a single object.
-// It is assembled only inside the cc subsystem (emitCC / emitLibraryCSource)
-// from a ModuleCompileEnv plus the per-source override (from ModuleData or a
-// GeneratedFileInfo.Compile spec). No other code constructs it.
 type ModuleCCInputs struct {
 	ModuleCompileEnv
 
@@ -66,18 +58,11 @@ type ModuleCCInputs struct {
 	IncludeInputs   []VFS
 }
 
-// ccInputsFor resolves the per-object compile inputs from the module env plus
-// per-source enrichment: from the registered CompileSpec for generated
-// sources, otherwise from ModuleData's per-source knowledge.
 func (env ModuleCompileEnv) ccInputsFor(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS VFS) ModuleCCInputs {
 	in := ModuleCCInputs{ModuleCompileEnv: env}
 
 	if info := ctx.codegenFor(instance).lookup(srcVFS); info != nil && info.Compile != nil {
 		sp := info.Compile
-
-		if sp.Env != nil {
-			in.ModuleCompileEnv = *sp.Env
-		}
 
 		in.PerSourceCFlags = sp.CFlags
 		in.FlatOutput = sp.FlatOutput
@@ -86,8 +71,19 @@ func (env ModuleCompileEnv) ccInputsFor(ctx *GenCtx, instance ModuleInstance, d 
 		in.Py3Suffix = sp.Py3Suffix
 		in.ForceCxx = sp.ForceCxx
 
+		envDelta := false
+
 		if len(sp.AddInclExtra) > 0 {
 			in.AddIncl = concat(in.AddIncl, sp.AddInclExtra)
+			envDelta = true
+		}
+
+		if sp.EnvCFlags != nil {
+			in.CFlags = *sp.EnvCFlags
+			envDelta = true
+		}
+
+		if envDelta {
 			in.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &in.ModuleCompileEnv)
 		}
 
@@ -107,13 +103,20 @@ func (env ModuleCompileEnv) ccInputsFor(ctx *GenCtx, instance ModuleInstance, d 
 	return in
 }
 
-// emitCC is the sole constructor of ModuleCCInputs. It takes the module's
-// compile environment from ModuleData (d.cc), enriches it with per-source
-// module knowledge, and for generated sources pulls the enrichment from the
-// source's registered CompileSpec. No other code assembles cc flags.
 func emitCC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS VFS) (NodeRef, VFS) {
-	in := d.cc.ccInputsFor(ctx, instance, d, srcVFS)
+	return emitCCWith(ctx, instance, d, srcVFS, d.cc.ccInputsFor(ctx, instance, d, srcVFS))
+}
 
+func emitCCVariant(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS VFS, variant string, cflags []ARG) (NodeRef, VFS) {
+	in := d.cc.ccInputsFor(ctx, instance, d, srcVFS)
+	in.FlatOutput = true
+	in.Variant = &variant
+	in.PerSourceCFlags = cflags
+
+	return emitCCWith(ctx, instance, d, srcVFS, in)
+}
+
+func emitCCWith(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS VFS, in ModuleCCInputs) (NodeRef, VFS) {
 	in.IncludeInputs = walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)
 	in.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, in.IncludeInputs)
 

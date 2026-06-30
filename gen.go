@@ -703,15 +703,28 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		d.cc = ModuleCompileEnv{
-			InclArgs:          ctx.inclArgs,
-			Flags:             d.flags,
-			AddIncl:           d.addIncl,
-			PeerAddInclGlobal: peerContribs.addIncl,
-			SrcDirs:           d.srcDirs,
-			FS:                ctx.fs,
-			DefaultVars:       d.defaultVars,
-			DefaultVarOrder:   d.defaultVarOrder,
-			TC:                d.tc,
+			InclArgs:             ctx.inclArgs,
+			Flags:                d.flags,
+			AddIncl:              d.addIncl,
+			PeerAddInclGlobal:    peerContribs.addIncl,
+			CFlags:               d.cFlags,
+			CXXFlags:             d.cxxFlags,
+			COnlyFlags:           d.cOnlyFlags,
+			OwnCFlagsGlobal:      d.cFlagsGlobal,
+			OwnCXXFlagsGlobal:    d.cxxFlagsGlobal,
+			OwnCOnlyFlagsGlobal:  d.cOnlyFlagsGlobal,
+			PeerCFlagsGlobal:     peerContribs.cFlags,
+			PeerCXXFlagsGlobal:   peerContribs.cxxFlags,
+			PeerCOnlyFlagsGlobal: peerContribs.cOnlyFlags,
+			ModuleScopeCFlags:    d.moduleScopeCFlags,
+			ClangWarnings:        d.clangWarnings,
+			SrcDirs:              d.srcDirs,
+			FS:                   ctx.fs,
+			DefaultVars:          d.defaultVars,
+			DefaultVarOrder:      d.defaultVarOrder,
+			SetVars:              d.setVars,
+			TC:                   d.tc,
+			ModuleTag:            cfModuleTag(d, instance),
 		}
 
 		d.cc.ScanCfg = newScanContext(ctx.parsers, d.addIncl, peerContribs.addIncl, includeScannerBasePaths(), instance.Path.rel())
@@ -1826,15 +1839,18 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	for _, e := range d.simdSrcs {
-		emit := emitOneSource(ctx, instance, d, e.Src)
+		srcVFS := resolveModuleSourceVFS(ctx, instance, d, e.Src, d.cc.SrcDirs)
+		flags := internArgs(e.CFlags)
 
-		if emit == nil {
-			continue
+		if extras := d.perSrcCFlagsFor(e.Src); extras != nil {
+			flags = append(flags, *extras...)
 		}
 
-		ccRefs = append(ccRefs, emit.Ref)
-		ccOutputs = append(ccOutputs, emit.OutPath)
-		arDeclMeta[emit.OutPath] = SrcMeta{Prio: stmtPrioDefault, Seq: e.Seq}
+		ref, out := emitCCVariant(ctx, instance, d, srcVFS, e.Variant, flags)
+
+		ccRefs = append(ccRefs, ref)
+		ccOutputs = append(ccOutputs, out)
+		arDeclMeta[out] = SrcMeta{Prio: stmtPrioDefault, Seq: e.Seq}
 	}
 
 	jsRefs, jsOuts, jsMeta := emitJoinSrcs(ctx, instance, d)

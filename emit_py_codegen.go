@@ -178,11 +178,23 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, py3Suff
 
 		pyRef := ctx.emit.emit(pyNode)
 
+		envCFlags := make([]ARG, 0, len(d.cc.CFlags))
+
+		for _, f := range d.cc.CFlags {
+			if short, ok := pyInitDefineShortname(f.string()); ok {
+				if _, keep := priorShort[short]; !keep {
+					continue
+				}
+			}
+
+			envCFlags = append(envCFlags, f)
+		}
+
 		ctx.codegenFor(instance).register(&GeneratedFileInfo{
 			OutputPath:    regCppVFS,
 			ProducerRef:   pyRef,
 			ClosureLeaves: []VFS{genPy3RegScriptVFS},
-			Compile:       &CompileSpec{Py3Suffix: py3Suffix},
+			Compile:       &CompileSpec{Py3Suffix: py3Suffix, EnvCFlags: &envCFlags},
 		})
 
 		se := emitOneSource(ctx, instance, d, regCppVFS.str())

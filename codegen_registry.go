@@ -21,7 +21,7 @@ type CompileSpec struct {
 	Py3Suffix        bool
 	ForceCxx         bool
 	AddInclExtra     []VFS
-	Env              *ModuleCompileEnv
+	EnvCFlags        *[]ARG
 }
 
 type CodegenRegistry struct {
