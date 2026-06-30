@@ -54,21 +54,14 @@ func emitLibraryGperfSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	genVFS := build(instance.Path.rel(), "/", gperfGeneratedRel(srcRel))
 	srcClosure := walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)
 	gpRef := emitGP(instance, srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, keepOnlySourceVFS(srcClosure), ctx.emit)
-	gpParsed := ctx.scannerFor(instance).parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesCpp)
 
 	ctx.codegenFor(instance).register(&GeneratedFileInfo{
 		OutputPath:     genVFS,
 		ProducerRef:    gpRef,
 		GeneratorRefs:  []NodeRef{gperfLDRef},
-		ParsedIncludes: gpParsed,
+		ParsedIncludes: []IncludeDirective{{kind: includeQuoted, target: internStr(srcVFS.rel())}},
+		Compile:        &CompileSpec{FlatOutput: in.FlatOutput, CFlags: in.PerSourceCFlags},
 	})
 
-	ccIn := in
-
-	ccIn.IncludeInputs = append([]VFS{genVFS}, srcClosure...)
-	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, srcClosure, gpRef)
-
-	ccRef, ccOut, _ := emitCC(instance, genVFS.str(), genVFS, ccIn, ctx.host, ctx.emit)
-
-	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
+	return emitOneSource(ctx, instance, d, genVFS.str(), in)
 }
