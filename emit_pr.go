@@ -61,7 +61,8 @@ func emitRunProgramsForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, i
 		for _, out := range run.outs {
 			switch {
 			case isCCSourceExt(out):
-				ccRef, ccOut := emitPRDownstreamCC(ctx, instance, out, run.prRef, in)
+				se := emitOneSource(ctx, instance, d, copyFileOutputVFS(instance.Path.rel(), out).str(), in)
+				ccRef, ccOut := se.Ref, se.OutPath
 
 				res.CCRefs = append(res.CCRefs, ccRef)
 				res.CCOutputs = append(res.CCOutputs, ccOut)

@@ -26,7 +26,8 @@ func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in 
 		for _, out := range outs {
 			switch {
 			case isCCSourceExt(out):
-				ccRef, ccOut := emitPRDownstreamCC(ctx, instance, out, pyRef, in)
+				se := emitOneSource(ctx, instance, d, copyFileOutputVFS(instance.Path.rel(), out).str(), in)
+				ccRef, ccOut := se.Ref, se.OutPath
 
 				res.CCRefs = append(res.CCRefs, ccRef)
 				res.CCOutputs = append(res.CCOutputs, ccOut)

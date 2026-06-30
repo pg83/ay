@@ -21,16 +21,16 @@ func emitDecimalMD5ForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in
 	res := &DecimalMD5Result{}
 
 	for _, stmt := range d.decimalMD5 {
-		svRef := emitDecimalMD5(ctx, instance, d, stmt)
+		emitDecimalMD5(ctx, instance, d, stmt)
 
 		if !isCCSourceExt(stmt.File) {
 			continue
 		}
 
-		ccRef, ccOut := emitCodegenDownstreamCC(ctx, instance, stmt.File, []NodeRef{svRef}, in)
-
-		res.CCRefs = append(res.CCRefs, ccRef)
-		res.CCOutputs = append(res.CCOutputs, ccOut)
+		if se := emitOneSource(ctx, instance, d, copyFileOutputVFS(instance.Path.rel(), stmt.File).str(), in); se != nil {
+			res.CCRefs = append(res.CCRefs, se.Ref)
+			res.CCOutputs = append(res.CCOutputs, se.OutPath)
+		}
 	}
 
 	return res
