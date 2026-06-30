@@ -188,17 +188,9 @@ func emitLibraryFlatcSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData,
 	srcRel := src.string()
 	cppVFS := build(resolveSourceVFS(ctx, instance, srcRel, d.srcDirs).rel(), ".cpp")
 
-	return emitFlatcCppCompile(ctx, instance, cppVFS, in)
+	return emitFlatcCppCompile(ctx, instance, d, cppVFS, in)
 }
 
-func emitFlatcCppCompile(ctx *GenCtx, instance ModuleInstance, cppVFS VFS, in ModuleCCInputs) *SourceEmit {
-	flRef := ctx.codegenFor(instance).lookup(cppVFS).ProducerRef
-	ccIn := in
-
-	ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), cppVFS, in.ScanCfg)
-	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, flRef)
-
-	ccRef, ccOut, _ := emitCC(instance, cppVFS.str(), cppVFS, ccIn, ctx.host, ctx.emit)
-
-	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
+func emitFlatcCppCompile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, cppVFS VFS, in ModuleCCInputs) *SourceEmit {
+	return emitOneSource(ctx, instance, d, cppVFS.str(), in)
 }
