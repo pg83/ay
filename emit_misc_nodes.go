@@ -85,7 +85,7 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 					{build(outPrefix, parserBase, ".cpp"), build(outPrefix, parserBase, ".h")},
 				}
 
-				refs, outs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
+				refs, outs := emitJVDownstreamCPCC(ctx, instance, d, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
 
 				ccRefs = append(ccRefs, refs...)
 				ccOutputs = append(ccOutputs, outs...)
@@ -153,7 +153,7 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, consumer
 					{build(outPrefix, base, "Parser.cpp"), build(outPrefix, base, "Parser.h")},
 				}
 
-				refs, outs := emitJVDownstreamCPCC(ctx, instance, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
+				refs, outs := emitJVDownstreamCPCC(ctx, instance, d, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes, *consumerInputs)
 
 				ccRefs = append(ccRefs, refs...)
 				ccOutputs = append(ccOutputs, outs...)
