@@ -60,19 +60,11 @@ func emitGeneratedPyAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleDat
 
 	res := &GeneratedPyAuxChunksResult{}
 
-	for i, prRef := range rawRes.PRRefs {
-		aux := rawRes.PROutputs[i]
-		ccIn := in
-
-		ccIn.ExtraDepRefs = []NodeRef{prRef}
-		ccIn.ForceCxx = true
-		ccIn.PerSourceCFlags = concat(in.PerSourceCFlags, []ARG{argX, argC})
-		ccIn.IncludeInputs = rawRes.AuxClosures[i]
-
-		ccRef, ccOut, _ := emitCC(instance, internStr(aux.rel()[strings.LastIndex(aux.rel(), "/")+1:]), aux, ccIn, ctx.host, ctx.emit)
-
-		res.Refs = append(res.Refs, ccRef)
-		res.Outputs = append(res.Outputs, ccOut)
+	for _, aux := range rawRes.PROutputs {
+		if se := emitOneSource(ctx, instance, d, aux.str(), in); se != nil {
+			res.Refs = append(res.Refs, se.Ref)
+			res.Outputs = append(res.Outputs, se.OutPath)
+		}
 	}
 
 	return res
@@ -181,6 +173,7 @@ func rawAuxInputClosure(ctx *GenCtx, instance ModuleInstance, aux VFS, seed []VF
 		ProducerRef:    ref,
 		GeneratorRefs:  []NodeRef{rescompilerRef},
 		ParsedIncludes: emits,
+		Compile:        &CompileSpec{FlatOutput: in.FlatOutput, ForceCxx: true, CFlags: concat(in.PerSourceCFlags, []ARG{argX, argC})},
 	})
 
 	closure := walkClosure(ctx.scannerFor(instance), aux, in.ScanCfg)
