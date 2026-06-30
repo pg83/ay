@@ -372,10 +372,8 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 			ParsedIncludes: yaffHParsed,
 		})
 
-		yaffCCParsed := []IncludeDirective{
-			{kind: includeQuoted, target: internStr(yaffH.rel())},
-			{kind: includeQuoted, target: internStr(pbH.rel())},
-		}
+		yaffCCParsed := append(append([]IncludeDirective(nil), yaffHParsed...),
+			IncludeDirective{kind: includeQuoted, target: internStr(pbH.rel())})
 
 		reg.register(&GeneratedFileInfo{
 			OutputPath:     yaffCC,
@@ -572,7 +570,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 			evH := build(evRelPath, ".pb.h")
 			evPbCC := build(evRelPath, ".pb.cc")
 			directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, protoCPPOutRoot(d))
-			evExtras := evWitnessExtras(evRelPath, evPbCC)
+			evExtras := evWitnessExtras(evRelPath)
 			evHParsed := make([]IncludeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(evExtras))
 
 			evHParsed = append(evHParsed, directImports...)
@@ -584,12 +582,11 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 				ProducerRef:    evRef,
 				GeneratorRefs:  []NodeRef{event2cppLDRef},
 				ParsedIncludes: evHParsed,
+				ClosureLeaves:  []VFS{evPbCC},
 			})
 
-			evCCParsed := make([]IncludeDirective, 0, 1+len(protobufRuntimeHeaders))
-
-			evCCParsed = append(evCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(evH.rel())})
-			evCCParsed = append(evCCParsed, protobufRuntimeDirectives...)
+			evCCParsed := append(append([]IncludeDirective(nil), evHParsed...),
+				IncludeDirective{kind: includeQuoted, target: internStr(source(pbRuntimeBase, "google/protobuf/wire_format.h").rel())})
 
 			ctx.codegenFor(instance).register(&GeneratedFileInfo{
 				OutputPath:     evPbCC,
@@ -654,54 +651,13 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	ccRefs := make([]NodeRef, 0, len(codegenOutputs))
 	ccOutputs := make([]VFS, 0, len(codegenOutputs))
 	arDeclMeta := map[VFS]SrcMeta{}
-	wireFormatVFS := source(pbRuntimeBase, "google/protobuf/wire_format.h")
 
 	for _, co := range codegenOutputs {
-		ccIn := moduleInputs
+		se := emitOneSource(ctx, cppInstance, d, co.pbCC.str(), moduleInputs)
 
-		ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), co.pbCC, moduleInputs.ScanCfg)
-
-		if extIsEvPbCC(co.srcRel) {
-			selfH := build(strings.TrimSuffix(co.pbCC.rel(), ".cc"), ".h")
-			filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
-
-			for _, in := range ccIn.IncludeInputs {
-				if in == selfH {
-					continue
-				}
-
-				filtered = append(filtered, in)
-			}
-
-			ccIn.IncludeInputs = filtered
-		}
-
-		if extIsEvPbCC(co.srcRel) {
-			ccIn.IncludeInputs = append(ccIn.IncludeInputs, wireFormatVFS)
-		}
-
-		if extIsYaffCpp(co.srcRel) {
-			selfH := build(strings.TrimSuffix(co.pbCC.rel(), ".cpp"), ".h")
-			filtered := make([]VFS, 0, len(ccIn.IncludeInputs))
-
-			for _, in := range ccIn.IncludeInputs {
-				if in == selfH {
-					continue
-				}
-
-				filtered = append(filtered, in)
-			}
-
-			ccIn.IncludeInputs = filtered
-		}
-
-		ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, co.genRef)
-
-		ccRef, ccOut, _ := emitCC(cppInstance, co.pbCC.str(), co.pbCC, ccIn, ctx.host, ctx.emit)
-
-		ccRefs = append(ccRefs, ccRef)
-		ccOutputs = append(ccOutputs, ccOut)
-		arDeclMeta[ccOut] = SrcMeta{Prio: stmtPrioSrcs, Seq: co.declIdx, Generated: true}
+		ccRefs = append(ccRefs, se.Ref)
+		ccOutputs = append(ccOutputs, se.OutPath)
+		arDeclMeta[se.OutPath] = SrcMeta{Prio: stmtPrioSrcs, Seq: co.declIdx, Generated: true}
 	}
 
 	enRes := emitEnumSrcs(ctx, instance, d, peerContribs.addIncl, &moduleInputs)
@@ -776,24 +732,12 @@ func emitProtoProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcR
 func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, in ModuleCCInputs) *SourceEmit {
 	srcRel := src.string()
 	protoBase := strings.TrimSuffix(protoSourceRelPath(ctx.fs, instance, d, srcRel), ".proto")
-	pbRef := ctx.codegenFor(instance).lookup(build(protoBase, ".pb.cc")).ProducerRef
 
-	emitGenCC := func(pbCC VFS) SourceEmit {
-		ccIn := in
-
-		ccIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), pbCC, in.ScanCfg)
-		ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ccIn.IncludeInputs, pbRef)
-
-		ccRef, ccOut, _ := emitCC(instance, pbCC.str(), pbCC, ccIn, ctx.host, ctx.emit)
-
-		return SourceEmit{Ref: ccRef, OutPath: ccOut}
-	}
-
-	se := emitGenCC(build(protoBase, ".pb.cc"))
+	se := emitOneSource(ctx, instance, d, build(protoBase, ".pb.cc").str(), in)
 
 	if d.grpc {
-		se.Extra = append(se.Extra, emitGenCC(build(protoBase, ".grpc.pb.cc")))
+		se.Extra = append(se.Extra, *emitOneSource(ctx, instance, d, build(protoBase, ".grpc.pb.cc").str(), in))
 	}
 
-	return &se
+	return se
 }

@@ -163,14 +163,6 @@ func extIsPbH(p string) bool {
 	return strings.HasSuffix(p, ".pb.h")
 }
 
-func extIsEvPbCC(p string) bool {
-	return strings.HasSuffix(p, ".ev.pb.cc")
-}
-
-func extIsYaffCpp(p string) bool {
-	return strings.HasSuffix(p, ".yaff.cpp")
-}
-
 func extIsAsm(p string) bool {
 	return strings.HasSuffix(p, ".asm")
 }
