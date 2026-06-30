@@ -60,6 +60,7 @@ type ModuleCCInputs struct {
 
 func (env ModuleCompileEnv) ccInputsFor(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS VFS) ModuleCCInputs {
 	in := ModuleCCInputs{ModuleCompileEnv: env}
+	envCFlagsSet := false
 
 	if info := ctx.codegenFor(instance).lookup(srcVFS); info != nil && info.Compile != nil {
 		sp := info.Compile
@@ -71,33 +72,32 @@ func (env ModuleCompileEnv) ccInputsFor(ctx *GenCtx, instance ModuleInstance, d 
 		in.Py3Suffix = sp.Py3Suffix
 		in.ForceCxx = sp.ForceCxx
 
-		envDelta := false
-
-		if len(sp.AddInclExtra) > 0 {
-			in.AddIncl = concat(in.AddIncl, sp.AddInclExtra)
-			envDelta = true
-		}
-
 		if sp.EnvCFlags != nil {
 			in.CFlags = *sp.EnvCFlags
-			envDelta = true
+			envCFlagsSet = true
+		}
+	} else {
+		srcID := internStr(strings.TrimPrefix(srcVFS.rel(), instance.Path.rel()+"/"))
+
+		if extras := d.perSrcCFlagsFor(srcID); extras != nil {
+			in.PerSourceCFlags = *extras
 		}
 
-		if envDelta {
-			in.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &in.ModuleCompileEnv)
+		if d.flatSrc(srcID) {
+			in.FlatOutput = true
+		}
+	}
+
+	if len(d.cythonCpp) > 0 {
+		in.AddIncl = appendCythonCCAddIncl(in.AddIncl, d.cythonNumpyBeforeInclude)
+
+		if !envCFlagsSet {
+			in.CFlags = filterPyRegisterCFlags(in.CFlags)
 		}
 
-		return in
-	}
-
-	srcID := internStr(strings.TrimPrefix(srcVFS.rel(), instance.Path.rel()+"/"))
-
-	if extras := d.perSrcCFlagsFor(srcID); extras != nil {
-		in.PerSourceCFlags = *extras
-	}
-
-	if d.flatSrc(srcID) {
-		in.FlatOutput = true
+		in.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &in.ModuleCompileEnv)
+	} else if envCFlagsSet {
+		in.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &in.ModuleCompileEnv)
 	}
 
 	return in

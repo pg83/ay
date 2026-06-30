@@ -20,7 +20,6 @@ type CompileSpec struct {
 	ObjectSuffixStem *string
 	Py3Suffix        bool
 	ForceCxx         bool
-	AddInclExtra     []VFS
 	EnvCFlags        *[]ARG
 }
 
