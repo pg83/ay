@@ -42,14 +42,19 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in Mo
 			Resources:    usesPython3,
 		})
 
-		ccIn := in
+		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			OutputPath:  generatedVFS,
+			ProducerRef: chRef,
+			ParsedIncludes: []IncludeDirective{
+				{kind: includeQuoted, target: internStr(confVFS.rel())},
+			},
+			ClosureLeaves: []VFS{buildScriptsCheckConfigHPy},
+			Compile:       &CompileSpec{FlatOutput: in.FlatOutput, CFlags: in.PerSourceCFlags},
+		})
 
-		ccIn.ExtraDepRefs = []NodeRef{chRef}
-		ccIn.IncludeInputs = append([]VFS{generatedVFS}, inputs...)
-
-		ccRef, ccOut, _ := emitCC(instance, internStr(generated), generatedVFS, ccIn, ctx.host, ctx.emit)
-
-		out = append(out, &SourceEmit{Ref: ccRef, OutPath: ccOut})
+		if se := emitOneSource(ctx, instance, d, generatedVFS.str(), in); se != nil {
+			out = append(out, se)
+		}
 	}
 
 	return out
