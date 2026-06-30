@@ -25,6 +25,7 @@ const jdkResourcePath = "$(JDK17)/bin/java"
 func emitJVDownstreamCPCC(
 	ctx *GenCtx,
 	instance ModuleInstance,
+	d *ModuleData,
 	jvRef NodeRef,
 	jvPrimary VFS,
 	jvInputs []VFS,
@@ -37,7 +38,6 @@ func emitJVDownstreamCPCC(
 		srcH := pair.h
 		base := strings.TrimSuffix(filepath.Base(srcCpp.rel()), ".cpp")
 		g4CppPath := build(instance.Path.rel(), "/", base, ".g4.cpp")
-		g4CppRel := base + ".g4.cpp"
 		cpRef := ctx.emit.reserve()
 		emits := make([]IncludeDirective, 0, 1+len(outputIncludes))
 
@@ -47,42 +47,39 @@ func emitJVDownstreamCPCC(
 			emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(h)})
 		}
 
+		leaves := append([]VFS{jvPrimary, srcH}, ctx.scripts[antlr4FsToolsVFS]...)
+		leaves = append(leaves, jvInputs...)
+
 		ctx.codegenFor(instance).register(&GeneratedFileInfo{
 			OutputPath:     g4CppPath,
 			ProducerRef:    cpRef,
 			GeneratorRefs:  nil,
 			ParsedIncludes: emits,
+			ClosureLeaves:  leaves,
+			Compile:        &CompileSpec{FlatOutput: in.FlatOutput, CFlags: []ARG{argWnoUnusedVariable}},
 		})
 
-		ccIn := in
+		closure := walkClosure(ctx.scannerFor(instance), g4CppPath, in.ScanCfg)
+		leafSet := make(map[VFS]bool, len(leaves))
 
-		ccIn.ExtraDepRefs = nil
+		for _, l := range leaves {
+			leafSet[l] = true
+		}
 
-		closure := walkClosure(ctx.scannerFor(instance), g4CppPath, ccIn.ScanCfg)
-		cpClosure := closure
+		cpClosure := make([]VFS, 0, len(closure))
 
-		if len(cpClosure) > 0 {
-			cpClosure = cpClosure[1:]
+		for _, v := range closure {
+			if v != g4CppPath && !leafSet[v] {
+				cpClosure = append(cpClosure, v)
+			}
 		}
 
 		emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, in.TC, ctx.scripts, ctx.emit)
 
-		ccIncludeInputs := make([]VFS, 0, 3+len(jvInputs)+len(closure)+2)
-
-		ccIncludeInputs = append(ccIncludeInputs, jvPrimary)
-		ccIncludeInputs = append(ccIncludeInputs, srcH)
-		ccIncludeInputs = append(ccIncludeInputs, ctx.scripts[antlr4FsToolsVFS]...)
-		ccIncludeInputs = append(ccIncludeInputs, jvInputs...)
-		ccIncludeInputs = append(ccIncludeInputs, closure...)
-
-		ccIn.IncludeInputs = ccIncludeInputs
-		ccIn.ExtraDepRefs = []NodeRef{jvRef, cpRef}
-		ccIn.PerSourceCFlags = []ARG{argWnoUnusedVariable}
-
-		ccRef, ccOut, _ := emitCC(instance, internStr(g4CppRel), g4CppPath, ccIn, ctx.host, ctx.emit)
-
-		ccRefs = append(ccRefs, ccRef)
-		ccOutputs = append(ccOutputs, ccOut)
+		if se := emitOneSource(ctx, instance, d, g4CppPath.str(), in); se != nil {
+			ccRefs = append(ccRefs, se.Ref)
+			ccOutputs = append(ccOutputs, se.OutPath)
+		}
 	}
 
 	return
