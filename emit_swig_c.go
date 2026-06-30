@@ -75,6 +75,8 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 			ProducerRef:    swRef,
 			GeneratorRefs:  []NodeRef{swigRef},
 			ParsedIncludes: collectSwigInducedIncludes(ctx, srcVFS, swigClosure),
+			ClosureLeaves:  append(append([]VFS{}, swigClosure...), srcVFS),
+			Compile:        &CompileSpec{FlatOutput: in.FlatOutput, CFlags: in.PerSourceCFlags},
 		})
 
 		reg.register(&GeneratedFileInfo{
@@ -84,22 +86,9 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, in ModuleCCI
 			SourceInputs:  append([]VFS{cOutVFS, srcVFS}, swigClosure...),
 		})
 
-		ccIn := in
-
-		ccIn.ExtraDepRefs = []NodeRef{swRef}
-
-		cClosure := walkClosure(ctx.scannerFor(instance), cOutVFS, in.ScanCfg)
-		incl := make([]VFS, 0, len(cClosure)+len(swigClosure)+1)
-
-		incl = append(incl, cClosure...)
-		incl = append(incl, swigClosure...)
-		incl = append(incl, srcVFS)
-
-		ccIn.IncludeInputs = incl
-
-		ccRef, ccOut, _ := emitCC(instance, internStr(cOutRel), cOutVFS, ccIn, ctx.host, ctx.emit)
-
-		out = append(out, &SourceEmit{Ref: ccRef, OutPath: ccOut})
+		if se := emitOneSource(ctx, instance, d, cOutVFS.str(), in); se != nil {
+			out = append(out, se)
+		}
 	}
 
 	return out
