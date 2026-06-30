@@ -22,10 +22,17 @@ func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 	flexRef, flexBin := ctx.tool(argContribToolsFlexOld)
 	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, in.SrcDirs)
 	outVFS := flexGeneratedVFS(instance, srcRel)
-	parsed := make([]IncludeDirective, 0, 1)
+	parsed := make([]IncludeDirective, 0, 2)
 
 	parsed = append(parsed, flexOutputInclude)
 	parsed = append(parsed, ctx.scannerFor(instance).parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
+
+	cflags := in.PerSourceCFlags
+
+	if extIsFlexL(srcRel) {
+		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(srcVFS.rel())})
+		cflags = concat(in.PerSourceCFlags, []ARG{argWnoUnusedVariable})
+	}
 
 	lxRef := ctx.emit.reserve()
 
@@ -34,6 +41,7 @@ func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 		ProducerRef:    lxRef,
 		GeneratorRefs:  []NodeRef{flexRef},
 		ParsedIncludes: parsed,
+		Compile:        &CompileSpec{FlatOutput: in.FlatOutput, CFlags: cflags},
 	})
 
 	window := walkClosure(ctx.scannerFor(instance), outVFS, in.ScanCfg)
@@ -41,19 +49,7 @@ func emitLibraryFlexSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, 
 
 	emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef, ctx.emit)
 
-	ccIn := in
-
-	ccIn.IncludeInputs = window
-	ccIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, window, lxRef)
-
-	if extIsFlexL(srcRel) {
-		ccIn.IncludeInputs = concat(window, []VFS{srcVFS})
-		ccIn.PerSourceCFlags = concat(in.PerSourceCFlags, []ARG{argWnoUnusedVariable})
-	}
-
-	ccRef, ccOut, _ := emitCC(instance, outVFS.str(), outVFS, ccIn, ctx.host, ctx.emit)
-
-	return &SourceEmit{Ref: ccRef, OutPath: ccOut}
+	return emitOneSource(ctx, instance, d, outVFS.str(), in)
 }
 
 func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, outVFS VFS, closure []VFS, id NodeRef, emit *StreamingEmitter) {
