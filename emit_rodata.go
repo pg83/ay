@@ -68,7 +68,7 @@ func (e *EmitContext) emitLibraryRodataSource(src STR) *SourceEmit {
 
 	yasmLDRef, _ := ctx.tool(argContribToolsYasm)
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
-	in := d.cc.ccInputsFor(ctx, instance, d, srcVFS)
+	in := e.ccInputsFor(srcVFS)
 	ref, _, outPath := emitRD(instance, srcRel, srcVFS, yasmLDRef, nil, nil, in.TC, ctx.emit)
 
 	return &SourceEmit{Ref: ref, OutPath: outPath}

@@ -1036,7 +1036,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			continue
 		}
 
-		peerInstance := derivePeerInstance(ctx, instance, d, peerPath)
+		peerInstance := e.derivePeerInstance(peerPath)
 		peerResult := genModule(ctx, peerInstance)
 
 		if peerResult.isPROGRAM {
@@ -2501,7 +2501,7 @@ func (e *EmitContext) walkPeersForGlobalAddIncl() PeerGlobalContribs {
 	}
 
 	walk := func(peerPath string) {
-		walkInstance(derivePeerInstance(ctx, instance, d, peerPath))
+		walkInstance(e.derivePeerInstance(peerPath))
 	}
 
 	if instance.Language == LangPy && d.moduleStmt.Name == tokProtoLibrary && d.optimizePyProtos && !moduleExcludesTag(d, "CPP_PROTO") {

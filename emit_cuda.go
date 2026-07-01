@@ -25,7 +25,7 @@ func (e *EmitContext) emitLibraryCudaSource(src STR) *SourceEmit {
 	na := ctx.emit.nodeArenas()
 	p := instance.Platform
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
-	in := d.cc.ccInputsFor(ctx, instance, d, srcVFS)
+	in := e.ccInputsFor(srcVFS)
 	outVFS, inVFS := composeCCPaths(instance, srcRel, srcVFS, in, ".o")
 	blocks := in.CCBlocks
 	scanner := ctx.scannerFor(instance)

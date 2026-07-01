@@ -58,7 +58,9 @@ type ModuleCCInputs struct {
 	IncludeInputs   []VFS
 }
 
-func (env ModuleCompileEnv) ccInputsFor(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS VFS) ModuleCCInputs {
+func (e *EmitContext) ccInputsFor(srcVFS VFS) ModuleCCInputs {
+	ctx, instance, d := e.ctx, e.instance, e.d
+	env := d.cc
 	in := ModuleCCInputs{ModuleCompileEnv: env}
 
 	if info := ctx.codegenFor(instance).lookup(srcVFS); info != nil && info.Compile != nil {
@@ -104,8 +106,7 @@ func (env ModuleCompileEnv) ccInputsFor(ctx *GenCtx, instance ModuleInstance, d 
 }
 
 func (e *EmitContext) emitCC(srcVFS VFS) (NodeRef, VFS) {
-	ctx, instance, d := e.ctx, e.instance, e.d
-	return e.emitCCWith(srcVFS, d.cc.ccInputsFor(ctx, instance, d, srcVFS))
+	return e.emitCCWith(srcVFS, e.ccInputsFor(srcVFS))
 }
 
 func (e *EmitContext) moduleSourceVFS(src STR) VFS {
@@ -118,8 +119,7 @@ func (e *EmitContext) moduleSourceVFS(src STR) VFS {
 }
 
 func (e *EmitContext) emitCCFlat(srcVFS VFS, variant *string, cflags []ARG) (NodeRef, VFS) {
-	ctx, instance, d := e.ctx, e.instance, e.d
-	in := d.cc.ccInputsFor(ctx, instance, d, srcVFS)
+	in := e.ccInputsFor(srcVFS)
 	in.FlatOutput = true
 	in.Variant = variant
 	in.PerSourceCFlags = cflags

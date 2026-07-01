@@ -283,15 +283,13 @@ type ObjcopyEmit struct {
 
 type KvOnlyKind int
 
-func emitKvOnlyObjcopyNode(
-	ctx *GenCtx,
-	instance ModuleInstance,
+func (e *EmitContext) emitKvOnlyObjcopyNode(
 	kind KvOnlyKind,
 	kvsHash []string,
 	kvsCmd []string,
-	d *ModuleData,
 	oc *ObjcopyEmitCtx,
 ) *ObjcopyEmit {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	var moduleTag *string
 
 	switch kind {
@@ -461,26 +459,26 @@ func (e *EmitContext) emitPyNamespaceForGroup(
 		kvsCmd = append(kvsCmd, key+"="+nsValue)
 	}
 
-	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyLib, kvsHash, kvsCmd, d, oc)
+	return e.emitKvOnlyObjcopyNode(kvOnlyLib, kvsHash, kvsCmd, oc)
 }
 
 func (e *EmitContext) emitPyMainObjcopy(
 	oc *ObjcopyEmitCtx,
 ) *ObjcopyEmit {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	_, _, d := e.ctx, e.instance, e.d
 	if d.pyMain == nil {
 		return nil
 	}
 
 	kv := "PY_MAIN=" + d.pyMain.string()
 
-	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyBin, []string{kv}, []string{kv}, d, oc)
+	return e.emitKvOnlyObjcopyNode(kvOnlyBin, []string{kv}, []string{kv}, oc)
 }
 
 func (e *EmitContext) emitNoCheckImportsObjcopy(
 	oc *ObjcopyEmitCtx,
 ) *ObjcopyEmit {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	_, _, d := e.ctx, e.instance, e.d
 	if len(d.noCheckImports) == 0 {
 		return nil
 	}
@@ -495,7 +493,7 @@ func (e *EmitContext) emitNoCheckImportsObjcopy(
 	kvHash := key + "=\"" + value + "\""
 	kvCmd := key + "=" + value
 
-	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyBin, []string{kvHash}, []string{kvCmd}, d, oc)
+	return e.emitKvOnlyObjcopyNode(kvOnlyBin, []string{kvHash}, []string{kvCmd}, oc)
 }
 
 func (e *EmitContext) emitPySrcObjcopy(

@@ -41,7 +41,7 @@ func (e *EmitContext) emitLLVMBC(resourceGlobals []ResourceDecl) {
 
 		for _, src := range stmt.Sources {
 			inputVFS, producer := llvmBcSourceInfo(ctx, instance, src)
-			in := d.cc.ccInputsFor(ctx, instance, d, inputVFS)
+			in := e.ccInputsFor(inputVFS)
 			bcOut := build(llvmBcRootRelArcSrc(ctx, instance, src), stmt.Suffix, ".bc")
 			bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
 			closure := walkClosure(ctx.scannerFor(instance), inputVFS, in.ScanCfg)

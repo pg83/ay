@@ -10,7 +10,7 @@ func (e *EmitContext) emitMiscNodes() (ccRefs []NodeRef, ccOutputs []VFS) {
 	outPrefix := instance.Path.rel() + "/"
 
 	for _, cf := range d.configureFiles {
-		emitExplicitCF(ctx, instance, cf, d)
+		e.emitExplicitCF(cf)
 	}
 
 	antlrCCRefs, antlrCCOutputs := e.emitAntlrRuns()

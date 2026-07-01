@@ -40,7 +40,7 @@ func (e *EmitContext) emitRunProgramsForAR() *RunProgramsForARResult {
 	runs := make([]runEntry, 0, len(d.runPrograms))
 
 	for _, rp := range d.runPrograms {
-		prRef := emitRunProgram(ctx, instance, rp, d, reg)
+		prRef := e.emitRunProgram(rp, reg)
 		outs := make([]string, 0, len(rp.OUTFiles)+len(rp.OUTNoAutoFiles)+1)
 
 		outs = append(outs, strStrings(rp.OUTFiles)...)
@@ -112,8 +112,8 @@ func prMainOutputRel(stmt *RunProgramStmt) string {
 	return ""
 }
 
-func emitRunProgram(ctx *GenCtx, instance ModuleInstance, stmt *RunProgramStmt, d *ModuleData, reg *CodegenRegistry) NodeRef {
-	e := newEmitContext(ctx, instance, d)
+func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt, reg *CodegenRegistry) NodeRef {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	res := ctx.toolResult(internArg(filepath.Clean(stmt.ToolPath.string())))
 	toolLDRef := res.LDRef
 	toolBinPath := *res.LDPath
