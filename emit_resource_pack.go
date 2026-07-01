@@ -17,6 +17,7 @@ var (
 	objcopyScriptChunk          = []VFS{objcopyScriptVFS}
 	rawAuxKV                    = KV{P: pkPR, PC: pcYellow, ShowOut: true}
 	batchDeduper                DeDuper
+	pyObjcopyKV                 = KV{P: pkPY, PC: pcYellow, ShowOut: true}
 )
 
 const (
@@ -662,4 +663,50 @@ func (e *EmitContext) emitRawAuxChunks(entries []PyProtoAuxEntry, hashTag string
 	}
 
 	return res
+}
+
+type ObjcopyEmitResult struct {
+	Refs            []NodeRef
+	Outputs         []VFS
+	PySrcTrailCount int
+}
+
+type ObjcopyEmit struct {
+	Ref NodeRef
+	Out VFS
+}
+
+func (e *EmitContext) emitKvOnlyObjcopyNode(moduleTag *string, kvsHash []string, kvsCmd []string, oc *ObjcopyEmitCtx) *ObjcopyEmit {
+	ctx, instance := e.ctx, e.instance
+
+	ref, out := buildObjcopyNode(ctx, instance, oc, ObjcopyNode{
+		moduleTag: moduleTag,
+		kv:        &pyObjcopyKV,
+		kvsHash:   kvsHash,
+		kvsCmd:    kvsCmd,
+		inputs:    ctx.na.inputList(rescompilersWithScriptChunk),
+		deps:      depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef),
+	})
+
+	return &ObjcopyEmit{Ref: ref, Out: out}
+}
+
+func (e *EmitContext) emitResourceFile(oc *ObjcopyEmitCtx, entries []ResourceEntry, moduleTag *string) (refs []NodeRef, outputs []VFS) {
+	b := newObjcopyBatcher(e, oc, ObjcopyProfile{moduleTag: moduleTag, kv: &pyObjcopyKV, layout: objcopyLayoutResource, resolveDeps: true})
+
+	for _, entry := range entries {
+		if resourceCanObjcopy(entry.Path, entry.Key) {
+			if entry.Path == "-" {
+				b.resourceKvEntry(entry.Key)
+			} else {
+				b.resourceFileEntry(entry.Path, entry.Key)
+			}
+		}
+
+		b.entryDone(entry.EndsBatch)
+	}
+
+	b.flush()
+
+	return b.results()
 }
