@@ -8,6 +8,7 @@ type EmitContext struct {
 	codegen  *CodegenRegistry
 	srcs     []STR
 	srcMeta  map[STR]SrcMeta
+	pass2    []func()
 	refs     []NodeRef
 	outs     []VFS
 	declMeta map[VFS]SrcMeta
@@ -42,6 +43,10 @@ func (e *EmitContext) enqueueSrc(src STR, meta SrcMeta) {
 	e.srcMeta[src] = meta
 }
 
+func (e *EmitContext) deferPass2(cb func()) {
+	e.pass2 = append(e.pass2, cb)
+}
+
 func (e *EmitContext) drainSrcs() {
 	for len(e.srcs) > 0 {
 		src := e.srcs[0]
@@ -50,4 +55,10 @@ func (e *EmitContext) drainSrcs() {
 
 		e.emitOneSource(src)
 	}
+
+	for _, cb := range e.pass2 {
+		cb()
+	}
+
+	e.pass2 = e.pass2[:0]
 }

@@ -650,6 +650,7 @@ func (e *EmitContext) emitProtoProducer(srcRel string) {
 func (e *EmitContext) emitLibraryProtoSource(src STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
+	e.emitProtoProducer(srcRel)
 	protoBase := strings.TrimSuffix(protoSourceRelPath(ctx.fs, instance, d, srcRel), ".proto")
 	meta := e.metaForSrc(src)
 

@@ -1688,27 +1688,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
 	e.cythonAdjustModuleCCBlocks()
 
-	for _, src := range d.srcs {
-		switch srcExtClassOf(src) {
-		case srcExtFbs:
-			e.emitFlatcProducer(resolveSourceVFS(ctx, instance, src.string(), d.srcDirs), &flatcVariantFL, nil)
-		case srcExtFbs64:
-			e.emitFlatcProducer(resolveSourceVFS(ctx, instance, src.string(), d.srcDirs), &flatcVariantFL64, nil)
-		}
-	}
-
-	for _, src := range d.srcs {
-		if srcExtClassOf(src) == srcExtY {
-			e.emitBisonProducer(src)
-		}
-	}
-
-	for _, src := range d.srcs {
-		if srcExtClassOf(src) == srcExtProto {
-			e.emitProtoProducer(src.string())
-		}
-	}
-
 	cythonPlans := e.planCythonCpp()
 
 	for _, src := range d.srcs {

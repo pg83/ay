@@ -70,7 +70,6 @@ func (e *EmitContext) emitLibraryGztProtoCompile(src STR) {
 	srcRel := src.string()
 	_, genProtoSrc := e.emitLibraryGztProtoSource(srcRel, d.cc.ProtoInclude, d.cc.ModuleTag)
 
-	e.emitProtoProducer(genProtoSrc)
 	e.srcMeta[internStr(genProtoSrc)] = e.metaForSrc(src)
 	e.emitLibraryProtoSource(internStr(genProtoSrc))
 }

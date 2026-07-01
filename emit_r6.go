@@ -104,17 +104,17 @@ func (e *EmitContext) emitLibraryRagel6Source(src STR) {
 		},
 	})
 
-	window := walkClosure(e.scanner, r6Out, d.cc.ScanCfg)
-	rl6Closure := keepOnlySourceVFS(filterEnSerializedSiblings(window))
+	if isCxxSource(r6Out.rel()) {
+		meta := d.srcMetaOf(src)
 
-	emitR6(instance, srcRel, ragelLDRef, ragelBinaryVFS, d.cc.Ragel6Flags, rl6Closure, r6Ref, ctx.emit)
-
-	if !isCxxSource(r6Out.rel()) {
-		return
+		meta.Generated = true
+		e.enqueueSrc(r6Out.str(), meta)
 	}
 
-	meta := d.srcMetaOf(src)
+	e.deferPass2(func() {
+		window := walkClosure(e.scanner, r6Out, d.cc.ScanCfg)
+		rl6Closure := keepOnlySourceVFS(filterEnSerializedSiblings(window))
 
-	meta.Generated = true
-	e.enqueueSrc(r6Out.str(), meta)
+		emitR6(instance, srcRel, ragelLDRef, ragelBinaryVFS, d.cc.Ragel6Flags, rl6Closure, r6Ref, ctx.emit)
+	})
 }
