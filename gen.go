@@ -1691,7 +1691,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	d.cc.ScanCfg = newScanContext(ctx.parsers, dedupedAddIncl, selfPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
-	d.cc.ScanCfg.OwnerModuleTag = cfModuleTag(d, instance)
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
 
 	e = newEmitContext(ctx, instance, d, &PeerContext{
