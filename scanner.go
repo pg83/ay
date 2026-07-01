@@ -157,7 +157,6 @@ type ScanContext struct {
 	PeerAddInclSet  []VFS
 	BaseSearchPaths []VFS
 	OwnerModuleDir  string
-	OwnerModuleTag  STR
 	cfg             *ScanConfig
 }
 
