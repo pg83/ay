@@ -247,7 +247,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	var protoProducerSourceInputs []VFS
 	var genProtoParsed []IncludeDirective
 
-	if info := ctx.codegenFor(instance).lookup(buildProto); info != nil {
+	if info := e.codegen.lookup(buildProto); info != nil {
 		protoSrcOverride = buildProto
 		protoVFS = buildProto
 		extraProtoDeps = []NodeRef{info.ProducerRef}
@@ -255,7 +255,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		genProtoParsed = info.ParsedIncludes
 	}
 
-	transitiveImports := walkClosureTail(ctx.scannerFor(instance), protoVFS, protoWalkInputs(ctx.parsers, protoSearchPaths, instance.Path.rel()))
+	transitiveImports := walkClosureTail(e.scanner, protoVFS, protoWalkInputs(ctx.parsers, protoSearchPaths, instance.Path.rel()))
 
 	extraProtoDeps = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, transitiveImports, extraProtoDeps...)
 
@@ -340,7 +340,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		pbHLeaves = protoProducerSourceInputs
 	}
 
-	reg := ctx.codegenFor(instance)
+	reg := e.codegen
 
 	reg.register(&GeneratedFileInfo{
 		OutputPath:     pbH,
@@ -561,7 +561,7 @@ func (e *EmitContext) emitCPPProtoSrcs(peerContribs PeerGlobalContribs, protoSrc
 		for _, src := range evSrcs {
 			evRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
 			evVFS := source(evRelPath)
-			evImports := walkClosureTail(ctx.scannerFor(instance), evVFS, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
+			evImports := walkClosureTail(e.scanner, evVFS, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
 
 			evRef := emitEV(
 				instance, evRelPath, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
@@ -580,7 +580,7 @@ func (e *EmitContext) emitCPPProtoSrcs(peerContribs PeerGlobalContribs, protoSrc
 			evHParsed = append(evHParsed, protobufRuntimeDirectives...)
 			evHParsed = append(evHParsed, evExtras...)
 
-			ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			e.codegen.register(&GeneratedFileInfo{
 				OutputPath:     evH,
 				ProducerRef:    evRef,
 				GeneratorRefs:  []NodeRef{event2cppLDRef},
@@ -591,7 +591,7 @@ func (e *EmitContext) emitCPPProtoSrcs(peerContribs PeerGlobalContribs, protoSrc
 			evCCParsed := append(append([]IncludeDirective(nil), evHParsed...),
 				IncludeDirective{kind: includeQuoted, target: internStr(source(pbRuntimeBase, "google/protobuf/wire_format.h").rel())})
 
-			ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			e.codegen.register(&GeneratedFileInfo{
 				OutputPath:     evPbCC,
 				ProducerRef:    evRef,
 				GeneratorRefs:  []NodeRef{event2cppLDRef},
@@ -643,7 +643,7 @@ func (e *EmitContext) emitCPPProtoSrcs(peerContribs PeerGlobalContribs, protoSrc
 	var antlrRefs []NodeRef
 	var antlrOutputs []VFS
 
-	reg := ctx.codegenFor(instance)
+	reg := e.codegen
 
 	for _, run := range d.antlrRuns {
 		for _, outTok := range run.OUTFiles {

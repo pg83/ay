@@ -184,7 +184,7 @@ func (e *EmitContext) emitLibraryEvSource(src STR) *SourceEmit {
 	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
 	cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
 	event2cppLDRef, event2cppBinary := ctx.tool(argToolsEvent2cpp)
-	evImports := walkClosureTail(ctx.scannerFor(instance), evSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
+	evImports := walkClosureTail(e.scanner, evSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
 
 	evRef := emitEV(
 		instance, evRelPath,
@@ -204,7 +204,7 @@ func (e *EmitContext) emitLibraryEvSource(src STR) *SourceEmit {
 	evHParsed = append(evHParsed, protobufRuntimeDirectives...)
 	evHParsed = append(evHParsed, evExtras...)
 
-	reg := ctx.codegenFor(instance)
+	reg := e.codegen
 
 	var psc []ARG
 	if p := d.perSrcCFlagsFor(src); p != nil {

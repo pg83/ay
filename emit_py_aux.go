@@ -15,7 +15,7 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() *GeneratedPyAuxChunksResult {
 		return nil
 	}
 
-	reg := ctx.codegenFor(instance)
+	reg := e.codegen
 
 	var entries []PyProtoAuxEntry
 
@@ -163,7 +163,7 @@ func (e *EmitContext) emitRawAuxResourceChunks(entries []PyProtoAuxEntry, module
 }
 
 func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) []VFS {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	ctx, _, d := e.ctx, e.instance, e.d
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 	emits := make([]IncludeDirective, 0, len(seed))
 
@@ -177,7 +177,7 @@ func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) []VFS
 		psc = *p
 	}
 
-	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+	e.codegen.register(&GeneratedFileInfo{
 		OutputPath:     aux,
 		ProducerRef:    ref,
 		GeneratorRefs:  []NodeRef{rescompilerRef},
@@ -185,7 +185,7 @@ func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) []VFS
 		Compile:        &CompileSpec{FlatOutput: d.flatSrc(aux.str()), ForceCxx: true, CFlags: concat(psc, []ARG{argX, argC})},
 	})
 
-	closure := walkClosure(ctx.scannerFor(instance), aux, d.cc.ScanCfg)
+	closure := walkClosure(e.scanner, aux, d.cc.ScanCfg)
 
 	if len(closure) == 0 {
 		return nil

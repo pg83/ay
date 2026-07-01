@@ -8,7 +8,7 @@ import (
 var splitCodegenKV = KV{P: pkSC, PC: pcYellow}
 
 func (e *EmitContext) emitSplitCodegensForAR() *RunProgramsForARResult {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	_, instance, d := e.ctx, e.instance, e.d
 	if len(d.splitCodegens) == 0 {
 		return nil
 	}
@@ -16,7 +16,7 @@ func (e *EmitContext) emitSplitCodegensForAR() *RunProgramsForARResult {
 	res := &RunProgramsForARResult{}
 
 	for _, sc := range d.splitCodegens {
-		_, parts := emitSplitCodegen(ctx, instance, sc)
+		_, parts := e.emitSplitCodegen(sc)
 
 		for _, partRel := range parts {
 			se := e.emitOneSource(copyFileOutputVFS(instance.Path.rel(), partRel).str())
@@ -30,7 +30,8 @@ func (e *EmitContext) emitSplitCodegensForAR() *RunProgramsForARResult {
 	return res
 }
 
-func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt) (NodeRef, []string) {
+func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string) {
+	ctx, instance := e.ctx, e.instance
 	na := ctx.emit.nodeArenas()
 	moduleDir := instance.Path.rel()
 	prefix := sc.Prefix.string()
@@ -77,7 +78,7 @@ func emitSplitCodegen(ctx *GenCtx, instance ModuleInstance, sc *SplitCodegenStmt
 	}
 
 	cppParsed := []IncludeDirective{part0Inc}
-	reg := ctx.codegenFor(instance)
+	reg := e.codegen
 
 	reg.register(&GeneratedFileInfo{
 		OutputPath:     prefixH,

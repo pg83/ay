@@ -14,7 +14,7 @@ func (e *EmitContext) emitLibraryCfgProtoSource(src STR) *SourceEmit {
 	configOpts := na.strList(internV("--plugin=protoc-gen-config=", configPluginBinary.string()),
 		argConfigOutB.str())
 
-	cfgImports := walkClosureTail(ctx.scannerFor(instance), cfgSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
+	cfgImports := walkClosureTail(e.scanner, cfgSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
 
 	cfgRef := emitProtoWrapperPBNode(
 		instance, cfgRelPath, &cfgprotoKV,
@@ -41,7 +41,7 @@ func (e *EmitContext) emitLibraryCfgProtoSource(src STR) *SourceEmit {
 		cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: internStr(ti.rel())})
 	}
 
-	reg := ctx.codegenFor(instance)
+	reg := e.codegen
 
 	reg.register(&GeneratedFileInfo{
 		OutputPath:     cfgH,

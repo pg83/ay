@@ -95,7 +95,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 	parsed := fromSandboxOutputIncludes(stmt)
 
 	for _, out := range outVFSs {
-		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		e.codegen.register(&GeneratedFileInfo{
 			OutputPath:      out,
 			ProducerRef:     ref,
 			ParsedIncludes:  parsed,

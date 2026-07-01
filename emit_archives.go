@@ -5,13 +5,13 @@ import "strings"
 var archivesKV = KV{P: pkAR, PC: pcLightRed}
 
 func (e *EmitContext) emitArchives() {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	ctx, _, d := e.ctx, e.instance, e.d
 	if len(d.archives) == 0 {
 		return
 	}
 
 	toolLDRef, toolBinPath := ctx.tool(argToolsArchiver)
-	reg := ctx.codegenFor(instance)
+	reg := e.codegen
 
 	for _, a := range d.archives {
 		e.emitArchive(a, toolBinPath, toolLDRef, ctx.emit, reg)

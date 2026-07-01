@@ -78,7 +78,7 @@ func (e *EmitContext) emitJoinSrcs() ([]NodeRef, []VFS, map[VFS]SrcMeta) {
 			psc = *p
 		}
 
-		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		e.codegen.register(&GeneratedFileInfo{
 			OutputPath:    joinOutVFS,
 			ProducerRef:   jsRef,
 			ClosureLeaves: ccIncl[1:],

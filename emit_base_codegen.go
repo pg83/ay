@@ -7,13 +7,14 @@ import (
 var baseCodegenKV = KV{P: pkBC, PC: pcYellow}
 
 func (e *EmitContext) emitBaseCodegensForAR() {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	_, _, d := e.ctx, e.instance, e.d
 	for _, bc := range d.baseCodegens {
-		emitBaseCodegen(ctx, instance, bc)
+		e.emitBaseCodegen(bc)
 	}
 }
 
-func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt) {
+func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
+	ctx, instance := e.ctx, e.instance
 	na := ctx.emit.nodeArenas()
 	moduleDir := instance.Path.rel()
 	prefix := bc.Prefix.string()
@@ -44,7 +45,7 @@ func emitBaseCodegen(ctx *GenCtx, instance ModuleInstance, bc *BaseCodegenStmt) 
 		headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: oi})
 	}
 
-	reg := ctx.codegenFor(instance)
+	reg := e.codegen
 
 	reg.register(&GeneratedFileInfo{
 		OutputPath:     prefixH,

@@ -223,30 +223,30 @@ func (e *EmitContext) emitResourceFile(oc *ObjcopyEmitCtx, entries []ResourceEnt
 		cur = acc{}
 	}
 
-	for _, e := range entries {
-		if !contains(e.Path) && !contains(e.Key) {
-			if e.Path == "-" {
-				cur.kvs = append(cur.kvs, e.Key)
-				cur.cmdLen += rootCmdLen + len(e.Key)
+	for _, entry := range entries {
+		if !contains(entry.Path) && !contains(entry.Key) {
+			if entry.Path == "-" {
+				cur.kvs = append(cur.kvs, entry.Key)
+				cur.cmdLen += rootCmdLen + len(entry.Key)
 
-				if inner, ok := rootrelInputPath(e.Key); ok {
-					r := resolveResourceInput(ctx, instance, inner, copyFileInputVFS(ctx.fs, instance.Path, inner))
+				if inner, ok := rootrelInputPath(entry.Key); ok {
+					r := e.resolveResourceInput(inner, copyFileInputVFS(ctx.fs, instance.Path, inner))
 
 					cur.kvInputs = append(cur.kvInputs, r.Input)
 					cur.mainOuts = append(cur.mainOuts, r.ProducerMainOut)
-					cur.kvsCmd = append(cur.kvsCmd, renderResourceKvCmd(rootrelExpand(e.Key, r.Input.rel())))
+					cur.kvsCmd = append(cur.kvsCmd, renderResourceKvCmd(rootrelExpand(entry.Key, r.Input.rel())))
 				} else {
-					cur.kvsCmd = append(cur.kvsCmd, renderResourceKvCmd(e.Key))
+					cur.kvsCmd = append(cur.kvsCmd, renderResourceKvCmd(entry.Key))
 				}
 			} else {
-				r := resolveResourceInput(ctx, instance, e.Path, copyFileInputVFS(ctx.fs, instance.Path, e.Path))
+				r := e.resolveResourceInput(entry.Path, copyFileInputVFS(ctx.fs, instance.Path, entry.Path))
 
-				cur.paths = append(cur.paths, e.Path)
+				cur.paths = append(cur.paths, entry.Path)
 				cur.pathInputs = append(cur.pathInputs, r.Input)
 				cur.mainOuts = append(cur.mainOuts, r.ProducerMainOut)
 
 				if r.ProducerRef != 0 {
-					for _, v := range walkClosureTail(ctx.scannerFor(instance), r.Input, d.cc.ScanCfg) {
+					for _, v := range walkClosureTail(e.scanner, r.Input, d.cc.ScanCfg) {
 						if v.isBuild() {
 							cur.closureInputs = append(cur.closureInputs, v)
 						}
@@ -259,14 +259,14 @@ func (e *EmitContext) emitResourceFile(oc *ObjcopyEmitCtx, entries []ResourceEnt
 					}
 				}
 
-				kb := encb64.StdEncoding.EncodeToString([]byte(e.Key))
+				kb := encb64.StdEncoding.EncodeToString([]byte(entry.Key))
 
 				cur.keys = append(cur.keys, kb)
-				cur.cmdLen += rootCmdLen + len(e.Path) + len(kb)
+				cur.cmdLen += rootCmdLen + len(entry.Path) + len(kb)
 			}
 		}
 
-		if cur.cmdLen > maxCmdLen || e.EndsBatch {
+		if cur.cmdLen > maxCmdLen || entry.EndsBatch {
 			flush()
 		}
 	}
@@ -382,7 +382,7 @@ func (e *EmitContext) emitPyNamespaceForGroup(
 	oc *ObjcopyEmitCtx,
 ) *ObjcopyEmit {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	reg := ctx.codegenFor(instance)
+	reg := e.codegen
 	pySources := make([]string, 0, len(group.Srcs))
 	arcSources := make([]string, 0, len(group.Srcs))
 
@@ -536,7 +536,7 @@ func (e *EmitContext) emitPySrcObjcopy(
 			}
 		}
 
-		entries := buildPySrcEntriesFor(ctx.codegenFor(instance), ctx.fs, d, instance.Path.rel(), strStrings(group.Srcs), group.TopLevel, group.Namespace)
+		entries := buildPySrcEntriesFor(e.codegen, ctx.fs, d, instance.Path.rel(), strStrings(group.Srcs), group.TopLevel, group.Namespace)
 
 		if len(entries) == 0 {
 			continue

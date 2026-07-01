@@ -151,13 +151,13 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 		scanAddIncl := appendCythonScanAddIncl(d.cc.AddIncl, d.cythonAddIncl, py23Variant)
 		srcScanIn := newScanContext(ctx.parsers, scanAddIncl, d.cc.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 
-		ind := cythonCppInducedSets(ctx, instance, srcVFS, stmt.CMode, srcScanIn)
+		ind := e.cythonCppInducedSets(srcVFS, stmt.CMode, srcScanIn)
 		cyRef := ctx.emit.reserve()
 
 		var headerPyxClosure []VFS
 
 		if stmt.Header {
-			headerPyxClosure = cythonPyxLangClosure(ctx.scannerFor(instance), srcVFS, srcScanIn)
+			headerPyxClosure = cythonPyxLangClosure(e.scanner, srcVFS, srcScanIn)
 
 			pyxInduced := keepOnlySourceVFS(headerPyxClosure)
 			headerInduced := cythonHeaderInducedClosure(ind)
@@ -167,7 +167,7 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 				headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: internStr(v.rel())})
 			}
 
-			reg := ctx.codegenFor(instance)
+			reg := e.codegen
 
 			for _, h := range headerVFS {
 				reg.register(&GeneratedFileInfo{
@@ -221,7 +221,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) []*SourceEmit
 		srcVFS := p.srcVFS
 		srcScanIn := p.srcScanIn
 		cyRef := p.cyRef
-		sourceClosure := walkClosureTail(ctx.scannerFor(instance), srcVFS, srcScanIn)
+		sourceClosure := walkClosureTail(e.scanner, srcVFS, srcScanIn)
 		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(p.ind, sourceClosure)
 
 		if stmt.Header {
@@ -229,7 +229,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) []*SourceEmit
 		}
 
 		if pxdVFS, ok := resolveCythonPxd(ctx, instance, stmt.Pxd); ok {
-			pxdClosure := walkClosure(ctx.scannerFor(instance), pxdVFS, srcScanIn)
+			pxdClosure := walkClosure(e.scanner, pxdVFS, srcScanIn)
 
 			toolInputs = keepOnlySourceVFS(dedup(toolInputs, pxdClosure))
 			emitsIncludes = dedup(emitsIncludes, pxdClosure)
@@ -256,7 +256,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) []*SourceEmit
 			ccCFlags = append(ccCFlags, argWnoImplicitFallthrough)
 		}
 
-		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		e.codegen.register(&GeneratedFileInfo{
 			OutputPath:     generatedVFS,
 			ProducerRef:    cyRef,
 			GeneratorRefs:  nil,
@@ -356,8 +356,8 @@ func isCythonLangFile(rel string) bool {
 	return hasSuffix(rel, ".pyx") || hasSuffix(rel, ".pxd") || hasSuffix(rel, ".pxi") || hasSuffix(rel, ".py")
 }
 
-func cythonCompileInducedInputs(ctx *GenCtx, instance ModuleInstance, includeInputs []VFS) []VFS {
-	reg := ctx.codegenFor(instance)
+func (e *EmitContext) cythonCompileInducedInputs(includeInputs []VFS) []VFS {
+	reg := e.codegen
 
 	var extra []VFS
 
@@ -385,8 +385,8 @@ type CythonCppInduced struct {
 	emitsCl      [][]VFS
 }
 
-func cythonCppInducedSets(ctx *GenCtx, instance ModuleInstance, src VFS, cMode bool, scanIn ScanContext) CythonCppInduced {
-	scanner := ctx.scannerFor(instance)
+func (e *EmitContext) cythonCppInducedSets(src VFS, cMode bool, scanIn ScanContext) CythonCppInduced {
+	scanner := e.scanner
 	toolSingles := []VFS{contribToolsCythonCythonPy}
 	emitsSingles := []VFS{contribToolsCythonCythonPy, src}
 

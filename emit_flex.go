@@ -26,7 +26,7 @@ func (e *EmitContext) emitLibraryFlexSource(src STR) *SourceEmit {
 	parsed := make([]IncludeDirective, 0, 2)
 
 	parsed = append(parsed, flexOutputInclude)
-	parsed = append(parsed, ctx.scannerFor(instance).parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
+	parsed = append(parsed, e.scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
 
 	var psc []ARG
 	if p := d.perSrcCFlagsFor(src); p != nil {
@@ -42,7 +42,7 @@ func (e *EmitContext) emitLibraryFlexSource(src STR) *SourceEmit {
 
 	lxRef := ctx.emit.reserve()
 
-	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+	e.codegen.register(&GeneratedFileInfo{
 		OutputPath:     outVFS,
 		ProducerRef:    lxRef,
 		GeneratorRefs:  []NodeRef{flexRef},
@@ -50,7 +50,7 @@ func (e *EmitContext) emitLibraryFlexSource(src STR) *SourceEmit {
 		Compile:        &CompileSpec{FlatOutput: d.flatSrc(src), CFlags: cflags},
 	})
 
-	window := walkClosure(ctx.scannerFor(instance), outVFS, d.cc.ScanCfg)
+	window := walkClosure(e.scanner, outVFS, d.cc.ScanCfg)
 	lxClosure := keepOnlySourceVFS(window)
 
 	emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef, ctx.emit)

@@ -28,14 +28,14 @@ func (e *EmitContext) emitMiscNodes() (ccRefs []NodeRef, ccOutputs []VFS) {
 			lexerCpp := build(outPrefix, lexerBase, ".cpp")
 			parserCpp := build(outPrefix, parserBase, ".cpp")
 
-			ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			e.codegen.register(&GeneratedFileInfo{
 				OutputPath:     lexerCpp,
 				ProducerRef:    jvRef,
 				GeneratorRefs:  nil,
 				ParsedIncludes: nil,
 			})
 
-			ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			e.codegen.register(&GeneratedFileInfo{
 				OutputPath:     parserCpp,
 				ProducerRef:    jvRef,
 				GeneratorRefs:  nil,
@@ -63,7 +63,7 @@ func (e *EmitContext) emitMiscNodes() (ccRefs []NodeRef, ccOutputs []VFS) {
 					parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.rel())})
 				}
 
-				ctx.codegenFor(instance).register(&GeneratedFileInfo{
+				e.codegen.register(&GeneratedFileInfo{
 					OutputPath:     build(outPrefix, suffix),
 					ProducerRef:    jvRef,
 					GeneratorRefs:  nil,
@@ -96,14 +96,14 @@ func (e *EmitContext) emitMiscNodes() (ccRefs []NodeRef, ccOutputs []VFS) {
 			lexerCpp := build(outPrefix, base, "Lexer.cpp")
 			parserCpp := build(outPrefix, base, "Parser.cpp")
 
-			ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			e.codegen.register(&GeneratedFileInfo{
 				OutputPath:     lexerCpp,
 				ProducerRef:    jvRef,
 				GeneratorRefs:  nil,
 				ParsedIncludes: nil,
 			})
 
-			ctx.codegenFor(instance).register(&GeneratedFileInfo{
+			e.codegen.register(&GeneratedFileInfo{
 				OutputPath:     parserCpp,
 				ProducerRef:    jvRef,
 				GeneratorRefs:  nil,
@@ -130,7 +130,7 @@ func (e *EmitContext) emitMiscNodes() (ccRefs []NodeRef, ccOutputs []VFS) {
 					parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.rel())})
 				}
 
-				ctx.codegenFor(instance).register(&GeneratedFileInfo{
+				e.codegen.register(&GeneratedFileInfo{
 					OutputPath:     build(outPrefix, suffix),
 					ProducerRef:    jvRef,
 					GeneratorRefs:  nil,
@@ -161,7 +161,7 @@ func (e *EmitContext) emitMiscNodes() (ccRefs []NodeRef, ccOutputs []VFS) {
 	if d.createBuildInfoFor != nil {
 		biRef := emitBI(instance, d.createBuildInfoFor.string(), biFlagsForInstance(instance.Platform), d.tc, ctx.emit)
 
-		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		e.codegen.register(&GeneratedFileInfo{
 			OutputPath:    build(outPrefix, d.createBuildInfoFor.string()),
 			ProducerRef:   biRef,
 			GeneratorRefs: nil,

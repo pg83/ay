@@ -54,14 +54,14 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 		Platform:     instance.Platform,
 		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
 		Env:          env,
-		Inputs:       na.inputList(na.vfsList(configureFilePyVFS), walkClosure(ctx.scannerFor(instance), srcVFS, d.cc.ScanCfg)),
+		Inputs:       na.inputList(na.vfsList(configureFilePyVFS), walkClosure(e.scanner, srcVFS, d.cc.ScanCfg)),
 		KV:           &cfKV,
 		Outputs:      na.vfsList(outVFS),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    usesPython3,
 	})
 
-	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+	e.codegen.register(&GeneratedFileInfo{
 		OutputPath:     outVFS,
 		SourcePath:     srcVFS,
 		ProducerRef:    cfRef,

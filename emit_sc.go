@@ -29,11 +29,11 @@ func (e *EmitContext) emitLibrarySCSource(src STR) *SourceEmit {
 	domLDRef, domBinary := domRes.LDRef, *domRes.LDPath
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	headerVFS := build(srcVFS.rel(), ".h")
-	runtimeClosure := walkClosure(ctx.scannerFor(instance), domschemeRuntimeVFS, d.cc.ScanCfg)
+	runtimeClosure := walkClosure(e.scanner, domschemeRuntimeVFS, d.cc.ScanCfg)
 	scRef := emitSC(instance, srcVFS, headerVFS, domBinary, runtimeClosure, domLDRef, ctx.emit)
 	runtimeInclude := []IncludeDirective{{kind: includeQuoted, target: internStr(domschemeRuntimeVFS.rel())}}
 
-	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+	e.codegen.register(&GeneratedFileInfo{
 		OutputPath:     headerVFS,
 		ProducerRef:    scRef,
 		GeneratorRefs:  []NodeRef{domLDRef},

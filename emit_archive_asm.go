@@ -3,13 +3,13 @@ package main
 var archiveAsmKV = KV{P: pkAR, PC: pcLightCyan}
 
 func (e *EmitContext) emitArchiveAsmForAR() *RunProgramsForARResult {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	ctx, _, d := e.ctx, e.instance, e.d
 	if len(d.archiveAsm) == 0 {
 		return nil
 	}
 
 	toolLDRef, toolBinPath := ctx.tool(argToolsArchiver)
-	reg := ctx.codegenFor(instance)
+	reg := e.codegen
 	res := &RunProgramsForARResult{}
 
 	for _, a := range d.archiveAsm {
@@ -117,7 +117,7 @@ func (e *EmitContext) emitArchiveAsmRodata(rodataRel string, producerRef NodeRef
 	}
 
 	rodataPath := build(instance.Path.rel(), "/", rodataRel)
-	leaves := walkClosureTail(ctx.scannerFor(instance), rodataPath, d.cc.ScanCfg)
+	leaves := walkClosureTail(e.scanner, rodataPath, d.cc.ScanCfg)
 	yasmLDRef, _ := ctx.tool(argContribToolsYasm)
 	ref, _, outPath := emitRD(instance, rodataRel, rodataPath, yasmLDRef, leaves, []NodeRef{producerRef}, d.cc.TC, ctx.emit)
 

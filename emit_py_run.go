@@ -91,7 +91,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 		pySourceInputs = append(pySourceInputs, scriptVFS)
 	}
 
-	reg := ctx.codegenFor(instance)
+	reg := e.codegen
 
 	for _, v := range inVFSs {
 		if v.isSource() {
@@ -146,7 +146,7 @@ func (e *EmitContext) pyInputClosure(stmt *RunPythonStmt) []VFS {
 	walkOne := func(rel string) {
 		buildRootPath := copyFileOutputVFS(instance.Path.rel(), rel)
 
-		out = append(out, walkClosureTail(ctx.scannerFor(instance), buildRootPath, scanCfg)...)
+		out = append(out, walkClosureTail(e.scanner, buildRootPath, scanCfg)...)
 	}
 
 	hasCCShard, _ := splitCodegenDetect(stmt)
@@ -155,7 +155,7 @@ func (e *EmitContext) pyInputClosure(stmt *RunPythonStmt) []VFS {
 		for _, f := range stmt.INFiles {
 			vfs := e.runProgramInputVFS(f.string())
 
-			out = append(out, walkClosure(ctx.scannerFor(instance), vfs, scanCfg)...)
+			out = append(out, walkClosure(e.scanner, vfs, scanCfg)...)
 		}
 	} else {
 		for _, f := range stmt.OUTFiles {
@@ -199,8 +199,8 @@ func splitCodegenDetect(stmt *RunPythonStmt) (hasCCShard bool, hasHeader bool) {
 }
 
 func (e *EmitContext) splitCodegenSrcs(stmt *RunPythonStmt, scriptVFS VFS) []VFS {
-	ctx, instance, _ := e.ctx, e.instance, e.d
-	reg := ctx.codegenFor(instance)
+	ctx, _, _ := e.ctx, e.instance, e.d
+	reg := e.codegen
 	seen := make(map[VFS]struct{}, 32)
 
 	var sources []VFS

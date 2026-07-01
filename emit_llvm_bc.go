@@ -40,11 +40,11 @@ func (e *EmitContext) emitLLVMBC(resourceGlobals []ResourceDecl) {
 		linksCopy := false
 
 		for _, src := range stmt.Sources {
-			inputVFS, producer := llvmBcSourceInfo(ctx, instance, src)
+			inputVFS, producer := e.llvmBcSourceInfo(src)
 			in := e.ccInputsFor(inputVFS)
-			bcOut := build(llvmBcRootRelArcSrc(ctx, instance, src), stmt.Suffix, ".bc")
+			bcOut := build(e.llvmBcRootRelArcSrc(src), stmt.Suffix, ".bc")
 			bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
-			closure := walkClosure(ctx.scannerFor(instance), inputVFS, in.ScanCfg)
+			closure := walkClosure(e.scanner, inputVFS, in.ScanCfg)
 			deps := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, closure, depRefs(producer)...)
 
 			allInputs := na.inputList(na.vfsList(clangWrapperVFS),
@@ -147,7 +147,7 @@ func (e *EmitContext) emitLLVMBC(resourceGlobals []ResourceDecl) {
 
 		ensureResourcePeer(instance.Path.rel(), d)
 
-		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		e.codegen.register(&GeneratedFileInfo{
 			OutputPath:     optOut,
 			ProducerRef:    opRef,
 			GeneratorRefs:  nil,
@@ -201,15 +201,16 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	return args
 }
 
-func llvmBcSourceInfo(ctx *GenCtx, instance ModuleInstance, src string) (inputVFS VFS, producer NodeRef) {
-	reg := ctx.codegenFor(instance)
+func (e *EmitContext) llvmBcSourceInfo(src string) (inputVFS VFS, producer NodeRef) {
+	ctx, instance := e.ctx, e.instance
+	reg := e.codegen
 	outVFS := copyFileOutputVFS(instance.Path.rel(), src)
 
 	if info := reg.lookup(outVFS); info != nil {
 		return outVFS, info.ProducerRef
 	}
 
-	if buildVFS := generatedModuleSourceVFS(ctx, instance, src); buildVFS != nil {
+	if buildVFS := e.generatedModuleSourceVFS(src); buildVFS != nil {
 		ref := NodeRef(0)
 
 		if info := reg.lookup(*buildVFS); info != nil {
@@ -222,12 +223,13 @@ func llvmBcSourceInfo(ctx *GenCtx, instance ModuleInstance, src string) (inputVF
 	return copyFileInputVFS(ctx.fs, instance.Path, src), NodeRef(0)
 }
 
-func llvmBcRootRelArcSrc(ctx *GenCtx, instance ModuleInstance, src string) string {
-	if reg := ctx.codegenFor(instance); reg.lookup(copyFileOutputVFS(instance.Path.rel(), src)) != nil {
+func (e *EmitContext) llvmBcRootRelArcSrc(src string) string {
+	ctx, instance := e.ctx, e.instance
+	if reg := e.codegen; reg.lookup(copyFileOutputVFS(instance.Path.rel(), src)) != nil {
 		return src
 	}
 
-	if generatedModuleSourceVFS(ctx, instance, src) != nil {
+	if e.generatedModuleSourceVFS(src) != nil {
 		return src
 	}
 

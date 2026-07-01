@@ -28,7 +28,7 @@ func (e *EmitContext) emitLibraryCudaSource(src STR) *SourceEmit {
 	in := e.ccInputsFor(srcVFS)
 	outVFS, inVFS := composeCCPaths(instance, srcRel, srcVFS, in, ".o")
 	blocks := in.CCBlocks
-	scanner := ctx.scannerFor(instance)
+	scanner := e.scanner
 	closure := dedup(walkClosure(scanner, srcVFS, in.ScanCfg), walkClosure(scanner, cudaRuntimeIncludeVFS, in.ScanCfg))
 	mtimeRef, mtimeVFS := ctx.tool(cudaMtimeArg)
 	pidRef, pidVFS := ctx.tool(cudaCustomPidArg)

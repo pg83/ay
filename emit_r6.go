@@ -84,7 +84,7 @@ func (e *EmitContext) emitLibraryRagel6Source(src STR) *SourceEmit {
 	ragelLDRef, ragelBinaryVFS := ctx.tool(argContribToolsRagel6)
 	rl6SourceVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	r6Out := ragel6OutVFS(instance, srcRel)
-	r6Parsed := ctx.scannerFor(instance).parsers.sourceParsedBuckets(rl6SourceVFS, nil).bucket(parsedIncludesCpp)
+	r6Parsed := e.scanner.parsers.sourceParsedBuckets(rl6SourceVFS, nil).bucket(parsedIncludesCpp)
 	r6Ref := ctx.emit.reserve()
 
 	var psc []ARG
@@ -92,7 +92,7 @@ func (e *EmitContext) emitLibraryRagel6Source(src STR) *SourceEmit {
 		psc = *p
 	}
 
-	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+	e.codegen.register(&GeneratedFileInfo{
 		OutputPath:     r6Out,
 		ProducerRef:    r6Ref,
 		GeneratorRefs:  []NodeRef{ragelLDRef},
@@ -103,7 +103,7 @@ func (e *EmitContext) emitLibraryRagel6Source(src STR) *SourceEmit {
 		},
 	})
 
-	window := walkClosure(ctx.scannerFor(instance), r6Out, d.cc.ScanCfg)
+	window := walkClosure(e.scanner, r6Out, d.cc.ScanCfg)
 	rl6Closure := keepOnlySourceVFS(filterEnSerializedSiblings(window))
 
 	emitR6(instance, srcRel, ragelLDRef, ragelBinaryVFS, d.cc.Ragel6Flags, rl6Closure, r6Ref, ctx.emit)

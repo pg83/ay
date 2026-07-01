@@ -23,12 +23,12 @@ type RunProgramAuxTool struct {
 }
 
 func (e *EmitContext) emitRunProgramsForAR() *RunProgramsForARResult {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	_, instance, d := e.ctx, e.instance, e.d
 	if len(d.runPrograms) == 0 {
 		return nil
 	}
 
-	reg := ctx.codegenFor(instance)
+	reg := e.codegen
 	res := &RunProgramsForARResult{}
 
 	type runEntry struct {
@@ -217,7 +217,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt, reg *CodegenRegistry)
 			ClosureLeaves:  leaves,
 		}
 
-		ctx.codegenFor(instance).register(info)
+		e.codegen.register(info)
 	}
 
 	parsedFor := func(f STR, out VFS, auto bool) ([]IncludeDirective, bool) {
@@ -359,14 +359,14 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 
 	walkOne := func(rel string) {
 		buildRootPath := copyFileOutputVFS(instance.Path.rel(), rel)
-		sub := walkClosureTail(ctx.scannerFor(instance), buildRootPath, scanCfg)
+		sub := walkClosureTail(e.scanner, buildRootPath, scanCfg)
 
 		out = append(out, sub...)
 	}
 
 	walkInput := func(rel string) {
 		inputVFS := e.runProgramInputVFS(rel)
-		sub := walkClosure(ctx.scannerFor(instance), inputVFS, scanCfg)
+		sub := walkClosure(e.scanner, inputVFS, scanCfg)
 
 		out = append(out, sub...)
 	}
@@ -401,7 +401,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 			continue
 		}
 
-		if info := ctx.codegenFor(instance).lookup(e.runProgramInputVFS(rel)); info != nil {
+		if info := e.codegen.lookup(e.runProgramInputVFS(rel)); info != nil {
 			out = append(out, info.SourceInputs...)
 		}
 	}
@@ -412,7 +412,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 				continue
 			}
 
-			for _, v := range walkClosureTail(ctx.scannerFor(instance), copyFileOutputVFS(instance.Path.rel(), f.string()), scanCfg) {
+			for _, v := range walkClosureTail(e.scanner, copyFileOutputVFS(instance.Path.rel(), f.string()), scanCfg) {
 				if v.isSource() {
 					out = append(out, v)
 				}
@@ -420,7 +420,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 		}
 	}
 
-	reg := ctx.codegenFor(instance)
+	reg := e.codegen
 
 	keep := func(v VFS) bool {
 		if fullSourceClosure {
@@ -446,10 +446,10 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 		switch info := reg.lookup(candidate); {
 		case info != nil:
 
-			sub = walkClosureTail(ctx.scannerFor(instance), info.OutputPath, scanCfg)
+			sub = walkClosureTail(e.scanner, info.OutputPath, scanCfg)
 		case fullSourceClosure && ctx.fs.isFile(srcRootVFS, target.string()):
 
-			sub = walkClosure(ctx.scannerFor(instance), source(target.string()), scanCfg)
+			sub = walkClosure(e.scanner, source(target.string()), scanCfg)
 		default:
 			continue
 		}
@@ -580,7 +580,7 @@ func (e *EmitContext) runProgramInputVFS(rel string) VFS {
 
 	buildVFS := build(filepath.ToSlash(filepath.Clean(instance.Path.rel() + "/" + rel)))
 
-	if ctx.codegenFor(instance).lookup(buildVFS) != nil {
+	if e.codegen.lookup(buildVFS) != nil {
 		return buildVFS
 	}
 

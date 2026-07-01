@@ -69,7 +69,7 @@ func (e *EmitContext) emitLibraryRagel5Source(src STR) *SourceEmit {
 	rlgenCdLDRef, rlgenCdBinVFS := ctx.tool(argContribToolsRagel5RlgenCd)
 	r5Ref, r5TmpOut, r5CppOut := emitR5(instance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, ctx.emit)
 	rlSourceVFS := source(instance.Path.rel(), "/", srcRel)
-	reg := ctx.codegenFor(instance)
+	reg := e.codegen
 
 	reg.register(&GeneratedFileInfo{
 		OutputPath:     r5TmpOut,
@@ -78,7 +78,7 @@ func (e *EmitContext) emitLibraryRagel5Source(src STR) *SourceEmit {
 		ParsedIncludes: nil,
 	})
 
-	r5Parsed := ctx.scannerFor(instance).parsers.sourceParsedBuckets(rlSourceVFS, nil).bucket(parsedIncludesCpp)
+	r5Parsed := e.scanner.parsers.sourceParsedBuckets(rlSourceVFS, nil).bucket(parsedIncludesCpp)
 
 	reg.register(&GeneratedFileInfo{
 		OutputPath:     r5CppOut,

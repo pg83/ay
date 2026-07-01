@@ -31,7 +31,7 @@ func (e *EmitContext) emitPySrcs() {
 
 	py3ccToolsChunk := []VFS{py3ccBinary, py3ccSlowBin}
 	py3ccArgHead := []STR{(py3ccBinary).str(), argSlowPy3cc.str(), (py3ccSlowBin).str()}
-	reg := ctx.codegenFor(instance)
+	reg := e.codegen
 
 	for i, srcRel := range d.pySrcs {
 		if extIsPyi(srcRel.string()) {
@@ -198,7 +198,7 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) *PyRegisterResult {
 			spec.EnvAddIncl = appendCythonCCAddIncl(d.cc.AddIncl, d.cythonNumpyBeforeInclude)
 		}
 
-		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		e.codegen.register(&GeneratedFileInfo{
 			OutputPath:    regCppVFS,
 			ProducerRef:   pyRef,
 			ClosureLeaves: []VFS{genPy3RegScriptVFS},

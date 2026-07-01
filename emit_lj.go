@@ -36,7 +36,7 @@ func (e *EmitContext) emitLuaJit21() {
 
 	luas := d.lj21.Luas
 	compilerLDRef, compilerBin := ctx.tool(argLuajit21Compiler)
-	reg := ctx.codegenFor(instance)
+	reg := e.codegen
 	cwd := source(luajit21CwdRel).str()
 	raws := make([]string, len(luas))
 
