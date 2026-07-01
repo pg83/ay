@@ -618,74 +618,19 @@ func (e *EmitContext) emitCPPProtoSrcs(peerContribs PeerGlobalContribs, protoSrc
 		return nil
 	}
 
-	ccRefs := make([]NodeRef, 0, len(codegenOutputs))
-	ccOutputs := make([]VFS, 0, len(codegenOutputs))
-	arDeclMeta := map[VFS]SrcMeta{}
-
 	for _, co := range codegenOutputs {
-		se := e.at(cppInstance).emitOneSource(co.pbCC.str())
-
-		ccRefs = append(ccRefs, se.Ref)
-		ccOutputs = append(ccOutputs, se.OutPath)
-		arDeclMeta[se.OutPath] = SrcMeta{Prio: stmtPrioSrcs, Seq: co.declIdx, Generated: true}
+		e.enqueueSrc(co.pbCC.str(), SrcMeta{Prio: stmtPrioSrcs, Seq: co.declIdx, Generated: true})
 	}
 
 	enRes := e.emitEnumSrcs(peerContribs.addIncl)
 
-	if enRes != nil {
-		for i := range enRes.CCRefs {
-			ccRefs = append(ccRefs, enRes.CCRefs[i])
-			ccOutputs = append(ccOutputs, enRes.CCOutputs[i])
-			arDeclMeta[enRes.CCOutputs[i]] = SrcMeta{Prio: stmtPrioDefault, Seq: enRes.Seqs[i], Generated: true, SecondLevel: enRes.SecondLevel[i]}
-		}
-	}
-
-	var antlrRefs []NodeRef
-	var antlrOutputs []VFS
-
-	reg := e.codegen
-
-	for _, run := range d.antlrRuns {
-		for _, outTok := range run.OUTFiles {
-			if !isCCSourceExt(outTok.string()) {
-				continue
-			}
-
-			outVFS := copyFileOutputVFS(instance.Path.rel(), outTok.string())
-			info := reg.lookup(outVFS)
-
-			if info == nil {
-				continue
-			}
-
-			cppRel := antlrOutputModuleRel(instance.Path.rel(), outVFS)
-			se := e.at(cppInstance).emitOneSource(copyFileOutputVFS(cppInstance.Path.rel(), cppRel).str())
-			ccRef, ccOut := se.Ref, se.OutPath
-
-			antlrRefs = append(antlrRefs, ccRef)
-			antlrOutputs = append(antlrOutputs, ccOut)
-			arDeclMeta[ccOut] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
-		}
-	}
-
-	if len(antlrRefs) > 0 {
-		ccRefs = append(antlrRefs, ccRefs...)
-		ccOutputs = append(antlrOutputs, ccOutputs...)
-	}
-
-	ccRefs, ccOutputs = reorderARMembers(ccRefs, ccOutputs, arDeclMeta)
-
-	var protoLibName string
+	protoLibName := ""
 
 	if len(d.moduleStmt.Args) > 0 {
 		protoLibName = d.moduleStmt.Args[0].string()
 	}
 
-	arBaseName := archiveNameWithPrefixOrName(instance.Path.rel(), "lib", protoLibName)
-	archivePath := build(instance.Path.rel(), "/", arBaseName)
-	arRef := emitARNode(instance, archivePath, tagCppProto, ccRefs, ccOutputs, nil, nil, nil, d.tc, ctx.host, ctx.emit)
-
-	return &ProtoSrcsResult{ARRef: arRef, ARPath: &archivePath}
+	return &ProtoSrcsResult{PendingAR: true, EnumRes: enRes, ProtoLibName: protoLibName}
 }
 
 func (e *EmitContext) emitProtoProducer(srcRel string) {
