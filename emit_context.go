@@ -3,6 +3,7 @@ package main
 type PeerContext struct {
 	SelfAddInclGlobal []VFS
 	ResourceGlobals   []ResourceDecl
+	ProtoInclude      []VFS
 }
 
 type EmitContext struct {
@@ -21,6 +22,7 @@ type EmitContext struct {
 	globalOuts           []VFS
 	globalSrcMemberCount int
 	objcopyRes           *ObjcopyEmitResult
+	protoRes             *ProtoSrcsResult
 	declMeta             map[VFS]SrcMeta
 }
 
@@ -76,6 +78,27 @@ func (e *EmitContext) emit() {
 	fsMemberRefs, fsMemberPaths := e.emitFromSandboxes()
 
 	e.emitBundles()
+
+	if isSpecializedLibraryType(d.moduleStmt.Name) {
+		e.emitRunProgramsForAR()
+		e.emitRunPythonForAR()
+
+		e.emitPySrcs()
+
+		e.objcopyRes = e.emitResourceObjcopy()
+
+		e.emitMiscNodes()
+
+		e.protoRes = e.emitProtoSrcs(PeerGlobalContribs{addIncl: e.peers.SelfAddInclGlobal, protoInclude: e.peers.ProtoInclude})
+
+		if d.moduleStmt.Name != tokProtoLibrary {
+			e.emitEnumSrcs(e.peers.SelfAddInclGlobal)
+		}
+
+		e.drainSrcs()
+
+		return
+	}
 
 	for _, src := range d.srcs {
 		if isCodegenProducingSrcID(src) {
