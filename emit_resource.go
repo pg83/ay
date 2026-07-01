@@ -683,39 +683,78 @@ type ObjcopyEmit struct {
 	Out VFS
 }
 
-func (e *EmitContext) emitKvOnlyObjcopyNode(moduleTag *string, kvsHash []string, kvsCmd []string, oc *ObjcopyEmitCtx) *ObjcopyEmit {
-	ctx, instance := e.ctx, e.instance
+func (e *EmitContext) emitKvOnlyResource(tag *string, kvsHash, kvsCmd []string) *ObjcopyEmit {
+	items := make([]ResourceItem, len(kvsHash))
 
-	ref, out := buildObjcopyNode(ctx, instance, oc, ObjcopyNode{
-		moduleTag: moduleTag,
-		kv:        &pyObjcopyKV,
-		kvsHash:   kvsHash,
-		kvsCmd:    kvsCmd,
-		inputs:    ctx.na.inputList(rescompilersWithScriptChunk),
-		deps:      depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef),
-	})
-
-	return &ObjcopyEmit{Ref: ref, Out: out}
-}
-
-func (e *EmitContext) emitResourceFile(oc *ObjcopyEmitCtx, entries []ResourceEntry, moduleTag *string) (refs []NodeRef, outputs []VFS) {
-	b := newObjcopyBatcher(e, oc, ObjcopyProfile{moduleTag: moduleTag, kv: &pyObjcopyKV, layout: objcopyLayoutResource, resolveDeps: true})
-
-	for _, entry := range entries {
-		if resourceCanObjcopy(entry.Path, entry.Key) {
-			if entry.Path == "-" {
-				b.resourceKvEntry(entry.Key)
-			} else {
-				b.resourceFileEntry(entry.Path, entry.Key)
-			}
-		}
-
-		b.entryDone(entry.EndsBatch)
+	for i := range kvsHash {
+		items[i] = ResourceItem{Path: "-", Key: kvsHash[i], Cmd: kvsCmd[i]}
 	}
 
-	b.flush()
+	refs, outs := e.packResources(ResourcePack{Tag: tag, Items: items})
 
-	return b.results()
+	return &ObjcopyEmit{Ref: refs[0], Out: outs[0]}
+}
+
+func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag *string) (refs []NodeRef, outs []VFS) {
+	ctx, instance, d := e.ctx, e.instance, e.d
+	batch := make([]ResourceItem, 0, len(entries))
+
+	flushBatch := func() {
+		if len(batch) == 0 {
+			return
+		}
+
+		r, o := e.packResources(ResourcePack{Tag: moduleTag, Items: batch})
+
+		refs = append(refs, r...)
+		outs = append(outs, o...)
+		batch = batch[:0]
+	}
+
+	for _, entry := range entries {
+		if entry.Path == "-" {
+			it := ResourceItem{Path: "-", Key: entry.Key}
+
+			if inner, ok := rootrelInputPath(entry.Key); ok {
+				r := e.resolveResourceInput(inner, copyFileInputVFS(ctx.fs, instance.Path, inner))
+
+				it.Cmd = renderResourceKvCmd(rootrelExpand(entry.Key, r.Input.rel()))
+				it.Aux = []VFS{r.Input, r.ProducerMainOut}
+			} else {
+				it.Cmd = renderResourceKvCmd(entry.Key)
+			}
+
+			batch = append(batch, it)
+		} else {
+			r := e.resolveResourceInput(entry.Path, copyFileInputVFS(ctx.fs, instance.Path, entry.Path))
+			it := ResourceItem{Path: entry.Path, Key: entry.Key, Input: r.Input}
+
+			if r.ProducerRef != 0 {
+				for _, v := range walkClosureTail(e.scanner, r.Input, d.cc.ScanCfg) {
+					if v.isBuild() {
+						it.Aux = append(it.Aux, v)
+					}
+				}
+
+				for _, v := range r.SourceInputs {
+					if v.isSource() && objcopySourceLeafKept(v.rel()) {
+						it.Aux = append(it.Aux, v)
+					}
+				}
+			}
+
+			it.Aux = append(it.Aux, r.ProducerMainOut)
+			batch = append(batch, it)
+		}
+
+		if entry.EndsBatch {
+			flushBatch()
+		}
+	}
+
+	flushBatch()
+
+	return refs, outs
 }
 
 type RawAuxEntry struct {
@@ -723,4 +762,251 @@ type RawAuxEntry struct {
 	key      string
 	producer NodeRef
 	inputs   []VFS
+}
+
+type ResourceItem struct {
+	Path  string
+	Key   string
+	Cmd   string
+	Input VFS
+	Extra []VFS
+	Aux   []VFS
+}
+
+type ResourcePack struct {
+	Tag        *string
+	Items      []ResourceItem
+	RawClosure func(aux VFS, inputs []VFS, ref NodeRef) []VFS
+}
+
+type resourceChunk struct {
+	paths     []string
+	keysB64   []string
+	kvsHash   []string
+	kvsCmd    []string
+	hashPairs []string
+	cmdPairs  []string
+	payload   []VFS
+	adjacent  []VFS
+	aux       []VFS
+	cmdLen    int
+}
+
+func splitResourceChunks(items []ResourceItem, objcopy bool) []resourceChunk {
+	var chunks []resourceChunk
+
+	cur := resourceChunk{}
+	seen := map[VFS]struct{}{}
+
+	addAdjacent := func(v VFS) {
+		if v == 0 {
+			return
+		}
+
+		if _, dup := seen[v]; dup {
+			return
+		}
+
+		seen[v] = struct{}{}
+		cur.adjacent = append(cur.adjacent, v)
+	}
+
+	flush := func() {
+		if cur.cmdLen == 0 {
+			return
+		}
+
+		chunks = append(chunks, cur)
+		cur = resourceChunk{}
+		seen = map[VFS]struct{}{}
+	}
+
+	for _, it := range items {
+		if it.Path == "-" {
+			cur.kvsHash = append(cur.kvsHash, it.Key)
+			cur.kvsCmd = append(cur.kvsCmd, it.Cmd)
+			cur.hashPairs = append(cur.hashPairs, "-", it.Key)
+			cur.cmdPairs = append(cur.cmdPairs, "-", it.Cmd)
+			cur.cmdLen += rootCmdLen + len(it.Key)
+		} else {
+			cur.paths = append(cur.paths, it.Path)
+
+			key := it.Key
+
+			if objcopy {
+				key = encb64.StdEncoding.EncodeToString([]byte(it.Key))
+			}
+
+			cur.keysB64 = append(cur.keysB64, key)
+			cur.hashPairs = append(cur.hashPairs, it.Path, "-"+it.Key)
+			cur.cmdPairs = append(cur.cmdPairs, it.Input.string(), "-"+it.Key)
+			cur.payload = append(cur.payload, it.Input)
+			cur.cmdLen += rootCmdLen + len(it.Path) + len(key)
+		}
+
+		addAdjacent(it.Input)
+
+		for _, v := range it.Extra {
+			addAdjacent(v)
+		}
+
+		cur.aux = append(cur.aux, it.Aux...)
+
+		if cur.cmdLen >= maxCmdLen {
+			flush()
+		}
+	}
+
+	flush()
+
+	return chunks
+}
+
+func (e *EmitContext) packResources(p ResourcePack) (refs []NodeRef, outs []VFS) {
+	var objItems, rawItems []ResourceItem
+
+	for _, it := range p.Items {
+		if resourceCanObjcopy(it.Path, it.Key) {
+			objItems = append(objItems, it)
+		} else {
+			rawItems = append(rawItems, it)
+		}
+	}
+
+	if len(rawItems) > 0 {
+		r, o := e.packRawResourceChunks(rawItems, p)
+
+		refs = append(refs, r...)
+		outs = append(outs, o...)
+	}
+
+	if len(objItems) > 0 {
+		r, o := e.packObjcopyResourceChunks(objItems, p)
+
+		refs = append(refs, r...)
+		outs = append(outs, o...)
+	}
+
+	return refs, outs
+}
+
+func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p ResourcePack) (refs []NodeRef, outs []VFS) {
+	ctx, instance, d := e.ctx, e.instance, e.d
+	na := ctx.na
+	oc := newObjcopyEmitCtx(ctx, d, instance.Platform)
+
+	for _, ch := range splitResourceChunks(items, true) {
+		deduper.reset()
+
+		for _, v := range rescompilersWithScriptChunk {
+			deduper.add(v)
+		}
+
+		for _, v := range ch.adjacent {
+			deduper.add(v)
+		}
+
+		var tail []VFS
+
+		for _, v := range ch.aux {
+			if v == 0 {
+				continue
+			}
+
+			if deduper.add(v) {
+				tail = append(tail, v)
+			}
+		}
+
+		inputs := na.inputList(rescompilersChunk, ch.adjacent, objcopyScriptChunk)
+
+		if len(tail) > 0 {
+			inputs = append(inputs, tail)
+		}
+
+		dataInputs := concat(ch.adjacent, tail)
+
+		r, outputObj := buildObjcopyNode(ctx, instance, oc, ObjcopyNode{
+			moduleTag:  p.Tag,
+			kv:         &pyObjcopyKV,
+			hashPaths:  ch.paths,
+			keysB64:    ch.keysB64,
+			kvsHash:    ch.kvsHash,
+			kvsCmd:     ch.kvsCmd,
+			pathInputs: ch.payload,
+			inputs:     inputs,
+			deps:       resolveCodegenDepRefsIncl(ctx, instance, na, dataInputs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...),
+		})
+
+		refs = append(refs, r)
+		outs = append(outs, outputObj)
+	}
+
+	return refs, outs
+}
+
+func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack) (refs []NodeRef, outs []VFS) {
+	ctx, instance := e.ctx, e.instance
+	na := ctx.na
+
+	if p.RawClosure == nil {
+		throwFmt("packResources: %s has raw-routed resource items but no RawClosure", instance.Path.rel())
+	}
+
+	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
+	tag := ""
+
+	if p.Tag != nil {
+		tag = *p.Tag
+	}
+
+	for _, ch := range splitResourceChunks(items, false) {
+		aux := build(instance.Path.rel(), "/", resourcePackHash(ch.hashPairs, "$S/"+instance.Path.rel(), tag), "_raw.auxcpp")
+		auxRef := ctx.emit.reserve()
+		auxClosure := p.RawClosure(aux, ch.adjacent, auxRef)
+		nodeCmd := []STR{internStr(rescompilerBinPath), (aux).str()}
+
+		nodeCmd = appendInternStrs(nodeCmd, ch.cmdPairs)
+
+		deps := append(resolveCodegenDepRefsIncl(ctx, instance, na, ch.adjacent), depRefs(rescompilerRef)...)
+		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+
+		deduper.reset()
+
+		for _, v := range ch.adjacent {
+			deduper.add(v)
+		}
+
+		tail := make([]VFS, 0, 1+len(auxClosure))
+
+		if deduper.add(rescompilerBinVFS) {
+			tail = append(tail, rescompilerBinVFS)
+		}
+
+		for _, v := range auxClosure {
+			if v == aux {
+				continue
+			}
+
+			if deduper.add(v) {
+				tail = append(tail, v)
+			}
+		}
+
+		ctx.emit.emitReserved(&Node{
+			Platform:     instance.Platform,
+			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(nodeCmd), Env: env}),
+			Env:          env,
+			Inputs:       na.inputList(ch.adjacent, tail),
+			Outputs:      na.vfsList(aux),
+			KV:           &rawAuxKV,
+			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			DepRefs:      deps,
+		}, auxRef)
+
+		refs = append(refs, auxRef)
+		outs = append(outs, aux)
+	}
+
+	return refs, outs
 }
