@@ -47,7 +47,7 @@ func (e *EmitContext) deferPass2(cb func()) {
 	e.pass2 = append(e.pass2, cb)
 }
 
-func (e *EmitContext) emit(selfPeerAddInclGlobal []VFS) []VFS {
+func (e *EmitContext) emit(selfPeerAddInclGlobal []VFS) {
 	d := e.d
 
 	for _, src := range d.srcs {
@@ -57,7 +57,8 @@ func (e *EmitContext) emit(selfPeerAddInclGlobal []VFS) []VFS {
 	}
 
 	cythonPlans := e.planCythonCpp()
-	cpMemberSrcs := e.emitCopyFiles()
+
+	e.emitCopyFiles()
 
 	e.emitMiscNodes()
 	e.emitRunProgramsForAR()
@@ -86,8 +87,6 @@ func (e *EmitContext) emit(selfPeerAddInclGlobal []VFS) []VFS {
 			e.emitOneSource(src)
 		}
 	}
-
-	return cpMemberSrcs
 }
 
 func (e *EmitContext) drainSrcs() {

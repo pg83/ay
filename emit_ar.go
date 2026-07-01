@@ -18,7 +18,6 @@ func emitARNamed(
 	objPaths []VFS,
 	peerArchiveRefs []NodeRef,
 	arPluginPath *VFS,
-	extraInputs []VFS,
 	tc ModuleToolchain,
 	hostP *Platform,
 	emit *StreamingEmitter,
@@ -29,7 +28,7 @@ func emitARNamed(
 
 	archivePath := buildJoined(instance.Path.rel(), archiveBaseName)
 
-	return emitARNode(instance, archivePath, 0, objRefs, objPaths, peerArchiveRefs, arPluginPath, extraInputs, tc, hostP, emit)
+	return emitARNode(instance, archivePath, 0, objRefs, objPaths, peerArchiveRefs, arPluginPath, tc, hostP, emit)
 }
 
 func emitARNamedTagged(
@@ -40,7 +39,6 @@ func emitARNamedTagged(
 	objPaths []VFS,
 	peerArchiveRefs []NodeRef,
 	arPluginPath *VFS,
-	extraInputs []VFS,
 	tc ModuleToolchain,
 	hostP *Platform,
 	emit *StreamingEmitter,
@@ -51,7 +49,7 @@ func emitARNamedTagged(
 
 	archivePath := buildJoined(instance.Path.rel(), archiveBaseName)
 
-	return emitARNode(instance, archivePath, tag, objRefs, objPaths, peerArchiveRefs, arPluginPath, extraInputs, tc, hostP, emit)
+	return emitARNode(instance, archivePath, tag, objRefs, objPaths, peerArchiveRefs, arPluginPath, tc, hostP, emit)
 }
 
 func emitARGlobalNamedTagged(
@@ -70,7 +68,7 @@ func emitARGlobalNamedTagged(
 
 	archivePath := buildJoined(instance.Path.rel(), archiveBaseName)
 
-	return emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, nil, nil, tc, hostP, emit)
+	return emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, nil, tc, hostP, emit)
 }
 
 func archiveNameWithPrefix(moduleDir, prefix string) string {
@@ -109,7 +107,6 @@ func emitARNode(
 	objPaths []VFS,
 	peerArchiveRefs []NodeRef,
 	arPluginPath *VFS,
-	extraInputs []VFS,
 	tc ModuleToolchain,
 	hostP *Platform,
 	emit *StreamingEmitter,
@@ -148,7 +145,7 @@ func emitARNode(
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Env: cmdEnv}),
 		Env:          topEnv,
-		Inputs:       na.inputList(objPaths, inputTail, extraInputs),
+		Inputs:       na.inputList(objPaths, inputTail),
 		KV:           &arKV,
 		Outputs:      na.vfsList(archivePath),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
