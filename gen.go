@@ -1397,18 +1397,54 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		effectiveAddInclGlobal = spliced
 	}
 
-	if specialized {
-		ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
+	effectiveCFlagsGlobal := dedup(peerCFlagsGlobal, d.cFlagsGlobal)
+	effectiveCXXFlagsGlobal := concat(peerCXXFlagsGlobal, d.cxxFlagsGlobal)
+	effectiveCOnlyFlagsGlobal := concat(peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
+	effectiveRPathFlagsGlobal := concat(peerRPathFlagsGlobal, d.rpathFlagsGlobal)
+	ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
 
-		ldPlugins := mergeLDPlugins(ownLDPlugins, &LdPluginsResult{
-			Refs:  peerLDPluginRefs,
-			Paths: peerLDPluginPaths,
-		})
+	mergedLDPlugins := mergeLDPlugins(ownLDPlugins, &LdPluginsResult{
+		Refs:  peerLDPluginRefs,
+		Paths: peerLDPluginPaths,
+	})
 
-		if ldPlugins == nil {
-			ldPlugins = &LdPluginsResult{}
+	if mergedLDPlugins == nil {
+		mergedLDPlugins = &LdPluginsResult{}
+	}
+
+	newResult := func() *ModuleEmitResult {
+		return &ModuleEmitResult{
+			isPyLibrary:                     isPyLibraryType(d.moduleStmt.Name),
+			AddInclGlobal:                   effectiveAddInclGlobal,
+			OwnAddInclGlobal:                d.addInclGlobal,
+			ProtoInclude:                    effectiveProtoInclude,
+			AddInclOneLevel:                 d.addInclOneLevel,
+			AddInclUserGlobal:               d.addInclUserGlobal,
+			CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
+			COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,
+			ObjAddLibsGlobal:                concat(peerObjAddLibsGlobal, d.objAddLibsGlobal),
+			LDFlagsGlobal:                   concat(peerLDFlagsGlobal, d.ldFlags),
+			RPathFlagsGlobal:                effectiveRPathFlagsGlobal,
+			PeerArchiveClosureRefs:          peerArchiveRefs,
+			PeerArchiveClosurePaths:         peerArchivePaths,
+			PeerGlobalClosureRefs:           peerGlobalRefs,
+			PeerGlobalClosurePaths:          peerGlobalPaths,
+			PeerWholeArchiveClosureRefs:     peerWholeArchiveRefs,
+			PeerWholeArchiveClosurePaths:    peerWholeArchivePaths,
+			PeerWholeArchiveCmdClosurePaths: peerWholeArchiveCmdPaths,
+			LDPluginRefs:                    mergedLDPlugins.Refs,
+			LDPluginPaths:                   mergedLDPlugins.Paths,
+			PeerDynamicClosureRefs:          peerDynamicRefs,
+			PeerDynamicClosurePaths:         peerDynamicPaths,
+			PeerSbomClosureRefs:             peerSbomRefs,
+			PeerSbomClosurePaths:            peerSbomPaths,
+			InducedDeps:                     d.inducedDeps,
+			Peerdirs:                        d.peerdirs,
+			ModuleStmtName:                  d.moduleStmt.Name,
 		}
+	}
 
+	if specialized {
 		d.cc = ModuleCompileEnv{
 			InclArgs:             ctx.inclArgs,
 			Flags:                d.flags,
@@ -1527,21 +1563,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			hOnlyWholeArchivePaths = append(hOnlyWholeArchivePaths, protoResult.WholeArchivePaths...)
 		}
 
-		peerArchivePathsH := peerArchivePaths
-		peerArchiveRefsH := peerArchiveRefs
-		peerGlobalPathsH := peerGlobalPaths
-		peerGlobalRefsH := peerGlobalRefs
-
-		var ownProtoIncludeH []VFS
-
-		if d.protoNamespace != nil {
-			ownProtoIncludeH = []VFS{source(filepath.ToSlash(filepath.Clean(d.protoNamespace.string())))}
-		}
-
-		ownProtoIncludeH = append(ownProtoIncludeH, d.protoAddInclGlobal...)
-
-		effectiveProtoIncludeH := dedup(ownProtoIncludeH, peerProtoInclude)
-
 		var ownSbomRefH *NodeRef
 		var ownSbomPathH *VFS
 
@@ -1551,56 +1572,23 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ownSbomRefH, ownSbomPathH = e.emitSbomComponent(realPrjName)
 		}
 
-		result := &ModuleEmitResult{
-			isPyLibrary:       isPyLibraryType(d.moduleStmt.Name),
-			ARRef:             hOnlyARRef,
-			ARPath:            hOnlyARPath,
-			GlobalRef:         hOnlyGlobalRef,
-			GlobalPath:        hOnlyGlobalPath,
-			AddInclGlobal:     dedup(d.addInclGlobal, peerAddInclGlobal),
-			OwnAddInclGlobal:  d.addInclGlobal,
-			ProtoInclude:      effectiveProtoIncludeH,
-			AddInclOneLevel:   d.addInclOneLevel,
-			AddInclUserGlobal: d.addInclUserGlobal,
+		result := newResult()
 
-			CFlagsGlobal:                    concat(peerCFlagsGlobal, d.cFlagsGlobal),
-			CXXFlagsGlobal:                  concat(peerCXXFlagsGlobal, d.cxxFlagsGlobal),
-			COnlyFlagsGlobal:                concat(peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal),
-			ObjAddLibsGlobal:                concat(peerObjAddLibsGlobal, d.objAddLibsGlobal),
-			LDFlagsGlobal:                   concat(peerLDFlagsGlobal, d.ldFlags),
-			RPathFlagsGlobal:                concat(peerRPathFlagsGlobal, d.rpathFlagsGlobal),
-			PeerArchiveClosureRefs:          peerArchiveRefsH,
-			PeerArchiveClosurePaths:         peerArchivePathsH,
-			PeerGlobalClosureRefs:           peerGlobalRefsH,
-			PeerGlobalClosurePaths:          peerGlobalPathsH,
-			WholeArchiveRefs:                hOnlyWholeArchiveRefs,
-			WholeArchivePaths:               hOnlyWholeArchivePaths,
-			WholeArchiveCmdPaths:            protoResultWholeArchiveCmdPaths(protoResult),
-			PeerWholeArchiveClosureRefs:     peerWholeArchiveRefs,
-			PeerWholeArchiveClosurePaths:    peerWholeArchivePaths,
-			PeerWholeArchiveCmdClosurePaths: peerWholeArchiveCmdPaths,
-			LDPluginRefs:                    ldPlugins.Refs,
-			LDPluginPaths:                   ldPlugins.Paths,
-			PeerDynamicClosureRefs:          peerDynamicRefs,
-			PeerDynamicClosurePaths:         peerDynamicPaths,
-			SbomComponentRef:                ownSbomRefH,
-			SbomComponentPath:               ownSbomPathH,
-			PeerSbomClosureRefs:             peerSbomRefs,
-			PeerSbomClosurePaths:            peerSbomPaths,
-			InducedDeps:                     d.inducedDeps,
-			Peerdirs:                        d.peerdirs,
-			ModuleStmtName:                  d.moduleStmt.Name,
-		}
+		result.ARRef = hOnlyARRef
+		result.ARPath = hOnlyARPath
+		result.GlobalRef = hOnlyGlobalRef
+		result.GlobalPath = hOnlyGlobalPath
+		result.CFlagsGlobal = concat(peerCFlagsGlobal, d.cFlagsGlobal)
+		result.WholeArchiveRefs = hOnlyWholeArchiveRefs
+		result.WholeArchivePaths = hOnlyWholeArchivePaths
+		result.WholeArchiveCmdPaths = protoResultWholeArchiveCmdPaths(protoResult)
+		result.SbomComponentRef = ownSbomRefH
+		result.SbomComponentPath = ownSbomPathH
 
 		ctx.memo.put(ctx.instanceKey(instance), result)
 
 		return result
 	}
-
-	effectiveCFlagsGlobal := dedup(peerCFlagsGlobal, d.cFlagsGlobal)
-	effectiveCXXFlagsGlobal := concat(peerCXXFlagsGlobal, d.cxxFlagsGlobal)
-	effectiveCOnlyFlagsGlobal := concat(peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
-	effectiveRPathFlagsGlobal := concat(peerRPathFlagsGlobal, d.rpathFlagsGlobal)
 
 	if !effectiveNoPlatform(d.flags) && runtimeAncestorCxxConsumers[instance.Path.rel()] {
 		hasNostdinc := false
@@ -1713,16 +1701,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	globalRefs := append(make([]NodeRef, 0, len(e.globalRefs)), e.globalRefs...)
 	globalOutputs := append(make([]VFS, 0, len(e.globalOuts)), e.globalOuts...)
 	globalSrcMemberCount := e.globalSrcMemberCount
-	ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
-
-	mergedLDPlugins := mergeLDPlugins(ownLDPlugins, &LdPluginsResult{
-		Refs:  peerLDPluginRefs,
-		Paths: peerLDPluginPaths,
-	})
-
-	if mergedLDPlugins == nil {
-		mergedLDPlugins = &LdPluginsResult{}
-	}
 
 	if ctx.sbomEnabled && env.bool(envCLANG) && len(e.refs) > 0 {
 		if r, p := clangToolchainSbomComponent(ctx, instance.Platform); r != nil && !containsVFS(peerSbomPaths, *p) {
@@ -1886,45 +1864,18 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			suiteInfo = buildTestSuiteInfo(instance, d, ldPath)
 		}
 
-		result := &ModuleEmitResult{
-			ARRef:                           ldRef,
-			ARPath:                          &ldPath,
-			isPROGRAM:                       true,
-			isPyLibrary:                     isPyLibraryType(d.moduleStmt.Name),
-			LDRef:                           ldRef,
-			LDPath:                          &ldPath,
-			AddInclGlobal:                   effectiveAddInclGlobal,
-			OwnAddInclGlobal:                d.addInclGlobal,
-			ProtoInclude:                    effectiveProtoInclude,
-			AddInclOneLevel:                 d.addInclOneLevel,
-			AddInclUserGlobal:               d.addInclUserGlobal,
-			CFlagsGlobal:                    effectiveCFlagsGlobal,
-			CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
-			COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,
-			ObjAddLibsGlobal:                concat(peerObjAddLibsGlobal, d.objAddLibsGlobal),
-			LDFlagsGlobal:                   concat(peerLDFlagsGlobal, d.ldFlags),
-			RPathFlagsGlobal:                effectiveRPathFlagsGlobal,
-			PeerArchiveClosureRefs:          peerArchiveRefs,
-			PeerArchiveClosurePaths:         peerArchivePaths,
-			PeerGlobalClosureRefs:           peerGlobalRefs,
-			PeerGlobalClosurePaths:          peerGlobalPaths,
-			PeerWholeArchiveClosureRefs:     peerWholeArchiveRefs,
-			PeerWholeArchiveClosurePaths:    peerWholeArchivePaths,
-			PeerWholeArchiveCmdClosurePaths: peerWholeArchiveCmdPaths,
-			LDPluginRefs:                    mergedLDPlugins.Refs,
-			LDPluginPaths:                   mergedLDPlugins.Paths,
-			PeerDynamicClosureRefs:          peerDynamicRefs,
-			PeerDynamicClosurePaths:         peerDynamicPaths,
-			SbomComponentRef:                ownSbomRef,
-			SbomComponentPath:               ownSbomPath,
-			PeerSbomClosureRefs:             peerSbomRefs,
-			PeerSbomClosurePaths:            peerSbomPaths,
-			InducedDeps:                     d.inducedDeps,
-			Peerdirs:                        d.peerdirs,
-			ModuleStmtName:                  d.moduleStmt.Name,
-			ResourceGlobalClosure:           resourceGlobalsClosure,
-			testSuiteInfo:                   suiteInfo,
-		}
+		result := newResult()
+
+		result.ARRef = ldRef
+		result.ARPath = &ldPath
+		result.isPROGRAM = true
+		result.LDRef = ldRef
+		result.LDPath = &ldPath
+		result.CFlagsGlobal = effectiveCFlagsGlobal
+		result.SbomComponentRef = ownSbomRef
+		result.SbomComponentPath = ownSbomPath
+		result.ResourceGlobalClosure = resourceGlobalsClosure
+		result.testSuiteInfo = suiteInfo
 
 		ctx.memo.put(ctx.instanceKey(instance), result)
 
@@ -1996,44 +1947,16 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ownSbomRef, ownSbomPath = e.emitSbomComponent(realPrjName)
 	}
 
-	result := &ModuleEmitResult{
-		ARRef:                           arRef,
-		ARPath:                          arPath,
-		isPROGRAM:                       false,
-		isPyLibrary:                     isPyLibraryType(d.moduleStmt.Name),
-		LDRef:                           arRef,
-		LDPath:                          arPath,
-		AddInclGlobal:                   effectiveAddInclGlobal,
-		OwnAddInclGlobal:                d.addInclGlobal,
-		ProtoInclude:                    effectiveProtoInclude,
-		AddInclOneLevel:                 d.addInclOneLevel,
-		AddInclUserGlobal:               d.addInclUserGlobal,
-		CFlagsGlobal:                    effectiveCFlagsGlobal,
-		CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
-		COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,
-		ObjAddLibsGlobal:                concat(peerObjAddLibsGlobal, d.objAddLibsGlobal),
-		LDFlagsGlobal:                   concat(peerLDFlagsGlobal, d.ldFlags),
-		RPathFlagsGlobal:                effectiveRPathFlagsGlobal,
-		PeerArchiveClosureRefs:          peerArchiveRefs,
-		PeerArchiveClosurePaths:         peerArchivePaths,
-		PeerGlobalClosureRefs:           peerGlobalRefs,
-		PeerGlobalClosurePaths:          peerGlobalPaths,
-		PeerWholeArchiveClosureRefs:     peerWholeArchiveRefs,
-		PeerWholeArchiveClosurePaths:    peerWholeArchivePaths,
-		PeerWholeArchiveCmdClosurePaths: peerWholeArchiveCmdPaths,
-		LDPluginRefs:                    mergedLDPlugins.Refs,
-		LDPluginPaths:                   mergedLDPlugins.Paths,
-		PeerDynamicClosureRefs:          peerDynamicRefs,
-		PeerDynamicClosurePaths:         peerDynamicPaths,
-		SbomComponentRef:                ownSbomRef,
-		SbomComponentPath:               ownSbomPath,
-		PeerSbomClosureRefs:             peerSbomRefs,
-		PeerSbomClosurePaths:            peerSbomPaths,
-		InducedDeps:                     d.inducedDeps,
-		Peerdirs:                        d.peerdirs,
-		ModuleStmtName:                  d.moduleStmt.Name,
-		ResourceGlobalClosure:           resourceGlobalsClosure,
-	}
+	result := newResult()
+
+	result.ARRef = arRef
+	result.ARPath = arPath
+	result.LDRef = arRef
+	result.LDPath = arPath
+	result.CFlagsGlobal = effectiveCFlagsGlobal
+	result.SbomComponentRef = ownSbomRef
+	result.SbomComponentPath = ownSbomPath
+	result.ResourceGlobalClosure = resourceGlobalsClosure
 
 	if len(globalRefs) > 0 {
 		globalBaseName := globalArNameFn(instance.Path.rel())
