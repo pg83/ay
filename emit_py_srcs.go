@@ -800,3 +800,146 @@ func pyInitDefineShortname(flag string) (string, bool) {
 
 	return "", false
 }
+
+type PyGenResEntry struct {
+	token    string
+	key      string
+	path     VFS
+	producer NodeRef
+	inputs   []VFS
+}
+
+type PyGenResourcesResult struct {
+	Refs    []NodeRef
+	Outputs []VFS
+}
+
+func (e *EmitContext) emitPyGenResources(entries []PyGenResEntry, hashTag string, objKV *KV, closure func(aux VFS, inputs []VFS, ref NodeRef) []VFS) *PyGenResourcesResult {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	var auxEntries []PyProtoAuxEntry
+	var objEntries []PyGenResEntry
+
+	for _, en := range entries {
+		if resourceCanObjcopy(en.token, en.key) {
+			objEntries = append(objEntries, en)
+		} else {
+			auxEntries = append(auxEntries, PyProtoAuxEntry{path: en.path, key: en.key, producer: en.producer, inputs: en.inputs})
+		}
+	}
+
+	res := &PyGenResourcesResult{}
+
+	if rawRes := e.emitRawAuxChunks(auxEntries, hashTag, false, closure); rawRes != nil {
+		for _, aux := range rawRes.Outputs {
+			auxRef, auxOut := e.emitCC(aux)
+
+			res.Refs = append(res.Refs, auxRef)
+			res.Outputs = append(res.Outputs, auxOut)
+		}
+	}
+
+	if len(objEntries) > 0 {
+		oc := newObjcopyEmitCtx(e.ctx, e.d, e.instance.Platform)
+		b := newObjcopyBatcher(e, oc, ObjcopyProfile{moduleTag: stringPtr(hashTag), kv: objKV, layout: objcopyLayoutScriptTail})
+
+		for _, en := range objEntries {
+			b.genProtoEntry(en.token, "resfs/file/py/"+en.key, en.path, en.producer)
+		}
+
+		b.flush()
+
+		objRefs, objOuts := b.results()
+
+		res.Refs = append(res.Refs, objRefs...)
+		res.Outputs = append(res.Outputs, objOuts...)
+	}
+
+	if len(res.Refs) == 0 {
+		return nil
+	}
+
+	return res
+}
+
+type PyGenYapycResult struct {
+	Refs    []NodeRef
+	Outputs []VFS
+}
+
+func emitPyGenYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs []VFS, tokens []string, producerRef NodeRef, sourceInputs []VFS) *PyGenYapycResult {
+	na := ctx.na
+	py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin := py3ccToolRefs(ctx, instance)
+	suffix := protoPySuffix(instance.Path.rel())
+	res := &PyGenYapycResult{}
+
+	for i, pyOut := range pyOutputs {
+		uniq := ""
+
+		if strings.Contains(tokens[i], "/") {
+			uniq = "." + suffix
+		}
+
+		out := build(pyOut.rel(), uniq, ".yapyc3")
+
+		cmdArgs := []STR{
+			(py3ccBinary).str(),
+			argSlowPy3cc.str(),
+			(py3ccSlowBin).str(),
+			internV(tokens[i], "-"),
+			(pyOut).str(),
+			(out).str(),
+		}
+
+		deps := []NodeRef{producerRef}
+		toolRefs := depRefs(py3ccRef, py3ccSlowRef)
+		nodeInputs := na.inputList(na.vfsList(py3ccBinary, py3ccSlowBin, pyOut), sourceInputs)
+
+		if i > 0 {
+			nodeInputs = append(nodeInputs, []VFS{pyOutputs[0]})
+		}
+
+		node := &Node{
+			Platform:     instance.Platform,
+			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}}),
+			Env:          EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}},
+			Inputs:       nodeInputs,
+			Outputs:      na.vfsList(out),
+			KV:           &pyCodegenKV,
+			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			DepRefs:      deps,
+			Resources:    usesPython3,
+		}
+
+		if len(toolRefs) > 0 {
+			node.ForeignDepRefs = toolRefs
+		}
+
+		res.Refs = append(res.Refs, ctx.emit.emit(node))
+		res.Outputs = append(res.Outputs, out)
+	}
+
+	return res
+}
+
+func pyProtoSourceInputs(inputs []VFS) []VFS {
+	out := make([]VFS, 0, len(inputs))
+
+	deduper.reset()
+
+	for _, input := range inputs {
+		if !input.isSource() {
+			continue
+		}
+
+		if !deduper.add(input) {
+			continue
+		}
+
+		out = append(out, input)
+	}
+
+	return out
+}

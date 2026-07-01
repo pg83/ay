@@ -710,3 +710,10 @@ func (e *EmitContext) emitResourceFile(oc *ObjcopyEmitCtx, entries []ResourceEnt
 
 	return b.results()
 }
+
+type PyProtoAuxEntry struct {
+	path     VFS
+	key      string
+	producer NodeRef
+	inputs   []VFS
+}

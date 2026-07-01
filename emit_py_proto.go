@@ -70,26 +70,25 @@ func (e *EmitContext) emitPyProtoSrcs(peerContribs PeerGlobalContribs, protoSrcs
 
 	var pyProtoRefs []NodeRef
 	var pyProtoOutputs []VFS
-	var auxEntries []PyProtoAuxEntry
-	var genEntries []GenProtoResEntry
+	var entries []PyGenResEntry
 
 	for _, src := range protoSrcs {
-		aux, gen := e.emitPyProtoSrc(src, protocLDRef, protocBinary, pe)
-
-		auxEntries = append(auxEntries, aux...)
-		genEntries = append(genEntries, gen...)
+		entries = append(entries, e.emitPyProtoSrc(src, protocLDRef, protocBinary, pe)...)
 	}
 
-	auxRes := e.emitPyProtoAuxChunks(peerContribs, auxEntries, cppSibling)
+	peerAddIncl := peerContribs.addIncl
 
-	if auxRes != nil {
-		pyProtoRefs = append(pyProtoRefs, auxRes.Refs...)
-		pyProtoOutputs = append(pyProtoOutputs, auxRes.Outputs...)
+	if cppSibling != nil {
+		peerAddIncl = dedup(cppSibling.AddInclGlobal, peerContribs.addIncl)
 	}
 
-	if objRes := e.emitGeneratedPyProtoObjcopy(genEntries); objRes != nil {
-		pyProtoRefs = append(pyProtoRefs, objRes.Refs...)
-		pyProtoOutputs = append(pyProtoOutputs, objRes.Outputs...)
+	genRes := e.emitPyGenResources(entries, "PY3_PROTO", &pyProtoKV2, func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
+		return e.pyProtoAuxInputClosure(aux, inputs, ref, peerAddIncl)
+	})
+
+	if genRes != nil {
+		pyProtoRefs = append(pyProtoRefs, genRes.Refs...)
+		pyProtoOutputs = append(pyProtoOutputs, genRes.Outputs...)
 	}
 
 	if len(pyProtoRefs) == 0 {
@@ -232,7 +231,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 	return pe
 }
 
-func (e *EmitContext) emitPyProtoSrc(src string, protocLDRef NodeRef, protocBinary VFS, pe *PyPBModuleEmission) ([]PyProtoAuxEntry, []GenProtoResEntry) {
+func (e *EmitContext) emitPyProtoSrc(src string, protocLDRef NodeRef, protocBinary VFS, pe *PyPBModuleEmission) []PyGenResEntry {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
@@ -341,13 +340,70 @@ func (e *EmitContext) emitPyProtoSrc(src string, protocLDRef NodeRef, protocBina
 		yapycTokens = append(yapycTokens, pyBuildBase+"__intpy3___pb2_grpc.py")
 	}
 
-	yapyRes := emitGeneratedPyProtoYapyc(ctx, instance, pyYapyc, yapycTokens, pyPBRef, pyProtoSourceInputs(inputs))
+	yapyRes := emitPyGenYapyc(ctx, instance, pyYapyc, yapycTokens, pyPBRef, pyProtoSourceInputs(inputs))
+
+	return pyProtoResEntriesForSource(instance, d, src, generated, yapycTokens, pyPBRef, pyProtoSourceInputs(inputs), outputs, yapyRes.Refs, yapyRes.Outputs)
+}
+
+func pyProtoResEntriesForSource(instance ModuleInstance, d *ModuleData, src string, generated bool, tokens []string, pyPBRef NodeRef, producerInputs []VFS, pyOutputs []VFS, yapyRefs []NodeRef, yapyOuts []VFS) []PyGenResEntry {
+	var entries []PyGenResEntry
 
 	if generated {
-		return nil, genProtoResEntriesForSource(instance, d, src, yapycTokens, pyPBRef, outputs, yapyRes.Refs, yapyRes.Outputs)
+		add := func(token, suffix string, output VFS, producer NodeRef) {
+			entries = append(entries, PyGenResEntry{
+				token:    token,
+				key:      protoPythonResourceKey(instance, d, src, suffix),
+				path:     output,
+				producer: producer,
+			})
+		}
+
+		yapToken := func(i int) string {
+			return tokens[i] + strings.TrimPrefix(yapyOuts[i].rel(), pyOutputs[i].rel())
+		}
+
+		add(tokens[0], "_pb2.py", pyOutputs[0], pyPBRef)
+
+		if len(yapyOuts) > 0 {
+			add(yapToken(0), "_pb2.py.yapyc3", yapyOuts[0], yapyRefs[0])
+		}
+
+		if d.grpc && len(pyOutputs) > 1 {
+			add(tokens[1], "_pb2_grpc.py", pyOutputs[1], pyPBRef)
+
+			if len(yapyOuts) > 1 {
+				add(yapToken(1), "_pb2_grpc.py.yapyc3", yapyOuts[1], yapyRefs[1])
+			}
+		}
+
+		return entries
 	}
 
-	return pyProtoAuxEntriesForSource(instance, d, src, pyPBRef, pyProtoSourceInputs(inputs), outputs, yapyRes.Refs, yapyRes.Outputs), nil
+	add := func(path VFS, suffix string, producer NodeRef, inputs []VFS) {
+		entries = append(entries, PyGenResEntry{
+			token:    "${ARCADIA_BUILD_ROOT}/" + path.rel(),
+			key:      protoPythonResourceKey(instance, d, src, suffix),
+			path:     path,
+			producer: producer,
+			inputs:   inputs,
+		})
+	}
+
+	add(pyOutputs[0], "_pb2.py", pyPBRef, producerInputs)
+
+	if len(yapyOuts) > 0 {
+		add(yapyOuts[0], "_pb2.py.yapyc3", yapyRefs[0], producerInputs)
+	}
+
+	if d.grpc && len(pyOutputs) > 2 && pyOutputs[1].rel() != "" {
+		add(pyOutputs[1], "_pb2_grpc.py", pyPBRef, concat(producerInputs, []VFS{pyOutputs[0]}))
+
+		if len(yapyOuts) > 1 {
+			add(yapyOuts[1], "_pb2_grpc.py.yapyc3", yapyRefs[1], producerInputs)
+		}
+	}
+
+	return entries
 }
 
 func protoPythonOutputRoot(d *ModuleData) string {
@@ -360,217 +416,4 @@ func protoPythonOutputRoot(d *ModuleData) string {
 	}
 
 	return ""
-}
-
-type GeneratedPyProtoYapycResult struct {
-	Refs    []NodeRef
-	Outputs []VFS
-}
-
-func emitGeneratedPyProtoYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs []VFS, tokens []string, pyPBRef NodeRef, sourceInputs []VFS) *GeneratedPyProtoYapycResult {
-	na := ctx.na
-	py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin := py3ccToolRefs(ctx, instance)
-	suffix := protoPySuffix(instance.Path.rel())
-	res := &GeneratedPyProtoYapycResult{}
-
-	for i, pyOut := range pyOutputs {
-		uniq := ""
-
-		if strings.Contains(tokens[i], "/") {
-			uniq = "." + suffix
-		}
-
-		out := build(pyOut.rel(), uniq, ".yapyc3")
-
-		cmdArgs := []STR{
-			(py3ccBinary).str(),
-			argSlowPy3cc.str(),
-			(py3ccSlowBin).str(),
-			internV(tokens[i], "-"),
-			(pyOut).str(),
-			(out).str(),
-		}
-
-		deps := []NodeRef{pyPBRef}
-		toolRefs := depRefs(py3ccRef, py3ccSlowRef)
-		nodeInputs := na.inputList(na.vfsList(py3ccBinary, py3ccSlowBin, pyOut), sourceInputs)
-
-		if i > 0 {
-			nodeInputs = append(nodeInputs, []VFS{pyOutputs[0]})
-		}
-
-		node := &Node{
-			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}}),
-			Env:          EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}},
-			Inputs:       nodeInputs,
-			Outputs:      na.vfsList(out),
-			KV:           &pyProtoKV,
-			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			DepRefs:      deps,
-			Resources:    usesPython3,
-		}
-
-		if len(toolRefs) > 0 {
-			node.ForeignDepRefs = toolRefs
-		}
-
-		res.Refs = append(res.Refs, ctx.emit.emit(node))
-		res.Outputs = append(res.Outputs, out)
-	}
-
-	return res
-}
-
-type PyProtoAuxEntry struct {
-	path     VFS
-	key      string
-	producer NodeRef
-	inputs   []VFS
-}
-
-func pyProtoAuxEntriesForSource(instance ModuleInstance, d *ModuleData, src string, pyPBRef NodeRef, producerInputs []VFS, pyOutputs []VFS, yapyRefs []NodeRef, yapyOuts []VFS) []PyProtoAuxEntry {
-	var entries []PyProtoAuxEntry
-
-	addResource := func(srcPath VFS, key string, producer NodeRef) {
-		entries = append(entries, PyProtoAuxEntry{path: srcPath, key: key, producer: producer, inputs: producerInputs})
-	}
-
-	addResource(pyOutputs[0], protoPythonResourceKey(instance, d, src, "_pb2.py"), pyPBRef)
-
-	if len(yapyOuts) > 0 {
-		addResource(yapyOuts[0], protoPythonResourceKey(instance, d, src, "_pb2.py.yapyc3"), yapyRefs[0])
-	}
-
-	if d.grpc && len(pyOutputs) > 2 && pyOutputs[1].rel() != "" {
-		entries = append(entries, PyProtoAuxEntry{
-			path:     pyOutputs[1],
-			key:      protoPythonResourceKey(instance, d, src, "_pb2_grpc.py"),
-			producer: pyPBRef,
-			inputs:   concat(producerInputs, []VFS{pyOutputs[0]}),
-		})
-
-		if len(yapyOuts) > 1 {
-			addResource(yapyOuts[1], protoPythonResourceKey(instance, d, src, "_pb2_grpc.py.yapyc3"), yapyRefs[1])
-		}
-	}
-
-	return entries
-}
-
-type GenProtoResEntry struct {
-	token    string
-	key      string
-	output   VFS
-	producer NodeRef
-}
-
-func genProtoResEntriesForSource(instance ModuleInstance, d *ModuleData, src string, tokens []string, pyPBRef NodeRef, pyOutputs []VFS, yapyRefs []NodeRef, yapyOuts []VFS) []GenProtoResEntry {
-	var entries []GenProtoResEntry
-
-	add := func(token, suffix string, output VFS, producer NodeRef) {
-		entries = append(entries, GenProtoResEntry{
-			token:    token,
-			key:      "resfs/file/py/" + protoPythonResourceKey(instance, d, src, suffix),
-			output:   output,
-			producer: producer,
-		})
-	}
-
-	yapToken := func(i int) string {
-		return tokens[i] + strings.TrimPrefix(yapyOuts[i].rel(), pyOutputs[i].rel())
-	}
-
-	add(tokens[0], "_pb2.py", pyOutputs[0], pyPBRef)
-
-	if len(yapyOuts) > 0 {
-		add(yapToken(0), "_pb2.py.yapyc3", yapyOuts[0], yapyRefs[0])
-	}
-
-	if d.grpc && len(pyOutputs) > 1 {
-		add(tokens[1], "_pb2_grpc.py", pyOutputs[1], pyPBRef)
-
-		if len(yapyOuts) > 1 {
-			add(yapToken(1), "_pb2_grpc.py.yapyc3", yapyOuts[1], yapyRefs[1])
-		}
-	}
-
-	return entries
-}
-
-func (e *EmitContext) emitGeneratedPyProtoObjcopy(entries []GenProtoResEntry) *ObjcopyEmitResult {
-	ctx, instance, d := e.ctx, e.instance, e.d
-
-	if len(entries) == 0 {
-		return nil
-	}
-
-	oc := newObjcopyEmitCtx(ctx, d, instance.Platform)
-	b := newObjcopyBatcher(e, oc, ObjcopyProfile{moduleTag: stringPtr("PY3_PROTO"), kv: &pyProtoKV2, layout: objcopyLayoutScriptTail})
-
-	for _, en := range entries {
-		b.genProtoEntry(en.token, en.key, en.output, en.producer)
-	}
-
-	b.flush()
-
-	refs, outs := b.results()
-
-	return &ObjcopyEmitResult{Refs: refs, Outputs: outs}
-}
-
-func pyProtoSourceInputs(inputs []VFS) []VFS {
-	out := make([]VFS, 0, len(inputs))
-
-	deduper.reset()
-
-	for _, input := range inputs {
-		if !input.isSource() {
-			continue
-		}
-
-		if !deduper.add(input) {
-			continue
-		}
-
-		out = append(out, input)
-	}
-
-	return out
-}
-
-type PyProtoAuxChunksResult struct {
-	Refs    []NodeRef
-	Outputs []VFS
-}
-
-func (e *EmitContext) emitPyProtoAuxChunks(peerContribs PeerGlobalContribs, entries []PyProtoAuxEntry, cppSibling *ModuleEmitResult) *PyProtoAuxChunksResult {
-	if len(entries) == 0 {
-		return nil
-	}
-
-	peerAddIncl := peerContribs.addIncl
-
-	if cppSibling != nil {
-		peerAddIncl = dedup(cppSibling.AddInclGlobal, peerContribs.addIncl)
-	}
-
-	rawRes := e.emitRawAuxChunks(entries, "PY3_PROTO", false, func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
-		return e.pyProtoAuxInputClosure(aux, inputs, ref, peerAddIncl)
-	})
-
-	if rawRes == nil {
-		return nil
-	}
-
-	res := &PyProtoAuxChunksResult{}
-
-	for _, aux := range rawRes.Outputs {
-		auxRef, auxOut := e.emitCC(aux)
-
-		res.Refs = append(res.Refs, auxRef)
-		res.Outputs = append(res.Outputs, auxOut)
-	}
-
-	return res
 }
