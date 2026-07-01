@@ -5,10 +5,10 @@ import (
 	"strings"
 )
 
-func (e *EmitContext) emitAntlrRuns() (ccRefs []NodeRef, ccOutputs []VFS) {
+func (e *EmitContext) emitAntlrRuns() {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	if len(d.antlrRuns) == 0 {
-		return nil, nil
+		return
 	}
 
 	reg := e.codegen
@@ -101,15 +101,10 @@ func (e *EmitContext) emitAntlrRuns() (ccRefs []NodeRef, ccOutputs []VFS) {
 
 			outVFS := outVFSByToken[outTok.string()]
 			cppRel := antlrOutputModuleRel(instance.Path.rel(), outVFS)
-			se := e.emitOneSource(copyFileOutputVFS(instance.Path.rel(), cppRel).str())
-			ccRef, ccOut := se.Ref, se.OutPath
 
-			ccRefs = append(ccRefs, ccRef)
-			ccOutputs = append(ccOutputs, ccOut)
+			e.enqueueSrc(copyFileOutputVFS(instance.Path.rel(), cppRel).str(), SrcMeta{Prio: stmtPrioDefault, Generated: true})
 		}
 	}
-
-	return ccRefs, ccOutputs
 }
 
 func antlrRunCmdArgs(instance ModuleInstance, run AntlrRunInfo, inVFSByToken, outVFSByToken map[string]VFS) []string {

@@ -223,6 +223,9 @@ type ProtoSrcsResult struct {
 	WholeArchiveRefs     []NodeRef
 	WholeArchivePaths    []VFS
 	WholeArchiveCmdPaths []VFS
+	PendingAR            bool
+	EnumRes              *EnumSrcsResult
+	ProtoLibName         string
 }
 
 func protoSourceRelPath(fs FS, instance ModuleInstance, d *ModuleData, src string) string {

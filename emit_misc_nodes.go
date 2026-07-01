@@ -13,10 +13,7 @@ func (e *EmitContext) emitMiscNodes() (ccRefs []NodeRef, ccOutputs []VFS) {
 		e.emitExplicitCF(cf)
 	}
 
-	antlrCCRefs, antlrCCOutputs := e.emitAntlrRuns()
-
-	ccRefs = append(ccRefs, antlrCCRefs...)
-	ccOutputs = append(ccOutputs, antlrCCOutputs...)
+	e.emitAntlrRuns()
 
 	for _, g := range d.antlr4Grammars {
 		if g.IsSplit {

@@ -792,6 +792,25 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			e.emitEnumSrcs(peerContribs.addIncl)
 		}
 
+		protoARRefs, protoAROuts, protoARMeta := e.drainSrcs()
+
+		if protoResult != nil && protoResult.PendingAR {
+			if protoResult.EnumRes != nil {
+				for i := range protoResult.EnumRes.CCRefs {
+					protoARRefs = append(protoARRefs, protoResult.EnumRes.CCRefs[i])
+					protoAROuts = append(protoAROuts, protoResult.EnumRes.CCOutputs[i])
+					protoARMeta[protoResult.EnumRes.CCOutputs[i]] = SrcMeta{Prio: stmtPrioDefault, Seq: protoResult.EnumRes.Seqs[i], Generated: true, SecondLevel: protoResult.EnumRes.SecondLevel[i]}
+				}
+			}
+
+			protoARRefs, protoAROuts = reorderARMembers(protoARRefs, protoAROuts, protoARMeta)
+			arBaseName := archiveNameWithPrefixOrName(instance.Path.rel(), "lib", protoResult.ProtoLibName)
+			archivePath := build(instance.Path.rel(), "/", arBaseName)
+			arRef := emitARNode(instance, archivePath, tagCppProto, protoARRefs, protoAROuts, nil, nil, nil, d.tc, ctx.host, ctx.emit)
+			protoResult.ARRef = arRef
+			protoResult.ARPath = &archivePath
+		}
+
 		hOnlyARRef := NodeRef(0)
 
 		var hOnlyARPath *VFS
@@ -1800,6 +1819,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	for _, emit := range e.emitSwigC() {
 		genCC(emit)
+	}
+
+	antlrDrainRefs, antlrDrainOuts, antlrDrainMeta := e.drainSrcs()
+
+	for i, ref := range antlrDrainRefs {
+		genCCMeta(&SourceEmit{Ref: ref, OutPath: antlrDrainOuts[i]}, antlrDrainMeta[antlrDrainOuts[i]])
 	}
 
 	for i, ref := range jvCCRefs {
