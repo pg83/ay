@@ -62,5 +62,9 @@ func (e *EmitContext) emitLibraryCfgProtoSource(src STR) *SourceEmit {
 		ClosureLeaves:  []VFS{cfgSource},
 	})
 
-	return e.emitOneSource(cfgPbCC.str())
+	meta := d.srcMetaOf(src)
+	meta.Generated = true
+	e.enqueueSrc(cfgPbCC.str(), meta)
+
+	return nil
 }

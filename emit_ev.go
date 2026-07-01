@@ -230,5 +230,9 @@ func (e *EmitContext) emitLibraryEvSource(src STR) *SourceEmit {
 		Compile:        &CompileSpec{FlatOutput: d.flatSrc(src), CFlags: psc},
 	})
 
-	return e.emitOneSource(evPbCC.str())
+	meta := d.srcMetaOf(src)
+	meta.Generated = true
+	e.enqueueSrc(evPbCC.str(), meta)
+
+	return nil
 }

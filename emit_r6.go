@@ -112,5 +112,9 @@ func (e *EmitContext) emitLibraryRagel6Source(src STR) *SourceEmit {
 		return nil
 	}
 
-	return e.emitOneSource(r6Out.str())
+	meta := d.srcMetaOf(src)
+	meta.Generated = true
+	e.enqueueSrc(r6Out.str(), meta)
+
+	return nil
 }
