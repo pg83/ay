@@ -5,14 +5,15 @@ import (
 	"strings"
 )
 
-func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData) (ccRefs []NodeRef, ccOutputs []VFS) {
+func (e *EmitContext) emitMiscNodes() (ccRefs []NodeRef, ccOutputs []VFS) {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	outPrefix := instance.Path.rel() + "/"
 
 	for _, cf := range d.configureFiles {
 		emitExplicitCF(ctx, instance, cf, d)
 	}
 
-	antlrCCRefs, antlrCCOutputs := emitAntlrRuns(ctx, instance, d)
+	antlrCCRefs, antlrCCOutputs := e.emitAntlrRuns()
 
 	ccRefs = append(ccRefs, antlrCCRefs...)
 	ccOutputs = append(ccOutputs, antlrCCOutputs...)
@@ -84,7 +85,7 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData) (ccRefs 
 				{build(outPrefix, parserBase, ".cpp"), build(outPrefix, parserBase, ".h")},
 			}
 
-			refs, outs := emitJVDownstreamCPCC(ctx, instance, d, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes)
+			refs, outs := e.emitJVDownstreamCPCC(jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes)
 
 			ccRefs = append(ccRefs, refs...)
 			ccOutputs = append(ccOutputs, outs...)
@@ -150,7 +151,7 @@ func emitMiscNodes(ctx *GenCtx, instance ModuleInstance, d *ModuleData) (ccRefs 
 				{build(outPrefix, base, "Parser.cpp"), build(outPrefix, base, "Parser.h")},
 			}
 
-			refs, outs := emitJVDownstreamCPCC(ctx, instance, d, jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes)
+			refs, outs := e.emitJVDownstreamCPCC(jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes)
 
 			ccRefs = append(ccRefs, refs...)
 			ccOutputs = append(ccOutputs, outs...)

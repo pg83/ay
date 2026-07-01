@@ -119,7 +119,8 @@ func suppressMallocAPIDefault(defaults []string, allocatorName STR) []string {
 	return out
 }
 
-func defaultPeerdirsForModule(ctx *GenCtx, instance ModuleInstance, d *ModuleData) []string {
+func (e *EmitContext) defaultPeerdirsForModule() []string {
+	_, instance, d := e.ctx, e.instance, e.d
 	inst := instance
 
 	if instance.Language == LangPy && d.usePython3 &&
@@ -127,10 +128,11 @@ func defaultPeerdirsForModule(ctx *GenCtx, instance ModuleInstance, d *ModuleDat
 		inst.Language = LangCPP
 	}
 
-	return defaultPeerdirsForWithState(ctx, inst, d)
+	return e.at(inst).defaultPeerdirsForWithState()
 }
 
-func defaultPeerdirsForWithState(ctx *GenCtx, instance ModuleInstance, d *ModuleData) []string {
+func (e *EmitContext) defaultPeerdirsForWithState() []string {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	flags := d.flags
 	noPlatform := effectiveNoPlatform(flags)
 
@@ -266,11 +268,12 @@ func rebasePerArchPeerAddIncl(hostPeerAddIncl []VFS, from, to ISA) []VFS {
 	return out
 }
 
-func defaultProgramPeerdirsForModule(ctx *GenCtx, instance ModuleInstance, d *ModuleData, postUser bool) []string {
-	return defaultProgramPeerdirsForWithState(ctx, instance, d, postUser)
+func (e *EmitContext) defaultProgramPeerdirsForModule(postUser bool) []string {
+	return e.defaultProgramPeerdirsForWithState(postUser)
 }
 
-func defaultProgramPeerdirsForWithState(ctx *GenCtx, instance ModuleInstance, d *ModuleData, postUser bool) []string {
+func (e *EmitContext) defaultProgramPeerdirsForWithState(postUser bool) []string {
+	_, instance, d := e.ctx, e.instance, e.d
 	if instance.Language != LangCPP {
 		return nil
 	}

@@ -7,7 +7,8 @@ import (
 
 var checkConfigHKV = KV{P: pkCH, PC: pcYellow}
 
-func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData) []*SourceEmit {
+func (e *EmitContext) emitCheckConfigH() []*SourceEmit {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 
 	if len(d.checkConfigHeaders) == 0 {
@@ -58,7 +59,7 @@ func emitCheckConfigH(ctx *GenCtx, instance ModuleInstance, d *ModuleData) []*So
 			Compile:       &CompileSpec{FlatOutput: d.flatSrc(generatedVFS.str()), CFlags: psc},
 		})
 
-		if se := emitOneSource(ctx, instance, d, generatedVFS.str()); se != nil {
+		if se := e.emitOneSource(generatedVFS.str()); se != nil {
 			out = append(out, se)
 		}
 	}

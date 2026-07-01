@@ -4,7 +4,8 @@ import "strings"
 
 var archivesKV = KV{P: pkAR, PC: pcLightRed}
 
-func emitArchives(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
+func (e *EmitContext) emitArchives() {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	if len(d.archives) == 0 {
 		return
 	}

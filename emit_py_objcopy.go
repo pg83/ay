@@ -22,11 +22,8 @@ type ObjcopyEmitResult struct {
 	PySrcTrailCount int
 }
 
-func emitResourceObjcopy(
-	ctx *GenCtx,
-	instance ModuleInstance,
-	d *ModuleData,
-) *ObjcopyEmitResult {
+func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	hasKvOnly := d.pyMain != nil || len(d.noCheckImports) > 0 || len(d.pySrcs) > 0 || len(d.yaConfJSON) > 0
 
 	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 && !hasKvOnly {
@@ -36,24 +33,24 @@ func emitResourceObjcopy(
 	oc := newObjcopyEmitCtx(ctx, d, instance.Platform)
 	out := &ObjcopyEmitResult{}
 
-	if nodeRes := emitPyMainObjcopy(ctx, instance, d, oc); nodeRes != nil {
+	if nodeRes := e.emitPyMainObjcopy(oc); nodeRes != nil {
 		out.Refs = append(out.Refs, nodeRes.Ref)
 		out.Outputs = append(out.Outputs, nodeRes.Out)
 	}
 
-	if nodeRes := emitNoCheckImportsObjcopy(ctx, instance, d, oc); nodeRes != nil {
+	if nodeRes := e.emitNoCheckImportsObjcopy(oc); nodeRes != nil {
 		out.Refs = append(out.Refs, nodeRes.Ref)
 		out.Outputs = append(out.Outputs, nodeRes.Out)
 	}
 
-	for _, nodeRes := range emitYaConfJSONObjcopy(ctx, instance, d, oc) {
+	for _, nodeRes := range e.emitYaConfJSONObjcopy(oc) {
 		out.Refs = append(out.Refs, nodeRes.Ref)
 		out.Outputs = append(out.Outputs, nodeRes.Out)
 	}
 
 	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 {
 		trailStart := len(out.Refs)
-		srcRes := emitPySrcObjcopy(ctx, instance, d, oc)
+		srcRes := e.emitPySrcObjcopy(oc)
 
 		if srcRes != nil {
 			out.Refs = append(out.Refs, srcRes.Refs...)
@@ -76,14 +73,14 @@ func emitResourceObjcopy(
 	py3BinProgramSide := d.moduleStmt.Name == tokPy3Program && !d.programPairedLib
 
 	if !py3BinProgramSide {
-		r, o := emitResourceFile(ctx, instance, d, oc, d.resources, moduleTag)
+		r, o := e.emitResourceFile(oc, d.resources, moduleTag)
 
 		out.Refs = append(out.Refs, r...)
 		out.Outputs = append(out.Outputs, o...)
 	}
 
 	trailStart := len(out.Refs)
-	srcRes := emitPySrcObjcopy(ctx, instance, d, oc)
+	srcRes := e.emitPySrcObjcopy(oc)
 
 	if srcRes != nil {
 		out.Refs = append(out.Refs, srcRes.Refs...)
@@ -91,7 +88,7 @@ func emitResourceObjcopy(
 	}
 
 	if !py3BinProgramSide {
-		r, o := emitResourceFile(ctx, instance, d, oc, d.pyPyiResources, moduleTag)
+		r, o := e.emitResourceFile(oc, d.pyPyiResources, moduleTag)
 
 		out.Refs = append(out.Refs, r...)
 		out.Outputs = append(out.Outputs, o...)
@@ -102,7 +99,8 @@ func emitResourceObjcopy(
 	return out
 }
 
-func emitResourceFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, oc *ObjcopyEmitCtx, entries []ResourceEntry, moduleTag *string) (refs []NodeRef, outputs []VFS) {
+func (e *EmitContext) emitResourceFile(oc *ObjcopyEmitCtx, entries []ResourceEntry, moduleTag *string) (refs []NodeRef, outputs []VFS) {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	bad := []string{"${ARCADIA_BUILD_ROOT}", "${ARCADIA_SOURCE_ROOT}", "conftest.py"}
 
@@ -315,12 +313,10 @@ func emitKvOnlyObjcopyNode(
 	return &ObjcopyEmit{Ref: ref, Out: out}
 }
 
-func emitYaConfJSONObjcopy(
-	ctx *GenCtx,
-	instance ModuleInstance,
-	d *ModuleData,
+func (e *EmitContext) emitYaConfJSONObjcopy(
 	oc *ObjcopyEmitCtx,
 ) []*ObjcopyEmit {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 
 	if len(d.yaConfJSON) == 0 {
@@ -383,13 +379,11 @@ func emitYaConfJSONObjcopy(
 	return out
 }
 
-func emitPyNamespaceForGroup(
-	ctx *GenCtx,
-	instance ModuleInstance,
-	d *ModuleData,
+func (e *EmitContext) emitPyNamespaceForGroup(
 	group PySrcGroup,
 	oc *ObjcopyEmitCtx,
 ) *ObjcopyEmit {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	reg := ctx.codegenFor(instance)
 	pySources := make([]string, 0, len(group.Srcs))
 	arcSources := make([]string, 0, len(group.Srcs))
@@ -470,12 +464,10 @@ func emitPyNamespaceForGroup(
 	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyLib, kvsHash, kvsCmd, d, oc)
 }
 
-func emitPyMainObjcopy(
-	ctx *GenCtx,
-	instance ModuleInstance,
-	d *ModuleData,
+func (e *EmitContext) emitPyMainObjcopy(
 	oc *ObjcopyEmitCtx,
 ) *ObjcopyEmit {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	if d.pyMain == nil {
 		return nil
 	}
@@ -485,12 +477,10 @@ func emitPyMainObjcopy(
 	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyBin, []string{kv}, []string{kv}, d, oc)
 }
 
-func emitNoCheckImportsObjcopy(
-	ctx *GenCtx,
-	instance ModuleInstance,
-	d *ModuleData,
+func (e *EmitContext) emitNoCheckImportsObjcopy(
 	oc *ObjcopyEmitCtx,
 ) *ObjcopyEmit {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	if len(d.noCheckImports) == 0 {
 		return nil
 	}
@@ -508,12 +498,10 @@ func emitNoCheckImportsObjcopy(
 	return emitKvOnlyObjcopyNode(ctx, instance, kvOnlyBin, []string{kvHash}, []string{kvCmd}, d, oc)
 }
 
-func emitPySrcObjcopy(
-	ctx *GenCtx,
-	instance ModuleInstance,
-	d *ModuleData,
+func (e *EmitContext) emitPySrcObjcopy(
 	oc *ObjcopyEmitCtx,
 ) *ObjcopyEmitResult {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 
 	if len(d.pySrcs) == 0 {
@@ -544,7 +532,7 @@ func emitPySrcObjcopy(
 
 	for _, group := range groups {
 		if namespaceEnabled {
-			if nsRes := emitPyNamespaceForGroup(ctx, instance, d, group, oc); nsRes != nil {
+			if nsRes := e.emitPyNamespaceForGroup(group, oc); nsRes != nil {
 				res.Refs = append(res.Refs, nsRes.Ref)
 				res.Outputs = append(res.Outputs, nsRes.Out)
 			}

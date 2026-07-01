@@ -16,30 +16,34 @@ func emitExplicitCF(ctx *GenCtx, instance ModuleInstance, cf *ConfigureFileStmt,
 	srcVFS := copyFileInputVFS(ctx.fs, instance.Path, cf.Src)
 	outVFS := copyFileOutputVFS(instance.Path.rel(), cf.Dst)
 
-	emitConfigureFile(ctx, instance, d, srcVFS, outVFS)
+	e := newEmitContext(ctx, instance, d)
+	e.emitConfigureFile(srcVFS, outVFS)
 }
 
-func emitLibraryHInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryHInSource(src STR) *SourceEmit {
+	_, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
-	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, d.cc.SrcDirs)
+	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	outVFS := build(instance.Path.rel(), "/", strings.TrimSuffix(srcRel, ".in"))
 
-	emitConfigureFile(ctx, instance, d, srcVFS, outVFS)
+	e.emitConfigureFile(srcVFS, outVFS)
 
 	return nil
 }
 
-func emitLibraryCInSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryCInSource(src STR) *SourceEmit {
+	_, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
-	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, d.cc.SrcDirs)
+	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	outVFS := build(instance.Path.rel(), "/", strings.TrimSuffix(srcRel, ".in"))
 
-	emitConfigureFile(ctx, instance, d, srcVFS, outVFS)
+	e.emitConfigureFile(srcVFS, outVFS)
 
-	return emitOneSource(ctx, instance, d, outVFS.str())
+	return e.emitOneSource(outVFS.str())
 }
 
-func emitConfigureFile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS, outVFS VFS) NodeRef {
+func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	cmdArgs := []STR{d.cc.TC.Python3, configureFilePyVFS.str(), srcVFS.str(), outVFS.str()}

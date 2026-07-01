@@ -6,7 +6,8 @@ import (
 
 var baseCodegenKV = KV{P: pkBC, PC: pcYellow}
 
-func emitBaseCodegensForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
+func (e *EmitContext) emitBaseCodegensForAR() {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	for _, bc := range d.baseCodegens {
 		emitBaseCodegen(ctx, instance, bc)
 	}

@@ -450,7 +450,7 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 		"build/platform/python/ymake_python3",
 	}
 
-	gotDefaults := defaultPeerdirsForWithState(nil, plain, &ModuleData{})
+	gotDefaults := newEmitContext(nil, plain, &ModuleData{}).defaultPeerdirsForWithState()
 
 	if !stringSlicesEqual(gotDefaults, wantDefaults) {
 		t.Errorf("defaultPeerdirsForWithState(plain CPP) = %v, want %v", gotDefaults, wantDefaults)
@@ -667,7 +667,7 @@ func TestGen_DefaultPeerdirs_HelperSuppression(t *testing.T) {
 				mi.Platform = testTargetP
 			}
 
-			got := defaultPeerdirsForWithState(nil, mi, &ModuleData{flags: c.flags})
+			got := newEmitContext(nil, mi, &ModuleData{flags: c.flags}).defaultPeerdirsForWithState()
 
 			if !stringSlicesEqual(got, c.want) {
 				t.Errorf("defaultPeerdirsForWithState(%+v, %+v) = %v, want %v", mi, c.flags, got, c.want)

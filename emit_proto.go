@@ -230,7 +230,8 @@ func newPBModuleEmission(ctx *GenCtx, d *ModuleData, cfg ProtoPBConfig, protoInc
 	return pe
 }
 
-func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, cfg ProtoPBConfig, pe *PbModuleEmission, peerProtoAddIncl []VFS, sprotoProduced map[string]struct{}) ProtoPBEmission {
+func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModuleEmission, peerProtoAddIncl []VFS, sprotoProduced map[string]struct{}) ProtoPBEmission {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcRel)
 	protoSearchPaths := peerProtoAddIncl
 
@@ -460,7 +461,8 @@ func emitProtoPB(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel str
 	}
 }
 
-func emitProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerContribs PeerGlobalContribs) *ProtoSrcsResult {
+func (e *EmitContext) emitProtoSrcs(peerContribs PeerGlobalContribs) *ProtoSrcsResult {
+	_, instance, d := e.ctx, e.instance, e.d
 	var protoSrcs, evSrcs, gztSrcs []string
 
 	for _, src := range d.srcs {
@@ -480,13 +482,14 @@ func emitProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCont
 
 	switch instance.Language {
 	case LangPy:
-		return emitPyProtoSrcs(ctx, instance, d, peerContribs, protoSrcs, evSrcs)
+		return e.emitPyProtoSrcs(peerContribs, protoSrcs, evSrcs)
 	default:
-		return emitCPPProtoSrcs(ctx, instance, d, peerContribs, protoSrcs, evSrcs, gztSrcs)
+		return e.emitCPPProtoSrcs(peerContribs, protoSrcs, evSrcs, gztSrcs)
 	}
 }
 
-func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerContribs PeerGlobalContribs, protoSrcs, evSrcs, gztSrcs []string) *ProtoSrcsResult {
+func (e *EmitContext) emitCPPProtoSrcs(peerContribs PeerGlobalContribs, protoSrcs, evSrcs, gztSrcs []string) *ProtoSrcsResult {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	srcDeclIdx := make(map[string]int, len(d.srcs))
 
 	for i, src := range d.srcs {
@@ -496,7 +499,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	}
 
 	for i, gztSrc := range gztSrcs {
-		_, genProtoSrc := emitLibraryGztProtoSource(ctx, instance, d, gztSrc, peerContribs.protoInclude, tagCppProto)
+		_, genProtoSrc := e.emitLibraryGztProtoSource(gztSrc, peerContribs.protoInclude, tagCppProto)
 
 		protoSrcs = append(protoSrcs, genProtoSrc)
 		srcDeclIdx[genProtoSrc] = len(d.srcs) + i
@@ -535,11 +538,11 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	}
 
 	cppInstance := instance
-	sprotoProduced := ymapsSprotoProducedBases(ctx, instance, d)
+	sprotoProduced := e.ymapsSprotoProducedBases()
 	pe := newPBModuleEmission(ctx, d, cfg, peerContribs.protoInclude)
 
 	for _, src := range protoSrcs {
-		pb := emitProtoPB(ctx, instance, d, src, cfg, pe, peerContribs.protoInclude, sprotoProduced)
+		pb := e.emitProtoPB(src, cfg, pe, peerContribs.protoInclude, sprotoProduced)
 
 		for _, cc := range pb.orderedCC {
 			ccSrcRel := strings.TrimPrefix(cc.rel(), cppInstance.Path.rel()+"/")
@@ -548,7 +551,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 		}
 	}
 
-	emitYmapsSprotoHeaders(ctx, instance, d, peerContribs, sprotoProduced)
+	e.emitYmapsSprotoHeaders(peerContribs, sprotoProduced)
 
 	if len(evSrcs) > 0 {
 		protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
@@ -620,14 +623,14 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	arDeclMeta := map[VFS]SrcMeta{}
 
 	for _, co := range codegenOutputs {
-		se := emitOneSource(ctx, cppInstance, d, co.pbCC.str())
+		se := e.at(cppInstance).emitOneSource(co.pbCC.str())
 
 		ccRefs = append(ccRefs, se.Ref)
 		ccOutputs = append(ccOutputs, se.OutPath)
 		arDeclMeta[se.OutPath] = SrcMeta{Prio: stmtPrioSrcs, Seq: co.declIdx, Generated: true}
 	}
 
-	enRes := emitEnumSrcs(ctx, instance, d, peerContribs.addIncl)
+	enRes := e.emitEnumSrcs(peerContribs.addIncl)
 
 	if enRes != nil {
 		for i := range enRes.CCRefs {
@@ -656,7 +659,7 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 			}
 
 			cppRel := antlrOutputModuleRel(instance.Path.rel(), outVFS)
-			se := emitOneSource(ctx, cppInstance, d, copyFileOutputVFS(cppInstance.Path.rel(), cppRel).str())
+			se := e.at(cppInstance).emitOneSource(copyFileOutputVFS(cppInstance.Path.rel(), cppRel).str())
 			ccRef, ccOut := se.Ref, se.OutPath
 
 			antlrRefs = append(antlrRefs, ccRef)
@@ -685,7 +688,8 @@ func emitCPPProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerC
 	return &ProtoSrcsResult{ARRef: arRef, ARPath: &archivePath}
 }
 
-func emitProtoProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string) {
+func (e *EmitContext) emitProtoProducer(srcRel string) {
+	ctx, _, d := e.ctx, e.instance, e.d
 	cfg := ProtoPBConfig{
 		cppOutRoot: protoCPPOutRoot(d),
 		grpc:       d.grpc,
@@ -693,17 +697,18 @@ func emitProtoProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcR
 
 	pe := newPBModuleEmission(ctx, d, cfg, d.cc.ProtoIncludePeers)
 
-	emitProtoPB(ctx, instance, d, srcRel, cfg, pe, d.cc.ProtoInclude, nil)
+	e.emitProtoPB(srcRel, cfg, pe, d.cc.ProtoInclude, nil)
 }
 
-func emitLibraryProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryProtoSource(src STR) *SourceEmit {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	protoBase := strings.TrimSuffix(protoSourceRelPath(ctx.fs, instance, d, srcRel), ".proto")
 
-	se := emitOneSource(ctx, instance, d, build(protoBase, ".pb.cc").str())
+	se := e.emitOneSource(build(protoBase, ".pb.cc").str())
 
 	if d.grpc {
-		se.Extra = append(se.Extra, *emitOneSource(ctx, instance, d, build(protoBase, ".grpc.pb.cc").str()))
+		se.Extra = append(se.Extra, *e.emitOneSource(build(protoBase, ".grpc.pb.cc").str()))
 	}
 
 	return se

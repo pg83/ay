@@ -321,7 +321,7 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 		Language: LangCPP,
 		Platform: testTargetP,
 	}
-	res := emitPySrcObjcopy(ctx, instance, d, &ObjcopyEmitCtx{blocks: composeObjcopyArgBlocks(d.tc, testTargetP), na: ctx.na})
+	res := newEmitContext(ctx, instance, d).emitPySrcObjcopy(&ObjcopyEmitCtx{blocks: composeObjcopyArgBlocks(d.tc, testTargetP), na: ctx.na})
 
 	if res == nil {
 		t.Fatal("emitPySrcObjcopy returned nil")

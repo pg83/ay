@@ -60,7 +60,8 @@ func sbomComponentLang(moduleName TOK) string {
 	}
 }
 
-func emitSbomComponent(ctx *GenCtx, instance ModuleInstance, d *ModuleData, realPrjName string) (*NodeRef, *VFS) {
+func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	moddir := instance.Path.rel()
 	lang := sbomComponentLang(d.moduleStmt.Name)

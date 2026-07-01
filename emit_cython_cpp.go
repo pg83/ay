@@ -94,11 +94,12 @@ type CythonStmtPlan struct {
 	ind               CythonCppInduced
 }
 
-func emitCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData) []*SourceEmit {
-	return emitCythonCppPlanned(ctx, instance, d, planCythonCpp(ctx, instance, d))
+func (e *EmitContext) emitCythonCpp() []*SourceEmit {
+	return e.emitCythonCppPlanned(e.planCythonCpp())
 }
 
-func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData) []CythonStmtPlan {
+func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	if len(d.cythonCpp) == 0 {
 		return nil
 	}
@@ -200,7 +201,8 @@ func planCythonCpp(ctx *GenCtx, instance ModuleInstance, d *ModuleData) []Cython
 	return plans
 }
 
-func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, plans []CythonStmtPlan) []*SourceEmit {
+func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) []*SourceEmit {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 
 	if len(plans) == 0 {
@@ -299,7 +301,7 @@ func emitCythonCppPlanned(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 			Resources:    usesPython3,
 		}, cyRef)
 
-		if se := emitOneSource(ctx, instance, d, generatedVFS.str()); se != nil {
+		if se := e.emitOneSource(generatedVFS.str()); se != nil {
 			out = append(out, se)
 		}
 	}
@@ -465,7 +467,8 @@ func appendCythonAddIncl(cmdArgs []STR, addIncl []VFS, memo InclArgMemo) []STR {
 	return cmdArgs
 }
 
-func cythonAdjustModuleCCBlocks(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
+func (e *EmitContext) cythonAdjustModuleCCBlocks() {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	if len(d.cythonCpp) == 0 {
 		return
 	}

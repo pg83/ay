@@ -13,7 +13,8 @@ type DecimalMD5Result struct {
 	CCOutputs []VFS
 }
 
-func emitDecimalMD5ForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *DecimalMD5Result {
+func (e *EmitContext) emitDecimalMD5ForAR() *DecimalMD5Result {
+	_, instance, d := e.ctx, e.instance, e.d
 	if len(d.decimalMD5) == 0 {
 		return nil
 	}
@@ -21,13 +22,13 @@ func emitDecimalMD5ForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *D
 	res := &DecimalMD5Result{}
 
 	for _, stmt := range d.decimalMD5 {
-		emitDecimalMD5(ctx, instance, d, stmt)
+		e.emitDecimalMD5(stmt)
 
 		if !isCCSourceExt(stmt.File) {
 			continue
 		}
 
-		if se := emitOneSource(ctx, instance, d, copyFileOutputVFS(instance.Path.rel(), stmt.File).str()); se != nil {
+		if se := e.emitOneSource(copyFileOutputVFS(instance.Path.rel(), stmt.File).str()); se != nil {
 			res.CCRefs = append(res.CCRefs, se.Ref)
 			res.CCOutputs = append(res.CCOutputs, se.OutPath)
 		}
@@ -36,7 +37,8 @@ func emitDecimalMD5ForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *D
 	return res
 }
 
-func emitDecimalMD5(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *DecimalMD5Lower32BitsStmt) NodeRef {
+func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.emit.nodeArenas()
 	modulePath := instance.Path.rel()
 	outVFS := copyFileOutputVFS(modulePath, stmt.File)

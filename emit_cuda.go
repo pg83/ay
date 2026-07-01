@@ -19,11 +19,12 @@ var cudaKV = KV{P: pkCU, PC: pcLightGreen}
 
 const cudaArchitectures129 = "sm_50:sm_52:sm_60:sm_61:sm_70:sm_75:sm_80:sm_86:sm_89:sm_90:sm_90a:sm_100:sm_100a:sm_120:sm_120a:sm_100f:sm_103:sm_103a:sm_103f:sm_120f"
 
-func emitLibraryCudaSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryCudaSource(src STR) *SourceEmit {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	na := ctx.emit.nodeArenas()
 	p := instance.Platform
-	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, d.cc.SrcDirs)
+	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	in := d.cc.ccInputsFor(ctx, instance, d, srcVFS)
 	outVFS, inVFS := composeCCPaths(instance, srcRel, srcVFS, in, ".o")
 	blocks := in.CCBlocks

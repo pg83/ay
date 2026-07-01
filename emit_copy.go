@@ -41,7 +41,8 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, moduleDir VFS, entry
 	return out
 }
 
-func emitCopyFiles(ctx *GenCtx, instance ModuleInstance, d *ModuleData) (memberRefs []NodeRef, memberOuts []VFS, memberSrcs []VFS) {
+func (e *EmitContext) emitCopyFiles() (memberRefs []NodeRef, memberOuts []VFS, memberSrcs []VFS) {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	scanner := ctx.scannerFor(instance)
 	reg := ctx.codegenFor(instance)
 
@@ -159,7 +160,8 @@ func generatedModuleSourceVFS(ctx *GenCtx, instance ModuleInstance, srcRel strin
 	return nil
 }
 
-func resolveModuleSourceVFS(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR, srcDirs []VFS) VFS {
+func (e *EmitContext) resolveModuleSourceVFS(src STR, srcDirs []VFS) VFS {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	if buildVFS := copyFileAutoSourceVFS(instance.Path.rel(), d, src); buildVFS != nil {
 		return *buildVFS
 	}

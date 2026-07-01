@@ -12,43 +12,44 @@ type SourceEmit struct {
 	Extra   []SourceEmit
 }
 
-type SrcEmitter = func(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit
+type SrcEmitter = func(e *EmitContext, src STR) *SourceEmit
 
 func init() {
 	srcExtMatcher = newExtMatcher([]ExtEntry[SrcEmitter]{
-		{".gztproto", emitLibraryGztProtoCompile},
-		{".proto", emitLibraryProtoSource},
-		{".fbs64", emitLibraryFlatcSource},
-		{".fbs", emitLibraryFlatcSource},
-		{".rodata", emitLibraryRodataSource},
-		{".c", emitLibraryCSource},
-		{".cpp", emitLibraryCSource},
-		{".cc", emitLibraryCSource},
-		{".cxx", emitLibraryCSource},
-		{".C", emitLibraryCSource},
-		{".auxcpp", emitLibraryCSource},
-		{".S", emitLibraryAsmSource},
-		{".s", emitLibraryAsmSource},
-		{".asm", emitLibraryAsmSource},
-		{".cu", emitLibraryCudaSource},
-		{".rl6", emitLibraryRagel6Source},
-		{".y", emitBisonY},
-		{".ypp", emitBisonY},
-		{".ev", emitLibraryEvSource},
-		{".rl", emitLibraryRagel5Source},
-		{".lpp", emitLibraryFlexSource},
-		{".lex", emitLibraryFlexSource},
-		{".l", emitLibraryFlexSource},
-		{".h.in", emitLibraryHInSource},
-		{".cpp.in", emitLibraryCInSource},
-		{".c.in", emitLibraryCInSource},
-		{".sc", emitLibrarySCSource},
-		{".gperf", emitLibraryGperfSource},
-		{".cfgproto", emitLibraryCfgProtoSource},
+		{".gztproto", (*EmitContext).emitLibraryGztProtoCompile},
+		{".proto", (*EmitContext).emitLibraryProtoSource},
+		{".fbs64", (*EmitContext).emitLibraryFlatcSource},
+		{".fbs", (*EmitContext).emitLibraryFlatcSource},
+		{".rodata", (*EmitContext).emitLibraryRodataSource},
+		{".c", (*EmitContext).emitLibraryCSource},
+		{".cpp", (*EmitContext).emitLibraryCSource},
+		{".cc", (*EmitContext).emitLibraryCSource},
+		{".cxx", (*EmitContext).emitLibraryCSource},
+		{".C", (*EmitContext).emitLibraryCSource},
+		{".auxcpp", (*EmitContext).emitLibraryCSource},
+		{".S", (*EmitContext).emitLibraryAsmSource},
+		{".s", (*EmitContext).emitLibraryAsmSource},
+		{".asm", (*EmitContext).emitLibraryAsmSource},
+		{".cu", (*EmitContext).emitLibraryCudaSource},
+		{".rl6", (*EmitContext).emitLibraryRagel6Source},
+		{".y", (*EmitContext).emitBisonY},
+		{".ypp", (*EmitContext).emitBisonY},
+		{".ev", (*EmitContext).emitLibraryEvSource},
+		{".rl", (*EmitContext).emitLibraryRagel5Source},
+		{".lpp", (*EmitContext).emitLibraryFlexSource},
+		{".lex", (*EmitContext).emitLibraryFlexSource},
+		{".l", (*EmitContext).emitLibraryFlexSource},
+		{".h.in", (*EmitContext).emitLibraryHInSource},
+		{".cpp.in", (*EmitContext).emitLibraryCInSource},
+		{".c.in", (*EmitContext).emitLibraryCInSource},
+		{".sc", (*EmitContext).emitLibrarySCSource},
+		{".gperf", (*EmitContext).emitLibraryGperfSource},
+		{".cfgproto", (*EmitContext).emitLibraryCfgProtoSource},
 	})
 }
 
-func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
+func (e *EmitContext) emitOneSource(src STR) *SourceEmit {
+	ctx, instance, _ := e.ctx, e.instance, e.d
 	srcRel := src.string()
 
 	if isHeaderSource(srcRel) {
@@ -66,5 +67,5 @@ func emitOneSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR)
 		return nil
 	}
 
-	return emit(ctx, instance, d, src)
+	return emit(e, src)
 }

@@ -24,7 +24,8 @@ func dllOutputName(stmt *ModuleStmt) string {
 	return prefix + name + ".so"
 }
 
-func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs []NodeRef, ccOutputs []VFS, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS) *ModuleEmitResult {
+func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS) *ModuleEmitResult {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 
 	if d.exportsScript == nil {
@@ -63,7 +64,7 @@ func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs [
 		}
 
 		if sbomQualifies(d) {
-			if or, op := emitSbomComponent(ctx, instance, d, strings.TrimSuffix(outputName, ".so")); or != nil {
+			if or, op := e.emitSbomComponent(strings.TrimSuffix(outputName, ".so")); or != nil {
 				ldSbomRefs = append(ldSbomRefs, *or)
 				ldSbomPaths = append(ldSbomPaths, *op)
 			}
@@ -128,7 +129,8 @@ func emitDllShared(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccRefs [
 	}
 }
 
-func emitDynamicLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *ModuleEmitResult {
+func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 
 	if len(d.moduleStmt.Args) == 0 {

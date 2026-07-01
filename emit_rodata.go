@@ -58,7 +58,8 @@ func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 	return emit.emit(node), asmVFS, outVFS
 }
 
-func emitLibraryRodataSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryRodataSource(src STR) *SourceEmit {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 
 	if instance.Platform.ISA != ISAX8664 {
@@ -66,7 +67,7 @@ func emitLibraryRodataSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	}
 
 	yasmLDRef, _ := ctx.tool(argContribToolsYasm)
-	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, d.cc.SrcDirs)
+	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	in := d.cc.ccInputsFor(ctx, instance, d, srcVFS)
 	ref, _, outPath := emitRD(instance, srcRel, srcVFS, yasmLDRef, nil, nil, in.TC, ctx.emit)
 

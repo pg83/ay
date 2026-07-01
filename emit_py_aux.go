@@ -9,7 +9,8 @@ type GeneratedPyAuxChunksResult struct {
 	Outputs []VFS
 }
 
-func emitGeneratedPyAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *GeneratedPyAuxChunksResult {
+func (e *EmitContext) emitGeneratedPyAuxChunks() *GeneratedPyAuxChunksResult {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	if len(d.pySrcs) == 0 {
 		return nil
 	}
@@ -52,7 +53,7 @@ func emitGeneratedPyAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleDat
 	}
 
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
-	rawRes := emitRawAuxResourceChunks(ctx, instance, d, entries, "PY3", nil, rescompilerRef)
+	rawRes := e.emitRawAuxResourceChunks(entries, "PY3", nil, rescompilerRef)
 
 	if rawRes == nil {
 		return nil
@@ -61,7 +62,7 @@ func emitGeneratedPyAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleDat
 	res := &GeneratedPyAuxChunksResult{}
 
 	for _, aux := range rawRes.PROutputs {
-		if se := emitOneSource(ctx, instance, d, aux.str()); se != nil {
+		if se := e.emitOneSource(aux.str()); se != nil {
 			res.Refs = append(res.Refs, se.Ref)
 			res.Outputs = append(res.Outputs, se.OutPath)
 		}
@@ -88,7 +89,8 @@ type RawAuxResourceChunksResult struct {
 	AuxClosures [][]VFS
 }
 
-func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, entries []PyProtoAuxEntry, moduleTag string, deps []NodeRef, rescompilerRef NodeRef) *RawAuxResourceChunksResult {
+func (e *EmitContext) emitRawAuxResourceChunks(entries []PyProtoAuxEntry, moduleTag string, deps []NodeRef, rescompilerRef NodeRef) *RawAuxResourceChunksResult {
+	ctx, instance, _ := e.ctx, e.instance, e.d
 	na := ctx.na
 
 	if len(entries) == 0 {
@@ -101,7 +103,7 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleDat
 		aux := build(instance.Path.rel(), "/", protoResourceHash(ch.hashInputs, "$S/"+instance.Path.rel(), moduleTag), "_raw.auxcpp")
 		auxRef := ctx.emit.reserve()
 		sourceInputs := pyProtoSourceInputs(ch.inputs)
-		auxClosure := rawAuxInputClosure(ctx, instance, d, aux, sourceInputs, auxRef)
+		auxClosure := e.rawAuxInputClosure(aux, sourceInputs, auxRef)
 		cmdArgs := []STR{internStr(rescompilerBinPath), (aux).str()}
 
 		cmdArgs = appendInternStrs(cmdArgs, ch.cmdArgs)
@@ -160,7 +162,8 @@ func emitRawAuxResourceChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleDat
 	return res
 }
 
-func rawAuxInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, aux VFS, seed []VFS, ref NodeRef) []VFS {
+func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) []VFS {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 	emits := make([]IncludeDirective, 0, len(seed))
 

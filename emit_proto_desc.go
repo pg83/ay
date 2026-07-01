@@ -106,7 +106,8 @@ func descProtoOutputRel(instancePath, srcRel, resolvedRel string) string {
 	return instancePath + "/" + composeSrcDirOutputRel(instancePath, resolvedRel) + ".desc"
 }
 
-func emitDescProtoSubmodule(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *ModuleEmitResult {
+func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	span := descPeerClosure(ctx, instance, d.peerdirs, d.needGoogleProtoPeerdirs)
 	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
 	cppOutRoot := protoCPPOutRoot(d)
@@ -305,7 +306,8 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 	return ctx.emit.emit(node)
 }
 
-func emitProtoDescriptions(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *ModuleEmitResult {
+func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	closure := descPeerClosure(ctx, instance, d.peerdirs, false).peers
 	na := ctx.emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}

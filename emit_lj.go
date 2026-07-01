@@ -28,7 +28,8 @@ func emitLJ(instance ModuleInstance, luaSrc, rawOut, compilerBin VFS, compilerLD
 	return emit.emit(node)
 }
 
-func emitLuaJit21(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
+func (e *EmitContext) emitLuaJit21() {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	if d.lj21 == nil {
 		return
 	}

@@ -78,10 +78,11 @@ func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	emit.emitReserved(node, id)
 }
 
-func emitLibraryRagel6Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryRagel6Source(src STR) *SourceEmit {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	ragelLDRef, ragelBinaryVFS := ctx.tool(argContribToolsRagel6)
-	rl6SourceVFS := resolveModuleSourceVFS(ctx, instance, d, src, d.cc.SrcDirs)
+	rl6SourceVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	r6Out := ragel6OutVFS(instance, srcRel)
 	r6Parsed := ctx.scannerFor(instance).parsers.sourceParsedBuckets(rl6SourceVFS, nil).bucket(parsedIncludesCpp)
 	r6Ref := ctx.emit.reserve()
@@ -111,5 +112,5 @@ func emitLibraryRagel6Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		return nil
 	}
 
-	return emitOneSource(ctx, instance, d, r6Out.str())
+	return e.emitOneSource(r6Out.str())
 }

@@ -41,7 +41,8 @@ func protoPythonNamespaceArg(d *ModuleData) string {
 	return "/" + filepath.ToSlash(filepath.Clean(d.protoNamespace.string()))
 }
 
-func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerContribs PeerGlobalContribs, protoSrcs, evSrcs []string) *ProtoSrcsResult {
+func (e *EmitContext) emitPyProtoSrcs(peerContribs PeerGlobalContribs, protoSrcs, evSrcs []string) *ProtoSrcsResult {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	if len(evSrcs) > 0 {
 		throwFmt("gen: py-addressed PROTO_LIBRARY %s with .ev sources is not modelled", instance.Path.rel())
 	}
@@ -74,20 +75,20 @@ func emitPyProtoSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerCo
 	var genEntries []GenProtoResEntry
 
 	for _, src := range protoSrcs {
-		aux, gen := emitPyProtoSrc(ctx, instance, d, src, protocLDRef, protocBinary, pe)
+		aux, gen := e.emitPyProtoSrc(src, protocLDRef, protocBinary, pe)
 
 		auxEntries = append(auxEntries, aux...)
 		genEntries = append(genEntries, gen...)
 	}
 
-	auxRes := emitPyProtoAuxChunks(ctx, instance, d, peerContribs, auxEntries, cppSibling)
+	auxRes := e.emitPyProtoAuxChunks(peerContribs, auxEntries, cppSibling)
 
 	if auxRes != nil {
 		pyProtoRefs = append(pyProtoRefs, auxRes.Refs...)
 		pyProtoOutputs = append(pyProtoOutputs, auxRes.Outputs...)
 	}
 
-	if objRes := emitGeneratedPyProtoObjcopy(ctx, instance, d, genEntries); objRes != nil {
+	if objRes := e.emitGeneratedPyProtoObjcopy(genEntries); objRes != nil {
 		pyProtoRefs = append(pyProtoRefs, objRes.Refs...)
 		pyProtoOutputs = append(pyProtoOutputs, objRes.Outputs...)
 	}
@@ -231,7 +232,8 @@ func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, 
 	return pe
 }
 
-func emitPyProtoSrc(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src string, protocLDRef NodeRef, protocBinary VFS, pe *PyPBModuleEmission) ([]PyProtoAuxEntry, []GenProtoResEntry) {
+func (e *EmitContext) emitPyProtoSrc(src string, protocLDRef NodeRef, protocBinary VFS, pe *PyPBModuleEmission) ([]PyProtoAuxEntry, []GenProtoResEntry) {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
@@ -497,7 +499,8 @@ func genProtoResEntriesForSource(instance ModuleInstance, d *ModuleData, src str
 	return entries
 }
 
-func emitGeneratedPyProtoObjcopy(ctx *GenCtx, instance ModuleInstance, d *ModuleData, entries []GenProtoResEntry) *ObjcopyEmitResult {
+func (e *EmitContext) emitGeneratedPyProtoObjcopy(entries []GenProtoResEntry) *ObjcopyEmitResult {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	if len(entries) == 0 {
 		return nil
 	}
@@ -599,7 +602,8 @@ type PyProtoAuxChunksResult struct {
 	Outputs []VFS
 }
 
-func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerContribs PeerGlobalContribs, entries []PyProtoAuxEntry, cppSibling *ModuleEmitResult) *PyProtoAuxChunksResult {
+func (e *EmitContext) emitPyProtoAuxChunks(peerContribs PeerGlobalContribs, entries []PyProtoAuxEntry, cppSibling *ModuleEmitResult) *PyProtoAuxChunksResult {
+	ctx, instance, _ := e.ctx, e.instance, e.d
 	na := ctx.na
 
 	if len(entries) == 0 {
@@ -619,7 +623,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 	for _, ch := range chunks {
 		aux := build(instance.Path.rel(), "/", protoResourceHash(ch.hashInputs, "$S/"+instance.Path.rel(), "PY3_PROTO"), "_raw.auxcpp")
 		auxRef := ctx.emit.reserve()
-		auxClosure := pyProtoAuxInputClosure(ctx, instance, d, aux, ch.inputs, auxRef, peerAddIncl)
+		auxClosure := e.pyProtoAuxInputClosure(aux, ch.inputs, auxRef, peerAddIncl)
 		cmdArgs := []STR{internStr(rescompilerBinPath), (aux).str()}
 
 		cmdArgs = appendInternStrs(cmdArgs, ch.cmdArgs)
@@ -660,7 +664,7 @@ func emitPyProtoAuxChunks(ctx *GenCtx, instance ModuleInstance, d *ModuleData, p
 			DepRefs:      deps,
 		}, auxRef)
 
-		se := emitOneSource(ctx, instance, d, aux.str())
+		se := e.emitOneSource(aux.str())
 
 		res.Refs = append(res.Refs, se.Ref)
 		res.Outputs = append(res.Outputs, se.OutPath)
