@@ -41,25 +41,32 @@ func resourceCanObjcopy(path, key string) bool {
 	return true
 }
 
+func resourcePackHash(items []string, unitPath, moduleTag string) string {
+	list := append(make([]string, 0, len(items)+1), items...)
+
+	list = append(list, unitPath)
+
+	sort.Strings(list)
+
+	sum := md5.Sum([]byte(strings.Join(list, ",") + moduleTag))
+
+	return strings.ToLower(enchex.EncodeToString(sum[:]))[:hashLen]
+}
+
 func objcopyHash(paths []string, keysB64 []string, kvs []string, unitPath string, moduleTag *string) string {
-	list := make([]string, 0, len(paths)+len(keysB64)+len(kvs)+1)
+	list := make([]string, 0, len(paths)+len(keysB64)+len(kvs))
 
 	list = append(list, paths...)
 	list = append(list, keysB64...)
 	list = append(list, kvs...)
-	list = append(list, "$S/"+unitPath)
 
-	sort.Strings(list)
-
-	stringify := strings.Join(list, ",")
+	tag := ""
 
 	if moduleTag != nil {
-		stringify += *moduleTag
+		tag = *moduleTag
 	}
 
-	sum := md5.Sum([]byte(stringify))
-
-	return strings.ToLower(enchex.EncodeToString(sum[:]))[:hashLen]
+	return resourcePackHash(list, "$S/"+unitPath, tag)
 }
 
 func renderResourceKvCmd(kv string) string {
@@ -610,7 +617,7 @@ func (e *EmitContext) emitRawAuxChunks(entries []RawAuxEntry, hashTag string, re
 	res := &RawAuxResult{}
 
 	for _, ch := range chunkAuxEntries(entries) {
-		aux := build(instance.Path.rel(), "/", protoResourceHash(ch.hashInputs, "$S/"+instance.Path.rel(), hashTag), "_raw.auxcpp")
+		aux := build(instance.Path.rel(), "/", resourcePackHash(ch.hashInputs, "$S/"+instance.Path.rel(), hashTag), "_raw.auxcpp")
 		auxRef := ctx.emit.reserve()
 		auxClosure := closure(aux, ch.inputs, auxRef)
 		cmdArgs := []STR{internStr(rescompilerBinPath), (aux).str()}
@@ -716,15 +723,4 @@ type RawAuxEntry struct {
 	key      string
 	producer NodeRef
 	inputs   []VFS
-}
-
-func protoResourceHash(items []string, modulePath, moduleTag string) string {
-	list := append([]string(nil), items...)
-
-	list = append(list, modulePath)
-	sort.Strings(list)
-
-	sum := md5.Sum([]byte(strings.Join(list, ",") + moduleTag))
-
-	return strings.ToLower(enchex.EncodeToString(sum[:]))[:26]
 }
