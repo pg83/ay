@@ -26,7 +26,7 @@ func TestDefaultProgramPeerdirsForWithState_X8664GetsTcmallocDefault(t *testing.
 		Platform: newAllocatorDefaultTestPlatform(OSLinux, ISAX8664),
 	}
 
-	got := defaultProgramPeerdirsForWithState(nil, instance, &ModuleData{}, false)
+	got := newEmitContext(nil, instance, &ModuleData{}).defaultProgramPeerdirsForWithState(false)
 	want := []string{
 		"build/cow/on",
 		"library/cpp/malloc/tcmalloc",
@@ -46,13 +46,13 @@ func TestDefaultProgramPeerdirs_GlibcasmGatedByUseAsmlib(t *testing.T) {
 		Platform: newAllocatorDefaultTestPlatform(OSLinux, ISAX8664),
 	}
 
-	with := defaultProgramPeerdirsForWithState(nil, instance, &ModuleData{useAsmlib: true}, true)
+	with := newEmitContext(nil, instance, &ModuleData{useAsmlib: true}).defaultProgramPeerdirsForWithState(true)
 
 	if !slices.Contains(with, "contrib/libs/glibcasm") {
 		t.Fatalf("USE_ASMLIB on: expected glibcasm peer, got %v", with)
 	}
 
-	without := defaultProgramPeerdirsForWithState(nil, instance, &ModuleData{useAsmlib: false}, true)
+	without := newEmitContext(nil, instance, &ModuleData{useAsmlib: false}).defaultProgramPeerdirsForWithState(true)
 
 	if slices.Contains(without, "contrib/libs/glibcasm") || slices.Contains(without, "contrib/libs/asmlib") {
 		t.Fatalf("DISABLE(USE_ASMLIB): expected no glibcasm/asmlib peer, got %v", without)
@@ -67,7 +67,7 @@ func TestDefaultProgramPeerdirsForWithState_AArch64SkipsTcmallocDefault(t *testi
 		Platform: newAllocatorDefaultTestPlatform(OSLinux, ISAAArch64),
 	}
 
-	got := defaultProgramPeerdirsForWithState(nil, instance, &ModuleData{}, false)
+	got := newEmitContext(nil, instance, &ModuleData{}).defaultProgramPeerdirsForWithState(false)
 	want := []string{"build/cow/on"}
 
 	if !reflect.DeepEqual(got, want) {

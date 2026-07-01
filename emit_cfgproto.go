@@ -2,8 +2,9 @@ package main
 
 var cfgprotoKV = KV{P: pkPB, PC: pcYellow}
 
-func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
-	cfgSource := resolveModuleSourceVFS(ctx, instance, d, src, d.cc.SrcDirs)
+func (e *EmitContext) emitLibraryCfgProtoSource(src STR) *SourceEmit {
+	ctx, instance, d := e.ctx, e.instance, e.d
+	cfgSource := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	cfgRelPath := cfgSource.rel()
 	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
 	cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
@@ -61,5 +62,5 @@ func emitLibraryCfgProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 		ClosureLeaves:  []VFS{cfgSource},
 	})
 
-	return emitOneSource(ctx, instance, d, cfgPbCC.str())
+	return e.emitOneSource(cfgPbCC.str())
 }

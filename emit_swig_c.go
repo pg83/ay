@@ -26,7 +26,8 @@ type SwigSrc struct {
 	Module string
 }
 
-func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData) []*SourceEmit {
+func (e *EmitContext) emitSwigC() []*SourceEmit {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 
 	if len(d.swigC) == 0 {
@@ -92,7 +93,7 @@ func emitSwigC(ctx *GenCtx, instance ModuleInstance, d *ModuleData) []*SourceEmi
 			SourceInputs:  append([]VFS{cOutVFS, srcVFS}, swigClosure...),
 		})
 
-		if se := emitOneSource(ctx, instance, d, cOutVFS.str()); se != nil {
+		if se := e.emitOneSource(cOutVFS.str()); se != nil {
 			out = append(out, se)
 		}
 	}

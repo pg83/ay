@@ -22,16 +22,14 @@ var antlrJavaConstHead = []STR{
 
 const jdkResourcePath = "$(JDK17)/bin/java"
 
-func emitJVDownstreamCPCC(
-	ctx *GenCtx,
-	instance ModuleInstance,
-	d *ModuleData,
+func (e *EmitContext) emitJVDownstreamCPCC(
 	jvRef NodeRef,
 	jvPrimary VFS,
 	jvInputs []VFS,
 	cpccPairs []struct{ cpp, h VFS },
 	outputIncludes []string,
 ) (ccRefs []NodeRef, ccOutputs []VFS) {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	for _, pair := range cpccPairs {
 		srcCpp := pair.cpp
 		srcH := pair.h
@@ -75,7 +73,7 @@ func emitJVDownstreamCPCC(
 
 		emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, d.cc.TC, ctx.scripts, ctx.emit)
 
-		if se := emitOneSource(ctx, instance, d, g4CppPath.str()); se != nil {
+		if se := e.emitOneSource(g4CppPath.str()); se != nil {
 			ccRefs = append(ccRefs, se.Ref)
 			ccOutputs = append(ccOutputs, se.OutPath)
 		}

@@ -14,7 +14,8 @@ type EnumSrcsResult struct {
 	SecondLevel []bool
 }
 
-func moduleProtoGenHeaders(ctx *GenCtx, instance ModuleInstance, d *ModuleData) map[string]struct{} {
+func (e *EmitContext) moduleProtoGenHeaders() map[string]struct{} {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	var set map[string]struct{}
 
 	add := func(h string) {
@@ -59,7 +60,8 @@ func resolveEnumHeaderInput(ctx *GenCtx, instance ModuleInstance, headerRel stri
 	return headerInput
 }
 
-func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddInclGlobal []VFS) *EnumSrcsResult {
+func (e *EmitContext) emitEnumSrcs(peerAddInclGlobal []VFS) *EnumSrcsResult {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	if len(d.enumSrcs) == 0 {
 		return nil
 	}
@@ -69,7 +71,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 	scanCfg := newScanContext(ctx.parsers, d.addIncl, peerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 
 	res := &EnumSrcsResult{}
-	protoGenHeaders := moduleProtoGenHeaders(ctx, instance, d)
+	protoGenHeaders := e.moduleProtoGenHeaders()
 
 	type enumStmtPlan struct {
 		withHeader        bool
@@ -179,7 +181,7 @@ func emitEnumSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerAddIn
 			ctx.emit,
 		)
 
-		se := emitOneSource(ctx, instance, d, p.serializedCPPPath.str())
+		se := e.emitOneSource(p.serializedCPPPath.str())
 		ccRef, ccOut := se.Ref, se.OutPath
 
 		res.CCRefs = append(res.CCRefs, ccRef)

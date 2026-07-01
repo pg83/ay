@@ -58,7 +58,8 @@ func emitR5(
 	return emit.emit(node), tmpVFS, cppVFS
 }
 
-func emitLibraryRagel5Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryRagel5Source(src STR) *SourceEmit {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	var psc []ARG
 	if p := d.perSrcCFlagsFor(src); p != nil {
@@ -90,5 +91,5 @@ func emitLibraryRagel5Source(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		},
 	})
 
-	return emitOneSource(ctx, instance, d, r5CppOut.str())
+	return e.emitOneSource(r5CppOut.str())
 }

@@ -10,7 +10,8 @@ var (
 	pyCodegenKV          = KV{P: pkPY, PC: pcYellow}
 )
 
-func emitPySrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
+func (e *EmitContext) emitPySrcs() {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 
 	if len(d.pySrcs) == 0 {
@@ -130,7 +131,8 @@ type PyRegisterResult struct {
 	Outputs []VFS
 }
 
-func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, py3Suffix bool) *PyRegisterResult {
+func (e *EmitContext) emitPyRegister(py3Suffix bool) *PyRegisterResult {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 
 	if len(d.pyRegister) == 0 {
@@ -203,7 +205,7 @@ func emitPyRegister(ctx *GenCtx, instance ModuleInstance, d *ModuleData, py3Suff
 			Compile:       spec,
 		})
 
-		se := emitOneSource(ctx, instance, d, regCppVFS.str())
+		se := e.emitOneSource(regCppVFS.str())
 
 		res.Refs = append(res.Refs, se.Ref)
 		res.Outputs = append(res.Outputs, se.OutPath)

@@ -4,7 +4,8 @@ import "strings"
 
 var ymapsSprotoKV = KV{P: pkPB, PC: pcYellow}
 
-func ymapsSprotoProducedBases(ctx *GenCtx, instance ModuleInstance, d *ModuleData) map[string]struct{} {
+func (e *EmitContext) ymapsSprotoProducedBases() map[string]struct{} {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	if len(d.ymapsSprotoSrcs) == 0 {
 		return nil
 	}
@@ -26,7 +27,8 @@ type YmapsSprotoPending struct {
 	protoRelPath string
 }
 
-func emitYmapsSprotoHeaders(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peerContribs PeerGlobalContribs, produced map[string]struct{}) {
+func (e *EmitContext) emitYmapsSprotoHeaders(peerContribs PeerGlobalContribs, produced map[string]struct{}) {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	if len(produced) == 0 {
 		return
 	}

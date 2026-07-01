@@ -184,7 +184,8 @@ func resolveResourceGlobalRef(s string, globals []ResourceDecl) string {
 	return ""
 }
 
-func bindResourceGlobalVars(ctx *GenCtx, instance ModuleInstance, d *ModuleData, env Environment) bool {
+func (e *EmitContext) bindResourceGlobalVars(env Environment) bool {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	bound := false
 
 	for _, stmt := range d.resourceDeclStmts {
@@ -253,7 +254,8 @@ func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolc
 	return tc
 }
 
-func genResourcesLibrary(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *ModuleEmitResult {
+func (e *EmitContext) genResourcesLibrary() *ModuleEmitResult {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	var globals []ResourceDecl
 	deduper.reset()
 
@@ -308,7 +310,8 @@ func prebuiltModuleSuffix(p *Platform) string {
 	return ""
 }
 
-func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *ModuleEmitResult {
+func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 
 	var fetchRef NodeRef
@@ -340,7 +343,7 @@ func genPrebuiltProgram(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Mo
 	var ownSbomPath *VFS
 
 	if sbomActive(ctx, instance) && sbomQualifies(d) {
-		ownSbomRef, ownSbomPath = emitSbomComponent(ctx, instance, d, programBinaryName(instance, d.moduleStmt))
+		ownSbomRef, ownSbomPath = e.emitSbomComponent(programBinaryName(instance, d.moduleStmt))
 	}
 
 	inputs := InputChunks{ctx.scripts[copyFsToolsVFS]}

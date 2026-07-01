@@ -229,7 +229,8 @@ func protoSourceRelPath(fs FS, instance ModuleInstance, d *ModuleData, src strin
 	return filepath.ToSlash(filepath.Clean(resolvePySrcRel(fs, d.srcDirs, instance.Path.rel(), src)))
 }
 
-func pyProtoAuxInputClosure(ctx *GenCtx, instance ModuleInstance, d *ModuleData, aux VFS, seed []VFS, ref NodeRef, peerAddIncl []VFS) []VFS {
+func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, peerAddIncl []VFS) []VFS {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 	emits := make([]IncludeDirective, 0, len(seed))
 

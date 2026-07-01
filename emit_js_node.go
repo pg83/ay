@@ -51,7 +51,8 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 	return emit.emit(node), outVFS
 }
 
-func emitJoinSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) ([]NodeRef, []VFS, map[VFS]SrcMeta) {
+func (e *EmitContext) emitJoinSrcs() ([]NodeRef, []VFS, map[VFS]SrcMeta) {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	refs := make([]NodeRef, 0, len(d.joinSrcs))
 	outs := make([]VFS, 0, len(d.joinSrcs))
 	meta := make(map[VFS]SrcMeta, len(d.joinSrcs))
@@ -84,7 +85,7 @@ func emitJoinSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) ([]NodeRe
 			Compile:       &CompileSpec{FlatOutput: d.flatSrc(joinOutVFS.str()), CFlags: psc},
 		})
 
-		if se := emitOneSource(ctx, instance, d, joinOutVFS.str()); se != nil {
+		if se := e.emitOneSource(joinOutVFS.str()); se != nil {
 			refs = append(refs, se.Ref)
 			outs = append(outs, se.OutPath)
 			meta[se.OutPath] = SrcMeta{Prio: stmtPrioDefault, Seq: js.Seq, Generated: true}

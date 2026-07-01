@@ -6,7 +6,8 @@ import (
 
 var pyRunKV = KV{P: pkPY, PC: pcYellow, ShowOut: true}
 
-func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *RunProgramsForARResult {
+func (e *EmitContext) emitRunPythonForAR() *RunProgramsForARResult {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	if len(d.runPython) == 0 {
 		return nil
 	}
@@ -26,13 +27,13 @@ func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Ru
 		for _, out := range outs {
 			switch {
 			case isCCSourceExt(out):
-				se := emitOneSource(ctx, instance, d, copyFileOutputVFS(instance.Path.rel(), out).str())
+				se := e.emitOneSource(copyFileOutputVFS(instance.Path.rel(), out).str())
 				ccRef, ccOut := se.Ref, se.OutPath
 
 				res.CCRefs = append(res.CCRefs, ccRef)
 				res.CCOutputs = append(res.CCOutputs, ccOut)
 			case isAsmSourceExt(out):
-				asRef, asOut := emitCodegenDownstreamAS(ctx, instance, d, out, []NodeRef{pyRef})
+				asRef, asOut := e.emitCodegenDownstreamAS(out, []NodeRef{pyRef})
 
 				res.CCRefs = append(res.CCRefs, asRef)
 				res.CCOutputs = append(res.CCOutputs, asOut)
@@ -44,12 +45,13 @@ func emitRunPythonForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *Ru
 }
 
 func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d *ModuleData) NodeRef {
+	e := newEmitContext(ctx, instance, d)
 	scriptVFS := copyFileInputVFS(ctx.fs, instance.Path, stmt.ScriptPath.string())
 	inVFSByToken := make(map[string]VFS, len(stmt.INFiles))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
 
 	for _, f := range stmt.INFiles {
-		vfs := runProgramInputVFS(ctx, instance, d, f.string())
+		vfs := e.runProgramInputVFS(f.string())
 
 		inVFSByToken[f.string()] = vfs
 		inVFSs = append(inVFSs, vfs)
@@ -79,7 +81,7 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	var splitSrcs []VFS
 
 	if hasCCShard {
-		splitSrcs = splitCodegenSrcs(ctx, instance, d, stmt, scriptVFS)
+		splitSrcs = e.splitCodegenSrcs(stmt, scriptVFS)
 	}
 
 	var pySourceInputs []VFS
@@ -118,15 +120,15 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 	}
 
 	for _, f := range stmt.OUTFiles {
-		registerPYOutput(outVFSByToken[f.string()], pyEmitsIncludes(ctx, instance, d, stmt, f.string(), scriptVFS, splitSrcs, hasCCShard))
+		registerPYOutput(outVFSByToken[f.string()], e.pyEmitsIncludes(stmt, f.string(), scriptVFS, splitSrcs, hasCCShard))
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		registerPYOutput(outVFSByToken[f.string()], pyEmitsIncludes(ctx, instance, d, stmt, f.string(), scriptVFS, splitSrcs, hasCCShard))
+		registerPYOutput(outVFSByToken[f.string()], e.pyEmitsIncludes(stmt, f.string(), scriptVFS, splitSrcs, hasCCShard))
 	}
 
 	if stmt.StdoutFile != nil {
-		registerPYOutput(*stdoutVFS, pyEmitsIncludes(ctx, instance, d, stmt, stmt.StdoutFile.string(), scriptVFS, splitSrcs, hasCCShard))
+		registerPYOutput(*stdoutVFS, e.pyEmitsIncludes(stmt, stmt.StdoutFile.string(), scriptVFS, splitSrcs, hasCCShard))
 	}
 
 	inputClosure := pyInputClosure(ctx, instance, stmt, d)
@@ -136,6 +138,7 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 }
 
 func pyInputClosure(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d *ModuleData) []VFS {
+	e := newEmitContext(ctx, instance, d)
 	scanCfg := newScanContext(ctx.parsers, d.cc.AddIncl, d.cc.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 
 	var out []VFS
@@ -150,7 +153,7 @@ func pyInputClosure(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d
 
 	if hasCCShard {
 		for _, f := range stmt.INFiles {
-			vfs := runProgramInputVFS(ctx, instance, d, f.string())
+			vfs := e.runProgramInputVFS(f.string())
 
 			out = append(out, walkClosure(ctx.scannerFor(instance), vfs, scanCfg)...)
 		}
@@ -195,7 +198,8 @@ func splitCodegenDetect(stmt *RunPythonStmt) (hasCCShard bool, hasHeader bool) {
 	return
 }
 
-func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *RunPythonStmt, scriptVFS VFS) []VFS {
+func (e *EmitContext) splitCodegenSrcs(stmt *RunPythonStmt, scriptVFS VFS) []VFS {
+	ctx, instance, _ := e.ctx, e.instance, e.d
 	reg := ctx.codegenFor(instance)
 	seen := make(map[VFS]struct{}, 32)
 
@@ -225,7 +229,7 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 	addSource(scriptVFS)
 
 	for _, f := range stmt.INFiles {
-		vfs := runProgramInputVFS(ctx, instance, d, f.string())
+		vfs := e.runProgramInputVFS(f.string())
 
 		if info := reg.lookup(vfs); info != nil {
 			for _, si := range info.SourceInputs {
@@ -243,7 +247,8 @@ func splitCodegenSrcs(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt 
 	return sources
 }
 
-func pyEmitsIncludes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *RunPythonStmt, outFile string, scriptVFS VFS, splitSrcs []VFS, splitHasCCShard bool) []IncludeDirective {
+func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scriptVFS VFS, splitSrcs []VFS, splitHasCCShard bool) []IncludeDirective {
+	_, instance, _ := e.ctx, e.instance, e.d
 	if !generatedOutputCarriesIncludes(outFile) {
 		return nil
 	}
@@ -300,7 +305,7 @@ func pyEmitsIncludes(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *
 	includes := []IncludeDirective{{kind: includeQuoted, target: internStr(scriptVFS.rel())}}
 
 	for _, f := range stmt.INFiles {
-		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(runProgramInputVFS(ctx, instance, d, f.string()).rel())})
+		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(e.runProgramInputVFS(f.string()).rel())})
 	}
 
 	for _, f := range stmt.OutputIncludes {

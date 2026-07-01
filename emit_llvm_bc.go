@@ -8,7 +8,8 @@ var (
 	llvmBcKV3 = KV{P: pkOP, PC: pcYellow}
 )
 
-func emitLLVMBC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, resourceGlobals []ResourceDecl) {
+func (e *EmitContext) emitLLVMBC(resourceGlobals []ResourceDecl) {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 
 	if len(d.llvmBc) == 0 {

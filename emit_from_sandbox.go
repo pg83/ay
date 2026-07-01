@@ -8,9 +8,10 @@ var fromSandboxScriptInputs = []VFS{
 
 var fromSandboxKV = KV{P: pkSB, PC: pcYellow, ShowOut: true}
 
-func emitFromSandboxes(ctx *GenCtx, instance ModuleInstance, d *ModuleData) (memberRefs []NodeRef, memberPaths []VFS) {
+func (e *EmitContext) emitFromSandboxes() (memberRefs []NodeRef, memberPaths []VFS) {
+	_, _, d := e.ctx, e.instance, e.d
 	for _, fs := range d.fromSandboxes {
-		refs, paths := emitFromSandbox(ctx, instance, d, fs)
+		refs, paths := e.emitFromSandbox(fs)
 
 		memberRefs = append(memberRefs, refs...)
 		memberPaths = append(memberPaths, paths...)
@@ -23,7 +24,8 @@ func fromSandboxAutoLinkMember(name string) bool {
 	return extIsArchiveMember(name)
 }
 
-func emitFromSandbox(ctx *GenCtx, instance ModuleInstance, d *ModuleData, stmt *FromSandboxStmt) (memberRefs []NodeRef, memberPaths []VFS) {
+func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeRef, memberPaths []VFS) {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.emit.nodeArenas()
 	id := stmt.ResourceId.string()
 	mode := "--untar-to"

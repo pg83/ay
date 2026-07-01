@@ -179,9 +179,10 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	return emit.emit(node), outVFS
 }
 
-func emitLibraryAsmSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryAsmSource(src STR) *SourceEmit {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
-	srcVFS := resolveModuleSourceVFS(ctx, instance, d, src, d.cc.SrcDirs)
+	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	in := d.cc.ccInputsFor(ctx, instance, d, srcVFS)
 	asIn := in
 	scanIn := in

@@ -2,7 +2,8 @@ package main
 
 var archiveAsmKV = KV{P: pkAR, PC: pcLightCyan}
 
-func emitArchiveAsmForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *RunProgramsForARResult {
+func (e *EmitContext) emitArchiveAsmForAR() *RunProgramsForARResult {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	if len(d.archiveAsm) == 0 {
 		return nil
 	}
@@ -13,7 +14,7 @@ func emitArchiveAsmForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *R
 
 	for _, a := range d.archiveAsm {
 		rodataRef := emitArchiveAsmNode(ctx, instance, a, d, toolBinPath, toolLDRef, reg)
-		rdRef, rdOut := emitArchiveAsmRodata(ctx, instance, d, a.Name+".rodata", rodataRef)
+		rdRef, rdOut := e.emitArchiveAsmRodata(a.Name+".rodata", rodataRef)
 
 		res.CCRefs = append(res.CCRefs, rdRef)
 		res.CCOutputs = append(res.CCOutputs, rdOut)
@@ -111,7 +112,8 @@ func emitArchiveAsmNode(
 	return rodataRef
 }
 
-func emitArchiveAsmRodata(ctx *GenCtx, instance ModuleInstance, d *ModuleData, rodataRel string, producerRef NodeRef) (NodeRef, VFS) {
+func (e *EmitContext) emitArchiveAsmRodata(rodataRel string, producerRef NodeRef) (NodeRef, VFS) {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	if instance.Platform.ISA != ISAX8664 {
 		throwFmt("gen: unsupported .rodata platform %s for ARCHIVE_ASM %q", instance.Platform.ISA, rodataRel)
 	}

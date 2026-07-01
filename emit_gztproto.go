@@ -7,8 +7,9 @@ import (
 
 var gztprotoKV = KV{P: pkGZ, PC: pcYellow}
 
-func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcRel string, protoInclude []VFS, moduleTag STR) (NodeRef, string) {
-	gztSource := resolveModuleSourceVFS(ctx, instance, d, internStr(srcRel), d.srcDirs)
+func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VFS, moduleTag STR) (NodeRef, string) {
+	ctx, instance, d := e.ctx, e.instance, e.d
+	gztSource := e.resolveModuleSourceVFS(internStr(srcRel), d.srcDirs)
 	moddir := instance.Path.rel()
 	base := strings.TrimSuffix(filepath.Base(gztSource.rel()), filepath.Ext(gztSource.rel()))
 	genProtoName := base + ".proto"
@@ -64,13 +65,14 @@ func emitLibraryGztProtoSource(ctx *GenCtx, instance ModuleInstance, d *ModuleDa
 	return gzRef, genProtoName
 }
 
-func emitLibraryGztProtoCompile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryGztProtoCompile(src STR) *SourceEmit {
+	_, _, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
-	_, genProtoSrc := emitLibraryGztProtoSource(ctx, instance, d, srcRel, d.cc.ProtoInclude, d.cc.ModuleTag)
+	_, genProtoSrc := e.emitLibraryGztProtoSource(srcRel, d.cc.ProtoInclude, d.cc.ModuleTag)
 
-	emitProtoProducer(ctx, instance, d, genProtoSrc)
+	e.emitProtoProducer(genProtoSrc)
 
-	return emitLibraryProtoSource(ctx, instance, d, internStr(genProtoSrc))
+	return e.emitLibraryProtoSource(internStr(genProtoSrc))
 }
 
 func gztCmdArgs(converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) []STR {

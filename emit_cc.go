@@ -103,28 +103,32 @@ func (env ModuleCompileEnv) ccInputsFor(ctx *GenCtx, instance ModuleInstance, d 
 	return in
 }
 
-func emitCC(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS VFS) (NodeRef, VFS) {
-	return emitCCWith(ctx, instance, d, srcVFS, d.cc.ccInputsFor(ctx, instance, d, srcVFS))
+func (e *EmitContext) emitCC(srcVFS VFS) (NodeRef, VFS) {
+	ctx, instance, d := e.ctx, e.instance, e.d
+	return e.emitCCWith(srcVFS, d.cc.ccInputsFor(ctx, instance, d, srcVFS))
 }
 
-func moduleSourceVFS(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) VFS {
+func (e *EmitContext) moduleSourceVFS(src STR) VFS {
+	_, _, d := e.ctx, e.instance, e.d
 	if v := src.vfs(); v != 0 {
 		return v
 	}
 
-	return resolveModuleSourceVFS(ctx, instance, d, src, d.cc.SrcDirs)
+	return e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 }
 
-func emitCCFlat(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS VFS, variant *string, cflags []ARG) (NodeRef, VFS) {
+func (e *EmitContext) emitCCFlat(srcVFS VFS, variant *string, cflags []ARG) (NodeRef, VFS) {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	in := d.cc.ccInputsFor(ctx, instance, d, srcVFS)
 	in.FlatOutput = true
 	in.Variant = variant
 	in.PerSourceCFlags = cflags
 
-	return emitCCWith(ctx, instance, d, srcVFS, in)
+	return e.emitCCWith(srcVFS, in)
 }
 
-func emitCCWith(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS VFS, in ModuleCCInputs) (NodeRef, VFS) {
+func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs) (NodeRef, VFS) {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	in.IncludeInputs = walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)
 	in.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, in.IncludeInputs)
 
@@ -609,14 +613,15 @@ func (m InclArgMemo) arg(path VFS) STR {
 	return a
 }
 
-func emitLibraryCSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryCSource(src STR) *SourceEmit {
+	_, _, d := e.ctx, e.instance, e.d
 	srcVFS := src.vfs()
 
 	if srcVFS == 0 {
-		srcVFS = resolveModuleSourceVFS(ctx, instance, d, src, d.cc.SrcDirs)
+		srcVFS = e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	}
 
-	ref, outPath := emitCC(ctx, instance, d, srcVFS)
+	ref, outPath := e.emitCC(srcVFS)
 
 	return &SourceEmit{Ref: ref, OutPath: outPath}
 }

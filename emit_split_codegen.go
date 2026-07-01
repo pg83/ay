@@ -7,7 +7,8 @@ import (
 
 var splitCodegenKV = KV{P: pkSC, PC: pcYellow}
 
-func emitSplitCodegensForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *RunProgramsForARResult {
+func (e *EmitContext) emitSplitCodegensForAR() *RunProgramsForARResult {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	if len(d.splitCodegens) == 0 {
 		return nil
 	}
@@ -18,7 +19,7 @@ func emitSplitCodegensForAR(ctx *GenCtx, instance ModuleInstance, d *ModuleData)
 		_, parts := emitSplitCodegen(ctx, instance, sc)
 
 		for _, partRel := range parts {
-			se := emitOneSource(ctx, instance, d, copyFileOutputVFS(instance.Path.rel(), partRel).str())
+			se := e.emitOneSource(copyFileOutputVFS(instance.Path.rel(), partRel).str())
 			ccRef, ccOut := se.Ref, se.OutPath
 
 			res.CCRefs = append(res.CCRefs, ccRef)

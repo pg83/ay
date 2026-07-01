@@ -142,7 +142,8 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 	return emit.emit(node), headerVFS, cppVFS, bfbsVFS
 }
 
-func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcVFS VFS, v *FlatcVariant, genDeps []NodeRef) {
+func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []NodeRef) {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	flatcRes := ctx.toolResult(v.toolArg)
 	flatcLDRef, flatcBinary := flatcRes.LDRef, *flatcRes.LDPath
 	transitiveImports := walkClosureTail(ctx.scannerFor(instance), srcVFS, newScanContext(ctx.parsers, nil, nil, includeScannerBasePaths(), instance.Path.rel()))
@@ -184,13 +185,14 @@ func emitFlatcProducer(ctx *GenCtx, instance ModuleInstance, d *ModuleData, srcV
 	})
 }
 
-func emitLibraryFlatcSource(ctx *GenCtx, instance ModuleInstance, d *ModuleData, src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryFlatcSource(src STR) *SourceEmit {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	cppVFS := build(resolveSourceVFS(ctx, instance, srcRel, d.srcDirs).rel(), ".cpp")
 
-	return emitFlatcCppCompile(ctx, instance, d, cppVFS)
+	return e.emitFlatcCppCompile(cppVFS)
 }
 
-func emitFlatcCppCompile(ctx *GenCtx, instance ModuleInstance, d *ModuleData, cppVFS VFS) *SourceEmit {
-	return emitOneSource(ctx, instance, d, cppVFS.str())
+func (e *EmitContext) emitFlatcCppCompile(cppVFS VFS) *SourceEmit {
+	return e.emitOneSource(cppVFS.str())
 }

@@ -1,6 +1,7 @@
 package main
 
-func emitCodegenDownstreamAS(ctx *GenCtx, instance ModuleInstance, d *ModuleData, asmRel string, depRefs []NodeRef) (NodeRef, VFS) {
+func (e *EmitContext) emitCodegenDownstreamAS(asmRel string, depRefs []NodeRef) (NodeRef, VFS) {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	asmPath := copyFileOutputVFS(instance.Path.rel(), asmRel)
 	in := d.cc.ccInputsFor(ctx, instance, d, asmPath)
 	asIn := in
