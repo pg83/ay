@@ -29,6 +29,7 @@ func (e *EmitContext) emitLibraryFlexSource(src STR) {
 	parsed = append(parsed, e.scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
 
 	var psc []ARG
+
 	if p := d.perSrcCFlagsFor(src); p != nil {
 		psc = *p
 	}
@@ -56,6 +57,7 @@ func (e *EmitContext) emitLibraryFlexSource(src STR) {
 	emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef, ctx.emit)
 
 	meta := d.srcMetaOf(src)
+
 	meta.Generated = true
 	e.enqueueSrc(outVFS.str(), meta)
 }

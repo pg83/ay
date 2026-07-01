@@ -86,7 +86,6 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 		resolvedRel := resolvePySrcRel(fs, d.srcDirs, modulePath, srcRel)
 		genInfo := reg.lookupSplit(dirKey(modulePath), internStr(srcRel))
 		generated := genInfo != nil
-
 		pySource := source(resolvedRel)
 
 		if generated {

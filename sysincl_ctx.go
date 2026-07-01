@@ -230,7 +230,6 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 
 func (m *SysinclIndex) lookup(path string, target STR) ([]VFS, bool, bool) {
 	bi := m.byID.get(uint64(target))
-
 	bucket := m.buckets[*bi]
 
 	var (

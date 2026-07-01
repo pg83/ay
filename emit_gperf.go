@@ -57,6 +57,7 @@ func (e *EmitContext) emitLibraryGperfSource(src STR) {
 	gpRef := emitGP(instance, srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, keepOnlySourceVFS(srcClosure), ctx.emit)
 
 	var psc []ARG
+
 	if p := d.perSrcCFlagsFor(src); p != nil {
 		psc = *p
 	}
@@ -70,6 +71,7 @@ func (e *EmitContext) emitLibraryGperfSource(src STR) {
 	})
 
 	meta := d.srcMetaOf(src)
+
 	meta.Generated = true
 	e.enqueueSrc(genVFS.str(), meta)
 }

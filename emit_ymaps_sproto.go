@@ -6,6 +6,7 @@ var ymapsSprotoKV = KV{P: pkPB, PC: pcYellow}
 
 func (e *EmitContext) ymapsSprotoProducedBases() map[string]struct{} {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
 	if len(d.ymapsSprotoSrcs) == 0 {
 		return nil
 	}
@@ -29,6 +30,7 @@ type YmapsSprotoPending struct {
 
 func (e *EmitContext) emitYmapsSprotoHeaders(peerContribs PeerGlobalContribs, produced map[string]struct{}) {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
 	if len(produced) == 0 {
 		return
 	}

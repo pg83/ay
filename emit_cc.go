@@ -111,6 +111,7 @@ func (e *EmitContext) emitCC(srcVFS VFS) (NodeRef, VFS) {
 
 func (e *EmitContext) moduleSourceVFS(src STR) VFS {
 	_, _, d := e.ctx, e.instance, e.d
+
 	if v := src.vfs(); v != 0 {
 		return v
 	}
@@ -120,6 +121,7 @@ func (e *EmitContext) moduleSourceVFS(src STR) VFS {
 
 func (e *EmitContext) emitCCFlat(srcVFS VFS, variant *string, cflags []ARG) (NodeRef, VFS) {
 	in := e.ccInputsFor(srcVFS)
+
 	in.FlatOutput = true
 	in.Variant = variant
 	in.PerSourceCFlags = cflags
@@ -129,6 +131,7 @@ func (e *EmitContext) emitCCFlat(srcVFS VFS, variant *string, cflags []ARG) (Nod
 
 func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs) (NodeRef, VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
 	in.IncludeInputs = walkClosure(e.scanner, srcVFS, in.ScanCfg)
 	in.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, in.IncludeInputs)
 

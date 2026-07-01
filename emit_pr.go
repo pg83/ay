@@ -17,6 +17,7 @@ type RunProgramAuxTool struct {
 
 func (e *EmitContext) emitRunProgramsForAR() {
 	_, instance, d := e.ctx, e.instance, e.d
+
 	if len(d.runPrograms) == 0 {
 		return
 	}
@@ -324,7 +325,6 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 	}
 
 	selfScanGeneratedCC := len(stmt.INFiles) > 0 && (hasParsedIN || !generatesHeader)
-
 	scanCfg := newScanContext(ctx.parsers, d.cc.AddIncl, d.cc.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 
 	var out []VFS
@@ -540,6 +540,7 @@ func resolveRunProgramAuxTools(ctx *GenCtx, toolPaths []string) []RunProgramAuxT
 
 func (e *EmitContext) runProgramInputVFS(rel string) VFS {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
 	switch {
 	case strings.HasPrefix(rel, "$(S)/"),
 		strings.HasPrefix(rel, "$(B)/"),

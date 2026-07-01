@@ -179,7 +179,6 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) *PyRegisterResult {
 		}
 
 		pyRef := ctx.emit.emit(pyNode)
-
 		envCFlags := make([]ARG, 0, len(d.cc.CFlags))
 
 		for _, f := range d.cc.CFlags {

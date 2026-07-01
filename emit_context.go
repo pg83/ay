@@ -45,6 +45,7 @@ func (e *EmitContext) enqueueSrc(src STR, meta SrcMeta) {
 func (e *EmitContext) drainSrcs() {
 	for len(e.srcs) > 0 {
 		src := e.srcs[0]
+
 		e.srcs = e.srcs[1:]
 
 		e.emitOneSource(src)

@@ -10,6 +10,7 @@ var fromSandboxKV = KV{P: pkSB, PC: pcYellow, ShowOut: true}
 
 func (e *EmitContext) emitFromSandboxes() (memberRefs []NodeRef, memberPaths []VFS) {
 	_, _, d := e.ctx, e.instance, e.d
+
 	for _, fs := range d.fromSandboxes {
 		refs, paths := e.emitFromSandbox(fs)
 

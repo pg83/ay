@@ -8,12 +8,14 @@ var pyRunKV = KV{P: pkPY, PC: pcYellow, ShowOut: true}
 
 func (e *EmitContext) emitRunPythonForAR() {
 	_, instance, d := e.ctx, e.instance, e.d
+
 	if len(d.runPython) == 0 {
 		return
 	}
 
 	for _, rp := range d.runPython {
 		e.emitRunPython(rp)
+
 		outs := make([]string, 0, len(rp.OUTFiles)+1)
 
 		outs = append(outs, strStrings(rp.OUTFiles)...)
@@ -235,6 +237,7 @@ func (e *EmitContext) splitCodegenSrcs(stmt *RunPythonStmt, scriptVFS VFS) []VFS
 
 func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scriptVFS VFS, splitSrcs []VFS, splitHasCCShard bool) []IncludeDirective {
 	_, instance, _ := e.ctx, e.instance, e.d
+
 	if !generatedOutputCarriesIncludes(outFile) {
 		return nil
 	}

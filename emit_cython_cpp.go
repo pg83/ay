@@ -100,6 +100,7 @@ func (e *EmitContext) emitCythonCpp() {
 
 func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
 	if len(d.cythonCpp) == 0 {
 		return nil
 	}
@@ -150,7 +151,6 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 		srcVFS := source(instance.Path.rel(), "/", stmt.Src)
 		scanAddIncl := appendCythonScanAddIncl(d.cc.AddIncl, d.cythonAddIncl, py23Variant)
 		srcScanIn := newScanContext(ctx.parsers, scanAddIncl, d.cc.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
-
 		ind := e.cythonCppInducedSets(srcVFS, stmt.CMode, srcScanIn)
 		cyRef := ctx.emit.reserve()
 
@@ -463,13 +463,16 @@ func appendCythonAddIncl(cmdArgs []STR, addIncl []VFS, memo InclArgMemo) []STR {
 
 func (e *EmitContext) cythonAdjustModuleCCBlocks() {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
 	if len(d.cythonCpp) == 0 {
 		return
 	}
 
 	cy := d.cc
+
 	cy.AddIncl = appendCythonCCAddIncl(d.cc.AddIncl, d.cythonNumpyBeforeInclude)
 	cy.CFlags = filterPyRegisterCFlags(d.cc.CFlags)
+
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &cy)
 }
 

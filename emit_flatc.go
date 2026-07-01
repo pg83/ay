@@ -189,8 +189,8 @@ func (e *EmitContext) emitLibraryFlatcSource(src STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	cppVFS := build(resolveSourceVFS(ctx, instance, srcRel, d.srcDirs).rel(), ".cpp")
-
 	meta := d.srcMetaOf(src)
+
 	meta.Generated = true
 	e.enqueueSrc(cppVFS.str(), meta)
 }

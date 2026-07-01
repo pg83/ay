@@ -10,6 +10,7 @@ type DecimalMD5Lower32BitsStmt struct {
 
 func (e *EmitContext) emitDecimalMD5ForAR() {
 	_, instance, d := e.ctx, e.instance, e.d
+
 	if len(d.decimalMD5) == 0 {
 		return
 	}

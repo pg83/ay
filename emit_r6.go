@@ -88,6 +88,7 @@ func (e *EmitContext) emitLibraryRagel6Source(src STR) {
 	r6Ref := ctx.emit.reserve()
 
 	var psc []ARG
+
 	if p := d.perSrcCFlagsFor(src); p != nil {
 		psc = *p
 	}
@@ -113,6 +114,7 @@ func (e *EmitContext) emitLibraryRagel6Source(src STR) {
 	}
 
 	meta := d.srcMetaOf(src)
+
 	meta.Generated = true
 	e.enqueueSrc(r6Out.str(), meta)
 }

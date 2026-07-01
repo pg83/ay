@@ -7,6 +7,7 @@ import (
 
 func (e *EmitContext) emitAntlrRuns() {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
 	if len(d.antlrRuns) == 0 {
 		return
 	}

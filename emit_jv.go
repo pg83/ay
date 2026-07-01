@@ -30,6 +30,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 	outputIncludes []string,
 ) {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
 	for _, pair := range cpccPairs {
 		srcCpp := pair.cpp
 		srcH := pair.h
@@ -45,6 +46,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 		}
 
 		leaves := append([]VFS{jvPrimary, srcH}, ctx.scripts[antlr4FsToolsVFS]...)
+
 		leaves = append(leaves, jvInputs...)
 
 		e.codegen.register(&GeneratedFileInfo{

@@ -290,6 +290,7 @@ func (e *EmitContext) emitKvOnlyObjcopyNode(
 	oc *ObjcopyEmitCtx,
 ) *ObjcopyEmit {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
 	var moduleTag *string
 
 	switch kind {
@@ -466,6 +467,7 @@ func (e *EmitContext) emitPyMainObjcopy(
 	oc *ObjcopyEmitCtx,
 ) *ObjcopyEmit {
 	_, _, d := e.ctx, e.instance, e.d
+
 	if d.pyMain == nil {
 		return nil
 	}
@@ -479,6 +481,7 @@ func (e *EmitContext) emitNoCheckImportsObjcopy(
 	oc *ObjcopyEmitCtx,
 ) *ObjcopyEmit {
 	_, _, d := e.ctx, e.instance, e.d
+
 	if len(d.noCheckImports) == 0 {
 		return nil
 	}

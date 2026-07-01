@@ -38,6 +38,7 @@ func (e *EmitContext) emitLibraryCInSource(src STR) {
 	e.emitConfigureFile(srcVFS, outVFS)
 
 	meta := e.metaForSrc(src)
+
 	meta.Generated = true
 	e.enqueueSrc(outVFS.str(), meta)
 }

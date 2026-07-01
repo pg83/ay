@@ -256,6 +256,7 @@ func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolc
 
 func (e *EmitContext) genResourcesLibrary() *ModuleEmitResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
 	var globals []ResourceDecl
 	deduper.reset()
 

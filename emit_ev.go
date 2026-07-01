@@ -207,6 +207,7 @@ func (e *EmitContext) emitLibraryEvSource(src STR) {
 	reg := e.codegen
 
 	var psc []ARG
+
 	if p := d.perSrcCFlagsFor(src); p != nil {
 		psc = *p
 	}
@@ -231,6 +232,7 @@ func (e *EmitContext) emitLibraryEvSource(src STR) {
 	})
 
 	meta := d.srcMetaOf(src)
+
 	meta.Generated = true
 	e.enqueueSrc(evPbCC.str(), meta)
 }

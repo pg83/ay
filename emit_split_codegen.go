@@ -9,6 +9,7 @@ var splitCodegenKV = KV{P: pkSC, PC: pcYellow}
 
 func (e *EmitContext) emitSplitCodegensForAR() {
 	_, instance, d := e.ctx, e.instance, e.d
+
 	if len(d.splitCodegens) == 0 {
 		return
 	}

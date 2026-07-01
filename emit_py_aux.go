@@ -11,6 +11,7 @@ type GeneratedPyAuxChunksResult struct {
 
 func (e *EmitContext) emitGeneratedPyAuxChunks() *GeneratedPyAuxChunksResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
 	if len(d.pySrcs) == 0 {
 		return nil
 	}
@@ -63,6 +64,7 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() *GeneratedPyAuxChunksResult {
 
 	for _, aux := range rawRes.PROutputs {
 		auxRef, auxOut := e.emitCC(aux)
+
 		res.Refs = append(res.Refs, auxRef)
 		res.Outputs = append(res.Outputs, auxOut)
 	}

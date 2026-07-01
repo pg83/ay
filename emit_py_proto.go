@@ -43,6 +43,7 @@ func protoPythonNamespaceArg(d *ModuleData) string {
 
 func (e *EmitContext) emitPyProtoSrcs(peerContribs PeerGlobalContribs, protoSrcs, evSrcs []string) *ProtoSrcsResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
 	if len(evSrcs) > 0 {
 		throwFmt("gen: py-addressed PROTO_LIBRARY %s with .ev sources is not modelled", instance.Path.rel())
 	}
@@ -236,7 +237,6 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 func (e *EmitContext) emitPyProtoSrc(src string, protocLDRef NodeRef, protocBinary VFS, pe *PyPBModuleEmission) ([]PyProtoAuxEntry, []GenProtoResEntry) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	pyBase := protoBase + "__intpy3___pb2.py"
@@ -502,6 +502,7 @@ func genProtoResEntriesForSource(instance ModuleInstance, d *ModuleData, src str
 
 func (e *EmitContext) emitGeneratedPyProtoObjcopy(entries []GenProtoResEntry) *ObjcopyEmitResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
 	if len(entries) == 0 {
 		return nil
 	}
