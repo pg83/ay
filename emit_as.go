@@ -181,8 +181,15 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 
 func (e *EmitContext) emitLibraryAsmSource(src STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
+	srcVFS := src.vfs()
 	srcRel := src.string()
-	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
+
+	if srcVFS == 0 {
+		srcVFS = e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
+	} else {
+		srcRel = strings.TrimPrefix(srcVFS.rel(), instance.Path.rel()+"/")
+	}
+
 	in := e.ccInputsFor(srcVFS)
 	asIn := in
 	scanIn := in
@@ -204,8 +211,15 @@ func (e *EmitContext) emitLibraryAsmSource(src STR) {
 
 func (e *EmitContext) emitLibraryYasmSource(src STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
+	srcVFS := src.vfs()
 	srcRel := src.string()
-	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
+
+	if srcVFS == 0 {
+		srcVFS = e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
+	} else {
+		srcRel = strings.TrimPrefix(srcVFS.rel(), instance.Path.rel()+"/")
+	}
+
 	in := e.ccInputsFor(srcVFS)
 	asIn := in
 	scanIn := in

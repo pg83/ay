@@ -1106,6 +1106,8 @@ END()
 `)
 	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
 
+	writeToolProgram(files, "contrib/tools/yasm", "yasm")
+
 	g := testGen(newMemFS(files), "app")
 
 	asmProducer := mustNodeByAnyOutput(t, g, "$(B)/builtin/gen.asm")
@@ -1244,6 +1246,8 @@ SRCS(main.cpp)
 END()
 `)
 	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	writeToolProgram(files, "contrib/tools/yasm", "yasm")
 
 	g := testGen(newMemFS(files), "app")
 
