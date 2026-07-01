@@ -6,10 +6,7 @@ import (
 	"strings"
 )
 
-var (
-	pyProtoKV  = KV{P: pkPY, PC: pcYellow}
-	pyProtoKV2 = KV{P: pkPY, PC: pcYellow, ShowOut: true}
-)
+var pyProtoKV2 = KV{P: pkPY, PC: pcYellow, ShowOut: true}
 
 func protoPythonResourceKey(instance ModuleInstance, d *ModuleData, src, suffix string) string {
 	base := strings.TrimSuffix(src, ".proto")
@@ -82,7 +79,7 @@ func (e *EmitContext) emitPyProtoSrcs(peerContribs PeerGlobalContribs, protoSrcs
 		peerAddIncl = dedup(cppSibling.AddInclGlobal, peerContribs.addIncl)
 	}
 
-	genRes := e.emitPyGenResources(entries, "PY3_PROTO", &pyProtoKV2, func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
+	genRes := e.emitPyGenResources(entries, "PY3_PROTO", &pyProtoKV2, false, func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
 		return e.pyProtoAuxInputClosure(aux, inputs, ref, peerAddIncl)
 	})
 
