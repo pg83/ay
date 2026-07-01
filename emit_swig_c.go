@@ -92,7 +92,7 @@ func (e *EmitContext) emitSwigC() {
 			SourceInputs:  append([]VFS{cOutVFS, srcVFS}, swigClosure...),
 		})
 
-		e.emitGenerated(cOutVFS.str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkSwig})
+		e.enqueueSrc(cOutVFS.str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkSwig})
 	}
 }
 

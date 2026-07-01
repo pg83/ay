@@ -1753,6 +1753,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	e.emitCheckConfigH()
 	e.emitCythonCppPlanned(cythonPlans)
 	e.emitSwigC()
+	e.emitJoinSrcs()
 	e.drainSrcs()
 
 	for _, simd := range d.simdSrcs {
@@ -1770,8 +1771,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		e.outs = append(e.outs, out)
 		e.declMeta[out] = SrcMeta{Prio: stmtPrioDefault, Seq: simd.Seq}
 	}
-
-	e.emitJoinSrcs()
 
 	globalRefs := make([]NodeRef, 0, len(d.globalSrcs))
 	globalOutputs := make([]VFS, 0, len(d.globalSrcs))
