@@ -717,3 +717,14 @@ type RawAuxEntry struct {
 	producer NodeRef
 	inputs   []VFS
 }
+
+func protoResourceHash(items []string, modulePath, moduleTag string) string {
+	list := append([]string(nil), items...)
+
+	list = append(list, modulePath)
+	sort.Strings(list)
+
+	sum := md5.Sum([]byte(strings.Join(list, ",") + moduleTag))
+
+	return strings.ToLower(enchex.EncodeToString(sum[:]))[:26]
+}

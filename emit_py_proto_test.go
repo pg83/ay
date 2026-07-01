@@ -272,7 +272,7 @@ END()
 	}
 
 	pyRel := "$(B)/" + modPath + "/foo__intpy3___pb2.py"
-	suffix := protoPySuffix(modPath)
+	suffix := pySrcYapycSuffix(modPath)
 
 	if nodeByOutput(g, pyRel+"."+suffix+".yapyc3") == nil {
 		t.Fatalf("checked-in proto missing path-id-suffixed yapyc3 %q", pyRel+"."+suffix+".yapyc3")

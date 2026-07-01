@@ -861,7 +861,7 @@ type PyGenYapycResult struct {
 func emitPyGenYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs []VFS, tokens []string, producerRef NodeRef, sourceInputs []VFS) *PyGenYapycResult {
 	na := ctx.na
 	py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin := py3ccToolRefs(ctx, instance)
-	suffix := protoPySuffix(instance.Path.rel())
+	suffix := pySrcYapycSuffix(instance.Path.rel())
 	res := &PyGenYapycResult{}
 
 	for i, pyOut := range pyOutputs {
@@ -967,4 +967,20 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 	}
 
 	return out
+}
+
+func py3ccToolRefs(ctx *GenCtx, instance ModuleInstance) (NodeRef, NodeRef, VFS, VFS) {
+	py3ccRef, py3ccBinary := ctx.tool(argToolsPy3cc)
+	py3ccSlowRef, py3ccSlowBin := ctx.tool(argToolsPy3ccSlow)
+
+	return py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin
+}
+
+func protoPathID(path string) string {
+	sum := md5.Sum([]byte(path))
+	encoded := enc32.StdEncoding.EncodeToString(sum[:])
+
+	encoded = strings.ToLower(encoded)
+
+	return strings.TrimRight(encoded, "=")
 }

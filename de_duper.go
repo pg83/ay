@@ -99,3 +99,13 @@ func concat[T any](lists ...[]T) []T {
 
 	return out
 }
+
+func containsVFS(xs []VFS, want VFS) bool {
+	for _, x := range xs {
+		if x == want {
+			return true
+		}
+	}
+
+	return false
+}

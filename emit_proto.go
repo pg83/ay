@@ -10,6 +10,8 @@ var (
 	protobufRuntimeDirectives      = quotedDirectives(protobufRuntimeHeaders)
 	pbDescriptorImporterDirectives = quotedDirectives(pbDescriptorImporterHeaders)
 	pbRuntimeBaseVFS               = source(strings.TrimSuffix(pbRuntimeBase, "/"))
+	pbWrapperPath                  = pbWrapperVFS.string()
+	pbKV                           = KV{P: pkPB, PC: pcYellow}
 )
 
 var yaffBaseRuntimeHeaders = []string{
@@ -25,7 +27,35 @@ var yaffExperimentsRuntimeHeaders = []string{
 	yaffRuntimeBase + "experiments/merge.h",
 }
 
-const yaffRuntimeBase = "library/cpp/yaff/"
+var protobufRuntimeHeaders = []VFS{
+	source(pbRuntimeBase, "google/protobuf/arena.h"),
+	source(pbRuntimeBase, "google/protobuf/arenastring.h"),
+	source(pbRuntimeBase, "google/protobuf/extension_set.h"),
+	source(pbRuntimeBase, "google/protobuf/generated_message_reflection.h"),
+	source(pbRuntimeBase, "google/protobuf/generated_message_util.h"),
+	source(pbRuntimeBase, "google/protobuf/io/coded_stream.h"),
+	source(pbRuntimeBase, "google/protobuf/message.h"),
+	source(pbRuntimeBase, "google/protobuf/metadata_lite.h"),
+	source(pbRuntimeBase, "google/protobuf/port_def.inc"),
+	source(pbRuntimeBase, "google/protobuf/port_undef.inc"),
+	source(pbRuntimeBase, "google/protobuf/repeated_field.h"),
+	source(pbRuntimeBase, "google/protobuf/unknown_field_set.h"),
+}
+
+var pbDescriptorImporterHeaders = []VFS{
+	source(pbRuntimeBase, "google/protobuf/generated_message_bases.h"),
+	source(pbRuntimeBase, "google/protobuf/map_entry.h"),
+	source(pbRuntimeBase, "google/protobuf/map_entry_lite.h"),
+	source(pbRuntimeBase, "google/protobuf/map_field.h"),
+	source(pbRuntimeBase, "google/protobuf/map_field_inl.h"),
+	source(pbRuntimeBase, "google/protobuf/map_field_lite.h"),
+	source(pbRuntimeBase, "google/protobuf/reflection_ops.h"),
+}
+
+const (
+	yaffRuntimeBase = "library/cpp/yaff/"
+	pbRuntimeBase   = "contrib/libs/protobuf/src/"
+)
 
 func quotedDirectives(headers []VFS) []IncludeDirective {
 	out := make([]IncludeDirective, len(headers))
@@ -663,4 +693,266 @@ func (e *EmitContext) emitLibraryProtoSource(src STR) {
 	if d.grpc {
 		e.enqueueSrc(build(protoBase, ".grpc.pb.cc").str(), meta)
 	}
+}
+
+type ResolvedCPPProtoPlugin struct {
+	Spec   CppProtoPlugin
+	LDRef  NodeRef
+	Binary VFS
+}
+
+func emitPB(
+	instance ModuleInstance,
+	protoRelPath string,
+	protoSrcOverride VFS,
+	cppStyleguideLDRef NodeRef,
+	protocLDRef NodeRef,
+	grpcCppLDRef NodeRef,
+	cppStyleguideBinary VFS,
+	protocBinary VFS,
+	grpcCppBinary VFS,
+	grpc bool,
+	moduleTag STR,
+	liteHeaders bool,
+	extraPlugins []ResolvedCPPProtoPlugin,
+	transitiveProtoImports []VFS,
+	extraDepRefs []NodeRef,
+	producerSourceInputs []VFS,
+	blocks *PbArgBlocks,
+	emit *StreamingEmitter,
+) NodeRef {
+	na := emit.nodeArenas()
+	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
+	pbH := build(protoBase, ".pb.h")
+	pbCC := build(protoBase, ".pb.cc")
+	pbDepsH := build(protoBase, ".deps.pb.h")
+	grpcPbCC := build(protoBase, ".grpc.pb.cc")
+	grpcPbH := build(protoBase, ".grpc.pb.h")
+	srcVFS := source(protoRelPath)
+
+	if protoSrcOverride != 0 {
+		srcVFS = protoSrcOverride
+	}
+
+	outputs := assembleProtoCmdOutputs(protoBase, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH, extraPlugins, liteHeaders, grpc)
+	outsChunk := make([]STR, 0, len(outputs))
+
+	for _, output := range outputs {
+		outsChunk = append(outsChunk, (output).str())
+	}
+
+	cmdArgs := na.chunkList(blocks.head, outsChunk, blocks.mid, na.strList(internStr(protoRelPath)))
+
+	if len(blocks.tail) > 0 {
+		cmdArgs = append(cmdArgs, blocks.tail)
+	}
+
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+
+	inputs := []VFS{
+		cppStyleguideBinary,
+	}
+
+	if grpc {
+		inputs = append(inputs, grpcCppBinary)
+	}
+
+	inputs = append(inputs, protocBinary)
+
+	for _, plugin := range extraPlugins {
+		inputs = append(inputs, plugin.Binary)
+	}
+
+	inputs = append(inputs, pbWrapperVFS)
+	inputs = append(inputs, srcVFS)
+
+	foreignDepRefs := depRefs(cppStyleguideLDRef, grpcCppLDRef, protocLDRef)
+
+	for _, plugin := range extraPlugins {
+		foreignDepRefs = append(foreignDepRefs, depRefs(plugin.LDRef)...)
+	}
+
+	foreignDepRefs = dedupRefs(foreignDepRefs)
+
+	deps := append([]NodeRef(nil), extraDepRefs...)
+	protocCwd := "$(S)"
+
+	if protoSrcOverride != 0 {
+		protocCwd = "$(B)"
+	}
+
+	node := &Node{
+		Platform: instance.Platform,
+		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
+			Cwd: internStr(protocCwd),
+			Env: env}),
+		Env: env,
+
+		Inputs:         na.inputList(inputs, transitiveProtoImports, producerSourceInputs),
+		Outputs:        outputs,
+		KV:             &pbKV,
+		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		DepRefs:        deps,
+		ForeignDepRefs: foreignDepRefs,
+		Resources:      usesPython3,
+	}
+
+	return emit.emit(node)
+}
+
+func assembleProtoCmdOutputs(protoBase string, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH VFS, extraPlugins []ResolvedCPPProtoPlugin, liteHeaders, grpc bool) []VFS {
+	outputs := []VFS{pbH}
+
+	for _, plugin := range extraPlugins {
+		if !pluginOutputsPrecedeCppGroup(plugin, liteHeaders) {
+			continue
+		}
+
+		for _, suffix := range plugin.Spec.OutputSuffixes {
+			outputs = append(outputs, build(protoBase, suffix))
+		}
+	}
+
+	outputs = append(outputs, pbCC)
+
+	if liteHeaders {
+		outputs = append(outputs, pbDepsH)
+	}
+
+	if grpc {
+		outputs = append(outputs, grpcPbCC, grpcPbH)
+	}
+
+	for _, plugin := range extraPlugins {
+		if pluginOutputsPrecedeCppGroup(plugin, liteHeaders) {
+			continue
+		}
+
+		for _, suffix := range plugin.Spec.OutputSuffixes {
+			outputs = append(outputs, build(protoBase, suffix))
+		}
+	}
+
+	return outputs
+}
+
+func pluginOutputsPrecedeCppGroup(plugin ResolvedCPPProtoPlugin, liteHeaders bool) bool {
+	return liteHeaders && plugin.Spec.DeclaredBeforeLiteHeaders
+}
+
+func protoCPPOutRoot(d *ModuleData) string {
+	if d.protoNamespace == nil {
+		return ""
+	}
+
+	root := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(d.protoNamespace.string())), "/")
+
+	if root == "." {
+		return ""
+	}
+
+	return root
+}
+
+type ProtoSrcsResult struct {
+	ARRef                NodeRef
+	ARPath               *VFS
+	GlobalRef            *NodeRef
+	GlobalPath           *VFS
+	WholeArchiveRefs     []NodeRef
+	WholeArchivePaths    []VFS
+	WholeArchiveCmdPaths []VFS
+	PendingAR            bool
+	ProtoLibName         string
+}
+
+func protoSourceRelPath(fs FS, instance ModuleInstance, d *ModuleData, src string) string {
+	return filepath.ToSlash(filepath.Clean(resolvePySrcRel(fs, d.srcDirs, instance.Path.rel(), src)))
+}
+
+type PbArgBlocks struct {
+	head []STR
+	mid  []STR
+	tail []STR
+}
+
+func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, grpcCppBinary VFS,
+	grpc bool, cppOutRoot string, liteHeaders bool,
+	extraProtocFlags []ARG, extraPlugins []ResolvedCPPProtoPlugin,
+	protoInclude []VFS) *PbArgBlocks {
+	head := []STR{
+		tc.Python3,
+		internStr(pbWrapperPath),
+		argOutputs.str(),
+	}
+
+	includeRoot := ""
+
+	if cppOutRoot != "" {
+		includeRoot = cppOutRoot
+	}
+
+	cppOutArg := ":$(B)/" + cppOutRoot
+
+	if liteHeaders {
+		cppOutArg = "proto_h=true" + cppOutArg
+	}
+
+	mid := make([]STR, 0, 12+len(protoInclude)+len(extraProtocFlags))
+
+	mid = append(mid,
+		arg2.str(),
+		(protocBinary).str(),
+		internV("-I=./", includeRoot),
+		internV("-I=$(S)/", includeRoot),
+		argIB2.str(),
+		argIS3.str(),
+	)
+
+	if cppOutRoot != "" {
+		mid = append(mid, internV("-I=$(S)/", cppOutRoot))
+	}
+
+	for _, p := range protoInclude {
+		mid = append(mid, internV("-I=", p.string()))
+	}
+
+	mid = append(mid,
+		argIB2.str(),
+		argISContribLibsProtobufSrc.str(),
+		internV("--cpp_out=", cppOutArg),
+	)
+
+	mid = appendArgStr(mid, extraProtocFlags)
+
+	mid = append(mid,
+		internV("--cpp_styleguide_out=:$(B)/", cppOutRoot),
+		internV("--plugin=protoc-gen-cpp_styleguide=", cppStyleguideBinary.string()),
+	)
+
+	var tail []STR
+
+	if grpc {
+		tail = append(tail,
+			internV("--plugin=protoc-gen-grpc_cpp=", grpcCppBinary.string()),
+			internV("--grpc_cpp_out=$(B)/", cppOutRoot),
+		)
+	}
+
+	for _, plugin := range extraPlugins {
+		tail = append(tail,
+			internV("--plugin=protoc-gen-", plugin.Spec.Name, "=", plugin.Binary.string()),
+			internV("--", plugin.Spec.Name, "_out=$(B)/", cppOutRoot),
+		)
+
+		for _, piece := range strings.Split(plugin.Spec.ExtraOutFlag, ",") {
+			if piece == "" {
+				continue
+			}
+
+			tail = append(tail, internV("--", plugin.Spec.Name, "_opt=", piece))
+		}
+	}
+
+	return &PbArgBlocks{head: head, mid: mid, tail: tail}
 }
