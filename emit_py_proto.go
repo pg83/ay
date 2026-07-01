@@ -6,7 +6,10 @@ import (
 	"strings"
 )
 
-var pyProtoKV2 = KV{P: pkPY, PC: pcYellow, ShowOut: true}
+var (
+	pyProtoKV2      = KV{P: pkPY, PC: pcYellow, ShowOut: true}
+	pbPyWrapperPath = pbPyWrapperVFS.string()
+)
 
 func protoPythonResourceKey(instance ModuleInstance, d *ModuleData, src, suffix string) string {
 	base := strings.TrimSuffix(src, ".proto")
@@ -413,4 +416,33 @@ func protoPythonOutputRoot(d *ModuleData) string {
 	}
 
 	return ""
+}
+
+func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, peerAddIncl []VFS) []VFS {
+	ctx, instance, d := e.ctx, e.instance, e.d
+	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
+	emits := make([]IncludeDirective, 0, len(seed))
+
+	for _, in := range seed {
+		if in.isSource() {
+			emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(in.rel())})
+		}
+	}
+
+	e.codegen.register(&GeneratedFileInfo{
+		OutputPath:     aux,
+		ProducerRef:    ref,
+		GeneratorRefs:  []NodeRef{rescompilerRef},
+		ParsedIncludes: emits,
+		Compile:        &CompileSpec{ForceCxx: true, Py3Suffix: true, CFlags: []ARG{argX, argC}},
+	})
+
+	scanCfg := newScanContext(ctx.parsers, d.addIncl, peerAddIncl, includeScannerBasePaths(), instance.Path.rel())
+	closure := walkClosure(e.scanner, aux, scanCfg)
+
+	if len(closure) == 0 {
+		return nil
+	}
+
+	return closure
 }
