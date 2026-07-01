@@ -1,7 +1,6 @@
 package main
 
 import (
-	encb64 "encoding/base64"
 	"strings"
 )
 
@@ -143,73 +142,6 @@ func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath
 	return out
 }
 
-type PySrcChunk struct {
-	paths    []string
-	keys     []string
-	kvsHash  []string
-	kvsCmd   []string
-	pathInps []VFS
-	inps     []VFS
-}
-
 func pySrcYapycSuffix(modulePath string) string {
 	return protoPathID("$S/" + modulePath)[:4]
-}
-
-func chunkPySrcEntries(entries []PySrcEntry) []PySrcChunk {
-	chunks := make([]PySrcChunk, 0)
-	cur := PySrcChunk{}
-	cmdLen := 0
-
-	deduper.reset()
-
-	flush := func() {
-		if cmdLen == 0 {
-			return
-		}
-
-		chunks = append(chunks, cur)
-		cur = PySrcChunk{}
-		cmdLen = 0
-		deduper.reset()
-	}
-
-	addInps := func(e PySrcEntry) {
-		if deduper.add(e.pathInput) {
-			cur.inps = append(cur.inps, e.pathInput)
-		}
-
-		for _, v := range e.extraInputs {
-			if deduper.add(v) {
-				cur.inps = append(cur.inps, v)
-			}
-		}
-	}
-
-	for _, e := range entries {
-		cur.kvsHash = append(cur.kvsHash, e.kvHash)
-		cur.kvsCmd = append(cur.kvsCmd, e.kvCmd)
-		addInps(e)
-		cmdLen += rootCmdLen + len(e.kvHash)
-
-		if cmdLen >= maxCmdLen {
-			flush()
-		}
-
-		kb64 := encb64.StdEncoding.EncodeToString([]byte(e.key))
-
-		cur.paths = append(cur.paths, e.pathHash)
-		cur.keys = append(cur.keys, kb64)
-		cur.pathInps = append(cur.pathInps, e.pathInput)
-		addInps(e)
-		cmdLen += rootCmdLen + len(e.pathHash) + len(kb64)
-
-		if cmdLen >= maxCmdLen {
-			flush()
-		}
-	}
-
-	flush()
-
-	return chunks
 }

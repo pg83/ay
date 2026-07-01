@@ -184,6 +184,7 @@ func TestPyMainObjcopyHashPy3ccSlow(t *testing.T) {
 
 func TestPySrcObjcopyHashRuntimePy3RawEntryPoints(t *testing.T) {
 	d := &ModuleData{
+		tc:           testToolchain(),
 		pySrcs:       sTRS("entry_points.py"),
 		pyBuildNoPYC: true,
 		pyBuildNoPY:  false,
@@ -212,46 +213,46 @@ func TestPySrcObjcopyHashRuntimePy3RawEntryPoints(t *testing.T) {
 		t.Errorf("kvHash: got %q, want %q", entries[0].kvHash, expectedKv)
 	}
 
-	chunks := chunkPySrcEntries(entries)
+	nodes := runPySrcBatcher(t, d, "library/python/runtime_py3")
 
-	if len(chunks) != 1 {
-		t.Fatalf("chunks: got %d, want 1", len(chunks))
+	if len(nodes) != 1 {
+		t.Fatalf("nodes: got %d, want 1", len(nodes))
 	}
 
-	ch := chunks[0]
-	got := objcopyHash(ch.paths, ch.keys, ch.kvsHash, "library/python/runtime_py3", stringPtr("PY3"))
-	want := "84a3659770bdea15f8ae77837d"
+	got := nodes[0].Outputs[0].string()
+	want := "$(B)/library/python/runtime_py3/objcopy_84a3659770bdea15f8ae77837d.o"
 
 	if got != want {
-		t.Fatalf("runtime_py3 entry_points objcopy hash: got %q, want %q", got, want)
+		t.Fatalf("runtime_py3 entry_points objcopy output: got %q, want %q", got, want)
 	}
 }
 
 func TestPySrcObjcopyHashPy3ccSlowMain(t *testing.T) {
 	d := &ModuleData{
+		tc:           testToolchain(),
 		pySrcs:       sTRS("main.py"),
 		pyBuildNoPYC: true,
 		pyBuildNoPY:  false,
 		pyTopLevel:   false,
 		moduleStmt:   &ModuleStmt{Name: tokPy3ProgramBin},
 	}
-	entries := buildPySrcEntries(d, "tools/py3cc/slow")
-	chunks := chunkPySrcEntries(entries)
+	nodes := runPySrcBatcher(t, d, "tools/py3cc/slow")
 
-	if len(chunks) != 1 {
-		t.Fatalf("chunks: got %d, want 1", len(chunks))
+	if len(nodes) != 1 {
+		t.Fatalf("nodes: got %d, want 1", len(nodes))
 	}
 
-	got := objcopyHash(chunks[0].paths, chunks[0].keys, chunks[0].kvsHash, "tools/py3cc/slow", stringPtr("PY3"))
-	want := "c3a5182796bc68c054c676bcc0"
+	got := nodes[0].Outputs[0].string()
+	want := "$(B)/tools/py3cc/slow/objcopy_c3a5182796bc68c054c676bcc0.o"
 
 	if got != want {
-		t.Fatalf("py3cc/slow main.py objcopy hash: got %q, want %q", got, want)
+		t.Fatalf("py3cc/slow main.py objcopy output: got %q, want %q", got, want)
 	}
 }
 
 func TestPySrcObjcopyHashSymbolsModuleDualEntry(t *testing.T) {
 	d := &ModuleData{
+		tc:           testToolchain(),
 		pySrcs:       sTRS("__init__.py"),
 		pyBuildNoPYC: false,
 		pyBuildNoPY:  false,
@@ -264,17 +265,17 @@ func TestPySrcObjcopyHashSymbolsModuleDualEntry(t *testing.T) {
 		t.Fatalf("entries: got %d, want 2 (yapyc3 + raw)", len(entries))
 	}
 
-	chunks := chunkPySrcEntries(entries)
+	nodes := runPySrcBatcher(t, d, "library/python/symbols/module")
 
-	if len(chunks) != 1 {
-		t.Fatalf("chunks: got %d, want 1", len(chunks))
+	if len(nodes) != 1 {
+		t.Fatalf("nodes: got %d, want 1", len(nodes))
 	}
 
-	got := objcopyHash(chunks[0].paths, chunks[0].keys, chunks[0].kvsHash, "library/python/symbols/module", stringPtr("PY3"))
-	want := "c325f0009e9625395005936d90"
+	got := nodes[0].Outputs[0].string()
+	want := "$(B)/library/python/symbols/module/objcopy_c325f0009e9625395005936d90.o"
 
 	if got != want {
-		t.Fatalf("symbols/module __init__.py objcopy hash: got %q, want %q", got, want)
+		t.Fatalf("symbols/module __init__.py objcopy output: got %q, want %q", got, want)
 	}
 }
 
@@ -295,21 +296,6 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 		pyTopLevel:    true,
 		pyYapycSuffix: pySrcYapycSuffix("contrib/python/shellingham"),
 		moduleStmt:    &ModuleStmt{Name: tokPy3Library},
-	}
-
-	entries := buildPySrcEntries(d, "contrib/python/shellingham")
-	chunks := chunkPySrcEntries(entries)
-
-	if got := len(chunks); got != 2 {
-		t.Fatalf("chunks: got %d, want 2", got)
-	}
-
-	if got := len(chunks[1].kvsCmd); got != 0 {
-		t.Fatalf("tail chunk kvsCmd len: got %d, want 0", got)
-	}
-
-	if got := len(chunks[1].paths); got != 1 {
-		t.Fatalf("tail chunk paths len: got %d, want 1", got)
 	}
 
 	em := newStreamingEmitter(nil, nil)
@@ -443,4 +429,32 @@ func TestResolvePySrcRel_DirtyPathNotRootBound(t *testing.T) {
 
 func buildPySrcEntries(d *ModuleData, modulePath string) []PySrcEntry {
 	return buildPySrcEntriesFor(newCodegenRegistry(), newMemFS(nil), d, modulePath, strStrings(d.pySrcs), d.pyTopLevel, d.pyNamespace)
+}
+
+func runPySrcBatcher(t *testing.T, d *ModuleData, modulePath string) []*Node {
+	t.Helper()
+
+	em := newStreamingEmitter(nil, nil)
+	ctx := &GenCtx{emit: em, na: em.nodeArenas(), target: testTargetP, fs: newMemFS(nil)}
+
+	wireTestScanners(ctx)
+
+	instance := ModuleInstance{
+		Path:     source(modulePath),
+		Kind:     KindLib,
+		Language: LangCPP,
+		Platform: testTargetP,
+	}
+	e := newEmitContext(ctx, instance, d)
+	oc := &ObjcopyEmitCtx{blocks: composeObjcopyArgBlocks(d.tc, testTargetP), na: ctx.na}
+	b := newObjcopyBatcher(e, oc, ObjcopyProfile{moduleTag: stringPtr("PY3"), kv: &pyObjcopyKV, layout: objcopyLayoutScriptTail, resolveDeps: true})
+
+	for _, en := range buildPySrcEntries(d, modulePath) {
+		b.kvEntry(en.kvHash, en.kvCmd, en.pathInput, en.extraInputs)
+		b.fileEntry(en.pathHash, en.key, en.pathInput, en.extraInputs)
+	}
+
+	b.flush()
+
+	return em.nodes
 }

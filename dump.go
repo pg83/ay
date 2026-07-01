@@ -187,7 +187,6 @@ func nodeCmdBasenames(node *RawNode) map[string]struct{} {
 
 func arLDInputKept(s, kind string, cmdBases map[string]struct{}) bool {
 	if extIsRefOnlyArtifact(s) {
-		// BUG : dev/bugs/20260701-upstream-copy-file-source-ar-input-overemit.md
 		if rel, ok := strings.CutPrefix(s, "$(S)/"); ok && strings.HasSuffix(rel, ".a") {
 			return false
 		}

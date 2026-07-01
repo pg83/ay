@@ -1,7 +1,6 @@
 package main
 
 import (
-	encb64 "encoding/base64"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -10,7 +9,6 @@ import (
 var (
 	pyProtoKV  = KV{P: pkPY, PC: pcYellow}
 	pyProtoKV2 = KV{P: pkPY, PC: pcYellow, ShowOut: true}
-	pyProtoKV3 = KV{P: pkPR, PC: pcYellow, ShowOut: true}
 )
 
 func protoPythonResourceKey(instance ModuleInstance, d *ModuleData, src, suffix string) string {
@@ -507,76 +505,18 @@ func (e *EmitContext) emitGeneratedPyProtoObjcopy(entries []GenProtoResEntry) *O
 		return nil
 	}
 
-	na := ctx.na
 	oc := newObjcopyEmitCtx(ctx, d, instance.Platform)
-	res := &ObjcopyEmitResult{}
-	hashTag := stringPtr("PY3_PROTO")
+	b := newObjcopyBatcher(e, oc, ObjcopyProfile{moduleTag: stringPtr("PY3_PROTO"), kv: &pyProtoKV2, layout: objcopyLayoutScriptTail})
 
-	type chunk struct {
-		paths   []string
-		keysB64 []string
-		kvsHash []string
-		kvsCmd  []string
-		inputs  []VFS
-		deps    []NodeRef
-		cmdLen  int
+	for _, en := range entries {
+		b.genProtoEntry(en.token, en.key, en.output, en.producer)
 	}
 
-	cur := chunk{}
-	depSeen := map[NodeRef]struct{}{}
+	b.flush()
 
-	flush := func() {
-		if cur.cmdLen == 0 {
-			return
-		}
+	refs, outs := b.results()
 
-		r, outputObj := buildObjcopyNode(ctx, instance, oc, ObjcopyNode{
-			moduleTag:  hashTag,
-			kv:         &pyProtoKV2,
-			hashPaths:  cur.paths,
-			keysB64:    cur.keysB64,
-			kvsHash:    cur.kvsHash,
-			kvsCmd:     cur.kvsCmd,
-			pathInputs: cur.inputs,
-			inputs:     na.inputList(rescompilersChunk, cur.inputs, objcopyScriptChunk),
-			deps:       concat(depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef), cur.deps),
-		})
-
-		res.Refs = append(res.Refs, r)
-		res.Outputs = append(res.Outputs, outputObj)
-
-		cur = chunk{}
-		depSeen = map[NodeRef]struct{}{}
-	}
-
-	for _, e := range entries {
-		kvHash := "resfs/src/" + e.key + "=${rootrel;context=TEXT;input=TEXT:\"" + e.token + "\"}"
-		kvCmd := "resfs/src/" + e.key + "=" + e.output.rel()
-		kb64 := encb64.StdEncoding.EncodeToString([]byte(e.key))
-
-		cur.paths = append(cur.paths, e.token)
-		cur.keysB64 = append(cur.keysB64, kb64)
-		cur.kvsHash = append(cur.kvsHash, kvHash)
-		cur.kvsCmd = append(cur.kvsCmd, kvCmd)
-		cur.inputs = append(cur.inputs, e.output)
-
-		if e.producer != NodeRef(0) {
-			if _, ok := depSeen[e.producer]; !ok {
-				depSeen[e.producer] = struct{}{}
-				cur.deps = append(cur.deps, e.producer)
-			}
-		}
-
-		cur.cmdLen += rootCmdLen + len(e.token) + len(kb64) + len(kvHash) + len(kvCmd)
-
-		if cur.cmdLen >= maxCmdLen {
-			flush()
-		}
-	}
-
-	flush()
-
-	return res
+	return &ObjcopyEmitResult{Refs: refs, Outputs: outs}
 }
 
 func pyProtoSourceInputs(inputs []VFS) []VFS {
@@ -605,67 +545,27 @@ type PyProtoAuxChunksResult struct {
 }
 
 func (e *EmitContext) emitPyProtoAuxChunks(peerContribs PeerGlobalContribs, entries []PyProtoAuxEntry, cppSibling *ModuleEmitResult) *PyProtoAuxChunksResult {
-	ctx, instance, _ := e.ctx, e.instance, e.d
-	na := ctx.na
-
 	if len(entries) == 0 {
 		return nil
 	}
 
-	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
-	chunks := chunkAuxEntries(entries)
 	peerAddIncl := peerContribs.addIncl
 
 	if cppSibling != nil {
 		peerAddIncl = dedup(cppSibling.AddInclGlobal, peerContribs.addIncl)
 	}
 
+	rawRes := e.emitRawAuxChunks(entries, "PY3_PROTO", false, func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
+		return e.pyProtoAuxInputClosure(aux, inputs, ref, peerAddIncl)
+	})
+
+	if rawRes == nil {
+		return nil
+	}
+
 	res := &PyProtoAuxChunksResult{}
 
-	for _, ch := range chunks {
-		aux := build(instance.Path.rel(), "/", protoResourceHash(ch.hashInputs, "$S/"+instance.Path.rel(), "PY3_PROTO"), "_raw.auxcpp")
-		auxRef := ctx.emit.reserve()
-		auxClosure := e.pyProtoAuxInputClosure(aux, ch.inputs, auxRef, peerAddIncl)
-		cmdArgs := []STR{internStr(rescompilerBinPath), (aux).str()}
-
-		cmdArgs = appendInternStrs(cmdArgs, ch.cmdArgs)
-
-		deps := concat(ch.deps, depRefs(rescompilerRef))
-		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
-		deduper.reset()
-
-		for _, p := range ch.inputs {
-			deduper.add(p)
-		}
-
-		tail := make([]VFS, 0, 1+len(auxClosure))
-
-		if deduper.add(rescompilerBinVFS) {
-			tail = append(tail, rescompilerBinVFS)
-		}
-
-		for _, p := range auxClosure {
-			if p == aux {
-				continue
-			}
-
-			if deduper.add(p) {
-				tail = append(tail, p)
-			}
-		}
-
-		ctx.emit.emitReserved(&Node{
-			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
-			Env:          env,
-			Inputs:       na.inputList(ch.inputs, tail),
-			Outputs:      na.vfsList(aux),
-			KV:           &pyProtoKV3,
-			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			DepRefs:      deps,
-		}, auxRef)
-
+	for _, aux := range rawRes.Outputs {
 		auxRef, auxOut := e.emitCC(aux)
 
 		res.Refs = append(res.Refs, auxRef)
