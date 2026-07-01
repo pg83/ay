@@ -100,180 +100,23 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 }
 
 func (e *EmitContext) emitResourceFile(oc *ObjcopyEmitCtx, entries []ResourceEntry, moduleTag *string) (refs []NodeRef, outputs []VFS) {
-	ctx, instance, d := e.ctx, e.instance, e.d
-	na := ctx.na
-	bad := []string{"${ARCADIA_BUILD_ROOT}", "${ARCADIA_SOURCE_ROOT}", "conftest.py"}
-
-	contains := func(s string) bool {
-		for _, b := range bad {
-			if strings.Contains(s, b) {
-				return true
-			}
-		}
-
-		return false
-	}
-
-	type acc struct {
-		paths         []string
-		pathInputs    []VFS
-		kvInputs      []VFS
-		closureInputs []VFS
-
-		mainOuts []VFS
-
-		srcAttrInputs []VFS
-		keys          []string
-		kvs           []string
-		kvsCmd        []string
-		cmdLen        int
-	}
-
-	cur := acc{}
-
-	flush := func() {
-		if cur.cmdLen == 0 {
-			return
-		}
-
-		var inputs InputChunks
-
-		if len(cur.paths) <= 1 {
-			inputs = na.inputList(rescompilersWithScriptChunk, cur.pathInputs)
-		} else {
-			inputs = na.inputList(rescompilersChunk, cur.pathInputs, objcopyScriptChunk)
-		}
-
-		deduper.reset()
-
-		for _, ch := range inputs {
-			for _, p := range ch {
-				deduper.add(p)
-			}
-		}
-
-		var tail []VFS
-
-		for _, p := range cur.closureInputs {
-			if !deduper.add(p) {
-				continue
-			}
-
-			tail = append(tail, p)
-		}
-
-		for _, p := range cur.kvInputs {
-			if !deduper.add(p) {
-				continue
-			}
-
-			tail = append(tail, p)
-		}
-
-		for _, p := range cur.srcAttrInputs {
-			if !deduper.add(p) {
-				continue
-			}
-
-			tail = append(tail, p)
-		}
-
-		if len(tail) > 0 {
-			inputs = append(inputs, tail)
-		}
-
-		var mainTail []VFS
-
-		for _, p := range cur.mainOuts {
-			if p == 0 {
-				continue
-			}
-
-			if !deduper.add(p) {
-				continue
-			}
-
-			mainTail = append(mainTail, p)
-		}
-
-		if len(mainTail) > 0 {
-			inputs = append(inputs, mainTail)
-		}
-
-		dataInputs := make([]VFS, 0, len(cur.pathInputs)+len(cur.closureInputs)+len(cur.kvInputs))
-
-		dataInputs = append(dataInputs, cur.pathInputs...)
-		dataInputs = append(dataInputs, cur.closureInputs...)
-		dataInputs = append(dataInputs, cur.kvInputs...)
-
-		r, outputObj := buildObjcopyNode(ctx, instance, oc, ObjcopyNode{
-			moduleTag:  moduleTag,
-			kv:         &pyObjcopyKV,
-			hashPaths:  cur.paths,
-			keysB64:    cur.keys,
-			kvsHash:    cur.kvs,
-			kvsCmd:     cur.kvsCmd,
-			pathInputs: cur.pathInputs,
-			inputs:     inputs,
-			deps:       resolveCodegenDepRefsIncl(ctx, instance, ctx.na, dataInputs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...),
-		})
-
-		refs = append(refs, r)
-		outputs = append(outputs, outputObj)
-		cur = acc{}
-	}
+	b := newObjcopyBatcher(e, oc, ObjcopyProfile{moduleTag: moduleTag, kv: &pyObjcopyKV, layout: objcopyLayoutResource, resolveDeps: true})
 
 	for _, entry := range entries {
-		if !contains(entry.Path) && !contains(entry.Key) {
+		if resourceCanObjcopy(entry.Path, entry.Key) {
 			if entry.Path == "-" {
-				cur.kvs = append(cur.kvs, entry.Key)
-				cur.cmdLen += rootCmdLen + len(entry.Key)
-
-				if inner, ok := rootrelInputPath(entry.Key); ok {
-					r := e.resolveResourceInput(inner, copyFileInputVFS(ctx.fs, instance.Path, inner))
-
-					cur.kvInputs = append(cur.kvInputs, r.Input)
-					cur.mainOuts = append(cur.mainOuts, r.ProducerMainOut)
-					cur.kvsCmd = append(cur.kvsCmd, renderResourceKvCmd(rootrelExpand(entry.Key, r.Input.rel())))
-				} else {
-					cur.kvsCmd = append(cur.kvsCmd, renderResourceKvCmd(entry.Key))
-				}
+				b.resourceKvEntry(entry.Key)
 			} else {
-				r := e.resolveResourceInput(entry.Path, copyFileInputVFS(ctx.fs, instance.Path, entry.Path))
-
-				cur.paths = append(cur.paths, entry.Path)
-				cur.pathInputs = append(cur.pathInputs, r.Input)
-				cur.mainOuts = append(cur.mainOuts, r.ProducerMainOut)
-
-				if r.ProducerRef != 0 {
-					for _, v := range walkClosureTail(e.scanner, r.Input, d.cc.ScanCfg) {
-						if v.isBuild() {
-							cur.closureInputs = append(cur.closureInputs, v)
-						}
-					}
-
-					for _, v := range r.SourceInputs {
-						if v.isSource() && objcopySourceLeafKept(v.rel()) {
-							cur.srcAttrInputs = append(cur.srcAttrInputs, v)
-						}
-					}
-				}
-
-				kb := encb64.StdEncoding.EncodeToString([]byte(entry.Key))
-
-				cur.keys = append(cur.keys, kb)
-				cur.cmdLen += rootCmdLen + len(entry.Path) + len(kb)
+				b.resourceFileEntry(entry.Path, entry.Key)
 			}
 		}
 
-		if cur.cmdLen > maxCmdLen || entry.EndsBatch {
-			flush()
-		}
+		b.entryDone(entry.EndsBatch)
 	}
 
-	flush()
+	b.flush()
 
-	return refs, outputs
+	return b.results()
 }
 
 type ObjcopyEmit struct {
@@ -503,7 +346,6 @@ func (e *EmitContext) emitPySrcObjcopy(
 	oc *ObjcopyEmitCtx,
 ) *ObjcopyEmitResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	na := ctx.na
 
 	if len(d.pySrcs) == 0 {
 		return nil
@@ -545,22 +387,19 @@ func (e *EmitContext) emitPySrcObjcopy(
 			continue
 		}
 
-		for _, ch := range chunkPySrcEntries(entries) {
-			r, outputObj := buildObjcopyNode(ctx, instance, oc, ObjcopyNode{
-				moduleTag:  moduleTag,
-				kv:         &pyObjcopyKV,
-				hashPaths:  ch.paths,
-				keysB64:    ch.keys,
-				kvsHash:    ch.kvsHash,
-				kvsCmd:     ch.kvsCmd,
-				pathInputs: ch.pathInps,
-				inputs:     na.inputList(rescompilersChunk, ch.inps, objcopyScriptChunk),
-				deps:       resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ch.inps, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...),
-			})
+		b := newObjcopyBatcher(e, oc, ObjcopyProfile{moduleTag: moduleTag, kv: &pyObjcopyKV, layout: objcopyLayoutScriptTail, resolveDeps: true})
 
-			res.Refs = append(res.Refs, r)
-			res.Outputs = append(res.Outputs, outputObj)
+		for _, en := range entries {
+			b.kvEntry(en.kvHash, en.kvCmd, en.pathInput, en.extraInputs)
+			b.fileEntry(en.pathHash, en.key, en.pathInput, en.extraInputs)
 		}
+
+		b.flush()
+
+		groupRefs, groupOuts := b.results()
+
+		res.Refs = append(res.Refs, groupRefs...)
+		res.Outputs = append(res.Outputs, groupOuts...)
 	}
 
 	if len(res.Refs) == 0 {

@@ -2,15 +2,13 @@ package main
 
 import "strings"
 
-var pyAuxKV = KV{P: pkPR, PC: pcYellow, ShowOut: true}
-
 type GeneratedPyAuxChunksResult struct {
 	Refs    []NodeRef
 	Outputs []VFS
 }
 
 func (e *EmitContext) emitGeneratedPyAuxChunks() *GeneratedPyAuxChunksResult {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	_, instance, d := e.ctx, e.instance, e.d
 
 	if len(d.pySrcs) == 0 {
 		return nil
@@ -53,8 +51,9 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() *GeneratedPyAuxChunksResult {
 		return nil
 	}
 
-	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
-	rawRes := e.emitRawAuxResourceChunks(entries, "PY3", nil, rescompilerRef)
+	rawRes := e.emitRawAuxChunks(entries, "PY3", true, func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
+		return e.rawAuxInputClosure(aux, pyProtoSourceInputs(inputs), ref)
+	})
 
 	if rawRes == nil {
 		return nil
@@ -62,7 +61,7 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() *GeneratedPyAuxChunksResult {
 
 	res := &GeneratedPyAuxChunksResult{}
 
-	for _, aux := range rawRes.PROutputs {
+	for _, aux := range rawRes.Outputs {
 		auxRef, auxOut := e.emitCC(aux)
 
 		res.Refs = append(res.Refs, auxRef)
@@ -80,87 +79,6 @@ func generatedPyResourceKey(modulePath string, d *ModuleData, srcRel string) str
 	}
 
 	return keyPrefix + srcRel
-}
-
-type RawAuxResourceChunksResult struct {
-	Refs        []NodeRef
-	Outputs     []VFS
-	PRRefs      []NodeRef
-	PROutputs   []VFS
-	AuxClosures [][]VFS
-}
-
-func (e *EmitContext) emitRawAuxResourceChunks(entries []PyProtoAuxEntry, moduleTag string, deps []NodeRef, rescompilerRef NodeRef) *RawAuxResourceChunksResult {
-	ctx, instance, _ := e.ctx, e.instance, e.d
-	na := ctx.na
-
-	if len(entries) == 0 {
-		return nil
-	}
-
-	res := &RawAuxResourceChunksResult{}
-
-	for _, ch := range chunkAuxEntries(entries) {
-		aux := build(instance.Path.rel(), "/", protoResourceHash(ch.hashInputs, "$S/"+instance.Path.rel(), moduleTag), "_raw.auxcpp")
-		auxRef := ctx.emit.reserve()
-		sourceInputs := pyProtoSourceInputs(ch.inputs)
-		auxClosure := e.rawAuxInputClosure(aux, sourceInputs, auxRef)
-		cmdArgs := []STR{internStr(rescompilerBinPath), (aux).str()}
-
-		cmdArgs = appendInternStrs(cmdArgs, ch.cmdArgs)
-
-		chDeps := append([]NodeRef(nil), deps...)
-
-		chDeps = append(chDeps, ch.deps...)
-		chDeps = append(chDeps, depRefs(rescompilerRef)...)
-
-		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
-		deduper.reset()
-
-		for _, p := range ch.inputs {
-			deduper.add(p)
-		}
-
-		tail := make([]VFS, 0, 1+len(auxClosure))
-
-		if deduper.add(rescompilerBinVFS) {
-			tail = append(tail, rescompilerBinVFS)
-		}
-
-		for _, p := range auxClosure {
-			if p == aux {
-				continue
-			}
-
-			if deduper.add(p) {
-				tail = append(tail, p)
-			}
-		}
-
-		inputs := na.inputList(ch.inputs, tail)
-
-		chDeps = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, ch.inputs, chDeps...)
-
-		ctx.emit.emitReserved(&Node{
-			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
-			Env:          env,
-			Inputs:       inputs,
-			Outputs:      na.vfsList(aux),
-			KV:           &pyAuxKV,
-			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			DepRefs:      chDeps,
-		}, auxRef)
-
-		res.Refs = append(res.Refs, auxRef)
-		res.Outputs = append(res.Outputs, aux)
-		res.PRRefs = append(res.PRRefs, auxRef)
-		res.PROutputs = append(res.PROutputs, aux)
-		res.AuxClosures = append(res.AuxClosures, auxClosure)
-	}
-
-	return res
 }
 
 func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) []VFS {
