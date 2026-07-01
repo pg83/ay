@@ -1,25 +1,33 @@
 package main
 
-type EmitContext struct {
-	ctx        *GenCtx
-	instance   ModuleInstance
-	d          *ModuleData
-	scanner    *IncludeScanner
-	codegen    *CodegenRegistry
-	srcs       []STR
-	srcMeta    map[STR]SrcMeta
-	pass2      []func()
-	refs       []NodeRef
-	outs       []VFS
-	globalRefs []NodeRef
-	globalOuts []VFS
-	declMeta   map[VFS]SrcMeta
+type PeerContext struct {
+	SelfAddInclGlobal []VFS
+	ResourceGlobals   []ResourceDecl
 }
 
-func newEmitContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *EmitContext {
+type EmitContext struct {
+	ctx                  *GenCtx
+	instance             ModuleInstance
+	d                    *ModuleData
+	peers                *PeerContext
+	scanner              *IncludeScanner
+	codegen              *CodegenRegistry
+	srcs                 []STR
+	srcMeta              map[STR]SrcMeta
+	pass2                []func()
+	refs                 []NodeRef
+	outs                 []VFS
+	globalRefs           []NodeRef
+	globalOuts           []VFS
+	globalSrcMemberCount int
+	objcopyRes           *ObjcopyEmitResult
+	declMeta             map[VFS]SrcMeta
+}
+
+func newEmitContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peers *PeerContext) *EmitContext {
 	scanner := ctx.scannerFor(instance)
 
-	return &EmitContext{ctx: ctx, instance: instance, d: d, scanner: scanner, codegen: scanner.codegen, srcMeta: map[STR]SrcMeta{}, declMeta: map[VFS]SrcMeta{}}
+	return &EmitContext{ctx: ctx, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen, srcMeta: map[STR]SrcMeta{}, declMeta: map[VFS]SrcMeta{}}
 }
 
 func (e *EmitContext) collectObj(ref NodeRef, out VFS, meta SrcMeta) {
@@ -51,7 +59,7 @@ func (e *EmitContext) metaForSrc(src STR) SrcMeta {
 }
 
 func (e *EmitContext) at(instance ModuleInstance) *EmitContext {
-	return newEmitContext(e.ctx, instance, e.d)
+	return newEmitContext(e.ctx, instance, e.d, e.peers)
 }
 
 func (e *EmitContext) enqueueSrc(src STR, meta SrcMeta) {
@@ -63,8 +71,11 @@ func (e *EmitContext) deferPass2(cb func()) {
 	e.pass2 = append(e.pass2, cb)
 }
 
-func (e *EmitContext) emit(selfPeerAddInclGlobal []VFS) {
+func (e *EmitContext) emit() {
 	d := e.d
+	fsMemberRefs, fsMemberPaths := e.emitFromSandboxes()
+
+	e.emitBundles()
 
 	for _, src := range d.srcs {
 		if isCodegenProducingSrcID(src) {
@@ -83,7 +94,7 @@ func (e *EmitContext) emit(selfPeerAddInclGlobal []VFS) {
 	e.emitBaseCodegensForAR()
 	e.emitRunPythonForAR()
 	e.emitArchiveAsmForAR()
-	e.emitEnumSrcs(selfPeerAddInclGlobal)
+	e.emitEnumSrcs(e.peers.SelfAddInclGlobal)
 	e.emitLuaJit21()
 	e.emitArchives()
 	e.emitCheckConfigH()
@@ -102,6 +113,58 @@ func (e *EmitContext) emit(selfPeerAddInclGlobal []VFS) {
 		if !isCodegenProducingSrcID(src) {
 			e.emitOneSource(src)
 		}
+	}
+
+	e.drainSrcs()
+
+	for _, simd := range d.simdSrcs {
+		srcVFS := e.moduleSourceVFS(simd.Src)
+		flags := internArgs(simd.CFlags)
+
+		if extras := d.perSrcCFlagsFor(simd.Src); extras != nil {
+			flags = append(flags, *extras...)
+		}
+
+		variant := simd.Variant
+		ref, out := e.emitCCFlat(srcVFS, &variant, flags)
+
+		e.collectObj(ref, out, SrcMeta{Prio: stmtPrioDefault, Seq: simd.Seq})
+	}
+
+	for _, src := range d.globalSrcs {
+		e.markGlobalSrc(src)
+		e.emitOneSource(src)
+	}
+
+	e.globalSrcMemberCount = len(e.globalRefs)
+
+	regCCPy3Suffix := d.moduleStmt.Name == tokPy23NativeLibrary || d.moduleStmt.Name == tokPy23Library
+
+	if regRes := e.emitPyRegister(regCCPy3Suffix); regRes != nil {
+		for i, ref := range regRes.Refs {
+			e.globalRefs = append(e.globalRefs, ref)
+			e.globalOuts = append(e.globalOuts, regRes.Outputs[i])
+			e.declMeta[regRes.Outputs[i]] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
+		}
+	}
+
+	if !isProgramModuleType(d.moduleStmt.Name) {
+		e.emitPySrcs()
+
+		if genPyAuxRes := e.emitGeneratedPyAuxChunks(); genPyAuxRes != nil {
+			e.globalRefs = append(e.globalRefs, genPyAuxRes.Refs...)
+			e.globalOuts = append(e.globalOuts, genPyAuxRes.Outputs...)
+		}
+
+		e.emitLLVMBC(e.peers.ResourceGlobals)
+	}
+
+	if !isProgramModuleType(d.moduleStmt.Name) || resourceLibTagForData(d) != nil || len(d.resources) > 0 {
+		e.objcopyRes = e.emitResourceObjcopy()
+	}
+
+	for i, ref := range fsMemberRefs {
+		e.collectObj(ref, fsMemberPaths[i], SrcMeta{Prio: stmtPrioDefault})
 	}
 }
 

@@ -498,7 +498,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	stmts := moduleStmts(ctx, instance.Path.rel())
 	env := buildIfEnv(instance)
 	d := collectModule(ctx.parsers, &deduper, instance, stmts, env, ctx.onWarn)
-	e := newEmitContext(ctx, instance, d)
+	e := newEmitContext(ctx, instance, d, nil)
 
 	if instance.Language == LangPy && d.moduleStmt != nil && d.moduleStmt.Name != tokProtoLibrary {
 		cpp := instance
@@ -543,7 +543,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if d.moduleStmt.Name == tokResourcesLibrary {
 		if e.bindResourceGlobalVars(env) {
 			d = collectModule(ctx.parsers, &deduper, instance, stmts, env, ctx.onWarn)
-			e = newEmitContext(ctx, instance, d)
+			e = newEmitContext(ctx, instance, d, nil)
 		}
 
 		return e.genResourcesLibrary()
@@ -554,7 +554,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		if e.bindResourceGlobalVars(env) {
 			d = collectModule(ctx.parsers, &deduper, instance, stmts, env, ctx.onWarn)
-			e = newEmitContext(ctx, instance, d)
+			e = newEmitContext(ctx, instance, d, nil)
 		}
 
 		return e.genPrebuiltProgram()
@@ -1075,10 +1075,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	d.tc = resolveModuleToolchain(resourceGlobalsClosure, instance.Platform.ClangVer)
-
-	fsMemberRefs, fsMemberPaths := e.emitFromSandboxes()
-
-	e.emitBundles()
 
 	deduper.reset()
 
@@ -1686,45 +1682,18 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	d.cc.ScanCfg = newScanContext(ctx.parsers, dedupedAddIncl, selfPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 	d.cc.ScanCfg.OwnerModuleTag = cfModuleTag(d, instance)
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
+
+	e = newEmitContext(ctx, instance, d, &PeerContext{
+		SelfAddInclGlobal: selfPeerAddInclGlobal,
+		ResourceGlobals:   resourceGlobalsClosure,
+	})
+
 	e.cythonAdjustModuleCCBlocks()
-
-	e.emit(selfPeerAddInclGlobal)
-
-	e.drainSrcs()
-
-	for _, simd := range d.simdSrcs {
-		srcVFS := e.moduleSourceVFS(simd.Src)
-		flags := internArgs(simd.CFlags)
-
-		if extras := d.perSrcCFlagsFor(simd.Src); extras != nil {
-			flags = append(flags, *extras...)
-		}
-
-		variant := simd.Variant
-		ref, out := e.emitCCFlat(srcVFS, &variant, flags)
-
-		e.collectObj(ref, out, SrcMeta{Prio: stmtPrioDefault, Seq: simd.Seq})
-	}
-
-	for _, src := range d.globalSrcs {
-		e.markGlobalSrc(src)
-		e.emitOneSource(src)
-	}
+	e.emit()
 
 	globalRefs := append(make([]NodeRef, 0, len(e.globalRefs)), e.globalRefs...)
 	globalOutputs := append(make([]VFS, 0, len(e.globalOuts)), e.globalOuts...)
-	globalSrcMemberCount := len(globalRefs)
-	regCCPy3Suffix := isPy3NativeLib || d.moduleStmt.Name == tokPy23Library
-	regRes := e.emitPyRegister(regCCPy3Suffix)
-
-	if regRes != nil {
-		for i, ref := range regRes.Refs {
-			globalRefs = append(globalRefs, ref)
-			globalOutputs = append(globalOutputs, regRes.Outputs[i])
-			e.declMeta[regRes.Outputs[i]] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
-		}
-	}
-
+	globalSrcMemberCount := e.globalSrcMemberCount
 	ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
 
 	mergedLDPlugins := mergeLDPlugins(ownLDPlugins, &LdPluginsResult{
@@ -1742,9 +1711,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			peerSbomPaths = append(peerSbomPaths, *p)
 		}
 	}
-
-	e.refs = append(e.refs, fsMemberRefs...)
-	e.outs = append(e.outs, fsMemberPaths...)
 
 	if isProgramModuleType(d.moduleStmt.Name) {
 		binaryName := programBinaryName(instance, d.moduleStmt)
@@ -1803,13 +1769,9 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		var ldObjcopyRefs []NodeRef
 		var ldObjcopyPaths []VFS
 
-		if resourceLibTagForData(d) != nil || len(d.resources) > 0 {
-			objcopyRes := e.emitResourceObjcopy()
-
-			if objcopyRes != nil && len(objcopyRes.Refs) > 0 {
-				ldObjcopyRefs = objcopyRes.Refs
-				ldObjcopyPaths = objcopyRes.Outputs
-			}
+		if e.objcopyRes != nil && len(e.objcopyRes.Refs) > 0 {
+			ldObjcopyRefs = e.objcopyRes.Refs
+			ldObjcopyPaths = e.objcopyRes.Outputs
 		}
 
 		ldObjcopyRefs = append(globalRefs, ldObjcopyRefs...)
@@ -1970,20 +1932,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		arPluginVFS = &v
 	}
 
-	e.emitPySrcs()
-
-	genPyAuxRes := e.emitGeneratedPyAuxChunks()
-
-	if genPyAuxRes != nil {
-		globalRefs = append(globalRefs, genPyAuxRes.Refs...)
-		globalOutputs = append(globalOutputs, genPyAuxRes.Outputs...)
-	}
-
-	e.emitLLVMBC(resourceGlobalsClosure)
-
-	objcopyRes := e.emitResourceObjcopy()
-
-	if objcopyRes != nil {
+	if objcopyRes := e.objcopyRes; objcopyRes != nil {
 		globalRefs = append(globalRefs, objcopyRes.Refs...)
 		globalOutputs = append(globalOutputs, objcopyRes.Outputs...)
 
