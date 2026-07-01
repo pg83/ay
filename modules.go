@@ -275,6 +275,7 @@ type SrcMeta struct {
 	Seq         int
 	Generated   bool
 	SecondLevel bool
+	Global      bool
 	Bucket      int
 }
 
