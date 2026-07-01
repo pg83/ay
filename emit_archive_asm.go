@@ -2,25 +2,21 @@ package main
 
 var archiveAsmKV = KV{P: pkAR, PC: pcLightCyan}
 
-func (e *EmitContext) emitArchiveAsmForAR() *RunProgramsForARResult {
+func (e *EmitContext) emitArchiveAsmForAR() {
 	ctx, _, d := e.ctx, e.instance, e.d
 	if len(d.archiveAsm) == 0 {
-		return nil
+		return
 	}
 
 	toolLDRef, toolBinPath := ctx.tool(argToolsArchiver)
 	reg := e.codegen
-	res := &RunProgramsForARResult{}
 
 	for _, a := range d.archiveAsm {
 		rodataRef := e.emitArchiveAsmNode(a, toolBinPath, toolLDRef, reg)
 		rdRef, rdOut := e.emitArchiveAsmRodata(a.Name+".rodata", rodataRef)
 
-		res.CCRefs = append(res.CCRefs, rdRef)
-		res.CCOutputs = append(res.CCOutputs, rdOut)
+		e.collectObj(rdRef, rdOut, SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkArchiveAsm})
 	}
-
-	return res
 }
 
 func (e *EmitContext) emitArchiveAsmNode(

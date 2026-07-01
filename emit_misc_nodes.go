@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func (e *EmitContext) emitMiscNodes() (ccRefs []NodeRef, ccOutputs []VFS) {
+func (e *EmitContext) emitMiscNodes() {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	outPrefix := instance.Path.rel() + "/"
 
@@ -82,10 +82,7 @@ func (e *EmitContext) emitMiscNodes() (ccRefs []NodeRef, ccOutputs []VFS) {
 				{build(outPrefix, parserBase, ".cpp"), build(outPrefix, parserBase, ".h")},
 			}
 
-			refs, outs := e.emitJVDownstreamCPCC(jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes)
-
-			ccRefs = append(ccRefs, refs...)
-			ccOutputs = append(ccOutputs, outs...)
+			e.emitJVDownstreamCPCC(jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes)
 		} else {
 			jvRef := emitJV(instance, g.Grammar, g.Options, g.Visitor, g.Listener, cfModuleTag(d, instance), d.tc, ctx.emit)
 			base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
@@ -148,10 +145,7 @@ func (e *EmitContext) emitMiscNodes() (ccRefs []NodeRef, ccOutputs []VFS) {
 				{build(outPrefix, base, "Parser.cpp"), build(outPrefix, base, "Parser.h")},
 			}
 
-			refs, outs := e.emitJVDownstreamCPCC(jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes)
-
-			ccRefs = append(ccRefs, refs...)
-			ccOutputs = append(ccOutputs, outs...)
+			e.emitJVDownstreamCPCC(jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes)
 		}
 	}
 
@@ -170,5 +164,4 @@ func (e *EmitContext) emitMiscNodes() (ccRefs []NodeRef, ccOutputs []VFS) {
 		})
 	}
 
-	return
 }

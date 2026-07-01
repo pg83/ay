@@ -6,13 +6,11 @@ import (
 
 var pyRunKV = KV{P: pkPY, PC: pcYellow, ShowOut: true}
 
-func (e *EmitContext) emitRunPythonForAR() *RunProgramsForARResult {
+func (e *EmitContext) emitRunPythonForAR() {
 	_, instance, d := e.ctx, e.instance, e.d
 	if len(d.runPython) == 0 {
-		return nil
+		return
 	}
-
-	res := &RunProgramsForARResult{}
 
 	for _, rp := range d.runPython {
 		pyRef := e.emitRunPython(rp)
@@ -27,20 +25,14 @@ func (e *EmitContext) emitRunPythonForAR() *RunProgramsForARResult {
 		for _, out := range outs {
 			switch {
 			case isCCSourceExt(out):
-				ccRef, ccOut := e.emitCC(copyFileOutputVFS(instance.Path.rel(), out))
-
-				res.CCRefs = append(res.CCRefs, ccRef)
-				res.CCOutputs = append(res.CCOutputs, ccOut)
+				e.emitGenerated(copyFileOutputVFS(instance.Path.rel(), out).str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkRunPython})
 			case isAsmSourceExt(out):
 				asRef, asOut := e.emitCodegenDownstreamAS(out, []NodeRef{pyRef})
 
-				res.CCRefs = append(res.CCRefs, asRef)
-				res.CCOutputs = append(res.CCOutputs, asOut)
+				e.collectObj(asRef, asOut, SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkRunPython})
 			}
 		}
 	}
-
-	return res
 }
 
 func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {

@@ -28,7 +28,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 	jvInputs []VFS,
 	cpccPairs []struct{ cpp, h VFS },
 	outputIncludes []string,
-) (ccRefs []NodeRef, ccOutputs []VFS) {
+) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	for _, pair := range cpccPairs {
 		srcCpp := pair.cpp
@@ -73,12 +73,8 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 
 		emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, d.cc.TC, ctx.scripts, ctx.emit)
 
-		g4Ref, g4Out := e.emitCC(g4CppPath)
-		ccRefs = append(ccRefs, g4Ref)
-		ccOutputs = append(ccOutputs, g4Out)
+		e.emitGenerated(g4CppPath.str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkJV})
 	}
-
-	return
 }
 
 func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs InputChunks, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag STR, emit *StreamingEmitter) NodeRef {

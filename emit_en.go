@@ -7,13 +7,6 @@ import (
 
 var enKV = KV{P: pkEN, PC: pcYellow}
 
-type EnumSrcsResult struct {
-	CCRefs      []NodeRef
-	CCOutputs   []VFS
-	Seqs        []int
-	SecondLevel []bool
-}
-
 func (e *EmitContext) moduleProtoGenHeaders() map[string]struct{} {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	var set map[string]struct{}
@@ -61,17 +54,16 @@ func (e *EmitContext) resolveEnumHeaderInput(headerRel string, srcDirs []VFS) VF
 	return headerInput
 }
 
-func (e *EmitContext) emitEnumSrcs(peerAddInclGlobal []VFS) *EnumSrcsResult {
+func (e *EmitContext) emitEnumSrcs(peerAddInclGlobal []VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	if len(d.enumSrcs) == 0 {
-		return nil
+		return
 	}
 
 	enumParserLD, enumParserBin := ctx.tool(argToolsEnumParserEnumParser)
 
 	scanCfg := newScanContext(ctx.parsers, d.addIncl, peerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 
-	res := &EnumSrcsResult{}
 	protoGenHeaders := e.moduleProtoGenHeaders()
 
 	type enumStmtPlan struct {
@@ -182,15 +174,8 @@ func (e *EmitContext) emitEnumSrcs(peerAddInclGlobal []VFS) *EnumSrcsResult {
 			ctx.emit,
 		)
 
-		ccRef, ccOut := e.emitCC(p.serializedCPPPath)
-
-		res.CCRefs = append(res.CCRefs, ccRef)
-		res.CCOutputs = append(res.CCOutputs, ccOut)
-		res.Seqs = append(res.Seqs, p.declSeq)
-		res.SecondLevel = append(res.SecondLevel, p.secondLevel)
+		e.emitGenerated(p.serializedCPPPath.str(), SrcMeta{Prio: stmtPrioDefault, Seq: p.declSeq, Generated: true, SecondLevel: p.secondLevel})
 	}
-
-	return res
 }
 
 func emitEN(
