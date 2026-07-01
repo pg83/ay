@@ -800,9 +800,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		if protoResult != nil && protoResult.PendingAR {
 			protoARRefs, protoAROuts = reorderARMembers(protoARRefs, protoAROuts, protoARMeta)
+
 			arBaseName := archiveNameWithPrefixOrName(instance.Path.rel(), "lib", protoResult.ProtoLibName)
 			archivePath := build(instance.Path.rel(), "/", arBaseName)
 			arRef := emitARNode(instance, archivePath, tagCppProto, protoARRefs, protoAROuts, nil, nil, nil, d.tc, ctx.host, ctx.emit)
+
 			protoResult.ARRef = arRef
 			protoResult.ARPath = &archivePath
 		}
@@ -1774,7 +1776,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	globalRefs := make([]NodeRef, 0, len(d.globalSrcs))
 	globalOutputs := make([]VFS, 0, len(d.globalSrcs))
-
 	globalStart := len(e.refs)
 
 	for _, src := range d.globalSrcs {
@@ -1787,6 +1788,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	globalRefs = append(globalRefs, e.refs[globalStart:]...)
 	globalOutputs = append(globalOutputs, e.outs[globalStart:]...)
+
 	e.refs = e.refs[:globalStart]
 	e.outs = e.outs[:globalStart]
 

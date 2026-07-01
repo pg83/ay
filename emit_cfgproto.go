@@ -63,6 +63,7 @@ func (e *EmitContext) emitLibraryCfgProtoSource(src STR) {
 	})
 
 	meta := d.srcMetaOf(src)
+
 	meta.Generated = true
 	e.enqueueSrc(cfgPbCC.str(), meta)
 }

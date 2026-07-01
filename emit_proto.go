@@ -463,6 +463,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 func (e *EmitContext) emitProtoSrcs(peerContribs PeerGlobalContribs) *ProtoSrcsResult {
 	_, instance, d := e.ctx, e.instance, e.d
+
 	var protoSrcs, evSrcs, gztSrcs []string
 
 	for _, src := range d.srcs {
@@ -635,6 +636,7 @@ func (e *EmitContext) emitCPPProtoSrcs(peerContribs PeerGlobalContribs, protoSrc
 
 func (e *EmitContext) emitProtoProducer(srcRel string) {
 	ctx, _, d := e.ctx, e.instance, e.d
+
 	cfg := ProtoPBConfig{
 		cppOutRoot: protoCPPOutRoot(d),
 		grpc:       d.grpc,
@@ -649,8 +651,8 @@ func (e *EmitContext) emitLibraryProtoSource(src STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	protoBase := strings.TrimSuffix(protoSourceRelPath(ctx.fs, instance, d, srcRel), ".proto")
-
 	meta := e.metaForSrc(src)
+
 	meta.Generated = true
 
 	e.enqueueSrc(build(protoBase, ".pb.cc").str(), meta)

@@ -46,6 +46,19 @@ const (
 	yaffPluginPath      = "library/cpp/yaff/tools/protoc_plugin"
 )
 
+const (
+	bkDefault = iota
+	bkCheckConfig
+	bkCython
+	bkSwig
+	bkAntlr
+	bkJV
+	bkSplitCodegen
+	bkRunPython
+	bkArchiveAsm
+	bkDecimalMD5
+)
+
 type CppProtoPlugin struct {
 	Name                      string
 	ToolPath                  string
@@ -278,19 +291,6 @@ func (m SrcMeta) sortKey() uint64 {
 
 	return round<<48 | uint64(m.Prio)<<40 | uint64(uint32(m.Seq))<<8 | uint64(uint8(m.Bucket))
 }
-
-const (
-	bkDefault = iota
-	bkCheckConfig
-	bkCython
-	bkSwig
-	bkAntlr
-	bkJV
-	bkSplitCodegen
-	bkRunPython
-	bkArchiveAsm
-	bkDecimalMD5
-)
 
 func (d *ModuleData) nextDeclSeq() int {
 	d.declSeq++
@@ -3221,6 +3221,7 @@ func peerEntryLanguage(parent ModuleInstance, parentModuleName TOK) Language {
 
 func (e *EmitContext) derivePeerInstance(peerPath string) ModuleInstance {
 	_, parent, d := e.ctx, e.instance, e.d
+
 	return ModuleInstance{
 		Path:     source(peerPath),
 		Kind:     KindLib,

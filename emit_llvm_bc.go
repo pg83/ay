@@ -225,6 +225,7 @@ func (e *EmitContext) llvmBcSourceInfo(src string) (inputVFS VFS, producer NodeR
 
 func (e *EmitContext) llvmBcRootRelArcSrc(src string) string {
 	ctx, instance := e.ctx, e.instance
+
 	if reg := e.codegen; reg.lookup(copyFileOutputVFS(instance.Path.rel(), src)) != nil {
 		return src
 	}

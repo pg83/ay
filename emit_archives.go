@@ -6,6 +6,7 @@ var archivesKV = KV{P: pkAR, PC: pcLightRed}
 
 func (e *EmitContext) emitArchives() {
 	ctx, _, d := e.ctx, e.instance, e.d
+
 	if len(d.archives) == 0 {
 		return
 	}

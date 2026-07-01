@@ -61,10 +61,13 @@ func emitR5(
 func (e *EmitContext) emitLibraryRagel5Source(src STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
+
 	var psc []ARG
+
 	if p := d.perSrcCFlagsFor(src); p != nil {
 		psc = *p
 	}
+
 	ragel5LDRef, ragel5BinVFS := ctx.tool(argContribToolsRagel5Ragel)
 	rlgenCdLDRef, rlgenCdBinVFS := ctx.tool(argContribToolsRagel5RlgenCd)
 	r5Ref, r5TmpOut, r5CppOut := emitR5(instance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, ctx.emit)
@@ -92,6 +95,7 @@ func (e *EmitContext) emitLibraryRagel5Source(src STR) {
 	})
 
 	meta := d.srcMetaOf(src)
+
 	meta.Generated = true
 	e.enqueueSrc(r5CppOut.str(), meta)
 }

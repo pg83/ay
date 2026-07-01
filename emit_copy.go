@@ -163,6 +163,7 @@ func (e *EmitContext) generatedModuleSourceVFS(srcRel string) *VFS {
 
 func (e *EmitContext) resolveModuleSourceVFS(src STR, srcDirs []VFS) VFS {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
 	if buildVFS := copyFileAutoSourceVFS(instance.Path.rel(), d, src); buildVFS != nil {
 		return *buildVFS
 	}

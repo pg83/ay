@@ -29,6 +29,7 @@ func (e *EmitContext) emitBundles() {
 
 func (e *EmitContext) resolveBundleSource(target string) (VFS, NodeRef, bool) {
 	ctx := e.ctx
+
 	if !peerYaMakeExists(ctx.fs, target) {
 		return 0, 0, false
 	}

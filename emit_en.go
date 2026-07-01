@@ -9,6 +9,7 @@ var enKV = KV{P: pkEN, PC: pcYellow}
 
 func (e *EmitContext) moduleProtoGenHeaders() map[string]struct{} {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
 	var set map[string]struct{}
 
 	add := func(h string) {
@@ -56,14 +57,13 @@ func (e *EmitContext) resolveEnumHeaderInput(headerRel string, srcDirs []VFS) VF
 
 func (e *EmitContext) emitEnumSrcs(peerAddInclGlobal []VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
 	if len(d.enumSrcs) == 0 {
 		return
 	}
 
 	enumParserLD, enumParserBin := ctx.tool(argToolsEnumParserEnumParser)
-
 	scanCfg := newScanContext(ctx.parsers, d.addIncl, peerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
-
 	protoGenHeaders := e.moduleProtoGenHeaders()
 
 	type enumStmtPlan struct {

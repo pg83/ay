@@ -166,8 +166,8 @@ func (e *EmitContext) emitBisonY(src STR) {
 	_, instance, d := e.ctx, e.instance, e.d
 	generatedRel := bisonGeneratedRel(src.string(), d.cc.BisonGenExt)
 	generatedVFS := build(instance.Path.rel(), "/", generatedRel)
-
 	meta := d.srcMetaOf(src)
+
 	meta.Generated = true
 	e.enqueueSrc(generatedVFS.str(), meta)
 }

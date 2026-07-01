@@ -4,6 +4,7 @@ var archiveAsmKV = KV{P: pkAR, PC: pcLightCyan}
 
 func (e *EmitContext) emitArchiveAsmForAR() {
 	ctx, _, d := e.ctx, e.instance, e.d
+
 	if len(d.archiveAsm) == 0 {
 		return
 	}
@@ -108,6 +109,7 @@ func (e *EmitContext) emitArchiveAsmNode(
 
 func (e *EmitContext) emitArchiveAsmRodata(rodataRel string, producerRef NodeRef) (NodeRef, VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
 	if instance.Platform.ISA != ISAX8664 {
 		throwFmt("gen: unsupported .rodata platform %s for ARCHIVE_ASM %q", instance.Platform.ISA, rodataRel)
 	}
