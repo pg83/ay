@@ -1688,16 +1688,13 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
 	e.cythonAdjustModuleCCBlocks()
 
-	cythonPlans := e.planCythonCpp()
-
 	for _, src := range d.srcs {
-		if !isCodegenProducingSrcID(src) {
-			continue
+		if isCodegenProducingSrcID(src) {
+			e.emitOneSource(src)
 		}
-
-		e.emitOneSource(src)
 	}
 
+	cythonPlans := e.planCythonCpp()
 	cpMemberSrcs := e.emitCopyFiles()
 
 	e.emitMiscNodes()
@@ -1710,14 +1707,10 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	e.emitEnumSrcs(selfPeerAddInclGlobal)
 	e.emitLuaJit21()
 	e.emitArchives()
-
-	for _, src := range d.srcs {
-		if isCodegenProducingSrcID(src) {
-			continue
-		}
-
-		e.emitOneSource(src)
-	}
+	e.emitCheckConfigH()
+	e.emitCythonCppPlanned(cythonPlans)
+	e.emitSwigC()
+	e.emitJoinSrcs()
 
 	for _, fe := range d.srcExtraFlat {
 		srcVFS := e.moduleSourceVFS(fe.Src)
@@ -1726,10 +1719,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		e.collectObj(ref, out, SrcMeta{Prio: stmtPrioDefault, Seq: fe.Seq})
 	}
 
-	e.emitCheckConfigH()
-	e.emitCythonCppPlanned(cythonPlans)
-	e.emitSwigC()
-	e.emitJoinSrcs()
+	for _, src := range d.srcs {
+		if !isCodegenProducingSrcID(src) {
+			e.emitOneSource(src)
+		}
+	}
+
 	e.drainSrcs()
 
 	for _, simd := range d.simdSrcs {
