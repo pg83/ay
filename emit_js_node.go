@@ -85,11 +85,10 @@ func (e *EmitContext) emitJoinSrcs() ([]NodeRef, []VFS, map[VFS]SrcMeta) {
 			Compile:       &CompileSpec{FlatOutput: d.flatSrc(joinOutVFS.str()), CFlags: psc},
 		})
 
-		if se := e.emitOneSource(joinOutVFS.str()); se != nil {
-			refs = append(refs, se.Ref)
-			outs = append(outs, se.OutPath)
-			meta[se.OutPath] = SrcMeta{Prio: stmtPrioDefault, Seq: js.Seq, Generated: true}
-		}
+		jRef, jOut := e.emitCC(joinOutVFS)
+		refs = append(refs, jRef)
+		outs = append(outs, jOut)
+		meta[jOut] = SrcMeta{Prio: stmtPrioDefault, Seq: js.Seq, Generated: true}
 	}
 
 	return refs, outs, meta

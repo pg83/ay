@@ -182,8 +182,7 @@ func (e *EmitContext) emitEnumSrcs(peerAddInclGlobal []VFS) *EnumSrcsResult {
 			ctx.emit,
 		)
 
-		se := e.emitOneSource(p.serializedCPPPath.str())
-		ccRef, ccOut := se.Ref, se.OutPath
+		ccRef, ccOut := e.emitCC(p.serializedCPPPath)
 
 		res.CCRefs = append(res.CCRefs, ccRef)
 		res.CCOutputs = append(res.CCOutputs, ccOut)

@@ -2,7 +2,7 @@ package main
 
 var cfgprotoKV = KV{P: pkPB, PC: pcYellow}
 
-func (e *EmitContext) emitLibraryCfgProtoSource(src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryCfgProtoSource(src STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	cfgSource := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	cfgRelPath := cfgSource.rel()
@@ -65,6 +65,4 @@ func (e *EmitContext) emitLibraryCfgProtoSource(src STR) *SourceEmit {
 	meta := d.srcMetaOf(src)
 	meta.Generated = true
 	e.enqueueSrc(cfgPbCC.str(), meta)
-
-	return nil
 }

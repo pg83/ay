@@ -26,16 +26,15 @@ type SwigSrc struct {
 	Module string
 }
 
-func (e *EmitContext) emitSwigC() []*SourceEmit {
+func (e *EmitContext) emitSwigC() {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 
 	if len(d.swigC) == 0 {
-		return nil
+		return
 	}
 
 	swigRef, swigBin := swigTool(ctx, instance)
-	out := make([]*SourceEmit, 0, len(d.swigC))
 
 	for _, stmt := range d.swigC {
 		prefix := swigOutputPrefix(stmt.Src, stmt.Module)
@@ -93,12 +92,8 @@ func (e *EmitContext) emitSwigC() []*SourceEmit {
 			SourceInputs:  append([]VFS{cOutVFS, srcVFS}, swigClosure...),
 		})
 
-		if se := e.emitOneSource(cOutVFS.str()); se != nil {
-			out = append(out, se)
-		}
+		e.emitGenerated(cOutVFS.str(), SrcMeta{Prio: stmtPrioDefault, Generated: true})
 	}
-
-	return out
 }
 
 func swigTool(ctx *GenCtx, instance ModuleInstance) (NodeRef, VFS) {

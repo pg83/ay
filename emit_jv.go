@@ -73,10 +73,9 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 
 		emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, d.cc.TC, ctx.scripts, ctx.emit)
 
-		if se := e.emitOneSource(g4CppPath.str()); se != nil {
-			ccRefs = append(ccRefs, se.Ref)
-			ccOutputs = append(ccOutputs, se.OutPath)
-		}
+		g4Ref, g4Out := e.emitCC(g4CppPath)
+		ccRefs = append(ccRefs, g4Ref)
+		ccOutputs = append(ccOutputs, g4Out)
 	}
 
 	return

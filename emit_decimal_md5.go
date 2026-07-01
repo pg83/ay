@@ -28,10 +28,10 @@ func (e *EmitContext) emitDecimalMD5ForAR() *DecimalMD5Result {
 			continue
 		}
 
-		if se := e.emitOneSource(copyFileOutputVFS(instance.Path.rel(), stmt.File).str()); se != nil {
-			res.CCRefs = append(res.CCRefs, se.Ref)
-			res.CCOutputs = append(res.CCOutputs, se.OutPath)
-		}
+		dmRef, dmOut := e.emitCC(copyFileOutputVFS(instance.Path.rel(), stmt.File))
+
+		res.CCRefs = append(res.CCRefs, dmRef)
+		res.CCOutputs = append(res.CCOutputs, dmOut)
 	}
 
 	return res

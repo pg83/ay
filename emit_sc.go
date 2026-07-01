@@ -23,7 +23,7 @@ func emitSC(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary VFS, ru
 	return emit.emit(node)
 }
 
-func (e *EmitContext) emitLibrarySCSource(src STR) *SourceEmit {
+func (e *EmitContext) emitLibrarySCSource(src STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	domRes := ctx.toolResult(argToolsDomschemec)
 	domLDRef, domBinary := domRes.LDRef, *domRes.LDPath
@@ -40,6 +40,4 @@ func (e *EmitContext) emitLibrarySCSource(src STR) *SourceEmit {
 		ParsedIncludes: runtimeInclude,
 		ClosureLeaves:  []VFS{srcVFS, domschemeRuntimeVFS},
 	})
-
-	return nil
 }

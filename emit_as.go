@@ -179,7 +179,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	return emit.emit(node), outVFS
 }
 
-func (e *EmitContext) emitLibraryAsmSource(src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryAsmSource(src STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
@@ -200,10 +200,12 @@ func (e *EmitContext) emitLibraryAsmSource(src STR) *SourceEmit {
 		yasmLD, _ := ctx.tool(argContribToolsYasm)
 		ref, outPath := emitASYasm(instance, srcRel, srcVFS, asIn, yasmLD, ctx.emit)
 
-		return &SourceEmit{Ref: ref, OutPath: outPath}
+		e.collectObj(ref, outPath, e.metaForSrc(src))
+
+		return
 	}
 
 	ref, outPath := emitAS(instance, srcRel, srcVFS, asIn, ctx.host, ctx.emit)
 
-	return &SourceEmit{Ref: ref, OutPath: outPath}
+	e.collectObj(ref, outPath, e.metaForSrc(src))
 }

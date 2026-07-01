@@ -177,7 +177,7 @@ func emitProtoWrapperPBNode(
 	return emit.emit(node)
 }
 
-func (e *EmitContext) emitLibraryEvSource(src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryEvSource(src STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	evSource := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	evRelPath := evSource.rel()
@@ -233,6 +233,4 @@ func (e *EmitContext) emitLibraryEvSource(src STR) *SourceEmit {
 	meta := d.srcMetaOf(src)
 	meta.Generated = true
 	e.enqueueSrc(evPbCC.str(), meta)
-
-	return nil
 }

@@ -792,7 +792,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			e.emitEnumSrcs(peerContribs.addIncl)
 		}
 
-		protoARRefs, protoAROuts, protoARMeta := e.drainSrcs()
+		e.drainSrcs()
+
+		protoARRefs := e.refs
+		protoAROuts := e.outs
+		protoARMeta := e.declMeta
 
 		if protoResult != nil && protoResult.PendingAR {
 			if protoResult.EnumRes != nil {
@@ -1605,9 +1609,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	ccRefs := make([]NodeRef, 0, len(d.srcs)+len(d.joinSrcs))
-	ccOutputs := make([]VFS, 0, len(d.srcs)+len(d.joinSrcs))
-	arDeclMeta := map[VFS]SrcMeta{}
 	ownCFlags := d.cFlags
 	ownCFlagsGlobalSelf := d.cFlagsGlobal
 	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
@@ -1693,13 +1694,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
 	e.cythonAdjustModuleCCBlocks()
 
-	type codegenEmit struct {
-		srcID STR
-		emit  *SourceEmit
-	}
-
-	codegenEmits := make([]codegenEmit, 0, 4)
-
 	for _, src := range d.srcs {
 		switch srcExtClassOf(src) {
 		case srcExtFbs:
@@ -1728,14 +1722,14 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			continue
 		}
 
-		codegenEmits = append(codegenEmits, codegenEmit{src, e.emitOneSource(src)})
+		e.emitOneSource(src)
 	}
 
 	cpMemberRefs, cpMemberOuts, cpMemberSrcs := e.emitCopyFiles()
 
 	for i, ref := range cpMemberRefs {
-		ccRefs = append(ccRefs, ref)
-		ccOutputs = append(ccOutputs, cpMemberOuts[i])
+		e.refs = append(e.refs, ref)
+		e.outs = append(e.outs, cpMemberOuts[i])
 	}
 
 	jvCCRefs, jvCCOutputs := e.emitMiscNodes()
@@ -1753,119 +1747,69 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	e.emitArchives()
 
-	appendCC := func(srcID STR, emit *SourceEmit, generated bool) {
-		if emit == nil {
-			return
-		}
-
-		m := d.srcMetaOf(srcID)
-
-		m.Generated = generated
-		ccRefs = append(ccRefs, emit.Ref)
-		ccOutputs = append(ccOutputs, emit.OutPath)
-		arDeclMeta[emit.OutPath] = m
-
-		for _, ex := range emit.Extra {
-			ccRefs = append(ccRefs, ex.Ref)
-			ccOutputs = append(ccOutputs, ex.OutPath)
-			arDeclMeta[ex.OutPath] = m
-		}
-	}
-
 	for _, src := range d.srcs {
 		if isCodegenProducingSrcID(src) {
 			continue
 		}
 
-		appendCC(src, e.emitOneSource(src), false)
-	}
-
-	for _, ce := range codegenEmits {
-		appendCC(ce.srcID, ce.emit, true)
+		e.emitOneSource(src)
 	}
 
 	for _, fe := range d.srcExtraFlat {
 		srcVFS := e.moduleSourceVFS(fe.Src)
 		ref, out := e.emitCCFlat(srcVFS, nil, fe.Flags)
 
-		ccRefs = append(ccRefs, ref)
-		ccOutputs = append(ccOutputs, out)
-		arDeclMeta[out] = SrcMeta{Prio: stmtPrioDefault, Seq: fe.Seq}
+		e.collectObj(ref, out, SrcMeta{Prio: stmtPrioDefault, Seq: fe.Seq})
 	}
 
-	genCCMeta := func(emit *SourceEmit, m SrcMeta) {
-		ccRefs = append(ccRefs, emit.Ref)
-		ccOutputs = append(ccOutputs, emit.OutPath)
-		arDeclMeta[emit.OutPath] = m
-
-		for _, ex := range emit.Extra {
-			ccRefs = append(ccRefs, ex.Ref)
-			ccOutputs = append(ccOutputs, ex.OutPath)
-			arDeclMeta[ex.OutPath] = m
-		}
+	genCC := func(ref NodeRef, out VFS) {
+		e.collectObj(ref, out, SrcMeta{Prio: stmtPrioDefault, Generated: true})
 	}
 
-	genCC := func(emit *SourceEmit) {
-		genCCMeta(emit, SrcMeta{Prio: stmtPrioDefault, Generated: true})
-	}
-
-	for _, emit := range e.emitCheckConfigH() {
-		genCC(emit)
-	}
-
-	for _, emit := range e.emitCythonCppPlanned(cythonPlans) {
-		genCC(emit)
-	}
-
-	for _, emit := range e.emitSwigC() {
-		genCC(emit)
-	}
-
-	antlrDrainRefs, antlrDrainOuts, antlrDrainMeta := e.drainSrcs()
-
-	for i, ref := range antlrDrainRefs {
-		genCCMeta(&SourceEmit{Ref: ref, OutPath: antlrDrainOuts[i]}, antlrDrainMeta[antlrDrainOuts[i]])
-	}
+	e.emitCheckConfigH()
+	e.emitCythonCppPlanned(cythonPlans)
+	e.emitSwigC()
+	e.drainSrcs()
 
 	for i, ref := range jvCCRefs {
-		genCC(&SourceEmit{Ref: ref, OutPath: jvCCOutputs[i]})
+		genCC(ref, jvCCOutputs[i])
 	}
 
 	if enCCRes != nil {
 		for i, ref := range enCCRes.CCRefs {
-			genCCMeta(&SourceEmit{Ref: ref, OutPath: enCCRes.CCOutputs[i]},
+			e.collectObj(ref, enCCRes.CCOutputs[i],
 				SrcMeta{Prio: stmtPrioDefault, Seq: enCCRes.Seqs[i], Generated: true, SecondLevel: enCCRes.SecondLevel[i]})
 		}
 	}
 
 	if prCCRes != nil {
 		for i, ref := range prCCRes.CCRefs {
-			genCCMeta(&SourceEmit{Ref: ref, OutPath: prCCRes.CCOutputs[i]},
+			e.collectObj(ref, prCCRes.CCOutputs[i],
 				SrcMeta{Prio: stmtPrioDefault, Seq: prCCRes.Seqs[i], Generated: true, SecondLevel: prCCRes.SecondLevel[i]})
 		}
 	}
 
 	if scCCRes != nil {
 		for i, ref := range scCCRes.CCRefs {
-			genCC(&SourceEmit{Ref: ref, OutPath: scCCRes.CCOutputs[i]})
+			genCC(ref, scCCRes.CCOutputs[i])
 		}
 	}
 
 	if pyCCRes != nil {
 		for i, ref := range pyCCRes.CCRefs {
-			genCC(&SourceEmit{Ref: ref, OutPath: pyCCRes.CCOutputs[i]})
+			genCC(ref, pyCCRes.CCOutputs[i])
 		}
 	}
 
 	if aaCCRes != nil {
 		for i, ref := range aaCCRes.CCRefs {
-			genCC(&SourceEmit{Ref: ref, OutPath: aaCCRes.CCOutputs[i]})
+			genCC(ref, aaCCRes.CCOutputs[i])
 		}
 	}
 
 	if dmCCRes != nil {
 		for i, ref := range dmCCRes.CCRefs {
-			genCC(&SourceEmit{Ref: ref, OutPath: dmCCRes.CCOutputs[i]})
+			genCC(ref, dmCCRes.CCOutputs[i])
 		}
 	}
 
@@ -1880,33 +1824,37 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		variant := simd.Variant
 		ref, out := e.emitCCFlat(srcVFS, &variant, flags)
 
-		ccRefs = append(ccRefs, ref)
-		ccOutputs = append(ccOutputs, out)
-		arDeclMeta[out] = SrcMeta{Prio: stmtPrioDefault, Seq: simd.Seq}
+		e.refs = append(e.refs, ref)
+		e.outs = append(e.outs, out)
+		e.declMeta[out] = SrcMeta{Prio: stmtPrioDefault, Seq: simd.Seq}
 	}
 
 	jsRefs, jsOuts, jsMeta := e.emitJoinSrcs()
 
-	ccRefs = append(ccRefs, jsRefs...)
-	ccOutputs = append(ccOutputs, jsOuts...)
+	e.refs = append(e.refs, jsRefs...)
+	e.outs = append(e.outs, jsOuts...)
 
 	for k, v := range jsMeta {
-		arDeclMeta[k] = v
+		e.declMeta[k] = v
 	}
 
 	globalRefs := make([]NodeRef, 0, len(d.globalSrcs))
 	globalOutputs := make([]VFS, 0, len(d.globalSrcs))
 
+	globalStart := len(e.refs)
+
 	for _, src := range d.globalSrcs {
-		emit := e.emitOneSource(src)
-
-		if emit == nil {
-			continue
-		}
-
-		globalRefs = append(globalRefs, emit.Ref)
-		globalOutputs = append(globalOutputs, emit.OutPath)
+		e.emitOneSource(src)
 	}
+
+	for _, out := range e.outs[globalStart:] {
+		delete(e.declMeta, out)
+	}
+
+	globalRefs = append(globalRefs, e.refs[globalStart:]...)
+	globalOutputs = append(globalOutputs, e.outs[globalStart:]...)
+	e.refs = e.refs[:globalStart]
+	e.outs = e.outs[:globalStart]
 
 	globalSrcMemberCount := len(globalRefs)
 	regCCPy3Suffix := isPy3NativeLib || d.moduleStmt.Name == tokPy23Library
@@ -1916,7 +1864,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		for i, ref := range regRes.Refs {
 			globalRefs = append(globalRefs, ref)
 			globalOutputs = append(globalOutputs, regRes.Outputs[i])
-			arDeclMeta[regRes.Outputs[i]] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
+			e.declMeta[regRes.Outputs[i]] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
 		}
 	}
 
@@ -1931,15 +1879,15 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		mergedLDPlugins = &LdPluginsResult{}
 	}
 
-	if ctx.sbomEnabled && env.bool(envCLANG) && len(ccRefs) > 0 {
+	if ctx.sbomEnabled && env.bool(envCLANG) && len(e.refs) > 0 {
 		if r, p := clangToolchainSbomComponent(ctx, instance.Platform); r != nil && !containsVFS(peerSbomPaths, *p) {
 			peerSbomRefs = append(peerSbomRefs, *r)
 			peerSbomPaths = append(peerSbomPaths, *p)
 		}
 	}
 
-	ccRefs = append(ccRefs, fsMemberRefs...)
-	ccOutputs = append(ccOutputs, fsMemberPaths...)
+	e.refs = append(e.refs, fsMemberRefs...)
+	e.outs = append(e.outs, fsMemberPaths...)
 
 	if isProgramModuleType(d.moduleStmt.Name) {
 		binaryName := programBinaryName(instance, d.moduleStmt)
@@ -1990,10 +1938,10 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ldInstance.Language = LangPy
 		}
 
-		ldCCRefs := ccRefs
-		ldCCOutputs := ccOutputs
+		ldCCRefs := e.refs
+		ldCCOutputs := e.outs
 
-		ldCCRefs, ldCCOutputs = reorderARMembers(ldCCRefs, ldCCOutputs, arDeclMeta)
+		ldCCRefs, ldCCOutputs = reorderARMembers(ldCCRefs, ldCCOutputs, e.declMeta)
 
 		var ldObjcopyRefs []NodeRef
 		var ldObjcopyPaths []VFS
@@ -2145,7 +2093,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		return result
 	}
 
-	ccRefs, ccOutputs = reorderARMembers(ccRefs, ccOutputs, arDeclMeta)
+	e.refs, e.outs = reorderARMembers(e.refs, e.outs, e.declMeta)
 
 	var arRef NodeRef
 
@@ -2193,24 +2141,24 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	if d.moduleStmt.Name == tokDllTool {
-		result := e.emitDllShared(ccRefs, ccOutputs, peerArchiveRefs, peerArchivePaths, peerSbomRefs, peerSbomPaths)
+		result := e.emitDllShared(e.refs, e.outs, peerArchiveRefs, peerArchivePaths, peerSbomRefs, peerSbomPaths)
 
 		ctx.memo.put(ctx.instanceKey(instance), result)
 
 		return result
 	}
 
-	if len(ccRefs) > 0 {
+	if len(e.refs) > 0 {
 		if perModuleCCTag != 0 {
-			arRef = emitARNamedTagged(arInstance, arBaseName, perModuleCCTag, ccRefs, ccOutputs, nil, arPluginVFS, cpMemberSrcs, d.tc, ctx.host, ctx.emit)
+			arRef = emitARNamedTagged(arInstance, arBaseName, perModuleCCTag, e.refs, e.outs, nil, arPluginVFS, cpMemberSrcs, d.tc, ctx.host, ctx.emit)
 		} else {
-			arRef = emitARNamed(arInstance, arBaseName, ccRefs, ccOutputs, nil, arPluginVFS, cpMemberSrcs, d.tc, ctx.host, ctx.emit)
+			arRef = emitARNamed(arInstance, arBaseName, e.refs, e.outs, nil, arPluginVFS, cpMemberSrcs, d.tc, ctx.host, ctx.emit)
 		}
 	}
 
 	var arPath *VFS
 
-	if len(ccRefs) > 0 {
+	if len(e.refs) > 0 {
 		arPath = vfsPtr(build(instance.Path.rel(), "/", arBaseName))
 	}
 
@@ -2279,7 +2227,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			globalTag = tagPy3BinLibGlobal
 		}
 
-		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, arDeclMeta)
+		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, e.declMeta)
 
 		globalRef := emitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, d.tc, ctx.host, ctx.emit)
 

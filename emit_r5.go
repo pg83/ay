@@ -58,7 +58,7 @@ func emitR5(
 	return emit.emit(node), tmpVFS, cppVFS
 }
 
-func (e *EmitContext) emitLibraryRagel5Source(src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryRagel5Source(src STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	var psc []ARG
@@ -94,6 +94,4 @@ func (e *EmitContext) emitLibraryRagel5Source(src STR) *SourceEmit {
 	meta := d.srcMetaOf(src)
 	meta.Generated = true
 	e.enqueueSrc(r5CppOut.str(), meta)
-
-	return nil
 }

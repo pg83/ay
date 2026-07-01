@@ -27,8 +27,7 @@ func (e *EmitContext) emitRunPythonForAR() *RunProgramsForARResult {
 		for _, out := range outs {
 			switch {
 			case isCCSourceExt(out):
-				se := e.emitOneSource(copyFileOutputVFS(instance.Path.rel(), out).str())
-				ccRef, ccOut := se.Ref, se.OutPath
+				ccRef, ccOut := e.emitCC(copyFileOutputVFS(instance.Path.rel(), out))
 
 				res.CCRefs = append(res.CCRefs, ccRef)
 				res.CCOutputs = append(res.CCOutputs, ccOut)

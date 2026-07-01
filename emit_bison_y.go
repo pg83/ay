@@ -162,7 +162,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 	}, ycRef)
 }
 
-func (e *EmitContext) emitBisonY(src STR) *SourceEmit {
+func (e *EmitContext) emitBisonY(src STR) {
 	_, instance, d := e.ctx, e.instance, e.d
 	generatedRel := bisonGeneratedRel(src.string(), d.cc.BisonGenExt)
 	generatedVFS := build(instance.Path.rel(), "/", generatedRel)
@@ -170,8 +170,6 @@ func (e *EmitContext) emitBisonY(src STR) *SourceEmit {
 	meta := d.srcMetaOf(src)
 	meta.Generated = true
 	e.enqueueSrc(generatedVFS.str(), meta)
-
-	return nil
 }
 
 func bisonTool(ctx *GenCtx, instance ModuleInstance) (NodeRef, string) {

@@ -94,8 +94,8 @@ type CythonStmtPlan struct {
 	ind               CythonCppInduced
 }
 
-func (e *EmitContext) emitCythonCpp() []*SourceEmit {
-	return e.emitCythonCppPlanned(e.planCythonCpp())
+func (e *EmitContext) emitCythonCpp() {
+	e.emitCythonCppPlanned(e.planCythonCpp())
 }
 
 func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
@@ -201,15 +201,13 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 	return plans
 }
 
-func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) []*SourceEmit {
+func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 
 	if len(plans) == 0 {
-		return nil
+		return
 	}
-
-	out := make([]*SourceEmit, 0, len(plans))
 
 	for i := range plans {
 		p := &plans[i]
@@ -301,12 +299,8 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) []*SourceEmit
 			Resources:    usesPython3,
 		}, cyRef)
 
-		if se := e.emitOneSource(generatedVFS.str()); se != nil {
-			out = append(out, se)
-		}
+		e.emitGenerated(generatedVFS.str(), SrcMeta{Prio: stmtPrioDefault, Generated: true})
 	}
-
-	return out
 }
 
 func cythonHeaderToolInputs(src VFS, pyxClosure []VFS) []VFS {

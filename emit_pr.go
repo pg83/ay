@@ -62,8 +62,7 @@ func (e *EmitContext) emitRunProgramsForAR() *RunProgramsForARResult {
 		for _, out := range run.outs {
 			switch {
 			case isCCSourceExt(out):
-				se := e.emitOneSource(copyFileOutputVFS(instance.Path.rel(), out).str())
-				ccRef, ccOut := se.Ref, se.OutPath
+				ccRef, ccOut := e.emitCC(copyFileOutputVFS(instance.Path.rel(), out))
 
 				res.CCRefs = append(res.CCRefs, ccRef)
 				res.CCOutputs = append(res.CCOutputs, ccOut)
@@ -87,10 +86,10 @@ func (e *EmitContext) emitRunProgramsForAR() *RunProgramsForARResult {
 			}
 
 			cppVFS := build(copyFileOutputVFS(instance.Path.rel(), out).rel(), ".cpp")
-			emit := e.emitFlatcCppCompile(cppVFS)
+			fRef, fOut := e.emitFlatcCppCompile(cppVFS)
 
-			res.CCRefs = append(res.CCRefs, emit.Ref)
-			res.CCOutputs = append(res.CCOutputs, emit.OutPath)
+			res.CCRefs = append(res.CCRefs, fRef)
+			res.CCOutputs = append(res.CCOutputs, fOut)
 			res.Seqs = append(res.Seqs, run.seq)
 			res.SecondLevel = append(res.SecondLevel, true)
 		}

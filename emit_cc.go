@@ -613,7 +613,7 @@ func (m InclArgMemo) arg(path VFS) STR {
 	return a
 }
 
-func (e *EmitContext) emitLibraryCSource(src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryCSource(src STR) {
 	_, _, d := e.ctx, e.instance, e.d
 	srcVFS := src.vfs()
 
@@ -623,5 +623,5 @@ func (e *EmitContext) emitLibraryCSource(src STR) *SourceEmit {
 
 	ref, outPath := e.emitCC(srcVFS)
 
-	return &SourceEmit{Ref: ref, OutPath: outPath}
+	e.collectObj(ref, outPath, e.metaForSrc(src))
 }
