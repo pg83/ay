@@ -1703,29 +1703,16 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		variant := simd.Variant
 		ref, out := e.emitCCFlat(srcVFS, &variant, flags)
 
-		e.refs = append(e.refs, ref)
-		e.outs = append(e.outs, out)
-		e.declMeta[out] = SrcMeta{Prio: stmtPrioDefault, Seq: simd.Seq}
+		e.collectObj(ref, out, SrcMeta{Prio: stmtPrioDefault, Seq: simd.Seq})
 	}
 
-	globalRefs := make([]NodeRef, 0, len(d.globalSrcs))
-	globalOutputs := make([]VFS, 0, len(d.globalSrcs))
-	globalStart := len(e.refs)
-
 	for _, src := range d.globalSrcs {
+		e.markGlobalSrc(src)
 		e.emitOneSource(src)
 	}
 
-	for _, out := range e.outs[globalStart:] {
-		delete(e.declMeta, out)
-	}
-
-	globalRefs = append(globalRefs, e.refs[globalStart:]...)
-	globalOutputs = append(globalOutputs, e.outs[globalStart:]...)
-
-	e.refs = e.refs[:globalStart]
-	e.outs = e.outs[:globalStart]
-
+	globalRefs := append(make([]NodeRef, 0, len(e.globalRefs)), e.globalRefs...)
+	globalOutputs := append(make([]VFS, 0, len(e.globalOuts)), e.globalOuts...)
 	globalSrcMemberCount := len(globalRefs)
 	regCCPy3Suffix := isPy3NativeLib || d.moduleStmt.Name == tokPy23Library
 	regRes := e.emitPyRegister(regCCPy3Suffix)

@@ -1,17 +1,19 @@
 package main
 
 type EmitContext struct {
-	ctx      *GenCtx
-	instance ModuleInstance
-	d        *ModuleData
-	scanner  *IncludeScanner
-	codegen  *CodegenRegistry
-	srcs     []STR
-	srcMeta  map[STR]SrcMeta
-	pass2    []func()
-	refs     []NodeRef
-	outs     []VFS
-	declMeta map[VFS]SrcMeta
+	ctx        *GenCtx
+	instance   ModuleInstance
+	d          *ModuleData
+	scanner    *IncludeScanner
+	codegen    *CodegenRegistry
+	srcs       []STR
+	srcMeta    map[STR]SrcMeta
+	pass2      []func()
+	refs       []NodeRef
+	outs       []VFS
+	globalRefs []NodeRef
+	globalOuts []VFS
+	declMeta   map[VFS]SrcMeta
 }
 
 func newEmitContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *EmitContext {
@@ -21,9 +23,23 @@ func newEmitContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *EmitCo
 }
 
 func (e *EmitContext) collectObj(ref NodeRef, out VFS, meta SrcMeta) {
+	if meta.Global {
+		e.globalRefs = append(e.globalRefs, ref)
+		e.globalOuts = append(e.globalOuts, out)
+
+		return
+	}
+
 	e.refs = append(e.refs, ref)
 	e.outs = append(e.outs, out)
 	e.declMeta[out] = meta
+}
+
+func (e *EmitContext) markGlobalSrc(src STR) {
+	m := e.metaForSrc(src)
+
+	m.Global = true
+	e.srcMeta[src] = m
 }
 
 func (e *EmitContext) metaForSrc(src STR) SrcMeta {
