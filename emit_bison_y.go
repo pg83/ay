@@ -167,7 +167,11 @@ func (e *EmitContext) emitBisonY(src STR) *SourceEmit {
 	generatedRel := bisonGeneratedRel(src.string(), d.cc.BisonGenExt)
 	generatedVFS := build(instance.Path.rel(), "/", generatedRel)
 
-	return e.emitOneSource(generatedVFS.str())
+	meta := d.srcMetaOf(src)
+	meta.Generated = true
+	e.enqueueSrc(generatedVFS.str(), meta)
+
+	return nil
 }
 
 func bisonTool(ctx *GenCtx, instance ModuleInstance) (NodeRef, string) {
