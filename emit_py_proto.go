@@ -58,7 +58,7 @@ func (e *EmitContext) emitPyProtoSrcs(peerContribs PeerGlobalContribs, protoSrcs
 		duplicateOutputRootInclude = containsVFS(peerContribs.addIncl, build(protoRoot))
 	}
 
-	pe := newPyPBModuleEmission(ctx, d, instance, protocBinary, peerContribs.protoInclude, duplicateOutputRootInclude)
+	pe := e.newPyPBModuleEmission(protocBinary, peerContribs.protoInclude, duplicateOutputRootInclude)
 
 	var cppSibling *ModuleEmitResult
 
@@ -136,7 +136,8 @@ type PyPBModuleEmission struct {
 	tail         []STR
 }
 
-func newPyPBModuleEmission(ctx *GenCtx, d *ModuleData, instance ModuleInstance, protocBinary VFS, protoInclude []VFS, duplicateOutputRootInclude bool) *PyPBModuleEmission {
+func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS, duplicateOutputRootInclude bool) *PyPBModuleEmission {
+	ctx, _, d := e.ctx, e.instance, e.d
 	pe := &PyPBModuleEmission{}
 
 	if d.grpc {

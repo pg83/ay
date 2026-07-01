@@ -14,20 +14,18 @@ func (e *EmitContext) emitArchives() {
 	reg := ctx.codegenFor(instance)
 
 	for _, a := range d.archives {
-		emitArchive(ctx, instance, a, d, toolBinPath, toolLDRef, ctx.emit, reg)
+		e.emitArchive(a, toolBinPath, toolLDRef, ctx.emit, reg)
 	}
 }
 
-func emitArchive(
-	ctx *GenCtx,
-	instance ModuleInstance,
+func (e *EmitContext) emitArchive(
 	a ArchiveEntry,
-	d *ModuleData,
 	toolBinPath VFS,
 	toolLDRef NodeRef,
 	emit *StreamingEmitter,
 	reg *CodegenRegistry,
 ) {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	na := emit.nodeArenas()
 	archiveVFS := build(instance.Path.rel(), "/", a.Name)
 	archivePath := archiveVFS.string()

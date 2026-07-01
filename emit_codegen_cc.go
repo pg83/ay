@@ -1,9 +1,9 @@
 package main
 
 func (e *EmitContext) emitCodegenDownstreamAS(asmRel string, depRefs []NodeRef) (NodeRef, VFS) {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	ctx, instance, _ := e.ctx, e.instance, e.d
 	asmPath := copyFileOutputVFS(instance.Path.rel(), asmRel)
-	in := d.cc.ccInputsFor(ctx, instance, d, asmPath)
+	in := e.ccInputsFor(asmPath)
 	asIn := in
 
 	asIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), asmPath, in.ScanCfg)

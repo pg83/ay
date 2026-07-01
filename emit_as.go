@@ -183,7 +183,7 @@ func (e *EmitContext) emitLibraryAsmSource(src STR) *SourceEmit {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
-	in := d.cc.ccInputsFor(ctx, instance, d, srcVFS)
+	in := e.ccInputsFor(srcVFS)
 	asIn := in
 	scanIn := in
 

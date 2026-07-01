@@ -13,7 +13,7 @@ func (e *EmitContext) emitArchiveAsmForAR() *RunProgramsForARResult {
 	res := &RunProgramsForARResult{}
 
 	for _, a := range d.archiveAsm {
-		rodataRef := emitArchiveAsmNode(ctx, instance, a, d, toolBinPath, toolLDRef, reg)
+		rodataRef := e.emitArchiveAsmNode(a, toolBinPath, toolLDRef, reg)
 		rdRef, rdOut := e.emitArchiveAsmRodata(a.Name+".rodata", rodataRef)
 
 		res.CCRefs = append(res.CCRefs, rdRef)
@@ -23,15 +23,13 @@ func (e *EmitContext) emitArchiveAsmForAR() *RunProgramsForARResult {
 	return res
 }
 
-func emitArchiveAsmNode(
-	ctx *GenCtx,
-	instance ModuleInstance,
+func (e *EmitContext) emitArchiveAsmNode(
 	a ArchiveAsmEntry,
-	d *ModuleData,
 	toolBinPath VFS,
 	toolLDRef NodeRef,
 	reg *CodegenRegistry,
 ) NodeRef {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.emit.nodeArenas()
 	rodataVFS := build(instance.Path.rel(), "/", a.Name, ".rodata")
 	cmdArgs := make([]STR, 0, 4+len(a.Files)+2)

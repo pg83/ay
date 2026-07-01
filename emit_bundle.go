@@ -13,7 +13,7 @@ func (e *EmitContext) emitBundles() {
 			continue
 		}
 
-		src, srcRef, resolved := resolveBundleSource(ctx, instance, d, b.Target)
+		src, srcRef, resolved := e.resolveBundleSource(b.Target)
 		ref := ctx.emit.reserve()
 
 		emitBundleNode(ctx, instance, d.tc.Python3, src, dst, srcRef, resolved, ref)
@@ -27,7 +27,8 @@ func (e *EmitContext) emitBundles() {
 	}
 }
 
-func resolveBundleSource(ctx *GenCtx, parent ModuleInstance, d *ModuleData, target string) (VFS, NodeRef, bool) {
+func (e *EmitContext) resolveBundleSource(target string) (VFS, NodeRef, bool) {
+	ctx := e.ctx
 	if !peerYaMakeExists(ctx.fs, target) {
 		return 0, 0, false
 	}
@@ -36,7 +37,7 @@ func resolveBundleSource(ctx *GenCtx, parent ModuleInstance, d *ModuleData, targ
 		return 0, 0, false
 	}
 
-	res := genModule(ctx, derivePeerInstance(ctx, parent, d, target))
+	res := genModule(ctx, e.derivePeerInstance(target))
 
 	if res.isPROGRAM && res.LDPath != nil {
 		return *res.LDPath, res.LDRef, true

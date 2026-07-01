@@ -7,7 +7,7 @@ import (
 var pyRunKV = KV{P: pkPY, PC: pcYellow, ShowOut: true}
 
 func (e *EmitContext) emitRunPythonForAR() *RunProgramsForARResult {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	_, instance, d := e.ctx, e.instance, e.d
 	if len(d.runPython) == 0 {
 		return nil
 	}
@@ -15,7 +15,7 @@ func (e *EmitContext) emitRunPythonForAR() *RunProgramsForARResult {
 	res := &RunProgramsForARResult{}
 
 	for _, rp := range d.runPython {
-		pyRef := emitRunPython(ctx, instance, rp, d)
+		pyRef := e.emitRunPython(rp)
 		outs := make([]string, 0, len(rp.OUTFiles)+1)
 
 		outs = append(outs, strStrings(rp.OUTFiles)...)
@@ -44,8 +44,8 @@ func (e *EmitContext) emitRunPythonForAR() *RunProgramsForARResult {
 	return res
 }
 
-func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d *ModuleData) NodeRef {
-	e := newEmitContext(ctx, instance, d)
+func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	scriptVFS := copyFileInputVFS(ctx.fs, instance.Path, stmt.ScriptPath.string())
 	inVFSByToken := make(map[string]VFS, len(stmt.INFiles))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
@@ -131,14 +131,14 @@ func emitRunPython(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d 
 		registerPYOutput(*stdoutVFS, e.pyEmitsIncludes(stmt, stmt.StdoutFile.string(), scriptVFS, splitSrcs, hasCCShard))
 	}
 
-	inputClosure := pyInputClosure(ctx, instance, stmt, d)
+	inputClosure := e.pyInputClosure(stmt)
 	extraDepRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, inputClosure)
 
 	return emitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, pyRef, d.cc.TC, ctx.emit)
 }
 
-func pyInputClosure(ctx *GenCtx, instance ModuleInstance, stmt *RunPythonStmt, d *ModuleData) []VFS {
-	e := newEmitContext(ctx, instance, d)
+func (e *EmitContext) pyInputClosure(stmt *RunPythonStmt) []VFS {
+	ctx, instance, d := e.ctx, e.instance, e.d
 	scanCfg := newScanContext(ctx.parsers, d.cc.AddIncl, d.cc.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 
 	var out []VFS

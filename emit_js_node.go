@@ -59,14 +59,14 @@ func (e *EmitContext) emitJoinSrcs() ([]NodeRef, []VFS, map[VFS]SrcMeta) {
 
 	for _, js := range d.joinSrcs {
 		jsSources := strStrings(js.Sources)
-		joinClosure := joinSrcsIncludeClosure(ctx, instance.Platform, instance, jsSources, d, d.cc.ScanCfg)
+		joinClosure := e.joinSrcsIncludeClosure(instance.Platform, jsSources, d.cc.ScanCfg)
 		ccClosure := joinClosure
 
 		if instance.Platform.ISA == ISAX8664 {
 			jsPeerAddInclGlobal := rebasePerArchPeerAddIncl(d.cc.PeerAddInclGlobal, instance.Platform.ISA, ctx.target.ISA)
 			jsScanCfg := newScanContext(ctx.parsers, d.cc.AddIncl, jsPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 
-			joinClosure = joinSrcsIncludeClosure(ctx, ctx.target, instance, jsSources, d, jsScanCfg)
+			joinClosure = e.joinSrcsIncludeClosure(ctx.target, jsSources, jsScanCfg)
 		}
 
 		jsRef, joinOutVFS := emitJS(instance, js.OutputName, jsSources, joinClosure, ctx.target, d.tc, ctx.scripts, ctx.emit)
@@ -95,7 +95,8 @@ func (e *EmitContext) emitJoinSrcs() ([]NodeRef, []VFS, map[VFS]SrcMeta) {
 	return refs, outs, meta
 }
 
-func joinSrcsIncludeClosure(ctx *GenCtx, scanPlatform *Platform, srcInstance ModuleInstance, sources []string, d *ModuleData, scanCfg ScanContext) []VFS {
+func (e *EmitContext) joinSrcsIncludeClosure(scanPlatform *Platform, sources []string, scanCfg ScanContext) []VFS {
+	ctx, srcInstance, d := e.ctx, e.instance, e.d
 	scanner := ctx.scannerForPlatform(scanPlatform)
 	visited := scanner.visitedIDPool.Get().(*IdSet)
 

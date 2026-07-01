@@ -12,11 +12,11 @@ var (
 	cfKV             = KV{P: pkCF, PC: pcYellow}
 )
 
-func emitExplicitCF(ctx *GenCtx, instance ModuleInstance, cf *ConfigureFileStmt, d *ModuleData) {
+func (e *EmitContext) emitExplicitCF(cf *ConfigureFileStmt) {
+	ctx, instance := e.ctx, e.instance
 	srcVFS := copyFileInputVFS(ctx.fs, instance.Path, cf.Src)
 	outVFS := copyFileOutputVFS(instance.Path.rel(), cf.Dst)
 
-	e := newEmitContext(ctx, instance, d)
 	e.emitConfigureFile(srcVFS, outVFS)
 }
 

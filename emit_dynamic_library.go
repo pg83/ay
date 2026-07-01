@@ -35,7 +35,7 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 	fixElfRef, fixElfPath := ctx.tool(argToolsFixElf)
 
 	if !effectiveNoPlatform(d.flags) {
-		cowRes := genModule(ctx, derivePeerInstance(ctx, instance, d, "build/cow/on"))
+		cowRes := genModule(ctx, e.derivePeerInstance("build/cow/on"))
 
 		if cowRes.ARPath != nil {
 			peerArchiveRefs = append([]NodeRef{cowRes.ARRef}, peerArchiveRefs...)
@@ -176,7 +176,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 		seen[p] = struct{}{}
 
-		peerInstance := derivePeerInstance(ctx, instance, d, p)
+		peerInstance := e.derivePeerInstance(p)
 
 		resolved = append(resolved, genModule(ctx, peerInstance))
 	}
@@ -190,7 +190,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 		seen[p] = struct{}{}
 
-		peerInstance := derivePeerInstance(ctx, instance, d, p)
+		peerInstance := e.derivePeerInstance(p)
 
 		rpathOnly = append(rpathOnly, genModule(ctx, peerInstance))
 	}

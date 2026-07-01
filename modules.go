@@ -3205,7 +3205,8 @@ func peerEntryLanguage(parent ModuleInstance, parentModuleName TOK) Language {
 	return LangCPP
 }
 
-func derivePeerInstance(ctx *GenCtx, parent ModuleInstance, d *ModuleData, peerPath string) ModuleInstance {
+func (e *EmitContext) derivePeerInstance(peerPath string) ModuleInstance {
+	_, parent, d := e.ctx, e.instance, e.d
 	return ModuleInstance{
 		Path:     source(peerPath),
 		Kind:     KindLib,
