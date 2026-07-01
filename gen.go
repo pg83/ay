@@ -678,220 +678,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		d.peerdirs = append(d.peerdirs, strContribLibsCxxsupp)
 	}
 
-	if isSpecializedLibraryType(d.moduleStmt.Name) {
-		if d.moduleStmt.Name == tokDynamicLibrary {
-			result := e.emitDynamicLibrary()
-
-			ctx.memo.put(ctx.instanceKey(instance), result)
-
-			return result
-		}
-
-		peerContribs := e.walkPeersForGlobalAddIncl()
-
-		d.tc = resolveModuleToolchain(peerContribs.resourceGlobals, instance.Platform.ClangVer)
-
-		e.emitFromSandboxes()
-		e.emitBundles()
-
-		ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
-
-		ldPlugins := mergeLDPlugins(ownLDPlugins, &LdPluginsResult{
-			Refs:  peerContribs.ldPluginRefs,
-			Paths: peerContribs.ldPluginPaths,
-		})
-
-		if ldPlugins == nil {
-			ldPlugins = &LdPluginsResult{}
-		}
-
-		d.cc = ModuleCompileEnv{
-			InclArgs:             ctx.inclArgs,
-			Flags:                d.flags,
-			AddIncl:              d.addIncl,
-			PeerAddInclGlobal:    peerContribs.addIncl,
-			CFlags:               d.cFlags,
-			CXXFlags:             d.cxxFlags,
-			COnlyFlags:           d.cOnlyFlags,
-			OwnCFlagsGlobal:      d.cFlagsGlobal,
-			OwnCXXFlagsGlobal:    d.cxxFlagsGlobal,
-			OwnCOnlyFlagsGlobal:  d.cOnlyFlagsGlobal,
-			PeerCFlagsGlobal:     peerContribs.cFlags,
-			PeerCXXFlagsGlobal:   peerContribs.cxxFlags,
-			PeerCOnlyFlagsGlobal: peerContribs.cOnlyFlags,
-			ModuleScopeCFlags:    d.moduleScopeCFlags,
-			ClangWarnings:        d.clangWarnings,
-			SrcDirs:              d.srcDirs,
-			FS:                   ctx.fs,
-			DefaultVars:          d.defaultVars,
-			DefaultVarOrder:      d.defaultVarOrder,
-			SetVars:              d.setVars,
-			TC:                   d.tc,
-			ModuleTag:            cfModuleTag(d, instance),
-		}
-
-		d.cc.ScanCfg = newScanContext(ctx.parsers, d.addIncl, peerContribs.addIncl, includeScannerBasePaths(), instance.Path.rel())
-		d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
-		e.cythonAdjustModuleCCBlocks()
-		e.emitRunProgramsForAR()
-		e.emitRunPythonForAR()
-
-		e.emitPySrcs()
-
-		objcopyRes := e.emitResourceObjcopy()
-
-		var hOnlyGlobalRef *NodeRef
-		var hOnlyGlobalPath *VFS
-		var hOnlyWholeArchiveRefs []NodeRef
-		var hOnlyWholeArchivePaths []VFS
-
-		if objcopyRes != nil && len(objcopyRes.Refs) > 0 {
-			arInstance := instance
-
-			var globalBaseName string
-			var tag STR
-
-			archiveName := ""
-
-			if len(d.moduleStmt.Args) > 0 {
-				archiveName = d.moduleStmt.Args[0].string()
-			}
-
-			switch d.moduleStmt.Name {
-			case tokPy23NativeLibrary:
-				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.rel(), "libpy3c", archiveName)
-				tag = tagPy3NativeGlobal
-			case tokPy23Library:
-				arInstance.Language = LangPy
-				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.rel(), "libpy3", archiveName)
-				tag = tagPy3Global
-			case tokPy3Library, tokPy2Library, tokPy2Program, tokPy3Program:
-				arInstance.Language = LangPy
-				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.rel(), "libpy3", archiveName)
-				tag = tagGlobal
-			default:
-				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.rel(), "lib", archiveName)
-				tag = tagGlobal
-			}
-
-			if cfModuleTag(d, instance) == tagCppProto {
-				tag = tagCppProtoGlobal
-			}
-
-			gRef := emitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRes.Refs, objcopyRes.Outputs, d.tc, ctx.host, ctx.emit)
-
-			hOnlyGlobalRef = &gRef
-			hOnlyGlobalPath = vfsPtr(build(instance.Path.rel(), "/", globalBaseName))
-		}
-
-		e.emitMiscNodes()
-
-		protoResult := e.emitProtoSrcs(peerContribs)
-
-		if d.moduleStmt.Name != tokProtoLibrary {
-			e.emitEnumSrcs(peerContribs.addIncl)
-		}
-
-		e.drainSrcs()
-
-		protoARRefs := e.refs
-		protoAROuts := e.outs
-		protoARMeta := e.declMeta
-
-		if protoResult != nil && protoResult.PendingAR {
-			protoARRefs, protoAROuts = reorderARMembers(protoARRefs, protoAROuts, protoARMeta)
-
-			arBaseName := archiveNameWithPrefixOrName(instance.Path.rel(), "lib", protoResult.ProtoLibName)
-			archivePath := build(instance.Path.rel(), "/", arBaseName)
-			arRef := emitARNode(instance, archivePath, tagCppProto, protoARRefs, protoAROuts, nil, nil, d.tc, ctx.host, ctx.emit)
-
-			protoResult.ARRef = arRef
-			protoResult.ARPath = &archivePath
-		}
-
-		hOnlyARRef := NodeRef(0)
-
-		var hOnlyARPath *VFS
-
-		if protoResult != nil {
-			if protoResult.ARPath != nil {
-				hOnlyARRef = protoResult.ARRef
-				hOnlyARPath = protoResult.ARPath
-			}
-
-			if protoResult.GlobalRef != nil && protoResult.GlobalPath != nil {
-				hOnlyGlobalRef = protoResult.GlobalRef
-				hOnlyGlobalPath = protoResult.GlobalPath
-			}
-
-			hOnlyWholeArchiveRefs = append(hOnlyWholeArchiveRefs, protoResult.WholeArchiveRefs...)
-			hOnlyWholeArchivePaths = append(hOnlyWholeArchivePaths, protoResult.WholeArchivePaths...)
-		}
-
-		peerArchivePathsH := peerContribs.archivePaths
-		peerArchiveRefsH := peerContribs.archiveRefs
-		peerGlobalPathsH := peerContribs.globalPaths
-		peerGlobalRefsH := peerContribs.globalRefs
-
-		var ownProtoIncludeH []VFS
-
-		if d.protoNamespace != nil {
-			ownProtoIncludeH = []VFS{source(filepath.ToSlash(filepath.Clean(d.protoNamespace.string())))}
-		}
-
-		ownProtoIncludeH = append(ownProtoIncludeH, d.protoAddInclGlobal...)
-
-		effectiveProtoIncludeH := dedup(ownProtoIncludeH, peerContribs.protoInclude)
-
-		var ownSbomRefH *NodeRef
-		var ownSbomPathH *VFS
-
-		if sbomActive(ctx, instance) && sbomQualifies(d) {
-			realPrjName := strings.TrimSuffix(archiveNameWithPrefixOrName(instance.Path.rel(), "", ""), ".a")
-
-			ownSbomRefH, ownSbomPathH = e.emitSbomComponent(realPrjName)
-		}
-
-		result := &ModuleEmitResult{
-			isPyLibrary:       isPyLibraryType(d.moduleStmt.Name),
-			ARRef:             hOnlyARRef,
-			ARPath:            hOnlyARPath,
-			GlobalRef:         hOnlyGlobalRef,
-			GlobalPath:        hOnlyGlobalPath,
-			AddInclGlobal:     dedup(d.addInclGlobal, peerContribs.addIncl),
-			OwnAddInclGlobal:  d.addInclGlobal,
-			ProtoInclude:      effectiveProtoIncludeH,
-			AddInclOneLevel:   d.addInclOneLevel,
-			AddInclUserGlobal: d.addInclUserGlobal,
-
-			CFlagsGlobal:                    concat(peerContribs.cFlags, d.cFlagsGlobal),
-			CXXFlagsGlobal:                  concat(peerContribs.cxxFlags, d.cxxFlagsGlobal),
-			COnlyFlagsGlobal:                concat(peerContribs.cOnlyFlags, d.cOnlyFlagsGlobal),
-			ObjAddLibsGlobal:                concat(peerContribs.objAddLibs, d.objAddLibsGlobal),
-			LDFlagsGlobal:                   concat(peerContribs.ldFlags, d.ldFlags),
-			RPathFlagsGlobal:                concat(peerContribs.rpathFlags, d.rpathFlagsGlobal),
-			PeerArchiveClosureRefs:          peerArchiveRefsH,
-			PeerArchiveClosurePaths:         peerArchivePathsH,
-			PeerGlobalClosureRefs:           peerGlobalRefsH,
-			PeerGlobalClosurePaths:          peerGlobalPathsH,
-			WholeArchiveRefs:                hOnlyWholeArchiveRefs,
-			WholeArchivePaths:               hOnlyWholeArchivePaths,
-			WholeArchiveCmdPaths:            protoResultWholeArchiveCmdPaths(protoResult),
-			PeerWholeArchiveClosureRefs:     peerContribs.wholeArchiveRefs,
-			PeerWholeArchiveClosurePaths:    peerContribs.wholeArchivePaths,
-			PeerWholeArchiveCmdClosurePaths: peerContribs.wholeArchiveCmdPaths,
-			LDPluginRefs:                    ldPlugins.Refs,
-			LDPluginPaths:                   ldPlugins.Paths,
-			PeerDynamicClosureRefs:          peerContribs.dynamicRefs,
-			PeerDynamicClosurePaths:         peerContribs.dynamicPaths,
-			SbomComponentRef:                ownSbomRefH,
-			SbomComponentPath:               ownSbomPathH,
-			PeerSbomClosureRefs:             peerContribs.sbomRefs,
-			PeerSbomClosurePaths:            peerContribs.sbomPaths,
-			InducedDeps:                     d.inducedDeps,
-			Peerdirs:                        d.peerdirs,
-			ModuleStmtName:                  d.moduleStmt.Name,
-		}
+	if d.moduleStmt.Name == tokDynamicLibrary {
+		result := e.emitDynamicLibrary()
 
 		ctx.memo.put(ctx.instanceKey(instance), result)
 
@@ -925,14 +713,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		unitTestPeerCount = 1
 	}
 
-	deduper.reset()
-
-	peerSeen := func(p string) bool {
-		return !deduper.add(VFS(internStr(p)) << 1)
-	}
-
-	allPeers := make([]string, 0, len(languageDefaults)+unitTestPeerCount+len(preUserProgDefaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
-
 	const (
 		peerKindLangDefault    = 0
 		peerKindProgramDefault = 1
@@ -940,6 +720,40 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		peerKindUnitTestPeer   = 3
 	)
 
+	type resolvedPeer struct {
+		path   string
+		result *ModuleEmitResult
+		kind   int
+	}
+
+	specialized := isSpecializedLibraryType(d.moduleStmt.Name)
+
+	deduper.reset()
+
+	peerSeen := func(p string) bool {
+		return !deduper.add(VFS(internStr(p)) << 1)
+	}
+
+	preResolved := make([]resolvedPeer, 0, 2)
+
+	if specialized && instance.Language == LangPy && d.moduleStmt.Name == tokProtoLibrary && d.optimizePyProtos && !moduleExcludesTag(d, "CPP_PROTO") {
+		peerSeen(instance.Path.rel())
+
+		cppSelf := instance
+
+		cppSelf.Language = LangCPP
+		preResolved = append(preResolved, resolvedPeer{path: instance.Path.rel(), result: genModule(ctx, cppSelf), kind: peerKindLangDefault})
+	}
+
+	if specialized && d.useCommonGoogleAPIs && instance.Language == LangCPP {
+		const googleapisPeer = "contrib/libs/googleapis-common-protos"
+
+		if !peerSeen(googleapisPeer) {
+			preResolved = append(preResolved, resolvedPeer{path: googleapisPeer, result: genModule(ctx, e.derivePeerInstance(googleapisPeer)), kind: peerKindLangDefault})
+		}
+	}
+
+	allPeers := make([]string, 0, len(languageDefaults)+unitTestPeerCount+len(preUserProgDefaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
 	peerKinds := make([]int, 0, len(languageDefaults)+unitTestPeerCount+len(preUserProgDefaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
 
 	for _, p := range languageDefaults {
@@ -1037,13 +851,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	var peerCFlagsGlobal []ARG
 	var peerCXXFlagsGlobal []ARG
 	var peerCOnlyFlagsGlobal []ARG
-	type resolvedPeer struct {
-		path   string
-		result *ModuleEmitResult
-		kind   int
-	}
 
-	resolved := make([]resolvedPeer, 0, len(allPeers))
+	resolved := append(make([]resolvedPeer, 0, len(preResolved)+len(allPeers)), preResolved...)
 
 	for i, p := range allPeers {
 		peerPath := filepath.Clean(p)
@@ -1212,7 +1021,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	if cxxIdx > libcxxIdx && libcxxIdx >= 0 {
+	if !specialized && cxxIdx > libcxxIdx && libcxxIdx >= 0 {
 		reordered := make([]resolvedPeer, 0, len(archiveOrder))
 		cxx := archiveOrder[cxxIdx]
 
@@ -1380,72 +1189,82 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	deduper.reset()
 
-	for _, rp := range resolved {
-		if rp.kind == peerKindLangDefault {
-			for _, p := range rp.result.OwnAddInclGlobal {
-				if deduper.add(p) {
-					peerAddInclGlobal = append(peerAddInclGlobal, p)
-				}
-			}
-		}
-	}
-
-	for _, rp := range resolved {
-		if rp.kind == peerKindLangDefault {
+	if specialized {
+		for _, rp := range resolved {
 			for _, p := range rp.result.AddInclGlobal {
 				if deduper.add(p) {
 					peerAddInclGlobal = append(peerAddInclGlobal, p)
 				}
 			}
 		}
-	}
+	} else {
+		for _, rp := range resolved {
+			if rp.kind == peerKindLangDefault {
+				for _, p := range rp.result.OwnAddInclGlobal {
+					if deduper.add(p) {
+						peerAddInclGlobal = append(peerAddInclGlobal, p)
+					}
+				}
+			}
+		}
 
-	for _, rp := range resolved {
-		if rp.kind == peerKindUnitTestPeer {
-			for _, p := range rp.result.AddInclGlobal {
+		for _, rp := range resolved {
+			if rp.kind == peerKindLangDefault {
+				for _, p := range rp.result.AddInclGlobal {
+					if deduper.add(p) {
+						peerAddInclGlobal = append(peerAddInclGlobal, p)
+					}
+				}
+			}
+		}
+
+		for _, rp := range resolved {
+			if rp.kind == peerKindUnitTestPeer {
+				for _, p := range rp.result.AddInclGlobal {
+					if deduper.add(p) {
+						peerAddInclGlobal = append(peerAddInclGlobal, p)
+					}
+				}
+			}
+		}
+
+		for _, rp := range resolved {
+			if rp.kind == peerKindProgramDefault {
+				for _, p := range rp.result.AddInclGlobal {
+					if deduper.add(p) {
+						peerAddInclGlobal = append(peerAddInclGlobal, p)
+					}
+				}
+			}
+		}
+
+		for _, rp := range resolved {
+			if rp.kind != peerKindUserPeer {
+				continue
+			}
+
+			for _, p := range rp.result.AddInclUserGlobal {
 				if deduper.add(p) {
 					peerAddInclGlobal = append(peerAddInclGlobal, p)
 				}
 			}
-		}
-	}
 
-	for _, rp := range resolved {
-		if rp.kind == peerKindProgramDefault {
+			for _, p := range rp.result.AddInclOneLevel {
+				if oneLevelOnlyPaths == nil {
+					oneLevelOnlyPaths = map[VFS]struct{}{}
+				}
+
+				oneLevelOnlyPaths[p] = struct{}{}
+			}
+
 			for _, p := range rp.result.AddInclGlobal {
 				if deduper.add(p) {
 					peerAddInclGlobal = append(peerAddInclGlobal, p)
 				}
-			}
-		}
-	}
 
-	for _, rp := range resolved {
-		if rp.kind != peerKindUserPeer {
-			continue
-		}
-
-		for _, p := range rp.result.AddInclUserGlobal {
-			if deduper.add(p) {
-				peerAddInclGlobal = append(peerAddInclGlobal, p)
-			}
-		}
-
-		for _, p := range rp.result.AddInclOneLevel {
-			if oneLevelOnlyPaths == nil {
-				oneLevelOnlyPaths = map[VFS]struct{}{}
-			}
-
-			oneLevelOnlyPaths[p] = struct{}{}
-		}
-
-		for _, p := range rp.result.AddInclGlobal {
-			if deduper.add(p) {
-				peerAddInclGlobal = append(peerAddInclGlobal, p)
-			}
-
-			if oneLevelOnlyPaths != nil {
-				delete(oneLevelOnlyPaths, p)
+				if oneLevelOnlyPaths != nil {
+					delete(oneLevelOnlyPaths, p)
+				}
 			}
 		}
 	}
@@ -1576,6 +1395,214 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		effectiveAddInclGlobal = spliced
+	}
+
+	if specialized {
+		e.emitFromSandboxes()
+		e.emitBundles()
+
+		ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
+
+		ldPlugins := mergeLDPlugins(ownLDPlugins, &LdPluginsResult{
+			Refs:  peerLDPluginRefs,
+			Paths: peerLDPluginPaths,
+		})
+
+		if ldPlugins == nil {
+			ldPlugins = &LdPluginsResult{}
+		}
+
+		d.cc = ModuleCompileEnv{
+			InclArgs:             ctx.inclArgs,
+			Flags:                d.flags,
+			AddIncl:              d.addIncl,
+			PeerAddInclGlobal:    peerAddInclGlobal,
+			CFlags:               d.cFlags,
+			CXXFlags:             d.cxxFlags,
+			COnlyFlags:           d.cOnlyFlags,
+			OwnCFlagsGlobal:      d.cFlagsGlobal,
+			OwnCXXFlagsGlobal:    d.cxxFlagsGlobal,
+			OwnCOnlyFlagsGlobal:  d.cOnlyFlagsGlobal,
+			PeerCFlagsGlobal:     peerCFlagsGlobal,
+			PeerCXXFlagsGlobal:   peerCXXFlagsGlobal,
+			PeerCOnlyFlagsGlobal: peerCOnlyFlagsGlobal,
+			ModuleScopeCFlags:    d.moduleScopeCFlags,
+			ClangWarnings:        d.clangWarnings,
+			SrcDirs:              d.srcDirs,
+			FS:                   ctx.fs,
+			DefaultVars:          d.defaultVars,
+			DefaultVarOrder:      d.defaultVarOrder,
+			SetVars:              d.setVars,
+			TC:                   d.tc,
+			ModuleTag:            cfModuleTag(d, instance),
+		}
+
+		d.cc.ScanCfg = newScanContext(ctx.parsers, d.addIncl, peerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+		d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
+		e.cythonAdjustModuleCCBlocks()
+		e.emitRunProgramsForAR()
+		e.emitRunPythonForAR()
+
+		e.emitPySrcs()
+
+		objcopyRes := e.emitResourceObjcopy()
+
+		var hOnlyGlobalRef *NodeRef
+		var hOnlyGlobalPath *VFS
+		var hOnlyWholeArchiveRefs []NodeRef
+		var hOnlyWholeArchivePaths []VFS
+
+		if objcopyRes != nil && len(objcopyRes.Refs) > 0 {
+			arInstance := instance
+
+			var globalBaseName string
+			var tag STR
+
+			archiveName := ""
+
+			if len(d.moduleStmt.Args) > 0 {
+				archiveName = d.moduleStmt.Args[0].string()
+			}
+
+			switch d.moduleStmt.Name {
+			case tokPy23NativeLibrary:
+				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.rel(), "libpy3c", archiveName)
+				tag = tagPy3NativeGlobal
+			case tokPy23Library:
+				arInstance.Language = LangPy
+				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.rel(), "libpy3", archiveName)
+				tag = tagPy3Global
+			case tokPy3Library, tokPy2Library, tokPy2Program, tokPy3Program:
+				arInstance.Language = LangPy
+				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.rel(), "libpy3", archiveName)
+				tag = tagGlobal
+			default:
+				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.rel(), "lib", archiveName)
+				tag = tagGlobal
+			}
+
+			if cfModuleTag(d, instance) == tagCppProto {
+				tag = tagCppProtoGlobal
+			}
+
+			gRef := emitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRes.Refs, objcopyRes.Outputs, d.tc, ctx.host, ctx.emit)
+
+			hOnlyGlobalRef = &gRef
+			hOnlyGlobalPath = vfsPtr(build(instance.Path.rel(), "/", globalBaseName))
+		}
+
+		e.emitMiscNodes()
+
+		protoResult := e.emitProtoSrcs(PeerGlobalContribs{addIncl: peerAddInclGlobal, protoInclude: peerProtoInclude})
+
+		if d.moduleStmt.Name != tokProtoLibrary {
+			e.emitEnumSrcs(peerAddInclGlobal)
+		}
+
+		e.drainSrcs()
+
+		protoARRefs := e.refs
+		protoAROuts := e.outs
+		protoARMeta := e.declMeta
+
+		if protoResult != nil && protoResult.PendingAR {
+			protoARRefs, protoAROuts = reorderARMembers(protoARRefs, protoAROuts, protoARMeta)
+
+			arBaseName := archiveNameWithPrefixOrName(instance.Path.rel(), "lib", protoResult.ProtoLibName)
+			archivePath := build(instance.Path.rel(), "/", arBaseName)
+			arRef := emitARNode(instance, archivePath, tagCppProto, protoARRefs, protoAROuts, nil, nil, d.tc, ctx.host, ctx.emit)
+
+			protoResult.ARRef = arRef
+			protoResult.ARPath = &archivePath
+		}
+
+		hOnlyARRef := NodeRef(0)
+
+		var hOnlyARPath *VFS
+
+		if protoResult != nil {
+			if protoResult.ARPath != nil {
+				hOnlyARRef = protoResult.ARRef
+				hOnlyARPath = protoResult.ARPath
+			}
+
+			if protoResult.GlobalRef != nil && protoResult.GlobalPath != nil {
+				hOnlyGlobalRef = protoResult.GlobalRef
+				hOnlyGlobalPath = protoResult.GlobalPath
+			}
+
+			hOnlyWholeArchiveRefs = append(hOnlyWholeArchiveRefs, protoResult.WholeArchiveRefs...)
+			hOnlyWholeArchivePaths = append(hOnlyWholeArchivePaths, protoResult.WholeArchivePaths...)
+		}
+
+		peerArchivePathsH := peerArchivePaths
+		peerArchiveRefsH := peerArchiveRefs
+		peerGlobalPathsH := peerGlobalPaths
+		peerGlobalRefsH := peerGlobalRefs
+
+		var ownProtoIncludeH []VFS
+
+		if d.protoNamespace != nil {
+			ownProtoIncludeH = []VFS{source(filepath.ToSlash(filepath.Clean(d.protoNamespace.string())))}
+		}
+
+		ownProtoIncludeH = append(ownProtoIncludeH, d.protoAddInclGlobal...)
+
+		effectiveProtoIncludeH := dedup(ownProtoIncludeH, peerProtoInclude)
+
+		var ownSbomRefH *NodeRef
+		var ownSbomPathH *VFS
+
+		if sbomActive(ctx, instance) && sbomQualifies(d) {
+			realPrjName := strings.TrimSuffix(archiveNameWithPrefixOrName(instance.Path.rel(), "", ""), ".a")
+
+			ownSbomRefH, ownSbomPathH = e.emitSbomComponent(realPrjName)
+		}
+
+		result := &ModuleEmitResult{
+			isPyLibrary:       isPyLibraryType(d.moduleStmt.Name),
+			ARRef:             hOnlyARRef,
+			ARPath:            hOnlyARPath,
+			GlobalRef:         hOnlyGlobalRef,
+			GlobalPath:        hOnlyGlobalPath,
+			AddInclGlobal:     dedup(d.addInclGlobal, peerAddInclGlobal),
+			OwnAddInclGlobal:  d.addInclGlobal,
+			ProtoInclude:      effectiveProtoIncludeH,
+			AddInclOneLevel:   d.addInclOneLevel,
+			AddInclUserGlobal: d.addInclUserGlobal,
+
+			CFlagsGlobal:                    concat(peerCFlagsGlobal, d.cFlagsGlobal),
+			CXXFlagsGlobal:                  concat(peerCXXFlagsGlobal, d.cxxFlagsGlobal),
+			COnlyFlagsGlobal:                concat(peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal),
+			ObjAddLibsGlobal:                concat(peerObjAddLibsGlobal, d.objAddLibsGlobal),
+			LDFlagsGlobal:                   concat(peerLDFlagsGlobal, d.ldFlags),
+			RPathFlagsGlobal:                concat(peerRPathFlagsGlobal, d.rpathFlagsGlobal),
+			PeerArchiveClosureRefs:          peerArchiveRefsH,
+			PeerArchiveClosurePaths:         peerArchivePathsH,
+			PeerGlobalClosureRefs:           peerGlobalRefsH,
+			PeerGlobalClosurePaths:          peerGlobalPathsH,
+			WholeArchiveRefs:                hOnlyWholeArchiveRefs,
+			WholeArchivePaths:               hOnlyWholeArchivePaths,
+			WholeArchiveCmdPaths:            protoResultWholeArchiveCmdPaths(protoResult),
+			PeerWholeArchiveClosureRefs:     peerWholeArchiveRefs,
+			PeerWholeArchiveClosurePaths:    peerWholeArchivePaths,
+			PeerWholeArchiveCmdClosurePaths: peerWholeArchiveCmdPaths,
+			LDPluginRefs:                    ldPlugins.Refs,
+			LDPluginPaths:                   ldPlugins.Paths,
+			PeerDynamicClosureRefs:          peerDynamicRefs,
+			PeerDynamicClosurePaths:         peerDynamicPaths,
+			SbomComponentRef:                ownSbomRefH,
+			SbomComponentPath:               ownSbomPathH,
+			PeerSbomClosureRefs:             peerSbomRefs,
+			PeerSbomClosurePaths:            peerSbomPaths,
+			InducedDeps:                     d.inducedDeps,
+			Peerdirs:                        d.peerdirs,
+			ModuleStmtName:                  d.moduleStmt.Name,
+		}
+
+		ctx.memo.put(ctx.instanceKey(instance), result)
+
+		return result
 	}
 
 	effectiveCFlagsGlobal := dedup(peerCFlagsGlobal, d.cFlagsGlobal)
@@ -2242,333 +2269,8 @@ func mergeLDPlugins(own, peer *LdPluginsResult) *LdPluginsResult {
 }
 
 type PeerGlobalContribs struct {
-	addIncl              []VFS
-	protoInclude         []VFS
-	cFlags               []ARG
-	cxxFlags             []ARG
-	cOnlyFlags           []ARG
-	objAddLibs           []ARG
-	ldFlags              []ARG
-	rpathFlags           []ARG
-	archiveRefs          []NodeRef
-	archivePaths         []VFS
-	globalRefs           []NodeRef
-	globalPaths          []VFS
-	wholeArchiveRefs     []NodeRef
-	wholeArchivePaths    []VFS
-	wholeArchiveCmdPaths []VFS
-	ldPluginRefs         []NodeRef
-	ldPluginPaths        []VFS
-	dynamicRefs          []NodeRef
-	dynamicPaths         []VFS
-	sbomRefs             []NodeRef
-	sbomPaths            []VFS
-	resourceGlobals      []ResourceDecl
-}
-
-func (e *EmitContext) walkPeersForGlobalAddIncl() PeerGlobalContribs {
-	ctx, instance, d := e.ctx, e.instance, e.d
-	defaults := e.defaultPeerdirsForModule()
-
-	defaults = suppressMallocAPIDefault(defaults, d.allocatorName)
-
-	seen := make(map[string]struct{}, len(defaults)+len(d.peerdirs))
-	resolved := make([]*ModuleEmitResult, 0, len(defaults)+len(d.peerdirs))
-
-	walkInstance := func(peerInstance ModuleInstance) {
-		resolved = append(resolved, genModule(ctx, peerInstance))
-	}
-
-	walk := func(peerPath string) {
-		walkInstance(e.derivePeerInstance(peerPath))
-	}
-
-	if instance.Language == LangPy && d.moduleStmt.Name == tokProtoLibrary && d.optimizePyProtos && !moduleExcludesTag(d, "CPP_PROTO") {
-		seen[instance.Path.rel()] = struct{}{}
-
-		cppSelf := instance
-
-		cppSelf.Language = LangCPP
-		walkInstance(cppSelf)
-	}
-
-	if d.useCommonGoogleAPIs && instance.Language == LangCPP {
-		const googleapisPeer = "contrib/libs/googleapis-common-protos"
-
-		if _, dup := seen[googleapisPeer]; !dup {
-			seen[googleapisPeer] = struct{}{}
-			walk(googleapisPeer)
-		}
-	}
-
-	for _, p := range defaults {
-		if _, dup := seen[p]; dup {
-			continue
-		}
-
-		seen[p] = struct{}{}
-
-		peerPath := filepath.Clean(p)
-
-		if !peerYaMakeExists(ctx.fs, peerPath) {
-			continue
-		}
-
-		walk(peerPath)
-	}
-
-	firstPeerdirIdx := len(resolved)
-	frontSet := map[string]struct{}{}
-
-	for _, p := range d.protoCmdPeers {
-		frontSet[filepath.Clean(p.string())] = struct{}{}
-	}
-
-	peerdirFront := make([]bool, firstPeerdirIdx, firstPeerdirIdx+len(d.peerdirs))
-
-	for _, p := range d.peerdirs {
-		if _, dup := seen[p.string()]; dup {
-			continue
-		}
-
-		seen[p.string()] = struct{}{}
-
-		peerPath := filepath.Clean(p.string())
-		_, isFront := frontSet[peerPath]
-
-		peerdirFront = append(peerdirFront, isFront)
-		walk(peerPath)
-	}
-
-	orderedResolved := resolved
-
-	if firstPeerdirIdx < len(resolved) {
-		orderedResolved = make([]*ModuleEmitResult, 0, len(resolved))
-		orderedResolved = append(orderedResolved, resolved[:firstPeerdirIdx]...)
-
-		for i := firstPeerdirIdx; i < len(resolved); i++ {
-			if peerdirFront[i] {
-				orderedResolved = append(orderedResolved, resolved[i])
-			}
-		}
-
-		for i := firstPeerdirIdx; i < len(resolved); i++ {
-			if !peerdirFront[i] {
-				orderedResolved = append(orderedResolved, resolved[i])
-			}
-		}
-	}
-
-	out := PeerGlobalContribs{}
-
-	deduper.reset()
-
-	for _, pr := range resolved {
-		for _, decl := range pr.ResourceGlobalClosure {
-			if deduper.add(VFS(decl.GlobalVar)) {
-				out.resourceGlobals = append(out.resourceGlobals, decl)
-			}
-		}
-	}
-
-	deduper.reset()
-
-	addInclFrom := func(pr *ModuleEmitResult) {
-		for _, p := range pr.AddInclGlobal {
-			if deduper.add(p) {
-				out.addIncl = append(out.addIncl, p)
-			}
-		}
-	}
-
-	for _, pr := range orderedResolved {
-		addInclFrom(pr)
-	}
-
-	deduper.reset()
-
-	for _, pr := range resolved {
-		for _, p := range pr.ProtoInclude {
-			if deduper.add(p) {
-				out.protoInclude = append(out.protoInclude, p)
-			}
-		}
-	}
-
-	deduper.reset()
-
-	for _, pr := range resolved {
-		for _, a := range pr.CFlagsGlobal {
-			if deduper.add(VFS(a)) {
-				out.cFlags = append(out.cFlags, a)
-			}
-		}
-	}
-
-	deduper.reset()
-
-	for _, pr := range resolved {
-		for _, a := range pr.CXXFlagsGlobal {
-			if deduper.add(VFS(a)) {
-				out.cxxFlags = append(out.cxxFlags, a)
-			}
-		}
-	}
-
-	deduper.reset()
-
-	for _, pr := range resolved {
-		for _, a := range pr.COnlyFlagsGlobal {
-			if deduper.add(VFS(a)) {
-				out.cOnlyFlags = append(out.cOnlyFlags, a)
-			}
-		}
-	}
-
-	deduper.reset()
-
-	for _, pr := range resolved {
-		for _, a := range pr.ObjAddLibsGlobal {
-			if deduper.add(VFS(a)) {
-				out.objAddLibs = append(out.objAddLibs, a)
-			}
-		}
-	}
-
-	deduper.reset()
-
-	for _, pr := range resolved {
-		for _, a := range pr.LDFlagsGlobal {
-			if deduper.add(VFS(a)) {
-				out.ldFlags = append(out.ldFlags, a)
-			}
-		}
-	}
-
-	deduper.reset()
-
-	for _, pr := range resolved {
-		for _, a := range pr.RPathFlagsGlobal {
-			if deduper.add(VFS(a)) {
-				out.rpathFlags = append(out.rpathFlags, a)
-			}
-		}
-	}
-
-	deduper.reset()
-
-	for _, pr := range orderedResolved {
-		for i, p := range pr.PeerArchiveClosurePaths {
-			if deduper.add(p) {
-				out.archiveRefs = append(out.archiveRefs, pr.PeerArchiveClosureRefs[i])
-				out.archivePaths = append(out.archivePaths, p)
-			}
-		}
-
-		if pr.ARPath != nil && deduper.add(*pr.ARPath) {
-			out.archiveRefs = append(out.archiveRefs, pr.ARRef)
-			out.archivePaths = append(out.archivePaths, *pr.ARPath)
-		}
-	}
-
-	deduper.reset()
-
-	for _, pr := range orderedResolved {
-		for i, p := range pr.PeerSbomClosurePaths {
-			if p == lldToolchainSbomVFS {
-				continue
-			}
-
-			if deduper.add(p) {
-				out.sbomRefs = append(out.sbomRefs, pr.PeerSbomClosureRefs[i])
-				out.sbomPaths = append(out.sbomPaths, p)
-			}
-		}
-
-		if pr.SbomComponentRef != nil && *pr.SbomComponentPath != lldToolchainSbomVFS && deduper.add(*pr.SbomComponentPath) {
-			out.sbomRefs = append(out.sbomRefs, *pr.SbomComponentRef)
-			out.sbomPaths = append(out.sbomPaths, *pr.SbomComponentPath)
-		}
-	}
-
-	deduper.reset()
-
-	for _, pr := range orderedResolved {
-		for i, p := range pr.PeerGlobalClosurePaths {
-			if deduper.add(p) {
-				out.globalRefs = append(out.globalRefs, pr.PeerGlobalClosureRefs[i])
-				out.globalPaths = append(out.globalPaths, p)
-			}
-		}
-
-		if pr.GlobalRef != nil && pr.GlobalPath != nil && deduper.add(*pr.GlobalPath) {
-			out.globalRefs = append(out.globalRefs, *pr.GlobalRef)
-			out.globalPaths = append(out.globalPaths, *pr.GlobalPath)
-		}
-	}
-
-	deduper.reset()
-
-	for _, pr := range orderedResolved {
-		for i, p := range pr.PeerWholeArchiveClosurePaths {
-			if deduper.add(p) {
-				out.wholeArchiveRefs = append(out.wholeArchiveRefs, pr.PeerWholeArchiveClosureRefs[i])
-				out.wholeArchivePaths = append(out.wholeArchivePaths, p)
-			}
-		}
-
-		for i, p := range pr.WholeArchivePaths {
-			if deduper.add(p) {
-				out.wholeArchiveRefs = append(out.wholeArchiveRefs, pr.WholeArchiveRefs[i])
-				out.wholeArchivePaths = append(out.wholeArchivePaths, p)
-			}
-		}
-	}
-
-	deduper.reset()
-
-	for _, pr := range orderedResolved {
-		for _, p := range pr.PeerWholeArchiveCmdClosurePaths {
-			if deduper.add(p) {
-				out.wholeArchiveCmdPaths = append(out.wholeArchiveCmdPaths, p)
-			}
-		}
-
-		for _, p := range pr.WholeArchiveCmdPaths {
-			if deduper.add(p) {
-				out.wholeArchiveCmdPaths = append(out.wholeArchiveCmdPaths, p)
-			}
-		}
-	}
-
-	deduper.reset()
-
-	for _, pr := range orderedResolved {
-		for i, p := range pr.LDPluginPaths {
-			if deduper.add(p) {
-				out.ldPluginRefs = append(out.ldPluginRefs, pr.LDPluginRefs[i])
-				out.ldPluginPaths = append(out.ldPluginPaths, p)
-			}
-		}
-	}
-
-	deduper.reset()
-
-	for _, pr := range orderedResolved {
-		for i, p := range pr.PeerDynamicClosurePaths {
-			if deduper.add(p) {
-				out.dynamicRefs = append(out.dynamicRefs, pr.PeerDynamicClosureRefs[i])
-				out.dynamicPaths = append(out.dynamicPaths, p)
-			}
-		}
-
-		if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil && deduper.add(*pr.LDPath) {
-			out.dynamicRefs = append(out.dynamicRefs, pr.LDRef)
-			out.dynamicPaths = append(out.dynamicPaths, *pr.LDPath)
-		}
-	}
-
-	return out
+	addIncl      []VFS
+	protoInclude []VFS
 }
 
 func reorderARMembers(refs []NodeRef, paths []VFS, declMeta map[VFS]SrcMeta) ([]NodeRef, []VFS) {
