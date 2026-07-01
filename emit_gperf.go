@@ -24,7 +24,7 @@ func gperfSymbolName(srcRel string) string {
 	return "-Nin_" + base + "_set"
 }
 
-func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS, gperfLD NodeRef, srcInputs []VFS, emit *StreamingEmitter) NodeRef {
+func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS, gperfLD NodeRef, srcInputs []VFS, ref NodeRef, emit *StreamingEmitter) {
 	na := emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	head := make([]STR, 0, 3+len(gperfFlags))
@@ -44,7 +44,7 @@ func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS
 		ForeignDepRefs: depRefs(gperfLD),
 	}
 
-	return emit.emit(node)
+	emit.emitReserved(node, ref)
 }
 
 func (e *EmitContext) emitLibraryGperfSource(src STR) {
@@ -53,8 +53,7 @@ func (e *EmitContext) emitLibraryGperfSource(src STR) {
 	gperfLDRef, gperfBinVFS := ctx.tool(argContribToolsGperf)
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	genVFS := build(instance.Path.rel(), "/", gperfGeneratedRel(srcRel))
-	srcClosure := walkClosure(e.scanner, srcVFS, d.cc.ScanCfg)
-	gpRef := emitGP(instance, srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, keepOnlySourceVFS(srcClosure), ctx.emit)
+	gpRef := ctx.emit.reserve()
 
 	var psc []ARG
 
@@ -74,4 +73,10 @@ func (e *EmitContext) emitLibraryGperfSource(src STR) {
 
 	meta.Generated = true
 	e.enqueueSrc(genVFS.str(), meta)
+
+	e.deferPass2(func() {
+		srcClosure := walkClosure(e.scanner, srcVFS, d.cc.ScanCfg)
+
+		emitGP(instance, srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, keepOnlySourceVFS(srcClosure), gpRef, ctx.emit)
+	})
 }

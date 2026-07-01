@@ -2229,6 +2229,53 @@ func writeToolProgram(files map[string]string, modulePath, binaryName string) {
 	files[modulePath+"/main.cpp"] = "int main(){return 0;}\n"
 }
 
+func testGenWarns(fs FS, targetDir string) (*Graph, []Warn) {
+	host := newTestPlatform(OSLinux, ISAX8664, "yes")
+	targetFlags := make(map[string]string, len(testToolchainFlags)+1)
+
+	for k, v := range testToolchainFlags {
+		targetFlags[k] = v
+	}
+
+	targetFlags["PIC"] = "no"
+	target := newPlatform(fs, OSLinux, ISAAArch64, targetFlags, "", "")
+
+	var warns []Warn
+
+	g := Gen(fs, targetDir, host, target, func(w Warn) { warns = append(warns, w) })
+
+	return g, warns
+}
+
+func writeBisonProducer(files map[string]string) {
+	addToolchainPeers(files)
+	writeBisonTool(files)
+	writeToolProgram(files, "contrib/tools/m4", "m4")
+	writeTestModuleFile(files, bisonPreprocessPyVFS.rel(), "print('stub')\n")
+
+	for _, input := range bisonCppSkeletonInputs {
+		body := ""
+
+		if strings.HasSuffix(input.rel(), "/stack.hh") {
+			body = `#include "skeleton-helper.h"` + "\n"
+		}
+
+		writeTestModuleFile(files, input.rel(), body)
+	}
+
+	writeTestModuleFile(files, "contrib/tools/bison/data/skeletons/skeleton-helper.h", "")
+}
+
+func assertNoMissingInclude(t *testing.T, warns []Warn, needle string) {
+	t.Helper()
+
+	for _, w := range warns {
+		if w.Kind == WarnMissingInclude && strings.Contains(w.Message, needle) {
+			t.Fatalf("missing-include (sibling producer registered after consumer scanned): %s", w.Message)
+		}
+	}
+}
+
 func writeTestModuleFile(files map[string]string, rel, content string) {
 	files[rel] = content
 }
