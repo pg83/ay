@@ -1398,9 +1398,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	if specialized {
-		e.emitFromSandboxes()
-		e.emitBundles()
-
 		ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
 
 		ldPlugins := mergeLDPlugins(ownLDPlugins, &LdPluginsResult{
@@ -1439,13 +1436,17 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		d.cc.ScanCfg = newScanContext(ctx.parsers, d.addIncl, peerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 		d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
+
+		e = newEmitContext(ctx, instance, d, &PeerContext{
+			SelfAddInclGlobal: peerAddInclGlobal,
+			ResourceGlobals:   resourceGlobalsClosure,
+			ProtoInclude:      peerProtoInclude,
+		})
+
 		e.cythonAdjustModuleCCBlocks()
-		e.emitRunProgramsForAR()
-		e.emitRunPythonForAR()
+		e.emit()
 
-		e.emitPySrcs()
-
-		objcopyRes := e.emitResourceObjcopy()
+		objcopyRes := e.objcopyRes
 
 		var hOnlyGlobalRef *NodeRef
 		var hOnlyGlobalPath *VFS
@@ -1491,16 +1492,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			hOnlyGlobalPath = vfsPtr(build(instance.Path.rel(), "/", globalBaseName))
 		}
 
-		e.emitMiscNodes()
-
-		protoResult := e.emitProtoSrcs(PeerGlobalContribs{addIncl: peerAddInclGlobal, protoInclude: peerProtoInclude})
-
-		if d.moduleStmt.Name != tokProtoLibrary {
-			e.emitEnumSrcs(peerAddInclGlobal)
-		}
-
-		e.drainSrcs()
-
+		protoResult := e.protoRes
 		protoARRefs := e.refs
 		protoAROuts := e.outs
 		protoARMeta := e.declMeta
