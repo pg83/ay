@@ -262,6 +262,7 @@ type SrcMeta struct {
 	Seq         int
 	Generated   bool
 	SecondLevel bool
+	Bucket      int
 }
 
 func (m SrcMeta) sortKey() uint64 {
@@ -275,8 +276,21 @@ func (m SrcMeta) sortKey() uint64 {
 		round = 2
 	}
 
-	return round<<60 | uint64(m.Prio)<<32 | uint64(uint32(m.Seq))
+	return round<<48 | uint64(m.Prio)<<40 | uint64(uint32(m.Seq))<<8 | uint64(uint8(m.Bucket))
 }
+
+const (
+	bkDefault = iota
+	bkCheckConfig
+	bkCython
+	bkSwig
+	bkAntlr
+	bkJV
+	bkSplitCodegen
+	bkRunPython
+	bkArchiveAsm
+	bkDecimalMD5
+)
 
 func (d *ModuleData) nextDeclSeq() int {
 	d.declSeq++

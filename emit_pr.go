@@ -8,13 +8,6 @@ import (
 
 var prKV = KV{P: pkPR, PC: pcYellow, ShowOut: true}
 
-type RunProgramsForARResult struct {
-	CCRefs      []NodeRef
-	CCOutputs   []VFS
-	Seqs        []int
-	SecondLevel []bool
-}
-
 type RunProgramAuxTool struct {
 	token  string
 	ref    NodeRef
@@ -22,14 +15,13 @@ type RunProgramAuxTool struct {
 	rooted bool
 }
 
-func (e *EmitContext) emitRunProgramsForAR() *RunProgramsForARResult {
+func (e *EmitContext) emitRunProgramsForAR() {
 	_, instance, d := e.ctx, e.instance, e.d
 	if len(d.runPrograms) == 0 {
-		return nil
+		return
 	}
 
 	reg := e.codegen
-	res := &RunProgramsForARResult{}
 
 	type runEntry struct {
 		prRef NodeRef
@@ -62,19 +54,11 @@ func (e *EmitContext) emitRunProgramsForAR() *RunProgramsForARResult {
 		for _, out := range run.outs {
 			switch {
 			case isCCSourceExt(out):
-				ccRef, ccOut := e.emitCC(copyFileOutputVFS(instance.Path.rel(), out))
-
-				res.CCRefs = append(res.CCRefs, ccRef)
-				res.CCOutputs = append(res.CCOutputs, ccOut)
-				res.Seqs = append(res.Seqs, run.seq)
-				res.SecondLevel = append(res.SecondLevel, false)
+				e.emitGenerated(copyFileOutputVFS(instance.Path.rel(), out).str(), SrcMeta{Prio: stmtPrioDefault, Seq: run.seq, Generated: true})
 			case isAsmSourceExt(out):
 				asRef, asOut := e.emitCodegenDownstreamAS(out, []NodeRef{run.prRef})
 
-				res.CCRefs = append(res.CCRefs, asRef)
-				res.CCOutputs = append(res.CCOutputs, asOut)
-				res.Seqs = append(res.Seqs, run.seq)
-				res.SecondLevel = append(res.SecondLevel, false)
+				e.collectObj(asRef, asOut, SrcMeta{Prio: stmtPrioDefault, Seq: run.seq, Generated: true})
 			}
 		}
 	}
@@ -86,16 +70,10 @@ func (e *EmitContext) emitRunProgramsForAR() *RunProgramsForARResult {
 			}
 
 			cppVFS := build(copyFileOutputVFS(instance.Path.rel(), out).rel(), ".cpp")
-			fRef, fOut := e.emitFlatcCppCompile(cppVFS)
 
-			res.CCRefs = append(res.CCRefs, fRef)
-			res.CCOutputs = append(res.CCOutputs, fOut)
-			res.Seqs = append(res.Seqs, run.seq)
-			res.SecondLevel = append(res.SecondLevel, true)
+			e.emitGenerated(cppVFS.str(), SrcMeta{Prio: stmtPrioDefault, Seq: run.seq, Generated: true, SecondLevel: true})
 		}
 	}
-
-	return res
 }
 
 func prMainOutputRel(stmt *RunProgramStmt) string {

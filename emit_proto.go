@@ -622,7 +622,7 @@ func (e *EmitContext) emitCPPProtoSrcs(peerContribs PeerGlobalContribs, protoSrc
 		e.enqueueSrc(co.pbCC.str(), SrcMeta{Prio: stmtPrioSrcs, Seq: co.declIdx, Generated: true})
 	}
 
-	enRes := e.emitEnumSrcs(peerContribs.addIncl)
+	e.emitEnumSrcs(peerContribs.addIncl)
 
 	protoLibName := ""
 
@@ -630,7 +630,7 @@ func (e *EmitContext) emitCPPProtoSrcs(peerContribs PeerGlobalContribs, protoSrc
 		protoLibName = d.moduleStmt.Args[0].string()
 	}
 
-	return &ProtoSrcsResult{PendingAR: true, EnumRes: enRes, ProtoLibName: protoLibName}
+	return &ProtoSrcsResult{PendingAR: true, ProtoLibName: protoLibName}
 }
 
 func (e *EmitContext) emitProtoProducer(srcRel string) {

@@ -57,6 +57,6 @@ func (e *EmitContext) emitCheckConfigH() {
 			Compile:       &CompileSpec{FlatOutput: d.flatSrc(generatedVFS.str()), CFlags: psc},
 		})
 
-		e.emitGenerated(generatedVFS.str(), SrcMeta{Prio: stmtPrioDefault, Generated: true})
+		e.emitGenerated(generatedVFS.str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkCheckConfig})
 	}
 }

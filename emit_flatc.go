@@ -194,7 +194,3 @@ func (e *EmitContext) emitLibraryFlatcSource(src STR) {
 	meta.Generated = true
 	e.enqueueSrc(cppVFS.str(), meta)
 }
-
-func (e *EmitContext) emitFlatcCppCompile(cppVFS VFS) (NodeRef, VFS) {
-	return e.emitCC(cppVFS)
-}

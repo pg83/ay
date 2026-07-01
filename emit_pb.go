@@ -224,7 +224,6 @@ type ProtoSrcsResult struct {
 	WholeArchivePaths    []VFS
 	WholeArchiveCmdPaths []VFS
 	PendingAR            bool
-	EnumRes              *EnumSrcsResult
 	ProtoLibName         string
 }
 

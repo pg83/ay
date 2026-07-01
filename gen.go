@@ -799,14 +799,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		protoARMeta := e.declMeta
 
 		if protoResult != nil && protoResult.PendingAR {
-			if protoResult.EnumRes != nil {
-				for i := range protoResult.EnumRes.CCRefs {
-					protoARRefs = append(protoARRefs, protoResult.EnumRes.CCRefs[i])
-					protoAROuts = append(protoAROuts, protoResult.EnumRes.CCOutputs[i])
-					protoARMeta[protoResult.EnumRes.CCOutputs[i]] = SrcMeta{Prio: stmtPrioDefault, Seq: protoResult.EnumRes.Seqs[i], Generated: true, SecondLevel: protoResult.EnumRes.SecondLevel[i]}
-				}
-			}
-
 			protoARRefs, protoAROuts = reorderARMembers(protoARRefs, protoAROuts, protoARMeta)
 			arBaseName := archiveNameWithPrefixOrName(instance.Path.rel(), "lib", protoResult.ProtoLibName)
 			archivePath := build(instance.Path.rel(), "/", arBaseName)
@@ -1732,19 +1724,15 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		e.outs = append(e.outs, cpMemberOuts[i])
 	}
 
-	jvCCRefs, jvCCOutputs := e.emitMiscNodes()
-	prCCRes := e.emitRunProgramsForAR()
-	dmCCRes := e.emitDecimalMD5ForAR()
-	scCCRes := e.emitSplitCodegensForAR()
-
+	e.emitMiscNodes()
+	e.emitRunProgramsForAR()
+	e.emitDecimalMD5ForAR()
+	e.emitSplitCodegensForAR()
 	e.emitBaseCodegensForAR()
-
-	pyCCRes := e.emitRunPythonForAR()
-	aaCCRes := e.emitArchiveAsmForAR()
-	enCCRes := e.emitEnumSrcs(selfPeerAddInclGlobal)
-
+	e.emitRunPythonForAR()
+	e.emitArchiveAsmForAR()
+	e.emitEnumSrcs(selfPeerAddInclGlobal)
 	e.emitLuaJit21()
-
 	e.emitArchives()
 
 	for _, src := range d.srcs {
@@ -1762,56 +1750,10 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		e.collectObj(ref, out, SrcMeta{Prio: stmtPrioDefault, Seq: fe.Seq})
 	}
 
-	genCC := func(ref NodeRef, out VFS) {
-		e.collectObj(ref, out, SrcMeta{Prio: stmtPrioDefault, Generated: true})
-	}
-
 	e.emitCheckConfigH()
 	e.emitCythonCppPlanned(cythonPlans)
 	e.emitSwigC()
 	e.drainSrcs()
-
-	for i, ref := range jvCCRefs {
-		genCC(ref, jvCCOutputs[i])
-	}
-
-	if enCCRes != nil {
-		for i, ref := range enCCRes.CCRefs {
-			e.collectObj(ref, enCCRes.CCOutputs[i],
-				SrcMeta{Prio: stmtPrioDefault, Seq: enCCRes.Seqs[i], Generated: true, SecondLevel: enCCRes.SecondLevel[i]})
-		}
-	}
-
-	if prCCRes != nil {
-		for i, ref := range prCCRes.CCRefs {
-			e.collectObj(ref, prCCRes.CCOutputs[i],
-				SrcMeta{Prio: stmtPrioDefault, Seq: prCCRes.Seqs[i], Generated: true, SecondLevel: prCCRes.SecondLevel[i]})
-		}
-	}
-
-	if scCCRes != nil {
-		for i, ref := range scCCRes.CCRefs {
-			genCC(ref, scCCRes.CCOutputs[i])
-		}
-	}
-
-	if pyCCRes != nil {
-		for i, ref := range pyCCRes.CCRefs {
-			genCC(ref, pyCCRes.CCOutputs[i])
-		}
-	}
-
-	if aaCCRes != nil {
-		for i, ref := range aaCCRes.CCRefs {
-			genCC(ref, aaCCRes.CCOutputs[i])
-		}
-	}
-
-	if dmCCRes != nil {
-		for i, ref := range dmCCRes.CCRefs {
-			genCC(ref, dmCCRes.CCOutputs[i])
-		}
-	}
 
 	for _, simd := range d.simdSrcs {
 		srcVFS := e.moduleSourceVFS(simd.Src)
@@ -1829,14 +1771,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		e.declMeta[out] = SrcMeta{Prio: stmtPrioDefault, Seq: simd.Seq}
 	}
 
-	jsRefs, jsOuts, jsMeta := e.emitJoinSrcs()
-
-	e.refs = append(e.refs, jsRefs...)
-	e.outs = append(e.outs, jsOuts...)
-
-	for k, v := range jsMeta {
-		e.declMeta[k] = v
-	}
+	e.emitJoinSrcs()
 
 	globalRefs := make([]NodeRef, 0, len(d.globalSrcs))
 	globalOutputs := make([]VFS, 0, len(d.globalSrcs))

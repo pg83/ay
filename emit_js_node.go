@@ -51,11 +51,8 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 	return emit.emit(node), outVFS
 }
 
-func (e *EmitContext) emitJoinSrcs() ([]NodeRef, []VFS, map[VFS]SrcMeta) {
+func (e *EmitContext) emitJoinSrcs() {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	refs := make([]NodeRef, 0, len(d.joinSrcs))
-	outs := make([]VFS, 0, len(d.joinSrcs))
-	meta := make(map[VFS]SrcMeta, len(d.joinSrcs))
 
 	for _, js := range d.joinSrcs {
 		jsSources := strStrings(js.Sources)
@@ -85,13 +82,8 @@ func (e *EmitContext) emitJoinSrcs() ([]NodeRef, []VFS, map[VFS]SrcMeta) {
 			Compile:       &CompileSpec{FlatOutput: d.flatSrc(joinOutVFS.str()), CFlags: psc},
 		})
 
-		jRef, jOut := e.emitCC(joinOutVFS)
-		refs = append(refs, jRef)
-		outs = append(outs, jOut)
-		meta[jOut] = SrcMeta{Prio: stmtPrioDefault, Seq: js.Seq, Generated: true}
+		e.emitGenerated(joinOutVFS.str(), SrcMeta{Prio: stmtPrioDefault, Seq: js.Seq, Generated: true})
 	}
-
-	return refs, outs, meta
 }
 
 func (e *EmitContext) joinSrcsIncludeClosure(scanPlatform *Platform, sources []string, scanCfg ScanContext) []VFS {
