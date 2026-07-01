@@ -120,7 +120,7 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 
 	mid := descProtocIncludes(span.includes, cppOutRoot)
 	scanCfg := protoWalkInputs(ctx.parsers, protoSearchPaths, instance.Path.rel())
-	scanner := ctx.scannerFor(instance)
+	scanner := e.scanner
 	hash := moddirHash(instance.Path.rel())
 
 	var producerRefs []NodeRef

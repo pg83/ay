@@ -280,7 +280,7 @@ func (e *EmitContext) emitPyProtoSrc(src string, protocLDRef NodeRef, protocBina
 
 	generated := false
 
-	if info := ctx.codegenFor(instance).lookup(build(protoRelPath)); info != nil {
+	if info := e.codegen.lookup(build(protoRelPath)); info != nil {
 		protoSrcVFS = build(protoRelPath)
 		protoCwd = strB
 		producerDeps = []NodeRef{info.ProducerRef}
@@ -289,7 +289,7 @@ func (e *EmitContext) emitPyProtoSrc(src string, protocLDRef NodeRef, protocBina
 	}
 
 	inputs := []VFS{protocBinary, pbPyWrapperVFS, protoSrcVFS}
-	transitive := walkClosureTail(ctx.scannerFor(instance), source(protoRelPath), protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
+	transitive := walkClosureTail(e.scanner, source(protoRelPath), protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
 
 	inputs = append(inputs, transitive...)
 	inputs = append(inputs, producerSourceInputs...)

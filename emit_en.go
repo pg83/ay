@@ -42,7 +42,8 @@ func (e *EmitContext) moduleProtoGenHeaders() map[string]struct{} {
 	return set
 }
 
-func resolveEnumHeaderInput(ctx *GenCtx, instance ModuleInstance, headerRel string, srcDirs []VFS) VFS {
+func (e *EmitContext) resolveEnumHeaderInput(headerRel string, srcDirs []VFS) VFS {
+	ctx, instance := e.ctx, e.instance
 	headerInput := resolveSourceVFS(ctx, instance, headerRel, srcDirs)
 
 	if !ctx.fs.isFile(srcRootVFS, headerInput.rel()) {
@@ -53,7 +54,7 @@ func resolveEnumHeaderInput(ctx *GenCtx, instance ModuleInstance, headerRel stri
 
 	buildHeader := build(headerInput.rel())
 
-	if ctx.codegenFor(instance).lookup(buildHeader) != nil {
+	if e.codegen.lookup(buildHeader) != nil {
 		return buildHeader
 	}
 
@@ -87,7 +88,7 @@ func (e *EmitContext) emitEnumSrcs(peerAddInclGlobal []VFS) *EnumSrcsResult {
 
 	for i, stmt := range d.enumSrcs {
 		withHeader := stmt.Variant == "with_header"
-		headerInput := resolveEnumHeaderInput(ctx, instance, stmt.Header, d.srcDirs)
+		headerInput := e.resolveEnumHeaderInput(stmt.Header, d.srcDirs)
 		serializedBase := instance.Path.rel() + "/" + stmt.Header
 
 		if moduleRootedVFS(instance.Path.rel(), stmt.Header) != nil {
@@ -112,7 +113,7 @@ func (e *EmitContext) emitEnumSrcs(peerAddInclGlobal []VFS) *EnumSrcsResult {
 
 		sort.Slice(cppParsed, func(i, j int) bool { return cppParsed[i].target.string() < cppParsed[j].target.string() })
 
-		reg := ctx.codegenFor(instance)
+		reg := e.codegen
 
 		reg.register(&GeneratedFileInfo{
 			OutputPath:     serializedCPPPath,
@@ -155,12 +156,12 @@ func (e *EmitContext) emitEnumSrcs(peerAddInclGlobal []VFS) *EnumSrcsResult {
 	}
 
 	for _, p := range plans {
-		closure := walkClosure(ctx.scannerFor(instance), p.headerInput, scanCfg)
+		closure := walkClosure(e.scanner, p.headerInput, scanCfg)
 
 		var ownOutputClosure []VFS
 
 		if !p.withHeader {
-			ownOutputClosure = walkClosureTail(ctx.scannerFor(instance), p.serializedCPPPath, scanCfg)
+			ownOutputClosure = walkClosureTail(e.scanner, p.serializedCPPPath, scanCfg)
 		}
 
 		enClosure := dedup(closure, ownOutputClosure)

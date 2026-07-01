@@ -6,7 +6,7 @@ func (e *EmitContext) emitCodegenDownstreamAS(asmRel string, depRefs []NodeRef) 
 	in := e.ccInputsFor(asmPath)
 	asIn := in
 
-	asIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), asmPath, in.ScanCfg)
+	asIn.IncludeInputs = walkClosure(e.scanner, asmPath, in.ScanCfg)
 	asIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, asIn.IncludeInputs, depRefs...)
 
 	if instance.Platform.ISA == ISAX8664 && extIsAsm(asmRel) {

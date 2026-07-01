@@ -413,10 +413,11 @@ type ResolvedResource struct {
 	SourceInputs    []VFS
 }
 
-func resolveResourceInput(ctx *GenCtx, instance ModuleInstance, rawPath string, fallback VFS) ResolvedResource {
+func (e *EmitContext) resolveResourceInput(rawPath string, fallback VFS) ResolvedResource {
+	_, instance := e.ctx, e.instance
 	output := resourceOutputVFS(instance.Path.rel(), rawPath)
 
-	if info := ctx.codegenFor(instance).lookup(output); info != nil {
+	if info := e.codegen.lookup(output); info != nil {
 		return ResolvedResource{
 			Input:           output,
 			ProducerRef:     info.ProducerRef,

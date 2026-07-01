@@ -49,7 +49,7 @@ func (e *EmitContext) emitYmapsSprotoHeaders(peerContribs PeerGlobalContribs, pr
 		parsed = append(parsed, pbhImports...)
 		parsed = append(parsed, sprotoInducedHeaders(pbhImports)...)
 
-		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		e.codegen.register(&GeneratedFileInfo{
 			OutputPath:     sprotoH,
 			ProducerRef:    sprotoRef,
 			GeneratorRefs:  []NodeRef{sprotocLDRef},
@@ -61,11 +61,12 @@ func (e *EmitContext) emitYmapsSprotoHeaders(peerContribs PeerGlobalContribs, pr
 	}
 
 	for _, p := range pending {
-		emitYmapsSprotoHeader(ctx, instance, p, outRoot, sprotocLDRef, sprotocBinary, scanCfg)
+		e.emitYmapsSprotoHeader(p, outRoot, sprotocLDRef, sprotocBinary, scanCfg)
 	}
 }
 
-func emitYmapsSprotoHeader(ctx *GenCtx, instance ModuleInstance, p YmapsSprotoPending, outRoot string, sprotocLDRef NodeRef, sprotocBinary VFS, scanCfg ScanContext) {
+func (e *EmitContext) emitYmapsSprotoHeader(p YmapsSprotoPending, outRoot string, sprotocLDRef NodeRef, sprotocBinary VFS, scanCfg ScanContext) {
+	ctx, instance := e.ctx, e.instance
 	na := ctx.emit.nodeArenas()
 
 	cmdArgs := na.chunkList(na.strList(
@@ -79,7 +80,7 @@ func emitYmapsSprotoHeader(ctx *GenCtx, instance ModuleInstance, p YmapsSprotoPe
 	))
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-	closure := dropGeneratedProtoHeaders(walkClosureTail(ctx.scannerFor(instance), p.sprotoH, scanCfg))
+	closure := dropGeneratedProtoHeaders(walkClosureTail(e.scanner, p.sprotoH, scanCfg))
 
 	node := &Node{
 		Platform: instance.Platform,

@@ -194,7 +194,7 @@ func (e *EmitContext) emitLibraryAsmSource(src STR) *SourceEmit {
 		asIn.AddIncl = scanIn.AddIncl
 	}
 
-	asIn.IncludeInputs = walkClosure(ctx.scannerFor(instance), srcVFS, scanIn.ScanCfg)
+	asIn.IncludeInputs = walkClosure(e.scanner, srcVFS, scanIn.ScanCfg)
 
 	if instance.Platform.ISA == ISAX8664 && extIsAsm(srcRel) {
 		yasmLD, _ := ctx.tool(argContribToolsYasm)

@@ -4,7 +4,7 @@ var bundleKV = KV{P: pkBN, PC: pcLightCyan}
 
 func (e *EmitContext) emitBundles() {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	reg := ctx.codegenFor(instance)
+	reg := e.codegen
 
 	for _, b := range d.bundles {
 		dst := copyFileOutputVFS(instance.Path.rel(), b.Name)

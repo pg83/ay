@@ -24,7 +24,7 @@ func (e *EmitContext) emitCheckConfigH() []*SourceEmit {
 		confVFS := source(instance.Path.rel(), "/", conf.string())
 		inputs := []VFS{buildScriptsCheckConfigHPy}
 
-		inputs = append(inputs, walkClosure(ctx.scannerFor(instance), confVFS, d.cc.ScanCfg)...)
+		inputs = append(inputs, walkClosure(e.scanner, confVFS, d.cc.ScanCfg)...)
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -49,7 +49,7 @@ func (e *EmitContext) emitCheckConfigH() []*SourceEmit {
 			psc = *p
 		}
 
-		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		e.codegen.register(&GeneratedFileInfo{
 			OutputPath:  generatedVFS,
 			ProducerRef: chRef,
 			ParsedIncludes: []IncludeDirective{

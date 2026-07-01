@@ -39,13 +39,13 @@ func bisonCppHeaderParsed(srcVFS VFS) []IncludeDirective {
 	return parsed
 }
 
-func bisonGeneratedCPPParsed(ctx *GenCtx, instance ModuleInstance, srcVFS, headerVFS VFS) []IncludeDirective {
+func (e *EmitContext) bisonGeneratedCPPParsed(srcVFS, headerVFS VFS) []IncludeDirective {
 	parsed := []IncludeDirective{
 		{kind: includeQuoted, target: internStr(headerVFS.rel())},
 		{kind: includeQuoted, target: internStr(srcVFS.rel())},
 	}
 
-	parsed = append(parsed, ctx.scannerFor(instance).parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
+	parsed = append(parsed, e.scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
 
 	return parsed
 }
@@ -77,11 +77,11 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 	if preprocessHeader {
 		headerParsed = bisonCppHeaderParsed(srcVFS)
 	} else {
-		headerParsed = append(headerParsed, ctx.scannerFor(instance).parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
+		headerParsed = append(headerParsed, e.scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
 	}
 
 	ycRef := ctx.emit.reserve()
-	reg := ctx.codegenFor(instance)
+	reg := e.codegen
 
 	headerInfo := &GeneratedFileInfo{
 		OutputPath:     headerVFS,
@@ -99,7 +99,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 	generatedParsed := []IncludeDirective{{kind: includeQuoted, target: internStr(headerVFS.rel())}}
 
 	if preprocessHeader {
-		generatedParsed = bisonGeneratedCPPParsed(ctx, instance, srcVFS, headerVFS)
+		generatedParsed = e.bisonGeneratedCPPParsed(srcVFS, headerVFS)
 	}
 
 	spec := &CompileSpec{FlatOutput: d.flatSrc(src)}
@@ -146,7 +146,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 
 		inputs = append(inputs, bisonPreprocessPyVFS)
 		inputs = append(inputs, bisonCppSkeletonInputs...)
-		inputs = dedup(inputs, walkClosureTail(ctx.scannerFor(instance), headerVFS, d.cc.ScanCfg))
+		inputs = dedup(inputs, walkClosureTail(e.scanner, headerVFS, d.cc.ScanCfg))
 	}
 
 	ctx.emit.emitReserved(&Node{

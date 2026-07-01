@@ -63,7 +63,7 @@ func (e *EmitContext) ccInputsFor(srcVFS VFS) ModuleCCInputs {
 	env := d.cc
 	in := ModuleCCInputs{ModuleCompileEnv: env}
 
-	if info := ctx.codegenFor(instance).lookup(srcVFS); info != nil && info.Compile != nil {
+	if info := e.codegen.lookup(srcVFS); info != nil && info.Compile != nil {
 		sp := info.Compile
 
 		in.PerSourceCFlags = sp.CFlags
@@ -129,11 +129,11 @@ func (e *EmitContext) emitCCFlat(srcVFS VFS, variant *string, cflags []ARG) (Nod
 
 func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs) (NodeRef, VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	in.IncludeInputs = walkClosure(ctx.scannerFor(instance), srcVFS, in.ScanCfg)
+	in.IncludeInputs = walkClosure(e.scanner, srcVFS, in.ScanCfg)
 	in.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, in.IncludeInputs)
 
 	if len(d.cythonCpp) > 0 {
-		in.IncludeInputs = cythonCompileInducedInputs(ctx, instance, in.IncludeInputs)
+		in.IncludeInputs = e.cythonCompileInducedInputs(in.IncludeInputs)
 	}
 
 	ref, outPath, _ := composeCCNode(instance, srcVFS.str(), srcVFS, in, ctx.host, ctx.emit)

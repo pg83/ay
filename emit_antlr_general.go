@@ -11,7 +11,7 @@ func (e *EmitContext) emitAntlrRuns() (ccRefs []NodeRef, ccOutputs []VFS) {
 		return nil, nil
 	}
 
-	reg := ctx.codegenFor(instance)
+	reg := e.codegen
 
 	for _, run := range d.antlrRuns {
 		jarVFS := antlr4JarVFS

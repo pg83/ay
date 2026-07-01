@@ -53,7 +53,7 @@ func (e *EmitContext) emitLibraryGperfSource(src STR) *SourceEmit {
 	gperfLDRef, gperfBinVFS := ctx.tool(argContribToolsGperf)
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	genVFS := build(instance.Path.rel(), "/", gperfGeneratedRel(srcRel))
-	srcClosure := walkClosure(ctx.scannerFor(instance), srcVFS, d.cc.ScanCfg)
+	srcClosure := walkClosure(e.scanner, srcVFS, d.cc.ScanCfg)
 	gpRef := emitGP(instance, srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, keepOnlySourceVFS(srcClosure), ctx.emit)
 
 	var psc []ARG
@@ -61,7 +61,7 @@ func (e *EmitContext) emitLibraryGperfSource(src STR) *SourceEmit {
 		psc = *p
 	}
 
-	ctx.codegenFor(instance).register(&GeneratedFileInfo{
+	e.codegen.register(&GeneratedFileInfo{
 		OutputPath:     genVFS,
 		ProducerRef:    gpRef,
 		GeneratorRefs:  []NodeRef{gperfLDRef},

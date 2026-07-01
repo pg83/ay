@@ -43,8 +43,8 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, moduleDir VFS, entry
 
 func (e *EmitContext) emitCopyFiles() (memberRefs []NodeRef, memberOuts []VFS, memberSrcs []VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	scanner := ctx.scannerFor(instance)
-	reg := ctx.codegenFor(instance)
+	scanner := e.scanner
+	reg := e.codegen
 
 	type entryReg struct {
 		srcVFS         VFS
@@ -114,7 +114,7 @@ func (e *EmitContext) emitCopyFiles() (memberRefs []NodeRef, memberOuts []VFS, m
 		var closure []VFS
 
 		if entry.WithContext || len(entry.OutputIncludes) > 0 {
-			closure = walkClosure(ctx.scannerFor(instance), dstVFS, d.cc.ScanCfg)
+			closure = walkClosure(e.scanner, dstVFS, d.cc.ScanCfg)
 			closure = rewriteClosureCPSource(scanner, closure)
 			closure = keepOnlySourceVFS(closure)
 			closure = dedup(closure)
@@ -136,8 +136,9 @@ func (e *EmitContext) emitCopyFiles() (memberRefs []NodeRef, memberOuts []VFS, m
 	return memberRefs, memberOuts, memberSrcs
 }
 
-func generatedModuleSourceVFS(ctx *GenCtx, instance ModuleInstance, srcRel string) *VFS {
-	reg := ctx.codegenFor(instance)
+func (e *EmitContext) generatedModuleSourceVFS(srcRel string) *VFS {
+	_, instance := e.ctx, e.instance
+	reg := e.codegen
 
 	var id STR
 
@@ -168,7 +169,7 @@ func (e *EmitContext) resolveModuleSourceVFS(src STR, srcDirs []VFS) VFS {
 
 	srcRel := src.string()
 
-	if buildVFS := generatedModuleSourceVFS(ctx, instance, srcRel); buildVFS != nil {
+	if buildVFS := e.generatedModuleSourceVFS(srcRel); buildVFS != nil {
 		return *buildVFS
 	}
 

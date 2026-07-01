@@ -47,7 +47,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 		leaves := append([]VFS{jvPrimary, srcH}, ctx.scripts[antlr4FsToolsVFS]...)
 		leaves = append(leaves, jvInputs...)
 
-		ctx.codegenFor(instance).register(&GeneratedFileInfo{
+		e.codegen.register(&GeneratedFileInfo{
 			OutputPath:     g4CppPath,
 			ProducerRef:    cpRef,
 			GeneratorRefs:  nil,
@@ -56,7 +56,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 			Compile:        &CompileSpec{FlatOutput: d.flatSrc(g4CppPath.str()), CFlags: []ARG{argWnoUnusedVariable}},
 		})
 
-		closure := walkClosure(ctx.scannerFor(instance), g4CppPath, d.cc.ScanCfg)
+		closure := walkClosure(e.scanner, g4CppPath, d.cc.ScanCfg)
 		leafSet := make(map[VFS]bool, len(leaves))
 
 		for _, l := range leaves {
