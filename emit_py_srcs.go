@@ -5,6 +5,7 @@ import (
 	enc32 "encoding/base32"
 	encb64 "encoding/base64"
 	enchex "encoding/hex"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -13,6 +14,8 @@ var (
 	genPy3RegScriptPath  = genPy3RegScriptVFS.string()
 	genPy3RegScriptChunk = []VFS{genPy3RegScriptVFS}
 	pyCodegenKV          = KV{P: pkPY, PC: pcYellow}
+	yaConfFormulaRE      = regexp.MustCompile(`"formula"\s*:\s*"([^"]+\.json)"`)
+	yaConfResourceRE     = regexp.MustCompile(`"resource"\s*:\s*"([^"]+)"`)
 )
 
 func resourceModuleTag(modName TOK) *string {
@@ -597,12 +600,7 @@ func (e *EmitContext) emitYaConfJSONObjcopy(oc *ObjcopyEmitCtx) []*ObjcopyEmit {
 	return out
 }
 
-type GeneratedPyAuxChunksResult struct {
-	Refs    []NodeRef
-	Outputs []VFS
-}
-
-func (e *EmitContext) emitGeneratedPyAuxChunks() *GeneratedPyAuxChunksResult {
+func (e *EmitContext) emitGeneratedPyAuxChunks() *PyGenResourcesResult {
 	_, instance, d := e.ctx, e.instance, e.d
 
 	if len(d.pySrcs) == 0 {
@@ -611,7 +609,7 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() *GeneratedPyAuxChunksResult {
 
 	reg := e.codegen
 
-	var entries []PyProtoAuxEntry
+	var entries []PyGenResEntry
 
 	for i, srcRel := range d.pySrcs {
 		info := reg.lookupSplit(dirKey(instance.Path.rel()), srcRel)
@@ -627,7 +625,12 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() *GeneratedPyAuxChunksResult {
 		genInputs := info.SourceInputs
 		src := build(instance.Path.rel(), "/", srcRel.string())
 
-		entries = append(entries, PyProtoAuxEntry{path: src, key: generatedPyResourceKey(instance.Path.rel(), d, srcRel.string()), inputs: genInputs})
+		entries = append(entries, PyGenResEntry{
+			token:  "${ARCADIA_BUILD_ROOT}/" + src.rel(),
+			key:    generatedPyResourceKey(instance.Path.rel(), d, srcRel.string()),
+			path:   src,
+			inputs: genInputs,
+		})
 
 		if !d.pyBuildNoPYC {
 			suffix := ".yapyc3"
@@ -638,32 +641,18 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() *GeneratedPyAuxChunksResult {
 
 			yp := build(instance.Path.rel(), "/", srcRel.string(), suffix)
 
-			entries = append(entries, PyProtoAuxEntry{path: yp, key: generatedPyResourceKey(instance.Path.rel(), d, srcRel.string()+".yapyc3"), inputs: genInputs})
+			entries = append(entries, PyGenResEntry{
+				token:  "${ARCADIA_BUILD_ROOT}/" + yp.rel(),
+				key:    generatedPyResourceKey(instance.Path.rel(), d, srcRel.string()+".yapyc3"),
+				path:   yp,
+				inputs: genInputs,
+			})
 		}
 	}
 
-	if len(entries) == 0 {
-		return nil
-	}
-
-	rawRes := e.emitRawAuxChunks(entries, "PY3", true, func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
+	return e.emitPyGenResources(entries, "PY3", &pyObjcopyKV, true, func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
 		return e.rawAuxInputClosure(aux, pyProtoSourceInputs(inputs), ref)
 	})
-
-	if rawRes == nil {
-		return nil
-	}
-
-	res := &GeneratedPyAuxChunksResult{}
-
-	for _, aux := range rawRes.Outputs {
-		auxRef, auxOut := e.emitCC(aux)
-
-		res.Refs = append(res.Refs, auxRef)
-		res.Outputs = append(res.Outputs, auxOut)
-	}
-
-	return res
 }
 
 func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) []VFS {
@@ -814,25 +803,25 @@ type PyGenResourcesResult struct {
 	Outputs []VFS
 }
 
-func (e *EmitContext) emitPyGenResources(entries []PyGenResEntry, hashTag string, objKV *KV, closure func(aux VFS, inputs []VFS, ref NodeRef) []VFS) *PyGenResourcesResult {
+func (e *EmitContext) emitPyGenResources(entries []PyGenResEntry, hashTag string, objKV *KV, resolveDeps bool, closure func(aux VFS, inputs []VFS, ref NodeRef) []VFS) *PyGenResourcesResult {
 	if len(entries) == 0 {
 		return nil
 	}
 
-	var auxEntries []PyProtoAuxEntry
+	var auxEntries []RawAuxEntry
 	var objEntries []PyGenResEntry
 
 	for _, en := range entries {
 		if resourceCanObjcopy(en.token, en.key) {
 			objEntries = append(objEntries, en)
 		} else {
-			auxEntries = append(auxEntries, PyProtoAuxEntry{path: en.path, key: en.key, producer: en.producer, inputs: en.inputs})
+			auxEntries = append(auxEntries, RawAuxEntry{path: en.path, key: en.key, producer: en.producer, inputs: en.inputs})
 		}
 	}
 
 	res := &PyGenResourcesResult{}
 
-	if rawRes := e.emitRawAuxChunks(auxEntries, hashTag, false, closure); rawRes != nil {
+	if rawRes := e.emitRawAuxChunks(auxEntries, hashTag, resolveDeps, closure); rawRes != nil {
 		for _, aux := range rawRes.Outputs {
 			auxRef, auxOut := e.emitCC(aux)
 
@@ -939,6 +928,42 @@ func pyProtoSourceInputs(inputs []VFS) []VFS {
 		}
 
 		out = append(out, input)
+	}
+
+	return out
+}
+
+func yaConfFormulaResources(fs FS, confPath string) []string {
+	raw := fs.read(confPath)
+
+	var out []string
+
+	seen := map[string]struct{}{}
+
+	for _, m := range yaConfFormulaRE.FindAllSubmatch(raw, -1) {
+		formula := string(m[1])
+
+		if _, dup := seen[formula]; dup {
+			continue
+		}
+
+		seen[formula] = struct{}{}
+		out = append(out, formula)
+	}
+
+	for _, m := range yaConfResourceRE.FindAllSubmatch(raw, -1) {
+		path := "build/external_resources/" + string(m[1]) + "/resources.json"
+
+		if _, dup := seen[path]; dup {
+			continue
+		}
+
+		if !fs.isFile(srcRootVFS, path) {
+			continue
+		}
+
+		seen[path] = struct{}{}
+		out = append(out, path)
 	}
 
 	return out
