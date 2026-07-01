@@ -1719,12 +1719,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		e.emitOneSource(src)
 	}
 
-	cpMemberRefs, cpMemberOuts, cpMemberSrcs := e.emitCopyFiles()
-
-	for i, ref := range cpMemberRefs {
-		e.refs = append(e.refs, ref)
-		e.outs = append(e.outs, cpMemberOuts[i])
-	}
+	cpMemberSrcs := e.emitCopyFiles()
 
 	e.emitMiscNodes()
 	e.emitRunProgramsForAR()

@@ -41,7 +41,7 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, moduleDir VFS, entry
 	return out
 }
 
-func (e *EmitContext) emitCopyFiles() (memberRefs []NodeRef, memberOuts []VFS, memberSrcs []VFS) {
+func (e *EmitContext) emitCopyFiles() (memberSrcs []VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	scanner := e.scanner
 	reg := e.codegen
@@ -127,13 +127,12 @@ func (e *EmitContext) emitCopyFiles() (memberRefs []NodeRef, memberOuts []VFS, m
 		emitCPWithDeps(instance, srcVFS, dstVFS, deps, closure, entries[i].ref, d.cc.ModuleTag, d.tc, ctx.scripts, ctx.emit)
 
 		if dst := entry.Dst; extIsArchiveMember(dst) {
-			memberRefs = append(memberRefs, entries[i].ref)
-			memberOuts = append(memberOuts, dstVFS)
+			e.collectObj(entries[i].ref, dstVFS, SrcMeta{Prio: stmtPrioDefault})
 			memberSrcs = append(memberSrcs, srcVFS)
 		}
 	}
 
-	return memberRefs, memberOuts, memberSrcs
+	return memberSrcs
 }
 
 func (e *EmitContext) generatedModuleSourceVFS(srcRel string) *VFS {
