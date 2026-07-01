@@ -174,7 +174,7 @@ func (e *EmitContext) emitEnumSrcs(peerAddInclGlobal []VFS) {
 			ctx.emit,
 		)
 
-		e.emitGenerated(p.serializedCPPPath.str(), SrcMeta{Prio: stmtPrioDefault, Seq: p.declSeq, Generated: true, SecondLevel: p.secondLevel})
+		e.enqueueSrc(p.serializedCPPPath.str(), SrcMeta{Prio: stmtPrioDefault, Seq: p.declSeq, Generated: true, SecondLevel: p.secondLevel})
 	}
 }
 

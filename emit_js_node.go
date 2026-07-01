@@ -82,7 +82,7 @@ func (e *EmitContext) emitJoinSrcs() {
 			Compile:       &CompileSpec{FlatOutput: d.flatSrc(joinOutVFS.str()), CFlags: psc},
 		})
 
-		e.emitGenerated(joinOutVFS.str(), SrcMeta{Prio: stmtPrioDefault, Seq: js.Seq, Generated: true})
+		e.enqueueSrc(joinOutVFS.str(), SrcMeta{Prio: stmtPrioDefault, Seq: js.Seq, Generated: true})
 	}
 }
 

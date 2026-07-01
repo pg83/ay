@@ -21,7 +21,7 @@ func (e *EmitContext) emitDecimalMD5ForAR() {
 			continue
 		}
 
-		e.emitGenerated(copyFileOutputVFS(instance.Path.rel(), stmt.File).str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkDecimalMD5})
+		e.enqueueSrc(copyFileOutputVFS(instance.Path.rel(), stmt.File).str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkDecimalMD5})
 	}
 }
 

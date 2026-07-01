@@ -17,7 +17,7 @@ func (e *EmitContext) emitSplitCodegensForAR() {
 		_, parts := e.emitSplitCodegen(sc)
 
 		for _, partRel := range parts {
-			e.emitGenerated(copyFileOutputVFS(instance.Path.rel(), partRel).str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkSplitCodegen})
+			e.enqueueSrc(copyFileOutputVFS(instance.Path.rel(), partRel).str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkSplitCodegen})
 		}
 	}
 }
