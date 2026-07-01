@@ -190,7 +190,11 @@ func (e *EmitContext) emitLibraryFlatcSource(src STR) *SourceEmit {
 	srcRel := src.string()
 	cppVFS := build(resolveSourceVFS(ctx, instance, srcRel, d.srcDirs).rel(), ".cpp")
 
-	return e.emitFlatcCppCompile(cppVFS)
+	meta := d.srcMetaOf(src)
+	meta.Generated = true
+	e.enqueueSrc(cppVFS.str(), meta)
+
+	return nil
 }
 
 func (e *EmitContext) emitFlatcCppCompile(cppVFS VFS) *SourceEmit {
