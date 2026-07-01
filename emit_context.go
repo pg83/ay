@@ -42,11 +42,6 @@ func (e *EmitContext) enqueueSrc(src STR, meta SrcMeta) {
 	e.srcMeta[src] = meta
 }
 
-func (e *EmitContext) emitGenerated(src STR, meta SrcMeta) {
-	e.srcMeta[src] = meta
-	e.emitOneSource(src)
-}
-
 func (e *EmitContext) drainSrcs() {
 	for len(e.srcs) > 0 {
 		src := e.srcs[0]

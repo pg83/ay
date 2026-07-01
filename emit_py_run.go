@@ -13,7 +13,7 @@ func (e *EmitContext) emitRunPythonForAR() {
 	}
 
 	for _, rp := range d.runPython {
-		pyRef := e.emitRunPython(rp)
+		e.emitRunPython(rp)
 		outs := make([]string, 0, len(rp.OUTFiles)+1)
 
 		outs = append(outs, strStrings(rp.OUTFiles)...)
@@ -23,13 +23,8 @@ func (e *EmitContext) emitRunPythonForAR() {
 		}
 
 		for _, out := range outs {
-			switch {
-			case isCCSourceExt(out):
-				e.emitGenerated(copyFileOutputVFS(instance.Path.rel(), out).str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkRunPython})
-			case isAsmSourceExt(out):
-				asRef, asOut := e.emitCodegenDownstreamAS(out, []NodeRef{pyRef})
-
-				e.collectObj(asRef, asOut, SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkRunPython})
+			if isCCSourceExt(out) || isAsmSourceExt(out) {
+				e.enqueueSrc(copyFileOutputVFS(instance.Path.rel(), out).str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkRunPython})
 			}
 		}
 	}

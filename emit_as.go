@@ -195,6 +195,7 @@ func (e *EmitContext) emitLibraryAsmSource(src STR) {
 	}
 
 	asIn.IncludeInputs = walkClosure(e.scanner, srcVFS, scanIn.ScanCfg)
+	asIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, asIn.IncludeInputs)
 
 	ref, outPath := emitAS(instance, srcRel, srcVFS, asIn, ctx.host, ctx.emit)
 
@@ -217,6 +218,7 @@ func (e *EmitContext) emitLibraryYasmSource(src STR) {
 	}
 
 	asIn.IncludeInputs = walkClosure(e.scanner, srcVFS, scanIn.ScanCfg)
+	asIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, asIn.IncludeInputs)
 
 	yasmLD, _ := ctx.tool(argContribToolsYasm)
 	ref, outPath := emitASYasm(instance, srcRel, srcVFS, asIn, yasmLD, ctx.emit)
