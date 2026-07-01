@@ -665,10 +665,10 @@ func (e *EmitContext) emitPyProtoAuxChunks(peerContribs PeerGlobalContribs, entr
 			DepRefs:      deps,
 		}, auxRef)
 
-		se := e.emitOneSource(aux.str())
+		auxRef, auxOut := e.emitCC(aux)
 
-		res.Refs = append(res.Refs, se.Ref)
-		res.Outputs = append(res.Outputs, se.OutPath)
+		res.Refs = append(res.Refs, auxRef)
+		res.Outputs = append(res.Outputs, auxOut)
 	}
 
 	return res

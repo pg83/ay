@@ -6,13 +6,7 @@ import (
 
 var srcExtMatcher *ExtMatcher[SrcEmitter]
 
-type SourceEmit struct {
-	Ref     NodeRef
-	OutPath VFS
-	Extra   []SourceEmit
-}
-
-type SrcEmitter = func(e *EmitContext, src STR) *SourceEmit
+type SrcEmitter = func(e *EmitContext, src STR)
 
 func init() {
 	srcExtMatcher = newExtMatcher([]ExtEntry[SrcEmitter]{
@@ -48,12 +42,12 @@ func init() {
 	})
 }
 
-func (e *EmitContext) emitOneSource(src STR) *SourceEmit {
+func (e *EmitContext) emitOneSource(src STR) {
 	ctx, instance, _ := e.ctx, e.instance, e.d
 	srcRel := src.string()
 
 	if isHeaderSource(srcRel) {
-		return nil
+		return
 	}
 
 	emit, ok := srcExtMatcher.match(srcRel)
@@ -64,8 +58,8 @@ func (e *EmitContext) emitOneSource(src STR) *SourceEmit {
 			Message: fmt.Sprintf("%s: unsupported source extension in %q", instance.Path.rel(), srcRel),
 		})
 
-		return nil
+		return
 	}
 
-	return emit(e, src)
+	emit(e, src)
 }

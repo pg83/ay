@@ -7,15 +7,13 @@ import (
 
 var checkConfigHKV = KV{P: pkCH, PC: pcYellow}
 
-func (e *EmitContext) emitCheckConfigH() []*SourceEmit {
+func (e *EmitContext) emitCheckConfigH() {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 
 	if len(d.checkConfigHeaders) == 0 {
-		return nil
+		return
 	}
-
-	out := make([]*SourceEmit, 0, len(d.checkConfigHeaders))
 
 	for _, conf := range d.checkConfigHeaders {
 		confBase := strings.TrimSuffix(path.Base(conf.string()), path.Ext(conf.string()))
@@ -59,10 +57,6 @@ func (e *EmitContext) emitCheckConfigH() []*SourceEmit {
 			Compile:       &CompileSpec{FlatOutput: d.flatSrc(generatedVFS.str()), CFlags: psc},
 		})
 
-		if se := e.emitOneSource(generatedVFS.str()); se != nil {
-			out = append(out, se)
-		}
+		e.emitGenerated(generatedVFS.str(), SrcMeta{Prio: stmtPrioDefault, Generated: true})
 	}
-
-	return out
 }

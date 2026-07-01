@@ -19,8 +19,7 @@ func (e *EmitContext) emitSplitCodegensForAR() *RunProgramsForARResult {
 		_, parts := e.emitSplitCodegen(sc)
 
 		for _, partRel := range parts {
-			se := e.emitOneSource(copyFileOutputVFS(instance.Path.rel(), partRel).str())
-			ccRef, ccOut := se.Ref, se.OutPath
+			ccRef, ccOut := e.emitCC(copyFileOutputVFS(instance.Path.rel(), partRel))
 
 			res.CCRefs = append(res.CCRefs, ccRef)
 			res.CCOutputs = append(res.CCOutputs, ccOut)

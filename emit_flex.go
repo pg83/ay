@@ -17,7 +17,7 @@ func flexGeneratedVFS(instance ModuleInstance, srcRel string) VFS {
 	return build(instance.Path.rel(), "/", srcRel, flexDefaultGenExt)
 }
 
-func (e *EmitContext) emitLibraryFlexSource(src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryFlexSource(src STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	flexRef, flexBin := ctx.tool(argContribToolsFlexOld)
@@ -58,8 +58,6 @@ func (e *EmitContext) emitLibraryFlexSource(src STR) *SourceEmit {
 	meta := d.srcMetaOf(src)
 	meta.Generated = true
 	e.enqueueSrc(outVFS.str(), meta)
-
-	return nil
 }
 
 func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, outVFS VFS, closure []VFS, id NodeRef, emit *StreamingEmitter) {

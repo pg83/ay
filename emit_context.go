@@ -8,12 +8,29 @@ type EmitContext struct {
 	codegen  *CodegenRegistry
 	srcs     []STR
 	srcMeta  map[STR]SrcMeta
+	refs     []NodeRef
+	outs     []VFS
+	declMeta map[VFS]SrcMeta
 }
 
 func newEmitContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData) *EmitContext {
 	scanner := ctx.scannerFor(instance)
 
-	return &EmitContext{ctx: ctx, instance: instance, d: d, scanner: scanner, codegen: scanner.codegen, srcMeta: map[STR]SrcMeta{}}
+	return &EmitContext{ctx: ctx, instance: instance, d: d, scanner: scanner, codegen: scanner.codegen, srcMeta: map[STR]SrcMeta{}, declMeta: map[VFS]SrcMeta{}}
+}
+
+func (e *EmitContext) collectObj(ref NodeRef, out VFS, meta SrcMeta) {
+	e.refs = append(e.refs, ref)
+	e.outs = append(e.outs, out)
+	e.declMeta[out] = meta
+}
+
+func (e *EmitContext) metaForSrc(src STR) SrcMeta {
+	if m, ok := e.srcMeta[src]; ok {
+		return m
+	}
+
+	return e.d.srcMetaOf(src)
 }
 
 func (e *EmitContext) at(instance ModuleInstance) *EmitContext {
@@ -25,31 +42,16 @@ func (e *EmitContext) enqueueSrc(src STR, meta SrcMeta) {
 	e.srcMeta[src] = meta
 }
 
-func (e *EmitContext) drainSrcs() (refs []NodeRef, outs []VFS, declMeta map[VFS]SrcMeta) {
-	declMeta = map[VFS]SrcMeta{}
+func (e *EmitContext) emitGenerated(src STR, meta SrcMeta) {
+	e.srcMeta[src] = meta
+	e.emitOneSource(src)
+}
 
+func (e *EmitContext) drainSrcs() {
 	for len(e.srcs) > 0 {
 		src := e.srcs[0]
 		e.srcs = e.srcs[1:]
 
-		emit := e.emitOneSource(src)
-
-		if emit == nil {
-			continue
-		}
-
-		meta := e.srcMeta[src]
-
-		refs = append(refs, emit.Ref)
-		outs = append(outs, emit.OutPath)
-		declMeta[emit.OutPath] = meta
-
-		for _, ex := range emit.Extra {
-			refs = append(refs, ex.Ref)
-			outs = append(outs, ex.OutPath)
-			declMeta[ex.OutPath] = meta
-		}
+		e.emitOneSource(src)
 	}
-
-	return refs, outs, declMeta
 }

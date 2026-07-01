@@ -185,7 +185,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 	})
 }
 
-func (e *EmitContext) emitLibraryFlatcSource(src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryFlatcSource(src STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	cppVFS := build(resolveSourceVFS(ctx, instance, srcRel, d.srcDirs).rel(), ".cpp")
@@ -193,10 +193,8 @@ func (e *EmitContext) emitLibraryFlatcSource(src STR) *SourceEmit {
 	meta := d.srcMetaOf(src)
 	meta.Generated = true
 	e.enqueueSrc(cppVFS.str(), meta)
-
-	return nil
 }
 
-func (e *EmitContext) emitFlatcCppCompile(cppVFS VFS) *SourceEmit {
-	return e.emitOneSource(cppVFS.str())
+func (e *EmitContext) emitFlatcCppCompile(cppVFS VFS) (NodeRef, VFS) {
+	return e.emitCC(cppVFS)
 }

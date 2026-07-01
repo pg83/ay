@@ -62,10 +62,9 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() *GeneratedPyAuxChunksResult {
 	res := &GeneratedPyAuxChunksResult{}
 
 	for _, aux := range rawRes.PROutputs {
-		if se := e.emitOneSource(aux.str()); se != nil {
-			res.Refs = append(res.Refs, se.Ref)
-			res.Outputs = append(res.Outputs, se.OutPath)
-		}
+		auxRef, auxOut := e.emitCC(aux)
+		res.Refs = append(res.Refs, auxRef)
+		res.Outputs = append(res.Outputs, auxOut)
 	}
 
 	return res

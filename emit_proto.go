@@ -645,16 +645,17 @@ func (e *EmitContext) emitProtoProducer(srcRel string) {
 	e.emitProtoPB(srcRel, cfg, pe, d.cc.ProtoInclude, nil)
 }
 
-func (e *EmitContext) emitLibraryProtoSource(src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryProtoSource(src STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	protoBase := strings.TrimSuffix(protoSourceRelPath(ctx.fs, instance, d, srcRel), ".proto")
 
-	se := e.emitOneSource(build(protoBase, ".pb.cc").str())
+	meta := e.metaForSrc(src)
+	meta.Generated = true
+
+	e.enqueueSrc(build(protoBase, ".pb.cc").str(), meta)
 
 	if d.grpc {
-		se.Extra = append(se.Extra, *e.emitOneSource(build(protoBase, ".grpc.pb.cc").str()))
+		e.enqueueSrc(build(protoBase, ".grpc.pb.cc").str(), meta)
 	}
-
-	return se
 }

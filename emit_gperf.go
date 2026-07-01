@@ -47,7 +47,7 @@ func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS
 	return emit.emit(node)
 }
 
-func (e *EmitContext) emitLibraryGperfSource(src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryGperfSource(src STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	gperfLDRef, gperfBinVFS := ctx.tool(argContribToolsGperf)
@@ -72,6 +72,4 @@ func (e *EmitContext) emitLibraryGperfSource(src STR) *SourceEmit {
 	meta := d.srcMetaOf(src)
 	meta.Generated = true
 	e.enqueueSrc(genVFS.str(), meta)
-
-	return nil
 }

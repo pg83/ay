@@ -205,10 +205,10 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) *PyRegisterResult {
 			Compile:       spec,
 		})
 
-		se := e.emitOneSource(regCppVFS.str())
+		regRef, regOut := e.emitCC(regCppVFS)
 
-		res.Refs = append(res.Refs, se.Ref)
-		res.Outputs = append(res.Outputs, se.OutPath)
+		res.Refs = append(res.Refs, regRef)
+		res.Outputs = append(res.Outputs, regOut)
 	}
 
 	return res

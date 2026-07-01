@@ -65,14 +65,14 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 	return gzRef, genProtoName
 }
 
-func (e *EmitContext) emitLibraryGztProtoCompile(src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryGztProtoCompile(src STR) {
 	_, _, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	_, genProtoSrc := e.emitLibraryGztProtoSource(srcRel, d.cc.ProtoInclude, d.cc.ModuleTag)
 
 	e.emitProtoProducer(genProtoSrc)
-
-	return e.emitLibraryProtoSource(internStr(genProtoSrc))
+	e.srcMeta[internStr(genProtoSrc)] = e.metaForSrc(src)
+	e.emitLibraryProtoSource(internStr(genProtoSrc))
 }
 
 func gztCmdArgs(converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) []STR {

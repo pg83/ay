@@ -20,18 +20,16 @@ func (e *EmitContext) emitExplicitCF(cf *ConfigureFileStmt) {
 	e.emitConfigureFile(srcVFS, outVFS)
 }
 
-func (e *EmitContext) emitLibraryHInSource(src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryHInSource(src STR) {
 	_, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	outVFS := build(instance.Path.rel(), "/", strings.TrimSuffix(srcRel, ".in"))
 
 	e.emitConfigureFile(srcVFS, outVFS)
-
-	return nil
 }
 
-func (e *EmitContext) emitLibraryCInSource(src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryCInSource(src STR) {
 	_, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
@@ -39,7 +37,9 @@ func (e *EmitContext) emitLibraryCInSource(src STR) *SourceEmit {
 
 	e.emitConfigureFile(srcVFS, outVFS)
 
-	return e.emitOneSource(outVFS.str())
+	meta := e.metaForSrc(src)
+	meta.Generated = true
+	e.enqueueSrc(outVFS.str(), meta)
 }
 
 func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {

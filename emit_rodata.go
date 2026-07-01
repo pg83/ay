@@ -58,7 +58,7 @@ func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 	return emit.emit(node), asmVFS, outVFS
 }
 
-func (e *EmitContext) emitLibraryRodataSource(src STR) *SourceEmit {
+func (e *EmitContext) emitLibraryRodataSource(src STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 
@@ -71,5 +71,5 @@ func (e *EmitContext) emitLibraryRodataSource(src STR) *SourceEmit {
 	in := e.ccInputsFor(srcVFS)
 	ref, _, outPath := emitRD(instance, srcRel, srcVFS, yasmLDRef, nil, nil, in.TC, ctx.emit)
 
-	return &SourceEmit{Ref: ref, OutPath: outPath}
+	e.collectObj(ref, outPath, e.metaForSrc(src))
 }
