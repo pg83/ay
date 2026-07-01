@@ -47,6 +47,49 @@ func (e *EmitContext) deferPass2(cb func()) {
 	e.pass2 = append(e.pass2, cb)
 }
 
+func (e *EmitContext) emit(selfPeerAddInclGlobal []VFS) []VFS {
+	d := e.d
+
+	for _, src := range d.srcs {
+		if isCodegenProducingSrcID(src) {
+			e.emitOneSource(src)
+		}
+	}
+
+	cythonPlans := e.planCythonCpp()
+	cpMemberSrcs := e.emitCopyFiles()
+
+	e.emitMiscNodes()
+	e.emitRunProgramsForAR()
+	e.emitDecimalMD5ForAR()
+	e.emitSplitCodegensForAR()
+	e.emitBaseCodegensForAR()
+	e.emitRunPythonForAR()
+	e.emitArchiveAsmForAR()
+	e.emitEnumSrcs(selfPeerAddInclGlobal)
+	e.emitLuaJit21()
+	e.emitArchives()
+	e.emitCheckConfigH()
+	e.emitCythonCppPlanned(cythonPlans)
+	e.emitSwigC()
+	e.emitJoinSrcs()
+
+	for _, fe := range d.srcExtraFlat {
+		srcVFS := e.moduleSourceVFS(fe.Src)
+		ref, out := e.emitCCFlat(srcVFS, nil, fe.Flags)
+
+		e.collectObj(ref, out, SrcMeta{Prio: stmtPrioDefault, Seq: fe.Seq})
+	}
+
+	for _, src := range d.srcs {
+		if !isCodegenProducingSrcID(src) {
+			e.emitOneSource(src)
+		}
+	}
+
+	return cpMemberSrcs
+}
+
 func (e *EmitContext) drainSrcs() {
 	for len(e.srcs) > 0 {
 		src := e.srcs[0]
