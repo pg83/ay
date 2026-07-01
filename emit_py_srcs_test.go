@@ -195,7 +195,9 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 		Language: LangCPP,
 		Platform: testTargetP,
 	}
-	res := newEmitContext(ctx, instance, d, nil).emitPySrcObjcopy(&ObjcopyEmitCtx{blocks: composeObjcopyArgBlocks(d.tc, testTargetP), na: ctx.na})
+	seedResourceTools(ctx)
+
+	res := newEmitContext(ctx, instance, d, nil).emitPySrcObjcopy()
 
 	if res == nil {
 		t.Fatal("emitPySrcObjcopy returned nil")
@@ -290,15 +292,17 @@ func runPySrcBatcher(t *testing.T, d *ModuleData, modulePath string) []*Node {
 		Platform: testTargetP,
 	}
 	e := newEmitContext(ctx, instance, d, nil)
-	oc := &ObjcopyEmitCtx{blocks: composeObjcopyArgBlocks(d.tc, testTargetP), na: ctx.na}
-	b := newObjcopyBatcher(e, oc, ObjcopyProfile{moduleTag: stringPtr("PY3"), kv: &pyObjcopyKV, layout: objcopyLayoutScriptTail, resolveDeps: true})
+	seedResourceTools(ctx)
+
+	items := make([]ResourceItem, 0, 8)
 
 	for _, en := range buildPySrcEntries(d, modulePath) {
-		b.kvEntry(en.kvHash, en.kvCmd, en.pathInput, en.extraInputs)
-		b.fileEntry(en.pathHash, en.key, en.pathInput, en.extraInputs)
+		items = append(items,
+			ResourceItem{Path: "-", Key: en.kvHash, Cmd: en.kvCmd, Input: en.pathInput, Extra: en.extraInputs},
+			ResourceItem{Path: en.pathHash, Key: en.key, Input: en.pathInput, Extra: en.extraInputs})
 	}
 
-	b.flush()
+	e.packResources(ResourcePack{Tag: stringPtr("PY3"), Items: items})
 
 	return em.nodes
 }
@@ -916,5 +920,13 @@ END()
 
 	if !nodeHasInput(bc, "$(S)/other/other.h") {
 		t.Fatalf("bytecode inputs missing transitive generator closure other/other.h: %#v", bc.flatInputs())
+	}
+}
+
+func seedResourceTools(ctx *GenCtx) {
+	dummy := build("dummy-tool")
+
+	for _, tool := range []ARG{argToolsRescompiler, argToolsRescompressor} {
+		ctx.tools.put(tool, &ModuleEmitResult{LDPath: &dummy})
 	}
 }

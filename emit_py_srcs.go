@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/md5"
 	enc32 "encoding/base32"
-	encb64 "encoding/base64"
 	enchex "encoding/hex"
 	"regexp"
 	"sort"
@@ -281,34 +280,33 @@ func (e *EmitContext) emitPySrcs() {
 }
 
 func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	_, instance, d := e.ctx, e.instance, e.d
 	hasKvOnly := d.pyMain != nil || len(d.noCheckImports) > 0 || len(d.pySrcs) > 0 || len(d.yaConfJSON) > 0
 
 	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 && !hasKvOnly {
 		return nil
 	}
 
-	oc := newObjcopyEmitCtx(ctx, d, instance.Platform)
 	out := &ObjcopyEmitResult{}
 
-	if nodeRes := e.emitPyMainObjcopy(oc); nodeRes != nil {
+	if nodeRes := e.emitPyMainObjcopy(); nodeRes != nil {
 		out.Refs = append(out.Refs, nodeRes.Ref)
 		out.Outputs = append(out.Outputs, nodeRes.Out)
 	}
 
-	if nodeRes := e.emitNoCheckImportsObjcopy(oc); nodeRes != nil {
+	if nodeRes := e.emitNoCheckImportsObjcopy(); nodeRes != nil {
 		out.Refs = append(out.Refs, nodeRes.Ref)
 		out.Outputs = append(out.Outputs, nodeRes.Out)
 	}
 
-	for _, nodeRes := range e.emitYaConfJSONObjcopy(oc) {
+	for _, nodeRes := range e.emitYaConfJSONObjcopy() {
 		out.Refs = append(out.Refs, nodeRes.Ref)
 		out.Outputs = append(out.Outputs, nodeRes.Out)
 	}
 
 	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 {
 		trailStart := len(out.Refs)
-		srcRes := e.emitPySrcObjcopy(oc)
+		srcRes := e.emitPySrcObjcopy()
 
 		if srcRes != nil {
 			out.Refs = append(out.Refs, srcRes.Refs...)
@@ -331,14 +329,14 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 	py3BinProgramSide := d.moduleStmt.Name == tokPy3Program && !d.programPairedLib
 
 	if !py3BinProgramSide {
-		r, o := e.emitResourceFile(oc, d.resources, moduleTag)
+		r, o := e.emitResourceFile(d.resources, moduleTag)
 
 		out.Refs = append(out.Refs, r...)
 		out.Outputs = append(out.Outputs, o...)
 	}
 
 	trailStart := len(out.Refs)
-	srcRes := e.emitPySrcObjcopy(oc)
+	srcRes := e.emitPySrcObjcopy()
 
 	if srcRes != nil {
 		out.Refs = append(out.Refs, srcRes.Refs...)
@@ -346,7 +344,7 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 	}
 
 	if !py3BinProgramSide {
-		r, o := e.emitResourceFile(oc, d.pyPyiResources, moduleTag)
+		r, o := e.emitResourceFile(d.pyPyiResources, moduleTag)
 
 		out.Refs = append(out.Refs, r...)
 		out.Outputs = append(out.Outputs, o...)
@@ -357,7 +355,7 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 	return out
 }
 
-func (e *EmitContext) emitPySrcObjcopy(oc *ObjcopyEmitCtx) *ObjcopyEmitResult {
+func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
 
 	if len(d.pySrcs) == 0 {
@@ -388,7 +386,7 @@ func (e *EmitContext) emitPySrcObjcopy(oc *ObjcopyEmitCtx) *ObjcopyEmitResult {
 
 	for _, group := range groups {
 		if namespaceEnabled {
-			if nsRes := e.emitPyNamespaceForGroup(group, oc); nsRes != nil {
+			if nsRes := e.emitPyNamespaceForGroup(group); nsRes != nil {
 				res.Refs = append(res.Refs, nsRes.Ref)
 				res.Outputs = append(res.Outputs, nsRes.Out)
 			}
@@ -400,16 +398,15 @@ func (e *EmitContext) emitPySrcObjcopy(oc *ObjcopyEmitCtx) *ObjcopyEmitResult {
 			continue
 		}
 
-		b := newObjcopyBatcher(e, oc, ObjcopyProfile{moduleTag: moduleTag, kv: &pyObjcopyKV, layout: objcopyLayoutScriptTail, resolveDeps: true})
+		items := make([]ResourceItem, 0, 2*len(entries))
 
 		for _, en := range entries {
-			b.kvEntry(en.kvHash, en.kvCmd, en.pathInput, en.extraInputs)
-			b.fileEntry(en.pathHash, en.key, en.pathInput, en.extraInputs)
+			items = append(items,
+				ResourceItem{Path: "-", Key: en.kvHash, Cmd: en.kvCmd, Input: en.pathInput, Extra: en.extraInputs},
+				ResourceItem{Path: en.pathHash, Key: en.key, Input: en.pathInput, Extra: en.extraInputs})
 		}
 
-		b.flush()
-
-		groupRefs, groupOuts := b.results()
+		groupRefs, groupOuts := e.packResources(ResourcePack{Tag: moduleTag, Items: items})
 
 		res.Refs = append(res.Refs, groupRefs...)
 		res.Outputs = append(res.Outputs, groupOuts...)
@@ -422,7 +419,7 @@ func (e *EmitContext) emitPySrcObjcopy(oc *ObjcopyEmitCtx) *ObjcopyEmitResult {
 	return res
 }
 
-func (e *EmitContext) emitPyNamespaceForGroup(group PySrcGroup, oc *ObjcopyEmitCtx) *ObjcopyEmit {
+func (e *EmitContext) emitPyNamespaceForGroup(group PySrcGroup) *ObjcopyEmit {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	reg := e.codegen
 	pySources := make([]string, 0, len(group.Srcs))
@@ -501,10 +498,10 @@ func (e *EmitContext) emitPyNamespaceForGroup(group PySrcGroup, oc *ObjcopyEmitC
 		kvsCmd = append(kvsCmd, key+"="+nsValue)
 	}
 
-	return e.emitKvOnlyObjcopyNode(resourceLibTagForData(d), kvsHash, kvsCmd, oc)
+	return e.emitKvOnlyResource(resourceLibTagForData(d), kvsHash, kvsCmd)
 }
 
-func (e *EmitContext) emitPyMainObjcopy(oc *ObjcopyEmitCtx) *ObjcopyEmit {
+func (e *EmitContext) emitPyMainObjcopy() *ObjcopyEmit {
 	_, _, d := e.ctx, e.instance, e.d
 
 	if d.pyMain == nil {
@@ -513,10 +510,10 @@ func (e *EmitContext) emitPyMainObjcopy(oc *ObjcopyEmitCtx) *ObjcopyEmit {
 
 	kv := "PY_MAIN=" + d.pyMain.string()
 
-	return e.emitKvOnlyObjcopyNode(resourceBinTagForData(d), []string{kv}, []string{kv}, oc)
+	return e.emitKvOnlyResource(resourceBinTagForData(d), []string{kv}, []string{kv})
 }
 
-func (e *EmitContext) emitNoCheckImportsObjcopy(oc *ObjcopyEmitCtx) *ObjcopyEmit {
+func (e *EmitContext) emitNoCheckImportsObjcopy() *ObjcopyEmit {
 	_, _, d := e.ctx, e.instance, e.d
 
 	if len(d.noCheckImports) == 0 {
@@ -533,12 +530,11 @@ func (e *EmitContext) emitNoCheckImportsObjcopy(oc *ObjcopyEmitCtx) *ObjcopyEmit
 	kvHash := key + "=\"" + value + "\""
 	kvCmd := key + "=" + value
 
-	return e.emitKvOnlyObjcopyNode(resourceBinTagForData(d), []string{kvHash}, []string{kvCmd}, oc)
+	return e.emitKvOnlyResource(resourceBinTagForData(d), []string{kvHash}, []string{kvCmd})
 }
 
-func (e *EmitContext) emitYaConfJSONObjcopy(oc *ObjcopyEmitCtx) []*ObjcopyEmit {
-	ctx, instance, d := e.ctx, e.instance, e.d
-	na := ctx.na
+func (e *EmitContext) emitYaConfJSONObjcopy() []*ObjcopyEmit {
+	ctx, _, d := e.ctx, e.instance, e.d
 
 	if len(d.yaConfJSON) == 0 {
 		return nil
@@ -577,24 +573,18 @@ func (e *EmitContext) emitYaConfJSONObjcopy(oc *ObjcopyEmitCtx) []*ObjcopyEmit {
 
 	for _, res := range resources {
 		key := "resfs/file/" + res.keyPath
-		keyB64 := encb64.StdEncoding.EncodeToString([]byte(key))
 		kvHash := "resfs/src/" + key + "=${rootrel;context=TEXT;input=TEXT:\"" + res.hashPath + "\"}"
 		kvCmd := "resfs/src/" + key + "=" + res.sourcePath
 		input := source(res.sourcePath)
 
-		ref, outputObj := buildObjcopyNode(ctx, instance, oc, ObjcopyNode{
-			moduleTag:  moduleTag,
-			kv:         &pyObjcopyKV,
-			hashPaths:  []string{res.hashPath},
-			keysB64:    []string{keyB64},
-			kvsHash:    []string{kvHash},
-			kvsCmd:     []string{kvCmd},
-			pathInputs: []VFS{input},
-			inputs:     na.inputList(rescompilersChunk, na.vfsList(input, objcopyScriptVFS)),
-			deps:       depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef),
-		})
+		refs, outs := e.packResources(ResourcePack{Tag: moduleTag, Items: []ResourceItem{
+			{Path: "-", Key: kvHash, Cmd: kvCmd},
+			{Path: res.hashPath, Key: key, Input: input},
+		}})
 
-		out = append(out, &ObjcopyEmit{Ref: ref, Out: outputObj})
+		for i, ref := range refs {
+			out = append(out, &ObjcopyEmit{Ref: ref, Out: outs[i]})
+		}
 	}
 
 	return out
