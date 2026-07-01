@@ -465,6 +465,122 @@ func moduleStmts(ctx *GenCtx, dir string) []Stmt {
 	return stmts
 }
 
+func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
+	if instance.Language == LangPy && d.moduleStmt.Name == tokProtoLibrary {
+		hasProtoSrc := false
+
+		for _, src := range d.srcs {
+			if extIsProto(src.string()) {
+				hasProtoSrc = true
+
+				break
+			}
+		}
+
+		if hasProtoSrc && !strings.HasPrefix(instance.Path.rel(), "contrib/libs/protobuf/builtin_proto") &&
+			!strings.HasPrefix(instance.Path.rel(), "contrib/python/protobuf") {
+			d.peerdirs = append(d.peerdirs, strContribPythonProtobuf)
+		}
+
+		if hasProtoSrc && d.grpc {
+			d.peerdirs = append(d.peerdirs, strContribPythonGrpcio)
+		}
+	}
+
+	if !d.hadAllocator && (d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin) {
+		d.hadAllocator = true
+		d.allocatorName = strJ
+	}
+
+	py3ProtoVariant := d.moduleStmt.Name == tokProtoLibrary && d.usePython3
+
+	if pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noPythonIncl && instance.Path.rel() != "contrib/libs/python" {
+		d.peerdirs = append([]STR{strContribLibsPython}, d.peerdirs...)
+	} else if py3ProtoVariant && !d.noPythonIncl && instance.Path.rel() != "contrib/libs/python" {
+		if moduleExcludesTag(d, "CPP_PROTO") {
+			d.peerdirs = append([]STR{strContribLibsPython}, d.peerdirs...)
+		} else {
+			d.peerdirs = append(d.peerdirs, strContribLibsPython)
+		}
+	}
+
+	if d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin {
+		var earlyPeers []string
+
+		if d.pythonSQLite3 {
+			earlyPeers = append(earlyPeers, "contrib/tools/python3/Modules/_sqlite")
+		}
+
+		earlyPeers = append(earlyPeers, "library/python/runtime_py3/main")
+
+		if !d.noImportTracing && instance.Path.rel() != "library/python/import_tracing/constructor" {
+			earlyPeers = append(earlyPeers, "library/python/import_tracing/constructor")
+		}
+
+		var latePeers []string
+
+		if !d.noCheckImportsDisabled {
+			latePeers = append(latePeers, "library/python/testing/import_test")
+		}
+
+		if d.moduleStmt.Name == tokPy3ProgramBin {
+			insertAt := 0
+
+			if len(d.peerdirs) > 0 && d.peerdirs[0].string() == "contrib/libs/python" {
+				insertAt = 1
+			}
+
+			filteredEarly := earlyPeers[:0]
+
+			for _, peer := range earlyPeers {
+				if instance.Path.rel() != peer {
+					filteredEarly = append(filteredEarly, peer)
+				}
+			}
+
+			spliced := make([]STR, 0, len(d.peerdirs)+len(filteredEarly))
+
+			spliced = append(spliced, d.peerdirs[:insertAt]...)
+			spliced = append(spliced, sTRS(filteredEarly...)...)
+			spliced = append(spliced, d.peerdirs[insertAt:]...)
+
+			d.peerdirs = spliced
+		} else {
+			for _, peer := range earlyPeers {
+				if instance.Path.rel() != peer {
+					d.peerdirs = append(d.peerdirs, internStr(peer))
+				}
+			}
+		}
+
+		for _, peer := range latePeers {
+			if instance.Path.rel() != peer {
+				d.peerdirs = append(d.peerdirs, internStr(peer))
+			}
+		}
+	}
+
+	if isProgramModuleType(d.moduleStmt.Name) && pyLibraryAutoPythonPeer(d.moduleStmt.Name) && d.moduleStmt.Name != tokPy3Program && d.moduleStmt.Name != tokPy3ProgramBin && !d.noImportTracing && instance.Path.rel() != "library/python/import_tracing/constructor" {
+		d.peerdirs = append(d.peerdirs, strLibraryPythonImportTracingConstructor)
+	}
+
+	if d.hasFbs && instance.Path.rel() != "contrib/libs/flatbuffers" {
+		d.peerdirs = append(d.peerdirs, strContribLibsFlatbuffers)
+	}
+
+	if d.hasFbs64 && instance.Path.rel() != "contrib/libs/flatbuffers64" {
+		d.peerdirs = append(d.peerdirs, strContribLibsFlatbuffers64)
+	}
+
+	if d.hasBisonY && instance.Path.rel() != strBuildInducedByBison.string() {
+		d.peerdirs = append(d.peerdirs, strBuildInducedByBison)
+	}
+
+	if ctx.sbomEnabled && !d.flags.NoRuntime && !effectiveNoPlatform(d.flags) && !strings.HasPrefix(instance.Path.rel(), "contrib/libs/cxxsupp") {
+		d.peerdirs = append(d.peerdirs, strContribLibsCxxsupp)
+	}
+}
+
 func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if existing := ctx.memo.get(ctx.instanceKey(instance)); existing != nil {
 		return *existing
@@ -560,123 +676,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		return e.genPrebuiltProgram()
 	}
 
-	if instance.Language == LangPy && d.moduleStmt.Name == tokProtoLibrary {
-		hasProtoSrc := false
-
-		for _, src := range d.srcs {
-			if extIsProto(src.string()) {
-				hasProtoSrc = true
-
-				break
-			}
-		}
-
-		if hasProtoSrc && !strings.HasPrefix(instance.Path.rel(), "contrib/libs/protobuf/builtin_proto") &&
-			!strings.HasPrefix(instance.Path.rel(), "contrib/python/protobuf") {
-			d.peerdirs = append(d.peerdirs, strContribPythonProtobuf)
-		}
-
-		if hasProtoSrc && d.grpc {
-			d.peerdirs = append(d.peerdirs, strContribPythonGrpcio)
-		}
-	}
-
 	if d.moduleStmt.Name != tokLibrary && d.moduleStmt.Name != tokFbsLibrary && d.moduleStmt.Name != tokDllTool && !isProgramModuleType(d.moduleStmt.Name) && !isPyLibraryType(d.moduleStmt.Name) && !isYqlUdfStaticModule(d.moduleStmt.Name) && !isSpecializedLibraryType(d.moduleStmt.Name) && !isResourceContainerType(d.moduleStmt.Name) {
 		throwFmt("gen: %s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only)", instance.Path.rel(), d.moduleStmt.Name)
 	}
 
-	if !d.hadAllocator && (d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin) {
-		d.hadAllocator = true
-		d.allocatorName = strJ
-	}
-
-	py3ProtoVariant := d.moduleStmt.Name == tokProtoLibrary && d.usePython3
-
-	if pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noPythonIncl && instance.Path.rel() != "contrib/libs/python" {
-		d.peerdirs = append([]STR{strContribLibsPython}, d.peerdirs...)
-	} else if py3ProtoVariant && !d.noPythonIncl && instance.Path.rel() != "contrib/libs/python" {
-		if moduleExcludesTag(d, "CPP_PROTO") {
-			d.peerdirs = append([]STR{strContribLibsPython}, d.peerdirs...)
-		} else {
-			d.peerdirs = append(d.peerdirs, strContribLibsPython)
-		}
-	}
-
-	if d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin {
-		var earlyPeers []string
-
-		if d.pythonSQLite3 {
-			earlyPeers = append(earlyPeers, "contrib/tools/python3/Modules/_sqlite")
-		}
-
-		earlyPeers = append(earlyPeers, "library/python/runtime_py3/main")
-
-		if !d.noImportTracing && instance.Path.rel() != "library/python/import_tracing/constructor" {
-			earlyPeers = append(earlyPeers, "library/python/import_tracing/constructor")
-		}
-
-		var latePeers []string
-
-		if !d.noCheckImportsDisabled {
-			latePeers = append(latePeers, "library/python/testing/import_test")
-		}
-
-		if d.moduleStmt.Name == tokPy3ProgramBin {
-			insertAt := 0
-
-			if len(d.peerdirs) > 0 && d.peerdirs[0].string() == "contrib/libs/python" {
-				insertAt = 1
-			}
-
-			filteredEarly := earlyPeers[:0]
-
-			for _, peer := range earlyPeers {
-				if instance.Path.rel() != peer {
-					filteredEarly = append(filteredEarly, peer)
-				}
-			}
-
-			spliced := make([]STR, 0, len(d.peerdirs)+len(filteredEarly))
-
-			spliced = append(spliced, d.peerdirs[:insertAt]...)
-			spliced = append(spliced, sTRS(filteredEarly...)...)
-			spliced = append(spliced, d.peerdirs[insertAt:]...)
-
-			d.peerdirs = spliced
-		} else {
-			for _, peer := range earlyPeers {
-				if instance.Path.rel() != peer {
-					d.peerdirs = append(d.peerdirs, internStr(peer))
-				}
-			}
-		}
-
-		for _, peer := range latePeers {
-			if instance.Path.rel() != peer {
-				d.peerdirs = append(d.peerdirs, internStr(peer))
-			}
-		}
-	}
-
-	if isProgramModuleType(d.moduleStmt.Name) && pyLibraryAutoPythonPeer(d.moduleStmt.Name) && d.moduleStmt.Name != tokPy3Program && d.moduleStmt.Name != tokPy3ProgramBin && !d.noImportTracing && instance.Path.rel() != "library/python/import_tracing/constructor" {
-		d.peerdirs = append(d.peerdirs, strLibraryPythonImportTracingConstructor)
-	}
-
-	if d.hasFbs && instance.Path.rel() != "contrib/libs/flatbuffers" {
-		d.peerdirs = append(d.peerdirs, strContribLibsFlatbuffers)
-	}
-
-	if d.hasFbs64 && instance.Path.rel() != "contrib/libs/flatbuffers64" {
-		d.peerdirs = append(d.peerdirs, strContribLibsFlatbuffers64)
-	}
-
-	if d.hasBisonY && instance.Path.rel() != strBuildInducedByBison.string() {
-		d.peerdirs = append(d.peerdirs, strBuildInducedByBison)
-	}
-
-	if ctx.sbomEnabled && !d.flags.NoRuntime && !effectiveNoPlatform(d.flags) && !strings.HasPrefix(instance.Path.rel(), "contrib/libs/cxxsupp") {
-		d.peerdirs = append(d.peerdirs, strContribLibsCxxsupp)
-	}
+	applyImplicitPeerdirs(ctx, instance, d)
 
 	if d.moduleStmt.Name == tokDynamicLibrary {
 		result := e.emitDynamicLibrary()
