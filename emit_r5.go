@@ -4,13 +4,6 @@ import "strings"
 
 var r5KV = KV{P: pkR5, PC: pcYellow}
 
-func ragel5OutPaths(instance ModuleInstance, srcRel string) (tmpVFS, cppVFS VFS) {
-	tmpVFS = build(instance.Path.rel(), "/", srcRel, ".tmp")
-	cppVFS = build(instance.Path.rel(), "/", strings.TrimSuffix(srcRel, ".rl"), ".rl5.cpp")
-
-	return tmpVFS, cppVFS
-}
-
 func emitR5(
 	instance ModuleInstance,
 	srcRel string,
@@ -18,13 +11,12 @@ func emitR5(
 	rlgenCdLD NodeRef,
 	ragel5BinPath VFS,
 	rlgenCdBinPath VFS,
-	closure []VFS,
-	ref NodeRef,
 	emit *StreamingEmitter,
-) {
+) (NodeRef, VFS, VFS) {
 	na := emit.nodeArenas()
 	srcVFS := source(instance.Path.rel(), "/", srcRel)
-	tmpVFS, cppVFS := ragel5OutPaths(instance, srcRel)
+	tmpVFS := build(instance.Path.rel(), "/", srcRel, ".tmp")
+	cppVFS := build(instance.Path.rel(), "/", strings.TrimSuffix(srcRel, ".rl"), ".rl5.cpp")
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	cmd0 := Cmd{
@@ -50,7 +42,7 @@ func emitR5(
 		Env: env,
 	}
 
-	inputs := append([]VFS{ragel5BinPath, rlgenCdBinPath, srcVFS}, closure...)
+	inputs := []VFS{ragel5BinPath, rlgenCdBinPath, srcVFS}
 
 	node := &Node{
 		Platform:       instance.Platform,
@@ -63,7 +55,7 @@ func emitR5(
 		ForeignDepRefs: depRefs(ragel5LD, rlgenCdLD),
 	}
 
-	emit.emitReserved(node, ref)
+	return emit.emit(node), tmpVFS, cppVFS
 }
 
 func (e *EmitContext) emitLibraryRagel5Source(src STR) {
@@ -78,8 +70,7 @@ func (e *EmitContext) emitLibraryRagel5Source(src STR) {
 
 	ragel5LDRef, ragel5BinVFS := ctx.tool(argContribToolsRagel5Ragel)
 	rlgenCdLDRef, rlgenCdBinVFS := ctx.tool(argContribToolsRagel5RlgenCd)
-	r5Ref := ctx.emit.reserve()
-	r5TmpOut, r5CppOut := ragel5OutPaths(instance, srcRel)
+	r5Ref, r5TmpOut, r5CppOut := emitR5(instance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, ctx.emit)
 	rlSourceVFS := source(instance.Path.rel(), "/", srcRel)
 	reg := e.codegen
 
@@ -107,11 +98,4 @@ func (e *EmitContext) emitLibraryRagel5Source(src STR) {
 
 	meta.Generated = true
 	e.enqueueSrc(r5CppOut.str(), meta)
-
-	e.deferPass2(func() {
-		window := walkClosure(e.scanner, r5CppOut, d.cc.ScanCfg)
-		closure := keepOnlySourceVFS(filterEnSerializedSiblings(window))
-
-		emitR5(instance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, closure, r5Ref, ctx.emit)
-	})
 }
