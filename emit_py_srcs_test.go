@@ -195,7 +195,7 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 		Language: LangCPP,
 		Platform: testTargetP,
 	}
-	res := newEmitContext(ctx, instance, d).emitPySrcObjcopy(&ObjcopyEmitCtx{blocks: composeObjcopyArgBlocks(d.tc, testTargetP), na: ctx.na})
+	res := newEmitContext(ctx, instance, d, nil).emitPySrcObjcopy(&ObjcopyEmitCtx{blocks: composeObjcopyArgBlocks(d.tc, testTargetP), na: ctx.na})
 
 	if res == nil {
 		t.Fatal("emitPySrcObjcopy returned nil")
@@ -289,7 +289,7 @@ func runPySrcBatcher(t *testing.T, d *ModuleData, modulePath string) []*Node {
 		Language: LangCPP,
 		Platform: testTargetP,
 	}
-	e := newEmitContext(ctx, instance, d)
+	e := newEmitContext(ctx, instance, d, nil)
 	oc := &ObjcopyEmitCtx{blocks: composeObjcopyArgBlocks(d.tc, testTargetP), na: ctx.na}
 	b := newObjcopyBatcher(e, oc, ObjcopyProfile{moduleTag: stringPtr("PY3"), kv: &pyObjcopyKV, layout: objcopyLayoutScriptTail, resolveDeps: true})
 
@@ -830,8 +830,8 @@ func TestEmitPyRegister_ProducerEmittedAtTargetPlatform(t *testing.T) {
 	targetInst := hostInst
 	targetInst.Platform = testTargetP
 
-	newEmitContext(ctx, hostInst, d).emitPyRegister(false)
-	newEmitContext(ctx, targetInst, d).emitPyRegister(false)
+	newEmitContext(ctx, hostInst, d, nil).emitPyRegister(false)
+	newEmitContext(ctx, targetInst, d, nil).emitPyRegister(false)
 
 	wantOutput := "$(B)/contrib/tools/python3/Modules/_sqlite/_sqlite3.reg3.cpp"
 	var pyNodes []*Node
