@@ -23,7 +23,7 @@ func init() {
 		{".auxcpp", (*EmitContext).emitLibraryCSource},
 		{".S", (*EmitContext).emitLibraryAsmSource},
 		{".s", (*EmitContext).emitLibraryAsmSource},
-		{".asm", (*EmitContext).emitLibraryAsmSource},
+		{".asm", (*EmitContext).emitLibraryYasmSource},
 		{".cu", (*EmitContext).emitLibraryCudaSource},
 		{".rl6", (*EmitContext).emitLibraryRagel6Source},
 		{".y", (*EmitContext).emitBisonY},

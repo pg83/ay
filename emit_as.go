@@ -196,16 +196,30 @@ func (e *EmitContext) emitLibraryAsmSource(src STR) {
 
 	asIn.IncludeInputs = walkClosure(e.scanner, srcVFS, scanIn.ScanCfg)
 
-	if instance.Platform.ISA == ISAX8664 && extIsAsm(srcRel) {
-		yasmLD, _ := ctx.tool(argContribToolsYasm)
-		ref, outPath := emitASYasm(instance, srcRel, srcVFS, asIn, yasmLD, ctx.emit)
+	ref, outPath := emitAS(instance, srcRel, srcVFS, asIn, ctx.host, ctx.emit)
 
-		e.collectObj(ref, outPath, e.metaForSrc(src))
+	e.collectObj(ref, outPath, e.metaForSrc(src))
+}
 
-		return
+func (e *EmitContext) emitLibraryYasmSource(src STR) {
+	ctx, instance, d := e.ctx, e.instance, e.d
+	srcRel := src.string()
+	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
+	in := e.ccInputsFor(srcVFS)
+	asIn := in
+	scanIn := in
+
+	if len(d.asmAddIncl) > 0 {
+		scanIn.AddIncl = dedup(in.AddIncl, d.asmAddIncl)
+		scanIn.ScanCfg = newScanContext(ctx.parsers, scanIn.AddIncl, scanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+
+		asIn.AddIncl = scanIn.AddIncl
 	}
 
-	ref, outPath := emitAS(instance, srcRel, srcVFS, asIn, ctx.host, ctx.emit)
+	asIn.IncludeInputs = walkClosure(e.scanner, srcVFS, scanIn.ScanCfg)
+
+	yasmLD, _ := ctx.tool(argContribToolsYasm)
+	ref, outPath := emitASYasm(instance, srcRel, srcVFS, asIn, yasmLD, ctx.emit)
 
 	e.collectObj(ref, outPath, e.metaForSrc(src))
 }
