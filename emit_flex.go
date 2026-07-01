@@ -55,7 +55,11 @@ func (e *EmitContext) emitLibraryFlexSource(src STR) *SourceEmit {
 
 	emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef, ctx.emit)
 
-	return e.emitOneSource(outVFS.str())
+	meta := d.srcMetaOf(src)
+	meta.Generated = true
+	e.enqueueSrc(outVFS.str(), meta)
+
+	return nil
 }
 
 func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, outVFS VFS, closure []VFS, id NodeRef, emit *StreamingEmitter) {
