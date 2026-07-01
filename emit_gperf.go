@@ -69,5 +69,9 @@ func (e *EmitContext) emitLibraryGperfSource(src STR) *SourceEmit {
 		Compile:        &CompileSpec{FlatOutput: d.flatSrc(src), CFlags: psc},
 	})
 
-	return e.emitOneSource(genVFS.str())
+	meta := d.srcMetaOf(src)
+	meta.Generated = true
+	e.enqueueSrc(genVFS.str(), meta)
+
+	return nil
 }
