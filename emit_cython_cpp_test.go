@@ -644,3 +644,35 @@ func TestGen_CythonCHeaderPassesInducedClosureToHandwrittenSrc(t *testing.T) {
 		t.Fatalf("handwritten use.c.o wrongly carries the source's cdef-extern C header; inputs=%v", use.flatInputs())
 	}
 }
+
+func TestGen_CythonizePyDefaultCppBucketARMemberOrder(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeTestModuleFile(files, "pkg/ya.make", "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nPY_SRCS(TOP_LEVEL CYTHONIZE_PY _difflib.py CYTHON_C objectify.pyx CYTHON_C_API_H etree.pyx)\nEND()\n")
+	writeTestModuleFile(files, "pkg/_difflib.py", "def d():\n    return 0\n")
+	writeTestModuleFile(files, "pkg/objectify.pyx", "def o():\n    return 1\n")
+	writeTestModuleFile(files, "pkg/etree.pyx", "def e():\n    return 2\n")
+
+	g := testGen(newMemFS(files), "pkg")
+
+	regular := mustNodeByOutput(t, g, "$(B)/pkg/libpy3pkg.a")
+	objectify := arMemberIndex(t, regular, "pkg", "objectify.pyx.c.o")
+	etree := arMemberIndex(t, regular, "pkg", "etree.c.o")
+	difflib := arMemberIndex(t, regular, "pkg", "_difflib.py.cpp.o")
+
+	if !(objectify < etree && etree < difflib) {
+		t.Fatalf("regular archive order objectify(%d) < etree(%d) < _difflib(%d) violated: %v",
+			objectify, etree, difflib, vfsStrings(regular.flatInputs()))
+	}
+
+	global := mustNodeByOutput(t, g, "$(B)/pkg/libpy3pkg.global.a")
+	objectifyR := arMemberIndex(t, global, "pkg", "objectify.reg3.cpp.o")
+	etreeR := arMemberIndex(t, global, "pkg", "etree.reg3.cpp.o")
+	difflibR := arMemberIndex(t, global, "pkg", "_difflib.reg3.cpp.o")
+
+	if !(objectifyR < etreeR && etreeR < difflibR) {
+		t.Fatalf("global .reg3.cpp order objectify(%d) < etree(%d) < _difflib(%d) violated: %v",
+			objectifyR, etreeR, difflibR, vfsStrings(global.flatInputs()))
+	}
+}
