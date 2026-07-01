@@ -52,13 +52,8 @@ func (e *EmitContext) emitRunProgramsForAR() {
 
 	for _, run := range runs {
 		for _, out := range run.outs {
-			switch {
-			case isCCSourceExt(out):
-				e.emitGenerated(copyFileOutputVFS(instance.Path.rel(), out).str(), SrcMeta{Prio: stmtPrioDefault, Seq: run.seq, Generated: true})
-			case isAsmSourceExt(out):
-				asRef, asOut := e.emitCodegenDownstreamAS(out, []NodeRef{run.prRef})
-
-				e.collectObj(asRef, asOut, SrcMeta{Prio: stmtPrioDefault, Seq: run.seq, Generated: true})
+			if isCCSourceExt(out) || isAsmSourceExt(out) {
+				e.enqueueSrc(copyFileOutputVFS(instance.Path.rel(), out).str(), SrcMeta{Prio: stmtPrioDefault, Seq: run.seq, Generated: true})
 			}
 		}
 	}
@@ -71,7 +66,7 @@ func (e *EmitContext) emitRunProgramsForAR() {
 
 			cppVFS := build(copyFileOutputVFS(instance.Path.rel(), out).rel(), ".cpp")
 
-			e.emitGenerated(cppVFS.str(), SrcMeta{Prio: stmtPrioDefault, Seq: run.seq, Generated: true, SecondLevel: true})
+			e.enqueueSrc(cppVFS.str(), SrcMeta{Prio: stmtPrioDefault, Seq: run.seq, Generated: true, SecondLevel: true})
 		}
 	}
 }
