@@ -803,7 +803,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 			arBaseName := archiveNameWithPrefixOrName(instance.Path.rel(), "lib", protoResult.ProtoLibName)
 			archivePath := build(instance.Path.rel(), "/", arBaseName)
-			arRef := emitARNode(instance, archivePath, tagCppProto, protoARRefs, protoAROuts, nil, nil, nil, d.tc, ctx.host, ctx.emit)
+			arRef := emitARNode(instance, archivePath, tagCppProto, protoARRefs, protoAROuts, nil, nil, d.tc, ctx.host, ctx.emit)
 
 			protoResult.ARRef = arRef
 			protoResult.ARPath = &archivePath
@@ -1688,7 +1688,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
 	e.cythonAdjustModuleCCBlocks()
 
-	cpMemberSrcs := e.emit(selfPeerAddInclGlobal)
+	e.emit(selfPeerAddInclGlobal)
 
 	e.drainSrcs()
 
@@ -2020,9 +2020,9 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if len(e.refs) > 0 {
 		if perModuleCCTag != 0 {
-			arRef = emitARNamedTagged(arInstance, arBaseName, perModuleCCTag, e.refs, e.outs, nil, arPluginVFS, cpMemberSrcs, d.tc, ctx.host, ctx.emit)
+			arRef = emitARNamedTagged(arInstance, arBaseName, perModuleCCTag, e.refs, e.outs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
 		} else {
-			arRef = emitARNamed(arInstance, arBaseName, e.refs, e.outs, nil, arPluginVFS, cpMemberSrcs, d.tc, ctx.host, ctx.emit)
+			arRef = emitARNamed(arInstance, arBaseName, e.refs, e.outs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
 		}
 	}
 

@@ -1281,7 +1281,7 @@ func EmitAR(
 
 	archivePath := build(instance.Path.rel() + "/" + archiveName(instance.Path.rel()))
 
-	return emitARNode(instance, archivePath, 0, objRefs, objPaths, peerArchiveRefs, nil, nil, testToolchain(), hostP, emit)
+	return emitARNode(instance, archivePath, 0, objRefs, objPaths, peerArchiveRefs, nil, testToolchain(), hostP, emit)
 }
 
 var (
