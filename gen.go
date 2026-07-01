@@ -1688,42 +1688,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
 	e.cythonAdjustModuleCCBlocks()
 
-	for _, src := range d.srcs {
-		if isCodegenProducingSrcID(src) {
-			e.emitOneSource(src)
-		}
-	}
-
-	cythonPlans := e.planCythonCpp()
-	cpMemberSrcs := e.emitCopyFiles()
-
-	e.emitMiscNodes()
-	e.emitRunProgramsForAR()
-	e.emitDecimalMD5ForAR()
-	e.emitSplitCodegensForAR()
-	e.emitBaseCodegensForAR()
-	e.emitRunPythonForAR()
-	e.emitArchiveAsmForAR()
-	e.emitEnumSrcs(selfPeerAddInclGlobal)
-	e.emitLuaJit21()
-	e.emitArchives()
-	e.emitCheckConfigH()
-	e.emitCythonCppPlanned(cythonPlans)
-	e.emitSwigC()
-	e.emitJoinSrcs()
-
-	for _, fe := range d.srcExtraFlat {
-		srcVFS := e.moduleSourceVFS(fe.Src)
-		ref, out := e.emitCCFlat(srcVFS, nil, fe.Flags)
-
-		e.collectObj(ref, out, SrcMeta{Prio: stmtPrioDefault, Seq: fe.Seq})
-	}
-
-	for _, src := range d.srcs {
-		if !isCodegenProducingSrcID(src) {
-			e.emitOneSource(src)
-		}
-	}
+	cpMemberSrcs := e.emit(selfPeerAddInclGlobal)
 
 	e.drainSrcs()
 
