@@ -12,8 +12,8 @@ func init() {
 	srcExtMatcher = newExtMatcher([]ExtEntry[SrcEmitter]{
 		{".gztproto", (*EmitContext).emitLibraryGztProtoCompile},
 		{".proto", (*EmitContext).emitLibraryProtoSource},
-		{".fbs64", (*EmitContext).emitLibraryFlatcSource},
-		{".fbs", (*EmitContext).emitLibraryFlatcSource},
+		{".fbs64", (*EmitContext).emitLibraryFlatcSource64},
+		{".fbs", (*EmitContext).emitLibraryFlatcSource32},
 		{".rodata", (*EmitContext).emitLibraryRodataSource},
 		{".c", (*EmitContext).emitLibraryCSource},
 		{".cpp", (*EmitContext).emitLibraryCSource},

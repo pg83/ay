@@ -51,15 +51,17 @@ func (e *EmitContext) emitLibraryFlexSource(src STR) {
 		Compile:        &CompileSpec{FlatOutput: d.flatSrc(src), CFlags: cflags},
 	})
 
-	window := walkClosure(e.scanner, outVFS, d.cc.ScanCfg)
-	lxClosure := keepOnlySourceVFS(window)
-
-	emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef, ctx.emit)
-
 	meta := d.srcMetaOf(src)
 
 	meta.Generated = true
 	e.enqueueSrc(outVFS.str(), meta)
+
+	e.deferPass2(func() {
+		window := walkClosure(e.scanner, outVFS, d.cc.ScanCfg)
+		lxClosure := keepOnlySourceVFS(window)
+
+		emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef, ctx.emit)
+	})
 }
 
 func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, outVFS VFS, closure []VFS, id NodeRef, emit *StreamingEmitter) {
