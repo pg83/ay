@@ -139,3 +139,30 @@ func countKind(g *Graph, k ProcKind) int {
 
 	return c
 }
+
+func TestGen_FlexScansSiblingGeneratedHeader(t *testing.T) {
+	files := map[string]string{}
+	writeBisonProducer(files)
+	writeToolProgram(files, "contrib/tools/flex-old", "flex-old")
+
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(
+    lexer.l
+    parser.y
+)
+END()
+`)
+	writeTestModuleFile(files, "mod/lexer.l", `%{
+#include "parser.h"
+%}
+%%
+`)
+	writeTestModuleFile(files, "mod/parser.y", "%%\n")
+
+	_, warns := testGenWarns(newMemFS(files), "mod")
+
+	assertNoMissingInclude(t, warns, "parser.h")
+}

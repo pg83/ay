@@ -456,3 +456,31 @@ END()
 var (
 	r6TestKV = KV{P: pkLD}
 )
+
+func TestGen_Ragel6ScansSiblingGeneratedHeader(t *testing.T) {
+	files := map[string]string{}
+	writeBisonProducer(files)
+	writeToolProgram(files, "contrib/tools/ragel6", "ragel6")
+
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(
+    lexer.rl6
+    parser.y
+)
+END()
+`)
+	writeTestModuleFile(files, "mod/lexer.rl6", `#include "parser.h"
+%%{
+    machine x;
+    main := 'a';
+}%%
+`)
+	writeTestModuleFile(files, "mod/parser.y", "%%\n")
+
+	_, warns := testGenWarns(newMemFS(files), "mod")
+
+	assertNoMissingInclude(t, warns, "parser.h")
+}
