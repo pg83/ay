@@ -293,7 +293,7 @@ func reportPerfStats(ctx *GenCtx, parsers *IncludeParserManager, targetScanner, 
 		fsStats.listdirHits, fsStats.listdirMisses, fsStats.existsHits, fsStats.existsMisses, fsStats.dirsCached)
 
 	fmt.Fprintf(os.Stderr, "perf: intern strs=%d args=%d envs=%d overflow=%d\n",
-		internTable.entries.len(), len(argTable.strs), len(envTable.strs), len(internTable.overflow))
+		len(internTable.strs), len(argTable.strs), len(envTable.strs), len(internTable.overflow))
 
 	reportScanner := func(label string, scanner *IncludeScanner) {
 		scanStats := scanner.perfStats()
