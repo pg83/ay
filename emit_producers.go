@@ -3,6 +3,7 @@ package main
 import (
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -16,6 +17,15 @@ const (
 	prodBaseCodegen
 	prodRunProgram
 	prodRunPython
+	prodArchiveAsm
+	prodSrc
+	prodEnum
+	prodLj21
+	prodArchive
+	prodCheckConfigH
+	prodCythonAll
+	prodSwigAll
+	prodJoinSrcs
 )
 
 type ProducerPos struct {
@@ -45,19 +55,82 @@ func rootedBuildCandidate(modulePath, rel string) VFS {
 	return 0
 }
 
-func (e *EmitContext) producerPositions() []ProducerPos {
+func (e *EmitContext) srcPositionOuts(tok STR) []VFS {
+	d := e.d
+
+	switch srcExtClassOf(tok) {
+	case srcExtProto:
+		rel := protoSourceRelPath(e.ctx.fs, e.instance, d, tok.string())
+		base := strings.TrimSuffix(rel, ".proto")
+
+		if d.unit.Tag == unitTagPy3Proto {
+			outs := []VFS{build(base, "__intpy3___pb2.py")}
+
+			if d.grpc {
+				outs = append(outs, build(base, "__intpy3___pb2_grpc.py"))
+			}
+
+			return outs
+		}
+
+		outs := []VFS{build(base, ".pb.h"), build(base, ".pb.cc")}
+
+		if !protoTransitiveHeadersEnabled(d) {
+			outs = append(outs, build(base, ".deps.pb.h"))
+		}
+
+		if d.grpc {
+			outs = append(outs, build(base, ".grpc.pb.cc"), build(base, ".grpc.pb.h"))
+		}
+
+		for _, plugin := range d.cppProtoPlugins {
+			for _, suffix := range plugin.OutputSuffixes {
+				outs = append(outs, build(base, suffix))
+			}
+		}
+
+		return outs
+	case srcExtEv, srcExtCfgProto:
+		rel := protoSourceRelPath(e.ctx.fs, e.instance, d, tok.string())
+
+		return []VFS{build(rel, ".pb.h"), build(rel, ".pb.cc")}
+	case srcExtGztProto:
+		if d.unit.Tag == unitTagPy3Proto {
+			return nil
+		}
+
+		return []VFS{build(e.instance.Path.rel(), "/", e.gztGenProtoName(tok.string()))}
+	}
+
+	return nil
+}
+
+func srcInsCandidate(module string, tok STR) []VFS {
+	if v := runInputBuildCandidate(module, tok.string()); v != 0 {
+		return []VFS{v}
+	}
+
+	return nil
+}
+
+func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []STR) {
 	d := e.d
 	module := e.instance.Path.rel()
 
 	n := len(d.copyFiles) + len(d.configureFiles) + len(d.antlrRuns) + len(d.antlr4Grammars) +
-		len(d.decimalMD5) + len(d.splitCodegens) + len(d.baseCodegens) + len(d.runPrograms) + len(d.runPython)
+		len(d.decimalMD5) + len(d.splitCodegens) + len(d.baseCodegens) + len(d.runPrograms) + len(d.runPython) +
+		len(d.archiveAsm) + len(d.srcs) + len(d.enumSrcs) + len(d.archives) + len(d.checkConfigHeaders) + len(d.joinSrcs)
 
 	if d.createBuildInfoFor != nil {
 		n++
 	}
 
+	if d.lj21 != nil || hasCython || len(d.swigC) > 0 {
+		n += 3
+	}
+
 	if n == 0 {
-		return nil
+		return nil, nil
 	}
 
 	total := 2*len(d.copyFiles) + 2*len(d.configureFiles) + 2*len(d.baseCodegens)
@@ -241,7 +314,115 @@ func (e *EmitContext) producerPositions() []ProducerPos {
 		push(prodRunPython, i, start, outEnd)
 	}
 
-	return positions
+	if len(d.archiveAsm) > 0 {
+		push(prodArchiveAsm, 0, len(backing), len(backing))
+	}
+
+	srcs := make([]STR, 0, len(d.srcs)+2)
+
+	var gztChildren []STR
+
+	for _, src := range d.srcs {
+		if !isCodegenProducingSrcID(src) {
+			continue
+		}
+
+		srcs = append(srcs, src)
+
+		if srcExtClassOf(src) == srcExtGztProto && d.unit.Tag != unitTagPy3Proto {
+			child := internStr(e.gztGenProtoName(src.string()))
+
+			e.srcMeta[child] = e.metaForSrc(src)
+			gztChildren = append(gztChildren, child)
+		}
+	}
+
+	srcs = append(srcs, gztChildren...)
+
+	for i, tok := range srcs {
+		positions = append(positions, ProducerPos{
+			kind:  prodSrc,
+			index: i,
+			outs:  e.srcPositionOuts(tok),
+			ins:   srcInsCandidate(module, tok),
+		})
+	}
+
+	for i := range d.enumSrcs {
+		stmt := d.enumSrcs[i]
+		outs := []VFS{build(e.enumSerializedBase(stmt), "_serialized.cpp")}
+
+		if stmt.Variant == "with_header" {
+			outs = append(outs, build(e.enumSerializedBase(stmt), "_serialized.h"))
+		}
+
+		positions = append(positions, ProducerPos{
+			kind:  prodEnum,
+			index: i,
+			outs:  outs,
+			ins:   []VFS{build(e.enumHeaderSourceInput(stmt.Header, d.srcDirs).rel())},
+		})
+	}
+
+	if d.lj21 != nil {
+		outs := make([]VFS, 0, len(d.lj21.Luas))
+
+		for _, lua := range d.lj21.Luas {
+			outs = append(outs, build(module, "/", strings.TrimSuffix(lua, ".lua"), ".raw"))
+		}
+
+		positions = append(positions, ProducerPos{kind: prodLj21, outs: outs})
+	}
+
+	for i, a := range d.archives {
+		ins := make([]VFS, 0, len(a.Files))
+
+		for _, f := range a.Files {
+			ins = append(ins, copyFileOutputVFS(module, f))
+		}
+
+		positions = append(positions, ProducerPos{
+			kind:  prodArchive,
+			index: i,
+			outs:  []VFS{build(module, "/", a.Name)},
+			ins:   ins,
+		})
+	}
+
+	for i, conf := range d.checkConfigHeaders {
+		positions = append(positions, ProducerPos{
+			kind:  prodCheckConfigH,
+			index: i,
+			outs:  []VFS{checkConfigHGeneratedVFS(module, conf)},
+		})
+	}
+
+	if hasCython {
+		positions = append(positions, ProducerPos{kind: prodCythonAll})
+	}
+
+	if len(d.swigC) > 0 {
+		positions = append(positions, ProducerPos{kind: prodSwigAll})
+	}
+
+	for i, js := range d.joinSrcs {
+		ins := make([]VFS, 0, len(js.Sources))
+
+		for _, src := range js.Sources {
+			if v := runInputBuildCandidate(module, src.string()); v != 0 {
+				ins = append(ins, v)
+			}
+		}
+
+		positions = append(positions, ProducerPos{
+			kind:  prodJoinSrcs,
+			index: i,
+			outs:  []VFS{build(module, "/", js.OutputName)},
+			ins:   ins,
+		})
+	}
+
+	return positions, srcs
 }
 
 func scheduleProducers(m *IdValueMap, positions []ProducerPos, modulePath string) []int {
@@ -315,8 +496,8 @@ func scheduleProducers(m *IdValueMap, positions []ProducerPos, modulePath string
 	return order
 }
 
-func (e *EmitContext) emitDeclaredProducers() {
-	positions := e.producerPositions()
+func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
+	positions, srcs := e.producerPositions(len(cythonPlans) > 0)
 
 	if len(positions) == 0 {
 		return
@@ -346,6 +527,24 @@ func (e *EmitContext) emitDeclaredProducers() {
 			e.emitRunProgramStmt(e.d.runPrograms[pos.index])
 		case prodRunPython:
 			e.emitRunPythonStmt(e.d.runPython[pos.index])
+		case prodArchiveAsm:
+			e.emitArchiveAsmForAR()
+		case prodSrc:
+			e.emitOneSource(srcs[pos.index])
+		case prodEnum:
+			e.emitEnumSrcStmt(e.d.enumSrcs[pos.index])
+		case prodLj21:
+			e.emitLuaJit21()
+		case prodArchive:
+			e.emitArchiveStmt(e.d.archives[pos.index])
+		case prodCheckConfigH:
+			e.emitCheckConfigHStmt(e.d.checkConfigHeaders[pos.index])
+		case prodCythonAll:
+			e.emitCythonCppPlanned(cythonPlans)
+		case prodSwigAll:
+			e.emitSwigC()
+		case prodJoinSrcs:
+			e.emitJoinSrcsStmt(e.d.joinSrcs[pos.index])
 		}
 	}
 }

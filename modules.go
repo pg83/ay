@@ -2860,6 +2860,17 @@ func applyLj21ArchiveStmt(v UnknownStmt, d *ModuleData) {
 	}
 
 	d.lj21 = &Lj21Archive{Luas: luas}
+
+	raws := make([]string, len(luas))
+
+	for i, lua := range luas {
+		raws[i] = strings.TrimSuffix(lua, ".lua") + ".raw"
+	}
+
+	d.archives = append(d.archives,
+		ArchiveEntry{Name: "LuaScripts.inc", DontCompress: true, Files: raws, Keys: luas, PropagateSourceMembers: true},
+		ArchiveEntry{Name: "LuaSources.inc", DontCompress: true, Files: append([]string(nil), luas...), Keys: luas, PropagateSourceMembers: true},
+	)
 }
 
 func applyAllocatorStmt(v UnknownStmt, d *ModuleData) {

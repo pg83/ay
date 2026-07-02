@@ -81,24 +81,7 @@ func (e *EmitContext) emit() {
 
 	cythonPlans := e.planCythonCpp()
 
-	e.emitDeclaredProducers()
-	e.emitArchiveAsmForAR()
-
-	for _, src := range d.srcs {
-		if isCodegenProducingSrcID(src) {
-			e.emitOneSource(src)
-		}
-	}
-
-	e.drainCodegenSrcs()
-
-	e.emitEnumSrcs(e.peers.SelfAddInclGlobal)
-	e.emitLuaJit21()
-	e.emitArchives()
-	e.emitCheckConfigH()
-	e.emitCythonCppPlanned(cythonPlans)
-	e.emitSwigC()
-	e.emitJoinSrcs()
+	e.emitDeclaredProducers(cythonPlans)
 
 	for _, fe := range d.srcExtraFlat {
 		srcVFS := e.moduleSourceVFS(fe.Src)
@@ -172,44 +155,26 @@ func (e *EmitContext) emit() {
 	}
 }
 
-func (e *EmitContext) drainCodegenSrcs() {
+func (e *EmitContext) drainSrcs() {
 	for {
-		var producing []STR
+		for len(e.srcs) > 0 {
+			src := e.srcs[0]
 
-		rest := e.srcs[:0]
+			e.srcs = e.srcs[1:]
 
-		for _, src := range e.srcs {
-			if isCodegenProducingSrcID(src) {
-				producing = append(producing, src)
-			} else {
-				rest = append(rest, src)
-			}
+			e.emitOneSource(src)
 		}
 
-		e.srcs = rest
-
-		if len(producing) == 0 {
+		if len(e.pass2) == 0 {
 			return
 		}
 
-		for _, src := range producing {
-			e.emitOneSource(src)
+		cbs := e.pass2
+
+		e.pass2 = nil
+
+		for _, cb := range cbs {
+			cb()
 		}
 	}
-}
-
-func (e *EmitContext) drainSrcs() {
-	for len(e.srcs) > 0 {
-		src := e.srcs[0]
-
-		e.srcs = e.srcs[1:]
-
-		e.emitOneSource(src)
-	}
-
-	for _, cb := range e.pass2 {
-		cb()
-	}
-
-	e.pass2 = e.pass2[:0]
 }

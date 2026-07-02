@@ -35,19 +35,13 @@ func (e *EmitContext) emitLuaJit21() {
 		return
 	}
 
-	luas := d.lj21.Luas
 	compilerLDRef, compilerBin := ctx.tool(argLuajit21Compiler)
 	reg := e.codegen
 	cwd := source(luajit21CwdRel).str()
-	raws := make([]string, len(luas))
 
-	for i, lua := range luas {
-		raw := strings.TrimSuffix(lua, ".lua") + ".raw"
-
-		raws[i] = raw
-
+	for _, lua := range d.lj21.Luas {
 		luaSrc := resolveSourceVFS(ctx, instance, lua, d.srcDirs)
-		rawOut := build(instance.Path.rel(), "/", raw)
+		rawOut := build(instance.Path.rel(), "/", strings.TrimSuffix(lua, ".lua"), ".raw")
 		ref := emitLJ(instance, luaSrc, rawOut, compilerBin, compilerLDRef, cwd, ctx.emit)
 
 		reg.register(&GeneratedFileInfo{
@@ -56,9 +50,4 @@ func (e *EmitContext) emitLuaJit21() {
 			SourceInputs: []VFS{luaSrc},
 		})
 	}
-
-	d.archives = append(d.archives,
-		ArchiveEntry{Name: "LuaScripts.inc", DontCompress: true, Files: raws, Keys: luas, PropagateSourceMembers: true},
-		ArchiveEntry{Name: "LuaSources.inc", DontCompress: true, Files: append([]string(nil), luas...), Keys: luas, PropagateSourceMembers: true},
-	)
 }
