@@ -679,26 +679,23 @@ func (e *EmitContext) emitYaConfJSONObjcopy() ([]NodeRef, []VFS) {
 	return outRefs, outPaths
 }
 
-func (e *EmitContext) emitGeneratedPyAuxChunks() ([]NodeRef, []VFS) {
+func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 	d := e.d
-
-	var entries []PyGenResEntry
 
 	for _, ps := range e.pySrcsReg {
 		if ps.Group != pyGroupGenAux {
 			continue
 		}
 
-		entries = append(entries, e.pyResEntriesFor(ps)...)
+		r, o := e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(e.pyResEntriesFor(ps)), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
+			return e.rawAuxInputClosure(aux, pyProtoSourceInputs(inputs), ref)
+		}})
+
+		refs = append(refs, r...)
+		outs = append(outs, o...)
 	}
 
-	if len(entries) == 0 {
-		return nil, nil
-	}
-
-	return e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
-		return e.rawAuxInputClosure(aux, pyProtoSourceInputs(inputs), ref)
-	}})
+	return refs, outs
 }
 
 func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) []VFS {
