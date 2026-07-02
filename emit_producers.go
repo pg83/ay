@@ -64,7 +64,7 @@ func relUnderDir(rel, dir string) bool {
 func (e *EmitContext) requireProducedInput(kind, token string, vfs VFS) VFS {
 	module := e.instance.Path.rel()
 
-	if vfs.isBuild() && relUnderDir(vfs.rel(), module) && e.codegen.lookup(vfs) == nil {
+	if vfs.isBuild() && e.codegen.lookup(vfs) == nil && relUnderDir(vfs.rel(), module) {
 		throwFmt("gen: %s: %s %q resolves to build file %s that no declared macro produces", module, kind, token, vfs.string())
 	}
 
