@@ -21,7 +21,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 	deduper.reset()
 
 	appendCFExtra := func(v VFS) {
-		if !deduper.add(v) {
+		if !deduper.add(v.strID()) {
 			return
 		}
 

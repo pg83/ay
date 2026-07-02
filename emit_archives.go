@@ -42,7 +42,7 @@ func (e *EmitContext) emitArchive(
 		if info := reg.lookup(copyFileOutputVFS(instance.Path.rel(), f)); info != nil {
 			isPRProduced = true
 
-			if deduper.add(VFS(info.ProducerRef)) {
+			if deduper.add(info.ProducerRef.strID()) {
 				producerRefs = append(producerRefs, info.ProducerRef)
 			}
 		}
@@ -77,7 +77,7 @@ func (e *EmitContext) emitArchive(
 	deduper.reset()
 
 	for _, p := range pathPerFile {
-		if !deduper.add(p) {
+		if !deduper.add(p.strID()) {
 			continue
 		}
 

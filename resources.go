@@ -258,14 +258,18 @@ func (e *EmitContext) genResourcesLibrary() *ModuleEmitResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
 
 	var globals []ResourceDecl
-	deduper.reset()
+	var decls []ResourceDecl
 
 	for _, stmt := range d.resourceDeclStmts {
-		for _, decl := range resolveResourceDecls(ctx.fs, ctx.host, instance.Path.rel(), stmt) {
-			if deduper.add(VFS(decl.GlobalVar)) {
-				globals = append(globals, decl)
-				emitResourceFetch(ctx, decl)
-			}
+		decls = append(decls, resolveResourceDecls(ctx.fs, ctx.host, instance.Path.rel(), stmt)...)
+	}
+
+	deduper.reset()
+
+	for _, decl := range decls {
+		if deduper.add(decl.GlobalVar.strID()) {
+			globals = append(globals, decl)
+			emitResourceFetch(ctx, decl)
 		}
 	}
 
@@ -316,14 +320,18 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 
 	var fetchRef NodeRef
 	var globals []ResourceDecl
-	deduper.reset()
+	var decls []ResourceDecl
 
 	for _, stmt := range d.resourceDeclStmts {
-		for _, decl := range resolveResourceDecls(ctx.fs, ctx.host, instance.Path.rel(), stmt) {
-			if deduper.add(VFS(decl.Name)) {
-				globals = append(globals, decl)
-				fetchRef = emitResourceFetch(ctx, decl)
-			}
+		decls = append(decls, resolveResourceDecls(ctx.fs, ctx.host, instance.Path.rel(), stmt)...)
+	}
+
+	deduper.reset()
+
+	for _, decl := range decls {
+		if deduper.add(decl.Name.strID()) {
+			globals = append(globals, decl)
+			fetchRef = emitResourceFetch(ctx, decl)
 		}
 	}
 

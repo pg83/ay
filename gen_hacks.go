@@ -91,7 +91,7 @@ func aggregateSbomComponents(name TOK, linkTarget bool, resolved []resolvedPeer,
 				continue
 			}
 
-			if deduper.add(p) {
+			if deduper.add(p.strID()) {
 				refs = append(refs, pr.PeerSbomClosureRefs[i])
 				paths = append(paths, p)
 			}
@@ -101,7 +101,7 @@ func aggregateSbomComponents(name TOK, linkTarget bool, resolved []resolvedPeer,
 			ownInsertIdx = len(paths)
 		}
 
-		if pr.SbomComponentRef != nil && (*pr.SbomComponentPath != lldToolchainSbomVFS || linkTarget) && deduper.add(*pr.SbomComponentPath) {
+		if pr.SbomComponentRef != nil && (*pr.SbomComponentPath != lldToolchainSbomVFS || linkTarget) && deduper.add(pr.SbomComponentPath.strID()) {
 			refs = append(refs, *pr.SbomComponentRef)
 			paths = append(paths, *pr.SbomComponentPath)
 		}

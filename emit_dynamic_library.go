@@ -199,7 +199,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 	for _, pr := range resolved {
 		for _, decl := range pr.ResourceGlobalClosure {
-			if deduper.add(VFS(decl.GlobalVar)) {
+			if deduper.add(decl.GlobalVar.strID()) {
 				resourceGlobals = append(resourceGlobals, decl)
 			}
 		}
@@ -220,7 +220,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 	for _, pr := range resolved {
 		for _, p := range pr.AddInclGlobal {
-			if deduper.add(p) {
+			if deduper.add(p.strID()) {
 				peerAddInclGlobal = append(peerAddInclGlobal, p)
 			}
 		}
@@ -235,7 +235,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 	for _, pr := range resolved {
 		for _, a := range pr.CFlagsGlobal {
-			if deduper.add(VFS(a)) {
+			if deduper.add(a.strID()) {
 				peerCFlagsGlobal = append(peerCFlagsGlobal, a)
 			}
 		}
@@ -245,7 +245,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 	for _, pr := range resolved {
 		for _, a := range pr.CXXFlagsGlobal {
-			if deduper.add(VFS(a)) {
+			if deduper.add(a.strID()) {
 				peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, a)
 			}
 		}
@@ -255,7 +255,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 	for _, pr := range resolved {
 		for _, a := range pr.COnlyFlagsGlobal {
-			if deduper.add(VFS(a)) {
+			if deduper.add(a.strID()) {
 				peerCOnlyFlagsGlobal = append(peerCOnlyFlagsGlobal, a)
 			}
 		}
@@ -265,7 +265,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 	for _, pr := range resolved {
 		for _, a := range pr.RPathFlagsGlobal {
-			if deduper.add(VFS(a)) {
+			if deduper.add(a.strID()) {
 				peerRPathFlagsGlobal = append(peerRPathFlagsGlobal, a)
 			}
 		}
@@ -273,7 +273,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 	for _, pr := range rpathOnly {
 		for _, a := range pr.RPathFlagsGlobal {
-			if deduper.add(VFS(a)) {
+			if deduper.add(a.strID()) {
 				peerRPathFlagsGlobal = append(peerRPathFlagsGlobal, a)
 			}
 		}
@@ -286,7 +286,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 	for _, pr := range resolved {
 		for i, pp := range pr.LDPluginPaths {
-			if deduper.add(pp) {
+			if deduper.add(pp.strID()) {
 				pluginRefs = append(pluginRefs, pr.LDPluginRefs[i])
 				pluginPaths = append(pluginPaths, pp)
 			}

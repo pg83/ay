@@ -26,6 +26,10 @@ func internArgSTR(st STR) ARG {
 	return id
 }
 
+func (a ARG) strID() uint32 {
+	return uint32(a)
+}
+
 func (a ARG) str() STR {
 	return argTable.strs[a]
 }

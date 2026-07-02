@@ -172,6 +172,12 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 	for order := range set {
 		rec := &set[order]
 
+		for i := range rec.pairs {
+			if rec.pairs[i].key == 0 {
+				internStr(rec.pairs[i].keyCI)
+			}
+		}
+
 		deduper.reset()
 
 		for i := len(rec.pairs) - 1; i >= 0; i-- {
@@ -182,7 +188,7 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 				id = internStr(p.keyCI)
 			}
 
-			if !deduper.add(VFS(id) << 1) {
+			if !deduper.add(id.strID()) {
 				p.paths = nil
 				p.key = 0
 				p.keyCI = ""

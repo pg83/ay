@@ -2,6 +2,10 @@ package main
 
 type NodeRef uint32
 
+func (r NodeRef) strID() uint32 {
+	return uint32(r)
+}
+
 type Graph struct {
 	Graph     []*Node                 `json:"graph"`
 	Inputs    map[string]interface{}  `json:"inputs"`
