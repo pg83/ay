@@ -123,7 +123,6 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 	return &ModuleEmitResult{
 		LDRef:          ref,
 		LDPath:         vfsPtr(build(instance.Path.rel(), "/", outputName)),
-		Peerdirs:       d.peerdirs,
 		ModuleStmtName: d.moduleStmt.Name,
 		InducedDeps:    d.inducedDeps,
 	}
@@ -355,7 +354,6 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 		LDPluginRefs:                 pluginRefs,
 		LDPluginPaths:                pluginPaths,
 		InducedDeps:                  d.inducedDeps,
-		Peerdirs:                     d.peerdirs,
 		ModuleStmtName:               d.moduleStmt.Name,
 	}
 }

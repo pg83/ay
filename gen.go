@@ -167,7 +167,6 @@ type ModuleEmitResult struct {
 	PeerSbomClosureRefs             []NodeRef
 	PeerSbomClosurePaths            []VFS
 	InducedDeps                     ParsedIncludeSet
-	Peerdirs                        []STR
 	ModuleStmtName                  TOK
 	testSuiteInfo                   *TestSuiteInfo
 	DescClosure                     []DescProtoPeer
@@ -1229,7 +1228,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			PeerSbomClosureRefs:             peerSbomRefs,
 			PeerSbomClosurePaths:            peerSbomPaths,
 			InducedDeps:                     d.inducedDeps,
-			Peerdirs:                        d.peerdirs,
 			ModuleStmtName:                  d.moduleStmt.Name,
 		}
 	}

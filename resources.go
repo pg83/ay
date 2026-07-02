@@ -283,7 +283,6 @@ func (e *EmitContext) genResourcesLibrary() *ModuleEmitResult {
 	result := &ModuleEmitResult{
 		ModuleStmtName:        d.moduleStmt.Name,
 		ResourceGlobalClosure: globals,
-		Peerdirs:              d.peerdirs,
 		RPathFlagsGlobal:      d.rpathFlagsGlobal,
 		LDFlagsGlobal:         d.ldFlags,
 		CFlagsGlobal:          d.cFlagsGlobal,
@@ -389,7 +388,6 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 		isPROGRAM:      true,
 		LDRef:          ref,
 		LDPath:         &dst,
-		Peerdirs:       d.peerdirs,
 
 		InducedDeps: d.inducedDeps,
 	}
