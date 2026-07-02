@@ -640,7 +640,7 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() *PyGenResourcesResult {
 		}
 	}
 
-	return e.emitPyGenResources(entries, "PY3", &pyObjcopyKV, true, func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
+	return e.emitPyGenResources(entries, "PY3", func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
 		return e.rawAuxInputClosure(aux, pyProtoSourceInputs(inputs), ref)
 	})
 }
@@ -781,11 +781,10 @@ func pyInitDefineShortname(flag string) (string, bool) {
 }
 
 type PyGenResEntry struct {
-	token    string
-	key      string
-	path     VFS
-	producer NodeRef
-	inputs   []VFS
+	token  string
+	key    string
+	path   VFS
+	inputs []VFS
 }
 
 type PyGenResourcesResult struct {
@@ -793,54 +792,18 @@ type PyGenResourcesResult struct {
 	Outputs []VFS
 }
 
-func (e *EmitContext) emitPyGenResources(entries []PyGenResEntry, hashTag string, objKV *KV, resolveDeps bool, closure func(aux VFS, inputs []VFS, ref NodeRef) []VFS) *PyGenResourcesResult {
+func (e *EmitContext) emitPyGenResources(entries []PyGenResEntry, hashTag string, closure func(aux VFS, inputs []VFS, ref NodeRef) []VFS) *PyGenResourcesResult {
 	if len(entries) == 0 {
 		return nil
 	}
 
-	var auxEntries []RawAuxEntry
-	var objEntries []PyGenResEntry
+	refs, outs := e.packResources(ResourcePack{Tag: stringPtr(hashTag), Items: pyGenResourceItems(entries), RawClosure: closure})
 
-	for _, en := range entries {
-		if resourceCanObjcopy(en.token, en.key) {
-			objEntries = append(objEntries, en)
-		} else {
-			auxEntries = append(auxEntries, RawAuxEntry{path: en.path, key: en.key, producer: en.producer, inputs: en.inputs})
-		}
-	}
-
-	res := &PyGenResourcesResult{}
-
-	if rawRes := e.emitRawAuxChunks(auxEntries, hashTag, resolveDeps, closure); rawRes != nil {
-		for _, aux := range rawRes.Outputs {
-			auxRef, auxOut := e.emitCC(aux)
-
-			res.Refs = append(res.Refs, auxRef)
-			res.Outputs = append(res.Outputs, auxOut)
-		}
-	}
-
-	if len(objEntries) > 0 {
-		oc := newObjcopyEmitCtx(e.ctx, e.d, e.instance.Platform)
-		b := newObjcopyBatcher(e, oc, ObjcopyProfile{moduleTag: stringPtr(hashTag), kv: objKV, layout: objcopyLayoutScriptTail})
-
-		for _, en := range objEntries {
-			b.genProtoEntry(en.token, "resfs/file/py/"+en.key, en.path, en.producer)
-		}
-
-		b.flush()
-
-		objRefs, objOuts := b.results()
-
-		res.Refs = append(res.Refs, objRefs...)
-		res.Outputs = append(res.Outputs, objOuts...)
-	}
-
-	if len(res.Refs) == 0 {
+	if len(refs) == 0 {
 		return nil
 	}
 
-	return res
+	return &PyGenResourcesResult{Refs: refs, Outputs: outs}
 }
 
 type PyGenYapycResult struct {
@@ -848,7 +811,8 @@ type PyGenYapycResult struct {
 	Outputs []VFS
 }
 
-func emitPyGenYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs []VFS, tokens []string, producerRef NodeRef, sourceInputs []VFS) *PyGenYapycResult {
+func (e *EmitContext) emitPyGenYapyc(pyOutputs []VFS, tokens []string, producerRef NodeRef, sourceInputs []VFS) *PyGenYapycResult {
+	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 	py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin := py3ccToolRefs(ctx, instance)
 	suffix := pySrcYapycSuffix(instance.Path.rel())
@@ -896,7 +860,11 @@ func emitPyGenYapyc(ctx *GenCtx, instance ModuleInstance, pyOutputs []VFS, token
 			node.ForeignDepRefs = toolRefs
 		}
 
-		res.Refs = append(res.Refs, ctx.emit.emit(node))
+		ref := ctx.emit.emit(node)
+
+		e.codegen.register(&GeneratedFileInfo{OutputPath: out, ProducerRef: ref})
+
+		res.Refs = append(res.Refs, ref)
 		res.Outputs = append(res.Outputs, out)
 	}
 

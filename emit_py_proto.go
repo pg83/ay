@@ -6,10 +6,7 @@ import (
 	"strings"
 )
 
-var (
-	pyProtoKV2      = KV{P: pkPY, PC: pcYellow, ShowOut: true}
-	pbPyWrapperPath = pbPyWrapperVFS.string()
-)
+var pbPyWrapperPath = pbPyWrapperVFS.string()
 
 func protoPythonResourceKey(instance ModuleInstance, d *ModuleData, src, suffix string) string {
 	base := strings.TrimSuffix(src, ".proto")
@@ -82,7 +79,7 @@ func (e *EmitContext) emitPyProtoSrcs(peerContribs PeerGlobalContribs, protoSrcs
 		peerAddIncl = dedup(cppSibling.AddInclGlobal, peerContribs.addIncl)
 	}
 
-	genRes := e.emitPyGenResources(entries, "PY3_PROTO", &pyProtoKV2, false, func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
+	genRes := e.emitPyGenResources(entries, "PY3_PROTO", func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
 		return e.pyProtoAuxInputClosure(aux, inputs, ref, peerAddIncl)
 	})
 
@@ -326,6 +323,13 @@ func (e *EmitContext) emitPyProtoSrc(src string, protocLDRef NodeRef, protocBina
 	}
 
 	pyPBRef := ctx.emit.emit(pyPBNode)
+
+	e.codegen.register(&GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef})
+
+	if d.grpc {
+		e.codegen.register(&GeneratedFileInfo{OutputPath: grpcPyOut, ProducerRef: pyPBRef})
+	}
+
 	pyYapyc := []VFS{pyOut}
 	pyBuildBase := protoBase
 
@@ -340,21 +344,20 @@ func (e *EmitContext) emitPyProtoSrc(src string, protocLDRef NodeRef, protocBina
 		yapycTokens = append(yapycTokens, pyBuildBase+"__intpy3___pb2_grpc.py")
 	}
 
-	yapyRes := emitPyGenYapyc(ctx, instance, pyYapyc, yapycTokens, pyPBRef, pyProtoSourceInputs(inputs))
+	yapyRes := e.emitPyGenYapyc(pyYapyc, yapycTokens, pyPBRef, pyProtoSourceInputs(inputs))
 
-	return pyProtoResEntriesForSource(instance, d, src, generated, yapycTokens, pyPBRef, pyProtoSourceInputs(inputs), outputs, yapyRes.Refs, yapyRes.Outputs)
+	return pyProtoResEntriesForSource(instance, d, src, generated, yapycTokens, pyProtoSourceInputs(inputs), outputs, yapyRes.Outputs)
 }
 
-func pyProtoResEntriesForSource(instance ModuleInstance, d *ModuleData, src string, generated bool, tokens []string, pyPBRef NodeRef, producerInputs []VFS, pyOutputs []VFS, yapyRefs []NodeRef, yapyOuts []VFS) []PyGenResEntry {
+func pyProtoResEntriesForSource(instance ModuleInstance, d *ModuleData, src string, generated bool, tokens []string, producerInputs []VFS, pyOutputs []VFS, yapyOuts []VFS) []PyGenResEntry {
 	var entries []PyGenResEntry
 
 	if generated {
-		add := func(token, suffix string, output VFS, producer NodeRef) {
+		add := func(token, suffix string, output VFS) {
 			entries = append(entries, PyGenResEntry{
-				token:    token,
-				key:      protoPythonResourceKey(instance, d, src, suffix),
-				path:     output,
-				producer: producer,
+				token: token,
+				key:   protoPythonResourceKey(instance, d, src, suffix),
+				path:  output,
 			})
 		}
 
@@ -362,44 +365,43 @@ func pyProtoResEntriesForSource(instance ModuleInstance, d *ModuleData, src stri
 			return tokens[i] + strings.TrimPrefix(yapyOuts[i].rel(), pyOutputs[i].rel())
 		}
 
-		add(tokens[0], "_pb2.py", pyOutputs[0], pyPBRef)
+		add(tokens[0], "_pb2.py", pyOutputs[0])
 
 		if len(yapyOuts) > 0 {
-			add(yapToken(0), "_pb2.py.yapyc3", yapyOuts[0], yapyRefs[0])
+			add(yapToken(0), "_pb2.py.yapyc3", yapyOuts[0])
 		}
 
 		if d.grpc && len(pyOutputs) > 1 {
-			add(tokens[1], "_pb2_grpc.py", pyOutputs[1], pyPBRef)
+			add(tokens[1], "_pb2_grpc.py", pyOutputs[1])
 
 			if len(yapyOuts) > 1 {
-				add(yapToken(1), "_pb2_grpc.py.yapyc3", yapyOuts[1], yapyRefs[1])
+				add(yapToken(1), "_pb2_grpc.py.yapyc3", yapyOuts[1])
 			}
 		}
 
 		return entries
 	}
 
-	add := func(path VFS, suffix string, producer NodeRef, inputs []VFS) {
+	add := func(path VFS, suffix string, inputs []VFS) {
 		entries = append(entries, PyGenResEntry{
-			token:    "${ARCADIA_BUILD_ROOT}/" + path.rel(),
-			key:      protoPythonResourceKey(instance, d, src, suffix),
-			path:     path,
-			producer: producer,
-			inputs:   inputs,
+			token:  "${ARCADIA_BUILD_ROOT}/" + path.rel(),
+			key:    protoPythonResourceKey(instance, d, src, suffix),
+			path:   path,
+			inputs: inputs,
 		})
 	}
 
-	add(pyOutputs[0], "_pb2.py", pyPBRef, producerInputs)
+	add(pyOutputs[0], "_pb2.py", producerInputs)
 
 	if len(yapyOuts) > 0 {
-		add(yapyOuts[0], "_pb2.py.yapyc3", yapyRefs[0], producerInputs)
+		add(yapyOuts[0], "_pb2.py.yapyc3", producerInputs)
 	}
 
 	if d.grpc && len(pyOutputs) > 2 && pyOutputs[1].rel() != "" {
-		add(pyOutputs[1], "_pb2_grpc.py", pyPBRef, concat(producerInputs, []VFS{pyOutputs[0]}))
+		add(pyOutputs[1], "_pb2_grpc.py", concat(producerInputs, []VFS{pyOutputs[0]}))
 
 		if len(yapyOuts) > 1 {
-			add(yapyOuts[1], "_pb2_grpc.py.yapyc3", yapyRefs[1], producerInputs)
+			add(yapyOuts[1], "_pb2_grpc.py.yapyc3", producerInputs)
 		}
 	}
 
