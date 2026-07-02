@@ -137,7 +137,7 @@ func (tc *TarjanCtx) strongconnect(g ClosureSink, v VFS) (hits uint64) {
 
 	members := tc.stack[sccStart:]
 
-	tc.closure.reset(vfsBound())
+	tc.closure.reset(strBound())
 
 	g.emitClosure(members, func(block []VFS) int {
 		k := 0
