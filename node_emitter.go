@@ -145,15 +145,33 @@ func (e *StreamingEmitter) finish() []UID {
 		throwFmt("finish: %d reserved node slot(s) left unfilled", e.reserved)
 	}
 
-	for _, id := range e.pendingIdx {
-		n := e.nodes[id]
+	for len(e.pendingIdx) > 0 {
+		next := e.pendingIdx[:0]
+		progress := false
 
-		e.uids.set(id, e.resolveAndUID(n))
-		e.resolved.add(uint32(id))
+		for _, id := range e.pendingIdx {
+			n := e.nodes[id]
 
-		if e.onNode != nil {
-			e.onNode(n, e.uids, e.fetchRefs)
+			if e.hasUnresolvedDeps(n) {
+				next = append(next, id)
+
+				continue
+			}
+
+			e.uids.set(id, e.resolveAndUID(n))
+			e.resolved.add(uint32(id))
+			progress = true
+
+			if e.onNode != nil {
+				e.onNode(n, e.uids, e.fetchRefs)
+			}
 		}
+
+		if !progress {
+			throwFmt("finish: %d pending node(s) still have unresolved deps", len(next))
+		}
+
+		e.pendingIdx = next
 	}
 
 	e.finalized = true
