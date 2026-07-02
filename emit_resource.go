@@ -35,27 +35,43 @@ func resourceCanObjcopy(path, key string) bool {
 	return true
 }
 
-func resourcePackHash(items []string, unitPath, moduleTag string) string {
-	list := append(make([]string, 0, len(items)+1), items...)
-
-	list = append(list, unitPath)
-
+func resourceHashInto(buf []byte, list []string, moduleTag string) (string, []byte) {
 	sort.Strings(list)
 
-	sum := md5.Sum([]byte(strings.Join(list, ",") + moduleTag))
+	buf = buf[:0]
 
-	return strings.ToLower(enchex.EncodeToString(sum[:]))[:hashLen]
+	for i, s := range list {
+		if i > 0 {
+			buf = append(buf, ',')
+		}
+
+		buf = append(buf, s...)
+	}
+
+	buf = append(buf, moduleTag...)
+
+	sum := md5.Sum(buf)
+
+	return enchex.EncodeToString(sum[:])[:hashLen], buf
 }
 
 func objcopyHash(paths []string, keysB64 []string, kvs []string, unitPath string, moduleTag STR) string {
-	list := concat(paths, keysB64, kvs)
+	list := make([]string, 0, len(paths)+len(keysB64)+len(kvs)+1)
+
+	list = append(list, paths...)
+	list = append(list, keysB64...)
+	list = append(list, kvs...)
+	list = append(list, "$S/"+unitPath)
+
 	tag := ""
 
 	if moduleTag != 0 {
 		tag = moduleTag.string()
 	}
 
-	return resourcePackHash(list, "$S/"+unitPath, tag)
+	hash, _ := resourceHashInto(nil, list, tag)
+
+	return hash
 }
 
 func renderResourceKvCmd(kv string) string {
@@ -167,55 +183,23 @@ func (e *EmitContext) resolveResourceInput(rawPath string, fallback VFS) Resolve
 	return ResolvedResource{Input: fallback}
 }
 
-type ObjcopyNode struct {
-	moduleTag  STR
-	kv         *KV
-	hashPaths  []string
-	keysB64    []string
-	kvsHash    []string
-	kvsCmd     []string
-	pathInputs []VFS
-	inputs     InputChunks
-	deps       []NodeRef
-}
-
-func buildObjcopyNode(ctx *GenCtx, instance ModuleInstance, oc *ObjcopyEmitCtx, n ObjcopyNode) (NodeRef, VFS) {
+func buildObjcopyNode(ctx *GenCtx, instance ModuleInstance, oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []STR, inputs InputChunks, deps []NodeRef) NodeRef {
 	na := oc.na
-	hash := objcopyHash(n.hashPaths, n.keysB64, n.kvsHash, instance.Path.rel(), n.moduleTag)
-	outputObj := build(instance.Path.rel(), "/objcopy_", hash, ".o")
-	payload := make([]STR, 0, 2+len(n.pathInputs)+len(n.keysB64)+1+len(n.kvsCmd))
-
-	if len(n.hashPaths) > 0 {
-		payload = append(payload, argInputs.str())
-
-		for _, p := range n.pathInputs {
-			payload = append(payload, (p).str())
-		}
-
-		payload = append(payload, argKeys.str())
-		payload = appendInternStrs(payload, n.keysB64)
-	}
-
-	if len(n.kvsCmd) > 0 {
-		payload = append(payload, argKvs.str())
-		payload = appendInternStrs(payload, n.kvsCmd)
-	}
-
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	node := &Node{
 		Platform:     instance.Platform,
 		Cmds:         na.cmdList(Cmd{CmdArgs: objcopyCmdArgs(oc, outputObj, payload), Env: env}),
 		Env:          env,
-		Inputs:       n.inputs,
+		Inputs:       inputs,
 		Outputs:      na.vfsList(outputObj),
-		KV:           n.kv,
+		KV:           kv,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    instance.Platform.UsesPython3Clang,
-		DepRefs:      n.deps,
+		DepRefs:      deps,
 	}
 
-	return ctx.emit.emit(node), outputObj
+	return ctx.emit.emit(node)
 }
 
 type ResourceItem struct {
@@ -233,91 +217,35 @@ type ResourcePack struct {
 	RawClosure func(aux VFS, inputs []VFS, ref NodeRef) []VFS
 }
 
-type resourceChunk struct {
-	paths     []string
-	keysB64   []string
-	kvsHash   []string
-	kvsCmd    []string
-	hashPairs []string
-	cmdPairs  []string
-	payload   []VFS
-	adjacent  []VFS
-	aux       []VFS
-	cmdLen    int
-}
+func resourceChunkEnds(items []ResourceItem, objcopy bool) []int {
+	var ends []int
 
-func splitResourceChunks(items []ResourceItem, objcopy bool) []resourceChunk {
-	var chunks []resourceChunk
+	cmdLen := 0
 
-	cur := resourceChunk{}
-	seen := map[VFS]struct{}{}
-
-	addAdjacent := func(v VFS) {
-		if v == 0 {
-			return
-		}
-
-		if _, dup := seen[v]; dup {
-			return
-		}
-
-		seen[v] = struct{}{}
-		cur.adjacent = append(cur.adjacent, v)
-	}
-
-	flush := func() {
-		if cur.cmdLen == 0 {
-			return
-		}
-
-		chunks = append(chunks, cur)
-		cur = resourceChunk{}
-		seen = map[VFS]struct{}{}
-	}
-
-	for _, it := range items {
+	for i, it := range items {
 		if it.Path == "-" {
-			cur.kvsHash = append(cur.kvsHash, it.Key)
-			cur.kvsCmd = append(cur.kvsCmd, it.Cmd)
-			cur.hashPairs = append(cur.hashPairs, "-", it.Key)
-			cur.cmdPairs = append(cur.cmdPairs, "-", it.Cmd)
-			cur.cmdLen += rootCmdLen + len(it.Key)
+			cmdLen += rootCmdLen + len(it.Key)
 
 			if !objcopy {
-				cur.cmdLen += len(it.Path)
+				cmdLen += len(it.Path)
 			}
+		} else if objcopy {
+			cmdLen += rootCmdLen + len(it.Path) + encb64.StdEncoding.EncodedLen(len(it.Key))
 		} else {
-			cur.paths = append(cur.paths, it.Path)
-
-			key := it.Key
-
-			if objcopy {
-				key = encb64.StdEncoding.EncodeToString([]byte(it.Key))
-			}
-
-			cur.keysB64 = append(cur.keysB64, key)
-			cur.hashPairs = append(cur.hashPairs, it.Path, "-"+it.Key)
-			cur.cmdPairs = append(cur.cmdPairs, it.Input.string(), "-"+it.Key)
-			cur.payload = append(cur.payload, it.Input)
-			cur.cmdLen += rootCmdLen + len(it.Path) + len(key)
+			cmdLen += rootCmdLen + len(it.Path) + len(it.Key)
 		}
 
-		addAdjacent(it.Input)
-
-		for _, v := range it.Extra {
-			addAdjacent(v)
-		}
-
-		cur.aux = append(cur.aux, it.Aux...)
-
-		if cur.cmdLen >= maxCmdLen {
-			flush()
+		if cmdLen >= maxCmdLen {
+			ends = append(ends, i+1)
+			cmdLen = 0
 		}
 	}
 
-	flush()
+	if cmdLen > 0 {
+		ends = append(ends, len(items))
+	}
 
-	return chunks
+	return ends
 }
 
 func (e *EmitContext) packResources(p ResourcePack) (refs []NodeRef, outs []VFS) {
@@ -352,51 +280,134 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	oc := newObjcopyEmitCtx(ctx, d, instance.Platform)
+	unitElem := "$S/" + instance.Path.rel()
+	tag := ""
 
-	for _, ch := range splitResourceChunks(items, true) {
+	if p.Tag != 0 {
+		tag = p.Tag.string()
+	}
+
+	var (
+		hashScratch []string
+		hashBuf     []byte
+		b64Scratch  []byte
+	)
+
+	lo := 0
+
+	for _, hi := range resourceChunkEnds(items, true) {
+		chunk := items[lo:hi]
+
+		lo = hi
+
+		nPaths, nKvs, cand := 0, 0, 0
+
+		for _, it := range chunk {
+			if it.Path == "-" {
+				nKvs++
+			} else {
+				nPaths++
+			}
+
+			cand += 1 + len(it.Extra)
+		}
+
+		payloadCap := 0
+
+		if nPaths > 0 {
+			payloadCap += 2 + 2*nPaths
+		}
+
+		if nKvs > 0 {
+			payloadCap += 1 + nKvs
+		}
+
+		payload := make([]STR, 0, payloadCap)
+
+		hashScratch = hashScratch[:0]
+
+		if nPaths > 0 {
+			payload = append(payload, argInputs.str())
+
+			for _, it := range chunk {
+				if it.Path != "-" {
+					payload = append(payload, it.Input.str())
+					hashScratch = append(hashScratch, it.Path)
+				}
+			}
+
+			payload = append(payload, argKeys.str())
+
+			for _, it := range chunk {
+				if it.Path != "-" {
+					b64Scratch = encb64.StdEncoding.AppendEncode(b64Scratch[:0], strBytes(it.Key))
+
+					key := internBytes(b64Scratch)
+
+					payload = append(payload, key)
+					hashScratch = append(hashScratch, key.string())
+				}
+			}
+		}
+
+		if nKvs > 0 {
+			payload = append(payload, argKvs.str())
+
+			for _, it := range chunk {
+				if it.Path == "-" {
+					payload = append(payload, internStr(it.Cmd))
+					hashScratch = append(hashScratch, it.Key)
+				}
+			}
+		}
+
 		deduper.reset()
+
+		adjacent := make([]VFS, 0, cand)
+
+		for _, it := range chunk {
+			if it.Input != 0 && deduper.add(it.Input) {
+				adjacent = append(adjacent, it.Input)
+			}
+
+			for _, v := range it.Extra {
+				if v != 0 && deduper.add(v) {
+					adjacent = append(adjacent, v)
+				}
+			}
+		}
 
 		for _, v := range rescompilersWithScriptChunk {
 			deduper.add(v)
 		}
 
-		for _, v := range ch.adjacent {
-			deduper.add(v)
-		}
-
 		var tail []VFS
 
-		for _, v := range ch.aux {
-			if v == 0 {
-				continue
-			}
-
-			if deduper.add(v) {
-				tail = append(tail, v)
+		for _, it := range chunk {
+			for _, v := range it.Aux {
+				if v != 0 && deduper.add(v) {
+					tail = append(tail, v)
+				}
 			}
 		}
 
-		inputs := na.inputList(rescompilersChunk, ch.adjacent, objcopyScriptChunk)
+		inputs := na.inputList(rescompilersChunk, adjacent, objcopyScriptChunk)
 
 		if len(tail) > 0 {
 			inputs = append(inputs, tail)
 		}
 
-		dataInputs := concat(ch.adjacent, tail)
+		hashScratch = append(hashScratch, unitElem)
 
-		r, outputObj := buildObjcopyNode(ctx, instance, oc, ObjcopyNode{
-			moduleTag:  p.Tag,
-			kv:         &pyObjcopyKV,
-			hashPaths:  ch.paths,
-			keysB64:    ch.keysB64,
-			kvsHash:    ch.kvsHash,
-			kvsCmd:     ch.kvsCmd,
-			pathInputs: ch.payload,
-			inputs:     inputs,
-			deps:       resolveCodegenDepRefsIncl(ctx, instance, na, dataInputs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...),
-		})
+		var hash string
 
-		refs = append(refs, r)
+		hash, hashBuf = resourceHashInto(hashBuf, hashScratch, tag)
+
+		outputObj := build(instance.Path.rel(), "/objcopy_", hash, ".o")
+		dataInputs := concat(adjacent, tail)
+		deps := resolveCodegenDepRefsIncl(ctx, instance, na, dataInputs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
+
+		refs = append(refs, buildObjcopyNode(ctx, instance, oc, &pyObjcopyKV, outputObj, payload, inputs, deps))
 		outs = append(outs, outputObj)
 	}
 
@@ -412,26 +423,77 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 	}
 
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
+	unitElem := "$S/" + instance.Path.rel()
+	dash := str2
 	tag := ""
 
 	if p.Tag != 0 {
 		tag = p.Tag.string()
 	}
 
-	for _, ch := range splitResourceChunks(items, false) {
-		aux := build(instance.Path.rel(), "/", resourcePackHash(ch.hashPairs, "$S/"+instance.Path.rel(), tag), "_raw.auxcpp")
+	var (
+		hashScratch []string
+		hashBuf     []byte
+	)
+
+	lo := 0
+
+	for _, hi := range resourceChunkEnds(items, false) {
+		chunk := items[lo:hi]
+
+		lo = hi
+
+		deduper.reset()
+
+		var adjacent []VFS
+
+		hashScratch = hashScratch[:0]
+
+		for _, it := range chunk {
+			if it.Path == "-" {
+				hashScratch = append(hashScratch, "-", it.Key)
+			} else {
+				hashScratch = append(hashScratch, it.Path, "-"+it.Key)
+			}
+
+			if it.Input != 0 && deduper.add(it.Input) {
+				adjacent = append(adjacent, it.Input)
+			}
+
+			for _, v := range it.Extra {
+				if v != 0 && deduper.add(v) {
+					adjacent = append(adjacent, v)
+				}
+			}
+		}
+
+		hashScratch = append(hashScratch, unitElem)
+
+		var hash string
+
+		hash, hashBuf = resourceHashInto(hashBuf, hashScratch, tag)
+
+		aux := build(instance.Path.rel(), "/", hash, "_raw.auxcpp")
 		auxRef := ctx.emit.reserve()
-		auxClosure := p.RawClosure(aux, ch.adjacent, auxRef)
-		nodeCmd := []STR{internStr(rescompilerBinPath), (aux).str()}
+		auxClosure := p.RawClosure(aux, adjacent, auxRef)
+		nodeCmd := make([]STR, 0, 2+2*len(chunk))
 
-		nodeCmd = appendInternStrs(nodeCmd, ch.cmdPairs)
+		nodeCmd = append(nodeCmd, internStr(rescompilerBinPath), aux.str())
 
-		deps := concat(resolveCodegenDepRefsIncl(ctx, instance, na, ch.adjacent), depRefs(rescompilerRef))
+		for _, it := range chunk {
+			if it.Path == "-" {
+				nodeCmd = append(nodeCmd, dash, internStr(it.Cmd))
+			} else {
+				nodeCmd = append(nodeCmd, it.Input.str(), internV("-", it.Key))
+			}
+		}
+
+		deps := concat(resolveCodegenDepRefsIncl(ctx, instance, na, adjacent), depRefs(rescompilerRef))
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 		deduper.reset()
 
-		for _, v := range ch.adjacent {
+		for _, v := range adjacent {
 			deduper.add(v)
 		}
 
@@ -455,7 +517,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 			Platform:     instance.Platform,
 			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(nodeCmd), Env: env}),
 			Env:          env,
-			Inputs:       na.inputList(ch.adjacent, tail),
+			Inputs:       na.inputList(adjacent, tail),
 			Outputs:      na.vfsList(aux),
 			KV:           &rawAuxKV,
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
