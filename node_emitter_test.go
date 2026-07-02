@@ -10,7 +10,7 @@ import (
 
 func build3NodeDAG() (*StreamingEmitter, NodeRef, NodeRef, NodeRef) {
 	e := newStreamingEmitter(nil, nil)
-	c := e.emit(&Node{
+	c := e.emitNode(Node{
 		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"build", "C"})}, Env: nil}},
 		Env:          nil,
 		Inputs:       InputChunks{ToVFSSlice([]string{"c.in"})},
@@ -19,7 +19,7 @@ func build3NodeDAG() (*StreamingEmitter, NodeRef, NodeRef, NodeRef) {
 		Platform:     &Platform{Target: "linux"},
 		Requirements: Requirements{},
 	})
-	b := e.emit(&Node{
+	b := e.emitNode(Node{
 		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"build", "B"})}, Env: nil}},
 		Env:          nil,
 		Inputs:       InputChunks{ToVFSSlice([]string{"b.in"})},
@@ -29,7 +29,7 @@ func build3NodeDAG() (*StreamingEmitter, NodeRef, NodeRef, NodeRef) {
 		Requirements: Requirements{},
 		DepRefs:      []NodeRef{c},
 	})
-	a := e.emit(&Node{
+	a := e.emitNode(Node{
 		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"build", "A"})}, Env: nil}},
 		Env:          nil,
 		Inputs:       InputChunks{ToVFSSlice([]string{"a.in"})},
@@ -133,7 +133,7 @@ func TestFinalize_UIDsStableAcrossRuns(t *testing.T) {
 func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 	e := newStreamingEmitter(nil, nil)
 	mkLeaf := func(name string) NodeRef {
-		return e.emit(&Node{Platform: &Platform{},
+		return e.emitNode(Node{Platform: &Platform{},
 			Cmds:   []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{name})}, Env: nil}},
 			Env:    nil,
 			Inputs: InputChunks{ToVFSSlice([]string{})}, KV: &KV{Name: name},
@@ -145,7 +145,7 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 	y := mkLeaf("Y")
 	z := mkLeaf("Z")
 
-	a := e.emit(&Node{Platform: &Platform{},
+	a := e.emitNode(Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
 		KV: &KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
@@ -186,13 +186,13 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 
 func TestFinalize_KeepsDuplicateDeps(t *testing.T) {
 	e := newStreamingEmitter(nil, nil)
-	c := e.emit(&Node{Platform: &Platform{},
+	c := e.emitNode(Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"C"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
 		KV: &KV{Name: "C"}, Outputs: ToVFSSlice([]string{}),
 		Requirements: Requirements{},
 	})
-	a := e.emit(&Node{Platform: &Platform{},
+	a := e.emitNode(Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
 		KV: &KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
@@ -240,7 +240,7 @@ func TestFinalize_GraphTopLevelKeyOrder(t *testing.T) {
 func TestFinalize_DedupesIdenticalEmits(t *testing.T) {
 	e := newStreamingEmitter(nil, nil)
 	mk := func() NodeRef {
-		return e.emit(&Node{Platform: &Platform{},
+		return e.emitNode(Node{Platform: &Platform{},
 			Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"identical"})}, Env: nil}},
 			Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
 			KV: &KV{Name: "L"}, Outputs: ToVFSSlice([]string{}),
@@ -275,7 +275,7 @@ func TestFinalize_SecondCallErrors(t *testing.T) {
 
 func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 	e := newStreamingEmitter(nil, nil)
-	a := e.emit(&Node{Platform: &Platform{},
+	a := e.emitNode(Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
 		KV: &KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
@@ -311,7 +311,7 @@ func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 
 func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
 	e := newStreamingEmitter(nil, nil)
-	a := e.emit(&Node{Platform: &Platform{},
+	a := e.emitNode(Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
 		KV: &KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
@@ -328,7 +328,7 @@ func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
 
 func TestEmitter_OnReady_BufferedNoOp(t *testing.T) {
 	e := newStreamingEmitter(nil, nil)
-	r := e.emit(&Node{Platform: &Platform{},
+	r := e.emitNode(Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"X"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
 		KV: &KV{Name: "X"}, Outputs: ToVFSSlice([]string{}),
@@ -356,7 +356,7 @@ func TestEmitter_OnReady_BufferedNoOp(t *testing.T) {
 
 func TestEmitter_PostFinalizeEmitPanics(t *testing.T) {
 	e := newStreamingEmitter(nil, nil)
-	e.emit(&Node{Platform: &Platform{}, KV: &KV{P: pkTEST}})
+	e.emitNode(Node{Platform: &Platform{}, KV: &KV{P: pkTEST}})
 	finalize(e)
 
 	defer func() {
@@ -377,12 +377,12 @@ func TestEmitter_PostFinalizeEmitPanics(t *testing.T) {
 		}
 	}()
 
-	e.emit(&Node{Platform: &Platform{}, KV: &KV{P: pkTEST2}})
+	e.emitNode(Node{Platform: &Platform{}, KV: &KV{P: pkTEST2}})
 }
 
 func TestEmitter_PostFinalizeResultPanics(t *testing.T) {
 	e := newStreamingEmitter(nil, nil)
-	ref := e.emit(&Node{Platform: &Platform{}, KV: &KV{P: pkTEST}})
+	ref := e.emitNode(Node{Platform: &Platform{}, KV: &KV{P: pkTEST}})
 	finalize(e)
 
 	defer func() {
@@ -408,12 +408,12 @@ func TestEmitter_PostFinalizeResultPanics(t *testing.T) {
 
 func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 	e1 := newStreamingEmitter(nil, nil)
-	c1 := e1.emit(&Node{Platform: &Platform{},
+	c1 := e1.emitNode(Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"C", "v1"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})}, KV: &KV{},
 		Outputs: ToVFSSlice([]string{}), Requirements: Requirements{},
 	})
-	a1 := e1.emit(&Node{Platform: &Platform{},
+	a1 := e1.emitNode(Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})}, KV: &KV{},
 		Outputs: ToVFSSlice([]string{}), Requirements: Requirements{},
@@ -423,12 +423,12 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 	g1 := finalize(e1)
 
 	e2 := newStreamingEmitter(nil, nil)
-	c2 := e2.emit(&Node{Platform: &Platform{},
+	c2 := e2.emitNode(Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"C", "v2"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})}, KV: &KV{},
 		Outputs: ToVFSSlice([]string{}), Requirements: Requirements{},
 	})
-	a2 := e2.emit(&Node{Platform: &Platform{},
+	a2 := e2.emitNode(Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})}, KV: &KV{},
 		Outputs: ToVFSSlice([]string{}), Requirements: Requirements{},
@@ -448,7 +448,7 @@ func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
 func TestFinalize_HeapTopo_Determinism(t *testing.T) {
 	e := newStreamingEmitter(nil, nil)
 	mk := func(name string, deps ...NodeRef) NodeRef {
-		return e.emit(&Node{Platform: &Platform{},
+		return e.emitNode(Node{Platform: &Platform{},
 			Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{name})}, Env: nil}},
 			Env:          nil,
 			Inputs:       InputChunks{ToVFSSlice([]string{})},

@@ -10,7 +10,7 @@ func emitLJ(instance ModuleInstance, luaSrc, rawOut, compilerBin VFS, compilerLD
 	na := emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	node := &Node{
+	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{
 			CmdArgs: na.chunkList(na.strList(compilerBin.str(), argB2.str(), argDashG.str(), luaSrc.str(), rawOut.str())),
@@ -25,7 +25,7 @@ func emitLJ(instance ModuleInstance, luaSrc, rawOut, compilerBin VFS, compilerLD
 		ForeignDepRefs: depRefs(compilerLDRef),
 	}
 
-	return emit.emit(node)
+	return emit.emitNode(node)
 }
 
 func (e *EmitContext) emitLuaJit21() {

@@ -96,7 +96,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 		reg.register(info)
 	}
 
-	node := &Node{
+	node := Node{
 		Platform:       instance.Platform,
 		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
 		Env:            env,
@@ -107,7 +107,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 		ForeignDepRefs: depRefs(toolLDRef),
 	}
 
-	ctx.emit.emitReserved(node, scRef)
+	ctx.emit.emitReservedNode(node, scRef)
 
 	return scRef, partRels
 }

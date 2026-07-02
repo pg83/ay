@@ -149,7 +149,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		inputs = dedup(inputs, walkClosureTail(e.scanner, headerVFS, d.cc.ScanCfg))
 	}
 
-	ctx.emit.emitReserved(&Node{
+	ctx.emit.emitReservedNode(Node{
 		Platform:     instance.Platform,
 		Cmds:         cmds,
 		DepRefs:      []NodeRef{bisonRef, m4Ref},

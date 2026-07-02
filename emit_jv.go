@@ -83,7 +83,7 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs InputChunks, outp
 	na := emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	node := &Node{
+	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env,
@@ -97,7 +97,7 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs InputChunks, outp
 		Resources:    usesPython3JDK17,
 	}
 
-	return emit.emit(node)
+	return emit.emitNode(node)
 }
 
 func emitJV(

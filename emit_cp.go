@@ -37,7 +37,7 @@ func emitJVCPG4(
 
 	inputs := na.inputList(head, scripts[fsTools], jvInputs, closure)
 
-	node := &Node{
+	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
@@ -50,7 +50,7 @@ func emitJVCPG4(
 		Resources:    usesPython3,
 	}
 
-	emit.emitReserved(node, id)
+	emit.emitReservedNode(node, id)
 }
 
 func emitCP(instance ModuleInstance, src VFS, dst VFS, tc ModuleToolchain, scripts ScriptDeps, emit *StreamingEmitter) NodeRef {
@@ -88,7 +88,7 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 
 	inputs := na.inputList(scripts[fsTools], ownInputs)
 
-	node := &Node{
+	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
@@ -101,5 +101,5 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 		Resources:    usesPython3,
 	}
 
-	emit.emitReserved(node, id)
+	emit.emitReservedNode(node, id)
 }

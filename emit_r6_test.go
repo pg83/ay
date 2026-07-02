@@ -8,7 +8,7 @@ import (
 func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	e := newStreamingEmitter(nil, nil)
 
-	ragel6LD := e.emit(&Node{
+	ragel6LD := e.emitNode(Node{
 		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
 		Env:          nil,
 		Inputs:       InputChunks{ToVFSSlice([]string{})},
@@ -95,7 +95,7 @@ func TestCollectModule_Ragel6FlagsMultiTokenSplit(t *testing.T) {
 func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 	e := newStreamingEmitter(nil, nil)
 
-	ragel6LD := e.emit(&Node{Platform: &Platform{},
+	ragel6LD := e.emitNode(Node{Platform: &Platform{},
 		Cmds:    []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
 		Env:     nil,
 		Inputs:  InputChunks{ToVFSSlice([]string{})},
@@ -135,7 +135,7 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 	e := newStreamingEmitter(nil, nil)
 
-	ragel6LD := e.emit(&Node{Platform: &Platform{},
+	ragel6LD := e.emitNode(Node{Platform: &Platform{},
 		Cmds:    []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
 		Env:     nil,
 		Inputs:  InputChunks{ToVFSSlice([]string{})},
@@ -180,7 +180,7 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 	e := newStreamingEmitter(nil, nil)
 
-	ragel6LD := e.emit(&Node{Platform: &Platform{},
+	ragel6LD := e.emitNode(Node{Platform: &Platform{},
 		Cmds:    []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
 		Env:     nil,
 		Inputs:  InputChunks{ToVFSSlice([]string{})},

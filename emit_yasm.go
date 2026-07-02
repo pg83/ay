@@ -69,7 +69,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envYASM_TEST_SUITE, Value: strOne}}
 
-	node := &Node{
+	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
@@ -86,7 +86,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 		node.DepRefs = in.ExtraDepRefs
 	}
 
-	return emit.emit(node), outVFS
+	return emit.emitNode(node), outVFS
 }
 
 func (e *EmitContext) emitLibraryYasmSource(meta SrcMeta) {

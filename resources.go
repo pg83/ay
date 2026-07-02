@@ -221,20 +221,20 @@ func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolc
 	for _, decl := range globals {
 		switch decl.Name {
 		case clangResID:
-			root := "$(B)/resources/" + clangRes
+			const pfx = "$(B)/resources/"
 
 			tc.ClangResource = clangResID
-			tc.ClangRoot = internStr(root)
-			tc.CC = internV(root, "/bin/clang")
-			tc.CXX = internV(root, "/bin/clang++")
-			tc.AR = internV(root, "/bin/llvm-ar")
-			tc.Objcopy = internV(root, "/bin/llvm-objcopy")
-			tc.Strip = internV(root, "/bin/llvm-strip")
+			tc.ClangRoot = internV(pfx, clangRes)
+			tc.CC = internV(pfx, clangRes, "/bin/clang")
+			tc.CXX = internV(pfx, clangRes, "/bin/clang++")
+			tc.AR = internV(pfx, clangRes, "/bin/llvm-ar")
+			tc.Objcopy = internV(pfx, clangRes, "/bin/llvm-objcopy")
+			tc.Strip = internV(pfx, clangRes, "/bin/llvm-strip")
 		case strLLDRootName:
-			root := "$(B)/resources/" + resourcePatternLLDRoot
+			const pfx = "$(B)/resources/"
 
-			tc.LLDRoot = internStr(root)
-			tc.LLD = internV(root, "/bin/ld.lld")
+			tc.LLDRoot = internV(pfx, resourcePatternLLDRoot)
+			tc.LLD = internV(pfx, resourcePatternLLDRoot, "/bin/ld.lld")
 		case strYMakePython3Name:
 			tc.Python3 = internV("$(B)/resources/", resourcePatternYMakePython3, "/bin/python3")
 		}
@@ -361,7 +361,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 		depRefs = append(depRefs, *ownSbomRef)
 	}
 
-	node := &Node{
+	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList([]STR{
 			wrapccPython3STR,
@@ -379,7 +379,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 		Resources:    usesPython3,
 	}
 
-	ref := ctx.emit.emit(node)
+	ref := ctx.emit.emitNode(node)
 
 	result := &ModuleEmitResult{
 		ModuleStmtName: d.moduleStmt.Name,

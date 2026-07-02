@@ -137,7 +137,7 @@ func emitARNode(
 	topEnv := hostP.toolEnv()
 	deps := concat(objRefs, peerArchiveRefs)
 
-	n := &Node{
+	n := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Env: cmdEnv}),
@@ -150,5 +150,5 @@ func emitARNode(
 		Resources:    instance.Platform.UsesPython3Clang,
 	}
 
-	return emit.emit(n)
+	return emit.emitNode(n)
 }

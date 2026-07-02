@@ -378,7 +378,7 @@ func emitPYRun(
 		cmd.Cwd = *stmt.CWD
 	}
 
-	node := &Node{
+	node := Node{
 		Platform:     instance.Platform,
 		Cmds:         na.cmdList(cmd),
 		Env:          env,
@@ -390,7 +390,7 @@ func emitPYRun(
 		Resources:    usesPython3,
 	}
 
-	emit.emitReserved(node, id)
+	emit.emitReservedNode(node, id)
 
 	return id
 }

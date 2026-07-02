@@ -287,7 +287,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			(generatedVFS).str(),
 		)
 
-		ctx.emit.emitReserved(&Node{
+		ctx.emit.emitReservedNode(Node{
 			Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 				Env: env}),

@@ -245,7 +245,7 @@ func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath st
 		descRawprotoWrapperVFS,
 	}
 
-	node := &Node{
+	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Cwd: strS,
@@ -259,7 +259,7 @@ func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath st
 		Resources:      usesPython3,
 	}
 
-	return ctx.emit.emit(node)
+	return ctx.emit.emitNode(node)
 }
 
 func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, protosrc VFS,
@@ -284,7 +284,7 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 
 	inputs := concat(descOutputs, rawprotoOutputs, producerSourceInputs)
 
-	node := &Node{
+	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(
 			Cmd{CmdArgs: na.chunkList(merge), Env: env},
@@ -299,7 +299,7 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 		Resources:    usesPython3,
 	}
 
-	return ctx.emit.emit(node)
+	return ctx.emit.emitNode(node)
 }
 
 func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
@@ -335,7 +335,7 @@ func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
 		}
 	}
 
-	node := &Node{
+	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(
 			Cmd{CmdArgs: na.chunkList(merge), Env: env},
@@ -350,7 +350,7 @@ func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
 		Resources:    usesPython3,
 	}
 
-	mergeRef := ctx.emit.emit(node)
+	mergeRef := ctx.emit.emitNode(node)
 	primary := protodesc
 
 	return &ModuleEmitResult{

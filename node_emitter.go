@@ -85,6 +85,24 @@ func (e *StreamingEmitter) emitReserved(n *Node, id NodeRef) {
 	e.resolveOrPend(n, id)
 }
 
+func (e *StreamingEmitter) newNode() *Node {
+	return e.na.nodes.one()
+}
+
+func (e *StreamingEmitter) emitNode(n Node) NodeRef {
+	p := e.na.nodes.one()
+	*p = n
+
+	return e.emit(p)
+}
+
+func (e *StreamingEmitter) emitReservedNode(n Node, id NodeRef) {
+	p := e.na.nodes.one()
+	*p = n
+
+	e.emitReserved(p, id)
+}
+
 func (e *StreamingEmitter) emit(n *Node) NodeRef {
 	if e.finalized {
 		panic("StreamingEmitter.Emit called after Finish")

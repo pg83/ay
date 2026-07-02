@@ -153,7 +153,7 @@ func (e *EmitContext) defaultPeerdirsForWithState() []string {
 		muslOn:     d.muslEnabled && !noPlatform,
 	}
 
-	var peers []string
+	peers := make([]string, 0, 16)
 
 	if addLinuxHeaders {
 		peers = append(peers, "contrib/libs/linux-headers")

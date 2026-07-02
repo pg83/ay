@@ -818,13 +818,16 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	peerWholeArchiveRefs := make([]NodeRef, 0, len(allPeers))
 	peerWholeArchivePaths := make([]VFS, 0, len(allPeers))
 	peerWholeArchiveCmdPaths := make([]VFS, 0, len(allPeers))
-	peerDynamicRefs := make([]NodeRef, 0, len(allPeers))
-	peerDynamicPaths := make([]VFS, 0, len(allPeers))
-	peerLinkCmdPaths := make([]VFS, 0, len(allPeers))
 	peerSbomRefs := make([]NodeRef, 0, len(allPeers))
 	peerSbomPaths := make([]VFS, 0, len(allPeers))
-	peerLDPluginRefs := make([]NodeRef, 0, 1)
-	peerLDPluginPaths := make([]VFS, 0, 1)
+
+	var (
+		peerDynamicRefs   []NodeRef
+		peerDynamicPaths  []VFS
+		peerLinkCmdPaths  []VFS
+		peerLDPluginRefs  []NodeRef
+		peerLDPluginPaths []VFS
+	)
 
 	var peerObjAddLibsGlobal []ARG
 	var peerLDFlagsGlobal []ARG

@@ -67,7 +67,7 @@ func vfsStrings(vs []VFS) []string {
 func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 	e := newStreamingEmitter(nil, nil)
 
-	objRefs := []NodeRef{e.emit(&Node{
+	objRefs := []NodeRef{e.emitNode(Node{
 		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
 		Env:          nil,
 		Inputs:       InputChunks{ToVFSSlice([]string{})},
@@ -95,7 +95,7 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 	e := newStreamingEmitter(nil, nil)
 
 	makeLeaf := func(out VFS) NodeRef {
-		return e.emit(&Node{
+		return e.emitNode(Node{
 			Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
 			Env:          nil,
 			Inputs:       InputChunks{ToVFSSlice([]string{})},
@@ -143,7 +143,7 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 	e := newStreamingEmitter(nil, nil)
 
 	makeLeaf := func(out VFS) NodeRef {
-		return e.emit(&Node{
+		return e.emitNode(Node{
 			Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
 			Env:          nil,
 			Inputs:       InputChunks{ToVFSSlice([]string{})},
@@ -178,7 +178,7 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 	e := newStreamingEmitter(nil, nil)
 
 	makeLeaf := func(out VFS) NodeRef {
-		return e.emit(&Node{
+		return e.emitNode(Node{
 			Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
 			Env:          nil,
 			Inputs:       InputChunks{ToVFSSlice([]string{})},
@@ -282,7 +282,7 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 	e := newStreamingEmitter(nil, nil)
 
 	makeLeaf := func(out VFS) NodeRef {
-		return e.emit(&Node{
+		return e.emitNode(Node{
 			Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
 			Env:          nil,
 			Inputs:       InputChunks{ToVFSSlice([]string{})},

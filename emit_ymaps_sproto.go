@@ -75,7 +75,7 @@ func (e *EmitContext) emitYmapsSprotoHeader(p YmapsSprotoPending, outRoot string
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	closure := dropGeneratedProtoHeaders(walkClosureTail(e.scanner, p.sprotoH, scanCfg))
 
-	node := &Node{
+	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Cwd: strS,
@@ -88,7 +88,7 @@ func (e *EmitContext) emitYmapsSprotoHeader(p YmapsSprotoPending, outRoot string
 		ForeignDepRefs: depRefs(sprotocLDRef),
 	}
 
-	ctx.emit.emitReserved(node, p.ref)
+	ctx.emit.emitReservedNode(node, p.ref)
 }
 
 func dropGeneratedProtoHeaders(closure []VFS) []VFS {

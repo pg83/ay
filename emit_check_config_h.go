@@ -24,7 +24,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf STR) {
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	chRef := ctx.emit.emit(&Node{
+	chRef := ctx.emit.emitNode(Node{
 		Platform: ctx.target,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(d.tc.Python3,
 			argSBuildScriptsCheckConfigHPy.str(),

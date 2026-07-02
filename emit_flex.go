@@ -76,7 +76,7 @@ func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, o
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	emit.emitReserved(&Node{
+	emit.emitReservedNode(Node{
 		Platform:       instance.Platform,
 		Cmds:           na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
 		Env:            env,

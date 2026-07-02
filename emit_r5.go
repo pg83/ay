@@ -44,7 +44,7 @@ func emitR5(
 
 	inputs := []VFS{ragel5BinPath, rlgenCdBinPath, srcVFS}
 
-	node := &Node{
+	node := Node{
 		Platform:       instance.Platform,
 		Cmds:           na.cmdList(cmd0, cmd1),
 		Env:            env,
@@ -55,7 +55,7 @@ func emitR5(
 		ForeignDepRefs: depRefs(ragel5LD, rlgenCdLD),
 	}
 
-	return emit.emit(node), tmpVFS, cppVFS
+	return emit.emitNode(node), tmpVFS, cppVFS
 }
 
 func (e *EmitContext) emitLibraryRagel5Source(src STR) {

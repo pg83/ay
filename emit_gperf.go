@@ -33,7 +33,7 @@ func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS
 	head = append(head, gperfFlags...)
 	head = append(head, internStr(gperfSymbolName(srcRel)), (srcVFS).str())
 
-	node := &Node{
+	node := Node{
 		Platform:       instance.Platform,
 		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(head), Env: env, Stdout: (genVFS).str()}),
 		Env:            env,
@@ -44,7 +44,7 @@ func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS
 		ForeignDepRefs: depRefs(gperfLD),
 	}
 
-	emit.emitReserved(node, ref)
+	emit.emitReservedNode(node, ref)
 }
 
 func (e *EmitContext) emitLibraryGperfSource(src STR) {
