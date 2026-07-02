@@ -202,6 +202,22 @@ func protoTransitiveHeadersEnabled(d *ModuleData) bool {
 	return true
 }
 
+type ProtoSpec struct {
+	kv            *KV
+	modulePlugins bool
+	ccFirstOuts   bool
+	optsTail      []STR
+	toolLDRef     NodeRef
+	toolBinary    VFS
+	genRefs       []NodeRef
+	genHParsed    []IncludeDirective
+	genCCExtras   []IncludeDirective
+	hLeaves       []VFS
+	ccLeaves      []VFS
+}
+
+var cppProtoSpec = &ProtoSpec{kv: &pbKV, modulePlugins: true}
+
 type ProtoPBConfig struct {
 	grpc       bool
 	moduleTag  STR
@@ -228,7 +244,7 @@ type PbModuleEmission struct {
 	blocks              *PbArgBlocks
 }
 
-func newPBModuleEmission(ctx *GenCtx, d *ModuleData, cfg ProtoPBConfig, protoInclude []VFS) *PbModuleEmission {
+func newPBModuleEmission(ctx *GenCtx, d *ModuleData, cfg ProtoPBConfig, protoInclude []VFS, spec *ProtoSpec) *PbModuleEmission {
 	pe := &PbModuleEmission{
 		liteHeaders:   !protoTransitiveHeadersEnabled(d),
 		grpcCppBinary: pbGrpcCppVFS,
@@ -241,16 +257,18 @@ func newPBModuleEmission(ctx *GenCtx, d *ModuleData, cfg ProtoPBConfig, protoInc
 		pe.grpcCppLDRef, pe.grpcCppBinary = ctx.tool(argContribToolsProtocPluginsGrpcCpp)
 	}
 
-	pe.extraPlugins = make([]ResolvedCPPProtoPlugin, 0, len(d.cppProtoPlugins))
+	if spec.modulePlugins {
+		pe.extraPlugins = make([]ResolvedCPPProtoPlugin, 0, len(d.cppProtoPlugins))
 
-	for _, spec := range d.cppProtoPlugins {
-		ldRef, binary := ctx.tool(internArg(spec.ToolPath))
+		for _, plugin := range d.cppProtoPlugins {
+			ldRef, binary := ctx.tool(internArg(plugin.ToolPath))
 
-		pe.extraPlugins = append(pe.extraPlugins, ResolvedCPPProtoPlugin{
-			Spec:   spec,
-			LDRef:  ldRef,
-			Binary: binary,
-		})
+			pe.extraPlugins = append(pe.extraPlugins, ResolvedCPPProtoPlugin{
+				Spec:   plugin,
+				LDRef:  ldRef,
+				Binary: binary,
+			})
+		}
 	}
 
 	pe.blocks = composePBArgBlocks(d.tc, pe.protocBinary, pe.cppStyleguideBinary, pe.grpcCppBinary,
@@ -260,7 +278,7 @@ func newPBModuleEmission(ctx *GenCtx, d *ModuleData, cfg ProtoPBConfig, protoInc
 	return pe
 }
 
-func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModuleEmission, peerProtoAddIncl []VFS, sprotoProduced map[string]struct{}) ProtoPBEmission {
+func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModuleEmission, peerProtoAddIncl []VFS, sprotoProduced map[string]struct{}, spec *ProtoSpec) ProtoPBEmission {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcRel)
 	protoSearchPaths := peerProtoAddIncl
@@ -299,6 +317,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		extraProtoDeps,
 		protoProducerSourceInputs,
 		pe.blocks,
+		spec,
 		ctx.emit,
 	)
 
@@ -332,6 +351,42 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 	if protoSrcOverride != 0 {
 		directImports = protoInducedPbH(ctx.parsers, genProtoParsed)
+	}
+
+	if spec.genHParsed != nil {
+		reg := e.codegen
+
+		reg.register(&GeneratedFileInfo{
+			OutputPath:     pbH,
+			ProducerRef:    pbRef,
+			GeneratorRefs:  spec.genRefs,
+			ParsedIncludes: spec.genHParsed,
+			ClosureLeaves:  spec.hLeaves,
+		})
+
+		ccParsed := concat(spec.genHParsed, spec.genCCExtras)
+
+		var psc []ARG
+
+		if p := d.perSrcCFlagsFor(internStr(srcRel)); p != nil {
+			psc = *p
+		}
+
+		reg.register(&GeneratedFileInfo{
+			OutputPath:     pbCC,
+			ProducerRef:    pbRef,
+			GeneratorRefs:  spec.genRefs,
+			ParsedIncludes: ccParsed,
+			ClosureLeaves:  spec.ccLeaves,
+			Compile:        &CompileSpec{FlatOutput: d.flatSrc(internStr(srcRel)), CFlags: psc},
+		})
+
+		return ProtoPBEmission{
+			pbRef:     pbRef,
+			pbCC:      pbCC,
+			orderedCC: []VFS{pbCC},
+			relPath:   protoRelPath,
+		}
 	}
 
 	pbHImports := directImports
@@ -491,18 +546,31 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	}
 }
 
-func (e *EmitContext) cppProtoPB(srcRel string) ProtoPBEmission {
+func (e *EmitContext) cppProtoPB(srcRel string, spec *ProtoSpec) ProtoPBEmission {
 	ctx, d := e.ctx, e.d
 
 	cfg := ProtoPBConfig{
 		cppOutRoot: protoCPPOutRoot(d),
-		grpc:       d.grpc,
+		grpc:       d.grpc && spec.modulePlugins,
 		moduleTag:  d.cc.ModuleTag,
 	}
 
-	pe := newPBModuleEmission(ctx, d, cfg, d.cc.ProtoIncludePeers)
+	pe := newPBModuleEmission(ctx, d, cfg, d.cc.ProtoIncludePeers, spec)
 
-	return e.emitProtoPB(srcRel, cfg, pe, d.cc.ProtoInclude, e.ymapsSprotoProducedBases())
+	return e.emitProtoPB(srcRel, cfg, pe, d.cc.ProtoInclude, e.ymapsSprotoProducedBases(), spec)
+}
+
+func (e *EmitContext) emitCppProtoFamilySource(src STR, spec *ProtoSpec) {
+	pb := e.cppProtoPB(src.string(), spec)
+	meta := e.metaForSrc(src)
+
+	meta.Generated = true
+
+	for _, cc := range pb.orderedCC {
+		e.enqueueSrc(cc.str(), meta)
+	}
+
+	e.markProtoPendingAR()
 }
 
 func (e *EmitContext) emitLibraryProtoSource(src STR) {
@@ -514,16 +582,7 @@ func (e *EmitContext) emitLibraryProtoSource(src STR) {
 		return
 	}
 
-	pb := e.cppProtoPB(src.string())
-	meta := e.metaForSrc(src)
-
-	meta.Generated = true
-
-	for _, cc := range pb.orderedCC {
-		e.enqueueSrc(cc.str(), meta)
-	}
-
-	e.markProtoPendingAR()
+	e.emitCppProtoFamilySource(src, cppProtoSpec)
 }
 
 func (e *EmitContext) markProtoPendingAR() {
@@ -566,6 +625,7 @@ func emitPB(
 	extraDepRefs []NodeRef,
 	producerSourceInputs []VFS,
 	blocks *PbArgBlocks,
+	spec *ProtoSpec,
 	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
@@ -582,6 +642,11 @@ func emitPB(
 	}
 
 	outputs := assembleProtoCmdOutputs(protoBase, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH, extraPlugins, liteHeaders, grpc)
+
+	if spec.ccFirstOuts {
+		outputs = []VFS{pbCC, pbH}
+	}
+
 	outsChunk := make([]STR, 0, len(outputs))
 
 	for _, output := range outputs {
@@ -592,6 +657,10 @@ func emitPB(
 
 	if len(blocks.tail) > 0 {
 		cmdArgs = append(cmdArgs, blocks.tail)
+	}
+
+	if len(spec.optsTail) > 0 {
+		cmdArgs = append(cmdArgs, spec.optsTail)
 	}
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -610,6 +679,10 @@ func emitPB(
 		inputs = append(inputs, plugin.Binary)
 	}
 
+	if spec.toolBinary != 0 {
+		inputs = append(inputs, spec.toolBinary)
+	}
+
 	inputs = append(inputs, pbWrapperVFS)
 	inputs = append(inputs, srcVFS)
 
@@ -619,6 +692,7 @@ func emitPB(
 		foreignDepRefs = append(foreignDepRefs, depRefs(plugin.LDRef)...)
 	}
 
+	foreignDepRefs = append(foreignDepRefs, depRefs(spec.toolLDRef)...)
 	foreignDepRefs = dedupRefs(foreignDepRefs)
 
 	deps := append([]NodeRef(nil), extraDepRefs...)
@@ -637,7 +711,7 @@ func emitPB(
 
 		Inputs:         na.inputList(inputs, transitiveProtoImports, producerSourceInputs),
 		Outputs:        outputs,
-		KV:             &pbKV,
+		KV:             spec.kv,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:        deps,
 		ForeignDepRefs: foreignDepRefs,

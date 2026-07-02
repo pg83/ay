@@ -80,34 +80,6 @@ func evWitnessExtras(evRelPath string) []IncludeDirective {
 	return out
 }
 
-func emitEV(
-	instance ModuleInstance,
-	evRelPath string,
-	cppStyleguideLDRef NodeRef,
-	protocLDRef NodeRef,
-	event2cppLDRef NodeRef,
-	cppStyleguideBinary VFS,
-	protocBinary VFS,
-	event2cppBinary VFS,
-	moduleTag STR,
-	transitiveImports []VFS,
-	protoInclude []VFS,
-	liteHeaders bool,
-	tc ModuleToolchain,
-	emit *StreamingEmitter,
-) NodeRef {
-	na := emit.nodeArenas()
-
-	evOpts := na.strList(internV("--plugin=protoc-gen-event2cpp=", event2cppBinary.string()),
-		argEvent2cppOutB.str(),
-		internV("-I=", evEventlogIncludePath))
-
-	return emitProtoWrapperPBNode(instance, evRelPath, &evKV,
-		cppStyleguideLDRef, protocLDRef, event2cppLDRef,
-		cppStyleguideBinary, protocBinary, event2cppBinary,
-		evOpts, moduleTag, transitiveImports, protoInclude, liteHeaders, tc, emit)
-}
-
 func emitProtoWrapperPBNode(
 	instance ModuleInstance,
 	relPath string,
@@ -184,23 +156,8 @@ func (e *EmitContext) emitLibraryEvSource(src STR) {
 		throwFmt("gen: py-addressed PROTO_LIBRARY %s with .ev sources is not modelled", instance.Path.rel())
 	}
 
-	evSource := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
-	evRelPath := evSource.rel()
-	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
-	cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
 	event2cppLDRef, event2cppBinary := ctx.tool(argToolsEvent2cpp)
-	evImports := walkClosureTail(e.scanner, evSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
-
-	evRef := emitEV(
-		instance, evRelPath,
-		cppStyleguideLDRef, protocLDRef, event2cppLDRef,
-		cppStyleguideBinary, protocBinary, event2cppBinary,
-		d.cc.ModuleTag, evImports, d.cc.ProtoInclude,
-		!protoTransitiveHeadersEnabled(d),
-		d.tc, ctx.emit)
-
-	evH := build(evRelPath, ".pb.h")
-	evPbCC := build(evRelPath, ".pb.cc")
+	evRelPath := protoSourceRelPath(ctx.fs, instance, d, src.string())
 	directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, protoCPPOutRoot(d))
 	evExtras := evWitnessExtras(evRelPath)
 	evHParsed := make([]IncludeDirective, 0, len(directImports)+len(protobufRuntimeDirectives)+len(evExtras))
@@ -209,36 +166,21 @@ func (e *EmitContext) emitLibraryEvSource(src STR) {
 	evHParsed = append(evHParsed, protobufRuntimeDirectives...)
 	evHParsed = append(evHParsed, evExtras...)
 
-	reg := e.codegen
-
-	var psc []ARG
-
-	if p := d.perSrcCFlagsFor(src); p != nil {
-		psc = *p
-	}
-
-	reg.register(&GeneratedFileInfo{
-		OutputPath:     evH,
-		ProducerRef:    evRef,
-		GeneratorRefs:  []NodeRef{event2cppLDRef},
-		ParsedIncludes: evHParsed,
-		ClosureLeaves:  []VFS{evPbCC},
+	e.emitCppProtoFamilySource(src, &ProtoSpec{
+		kv:          &evKV,
+		ccFirstOuts: true,
+		optsTail: []STR{
+			internV("--plugin=protoc-gen-event2cpp=", event2cppBinary.string()),
+			argEvent2cppOutB.str(),
+			internV("-I=", evEventlogIncludePath),
+		},
+		toolLDRef:  event2cppLDRef,
+		toolBinary: event2cppBinary,
+		genRefs:    []NodeRef{event2cppLDRef},
+		genHParsed: evHParsed,
+		genCCExtras: []IncludeDirective{
+			{kind: includeQuoted, target: internStr(source(pbRuntimeBase, "google/protobuf/wire_format.h").rel())},
+		},
+		hLeaves: []VFS{build(evRelPath, ".pb.cc")},
 	})
-
-	evCCParsed := append(append([]IncludeDirective(nil), evHParsed...),
-		IncludeDirective{kind: includeQuoted, target: internStr(source(pbRuntimeBase, "google/protobuf/wire_format.h").rel())})
-
-	reg.register(&GeneratedFileInfo{
-		OutputPath:     evPbCC,
-		ProducerRef:    evRef,
-		GeneratorRefs:  []NodeRef{event2cppLDRef},
-		ParsedIncludes: evCCParsed,
-		Compile:        &CompileSpec{FlatOutput: d.flatSrc(src), CFlags: psc},
-	})
-
-	meta := d.srcMetaOf(src)
-
-	meta.Generated = true
-	e.enqueueSrc(evPbCC.str(), meta)
-	e.markProtoPendingAR()
 }
