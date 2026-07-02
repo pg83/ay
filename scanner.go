@@ -653,7 +653,7 @@ func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 	r := int32(0)
 
 	add := func(p VFS) {
-		if !deduper.add(p) {
+		if !deduper.add(p.strID()) {
 			return
 		}
 

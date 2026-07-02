@@ -49,7 +49,7 @@ func (e *EmitContext) emitArchiveAsmNode(
 		if info := reg.lookup(copyFileOutputVFS(instance.Path.rel(), f)); info != nil {
 			memberVFS = copyFileOutputVFS(instance.Path.rel(), f)
 
-			if deduper.add(VFS(info.ProducerRef)) {
+			if deduper.add(info.ProducerRef.strID()) {
 				producerRefs = append(producerRefs, info.ProducerRef)
 			}
 		} else {
@@ -67,7 +67,7 @@ func (e *EmitContext) emitArchiveAsmNode(
 	deduper.reset()
 
 	for _, p := range pathPerFile {
-		if deduper.add(p) {
+		if deduper.add(p.strID()) {
 			inputs = append(inputs, p)
 		}
 	}

@@ -851,7 +851,7 @@ func pyProtoSourceInputs(inputs []VFS) []VFS {
 			continue
 		}
 
-		if !deduper.add(input) {
+		if !deduper.add(input.strID()) {
 			continue
 		}
 

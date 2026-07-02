@@ -38,6 +38,14 @@ func internOwnedCopy(b []byte) string {
 
 type STR uint32
 
+func (s STR) strID() uint32 {
+	return uint32(s)
+}
+
+func strBound() uint32 {
+	return uint32(len(internTable.strs))
+}
+
 func internAppend(s string, lo uint64) STR {
 	id := STR(len(internTable.strs))
 

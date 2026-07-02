@@ -463,7 +463,7 @@ func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPa
 	deduper.reset()
 
 	for _, p := range peerLibPaths {
-		if !deduper.add(p) {
+		if !deduper.add(p.strID()) {
 			throwFmt("composeLDInputs: %s: duplicate peer lib path %s", modulePath, p.rel())
 		}
 	}
@@ -474,7 +474,7 @@ func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPa
 
 	appendBuildRoot := func(paths []VFS) {
 		for _, p := range paths {
-			if !deduper.add(p) {
+			if !deduper.add(p.strID()) {
 				continue
 			}
 

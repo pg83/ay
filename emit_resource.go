@@ -366,26 +366,26 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 		adjacent := make([]VFS, 0, cand)
 
 		for _, it := range chunk {
-			if it.Input != 0 && deduper.add(it.Input) {
+			if it.Input != 0 && deduper.add(it.Input.strID()) {
 				adjacent = append(adjacent, it.Input)
 			}
 
 			for _, v := range it.Extra {
-				if v != 0 && deduper.add(v) {
+				if v != 0 && deduper.add(v.strID()) {
 					adjacent = append(adjacent, v)
 				}
 			}
 		}
 
 		for _, v := range rescompilersWithScriptChunk {
-			deduper.add(v)
+			deduper.add(v.strID())
 		}
 
 		var tail []VFS
 
 		for _, it := range chunk {
 			for _, v := range it.Aux {
-				if v != 0 && deduper.add(v) {
+				if v != 0 && deduper.add(v.strID()) {
 					tail = append(tail, v)
 				}
 			}
@@ -456,12 +456,12 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 				hashScratch = append(hashScratch, it.Path, "-"+it.Key)
 			}
 
-			if it.Input != 0 && deduper.add(it.Input) {
+			if it.Input != 0 && deduper.add(it.Input.strID()) {
 				adjacent = append(adjacent, it.Input)
 			}
 
 			for _, v := range it.Extra {
-				if v != 0 && deduper.add(v) {
+				if v != 0 && deduper.add(v.strID()) {
 					adjacent = append(adjacent, v)
 				}
 			}
@@ -494,12 +494,12 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		deduper.reset()
 
 		for _, v := range adjacent {
-			deduper.add(v)
+			deduper.add(v.strID())
 		}
 
 		tail := make([]VFS, 0, 1+len(auxClosure))
 
-		if deduper.add(rescompilerBinVFS) {
+		if deduper.add(rescompilerBinVFS.strID()) {
 			tail = append(tail, rescompilerBinVFS)
 		}
 
@@ -508,7 +508,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 				continue
 			}
 
-			if deduper.add(v) {
+			if deduper.add(v.strID()) {
 				tail = append(tail, v)
 			}
 		}

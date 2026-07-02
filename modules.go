@@ -806,17 +806,17 @@ func filterInvalidAddIncl(fs FS, dd *DeDuper, d *ModuleData, modulePath string, 
 		dd.reset()
 
 		for _, p := range d.addInclGlobal {
-			dd.add(p)
+			dd.add(p.strID())
 		}
 
 		for _, p := range d.addInclOneLevel {
-			dd.add(p)
+			dd.add(p.strID())
 		}
 
 		out := d.addInclUserGlobal[:0]
 
 		for _, p := range d.addInclUserGlobal {
-			if dd.has(p) {
+			if dd.has(p.strID()) {
 				out = append(out, p)
 			}
 		}

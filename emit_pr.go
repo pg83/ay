@@ -607,7 +607,7 @@ func emitPR(
 	deduper.reset()
 
 	appendUnique := func(p VFS) {
-		if !deduper.add(p) {
+		if !deduper.add(p.strID()) {
 			return
 		}
 
