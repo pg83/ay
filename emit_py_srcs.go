@@ -388,7 +388,7 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 	_, _, d := e.ctx, e.instance, e.d
 	hasKvOnly := d.pyMain != nil || len(d.noCheckImports) > 0 || e.hasEnginePySrcs() || len(d.yaConfJSON) > 0
 
-	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 && !hasKvOnly {
+	if len(e.resources) == 0 && len(d.pyPyiResources) == 0 && !hasKvOnly {
 		return nil
 	}
 
@@ -408,7 +408,7 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 	out.Refs = append(out.Refs, yaConfRefs...)
 	out.Outputs = append(out.Outputs, yaConfOuts...)
 
-	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 {
+	if len(e.resources) == 0 && len(d.pyPyiResources) == 0 {
 		trailStart := len(out.Refs)
 		srcRes := e.emitPySrcObjcopy()
 
@@ -426,7 +426,7 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 	py3BinProgramSide := d.unit.Tag == unitTagPy3Bin
 
 	if !py3BinProgramSide {
-		r, o := e.emitResourceFile(d.resources, moduleTag)
+		r, o := e.emitResourceFile(e.resources, moduleTag)
 
 		out.Refs = append(out.Refs, r...)
 		out.Outputs = append(out.Outputs, o...)

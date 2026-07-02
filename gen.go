@@ -1626,7 +1626,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if objcopyRes := e.objcopyRes; objcopyRes != nil {
 		lead := len(objcopyRes.Refs) - objcopyRes.PySrcTrailCount
 
-		if len(d.resources) > 0 && lead > 0 {
+		if len(e.resources) > 0 && lead > 0 {
 			globalRefs = concat(objcopyRes.Refs[:lead], globalRefs, objcopyRes.Refs[lead:])
 			globalOutputs = concat(objcopyRes.Outputs[:lead], globalOutputs, objcopyRes.Outputs[lead:])
 		} else {
