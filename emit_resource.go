@@ -498,21 +498,14 @@ type ObjcopyEmitResult struct {
 	PySrcTrailCount int
 }
 
-type ObjcopyEmit struct {
-	Ref NodeRef
-	Out VFS
-}
-
-func (e *EmitContext) emitKvOnlyResource(tag *string, kvsHash, kvsCmd []string) *ObjcopyEmit {
+func (e *EmitContext) emitKvOnlyResource(tag *string, kvsHash, kvsCmd []string) ([]NodeRef, []VFS) {
 	items := make([]ResourceItem, len(kvsHash))
 
 	for i := range kvsHash {
 		items[i] = ResourceItem{Path: "-", Key: kvsHash[i], Cmd: kvsCmd[i]}
 	}
 
-	refs, outs := e.packResources(ResourcePack{Tag: tag, Items: items})
-
-	return &ObjcopyEmit{Ref: refs[0], Out: outs[0]}
+	return e.packResources(ResourcePack{Tag: tag, Items: items})
 }
 
 func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag *string) (refs []NodeRef, outs []VFS) {

@@ -174,10 +174,10 @@ func (e *EmitContext) emit() {
 	if !isProgramModuleType(d.moduleStmt.Name) {
 		e.emitPySrcs()
 
-		if genPyAuxRes := e.emitGeneratedPyAuxChunks(); genPyAuxRes != nil {
-			e.globalRefs = append(e.globalRefs, genPyAuxRes.Refs...)
-			e.globalOuts = append(e.globalOuts, genPyAuxRes.Outputs...)
-		}
+		genPyAuxRefs, genPyAuxOuts := e.emitGeneratedPyAuxChunks()
+
+		e.globalRefs = append(e.globalRefs, genPyAuxRefs...)
+		e.globalOuts = append(e.globalOuts, genPyAuxOuts...)
 
 		e.emitLLVMBC(e.peers.ResourceGlobals)
 	}

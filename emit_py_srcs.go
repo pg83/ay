@@ -288,21 +288,20 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 	}
 
 	out := &ObjcopyEmitResult{}
+	pyMainRefs, pyMainOuts := e.emitPyMainObjcopy()
 
-	if nodeRes := e.emitPyMainObjcopy(); nodeRes != nil {
-		out.Refs = append(out.Refs, nodeRes.Ref)
-		out.Outputs = append(out.Outputs, nodeRes.Out)
-	}
+	out.Refs = append(out.Refs, pyMainRefs...)
+	out.Outputs = append(out.Outputs, pyMainOuts...)
 
-	if nodeRes := e.emitNoCheckImportsObjcopy(); nodeRes != nil {
-		out.Refs = append(out.Refs, nodeRes.Ref)
-		out.Outputs = append(out.Outputs, nodeRes.Out)
-	}
+	noCheckRefs, noCheckOuts := e.emitNoCheckImportsObjcopy()
 
-	for _, nodeRes := range e.emitYaConfJSONObjcopy() {
-		out.Refs = append(out.Refs, nodeRes.Ref)
-		out.Outputs = append(out.Outputs, nodeRes.Out)
-	}
+	out.Refs = append(out.Refs, noCheckRefs...)
+	out.Outputs = append(out.Outputs, noCheckOuts...)
+
+	yaConfRefs, yaConfOuts := e.emitYaConfJSONObjcopy()
+
+	out.Refs = append(out.Refs, yaConfRefs...)
+	out.Outputs = append(out.Outputs, yaConfOuts...)
 
 	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 {
 		trailStart := len(out.Refs)
@@ -386,10 +385,10 @@ func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 
 	for _, group := range groups {
 		if namespaceEnabled {
-			if nsRes := e.emitPyNamespaceForGroup(group); nsRes != nil {
-				res.Refs = append(res.Refs, nsRes.Ref)
-				res.Outputs = append(res.Outputs, nsRes.Out)
-			}
+			nsRefs, nsOuts := e.emitPyNamespaceForGroup(group)
+
+			res.Refs = append(res.Refs, nsRefs...)
+			res.Outputs = append(res.Outputs, nsOuts...)
 		}
 
 		entries := buildPySrcEntriesFor(e.codegen, ctx.fs, d, instance.Path.rel(), strStrings(group.Srcs), group.TopLevel, group.Namespace)
@@ -419,7 +418,7 @@ func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 	return res
 }
 
-func (e *EmitContext) emitPyNamespaceForGroup(group PySrcGroup) *ObjcopyEmit {
+func (e *EmitContext) emitPyNamespaceForGroup(group PySrcGroup) ([]NodeRef, []VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	reg := e.codegen
 	pySources := make([]string, 0, len(group.Srcs))
@@ -438,7 +437,7 @@ func (e *EmitContext) emitPyNamespaceForGroup(group PySrcGroup) *ObjcopyEmit {
 	}
 
 	if len(pySources) == 0 || len(arcSources) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	nsPrefix := strings.ReplaceAll(instance.Path.rel(), "/", ".") + "."
@@ -501,11 +500,11 @@ func (e *EmitContext) emitPyNamespaceForGroup(group PySrcGroup) *ObjcopyEmit {
 	return e.emitKvOnlyResource(resourceLibTagForData(d), kvsHash, kvsCmd)
 }
 
-func (e *EmitContext) emitPyMainObjcopy() *ObjcopyEmit {
+func (e *EmitContext) emitPyMainObjcopy() ([]NodeRef, []VFS) {
 	_, _, d := e.ctx, e.instance, e.d
 
 	if d.pyMain == nil {
-		return nil
+		return nil, nil
 	}
 
 	kv := "PY_MAIN=" + d.pyMain.string()
@@ -513,11 +512,11 @@ func (e *EmitContext) emitPyMainObjcopy() *ObjcopyEmit {
 	return e.emitKvOnlyResource(resourceBinTagForData(d), []string{kv}, []string{kv})
 }
 
-func (e *EmitContext) emitNoCheckImportsObjcopy() *ObjcopyEmit {
+func (e *EmitContext) emitNoCheckImportsObjcopy() ([]NodeRef, []VFS) {
 	_, _, d := e.ctx, e.instance, e.d
 
 	if len(d.noCheckImports) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	value := strings.Join(strStrings(d.noCheckImports), " ")
@@ -533,11 +532,11 @@ func (e *EmitContext) emitNoCheckImportsObjcopy() *ObjcopyEmit {
 	return e.emitKvOnlyResource(resourceBinTagForData(d), []string{kvHash}, []string{kvCmd})
 }
 
-func (e *EmitContext) emitYaConfJSONObjcopy() []*ObjcopyEmit {
+func (e *EmitContext) emitYaConfJSONObjcopy() ([]NodeRef, []VFS) {
 	ctx, _, d := e.ctx, e.instance, e.d
 
 	if len(d.yaConfJSON) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	type yaConfResource struct {
@@ -568,7 +567,8 @@ func (e *EmitContext) emitYaConfJSONObjcopy() []*ObjcopyEmit {
 		}
 	}
 
-	out := make([]*ObjcopyEmit, 0, len(resources))
+	outRefs := make([]NodeRef, 0, len(resources))
+	outPaths := make([]VFS, 0, len(resources))
 	moduleTag := resourceLibTagForData(d)
 
 	for _, res := range resources {
@@ -582,19 +582,18 @@ func (e *EmitContext) emitYaConfJSONObjcopy() []*ObjcopyEmit {
 			{Path: res.hashPath, Key: key, Input: input},
 		}})
 
-		for i, ref := range refs {
-			out = append(out, &ObjcopyEmit{Ref: ref, Out: outs[i]})
-		}
+		outRefs = append(outRefs, refs...)
+		outPaths = append(outPaths, outs...)
 	}
 
-	return out
+	return outRefs, outPaths
 }
 
-func (e *EmitContext) emitGeneratedPyAuxChunks() *PyGenResourcesResult {
+func (e *EmitContext) emitGeneratedPyAuxChunks() ([]NodeRef, []VFS) {
 	_, instance, d := e.ctx, e.instance, e.d
 
 	if len(d.pySrcs) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	reg := e.codegen
@@ -640,9 +639,9 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() *PyGenResourcesResult {
 		}
 	}
 
-	return e.emitPyGenResources(entries, "PY3", func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
+	return e.packResources(ResourcePack{Tag: stringPtr("PY3"), Items: pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
 		return e.rawAuxInputClosure(aux, pyProtoSourceInputs(inputs), ref)
-	})
+	}})
 }
 
 func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) []VFS {
@@ -787,36 +786,12 @@ type PyGenResEntry struct {
 	inputs []VFS
 }
 
-type PyGenResourcesResult struct {
-	Refs    []NodeRef
-	Outputs []VFS
-}
-
-func (e *EmitContext) emitPyGenResources(entries []PyGenResEntry, hashTag string, closure func(aux VFS, inputs []VFS, ref NodeRef) []VFS) *PyGenResourcesResult {
-	if len(entries) == 0 {
-		return nil
-	}
-
-	refs, outs := e.packResources(ResourcePack{Tag: stringPtr(hashTag), Items: pyGenResourceItems(entries), RawClosure: closure})
-
-	if len(refs) == 0 {
-		return nil
-	}
-
-	return &PyGenResourcesResult{Refs: refs, Outputs: outs}
-}
-
-type PyGenYapycResult struct {
-	Refs    []NodeRef
-	Outputs []VFS
-}
-
-func (e *EmitContext) emitPyGenYapyc(pyOutputs []VFS, tokens []string, producerRef NodeRef, sourceInputs []VFS) *PyGenYapycResult {
+func (e *EmitContext) emitPyGenYapyc(pyOutputs []VFS, tokens []string, producerRef NodeRef, sourceInputs []VFS) []VFS {
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 	py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin := py3ccToolRefs(ctx, instance)
 	suffix := pySrcYapycSuffix(instance.Path.rel())
-	res := &PyGenYapycResult{}
+	outs := make([]VFS, 0, len(pyOutputs))
 
 	for i, pyOut := range pyOutputs {
 		uniq := ""
@@ -864,11 +839,10 @@ func (e *EmitContext) emitPyGenYapyc(pyOutputs []VFS, tokens []string, producerR
 
 		e.codegen.register(&GeneratedFileInfo{OutputPath: out, ProducerRef: ref})
 
-		res.Refs = append(res.Refs, ref)
-		res.Outputs = append(res.Outputs, out)
+		outs = append(outs, out)
 	}
 
-	return res
+	return outs
 }
 
 func pyProtoSourceInputs(inputs []VFS) []VFS {
