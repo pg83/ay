@@ -1428,7 +1428,7 @@ func TestProtoPythonResourceKey_PYNamespacePreservesNestedSubdir(t *testing.T) {
 	instance := ModuleInstance{Path: source("yt/yt_proto/yt/client")}
 	d := &ModuleData{pyNamespace: strPtr(internStr("yt_proto.yt.client"))}
 
-	got := protoPythonResourceKey(instance, d, "chunk_client/proto/data_statistics.proto", "_pb2.py")
+	got := protoPythonResourceKeyBase(instance, d, "chunk_client/proto/data_statistics.proto") + "_pb2.py"
 	const want = "yt_proto/yt/client/chunk_client/proto/data_statistics_pb2.py"
 
 	if got != want {
@@ -1441,7 +1441,7 @@ func TestProtoPythonResourceKey_PYNamespacePreservesNestedSubdir(t *testing.T) {
 		t.Errorf("key collapsed nested subdir to %q", collapsed)
 	}
 
-	gotRoot := protoPythonResourceKey(instance, d, "access_control_service.proto", "_pb2.py")
+	gotRoot := protoPythonResourceKeyBase(instance, d, "access_control_service.proto") + "_pb2.py"
 	const wantRoot = "yt_proto/yt/client/access_control_service_pb2.py"
 
 	if gotRoot != wantRoot {

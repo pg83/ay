@@ -28,7 +28,7 @@ type YmapsSprotoPending struct {
 	protoRelPath string
 }
 
-func (e *EmitContext) emitYmapsSprotoHeaders(peerContribs PeerGlobalContribs, produced map[string]struct{}) {
+func (e *EmitContext) emitYmapsSprotoHeaders(peerAddIncl []VFS, produced map[string]struct{}) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 
 	if len(produced) == 0 {
@@ -38,7 +38,7 @@ func (e *EmitContext) emitYmapsSprotoHeaders(peerContribs PeerGlobalContribs, pr
 	outRoot := protoCPPOutRoot(d)
 	sprotocRes := ctx.toolResult(argMapsLibsSprotoSprotoc)
 	sprotocLDRef, sprotocBinary := sprotocRes.LDRef, *sprotocRes.LDPath
-	scanCfg := newScanContext(ctx.parsers, d.addIncl, peerContribs.addIncl, includeScannerBasePaths(), instance.Path.rel())
+	scanCfg := newScanContext(ctx.parsers, d.addIncl, peerAddIncl, includeScannerBasePaths(), instance.Path.rel())
 	pending := make([]YmapsSprotoPending, 0, len(d.ymapsSprotoSrcs))
 
 	for _, srcTok := range d.ymapsSprotoSrcs {

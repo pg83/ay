@@ -1261,6 +1261,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			SetVars:              d.setVars,
 			TC:                   d.tc,
 			ModuleTag:            d.unit.CCTag,
+			ProtoInclude:         peerProtoInclude,
+			ProtoIncludePeers:    peerProtoInclude,
 		}
 
 		d.cc.ScanCfg = newScanContext(ctx.parsers, d.addIncl, peerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
@@ -1791,11 +1793,6 @@ func mergeLDPlugins(own, peer *LdPluginsResult) *LdPluginsResult {
 	}
 
 	return out
-}
-
-type PeerGlobalContribs struct {
-	addIncl      []VFS
-	protoInclude []VFS
 }
 
 func reorderARMembers(refs []NodeRef, paths []VFS, declMeta map[VFS]SrcMeta) ([]NodeRef, []VFS) {

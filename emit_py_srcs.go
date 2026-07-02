@@ -754,65 +754,6 @@ type PyGenResEntry struct {
 	inputs []VFS
 }
 
-func (e *EmitContext) emitPyGenYapyc(pyOutputs []VFS, tokens []string, producerRef NodeRef, sourceInputs []VFS) []VFS {
-	ctx, instance := e.ctx, e.instance
-	na := ctx.na
-	py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin := py3ccToolRefs(ctx, instance)
-	suffix := pySrcYapycSuffix(instance.Path.rel())
-	outs := make([]VFS, 0, len(pyOutputs))
-
-	for i, pyOut := range pyOutputs {
-		uniq := ""
-
-		if strings.Contains(tokens[i], "/") {
-			uniq = "." + suffix
-		}
-
-		out := build(pyOut.rel(), uniq, ".yapyc3")
-
-		cmdArgs := []STR{
-			(py3ccBinary).str(),
-			argSlowPy3cc.str(),
-			(py3ccSlowBin).str(),
-			internV(tokens[i], "-"),
-			(pyOut).str(),
-			(out).str(),
-		}
-
-		deps := []NodeRef{producerRef}
-		toolRefs := depRefs(py3ccRef, py3ccSlowRef)
-		nodeInputs := na.inputList(na.vfsList(py3ccBinary, py3ccSlowBin, pyOut), sourceInputs)
-
-		if i > 0 {
-			nodeInputs = append(nodeInputs, []VFS{pyOutputs[0]})
-		}
-
-		node := &Node{
-			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}}),
-			Env:          EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}},
-			Inputs:       nodeInputs,
-			Outputs:      na.vfsList(out),
-			KV:           &pyCodegenKV,
-			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			DepRefs:      deps,
-			Resources:    usesPython3,
-		}
-
-		if len(toolRefs) > 0 {
-			node.ForeignDepRefs = toolRefs
-		}
-
-		ref := ctx.emit.emit(node)
-
-		e.codegen.register(&GeneratedFileInfo{OutputPath: out, ProducerRef: ref})
-
-		outs = append(outs, out)
-	}
-
-	return outs
-}
-
 func pyProtoSourceInputs(inputs []VFS) []VFS {
 	out := make([]VFS, 0, len(inputs))
 

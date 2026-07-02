@@ -56,6 +56,10 @@ func (e *EmitContext) resolveEnumHeaderInput(headerRel string, srcDirs []VFS) VF
 }
 
 func (e *EmitContext) emitEnumSrcs(peerAddInclGlobal []VFS) {
+	if e.d.unit.Tag == unitTagPy3Proto {
+		return
+	}
+
 	ctx, instance, d := e.ctx, e.instance, e.d
 
 	if len(d.enumSrcs) == 0 {

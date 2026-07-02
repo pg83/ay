@@ -22,6 +22,7 @@ type EmitContext struct {
 	globalOuts []VFS
 	objcopyRes *ObjcopyEmitResult
 	protoRes   *ProtoSrcsResult
+	pySrcsReg  []PySrc
 	declMeta   map[VFS]SrcMeta
 }
 
@@ -78,33 +79,6 @@ func (e *EmitContext) emit() {
 
 	e.emitBundles()
 
-	if isSpecializedLibraryType(d.moduleStmt.Name) {
-		e.emitRunProgramsForAR()
-		e.emitRunPythonForAR()
-
-		e.emitPySrcs()
-
-		e.objcopyRes = e.emitResourceObjcopy()
-
-		e.emitMiscNodes()
-
-		e.protoRes = e.emitProtoSrcs(PeerGlobalContribs{addIncl: e.peers.SelfAddInclGlobal, protoInclude: e.peers.ProtoInclude})
-
-		if d.moduleStmt.Name != tokProtoLibrary {
-			e.emitEnumSrcs(e.peers.SelfAddInclGlobal)
-		}
-
-		e.drainSrcs()
-
-		return
-	}
-
-	for _, src := range d.srcs {
-		if isCodegenProducingSrcID(src) {
-			e.emitOneSource(src)
-		}
-	}
-
 	cythonPlans := e.planCythonCpp()
 
 	e.emitCopyFiles()
@@ -116,6 +90,13 @@ func (e *EmitContext) emit() {
 	e.emitBaseCodegensForAR()
 	e.emitRunPythonForAR()
 	e.emitArchiveAsmForAR()
+
+	for _, src := range d.srcs {
+		if isCodegenProducingSrcID(src) {
+			e.emitOneSource(src)
+		}
+	}
+
 	e.emitEnumSrcs(e.peers.SelfAddInclGlobal)
 	e.emitLuaJit21()
 	e.emitArchives()
@@ -137,7 +118,13 @@ func (e *EmitContext) emit() {
 		}
 	}
 
+	e.emitYmapsSprotoHeaders(e.peers.SelfAddInclGlobal, e.ymapsSprotoProducedBases())
+
 	e.drainSrcs()
+
+	if pyRes := e.flushPySrcsRegistry(); pyRes != nil {
+		e.protoRes = pyRes
+	}
 
 	for _, simd := range d.simdSrcs {
 		srcVFS := e.moduleSourceVFS(simd.Src)
