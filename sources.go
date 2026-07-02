@@ -20,7 +20,7 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 	}
 
 	if srcRel != "" && pathIsClean(srcRel) &&
-		!ctx.fs.isFile(dirKey(srcInstance.Path.rel()), srcRel) &&
+		!ctx.fs.isFile(srcInstance.Path, srcRel) &&
 		ctx.fs.isFile(srcRootVFS, srcRel) {
 		return source(srcRel)
 	}

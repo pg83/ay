@@ -92,7 +92,7 @@ func (e *EmitContext) joinSrcsIncludeClosure(scanPlatform *Platform, sources []s
 
 	defer scanner.visitedIDPool.Put(visited)
 
-	modDirKey := dirKey(srcInstance.Path.rel())
+	modDirKey := srcInstance.Path
 	srcRels := make([]string, len(sources))
 
 	for i, src := range sources {
