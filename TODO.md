@@ -8,11 +8,14 @@
   фильтр malloc/api при ALLOCATOR(FAKE) (upstream-форма «не добавлять» уже есть
   в suppressMallocAPIDefault), jemalloc-переносы вокруг cowOn
   (+ хелперы moveArchivePathsAfter/movePathsAfter/moveSubrangeToFront);
-- py2/py3-хвосты archiveOrder и cflagsAggOrder-свитч заменены механизмом
-  applyDeferredPeerOrder на СБОРКЕ allPeers: upstream добавляет python-peers
-  отложенно (`when PEERDIR+=` коммитится на END модуля) — порядок объявления,
-  а не пост-обработка; archiveOrder/sbomOrder/cflagsAggOrder переменные умерли,
-  всё итерирует resolved;
+- py2/py3-хвосты archiveOrder и cflagsAggOrder-свитч заменены
+  applyDeferredPeerOrder (gen_hacks.go) на СБОРКЕ allPeers; py2/bin-ветка
+  обоснована upstream-механизмом (отложенные `when PEERDIR+=` коммитятся на END
+  модуля), py3Program-ветка — эмпирика сплющенного мультимодуля (runtime_py3/main
+  в upstream — немедленный PEERDIR() в теле conf; перенос program-defaults за
+  пользовательские peers из отложенности не выводится). Честная форма —
+  d.latePeerdirs на collect-этапе + развязка мультимодуля (см. раздел ниже);
+  archiveOrder/sbomOrder/cflagsAggOrder переменные умерли, всё итерирует resolved;
 - objcopy-lead в глобальном AR заменён прямой категорийной сборкой
   [RESOURCE-objcopy, GLOBAL srcs, pySrc-trail] из уже раздельных частей
   (e.objcopyRes/e.globalRefs); порядок категорийный, не декларационный
