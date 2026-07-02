@@ -97,6 +97,8 @@ func (e *EmitContext) emit() {
 		}
 	}
 
+	e.drainCodegenSrcs()
+
 	e.emitEnumSrcs(e.peers.SelfAddInclGlobal)
 	e.emitLuaJit21()
 	e.emitArchives()
@@ -174,6 +176,32 @@ func (e *EmitContext) emit() {
 
 	for i, ref := range fsMemberRefs {
 		e.collectObj(ref, fsMemberPaths[i], SrcMeta{Prio: stmtPrioDefault})
+	}
+}
+
+func (e *EmitContext) drainCodegenSrcs() {
+	for {
+		var producing []STR
+
+		rest := e.srcs[:0]
+
+		for _, src := range e.srcs {
+			if isCodegenProducingSrcID(src) {
+				producing = append(producing, src)
+			} else {
+				rest = append(rest, src)
+			}
+		}
+
+		e.srcs = rest
+
+		if len(producing) == 0 {
+			return
+		}
+
+		for _, src := range producing {
+			e.emitOneSource(src)
+		}
 	}
 }
 

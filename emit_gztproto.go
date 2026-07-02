@@ -7,7 +7,7 @@ import (
 
 var gztprotoKV = KV{P: pkGZ, PC: pcYellow}
 
-func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VFS, moduleTag STR) (NodeRef, string) {
+func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VFS) (NodeRef, string) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	gztSource := e.resolveModuleSourceVFS(internStr(srcRel), d.srcDirs)
 	moddir := instance.Path.rel()
@@ -73,10 +73,9 @@ func (e *EmitContext) emitLibraryGztProtoCompile(src STR) {
 	}
 
 	srcRel := src.string()
-	_, genProtoSrc := e.emitLibraryGztProtoSource(srcRel, d.cc.ProtoInclude, d.cc.ModuleTag)
+	_, genProtoSrc := e.emitLibraryGztProtoSource(srcRel, d.cc.ProtoInclude)
 
-	e.srcMeta[internStr(genProtoSrc)] = e.metaForSrc(src)
-	e.emitLibraryProtoSource(internStr(genProtoSrc))
+	e.enqueueSrc(internStr(genProtoSrc), e.metaForSrc(src))
 }
 
 func gztCmdArgs(converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) []STR {
