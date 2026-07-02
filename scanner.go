@@ -710,7 +710,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 	normTarget := normalisePath(target)
 
 	addSource := func(prefix VFS) bool {
-		v := s.resolveSourceUnder(prefix, target)
+		v := s.resolveSourceUnder(prefix, targetID)
 
 		if v == 0 {
 			return false
@@ -895,16 +895,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 
 	if d.quotedLike() {
 		matched := false
-		suKey := splitMix64(uint32(incDir), uint32(d.target))
-
-		var sv VFS
-
-		if p := s.sourceUnderCache.get(suKey); p != nil {
-			sv = *p
-		} else {
-			sv = s.resolveSourceUnder(incDir, d.target.string())
-			s.sourceUnderCache.put(suKey, sv)
-		}
+		sv := s.resolveSourceUnder(incDir, d.target)
 
 		if sv != 0 {
 			out = append(out, sv)
@@ -965,16 +956,28 @@ func cythonPy2SiblingOverride(includerAbs VFS, d IncludeDirective) (string, bool
 	return "", false
 }
 
-func (s *IncludeScanner) resolveSourceUnder(prefix VFS, target string) VFS {
-	if !s.parsers.fs.isFile(prefix, target) {
-		return 0
+func (s *IncludeScanner) resolveSourceUnder(prefix VFS, targetSTR STR) VFS {
+	key := splitMix64(uint32(prefix), uint32(targetSTR))
+
+	if p := s.sourceUnderCache.get(key); p != nil {
+		return *p
 	}
 
-	if target != "" && pathIsClean(target) {
-		return sourceJoined(prefix.rel(), target)
+	target := targetSTR.string()
+
+	var v VFS
+
+	if s.parsers.fs.isFile(prefix, target) {
+		if target != "" && pathIsClean(target) {
+			v = sourceJoined(prefix.rel(), target)
+		} else {
+			v = source(normalisePath(joinRel(prefix.rel(), target)))
+		}
 	}
 
-	return source(normalisePath(joinRel(prefix.rel(), target)))
+	s.sourceUnderCache.put(key, v)
+
+	return v
 }
 
 func canRelFilter(first, target string) bool {
