@@ -8,9 +8,7 @@ require (
 	github.com/jon-codes/getopt v0.2.1
 	github.com/zeebo/xxh3 v1.0.2
 	golang.org/x/crypto v0.42.0
+	golang.org/x/sys v0.42.0
 )
 
-require (
-	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
-	golang.org/x/sys v0.42.0 // indirect
-)
+require github.com/klauspost/cpuid/v2 v2.0.9 // indirect
