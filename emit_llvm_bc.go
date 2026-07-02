@@ -8,13 +8,9 @@ var (
 	llvmBcKV3 = KV{P: pkOP, PC: pcYellow}
 )
 
-func (e *EmitContext) emitLLVMBC(resourceGlobals []ResourceDecl) {
+func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-
-	if len(d.llvmBc) == 0 {
-		return
-	}
 
 	const (
 		clangWrapper = "$(S)/build/scripts/clang_wrapper.py"
@@ -24,142 +20,139 @@ func (e *EmitContext) emitLLVMBC(resourceGlobals []ResourceDecl) {
 	python := d.tc.Python3.string()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	reqs := Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)}
+	clangRoot := resolveResourceGlobalRef(stmt.ClangBCRoot, e.peers.ResourceGlobals)
+	clangxx := clangRoot + "/bin/clang++"
+	llvmLink := clangRoot + "/bin/llvm-link"
+	opt := clangRoot + "/bin/opt"
+	clangWrapperVFS := intern(clangWrapper)
+	optWrapperVFS := intern(optWrapper)
 
-	for _, stmt := range d.llvmBc {
-		clangRoot := resolveResourceGlobalRef(stmt.ClangBCRoot, resourceGlobals)
-		clangxx := clangRoot + "/bin/clang++"
-		llvmLink := clangRoot + "/bin/llvm-link"
-		opt := clangRoot + "/bin/opt"
-		clangWrapperVFS := intern(clangWrapper)
-		optWrapperVFS := intern(optWrapper)
+	var bcSourceInputs []VFS
 
-		var bcSourceInputs []VFS
+	bcRefs := make([]NodeRef, 0, len(stmt.Sources))
+	bcPaths := make([]VFS, 0, len(stmt.Sources))
+	linksCopy := false
 
-		bcRefs := make([]NodeRef, 0, len(stmt.Sources))
-		bcPaths := make([]VFS, 0, len(stmt.Sources))
-		linksCopy := false
+	for _, src := range stmt.Sources {
+		inputVFS, producer := e.llvmBcSourceInfo(src)
+		in := e.ccInputsFor(inputVFS)
+		bcOut := build(e.llvmBcRootRelArcSrc(src), stmt.Suffix, ".bc")
+		bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
+		closure := walkClosure(e.scanner, inputVFS, in.ScanCfg)
+		deps := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, closure, depRefs(producer)...)
 
-		for _, src := range stmt.Sources {
-			inputVFS, producer := e.llvmBcSourceInfo(src)
-			in := e.ccInputsFor(inputVFS)
-			bcOut := build(e.llvmBcRootRelArcSrc(src), stmt.Suffix, ".bc")
-			bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
-			closure := walkClosure(e.scanner, inputVFS, in.ScanCfg)
-			deps := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, closure, depRefs(producer)...)
+		allInputs := na.inputList(na.vfsList(clangWrapperVFS),
+			closure)
 
-			allInputs := na.inputList(na.vfsList(clangWrapperVFS),
-				closure)
+		for _, ch := range allInputs {
+			for _, v := range ch {
+				if v.isSource() {
+					bcSourceInputs = append(bcSourceInputs, v)
+				}
 
-			for _, ch := range allInputs {
-				for _, v := range ch {
-					if v.isSource() {
-						bcSourceInputs = append(bcSourceInputs, v)
-					}
-
-					if v == copyFsToolsVFS {
-						linksCopy = true
-					}
+				if v == copyFsToolsVFS {
+					linksCopy = true
 				}
 			}
-
-			node := &Node{
-				Platform:     instance.Platform,
-				Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(bcArgs), Env: env}),
-				Env:          env,
-				Inputs:       allInputs,
-				Outputs:      na.vfsList(bcOut),
-				KV:           &llvmBcKV,
-				Requirements: reqs,
-				DepRefs:      deps,
-				Resources:    usesPython3Clang16,
-			}
-
-			ref := ctx.emit.emit(node)
-
-			bcRefs = append(bcRefs, ref)
-			bcPaths = append(bcPaths, bcOut)
 		}
 
-		mergedOut := build(instance.Path.rel(), "/", stmt.Name, "_merged", stmt.Suffix, ".bc")
-		ldArgs := []STR{internStr(llvmLink)}
-
-		for _, p := range bcPaths {
-			ldArgs = append(ldArgs, (p).str())
-		}
-
-		ldArgs = append(ldArgs, argDashO.str(), (mergedOut).str())
-
-		mergeInputs := na.inputList(bcPaths)
-
-		if linksCopy {
-			mergeInputs = append(mergeInputs, ctx.scripts[copyFsToolsVFS])
-		}
-
-		ldNode := &Node{
+		node := &Node{
 			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(ldArgs), Env: env}),
+			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(bcArgs), Env: env}),
 			Env:          env,
-			Inputs:       mergeInputs,
-			Outputs:      na.vfsList(mergedOut),
-			KV:           &llvmBcKV2,
+			Inputs:       allInputs,
+			Outputs:      na.vfsList(bcOut),
+			KV:           &llvmBcKV,
 			Requirements: reqs,
-			DepRefs:      append([]NodeRef(nil), bcRefs...),
+			DepRefs:      deps,
 			Resources:    usesPython3Clang16,
 		}
 
-		ldRef := ctx.emit.emit(ldNode)
-		optOutName := stmt.Name + "_optimized" + stmt.Suffix + ".bc"
-		optOut := build(instance.Path.rel(), "/", optOutName)
-		optArgs := []STR{internStr(python), internStr(optWrapper), internStr(opt), (mergedOut).str(), argDashO.str(), (optOut).str()}
-		passes := []string{"default<O2>", "globalopt", "globaldce"}
+		ref := ctx.emit.emit(node)
 
-		if len(stmt.Symbols) > 0 {
-			passes = append(passes, "internalize")
-			optArgs = append(optArgs, internV("-internalize-public-api-list=", strings.Join(stmt.Symbols, "#")))
-		}
-
-		optArgs = append(optArgs, internV(`-passes="`, strings.Join(passes, ","), `"`))
-
-		optInputs := make([]VFS, 0, 2+len(bcSourceInputs))
-
-		optInputs = append(optInputs, mergedOut)
-		optInputs = append(optInputs, optWrapperVFS)
-
-		optChunks := na.inputList(concat(optInputs, bcSourceInputs))
-
-		optNode := &Node{
-			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(optArgs), Env: env}),
-			Env:          env,
-			Inputs:       optChunks,
-			Outputs:      na.vfsList(optOut),
-			KV:           &llvmBcKV3,
-			Requirements: reqs,
-			DepRefs:      []NodeRef{ldRef},
-			Resources:    usesPython3Clang16,
-		}
-
-		opRef := ctx.emit.emit(optNode)
-
-		if stmt.GenerateMachineCode {
-			continue
-		}
-
-		ensureResourcePeer(instance.Path.rel(), d)
-
-		e.codegen.register(&GeneratedFileInfo{
-			OutputPath:     optOut,
-			ProducerRef:    opRef,
-			GeneratorRefs:  nil,
-			ParsedIncludes: nil,
-		})
-
-		d.resources = append(d.resources, ResourceEntry{
-			Path:      optOutName,
-			Key:       "/llvm_bc/" + stmt.Name,
-			EndsBatch: true,
-		})
+		bcRefs = append(bcRefs, ref)
+		bcPaths = append(bcPaths, bcOut)
 	}
+
+	mergedOut := build(instance.Path.rel(), "/", stmt.Name, "_merged", stmt.Suffix, ".bc")
+	ldArgs := []STR{internStr(llvmLink)}
+
+	for _, p := range bcPaths {
+		ldArgs = append(ldArgs, (p).str())
+	}
+
+	ldArgs = append(ldArgs, argDashO.str(), (mergedOut).str())
+
+	mergeInputs := na.inputList(bcPaths)
+
+	if linksCopy {
+		mergeInputs = append(mergeInputs, ctx.scripts[copyFsToolsVFS])
+	}
+
+	ldNode := &Node{
+		Platform:     instance.Platform,
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(ldArgs), Env: env}),
+		Env:          env,
+		Inputs:       mergeInputs,
+		Outputs:      na.vfsList(mergedOut),
+		KV:           &llvmBcKV2,
+		Requirements: reqs,
+		DepRefs:      append([]NodeRef(nil), bcRefs...),
+		Resources:    usesPython3Clang16,
+	}
+
+	ldRef := ctx.emit.emit(ldNode)
+	optOutName := stmt.Name + "_optimized" + stmt.Suffix + ".bc"
+	optOut := build(instance.Path.rel(), "/", optOutName)
+	optArgs := []STR{internStr(python), internStr(optWrapper), internStr(opt), (mergedOut).str(), argDashO.str(), (optOut).str()}
+	passes := []string{"default<O2>", "globalopt", "globaldce"}
+
+	if len(stmt.Symbols) > 0 {
+		passes = append(passes, "internalize")
+		optArgs = append(optArgs, internV("-internalize-public-api-list=", strings.Join(stmt.Symbols, "#")))
+	}
+
+	optArgs = append(optArgs, internV(`-passes="`, strings.Join(passes, ","), `"`))
+
+	optInputs := make([]VFS, 0, 2+len(bcSourceInputs))
+
+	optInputs = append(optInputs, mergedOut)
+	optInputs = append(optInputs, optWrapperVFS)
+
+	optChunks := na.inputList(concat(optInputs, bcSourceInputs))
+
+	optNode := &Node{
+		Platform:     instance.Platform,
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(optArgs), Env: env}),
+		Env:          env,
+		Inputs:       optChunks,
+		Outputs:      na.vfsList(optOut),
+		KV:           &llvmBcKV3,
+		Requirements: reqs,
+		DepRefs:      []NodeRef{ldRef},
+		Resources:    usesPython3Clang16,
+	}
+
+	opRef := ctx.emit.emit(optNode)
+
+	if stmt.GenerateMachineCode {
+		return
+	}
+
+	ensureResourcePeer(instance.Path.rel(), d)
+
+	e.codegen.register(&GeneratedFileInfo{
+		OutputPath:     optOut,
+		ProducerRef:    opRef,
+		GeneratorRefs:  nil,
+		ParsedIncludes: nil,
+	})
+
+	d.resources = append(d.resources, ResourceEntry{
+		Path:      optOutName,
+		Key:       "/llvm_bc/" + stmt.Name,
+		EndsBatch: true,
+	})
 }
 
 func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platform, in ModuleCCInputs, inVFS, outVFS VFS) []STR {

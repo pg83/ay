@@ -27,6 +27,7 @@ const (
 	prodSwigAll
 	prodJoinSrcs
 	prodSproto
+	prodLlvmBc
 )
 
 type ProducerPos struct {
@@ -120,8 +121,8 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []STR) {
 
 	n := len(d.copyFiles) + len(d.configureFiles) + len(d.antlrRuns) + len(d.antlr4Grammars) +
 		len(d.decimalMD5) + len(d.splitCodegens) + len(d.baseCodegens) + len(d.runPrograms) + len(d.runPython) +
-		len(d.archiveAsm) + len(d.srcs) + len(d.ymapsSprotoSrcs) + len(d.enumSrcs) + len(d.archives) +
-		len(d.checkConfigHeaders) + len(d.joinSrcs)
+		len(d.archiveAsm) + len(d.srcs) + len(d.ymapsSprotoSrcs) + len(d.llvmBc) + len(d.enumSrcs) +
+		len(d.archives) + len(d.checkConfigHeaders) + len(d.joinSrcs)
 
 	if d.createBuildInfoFor != nil {
 		n++
@@ -361,6 +362,28 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []STR) {
 		})
 	}
 
+	if !isProgramModuleType(d.moduleStmt.Name) {
+		for i, stmt := range d.llvmBc {
+			ins := make([]VFS, 0, len(stmt.Sources))
+
+			for _, src := range stmt.Sources {
+				if v := runInputBuildCandidate(module, src); v != 0 {
+					ins = append(ins, v)
+				}
+			}
+
+			positions = append(positions, ProducerPos{
+				kind:  prodLlvmBc,
+				index: i,
+				outs: []VFS{
+					build(module, "/", stmt.Name, "_optimized", stmt.Suffix, ".bc"),
+					build(module, "/", stmt.Name, "_merged", stmt.Suffix, ".bc"),
+				},
+				ins: ins,
+			})
+		}
+	}
+
 	for i := range d.enumSrcs {
 		stmt := d.enumSrcs[i]
 		outs := []VFS{build(e.enumSerializedBase(stmt), "_serialized.cpp")}
@@ -560,6 +583,8 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 			e.emitJoinSrcsStmt(e.d.joinSrcs[pos.index])
 		case prodSproto:
 			e.emitYmapsSprotoStmt(e.d.ymapsSprotoSrcs[pos.index])
+		case prodLlvmBc:
+			e.emitLlvmBcStmt(e.d.llvmBc[pos.index])
 		}
 	}
 }

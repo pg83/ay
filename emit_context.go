@@ -140,8 +140,6 @@ func (e *EmitContext) emit() {
 		if pyRes := e.flushPyProtoSrcs(); pyRes != nil {
 			e.protoRes = pyRes
 		}
-
-		e.emitLLVMBC(e.peers.ResourceGlobals)
 	}
 
 	if !isProgramModuleType(d.moduleStmt.Name) || d.unit.Tag != 0 || len(d.resources) > 0 {
