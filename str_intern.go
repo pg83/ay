@@ -73,6 +73,60 @@ func internStr(s string) STR {
 	return id
 }
 
+func internBuild(prefix string, parts []string) STR {
+	n := len(prefix)
+
+	for _, p := range parts {
+		n += len(p)
+	}
+
+	if n == 0 {
+		return internStr("")
+	}
+
+	block := internTable.bytes.alloc(n)
+	off := copy(block, prefix)
+
+	for _, p := range parts {
+		off += copy(block[off:], p)
+	}
+
+	buf := block[:n]
+	h := xxh3.Hash128(buf)
+
+	if p := internTable.ids.get(h.Hi); p != nil {
+		if internTable.los[*p] == h.Lo {
+			return *p
+		}
+
+		if oid, ok := internTable.overflow[string(buf)]; ok {
+			return oid
+		}
+
+		s := internCommitBlock(block, n)
+		id := internAppend(s, h.Lo)
+
+		internTable.overflow[s] = id
+
+		return id
+	}
+
+	s := internCommitBlock(block, n)
+	id := internAppend(s, h.Lo)
+
+	internTable.ids.put(h.Hi, id)
+
+	return id
+}
+
+func internCommitBlock(block []byte, n int) string {
+	s := unsafe.String(&block[0], n)
+
+	internTable.bytes.commit(n)
+
+	return s
+}
+
 func internBytes(b []byte) STR {
 	h := xxh3.Hash128(b)
 
