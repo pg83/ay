@@ -93,6 +93,22 @@ func oldClassifySrcExt(s string) SrcExtClass {
 		return srcExtGperf
 	case strings.HasSuffix(s, ".lpp"), strings.HasSuffix(s, ".lex"), strings.HasSuffix(s, ".l"):
 		return srcExtFlex
+	case strings.HasSuffix(s, ".h"), strings.HasSuffix(s, ".hh"), strings.HasSuffix(s, ".hpp"),
+		strings.HasSuffix(s, ".cuh"), strings.HasSuffix(s, ".H"), strings.HasSuffix(s, ".hxx"),
+		strings.HasSuffix(s, ".xh"), strings.HasSuffix(s, ".ipp"), strings.HasSuffix(s, ".ixx"),
+		strings.HasSuffix(s, ".inl"):
+		return srcExtHeader
+	case strings.HasSuffix(s, ".auxcpp"), strings.HasSuffix(s, ".c"), strings.HasSuffix(s, ".cpp"),
+		strings.HasSuffix(s, ".cc"), strings.HasSuffix(s, ".cxx"), strings.HasSuffix(s, ".C"):
+		return srcExtCSource
+	case strings.HasSuffix(s, ".S"), strings.HasSuffix(s, ".s"):
+		return srcExtAsm
+	case strings.HasSuffix(s, ".asm"):
+		return srcExtYasm
+	case strings.HasSuffix(s, ".cu"):
+		return srcExtCuda
+	case strings.HasSuffix(s, ".rodata"):
+		return srcExtRodata
 	default:
 		return srcExtRegular
 	}

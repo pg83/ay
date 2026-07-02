@@ -4,62 +4,52 @@ import (
 	"fmt"
 )
 
-var srcExtMatcher *ExtMatcher[SrcEmitter]
-
-type SrcEmitter = func(e *EmitContext, src STR)
-
-func init() {
-	srcExtMatcher = newExtMatcher([]ExtEntry[SrcEmitter]{
-		{".gztproto", (*EmitContext).emitLibraryGztProtoCompile},
-		{".proto", (*EmitContext).emitLibraryProtoSource},
-		{".fbs64", (*EmitContext).emitLibraryFlatcSource64},
-		{".fbs", (*EmitContext).emitLibraryFlatcSource32},
-		{".rodata", (*EmitContext).emitLibraryRodataSource},
-		{".c", (*EmitContext).emitLibraryCSource},
-		{".cpp", (*EmitContext).emitLibraryCSource},
-		{".cc", (*EmitContext).emitLibraryCSource},
-		{".cxx", (*EmitContext).emitLibraryCSource},
-		{".C", (*EmitContext).emitLibraryCSource},
-		{".auxcpp", (*EmitContext).emitLibraryCSource},
-		{".S", (*EmitContext).emitLibraryAsmSource},
-		{".s", (*EmitContext).emitLibraryAsmSource},
-		{".asm", (*EmitContext).emitLibraryYasmSource},
-		{".cu", (*EmitContext).emitLibraryCudaSource},
-		{".rl6", (*EmitContext).emitLibraryRagel6Source},
-		{".y", (*EmitContext).emitBisonY},
-		{".ypp", (*EmitContext).emitBisonY},
-		{".ev", (*EmitContext).emitLibraryEvSource},
-		{".rl", (*EmitContext).emitLibraryRagel5Source},
-		{".lpp", (*EmitContext).emitLibraryFlexSource},
-		{".lex", (*EmitContext).emitLibraryFlexSource},
-		{".l", (*EmitContext).emitLibraryFlexSource},
-		{".h.in", (*EmitContext).emitLibraryHInSource},
-		{".cpp.in", (*EmitContext).emitLibraryCInSource},
-		{".c.in", (*EmitContext).emitLibraryCInSource},
-		{".sc", (*EmitContext).emitLibrarySCSource},
-		{".gperf", (*EmitContext).emitLibraryGperfSource},
-		{".cfgproto", (*EmitContext).emitLibraryCfgProtoSource},
-	})
-}
-
 func (e *EmitContext) emitOneSource(src STR) {
-	ctx, instance, _ := e.ctx, e.instance, e.d
-	srcRel := src.string()
-
-	if isHeaderSource(srcRel) {
+	switch srcExtClassOf(src) {
+	case srcExtHeader:
 		return
-	}
-
-	emit, ok := srcExtMatcher.match(srcRel)
-
-	if !ok {
-		ctx.onWarn(Warn{
+	case srcExtGztProto:
+		e.emitLibraryGztProtoCompile(src)
+	case srcExtProto:
+		e.emitLibraryProtoSource(src)
+	case srcExtFbs64:
+		e.emitLibraryFlatcSource64(src)
+	case srcExtFbs:
+		e.emitLibraryFlatcSource32(src)
+	case srcExtRodata:
+		e.emitLibraryRodataSource(src)
+	case srcExtCSource:
+		e.emitLibraryCSource(src)
+	case srcExtAsm:
+		e.emitLibraryAsmSource(src)
+	case srcExtYasm:
+		e.emitLibraryYasmSource(src)
+	case srcExtCuda:
+		e.emitLibraryCudaSource(src)
+	case srcExtRl6:
+		e.emitLibraryRagel6Source(src)
+	case srcExtY:
+		e.emitBisonY(src)
+	case srcExtEv:
+		e.emitLibraryEvSource(src)
+	case srcExtRl:
+		e.emitLibraryRagel5Source(src)
+	case srcExtFlex:
+		e.emitLibraryFlexSource(src)
+	case srcExtHIn:
+		e.emitLibraryHInSource(src)
+	case srcExtCppIn, srcExtCIn:
+		e.emitLibraryCInSource(src)
+	case srcExtSc:
+		e.emitLibrarySCSource(src)
+	case srcExtGperf:
+		e.emitLibraryGperfSource(src)
+	case srcExtCfgProto:
+		e.emitLibraryCfgProtoSource(src)
+	default:
+		e.ctx.onWarn(Warn{
 			Kind:    WarnUnsupportedSource,
-			Message: fmt.Sprintf("%s: unsupported source extension in %q", instance.Path.rel(), srcRel),
+			Message: fmt.Sprintf("%s: unsupported source extension in %q", e.instance.Path.rel(), src.string()),
 		})
-
-		return
 	}
-
-	emit(e, src)
 }
