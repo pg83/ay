@@ -792,7 +792,7 @@ type ProtoSrcsResult struct {
 }
 
 func protoSourceRelPath(fs FS, instance ModuleInstance, d *ModuleData, src string) string {
-	return filepath.ToSlash(filepath.Clean(resolvePySrcRel(fs, d.srcDirs, instance.Path.rel(), src).string()))
+	return filepath.ToSlash(filepath.Clean(resolvePySrcRel(fs, d.srcDirs, instance.Path, src).string()))
 }
 
 type PbArgBlocks struct {

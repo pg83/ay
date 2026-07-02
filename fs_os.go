@@ -193,7 +193,7 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 
 	dname, base := splitDirName(suffix)
 
-	v = fs.listdir(dirKey(joinRel(prefixRel, dname)))
+	v = fs.listdir(sourceJoined(prefixRel, dname))
 
 	if !v.listable() {
 		fs.existsMisses++
