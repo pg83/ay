@@ -2,7 +2,10 @@ package main
 
 import "strings"
 
-var extClassMatcher = buildExtClassMatcher()
+var (
+	extClassMatcher = buildExtClassMatcher()
+	srcExtClasses   []uint8
+)
 
 const (
 	extCxxSource ExtFlags = 1 << iota
@@ -12,6 +15,32 @@ const (
 	extCarriesIncl
 	extCodegen
 	extCopyAuto
+)
+
+const (
+	srcExtUnseen SrcExtClass = iota
+	srcExtRegular
+	srcExtProto
+	srcExtGztProto
+	srcExtFbs
+	srcExtFbs64
+	srcExtEv
+	srcExtRl6
+	srcExtRl
+	srcExtY
+	srcExtCppIn
+	srcExtCIn
+	srcExtHIn
+	srcExtSc
+	srcExtCfgProto
+	srcExtGperf
+	srcExtFlex
+	srcExtHeader
+	srcExtCSource
+	srcExtAsm
+	srcExtYasm
+	srcExtCuda
+	srcExtRodata
 )
 
 type ExtFlags uint8
@@ -242,4 +271,42 @@ func extIsEnumSerialized(p string) bool {
 
 func extIsProtoGeneratedHeader(p string) bool {
 	return extIsPbH(p) || strings.HasSuffix(p, ".sproto.h")
+}
+
+type SrcExtClass uint8
+
+func srcExtClassOf(id STR) SrcExtClass {
+	if int(id) < len(srcExtClasses) {
+		if c := SrcExtClass(srcExtClasses[id]); c != srcExtUnseen {
+			return c
+		}
+	}
+
+	c := classifySrcExt(id.string())
+
+	for int(id) >= len(srcExtClasses) {
+		grown := len(srcExtClasses) * 2
+
+		if grown <= int(id) {
+			grown = int(id) + 1
+		}
+
+		next := make([]uint8, grown)
+
+		copy(next, srcExtClasses)
+		srcExtClasses = next
+	}
+
+	srcExtClasses[id] = uint8(c)
+
+	return c
+}
+
+func isCodegenProducingSrcID(id STR) bool {
+	switch srcExtClassOf(id) {
+	case srcExtProto, srcExtGztProto, srcExtFbs, srcExtFbs64, srcExtEv, srcExtCfgProto, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc, srcExtGperf, srcExtFlex:
+		return true
+	}
+
+	return false
 }

@@ -1,15 +1,9 @@
 package main
 
 import (
-	"strings"
 	"unsafe"
 
 	"github.com/zeebo/xxh3"
-)
-
-var (
-	strDollar     TwoBitSet
-	srcExtClasses []uint8
 )
 
 var internTable = struct {
@@ -26,38 +20,6 @@ var internTable = struct {
 	strs:     make([]string, 1, 1<<16),
 	bytes:    newBumpAllocator[byte](1 << 20),
 }
-
-const (
-	dollarUnseen DollarMemoState = iota
-	dollarAbsent
-	dollarPresent
-)
-
-const (
-	srcExtUnseen SrcExtClass = iota
-	srcExtRegular
-	srcExtProto
-	srcExtGztProto
-	srcExtFbs
-	srcExtFbs64
-	srcExtEv
-	srcExtRl6
-	srcExtRl
-	srcExtY
-	srcExtCppIn
-	srcExtCIn
-	srcExtHIn
-	srcExtSc
-	srcExtCfgProto
-	srcExtGperf
-	srcExtFlex
-	srcExtHeader
-	srcExtCSource
-	srcExtAsm
-	srcExtYasm
-	srcExtCuda
-	srcExtRodata
-)
 
 func internOwnedCopy(b []byte) string {
 	n := len(b)
@@ -136,62 +98,6 @@ func internBytes(b []byte) STR {
 	internTable.ids.put(h.Hi, id)
 
 	return id
-}
-
-type DollarMemoState uint8
-
-func strHasDollar(id STR) bool {
-	if cell := DollarMemoState(strDollar.get(uint32(id))); cell != dollarUnseen {
-		return cell == dollarPresent
-	}
-
-	yes := strings.Contains(id.string(), "$")
-
-	if yes {
-		strDollar.set(uint32(id), uint8(dollarPresent))
-	} else {
-		strDollar.set(uint32(id), uint8(dollarAbsent))
-	}
-
-	return yes
-}
-
-type SrcExtClass uint8
-
-func srcExtClassOf(id STR) SrcExtClass {
-	if int(id) < len(srcExtClasses) {
-		if c := SrcExtClass(srcExtClasses[id]); c != srcExtUnseen {
-			return c
-		}
-	}
-
-	c := classifySrcExt(id.string())
-
-	for int(id) >= len(srcExtClasses) {
-		grown := len(srcExtClasses) * 2
-
-		if grown <= int(id) {
-			grown = int(id) + 1
-		}
-
-		next := make([]uint8, grown)
-
-		copy(next, srcExtClasses)
-		srcExtClasses = next
-	}
-
-	srcExtClasses[id] = uint8(c)
-
-	return c
-}
-
-func isCodegenProducingSrcID(id STR) bool {
-	switch srcExtClassOf(id) {
-	case srcExtProto, srcExtGztProto, srcExtFbs, srcExtFbs64, srcExtEv, srcExtCfgProto, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc, srcExtGperf, srcExtFlex:
-		return true
-	}
-
-	return false
 }
 
 func internedBytes(b []byte) STR {
