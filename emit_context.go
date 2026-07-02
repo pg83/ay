@@ -96,8 +96,6 @@ func (e *EmitContext) emit() {
 		}
 	}
 
-	e.emitYmapsSprotoHeaders(e.peers.SelfAddInclGlobal, e.ymapsSprotoProducedBases())
-
 	e.drainSrcs()
 
 	for _, simd := range d.simdSrcs {

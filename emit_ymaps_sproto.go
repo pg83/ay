@@ -28,43 +28,34 @@ type YmapsSprotoPending struct {
 	protoRelPath string
 }
 
-func (e *EmitContext) emitYmapsSprotoHeaders(peerAddIncl []VFS, produced map[string]struct{}) {
+func (e *EmitContext) emitYmapsSprotoStmt(srcTok STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
-
-	if len(produced) == 0 {
-		return
-	}
-
 	outRoot := protoCPPOutRoot(d)
 	sprotocRes := ctx.toolResult(argMapsLibsSprotoSprotoc)
 	sprotocLDRef, sprotocBinary := sprotocRes.LDRef, *sprotocRes.LDPath
-	scanCfg := newScanContext(ctx.parsers, d.addIncl, peerAddIncl, includeScannerBasePaths(), instance.Path.rel())
-	pending := make([]YmapsSprotoPending, 0, len(d.ymapsSprotoSrcs))
+	scanCfg := newScanContext(ctx.parsers, d.addIncl, e.peers.SelfAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcTok.string())
+	sprotoH := build(strings.TrimSuffix(protoRelPath, ".proto"), ".sproto.h")
+	sprotoRef := ctx.emit.reserve()
+	pbhImports := protoDirectPbHIncludes(ctx.parsers, protoRelPath, outRoot)
+	parsed := make([]IncludeDirective, 0, 2*len(pbhImports))
 
-	for _, srcTok := range d.ymapsSprotoSrcs {
-		protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcTok.string())
-		sprotoH := build(strings.TrimSuffix(protoRelPath, ".proto"), ".sproto.h")
-		sprotoRef := ctx.emit.reserve()
-		pbhImports := protoDirectPbHIncludes(ctx.parsers, protoRelPath, outRoot)
-		parsed := make([]IncludeDirective, 0, 2*len(pbhImports))
+	parsed = append(parsed, pbhImports...)
+	parsed = append(parsed, sprotoInducedHeaders(pbhImports)...)
 
-		parsed = append(parsed, pbhImports...)
-		parsed = append(parsed, sprotoInducedHeaders(pbhImports)...)
+	e.codegen.register(&GeneratedFileInfo{
+		OutputPath:     sprotoH,
+		ProducerRef:    sprotoRef,
+		GeneratorRefs:  []NodeRef{sprotocLDRef},
+		ParsedIncludes: parsed,
+		ClosureLeaves:  []VFS{source(protoRelPath)},
+	})
 
-		e.codegen.register(&GeneratedFileInfo{
-			OutputPath:     sprotoH,
-			ProducerRef:    sprotoRef,
-			GeneratorRefs:  []NodeRef{sprotocLDRef},
-			ParsedIncludes: parsed,
-			ClosureLeaves:  []VFS{source(protoRelPath)},
-		})
+	pending := YmapsSprotoPending{ref: sprotoRef, sprotoH: sprotoH, protoRelPath: protoRelPath}
 
-		pending = append(pending, YmapsSprotoPending{ref: sprotoRef, sprotoH: sprotoH, protoRelPath: protoRelPath})
-	}
-
-	for _, p := range pending {
-		e.emitYmapsSprotoHeader(p, outRoot, sprotocLDRef, sprotocBinary, scanCfg)
-	}
+	e.deferPass2(func() {
+		e.emitYmapsSprotoHeader(pending, outRoot, sprotocLDRef, sprotocBinary, scanCfg)
+	})
 }
 
 func (e *EmitContext) emitYmapsSprotoHeader(p YmapsSprotoPending, outRoot string, sprotocLDRef NodeRef, sprotocBinary VFS, scanCfg ScanContext) {

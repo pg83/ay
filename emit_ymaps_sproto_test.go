@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestGen_ProtoLibrary_YmapsSprotoEmitsHeadersAndFeedsGeneratedCCInputs(t *testing.T) {
 	files := map[string]string{}
@@ -239,4 +242,57 @@ func ymapsSprotoFixtureFiles(t *testing.T, mod string, withSproto bool) map[stri
 	writeTestModuleFile(files, "maps/libs/sproto/sprotoc/main.cpp", "int main(){return 0;}\n")
 
 	return files
+}
+
+func TestGen_OwnModuleSourceIncludesYmapsSprotoHeader(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(
+    img.proto
+    use.cpp
+)
+YMAPS_SPROTO(img.proto)
+ADDINCL(GLOBAL ${ARCADIA_BUILD_ROOT})
+END()
+`)
+	writeTestModuleFile(files, "mod/img.proto", `syntax = "proto2";
+package mod;
+message Img {}
+`)
+	writeTestModuleFile(files, "mod/use.cpp", "#include <mod/img.sproto.h>\nint use(){return 0;}\n")
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeTestModuleFile(files, "maps/libs/sproto/ya.make", "LIBRARY()\nSRCS(sproto.cpp)\nEND()\n")
+	writeTestModuleFile(files, "maps/libs/sproto/sproto.cpp", "int sproto(){return 0;}\n")
+	writeToolProgram(files, "maps/libs/sproto/sprotoc", "sprotoc")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(mod)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+	sproto := mustNodeByOutput(t, g, "$(B)/mod/img.sproto.h")
+	use := mustNodeByOutput(t, g, "$(B)/mod/use.cpp.o")
+
+	if !nodeHasInput(use, "$(B)/mod/img.sproto.h") {
+		t.Fatalf("use.cpp.o inputs missing own $(B)/mod/img.sproto.h: %v", vfsStringsT3(use.flatInputs()))
+	}
+
+	if !slices.Contains(graphDeps(g, use), sproto.UID) {
+		t.Fatalf("use.cpp.o deps missing sproto producer uid %q: %v", sproto.UID, graphDeps(g, use))
+	}
 }
