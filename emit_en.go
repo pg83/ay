@@ -36,7 +36,7 @@ func (e *EmitContext) moduleProtoGenHeaders() map[string]struct{} {
 	return set
 }
 
-func (e *EmitContext) resolveEnumHeaderInput(headerRel string, srcDirs []VFS) VFS {
+func (e *EmitContext) enumHeaderSourceInput(headerRel string, srcDirs []VFS) VFS {
 	ctx, instance := e.ctx, e.instance
 	headerInput := resolveSourceVFS(ctx, instance, headerRel, srcDirs)
 
@@ -46,6 +46,11 @@ func (e *EmitContext) resolveEnumHeaderInput(headerRel string, srcDirs []VFS) VF
 		}
 	}
 
+	return headerInput
+}
+
+func (e *EmitContext) resolveEnumHeaderInput(headerRel string, srcDirs []VFS) VFS {
+	headerInput := e.enumHeaderSourceInput(headerRel, srcDirs)
 	buildHeader := build(headerInput.rel())
 
 	if e.codegen.lookup(buildHeader) != nil {
@@ -55,94 +60,67 @@ func (e *EmitContext) resolveEnumHeaderInput(headerRel string, srcDirs []VFS) VF
 	return headerInput
 }
 
-func (e *EmitContext) emitEnumSrcs(peerAddInclGlobal []VFS) {
+func (e *EmitContext) enumSerializedBase(stmt *GenerateEnumSerializationStmt) string {
+	if moduleRootedVFS(e.instance.Path.rel(), stmt.Header) != nil {
+		return e.enumHeaderSourceInput(stmt.Header, e.d.srcDirs).rel()
+	}
+
+	return e.instance.Path.rel() + "/" + stmt.Header
+}
+
+func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 	if e.d.unit.Tag == unitTagPy3Proto {
 		return
 	}
 
 	ctx, instance, d := e.ctx, e.instance, e.d
-
-	if len(d.enumSrcs) == 0 {
-		return
-	}
-
 	enumParserLD, enumParserBin := ctx.tool(argToolsEnumParserEnumParser)
-	scanCfg := newScanContext(ctx.parsers, d.addIncl, peerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+	scanCfg := newScanContext(ctx.parsers, d.addIncl, e.peers.SelfAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 	protoGenHeaders := e.moduleProtoGenHeaders()
+	withHeader := stmt.Variant == "with_header"
+	headerInput := e.resolveEnumHeaderInput(stmt.Header, d.srcDirs)
+	serializedBase := e.enumSerializedBase(stmt)
+	_, secondLevel := protoGenHeaders[headerInput.rel()]
+	serializedCPPPath := build(serializedBase, "_serialized.cpp")
 
-	type enumStmtPlan struct {
-		withHeader        bool
-		headerInput       VFS
-		serializedCPPPath VFS
-		serializedHPath   VFS
-		enRef             NodeRef
-		declSeq           int
-		secondLevel       bool
+	var serializedHPath VFS
+
+	if withHeader {
+		serializedHPath = build(serializedBase, "_serialized.h")
 	}
 
-	plans := make([]enumStmtPlan, len(d.enumSrcs))
+	enRef := ctx.emit.reserve()
 
-	for i, stmt := range d.enumSrcs {
-		withHeader := stmt.Variant == "with_header"
-		headerInput := e.resolveEnumHeaderInput(stmt.Header, d.srcDirs)
-		serializedBase := instance.Path.rel() + "/" + stmt.Header
+	cppParsed := []IncludeDirective{
+		{kind: includeQuoted, target: internStr(headerInput.rel())},
+		{kind: includeQuoted, target: strUtilGenericSerializedEnumH},
+	}
 
-		if moduleRootedVFS(instance.Path.rel(), stmt.Header) != nil {
-			serializedBase = headerInput.rel()
-		}
+	sort.Slice(cppParsed, func(i, j int) bool { return cppParsed[i].target.string() < cppParsed[j].target.string() })
 
-		_, secondLevel := protoGenHeaders[headerInput.rel()]
-		serializedCPPPath := build(serializedBase, "_serialized.cpp")
+	reg := e.codegen
 
-		var serializedHPath VFS
+	reg.register(&GeneratedFileInfo{
+		OutputPath:     serializedCPPPath,
+		ProducerRef:    enRef,
+		GeneratorRefs:  []NodeRef{enumParserLD},
+		ParsedIncludes: cppParsed,
+	})
 
-		if withHeader {
-			serializedHPath = build(serializedBase, "_serialized.h")
-		}
-
-		enRef := ctx.emit.reserve()
-
-		cppParsed := []IncludeDirective{
+	if withHeader {
+		hParsed := []IncludeDirective{
 			{kind: includeQuoted, target: internStr(headerInput.rel())},
-			{kind: includeQuoted, target: strUtilGenericSerializedEnumH},
+			{kind: includeQuoted, target: internStr(serializedCPPPath.rel())},
 		}
 
-		sort.Slice(cppParsed, func(i, j int) bool { return cppParsed[i].target.string() < cppParsed[j].target.string() })
-
-		reg := e.codegen
+		sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target.string() < hParsed[j].target.string() })
 
 		reg.register(&GeneratedFileInfo{
-			OutputPath:     serializedCPPPath,
+			OutputPath:     serializedHPath,
 			ProducerRef:    enRef,
 			GeneratorRefs:  []NodeRef{enumParserLD},
-			ParsedIncludes: cppParsed,
+			ParsedIncludes: hParsed,
 		})
-
-		if withHeader {
-			hParsed := []IncludeDirective{
-				{kind: includeQuoted, target: internStr(headerInput.rel())},
-				{kind: includeQuoted, target: internStr(serializedCPPPath.rel())},
-			}
-
-			sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target.string() < hParsed[j].target.string() })
-
-			reg.register(&GeneratedFileInfo{
-				OutputPath:     serializedHPath,
-				ProducerRef:    enRef,
-				GeneratorRefs:  []NodeRef{enumParserLD},
-				ParsedIncludes: hParsed,
-			})
-		}
-
-		plans[i] = enumStmtPlan{
-			withHeader:        withHeader,
-			headerInput:       headerInput,
-			serializedCPPPath: serializedCPPPath,
-			serializedHPath:   serializedHPath,
-			enRef:             enRef,
-			declSeq:           stmt.DeclSeq,
-			secondLevel:       secondLevel,
-		}
 	}
 
 	var moduleTag STR
@@ -151,13 +129,15 @@ func (e *EmitContext) emitEnumSrcs(peerAddInclGlobal []VFS) {
 		moduleTag = tagCppProto
 	}
 
-	for _, p := range plans {
-		closure := walkClosure(e.scanner, p.headerInput, scanCfg)
+	declSeq := stmt.DeclSeq
+
+	e.deferPass2(func() {
+		closure := walkClosure(e.scanner, headerInput, scanCfg)
 
 		var ownOutputClosure []VFS
 
-		if !p.withHeader {
-			ownOutputClosure = walkClosureTail(e.scanner, p.serializedCPPPath, scanCfg)
+		if !withHeader {
+			ownOutputClosure = walkClosureTail(e.scanner, serializedCPPPath, scanCfg)
 		}
 
 		enClosure := dedup(closure, ownOutputClosure)
@@ -165,21 +145,21 @@ func (e *EmitContext) emitEnumSrcs(peerAddInclGlobal []VFS) {
 
 		emitEN(
 			instance,
-			p.headerInput,
-			p.serializedCPPPath,
-			p.serializedHPath,
+			headerInput,
+			serializedCPPPath,
+			serializedHPath,
 			moduleTag,
-			p.withHeader,
+			withHeader,
 			enumParserLD,
 			enumParserBin,
 			augmentedDepENRefs,
 			enClosure,
-			p.enRef,
+			enRef,
 			ctx.emit,
 		)
 
-		e.enqueueSrc(p.serializedCPPPath.str(), SrcMeta{Prio: stmtPrioDefault, Seq: p.declSeq, Generated: true, SecondLevel: p.secondLevel})
-	}
+		e.enqueueSrc(serializedCPPPath.str(), SrcMeta{Prio: stmtPrioDefault, Seq: declSeq, Generated: true, SecondLevel: secondLevel})
+	})
 }
 
 func emitEN(

@@ -65,6 +65,12 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 	return gzRef, genProtoName
 }
 
+func (e *EmitContext) gztGenProtoName(srcRel string) string {
+	gztSource := e.resolveModuleSourceVFS(internStr(srcRel), e.d.srcDirs)
+
+	return strings.TrimSuffix(filepath.Base(gztSource.rel()), filepath.Ext(gztSource.rel())) + ".proto"
+}
+
 func (e *EmitContext) emitLibraryGztProtoCompile(src STR) {
 	_, _, d := e.ctx, e.instance, e.d
 
@@ -72,10 +78,7 @@ func (e *EmitContext) emitLibraryGztProtoCompile(src STR) {
 		return
 	}
 
-	srcRel := src.string()
-	_, genProtoSrc := e.emitLibraryGztProtoSource(srcRel, d.cc.ProtoInclude)
-
-	e.enqueueSrc(internStr(genProtoSrc), e.metaForSrc(src))
+	e.emitLibraryGztProtoSource(src.string(), d.cc.ProtoInclude)
 }
 
 func gztCmdArgs(converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) []STR {

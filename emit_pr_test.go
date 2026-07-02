@@ -2038,3 +2038,133 @@ END()
 		t.Fatalf("third.bin deps missing second.bin producer uid %q: %v", second.UID, graphDeps(g, third))
 	}
 }
+
+func TestGen_RunProgramConsumesProtoGeneratedHeader(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "tools/gp", "gp")
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(msg.proto)
+RUN_PROGRAM(
+    tools/gp ${BINDIR}/msg.pb.h out.txt
+    IN ${BINDIR}/msg.pb.h
+    OUT_NOAUTO out.txt
+)
+END()
+`)
+	writeTestModuleFile(files, "mod/msg.proto", "syntax = \"proto3\";\npackage mod;\nmessage M {}\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(mod)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+	pbH := mustNodeByAnyOutput(t, g, "$(B)/mod/msg.pb.h")
+	consumer := mustNodeByOutput(t, g, "$(B)/mod/out.txt")
+
+	if !slices.Contains(graphDeps(g, consumer), pbH.UID) {
+		t.Fatalf("out.txt deps missing proto producer uid %q: %v", pbH.UID, graphDeps(g, consumer))
+	}
+}
+
+func TestGen_RunProgramConsumesEnumSerializedSource(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "tools/gp", "gp")
+	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(real.cpp)
+GENERATE_ENUM_SERIALIZATION(myenum.h)
+RUN_PROGRAM(
+    tools/gp ${BINDIR}/myenum.h_serialized.cpp out.txt
+    IN ${BINDIR}/myenum.h_serialized.cpp
+    OUT_NOAUTO out.txt
+)
+END()
+`)
+	writeTestModuleFile(files, "mod/myenum.h", "enum class E { A = 0 };\n")
+	writeTestModuleFile(files, "mod/real.cpp", "int real(){return 0;}\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(mod)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+	en := mustNodeByAnyOutput(t, g, "$(B)/mod/myenum.h_serialized.cpp")
+	consumer := mustNodeByOutput(t, g, "$(B)/mod/out.txt")
+
+	if !slices.Contains(graphDeps(g, consumer), en.UID) {
+		t.Fatalf("out.txt deps missing enum-serialization producer uid %q: %v", en.UID, graphDeps(g, consumer))
+	}
+}
+
+func TestGen_RunProgramConsumesArchiveOutput(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "tools/gp", "gp")
+	writeToolProgram(files, "tools/archiver", "archiver")
+
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(real.cpp)
+ARCHIVE(
+    NAME data.inc
+    payload.lst
+)
+RUN_PROGRAM(
+    tools/gp ${BINDIR}/data.inc out.txt
+    IN ${BINDIR}/data.inc
+    OUT_NOAUTO out.txt
+)
+END()
+`)
+	writeTestModuleFile(files, "mod/payload.lst", "payload\n")
+	writeTestModuleFile(files, "mod/real.cpp", "int real(){return 0;}\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(mod)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+	arc := mustNodeByAnyOutput(t, g, "$(B)/mod/data.inc")
+	consumer := mustNodeByOutput(t, g, "$(B)/mod/out.txt")
+
+	if !slices.Contains(graphDeps(g, consumer), arc.UID) {
+		t.Fatalf("out.txt deps missing archive producer uid %q: %v", arc.UID, graphDeps(g, consumer))
+	}
+}

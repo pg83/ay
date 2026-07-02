@@ -51,39 +51,36 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 	return emit.emit(node), outVFS
 }
 
-func (e *EmitContext) emitJoinSrcs() {
+func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 	ctx, instance, d := e.ctx, e.instance, e.d
+	jsSources := strStrings(js.Sources)
+	joinClosure := e.joinSrcsIncludeClosure(instance.Platform, jsSources, d.cc.ScanCfg)
+	ccClosure := joinClosure
 
-	for _, js := range d.joinSrcs {
-		jsSources := strStrings(js.Sources)
-		joinClosure := e.joinSrcsIncludeClosure(instance.Platform, jsSources, d.cc.ScanCfg)
-		ccClosure := joinClosure
+	if instance.Platform.ISA == ISAX8664 {
+		jsPeerAddInclGlobal := rebasePerArchPeerAddIncl(d.cc.PeerAddInclGlobal, instance.Platform.ISA, ctx.target.ISA)
+		jsScanCfg := newScanContext(ctx.parsers, d.cc.AddIncl, jsPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 
-		if instance.Platform.ISA == ISAX8664 {
-			jsPeerAddInclGlobal := rebasePerArchPeerAddIncl(d.cc.PeerAddInclGlobal, instance.Platform.ISA, ctx.target.ISA)
-			jsScanCfg := newScanContext(ctx.parsers, d.cc.AddIncl, jsPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
-
-			joinClosure = e.joinSrcsIncludeClosure(ctx.target, jsSources, jsScanCfg)
-		}
-
-		jsRef, joinOutVFS := emitJS(instance, js.OutputName, jsSources, joinClosure, ctx.target, d.tc, ctx.scripts, ctx.emit)
-		ccIncl := jsCCIncludeInputs(instance, joinOutVFS, jsSources, ccClosure, ctx.scripts)
-
-		var psc []ARG
-
-		if p := d.perSrcCFlagsFor(joinOutVFS.str()); p != nil {
-			psc = *p
-		}
-
-		e.codegen.register(&GeneratedFileInfo{
-			OutputPath:    joinOutVFS,
-			ProducerRef:   jsRef,
-			ClosureLeaves: ccIncl[1:],
-			Compile:       &CompileSpec{FlatOutput: d.flatSrc(joinOutVFS.str()), CFlags: psc},
-		})
-
-		e.enqueueSrc(joinOutVFS.str(), SrcMeta{Prio: stmtPrioDefault, Seq: js.Seq, Generated: true})
+		joinClosure = e.joinSrcsIncludeClosure(ctx.target, jsSources, jsScanCfg)
 	}
+
+	jsRef, joinOutVFS := emitJS(instance, js.OutputName, jsSources, joinClosure, ctx.target, d.tc, ctx.scripts, ctx.emit)
+	ccIncl := jsCCIncludeInputs(instance, joinOutVFS, jsSources, ccClosure, ctx.scripts)
+
+	var psc []ARG
+
+	if p := d.perSrcCFlagsFor(joinOutVFS.str()); p != nil {
+		psc = *p
+	}
+
+	e.codegen.register(&GeneratedFileInfo{
+		OutputPath:    joinOutVFS,
+		ProducerRef:   jsRef,
+		ClosureLeaves: ccIncl[1:],
+		Compile:       &CompileSpec{FlatOutput: d.flatSrc(joinOutVFS.str()), CFlags: psc},
+	})
+
+	e.enqueueSrc(joinOutVFS.str(), SrcMeta{Prio: stmtPrioDefault, Seq: js.Seq, Generated: true})
 }
 
 func (e *EmitContext) joinSrcsIncludeClosure(scanPlatform *Platform, sources []string, scanCfg ScanContext) []VFS {

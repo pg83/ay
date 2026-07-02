@@ -4,19 +4,11 @@ import "strings"
 
 var archivesKV = KV{P: pkAR, PC: pcLightRed}
 
-func (e *EmitContext) emitArchives() {
-	ctx, _, d := e.ctx, e.instance, e.d
-
-	if len(d.archives) == 0 {
-		return
-	}
-
+func (e *EmitContext) emitArchiveStmt(a ArchiveEntry) {
+	ctx := e.ctx
 	toolLDRef, toolBinPath := ctx.tool(argToolsArchiver)
-	reg := e.codegen
 
-	for _, a := range d.archives {
-		e.emitArchive(a, toolBinPath, toolLDRef, ctx.emit, reg)
-	}
+	e.emitArchive(a, toolBinPath, toolLDRef, ctx.emit, e.codegen)
 }
 
 func (e *EmitContext) emitArchive(
