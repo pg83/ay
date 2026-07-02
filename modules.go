@@ -150,7 +150,6 @@ type ModuleData struct {
 	cythonAddIncl            []VFS
 	asmAddIncl               []VFS
 	protoAddInclGlobal       []VFS
-	unhandledMacros          map[STR][]STR
 	llvmBc                   []*LlvmBcStmt
 	cFlags                   []ARG
 	cFlagsGlobal             []ARG
@@ -2384,13 +2383,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("gen: macro %q not modelled — implement its upstream semantics (see yatool/build/conf, yatool/build/ymake.core.conf)", v.Name.string())
 		}
 
-		if d.unhandledMacros == nil {
-			d.unhandledMacros = map[STR][]STR{}
-		}
-
-		name := v.Name.str()
-
-		d.unhandledMacros[name] = append(d.unhandledMacros[name], v.Args...)
 		recordIgnoredMacro(v.Name)
 	}
 }

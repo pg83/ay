@@ -198,7 +198,7 @@ func emitEN(
 	deps := append([]NodeRef(nil), depENRefs...)
 	foreignDepRefs := depRefs(enumParserLD)
 
-	node := &Node{
+	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
@@ -211,5 +211,5 @@ func emitEN(
 		ForeignDepRefs: foreignDepRefs,
 	}
 
-	emit.emitReserved(node, id)
+	emit.emitReservedNode(node, id)
 }

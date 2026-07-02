@@ -35,7 +35,7 @@ func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 	pythonEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	yasmEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envYASM_TEST_SUITE, Value: strOne}}
 
-	node := &Node{
+	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(tc.Python3), rodataConstArgs, na.strList(internStr(toolName), (srcVFS).str(), (asmVFS).str())),
 			Env: pythonEnv}, Cmd{CmdArgs: na.chunkList(yasmConstHead, na.strList(argD.str(), internV("_", string(instance.Platform.ISA), "_")), rodataYasmConstArgs, na.strList((outVFS).str(), (asmVFS).str())),
@@ -55,7 +55,7 @@ func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 		node.DepRefs = extraDepRefs
 	}
 
-	return emit.emit(node), asmVFS, outVFS
+	return emit.emitNode(node), asmVFS, outVFS
 }
 
 func (e *EmitContext) emitLibraryRodataSource(meta SrcMeta) {

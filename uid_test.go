@@ -54,7 +54,7 @@ func TestComputeUID_KnownVector(t *testing.T) {
 }
 
 func TestCanonicalNodeBytes_ZeroesIdentityFields(t *testing.T) {
-	n := &Node{Platform: &Platform{},
+	n := Node{Platform: &Platform{},
 		Cmds: []Cmd{},
 
 		Env:          nil,
@@ -65,7 +65,7 @@ func TestCanonicalNodeBytes_ZeroesIdentityFields(t *testing.T) {
 		UID:          tuid("AAAAA"),
 		SelfUID:      tuid("BBBBB"),
 	}
-	canon := canonicalNodeBytes(n)
+	canon := canonicalNodeBytes(&n)
 	s := string(canon)
 
 	for _, banned := range []string{tuid("AAAAA").string(), tuid("BBBBB").string(), "should-not-appear-CCCCC"} {

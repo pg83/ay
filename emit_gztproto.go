@@ -25,7 +25,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 	inputs = append(inputs, inducedProtos...)
 	inputs = append(inputs, gztSource)
 
-	node := &Node{
+	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{
 			CmdArgs: na.chunkList(gztCmdArgs(converterBin, protoInclude, gztSource, genProto)),
@@ -39,7 +39,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 		ForeignDepRefs: depRefs(converterRef),
 	}
 
-	gzRef := ctx.emit.emit(node)
+	gzRef := ctx.emit.emitNode(node)
 	sourceInputs := make([]VFS, 0, 1+len(imports))
 
 	sourceInputs = append(sourceInputs, gztSource)

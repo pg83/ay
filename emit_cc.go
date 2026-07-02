@@ -248,7 +248,7 @@ func composeCCNode(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInpu
 		allInputs = na.inputList(in.IncludeInputs)
 	}
 
-	node := &Node{
+	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{
 			CmdArgs: cmdArgs,
@@ -266,7 +266,7 @@ func composeCCNode(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInpu
 		node.DepRefs = in.ExtraDepRefs
 	}
 
-	return emit.emit(node), outVFS, allInputs
+	return emit.emitNode(node), outVFS, allInputs
 }
 
 func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, suffix string) (out, input VFS) {

@@ -187,7 +187,7 @@ func buildObjcopyNode(ctx *GenCtx, instance ModuleInstance, oc *ObjcopyEmitCtx, 
 	na := oc.na
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	node := &Node{
+	node := Node{
 		Platform:     instance.Platform,
 		Cmds:         na.cmdList(Cmd{CmdArgs: objcopyCmdArgs(oc, outputObj, payload), Env: env}),
 		Env:          env,
@@ -199,7 +199,7 @@ func buildObjcopyNode(ctx *GenCtx, instance ModuleInstance, oc *ObjcopyEmitCtx, 
 		DepRefs:      deps,
 	}
 
-	return ctx.emit.emit(node)
+	return ctx.emit.emitNode(node)
 }
 
 type ResourceItem struct {
@@ -513,7 +513,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 			}
 		}
 
-		ctx.emit.emitReserved(&Node{
+		ctx.emit.emitReservedNode(Node{
 			Platform:     instance.Platform,
 			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(nodeCmd), Env: env}),
 			Env:          env,

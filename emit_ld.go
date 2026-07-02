@@ -197,7 +197,7 @@ func emitLD(
 		outputs = append(outputs, build(binPrefix, binaryName, ".debug"))
 	}
 
-	n := &Node{
+	n := Node{
 		Platform:     instance.Platform,
 		Cmds:         cmds,
 		Env:          envFull,
@@ -209,7 +209,7 @@ func emitLD(
 		Resources:    instance.Platform.UsesLinkResources,
 	}
 
-	return emit.emit(n)
+	return emit.emitNode(n)
 }
 
 func lDOutputPath(instance ModuleInstance, binaryName string) VFS {
@@ -220,7 +220,7 @@ func emitVCSNode(emit *StreamingEmitter, host *Platform) NodeRef {
 	na := emit.nodeArenas()
 	output := bldVcsJson
 
-	node := &Node{
+	node := Node{
 		Platform: host,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(internStr(currentYatoolPath()),
 			argFetch.str(),
@@ -235,7 +235,7 @@ func emitVCSNode(emit *StreamingEmitter, host *Platform) NodeRef {
 	node.UID = resourceFetchUID("base64:vcs.json:"+vcsJSONBase64, output.string())
 	node.SelfUID = node.UID
 
-	return emit.emit(node)
+	return emit.emitNode(node)
 }
 
 func composeLDCmdVcsInfo(tc ModuleToolchain, vcsCPath string) []STR {

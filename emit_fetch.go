@@ -11,7 +11,7 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 
 	output := build("resources/", decl.Name.string())
 
-	node := &Node{
+	node := Node{
 		Platform: ctx.host,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(internStr(currentYatoolPath()),
 			argFetch.str(),
@@ -28,7 +28,7 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 	node.UID = resourceFetchUID(decl.URI.string(), output.string())
 	node.SelfUID = node.UID
 
-	ref := ctx.emit.emit(node)
+	ref := ctx.emit.emitNode(node)
 
 	ctx.fetchRefs.put(decl.Name, ref)
 

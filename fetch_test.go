@@ -12,14 +12,14 @@ func emitTestCompileGraph(t *testing.T, host, target *Platform) *Graph {
 
 	execEmit := newStreamingEmitter(nil, nil)
 
-	execEmit.fetchRefs.put(internStr(resourcePatternClangTool), execEmit.emit(&Node{
+	execEmit.fetchRefs.put(internStr(resourcePatternClangTool), execEmit.emitNode(Node{
 		Platform: host,
 		Cmds:     []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"ay", "fetch", "$(B)", "$(S)", "sbr:clang", "resources/CLANG"})}}},
 		KV:       &KV{P: pkFETCH, PC: pcYellow, ShowOut: true},
 		Outputs:  []VFS{build("resources/" + resourcePatternClangTool)},
 	}))
 	clangTool := prebuiltToolchainFlags()["CLANG_TOOL"]
-	ref := execEmit.emit(&Node{Platform: target,
+	ref := execEmit.emitNode(Node{Platform: target,
 		Cmds: []Cmd{{
 			CmdArgs: ArgChunks{appendInternStrs(nil, []string{clangTool, "-c", "$(S)/pkg/app/main.cpp", "-o", "$(B)/pkg/app/main.o"})},
 			Env:     nil,

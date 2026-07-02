@@ -55,7 +55,7 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 		ParsedIncludes: cppParsed,
 	})
 
-	node := &Node{
+	node := Node{
 		Platform:       instance.Platform,
 		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
 		Env:            env,
@@ -66,5 +66,5 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 		ForeignDepRefs: depRefs(toolLDRef),
 	}
 
-	ctx.emit.emitReserved(node, bcRef)
+	ctx.emit.emitReservedNode(node, bcRef)
 }

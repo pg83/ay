@@ -63,7 +63,7 @@ func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 	cmdArgs := na.chunkList(head, ragel6ConstArgs, na.strList((outVFS).str(), (inVFS).str()))
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	node := &Node{
+	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Env: env}),
@@ -75,7 +75,7 @@ func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 		ForeignDepRefs: []NodeRef{ragel6LD},
 	}
 
-	emit.emitReserved(node, id)
+	emit.emitReservedNode(node, id)
 }
 
 func (e *EmitContext) emitLibraryRagel6Source(src STR) {

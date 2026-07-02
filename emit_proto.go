@@ -704,7 +704,7 @@ func emitPB(
 		protocCwd = "$(B)"
 	}
 
-	node := &Node{
+	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Cwd: internStr(protocCwd),
@@ -720,7 +720,7 @@ func emitPB(
 		Resources:      usesPython3,
 	}
 
-	return emit.emit(node)
+	return emit.emitNode(node)
 }
 
 func assembleProtoCmdOutputs(protoBase string, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH VFS, extraPlugins []ResolvedCPPProtoPlugin, liteHeaders, grpc bool) []VFS {

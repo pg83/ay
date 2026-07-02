@@ -56,7 +56,7 @@ func emitBI(
 		buildInfoGenPyVFS,
 	}
 
-	node := &Node{
+	node := Node{
 		Platform:     instance.Platform,
 		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd1Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd2Args), Env: env}),
 		Env:          env,
@@ -68,7 +68,7 @@ func emitBI(
 		Resources:    instance.Platform.UsesPython3Clang,
 	}
 
-	return emit.emit(node)
+	return emit.emitNode(node)
 }
 
 func biFlagsForInstance(targetP *Platform) []STR {

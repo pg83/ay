@@ -308,7 +308,7 @@ func (e *EmitContext) emitEnginePyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef Nod
 		nodeInputs = na.inputList(inputs)
 	}
 
-	node := &Node{
+	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Env: env}),
@@ -330,7 +330,7 @@ func (e *EmitContext) emitEnginePyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef Nod
 
 	node.ForeignDepRefs = toolRefs
 
-	pyRef := ctx.emit.emit(node)
+	pyRef := ctx.emit.emitNode(node)
 
 	e.codegen.register(&GeneratedFileInfo{
 		OutputPath:    outputPath,
@@ -366,7 +366,7 @@ func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef,
 
 	yapycEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}
 
-	yapycNode := &Node{
+	yapycNode := Node{
 		Platform:       instance.Platform,
 		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(yapycCmd), Env: yapycEnv}),
 		Env:            yapycEnv,
@@ -379,7 +379,7 @@ func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef,
 		Resources:      usesPython3,
 	}
 
-	yapycRef := ctx.emit.emit(yapycNode)
+	yapycRef := ctx.emit.emitNode(yapycNode)
 
 	e.codegen.register(&GeneratedFileInfo{OutputPath: yapycOut, ProducerRef: yapycRef})
 }
@@ -772,7 +772,7 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) *PyRegisterResult {
 			internStr(regCppAbs),
 		}
 
-		pyNode := &Node{
+		pyNode := Node{
 			Platform:     ctx.target,
 			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(pyCmdArgs), Env: env}),
 			Env:          env,
@@ -783,7 +783,7 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) *PyRegisterResult {
 			Resources:    usesPython3,
 		}
 
-		pyRef := ctx.emit.emit(pyNode)
+		pyRef := ctx.emit.emitNode(pyNode)
 		envCFlags := make([]ARG, 0, len(d.cc.CFlags))
 
 		for _, f := range d.cc.CFlags {

@@ -56,7 +56,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 			}
 		}
 
-		node := &Node{
+		node := Node{
 			Platform:     instance.Platform,
 			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(bcArgs), Env: env}),
 			Env:          env,
@@ -68,7 +68,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 			Resources:    usesPython3Clang16,
 		}
 
-		ref := ctx.emit.emit(node)
+		ref := ctx.emit.emitNode(node)
 
 		bcRefs = append(bcRefs, ref)
 		bcPaths = append(bcPaths, bcOut)
@@ -89,7 +89,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		mergeInputs = append(mergeInputs, ctx.scripts[copyFsToolsVFS])
 	}
 
-	ldNode := &Node{
+	ldNode := Node{
 		Platform:     instance.Platform,
 		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(ldArgs), Env: env}),
 		Env:          env,
@@ -101,7 +101,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		Resources:    usesPython3Clang16,
 	}
 
-	ldRef := ctx.emit.emit(ldNode)
+	ldRef := ctx.emit.emitNode(ldNode)
 	optOutName := stmt.Name + "_optimized" + stmt.Suffix + ".bc"
 	optOut := build(instance.Path.rel(), "/", optOutName)
 	optArgs := []STR{internStr(python), internStr(optWrapper), internStr(opt), (mergedOut).str(), argDashO.str(), (optOut).str()}
@@ -121,7 +121,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	optChunks := na.inputList(concat(optInputs, bcSourceInputs))
 
-	optNode := &Node{
+	optNode := Node{
 		Platform:     instance.Platform,
 		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(optArgs), Env: env}),
 		Env:          env,
@@ -133,7 +133,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		Resources:    usesPython3Clang16,
 	}
 
-	opRef := ctx.emit.emit(optNode)
+	opRef := ctx.emit.emitNode(optNode)
 
 	if stmt.GenerateMachineCode {
 		return

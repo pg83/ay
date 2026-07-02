@@ -84,7 +84,7 @@ func emitBundleNode(ctx *GenCtx, instance ModuleInstance, python3 STR, src, dst 
 		depRefs = []NodeRef{srcRef}
 	}
 
-	node := &Node{
+	node := Node{
 		Platform:     instance.Platform,
 		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
 		Env:          env,
@@ -96,5 +96,5 @@ func emitBundleNode(ctx *GenCtx, instance ModuleInstance, python3 STR, src, dst 
 		Resources:    usesPython3,
 	}
 
-	ctx.emit.emitReserved(node, id)
+	ctx.emit.emitReservedNode(node, id)
 }

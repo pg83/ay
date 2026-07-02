@@ -69,7 +69,7 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta) {
 		{Name: cudaPathEnv, Value: cudaPathValueStr},
 	}
 
-	node := &Node{
+	node := Node{
 		Platform:     p,
 		Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
 		Env:          env,
@@ -81,5 +81,5 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta) {
 		DepRefs:      append([]NodeRef{mtimeRef, pidRef}, in.ExtraDepRefs...),
 	}
 
-	e.collectObj(ctx.emit.emit(node), outVFS, meta)
+	e.collectObj(ctx.emit.emitNode(node), outVFS, meta)
 }

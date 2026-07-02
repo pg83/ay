@@ -36,7 +36,7 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 
 	inputs := na.inputList(scripts[joinSrcs], srcVFSs, closure)
 
-	node := &Node{
+	node := Node{
 		Platform: statsPlatform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
@@ -48,7 +48,7 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 		Resources:    usesPython3,
 	}
 
-	return emit.emit(node), outVFS
+	return emit.emitNode(node), outVFS
 }
 
 func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {

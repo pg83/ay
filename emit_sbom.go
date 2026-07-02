@@ -75,7 +75,7 @@ func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 	scriptVFS := source(sbomGenScriptRel)
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	node := &Node{
+	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList([]STR{
 			wrapccPython3STR,
@@ -94,7 +94,7 @@ func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 		Resources:    usesPython3,
 	}
 
-	ref := ctx.emit.emit(node)
+	ref := ctx.emit.emitNode(node)
 
 	return &ref, &out
 }
@@ -111,7 +111,7 @@ func emitSbomToolchainComponent(ctx *GenCtx, instance ModuleInstance, toolchainN
 	scriptVFS := source(sbomGenScriptRel)
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	node := &Node{
+	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList([]STR{
 			wrapccPython3STR,
@@ -129,7 +129,7 @@ func emitSbomToolchainComponent(ctx *GenCtx, instance ModuleInstance, toolchainN
 		Resources:    usesPython3,
 	}
 
-	ref := ctx.emit.emit(node)
+	ref := ctx.emit.emitNode(node)
 
 	return &ref, &out
 }

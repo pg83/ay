@@ -28,6 +28,15 @@ func (a *BumpAllocator[T]) commit(k int) {
 	a.chunk = a.chunk[k:]
 }
 
+func (a *BumpAllocator[T]) one() *T {
+	block := a.alloc(1)
+	p := &block[0]
+
+	a.commit(1)
+
+	return p
+}
+
 func (a *BumpAllocator[T]) list(vs ...T) []T {
 	n := len(vs)
 	block := a.alloc(n)

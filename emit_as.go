@@ -12,7 +12,7 @@ func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 	cmdArgs := composeASCmdArgs(instance, outVFS, inVFS, in)
 	env := hostP.toolEnv()
 
-	node := &Node{
+	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Cwd: strB,
@@ -29,7 +29,7 @@ func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		node.DepRefs = in.ExtraDepRefs
 	}
 
-	return emit.emit(node), outVFS
+	return emit.emitNode(node), outVFS
 }
 
 func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs) (out, input VFS) {

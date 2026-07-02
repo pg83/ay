@@ -677,7 +677,7 @@ func emitPR(
 		cmd.Cwd = *stmt.CWD
 	}
 
-	node := &Node{
+	node := Node{
 		Platform:       instance.Platform,
 		Cmds:           na.cmdList(cmd),
 		Env:            env,
@@ -689,7 +689,7 @@ func emitPR(
 		ForeignDepRefs: foreignDepRefs,
 	}
 
-	emit.emitReserved(node, id)
+	emit.emitReservedNode(node, id)
 }
 
 type DeepReplaceCand struct {

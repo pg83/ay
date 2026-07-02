@@ -32,7 +32,7 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 	trickyArgs := []string{"a", "b<c>&d", "tab\there", "quote\"x", "back\\slash", "newline\nhere"}
 
 	e := newStreamingEmitter(nil, nil)
-	leaf := e.emit(&Node{Platform: &Platform{},
+	leaf := e.emitNode(Node{Platform: &Platform{},
 		Cmds:         []Cmd{},
 		Env:          nil,
 		Inputs:       InputChunks{ToVFSSlice([]string{})},
@@ -40,7 +40,7 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 		Outputs:      ToVFSSlice([]string{"leaf.o"}),
 		Requirements: Requirements{},
 	})
-	main := e.emit(&Node{Platform: &Platform{},
+	main := e.emitNode(Node{Platform: &Platform{},
 		Cmds:           []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, trickyArgs)}, Cwd: internStr("$(B)"), Env: EnvVars{{Name: internEnv("FOO"), Value: internStr("bar")}}}},
 		ForeignDepRefs: []NodeRef{leaf},
 		Env:            EnvVars{{Name: internEnv("PATH"), Value: internStr("/usr/bin")}},

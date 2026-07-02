@@ -53,7 +53,7 @@ func (e *EmitContext) emitSwigC() {
 			(cOutVFS).str(),
 			(srcVFS).str()))
 
-		swRef := ctx.emit.emit(&Node{
+		swRef := ctx.emit.emitNode(Node{
 			Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 				Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}}),

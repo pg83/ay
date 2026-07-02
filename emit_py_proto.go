@@ -228,7 +228,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR) {
 		})
 	}
 
-	pyPBNode := &Node{
+	pyPBNode := Node{
 		Platform:     instance.Platform,
 		Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Cwd: protoCwd, Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}}),
 		Env:          EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
@@ -244,7 +244,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR) {
 		pyPBNode.ForeignDepRefs = toolRefs
 	}
 
-	pyPBRef := ctx.emit.emit(pyPBNode)
+	pyPBRef := ctx.emit.emitNode(pyPBNode)
 	sourceInputs := pyProtoSourceInputs(inputs)
 	keyBase := protoPythonResourceKeyBase(instance, d, src)
 
