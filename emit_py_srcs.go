@@ -45,19 +45,19 @@ type PySrc struct {
 	Group  int
 }
 
-func resolvePySrcRel(fs FS, srcDirs []VFS, modulePath, srcRel string) string {
+func resolvePySrcRel(fs FS, srcDirs []VFS, modulePath, srcRel string) STR {
 	for i := len(srcDirs) - 1; i >= 1; i-- {
 		if fs.isFile(srcDirs[i], srcRel) {
-			return srcDirs[i].rel() + "/" + srcRel
+			return internV(srcDirs[i].rel(), "/", srcRel)
 		}
 	}
 
 	if srcRel != "" && pathIsClean(srcRel) &&
 		!fs.isFile(dirKey(modulePath), srcRel) && fs.isFile(srcRootVFS, srcRel) {
-		return srcRel
+		return internStr(srcRel)
 	}
 
-	return modulePath + "/" + srcRel
+	return internV(modulePath, "/", srcRel)
 }
 
 func pySrcYapycSuffix(modulePath string) string {
@@ -180,7 +180,7 @@ func (e *EmitContext) pyResEntriesFor(ps PySrc) []PyGenResEntry {
 
 	resolvedRel := resolvePySrcRel(e.ctx.fs, d.srcDirs, module, srcRel)
 	genInfo := e.codegen.lookupSplit(dirKey(module), ps.Token)
-	pySource := source(resolvedRel)
+	pySource := source(resolvedRel.string())
 
 	if genInfo != nil {
 		pySource = build(module, "/", srcRel)
@@ -560,7 +560,7 @@ func (e *EmitContext) emitPyNamespaceForGroup(group PySrcGroup) ([]NodeRef, []VF
 	nsRoots := make(map[string]struct{}, len(arcSources))
 
 	for _, srcRel := range arcSources {
-		resolvedRel := resolvePySrcRel(ctx.fs, d.srcDirs, instance.Path.rel(), srcRel)
+		resolvedRel := resolvePySrcRel(ctx.fs, d.srcDirs, instance.Path.rel(), srcRel).string()
 		end := len(resolvedRel) - len(srcRel) - 1
 
 		if end < 0 {
