@@ -594,80 +594,6 @@ type resolvedPeer struct {
 	kind   int
 }
 
-func applySbomComponentOrder(name TOK, linkTarget bool, resolved []resolvedPeer, allocatorExplicitPeers []string) []resolvedPeer {
-	sbomOrder := resolved
-	cxxIdx, libcxxIdx := -1, -1
-
-	for i, rp := range resolved {
-		switch rp.path {
-		case "contrib/libs/cxxsupp":
-			cxxIdx = i
-		case "contrib/libs/cxxsupp/libcxx":
-			libcxxIdx = i
-		}
-	}
-
-	if !isSpecializedLibraryType(name) && cxxIdx > libcxxIdx && libcxxIdx >= 0 {
-		reordered := make([]resolvedPeer, 0, len(resolved))
-		cxx := resolved[cxxIdx]
-
-		for i, rp := range resolved {
-			if i == cxxIdx {
-				continue
-			}
-
-			reordered = append(reordered, rp)
-
-			if i == libcxxIdx {
-				reordered = append(reordered, cxx)
-			}
-		}
-
-		sbomOrder = reordered
-	}
-
-	if linkTarget && len(allocatorExplicitPeers) > 0 {
-		allocSet := make(map[string]struct{}, len(allocatorExplicitPeers))
-
-		for _, p := range allocatorExplicitPeers {
-			allocSet[filepath.Clean(p)] = struct{}{}
-		}
-
-		lldIdx, allocIdx := -1, -1
-
-		for i, rp := range sbomOrder {
-			if rp.path == "build/platform/lld" {
-				lldIdx = i
-			}
-
-			if _, ok := allocSet[rp.path]; ok && allocIdx < 0 {
-				allocIdx = i
-			}
-		}
-
-		if lldIdx >= 0 && allocIdx >= 0 && lldIdx < allocIdx {
-			relocated := make([]resolvedPeer, 0, len(sbomOrder))
-			lld := sbomOrder[lldIdx]
-
-			for i, rp := range sbomOrder {
-				if i == lldIdx {
-					continue
-				}
-
-				if i == allocIdx {
-					relocated = append(relocated, lld)
-				}
-
-				relocated = append(relocated, rp)
-			}
-
-			sbomOrder = relocated
-		}
-	}
-
-	return sbomOrder
-}
-
 func applyDeferredPeerOrder(name TOK, allPeers []string, peerKinds []int, allocatorExplicitPeers []string) ([]string, []int) {
 	switch name {
 	case tokPy2Program, tokPy3ProgramBin:
@@ -1078,35 +1004,10 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	linkTarget := isProgramModuleType(d.moduleStmt.Name) || d.moduleStmt.Name == tokDllTool
-	sbomOrder := applySbomComponentOrder(d.moduleStmt.Name, linkTarget, resolved, allocatorExplicitPeers)
 
-	deduper.reset()
+	var ownSbomInsertIdx int
 
-	ownSbomInsertIdx := -1
-
-	for _, rp := range sbomOrder {
-		pr := rp.result
-
-		for i, p := range pr.PeerSbomClosurePaths {
-			if p == lldToolchainSbomVFS {
-				continue
-			}
-
-			if deduper.add(p) {
-				peerSbomRefs = append(peerSbomRefs, pr.PeerSbomClosureRefs[i])
-				peerSbomPaths = append(peerSbomPaths, p)
-			}
-		}
-
-		if rp.path == "build/platform/lld" && d.moduleStmt.Name == tokPy3Program {
-			ownSbomInsertIdx = len(peerSbomPaths)
-		}
-
-		if pr.SbomComponentRef != nil && (*pr.SbomComponentPath != lldToolchainSbomVFS || linkTarget) && deduper.add(*pr.SbomComponentPath) {
-			peerSbomRefs = append(peerSbomRefs, *pr.SbomComponentRef)
-			peerSbomPaths = append(peerSbomPaths, *pr.SbomComponentPath)
-		}
-	}
+	peerSbomRefs, peerSbomPaths, ownSbomInsertIdx = aggregateSbomComponents(d.moduleStmt.Name, linkTarget, resolved, allocatorExplicitPeers, peerSbomRefs, peerSbomPaths)
 
 	deduper.reset()
 
@@ -1735,20 +1636,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ldSbomPaths = peerSbomPaths
 
 			if ownSbomRef != nil {
-				if ownSbomInsertIdx >= 0 && ownSbomInsertIdx <= len(peerSbomPaths) {
-					ldSbomRefs = make([]NodeRef, 0, len(peerSbomRefs)+1)
-					ldSbomRefs = append(ldSbomRefs, peerSbomRefs[:ownSbomInsertIdx]...)
-					ldSbomRefs = append(ldSbomRefs, *ownSbomRef)
-					ldSbomRefs = append(ldSbomRefs, peerSbomRefs[ownSbomInsertIdx:]...)
-
-					ldSbomPaths = make([]VFS, 0, len(peerSbomPaths)+1)
-					ldSbomPaths = append(ldSbomPaths, peerSbomPaths[:ownSbomInsertIdx]...)
-					ldSbomPaths = append(ldSbomPaths, *ownSbomPath)
-					ldSbomPaths = append(ldSbomPaths, peerSbomPaths[ownSbomInsertIdx:]...)
-				} else {
-					ldSbomRefs = concat(peerSbomRefs, []NodeRef{*ownSbomRef})
-					ldSbomPaths = concat(peerSbomPaths, []VFS{*ownSbomPath})
-				}
+				ldSbomRefs, ldSbomPaths = insertOwnSbomComponent(peerSbomRefs, peerSbomPaths, *ownSbomRef, *ownSbomPath, ownSbomInsertIdx)
 			}
 		}
 
