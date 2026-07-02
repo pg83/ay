@@ -12,6 +12,7 @@ var (
 	pbRuntimeBaseVFS               = source(strings.TrimSuffix(pbRuntimeBase, "/"))
 	pbWrapperPath                  = pbWrapperVFS.string()
 	pbKV                           = KV{P: pkPB, PC: pcYellow}
+	cppProtoSpec                   = &ProtoSpec{kv: &pbKV, modulePlugins: true}
 )
 
 var yaffBaseRuntimeHeaders = []string{
@@ -215,8 +216,6 @@ type ProtoSpec struct {
 	hLeaves       []VFS
 	ccLeaves      []VFS
 }
-
-var cppProtoSpec = &ProtoSpec{kv: &pbKV, modulePlugins: true}
 
 type ProtoPBConfig struct {
 	grpc       bool
