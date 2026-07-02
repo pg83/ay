@@ -179,6 +179,11 @@ func emitProtoWrapperPBNode(
 
 func (e *EmitContext) emitLibraryEvSource(src STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
+	if d.unit.Tag == unitTagPy3Proto {
+		throwFmt("gen: py-addressed PROTO_LIBRARY %s with .ev sources is not modelled", instance.Path.rel())
+	}
+
 	evSource := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	evRelPath := evSource.rel()
 	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
@@ -190,13 +195,13 @@ func (e *EmitContext) emitLibraryEvSource(src STR) {
 		instance, evRelPath,
 		cppStyleguideLDRef, protocLDRef, event2cppLDRef,
 		cppStyleguideBinary, protocBinary, event2cppBinary,
-		0, evImports, d.cc.ProtoInclude,
+		d.cc.ModuleTag, evImports, d.cc.ProtoInclude,
 		!protoTransitiveHeadersEnabled(d),
 		d.tc, ctx.emit)
 
 	evH := build(evRelPath, ".pb.h")
 	evPbCC := build(evRelPath, ".pb.cc")
-	directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, "")
+	directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, protoCPPOutRoot(d))
 	evExtras := evWitnessExtras(evRelPath)
 	evHParsed := make([]IncludeDirective, 0, len(directImports)+len(protobufRuntimeDirectives)+len(evExtras))
 
@@ -235,4 +240,5 @@ func (e *EmitContext) emitLibraryEvSource(src STR) {
 
 	meta.Generated = true
 	e.enqueueSrc(evPbCC.str(), meta)
+	e.markProtoPendingAR()
 }

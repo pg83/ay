@@ -491,169 +491,47 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	}
 }
 
-func (e *EmitContext) emitProtoSrcs(peerContribs PeerGlobalContribs) *ProtoSrcsResult {
-	_, instance, d := e.ctx, e.instance, e.d
-
-	var protoSrcs, evSrcs, gztSrcs []string
-
-	for _, src := range d.srcs {
-		switch {
-		case extIsProto(src.string()):
-			protoSrcs = append(protoSrcs, src.string())
-		case extIsEv(src.string()):
-			evSrcs = append(evSrcs, src.string())
-		case extIsGztproto(src.string()):
-			gztSrcs = append(gztSrcs, src.string())
-		}
-	}
-
-	if len(protoSrcs) == 0 && len(evSrcs) == 0 && len(gztSrcs) == 0 {
-		return nil
-	}
-
-	switch instance.Language {
-	case LangPy:
-		return e.emitPyProtoSrcs(peerContribs, protoSrcs, evSrcs)
-	default:
-		return e.emitCPPProtoSrcs(peerContribs, protoSrcs, evSrcs, gztSrcs)
-	}
-}
-
-func (e *EmitContext) emitCPPProtoSrcs(peerContribs PeerGlobalContribs, protoSrcs, evSrcs, gztSrcs []string) *ProtoSrcsResult {
-	ctx, instance, d := e.ctx, e.instance, e.d
-	srcDeclIdx := make(map[string]int, len(d.srcs))
-
-	for i, src := range d.srcs {
-		if _, seen := srcDeclIdx[src.string()]; !seen {
-			srcDeclIdx[src.string()] = i
-		}
-	}
-
-	for i, gztSrc := range gztSrcs {
-		_, genProtoSrc := e.emitLibraryGztProtoSource(gztSrc, peerContribs.protoInclude, tagCppProto)
-
-		protoSrcs = append(protoSrcs, genProtoSrc)
-		srcDeclIdx[genProtoSrc] = len(d.srcs) + i
-	}
-
-	type protoCodegenOutput struct {
-		genRef  NodeRef
-		pbCC    VFS
-		srcRel  string
-		declIdx int
-	}
-
-	var codegenOutputs []protoCodegenOutput
-
-	codegenOutputSeen := make(map[STR]struct{})
-
-	appendCodegenOutput := func(genRef NodeRef, pbCC VFS, srcRel string, declIdx int) {
-		if _, dup := codegenOutputSeen[internStr(pbCC.rel())]; dup {
-			return
-		}
-
-		codegenOutputSeen[internStr(pbCC.rel())] = struct{}{}
-
-		codegenOutputs = append(codegenOutputs, protoCodegenOutput{
-			genRef:  genRef,
-			pbCC:    pbCC,
-			srcRel:  srcRel,
-			declIdx: declIdx,
-		})
-	}
+func (e *EmitContext) cppProtoPB(srcRel string) ProtoPBEmission {
+	ctx, d := e.ctx, e.d
 
 	cfg := ProtoPBConfig{
-		grpc:       d.grpc,
-		moduleTag:  tagCppProto,
 		cppOutRoot: protoCPPOutRoot(d),
+		grpc:       d.grpc,
+		moduleTag:  d.cc.ModuleTag,
 	}
 
-	cppInstance := instance
-	sprotoProduced := e.ymapsSprotoProducedBases()
-	pe := newPBModuleEmission(ctx, d, cfg, peerContribs.protoInclude)
+	pe := newPBModuleEmission(ctx, d, cfg, d.cc.ProtoIncludePeers)
 
-	for _, src := range protoSrcs {
-		pb := e.emitProtoPB(src, cfg, pe, peerContribs.protoInclude, sprotoProduced)
+	return e.emitProtoPB(srcRel, cfg, pe, d.cc.ProtoInclude, e.ymapsSprotoProducedBases())
+}
 
-		for _, cc := range pb.orderedCC {
-			ccSrcRel := strings.TrimPrefix(cc.rel(), cppInstance.Path.rel()+"/")
+func (e *EmitContext) emitLibraryProtoSource(src STR) {
+	d := e.d
 
-			appendCodegenOutput(pb.pbRef, cc, ccSrcRel, srcDeclIdx[src])
-		}
+	if d.unit.Tag == unitTagPy3Proto {
+		e.emitPyProtoSource(src)
+
+		return
 	}
 
-	e.emitYmapsSprotoHeaders(peerContribs, sprotoProduced)
+	pb := e.cppProtoPB(src.string())
+	meta := e.metaForSrc(src)
 
-	if len(evSrcs) > 0 {
-		protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
-		cppStyleguideLDRef, cppStyleguideBinary := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
-		event2cppLDRef, event2cppBinary := ctx.tool(argToolsEvent2cpp)
+	meta.Generated = true
 
-		for _, src := range evSrcs {
-			evRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
-			evVFS := source(evRelPath)
-			evImports := walkClosureTail(e.scanner, evVFS, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
-
-			evRef := emitEV(
-				instance, evRelPath, cppStyleguideLDRef, protocLDRef, event2cppLDRef,
-				cppStyleguideBinary, protocBinary, event2cppBinary,
-				tagCppProto, evImports, peerContribs.protoInclude,
-				!protoTransitiveHeadersEnabled(d),
-				d.tc, ctx.emit)
-
-			evH := build(evRelPath, ".pb.h")
-			evPbCC := build(evRelPath, ".pb.cc")
-			directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, protoCPPOutRoot(d))
-			evExtras := evWitnessExtras(evRelPath)
-			evHParsed := make([]IncludeDirective, 0, len(directImports)+len(protobufRuntimeHeaders)+len(evExtras))
-
-			evHParsed = append(evHParsed, directImports...)
-			evHParsed = append(evHParsed, protobufRuntimeDirectives...)
-			evHParsed = append(evHParsed, evExtras...)
-
-			e.codegen.register(&GeneratedFileInfo{
-				OutputPath:     evH,
-				ProducerRef:    evRef,
-				GeneratorRefs:  []NodeRef{event2cppLDRef},
-				ParsedIncludes: evHParsed,
-				ClosureLeaves:  []VFS{evPbCC},
-			})
-
-			evCCParsed := append(append([]IncludeDirective(nil), evHParsed...),
-				IncludeDirective{kind: includeQuoted, target: internStr(source(pbRuntimeBase, "google/protobuf/wire_format.h").rel())})
-
-			e.codegen.register(&GeneratedFileInfo{
-				OutputPath:     evPbCC,
-				ProducerRef:    evRef,
-				GeneratorRefs:  []NodeRef{event2cppLDRef},
-				ParsedIncludes: evCCParsed,
-			})
-
-			cppInstance := instance
-			evSrcRel := strings.TrimPrefix(evRelPath+".pb.cc", cppInstance.Path.rel()+"/")
-
-			codegenOutputs = append(codegenOutputs, protoCodegenOutput{
-				genRef:  evRef,
-				pbCC:    evPbCC,
-				srcRel:  evSrcRel,
-				declIdx: srcDeclIdx[src],
-			})
-		}
+	for _, cc := range pb.orderedCC {
+		e.enqueueSrc(cc.str(), meta)
 	}
 
-	sort.SliceStable(codegenOutputs, func(i, j int) bool {
-		return codegenOutputs[i].declIdx < codegenOutputs[j].declIdx
-	})
+	e.markProtoPendingAR()
+}
 
-	if d.moduleStmt.Name != tokProtoLibrary || len(codegenOutputs) == 0 {
-		return nil
+func (e *EmitContext) markProtoPendingAR() {
+	d := e.d
+
+	if d.moduleStmt.Name != tokProtoLibrary || e.protoRes != nil {
+		return
 	}
-
-	for _, co := range codegenOutputs {
-		e.enqueueSrc(co.pbCC.str(), SrcMeta{Prio: stmtPrioSrcs, Seq: co.declIdx, Generated: true})
-	}
-
-	e.emitEnumSrcs(peerContribs.addIncl)
 
 	protoLibName := ""
 
@@ -661,38 +539,7 @@ func (e *EmitContext) emitCPPProtoSrcs(peerContribs PeerGlobalContribs, protoSrc
 		protoLibName = d.moduleStmt.Args[0].string()
 	}
 
-	return &ProtoSrcsResult{PendingAR: true, ProtoLibName: protoLibName}
-}
-
-func (e *EmitContext) emitProtoProducer(srcRel string) {
-	ctx, _, d := e.ctx, e.instance, e.d
-
-	cfg := ProtoPBConfig{
-		cppOutRoot: protoCPPOutRoot(d),
-		grpc:       d.grpc,
-	}
-
-	pe := newPBModuleEmission(ctx, d, cfg, d.cc.ProtoIncludePeers)
-
-	e.emitProtoPB(srcRel, cfg, pe, d.cc.ProtoInclude, nil)
-}
-
-func (e *EmitContext) emitLibraryProtoSource(src STR) {
-	ctx, instance, d := e.ctx, e.instance, e.d
-	srcRel := src.string()
-
-	e.emitProtoProducer(srcRel)
-
-	protoBase := strings.TrimSuffix(protoSourceRelPath(ctx.fs, instance, d, srcRel), ".proto")
-	meta := e.metaForSrc(src)
-
-	meta.Generated = true
-
-	e.enqueueSrc(build(protoBase, ".pb.cc").str(), meta)
-
-	if d.grpc {
-		e.enqueueSrc(build(protoBase, ".grpc.pb.cc").str(), meta)
-	}
+	e.protoRes = &ProtoSrcsResult{PendingAR: true, ProtoLibName: protoLibName}
 }
 
 type ResolvedCPPProtoPlugin struct {

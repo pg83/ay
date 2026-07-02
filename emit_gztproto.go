@@ -67,6 +67,11 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 
 func (e *EmitContext) emitLibraryGztProtoCompile(src STR) {
 	_, _, d := e.ctx, e.instance, e.d
+
+	if d.unit.Tag == unitTagPy3Proto {
+		return
+	}
+
 	srcRel := src.string()
 	_, genProtoSrc := e.emitLibraryGztProtoSource(srcRel, d.cc.ProtoInclude, d.cc.ModuleTag)
 
