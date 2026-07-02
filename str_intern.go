@@ -6,18 +6,6 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-type internEntry struct {
-	s  string
-	lo uint64
-}
-
-type internTableT struct {
-	ids      *IntMap[STR]
-	overflow map[string]STR
-	entries  PageVec[internEntry]
-	bytes    *BumpAllocator[byte]
-}
-
 var internTable = func() internTableT {
 	t := internTableT{
 		ids:      newIntMap[STR](1 << 16),
@@ -29,6 +17,18 @@ var internTable = func() internTableT {
 
 	return t
 }()
+
+type internEntry struct {
+	s  string
+	lo uint64
+}
+
+type internTableT struct {
+	ids      *IntMap[STR]
+	overflow map[string]STR
+	entries  PageVec[internEntry]
+	bytes    *BumpAllocator[byte]
+}
 
 func internOwnedCopy(b []byte) string {
 	n := len(b)
@@ -85,7 +85,7 @@ func internBuild(prefix string, parts []string) STR {
 	}
 
 	if n == 0 {
-		return internStr("")
+		return strEmpty
 	}
 
 	block := internTable.bytes.alloc(n)
