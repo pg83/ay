@@ -157,7 +157,7 @@ func (e *EmitContext) srcPositionIns(tok STR) []VFS {
 	return ins
 }
 
-func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []STR) {
+func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMeta) {
 	d := e.d
 	module := e.instance.Path.rel()
 
@@ -363,33 +363,33 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []STR) {
 		push(prodArchiveAsm, 0, len(backing), len(backing))
 	}
 
-	srcs := make([]STR, 0, len(d.srcs)+2)
+	srcs := make([]SrcMeta, 0, len(d.srcs)+2)
 
-	var gztChildren []STR
+	var gztChildren []SrcMeta
 
 	for _, src := range d.srcs {
 		if !isCodegenProducingSrcID(src) {
 			continue
 		}
 
-		srcs = append(srcs, src)
+		srcs = append(srcs, d.srcMetaOf(src))
 
 		if srcExtClassOf(src) == srcExtGztProto && d.unit.Tag != unitTagPy3Proto {
-			child := internStr(e.gztGenProtoName(src.string()))
+			childMeta := d.srcMetaOf(src)
 
-			e.srcMeta[child] = e.metaForSrc(src)
-			gztChildren = append(gztChildren, child)
+			childMeta.Source = internStr(e.gztGenProtoName(src.string()))
+			gztChildren = append(gztChildren, childMeta)
 		}
 	}
 
 	srcs = append(srcs, gztChildren...)
 
-	for i, tok := range srcs {
+	for i, m := range srcs {
 		positions = append(positions, ProducerPos{
 			kind:  prodSrc,
 			index: i,
-			outs:  e.srcPositionOuts(tok),
-			ins:   e.srcPositionIns(tok),
+			outs:  e.srcPositionOuts(m.Source),
+			ins:   e.srcPositionIns(m.Source),
 		})
 	}
 

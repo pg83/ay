@@ -12,7 +12,7 @@ func (e *EmitContext) emitSplitCodegenStmt(sc *SplitCodegenStmt) {
 	_, parts := e.emitSplitCodegen(sc)
 
 	for _, partRel := range parts {
-		e.enqueueSrc(copyFileOutputVFS(instance.Path.rel(), partRel).str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkSplitCodegen})
+		e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.rel(), partRel).str(), Prio: stmtPrioDefault, Generated: true, Bucket: bkSplitCodegen})
 	}
 }
 

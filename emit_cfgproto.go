@@ -2,7 +2,8 @@ package main
 
 var cfgprotoKV = KV{P: pkPB, PC: pcYellow}
 
-func (e *EmitContext) emitLibraryCfgProtoSource(src STR) {
+func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
+	src := meta.Source
 	ctx, instance, d := e.ctx, e.instance, e.d
 	protocLDRef, _ := ctx.tool(argContribToolsProtoc)
 	cppStyleguideLDRef, _ := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
@@ -23,7 +24,7 @@ func (e *EmitContext) emitLibraryCfgProtoSource(src STR) {
 		cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: internStr(ti.rel())})
 	}
 
-	e.emitCppProtoFamilySource(src, &ProtoSpec{
+	e.emitCppProtoFamilySource(meta, &ProtoSpec{
 		kv:          &cfgprotoKV,
 		ccFirstOuts: true,
 		optsTail: []STR{

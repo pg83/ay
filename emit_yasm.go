@@ -89,7 +89,8 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	return emit.emit(node), outVFS
 }
 
-func (e *EmitContext) emitLibraryYasmSource(src STR) {
+func (e *EmitContext) emitLibraryYasmSource(meta SrcMeta) {
+	src := meta.Source
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcVFS := src.vfs()
 	srcRel := src.string()
@@ -117,5 +118,5 @@ func (e *EmitContext) emitLibraryYasmSource(src STR) {
 	yasmLD, _ := ctx.tool(argContribToolsYasm)
 	ref, outPath := emitASYasm(instance, srcRel, srcVFS, asIn, yasmLD, ctx.emit)
 
-	e.collectObj(ref, outPath, e.metaForSrc(src))
+	e.collectObj(ref, outPath, meta)
 }

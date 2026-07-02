@@ -158,7 +158,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 			ctx.emit,
 		)
 
-		e.enqueueSrc(serializedCPPPath.str(), SrcMeta{Prio: stmtPrioDefault, Seq: declSeq, Generated: true, SecondLevel: secondLevel})
+		e.enqueueSrc(SrcMeta{Source: serializedCPPPath.str(), Prio: stmtPrioDefault, Seq: declSeq, Generated: true, SecondLevel: secondLevel})
 	})
 }
 

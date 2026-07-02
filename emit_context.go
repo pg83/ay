@@ -13,8 +13,7 @@ type EmitContext struct {
 	peers      *PeerContext
 	scanner    *IncludeScanner
 	codegen    *CodegenRegistry
-	srcs       []STR
-	srcMeta    map[STR]SrcMeta
+	srcs       []SrcMeta
 	pass2      []func()
 	refs       []NodeRef
 	outs       []VFS
@@ -51,7 +50,7 @@ func newEmitContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peers *
 	scanner := ctx.scannerFor(instance)
 	k := len(d.resources)
 
-	return &EmitContext{ctx: ctx, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen, srcMeta: map[STR]SrcMeta{}, resources: d.resources[:k:k]}
+	return &EmitContext{ctx: ctx, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen, resources: d.resources[:k:k]}
 }
 
 func (e *EmitContext) collectObj(ref NodeRef, out VFS, meta SrcMeta) {
@@ -60,28 +59,12 @@ func (e *EmitContext) collectObj(ref NodeRef, out VFS, meta SrcMeta) {
 	e.metas = append(e.metas, meta)
 }
 
-func (e *EmitContext) markGlobalSrc(src STR) {
-	m := e.metaForSrc(src)
-
-	m.Global = true
-	e.srcMeta[src] = m
-}
-
-func (e *EmitContext) metaForSrc(src STR) SrcMeta {
-	if m, ok := e.srcMeta[src]; ok {
-		return m
-	}
-
-	return e.d.srcMetaOf(src)
-}
-
 func (e *EmitContext) at(instance ModuleInstance) *EmitContext {
 	return newEmitContext(e.ctx, instance, e.d, e.peers)
 }
 
-func (e *EmitContext) enqueueSrc(src STR, meta SrcMeta) {
-	e.srcs = append(e.srcs, src)
-	e.srcMeta[src] = meta
+func (e *EmitContext) enqueueSrc(meta SrcMeta) {
+	e.srcs = append(e.srcs, meta)
 }
 
 func (e *EmitContext) deferPass2(cb func()) {
@@ -107,7 +90,7 @@ func (e *EmitContext) emit() {
 
 	for _, src := range d.srcs {
 		if !isCodegenProducingSrcID(src) {
-			e.emitOneSource(src)
+			e.emitOneSource(d.srcMetaOf(src))
 		}
 	}
 
@@ -128,8 +111,11 @@ func (e *EmitContext) emit() {
 	}
 
 	for _, src := range d.globalSrcs {
-		e.markGlobalSrc(src)
-		e.emitOneSource(src)
+		m := d.srcMetaOf(src)
+
+		m.Global = true
+
+		e.emitOneSource(m)
 	}
 
 	e.registerCollectPySrcs()
@@ -168,11 +154,11 @@ func (e *EmitContext) emit() {
 func (e *EmitContext) drainSrcs() {
 	for {
 		for len(e.srcs) > 0 {
-			src := e.srcs[0]
+			meta := e.srcs[0]
 
 			e.srcs = e.srcs[1:]
 
-			e.emitOneSource(src)
+			e.emitOneSource(meta)
 		}
 
 		if len(e.pass2) == 0 {

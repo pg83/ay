@@ -3471,3 +3471,38 @@ message Any {}
 		t.Fatalf("use.cpp.o deps missing PB producer uid %q: %v", pb.UID, graphDeps(g, use))
 	}
 }
+
+func TestGen_RunProgramGeneratedProtoInSrcsCompiles(t *testing.T) {
+	files := map[string]string{
+		"mod/ya.make": `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    tools/gp foo.proto
+    OUT foo.proto
+)
+SRCS(foo.proto)
+PEERDIR(contrib/libs/protobuf)
+END()
+`,
+		"contrib/libs/protobuf/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n",
+		"contrib/libs/protobuf/p.cpp":   "int p(){return 0;}\n",
+	}
+	writeToolProgram(files, "tools/gp", "gp")
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+
+	g := testGen(newMemFS(files), "mod")
+
+	if nodeByOutput(g, "$(B)/mod/foo.proto") == nil {
+		t.Fatal("RUN_PROGRAM did not produce $(B)/mod/foo.proto")
+	}
+
+	pb := mustNodeByAnyOutput(t, g, "$(B)/mod/foo.pb.cc")
+	if !nodeHasInput(pb, "$(B)/mod/foo.proto") {
+		t.Fatalf("protoc node does not consume the generated build proto; inputs: %v", vfsStringsT3(pb.flatInputs()))
+	}
+
+	mustNodeByOutput(t, g, "$(B)/mod/foo.pb.cc.o")
+}

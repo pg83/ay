@@ -4,34 +4,36 @@ import (
 	"fmt"
 )
 
-func (e *EmitContext) emitOneSource(src STR) {
+func (e *EmitContext) emitOneSource(meta SrcMeta) {
+	src := meta.Source
+
 	switch srcExtClassOf(src) {
 	case srcExtHeader:
 		return
 	case srcExtGztProto:
 		e.emitLibraryGztProtoCompile(src)
 	case srcExtProto:
-		e.emitLibraryProtoSource(src)
+		e.emitLibraryProtoSource(meta)
 	case srcExtFbs64:
 		e.emitLibraryFlatcSource64(src)
 	case srcExtFbs:
 		e.emitLibraryFlatcSource32(src)
 	case srcExtRodata:
-		e.emitLibraryRodataSource(src)
+		e.emitLibraryRodataSource(meta)
 	case srcExtCSource:
-		e.emitLibraryCSource(src)
+		e.emitLibraryCSource(meta)
 	case srcExtAsm:
-		e.emitLibraryAsmSource(src)
+		e.emitLibraryAsmSource(meta)
 	case srcExtYasm:
-		e.emitLibraryYasmSource(src)
+		e.emitLibraryYasmSource(meta)
 	case srcExtCuda:
-		e.emitLibraryCudaSource(src)
+		e.emitLibraryCudaSource(meta)
 	case srcExtRl6:
 		e.emitLibraryRagel6Source(src)
 	case srcExtY:
 		e.emitBisonY(src)
 	case srcExtEv:
-		e.emitLibraryEvSource(src)
+		e.emitLibraryEvSource(meta)
 	case srcExtRl:
 		e.emitLibraryRagel5Source(src)
 	case srcExtFlex:
@@ -39,13 +41,13 @@ func (e *EmitContext) emitOneSource(src STR) {
 	case srcExtHIn:
 		e.emitLibraryHInSource(src)
 	case srcExtCppIn, srcExtCIn:
-		e.emitLibraryCInSource(src)
+		e.emitLibraryCInSource(meta)
 	case srcExtSc:
 		e.emitLibrarySCSource(src)
 	case srcExtGperf:
 		e.emitLibraryGperfSource(src)
 	case srcExtCfgProto:
-		e.emitLibraryCfgProtoSource(src)
+		e.emitLibraryCfgProtoSource(meta)
 	default:
 		e.ctx.onWarn(Warn{
 			Kind:    WarnUnsupportedSource,

@@ -559,29 +559,32 @@ func (e *EmitContext) cppProtoPB(srcRel string, spec *ProtoSpec) ProtoPBEmission
 	return e.emitProtoPB(srcRel, cfg, pe, d.cc.ProtoInclude, e.ymapsSprotoProducedBases(), spec)
 }
 
-func (e *EmitContext) emitCppProtoFamilySource(src STR, spec *ProtoSpec) {
-	pb := e.cppProtoPB(src.string(), spec)
-	meta := e.metaForSrc(src)
+func (e *EmitContext) emitCppProtoFamilySource(meta SrcMeta, spec *ProtoSpec) {
+	pb := e.cppProtoPB(meta.Source.string(), spec)
 
 	meta.Generated = true
 
 	for _, cc := range pb.orderedCC {
-		e.enqueueSrc(cc.str(), meta)
+		child := meta
+
+		child.Source = cc.str()
+
+		e.enqueueSrc(child)
 	}
 
 	e.markProtoPendingAR()
 }
 
-func (e *EmitContext) emitLibraryProtoSource(src STR) {
+func (e *EmitContext) emitLibraryProtoSource(meta SrcMeta) {
 	d := e.d
 
 	if d.unit.Tag == unitTagPy3Proto {
-		e.emitPyProtoSource(src)
+		e.emitPyProtoSource(meta.Source)
 
 		return
 	}
 
-	e.emitCppProtoFamilySource(src, cppProtoSpec)
+	e.emitCppProtoFamilySource(meta, cppProtoSpec)
 }
 
 func (e *EmitContext) markProtoPendingAR() {

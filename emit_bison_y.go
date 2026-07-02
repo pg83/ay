@@ -172,7 +172,8 @@ func (e *EmitContext) emitBisonY(src STR) {
 	meta := d.srcMetaOf(src)
 
 	meta.Generated = true
-	e.enqueueSrc(generatedVFS.str(), meta)
+	meta.Source = generatedVFS.str()
+	e.enqueueSrc(meta)
 }
 
 func bisonTool(ctx *GenCtx, instance ModuleInstance) (NodeRef, string) {

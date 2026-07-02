@@ -34,7 +34,8 @@ func evWitnessExtras(evRelPath string) []IncludeDirective {
 	return out
 }
 
-func (e *EmitContext) emitLibraryEvSource(src STR) {
+func (e *EmitContext) emitLibraryEvSource(meta SrcMeta) {
+	src := meta.Source
 	ctx, instance, d := e.ctx, e.instance, e.d
 
 	if d.unit.Tag == unitTagPy3Proto {
@@ -47,7 +48,7 @@ func (e *EmitContext) emitLibraryEvSource(src STR) {
 	evExtras := evWitnessExtras(evRelPath)
 	evHParsed := concat(directImports, protobufRuntimeDirectives, evExtras)
 
-	e.emitCppProtoFamilySource(src, &ProtoSpec{
+	e.emitCppProtoFamilySource(meta, &ProtoSpec{
 		kv:          &evKV,
 		ccFirstOuts: true,
 		optsTail: []STR{

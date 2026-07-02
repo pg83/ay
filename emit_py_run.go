@@ -21,7 +21,7 @@ func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
 
 	for _, out := range outs {
 		if isCCSourceExt(out) || isAsmSourceExt(out) {
-			e.enqueueSrc(copyFileOutputVFS(instance.Path.rel(), out).str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkRunPython})
+			e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.rel(), out).str(), Prio: stmtPrioDefault, Generated: true, Bucket: bkRunPython})
 		}
 	}
 }

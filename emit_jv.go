@@ -75,7 +75,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 
 		emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, d.cc.TC, ctx.scripts, ctx.emit)
 
-		e.enqueueSrc(g4CppPath.str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkJV})
+		e.enqueueSrc(SrcMeta{Source: g4CppPath.str(), Prio: stmtPrioDefault, Generated: true, Bucket: bkJV})
 	}
 }
 

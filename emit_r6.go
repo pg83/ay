@@ -108,7 +108,8 @@ func (e *EmitContext) emitLibraryRagel6Source(src STR) {
 		meta := d.srcMetaOf(src)
 
 		meta.Generated = true
-		e.enqueueSrc(r6Out.str(), meta)
+		meta.Source = r6Out.str()
+		e.enqueueSrc(meta)
 	}
 
 	e.deferPass2(func() {

@@ -97,5 +97,6 @@ func (e *EmitContext) emitLibraryRagel5Source(src STR) {
 	meta := d.srcMetaOf(src)
 
 	meta.Generated = true
-	e.enqueueSrc(r5CppOut.str(), meta)
+	meta.Source = r5CppOut.str()
+	e.enqueueSrc(meta)
 }

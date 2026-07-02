@@ -55,5 +55,5 @@ func (e *EmitContext) emitCheckConfigHStmt(conf STR) {
 		Compile:       &CompileSpec{FlatOutput: d.flatSrc(generatedVFS.str()), CFlags: psc},
 	})
 
-	e.enqueueSrc(generatedVFS.str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkCheckConfig})
+	e.enqueueSrc(SrcMeta{Source: generatedVFS.str(), Prio: stmtPrioDefault, Generated: true, Bucket: bkCheckConfig})
 }

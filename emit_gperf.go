@@ -72,7 +72,8 @@ func (e *EmitContext) emitLibraryGperfSource(src STR) {
 	meta := d.srcMetaOf(src)
 
 	meta.Generated = true
-	e.enqueueSrc(genVFS.str(), meta)
+	meta.Source = genVFS.str()
+	e.enqueueSrc(meta)
 
 	e.deferPass2(func() {
 		srcClosure := walkClosure(e.scanner, srcVFS, d.cc.ScanCfg)
