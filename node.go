@@ -75,7 +75,7 @@ func (n *Node) buildDeps(fetchRefs *DenseMap[STR, NodeRef]) func(func(NodeRef) b
 }
 
 func depRefs(refs ...NodeRef) []NodeRef {
-	var out []NodeRef
+	out := make([]NodeRef, 0, len(refs))
 
 	for _, r := range refs {
 		if r != 0 {

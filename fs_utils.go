@@ -79,6 +79,14 @@ func firstComponent(p string) (first string, more bool) {
 	return p, false
 }
 
+func trimModulePrefix(rel, dir string) string {
+	if relUnderDir(rel, dir) {
+		return rel[len(dir)+1:]
+	}
+
+	return rel
+}
+
 func joinRel(prefix, suffix string) string {
 	switch {
 	case prefix == "":

@@ -31,6 +31,12 @@ type collectedObjs struct {
 }
 
 func (e *EmitContext) partitionCollected() (local, global collectedObjs) {
+	n := len(e.metas)
+
+	local.refs = make([]NodeRef, 0, n)
+	local.outs = make([]VFS, 0, n)
+	local.metas = make([]SrcMeta, 0, n)
+
 	for i, m := range e.metas {
 		dst := &local
 
@@ -73,6 +79,13 @@ func (e *EmitContext) deferPass2(cb func()) {
 
 func (e *EmitContext) emit() {
 	d := e.d
+
+	if n := len(d.srcs) + len(d.simdSrcs) + len(d.srcExtraFlat); n > 0 {
+		e.refs = make([]NodeRef, 0, n)
+		e.outs = make([]VFS, 0, n)
+		e.metas = make([]SrcMeta, 0, n)
+	}
+
 	fsMemberRefs, fsMemberPaths := e.emitFromSandboxes()
 
 	e.emitBundles()
