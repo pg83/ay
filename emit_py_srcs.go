@@ -304,16 +304,6 @@ func (e *EmitContext) emitEnginePyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef Nod
 		inputs = []VFS{srcAbs}
 		inputs = append(inputs, genInfo.SourceInputs...)
 		inputs = append(inputs, py3ccBinary, py3ccSlowBin)
-
-		if len(inputs) > 4 {
-			toolA := inputs[len(inputs)-2]
-			toolB := inputs[len(inputs)-1]
-
-			copy(inputs[4:], inputs[2:len(inputs)-2])
-			inputs[2] = toolA
-			inputs[3] = toolB
-		}
-
 		nodeInputs = na.inputList(inputs)
 	}
 
