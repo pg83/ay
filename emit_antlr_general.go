@@ -5,106 +5,98 @@ import (
 	"strings"
 )
 
-func (e *EmitContext) emitAntlrRuns() {
+func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 	ctx, instance, d := e.ctx, e.instance, e.d
+	reg := e.codegen
+	jarVFS := antlr4JarVFS
 
-	if len(d.antlrRuns) == 0 {
-		return
+	if run.Macro == "RUN_ANTLR" {
+		jarVFS = antlr3JarVFS
 	}
 
-	reg := e.codegen
+	inVFSByToken := make(map[string]VFS, len(run.INFiles))
+	inputs := make([]VFS, 0, len(run.INFiles))
 
-	for _, run := range d.antlrRuns {
-		jarVFS := antlr4JarVFS
+	var cfExtraInputs []VFS
+	deduper.reset()
 
-		if run.Macro == "RUN_ANTLR" {
-			jarVFS = antlr3JarVFS
+	appendCFExtra := func(v VFS) {
+		if !deduper.add(v) {
+			return
 		}
 
-		inVFSByToken := make(map[string]VFS, len(run.INFiles))
-		inputs := make([]VFS, 0, len(run.INFiles))
+		cfExtraInputs = append(cfExtraInputs, v)
+	}
 
-		var cfExtraInputs []VFS
-		deduper.reset()
+	for _, inTok := range run.INFiles {
+		vfs := copyFileInputVFS(ctx.fs, instance.Path, inTok.string())
 
-		appendCFExtra := func(v VFS) {
-			if !deduper.add(v) {
-				return
-			}
+		inVFSByToken[inTok.string()] = vfs
+		inputs = append(inputs, vfs)
 
-			cfExtraInputs = append(cfExtraInputs, v)
-		}
-
-		for _, inTok := range run.INFiles {
-			vfs := copyFileInputVFS(ctx.fs, instance.Path, inTok.string())
-
-			inVFSByToken[inTok.string()] = vfs
-			inputs = append(inputs, vfs)
-
-			if info := reg.lookup(vfs); info != nil {
-				for _, v := range info.SourceInputs {
-					appendCFExtra(v)
-				}
+		if info := reg.lookup(vfs); info != nil {
+			for _, v := range info.SourceInputs {
+				appendCFExtra(v)
 			}
 		}
+	}
 
-		inputs = append(inputs, cfExtraInputs...)
+	inputs = append(inputs, cfExtraInputs...)
 
-		outVFSByToken := make(map[string]VFS, len(run.OUTFiles)+len(run.OUTNoAutoFiles))
-		outputs := make([]VFS, 0, len(run.OUTFiles)+len(run.OUTNoAutoFiles))
+	outVFSByToken := make(map[string]VFS, len(run.OUTFiles)+len(run.OUTNoAutoFiles))
+	outputs := make([]VFS, 0, len(run.OUTFiles)+len(run.OUTNoAutoFiles))
 
-		for _, outTok := range run.OUTFiles {
-			vfs := copyFileOutputVFS(instance.Path.rel(), outTok.string())
+	for _, outTok := range run.OUTFiles {
+		vfs := copyFileOutputVFS(instance.Path.rel(), outTok.string())
 
-			outVFSByToken[outTok.string()] = vfs
-			outputs = append(outputs, vfs)
+		outVFSByToken[outTok.string()] = vfs
+		outputs = append(outputs, vfs)
+	}
+
+	for _, outTok := range run.OUTNoAutoFiles {
+		vfs := copyFileOutputVFS(instance.Path.rel(), outTok.string())
+
+		outVFSByToken[outTok.string()] = vfs
+		outputs = append(outputs, vfs)
+	}
+
+	deps := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, inputs)
+	args := antlrRunCmdArgs(instance, run, inVFSByToken, outVFSByToken)
+	cwd := ""
+
+	if run.CWD != nil {
+		cwd = run.CWD.string()
+	}
+
+	jvRef := emitJVGeneral(instance, jarVFS, args, inputs, outputs, cwd, deps, d.unit.CCTag, d.tc, ctx.emit)
+	jvSourceInputs := make([]VFS, 0, len(inputs)+2)
+
+	for _, v := range inputs {
+		if v.isSource() {
+			jvSourceInputs = append(jvSourceInputs, v)
+		}
+	}
+
+	jvSourceInputs = append(jvSourceInputs, stdout2stderrVFS, jarVFS)
+
+	for outTok, outVFS := range outVFSByToken {
+		reg.register(&GeneratedFileInfo{
+			OutputPath:     outVFS,
+			ProducerRef:    jvRef,
+			ParsedIncludes: antlrParsedIncludes(instance.Path.rel(), run, outTok, outVFSByToken, inputs, jarVFS),
+			SourceInputs:   jvSourceInputs,
+		})
+	}
+
+	for _, outTok := range run.OUTFiles {
+		if !isCCSourceExt(outTok.string()) {
+			continue
 		}
 
-		for _, outTok := range run.OUTNoAutoFiles {
-			vfs := copyFileOutputVFS(instance.Path.rel(), outTok.string())
+		outVFS := outVFSByToken[outTok.string()]
+		cppRel := antlrOutputModuleRel(instance.Path.rel(), outVFS)
 
-			outVFSByToken[outTok.string()] = vfs
-			outputs = append(outputs, vfs)
-		}
-
-		deps := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, inputs)
-		args := antlrRunCmdArgs(instance, run, inVFSByToken, outVFSByToken)
-		cwd := ""
-
-		if run.CWD != nil {
-			cwd = run.CWD.string()
-		}
-
-		jvRef := emitJVGeneral(instance, jarVFS, args, inputs, outputs, cwd, deps, d.unit.CCTag, d.tc, ctx.emit)
-		jvSourceInputs := make([]VFS, 0, len(inputs)+2)
-
-		for _, v := range inputs {
-			if v.isSource() {
-				jvSourceInputs = append(jvSourceInputs, v)
-			}
-		}
-
-		jvSourceInputs = append(jvSourceInputs, stdout2stderrVFS, jarVFS)
-
-		for outTok, outVFS := range outVFSByToken {
-			reg.register(&GeneratedFileInfo{
-				OutputPath:     outVFS,
-				ProducerRef:    jvRef,
-				ParsedIncludes: antlrParsedIncludes(instance.Path.rel(), run, outTok, outVFSByToken, inputs, jarVFS),
-				SourceInputs:   jvSourceInputs,
-			})
-		}
-
-		for _, outTok := range run.OUTFiles {
-			if !isCCSourceExt(outTok.string()) {
-				continue
-			}
-
-			outVFS := outVFSByToken[outTok.string()]
-			cppRel := antlrOutputModuleRel(instance.Path.rel(), outVFS)
-
-			e.enqueueSrc(copyFileOutputVFS(instance.Path.rel(), cppRel).str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkAntlr})
-		}
+		e.enqueueSrc(copyFileOutputVFS(instance.Path.rel(), cppRel).str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkAntlr})
 	}
 }
 

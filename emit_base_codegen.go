@@ -6,14 +6,6 @@ import (
 
 var baseCodegenKV = KV{P: pkBC, PC: pcYellow}
 
-func (e *EmitContext) emitBaseCodegensForAR() {
-	_, _, d := e.ctx, e.instance, e.d
-
-	for _, bc := range d.baseCodegens {
-		e.emitBaseCodegen(bc)
-	}
-}
-
 func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 	ctx, instance := e.ctx, e.instance
 	na := ctx.emit.nodeArenas()

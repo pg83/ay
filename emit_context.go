@@ -81,12 +81,6 @@ func (e *EmitContext) emit() {
 
 	cythonPlans := e.planCythonCpp()
 
-	e.emitCopyFiles()
-
-	e.emitMiscNodes()
-	e.emitDecimalMD5ForAR()
-	e.emitSplitCodegensForAR()
-	e.emitBaseCodegensForAR()
 	e.emitDeclaredProducers()
 	e.emitArchiveAsmForAR()
 

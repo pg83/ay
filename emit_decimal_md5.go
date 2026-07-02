@@ -8,22 +8,16 @@ type DecimalMD5Lower32BitsStmt struct {
 	Opts     []STR
 }
 
-func (e *EmitContext) emitDecimalMD5ForAR() {
-	_, instance, d := e.ctx, e.instance, e.d
+func (e *EmitContext) emitDecimalMD5Stmt(stmt *DecimalMD5Lower32BitsStmt) {
+	instance := e.instance
 
-	if len(d.decimalMD5) == 0 {
+	e.emitDecimalMD5(stmt)
+
+	if !isCCSourceExt(stmt.File) {
 		return
 	}
 
-	for _, stmt := range d.decimalMD5 {
-		e.emitDecimalMD5(stmt)
-
-		if !isCCSourceExt(stmt.File) {
-			continue
-		}
-
-		e.enqueueSrc(copyFileOutputVFS(instance.Path.rel(), stmt.File).str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkDecimalMD5})
-	}
+	e.enqueueSrc(copyFileOutputVFS(instance.Path.rel(), stmt.File).str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkDecimalMD5})
 }
 
 func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
