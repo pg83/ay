@@ -23,13 +23,15 @@ type EmitContext struct {
 	objcopyRes *ObjcopyEmitResult
 	protoRes   *ProtoSrcsResult
 	pySrcsReg  []PySrc
+	resources  []ResourceEntry
 	declMeta   map[VFS]SrcMeta
 }
 
 func newEmitContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peers *PeerContext) *EmitContext {
 	scanner := ctx.scannerFor(instance)
+	k := len(d.resources)
 
-	return &EmitContext{ctx: ctx, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen, srcMeta: map[STR]SrcMeta{}, declMeta: map[VFS]SrcMeta{}}
+	return &EmitContext{ctx: ctx, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen, srcMeta: map[STR]SrcMeta{}, declMeta: map[VFS]SrcMeta{}, resources: d.resources[:k:k]}
 }
 
 func (e *EmitContext) collectObj(ref NodeRef, out VFS, meta SrcMeta) {
@@ -142,7 +144,7 @@ func (e *EmitContext) emit() {
 		}
 	}
 
-	if !isProgramModuleType(d.moduleStmt.Name) || d.unit.Tag != 0 || len(d.resources) > 0 {
+	if !isProgramModuleType(d.moduleStmt.Name) || d.unit.Tag != 0 || len(e.resources) > 0 {
 		e.objcopyRes = e.emitResourceObjcopy()
 	}
 

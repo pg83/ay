@@ -139,8 +139,6 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		return
 	}
 
-	ensureResourcePeer(instance.Path.rel(), d)
-
 	e.codegen.register(&GeneratedFileInfo{
 		OutputPath:     optOut,
 		ProducerRef:    opRef,
@@ -148,7 +146,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		ParsedIncludes: nil,
 	})
 
-	d.resources = append(d.resources, ResourceEntry{
+	e.resources = append(e.resources, ResourceEntry{
 		Path:      optOutName,
 		Key:       "/llvm_bc/" + stmt.Name,
 		EndsBatch: true,
