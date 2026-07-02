@@ -57,10 +57,14 @@ func rootedBuildCandidate(modulePath, rel string) VFS {
 	return 0
 }
 
+func relUnderDir(rel, dir string) bool {
+	return len(rel) > len(dir) && rel[len(dir)] == '/' && rel[:len(dir)] == dir
+}
+
 func (e *EmitContext) requireProducedInput(kind, token string, vfs VFS) VFS {
 	module := e.instance.Path.rel()
 
-	if vfs.isBuild() && strings.HasPrefix(vfs.rel(), module+"/") && e.codegen.lookup(vfs) == nil {
+	if vfs.isBuild() && relUnderDir(vfs.rel(), module) && e.codegen.lookup(vfs) == nil {
 		throwFmt("gen: %s: %s %q resolves to build file %s that no declared macro produces", module, kind, token, vfs.string())
 	}
 
