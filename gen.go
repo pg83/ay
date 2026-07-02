@@ -820,11 +820,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	peerWholeArchiveCmdPaths := make([]VFS, 0, len(allPeers))
 	peerSbomRefs := make([]NodeRef, 0, len(allPeers))
 	peerSbomPaths := make([]VFS, 0, len(allPeers))
+	peerLinkCmdPaths := make([]VFS, 0, len(allPeers))
 
 	var (
 		peerDynamicRefs   []NodeRef
 		peerDynamicPaths  []VFS
-		peerLinkCmdPaths  []VFS
 		peerLDPluginRefs  []NodeRef
 		peerLDPluginPaths []VFS
 	)
@@ -862,7 +862,13 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		resolved = append(resolved, resolvedPeer{path: peerPath, result: peerResult, kind: kind})
 	}
 
-	var resourceGlobalsClosure []ResourceDecl
+	resGlobalsSum := 0
+
+	for _, rp := range resolved {
+		resGlobalsSum += len(rp.result.ResourceGlobalClosure)
+	}
+
+	resourceGlobalsClosure := make([]ResourceDecl, 0, resGlobalsSum)
 	deduper.reset()
 
 	for _, rp := range resolved {

@@ -724,7 +724,9 @@ func emitPB(
 }
 
 func assembleProtoCmdOutputs(protoBase string, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH VFS, extraPlugins []ResolvedCPPProtoPlugin, liteHeaders, grpc bool) []VFS {
-	outputs := []VFS{pbH}
+	outputs := make([]VFS, 0, 4+2*len(extraPlugins))
+
+	outputs = append(outputs, pbH)
 
 	for _, plugin := range extraPlugins {
 		if !pluginOutputsPrecedeCppGroup(plugin, liteHeaders) {
