@@ -85,7 +85,7 @@ func (e *EmitContext) registerCollectPySrcs() {
 		for _, srcRel := range group.Srcs {
 			path := build(module, "/", srcRel.string())
 
-			if e.codegen.lookupSplit(dirKey(module), srcRel) == nil {
+			if e.codegen.lookupSplit(instance.Path, srcRel) == nil {
 				path = resolveSourceVFS(ctx, instance, srcRel.string(), d.srcDirs)
 			}
 
@@ -179,7 +179,7 @@ func (e *EmitContext) pyResEntriesFor(ps PySrc) []PyGenResEntry {
 	}
 
 	resolvedRel := resolvePySrcRel(e.ctx.fs, d.srcDirs, module, srcRel)
-	genInfo := e.codegen.lookupSplit(dirKey(module), ps.Token)
+	genInfo := e.codegen.lookupSplit(e.instance.Path, ps.Token)
 	pySource := source(resolvedRel.string())
 
 	if genInfo != nil {
@@ -281,7 +281,7 @@ func (e *EmitContext) emitEnginePyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef Nod
 		genInfo = e.codegen.mustInfo(ps.Path, "emitEnginePyYapyc")
 		moduleName = srcAbs.rel() + "-"
 	} else {
-		genInfo = e.codegen.lookupSplit(dirKey(instance.Path.rel()), ps.Token)
+		genInfo = e.codegen.lookupSplit(instance.Path, ps.Token)
 
 		if genInfo != nil {
 			moduleName = ps.Token.string() + "-"
@@ -522,7 +522,7 @@ func (e *EmitContext) emitPyNamespaceForGroup(group PySrcGroup) ([]NodeRef, []VF
 
 		pySources = append(pySources, srcRel.string())
 
-		if reg.lookupSplit(dirKey(instance.Path.rel()), srcRel) == nil {
+		if reg.lookupSplit(instance.Path, srcRel) == nil {
 			arcSources = append(arcSources, srcRel.string())
 		}
 	}

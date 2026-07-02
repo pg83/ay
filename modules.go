@@ -670,7 +670,7 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, instance ModuleInstanc
 
 	d.materializeAddIncl()
 
-	d.srcDirs = append([]VFS{dirKey(modulePath)}, d.srcDirs...)
+	d.srcDirs = append([]VFS{instance.Path}, d.srcDirs...)
 	d.addIncl = append(d.addIncl, d.cfAddIncl...)
 	d.addInclGlobal = append(d.addInclGlobal, d.cfAddInclGlobal...)
 	d.addInclUserGlobal = append(d.addInclUserGlobal, d.cfAddInclGlobal...)
