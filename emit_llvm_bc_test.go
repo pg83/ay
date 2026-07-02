@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -583,5 +584,40 @@ END()
 
 	if !nodeHasInput(bcNode, "$(S)/"+modPath+"/gen.h") {
 		t.Errorf("BC node Inputs missing gen.h from closure: %v", vfsStringsT3(bcNode.flatInputs()))
+	}
+}
+
+func TestGen_RunProgramConsumesLLVMBCOutput(t *testing.T) {
+	const modPath = "mod/llvm"
+
+	files := map[string]string{}
+	addLLVMBCToolchainPeer(files)
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+	writeToolProgram(files, "tools/gp", "gp")
+	files[modPath+"/ya.make"] = `LIBRARY()
+USE_LLVM_BC16()
+LLVM_BC(
+    foo.cpp
+    NAME
+    Bar
+    SUFFIX .16
+)
+SRCS(foo.cpp)
+RUN_PROGRAM(
+    tools/gp ${BINDIR}/Bar_optimized.16.bc out.txt
+    IN ${BINDIR}/Bar_optimized.16.bc
+    OUT_NOAUTO out.txt
+)
+END()
+`
+	files[modPath+"/foo.cpp"] = "int Bar(){return 0;}\n"
+
+	g := testGen(newMemFS(files), modPath)
+	opt := mustNodeByAnyOutput(t, g, "$(B)/"+modPath+"/Bar_optimized.16.bc")
+	consumer := mustNodeByOutput(t, g, "$(B)/"+modPath+"/out.txt")
+
+	if !slices.Contains(graphDeps(g, consumer), opt.UID) {
+		t.Fatalf("out.txt deps missing LLVM_BC opt producer uid %q: %v", opt.UID, graphDeps(g, consumer))
 	}
 }
