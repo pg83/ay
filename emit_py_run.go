@@ -6,28 +6,22 @@ import (
 
 var pyRunKV = KV{P: pkPY, PC: pcYellow, ShowOut: true}
 
-func (e *EmitContext) emitRunPythonForAR() {
-	_, instance, d := e.ctx, e.instance, e.d
+func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
+	instance := e.instance
 
-	if len(d.runPython) == 0 {
-		return
+	e.emitRunPython(rp)
+
+	outs := make([]string, 0, len(rp.OUTFiles)+1)
+
+	outs = append(outs, strStrings(rp.OUTFiles)...)
+
+	if rp.StdoutFile != nil && !rp.StdoutNoAuto {
+		outs = append(outs, rp.StdoutFile.string())
 	}
 
-	for _, rp := range d.runPython {
-		e.emitRunPython(rp)
-
-		outs := make([]string, 0, len(rp.OUTFiles)+1)
-
-		outs = append(outs, strStrings(rp.OUTFiles)...)
-
-		if rp.StdoutFile != nil && !rp.StdoutNoAuto {
-			outs = append(outs, rp.StdoutFile.string())
-		}
-
-		for _, out := range outs {
-			if isCCSourceExt(out) || isAsmSourceExt(out) {
-				e.enqueueSrc(copyFileOutputVFS(instance.Path.rel(), out).str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkRunPython})
-			}
+	for _, out := range outs {
+		if isCCSourceExt(out) || isAsmSourceExt(out) {
+			e.enqueueSrc(copyFileOutputVFS(instance.Path.rel(), out).str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkRunPython})
 		}
 	}
 }

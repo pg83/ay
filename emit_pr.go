@@ -15,60 +15,37 @@ type RunProgramAuxTool struct {
 	rooted bool
 }
 
-func (e *EmitContext) emitRunProgramsForAR() {
-	_, instance, d := e.ctx, e.instance, e.d
+func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
+	instance := e.instance
+	prRef := e.emitRunProgram(rp, e.codegen)
+	outs := make([]string, 0, len(rp.OUTFiles)+1)
 
-	if len(d.runPrograms) == 0 {
-		return
+	outs = append(outs, strStrings(rp.OUTFiles)...)
+
+	if rp.StdoutFile != nil && !rp.StdoutNoAuto {
+		outs = append(outs, rp.StdoutFile.string())
 	}
 
-	reg := e.codegen
-
-	type runEntry struct {
-		prRef NodeRef
-		outs  []string
-		seq   int
-	}
-
-	runs := make([]runEntry, 0, len(d.runPrograms))
-
-	for _, rp := range d.runPrograms {
-		prRef := e.emitRunProgram(rp, reg)
-		outs := make([]string, 0, len(rp.OUTFiles)+len(rp.OUTNoAutoFiles)+1)
-
-		outs = append(outs, strStrings(rp.OUTFiles)...)
-
-		if rp.StdoutFile != nil && !rp.StdoutNoAuto {
-			outs = append(outs, rp.StdoutFile.string())
-		}
-
-		runs = append(runs, runEntry{prRef: prRef, outs: outs, seq: rp.DeclSeq})
-
-		for _, out := range outs {
-			if v := flatcVariantForExt(out); v != nil {
-				e.emitFlatcProducer(copyFileOutputVFS(instance.Path.rel(), out), v, []NodeRef{prRef})
-			}
+	for _, out := range outs {
+		if v := flatcVariantForExt(out); v != nil {
+			e.emitFlatcProducer(copyFileOutputVFS(instance.Path.rel(), out), v, []NodeRef{prRef})
 		}
 	}
 
-	for _, run := range runs {
-		for _, out := range run.outs {
-			if isCCSourceExt(out) || isAsmSourceExt(out) {
-				e.enqueueSrc(copyFileOutputVFS(instance.Path.rel(), out).str(), SrcMeta{Prio: stmtPrioDefault, Seq: run.seq, Generated: true})
-			}
+	for _, out := range outs {
+		if isCCSourceExt(out) || isAsmSourceExt(out) {
+			e.enqueueSrc(copyFileOutputVFS(instance.Path.rel(), out).str(), SrcMeta{Prio: stmtPrioDefault, Seq: rp.DeclSeq, Generated: true})
 		}
 	}
 
-	for _, run := range runs {
-		for _, out := range run.outs {
-			if flatcVariantForExt(out) == nil {
-				continue
-			}
-
-			cppVFS := build(copyFileOutputVFS(instance.Path.rel(), out).rel(), ".cpp")
-
-			e.enqueueSrc(cppVFS.str(), SrcMeta{Prio: stmtPrioDefault, Seq: run.seq, Generated: true, SecondLevel: true})
+	for _, out := range outs {
+		if flatcVariantForExt(out) == nil {
+			continue
 		}
+
+		cppVFS := build(copyFileOutputVFS(instance.Path.rel(), out).rel(), ".cpp")
+
+		e.enqueueSrc(cppVFS.str(), SrcMeta{Prio: stmtPrioDefault, Seq: rp.DeclSeq, Generated: true, SecondLevel: true})
 	}
 }
 
