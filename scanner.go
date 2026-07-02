@@ -199,7 +199,7 @@ func hashScanContext(ctx *ScanContext) uint64 {
 		h = mix64(h ^ uint64(len(ss)))
 
 		for _, v := range ss {
-			h = mix64(h ^ internTable.entries.at(int(v.strID())).lo)
+			h = mix64(h ^ internTable.los[v.strID()])
 		}
 	}
 
