@@ -427,21 +427,6 @@ func unittestForPeerPath(moduleStmt *ModuleStmt) string {
 	return path.Clean(moduleStmt.Args[0].string())
 }
 
-func moduleCCTag(name TOK) STR {
-	switch name {
-	case tokPy23NativeLibrary:
-		return tagPy3Native
-	case tokPy23Library:
-		return tagPy3
-	case tokYqlUdfYdb, tokYqlUdfContrib:
-		return tagYqlUdfStatic
-	case tokFbsLibrary:
-		return tagCppFbs
-	}
-
-	return 0
-}
-
 func (ctx *GenCtx) parseFileCached(rel string) []Stmt {
 	rel = cleanRel(rel)
 
@@ -1275,7 +1260,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			DefaultVarOrder:      d.defaultVarOrder,
 			SetVars:              d.setVars,
 			TC:                   d.tc,
-			ModuleTag:            cfModuleTag(d, instance),
+			ModuleTag:            d.unit.CCTag,
 		}
 
 		d.cc.ScanCfg = newScanContext(ctx.parsers, d.addIncl, peerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
@@ -1326,7 +1311,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 				tag = tagGlobal
 			}
 
-			if cfModuleTag(d, instance) == tagCppProto {
+			if d.unit.CCTag == tagCppProto {
 				tag = tagCppProtoGlobal
 			}
 
@@ -1423,7 +1408,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	isPy3NativeLib := d.moduleStmt.Name == tokPy23NativeLibrary ||
 		d.moduleStmt.Name == tokPy23Library
 
-	perModuleCCTag := moduleCCTag(d.moduleStmt.Name)
+	perModuleCCTag := d.unit.CCTag
 
 	var arNameFn func(string) string
 	var globalArNameFn func(string) string
@@ -1434,17 +1419,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		archiveName = d.moduleStmt.Args[0].string()
 	}
 
-	switch d.moduleStmt.Name {
-	case tokPy23NativeLibrary:
-		arNameFn = func(dir string) string { return archiveNameWithPrefixOrName(dir, "libpy3c", archiveName) }
-		globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefixOrName(dir, "libpy3c", archiveName) }
-	case tokPy3Library, tokPy2Library, tokPy23Library, tokPy2Program, tokPy3Program:
-		arNameFn = func(dir string) string { return archiveNameWithPrefixOrName(dir, "libpy3", archiveName) }
-		globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefixOrName(dir, "libpy3", archiveName) }
-	default:
-		arNameFn = func(dir string) string { return archiveNameWithPrefixOrName(dir, "lib", archiveName) }
-		globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefixOrName(dir, "lib", archiveName) }
-	}
+	arNameFn = func(dir string) string { return archiveNameWithPrefixOrName(dir, d.unit.ARPrefix, archiveName) }
+	globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefixOrName(dir, d.unit.ARPrefix, archiveName) }
 
 	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path.rel(), peerAddInclGlobal, dedupedAddIncl)
 	effectiveSrcDirs := d.srcDirs
@@ -1521,11 +1497,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ldPeerArchivePaths := peerArchivePaths
 		ldPeerLinkCmdPaths := peerLinkCmdPaths
 		ldInstance := instance
-
-		if d.moduleStmt.Name == tokPy2Program || d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin {
-			ldInstance.Language = LangPy
-		}
-
 		ldCCRefs := e.refs
 		ldCCOutputs := e.outs
 
@@ -1603,6 +1574,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			d.useArcadiaLibm,
 			d.splitDwarf,
 			programModuleTag,
+			d.unit.SbomLang,
 			len(d.bundles) > 0,
 			d.tc,
 			ctx.host,
@@ -1643,11 +1615,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	arBaseName := arNameFn(instance.Path.rel())
 	arInstance := instance
-
-	switch d.moduleStmt.Name {
-	case tokPy3Library, tokPy2Library, tokPy23Library, tokPy2Program, tokPy3Program:
-		arInstance.Language = LangPy
-	}
 
 	var arPluginVFS *VFS
 
@@ -1694,7 +1661,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	var ownSbomRef *NodeRef
 	var ownSbomPath *VFS
 
-	if sbomActive(ctx, instance) && sbomQualifies(d) && !d.programPairedLib {
+	if sbomActive(ctx, instance) && sbomQualifies(d) && d.unit.Tag != unitTagPy3BinLib {
 		realPrjName := strings.TrimSuffix(archiveNameWithPrefixOrName(instance.Path.rel(), "", archiveName), ".a")
 
 		ownSbomRef, ownSbomPath = e.emitSbomComponent(realPrjName)
@@ -1713,20 +1680,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if len(globalRefs) > 0 {
 		globalBaseName := globalArNameFn(instance.Path.rel())
-		globalTag := tagGlobal
-
-		switch d.moduleStmt.Name {
-		case tokPy23Library:
-			globalTag = tagPy3Global
-		case tokPy23NativeLibrary:
-			globalTag = tagPy3NativeGlobal
-		case tokYqlUdfYdb, tokYqlUdfContrib:
-			globalTag = tagYqlUdfStaticGlobal
-		}
-
-		if d.programPairedLib {
-			globalTag = tagPy3BinLibGlobal
-		}
+		globalTag := d.unit.GlobalARTag
 
 		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, e.declMeta)
 

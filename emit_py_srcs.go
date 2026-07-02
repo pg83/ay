@@ -17,31 +17,6 @@ var (
 	yaConfResourceRE     = regexp.MustCompile(`"resource"\s*:\s*"([^"]+)"`)
 )
 
-func resourceModuleTag(modName TOK) *string {
-	switch modName {
-	case tokPy3Library, tokPy3ProgramBin, tokPy23Library, tokPy23NativeLibrary:
-		return stringPtr("PY3")
-	}
-
-	return nil
-}
-
-func resourceBinTagForData(d *ModuleData) *string {
-	if d.moduleStmt.Name == tokPy3Program {
-		return stringPtr("PY3_BIN")
-	}
-
-	return resourceModuleTag(d.moduleStmt.Name)
-}
-
-func resourceLibTagForData(d *ModuleData) *string {
-	if d.moduleStmt.Name == tokPy3Program || d.programPairedLib {
-		return stringPtr("PY3_BIN_LIB")
-	}
-
-	return resourceModuleTag(d.moduleStmt.Name)
-}
-
 func pyResourceKeyPrefix(topLevel bool, namespace *STR, modulePath string) string {
 	if topLevel {
 		return ""
@@ -280,7 +255,7 @@ func (e *EmitContext) emitPySrcs() {
 }
 
 func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
-	_, instance, d := e.ctx, e.instance, e.d
+	_, _, d := e.ctx, e.instance, e.d
 	hasKvOnly := d.pyMain != nil || len(d.noCheckImports) > 0 || len(d.pySrcs) > 0 || len(d.yaConfJSON) > 0
 
 	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 && !hasKvOnly {
@@ -317,15 +292,8 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 		return out
 	}
 
-	moduleTag := resourceLibTagForData(d)
-
-	if cfModuleTag(d, instance) == tagCppProto {
-		s := strCPPProto.string()
-
-		moduleTag = &s
-	}
-
-	py3BinProgramSide := d.moduleStmt.Name == tokPy3Program && !d.programPairedLib
+	moduleTag := d.unit.Tag
+	py3BinProgramSide := d.unit.Tag == unitTagPy3Bin
 
 	if !py3BinProgramSide {
 		r, o := e.emitResourceFile(d.resources, moduleTag)
@@ -361,11 +329,11 @@ func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 		return nil
 	}
 
-	if resourceLibTagForData(d) == nil {
+	if d.unit.Tag == 0 {
 		return nil
 	}
 
-	if d.moduleStmt.Name == tokPy3Program && !d.programPairedLib {
+	if d.unit.Tag == unitTagPy3Bin {
 		return nil
 	}
 
@@ -378,9 +346,9 @@ func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 	namespaceEnabled := !d.noExtendedPySearch &&
 		!strings.HasPrefix(instance.Path.rel(), "contrib/python") &&
 		!strings.HasPrefix(instance.Path.rel(), "contrib/tools/python3") &&
-		resourceModuleTag(d.moduleStmt.Name) != nil
+		pyNamespaceUnitType(d.unit.Type)
 
-	moduleTag := resourceLibTagForData(d)
+	moduleTag := d.unit.Tag
 	res := &ObjcopyEmitResult{}
 
 	for _, group := range groups {
@@ -497,7 +465,7 @@ func (e *EmitContext) emitPyNamespaceForGroup(group PySrcGroup) ([]NodeRef, []VF
 		kvsCmd = append(kvsCmd, key+"="+nsValue)
 	}
 
-	return e.emitKvOnlyResource(resourceLibTagForData(d), kvsHash, kvsCmd)
+	return e.emitKvOnlyResource(d.unit.Tag, kvsHash, kvsCmd)
 }
 
 func (e *EmitContext) emitPyMainObjcopy() ([]NodeRef, []VFS) {
@@ -509,7 +477,7 @@ func (e *EmitContext) emitPyMainObjcopy() ([]NodeRef, []VFS) {
 
 	kv := "PY_MAIN=" + d.pyMain.string()
 
-	return e.emitKvOnlyResource(resourceBinTagForData(d), []string{kv}, []string{kv})
+	return e.emitKvOnlyResource(d.unit.Tag, []string{kv}, []string{kv})
 }
 
 func (e *EmitContext) emitNoCheckImportsObjcopy() ([]NodeRef, []VFS) {
@@ -529,7 +497,7 @@ func (e *EmitContext) emitNoCheckImportsObjcopy() ([]NodeRef, []VFS) {
 	kvHash := key + "=\"" + value + "\""
 	kvCmd := key + "=" + value
 
-	return e.emitKvOnlyResource(resourceBinTagForData(d), []string{kvHash}, []string{kvCmd})
+	return e.emitKvOnlyResource(d.unit.Tag, []string{kvHash}, []string{kvCmd})
 }
 
 func (e *EmitContext) emitYaConfJSONObjcopy() ([]NodeRef, []VFS) {
@@ -569,7 +537,7 @@ func (e *EmitContext) emitYaConfJSONObjcopy() ([]NodeRef, []VFS) {
 
 	outRefs := make([]NodeRef, 0, len(resources))
 	outPaths := make([]VFS, 0, len(resources))
-	moduleTag := resourceLibTagForData(d)
+	moduleTag := d.unit.Tag
 
 	for _, res := range resources {
 		key := "resfs/file/" + res.keyPath
@@ -639,7 +607,7 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() ([]NodeRef, []VFS) {
 		}
 	}
 
-	return e.packResources(ResourcePack{Tag: stringPtr("PY3"), Items: pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
+	return e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
 		return e.rawAuxInputClosure(aux, pyProtoSourceInputs(inputs), ref)
 	}})
 }
@@ -915,4 +883,13 @@ func protoPathID(path string) string {
 	encoded = strings.ToLower(encoded)
 
 	return strings.TrimRight(encoded, "=")
+}
+
+func pyNamespaceUnitType(t TOK) bool {
+	switch t {
+	case tokPy3Library, tokPy3ProgramBin, tokPy23Library, tokPy23NativeLibrary:
+		return true
+	}
+
+	return false
 }

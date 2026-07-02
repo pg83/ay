@@ -79,7 +79,7 @@ func (e *EmitContext) emitPyProtoSrcs(peerContribs PeerGlobalContribs, protoSrcs
 		peerAddIncl = dedup(cppSibling.AddInclGlobal, peerContribs.addIncl)
 	}
 
-	genRefs, genOuts := e.packResources(ResourcePack{Tag: stringPtr("PY3_PROTO"), Items: pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
+	genRefs, genOuts := e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
 		return e.pyProtoAuxInputClosure(aux, inputs, ref, peerAddIncl)
 	}})
 
@@ -90,10 +90,6 @@ func (e *EmitContext) emitPyProtoSrcs(peerContribs PeerGlobalContribs, protoSrcs
 		return nil
 	}
 
-	pyInstance := instance
-
-	pyInstance.Language = LangPy
-
 	protoLibName := ""
 
 	if len(d.moduleStmt.Args) > 0 {
@@ -101,7 +97,7 @@ func (e *EmitContext) emitPyProtoSrcs(peerContribs PeerGlobalContribs, protoSrcs
 	}
 
 	globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path.rel(), "libpy3", protoLibName)
-	gRef := emitARGlobalNamedTagged(pyInstance, globalBaseName, tagPy3ProtoGlobal, pyProtoRefs, pyProtoOutputs, d.tc, ctx.host, ctx.emit)
+	gRef := emitARGlobalNamedTagged(instance, globalBaseName, d.unit.GlobalARTag, pyProtoRefs, pyProtoOutputs, d.tc, ctx.host, ctx.emit)
 	globalPath := build(instance.Path.rel(), "/", globalBaseName)
 
 	result := &ProtoSrcsResult{

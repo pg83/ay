@@ -14,9 +14,7 @@ func TestObjcopyHashCerts(t *testing.T) {
 	keysB64 := []string{encb64.StdEncoding.EncodeToString([]byte("/builtin/cacert"))}
 	kvs := []string{}
 	unitPath := "certs"
-	var moduleTag *string
-
-	got := objcopyHash(paths, keysB64, kvs, unitPath, moduleTag)
+	got := objcopyHash(paths, keysB64, kvs, unitPath, 0)
 	want := "c27c99b2d9d5eade92fd72d0aa"
 
 	if got != want {
@@ -47,7 +45,7 @@ func TestObjcopyHashRapidjson(t *testing.T) {
 		keysB64[i] = encb64.StdEncoding.EncodeToString([]byte(k))
 	}
 
-	got := objcopyHash(paths, keysB64, kvs, "devtools/ymake/contrib/python-rapidjson", stringPtr("PY3"))
+	got := objcopyHash(paths, keysB64, kvs, "devtools/ymake/contrib/python-rapidjson", unitTagPy3)
 	want := "55c44b1fdbfda511798cd895e2"
 
 	if got != want {
@@ -58,7 +56,7 @@ func TestObjcopyHashRapidjson(t *testing.T) {
 func TestPyNamespaceObjcopyHashRuntimePy3(t *testing.T) {
 	kv := `py/namespace/bd17cfe3d9af11d01ff7b15ebc3786a7/library/python/runtime_py3="library.python.runtime_py3."`
 
-	got := objcopyHash(nil, nil, []string{kv}, "library/python/runtime_py3", stringPtr("PY3"))
+	got := objcopyHash(nil, nil, []string{kv}, "library/python/runtime_py3", unitTagPy3)
 	want := "3b0561f75631281b973aa8b64e"
 
 	if got != want {
@@ -70,7 +68,7 @@ func TestNoCheckImportsObjcopyHashLib2Py(t *testing.T) {
 	value := "_ios_support _pyrepl.* antigravity asyncio.unix_events asyncio.windows_events asyncio.windows_utils ctypes.wintypes curses.* dbm.gnu dbm.ndbm dbm.sqlite3 encodings.mbcs encodings.oem lzma multiprocessing.popen_fork multiprocessing.popen_forkserver multiprocessing.popen_spawn_posix multiprocessing.popen_spawn_win32 sqlite3.* turtle pty tty"
 	kv := `py/no_check_imports/2fepmfaacurvvaalmzqchmko4a="` + value + `"`
 
-	got := objcopyHash(nil, nil, []string{kv}, "contrib/tools/python3/lib2/py", stringPtr("PY3"))
+	got := objcopyHash(nil, nil, []string{kv}, "contrib/tools/python3/lib2/py", unitTagPy3)
 	want := "cd47bcaec327e5eb9db4641ec8"
 
 	if got != want {
@@ -81,7 +79,7 @@ func TestNoCheckImportsObjcopyHashLib2Py(t *testing.T) {
 func TestPyMainObjcopyHashPy3ccSlow(t *testing.T) {
 	kv := "PY_MAIN=tools.py3cc.slow.main:main"
 
-	got := objcopyHash(nil, nil, []string{kv}, "tools/py3cc/slow", stringPtr("PY3"))
+	got := objcopyHash(nil, nil, []string{kv}, "tools/py3cc/slow", unitTagPy3)
 	want := "4b1c18d0dc6973976969ad23be"
 
 	if got != want {

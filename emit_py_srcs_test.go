@@ -184,6 +184,7 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 		pyTopLevel:    true,
 		pyYapycSuffix: pySrcYapycSuffix("contrib/python/shellingham"),
 		moduleStmt:    &ModuleStmt{Name: tokPy3Library},
+		unit:          resolveModuleUnit(&ModuleStmt{Name: tokPy3Library}, KindLib, LangCPP),
 	}
 
 	em := newStreamingEmitter(nil, nil)
@@ -302,7 +303,7 @@ func runPySrcBatcher(t *testing.T, d *ModuleData, modulePath string) []*Node {
 			ResourceItem{Path: en.pathHash, Key: en.key, Input: en.pathInput, Extra: en.extraInputs})
 	}
 
-	e.packResources(ResourcePack{Tag: stringPtr("PY3"), Items: items})
+	e.packResources(ResourcePack{Tag: unitTagPy3, Items: items})
 
 	return em.nodes
 }
@@ -459,7 +460,7 @@ END()
 		"resfs/src/" + pyKey + "=${rootrel;context=TEXT;input=TEXT:\"__init__.py\"}",
 		"resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"__init__.py.yapyc3\"}",
 	}
-	wantHash := objcopyHash(paths, keysB64, kvsHash, "mod", stringPtr("PY3"))
+	wantHash := objcopyHash(paths, keysB64, kvsHash, "mod", unitTagPy3)
 	wantObjcopy := "$(B)/mod/objcopy_" + wantHash + ".o"
 
 	objcopy := nodeByOutput(g, wantObjcopy)
@@ -551,7 +552,7 @@ END()
 		"resfs/src/" + pyKey + "=${rootrel;context=TEXT;input=TEXT:\"foo.py\"}",
 		"resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"foo.py.yapyc3\"}",
 	}
-	wantHash := objcopyHash([]string{"foo.py", "foo.py.yapyc3"}, keysB64, kvsHash, "modc", stringPtr("PY3"))
+	wantHash := objcopyHash([]string{"foo.py", "foo.py.yapyc3"}, keysB64, kvsHash, "modc", unitTagPy3)
 	objcopy := nodeByOutput(g, "$(B)/modc/objcopy_"+wantHash+".o")
 
 	if objcopy == nil {
@@ -611,7 +612,7 @@ END()
 	kvHash := wantKeyRoot + "=\"mod.\""
 	kvCmd := wantKeyRoot + "=mod."
 
-	wantHash := objcopyHash(nil, nil, []string{kvHash}, "mod", stringPtr("PY3"))
+	wantHash := objcopyHash(nil, nil, []string{kvHash}, "mod", unitTagPy3)
 	wantObjcopy := "$(B)/mod/objcopy_" + wantHash + ".o"
 
 	sawRoot := false
