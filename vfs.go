@@ -52,7 +52,7 @@ func vfsScratchConcat(prefix string, parts []string) []byte {
 }
 
 func internVInto(prefix string, parts []string) STR {
-	return internBytes(vfsScratchConcat(prefix, parts))
+	return internBuild(prefix, parts)
 }
 
 func internedVInto(prefix string, parts []string) STR {
