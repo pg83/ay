@@ -41,94 +41,96 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, moduleDir VFS, entry
 	return out
 }
 
-func (e *EmitContext) emitCopyFiles() {
-	ctx, instance, d := e.ctx, e.instance, e.d
+type CopyEmitState struct {
+	srcVFS         VFS
+	dstVFS         VFS
+	ref            NodeRef
+	producerSource []VFS
+}
+
+func (e *EmitContext) emitCopyFileStmt(entry CopyFileEntry) {
+	st := e.registerCopyFile(entry)
+
+	e.deferPass2(func() {
+		e.emitCopyFileNode(entry, st)
+	})
+}
+
+func (e *EmitContext) registerCopyFile(entry CopyFileEntry) CopyEmitState {
+	ctx, instance := e.ctx, e.instance
 	scanner := e.scanner
 	reg := e.codegen
+	srcVFS := copyFileInputVFS(ctx.fs, instance.Path, entry.Src)
+	dstVFS := copyFileOutputVFS(instance.Path.rel(), entry.Dst)
+	parsed := copyFileParsedIncludes(scanner, ctx.fs, instance.Path, entry)
+	ref := ctx.emit.reserve()
 
-	type entryReg struct {
-		srcVFS         VFS
-		dstVFS         VFS
-		parsed         []IncludeDirective
-		ref            NodeRef
-		producerSource []VFS
+	var producerSource []VFS
+
+	if srcInfo := reg.lookup(srcVFS); srcInfo != nil {
+		producerSource = srcInfo.SourceInputs
 	}
 
-	entries := make([]entryReg, 0, len(d.copyFiles))
-
-	for _, entry := range d.copyFiles {
-		srcVFS := copyFileInputVFS(ctx.fs, instance.Path, entry.Src)
-		dstVFS := copyFileOutputVFS(instance.Path.rel(), entry.Dst)
-		parsed := copyFileParsedIncludes(scanner, ctx.fs, instance.Path, entry)
-		ref := ctx.emit.reserve()
-
-		var producerSource []VFS
-
-		if srcInfo := reg.lookup(srcVFS); srcInfo != nil {
-			producerSource = srcInfo.SourceInputs
+	if existing := reg.lookup(dstVFS); existing != nil {
+		existing.ParsedIncludes = parsed
+	} else {
+		info := &GeneratedFileInfo{
+			OutputPath:     dstVFS,
+			SourcePath:     srcVFS,
+			IsText:         entry.Text,
+			ProducerRef:    ref,
+			ParsedIncludes: parsed,
 		}
 
-		entries = append(entries, entryReg{srcVFS, dstVFS, parsed, ref, producerSource})
+		if srcVFS != dstVFS {
+			info.ClosureLeaves = append(info.ClosureLeaves, ctx.scripts[copyFsToolsVFS]...)
 
-		if existing := reg.lookup(dstVFS); existing != nil {
-			existing.ParsedIncludes = parsed
-		} else {
-			info := &GeneratedFileInfo{
-				OutputPath:     dstVFS,
-				SourcePath:     srcVFS,
-				IsText:         entry.Text,
-				ProducerRef:    ref,
-				ParsedIncludes: parsed,
+			if entry.Text || entry.Auto {
+				info.ClosureLeaves = append(info.ClosureLeaves, srcVFS)
 			}
 
-			if srcVFS != dstVFS {
-				info.ClosureLeaves = append(info.ClosureLeaves, ctx.scripts[copyFsToolsVFS]...)
-
-				if entry.Text || entry.Auto {
-					info.ClosureLeaves = append(info.ClosureLeaves, srcVFS)
-				}
-
-				if srcVFS.isSource() {
-					info.SourceInputs = append([]VFS{srcVFS}, ctx.scripts[copyFsToolsVFS]...)
-				}
+			if srcVFS.isSource() {
+				info.SourceInputs = append([]VFS{srcVFS}, ctx.scripts[copyFsToolsVFS]...)
 			}
-
-			if len(producerSource) > 0 {
-				dstClosure := make([]VFS, 0, len(producerSource)+len(ctx.scripts[copyFsToolsVFS]))
-
-				dstClosure = append(dstClosure, producerSource...)
-				dstClosure = append(dstClosure, ctx.scripts[copyFsToolsVFS]...)
-
-				info.SourceInputs = dstClosure
-			}
-
-			reg.register(info)
 		}
+
+		if len(producerSource) > 0 {
+			dstClosure := make([]VFS, 0, len(producerSource)+len(ctx.scripts[copyFsToolsVFS]))
+
+			dstClosure = append(dstClosure, producerSource...)
+			dstClosure = append(dstClosure, ctx.scripts[copyFsToolsVFS]...)
+
+			info.SourceInputs = dstClosure
+		}
+
+		reg.register(info)
 	}
 
-	for i, entry := range d.copyFiles {
-		srcVFS := entries[i].srcVFS
-		dstVFS := entries[i].dstVFS
-		deps := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, []VFS{srcVFS})
+	return CopyEmitState{srcVFS: srcVFS, dstVFS: dstVFS, ref: ref, producerSource: producerSource}
+}
 
-		var closure []VFS
+func (e *EmitContext) emitCopyFileNode(entry CopyFileEntry, st CopyEmitState) {
+	ctx, instance, d := e.ctx, e.instance, e.d
+	scanner := e.scanner
+	deps := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, []VFS{st.srcVFS})
 
-		if entry.WithContext || len(entry.OutputIncludes) > 0 {
-			closure = walkClosure(e.scanner, dstVFS, d.cc.ScanCfg)
-			closure = rewriteClosureCPSource(scanner, closure)
-			closure = keepOnlySourceVFS(closure)
-			closure = dedup(closure)
-		}
+	var closure []VFS
 
-		if len(entries[i].producerSource) > 0 {
-			closure = append(closure, entries[i].producerSource...)
-		}
+	if entry.WithContext || len(entry.OutputIncludes) > 0 {
+		closure = walkClosure(e.scanner, st.dstVFS, d.cc.ScanCfg)
+		closure = rewriteClosureCPSource(scanner, closure)
+		closure = keepOnlySourceVFS(closure)
+		closure = dedup(closure)
+	}
 
-		emitCPWithDeps(instance, srcVFS, dstVFS, deps, closure, entries[i].ref, d.cc.ModuleTag, d.tc, ctx.scripts, ctx.emit)
+	if len(st.producerSource) > 0 {
+		closure = append(closure, st.producerSource...)
+	}
 
-		if dst := entry.Dst; extIsArchiveMember(dst) {
-			e.collectObj(entries[i].ref, dstVFS, SrcMeta{Prio: stmtPrioDefault})
-		}
+	emitCPWithDeps(instance, st.srcVFS, st.dstVFS, deps, closure, st.ref, d.cc.ModuleTag, d.tc, ctx.scripts, ctx.emit)
+
+	if extIsArchiveMember(entry.Dst) {
+		e.collectObj(st.ref, st.dstVFS, SrcMeta{Prio: stmtPrioDefault})
 	}
 }
 

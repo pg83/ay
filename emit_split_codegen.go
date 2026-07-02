@@ -7,19 +7,12 @@ import (
 
 var splitCodegenKV = KV{P: pkSC, PC: pcYellow}
 
-func (e *EmitContext) emitSplitCodegensForAR() {
-	_, instance, d := e.ctx, e.instance, e.d
+func (e *EmitContext) emitSplitCodegenStmt(sc *SplitCodegenStmt) {
+	instance := e.instance
+	_, parts := e.emitSplitCodegen(sc)
 
-	if len(d.splitCodegens) == 0 {
-		return
-	}
-
-	for _, sc := range d.splitCodegens {
-		_, parts := e.emitSplitCodegen(sc)
-
-		for _, partRel := range parts {
-			e.enqueueSrc(copyFileOutputVFS(instance.Path.rel(), partRel).str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkSplitCodegen})
-		}
+	for _, partRel := range parts {
+		e.enqueueSrc(copyFileOutputVFS(instance.Path.rel(), partRel).str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkSplitCodegen})
 	}
 }
 
