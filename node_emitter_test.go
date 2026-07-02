@@ -54,6 +54,56 @@ func graphDeps(g *Graph, n *Node) []UID {
 	return out
 }
 
+func TestFinalize_ResolvesPendingReservedNodesTopologically(t *testing.T) {
+	e := newStreamingEmitter(nil, nil)
+	aRef := e.reserve()
+	bRef := e.reserve()
+	cRef := e.reserve()
+
+	e.emitReserved(&Node{
+		Platform:     &Platform{Target: "linux"},
+		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"build", "A"})}, Env: nil}},
+		Inputs:       InputChunks{ToVFSSlice([]string{"a.in"})},
+		KV:           &KV{Name: "A"},
+		Outputs:      ToVFSSlice([]string{"a.out"}),
+		Requirements: Requirements{},
+		DepRefs:      []NodeRef{bRef},
+	}, aRef)
+	e.emitReserved(&Node{
+		Platform:     &Platform{Target: "linux"},
+		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"build", "B"})}, Env: nil}},
+		Inputs:       InputChunks{ToVFSSlice([]string{"b.in"})},
+		KV:           &KV{Name: "B"},
+		Outputs:      ToVFSSlice([]string{"b.out"}),
+		Requirements: Requirements{},
+		DepRefs:      []NodeRef{cRef},
+	}, bRef)
+	e.emitReserved(&Node{
+		Platform:     &Platform{Target: "linux"},
+		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"build", "C"})}, Env: nil}},
+		Inputs:       InputChunks{ToVFSSlice([]string{"c.in"})},
+		KV:           &KV{Name: "C"},
+		Outputs:      ToVFSSlice([]string{"c.out"}),
+		Requirements: Requirements{},
+	}, cRef)
+	e.result(aRef)
+
+	g := finalize(e)
+	byName := map[string]*Node{}
+
+	for _, n := range g.Graph {
+		byName[n.KV.Name] = n
+	}
+
+	if got, want := graphDeps(g, byName["A"]), []UID{byName["B"].UID}; !slices.Equal(got, want) {
+		t.Fatalf("A deps = %v, want %v", got, want)
+	}
+
+	if got, want := graphDeps(g, byName["B"]), []UID{byName["C"].UID}; !slices.Equal(got, want) {
+		t.Fatalf("B deps = %v, want %v", got, want)
+	}
+}
+
 func graphForeignDeps(g *Graph, n *Node) []UID {
 	out := make([]UID, len(n.ForeignDepRefs))
 
