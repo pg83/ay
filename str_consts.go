@@ -202,6 +202,8 @@ var (
 	tagPy3ProtoGlobal                                = internStr("py3_proto_global")
 	tagYqlUdfStatic                                  = internStr("yql_udf_static")
 	tagYqlUdfStaticGlobal                            = internStr("yql_udf_static_global")
+	unitSbomCpp                                      = internStr("CPP")
+	unitSbomPy3                                      = internStr("PY3")
 	unitTagPy3                                       = internStr("PY3")
 	unitTagPy3Bin                                    = internStr("PY3_BIN")
 	unitTagPy3BinLib                                 = internStr("PY3_BIN_LIB")

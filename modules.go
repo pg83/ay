@@ -967,7 +967,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				d.peerdirs = append(d.peerdirs, sTRS(yqlUdfImplicitPeers()...)...)
 			}
 
-			d.unit = resolveModuleUnit(v, kind, language)
+			d.unit = resolveModuleUnit(v.Name, kind, language)
 			d.moduleStmt = moduleStmtForKind(v, d.unit.Type)
 
 			if d.moduleStmt.Name == tokProtoLibrary {
@@ -1338,21 +1338,19 @@ type ModuleUnit struct {
 	CCTag       STR
 	ARPrefix    string
 	GlobalARTag STR
-	SbomLang    string
+	SbomLang    STR
 }
 
-func resolveModuleUnit(stmt *ModuleStmt, kind ModuleKind, language Language) ModuleUnit {
-	name := stmt.Name
-
+func resolveModuleUnit(name TOK, kind ModuleKind, language Language) ModuleUnit {
 	if name == tokPy3Program && kind == KindLib {
 		name = tokPy3Library
 
-		return ModuleUnit{Type: name, Tag: unitTagPy3BinLib, ARPrefix: "libpy3", GlobalARTag: tagPy3BinLibGlobal, SbomLang: "PY3"}
+		return ModuleUnit{Type: name, Tag: unitTagPy3BinLib, ARPrefix: "libpy3", GlobalARTag: tagPy3BinLibGlobal, SbomLang: unitSbomPy3}
 	}
 
 	switch name {
 	case tokPy3Program:
-		return ModuleUnit{Type: name, Tag: unitTagPy3Bin, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: "PY3"}
+		return ModuleUnit{Type: name, Tag: unitTagPy3Bin, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
 	case tokPy2Program, tokPy3ProgramBin:
 		tag := STR(0)
 
@@ -1360,28 +1358,28 @@ func resolveModuleUnit(stmt *ModuleStmt, kind ModuleKind, language Language) Mod
 			tag = unitTagPy3
 		}
 
-		return ModuleUnit{Type: name, Tag: tag, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: "PY3"}
+		return ModuleUnit{Type: name, Tag: tag, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
 	case tokPy3Library:
-		return ModuleUnit{Type: name, Tag: unitTagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: "CPP"}
+		return ModuleUnit{Type: name, Tag: unitTagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokPy2Library:
-		return ModuleUnit{Type: name, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: "CPP"}
+		return ModuleUnit{Type: name, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokPy23Library:
-		return ModuleUnit{Type: name, Tag: unitTagPy3, CCTag: tagPy3, ARPrefix: "libpy3", GlobalARTag: tagPy3Global, SbomLang: "CPP"}
+		return ModuleUnit{Type: name, Tag: unitTagPy3, CCTag: tagPy3, ARPrefix: "libpy3", GlobalARTag: tagPy3Global, SbomLang: unitSbomCpp}
 	case tokPy23NativeLibrary:
-		return ModuleUnit{Type: name, Tag: unitTagPy3, CCTag: tagPy3Native, ARPrefix: "libpy3c", GlobalARTag: tagPy3NativeGlobal, SbomLang: "CPP"}
+		return ModuleUnit{Type: name, Tag: unitTagPy3, CCTag: tagPy3Native, ARPrefix: "libpy3c", GlobalARTag: tagPy3NativeGlobal, SbomLang: unitSbomCpp}
 	case tokYqlUdfYdb, tokYqlUdfContrib:
-		return ModuleUnit{Type: name, CCTag: tagYqlUdfStatic, ARPrefix: "lib", GlobalARTag: tagYqlUdfStaticGlobal, SbomLang: "CPP"}
+		return ModuleUnit{Type: name, CCTag: tagYqlUdfStatic, ARPrefix: "lib", GlobalARTag: tagYqlUdfStaticGlobal, SbomLang: unitSbomCpp}
 	case tokFbsLibrary:
-		return ModuleUnit{Type: name, CCTag: tagCppFbs, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: "CPP"}
+		return ModuleUnit{Type: name, CCTag: tagCppFbs, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokProtoLibrary:
 		if language == LangPy {
-			return ModuleUnit{Type: name, Tag: unitTagPy3Proto, ARPrefix: "libpy3", GlobalARTag: tagPy3ProtoGlobal, SbomLang: "CPP"}
+			return ModuleUnit{Type: name, Tag: unitTagPy3Proto, ARPrefix: "libpy3", GlobalARTag: tagPy3ProtoGlobal, SbomLang: unitSbomCpp}
 		}
 
-		return ModuleUnit{Type: name, Tag: strCPPProto, CCTag: tagCppProto, ARPrefix: "lib", GlobalARTag: tagCppProtoGlobal, SbomLang: "CPP"}
+		return ModuleUnit{Type: name, Tag: strCPPProto, CCTag: tagCppProto, ARPrefix: "lib", GlobalARTag: tagCppProtoGlobal, SbomLang: unitSbomCpp}
 	}
 
-	return ModuleUnit{Type: name, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: "CPP"}
+	return ModuleUnit{Type: name, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 }
 
 func moduleStmtForKind(stmt *ModuleStmt, unitType TOK) *ModuleStmt {
