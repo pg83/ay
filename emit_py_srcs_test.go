@@ -184,7 +184,7 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 		pyTopLevel:    true,
 		pyYapycSuffix: pySrcYapycSuffix("contrib/python/shellingham"),
 		moduleStmt:    &ModuleStmt{Name: tokPy3Library},
-		unit:          resolveModuleUnit(&ModuleStmt{Name: tokPy3Library}, KindLib, LangCPP),
+		unit:          resolveModuleUnit(tokPy3Library, KindLib, LangCPP),
 	}
 
 	em := newStreamingEmitter(nil, nil)

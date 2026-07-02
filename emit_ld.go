@@ -76,7 +76,7 @@ func emitLD(
 	useArcadiaLibm bool,
 	wantsSplitDwarf bool,
 	programModuleTag STR,
-	sbomLang string,
+	sbomLang STR,
 	hasBundles bool,
 	tc ModuleToolchain,
 	hostP *Platform,
@@ -406,13 +406,13 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 	return trailer
 }
 
-func composeLDCmdLinkSbom(tc ModuleToolchain, lang, moddir, sbomJSON string, sbomPaths []VFS) []STR {
+func composeLDCmdLinkSbom(tc ModuleToolchain, lang STR, moddir, sbomJSON string, sbomPaths []VFS) []STR {
 	cmd := make([]STR, 0, 10+len(sbomPaths))
 
 	cmd = append(cmd,
 		tc.Python3,
 		linkSbomScriptVFS.str(),
-		strLang, internStr(lang),
+		strLang, lang,
 		strModPath, internStr(moddir),
 		strOutput, internStr(sbomJSON),
 		strVcsInfo, argVcsVcsJson.str(),
