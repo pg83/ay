@@ -85,20 +85,21 @@ func TestPySrcObjcopyHashRuntimePy3RawEntryPoints(t *testing.T) {
 		t.Fatalf("entries: got %d, want 1", len(entries))
 	}
 
-	if entries[0].pathHash != "entry_points.py" {
-		t.Errorf("pathHash: got %q, want %q", entries[0].pathHash, "entry_points.py")
+	if entries[0].token != "entry_points.py" {
+		t.Errorf("token: got %q, want %q", entries[0].token, "entry_points.py")
 	}
 
-	expectedKey := "resfs/file/py/library/python/runtime_py3/entry_points.py"
+	expectedKey := "library/python/runtime_py3/entry_points.py"
 
 	if entries[0].key != expectedKey {
 		t.Errorf("key: got %q, want %q", entries[0].key, expectedKey)
 	}
 
-	expectedKv := "resfs/src/" + expectedKey + "=${rootrel;context=TEXT;input=TEXT:\"entry_points.py\"}"
+	items := pyGenResourceItems(entries)
+	expectedKv := "resfs/src/resfs/file/py/" + expectedKey + "=${rootrel;context=TEXT;input=TEXT:\"entry_points.py\"}"
 
-	if entries[0].kvHash != expectedKv {
-		t.Errorf("kvHash: got %q, want %q", entries[0].kvHash, expectedKv)
+	if items[0].Key != expectedKv {
+		t.Errorf("kvHash: got %q, want %q", items[0].Key, expectedKv)
 	}
 
 	nodes := runPySrcBatcher(t, d, "library/python/runtime_py3")
@@ -198,7 +199,11 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 	}
 	seedResourceTools(ctx)
 
-	res := newEmitContext(ctx, instance, d, nil).emitPySrcObjcopy()
+	e := newEmitContext(ctx, instance, d, nil)
+
+	e.registerCollectPySrcs()
+
+	res := e.emitPySrcObjcopy()
 
 	if res == nil {
 		t.Fatal("emitPySrcObjcopy returned nil")
@@ -274,13 +279,7 @@ func TestResolvePySrcRel_DirtyPathNotRootBound(t *testing.T) {
 	}
 }
 
-func buildPySrcEntries(d *ModuleData, modulePath string) []PySrcEntry {
-	return buildPySrcEntriesFor(newCodegenRegistry(), newMemFS(nil), d, modulePath, strStrings(d.pySrcs), d.pyTopLevel, d.pyNamespace)
-}
-
-func runPySrcBatcher(t *testing.T, d *ModuleData, modulePath string) []*Node {
-	t.Helper()
-
+func pySrcTestEmitContext(d *ModuleData, modulePath string) (*EmitContext, *GenCtx) {
 	em := newStreamingEmitter(nil, nil)
 	ctx := &GenCtx{emit: em, na: em.nodeArenas(), target: testTargetP, fs: newMemFS(nil)}
 
@@ -292,20 +291,41 @@ func runPySrcBatcher(t *testing.T, d *ModuleData, modulePath string) []*Node {
 		Language: LangCPP,
 		Platform: testTargetP,
 	}
-	e := newEmitContext(ctx, instance, d, nil)
-	seedResourceTools(ctx)
 
-	items := make([]ResourceItem, 0, 8)
+	return newEmitContext(ctx, instance, d, nil), ctx
+}
 
-	for _, en := range buildPySrcEntries(d, modulePath) {
-		items = append(items,
-			ResourceItem{Path: "-", Key: en.kvHash, Cmd: en.kvCmd, Input: en.pathInput, Extra: en.extraInputs},
-			ResourceItem{Path: en.pathHash, Key: en.key, Input: en.pathInput, Extra: en.extraInputs})
+func buildPySrcEntries(d *ModuleData, modulePath string) []PyGenResEntry {
+	e, _ := pySrcTestEmitContext(d, modulePath)
+
+	e.registerCollectPySrcs()
+
+	var entries []PyGenResEntry
+
+	for _, ps := range e.pySrcsReg {
+		entries = append(entries, e.pyResEntriesFor(ps)...)
 	}
 
-	e.packResources(ResourcePack{Tag: unitTagPy3, Items: items})
+	return entries
+}
 
-	return em.nodes
+func runPySrcBatcher(t *testing.T, d *ModuleData, modulePath string) []*Node {
+	t.Helper()
+
+	e, ctx := pySrcTestEmitContext(d, modulePath)
+
+	seedResourceTools(ctx)
+	e.registerCollectPySrcs()
+
+	var entries []PyGenResEntry
+
+	for _, ps := range e.pySrcsReg {
+		entries = append(entries, e.pyResEntriesFor(ps)...)
+	}
+
+	e.packResources(ResourcePack{Tag: unitTagPy3, Items: pyGenResourceItems(entries)})
+
+	return ctx.emit.nodes
 }
 
 func TestGen_CopyFileStagedPySrcCarriesOriginalSourceClosure(t *testing.T) {

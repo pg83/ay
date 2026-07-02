@@ -65,9 +65,6 @@ func (e *EmitContext) emitSwigC() {
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		})
 
-		d.pySrcs = append(d.pySrcs, internStr(pyOutRel))
-		d.pySrcsFullName = append(d.pySrcsFullName, true)
-
 		reg := e.codegen
 
 		var psc []ARG
@@ -90,6 +87,13 @@ func (e *EmitContext) emitSwigC() {
 			ProducerRef:   swRef,
 			GeneratorRefs: []NodeRef{swigRef},
 			SourceInputs:  append([]VFS{cOutVFS, srcVFS}, swigClosure...),
+		})
+
+		e.pySrcsReg = append(e.pySrcsReg, PySrc{
+			Path:   pyOutVFS,
+			Module: internStr(generatedPyResourceKey(instance.Path.rel(), d, pyOutRel)),
+			Token:  internV("${ARCADIA_BUILD_ROOT}/", pyOutVFS.rel()),
+			Group:  pyGroupGenAux,
 		})
 
 		e.enqueueSrc(cOutVFS.str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkSwig})

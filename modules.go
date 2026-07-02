@@ -129,7 +129,6 @@ type ModuleData struct {
 	srcExtraFlat             []SrcFlatEntry
 	globalSrcs               []STR
 	pySrcs                   []STR
-	pySrcsFullName           []bool
 	pySrcGroups              []PySrcGroup
 	pyPyiResources           []ResourceEntry
 	pyBuildNoPYC             bool
@@ -2207,8 +2206,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 
 			d.pySrcs = append(d.pySrcs, internStr(src))
-			d.pySrcsFullName = append(d.pySrcsFullName, strings.HasPrefix(src, "${ARCADIA_BUILD_ROOT}/") || strings.HasPrefix(src, "${ARCADIA_ROOT}/") || strings.HasPrefix(src, "$B/"))
-
 			groupSrcs = append(groupSrcs, src)
 
 			if mainNext {
@@ -3245,7 +3242,6 @@ func applyAllPySrcs(fs FS, modulePath string, v UnknownStmt, d *ModuleData) {
 
 	sort.Strings(files)
 	d.pySrcs = append(d.pySrcs, sTRS(files...)...)
-	d.pySrcsFullName = append(d.pySrcsFullName, make([]bool, len(files))...)
 
 	if len(files) > 0 {
 		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{
