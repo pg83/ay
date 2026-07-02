@@ -270,11 +270,7 @@ func composeLDCmdVcsCompile(p *Platform, tc ModuleToolchain, vcsCPath, vcsOPath 
 
 	cmdArgs = append(cmdArgs, argIS.str())
 
-	preNoLibcExtras := make([]ARG, 0, len(p.CFlags)+len(moduleCFlags)+len(peerCFlagsGlobal))
-
-	preNoLibcExtras = append(preNoLibcExtras, p.CFlags...)
-	preNoLibcExtras = append(preNoLibcExtras, moduleCFlags...)
-	preNoLibcExtras = append(preNoLibcExtras, peerCFlagsGlobal...)
+	preNoLibcExtras := concat(p.CFlags, moduleCFlags, peerCFlagsGlobal)
 
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(noCompilerWarnings, false), bundle.Defines, preNoLibcExtras, moduleScopeCFlags, catboostOpenSourceDefineFor(p))
 

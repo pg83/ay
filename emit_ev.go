@@ -45,11 +45,7 @@ func (e *EmitContext) emitLibraryEvSource(src STR) {
 	evRelPath := protoSourceRelPath(ctx.fs, instance, d, src.string())
 	directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, protoCPPOutRoot(d))
 	evExtras := evWitnessExtras(evRelPath)
-	evHParsed := make([]IncludeDirective, 0, len(directImports)+len(protobufRuntimeDirectives)+len(evExtras))
-
-	evHParsed = append(evHParsed, directImports...)
-	evHParsed = append(evHParsed, protobufRuntimeDirectives...)
-	evHParsed = append(evHParsed, evExtras...)
+	evHParsed := concat(directImports, protobufRuntimeDirectives, evExtras)
 
 	e.emitCppProtoFamilySource(src, &ProtoSpec{
 		kv:          &evKV,

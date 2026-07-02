@@ -282,11 +282,7 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 		collect = append(collect, internStr(r.rel()))
 	}
 
-	inputs := make([]VFS, 0, len(descOutputs)+len(rawprotoOutputs)+len(producerSourceInputs))
-
-	inputs = append(inputs, descOutputs...)
-	inputs = append(inputs, rawprotoOutputs...)
-	inputs = append(inputs, producerSourceInputs...)
+	inputs := concat(descOutputs, rawprotoOutputs, producerSourceInputs)
 
 	node := &Node{
 		Platform: instance.Platform,

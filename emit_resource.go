@@ -48,12 +48,7 @@ func resourcePackHash(items []string, unitPath, moduleTag string) string {
 }
 
 func objcopyHash(paths []string, keysB64 []string, kvs []string, unitPath string, moduleTag STR) string {
-	list := make([]string, 0, len(paths)+len(keysB64)+len(kvs))
-
-	list = append(list, paths...)
-	list = append(list, keysB64...)
-	list = append(list, kvs...)
-
+	list := concat(paths, keysB64, kvs)
 	tag := ""
 
 	if moduleTag != 0 {

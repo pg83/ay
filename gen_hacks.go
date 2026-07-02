@@ -115,17 +115,8 @@ func insertOwnSbomComponent(refs []NodeRef, paths []VFS, ownRef NodeRef, ownPath
 		return concat(refs, []NodeRef{ownRef}), concat(paths, []VFS{ownPath})
 	}
 
-	outRefs := make([]NodeRef, 0, len(refs)+1)
-
-	outRefs = append(outRefs, refs[:insertIdx]...)
-	outRefs = append(outRefs, ownRef)
-	outRefs = append(outRefs, refs[insertIdx:]...)
-
-	outPaths := make([]VFS, 0, len(paths)+1)
-
-	outPaths = append(outPaths, paths[:insertIdx]...)
-	outPaths = append(outPaths, ownPath)
-	outPaths = append(outPaths, paths[insertIdx:]...)
+	outRefs := concat(refs[:insertIdx], []NodeRef{ownRef}, refs[insertIdx:])
+	outPaths := concat(paths[:insertIdx], []VFS{ownPath}, paths[insertIdx:])
 
 	return outRefs, outPaths
 }
@@ -189,7 +180,7 @@ func applyDeferredPeerOrder(name TOK, allPeers []string, peerKinds []int, alloca
 			headK = append(headK, peerKinds[i])
 		}
 
-		return append(append(headP, progP...), pyP...), append(append(headK, progK...), pyK...)
+		return concat(headP, progP, pyP), concat(headK, progK, pyK)
 	}
 
 	return allPeers, peerKinds

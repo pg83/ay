@@ -135,10 +135,7 @@ func emitARNode(
 	}
 
 	topEnv := hostP.toolEnv()
-	deps := make([]NodeRef, 0, len(objRefs)+len(peerArchiveRefs))
-
-	deps = append(deps, objRefs...)
-	deps = append(deps, peerArchiveRefs...)
+	deps := concat(objRefs, peerArchiveRefs)
 
 	n := &Node{
 		Platform: instance.Platform,
