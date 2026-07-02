@@ -106,6 +106,7 @@ var (
 	kwYQL_UDF_YDB                                    = internStr("YQL_UDF_YDB")
 	mapsDocProtoNS                                   = internStr("maps/doc/proto")
 	opensslUnistdTarget                              = internStr("unistd.h")
+	str2                                             = internStr("-")
 	str32                                            = internStr("32")
 	strAMXCFlags                                     = internStr("-mamx-tile -mamx-int8 -mavx512f -mavx512cd -mavx512bw -mavx512dq -mavx512vl")
 	strAVX2CFlags                                    = internStr("-mavx2 -mfma -mbmi -mbmi2")

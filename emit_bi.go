@@ -85,3 +85,20 @@ func biFlagsForInstance(targetP *Platform) []STR {
 
 	return flags
 }
+
+func (e *EmitContext) emitBuildInfoStmt() {
+	ctx, instance, d := e.ctx, e.instance, e.d
+	outPrefix := instance.Path.rel() + "/"
+	biRef := emitBI(instance, d.createBuildInfoFor.string(), biFlagsForInstance(instance.Platform), d.tc, ctx.emit)
+
+	e.codegen.register(&GeneratedFileInfo{
+		OutputPath:    build(outPrefix, d.createBuildInfoFor.string()),
+		ProducerRef:   biRef,
+		GeneratorRefs: nil,
+		ParsedIncludes: []IncludeDirective{
+			{kind: includeQuoted, target: internStr(buildInfoGenPyVFS.rel())},
+			{kind: includeQuoted, target: internStr(xargsPyVFS.rel())},
+			{kind: includeQuoted, target: internStr(yieldLinePyVFS.rel())},
+		},
+	})
+}
