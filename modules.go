@@ -270,6 +270,7 @@ func (d *ModuleData) flatSrc(src STR) bool {
 }
 
 type SrcMeta struct {
+	Source      STR
 	Prio        int
 	Seq         int
 	Generated   bool
@@ -307,11 +308,15 @@ func (d *ModuleData) setSrcMeta(src STR, prio, seq int) {
 }
 
 func (d *ModuleData) srcMetaOf(src STR) SrcMeta {
-	if m, ok := d.srcMeta[src]; ok {
-		return m
+	m, ok := d.srcMeta[src]
+
+	if !ok {
+		m = SrcMeta{Prio: stmtPrioDefault}
 	}
 
-	return SrcMeta{Prio: stmtPrioDefault}
+	m.Source = src
+
+	return m
 }
 
 func muslCFlags(on bool) []ARG {

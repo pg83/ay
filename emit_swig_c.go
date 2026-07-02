@@ -96,7 +96,7 @@ func (e *EmitContext) emitSwigC() {
 			Group:  pyGroupGenAux,
 		})
 
-		e.enqueueSrc(cOutVFS.str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkSwig})
+		e.enqueueSrc(SrcMeta{Source: cOutVFS.str(), Prio: stmtPrioDefault, Generated: true, Bucket: bkSwig})
 	}
 }
 

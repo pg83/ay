@@ -93,7 +93,8 @@ func composeASIncludes(in ModuleCCInputs) []STR {
 	return out
 }
 
-func (e *EmitContext) emitLibraryAsmSource(src STR) {
+func (e *EmitContext) emitLibraryAsmSource(meta SrcMeta) {
+	src := meta.Source
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcVFS := src.vfs()
 	srcRel := src.string()
@@ -120,5 +121,5 @@ func (e *EmitContext) emitLibraryAsmSource(src STR) {
 
 	ref, outPath := emitAS(instance, srcRel, srcVFS, asIn, ctx.host, ctx.emit)
 
-	e.collectObj(ref, outPath, e.metaForSrc(src))
+	e.collectObj(ref, outPath, meta)
 }

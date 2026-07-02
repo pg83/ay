@@ -202,5 +202,6 @@ func (e *EmitContext) emitLibraryFlatcSource(src STR, variant *FlatcVariant) {
 	meta := d.srcMetaOf(src)
 
 	meta.Generated = true
-	e.enqueueSrc(build(srcVFS.rel(), ".cpp").str(), meta)
+	meta.Source = build(srcVFS.rel(), ".cpp").str()
+	e.enqueueSrc(meta)
 }

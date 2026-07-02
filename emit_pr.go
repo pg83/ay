@@ -34,7 +34,7 @@ func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
 
 	for _, out := range outs {
 		if isCCSourceExt(out) || isAsmSourceExt(out) {
-			e.enqueueSrc(copyFileOutputVFS(instance.Path.rel(), out).str(), SrcMeta{Prio: stmtPrioDefault, Seq: rp.DeclSeq, Generated: true})
+			e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.rel(), out).str(), Prio: stmtPrioDefault, Seq: rp.DeclSeq, Generated: true})
 		}
 	}
 
@@ -45,7 +45,7 @@ func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
 
 		cppVFS := build(copyFileOutputVFS(instance.Path.rel(), out).rel(), ".cpp")
 
-		e.enqueueSrc(cppVFS.str(), SrcMeta{Prio: stmtPrioDefault, Seq: rp.DeclSeq, Generated: true, SecondLevel: true})
+		e.enqueueSrc(SrcMeta{Source: cppVFS.str(), Prio: stmtPrioDefault, Seq: rp.DeclSeq, Generated: true, SecondLevel: true})
 	}
 }
 

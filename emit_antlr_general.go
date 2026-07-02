@@ -96,7 +96,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 		outVFS := outVFSByToken[outTok.string()]
 		cppRel := antlrOutputModuleRel(instance.Path.rel(), outVFS)
 
-		e.enqueueSrc(copyFileOutputVFS(instance.Path.rel(), cppRel).str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkAntlr})
+		e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.rel(), cppRel).str(), Prio: stmtPrioDefault, Generated: true, Bucket: bkAntlr})
 	}
 }
 

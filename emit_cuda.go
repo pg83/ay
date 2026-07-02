@@ -19,7 +19,8 @@ var cudaKV = KV{P: pkCU, PC: pcLightGreen}
 
 const cudaArchitectures129 = "sm_50:sm_52:sm_60:sm_61:sm_70:sm_75:sm_80:sm_86:sm_89:sm_90:sm_90a:sm_100:sm_100a:sm_120:sm_120a:sm_100f:sm_103:sm_103a:sm_103f:sm_120f"
 
-func (e *EmitContext) emitLibraryCudaSource(src STR) {
+func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta) {
+	src := meta.Source
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	na := ctx.emit.nodeArenas()
@@ -80,5 +81,5 @@ func (e *EmitContext) emitLibraryCudaSource(src STR) {
 		DepRefs:      append([]NodeRef{mtimeRef, pidRef}, in.ExtraDepRefs...),
 	}
 
-	e.collectObj(ctx.emit.emit(node), outVFS, e.metaForSrc(src))
+	e.collectObj(ctx.emit.emit(node), outVFS, meta)
 }

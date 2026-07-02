@@ -54,7 +54,8 @@ func (e *EmitContext) emitLibraryFlexSource(src STR) {
 	meta := d.srcMetaOf(src)
 
 	meta.Generated = true
-	e.enqueueSrc(outVFS.str(), meta)
+	meta.Source = outVFS.str()
+	e.enqueueSrc(meta)
 
 	e.deferPass2(func() {
 		window := walkClosure(e.scanner, outVFS, d.cc.ScanCfg)

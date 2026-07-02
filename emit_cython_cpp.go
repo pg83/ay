@@ -299,7 +299,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			Resources:    usesPython3,
 		}, cyRef)
 
-		e.enqueueSrc(generatedVFS.str(), SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkCython})
+		e.enqueueSrc(SrcMeta{Source: generatedVFS.str(), Prio: stmtPrioDefault, Generated: true, Bucket: bkCython})
 	}
 }
 
