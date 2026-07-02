@@ -122,10 +122,6 @@ func (e *EmitContext) emit() {
 
 	e.drainSrcs()
 
-	if pyRes := e.flushPySrcsRegistry(); pyRes != nil {
-		e.protoRes = pyRes
-	}
-
 	for _, simd := range d.simdSrcs {
 		srcVFS := e.moduleSourceVFS(simd.Src)
 		flags := internArgs(simd.CFlags)
@@ -145,6 +141,8 @@ func (e *EmitContext) emit() {
 		e.emitOneSource(src)
 	}
 
+	e.registerCollectPySrcs()
+
 	regCCPy3Suffix := d.moduleStmt.Name == tokPy23NativeLibrary || d.moduleStmt.Name == tokPy23Library
 
 	if regRes := e.emitPyRegister(regCCPy3Suffix); regRes != nil {
@@ -156,12 +154,16 @@ func (e *EmitContext) emit() {
 	}
 
 	if !isProgramModuleType(d.moduleStmt.Name) {
-		e.emitPySrcs()
+		e.emitPyBytecode()
 
 		genPyAuxRefs, genPyAuxOuts := e.emitGeneratedPyAuxChunks()
 
 		e.globalRefs = append(e.globalRefs, genPyAuxRefs...)
 		e.globalOuts = append(e.globalOuts, genPyAuxOuts...)
+
+		if pyRes := e.flushPyProtoSrcs(); pyRes != nil {
+			e.protoRes = pyRes
+		}
 
 		e.emitLLVMBC(e.peers.ResourceGlobals)
 	}

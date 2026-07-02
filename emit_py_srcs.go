@@ -17,6 +17,11 @@ var (
 	yaConfResourceRE     = regexp.MustCompile(`"resource"\s*:\s*"([^"]+)"`)
 )
 
+const (
+	pyGroupGenAux = -2
+	pyGroupProto  = -1
+)
+
 func pyResourceKeyPrefix(topLevel bool, namespace *STR, modulePath string) string {
 	if topLevel {
 		return ""
@@ -33,13 +38,11 @@ func generatedPyResourceKey(modulePath string, d *ModuleData, srcRel string) str
 	return pyResourceKeyPrefix(d.pyTopLevel, nil, modulePath) + srcRel
 }
 
-type PySrcEntry struct {
-	pathHash    string
-	pathInput   VFS
-	key         string
-	kvHash      string
-	kvCmd       string
-	extraInputs []VFS
+type PySrc struct {
+	Path   VFS
+	Module STR
+	Token  STR
+	Group  int
 }
 
 func resolvePySrcRel(fs FS, srcDirs []VFS, modulePath, srcRel string) string {
@@ -61,202 +64,338 @@ func pySrcYapycSuffix(modulePath string) string {
 	return protoPathID("$S/" + modulePath)[:4]
 }
 
-func buildPySrcEntriesFor(reg *CodegenRegistry, fs FS, d *ModuleData, modulePath string, srcs []string, topLevel bool, namespace *STR) []PySrcEntry {
-	keyPrefix := pyResourceKeyPrefix(topLevel, namespace, modulePath)
-	fullName := make(map[string]bool, len(d.pySrcs))
+func (e *EmitContext) collectPyGroups() []PySrcGroup {
+	d := e.d
+	groups := d.pySrcGroups
 
-	for i, s := range d.pySrcs {
-		if i < len(d.pySrcsFullName) && d.pySrcsFullName[i] {
-			fullName[s.string()] = true
-		}
+	if len(groups) == 0 && len(d.pySrcs) > 0 {
+		groups = []PySrcGroup{{Srcs: d.pySrcs, TopLevel: d.pyTopLevel, Namespace: d.pyNamespace}}
 	}
 
-	out := make([]PySrcEntry, 0, len(srcs)*2)
+	return groups
+}
 
-	for _, srcRel := range srcs {
-		suffix := ".yapyc3"
+func (e *EmitContext) registerCollectPySrcs() {
+	ctx, instance, d := e.ctx, e.instance, e.d
+	module := instance.Path.rel()
 
-		if strings.Contains(srcRel, "/") {
-			suffix = "." + d.pyYapycSuffix + ".yapyc3"
-		}
+	for gi, group := range e.collectPyGroups() {
+		keyPrefix := pyResourceKeyPrefix(group.TopLevel, group.Namespace, module)
 
-		resolvedRel := resolvePySrcRel(fs, d.srcDirs, modulePath, srcRel)
-		genInfo := reg.lookupSplit(dirKey(modulePath), internStr(srcRel))
-		generated := genInfo != nil
-		pySource := source(resolvedRel)
+		for _, srcRel := range group.Srcs {
+			path := build(module, "/", srcRel.string())
 
-		if generated {
-			pySource = build(modulePath, "/", srcRel)
-			resolvedRel = modulePath + "/" + srcRel
-		}
-
-		srcEdge := pySource
-		copyStaged := generated && genInfo.SourcePath != 0 && genInfo.SourcePath.isSource()
-
-		if copyStaged {
-			srcEdge = genInfo.SourcePath
-		}
-
-		if !d.pyBuildNoPY {
-			pyKey := "resfs/file/py/" + keyPrefix + srcRel
-			pyKvHash := "resfs/src/" + pyKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + "\"}"
-			pyKvCmd := "resfs/src/" + pyKey + "=" + resolvedRel
-
-			var pyExtra []VFS
-
-			if copyStaged {
-				pyExtra = []VFS{srcEdge}
+			if e.codegen.lookupSplit(dirKey(module), srcRel) == nil {
+				path = resolveSourceVFS(ctx, instance, srcRel.string(), d.srcDirs)
 			}
 
-			out = append(out, PySrcEntry{
-				pathHash:    srcRel,
-				pathInput:   pySource,
-				key:         pyKey,
-				kvHash:      pyKvHash,
-				kvCmd:       pyKvCmd,
-				extraInputs: pyExtra,
+			e.pySrcsReg = append(e.pySrcsReg, PySrc{
+				Path:   path,
+				Module: internV(keyPrefix, srcRel.string()),
+				Token:  srcRel,
+				Group:  gi,
 			})
 		}
+	}
+}
+
+func (e *EmitContext) pyYapycOutFor(ps PySrc) VFS {
+	module := e.instance.Path.rel()
+
+	if ps.Group == pyGroupProto {
+		rel := ps.Path.rel()
+		token := strings.TrimPrefix(ps.Token.string(), "${ARCADIA_BUILD_ROOT}/")
+
+		if strings.Contains(token, "/") {
+			return build(rel, ".", pySrcYapycSuffix(module), ".yapyc3")
+		}
+
+		return build(rel, ".yapyc3")
+	}
+
+	srcRel := ps.Token.string()
+
+	if ps.Group == pyGroupGenAux {
+		srcRel = strings.TrimPrefix(ps.Path.rel(), module+"/")
+	}
+
+	if strings.Contains(srcRel, "/") {
+		return build(module, "/", srcRel, ".", e.d.pyYapycSuffix, ".yapyc3")
+	}
+
+	return build(module, "/", srcRel, ".yapyc3")
+}
+
+func (e *EmitContext) pyResEntriesFor(ps PySrc) []PyGenResEntry {
+	d := e.d
+	module := e.instance.Path.rel()
+	key := ps.Module.string()
+
+	switch ps.Group {
+	case pyGroupProto:
+		rel := ps.Path.rel()
+		grpc := strings.HasSuffix(rel, "__intpy3___pb2_grpc.py")
+		info := e.codegen.mustInfo(ps.Path, "pyResEntriesFor")
+		token := ps.Token.string()
+		yapycOut := e.pyYapycOutFor(ps)
+
+		if !strings.HasPrefix(token, "${ARCADIA_BUILD_ROOT}/") {
+			return []PyGenResEntry{
+				{token: token, key: key, path: ps.Path},
+				{token: token + strings.TrimPrefix(yapycOut.rel(), rel), key: key + ".yapyc3", path: yapycOut},
+			}
+		}
+
+		entryInputs := info.SourceInputs
+
+		if grpc {
+			siblingPy := build(strings.TrimSuffix(rel, "__intpy3___pb2_grpc.py"), "__intpy3___pb2.py")
+
+			entryInputs = concat(info.SourceInputs, []VFS{siblingPy})
+		}
+
+		return []PyGenResEntry{
+			{token: token, key: key, path: ps.Path, inputs: entryInputs},
+			{token: "${ARCADIA_BUILD_ROOT}/" + yapycOut.rel(), key: key + ".yapyc3", path: yapycOut, inputs: info.SourceInputs},
+		}
+	case pyGroupGenAux:
+		info := e.codegen.mustInfo(ps.Path, "pyResEntriesFor")
+		out := []PyGenResEntry{{token: ps.Token.string(), key: key, path: ps.Path, inputs: info.SourceInputs}}
 
 		if !d.pyBuildNoPYC {
-			ypKey := "resfs/file/py/" + keyPrefix + srcRel + ".yapyc3"
-			ypPathInput := build(modulePath, "/", srcRel, suffix)
-			ypKvHash := "resfs/src/" + ypKey + "=${rootrel;context=TEXT;input=TEXT:\"" + srcRel + suffix + "\"}"
-			ypKvCmd := "resfs/src/" + ypKey + "=" + modulePath + "/" + srcRel + suffix
+			yapycOut := e.pyYapycOutFor(ps)
 
-			out = append(out, PySrcEntry{
-				pathHash:    srcRel + suffix,
-				pathInput:   ypPathInput,
-				key:         ypKey,
-				kvHash:      ypKvHash,
-				kvCmd:       ypKvCmd,
-				extraInputs: []VFS{srcEdge},
-			})
+			out = append(out, PyGenResEntry{token: "${ARCADIA_BUILD_ROOT}/" + yapycOut.rel(), key: key + ".yapyc3", path: yapycOut, inputs: info.SourceInputs})
 		}
+
+		return out
+	}
+
+	srcRel := ps.Token.string()
+	suffix := ".yapyc3"
+
+	if strings.Contains(srcRel, "/") {
+		suffix = "." + d.pyYapycSuffix + ".yapyc3"
+	}
+
+	resolvedRel := resolvePySrcRel(e.ctx.fs, d.srcDirs, module, srcRel)
+	genInfo := e.codegen.lookupSplit(dirKey(module), ps.Token)
+	pySource := source(resolvedRel)
+
+	if genInfo != nil {
+		pySource = build(module, "/", srcRel)
+	}
+
+	srcEdge := pySource
+	copyStaged := genInfo != nil && genInfo.SourcePath != 0 && genInfo.SourcePath.isSource()
+
+	if copyStaged {
+		srcEdge = genInfo.SourcePath
+	}
+
+	out := make([]PyGenResEntry, 0, 2)
+
+	if !d.pyBuildNoPY {
+		var pyExtra []VFS
+
+		if copyStaged {
+			pyExtra = []VFS{srcEdge}
+		}
+
+		out = append(out, PyGenResEntry{token: srcRel, key: key, path: pySource, inputs: pyExtra})
+	}
+
+	if !d.pyBuildNoPYC {
+		out = append(out, PyGenResEntry{token: srcRel + suffix, key: key + ".yapyc3", path: build(module, "/", srcRel, suffix), inputs: []VFS{srcEdge}})
 	}
 
 	return out
 }
 
-func (e *EmitContext) emitPySrcs() {
-	ctx, instance, d := e.ctx, e.instance, e.d
-	na := ctx.na
+func (e *EmitContext) hasEnginePySrcs() bool {
+	for _, ps := range e.pySrcsReg {
+		if ps.Group != pyGroupProto {
+			return true
+		}
+	}
 
-	if len(d.pySrcs) == 0 {
+	return false
+}
+
+func (e *EmitContext) emitPyBytecode() {
+	ctx, _, d := e.ctx, e.instance, e.d
+
+	if len(e.pySrcsReg) == 0 {
 		return
 	}
 
-	if d.pyBuildNoPYC {
+	engine := e.hasEnginePySrcs()
+
+	if !e.hasProtoPySrcs() && d.pyBuildNoPYC {
 		return
 	}
 
 	py3ccLDRef, py3ccBinary := ctx.tool(argToolsPy3cc)
 	py3ccSlowLDRef, py3ccSlowBin := ctx.tool(argToolsPy3ccSlow)
 
-	ctx.tool(argToolsRescompiler)
-	ctx.tool(argToolsRescompressor)
-	ctx.tool(argToolsArchiver)
+	if engine && !d.pyBuildNoPYC {
+		ctx.tool(argToolsRescompiler)
+		ctx.tool(argToolsRescompressor)
+		ctx.tool(argToolsArchiver)
+	}
 
-	py3ccToolsChunk := []VFS{py3ccBinary, py3ccSlowBin}
-	py3ccArgHead := []STR{(py3ccBinary).str(), argSlowPy3cc.str(), (py3ccSlowBin).str()}
-	reg := e.codegen
+	for _, ps := range e.pySrcsReg {
+		if ps.Group == pyGroupProto {
+			e.emitPyProtoYapyc(ps, py3ccLDRef, py3ccSlowLDRef, py3ccBinary, py3ccSlowBin)
 
-	for i, srcRel := range d.pySrcs {
-		if extIsPyi(srcRel.string()) {
 			continue
 		}
 
-		genInfo := reg.lookupSplit(dirKey(instance.Path.rel()), srcRel)
-
-		var generatedInputs []VFS
-
-		if genInfo != nil {
-			generatedInputs = genInfo.SourceInputs
+		if d.pyBuildNoPYC || extIsPyi(ps.Token.string()) {
+			continue
 		}
 
-		srcAbs := resolveSourceVFS(ctx, instance, srcRel.string(), d.srcDirs)
-		moduleName := srcAbs.rel() + "-"
-
-		if genInfo != nil {
-			srcAbs = build(instance.Path.rel(), "/", srcRel.string())
-
-			if i < len(d.pySrcsFullName) && d.pySrcsFullName[i] {
-				moduleName = srcAbs.rel() + "-"
-			} else {
-				moduleName = srcRel.string() + "-"
-			}
-		}
-
-		var outputPath VFS
-
-		if strings.Contains(srcRel.string(), "/") {
-			outputPath = build(instance.Path.rel(), "/", srcRel.string(), ".", d.pyYapycSuffix, ".yapyc3")
-		} else {
-			outputPath = build(instance.Path.rel(), "/", srcRel.string(), ".yapyc3")
-		}
-
-		cmdArgs := na.chunkList(py3ccArgHead, na.strList(internStr(moduleName),
-			(srcAbs).str(),
-			(outputPath).str()))
-
-		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}
-		nodeInputs := na.inputList(py3ccToolsChunk, na.srcChunk(srcAbs))
-
-		var inputs []VFS
-
-		if genInfo != nil {
-			inputs = []VFS{srcAbs}
-			inputs = append(inputs, generatedInputs...)
-			inputs = append(inputs, py3ccBinary, py3ccSlowBin)
-
-			if len(inputs) > 4 {
-				toolA := inputs[len(inputs)-2]
-				toolB := inputs[len(inputs)-1]
-
-				copy(inputs[4:], inputs[2:len(inputs)-2])
-				inputs[2] = toolA
-				inputs[3] = toolB
-			}
-
-			nodeInputs = na.inputList(inputs)
-		}
-
-		node := &Node{
-			Platform: instance.Platform,
-			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
-				Env: env}),
-			Env:          env,
-			Inputs:       nodeInputs,
-			Outputs:      na.vfsList(outputPath),
-			KV:           &pyCodegenKV,
-			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			Resources:    usesPython3,
-		}
-
-		toolRefs := depRefs(py3ccLDRef, py3ccSlowLDRef)
-
-		if genInfo != nil {
-			if extras := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, inputs); len(extras) > 0 {
-				node.DepRefs = append(node.DepRefs, extras...)
-			}
-		}
-
-		node.ForeignDepRefs = toolRefs
-
-		pyRef := ctx.emit.emit(node)
-
-		reg.register(&GeneratedFileInfo{
-			OutputPath:     outputPath,
-			ProducerRef:    pyRef,
-			GeneratorRefs:  toolRefs,
-			ParsedIncludes: nil,
-		})
+		e.emitEnginePyYapyc(ps, py3ccLDRef, py3ccSlowLDRef, py3ccBinary, py3ccSlowBin)
 	}
+}
+
+func (e *EmitContext) hasProtoPySrcs() bool {
+	for _, ps := range e.pySrcsReg {
+		if ps.Group == pyGroupProto {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (e *EmitContext) emitEnginePyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, py3ccBinary, py3ccSlowBin VFS) {
+	ctx, instance := e.ctx, e.instance
+	na := ctx.na
+	srcAbs := ps.Path
+
+	var genInfo *GeneratedFileInfo
+	var moduleName string
+
+	if ps.Group == pyGroupGenAux {
+		genInfo = e.codegen.mustInfo(ps.Path, "emitEnginePyYapyc")
+		moduleName = srcAbs.rel() + "-"
+	} else {
+		genInfo = e.codegen.lookupSplit(dirKey(instance.Path.rel()), ps.Token)
+
+		if genInfo != nil {
+			moduleName = ps.Token.string() + "-"
+		} else {
+			moduleName = srcAbs.rel() + "-"
+		}
+	}
+
+	outputPath := e.pyYapycOutFor(ps)
+
+	cmdArgs := na.chunkList([]STR{(py3ccBinary).str(), argSlowPy3cc.str(), (py3ccSlowBin).str()},
+		na.strList(internStr(moduleName), (srcAbs).str(), (outputPath).str()))
+
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}
+	nodeInputs := na.inputList([]VFS{py3ccBinary, py3ccSlowBin}, na.srcChunk(srcAbs))
+
+	var inputs []VFS
+
+	if genInfo != nil {
+		inputs = []VFS{srcAbs}
+		inputs = append(inputs, genInfo.SourceInputs...)
+		inputs = append(inputs, py3ccBinary, py3ccSlowBin)
+
+		if len(inputs) > 4 {
+			toolA := inputs[len(inputs)-2]
+			toolB := inputs[len(inputs)-1]
+
+			copy(inputs[4:], inputs[2:len(inputs)-2])
+			inputs[2] = toolA
+			inputs[3] = toolB
+		}
+
+		nodeInputs = na.inputList(inputs)
+	}
+
+	node := &Node{
+		Platform: instance.Platform,
+		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
+			Env: env}),
+		Env:          env,
+		Inputs:       nodeInputs,
+		Outputs:      na.vfsList(outputPath),
+		KV:           &pyCodegenKV,
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		Resources:    usesPython3,
+	}
+
+	toolRefs := depRefs(py3ccLDRef, py3ccSlowLDRef)
+
+	if genInfo != nil {
+		if extras := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, inputs); len(extras) > 0 {
+			node.DepRefs = append(node.DepRefs, extras...)
+		}
+	}
+
+	node.ForeignDepRefs = toolRefs
+
+	pyRef := ctx.emit.emit(node)
+
+	e.codegen.register(&GeneratedFileInfo{
+		OutputPath:    outputPath,
+		ProducerRef:   pyRef,
+		GeneratorRefs: toolRefs,
+	})
+}
+
+func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef, py3ccBinary, py3ccSlowBin VFS) {
+	ctx, instance := e.ctx, e.instance
+	na := ctx.na
+	rel := ps.Path.rel()
+	info := e.codegen.mustInfo(ps.Path, "emitPyProtoYapyc")
+	token := strings.TrimPrefix(ps.Token.string(), "${ARCADIA_BUILD_ROOT}/")
+	yapycOut := e.pyYapycOutFor(ps)
+
+	yapycCmd := []STR{
+		(py3ccBinary).str(),
+		argSlowPy3cc.str(),
+		(py3ccSlowBin).str(),
+		internV(token, "-"),
+		(ps.Path).str(),
+		(yapycOut).str(),
+	}
+
+	nodeInputs := na.inputList(na.vfsList(py3ccBinary, py3ccSlowBin, ps.Path), info.SourceInputs)
+
+	if strings.HasSuffix(rel, "__intpy3___pb2_grpc.py") {
+		siblingPy := build(strings.TrimSuffix(rel, "__intpy3___pb2_grpc.py"), "__intpy3___pb2.py")
+
+		nodeInputs = append(nodeInputs, []VFS{siblingPy})
+	}
+
+	yapycEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}
+
+	yapycNode := &Node{
+		Platform:       instance.Platform,
+		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(yapycCmd), Env: yapycEnv}),
+		Env:            yapycEnv,
+		Inputs:         nodeInputs,
+		Outputs:        na.vfsList(yapycOut),
+		KV:             &pyCodegenKV,
+		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		DepRefs:        []NodeRef{info.ProducerRef},
+		ForeignDepRefs: depRefs(py3ccRef, py3ccSlowRef),
+		Resources:      usesPython3,
+	}
+
+	yapycRef := ctx.emit.emit(yapycNode)
+
+	e.codegen.register(&GeneratedFileInfo{OutputPath: yapycOut, ProducerRef: yapycRef})
 }
 
 func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 	_, _, d := e.ctx, e.instance, e.d
-	hasKvOnly := d.pyMain != nil || len(d.noCheckImports) > 0 || len(d.pySrcs) > 0 || len(d.yaConfJSON) > 0
+	hasKvOnly := d.pyMain != nil || len(d.noCheckImports) > 0 || e.hasEnginePySrcs() || len(d.yaConfJSON) > 0
 
 	if len(d.resources) == 0 && len(d.pyPyiResources) == 0 && !hasKvOnly {
 		return nil
@@ -323,7 +462,7 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 }
 
 func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	_, instance, d := e.ctx, e.instance, e.d
 
 	if len(d.pySrcs) == 0 {
 		return nil
@@ -337,21 +476,14 @@ func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 		return nil
 	}
 
-	groups := d.pySrcGroups
-
-	if len(groups) == 0 {
-		groups = []PySrcGroup{{Srcs: d.pySrcs, TopLevel: d.pyTopLevel, Namespace: d.pyNamespace}}
-	}
-
 	namespaceEnabled := !d.noExtendedPySearch &&
 		!strings.HasPrefix(instance.Path.rel(), "contrib/python") &&
 		!strings.HasPrefix(instance.Path.rel(), "contrib/tools/python3") &&
 		pyNamespaceUnitType(d.unit.Type)
 
-	moduleTag := d.unit.Tag
 	res := &ObjcopyEmitResult{}
 
-	for _, group := range groups {
+	for gi, group := range e.collectPyGroups() {
 		if namespaceEnabled {
 			nsRefs, nsOuts := e.emitPyNamespaceForGroup(group)
 
@@ -359,21 +491,21 @@ func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 			res.Outputs = append(res.Outputs, nsOuts...)
 		}
 
-		entries := buildPySrcEntriesFor(e.codegen, ctx.fs, d, instance.Path.rel(), strStrings(group.Srcs), group.TopLevel, group.Namespace)
+		var entries []PyGenResEntry
+
+		for _, ps := range e.pySrcsReg {
+			if ps.Group != gi {
+				continue
+			}
+
+			entries = append(entries, e.pyResEntriesFor(ps)...)
+		}
 
 		if len(entries) == 0 {
 			continue
 		}
 
-		items := make([]ResourceItem, 0, 2*len(entries))
-
-		for _, en := range entries {
-			items = append(items,
-				ResourceItem{Path: "-", Key: en.kvHash, Cmd: en.kvCmd, Input: en.pathInput, Extra: en.extraInputs},
-				ResourceItem{Path: en.pathHash, Key: en.key, Input: en.pathInput, Extra: en.extraInputs})
-		}
-
-		groupRefs, groupOuts := e.packResources(ResourcePack{Tag: moduleTag, Items: items})
+		groupRefs, groupOuts := e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(entries)})
 
 		res.Refs = append(res.Refs, groupRefs...)
 		res.Outputs = append(res.Outputs, groupOuts...)
@@ -558,53 +690,20 @@ func (e *EmitContext) emitYaConfJSONObjcopy() ([]NodeRef, []VFS) {
 }
 
 func (e *EmitContext) emitGeneratedPyAuxChunks() ([]NodeRef, []VFS) {
-	_, instance, d := e.ctx, e.instance, e.d
-
-	if len(d.pySrcs) == 0 {
-		return nil, nil
-	}
-
-	reg := e.codegen
+	d := e.d
 
 	var entries []PyGenResEntry
 
-	for i, srcRel := range d.pySrcs {
-		info := reg.lookupSplit(dirKey(instance.Path.rel()), srcRel)
-
-		if info == nil {
+	for _, ps := range e.pySrcsReg {
+		if ps.Group != pyGroupGenAux {
 			continue
 		}
 
-		if i >= len(d.pySrcsFullName) || !d.pySrcsFullName[i] {
-			continue
-		}
+		entries = append(entries, e.pyResEntriesFor(ps)...)
+	}
 
-		genInputs := info.SourceInputs
-		src := build(instance.Path.rel(), "/", srcRel.string())
-
-		entries = append(entries, PyGenResEntry{
-			token:  "${ARCADIA_BUILD_ROOT}/" + src.rel(),
-			key:    generatedPyResourceKey(instance.Path.rel(), d, srcRel.string()),
-			path:   src,
-			inputs: genInputs,
-		})
-
-		if !d.pyBuildNoPYC {
-			suffix := ".yapyc3"
-
-			if strings.Contains(srcRel.string(), "/") {
-				suffix = "." + d.pyYapycSuffix + ".yapyc3"
-			}
-
-			yp := build(instance.Path.rel(), "/", srcRel.string(), suffix)
-
-			entries = append(entries, PyGenResEntry{
-				token:  "${ARCADIA_BUILD_ROOT}/" + yp.rel(),
-				key:    generatedPyResourceKey(instance.Path.rel(), d, srcRel.string()+".yapyc3"),
-				path:   yp,
-				inputs: genInputs,
-			})
-		}
+	if len(entries) == 0 {
+		return nil, nil
 	}
 
 	return e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
@@ -808,13 +907,6 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 	}
 
 	return out
-}
-
-func py3ccToolRefs(ctx *GenCtx, instance ModuleInstance) (NodeRef, NodeRef, VFS, VFS) {
-	py3ccRef, py3ccBinary := ctx.tool(argToolsPy3cc)
-	py3ccSlowRef, py3ccSlowBin := ctx.tool(argToolsPy3ccSlow)
-
-	return py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin
 }
 
 func protoPathID(path string) string {

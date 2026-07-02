@@ -143,11 +143,6 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 	return pe
 }
 
-type PySrc struct {
-	Path   VFS
-	Module STR
-}
-
 func (e *EmitContext) emitPyProtoSource(srcTok STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
@@ -196,6 +191,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR) {
 
 	protoSrcVFS := source(protoRelPath)
 	protoCwd := strS
+	generatedProto := false
 
 	var producerDeps []NodeRef
 	var producerSourceInputs []VFS
@@ -205,6 +201,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR) {
 		protoCwd = strB
 		producerDeps = []NodeRef{info.ProducerRef}
 		producerSourceInputs = info.SourceInputs
+		generatedProto = true
 	}
 
 	inputs := []VFS{protocBinary, pbPyWrapperVFS, protoSrcVFS}
@@ -249,22 +246,39 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR) {
 
 	pyPBRef := ctx.emit.emit(pyPBNode)
 	sourceInputs := pyProtoSourceInputs(inputs)
-	module := internStr(protoPythonResourceKeyBase(instance, d, src))
+	keyBase := protoPythonResourceKeyBase(instance, d, src)
+
+	tokenFor := func(out VFS) STR {
+		if generatedProto {
+			return internStr(strings.TrimPrefix(out.rel(), instance.Path.rel()+"/"))
+		}
+
+		return internV("${ARCADIA_BUILD_ROOT}/", out.rel())
+	}
 
 	e.codegen.register(&GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs})
-	e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: pyOut, Module: module})
+	e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: pyOut, Module: internV(keyBase, "_pb2.py"), Token: tokenFor(pyOut), Group: pyGroupProto})
 
 	if d.grpc {
 		e.codegen.register(&GeneratedFileInfo{OutputPath: grpcPyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs})
-		e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: grpcPyOut, Module: module})
+		e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: grpcPyOut, Module: internV(keyBase, "_pb2_grpc.py"), Token: tokenFor(grpcPyOut), Group: pyGroupProto})
 	}
 }
 
-func (e *EmitContext) flushPySrcsRegistry() *ProtoSrcsResult {
+func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	na := ctx.na
 
-	if len(e.pySrcsReg) == 0 {
+	var entries []PyGenResEntry
+
+	for _, ps := range e.pySrcsReg {
+		if ps.Group != pyGroupProto {
+			continue
+		}
+
+		entries = append(entries, e.pyResEntriesFor(ps)...)
+	}
+
+	if len(entries) == 0 {
 		return nil
 	}
 
@@ -275,98 +289,6 @@ func (e *EmitContext) flushPySrcsRegistry() *ProtoSrcsResult {
 
 		cppInstance.Language = LangCPP
 		cppSibling = genModule(ctx, cppInstance)
-	}
-
-	py3ccRef, py3ccSlowRef, py3ccBinary, py3ccSlowBin := py3ccToolRefs(ctx, instance)
-	uniqSuffix := pySrcYapycSuffix(instance.Path.rel())
-
-	var entries []PyGenResEntry
-
-	for _, ps := range e.pySrcsReg {
-		rel := ps.Path.rel()
-		grpc := strings.HasSuffix(rel, "__intpy3___pb2_grpc.py")
-		base := strings.TrimSuffix(strings.TrimSuffix(rel, "__intpy3___pb2_grpc.py"), "__intpy3___pb2.py")
-		keySuffix := "_pb2.py"
-
-		if grpc {
-			keySuffix = "_pb2_grpc.py"
-		}
-
-		info := e.codegen.lookup(ps.Path)
-
-		if info == nil {
-			throwFmt("flushPySrcsRegistry: %s is not codegen-registered", rel)
-		}
-
-		generated := e.codegen.lookup(build(base, ".proto")) != nil
-		token := rel
-
-		if generated {
-			token = strings.TrimPrefix(rel, instance.Path.rel()+"/")
-		}
-
-		uniq := ""
-
-		if strings.Contains(token, "/") {
-			uniq = "." + uniqSuffix
-		}
-
-		yapycOut := build(rel, uniq, ".yapyc3")
-
-		yapycCmd := []STR{
-			(py3ccBinary).str(),
-			argSlowPy3cc.str(),
-			(py3ccSlowBin).str(),
-			internV(token, "-"),
-			(ps.Path).str(),
-			(yapycOut).str(),
-		}
-
-		nodeInputs := na.inputList(na.vfsList(py3ccBinary, py3ccSlowBin, ps.Path), info.SourceInputs)
-
-		var siblingPy VFS
-
-		if grpc {
-			siblingPy = build(strings.TrimSuffix(rel, "__intpy3___pb2_grpc.py"), "__intpy3___pb2.py")
-			nodeInputs = append(nodeInputs, []VFS{siblingPy})
-		}
-
-		yapycEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}
-
-		yapycNode := &Node{
-			Platform:       instance.Platform,
-			Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(yapycCmd), Env: yapycEnv}),
-			Env:            yapycEnv,
-			Inputs:         nodeInputs,
-			Outputs:        na.vfsList(yapycOut),
-			KV:             &pyCodegenKV,
-			Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			DepRefs:        []NodeRef{info.ProducerRef},
-			ForeignDepRefs: depRefs(py3ccRef, py3ccSlowRef),
-			Resources:      usesPython3,
-		}
-
-		yapycRef := ctx.emit.emit(yapycNode)
-
-		e.codegen.register(&GeneratedFileInfo{OutputPath: yapycOut, ProducerRef: yapycRef})
-
-		key := ps.Module.string() + keySuffix
-
-		if generated {
-			entries = append(entries,
-				PyGenResEntry{token: token, key: key, path: ps.Path},
-				PyGenResEntry{token: token + strings.TrimPrefix(yapycOut.rel(), rel), key: key + ".yapyc3", path: yapycOut})
-		} else {
-			entryInputs := info.SourceInputs
-
-			if grpc {
-				entryInputs = concat(info.SourceInputs, []VFS{siblingPy})
-			}
-
-			entries = append(entries,
-				PyGenResEntry{token: "${ARCADIA_BUILD_ROOT}/" + rel, key: key, path: ps.Path, inputs: entryInputs},
-				PyGenResEntry{token: "${ARCADIA_BUILD_ROOT}/" + yapycOut.rel(), key: key + ".yapyc3", path: yapycOut, inputs: info.SourceInputs})
-		}
 	}
 
 	peerAddIncl := e.peers.SelfAddInclGlobal
