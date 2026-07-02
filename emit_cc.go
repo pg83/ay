@@ -326,19 +326,9 @@ func composeSrcDirOutputRel(instancePath, target string) string {
 		return "_/" + filepath.Base(target)
 	}
 
-	parts := strings.Split(rel, string(filepath.Separator))
-	hasParent := false
+	if !strings.Contains(rel, "..") {
+		joined := filepath.ToSlash(rel)
 
-	for i, p := range parts {
-		if p == ".." {
-			parts[i] = "__"
-			hasParent = true
-		}
-	}
-
-	joined := strings.Join(parts, "/")
-
-	if !hasParent {
 		if strings.Contains(joined, "/") {
 			return "_/" + joined
 		}
@@ -346,7 +336,15 @@ func composeSrcDirOutputRel(instancePath, target string) string {
 		return joined
 	}
 
-	return joined
+	parts := strings.Split(rel, string(filepath.Separator))
+
+	for i, p := range parts {
+		if p == ".." {
+			parts[i] = "__"
+		}
+	}
+
+	return strings.Join(parts, "/")
 }
 
 func normalizeDotDotSegments(rel string) (body string, underscore bool) {
