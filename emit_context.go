@@ -18,33 +18,46 @@ type EmitContext struct {
 	pass2      []func()
 	refs       []NodeRef
 	outs       []VFS
-	globalRefs []NodeRef
-	globalOuts []VFS
+	metas      []SrcMeta
 	objcopyRes *ObjcopyEmitResult
 	protoRes   *ProtoSrcsResult
 	pySrcsReg  []PySrc
 	resources  []ResourceEntry
-	declMeta   map[VFS]SrcMeta
+}
+
+type collectedObjs struct {
+	refs  []NodeRef
+	outs  []VFS
+	metas []SrcMeta
+}
+
+func (e *EmitContext) partitionCollected() (local, global collectedObjs) {
+	for i, m := range e.metas {
+		dst := &local
+
+		if m.Global {
+			dst = &global
+		}
+
+		dst.refs = append(dst.refs, e.refs[i])
+		dst.outs = append(dst.outs, e.outs[i])
+		dst.metas = append(dst.metas, m)
+	}
+
+	return local, global
 }
 
 func newEmitContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peers *PeerContext) *EmitContext {
 	scanner := ctx.scannerFor(instance)
 	k := len(d.resources)
 
-	return &EmitContext{ctx: ctx, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen, srcMeta: map[STR]SrcMeta{}, declMeta: map[VFS]SrcMeta{}, resources: d.resources[:k:k]}
+	return &EmitContext{ctx: ctx, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen, srcMeta: map[STR]SrcMeta{}, resources: d.resources[:k:k]}
 }
 
 func (e *EmitContext) collectObj(ref NodeRef, out VFS, meta SrcMeta) {
-	if meta.Global {
-		e.globalRefs = append(e.globalRefs, ref)
-		e.globalOuts = append(e.globalOuts, out)
-
-		return
-	}
-
 	e.refs = append(e.refs, ref)
 	e.outs = append(e.outs, out)
-	e.declMeta[out] = meta
+	e.metas = append(e.metas, meta)
 }
 
 func (e *EmitContext) markGlobalSrc(src STR) {
@@ -125,9 +138,7 @@ func (e *EmitContext) emit() {
 
 	if regRes := e.emitPyRegister(regCCPy3Suffix); regRes != nil {
 		for i, ref := range regRes.Refs {
-			e.globalRefs = append(e.globalRefs, ref)
-			e.globalOuts = append(e.globalOuts, regRes.Outputs[i])
-			e.declMeta[regRes.Outputs[i]] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
+			e.collectObj(ref, regRes.Outputs[i], SrcMeta{Prio: stmtPrioDefault, Generated: true, Global: true})
 		}
 	}
 
@@ -136,8 +147,9 @@ func (e *EmitContext) emit() {
 
 		genPyAuxRefs, genPyAuxOuts := e.emitGeneratedPyAuxChunks()
 
-		e.globalRefs = append(e.globalRefs, genPyAuxRefs...)
-		e.globalOuts = append(e.globalOuts, genPyAuxOuts...)
+		for i, ref := range genPyAuxRefs {
+			e.collectObj(ref, genPyAuxOuts[i], SrcMeta{Prio: stmtPrioDefault, Global: true})
+		}
 
 		if pyRes := e.flushPyProtoSrcs(); pyRes != nil {
 			e.protoRes = pyRes
