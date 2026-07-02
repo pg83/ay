@@ -231,7 +231,7 @@ type ModuleData struct {
 	bundles                  []BundleEntry
 	pyMain                   *STR
 	noStrip                  bool
-	programPairedLib         bool
+	unit                     ModuleUnit
 	noCheckImports           []STR
 	noCheckImportsDisabled   bool
 	pyRegister               []STR
@@ -675,7 +675,7 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, instance ModuleInstanc
 	d.cfAddInclGlobal = nil
 	filterInvalidAddIncl(fs, dd, d, modulePath, onWarn)
 
-	if kind == KindLib && d.programPairedLib {
+	if d.unit.Tag == unitTagPy3BinLib {
 		d.pyMain = nil
 	}
 
@@ -967,7 +967,8 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				d.peerdirs = append(d.peerdirs, sTRS(yqlUdfImplicitPeers()...)...)
 			}
 
-			d.moduleStmt = moduleStmtForKind(v, kind)
+			d.unit = resolveModuleUnit(v, kind, language)
+			d.moduleStmt = moduleStmtForKind(v, d.unit.Type)
 
 			if d.moduleStmt.Name == tokProtoLibrary {
 				if language == LangPy {
@@ -987,9 +988,6 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			env.setString(envMODULE_LANG, moduleLang)
 
-			if v.Name == tokPy3Program && kind == KindLib {
-				d.programPairedLib = true
-			}
 		case *SrcsStmt:
 
 			routeAllToGlobal := d.moduleStmt != nil && isYqlUdfStaticModule(d.moduleStmt.Name)
@@ -1334,16 +1332,68 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 	}
 }
 
-func moduleStmtForKind(stmt *ModuleStmt, kind ModuleKind) *ModuleStmt {
-	if stmt.Name == tokPy3Program && kind == KindLib {
-		out := *stmt
+type ModuleUnit struct {
+	Type        TOK
+	Tag         STR
+	CCTag       STR
+	ARPrefix    string
+	GlobalARTag STR
+	SbomLang    string
+}
 
-		out.Name = tokPy3Library
+func resolveModuleUnit(stmt *ModuleStmt, kind ModuleKind, language Language) ModuleUnit {
+	name := stmt.Name
 
-		return &out
+	if name == tokPy3Program && kind == KindLib {
+		name = tokPy3Library
+
+		return ModuleUnit{Type: name, Tag: unitTagPy3BinLib, ARPrefix: "libpy3", GlobalARTag: tagPy3BinLibGlobal, SbomLang: "PY3"}
 	}
 
-	return stmt
+	switch name {
+	case tokPy3Program:
+		return ModuleUnit{Type: name, Tag: unitTagPy3Bin, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: "PY3"}
+	case tokPy2Program, tokPy3ProgramBin:
+		tag := STR(0)
+
+		if name == tokPy3ProgramBin {
+			tag = unitTagPy3
+		}
+
+		return ModuleUnit{Type: name, Tag: tag, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: "PY3"}
+	case tokPy3Library:
+		return ModuleUnit{Type: name, Tag: unitTagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: "CPP"}
+	case tokPy2Library:
+		return ModuleUnit{Type: name, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: "CPP"}
+	case tokPy23Library:
+		return ModuleUnit{Type: name, Tag: unitTagPy3, CCTag: tagPy3, ARPrefix: "libpy3", GlobalARTag: tagPy3Global, SbomLang: "CPP"}
+	case tokPy23NativeLibrary:
+		return ModuleUnit{Type: name, Tag: unitTagPy3, CCTag: tagPy3Native, ARPrefix: "libpy3c", GlobalARTag: tagPy3NativeGlobal, SbomLang: "CPP"}
+	case tokYqlUdfYdb, tokYqlUdfContrib:
+		return ModuleUnit{Type: name, CCTag: tagYqlUdfStatic, ARPrefix: "lib", GlobalARTag: tagYqlUdfStaticGlobal, SbomLang: "CPP"}
+	case tokFbsLibrary:
+		return ModuleUnit{Type: name, CCTag: tagCppFbs, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: "CPP"}
+	case tokProtoLibrary:
+		if language == LangPy {
+			return ModuleUnit{Type: name, Tag: unitTagPy3Proto, ARPrefix: "libpy3", GlobalARTag: tagPy3ProtoGlobal, SbomLang: "CPP"}
+		}
+
+		return ModuleUnit{Type: name, Tag: strCPPProto, CCTag: tagCppProto, ARPrefix: "lib", GlobalARTag: tagCppProtoGlobal, SbomLang: "CPP"}
+	}
+
+	return ModuleUnit{Type: name, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: "CPP"}
+}
+
+func moduleStmtForKind(stmt *ModuleStmt, unitType TOK) *ModuleStmt {
+	if stmt.Name == unitType {
+		return stmt
+	}
+
+	out := *stmt
+
+	out.Name = unitType
+
+	return &out
 }
 
 func generatedIncludeDir(modulePath, dst string) string {

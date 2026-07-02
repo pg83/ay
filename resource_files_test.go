@@ -79,7 +79,7 @@ END()
 		kvsHash = append(kvsHash, "resfs/src/"+fileKey+"=${rootrel;context=TEXT;input=TEXT:\""+path+"\"}")
 	}
 
-	wantHash := objcopyHash(hashPaths, keysB64, kvsHash, moddir, nil)
+	wantHash := objcopyHash(hashPaths, keysB64, kvsHash, moddir, 0)
 	wantOutput := "$(B)/mod/libs/cpp/objcopy_" + wantHash + ".o"
 
 	objcopy := nodeByOutput(g, wantOutput)
@@ -161,7 +161,7 @@ END()
 		kvsHash = append(kvsHash, "resfs/src/"+fileKey+"=${rootrel;context=TEXT;input=TEXT:\""+path+"\"}")
 	}
 
-	wantHash := objcopyHash(hashPaths, keysB64, kvsHash, moddir, nil)
+	wantHash := objcopyHash(hashPaths, keysB64, kvsHash, moddir, 0)
 	wantOutput := "$(B)/mod/app/objcopy_" + wantHash + ".o"
 
 	objcopy := nodeByOutput(g, wantOutput)
@@ -229,7 +229,7 @@ END()
 		kvsHash = append(kvsHash, "resfs/src/"+fileKey+"=${rootrel;context=TEXT;input=TEXT:\""+path+"\"}")
 	}
 
-	wantHash := objcopyHash(hashPaths, keysB64, kvsHash, moddir, nil)
+	wantHash := objcopyHash(hashPaths, keysB64, kvsHash, moddir, 0)
 	wantOutput := "$(B)/base/tools/sync/objcopy_" + wantHash + ".o"
 
 	objcopy := nodeByOutput(g, wantOutput)
@@ -291,7 +291,7 @@ END()
 		kvsHash = append(kvsHash, "resfs/src/"+fileKey+"=${rootrel;context=TEXT;input=TEXT:\""+path+"\"}")
 	}
 
-	wantHash := objcopyHash(hashPaths, keysB64, kvsHash, moddir, nil)
+	wantHash := objcopyHash(hashPaths, keysB64, kvsHash, moddir, 0)
 	wantOutput := "$(B)/mod/libs/cpp/objcopy_" + wantHash + ".o"
 
 	objcopy := nodeByOutput(g, wantOutput)
@@ -358,7 +358,7 @@ END()
 		kvsHash = append(kvsHash, "resfs/src/"+fileKey+"=${rootrel;context=TEXT;input=TEXT:\""+path+"\"}")
 	}
 
-	wantHash := objcopyHash(hashPaths, keysB64, kvsHash, moddir, nil)
+	wantHash := objcopyHash(hashPaths, keysB64, kvsHash, moddir, 0)
 	wantOutput := "$(B)/mod/libs/cpp/objcopy_" + wantHash + ".o"
 
 	objcopy := nodeByOutput(g, wantOutput)

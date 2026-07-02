@@ -75,7 +75,7 @@ func (e *EmitContext) emitAntlrRuns() {
 			cwd = run.CWD.string()
 		}
 
-		jvRef := emitJVGeneral(instance, jarVFS, args, inputs, outputs, cwd, deps, cfModuleTag(d, instance), d.tc, ctx.emit)
+		jvRef := emitJVGeneral(instance, jarVFS, args, inputs, outputs, cwd, deps, d.unit.CCTag, d.tc, ctx.emit)
 		jvSourceInputs := make([]VFS, 0, len(inputs)+2)
 
 		for _, v := range inputs {

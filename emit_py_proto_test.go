@@ -97,7 +97,7 @@ END()
 		"resfs/src/" + pb2Key + "=${rootrel;context=TEXT;input=TEXT:\"banner_flags__intpy3___pb2.py\"}",
 		"resfs/src/" + yapKey + "=${rootrel;context=TEXT;input=TEXT:\"banner_flags__intpy3___pb2.py.yapyc3\"}",
 	}
-	wantHash := objcopyHash(bare, keysB64, kvsHash, modPath, stringPtr("PY3_PROTO"))
+	wantHash := objcopyHash(bare, keysB64, kvsHash, modPath, unitTagPy3Proto)
 	wantObjcopy := "$(B)/" + modPath + "/objcopy_" + wantHash + ".o"
 
 	objcopy := nodeByOutput(g, wantObjcopy)

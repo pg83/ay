@@ -17,7 +17,7 @@ func (e *EmitContext) emitMiscNodes() {
 
 	for _, g := range d.antlr4Grammars {
 		if g.IsSplit {
-			jvRef := emitJVSplit(instance, g.Lexer, g.Parser, g.Visitor, g.Listener, cfModuleTag(d, instance), d.tc, ctx.emit)
+			jvRef := emitJVSplit(instance, g.Lexer, g.Parser, g.Visitor, g.Listener, d.unit.CCTag, d.tc, ctx.emit)
 			lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
 			parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
 			lexerG4 := source(instance.Path.rel(), "/", g.Lexer)
@@ -84,7 +84,7 @@ func (e *EmitContext) emitMiscNodes() {
 
 			e.emitJVDownstreamCPCC(jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes)
 		} else {
-			jvRef := emitJV(instance, g.Grammar, g.Options, g.Visitor, g.Listener, cfModuleTag(d, instance), d.tc, ctx.emit)
+			jvRef := emitJV(instance, g.Grammar, g.Options, g.Visitor, g.Listener, d.unit.CCTag, d.tc, ctx.emit)
 			base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
 			grammarG4 := source(instance.Path.rel(), "/", g.Grammar)
 			lexerCpp := build(outPrefix, base, "Lexer.cpp")

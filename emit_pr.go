@@ -241,7 +241,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt, reg *CodegenRegistry)
 
 	prExtraDepRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, depInputs)
 
-	emitPR(instance, stmt, toolBinPath, toolLDRef, auxTools, inVFSByToken, inVFSs, outVFSByToken, stdoutVFS, inputClosure, prExtraDepRefs, cfModuleTag(d, instance), prRef, ctx.emit)
+	emitPR(instance, stmt, toolBinPath, toolLDRef, auxTools, inVFSByToken, inVFSs, outVFSByToken, stdoutVFS, inputClosure, prExtraDepRefs, d.unit.CCTag, prRef, ctx.emit)
 
 	return prRef
 }

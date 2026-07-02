@@ -76,6 +76,7 @@ func emitLD(
 	useArcadiaLibm bool,
 	wantsSplitDwarf bool,
 	programModuleTag STR,
+	sbomLang string,
 	hasBundles bool,
 	tc ModuleToolchain,
 	hostP *Platform,
@@ -132,7 +133,7 @@ func emitLD(
 	cmds := na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull})
 
 	if sbomEmbed {
-		linkSbom := composeLDCmdLinkSbom(tc, ldSbomLang(instance), binaryDir, sbomJSON, sbomPaths)
+		linkSbom := composeLDCmdLinkSbom(tc, sbomLang, binaryDir, sbomJSON, sbomPaths)
 
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(linkSbom), Cwd: strB, Env: envVcsOnly})
 	}
@@ -403,14 +404,6 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 	trailer = appendInternStrs(trailer, p.linkerSelectionNoPieFlags())
 
 	return trailer
-}
-
-func ldSbomLang(instance ModuleInstance) string {
-	if instance.Language == LangPy {
-		return "PY3"
-	}
-
-	return "CPP"
 }
 
 func composeLDCmdLinkSbom(tc ModuleToolchain, lang, moddir, sbomJSON string, sbomPaths []VFS) []STR {

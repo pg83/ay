@@ -47,7 +47,7 @@ func resourcePackHash(items []string, unitPath, moduleTag string) string {
 	return strings.ToLower(enchex.EncodeToString(sum[:]))[:hashLen]
 }
 
-func objcopyHash(paths []string, keysB64 []string, kvs []string, unitPath string, moduleTag *string) string {
+func objcopyHash(paths []string, keysB64 []string, kvs []string, unitPath string, moduleTag STR) string {
 	list := make([]string, 0, len(paths)+len(keysB64)+len(kvs))
 
 	list = append(list, paths...)
@@ -56,8 +56,8 @@ func objcopyHash(paths []string, keysB64 []string, kvs []string, unitPath string
 
 	tag := ""
 
-	if moduleTag != nil {
-		tag = *moduleTag
+	if moduleTag != 0 {
+		tag = moduleTag.string()
 	}
 
 	return resourcePackHash(list, "$S/"+unitPath, tag)
@@ -173,7 +173,7 @@ func (e *EmitContext) resolveResourceInput(rawPath string, fallback VFS) Resolve
 }
 
 type ObjcopyNode struct {
-	moduleTag  *string
+	moduleTag  STR
 	kv         *KV
 	hashPaths  []string
 	keysB64    []string
@@ -233,7 +233,7 @@ type ResourceItem struct {
 }
 
 type ResourcePack struct {
-	Tag        *string
+	Tag        STR
 	Items      []ResourceItem
 	RawClosure func(aux VFS, inputs []VFS, ref NodeRef) []VFS
 }
@@ -419,8 +419,8 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 	tag := ""
 
-	if p.Tag != nil {
-		tag = *p.Tag
+	if p.Tag != 0 {
+		tag = p.Tag.string()
 	}
 
 	for _, ch := range splitResourceChunks(items, false) {
@@ -498,7 +498,7 @@ type ObjcopyEmitResult struct {
 	PySrcTrailCount int
 }
 
-func (e *EmitContext) emitKvOnlyResource(tag *string, kvsHash, kvsCmd []string) ([]NodeRef, []VFS) {
+func (e *EmitContext) emitKvOnlyResource(tag STR, kvsHash, kvsCmd []string) ([]NodeRef, []VFS) {
 	items := make([]ResourceItem, len(kvsHash))
 
 	for i := range kvsHash {
@@ -508,7 +508,7 @@ func (e *EmitContext) emitKvOnlyResource(tag *string, kvsHash, kvsCmd []string) 
 	return e.packResources(ResourcePack{Tag: tag, Items: items})
 }
 
-func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag *string) (refs []NodeRef, outs []VFS) {
+func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (refs []NodeRef, outs []VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	batch := make([]ResourceItem, 0, len(entries))
 

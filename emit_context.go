@@ -179,7 +179,7 @@ func (e *EmitContext) emit() {
 		e.emitLLVMBC(e.peers.ResourceGlobals)
 	}
 
-	if !isProgramModuleType(d.moduleStmt.Name) || resourceLibTagForData(d) != nil || len(d.resources) > 0 {
+	if !isProgramModuleType(d.moduleStmt.Name) || d.unit.Tag != 0 || len(d.resources) > 0 {
 		e.objcopyRes = e.emitResourceObjcopy()
 	}
 
