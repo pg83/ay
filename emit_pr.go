@@ -525,13 +525,7 @@ func (e *EmitContext) runProgramInputVFS(rel string) VFS {
 		strings.HasPrefix(rel, "${CURDIR}/"),
 		strings.HasPrefix(rel, "${ARCADIA_BUILD_ROOT}/"),
 		strings.HasPrefix(rel, "${BINDIR}/"):
-		vfs := copyFileInputVFS(ctx.fs, instance.Path, rel)
-
-		if vfs.isBuild() && e.codegen.lookup(vfs) == nil {
-			throwFmt("gen: %s: IN %q resolves to build file %s that no declared macro produces", instance.Path.rel(), rel, vfs.string())
-		}
-
-		return vfs
+		return e.requireProducedInput("IN", rel, copyFileInputVFS(ctx.fs, instance.Path, rel))
 	}
 
 	buildVFS := build(filepath.ToSlash(filepath.Clean(instance.Path.rel() + "/" + rel)))

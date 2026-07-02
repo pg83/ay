@@ -28,7 +28,7 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 	optVFSs := make([]VFS, 0, len(stmt.Opts))
 
 	for _, opt := range stmt.Opts {
-		optVFSs = append(optVFSs, copyFileInputVFS(ctx.fs, instance.Path, opt.string()))
+		optVFSs = append(optVFSs, e.requireProducedInput("DECIMAL_MD5 input", opt.string(), copyFileInputVFS(ctx.fs, instance.Path, opt.string())))
 	}
 
 	cmdArgs := make([]STR, 0, 7+len(optVFSs))

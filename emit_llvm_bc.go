@@ -213,7 +213,7 @@ func (e *EmitContext) llvmBcSourceInfo(src string) (inputVFS VFS, producer NodeR
 		return *buildVFS, ref
 	}
 
-	return copyFileInputVFS(ctx.fs, instance.Path, src), NodeRef(0)
+	return e.requireProducedInput("LLVM_BC source", src, copyFileInputVFS(ctx.fs, instance.Path, src)), NodeRef(0)
 }
 
 func (e *EmitContext) llvmBcRootRelArcSrc(src string) string {

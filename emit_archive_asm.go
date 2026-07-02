@@ -53,7 +53,7 @@ func (e *EmitContext) emitArchiveAsmNode(
 				producerRefs = append(producerRefs, info.ProducerRef)
 			}
 		} else {
-			memberVFS = resolveSourceVFS(ctx, instance, f, d.srcDirs)
+			memberVFS = e.requireProducedInput("ARCHIVE_ASM member", f, resolveSourceVFS(ctx, instance, f, d.srcDirs))
 		}
 
 		pathPerFile = append(pathPerFile, memberVFS)

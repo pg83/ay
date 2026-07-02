@@ -52,7 +52,7 @@ func (e *EmitContext) emitArchive(
 		if isPRProduced {
 			absVFS = build(instance.Path.rel(), "/", f)
 		} else {
-			absVFS = resolveSourceVFS(ctx, instance, f, d.srcDirs)
+			absVFS = e.requireProducedInput("ARCHIVE member", f, resolveSourceVFS(ctx, instance, f, d.srcDirs))
 		}
 
 		absStr := absVFS.string()

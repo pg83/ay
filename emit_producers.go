@@ -57,6 +57,16 @@ func rootedBuildCandidate(modulePath, rel string) VFS {
 	return 0
 }
 
+func (e *EmitContext) requireProducedInput(kind, token string, vfs VFS) VFS {
+	module := e.instance.Path.rel()
+
+	if vfs.isBuild() && strings.HasPrefix(vfs.rel(), module+"/") && e.codegen.lookup(vfs) == nil {
+		throwFmt("gen: %s: %s %q resolves to build file %s that no declared macro produces", module, kind, token, vfs.string())
+	}
+
+	return vfs
+}
+
 func (e *EmitContext) srcPositionOuts(tok STR) []VFS {
 	d := e.d
 
@@ -113,6 +123,34 @@ func srcInsCandidate(module string, tok STR) []VFS {
 	}
 
 	return nil
+}
+
+func (e *EmitContext) srcPositionIns(tok STR) []VFS {
+	module := e.instance.Path.rel()
+	ins := srcInsCandidate(module, tok)
+
+	switch srcExtClassOf(tok) {
+	case srcExtProto, srcExtEv:
+		rel := protoSourceRelPath(e.ctx.fs, e.instance, e.d, tok.string())
+
+		if !e.ctx.fs.isFile(srcRootVFS, rel) {
+			return ins
+		}
+
+		outputRoot := protoCPPOutRoot(e.d)
+
+		for _, name := range protoDirectImportNames(e.ctx.parsers, rel) {
+			clean := filepath.ToSlash(filepath.Clean(name))
+
+			ins = append(ins, build(clean))
+
+			if outputRoot != "" {
+				ins = append(ins, build(protoOutputRel(outputRoot, clean)))
+			}
+		}
+	}
+
+	return ins
 }
 
 func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []STR) {
@@ -347,7 +385,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []STR) {
 			kind:  prodSrc,
 			index: i,
 			outs:  e.srcPositionOuts(tok),
-			ins:   srcInsCandidate(module, tok),
+			ins:   e.srcPositionIns(tok),
 		})
 	}
 

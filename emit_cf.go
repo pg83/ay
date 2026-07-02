@@ -14,7 +14,7 @@ var (
 
 func (e *EmitContext) emitExplicitCF(cf *ConfigureFileStmt) {
 	ctx, instance := e.ctx, e.instance
-	srcVFS := copyFileInputVFS(ctx.fs, instance.Path, cf.Src)
+	srcVFS := e.requireProducedInput("CONFIGURE_FILE src", cf.Src, copyFileInputVFS(ctx.fs, instance.Path, cf.Src))
 	outVFS := copyFileOutputVFS(instance.Path.rel(), cf.Dst)
 
 	e.emitConfigureFile(srcVFS, outVFS)
