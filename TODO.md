@@ -36,25 +36,21 @@
   сейчас packResources кидает throw при отсутствии RawClosure; upstream пакует
   через raw. Реализовать при первом реальном кейсе.
 
-## Мультимодуль: несколько upstream-юнитов сплющены в один ModuleData
+## Мультимодуль: остаток после введения ModuleUnit (2026-07-02)
 
-В upstream PROTO_LIBRARY / PY3_PROGRAM — мультимодули: каждый вариант это
-отдельный юнит со своим MODULE_TAG и своим конфигом (CPP_PROTO, PY3_PROTO,
-PY3_BIN, PY3_BIN_LIB, ...). У нас частично это выражено осью
-ModuleInstance.Language (LangCPP/LangPy/LangDescProto для proto — отдельные
-инстансы с memo), а частично — сплющено в один ModuleData и разруливается
-ad-hoc данными по месту:
+Сделано: resolveModuleUnit(stmt, kind, language) — юнит (Type, MODULE_TAG,
+CC-тег, AR-префикс, global-AR-тег, sbom-lang) резолвится один раз в collect;
+инстансы вариантов уже существовали (PY3_PROGRAM: bin PEERDIR'ит собственную
+директорию → paired-lib инстанс; PROTO_LIBRARY: ось Language). Убиты
+programPairedLib, resource*TagForData, cfModuleTag/moduleCCTag, литералы
+"PY3"/"PY3_PROTO", per-site switch'и AR-префиксов/тегов, мёртвые
+arInstance/ldInstance.Language-переписывания.
 
-- resourceBinTagForData vs resourceLibTagForData: bin- и lib-стороны
-  PY3_PROGRAM — это два upstream-юнита (PY3_BIN / PY3_BIN_LIB), у нас — выбор
-  тега per-call внутри одного модуля;
-- d.programPairedLib, py3BinProgramSide: флаги-костыли той же пары;
-- "PY3_PROTO"-тег py-proto пака и CPP_PROTO-override в emitResourceObjcopy:
-  MODULE_TAG вариантов, передаваемый параметром вместо юнитного свойства;
-- hOnly-ветвление результата specialized-модулей: результат одного варианта,
-  собранный внутри чужого прохода.
-
-Направление: довести ось вариантов до конца — вариант = собственный
-ModuleInstance (как уже сделано для Language) со своим MODULE_TAG/env/результатом;
-тогда per-call теги, парные флаги и hOnly-сборка схлопываются, а packResources
-получает Tag из юнита, как в upstream.
+Остаток:
+- applyDeferredPeerOrder (gen_hacks.go) — довести до d.latePeerdirs на
+  collect-этапе: отложенные `when PEERDIR+=` upstream-конфа = поздние peerdirs
+  юнита, а py3Program-ветка должна выпасть из честной пары юнитов;
+- PY23_LIBRARY/PY23_NATIVE_LIBRARY: py2-вариант не строится вовсе;
+- hOnly-артефакт py-proto: objcopy-глобальный AR того блока живёт с default
+  "lib"/tagGlobal — при развязке юнитов должен стать артефактом своего юнита;
+- pyNamespaceUnitType — множество типов юнита, кандидат в поле ModuleUnit.
