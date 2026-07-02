@@ -51,6 +51,12 @@ const (
 	srcExtCfgProto
 	srcExtGperf
 	srcExtFlex
+	srcExtHeader
+	srcExtCSource
+	srcExtAsm
+	srcExtYasm
+	srcExtCuda
+	srcExtRodata
 )
 
 func internOwnedCopy(b []byte) string {
