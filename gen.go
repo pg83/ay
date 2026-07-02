@@ -220,6 +220,7 @@ type GenCtx struct {
 	autoincludeIdx  *AutoincludeIndex
 	tarjan          TarjanCtx
 	parsedFiles     map[string]*MakeFile
+	prodOuts        IdValueMap
 }
 
 type ScanCtxPerfStats struct {

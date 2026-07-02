@@ -1895,3 +1895,146 @@ END()
 			producerOut, sourceArgInput)
 	}
 }
+
+func TestGen_RunProgramChainDeclarationOrderIndependent(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "tools/gp", "gp")
+
+	writeTestModuleFile(files, "gen/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    tools/gp ${BINDIR}/first.bin second.bin
+    IN
+        ${BINDIR}/first.bin
+    OUT_NOAUTO second.bin
+)
+RUN_PROGRAM(
+    tools/gp root.dat first.bin
+    IN
+        root.dat
+    OUT_NOAUTO first.bin
+)
+END()
+`)
+	writeTestModuleFile(files, "gen/root.dat", "opaque\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(gen)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+	producer := mustNodeByOutput(t, g, "$(B)/gen/first.bin")
+	consumer := mustNodeByOutput(t, g, "$(B)/gen/second.bin")
+
+	if !slices.Contains(graphDeps(g, consumer), producer.UID) {
+		t.Fatalf("second.bin deps missing first.bin producer uid %q: %v", producer.UID, graphDeps(g, consumer))
+	}
+
+	if !nodeHasInput(consumer, "$(S)/gen/root.dat") {
+		t.Fatalf("second.bin inputs missing propagated $(S)/gen/root.dat: %#v", consumer.flatInputs())
+	}
+}
+
+func TestGen_RunProgramConsumesRunPython3Output(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "tools/gp", "gp")
+
+	writeTestModuleFile(files, "gen/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PYTHON3(
+    gen.py
+    STDOUT first.txt
+)
+RUN_PROGRAM(
+    tools/gp ${BINDIR}/first.txt second.bin
+    IN
+        ${BINDIR}/first.txt
+    OUT_NOAUTO second.bin
+)
+END()
+`)
+	writeTestModuleFile(files, "gen/gen.py", "print('payload')\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(gen)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+	producer := mustNodeByAnyOutput(t, g, "$(B)/gen/first.txt")
+	consumer := mustNodeByOutput(t, g, "$(B)/gen/second.bin")
+
+	if !slices.Contains(graphDeps(g, consumer), producer.UID) {
+		t.Fatalf("second.bin deps missing RUN_PYTHON3 producer uid %q: %v", producer.UID, graphDeps(g, consumer))
+	}
+}
+
+func TestGen_RunCodegenMixedChainWorstDeclarationOrder(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "tools/gp", "gp")
+
+	writeTestModuleFile(files, "gen/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    tools/gp ${BINDIR}/second.bin third.bin
+    IN
+        ${BINDIR}/second.bin
+    OUT_NOAUTO third.bin
+)
+RUN_PROGRAM(
+    tools/gp ${BINDIR}/first.txt second.bin
+    IN
+        ${BINDIR}/first.txt
+    OUT_NOAUTO second.bin
+)
+RUN_PYTHON3(
+    gen.py
+    STDOUT first.txt
+)
+END()
+`)
+	writeTestModuleFile(files, "gen/gen.py", "print('payload')\n")
+
+	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(gen)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "app")
+	first := mustNodeByAnyOutput(t, g, "$(B)/gen/first.txt")
+	second := mustNodeByOutput(t, g, "$(B)/gen/second.bin")
+	third := mustNodeByOutput(t, g, "$(B)/gen/third.bin")
+
+	if !slices.Contains(graphDeps(g, second), first.UID) {
+		t.Fatalf("second.bin deps missing first.txt producer uid %q: %v", first.UID, graphDeps(g, second))
+	}
+
+	if !slices.Contains(graphDeps(g, third), second.UID) {
+		t.Fatalf("third.bin deps missing second.bin producer uid %q: %v", second.UID, graphDeps(g, third))
+	}
+}

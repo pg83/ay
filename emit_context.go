@@ -84,11 +84,10 @@ func (e *EmitContext) emit() {
 	e.emitCopyFiles()
 
 	e.emitMiscNodes()
-	e.emitRunProgramsForAR()
 	e.emitDecimalMD5ForAR()
 	e.emitSplitCodegensForAR()
 	e.emitBaseCodegensForAR()
-	e.emitRunPythonForAR()
+	e.emitDeclaredProducers()
 	e.emitArchiveAsmForAR()
 
 	for _, src := range d.srcs {
