@@ -1,25 +1,28 @@
 # TODO
 
-## Подозрительные спец-перестановки в genModule — вероятно, не нужны
+## Спец-перестановки genModule — итог разбора (2026-07-02)
 
-Гипотеза: перечисленные ниже ручные переупорядочивания не воспроизводят явный
-upstream-механизм, а подгоняют порядок под конкретные кейсы; правильный порядок
-должен выпадать из более общего механизма (порядок обхода managed peers /
-PEERDIR-пропагации в ymake). Следующий рефактор: найти upstream-механизм,
-заменить им перестановки или удалить их, если гейт не заметит разницы.
+Из восьми ad-hoc перестановок после эксперимента «убрать всё → гейт»:
 
-- py2/py3-program: перенос contrib/libs/python и library/python/runtime_py3 в
-  хвост archiveOrder (gen.go, switch по tokPy2Program/tokPy3ProgramBin/tokPy3Program)
-- py3-program: cflagsAggOrder = archiveOrder вместо resolved (gen.go)
-- sbomOrder: перестановка contrib/libs/cxxsupp после contrib/libs/cxxsupp/libcxx (gen.go)
-- sbomOrder: перенос build/platform/lld перед аллокаторными peers +
-  ownSbomInsertIdx для вставки собственного sbom после lld (gen.go)
-- library/python/runtime_py3: splice build-root пути после abseil в
-  effectiveAddInclGlobal (gen.go)
-- ALLOCATOR(FAKE): фильтрация library/cpp/malloc/api/ из peer-архивов LD (gen.go)
-- py3-program + jemalloc: moveArchivePathsAfter/movePathsAfter вокруг
-  bldBuildCowOnLibbuildCowOnA (gen.go)
-- objcopy lead: moveSubrangeToFront глобальных ресурсов при resources+globalSrcs (gen.go)
+- удалены как мёртвые на срезах (гейт не заметил): runtime_py3 addIncl-splice,
+  фильтр malloc/api при ALLOCATOR(FAKE) (upstream-форма «не добавлять» уже есть
+  в suppressMallocAPIDefault), jemalloc-переносы вокруг cowOn
+  (+ хелперы moveArchivePathsAfter/movePathsAfter/moveSubrangeToFront);
+- py2/py3-хвосты archiveOrder и cflagsAggOrder-свитч заменены механизмом
+  applyDeferredPeerOrder на СБОРКЕ allPeers: upstream добавляет python-peers
+  отложенно (`when PEERDIR+=` коммитится на END модуля) — порядок объявления,
+  а не пост-обработка; archiveOrder/sbomOrder/cflagsAggOrder переменные умерли,
+  всё итерирует resolved;
+- objcopy-lead в глобальном AR заменён прямой категорийной сборкой
+  [RESOURCE-objcopy, GLOBAL srcs, pySrc-trail] из уже раздельных частей
+  (e.objcopyRes/e.globalRefs); порядок категорийный, не декларационный
+  (проверено фикстурой GLOBAL_SRCS-до-RESOURCE); условие len(d.resources)>0
+  для позиции kv-only нод — эмпирика, требует upstream-подтверждения;
+- sbom-порядок (cxxsupp после libcxx; lld после аллокаторных peers; own-компонент
+  py3-программы перед lld) сведён в applySbomComponentOrder + ownSbomInsertIdx —
+  ЭМПИРИКА эталонных графов: source link_sbom/сборки sbom-списка в чекауте
+  upstream отсутствует (internal). Гипотеза для проверки при доступе к source:
+  порядок sbom-компонент — post-order обхода peer-замыкания.
 
 ## Слой R: незамоделированные ветки upstream resource_handler
 
