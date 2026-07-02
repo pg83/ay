@@ -18,7 +18,7 @@ type VFSRoot uint8
 type VFS uint32
 
 func vfsBound() uint32 {
-	return uint32(len(internTable.strs)) << 1
+	return uint32(internTable.entries.len()) << 1
 }
 
 func intern(full string) VFS {
@@ -115,7 +115,7 @@ func build(parts ...string) VFS {
 }
 
 func (id STR) vfs() VFS {
-	s := internTable.strs[id]
+	s := internTable.entries.at(int(id)).s
 
 	if !vfsHasPrefix(s) {
 		return 0
@@ -131,7 +131,7 @@ func (id STR) vfs() VFS {
 }
 
 func (v VFS) rel() string {
-	return internTable.strs[v.strID()][vfsPrefixLen:]
+	return internTable.entries.at(int(v.strID())).s[vfsPrefixLen:]
 }
 
 func (v VFS) isSource() bool {
@@ -143,7 +143,7 @@ func (v VFS) isBuild() bool {
 }
 
 func (v VFS) string() string {
-	return internTable.strs[v.strID()]
+	return internTable.entries.at(int(v.strID())).s
 }
 
 func (v VFS) String() string {

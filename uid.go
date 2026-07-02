@@ -56,7 +56,7 @@ func (c *CanonBuf) writeBytes(s string) {
 }
 
 func (c *CanonBuf) writeSTR(s STR) {
-	c.writeUint64(internTable.los[s])
+	c.writeUint64(internTable.entries.at(int(s)).lo)
 }
 
 func (c *CanonBuf) writeRefUIDs(refs []NodeRef) {
@@ -160,12 +160,12 @@ func (c *CanonBuf) writeVFSSliceBody(vs []VFS) {
 
 func (c *CanonBuf) writeVFSSliceOS(vs []VFS, fs *OsFS) {
 	buf := c.buf
-	los := internTable.los
+	entries := &internTable.entries
 	hashes := fs.contentHashes
 
 	for _, v := range vs {
 		s := v.strID()
-		lo := los[s]
+		lo := entries.at(int(s)).lo
 
 		buf = append(buf,
 			byte(lo), byte(lo>>8), byte(lo>>16), byte(lo>>24),
