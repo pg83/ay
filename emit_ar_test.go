@@ -642,18 +642,19 @@ func TestReorderARMembers_Reg3PICVariantsTrailObjcopy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			refs := make([]NodeRef, len(tc.paths))
 			paths := make([]VFS, len(tc.paths))
-			declMeta := map[VFS]SrcMeta{}
+			metas := make([]SrcMeta, len(tc.paths))
 
 			for i, rel := range tc.paths {
 				refs[i] = NodeRef(int64(i + 1))
 				paths[i] = build(rel)
+				metas[i] = SrcMeta{Prio: stmtPrioDefault}
 
 				if strings.Contains(rel, ".reg3.cpp") {
-					declMeta[paths[i]] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
+					metas[i] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
 				}
 			}
 
-			gotRefs, gotPaths := reorderARMembers(refs, paths, declMeta)
+			gotRefs, gotPaths := reorderARMembers(refs, paths, metas)
 
 			wantRefs := make([]NodeRef, len(tc.wantOrder))
 			wantPaths := make([]string, len(tc.wantOrder))
@@ -810,12 +811,12 @@ func TestReorderARMembers_SecondLevelTrailsFirstLevelByRound(t *testing.T) {
 	cpp := build("mod/formula.cpp.o")
 	refs := []NodeRef{NodeRef(1), NodeRef(2)}
 	paths := []VFS{fbsCpp, cpp}
-	declMeta := map[VFS]SrcMeta{
-		fbsCpp: {Prio: stmtPrioDefault, Seq: 1, Generated: true, SecondLevel: true},
-		cpp:    {Prio: stmtPrioDefault, Seq: 2, Generated: true},
+	metas := []SrcMeta{
+		{Prio: stmtPrioDefault, Seq: 1, Generated: true, SecondLevel: true},
+		{Prio: stmtPrioDefault, Seq: 2, Generated: true},
 	}
 
-	_, gotPaths := reorderARMembers(refs, paths, declMeta)
+	_, gotPaths := reorderARMembers(refs, paths, metas)
 
 	got := []string{gotPaths[0].string(), gotPaths[1].string()}
 	want := []string{cpp.string(), fbsCpp.string()}

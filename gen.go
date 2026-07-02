@@ -1272,6 +1272,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		e.cythonAdjustModuleCCBlocks()
 		e.emit()
 
+		local, _ := e.partitionCollected()
 		objcopyRes := e.objcopyRes
 
 		var hOnlyGlobalRef *NodeRef
@@ -1319,12 +1320,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		protoResult := e.protoRes
-		protoARRefs := e.refs
-		protoAROuts := e.outs
-		protoARMeta := e.declMeta
+		protoARRefs := local.refs
+		protoAROuts := local.outs
 
 		if protoResult != nil && protoResult.PendingAR {
-			protoARRefs, protoAROuts = reorderARMembers(protoARRefs, protoAROuts, protoARMeta)
+			protoARRefs, protoAROuts = reorderARMembers(protoARRefs, protoAROuts, local.metas)
 
 			arBaseName := archiveNameWithPrefixOrName(instance.Path.rel(), "lib", protoResult.ProtoLibName)
 			archivePath := build(instance.Path.rel(), "/", arBaseName)
@@ -1478,10 +1478,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	e.cythonAdjustModuleCCBlocks()
 	e.emit()
 
-	globalRefs := append(make([]NodeRef, 0, len(e.globalRefs)), e.globalRefs...)
-	globalOutputs := append(make([]VFS, 0, len(e.globalOuts)), e.globalOuts...)
+	local, global := e.partitionCollected()
+	globalRefs := global.refs
+	globalOutputs := global.outs
+	globalMetas := global.metas
 
-	if ctx.sbomEnabled && env.bool(envCLANG) && len(e.refs) > 0 {
+	if ctx.sbomEnabled && env.bool(envCLANG) && len(local.refs) > 0 {
 		if r, p := clangToolchainSbomComponent(ctx, instance.Platform); r != nil && !containsVFS(peerSbomPaths, *p) {
 			peerSbomRefs = append(peerSbomRefs, *r)
 			peerSbomPaths = append(peerSbomPaths, *p)
@@ -1494,10 +1496,10 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ldPeerArchivePaths := peerArchivePaths
 		ldPeerLinkCmdPaths := peerLinkCmdPaths
 		ldInstance := instance
-		ldCCRefs := e.refs
-		ldCCOutputs := e.outs
+		ldCCRefs := local.refs
+		ldCCOutputs := local.outs
 
-		ldCCRefs, ldCCOutputs = reorderARMembers(ldCCRefs, ldCCOutputs, e.declMeta)
+		ldCCRefs, ldCCOutputs = reorderARMembers(ldCCRefs, ldCCOutputs, local.metas)
 
 		var ldObjcopyRefs []NodeRef
 		var ldObjcopyPaths []VFS
@@ -1606,7 +1608,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		return result
 	}
 
-	e.refs, e.outs = reorderARMembers(e.refs, e.outs, e.declMeta)
+	local.refs, local.outs = reorderARMembers(local.refs, local.outs, local.metas)
 
 	var arRef NodeRef
 
@@ -1623,35 +1625,42 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if objcopyRes := e.objcopyRes; objcopyRes != nil {
 		lead := len(objcopyRes.Refs) - objcopyRes.PySrcTrailCount
+		objMetas := make([]SrcMeta, len(objcopyRes.Refs))
+
+		for i := range objMetas {
+			objMetas[i] = SrcMeta{Prio: stmtPrioDefault}
+		}
 
 		if len(e.resources) > 0 && lead > 0 {
 			globalRefs = concat(objcopyRes.Refs[:lead], globalRefs, objcopyRes.Refs[lead:])
 			globalOutputs = concat(objcopyRes.Outputs[:lead], globalOutputs, objcopyRes.Outputs[lead:])
+			globalMetas = concat(objMetas[:lead], globalMetas, objMetas[lead:])
 		} else {
 			globalRefs = append(globalRefs, objcopyRes.Refs...)
 			globalOutputs = append(globalOutputs, objcopyRes.Outputs...)
+			globalMetas = append(globalMetas, objMetas...)
 		}
 	}
 
 	if d.moduleStmt.Name == tokDllTool {
-		result := e.emitDllShared(e.refs, e.outs, peerArchiveRefs, peerArchivePaths, peerSbomRefs, peerSbomPaths)
+		result := e.emitDllShared(local.refs, local.outs, peerArchiveRefs, peerArchivePaths, peerSbomRefs, peerSbomPaths)
 
 		ctx.memo.put(ctx.instanceKey(instance), result)
 
 		return result
 	}
 
-	if len(e.refs) > 0 {
+	if len(local.refs) > 0 {
 		if perModuleCCTag != 0 {
-			arRef = emitARNamedTagged(arInstance, arBaseName, perModuleCCTag, e.refs, e.outs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
+			arRef = emitARNamedTagged(arInstance, arBaseName, perModuleCCTag, local.refs, local.outs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
 		} else {
-			arRef = emitARNamed(arInstance, arBaseName, e.refs, e.outs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
+			arRef = emitARNamed(arInstance, arBaseName, local.refs, local.outs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
 		}
 	}
 
 	var arPath *VFS
 
-	if len(e.refs) > 0 {
+	if len(local.refs) > 0 {
 		arPath = vfsPtr(build(instance.Path.rel(), "/", arBaseName))
 	}
 
@@ -1679,7 +1688,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		globalBaseName := globalArNameFn(instance.Path.rel())
 		globalTag := d.unit.GlobalARTag
 
-		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, e.declMeta)
+		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, globalMetas)
 
 		globalRef := emitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, d.tc, ctx.host, ctx.emit)
 
@@ -1790,7 +1799,7 @@ func mergeLDPlugins(own, peer *LdPluginsResult) *LdPluginsResult {
 	return out
 }
 
-func reorderARMembers(refs []NodeRef, paths []VFS, declMeta map[VFS]SrcMeta) ([]NodeRef, []VFS) {
+func reorderARMembers(refs []NodeRef, paths []VFS, metas []SrcMeta) ([]NodeRef, []VFS) {
 	if len(paths) == 0 {
 		return refs, paths
 	}
@@ -1801,17 +1810,10 @@ func reorderARMembers(refs []NodeRef, paths []VFS, declMeta map[VFS]SrcMeta) ([]
 		key  uint64
 	}
 
-	defaultKey := SrcMeta{Prio: stmtPrioDefault}.sortKey()
 	members := make([]member, len(paths))
 
 	for i := range paths {
-		k := defaultKey
-
-		if m, ok := declMeta[paths[i]]; ok {
-			k = m.sortKey()
-		}
-
-		members[i] = member{refs[i], paths[i], k}
+		members[i] = member{refs[i], paths[i], metas[i].sortKey()}
 	}
 
 	slices.SortStableFunc(members, func(a, b member) int {
