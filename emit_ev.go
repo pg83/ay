@@ -1,7 +1,6 @@
 package main
 
 import (
-	"slices"
 	"sync"
 )
 
@@ -25,44 +24,6 @@ var evAbseilCleanupHeaders = []VFS{
 	intern("$(S)/contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/internal/cleanup.h"),
 }
 
-var evProtocConstHead = []STR{
-	argI2.str(),
-	argIS2.str(),
-	argIB2.str(),
-	argIS3.str(),
-	argISContribLibsProtobufSrc.str(),
-}
-
-var evProtocConstTail = []STR{
-	argIB2.str(),
-	argISContribLibsProtobufSrc.str(),
-	argCppOutB.str(),
-	argCppStyleguideOutB.str(),
-}
-
-var evProtocConstTailLite = []STR{
-	argIB2.str(),
-	argISContribLibsProtobufSrc.str(),
-	argCppOutProtoHB.str(),
-	argCppStyleguideOutB.str(),
-}
-
-func evPeerProtoIncludes(protoInclude []VFS) []STR {
-	out := make([]STR, 0, len(protoInclude))
-
-	for _, p := range protoInclude {
-		token := internV("-I=", p.string())
-
-		if slices.Contains(evProtocConstHead, token) || slices.Contains(out, token) {
-			continue
-		}
-
-		out = append(out, token)
-	}
-
-	return out
-}
-
 func evWitnessExtras(evRelPath string) []IncludeDirective {
 	evExtraProtobuf := evExtraProtobufDirectives()
 	evAbseilCleanup := evAbseilCleanupDirectives()
@@ -78,75 +39,6 @@ func evWitnessExtras(evRelPath string) []IncludeDirective {
 	out = append(out, evAbseilCleanup...)
 
 	return out
-}
-
-func emitProtoWrapperPBNode(
-	instance ModuleInstance,
-	relPath string,
-	kv *KV,
-	cppStyleguideLDRef NodeRef,
-	protocLDRef NodeRef,
-	pluginLDRef NodeRef,
-	cppStyleguideBinary VFS,
-	protocBinary VFS,
-	pluginBinary VFS,
-	pluginOpts []STR,
-	moduleTag STR,
-	transitiveImports []VFS,
-	protoInclude []VFS,
-	liteHeaders bool,
-	tc ModuleToolchain,
-	emit *StreamingEmitter,
-) NodeRef {
-	na := emit.nodeArenas()
-	genCC := build(relPath, ".pb.cc")
-	genH := build(relPath, ".pb.h")
-	srcVFS := source(relPath)
-	peerIncludes := evPeerProtoIncludes(protoInclude)
-	protocTail := evProtocConstTail
-
-	if liteHeaders {
-		protocTail = evProtocConstTailLite
-	}
-
-	tail := na.strList(append([]STR{
-		internV("--plugin=protoc-gen-cpp_styleguide=", cppStyleguideBinary.string()),
-		internStr(relPath),
-	}, pluginOpts...)...)
-
-	cmdArgs := na.chunkList(na.strList(tc.Python3,
-		internStr(pbWrapperPath),
-		argOutputs.str(),
-		(genCC).str(),
-		(genH).str(),
-		arg2.str(),
-		(protocBinary).str()), evProtocConstHead, peerIncludes, protocTail, tail)
-
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
-	inputs := []VFS{
-		cppStyleguideBinary,
-		protocBinary,
-		pluginBinary,
-		pbWrapperVFS,
-		srcVFS,
-	}
-
-	node := &Node{
-		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
-			Cwd: strS,
-			Env: env}),
-		Env:            env,
-		Inputs:         na.inputList(inputs, transitiveImports),
-		Outputs:        na.vfsList(genCC, genH),
-		KV:             kv,
-		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs: depRefs(cppStyleguideLDRef, protocLDRef, pluginLDRef),
-		Resources:      usesPython3,
-	}
-
-	return emit.emit(node)
 }
 
 func (e *EmitContext) emitLibraryEvSource(src STR) {

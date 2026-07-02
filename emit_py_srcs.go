@@ -304,6 +304,7 @@ func (e *EmitContext) emitEnginePyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef Nod
 		inputs = []VFS{srcAbs}
 		inputs = append(inputs, genInfo.SourceInputs...)
 		inputs = append(inputs, py3ccBinary, py3ccSlowBin)
+
 		nodeInputs = na.inputList(inputs)
 	}
 
