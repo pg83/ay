@@ -121,6 +121,13 @@ var acknowledgedTokSet = func() BitSet {
 	return b
 }()
 
+const (
+	peerKindLangDefault    = 0
+	peerKindProgramDefault = 1
+	peerKindUserPeer       = 2
+	peerKindUnitTestPeer   = 3
+)
+
 type ModuleEmitResult struct {
 	ARRef                           NodeRef
 	ARPath                          *VFS
@@ -581,6 +588,151 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 	}
 }
 
+type resolvedPeer struct {
+	path   string
+	result *ModuleEmitResult
+	kind   int
+}
+
+func applySbomComponentOrder(name TOK, linkTarget bool, resolved []resolvedPeer, allocatorExplicitPeers []string) []resolvedPeer {
+	sbomOrder := resolved
+	cxxIdx, libcxxIdx := -1, -1
+
+	for i, rp := range resolved {
+		switch rp.path {
+		case "contrib/libs/cxxsupp":
+			cxxIdx = i
+		case "contrib/libs/cxxsupp/libcxx":
+			libcxxIdx = i
+		}
+	}
+
+	if !isSpecializedLibraryType(name) && cxxIdx > libcxxIdx && libcxxIdx >= 0 {
+		reordered := make([]resolvedPeer, 0, len(resolved))
+		cxx := resolved[cxxIdx]
+
+		for i, rp := range resolved {
+			if i == cxxIdx {
+				continue
+			}
+
+			reordered = append(reordered, rp)
+
+			if i == libcxxIdx {
+				reordered = append(reordered, cxx)
+			}
+		}
+
+		sbomOrder = reordered
+	}
+
+	if linkTarget && len(allocatorExplicitPeers) > 0 {
+		allocSet := make(map[string]struct{}, len(allocatorExplicitPeers))
+
+		for _, p := range allocatorExplicitPeers {
+			allocSet[filepath.Clean(p)] = struct{}{}
+		}
+
+		lldIdx, allocIdx := -1, -1
+
+		for i, rp := range sbomOrder {
+			if rp.path == "build/platform/lld" {
+				lldIdx = i
+			}
+
+			if _, ok := allocSet[rp.path]; ok && allocIdx < 0 {
+				allocIdx = i
+			}
+		}
+
+		if lldIdx >= 0 && allocIdx >= 0 && lldIdx < allocIdx {
+			relocated := make([]resolvedPeer, 0, len(sbomOrder))
+			lld := sbomOrder[lldIdx]
+
+			for i, rp := range sbomOrder {
+				if i == lldIdx {
+					continue
+				}
+
+				if i == allocIdx {
+					relocated = append(relocated, lld)
+				}
+
+				relocated = append(relocated, rp)
+			}
+
+			sbomOrder = relocated
+		}
+	}
+
+	return sbomOrder
+}
+
+func applyDeferredPeerOrder(name TOK, allPeers []string, peerKinds []int, allocatorExplicitPeers []string) ([]string, []int) {
+	switch name {
+	case tokPy2Program, tokPy3ProgramBin:
+		headP := make([]string, 0, len(allPeers))
+		headK := make([]int, 0, len(peerKinds))
+		tailP := make([]string, 0, 2)
+		tailK := make([]int, 0, 2)
+
+		for i, p := range allPeers {
+			if filepath.Clean(p) == "contrib/libs/python" || filepath.Clean(p) == "library/python/runtime_py3" {
+				tailP = append(tailP, p)
+				tailK = append(tailK, peerKinds[i])
+
+				continue
+			}
+
+			headP = append(headP, p)
+			headK = append(headK, peerKinds[i])
+		}
+
+		return append(headP, tailP...), append(headK, tailK...)
+	case tokPy3Program:
+		allocatorExplicitSet := make(map[string]struct{}, len(allocatorExplicitPeers))
+
+		for _, p := range allocatorExplicitPeers {
+			allocatorExplicitSet[filepath.Clean(p)] = struct{}{}
+		}
+
+		headP := make([]string, 0, len(allPeers))
+		headK := make([]int, 0, len(peerKinds))
+		progP := make([]string, 0, 8)
+		progK := make([]int, 0, 8)
+		pyP := make([]string, 0, 4)
+		pyK := make([]int, 0, 4)
+
+		for i, p := range allPeers {
+			clean := filepath.Clean(p)
+
+			if clean == "contrib/tools/python3/Modules/_sqlite" ||
+				clean == "library/python/runtime_py3/main" ||
+				clean == "library/python/import_tracing/constructor" ||
+				clean == "library/python/testing/import_test" {
+				pyP = append(pyP, p)
+				pyK = append(pyK, peerKinds[i])
+
+				continue
+			}
+
+			if _, alloc := allocatorExplicitSet[clean]; alloc || peerKinds[i] == peerKindProgramDefault {
+				progP = append(progP, p)
+				progK = append(progK, peerKinds[i])
+
+				continue
+			}
+
+			headP = append(headP, p)
+			headK = append(headK, peerKinds[i])
+		}
+
+		return append(append(headP, progP...), pyP...), append(append(headK, progK...), pyK...)
+	}
+
+	return allPeers, peerKinds
+}
+
 func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if existing := ctx.memo.get(ctx.instanceKey(instance)); existing != nil {
 		return *existing
@@ -717,19 +869,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		unitTestPeerCount = 1
 	}
 
-	const (
-		peerKindLangDefault    = 0
-		peerKindProgramDefault = 1
-		peerKindUserPeer       = 2
-		peerKindUnitTestPeer   = 3
-	)
-
-	type resolvedPeer struct {
-		path   string
-		result *ModuleEmitResult
-		kind   int
-	}
-
 	specialized := isSpecializedLibraryType(d.moduleStmt.Name)
 
 	deduper.reset()
@@ -856,6 +995,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	var peerCXXFlagsGlobal []ARG
 	var peerCOnlyFlagsGlobal []ARG
 
+	allPeers, peerKinds = applyDeferredPeerOrder(d.moduleStmt.Name, allPeers, peerKinds, allocatorExplicitPeers)
+
 	resolved := append(make([]resolvedPeer, 0, len(preResolved)+len(allPeers)), preResolved...)
 
 	for i, p := range allPeers {
@@ -900,83 +1041,9 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	archiveOrder := resolved
-
-	switch d.moduleStmt.Name {
-	case tokPy2Program:
-		head := make([]resolvedPeer, 0, len(resolved))
-		tail := make([]resolvedPeer, 0, 2)
-
-		for _, rp := range resolved {
-			if rp.path == "contrib/libs/python" || rp.path == "library/python/runtime_py3" {
-				tail = append(tail, rp)
-
-				continue
-			}
-
-			head = append(head, rp)
-		}
-
-		archiveOrder = append(head, tail...)
-	case tokPy3ProgramBin:
-
-		head := make([]resolvedPeer, 0, len(resolved))
-		tail := make([]resolvedPeer, 0, 2)
-
-		for _, rp := range resolved {
-			if rp.path == "contrib/libs/python" || rp.path == "library/python/runtime_py3" {
-				tail = append(tail, rp)
-
-				continue
-			}
-
-			head = append(head, rp)
-		}
-
-		archiveOrder = append(head, tail...)
-	case tokPy3Program:
-		allocatorExplicitSet := make(map[string]struct{}, len(allocatorExplicitPeers))
-
-		for _, p := range allocatorExplicitPeers {
-			allocatorExplicitSet[filepath.Clean(p)] = struct{}{}
-		}
-
-		head := make([]resolvedPeer, 0, len(resolved))
-		programTail := make([]resolvedPeer, 0, len(preUserProgDefaults)+len(allocatorExplicitPeers)+len(postUserProgDefaults))
-		pythonTail := make([]resolvedPeer, 0, 4)
-
-		for _, rp := range resolved {
-			if rp.path == "contrib/tools/python3/Modules/_sqlite" ||
-				rp.path == "library/python/runtime_py3/main" ||
-				rp.path == "library/python/import_tracing/constructor" ||
-				rp.path == "library/python/testing/import_test" {
-				pythonTail = append(pythonTail, rp)
-
-				continue
-			}
-
-			if rp.kind == peerKindProgramDefault {
-				programTail = append(programTail, rp)
-
-				continue
-			}
-
-			if _, ok := allocatorExplicitSet[rp.path]; ok {
-				programTail = append(programTail, rp)
-
-				continue
-			}
-
-			head = append(head, rp)
-		}
-
-		archiveOrder = append(head, programTail...)
-		archiveOrder = append(archiveOrder, pythonTail...)
-	}
-
 	deduper.reset()
 
-	for _, rp := range archiveOrder {
+	for _, rp := range resolved {
 		pr := rp.result
 
 		for i, p := range pr.PeerArchiveClosurePaths {
@@ -994,7 +1061,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	deduper.reset()
 
-	for _, rp := range archiveOrder {
+	for _, rp := range resolved {
 		pr := rp.result
 
 		for i, p := range pr.PeerGlobalClosurePaths {
@@ -1010,78 +1077,10 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	deduper.reset()
-
 	linkTarget := isProgramModuleType(d.moduleStmt.Name) || d.moduleStmt.Name == tokDllTool
-	sbomOrder := archiveOrder
-	cxxIdx, libcxxIdx := -1, -1
+	sbomOrder := applySbomComponentOrder(d.moduleStmt.Name, linkTarget, resolved, allocatorExplicitPeers)
 
-	for i, rp := range archiveOrder {
-		switch rp.path {
-		case "contrib/libs/cxxsupp":
-			cxxIdx = i
-		case "contrib/libs/cxxsupp/libcxx":
-			libcxxIdx = i
-		}
-	}
-
-	if !specialized && cxxIdx > libcxxIdx && libcxxIdx >= 0 {
-		reordered := make([]resolvedPeer, 0, len(archiveOrder))
-		cxx := archiveOrder[cxxIdx]
-
-		for i, rp := range archiveOrder {
-			if i == cxxIdx {
-				continue
-			}
-
-			reordered = append(reordered, rp)
-
-			if i == libcxxIdx {
-				reordered = append(reordered, cxx)
-			}
-		}
-
-		sbomOrder = reordered
-	}
-
-	if linkTarget && len(allocatorExplicitPeers) > 0 {
-		allocSet := make(map[string]struct{}, len(allocatorExplicitPeers))
-
-		for _, p := range allocatorExplicitPeers {
-			allocSet[filepath.Clean(p)] = struct{}{}
-		}
-
-		lldIdx, allocIdx := -1, -1
-
-		for i, rp := range sbomOrder {
-			if rp.path == "build/platform/lld" {
-				lldIdx = i
-			}
-
-			if _, ok := allocSet[rp.path]; ok && allocIdx < 0 {
-				allocIdx = i
-			}
-		}
-
-		if lldIdx >= 0 && allocIdx >= 0 && lldIdx < allocIdx {
-			relocated := make([]resolvedPeer, 0, len(sbomOrder))
-			lld := sbomOrder[lldIdx]
-
-			for i, rp := range sbomOrder {
-				if i == lldIdx {
-					continue
-				}
-
-				if i == allocIdx {
-					relocated = append(relocated, lld)
-				}
-
-				relocated = append(relocated, rp)
-			}
-
-			sbomOrder = relocated
-		}
-	}
+	deduper.reset()
 
 	ownSbomInsertIdx := -1
 
@@ -1111,7 +1110,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	deduper.reset()
 
-	for _, rp := range archiveOrder {
+	for _, rp := range resolved {
 		pr := rp.result
 
 		for i, p := range pr.PeerWholeArchiveClosurePaths {
@@ -1131,7 +1130,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	deduper.reset()
 
-	for _, rp := range archiveOrder {
+	for _, rp := range resolved {
 		pr := rp.result
 
 		for _, p := range pr.PeerWholeArchiveCmdClosurePaths {
@@ -1149,7 +1148,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	deduper.reset()
 
-	for _, rp := range archiveOrder {
+	for _, rp := range resolved {
 		pr := rp.result
 
 		for i, p := range pr.PeerDynamicClosurePaths {
@@ -1167,7 +1166,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	deduper.reset()
 
-	for _, rp := range archiveOrder {
+	for _, rp := range resolved {
 		pr := rp.result
 
 		for _, p := range pr.PeerArchiveClosurePaths {
@@ -1275,10 +1274,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	cflagsAggOrder := resolved
 
-	if d.moduleStmt.Name == tokPy3Program {
-		cflagsAggOrder = archiveOrder
-	}
-
 	deduper.reset()
 
 	for _, rp := range cflagsAggOrder {
@@ -1374,33 +1369,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	effectiveProtoInclude := dedup(ownProtoInclude, peerProtoInclude)
-
-	if instance.Path == libraryPythonRuntimePy3 {
-		buildRootPath := bldLibraryPythonRuntimePy3
-		abseilPath := contribRestrictedAbseilCpp
-		spliced := make([]VFS, 0, len(effectiveAddInclGlobal)+1)
-		inserted := false
-
-		for _, p := range effectiveAddInclGlobal {
-			if p == buildRootPath {
-				continue
-			}
-
-			spliced = append(spliced, p)
-
-			if !inserted && p == abseilPath {
-				spliced = append(spliced, buildRootPath)
-				inserted = true
-			}
-		}
-
-		if !inserted {
-			spliced = append(spliced, buildRootPath)
-		}
-
-		effectiveAddInclGlobal = spliced
-	}
-
 	effectiveCFlagsGlobal := dedup(peerCFlagsGlobal, d.cFlagsGlobal)
 	effectiveCXXFlagsGlobal := concat(peerCXXFlagsGlobal, d.cxxFlagsGlobal)
 	effectiveCOnlyFlagsGlobal := concat(peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
@@ -1703,7 +1671,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	globalRefs := append(make([]NodeRef, 0, len(e.globalRefs)), e.globalRefs...)
 	globalOutputs := append(make([]VFS, 0, len(e.globalOuts)), e.globalOuts...)
-	globalSrcMemberCount := e.globalSrcMemberCount
 
 	if ctx.sbomEnabled && env.bool(envCLANG) && len(e.refs) > 0 {
 		if r, p := clangToolchainSbomComponent(ctx, instance.Platform); r != nil && !containsVFS(peerSbomPaths, *p) {
@@ -1717,44 +1684,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ldPeerArchiveRefs := peerArchiveRefs
 		ldPeerArchivePaths := peerArchivePaths
 		ldPeerLinkCmdPaths := peerLinkCmdPaths
-
-		if d.allocatorName == strFAKE {
-			ldPeerArchiveRefs = make([]NodeRef, 0, len(peerArchiveRefs))
-			ldPeerArchivePaths = make([]VFS, 0, len(peerArchivePaths))
-
-			for i, p := range peerArchivePaths {
-				if strings.HasPrefix(p.rel(), "library/cpp/malloc/api/") {
-					continue
-				}
-
-				ldPeerArchiveRefs = append(ldPeerArchiveRefs, peerArchiveRefs[i])
-				ldPeerArchivePaths = append(ldPeerArchivePaths, p)
-			}
-		}
-
-		if d.moduleStmt.Name == tokPy3Program && d.allocatorName == strJ {
-			ldPeerArchiveRefs, ldPeerArchivePaths = moveArchivePathsAfter(
-				ldPeerArchiveRefs,
-				ldPeerArchivePaths,
-				bldBuildCowOnLibbuildCowOnA,
-				[]VFS{
-					bldLibraryCppMallocApiLibcppMallocApiA,
-					bldContribLibsJemallocLibcontribLibsJemallocA,
-					bldLibraryCppMallocJemallocLibcppMallocJemallocA,
-				},
-			)
-
-			ldPeerLinkCmdPaths = movePathsAfter(
-				ldPeerLinkCmdPaths,
-				bldBuildCowOnLibbuildCowOnA,
-				[]VFS{
-					bldLibraryCppMallocApiLibcppMallocApiA,
-					bldContribLibsJemallocLibcontribLibsJemallocA,
-					bldLibraryCppMallocJemallocLibcppMallocJemallocA,
-				},
-			)
-		}
-
 		ldInstance := instance
 
 		if d.moduleStmt.Name == tokPy2Program || d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin {
@@ -1906,16 +1835,14 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	if objcopyRes := e.objcopyRes; objcopyRes != nil {
-		globalRefs = append(globalRefs, objcopyRes.Refs...)
-		globalOutputs = append(globalOutputs, objcopyRes.Outputs...)
+		lead := len(objcopyRes.Refs) - objcopyRes.PySrcTrailCount
 
-		leadCount := len(objcopyRes.Refs) - objcopyRes.PySrcTrailCount
-
-		if globalSrcMemberCount > 0 && leadCount > 0 && len(d.resources) > 0 {
-			objBase := len(globalRefs) - len(objcopyRes.Refs)
-
-			globalRefs = moveSubrangeToFront(globalRefs, objBase, leadCount)
-			globalOutputs = moveSubrangeToFront(globalOutputs, objBase, leadCount)
+		if len(d.resources) > 0 && lead > 0 {
+			globalRefs = concat(objcopyRes.Refs[:lead], globalRefs, objcopyRes.Refs[lead:])
+			globalOutputs = concat(objcopyRes.Outputs[:lead], globalOutputs, objcopyRes.Outputs[lead:])
+		} else {
+			globalRefs = append(globalRefs, objcopyRes.Refs...)
+			globalOutputs = append(globalOutputs, objcopyRes.Outputs...)
 		}
 	}
 
@@ -2036,103 +1963,6 @@ func filterEnSerializedSiblings(in []VFS) []VFS {
 
 		out = append(out, p)
 	}
-
-	return out
-}
-
-func moveArchivePathsAfter(refs []NodeRef, paths []VFS, anchor VFS, moved []VFS) ([]NodeRef, []VFS) {
-	if len(moved) == 0 || len(refs) != len(paths) {
-		return refs, paths
-	}
-
-	deduper.reset()
-
-	for _, path := range moved {
-		deduper.add(path)
-	}
-
-	outRefs := make([]NodeRef, 0, len(refs))
-	outPaths := make([]VFS, 0, len(paths))
-	movedRefs := make(map[VFS]NodeRef, len(moved))
-	movedPaths := make(map[VFS]VFS, len(moved))
-
-	for i, path := range paths {
-		if deduper.has(path) {
-			movedRefs[path] = refs[i]
-			movedPaths[path] = path
-
-			continue
-		}
-
-		outRefs = append(outRefs, refs[i])
-		outPaths = append(outPaths, path)
-
-		if path == anchor {
-			for _, movedPath := range moved {
-				if p, ok := movedPaths[movedPath]; ok {
-					outRefs = append(outRefs, movedRefs[movedPath])
-					outPaths = append(outPaths, p)
-				}
-			}
-		}
-	}
-
-	if len(outPaths) != len(paths) {
-		return refs, paths
-	}
-
-	return outRefs, outPaths
-}
-
-func movePathsAfter(paths []VFS, anchor VFS, moved []VFS) []VFS {
-	if len(moved) == 0 {
-		return paths
-	}
-
-	deduper.reset()
-
-	for _, path := range moved {
-		deduper.add(path)
-	}
-
-	outPaths := make([]VFS, 0, len(paths))
-	movedPaths := make(map[VFS]VFS, len(moved))
-
-	for _, path := range paths {
-		if deduper.has(path) {
-			movedPaths[path] = path
-
-			continue
-		}
-
-		outPaths = append(outPaths, path)
-
-		if path == anchor {
-			for _, movedPath := range moved {
-				if p, ok := movedPaths[movedPath]; ok {
-					outPaths = append(outPaths, p)
-				}
-			}
-		}
-	}
-
-	if len(outPaths) != len(paths) {
-		return paths
-	}
-
-	return outPaths
-}
-
-func moveSubrangeToFront[T any](in []T, start, count int) []T {
-	if count <= 0 || start < 0 || start+count > len(in) {
-		return in
-	}
-
-	out := make([]T, 0, len(in))
-
-	out = append(out, in[start:start+count]...)
-	out = append(out, in[:start]...)
-	out = append(out, in[start+count:]...)
 
 	return out
 }

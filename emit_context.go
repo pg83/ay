@@ -7,23 +7,22 @@ type PeerContext struct {
 }
 
 type EmitContext struct {
-	ctx                  *GenCtx
-	instance             ModuleInstance
-	d                    *ModuleData
-	peers                *PeerContext
-	scanner              *IncludeScanner
-	codegen              *CodegenRegistry
-	srcs                 []STR
-	srcMeta              map[STR]SrcMeta
-	pass2                []func()
-	refs                 []NodeRef
-	outs                 []VFS
-	globalRefs           []NodeRef
-	globalOuts           []VFS
-	globalSrcMemberCount int
-	objcopyRes           *ObjcopyEmitResult
-	protoRes             *ProtoSrcsResult
-	declMeta             map[VFS]SrcMeta
+	ctx        *GenCtx
+	instance   ModuleInstance
+	d          *ModuleData
+	peers      *PeerContext
+	scanner    *IncludeScanner
+	codegen    *CodegenRegistry
+	srcs       []STR
+	srcMeta    map[STR]SrcMeta
+	pass2      []func()
+	refs       []NodeRef
+	outs       []VFS
+	globalRefs []NodeRef
+	globalOuts []VFS
+	objcopyRes *ObjcopyEmitResult
+	protoRes   *ProtoSrcsResult
+	declMeta   map[VFS]SrcMeta
 }
 
 func newEmitContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peers *PeerContext) *EmitContext {
@@ -158,8 +157,6 @@ func (e *EmitContext) emit() {
 		e.markGlobalSrc(src)
 		e.emitOneSource(src)
 	}
-
-	e.globalSrcMemberCount = len(e.globalRefs)
 
 	regCCPy3Suffix := d.moduleStmt.Name == tokPy23NativeLibrary || d.moduleStmt.Name == tokPy23Library
 
