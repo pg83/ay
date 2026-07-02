@@ -252,13 +252,13 @@ func TestResolvePySrcRel_RootRelativeProto(t *testing.T) {
 	moduleDir := "market/idx/datacamp/proto/external"
 	srcDirs := []VFS{dirKey(moduleDir)}
 
-	got := resolvePySrcRel(fs, srcDirs, moduleDir, "market/idx/datacamp/proto/api/ExportMessage.proto")
+	got := resolvePySrcRel(fs, srcDirs, source(moduleDir), "market/idx/datacamp/proto/api/ExportMessage.proto")
 
 	if want := "market/idx/datacamp/proto/api/ExportMessage.proto"; got.string() != want {
 		t.Fatalf("root-relative proto: got %s, want %s", got.string(), want)
 	}
 
-	got = resolvePySrcRel(fs, srcDirs, moduleDir, "market/idx/datacamp/proto/external/ExportCategory.proto")
+	got = resolvePySrcRel(fs, srcDirs, source(moduleDir), "market/idx/datacamp/proto/external/ExportCategory.proto")
 
 	if want := "market/idx/datacamp/proto/external/ExportCategory.proto"; got.string() != want {
 		t.Fatalf("root-relative proto under module: got %s, want %s", got.string(), want)
@@ -272,7 +272,7 @@ func TestResolvePySrcRel_DirtyPathNotRootBound(t *testing.T) {
 	moduleDir := "pkg/sub"
 	srcDirs := []VFS{dirKey(moduleDir)}
 
-	got := resolvePySrcRel(fs, srcDirs, moduleDir, "../root.proto")
+	got := resolvePySrcRel(fs, srcDirs, source(moduleDir), "../root.proto")
 
 	if want := "pkg/sub/../root.proto"; got.string() != want {
 		t.Fatalf("dirty srcRel must not source-root bind: got %s, want %s", got.string(), want)

@@ -45,7 +45,7 @@ type PySrc struct {
 	Group  int
 }
 
-func resolvePySrcRel(fs FS, srcDirs []VFS, modulePath, srcRel string) STR {
+func resolvePySrcRel(fs FS, srcDirs []VFS, moduleVFS VFS, srcRel string) STR {
 	for i := len(srcDirs) - 1; i >= 1; i-- {
 		if fs.isFile(srcDirs[i], srcRel) {
 			return internV(srcDirs[i].rel(), "/", srcRel)
@@ -53,11 +53,11 @@ func resolvePySrcRel(fs FS, srcDirs []VFS, modulePath, srcRel string) STR {
 	}
 
 	if srcRel != "" && pathIsClean(srcRel) &&
-		!fs.isFile(dirKey(modulePath), srcRel) && fs.isFile(srcRootVFS, srcRel) {
+		!fs.isFile(moduleVFS, srcRel) && fs.isFile(srcRootVFS, srcRel) {
 		return internStr(srcRel)
 	}
 
-	return internV(modulePath, "/", srcRel)
+	return internV(moduleVFS.rel(), "/", srcRel)
 }
 
 func pySrcYapycSuffix(modulePath string) string {
@@ -178,7 +178,7 @@ func (e *EmitContext) pyResEntriesFor(ps PySrc) []PyGenResEntry {
 		suffix = "." + d.pyYapycSuffix + ".yapyc3"
 	}
 
-	resolvedRel := resolvePySrcRel(e.ctx.fs, d.srcDirs, module, srcRel)
+	resolvedRel := resolvePySrcRel(e.ctx.fs, d.srcDirs, e.instance.Path, srcRel)
 	genInfo := e.codegen.lookupSplit(e.instance.Path, ps.Token)
 	pySource := source(resolvedRel.string())
 
@@ -560,7 +560,7 @@ func (e *EmitContext) emitPyNamespaceForGroup(group PySrcGroup) ([]NodeRef, []VF
 	nsRoots := make(map[string]struct{}, len(arcSources))
 
 	for _, srcRel := range arcSources {
-		resolvedRel := resolvePySrcRel(ctx.fs, d.srcDirs, instance.Path.rel(), srcRel).string()
+		resolvedRel := resolvePySrcRel(ctx.fs, d.srcDirs, instance.Path, srcRel).string()
 		end := len(resolvedRel) - len(srcRel) - 1
 
 		if end < 0 {

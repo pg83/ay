@@ -3270,10 +3270,14 @@ func peerEntryLanguage(parent ModuleInstance, parentModuleName TOK) Language {
 }
 
 func (e *EmitContext) derivePeerInstance(peerPath string) ModuleInstance {
+	return e.derivePeerInstanceVFS(source(peerPath))
+}
+
+func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 	_, parent, d := e.ctx, e.instance, e.d
 
 	return ModuleInstance{
-		Path:     source(peerPath),
+		Path:     peerVFS,
 		Kind:     KindLib,
 		Language: peerEntryLanguage(parent, d.moduleStmt.Name),
 		Platform: parent.Platform,

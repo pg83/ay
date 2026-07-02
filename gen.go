@@ -846,13 +846,14 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	for i, p := range allPeers {
 		peerPath := filepath.Clean(p)
+		peerVFS := source(peerPath)
 		kind := peerKinds[i]
 
-		if kind != peerKindUserPeer && !peerYaMakeExists(ctx.fs, peerPath) {
+		if kind != peerKindUserPeer && !peerYaMakeExists(ctx.fs, peerVFS) {
 			continue
 		}
 
-		peerInstance := e.derivePeerInstance(peerPath)
+		peerInstance := e.derivePeerInstanceVFS(peerVFS)
 		peerResult := genModule(ctx, peerInstance)
 
 		if peerResult.isPROGRAM {

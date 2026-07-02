@@ -33,7 +33,7 @@ func moddirHash(moduleDir string) string {
 }
 
 func isProtoLibraryPeer(ctx *GenCtx, peerPath string) bool {
-	if !peerYaMakeExists(ctx.fs, peerPath) {
+	if !peerYaMakeExists(ctx.fs, dirKey(peerPath)) {
 		return false
 	}
 
