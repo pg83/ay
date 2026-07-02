@@ -366,7 +366,7 @@ func (sc *ScanCtx) dfs(abs VFS) {
 		sc.closureOf(ch)
 	})
 
-	s.tjc.closure.reset(vfsBound())
+	s.tjc.closure.reset(strBound())
 
 	block := s.closureArena.alloc(closureAllocHint)
 	k := 0

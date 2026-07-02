@@ -88,7 +88,7 @@ func (e *EmitContext) joinSrcsIncludeClosure(scanPlatform *Platform, sources []s
 	scanner := ctx.scannerForPlatform(scanPlatform)
 	visited := scanner.visitedIDPool.Get().(*IdSet)
 
-	visited.reset(vfsBound())
+	visited.reset(strBound())
 
 	defer scanner.visitedIDPool.Put(visited)
 

@@ -1,8 +1,8 @@
 package main
 
 type IdSet struct {
-	gen   []uint32
-	epoch uint32
+	gen   []uint16
+	epoch uint16
 }
 
 func (s *IdSet) reset(size uint32) {
@@ -13,7 +13,7 @@ func (s *IdSet) reset(size uint32) {
 			grown = size
 		}
 
-		s.gen = make([]uint32, grown)
+		s.gen = make([]uint16, grown)
 		s.epoch = 1
 
 		return
@@ -31,13 +31,13 @@ func (s *IdSet) reset(size uint32) {
 }
 
 func (s *IdSet) has(v VFS) bool {
-	id := uint32(v)
+	id := v.strID()
 
 	return id < uint32(len(s.gen)) && s.gen[id] == s.epoch
 }
 
 func (s *IdSet) add(v VFS) {
-	id := uint32(v)
+	id := v.strID()
 
 	if id >= uint32(len(s.gen)) {
 		grown := uint32(len(s.gen)) * 2
@@ -46,7 +46,7 @@ func (s *IdSet) add(v VFS) {
 			grown = id + 1
 		}
 
-		g := make([]uint32, grown)
+		g := make([]uint16, grown)
 
 		copy(g, s.gen)
 		s.gen = g
@@ -60,11 +60,13 @@ func (s *IdSet) spliceNew(win []VFS, block []VFS, k int) int {
 	epoch := s.epoch
 
 	for _, v := range win {
-		if gen[v] == epoch {
+		id := v.strID()
+
+		if gen[id] == epoch {
 			continue
 		}
 
-		gen[v] = epoch
+		gen[id] = epoch
 		block[k] = v
 		k++
 	}
