@@ -79,14 +79,12 @@ func (e *EmitContext) emitPyProtoSrcs(peerContribs PeerGlobalContribs, protoSrcs
 		peerAddIncl = dedup(cppSibling.AddInclGlobal, peerContribs.addIncl)
 	}
 
-	genRes := e.emitPyGenResources(entries, "PY3_PROTO", func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
+	genRefs, genOuts := e.packResources(ResourcePack{Tag: stringPtr("PY3_PROTO"), Items: pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
 		return e.pyProtoAuxInputClosure(aux, inputs, ref, peerAddIncl)
-	})
+	}})
 
-	if genRes != nil {
-		pyProtoRefs = append(pyProtoRefs, genRes.Refs...)
-		pyProtoOutputs = append(pyProtoOutputs, genRes.Outputs...)
-	}
+	pyProtoRefs = append(pyProtoRefs, genRefs...)
+	pyProtoOutputs = append(pyProtoOutputs, genOuts...)
 
 	if len(pyProtoRefs) == 0 {
 		return nil
@@ -344,9 +342,9 @@ func (e *EmitContext) emitPyProtoSrc(src string, protocLDRef NodeRef, protocBina
 		yapycTokens = append(yapycTokens, pyBuildBase+"__intpy3___pb2_grpc.py")
 	}
 
-	yapyRes := e.emitPyGenYapyc(pyYapyc, yapycTokens, pyPBRef, pyProtoSourceInputs(inputs))
+	yapyOuts := e.emitPyGenYapyc(pyYapyc, yapycTokens, pyPBRef, pyProtoSourceInputs(inputs))
 
-	return pyProtoResEntriesForSource(instance, d, src, generated, yapycTokens, pyProtoSourceInputs(inputs), outputs, yapyRes.Outputs)
+	return pyProtoResEntriesForSource(instance, d, src, generated, yapycTokens, pyProtoSourceInputs(inputs), outputs, yapyOuts)
 }
 
 func pyProtoResEntriesForSource(instance ModuleInstance, d *ModuleData, src string, generated bool, tokens []string, producerInputs []VFS, pyOutputs []VFS, yapyOuts []VFS) []PyGenResEntry {
