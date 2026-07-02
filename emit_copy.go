@@ -62,6 +62,11 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) CopyEmitState {
 	reg := e.codegen
 	srcVFS := copyFileInputVFS(ctx.fs, instance.Path, entry.Src)
 	dstVFS := copyFileOutputVFS(instance.Path.rel(), entry.Dst)
+
+	if srcVFS != dstVFS {
+		e.requireProducedInput("COPY_FILE src", entry.Src, srcVFS)
+	}
+
 	parsed := copyFileParsedIncludes(scanner, ctx.fs, instance.Path, entry)
 	ref := ctx.emit.reserve()
 
