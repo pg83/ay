@@ -1,13 +1,9 @@
 package main
 
-import (
-	"sync"
-)
-
 var (
 	evEventlogIncludePath     = evEventlogIncludeVFS.string()
-	evExtraProtobufDirectives = sync.OnceValue(func() []IncludeDirective { return quotedDirectives(evExtraProtobufHeaders) })
-	evAbseilCleanupDirectives = sync.OnceValue(func() []IncludeDirective { return quotedDirectives(evAbseilCleanupHeaders) })
+	evExtraProtobufDirectives = quotedDirectives(evExtraProtobufHeaders)
+	evAbseilCleanupDirectives = quotedDirectives(evAbseilCleanupHeaders)
 	evKV                      = KV{P: pkEV, PC: pcYellow}
 )
 
@@ -20,23 +16,20 @@ var evExtraProtobufHeaders = []VFS{
 }
 
 var evAbseilCleanupHeaders = []VFS{
-	intern("$(S)/contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/cleanup.h"),
-	intern("$(S)/contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/internal/cleanup.h"),
+	source("contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/cleanup.h"),
+	source("contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/internal/cleanup.h"),
 }
 
 func evWitnessExtras(evRelPath string) []IncludeDirective {
-	evExtraProtobuf := evExtraProtobufDirectives()
-	evAbseilCleanup := evAbseilCleanupDirectives()
-
 	out := make([]IncludeDirective, 0,
-		3+len(pbDescriptorImporterDirectives)+len(evExtraProtobuf)+len(evAbseilCleanup))
+		3+len(pbDescriptorImporterDirectives)+len(evExtraProtobufDirectives)+len(evAbseilCleanupDirectives))
 
 	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())})
 	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(pbDescriptorVFS.rel())})
 	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(evRelPath)})
 	out = append(out, pbDescriptorImporterDirectives...)
-	out = append(out, evExtraProtobuf...)
-	out = append(out, evAbseilCleanup...)
+	out = append(out, evExtraProtobufDirectives...)
+	out = append(out, evAbseilCleanupDirectives...)
 
 	return out
 }
