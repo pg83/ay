@@ -2,12 +2,8 @@ package main
 
 import "math/bits"
 
-// PageVec is an append-only vector that never copies existing elements on
-// growth: element i lives in page p = floor(log2(i+1)), which is allocated
-// once at its final size 2^p. Access costs a bits.Len64 + one extra deref
-// versus a flat slice, but append is memmove-free.
 type PageVec[T any] struct {
-	pages [64][]T
+	pages [32][]T
 	n     int
 }
 

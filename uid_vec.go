@@ -3,7 +3,7 @@ package main
 import "math/bits"
 
 type UidVec struct {
-	pages [64][]UID
+	pages [32][]UID
 }
 
 func pageOffset(id NodeRef) (page int, off int64) {

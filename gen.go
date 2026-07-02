@@ -869,6 +869,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	resourceGlobalsClosure := make([]ResourceDecl, 0, resGlobalsSum)
+
 	deduper.reset()
 
 	for _, rp := range resolved {

@@ -78,7 +78,7 @@ func TestPageVec_LazyPageAllocation(t *testing.T) {
 		v.push(i)
 	}
 
-	for p := 7; p < 64; p++ {
+	for p := 7; p < len(v.pages); p++ {
 		if v.pages[p] != nil {
 			t.Fatalf("page %d allocated without any element reaching it", p)
 		}

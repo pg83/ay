@@ -91,6 +91,7 @@ func (e *StreamingEmitter) newNode() *Node {
 
 func (e *StreamingEmitter) emitNode(n Node) NodeRef {
 	p := e.na.nodes.one()
+
 	*p = n
 
 	return e.emit(p)
@@ -98,6 +99,7 @@ func (e *StreamingEmitter) emitNode(n Node) NodeRef {
 
 func (e *StreamingEmitter) emitReservedNode(n Node, id NodeRef) {
 	p := e.na.nodes.one()
+
 	*p = n
 
 	e.emitReserved(p, id)
