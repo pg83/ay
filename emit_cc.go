@@ -92,7 +92,7 @@ func (e *EmitContext) ccInputsFor(srcVFS VFS) ModuleCCInputs {
 		return in
 	}
 
-	srcID := internStr(strings.TrimPrefix(srcVFS.rel(), instance.Path.rel()+"/"))
+	srcID := internStr(trimModulePrefix(srcVFS.rel(), instance.Path.rel()))
 
 	if extras := d.perSrcCFlagsFor(srcID); extras != nil {
 		in.PerSourceCFlags = *extras
@@ -150,7 +150,7 @@ func composeCCNode(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInpu
 
 	if v := src.vfs(); v != 0 {
 		srcVFS = v
-		srcRel = strings.TrimPrefix(v.rel(), instance.Path.rel()+"/")
+		srcRel = trimModulePrefix(v.rel(), instance.Path.rel())
 	}
 
 	suffix := ".o"

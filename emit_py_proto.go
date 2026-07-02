@@ -250,7 +250,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR) {
 
 	tokenFor := func(out VFS) STR {
 		if generatedProto {
-			return internStr(strings.TrimPrefix(out.rel(), instance.Path.rel()+"/"))
+			return internStr(trimModulePrefix(out.rel(), instance.Path.rel()))
 		}
 
 		return internV("${ARCADIA_BUILD_ROOT}/", out.rel())

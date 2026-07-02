@@ -98,7 +98,7 @@ func (e *EmitContext) emitLibraryYasmSource(meta SrcMeta) {
 	if srcVFS == 0 {
 		srcVFS = e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	} else {
-		srcRel = strings.TrimPrefix(srcVFS.rel(), instance.Path.rel()+"/")
+		srcRel = trimModulePrefix(srcVFS.rel(), instance.Path.rel())
 	}
 
 	in := e.ccInputsFor(srcVFS)
