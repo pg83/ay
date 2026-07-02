@@ -1929,10 +1929,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		filename := v.Args[0]
-		flags := make([]string, 0, len(variant.CFlags)+len(v.Args)-1)
-
-		flags = append(flags, variant.CFlags...)
-		flags = append(flags, strStrings(v.Args[1:])...)
+		flags := concat(variant.CFlags, strStrings(v.Args[1:]))
 
 		d.simdSrcs = append(d.simdSrcs, SimdSrc{
 			Src:     filename,

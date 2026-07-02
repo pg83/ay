@@ -406,14 +406,7 @@ func composePeerExtras(in ModuleCompileEnv, isCxx bool) []ARG {
 }
 
 func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCompileEnv, p *Platform) []ARG {
-	out := make([]ARG, 0, len(p.CFlags)+len(in.CFlags)+len(in.PeerCFlagsGlobal)+len(in.OwnCFlagsGlobal))
-
-	out = append(out, p.CFlags...)
-	out = append(out, in.CFlags...)
-	out = append(out, in.PeerCFlagsGlobal...)
-	out = append(out, in.OwnCFlagsGlobal...)
-
-	return out
+	return concat(p.CFlags, in.CFlags, in.PeerCFlagsGlobal, in.OwnCFlagsGlobal)
 }
 
 func composeOwnAndPeerGlobalBucket(in ModuleCompileEnv, isCxx bool) []ARG {

@@ -100,12 +100,7 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) CopyEmitState {
 		}
 
 		if len(producerSource) > 0 {
-			dstClosure := make([]VFS, 0, len(producerSource)+len(ctx.scripts[copyFsToolsVFS]))
-
-			dstClosure = append(dstClosure, producerSource...)
-			dstClosure = append(dstClosure, ctx.scripts[copyFsToolsVFS]...)
-
-			info.SourceInputs = dstClosure
+			info.SourceInputs = concat(producerSource, ctx.scripts[copyFsToolsVFS])
 		}
 
 		reg.register(info)

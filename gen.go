@@ -447,12 +447,8 @@ func moduleStmts(ctx *GenCtx, dir string) []Stmt {
 
 	if inc, ok := ctx.autoincludeIdx.lintersMakeIncFor(dir); ok && ctx.fs.isFile(srcRootVFS, inc.rel()) {
 		incStmts := ctx.parseFileCached(inc.rel())
-		out := make([]Stmt, 0, len(stmts)+len(incStmts))
 
-		out = append(out, stmts...)
-		out = append(out, incStmts...)
-
-		return out
+		return concat(stmts, incStmts)
 	}
 
 	return stmts
