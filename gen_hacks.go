@@ -129,3 +129,68 @@ func insertOwnSbomComponent(refs []NodeRef, paths []VFS, ownRef NodeRef, ownPath
 
 	return outRefs, outPaths
 }
+
+func applyDeferredPeerOrder(name TOK, allPeers []string, peerKinds []int, allocatorExplicitPeers []string) ([]string, []int) {
+	switch name {
+	case tokPy2Program, tokPy3ProgramBin:
+		headP := make([]string, 0, len(allPeers))
+		headK := make([]int, 0, len(peerKinds))
+		tailP := make([]string, 0, 2)
+		tailK := make([]int, 0, 2)
+
+		for i, p := range allPeers {
+			if filepath.Clean(p) == "contrib/libs/python" || filepath.Clean(p) == "library/python/runtime_py3" {
+				tailP = append(tailP, p)
+				tailK = append(tailK, peerKinds[i])
+
+				continue
+			}
+
+			headP = append(headP, p)
+			headK = append(headK, peerKinds[i])
+		}
+
+		return append(headP, tailP...), append(headK, tailK...)
+	case tokPy3Program:
+		allocatorExplicitSet := make(map[string]struct{}, len(allocatorExplicitPeers))
+
+		for _, p := range allocatorExplicitPeers {
+			allocatorExplicitSet[filepath.Clean(p)] = struct{}{}
+		}
+
+		headP := make([]string, 0, len(allPeers))
+		headK := make([]int, 0, len(peerKinds))
+		progP := make([]string, 0, 8)
+		progK := make([]int, 0, 8)
+		pyP := make([]string, 0, 4)
+		pyK := make([]int, 0, 4)
+
+		for i, p := range allPeers {
+			clean := filepath.Clean(p)
+
+			if clean == "contrib/tools/python3/Modules/_sqlite" ||
+				clean == "library/python/runtime_py3/main" ||
+				clean == "library/python/import_tracing/constructor" ||
+				clean == "library/python/testing/import_test" {
+				pyP = append(pyP, p)
+				pyK = append(pyK, peerKinds[i])
+
+				continue
+			}
+
+			if _, alloc := allocatorExplicitSet[clean]; alloc || peerKinds[i] == peerKindProgramDefault {
+				progP = append(progP, p)
+				progK = append(progK, peerKinds[i])
+
+				continue
+			}
+
+			headP = append(headP, p)
+			headK = append(headK, peerKinds[i])
+		}
+
+		return append(append(headP, progP...), pyP...), append(append(headK, progK...), pyK...)
+	}
+
+	return allPeers, peerKinds
+}
