@@ -1,6 +1,13 @@
 package main
 
-import "strings"
+import (
+	"strings"
+	"unsafe"
+)
+
+func strBytes(s string) []byte {
+	return unsafe.Slice(unsafe.StringData(s), len(s))
+}
 
 func appendArgStr(dst []STR, srcs ...[]ARG) []STR {
 	for _, s := range srcs {
