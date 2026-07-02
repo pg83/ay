@@ -127,10 +127,6 @@ func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser Inclu
 	return put(out)
 }
 
-func (pm *IncludeParserManager) injectSourceParse(vfsPath VFS, set ParsedIncludeSet) {
-	pm.cache.parsed.put(STR(vfsPath.strID()), set)
-}
-
 func (pm *IncludeParserManager) indexAddincl(a VFS) {
 	if a.isBuild() || a.rel() == "" {
 		return

@@ -50,16 +50,12 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 		}
 	}
 
-	generatedParse := gztGeneratedProtoParse(ctx, gztSource, inducedProtos)
-
-	ctx.parsers.injectSourceParse(source(moddir, "/", genProtoName), generatedParse)
-
 	e.codegen.register(&GeneratedFileInfo{
 		OutputPath:     genProto,
 		ProducerRef:    gzRef,
 		SourceInputs:   sourceInputs,
 		ClosureLeaves:  sourceInputs,
-		ParsedIncludes: generatedParse.bucket(parsedIncludesLocal),
+		ParsedIncludes: gztGeneratedProtoParse(ctx, gztSource, inducedProtos),
 	})
 
 	return gzRef, genProtoName
@@ -139,7 +135,7 @@ func gztConverterInducedProtos(ctx *GenCtx) []VFS {
 	return out
 }
 
-func gztGeneratedProtoParse(ctx *GenCtx, gztSource VFS, inducedProtos []VFS) ParsedIncludeSet {
+func gztGeneratedProtoParse(ctx *GenCtx, gztSource VFS, inducedProtos []VFS) []IncludeDirective {
 	gztLocal := ctx.parsers.sourceParsedBuckets(gztSource, nil).bucket(parsedIncludesLocal)
 	local := make([]IncludeDirective, 0, len(inducedProtos)+len(gztLocal))
 
@@ -157,20 +153,5 @@ func gztGeneratedProtoParse(ctx *GenCtx, gztSource VFS, inducedProtos []VFS) Par
 		local = append(local, IncludeDirective{kind: dir.kind, target: internStr(t)})
 	}
 
-	hcpp := make([]IncludeDirective, 0, len(local))
-
-	for _, dir := range local {
-		t := dir.target.string()
-
-		if extIsProto(t) {
-			hcpp = append(hcpp, IncludeDirective{kind: dir.kind, target: internV(strings.TrimSuffix(t, ".proto"), ".pb.h")})
-		}
-	}
-
-	var set ParsedIncludeSet
-	set[parsedIncludesLocal] = local
-	set[parsedIncludesHeader] = hcpp
-	set[parsedIncludesCpp] = hcpp
-
-	return set
+	return local
 }
