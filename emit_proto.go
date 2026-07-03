@@ -302,7 +302,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		genProtoParsed = info.ParsedIncludes
 	}
 
-	transitiveImports := walkClosureTail(e.scanner, protoVFS, protoWalkInputs(ctx.parsers, protoSearchPaths, instance.Path.rel()))
+	transitiveImports := walkClosure(e.scanner, protoVFS, protoWalkInputs(ctx.parsers, protoSearchPaths, instance.Path.rel()))
 
 	extraProtoDeps = resolveCodegenDepRefsInclView(ctx, instance, ctx.na, transitiveImports, extraProtoDeps...)
 
@@ -400,7 +400,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	pbHParsed = append(pbHParsed, pbHImports...)
 	pbHParsed = append(pbHParsed, extras...)
 
-	transitiveImports.each(func(ti VFS) {
+	eachBucketVFS(transitiveImports.buckets[:], func(ti VFS) {
 		if ti.isBuild() {
 			return
 		}

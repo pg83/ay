@@ -219,7 +219,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		srcVFS := p.srcVFS
 		srcScanIn := p.srcScanIn
 		cyRef := p.cyRef
-		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(p.ind, walkClosureTail(e.scanner, srcVFS, srcScanIn))
+		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(p.ind, walkClosure(e.scanner, srcVFS, srcScanIn))
 
 		if stmt.Header {
 			toolInputs = cythonHeaderToolInputs(srcVFS, p.headerPyxClosure)
@@ -228,8 +228,8 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		if pxdVFS, ok := resolveCythonPxd(ctx, instance, stmt.Pxd); ok {
 			pxdCV := walkClosure(e.scanner, pxdVFS, srcScanIn)
 
-			toolInputs = keepOnlySourceVFS(dedupClosure(toolInputs, pxdCV))
-			emitsIncludes = dedupClosure(emitsIncludes, pxdCV)
+			toolInputs = keepOnlySourceVFS(dedupClosure(append(toolInputs, pxdCV.self), pxdCV.buckets[:]))
+			emitsIncludes = dedupClosure(append(emitsIncludes, pxdCV.self), pxdCV.buckets[:])
 		}
 
 		parsed := make([]IncludeDirective, 0, len(emitsIncludes))
@@ -391,7 +391,7 @@ func (e *EmitContext) cythonCppInducedSets(src VFS, cMode bool, scanIn ScanConte
 		toolSingles = append(toolSingles, v)
 		emitsSingles = append(emitsSingles, v)
 
-		cv := walkClosureTail(scanner, v, scanIn)
+		cv := walkClosure(scanner, v, scanIn)
 
 		toolCl = append(toolCl, cv.buckets[:]...)
 		emitsCl = append(emitsCl, cv.buckets[:]...)
@@ -403,7 +403,7 @@ func (e *EmitContext) cythonCppInducedSets(src VFS, cMode bool, scanIn ScanConte
 		toolSingles = append(toolSingles, v)
 		emitsSingles = append(emitsSingles, v)
 
-		cv := walkClosureTail(scanner, v, scanIn)
+		cv := walkClosure(scanner, v, scanIn)
 
 		toolCl = append(toolCl, cv.buckets[:]...)
 		emitsCl = append(emitsCl, cv.buckets[:]...)

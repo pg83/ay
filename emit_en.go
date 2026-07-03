@@ -137,9 +137,10 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 		var enClosure []VFS
 
 		if withHeader {
-			enClosure = dedupClosure(nil, headerClosure)
+			enClosure = dedupClosure([]VFS{headerClosure.self}, headerClosure.buckets[:])
 		} else {
-			enClosure = dedupClosure(nil, headerClosure, walkClosureTail(e.scanner, serializedCPPPath, scanCfg))
+			ownCV := walkClosure(e.scanner, serializedCPPPath, scanCfg)
+			enClosure = dedupClosure([]VFS{headerClosure.self}, headerClosure.buckets[:], ownCV.buckets[:])
 		}
 		augmentedDepENRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, enClosure)
 
