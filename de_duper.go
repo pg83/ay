@@ -77,22 +77,36 @@ func (dd *DeDuper) filterSeen(list []VFS) []VFS {
 // closure's cv.buckets, i.e. without self). Callers that want a closure's
 // self add it to extra.
 func dedupClosure(extra []VFS, groups ...[][]VFS) []VFS {
+	total := len(extra)
+
+	for _, g := range groups {
+		for _, b := range g {
+			total += len(b)
+		}
+	}
+
+	if total == 0 {
+		return nil
+	}
+
 	deduper.reset()
 
-	var out []VFS
+	out := make([]VFS, 0, total)
 
-	add := func(v VFS) {
+	for _, v := range extra {
 		if deduper.add(v.strID()) {
 			out = append(out, v)
 		}
 	}
 
-	for _, v := range extra {
-		add(v)
-	}
-
 	for _, g := range groups {
-		eachBucketVFS(g, add)
+		for _, b := range g {
+			for _, v := range b {
+				if deduper.add(v.strID()) {
+					out = append(out, v)
+				}
+			}
+		}
 	}
 
 	return out

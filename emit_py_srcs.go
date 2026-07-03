@@ -665,7 +665,7 @@ func (e *EmitContext) emitYaConfJSONObjcopy() ([]NodeRef, []VFS) {
 	for _, res := range resources {
 		key := "resfs/file/" + res.keyPath
 		kvHash := "resfs/src/" + key + "=${rootrel;context=TEXT;input=TEXT:\"" + res.hashPath + "\"}"
-		kvCmd := "resfs/src/" + key + "=" + res.sourcePath
+		kvCmd := internV("resfs/src/", key, "=", res.sourcePath).string()
 		input := source(res.sourcePath)
 
 		refs, outs := e.packResources(ResourcePack{Tag: moduleTag, Items: []ResourceItem{
