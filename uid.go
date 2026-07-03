@@ -21,7 +21,7 @@ func resourceFetchUID(uri, output string) UID {
 
 type CanonBuf struct {
 	buf       []byte
-	fs        FS
+	hash      func(VFS) uint64
 	futs      *PageVec[*NodeFuture]
 	fetchRefs *DenseMap[STR, NodeRef]
 }
@@ -54,14 +54,14 @@ func (c *CanonBuf) writeBytes(s string) {
 }
 
 func (c *CanonBuf) writeSTR(s STR) {
-	c.writeUint64(internTable.los[s])
+	c.writeUint64(internTable.cells.get(uint32(s)).lo)
 }
 
 func (c *CanonBuf) writeRefUIDs(refs []NodeRef) {
 	c.writeUint32(uint32(len(refs)))
 
 	for _, r := range refs {
-		u := c.futs.get(r).uid
+		u := c.futs.get(uint32(r)).uid
 
 		c.writeUint64(u.Hi)
 		c.writeUint64(u.Lo)
@@ -80,7 +80,7 @@ func (c *CanonBuf) writeDepRefUIDs(n *Node) {
 	c.writeUint32(uint32(count))
 
 	for _, r := range n.DepRefs {
-		u := c.futs.get(r).uid
+		u := c.futs.get(uint32(r)).uid
 
 		c.writeUint64(u.Hi)
 		c.writeUint64(u.Lo)
@@ -88,7 +88,7 @@ func (c *CanonBuf) writeDepRefUIDs(n *Node) {
 
 	for _, pat := range n.Resources {
 		if ref, ok := c.fetchRefs.get(pat); ok {
-			u := c.futs.get(ref).uid
+			u := c.futs.get(uint32(ref)).uid
 
 			c.writeUint64(u.Hi)
 			c.writeUint64(u.Lo)
@@ -121,14 +121,6 @@ func (c *CanonBuf) writeVFSChunks(chunks InputChunks) {
 
 	c.writeUint32(uint32(total))
 
-	if fs, ok := c.fs.(*OsFS); ok {
-		for _, ch := range chunks {
-			c.writeVFSSliceOS(ch, fs)
-		}
-
-		return
-	}
-
 	for _, ch := range chunks {
 		c.writeVFSSliceBody(ch)
 	}
@@ -136,13 +128,6 @@ func (c *CanonBuf) writeVFSChunks(chunks InputChunks) {
 
 func (c *CanonBuf) writeVFSSlice(vs []VFS) {
 	c.writeUint32(uint32(len(vs)))
-
-	if fs, ok := c.fs.(*OsFS); ok {
-		c.writeVFSSliceOS(vs, fs)
-
-		return
-	}
-
 	c.writeVFSSliceBody(vs)
 }
 
@@ -150,44 +135,10 @@ func (c *CanonBuf) writeVFSSliceBody(vs []VFS) {
 	for _, v := range vs {
 		c.writeSTR(v.str())
 
-		if c.fs != nil && v.isSource() {
-			c.writeUint64(c.fs.contentHash(v))
+		if v.isSource() {
+			c.writeUint64(c.hash(v))
 		}
 	}
-}
-
-func (c *CanonBuf) writeVFSSliceOS(vs []VFS, fs *OsFS) {
-	buf := c.buf
-	los := internTable.los
-	hashes := fs.contentHashes
-
-	for _, v := range vs {
-		s := v.strID()
-		lo := los[s]
-
-		buf = append(buf,
-			byte(lo), byte(lo>>8), byte(lo>>16), byte(lo>>24),
-			byte(lo>>32), byte(lo>>40), byte(lo>>48), byte(lo>>56))
-
-		if !v.isSource() {
-			continue
-		}
-
-		var h uint64
-
-		if int(s) < len(hashes) && hashes[s] != 0 {
-			h = hashes[s]
-		} else {
-			h = fs.contentHashSlow(v)
-			hashes = fs.contentHashes
-		}
-
-		buf = append(buf,
-			byte(h), byte(h>>8), byte(h>>16), byte(h>>24),
-			byte(h>>32), byte(h>>40), byte(h>>48), byte(h>>56))
-	}
-
-	c.buf = buf
 }
 
 func (c *CanonBuf) writeStrChunks(chunks ArgChunks) {

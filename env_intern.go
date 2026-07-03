@@ -1,9 +1,16 @@
 package main
 
 var envTable = struct {
-	ids  DenseMap[STR, uint32]
-	strs []STR
-}{strs: []STR{0}}
+	ids   DenseMap[STR, uint32]
+	strs  PageVec[STR]
+	count uint32
+}{
+	count: 1,
+}
+
+func init() {
+	envTable.strs.set(0, 0)
+}
 
 type ENV uint32
 
@@ -16,20 +23,21 @@ func internEnvSTR(st STR) ENV {
 		return ENV(id)
 	}
 
-	id := ENV(len(envTable.strs))
+	id := ENV(envTable.count)
 
-	envTable.strs = append(envTable.strs, st)
+	envTable.strs.set(envTable.count, st)
+	envTable.count++
 	envTable.ids.put(st, uint32(id))
 
 	return id
 }
 
 func (id ENV) str() STR {
-	return envTable.strs[id]
+	return envTable.strs.get(uint32(id))
 }
 
 func (id ENV) string() string {
-	return envTable.strs[id].string()
+	return envTable.strs.get(uint32(id)).string()
 }
 
 func (id ENV) String() string {

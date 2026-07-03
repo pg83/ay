@@ -1,10 +1,15 @@
 package main
 
 var argTable = struct {
-	ids  DenseMap[STR, uint32]
-	strs []STR
+	ids   DenseMap[STR, uint32]
+	strs  PageVec[STR]
+	count uint32
 }{
-	strs: make([]STR, 1, 256),
+	count: 1,
+}
+
+func init() {
+	argTable.strs.set(0, 0)
 }
 
 type ARG uint32
@@ -18,9 +23,10 @@ func internArgSTR(st STR) ARG {
 		return ARG(id)
 	}
 
-	id := ARG(len(argTable.strs))
+	id := ARG(argTable.count)
 
-	argTable.strs = append(argTable.strs, st)
+	argTable.strs.set(argTable.count, st)
+	argTable.count++
 	argTable.ids.put(st, uint32(id))
 
 	return id
@@ -31,11 +37,11 @@ func (a ARG) strID() uint32 {
 }
 
 func (a ARG) str() STR {
-	return argTable.strs[a]
+	return argTable.strs.get(uint32(a))
 }
 
 func (a ARG) string() string {
-	return argTable.strs[a].string()
+	return argTable.strs.get(uint32(a)).string()
 }
 
 func (a ARG) String() string {

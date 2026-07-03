@@ -6,19 +6,29 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
+// internCell holds one interned string and the low 64 bits of its 128-bit
+// hash, in a single paged slot. Paging (rather than a growable slice) keeps
+// reads lock-free while emission keeps appending during concurrent execution.
+type internCell struct {
+	str string
+	lo  uint64
+}
+
 var internTable = struct {
 	ids      *IntMap[STR]
 	overflow map[string]STR
-	los      []uint64
-	strs     []string
-
-	bytes *BumpAllocator[byte]
+	cells    PageVec[internCell]
+	count    uint32
+	bytes    *BumpAllocator[byte]
 }{
 	ids:      newIntMap[STR](1 << 16),
 	overflow: make(map[string]STR),
-	los:      make([]uint64, 1, 1<<16),
-	strs:     make([]string, 1, 1<<16),
+	count:    1,
 	bytes:    newBumpAllocator[byte](1 << 20),
+}
+
+func init() {
+	internTable.cells.set(0, internCell{})
 }
 
 func internOwnedCopy(b []byte) string {
@@ -43,14 +53,14 @@ func (s STR) strID() uint32 {
 }
 
 func strBound() uint32 {
-	return uint32(len(internTable.strs))
+	return internTable.count
 }
 
 func internAppend(s string, lo uint64) STR {
-	id := STR(len(internTable.strs))
+	id := STR(internTable.count)
 
-	internTable.strs = append(internTable.strs, s)
-	internTable.los = append(internTable.los, lo)
+	internTable.cells.set(internTable.count, internCell{str: s, lo: lo})
+	internTable.count++
 
 	return id
 }
@@ -59,7 +69,7 @@ func internStr(s string) STR {
 	h := xxh3.HashString128(s)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
-		if internTable.los[*p] == h.Lo {
+		if internTable.cells.get(uint32(*p)).lo == h.Lo {
 			return *p
 		}
 
@@ -103,7 +113,7 @@ func internBuild(prefix string, parts []string) STR {
 	h := xxh3.Hash128(buf)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
-		if internTable.los[*p] == h.Lo {
+		if internTable.cells.get(uint32(*p)).lo == h.Lo {
 			return *p
 		}
 
@@ -139,7 +149,7 @@ func internBytes(b []byte) STR {
 	h := xxh3.Hash128(b)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
-		if internTable.los[*p] == h.Lo {
+		if internTable.cells.get(uint32(*p)).lo == h.Lo {
 			return *p
 		}
 
@@ -166,7 +176,7 @@ func internedBytes(b []byte) STR {
 	h := xxh3.Hash128(b)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
-		if internTable.los[*p] == h.Lo {
+		if internTable.cells.get(uint32(*p)).lo == h.Lo {
 			return *p
 		}
 
@@ -187,7 +197,7 @@ func (id STR) string() string {
 		strProbeAt()
 	}
 
-	return internTable.strs[id]
+	return internTable.cells.get(uint32(id)).str
 }
 
 func (id STR) String() string {
@@ -212,7 +222,7 @@ func interned(s string) STR {
 	h := xxh3.HashString128(s)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
-		if internTable.los[*p] == h.Lo {
+		if internTable.cells.get(uint32(*p)).lo == h.Lo {
 			return *p
 		}
 
@@ -225,5 +235,5 @@ func interned(s string) STR {
 }
 
 func internBound() uint32 {
-	return uint32(len(internTable.strs))
+	return internTable.count
 }
