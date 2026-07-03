@@ -1,0 +1,68 @@
+package main
+
+const closureBuckets = 16
+
+type BucketClosure struct {
+	self    VFS
+	buckets [closureBuckets]uint32
+}
+
+func bucketHash(elems []VFS) uint64 {
+	h := mix64(uint64(len(elems)))
+
+	for _, v := range elems {
+		h += mix64(uint64(v))
+	}
+
+	if h == 0 {
+		h = 1
+	}
+
+	return h
+}
+
+func (s *IncludeScanner) internBucket(elems []VFS) uint32 {
+	if len(elems) == 0 {
+		return 0
+	}
+
+	cell, found := s.bucketIntern.cell(bucketHash(elems))
+	if found {
+		return *cell
+	}
+
+	ref := uint32(len(s.bucketList))
+	s.bucketList = append(s.bucketList, s.bucketPool.list(elems...))
+	*cell = ref
+
+	return ref
+}
+
+func (s *IncludeScanner) storeBuckets(self VFS, rest []VFS) BucketClosure {
+	for r := range s.bktScratch {
+		s.bktScratch[r] = s.bktScratch[r][:0]
+	}
+
+	for _, v := range rest {
+		r := v.strID() & (closureBuckets - 1)
+		s.bktScratch[r] = append(s.bktScratch[r], v)
+	}
+
+	bc := BucketClosure{self: self}
+
+	for r := 0; r < closureBuckets; r++ {
+		bc.buckets[r] = s.internBucket(s.bktScratch[r])
+	}
+
+	return bc
+}
+
+func (s *IncludeScanner) reconstruct(bc BucketClosure, buf []VFS) []VFS {
+	buf = append(buf[:0], bc.self)
+
+	for r := 0; r < closureBuckets; r++ {
+		buf = append(buf, s.bucketList[bc.buckets[r]]...)
+	}
+
+	return buf
+}
