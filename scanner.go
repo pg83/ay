@@ -47,7 +47,6 @@ type IncludeScanner struct {
 	parsers          *IncludeParserManager
 	buckets          *BucketCache
 	closures         DenseMap[STR, Closure]
-	bktScratch       [closureBuckets][]VFS
 	closureArena     *BumpAllocator[VFS]
 	scanCache        DenseMap3[STR, []VFS, uint32, bool]
 	searchTierFlat   *IntMap[VFS]
@@ -352,7 +351,7 @@ func (sc *ScanCtx) dfs(abs VFS) {
 		}
 	}
 
-	s.putClosure(abs, s.storeBuckets(block[0], block[1:k]))
+	s.putClosure(abs, s.buckets.storeBuckets(block[0], block[1:k]))
 }
 
 func (sc *ScanCtx) ensureClosure(abs VFS) {
@@ -409,7 +408,7 @@ func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 		}
 	}
 
-	cl := s.storeBuckets(block[0], block[1:k])
+	cl := s.buckets.storeBuckets(block[0], block[1:k])
 
 	for _, u := range members {
 		s.putClosure(u, cl)
