@@ -47,7 +47,6 @@ type IncludeScanner struct {
 	parsers          *IncludeParserManager
 	buckets          *BucketCache
 	closures         DenseMap[STR, Closure]
-	closureFrontier  []VFS
 	closureArena     *BumpAllocator[VFS]
 	scanCache        DenseMap3[STR, []VFS, uint32, bool]
 	searchTierFlat   *IntMap[VFS]
@@ -324,88 +323,35 @@ func (sc *ScanCtx) dfs(abs VFS) {
 	})
 
 	s.tjc.closure.reset(strBound())
+
+	block := s.closureArena.alloc(closureAllocHint)
+	k := 0
+
 	s.tjc.closure.add(abs)
-	s.buckets.resetScratch()
+	block[k] = abs
+	k++
 
-	// Merge every child closure into the 16 positional accumulator buckets.
-	// gen/epoch are hoisted and the scratch backing is pinned so the per-element
-	// dedup+append is a tight inlined loop (no call, no per-element bounds grow —
-	// reset(strBound) pre-sized gen). Build nodes queue for leaf expansion.
-	gen := s.tjc.closure.gen
-	epoch := s.tjc.closure.epoch
-	scratch := &s.buckets.scratch
-	frontier := s.closureFrontier[:0]
+	sc.forEachResolvedChildID(abs, func(ch VFS) {
+		if ch == abs {
+			return
+		}
 
-	if abs.isBuild() {
-		frontier = append(frontier, abs)
-	}
-
-	children, _ := s.cachedChildren(abs)
-
-	for _, ch := range children {
-		if ch == abs || sc.windowSubsumed(ch) {
-			continue
+		if sc.windowSubsumed(ch) {
+			return
 		}
 
 		cl, _ := s.closure(ch)
 
-		if sid := cl.self.strID(); gen[sid] != epoch {
-			gen[sid] = epoch
-			r := sid & (closureBuckets - 1)
-			scratch[r] = append(scratch[r], cl.self)
+		k = cl.spliceInto(&s.tjc.closure, block, k)
+	})
 
-			if cl.self.isBuild() {
-				frontier = append(frontier, cl.self)
-			}
-		}
-
-		for n, b := range cl.buckets {
-			if len(b) == 0 {
-				continue
-			}
-
-			dst := scratch[n]
-
-			for _, v := range b {
-				id := v.strID()
-
-				if gen[id] == epoch {
-					continue
-				}
-
-				gen[id] = epoch
-				dst = append(dst, v)
-
-				if v.isBuild() {
-					frontier = append(frontier, v)
-				}
-			}
-
-			scratch[n] = dst
+	for i := 0; i < k; i++ {
+		if block[i].isBuild() {
+			k = s.tjc.closure.spliceNew(s.codegen.closureLeaves(block[i]), block, k)
 		}
 	}
 
-	for i := 0; i < len(frontier); i++ {
-		for _, leaf := range s.codegen.closureLeaves(frontier[i]) {
-			id := leaf.strID()
-
-			if gen[id] == epoch {
-				continue
-			}
-
-			gen[id] = epoch
-			r := id & (closureBuckets - 1)
-			scratch[r] = append(scratch[r], leaf)
-
-			if leaf.isBuild() {
-				frontier = append(frontier, leaf)
-			}
-		}
-	}
-
-	s.closureFrontier = frontier
-
-	s.putClosure(abs, s.buckets.internScratch(abs))
+	s.putClosure(abs, s.buckets.storeBuckets(block[0], block[1:k]))
 }
 
 func (sc *ScanCtx) ensureClosure(abs VFS) {
