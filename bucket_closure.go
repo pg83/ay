@@ -7,6 +7,20 @@ type BucketClosure struct {
 	buckets [closureBuckets]uint32
 }
 
+type BucketCache struct {
+	list   [][]VFS
+	pool   *BumpAllocator[VFS]
+	intern *IntMap[uint32]
+}
+
+func newBucketCache() *BucketCache {
+	return &BucketCache{
+		list:   make([][]VFS, 1, 4096),
+		pool:   newBumpAllocator[VFS](1 << 19),
+		intern: newIntMap[uint32](1 << 16),
+	}
+}
+
 func bucketHash(elems []VFS) uint64 {
 	h := mix64(uint64(len(elems)))
 
@@ -26,13 +40,13 @@ func (s *IncludeScanner) internBucket(elems []VFS) uint32 {
 		return 0
 	}
 
-	cell, found := s.bucketIntern.cell(bucketHash(elems))
+	cell, found := s.buckets.intern.cell(bucketHash(elems))
 	if found {
 		return *cell
 	}
 
-	ref := uint32(len(s.bucketList))
-	s.bucketList = append(s.bucketList, s.bucketPool.list(elems...))
+	ref := uint32(len(s.buckets.list))
+	s.buckets.list = append(s.buckets.list, s.buckets.pool.list(elems...))
 	*cell = ref
 
 	return ref
@@ -62,7 +76,7 @@ func (s *IncludeScanner) spliceClosure(cref ClosureRef, block []VFS, k int) int 
 	k = s.tjc.closure.spliceOne(bc.self, block, k)
 
 	for r := 0; r < closureBuckets; r++ {
-		k = s.tjc.closure.spliceNew(s.bucketList[bc.buckets[r]], block, k)
+		k = s.tjc.closure.spliceNew(s.buckets.list[bc.buckets[r]], block, k)
 	}
 
 	return k
@@ -72,7 +86,7 @@ func (s *IncludeScanner) reconstruct(bc BucketClosure, buf []VFS) []VFS {
 	buf = append(buf[:0], bc.self)
 
 	for r := 0; r < closureBuckets; r++ {
-		buf = append(buf, s.bucketList[bc.buckets[r]]...)
+		buf = append(buf, s.buckets.list[bc.buckets[r]]...)
 	}
 
 	return buf

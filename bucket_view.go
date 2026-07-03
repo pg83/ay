@@ -13,7 +13,7 @@ func (s *IncludeScanner) view(bc BucketClosure, withSelf bool) ClosureView {
 	}
 
 	for r := 0; r < closureBuckets; r++ {
-		cv.buckets[r] = s.bucketList[bc.buckets[r]]
+		cv.buckets[r] = s.buckets.list[bc.buckets[r]]
 	}
 
 	return cv
