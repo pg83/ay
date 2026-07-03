@@ -33,10 +33,6 @@ type OsFS struct {
 	direntBuf     []byte
 	rootFD        int
 	pathBuf       []byte
-	listdirHits   uint64
-	listdirMisses uint64
-	existsHits    uint64
-	existsMisses  uint64
 }
 
 func newFS(srcRoot string) FS {
@@ -87,12 +83,9 @@ func (fs *OsFS) listdir(dir VFS) DirView {
 	key := STR(dir.strID())
 
 	if cached, ok := fs.dirs.get(key); ok {
-		fs.listdirHits++
 
 		return cached
 	}
-
-	fs.listdirMisses++
 
 	v := fs.readDirViewRel(key, dir.rel())
 
@@ -117,14 +110,6 @@ func (fs *OsFS) dirHas(v DirView, name string) (present bool, isDir bool) {
 	return true, *d
 }
 
-func (fs *OsFS) bumpExists(ok bool) {
-	if ok {
-		fs.existsHits++
-	} else {
-		fs.existsMisses++
-	}
-}
-
 func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 	if suffix == "" {
 		return fs.listdir(prefix).listable(), true
@@ -143,14 +128,11 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 		v := fs.listdir(dirKey(dir))
 
 		if !v.listable() {
-			fs.existsMisses++
 
 			return false, false
 		}
 
 		ok, d := fs.dirHas(v, name)
-
-		fs.bumpExists(ok)
 
 		return ok, d
 	}
@@ -158,7 +140,6 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 	v := fs.listdir(prefix)
 
 	if !v.listable() {
-		fs.existsMisses++
 
 		return false, false
 	}
@@ -168,13 +149,10 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 	if !more {
 		ok, d := fs.dirHas(v, first)
 
-		fs.bumpExists(ok)
-
 		return ok, d
 	}
 
 	if ok, d := fs.dirHas(v, first); !ok || !d {
-		fs.existsMisses++
 
 		return false, false
 	}
@@ -184,14 +162,11 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 	v = fs.listdir(sourceJoined(prefixRel, dname))
 
 	if !v.listable() {
-		fs.existsMisses++
 
 		return false, false
 	}
 
 	ok, d := fs.dirHas(v, base)
-
-	fs.bumpExists(ok)
 
 	return ok, d
 }
@@ -271,15 +246,5 @@ func (fs *OsFS) walk(rel string, visit func(rel string, isDir bool) bool) {
 		}
 
 		visit(child, false)
-	}
-}
-
-func (fs *OsFS) perfStats() FsPerfStats {
-	return FsPerfStats{
-		listdirHits:   fs.listdirHits,
-		listdirMisses: fs.listdirMisses,
-		existsHits:    fs.existsHits,
-		existsMisses:  fs.existsMisses,
-		dirsCached:    fs.dirs.len(),
 	}
 }

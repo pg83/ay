@@ -2,14 +2,8 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"strings"
 	"sync"
-)
-
-var (
-	scannerStatsEnabled = os.Getenv("SCANNER_STATS") != ""
-	perfStatsEnabled    = os.Getenv("YATOOL_PERF_STATS") != ""
 )
 
 const (
@@ -49,36 +43,27 @@ func (d IncludeDirective) cythonProbe() bool {
 }
 
 type IncludeScanner struct {
-	sysincl                *SysinclCtx
-	parsers                *IncludeParserManager
-	subgraphClosures       []BucketClosure
-	buckets                *BucketCache
-	bktScratch             [closureBuckets][]VFS
-	reconstructBuf         []VFS
-	closureArena           *BumpAllocator[VFS]
-	scanCache              DenseMap3[STR, []VFS, ClosureRef, bool]
-	searchTierFlat         *IntMap[VFS]
-	searchTierSeen         BitSet
-	sourceUnderCache       *IntMap[VFS]
-	childArena             *BumpAllocator[VFS]
-	spOut                  []VFS
-	resolveOut             []VFS
-	tjc                    *TarjanCtx
-	dfsActive              BitSet
-	visitedIDPool          sync.Pool
-	scanCtxPool            sync.Pool
-	onWarn                 func(Warn)
-	walkClosureCalls       uint64
-	subgraphHits           uint64
-	subgraphMisses         uint64
-	subgraphTainted        uint64
-	subgraphSubsumed       uint64
-	searchTierHits         uint64
-	searchTierMisses       uint64
-	resolveSearchPathCalls uint64
-	statsCallCount         uint64
-	codegen                *CodegenRegistry
-	moduleByRef            *DenseMap[NodeRef, *ModuleEmitResult]
+	sysincl          *SysinclCtx
+	parsers          *IncludeParserManager
+	subgraphClosures []BucketClosure
+	buckets          *BucketCache
+	bktScratch       [closureBuckets][]VFS
+	reconstructBuf   []VFS
+	closureArena     *BumpAllocator[VFS]
+	scanCache        DenseMap3[STR, []VFS, ClosureRef, bool]
+	searchTierFlat   *IntMap[VFS]
+	searchTierSeen   BitSet
+	sourceUnderCache *IntMap[VFS]
+	childArena       *BumpAllocator[VFS]
+	spOut            []VFS
+	resolveOut       []VFS
+	tjc              *TarjanCtx
+	dfsActive        BitSet
+	visitedIDPool    sync.Pool
+	scanCtxPool      sync.Pool
+	onWarn           func(Warn)
+	codegen          *CodegenRegistry
+	moduleByRef      *DenseMap[NodeRef, *ModuleEmitResult]
 }
 
 type ScanCtx struct {
@@ -117,17 +102,6 @@ func (s *IncludeScanner) sourceFileExists(abs VFS) bool {
 	s.scanCache.put3(key, v)
 
 	return v
-}
-
-type ScannerPerfStats struct {
-	walkClosureCalls       uint64
-	subgraphHits           uint64
-	subgraphMisses         uint64
-	subgraphTainted        uint64
-	subgraphSubsumed       uint64
-	searchTierHits         uint64
-	searchTierMisses       uint64
-	resolveSearchPathCalls uint64
 }
 
 func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, onWarn func(Warn), tjc *TarjanCtx, buckets *BucketCache) *IncludeScanner {
@@ -334,28 +308,11 @@ func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
 	}
 }
 
-func (s *IncludeScanner) subgraphCacheStats() (hits, misses, tainted uint64) {
-	return s.subgraphHits, s.subgraphMisses, s.subgraphTainted
-}
-
-func (s *IncludeScanner) perfStats() ScannerPerfStats {
-	return ScannerPerfStats{
-		walkClosureCalls:       s.walkClosureCalls,
-		subgraphHits:           s.subgraphHits,
-		subgraphMisses:         s.subgraphMisses,
-		subgraphTainted:        s.subgraphTainted,
-		subgraphSubsumed:       s.subgraphSubsumed,
-		searchTierHits:         s.searchTierHits,
-		searchTierMisses:       s.searchTierMisses,
-		resolveSearchPathCalls: s.resolveSearchPathCalls,
-	}
-}
-
 func (sc *ScanCtx) dfs(abs VFS) {
 	s := sc.scanner
 
 	if s.dfsActive.has(uint32(abs)) {
-		s.subgraphHits += s.tjc.runSCC(sc, abs)
+		s.tjc.runSCC(sc, abs)
 
 		return
 	}
@@ -379,8 +336,6 @@ func (sc *ScanCtx) dfs(abs VFS) {
 	block[k] = abs
 	k++
 
-	var crefs []ClosureRef
-
 	sc.forEachResolvedChildID(abs, func(ch VFS) {
 		if ch == abs {
 			return
@@ -391,10 +346,6 @@ func (sc *ScanCtx) dfs(abs VFS) {
 		}
 
 		cref, _ := s.cachedClosure(ch)
-
-		if closureDump != nil {
-			crefs = append(crefs, cref)
-		}
 
 		k = s.spliceClosure(cref, block, k)
 	})
@@ -409,18 +360,12 @@ func (sc *ScanCtx) dfs(abs VFS) {
 
 	s.subgraphClosures = append(s.subgraphClosures, s.storeBuckets(block[0], block[1:k]))
 	s.putClosure(abs, ref)
-
-	if closureDump != nil {
-		closureDump.recordClosure(s, ref, abs.strID(), block[:k], crefs)
-	}
 }
 
 func (sc *ScanCtx) ensureClosure(abs VFS) {
 	s := sc.scanner
 
-	if _, ok := s.cachedClosure(abs); ok {
-		s.subgraphHits++
-	} else {
+	if _, ok := s.cachedClosure(abs); !ok {
 		sc.dfs(abs)
 	}
 }
@@ -429,9 +374,7 @@ func (sc *ScanCtx) closureOf(abs VFS) ClosureView {
 	s := sc.scanner
 	ref, ok := s.cachedClosure(abs)
 
-	if ok {
-		s.subgraphHits++
-	} else {
+	if !ok {
 		sc.dfs(abs)
 
 		ref, _ = s.cachedClosure(abs)
@@ -455,8 +398,6 @@ func (sc *ScanCtx) windowSubsumed(ch VFS) bool {
 	if s.codegen.isLeafEver(ch) {
 		return false
 	}
-
-	s.subgraphSubsumed++
 
 	return true
 }
@@ -489,16 +430,6 @@ func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 	ref := ClosureRef(len(s.subgraphClosures))
 
 	s.subgraphClosures = append(s.subgraphClosures, s.storeBuckets(block[0], block[1:k]))
-
-	if closureDump != nil {
-		closureDump.recordClosure(s, ref, members[0].strID(), block[:k], nil)
-	}
-
-	s.subgraphMisses += uint64(len(members))
-
-	if len(members) > 1 {
-		s.subgraphTainted++
-	}
 
 	for _, u := range members {
 		s.putClosure(u, ref)
@@ -718,13 +649,9 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 
 	if s.searchTierSeen.has(uint32(targetID)) {
 		if cached := s.searchTierFlat.get(splitMix64(sc.cfg.cfg.num, uint32(targetID))); cached != nil {
-			s.searchTierHits++
-
 			return *cached
 		}
 	}
-
-	s.searchTierMisses++
 
 	target := targetID.string()
 
@@ -866,8 +793,6 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 
 func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective) []VFS {
 	s := sc.scanner
-
-	s.resolveSearchPathCalls++
 
 	out := s.spOut[:0]
 

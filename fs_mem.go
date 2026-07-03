@@ -199,7 +199,3 @@ func (fs *MemFS) walk(rel string, visit func(rel string, isDir bool) bool) {
 		visit(child, false)
 	}
 }
-
-func (fs *MemFS) perfStats() FsPerfStats {
-	return FsPerfStats{}
-}

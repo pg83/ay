@@ -67,11 +67,6 @@ var commands = []Command{
 			"Args: [count] [size-bytes]. Prints ns/op for each.",
 	},
 	{
-		path: []string{"dev", "perf", "merge"}, run: cmdPerfMerge,
-		help: "🔀 Benchmark closure merge strategies on a live dump (AY_CLOSURE_DUMP):\n" +
-			"gen-set splice vs N-way sorted-merge. Arg: <dump-prefix>.",
-	},
-	{
 		path: []string{"dev", "perf", "splice"}, run: cmdPerfSplice,
 		help: "🪢 Benchmark IdSet.spliceNew closure-window dedup: scalar vs AVX512 vs\n" +
 			"prefetch, over random array merges. Args: [merges] [max-element] (max-element\n" +
@@ -118,12 +113,6 @@ func main() {
 func dispatch(argv []string) {
 	probes, g, rest := parseGlobalFlags(argv[1:])
 
-	for _, p := range probes {
-		if p == "str" {
-			strProbeEnabled = true
-		}
-	}
-
 	code := runCommand(rest, g)
 
 	dumpProbes(probes)
@@ -148,10 +137,10 @@ func parseGlobalFlags(argv []string) (probes []string, g GlobalFlags, rest []str
 		k, v, _ := strings.Cut(strings.TrimLeft(a, "-"), "=")
 
 		switch {
-		case k == "probe" && (v == "map" || v == "callsite" || v == "str"):
+		case k == "probe" && (v == "map" || v == "callsite"):
 			probes = append(probes, v)
 		case k == "probe":
-			throwFmt("unknown --probe=%q (want map|callsite|str)", v)
+			throwFmt("unknown --probe=%q (want map|callsite)", v)
 		case k == "verbose" || k == "v":
 			g.Verbose = true
 		default:

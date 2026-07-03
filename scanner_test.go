@@ -212,10 +212,6 @@ func TestScanner_SearchTierCacheReuse_OwnAddIncl(t *testing.T) {
 	if scanner.searchTierFlat.len() != 1 {
 		t.Fatalf("searchTierFlat entries = %d, want 1 (shared by target)", scanner.searchTierFlat.len())
 	}
-
-	if scanner.searchTierMisses != 1 || scanner.searchTierHits != 1 {
-		t.Fatalf("searchTier hits/misses = %d/%d, want 1/1", scanner.searchTierHits, scanner.searchTierMisses)
-	}
 }
 
 func TestScanner_SearchTierCacheReuse_NotFound(t *testing.T) {
@@ -237,10 +233,6 @@ func TestScanner_SearchTierCacheReuse_NotFound(t *testing.T) {
 	if e := scanner.searchTierFlat.get(splitMix64(sc.cfg.cfg.num, uint32(internStr("missing.h")))); e != nil && *e != 0 {
 		t.Fatalf("missing header cached as found")
 	}
-
-	if scanner.searchTierMisses != 1 || scanner.searchTierHits != 1 {
-		t.Fatalf("searchTier hits/misses = %d/%d, want 1/1", scanner.searchTierHits, scanner.searchTierMisses)
-	}
 }
 
 func TestScanner_SearchTierCacheBypassedBySameDirQuoted(t *testing.T) {
@@ -260,10 +252,6 @@ func TestScanner_SearchTierCacheBypassedBySameDirQuoted(t *testing.T) {
 
 	if scanner.searchTierFlat.len() != 0 {
 		t.Fatalf("searchTierFlat entries = %d, want 0 when same-dir quoted wins", scanner.searchTierFlat.len())
-	}
-
-	if scanner.searchTierHits != 0 || scanner.searchTierMisses != 0 {
-		t.Fatalf("searchTier hits/misses = %d/%d, want 0/0", scanner.searchTierHits, scanner.searchTierMisses)
 	}
 }
 

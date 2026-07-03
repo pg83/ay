@@ -13,7 +13,6 @@ type FS interface {
 	walk(rel string, visit func(rel string, isDir bool) bool)
 
 	contentHash(v VFS) uint64
-	perfStats() FsPerfStats
 }
 
 func dirKey(dir string) VFS {
@@ -27,12 +26,4 @@ type DirView struct {
 
 func (v DirView) listable() bool {
 	return v.names != nil
-}
-
-type FsPerfStats struct {
-	listdirHits   uint64
-	listdirMisses uint64
-	existsHits    uint64
-	existsMisses  uint64
-	dirsCached    int
 }

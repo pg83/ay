@@ -223,12 +223,6 @@ type GenCtx struct {
 	prodOuts        IdValueMap
 }
 
-type ScanCtxPerfStats struct {
-	subgraphEntries int
-	childrenEntries int
-	closureWindows  int
-}
-
 func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, na *NodeArenas, includeInputs []VFS, incl ...NodeRef) []NodeRef {
 	deduper.reset()
 
@@ -313,74 +307,6 @@ func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *Nod
 	return out[:k]
 }
 
-func (ctx *GenCtx) perfScanCtxStats(scanner *IncludeScanner) ScanCtxPerfStats {
-	return ScanCtxPerfStats{
-		subgraphEntries: scanner.scanCache.len(),
-		childrenEntries: scanner.scanCache.len(),
-		closureWindows:  len(scanner.subgraphClosures),
-	}
-}
-
-func reportPerfStats(ctx *GenCtx, parsers *IncludeParserManager, targetScanner, hostScanner *IncludeScanner) {
-	if !perfStatsEnabled {
-		return
-	}
-
-	parserStats := parsers.perfStats()
-	fsStats := ctx.fs.perfStats()
-
-	fmt.Fprintf(os.Stderr, "perf: parser parsedHits=%d parsedMisses=%d\n",
-		parserStats.parsedHits, parserStats.parsedMisses)
-
-	fmt.Fprintf(os.Stderr, "perf: fs listdirHits=%d listdirMisses=%d existsHits=%d existsMisses=%d dirsCached=%d\n",
-		fsStats.listdirHits, fsStats.listdirMisses, fsStats.existsHits, fsStats.existsMisses, fsStats.dirsCached)
-
-	fmt.Fprintf(os.Stderr, "perf: intern strs=%d args=%d envs=%d overflow=%d\n",
-		internTable.count, argTable.count, envTable.count, len(internTable.overflow))
-
-	reportScanner := func(label string, scanner *IncludeScanner) {
-		scanStats := scanner.perfStats()
-		ctxStats := ctx.perfScanCtxStats(scanner)
-
-		fmt.Fprintf(os.Stderr, "perf: scanner %s closureEntries=%d closureWindows=%d childrenEntries=%d walkClosure=%d closureHits=%d closureMisses=%d cyclicSCCs=%d closureSubsumed=%d searchTierHits=%d searchTierMisses=%d resolveCalls=%d\n",
-			label,
-			ctxStats.subgraphEntries,
-			ctxStats.closureWindows,
-			ctxStats.childrenEntries,
-			scanStats.walkClosureCalls,
-			scanStats.subgraphHits,
-			scanStats.subgraphMisses,
-			scanStats.subgraphTainted,
-			scanStats.subgraphSubsumed,
-			scanStats.searchTierHits,
-			scanStats.searchTierMisses,
-			scanStats.resolveSearchPathCalls,
-		)
-	}
-
-	reportScanner("target", targetScanner)
-	reportScanner("host", hostScanner)
-
-	reportBuckets := func(label string, scanner *IncludeScanner) {
-		var uniqElems, totalClosureElems int64
-		for _, b := range scanner.buckets.list {
-			uniqElems += int64(len(b))
-		}
-		for _, bc := range scanner.subgraphClosures {
-			totalClosureElems++
-			for r := 0; r < closureBuckets; r++ {
-				totalClosureElems += int64(len(scanner.buckets.list[bc.buckets[r]]))
-			}
-		}
-		fmt.Fprintf(os.Stderr, "perf: buckets %s closures=%d uniqueBuckets=%d uniqueElems=%d totalClosureElems=%d (%.1f%% saved)\n",
-			label, len(scanner.subgraphClosures), len(scanner.buckets.list), uniqElems, totalClosureElems,
-			100*(1-float64(uniqElems)/float64(totalClosureElems)))
-	}
-
-	reportBuckets("target", targetScanner)
-	reportBuckets("host", hostScanner)
-}
-
 func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), testMode bool) NodeRef {
 	plainEmit := emitter
 	scriptTbl := buildScriptTable(fs)
@@ -443,9 +369,6 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 			ctx.emit.result(ref)
 		}
 	}
-
-	reportPerfStats(ctx, parsers, targetScanner, hostScanner)
-	closureDump.close()
 
 	return root.LDRef
 }
@@ -1824,7 +1747,6 @@ func filterBuildRootSelfPaths(instancePath string, peer, own []VFS) []VFS {
 
 	return out
 }
-
 
 func mergeLDPlugins(own, peer *LdPluginsResult) *LdPluginsResult {
 	var ownRefs []NodeRef
