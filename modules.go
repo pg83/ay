@@ -652,8 +652,8 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, instance ModuleInstanc
 	kind := instance.Kind
 
 	env.setString(envMODDIR, modulePath)
-	env.setString(envCURDIR, "$(S)/"+modulePath)
-	env.setString(envBINDIR, "$(B)/"+modulePath)
+	env.setStringID(envCURDIR, internV("$(S)/", modulePath))
+	env.setStringID(envBINDIR, internV("$(B)/", modulePath))
 
 	d := &ModuleData{
 		pythonSQLite3:           true,
