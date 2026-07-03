@@ -345,7 +345,18 @@ func (sc *ScanCtx) dfs(abs VFS) {
 		k = cl.spliceInto(&s.tjc.closure, block, k)
 	})
 
-	for i := 0; i < k; i++ {
+	// Only abs's own build-leaf chain needs expansion: a child build node already
+	// carries its ClosureLeaves inside the child's own closure (expanded when the
+	// child was built), so they arrive with the spliced child window. Expand abs,
+	// then transitively any build nodes among the leaves it adds — not the child
+	// block above.
+	leafStart := k
+
+	if abs.isBuild() {
+		k = s.tjc.closure.spliceNew(s.codegen.closureLeaves(abs), block, k)
+	}
+
+	for i := leafStart; i < k; i++ {
 		if block[i].isBuild() {
 			k = s.tjc.closure.spliceNew(s.codegen.closureLeaves(block[i]), block, k)
 		}
