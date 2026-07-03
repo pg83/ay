@@ -67,13 +67,6 @@ var commands = []Command{
 			"Args: [count] [size-bytes]. Prints ns/op for each.",
 	},
 	{
-		path: []string{"dev", "perf", "splice"}, run: cmdPerfSplice,
-		help: "🪢 Benchmark IdSet.spliceNew closure-window dedup: scalar vs AVX512 vs\n" +
-			"prefetch, over random array merges. Args: [merges] [max-element] (max-element\n" +
-			"sizes the gen set: small = L2/throughput-bound, large = DRAM/latency-bound).\n" +
-			"Prints ns/elem for each.",
-	},
-	{
 		path: []string{"dev", "refac", "consts"}, run: refacConsts,
 		help: "♻️ Regenerate the interned-constant files (str/arg/vfs/env) from the\n" +
 			"literals used across the package. Mutates source in place.",
