@@ -207,6 +207,7 @@ type GenCtx struct {
 	traceStack      []string
 	scannerTarget   *IncludeScanner
 	scannerHost     *IncludeScanner
+	buckets         *BucketCache
 	moduleByRef     DenseMap[NodeRef, *ModuleEmitResult]
 	tools           DenseMap[ARG, *ModuleEmitResult]
 	scripts         ScriptDeps
@@ -362,17 +363,17 @@ func reportPerfStats(ctx *GenCtx, parsers *IncludeParserManager, targetScanner, 
 
 	reportBuckets := func(label string, scanner *IncludeScanner) {
 		var uniqElems, totalClosureElems int64
-		for _, b := range scanner.bucketList {
+		for _, b := range scanner.buckets.list {
 			uniqElems += int64(len(b))
 		}
 		for _, bc := range scanner.subgraphClosures {
 			totalClosureElems++
 			for r := 0; r < closureBuckets; r++ {
-				totalClosureElems += int64(len(scanner.bucketList[bc.buckets[r]]))
+				totalClosureElems += int64(len(scanner.buckets.list[bc.buckets[r]]))
 			}
 		}
 		fmt.Fprintf(os.Stderr, "perf: buckets %s closures=%d uniqueBuckets=%d uniqueElems=%d totalClosureElems=%d (%.1f%% saved)\n",
-			label, len(scanner.subgraphClosures), len(scanner.bucketList), uniqElems, totalClosureElems,
+			label, len(scanner.subgraphClosures), len(scanner.buckets.list), uniqElems, totalClosureElems,
 			100*(1-float64(uniqElems)/float64(totalClosureElems)))
 	}
 
@@ -410,12 +411,14 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
 
-	targetScanner := newIncludeScannerWith(parsers, loadSysInclSetForFS(fs, string(targetP.ISA), targetP.Flags[envMUSL] == strYes, targetP.Flags[envOPENSOURCE] == strYes, targetP.OS, onWarn), onWarn, &ctx.tarjan)
+	ctx.buckets = newBucketCache()
+
+	targetScanner := newIncludeScannerWith(parsers, loadSysInclSetForFS(fs, string(targetP.ISA), targetP.Flags[envMUSL] == strYes, targetP.Flags[envOPENSOURCE] == strYes, targetP.OS, onWarn), onWarn, &ctx.tarjan, ctx.buckets)
 
 	targetScanner.codegen = targetReg
 	targetScanner.moduleByRef = &ctx.moduleByRef
 
-	hostScanner := newIncludeScannerWith(parsers, loadSysInclSetForFS(fs, string(hostP.ISA), hostP.Flags[envMUSL] == strYes, hostP.Flags[envOPENSOURCE] == strYes, hostP.OS, onWarn), onWarn, &ctx.tarjan)
+	hostScanner := newIncludeScannerWith(parsers, loadSysInclSetForFS(fs, string(hostP.ISA), hostP.Flags[envMUSL] == strYes, hostP.Flags[envOPENSOURCE] == strYes, hostP.OS, onWarn), onWarn, &ctx.tarjan, ctx.buckets)
 
 	hostScanner.codegen = hostReg
 	hostScanner.moduleByRef = &ctx.moduleByRef

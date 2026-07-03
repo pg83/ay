@@ -52,9 +52,7 @@ type IncludeScanner struct {
 	sysincl                *SysinclCtx
 	parsers                *IncludeParserManager
 	subgraphClosures       []BucketClosure
-	bucketList             [][]VFS
-	bucketPool             *BumpAllocator[VFS]
-	bucketIntern           *IntMap[uint32]
+	buckets                *BucketCache
 	bktScratch             [closureBuckets][]VFS
 	reconstructBuf         []VFS
 	closureArena           *BumpAllocator[VFS]
@@ -132,16 +130,14 @@ type ScannerPerfStats struct {
 	resolveSearchPathCalls uint64
 }
 
-func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, onWarn func(Warn), tjc *TarjanCtx) *IncludeScanner {
+func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, onWarn func(Warn), tjc *TarjanCtx, buckets *BucketCache) *IncludeScanner {
 	s := &IncludeScanner{
 		sysincl: newSysinclCtx(sysincl),
 		parsers: parsers,
 		onWarn:  onWarn,
 
 		subgraphClosures: make([]BucketClosure, 1, 256),
-		bucketList:       make([][]VFS, 1, 4096),
-		bucketPool:       newBumpAllocator[VFS](1 << 19),
-		bucketIntern:     newIntMap[uint32](1 << 16),
+		buckets:          buckets,
 		closureArena:     newBumpAllocator[VFS](closureArenaInitial),
 		childArena:       newBumpAllocator[VFS](1 << 12),
 		searchTierFlat:   newIntMap[VFS](4096),

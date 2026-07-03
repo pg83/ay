@@ -205,6 +205,7 @@ func newTestScanner(fs FS, sysincl SysInclSet) *IncludeScanner {
 		sysincl,
 		func(Warn) {},
 		&TarjanCtx{},
+		newBucketCache(),
 	)
 
 	s.codegen = newCodegenRegistry()
