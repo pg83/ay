@@ -27,10 +27,37 @@ func (m *MockSink) forEachChild(v VFS, fn func(VFS)) {
 	}
 }
 
-func (m *MockSink) cachedWindow(v VFS) ([]VFS, bool) {
+func (m *MockSink) cachedWindow(v VFS) (Closure, bool) {
 	w, ok := m.cache[v]
 
-	return w, ok
+	if !ok {
+		return Closure{}, false
+	}
+
+	return closureFromFlat(w), true
+}
+
+func closureFromFlat(flat []VFS) Closure {
+	if len(flat) == 0 {
+		return Closure{}
+	}
+
+	var scratch [closureBuckets][]VFS
+
+	for _, v := range flat[1:] {
+		r := int(v.strID() & (closureBuckets - 1))
+		scratch[r] = append(scratch[r], v)
+	}
+
+	var buckets [][]VFS
+
+	for r := 0; r < closureBuckets; r++ {
+		if len(scratch[r]) > 0 {
+			buckets = append(buckets, scratch[r])
+		}
+	}
+
+	return Closure{self: flat[0], buckets: buckets}
 }
 
 func (m *MockSink) windowSubsumed(VFS) bool {

@@ -688,7 +688,7 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 			continue
 		}
 
-		r, o := e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(e.pyResEntriesFor(ps)), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) ClosureView {
+		r, o := e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(e.pyResEntriesFor(ps)), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
 			return e.rawAuxInputClosure(aux, pyProtoSourceInputs(inputs, nil), ref)
 		}})
 
@@ -699,7 +699,7 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 	return refs, outs
 }
 
-func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) ClosureView {
+func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) Closure {
 	ctx, _, d := e.ctx, e.instance, e.d
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 	emits := make([]IncludeDirective, 0, len(seed))

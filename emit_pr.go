@@ -310,7 +310,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 		buildRootPath := copyFileOutputVFS(instance.Path.rel(), rel)
 		cv := walkClosure(e.scanner, buildRootPath, scanCfg)
 
-		eachBucketVFS(cv.buckets[:], func(v VFS) { out = append(out, v) })
+		eachBucketVFS(cv.buckets, func(v VFS) { out = append(out, v) })
 	}
 
 	walkInput := func(rel string) {
@@ -362,7 +362,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 
 			cv := walkClosure(e.scanner, copyFileOutputVFS(instance.Path.rel(), f.string()), scanCfg)
 
-			eachBucketVFS(cv.buckets[:], func(v VFS) {
+			eachBucketVFS(cv.buckets, func(v VFS) {
 				if v.isSource() {
 					out = append(out, v)
 				}
@@ -391,7 +391,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 
 		candidate := build(target.string())
 
-		var sub ClosureView
+		var sub Closure
 		selfIsInput := false
 
 		switch info := reg.lookup(candidate); {
@@ -432,7 +432,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 			process(sub.self)
 		}
 
-		eachBucketVFS(sub.buckets[:], process)
+		eachBucketVFS(sub.buckets, process)
 	}
 
 	if len(out) == 0 {

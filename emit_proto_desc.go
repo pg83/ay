@@ -162,7 +162,7 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 		addSourceInput(descRawprotoWrapperVFS)
 		addSourceInput(protoVFS)
 
-		eachBucketVFS(imports.buckets[:], func(im VFS) {
+		eachBucketVFS(imports.buckets, func(im VFS) {
 			addSourceInput(im)
 		})
 	}
@@ -220,7 +220,7 @@ func descProtocIncludes(peerProtoAddIncl []VFS, cppOutRoot string) []STR {
 }
 
 func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath string,
-	descOut, rawprotoOut VFS, protocLDRef NodeRef, protocBinary VFS, mid []STR, imports ClosureView) NodeRef {
+	descOut, rawprotoOut VFS, protocLDRef NodeRef, protocBinary VFS, mid []STR, imports Closure) NodeRef {
 	na := ctx.emit.nodeArenas()
 
 	head := na.strList(
@@ -251,7 +251,7 @@ func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath st
 			Cwd: strS,
 			Env: env}),
 		Env:            env,
-		Inputs:         na.inputList(inputs, imports.buckets[:]...),
+		Inputs:         na.inputList(inputs, imports.buckets...),
 		KV:             &protoDescKV,
 		Outputs:        na.vfsList(descOut, rawprotoOut),
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

@@ -214,7 +214,7 @@ type ResourceItem struct {
 type ResourcePack struct {
 	Tag        STR
 	Items      []ResourceItem
-	RawClosure func(aux VFS, inputs []VFS, ref NodeRef) ClosureView
+	RawClosure func(aux VFS, inputs []VFS, ref NodeRef) Closure
 }
 
 func resourceChunkEnds(items []ResourceItem, objcopy bool) []int {
@@ -603,7 +603,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 			if r.ProducerRef != 0 {
 				cv := walkClosure(e.scanner, r.Input, d.cc.ScanCfg)
 
-				eachBucketVFS(cv.buckets[:], func(v VFS) {
+				eachBucketVFS(cv.buckets, func(v VFS) {
 					if v.isBuild() {
 						it.Aux = append(it.Aux, v)
 					}

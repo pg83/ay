@@ -30,7 +30,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf STR) {
 			(generatedVFS).str())),
 			Env: env}),
 		Env:          env,
-		Inputs:       na.inputList(na.vfsList(buildScriptsCheckConfigHPy, cv.self), cv.buckets[:]...),
+		Inputs:       na.inputList(na.vfsList(buildScriptsCheckConfigHPy, cv.self), cv.buckets...),
 		Outputs:      na.vfsList(generatedVFS),
 		KV:           &checkConfigHKV,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

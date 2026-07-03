@@ -85,7 +85,7 @@ func (t *TarjanScratch) setOnStack(v VFS, b bool) {
 type ClosureSink interface {
 	forEachChild(v VFS, fn func(VFS))
 
-	cachedWindow(v VFS) (window []VFS, cached bool)
+	cachedWindow(v VFS) (window Closure, cached bool)
 
 	emitClosure(members []VFS, fill func(block []VFS) int)
 
@@ -160,9 +160,9 @@ func (tc *TarjanCtx) strongconnect(g ClosureSink, v VFS) (hits uint64) {
 					return
 				}
 
-				win, _ := g.cachedWindow(ch)
+				cl, _ := g.cachedWindow(ch)
 
-				k = tc.closure.spliceNew(win, block, k)
+				k = cl.spliceInto(&tc.closure, block, k)
 			})
 		}
 
