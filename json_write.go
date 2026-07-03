@@ -2,8 +2,46 @@ package main
 
 import (
 	"io"
+	"strconv"
 	"unicode/utf8"
 )
+
+func appendRefNum(buf []byte, r NodeRef) []byte {
+	return strconv.AppendUint(buf, uint64(r), 10)
+}
+
+func appendRefNumsSeq(buf []byte, seq func(func(NodeRef) bool)) []byte {
+	buf = append(buf, '[')
+
+	first := true
+
+	seq(func(r NodeRef) bool {
+		if !first {
+			buf = append(buf, ',')
+		}
+
+		first = false
+		buf = appendRefNum(buf, r)
+
+		return true
+	})
+
+	return append(buf, ']')
+}
+
+func appendRefNumSlice(buf []byte, refs []NodeRef) []byte {
+	buf = append(buf, '[')
+
+	for i, r := range refs {
+		if i > 0 {
+			buf = append(buf, ',')
+		}
+
+		buf = appendRefNum(buf, r)
+	}
+
+	return append(buf, ']')
+}
 
 var vfsEscapedJSON [][]byte
 
@@ -36,7 +74,7 @@ func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 			buf = append(buf, ',')
 		}
 
-		buf = appendNode(buf, node, g.uids, g.fetchRefs, dropSrcInputs)
+		buf = appendNode(buf, node, g.fetchRefs, dropSrcInputs)
 
 		if len(buf) >= 256<<10 {
 			throw2(w.Write(buf))
@@ -45,13 +83,13 @@ func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 	}
 
 	buf = append(buf, `],"inputs":{},"result":`...)
-	buf = appendUIDSlice(buf, g.Result)
+	buf = appendRefNumSlice(buf, g.Result)
 	buf = append(buf, '}')
 
 	throw2(w.Write(buf))
 }
 
-func appendNode(buf []byte, n *Node, uids *UidVec, fetchRefs *DenseMap[STR, NodeRef], dropSrcInputs bool) []byte {
+func appendNode(buf []byte, n *Node, fetchRefs *DenseMap[STR, NodeRef], dropSrcInputs bool) []byte {
 	buf = append(buf, '{')
 
 	if n.KV.DisableCache {
@@ -61,13 +99,14 @@ func appendNode(buf []byte, n *Node, uids *UidVec, fetchRefs *DenseMap[STR, Node
 	buf = append(buf, `"cmds":`...)
 	buf = appendCmdSlice(buf, n.Cmds)
 	buf = append(buf, `,"deps":`...)
-	buf = appendRefUIDsSeq(buf, n.buildDeps(fetchRefs), uids)
+	buf = appendRefNumsSeq(buf, n.buildDeps(fetchRefs))
 	buf = append(buf, `,"env":`...)
 	buf = appendEnv(buf, n.Env)
 
 	if len(n.ForeignDepRefs) > 0 {
-		buf = append(buf, `,"foreign_deps":`...)
-		buf = appendToolForeignDeps(buf, n.ForeignDepRefs, uids)
+		buf = append(buf, `,"foreign_deps":{"tool":`...)
+		buf = appendRefNumSlice(buf, n.ForeignDepRefs)
+		buf = append(buf, '}')
 	}
 
 	buf = append(buf, `,"inputs":`...)
@@ -87,9 +126,9 @@ func appendNode(buf []byte, n *Node, uids *UidVec, fetchRefs *DenseMap[STR, Node
 	buf = append(buf, `,"requirements":`...)
 	buf = appendRequirements(buf, n.Requirements)
 	buf = append(buf, `,"self_uid":`...)
-	buf = appendUID(buf, n.SelfUID)
+	buf = appendRefNum(buf, n.Ref)
 	buf = append(buf, `,"uid":`...)
-	buf = appendUID(buf, n.UID)
+	buf = appendRefNum(buf, n.Ref)
 
 	return append(buf, '}')
 }
@@ -169,60 +208,6 @@ func appendStrSlice(buf []byte, as []STR) []byte {
 
 		buf = appendString(buf, a.string())
 	}
-
-	return append(buf, ']')
-}
-
-func appendUID(buf []byte, u UID) []byte {
-	buf = append(buf, '"')
-	buf = u.appendB64(buf)
-
-	return append(buf, '"')
-}
-
-func appendUIDSlice(buf []byte, us []UID) []byte {
-	buf = append(buf, '[')
-
-	for i, u := range us {
-		if i > 0 {
-			buf = append(buf, ',')
-		}
-
-		buf = appendUID(buf, u)
-	}
-
-	return append(buf, ']')
-}
-
-func appendRefUIDs(buf []byte, refs []NodeRef, uids *UidVec) []byte {
-	buf = append(buf, '[')
-
-	for i, r := range refs {
-		if i > 0 {
-			buf = append(buf, ',')
-		}
-
-		buf = appendUID(buf, uids.get(r))
-	}
-
-	return append(buf, ']')
-}
-
-func appendRefUIDsSeq(buf []byte, seq func(func(NodeRef) bool), uids *UidVec) []byte {
-	buf = append(buf, '[')
-
-	first := true
-
-	seq(func(r NodeRef) bool {
-		if !first {
-			buf = append(buf, ',')
-		}
-
-		first = false
-		buf = appendUID(buf, uids.get(r))
-
-		return true
-	})
 
 	return append(buf, ']')
 }
@@ -328,13 +313,6 @@ func appendVFS(buf []byte, v VFS) []byte {
 	vfsEscapedJSON[id] = out
 
 	return append(buf, out...)
-}
-
-func appendToolForeignDeps(buf []byte, refs []NodeRef, uids *UidVec) []byte {
-	buf = append(buf, `{"tool":`...)
-	buf = appendRefUIDs(buf, refs, uids)
-
-	return append(buf, '}')
 }
 
 func appendString(buf []byte, s string) []byte {

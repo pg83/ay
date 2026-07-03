@@ -43,8 +43,8 @@ type Node struct {
 	Outputs        []VFS        `json:"outputs"`
 	Platform       *Platform    `json:"platform"`
 	Requirements   Requirements `json:"requirements"`
-	SelfUID        UID          `json:"self_uid"`
-	UID            UID          `json:"uid"`
+	Ref            NodeRef      `json:"-"`
+	presetUID      UID          `json:"-"`
 	DepRefs        []NodeRef    `json:"-"`
 	ForeignDepRefs []NodeRef    `json:"-"`
 	Resources      []STR        `json:"-"`

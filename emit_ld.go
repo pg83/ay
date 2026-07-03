@@ -232,8 +232,7 @@ func emitVCSNode(emit *StreamingEmitter, host *Platform) NodeRef {
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(16)},
 	}
 
-	node.UID = resourceFetchUID("base64:vcs.json:"+vcsJSONBase64, output.string())
-	node.SelfUID = node.UID
+	node.presetUID = resourceFetchUID("base64:vcs.json:"+vcsJSONBase64, output.string())
 
 	return emit.emitNode(node)
 }

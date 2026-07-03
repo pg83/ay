@@ -141,8 +141,8 @@ END()
 		}
 	}
 
-	if !slices.Contains(graphDeps(g, use), genH.UID) {
-		t.Fatalf("use.cpp.o deps missing generated-header PR uid %q: %v", genH.UID, graphDeps(g, use))
+	if !slices.Contains(graphDeps(g, use), genH.Ref) {
+		t.Fatalf("use.cpp.o deps missing generated-header PR ref %d: %v", genH.Ref, graphDeps(g, use))
 	}
 }
 
@@ -345,8 +345,8 @@ END()
 
 	pbProducer := mustNodeByAnyOutput(t, g, "$(B)/dep/dep.pb.h")
 
-	if slices.Contains(graphDeps(g, pr), pbProducer.UID) {
-		t.Fatalf("PR producer must not depend on the dep.pb.h codegen producer %q: %v", pbProducer.UID, graphDeps(g, pr))
+	if slices.Contains(graphDeps(g, pr), pbProducer.Ref) {
+		t.Fatalf("PR producer must not depend on the dep.pb.h codegen producer %q: %v", pbProducer.Ref, graphDeps(g, pr))
 	}
 
 	cppO := findGraphNodeByOutputs(t, g, "$(B)/mod/out.cpp.o")
@@ -1056,8 +1056,8 @@ END()
 		t.Fatalf("use.cpp.o inputs missing %q: %#v", genHeader, use.flatInputs())
 	}
 
-	if !slices.Contains(graphDeps(g, use), producer.UID) {
-		t.Fatalf("use.cpp.o deps missing producer uid %q: %v", producer.UID, graphDeps(g, use))
+	if !slices.Contains(graphDeps(g, use), producer.Ref) {
+		t.Fatalf("use.cpp.o deps missing producer ref %d: %v", producer.Ref, graphDeps(g, use))
 	}
 }
 
@@ -1114,8 +1114,8 @@ END()
 
 	asmObj := mustNodeByOutput(t, g, "$(B)/builtin/gen.o")
 
-	if !slices.Contains(graphDeps(g, asmObj), asmProducer.UID) {
-		t.Fatalf("gen.o deps missing RUN_PROGRAM producer uid %q: %v", asmProducer.UID, graphDeps(g, asmObj))
+	if !slices.Contains(graphDeps(g, asmObj), asmProducer.Ref) {
+		t.Fatalf("gen.o deps missing RUN_PROGRAM producer ref %d: %v", asmProducer.Ref, graphDeps(g, asmObj))
 	}
 
 	lib := mustNodeByOutput(t, g, "$(B)/builtin/libbuiltin.a")
@@ -1255,8 +1255,8 @@ END()
 
 	asmObj := mustNodeByOutput(t, g, "$(B)/builtin/gen.o")
 
-	if !slices.Contains(graphDeps(g, asmObj), asmProducer.UID) {
-		t.Fatalf("gen.o deps missing RUN_PYTHON3 producer uid %q: %v", asmProducer.UID, graphDeps(g, asmObj))
+	if !slices.Contains(graphDeps(g, asmObj), asmProducer.Ref) {
+		t.Fatalf("gen.o deps missing RUN_PYTHON3 producer ref %d: %v", asmProducer.Ref, graphDeps(g, asmObj))
 	}
 
 	lib := mustNodeByOutput(t, g, "$(B)/builtin/libbuiltin.a")
@@ -1850,9 +1850,9 @@ END()
 
 	foreign1 := graphForeignDeps(g1, prod1)
 
-	if !slices.Contains(foreign1, toolLD1.UID) {
-		t.Fatalf("producer %q foreign (tool) deps %v missing built-tool LD uid %q",
-			producerOut, foreign1, toolLD1.UID)
+	if !slices.Contains(foreign1, toolLD1.Ref) {
+		t.Fatalf("producer %q foreign (tool) deps %v missing built-tool LD ref %d",
+			producerOut, foreign1, toolLD1.Ref)
 	}
 
 	if !nodeHasInput(prod1, sourceArgInput) {
@@ -1861,38 +1861,12 @@ END()
 	}
 
 	for _, fd := range foreign1 {
-		if fd == toolLD1.UID {
+		if fd == toolLD1.Ref {
 			continue
 		}
 
 		t.Fatalf("producer %q has unexpected extra foreign dep %q (source arg must not be a tool dep)",
 			producerOut, fd)
-	}
-
-	g2 := build("#pragma once\nint genhdr_marker = 1;\n")
-	toolLD2 := mustNodeByOutput(t, g2, toolLDOut)
-	prod2 := mustNodeByOutput(t, g2, producerOut)
-
-	if toolLD1.UID == toolLD2.UID {
-		t.Fatalf("built-tool LD uid unchanged (%q) after tool.h closure change — tool identity does not track its source/header closure",
-			toolLD1.UID)
-	}
-
-	foreign2 := graphForeignDeps(g2, prod2)
-
-	if slices.Contains(foreign2, toolLD1.UID) {
-		t.Fatalf("producer %q still depends on stale tool identity %q after the tool closure changed",
-			producerOut, toolLD1.UID)
-	}
-
-	if !slices.Contains(foreign2, toolLD2.UID) {
-		t.Fatalf("producer %q foreign deps %v missing new built-tool LD uid %q",
-			producerOut, foreign2, toolLD2.UID)
-	}
-
-	if !nodeHasInput(prod2, sourceArgInput) {
-		t.Fatalf("producer %q lost source arg input %q after tool closure change",
-			producerOut, sourceArgInput)
 	}
 }
 
@@ -1935,8 +1909,8 @@ END()
 	producer := mustNodeByOutput(t, g, "$(B)/gen/first.bin")
 	consumer := mustNodeByOutput(t, g, "$(B)/gen/second.bin")
 
-	if !slices.Contains(graphDeps(g, consumer), producer.UID) {
-		t.Fatalf("second.bin deps missing first.bin producer uid %q: %v", producer.UID, graphDeps(g, consumer))
+	if !slices.Contains(graphDeps(g, consumer), producer.Ref) {
+		t.Fatalf("second.bin deps missing first.bin producer ref %d: %v", producer.Ref, graphDeps(g, consumer))
 	}
 
 	if !nodeHasInput(consumer, "$(S)/gen/root.dat") {
@@ -1981,8 +1955,8 @@ END()
 	producer := mustNodeByAnyOutput(t, g, "$(B)/gen/first.txt")
 	consumer := mustNodeByOutput(t, g, "$(B)/gen/second.bin")
 
-	if !slices.Contains(graphDeps(g, consumer), producer.UID) {
-		t.Fatalf("second.bin deps missing RUN_PYTHON3 producer uid %q: %v", producer.UID, graphDeps(g, consumer))
+	if !slices.Contains(graphDeps(g, consumer), producer.Ref) {
+		t.Fatalf("second.bin deps missing RUN_PYTHON3 producer ref %d: %v", producer.Ref, graphDeps(g, consumer))
 	}
 }
 
@@ -2030,12 +2004,12 @@ END()
 	second := mustNodeByOutput(t, g, "$(B)/gen/second.bin")
 	third := mustNodeByOutput(t, g, "$(B)/gen/third.bin")
 
-	if !slices.Contains(graphDeps(g, second), first.UID) {
-		t.Fatalf("second.bin deps missing first.txt producer uid %q: %v", first.UID, graphDeps(g, second))
+	if !slices.Contains(graphDeps(g, second), first.Ref) {
+		t.Fatalf("second.bin deps missing first.txt producer ref %d: %v", first.Ref, graphDeps(g, second))
 	}
 
-	if !slices.Contains(graphDeps(g, third), second.UID) {
-		t.Fatalf("third.bin deps missing second.bin producer uid %q: %v", second.UID, graphDeps(g, third))
+	if !slices.Contains(graphDeps(g, third), second.Ref) {
+		t.Fatalf("third.bin deps missing second.bin producer ref %d: %v", second.Ref, graphDeps(g, third))
 	}
 }
 
@@ -2077,8 +2051,8 @@ END()
 	pbH := mustNodeByAnyOutput(t, g, "$(B)/mod/msg.pb.h")
 	consumer := mustNodeByOutput(t, g, "$(B)/mod/out.txt")
 
-	if !slices.Contains(graphDeps(g, consumer), pbH.UID) {
-		t.Fatalf("out.txt deps missing proto producer uid %q: %v", pbH.UID, graphDeps(g, consumer))
+	if !slices.Contains(graphDeps(g, consumer), pbH.Ref) {
+		t.Fatalf("out.txt deps missing proto producer ref %d: %v", pbH.Ref, graphDeps(g, consumer))
 	}
 }
 
@@ -2120,8 +2094,8 @@ END()
 	en := mustNodeByAnyOutput(t, g, "$(B)/mod/myenum.h_serialized.cpp")
 	consumer := mustNodeByOutput(t, g, "$(B)/mod/out.txt")
 
-	if !slices.Contains(graphDeps(g, consumer), en.UID) {
-		t.Fatalf("out.txt deps missing enum-serialization producer uid %q: %v", en.UID, graphDeps(g, consumer))
+	if !slices.Contains(graphDeps(g, consumer), en.Ref) {
+		t.Fatalf("out.txt deps missing enum-serialization producer ref %d: %v", en.Ref, graphDeps(g, consumer))
 	}
 }
 
@@ -2164,7 +2138,7 @@ END()
 	arc := mustNodeByAnyOutput(t, g, "$(B)/mod/data.inc")
 	consumer := mustNodeByOutput(t, g, "$(B)/mod/out.txt")
 
-	if !slices.Contains(graphDeps(g, consumer), arc.UID) {
-		t.Fatalf("out.txt deps missing archive producer uid %q: %v", arc.UID, graphDeps(g, consumer))
+	if !slices.Contains(graphDeps(g, consumer), arc.Ref) {
+		t.Fatalf("out.txt deps missing archive producer ref %d: %v", arc.Ref, graphDeps(g, consumer))
 	}
 }

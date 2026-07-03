@@ -399,7 +399,7 @@ END()
 	found := false
 
 	for _, d := range graphDeps(g, pb) {
-		if d == jv.UID {
+		if d == jv.Ref {
 			found = true
 
 			break
@@ -407,7 +407,7 @@ END()
 	}
 
 	if !found {
-		t.Errorf("graphDeps(g, PB) %v does not include JV(.proto) uid %q", graphDeps(g, pb), jv.UID)
+		t.Errorf("graphDeps(g, PB) %v does not include JV(.proto) ref %d", graphDeps(g, pb), jv.Ref)
 	}
 
 	hasBuildProto := false
@@ -1006,7 +1006,7 @@ END()
 	found := false
 
 	for _, d := range graphDeps(g, pyPB) {
-		if d == jv.UID {
+		if d == jv.Ref {
 			found = true
 
 			break
@@ -1014,7 +1014,7 @@ END()
 	}
 
 	if !found {
-		t.Errorf("graphDeps(g, pyPB) %v does not include JV(.proto) uid %q", graphDeps(g, pyPB), jv.UID)
+		t.Errorf("graphDeps(g, pyPB) %v does not include JV(.proto) ref %d", graphDeps(g, pyPB), jv.Ref)
 	}
 
 	have := make(map[string]struct{}, len(pyPB.flatInputs()))
@@ -1685,7 +1685,7 @@ func TestEmitProtoSrcs_CppEvlogCarriesEvent2cppInducedDeps(t *testing.T) {
 	refs := 0
 
 	for _, dep := range graphDeps(gEv, pb) {
-		if dep == event2cppNode.UID {
+		if dep == event2cppNode.Ref {
 			refs++
 		}
 	}
@@ -2362,7 +2362,7 @@ func TestEmitPB_PeerRedeclaredOwnNamespaceRidesProtoIncludeBand(t *testing.T) {
 }
 
 func TestEmitPB_ExtraProtocFlags(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 	inst := targetInstance("pkg/proto")
 
 	blocks := composePBArgBlocks(testToolchain(),
@@ -2403,7 +2403,7 @@ func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 }
 
 func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 	inst := targetInstance("pkg/proto")
 
 	blocks := composePBArgBlocks(testToolchain(),
@@ -2562,19 +2562,7 @@ END()
 
 	g := testGen(newMemFS(files), "app")
 
-	var ldNode *Node
-
-	for _, n := range g.Graph {
-		if n.KV.P == pkLD {
-			ldNode = n
-
-			break
-		}
-	}
-
-	if ldNode == nil {
-		t.Fatal("no LD node found in graph")
-	}
+	ldNode := resultRootNode(g)
 
 	var linkArgs []STR
 
@@ -2648,19 +2636,7 @@ END()
 
 	g := testGen(newMemFS(files), "app")
 
-	var ldNode *Node
-
-	for _, n := range g.Graph {
-		if n.KV.P == pkLD {
-			ldNode = n
-
-			break
-		}
-	}
-
-	if ldNode == nil {
-		t.Fatal("no LD node found in graph")
-	}
+	ldNode := resultRootNode(g)
 
 	var linkArgs []STR
 
@@ -2807,7 +2783,7 @@ END()
 		t.Fatalf("pb inputs prefix = %v, want %v", inputs, wantInputsPrefix)
 	}
 
-	wantDeps := []UID{styleguide.UID, grpcCpp.UID, protoc.UID, configPlugin.UID}
+	wantDeps := []NodeRef{styleguide.Ref, grpcCpp.Ref, protoc.Ref, configPlugin.Ref}
 
 	if len(graphDeps(g, pb)) != len(wantDeps) {
 		t.Fatalf("pb deps len = %d, want %d (%v)", len(graphDeps(g, pb)), len(wantDeps), graphDeps(g, pb))
@@ -2829,8 +2805,8 @@ END()
 		}
 	}
 
-	if !slices.Contains(graphDeps(g, configPlugin), pluginRuntime.UID) {
-		t.Fatalf("config proto plugin deps = %v, want runtime peer uid %q", graphDeps(g, configPlugin), pluginRuntime.UID)
+	if !slices.Contains(graphDeps(g, configPlugin), pluginRuntime.Ref) {
+		t.Fatalf("config proto plugin deps = %v, want runtime peer ref %d", graphDeps(g, configPlugin), pluginRuntime.Ref)
 	}
 }
 
@@ -3405,7 +3381,7 @@ int use() { return 0; }
 		}
 	}
 
-	for _, want := range []UID{mainPB.UID, publicPB.UID, leafPB.UID} {
+	for _, want := range []NodeRef{mainPB.Ref, publicPB.Ref, leafPB.Ref} {
 		if !slices.Contains(graphDeps(g, useCC), want) {
 			t.Fatalf("use.cpp.o deps missing %q: %v", want, graphDeps(g, useCC))
 		}
@@ -3467,8 +3443,8 @@ message Any {}
 		t.Fatalf("use.cpp.o inputs still contain unrebased WKT header path: %#v", use.flatInputs())
 	}
 
-	if !slices.Contains(graphDeps(g, use), pb.UID) {
-		t.Fatalf("use.cpp.o deps missing PB producer uid %q: %v", pb.UID, graphDeps(g, use))
+	if !slices.Contains(graphDeps(g, use), pb.Ref) {
+		t.Fatalf("use.cpp.o deps missing PB producer ref %d: %v", pb.Ref, graphDeps(g, use))
 	}
 }
 

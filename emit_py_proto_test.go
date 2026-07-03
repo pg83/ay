@@ -112,12 +112,12 @@ END()
 
 	deps := graphDeps(g, objcopy)
 
-	if !slices.Contains(deps, pb.UID) {
-		t.Fatalf("objcopy deps %v missing PB producer uid %q", deps, pb.UID)
+	if !slices.Contains(deps, pb.Ref) {
+		t.Fatalf("objcopy deps %v missing PB producer ref %d", deps, pb.Ref)
 	}
 
-	if !slices.Contains(deps, py3cc.UID) {
-		t.Fatalf("objcopy deps %v missing py3cc producer uid %q", deps, py3cc.UID)
+	if !slices.Contains(deps, py3cc.Ref) {
+		t.Fatalf("objcopy deps %v missing py3cc producer ref %d", deps, py3cc.Ref)
 	}
 
 	globalAr := mustNodeByOutput(t, g, "$(B)/"+modPath+"/libpy3irt-test-banner_flags.global.a")

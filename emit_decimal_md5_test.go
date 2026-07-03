@@ -86,7 +86,7 @@ func TestEmitDecimalMD5_GeneratedSourceEntersArchive(t *testing.T) {
 	foundDep := false
 
 	for _, dep := range graphDeps(g, cc) {
-		if dep == sv.UID {
+		if dep == sv.Ref {
 			foundDep = true
 
 			break
@@ -94,7 +94,7 @@ func TestEmitDecimalMD5_GeneratedSourceEntersArchive(t *testing.T) {
 	}
 
 	if !foundDep {
-		t.Errorf("graphDeps(g, CC) = %v, want to contain SV UID %q", graphDeps(g, cc), sv.UID)
+		t.Errorf("graphDeps(g, CC) = %v, want to contain SV ref %d", graphDeps(g, cc), sv.Ref)
 	}
 
 	ar := mustNodeByOutput(t, g, "$(B)/mod/libmod.a")

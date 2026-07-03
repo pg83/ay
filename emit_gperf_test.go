@@ -58,8 +58,8 @@ END()
 
 	ldNode := mustNodeByOutput(t, g, gperfBin)
 
-	if fd := graphForeignDeps(g, gp); len(fd) != 1 || fd[0] != ldNode.UID {
-		t.Fatalf("gperf ForeignDeps = %v, want {tool: [%q]}", fd, ldNode.UID)
+	if fd := graphForeignDeps(g, gp); len(fd) != 1 || fd[0] != ldNode.Ref {
+		t.Fatalf("gperf ForeignDeps = %v, want {tool: [%d]}", fd, ldNode.Ref)
 	}
 
 	cc := mustNodeByOutput(t, g, "$(B)/gpmod/tags.gperf.cpp.o")
@@ -71,7 +71,7 @@ END()
 	found := false
 
 	for _, dep := range graphDeps(g, cc) {
-		if dep == gp.UID {
+		if dep == gp.Ref {
 			found = true
 
 			break
@@ -79,7 +79,7 @@ END()
 	}
 
 	if !found {
-		t.Fatalf("gperf CC deps = %v, want to contain GP UID %q", graphDeps(g, cc), gp.UID)
+		t.Fatalf("gperf CC deps = %v, want to contain GP ref %d", graphDeps(g, cc), gp.Ref)
 	}
 
 	ar := mustNodeByOutputSuffix(t, g, ".a")

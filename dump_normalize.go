@@ -75,13 +75,13 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 
 	fanoutNodes(src, workers,
 		func(node *RawNode) p1Result {
-			uid := node.UID
+			uid := string(node.UID)
 			kv, _ := node.Kv.(map[string]any)
 			p, _ := kv["p"].(string)
 
 			r := p1Result{
 				uid:     uid,
-				deps:    node.Deps,
+				deps:    idStrs(node.Deps),
 				content: sha256.Sum256(marshalCompact(canonContent(node, refGraph))),
 				isFetch: p == "FT",
 			}
@@ -154,7 +154,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 
 		fanoutNodes(src, workers,
 			func(node *RawNode) stripResult {
-				uid := node.UID
+				uid := string(node.UID)
 				inputSet := make(map[string]struct{})
 
 				for _, in := range canonInputs(node, refGraph) {
@@ -162,7 +162,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 				}
 
 				cmdText := nodeCmdText(node)
-				raw := node.Deps
+				raw := idStrs(node.Deps)
 				kept := make([]string, 0, len(raw))
 
 				for _, d := range raw {
@@ -253,7 +253,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 
 	fanoutNodes(src, workers,
 		func(node *RawNode) emitLine {
-			uid := node.UID
+			uid := string(node.UID)
 
 			if !closure[uid] {
 				return emitLine{}

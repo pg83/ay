@@ -30,7 +30,7 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 
 	for _, n := range g.Graph {
 		if len(n.Outputs) == 0 {
-			t.Fatalf("node uid=%s has no outputs", n.UID)
+			t.Fatalf("node ref=%d has no outputs", n.Ref)
 		}
 
 		nodesByOutput[n.Outputs[0].string()] = n
@@ -59,25 +59,25 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 		t.Errorf("root LD Cmds = %d, want 4", len(rootLD.Cmds))
 	}
 
-	if g.Result[0] != rootLD.UID {
-		t.Errorf("result UID = %q, want mainprog LD uid %q", g.Result[0], rootLD.UID)
+	if g.Result[0] != rootLD.Ref {
+		t.Errorf("result Ref = %d, want mainprog LD ref %d", g.Result[0], rootLD.Ref)
 	}
 
 	mainCC := nodesByOutput[mainCCOut]
 	libAR := nodesByOutput[libARout]
 
-	depSet := make(map[UID]struct{}, len(graphDeps(g, rootLD)))
+	depSet := make(map[NodeRef]struct{}, len(graphDeps(g, rootLD)))
 
 	for _, d := range graphDeps(g, rootLD) {
 		depSet[d] = struct{}{}
 	}
 
-	if _, ok := depSet[mainCC.UID]; !ok {
-		t.Errorf("root LD deps %v missing main.cpp.o uid %q", graphDeps(g, rootLD), mainCC.UID)
+	if _, ok := depSet[mainCC.Ref]; !ok {
+		t.Errorf("root LD deps %v missing main.cpp.o ref %d", graphDeps(g, rootLD), mainCC.Ref)
 	}
 
-	if _, ok := depSet[libAR.UID]; !ok {
-		t.Errorf("root LD deps %v missing thelib AR uid %q", graphDeps(g, rootLD), libAR.UID)
+	if _, ok := depSet[libAR.Ref]; !ok {
+		t.Errorf("root LD deps %v missing thelib AR ref %d", graphDeps(g, rootLD), libAR.Ref)
 	}
 }
 
@@ -123,7 +123,7 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 		t.Errorf("root node kv.p = %q, want LD", ld.KV.P)
 	}
 
-	deps := make(map[UID]struct{}, len(graphDeps(g, ld)))
+	deps := make(map[NodeRef]struct{}, len(graphDeps(g, ld)))
 
 	for _, d := range graphDeps(g, ld) {
 		deps[d] = struct{}{}
@@ -135,8 +135,8 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 		t.Fatal("missing tested-lib AR $(B)/thelib/libthelib.a")
 	}
 
-	if _, ok := deps[libAR.UID]; !ok {
-		t.Errorf("LD deps missing tested-lib AR uid %q (implicit PEERDIR($arg) not walked)", libAR.UID)
+	if _, ok := deps[libAR.Ref]; !ok {
+		t.Errorf("LD deps missing tested-lib AR ref %d (implicit PEERDIR($arg) not walked)", libAR.Ref)
 	}
 
 	umAR := byOut["$(B)/library/cpp/testing/unittest_main/libcpp-testing-unittest_main.a"]
@@ -145,8 +145,8 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 		t.Fatal("missing unittest_main AR")
 	}
 
-	if _, ok := deps[umAR.UID]; !ok {
-		t.Errorf("LD deps missing unittest_main AR uid %q (implicit PEERDIR not walked)", umAR.UID)
+	if _, ok := deps[umAR.Ref]; !ok {
+		t.Errorf("LD deps missing unittest_main AR ref %d (implicit PEERDIR not walked)", umAR.Ref)
 	}
 
 	cc := byOut["$(B)/mod/__/thelib/a_ut.cpp.o"]
@@ -725,7 +725,7 @@ END()
 
 	for _, ref := range graphDeps(g, lib1AR) {
 		for _, n := range g.Graph {
-			if n.UID == ref && n.KV.P == pkAR {
+			if n.Ref == ref && n.KV.P == pkAR {
 				t.Errorf("lib1 AR has AR-typed dep %q (outputs=%v); reference invariant: zero AR-on-AR deps", ref, n.Outputs)
 			}
 		}
@@ -1720,7 +1720,7 @@ int use() { return 0; }
 		}
 	}
 
-	for _, want := range []UID{mainPB.UID, depPB.UID} {
+	for _, want := range []NodeRef{mainPB.Ref, depPB.Ref} {
 		if !slices.Contains(graphDeps(g, useCC), want) {
 			t.Fatalf("use.cpp.o deps missing %q: %v", want, graphDeps(g, useCC))
 		}
@@ -1736,12 +1736,12 @@ int use() { return 0; }
 		t.Fatalf("enum node still consumes source-root pb.h: %#v", en.flatInputs())
 	}
 
-	if !slices.Contains(graphDeps(g, en), mainPB.UID) {
-		t.Fatalf("enum node deps missing pb producer uid %q: %v", mainPB.UID, graphDeps(g, en))
+	if !slices.Contains(graphDeps(g, en), mainPB.Ref) {
+		t.Fatalf("enum node deps missing pb producer ref %d: %v", mainPB.Ref, graphDeps(g, en))
 	}
 
-	if !slices.Contains(graphDeps(g, en), depPB.UID) {
-		t.Fatalf("enum node deps missing imported pb producer uid %q: %v", depPB.UID, graphDeps(g, en))
+	if !slices.Contains(graphDeps(g, en), depPB.Ref) {
+		t.Fatalf("enum node deps missing imported pb producer ref %d: %v", depPB.Ref, graphDeps(g, en))
 	}
 
 	if !nodeHasInput(en, "$(B)/protos/dep.pb.h") {
@@ -1755,6 +1755,14 @@ int use() { return 0; }
 
 func testGen(fs FS, targetDir string) *Graph {
 	return testGenContour(fs, targetDir, true)
+}
+
+// resultRootNode returns the graph's root node (the program/link node the
+// target resolves to). g.Graph is NodeRef-indexed, so Result[0] indexes it
+// directly. Prefer this over "first pkLD node in g.Graph", which is order-
+// dependent now that the graph is emission-ordered and no longer deduped.
+func resultRootNode(g *Graph) *Node {
+	return g.Graph[g.Result[0]]
 }
 
 func testGenDumpGraph(fs FS, targetDir string) *Graph {

@@ -188,7 +188,7 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 		unit:          resolveModuleUnit(tokPy3Library, KindLib, LangCPP),
 	}
 
-	em := newStreamingEmitter(nil, nil)
+	em := newStreamingEmitter(nil)
 	ctx := &GenCtx{emit: em, na: em.nodeArenas(), target: testTargetP, fs: newMemFS(nil)}
 	wireTestScanners(ctx)
 	instance := ModuleInstance{
@@ -280,7 +280,7 @@ func TestResolvePySrcRel_DirtyPathNotRootBound(t *testing.T) {
 }
 
 func pySrcTestEmitContext(d *ModuleData, modulePath string) (*EmitContext, *GenCtx) {
-	em := newStreamingEmitter(nil, nil)
+	em := newStreamingEmitter(nil)
 	ctx := &GenCtx{emit: em, na: em.nodeArenas(), target: testTargetP, fs: newMemFS(nil)}
 
 	wireTestScanners(ctx)
@@ -505,12 +505,12 @@ END()
 	bytecode := mustNodeByOutput(t, g, "$(B)/mod/__init__.py.yapyc3")
 	deps := graphDeps(g, objcopy)
 
-	if !slices.Contains(deps, producer.UID) {
-		t.Fatalf("objcopy deps %v missing RUN_PROGRAM producer uid %q", deps, producer.UID)
+	if !slices.Contains(deps, producer.Ref) {
+		t.Fatalf("objcopy deps %v missing RUN_PROGRAM producer ref %d", deps, producer.Ref)
 	}
 
-	if !slices.Contains(deps, bytecode.UID) {
-		t.Fatalf("objcopy deps %v missing py3cc bytecode producer uid %q", deps, bytecode.UID)
+	if !slices.Contains(deps, bytecode.Ref) {
+		t.Fatalf("objcopy deps %v missing py3cc bytecode producer ref %d", deps, bytecode.Ref)
 	}
 
 	for _, n := range g.Graph {
@@ -795,8 +795,8 @@ END()
 		t.Errorf("LD cmds over-link the LIBRARY-owned RESOURCE objcopy %q", resOut)
 	}
 
-	if depsContain(graphDeps(g, ld), resObjcopy.UID) {
-		t.Errorf("graphDeps(LD) %v over-includes the RESOURCE objcopy uid %q", graphDeps(g, ld), resObjcopy.UID)
+	if depsContain(graphDeps(g, ld), resObjcopy.Ref) {
+		t.Errorf("graphDeps(LD) %v over-includes the RESOURCE objcopy ref %d", graphDeps(g, ld), resObjcopy.Ref)
 	}
 
 	mainOut := mainObjcopy.Outputs[0].string()
@@ -805,8 +805,8 @@ END()
 		t.Errorf("LD inputs missing the PROGRAM-side PY_MAIN objcopy %q: %v", mainOut, vfsStringsT3(ld.flatInputs()))
 	}
 
-	if !depsContain(graphDeps(g, ld), mainObjcopy.UID) {
-		t.Errorf("graphDeps(LD) %v missing the PY_MAIN objcopy uid %q", graphDeps(g, ld), mainObjcopy.UID)
+	if !depsContain(graphDeps(g, ld), mainObjcopy.Ref) {
+		t.Errorf("graphDeps(LD) %v missing the PY_MAIN objcopy ref %d", graphDeps(g, ld), mainObjcopy.Ref)
 	}
 
 	var global *Node
@@ -837,7 +837,7 @@ END()
 }
 
 func TestEmitPyRegister_ProducerEmittedAtTargetPlatform(t *testing.T) {
-	emit := newStreamingEmitter(nil, nil)
+	emit := newStreamingEmitter(nil)
 	ctx := &GenCtx{
 		emit:   emit,
 		na:     emit.nodeArenas(),
@@ -924,7 +924,7 @@ END()
 	foundDep := false
 
 	for _, d := range graphDeps(g, bc) {
-		if d == producer.UID {
+		if d == producer.Ref {
 			foundDep = true
 
 			break
@@ -932,7 +932,7 @@ END()
 	}
 
 	if !foundDep {
-		t.Fatalf("bytecode deps %v do not include producer uid %q", graphDeps(g, bc), producer.UID)
+		t.Fatalf("bytecode deps %v do not include producer ref %d", graphDeps(g, bc), producer.Ref)
 	}
 
 	if !nodeHasInput(bc, "$(S)/mod/gen.h") {

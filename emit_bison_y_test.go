@@ -372,7 +372,7 @@ END()
 	found := false
 
 	for _, dep := range graphDeps(g, parserObj) {
-		if dep == pb.UID {
+		if dep == pb.Ref {
 			found = true
 
 			break
@@ -380,7 +380,7 @@ END()
 	}
 
 	if !found {
-		t.Fatalf("bison-generated parser object missing dep on proto producer %q; deps=%v", pb.UID, graphDeps(g, parserObj))
+		t.Fatalf("bison-generated parser object missing dep on proto producer %q; deps=%v", pb.Ref, graphDeps(g, parserObj))
 	}
 }
 

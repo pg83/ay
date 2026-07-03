@@ -15,7 +15,7 @@ var builtinsASOwnAddIncl = []VFS{
 }
 
 func TestEmitAS_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 	inst := hostInstance("contrib/libs/foolib")
 	in := ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{
 		InclArgs: newInclArgMemo(),
@@ -56,7 +56,7 @@ func TestEmitAS_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 }
 
 func TestEmitAS_OutputPath_FlatSrcRel(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 	_, outPath := emitAS(targetInstance("some/module"), "flat.S", intern("$(S)/some/module/flat.S"), ModuleCCInputs{}, testHostP, e)
 	want := "$(B)/some/module/flat.S.o"
 
@@ -66,7 +66,7 @@ func TestEmitAS_OutputPath_FlatSrcRel(t *testing.T) {
 }
 
 func TestEmitAS_OutputPath_NestedSrc(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 	_, outPath := emitAS(targetInstance("contrib/libs/cxxsupp/builtins"), "aarch64/chkstk.S", intern("$(S)/contrib/libs/cxxsupp/builtins/aarch64/chkstk.S"), ModuleCCInputs{}, testHostP, e)
 	want := "$(B)/contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S.o"
 
@@ -76,7 +76,7 @@ func TestEmitAS_OutputPath_NestedSrc(t *testing.T) {
 }
 
 func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 
 	in := ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{SrcDirs: []VFS{dirKey("contrib/libs/tcmalloc")}, FS: newMemFS(nil)}}
 	_, outPath := emitAS(
@@ -107,7 +107,7 @@ func testYasmLDRef(e *StreamingEmitter) NodeRef {
 }
 
 func TestEmitASYasm_YasmLD_PopulatesDepRefs(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 	yasmLDRef := testYasmLDRef(e)
 
 	yasmTestIn := ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{InclArgs: newInclArgMemo(), AddIncl: builtinsASOwnAddIncl}}
@@ -132,7 +132,7 @@ func TestEmitASYasm_YasmLD_PopulatesDepRefs(t *testing.T) {
 }
 
 func TestEmitAS_KV(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 	emitAS(targetInstance("some/module"), "aarch64/foo.S", intern("$(S)/some/module/aarch64/foo.S"), ModuleCCInputs{}, testHostP, e)
 
 	if len(e.nodes) != 1 {
@@ -148,7 +148,7 @@ func TestEmitAS_KV(t *testing.T) {
 }
 
 func TestEmitAS_AsmlibYasm_OutputPath_NoUnderscoreInfix(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 	_, outPath := emitASYasm(hostInstance("contrib/libs/asmlib"), "memset64.asm", intern("$(S)/contrib/libs/asmlib/memset64.asm"), ModuleCCInputs{}, testYasmLDRef(e), e)
 	want := "$(B)/contrib/libs/asmlib/memset64.pic.o"
 
@@ -158,7 +158,7 @@ func TestEmitAS_AsmlibYasm_OutputPath_NoUnderscoreInfix(t *testing.T) {
 }
 
 func TestEmitAS_AsmlibYasm_TargetSide_NoPicSuffix(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 	targetX86 := newTestPlatform(OSLinux, ISAX8664, "no")
 	instance := ModuleInstance{
 		Path:     source("contrib/libs/asmlib"),

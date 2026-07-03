@@ -10,7 +10,7 @@ import (
 func emitTestCompileGraph(t *testing.T, host, target *Platform) *Graph {
 	t.Helper()
 
-	execEmit := newStreamingEmitter(nil, nil)
+	execEmit := newStreamingEmitter(nil)
 
 	execEmit.fetchRefs.put(internStr(resourcePatternClangTool), execEmit.emitNode(Node{
 		Platform: host,

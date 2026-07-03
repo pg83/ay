@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"bytes"
 	"encoding/json"
 	"testing"
@@ -31,7 +32,7 @@ func encodeWithHandRolled(g *Graph) []byte {
 func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 	trickyArgs := []string{"a", "b<c>&d", "tab\there", "quote\"x", "back\\slash", "newline\nhere"}
 
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 	leaf := e.emitNode(Node{Platform: &Platform{},
 		Cmds:         []Cmd{},
 		Env:          nil,
@@ -65,26 +66,26 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 			Cmds []struct {
 				CmdArgs []string `json:"cmd_args"`
 			} `json:"cmds"`
-			Deps        []string            `json:"deps"`
-			ForeignDeps map[string][]string `json:"foreign_deps"`
+			Deps        []nodeID            `json:"deps"`
+			ForeignDeps map[string][]nodeID `json:"foreign_deps"`
 			KV          map[string]any      `json:"kv"`
 		} `json:"graph"`
-		Result []string `json:"result"`
+		Result []nodeID `json:"result"`
 	}
 
 	if err := json.Unmarshal(out, &parsed); err != nil {
 		t.Fatalf("compact output does not parse: %v\n%s", err, out)
 	}
 
-	leafUID := g.uids.get(leaf).string()
-	mainUID := g.uids.get(main).string()
+	leafUID := nodeID(strconv.FormatUint(uint64(leaf), 10))
+	mainUID := nodeID(strconv.FormatUint(uint64(main), 10))
 
 	var mainNode *struct {
 		Cmds []struct {
 			CmdArgs []string `json:"cmd_args"`
 		} `json:"cmds"`
-		Deps        []string            `json:"deps"`
-		ForeignDeps map[string][]string `json:"foreign_deps"`
+		Deps        []nodeID            `json:"deps"`
+		ForeignDeps map[string][]nodeID `json:"foreign_deps"`
 		KV          map[string]any      `json:"kv"`
 	}
 
@@ -152,7 +153,7 @@ func TestWriteGraphCompact_EmptyGraph(t *testing.T) {
 	g := &Graph{
 		Graph:  []*Node{},
 		Inputs: map[string]interface{}{},
-		Result: []UID{},
+		Result: []NodeRef{},
 	}
 
 	want := encodeWithStdlib(g)

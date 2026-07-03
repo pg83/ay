@@ -117,7 +117,7 @@ END()
 		t.Fatalf("user.proto PB inputs missing generated import $(B)/lib/syn/model.proto: %v", vfsStringsT3(userPB.flatInputs()))
 	}
 
-	if !slices.Contains(graphDeps(g, userPB), gz.UID) {
-		t.Fatalf("user.proto PB deps missing gzt converter uid %q: %v", gz.UID, graphDeps(g, userPB))
+	if !slices.Contains(graphDeps(g, userPB), gz.Ref) {
+		t.Fatalf("user.proto PB deps missing gzt converter ref %d: %v", gz.Ref, graphDeps(g, userPB))
 	}
 }

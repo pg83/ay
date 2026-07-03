@@ -52,7 +52,7 @@ var archiverGlobalPaths = []string{
 const referenceLDOutput = "$(B)/tools/archiver/archiver"
 
 func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
-	emit := newStreamingEmitter(nil, nil)
+	emit := newStreamingEmitter(nil)
 	mainRef := emit.emitNode(Node{Platform: &Platform{},
 		KV: &ldTestKV,
 	})
@@ -148,7 +148,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 }
 
 func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
-	emit := newStreamingEmitter(nil, nil)
+	emit := newStreamingEmitter(nil)
 	mainRef := emit.emitNode(Node{Platform: &Platform{},
 		KV: &ldTestKV,
 	})
@@ -238,7 +238,7 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 }
 
 func TestEmitLD_AcceptsHostPIC(t *testing.T) {
-	emit := newStreamingEmitter(nil, nil)
+	emit := newStreamingEmitter(nil)
 	stub := emit.emitNode(Node{Platform: &Platform{}, KV: &ldTestKV})
 
 	ref := emitLD(
@@ -331,7 +331,7 @@ func TestComposeProgramLinkTrailer_NonPICRPathTrailerKeepsNoPie(t *testing.T) {
 }
 
 func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
-	emit := newStreamingEmitter(nil, nil)
+	emit := newStreamingEmitter(nil)
 	mainRef := emit.emitNode(Node{Platform: &Platform{}, KV: &ldTestKV})
 
 	wholeRef := emit.emitNode(Node{Platform: &Platform{}, KV: &ldTestKV})
@@ -411,7 +411,7 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 }
 
 func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T) {
-	emit := newStreamingEmitter(nil, nil)
+	emit := newStreamingEmitter(nil)
 	mainRef := emit.emitNode(Node{Platform: &Platform{}, KV: &ldTestKV})
 
 	peerRef := emit.emitNode(Node{Platform: &Platform{}, KV: &ldTestKV})
@@ -514,7 +514,7 @@ func TestEmitLD_LengthMismatchPanics(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			e := newStreamingEmitter(nil, nil)
+			e := newStreamingEmitter(nil)
 			instance := targetInstance("test/prog")
 
 			exc := try(func() {
@@ -576,8 +576,8 @@ func TestGen_SyntheticPROGRAM_EmitsLD(t *testing.T) {
 		t.Errorf("LD outputs = %#v, want [%q]", ld.Outputs, wantOut)
 	}
 
-	if g.Result[0] != ld.UID {
-		t.Errorf("result UID = %q, want LD uid %q", g.Result[0], ld.UID)
+	if g.Result[0] != ld.Ref {
+		t.Errorf("result Ref = %d, want LD ref %d", g.Result[0], ld.Ref)
 	}
 }
 
@@ -679,19 +679,7 @@ func TestGen_FbsSrcsInduceFlatbuffersLinkDep(t *testing.T) {
 
 	g := testGen(newMemFS(files), "prog")
 
-	var ldNode *Node
-
-	for _, n := range g.Graph {
-		if n.KV.P == pkLD {
-			ldNode = n
-
-			break
-		}
-	}
-
-	if ldNode == nil {
-		t.Fatal("no LD node found in graph")
-	}
+	ldNode := resultRootNode(g)
 
 	linkArgs := ldNode.Cmds[2].CmdArgs.flat()
 	peer1Idx := indexOfArg(linkArgs, "peer1/libpeer1.a")
@@ -775,22 +763,12 @@ func TestGen_EnumSerializationRuntimePrecedesProtoLibraryArchive(t *testing.T) {
 
 	var linkArgs []STR
 
-	for _, n := range g.Graph {
-		if n.KV.P != pkLD {
-			continue
-		}
+	for _, c := range resultRootNode(g).Cmds {
+		args := c.CmdArgs.flat()
 
-		for _, c := range n.Cmds {
-			args := c.CmdArgs.flat()
+		if indexOfArg(args, "-Wl,--start-group") >= 0 {
+			linkArgs = args
 
-			if indexOfArg(args, "-Wl,--start-group") >= 0 {
-				linkArgs = args
-
-				break
-			}
-		}
-
-		if linkArgs != nil {
 			break
 		}
 	}

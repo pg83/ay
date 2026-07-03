@@ -336,9 +336,33 @@ func marshalCompact(v any) []byte {
 	return b
 }
 
+// nodeID is a graph node identifier that unmarshals from either a JSON string
+// (reference ymake graphs: base64 UIDs) or a JSON number (our graphs: NodeRef).
+type nodeID string
+
+func (k *nodeID) UnmarshalJSON(b []byte) error {
+	if len(b) >= 2 && b[0] == '"' {
+		*k = nodeID(b[1 : len(b)-1])
+	} else {
+		*k = nodeID(b)
+	}
+
+	return nil
+}
+
+func idStrs(ids []nodeID) []string {
+	out := make([]string, len(ids))
+
+	for i, id := range ids {
+		out[i] = string(id)
+	}
+
+	return out
+}
+
 type RawNode struct {
-	UID          string   `json:"uid"`
-	Deps         []string `json:"deps"`
+	UID          nodeID   `json:"uid"`
+	Deps         []nodeID `json:"deps"`
 	Inputs       []string `json:"inputs"`
 	Outputs      []string `json:"outputs"`
 	Platform     string   `json:"platform"`

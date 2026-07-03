@@ -159,19 +159,7 @@ func TestGen_YmapsSproto_InducesTargetSprotoPeerArchive(t *testing.T) {
 		t.Fatalf("no AR node archives the PIC sproto.cpp.pic.o into %s", archive)
 	}
 
-	var ldNode *Node
-
-	for _, n := range g.Graph {
-		if n.KV.P == pkLD {
-			ldNode = n
-
-			break
-		}
-	}
-
-	if ldNode == nil {
-		t.Fatal("no LD node found in graph")
-	}
+	ldNode := resultRootNode(g)
 
 	linkArgs := ldNode.Cmds[2].CmdArgs.flat()
 	sprotoIdx := indexOfArg(linkArgs, "maps/libs/sproto/libmaps-libs-sproto.a")
@@ -292,7 +280,7 @@ END()
 		t.Fatalf("use.cpp.o inputs missing own $(B)/mod/img.sproto.h: %v", vfsStringsT3(use.flatInputs()))
 	}
 
-	if !slices.Contains(graphDeps(g, use), sproto.UID) {
-		t.Fatalf("use.cpp.o deps missing sproto producer uid %q: %v", sproto.UID, graphDeps(g, use))
+	if !slices.Contains(graphDeps(g, use), sproto.Ref) {
+		t.Fatalf("use.cpp.o deps missing sproto producer ref %d: %v", sproto.Ref, graphDeps(g, use))
 	}
 }

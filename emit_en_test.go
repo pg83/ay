@@ -100,8 +100,8 @@ END()
 
 	genH := mustNodeByAnyOutput(t, g, "$(B)/mod/gen.h")
 
-	if !slices.Contains(graphDeps(g, en), genH.UID) {
-		t.Fatalf("EN node deps missing generated-header producer uid %q: %v", genH.UID, graphDeps(g, en))
+	if !slices.Contains(graphDeps(g, en), genH.Ref) {
+		t.Fatalf("EN node deps missing generated-header producer ref %d: %v", genH.Ref, graphDeps(g, en))
 	}
 }
 

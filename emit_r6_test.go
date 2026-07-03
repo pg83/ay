@@ -6,7 +6,7 @@ import (
 )
 
 func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 
 	ragel6LD := e.emitNode(Node{
 		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
@@ -93,7 +93,7 @@ func TestCollectModule_Ragel6FlagsMultiTokenSplit(t *testing.T) {
 }
 
 func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 
 	ragel6LD := e.emitNode(Node{Platform: &Platform{},
 		Cmds:    []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
@@ -133,7 +133,7 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 }
 
 func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 
 	ragel6LD := e.emitNode(Node{Platform: &Platform{},
 		Cmds:    []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
@@ -178,7 +178,7 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 }
 
 func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 
 	ragel6LD := e.emitNode(Node{Platform: &Platform{},
 		Cmds:    []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"link"})}, Env: nil}},
@@ -280,12 +280,12 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 		t.Fatal("no host ragel6 LD node found")
 	}
 
-	if len(graphDeps(g, r6Node)) != 1 || graphDeps(g, r6Node)[0] != ldNode.UID {
-		t.Errorf("R6 Deps = %v, want [%q]", graphDeps(g, r6Node), ldNode.UID)
+	if len(graphDeps(g, r6Node)) != 1 || graphDeps(g, r6Node)[0] != ldNode.Ref {
+		t.Errorf("R6 Deps = %v, want [%q]", graphDeps(g, r6Node), ldNode.Ref)
 	}
 
-	if len(graphForeignDeps(g, r6Node)) != 1 || len(graphForeignDeps(g, r6Node)) != 1 || graphForeignDeps(g, r6Node)[0] != ldNode.UID {
-		t.Errorf("R6 ForeignDeps = %v, want {tool: [%q]}", graphForeignDeps(g, r6Node), ldNode.UID)
+	if len(graphForeignDeps(g, r6Node)) != 1 || len(graphForeignDeps(g, r6Node)) != 1 || graphForeignDeps(g, r6Node)[0] != ldNode.Ref {
+		t.Errorf("R6 ForeignDeps = %v, want {tool: [%d]}", graphForeignDeps(g, r6Node), ldNode.Ref)
 	}
 
 	if len(r6Node.Cmds) == 0 || len(r6Node.Cmds[0].CmdArgs.flat()) == 0 {
@@ -441,7 +441,7 @@ END()
 	found := false
 
 	for _, dep := range graphDeps(g, ccNode) {
-		if dep == r6Node.UID {
+		if dep == r6Node.Ref {
 			found = true
 
 			break
@@ -449,7 +449,7 @@ END()
 	}
 
 	if !found {
-		t.Errorf("R6-derived graphDeps(g, CC) = %v, want to contain R6 UID %q (PR-30 D04 Generator wiring)", graphDeps(g, ccNode), r6Node.UID)
+		t.Errorf("R6-derived graphDeps(g, CC) = %v, want to contain R6 ref %d (PR-30 D04 Generator wiring)", graphDeps(g, ccNode), r6Node.Ref)
 	}
 }
 

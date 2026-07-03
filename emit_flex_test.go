@@ -68,8 +68,8 @@ END()
 		t.Fatalf("generated lexer.l.cpp.o kv.p = %q, want CC", cc.KV.P.string())
 	}
 
-	if !depsContain(graphDeps(g, cc), lx.UID) {
-		t.Errorf("generated CC deps %v missing LX producer uid %q", graphDeps(g, cc), lx.UID)
+	if !depsContain(graphDeps(g, cc), lx.Ref) {
+		t.Errorf("generated CC deps %v missing LX producer ref %d", graphDeps(g, cc), lx.Ref)
 	}
 
 	if !cmdHasArg(cc, "-I$(S)/contrib/tools/flex-old") {
@@ -78,8 +78,8 @@ END()
 
 	ar := mustNodeByOutput(t, g, "$(B)/lex/liblex.a")
 
-	if !depsContain(graphDeps(g, ar), cc.UID) {
-		t.Errorf("module AR deps %v missing generated object uid %q", graphDeps(g, ar), cc.UID)
+	if !depsContain(graphDeps(g, ar), cc.Ref) {
+		t.Errorf("module AR deps %v missing generated object ref %d", graphDeps(g, ar), cc.Ref)
 	}
 }
 
