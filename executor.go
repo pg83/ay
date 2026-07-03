@@ -39,6 +39,8 @@ type Executor struct {
 	fetchRefs   *DenseMap[STR, NodeRef]
 	events      *EventQueue
 	stats       map[string][]time.Duration
+	hashMu      sync.Mutex
+	localHash   map[STR]uint64
 	pending     atomic.Uint64
 	done        atomic.Uint64
 	tokenOnce   sync.Once
@@ -79,7 +81,33 @@ func newExecutor(srcRoot, bldRoot string, fs FS, threads int, keepGoing bool, ni
 		futs:        &PageVec[*NodeFuture]{},
 		events:      events,
 		stats:       map[string][]time.Duration{},
+		localHash:   map[STR]uint64{},
 	}
+}
+
+// contentHash resolves a source file's content hash at execution time.
+// Generation-recorded hashes are read lock-free from the paged fs store; files
+// the scanner never read are hashed here and memoized under a lock (rare —
+// most sources are read during generation). Reading here goes straight through
+// os.ReadFile to avoid the OsFS single-threaded read buffers.
+func (ex *Executor) contentHash(v VFS) uint64 {
+	if h := ex.fs.contentHash(v); h != 0 {
+		return h
+	}
+
+	s := v.str()
+
+	ex.hashMu.Lock()
+	defer ex.hashMu.Unlock()
+
+	if h, ok := ex.localHash[s]; ok {
+		return h
+	}
+
+	h := hashSourceFile(ex.srcRoot, v.rel())
+	ex.localHash[s] = h
+
+	return h
 }
 
 func (ex *Executor) onNode(n *Node, fetchRefs *DenseMap[STR, NodeRef]) {
@@ -87,7 +115,7 @@ func (ex *Executor) onNode(n *Node, fetchRefs *DenseMap[STR, NodeRef]) {
 
 	f := &NodeFuture{node: n, ref: n.Ref}
 
-	ex.futs.set(n.Ref, f)
+	ex.futs.set(uint32(n.Ref), f)
 
 	go ex.fire(f)
 }
@@ -110,7 +138,7 @@ func (ex *Executor) uidOf(n *Node) UID {
 		return n.presetUID
 	}
 
-	c := CanonBuf{fs: ex.fs, futs: ex.futs, fetchRefs: ex.fetchRefs}
+	c := CanonBuf{hash: ex.contentHash, futs: ex.futs, fetchRefs: ex.fetchRefs}
 
 	return c.calcUID(n)
 }
@@ -131,7 +159,7 @@ func (ex *Executor) run(roots []NodeRef) {
 }
 
 func (ex *Executor) visit(ref NodeRef) {
-	f := ex.futs.get(ref)
+	f := ex.futs.get(uint32(ref))
 
 	if f == nil {
 		throwFmt("executor: unknown NodeRef %d", ref)
@@ -152,7 +180,7 @@ func (ex *Executor) failedRoots(roots []NodeRef) []NodeRef {
 	var failed []NodeRef
 
 	for _, r := range roots {
-		f := ex.futs.get(r)
+		f := ex.futs.get(uint32(r))
 
 		if f == nil || f.err == nil {
 			continue
@@ -230,7 +258,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 	}
 
 	for r := range n.buildDeps(ex.fetchRefs) {
-		ex.restoreInto(ex.futs.get(r).uid, bldMount)
+		ex.restoreInto(ex.futs.get(uint32(r)).uid, bldMount)
 	}
 
 	start := time.Now()
@@ -568,7 +596,7 @@ func (ex *Executor) installRoot(ref NodeRef, where string) {
 		return
 	}
 
-	ex.restoreInto(ex.futs.get(ref).uid, where)
+	ex.restoreInto(ex.futs.get(uint32(ref)).uid, where)
 }
 
 func (ex *Executor) removeContents(dir string) {

@@ -1,10 +1,24 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/zeebo/xxh3"
 )
+
+// hashSourceFile reads and hashes a source file with no shared OsFS state, so
+// it is safe to call concurrently from executor goroutines. The hash function
+// must match recordContentHash (xxh3.Hash).
+func hashSourceFile(srcRoot, rel string) uint64 {
+	data, err := os.ReadFile(filepath.Join(srcRoot, cleanRel(rel)))
+	if err != nil {
+		return 0
+	}
+
+	return xxh3.Hash(data)
+}
 
 var emptyDirNames = []uint32{}
 
@@ -14,7 +28,7 @@ type OsFS struct {
 	dirs          DenseMap[STR, DirView]
 	dirNames      *BumpAllocator[uint32]
 	dirEntries    *IntMap[bool]
-	contentHashes []uint64
+	contentHashes PageVec[uint64]
 	readBuf       []byte
 	direntBuf     []byte
 	rootFD        int
@@ -39,10 +53,10 @@ func newFS(srcRoot string) FS {
 }
 
 func (fs *OsFS) readSourceRels() []string {
-	out := make([]string, 0, len(fs.contentHashes))
+	var out []string
 
-	for s := 1; s < len(fs.contentHashes); s++ {
-		if fs.contentHashes[s] == 0 {
+	for s := uint32(1); s < internTable.count; s++ {
+		if fs.contentHashes.getSafe(s) == 0 {
 			continue
 		}
 
@@ -54,45 +68,19 @@ func (fs *OsFS) readSourceRels() []string {
 	return out
 }
 
+// recordContentHash is called single-threaded during graph generation (the
+// scanner's file reads); the paged store lets the executor read hashes
+// lock-free while generation keeps recording.
 func (fs *OsFS) recordContentHash(rel string, data []byte) {
 	s := internPrefixed("$(S)/", cleanRel(rel))
 
-	if int(s) >= len(fs.contentHashes) {
-		n := len(fs.contentHashes) * 2
-
-		if n <= int(s) {
-			n = int(s) + 1
-		}
-
-		grown := make([]uint64, n)
-
-		copy(grown, fs.contentHashes)
-		fs.contentHashes = grown
-	}
-
-	fs.contentHashes[s] = xxh3.Hash(data)
+	fs.contentHashes.set(uint32(s), xxh3.Hash(data))
 }
 
+// contentHash returns the generation-time content hash, or 0 if the file was
+// never read during generation (the executor computes such misses itself).
 func (fs *OsFS) contentHash(v VFS) uint64 {
-	s := v.strID()
-
-	if int(s) < len(fs.contentHashes) && fs.contentHashes[s] != 0 {
-		return fs.contentHashes[s]
-	}
-
-	return fs.contentHashSlow(v)
-}
-
-func (fs *OsFS) contentHashSlow(v VFS) uint64 {
-	rel := v.rel()
-
-	if p, d := fs.existsRel(rel); p && d {
-		return 0
-	}
-
-	fs.read(rel)
-
-	return fs.contentHashes[v.strID()]
+	return fs.contentHashes.getSafe(v.strID())
 }
 
 func (fs *OsFS) listdir(dir VFS) DirView {
