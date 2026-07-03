@@ -77,7 +77,7 @@ func TestEmitLj21Archive_RawCompilationAndArchive(t *testing.T) {
 	arDepsLJ := false
 
 	for _, dep := range graphDeps(g, ar) {
-		if dep == lj.UID {
+		if dep == lj.Ref {
 			arDepsLJ = true
 
 			break
@@ -85,7 +85,7 @@ func TestEmitLj21Archive_RawCompilationAndArchive(t *testing.T) {
 	}
 
 	if !arDepsLJ {
-		t.Errorf("graphDeps(archive) %v does not include the LJ producer uid %q", graphDeps(g, ar), lj.UID)
+		t.Errorf("graphDeps(archive) %v does not include the LJ producer ref %d", graphDeps(g, ar), lj.Ref)
 	}
 
 	src := mustNodeByOutput(t, g, "$(B)/mod/LuaSources.inc")

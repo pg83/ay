@@ -4,10 +4,9 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-func (c CanonBuf) calcUID(n *Node) UID {
-	c.buf = (*c.bufStore)[:0]
+func (c *CanonBuf) calcUID(n *Node) UID {
+	c.buf = c.buf[:0]
 	c.writeNode(n)
-	*c.bufStore = c.buf
 
 	sum := xxh3.Hash128(c.buf)
 
@@ -22,9 +21,8 @@ func resourceFetchUID(uri, output string) UID {
 
 type CanonBuf struct {
 	buf       []byte
-	bufStore  *[]byte
 	fs        FS
-	uids      *UidVec
+	futs      *PageVec[*NodeFuture]
 	fetchRefs *DenseMap[STR, NodeRef]
 }
 
@@ -63,7 +61,7 @@ func (c *CanonBuf) writeRefUIDs(refs []NodeRef) {
 	c.writeUint32(uint32(len(refs)))
 
 	for _, r := range refs {
-		u := c.uids.get(r)
+		u := c.futs.get(r).uid
 
 		c.writeUint64(u.Hi)
 		c.writeUint64(u.Lo)
@@ -82,7 +80,7 @@ func (c *CanonBuf) writeDepRefUIDs(n *Node) {
 	c.writeUint32(uint32(count))
 
 	for _, r := range n.DepRefs {
-		u := c.uids.get(r)
+		u := c.futs.get(r).uid
 
 		c.writeUint64(u.Hi)
 		c.writeUint64(u.Lo)
@@ -90,7 +88,7 @@ func (c *CanonBuf) writeDepRefUIDs(n *Node) {
 
 	for _, pat := range n.Resources {
 		if ref, ok := c.fetchRefs.get(pat); ok {
-			u := c.uids.get(ref)
+			u := c.futs.get(ref).uid
 
 			c.writeUint64(u.Hi)
 			c.writeUint64(u.Lo)

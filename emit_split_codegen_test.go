@@ -178,8 +178,8 @@ END()
 		t.Fatalf("SC node inputs missing the codegen tool binary: %v", sc.flatInputs())
 	}
 
-	if !slices.Contains(graphForeignDeps(g, sc), tool.UID) {
-		t.Fatalf("SC node foreign deps missing tool LD uid %q: %v", tool.UID, graphForeignDeps(g, sc))
+	if !slices.Contains(graphForeignDeps(g, sc), tool.Ref) {
+		t.Fatalf("SC node foreign deps missing tool LD ref %d: %v", tool.Ref, graphForeignDeps(g, sc))
 	}
 
 	for _, ccOut := range []string{
@@ -189,8 +189,8 @@ END()
 	} {
 		cc := mustNodeByOutput(t, g, ccOut)
 
-		if !slices.Contains(graphDeps(g, cc), sc.UID) {
-			t.Fatalf("%s deps missing SC producer uid %q: %v", ccOut, sc.UID, graphDeps(g, cc))
+		if !slices.Contains(graphDeps(g, cc), sc.Ref) {
+			t.Fatalf("%s deps missing SC producer ref %d: %v", ccOut, sc.Ref, graphDeps(g, cc))
 		}
 	}
 }

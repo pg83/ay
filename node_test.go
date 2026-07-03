@@ -14,8 +14,6 @@ var expectedKeyOrder = []string{
 	"outputs",
 	"platform",
 	"requirements",
-	"self_uid",
-	"uid",
 }
 
 var expectedKeyOrderMinimal = []string{
@@ -26,8 +24,6 @@ var expectedKeyOrderMinimal = []string{
 	"outputs",
 	"platform",
 	"requirements",
-	"self_uid",
-	"uid",
 }
 
 func extractKeyOrder(t *testing.T, raw []byte) []string {
@@ -84,8 +80,6 @@ func TestNodeJSONKeyOrder_AllFieldsPresent(t *testing.T) {
 		Outputs:      ToVFSSlice([]string{"out"}),
 		Platform:     &Platform{Target: "default-linux-aarch64"},
 		Requirements: Requirements{CPU: 1, RAM: 32},
-		SelfUID:      tuid("selfuid"),
-		UID:          tuid("uid"),
 	}
 	raw, err := json.Marshal(n)
 
@@ -116,8 +110,6 @@ func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
 		Outputs:      ToVFSSlice([]string{}),
 		Platform:     nil,
 		Requirements: Requirements{},
-		SelfUID:      UID{},
-		UID:          UID{},
 	}
 	raw, err := json.Marshal(n)
 

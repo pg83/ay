@@ -451,7 +451,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 }
 
 func genDumpGraphWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), testMode bool) *Graph {
-	emitter := newStreamingEmitter(fs, nil)
+	emitter := newStreamingEmitter(nil)
 
 	runGenIntoWithResources(fs, targetDir, hostP, targetP, emitter, onWarn, testMode)
 

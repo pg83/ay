@@ -617,7 +617,7 @@ END()
 	opt := mustNodeByAnyOutput(t, g, "$(B)/"+modPath+"/Bar_optimized.16.bc")
 	consumer := mustNodeByOutput(t, g, "$(B)/"+modPath+"/out.txt")
 
-	if !slices.Contains(graphDeps(g, consumer), opt.UID) {
-		t.Fatalf("out.txt deps missing LLVM_BC opt producer uid %q: %v", opt.UID, graphDeps(g, consumer))
+	if !slices.Contains(graphDeps(g, consumer), opt.Ref) {
+		t.Fatalf("out.txt deps missing LLVM_BC opt producer ref %d: %v", opt.Ref, graphDeps(g, consumer))
 	}
 }

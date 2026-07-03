@@ -144,8 +144,8 @@ END()
 		t.Fatalf("BC node inputs missing the tool binary: %v", bc.flatInputs())
 	}
 
-	if !slices.Contains(graphForeignDeps(g, bc), tool.UID) {
-		t.Fatalf("BC node foreign deps missing tool LD uid %q: %v", tool.UID, graphForeignDeps(g, bc))
+	if !slices.Contains(graphForeignDeps(g, bc), tool.Ref) {
+		t.Fatalf("BC node foreign deps missing tool LD ref %d: %v", tool.Ref, graphForeignDeps(g, bc))
 	}
 
 	scH := mustNodeByAnyOutput(t, g, "$(B)/hidden/factors/factors_gen.h")
@@ -156,8 +156,8 @@ END()
 
 	cc := mustNodeByOutput(t, g, "$(B)/hidden/factors/factors_gen.0.cpp.pic.o")
 
-	if !slices.Contains(graphDeps(g, cc), scH.UID) {
-		t.Fatalf("generated CC deps missing SC producer uid %q: %v", scH.UID, graphDeps(g, cc))
+	if !slices.Contains(graphDeps(g, cc), scH.Ref) {
+		t.Fatalf("generated CC deps missing SC producer ref %d: %v", scH.Ref, graphDeps(g, cc))
 	}
 }
 
@@ -245,8 +245,8 @@ END()
 
 	tool := mustNodeByOutput(t, g, "$(B)/kernel/struct_codegen/codegen_tool/codegen_tool")
 
-	if !slices.Contains(graphForeignDeps(g, bc), tool.UID) {
-		t.Fatalf("BC node foreign deps missing codegen tool LD uid %q: %v", tool.UID, graphForeignDeps(g, bc))
+	if !slices.Contains(graphForeignDeps(g, bc), tool.Ref) {
+		t.Fatalf("BC node foreign deps missing codegen tool LD ref %d: %v", tool.Ref, graphForeignDeps(g, bc))
 	}
 
 	cc := mustNodeByOutput(t, g, "$(B)/lib/use.cpp.o")

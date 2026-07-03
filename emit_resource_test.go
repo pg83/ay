@@ -219,8 +219,8 @@ END()
 		t.Fatalf("objcopy inputs double the module dir: %#v", objcopy.flatInputs())
 	}
 
-	if !slices.Contains(graphDeps(g, objcopy), sb.UID) {
-		t.Fatalf("objcopy deps missing SB fetch uid %q: %v", sb.UID, graphDeps(g, objcopy))
+	if !slices.Contains(graphDeps(g, objcopy), sb.Ref) {
+		t.Fatalf("objcopy deps missing SB fetch ref %d: %v", sb.Ref, graphDeps(g, objcopy))
 	}
 
 	wantKey := encb64.StdEncoding.EncodeToString([]byte("/ytprof/llvm-symbolizer"))
@@ -348,7 +348,7 @@ END()
 	foundDep := false
 
 	for _, d := range graphDeps(g, objcopy) {
-		if d == depProducer.UID {
+		if d == depProducer.Ref {
 			foundDep = true
 
 			break
@@ -356,7 +356,7 @@ END()
 	}
 
 	if !foundDep {
-		t.Fatalf("objcopy deps %v do not include dep.pb.h producer uid %q", graphDeps(g, objcopy), depProducer.UID)
+		t.Fatalf("objcopy deps %v do not include dep.pb.h producer ref %d", graphDeps(g, objcopy), depProducer.Ref)
 	}
 
 	args := prCmdArgStrings(objcopy)
@@ -488,7 +488,7 @@ END()
 	foundDep := false
 
 	for _, d := range graphDeps(g, objcopy) {
-		if d == producer.UID {
+		if d == producer.Ref {
 			foundDep = true
 
 			break
@@ -496,7 +496,7 @@ END()
 	}
 
 	if !foundDep {
-		t.Fatalf("objcopy deps %v do not include the common.json producer uid %q", graphDeps(g, objcopy), producer.UID)
+		t.Fatalf("objcopy deps %v do not include the common.json producer ref %d", graphDeps(g, objcopy), producer.Ref)
 	}
 
 	wantKey := encb64.StdEncoding.EncodeToString([]byte("resfs/file/feature_store/catalog/common.json"))
@@ -760,8 +760,8 @@ func TestEmitProgramResource_CppProgramLinksObjcopy(t *testing.T) {
 		t.Errorf("BN node inputs missing $(B)/dep/libdep.a: %v", vfsStringsT3(bn.flatInputs()))
 	}
 
-	if !depsContain(graphDeps(g, bn), depAR.UID) {
-		t.Errorf("graphDeps(BN) %v does not include the bundled AR uid %q", graphDeps(g, bn), depAR.UID)
+	if !depsContain(graphDeps(g, bn), depAR.Ref) {
+		t.Errorf("graphDeps(BN) %v does not include the bundled AR ref %d", graphDeps(g, bn), depAR.Ref)
 	}
 
 	oc := findNodeByOutputPrefix(g, "$(B)/prog/objcopy_")
@@ -778,8 +778,8 @@ func TestEmitProgramResource_CppProgramLinksObjcopy(t *testing.T) {
 		t.Errorf("objcopy lists the nonexistent source $(S)/prog/x.bundle: %v", vfsStringsT3(oc.flatInputs()))
 	}
 
-	if !depsContain(graphDeps(g, oc), bn.UID) {
-		t.Errorf("graphDeps(objcopy) %v does not include the BN uid %q", graphDeps(g, oc), bn.UID)
+	if !depsContain(graphDeps(g, oc), bn.Ref) {
+		t.Errorf("graphDeps(objcopy) %v does not include the BN ref %d", graphDeps(g, oc), bn.Ref)
 	}
 
 	ld := mustNodeByOutput(t, g, "$(B)/prog/prog")
@@ -788,8 +788,8 @@ func TestEmitProgramResource_CppProgramLinksObjcopy(t *testing.T) {
 		t.Errorf("LD inputs missing the resource objcopy member %q: %v", oc.Outputs[0].string(), vfsStringsT3(ld.flatInputs()))
 	}
 
-	if !depsContain(graphDeps(g, ld), oc.UID) {
-		t.Errorf("graphDeps(LD) %v does not include the objcopy uid %q", graphDeps(g, ld), oc.UID)
+	if !depsContain(graphDeps(g, ld), oc.Ref) {
+		t.Errorf("graphDeps(LD) %v does not include the objcopy ref %d", graphDeps(g, ld), oc.Ref)
 	}
 }
 
@@ -805,7 +805,7 @@ func objcopyOutputs(g *Graph) []string {
 	return out
 }
 
-func depsContain(deps []UID, want UID) bool {
+func depsContain(deps []NodeRef, want NodeRef) bool {
 	for _, d := range deps {
 		if d == want {
 			return true

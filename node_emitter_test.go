@@ -9,7 +9,7 @@ import (
 )
 
 func build3NodeDAG() (*StreamingEmitter, NodeRef, NodeRef, NodeRef) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 	c := e.emitNode(Node{
 		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"build", "C"})}, Env: nil}},
 		Env:          nil,
@@ -44,21 +44,21 @@ func build3NodeDAG() (*StreamingEmitter, NodeRef, NodeRef, NodeRef) {
 	return e, a, b, c
 }
 
-func graphDeps(g *Graph, n *Node) []UID {
-	var out []UID
+func graphDeps(g *Graph, n *Node) []NodeRef {
+	var out []NodeRef
 
 	for r := range n.buildDeps(g.fetchRefs) {
-		out = append(out, g.uids.get(r))
+		out = append(out, r)
 	}
 
 	return out
 }
 
-func graphForeignDeps(g *Graph, n *Node) []UID {
-	out := make([]UID, len(n.ForeignDepRefs))
+func graphForeignDeps(g *Graph, n *Node) []NodeRef {
+	out := make([]NodeRef, len(n.ForeignDepRefs))
 
 	for i, r := range n.ForeignDepRefs {
-		out[i] = g.uids.get(r)
+		out[i] = r
 	}
 
 	return out
@@ -86,15 +86,11 @@ func TestFinalize_TopoOrder_LeavesFirst(t *testing.T) {
 		t.Fatalf("expected 3 nodes, got %d", len(g.Graph))
 	}
 
-	if nodeNameByKV(g, 0) != "A" {
-		t.Errorf("graph[0] = %q, want A (DFS root)", nodeNameByKV(g, 0))
-	}
+	present := map[string]bool{nodeNameByKV(g, 0): true, nodeNameByKV(g, 1): true, nodeNameByKV(g, 2): true}
 
-	remaining := map[string]bool{nodeNameByKV(g, 1): true, nodeNameByKV(g, 2): true}
-
-	if !remaining["B"] || !remaining["C"] {
-		t.Errorf("graph[1..2] = [%q, %q], want {B, C} in some order",
-			nodeNameByKV(g, 1), nodeNameByKV(g, 2))
+	if !present["A"] || !present["B"] || !present["C"] {
+		t.Errorf("graph = [%q, %q, %q], want {A, B, C}",
+			nodeNameByKV(g, 0), nodeNameByKV(g, 1), nodeNameByKV(g, 2))
 	}
 }
 
@@ -112,26 +108,18 @@ func TestFinalize_UIDsStableAcrossRuns(t *testing.T) {
 	}
 
 	for i, n := range g1.Graph {
-		if len(n.UID.string()) != 22 {
-			t.Errorf("graph[%d].UID len = %d, want 22 (got %q)", i, len(n.UID.string()), n.UID)
-		}
-
-		if n.SelfUID != n.UID {
-			t.Logf("PR-02 placeholder: SelfUID currently equals UID; future PR will compute distinct value. graph[%d].SelfUID=%q UID=%q", i, n.SelfUID, n.UID)
+		if n.Ref != NodeRef(i) {
+			t.Errorf("graph[%d].Ref = %d, want %d", i, n.Ref, i)
 		}
 	}
 
 	if len(g1.Result) != 1 {
 		t.Fatalf("expected 1 result, got %d (%v)", len(g1.Result), g1.Result)
 	}
-
-	if g1.Result[0] != g1.Graph[0].UID {
-		t.Errorf("result[0] = %q, want graph[0].UID %q", g1.Result[0], g1.Graph[0].UID)
-	}
 }
 
 func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 	mkLeaf := func(name string) NodeRef {
 		return e.emitNode(Node{Platform: &Platform{},
 			Cmds:   []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{name})}, Env: nil}},
@@ -169,15 +157,15 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 		t.Fatalf("A not found in graph")
 	}
 
-	byName := map[string]UID{}
+	byName := map[string]NodeRef{}
 
 	for _, n := range g.Graph {
 		if nm := n.KV.Name; nm != "" {
-			byName[nm] = n.UID
+			byName[nm] = n.Ref
 		}
 	}
 
-	want := []UID{byName["Z"], byName["X"], byName["Y"]}
+	want := []NodeRef{byName["Z"], byName["X"], byName["Y"]}
 
 	if !slices.Equal(graphDeps(g, aNode), want) {
 		t.Errorf("A.Deps = %v, want insertion order %v", graphDeps(g, aNode), want)
@@ -185,7 +173,7 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 }
 
 func TestFinalize_KeepsDuplicateDeps(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 	c := e.emitNode(Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"C"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
@@ -237,8 +225,10 @@ func TestFinalize_GraphTopLevelKeyOrder(t *testing.T) {
 	}
 }
 
-func TestFinalize_DedupesIdenticalEmits(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+func TestFinalize_KeepsIdenticalEmits(t *testing.T) {
+	// Construction no longer dedups identical nodes; each emit is a distinct
+	// NodeRef. Content-addressed dedup happens later in `dev dump normalize`.
+	e := newStreamingEmitter(nil)
 	mk := func() NodeRef {
 		return e.emitNode(Node{Platform: &Platform{},
 			Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"identical"})}, Env: nil}},
@@ -253,8 +243,8 @@ func TestFinalize_DedupesIdenticalEmits(t *testing.T) {
 	e.result(r2)
 	g := finalize(e)
 
-	if len(g.Graph) != 1 {
-		t.Errorf("expected 1 deduped node in Graph, got %d (%+v)", len(g.Graph), g.Graph)
+	if len(g.Graph) != 2 {
+		t.Errorf("expected 2 nodes in Graph (no construction dedup), got %d (%+v)", len(g.Graph), g.Graph)
 	}
 }
 
@@ -274,7 +264,7 @@ func TestFinalize_SecondCallErrors(t *testing.T) {
 }
 
 func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 	a := e.emitNode(Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
@@ -310,7 +300,7 @@ func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 }
 
 func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 	a := e.emitNode(Node{Platform: &Platform{},
 		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
@@ -326,36 +316,8 @@ func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
 	}
 }
 
-func TestEmitter_OnReady_BufferedNoOp(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
-	r := e.emitNode(Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"X"})}, Env: nil}},
-		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
-		KV: &KV{Name: "X"}, Outputs: ToVFSSlice([]string{}),
-		Requirements: Requirements{},
-	})
-	e.result(r)
-
-	ch := e.onReady(r)
-
-	select {
-	case <-ch:
-		t.Fatalf("OnReady channel closed pre-Finalize (BufferedEmitter contract)")
-	default:
-	}
-
-	finalize(e)
-
-	select {
-	case <-ch:
-
-	default:
-		t.Fatalf("OnReady channel not closed post-Finalize")
-	}
-}
-
 func TestEmitter_PostFinalizeEmitPanics(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 	e.emitNode(Node{Platform: &Platform{}, KV: &KV{P: pkTEST}})
 	finalize(e)
 
@@ -381,7 +343,7 @@ func TestEmitter_PostFinalizeEmitPanics(t *testing.T) {
 }
 
 func TestEmitter_PostFinalizeResultPanics(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 	ref := e.emitNode(Node{Platform: &Platform{}, KV: &KV{P: pkTEST}})
 	finalize(e)
 
@@ -406,100 +368,3 @@ func TestEmitter_PostFinalizeResultPanics(t *testing.T) {
 	e.result(ref)
 }
 
-func TestFinalize_ChildContentChangeChangesParentUID(t *testing.T) {
-	e1 := newStreamingEmitter(nil, nil)
-	c1 := e1.emitNode(Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"C", "v1"})}, Env: nil}},
-		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})}, KV: &KV{},
-		Outputs: ToVFSSlice([]string{}), Requirements: Requirements{},
-	})
-	a1 := e1.emitNode(Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
-		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})}, KV: &KV{},
-		Outputs: ToVFSSlice([]string{}), Requirements: Requirements{},
-		DepRefs: []NodeRef{c1},
-	})
-	e1.result(a1)
-	g1 := finalize(e1)
-
-	e2 := newStreamingEmitter(nil, nil)
-	c2 := e2.emitNode(Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"C", "v2"})}, Env: nil}},
-		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})}, KV: &KV{},
-		Outputs: ToVFSSlice([]string{}), Requirements: Requirements{},
-	})
-	a2 := e2.emitNode(Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
-		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})}, KV: &KV{},
-		Outputs: ToVFSSlice([]string{}), Requirements: Requirements{},
-		DepRefs: []NodeRef{c2},
-	})
-	e2.result(a2)
-	g2 := finalize(e2)
-
-	a1uid := g1.Graph[0].UID
-	a2uid := g2.Graph[0].UID
-
-	if a1uid == a2uid {
-		t.Errorf("Merkle property violated: parent UID stayed %q after leaf change", a1uid)
-	}
-}
-
-func TestFinalize_HeapTopo_Determinism(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
-	mk := func(name string, deps ...NodeRef) NodeRef {
-		return e.emitNode(Node{Platform: &Platform{},
-			Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{name})}, Env: nil}},
-			Env:          nil,
-			Inputs:       InputChunks{ToVFSSlice([]string{})},
-			KV:           &KV{Name: name},
-			Outputs:      ToVFSSlice([]string{}),
-			Requirements: Requirements{},
-			DepRefs:      deps,
-		})
-	}
-	l0 := mk("L0")
-	l1 := mk("L1")
-	l2 := mk("L2")
-	m3 := mk("M3", l0)
-	m4 := mk("M4", l1)
-	t6 := mk("T", l2, m3, m4)
-	e.result(t6)
-	g := finalize(e)
-
-	if len(g.Graph) != 6 {
-		t.Fatalf("graph len = %d, want 6", len(g.Graph))
-	}
-
-	if g.Graph[0].KV.Name != "T" {
-		t.Errorf("graph[0] = %q, want T (DFS root)", g.Graph[0].KV.Name)
-	}
-
-	pos := make(map[string]int, 6)
-
-	for i, n := range g.Graph {
-		name := n.KV.Name
-		pos[name] = i
-	}
-
-	edges := map[string][]string{
-		"T":  {"L2", "M3", "M4"},
-		"M3": {"L0"},
-		"M4": {"L1"},
-	}
-
-	for parent, children := range edges {
-		for _, child := range children {
-			if pos[parent] > pos[child] {
-				t.Errorf("DFS invariant violated: %s (pos %d) must appear before %s (pos %d)",
-					parent, pos[parent], child, pos[child])
-			}
-		}
-	}
-
-	for _, name := range []string{"T", "L0", "L1", "L2", "M3", "M4"} {
-		if _, ok := pos[name]; !ok {
-			t.Errorf("node %q missing from graph", name)
-		}
-	}
-}

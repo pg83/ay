@@ -57,8 +57,8 @@ END()
 		t.Fatalf("pack.bin command missing $(B)/mod/trie arg: %v", prCmdArgStrings(pr))
 	}
 
-	if !slices.Contains(graphDeps(g, pr), sb.UID) {
-		t.Fatalf("pack.bin deps missing SB fetch uid %q: %v", sb.UID, graphDeps(g, pr))
+	if !slices.Contains(graphDeps(g, pr), sb.Ref) {
+		t.Fatalf("pack.bin deps missing SB fetch ref %d: %v", sb.Ref, graphDeps(g, pr))
 	}
 }
 

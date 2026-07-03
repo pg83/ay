@@ -28,14 +28,15 @@ type CmdPrefix struct {
 type Executor struct {
 	srcRoot     string
 	bldRoot     string
+	fs          FS
 	sema        chan struct{}
 	keepGoing   bool
 	cmdPrefixes []CmdPrefix
 	ninja       bool
 	sandboxing  bool
 	grbDir      string
-	mu          sync.Mutex
-	byUID       map[UID]*NodeFuture
+	futs        *PageVec[*NodeFuture]
+	fetchRefs   *DenseMap[STR, NodeRef]
 	events      *EventQueue
 	stats       map[string][]time.Duration
 	pending     atomic.Uint64
@@ -57,54 +58,61 @@ type CommandResult struct {
 }
 
 type NodeFuture struct {
-	node      *Node
-	uids      *UidVec
-	fetchRefs *DenseMap[STR, NodeRef]
-	once      sync.Once
-	err       *Exception
+	node *Node
+	ref  NodeRef
+	uid  UID
+	once sync.Once
+	err  *Exception
 }
 
-func newExecutor(srcRoot, bldRoot string, threads int, keepGoing bool, ninja bool, sandboxing bool, cmdPrefixes []CmdPrefix, events *EventQueue) *Executor {
+func newExecutor(srcRoot, bldRoot string, fs FS, threads int, keepGoing bool, ninja bool, sandboxing bool, cmdPrefixes []CmdPrefix, events *EventQueue) *Executor {
 	return &Executor{
 		srcRoot:     srcRoot,
 		bldRoot:     bldRoot,
+		fs:          fs,
 		sema:        make(chan struct{}, threads),
 		keepGoing:   keepGoing,
 		ninja:       ninja,
 		sandboxing:  sandboxing,
 		grbDir:      filepath.Join(bldRoot, "grb"),
 		cmdPrefixes: cmdPrefixes,
-		byUID:       make(map[UID]*NodeFuture, 8192),
+		futs:        &PageVec[*NodeFuture]{},
 		events:      events,
 		stats:       map[string][]time.Duration{},
 	}
 }
 
-func (ex *Executor) onNode(n *Node, uids *UidVec, fetchRefs *DenseMap[STR, NodeRef]) {
-	ex.mu.Lock()
+func (ex *Executor) onNode(n *Node, fetchRefs *DenseMap[STR, NodeRef]) {
+	ex.fetchRefs = fetchRefs
 
-	if _, ok := ex.byUID[n.UID]; ok {
-		ex.mu.Unlock()
+	f := &NodeFuture{node: n, ref: n.Ref}
 
-		return
-	}
-
-	f := &NodeFuture{node: n, uids: uids, fetchRefs: fetchRefs}
-
-	ex.byUID[n.UID] = f
-	ex.mu.Unlock()
+	ex.futs.set(n.Ref, f)
 
 	go ex.fire(f)
 }
 
 func (ex *Executor) fire(f *NodeFuture) {
 	try(func() {
-		ex.visit(f.node.UID)
+		ex.visit(f.ref)
 	}).catch(func(e *Exception) {
 		if !ex.keepGoing {
 			fatalException(e)
 		}
 	})
+}
+
+// uidOf materializes a node's UID at execution time. Fetch/VCS nodes carry a
+// content-addressed preset; everything else is a Merkle hash over node content
+// plus the (already-computed) UIDs of its dependency futures.
+func (ex *Executor) uidOf(n *Node) UID {
+	if n.presetUID != (UID{}) {
+		return n.presetUID
+	}
+
+	c := CanonBuf{fs: ex.fs, futs: ex.futs, fetchRefs: ex.fetchRefs}
+
+	return c.calcUID(n)
 }
 
 func fatalException(e *Exception) {
@@ -116,21 +124,17 @@ func fatalException(e *Exception) {
 	select {}
 }
 
-func (ex *Executor) run(roots []UID) {
-	if len(roots) == 0 {
-		return
-	}
-
-	for _, uid := range roots {
-		ex.visit(uid)
+func (ex *Executor) run(roots []NodeRef) {
+	for _, r := range roots {
+		ex.visit(r)
 	}
 }
 
-func (ex *Executor) visit(uid UID) {
-	f := ex.lookup(uid)
+func (ex *Executor) visit(ref NodeRef) {
+	f := ex.futs.get(ref)
 
 	if f == nil {
-		throwFmt("executor: unknown UID %s", uid)
+		throwFmt("executor: unknown NodeRef %d", ref)
 	}
 
 	f.once.Do(func() {
@@ -144,35 +148,46 @@ func (ex *Executor) visit(uid UID) {
 	}
 }
 
-func (ex *Executor) failedRoots(roots []UID) []UID {
-	var failed []UID
+func (ex *Executor) failedRoots(roots []NodeRef) []NodeRef {
+	var failed []NodeRef
 
-	for _, uid := range roots {
-		f := ex.lookup(uid)
+	for _, r := range roots {
+		f := ex.futs.get(r)
 
 		if f == nil || f.err == nil {
 			continue
 		}
 
-		failed = append(failed, uid)
+		failed = append(failed, r)
 	}
 
 	return failed
 }
 
-func (ex *Executor) lookup(uid UID) *NodeFuture {
-	ex.mu.Lock()
-
-	f := ex.byUID[uid]
-
-	ex.mu.Unlock()
-
-	return f
-}
-
 func (ex *Executor) execute(f *NodeFuture) {
 	n := f.node
-	cachePath := ex.uidPath(n.UID)
+
+	if ex.keepGoing {
+		for r := range n.buildDeps(ex.fetchRefs) {
+			exc := try(func() {
+				ex.visit(r)
+			})
+
+			if exc == nil {
+				continue
+			}
+
+			throwFmt("deps failed: %d", r)
+		}
+	} else {
+		for r := range n.buildDeps(ex.fetchRefs) {
+			ex.visit(r)
+		}
+	}
+
+	f.uid = ex.uidOf(n)
+
+	cachePath := ex.uidPath(f.uid)
 
 	if _, err := os.Stat(cachePath); err == nil {
 		return
@@ -182,31 +197,11 @@ func (ex *Executor) execute(f *NodeFuture) {
 
 	defer ex.done.Add(1)
 
-	if ex.keepGoing {
-		for r := range n.buildDeps(f.fetchRefs) {
-			dep := f.uids.get(r)
-
-			exc := try(func() {
-				ex.visit(dep)
-			})
-
-			if exc == nil {
-				continue
-			}
-
-			throwFmt("deps failed: %s", dep)
-		}
-	} else {
-		for r := range n.buildDeps(f.fetchRefs) {
-			ex.visit(f.uids.get(r))
-		}
-	}
-
 	ex.sema <- struct{}{}
 
 	defer func() { <-ex.sema }()
 
-	tmp := filepath.Join(ex.bldRoot, "tmp", n.UID.string())
+	tmp := filepath.Join(ex.bldRoot, "tmp", f.uid.string())
 
 	throw(os.MkdirAll(tmp, 0o755))
 
@@ -234,15 +229,15 @@ func (ex *Executor) execute(f *NodeFuture) {
 		ex.linkSourceInputs(n, srcMount)
 	}
 
-	for r := range n.buildDeps(f.fetchRefs) {
-		ex.restoreInto(f.uids.get(r), bldMount)
+	for r := range n.buildDeps(ex.fetchRefs) {
+		ex.restoreInto(ex.futs.get(r).uid, bldMount)
 	}
 
 	start := time.Now()
 	cmdResult := ex.runNode(n, srcMount, bldMount)
 	dur := time.Since(start)
 
-	ex.storeOutputs(n, bldMount)
+	ex.storeOutputs(n, f.uid, bldMount)
 
 	col := n.KV.PC
 	kind := n.KV.P
@@ -432,7 +427,7 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 		cmd.Stderr = &stderr
 
 		if err := cmd.Run(); err != nil {
-			msg := fmt.Sprintf("cmd failed (uid=%s): %v: %s", n.UID, err, strings.Join(args, " "))
+			msg := fmt.Sprintf("cmd failed (ref=%d): %v: %s", n.Ref, err, strings.Join(args, " "))
 
 			if stderr.Len() > 0 {
 				msg += "\n" + strings.TrimRight(stderr.String(), "\n")
@@ -475,22 +470,22 @@ type OutputEntry struct {
 	Link string `json:"link,omitempty"`
 }
 
-func (ex *Executor) storeOutputs(n *Node, tmp string) {
+func (ex *Executor) storeOutputs(n *Node, uid UID, tmp string) {
 	meta := make(map[string]OutputEntry, len(n.Outputs))
 
 	for _, out := range n.Outputs {
 		if !out.isBuild() {
-			throwFmt("node %s: non-Build output %v", n.UID, out)
+			throwFmt("node ref=%d: non-Build output %v", n.Ref, out)
 		}
 
 		ex.storePath(filepath.Join(tmp, out.rel()), out.string(), meta)
 	}
 
-	uidPath := ex.uidPath(n.UID)
+	uidPath := ex.uidPath(uid)
 
 	throw(os.MkdirAll(filepath.Dir(uidPath), 0o755))
 
-	tf := throw2(os.CreateTemp(filepath.Dir(uidPath), "."+n.UID.string()+".*"))
+	tf := throw2(os.CreateTemp(filepath.Dir(uidPath), "."+uid.string()+".*"))
 
 	throw2(tf.Write(throw2(json.Marshal(meta))))
 	throw(tf.Close())
@@ -568,12 +563,12 @@ func (ex *Executor) restoreManifest(uid UID, where string) {
 	}
 }
 
-func (ex *Executor) installRoot(uid UID, where string) {
+func (ex *Executor) installRoot(ref NodeRef, where string) {
 	if where == "" {
 		return
 	}
 
-	ex.restoreInto(uid, where)
+	ex.restoreInto(ex.futs.get(ref).uid, where)
 }
 
 func (ex *Executor) removeContents(dir string) {

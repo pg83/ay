@@ -65,7 +65,7 @@ func vfsStrings(vs []VFS) []string {
 }
 
 func TestEmitAR_LengthMismatchPanics(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 
 	objRefs := []NodeRef{e.emitNode(Node{
 		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
@@ -92,7 +92,7 @@ func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 }
 
 func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.emitNode(Node{
@@ -140,7 +140,7 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 }
 
 func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.emitNode(Node{
@@ -175,7 +175,7 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 }
 
 func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.emitNode(Node{
@@ -279,7 +279,7 @@ END()
 }
 
 func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.emitNode(Node{
@@ -406,7 +406,7 @@ END()
 
 	for _, dep := range graphDeps(g, consumerAR) {
 		for _, n := range g.Graph {
-			if n.UID == dep && n.KV.P == pkAR {
+			if n.Ref == dep && n.KV.P == pkAR {
 				t.Errorf("lib_consumer AR has AR-typed dep (peer outputs=%v); reference invariant: zero AR-on-AR deps", n.Outputs)
 			}
 		}

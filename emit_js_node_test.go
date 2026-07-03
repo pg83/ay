@@ -6,7 +6,7 @@ import (
 )
 
 func TestEmitJS_UsesRequestedPlatformTags(t *testing.T) {
-	emit := newStreamingEmitter(nil, nil)
+	emit := newStreamingEmitter(nil)
 	target := newTestPlatform(OSLinux, ISAX8664, "no")
 
 	ref, _ := emitJS(hostInstance("joinmod"), "all.cpp", []string{"a.cpp"}, nil, target, testToolchain(), nil, emit)
@@ -125,7 +125,7 @@ func TestGen_GeneratorWiredIntoDepRefs_JS(t *testing.T) {
 	found := false
 
 	for _, dep := range graphDeps(g, ccNode) {
-		if dep == jsNode.UID {
+		if dep == jsNode.Ref {
 			found = true
 
 			break
@@ -133,6 +133,6 @@ func TestGen_GeneratorWiredIntoDepRefs_JS(t *testing.T) {
 	}
 
 	if !found {
-		t.Errorf("graphDeps(g, CC) = %v, want to contain JS UID %q (PR-30 D04 Generator wiring)", graphDeps(g, ccNode), jsNode.UID)
+		t.Errorf("graphDeps(g, CC) = %v, want to contain JS ref %d (PR-30 D04 Generator wiring)", graphDeps(g, ccNode), jsNode.Ref)
 	}
 }

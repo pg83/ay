@@ -53,41 +53,8 @@ func TestComputeUID_KnownVector(t *testing.T) {
 	}
 }
 
-func TestCanonicalNodeBytes_ZeroesIdentityFields(t *testing.T) {
-	n := Node{Platform: &Platform{},
-		Cmds: []Cmd{},
-
-		Env:          nil,
-		Inputs:       InputChunks{ToVFSSlice([]string{})},
-		KV:           &KV{},
-		Outputs:      ToVFSSlice([]string{}),
-		Requirements: Requirements{},
-		UID:          tuid("AAAAA"),
-		SelfUID:      tuid("BBBBB"),
-	}
-	canon := canonicalNodeBytes(&n)
-	s := string(canon)
-
-	for _, banned := range []string{tuid("AAAAA").string(), tuid("BBBBB").string(), "should-not-appear-CCCCC"} {
-		if strings.Contains(s, banned) {
-			t.Errorf("canonicalNodeBytes leaked identity field value %q: %s", banned, s)
-		}
-	}
-
-	if n.UID == (UID{}) || n.SelfUID == (UID{}) {
-		t.Errorf("canonicalNodeBytes mutated the original node: %+v", n)
-	}
-}
-
 func computeUID(canonicalBytes []byte) UID {
 	sum := xxh3.Hash128(canonicalBytes)
 
 	return UID{Hi: sum.Hi, Lo: sum.Lo}
-}
-
-func canonicalNodeBytes(n *Node) []byte {
-	var c CanonBuf
-	c.writeNode(n)
-
-	return c.buf
 }

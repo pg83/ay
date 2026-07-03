@@ -40,7 +40,7 @@ func TestEmitBundle_GeneratedFileWiresProducerDep(t *testing.T) {
 	bnDepsAR := false
 
 	for _, d := range graphDeps(g, bn) {
-		if d == depAR.UID {
+		if d == depAR.Ref {
 			bnDepsAR = true
 
 			break
@@ -48,7 +48,7 @@ func TestEmitBundle_GeneratedFileWiresProducerDep(t *testing.T) {
 	}
 
 	if !bnDepsAR {
-		t.Errorf("graphDeps(g, BN) %v does not include the bundled AR uid %q", graphDeps(g, bn), depAR.UID)
+		t.Errorf("graphDeps(g, BN) %v does not include the bundled AR ref %d", graphDeps(g, bn), depAR.Ref)
 	}
 
 	oc := findNodeByOutputPrefix(g, "$(B)/cons/objcopy_")
@@ -68,7 +68,7 @@ func TestEmitBundle_GeneratedFileWiresProducerDep(t *testing.T) {
 	ocDepsBN := false
 
 	for _, d := range graphDeps(g, oc) {
-		if d == bn.UID {
+		if d == bn.Ref {
 			ocDepsBN = true
 
 			break
@@ -76,7 +76,7 @@ func TestEmitBundle_GeneratedFileWiresProducerDep(t *testing.T) {
 	}
 
 	if !ocDepsBN {
-		t.Errorf("graphDeps(g, objcopy) %v does not include the BN uid %q", graphDeps(g, oc), bn.UID)
+		t.Errorf("graphDeps(g, objcopy) %v does not include the BN ref %d", graphDeps(g, oc), bn.Ref)
 	}
 }
 
@@ -116,8 +116,8 @@ func TestEmitProgramResource_BundleAttributesFsToolsToModule(t *testing.T) {
 		t.Errorf("BN node inputs missing %q: %v", fsTools, vfsStringsT3(bn.flatInputs()))
 	}
 
-	if !depsContain(graphDeps(g, bn), depAR.UID) {
-		t.Errorf("graphDeps(BN) %v does not include the bundled AR uid %q", graphDeps(g, bn), depAR.UID)
+	if !depsContain(graphDeps(g, bn), depAR.Ref) {
+		t.Errorf("graphDeps(BN) %v does not include the bundled AR ref %d", graphDeps(g, bn), depAR.Ref)
 	}
 
 	oc := findNodeByOutputPrefix(g, "$(B)/prog/objcopy_")
@@ -130,8 +130,8 @@ func TestEmitProgramResource_BundleAttributesFsToolsToModule(t *testing.T) {
 		t.Errorf("objcopy inputs missing the BN build output $(B)/prog/x.bundle: %v", vfsStringsT3(oc.flatInputs()))
 	}
 
-	if !depsContain(graphDeps(g, ld), oc.UID) {
-		t.Errorf("graphDeps(LD) %v does not include the objcopy uid %q", graphDeps(g, ld), oc.UID)
+	if !depsContain(graphDeps(g, ld), oc.Ref) {
+		t.Errorf("graphDeps(LD) %v does not include the objcopy ref %d", graphDeps(g, ld), oc.Ref)
 	}
 
 	blibAR := mustNodeByOutput(t, g, "$(B)/blib/libblib.a")

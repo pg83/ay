@@ -248,8 +248,8 @@ END()
 		t.Errorf("AR .rodata inputs missing the dictionary binary: %v", vfsStringsT3(ar.flatInputs()))
 	}
 
-	if !depsContain(graphDeps(g, ar), py.UID) {
-		t.Errorf("graphDeps(AR .rodata) %v does not include the PY uid %q", graphDeps(g, ar), py.UID)
+	if !depsContain(graphDeps(g, ar), py.Ref) {
+		t.Errorf("graphDeps(AR .rodata) %v does not include the PY ref %d", graphDeps(g, ar), py.Ref)
 	}
 
 	memberArg := "$(B)/m/out.dict.bin:"
@@ -274,8 +274,8 @@ END()
 		t.Errorf("RD node inputs missing the .rodata source: %v", vfsStringsT3(rd.flatInputs()))
 	}
 
-	if !depsContain(graphDeps(g, rd), ar.UID) {
-		t.Errorf("graphDeps(RD) %v does not include the AR .rodata uid %q", graphDeps(g, rd), ar.UID)
+	if !depsContain(graphDeps(g, rd), ar.Ref) {
+		t.Errorf("graphDeps(RD) %v does not include the AR .rodata ref %d", graphDeps(g, rd), ar.Ref)
 	}
 
 	lib := mustNodeByOutput(t, g, "$(B)/m/libm.a")

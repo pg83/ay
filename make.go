@@ -248,7 +248,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 				writeGraph("-", g, !mf.sandboxing)
 			}
 		} else {
-			genStream(fs, mf.targets, hostP, targetP, func(*Node, *UidVec, *DenseMap[STR, NodeRef]) {}, onWarn, mf.testLevel > 0)
+			genStream(fs, mf.targets, hostP, targetP, func(*Node, *DenseMap[STR, NodeRef]) {}, onWarn, mf.testLevel > 0)
 		}
 
 		if mf.dumpIgnoredMacros {
@@ -258,7 +258,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 		return 0
 	}
 
-	ex := newExecutor(mf.srcRoot, mf.bldRoot, mf.threads, mf.keepGoing, mf.ninja, mf.sandboxing, mf.cmdPrefixes, events)
+	ex := newExecutor(mf.srcRoot, mf.bldRoot, fs, mf.threads, mf.keepGoing, mf.ninja, mf.sandboxing, mf.cmdPrefixes, events)
 
 	ex.startGarbageCollector()
 
@@ -275,36 +275,29 @@ func cmdMake(g GlobalFlags, args []string) int {
 	if len(failedRoots) > 0 {
 		failedStrs := make([]string, len(failedRoots))
 
-		for i, u := range failedRoots {
-			failedStrs[i] = u.string()
+		for i, r := range failedRoots {
+			failedStrs[i] = strconv.FormatUint(uint64(r), 10)
 		}
 
 		throwFmt("build failed: %s", strings.Join(failedStrs, ", "))
 	}
 
-	for _, uid := range results {
-		ex.installRoot(uid, mf.installRoot)
+	for _, r := range results {
+		ex.installRoot(r, mf.installRoot)
 	}
 
 	return 0
 }
 
-func genStream(fs FS, targets []string, hostP, targetP *Platform, onNode func(*Node, *UidVec, *DenseMap[STR, NodeRef]), onWarn func(Warn), testMode bool) []UID {
-	all := []UID{}
+// genStream builds one graph across all targets in a single emitter (so
+// NodeRefs form one global address space the executor can key on) and returns
+// the deduped result NodeRefs.
+func genStream(fs FS, targets []string, hostP, targetP *Platform, onNode func(*Node, *DenseMap[STR, NodeRef]), onWarn func(Warn), testMode bool) []NodeRef {
+	emitter := newStreamingEmitter(onNode)
 
 	for _, t := range targets {
-		ec := genStreamOne(fs, t, hostP, targetP, onNode, onWarn, testMode)
-
-		all = append(all, ec...)
+		runGenIntoWithResources(fs, t, hostP, targetP, emitter, onWarn, testMode)
 	}
-
-	return all
-}
-
-func genStreamOne(fs FS, target string, hostP, targetP *Platform, onNode func(*Node, *UidVec, *DenseMap[STR, NodeRef]), onWarn func(Warn), testMode bool) []UID {
-	emitter := newStreamingEmitter(fs, onNode)
-
-	runGenIntoWithResources(fs, target, hostP, targetP, emitter, onWarn, testMode)
 
 	return emitter.finish()
 }

@@ -14,7 +14,7 @@ func TestEmitFL_NodeShape(t *testing.T) {
 		Platform: target,
 	}
 
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 	_, header, cpp, bfbs := emitFL(
 		instance,
 		"mod/File.fbs",
@@ -188,8 +188,8 @@ END()
 		t.Fatalf("flatc node inputs missing build-root schema.fbs: %#v", fl.flatInputs())
 	}
 
-	if !slices.Contains(graphDeps(g, fl), pr.UID) {
-		t.Fatalf("flatc node deps missing PR producer uid %q: %v", pr.UID, graphDeps(g, fl))
+	if !slices.Contains(graphDeps(g, fl), pr.Ref) {
+		t.Fatalf("flatc node deps missing PR producer ref %d: %v", pr.Ref, graphDeps(g, fl))
 	}
 
 	cppO := findGraphNodeByOutputs(t, g, "$(B)/mod/schema.fbs.cpp.o")
@@ -220,7 +220,7 @@ func TestEmitFL64_NodeShape(t *testing.T) {
 		Platform: target,
 	}
 
-	e := newStreamingEmitter(nil, nil)
+	e := newStreamingEmitter(nil)
 	_, header, cpp, bfbs := emitFL(
 		instance,
 		"mod/File.fbs64",
