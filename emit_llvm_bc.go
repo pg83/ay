@@ -38,7 +38,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		in := e.ccInputsFor(inputVFS)
 		bcOut := build(e.llvmBcRootRelArcSrc(src), stmt.Suffix, ".bc")
 		bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
-		closure := walkClosure(e.scanner, inputVFS, in.ScanCfg)
+		closure := walkClosure(e.scanner, inputVFS, in.ScanCfg).flat()
 		deps := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, closure, depRefs(producer)...)
 
 		allInputs := na.inputList(na.vfsList(clangWrapperVFS),

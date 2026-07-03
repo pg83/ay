@@ -600,7 +600,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 			it := ResourceItem{Path: entry.Path, Key: entry.Key, Input: r.Input}
 
 			if r.ProducerRef != 0 {
-				for _, v := range walkClosureTail(e.scanner, r.Input, d.cc.ScanCfg) {
+				for _, v := range walkClosureTail(e.scanner, r.Input, d.cc.ScanCfg).flat() {
 					if v.isBuild() {
 						it.Aux = append(it.Aux, v)
 					}

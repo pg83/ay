@@ -73,7 +73,7 @@ func (e *EmitContext) emitYmapsSprotoHeader(p YmapsSprotoPending, outRoot string
 	))
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-	closure := dropGeneratedProtoHeaders(walkClosureTail(e.scanner, p.sprotoH, scanCfg))
+	closure := dropGeneratedProtoHeaders(walkClosureTail(e.scanner, p.sprotoH, scanCfg).flat())
 
 	node := Node{
 		Platform: instance.Platform,

@@ -56,6 +56,7 @@ type ModuleCCInputs struct {
 	Variant         *string
 	ExtraDepRefs    []NodeRef
 	IncludeInputs   []VFS
+	IncludeView     ClosureView
 }
 
 func (e *EmitContext) ccInputsFor(srcVFS VFS) ModuleCCInputs {
@@ -132,11 +133,12 @@ func (e *EmitContext) emitCCFlat(srcVFS VFS, variant *string, cflags []ARG) (Nod
 func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs) (NodeRef, VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 
-	in.IncludeInputs = walkClosure(e.scanner, srcVFS, in.ScanCfg)
-	in.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, in.IncludeInputs)
+	in.IncludeView = walkClosure(e.scanner, srcVFS, in.ScanCfg)
+	in.ExtraDepRefs = resolveCodegenDepRefsInclView(ctx, instance, ctx.na, in.IncludeView)
 
 	if len(d.cythonCpp) > 0 {
-		in.IncludeInputs = e.cythonCompileInducedInputs(in.IncludeInputs)
+		in.IncludeInputs = e.cythonCompileInducedInputs(in.IncludeView.flat())
+		in.IncludeView = ClosureView{}
 	}
 
 	ref, outPath, _ := composeCCNode(instance, srcVFS.str(), srcVFS, in, ctx.host, ctx.emit)
@@ -242,9 +244,14 @@ func composeCCNode(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInpu
 
 	var allInputs InputChunks
 
-	if wrap {
+	switch {
+	case in.IncludeView.self != 0 && wrap:
+		allInputs = na.inputList(na.vfsList(in.IncludeView.self, wrapccPyVFS), in.IncludeView.buckets[:]...)
+	case in.IncludeView.self != 0:
+		allInputs = na.inputList(na.vfsList(in.IncludeView.self), in.IncludeView.buckets[:]...)
+	case wrap:
 		allInputs = na.inputList(in.IncludeInputs, wrapccPyChunk)
-	} else {
+	default:
 		allInputs = na.inputList(in.IncludeInputs)
 	}
 

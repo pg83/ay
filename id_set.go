@@ -55,6 +55,19 @@ func (s *IdSet) add(v VFS) {
 	s.gen[id] = s.epoch
 }
 
+func (s *IdSet) spliceOne(v VFS, block []VFS, k int) int {
+	id := v.strID()
+
+	if s.gen[id] == s.epoch {
+		return k
+	}
+
+	s.gen[id] = s.epoch
+	block[k] = v
+
+	return k + 1
+}
+
 func (s *IdSet) spliceNew(win []VFS, block []VFS, k int) int {
 	gen := s.gen
 	epoch := s.epoch

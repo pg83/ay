@@ -118,7 +118,7 @@ func (e *EmitContext) joinSrcsIncludeClosure(scanPlatform *Platform, sources []s
 	for _, srcRelOnDisk := range srcRels {
 		sc := scanner.getScanCtx(cfg, scanner.parsers.registry.registeredParserFor(srcRelOnDisk))
 
-		for _, v := range sc.closureOf(source(srcRelOnDisk)) {
+		for _, v := range sc.closureOf(source(srcRelOnDisk)).flat() {
 			if visited.has(v) {
 				continue
 			}

@@ -18,7 +18,7 @@ func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 			Cwd: strB,
 			Env: env}),
 		Env:          env,
-		Inputs:       na.inputList(in.IncludeInputs),
+		Inputs:       na.inputList(na.vfsList(in.IncludeView.self), in.IncludeView.buckets[:]...),
 		Outputs:      na.vfsList(outVFS),
 		KV:           &asKV,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -116,8 +116,8 @@ func (e *EmitContext) emitLibraryAsmSource(meta SrcMeta) {
 		asIn.AddIncl = scanIn.AddIncl
 	}
 
-	asIn.IncludeInputs = walkClosure(e.scanner, srcVFS, scanIn.ScanCfg)
-	asIn.ExtraDepRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, asIn.IncludeInputs)
+	asIn.IncludeView = walkClosure(e.scanner, srcVFS, scanIn.ScanCfg)
+	asIn.ExtraDepRefs = resolveCodegenDepRefsInclView(ctx, instance, ctx.na, asIn.IncludeView)
 
 	ref, outPath := emitAS(instance, srcRel, srcVFS, asIn, ctx.host, ctx.emit)
 

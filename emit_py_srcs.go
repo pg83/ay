@@ -722,7 +722,7 @@ func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) []VFS
 		Compile:        &CompileSpec{FlatOutput: d.flatSrc(aux.str()), ForceCxx: true, CFlags: concat(psc, []ARG{argX, argC})},
 	})
 
-	closure := walkClosure(e.scanner, aux, d.cc.ScanCfg)
+	closure := walkClosure(e.scanner, aux, d.cc.ScanCfg).flat()
 
 	if len(closure) == 0 {
 		return nil

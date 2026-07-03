@@ -30,7 +30,7 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta) {
 	outVFS, inVFS := composeCCPaths(instance, srcRel, srcVFS, in, ".o")
 	blocks := in.CCBlocks
 	scanner := e.scanner
-	closure := dedup(walkClosure(scanner, srcVFS, in.ScanCfg), walkClosure(scanner, cudaRuntimeIncludeVFS, in.ScanCfg))
+	closure := dedup(walkClosure(scanner, srcVFS, in.ScanCfg).flat(), walkClosure(scanner, cudaRuntimeIncludeVFS, in.ScanCfg).flat())
 	mtimeRef, mtimeVFS := ctx.tool(cudaMtimeArg)
 	pidRef, pidVFS := ctx.tool(cudaCustomPidArg)
 	cuCxxTail := blocks.cxxTail

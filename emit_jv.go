@@ -58,7 +58,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 			Compile:        &CompileSpec{FlatOutput: d.flatSrc(g4CppPath.str()), CFlags: []ARG{argWnoUnusedVariable}},
 		})
 
-		closure := walkClosure(e.scanner, g4CppPath, d.cc.ScanCfg)
+		closure := walkClosure(e.scanner, g4CppPath, d.cc.ScanCfg).flat()
 		leafSet := make(map[VFS]bool, len(leaves))
 
 		for _, l := range leaves {

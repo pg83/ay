@@ -128,7 +128,7 @@ func (e *EmitContext) pyInputClosure(stmt *RunPythonStmt) []VFS {
 	walkOne := func(rel string) {
 		buildRootPath := copyFileOutputVFS(instance.Path.rel(), rel)
 
-		out = append(out, walkClosureTail(e.scanner, buildRootPath, scanCfg)...)
+		out = append(out, walkClosureTail(e.scanner, buildRootPath, scanCfg).flat()...)
 	}
 
 	hasCCShard, _ := splitCodegenDetect(stmt)
@@ -137,7 +137,7 @@ func (e *EmitContext) pyInputClosure(stmt *RunPythonStmt) []VFS {
 		for _, f := range stmt.INFiles {
 			vfs := e.runProgramInputVFS(f.string())
 
-			out = append(out, walkClosure(e.scanner, vfs, scanCfg)...)
+			out = append(out, walkClosure(e.scanner, vfs, scanCfg).flat()...)
 		}
 	} else {
 		for _, f := range stmt.OUTFiles {

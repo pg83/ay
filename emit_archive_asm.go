@@ -115,7 +115,7 @@ func (e *EmitContext) emitArchiveAsmRodata(rodataRel string, producerRef NodeRef
 	}
 
 	rodataPath := build(instance.Path.rel(), "/", rodataRel)
-	leaves := walkClosureTail(e.scanner, rodataPath, d.cc.ScanCfg)
+	leaves := walkClosureTail(e.scanner, rodataPath, d.cc.ScanCfg).flat()
 	yasmLDRef, _ := ctx.tool(argContribToolsYasm)
 	ref, _, outPath := emitRD(instance, rodataRel, rodataPath, yasmLDRef, leaves, []NodeRef{producerRef}, d.cc.TC, ctx.emit)
 

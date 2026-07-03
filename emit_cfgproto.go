@@ -10,7 +10,7 @@ func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 	configPluginLDRef, configPluginBinary := ctx.tool(argLibraryCppProtoConfigPlugin)
 	cfgRelPath := protoSourceRelPath(ctx.fs, instance, d, src.string())
 	cfgSource := source(cfgRelPath)
-	cfgImports := walkClosureTail(e.scanner, cfgSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
+	cfgImports := walkClosureTail(e.scanner, cfgSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel())).flat()
 	directImports := protoDirectPbHIncludes(ctx.parsers, cfgRelPath, protoCPPOutRoot(d))
 	configIncludes := ctx.parsers.sourceParsedBuckets(cfgSource, nil).bucket(parsedIncludesProtoConfig)
 	extras := pbHEmitsIncludesExtras()

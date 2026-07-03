@@ -270,6 +270,48 @@ func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, na *NodeAre
 	return out[:k]
 }
 
+func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *NodeArenas, cv ClosureView, incl ...NodeRef) []NodeRef {
+	deduper.reset()
+
+	out := na.noderefs.alloc(len(incl) + cv.len())
+	k := 0
+
+	for _, r := range incl {
+		deduper.add(r.strID())
+		out[k] = r
+		k++
+	}
+
+	reg := ctx.codegenFor(consumer)
+
+	cv.each(func(p VFS) {
+		if !p.isBuild() {
+			return
+		}
+
+		info := reg.lookup(p)
+
+		if info == nil {
+			return
+		}
+
+		if !deduper.add(info.ProducerRef.strID()) {
+			return
+		}
+
+		out[k] = info.ProducerRef
+		k++
+	})
+
+	na.noderefs.commit(k)
+
+	if k == 0 {
+		return nil
+	}
+
+	return out[:k]
+}
+
 func (ctx *GenCtx) perfScanCtxStats(scanner *IncludeScanner) ScanCtxPerfStats {
 	return ScanCtxPerfStats{
 		subgraphEntries: scanner.scanCache.len(),

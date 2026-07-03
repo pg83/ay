@@ -57,6 +57,17 @@ func (s *IncludeScanner) storeBuckets(self VFS, rest []VFS) BucketClosure {
 	return bc
 }
 
+func (s *IncludeScanner) spliceClosure(cref ClosureRef, block []VFS, k int) int {
+	bc := s.subgraphClosures[cref]
+	k = s.tjc.closure.spliceOne(bc.self, block, k)
+
+	for r := 0; r < closureBuckets; r++ {
+		k = s.tjc.closure.spliceNew(s.bucketList[bc.buckets[r]], block, k)
+	}
+
+	return k
+}
+
 func (s *IncludeScanner) reconstruct(bc BucketClosure, buf []VFS) []VFS {
 	buf = append(buf[:0], bc.self)
 
