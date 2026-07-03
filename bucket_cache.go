@@ -1,5 +1,7 @@
 package main
 
+import "unsafe"
+
 const closureBuckets = 16
 
 // Closure is both the stored form of an include closure and the view over it:
@@ -32,11 +34,36 @@ func newBucketCache() *BucketCache {
 }
 
 func bucketHash(elems []VFS) uint64 {
-	h := mix64(uint64(len(elems)))
+	// sum + Σv² + xor, order-independent multiset hash. Unrolled by two into
+	// independent accumulator pairs (2× ILP over the serial add/mul/xor chains)
+	// and walked through an unsafe pointer to drop the per-element bounds check.
+	var s0, s1, q0, q1, x0, x1 uint32
 
-	for _, v := range elems {
-		h += mix64(uint64(v))
+	n := len(elems)
+	p := unsafe.Pointer(unsafe.SliceData(elems))
+
+	i := 0
+
+	for ; i+1 < n; i += 2 {
+		a := uint32(*(*VFS)(p))
+		b := uint32(*(*VFS)(unsafe.Add(p, 4)))
+		p = unsafe.Add(p, 8)
+		s0 += a
+		q0 += a * a
+		x0 ^= a
+		s1 += b
+		q1 += b * b
+		x1 ^= b
 	}
+
+	if i < n {
+		a := uint32(*(*VFS)(p))
+		s0 += a
+		q0 += a * a
+		x0 ^= a
+	}
+
+	h := splitMix64(s0+s1+uint32(n), q0+q1) ^ mix64(uint64(x0^x1))
 
 	if h == 0 {
 		h = 1

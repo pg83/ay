@@ -74,6 +74,11 @@ var commands = []Command{
 			"Prints ns/elem for each.",
 	},
 	{
+		path: []string{"dev", "perf", "buckethash"}, run: cmdPerfBucketHash,
+		help: "💥 Stress-test bucketHash for collisions: random sequences (len 0..10000,\n" +
+			"values 0..100000), report the first genuine collision. Prints progress.",
+	},
+	{
 		path: []string{"dev", "refac", "consts"}, run: refacConsts,
 		help: "♻️ Regenerate the interned-constant files (str/arg/vfs/env) from the\n" +
 			"literals used across the package. Mutates source in place.",
