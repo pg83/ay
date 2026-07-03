@@ -326,59 +326,86 @@ func (sc *ScanCtx) dfs(abs VFS) {
 	s.tjc.closure.reset(strBound())
 	s.tjc.closure.add(abs)
 	s.buckets.resetScratch()
-	s.closureFrontier = s.closureFrontier[:0]
+
+	// Merge every child closure into the 16 positional accumulator buckets.
+	// gen/epoch are hoisted and the scratch backing is pinned so the per-element
+	// dedup+append is a tight inlined loop (no call, no per-element bounds grow —
+	// reset(strBound) pre-sized gen). Build nodes queue for leaf expansion.
+	gen := s.tjc.closure.gen
+	epoch := s.tjc.closure.epoch
+	scratch := &s.buckets.scratch
+	frontier := s.closureFrontier[:0]
 
 	if abs.isBuild() {
-		s.closureFrontier = append(s.closureFrontier, abs)
+		frontier = append(frontier, abs)
 	}
 
-	sc.forEachResolvedChildID(abs, func(ch VFS) {
-		if ch == abs {
-			return
-		}
+	children, _ := s.cachedChildren(abs)
 
-		if sc.windowSubsumed(ch) {
-			return
+	for _, ch := range children {
+		if ch == abs || sc.windowSubsumed(ch) {
+			continue
 		}
 
 		cl, _ := s.closure(ch)
 
-		sc.foldInto(&s.buckets.scratch[cl.self.strID()&(closureBuckets-1)], cl.self)
+		if sid := cl.self.strID(); gen[sid] != epoch {
+			gen[sid] = epoch
+			r := sid & (closureBuckets - 1)
+			scratch[r] = append(scratch[r], cl.self)
 
-		for n, b := range cl.buckets {
-			dst := &s.buckets.scratch[n]
-
-			for _, v := range b {
-				sc.foldInto(dst, v)
+			if cl.self.isBuild() {
+				frontier = append(frontier, cl.self)
 			}
 		}
-	})
 
-	for i := 0; i < len(s.closureFrontier); i++ {
-		for _, leaf := range s.codegen.closureLeaves(s.closureFrontier[i]) {
-			sc.foldInto(&s.buckets.scratch[leaf.strID()&(closureBuckets-1)], leaf)
+		for n, b := range cl.buckets {
+			if len(b) == 0 {
+				continue
+			}
+
+			dst := scratch[n]
+
+			for _, v := range b {
+				id := v.strID()
+
+				if gen[id] == epoch {
+					continue
+				}
+
+				gen[id] = epoch
+				dst = append(dst, v)
+
+				if v.isBuild() {
+					frontier = append(frontier, v)
+				}
+			}
+
+			scratch[n] = dst
 		}
 	}
 
+	for i := 0; i < len(frontier); i++ {
+		for _, leaf := range s.codegen.closureLeaves(frontier[i]) {
+			id := leaf.strID()
+
+			if gen[id] == epoch {
+				continue
+			}
+
+			gen[id] = epoch
+			r := id & (closureBuckets - 1)
+			scratch[r] = append(scratch[r], leaf)
+
+			if leaf.isBuild() {
+				frontier = append(frontier, leaf)
+			}
+		}
+	}
+
+	s.closureFrontier = frontier
+
 	s.putClosure(abs, s.buckets.internScratch(abs))
-}
-
-// foldInto appends v to the given accumulator bucket unless it is already in the
-// closure (shared IdSet). The caller resolves the destination bucket once — a
-// child bucket's elements all share the same strID nibble — so there is no
-// per-element rebucketing. Build nodes are queued for transitive leaf expansion.
-func (sc *ScanCtx) foldInto(dst *[]VFS, v VFS) {
-	s := sc.scanner
-
-	if !s.tjc.closure.addNew(v) {
-		return
-	}
-
-	*dst = append(*dst, v)
-
-	if v.isBuild() {
-		s.closureFrontier = append(s.closureFrontier, v)
-	}
 }
 
 func (sc *ScanCtx) ensureClosure(abs VFS) {
