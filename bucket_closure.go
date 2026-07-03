@@ -17,9 +17,10 @@ type Closure struct {
 // closure index lives on IncludeScanner instead, because the same file resolves
 // to a different closure per platform.
 type BucketCache struct {
-	chunks *BumpAllocator[[]VFS]
-	pool   *BumpAllocator[VFS]
-	intern *IntMap[[]VFS]
+	chunks  *BumpAllocator[[]VFS]
+	pool    *BumpAllocator[VFS]
+	intern  *IntMap[[]VFS]
+	scratch [closureBuckets][]VFS
 }
 
 func newBucketCache() *BucketCache {
@@ -46,49 +47,49 @@ func bucketHash(elems []VFS) uint64 {
 
 // internBucket hash-conses a bucket's contents into the shared pool, returning
 // the shared slice so identical buckets across closures share one backing.
-func (s *IncludeScanner) internBucket(elems []VFS) []VFS {
-	cell, found := s.buckets.intern.cell(bucketHash(elems))
+func (c *BucketCache) internBucket(elems []VFS) []VFS {
+	cell, found := c.intern.cell(bucketHash(elems))
 	if found {
 		return *cell
 	}
 
-	slice := s.buckets.pool.list(elems...)
+	slice := c.pool.list(elems...)
 	*cell = slice
 
 	return slice
 }
 
-func (s *IncludeScanner) storeBuckets(self VFS, rest []VFS) Closure {
-	for r := range s.bktScratch {
-		s.bktScratch[r] = s.bktScratch[r][:0]
+func (c *BucketCache) storeBuckets(self VFS, rest []VFS) Closure {
+	for r := range c.scratch {
+		c.scratch[r] = c.scratch[r][:0]
 	}
 
 	for _, v := range rest {
 		r := v.strID() & (closureBuckets - 1)
-		s.bktScratch[r] = append(s.bktScratch[r], v)
+		c.scratch[r] = append(c.scratch[r], v)
 	}
 
 	n := 0
 
 	for r := 0; r < closureBuckets; r++ {
-		if len(s.bktScratch[r]) > 0 {
+		if len(c.scratch[r]) > 0 {
 			n++
 		}
 	}
 
-	buckets := s.buckets.chunks.alloc(n)
+	buckets := c.chunks.alloc(n)
 	k := 0
 
 	for r := 0; r < closureBuckets; r++ {
-		if len(s.bktScratch[r]) == 0 {
+		if len(c.scratch[r]) == 0 {
 			continue
 		}
 
-		buckets[k] = s.internBucket(s.bktScratch[r])
+		buckets[k] = c.internBucket(c.scratch[r])
 		k++
 	}
 
-	s.buckets.chunks.commit(n)
+	c.chunks.commit(n)
 
 	return Closure{self: self, buckets: buckets[:n:n]}
 }
