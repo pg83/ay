@@ -1,5 +1,14 @@
 package main
 
+// Closure is both the stored form of an include closure and the view over it:
+// a root file (self) plus the non-empty residue buckets of its transitive
+// closure. Each bucket is a hash-consed []VFS shared through BucketCache; the
+// per-closure bucket slice is bump-allocated, so the struct itself is thin.
+type Closure struct {
+	self    VFS
+	buckets [][]VFS
+}
+
 func (cl Closure) len() int {
 	n := 0
 
@@ -32,6 +41,16 @@ func (cl Closure) collect(keep func(VFS) bool) []VFS {
 	})
 
 	return out
+}
+
+func (cl Closure) spliceInto(cs *IdSet, block []VFS, k int) int {
+	k = cs.spliceOne(cl.self, block, k)
+
+	for _, b := range cl.buckets {
+		k = cs.spliceNew(b, block, k)
+	}
+
+	return k
 }
 
 // eachBucketVFS / collectBucketVFS operate on a closure's bucket chunks
