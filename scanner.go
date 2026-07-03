@@ -380,7 +380,7 @@ func (sc *ScanCtx) closureOf(abs VFS) ClosureView {
 		ref, _ = s.cachedClosure(abs)
 	}
 
-	return s.view(s.subgraphClosures[ref], true)
+	return s.view(s.subgraphClosures[ref])
 }
 
 func (s *IncludeScanner) closureWindow(ref ClosureRef) []VFS {

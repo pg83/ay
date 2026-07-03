@@ -308,8 +308,9 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 
 	walkOne := func(rel string) {
 		buildRootPath := copyFileOutputVFS(instance.Path.rel(), rel)
+		cv := walkClosure(e.scanner, buildRootPath, scanCfg)
 
-		walkClosureTail(e.scanner, buildRootPath, scanCfg).each(func(v VFS) { out = append(out, v) })
+		eachBucketVFS(cv.buckets[:], func(v VFS) { out = append(out, v) })
 	}
 
 	walkInput := func(rel string) {
@@ -359,7 +360,9 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 				continue
 			}
 
-			walkClosureTail(e.scanner, copyFileOutputVFS(instance.Path.rel(), f.string()), scanCfg).each(func(v VFS) {
+			cv := walkClosure(e.scanner, copyFileOutputVFS(instance.Path.rel(), f.string()), scanCfg)
+
+			eachBucketVFS(cv.buckets[:], func(v VFS) {
 				if v.isSource() {
 					out = append(out, v)
 				}
@@ -389,19 +392,21 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 		candidate := build(target.string())
 
 		var sub ClosureView
+		selfIsInput := false
 
 		switch info := reg.lookup(candidate); {
 		case info != nil:
 
-			sub = walkClosureTail(e.scanner, info.OutputPath, scanCfg)
+			sub = walkClosure(e.scanner, info.OutputPath, scanCfg)
 		case fullSourceClosure && ctx.fs.isFile(srcRootVFS, target.string()):
 
 			sub = walkClosure(e.scanner, source(target.string()), scanCfg)
+			selfIsInput = true
 		default:
 			continue
 		}
 
-		sub.each(func(v VFS) {
+		process := func(v VFS) {
 			if !keep(v) {
 				return
 			}
@@ -421,7 +426,13 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 					pbhSeen[sibBase] = true
 				}
 			}
-		})
+		}
+
+		if selfIsInput {
+			process(sub.self)
+		}
+
+		eachBucketVFS(sub.buckets[:], process)
 	}
 
 	if len(out) == 0 {

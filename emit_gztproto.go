@@ -15,7 +15,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 	genProtoName := base + ".proto"
 	genProto := build(moddir, "/", genProtoName)
 	converterRef, converterBin := ctx.tool(argDictGazetteerConverter)
-	imports := walkClosureTail(e.scanner, gztSource, protoWalkInputs(ctx.parsers, protoInclude, moddir))
+	imports := walkClosure(e.scanner, gztSource, protoWalkInputs(ctx.parsers, protoInclude, moddir))
 	inducedProtos := gztConverterInducedProtos(ctx)
 	na := ctx.emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -44,7 +44,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 
 	sourceInputs = append(sourceInputs, gztSource)
 
-	imports.each(func(v VFS) {
+	eachBucketVFS(imports.buckets[:], func(v VFS) {
 		if v.isSource() && extIsGztproto(v.rel()) {
 			sourceInputs = append(sourceInputs, v)
 		}

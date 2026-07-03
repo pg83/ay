@@ -205,7 +205,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR) {
 	}
 
 	inputs := []VFS{protocBinary, pbPyWrapperVFS, protoSrcVFS}
-	transitive := walkClosureTail(e.scanner, source(protoRelPath), protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
+	transitive := walkClosure(e.scanner, source(protoRelPath), protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
 
 	inputs = append(inputs, producerSourceInputs...)
 
@@ -244,7 +244,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR) {
 	}
 
 	pyPBRef := ctx.emit.emitNode(pyPBNode)
-	sourceInputs := pyProtoSourceInputs(inputs, transitive)
+	sourceInputs := pyProtoSourceInputs(inputs, transitive.buckets[:])
 	keyBase := protoPythonResourceKeyBase(instance, d, src)
 
 	tokenFor := func(out VFS) STR {

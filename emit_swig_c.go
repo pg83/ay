@@ -43,9 +43,9 @@ func (e *EmitContext) emitSwigC() {
 		srcVFS := source(instance.Path.rel(), "/", stmt.Src)
 		cOutVFS := build(instance.Path.rel(), "/", cOutRel)
 		pyOutVFS := build(instance.Path.rel(), "/", pyOutRel)
-		cv := walkClosureTail(e.scanner, srcVFS, newScanContext(ctx.parsers, swigAddIncls, nil, includeScannerBasePaths(), instance.Path.rel()))
+		cv := walkClosure(e.scanner, srcVFS, newScanContext(ctx.parsers, swigAddIncls, nil, includeScannerBasePaths(), instance.Path.rel()))
 		inputs := na.inputList(na.vfsList(bldContribToolsSwigSwig, srcVFS), cv.buckets[:]...)
-		swigClosure := cv.collect(func(VFS) bool { return true })
+		swigClosure := collectBucketVFS(cv.buckets[:], func(VFS) bool { return true })
 
 		cmdArgs := na.chunkList(na.strList(swigBin.str()), swigConstArgs, na.strList(internStr(swigModuleName(stmt.Module)),
 			argInterface.str(),

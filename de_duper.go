@@ -73,23 +73,26 @@ func (dd *DeDuper) filterSeen(list []VFS) []VFS {
 	return list
 }
 
-func dedupClosure(extra []VFS, cvs ...ClosureView) []VFS {
+// dedupClosure dedups extra plus the elements of every bucket group (a
+// closure's cv.buckets[:], i.e. without self). Callers that want a closure's
+// self add it to extra.
+func dedupClosure(extra []VFS, groups ...[][]VFS) []VFS {
 	deduper.reset()
 
 	var out []VFS
 
-	for _, v := range extra {
+	add := func(v VFS) {
 		if deduper.add(v.strID()) {
 			out = append(out, v)
 		}
 	}
 
-	for _, cv := range cvs {
-		cv.each(func(v VFS) {
-			if deduper.add(v.strID()) {
-				out = append(out, v)
-			}
-		})
+	for _, v := range extra {
+		add(v)
+	}
+
+	for _, g := range groups {
+		eachBucketVFS(g, add)
 	}
 
 	return out

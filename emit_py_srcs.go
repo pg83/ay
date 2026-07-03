@@ -689,7 +689,7 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 		}
 
 		r, o := e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(e.pyResEntriesFor(ps)), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) ClosureView {
-			return e.rawAuxInputClosure(aux, pyProtoSourceInputs(inputs, ClosureView{}), ref)
+			return e.rawAuxInputClosure(aux, pyProtoSourceInputs(inputs, nil), ref)
 		}})
 
 		refs = append(refs, r...)
@@ -835,8 +835,8 @@ type PyGenResEntry struct {
 	inputs []VFS
 }
 
-func pyProtoSourceInputs(inputs []VFS, extra ClosureView) []VFS {
-	out := make([]VFS, 0, len(inputs)+extra.len())
+func pyProtoSourceInputs(inputs []VFS, extra [][]VFS) []VFS {
+	out := make([]VFS, 0, len(inputs))
 
 	deduper.reset()
 
@@ -856,7 +856,7 @@ func pyProtoSourceInputs(inputs []VFS, extra ClosureView) []VFS {
 		keep(input)
 	}
 
-	extra.each(keep)
+	eachBucketVFS(extra, keep)
 
 	return out
 }

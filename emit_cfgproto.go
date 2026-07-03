@@ -10,7 +10,7 @@ func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 	configPluginLDRef, configPluginBinary := ctx.tool(argLibraryCppProtoConfigPlugin)
 	cfgRelPath := protoSourceRelPath(ctx.fs, instance, d, src.string())
 	cfgSource := source(cfgRelPath)
-	cfgImports := walkClosureTail(e.scanner, cfgSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
+	cfgImports := walkClosure(e.scanner, cfgSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
 	directImports := protoDirectPbHIncludes(ctx.parsers, cfgRelPath, protoCPPOutRoot(d))
 	configIncludes := ctx.parsers.sourceParsedBuckets(cfgSource, nil).bucket(parsedIncludesProtoConfig)
 	extras := pbHEmitsIncludesExtras()
@@ -20,7 +20,7 @@ func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 	cfgHParsed = append(cfgHParsed, configIncludes...)
 	cfgHParsed = append(cfgHParsed, extras...)
 
-	cfgImports.each(func(ti VFS) {
+	eachBucketVFS(cfgImports.buckets[:], func(ti VFS) {
 		cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: internStr(ti.rel())})
 	})
 

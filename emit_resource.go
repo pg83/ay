@@ -601,7 +601,9 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 			it := ResourceItem{Path: entry.Path, Key: entry.Key, Input: r.Input}
 
 			if r.ProducerRef != 0 {
-				walkClosureTail(e.scanner, r.Input, d.cc.ScanCfg).each(func(v VFS) {
+				cv := walkClosure(e.scanner, r.Input, d.cc.ScanCfg)
+
+				eachBucketVFS(cv.buckets[:], func(v VFS) {
 					if v.isBuild() {
 						it.Aux = append(it.Aux, v)
 					}

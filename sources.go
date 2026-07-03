@@ -42,13 +42,6 @@ func walkClosure(scanner *IncludeScanner, vfsPath VFS, cfg ScanContext) ClosureV
 	return sc.closureOf(vfsPath)
 }
 
-func walkClosureTail(scanner *IncludeScanner, vfsPath VFS, cfg ScanContext) ClosureView {
-	cv := walkClosure(scanner, vfsPath, cfg)
-	cv.self = 0
-
-	return cv
-}
-
 func rewriteClosureCPSource(scanner *IncludeScanner, cv ClosureView) []VFS {
 	out := cv.collect(func(VFS) bool { return true })
 
