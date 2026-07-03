@@ -72,11 +72,13 @@ func keepOnlySourceVFS(out []VFS) []VFS {
 	return w
 }
 
+var includeScannerBasePathsSlice = []VFS{
+	v,
+	bld,
+	contribLibsLinuxHeaders,
+	contribLibsLinuxHeadersNf,
+}
+
 func includeScannerBasePaths() []VFS {
-	return []VFS{
-		v,
-		bld,
-		contribLibsLinuxHeaders,
-		contribLibsLinuxHeadersNf,
-	}
+	return includeScannerBasePathsSlice
 }

@@ -817,12 +817,6 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 		includeRoot = cppOutRoot
 	}
 
-	cppOutArg := ":$(B)/" + cppOutRoot
-
-	if liteHeaders {
-		cppOutArg = "proto_h=true" + cppOutArg
-	}
-
 	mid := make([]STR, 0, 12+len(protoInclude)+len(extraProtocFlags))
 
 	mid = append(mid,
@@ -842,11 +836,19 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 		mid = append(mid, internV("-I=", p.string()))
 	}
 
-	mid = append(mid,
-		argIB2.str(),
-		argISContribLibsProtobufSrc.str(),
-		internV("--cpp_out=", cppOutArg),
-	)
+	if liteHeaders {
+		mid = append(mid,
+			argIB2.str(),
+			argISContribLibsProtobufSrc.str(),
+			internV("--cpp_out=proto_h=true:$(B)/", cppOutRoot),
+		)
+	} else {
+		mid = append(mid,
+			argIB2.str(),
+			argISContribLibsProtobufSrc.str(),
+			internV("--cpp_out=:$(B)/", cppOutRoot),
+		)
+	}
 
 	mid = appendArgStr(mid, extraProtocFlags)
 
