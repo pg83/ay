@@ -317,6 +317,25 @@ func reportPerfStats(ctx *GenCtx, parsers *IncludeParserManager, targetScanner, 
 
 	reportScanner("target", targetScanner)
 	reportScanner("host", hostScanner)
+
+	reportBuckets := func(label string, scanner *IncludeScanner) {
+		var uniqElems, totalClosureElems int64
+		for _, b := range scanner.bucketList {
+			uniqElems += int64(len(b))
+		}
+		for _, bc := range scanner.subgraphClosures {
+			totalClosureElems++
+			for r := 0; r < closureBuckets; r++ {
+				totalClosureElems += int64(len(scanner.bucketList[bc.buckets[r]]))
+			}
+		}
+		fmt.Fprintf(os.Stderr, "perf: buckets %s closures=%d uniqueBuckets=%d uniqueElems=%d totalClosureElems=%d (%.1f%% saved)\n",
+			label, len(scanner.subgraphClosures), len(scanner.bucketList), uniqElems, totalClosureElems,
+			100*(1-float64(uniqElems)/float64(totalClosureElems)))
+	}
+
+	reportBuckets("target", targetScanner)
+	reportBuckets("host", hostScanner)
 }
 
 func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), testMode bool) NodeRef {
@@ -381,6 +400,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	}
 
 	reportPerfStats(ctx, parsers, targetScanner, hostScanner)
+	closureDump.close()
 
 	return root.LDRef
 }

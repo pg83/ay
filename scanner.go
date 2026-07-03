@@ -51,7 +51,12 @@ func (d IncludeDirective) cythonProbe() bool {
 type IncludeScanner struct {
 	sysincl                *SysinclCtx
 	parsers                *IncludeParserManager
-	subgraphClosures       [][]VFS
+	subgraphClosures       []BucketClosure
+	bucketList             [][]VFS
+	bucketPool             *BumpAllocator[VFS]
+	bucketIntern           *IntMap[uint32]
+	bktScratch             [closureBuckets][]VFS
+	reconstructBuf         []VFS
 	closureArena           *BumpAllocator[VFS]
 	scanCache              DenseMap3[STR, []VFS, ClosureRef, bool]
 	searchTierFlat         *IntMap[VFS]
@@ -133,7 +138,10 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 		parsers: parsers,
 		onWarn:  onWarn,
 
-		subgraphClosures: make([][]VFS, 1, 256),
+		subgraphClosures: make([]BucketClosure, 1, 256),
+		bucketList:       make([][]VFS, 1, 4096),
+		bucketPool:       newBumpAllocator[VFS](1 << 19),
+		bucketIntern:     newIntMap[uint32](1 << 16),
 		closureArena:     newBumpAllocator[VFS](closureArenaInitial),
 		childArena:       newBumpAllocator[VFS](1 << 12),
 		searchTierFlat:   newIntMap[VFS](4096),
@@ -363,7 +371,7 @@ func (sc *ScanCtx) dfs(abs VFS) {
 			return
 		}
 
-		sc.closureOf(ch)
+		sc.ensureClosure(ch)
 	})
 
 	s.tjc.closure.reset(strBound())
@@ -374,6 +382,8 @@ func (sc *ScanCtx) dfs(abs VFS) {
 	s.tjc.closure.add(abs)
 	block[k] = abs
 	k++
+
+	var crefs []ClosureRef
 
 	sc.forEachResolvedChildID(abs, func(ch VFS) {
 		if ch == abs {
@@ -386,6 +396,10 @@ func (sc *ScanCtx) dfs(abs VFS) {
 
 		cref, _ := s.cachedClosure(ch)
 
+		if closureDump != nil {
+			crefs = append(crefs, cref)
+		}
+
 		k = s.tjc.closure.spliceNew(s.closureWindow(cref), block, k)
 	})
 
@@ -395,12 +409,24 @@ func (sc *ScanCtx) dfs(abs VFS) {
 		}
 	}
 
-	s.closureArena.commit(k)
-
 	ref := ClosureRef(len(s.subgraphClosures))
 
-	s.subgraphClosures = append(s.subgraphClosures, block[:k])
+	s.subgraphClosures = append(s.subgraphClosures, s.storeBuckets(block[0], block[1:k]))
 	s.putClosure(abs, ref)
+
+	if closureDump != nil {
+		closureDump.recordClosure(s, ref, abs.strID(), block[:k], crefs)
+	}
+}
+
+func (sc *ScanCtx) ensureClosure(abs VFS) {
+	s := sc.scanner
+
+	if _, ok := s.cachedClosure(abs); ok {
+		s.subgraphHits++
+	} else {
+		sc.dfs(abs)
+	}
 }
 
 func (sc *ScanCtx) closureOf(abs VFS) []VFS {
@@ -415,13 +441,12 @@ func (sc *ScanCtx) closureOf(abs VFS) []VFS {
 		ref, _ = s.cachedClosure(abs)
 	}
 
-	w := s.subgraphClosures[ref]
-
-	return w
+	return s.reconstruct(s.subgraphClosures[ref], nil)
 }
 
 func (s *IncludeScanner) closureWindow(ref ClosureRef) []VFS {
-	return s.subgraphClosures[ref]
+	s.reconstructBuf = s.reconstruct(s.subgraphClosures[ref], s.reconstructBuf)
+	return s.reconstructBuf
 }
 
 func (sc *ScanCtx) windowSubsumed(ch VFS) bool {
@@ -465,11 +490,13 @@ func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 		}
 	}
 
-	s.closureArena.commit(k)
-
 	ref := ClosureRef(len(s.subgraphClosures))
 
-	s.subgraphClosures = append(s.subgraphClosures, block[:k])
+	s.subgraphClosures = append(s.subgraphClosures, s.storeBuckets(block[0], block[1:k]))
+
+	if closureDump != nil {
+		closureDump.recordClosure(s, ref, members[0].strID(), block[:k], nil)
+	}
 
 	s.subgraphMisses += uint64(len(members))
 

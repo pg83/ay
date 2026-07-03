@@ -67,6 +67,11 @@ var commands = []Command{
 			"Args: [count] [size-bytes]. Prints ns/op for each.",
 	},
 	{
+		path: []string{"dev", "perf", "merge"}, run: cmdPerfMerge,
+		help: "🔀 Benchmark closure merge strategies on a live dump (AY_CLOSURE_DUMP):\n" +
+			"gen-set splice vs N-way sorted-merge. Arg: <dump-prefix>.",
+	},
+	{
 		path: []string{"dev", "perf", "splice"}, run: cmdPerfSplice,
 		help: "🪢 Benchmark IdSet.spliceNew closure-window dedup: scalar vs AVX512 vs\n" +
 			"prefetch, over random array merges. Args: [merges] [max-element] (max-element\n" +
