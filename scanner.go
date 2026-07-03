@@ -47,6 +47,7 @@ type IncludeScanner struct {
 	parsers          *IncludeParserManager
 	buckets          *BucketCache
 	closures         DenseMap[STR, Closure]
+	closureFrontier  []VFS
 	closureArena     *BumpAllocator[VFS]
 	scanCache        DenseMap3[STR, []VFS, uint32, bool]
 	searchTierFlat   *IntMap[VFS]
@@ -323,13 +324,13 @@ func (sc *ScanCtx) dfs(abs VFS) {
 	})
 
 	s.tjc.closure.reset(strBound())
-
-	block := s.closureArena.alloc(closureAllocHint)
-	k := 0
-
 	s.tjc.closure.add(abs)
-	block[k] = abs
-	k++
+	s.buckets.resetScratch()
+	s.closureFrontier = s.closureFrontier[:0]
+
+	if abs.isBuild() {
+		s.closureFrontier = append(s.closureFrontier, abs)
+	}
 
 	sc.forEachResolvedChildID(abs, func(ch VFS) {
 		if ch == abs {
@@ -342,16 +343,42 @@ func (sc *ScanCtx) dfs(abs VFS) {
 
 		cl, _ := s.closure(ch)
 
-		k = cl.spliceInto(&s.tjc.closure, block, k)
+		sc.foldInto(&s.buckets.scratch[cl.self.strID()&(closureBuckets-1)], cl.self)
+
+		for n, b := range cl.buckets {
+			dst := &s.buckets.scratch[n]
+
+			for _, v := range b {
+				sc.foldInto(dst, v)
+			}
+		}
 	})
 
-	for i := 0; i < k; i++ {
-		if block[i].isBuild() {
-			k = s.tjc.closure.spliceNew(s.codegen.closureLeaves(block[i]), block, k)
+	for i := 0; i < len(s.closureFrontier); i++ {
+		for _, leaf := range s.codegen.closureLeaves(s.closureFrontier[i]) {
+			sc.foldInto(&s.buckets.scratch[leaf.strID()&(closureBuckets-1)], leaf)
 		}
 	}
 
-	s.putClosure(abs, s.buckets.storeBuckets(block[0], block[1:k]))
+	s.putClosure(abs, s.buckets.internScratch(abs))
+}
+
+// foldInto appends v to the given accumulator bucket unless it is already in the
+// closure (shared IdSet). The caller resolves the destination bucket once — a
+// child bucket's elements all share the same strID nibble — so there is no
+// per-element rebucketing. Build nodes are queued for transitive leaf expansion.
+func (sc *ScanCtx) foldInto(dst *[]VFS, v VFS) {
+	s := sc.scanner
+
+	if !s.tjc.closure.addNew(v) {
+		return
+	}
+
+	*dst = append(*dst, v)
+
+	if v.isBuild() {
+		s.closureFrontier = append(s.closureFrontier, v)
+	}
 }
 
 func (sc *ScanCtx) ensureClosure(abs VFS) {

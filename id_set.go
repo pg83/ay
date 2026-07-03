@@ -55,6 +55,31 @@ func (s *IdSet) add(v VFS) {
 	s.gen[id] = s.epoch
 }
 
+func (s *IdSet) addNew(v VFS) bool {
+	id := v.strID()
+
+	if id >= uint32(len(s.gen)) {
+		grown := uint32(len(s.gen)) * 2
+
+		if grown <= id {
+			grown = id + 1
+		}
+
+		g := make([]uint16, grown)
+
+		copy(g, s.gen)
+		s.gen = g
+	}
+
+	if s.gen[id] == s.epoch {
+		return false
+	}
+
+	s.gen[id] = s.epoch
+
+	return true
+}
+
 func (s *IdSet) spliceOne(v VFS, block []VFS, k int) int {
 	id := v.strID()
 
