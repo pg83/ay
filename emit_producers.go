@@ -46,7 +46,7 @@ func runInputBuildCandidate(modulePath, rel string) VFS {
 		return 0
 	}
 
-	return build(filepath.ToSlash(filepath.Clean(modulePath + "/" + rel)))
+	return buildJoinClean(modulePath, rel)
 }
 
 func rootedBuildCandidate(modulePath, rel string) VFS {
@@ -144,7 +144,11 @@ func (e *EmitContext) srcPositionIns(tok STR) []VFS {
 		outputRoot := protoCPPOutRoot(e.d)
 
 		for _, name := range protoDirectImportNames(e.ctx.parsers, rel) {
-			clean := filepath.ToSlash(filepath.Clean(name))
+			clean := name
+
+			if name == "" || !pathIsClean(name) {
+				clean = filepath.ToSlash(filepath.Clean(name))
+			}
 
 			ins = append(ins, build(clean))
 

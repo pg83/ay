@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/md5"
 	enchex "encoding/hex"
-	"path/filepath"
 	"strings"
 )
 
@@ -186,7 +185,7 @@ func protoNamespaceContribs(d *ModuleData) []VFS {
 	var own []VFS
 
 	if d.protoNamespace != nil {
-		own = []VFS{source(filepath.ToSlash(filepath.Clean(d.protoNamespace.string())))}
+		own = []VFS{sourceClean(d.protoNamespace.string())}
 	}
 
 	return append(own, d.protoAddInclGlobal...)
