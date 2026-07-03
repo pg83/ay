@@ -214,7 +214,7 @@ type ResourceItem struct {
 type ResourcePack struct {
 	Tag        STR
 	Items      []ResourceItem
-	RawClosure func(aux VFS, inputs []VFS, ref NodeRef) []VFS
+	RawClosure func(aux VFS, inputs []VFS, ref NodeRef) ClosureView
 }
 
 func resourceChunkEnds(items []ResourceItem, objcopy bool) []int {
@@ -476,6 +476,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		aux := build(instance.Path.rel(), "/", hash, "_raw.auxcpp")
 		auxRef := ctx.emit.reserve()
 		auxClosure := p.RawClosure(aux, adjacent, auxRef)
+		auxLen := auxClosure.len()
 		nodeCmd := make([]STR, 0, 2+2*len(chunk))
 
 		nodeCmd = append(nodeCmd, internStr(rescompilerBinPath), aux.str())
@@ -497,21 +498,21 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 			deduper.add(v.strID())
 		}
 
-		tail := make([]VFS, 0, 1+len(auxClosure))
+		tail := make([]VFS, 0, 1+auxLen)
 
 		if deduper.add(rescompilerBinVFS.strID()) {
 			tail = append(tail, rescompilerBinVFS)
 		}
 
-		for _, v := range auxClosure {
+		auxClosure.each(func(v VFS) {
 			if v == aux {
-				continue
+				return
 			}
 
 			if deduper.add(v.strID()) {
 				tail = append(tail, v)
 			}
-		}
+		})
 
 		ctx.emit.emitReservedNode(Node{
 			Platform:     instance.Platform,
@@ -600,11 +601,11 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 			it := ResourceItem{Path: entry.Path, Key: entry.Key, Input: r.Input}
 
 			if r.ProducerRef != 0 {
-				for _, v := range walkClosureTail(e.scanner, r.Input, d.cc.ScanCfg).flat() {
+				walkClosureTail(e.scanner, r.Input, d.cc.ScanCfg).each(func(v VFS) {
 					if v.isBuild() {
 						it.Aux = append(it.Aux, v)
 					}
-				}
+				})
 
 				for _, v := range r.SourceInputs {
 					if v.isSource() && objcopySourceLeafKept(v.rel()) {

@@ -137,7 +137,7 @@ func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs) (NodeRef, VFS) {
 	in.ExtraDepRefs = resolveCodegenDepRefsInclView(ctx, instance, ctx.na, in.IncludeView)
 
 	if len(d.cythonCpp) > 0 {
-		in.IncludeInputs = e.cythonCompileInducedInputs(in.IncludeView.flat())
+		in.IncludeInputs = e.cythonCompileInducedInputs(in.IncludeView)
 		in.IncludeView = ClosureView{}
 	}
 

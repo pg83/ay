@@ -10,19 +10,19 @@ func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 	configPluginLDRef, configPluginBinary := ctx.tool(argLibraryCppProtoConfigPlugin)
 	cfgRelPath := protoSourceRelPath(ctx.fs, instance, d, src.string())
 	cfgSource := source(cfgRelPath)
-	cfgImports := walkClosureTail(e.scanner, cfgSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel())).flat()
+	cfgImports := walkClosureTail(e.scanner, cfgSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
 	directImports := protoDirectPbHIncludes(ctx.parsers, cfgRelPath, protoCPPOutRoot(d))
 	configIncludes := ctx.parsers.sourceParsedBuckets(cfgSource, nil).bucket(parsedIncludesProtoConfig)
 	extras := pbHEmitsIncludesExtras()
-	cfgHParsed := make([]IncludeDirective, 0, len(directImports)+len(configIncludes)+len(extras)+len(cfgImports))
+	cfgHParsed := make([]IncludeDirective, 0, len(directImports)+len(configIncludes)+len(extras)+cfgImports.len())
 
 	cfgHParsed = append(cfgHParsed, directImports...)
 	cfgHParsed = append(cfgHParsed, configIncludes...)
 	cfgHParsed = append(cfgHParsed, extras...)
 
-	for _, ti := range cfgImports {
+	cfgImports.each(func(ti VFS) {
 		cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: internStr(ti.rel())})
-	}
+	})
 
 	e.emitCppProtoFamilySource(meta, &ProtoSpec{
 		kv:          &cfgprotoKV,

@@ -302,9 +302,9 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		genProtoParsed = info.ParsedIncludes
 	}
 
-	transitiveImports := walkClosureTail(e.scanner, protoVFS, protoWalkInputs(ctx.parsers, protoSearchPaths, instance.Path.rel())).flat()
+	transitiveImports := walkClosureTail(e.scanner, protoVFS, protoWalkInputs(ctx.parsers, protoSearchPaths, instance.Path.rel()))
 
-	extraProtoDeps = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, transitiveImports, extraProtoDeps...)
+	extraProtoDeps = resolveCodegenDepRefsInclView(ctx, instance, ctx.na, transitiveImports, extraProtoDeps...)
 
 	pbRef := emitPB(
 		instance, protoRelPath, protoSrcOverride, pe.cppStyleguideLDRef, pe.protocLDRef,
@@ -395,18 +395,18 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	}
 
 	extras := pbHEmitsIncludesExtras()
-	pbHParsed := make([]IncludeDirective, 0, len(pbHImports)+len(extras)+len(transitiveImports))
+	pbHParsed := make([]IncludeDirective, 0, len(pbHImports)+len(extras)+transitiveImports.len())
 
 	pbHParsed = append(pbHParsed, pbHImports...)
 	pbHParsed = append(pbHParsed, extras...)
 
-	for _, ti := range transitiveImports {
+	transitiveImports.each(func(ti VFS) {
 		if ti.isBuild() {
-			continue
+			return
 		}
 
 		pbHParsed = append(pbHParsed, IncludeDirective{kind: includeQuoted, target: internStr(ti.rel())})
-	}
+	})
 
 	pbGenRefs := []NodeRef{pe.protocLDRef, pe.cppStyleguideLDRef}
 
@@ -623,7 +623,7 @@ func emitPB(
 	moduleTag STR,
 	liteHeaders bool,
 	extraPlugins []ResolvedCPPProtoPlugin,
-	transitiveProtoImports []VFS,
+	transitiveProtoImports ClosureView,
 	extraDepRefs []NodeRef,
 	producerSourceInputs []VFS,
 	blocks *PbArgBlocks,
@@ -711,7 +711,7 @@ func emitPB(
 			Env: env}),
 		Env: env,
 
-		Inputs:         na.inputList(inputs, transitiveProtoImports, producerSourceInputs),
+		Inputs:         na.inputList(inputs, append([][]VFS{producerSourceInputs}, transitiveProtoImports.buckets[:]...)...),
 		Outputs:        outputs,
 		KV:             spec.kv,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

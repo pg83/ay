@@ -148,7 +148,7 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 		srcRel := src.string()
 		protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcRel)
 		protoVFS := source(protoRelPath)
-		imports := walkClosureTail(scanner, protoVFS, scanCfg).flat()
+		imports := walkClosureTail(scanner, protoVFS, scanCfg)
 		descOut := build(descProtoOutputRel(instance.Path.rel(), srcRel, protoRelPath))
 		rawprotoOut := build(protoRelPath, ".", hash, ".rawproto")
 
@@ -162,9 +162,9 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 		addSourceInput(descRawprotoWrapperVFS)
 		addSourceInput(protoVFS)
 
-		for _, im := range imports {
+		imports.each(func(im VFS) {
 			addSourceInput(im)
-		}
+		})
 	}
 
 	prj := realPrjName(instance.Path.rel())
@@ -220,7 +220,7 @@ func descProtocIncludes(peerProtoAddIncl []VFS, cppOutRoot string) []STR {
 }
 
 func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath string,
-	descOut, rawprotoOut VFS, protocLDRef NodeRef, protocBinary VFS, mid []STR, imports []VFS) NodeRef {
+	descOut, rawprotoOut VFS, protocLDRef NodeRef, protocBinary VFS, mid []STR, imports ClosureView) NodeRef {
 	na := ctx.emit.nodeArenas()
 
 	head := na.strList(
@@ -251,7 +251,7 @@ func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath st
 			Cwd: strS,
 			Env: env}),
 		Env:            env,
-		Inputs:         na.inputList(inputs, imports),
+		Inputs:         na.inputList(inputs, imports.buckets[:]...),
 		KV:             &protoDescKV,
 		Outputs:        na.vfsList(descOut, rawprotoOut),
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

@@ -58,8 +58,7 @@ func (e *EmitContext) emitLibraryFlexSource(src STR) {
 	e.enqueueSrc(meta)
 
 	e.deferPass2(func() {
-		window := walkClosure(e.scanner, outVFS, d.cc.ScanCfg).flat()
-		lxClosure := keepOnlySourceVFS(window)
+		lxClosure := walkClosure(e.scanner, outVFS, d.cc.ScanCfg).collect(func(v VFS) bool { return v.isSource() })
 
 		emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef, ctx.emit)
 	})

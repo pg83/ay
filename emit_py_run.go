@@ -123,12 +123,12 @@ func (e *EmitContext) pyInputClosure(stmt *RunPythonStmt) []VFS {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	scanCfg := newScanContext(ctx.parsers, d.cc.AddIncl, d.cc.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 
-	var out []VFS
+	var walked []ClosureView
 
 	walkOne := func(rel string) {
 		buildRootPath := copyFileOutputVFS(instance.Path.rel(), rel)
 
-		out = append(out, walkClosureTail(e.scanner, buildRootPath, scanCfg).flat()...)
+		walked = append(walked, walkClosureTail(e.scanner, buildRootPath, scanCfg))
 	}
 
 	hasCCShard, _ := splitCodegenDetect(stmt)
@@ -137,7 +137,7 @@ func (e *EmitContext) pyInputClosure(stmt *RunPythonStmt) []VFS {
 		for _, f := range stmt.INFiles {
 			vfs := e.runProgramInputVFS(f.string())
 
-			out = append(out, walkClosure(e.scanner, vfs, scanCfg).flat()...)
+			walked = append(walked, walkClosure(e.scanner, vfs, scanCfg))
 		}
 	} else {
 		for _, f := range stmt.OUTFiles {
@@ -157,13 +157,7 @@ func (e *EmitContext) pyInputClosure(stmt *RunPythonStmt) []VFS {
 		}
 	}
 
-	if len(out) == 0 {
-		return nil
-	}
-
-	out = dedup(out, nil)
-
-	return out
+	return dedupClosure(nil, walked...)
 }
 
 func splitCodegenDetect(stmt *RunPythonStmt) (hasCCShard bool, hasHeader bool) {

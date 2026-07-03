@@ -50,11 +50,13 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 
 	cmdArgs = appendInternStrs(cmdArgs, buildCFGVars(ctx.fs, srcVFS.rel(), d.cc.SetVars, d.cc.DefaultVars, instance.Platform.BuildTypeUpperSTR.string()))
 
+	cv := walkClosure(e.scanner, srcVFS, d.cc.ScanCfg)
+
 	cfRef := ctx.emit.emitNode(Node{
 		Platform:     instance.Platform,
 		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
 		Env:          env,
-		Inputs:       na.inputList(na.vfsList(configureFilePyVFS), walkClosure(e.scanner, srcVFS, d.cc.ScanCfg).flat()),
+		Inputs:       na.inputList(na.vfsList(configureFilePyVFS, cv.self), cv.buckets[:]...),
 		KV:           &cfKV,
 		Outputs:      na.vfsList(outVFS),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

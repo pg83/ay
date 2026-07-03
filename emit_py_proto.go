@@ -205,9 +205,8 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR) {
 	}
 
 	inputs := []VFS{protocBinary, pbPyWrapperVFS, protoSrcVFS}
-	transitive := walkClosureTail(e.scanner, source(protoRelPath), protoWalkInputs(ctx.parsers, nil, instance.Path.rel())).flat()
+	transitive := walkClosureTail(e.scanner, source(protoRelPath), protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
 
-	inputs = append(inputs, transitive...)
 	inputs = append(inputs, producerSourceInputs...)
 
 	if d.grpc {
@@ -232,7 +231,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR) {
 		Platform:     instance.Platform,
 		Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Cwd: protoCwd, Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}}),
 		Env:          EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
-		Inputs:       na.inputList(inputs),
+		Inputs:       na.inputList(inputs, transitive.buckets[:]...),
 		Outputs:      outputs,
 		KV:           &pbNodeKV,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -245,7 +244,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR) {
 	}
 
 	pyPBRef := ctx.emit.emitNode(pyPBNode)
-	sourceInputs := pyProtoSourceInputs(inputs)
+	sourceInputs := pyProtoSourceInputs(inputs, transitive)
 	keyBase := protoPythonResourceKeyBase(instance, d, src)
 
 	tokenFor := func(out VFS) STR {
@@ -297,7 +296,7 @@ func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
 		peerAddIncl = dedup(cppSibling.AddInclGlobal, e.peers.SelfAddInclGlobal)
 	}
 
-	genRefs, genOuts := e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
+	genRefs, genOuts := e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) ClosureView {
 		return e.pyProtoAuxInputClosure(aux, inputs, ref, peerAddIncl)
 	}})
 
@@ -342,7 +341,7 @@ func protoPythonOutputRoot(d *ModuleData) string {
 	return ""
 }
 
-func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, peerAddIncl []VFS) []VFS {
+func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, peerAddIncl []VFS) ClosureView {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 	emits := make([]IncludeDirective, 0, len(seed))
@@ -362,11 +361,6 @@ func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, p
 	})
 
 	scanCfg := newScanContext(ctx.parsers, d.addIncl, peerAddIncl, includeScannerBasePaths(), instance.Path.rel())
-	closure := walkClosure(e.scanner, aux, scanCfg).flat()
 
-	if len(closure) == 0 {
-		return nil
-	}
-
-	return closure
+	return walkClosure(e.scanner, aux, scanCfg)
 }

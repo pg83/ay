@@ -15,7 +15,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 	genProtoName := base + ".proto"
 	genProto := build(moddir, "/", genProtoName)
 	converterRef, converterBin := ctx.tool(argDictGazetteerConverter)
-	imports := walkClosureTail(e.scanner, gztSource, protoWalkInputs(ctx.parsers, protoInclude, moddir)).flat()
+	imports := walkClosureTail(e.scanner, gztSource, protoWalkInputs(ctx.parsers, protoInclude, moddir))
 	inducedProtos := gztConverterInducedProtos(ctx)
 	na := ctx.emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -32,7 +32,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 			Env:     env,
 		}),
 		Env:            env,
-		Inputs:         na.inputList(inputs, imports),
+		Inputs:         na.inputList(inputs, imports.buckets[:]...),
 		Outputs:        []VFS{genProto},
 		KV:             &gztprotoKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -40,15 +40,15 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 	}
 
 	gzRef := ctx.emit.emitNode(node)
-	sourceInputs := make([]VFS, 0, 1+len(imports))
+	sourceInputs := make([]VFS, 0, 1+imports.len())
 
 	sourceInputs = append(sourceInputs, gztSource)
 
-	for _, v := range imports {
+	imports.each(func(v VFS) {
 		if v.isSource() && extIsGztproto(v.rel()) {
 			sourceInputs = append(sourceInputs, v)
 		}
-	}
+	})
 
 	e.codegen.register(&GeneratedFileInfo{
 		OutputPath:     genProto,

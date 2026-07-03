@@ -308,16 +308,14 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 
 	walkOne := func(rel string) {
 		buildRootPath := copyFileOutputVFS(instance.Path.rel(), rel)
-		sub := walkClosureTail(e.scanner, buildRootPath, scanCfg).flat()
 
-		out = append(out, sub...)
+		walkClosureTail(e.scanner, buildRootPath, scanCfg).each(func(v VFS) { out = append(out, v) })
 	}
 
 	walkInput := func(rel string) {
 		inputVFS := e.runProgramInputVFS(rel)
-		sub := walkClosure(e.scanner, inputVFS, scanCfg).flat()
 
-		out = append(out, sub...)
+		walkClosure(e.scanner, inputVFS, scanCfg).each(func(v VFS) { out = append(out, v) })
 	}
 
 	mainRel := prMainOutputRel(stmt)
@@ -361,11 +359,11 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 				continue
 			}
 
-			for _, v := range walkClosureTail(e.scanner, copyFileOutputVFS(instance.Path.rel(), f.string()), scanCfg).flat() {
+			walkClosureTail(e.scanner, copyFileOutputVFS(instance.Path.rel(), f.string()), scanCfg).each(func(v VFS) {
 				if v.isSource() {
 					out = append(out, v)
 				}
-			}
+			})
 		}
 	}
 
@@ -390,22 +388,22 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 
 		candidate := build(target.string())
 
-		var sub []VFS
+		var sub ClosureView
 
 		switch info := reg.lookup(candidate); {
 		case info != nil:
 
-			sub = walkClosureTail(e.scanner, info.OutputPath, scanCfg).flat()
+			sub = walkClosureTail(e.scanner, info.OutputPath, scanCfg)
 		case fullSourceClosure && ctx.fs.isFile(srcRootVFS, target.string()):
 
-			sub = walkClosure(e.scanner, source(target.string()), scanCfg).flat()
+			sub = walkClosure(e.scanner, source(target.string()), scanCfg)
 		default:
 			continue
 		}
 
-		for _, v := range sub {
+		sub.each(func(v VFS) {
 			if !keep(v) {
-				continue
+				return
 			}
 
 			out = append(out, v)
@@ -423,7 +421,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 					pbhSeen[sibBase] = true
 				}
 			}
-		}
+		})
 	}
 
 	if len(out) == 0 {

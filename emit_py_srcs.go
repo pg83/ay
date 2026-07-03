@@ -688,8 +688,8 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 			continue
 		}
 
-		r, o := e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(e.pyResEntriesFor(ps)), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) []VFS {
-			return e.rawAuxInputClosure(aux, pyProtoSourceInputs(inputs), ref)
+		r, o := e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(e.pyResEntriesFor(ps)), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) ClosureView {
+			return e.rawAuxInputClosure(aux, pyProtoSourceInputs(inputs, ClosureView{}), ref)
 		}})
 
 		refs = append(refs, r...)
@@ -699,7 +699,7 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 	return refs, outs
 }
 
-func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) []VFS {
+func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) ClosureView {
 	ctx, _, d := e.ctx, e.instance, e.d
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 	emits := make([]IncludeDirective, 0, len(seed))
@@ -722,13 +722,7 @@ func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) []VFS
 		Compile:        &CompileSpec{FlatOutput: d.flatSrc(aux.str()), ForceCxx: true, CFlags: concat(psc, []ARG{argX, argC})},
 	})
 
-	closure := walkClosure(e.scanner, aux, d.cc.ScanCfg).flat()
-
-	if len(closure) == 0 {
-		return nil
-	}
-
-	return closure
+	return walkClosure(e.scanner, aux, d.cc.ScanCfg)
 }
 
 type PyRegisterResult struct {
@@ -841,22 +835,28 @@ type PyGenResEntry struct {
 	inputs []VFS
 }
 
-func pyProtoSourceInputs(inputs []VFS) []VFS {
-	out := make([]VFS, 0, len(inputs))
+func pyProtoSourceInputs(inputs []VFS, extra ClosureView) []VFS {
+	out := make([]VFS, 0, len(inputs)+extra.len())
 
 	deduper.reset()
 
-	for _, input := range inputs {
+	keep := func(input VFS) {
 		if !input.isSource() {
-			continue
+			return
 		}
 
 		if !deduper.add(input.strID()) {
-			continue
+			return
 		}
 
 		out = append(out, input)
 	}
+
+	for _, input := range inputs {
+		keep(input)
+	}
+
+	extra.each(keep)
 
 	return out
 }

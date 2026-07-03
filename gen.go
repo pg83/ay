@@ -1822,19 +1822,6 @@ func filterBuildRootSelfPaths(instancePath string, peer, own []VFS) []VFS {
 	return out
 }
 
-func filterEnSerializedSiblings(in []VFS) []VFS {
-	out := make([]VFS, 0, len(in))
-
-	for _, p := range in {
-		if extIsEnumSerialized(p.rel()) {
-			continue
-		}
-
-		out = append(out, p)
-	}
-
-	return out
-}
 
 func mergeLDPlugins(own, peer *LdPluginsResult) *LdPluginsResult {
 	var ownRefs []NodeRef

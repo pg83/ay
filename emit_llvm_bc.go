@@ -38,11 +38,10 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		in := e.ccInputsFor(inputVFS)
 		bcOut := build(e.llvmBcRootRelArcSrc(src), stmt.Suffix, ".bc")
 		bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
-		closure := walkClosure(e.scanner, inputVFS, in.ScanCfg).flat()
-		deps := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, closure, depRefs(producer)...)
+		cv := walkClosure(e.scanner, inputVFS, in.ScanCfg)
+		deps := resolveCodegenDepRefsInclView(ctx, instance, ctx.na, cv, depRefs(producer)...)
 
-		allInputs := na.inputList(na.vfsList(clangWrapperVFS),
-			closure)
+		allInputs := na.inputList(na.vfsList(clangWrapperVFS, cv.self), cv.buckets[:]...)
 
 		for _, ch := range allInputs {
 			for _, v := range ch {

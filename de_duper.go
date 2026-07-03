@@ -73,6 +73,28 @@ func (dd *DeDuper) filterSeen(list []VFS) []VFS {
 	return list
 }
 
+func dedupClosure(extra []VFS, cvs ...ClosureView) []VFS {
+	deduper.reset()
+
+	var out []VFS
+
+	for _, v := range extra {
+		if deduper.add(v.strID()) {
+			out = append(out, v)
+		}
+	}
+
+	for _, cv := range cvs {
+		cv.each(func(v VFS) {
+			if deduper.add(v.strID()) {
+				out = append(out, v)
+			}
+		})
+	}
+
+	return out
+}
+
 func dedup[T idKey](lists ...[]T) []T {
 	total := 0
 
