@@ -540,7 +540,7 @@ func pyGenResourceItems(entries []PyGenResEntry) []ResourceItem {
 	for _, en := range entries {
 		key := "resfs/file/py/" + en.key
 		kvHash := "resfs/src/" + key + "=${rootrel;context=TEXT;input=TEXT:\"" + en.token + "\"}"
-		kvCmd := "resfs/src/" + key + "=" + en.path.rel()
+		kvCmd := internV("resfs/src/", key, "=", en.path.rel()).string()
 
 		items = append(items,
 			ResourceItem{Path: "-", Key: kvHash, Cmd: kvCmd, Input: en.path, Extra: en.inputs},
