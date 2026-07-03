@@ -812,15 +812,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	peerArchiveRefs := make([]NodeRef, 0, len(allPeers))
-	peerArchivePaths := make([]VFS, 0, len(allPeers))
 	peerGlobalRefs := make([]NodeRef, 0, len(allPeers))
 	peerGlobalPaths := make([]VFS, 0, len(allPeers))
 	peerWholeArchiveRefs := make([]NodeRef, 0, len(allPeers))
 	peerWholeArchivePaths := make([]VFS, 0, len(allPeers))
 	peerWholeArchiveCmdPaths := make([]VFS, 0, len(allPeers))
-	peerSbomRefs := make([]NodeRef, 0, len(allPeers))
-	peerSbomPaths := make([]VFS, 0, len(allPeers))
 	peerLinkCmdPaths := make([]VFS, 0, len(allPeers))
 
 	var (
@@ -865,12 +861,20 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	resGlobalsSum := 0
+	archiveCap := 0
+	sbomCap := 0
 
 	for _, rp := range resolved {
 		resGlobalsSum += len(rp.result.ResourceGlobalClosure)
+		archiveCap += len(rp.result.PeerArchiveClosurePaths) + 1
+		sbomCap += len(rp.result.PeerSbomClosurePaths) + 1
 	}
 
 	resourceGlobalsClosure := make([]ResourceDecl, 0, resGlobalsSum)
+	peerArchiveRefs := make([]NodeRef, 0, archiveCap)
+	peerArchivePaths := make([]VFS, 0, archiveCap)
+	peerSbomRefs := make([]NodeRef, 0, sbomCap)
+	peerSbomPaths := make([]VFS, 0, sbomCap)
 
 	deduper.reset()
 
