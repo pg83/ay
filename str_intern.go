@@ -193,10 +193,6 @@ func (id STR) str() STR {
 }
 
 func (id STR) string() string {
-	if strProbeEnabled {
-		strProbeAt()
-	}
-
 	return internTable.cells.get(uint32(id)).str
 }
 

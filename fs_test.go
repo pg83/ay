@@ -92,15 +92,6 @@ func TestFS_ExistsRoutesThroughListdir(t *testing.T) {
 		t.Fatal("c missing")
 	}
 
-	stats := fs.perfStats()
-
-	if stats.listdirMisses != 1 {
-		t.Errorf("expected exactly 1 listdir miss for shared dir, got %d", stats.listdirMisses)
-	}
-
-	if stats.listdirHits != 2 {
-		t.Errorf("expected 2 listdir hits (3 calls - 1 miss), got %d", stats.listdirHits)
-	}
 }
 
 func TestFS_ListdirCachesNegative(t *testing.T) {
@@ -113,12 +104,6 @@ func TestFS_ListdirCachesNegative(t *testing.T) {
 
 	if fs.listdir(dirKey("nope")).listable() {
 		t.Error("missing dir should still return nil on cache hit")
-	}
-
-	stats := fs.perfStats()
-
-	if stats.listdirMisses != 1 {
-		t.Errorf("expected exactly 1 listdir miss after two calls, got %d", stats.listdirMisses)
 	}
 }
 

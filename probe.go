@@ -5,8 +5,6 @@ func dumpProbes(probes []string) {
 		switch p {
 		case "map":
 			reportMapProbe()
-		case "str":
-			reportStrProbe()
 		}
 	}
 }

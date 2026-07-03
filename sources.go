@@ -39,8 +39,6 @@ func walkClosure(scanner *IncludeScanner, vfsPath VFS, cfg ScanContext) ClosureV
 
 	defer scanner.putScanCtx(sc)
 
-	scanner.walkClosureCalls++
-
 	return sc.closureOf(vfsPath)
 }
 

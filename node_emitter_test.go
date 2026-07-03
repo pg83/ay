@@ -367,4 +367,3 @@ func TestEmitter_PostFinalizeResultPanics(t *testing.T) {
 
 	e.result(ref)
 }
-

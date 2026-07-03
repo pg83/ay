@@ -32,11 +32,9 @@ func (set ParsedIncludeSet) bucket(bucket ParsedIncludeBucket) []IncludeDirectiv
 }
 
 type SharedParseCache struct {
-	ambiguous    map[uint64]ParsedIncludeSet
-	directives   *BumpAllocator[IncludeDirective]
-	parsed       DenseMap[STR, ParsedIncludeSet]
-	parsedHits   uint64
-	parsedMisses uint64
+	ambiguous  map[uint64]ParsedIncludeSet
+	directives *BumpAllocator[IncludeDirective]
+	parsed     DenseMap[STR, ParsedIncludeSet]
 }
 
 func newSharedParseCache() *SharedParseCache {
@@ -54,11 +52,6 @@ type IncludeParserManager struct {
 	addinclIndex    DenseMap[STR, []VFS]
 	addinclIndexed  BitSet
 	registry        IncludeDirectiveParserRegistry
-}
-
-type ParserPerfStats struct {
-	parsedHits   uint64
-	parsedMisses uint64
 }
 
 func newIncludeParserManagerFS(fs FS, cache *SharedParseCache) *IncludeParserManager {
@@ -90,17 +83,13 @@ func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser Inclu
 		ambKey = splitMix64(uint32(key), parser.id())
 
 		if cached, ok := pm.cache.ambiguous[ambKey]; ok {
-			pm.cache.parsedHits++
 
 			return cached
 		}
 	} else if cached, ok := pm.cache.parsed.get(key); ok {
-		pm.cache.parsedHits++
 
 		return cached
 	}
-
-	pm.cache.parsedMisses++
 
 	put := func(set ParsedIncludeSet) ParsedIncludeSet {
 		if ambKey != 0 {
@@ -181,11 +170,4 @@ func (pm *IncludeParserManager) resolveScanConfig(cfg *ScanContext) *ScanConfig 
 	}
 
 	return sc
-}
-
-func (pm *IncludeParserManager) perfStats() ParserPerfStats {
-	return ParserPerfStats{
-		parsedHits:   pm.cache.parsedHits,
-		parsedMisses: pm.cache.parsedMisses,
-	}
 }
