@@ -56,7 +56,7 @@ type ModuleCCInputs struct {
 	Variant         *string
 	ExtraDepRefs    []NodeRef
 	IncludeInputs   []VFS
-	IncludeView     ClosureView
+	IncludeView     Closure
 }
 
 func (e *EmitContext) ccInputsFor(srcVFS VFS) ModuleCCInputs {
@@ -138,7 +138,7 @@ func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs) (NodeRef, VFS) {
 
 	if len(d.cythonCpp) > 0 {
 		in.IncludeInputs = e.cythonCompileInducedInputs(in.IncludeView)
-		in.IncludeView = ClosureView{}
+		in.IncludeView = Closure{}
 	}
 
 	ref, outPath, _ := composeCCNode(instance, srcVFS.str(), srcVFS, in, ctx.host, ctx.emit)
@@ -246,9 +246,9 @@ func composeCCNode(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInpu
 
 	switch {
 	case in.IncludeView.self != 0 && wrap:
-		allInputs = na.inputList(na.vfsList(in.IncludeView.self, wrapccPyVFS), in.IncludeView.buckets[:]...)
+		allInputs = na.inputList(na.vfsList(in.IncludeView.self, wrapccPyVFS), in.IncludeView.buckets...)
 	case in.IncludeView.self != 0:
-		allInputs = na.inputList(na.vfsList(in.IncludeView.self), in.IncludeView.buckets[:]...)
+		allInputs = na.inputList(na.vfsList(in.IncludeView.self), in.IncludeView.buckets...)
 	case wrap:
 		allInputs = na.inputList(in.IncludeInputs, wrapccPyChunk)
 	default:

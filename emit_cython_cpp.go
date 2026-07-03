@@ -228,8 +228,8 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		if pxdVFS, ok := resolveCythonPxd(ctx, instance, stmt.Pxd); ok {
 			pxdCV := walkClosure(e.scanner, pxdVFS, srcScanIn)
 
-			toolInputs = keepOnlySourceVFS(dedupClosure(append(toolInputs, pxdCV.self), pxdCV.buckets[:]))
-			emitsIncludes = dedupClosure(append(emitsIncludes, pxdCV.self), pxdCV.buckets[:])
+			toolInputs = keepOnlySourceVFS(dedupClosure(append(toolInputs, pxdCV.self), pxdCV.buckets))
+			emitsIncludes = dedupClosure(append(emitsIncludes, pxdCV.self), pxdCV.buckets)
 		}
 
 		parsed := make([]IncludeDirective, 0, len(emitsIncludes))
@@ -349,7 +349,7 @@ func isCythonLangFile(rel string) bool {
 	return hasSuffix(rel, ".pyx") || hasSuffix(rel, ".pxd") || hasSuffix(rel, ".pxi") || hasSuffix(rel, ".py")
 }
 
-func (e *EmitContext) cythonCompileInducedInputs(includeView ClosureView) []VFS {
+func (e *EmitContext) cythonCompileInducedInputs(includeView Closure) []VFS {
 	reg := e.codegen
 
 	var out, extra []VFS
@@ -393,8 +393,8 @@ func (e *EmitContext) cythonCppInducedSets(src VFS, cMode bool, scanIn ScanConte
 
 		cv := walkClosure(scanner, v, scanIn)
 
-		toolCl = append(toolCl, cv.buckets[:]...)
-		emitsCl = append(emitsCl, cv.buckets[:]...)
+		toolCl = append(toolCl, cv.buckets...)
+		emitsCl = append(emitsCl, cv.buckets...)
 	}
 
 	for _, rel := range py3CythonEmbeddedFiles {
@@ -405,8 +405,8 @@ func (e *EmitContext) cythonCppInducedSets(src VFS, cMode bool, scanIn ScanConte
 
 		cv := walkClosure(scanner, v, scanIn)
 
-		toolCl = append(toolCl, cv.buckets[:]...)
-		emitsCl = append(emitsCl, cv.buckets[:]...)
+		toolCl = append(toolCl, cv.buckets...)
+		emitsCl = append(emitsCl, cv.buckets...)
 	}
 
 	toolSingles = append(toolSingles, src)
@@ -414,9 +414,9 @@ func (e *EmitContext) cythonCppInducedSets(src VFS, cMode bool, scanIn ScanConte
 	return CythonCppInduced{toolSingles: toolSingles, emitsSingles: emitsSingles, toolCl: toolCl, emitsCl: emitsCl}
 }
 
-func cythonGeneratedOutputInputs(ind CythonCppInduced, sourceCV ClosureView) ([]VFS, []VFS) {
-	toolLists := append(append([][]VFS{ind.toolSingles}, ind.toolCl...), sourceCV.buckets[:]...)
-	emitsLists := append(append([][]VFS{ind.emitsSingles}, ind.emitsCl...), sourceCV.buckets[:]...)
+func cythonGeneratedOutputInputs(ind CythonCppInduced, sourceCV Closure) ([]VFS, []VFS) {
+	toolLists := append(append([][]VFS{ind.toolSingles}, ind.toolCl...), sourceCV.buckets...)
+	emitsLists := append(append([][]VFS{ind.emitsSingles}, ind.emitsCl...), sourceCV.buckets...)
 
 	return keepOnlySourceVFS(dedup(toolLists...)), dedup(emitsLists...)
 }

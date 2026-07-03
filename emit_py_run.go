@@ -130,7 +130,7 @@ func (e *EmitContext) pyInputClosure(stmt *RunPythonStmt) []VFS {
 		buildRootPath := copyFileOutputVFS(instance.Path.rel(), rel)
 		cv := walkClosure(e.scanner, buildRootPath, scanCfg)
 
-		groups = append(groups, cv.buckets[:])
+		groups = append(groups, cv.buckets)
 	}
 
 	hasCCShard, _ := splitCodegenDetect(stmt)
@@ -141,7 +141,7 @@ func (e *EmitContext) pyInputClosure(stmt *RunPythonStmt) []VFS {
 			cv := walkClosure(e.scanner, vfs, scanCfg)
 
 			selves = append(selves, cv.self)
-			groups = append(groups, cv.buckets[:])
+			groups = append(groups, cv.buckets)
 		}
 	} else {
 		for _, f := range stmt.OUTFiles {

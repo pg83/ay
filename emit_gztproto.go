@@ -32,7 +32,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 			Env:     env,
 		}),
 		Env:            env,
-		Inputs:         na.inputList(inputs, imports.buckets[:]...),
+		Inputs:         na.inputList(inputs, imports.buckets...),
 		Outputs:        []VFS{genProto},
 		KV:             &gztprotoKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -44,7 +44,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 
 	sourceInputs = append(sourceInputs, gztSource)
 
-	eachBucketVFS(imports.buckets[:], func(v VFS) {
+	eachBucketVFS(imports.buckets, func(v VFS) {
 		if v.isSource() && extIsGztproto(v.rel()) {
 			sourceInputs = append(sourceInputs, v)
 		}

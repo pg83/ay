@@ -45,12 +45,11 @@ func (d IncludeDirective) cythonProbe() bool {
 type IncludeScanner struct {
 	sysincl          *SysinclCtx
 	parsers          *IncludeParserManager
-	subgraphClosures []BucketClosure
 	buckets          *BucketCache
+	closures         DenseMap[STR, Closure]
 	bktScratch       [closureBuckets][]VFS
-	reconstructBuf   []VFS
 	closureArena     *BumpAllocator[VFS]
-	scanCache        DenseMap3[STR, []VFS, ClosureRef, bool]
+	scanCache        DenseMap3[STR, []VFS, uint32, bool]
 	searchTierFlat   *IntMap[VFS]
 	searchTierSeen   BitSet
 	sourceUnderCache *IntMap[VFS]
@@ -72,7 +71,13 @@ type ScanCtx struct {
 	parser  IncludeDirectiveParser
 }
 
-type ClosureRef uint32
+func (s *IncludeScanner) closure(v VFS) (Closure, bool) {
+	return s.closures.get(v.str())
+}
+
+func (s *IncludeScanner) putClosure(v VFS, cl Closure) {
+	s.closures.put(v.str(), cl)
+}
 
 func (s *IncludeScanner) cachedChildren(v VFS) ([]VFS, bool) {
 	return s.scanCache.get1(STR(v.strID()))
@@ -80,14 +85,6 @@ func (s *IncludeScanner) cachedChildren(v VFS) ([]VFS, bool) {
 
 func (s *IncludeScanner) putChildren(v VFS, children []VFS) {
 	s.scanCache.put1(STR(v.strID()), children)
-}
-
-func (s *IncludeScanner) cachedClosure(v VFS) (ClosureRef, bool) {
-	return s.scanCache.get2(STR(v.strID()))
-}
-
-func (s *IncludeScanner) putClosure(v VFS, ref ClosureRef) {
-	s.scanCache.put2(STR(v.strID()), ref)
 }
 
 func (s *IncludeScanner) sourceFileExists(abs VFS) bool {
@@ -110,7 +107,6 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 		parsers: parsers,
 		onWarn:  onWarn,
 
-		subgraphClosures: make([]BucketClosure, 1, 256),
 		buckets:          buckets,
 		closureArena:     newBumpAllocator[VFS](closureArenaInitial),
 		childArena:       newBumpAllocator[VFS](1 << 12),
@@ -345,9 +341,9 @@ func (sc *ScanCtx) dfs(abs VFS) {
 			return
 		}
 
-		cref, _ := s.cachedClosure(ch)
+		cl, _ := s.closure(ch)
 
-		k = s.spliceClosure(cref, block, k)
+		k = cl.spliceInto(&s.tjc.closure, block, k)
 	})
 
 	for i := 0; i < k; i++ {
@@ -356,36 +352,28 @@ func (sc *ScanCtx) dfs(abs VFS) {
 		}
 	}
 
-	ref := ClosureRef(len(s.subgraphClosures))
-
-	s.subgraphClosures = append(s.subgraphClosures, s.storeBuckets(block[0], block[1:k]))
-	s.putClosure(abs, ref)
+	s.putClosure(abs, s.storeBuckets(block[0], block[1:k]))
 }
 
 func (sc *ScanCtx) ensureClosure(abs VFS) {
 	s := sc.scanner
 
-	if _, ok := s.cachedClosure(abs); !ok {
+	if _, ok := s.closure(abs); !ok {
 		sc.dfs(abs)
 	}
 }
 
-func (sc *ScanCtx) closureOf(abs VFS) ClosureView {
+func (sc *ScanCtx) closureOf(abs VFS) Closure {
 	s := sc.scanner
-	ref, ok := s.cachedClosure(abs)
+	cl, ok := s.closure(abs)
 
 	if !ok {
 		sc.dfs(abs)
 
-		ref, _ = s.cachedClosure(abs)
+		cl, _ = s.closure(abs)
 	}
 
-	return s.view(s.subgraphClosures[ref])
-}
-
-func (s *IncludeScanner) closureWindow(ref ClosureRef) []VFS {
-	s.reconstructBuf = s.reconstruct(s.subgraphClosures[ref], s.reconstructBuf)
-	return s.reconstructBuf
+	return cl
 }
 
 func (sc *ScanCtx) windowSubsumed(ch VFS) bool {
@@ -406,14 +394,8 @@ func (sc *ScanCtx) forEachChild(v VFS, fn func(VFS)) {
 	sc.forEachResolvedChildID(v, fn)
 }
 
-func (sc *ScanCtx) cachedWindow(v VFS) ([]VFS, bool) {
-	ref, ok := sc.scanner.cachedClosure(v)
-
-	if !ok {
-		return nil, false
-	}
-
-	return sc.scanner.closureWindow(ref), true
+func (sc *ScanCtx) cachedWindow(v VFS) (Closure, bool) {
+	return sc.scanner.closure(v)
 }
 
 func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
@@ -427,12 +409,10 @@ func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 		}
 	}
 
-	ref := ClosureRef(len(s.subgraphClosures))
-
-	s.subgraphClosures = append(s.subgraphClosures, s.storeBuckets(block[0], block[1:k]))
+	cl := s.storeBuckets(block[0], block[1:k])
 
 	for _, u := range members {
-		s.putClosure(u, ref)
+		s.putClosure(u, cl)
 	}
 }
 

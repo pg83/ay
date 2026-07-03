@@ -74,7 +74,7 @@ func (dd *DeDuper) filterSeen(list []VFS) []VFS {
 }
 
 // dedupClosure dedups extra plus the elements of every bucket group (a
-// closure's cv.buckets[:], i.e. without self). Callers that want a closure's
+// closure's cv.buckets, i.e. without self). Callers that want a closure's
 // self add it to extra.
 func dedupClosure(extra []VFS, groups ...[][]VFS) []VFS {
 	deduper.reset()

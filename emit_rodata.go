@@ -28,7 +28,7 @@ func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
 	return build(base, ".asm"), build(base, instance.Platform.objectSuffix())
 }
 
-func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, extraInputs ClosureView, extraDepRefs []NodeRef, tc ModuleToolchain, emit *StreamingEmitter) (NodeRef, VFS, VFS) {
+func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, extraInputs Closure, extraDepRefs []NodeRef, tc ModuleToolchain, emit *StreamingEmitter) (NodeRef, VFS, VFS) {
 	na := emit.nodeArenas()
 	asmVFS, outVFS := composeRodataOutputs(instance, srcRel)
 	toolName := path.Base(strings.TrimSuffix(srcRel, ".rodata"))
@@ -43,7 +43,7 @@ func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 		Env: yasmEnv,
 		Inputs: na.inputList(na.vfsList(yasmBinaryVFS,
 			rodataScriptVFS,
-			srcVFS), extraInputs.buckets[:]...),
+			srcVFS), extraInputs.buckets...),
 		KV:             &rodataKV,
 		Outputs:        na.vfsList(asmVFS, outVFS),
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -70,7 +70,7 @@ func (e *EmitContext) emitLibraryRodataSource(meta SrcMeta) {
 	yasmLDRef, _ := ctx.tool(argContribToolsYasm)
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	in := e.ccInputsFor(srcVFS)
-	ref, _, outPath := emitRD(instance, srcRel, srcVFS, yasmLDRef, ClosureView{}, nil, in.TC, ctx.emit)
+	ref, _, outPath := emitRD(instance, srcRel, srcVFS, yasmLDRef, Closure{}, nil, in.TC, ctx.emit)
 
 	e.collectObj(ref, outPath, meta)
 }

@@ -18,7 +18,7 @@ func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 			Cwd: strB,
 			Env: env}),
 		Env:          env,
-		Inputs:       na.inputList(na.vfsList(in.IncludeView.self), in.IncludeView.buckets[:]...),
+		Inputs:       na.inputList(na.vfsList(in.IncludeView.self), in.IncludeView.buckets...),
 		Outputs:      na.vfsList(outVFS),
 		KV:           &asKV,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

@@ -400,7 +400,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	pbHParsed = append(pbHParsed, pbHImports...)
 	pbHParsed = append(pbHParsed, extras...)
 
-	eachBucketVFS(transitiveImports.buckets[:], func(ti VFS) {
+	eachBucketVFS(transitiveImports.buckets, func(ti VFS) {
 		if ti.isBuild() {
 			return
 		}
@@ -623,7 +623,7 @@ func emitPB(
 	moduleTag STR,
 	liteHeaders bool,
 	extraPlugins []ResolvedCPPProtoPlugin,
-	transitiveProtoImports ClosureView,
+	transitiveProtoImports Closure,
 	extraDepRefs []NodeRef,
 	producerSourceInputs []VFS,
 	blocks *PbArgBlocks,
@@ -711,7 +711,7 @@ func emitPB(
 			Env: env}),
 		Env: env,
 
-		Inputs:         na.inputList(inputs, append([][]VFS{producerSourceInputs}, transitiveProtoImports.buckets[:]...)...),
+		Inputs:         na.inputList(inputs, append([][]VFS{producerSourceInputs}, transitiveProtoImports.buckets...)...),
 		Outputs:        outputs,
 		KV:             spec.kv,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

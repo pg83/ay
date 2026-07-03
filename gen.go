@@ -265,7 +265,7 @@ func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, na *NodeAre
 	return out[:k]
 }
 
-func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *NodeArenas, cv ClosureView, incl ...NodeRef) []NodeRef {
+func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *NodeArenas, cv Closure, incl ...NodeRef) []NodeRef {
 	deduper.reset()
 
 	out := na.noderefs.alloc(len(incl) + cv.len())

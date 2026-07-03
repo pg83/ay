@@ -2,22 +2,31 @@ package main
 
 const closureBuckets = 16
 
-type BucketClosure struct {
+// Closure is both the stored form of an include closure and the view over it:
+// a root file (self) plus the non-empty residue buckets of its transitive
+// closure. Each bucket is a hash-consed []VFS shared through BucketCache; the
+// per-closure bucket slice is bump-allocated, so the struct itself is thin.
+type Closure struct {
 	self    VFS
-	buckets [closureBuckets]uint32
+	buckets [][]VFS
 }
 
+// BucketCache is the shared content pool: hash-consed bucket contents plus the
+// bump arenas backing them. It is shared across the target and host scanners
+// because bucket content is content-addressed and immutable. The per-file
+// closure index lives on IncludeScanner instead, because the same file resolves
+// to a different closure per platform.
 type BucketCache struct {
-	list   [][]VFS
+	chunks *BumpAllocator[[]VFS]
 	pool   *BumpAllocator[VFS]
-	intern *IntMap[uint32]
+	intern *IntMap[[]VFS]
 }
 
 func newBucketCache() *BucketCache {
 	return &BucketCache{
-		list:   make([][]VFS, 1, 4096),
+		chunks: newBumpAllocator[[]VFS](1 << 12),
 		pool:   newBumpAllocator[VFS](1 << 19),
-		intern: newIntMap[uint32](1 << 16),
+		intern: newIntMap[[]VFS](1 << 16),
 	}
 }
 
@@ -35,24 +44,21 @@ func bucketHash(elems []VFS) uint64 {
 	return h
 }
 
-func (s *IncludeScanner) internBucket(elems []VFS) uint32 {
-	if len(elems) == 0 {
-		return 0
-	}
-
+// internBucket hash-conses a bucket's contents into the shared pool, returning
+// the shared slice so identical buckets across closures share one backing.
+func (s *IncludeScanner) internBucket(elems []VFS) []VFS {
 	cell, found := s.buckets.intern.cell(bucketHash(elems))
 	if found {
 		return *cell
 	}
 
-	ref := uint32(len(s.buckets.list))
-	s.buckets.list = append(s.buckets.list, s.buckets.pool.list(elems...))
-	*cell = ref
+	slice := s.buckets.pool.list(elems...)
+	*cell = slice
 
-	return ref
+	return slice
 }
 
-func (s *IncludeScanner) storeBuckets(self VFS, rest []VFS) BucketClosure {
+func (s *IncludeScanner) storeBuckets(self VFS, rest []VFS) Closure {
 	for r := range s.bktScratch {
 		s.bktScratch[r] = s.bktScratch[r][:0]
 	}
@@ -62,32 +68,37 @@ func (s *IncludeScanner) storeBuckets(self VFS, rest []VFS) BucketClosure {
 		s.bktScratch[r] = append(s.bktScratch[r], v)
 	}
 
-	bc := BucketClosure{self: self}
+	n := 0
 
 	for r := 0; r < closureBuckets; r++ {
-		bc.buckets[r] = s.internBucket(s.bktScratch[r])
+		if len(s.bktScratch[r]) > 0 {
+			n++
+		}
 	}
 
-	return bc
-}
-
-func (s *IncludeScanner) spliceClosure(cref ClosureRef, block []VFS, k int) int {
-	bc := s.subgraphClosures[cref]
-	k = s.tjc.closure.spliceOne(bc.self, block, k)
+	buckets := s.buckets.chunks.alloc(n)
+	k := 0
 
 	for r := 0; r < closureBuckets; r++ {
-		k = s.tjc.closure.spliceNew(s.buckets.list[bc.buckets[r]], block, k)
+		if len(s.bktScratch[r]) == 0 {
+			continue
+		}
+
+		buckets[k] = s.internBucket(s.bktScratch[r])
+		k++
+	}
+
+	s.buckets.chunks.commit(n)
+
+	return Closure{self: self, buckets: buckets[:n:n]}
+}
+
+func (cl Closure) spliceInto(cs *IdSet, block []VFS, k int) int {
+	k = cs.spliceOne(cl.self, block, k)
+
+	for _, b := range cl.buckets {
+		k = cs.spliceNew(b, block, k)
 	}
 
 	return k
-}
-
-func (s *IncludeScanner) reconstruct(bc BucketClosure, buf []VFS) []VFS {
-	buf = append(buf[:0], bc.self)
-
-	for r := 0; r < closureBuckets; r++ {
-		buf = append(buf, s.buckets.list[bc.buckets[r]]...)
-	}
-
-	return buf
 }
