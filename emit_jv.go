@@ -58,20 +58,15 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 			Compile:        &CompileSpec{FlatOutput: d.flatSrc(g4CppPath.str()), CFlags: []ARG{argWnoUnusedVariable}},
 		})
 
-		closure := walkClosure(e.scanner, g4CppPath, d.cc.ScanCfg).flat()
 		leafSet := make(map[VFS]bool, len(leaves))
 
 		for _, l := range leaves {
 			leafSet[l] = true
 		}
 
-		cpClosure := make([]VFS, 0, len(closure))
-
-		for _, v := range closure {
-			if v != g4CppPath && !leafSet[v] {
-				cpClosure = append(cpClosure, v)
-			}
-		}
+		cpClosure := walkClosure(e.scanner, g4CppPath, d.cc.ScanCfg).collect(func(v VFS) bool {
+			return v != g4CppPath && !leafSet[v]
+		})
 
 		emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, d.cc.TC, ctx.scripts, ctx.emit)
 

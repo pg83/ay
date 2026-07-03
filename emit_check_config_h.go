@@ -18,9 +18,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf STR) {
 	na := ctx.na
 	generatedVFS := checkConfigHGeneratedVFS(instance.Path.rel(), conf)
 	confVFS := source(instance.Path.rel(), "/", conf.string())
-	inputs := []VFS{buildScriptsCheckConfigHPy}
-
-	inputs = append(inputs, walkClosure(e.scanner, confVFS, d.cc.ScanCfg).flat()...)
+	cv := walkClosure(e.scanner, confVFS, d.cc.ScanCfg)
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -32,7 +30,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf STR) {
 			(generatedVFS).str())),
 			Env: env}),
 		Env:          env,
-		Inputs:       na.inputList(inputs),
+		Inputs:       na.inputList(na.vfsList(buildScriptsCheckConfigHPy, cv.self), cv.buckets[:]...),
 		Outputs:      na.vfsList(generatedVFS),
 		KV:           &checkConfigHKV,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

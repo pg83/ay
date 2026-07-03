@@ -45,9 +45,14 @@ func (cv ClosureView) each(fn func(VFS)) {
 	}
 }
 
-func (cv ClosureView) flat() []VFS {
-	out := make([]VFS, 0, cv.len())
-	cv.each(func(v VFS) { out = append(out, v) })
+func (cv ClosureView) collect(keep func(VFS) bool) []VFS {
+	var out []VFS
+
+	cv.each(func(v VFS) {
+		if keep(v) {
+			out = append(out, v)
+		}
+	})
 
 	return out
 }

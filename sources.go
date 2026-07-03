@@ -51,8 +51,8 @@ func walkClosureTail(scanner *IncludeScanner, vfsPath VFS, cfg ScanContext) Clos
 	return cv
 }
 
-func rewriteClosureCPSource(scanner *IncludeScanner, out []VFS) []VFS {
-	var result []VFS
+func rewriteClosureCPSource(scanner *IncludeScanner, cv ClosureView) []VFS {
+	out := cv.collect(func(VFS) bool { return true })
 
 	for i, v := range out {
 		info := scanner.codegen.lookup(v)
@@ -61,18 +61,10 @@ func rewriteClosureCPSource(scanner *IncludeScanner, out []VFS) []VFS {
 			continue
 		}
 
-		if result == nil {
-			result = append(result, out...)
-		}
-
-		result[i] = info.SourcePath
+		out[i] = info.SourcePath
 	}
 
-	if result == nil {
-		return out
-	}
-
-	return result
+	return out
 }
 
 func keepOnlySourceVFS(out []VFS) []VFS {

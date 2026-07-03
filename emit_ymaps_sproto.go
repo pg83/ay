@@ -73,7 +73,9 @@ func (e *EmitContext) emitYmapsSprotoHeader(p YmapsSprotoPending, outRoot string
 	))
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-	closure := dropGeneratedProtoHeaders(walkClosureTail(e.scanner, p.sprotoH, scanCfg).flat())
+	closure := walkClosureTail(e.scanner, p.sprotoH, scanCfg).collect(func(v VFS) bool {
+		return v.isSource() || !extIsProtoGeneratedHeader(v.rel())
+	})
 
 	node := Node{
 		Platform: instance.Platform,
@@ -89,24 +91,6 @@ func (e *EmitContext) emitYmapsSprotoHeader(p YmapsSprotoPending, outRoot string
 	}
 
 	ctx.emit.emitReservedNode(node, p.ref)
-}
-
-func dropGeneratedProtoHeaders(closure []VFS) []VFS {
-	var out []VFS
-
-	for _, v := range closure {
-		if !v.isSource() {
-			rel := v.rel()
-
-			if extIsProtoGeneratedHeader(rel) {
-				continue
-			}
-		}
-
-		out = append(out, v)
-	}
-
-	return out
 }
 
 func sprotoInducedHeaders(pbhImports []IncludeDirective) []IncludeDirective {

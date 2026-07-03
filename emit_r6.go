@@ -113,8 +113,9 @@ func (e *EmitContext) emitLibraryRagel6Source(src STR) {
 	}
 
 	e.deferPass2(func() {
-		window := walkClosure(e.scanner, r6Out, d.cc.ScanCfg).flat()
-		rl6Closure := keepOnlySourceVFS(filterEnSerializedSiblings(window))
+		rl6Closure := walkClosure(e.scanner, r6Out, d.cc.ScanCfg).collect(func(v VFS) bool {
+			return v.isSource() && !extIsEnumSerialized(v.rel())
+		})
 
 		emitR6(instance, srcRel, ragelLDRef, ragelBinaryVFS, d.cc.Ragel6Flags, rl6Closure, r6Ref, ctx.emit)
 	})

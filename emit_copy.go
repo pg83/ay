@@ -117,8 +117,7 @@ func (e *EmitContext) emitCopyFileNode(entry CopyFileEntry, st CopyEmitState) {
 	var closure []VFS
 
 	if entry.WithContext || len(entry.OutputIncludes) > 0 {
-		closure = walkClosure(e.scanner, st.dstVFS, d.cc.ScanCfg).flat()
-		closure = rewriteClosureCPSource(scanner, closure)
+		closure = rewriteClosureCPSource(scanner, walkClosure(e.scanner, st.dstVFS, d.cc.ScanCfg))
 		closure = keepOnlySourceVFS(closure)
 		closure = dedup(closure)
 	}

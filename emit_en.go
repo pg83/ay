@@ -132,15 +132,15 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 	declSeq := stmt.DeclSeq
 
 	e.deferPass2(func() {
-		closure := walkClosure(e.scanner, headerInput, scanCfg).flat()
+		headerClosure := walkClosure(e.scanner, headerInput, scanCfg)
 
-		var ownOutputClosure []VFS
+		var enClosure []VFS
 
-		if !withHeader {
-			ownOutputClosure = walkClosureTail(e.scanner, serializedCPPPath, scanCfg).flat()
+		if withHeader {
+			enClosure = dedupClosure(nil, headerClosure)
+		} else {
+			enClosure = dedupClosure(nil, headerClosure, walkClosureTail(e.scanner, serializedCPPPath, scanCfg))
 		}
-
-		enClosure := dedup(closure, ownOutputClosure)
 		augmentedDepENRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, enClosure)
 
 		emitEN(

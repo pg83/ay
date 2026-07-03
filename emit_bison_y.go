@@ -146,7 +146,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 
 		inputs = append(inputs, bisonPreprocessPyVFS)
 		inputs = append(inputs, bisonCppSkeletonInputs...)
-		inputs = dedup(inputs, walkClosureTail(e.scanner, headerVFS, d.cc.ScanCfg).flat())
+		inputs = dedupClosure(inputs, walkClosureTail(e.scanner, headerVFS, d.cc.ScanCfg))
 	}
 
 	ctx.emit.emitReservedNode(Node{

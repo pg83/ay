@@ -219,18 +219,17 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		srcVFS := p.srcVFS
 		srcScanIn := p.srcScanIn
 		cyRef := p.cyRef
-		sourceClosure := walkClosureTail(e.scanner, srcVFS, srcScanIn).flat()
-		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(p.ind, sourceClosure)
+		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(p.ind, walkClosureTail(e.scanner, srcVFS, srcScanIn))
 
 		if stmt.Header {
 			toolInputs = cythonHeaderToolInputs(srcVFS, p.headerPyxClosure)
 		}
 
 		if pxdVFS, ok := resolveCythonPxd(ctx, instance, stmt.Pxd); ok {
-			pxdClosure := walkClosure(e.scanner, pxdVFS, srcScanIn).flat()
+			pxdCV := walkClosure(e.scanner, pxdVFS, srcScanIn)
 
-			toolInputs = keepOnlySourceVFS(dedup(toolInputs, pxdClosure))
-			emitsIncludes = dedup(emitsIncludes, pxdClosure)
+			toolInputs = keepOnlySourceVFS(dedupClosure(toolInputs, pxdCV))
+			emitsIncludes = dedupClosure(emitsIncludes, pxdCV)
 		}
 
 		parsed := make([]IncludeDirective, 0, len(emitsIncludes))
@@ -350,26 +349,24 @@ func isCythonLangFile(rel string) bool {
 	return hasSuffix(rel, ".pyx") || hasSuffix(rel, ".pxd") || hasSuffix(rel, ".pxi") || hasSuffix(rel, ".py")
 }
 
-func (e *EmitContext) cythonCompileInducedInputs(includeInputs []VFS) []VFS {
+func (e *EmitContext) cythonCompileInducedInputs(includeView ClosureView) []VFS {
 	reg := e.codegen
 
-	var extra []VFS
+	var out, extra []VFS
 
-	for _, v := range includeInputs {
+	includeView.each(func(v VFS) {
+		out = append(out, v)
+
 		if !v.isBuild() {
-			continue
+			return
 		}
 
 		if info := reg.lookup(v); info != nil && info.ProducerMainOut != 0 {
 			extra = append(extra, info.ProducerMainOut)
 		}
-	}
+	})
 
-	if len(extra) == 0 {
-		return includeInputs
-	}
-
-	return concat(includeInputs, extra)
+	return append(out, extra...)
 }
 
 type CythonCppInduced struct {
@@ -394,10 +391,10 @@ func (e *EmitContext) cythonCppInducedSets(src VFS, cMode bool, scanIn ScanConte
 		toolSingles = append(toolSingles, v)
 		emitsSingles = append(emitsSingles, v)
 
-		cl := walkClosureTail(scanner, v, scanIn).flat()
+		cv := walkClosureTail(scanner, v, scanIn)
 
-		toolCl = append(toolCl, cl)
-		emitsCl = append(emitsCl, cl)
+		toolCl = append(toolCl, cv.buckets[:]...)
+		emitsCl = append(emitsCl, cv.buckets[:]...)
 	}
 
 	for _, rel := range py3CythonEmbeddedFiles {
@@ -406,10 +403,10 @@ func (e *EmitContext) cythonCppInducedSets(src VFS, cMode bool, scanIn ScanConte
 		toolSingles = append(toolSingles, v)
 		emitsSingles = append(emitsSingles, v)
 
-		cl := walkClosureTail(scanner, v, scanIn).flat()
+		cv := walkClosureTail(scanner, v, scanIn)
 
-		toolCl = append(toolCl, cl)
-		emitsCl = append(emitsCl, cl)
+		toolCl = append(toolCl, cv.buckets[:]...)
+		emitsCl = append(emitsCl, cv.buckets[:]...)
 	}
 
 	toolSingles = append(toolSingles, src)
@@ -417,9 +414,11 @@ func (e *EmitContext) cythonCppInducedSets(src VFS, cMode bool, scanIn ScanConte
 	return CythonCppInduced{toolSingles: toolSingles, emitsSingles: emitsSingles, toolCl: toolCl, emitsCl: emitsCl}
 }
 
-func cythonGeneratedOutputInputs(ind CythonCppInduced, sourceClosure []VFS) ([]VFS, []VFS) {
-	return keepOnlySourceVFS(dedup(append([][]VFS{ind.toolSingles}, append(ind.toolCl, sourceClosure)...)...)),
-		dedup(append([][]VFS{ind.emitsSingles}, append(ind.emitsCl, sourceClosure)...)...)
+func cythonGeneratedOutputInputs(ind CythonCppInduced, sourceCV ClosureView) ([]VFS, []VFS) {
+	toolLists := append(append([][]VFS{ind.toolSingles}, ind.toolCl...), sourceCV.buckets[:]...)
+	emitsLists := append(append([][]VFS{ind.emitsSingles}, ind.emitsCl...), sourceCV.buckets[:]...)
+
+	return keepOnlySourceVFS(dedup(toolLists...)), dedup(emitsLists...)
 }
 
 func cythonHeaderInducedClosure(ind CythonCppInduced) []VFS {

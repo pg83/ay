@@ -2,7 +2,7 @@ package main
 
 var scKV = KV{P: pkSC, PC: pcYellow}
 
-func emitSC(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary VFS, runtimeClosure []VFS, domschemecLDRef NodeRef, emit *StreamingEmitter) NodeRef {
+func emitSC(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary VFS, runtimeClosure ClosureView, domschemecLDRef NodeRef, emit *StreamingEmitter) NodeRef {
 	na := emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -13,7 +13,7 @@ func emitSC(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary VFS, ru
 			Env:     env,
 		}),
 		Env:            env,
-		Inputs:         na.inputList(na.vfsList(domschemecBinary, srcVFS), runtimeClosure),
+		Inputs:         na.inputList(na.vfsList(domschemecBinary, srcVFS, runtimeClosure.self), runtimeClosure.buckets[:]...),
 		KV:             &scKV,
 		Outputs:        na.vfsList(headerVFS),
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -29,7 +29,7 @@ func (e *EmitContext) emitLibrarySCSource(src STR) {
 	domLDRef, domBinary := domRes.LDRef, *domRes.LDPath
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	headerVFS := build(srcVFS.rel(), ".h")
-	runtimeClosure := walkClosure(e.scanner, domschemeRuntimeVFS, d.cc.ScanCfg).flat()
+	runtimeClosure := walkClosure(e.scanner, domschemeRuntimeVFS, d.cc.ScanCfg)
 	scRef := emitSC(instance, srcVFS, headerVFS, domBinary, runtimeClosure, domLDRef, ctx.emit)
 	runtimeInclude := []IncludeDirective{{kind: includeQuoted, target: internStr(domschemeRuntimeVFS.rel())}}
 
