@@ -1180,7 +1180,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	var ownProtoInclude []VFS
 
 	if d.protoNamespace != nil {
-		ownProtoInclude = []VFS{source(filepath.ToSlash(filepath.Clean(d.protoNamespace.string())))}
+		ownProtoInclude = []VFS{sourceClean(d.protoNamespace.string())}
 	}
 
 	ownProtoInclude = append(ownProtoInclude, d.protoAddInclGlobal...)
