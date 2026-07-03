@@ -38,8 +38,14 @@ func (na *NodeArenas) chunkList(ch ...[]STR) ArgChunks {
 	return ArgChunks(na.chunks.list(ch...))
 }
 
-func (na *NodeArenas) inputList(ch ...[]VFS) InputChunks {
-	return InputChunks(na.inputs.list(ch...))
+func (na *NodeArenas) inputList(first []VFS, rest ...[]VFS) InputChunks {
+	n := 1 + len(rest)
+	dst := na.inputs.alloc(n)
+	dst[0] = first
+	copy(dst[1:], rest)
+	na.inputs.commit(n)
+
+	return InputChunks(dst[:n:n])
 }
 
 func (na *NodeArenas) srcChunk(v VFS) []VFS {

@@ -43,7 +43,7 @@ func (e *EmitContext) emitSwigC() {
 		srcVFS := source(instance.Path.rel(), "/", stmt.Src)
 		cOutVFS := build(instance.Path.rel(), "/", cOutRel)
 		pyOutVFS := build(instance.Path.rel(), "/", pyOutRel)
-		swigClosure := walkClosureTail(e.scanner, srcVFS, newScanContext(ctx.parsers, swigAddIncls, nil, includeScannerBasePaths(), instance.Path.rel()))
+		swigClosure := walkClosureTail(e.scanner, srcVFS, newScanContext(ctx.parsers, swigAddIncls, nil, includeScannerBasePaths(), instance.Path.rel())).flat()
 		inputs := na.inputList(na.vfsList(bldContribToolsSwigSwig, srcVFS), swigClosure)
 
 		cmdArgs := na.chunkList(na.strList(swigBin.str()), swigConstArgs, na.strList(internStr(swigModuleName(stmt.Module)),

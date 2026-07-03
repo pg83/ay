@@ -20,7 +20,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf STR) {
 	confVFS := source(instance.Path.rel(), "/", conf.string())
 	inputs := []VFS{buildScriptsCheckConfigHPy}
 
-	inputs = append(inputs, walkClosure(e.scanner, confVFS, d.cc.ScanCfg)...)
+	inputs = append(inputs, walkClosure(e.scanner, confVFS, d.cc.ScanCfg).flat()...)
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 

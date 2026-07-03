@@ -54,7 +54,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 		Platform:     instance.Platform,
 		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
 		Env:          env,
-		Inputs:       na.inputList(na.vfsList(configureFilePyVFS), walkClosure(e.scanner, srcVFS, d.cc.ScanCfg)),
+		Inputs:       na.inputList(na.vfsList(configureFilePyVFS), walkClosure(e.scanner, srcVFS, d.cc.ScanCfg).flat()),
 		KV:           &cfKV,
 		Outputs:      na.vfsList(outVFS),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

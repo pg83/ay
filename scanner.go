@@ -400,7 +400,7 @@ func (sc *ScanCtx) dfs(abs VFS) {
 			crefs = append(crefs, cref)
 		}
 
-		k = s.tjc.closure.spliceNew(s.closureWindow(cref), block, k)
+		k = s.spliceClosure(cref, block, k)
 	})
 
 	for i := 0; i < k; i++ {
@@ -429,7 +429,7 @@ func (sc *ScanCtx) ensureClosure(abs VFS) {
 	}
 }
 
-func (sc *ScanCtx) closureOf(abs VFS) []VFS {
+func (sc *ScanCtx) closureOf(abs VFS) ClosureView {
 	s := sc.scanner
 	ref, ok := s.cachedClosure(abs)
 
@@ -441,7 +441,7 @@ func (sc *ScanCtx) closureOf(abs VFS) []VFS {
 		ref, _ = s.cachedClosure(abs)
 	}
 
-	return s.reconstruct(s.subgraphClosures[ref], nil)
+	return s.view(s.subgraphClosures[ref], true)
 }
 
 func (s *IncludeScanner) closureWindow(ref ClosureRef) []VFS {

@@ -205,7 +205,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR) {
 	}
 
 	inputs := []VFS{protocBinary, pbPyWrapperVFS, protoSrcVFS}
-	transitive := walkClosureTail(e.scanner, source(protoRelPath), protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
+	transitive := walkClosureTail(e.scanner, source(protoRelPath), protoWalkInputs(ctx.parsers, nil, instance.Path.rel())).flat()
 
 	inputs = append(inputs, transitive...)
 	inputs = append(inputs, producerSourceInputs...)
@@ -362,7 +362,7 @@ func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, p
 	})
 
 	scanCfg := newScanContext(ctx.parsers, d.addIncl, peerAddIncl, includeScannerBasePaths(), instance.Path.rel())
-	closure := walkClosure(e.scanner, aux, scanCfg)
+	closure := walkClosure(e.scanner, aux, scanCfg).flat()
 
 	if len(closure) == 0 {
 		return nil

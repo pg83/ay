@@ -7,7 +7,7 @@ import (
 )
 
 func scanClosure(scanner *IncludeScanner, srcRel string, cfg ScanContext) []VFS {
-	return scanner.getScanCtx(cfg, scanner.parsers.registry.registeredParserFor(srcRel)).closureOf(source(srcRel))[1:]
+	return scanner.getScanCtx(cfg, scanner.parsers.registry.registeredParserFor(srcRel)).closureOf(source(srcRel)).flat()[1:]
 }
 
 func TestStripComments_BlockCommentInclude(t *testing.T) {
@@ -740,7 +740,7 @@ machine Sub;
 
 	sc := scanner.getScanCtx(newScanContext(scanner.parsers, VFSesFromStrings([]string{"stl"}), nil, nil, ""), nil)
 
-	closure := sc.closureOf(intern("$(S)/pkg/main.rl6"))
+	closure := sc.closureOf(intern("$(S)/pkg/main.rl6")).flat()
 
 	closureSet := make(map[string]bool, len(closure))
 

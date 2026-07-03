@@ -34,7 +34,7 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 	return source(srcRelOnDisk)
 }
 
-func walkClosure(scanner *IncludeScanner, vfsPath VFS, cfg ScanContext) []VFS {
+func walkClosure(scanner *IncludeScanner, vfsPath VFS, cfg ScanContext) ClosureView {
 	sc := scanner.getScanCtx(cfg, scanner.parsers.registry.registeredParserFor(vfsPath.rel()))
 
 	defer scanner.putScanCtx(sc)
@@ -44,14 +44,11 @@ func walkClosure(scanner *IncludeScanner, vfsPath VFS, cfg ScanContext) []VFS {
 	return sc.closureOf(vfsPath)
 }
 
-func walkClosureTail(scanner *IncludeScanner, vfsPath VFS, cfg ScanContext) []VFS {
-	full := walkClosure(scanner, vfsPath, cfg)
+func walkClosureTail(scanner *IncludeScanner, vfsPath VFS, cfg ScanContext) ClosureView {
+	cv := walkClosure(scanner, vfsPath, cfg)
+	cv.self = 0
 
-	if len(full) == 0 {
-		return nil
-	}
-
-	return full[1:]
+	return cv
 }
 
 func rewriteClosureCPSource(scanner *IncludeScanner, out []VFS) []VFS {

@@ -76,7 +76,7 @@ func (e *EmitContext) emitLibraryGperfSource(src STR) {
 	e.enqueueSrc(meta)
 
 	e.deferPass2(func() {
-		srcClosure := walkClosure(e.scanner, srcVFS, d.cc.ScanCfg)
+		srcClosure := walkClosure(e.scanner, srcVFS, d.cc.ScanCfg).flat()
 
 		emitGP(instance, srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, keepOnlySourceVFS(srcClosure), gpRef, ctx.emit)
 	})
