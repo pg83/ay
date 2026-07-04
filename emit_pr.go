@@ -392,6 +392,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 		candidate := build(target.string())
 
 		var sub Closure
+
 		selfIsInput := false
 
 		switch info := reg.lookup(candidate); {

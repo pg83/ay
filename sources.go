@@ -4,6 +4,13 @@ import (
 	"path/filepath"
 )
 
+var includeScannerBasePathsSlice = []VFS{
+	v,
+	bld,
+	contribLibsLinuxHeaders,
+	contribLibsLinuxHeadersNf,
+}
+
 func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, srcDirs []VFS) VFS {
 	if vfs := moduleRootedVFS(srcInstance.Path.rel(), srcRel); vfs != nil {
 		return *vfs
@@ -70,13 +77,6 @@ func keepOnlySourceVFS(out []VFS) []VFS {
 	}
 
 	return w
-}
-
-var includeScannerBasePathsSlice = []VFS{
-	v,
-	bld,
-	contribLibsLinuxHeaders,
-	contribLibsLinuxHeadersNf,
 }
 
 func includeScannerBasePaths() []VFS {

@@ -2,9 +2,6 @@ package main
 
 import "math/bits"
 
-// PageVec is a paged, sparse NodeRef -> T map. Single-writer (graph emission)
-// / multi-reader (executor goroutines); per-page preallocation keeps reads
-// lock-free while new pages are appended.
 type PageVec[T any] struct {
 	pages [32][]T
 }
@@ -32,8 +29,6 @@ func (v *PageVec[T]) get(id uint32) T {
 	return v.pages[p][off]
 }
 
-// getSafe returns the zero value if the page for id was never allocated (the
-// id was never set). Use where the index space is sparse.
 func (v *PageVec[T]) getSafe(id uint32) T {
 	p, off := pageOffset(id)
 

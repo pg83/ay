@@ -83,11 +83,9 @@ func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser Inclu
 		ambKey = splitMix64(uint32(key), parser.id())
 
 		if cached, ok := pm.cache.ambiguous[ambKey]; ok {
-
 			return cached
 		}
 	} else if cached, ok := pm.cache.parsed.get(key); ok {
-
 		return cached
 	}
 

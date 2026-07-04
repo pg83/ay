@@ -19,7 +19,6 @@ func (e *EmitContext) emitCheckConfigHStmt(conf STR) {
 	generatedVFS := checkConfigHGeneratedVFS(instance.Path.rel(), conf)
 	confVFS := source(instance.Path.rel(), "/", conf.string())
 	cv := walkClosure(e.scanner, confVFS, d.cc.ScanCfg)
-
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	chRef := ctx.emit.emitNode(Node{

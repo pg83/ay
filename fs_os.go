@@ -8,19 +8,17 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-// hashSourceFile reads and hashes a source file with no shared OsFS state, so
-// it is safe to call concurrently from executor goroutines. The hash function
-// must match recordContentHash (xxh3.Hash).
+var emptyDirNames = []uint32{}
+
 func hashSourceFile(srcRoot, rel string) uint64 {
 	data, err := os.ReadFile(filepath.Join(srcRoot, cleanRel(rel)))
+
 	if err != nil {
 		return 0
 	}
 
 	return xxh3.Hash(data)
 }
-
-var emptyDirNames = []uint32{}
 
 type OsFS struct {
 	srcRoot       string
@@ -64,17 +62,12 @@ func (fs *OsFS) readSourceRels() []string {
 	return out
 }
 
-// recordContentHash is called single-threaded during graph generation (the
-// scanner's file reads); the paged store lets the executor read hashes
-// lock-free while generation keeps recording.
 func (fs *OsFS) recordContentHash(rel string, data []byte) {
 	s := internPrefixed("$(S)/", cleanRel(rel))
 
 	fs.contentHashes.set(uint32(s), xxh3.Hash(data))
 }
 
-// contentHash returns the generation-time content hash, or 0 if the file was
-// never read during generation (the executor computes such misses itself).
 func (fs *OsFS) contentHash(v VFS) uint64 {
 	return fs.contentHashes.getSafe(v.strID())
 }
@@ -83,7 +76,6 @@ func (fs *OsFS) listdir(dir VFS) DirView {
 	key := STR(dir.strID())
 
 	if cached, ok := fs.dirs.get(key); ok {
-
 		return cached
 	}
 
@@ -128,7 +120,6 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 		v := fs.listdir(dirKey(dir))
 
 		if !v.listable() {
-
 			return false, false
 		}
 
@@ -140,7 +131,6 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 	v := fs.listdir(prefix)
 
 	if !v.listable() {
-
 		return false, false
 	}
 
@@ -153,7 +143,6 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 	}
 
 	if ok, d := fs.dirHas(v, first); !ok || !d {
-
 		return false, false
 	}
 
@@ -162,7 +151,6 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 	v = fs.listdir(sourceJoined(prefixRel, dname))
 
 	if !v.listable() {
-
 		return false, false
 	}
 

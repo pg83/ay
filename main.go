@@ -105,7 +105,6 @@ func main() {
 
 func dispatch(argv []string) {
 	probes, g, rest := parseGlobalFlags(argv[1:])
-
 	code := runCommand(rest, g)
 
 	dumpProbes(probes)

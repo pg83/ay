@@ -74,6 +74,7 @@ func (e *EmitContext) emitYmapsSprotoHeader(p YmapsSprotoPending, outRoot string
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	sprotoCV := walkClosure(e.scanner, p.sprotoH, scanCfg)
+
 	closure := collectBucketVFS(sprotoCV.buckets, func(v VFS) bool {
 		return v.isSource() || !extIsProtoGeneratedHeader(v.rel())
 	})
