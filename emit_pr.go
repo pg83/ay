@@ -223,30 +223,6 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt, reg *CodegenRegistry)
 	return prRef
 }
 
-func filterSourceVFS(vs []VFS) []VFS {
-	n := 0
-
-	for _, v := range vs {
-		if v.isSource() {
-			n++
-		}
-	}
-
-	if n == len(vs) {
-		return vs
-	}
-
-	out := make([]VFS, 0, n)
-
-	for _, v := range vs {
-		if v.isSource() {
-			out = append(out, v)
-		}
-	}
-
-	return out
-}
-
 func pbhBasenameSet(vs []VFS) map[string]bool {
 	m := map[string]bool{}
 

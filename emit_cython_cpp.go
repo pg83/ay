@@ -159,7 +159,7 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 		if stmt.Header {
 			headerPyxClosure = cythonPyxLangClosure(e.scanner, srcVFS, srcScanIn)
 
-			pyxInduced := keepOnlySourceVFS(headerPyxClosure)
+			pyxInduced := filterSourceVFS(headerPyxClosure)
 			headerInduced := cythonHeaderInducedClosure(ind)
 			headerParsed := make([]IncludeDirective, 0, len(headerInduced))
 
@@ -228,7 +228,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		if pxdVFS, ok := resolveCythonPxd(ctx, instance, stmt.Pxd); ok {
 			pxdCV := walkClosure(e.scanner, pxdVFS, srcScanIn)
 
-			toolInputs = keepOnlySourceVFS(dedupClosure(append(toolInputs, pxdCV.self), pxdCV.buckets))
+			toolInputs = filterSourceVFS(dedupClosure(append(toolInputs, pxdCV.self), pxdCV.buckets))
 			emitsIncludes = dedupClosure(append(emitsIncludes, pxdCV.self), pxdCV.buckets)
 		}
 
@@ -311,7 +311,7 @@ func cythonHeaderToolInputs(src VFS, pyxClosure []VFS) []VFS {
 		singles = append(singles, source(rel))
 	}
 
-	return keepOnlySourceVFS(dedup(singles, pyxClosure))
+	return filterSourceVFS(dedup(singles, pyxClosure))
 }
 
 func cythonPyxLangClosure(scanner *IncludeScanner, src VFS, cfg ScanContext) []VFS {
@@ -418,7 +418,7 @@ func cythonGeneratedOutputInputs(ind CythonCppInduced, sourceCV Closure) ([]VFS,
 	toolLists := append(append([][]VFS{ind.toolSingles}, ind.toolCl...), sourceCV.buckets...)
 	emitsLists := append(append([][]VFS{ind.emitsSingles}, ind.emitsCl...), sourceCV.buckets...)
 
-	return keepOnlySourceVFS(dedup(toolLists...)), dedup(emitsLists...)
+	return filterSourceVFS(dedup(toolLists...)), dedup(emitsLists...)
 }
 
 func cythonHeaderInducedClosure(ind CythonCppInduced) []VFS {
