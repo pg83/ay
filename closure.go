@@ -1,5 +1,10 @@
 package main
 
+type Closure struct {
+	self    VFS
+	buckets [][]VFS
+}
+
 func (cl Closure) len() int {
 	n := 0
 
@@ -34,25 +39,12 @@ func (cl Closure) collect(keep func(VFS) bool) []VFS {
 	return out
 }
 
-// eachBucketVFS / collectBucketVFS operate on a closure's bucket chunks
-// ([][]VFS) — i.e. the closure without self. Consumers that do not need self
-// pass cl.buckets and use these instead of the Closure methods.
-func eachBucketVFS(chunks [][]VFS, fn func(VFS)) {
-	for _, ch := range chunks {
-		for _, v := range ch {
-			fn(v)
-		}
+func (cl Closure) spliceInto(cs *IdSet, block []VFS, k int) int {
+	k = cs.spliceOne(cl.self, block, k)
+
+	for _, b := range cl.buckets {
+		k = cs.spliceNew(b, block, k)
 	}
-}
 
-func collectBucketVFS(chunks [][]VFS, keep func(VFS) bool) []VFS {
-	var out []VFS
-
-	eachBucketVFS(chunks, func(v VFS) {
-		if keep(v) {
-			out = append(out, v)
-		}
-	})
-
-	return out
+	return k
 }
