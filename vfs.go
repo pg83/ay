@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 )
 
-var vfsPrefixScratch []byte
-
 const vfsPrefixLen = len("$(S)/")
 
 const (
@@ -39,24 +37,12 @@ func (v VFS) str() STR {
 	return STR(v.strID())
 }
 
-func vfsScratchConcat(prefix string, parts []string) []byte {
-	b := append(vfsPrefixScratch[:0], prefix...)
-
-	for _, p := range parts {
-		b = append(b, p...)
-	}
-
-	vfsPrefixScratch = b
-
-	return b
-}
-
 func internVInto(prefix string, parts []string) STR {
 	return internBuild(prefix, parts)
 }
 
 func internedVInto(prefix string, parts []string) STR {
-	return internedBytes(vfsScratchConcat(prefix, parts))
+	return internedBuild(prefix, parts)
 }
 
 func internV(parts ...string) STR {
@@ -100,10 +86,7 @@ func buildJoined(dir, rel string) VFS {
 }
 
 func sourceBytes(rel []byte) VFS {
-	vfsPrefixScratch = append(vfsPrefixScratch[:0], "$(S)/"...)
-	vfsPrefixScratch = append(vfsPrefixScratch, rel...)
-
-	return VFS(uint32(internBytes(vfsPrefixScratch))<<1 | uint32(VFSRootSource))
+	return VFS(uint32(internBuildBytes("$(S)/", rel))<<1 | uint32(VFSRootSource))
 }
 
 func source(parts ...string) VFS {

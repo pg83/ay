@@ -88,15 +88,11 @@ func internStr(s string) STR {
 	return id
 }
 
-func internBuild(prefix string, parts []string) STR {
+func internFill(prefix string, parts []string) ([]byte, int) {
 	n := len(prefix)
 
 	for _, p := range parts {
 		n += len(p)
-	}
-
-	if n == 0 {
-		return strEmpty
 	}
 
 	block := internTable.bytes.alloc(n)
@@ -106,6 +102,36 @@ func internBuild(prefix string, parts []string) STR {
 		off += copy(block[off:], p)
 	}
 
+	return block, n
+}
+
+func internBuild(prefix string, parts []string) STR {
+	block, n := internFill(prefix, parts)
+
+	if n == 0 {
+		return strEmpty
+	}
+
+	return internBlock(block, n)
+}
+
+func internBuildBytes(prefix string, rel []byte) STR {
+	n := len(prefix) + len(rel)
+	block := internTable.bytes.alloc(n)
+	off := copy(block, prefix)
+
+	copy(block[off:], rel)
+
+	return internBlock(block, n)
+}
+
+func internedBuild(prefix string, parts []string) STR {
+	block, n := internFill(prefix, parts)
+
+	return internedBytes(block[:n])
+}
+
+func internBlock(block []byte, n int) STR {
 	buf := block[:n]
 	h := xxh3.Hash128(buf)
 
