@@ -169,6 +169,10 @@ func generatedOutputCarriesIncludes(p string) bool {
 	return extHas(p, extCarriesIncl)
 }
 
+func generatedOutputAutoCompiles(p string) bool {
+	return isCCSourceExt(p) || isAsmSourceExt(p) || flatcVariantForExt(p) != nil
+}
+
 func isCodegenProducingSrc(srcRel string) bool {
 	return extHas(srcRel, extCodegen)
 }
