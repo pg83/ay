@@ -20,7 +20,6 @@ type RunProgramNodeSpec struct {
 	toolBinPath   VFS
 	toolLDRef     NodeRef
 	auxTools      []RunProgramAuxTool
-	inVFSByToken  map[STR]VFS
 	inVFSs        []VFS
 	outVFSByToken map[STR]VFS
 	stdoutVFS     *VFS
@@ -70,14 +69,10 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	ctx, instance := e.ctx, e.instance
 	res := ctx.toolResult(internArg(filepath.Clean(stmt.ToolPath.string())))
 	auxTools := resolveRunProgramAuxTools(ctx, strStrings(stmt.ToolPaths))
-	inVFSByToken := make(map[STR]VFS, len(stmt.INFiles))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
 
 	for _, f := range stmt.INFiles {
-		vfs := e.runProgramInputVFS(f.string())
-
-		inVFSByToken[f] = vfs
-		inVFSs = append(inVFSs, vfs)
+		inVFSs = append(inVFSs, e.runProgramInputVFS(f.string()))
 	}
 
 	outVFSByToken := make(map[STR]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
@@ -199,7 +194,6 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			toolBinPath:   *res.LDPath,
 			toolLDRef:     res.LDRef,
 			auxTools:      auxTools,
-			inVFSByToken:  inVFSByToken,
 			inVFSs:        inVFSs,
 			outVFSByToken: outVFSByToken,
 			stdoutVFS:     stdoutVFS,
@@ -490,13 +484,7 @@ func resolveRunProgramAuxTools(ctx *GenCtx, toolPaths []string) []RunProgramAuxT
 func (e *EmitContext) runProgramInputVFS(rel string) VFS {
 	ctx, instance, d := e.ctx, e.instance, e.d
 
-	switch {
-	case strings.HasPrefix(rel, "$(S)/"),
-		strings.HasPrefix(rel, "$(B)/"),
-		strings.HasPrefix(rel, "${ARCADIA_ROOT}/"),
-		strings.HasPrefix(rel, "${CURDIR}/"),
-		strings.HasPrefix(rel, "${ARCADIA_BUILD_ROOT}/"),
-		strings.HasPrefix(rel, "${BINDIR}/"):
+	if vfsHasPrefix(rel) {
 		return e.requireProducedInput("IN", rel, copyFileInputVFS(ctx.fs, instance.Path, rel))
 	}
 
@@ -532,7 +520,7 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 
 	cmdArgs = append(cmdArgs, spec.toolBinPath.str())
 
-	cands := deepReplaceCandidates(stmt, spec.inVFSByToken, spec.outVFSByToken)
+	fileTokens := prBareFileTokens(stmt, spec.inVFSs, spec.outVFSByToken)
 
 	for _, aTok := range stmt.Args {
 		a := aTok.string()
@@ -552,7 +540,7 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 		}
 
 		if !toolReplaced {
-			if rooted, ok := deepReplacePathArg(a, cands); ok {
+			if rooted, ok := rootBareFileArg(a, fileTokens); ok {
 				key = internStr(rooted)
 			}
 		}
@@ -647,70 +635,45 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 	emit.emitReservedNode(node, id)
 }
 
-type DeepReplaceCand struct {
+type prFileToken struct {
 	token  string
 	rooted string
 }
 
-func deepReplaceCandidates(stmt *RunProgramStmt, inVFSByToken, outVFSByToken map[STR]VFS) []DeepReplaceCand {
-	cands := make([]DeepReplaceCand, 0, len(stmt.INFiles)+len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles))
+func prBareFileTokens(stmt *RunProgramStmt, inVFSs []VFS, outVFSByToken map[STR]VFS) []prFileToken {
+	toks := make([]prFileToken, 0, len(stmt.INFiles)+len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles))
 
-	add := func(tok STR, vfs VFS, ok bool) {
-		if !ok {
-			return
-		}
-
+	add := func(tok STR, vfs VFS) {
 		t := tok.string()
 
-		if !mustDeepReplacePath(t) {
+		if vfsHasPrefix(t) {
 			return
 		}
 
-		cands = append(cands, DeepReplaceCand{token: t, rooted: vfs.string()})
+		toks = append(toks, prFileToken{token: t, rooted: vfs.string()})
 	}
 
-	for _, f := range stmt.INFiles {
-		vfs, ok := inVFSByToken[f]
-
-		add(f, vfs, ok)
+	for i, f := range stmt.INFiles {
+		add(f, inVFSs[i])
 	}
 
 	for _, f := range stmt.OUTFiles {
-		vfs, ok := outVFSByToken[f]
-
-		add(f, vfs, ok)
+		add(f, outVFSByToken[f])
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		vfs, ok := outVFSByToken[f]
-
-		add(f, vfs, ok)
+		add(f, outVFSByToken[f])
 	}
 
-	sort.SliceStable(cands, func(i, j int) bool {
-		return len(cands[i].token) > len(cands[j].token)
+	sort.SliceStable(toks, func(i, j int) bool {
+		return len(toks[i].token) > len(toks[j].token)
 	})
 
-	return cands
+	return toks
 }
 
-func mustDeepReplacePath(p string) bool {
-	switch {
-	case strings.HasPrefix(p, "$(S)/"),
-		strings.HasPrefix(p, "$(B)/"),
-		strings.HasPrefix(p, "${ARCADIA_ROOT}/"),
-		strings.HasPrefix(p, "${ARCADIA_BUILD_ROOT}/"),
-		strings.HasPrefix(p, "${CURDIR}/"),
-		strings.HasPrefix(p, "${BINDIR}/"),
-		strings.HasPrefix(p, "/"):
-		return false
-	}
-
-	return true
-}
-
-func deepReplacePathArg(arg string, cands []DeepReplaceCand) (string, bool) {
-	for _, c := range cands {
+func rootBareFileArg(arg string, toks []prFileToken) (string, bool) {
+	for _, c := range toks {
 		idx := strings.Index(arg, c.token)
 
 		if idx < 0 {
@@ -718,8 +681,8 @@ func deepReplacePathArg(arg string, cands []DeepReplaceCand) (string, bool) {
 		}
 
 		end := idx + len(c.token)
-		beforeOK := idx == 0 || isDeepReplaceBoundary(arg[idx-1])
-		afterOK := end == len(arg) || isDeepReplaceBoundary(arg[end])
+		beforeOK := idx == 0 || isBareTokenBoundary(arg[idx-1])
+		afterOK := end == len(arg) || isBareTokenBoundary(arg[end])
 
 		if beforeOK && afterOK {
 			return arg[:idx] + c.rooted + arg[end:], true
@@ -729,7 +692,7 @@ func deepReplacePathArg(arg string, cands []DeepReplaceCand) (string, bool) {
 	return arg, false
 }
 
-func isDeepReplaceBoundary(c byte) bool {
+func isBareTokenBoundary(c byte) bool {
 	switch {
 	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':
 		return false
@@ -739,3 +702,4 @@ func isDeepReplaceBoundary(c byte) bool {
 
 	return true
 }
+
