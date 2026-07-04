@@ -33,11 +33,13 @@ func bucketHash(elems []VFS) uint64 {
 
 func (c *BucketCache) internBucket(elems []VFS) []VFS {
 	cell, found := c.intern.cell(bucketHash(elems))
+
 	if found {
 		return *cell
 	}
 
 	slice := c.pool.list(elems...)
+
 	*cell = slice
 
 	return slice
@@ -50,6 +52,7 @@ func (c *BucketCache) storeBuckets(self VFS, rest []VFS) Closure {
 
 	for _, v := range rest {
 		r := v.strID() & (closureBuckets - 1)
+
 		c.scratch[r] = append(c.scratch[r], v)
 	}
 

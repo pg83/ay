@@ -98,10 +98,6 @@ func joinRel(prefix, suffix string) string {
 	}
 }
 
-// buildJoinClean is build(filepath.Clean(dir+"/"+rel)) without the throwaway
-// concat+Clean strings when both parts are already clean (the common case) — the
-// join is then clean too, so filepath.Clean is a no-op and build interns the
-// parts directly.
 func buildJoinClean(dir, rel string) VFS {
 	if dir != "" && rel != "" && pathIsClean(dir) && pathIsClean(rel) {
 		return build(dir, "/", rel)
@@ -110,8 +106,6 @@ func buildJoinClean(dir, rel string) VFS {
 	return build(filepath.ToSlash(filepath.Clean(dir + "/" + rel)))
 }
 
-// sourceClean is source(filepath.Clean(rel)) skipping the Clean throwaway when
-// rel is already clean.
 func sourceClean(rel string) VFS {
 	if rel != "" && pathIsClean(rel) {
 		return source(rel)

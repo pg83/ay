@@ -6,14 +6,6 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-// internCell holds one interned string and the low 64 bits of its 128-bit
-// hash, in a single paged slot. Paging (rather than a growable slice) keeps
-// reads lock-free while emission keeps appending during concurrent execution.
-type internCell struct {
-	str string
-	lo  uint64
-}
-
 var internTable = struct {
 	ids      *IntMap[STR]
 	overflow map[string]STR
@@ -25,6 +17,11 @@ var internTable = struct {
 	overflow: make(map[string]STR),
 	count:    1,
 	bytes:    newBumpAllocator[byte](1 << 20),
+}
+
+type internCell struct {
+	str string
+	lo  uint64
 }
 
 func init() {

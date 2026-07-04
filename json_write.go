@@ -6,6 +6,27 @@ import (
 	"unicode/utf8"
 )
 
+var vfsEscapedJSON [][]byte
+
+var htmlSafeNoEscape = func() [128]bool {
+	var t [128]bool
+
+	for b := 0; b < 128; b++ {
+		switch {
+		case b < 0x20:
+			t[b] = false
+		case b == '"' || b == '\\':
+			t[b] = false
+		default:
+			t[b] = true
+		}
+	}
+
+	return t
+}()
+
+const hex = "0123456789abcdef"
+
 func appendRefNum(buf []byte, r NodeRef) []byte {
 	return strconv.AppendUint(buf, uint64(r), 10)
 }
@@ -42,27 +63,6 @@ func appendRefNumSlice(buf []byte, refs []NodeRef) []byte {
 
 	return append(buf, ']')
 }
-
-var vfsEscapedJSON [][]byte
-
-var htmlSafeNoEscape = func() [128]bool {
-	var t [128]bool
-
-	for b := 0; b < 128; b++ {
-		switch {
-		case b < 0x20:
-			t[b] = false
-		case b == '"' || b == '\\':
-			t[b] = false
-		default:
-			t[b] = true
-		}
-	}
-
-	return t
-}()
-
-const hex = "0123456789abcdef"
 
 func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 	buf := make([]byte, 0, 1<<20)

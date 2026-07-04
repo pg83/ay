@@ -41,6 +41,7 @@ func (na *NodeArenas) chunkList(ch ...[]STR) ArgChunks {
 func (na *NodeArenas) inputList(first []VFS, rest ...[]VFS) InputChunks {
 	n := 1 + len(rest)
 	dst := na.inputs.alloc(n)
+
 	dst[0] = first
 	copy(dst[1:], rest)
 	na.inputs.commit(n)

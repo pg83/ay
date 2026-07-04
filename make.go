@@ -289,9 +289,6 @@ func cmdMake(g GlobalFlags, args []string) int {
 	return 0
 }
 
-// genStream builds one graph across all targets in a single emitter (so
-// NodeRefs form one global address space the executor can key on) and returns
-// the deduped result NodeRefs.
 func genStream(fs FS, targets []string, hostP, targetP *Platform, onNode func(*Node, *DenseMap[STR, NodeRef]), onWarn func(Warn), testMode bool) []NodeRef {
 	emitter := newStreamingEmitter(onNode)
 

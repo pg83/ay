@@ -336,7 +336,6 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	}
 
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
-
 	ctx.buckets = newBucketCache()
 
 	targetScanner := newIncludeScannerWith(parsers, loadSysInclSetForFS(fs, string(targetP.ISA), targetP.Flags[envMUSL] == strYes, targetP.Flags[envOPENSOURCE] == strYes, targetP.OS, onWarn), onWarn, &ctx.tarjan, ctx.buckets)

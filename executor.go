@@ -85,11 +85,6 @@ func newExecutor(srcRoot, bldRoot string, fs FS, threads int, keepGoing bool, ni
 	}
 }
 
-// contentHash resolves a source file's content hash at execution time.
-// Generation-recorded hashes are read lock-free from the paged fs store; files
-// the scanner never read are hashed here and memoized under a lock (rare —
-// most sources are read during generation). Reading here goes straight through
-// os.ReadFile to avoid the OsFS single-threaded read buffers.
 func (ex *Executor) contentHash(v VFS) uint64 {
 	if h := ex.fs.contentHash(v); h != 0 {
 		return h
@@ -98,6 +93,7 @@ func (ex *Executor) contentHash(v VFS) uint64 {
 	s := v.str()
 
 	ex.hashMu.Lock()
+
 	defer ex.hashMu.Unlock()
 
 	if h, ok := ex.localHash[s]; ok {
@@ -105,6 +101,7 @@ func (ex *Executor) contentHash(v VFS) uint64 {
 	}
 
 	h := hashSourceFile(ex.srcRoot, v.rel())
+
 	ex.localHash[s] = h
 
 	return h
@@ -130,9 +127,6 @@ func (ex *Executor) fire(f *NodeFuture) {
 	})
 }
 
-// uidOf materializes a node's UID at execution time. Fetch/VCS nodes carry a
-// content-addressed preset; everything else is a Merkle hash over node content
-// plus the (already-computed) UIDs of its dependency futures.
 func (ex *Executor) uidOf(n *Node) UID {
 	if n.presetUID != (UID{}) {
 		return n.presetUID

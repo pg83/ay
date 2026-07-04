@@ -345,11 +345,6 @@ func (sc *ScanCtx) dfs(abs VFS) {
 		k = cl.spliceInto(&s.tjc.closure, block, k)
 	})
 
-	// Only abs's own build-leaf chain needs expansion: a child build node already
-	// carries its ClosureLeaves inside the child's own closure (expanded when the
-	// child was built), so they arrive with the spliced child window. Expand abs,
-	// then transitively any build nodes among the leaves it adds — not the child
-	// block above.
 	leafStart := k
 
 	if abs.isBuild() {
@@ -783,7 +778,6 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 
 func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective) []VFS {
 	s := sc.scanner
-
 	out := s.spOut[:0]
 
 	defer func() {

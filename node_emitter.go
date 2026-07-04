@@ -101,10 +101,6 @@ func (e *StreamingEmitter) emit(n *Node) NodeRef {
 	return id
 }
 
-// resolveOrPend enforces dependency-first ordering of onNode: a node is only
-// released to the executor once every build dep has been released, so the
-// executor can materialize dep UIDs from already-registered futures. UIDs are
-// no longer computed here — that moved to the executor.
 func (e *StreamingEmitter) resolveOrPend(n *Node, id NodeRef) {
 	if e.hasUnresolvedDeps(n) {
 		e.pendingSet[id] = true
