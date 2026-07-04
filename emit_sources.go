@@ -15,9 +15,9 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	case srcExtProto:
 		e.emitLibraryProtoSource(meta)
 	case srcExtFbs64:
-		e.emitLibraryFlatcSource64(src)
+		e.emitLibraryFlatcSource(meta, &flatcVariantFL64)
 	case srcExtFbs:
-		e.emitLibraryFlatcSource32(src)
+		e.emitLibraryFlatcSource(meta, &flatcVariantFL)
 	case srcExtRodata:
 		e.emitLibraryRodataSource(meta)
 	case srcExtCSource:

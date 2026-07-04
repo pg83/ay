@@ -185,23 +185,25 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 	})
 }
 
-func (e *EmitContext) emitLibraryFlatcSource32(src STR) {
-	e.emitLibraryFlatcSource(src, &flatcVariantFL)
-}
-
-func (e *EmitContext) emitLibraryFlatcSource64(src STR) {
-	e.emitLibraryFlatcSource(src, &flatcVariantFL64)
-}
-
-func (e *EmitContext) emitLibraryFlatcSource(src STR, variant *FlatcVariant) {
+func (e *EmitContext) emitLibraryFlatcSource(meta SrcMeta, variant *FlatcVariant) {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	srcVFS := resolveSourceVFS(ctx, instance, src.string(), d.srcDirs)
 
-	e.emitFlatcProducer(srcVFS, variant, nil)
+	var srcVFS VFS
+	var genDeps []NodeRef
 
-	meta := d.srcMetaOf(src)
+	if meta.Generated {
+		srcVFS = meta.Source.vfs()
+		genDeps = []NodeRef{e.codegen.mustInfo(srcVFS, "flatc generated source").ProducerRef}
+	} else {
+		srcVFS = resolveSourceVFS(ctx, instance, meta.Source.string(), d.srcDirs)
+	}
 
-	meta.Generated = true
-	meta.Source = build(srcVFS.rel(), ".cpp").str()
-	e.enqueueSrc(meta)
+	e.emitFlatcProducer(srcVFS, variant, genDeps)
+
+	cpp := meta
+
+	cpp.SecondLevel = meta.SecondLevel || meta.Generated
+	cpp.Generated = true
+	cpp.Source = build(srcVFS.rel(), ".cpp").str()
+	e.enqueueSrc(cpp)
 }

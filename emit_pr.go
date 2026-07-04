@@ -15,9 +15,22 @@ type RunProgramAuxTool struct {
 	rooted bool
 }
 
+type RunProgramNodeSpec struct {
+	stmt          *RunProgramStmt
+	toolBinPath   VFS
+	toolLDRef     NodeRef
+	auxTools      []RunProgramAuxTool
+	inVFSByToken  map[STR]VFS
+	inVFSs        []VFS
+	outVFSByToken map[STR]VFS
+	stdoutVFS     *VFS
+	inputClosure  []VFS
+	extraDepRefs  []NodeRef
+}
+
 func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
-	instance := e.instance
-	prRef := e.emitRunProgram(rp, e.codegen)
+	e.emitRunProgram(rp)
+
 	outs := make([]string, 0, len(rp.OUTFiles)+1)
 
 	outs = append(outs, strStrings(rp.OUTFiles)...)
@@ -27,25 +40,16 @@ func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
 	}
 
 	for _, out := range outs {
-		if v := flatcVariantForExt(out); v != nil {
-			e.emitFlatcProducer(copyFileOutputVFS(instance.Path.rel(), out), v, []NodeRef{prRef})
-		}
-	}
-
-	for _, out := range outs {
-		if isCCSourceExt(out) || isAsmSourceExt(out) {
-			e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.rel(), out).str(), Prio: stmtPrioDefault, Seq: rp.DeclSeq, Generated: true})
-		}
-	}
-
-	for _, out := range outs {
-		if flatcVariantForExt(out) == nil {
+		if !generatedOutputAutoCompiles(out) {
 			continue
 		}
 
-		cppVFS := build(copyFileOutputVFS(instance.Path.rel(), out).rel(), ".cpp")
-
-		e.enqueueSrc(SrcMeta{Source: cppVFS.str(), Prio: stmtPrioDefault, Seq: rp.DeclSeq, Generated: true, SecondLevel: true})
+		e.enqueueSrc(SrcMeta{
+			Source:    copyFileOutputVFS(e.instance.Path.rel(), out).str(),
+			Prio:      stmtPrioDefault,
+			Seq:       rp.DeclSeq,
+			Generated: true,
+		})
 	}
 }
 
@@ -62,11 +66,9 @@ func prMainOutputRel(stmt *RunProgramStmt) string {
 	return ""
 }
 
-func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt, reg *CodegenRegistry) NodeRef {
-	ctx, instance, d := e.ctx, e.instance, e.d
+func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
+	ctx, instance := e.ctx, e.instance
 	res := ctx.toolResult(internArg(filepath.Clean(stmt.ToolPath.string())))
-	toolLDRef := res.LDRef
-	toolBinPath := *res.LDPath
 	auxTools := resolveRunProgramAuxTools(ctx, strStrings(stmt.ToolPaths))
 	inVFSByToken := make(map[STR]VFS, len(stmt.INFiles))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
@@ -108,31 +110,8 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt, reg *CodegenRegistry)
 		mainOutputVFS = *stdoutVFS
 	}
 
-	var prSourceInputs []VFS
-	var prGeneratedFromSources []VFS
-
-	for _, v := range inVFSs {
-		if v.isSource() {
-			prSourceInputs = append(prSourceInputs, v)
-
-			continue
-		}
-
-		if info := reg.lookup(v); info != nil {
-			prGeneratedFromSources = append(prGeneratedFromSources, info.SourceInputs...)
-		}
-	}
-
-	prSourceInputs = append(prSourceInputs, prGeneratedFromSources...)
-
-	var protoImportPbH []IncludeDirective
-
-	for _, v := range inVFSs {
-		if v.isSource() && extIsProto(v.rel()) {
-			protoImportPbH = append(protoImportPbH, protoDirectPbHIncludes(ctx.parsers, v.rel(), "")...)
-		}
-	}
-
+	prSourceInputs := prCollectSourceInputs(e.codegen, inVFSs)
+	protoImportPbH := prProtoImportPbH(ctx.parsers, inVFSs)
 	prRef := ctx.emit.reserve()
 	registeredPROut := map[VFS]bool{}
 	mainIsHeader := mainOutputVFS != 0 && isHeaderSource(mainOutputVFS.rel())
@@ -145,33 +124,31 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt, reg *CodegenRegistry)
 		return IncludeDirective{kind: includeQuoted, target: internStr(mainOutputVFS.rel())}, true
 	}
 
-	registerPROutput := func(out VFS, parsed []IncludeDirective, ridesHeaderViaParsed bool) {
+	registerOutput := func(out VFS, parsed []IncludeDirective, ridesHeaderViaParsed bool) {
 		if registeredPROut[out] {
 			return
 		}
 
 		registeredPROut[out] = true
 
-		leaves := prGeneratedFromSources
+		leaves := prSourceInputs.generated
 
 		if out != mainOutputVFS && !ridesHeaderViaParsed {
-			leaves = append([]VFS{mainOutputVFS}, prGeneratedFromSources...)
+			leaves = append([]VFS{mainOutputVFS}, prSourceInputs.generated...)
 		}
 
-		info := &GeneratedFileInfo{
+		e.codegen.register(&GeneratedFileInfo{
 			OutputPath:     out,
 			ProducerRef:    prRef,
-			GeneratorRefs:  []NodeRef{toolLDRef},
+			GeneratorRefs:  []NodeRef{res.LDRef},
 			ParsedIncludes: parsed,
-			SourceInputs:   prSourceInputs,
+			SourceInputs:   prSourceInputs.all,
 			ClosureLeaves:  leaves,
-		}
-
-		e.codegen.register(info)
+		})
 	}
 
 	parsedFor := func(f STR, out VFS, auto bool) ([]IncludeDirective, bool) {
-		parsed := prEmitsIncludes(f, stmt, inVFSs, protoImportPbH)
+		parsed := prOutputParsedIncludes(f, stmt, inVFSs, protoImportPbH)
 
 		if auto && isCCSourceExt(f.string()) {
 			if inc, ok := mainHeaderInclude(out.rel()); ok {
@@ -186,41 +163,86 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt, reg *CodegenRegistry)
 		out := outVFSByToken[f]
 		parsed, rides := parsedFor(f, out, true)
 
-		registerPROutput(out, parsed, rides)
+		registerOutput(out, parsed, rides)
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
 		out := outVFSByToken[f]
 		parsed, rides := parsedFor(f, out, false)
 
-		registerPROutput(out, parsed, rides)
+		registerOutput(out, parsed, rides)
 	}
 
 	if stmt.StdoutFile != nil {
 		parsed, rides := parsedFor(*stmt.StdoutFile, *stdoutVFS, !stmt.StdoutNoAuto)
 
-		registerPROutput(*stdoutVFS, parsed, rides)
+		registerOutput(*stdoutVFS, parsed, rides)
 	}
 
-	inputClosure := e.prInputClosure(stmt)
+	e.deferPass2(func() {
+		inputClosure := e.prInputClosure(stmt)
 
-	if prSourceClosure := filterSourceVFS(inputClosure); len(prSourceClosure) > 0 {
-		for out := range registeredPROut {
-			reg.addSourceInputs(out, prSourceClosure)
+		if prSourceClosure := filterSourceVFS(inputClosure); len(prSourceClosure) > 0 {
+			for out := range registeredPROut {
+				e.codegen.addSourceInputs(out, prSourceClosure)
+			}
+		}
+
+		depInputs := inputClosure
+
+		if len(inVFSs) > 0 {
+			depInputs = concat(inVFSs, inputClosure)
+		}
+
+		emitPR(instance, RunProgramNodeSpec{
+			stmt:          stmt,
+			toolBinPath:   *res.LDPath,
+			toolLDRef:     res.LDRef,
+			auxTools:      auxTools,
+			inVFSByToken:  inVFSByToken,
+			inVFSs:        inVFSs,
+			outVFSByToken: outVFSByToken,
+			stdoutVFS:     stdoutVFS,
+			inputClosure:  inputClosure,
+			extraDepRefs:  resolveCodegenDepRefsIncl(ctx, instance, ctx.na, depInputs),
+		}, prRef, ctx.emit)
+	})
+}
+
+type prSourceInputSet struct {
+	all       []VFS
+	generated []VFS
+}
+
+func prCollectSourceInputs(reg *CodegenRegistry, inVFSs []VFS) prSourceInputSet {
+	var direct []VFS
+	var generated []VFS
+
+	for _, v := range inVFSs {
+		if v.isSource() {
+			direct = append(direct, v)
+
+			continue
+		}
+
+		if info := reg.lookup(v); info != nil {
+			generated = append(generated, info.SourceInputs...)
 		}
 	}
 
-	depInputs := inputClosure
+	return prSourceInputSet{all: append(direct, generated...), generated: generated}
+}
 
-	if len(inVFSs) > 0 {
-		depInputs = concat(inVFSs, inputClosure)
+func prProtoImportPbH(pm *IncludeParserManager, inVFSs []VFS) []IncludeDirective {
+	var out []IncludeDirective
+
+	for _, v := range inVFSs {
+		if v.isSource() && extIsProto(v.rel()) {
+			out = append(out, protoDirectPbHIncludes(pm, v.rel(), "")...)
+		}
 	}
 
-	prExtraDepRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, depInputs)
-
-	emitPR(instance, stmt, toolBinPath, toolLDRef, auxTools, inVFSByToken, inVFSs, outVFSByToken, stdoutVFS, inputClosure, prExtraDepRefs, d.unit.CCTag, prRef, ctx.emit)
-
-	return prRef
+	return out
 }
 
 func pbhBasenameSet(vs []VFS) map[string]bool {
@@ -238,17 +260,15 @@ func pbhBasenameSet(vs []VFS) map[string]bool {
 func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	hasAutoCCSourceOut := stmt.StdoutFile != nil && isCCSourceExt(stmt.StdoutFile.string())
+	generatesHeader := stmt.StdoutFile != nil && isHeaderSource(stmt.StdoutFile.string())
 
 	for _, f := range stmt.OUTFiles {
-		if isCCSourceExt(f.string()) {
-			hasAutoCCSourceOut = true
-
-			break
-		}
+		hasAutoCCSourceOut = hasAutoCCSourceOut || isCCSourceExt(f.string())
+		generatesHeader = generatesHeader || isHeaderSource(f.string())
 	}
 
-	mainIsCCSource := isCCSourceExt(prMainOutputRel(stmt))
-	fullSourceClosure := len(stmt.INFiles) == 0 && (!hasAutoCCSourceOut || mainIsCCSource)
+	mainRel := prMainOutputRel(stmt)
+	fullSourceClosure := len(stmt.INFiles) == 0 && (!hasAutoCCSourceOut || isCCSourceExt(mainRel))
 
 	if len(stmt.INFiles) == 0 && !fullSourceClosure {
 		return nil
@@ -258,69 +278,43 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 	hasParsedIN := false
 
 	for _, f := range stmt.INFiles {
-		if extIsProto(f.string()) {
-			hasProtoIN = true
-		}
-
-		if ctx.parsers.registry.hasRegisteredParser(f.string()) {
-			hasParsedIN = true
-		}
+		hasProtoIN = hasProtoIN || extIsProto(f.string())
+		hasParsedIN = hasParsedIN || ctx.parsers.registry.hasRegisteredParser(f.string())
 	}
 
-	generatesHeader := stmt.StdoutFile != nil && isHeaderSource(stmt.StdoutFile.string())
-
-	for _, f := range stmt.OUTFiles {
-		if isHeaderSource(f.string()) {
-			generatesHeader = true
-
-			break
-		}
-	}
-
-	selfScanGeneratedCC := len(stmt.INFiles) > 0 && (hasParsedIN || !generatesHeader)
 	scanCfg := newScanContext(ctx.parsers, d.cc.AddIncl, d.cc.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 
 	var out []VFS
-
-	walkOne := func(rel string) {
-		buildRootPath := copyFileOutputVFS(instance.Path.rel(), rel)
-		cv := walkClosure(e.scanner, buildRootPath, scanCfg)
-
-		eachBucketVFS(cv.buckets, func(v VFS) { out = append(out, v) })
-	}
-
-	walkInput := func(rel string) {
-		inputVFS := e.runProgramInputVFS(rel)
-
-		walkClosure(e.scanner, inputVFS, scanCfg).each(func(v VFS) { out = append(out, v) })
-	}
-
-	mainRel := prMainOutputRel(stmt)
 
 	ridesMainHeader := func(ccRel string) bool {
 		return isHeaderSource(mainRel) && relStem(ccRel) == relStem(mainRel)
 	}
 
-	if selfScanGeneratedCC {
-		for _, f := range stmt.OUTFiles {
-			if !isCCSourceExt(f.string()) || ridesMainHeader(f.string()) {
-				continue
+	if len(stmt.INFiles) > 0 && (hasParsedIN || !generatesHeader) {
+		scanGeneratedCC := func(rel string) {
+			if !isCCSourceExt(rel) || ridesMainHeader(rel) {
+				return
 			}
 
-			walkOne(f.string())
-		}
-	}
+			cv := walkClosure(e.scanner, copyFileOutputVFS(instance.Path.rel(), rel), scanCfg)
 
-	if selfScanGeneratedCC && stmt.StdoutFile != nil && isCCSourceExt(stmt.StdoutFile.string()) &&
-		!ridesMainHeader(stmt.StdoutFile.string()) {
-		walkOne(stmt.StdoutFile.string())
+			eachBucketVFS(cv.buckets, func(v VFS) { out = append(out, v) })
+		}
+
+		for _, f := range stmt.OUTFiles {
+			scanGeneratedCC(f.string())
+		}
+
+		if stmt.StdoutFile != nil {
+			scanGeneratedCC(stmt.StdoutFile.string())
+		}
 	}
 
 	for _, f := range stmt.INFiles {
 		rel := f.string()
 
 		if ctx.parsers.registry.hasRegisteredParser(rel) {
-			walkInput(rel)
+			walkClosure(e.scanner, e.runProgramInputVFS(rel), scanCfg).each(func(v VFS) { out = append(out, v) })
 
 			continue
 		}
@@ -346,8 +340,6 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 		}
 	}
 
-	reg := e.codegen
-
 	keep := func(v VFS) bool {
 		if fullSourceClosure {
 			return v.isSource()
@@ -365,18 +357,14 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 			target = internStr(intern(target.string()).rel())
 		}
 
-		candidate := build(target.string())
-
 		var sub Closure
 
 		selfIsInput := false
 
-		switch info := reg.lookup(candidate); {
+		switch info := e.codegen.lookup(build(target.string())); {
 		case info != nil:
-
 			sub = walkClosure(e.scanner, info.OutputPath, scanCfg)
 		case fullSourceClosure && ctx.fs.isFile(srcRootVFS, target.string()):
-
 			sub = walkClosure(e.scanner, source(target.string()), scanCfg)
 			selfIsInput = true
 		default:
@@ -416,12 +404,10 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 		return nil
 	}
 
-	out = dedup(out, nil)
-
-	return out
+	return dedup(out, nil)
 }
 
-func prEmitsIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, protoImportPbH []IncludeDirective) []IncludeDirective {
+func prOutputParsedIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, protoImportPbH []IncludeDirective) []IncludeDirective {
 	carries := generatedOutputCarriesIncludes(outFile.string())
 
 	if !carries && len(stmt.OutputIncludes) == 0 {
@@ -527,22 +513,8 @@ func (e *EmitContext) runProgramInputVFS(rel string) VFS {
 	return e.resolveModuleSourceVFS(internStr(rel), d.srcDirs)
 }
 
-func emitPR(
-	instance ModuleInstance,
-	stmt *RunProgramStmt,
-	toolBinPath VFS,
-	toolLDRef NodeRef,
-	auxTools []RunProgramAuxTool,
-	inVFSByToken map[STR]VFS,
-	inVFSs []VFS,
-	outVFSByToken map[STR]VFS,
-	stdoutVFS *VFS,
-	inputClosure []VFS,
-	extraDepRefs []NodeRef,
-	moduleTag STR,
-	id NodeRef,
-	emit *StreamingEmitter,
-) {
+func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *StreamingEmitter) {
+	stmt := spec.stmt
 	na := emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -558,16 +530,16 @@ func emitPR(
 
 	cmdArgs := make([]STR, 0, 1+len(stmt.Args))
 
-	cmdArgs = append(cmdArgs, (toolBinPath).str())
+	cmdArgs = append(cmdArgs, spec.toolBinPath.str())
 
-	cands := deepReplaceCandidates(stmt, inVFSByToken, outVFSByToken)
+	cands := deepReplaceCandidates(stmt, spec.inVFSByToken, spec.outVFSByToken)
 
 	for _, aTok := range stmt.Args {
 		a := aTok.string()
 		key := aTok
 		toolReplaced := false
 
-		for _, tool := range auxTools {
+		for _, tool := range spec.auxTools {
 			if tool.rooted {
 				continue
 			}
@@ -588,7 +560,7 @@ func emitPR(
 		cmdArgs = append(cmdArgs, key)
 	}
 
-	head := make([]VFS, 0, 1+len(auxTools)+len(stmt.INFiles))
+	head := make([]VFS, 0, 1+len(spec.auxTools)+len(stmt.INFiles))
 
 	deduper.reset()
 
@@ -600,17 +572,17 @@ func emitPR(
 		head = append(head, p)
 	}
 
-	appendUnique(toolBinPath)
+	appendUnique(spec.toolBinPath)
 
-	for _, tool := range auxTools {
+	for _, tool := range spec.auxTools {
 		appendUnique(tool.bin)
 	}
 
-	for _, v := range inVFSs {
+	for _, v := range spec.inVFSs {
 		appendUnique(v)
 	}
 
-	inputs := na.inputList(head, deduper.filterSeen(inputClosure))
+	inputs := na.inputList(head, deduper.filterSeen(spec.inputClosure))
 
 	var outputs []VFS
 	var stdoutPath STR
@@ -626,29 +598,26 @@ func emitPR(
 		outputs = append(outputs, v)
 	}
 
-	if stdoutVFS != nil {
-		stdoutPath = stdoutVFS.str()
-		appendOutput(*stdoutVFS)
+	if spec.stdoutVFS != nil {
+		stdoutPath = spec.stdoutVFS.str()
+		appendOutput(*spec.stdoutVFS)
 	}
 
 	for _, f := range stmt.OUTFiles {
-		appendOutput(outVFSByToken[f])
+		appendOutput(spec.outVFSByToken[f])
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		appendOutput(outVFSByToken[f])
+		appendOutput(spec.outVFSByToken[f])
 	}
 
 	var toolRefs []NodeRef
 
-	for _, tool := range auxTools {
+	for _, tool := range spec.auxTools {
 		toolRefs = append(toolRefs, depRefs(tool.ref)...)
 	}
 
-	toolRefs = append(toolRefs, depRefs(toolLDRef)...)
-
-	deps := append([]NodeRef(nil), extraDepRefs...)
-	foreignDepRefs := toolRefs
+	toolRefs = append(toolRefs, depRefs(spec.toolLDRef)...)
 
 	cmd := Cmd{
 		CmdArgs: na.chunkList(cmdArgs),
@@ -671,8 +640,8 @@ func emitPR(
 		Outputs:        outputs,
 		KV:             &prKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:        deps,
-		ForeignDepRefs: foreignDepRefs,
+		DepRefs:        append([]NodeRef(nil), spec.extraDepRefs...),
+		ForeignDepRefs: toolRefs,
 	}
 
 	emit.emitReservedNode(node, id)
