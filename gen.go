@@ -177,14 +177,6 @@ func stringPtr(s string) *string {
 	return &s
 }
 
-func vfsPtr(v VFS) *VFS {
-	return &v
-}
-
-func cloneVFSs(in []VFS) []VFS {
-	return append([]VFS(nil), in...)
-}
-
 func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
 	if res == nil {
 		return nil

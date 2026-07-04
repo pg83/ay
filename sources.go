@@ -65,20 +65,6 @@ func rewriteClosureCPSource(scanner *IncludeScanner, cv Closure) []VFS {
 	return out
 }
 
-func keepOnlySourceVFS(out []VFS) []VFS {
-	var w []VFS
-
-	for _, v := range out {
-		if !v.isSource() {
-			continue
-		}
-
-		w = append(w, v)
-	}
-
-	return w
-}
-
 func includeScannerBasePaths() []VFS {
 	return includeScannerBasePathsSlice
 }
