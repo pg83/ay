@@ -395,17 +395,17 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	}
 
 	extras := pbHEmitsIncludesExtras()
-	pbHParsed := make([]IncludeDirective, 0, len(pbHImports)+len(extras)+transitiveImports.len())
+	pbHCompile := make([]IncludeDirective, 0, len(pbHImports)+len(extras)+transitiveImports.len())
 
-	pbHParsed = append(pbHParsed, pbHImports...)
-	pbHParsed = append(pbHParsed, extras...)
+	pbHCompile = append(pbHCompile, pbHImports...)
+	pbHCompile = append(pbHCompile, extras...)
 
 	eachBucketVFS(transitiveImports.buckets, func(ti VFS) {
 		if ti.isBuild() {
 			return
 		}
 
-		pbHParsed = append(pbHParsed, IncludeDirective{kind: includeQuoted, target: internStr(ti.rel())})
+		pbHCompile = append(pbHCompile, IncludeDirective{kind: includeQuoted, target: internStr(ti.rel())})
 	})
 
 	pbGenRefs := []NodeRef{pe.protocLDRef, pe.cppStyleguideLDRef}
@@ -430,7 +430,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		OutputPath:     pbH,
 		ProducerRef:    pbRef,
 		GeneratorRefs:  pbGenRefs,
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: pbHParsed},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesCpp: pbHCompile},
 		ClosureLeaves:  pbHLeaves,
 	})
 
