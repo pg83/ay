@@ -1197,6 +1197,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			PeerSbomClosurePaths:            peerSbomPaths,
 			InducedDeps:                     d.inducedDeps,
 			ModuleStmtName:                  d.moduleStmt.Name,
+			CFlagsGlobal:                    effectiveCFlagsGlobal,
 		}
 	}
 
@@ -1360,7 +1361,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		var ownSbomPathH *VFS
 
 		if sbomActive(ctx, instance) && sbomQualifies(d) {
-			realPrjName := strings.TrimSuffix(archiveNameWithPrefixOrName(instance.Path.rel(), "", ""), ".a")
+			realPrjName := strings.TrimSuffix(archiveNameWithPrefixOrName(instance.Path.rel(), "", archiveName), ".a")
 
 			ownSbomRefH, ownSbomPathH = e.emitSbomComponent(realPrjName)
 		}
@@ -1371,7 +1372,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		result.ARPath = hOnlyARPath
 		result.GlobalRef = hOnlyGlobalRef
 		result.GlobalPath = hOnlyGlobalPath
-		result.CFlagsGlobal = concat(peerCFlagsGlobal, d.cFlagsGlobal)
 		result.WholeArchiveRefs = hOnlyWholeArchiveRefs
 		result.WholeArchivePaths = hOnlyWholeArchivePaths
 		result.WholeArchiveCmdPaths = protoResultWholeArchiveCmdPaths(protoResult)
@@ -1502,7 +1502,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		result.isPROGRAM = true
 		result.LDRef = ldRef
 		result.LDPath = &ldPath
-		result.CFlagsGlobal = effectiveCFlagsGlobal
 		result.SbomComponentRef = ownSbomRef
 		result.SbomComponentPath = ownSbomPath
 		result.ResourceGlobalClosure = resourceGlobalsClosure
@@ -1584,7 +1583,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	result.ARPath = arPath
 	result.LDRef = arRef
 	result.LDPath = arPath
-	result.CFlagsGlobal = effectiveCFlagsGlobal
 	result.SbomComponentRef = ownSbomRef
 	result.SbomComponentPath = ownSbomPath
 	result.ResourceGlobalClosure = resourceGlobalsClosure
