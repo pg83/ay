@@ -567,20 +567,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		return *existing
 	}
 
-	if os.Getenv("YATOOL_TRACE") == "1" {
-		indent := strings.Repeat("  ", len(ctx.traceStack))
-		caller := "(root)"
-
-		if len(ctx.traceStack) > 0 {
-			caller = ctx.traceStack[len(ctx.traceStack)-1]
-		}
-
-		fmt.Fprintf(os.Stderr, "%sgenModule %s@%s  (from %s)\n", indent, instance.Path.rel(), instance.Platform.Target, caller)
-		ctx.traceStack = append(ctx.traceStack, instance.Path.rel()+"@"+string(instance.Platform.Target))
-
-		defer func() { ctx.traceStack = ctx.traceStack[:len(ctx.traceStack)-1] }()
-	}
-
 	if ctx.walking[instance] {
 		ctx.cyclesTolerated++
 		fmt.Fprintf(os.Stderr, "gen: PEERDIR cycle tolerated at %s\n", instance.Path.rel())
