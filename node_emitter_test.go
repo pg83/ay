@@ -367,3 +367,54 @@ func TestEmitter_PostFinalizeResultPanics(t *testing.T) {
 
 	e.result(ref)
 }
+
+func TestFinish_PendingDeliveredAfterTheirDeps(t *testing.T) {
+	delivered := map[NodeRef]bool{}
+
+	var order []NodeRef
+
+	var e *StreamingEmitter
+
+	e = newStreamingEmitter(func(n *Node, fetchRefs *DenseMap[STR, NodeRef]) {
+		for r := range n.buildDeps(fetchRefs) {
+			if !delivered[r] {
+				t.Errorf("node %d delivered before its dep %d", n.Ref, r)
+			}
+		}
+
+		delivered[n.Ref] = true
+		order = append(order, n.Ref)
+	})
+
+	_ = e
+
+	r1 := e.reserve()
+	r2 := e.reserve()
+
+	a := e.emitNode(Node{
+		KV:       &KV{Name: "A"},
+		Platform: &Platform{Target: "linux"},
+		DepRefs:  []NodeRef{r1},
+	})
+
+	e.emitReservedNode(Node{
+		KV:       &KV{Name: "R1"},
+		Platform: &Platform{Target: "linux"},
+		DepRefs:  []NodeRef{r2},
+	}, r1)
+
+	e.emitReservedNode(Node{
+		KV:       &KV{Name: "R2"},
+		Platform: &Platform{Target: "linux"},
+	}, r2)
+
+	e.finish()
+
+	if len(order) != 3 {
+		t.Fatalf("delivered %d nodes, want 3", len(order))
+	}
+
+	if !delivered[a] || !delivered[r1] || !delivered[r2] {
+		t.Fatalf("not all nodes delivered: %v", order)
+	}
+}

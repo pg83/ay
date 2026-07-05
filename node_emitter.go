@@ -143,14 +143,32 @@ func (e *StreamingEmitter) finish() []NodeRef {
 		throwFmt("finish: %d reserved node slot(s) left unfilled", e.reserved)
 	}
 
-	for _, id := range e.pendingIdx {
-		n := e.nodes[id]
+	pending := e.pendingIdx
 
-		e.resolved.add(uint32(id))
+	for len(pending) > 0 {
+		next := pending[:0]
 
-		if e.onNode != nil {
-			e.onNode(n, e.fetchRefs)
+		for _, id := range pending {
+			n := e.nodes[id]
+
+			if e.hasUnresolvedDeps(n) {
+				next = append(next, id)
+
+				continue
+			}
+
+			e.resolved.add(uint32(id))
+
+			if e.onNode != nil {
+				e.onNode(n, e.fetchRefs)
+			}
 		}
+
+		if len(next) == len(pending) {
+			throwFmt("finish: %d pending node(s) form a dependency cycle", len(next))
+		}
+
+		pending = next
 	}
 
 	e.finalized = true
