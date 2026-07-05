@@ -1,6 +1,9 @@
 package main
 
 import (
+	"cmp"
+	"slices"
+
 	"github.com/zeebo/xxh3"
 )
 
@@ -121,8 +124,29 @@ func (c *CanonBuf) writeVFSChunks(chunks InputChunks) {
 
 	c.writeUint32(uint32(total))
 
+	type keyed struct {
+		lo uint64
+		v  VFS
+	}
+
+	inputs := make([]keyed, 0, total)
+
 	for _, ch := range chunks {
-		c.writeVFSSliceBody(ch)
+		for _, v := range ch {
+			inputs = append(inputs, keyed{lo: internTable.cells.get(v.strID()).lo, v: v})
+		}
+	}
+
+	slices.SortFunc(inputs, func(a, b keyed) int {
+		return cmp.Compare(a.lo, b.lo)
+	})
+
+	for _, in := range inputs {
+		c.writeUint64(in.lo)
+
+		if in.v.isSource() {
+			c.writeUint64(c.hash(in.v))
+		}
 	}
 }
 
