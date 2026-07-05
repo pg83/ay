@@ -2,6 +2,7 @@ package main
 
 type PeerContext struct {
 	SelfAddInclGlobal []VFS
+	PeerAddInclGlobal []VFS
 	ResourceGlobals   []ResourceDecl
 	ProtoInclude      []VFS
 }

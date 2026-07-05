@@ -33,7 +33,7 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok STR) {
 	outRoot := protoCPPOutRoot(d)
 	sprotocRes := ctx.toolResult(argMapsLibsSprotoSprotoc)
 	sprotocLDRef, sprotocBinary := sprotocRes.LDRef, *sprotocRes.LDPath
-	scanCfg := newScanContext(ctx.parsers, d.addIncl, e.peers.SelfAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+	scanCfg := newScanContext(ctx.parsers, d.addIncl, e.peers.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcTok.string())
 	sprotoH := build(strings.TrimSuffix(protoRelPath, ".proto"), ".sproto.h")
 	sprotoRef := ctx.emit.reserve()

@@ -151,7 +151,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR) {
 	duplicateOutputRootInclude := false
 
 	if protoRoot := protoPythonOutputRoot(d); protoRoot != "" {
-		duplicateOutputRootInclude = containsVFS(e.peers.SelfAddInclGlobal, build(protoRoot))
+		duplicateOutputRootInclude = containsVFS(e.peers.PeerAddInclGlobal, build(protoRoot))
 	}
 
 	pe := e.newPyPBModuleEmission(protocBinary, e.peers.ProtoInclude, duplicateOutputRootInclude)
@@ -290,10 +290,10 @@ func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
 		cppSibling = genModule(ctx, cppInstance)
 	}
 
-	peerAddIncl := e.peers.SelfAddInclGlobal
+	peerAddIncl := e.peers.PeerAddInclGlobal
 
 	if cppSibling != nil {
-		peerAddIncl = dedup(cppSibling.AddInclGlobal, e.peers.SelfAddInclGlobal)
+		peerAddIncl = dedup(cppSibling.AddInclGlobal, e.peers.PeerAddInclGlobal)
 	}
 
 	genRefs, genOuts := e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {

@@ -1233,47 +1233,113 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	if specialized {
-		d.cc = ModuleCompileEnv{
-			InclArgs:             ctx.inclArgs,
-			Flags:                d.flags,
-			AddIncl:              d.addIncl,
-			PeerAddInclGlobal:    peerAddInclGlobal,
-			CFlags:               d.cFlags,
-			CXXFlags:             d.cxxFlags,
-			COnlyFlags:           d.cOnlyFlags,
-			OwnCFlagsGlobal:      d.cFlagsGlobal,
-			OwnCXXFlagsGlobal:    d.cxxFlagsGlobal,
-			OwnCOnlyFlagsGlobal:  d.cOnlyFlagsGlobal,
-			PeerCFlagsGlobal:     peerCFlagsGlobal,
-			PeerCXXFlagsGlobal:   peerCXXFlagsGlobal,
-			PeerCOnlyFlagsGlobal: peerCOnlyFlagsGlobal,
-			ModuleScopeCFlags:    d.moduleScopeCFlags,
-			ClangWarnings:        d.clangWarnings,
-			SrcDirs:              d.srcDirs,
-			FS:                   ctx.fs,
-			DefaultVars:          d.defaultVars,
-			DefaultVarOrder:      d.defaultVarOrder,
-			SetVars:              d.setVars,
-			TC:                   d.tc,
-			ModuleTag:            d.unit.CCTag,
-			ProtoInclude:         peerProtoInclude,
-			ProtoIncludePeers:    peerProtoInclude,
+	if !effectiveNoPlatform(d.flags) && runtimeAncestorCxxConsumers[instance.Path.rel()] {
+		hasNostdinc := false
+
+		for _, a := range peerCXXFlagsGlobal {
+			if a == baseUnitCxxNostdinc {
+				hasNostdinc = true
+
+				break
+			}
 		}
 
-		d.cc.ScanCfg = newScanContext(ctx.parsers, d.addIncl, peerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
-		d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
+		if !hasNostdinc {
+			peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, baseUnitCxxNostdinc)
+		}
+	}
 
-		e = newEmitContext(ctx, instance, d, &PeerContext{
-			SelfAddInclGlobal: peerAddInclGlobal,
-			ResourceGlobals:   resourceGlobalsClosure,
-			ProtoInclude:      peerProtoInclude,
-		})
+	ownCFlags := d.cFlags
+	ownCFlagsGlobalSelf := d.cFlagsGlobal
+	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
+	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
+	dedupedAddIncl := dedup(d.addIncl, d.addInclGlobal)
 
-		e.cythonAdjustModuleCCBlocks()
-		e.emit()
+	isPy3NativeLib := d.moduleStmt.Name == tokPy23NativeLibrary ||
+		d.moduleStmt.Name == tokPy23Library
 
-		local, _ := e.partitionCollected()
+	perModuleCCTag := d.unit.CCTag
+
+	var arNameFn func(string) string
+	var globalArNameFn func(string) string
+
+	archiveName := ""
+
+	if len(d.moduleStmt.Args) > 0 {
+		archiveName = d.moduleStmt.Args[0].string()
+	}
+
+	arNameFn = func(dir string) string { return archiveNameWithPrefixOrName(dir, d.unit.ARPrefix, archiveName) }
+	globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefixOrName(dir, d.unit.ARPrefix, archiveName) }
+
+	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path.rel(), peerAddInclGlobal, dedupedAddIncl)
+
+	if specialized {
+		selfPeerAddInclGlobal = peerAddInclGlobal
+	}
+	effectiveSrcDirs := d.srcDirs
+
+	if pd := programSourceDir(d.moduleStmt); pd != nil {
+		effectiveSrcDirs = concat(d.srcDirs, []VFS{dirKey(*pd)})
+	}
+
+	d.cc = ModuleCompileEnv{
+		InclArgs:             ctx.inclArgs,
+		Flags:                d.flags,
+		CudaNvccFlags:        d.cudaNvccFlags,
+		AddIncl:              dedupedAddIncl,
+		PeerAddInclGlobal:    selfPeerAddInclGlobal,
+		ProtoInclude:         effectiveProtoInclude,
+		ProtoIncludePeers:    peerProtoInclude,
+		CFlags:               ownCFlags,
+		CXXFlags:             d.cxxFlags,
+		COnlyFlags:           d.cOnlyFlags,
+		ClangWarnings:        d.clangWarnings,
+		OwnCFlagsGlobal:      ownCFlagsGlobalSelf,
+		OwnCXXFlagsGlobal:    ownCXXFlagsGlobalSelf,
+		OwnCOnlyFlagsGlobal:  ownCOnlyFlagsGlobalSelf,
+		PeerCFlagsGlobal:     peerCFlagsGlobal,
+		PeerCXXFlagsGlobal:   peerCXXFlagsGlobal,
+		PeerCOnlyFlagsGlobal: peerCOnlyFlagsGlobal,
+		ModuleScopeCFlags:    d.moduleScopeCFlags,
+		SFlags:               d.sFlags,
+		SrcDirs:              effectiveSrcDirs,
+		FS:                   ctx.fs,
+		DefaultVars:          d.defaultVars,
+		DefaultVarOrder:      d.defaultVarOrder,
+		SetVars:              d.setVars,
+		Py3Suffix:            isPy3NativeLib,
+		ObjectSuffixStem: func() *string {
+			if isYqlUdfStaticModule(d.moduleStmt.Name) {
+				return stringPtr("udfs")
+			}
+
+			return nil
+		}(),
+		ModuleTag:   perModuleCCTag,
+		Ragel6Flags: d.ragel6Flags,
+		BisonFlags:  d.bisonFlags,
+		BisonGenExt: d.bisonGenExt.string(),
+		NoOptimize:  d.noOptimize,
+		TC:          d.tc,
+	}
+
+	d.cc.ScanCfg = newScanContext(ctx.parsers, dedupedAddIncl, selfPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
+
+	e = newEmitContext(ctx, instance, d, &PeerContext{
+		SelfAddInclGlobal: selfPeerAddInclGlobal,
+		PeerAddInclGlobal: peerAddInclGlobal,
+		ResourceGlobals:   resourceGlobalsClosure,
+		ProtoInclude:      peerProtoInclude,
+	})
+
+	e.cythonAdjustModuleCCBlocks()
+	e.emit()
+
+	local, global := e.partitionCollected()
+
+	if specialized {
 		objcopyRes := e.objcopyRes
 
 		var hOnlyGlobalRef *NodeRef
@@ -1381,105 +1447,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		return result
 	}
 
-	if !effectiveNoPlatform(d.flags) && runtimeAncestorCxxConsumers[instance.Path.rel()] {
-		hasNostdinc := false
 
-		for _, a := range peerCXXFlagsGlobal {
-			if a == baseUnitCxxNostdinc {
-				hasNostdinc = true
-
-				break
-			}
-		}
-
-		if !hasNostdinc {
-			peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, baseUnitCxxNostdinc)
-		}
-	}
-
-	ownCFlags := d.cFlags
-	ownCFlagsGlobalSelf := d.cFlagsGlobal
-	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
-	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
-	dedupedAddIncl := dedup(d.addIncl, d.addInclGlobal)
-
-	isPy3NativeLib := d.moduleStmt.Name == tokPy23NativeLibrary ||
-		d.moduleStmt.Name == tokPy23Library
-
-	perModuleCCTag := d.unit.CCTag
-
-	var arNameFn func(string) string
-	var globalArNameFn func(string) string
-
-	archiveName := ""
-
-	if len(d.moduleStmt.Args) > 0 {
-		archiveName = d.moduleStmt.Args[0].string()
-	}
-
-	arNameFn = func(dir string) string { return archiveNameWithPrefixOrName(dir, d.unit.ARPrefix, archiveName) }
-	globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefixOrName(dir, d.unit.ARPrefix, archiveName) }
-
-	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path.rel(), peerAddInclGlobal, dedupedAddIncl)
-	effectiveSrcDirs := d.srcDirs
-
-	if pd := programSourceDir(d.moduleStmt); pd != nil {
-		effectiveSrcDirs = concat(d.srcDirs, []VFS{dirKey(*pd)})
-	}
-
-	d.cc = ModuleCompileEnv{
-		InclArgs:             ctx.inclArgs,
-		Flags:                d.flags,
-		CudaNvccFlags:        d.cudaNvccFlags,
-		AddIncl:              dedupedAddIncl,
-		PeerAddInclGlobal:    selfPeerAddInclGlobal,
-		ProtoInclude:         effectiveProtoInclude,
-		ProtoIncludePeers:    peerProtoInclude,
-		CFlags:               ownCFlags,
-		CXXFlags:             d.cxxFlags,
-		COnlyFlags:           d.cOnlyFlags,
-		ClangWarnings:        d.clangWarnings,
-		OwnCFlagsGlobal:      ownCFlagsGlobalSelf,
-		OwnCXXFlagsGlobal:    ownCXXFlagsGlobalSelf,
-		OwnCOnlyFlagsGlobal:  ownCOnlyFlagsGlobalSelf,
-		PeerCFlagsGlobal:     peerCFlagsGlobal,
-		PeerCXXFlagsGlobal:   peerCXXFlagsGlobal,
-		PeerCOnlyFlagsGlobal: peerCOnlyFlagsGlobal,
-		ModuleScopeCFlags:    d.moduleScopeCFlags,
-		SFlags:               d.sFlags,
-		SrcDirs:              effectiveSrcDirs,
-		FS:                   ctx.fs,
-		DefaultVars:          d.defaultVars,
-		DefaultVarOrder:      d.defaultVarOrder,
-		SetVars:              d.setVars,
-		Py3Suffix:            isPy3NativeLib,
-		ObjectSuffixStem: func() *string {
-			if isYqlUdfStaticModule(d.moduleStmt.Name) {
-				return stringPtr("udfs")
-			}
-
-			return nil
-		}(),
-		ModuleTag:   perModuleCCTag,
-		Ragel6Flags: d.ragel6Flags,
-		BisonFlags:  d.bisonFlags,
-		BisonGenExt: d.bisonGenExt.string(),
-		NoOptimize:  d.noOptimize,
-		TC:          d.tc,
-	}
-
-	d.cc.ScanCfg = newScanContext(ctx.parsers, dedupedAddIncl, selfPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
-	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
-
-	e = newEmitContext(ctx, instance, d, &PeerContext{
-		SelfAddInclGlobal: selfPeerAddInclGlobal,
-		ResourceGlobals:   resourceGlobalsClosure,
-	})
-
-	e.cythonAdjustModuleCCBlocks()
-	e.emit()
-
-	local, global := e.partitionCollected()
 	globalRefs := global.refs
 	globalOutputs := global.outs
 	globalMetas := global.metas
