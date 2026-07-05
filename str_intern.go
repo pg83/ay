@@ -9,12 +9,14 @@ import (
 var internTable = struct {
 	ids      *IntMap[STR]
 	overflow map[string]STR
+	flat     []internCell
 	cells    PageVec[internCell]
 	count    uint32
 	bytes    *BumpAllocator[byte]
 }{
 	ids:      newIntMap[STR](1 << 16),
 	overflow: make(map[string]STR),
+	flat:     make([]internCell, 1, 1<<21),
 	count:    1,
 	bytes:    newBumpAllocator[byte](1 << 20),
 }
@@ -55,8 +57,10 @@ func strBound() uint32 {
 
 func internAppend(s string, lo uint64) STR {
 	id := STR(internTable.count)
+	cell := internCell{str: s, lo: lo}
 
-	internTable.cells.set(internTable.count, internCell{str: s, lo: lo})
+	internTable.flat = append(internTable.flat, cell)
+	internTable.cells.set(internTable.count, cell)
 	internTable.count++
 
 	return id
@@ -66,7 +70,7 @@ func internStr(s string) STR {
 	h := xxh3.HashString128(s)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
-		if internTable.cells.get(uint32(*p)).lo == h.Lo {
+		if internTable.flat[uint32(*p)].lo == h.Lo {
 			return *p
 		}
 
@@ -136,7 +140,7 @@ func internBlock(block []byte, n int) STR {
 	h := xxh3.Hash128(buf)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
-		if internTable.cells.get(uint32(*p)).lo == h.Lo {
+		if internTable.flat[uint32(*p)].lo == h.Lo {
 			return *p
 		}
 
@@ -172,7 +176,7 @@ func internBytes(b []byte) STR {
 	h := xxh3.Hash128(b)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
-		if internTable.cells.get(uint32(*p)).lo == h.Lo {
+		if internTable.flat[uint32(*p)].lo == h.Lo {
 			return *p
 		}
 
@@ -199,7 +203,7 @@ func internedBytes(b []byte) STR {
 	h := xxh3.Hash128(b)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
-		if internTable.cells.get(uint32(*p)).lo == h.Lo {
+		if internTable.flat[uint32(*p)].lo == h.Lo {
 			return *p
 		}
 
@@ -216,6 +220,10 @@ func (id STR) str() STR {
 }
 
 func (id STR) string() string {
+	return internTable.flat[uint32(id)].str
+}
+
+func (id STR) sharedString() string {
 	return internTable.cells.get(uint32(id)).str
 }
 
@@ -241,7 +249,7 @@ func interned(s string) STR {
 	h := xxh3.HashString128(s)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
-		if internTable.cells.get(uint32(*p)).lo == h.Lo {
+		if internTable.flat[uint32(*p)].lo == h.Lo {
 			return *p
 		}
 
