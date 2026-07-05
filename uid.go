@@ -16,10 +16,10 @@ func (c *CanonBuf) calcUID(n *Node) UID {
 	return UID{Hi: sum.Hi, Lo: sum.Lo}
 }
 
-func resourceFetchUID(uri, output string) UID {
+func resourceFetchUID(uri, output string) *UID {
 	sum := xxh3.Hash128([]byte(uri + "\x00" + output))
 
-	return UID{Hi: sum.Hi, Lo: sum.Lo}
+	return &UID{Hi: sum.Hi, Lo: sum.Lo}
 }
 
 type CanonBuf struct {

@@ -25,7 +25,7 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 		Requirements: Requirements{CPU: float64(1), Network: nwFull, RAM: float64(32)},
 	}
 
-	node.presetUID = resourceFetchUID(decl.URI.string(), output.string())
+	node.PresetUID = resourceFetchUID(decl.URI.string(), output.string())
 
 	ref := ctx.emit.emitNode(node)
 

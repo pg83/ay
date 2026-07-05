@@ -132,8 +132,8 @@ func (ex *Executor) fire(f *NodeFuture) {
 }
 
 func (ex *Executor) uidOf(n *Node) UID {
-	if n.presetUID != (UID{}) {
-		return n.presetUID
+	if n.PresetUID != nil {
+		return *n.PresetUID
 	}
 
 	c := CanonBuf{hash: ex.contentHash, futs: ex.futs, fetchRefs: ex.fetchRefs}
