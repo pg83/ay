@@ -1315,39 +1315,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		var hOnlyWholeArchivePaths []VFS
 
 		if objcopyRes != nil && len(objcopyRes.Refs) > 0 {
-			arInstance := instance
-
-			var globalBaseName string
-			var tag STR
-
-			archiveName := ""
-
-			if len(d.moduleStmt.Args) > 0 {
-				archiveName = d.moduleStmt.Args[0].string()
-			}
-
-			switch d.moduleStmt.Name {
-			case tokPy23NativeLibrary:
-				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.rel(), "libpy3c", archiveName)
-				tag = tagPy3NativeGlobal
-			case tokPy23Library:
-				arInstance.Language = LangPy
-				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.rel(), "libpy3", archiveName)
-				tag = tagPy3Global
-			case tokPy3Library, tokPy2Library, tokPy2Program, tokPy3Program:
-				arInstance.Language = LangPy
-				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.rel(), "libpy3", archiveName)
-				tag = tagGlobal
-			default:
-				globalBaseName = globalArchiveNameWithPrefixOrName(instance.Path.rel(), "lib", archiveName)
-				tag = tagGlobal
-			}
-
-			if d.unit.CCTag == tagCppProto {
-				tag = tagCppProtoGlobal
-			}
-
-			gRef := emitARGlobalNamedTagged(arInstance, globalBaseName, tag, objcopyRes.Refs, objcopyRes.Outputs, d.tc, ctx.host, ctx.emit)
+			globalBaseName := globalArNameFn(instance.Path.rel())
+			gRef := emitARGlobalNamedTagged(instance, globalBaseName, d.unit.GlobalARTag, objcopyRes.Refs, objcopyRes.Outputs, d.tc, ctx.host, ctx.emit)
 
 			hOnlyGlobalRef = &gRef
 			hOnlyGlobalPath = vfsPtr(build(instance.Path.rel(), "/", globalBaseName))
