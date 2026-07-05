@@ -353,6 +353,14 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 
 	root := genModule(ctx, seed)
 
+	if ctx.buckets.h1Mismatches > 0 {
+		onWarn(Warn{
+			Kind: WarnBucketHash,
+			Message: fmt.Sprintf("%d h1 mismatches, %d buckets in overflow (pair-collision headroom shrinking)",
+				ctx.buckets.h1Mismatches, ctx.buckets.overflowed),
+		})
+	}
+
 	ctx.emit.result(root.LDRef)
 
 	if ctx.testMode && root.testSuiteInfo != nil {
