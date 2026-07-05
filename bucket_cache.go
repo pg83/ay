@@ -38,8 +38,8 @@ func bucketHash(elems []VFS) (uint64, uint64) {
 		sq += x * x
 	}
 
-	h1 := mix64(uint64(sum)<<32 | uint64(xr))
-	h2 := mix64(uint64(sq)<<32 | uint64(sum^xr))
+	h1 := mix64(uint64(sq)<<32 | uint64(sum^xr))
+	h2 := mix64(uint64(sum)<<32 | uint64(xr))
 
 	if h1 == 0 {
 		h1 = 1
