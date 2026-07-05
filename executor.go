@@ -108,7 +108,11 @@ func (ex *Executor) contentHash(v VFS) uint64 {
 }
 
 func (ex *Executor) onNode(n *Node, fetchRefs *DenseMap[STR, NodeRef]) {
-	ex.fetchRefs = fetchRefs
+	if ex.fetchRefs == nil {
+		ex.fetchRefs = fetchRefs
+	} else if ex.fetchRefs != fetchRefs {
+		throwFmt("executor: fetchRefs changed mid-stream")
+	}
 
 	f := &NodeFuture{node: n, ref: n.Ref}
 
