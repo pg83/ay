@@ -104,7 +104,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 		OutputPath:     serializedCPPPath,
 		ProducerRef:    enRef,
 		GeneratorRefs:  []NodeRef{enumParserLD},
-		ParsedIncludes: cppParsed,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
 	})
 
 	if withHeader {
@@ -119,7 +119,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 			OutputPath:     serializedHPath,
 			ProducerRef:    enRef,
 			GeneratorRefs:  []NodeRef{enumParserLD},
-			ParsedIncludes: hParsed,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: hParsed},
 		})
 	}
 

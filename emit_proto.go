@@ -299,7 +299,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		protoVFS = buildProto
 		extraProtoDeps = []NodeRef{info.ProducerRef}
 		protoProducerSourceInputs = info.SourceInputs
-		genProtoParsed = info.ParsedIncludes
+		genProtoParsed = info.ParsedIncludes.bucket(parsedIncludesLocal)
 	}
 
 	transitiveImports := walkClosure(e.scanner, protoVFS, protoWalkInputs(ctx.parsers, protoSearchPaths, instance.Path.rel()))
@@ -359,7 +359,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			OutputPath:     pbH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  spec.genRefs,
-			ParsedIncludes: spec.genHParsed,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: spec.genHParsed},
 			ClosureLeaves:  spec.hLeaves,
 		})
 
@@ -375,7 +375,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			OutputPath:     pbCC,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  spec.genRefs,
-			ParsedIncludes: ccParsed,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: ccParsed},
 			ClosureLeaves:  spec.ccLeaves,
 			Compile:        &CompileSpec{FlatOutput: d.flatSrc(internStr(srcRel)), CFlags: psc},
 		})
@@ -430,7 +430,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		OutputPath:     pbH,
 		ProducerRef:    pbRef,
 		GeneratorRefs:  pbGenRefs,
-		ParsedIncludes: pbHParsed,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: pbHParsed},
 		ClosureLeaves:  pbHLeaves,
 	})
 
@@ -454,7 +454,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			OutputPath:     yaffH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  nil,
-			ParsedIncludes: yaffHParsed,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: yaffHParsed},
 		})
 
 		yaffCCParsed := append(append([]IncludeDirective(nil), yaffHParsed...),
@@ -464,7 +464,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			OutputPath:     yaffCC,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pbGenRefs,
-			ParsedIncludes: yaffCCParsed,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: yaffCCParsed},
 		})
 	}
 
@@ -478,7 +478,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			OutputPath:     pbDepsH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pbGenRefs,
-			ParsedIncludes: depsParsed,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: depsParsed},
 		})
 	}
 
@@ -496,7 +496,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		OutputPath:     pbCC,
 		ProducerRef:    pbRef,
 		GeneratorRefs:  pbGenRefs,
-		ParsedIncludes: pbCCParsed,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: pbCCParsed},
 	})
 
 	var grpcCCParsed, grpcHParsed []IncludeDirective
@@ -517,14 +517,14 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			OutputPath:     grpcPbCC,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  []NodeRef{pe.protocLDRef, pe.grpcCppLDRef},
-			ParsedIncludes: grpcCCParsed,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: grpcCCParsed},
 		})
 
 		reg.register(&GeneratedFileInfo{
 			OutputPath:     grpcPbH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  []NodeRef{pe.grpcCppLDRef},
-			ParsedIncludes: grpcHParsed,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: grpcHParsed},
 		})
 	}
 

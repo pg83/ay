@@ -69,7 +69,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 		ProducerRef:    cfRef,
 		GeneratorRefs:  nil,
 		SourceInputs:   []VFS{srcVFS, configureFilePyVFS},
-		ParsedIncludes: cfTemplateParsedIncludes(ctx.parsers, srcVFS.rel()),
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cfTemplateParsedIncludes(ctx.parsers, srcVFS.rel())},
 		ClosureLeaves:  []VFS{srcVFS, configureFilePyVFS},
 	})
 

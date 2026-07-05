@@ -53,7 +53,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 			OutputPath:     g4CppPath,
 			ProducerRef:    cpRef,
 			GeneratorRefs:  nil,
-			ParsedIncludes: emits,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
 			ClosureLeaves:  leaves,
 			Compile:        &CompileSpec{FlatOutput: d.flatSrc(g4CppPath.str()), CFlags: []ARG{argWnoUnusedVariable}},
 		})

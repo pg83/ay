@@ -37,7 +37,7 @@ func (e *EmitContext) emitLibrarySCSource(src STR) {
 		OutputPath:     headerVFS,
 		ProducerRef:    scRef,
 		GeneratorRefs:  []NodeRef{domLDRef},
-		ParsedIncludes: runtimeInclude,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: runtimeInclude},
 		ClosureLeaves:  []VFS{srcVFS, domschemeRuntimeVFS},
 	})
 }

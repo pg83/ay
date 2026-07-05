@@ -87,7 +87,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		OutputPath:     headerVFS,
 		ProducerRef:    ycRef,
 		GeneratorRefs:  []NodeRef{bisonRef, m4Ref},
-		ParsedIncludes: headerParsed,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
 	}
 
 	if preprocessHeader {
@@ -116,7 +116,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		OutputPath:     generatedVFS,
 		ProducerRef:    ycRef,
 		GeneratorRefs:  []NodeRef{bisonRef, m4Ref},
-		ParsedIncludes: generatedParsed,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: generatedParsed},
 		Compile:        spec,
 	})
 

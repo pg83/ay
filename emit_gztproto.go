@@ -55,7 +55,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 		ProducerRef:    gzRef,
 		SourceInputs:   sourceInputs,
 		ClosureLeaves:  sourceInputs,
-		ParsedIncludes: gztGeneratedProtoParse(ctx, gztSource, inducedProtos),
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: gztGeneratedProtoParse(ctx, gztSource, inducedProtos)},
 	})
 
 	return gzRef, genProtoName

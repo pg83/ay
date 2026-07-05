@@ -45,9 +45,9 @@ func (e *EmitContext) emitCheckConfigHStmt(conf STR) {
 	e.codegen.register(&GeneratedFileInfo{
 		OutputPath:  generatedVFS,
 		ProducerRef: chRef,
-		ParsedIncludes: []IncludeDirective{
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{
 			{kind: includeQuoted, target: internStr(confVFS.rel())},
-		},
+		}},
 		ClosureLeaves: []VFS{buildScriptsCheckConfigHPy},
 		Compile:       &CompileSpec{FlatOutput: d.flatSrc(generatedVFS.str()), CFlags: psc},
 	})

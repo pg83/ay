@@ -24,7 +24,10 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, moduleDir VFS, entry
 	if entry.Text {
 		srcVFS := copyFileInputVFS(fs, moduleDir, entry.Src)
 
-		out = append(out, scanner.parsedIncludes(srcVFS, nil)...)
+		own, compileExtra := scanner.parsedIncludes(srcVFS, nil)
+
+		out = append(out, own...)
+		out = append(out, compileExtra...)
 	} else if entry.WithContext {
 		srcVFS := copyFileInputVFS(fs, moduleDir, entry.Src)
 
@@ -77,14 +80,14 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) CopyEmitState {
 	}
 
 	if existing := reg.lookup(dstVFS); existing != nil {
-		existing.ParsedIncludes = parsed
+		existing.ParsedIncludes = ParsedIncludeSet{parsedIncludesLocal: parsed}
 	} else {
 		info := &GeneratedFileInfo{
 			OutputPath:     dstVFS,
 			SourcePath:     srcVFS,
 			IsText:         entry.Text,
 			ProducerRef:    ref,
-			ParsedIncludes: parsed,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
 		}
 
 		if srcVFS != dstVFS {

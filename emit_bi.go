@@ -95,10 +95,10 @@ func (e *EmitContext) emitBuildInfoStmt() {
 		OutputPath:    build(outPrefix, d.createBuildInfoFor.string()),
 		ProducerRef:   biRef,
 		GeneratorRefs: nil,
-		ParsedIncludes: []IncludeDirective{
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{
 			{kind: includeQuoted, target: internStr(buildInfoGenPyVFS.rel())},
 			{kind: includeQuoted, target: internStr(xargsPyVFS.rel())},
 			{kind: includeQuoted, target: internStr(yieldLinePyVFS.rel())},
-		},
+		}},
 	})
 }

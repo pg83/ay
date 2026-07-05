@@ -97,7 +97,7 @@ func (e *EmitContext) emitLibraryRagel6Source(src STR) {
 		OutputPath:     r6Out,
 		ProducerRef:    r6Ref,
 		GeneratorRefs:  []NodeRef{ragelLDRef},
-		ParsedIncludes: r6Parsed,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: r6Parsed},
 		Compile: &CompileSpec{
 			FlatOutput: d.flatSrc(src),
 			CFlags:     concat(psc, []ARG{argWnoImplicitFallthrough}),

@@ -44,7 +44,7 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 		OutputPath:     prefixH,
 		ProducerRef:    bcRef,
 		GeneratorRefs:  []NodeRef{toolLDRef},
-		ParsedIncludes: headerParsed,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
 		ClosureLeaves:  []VFS{prefixCpp, inputIn},
 	})
 
@@ -52,7 +52,7 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 		OutputPath:     prefixCpp,
 		ProducerRef:    bcRef,
 		GeneratorRefs:  []NodeRef{toolLDRef},
-		ParsedIncludes: cppParsed,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
 	})
 
 	node := Node{

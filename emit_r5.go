@@ -78,7 +78,6 @@ func (e *EmitContext) emitLibraryRagel5Source(src STR) {
 		OutputPath:     r5TmpOut,
 		ProducerRef:    r5Ref,
 		GeneratorRefs:  []NodeRef{ragel5LDRef, rlgenCdLDRef},
-		ParsedIncludes: nil,
 	})
 
 	r5Parsed := e.scanner.parsers.sourceParsedBuckets(rlSourceVFS, nil).bucket(parsedIncludesCpp)
@@ -87,7 +86,7 @@ func (e *EmitContext) emitLibraryRagel5Source(src STR) {
 		OutputPath:     r5CppOut,
 		ProducerRef:    r5Ref,
 		GeneratorRefs:  []NodeRef{ragel5LDRef, rlgenCdLDRef},
-		ParsedIncludes: append([]IncludeDirective{{kind: includeQuoted, target: internStr(r5TmpOut.rel())}}, r5Parsed...),
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: append([]IncludeDirective{{kind: includeQuoted, target: internStr(r5TmpOut.rel())}}, r5Parsed...)},
 		Compile: &CompileSpec{
 			FlatOutput: d.flatSrc(src),
 			CFlags:     concat(psc, []ARG{argWnoImplicitFallthrough}),
