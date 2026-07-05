@@ -57,6 +57,11 @@ var commands = []Command{
 		help: "⏱️ Benchmark the C/ya.make parser over every source file under <dir>.",
 	},
 	{
+		path: []string{"dev", "perf", "buckethash"}, run: cmdPerfBucketHash,
+		help: "\U0001FAA3 Benchmark the bucket intern pair-hash vs the old mix64 sum, then\n" +
+			"stress-test the (h1, h2) pair for collisions until interrupted.",
+	},
+	{
 		path: []string{"dev", "perf", "darts"}, run: cmdPerfDarts,
 		help: "🎯 Benchmark the autoinclude longest-prefix matcher: double-array trie vs\n" +
 			"the former ancestor-walk. Prints ns/op for each.",

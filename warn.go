@@ -8,6 +8,8 @@ const (
 	WarnUnsupportedSource
 
 	WarnMissingAddincl
+
+	WarnBucketHash
 )
 
 type Warn struct {
@@ -27,6 +29,8 @@ func (k WarnKind) string() string {
 		return "unsupported-source"
 	case WarnMissingAddincl:
 		return "missing-addincl"
+	case WarnBucketHash:
+		return "bucket-hash"
 	}
 
 	return "warn"

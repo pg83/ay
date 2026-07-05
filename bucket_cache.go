@@ -2,45 +2,90 @@ package main
 
 const closureBuckets = 16
 
+type bucketVal struct {
+	verify uint64
+	slice  []VFS
+}
+
 type BucketCache struct {
-	chunks  *BumpAllocator[[]VFS]
-	pool    *BumpAllocator[VFS]
-	intern  *IntMap[[]VFS]
-	scratch [closureBuckets][]VFS
+	chunks       *BumpAllocator[[]VFS]
+	pool         *BumpAllocator[VFS]
+	intern       *IntMap[bucketVal]
+	overflow     *IntMap[bucketVal]
+	h1Mismatches int
+	overflowed   int
+	scratch      [closureBuckets][]VFS
 }
 
 func newBucketCache() *BucketCache {
 	return &BucketCache{
-		chunks: newBumpAllocator[[]VFS](1 << 12),
-		pool:   newBumpAllocator[VFS](1 << 19),
-		intern: newIntMap[[]VFS](1 << 16),
+		chunks:   newBumpAllocator[[]VFS](1 << 12),
+		pool:     newBumpAllocator[VFS](1 << 19),
+		intern:   newIntMap[bucketVal](1 << 16),
+		overflow: newIntMap[bucketVal](1 << 4),
 	}
 }
 
-func bucketHash(elems []VFS) uint64 {
-	h := mix64(uint64(len(elems)))
+func bucketHash(elems []VFS) (uint64, uint64) {
+	sum := uint32(len(elems))
+
+	var xr, sq uint32
 
 	for _, v := range elems {
-		h += mix64(uint64(v))
+		x := uint32(v)
+		sum += x
+		xr ^= x
+		sq += x * x
 	}
 
-	if h == 0 {
-		h = 1
+	h1 := mix64(uint64(sum)<<32 | uint64(xr))
+	h2 := mix64(uint64(sq)<<32 | uint64(sum^xr))
+
+	if h1 == 0 {
+		h1 = 1
 	}
 
-	return h
+	if h2 == 0 {
+		h2 = 1
+	}
+
+	return h1, h2
 }
 
 func (c *BucketCache) internBucket(elems []VFS) []VFS {
-	cell, found := c.intern.cell(bucketHash(elems))
+	h1, h2 := bucketHash(elems)
+
+	cell, found := c.intern.cell(h1)
 
 	if found {
-		return *cell
+		if cell.verify == h2 {
+			return cell.slice
+		}
+
+		c.h1Mismatches++
+
+		cell2, found2 := c.overflow.cell(h2)
+
+		if found2 {
+			if cell2.verify != h1 {
+				throwFmt("BucketCache: bucket hash pair collision (h1=%#x h2=%#x, %d elems)", h1, h2, len(elems))
+			}
+
+			return cell2.slice
+		}
+
+		c.overflowed++
+
+		slice := c.pool.list(elems...)
+
+		*cell2 = bucketVal{verify: h1, slice: slice}
+
+		return slice
 	}
 
 	slice := c.pool.list(elems...)
 
-	*cell = slice
+	*cell = bucketVal{verify: h2, slice: slice}
 
 	return slice
 }
