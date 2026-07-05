@@ -1010,60 +1010,27 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	deduper.reset()
 
-	if specialized {
-		for _, rp := range resolved {
+	for _, rp := range resolved {
+		switch rp.kind {
+		case peerKindLangDefault:
+			for _, p := range rp.result.OwnAddInclGlobal {
+				if deduper.add(p.strID()) {
+					peerAddInclGlobal = append(peerAddInclGlobal, p)
+				}
+			}
+
 			for _, p := range rp.result.AddInclGlobal {
 				if deduper.add(p.strID()) {
 					peerAddInclGlobal = append(peerAddInclGlobal, p)
 				}
 			}
-		}
-	} else {
-		for _, rp := range resolved {
-			if rp.kind == peerKindLangDefault {
-				for _, p := range rp.result.OwnAddInclGlobal {
-					if deduper.add(p.strID()) {
-						peerAddInclGlobal = append(peerAddInclGlobal, p)
-					}
+		case peerKindUnitTestPeer, peerKindProgramDefault:
+			for _, p := range rp.result.AddInclGlobal {
+				if deduper.add(p.strID()) {
+					peerAddInclGlobal = append(peerAddInclGlobal, p)
 				}
 			}
-		}
-
-		for _, rp := range resolved {
-			if rp.kind == peerKindLangDefault {
-				for _, p := range rp.result.AddInclGlobal {
-					if deduper.add(p.strID()) {
-						peerAddInclGlobal = append(peerAddInclGlobal, p)
-					}
-				}
-			}
-		}
-
-		for _, rp := range resolved {
-			if rp.kind == peerKindUnitTestPeer {
-				for _, p := range rp.result.AddInclGlobal {
-					if deduper.add(p.strID()) {
-						peerAddInclGlobal = append(peerAddInclGlobal, p)
-					}
-				}
-			}
-		}
-
-		for _, rp := range resolved {
-			if rp.kind == peerKindProgramDefault {
-				for _, p := range rp.result.AddInclGlobal {
-					if deduper.add(p.strID()) {
-						peerAddInclGlobal = append(peerAddInclGlobal, p)
-					}
-				}
-			}
-		}
-
-		for _, rp := range resolved {
-			if rp.kind != peerKindUserPeer {
-				continue
-			}
-
+		case peerKindUserPeer:
 			for _, p := range rp.result.AddInclUserGlobal {
 				if deduper.add(p.strID()) {
 					peerAddInclGlobal = append(peerAddInclGlobal, p)
