@@ -98,7 +98,7 @@ func build(parts ...string) VFS {
 }
 
 func (id STR) vfs() VFS {
-	s := internTable.cells.get(uint32(id)).str
+	s := internTable.flat[uint32(id)].str
 
 	if !vfsHasPrefix(s) {
 		return 0
@@ -114,6 +114,10 @@ func (id STR) vfs() VFS {
 }
 
 func (v VFS) rel() string {
+	return internTable.flat[v.strID()].str[vfsPrefixLen:]
+}
+
+func (v VFS) sharedRel() string {
 	return internTable.cells.get(v.strID()).str[vfsPrefixLen:]
 }
 
@@ -126,6 +130,10 @@ func (v VFS) isBuild() bool {
 }
 
 func (v VFS) string() string {
+	return internTable.flat[v.strID()].str
+}
+
+func (v VFS) sharedString() string {
 	return internTable.cells.get(v.strID()).str
 }
 

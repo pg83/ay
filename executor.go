@@ -100,7 +100,7 @@ func (ex *Executor) contentHash(v VFS) uint64 {
 		return h
 	}
 
-	h := hashSourceFile(ex.srcRoot, v.rel())
+	h := hashSourceFile(ex.srcRoot, v.sharedRel())
 
 	ex.localHash[s] = h
 
@@ -269,7 +269,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 	outFirst := ""
 
 	if len(n.Outputs) > 0 {
-		outFirst = n.Outputs[0].string()
+		outFirst = n.Outputs[0].sharedString()
 	}
 
 	rec := fmt.Sprintf("[%s] {%d/%d} %s", display, done, pending, outFirst)
@@ -378,7 +378,7 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 			continue
 		}
 
-		mounted := filepath.Join(bldMount, out.rel())
+		mounted := filepath.Join(bldMount, out.sharedRel())
 
 		throw(os.MkdirAll(filepath.Dir(mounted), 0o755))
 	}
@@ -390,7 +390,7 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 		args := make([]string, len(flatArgs))
 
 		for i, a := range flatArgs {
-			args[i] = mountString(a.string(), srcMount, bldMount)
+			args[i] = mountString(a.sharedString(), srcMount, bldMount)
 		}
 
 		if n.KV.P == pkSB {
@@ -403,17 +403,17 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 		dir := bldMount
 
 		if c.Cwd != 0 {
-			dir = mountString(c.Cwd.string(), srcMount, bldMount)
+			dir = mountString(c.Cwd.sharedString(), srcMount, bldMount)
 		}
 
 		env := os.Environ()
 
 		for _, e := range n.Env {
-			env = append(env, e.Name.string()+"="+mountString(e.Value.string(), srcMount, bldMount))
+			env = append(env, e.Name.sharedString()+"="+mountString(e.Value.sharedString(), srcMount, bldMount))
 		}
 
 		for _, e := range c.Env {
-			env = append(env, e.Name.string()+"="+mountString(e.Value.string(), srcMount, bldMount))
+			env = append(env, e.Name.sharedString()+"="+mountString(e.Value.sharedString(), srcMount, bldMount))
 		}
 
 		if os.Getenv("YA_TOKEN") == "" && (n.KV.P == pkSB || (n.KV.P == pkFETCH && argsNeedSandboxToken(args))) {
@@ -432,7 +432,7 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 		var stdoutW io.Writer = os.Stdout
 
 		if c.Stdout != 0 {
-			path := mountString(c.Stdout.string(), srcMount, bldMount)
+			path := mountString(c.Stdout.sharedString(), srcMount, bldMount)
 
 			throw(os.MkdirAll(filepath.Dir(path), 0o755))
 
@@ -477,7 +477,7 @@ func (ex *Executor) linkSourceInputs(n *Node, srcMount string) {
 				continue
 			}
 
-			rel := in.rel()
+			rel := in.sharedRel()
 			target := filepath.Join(srcMount, rel)
 
 			throw(os.MkdirAll(filepath.Dir(target), 0o755))
@@ -500,7 +500,7 @@ func (ex *Executor) storeOutputs(n *Node, uid UID, tmp string) {
 			throwFmt("node ref=%d: non-Build output %v", n.Ref, out)
 		}
 
-		ex.storePath(filepath.Join(tmp, out.rel()), out.string(), meta)
+		ex.storePath(filepath.Join(tmp, out.sharedRel()), out.sharedString(), meta)
 	}
 
 	uidPath := ex.uidPath(uid)

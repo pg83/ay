@@ -44,6 +44,10 @@ func (a ARG) string() string {
 	return argTable.strs.get(uint32(a)).string()
 }
 
+func (a ARG) sharedString() string {
+	return argTable.strs.get(uint32(a)).sharedString()
+}
+
 func (a ARG) String() string {
 	return a.string()
 }
