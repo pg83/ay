@@ -119,7 +119,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		return IncludeDirective{kind: includeQuoted, target: internStr(mainOutputVFS.rel())}, true
 	}
 
-	registerOutput := func(out VFS, parsed []IncludeDirective, ridesHeaderViaParsed bool) {
+	registerOutput := func(out VFS, parsed ParsedIncludeSet, ridesHeaderViaParsed bool) {
 		if registeredPROut[out] {
 			return
 		}
@@ -136,18 +136,18 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			OutputPath:     out,
 			ProducerRef:    prRef,
 			GeneratorRefs:  []NodeRef{res.LDRef},
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
+			ParsedIncludes: parsed,
 			SourceInputs:   prSourceInputs.all,
 			ClosureLeaves:  leaves,
 		})
 	}
 
-	parsedFor := func(f STR, out VFS, auto bool) ([]IncludeDirective, bool) {
+	parsedFor := func(f STR, out VFS, auto bool) (ParsedIncludeSet, bool) {
 		parsed := prOutputParsedIncludes(f, stmt, inVFSs, protoImportPbH)
 
 		if auto && isCCSourceExt(f.string()) {
 			if inc, ok := mainHeaderInclude(out.rel()); ok {
-				return append(parsed, inc), true
+				return appendParsedDirectives(parsed, parsedIncludesCpp, inc), true
 			}
 		}
 
@@ -401,15 +401,25 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 	return dedup(out, nil)
 }
 
-func prOutputParsedIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, protoImportPbH []IncludeDirective) []IncludeDirective {
+func prOutputParsedIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, protoImportPbH []IncludeDirective) ParsedIncludeSet {
 	carries := generatedOutputCarriesIncludes(outFile.string())
 
 	if !carries && len(stmt.OutputIncludes) == 0 {
-		return nil
+		return ParsedIncludeSet{}
+	}
+
+	local := make([]IncludeDirective, 0, len(stmt.OutputIncludes))
+
+	for _, f := range stmt.OutputIncludes {
+		if v := f.vfs(); v != 0 {
+			f = internStr(v.rel())
+		}
+
+		local = append(local, IncludeDirective{kind: includeQuoted, target: f})
 	}
 
 	carryProtoImportPbH := isHeaderSource(outFile.string()) && !extIsPbH(outFile.string())
-	n := len(stmt.OutputIncludes)
+	n := 0
 
 	if carries {
 		n += len(inVFSs)
@@ -419,7 +429,7 @@ func prOutputParsedIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, pro
 		n += len(protoImportPbH)
 	}
 
-	includes := make([]IncludeDirective, 0, n)
+	compile := make([]IncludeDirective, 0, n)
 
 	if carries {
 		for _, v := range inVFSs {
@@ -427,23 +437,15 @@ func prOutputParsedIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, pro
 				continue
 			}
 
-			includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(v.rel())})
+			compile = append(compile, IncludeDirective{kind: includeQuoted, target: internStr(v.rel())})
 		}
-	}
-
-	for _, f := range stmt.OutputIncludes {
-		if v := f.vfs(); v != 0 {
-			f = internStr(v.rel())
-		}
-
-		includes = append(includes, IncludeDirective{kind: includeQuoted, target: f})
 	}
 
 	if carryProtoImportPbH {
-		includes = append(includes, protoImportPbH...)
+		compile = append(compile, protoImportPbH...)
 	}
 
-	return includes
+	return ParsedIncludeSet{parsedIncludesLocal: local, parsedIncludesCpp: compile}
 }
 
 func resolveRunProgramAuxTools(ctx *GenCtx, toolPaths []string) []RunProgramAuxTool {
