@@ -97,22 +97,24 @@ func TestPageVec_NoAliasing(t *testing.T) {
 func TestPageVec_LazyPageSizes(t *testing.T) {
 	var v PageVec[int]
 
-	if v.pages[3] != nil {
+	if v.pages[3].Load() != nil {
 		t.Fatalf("page 3 allocated before any set")
 	}
 
 	v.set(10, 42)
 
-	if v.pages[3] == nil {
+	page := v.pages[3].Load()
+
+	if page == nil {
 		t.Fatalf("id 10 lives in page 3, page not allocated")
 	}
 
-	if len(v.pages[3]) != 1<<3 {
-		t.Errorf("page 3 size = %d, want %d", len(v.pages[3]), 1<<3)
+	if len(*page) != 1<<3 {
+		t.Errorf("page 3 size = %d, want %d", len(*page), 1<<3)
 	}
 
-	for p, pg := range v.pages {
-		if p != 3 && pg != nil {
+	for p := range v.pages {
+		if p != 3 && v.pages[p].Load() != nil {
 			t.Errorf("page %d unexpectedly allocated", p)
 		}
 	}
