@@ -9,7 +9,7 @@ type GeneratedFileInfo struct {
 	SourceInputs    []VFS
 	ProducerMainOut VFS
 	ClosureLeaves   []VFS
-	ParsedIncludes  []IncludeDirective
+	ParsedIncludes  ParsedIncludeSet
 	Compile         *CompileSpec
 }
 
@@ -130,12 +130,12 @@ func (r *CodegenRegistry) addSourceInputs(path VFS, extra []VFS) {
 	info.SourceInputs = dedup(info.SourceInputs, extra)
 }
 
-func (r *CodegenRegistry) buildParsedFor(out VFS) []IncludeDirective {
+func (r *CodegenRegistry) buildParsedFor(out VFS) ParsedIncludeSet {
 	if info := r.lookup(out); info != nil {
 		return info.ParsedIncludes
 	}
 
-	return nil
+	return ParsedIncludeSet{}
 }
 
 func (ctx *GenCtx) codegenFor(instance ModuleInstance) *CodegenRegistry {

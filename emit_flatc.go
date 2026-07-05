@@ -164,7 +164,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 		OutputPath:     headerVFS,
 		ProducerRef:    flRef,
 		GeneratorRefs:  []NodeRef{flatcLDRef},
-		ParsedIncludes: headerIncludes,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerIncludes},
 		ClosureLeaves:  headerLeaves,
 	})
 
@@ -174,14 +174,13 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 		OutputPath:     cppVFS,
 		ProducerRef:    flRef,
 		GeneratorRefs:  []NodeRef{flatcLDRef},
-		ParsedIncludes: cppIncludes,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppIncludes},
 	})
 
 	reg.register(&GeneratedFileInfo{
 		OutputPath:     bfbsVFS,
 		ProducerRef:    flRef,
 		GeneratorRefs:  []NodeRef{flatcLDRef},
-		ParsedIncludes: nil,
 	})
 }
 

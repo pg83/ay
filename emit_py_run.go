@@ -95,7 +95,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 		reg.register(&GeneratedFileInfo{
 			OutputPath:     out,
 			ProducerRef:    pyRef,
-			ParsedIncludes: parsed,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
 			SourceInputs:   pySourceInputs,
 			ClosureLeaves:  pyGeneratedFromSources,
 		})

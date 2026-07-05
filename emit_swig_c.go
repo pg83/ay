@@ -78,7 +78,7 @@ func (e *EmitContext) emitSwigC() {
 			OutputPath:     cOutVFS,
 			ProducerRef:    swRef,
 			GeneratorRefs:  []NodeRef{swigRef},
-			ParsedIncludes: collectSwigInducedIncludes(ctx, srcVFS, swigClosure),
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: collectSwigInducedIncludes(ctx, srcVFS, swigClosure)},
 			ClosureLeaves:  append(append([]VFS{}, swigClosure...), srcVFS),
 			Compile:        &CompileSpec{FlatOutput: d.flatSrc(cOutVFS.str()), CFlags: psc},
 		})

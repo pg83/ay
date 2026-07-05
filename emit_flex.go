@@ -47,7 +47,7 @@ func (e *EmitContext) emitLibraryFlexSource(src STR) {
 		OutputPath:     outVFS,
 		ProducerRef:    lxRef,
 		GeneratorRefs:  []NodeRef{flexRef},
-		ParsedIncludes: parsed,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
 		Compile:        &CompileSpec{FlatOutput: d.flatSrc(src), CFlags: cflags},
 	})
 

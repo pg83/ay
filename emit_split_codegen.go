@@ -70,7 +70,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 		OutputPath:     prefixH,
 		ProducerRef:    scRef,
 		GeneratorRefs:  []NodeRef{toolLDRef},
-		ParsedIncludes: headerParsed,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
 		ClosureLeaves:  []VFS{part0, inputIn},
 	})
 
@@ -78,7 +78,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 		OutputPath:     prefixCpp,
 		ProducerRef:    scRef,
 		GeneratorRefs:  []NodeRef{toolLDRef},
-		ParsedIncludes: cppParsed,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
 	})
 
 	for i, partRel := range partRels {
@@ -86,7 +86,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 			OutputPath:     build(moduleDir, "/", partRel),
 			ProducerRef:    scRef,
 			GeneratorRefs:  []NodeRef{toolLDRef},
-			ParsedIncludes: cppParsed,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
 		}
 
 		if i == 0 {

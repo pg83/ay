@@ -183,12 +183,14 @@ func hashScanContext(ctx *ScanContext) uint64 {
 	return h
 }
 
-func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveParser) []IncludeDirective {
+func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveParser) (own, compileExtra []IncludeDirective) {
 	if vfsPath.isBuild() {
-		return s.codegen.buildParsedFor(vfsPath)
+		set := s.codegen.buildParsedFor(vfsPath)
+
+		return set.bucket(parsedIncludesLocal), set.bucket(parsedIncludesCpp)
 	}
 
-	return s.parsers.sourceParsedBuckets(vfsPath, ctxParser).bucket(s.parsers.registry.walkableBucketFor(vfsPath.rel()))
+	return s.parsers.sourceParsedBuckets(vfsPath, ctxParser).bucket(s.parsers.registry.walkableBucketFor(vfsPath.rel())), nil
 }
 
 func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
@@ -197,13 +199,13 @@ func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 	suppressCimportNames := false
 	prevProbeMissed := false
 
-	for _, entry := range s.parsedIncludes(vfsPath, sc.parser) {
+	process := func(entry IncludeDirective) {
 		if entry.kind == includeCythonSibling {
 			for _, rabs := range sc.resolve(vfsPath, incDir, entry) {
 				fn(rabs)
 			}
 
-			continue
+			return
 		}
 
 		isName := entry.kind == includeCythonName
@@ -216,7 +218,7 @@ func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 		if (isName && suppressCimportNames) || (isFallback && !prevProbeMissed) {
 			prevProbeMissed = false
 
-			continue
+			return
 		}
 
 		resolved := sc.resolve(vfsPath, incDir, entry)
@@ -230,6 +232,16 @@ func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 		if entry.kind == includeCythonModule && len(resolved) > 0 {
 			suppressCimportNames = true
 		}
+	}
+
+	own, compileExtra := s.parsedIncludes(vfsPath, sc.parser)
+
+	for _, entry := range own {
+		process(entry)
+	}
+
+	for _, entry := range compileExtra {
+		process(entry)
 	}
 
 	sc.resolveInducedDeps(vfsPath, incDir, fn)

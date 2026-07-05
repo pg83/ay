@@ -22,7 +22,6 @@ func (e *EmitContext) emitBundles() {
 			OutputPath:     dst,
 			ProducerRef:    ref,
 			GeneratorRefs:  nil,
-			ParsedIncludes: nil,
 		})
 	}
 }

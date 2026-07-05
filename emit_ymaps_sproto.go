@@ -47,7 +47,7 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok STR) {
 		OutputPath:     sprotoH,
 		ProducerRef:    sprotoRef,
 		GeneratorRefs:  []NodeRef{sprotocLDRef},
-		ParsedIncludes: parsed,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
 		ClosureLeaves:  []VFS{source(protoRelPath)},
 	})
 

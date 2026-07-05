@@ -136,7 +136,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			OutputPath:     out,
 			ProducerRef:    prRef,
 			GeneratorRefs:  []NodeRef{res.LDRef},
-			ParsedIncludes: parsed,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
 			SourceInputs:   prSourceInputs.all,
 			ClosureLeaves:  leaves,
 		})

@@ -141,7 +141,6 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		OutputPath:     optOut,
 		ProducerRef:    opRef,
 		GeneratorRefs:  nil,
-		ParsedIncludes: nil,
 	})
 
 	e.resources = append(e.resources, ResourceEntry{

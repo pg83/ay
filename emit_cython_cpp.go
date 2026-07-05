@@ -173,7 +173,7 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 				reg.register(&GeneratedFileInfo{
 					OutputPath:      h,
 					ProducerRef:     cyRef,
-					ParsedIncludes:  headerParsed,
+					ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: headerParsed},
 					ProducerMainOut: generatedVFS,
 				})
 
@@ -257,7 +257,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			OutputPath:     generatedVFS,
 			ProducerRef:    cyRef,
 			GeneratorRefs:  nil,
-			ParsedIncludes: parsed,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
 			Compile:        &CompileSpec{FlatOutput: d.flatSrc(genSrcID), Py3Suffix: py3Suffix, CFlags: ccCFlags},
 		})
 

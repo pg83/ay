@@ -718,7 +718,7 @@ func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) Closu
 		OutputPath:     aux,
 		ProducerRef:    ref,
 		GeneratorRefs:  []NodeRef{rescompilerRef},
-		ParsedIncludes: emits,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
 		Compile:        &CompileSpec{FlatOutput: d.flatSrc(aux.str()), ForceCxx: true, CFlags: concat(psc, []ARG{argX, argC})},
 	})
 

@@ -903,7 +903,9 @@ func TestScanDirectives_MacroIndirectAugmentation(t *testing.T) {
 }
 
 func (s *IncludeScanner) scanDirectives(vfsPath VFS) []IncludeDirective {
-	return s.parsedIncludes(vfsPath, nil)
+	own, compileExtra := s.parsedIncludes(vfsPath, nil)
+
+	return concat(own, compileExtra)
 }
 
 func (s *IncludeScanner) parsedIncludeSet(vfsPath VFS) ParsedIncludeSet {

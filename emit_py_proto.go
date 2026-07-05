@@ -356,7 +356,7 @@ func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, p
 		OutputPath:     aux,
 		ProducerRef:    ref,
 		GeneratorRefs:  []NodeRef{rescompilerRef},
-		ParsedIncludes: emits,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
 		Compile:        &CompileSpec{ForceCxx: true, Py3Suffix: true, CFlags: []ARG{argX, argC}},
 	})
 

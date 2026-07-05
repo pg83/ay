@@ -99,7 +99,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 		e.codegen.register(&GeneratedFileInfo{
 			OutputPath:      out,
 			ProducerRef:     ref,
-			ParsedIncludes:  parsed,
+			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
 			SourceInputs:    fromSandboxScriptInputs,
 			ProducerMainOut: outVFSs[0],
 		})

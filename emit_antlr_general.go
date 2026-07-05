@@ -83,7 +83,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 		reg.register(&GeneratedFileInfo{
 			OutputPath:     outVFS,
 			ProducerRef:    jvRef,
-			ParsedIncludes: antlrParsedIncludes(instance.Path.rel(), run, outTok, outVFSByToken, inputs, jarVFS),
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: antlrParsedIncludes(instance.Path.rel(), run, outTok, outVFSByToken, inputs, jarVFS)},
 			SourceInputs:   jvSourceInputs,
 		})
 	}
