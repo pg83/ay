@@ -276,7 +276,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 		hasParsedIN = hasParsedIN || ctx.parsers.registry.hasRegisteredParser(f.string())
 	}
 
-	scanCfg := newScanContext(ctx.parsers, d.cc.AddIncl, d.cc.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+	scanCfg := d.cc.ScanCfg
 
 	var out []VFS
 
