@@ -349,26 +349,6 @@ func isCythonLangFile(rel string) bool {
 	return hasSuffix(rel, ".pyx") || hasSuffix(rel, ".pxd") || hasSuffix(rel, ".pxi") || hasSuffix(rel, ".py")
 }
 
-func (e *EmitContext) cythonCompileInducedInputs(includeView Closure) []VFS {
-	reg := e.codegen
-
-	var out, extra []VFS
-
-	includeView.each(func(v VFS) {
-		out = append(out, v)
-
-		if !v.isBuild() {
-			return
-		}
-
-		if info := reg.lookup(v); info != nil && info.ProducerMainOut != 0 {
-			extra = append(extra, info.ProducerMainOut)
-		}
-	})
-
-	return append(out, extra...)
-}
-
 type CythonCppInduced struct {
 	toolSingles  []VFS
 	emitsSingles []VFS
@@ -472,6 +452,7 @@ func (e *EmitContext) cythonAdjustModuleCCBlocks() {
 	cy.AddIncl = appendCythonCCAddIncl(d.cc.AddIncl, d.cythonNumpyBeforeInclude)
 	cy.CFlags = filterPyRegisterCFlags(d.cc.CFlags)
 
+	d.cc.MainOutInducedInputs = true
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &cy)
 }
 
