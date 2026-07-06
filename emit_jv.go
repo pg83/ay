@@ -20,7 +20,7 @@ var antlrJavaConstHead = []STR{
 	internStr(antlr4JarPath),
 }
 
-const jdkResourcePath = "$(JDK17)/bin/java"
+const jdkResourcePath = "$(B)/resources/JDK17/bin/java"
 
 func (e *EmitContext) emitJVDownstreamCPCC(
 	jvRef NodeRef,
