@@ -10,14 +10,14 @@ var (
 	goLdKV               = KV{P: pkLD, PC: pcLightRed, ShowOut: true}
 	goVcsEnv             = EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	goStdRuntimeVFS      = source(goStdPrefix + "/runtime")
-	strGoToolsRoot       = internStr(resourcePatternRef("GO_TOOLS"))
-	strGoAsmTool         = internV(resourcePatternRef("GO_TOOLS"), "/pkg/tool/linux_amd64/asm")
-	strGoCgoTool         = internV(resourcePatternRef("GO_TOOLS"), "/pkg/tool/linux_amd64/cgo")
-	strGoToolsPkgInclude = internV(resourcePatternRef("GO_TOOLS"), "/pkg/include")
-	strGoYolintTool      = internV(resourcePatternRef("YOLINT"), "/yolint")
+	strGoToolsRoot       = internV("$(B)/resources/", "GO_TOOLS")
+	strGoAsmTool         = internV("$(B)/resources/", "GO_TOOLS", "/pkg/tool/linux_amd64/asm")
+	strGoCgoTool         = internV("$(B)/resources/", "GO_TOOLS", "/pkg/tool/linux_amd64/cgo")
+	strGoToolsPkgInclude = internV("$(B)/resources/", "GO_TOOLS", "/pkg/include")
+	strGoYolintTool      = internV("$(B)/resources/", "YOLINT", "/yolint")
 	strGoToolScript      = internV("$(S)/", "build/scripts/go_tool.py")
 	strGoVcsInfoScript   = internV("$(S)/", "build/scripts/vcs_info.py")
-	strGoVcsJson         = internV("$(VCS)/", "vcs.json")
+	strGoVcsJson         = bldVcsJson.str()
 	strGoMigrationsCfg   = internV("-migration.config=", "$(S)/", "build/rules/go/migrations.yaml")
 	strGoScopelintCfg    = internV("-scopelint.config=", "$(S)/", "build/rules/go/extended_lint.yaml")
 	strGoRiskyCfg        = internV("-riskyimports.config=", "$(S)/", "build/rules/go/risky_imports.yaml")
@@ -91,7 +91,7 @@ var goExtldLinkerTail = []STR{
 var goSymabisHead = []STR{
 	strGoAsmTool,
 	internStr("-trimpath"),
-	internStr("$(SOURCE_ROOT)=>/-S;$(BUILD_ROOT)=>/-B;$(TOOL_ROOT)=>/-T"),
+	internStr("$(S)=>/-S;$(B)=>/-B;$(TOOL_ROOT)=>/-T"),
 }
 
 var goSymabisDefs = []STR{
