@@ -1,14 +1,14 @@
 package main
 
 type DenseMap[K ~uint32, V any] struct {
-	idx  []uint32
-	vals []V
+	idx  Vec[uint32]
+	vals Vec[V]
 }
 
 func (m *DenseMap[K, V]) get(k K) (V, bool) {
-	if int(k) < len(m.idx) {
-		if slot := m.idx[k]; slot != 0 {
-			return m.vals[slot], true
+	if int(k) < m.idx.len() {
+		if slot := m.idx.s[k]; slot != 0 {
+			return m.vals.s[slot], true
 		}
 	}
 
@@ -18,44 +18,27 @@ func (m *DenseMap[K, V]) get(k K) (V, bool) {
 }
 
 func (m *DenseMap[K, V]) put(k K, v V) {
-	if int(k) < len(m.idx) {
-		if slot := m.idx[k]; slot != 0 {
-			m.vals[slot] = v
+	if int(k) < m.idx.len() {
+		if slot := m.idx.s[k]; slot != 0 {
+			m.vals.s[slot] = v
 
 			return
 		}
 	}
 
-	if len(m.vals) == 0 {
-		m.vals = append(m.vals, *new(V))
+	if m.vals.len() == 0 {
+		m.vals.pushBack(*new(V))
 	}
 
-	m.growIdx(int(k))
-	m.vals = append(m.vals, v)
-	m.idx[k] = uint32(len(m.vals) - 1)
-}
-
-func (m *DenseMap[K, V]) growIdx(k int) {
-	if k < len(m.idx) {
-		return
-	}
-
-	n := len(m.idx) * 2
-
-	if n <= k {
-		n = k + 1
-	}
-
-	grown := make([]uint32, n)
-
-	copy(grown, m.idx)
-	m.idx = grown
+	m.idx.ensureLen(int(k) + 1)
+	m.vals.pushBack(v)
+	m.idx.s[k] = uint32(m.vals.len() - 1)
 }
 
 func (m *DenseMap[K, V]) len() int {
-	if len(m.vals) == 0 {
+	if m.vals.len() == 0 {
 		return 0
 	}
 
-	return len(m.vals) - 1
+	return m.vals.len() - 1
 }

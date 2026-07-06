@@ -2,19 +2,18 @@ package main
 
 type IntValueMap[V any] struct {
 	idx  *IntMap[uint32]
-	vals []V
+	vals Vec[V]
 }
 
 func newIntValueMap[V any](hint int) *IntValueMap[V] {
 	return &IntValueMap[V]{
-		idx:  newIntMap[uint32](hint),
-		vals: make([]V, 0, hint),
+		idx: newIntMap[uint32](hint),
 	}
 }
 
 func (m *IntValueMap[V]) get(k uint64) *V {
 	if i := m.idx.get(k); i != nil {
-		return &m.vals[*i]
+		return &m.vals.s[*i]
 	}
 
 	return nil
@@ -24,31 +23,31 @@ func (m *IntValueMap[V]) cell(k uint64) (*V, bool) {
 	cell, existed := m.idx.cell(k)
 
 	if existed {
-		return &m.vals[*cell], true
+		return &m.vals.s[*cell], true
 	}
 
-	*cell = uint32(len(m.vals))
+	*cell = uint32(m.vals.len())
 
 	var zero V
 
-	m.vals = append(m.vals, zero)
+	m.vals.pushBack(zero)
 
-	return &m.vals[*cell], false
+	return &m.vals.s[*cell], false
 }
 
 func (m *IntValueMap[V]) put(k uint64, v V) {
 	cell, existed := m.idx.cell(k)
 
 	if existed {
-		m.vals[*cell] = v
+		m.vals.s[*cell] = v
 
 		return
 	}
 
-	*cell = uint32(len(m.vals))
-	m.vals = append(m.vals, v)
+	*cell = uint32(m.vals.len())
+	m.vals.pushBack(v)
 }
 
 func (m *IntValueMap[V]) len() int {
-	return len(m.vals)
+	return m.vals.len()
 }
