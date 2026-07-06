@@ -158,5 +158,23 @@
     "xfail": false,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/12552128438",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/12552129011"
+  },
+  {
+    "id": "devtools_yamaker",
+    "vcs": "arc",
+    "remote": "arcadia",
+    "sha": "20e866ddbfdcc132c16f91ae7bafdf4f6ca0973f",
+    "command": [
+      "ya",
+      "make",
+      "-j0",
+      "-G",
+      "--sandboxing",
+      "devtools/yamaker"
+    ],
+    "target": "devtools/yamaker",
+    "xfail": "auto",
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/12687148441",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/12687148769"
   }
 ]
