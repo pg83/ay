@@ -1,9 +1,5 @@
 package main
 
-import (
-	"path/filepath"
-)
-
 func copyFileAutoSourceVFS(modulePath string, d *ModuleData, src STR) *VFS {
 	if d.copyFileAutoOutputs == nil {
 		return nil
@@ -134,45 +130,4 @@ func (e *EmitContext) emitCopyFileNode(entry CopyFileEntry, st CopyEmitState) {
 	if extIsArchiveMember(entry.Dst) {
 		e.collectObj(st.ref, st.dstVFS, SrcMeta{Prio: stmtPrioDefault})
 	}
-}
-
-func (e *EmitContext) generatedModuleSourceVFS(srcRel string) *VFS {
-	_, instance := e.ctx, e.instance
-	reg := e.codegen
-
-	var id STR
-
-	if srcRel != "" && pathIsClean(srcRel) {
-		id = internedPrefixedJoined("$(B)/", instance.Path.rel(), srcRel)
-	} else {
-		id = internedPrefixed("$(B)/", filepath.ToSlash(filepath.Clean(instance.Path.rel()+"/"+srcRel)))
-	}
-
-	if id == 0 {
-		return nil
-	}
-
-	buildVFS := id.vfs()
-
-	if reg.lookup(buildVFS) != nil {
-		return vfsPtr(buildVFS)
-	}
-
-	return nil
-}
-
-func (e *EmitContext) resolveModuleSourceVFS(src STR, srcDirs []VFS) VFS {
-	ctx, instance, d := e.ctx, e.instance, e.d
-
-	if buildVFS := copyFileAutoSourceVFS(instance.Path.rel(), d, src); buildVFS != nil {
-		return *buildVFS
-	}
-
-	srcRel := src.string()
-
-	if buildVFS := e.generatedModuleSourceVFS(srcRel); buildVFS != nil {
-		return *buildVFS
-	}
-
-	return resolveSourceVFS(ctx, instance, srcRel, srcDirs)
 }

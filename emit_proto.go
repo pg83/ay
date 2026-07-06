@@ -58,16 +58,6 @@ const (
 	pbRuntimeBase   = "contrib/libs/protobuf/src/"
 )
 
-func quotedDirectives(headers []VFS) []IncludeDirective {
-	out := make([]IncludeDirective, len(headers))
-
-	for i, h := range headers {
-		out[i] = IncludeDirective{kind: includeQuoted, target: internStr(h.rel())}
-	}
-
-	return out
-}
-
 func yaffGeneratedHeaderIncludes(experimental bool, pbHRel string) []IncludeDirective {
 	n := len(yaffBaseRuntimeHeaders) + 1
 

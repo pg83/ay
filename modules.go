@@ -3283,3 +3283,7 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 		Platform: parent.Platform,
 	}
 }
+
+func moduleExcludesTag(d *ModuleData, tag string) bool {
+	return d != nil && d.excludeTags != nil && d.excludeTags[internStr(tag)]
+}
