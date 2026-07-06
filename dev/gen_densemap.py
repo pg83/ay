@@ -26,7 +26,7 @@ import sys
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Arities to generate. Only DenseMap3 is used in the tree (scanCache); 2/4/5 were
 # generated but unused and removed. Add the arity here and re-run if one is needed.
-ARITIES = [3]
+ARITIES = [2, 3]
 
 
 def type_params(n):
