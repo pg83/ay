@@ -178,9 +178,9 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 	})
 
 	reg.register(&GeneratedFileInfo{
-		OutputPath:     bfbsVFS,
-		ProducerRef:    flRef,
-		GeneratorRefs:  []NodeRef{flatcLDRef},
+		OutputPath:    bfbsVFS,
+		ProducerRef:   flRef,
+		GeneratorRefs: []NodeRef{flatcLDRef},
 	})
 }
 

@@ -75,9 +75,9 @@ func (e *EmitContext) emitLibraryRagel5Source(src STR) {
 	reg := e.codegen
 
 	reg.register(&GeneratedFileInfo{
-		OutputPath:     r5TmpOut,
-		ProducerRef:    r5Ref,
-		GeneratorRefs:  []NodeRef{ragel5LDRef, rlgenCdLDRef},
+		OutputPath:    r5TmpOut,
+		ProducerRef:   r5Ref,
+		GeneratorRefs: []NodeRef{ragel5LDRef, rlgenCdLDRef},
 	})
 
 	r5Parsed := e.scanner.parsers.sourceParsedBuckets(rlSourceVFS, nil).bucket(parsedIncludesCpp)

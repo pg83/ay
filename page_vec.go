@@ -26,6 +26,7 @@ func (v *PageVec[T]) set(id uint32, x T) {
 	}
 
 	page := make([]T, int64(1)<<uint(p))
+
 	page[off] = x
 	v.pages[p].Store(&page)
 }

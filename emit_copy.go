@@ -19,7 +19,6 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, moduleDir VFS, entry
 
 	if entry.Text {
 		srcVFS := copyFileInputVFS(fs, moduleDir, entry.Src)
-
 		own, compileExtra := scanner.parsedIncludes(srcVFS, nil)
 
 		out = append(out, own...)

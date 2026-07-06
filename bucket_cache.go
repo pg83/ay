@@ -33,6 +33,7 @@ func bucketHash(elems []VFS) (uint64, uint64) {
 
 	for _, v := range elems {
 		x := uint32(v)
+
 		sum += x
 		xr ^= x
 		sq += x * x
@@ -54,7 +55,6 @@ func bucketHash(elems []VFS) (uint64, uint64) {
 
 func (c *BucketCache) internBucket(elems []VFS) []VFS {
 	h1, h2 := bucketHash(elems)
-
 	cell, found := c.intern.cell(h1)
 
 	if found {

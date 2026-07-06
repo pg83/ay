@@ -1055,6 +1055,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	ldplugBlockR := ctx.refSlices.alloc(ldplugCap)
 	ldplugBlockP := ctx.vfsSlices.alloc(ldplugCap)
+
 	k = 0
 
 	for _, rp := range resolved {
@@ -1074,6 +1075,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	archiveBlockR := ctx.refSlices.alloc(archiveCap)
 	archiveBlockP := ctx.vfsSlices.alloc(archiveCap)
+
 	k = 0
 
 	for _, rp := range resolved {
@@ -1101,6 +1103,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	globalBlockR := ctx.refSlices.alloc(globalCap)
 	globalBlockP := ctx.vfsSlices.alloc(globalCap)
+
 	k = 0
 
 	for _, rp := range resolved {
@@ -1123,12 +1126,9 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	peerGlobalRefs := ctx.refSlices.intern(globalBlockR[:k])
 	peerGlobalPaths := ctx.vfsSlices.intern(globalBlockP[:k])
-
 	linkTarget := isProgramModuleType(d.moduleStmt.Name) || d.moduleStmt.Name == tokDllTool
-
 	sbomBlockR := ctx.refSlices.alloc(sbomCap)
 	sbomBlockP := ctx.vfsSlices.alloc(sbomCap)
-
 	peerSbomRefsRaw, peerSbomPathsRaw, ownSbomInsertIdx := aggregateSbomComponents(d.moduleStmt.Name, linkTarget, resolved, allocatorExplicitPeers, sbomBlockR[:0], sbomBlockP[:0])
 	peerSbomRefs := ctx.refSlices.intern(peerSbomRefsRaw)
 	peerSbomPaths := ctx.vfsSlices.intern(peerSbomPathsRaw)
@@ -1137,6 +1137,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	waBlockR := ctx.refSlices.alloc(waCap)
 	waBlockP := ctx.vfsSlices.alloc(waCap)
+
 	k = 0
 
 	for _, rp := range resolved {
@@ -1165,6 +1166,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	deduper.reset()
 
 	waCmdBlock := ctx.vfsSlices.alloc(waCmdCap)
+
 	k = 0
 
 	for _, rp := range resolved {
@@ -1191,6 +1193,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	dynBlockR := ctx.refSlices.alloc(dynCap)
 	dynBlockP := ctx.vfsSlices.alloc(dynCap)
+
 	k = 0
 
 	for _, rp := range resolved {
@@ -1391,7 +1394,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	effectiveCOnlyFlagsGlobal := concatShared(ctx.argSlices, peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
 	effectiveRPathFlagsGlobal := concatShared(ctx.argSlices, peerRPathFlagsGlobal, d.rpathFlagsGlobal)
 	ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
-
 	mergedLDPluginRefs := peerLDPluginRefs
 	mergedLDPluginPaths := peerLDPluginPaths
 
@@ -1500,6 +1502,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if d.moduleStmt.Name == tokProtoLibrary {
 		selfPeerAddInclGlobal = peerAddInclGlobal
 	}
+
 	effectiveSrcDirs := d.srcDirs
 
 	if pd := programSourceDir(d.moduleStmt); pd != nil {
@@ -1564,7 +1567,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	e.emit()
 
 	local, global := e.partitionCollected()
-
 	globalRefs := global.refs
 	globalOutputs := global.outs
 	globalMetas := global.metas
@@ -1578,7 +1580,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if d.moduleStmt.Name == tokGoProgram {
 		goRef, goPath := e.emitGoExe(resolved, peerArchiveRefs, peerArchivePaths, peerSbomRefs, peerSbomPaths, resourceGlobalsClosure)
-
 		result := newResult()
 
 		result.isPROGRAM = true
@@ -1762,6 +1763,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if isGoModuleType(d.moduleStmt.Name) {
 		if sbomActive(ctx, instance) && sbomQualifies(d) {
 			rel := instance.Path.rel()
+
 			ownSbomRef, ownSbomPath = e.emitSbomComponent(rel[strings.LastIndexByte(rel, '/')+1:])
 		}
 

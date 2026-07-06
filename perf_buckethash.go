@@ -25,6 +25,7 @@ func cmdPerfBucketHash(_ GlobalFlags, args []string) int {
 	const totalTarget = 1_000_000
 
 	rng := uint64(0x9e3779b97f4a7c15)
+
 	next := func() uint64 {
 		rng ^= rng << 13
 		rng ^= rng >> 7
@@ -101,7 +102,6 @@ func cmdPerfBucketHash(_ GlobalFlags, args []string) int {
 
 	seen := make(map[uint64]pairVal, 1<<24)
 	elems := make([]VFS, 0, maxLen)
-
 	start := time.Now()
 	lastPrint := start
 
@@ -109,17 +109,20 @@ func cmdPerfBucketHash(_ GlobalFlags, args []string) int {
 
 	for {
 		n := int(next() % (maxLen + 1))
+
 		elems = elems[:0]
 
 		ident := uint64(0)
 
 		for i := 0; i < n; i++ {
 			id := uint32(next() % (maxVal + 1))
+
 			elems = append(elems, VFS(id)<<1)
 			ident += mix64(uint64(id))
 		}
 
 		h1, h2 := bucketHash(elems)
+
 		count++
 
 		if prev, ok := seen[h1]; ok {

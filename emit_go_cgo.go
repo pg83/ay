@@ -7,32 +7,29 @@ import (
 var (
 	goCgoBaseCFlags    = []ARG{internArg("-w"), internArg("-pthread"), internArg("-fpic")}
 	goCgoBaseCFlagsStr = []STR{internStr("-w"), internStr("-pthread"), internStr("-fpic")}
-
-	goCgoCopyCmdHead = []STR{wrapccPython3STR, copyFsToolsVFS.str(), internStr("copy")}
-
-	goCgo1Head = []STR{
-		wrapccPython3STR,
-		cgo1WrapperVFS.str(),
-		internStr("--build-prefix=/-B"),
-		internStr("--source-prefix=/-S"),
-		internStr("--build-root"), strB,
-		internStr("--source-root"), strS,
-		internStr("--cgo1-files"),
-	}
-
-	goCgo1ToolChunk = []STR{str3, strGoCgoTool, internStr("-objdir")}
-
+	goCgoCopyCmdHead   = []STR{wrapccPython3STR, copyFsToolsVFS.str(), internStr("copy")}
+	goCgo1ToolChunk    = []STR{str3, strGoCgoTool, internStr("-objdir")}
 	goCgoImportStd     = []STR{internStr("-import_runtime_cgo=false"), internStr("-import_syscall=false")}
 	goCgoImportDefault = []STR{internStr("-import_runtime_cgo=true"), internStr("-import_syscall=true")}
-
-	goCgoLinkOPostLd = []STR{
-		internStr("-Wl,--no-rosegment"),
-		internStr("-Wl,--build-id=sha1"),
-		internStr("-Wl,--unresolved-symbols=ignore-all"),
-		internStr("-nodefaultlibs"),
-		internStr("-lc"),
-	}
 )
+
+var goCgo1Head = []STR{
+	wrapccPython3STR,
+	cgo1WrapperVFS.str(),
+	internStr("--build-prefix=/-B"),
+	internStr("--source-prefix=/-S"),
+	internStr("--build-root"), strB,
+	internStr("--source-root"), strS,
+	internStr("--cgo1-files"),
+}
+
+var goCgoLinkOPostLd = []STR{
+	internStr("-Wl,--no-rosegment"),
+	internStr("-Wl,--build-id=sha1"),
+	internStr("-Wl,--unresolved-symbols=ignore-all"),
+	internStr("-nodefaultlibs"),
+	internStr("-lc"),
+}
 
 func goModuleCgoCFiles(d *ModuleData) []STR {
 	var out []STR
@@ -138,7 +135,6 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel STR) {
 	srcVFS := resolveSourceVFS(ctx, instance, srcRel.string(), d.srcDirs)
 	dstVFS := build(module, "/", srcRel.string())
 	ref := ctx.emit.reserve()
-
 	parsed := e.scanner.parsers.sourceParsedBuckets(srcVFS, nil)
 
 	var cgoContext []VFS
@@ -259,7 +255,6 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 	exportC := build(dir, "/_cgo_export.c")
 	gotypes := build(dir, "/_cgo_gotypes.go")
 	mainC := build(dir, "/_cgo_main.c")
-
 	pathBlock := na.strs.alloc(2*len(files) + 1)
 	k := 0
 
@@ -288,7 +283,6 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 
 	inclArgs := e.goCgoIncludeArgs()
 	cflagsStr := e.goCgoCFlagsStr()
-
 	inputCap := 1 + len(files)
 
 	for _, f := range files {
@@ -324,7 +318,6 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 	na.vfs.commit(ni)
 
 	env := goCmdEnv(ctx, instance.Platform, d.tc)
-
 	outputs := na.vfs.alloc(2*len(files) + 4)
 	no := 0
 
@@ -369,7 +362,6 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 	}
 
 	ref := ctx.emit.emitNode(node)
-
 	leafCap := 2 + inputCap
 	cgoLeaves := na.vfs.alloc(leafCap)
 	nl := 0
@@ -465,7 +457,6 @@ func (e *EmitContext) flushGoCgo2() {
 	cgoO := build(dir, "/_cgo_", p.objectSuffix())
 	importGo := build(dir, "/_cgo_import.go")
 	exportH := build(dir, "/_cgo_export.h")
-
 	objByPath := map[VFS]NodeRef{}
 
 	for i, out := range e.outs {
@@ -499,7 +490,6 @@ func (e *EmitContext) flushGoCgo2() {
 	inclArgs := e.goCgoIncludeArgs()
 	cflagsStr := e.goCgoCFlagsStr()
 	linkOFlags := e.goCgoLinkOFlags()
-
 	linkOScripts := ctx.scripts[linkOScriptVFS]
 	copyFsScripts := ctx.scripts[copyFsToolsVFS]
 

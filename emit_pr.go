@@ -277,7 +277,6 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 	}
 
 	scanCfg := d.cc.ScanCfg
-
 	out := ctx.prClosureScratch[:0]
 
 	ridesMainHeader := func(ccRel string) bool {
@@ -401,6 +400,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 	}
 
 	res := dedup(out, nil)
+
 	ctx.prClosureScratch = out
 
 	return res
@@ -709,4 +709,3 @@ func isBareTokenBoundary(c byte) bool {
 
 	return true
 }
-

@@ -1,8 +1,8 @@
 package main
 
 import (
-	"strings"
 	"fmt"
+	"strings"
 )
 
 func (e *EmitContext) emitOneSource(meta SrcMeta) {

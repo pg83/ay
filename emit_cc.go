@@ -550,7 +550,6 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 
 	catboostStr := catboostOpenSourceChunk(p)
 	noLibc := p.NoLibcBlockStr
-
 	incl := na.strs.alloc(len(ccIncludesPrefixStr) + len(in.AddIncl) + len(in.PeerAddInclGlobal))
 	k := copy(incl, ccIncludesPrefixStr)
 
@@ -568,7 +567,6 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 
 	includes := incl[:k:k]
 	warnC := cWarningChunk(na, in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
-
 	forceDebug := [][]STR(nil)
 
 	if in.ForceConsistentDebug {
@@ -580,6 +578,7 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 	}
 
 	flagParts = append(flagParts, forceDebug...)
+
 	flagParts = append(flagParts, [][]STR{
 		debugPrefixMapFlagsStr,
 		xclangDebugCompilationDirStr,

@@ -10,6 +10,8 @@ const (
 	closureAllocHint    = 1 << 13
 	closureArenaInitial = closureAllocHint
 	resolveNoRank       = int(^uint(0) >> 1)
+	sourceExistsNo      = 1
+	sourceExistsYes     = 2
 )
 
 const (
@@ -84,11 +86,6 @@ func (s *IncludeScanner) cachedChildren(v VFS) ([]VFS, bool) {
 func (s *IncludeScanner) putChildren(v VFS, children []VFS) {
 	s.scanCache.put1(STR(v.strID()), children)
 }
-
-const (
-	sourceExistsNo  = 1
-	sourceExistsYes = 2
-)
 
 func (s *IncludeScanner) sourceFileExists(abs VFS) bool {
 	id := abs.strID()
