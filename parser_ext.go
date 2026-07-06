@@ -2,6 +2,7 @@ package main
 
 var (
 	cParser      = CIncludeDirectiveParser{}
+	goCgoParser  = GoCgoIncludeDirectiveParser{}
 	emptyParser  = EmptyIncludeDirectiveParser{}
 	ragelParser  = RagelIncludeDirectiveParser{}
 	fbsParser    = FlatbuffersIncludeDirectiveParser{}
@@ -21,7 +22,7 @@ func buildParserExtMatcher(proto ProtoIncludeDirectiveParser) *ExtMatcher[Includ
 		{".s", cParser},
 		{".H", cParser},
 		{".h", cParser},
-		{".go", cParser},
+		{".go", goCgoParser},
 		{".g4", emptyParser},
 		{".mm", cParser},
 		{".xh", cParser},

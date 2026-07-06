@@ -46,7 +46,7 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 	outputName := dllOutputName(d.moduleStmt)
 	outputPath := build(instance.Path.rel(), "/", outputName).string()
 	vcsCPath := build(instance.Path.rel(), "/__vcs_version__.c").string()
-	vcsOPath := build(instance.Path.rel(), "/__vcs_version__.c.pic.o").string()
+	vcsOPath := build(instance.Path.rel(), "/__vcs_version__.c", instance.Platform.objectSuffix()).string()
 	cmd0 := composeLDCmdVcsInfo(d.tc, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
 	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.rel(), outputPath, outputName, vcsOPath, ccOutputs, peerArchivePaths, nil, nil, d.exportsScript.string(), fixElfPath.string())
@@ -416,6 +416,10 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 		internV("-Wl,--version-script=$(S)/", modulePath, "/", exportsScript),
 	)
 
+	if !p.PIC && p.CompressDebugSections {
+		cmdArgs = append(cmdArgs, argWlCompressDebugSectionsZstd.str())
+	}
+
 	cmdArgs = append(cmdArgs, p.LinkPreludeExtra...)
 	cmdArgs = append(cmdArgs, argWlNoAsNeeded.str())
 
@@ -441,6 +445,7 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 
 	cmdArgs = append(cmdArgs, p.SystemLibs...)
 	cmdArgs = append(cmdArgs, argLm.str(), argWlGcSections.str())
+	cmdArgs = appendInternStrs(cmdArgs, p.linkerSelectionNoPieFlags())
 
 	return cmdArgs
 }

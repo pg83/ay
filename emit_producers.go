@@ -28,6 +28,8 @@ const (
 	prodJoinSrcs
 	prodSproto
 	prodLlvmBc
+	prodGoCgoCopy
+	prodGoCgo1
 )
 
 type ProducerPos struct {
@@ -216,6 +218,20 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		}
 	}
 
+	goModule := isGoModuleType(d.moduleStmt.Name)
+
+	if goModule {
+		cgoC := goModuleCgoCFiles(d)
+
+		n += len(cgoC)
+		total += 2 * len(cgoC)
+
+		if len(d.cgoSrcs) > 0 {
+			n++
+			total += 3*len(d.cgoSrcs) + 4
+		}
+	}
+
 	backing := make([]VFS, 0, total)
 	positions := make([]ProducerPos, 0, n)
 
@@ -395,6 +411,37 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 			outs:  e.srcPositionOuts(m.Source),
 			ins:   e.srcPositionIns(m.Source),
 		})
+	}
+
+	if goModule {
+		for i, srcTok := range goModuleCgoCFiles(d) {
+			positions = append(positions, ProducerPos{
+				kind:  prodGoCgoCopy,
+				index: i,
+				outs:  []VFS{build(module, "/", srcTok.string())},
+				ins:   srcInsCandidate(module, srcTok),
+			})
+		}
+
+		if len(d.cgoSrcs) > 0 {
+			outs := make([]VFS, 0, 2*len(d.cgoSrcs)+4)
+			ins := make([]VFS, 0, len(d.cgoSrcs))
+
+			for _, f := range d.cgoSrcs {
+				base := strings.TrimSuffix(f.string(), ".go")
+
+				outs = append(outs, build(module, "/", base, ".cgo1.go"), build(module, "/", base, ".cgo2.c"))
+				ins = append(ins, source(module+"/"+f.string()))
+			}
+
+			outs = append(outs,
+				build(module, "/_cgo_export.h"),
+				build(module, "/_cgo_export.c"),
+				build(module, "/_cgo_gotypes.go"),
+				build(module, "/_cgo_main.c"))
+
+			positions = append(positions, ProducerPos{kind: prodGoCgo1, index: 0, outs: outs, ins: ins})
+		}
 	}
 
 	for i, srcTok := range d.ymapsSprotoSrcs {
@@ -613,6 +660,10 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 			e.emitArchiveAsmForAR()
 		case prodSrc:
 			e.emitOneSource(srcs[pos.index])
+		case prodGoCgoCopy:
+			e.emitGoCgoCopyStmt(goModuleCgoCFiles(e.d)[pos.index])
+		case prodGoCgo1:
+			e.emitGoCgo1Stmt()
 		case prodEnum:
 			e.emitEnumSrcStmt(e.d.enumSrcs[pos.index])
 		case prodLj21:

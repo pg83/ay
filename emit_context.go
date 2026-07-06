@@ -170,6 +170,7 @@ func (e *EmitContext) emit() {
 		e.collectObj(ref, fsMemberPaths[i], SrcMeta{Prio: stmtPrioDefault})
 	}
 
+	e.flushGoCgo2()
 	e.flushGoSrcs()
 }
 

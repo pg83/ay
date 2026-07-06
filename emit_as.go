@@ -66,17 +66,23 @@ func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInp
 
 	betweenBlocks += len(in.ModuleScopeCFlags)
 
-	fixed := prologueArgs + len(debugPrefixMapFlags) + len(xclangDebugCompilationDir) +
+	fixed := prologueArgs + 2*len(debugPrefixMapFlags) + 2*len(xclangDebugCompilationDir) +
 		len(bundle.CFlags) + len(warnBundle) + len(bundle.Defines) + len(ownCFlags) +
-		len(bundle.NoLibcBlock) + betweenBlocks + len(bundle.NoLibcBlock) + len(in.SFlags) + 4
+		len(bundle.NoLibcBlock) + betweenBlocks + len(bundle.NoLibcBlock) + len(in.SFlags) + len(in.PerSourceCFlags) + 4
 
 	cmdArgs := make([]STR, 0, fixed+len(includes))
 
 	cmdArgs = append(cmdArgs, in.TC.CC, instance.Platform.TargetArg)
 	cmdArgs = appendArgStr(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs, instance.Platform.SysrootArgs...)
+
+	if in.ForceConsistentDebug {
+		cmdArgs = appendArgStr(cmdArgs, debugPrefixMapFlags, xclangDebugCompilationDir)
+	}
+
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warnBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboostOpenSourceDefineFor(instance.Platform))
 	cmdArgs = appendArgStr(cmdArgs, in.SFlags)
+	cmdArgs = appendArgStr(cmdArgs, in.PerSourceCFlags)
 	cmdArgs = append(cmdArgs, argDashC.str(), argDashO.str(), (outVFS).str(), (inVFS).str())
 	cmdArgs = append(cmdArgs, includes...)
 

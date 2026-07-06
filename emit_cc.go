@@ -47,6 +47,7 @@ type ModuleCompileEnv struct {
 	BisonFlags           []ARG
 	BisonGenExt          string
 	TC                   ModuleToolchain
+	ForceConsistentDebug bool
 }
 
 type ModuleCCInputs struct {
@@ -568,8 +569,18 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 	includes := incl[:k:k]
 	warnC := cWarningChunk(na, in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
 
+	forceDebug := [][]STR(nil)
+
+	if in.ForceConsistentDebug {
+		forceDebug = [][]STR{debugPrefixMapFlagsStr, xclangDebugCompilationDirStr}
+	}
+
 	flagParts := [][]STR{
 		na.argStrList(in.ClangWarnings),
+	}
+
+	flagParts = append(flagParts, forceDebug...)
+	flagParts = append(flagParts, [][]STR{
 		debugPrefixMapFlagsStr,
 		xclangDebugCompilationDirStr,
 		cflagsStr,
@@ -580,7 +591,7 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 		catboostStr,
 		na.argStrList(in.ModuleScopeCFlags),
 		noLibc,
-	}
+	}...)
 
 	cxxOwnExtras := in.CXXFlags
 
@@ -628,6 +639,10 @@ func (m InclArgMemo) arg(path VFS) STR {
 	}
 
 	a := internV("-I", path.string())
+
+	if path.rel() == "" {
+		a = internV("-I", strings.TrimSuffix(path.string(), "/"))
+	}
 
 	m.m.put(path, a)
 
