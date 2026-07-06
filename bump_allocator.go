@@ -1,6 +1,8 @@
 package main
 
-const bumpChunkSize = 200_000
+import "unsafe"
+
+const bumpChunkBytes = 1 << 21
 
 type BumpAllocator[T any] struct {
 	chunk []T
@@ -12,7 +14,9 @@ func newBumpAllocator[T any](int) *BumpAllocator[T] {
 
 func (a *BumpAllocator[T]) alloc(n int) []T {
 	if len(a.chunk) < n {
-		size := bumpChunkSize
+		var zero T
+
+		size := bumpChunkBytes / int(unsafe.Sizeof(zero))
 
 		if size < n {
 			size = n
