@@ -927,3 +927,13 @@ func (s *IncludeScanner) resolveSourceUnder(prefix VFS, targetSTR STR) VFS {
 func canRelFilter(first, target string) bool {
 	return first != "" && first != "." && first != ".." && !strings.Contains(target, "/..")
 }
+
+func quotedDirectives(headers []VFS) []IncludeDirective {
+	out := make([]IncludeDirective, len(headers))
+
+	for i, h := range headers {
+		out[i] = IncludeDirective{kind: includeQuoted, target: internStr(h.rel())}
+	}
+
+	return out
+}

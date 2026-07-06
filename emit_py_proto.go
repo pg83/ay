@@ -24,10 +24,6 @@ func protoPythonResourceKeyBase(instance ModuleInstance, d *ModuleData, src stri
 	return filepath.ToSlash(filepath.Clean(nsPath + "/" + base))
 }
 
-func moduleExcludesTag(d *ModuleData, tag string) bool {
-	return d != nil && d.excludeTags != nil && d.excludeTags[internStr(tag)]
-}
-
 func protoPythonNamespaceArg(d *ModuleData) string {
 	if d.protoNamespace == nil {
 		return "/"
