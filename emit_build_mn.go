@@ -37,6 +37,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 		Outputs:        na.vfsList(cppVFS, rodataVFS),
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: depRefs(archiverRef),
+		Resources:      usesPython3,
 	}
 
 	ref := ctx.emit.emitNode(node)
