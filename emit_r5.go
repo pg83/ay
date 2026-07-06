@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"path/filepath"
+	"strings"
+)
 
 var r5KV = KV{P: pkR5, PC: pcYellow}
 
@@ -16,7 +19,7 @@ func emitR5(
 	na := emit.nodeArenas()
 	srcVFS := source(instance.Path.rel(), "/", srcRel)
 	tmpVFS := build(instance.Path.rel(), "/", srcRel, ".tmp")
-	cppVFS := build(instance.Path.rel(), "/", strings.TrimSuffix(srcRel, ".rl"), ".rl5.cpp")
+	cppVFS := build(instance.Path.rel(), "/", strings.TrimSuffix(srcRel, filepath.Ext(srcRel)), ".rl5.cpp")
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	cmd0 := Cmd{

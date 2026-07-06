@@ -77,7 +77,7 @@ func buildExtClassMatcher() *ExtMatcher[ExtClass] {
 	set(extAsmSource, ".asm", ".s", ".S")
 	set(extHeader, ".h", ".hh", ".hpp", ".cuh", ".H", ".hxx", ".xh", ".ipp", ".ixx", ".inl")
 	set(extCopyAuto, ".c", ".cpp", ".cc", ".cxx", ".proto", ".ev", ".g4", ".y", ".ypp", ".rl", ".rl6", ".h.in", ".c.in", ".cpp.in")
-	set(extCodegen, ".proto", ".gztproto", ".fbs64", ".fbs", ".ev", ".cfgproto", ".rl6", ".rl", ".y", ".ypp", ".cpp.in", ".c.in", ".sc", ".gperf", ".lpp", ".lex", ".l")
+	set(extCodegen, ".proto", ".gztproto", ".fbs64", ".fbs", ".ev", ".cfgproto", ".rl6", ".rl", ".rl5", ".y", ".ypp", ".cpp.in", ".c.in", ".sc", ".gperf", ".lpp", ".lex", ".l")
 
 	for ext, cls := range map[string]SrcExtClass{
 		".gztproto": srcExtGztProto,
@@ -87,6 +87,7 @@ func buildExtClassMatcher() *ExtMatcher[ExtClass] {
 		".ev":       srcExtEv,
 		".rl6":      srcExtRl6,
 		".rl":       srcExtRl,
+		".rl5":      srcExtRl,
 		".y":        srcExtY,
 		".ypp":      srcExtY,
 		".cpp.in":   srcExtCppIn,
