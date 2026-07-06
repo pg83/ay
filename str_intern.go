@@ -16,7 +16,7 @@ var internTable = struct {
 }{
 	ids:      newIntMap[STR](1 << 16),
 	overflow: make(map[string]STR),
-	flat:     make([]internCell, 1, 1<<21),
+	flat:     make([]internCell, 1, 1<<20),
 	count:    1,
 	bytes:    newBumpAllocator[byte](1 << 20),
 }

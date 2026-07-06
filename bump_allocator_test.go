@@ -61,18 +61,28 @@ func TestBumpAllocatorFixedChunkSize(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		r := a.alloc(1)
 
-		if len(r) != bumpChunkSize {
-			t.Fatalf("alloc %d: fresh chunk len = %d, want fixed %d", i, len(r), bumpChunkSize)
+		if len(r) != bumpChunkBytes {
+			t.Fatalf("alloc %d: fresh chunk len = %d, want fixed %d", i, len(r), bumpChunkBytes)
 		}
 
 		a.commit(len(r)) // exhaust the chunk so the next alloc opens a fresh one
 	}
 }
 
+func TestBumpAllocatorChunkByteBudget(t *testing.T) {
+	a := newBumpAllocator[uint64](8)
+
+	r := a.alloc(1)
+
+	if len(r) != bumpChunkBytes/8 {
+		t.Fatalf("uint64 fresh chunk len = %d, want %d", len(r), bumpChunkBytes/8)
+	}
+}
+
 func TestBumpAllocatorOversizedAllocFits(t *testing.T) {
 	a := newBumpAllocator[byte](8)
 
-	big := bumpChunkSize * 3
+	big := bumpChunkBytes * 3
 	r := a.alloc(big)
 
 	if len(r) < big {
