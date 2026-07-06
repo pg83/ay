@@ -767,6 +767,22 @@ type PyGenResEntry struct {
 	inputs []VFS
 }
 
+func pyGenResourceItems(entries []PyGenResEntry) []ResourceItem {
+	items := make([]ResourceItem, 0, 2*len(entries))
+
+	for _, en := range entries {
+		key := "resfs/file/py/" + en.key
+		kvHash := "resfs/src/" + key + "=${rootrel;context=TEXT;input=TEXT:\"" + en.token + "\"}"
+		kvCmd := internV("resfs/src/", key, "=", en.path.rel()).string()
+
+		items = append(items,
+			ResourceItem{Path: "-", Key: kvHash, Cmd: kvCmd, Input: en.path, Extra: en.inputs},
+			ResourceItem{Path: en.token, Key: key, Input: en.path, Extra: en.inputs})
+	}
+
+	return items
+}
+
 func pyProtoSourceInputs(inputs []VFS, extra [][]VFS) []VFS {
 	out := make([]VFS, 0, len(inputs))
 
