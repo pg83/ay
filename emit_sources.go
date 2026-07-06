@@ -14,7 +14,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 		e.emitLibraryGztProtoCompile(src)
 	case srcExtProto:
 		if e.d.unit.Tag == unitTagPy3Proto {
-			e.emitPyProtoSource(meta.Source)
+			e.emitPyProtoSource(meta.Source, 0)
 		} else {
 			e.emitCppProtoFamilySource(meta, cppProtoSpec)
 		}

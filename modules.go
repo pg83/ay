@@ -3206,6 +3206,7 @@ func expandScalarVarRef(s string, env Environment) string {
 func applyAllPySrcs(fs FS, modulePath string, v UnknownStmt, d *ModuleData) {
 	dirs := []string{"."}
 	noTestFiles := false
+	recursive := false
 
 	for i := 0; i < len(v.Args); i++ {
 		a := v.Args[i]
@@ -3222,6 +3223,7 @@ func applyAllPySrcs(fs FS, modulePath string, v UnknownStmt, d *ModuleData) {
 
 			d.pyNamespace = strPtr(v.Args[i])
 		case "RECURSIVE":
+			recursive = true
 		case "NO_TEST_FILES":
 			noTestFiles = true
 		default:
@@ -3237,31 +3239,84 @@ func applyAllPySrcs(fs FS, modulePath string, v UnknownStmt, d *ModuleData) {
 
 	moduleRootRel := modulePath
 
+	appendDirPyFiles := func(dirRel string) {
+		view := fs.listdir(dirKey(dirRel))
+		names := make([]string, 0, len(view.names))
+
+		for _, packed := range view.names {
+			if packed&1 != 0 {
+				continue
+			}
+
+			name := STR(packed >> 1).string()
+
+			if filepath.Ext(name) != ".py" {
+				continue
+			}
+
+			if noTestFiles && (strings.HasPrefix(name, "test_") || strings.HasSuffix(name, "_test.py")) {
+				continue
+			}
+
+			names = append(names, name)
+		}
+
+		sort.Strings(names)
+
+		for _, name := range names {
+			files = append(files, strings.TrimPrefix(dirRel+"/"+name, moduleRootRel+"/"))
+		}
+	}
+
+	subDirsSorted := func(dirRel string) []string {
+		view := fs.listdir(dirKey(dirRel))
+
+		var subs []string
+
+		for _, packed := range view.names {
+			if packed&1 == 0 {
+				continue
+			}
+
+			child := dirRel + "/" + STR(packed>>1).string()
+
+			if fs.isFile(dirKey(child), "ya.make") {
+				continue
+			}
+
+			subs = append(subs, child)
+		}
+
+		sort.Strings(subs)
+
+		return subs
+	}
+
 	for _, dir := range dirs {
 		walkRoot := filepath.ToSlash(filepath.Join(moduleRootRel, dir))
 
-		fs.walk(walkRoot, func(rel string, isDir bool) bool {
-			if isDir {
-				return rel == walkRoot || !fs.isFile(dirKey(rel), "ya.make")
-			}
+		if !recursive {
+			appendDirPyFiles(walkRoot)
 
-			if filepath.Ext(rel) != ".py" {
-				return false
-			}
+			continue
+		}
 
-			base := filepath.Base(rel)
+		order := make([]string, 0, 16)
 
-			if noTestFiles && (strings.HasPrefix(base, "test_") || strings.HasSuffix(base, "_test.py")) {
-				return false
-			}
+		for queue := []string{walkRoot}; len(queue) > 0; queue = queue[1:] {
+			subs := subDirsSorted(queue[0])
 
-			files = append(files, strings.TrimPrefix(rel, moduleRootRel+"/"))
+			order = append(order, subs...)
+			queue = append(queue, subs...)
+		}
 
-			return false
-		})
+		order = append(order, walkRoot)
+
+		for _, dirRel := range order {
+			appendDirPyFiles(dirRel)
+		}
 	}
 
-	sort.Strings(files)
 	d.pySrcs = append(d.pySrcs, sTRS(files...)...)
 
 	if len(files) > 0 {

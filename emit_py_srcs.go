@@ -39,10 +39,11 @@ func generatedPyResourceKey(modulePath string, d *ModuleData, srcRel string) str
 }
 
 type PySrc struct {
-	Path   VFS
-	Module STR
-	Token  STR
-	Group  int
+	Path     VFS
+	Module   STR
+	Token    STR
+	Group    int
+	SrcGroup int
 }
 
 func resolvePySrcRel(fs FS, srcDirs []VFS, moduleVFS VFS, srcRel string) STR {
@@ -84,7 +85,7 @@ func (e *EmitContext) registerCollectPySrcs() {
 
 		for _, srcRel := range group.Srcs {
 			if extIsProto(srcRel.string()) {
-				e.emitPyProtoSource(srcRel)
+				e.emitPyProtoSource(srcRel, gi)
 
 				continue
 			}
@@ -323,14 +324,19 @@ func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 			entries = append(entries, e.pyResEntriesFor(ps)...)
 		}
 
-		if len(entries) == 0 {
-			continue
+		if len(entries) > 0 {
+			groupRefs, groupOuts := e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(entries)})
+
+			res.Refs = append(res.Refs, groupRefs...)
+			res.Outputs = append(res.Outputs, groupOuts...)
 		}
 
-		groupRefs, groupOuts := e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(entries)})
+		if d.moduleStmt.Name != tokProtoLibrary {
+			protoRefs, protoOuts := e.flushPyProtoGroup(gi)
 
-		res.Refs = append(res.Refs, groupRefs...)
-		res.Outputs = append(res.Outputs, groupOuts...)
+			res.Refs = append(res.Refs, protoRefs...)
+			res.Outputs = append(res.Outputs, protoOuts...)
+		}
 	}
 
 	if len(res.Refs) == 0 {
