@@ -15,16 +15,16 @@ type denseRow2 struct {
 // (a row slot of 0 = column unset for the key). See dev/gen_densemap.py for
 // the rationale versus N separate DenseMaps or a DenseMap of a struct.
 type DenseMap2[K ~uint32, V1, V2 any] struct {
-	idx   []uint32
-	rows  []denseRow2
-	vals1 []V1
-	vals2 []V2
+	idx   Vec[uint32]
+	rows  Vec[denseRow2]
+	vals1 Vec[V1]
+	vals2 Vec[V2]
 }
 
 // rowSlot returns the 1-based row slot for k, or 0 when k has no row yet.
 func (m *DenseMap2[K, V1, V2]) rowSlot(k K) uint32 {
-	if int(k) < len(m.idx) {
-		return m.idx[k]
+	if int(k) < m.idx.len() {
+		return m.idx.s[k]
 	}
 
 	return 0
@@ -32,45 +32,29 @@ func (m *DenseMap2[K, V1, V2]) rowSlot(k K) uint32 {
 
 // ensureRow returns k's row slot, allocating an empty row on first touch.
 func (m *DenseMap2[K, V1, V2]) ensureRow(k K) uint32 {
-	if int(k) < len(m.idx) {
-		if slot := m.idx[k]; slot != 0 {
+	if int(k) < m.idx.len() {
+		if slot := m.idx.s[k]; slot != 0 {
 			return slot
 		}
 	}
 
-	if len(m.rows) == 0 {
-		m.rows = append(m.rows, denseRow2{}) // reserve slot 0 as the absent sentinel
+	if m.rows.len() == 0 {
+		m.rows.pushBack(denseRow2{}) // reserve slot 0 as the absent sentinel
 	}
 
-	m.growIdx(int(k))
-	m.rows = append(m.rows, denseRow2{})
-	slot := uint32(len(m.rows) - 1)
-	m.idx[k] = slot
+	m.idx.ensureLen(int(k) + 1)
+	m.rows.pushBack(denseRow2{})
+	slot := uint32(m.rows.len() - 1)
+	m.idx.s[k] = slot
 
 	return slot
-}
-
-func (m *DenseMap2[K, V1, V2]) growIdx(k int) {
-	if k < len(m.idx) {
-		return
-	}
-
-	n := len(m.idx) * 2
-
-	if n <= k {
-		n = k + 1
-	}
-
-	grown := make([]uint32, n)
-	copy(grown, m.idx)
-	m.idx = grown
 }
 
 // get1 returns column 1's value for k and whether that column is present.
 func (m *DenseMap2[K, V1, V2]) get1(k K) (V1, bool) {
 	if slot := m.rowSlot(k); slot != 0 {
-		if vi := m.rows[slot].i1; vi != 0 {
-			return m.vals1[vi], true
+		if vi := m.rows.s[slot].i1; vi != 0 {
+			return m.vals1.s[vi], true
 		}
 	}
 
@@ -83,25 +67,25 @@ func (m *DenseMap2[K, V1, V2]) get1(k K) (V1, bool) {
 func (m *DenseMap2[K, V1, V2]) put1(k K, v V1) {
 	slot := m.ensureRow(k)
 
-	if vi := m.rows[slot].i1; vi != 0 {
-		m.vals1[vi] = v
+	if vi := m.rows.s[slot].i1; vi != 0 {
+		m.vals1.s[vi] = v
 
 		return
 	}
 
-	if len(m.vals1) == 0 {
-		m.vals1 = append(m.vals1, *new(V1)) // reserve slot 0 as the absent sentinel
+	if m.vals1.len() == 0 {
+		m.vals1.pushBack(*new(V1)) // reserve slot 0 as the absent sentinel
 	}
 
-	m.vals1 = append(m.vals1, v)
-	m.rows[slot].i1 = uint32(len(m.vals1) - 1)
+	m.vals1.pushBack(v)
+	m.rows.s[slot].i1 = uint32(m.vals1.len() - 1)
 }
 
 // get2 returns column 2's value for k and whether that column is present.
 func (m *DenseMap2[K, V1, V2]) get2(k K) (V2, bool) {
 	if slot := m.rowSlot(k); slot != 0 {
-		if vi := m.rows[slot].i2; vi != 0 {
-			return m.vals2[vi], true
+		if vi := m.rows.s[slot].i2; vi != 0 {
+			return m.vals2.s[vi], true
 		}
 	}
 
@@ -114,26 +98,26 @@ func (m *DenseMap2[K, V1, V2]) get2(k K) (V2, bool) {
 func (m *DenseMap2[K, V1, V2]) put2(k K, v V2) {
 	slot := m.ensureRow(k)
 
-	if vi := m.rows[slot].i2; vi != 0 {
-		m.vals2[vi] = v
+	if vi := m.rows.s[slot].i2; vi != 0 {
+		m.vals2.s[vi] = v
 
 		return
 	}
 
-	if len(m.vals2) == 0 {
-		m.vals2 = append(m.vals2, *new(V2)) // reserve slot 0 as the absent sentinel
+	if m.vals2.len() == 0 {
+		m.vals2.pushBack(*new(V2)) // reserve slot 0 as the absent sentinel
 	}
 
-	m.vals2 = append(m.vals2, v)
-	m.rows[slot].i2 = uint32(len(m.vals2) - 1)
+	m.vals2.pushBack(v)
+	m.rows.s[slot].i2 = uint32(m.vals2.len() - 1)
 }
 
 // len reports the number of distinct keys stored (a key counts once any of
 // its columns has been set).
 func (m *DenseMap2[K, V1, V2]) len() int {
-	if len(m.rows) == 0 {
+	if m.rows.len() == 0 {
 		return 0
 	}
 
-	return len(m.rows) - 1
+	return m.rows.len() - 1
 }
