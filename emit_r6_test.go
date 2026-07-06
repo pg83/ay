@@ -29,7 +29,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		t.Errorf("outPath = %q, want %q", outPath.string(), wantOut)
 	}
 
-	got := e.nodes[r6Ref]
+	got := e.nodes.s[r6Ref]
 
 	if len(got.Cmds[0].CmdArgs.flat()) != 7 {
 		t.Errorf("cmd_args length = %d, want 7", len(got.Cmds[0].CmdArgs.flat()))
@@ -115,7 +115,7 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 		e,
 	)
 
-	got := e.nodes[r6Ref]
+	got := e.nodes.s[r6Ref]
 
 	if got.Cmds[0].CmdArgs.flat()[1].string() != "-lF1" {
 		t.Errorf("cmd_args[1] = %q, want -lF1 (per-module SET(RAGEL6_FLAGS) override)", got.Cmds[0].CmdArgs.flat()[1].string())
@@ -170,7 +170,7 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 		e,
 	)
 
-	got := e.nodes[r6Ref]
+	got := e.nodes.s[r6Ref]
 
 	if got.Cmds[0].CmdArgs.flat()[1].string() != "-CG2" {
 		t.Errorf("cmd_args[1] = %q, want -CG2 (x86_64 host = release = optimized)", got.Cmds[0].CmdArgs.flat()[1].string())
@@ -197,7 +197,7 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 	r6Ref := e.reserve()
 	emitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, intern("$(B)/contrib/tools/ragel6/ragel6"), nil, closure, r6Ref, e)
 
-	got := e.nodes[r6Ref]
+	got := e.nodes.s[r6Ref]
 
 	wantInputs := []string{
 		"$(B)/contrib/tools/ragel6/ragel6",

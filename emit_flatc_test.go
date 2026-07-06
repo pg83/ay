@@ -42,11 +42,11 @@ func TestEmitFL_NodeShape(t *testing.T) {
 		t.Fatalf("bfbs = %q", bfbs)
 	}
 
-	if len(e.nodes) != 1 {
-		t.Fatalf("emitted %d nodes, want 1", len(e.nodes))
+	if e.nodes.len() != 1 {
+		t.Fatalf("emitted %d nodes, want 1", e.nodes.len())
 	}
 
-	node := e.nodes[0]
+	node := e.nodes.s[0]
 
 	if node.KV.P != pkFL {
 		t.Fatalf("kv.p = %q, want FL", node.KV.P)
@@ -248,11 +248,11 @@ func TestEmitFL64_NodeShape(t *testing.T) {
 		t.Fatalf("bfbs = %q", bfbs)
 	}
 
-	if len(e.nodes) != 1 {
-		t.Fatalf("emitted %d nodes, want 1", len(e.nodes))
+	if e.nodes.len() != 1 {
+		t.Fatalf("emitted %d nodes, want 1", e.nodes.len())
 	}
 
-	node := e.nodes[0]
+	node := e.nodes.s[0]
 
 	if node.KV.P != pkFL64 {
 		t.Fatalf("kv.p = %q, want FL64", node.KV.P)

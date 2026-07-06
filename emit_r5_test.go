@@ -36,7 +36,7 @@ func TestEmitR5_RlgenModeFollowsOptimized(t *testing.T) {
 			t.Errorf("cppOut = %q, want $(B)/kernel/urlnorm/urlhashval.rl5.cpp", cppOut.string())
 		}
 
-		flat := e.nodes[ref].Cmds[1].CmdArgs.flat()
+		flat := e.nodes.s[ref].Cmds[1].CmdArgs.flat()
 
 		return flat[1].string()
 	}

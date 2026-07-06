@@ -97,7 +97,7 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		emitVCSNode(emit, testHostP),
 	)
 
-	got := emit.nodes[ldRef]
+	got := emit.nodes.s[ldRef]
 
 	if len(got.Cmds) != 4 {
 		t.Fatalf("Cmds = %d, want 4", len(got.Cmds))
@@ -193,7 +193,7 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 		emitVCSNode(emit, testHostP),
 	)
 
-	got := emit.nodes[ldRef]
+	got := emit.nodes.s[ldRef]
 
 	if len(got.Cmds) != 7 {
 		t.Fatalf("Cmds = %d, want 7", len(got.Cmds))
@@ -278,7 +278,7 @@ func TestEmitLD_AcceptsHostPIC(t *testing.T) {
 		emitVCSNode(emit, testHostP),
 	)
 
-	got := emit.nodes[ref]
+	got := emit.nodes.s[ref]
 
 	if string(got.Platform.Target) != string(PlatformDefaultLinuxX8664) {
 		t.Errorf("platform = %q, want %q", string(got.Platform.Target), PlatformDefaultLinuxX8664)
@@ -376,7 +376,7 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 		emitVCSNode(emit, testHostP),
 	)
 
-	got := emit.nodes[ldRef]
+	got := emit.nodes.s[ldRef]
 
 	if !slices.Contains(got.flatInputs(), build(wholeArchivePath)) {
 		t.Fatalf("inputs do not contain whole-archive path %q: %#v", wholeArchivePath, got.flatInputs())
@@ -456,7 +456,7 @@ func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T
 		emitVCSNode(emit, testHostP),
 	)
 
-	got := emit.nodes[ldRef]
+	got := emit.nodes.s[ldRef]
 	count := 0
 
 	for _, input := range got.flatInputs() {

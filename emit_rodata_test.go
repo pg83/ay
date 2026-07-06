@@ -22,11 +22,11 @@ func TestEmitRD_NodeShape(t *testing.T) {
 		t.Fatalf("objOut = %q", objOut)
 	}
 
-	if len(e.nodes) != 1 {
-		t.Fatalf("emitted %d nodes, want 1", len(e.nodes))
+	if e.nodes.len() != 1 {
+		t.Fatalf("emitted %d nodes, want 1", e.nodes.len())
 	}
 
-	node := e.nodes[0]
+	node := e.nodes.s[0]
 
 	if node.KV.P != pkRD {
 		t.Fatalf("kv.p = %q, want RD", node.KV.P)
