@@ -156,6 +156,12 @@ func (e *EmitContext) emit() {
 		if pyRes := e.flushPyProtoSrcs(); pyRes != nil {
 			e.protoRes = pyRes
 		}
+	} else if pyModuleTypeUsesPython3(d.moduleStmt.Name) {
+		e.emitPyProtoBytecode()
+
+		if pyRes := e.flushPyProtoSrcs(); pyRes != nil {
+			e.protoRes = pyRes
+		}
 	}
 
 	if !isProgramModuleType(d.moduleStmt.Name) || d.unit.Tag != 0 || len(e.resources) > 0 {

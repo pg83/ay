@@ -83,6 +83,12 @@ func (e *EmitContext) registerCollectPySrcs() {
 		keyPrefix := pyResourceKeyPrefix(group.TopLevel, group.Namespace, module)
 
 		for _, srcRel := range group.Srcs {
+			if extIsProto(srcRel.string()) {
+				e.emitPyProtoSource(srcRel)
+
+				continue
+			}
+
 			path := build(module, "/", srcRel.string())
 
 			if e.codegen.lookupSplit(instance.Path, srcRel) == nil {

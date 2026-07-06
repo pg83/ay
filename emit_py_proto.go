@@ -154,6 +154,11 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR) {
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	pyOut := build(protoBase, "__intpy3___pb2.py")
+
+	if e.codegen.lookup(pyOut) != nil {
+		return
+	}
+
 	pyiOut := build(protoBase, "__intpy3___pb2.pyi")
 
 	var grpcPyOut VFS
@@ -393,7 +398,7 @@ func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
 
 	var cppSibling *ModuleEmitResult
 
-	if !moduleExcludesTag(d, "CPP_PROTO") {
+	if d.moduleStmt.Name == tokProtoLibrary && !moduleExcludesTag(d, "CPP_PROTO") {
 		cppInstance := instance
 
 		cppInstance.Language = LangCPP
