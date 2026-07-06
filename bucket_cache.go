@@ -10,8 +10,8 @@ type bucketVal struct {
 type BucketCache struct {
 	chunks       *BumpAllocator[[]VFS]
 	pool         *BumpAllocator[VFS]
-	intern       *IntMap[bucketVal]
-	overflow     *IntMap[bucketVal]
+	intern       *IntValueMap[bucketVal]
+	overflow     *IntValueMap[bucketVal]
 	h1Mismatches int
 	overflowed   int
 	scratch      [closureBuckets][]VFS
@@ -21,8 +21,8 @@ func newBucketCache() *BucketCache {
 	return &BucketCache{
 		chunks:   newBumpAllocator[[]VFS](1 << 12),
 		pool:     newBumpAllocator[VFS](1 << 19),
-		intern:   newIntMap[bucketVal](1 << 16),
-		overflow: newIntMap[bucketVal](1 << 4),
+		intern:   newIntValueMap[bucketVal](1 << 16),
+		overflow: newIntValueMap[bucketVal](1 << 4),
 	}
 }
 
