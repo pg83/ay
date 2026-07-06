@@ -65,6 +65,25 @@ func (na *NodeArenas) inclArgList(addIncl []VFS, memo InclArgMemo) []STR {
 	return block[:len(addIncl):len(addIncl)]
 }
 
+func (na *NodeArenas) strConcat(parts ...[]STR) []STR {
+	n := 0
+
+	for _, p := range parts {
+		n += len(p)
+	}
+
+	block := na.strs.alloc(n)
+	k := 0
+
+	for _, p := range parts {
+		k += copy(block[k:], p)
+	}
+
+	na.strs.commit(n)
+
+	return block[:n:n]
+}
+
 func (na *NodeArenas) argStrList(groups ...[]ARG) []STR {
 	n := 0
 
