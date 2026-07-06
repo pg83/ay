@@ -784,6 +784,10 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, instance ModuleInstanc
 		ensureResourcePeer(modulePath, d)
 	}
 
+	if len(d.antlr4Grammars) > 0 || len(d.antlrRuns) > 0 {
+		d.peerdirs = append(d.peerdirs, internStr("build/platform/java/jdk/jdk17"))
+	}
+
 	return d
 }
 

@@ -197,6 +197,7 @@ END()
 
 func TestGen_SplitCodegenShardInputWiring(t *testing.T) {
 	files := map[string]string{}
+	writeJdk17Resource(files)
 
 	writeToolProgram(files, "contrib/tools/protoc/bin", "protoc")
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")

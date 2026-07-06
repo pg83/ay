@@ -318,6 +318,7 @@ func TestEmitProtoSrcs_GeneratedProtoWiresProducerDep(t *testing.T) {
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeJdk17Resource(files)
 
 	for path, body := range map[string]string{
 		modPath + "/ya.make": `PROTO_LIBRARY()
@@ -431,6 +432,7 @@ func TestEmitProtoSrcs_GeneratedProtoInheritsProducerSourceInputs(t *testing.T) 
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeJdk17Resource(files)
 
 	for path, body := range map[string]string{
 		modPath + "/ya.make": `PROTO_LIBRARY()
@@ -621,6 +623,7 @@ func TestEmitProtoSrcs_AntlrCppOutsCompileIntoProtoArchive(t *testing.T) {
 	files := map[string]string{}
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeJdk17Resource(files)
 
 	for path, body := range map[string]string{
 		modPath + "/ya.make": `PROTO_LIBRARY()
@@ -903,6 +906,7 @@ func TestEmitPyProtoSrc_GeneratedProtoWiresProducerDep(t *testing.T) {
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
 	writeToolProgram(files, "tools/py3cc", "py3cc")
 	writeToolProgram(files, "tools/py3cc/slow", "py3cc_slow")
+	writeJdk17Resource(files)
 	writeToolProgram(files, "tools/rescompiler", "rescompiler")
 	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	writeToolProgram(files, "tools/archiver", "archiver")
@@ -1160,6 +1164,7 @@ func TestGen_PyProtoLibrary_TransitivePROTONamespaceReachesPyProtoCmd(t *testing
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
 	writeToolProgram(files, "tools/py3cc", "py3cc")
 	writeToolProgram(files, "tools/py3cc/slow", "py3cc_slow")
+	writeJdk17Resource(files)
 	writeToolProgram(files, "tools/rescompiler", "rescompiler")
 	writeToolProgram(files, "contrib/python/mypy-protobuf/bin/protoc-gen-mypy", "protoc-gen-mypy")
 
@@ -1262,6 +1267,7 @@ func TestGen_PyProtoLibrary_ProtobufBuiltinKeepsBandProtobufSrc(t *testing.T) {
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
 	writeToolProgram(files, "tools/py3cc", "py3cc")
 	writeToolProgram(files, "tools/py3cc/slow", "py3cc_slow")
+	writeJdk17Resource(files)
 	writeToolProgram(files, "tools/rescompiler", "rescompiler")
 	writeToolProgram(files, "contrib/python/mypy-protobuf/bin/protoc-gen-mypy", "protoc-gen-mypy")
 
@@ -1333,6 +1339,7 @@ func TestGen_ProtoLibrary_TransitiveGlobalNamespaceInterleavesInBothCmds(t *test
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
 	writeToolProgram(files, "tools/py3cc", "py3cc")
 	writeToolProgram(files, "tools/py3cc/slow", "py3cc_slow")
+	writeJdk17Resource(files)
 	writeToolProgram(files, "tools/rescompiler", "rescompiler")
 	writeToolProgram(files, "contrib/python/mypy-protobuf/bin/protoc-gen-mypy", "protoc-gen-mypy")
 
@@ -1502,6 +1509,7 @@ func TestGen_PyProtoLibrary_OwnPROTONamespaceDuplicatesNamespaceInclude(t *testi
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
 	writeToolProgram(files, "tools/py3cc", "py3cc")
 	writeToolProgram(files, "tools/py3cc/slow", "py3cc_slow")
+	writeJdk17Resource(files)
 	writeToolProgram(files, "tools/rescompiler", "rescompiler")
 	writeToolProgram(files, "contrib/python/mypy-protobuf/bin/protoc-gen-mypy", "protoc-gen-mypy")
 
@@ -1710,6 +1718,7 @@ func TestParseInclude_VarBearingPeersListReachesLeafPyProto(t *testing.T) {
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
 	writeToolProgram(files, "tools/py3cc", "py3cc")
 	writeToolProgram(files, "tools/py3cc/slow", "py3cc_slow")
+	writeJdk17Resource(files)
 	writeToolProgram(files, "tools/rescompiler", "rescompiler")
 
 	writeTestModuleFile(files, consumer+"/ya.make", `PY3_LIBRARY(app)
@@ -1769,6 +1778,7 @@ func TestEmitPyProtoSrcs_ExplicitProtoLibraryNameNamesGlobalArchive(t *testing.T
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
 	writeToolProgram(files, "tools/py3cc", "py3cc")
 	writeToolProgram(files, "tools/py3cc/slow", "py3cc_slow")
+	writeJdk17Resource(files)
 	writeToolProgram(files, "tools/rescompiler", "rescompiler")
 	writeToolProgram(files, "contrib/python/mypy-protobuf/bin/protoc-gen-mypy", "protoc-gen-mypy")
 
