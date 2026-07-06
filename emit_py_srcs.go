@@ -61,7 +61,7 @@ func resolvePySrcRel(fs FS, srcDirs []VFS, moduleVFS VFS, srcRel string) STR {
 }
 
 func pySrcYapycSuffix(modulePath string) string {
-	return protoPathID("$S/" + modulePath)[:4]
+	return pathIDBase32("$S/" + modulePath)[:4]
 }
 
 func (e *EmitContext) collectPyGroups() []PySrcGroup {
@@ -712,7 +712,7 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 	return out
 }
 
-func protoPathID(path string) string {
+func pathIDBase32(path string) string {
 	sum := md5.Sum([]byte(path))
 	encoded := enc32.StdEncoding.EncodeToString(sum[:])
 
