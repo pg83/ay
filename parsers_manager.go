@@ -50,6 +50,7 @@ type IncludeParserManager struct {
 	scanConfigs     map[uint64]*ScanConfig
 	scanConfigCount uint32
 	addinclIndex    DenseMap[STR, []VFS]
+	sourceExists    TwoBitSet
 	addinclIndexed  BitSet
 	registry        IncludeDirectiveParserRegistry
 }

@@ -47,7 +47,7 @@ type IncludeScanner struct {
 	parsers          *IncludeParserManager
 	buckets          *BucketCache
 	closureArena     *BumpAllocator[VFS]
-	scanCache        DenseMap3[STR, []VFS, Closure, bool]
+	scanCache        DenseMap2[STR, []VFS, Closure]
 	searchTierFlat   *IntMap[VFS]
 	searchTierSeen   BitSet
 	sourceUnderCache *IntMap[VFS]
@@ -85,16 +85,28 @@ func (s *IncludeScanner) putChildren(v VFS, children []VFS) {
 	s.scanCache.put1(STR(v.strID()), children)
 }
 
-func (s *IncludeScanner) sourceFileExists(abs VFS) bool {
-	key := STR(abs.strID())
+const (
+	sourceExistsNo  = 1
+	sourceExistsYes = 2
+)
 
-	if exists, probed := s.scanCache.get3(key); probed {
-		return exists
+func (s *IncludeScanner) sourceFileExists(abs VFS) bool {
+	id := abs.strID()
+
+	switch s.parsers.sourceExists.get(id) {
+	case sourceExistsYes:
+		return true
+	case sourceExistsNo:
+		return false
 	}
 
 	v := s.parsers.fs.isFile(srcRootVFS, abs.rel())
 
-	s.scanCache.put3(key, v)
+	if v {
+		s.parsers.sourceExists.set(id, sourceExistsYes)
+	} else {
+		s.parsers.sourceExists.set(id, sourceExistsNo)
+	}
 
 	return v
 }
