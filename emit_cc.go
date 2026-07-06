@@ -41,6 +41,7 @@ type ModuleCompileEnv struct {
 	Py3Suffix            bool
 	ObjectSuffixStem     *string
 	NoOptimize           bool
+	MainOutInducedInputs bool
 	ModuleTag            STR
 	Ragel6Flags          []ARG
 	BisonFlags           []ARG
@@ -132,19 +133,39 @@ func (e *EmitContext) emitCCFlat(srcVFS VFS, variant *string, cflags []ARG) (Nod
 }
 
 func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs) (NodeRef, VFS) {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	ctx, instance := e.ctx, e.instance
 
 	in.IncludeView = walkClosure(e.scanner, srcVFS, in.ScanCfg)
 	in.ExtraDepRefs = resolveCodegenDepRefsInclView(ctx, instance, ctx.na, in.IncludeView)
 
-	if len(d.cythonCpp) > 0 {
-		in.IncludeInputs = e.cythonCompileInducedInputs(in.IncludeView)
+	if in.MainOutInducedInputs {
+		in.IncludeInputs = e.mainOutInducedInputs(in.IncludeView)
 		in.IncludeView = Closure{}
 	}
 
 	ref, outPath, _ := composeCCNode(instance, srcVFS.str(), srcVFS, in, ctx.host, ctx.emit)
 
 	return ref, outPath
+}
+
+func (e *EmitContext) mainOutInducedInputs(includeView Closure) []VFS {
+	reg := e.codegen
+
+	var out, extra []VFS
+
+	includeView.each(func(v VFS) {
+		out = append(out, v)
+
+		if !v.isBuild() {
+			return
+		}
+
+		if info := reg.lookup(v); info != nil && info.ProducerMainOut != 0 {
+			extra = append(extra, info.ProducerMainOut)
+		}
+	})
+
+	return append(out, extra...)
 }
 
 func composeCCNode(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit *StreamingEmitter) (NodeRef, VFS, InputChunks) {
