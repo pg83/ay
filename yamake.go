@@ -492,7 +492,7 @@ func isWordByte(b byte) bool {
 	}
 
 	switch b {
-	case '_', '-', '.', '/', '+', ':', '=', '*', '?', '$', '%', '~', ',', '!', '{', '}', '#',
+	case '_', '-', '.', '/', '+', ':', '=', '*', '?', '$', '%', '~', ',', '!', '{', '}', '#', '[', ']',
 
 		'\\':
 		return true
@@ -981,6 +981,7 @@ func buildStmtFor(name string, args []STR, line int, fail func(format string, a 
 		"PACKAGE", "UNION", "RESOURCES_LIBRARY",
 		"PREBUILT_PROGRAM",
 		"FBS_LIBRARY",
+		"GO_LIBRARY", "GO_PROGRAM",
 		"UNITTEST_FOR":
 		return &ModuleStmt{Name: internTok(name), Args: args, Line: line}
 	case "DECLARE_EXTERNAL_RESOURCE",

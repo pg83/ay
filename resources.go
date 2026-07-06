@@ -145,13 +145,24 @@ func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *Declar
 }
 
 func selectHostResourceDecl(host *Platform, modulePath, name string, bundle map[string]string) ResourceDecl {
-	uri, ok := bundle[hostPlatformKey(host)]
+	want := canonizePlatformKey(hostPlatformKey(host))
+	keys := make([]string, 0, len(bundle))
 
-	if !ok {
-		throwFmt("gen: %s: resource %q has no entry for host platform %q", modulePath, name, hostPlatformKey(host))
+	for k := range bundle {
+		keys = append(keys, k)
 	}
 
-	return makeResourceDecl(name, uri)
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		if canonizePlatformKey(k) == want {
+			return makeResourceDecl(name, bundle[k])
+		}
+	}
+
+	throwFmt("gen: %s: resource %q has no entry for host platform %q", modulePath, name, hostPlatformKey(host))
+
+	return ResourceDecl{}
 }
 
 func sortedResourceGlobals(in []ResourceDecl) []ResourceDecl {

@@ -214,6 +214,11 @@ func cmdMake(g GlobalFlags, args []string) int {
 		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS")),
 	)
 
+	if platformsEquivalent(hostP, targetP) {
+		targetP = hostP
+
+	}
+
 	events := newEventQueue()
 
 	defer events.close()

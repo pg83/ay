@@ -377,6 +377,27 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 
 	ctx.emit.result(root.LDRef)
 
+	if root.GlobalRef != nil {
+		ctx.emit.result(*root.GlobalRef)
+	}
+
+	for _, dir := range discoverRecursedFinalTargets(ctx, filepath.Clean(targetDir)) {
+		sub := genModule(ctx, ModuleInstance{
+			Path:     source(dir),
+			Kind:     KindBin,
+			Language: LangCPP,
+			Platform: targetP,
+		})
+
+		if sub.LDRef != 0 {
+			ctx.emit.result(sub.LDRef)
+		}
+
+		if sub.GlobalRef != nil {
+			ctx.emit.result(*sub.GlobalRef)
+		}
+	}
+
 	if ctx.testMode && root.testSuiteInfo != nil {
 		for _, ref := range emitTestRunNodes(plainEmit, plainEmit, targetP, *root.testSuiteInfo, root.LDRef, root.ResourceGlobalClosure) {
 			ctx.emit.result(ref)
@@ -384,6 +405,63 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	}
 
 	return root.LDRef
+}
+
+func isFinalTargetModuleType(name TOK) bool {
+	return isProgramModuleType(name) || name == tokDllTool
+}
+
+func discoverRecursedFinalTargets(ctx *GenCtx, targetDir string) []string {
+	seen := map[string]bool{targetDir: true}
+
+	var finals []string
+
+	var walk func(dir string, root bool)
+
+	walk = func(dir string, root bool) {
+		if !root {
+			if seen[dir] {
+				return
+			}
+
+			seen[dir] = true
+
+			if !ctx.fs.isFile(source(dir), "ya.make") {
+				return
+			}
+		}
+
+		var moduleName TOK
+
+		for _, st := range moduleStmts(ctx, dir) {
+			switch v := st.(type) {
+			case *ModuleStmt:
+				moduleName = v.Name
+			case *UnknownStmt:
+				if v.Name != tokRecurse && v.Name != tokRecurseRootRelative {
+					continue
+				}
+
+				for _, a := range v.Args {
+					child := a.string()
+
+					if v.Name == tokRecurse {
+						child = dir + "/" + child
+					}
+
+					walk(filepath.Clean(child), false)
+				}
+			}
+		}
+
+		if !root && moduleName != 0 && isFinalTargetModuleType(moduleName) {
+			finals = append(finals, dir)
+		}
+	}
+
+	walk(targetDir, true)
+
+	return finals
 }
 
 func genDumpGraphWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), testMode bool) *Graph {
@@ -577,6 +655,7 @@ type resolvedPeer struct {
 }
 
 func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
+
 	if existing := ctx.memo.get(ctx.instanceKey(instance)); existing != nil {
 		return *existing
 	}
@@ -657,11 +736,15 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		return e.genPrebuiltProgram()
 	}
 
-	if d.moduleStmt.Name != tokLibrary && d.moduleStmt.Name != tokFbsLibrary && d.moduleStmt.Name != tokDllTool && !isProgramModuleType(d.moduleStmt.Name) && !isPyLibraryType(d.moduleStmt.Name) && !isYqlUdfStaticModule(d.moduleStmt.Name) && !isSpecializedLibraryType(d.moduleStmt.Name) && !isResourceContainerType(d.moduleStmt.Name) {
+	if d.moduleStmt.Name != tokLibrary && d.moduleStmt.Name != tokFbsLibrary && d.moduleStmt.Name != tokDllTool && !isProgramModuleType(d.moduleStmt.Name) && !isPyLibraryType(d.moduleStmt.Name) && !isYqlUdfStaticModule(d.moduleStmt.Name) && !isSpecializedLibraryType(d.moduleStmt.Name) && !isResourceContainerType(d.moduleStmt.Name) && d.moduleStmt.Name != tokGoLibrary && d.moduleStmt.Name != tokGoProgram {
 		throwFmt("gen: %s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only)", instance.Path.rel(), d.moduleStmt.Name)
 	}
 
 	applyImplicitPeerdirs(ctx, instance, d)
+
+	if isGoModuleType(d.moduleStmt.Name) {
+		applyGoImplicitPeerdirs(ctx, instance, d)
+	}
 
 	if d.moduleStmt.Name == tokDynamicLibrary {
 		result := e.emitDynamicLibrary()
@@ -1411,6 +1494,22 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
+	if d.moduleStmt.Name == tokGoProgram {
+		goRef, goPath := e.emitGoExe(resolved, peerArchiveRefs, peerArchivePaths, resourceGlobalsClosure)
+
+		result := newResult()
+
+		result.isPROGRAM = true
+		result.LDRef = goRef
+		result.LDPath = vfsPtr(goPath)
+		result.ARRef = goRef
+		result.ARPath = vfsPtr(goPath)
+
+		ctx.memo.put(ctx.instanceKey(instance), result)
+
+		return result
+	}
+
 	if isProgramModuleType(d.moduleStmt.Name) {
 		binaryName := programBinaryName(instance, d.moduleStmt)
 		ldPeerArchiveRefs := peerArchiveRefs
@@ -1570,17 +1669,20 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		return result
 	}
 
-	if len(local.refs) > 0 {
+	var arPath *VFS
+
+	if isGoModuleType(d.moduleStmt.Name) {
+		goRef, goPath := e.emitGoPackage(resolved, local.refs, local.outs, resourceGlobalsClosure)
+
+		arRef = goRef
+		arPath = vfsPtr(goPath)
+	} else if len(local.refs) > 0 {
 		if perModuleCCTag != 0 {
 			arRef = emitARNamedTagged(arInstance, arBaseName, perModuleCCTag, local.refs, local.outs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
 		} else {
 			arRef = emitARNamed(arInstance, arBaseName, local.refs, local.outs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
 		}
-	}
 
-	var arPath *VFS
-
-	if len(local.refs) > 0 {
 		arPath = vfsPtr(build(instance.Path.rel(), "/", arBaseName))
 	}
 

@@ -21,6 +21,7 @@ type EmitContext struct {
 	metas      []SrcMeta
 	objcopyRes *ObjcopyEmitResult
 	protoRes   *ProtoSrcsResult
+	goRes      *GoSrcsResult
 	pySrcsReg  []PySrc
 	resources  []ResourceEntry
 }
@@ -164,6 +165,8 @@ func (e *EmitContext) emit() {
 	for i, ref := range fsMemberRefs {
 		e.collectObj(ref, fsMemberPaths[i], SrcMeta{Prio: stmtPrioDefault})
 	}
+
+	e.flushGoSrcs()
 }
 
 func (e *EmitContext) drainSrcs() {

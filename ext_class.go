@@ -38,6 +38,7 @@ const (
 	srcExtHeader
 	srcExtCSource
 	srcExtAsm
+	srcExtGo
 	srcExtYasm
 	srcExtCuda
 	srcExtRodata
@@ -114,6 +115,7 @@ func buildExtClassMatcher() *ExtMatcher[ExtClass] {
 		".C":        srcExtCSource,
 		".auxcpp":   srcExtCSource,
 		".S":        srcExtAsm,
+		".go":       srcExtGo,
 		".s":        srcExtAsm,
 		".asm":      srcExtYasm,
 		".cu":       srcExtCuda,

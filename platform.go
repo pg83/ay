@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"strings"
+	"slices"
 )
 
 var (
@@ -203,6 +204,14 @@ func buildPlatformIfEnv(p *Platform) Environment {
 		env.setFromStringID(k, v)
 	}
 
+	if !env.hasBindingID(envGOSTD_VERSION) {
+		env.setString(envGOSTD_VERSION, "1.26")
+	}
+
+	if !env.bool(envOS_WINDOWS) {
+		env.setBool(envCGO_ENABLED, true)
+	}
+
 	if env.bool(envOPENSOURCE) || env.string(envOPENSOURCE_PROJECT) == "ymake" || env.string(envOPENSOURCE_PROJECT) == "ya" {
 		env.setBool(envYA_OPENSOURCE, true)
 	}
@@ -380,4 +389,22 @@ func parsePlatformID(s string) (OS, ISA) {
 	}
 
 	return OS(rest[:dash]), ISA(rest[dash+1:])
+}
+
+func platformsEquivalent(a, b *Platform) bool {
+	if a.OS != b.OS || a.ISA != b.ISA || a.Target != b.Target || a.PIC != b.PIC || a.BuildType != b.BuildType {
+		return false
+	}
+
+	if len(a.Flags) != len(b.Flags) {
+		return false
+	}
+
+	for k, v := range a.Flags {
+		if b.Flags[k] != v {
+			return false
+		}
+	}
+
+	return slices.Equal(a.CFlags, b.CFlags) && slices.Equal(a.CXXFlags, b.CXXFlags)
 }
