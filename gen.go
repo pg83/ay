@@ -194,6 +194,10 @@ type GenCtx struct {
 	inclArgValues   DenseMap[VFS, STR]
 	inclArgs        InclArgMemo
 	memo            *IntValueMap[*ModuleEmitResult]
+	refSlices       *SliceCache[NodeRef]
+	vfsSlices       *SliceCache[VFS]
+	argSlices       *SliceCache[ARG]
+	declSlices      *SliceCache[ResourceDecl]
 	walking         map[ModuleInstance]bool
 	cyclesTolerated int
 	traceStack      []string
@@ -314,6 +318,12 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		onWarn:    onWarn,
 		na:        plainEmit.nodeArenas(),
 		memo:      newIntValueMap[*ModuleEmitResult](4096),
+
+		refSlices:  newSliceCache[NodeRef](1 << 12),
+		vfsSlices:  newSliceCache[VFS](1 << 12),
+		argSlices:  newSliceCache[ARG](1 << 8),
+		declSlices: newSliceCache[ResourceDecl](1 << 3),
+
 		walking:   make(map[ModuleInstance]bool),
 		host:      hostP,
 		target:    targetP,
@@ -684,7 +694,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		unitTestPeerCount = 1
 	}
 
-
 	const googleapisPeer = "contrib/libs/googleapis-common-protos"
 
 	internStr(instance.Path.rel())
@@ -796,19 +805,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	peerGlobalRefs := make([]NodeRef, 0, len(allPeers))
-	peerGlobalPaths := make([]VFS, 0, len(allPeers))
-	peerWholeArchiveRefs := make([]NodeRef, 0, len(allPeers))
-	peerWholeArchivePaths := make([]VFS, 0, len(allPeers))
-	peerWholeArchiveCmdPaths := make([]VFS, 0, len(allPeers))
 	peerLinkCmdPaths := make([]VFS, 0, len(allPeers))
-
-	var (
-		peerDynamicRefs   []NodeRef
-		peerDynamicPaths  []VFS
-		peerLDPluginRefs  []NodeRef
-		peerLDPluginPaths []VFS
-	)
 
 	var peerObjAddLibsGlobal []ARG
 	var peerLDFlagsGlobal []ARG
@@ -847,139 +844,205 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	resGlobalsSum := 0
 	archiveCap := 0
 	sbomCap := 0
+	globalCap := 0
+	waCap := 0
+	waCmdCap := 0
+	dynCap := 0
+	ldplugCap := 0
 
 	for _, rp := range resolved {
-		resGlobalsSum += len(rp.result.ResourceGlobalClosure)
-		archiveCap += len(rp.result.PeerArchiveClosurePaths) + 1
-		sbomCap += len(rp.result.PeerSbomClosurePaths) + 1
+		pr := rp.result
+
+		resGlobalsSum += len(pr.ResourceGlobalClosure)
+		archiveCap += len(pr.PeerArchiveClosurePaths) + 1
+		sbomCap += len(pr.PeerSbomClosurePaths) + 1
+		globalCap += len(pr.PeerGlobalClosurePaths) + 1
+		waCap += len(pr.PeerWholeArchiveClosurePaths) + len(pr.WholeArchivePaths)
+		waCmdCap += len(pr.PeerWholeArchiveCmdClosurePaths) + len(pr.WholeArchiveCmdPaths)
+		dynCap += len(pr.PeerDynamicClosurePaths) + 1
+		ldplugCap += len(pr.LDPluginPaths)
 	}
 
-	resourceGlobalsClosure := make([]ResourceDecl, 0, resGlobalsSum)
-	peerArchiveRefs := make([]NodeRef, 0, archiveCap)
-	peerArchivePaths := make([]VFS, 0, archiveCap)
-	peerSbomRefs := make([]NodeRef, 0, sbomCap)
-	peerSbomPaths := make([]VFS, 0, sbomCap)
-
 	deduper.reset()
+
+	declBlock := ctx.declSlices.alloc(resGlobalsSum)
+	k := 0
 
 	for _, rp := range resolved {
 		for _, decl := range rp.result.ResourceGlobalClosure {
 			if deduper.add(decl.GlobalVar.strID()) {
-				resourceGlobalsClosure = append(resourceGlobalsClosure, decl)
+				declBlock[k] = decl
+				k++
 			}
 		}
 	}
+
+	resourceGlobalsClosure := ctx.declSlices.intern(declBlock[:k])
 
 	d.tc = resolveModuleToolchain(resourceGlobalsClosure, instance.Platform.ClangVer)
 
 	deduper.reset()
 
+	ldplugBlockR := ctx.refSlices.alloc(ldplugCap)
+	ldplugBlockP := ctx.vfsSlices.alloc(ldplugCap)
+	k = 0
+
 	for _, rp := range resolved {
 		for i, p := range rp.result.LDPluginPaths {
 			if deduper.add(p.strID()) {
-				peerLDPluginRefs = append(peerLDPluginRefs, rp.result.LDPluginRefs[i])
-				peerLDPluginPaths = append(peerLDPluginPaths, p)
+				ldplugBlockR[k] = rp.result.LDPluginRefs[i]
+				ldplugBlockP[k] = p
+				k++
 			}
 		}
 	}
 
+	peerLDPluginRefs := ctx.refSlices.intern(ldplugBlockR[:k])
+	peerLDPluginPaths := ctx.vfsSlices.intern(ldplugBlockP[:k])
+
 	deduper.reset()
+
+	archiveBlockR := ctx.refSlices.alloc(archiveCap)
+	archiveBlockP := ctx.vfsSlices.alloc(archiveCap)
+	k = 0
 
 	for _, rp := range resolved {
 		pr := rp.result
 
 		for i, p := range pr.PeerArchiveClosurePaths {
 			if deduper.add(p.strID()) {
-				peerArchiveRefs = append(peerArchiveRefs, pr.PeerArchiveClosureRefs[i])
-				peerArchivePaths = append(peerArchivePaths, p)
+				archiveBlockR[k] = pr.PeerArchiveClosureRefs[i]
+				archiveBlockP[k] = p
+				k++
 			}
 		}
 
 		if pr.ARPath != nil && deduper.add(pr.ARPath.strID()) {
-			peerArchiveRefs = append(peerArchiveRefs, pr.ARRef)
-			peerArchivePaths = append(peerArchivePaths, *pr.ARPath)
+			archiveBlockR[k] = pr.ARRef
+			archiveBlockP[k] = *pr.ARPath
+			k++
 		}
 	}
 
+	peerArchiveRefs := ctx.refSlices.intern(archiveBlockR[:k])
+	peerArchivePaths := ctx.vfsSlices.intern(archiveBlockP[:k])
+
 	deduper.reset()
+
+	globalBlockR := ctx.refSlices.alloc(globalCap)
+	globalBlockP := ctx.vfsSlices.alloc(globalCap)
+	k = 0
 
 	for _, rp := range resolved {
 		pr := rp.result
 
 		for i, p := range pr.PeerGlobalClosurePaths {
 			if deduper.add(p.strID()) {
-				peerGlobalRefs = append(peerGlobalRefs, pr.PeerGlobalClosureRefs[i])
-				peerGlobalPaths = append(peerGlobalPaths, p)
+				globalBlockR[k] = pr.PeerGlobalClosureRefs[i]
+				globalBlockP[k] = p
+				k++
 			}
 		}
 
 		if pr.GlobalRef != nil && pr.GlobalPath != nil && deduper.add(pr.GlobalPath.strID()) {
-			peerGlobalRefs = append(peerGlobalRefs, *pr.GlobalRef)
-			peerGlobalPaths = append(peerGlobalPaths, *pr.GlobalPath)
+			globalBlockR[k] = *pr.GlobalRef
+			globalBlockP[k] = *pr.GlobalPath
+			k++
 		}
 	}
 
+	peerGlobalRefs := ctx.refSlices.intern(globalBlockR[:k])
+	peerGlobalPaths := ctx.vfsSlices.intern(globalBlockP[:k])
+
 	linkTarget := isProgramModuleType(d.moduleStmt.Name) || d.moduleStmt.Name == tokDllTool
 
-	var ownSbomInsertIdx int
+	sbomBlockR := ctx.refSlices.alloc(sbomCap)
+	sbomBlockP := ctx.vfsSlices.alloc(sbomCap)
 
-	peerSbomRefs, peerSbomPaths, ownSbomInsertIdx = aggregateSbomComponents(d.moduleStmt.Name, linkTarget, resolved, allocatorExplicitPeers, peerSbomRefs, peerSbomPaths)
+	peerSbomRefsRaw, peerSbomPathsRaw, ownSbomInsertIdx := aggregateSbomComponents(d.moduleStmt.Name, linkTarget, resolved, allocatorExplicitPeers, sbomBlockR[:0], sbomBlockP[:0])
+	peerSbomRefs := ctx.refSlices.intern(peerSbomRefsRaw)
+	peerSbomPaths := ctx.vfsSlices.intern(peerSbomPathsRaw)
 
 	deduper.reset()
+
+	waBlockR := ctx.refSlices.alloc(waCap)
+	waBlockP := ctx.vfsSlices.alloc(waCap)
+	k = 0
 
 	for _, rp := range resolved {
 		pr := rp.result
 
 		for i, p := range pr.PeerWholeArchiveClosurePaths {
 			if deduper.add(p.strID()) {
-				peerWholeArchiveRefs = append(peerWholeArchiveRefs, pr.PeerWholeArchiveClosureRefs[i])
-				peerWholeArchivePaths = append(peerWholeArchivePaths, p)
+				waBlockR[k] = pr.PeerWholeArchiveClosureRefs[i]
+				waBlockP[k] = p
+				k++
 			}
 		}
 
 		for i, p := range pr.WholeArchivePaths {
 			if deduper.add(p.strID()) {
-				peerWholeArchiveRefs = append(peerWholeArchiveRefs, pr.WholeArchiveRefs[i])
-				peerWholeArchivePaths = append(peerWholeArchivePaths, p)
+				waBlockR[k] = pr.WholeArchiveRefs[i]
+				waBlockP[k] = p
+				k++
 			}
 		}
 	}
 
+	peerWholeArchiveRefs := ctx.refSlices.intern(waBlockR[:k])
+	peerWholeArchivePaths := ctx.vfsSlices.intern(waBlockP[:k])
+
 	deduper.reset()
+
+	waCmdBlock := ctx.vfsSlices.alloc(waCmdCap)
+	k = 0
 
 	for _, rp := range resolved {
 		pr := rp.result
 
 		for _, p := range pr.PeerWholeArchiveCmdClosurePaths {
 			if deduper.add(p.strID()) {
-				peerWholeArchiveCmdPaths = append(peerWholeArchiveCmdPaths, p)
+				waCmdBlock[k] = p
+				k++
 			}
 		}
 
 		for _, p := range pr.WholeArchiveCmdPaths {
 			if deduper.add(p.strID()) {
-				peerWholeArchiveCmdPaths = append(peerWholeArchiveCmdPaths, p)
+				waCmdBlock[k] = p
+				k++
 			}
 		}
 	}
 
+	peerWholeArchiveCmdPaths := ctx.vfsSlices.intern(waCmdBlock[:k])
+
 	deduper.reset()
+
+	dynBlockR := ctx.refSlices.alloc(dynCap)
+	dynBlockP := ctx.vfsSlices.alloc(dynCap)
+	k = 0
 
 	for _, rp := range resolved {
 		pr := rp.result
 
 		for i, p := range pr.PeerDynamicClosurePaths {
 			if deduper.add(p.strID()) {
-				peerDynamicRefs = append(peerDynamicRefs, pr.PeerDynamicClosureRefs[i])
-				peerDynamicPaths = append(peerDynamicPaths, p)
+				dynBlockR[k] = pr.PeerDynamicClosureRefs[i]
+				dynBlockP[k] = p
+				k++
 			}
 		}
 
 		if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil && deduper.add(pr.LDPath.strID()) {
-			peerDynamicRefs = append(peerDynamicRefs, pr.LDRef)
-			peerDynamicPaths = append(peerDynamicPaths, *pr.LDPath)
+			dynBlockR[k] = pr.LDRef
+			dynBlockP[k] = *pr.LDPath
+			k++
 		}
 	}
+
+	peerDynamicRefs := ctx.refSlices.intern(dynBlockR[:k])
+	peerDynamicPaths := ctx.vfsSlices.intern(dynBlockP[:k])
 
 	deduper.reset()
 
@@ -1130,7 +1193,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	effectiveAddInclGlobal := dedup(d.addInclGlobal, peerAddInclForProp)
+	effectiveAddInclGlobal := dedupShared(ctx.vfsSlices, d.addInclGlobal, peerAddInclForProp)
 
 	var ownProtoInclude []VFS
 
@@ -1152,20 +1215,43 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	effectiveProtoInclude := dedup(ownProtoInclude, peerProtoInclude)
-	effectiveCFlagsGlobal := dedup(peerCFlagsGlobal, d.cFlagsGlobal)
-	effectiveCXXFlagsGlobal := concat(peerCXXFlagsGlobal, d.cxxFlagsGlobal)
-	effectiveCOnlyFlagsGlobal := concat(peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
-	effectiveRPathFlagsGlobal := concat(peerRPathFlagsGlobal, d.rpathFlagsGlobal)
+	effectiveProtoInclude := dedupShared(ctx.vfsSlices, ownProtoInclude, peerProtoInclude)
+	effectiveCFlagsGlobal := dedupShared(ctx.argSlices, peerCFlagsGlobal, d.cFlagsGlobal)
+	effectiveCXXFlagsGlobal := concatShared(ctx.argSlices, peerCXXFlagsGlobal, d.cxxFlagsGlobal)
+	effectiveCOnlyFlagsGlobal := concatShared(ctx.argSlices, peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
+	effectiveRPathFlagsGlobal := concatShared(ctx.argSlices, peerRPathFlagsGlobal, d.rpathFlagsGlobal)
 	ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
 
-	mergedLDPlugins := mergeLDPlugins(ownLDPlugins, &LdPluginsResult{
-		Refs:  peerLDPluginRefs,
-		Paths: peerLDPluginPaths,
-	})
+	mergedLDPluginRefs := peerLDPluginRefs
+	mergedLDPluginPaths := peerLDPluginPaths
 
-	if mergedLDPlugins == nil {
-		mergedLDPlugins = &LdPluginsResult{}
+	if ownLDPlugins != nil && len(ownLDPlugins.Paths) > 0 {
+		total := len(ownLDPlugins.Paths) + len(peerLDPluginPaths)
+		mergeBlockR := ctx.refSlices.alloc(total)
+		mergeBlockP := ctx.vfsSlices.alloc(total)
+
+		deduper.reset()
+
+		k = 0
+
+		for i, p := range ownLDPlugins.Paths {
+			if deduper.add(p.strID()) {
+				mergeBlockR[k] = ownLDPlugins.Refs[i]
+				mergeBlockP[k] = p
+				k++
+			}
+		}
+
+		for i, p := range peerLDPluginPaths {
+			if deduper.add(p.strID()) {
+				mergeBlockR[k] = peerLDPluginRefs[i]
+				mergeBlockP[k] = p
+				k++
+			}
+		}
+
+		mergedLDPluginRefs = ctx.refSlices.intern(mergeBlockR[:k])
+		mergedLDPluginPaths = ctx.vfsSlices.intern(mergeBlockP[:k])
 	}
 
 	newResult := func() *ModuleEmitResult {
@@ -1178,8 +1264,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			AddInclUserGlobal:               d.addInclUserGlobal,
 			CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
 			COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,
-			ObjAddLibsGlobal:                concat(peerObjAddLibsGlobal, d.objAddLibsGlobal),
-			LDFlagsGlobal:                   concat(peerLDFlagsGlobal, d.ldFlags),
+			ObjAddLibsGlobal:                concatShared(ctx.argSlices, peerObjAddLibsGlobal, d.objAddLibsGlobal),
+			LDFlagsGlobal:                   concatShared(ctx.argSlices, peerLDFlagsGlobal, d.ldFlags),
 			RPathFlagsGlobal:                effectiveRPathFlagsGlobal,
 			PeerArchiveClosureRefs:          peerArchiveRefs,
 			PeerArchiveClosurePaths:         peerArchivePaths,
@@ -1188,8 +1274,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			PeerWholeArchiveClosureRefs:     peerWholeArchiveRefs,
 			PeerWholeArchiveClosurePaths:    peerWholeArchivePaths,
 			PeerWholeArchiveCmdClosurePaths: peerWholeArchiveCmdPaths,
-			LDPluginRefs:                    mergedLDPlugins.Refs,
-			LDPluginPaths:                   mergedLDPlugins.Paths,
+			LDPluginRefs:                    mergedLDPluginRefs,
+			LDPluginPaths:                   mergedLDPluginPaths,
 			PeerDynamicClosureRefs:          peerDynamicRefs,
 			PeerDynamicClosurePaths:         peerDynamicPaths,
 			PeerSbomClosureRefs:             peerSbomRefs,
@@ -1307,7 +1393,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	local, global := e.partitionCollected()
 
-
 	globalRefs := global.refs
 	globalOutputs := global.outs
 	globalMetas := global.metas
@@ -1380,7 +1465,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ldCCRefs, ldCCOutputs,
 			ldPeerArchiveRefs, ldPeerArchivePaths,
 			ldPeerLinkCmdPaths,
-			mergedLDPlugins.Refs, mergedLDPlugins.Paths,
+			mergedLDPluginRefs, mergedLDPluginPaths,
 			peerGlobalRefs, peerGlobalPaths,
 			peerWholeArchiveRefs, peerWholeArchivePaths,
 			peerWholeArchiveCmdPaths,
@@ -1569,55 +1654,6 @@ func filterBuildRootSelfPaths(instancePath string, peer, own []VFS) []VFS {
 		}
 
 		out = append(out, p)
-	}
-
-	return out
-}
-
-func mergeLDPlugins(own, peer *LdPluginsResult) *LdPluginsResult {
-	var ownRefs []NodeRef
-	var ownPaths []VFS
-
-	if own != nil {
-		ownRefs = own.Refs
-		ownPaths = own.Paths
-	}
-
-	var peerRefs []NodeRef
-	var peerPaths []VFS
-
-	if peer != nil {
-		peerRefs = peer.Refs
-		peerPaths = peer.Paths
-	}
-
-	if len(ownPaths) == 0 && len(peerPaths) == 0 {
-		return nil
-	}
-
-	deduper.reset()
-
-	out := &LdPluginsResult{
-		Refs:  make([]NodeRef, 0, len(ownPaths)+len(peerPaths)),
-		Paths: make([]VFS, 0, len(ownPaths)+len(peerPaths)),
-	}
-
-	for i, p := range ownPaths {
-		if !deduper.add(p.strID()) {
-			continue
-		}
-
-		out.Refs = append(out.Refs, ownRefs[i])
-		out.Paths = append(out.Paths, p)
-	}
-
-	for i, p := range peerPaths {
-		if !deduper.add(p.strID()) {
-			continue
-		}
-
-		out.Refs = append(out.Refs, peerRefs[i])
-		out.Paths = append(out.Paths, p)
 	}
 
 	return out
