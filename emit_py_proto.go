@@ -139,7 +139,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 	return pe
 }
 
-func (e *EmitContext) emitPyProtoSource(srcTok STR) {
+func (e *EmitContext) emitPyProtoSource(srcTok STR, srcGroup int) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	src := srcTok.string()
@@ -257,11 +257,11 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR) {
 	}
 
 	e.codegen.register(&GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs})
-	e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: pyOut, Module: internV(keyBase, "_pb2.py"), Token: tokenFor(pyOut), Group: pyGroupProto})
+	e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: pyOut, Module: internV(keyBase, "_pb2.py"), Token: tokenFor(pyOut), Group: pyGroupProto, SrcGroup: srcGroup})
 
 	if d.grpc {
 		e.codegen.register(&GeneratedFileInfo{OutputPath: grpcPyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs})
-		e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: grpcPyOut, Module: internV(keyBase, "_pb2_grpc.py"), Token: tokenFor(grpcPyOut), Group: pyGroupProto})
+		e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: grpcPyOut, Module: internV(keyBase, "_pb2_grpc.py"), Token: tokenFor(grpcPyOut), Group: pyGroupProto, SrcGroup: srcGroup})
 	}
 }
 
@@ -379,6 +379,30 @@ func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef,
 	e.codegen.register(&GeneratedFileInfo{OutputPath: yapycOut, ProducerRef: yapycRef})
 }
 
+func (e *EmitContext) flushPyProtoGroup(srcGroup int) ([]NodeRef, []VFS) {
+	d := e.d
+
+	var entries []PyGenResEntry
+
+	for _, ps := range e.pySrcsReg {
+		if ps.Group != pyGroupProto || ps.SrcGroup != srcGroup {
+			continue
+		}
+
+		entries = append(entries, e.pyProtoResEntries(ps)...)
+	}
+
+	if len(entries) == 0 {
+		return nil, nil
+	}
+
+	peerAddIncl := e.peers.PeerAddInclGlobal
+
+	return e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
+		return e.pyProtoAuxInputClosure(aux, inputs, ref, peerAddIncl)
+	}})
+}
+
 func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
 
@@ -456,6 +480,10 @@ func protoPythonOutputRoot(d *ModuleData) string {
 	return ""
 }
 
+func pyProtoAuxPy3Suffix(d *ModuleData) bool {
+	return d.unit.Tag == unitTagPy3Proto || d.moduleStmt.Name == tokPy23Library || d.moduleStmt.Name == tokPy23NativeLibrary
+}
+
 func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, peerAddIncl []VFS) Closure {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
@@ -472,7 +500,7 @@ func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, p
 		ProducerRef:    ref,
 		GeneratorRefs:  []NodeRef{rescompilerRef},
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
-		Compile:        &CompileSpec{ForceCxx: true, Py3Suffix: true, CFlags: []ARG{argX, argC}},
+		Compile:        &CompileSpec{ForceCxx: true, Py3Suffix: pyProtoAuxPy3Suffix(d), CFlags: []ARG{argX, argC}},
 	})
 
 	scanCfg := newScanContext(ctx.parsers, d.addIncl, peerAddIncl, includeScannerBasePaths(), instance.Path.rel())
