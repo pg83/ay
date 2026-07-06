@@ -565,18 +565,6 @@ func (e *EmitContext) emitCppProtoFamilySource(meta SrcMeta, spec *ProtoSpec) {
 	e.markProtoPendingAR()
 }
 
-func (e *EmitContext) emitLibraryProtoSource(meta SrcMeta) {
-	d := e.d
-
-	if d.unit.Tag == unitTagPy3Proto {
-		e.emitPyProtoSource(meta.Source)
-
-		return
-	}
-
-	e.emitCppProtoFamilySource(meta, cppProtoSpec)
-}
-
 func (e *EmitContext) markProtoPendingAR() {
 	d := e.d
 

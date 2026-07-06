@@ -13,7 +13,11 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	case srcExtGztProto:
 		e.emitLibraryGztProtoCompile(src)
 	case srcExtProto:
-		e.emitLibraryProtoSource(meta)
+		if e.d.unit.Tag == unitTagPy3Proto {
+			e.emitPyProtoSource(meta.Source)
+		} else {
+			e.emitCppProtoFamilySource(meta, cppProtoSpec)
+		}
 	case srcExtFbs64:
 		e.emitLibraryFlatcSource(meta, &flatcVariantFL64)
 	case srcExtFbs:
