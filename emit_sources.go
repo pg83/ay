@@ -26,8 +26,16 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 		e.emitLibraryRodataSource(meta)
 	case srcExtCSource:
 		e.emitLibraryCSource(meta)
+	case srcExtGo:
+		if isGoModuleType(e.d.unit.Type) {
+			e.collectGoSource(meta, false)
+		}
 	case srcExtAsm:
-		e.emitLibraryAsmSource(meta)
+		if isGoModuleType(e.d.unit.Type) {
+			e.collectGoSource(meta, true)
+		} else {
+			e.emitLibraryAsmSource(meta)
+		}
 	case srcExtYasm:
 		e.emitLibraryYasmSource(meta)
 	case srcExtCuda:
@@ -53,6 +61,10 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	case srcExtCfgProto:
 		e.emitLibraryCfgProtoSource(meta)
 	default:
+		if isGoModuleType(e.d.unit.Type) && src.string() == "CGO_EXPORT" {
+			return
+		}
+
 		e.ctx.onWarn(Warn{
 			Kind:    WarnUnsupportedSource,
 			Message: fmt.Sprintf("%s: unsupported source extension in %q", e.instance.Path.rel(), src.string()),

@@ -194,6 +194,15 @@ var tokName = [...]STR{
 	tokYqlLastAbiVersion:               internStr("YQL_LAST_ABI_VERSION"),
 	tokYqlUdfContrib:                   kwYQL_UDF_CONTRIB,
 	tokYqlUdfYdb:                       kwYQL_UDF_YDB,
+	tokGoLibrary:                       internStr("GO_LIBRARY"),
+	tokGoProgram:                       internStr("GO_PROGRAM"),
+	tokGoTestSrcs:                      internStr("GO_TEST_SRCS"),
+	tokGoXtestSrcs:                     internStr("GO_XTEST_SRCS"),
+	tokGoSkipTests:                     internStr("GO_SKIP_TESTS"),
+	tokGoEmbedPattern:                  internStr("GO_EMBED_PATTERN"),
+	tokCgoSrcs:                         internStr("CGO_SRCS"),
+	tokCgoLdflags:                      internStr("CGO_LDFLAGS"),
+	tokCgoCflags:                       internStr("CGO_CFLAGS"),
 
 	tokAllResourceFiles:      internStr("ALL_RESOURCE_FILES"),
 	tokArchiveByKeys:         internStr("ARCHIVE_BY_KEYS"),
@@ -414,6 +423,15 @@ const (
 	tokYqlLastAbiVersion
 	tokYqlUdfContrib
 	tokYqlUdfYdb
+	tokGoLibrary
+	tokGoProgram
+	tokGoTestSrcs
+	tokGoXtestSrcs
+	tokGoSkipTests
+	tokGoEmbedPattern
+	tokCgoSrcs
+	tokCgoLdflags
+	tokCgoCflags
 
 	tokAllResourceFiles
 	tokArchiveByKeys

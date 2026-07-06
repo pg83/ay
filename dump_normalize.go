@@ -188,7 +188,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		case len(ldRoots) == 1:
 			roots = append(roots, ldRoots[0])
 		case len(ldRoots) > 1:
-			throwFmt("dump normalize: %d LD roots for target %q; expected 1", len(ldRoots), target)
+			roots = append(roots, ldRoots...)
 		case len(arRoots) == 1:
 			roots = append(roots, arRoots[0])
 		default:

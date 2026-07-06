@@ -123,6 +123,9 @@ type ModuleData struct {
 	moduleStmt               *ModuleStmt
 	modver                   string
 	hasLicense               bool
+	cgoSrcs                  []STR
+	cgoLdflags               []STR
+	cgoCflags                []STR
 	hasBisonY                bool
 	toolchainName            string
 	srcs                     []STR
@@ -1352,6 +1355,8 @@ func resolveModuleUnit(name TOK, kind ModuleKind, language Language) ModuleUnit 
 	}
 
 	switch name {
+	case tokGoLibrary, tokGoProgram:
+		return ModuleUnit{Type: name, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokPy3Program:
 		return ModuleUnit{Type: name, Tag: unitTagPy3Bin, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
 	case tokPy2Program, tokPy3ProgramBin:
@@ -1603,6 +1608,17 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			d.bundles = append(d.bundles, BundleEntry{Target: target, Name: name, Suffix: suffix})
 		}
 
+	case tokGoTestSrcs, tokGoXtestSrcs, tokGoSkipTests, tokGoEmbedPattern:
+
+	case tokCgoSrcs:
+
+		d.cgoSrcs = append(d.cgoSrcs, expandStmtTokensSTR(v.Args, env)...)
+	case tokCgoLdflags:
+
+		d.cgoLdflags = append(d.cgoLdflags, expandStmtTokensSTR(v.Args, env)...)
+	case tokCgoCflags:
+
+		d.cgoCflags = append(d.cgoCflags, expandStmtTokensSTR(v.Args, env)...)
 	case tokMavenGroupId:
 
 	case tokLicense:
@@ -2884,7 +2900,7 @@ func applyAllocatorStmt(v UnknownStmt, d *ModuleData) {
 
 func isProgramModuleType(name TOK) bool {
 	switch name {
-	case tokProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokUnittestFor:
+	case tokProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokUnittestFor, tokGoProgram:
 		return true
 	}
 
