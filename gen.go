@@ -192,6 +192,10 @@ type GenCtx struct {
 	onWarn          func(Warn)
 	na              *NodeArenas
 	inclArgValues   DenseMap[VFS, STR]
+	prClosureScratch []VFS
+	resHashScratch  []string
+	resHashBuf      []byte
+	resB64Scratch   []byte
 	inclArgs        InclArgMemo
 	memo            *IntValueMap[*ModuleEmitResult]
 	refSlices       *SliceCache[NodeRef]
@@ -805,7 +809,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	peerLinkCmdPaths := make([]VFS, 0, len(allPeers))
 
 	var peerObjAddLibsGlobal []ARG
 	var peerLDFlagsGlobal []ARG
@@ -849,6 +852,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	waCmdCap := 0
 	dynCap := 0
 	ldplugCap := 0
+	linkCmdCap := 0
 
 	for _, rp := range resolved {
 		pr := rp.result
@@ -861,7 +865,10 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		waCmdCap += len(pr.PeerWholeArchiveCmdClosurePaths) + len(pr.WholeArchiveCmdPaths)
 		dynCap += len(pr.PeerDynamicClosurePaths) + 1
 		ldplugCap += len(pr.LDPluginPaths)
+		linkCmdCap += len(pr.PeerArchiveClosurePaths) + len(pr.PeerDynamicClosurePaths) + 2
 	}
+
+	peerLinkCmdPaths := make([]VFS, 0, linkCmdCap)
 
 	deduper.reset()
 

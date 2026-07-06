@@ -55,25 +55,6 @@ func resourceHashInto(buf []byte, list []string, moduleTag string) (string, []by
 	return enchex.EncodeToString(sum[:])[:hashLen], buf
 }
 
-func objcopyHash(paths []string, keysB64 []string, kvs []string, unitPath string, moduleTag STR) string {
-	list := make([]string, 0, len(paths)+len(keysB64)+len(kvs)+1)
-
-	list = append(list, paths...)
-	list = append(list, keysB64...)
-	list = append(list, kvs...)
-	list = append(list, "$S/"+unitPath)
-
-	tag := ""
-
-	if moduleTag != 0 {
-		tag = moduleTag.string()
-	}
-
-	hash, _ := resourceHashInto(nil, list, tag)
-
-	return hash
-}
-
 func renderResourceKvCmd(kv string) string {
 	kv = strings.ReplaceAll(kv, "${ARCADIA_ROOT}/", "$(S)/")
 	kv = strings.ReplaceAll(kv, "${ARCADIA_BUILD_ROOT}/", "$(B)/")
@@ -249,7 +230,8 @@ func resourceChunkEnds(items []ResourceItem, objcopy bool) []int {
 }
 
 func (e *EmitContext) packResources(p ResourcePack) (refs []NodeRef, outs []VFS) {
-	var objItems, rawItems []ResourceItem
+	objItems := make([]ResourceItem, 0, len(p.Items))
+	rawItems := make([]ResourceItem, 0, len(p.Items))
 
 	for _, it := range p.Items {
 		if resourceCanObjcopy(it.Path, it.Key) {
@@ -287,11 +269,15 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 		tag = p.Tag.string()
 	}
 
-	var (
-		hashScratch []string
-		hashBuf     []byte
-		b64Scratch  []byte
-	)
+	hashScratch := ctx.resHashScratch[:0]
+	hashBuf := ctx.resHashBuf
+	b64Scratch := ctx.resB64Scratch
+
+	defer func() {
+		ctx.resHashScratch = hashScratch[:0]
+		ctx.resHashBuf = hashBuf
+		ctx.resB64Scratch = b64Scratch
+	}()
 
 	lo := 0
 
@@ -431,10 +417,13 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		tag = p.Tag.string()
 	}
 
-	var (
-		hashScratch []string
-		hashBuf     []byte
-	)
+	hashScratch := ctx.resHashScratch[:0]
+	hashBuf := ctx.resHashBuf
+
+	defer func() {
+		ctx.resHashScratch = hashScratch[:0]
+		ctx.resHashBuf = hashBuf
+	}()
 
 	lo := 0
 
