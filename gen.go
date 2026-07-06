@@ -187,42 +187,43 @@ func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
 }
 
 type GenCtx struct {
-	fs              FS
-	parsers         *IncludeParserManager
-	emit            *StreamingEmitter
-	onWarn          func(Warn)
-	na              *NodeArenas
-	inclArgValues   DenseMap[VFS, STR]
+	fs               FS
+	parsers          *IncludeParserManager
+	emit             *StreamingEmitter
+	onWarn           func(Warn)
+	na               *NodeArenas
+	inclArgValues    DenseMap[VFS, STR]
 	prClosureScratch []VFS
-	resHashScratch  []string
-	resHashBuf      []byte
-	resB64Scratch   []byte
-	inclArgs        InclArgMemo
-	memo            *IntValueMap[*ModuleEmitResult]
-	refSlices       *SliceCache[NodeRef]
-	vfsSlices       *SliceCache[VFS]
-	argSlices       *SliceCache[ARG]
-	declSlices      *SliceCache[ResourceDecl]
-	walking         map[ModuleInstance]bool
-	cyclesTolerated int
-	traceStack      []string
-	scannerTarget   *IncludeScanner
-	scannerHost     *IncludeScanner
-	buckets         *BucketCache
-	moduleByRef     DenseMap[NodeRef, *ModuleEmitResult]
-	tools           DenseMap[ARG, *ModuleEmitResult]
-	scripts         ScriptDeps
-	fetchRefs       *DenseMap[STR, NodeRef]
-	host            *Platform
-	target          *Platform
-	vcsRef          NodeRef
-	testMode        bool
-	sbomEnabled     bool
-	autoincludeIdx  *AutoincludeIndex
-	tarjan          TarjanCtx
-	parsedFiles     map[string]*MakeFile
-	prodOuts        IdValueMap
-	py3NoStripDebug bool
+	resHashScratch   []string
+	resHashBuf       []byte
+	resB64Scratch    []byte
+	inclArgs         InclArgMemo
+	memo             *IntValueMap[*ModuleEmitResult]
+	refSlices        *SliceCache[NodeRef]
+	vfsSlices        *SliceCache[VFS]
+	argSlices        *SliceCache[ARG]
+	declSlices       *SliceCache[ResourceDecl]
+	walking          map[ModuleInstance]bool
+	cyclesTolerated  int
+	traceStack       []string
+	scannerTarget    *IncludeScanner
+	scannerHost      *IncludeScanner
+	buckets          *BucketCache
+	moduleByRef      DenseMap[NodeRef, *ModuleEmitResult]
+	tools            DenseMap[ARG, *ModuleEmitResult]
+	scripts          ScriptDeps
+	fetchRefs        *DenseMap[STR, NodeRef]
+	host             *Platform
+	target           *Platform
+	vcsRef           NodeRef
+	testMode         bool
+	sbomEnabled      bool
+	autoincludeIdx   *AutoincludeIndex
+	tarjan           TarjanCtx
+	parsedFiles      map[string]*MakeFile
+	prodOuts         IdValueMap
+	py3NoStripDebug  bool
+	goEnvMemo        map[[2]STR]EnvVars
 }
 
 func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, na *NodeArenas, includeInputs []VFS, incl ...NodeRef) []NodeRef {
@@ -256,6 +257,57 @@ func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, na *NodeAre
 
 		out[k] = info.ProducerRef
 		k++
+	}
+
+	na.noderefs.commit(k)
+
+	if k == 0 {
+		return nil
+	}
+
+	return out[:k]
+}
+
+func (e *EmitContext) resolveCodegenDepRefsChunks(chunks InputChunks, incl []NodeRef) []NodeRef {
+	deduper.reset()
+
+	na := e.ctx.na
+	total := len(incl)
+
+	for _, ch := range chunks {
+		total += len(ch)
+	}
+
+	out := na.noderefs.alloc(total)
+	k := 0
+
+	for _, r := range incl {
+		deduper.add(r.strID())
+		out[k] = r
+		k++
+	}
+
+	reg := e.codegen
+
+	for _, ch := range chunks {
+		for _, p := range ch {
+			if !p.isBuild() {
+				continue
+			}
+
+			info := reg.lookup(p)
+
+			if info == nil {
+				continue
+			}
+
+			if !deduper.add(info.ProducerRef.strID()) {
+				continue
+			}
+
+			out[k] = info.ProducerRef
+			k++
+		}
 	}
 
 	na.noderefs.commit(k)
@@ -318,12 +370,12 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	hostReg := newCodegenRegistry()
 
 	ctx := &GenCtx{
-		fs:        fs,
-		parsers:   parsers,
-		emit:      plainEmit,
-		onWarn:    onWarn,
-		na:        plainEmit.nodeArenas(),
-		memo:      newIntValueMap[*ModuleEmitResult](4096),
+		fs:      fs,
+		parsers: parsers,
+		emit:    plainEmit,
+		onWarn:  onWarn,
+		na:      plainEmit.nodeArenas(),
+		memo:    newIntValueMap[*ModuleEmitResult](4096),
 
 		refSlices:  newSliceCache[NodeRef](1 << 12),
 		vfsSlices:  newSliceCache[VFS](1 << 12),
@@ -771,7 +823,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		if hasPyProto {
-			d.peerdirs = append(d.peerdirs, internStr("contrib/python/protobuf"))
+			d.peerdirs = append(d.peerdirs, strContribPythonProtobuf)
 		}
 	}
 
@@ -920,7 +972,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			appendUserPeer(p)
 		}
 	}
-
 
 	var peerObjAddLibsGlobal []ARG
 	var peerLDFlagsGlobal []ARG
@@ -1570,7 +1621,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		wantsStrip := (d.moduleStmt.Name == tokPy3ProgramBin || d.moduleStmt.Name == tokPy3Program) && !d.noStrip &&
-		!(ctx.py3NoStripDebug && !instance.Platform.BuildRelease)
+			!(ctx.py3NoStripDebug && !instance.Platform.BuildRelease)
 
 		var programModuleTag STR
 
