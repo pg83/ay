@@ -1671,6 +1671,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			peerRPathFlagsGlobal,
 			peerObjAddLibsGlobal,
 			d.exportsScript,
+			d.flags.NoExportDynSymbols,
 			d.flags.NoCompilerWarnings,
 			d.noOptimize,
 			wantsStrip,

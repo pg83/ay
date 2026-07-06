@@ -8,9 +8,10 @@ import (
 var procKindStr = [...]string{
 	pkNone: "", pkAS: "AS", pkAR: "AR", pkBI: "BI", pkBC: "BC", pkCC: "CC",
 	pkCF: "CF", pkCH: "CH", pkCP: "CP", pkCY: "CY", pkEN: "EN", pkEV: "EV",
-	pkFETCH: "FT", pkFL: "FL", pkFL64: "FL64", pkGP: "GP", pkGZ: "GZ", pkJS: "JS", pkJV: "JV", pkLD: "LD", pkGO: "GO", pkGoTool: "go", pkLX: "LX", pkLJ: "LJ", pkOP: "OP",
+	pkFETCH: "FT", pkFL: "FL", pkFL64: "FL64", pkFM: "FM", pkGP: "GP", pkGZ: "GZ", pkHT: "HT", pkJS: "JS", pkJV: "JV", pkLD: "LD", pkGO: "GO", pkGoTool: "go", pkLX: "LX", pkLJ: "LJ", pkMN: "MN", pkOP: "OP",
 	pkPB: "PB", pkPR: "PR", pkPY: "PY", pkR5: "R5", pkR6: "R6", pkRD: "RD",
 	pkSB:   "SB",
+	pkSF:   "SF",
 	pkSTUB: "STUB", pkSW: "SW", pkTEST: "TEST", pkTEST2: "TEST2", pkTS: "TS", pkYC: "YC",
 	pkld: "ld", pkDX: "DX", pkBN: "BN", pkSV: "SV", pkSC: "SC", pkPD: "PD", pkCU: "CU",
 }
@@ -46,8 +47,10 @@ const (
 	pkFETCH
 	pkFL
 	pkFL64
+	pkFM
 	pkGP
 	pkGZ
+	pkHT
 	pkJS
 	pkJV
 	pkLD
@@ -55,6 +58,7 @@ const (
 	pkGoTool
 	pkLX
 	pkLJ
+	pkMN
 	pkOP
 	pkPB
 	pkPR
@@ -63,6 +67,7 @@ const (
 	pkR6
 	pkRD
 	pkSB
+	pkSF
 	pkSTUB
 	pkSW
 	pkTEST

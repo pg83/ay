@@ -13,6 +13,7 @@ const (
 	prodAntlr4Grammar
 	prodBuildInfo
 	prodDecimalMD5
+	prodBuildMn
 	prodSplitCodegen
 	prodBaseCodegen
 	prodRunProgram
@@ -329,6 +330,13 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		push(prodDecimalMD5, i, start, outEnd)
 	}
 
+	for i, stmt := range d.buildMns {
+		start := len(backing)
+
+		backing = append(backing, build(module, "/mn.", stmt.Name, ".cpp"), build(module, "/MN_External_", stmt.Name, ".rodata"))
+		push(prodBuildMn, i, start, len(backing))
+	}
+
 	for i, sc := range d.splitCodegens {
 		start := len(backing)
 		prefix := sc.Prefix.string()
@@ -343,7 +351,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 
 	for i, bc := range d.baseCodegens {
 		start := len(backing)
-		prefix := bc.Prefix.string()
+		prefix := filepath.Base(bc.Prefix.string())
 
 		backing = append(backing, build(module, "/", prefix, ".cpp"), build(module, "/", prefix, ".h"))
 		push(prodBaseCodegen, i, start, len(backing))
@@ -648,6 +656,8 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 			e.emitBuildInfoStmt()
 		case prodDecimalMD5:
 			e.emitDecimalMD5Stmt(e.d.decimalMD5[pos.index])
+		case prodBuildMn:
+			e.emitBuildMnStmt(e.d.buildMns[pos.index])
 		case prodSplitCodegen:
 			e.emitSplitCodegenStmt(e.d.splitCodegens[pos.index])
 		case prodBaseCodegen:

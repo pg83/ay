@@ -35,6 +35,9 @@ const (
 	srcExtCfgProto
 	srcExtGperf
 	srcExtFlex
+	srcExtFml
+	srcExtSfdl
+	srcExtAsp
 	srcExtHeader
 	srcExtCSource
 	srcExtAsm
@@ -77,7 +80,7 @@ func buildExtClassMatcher() *ExtMatcher[ExtClass] {
 	set(extAsmSource, ".asm", ".s", ".S")
 	set(extHeader, ".h", ".hh", ".hpp", ".cuh", ".H", ".hxx", ".xh", ".ipp", ".ixx", ".inl")
 	set(extCopyAuto, ".c", ".cpp", ".cc", ".cxx", ".proto", ".ev", ".g4", ".y", ".ypp", ".rl", ".rl6", ".h.in", ".c.in", ".cpp.in")
-	set(extCodegen, ".proto", ".gztproto", ".fbs64", ".fbs", ".ev", ".cfgproto", ".rl6", ".rl", ".rl5", ".y", ".ypp", ".cpp.in", ".c.in", ".sc", ".gperf", ".lpp", ".lex", ".l")
+	set(extCodegen, ".proto", ".gztproto", ".fbs64", ".fbs", ".ev", ".cfgproto", ".rl6", ".rl", ".rl5", ".y", ".ypp", ".cpp.in", ".c.in", ".sc", ".gperf", ".lpp", ".lex", ".l", ".fml", ".sfdl", ".asp")
 
 	for ext, cls := range map[string]SrcExtClass{
 		".gztproto": srcExtGztProto,
@@ -88,6 +91,9 @@ func buildExtClassMatcher() *ExtMatcher[ExtClass] {
 		".rl6":      srcExtRl6,
 		".rl":       srcExtRl,
 		".rl5":      srcExtRl,
+		".fml":      srcExtFml,
+		".sfdl":     srcExtSfdl,
+		".asp":      srcExtAsp,
 		".y":        srcExtY,
 		".ypp":      srcExtY,
 		".cpp.in":   srcExtCppIn,
@@ -311,7 +317,7 @@ func srcExtClassOf(id STR) SrcExtClass {
 
 func isCodegenProducingSrcID(id STR) bool {
 	switch srcExtClassOf(id) {
-	case srcExtProto, srcExtGztProto, srcExtFbs, srcExtFbs64, srcExtEv, srcExtCfgProto, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc, srcExtGperf, srcExtFlex:
+	case srcExtProto, srcExtGztProto, srcExtFbs, srcExtFbs64, srcExtEv, srcExtCfgProto, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc, srcExtGperf, srcExtFlex, srcExtFml, srcExtSfdl, srcExtAsp:
 		return true
 	}
 

@@ -208,6 +208,7 @@ type ModuleData struct {
 	antlrRuns                []AntlrRunInfo
 	runPrograms              []*RunProgramStmt
 	decimalMD5               []*DecimalMD5Lower32BitsStmt
+	buildMns                 []*BuildMnStmt
 	splitCodegens            []*SplitCodegenStmt
 	baseCodegens             []*BaseCodegenStmt
 	runPython                []*RunPythonStmt
@@ -716,15 +717,12 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, instance ModuleInstanc
 		pm.indexAddincl(a)
 	}
 
-	hasEv := false
 	hasProto := false
 	hasSc := false
 	hasCfgProto := false
 
 	for _, src := range d.srcs {
 		switch srcExtClassOf(src) {
-		case srcExtEv:
-			hasEv = true
 		case srcExtProto:
 			hasProto = true
 		case srcExtFbs:
@@ -740,8 +738,26 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, instance ModuleInstanc
 		}
 	}
 
-	if hasEv {
-		d.peerdirs = append(d.peerdirs, strLibraryCppEventlog, strContribLibsProtobuf)
+	evInduced, protoInduced := false, false
+
+	for _, src := range d.srcs {
+		switch srcExtClassOf(src) {
+		case srcExtEv:
+			if !evInduced {
+				evInduced = true
+
+				d.peerdirs = append(d.peerdirs, strLibraryCppEventlog, strContribLibsProtobuf)
+			}
+		case srcExtProto:
+			if !protoInduced {
+				protoInduced = true
+				isProtoLibrary := d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary
+
+				if !isProtoLibrary || !env.bool(envPY3_PROTO) {
+					d.peerdirs = append(d.peerdirs, strContribLibsProtobuf)
+				}
+			}
+		}
 	}
 
 	if hasSc {
@@ -752,12 +768,8 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, instance ModuleInstanc
 		d.peerdirs = append(d.peerdirs, strLibraryCppProtoConfigCodegen, strLibraryCppProtoConfigProtos, strContribLibsProtobuf)
 	}
 
-	if hasProto && !hasEv {
+	if hasProto {
 		isProtoLibrary := d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary
-
-		if !isProtoLibrary || !env.bool(envPY3_PROTO) {
-			d.peerdirs = append(d.peerdirs, strContribLibsProtobuf)
-		}
 
 		if isProtoLibrary && !d.optimizePyProtosSet {
 			d.optimizePyProtos = true
@@ -1502,6 +1514,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.flags.NoCompilerWarnings = true
 	case tokNoWshadow:
 		d.flags.NoWShadow = true
+	case tokNoExportDynamicSymbols:
+		d.flags.NoExportDynSymbols = true
 	case tokUseLlvmBc16:
 		env.setString(envCLANG_BC_ROOT, "$"+envCLANG16_RESOURCE_GLOBAL.string())
 		env.setString(envLLVM_LLC_TOOL, "contrib/libs/llvm16/tools/llc")
@@ -1964,6 +1978,13 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			CFlags:  flags,
 			Seq:     d.nextDeclSeq(),
 		})
+	case tokBuildMn:
+
+		if len(v.Args) != 2 {
+			throwFmt("gen: %s: BUILD_MN with options is not modelled, expected (MnInfo MnName), got %d args", modulePath, len(v.Args))
+		}
+
+		d.buildMns = append(d.buildMns, &BuildMnStmt{Info: v.Args[0], Name: v.Args[1].string(), Seq: d.nextDeclSeq()})
 	case tokLdPlugin:
 
 		d.ldPlugins = append(d.ldPlugins, v.Args...)

@@ -15,6 +15,7 @@ var tokName = [...]STR{
 	tokBuildwithCythonC:                   internStr("BUILDWITH_CYTHON_C"),
 	tokBuildwithCythonCpp:                 internStr("BUILDWITH_CYTHON_CPP"),
 	tokBuildOnlyIf:                        internStr("BUILD_ONLY_IF"),
+	tokBuildMn:                            internStr("BUILD_MN"),
 	tokCheckConfigH:                       internStr("CHECK_CONFIG_H"),
 	tokCheckDependentDirs:                 internStr("CHECK_DEPENDENT_DIRS"),
 	tokClangWarnings:                      internStr("CLANG_WARNINGS"),
@@ -247,6 +248,7 @@ const (
 	tokBuildwithCythonC
 	tokBuildwithCythonCpp
 	tokBuildOnlyIf
+	tokBuildMn
 	tokCheckConfigH
 	tokCheckDependentDirs
 	tokClangWarnings
