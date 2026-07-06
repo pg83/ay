@@ -135,6 +135,32 @@ func dedup[T idKey](lists ...[]T) []T {
 	return out
 }
 
+func dedupSourceVFS(inputs []VFS, extra [][]VFS) []VFS {
+	out := make([]VFS, 0, len(inputs))
+
+	deduper.reset()
+
+	keep := func(input VFS) {
+		if !input.isSource() {
+			return
+		}
+
+		if !deduper.add(input.strID()) {
+			return
+		}
+
+		out = append(out, input)
+	}
+
+	for _, input := range inputs {
+		keep(input)
+	}
+
+	eachBucketVFS(extra, keep)
+
+	return out
+}
+
 func concat[T any](lists ...[]T) []T {
 	total := 0
 	nonEmpty := 0

@@ -240,7 +240,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR) {
 	}
 
 	pyPBRef := ctx.emit.emitNode(pyPBNode)
-	sourceInputs := pyProtoSourceInputs(inputs, transitive.buckets)
+	sourceInputs := dedupSourceVFS(inputs, transitive.buckets)
 	keyBase := protoPythonResourceKeyBase(instance, d, src)
 
 	tokenFor := func(out VFS) STR {
