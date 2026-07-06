@@ -946,6 +946,7 @@ func TestGen_CC_NoDuplicateInputsWhenBuildProtoDropped(t *testing.T) {
 	const appModPath = "app"
 
 	files := map[string]string{}
+	writeJdk17Resource(files)
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
 

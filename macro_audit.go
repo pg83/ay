@@ -21,6 +21,7 @@ var macrosAcceptingUserFlags = map[TOK]struct{}{
 	tokExcludeTags: {},
 
 	tokSetResourceUriFromJson: {},
+	tokToolchain:              {},
 
 	tokLicense: {},
 

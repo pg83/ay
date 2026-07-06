@@ -1420,6 +1420,7 @@ func TestEvalCond_ARCH_ARM64_Aliased(t *testing.T) {
 
 func TestGen_ProtoAstStylePipelineExpandsLowercaseVarsAndRootedPaths(t *testing.T) {
 	files := map[string]string{}
+	writeJdk17Resource(files)
 	writeFile := func(rel, body string) {
 		files[rel] = body
 	}
@@ -2230,6 +2231,10 @@ END()
 	if nodeHasInput(objcopy, "$(S)/dep/dep.h") {
 		t.Fatalf("objcopy should not carry producer-closure dep/dep.h: %#v", objcopy.flatInputs())
 	}
+}
+
+func writeJdk17Resource(files map[string]string) {
+	files["build/platform/java/jdk/jdk17/ya.make"] = "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(JDK17 sbr:1)\nEND()\n"
 }
 
 func writeToolProgram(files map[string]string, modulePath, binaryName string) {
