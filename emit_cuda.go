@@ -37,10 +37,6 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta) {
 	pidRef, pidVFS := ctx.tool(cudaCustomPidArg)
 	cuCxxTail := blocks.cxxTail
 
-	if len(cuCxxTail) >= 2 {
-		cuCxxTail = cuCxxTail[:len(cuCxxTail)-2]
-	}
-
 	head := []([]STR){
 		na.strList(wrapccPython3STR, cudaCompileScriptVFS.str(), cudaMtimeFlagStr, mtimeVFS.str(), cudaCustomPidFlagStr, pidVFS.str(), cudaNvccBinStr, cudaNvccStdStr),
 		nvccFlagsHead,
@@ -50,18 +46,17 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta) {
 		na.strList(argDashC.str(), (inVFS).str(), argDashO.str(), (outVFS).str()),
 	}
 
-	total := len(head) + len(blocks.includes) + 2 + len(blocks.flags) + len(cuCxxTail) + 1
+	total := len(head) + 6
 	chunks := na.chunks.alloc(total)
 	k := copy(chunks, head)
 
-	k += copy(chunks[k:], blocks.includes)
-	chunks[k] = na.strList(cudaCflagsStr)
-	chunks[k+1] = p.CCHead
-	k += 2
-	k += copy(chunks[k:], blocks.flags)
-	k += copy(chunks[k:], cuCxxTail)
-	chunks[k] = na.strList(cudaNvccStdStr)
-	k++
+	chunks[k] = blocks.includes
+	chunks[k+1] = na.strList(cudaCflagsStr)
+	chunks[k+2] = p.CCHead
+	chunks[k+3] = blocks.flags
+	chunks[k+4] = cuCxxTail
+	chunks[k+5] = na.strList(cudaNvccStdStr)
+	k += 6
 	na.chunks.commit(k)
 
 	cmdArgs := ArgChunks(chunks[:k])

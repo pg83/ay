@@ -215,18 +215,22 @@ func composeCCNode(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInpu
 		tail = blocks.cTail
 	}
 
-	total := 4 + len(blocks.includes) + len(blocks.flags) + len(tail)
+	total := 4 + 4
 
 	if wrapcc {
 		total += 3
+	}
+
+	if len(tail) > 0 {
+		total++
 	}
 
 	if len(in.PerSourceCFlags) > 0 {
 		total++
 	}
 
-	if !isCxx {
-		total += len(blocks.cPost)
+	if !isCxx && len(blocks.cPost) > 0 {
+		total++
 	}
 
 	chunks := na.chunks.alloc(total)
@@ -242,18 +246,27 @@ func composeCCNode(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInpu
 	chunks[k] = compiler
 	chunks[k+1] = instance.Platform.CCHead
 	chunks[k+2] = tok[1:4]
-	k += 3
-	k += copy(chunks[k:], blocks.includes)
-	k += copy(chunks[k:], blocks.flags)
-	k += copy(chunks[k:], tail)
+	chunks[k+3] = blocks.includes
+	chunks[k+4] = blocks.flags
+	k += 5
+
+	if len(tail) > 0 {
+		chunks[k] = tail
+		k++
+	}
+
+	chunks[k] = builtinMacroDateTimeStr
+	chunks[k+1] = macroPrefixMapFlagsStr
+	k += 2
 
 	if len(in.PerSourceCFlags) > 0 {
 		chunks[k] = na.argStrList(in.PerSourceCFlags)
 		k++
 	}
 
-	if !isCxx {
-		k += copy(chunks[k:], blocks.cPost)
+	if !isCxx && len(blocks.cPost) > 0 {
+		chunks[k] = blocks.cPost
+		k++
 	}
 
 	chunks[k] = inChunk
@@ -478,11 +491,11 @@ func appendCompileFlagPipeline(cmdArgs []STR, bundle CompileFlagBundle, warningB
 type CcModuleArgBlocks struct {
 	cHead    []STR
 	cxxHead  []STR
-	includes ArgChunks
-	flags    ArgChunks
-	cTail    ArgChunks
-	cxxTail  ArgChunks
-	cPost    ArgChunks
+	includes []STR
+	flags    []STR
+	cTail    []STR
+	cxxTail  []STR
+	cPost    []STR
 }
 
 func cWarningChunk(na *NodeArenas, noCompilerWarnings, noWShadow bool) []STR {
@@ -536,45 +549,38 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 
 	catboostStr := catboostOpenSourceChunk(p)
 	noLibc := p.NoLibcBlockStr
-	inc := na.chunks.alloc(4)
-	ni := 0
 
-	inc[ni] = ccIncludesPrefixStr
-	ni++
-	inc[ni] = na.inclArgList(in.AddIncl, in.InclArgs)
-	ni++
+	incl := na.strs.alloc(len(ccIncludesPrefixStr) + len(in.AddIncl) + len(in.PeerAddInclGlobal))
+	k := copy(incl, ccIncludesPrefixStr)
 
-	peerAddIncl := in.PeerAddInclGlobal
-
-	if len(peerAddIncl) > 0 && peerAddIncl[0] == googleapisCommonProtosAddIncl {
-		inc[ni] = na.strList(in.InclArgs.arg(peerAddIncl[0]))
-		ni++
-		peerAddIncl = peerAddIncl[1:]
+	for _, pt := range in.AddIncl {
+		incl[k] = in.InclArgs.arg(pt)
+		k++
 	}
 
-	inc[ni] = na.inclArgList(peerAddIncl, in.InclArgs)
-	ni++
-	na.chunks.commit(ni)
+	for _, pt := range in.PeerAddInclGlobal {
+		incl[k] = in.InclArgs.arg(pt)
+		k++
+	}
 
-	flags := na.chunkList(
+	na.strs.commit(k)
+
+	includes := incl[:k:k]
+	warnC := cWarningChunk(na, in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
+
+	flagParts := [][]STR{
 		na.argStrList(in.ClangWarnings),
 		debugPrefixMapFlagsStr,
 		xclangDebugCompilationDirStr,
 		cflagsStr,
-		cWarningChunk(na, in.Flags.NoCompilerWarnings, in.Flags.NoWShadow),
+		warnC,
 		p.DefinesStr,
 		na.argStrList(p.CFlags, in.CFlags, in.PeerCFlagsGlobal, in.OwnCFlagsGlobal),
 		noLibc,
 		catboostStr,
 		na.argStrList(in.ModuleScopeCFlags),
 		noLibc,
-	)
-
-	cTail := na.chunkList(
-		na.argStrList(in.PeerCOnlyFlagsGlobal),
-		builtinMacroDateTimeStr,
-		macroPrefixMapFlagsStr,
-	)
+	}
 
 	cxxOwnExtras := in.CXXFlags
 
@@ -584,31 +590,23 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 
 	cxxBucket := composeOwnAndPeerGlobalBucket(*in, true)
 
-	cxxTail := na.chunkList(
+	cxxTailParts := [][]STR{
 		cxxStandardFlagStr,
 		cxxWarningChunk(in.Flags.NoCompilerWarnings),
 		na.argStrList(cxxOwnExtras),
 		na.argStrList(cxxBucket),
 		catboostStr,
 		na.argStrList(composePostCatboostBucket(cxxBucket)),
-		builtinMacroDateTimeStr,
-		macroPrefixMapFlagsStr,
-	)
-
-	var cPost ArgChunks
-
-	if len(in.COnlyFlags) > 0 {
-		cPost = na.chunkList(na.argStrList(in.COnlyFlags))
 	}
 
 	return &CcModuleArgBlocks{
 		cHead:    na.strList(in.TC.CC),
 		cxxHead:  na.strList(in.TC.CXX),
-		includes: ArgChunks(inc[:ni]),
-		flags:    flags,
-		cTail:    cTail,
-		cxxTail:  cxxTail,
-		cPost:    cPost,
+		includes: includes,
+		flags:    na.strConcat(flagParts...),
+		cTail:    na.argStrList(in.PeerCOnlyFlagsGlobal),
+		cxxTail:  na.strConcat(cxxTailParts...),
+		cPost:    na.argStrList(in.COnlyFlags),
 	}
 }
 
