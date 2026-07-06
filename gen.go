@@ -684,7 +684,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		unitTestPeerCount = 1
 	}
 
-	specialized := isSpecializedLibraryType(d.moduleStmt.Name)
 
 	const googleapisPeer = "contrib/libs/googleapis-common-protos"
 
@@ -709,7 +708,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	preResolved := make([]resolvedPeer, 0, 2)
 
-	if specialized && instance.Language == LangPy && d.moduleStmt.Name == tokProtoLibrary && d.optimizePyProtos && !moduleExcludesTag(d, "CPP_PROTO") {
+	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangPy && d.optimizePyProtos && !moduleExcludesTag(d, "CPP_PROTO") {
 		peerSeen(instance.Path.rel())
 
 		cppSelf := instance
@@ -718,7 +717,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		preResolved = append(preResolved, resolvedPeer{path: instance.Path.rel(), result: genModule(ctx, cppSelf), kind: peerKindLangDefault})
 	}
 
-	if specialized && d.useCommonGoogleAPIs && instance.Language == LangCPP {
+	if d.moduleStmt.Name == tokProtoLibrary && d.useCommonGoogleAPIs && instance.Language == LangCPP {
 		if !peerSeen(googleapisPeer) {
 			preResolved = append(preResolved, resolvedPeer{path: googleapisPeer, result: genModule(ctx, e.derivePeerInstance(googleapisPeer)), kind: peerKindLangDefault})
 		}
@@ -1242,7 +1241,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path.rel(), peerAddInclGlobal, dedupedAddIncl)
 
-	if specialized {
+	if d.moduleStmt.Name == tokProtoLibrary {
 		selfPeerAddInclGlobal = peerAddInclGlobal
 	}
 	effectiveSrcDirs := d.srcDirs
