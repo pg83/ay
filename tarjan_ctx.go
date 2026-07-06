@@ -1,7 +1,7 @@
 package main
 
 type TarjanScratch struct {
-	stamp   []uint32
+	stamp   Vec[uint32]
 	index   []int32
 	low     []int32
 	onStack BitSet
@@ -16,16 +16,9 @@ type TarjanCtx struct {
 }
 
 func (t *TarjanScratch) reset(size uint32) {
-	if uint32(len(t.stamp)) < size {
-		grown := uint32(len(t.stamp)) * 2
-
-		if grown < size {
-			grown = size
-		}
-
-		t.stamp = make([]uint32, grown)
-		t.index = make([]int32, grown)
-		t.low = make([]int32, grown)
+	if t.stamp.freshLen(int(size)) {
+		t.index = make([]int32, t.stamp.len())
+		t.low = make([]int32, t.stamp.len())
 		t.onStack = BitSet{}
 		t.epoch = 1
 
@@ -35,9 +28,7 @@ func (t *TarjanScratch) reset(size uint32) {
 	t.epoch++
 
 	if t.epoch == 0 {
-		for i := range t.stamp {
-			t.stamp[i] = 0
-		}
+		clear(t.stamp.s)
 
 		t.epoch = 1
 	}
@@ -46,13 +37,13 @@ func (t *TarjanScratch) reset(size uint32) {
 func (t *TarjanScratch) visited(v VFS) bool {
 	id := uint32(v)
 
-	return id < uint32(len(t.stamp)) && t.stamp[id] == t.epoch
+	return id < uint32(t.stamp.len()) && t.stamp.s[id] == t.epoch
 }
 
 func (t *TarjanScratch) discover(v VFS, idx int32) {
 	id := uint32(v)
 
-	t.stamp[id] = t.epoch
+	t.stamp.s[id] = t.epoch
 	t.index[id] = idx
 	t.low[id] = idx
 	t.onStack.add(id)

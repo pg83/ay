@@ -1,21 +1,14 @@
 package main
 
 type IdValueMap struct {
-	gen   []uint32
+	gen   Vec[uint32]
 	val   []int32
 	epoch uint32
 }
 
 func (m *IdValueMap) reset(size uint32) {
-	if uint32(len(m.gen)) < size {
-		grown := uint32(len(m.gen)) * 2
-
-		if grown < size {
-			grown = size
-		}
-
-		m.gen = make([]uint32, grown)
-		m.val = make([]int32, grown)
+	if m.gen.freshLen(int(size)) {
+		m.val = make([]int32, m.gen.len())
 		m.epoch = 1
 
 		return
@@ -24,9 +17,7 @@ func (m *IdValueMap) reset(size uint32) {
 	m.epoch++
 
 	if m.epoch == 0 {
-		for i := range m.gen {
-			m.gen[i] = 0
-		}
+		clear(m.gen.s)
 
 		m.epoch = 1
 	}
@@ -35,30 +26,23 @@ func (m *IdValueMap) reset(size uint32) {
 func (m *IdValueMap) put(k VFS, v int32) {
 	id := uint32(k)
 
-	if id >= uint32(len(m.gen)) {
-		grown := uint32(len(m.gen)) * 2
+	if id >= uint32(m.gen.len()) {
+		m.gen.ensureLen(int(id) + 1)
 
-		if grown <= id {
-			grown = id + 1
-		}
+		grown := make([]int32, m.gen.len())
 
-		g := make([]uint32, grown)
-		vals := make([]int32, grown)
-
-		copy(g, m.gen)
-		copy(vals, m.val)
-		m.gen = g
-		m.val = vals
+		copy(grown, m.val)
+		m.val = grown
 	}
 
-	m.gen[id] = m.epoch
+	m.gen.s[id] = m.epoch
 	m.val[id] = v
 }
 
 func (m *IdValueMap) get(k VFS) (int32, bool) {
 	id := uint32(k)
 
-	if id < uint32(len(m.gen)) && m.gen[id] == m.epoch {
+	if id < uint32(m.gen.len()) && m.gen.s[id] == m.epoch {
 		return m.val[id], true
 	}
 

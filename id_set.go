@@ -1,19 +1,12 @@
 package main
 
 type IdSet struct {
-	gen   []uint16
+	gen   Vec[uint16]
 	epoch uint16
 }
 
 func (s *IdSet) reset(size uint32) {
-	if uint32(len(s.gen)) < size {
-		grown := uint32(len(s.gen)) * 2
-
-		if grown < size {
-			grown = size
-		}
-
-		s.gen = make([]uint16, grown)
+	if s.gen.freshLen(int(size)) {
 		s.epoch = 1
 
 		return
@@ -22,9 +15,7 @@ func (s *IdSet) reset(size uint32) {
 	s.epoch++
 
 	if s.epoch == 0 {
-		for i := range s.gen {
-			s.gen[i] = 0
-		}
+		clear(s.gen.s)
 
 		s.epoch = 1
 	}
@@ -33,43 +24,32 @@ func (s *IdSet) reset(size uint32) {
 func (s *IdSet) has(v VFS) bool {
 	id := v.strID()
 
-	return id < uint32(len(s.gen)) && s.gen[id] == s.epoch
+	return id < uint32(s.gen.len()) && s.gen.s[id] == s.epoch
 }
 
 func (s *IdSet) add(v VFS) {
 	id := v.strID()
 
-	if id >= uint32(len(s.gen)) {
-		grown := uint32(len(s.gen)) * 2
+	s.gen.ensureLen(int(id) + 1)
 
-		if grown <= id {
-			grown = id + 1
-		}
-
-		g := make([]uint16, grown)
-
-		copy(g, s.gen)
-		s.gen = g
-	}
-
-	s.gen[id] = s.epoch
+	s.gen.s[id] = s.epoch
 }
 
 func (s *IdSet) spliceOne(v VFS, block []VFS, k int) int {
 	id := v.strID()
 
-	if s.gen[id] == s.epoch {
+	if s.gen.s[id] == s.epoch {
 		return k
 	}
 
-	s.gen[id] = s.epoch
+	s.gen.s[id] = s.epoch
 	block[k] = v
 
 	return k + 1
 }
 
 func (s *IdSet) spliceNew(win []VFS, block []VFS, k int) int {
-	gen := s.gen
+	gen := s.gen.s
 	epoch := s.epoch
 
 	for _, v := range win {

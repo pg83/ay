@@ -8,21 +8,12 @@ type idKey interface {
 }
 
 type DeDuper struct {
-	gen   []uint32
+	gen   Vec[uint32]
 	epoch uint32
 }
 
 func (dd *DeDuper) reset() {
-	size := strBound()
-
-	if uint32(len(dd.gen)) < size {
-		grown := uint32(len(dd.gen)) * 2
-
-		if grown < size {
-			grown = size
-		}
-
-		dd.gen = make([]uint32, grown)
+	if dd.gen.freshLen(int(strBound())) {
 		dd.epoch = 1
 
 		return
@@ -31,26 +22,24 @@ func (dd *DeDuper) reset() {
 	dd.epoch++
 
 	if dd.epoch == 0 {
-		for i := range dd.gen {
-			dd.gen[i] = 0
-		}
+		clear(dd.gen.s)
 
 		dd.epoch = 1
 	}
 }
 
 func (dd *DeDuper) add(id uint32) bool {
-	if dd.gen[id] == dd.epoch {
+	if dd.gen.s[id] == dd.epoch {
 		return false
 	}
 
-	dd.gen[id] = dd.epoch
+	dd.gen.s[id] = dd.epoch
 
 	return true
 }
 
 func (dd *DeDuper) has(id uint32) bool {
-	return dd.gen[id] == dd.epoch
+	return dd.gen.s[id] == dd.epoch
 }
 
 func (dd *DeDuper) filterSeen(list []VFS) []VFS {

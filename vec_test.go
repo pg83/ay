@@ -29,21 +29,6 @@ func TestVec_PushBackDoubles(t *testing.T) {
 	}
 }
 
-func TestVec_LargeVecGrowsSlower(t *testing.T) {
-	var v Vec[uint64]
-
-	v.reserve(vecSlowGrowBytes / 8)
-
-	c0 := cap(v.s)
-
-	v.s = v.s[:c0]
-	v.pushBack(1)
-
-	if c1 := cap(v.s); c1 >= c0*2 {
-		t.Fatalf("large vec doubled: %d -> %d, want 1.5x", c0, c1)
-	}
-}
-
 func TestVec_ReserveAvoidsRegrowth(t *testing.T) {
 	var v Vec[int]
 

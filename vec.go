@@ -1,9 +1,5 @@
 package main
 
-import "unsafe"
-
-const vecSlowGrowBytes = 1 << 20
-
 type Vec[T any] struct {
 	s []T
 }
@@ -12,14 +8,8 @@ func (v *Vec[T]) len() int {
 	return len(v.s)
 }
 
-func (v *Vec[T]) grow(need int) {
-	var zero T
-
+func (v *Vec[T]) nextCap(need int) int {
 	c := cap(v.s) * 2
-
-	if cap(v.s)*int(unsafe.Sizeof(zero)) >= vecSlowGrowBytes {
-		c = cap(v.s) + cap(v.s)/2
-	}
 
 	if c < 8 {
 		c = 8
@@ -29,10 +19,24 @@ func (v *Vec[T]) grow(need int) {
 		c = need
 	}
 
-	next := make([]T, len(v.s), c)
+	return c
+}
+
+func (v *Vec[T]) grow(need int) {
+	next := make([]T, len(v.s), v.nextCap(need))
 
 	copy(next, v.s)
 	v.s = next
+}
+
+func (v *Vec[T]) freshLen(n int) bool {
+	if n <= len(v.s) {
+		return false
+	}
+
+	v.s = make([]T, v.nextCap(n))
+
+	return true
 }
 
 func (v *Vec[T]) reserve(n int) {
