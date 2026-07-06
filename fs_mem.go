@@ -8,7 +8,7 @@ type MemFS struct {
 	files     map[string][]byte
 	dirs      map[string]map[string]bool
 	views     map[string]DirView
-	entries   *IntMap[bool]
+	entries   *IntSet
 }
 
 func newMemFS(files map[string]string) *MemFS {
@@ -20,7 +20,7 @@ func newMemFS(files map[string]string) *MemFS {
 		files:     make(map[string][]byte, len(files)),
 		dirs:      map[string]map[string]bool{"": {}},
 		views:     map[string]DirView{},
-		entries:   newIntMap[bool](64),
+		entries:   newIntSet(64),
 	}
 
 	addEntry := func(parent, name string, isDir bool) {
@@ -104,13 +104,13 @@ func (fs *MemFS) dirHas(v DirView, name string) (present bool, isDir bool) {
 		return false, false
 	}
 
-	d := fs.entries.get(splitMix64(uint32(v.dir), uint32(id)))
+	isDir, ok := fs.entries.get(splitMix64(uint32(v.dir), uint32(id)))
 
-	if d == nil {
+	if !ok {
 		return false, false
 	}
 
-	return true, *d
+	return true, isDir
 }
 
 func (fs *MemFS) existsRel(rel string) (present bool, isDir bool) {

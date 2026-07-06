@@ -25,7 +25,7 @@ type OsFS struct {
 	rootSlash     string
 	dirs          DenseMap[STR, DirView]
 	dirNames      *BumpAllocator[uint32]
-	dirEntries    *IntMap[bool]
+	dirEntries    *IntSet
 	contentHashes PageVec[uint64]
 	readBuf       []byte
 	direntBuf     []byte
@@ -38,7 +38,7 @@ func newFS(srcRoot string) FS {
 		srcRoot:    srcRoot,
 		rootSlash:  srcRoot + "/",
 		dirNames:   newBumpAllocator[uint32](1 << 12),
-		dirEntries: newIntMap[bool](1 << 12),
+		dirEntries: newIntSet(1 << 12),
 	}
 
 	fs.platformInit()
@@ -93,13 +93,13 @@ func (fs *OsFS) dirHas(v DirView, name string) (present bool, isDir bool) {
 		return false, false
 	}
 
-	d := fs.dirEntries.get(splitMix64(uint32(v.dir), uint32(id)))
+	isDir, ok := fs.dirEntries.get(splitMix64(uint32(v.dir), uint32(id)))
 
-	if d == nil {
+	if !ok {
 		return false, false
 	}
 
-	return true, *d
+	return true, isDir
 }
 
 func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
