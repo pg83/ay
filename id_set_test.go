@@ -35,15 +35,15 @@ func TestIdSet_ResetClearsMembershipReusingArray(t *testing.T) {
 		t.Fatal("member missing before reset")
 	}
 
-	before := cap(s.gen)
+	before := cap(s.gen.s)
 	s.reset(8)
 
 	if s.has(vid(2)) {
 		t.Fatal("member survived reset")
 	}
 
-	if cap(s.gen) != before {
-		t.Fatalf("reset reallocated backing array (cap %d -> %d) for an unchanged size", before, cap(s.gen))
+	if cap(s.gen.s) != before {
+		t.Fatalf("reset reallocated backing array (cap %d -> %d) for an unchanged size", before, cap(s.gen.s))
 	}
 }
 
@@ -92,7 +92,7 @@ func TestIdSet_EpochWraparoundZeroes(t *testing.T) {
 	s.reset(8)
 
 	s.epoch = 0xFFFF
-	s.gen[3] = 0xFFFF
+	s.gen.s[3] = 0xFFFF
 
 	s.reset(8)
 

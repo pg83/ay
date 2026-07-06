@@ -54,15 +54,15 @@ func TestIdValueMap_ResetClearsEntriesReusingArrays(t *testing.T) {
 	m.reset(8)
 	m.put(VFS(2), 5)
 
-	before := cap(m.gen)
+	before := cap(m.gen.s)
 	m.reset(8)
 
 	if _, ok := m.get(VFS(2)); ok {
 		t.Fatal("entry survived reset")
 	}
 
-	if cap(m.gen) != before {
-		t.Fatalf("reset reallocated backing arrays (cap %d -> %d) for an unchanged size", before, cap(m.gen))
+	if cap(m.gen.s) != before {
+		t.Fatalf("reset reallocated backing arrays (cap %d -> %d) for an unchanged size", before, cap(m.gen.s))
 	}
 
 	m.put(VFS(2), 6)
@@ -82,8 +82,8 @@ func TestIdValueMap_ResetGrowsWhenSizeExceedsCapacity(t *testing.T) {
 		t.Fatal("entry survived growing reset")
 	}
 
-	if len(m.gen) < 64 || len(m.val) < 64 {
-		t.Fatalf("backing arrays not grown: gen=%d val=%d, want >= 64", len(m.gen), len(m.val))
+	if m.gen.len() < 64 || len(m.val) < 64 {
+		t.Fatalf("backing arrays not grown: gen=%d val=%d, want >= 64", m.gen.len(), len(m.val))
 	}
 }
 
