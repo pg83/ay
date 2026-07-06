@@ -19,15 +19,15 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		parserCpp := build(outPrefix, parserBase, ".cpp")
 
 		e.codegen.register(&GeneratedFileInfo{
-			OutputPath:     lexerCpp,
-			ProducerRef:    jvRef,
-			GeneratorRefs:  nil,
+			OutputPath:    lexerCpp,
+			ProducerRef:   jvRef,
+			GeneratorRefs: nil,
 		})
 
 		e.codegen.register(&GeneratedFileInfo{
-			OutputPath:     parserCpp,
-			ProducerRef:    jvRef,
-			GeneratorRefs:  nil,
+			OutputPath:    parserCpp,
+			ProducerRef:   jvRef,
+			GeneratorRefs: nil,
 		})
 
 		witnessIncludes := []VFS{
@@ -82,15 +82,15 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		parserCpp := build(outPrefix, base, "Parser.cpp")
 
 		e.codegen.register(&GeneratedFileInfo{
-			OutputPath:     lexerCpp,
-			ProducerRef:    jvRef,
-			GeneratorRefs:  nil,
+			OutputPath:    lexerCpp,
+			ProducerRef:   jvRef,
+			GeneratorRefs: nil,
 		})
 
 		e.codegen.register(&GeneratedFileInfo{
-			OutputPath:     parserCpp,
-			ProducerRef:    jvRef,
-			GeneratorRefs:  nil,
+			OutputPath:    parserCpp,
+			ProducerRef:   jvRef,
+			GeneratorRefs: nil,
 		})
 
 		witnessIncludes := []VFS{

@@ -10,7 +10,6 @@ func parseGoImports(data []byte) []string {
 
 	s := string(data)
 	i := 0
-
 	n := len(s)
 
 	skipSpace := func() {

@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-
 func objcopyHash(paths []string, keysB64 []string, kvs []string, unitPath string, moduleTag STR) string {
 	list := make([]string, 0, len(paths)+len(keysB64)+len(kvs)+1)
 

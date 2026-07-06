@@ -4,40 +4,12 @@ import (
 	"strings"
 )
 
-const (
-	goStdPrefix    = "contrib/go/_std_1.26/src"
-	goArcPrefix    = "a.yandex-team.ru/"
-	goVersion      = "1.26"
-	goToolsPeer    = "build/external_resources/go_tools"
-	goYolintPeer   = "build/external_resources/yolint"
-	goVendorPrefix = "vendor"
-)
-
 var (
-	goKV     = KV{P: pkGO, PC: pcLightRed, ShowOut: true}
-	goToolKV = KV{P: pkGoTool, PC: pcLightBlue, ShowOut: true}
-	goLdKV   = KV{P: pkLD, PC: pcLightRed, ShowOut: true}
-
-	goVcsEnv = EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-
-	goStdRuntimeVFS = source(goStdPrefix + "/runtime")
-
-	goAsmIncludeDirs = []VFS{
-		goStdRuntimeVFS,
-		goFakeIncludeVFS,
-		contribLibsLinuxHeaders,
-		contribLibsLinuxHeadersNf,
-	}
-
-	goToolScriptInputsChunk = []VFS{
-		source("build/scripts/go_tool.py"),
-		buildScriptsProcessCommandFilesPy,
-		source("build/scripts/process_whole_archive_option.py"),
-		source("build/rules/go/migrations.yaml"),
-		source("build/rules/go/extended_lint.yaml"),
-		source("build/rules/go/risky_imports.yaml"),
-	}
-
+	goKV                 = KV{P: pkGO, PC: pcLightRed, ShowOut: true}
+	goToolKV             = KV{P: pkGoTool, PC: pcLightBlue, ShowOut: true}
+	goLdKV               = KV{P: pkLD, PC: pcLightRed, ShowOut: true}
+	goVcsEnv             = EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+	goStdRuntimeVFS      = source(goStdPrefix + "/runtime")
 	strGoToolsRoot       = internStr(resourcePatternRef("GO_TOOLS"))
 	strGoAsmTool         = internV(resourcePatternRef("GO_TOOLS"), "/pkg/tool/linux_amd64/asm")
 	strGoCgoTool         = internV(resourcePatternRef("GO_TOOLS"), "/pkg/tool/linux_amd64/cgo")
@@ -49,74 +21,93 @@ var (
 	strGoMigrationsCfg   = internV("-migration.config=", "$(S)/", "build/rules/go/migrations.yaml")
 	strGoScopelintCfg    = internV("-scopelint.config=", "$(S)/", "build/rules/go/extended_lint.yaml")
 	strGoRiskyCfg        = internV("-riskyimports.config=", "$(S)/", "build/rules/go/risky_imports.yaml")
+	goToolCmdHeadLib     = goToolCmdHeadChunk("lib")
+	goToolCmdHeadExe     = goToolCmdHeadChunk("exe")
+	goToolCmdFlags       = goToolCmdFlagsChunk(false)
+	goToolCmdFlagsPic    = goToolCmdFlagsChunk(true)
+	goToolCmdPeers       = []STR{internStr("++peers")}
+	goToolCmdEnd         = []STR{internStr("--ya-end-command-file")}
+	goExeCmdExtld        = []STR{internStr("++extld"), strClang, internStr("++extldflags")}
 )
 
-var (
-	goToolCmdHeadLib = goToolCmdHeadChunk("lib")
-	goToolCmdHeadExe = goToolCmdHeadChunk("exe")
+var goAsmIncludeDirs = []VFS{
+	goStdRuntimeVFS,
+	goFakeIncludeVFS,
+	contribLibsLinuxHeaders,
+	contribLibsLinuxHeadersNf,
+}
 
-	goToolCmdMid = []STR{
-		internStr("++toolchain-root"), strGoToolsRoot,
-		internStr("++host-os"), strLinux,
-		internStr("++host-arch"), strAmd64,
-		internStr("++targ-os"), strLinux,
-		internStr("++targ-arch"), strAmd64,
-		internStr("++output"),
-	}
+var goToolScriptInputsChunk = []VFS{
+	source("build/scripts/go_tool.py"),
+	buildScriptsProcessCommandFilesPy,
+	source("build/scripts/process_whole_archive_option.py"),
+	source("build/rules/go/migrations.yaml"),
+	source("build/rules/go/extended_lint.yaml"),
+	source("build/rules/go/risky_imports.yaml"),
+}
 
-	goToolCmdVet = []STR{
-		internStr("++vet"), strGoYolintTool,
-		internStr("++vet-flags"),
-		strGoMigrationsCfg,
-		strGoScopelintCfg,
-		strGoRiskyCfg,
-		internStr("++debug-root-map"), internStr("source=/-S;build=/-B;tools=/-T"),
-		internStr("++tools-root"), internStr("$(TOOL_ROOT)"),
-		internStr("++srcs"),
-	}
+var goToolCmdMid = []STR{
+	internStr("++toolchain-root"), strGoToolsRoot,
+	internStr("++host-os"), strLinux,
+	internStr("++host-arch"), strAmd64,
+	internStr("++targ-os"), strLinux,
+	internStr("++targ-arch"), strAmd64,
+	internStr("++output"),
+}
 
-	goToolCmdFlags    = goToolCmdFlagsChunk(false)
-	goToolCmdFlagsPic = goToolCmdFlagsChunk(true)
+var goToolCmdVet = []STR{
+	internStr("++vet"), strGoYolintTool,
+	internStr("++vet-flags"),
+	strGoMigrationsCfg,
+	strGoScopelintCfg,
+	strGoRiskyCfg,
+	internStr("++debug-root-map"), internStr("source=/-S;build=/-B;tools=/-T"),
+	internStr("++tools-root"), internStr("$(TOOL_ROOT)"),
+	internStr("++srcs"),
+}
 
-	goToolCmdPeers = []STR{internStr("++peers")}
-	goToolCmdEnd   = []STR{internStr("--ya-end-command-file")}
+var goExeCmdLinkFlags = []STR{
+	strLinkFlags,
+	strLinkmodeExternal,
+	strCgoSrcs,
+	internStr("++ld_plugins"),
+	internStr("++vcs"),
+}
 
-	goExeCmdLinkFlags = []STR{
-		strLinkFlags,
-		strLinkmodeExternal,
-		strCgoSrcs,
-		internStr("++ld_plugins"),
-		internStr("++vcs"),
-	}
+var goExtldWholeArchive = []STR{
+	internStr("-Wl,--whole-archive"),
+	internStr("-Wl,--no-whole-archive"),
+	internStr("--cgo-peers"),
+}
 
-	goExeCmdExtld = []STR{internStr("++extld"), strClang, internStr("++extldflags")}
+var goExtldLinkerTail = []STR{
+	internStr("-Wl,--no-rosegment"),
+	internStr("-Wl,--build-id=sha1"),
+	internStr("-lpthread"),
+	internStr("-ldl"),
+	internStr("-lresolv"),
+}
 
-	goExtldWholeArchive = []STR{
-		internStr("-Wl,--whole-archive"),
-		internStr("-Wl,--no-whole-archive"),
-		internStr("--cgo-peers"),
-	}
+var goSymabisHead = []STR{
+	strGoAsmTool,
+	internStr("-trimpath"),
+	internStr("$(SOURCE_ROOT)=>/-S;$(BUILD_ROOT)=>/-B;$(TOOL_ROOT)=>/-T"),
+}
 
-	goExtldLinkerTail = []STR{
-		internStr("-Wl,--no-rosegment"),
-		internStr("-Wl,--build-id=sha1"),
-		internStr("-lpthread"),
-		internStr("-ldl"),
-		internStr("-lresolv"),
-	}
+var goSymabisDefs = []STR{
+	strI, strGoToolsPkgInclude,
+	internStr("-D"), internStr("GOOS_linux"),
+	internStr("-D"), internStr("GOARCH_amd64"),
+	internStr("-p"),
+}
 
-	goSymabisHead = []STR{
-		strGoAsmTool,
-		internStr("-trimpath"),
-		internStr("$(SOURCE_ROOT)=>/-S;$(BUILD_ROOT)=>/-B;$(TOOL_ROOT)=>/-T"),
-	}
-
-	goSymabisDefs = []STR{
-		strI, strGoToolsPkgInclude,
-		internStr("-D"), internStr("GOOS_linux"),
-		internStr("-D"), internStr("GOARCH_amd64"),
-		internStr("-p"),
-	}
+const (
+	goStdPrefix    = "contrib/go/_std_1.26/src"
+	goArcPrefix    = "a.yandex-team.ru/"
+	goVersion      = "1.26"
+	goToolsPeer    = "build/external_resources/go_tools"
+	goYolintPeer   = "build/external_resources/yolint"
+	goVendorPrefix = "vendor"
 )
 
 func goToolCmdHeadChunk(mode string) []STR {
@@ -332,7 +323,6 @@ func (e *EmitContext) flushGoSrcs() {
 	na := ctx.na
 	dir := instance.Path.rel()
 	out := build(dir, "/gen.symabis")
-
 	tail := na.strs.alloc(5 + len(e.goRes.AsmFiles))
 	nt := 0
 	push := func(x STR) { tail[nt] = x; nt++ }
@@ -653,11 +643,13 @@ func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, 
 
 	if len(d.cgoSrcs) > 0 {
 		objSuf := instance.Platform.objectSuffix()
+
 		isCgoObj := func(p VFS) bool {
 			rel := p.rel()
 
 			return strings.HasSuffix(rel, ".cgo2.c"+objSuf) || strings.HasSuffix(rel, "/_cgo_export.c"+objSuf)
 		}
+
 		isDotSObj := func(p VFS) bool {
 			return strings.HasSuffix(p.rel(), ".S.o")
 		}
@@ -802,7 +794,6 @@ func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, 
 	}
 
 	srcClosure := goPeerSrcClosure(ctx, resolved, ownInputs, srcClosureExtras)
-
 	sbomRefs, sbomPaths := e.goToolchainSboms(false)
 
 	deduper.reset()
@@ -887,7 +878,6 @@ func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, 
 
 	extraInputs := extraBlock[:nx:nx]
 	inputs := na.inputList(ownInputs, goToolScriptInputsChunk, peerArchivePaths, extraInputs)
-
 	depBlock := na.noderefs.alloc(1 + len(objRefs) + len(peerArchiveRefs) + merged)
 	ndep := 0
 
@@ -903,7 +893,6 @@ func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, 
 	na.noderefs.commit(ndep)
 
 	deps := e.resolveCodegenDepRefsChunks(inputs, depBlock[:ndep])
-
 	env := goCmdEnv(ctx, instance.Platform, d.tc)
 
 	node := Node{
@@ -946,9 +935,9 @@ func (e *EmitContext) emitGoExe(resolved []resolvedPeer, peerArchiveRefs []NodeR
 	vcsCPath := build(dir, "/__vcs_version__.c")
 	vcsOPath := build(dir, "/__vcs_version__.c", instance.Platform.objectSuffix())
 	vcsGoPath := build(dir, "/__vcs_version__.go")
-
 	cmd0 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsInfo(d.tc, vcsCPath.string())), Env: goVcsEnv}
 	cmd1 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsCompileForced(instance.Platform, d.tc, vcsCPath.string(), vcsOPath.string(), d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize, true)), Env: instance.Platform.ToolEnvVars}
+
 	cmd2 := Cmd{CmdArgs: na.chunkList(na.strList(
 		wrapccPython3STR,
 		strGoVcsInfoScript,
@@ -967,6 +956,7 @@ func (e *EmitContext) emitGoExe(resolved []resolvedPeer, peerArchiveRefs []NodeR
 	na.strs.commit(len(goRes.GoFiles))
 
 	srcArgs = srcArgs[:len(goRes.GoFiles):len(goRes.GoFiles)]
+
 	localARs, nonLocalARs, cgoARs := goClassifyClosure(na, resolved, peerArchivePaths)
 	tail := na.strs.alloc(4 + len(localARs) + len(nonLocalARs) + len(cgoARs))
 	nt := 0
@@ -1039,6 +1029,7 @@ func (e *EmitContext) emitGoExe(resolved []resolvedPeer, peerArchiveRefs []NodeR
 	na.noderefs.commit(k)
 
 	env := goCmdEnv(ctx, instance.Platform, d.tc)
+
 	goCmd := Cmd{CmdArgs: na.chunkList(
 		goToolCmdHeadExe,
 		na.strList(build(dir).str()),

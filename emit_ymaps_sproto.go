@@ -86,4 +86,3 @@ func (e *EmitContext) emitYmapsSprotoHeader(p YmapsSprotoPending, outRoot string
 
 	ctx.emit.emitReservedNode(node, p.ref)
 }
-

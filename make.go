@@ -216,7 +216,6 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	if platformsEquivalent(hostP, targetP) {
 		targetP = hostP
-
 	}
 
 	events := newEventQueue()

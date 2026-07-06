@@ -19,9 +19,9 @@ func (e *EmitContext) emitBundles() {
 		emitBundleNode(ctx, instance, d.tc.Python3, src, dst, srcRef, resolved, ref)
 
 		reg.register(&GeneratedFileInfo{
-			OutputPath:     dst,
-			ProducerRef:    ref,
-			GeneratorRefs:  nil,
+			OutputPath:    dst,
+			ProducerRef:   ref,
+			GeneratorRefs: nil,
 		})
 	}
 }

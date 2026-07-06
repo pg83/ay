@@ -10,6 +10,8 @@ import (
 
 var emptyDirNames = []uint32{}
 
+const mmapReadThreshold = 2 << 20
+
 func hashSourceFile(srcRoot, rel string) uint64 {
 	data, err := os.ReadFile(filepath.Join(srcRoot, cleanRel(rel)))
 
@@ -19,8 +21,6 @@ func hashSourceFile(srcRoot, rel string) uint64 {
 
 	return xxh3.Hash(data)
 }
-
-const mmapReadThreshold = 2 << 20
 
 type OsFS struct {
 	srcRoot       string

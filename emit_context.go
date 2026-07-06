@@ -8,17 +8,17 @@ type PeerContext struct {
 }
 
 type EmitContext struct {
-	ctx        *GenCtx
-	instance   ModuleInstance
-	d          *ModuleData
-	peers      *PeerContext
-	scanner    *IncludeScanner
-	codegen    *CodegenRegistry
-	srcs       []SrcMeta
-	pass2      []func()
-	refs       []NodeRef
-	outs       []VFS
-	metas      []SrcMeta
+	ctx          *GenCtx
+	instance     ModuleInstance
+	d            *ModuleData
+	peers        *PeerContext
+	scanner      *IncludeScanner
+	codegen      *CodegenRegistry
+	srcs         []SrcMeta
+	pass2        []func()
+	refs         []NodeRef
+	outs         []VFS
+	metas        []SrcMeta
 	objcopyRes   *ObjcopyEmitResult
 	protoRes     *ProtoSrcsResult
 	goRes        *GoSrcsResult
