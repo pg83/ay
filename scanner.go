@@ -46,9 +46,8 @@ type IncludeScanner struct {
 	sysincl          *SysinclCtx
 	parsers          *IncludeParserManager
 	buckets          *BucketCache
-	closures         DenseMap[STR, Closure]
 	closureArena     *BumpAllocator[VFS]
-	scanCache        DenseMap3[STR, []VFS, uint32, bool]
+	scanCache        DenseMap3[STR, []VFS, Closure, bool]
 	searchTierFlat   *IntMap[VFS]
 	searchTierSeen   BitSet
 	sourceUnderCache *IntMap[VFS]
@@ -71,11 +70,11 @@ type ScanCtx struct {
 }
 
 func (s *IncludeScanner) closure(v VFS) (Closure, bool) {
-	return s.closures.get(v.str())
+	return s.scanCache.get2(STR(v.strID()))
 }
 
 func (s *IncludeScanner) putClosure(v VFS, cl Closure) {
-	s.closures.put(v.str(), cl)
+	s.scanCache.put2(STR(v.strID()), cl)
 }
 
 func (s *IncludeScanner) cachedChildren(v VFS) ([]VFS, bool) {
