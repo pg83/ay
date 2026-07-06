@@ -292,7 +292,7 @@ func (e *EmitContext) defaultProgramPeerdirsForWithState(postUser bool) []string
 			return nil
 		}
 
-		return []string{"build/cow/on", "build/platform/lld"}
+		return []string{"build/platform/lld", "build/cow/on"}
 	}
 
 	flags := d.flags

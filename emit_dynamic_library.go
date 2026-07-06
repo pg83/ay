@@ -101,7 +101,11 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 
 	deps = append(deps, peerArchiveRefs...)
 	deps = append(deps, ccRefs...)
-	deps = append(deps, ldSbomRefs...)
+
+	if sbomEmbed {
+		deps = append(deps, ldSbomRefs...)
+	}
+
 	deps = append(deps, ctx.vcsRef)
 
 	n := Node{

@@ -78,6 +78,7 @@ func applySbomComponentOrder(name TOK, linkTarget bool, resolved []resolvedPeer,
 
 func aggregateSbomComponents(name TOK, linkTarget bool, resolved []resolvedPeer, allocatorExplicitPeers []string, refs []NodeRef, paths []VFS) ([]NodeRef, []VFS, int) {
 	sbomOrder := applySbomComponentOrder(name, linkTarget, resolved, allocatorExplicitPeers)
+	keepLld := linkTarget || isGoModuleType(name)
 
 	deduper.reset()
 
@@ -87,7 +88,7 @@ func aggregateSbomComponents(name TOK, linkTarget bool, resolved []resolvedPeer,
 		pr := rp.result
 
 		for i, p := range pr.PeerSbomClosurePaths {
-			if p == lldToolchainSbomVFS {
+			if p == lldToolchainSbomVFS && !keepLld {
 				continue
 			}
 
@@ -101,7 +102,7 @@ func aggregateSbomComponents(name TOK, linkTarget bool, resolved []resolvedPeer,
 			ownInsertIdx = len(paths)
 		}
 
-		if pr.SbomComponentRef != nil && (*pr.SbomComponentPath != lldToolchainSbomVFS || linkTarget) && deduper.add(pr.SbomComponentPath.strID()) {
+		if pr.SbomComponentRef != nil && (*pr.SbomComponentPath != lldToolchainSbomVFS || keepLld) && deduper.add(pr.SbomComponentPath.strID()) {
 			refs = append(refs, *pr.SbomComponentRef)
 			paths = append(paths, *pr.SbomComponentPath)
 		}
