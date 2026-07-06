@@ -1307,82 +1307,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	local, global := e.partitionCollected()
 
-	if specialized {
-		objcopyRes := e.objcopyRes
-
-		var hOnlyGlobalRef *NodeRef
-		var hOnlyGlobalPath *VFS
-		var hOnlyWholeArchiveRefs []NodeRef
-		var hOnlyWholeArchivePaths []VFS
-
-		if objcopyRes != nil && len(objcopyRes.Refs) > 0 {
-			globalBaseName := globalArNameFn(instance.Path.rel())
-			gRef := emitARGlobalNamedTagged(instance, globalBaseName, d.unit.GlobalARTag, objcopyRes.Refs, objcopyRes.Outputs, d.tc, ctx.host, ctx.emit)
-
-			hOnlyGlobalRef = &gRef
-			hOnlyGlobalPath = vfsPtr(build(instance.Path.rel(), "/", globalBaseName))
-		}
-
-		protoResult := e.protoRes
-		protoARRefs := local.refs
-		protoAROuts := local.outs
-
-		if protoResult != nil && protoResult.PendingAR {
-			protoARRefs, protoAROuts = reorderARMembers(protoARRefs, protoAROuts, local.metas)
-
-			arBaseName := archiveNameWithPrefixOrName(instance.Path.rel(), "lib", protoResult.ProtoLibName)
-			archivePath := build(instance.Path.rel(), "/", arBaseName)
-			arRef := emitARNode(instance, archivePath, tagCppProto, protoARRefs, protoAROuts, nil, nil, d.tc, ctx.host, ctx.emit)
-
-			protoResult.ARRef = arRef
-			protoResult.ARPath = &archivePath
-		}
-
-		hOnlyARRef := NodeRef(0)
-
-		var hOnlyARPath *VFS
-
-		if protoResult != nil {
-			if protoResult.ARPath != nil {
-				hOnlyARRef = protoResult.ARRef
-				hOnlyARPath = protoResult.ARPath
-			}
-
-			if protoResult.GlobalRef != nil && protoResult.GlobalPath != nil {
-				hOnlyGlobalRef = protoResult.GlobalRef
-				hOnlyGlobalPath = protoResult.GlobalPath
-			}
-
-			hOnlyWholeArchiveRefs = append(hOnlyWholeArchiveRefs, protoResult.WholeArchiveRefs...)
-			hOnlyWholeArchivePaths = append(hOnlyWholeArchivePaths, protoResult.WholeArchivePaths...)
-		}
-
-		var ownSbomRefH *NodeRef
-		var ownSbomPathH *VFS
-
-		if sbomActive(ctx, instance) && sbomQualifies(d) {
-			realPrjName := strings.TrimSuffix(archiveNameWithPrefixOrName(instance.Path.rel(), "", archiveName), ".a")
-
-			ownSbomRefH, ownSbomPathH = e.emitSbomComponent(realPrjName)
-		}
-
-		result := newResult()
-
-		result.ARRef = hOnlyARRef
-		result.ARPath = hOnlyARPath
-		result.GlobalRef = hOnlyGlobalRef
-		result.GlobalPath = hOnlyGlobalPath
-		result.WholeArchiveRefs = hOnlyWholeArchiveRefs
-		result.WholeArchivePaths = hOnlyWholeArchivePaths
-		result.WholeArchiveCmdPaths = protoResultWholeArchiveCmdPaths(protoResult)
-		result.SbomComponentRef = ownSbomRefH
-		result.SbomComponentPath = ownSbomPathH
-
-		ctx.memo.put(ctx.instanceKey(instance), result)
-
-		return result
-	}
-
 
 	globalRefs := global.refs
 	globalOutputs := global.outs
@@ -1597,6 +1521,17 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		result.GlobalRef = &globalRef
 		result.GlobalPath = vfsPtr(build(instance.Path.rel(), "/", globalBaseName))
+	}
+
+	if protoResult := e.protoRes; protoResult != nil {
+		result.WholeArchiveRefs = protoResult.WholeArchiveRefs
+		result.WholeArchivePaths = protoResult.WholeArchivePaths
+		result.WholeArchiveCmdPaths = protoResultWholeArchiveCmdPaths(protoResult)
+
+		if protoResult.GlobalRef != nil && protoResult.GlobalPath != nil {
+			result.GlobalRef = protoResult.GlobalRef
+			result.GlobalPath = protoResult.GlobalPath
+		}
 	}
 
 	ctx.memo.put(ctx.instanceKey(instance), result)
