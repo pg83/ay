@@ -176,5 +176,23 @@
     "xfail": "auto",
     "slice_url": "https://proxy.sandbox.yandex-team.ru/12687148441",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/12687148769"
+  },
+  {
+    "id": "search_daemons_basesearch",
+    "vcs": "arc",
+    "remote": "arcadia",
+    "sha": "20e866ddbfdcc132c16f91ae7bafdf4f6ca0973f",
+    "command": [
+      "ya",
+      "make",
+      "-j0",
+      "-G",
+      "--sandboxing",
+      "search/daemons/basesearch"
+    ],
+    "target": "search/daemons/basesearch",
+    "xfail": "auto",
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/12695071273",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/12695073975"
   }
 ]
