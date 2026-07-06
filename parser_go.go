@@ -2,27 +2,35 @@ package main
 
 import (
 	"bytes"
-	"strings"
+	"unsafe"
 )
 
-func parseGoImports(data []byte) []string {
-	var out []string
+func parseGoImports(data []byte) []STR {
+	var out []STR
 
-	s := string(data)
+	s := data
 	i := 0
 	n := len(s)
+
+	view := func(start, end int) string {
+		if start == end {
+			return ""
+		}
+
+		return unsafe.String(&s[start], end-start)
+	}
 
 	skipSpace := func() {
 		for i < n {
 			switch {
 			case s[i] == ' ' || s[i] == '\t' || s[i] == '\r' || s[i] == '\n':
 				i++
-			case strings.HasPrefix(s[i:], "//"):
+			case s[i] == '/' && i+1 < n && s[i+1] == '/':
 				for i < n && s[i] != '\n' {
 					i++
 				}
-			case strings.HasPrefix(s[i:], "/*"):
-				end := strings.Index(s[i+2:], "*/")
+			case s[i] == '/' && i+1 < n && s[i+1] == '*':
+				end := bytes.Index(s[i+2:], blockCommentClose)
 
 				if end < 0 {
 					i = n
@@ -44,10 +52,10 @@ func parseGoImports(data []byte) []string {
 			i++
 		}
 
-		return s[start:i]
+		return view(start, i)
 	}
 
-	importPath := func() string {
+	importPath := func() []byte {
 		skipSpace()
 
 		if i < n && (s[i] == '_' || s[i] == '.' || isGoIdentStart(s[i])) {
@@ -56,7 +64,7 @@ func parseGoImports(data []byte) []string {
 		}
 
 		if i >= n || s[i] != '"' {
-			return ""
+			return nil
 		}
 
 		i++
@@ -108,15 +116,15 @@ func parseGoImports(data []byte) []string {
 						break
 					}
 
-					if p := importPath(); p != "" {
-						out = append(out, p)
+					if p := importPath(); len(p) > 0 {
+						out = append(out, internBytes(p))
 					} else {
 						i++
 					}
 				}
 			} else {
-				if p := importPath(); p != "" {
-					out = append(out, p)
+				if p := importPath(); len(p) > 0 {
+					out = append(out, internBytes(p))
 				}
 			}
 		default:
