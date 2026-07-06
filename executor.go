@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	iofs "io/fs"
 	"math/rand/v2"
 	"os"
 	"os/exec"
@@ -630,11 +631,26 @@ func (ex *Executor) discard(path string) {
 func (ex *Executor) startGarbageCollector() {
 	go func() {
 		for {
-			_ = exec.Command("rm", "-rf", ex.grbDir).Run()
-
+			removeAllForce(ex.grbDir)
 			time.Sleep(time.Second)
 		}
 	}()
+}
+
+func removeAllForce(dir string) {
+	if err := os.RemoveAll(dir); err == nil {
+		return
+	}
+
+	_ = filepath.WalkDir(dir, func(path string, d iofs.DirEntry, err error) error {
+		if err == nil && d.IsDir() {
+			_ = os.Chmod(path, 0o755)
+		}
+
+		return nil
+	})
+
+	_ = os.RemoveAll(dir)
 }
 
 func mountString(s, srcRoot, bldRoot string) string {
