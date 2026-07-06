@@ -171,6 +171,7 @@ type ModuleEmitResult struct {
 	testSuiteInfo                   *TestSuiteInfo
 	DescClosure                     []DescProtoPeer
 	ResourceGlobalClosure           []ResourceDecl
+	GoSrcClosure                    []VFS
 }
 
 func stringPtr(s string) *string {
@@ -643,7 +644,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		d.peerdirs = append(d.peerdirs, strBuildInducedByBison)
 	}
 
-	if ctx.sbomEnabled && !d.flags.NoRuntime && !effectiveNoPlatform(d.flags) && !strings.HasPrefix(instance.Path.rel(), "contrib/libs/cxxsupp") {
+	if ctx.sbomEnabled && !d.flags.NoRuntime && !effectiveNoPlatform(d.flags) && !isGoModuleType(d.moduleStmt.Name) && !strings.HasPrefix(instance.Path.rel(), "contrib/libs/cxxsupp") {
 		d.peerdirs = append(d.peerdirs, strContribLibsCxxsupp)
 	}
 }
@@ -1513,7 +1514,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	if d.moduleStmt.Name == tokGoProgram {
-		goRef, goPath := e.emitGoExe(resolved, peerArchiveRefs, peerArchivePaths, resourceGlobalsClosure)
+		goRef, goPath := e.emitGoExe(resolved, peerArchiveRefs, peerArchivePaths, peerSbomRefs, peerSbomPaths, resourceGlobalsClosure)
 
 		result := newResult()
 
@@ -1689,11 +1690,14 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	var arPath *VFS
 
+	var goSrcClosure []VFS
+
 	if isGoModuleType(d.moduleStmt.Name) {
-		goRef, goPath := e.emitGoPackage(resolved, local.refs, local.outs, resourceGlobalsClosure)
+		goRef, goPath, srcClosure := e.emitGoPackage(resolved, local.refs, local.outs, peerArchiveRefs, peerArchivePaths, peerSbomRefs, peerSbomPaths, resourceGlobalsClosure)
 
 		arRef = goRef
 		arPath = vfsPtr(goPath)
+		goSrcClosure = srcClosure
 	} else if len(local.refs) > 0 {
 		if perModuleCCTag != 0 {
 			arRef = emitARNamedTagged(arInstance, arBaseName, perModuleCCTag, local.refs, local.outs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
@@ -1727,6 +1731,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	result.SbomComponentRef = ownSbomRef
 	result.SbomComponentPath = ownSbomPath
 	result.ResourceGlobalClosure = resourceGlobalsClosure
+	result.GoSrcClosure = goSrcClosure
 
 	if len(globalRefs) > 0 {
 		globalBaseName := globalArNameFn(instance.Path.rel())

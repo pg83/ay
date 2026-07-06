@@ -139,6 +139,14 @@ func (e *EmitContext) defaultPeerdirsForWithState() []string {
 	addLinuxHeaders := instance.Path.rel() != "contrib/libs/linux-headers" &&
 		!strings.HasPrefix(instance.Path.rel(), "contrib/libs/linux-headers/")
 
+	if d.moduleStmt != nil && isGoModuleType(d.moduleStmt.Name) {
+		if addLinuxHeaders {
+			return []string{"contrib/libs/linux-headers"}
+		}
+
+		return nil
+	}
+
 	if instance.Language != LangCPP {
 		if addLinuxHeaders {
 			return []string{"contrib/libs/linux-headers"}
@@ -277,6 +285,14 @@ func (e *EmitContext) defaultProgramPeerdirsForWithState(postUser bool) []string
 
 	if instance.Language != LangCPP {
 		return nil
+	}
+
+	if d.moduleStmt != nil && d.moduleStmt.Name == tokGoProgram {
+		if postUser {
+			return nil
+		}
+
+		return []string{"build/cow/on", "build/platform/lld"}
 	}
 
 	flags := d.flags
