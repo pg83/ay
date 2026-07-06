@@ -1302,6 +1302,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	})
 
 	e.cythonAdjustModuleCCBlocks()
+	e.sprotoAdjustProtoEnv()
 	e.emit()
 
 	local, global := e.partitionCollected()

@@ -4,22 +4,14 @@ import "strings"
 
 var ymapsSprotoKV = KV{P: pkPB, PC: pcYellow}
 
-func (e *EmitContext) ymapsSprotoProducedBases() map[string]struct{} {
-	ctx, instance, d := e.ctx, e.instance, e.d
+const sprotoPbHCompanionExt = ".sproto.h"
 
-	if len(d.ymapsSprotoSrcs) == 0 {
-		return nil
+func (e *EmitContext) sprotoAdjustProtoEnv() {
+	if len(e.d.ymapsSprotoSrcs) == 0 {
+		return
 	}
 
-	produced := make(map[string]struct{}, len(d.ymapsSprotoSrcs))
-
-	for _, srcTok := range d.ymapsSprotoSrcs {
-		protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcTok.string())
-
-		produced[strings.TrimSuffix(protoRelPath, ".proto")] = struct{}{}
-	}
-
-	return produced
+	e.d.cc.PbHCompanionExt = sprotoPbHCompanionExt
 }
 
 type YmapsSprotoPending struct {
@@ -41,7 +33,7 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok STR) {
 	parsed := make([]IncludeDirective, 0, 2*len(pbhImports))
 
 	parsed = append(parsed, pbhImports...)
-	parsed = append(parsed, sprotoInducedHeaders(pbhImports)...)
+	parsed = append(parsed, pbHCompanionDirectives(pbhImports, sprotoPbHCompanionExt)...)
 
 	e.codegen.register(&GeneratedFileInfo{
 		OutputPath:     sprotoH,
@@ -95,18 +87,3 @@ func (e *EmitContext) emitYmapsSprotoHeader(p YmapsSprotoPending, outRoot string
 	ctx.emit.emitReservedNode(node, p.ref)
 }
 
-func sprotoInducedHeaders(pbhImports []IncludeDirective) []IncludeDirective {
-	var out []IncludeDirective
-
-	for _, dir := range pbhImports {
-		base, ok := strings.CutSuffix(dir.target.string(), ".pb.h")
-
-		if !ok {
-			continue
-		}
-
-		out = append(out, IncludeDirective{kind: dir.kind, target: internV(base, ".sproto.h")})
-	}
-
-	return out
-}
