@@ -267,7 +267,7 @@ func newPBModuleEmission(ctx *GenCtx, d *ModuleData, cfg ProtoPBConfig, protoInc
 	return pe
 }
 
-func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModuleEmission, peerProtoAddIncl []VFS, sprotoProduced map[string]struct{}, spec *ProtoSpec) ProtoPBEmission {
+func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModuleEmission, peerProtoAddIncl []VFS, spec *ProtoSpec) ProtoPBEmission {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcRel)
 	protoSearchPaths := peerProtoAddIncl
@@ -380,8 +380,8 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 	pbHImports := directImports
 
-	if len(sprotoProduced) > 0 {
-		pbHImports = concat(directImports, sprotoInducedHeaders(directImports))
+	if ext := e.d.cc.PbHCompanionExt; ext != "" {
+		pbHImports = concat(directImports, pbHCompanionDirectives(directImports, ext))
 	}
 
 	extras := pbHEmitsIncludesExtras()
@@ -546,7 +546,23 @@ func (e *EmitContext) cppProtoPB(srcRel string, spec *ProtoSpec) ProtoPBEmission
 
 	pe := newPBModuleEmission(ctx, d, cfg, d.cc.ProtoIncludePeers, spec)
 
-	return e.emitProtoPB(srcRel, cfg, pe, d.cc.ProtoInclude, e.ymapsSprotoProducedBases(), spec)
+	return e.emitProtoPB(srcRel, cfg, pe, d.cc.ProtoInclude, spec)
+}
+
+func pbHCompanionDirectives(pbhImports []IncludeDirective, ext string) []IncludeDirective {
+	var out []IncludeDirective
+
+	for _, dir := range pbhImports {
+		base, ok := strings.CutSuffix(dir.target.string(), ".pb.h")
+
+		if !ok {
+			continue
+		}
+
+		out = append(out, IncludeDirective{kind: dir.kind, target: internV(base, ext)})
+	}
+
+	return out
 }
 
 func (e *EmitContext) emitCppProtoFamilySource(meta SrcMeta, spec *ProtoSpec) {

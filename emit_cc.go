@@ -19,6 +19,7 @@ type ModuleCompileEnv struct {
 	PeerAddInclGlobal    []VFS
 	ProtoInclude         []VFS
 	ProtoIncludePeers    []VFS
+	PbHCompanionExt      string
 	CXXFlags             []ARG
 	COnlyFlags           []ARG
 	ClangWarnings        []ARG
