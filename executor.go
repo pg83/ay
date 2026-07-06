@@ -583,7 +583,7 @@ func (ex *Executor) restoreManifest(uid UID, where string) {
 			src := ex.casPathForHash(e.Cas)
 
 			if err := os.Link(src, target); err != nil && !os.IsExist(err) {
-				throw(copyFile(src, target))
+				throw(os.Symlink(throw2(filepath.Abs(src)), target))
 			}
 		}
 	}
