@@ -229,7 +229,7 @@ func makeDefaultIfEnv() Environment {
 	e := newEnvironment()
 
 	for _, n := range []ENV{
-		envOS_LINUX, envLINUX,
+		envOS_LINUX, envLINUX, envUnix,
 		envCLANG, envTRUE, envUSE_SSE4,
 		envUSE_ARCADIA_PYTHON, envPYTHON3,
 

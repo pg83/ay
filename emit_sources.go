@@ -49,6 +49,12 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 		e.emitLibraryEvSource(meta)
 	case srcExtRl:
 		e.emitLibraryRagel5Source(src)
+	case srcExtFml:
+		e.emitLibraryFmlSource(src)
+	case srcExtSfdl:
+		e.emitLibrarySfdlSource(src)
+	case srcExtAsp:
+		e.emitLibraryAspSource(src)
 	case srcExtFlex:
 		e.emitLibraryFlexSource(src)
 	case srcExtHIn:

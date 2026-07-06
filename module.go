@@ -93,6 +93,7 @@ type FlagSet struct {
 	NoPlatform         bool
 	NoCompilerWarnings bool
 	NoWShadow          bool
+	NoExportDynSymbols bool
 	IsCpp              bool
 }
 

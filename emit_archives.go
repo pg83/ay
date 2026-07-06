@@ -50,7 +50,7 @@ func (e *EmitContext) emitArchive(
 		var absVFS VFS
 
 		if isPRProduced {
-			absVFS = build(instance.Path.rel(), "/", f)
+			absVFS = copyFileOutputVFS(instance.Path.rel(), f)
 		} else {
 			absVFS = e.requireProducedInput("ARCHIVE member", f, resolveSourceVFS(ctx, instance, f, d.srcDirs))
 		}

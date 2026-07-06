@@ -70,7 +70,21 @@ func (e *EmitContext) emitLibraryRodataSource(meta SrcMeta) {
 	yasmLDRef, _ := ctx.tool(argContribToolsYasm)
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	in := e.ccInputsFor(srcVFS)
-	ref, _, outPath := emitRD(instance, srcRel, srcVFS, yasmLDRef, Closure{}, nil, in.TC, ctx.emit)
+	cv := Closure{}
+
+	var deps []NodeRef
+
+	if srcVFS.isBuild() {
+		cv = walkClosure(e.scanner, srcVFS, d.cc.ScanCfg)
+
+		if info := e.codegen.lookup(srcVFS); info != nil {
+			deps = depRefs(info.ProducerRef)
+		}
+
+		deps = resolveCodegenDepRefsInclView(ctx, instance, ctx.na, cv, deps...)
+	}
+
+	ref, _, outPath := emitRD(instance, srcRel, srcVFS, yasmLDRef, cv, deps, in.TC, ctx.emit)
 
 	e.collectObj(ref, outPath, meta)
 }

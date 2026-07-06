@@ -75,7 +75,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 	headerParsed := []IncludeDirective{{kind: includeQuoted, target: internStr(srcVFS.rel())}}
 
 	if preprocessHeader {
-		headerParsed = bisonCppHeaderParsed(srcVFS)
+		headerParsed = append([]IncludeDirective{{kind: includeQuoted, target: internStr(srcVFS.rel())}}, bisonCppHeaderParsed(srcVFS)...)
 	} else {
 		headerParsed = append(headerParsed, e.scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
 	}
@@ -90,9 +90,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
 	}
 
-	if preprocessHeader {
-		headerInfo.ClosureLeaves = []VFS{srcVFS}
-	}
+
 
 	reg.register(headerInfo)
 
@@ -147,9 +145,11 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		inputs = append(inputs, bisonPreprocessPyVFS)
 		inputs = append(inputs, bisonCppSkeletonInputs...)
 
-		headerCV := walkClosure(e.scanner, headerVFS, d.cc.ScanCfg)
+		for _, sk := range bisonCppSkeletonInputs {
+			skCV := walkClosure(e.scanner, sk, d.cc.ScanCfg)
 
-		inputs = dedupClosure(inputs, headerCV.buckets)
+			inputs = dedupClosure(inputs, skCV.buckets)
+		}
 	}
 
 	ctx.emit.emitReservedNode(Node{

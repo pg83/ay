@@ -9,12 +9,13 @@ var (
 	yasmParser   = YasmIncludeDirectiveParser{}
 	cythonParser = CythonIncludeDirectiveParser{}
 	swigParser   = SwigIncludeDirectiveParser{}
+	lexParser    = LexIncludeDirectiveParser{}
 )
 
 func buildParserExtMatcher(proto ProtoIncludeDirectiveParser) *ExtMatcher[IncludeDirectiveParser] {
 	return newExtMatcher([]ExtEntry[IncludeDirectiveParser]{
-		{".y", cParser},
-		{".l", cParser},
+		{".y", lexParser},
+		{".l", lexParser},
 		{".m", cParser},
 		{".C", cParser},
 		{".S", cParser},
@@ -46,10 +47,10 @@ func buildParserExtMatcher(proto ProtoIncludeDirectiveParser) *ExtMatcher[Includ
 		{".inl", cParser},
 		{".gzt", proto},
 		{".asm", yasmParser},
-		{".lex", cParser},
+		{".lex", lexParser},
 		{".pxd", cythonParser},
 		{".cpp", cParser},
-		{".asp", cParser},
+		{".asp", lexParser},
 		{".cxx", cParser},
 		{".hpp", cParser},
 		{".ipp", cParser},
@@ -66,7 +67,7 @@ func buildParserExtMatcher(proto ProtoIncludeDirectiveParser) *ExtMatcher[Includ
 		{".vert", cParser},
 		{".proto", proto},
 		{".fbs64", fbsParser},
-		{".gperf", cParser},
+		{".gperf", lexParser},
 		{".auxcpp", cParser},
 		{".pxd.pxi", cythonParser},
 		{".pyx.pxi", cythonParser},
