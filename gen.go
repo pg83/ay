@@ -746,6 +746,24 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		applyGoImplicitPeerdirs(ctx, instance, d)
 	}
 
+	if pyModuleTypeUsesPython3(d.moduleStmt.Name) && d.moduleStmt.Name != tokProtoLibrary {
+		hasPyProto := false
+
+		for _, g := range d.pySrcGroups {
+			for _, s := range g.Srcs {
+				hasPyProto = hasPyProto || extIsProto(s.string())
+			}
+		}
+
+		for _, s := range d.pySrcs {
+			hasPyProto = hasPyProto || extIsProto(s.string())
+		}
+
+		if hasPyProto {
+			d.peerdirs = append(d.peerdirs, internStr("contrib/python/protobuf"))
+		}
+	}
+
 	if d.moduleStmt.Name == tokDynamicLibrary {
 		result := e.emitDynamicLibrary()
 
@@ -1691,6 +1709,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if sbomActive(ctx, instance) && sbomQualifies(d) && d.unit.Tag != unitTagPy3BinLib {
 		realPrjName := strings.TrimSuffix(archiveNameWithPrefixOrName(instance.Path.rel(), "", archiveName), ".a")
+
+		if isGoModuleType(d.moduleStmt.Name) {
+			rel := instance.Path.rel()
+			realPrjName = rel[strings.LastIndexByte(rel, '/')+1:]
+		}
 
 		ownSbomRef, ownSbomPath = e.emitSbomComponent(realPrjName)
 	}
