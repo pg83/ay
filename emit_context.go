@@ -19,11 +19,13 @@ type EmitContext struct {
 	refs       []NodeRef
 	outs       []VFS
 	metas      []SrcMeta
-	objcopyRes *ObjcopyEmitResult
-	protoRes   *ProtoSrcsResult
-	goRes      *GoSrcsResult
-	pySrcsReg  []PySrc
-	resources  []ResourceEntry
+	objcopyRes   *ObjcopyEmitResult
+	protoRes     *ProtoSrcsResult
+	goRes        *GoSrcsResult
+	goInclJoined []STR
+	goInclSplit  []STR
+	pySrcsReg    []PySrc
+	resources    []ResourceEntry
 }
 
 type collectedObjs struct {
