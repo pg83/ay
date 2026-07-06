@@ -143,6 +143,7 @@ func (e *EmitContext) emit() {
 	}
 
 	if !isProgramModuleType(d.moduleStmt.Name) {
+		e.emitPyProtoBytecode()
 		e.emitPyBytecode()
 
 		genPyAuxRefs, genPyAuxOuts := e.emitGeneratedPyAuxChunks()

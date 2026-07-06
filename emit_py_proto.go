@@ -260,6 +260,120 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR) {
 	}
 }
 
+func (e *EmitContext) hasProtoPySrcs() bool {
+	for _, ps := range e.pySrcsReg {
+		if ps.Group == pyGroupProto {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (e *EmitContext) pyProtoYapycOut(ps PySrc) VFS {
+	rel := ps.Path.rel()
+	token := strings.TrimPrefix(ps.Token.string(), "${ARCADIA_BUILD_ROOT}/")
+
+	if strings.Contains(token, "/") {
+		return build(rel, ".", pySrcYapycSuffix(e.instance.Path.rel()), ".yapyc3")
+	}
+
+	return build(rel, ".yapyc3")
+}
+
+func (e *EmitContext) pyProtoResEntries(ps PySrc) []PyGenResEntry {
+	key := ps.Module.string()
+	rel := ps.Path.rel()
+	grpc := strings.HasSuffix(rel, "__intpy3___pb2_grpc.py")
+	info := e.codegen.mustInfo(ps.Path, "pyProtoResEntries")
+	token := ps.Token.string()
+	yapycOut := e.pyProtoYapycOut(ps)
+
+	if !strings.HasPrefix(token, "${ARCADIA_BUILD_ROOT}/") {
+		return []PyGenResEntry{
+			{token: token, key: key, path: ps.Path},
+			{token: token + strings.TrimPrefix(yapycOut.rel(), rel), key: key + ".yapyc3", path: yapycOut},
+		}
+	}
+
+	entryInputs := info.SourceInputs
+
+	if grpc {
+		siblingPy := build(strings.TrimSuffix(rel, "__intpy3___pb2_grpc.py"), "__intpy3___pb2.py")
+
+		entryInputs = concat(info.SourceInputs, []VFS{siblingPy})
+	}
+
+	return []PyGenResEntry{
+		{token: token, key: key, path: ps.Path, inputs: entryInputs},
+		{token: "${ARCADIA_BUILD_ROOT}/" + yapycOut.rel(), key: key + ".yapyc3", path: yapycOut, inputs: info.SourceInputs},
+	}
+}
+
+func (e *EmitContext) emitPyProtoBytecode() {
+	ctx := e.ctx
+
+	if !e.hasProtoPySrcs() {
+		return
+	}
+
+	py3ccLDRef, py3ccBinary := ctx.tool(argToolsPy3cc)
+	py3ccSlowLDRef, py3ccSlowBin := ctx.tool(argToolsPy3ccSlow)
+
+	for _, ps := range e.pySrcsReg {
+		if ps.Group != pyGroupProto {
+			continue
+		}
+
+		e.emitPyProtoYapyc(ps, py3ccLDRef, py3ccSlowLDRef, py3ccBinary, py3ccSlowBin)
+	}
+}
+
+func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef, py3ccBinary, py3ccSlowBin VFS) {
+	ctx, instance := e.ctx, e.instance
+	na := ctx.na
+	rel := ps.Path.rel()
+	info := e.codegen.mustInfo(ps.Path, "emitPyProtoYapyc")
+	token := strings.TrimPrefix(ps.Token.string(), "${ARCADIA_BUILD_ROOT}/")
+	yapycOut := e.pyProtoYapycOut(ps)
+
+	yapycCmd := []STR{
+		(py3ccBinary).str(),
+		argSlowPy3cc.str(),
+		(py3ccSlowBin).str(),
+		internV(token, "-"),
+		(ps.Path).str(),
+		(yapycOut).str(),
+	}
+
+	nodeInputs := na.inputList(na.vfsList(py3ccBinary, py3ccSlowBin, ps.Path), info.SourceInputs)
+
+	if strings.HasSuffix(rel, "__intpy3___pb2_grpc.py") {
+		siblingPy := build(strings.TrimSuffix(rel, "__intpy3___pb2_grpc.py"), "__intpy3___pb2.py")
+
+		nodeInputs = append(nodeInputs, []VFS{siblingPy})
+	}
+
+	yapycEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}
+
+	yapycNode := Node{
+		Platform:       instance.Platform,
+		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(yapycCmd), Env: yapycEnv}),
+		Env:            yapycEnv,
+		Inputs:         nodeInputs,
+		Outputs:        na.vfsList(yapycOut),
+		KV:             &pyCodegenKV,
+		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		DepRefs:        []NodeRef{info.ProducerRef},
+		ForeignDepRefs: depRefs(py3ccRef, py3ccSlowRef),
+		Resources:      usesPython3,
+	}
+
+	yapycRef := ctx.emit.emitNode(yapycNode)
+
+	e.codegen.register(&GeneratedFileInfo{OutputPath: yapycOut, ProducerRef: yapycRef})
+}
+
 func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
 
@@ -270,7 +384,7 @@ func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
 			continue
 		}
 
-		entries = append(entries, e.pyResEntriesFor(ps)...)
+		entries = append(entries, e.pyProtoResEntries(ps)...)
 	}
 
 	if len(entries) == 0 {
