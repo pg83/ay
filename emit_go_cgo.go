@@ -222,6 +222,7 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel STR) {
 			KV:           &cpKV,
 			Outputs:      na.vfsList(dstVFS),
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			Resources:    usesPython3,
 		}
 
 		ctx.emit.emitReservedNode(node, ref)
