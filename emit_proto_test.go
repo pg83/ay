@@ -2393,12 +2393,12 @@ func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 		e,
 	)
 
-	if len(e.nodes) != 1 {
-		t.Fatalf("emitted %d nodes, want 1", len(e.nodes))
+	if e.nodes.len() != 1 {
+		t.Fatalf("emitted %d nodes, want 1", e.nodes.len())
 	}
 
-	if !contains(e.nodes[0].Cmds[0].CmdArgs.flat(), "--fatal_warnings") {
-		t.Fatalf("cmd_args missing --fatal_warnings: %v", e.nodes[0].Cmds[0].CmdArgs.flat())
+	if !contains(e.nodes.s[0].Cmds[0].CmdArgs.flat(), "--fatal_warnings") {
+		t.Fatalf("cmd_args missing --fatal_warnings: %v", e.nodes.s[0].Cmds[0].CmdArgs.flat())
 	}
 }
 
@@ -2434,11 +2434,11 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 		e,
 	)
 
-	if len(e.nodes) != 1 {
-		t.Fatalf("emitted %d nodes, want 1", len(e.nodes))
+	if e.nodes.len() != 1 {
+		t.Fatalf("emitted %d nodes, want 1", e.nodes.len())
 	}
 
-	got := e.nodes[0]
+	got := e.nodes.s[0]
 	wantOutputs := []string{
 		"$(B)/pkg/proto/test.pb.h",
 		"$(B)/pkg/proto/test.pb.cc",

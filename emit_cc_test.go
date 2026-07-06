@@ -38,11 +38,11 @@ func TestEmitCC_GeneratedSource_BuildRootInput(t *testing.T) {
 		t.Errorf("outPath = %q, want %q", outPath, wantOut)
 	}
 
-	if len(emit.nodes) != 1 {
-		t.Fatalf("emitter buffered %d nodes, want 1", len(emit.nodes))
+	if emit.nodes.len() != 1 {
+		t.Fatalf("emitter buffered %d nodes, want 1", emit.nodes.len())
 	}
 
-	got := emit.nodes[0]
+	got := emit.nodes.s[0]
 
 	wantInput := "$(B)/util/_/datetime/parser.rl6.cpp"
 
@@ -70,7 +70,7 @@ func TestEmitCC_AddIncl_SlotsBetweenPrefixAndSuffix(t *testing.T) {
 	}}
 	composeCCNode(targetInstance("contrib/libs/cxxsupp/builtins"), internStr("aarch64/fp_mode.c"), intern("$(S)/contrib/libs/cxxsupp/builtins/aarch64/fp_mode.c"), withCCBlocks(targetInstance("contrib/libs/cxxsupp/builtins").Platform, in), testHostP, emit)
 
-	args := emit.nodes[0].Cmds[0].CmdArgs.flat()
+	args := emit.nodes.s[0].Cmds[0].CmdArgs.flat()
 
 	wantSlot := []string{
 		"-I$(B)",
@@ -100,7 +100,7 @@ func TestEmitCC_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 	}}
 	composeCCNode(inst, internStr("src/string/strlen.c"), intern("$(S)/contrib/libs/foolib/src/string/strlen.c"), withCCBlocks(inst.Platform, in), testHostP, emit)
 
-	args := emit.nodes[0].Cmds[0].CmdArgs.flat()
+	args := emit.nodes.s[0].Cmds[0].CmdArgs.flat()
 	wantSlot := []string{
 		"-I$(B)",
 		"-I$(S)",
@@ -132,7 +132,7 @@ func TestEmitCC_CxxSource_UsesClangPlusPlus(t *testing.T) {
 	emit := newStreamingEmitter(nil)
 	composeCCNode(targetInstance("contrib/libs/cxxsupp/libcxx"), internStr("src/algorithm.cpp"), intern("$(S)/contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"), withCCBlocks(targetInstance("contrib/libs/cxxsupp/libcxx").Platform, ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{TC: testToolchain()}}), testHostP, emit)
 
-	args := emit.nodes[0].Cmds[0].CmdArgs.flat()
+	args := emit.nodes.s[0].Cmds[0].CmdArgs.flat()
 
 	wantCxx := testToolchain().CXX.string()
 
@@ -159,7 +159,7 @@ func TestEmitCC_UppercaseCSource_UsesClangPlusPlus(t *testing.T) {
 	emit := newStreamingEmitter(nil)
 	composeCCNode(targetInstance("contrib/libs/cxxsupp/libcxx"), internStr("src/algorithm.C"), intern("$(S)/contrib/libs/cxxsupp/libcxx/src/algorithm.C"), withCCBlocks(targetInstance("contrib/libs/cxxsupp/libcxx").Platform, ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{TC: testToolchain()}}), testHostP, emit)
 
-	args := emit.nodes[0].Cmds[0].CmdArgs.flat()
+	args := emit.nodes.s[0].Cmds[0].CmdArgs.flat()
 
 	wantCxx := testToolchain().CXX.string()
 
@@ -186,7 +186,7 @@ func TestEmitCC_CSource_UsesClang(t *testing.T) {
 	emit := newStreamingEmitter(nil)
 	composeCCNode(targetInstance("build/cow/on"), internStr("lib.c"), intern("$(S)/build/cow/on/lib.c"), withCCBlocks(targetInstance("build/cow/on").Platform, ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{TC: testToolchain()}}), testHostP, emit)
 
-	args := emit.nodes[0].Cmds[0].CmdArgs.flat()
+	args := emit.nodes.s[0].Cmds[0].CmdArgs.flat()
 
 	wantCC := testToolchain().CC.string()
 
@@ -208,7 +208,7 @@ func TestEmitCC_NoCompilerWarnings_SelectsWarningSuppressionFlags(t *testing.T) 
 	inst := targetInstance("contrib/libs/cxxsupp/libcxxrt")
 	composeCCNode(inst, internStr("exception.cc"), intern("$(S)/contrib/libs/cxxsupp/libcxxrt/exception.cc"), withCCBlocks(inst.Platform, ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{Flags: FlagSet{NoCompilerWarnings: true}}}), testHostP, emit)
 
-	args := emit.nodes[0].Cmds[0].CmdArgs.flat()
+	args := emit.nodes.s[0].Cmds[0].CmdArgs.flat()
 
 	for _, a := range args {
 		if a.string() == "-Werror" {
@@ -238,7 +238,7 @@ func TestEmitCC_OwnCXXFlags_SlotsAfterSuppressionBlock(t *testing.T) {
 	inst := targetInstance("contrib/libs/cxxsupp/libcxx")
 	composeCCNode(inst, internStr("src/algorithm.cpp"), intern("$(S)/contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"), withCCBlocks(inst.Platform, in), testHostP, emit)
 
-	args := emit.nodes[0].Cmds[0].CmdArgs.flat()
+	args := emit.nodes.s[0].Cmds[0].CmdArgs.flat()
 
 	idxOwn := -1
 	idxLastSuppression := -1
@@ -276,15 +276,15 @@ func TestEmitCC_COnlyFlags_AppliesOnlyToCSources(t *testing.T) {
 	emitC := newStreamingEmitter(nil)
 	composeCCNode(targetInstance("build/cow/on"), internStr("lib.c"), intern("$(S)/build/cow/on/lib.c"), withCCBlocks(targetInstance("build/cow/on").Platform, in), testHostP, emitC)
 
-	if !contains(emitC.nodes[0].Cmds[0].CmdArgs.flat(), "-Wno-narrowing") {
-		t.Errorf(".c source missing CONLYFLAG -Wno-narrowing; got %v", emitC.nodes[0].Cmds[0].CmdArgs.flat())
+	if !contains(emitC.nodes.s[0].Cmds[0].CmdArgs.flat(), "-Wno-narrowing") {
+		t.Errorf(".c source missing CONLYFLAG -Wno-narrowing; got %v", emitC.nodes.s[0].Cmds[0].CmdArgs.flat())
 	}
 
 	emitCpp := newStreamingEmitter(nil)
 	composeCCNode(targetInstance("build/cow/on"), internStr("lib.cpp"), intern("$(S)/build/cow/on/lib.cpp"), withCCBlocks(targetInstance("build/cow/on").Platform, in), testHostP, emitCpp)
 
-	if contains(emitCpp.nodes[0].Cmds[0].CmdArgs.flat(), "-Wno-narrowing") {
-		t.Errorf(".cpp source got CONLYFLAG -Wno-narrowing (should be CXXFlags-only); got %v", emitCpp.nodes[0].Cmds[0].CmdArgs.flat())
+	if contains(emitCpp.nodes.s[0].Cmds[0].CmdArgs.flat(), "-Wno-narrowing") {
+		t.Errorf(".cpp source got CONLYFLAG -Wno-narrowing (should be CXXFlags-only); got %v", emitCpp.nodes.s[0].Cmds[0].CmdArgs.flat())
 	}
 }
 
@@ -307,7 +307,7 @@ func TestEmitCC_PlatformEnvFlags_TargetOnly(t *testing.T) {
 
 	e := newStreamingEmitter(nil)
 	composeCCNode(instance, internStr("lib.c"), intern("$(S)/build/cow/on/lib.c"), withCCBlocks(instance.Platform, ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{Flags: FlagSet{NoLibc: true, NoUtil: true, NoRuntime: true}}}), testHostP, e)
-	cArgs := e.nodes[0].Cmds[0].CmdArgs.flat()
+	cArgs := e.nodes.s[0].Cmds[0].CmdArgs.flat()
 
 	if !contains(cArgs, "-DENV_C=1") {
 		t.Fatalf("C cmd_args missing env CFLAGS: %v", cArgs)
@@ -319,7 +319,7 @@ func TestEmitCC_PlatformEnvFlags_TargetOnly(t *testing.T) {
 
 	e = newStreamingEmitter(nil)
 	composeCCNode(instance, internStr("lib.cpp"), intern("$(S)/build/cow/on/lib.cpp"), withCCBlocks(instance.Platform, ModuleCCInputs{}), testHostP, e)
-	cxxArgs := e.nodes[0].Cmds[0].CmdArgs.flat()
+	cxxArgs := e.nodes.s[0].Cmds[0].CmdArgs.flat()
 
 	if !contains(cxxArgs, "-DENV_C=1") {
 		t.Fatalf("C++ cmd_args missing env CFLAGS: %v", cxxArgs)
@@ -350,7 +350,7 @@ func TestEmitCC_WrapccPrefix_NonOpensource(t *testing.T) {
 
 	composeCCNode(inst, internStr("lib.cpp"), srcVFS, withCCBlocks(inst.Platform, ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{TC: testToolchain()}, IncludeInputs: []VFS{srcVFS}}), testHostP, emit)
 
-	node := emit.nodes[0]
+	node := emit.nodes.s[0]
 	args := strStrs(node.Cmds[0].CmdArgs.flat())
 
 	wantPrefix := []string{
@@ -394,7 +394,7 @@ func TestEmitCC_NoWrapcc_Opensource(t *testing.T) {
 
 	composeCCNode(targetInstance("mod"), internStr("lib.cpp"), intern("$(S)/mod/lib.cpp"), withCCBlocks(targetInstance("mod").Platform, ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{TC: testToolchain()}}), testHostP, emit)
 
-	node := emit.nodes[0]
+	node := emit.nodes.s[0]
 	args := strStrs(node.Cmds[0].CmdArgs.flat())
 
 	if args[0] != testToolchain().CXX.string() {
@@ -468,8 +468,8 @@ func TestEmitCC_NoWShadowAddsWarningFlag(t *testing.T) {
 
 	composeCCNode(targetInstance("build/cow/on"), internStr("lib.cpp"), intern("$(S)/build/cow/on/lib.cpp"), withCCBlocks(targetInstance("build/cow/on").Platform, in), testHostP, e)
 
-	if !contains(e.nodes[0].Cmds[0].CmdArgs.flat(), "-Wno-shadow") {
-		t.Fatalf("cmd_args missing -Wno-shadow: %v", e.nodes[0].Cmds[0].CmdArgs.flat())
+	if !contains(e.nodes.s[0].Cmds[0].CmdArgs.flat(), "-Wno-shadow") {
+		t.Fatalf("cmd_args missing -Wno-shadow: %v", e.nodes.s[0].Cmds[0].CmdArgs.flat())
 	}
 }
 

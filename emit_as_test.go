@@ -26,7 +26,7 @@ func TestEmitAS_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 	}}
 	emitAS(inst, "src/math/x86_64/ceill.s", intern("$(S)/contrib/libs/foolib/src/math/x86_64/ceill.s"), in, testHostP, e)
 
-	args := e.nodes[0].Cmds[0].CmdArgs.flat()
+	args := e.nodes.s[0].Cmds[0].CmdArgs.flat()
 	wantTail := []string{
 		"-I$(B)",
 		"-I$(S)",
@@ -113,12 +113,12 @@ func TestEmitASYasm_YasmLD_PopulatesDepRefs(t *testing.T) {
 	yasmTestIn := ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{InclArgs: newInclArgMemo(), AddIncl: builtinsASOwnAddIncl}}
 	ref, _ := emitASYasm(hostInstance("contrib/libs/asmlib"), "memset64.asm", intern("$(S)/contrib/libs/asmlib/memset64.asm"), yasmTestIn, yasmLDRef, e)
 
-	if len(e.nodes) != 2 {
-		t.Fatalf("emitter buffered %d nodes, want 2", len(e.nodes))
+	if e.nodes.len() != 2 {
+		t.Fatalf("emitter buffered %d nodes, want 2", e.nodes.len())
 	}
 
 	_ = ref
-	got := e.nodes[1]
+	got := e.nodes.s[1]
 
 	if len(got.ForeignDepRefs) != 1 || got.ForeignDepRefs[0] != yasmLDRef {
 		t.Errorf("ForeignDepRefs = %v, want [%v]", got.ForeignDepRefs, yasmLDRef)
@@ -135,11 +135,11 @@ func TestEmitAS_KV(t *testing.T) {
 	e := newStreamingEmitter(nil)
 	emitAS(targetInstance("some/module"), "aarch64/foo.S", intern("$(S)/some/module/aarch64/foo.S"), ModuleCCInputs{}, testHostP, e)
 
-	if len(e.nodes) != 1 {
-		t.Fatalf("emitter buffered %d nodes, want 1", len(e.nodes))
+	if e.nodes.len() != 1 {
+		t.Fatalf("emitter buffered %d nodes, want 1", e.nodes.len())
 	}
 
-	got := e.nodes[0]
+	got := e.nodes.s[0]
 	want := KV{P: pkAS, PC: pcLightGreen}
 
 	if !reflect.DeepEqual(*got.KV, want) {
@@ -173,11 +173,11 @@ func TestEmitAS_AsmlibYasm_TargetSide_NoPicSuffix(t *testing.T) {
 		t.Errorf("outPath = %q, want %q", outPath, wantYasmPath)
 	}
 
-	if len(e.nodes) != 2 {
-		t.Fatalf("emitter buffered %d nodes, want 2", len(e.nodes))
+	if e.nodes.len() != 2 {
+		t.Fatalf("emitter buffered %d nodes, want 2", e.nodes.len())
 	}
 
-	got := e.nodes[1]
+	got := e.nodes.s[1]
 
 	if got.Cmds[0].Cwd != 0 {
 		t.Errorf("Cmds[0].Cwd = %q, want empty (yasm path)", got.Cmds[0].Cwd.string())

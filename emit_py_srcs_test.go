@@ -211,11 +211,11 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 
 	emit := ctx.emit
 
-	if got := len(emit.nodes); got != 2 {
+	if got := emit.nodes.len(); got != 2 {
 		t.Fatalf("emitted nodes: got %d, want 2", got)
 	}
 
-	tail := emit.nodes[1]
+	tail := emit.nodes.s[1]
 
 	if got := tail.Outputs[0].string(); got != "$(B)/contrib/python/shellingham/objcopy_e79ae9e993a07f847435dcf3c2.o" {
 		t.Fatalf("tail output = %q, want %q", got, "$(B)/contrib/python/shellingham/objcopy_e79ae9e993a07f847435dcf3c2.o")
@@ -325,7 +325,7 @@ func runPySrcBatcher(t *testing.T, d *ModuleData, modulePath string) []*Node {
 
 	e.packResources(ResourcePack{Tag: unitTagPy3, Items: pyGenResourceItems(entries)})
 
-	return ctx.emit.nodes
+	return ctx.emit.nodes.s
 }
 
 func TestGen_CopyFileStagedPySrcCarriesOriginalSourceClosure(t *testing.T) {
@@ -861,7 +861,7 @@ func TestEmitPyRegister_ProducerEmittedAtTargetPlatform(t *testing.T) {
 	wantOutput := "$(B)/contrib/tools/python3/Modules/_sqlite/_sqlite3.reg3.cpp"
 	var pyNodes []*Node
 
-	for _, n := range emit.nodes {
+	for _, n := range emit.nodes.s {
 		if len(n.Outputs) == 1 && n.Outputs[0].string() == wantOutput {
 			pyNodes = append(pyNodes, n)
 		}

@@ -1,36 +1,25 @@
 package main
 
 type TwoBitSet struct {
-	words []uint64
+	words Vec[uint64]
 }
 
 func (b *TwoBitSet) get(v uint32) uint8 {
 	w := v >> 5
 
-	if w >= uint32(len(b.words)) {
+	if w >= uint32(b.words.len()) {
 		return 0
 	}
 
-	return uint8(b.words[w] >> ((v & 31) * 2) & 3)
+	return uint8(b.words.s[w] >> ((v & 31) * 2) & 3)
 }
 
 func (b *TwoBitSet) set(v uint32, val uint8) {
 	w := v >> 5
 
-	if w >= uint32(len(b.words)) {
-		grown := uint32(len(b.words)) * 2
-
-		if grown <= w {
-			grown = w + 1
-		}
-
-		next := make([]uint64, grown)
-
-		copy(next, b.words)
-		b.words = next
-	}
+	b.words.ensureLen(int(w) + 1)
 
 	shift := (v & 31) * 2
 
-	b.words[w] = b.words[w]&^(3<<shift) | uint64(val&3)<<shift
+	b.words.s[w] = b.words.s[w]&^(3<<shift) | uint64(val&3)<<shift
 }

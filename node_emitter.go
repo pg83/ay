@@ -14,7 +14,7 @@ type Graph struct {
 }
 
 type StreamingEmitter struct {
-	nodes      []*Node
+	nodes      Vec[*Node]
 	resolved   BitSet
 	pendingIdx []NodeRef
 	pendingSet map[NodeRef]bool
@@ -44,9 +44,9 @@ func (e *StreamingEmitter) reserve() NodeRef {
 		panic("StreamingEmitter.reserve called after Finish")
 	}
 
-	id := NodeRef(len(e.nodes))
+	id := NodeRef(e.nodes.len())
 
-	e.nodes = append(e.nodes, nil)
+	e.nodes.pushBack(nil)
 	e.reserved++
 
 	return id
@@ -57,12 +57,12 @@ func (e *StreamingEmitter) emitReserved(n *Node, id NodeRef) {
 		panic("StreamingEmitter.emitReserved called after Finish")
 	}
 
-	if e.nodes[id] != nil {
+	if e.nodes.s[id] != nil {
 		throwFmt("emitReserved: slot %d already filled", id)
 	}
 
 	n.Ref = id
-	e.nodes[id] = n
+	e.nodes.s[id] = n
 	e.reserved--
 	e.resolveOrPend(n, id)
 }
@@ -92,10 +92,10 @@ func (e *StreamingEmitter) emit(n *Node) NodeRef {
 		panic("StreamingEmitter.Emit called after Finish")
 	}
 
-	id := NodeRef(len(e.nodes))
+	id := NodeRef(e.nodes.len())
 
 	n.Ref = id
-	e.nodes = append(e.nodes, n)
+	e.nodes.pushBack(n)
 	e.resolveOrPend(n, id)
 
 	return id
@@ -149,7 +149,7 @@ func (e *StreamingEmitter) finish() []NodeRef {
 		next := pending[:0]
 
 		for _, id := range pending {
-			n := e.nodes[id]
+			n := e.nodes.s[id]
 
 			if e.hasUnresolvedDeps(n) {
 				next = append(next, id)
@@ -195,7 +195,7 @@ func dedupResultRefs(results []NodeRef) []NodeRef {
 func graphFromEmitter(e *StreamingEmitter) *Graph {
 	return &Graph{
 		Inputs:    map[string]interface{}{},
-		Graph:     e.nodes,
+		Graph:     e.nodes.s,
 		Result:    dedupResultRefs(e.results),
 		fetchRefs: e.fetchRefs,
 	}
